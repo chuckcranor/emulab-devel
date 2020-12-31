@@ -1058,6 +1058,8 @@ sub DeleteSliver($)
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
+    $aggregate->Refresh();
+    
     if ($aggregate->Busy() ||
 	$aggregate->Imaging()) {
 	$slice->UnLock();
@@ -1202,6 +1204,7 @@ sub DeleteSlice($)
 	$blocking = 1;
 	goto cleanit;
     }
+    $aggregate->Refresh();
     my $slice_experiment = $slice->GetExperiment();
     
     #
@@ -1559,6 +1562,8 @@ sub SliverAction($$$$$$)
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
+    $aggregate->Refresh();
+    
     if ($aggregate->Busy() ||
 	$aggregate->Imaging()) {
 	$slice->UnLock();
@@ -1824,6 +1829,7 @@ sub SliverStatus($)
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
+    $aggregate->Refresh();
     my $slice_experiment = $slice->GetExperiment();
     
     if ($aggregate->ComputeState()) {
@@ -2704,6 +2710,8 @@ sub AddNodes($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Internal Error");
     }
+    $aggregate->Refresh();
+    
     # We get the manifest from the aggregate object, so that the
     # expiration goes in.
     my $sliver_manifest = $aggregate->GetManifest(1);
@@ -2968,6 +2976,8 @@ sub DeleteNodes($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Internal Error");
     }
+    $aggregate->Refresh();
+    
     # We get the manifest from the aggregate object, so that the
     # expiration goes in.
     my $sliver_manifest = $aggregate->GetManifest(1);
@@ -3160,6 +3170,7 @@ sub BindToSlice($)
     }
     # Need experiment for this.
     if (defined($aggregate)) {
+	$aggregate->Refresh();
 	if ($amapi) {
 	    if ($aggregate->ComputeState()) {
 		print STDERR "Could not compute state for $aggregate\n";
@@ -4128,6 +4139,8 @@ sub CreateImage($)
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
+    $aggregate->Refresh();
+
     my $opt  = "";
     if (defined($image) && $image->isdataset()) {
 	$opt .= " -b $bsname ";
@@ -5197,17 +5210,19 @@ sub ShareLanAux($$)
 	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
 				    "Slice is marked for termination");
     }
-    if ($aggregate->Busy() ||
-	$aggregate->Imaging()) {
-	return GeniResponse->BusyResponse();
-    }
-
     #
     # Lock the slice; we do not let the user to mess with things.
     #
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
+    $aggregate->Refresh();
+    # Check again after lock.
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
+	$slice->UnLock();
+	return GeniResponse->BusyResponse();
+    }    
     my $experiment = $slice->GetExperiment();
     if (!defined($experiment)) {
 	$slice->UnLock();
@@ -6515,6 +6530,8 @@ sub Panic($)
     if ($slice->WaitForLock(5) != 0) {
 	return GeniResponse->BusyResponse();
     }
+    $aggregate->Refresh();
+    
     main::AddLogfileMetaDataFromSlice($slice);
 
     my $experiment = $slice->GetExperiment();

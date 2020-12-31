@@ -143,6 +143,63 @@ SWITCH: for ($action) {
 }
 exit(0);
 
+sub writemap($;$$)
+{
+    my ($btype, $cmdp, $dinfo) = @_;
+
+    if ($btype eq "full") {
+	if (open(MAP, ">$STORAGEMAP")) {
+	    if (open(PMAP, "<$STORAGEMAP.local")) {
+		while (<PMAP>) {
+		    print MAP "$_";
+		}
+		close(PMAP);
+	    }
+	    if (open(PMAP, "<$STORAGEMAP.remote")) {
+		while (<PMAP>) {
+		    print MAP "$_";
+		}
+		close(PMAP);
+	    }
+	    close(MAP);
+	} else {
+	    warn("*** Could not create storage map: $STORAGEMAP\n");
+	}
+	return;
+    }
+
+    if (open(MAP, ">$STORAGEMAP.$btype")) {
+	my @cmds = ();
+	foreach my $href (@$cmdp) {
+	    if ($btype eq "local" && $href->{'CLASS'} eq "local") {
+		push(@cmds, $href);
+	    } elsif ($btype eq "remote" && $href->{'CLASS'} ne "local") {
+		push(@cmds, $href);
+	    }
+	}
+	foreach my $cmd (@cmds) {
+	    print MAP $cmd->{'VOLNAME'};
+	    if (exists($cmd->{'LVDEV'})) {
+		print MAP " " . $cmd->{'LVDEV'};
+	    }
+	    if (exists($cmd->{'MOUNTPOINT'})) {
+		print MAP " " . $cmd->{'MOUNTPOINT'};
+		my $dev = $cmd->{'LVDEV'};
+		if ($dev) {
+		    $dev =~ s/^\/dev\///;
+		    if ($dinfo && exists($dinfo->{$dev})) {
+			$dinfo->{$dev}->{'mountpoint'} = $cmd->{'MOUNTPOINT'};
+		    }
+		}
+	    }
+	    print MAP "\n";
+	}
+	close(MAP);
+    } else {
+	warn("*** Could not create storage map: $STORAGEMAP.$btype\n");
+    }
+}
+
 #
 # Boot Action.
 #
@@ -318,30 +375,33 @@ sub doboot()
 
     #
     # Stash mapping of block stores to local names for the convenience
-    # of the user. The storage map always gets all blockstores.
+    # of the user.
     #
-    if (open(MAP, ">$STORAGEMAP")) {
-	foreach my $cmd (@allcmds) {
-	    print MAP $cmd->{'VOLNAME'};
-	    if (exists($cmd->{'LVDEV'})) {
-		print MAP " " . $cmd->{'LVDEV'};
-	    }
-	    if (exists($cmd->{'MOUNTPOINT'})) {
-		print MAP " " . $cmd->{'MOUNTPOINT'};
-		my $dev = $cmd->{'LVDEV'};
-		if ($dev) {
-		    $dev =~ s/^\/dev\///;
-		    if (exists($dinfo->{$dev})) {
-			$dinfo->{$dev}->{'mountpoint'} = $cmd->{'MOUNTPOINT'};
-		    }
-		}
-	    }
-	    print MAP "\n";
-	}
-	close(MAP);
-    } else {
-	warn("*** Could not create storage map: $STORAGEMAP\n");
+    # We build the storage map in pieces, $STORAGEMAP.{local,remote} and
+    # then concatonate the pieces to form the full map.
+    #
+    # We used to just write all the blockstores to $STORAGEMAP even when
+    # invoked for either just local or remote. The problem is that we do
+    # not process all blockstores when invoked with -L or -R, we only
+    # process those of the given type. However, it is the processing step
+    # that sets LVDEV for local blockstores. So if we execute remote
+    # blockstore setup after local setup (the normal order), then it would
+    # overwrite $STORAGEMAP with info for local blockstores that did not
+    # have LVDEV set. This, coupled with a broken RE in blockstore (dataset)
+    # image capture, would lead to failure when capturing image-backed
+    # datasets on some occasions.
+    #
+    # The hope is that this convoluted procedure will allow you to run
+    # the type specific rc file even after boot time and have the resulting
+    # STORAGEMAP make sense.
+    #
+    if ($dolocal) {
+	writemap("local", \@allcmds, $dinfo);
     }
+    if ($doremote) {
+	writemap("remote", \@allcmds, $dinfo);
+    }
+    writemap("full");
 
     #
     # Since we went to a lot of trouble to compute it, also dump
@@ -591,8 +651,13 @@ sub docleanup($)
 
     # XXX see XXX comment above.
     if ($dolocal) {
+	unlink("$STORAGEMAP.local");
 	unlink($STORAGEMAP, $DISKINFO);
     }
+    if ($doremote) {
+	unlink("$STORAGEMAP.remote");
+    }
+    writemap("full");
 }
 
 #

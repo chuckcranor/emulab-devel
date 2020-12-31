@@ -1938,7 +1938,6 @@ sub ReservationPrediction($)
 	my $type = $type->type();
 	
 	foreach my $pid (@projlist) {
-	    my $rpid  = $projlist{$pid}->project();
 	    my @pairs = Reservation->FuturePressure([$type],[$pid]);
 	    next
 		if (!@pairs);
@@ -1947,6 +1946,13 @@ sub ReservationPrediction($)
 	    my $hrn  = $projlist{$pid};
 	    my $epid = $hrn->project();
 	    $pressure->{$type}->{$epid} = \@pairs;
+	}
+    }
+    foreach my $type (@types)  {
+	my $type = $type->type();
+	
+	foreach my $pid (@projlist) {
+	    my $rpid  = $projlist{$pid}->project();
 
 	    if (!exists($pforecasts->{$rpid})) {
 		$pforecasts->{$rpid} = {};

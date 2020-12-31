@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2013, 2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # Copyright (c) 2004-2010 Regents, University of California.
 # 
 # {{{EMULAB-LGPL
@@ -1890,8 +1890,10 @@ sub disablePortTrunking($$) {
     my $id = $self->{NAME} . "::disablePortTrunking($port)";
 
     my ($portIndex) = $self->convertPortFormat($PORT_FORMAT_IFINDEX,$port);
-    return 0
-	if (!$portIndex);
+    if (!$portIndex) {
+	warn "$id: Unable convert $port to ifindex\n";
+	return 0;
+    }
     my $native_vlan = $self->get1("dot1qPvid",$portIndex) || 1;
     my @remvlans = $self->otherTrunkedVlans($portIndex, $native_vlan);
 

@@ -469,7 +469,7 @@ sub DoCreate()
     #
     if ($type eq "imdataset") {
 	my $errcode = DoSnapShotInternal($dataset, $aggregate,
-					 $bsname, $nodeid, \$errmsg);
+					 $bsname, $sliver_urn, \$errmsg);
 	if ($errcode) {
 	    $response = $dataset->DeleteDataset();
 	    if ($response->code() == GENIRESPONSE_SUCCESS ||

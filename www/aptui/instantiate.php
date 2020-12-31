@@ -394,7 +394,7 @@ function SPITFORM($formfields, $newuser, $errors)
 
     if ($ISPOWDER) {
         # Powder Radio info.
-        $radioinfo = Aggregate::RadioInfo();
+        $radioinfo = Aggregate::RadioInfoNew();
         echo "<script type='text/plain' id='radioinfo-json'>\n";
         echo htmlentities(json_encode($radioinfo));
         echo "</script>\n";

@@ -102,6 +102,8 @@ my $ELAB_SETUP     = "$TB/sbin/elabinelab";
 my $TBADB          = "$TB/bin/tbadb";
 my $PUSHROOTKEY	   = "$TB/sbin/pushrootkey";
 my $TEVC	   = "$TB/bin/tevc";
+my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
+my $POKEFRONTEND     = "$TB/sbin/pokerffe";
 
 # Cache of instances to avoid regenerating them.
 my %aggregates     = ();
@@ -411,6 +413,24 @@ sub Delete($$)
     # Delete from cache. 
     delete($aggregates{$idx});
 
+    return 0;
+}
+
+#
+# Refresh instance.
+#
+sub Refresh($)
+{
+    my ($self) = @_;
+    my $idx = $self->idx();
+    
+    my $query_result =
+	DBQueryWarn("select * from geni_aggregates where idx='$idx'");
+    
+    return -1
+	if (!$query_result || !$query_result->numrows);
+
+    $self->{'AGGREGATE'} = $query_result->fetchrow_hashref();
     return 0;
 }
 
@@ -1380,6 +1400,14 @@ sub ActionStart($$;$)
 		goto bad;
 	    }
 	    DebugTimeStamp("syncportvlans done");
+	}
+	# The monitor is a proxy for needing this
+	if ($POWDER_RFMONITOR) {
+	    if (system("$POKEFRONTEND -d -e $pid,$eid enable")) {
+		$bootfailure_code = GENIRESPONSE_SETUPFAILURE_NETWORK();
+		$msg .= "Failed to setup RF frontends";
+		goto bad;
+	    }
 	}
     }
     $sliver = undef;
@@ -3258,6 +3286,13 @@ sub Stop($$;$)
 	if ($?) {
 	    $msg .= "Failed to remove vlans";
 	    goto bad;
+	}
+
+	# The monitor is a proxy for needing this
+	if ($POWDER_RFMONITOR) {
+	    if (system("$POKEFRONTEND -d -e $pid,$eid disable")) {
+		print STDERR "Failed to turn off RF frontends\n";
+	    }
 	}
     }
     

@@ -556,6 +556,9 @@ sub Start($$)
     #
     $logfile = CreateLogFile($logfilename);
 
+    # To assist debugging, push the initial metadata so that it is in the DB.
+    $logfile->SetMetadata(\@metadata, 1);
+
     #
     # We want to catch warnings, specifically uninitialized variables,
     # so we can print a backtrace. 
@@ -697,7 +700,7 @@ sub Start($$)
 	    push(@metadata, ["LogURN", $logurn]);
 	    push(@metadata, ["LogURL", $logfile->URL()]);
 
-	    $logfile->SetMetadata(\@metadata, 0);
+	    $logfile->SetMetadata(\@metadata, 1);
 	}
 	# The parent returns value, children go away.
 	if (!$rpcerror) {

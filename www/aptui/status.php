@@ -363,22 +363,9 @@ echo "</script>\n";
 # For Powder, send the radio info.
 #
 if ($ISPOWDER) {
-    $blob = array();
-
-    $query_result =
-        DBQueryFatal("select * from apt_aggregate_radioinfo");
-
-    while ($row = mysql_fetch_array($query_result)) {
-        $urn      = $row["aggregate_urn"];
-        $node_id  = $row["node_id"];
-
-        if (!array_key_exists($urn, $blob)) {
-            $blob[$urn] = array();
-        }
-        $blob[$urn][$node_id] = $row;
-    }
+    $radioinfo = Aggregate::RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
-    echo json_encode($blob,
+    echo json_encode($radioinfo,
                      JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
     echo "</script>\n";
 }

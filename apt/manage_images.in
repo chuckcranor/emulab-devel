@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -546,14 +546,24 @@ sub DoDeleteImage()
 	    next
 		if (!defined($version));
 
-	    if ($version->isLocked()) {
-		my $mesg =
-		    "Version " . $version->version() . " of the " .
-		    $version->name() . " profile is locked down, ".
-		    "cannot delete it.";
+	    if ($version->isLocked() || $version->inUse()) {
+		my $mesg;
+		my $reason;
 		
+		if ($version->isLocked()) {
+		    $mesg = "Version " . $version->version() . " of the " .
+			$version->name() . " profile is locked down, ".
+			"cannot delete it.";
+		    $reason = "locked";
+		}
+		else {
+		    $mesg = "Version " . $version->version() . " of the " .
+			$version->name() . " profile is in use by a ".
+			"running experiment, cannot delete it.";
+		    $reason = "inuse";
+		}
 		if ($webtask) {
-		    $webtask->reason("locked");
+		    $webtask->reason($reason);
 		    $webtask->profile($version->uuid());
 		}
 		UserError($mesg);

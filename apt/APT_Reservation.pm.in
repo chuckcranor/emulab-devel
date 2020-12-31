@@ -1216,9 +1216,9 @@ sub Reserved($$$$$$)
 #
 # Determine a max duration for an experiment.
 #
-sub MaxDuration($$$$$)
+sub MaxDuration($$$$$$)
 {
-    my ($project, $start, $pend, $resources, $pmsg) = @_;
+    my ($project, $start, $pend, $resources, $forecasts, $pmsg) = @_;
     my $counts   = undef;
     my $newend   = undef;
 
@@ -1239,88 +1239,193 @@ sub MaxDuration($$$$$)
 	
 	foreach my $type (keys(%{ $resources->{$urn} })) {
 	    my $count = $resources->{$urn}->{$type};
+	    print "$urn, $type, $count\n";
 
-	    print "$type, $count\n";
+	    #
+	    # If no forecast, just skip it.
+	    #
+	    if (! exists($forecasts->{$urn}->{'forecast'}->{$type})) {
+		print STDERR "No forecast info for $type at $urn\n";
+		next;
+	    }
 
-	    foreach my $group (@groups) {
-		my $res_project = $group->GetProject();
-		my $pid = $res_project->pid();
+	    #
+	    # Process the forecast info so we can use it.
+	    #
+	    my @forecast = @{ $forecasts->{$urn}->{'forecast'}->{$type} };
 
-		print "$group\n";
-		
-		next
-		    if (! $group->ReservationList());
+	    #
+	    # For debugging, add human readable time stamps.
+	    #
+	    foreach my $ref (@forecast) {
+		$ref->{"date"} = POSIX::strftime("%m/%d/20%y %H:%M",
+						 localtime($ref->{"t"}));
+	    }
+	    print Dumper(\@forecast);
 
-		my $res_start   = str2time($group->start());
-		my $res_end     = str2time($group->end());
+	    if (scalar(@forecast) > 1) {
+		my @temp = ();
 
-		print "$pid, $urn\n";
-
-		foreach my $existing ($group->ReservationList()) {
-		    next
-			if (!$existing->approved());
-		    next
-			if ($existing->aggregate_urn() ne $urn);
-		    next
-			if ($existing->type() ne $type);
-			   
-		    # Only reservable nodes for now, it would be pretty
-		    # messy to figure this out for compute nodes (more the
-		    # one)
-		    next
-			if (! $aggregate->IsReservableNode($type));
-
-		    printf("%s, %s\n",
-			   $existing->aggregate_urn(), $existing->type());
+		#
+		# Hmm, Gary says there can be duplicate entries for the same
+		# time stamp, and we want the last one. So have to splice those
+		# out before we process. 
+		#
+		for (my $i = 0; $i < scalar(@forecast) - 1; $i++) {
+		    my $data     = $forecast[$i];
+		    my $nextdata = $forecast[$i + 1];
 		    
-		    if ($project->SameProject($res_project)) {
-			#
-			# The two cases that matter here are:
-			#
-			# * The start time is within this reservation, in which
-			#   case, the end of the reservation is the upper bound.
-			#
-			# * The start is before the reservation, but still
-			#   close enough to fall within the default
-			#   maxduration (so, the experiment can start and
-			#   run until the start of the reservation).
-			#
-			if ($start >= $res_start && $start < $res_end) {
-			    if (!defined($newend) || $res_end < $newend) {
-				$newend = $res_end;
-			    }
-			}
-			elsif ($start <= $res_start &&
-			       $res_start - $start <= $MAXDURATION * 3600) {
-			    if (!defined($newend)) {
-				$newend = $res_end;
-			    }
-			    elsif ($newend >= $res_start &&
-				   $res_end < $newend) {
-				$newend = $res_end;
-			    }
-			}
+		    if ($data->{"t"} == $nextdata->{"t"}) {
+			print "toss1\n";
+			next;
 		    }
-		    else {
-			print "$start, $res_start, $res_end\n";
-			
-			#
-			# Reservation in another project, experiment must stop
-			# before the other one starts.
-			#
-			if ($start >= $res_start && $start < $res_end) {
-			    $newend = 0;
-			}
-			elsif ($start < $res_start &&
-			    $res_start - $start <= $MAXDURATION * 3600) {
-			    if (!defined($newend) || $res_start < $newend) {
-				$newend = $res_start;
+		    #
+		    # Oh, turns out two consecutive timestamps can have the
+		    # same free/held values. Cull those out too.  We want
+		    # the first one, eating up the subsequent timestamps
+		    # with the same values.
+		    #
+		    if ($data->{"free"} == $nextdata->{"free"} &&
+			$data->{"held"} == $nextdata->{"held"}) {
+			print "toss2\n";
+			push(@temp, $data);
+			for ($i = $i + 1; $i < scalar(@forecast) - 1; $i++) {
+			    $nextdata = $forecast[$i];
+			    if (! ($data->{"free"} == $nextdata->{"free"} &&
+				   $data->{"held"} == $nextdata->{"held"})) {
+				$i--;
+				last;
 			    }
+			    print "toss2-B\n";
 			}
+			next;
 		    }
+		    push(@temp, $data);
+		}
+		# Tack on last one.
+		push(@temp, $forecast[-1]);
+		
+		@forecast = @temp;
+	    }
+	    print Dumper(\@forecast);
+
+	    #
+	    # Scan until we find the entry just prior to the start time,
+	    # This entry is what is available at the start time.  One
+	    # (first) entry is what is available right now.
+	    #
+	    my $prev = shift(@forecast);
+	    
+	    if (@forecast) {
+		while (@forecast) {
+		    my $data = $forecast[0];
+		    if ($data->{"t"} > $start) {
+			last;
+		    }
+		    $prev = shift(@forecast);
 		}
 	    }
+	    print Dumper($prev);
+	    print Dumper($forecast[0]);
+
+	    #
+	    # Easy is that the prev entry free count is too small, so
+	    # user cannot start at the desired time.
+	    #
+	    if ($prev->{'free'} + $prev->{'held'}  < $count) {
+		$newend = 0;
+		last;
+	    }
+	    my $maxend = $start + ($MAXDURATION * 3600);
+	    
+	    #
+	    # If this is the last entry, there are no future changes.
+	    # Which probably means there is no reservation since if there
+	    # was, there would be a future entry for the end of the
+	    # reservation. The user gets only MAXDURATION.
+	    #
+	    if (!@forecast) {
+		if (!defined($newend) || $maxend < $newend) {
+		    $newend = $maxend;
+		}
+		next;
+	    }
+	    my $next = $forecast[0];
+
+	    #
+	    # Simple case which is actually a typical case; the next
+	    # datapoint says there are not enough free or held. 
+	    #
+	    if ($next->{'free'} + $next->{'held'} < $count) {
+		my $tmp = $maxend;
+		if ($tmp >= $next->{"t"}) {
+		    $tmp = $next->{"t"};
+		}
+		if (!defined($newend) || $tmp < $newend) {
+		    $newend = $tmp;
+		}
+		next;
+	    }
+
+	    #
+	    # At the time the user wants to start, there have to enough
+	    # free nodes or enough held nodes. Held nodes are unused
+	    # reserved nodes. In either case, the user can start the
+	    # experiment.
+	    # 
+	    # To go past MAXDURATION, the project must have a reservation
+	    # for the number of nodes requested. And the reservation has to
+	    # be unused (held count). If someone else in the project has
+	    # already sucked up the nodes, the held count will be zero, and
+	    # that is same thing as not have a reservation for them.
+	    #
+	    # The experiment can be scheduled for as long as the held
+	    # count is greater then the requested count.
+	    #
+	    my $held = $prev->{'held'};
+
+	    #
+	    # Scan ahead to see if the user has a reservation within
+	    # MAXDURATION.
+	    #
+	    while (@forecast) {
+		$next = shift(@forecast);
+
+		if ($held >= $count) {
+		    #
+		    # Keep going while held>count, the project has
+		    # reservations and can keep the experiment running.
+		    #
+		    if ($next->{"held"} >= $count) {
+			next;
+		    }
+		    last;
+		}
+		last
+		    if ($next->{"t"} >= $maxend || $count > $next->{"free"});
+
+		# If we make it to a reservation, we can keep going.
+		if ($next->{"held"} >= $count) {
+		    $held = $next->{"held"};
+		}
+		$prev = $next;
+	    }
+	    if ($held) {
+		if (!defined($newend) || $next->{"t"} < $newend) {
+		    $newend = $next->{"t"};
+		}
+	    }
+	    elsif ($next->{"t"} >= $maxend) {
+		if (!defined($newend) || $maxend < $newend) {
+		    $newend = $maxend;
+		}
+	    }
+	    elsif (!defined($newend) || $next->{"t"} < $newend) {
+		$newend = $next->{"t"};
+	    }
 	}
+	last
+	    if (defined($newend) && $newend == 0);
     }
     $$pend = $newend;
     return 0;

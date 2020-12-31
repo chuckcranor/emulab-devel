@@ -417,7 +417,7 @@ sub ParRun($$$@)
 	#
 	if (@objects && keys(%children) < $maxchildren && !$signaled) {
 	    # Space out the invocation of child processes a little.
-	    select(undef, undef, undef, 0.35);	    
+	    select(undef, undef, undef, 0.25);	    
 
 	    my $newsigset = POSIX::SigSet->new(SIGQUIT,SIGINT,SIGTERM,SIGHUP);
 	    my $oldsigset = POSIX::SigSet->new;
@@ -1026,11 +1026,9 @@ sub runBusyLoop($)
 	    close(PIPE);
 	    print $output;
 	    return 0
-		if (!$?);
-	    if ($output =~ /(group|db) file is busy/m) {
-		print "runBusyLoop; waiting a few seconds before trying again\n";
-		sleep(3);
-	    }
+		if (!$? || $output !~ /(group|db) file is busy/m);
+	    print "runBusyLoop; waiting a few seconds before trying again\n";
+	    sleep(3);
 	}
 	else {
 	    open(STDERR, ">&STDOUT");

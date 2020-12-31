@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2004-2019 University of Utah and the Flux Group.
+# Copyright (c) 2004-2020 University of Utah and the Flux Group.
 # Copyright (c) 2006-2014 Universiteit Gent/iMinds, Belgium.
 # Copyright (c) 2004-2006 Regents, University of California.
 # 
@@ -113,7 +113,7 @@ my $ChassisInfo = {
     },
     "force10-s4048" => {
         "moduleSlots"           => 1,   # Max # of modules in chassis
-        "maxPortsPerModule"     => 52,  # Max # of ports in any module
+        "maxPortsPerModule"     => 54,  # Max # of ports in any module
         "bitmaskBitsPerModule"  => 1024, # Number of bits per module
 	"zeroBased"             => 0,   # Whether ports/mods are 0 or 1-based
 	"nybbleEncoded"         => 0,   # Nybble-per-phy-port PortSet encoding

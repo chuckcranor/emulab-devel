@@ -1366,11 +1366,11 @@ function Do_MaxDuration()
         $am_array[$name] = $urn;
     }
 
-    if (!isset($formfields["rspec"]) || $formfields["rspec"] == "") {
+    if (!isset($ajax_args["rspec"]) || $ajax_args["rspec"] == "") {
         SPITAJAX_ERROR(-1, "Missing rspec");
         return;
     }
-    $rspec = $formfields["rspec"];
+    $rspec = $ajax_args["rspec"];
 
     if (isset($formfields["sites"]) && is_array($formfields["sites"])) {
         while (list($siteid, $am) = each($formfields["sites"])) {
@@ -1404,6 +1404,17 @@ function Do_MaxDuration()
     chmod($filename, 0666);
     $options .= " -f $filename";
 
+    #
+    # Hopefully the prediction info came through.
+    #
+    if (isset($ajax_args["prediction"]) && $ajax_args["prediction"] != "") {
+        $filename2 = tempnam("/tmp", "prediction");
+        $fp = fopen($filename2, "w");
+        fwrite($fp, $ajax_args["prediction"]);
+        fclose($fp);
+        chmod($filename2, 0666);
+        $options .= " -P $filename2";
+    }
     $webtask      = WebTask::CreateAnonymous();
     $webtask_id   = $webtask->task_id();
 
@@ -1412,6 +1423,8 @@ function Do_MaxDuration()
                      "  maxduration $options",
                      SUEXEC_ACTION_CONTINUE);
     $webtask->Refresh();
+
+    SUEXECERROR(SUEXEC_ACTION_CONTINUE);    
         
     if ($retval) {
         if (!$webtask->exited() || $retval < 0) {
@@ -1421,10 +1434,16 @@ function Do_MaxDuration()
             SPITAJAX_ERROR(1, $webtask->output());
         }
         unlink($filename);
+        if (isset($filename2)) {
+            unlink($filename2);
+        }
         $webtask->Delete();
         return;
     }
     unlink($filename);
+    if (isset($filename2)) {
+        unlink($filename2);
+    }
     $maxend = DateStringGMT(intval($webtask->TaskValue("maxend")));
     $webtask->Delete();
     SPITAJAX_RESPONSE($maxend);

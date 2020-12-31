@@ -1966,6 +1966,17 @@ sub GetSpectrum($)
     }
     return \@result;
 }
+sub GetFrontend($)
+{
+    my ($ref)  = @_;
+    my @result = ();
+
+    my $frontend = FindNodesNS("n:frontend", $ref, $EMULAB_NS)->pop();
+    return undef
+	if (!defined($frontend));
+
+    return GetText("name", $frontend);
+}
 sub GetBusRoutes($)
 {
     my ($ref)  = @_;

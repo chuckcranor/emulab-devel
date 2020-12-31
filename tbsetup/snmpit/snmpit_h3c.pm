@@ -1838,8 +1838,10 @@ sub disablePortTrunking($$) {
     my $id = $self->{NAME} . "::disablePortTrunking($port)";
 
     my ($portIndex) = $self->convertPortFormat($PORT_FORMAT_IFINDEX,$port);
-    return 0
-	if (!$portIndex);
+    if (!$portIndex) {
+	warn "$id: Unable convert $port to ifindex\n";
+	return 0;
+    }
     my $native_vlan = $self->get1("dot1qPvid",$portIndex) || 1;
     my @remvlans = $self->otherTrunkedVlans($portIndex, $native_vlan);
 
@@ -2326,6 +2328,8 @@ sub removePortsFromVlan($@) {
     return $errors;
 }
 
+use Data::Dumper;
+
 sub enablePortTrunking2($$$$) {
     my ($self,$port,$native_vlan,$equaltrunking) = @_;
     my ($ifIndex) = $self->convertPortFormat($PORT_FORMAT_IFINDEX,$port);
@@ -2353,19 +2357,30 @@ sub enablePortTrunking2($$$$) {
 sub disablePortTrunking($$) {
     my ($self, $port) = @_;
     my $id = $self->{NAME} . "::disablePortTrunking($port)";
+    my $errors = 0;
 
     my ($portIndex) = $self->convertPortFormat($PORT_FORMAT_IFINDEX,$port);
     my $trunks = $self->trunkedPorts($portIndex);
-    my $native_vlan = $$trunks{$portIndex};;
-    return 0 unless ($native_vlan);
+    my $native_vlan = $$trunks{$portIndex};
+    if (!$native_vlan) {
+	warn "$id: $portIndex does not have a native vlan\n";
+	return 0;
+    }
     my @remvlans = $self->otherTrunkedVlans($portIndex, 0);
 
     foreach my $vlan_number (@remvlans) {
-	warn "$id: Unable to remove VLAN $vlan_number\n"
+	warn "$id: Unable to remove VLAN $vlan_number on $portIndex\n"
 	   if $self->removeSomePortsFromVlan($vlan_number, $portIndex);
     }
-    my $errors = $self->set([$typeOID, $portIndex, 'access']) 
-		+$self->setPortVlan($native_vlan, $portIndex);
+    my $rv = $self->set([$typeOID, $portIndex, 'access']);
+    if (!defined($rv)) {
+	warn "$id: Unable to set access mode on $portIndex\n";
+	$errors++;
+    }
+    if ($self->setPortVlan($native_vlan, $portIndex)) {
+	warn "$id: Unable to reset native vlan $native_vlan on $portIndex\n";
+	$errors++;
+    }
     return $errors == 0;
 }
 
@@ -2432,8 +2447,6 @@ my %h3c_cmdOIDs =
     #"full"   => ["hh3cifEthernetDuplex","full"],
     #"half"   => ["hh3cifEthernetDuplex","half"],
 );
-
-use Data::Dumper;
 
 sub readifIndex($) {
     my $self = shift;

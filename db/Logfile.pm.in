@@ -457,6 +457,7 @@ sub Store($)
 sub SetMetadata($$$)
 {
     my ($self, $argref, $purge) = @_;
+    my @inserts = ();
 
     return -1
 	if (!ref($self));
@@ -486,11 +487,7 @@ sub SetMetadata($$$)
 	    my $len = 255 - (strlen($safe_val) - strlen($val));
 	    $safe_val = DBQuoteSpecial(substr($val, 0, $len));
 	}
-	return -1
-	    if (! DBQueryWarn("replace into logfile_metadata set ".
-			      "  logidx='$logidx',".
-			      "  metakey=$safe_key,metaval=$safe_val"));
-	return 0;
+	push(@inserts, "('$logidx',NULL,$safe_key,$safe_val)");
     };
 
     #
@@ -498,16 +495,17 @@ sub SetMetadata($$$)
     #
     if (ref($argref) eq "ARRAY") {
 	foreach my $ref (@{$argref}) {
-	    return -1
-		if (&$coderef(@{$ref}));
+	    &$coderef(@{$ref});
 	}
     }
     else {
 	foreach my $key (keys(%{$argref})) {
-	    return -1
-		if (&$coderef($key, $argref->{$key}));
+	    &$coderef($key, $argref->{$key});
 	}
     }
+    return -1
+	if (!DBQueryWarn("insert into logfile_metadata values ".
+			 join(",", @inserts)));
     return 0;
 }
 

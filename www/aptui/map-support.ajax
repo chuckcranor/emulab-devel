@@ -27,29 +27,6 @@ include_once("aggregate_defs.php");
 chdir("apt");
 
 #
-# Return the radio info for all radios.
-#
-function Do_GetRadioInfo()
-{
-    global $this_user, $ajax_args;
-    $blob = array();
-
-    $query_result =
-        DBQueryFatal("select * from apt_aggregate_radioinfo");
-
-    while ($row = mysql_fetch_array($query_result)) {
-        $urn      = $row["aggregate_urn"];
-        $node_id  = $row["node_id"];
-
-        if (!array_key_exists($urn, $blob)) {
-            $blob[$urn] = array();
-        }
-        $blob[$urn][$node_id] = $row;
-    }
-    SPITAJAX_RESPONSE($blob);
-}
-
-#
 # Return Fixed Endpoint info.
 #
 function Do_GetFixedEndpoints()
@@ -57,25 +34,11 @@ function Do_GetFixedEndpoints()
     global $this_user, $ajax_args;
     $blob = array();
     $aggregates = Aggregate::AllAggregatesList();
+    $radioinfo  = Aggregate::RadioInfoNew();
     
     foreach ($aggregates as $urn => $aggregate) {
         if (! $aggregate->isFE() || $aggregate->disabled()) {
             continue;
-        }
-        #
-        # Grab the radio info for this one.
-        #
-        $radioinfo = null;
-        
-        $query_result =
-            DBQueryFatal("select * from apt_aggregate_radioinfo ".
-                         "where aggregate_urn='$urn'");
-        if (mysql_num_rows($query_result)) {
-            $radioinfo = array();
-            
-            while ($row = mysql_fetch_array($query_result)) {
-                $radioinfo[$row["node_id"]] = $row;
-            }
         }
         $reservablenodes = $aggregate->ReservableNodes(true);
 
@@ -86,9 +49,12 @@ function Do_GetFixedEndpoints()
                   "nickname"  => $aggregate->nickname(),
                   "name"      => $aggregate->name(),
                   "typelist"  => $typelist,
-                  "radioinfo" => $radioinfo,
+                  "radioinfo" => null,
                   # Ask for extended info.
                   "reservable_nodes" => $reservablenodes);
+        if (array_key_exists($urn, $radioinfo)) {
+            $blob[$urn]["radioinfo"] = $radioinfo[$urn];
+        }
     }
     SPITAJAX_RESPONSE($blob);
 }
@@ -106,96 +72,50 @@ function Do_GetBaseStations()
     }
     $urn = $aggregate->urn();
     $reservable_nodes = $aggregate->ReservableNodes(true);
+    $radioinfo        = Aggregate::RadioInfoNew();
+    $locationRadios   = array();
+    # Split up radios by location
+    foreach ($radioinfo[$urn] as $node_id => &$info) {
+        $location = $info["location"];
+        if (!array_key_exists($location, $locationRadios)) {
+            $locationRadios[$location] = array();
+        }
+        $locationRadios[$location][$node_id] = $info;
+        if (isset($reservable_nodes[$node_id])) {
+            $info["available"] = $reservable_nodes[$node_id]["available"];
+        }
+    }
 
+    #
+    # Grab the base station locations,
+    #
     $query_result =
-        DBQueryFatal("select * from apt_aggregate_radioinfo ".
-                     "where aggregate_urn='$urn'");
+        DBQueryFatal("select * from apt_aggregate_radio_locations ".
+                     "where itype='BS' and aggregate_urn='$urn'");
     if (!mysql_num_rows($query_result)) {
         SPITAJAX_RESPONSE(null);
         return 0;
     }
-    #
-    # This needs to go into the DB at some point.
-    #
-    $baseStations = array(
-        "Medical Tower" =>
-        array("name"      => "Medical Tower",
-              "latitude"  => 40.7674008,
-              "longitude" => -111.8311815,
-              "type"      => "Rooftop Base Station",
-              "street"    => "https://goo.gl/maps/jt5VnRKTAE2AEJmA9",
-              "radioinfo" => null),
-        "Honors" =>
-        array("name"      => "Honors",
-              "latitude"  => 40.7644037,
-              "longitude" => -111.8369526,
-              "type"      => "Rooftop Base Station",
-              "street"    => "https://goo.gl/maps/QR3s1VcjYRuVMEXv7",
-              "radioinfo" => null),
-        "Dentistry" =>
-        array("name"      => "Dentistry",
-              "latitude"  => 40.7571518,
-              "longitude" => -111.8314963,
-              "type"      => "Rooftop Base Station",
-              "street"    => "https://goo.gl/maps/CtW3afez7zPhUtK99",
-              "radioinfo" => null),
-        "Behavioral" =>
-        array("name"      => "Behavioral",
-              "latitude"  => 40.7613391,
-              "longitude" => -111.8462915,
-              "type"      => "Rooftop Base Station",
-              "street"    => "https://goo.gl/maps/t6NynuYL8LqT4HmW9",
-              "radioinfo" => null),
-        "Friendship" =>
-        array("name"      => "Friendship",
-              "latitude"  => 40.7580745,
-              "longitude" => -111.8532534,
-              "type"      => "Rooftop Base Station",
-              "street"    => "https://goo.gl/maps/wXhbuhB6Hn2VU93z5",
-              "radioinfo" => null),
-        "Browning" =>
-        array("name"      => "Browning",
-              "latitude"  => 40.7662732,
-              "longitude" => -111.8477366,
-              "type"      => "Rooftop Base Station",
-              "street"    => "https://goo.gl/maps/chCab9EvmkMGNmAZ7",
-              "radioinfo" => null),
-        "MEB" =>
-        array("name"      => "MEB",
-              "latitude"  => 40.7687871,
-              "longitude" => -111.8458272,
-              "type"      => "Rooftop Base Station",
-              "street"    => "https://goo.gl/maps/c6oUDd5qAV5xK7uk9",
-              "radioinfo" => null),
-        "USTAR" =>
-        array("name"      => "USTAR",
-              "latitude"  => 40.7689874,
-              "longitude" => -111.8416694,
-              "type"      => "Rooftop Base Station",
-              "street"    => "https://goo.gl/maps/8k8MU1KkVsAqzb3H7",
-              "radioinfo" => null),
-        "Hospital" =>
-        array("name"      => "Hospital",
-              "latitude"  => 40.771050,
-              "longitude" => -111.837123,
-              "type"      => "Rooftop Base Station",
-              "street"    => "https://goo.gl/maps/8k8MU1KkVsAqzb3H7",
-              "radioinfo" => null),
-    );
+    $baseStations = array();
+    
     while ($row = mysql_fetch_array($query_result)) {
-        $location = $row["location"];
-        $node_id  = $row["node_id"];
-        
-        if (isset($reservable_nodes[$node_id])) {
-            $row["available"] = $reservable_nodes[$node_id]["available"];
+        $location   = $row["location"];
+        $latitude   = $row["latitude"];
+        $longitude  = $row["longitude"];
+        $streeturl  = $row["streeturl"];
+
+        $baseStations[$location] = array(
+            "name"        => $location,
+            "latitude"    => $latitude,
+            "longitude"   => $longitude,
+            "type"        => "Rooftop Base Station",
+            "street"      => $streeturl,
+            "cluster_urn" => $urn,
+            "radioinfo"   => null
+        );
+        if (array_key_exists($location, $locationRadios)) {
+            $baseStations[$location]["radioinfo"] = $locationRadios[$location];
         }
-        if ($baseStations[$location]["radioinfo"] == null) {
-            $baseStations[$location]["radioinfo"] = array();
-        }
-        $radioinfo = $baseStations[$location]["radioinfo"];
-        $radioinfo[$row["node_id"]] = $row;
-        $baseStations[$location]["radioinfo"]   = $radioinfo;
-        $baseStations[$location]["cluster_urn"] = $urn;
     }
     SPITAJAX_RESPONSE($baseStations);
 }

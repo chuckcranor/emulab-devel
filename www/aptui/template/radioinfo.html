@@ -6,6 +6,7 @@
 	<th>Location</th>
 	<th>Node</th>
 	<th>Radio Type</th>
+	<th>Frontend (iface)</th>
 	<th class="sorter-false">TX Ranges</th>
 	<th class="sorter-false">RX Ranges</th>
 	<th class="sorter-false">Monitor</th>
@@ -15,28 +16,30 @@
     </thead>
     <tbody>
       <% _.each(radioinfo, function(aggregate, urn) { %>
-	<% _.each(aggregate, function(details, node_id) { %>
+	<% _.each(aggregate, function(node, node_id) { %>
 	  <% var url = amlist[urn].weburl +
-  	  "/portal/show-node.php?node_id=" + details.node_id; %>
+  	  "/portal/show-node.php?node_id=" + node_id; %>
+	  <% _.each(node.frontends, function(frontend, iface) { %>
 	  <tr>
-	    <td><a href="powder-map.php?location=<%- details.location %>"
+	    <td><a href="powder-map.php?location=<%- node.location %>"
 		   class="location"
 		   data-urn="<%- urn %>"
-		   data-location="<%- details.location %>"
-		   data-type="<%- details.installation_type %>">
-	      <%- details.location %></a>
+		   data-location="<%- node.location %>"
+		   data-type="<%- node.itype %>">
+	      <%- node.location %></a>
 	    </td>
 	    <td><a href="<%- url %>" target="_blank">
-	      <%- details.node_id %></a>
+	      <%- node_id %></a>
 	    </td>
-	    <td><%- details.radio_type %></td>
-	    <td><%- details.transmit_frequencies %></td>
-	    <td><%- details.receive_frequencies %></td>
+	    <td><%- node.radio_type %></td>
+	    <td><%- frontend.frontend %> (<%- iface %>)</td>
+	    <td><%- frontend.transmit_frequencies %></td>
+	    <td><%- frontend.receive_frequencies %></td>
 	    <td class="text-center">
-	      <% if (details.monitored) { %>
+	      <% if (frontend.monitored) { %>
 		<% var url = "frequency-graph.php?cluster=" +
 		amlist[urn].nickname + "&node_id=" +
-		details.node_id + "&iface=rf0";
+		node_id + "&iface=" + iface;
 		%>
 		<a href='<%- url %>' target="_blank">
 		  <span class="glyphicon glyphicon-stats"
@@ -45,9 +48,10 @@
 		  n/a
 	      <% } %>
 	    </td>
-	    <td><%- details.available ? "Yes" : "No" %></td>
-	    <td><%- details.notes %></td>
+	    <td><%- node.available ? "Yes" : "No" %></td>
+	    <td><%- frontend.notes %></td>
 	  </tr>
+	<% }); %>
 	<% }); %>
       <% }); %>
     </tbody>

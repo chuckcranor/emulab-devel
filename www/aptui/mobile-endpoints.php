@@ -64,7 +64,7 @@ echo "<script type='text/plain' id='amlist-json'>\n";
 echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 
-$radioinfo = Aggregate::RadioInfo();
+$radioinfo = Aggregate::RadioInfoNew();
 echo "<script type='text/plain' id='radioinfo-json'>\n";
 echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
 echo "</script>\n";

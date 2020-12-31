@@ -144,8 +144,8 @@ window.ShowFrequencyGraph = (function ()
 
 	toolbox.append("rect")
 	    .attr("class", "tooltip-rect")
-	    .attr("width", 125)
-	    .attr("height", 50)
+	    .attr("width", 130)
+	    .attr("height", 75)
             .attr("y", -22)
 	    .attr("rx", 4)
 	    .attr("ry", 4);
@@ -169,6 +169,16 @@ window.ShowFrequencyGraph = (function ()
 	    .attr("class", "tooltip-power")
 	    .attr("x", 65)
 	    .attr("y", 18);
+
+	toolbox.append("text")
+	    .attr("x", 5)
+	    .attr("y", 38)
+	    .text("Center:");
+
+	toolbox.append("text")
+	    .attr("class", "tooltip-center")
+	    .attr("x", 65)
+	    .attr("y", 38);
 
 	context.append("path")
 	    .datum(data)
@@ -219,6 +229,13 @@ window.ShowFrequencyGraph = (function ()
 			 "," + y(d.power) + ")");
 	    tooltip.select(".tooltip-freq").text(formatter(d.frequency));
 	    tooltip.select(".tooltip-power").text(formatter(d.power));
+	    if (_.has(d, "center_freq")) {
+		tooltip.select(".tooltip-center")
+		    .text(formatter(d.center_freq));
+	    }
+	    else {
+		tooltip.select(".tooltip-center").text("n/a");
+	    }
 	}
 
 	function brushed() {
@@ -697,7 +714,38 @@ window.ShowFrequencyGraph = (function ()
 	var max = 99999999;
 	
 	return Math.floor(Math.random() * (max - min + 1)) + min;
-    }    
+    }
+
+    // Link to the graph page for a specific graph.
+    function GraphURL(args, info)
+    {
+	if (_.has(info, "graphurl")) {
+	    return info.graphurl;
+	}
+	var dirname = info["dirname"];
+	
+	var url = window.location.origin + "/" +
+	    window.location.pathname + "?logid=" + info.logid +
+	    "&node_id=" + info.node_id +
+	    "&iface=" + info.iface;
+
+	if (args.cluster) {
+	    url = url + "&cluster=" + args.cluster;
+	}
+	if (args.baseline) {
+	    url = url + "&baseline=1";
+	    
+	    if (!args.cluster) {
+		url = url + "&cluster=" + dirname;
+	    }
+	}
+	else if (dirname == "archive") {
+	    url = url + "&archived=1";
+	}
+	// Remember it so we can add a link at top of page when selected
+	info["graphurl"] = url;
+	return url;
+    }
 
     function BuildMenu(args)
     {
@@ -800,6 +848,9 @@ window.ShowFrequencyGraph = (function ()
 		    return btime - atime;
 		});
 		_.each(list, function(info) {
+		    // Remeber this for generating graph url.
+		    info["dirname"] = dirname;
+		    
 		    var html =
 			"<li class='fgraph-" + info.id  + "'>" +
 			" <a href='#'>" +
@@ -814,24 +865,7 @@ window.ShowFrequencyGraph = (function ()
 		    });
 		    // Lazily put in the href for the specific graph link.
 		    $(item).hover(function (event) {
-			var url = window.location.origin + "/" +
-			    window.location.pathname + "?logid=" + info.logid +
-			    "&node_id=" + info.node_id +
-			    "&iface=" + info.iface;
-
-			if (args.cluster) {
-			    url = url + "&cluster=" + args.cluster;
-			}
-			if (args.baseline) {
-			    url = url + "&baseline=1";
-			    
-			    if (!args.cluster) {
-				url = url + "&cluster=" + dirname;
-			    }
-			}
-			else if (dirname == "archive") {
-			    url = url + "&archived=1";
-			}
+			var url = GraphURL(args, info);
 			$(this).find("a").attr("href", url);
 		    });
 		    menuitems.push(item);
@@ -1047,6 +1081,14 @@ window.ShowFrequencyGraph = (function ()
 	    .find(".active").removeClass("active");
 	$(args.selector + ' .moregraphs-dropdown')
 	    .find(".fgraph-" + info.id).addClass("active");
+
+	// Link to graph.
+	var url = GraphURL(args, info);
+	console.info(url);
+	
+	$(args.selector + ' .share-button')
+	    .data("graphurl", url)
+	    .removeAttr("disabled");
     }
 
     function UpdateGraph(args, info)
@@ -1107,7 +1149,58 @@ window.ShowFrequencyGraph = (function ()
 		});
     }
 
+    /*
+     * Handle the Share button popup.
+     */
+    function Share(args)
+    {
+	var selector = args.selector + ' .share-button';
+	var url = $(selector).data("graphurl");
+	var id = "xxxyyy";
+	var input = id + "-url-input";
+	var copy  = id + "-url-copy";
+	
+	var popupstring = 
+	    "<div style='width 100%'> "+
+	    "  <input readonly type=text " +
+	    "       id='" + input + "' " +
+	    "       style='display:inline; width: 93%; padding: 2px;' " +
+	    "       class='form-control input-sm' " +
+	    "       value='" + url + "'>" +
+	    "  <a href='#' class='btn' " +
+	    "     id='" + copy + "' " +
+	    "     style='padding: 0px'>" +
+	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
+	
+	if ($("#" + input).length == 0) {
+	    $(selector).popover({
+		html:     true,
+		content:  popupstring,
+		trigger:  'manual',
+		placement:'auto',
+		container:'body',
+	    });
+	    $(selector).popover('show');
+	    $('#' + copy).click(function (e) {
+		e.preventDefault();
+		$('#' + input).select();
+		document.execCommand("copy");
+		$(selector).popover('destroy');
+	    });
+	    $('#' + input).click(function (e) {
+		e.preventDefault();
+		$(selector).popover('destroy');
+	    });
+	}
+	else {
+	    $(selector).popover('destroy');
+	}
+    }
+
     return function(args) {
+	$(args.selector + ' .share-button').click(function (e) {
+	    Share(args);
+	});
 	BuildMenu(args);
     };
 }

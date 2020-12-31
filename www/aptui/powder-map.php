@@ -49,6 +49,7 @@ $showmobile    = ($this_user ? 1 : 0);
 $optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
                                  "experiment", PAGEARG_UUID,
                                  "nomobile",   PAGEARG_BOOLEAN,
+                                 "showlinks",  PAGEARG_STRING,
                                  "location",   PAGEARG_STRING,
                                  "route",      PAGEARG_STRING);
 
@@ -68,6 +69,12 @@ else {
 if ($nomobile) {
     $showmobile = 0;
 }
+if (!isset($showlinks)) {
+    $showlinks = null;
+}
+else {
+    $showlinks = "'$showlinks'";
+}
 SPITHEADER(1);
 
 echo '<link rel="stylesheet"
@@ -82,6 +89,7 @@ echo "window.SHOWLEGEND    = $showlegend;\n";
 echo "window.SHOWAVAILABLE = $showavailable;\n";
 echo "window.SHOWRESERVED  = $showreserved;\n";
 echo "window.SHOWMOBILE    = $showmobile;\n";
+echo "window.SHOWLINKS     = $showlinks;\n";
 echo "window.BASEONLY      = $baseonly;\n";
 if ($experiment) {
     echo "window.EXPERIMENT = '$experiment';\n";
@@ -97,6 +105,7 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 AddLibrary("js/quickvm_sup.js");
 REQUIRE_MOMENT();
+AddLibrary("js/lib/jquery.csv.js");
 AddLibrary("js/powder-map-support.js");
 SPITREQUIRE("js/powder-map.js",
             "<script src='https://js.arcgis.com/4.14/'></script>");

@@ -39,6 +39,11 @@ window.ShowPowderMap = (function()
 	    "all"    : null,
 	    "filter" : null,
 	},
+	"Links"  : {
+	    "data"   : null,	// Raw data
+	    "all"    : null,
+	    "filter" : null,
+	},
     };
 
     // x,y is the point to test
@@ -82,6 +87,7 @@ window.ShowPowderMap = (function()
 			return;
 		    }
 		    ResInfo = json.value;
+		    console.info("ResInfo", json.value);
 		};
 		sup.CallServerMethod(null, "resgroup",
 				     "ListReservationGroups",
@@ -197,6 +203,10 @@ window.ShowPowderMap = (function()
 		       DrawBaseStations(), DrawRoutes())
 		    .done(function (r1, r2, r3) {
 			console.info("done1", r1, r2, 3);
+
+			if (Options.showlinks) {
+			    DrawLinks(Options.showlinks);
+			}
 			
 			if (_.has(Options, "experiment")) {
 			    MarkExperimentResources();
@@ -212,7 +222,7 @@ window.ShowPowderMap = (function()
 			    ShowRoute(Options.route);
 			}
 			else if (Options.showmobile) {
-			    ShowRoute(68);
+			    //ShowRoute(68);
 			}
 			if (window.opener) {
 			    window.addEventListener("message",
@@ -634,75 +644,92 @@ window.ShowPowderMap = (function()
 
 			attributes[prefix + "node_id"]    = node_id;
 			attributes[prefix + "radio_type"] = info.radio_type;
-			attributes[prefix + "tx_freq"] =
-			    info.transmit_frequencies;
-			attributes[prefix + "rx_freq"] =
-			    info.receive_frequencies;
 			attributes[prefix + "notes"] = info.notes;
 			attributes[prefix + "free"]  =
 			    (details.reservable_nodes[node_id].available ?
 			     "Yes" : "No");
 
-			var content = {
-			    type: "fields",
-			    fieldInfos: [
-				{
-				    fieldName: prefix + "node_id",
-				    label: "Node ID"
-				},
-				{
-				    fieldName: prefix + "free",
-				    label: "Available?"
-				},
-				{
-				    fieldName: prefix + "radio_type",
-				    label: "Radio Type"
-				},
-				{
-				    fieldName: prefix + "tx_freq",
-				    label: "TX Frequencies"
-				},
-				{
-				    fieldName: prefix + "rx_freq",
-				    label: "RX Frequencies"
-				},
-				{
-				    fieldName: prefix + "notes",
-				    label: "Notes"
-				},
-			    ]
-			};
-			popupcontent.push(content);
+			var fieldInfos = [
+			    {
+				fieldName: prefix + "node_id",
+				label: "Node ID"
+			    },
+			    {
+				fieldName: prefix + "free",
+				label: "Available?"
+			    },
+			    {
+				fieldName: prefix + "radio_type",
+				label: "Radio Type"
+			    },
+			];
 
 			/*
 			 * Parse the comma separated strings into arrays
-			 * of low/high frequency info.
+			 * of low/high frequency info. See below.
 			 */
 			info["txRanges"] = [];
 			info["rxRanges"] = [];
 
-			if (info.transmit_frequencies != "") {
-			    _.each(info.transmit_frequencies.split(","),
+			/*
+			 * Each frontend has its own frequencies and notes.
+			 */
+			_.each(info.frontends, function (frontend, iface) {
+			    var fe_prefix = prefix + iface + " ";
+			    var tx       = frontend.transmit_frequencies;
+			    var rx       = frontend.receive_frequencies;
+			    var fe       = frontend.frontend;
+			    var notes    = frontend.notes;
+			    var fe_infos = [];
+
+			    if (fe != "none") {
+				fe_infos.push({
+				    fieldName: fe_prefix + "frontend",
+				    label: "Frontend"
+				});
+				attributes[fe_prefix + "frontend"] = fe;
+			    }
+			    fe_infos.push({
+				fieldName: fe_prefix + "tx_freq",
+				label: "TX Frequencies"
+			    });
+			    fe_infos.push({
+				fieldName: fe_prefix + "rx_freq",
+				label: "RX Frequencies"
+			    });
+			    fe_infos.push({
+				fieldName: fe_prefix + "notes",
+				label: "Notes"
+			    });
+			    attributes[fe_prefix + "tx_freq"] = tx;
+			    attributes[fe_prefix + "rx_freq"] = rx;
+			    attributes[fe_prefix + "notes"]   = notes;
+
+			    fieldInfos = fieldInfos.concat(fe_infos);
+
+			    _.each(tx.split(","),
 				   function (range) {
 				       var tokens = range.split("-");
 
 				       info.txRanges.push({
-					   "low"  : parseInt(tokens[0]),
-					   "high" : parseInt(tokens[1]),
+					   "low"  : tokens[0],
+					   "high" : tokens[1]
 				       });
 				   });
-			}
-			if (info.receive_frequencies != "") {
-			    _.each(info.receive_frequencies.split(","),
+			    _.each(rx.split(","),
 				   function (range) {
 				       var tokens = range.split("-");
 
 				       info.rxRanges.push({
-					   "low"  : parseInt(tokens[0]),
-					   "high" : parseInt(tokens[1]),
+					   "low"  : tokens[0],
+					   "high" : tokens[1]
 				       });
 				   });
-			}
+			});
+			popupcontent.push({
+			    type: "fields",
+			    fieldInfos: fieldInfos,
+			});
 		    });
 		}
 		//console.info(attributes, popupcontent);
@@ -1030,70 +1057,91 @@ window.ShowPowderMap = (function()
 
 			attributes[prefix + "node_id"]    = node_id;
 			attributes[prefix + "radio_type"] = info.radio_type;
-			attributes[prefix + "tx_freq"] =
-			    info.transmit_frequencies;
-			attributes[prefix + "rx_freq"] =
-			    info.receive_frequencies;
 			attributes[prefix + "notes"] = info.notes;
 			attributes[prefix + "free"]  =
 			    (info.available ? "Yes" : "No");
 
-			var content = {
-			    type: "fields",
-			    fieldInfos: [
-				{
-				    fieldName: prefix + "node_id",
-				    label: "Node ID"
-				},
-				{
-				    fieldName: prefix + "free",
-				    label: "Available?"
-				},
-				{
-				    fieldName: prefix + "radio_type",
-				    label: "Radio Type"
-				},
-				{
-				    fieldName: prefix + "tx_freq",
-				    label: "TX Frequencies"
-				},
-				{
-				    fieldName: prefix + "rx_freq",
-				    label: "RX Frequencies"
-				},
-				{
-				    fieldName: prefix + "notes",
-				    label: "Notes"
-				},
-			    ]
-			};
-			popupcontent.push(content);
+			var fieldInfos = [
+			    {
+				fieldName: prefix + "node_id",
+				label: "Node ID"
+			    },
+			    {
+				fieldName: prefix + "free",
+				label: "Available?"
+			    },
+			    {
+				fieldName: prefix + "radio_type",
+				label: "Radio Type"
+			    }
+			];
 
 			/*
 			 * Parse the comma separated strings into arrays
-			 * of low/high frequency info.
+			 * of low/high frequency info. See below.
 			 */
 			info["txRanges"] = [];
 			info["rxRanges"] = [];
-			
-			_.each(info.transmit_frequencies.split(","),
-			       function (range) {
-				   var tokens = range.split("-");
 
-				   info.txRanges.push({
-				       "low"  : tokens[0],
-				       "high" : tokens[1]
-				   });
-			       });
-			_.each(info.receive_frequencies.split(","),
-			       function (range) {
-				   var tokens = range.split("-");
+			/*
+			 * Each frontend has its own frequencies and notes.
+			 */
+			_.each(info.frontends, function (frontend, iface) {
+			    var fe_prefix = prefix + iface + " ";
+			    var tx       = frontend.transmit_frequencies;
+			    var rx       = frontend.receive_frequencies;
+			    var fe       = frontend.frontend;
+			    var notes    = frontend.notes;
+			    var fe_infos = [];
 
-				   info.rxRanges.push({
-				       "low"  : tokens[0],
-				       "high" : tokens[1]
+			    if (fe != "none") {
+				fe_infos.push({
+				    fieldName: fe_prefix + "frontend",
+				    label: "Frontend"
+				});
+				attributes[fe_prefix + "frontend"] = fe;
+			    }
+			    fe_infos.push({
+				fieldName: fe_prefix + "tx_freq",
+				label: "TX Frequencies"
+			    });
+			    fe_infos.push({
+				fieldName: fe_prefix + "rx_freq",
+				label: "RX Frequencies"
+			    });
+			    fe_infos.push({
+				fieldName: fe_prefix + "notes",
+				label: "Notes"
+			    });
+			    attributes[fe_prefix + "tx_freq"] = tx;
+			    attributes[fe_prefix + "rx_freq"] = rx;
+			    attributes[fe_prefix + "notes"]   = notes;
+
+			    fieldInfos = fieldInfos.concat(fe_infos);
+
+			    _.each(tx.split(","),
+				   function (range) {
+				       var tokens = range.split("-");
+
+				       info.txRanges.push({
+					   "low"  : tokens[0],
+					   "high" : tokens[1]
+				       });
 				   });
-			       });
+			    _.each(rx.split(","),
+				   function (range) {
+				       var tokens = range.split("-");
+
+				       info.rxRanges.push({
+					   "low"  : tokens[0],
+					   "high" : tokens[1]
+				       });
+				   });
+			});
+			popupcontent.push({
+			    type: "fields",
+			    fieldInfos: fieldInfos,
+			});
 		    });
 		}
 		var popup = {
@@ -1618,6 +1666,57 @@ window.ShowPowderMap = (function()
             coordinates.push([lng / factor, lat / factor]);
 	}
 	return coordinates;
+    }
+
+    function DrawLinks(which)
+    {
+	var url = "https://www.powderwireless.net/powder-link-" +
+	    which + ".csv";
+	var layer = GraphicsLayer({
+	    title: "Links",
+	})
+	Map.add(layer);
+	Layers["Links"].all = layer;
+
+	var callback = function (data) {
+	    console.info("DrawLinks", data);
+	    Layers["Links"].data = data;
+
+	    _.each(data, function (line) {
+		var color = line.color;
+	    
+		var simpleLineSymbol = {
+		    type: "simple-line",
+		    color: "#" + color,
+		    width: 1
+		};
+
+		var polyline = {
+		    type: "polyline",
+		    paths: [
+			[line.longitude1, line.latitude1],
+			[line.longitude2, line.latitude2],
+		    ]
+		};
+
+		var polylineGraphic = new Graphic({
+		    geometry: polyline,
+		    symbol: simpleLineSymbol
+		});
+
+		layer.add(polylineGraphic);
+	    });
+	};
+	$.ajax({
+	    type: "GET",  
+	    url: url,
+	    dataType: "text",       
+	    success: function(response)  
+	    {
+		var data = $.csv.toObjects(response);
+		callback(data);
+	    }   
+	});	
     }
 
     // Helper for Emulab Namespace

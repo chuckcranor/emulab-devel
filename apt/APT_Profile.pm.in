@@ -383,6 +383,22 @@ sub isLocked($)
 
     return ($self->nodelete() || $self->profile_nodelete() ? 1 : 0);
 }
+# Is a profile is use by an running or scheduled experiment.
+sub inUse($)
+{
+    my ($self) = @_;
+    my $profileid = $self->profileid();
+    my $version   = $self->version();
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instances ".
+		    "where profile_id='$profileid' and ".
+		    "      profile_version='$version'");
+    return 1
+	if (!$query_result);
+
+    return $query_result->numrows;
+}
 
 #
 # Refresh a class instance by reloading from the DB.
@@ -1618,8 +1634,7 @@ sub CheckLicenses($$$$$)
 		
 		my $nodetype = NodeType->Lookup($hardtype);
 		if (! $nodetype) {
-		    $$perrmsg = "Not a valid hardware type: $hardtype";
-		    return 1;
+		    next;
 		}
 		if ($nodetype->required_license()) {
 		    my $idx = $nodetype->required_license();
@@ -1737,6 +1752,10 @@ sub GetResources($$$)
 		$restoken = $type;
 	    }
 	}
+	else {
+	    print STDERR "No type for $client_id\n";
+	    next;
+	}
 	if (!exists($typeCounts{$manager_urn})) {
 	    $typeCounts{$manager_urn} = {};
 	}
@@ -1817,6 +1836,13 @@ sub CheckSpectrum($$$$$$)
 	    return -1;
 	}
     }
+
+    #
+    # Check frontend specifications here.
+    #
+    my $retval = CheckFrontends($rspec, $pmsg);
+    return $retval
+	if ($retval);
     
     my $check = sub () {
 	my ($spectrum) = @_;
@@ -1989,6 +2015,65 @@ sub GetSpectrum($$$)
 	}
     }
     $$pref = \@ranges;
+    return 0;
+}
+
+#
+# Check Frontends.
+#
+sub CheckFrontends($$)
+{
+    my ($rspec, $perrmsg) = @_;
+    
+    if (!ref($rspec)) {
+	my $rspec = GeniXML::Parse($rspec);
+	if (! defined($rspec)) {
+	    $$perrmsg = "CheckFrontends: Could not parse rspec";
+	    return -1;
+	}
+    }
+
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $client_id   = GetVirtualId($ref);
+	my $node_id     = GeniXML::GetNodeId($ref);
+	my $manager_urn = GetManagerId($ref);
+	my $aggregate   = APT_Aggregate->Lookup($manager_urn);
+
+	foreach my $iref (GeniXML::FindNodes("n:interface",
+					     $ref)->get_nodelist()) {
+	    my $fe_id   = GeniXML::GetFrontend($iref);
+	    my $link_id = GeniXML::GetInterfaceId($iref);
+	    my $iface   = GeniXML::GetNodeId($iref);
+
+	    next
+		if (!defined($fe_id));
+
+	    if (!defined($iface)) {
+		$$perrmsg = "CheckFrontends: you must set the component_id ".
+		    "for interface $link_id on $client_id";
+		return 1;
+	    }
+	    #
+	    # The frontend must be defined for the interface. 
+	    #
+	    my $radio = $aggregate->Radio($node_id);
+	    if (!defined($radio)) {
+		$$perrmsg = "CheckFrontends: No radio info found for ".
+		    "$node_id";
+		return 1;
+	    }
+	    my $frontend = $radio->Frontend($iface, $fe_id);
+	    if (!defined($frontend)) {
+		$$perrmsg = "CheckFrontends: Radio $node_id:$iface does not ".
+		    "have frontend $fe_id";
+		return 1;
+	    }
+	}
+    }
+    if (0) {
+	$$perrmsg = "CheckFrontends: Ha Ha";
+	return 1;
+    }
     return 0;
 }
 

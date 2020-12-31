@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2004-2018 University of Utah and the Flux Group.
+# Copyright (c) 2004-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,18 +32,16 @@ SBIN_SCRIPTS	= xmlrpcbag sslxmlrpc_server.py
 LIB_STUFF	= emulabserver.py
 LIBEXEC_STUFF	= webxmlrpc
 WWW_STUFF	= xmlrpcapi.php3
-DEBUG_STUFF     = experiment node imageid osid fs user emulab server
 
 #
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 # 
-all:	$(SBIN_SCRIPTS) $(LIB_STUFF) $(LIBEXEC_STUFF) $(DEBUG_STUFF)
+all:	$(SBIN_SCRIPTS) $(LIB_STUFF) $(LIBEXEC_STUFF)
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 install: $(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS)) \
-	$(addprefix $(INSTALL_SBINDIR)/xmlrpc/, $(DEBUG_STUFF)) \
 	$(addprefix $(INSTALL_LIBEXECDIR)/, $(LIBEXEC_STUFF)) \
 	$(addprefix $(INSTALL_WWWDIR)/, $(WWW_STUFF)) \
 	$(addprefix $(INSTALL_LIBDIR)/, $(LIB_STUFF))

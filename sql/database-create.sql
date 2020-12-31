@@ -130,6 +130,56 @@ CREATE TABLE `addr_pool_history` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_aggregate_radio_locations`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_radio_locations`;
+CREATE TABLE `apt_aggregate_radio_locations` (
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `location` varchar(64) NOT NULL default '',
+  `itype` enum('FE','ME','BS','PE','unknown') NOT NULL default 'unknown',
+  `latitude` float(8,5) default NULL,
+  `longitude` float(8,5) default NULL,
+  `mapurl` tinytext,
+  `streeturl` tinytext,
+  `notes` text,
+  PRIMARY KEY  (`aggregate_urn`,`location`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_aggregate_radios`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_radio_info`;
+CREATE TABLE `apt_aggregate_radio_info` (
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `node_id` varchar(32) NOT NULL default '',
+  `location` varchar(64) NOT NULL default '',
+  `radio_type` tinytext,
+  `power_id` varchar(32) default NULL,
+  `cnuc_id` varchar(32) default NULL,
+  `notes` text,
+  PRIMARY KEY  (`aggregate_urn`,`node_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_aggregate_radio_frontends
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_radio_frontends`;
+CREATE TABLE `apt_aggregate_radio_frontends` (
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `node_id` varchar(32) NOT NULL default '',
+  `iface` varchar(32) NOT NULL default '',
+  `frontend` enum('TDD','FDD','none') NOT NULL default 'none',
+  `transmit_frequencies` text,
+  `receive_frequencies` text,
+  `monitored` tinyint(1) NOT NULL default '0',
+  `notes` text,
+  PRIMARY KEY  (`aggregate_urn`,`node_id`,`iface`,`frontend`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregate_radioinfo`
 --
 

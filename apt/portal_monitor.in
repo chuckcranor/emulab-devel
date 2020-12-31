@@ -91,7 +91,7 @@ my %mothershipnodes = (
 			      "subboss", "subboss2", "subboss3",
 			      "tipserv3", "tipserv4", "tipserv5", "tipserv6"],
     "apt.emulab.net"      => ["subboss"],
-    "utah.cloudlab.us"    => ["dbox1", "subboss"],
+    "utah.cloudlab.us"    => ["dbox1"],
     "wisc.cloudlab.us"    => ["dbox"],
     "clemson.cloudlab.us" => ["dbox"],
 );

@@ -426,6 +426,16 @@ class User
                ($this->isPNet() ? "powder-approval@powderwireless.net" :
                 $TBMAIL_APPROVAL))));
     }
+    function opsEmail() {
+        global $TBMAIL_OPS;
+        
+        return 
+            ($this->isAPT() ? "portal-ops@aptlab.net" :
+             ($this->isCloud() ? "portal-ops@cloudlab.us" :
+              ($this->isPNet() ? "portal-ops@phantomnet.org" :
+               ($this->isPNet() ? "portal-ops@powderwireless.net" :
+                $TBMAIL_OPS))));
+    }
 
     #
     # Class function to create new user and return object.
@@ -1440,6 +1450,7 @@ class User
 
 	$uid_idx     = $this->uid_idx();
 	$result      = array();
+	$ordered     = array();
 	$user_clause = "where uid_idx='$uid_idx' and p.nonlocal_id is null and";
 	$trust_clause= "";
 
@@ -1492,6 +1503,7 @@ class User
 	    $gid = $row['gid'];
 	
 	    $result[$pid][] = $gid;
+            $ordered[$pid]  = 0;
 	}
 
         # We want to order by time of last usage.
@@ -1506,7 +1518,6 @@ class User
                          " where creator_idx='$uid_idx' and pid is not null ".
                          " group by pid,pid_idx order by last desc)");
         
-	$ordered = array();
 	while ($row = mysql_fetch_array($query_result)) {
 	    $pid   = $row['pid'];
 	    $stamp = $row['last'];
@@ -1515,6 +1526,9 @@ class User
                 if ($ordered[$pid] > $stamp) {
                     continue;
                 }
+            }
+            else {
+                $ordered[$pid]  = 0;
             }
 	    $ordered[$pid] = $stamp;
 	}
