@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2020 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -661,8 +661,13 @@ dumpchunk(char *name, char *buf, int chunkno, int checkindex)
 				losect = hdr->firstsect;
 			if ((hdr->lastsect-1) > hisect)
 				hisect = hdr->lastsect - 1;
-		} else
+		} else {
 			count = reg->start - nextsector;
+			if (reg->start < losect)
+				losect = reg->start;
+			if ((reg->start+reg->size-1) > hisect)
+				hisect = reg->start + reg->size - 1;
+		}
 		if (count > 0) {
 			sectfree += count;
 			if (count < fmin)
