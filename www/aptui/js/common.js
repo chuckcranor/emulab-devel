@@ -303,21 +303,22 @@ window.APT_OPTIONS.Announcements = function () {
     var callback = function(json) {
 	if (json.code) {
 	    console.info("announcements", json);
-	    return;
-	}
-	var newhtml = "";
-	
-	if (json.value.length) {
-	    //console.info("announcements", json);
-	    _.each(json.value, function(html) {
-		newhtml += html;
-	    });
 	}
 	else {
-	    // Clear current announcements; dismissed in another tab.
-	    newhtml = "";
+	    var newhtml = "";
+	
+	    if (json.value.length) {
+		//console.info("announcements", json);
+		_.each(json.value, function(html) {
+		    newhtml += html;
+		});
+	    }
+	    else {
+		// Clear current announcements; dismissed in another tab.
+		newhtml = "";
+	    }
+	    $('#portal-announcement-div').html(newhtml);
 	}
-	$('#portal-announcement-div').html(newhtml);
 	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 60000);
     }
 
