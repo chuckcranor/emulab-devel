@@ -44,7 +44,7 @@ my $CONN_TIMEOUT = 60;
 my $CLI_TIMEOUT  = 15;
 my $DEBUG_LOG    = "/tmp/force10_expect_debug.log";
 
-sub new($$$$) {
+sub new($$$$$) {
 
     # The next two lines are some voodoo taken from perltoot(1)
     my $proto = shift;
@@ -53,6 +53,7 @@ sub new($$$$) {
     my $name = shift;
     my $debugLevel = shift;
     my $userpass = shift;  # username and password
+    my $options = shift;
 
     #
     # Create the actual object
@@ -80,7 +81,12 @@ sub new($$$$) {
             "debug level $self->{DEBUG}\n" ;
     }
 
-    $self->{CLI_PROMPT} = "$self->{NAME}#";
+    if (exists($options->{"hostname"})) {
+	$self->{CLI_PROMPT} = $options->{"hostname"} . "#";
+    }
+    else {
+	$self->{CLI_PROMPT} = "$self->{NAME}#";
+    }
 
     # Make it a class object
     bless($self, $class);

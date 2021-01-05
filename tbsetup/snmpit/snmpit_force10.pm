@@ -279,7 +279,7 @@ sub new($$$;$) {
     if (exists($options->{"username"}) && exists($options->{"password"})) {
 	my $swcreds = $options->{"username"} . ":" . $options->{"password"};
 	$self->{EXP_OBJ} = force10_expect->new($self->{NAME},$debugLevel,
-					       $swcreds);
+					       $swcreds, $options);
 	if (!$self->{EXP_OBJ}) {
 	    warn "Could not create Expect object for $self->{NAME}\n";
 	    return undef;
