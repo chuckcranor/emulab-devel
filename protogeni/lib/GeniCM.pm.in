@@ -3138,8 +3138,10 @@ sub GetTicketAuxAux($)
 	    my $dest   = GetText("dest_id", $property);
 	    if (!defined($source) || !defined($dest) ||
 		$source eq "" || $dest eq "") {
-		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+		$response = 
+		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 			     "$lanname: Missing source or dest in property");
+		goto bad;
 	    }
 	    $properties{"$source:$dest"} = $property;	    
 	}
