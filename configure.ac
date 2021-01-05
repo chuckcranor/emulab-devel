@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1517,7 +1517,10 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	$mobilefiles \
 	apache/GNUmakefile apache/php.ini \
         xmlrpc/GNUmakefile xmlrpc/emulabserver.py \
-	xmlrpc/sslxmlrpc_server.py xmlrpc/webxmlrpc xmlrpc/xmlrpcbag \
+	xmlrpc/sslxmlrpc_server.py \
+	xmlrpc/webxmlrpc \
+	xmlrpc/emulab xmlrpc/node xmlrpc/experiment xmlrpc/fs xmlrpc/user \
+	xmlrpc/imageid xmlrpc/osid xmlrpc/server xmlrpc/xmlrpcbag \
 	cdrom/GNUmakefile cdrom/tbbootconfig/GNUmakefile \
 	cdrom/groklilo/GNUmakefile \
 	autofs/GNUmakefile flash/GNUmakefile \
