@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2018 University of Utah and the Flux Group.
+# Copyright (c) 2010-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -97,7 +97,7 @@ my $KEYGEN	      = "/usr/bin/ssh-keygen";
 my $SKEL	      = "/usr/share/skel";
 my $PIDFILE           = "/var/run/mountd.pid";
 my $TSFILE	      = "/var/run/mountd.ts";
-my $DISABLEFLAGS      = "@DISABLE_FSNODE_CHFLAGS@";
+my $DISABLEFLAGS      = @DISABLE_FSNODE_CHFLAGS@;
 my $USEFLAGS          = 0;
 
 # XXX

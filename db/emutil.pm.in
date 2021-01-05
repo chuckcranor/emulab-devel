@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,7 +52,7 @@ my $TB           = "@prefix@";
 my $OPSVM_ENABLE = @OPSVM_ENABLE@;
 my $WITHZFS      = @WITHZFS@;
 my $CHFLAGS      = "/bin/chflags";
-my $DISABLEFLAGS = "@DISABLE_FSNODE_CHFLAGS@";
+my $DISABLEFLAGS = @DISABLE_FSNODE_CHFLAGS@;
 
 #
 # Store up the list of caches to flush
