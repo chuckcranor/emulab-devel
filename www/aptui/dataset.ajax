@@ -85,6 +85,10 @@ function Do_CreateDataSet()
     if (!TBvalid_vnode_id($formfields["dataset_name"])) {
 	$errors["dataset_name"] = $DBFieldErrstr;
     }
+    # Temporary until I solve the HRN (OU) 64 char limit.
+    elseif (strlen($formfields["dataset_name"]) > 24) {
+        $errors["dataset_name"] = "Too long: maximum length 24 chars";
+    }
     if (! ($formfields["dataset_type"] == "stdataset" ||
 	   $formfields["dataset_type"] == "ltdataset" ||
 	   $formfields["dataset_type"] == "imdataset")) {

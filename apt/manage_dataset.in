@@ -332,6 +332,9 @@ sub DoCreate()
     if ($name =~ /^([-\w]+)\/([-\w]+)$/) {
 	$pid  = $1;
 	$name = $2;
+	if (length($name) > 24) {
+	    UserError("Dataset name is too long: maximum 24 characters");
+	}
     }
     else {
 	fatal("Dataset name $name not in the form <pid>/<name>.");
