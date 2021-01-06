@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -193,6 +193,7 @@ class Node
     function cd_version() {return $this->field("cd_version"); }
     function boot_errno() {return $this->field("boot_errno"); }
     function reserved_pid() {return $this->field("reserved_pid"); }
+    function reservation_name() {return $this->field("reservation_name"); }
     function taint_states() {return $this->field("taint_states"); }
 
     function def_boot_image() {

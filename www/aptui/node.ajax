@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -127,6 +127,12 @@ function Do_GetInfo()
     $blob["control_ip"]      = $node->ControlIP();
     $blob["eventstate"]      = $node->eventstate();
     $blob["allocstate"]      = $node->allocstate();
+    if ($node->reserved_pid()) {
+        $blob["reserved_pid"] = $node->reserved_pid();
+        if ($node->reservation_name()) {
+            $blob["reservation_name"] = $node->reservation_name();
+        }
+    }
     if ($this_user) {
         $blob["management_ip"] = $node->ManagementIP();
         $blob["expinfo"]       = GetExpInfo($node);
