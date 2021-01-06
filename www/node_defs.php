@@ -1642,7 +1642,8 @@ class Node
                 DBQueryFatal("select i.*,w.*,c.capval as protocols ".
                              "  from interfaces as i ".
                              "left join wires as w on ".
-                             "     i.node_id=w.node_id1 and i.iface=w.iface1 ".
+                             " (i.node_id=w.node_id1 and i.iface=w.iface1) or ".
+                             " (i.node_id=w.node_id2 and i.iface=w.iface2) ".
                              "left join interface_capabilities as c on ".
                              "     i.interface_type=c.type and ".
                              "     c.capkey='protocols' ".
@@ -1667,16 +1668,24 @@ class Node
                 $info["mac"]          = $row["mac"];
                 $info["IP"]           = $row["IP"];
                 $info["protocols"]    = $row["protocols"];
-                $info["switch_id"]    = $row["node_id2"];
-                $info["switch_iface"] = $row["iface2"];
-                $info["switch_card"]  = $row["card2"];
-                $info["switch_port"]  = $row["port2"];
-                $info["wire_type"]    = $row["type"];
+                if ($node_id == $row["node_id1"]) {
+                    $info["switch_id"]    = $row["node_id2"];
+                    $info["switch_iface"] = $row["iface2"];
+                    $info["switch_card"]  = $row["card2"];
+                    $info["switch_port"]  = $row["port2"];
+                }
+                else {
+                    $info["switch_id"]    = $row["node_id1"];
+                    $info["switch_iface"] = $row["iface1"];
+                    $info["switch_card"]  = $row["card1"];
+                    $info["switch_port"]  = $row["port1"];
+                }
+                $info["wire_type"] = $row["type"];
                 // Speed is in Mbs.
                 $info["current_speed"] = $row["current_speed"];
 
                 $info["switch_isswitch"] = false;
-                if ($switch = Node::Lookup($row["node_id2"])) {
+                if ($switch = Node::Lookup($info["switch_id"])) {
                     if ($switch->TypeClass() == "switch") {
                         $info["switch_isswitch"] = true;
                     }
