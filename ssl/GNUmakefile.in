@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -155,7 +155,7 @@ ctrlnode.pem:	dirsmade mkserial ctrlnode.cnf ca.cnf ctrlnode.key ctrlnode.req
 
 keys:		emulab_privkey.pem emulab_pubkey.pem
 
-emulab_privkey.pem: $(RANDFILE)
+emulab_privkey.pem: | $(RANDFILE)
 	#
 	# Generate a priv key for signing stuff. This one gets a
 	# passphrase.
@@ -174,7 +174,7 @@ emulab_pubkey.pem:	emulab_privkey.pem
 # If this fails, check to make sure that ~/.rnd is owned
 # by you and writable. 
 #
-%.key:	$(RANDFILE)
+%.key:	| $(RANDFILE)
 	(RANDFILE=$(RANDFILE) openssl genrsa -out $@ -rand $(RANDFILE) 2048)
 
 #
