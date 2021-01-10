@@ -53,7 +53,8 @@ $query_result
                    "     v.version=p.version ".
                    "where (p.public!=0 and ".
                    "        FIND_IN_SET('$PORTAL_GENESIS',examples_portals)) ".
-                   "order by p.name");
+                   "order by " .
+                   ($ISPOWDER ? "examples_portals,p.name" : "p.name"));
 
 while ($row = mysql_fetch_array($query_result)) {
     $blob = array();

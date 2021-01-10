@@ -70,7 +70,7 @@ if ($nomobile) {
     $showmobile = 0;
 }
 if (!isset($showlinks)) {
-    $showlinks = null;
+    $showlinks = "null";
 }
 else {
     $showlinks = "'$showlinks'";

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2020 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -256,6 +256,8 @@ sub Create($$;$)
 	push(@certlines, $_);
     }
     if (!close(CERT)) {
+	print STDERR "'$cmd'\n";
+	print STDERR join("", @certlines);
 	print STDERR "$MKCERT failed!\n";
 	return undef;
     }

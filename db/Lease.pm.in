@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2019 University of Utah and the Flux Group.
+# Copyright (c) 2012-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -208,6 +208,7 @@ sub gid($)             {return $_[0]->{'DBROW'}->{'gid'}; }
 sub idx($)             {return $_[0]->{'DBROW'}->{'lease_idx'}; }
 sub lease_idx($)       {return $_[0]->idx(); }
 sub owner($)           {return $_[0]->{'DBROW'}->{'owner_uid'}; }
+sub owner_uid($)       {return $_[0]->{'DBROW'}->{'owner_uid'}; }
 sub owner_urn($)       {return $_[0]->{'DBROW'}->{'owner_urn'}; }
 sub type($)            {return $_[0]->{'DBROW'}->{'type'}; }
 sub inception($)       {return str2time($_[0]->{'DBROW'}->{'inception'}); }

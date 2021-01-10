@@ -3027,6 +3027,17 @@ sub GetTicketAuxAux($)
 	#
 	my $default_bandwidth = 0;
 	
+	#
+	# Sanity check the IP. Need to think about the MASK.
+	#
+	# If rspec supplies an IP on any interface, it must supply all
+	# of them. The exception is blackbox nodes, which might have a
+	# hardwired address, and so the user does really need to supply
+	# the IP. For example, all the Powder radios.
+	#
+	my $required_ips = scalar(@interfaces);
+	my $supplied_ips = 0;
+	
 	foreach my $ref (@interfaces) {
 	    my $node_nickname = GeniXML::GetInterfaceNodeId($ref);
 	    my $iface_id = GeniXML::GetInterfaceId($ref);
@@ -3071,7 +3082,46 @@ sub GetTicketAuxAux($)
 		$trivial_ok = 0;
 		$besteffort = 1;
 	    }
+	    # Sanity check the IP/Mask assignments.
+	    my ($ip,$mask);
+
+	    if (exists($external_nodemap{$node_nickname})) {
+		my $external_noderef = $external_nodemap{$node_nickname};
+
+		$ip   = GeniXML::GetIp($ref, $external_noderef);
+		$mask = GeniXML::GetMask($ref, $external_noderef);
+
+		# Makes no sense not to supply IP on both sides of a
+		# stitched link.
+		if (!defined($ip)) {
+		    $response =
+			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "$lanname: Must supply IP/MASK on all members ".
+			     "of a stitched link");
+		    goto bad;
+		}
+	    }
+	    else {
+		my $rspec = $nodemap{$node_nickname}->{'rspec'};
+		
+		$ip   = GeniXML::GetIp($ref, $rspec);
+		$mask = GeniXML::GetMask($ref, $rspec);
+
+		# No IP required for blackbox nodes.
+		$required_ips--
+		    if (defined($nodetype) && $nodetype->isblackbox());
+	    }
+	    $supplied_ips++
+		if (defined($ip));
 	}
+	if ($supplied_ips && $supplied_ips < $required_ips) {
+	    $response =
+		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+		     "$lanname: Must supply IP/MASK on all members, ".
+			     "or no members");
+	    goto bad;
+	}
+
 	#
 	# Link wide properties. Saves a lot of XML when all the user
 	# wants is to set symmetrical properties for the entire lan.
