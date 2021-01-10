@@ -39,7 +39,7 @@ PHP_VER=56
 PY_VER=2.7
 .if (${EMULAB_PORTVERSION} == "8.1")
 PY_VER=3.7
-DEFAULT_VERSIONS= perl5=5.32 python=3.7 tcltk=8.6 php=7.2 mysql=5.7 apache=2.4
+DEFAULT_VERSIONS= perl5=5.32 python=3.7 tcltk=8.6 php=7.4 mysql=5.7 apache=2.4
 APACHE_PORT=www/apache24
 APACHEMODDIR=libexec/apache24
 MYSQL_VER=57
@@ -47,7 +47,7 @@ MYSQL_VER=57
 SWIG_VER=
 SWIG_PORT=devel/swig
 PHP_MAJ=7
-PHP_VER=72
+PHP_VER=74
 .else
 .if (${EMULAB_PORTVERSION} == "7.3")
 DEFAULT_VERSIONS= perl5=5.30 python=2.7 tcltk=8.6 php=7.2 mysql=5.7 apache=2.4
