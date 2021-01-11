@@ -1,16 +1,16 @@
 Making boss/ops/fs/etc. packages. This is only for the latest FreeBSD
-(as of this writing, 11.3). If you need help with older packages,
-check out the initial version of this document.
+(as of this writing, 12.2). If you need help with older packages, check out
+an older version of this document.
 
 As of FreeBSD 10, I started using the quarterly ports release at the time
-of the OS release and then update the packages quarterly. For the 11.3 release,
-I am currently using 2020Q2.
+of the OS release and then update the packages quarterly. For the 12.2 release,
+I am currently using 2021Q1.
 
 ################ TL;DR ################
 
 This is a condensed version of the steps below.
 
-0. Updating the Emulab package repo (11.3 specific).
+0. Updating the Emulab package repo (12.2 specific).
 
    Occasionally you will want to make sure the ports are up to date.
    We track the "quarterly" branch of ports, so within a three month
@@ -23,39 +23,48 @@ This is a condensed version of the steps below.
    couple of mysterious updates of things that didn't change, but I
    can live with that...
 
-   a. Make sure the ports tree in /share/freebsd/11.3/ports on ops
+   a. Make sure the ports tree in /share/freebsd/12.2/ports on ops
       is up to date. [ Note that there is not actually an svn repo branch
       called "quarterly" so you have to make sure you are tracking the
       current quarter. ]
 
-      cd /share/freebsd/11.3/ports
+      cd /share/freebsd/12.2/ports
       sudo svn update
 
    b. Make sure the Emulab ports are up to date.
 
-      cd /share/freebsd/11.3/ports/misc
+      cd /share/freebsd/12.2/ports/misc
       diff -r ~mike/testbed-clean/install/ports .
       <update anything that is out of sync>
 
-   c. Swapin a FreeBSD 11.3 node (experiment emulab-ops/freebsd112-64).
+   c. Swapin a FreeBSD 12.2 node (experiment emulab-ops/freebsd112-64).
       This will give you a d430 which is the best thing to use.
 
    d. Mount the ports and source trees.
 
       cd /usr
-      sudo mount -o ro fs:/share/freebsd/11.3/ports /usr/ports
-      sudo mount -o ro fs:/share/freebsd/11.3/src /usr/src
+      sudo mount -o ro fs:/share/freebsd/12.2/ports /usr/ports
+      sudo mount -o ro fs:/share/freebsd/12.2/src /usr/src
       
    e. Make sure /etc/make.conf is up to date. It should have:
 
-  DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
-  DEFAULT_VERSIONS+=ssl=base
+DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
+DEFAULT_VERSIONS+=ssl=base
 
-      Also, to save a bunch of changing port options below, add:
+      We also add a bunch of custom port configurations to avoid needing to
+      do "make config" for a bunch of ports:
 
-  OPTIONS_UNSET=DOCS OPENGL DTRACE
+OPTIONS_UNSET=DOCS OPENGL DTRACE
+www_apache24_SET+=SUEXEC
+editors_emacs_UNSET+=DBUS GCONF GSETTINGS HARFBUZZ LCMS2 M17N OTF SCROLLBARS \
+                     XFT XIM CAIRO GIF MAGICK PNG SVG TIFF XPM OSS GTK3
+editors_emacs_SET+=XAW
+devel_subversion_UNSET+=GPG_AGENT
+devel_cmake_UNSET+=MANPAGES
+devel_doxygen_UNSET+=LATEX
+security_py-certbot_UNSET+=MANPAGES
 
-      The last (DTRACE) seems to be new (as of 12/8/20) and broke a couple
+      The DTRACE option seems to be new (as of 12/8/20) and broke a couple
       of ports:
       - perl5.32 (configure error)
       - tcl86 (build error)
@@ -91,41 +100,14 @@ This is a condensed version of the steps below.
       run up against certificate issues, the it won't reinstall it.
       In that case, I have found the easiest thing to do is:
 
-      pushd /share/freebsd/11.3/packages-64
+      pushd /share/freebsd/12.2/packages-64
       pkg add pkg-*
       pkg add ca_root*
       popd
 
    i. Make sure port options are correctly set:
 
-      NOTE: if you get a message about "unsupported release" when you
-      try to do a make, it might be because /usr/include/sys/param.h
-      is out of date. Diff it with /usr/src/sys/sys/param.h and update
-      as necessary.
-
-      - make -C editors/emacs config
-        and deselect:
-          DBUS
-          GCONF, GSETTINGS, HARFBUZZ LCMS2, M17N, OTF, SCROLLBARS, XFT, XIM,
-	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
-	  OSS,
-	  GTK3
-        and select:
-	  XAW
-      - make -C graphics/cairo config
-        and deselect OPENGL.
-      - make -C graphics/jasper config
-        and deselect OPENGL.
-      - make -C www/apache24 config
-        and select SUEXEC.
-      - make -C devel/subversion config
-        and deselect GPG_AGENT
-      - make -C devel/cmake config
-        and deselect MANPAGES
-      - make -C devel/doxygen config
-        and deselect LATEX
-      - make -C security/py-certbot config
-        and deselect MANPAGES
+      This step is no longer needed given the /etc/make.conf options above.
 
    j. Build em all:
 
@@ -138,7 +120,7 @@ This is a condensed version of the steps below.
        end
 
    k. Check for vulnerabilities. If any are revealed, you can either try
-      to update /share/freebsd/11.3/ports with a newer version of the port
+      to update /share/freebsd/12.2/ports with a newer version of the port
       (e.g., from /share/freebsd/current/ports) or just live with the
       vulnerability for now.
 
@@ -159,7 +141,7 @@ This is a condensed version of the steps below.
    n. Save packages and update tarball and repo. On boss:
 
        set www=/usr/testbed/www
-       cd /share/freebsd/11.3
+       cd /share/freebsd/12.2
        mkdir packages
        scp pcXXX:/usr/obj/ports/packages/All/\* packages/
        sudo chown -R root:wheel packages
@@ -167,22 +149,22 @@ This is a condensed version of the steps below.
       For testing purposes (see next step), start with the ports in
       "Emulab-devel" repo.
 
-       sudo mv $www/FreeBSD/11.3-devel/{packages,Opackages}
-       sudo cp -rp packages $www/FreeBSD/11.3-devel/
-       sudo pkg repo $www/FreeBSD/11.3-devel/packages
+       sudo mv $www/FreeBSD/12.2-devel/{packages,Opackages}
+       sudo cp -rp packages $www/FreeBSD/12.2-devel/
+       sudo pkg repo $www/FreeBSD/12.2-devel/packages
 
       Do the following when you are sure everything is good.
       
-       set tball="FreeBSD-11.3-packages-64-`date +%Y%m%d`.tar.gz"
+       set tball="FreeBSD-12.2-packages-64-`date +%Y%m%d`.tar.gz"
        sudo tar czf $tball packages
        sudo cp $tball $www/downloads/
-       sudo ln -sf $tball $www/downloads/FreeBSD-11.3-packages-64.tar.gz
-       sudo mv $www/FreeBSD/11.3/{packages,Opackages}
-       sudo cp -rp packages $www/FreeBSD/11.3/
-       sudo pkg repo $www/FreeBSD/11.3/packages
+       sudo ln -sf $tball $www/downloads/FreeBSD-12.2-packages-64.tar.gz
+       sudo mv $www/FreeBSD/12.2/{packages,Opackages}
+       sudo cp -rp packages $www/FreeBSD/12.2/
+       sudo pkg repo $www/FreeBSD/12.2/packages
 
        # tar up the ports tree that corresponds to these packages
-       set tball="FreeBSD-11.3-ports.tar.gz"
+       set tball="FreeBSD-12.2-ports.tar.gz"
        sudo tar --exclude=ports/.svn -czf $tball ports
        sudo cp $tball $www/downloads/
 
@@ -191,7 +173,7 @@ This is a condensed version of the steps below.
       /etc/pkg/Emulab-devel.conf:
       
 Emulab-devel: {
-  url: "https://www.emulab.net/FreeBSD/11.3-devel/packages",
+  url: "https://www.emulab.net/FreeBSD/12.2-devel/packages",
   mirror_type: NONE,
   enabled: yes
 }
