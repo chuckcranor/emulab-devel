@@ -93,6 +93,12 @@ define("DOLOGIN_STATUS_NOGENIUSER", 	-7);
 # So we can redefine this in the APT pages.
 $CHANGEPSWD_PAGE = "moduserinfo.php3";
 
+$HAVE_MHASH = 1;
+$version = explode('.', PHP_VERSION);
+if ($version[0] > 7 || ($version[0] == 7 && $version[1] >= 4)) {
+   $HAVE_MHASH = 0;
+}
+
 #
 # Generate a hash value suitable for authorization. We use the results of
 # microtime, combined with a random number.
@@ -105,8 +111,11 @@ function GENHASH() {
     $random_bytes = fread($fp, 128);
     fclose($fp);
 
-    $hash  = mhash (MHASH_MD5, bin2hex($random_bytes) . " " . microtime());
-    return bin2hex($hash);
+    if ($HAVE_MHASH) {
+	$hash = mhash(MHASH_MD5, bin2hex($random_bytes) . " " . microtime());
+	return bin2hex($hash);
+    }
+    return hash('md5', bin2hex($random_bytes) . " " . microtime(), false);
 }
 
 #
@@ -421,12 +430,25 @@ function LoginStatus() {
 	# of the real hash, and simply tells us what menu to draw, but does
 	# not impart any privs!
 	#
-	if (isset($hashhash) &&
-	    $hashhash == bin2hex(mhash(MHASH_CRC32, $hashkey))) {
-            #
-            # The login is probably valid, but we have no proof yet. 
-            #
-	    $CHECKLOGIN_STATUS = CHECKLOGIN_MAYBEVALID;
+	if (isset($hashhash)) {
+	    if ($HAVE_MHASH) {
+		$newhash = bin2hex(mhash(MHASH_CRC32, $hashkey));
+	    }
+	    else {
+		$newhash = hash('crc32', $hashkey, false);
+	    }
+	    if ($hashhash == $newhash) {
+		#
+		# The login is probably valid, but we have no proof yet. 
+		#
+		$CHECKLOGIN_STATUS = CHECKLOGIN_MAYBEVALID;
+	    }
+	    else {
+		#
+	    	# Hash of hash is invalid, so assume no real cookie either. 
+	    	# 
+		$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
+	    }
 	}
 	else {
 	    #
@@ -1143,7 +1165,11 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     $timeout = $now + 3600;
     $hashkey = GENHASH();
     # See note in CrossLogin() in db/User.pm.in. Do not change this.
-    $crc     = bin2hex(mhash(MHASH_CRC32, $hashkey));
+    if ($HAVE_MHASH) {
+	$crc = bin2hex(mhash(MHASH_CRC32, $hashkey));
+    } else {
+	$crc = hash('crc32', $hashkey, false);
+    }
     $opskey  = GENHASH();
 
     #
