@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -654,7 +654,7 @@ try:
             # Allow port spec here too.
             #
             if val.find(":") > 0:
-                (ADDR,PORT) = string.split(val, ":", 1)
+                (ADDR,PORT) = str.split(val, ":", 1)
                 PORT = int(PORT)
                 pass
             pass
@@ -689,7 +689,7 @@ if not debug:
     # Connect to syslog.
     #
     syslog.openlog("sslxmlrpc", syslog.LOG_PID,
-                   getattr(syslog, "LOG_" + string.upper(LOGFACIL)))
+                   getattr(syslog, "LOG_" + str.upper(LOGFACIL)))
     syslog.syslog(syslog.LOG_INFO, "SSL XMLRPC server starting up");
 
     # We use foreground mode from daemon_wrapper.

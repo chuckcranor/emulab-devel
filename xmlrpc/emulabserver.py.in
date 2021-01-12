@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2017, 2019, 2020 University of Utah and the Flux Group.
+# Copyright (c) 2004-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2056,9 +2056,9 @@ class experiment:
                                  (argdict["proj"], argdict["exp"]))
             ipmap = {}
             for res in dbres:
-                for ipinfo in string.split(res[1], " "):
+                for ipinfo in str.split(res[1], " "):
                     if len(ipinfo) > 0:
-                        port, ip = string.split(ipinfo, ":")
+                        port, ip = str.split(ipinfo, ":")
                         ipmap[res[0] + ":" + port] = ip
                         pass
                     pass
@@ -2531,7 +2531,7 @@ class experiment:
                     #
                     # Convert NULL to ""
                     #
-                    for key2, val2 in row.items():
+                    for key2, val2 in list(row.items()):
                         if key2 in ("pid", "eid"):
                             del row[key2]
                             pass
@@ -6577,7 +6577,7 @@ def nfspath(value):
 # @return retval
 #
 def scrubdict(retval, prunelist=[], defaultvals={}):
-    for key in retval.keys():
+    for key in list(retval):
         if (retval[key] == None) or key in prunelist:
             if key in defaultvals:
                 retval[key] = defaultvals[key]
