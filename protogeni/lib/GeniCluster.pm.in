@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -396,6 +396,7 @@ sub PreReservationList($;$$)
 	my $terminal = $row->{'terminal'};
 	my $types    = $row->{'types'};
 	my $creator  = $row->{'creator'};
+	my $notes    = $row->{'notes'};
 	my $created  = TBDateStringGMT($row->{'created'});
 	my $start    = TBDateStringGMT($row->{'start'});
 	my $end      = TBDateStringGMT($row->{'end'});
@@ -479,7 +480,7 @@ sub PreReservationList($;$$)
 		     "approved"     => TBDateStringGMT($approved),
 		     "canceled"     => TBDateStringGMT($canceled),
 		     "terminal"     => $terminal,
-		     "notes"        => $row->{'notes'} || "",
+		     "notes"        => $notes || "",
 	     });
 	# We ate the last row.
 	last
