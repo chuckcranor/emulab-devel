@@ -72,7 +72,10 @@ if ($EUID != 0) {
 use lib "@prefix@/lib";
 use GeniDB;
 use GeniTicket;
+use GeniSlice;
+use GeniUser;
 use GeniUtil;
+use GeniCM;
 use Genixmlrpc;
 use GeniCertificate;
 
@@ -108,7 +111,22 @@ my $ticket = GeniTicket->Lookup($token);
 if (!defined($ticket)) {
     fatal("No such ticket for $token");
 }
-GeniUtil::FlipToGeniUser();
+if ($ticket->slice_uuid()) {
+    my $slice = GeniSlice->Lookup($ticket->slice_uuid());
+    if (!defined($slice)) {
+	fatal("Could not lookup slice for ticket");
+    }
+    my $creator = GeniUser->Lookup($slice->creator_uuid(), 1);
+    if (!defined($creator)) {
+	fatal("Could not find creator");
+    }
+    if (!defined(GeniCM::FlipToUser($slice, $creator))) {
+	fatal("Could not flip to slice creator");
+    }
+}
+else {
+    GeniUtil::FlipToGeniUser();
+}
 
 if ($ticket->Lock() && !$force) {
     fatal("Could not lock $ticket");
