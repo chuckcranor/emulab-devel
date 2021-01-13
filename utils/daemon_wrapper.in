@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004, 2005, 2006, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2004-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -207,9 +207,11 @@ while (1) {
 	    "    Could not start $daemon! Might be a configuration error.\n");
     }
     #
-    # Anytime it exits, send email (unless TERM).
+    # Anytime it exits, send email (unless TERM). The ecode is a bit hacky,
+    # but need a way to avoid sending email if the process catches TERM
+    # and then exits.
     #
-    if ($exitstat != 15) {
+    if (! ($exitstat == 15 || $ecode == 15)) {
 	SENDMAIL($TBOPS, "$daemon died",
 		 "$daemon $msg after $runtime seconds; restarting it.",
 		 $TBOPS);

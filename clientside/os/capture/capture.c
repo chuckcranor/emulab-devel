@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2019 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2021 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -150,6 +150,7 @@ char	*Devname;
 char	*Machine;
 int	logfd = -1, runfd, devfd = -1, ptyfd = -1, xsfd = -1;
 int	hwflow = 0, speed = B9600, debug = 0, runfile = 0, standalone = 0;
+int     foreground = 0;
 int     nologfile = 0;
 int	stampinterval = -1;
 int	stamplast = 0;
@@ -452,6 +453,10 @@ main(int argc, char **argv)
 			debug++;
 			break;
 
+		case 'f':
+			foreground++;
+			break;
+
 		case 'r':
 			runfile++;
 			break;
@@ -504,7 +509,7 @@ main(int argc, char **argv)
 	if (!(programmode || xendomain) && argc != 2)
 		usage();
 
-	if (!debug && daemon(0, 0))
+	if (!(debug || foreground) && daemon(0, 0))
 		die("Could not daemonize");
 
 	Machine = argv[0];
@@ -1594,7 +1599,8 @@ die(char *format, ...)
 	vsnprintf(msgbuf, BUFSIZE, format, ap);
 	va_end(ap);
 	dolog(LOG_ERR, msgbuf);
-	quit(0);
+	cleanup();
+	exit(1);
 }
 
 void
@@ -1617,7 +1623,10 @@ void
 quit(int sig)
 {
 	cleanup();
-	exit(1);
+	// This used to be an exit(1). Lets use 15 instead, so we can run
+	// this from daemon_wrapper, which now looks for this exit code,
+	// since it will not otherwise know this was a TERM exit.
+	exit(15);
 }
 
 void
