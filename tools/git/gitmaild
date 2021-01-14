@@ -398,6 +398,17 @@ sub get_member_addresses($$) {
                 print "User address: $address\n";
             }
             push @addresses, $address;
+        } elsif (exists $member->{id}) {
+            # Sometimes, the user email address seems to not be included direcly;
+            # it's a mystery
+            my $userinfo = call_gitlab_api("/users/" . $member->{id});
+            if (exists $userinfo->{'email'}) { 
+                my $address = $userinfo->{'email'};
+                if ($verbose) {
+                    print "User address (via extra lookup): $address\n";
+                }
+                push @addresses, $address;
+            }
         }
     }
 
