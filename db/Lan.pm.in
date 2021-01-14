@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2496,11 +2496,11 @@ sub Lookup($$;$)
     }
     elsif (!ref($arg1)) {
 	# Two args means lookup by $experiment,$vname
-	print STDERR "VLan->Lookup(): Bad first argument: $arg1\n";
+	#print STDERR "VLan->Lookup(): Bad first argument: $arg1\n";
 	return undef;
     }
     elsif (! ($arg2 =~ /^[-\w\/]*$/)) {
-	print STDERR "VLan->Lookup(): Bad second argument: $arg2\n";
+	#print STDERR "VLan->Lookup(): Bad second argument: $arg2\n";
 	return undef;
     }
     else {
