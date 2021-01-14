@@ -386,7 +386,7 @@ sub get_member_addresses($$) {
     my ($repo_id, $groupmembers) = @_;
     my $path = "/projects/" . $repo_id . "/members"; 
     if ($groupmembers) {
-        $path += "/all";
+        $path .= "/all";
     }
     my $memberinfo = call_gitlab_api($path);
 
