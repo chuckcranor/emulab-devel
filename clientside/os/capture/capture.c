@@ -911,6 +911,17 @@ send_to_client(const char *buf, int cc)
 #endif
 				return;
 			}
+			if (lerrno == ECONNRESET) {
+				if (debug == 1) {
+					fprintf(stderr,
+						"%s: client write ECONNRESET\n",
+						Machine);
+				}
+#ifdef	USESOCKETS
+				tipactive = 0;
+				return;
+#endif
+			}
 			die("%s: write: %s", Ptyname, geterr(lerrno));
 		}
 		if (i == 0) {
