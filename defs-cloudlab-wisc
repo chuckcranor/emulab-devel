@@ -253,13 +253,10 @@ DHCPD_EXTRAIFS="xn1"
 #
 NAMED_FORWARDERS="144.92.254.254 128.104.254.254"
 
-# Borrowed from defs-apt.  Here's a couple of other IPs of the named slave on
-# ops that we want to notify so that it will get the different views synced.
-# 2015-02-25
-# bpkroth
-#NAMED_ALSONOTIFY="128.104.222.8 10.130.6.8 192.168.6.8"
-NAMED_ALSONOTIFY="128.104.222.8 192.168.6.8 128.104.223.201 10.130.7.201 128.104.223.202 10.130.7.202 128.104.223.203 10.130.7.203"
-NAMED_ALSONOTIFY="128.104.222.8 192.168.6.8 10.130.7.201 10.130.7.202 10.130.7.203"
+#
+# Wisc runs a secondary on ops, leaving that for now.
+#
+NAMED_ALSONOTIFY="155.98.32.70 128.104.222.8 155.99.144.4 155.98.60.2"
 
 #
 # NTP server configuration:
