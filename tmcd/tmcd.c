@@ -409,6 +409,8 @@ COMMAND_PROTOTYPE(dosubbossinfo);
 COMMAND_PROTOTYPE(dopublicaddrinfo);
 COMMAND_PROTOTYPE(dohwcollect);
 COMMAND_PROTOTYPE(dowbstore);
+COMMAND_PROTOTYPE(doattenuatorlist);
+COMMAND_PROTOTYPE(doattenuator);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -553,6 +555,8 @@ struct command {
 	{ "publicaddrinfo",  FULLCONFIG_NONE, F_ALLOCATED, dopublicaddrinfo },
 	{ "hwcollect",	  FULLCONFIG_NONE, 0, dohwcollect},
 	{ "wbstore",	  FULLCONFIG_NONE, 0, dowbstore},
+	{ "attenuatorlist", FULLCONFIG_NONE, F_ALLOCATED|F_REMREQSSL, doattenuatorlist },
+	{ "attenuator",   FULLCONFIG_NONE, F_ALLOCATED|F_REMREQSSL, doattenuator },
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
 	{ "geni_slice_urn", FULLCONFIG_NONE, 0, dogenisliceurn },
@@ -14803,4 +14807,106 @@ COMMAND_PROTOTYPE(dopublicaddrinfo)
 	client_writeback(sock, buf, strlen(buf), tcp);
 
 	return 0;
+}
+
+/*
+ * Attenuator inventory.
+ */
+COMMAND_PROTOTYPE(doattenuatorlist)
+{
+	MYSQL_RES   *res;
+	MYSQL_ROW   row;
+	int         nrows;
+	char	    buf[MYBUFSIZE];
+	char	    *bufp = buf, *ebufp = &buf[sizeof(buf)];
+	
+	res = mydb_query( "SELECT w.external_wire, w.node_id1, w.node_id2 "
+			  "FROM wires AS w, reserved AS r1, reserved AS r2 "
+			  "WHERE w.node_id1=r1.node_id AND "
+			  "w.node_id2=r2.node_id AND r1.exptidx=%d AND "
+			  "r2.exptidx=%d AND w.iface1 LIKE 'rf%%' AND "
+			  "w.iface2 LIKE 'rf%%'", 3,
+			  reqp->exptidx, reqp->exptidx );
+	
+	if( !res ) {
+		error( "ATTENUATORLIST: %s: query failed\n",
+		       reqp->nodeid );
+		
+		return 1;
+	}
+	
+	if( !mysql_num_rows( res ) ) {
+		/* no attenuated RF paths in experiment */
+		mysql_free_result( res );
+		return 0;
+	}
+
+	nrows = (int)mysql_num_rows(res);
+	while (nrows-- > 0) {
+		row = mysql_fetch_row(res);
+		bufp += OUTPUT( bufp, ebufp - buf,
+			        "%s:%s/%s\n", row[ 0 ], row[ 1 ], row[ 2 ] );
+	}
+	
+	mysql_free_result( res );
+	
+	client_writeback( sock, buf, strlen( buf ), tcp );
+
+	return 0;
+}
+
+/*
+ * Attenuator control.
+ */
+COMMAND_PROTOTYPE(doattenuator)
+{
+	int atten, val;
+	MYSQL_RES *res;
+	int attendsock;
+	struct sockaddr_in sin;
+	unsigned char cmd[ 3 ];
+	char *response;
+	
+	if( !sscanf( rdata, "%d %d", &atten, &val ) ) {
+		error( "ATTENUATOR: %s: Invalid format\n", reqp->nodeid );
+		
+		return 1;
+	}
+	
+	/* The attenuator must be on a wire path between two nodes both reserved
+	   to reqp->exptidx. */
+	res = mydb_query( "SELECT w.node_id1 FROM wires AS w, reserved AS r1, "
+			  "reserved AS r2 WHERE w.node_id1=r1.node_id AND "
+			  "w.node_id2=r2.node_id AND r1.exptidx=%d AND "
+			  "r2.exptidx=%d AND ( w.external_wire=%d OR "
+			  "w.external_wire LIKE '%d,%%' OR "
+			  "w.external_wire LIKE '%%,%d' )", 1, reqp->exptidx,
+			  reqp->exptidx, atten, atten, atten );
+
+	if( mysql_num_rows( res ) ) {
+		sin.sin_family = AF_INET;
+		sin.sin_addr.s_addr = htonl( INADDR_LOOPBACK );
+		sin.sin_port = htons( 0x10DB );
+	
+		cmd[ 0 ] = 1; /* version */
+		cmd[ 1 ] = atten; /* attenuator ID */
+		cmd[ 2 ] = val; /* attenuation in dB */
+		
+		if( ( attendsock = socket( AF_INET, SOCK_STREAM, 0 ) ) < 0 ||
+		    connect( attendsock, (struct sockaddr *) &sin,
+			     sizeof sin ) < 0 ||
+		    write( attendsock, cmd, sizeof cmd ) != sizeof cmd )
+			response = "error changing attenuation\n";
+		else
+			response = "changing attenuation\n";
+
+		close( attendsock );
+	} else
+	    response = "invalid attenuator ID\n";
+	    
+	client_writeback( sock, response, strlen( response ), tcp );
+
+	mysql_free_result( res );
+		
+	return 0;	    
 }
