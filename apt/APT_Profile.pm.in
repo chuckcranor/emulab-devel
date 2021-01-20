@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2111,8 +2111,10 @@ sub CheckForBuses($$$)
 	#
 	# Check that the project has the feature.
 	#
-	if (!EmulabFeatures->FeatureEnabled("powder-routes-allowed",
-					    undef, $project)) {
+	if (!(EmulabFeatures->FeatureEnabled("powder-routes-allowed",
+					     undef, $project) ||
+	      EmulabFeatures->FeatureEnabled("powder-me-allowed",
+					     undef, $project))) {
 	    $$perrmsg = "CheckForBuses: No permission to use buses: ".
 		$aggregate->nickname();
 	    return 1;
