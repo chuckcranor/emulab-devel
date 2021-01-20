@@ -27,18 +27,26 @@ import re
 import pwd
 import sys
 import glob
-import sets
 import stat
 import time
 import getopt
 import socket
 import zipfile
 import tempfile
-import cStringIO
+try:
+    import cStringIO as io
+except ImportError:
+    import io
 import threading
-import xmlrpclib
+try:
+    import xmlrpclib
+except:
+    import xmlrpc.client as xmlrpclib
 import os, os.path
-import ConfigParser
+try:
+    import ConfigParser as configparser
+except:
+    import configparser
 
 prefix = "@prefix@"
 
@@ -221,85 +229,85 @@ def get_explist():
 # Print the top level usage statement for the whole tool.
 #
 def usage():
-    print "Usage: loghole [-hV] [-e pid/eid|-a] [OPTIONS] <action> [...]"
-    print
-    print "Manage an experiment's log hole."
-    print
-    print "Optional arguments:"
-    print "  -h, --help                Print this message, or the action's"
-    print "                            usage message."
-    print "  -V, --version             Print version information."
-    print "  -d, --debug               Turn on debugging messages."
-    print "  -q, --quiet               Be less verbose."
-    print "  -v, --verbose             Be more verbose."
-    print "  -e, --experiment=PID/EID  Specify the experiment to manage."
-    print "  -a, --all                 Perform the action on all of your "
-    print "                            experiments."
-    print "  -s, --server=SERVER       Specify the XML-RPC server to use."
-    print "                            (Default: %s)" % XMLRPC_SERVER
-    print "  -P, --port=PORT           Specify the XML-RPC server port."
-    print "                            (Default: %d)" % XMLRPC_PORT
-    print
-    print "Actions:"
-    print "  sync      Synchronize the experiment's log holes with the"
-    print "            experiment's log directory."
-    print "  archive   Archive the contents of the experiment's log directory."
-    print "  change    Change the metadata of an existing archive."
-    print "  list      Print a brief listing of the archives in the"
-    print "            experiment's log directory."
-    print "  show      Show a detailed listing of the archive(s) in the"
-    print "            experiment directory."
-    print "  validate  Validate the experiment logs."
-    print "  clean     Clean the experiment log directory and node local"
-    print "            directories."
-    print "  gc        Garbage collect old archives."
-    print
-    print "Environment:"
-    print "  cwd       The project and experiment ID will be inferred from the"
-    print "            current working directory, if it is inside the"
-    print "            experiment's directory (e.g. /proj/foo/exp/bar)."
-    print
-    print "Examples:"
-    print "  $ loghole -e foo/bar sync"
-    print "  $ loghole -e foo/bar list"
+    print("Usage: loghole [-hV] [-e pid/eid|-a] [OPTIONS] <action> [...]")
+    print("")
+    print("Manage an experiment's log hole.")
+    print("")
+    print("Optional arguments:")
+    print("  -h, --help                Print this message, or the action's")
+    print("                            usage message.")
+    print("  -V, --version             Print version information.")
+    print("  -d, --debug               Turn on debugging messages.")
+    print("  -q, --quiet               Be less verbose.")
+    print("  -v, --verbose             Be more verbose.")
+    print("  -e, --experiment=PID/EID  Specify the experiment to manage.")
+    print("  -a, --all                 Perform the action on all of your ")
+    print("                            experiments.")
+    print("  -s, --server=SERVER       Specify the XML-RPC server to use.")
+    print("                            (Default: %s)" % XMLRPC_SERVER)
+    print("  -P, --port=PORT           Specify the XML-RPC server port.")
+    print("                            (Default: %d)" % XMLRPC_PORT)
+    print("")
+    print("Actions:")
+    print("  sync      Synchronize the experiment's log holes with the")
+    print("            experiment's log directory.")
+    print("  archive   Archive the contents of the experiment's log directory.")
+    print("  change    Change the metadata of an existing archive.")
+    print("  list      Print a brief listing of the archives in the")
+    print("            experiment's log directory.")
+    print("  show      Show a detailed listing of the archive(s) in the")
+    print("            experiment directory.")
+    print("  validate  Validate the experiment logs.")
+    print("  clean     Clean the experiment log directory and node local")
+    print("            directories.")
+    print("  gc        Garbage collect old archives.")
+    print("")
+    print("Environment:")
+    print("  cwd       The project and experiment ID will be inferred from the")
+    print("            current working directory, if it is inside the")
+    print("            experiment's directory (e.g. /proj/foo/exp/bar).")
+    print("")
+    print("Examples:")
+    print("  $ loghole -e foo/bar sync")
+    print("  $ loghole -e foo/bar list")
     return
 
 ##
 # Print the usage statement for the "sync" action.
 #
 def sync_usage():
-    print "Usage: loghole sync [-nPsR] [-r remotedir] [-l localdir] [node1 ...]"
-    print
-    print "Synchronize the experiment's log holes with a local directory."
-    print
-    print "Optional arguments:"
-    print "  -r, --remote=REMOTEDIR"
-    print "               An additional remote directory to sync.  This option"
-    print "               is additive, so you can download several additional"
-    print "               directories."
-    print "  -l, --local=LOCALDIR"
-    print "               The local directory to store the downloaded files."
-    print "               This defaults to the experiment's log directory."
-    print "  -n, --no-standard"
-    print "               Flag that indicates that the standard logholes"
-    print "               (i.e. '/var/emulab/logs', '/local/logs') should not"
-    print "               be downloaded."
-    print "  -P, --no-post"
-    print "               Do not do any additional post processing."
-    print "  -s, --snapshot"
-    print "               Send a SNAPSHOT event to any link trace agents."
-    print "  -R, --root"
-    print "               Use sudo on remote nodes to read files as root."
-    print "  node1 ...    The names of the virtual or physical nodes that "
-    print "               should be synced.  The default behavior is to sync "
-    print "               all of the nodes in an experiment."
-    print
-    print "Files:"
-    print "  /proj/<pid>/exp/<eid>/logs/<node>/<loghole>"
-    print "               The location of the log hole for a particular node."
-    print
-    print "Examples:"
-    print "  $ loghole sync"
+    print("Usage: loghole sync [-nPsR] [-r remotedir] [-l localdir] [node1 ...]")
+    print("")
+    print("Synchronize the experiment's log holes with a local directory.")
+    print("")
+    print("Optional arguments:")
+    print("  -r, --remote=REMOTEDIR")
+    print("               An additional remote directory to sync.  This option")
+    print("               is additive, so you can download several additional")
+    print("               directories.")
+    print("  -l, --local=LOCALDIR")
+    print("               The local directory to store the downloaded files.")
+    print("               This defaults to the experiment's log directory.")
+    print("  -n, --no-standard")
+    print("               Flag that indicates that the standard logholes")
+    print("               (i.e. '/var/emulab/logs', '/local/logs') should not")
+    print("               be downloaded.")
+    print("  -P, --no-post")
+    print("               Do not do any additional post processing.")
+    print("  -s, --snapshot")
+    print("               Send a SNAPSHOT event to any link trace agents.")
+    print("  -R, --root")
+    print("               Use sudo on remote nodes to read files as root.")
+    print("  node1 ...    The names of the virtual or physical nodes that ")
+    print("               should be synced.  The default behavior is to sync ")
+    print("               all of the nodes in an experiment.")
+    print("")
+    print("Files:")
+    print("  /proj/<pid>/exp/<eid>/logs/<node>/<loghole>")
+    print("               The location of the log hole for a particular node.")
+    print("")
+    print("Examples:")
+    print("  $ loghole sync")
     return
 
 ##
@@ -308,95 +316,95 @@ def sync_usage():
 def archive_usage():
     print ("Usage: loghole archive [-k (i-delete|space-is-needed)] "
            "[-a days] [-c comment] [-d] [archive-name]")
-    print
-    print "Archive the contents of the experiment's log directory.  The"
-    print "archive will be a zip file containing all of the directories"
-    print "under the experiment's log directory, any extra log files"
-    print "at the top (e.g. event-sched.log), and some metadata."
-    print
-    print "Optional arguments:"
-    print "  -k, --keep-until=(i-delete|space-is-needed)"
-    print "                         Keep the archive until you decide to"
-    print "                         delete it manually or space is needed."
-    print "                         (Default: space-is-needed)"
-    print "  -a, --keep-atleast=N   Keep the archive atleast N days after"
-    print "                         creation.  This value keeps the archive "
-    print "                         from being garbage collected when more "
-    print "                         space is needed. (Default: 3 days)"
-    print "  -c, --comment=COMMENT  Add a comment to the archive. This comment"
-    print "                         will be displayed in the listing generated"
-    print "                         by the 'show' action.  Use a single dash "
-    print "                         (-) to read the comment from standard in."
-    print "  -d, --delete           Mark the experiment as clean-on-sync to"
-    print "                         remove stale data before another sync."
-    print
-    print "Required arguments:"
-    print "  archive-name  The name of the archive to create."
-    print "                (Default: The experiment name)"
-    print
-    print "Files:"
-    print "  /proj/<pid>/exp/<eid>/logs/<archive-name>.<instance>.zip"
-    print
-    print "Examples:"
-    print "  $ loghole archive foobar"
+    print("")
+    print("Archive the contents of the experiment's log directory.  The")
+    print("archive will be a zip file containing all of the directories")
+    print("under the experiment's log directory, any extra log files")
+    print("at the top (e.g. event-sched.log), and some metadata.")
+    print("")
+    print("Optional arguments:")
+    print("  -k, --keep-until=(i-delete|space-is-needed)")
+    print("                         Keep the archive until you decide to")
+    print("                         delete it manually or space is needed.")
+    print("                         (Default: space-is-needed)")
+    print("  -a, --keep-atleast=N   Keep the archive atleast N days after")
+    print("                         creation.  This value keeps the archive ")
+    print("                         from being garbage collected when more ")
+    print("                         space is needed. (Default: 3 days)")
+    print("  -c, --comment=COMMENT  Add a comment to the archive. This comment")
+    print("                         will be displayed in the listing generated")
+    print("                         by the 'show' action.  Use a single dash ")
+    print("                         (-) to read the comment from standard in.")
+    print("  -d, --delete           Mark the experiment as clean-on-sync to")
+    print("                         remove stale data before another sync.")
+    print("")
+    print("Required arguments:")
+    print("  archive-name  The name of the archive to create.")
+    print("                (Default: The experiment name)")
+    print("")
+    print("Files:")
+    print("  /proj/<pid>/exp/<eid>/logs/<archive-name>.<instance>.zip")
+    print("")
+    print("Examples:")
+    print("  $ loghole archive foobar")
     return
 
 ##
 # Print the usage statement for the "list" action.
 #
 def list_usage():
-    print "Usage: loghole list [-O1!Xo] [-m atmost] [-s megabytes]"
-    print
-    print "Print a brief listing of the archives in the experiment's log"
-    print "directory.  The listing can be helpful in getting an idea of"
-    print "what archives are in your experiment and when they are likely"
-    print "to be garbage collected."
-    print
-    print "Optional arguments:"
-    print "  -O                    Only list archives that are marked as 'keep"
-    print "                        until \"i-delete\"'."
-    print "  -1                    Only list archives that are a day from"
-    print "                        their keep-atleast date."
-    print "  -!                    Only list archives that are past their"
-    print "                        keep-atleast date."
-    print "  -X                    Only list archives that are ready to be"
-    print "                        garbage collected."
-    print "  -o                    List archives that do not match the above"
-    print "                        flags."
-    print "  -m, --keep-atmost=N   Keep at most N archives in the experiment."
-    print "                        (Default: 100)"
-    print "  -s, --keep-size=N     Keep at N megabytes of archives."
-    print "                        (Default: 3.0 MB)"
-    print
-    print "Examples:"
-    print "  $ loghole list"
-    print "  GC  Name             Date"
-    print
-    print "  [ ] foobar.1.zip     10/15"
-    print "  [!] foobar.0.zip     10/13"
-    print "  ..."
-    print
-    print "  $ loghole -q list -!"
-    print "  foobar.0.zip"
+    print("Usage: loghole list [-O1!Xo] [-m atmost] [-s megabytes]")
+    print("")
+    print("Print a brief listing of the archives in the experiment's log")
+    print("directory.  The listing can be helpful in getting an idea of")
+    print("what archives are in your experiment and when they are likely")
+    print("to be garbage collected.")
+    print("")
+    print("Optional arguments:")
+    print("  -O                    Only list archives that are marked as 'keep")
+    print("                        until \"i-delete\"'.")
+    print("  -1                    Only list archives that are a day from")
+    print("                        their keep-atleast date.")
+    print("  -!                    Only list archives that are past their")
+    print("                        keep-atleast date.")
+    print("  -X                    Only list archives that are ready to be")
+    print("                        garbage collected.")
+    print("  -o                    List archives that do not match the above")
+    print("                        flags.")
+    print("  -m, --keep-atmost=N   Keep at most N archives in the experiment.")
+    print("                        (Default: 100)")
+    print("  -s, --keep-size=N     Keep at N megabytes of archives.")
+    print("                        (Default: 3.0 MB)")
+    print("")
+    print("Examples:")
+    print("  $ loghole list")
+    print("  GC  Name             Date")
+    print("")
+    print("  [ ] foobar.1.zip     10/15")
+    print("  [!] foobar.0.zip     10/13")
+    print("  ...")
+    print("")
+    print("  $ loghole -q list -!")
+    print("  foobar.0.zip")
     return
 
 ##
 # Print the usage statement for the "show" action.
 #
 def show_usage():
-    print "Usage: loghole show [archive-name]"
-    print
-    print "Show a detailed listing of the archive(s) in the experiment"
-    print "directory.  The listing shows all of the metadata for the archive,"
-    print "comments, and the file listing."
-    print
-    print "Example:"
-    print "  $ loghole show foobar"
-    print "  Archive: foobar.0.zip"
-    print "    Creator:\t\t%s" % USER
-    print "    ..."
-    print "  Archive: foobar.1.zip"
-    print "    ..."
+    print("Usage: loghole show [archive-name]")
+    print("")
+    print("Show a detailed listing of the archive(s) in the experiment")
+    print("directory.  The listing shows all of the metadata for the archive,")
+    print("comments, and the file listing.")
+    print("")
+    print("Example:")
+    print("  $ loghole show foobar")
+    print("  Archive: foobar.0.zip")
+    print("    Creator:\t\t%s" % USER)
+    print("    ...")
+    print("  Archive: foobar.1.zip")
+    print("    ...")
     return
 
 ##
@@ -405,91 +413,91 @@ def show_usage():
 def change_usage():
     print ("Usage: loghole change [-k (i-delete|space-is-needed)] "
            "[-a days] [-c comment] <archive-name1> [archive-name2 ...]")
-    print
-    print "Change the metadata of an existing archive."
-    print
-    print "Optional arguments:"
-    print "  -k, --keep-until=(i-delete|space-is-needed)"
-    print "                         Keep the archive until you decide to"
-    print "                         delete it manually or space is needed."
-    print "                         (Default: space-is-needed)"
-    print "  -a, --keep-atleast=N   Keep the archive atleast N days after"
-    print "                         creation.  This value keeps the archive "
-    print "                         from being garbage collected when more "
-    print "                         space is needed. (Default: 3 days)"
-    print "  -c, --comment=COMMENT  Add a comment to the archive. This comment"
-    print "                         will be displayed in the listing generated"
-    print "                         by the 'show' action.  Use a single dash "
-    print "                         (-) to read the comment from standard in."
-    print
-    print "Required arguments:"
-    print "  archive-name  The name of the archive to change."
-    print
-    print "Files:"
-    print "  /proj/<pid>/exp/<eid>/logs/<archive-name>.<instance>.zip"
-    print
-    print "Examples:"
-    print "  $ loghole change -c 'Results bad...' foobar"
+    print("")
+    print("Change the metadata of an existing archive.")
+    print("")
+    print("Optional arguments:")
+    print("  -k, --keep-until=(i-delete|space-is-needed)")
+    print("                         Keep the archive until you decide to")
+    print("                         delete it manually or space is needed.")
+    print("                         (Default: space-is-needed)")
+    print("  -a, --keep-atleast=N   Keep the archive atleast N days after")
+    print("                         creation.  This value keeps the archive ")
+    print("                         from being garbage collected when more ")
+    print("                         space is needed. (Default: 3 days)")
+    print("  -c, --comment=COMMENT  Add a comment to the archive. This comment")
+    print("                         will be displayed in the listing generated")
+    print("                         by the 'show' action.  Use a single dash ")
+    print("                         (-) to read the comment from standard in.")
+    print("")
+    print("Required arguments:")
+    print("  archive-name  The name of the archive to change.")
+    print("")
+    print("Files:")
+    print("  /proj/<pid>/exp/<eid>/logs/<archive-name>.<instance>.zip")
+    print("")
+    print("Examples:")
+    print("  $ loghole change -c 'Results bad...' foobar")
     return
 
 ##
 # Print the usage statement for the "validate" action.
 #
 def validate_usage():
-    print "Usage: loghole validate"
-    print
-    print "Validate the experiment logs.  Currently, this action will:"
-    print
-    print "  1. Examine the log files from individual logs from the "
-    print "     program-agent to verify that the files are intact."
-    print "  2. Check that the referent of any soft-links exist."
-    print
-    print "Examples:"
-    print "  $ loghole validate"
+    print("Usage: loghole validate")
+    print("")
+    print("Validate the experiment logs.  Currently, this action will:")
+    print("")
+    print("  1. Examine the log files from individual logs from the ")
+    print("     program-agent to verify that the files are intact.")
+    print("  2. Check that the referent of any soft-links exist.")
+    print("")
+    print("Examples:")
+    print("  $ loghole validate")
     return
 
 ##
 # Print the usage statement for the "clean" action.
 #
 def clean_usage():
-    print "Usage: loghole clean [-fneR] [node1 ...]"
-    print
-    print "Clean the experiment log directory by removing any subdirectories"
-    print "and/or clean the log holes on the nodes.  The default behavior is"
-    print "to clean both."
-    print
-    print "Optional arguments:"
-    print "  -f, --force         Do not ask for confirmation."
-    print "  -n, --nodes         Clean only the nodes log directories."
-    print "  -e, --experiment    Clean only the experiment log directory."
-    print "  -R, --root          Use sudo to clean nodes as root."
-    print
-    print "Examples:"
-    print "  $ loghole clean"
+    print("Usage: loghole clean [-fneR] [node1 ...]")
+    print("")
+    print("Clean the experiment log directory by removing any subdirectories")
+    print("and/or clean the log holes on the nodes.  The default behavior is")
+    print("to clean both.")
+    print("")
+    print("Optional arguments:")
+    print("  -f, --force         Do not ask for confirmation.")
+    print("  -n, --nodes         Clean only the nodes log directories.")
+    print("  -e, --experiment    Clean only the experiment log directory.")
+    print("  -R, --root          Use sudo to clean nodes as root.")
+    print("")
+    print("Examples:")
+    print("  $ loghole clean")
     return
 
 ##
 # Print the usage statement for the "gc" action.
 #
 def gc_usage():
-    print "Usage: loghole gc [-n] [-m atmost] [-s megabytes]"
-    print
-    print "Garbage collect old log archives."
-    print
-    print "Optional arguments:"
-    print "  -n, --dry-run         Perform a dry run, do not delete any files."
-    print "  -m, --keep-atmost=N   Keep at most N archives in the experiment."
-    print "                        (Default: 100)"
-    print "  -s, --keep-size=N     Keep at N megabytes of archives."
-    print "                        (Default: 3.0 MB)"
-    print
-    print "Examples:"
-    print "  $ loghole gc -n -m 1"
-    print "  Reclaimed 3421 bytes from foo/bar."
-    print "  52434 bytes are still in foo/bar."
-    print
-    print "  $ loghole -q gc -m 1"
-    print "  3421 52434"
+    print("Usage: loghole gc [-n] [-m atmost] [-s megabytes]")
+    print("")
+    print("Garbage collect old log archives.")
+    print("")
+    print("Optional arguments:")
+    print("  -n, --dry-run         Perform a dry run, do not delete any files.")
+    print("  -m, --keep-atmost=N   Keep at most N archives in the experiment.")
+    print("                        (Default: 100)")
+    print("  -s, --keep-size=N     Keep at N megabytes of archives.")
+    print("                        (Default: 3.0 MB)")
+    print("")
+    print("Examples:")
+    print("  $ loghole gc -n -m 1")
+    print("  Reclaimed 3421 bytes from foo/bar.")
+    print("  52434 bytes are still in foo/bar.")
+    print("")
+    print("  $ loghole -q gc -m 1")
+    print("  3421 52434")
     return
 
 ##
@@ -538,8 +546,8 @@ def open_loghole(path, mode='r'):
     if zipfile.is_zipfile(path):
         zf = zipfile.ZipFile(path, mode)
         if "loghole.cfg" in zf.namelist():
-            cio = cStringIO.StringIO(zf.read("loghole.cfg"))
-            cp = ConfigParser.ConfigParser()
+            cio = io.StringIO(zf.read("loghole.cfg"))
+            cp = configparser.ConfigParser()
             cp.readfp(cio)
             retval = zf, cp
             zf = None
@@ -626,7 +634,7 @@ def sort_archives(keep_atmost, keep_size):
             keep_until = cp.get("MAIN", "keep-until")
             if keep_until == "i-delete":
                 if DEBUG:
-                    print "loghole: ignoring - " + entry
+                    print("loghole: ignoring - " + entry)
                     pass
 
                 retval_safe.append(entry)
@@ -645,14 +653,14 @@ def sort_archives(keep_atmost, keep_size):
         pass
 
     # Sort the archives from oldest keep-atleast time to newest, then
-    exp_logholes.sort(lambda x, y: cmp(x[2], y[2]))
+    exp_logholes.sort(key=lambda x: x[2])
 
     # ... divide them between the del list and the soon list depending on
     # whether or not space is needed.
     for entry, st, expiration in exp_logholes:
         if inuse_gc_size > keep_size:
             if DEBUG:
-                print "loghole: stale entry - " + entry
+                print("loghole: stale entry - " + entry)
                 pass
 
             retval_del.append(entry)
@@ -666,7 +674,7 @@ def sort_archives(keep_atmost, keep_size):
 
     # Resort the list in the reverse direction for keep-atleast time.
     exp_logholes = [x for x in exp_logholes if x[0] in retval_soon]
-    exp_logholes.sort(lambda x, y: cmp(y[2], x[2]))
+    exp_logholes.sort(key=lambda x: x[2], reverse=True)
 
     # Update the inuse_size for the archives below the keep-atmost value, then
     for entry, st, expiration in exp_logholes[0:keep_atmost]:
@@ -683,7 +691,7 @@ def sort_archives(keep_atmost, keep_size):
     # ... move the rest to the "del" list and
     for entry, st, expiration in exp_logholes[keep_atmost:]:
         if DEBUG:
-            print "loghole: excess entry - " + entry
+            print("loghole: excess entry - " + entry)
             pass
 
         retval_soon.remove(entry)
@@ -756,8 +764,8 @@ def do_archive(args):
             raise getopt.error(
                 'error: too many arguments for "archive" action.')
         pass
-    except getopt.error, e:
-        print e.args[0]
+    except getopt.error as e:
+        print(e.args[0])
         archive_usage()
         return 2
 
@@ -793,7 +801,7 @@ def do_archive(args):
         pass
 
     # Construct the meta-data.
-    cp = ConfigParser.ConfigParser()
+    cp = configparser.ConfigParser()
     cp.add_section("MAIN")
     cp.set("MAIN", "created", time.ctime(time.time()))
     cp.set("MAIN", "creator", USER)
@@ -802,7 +810,7 @@ def do_archive(args):
     cp.set("MAIN", "keep-until", keep_until)
     cp.set("MAIN", "keep-atleast", keep_atleast)
     
-    cio = cStringIO.StringIO()
+    cio = io.StringIO()
     cp.write(cio)
 
     loghole_zi = zipfile.ZipInfo()
@@ -837,14 +845,14 @@ def do_archive(args):
 
     if delete_dir:
         open(CLEANFILE, 'w')
-        os.chmod(CLEANFILE, 0664)
+        os.chmod(CLEANFILE, 0o664)
         pass
 
     if VERBOSITY == VERBOSITY_MACHINE:
-        print archive_name
+        print(archive_name)
         pass
     elif VERBOSITY >= VERBOSITY_HUMAN:
-        print "Created log hole archive: " + archive_name
+        print("Created log hole archive: " + archive_name)
         pass
     
     return retval
@@ -864,35 +872,35 @@ def do_show(args):
         if len(args) == 0 or entry.startswith(args[0]):
             lh, cp = open_loghole(entry)
             if lh:
-                print "Archive: " + entry
-                print ("  Project/Experiment:\t%s/%s" %
-                       (cp.get("MAIN", "project"),
-                        cp.get("MAIN", "experiment")))
-                print "  Creator:\t\t%s" % cp.get("MAIN", "creator")
-                print "  Created:\t\t%s" % cp.get("MAIN", "created")
-                print "  Keep-until:\t\t%s" % cp.get("MAIN", "keep-until")
-                print ("  Keep-atleast:\t\t%s days" %
+                print("Archive: " + entry)
+                print("  Project/Experiment:\t%s/%s" %
+                      (cp.get("MAIN", "project"),
+                       cp.get("MAIN", "experiment")))
+                print("  Creator:\t\t%s" % cp.get("MAIN", "creator"))
+                print("  Created:\t\t%s" % cp.get("MAIN", "created"))
+                print("  Keep-until:\t\t%s" % cp.get("MAIN", "keep-until"))
+                print("  Keep-atleast:\t\t%s days" %
                        cp.get("MAIN", "keep-atleast"))
                 if "report.mail" in lh.namelist():
-                    print "Report:"
-                    print lh.read("report.mail")
+                    print("Report:")
+                    print(lh.read("report.mail"))
                     pass
                 for name in lh.namelist():
                     if re.match(r'loghole-comment.*\.txt', name):
                         before = 38 - (len(name) / 2)
                         after = 77 - before - len(name)
-                        print "%s %s %s" % ("-" * before, name, "-" * after)
-                        print lh.read(name)
+                        print("%s %s %s" % ("-" * before, name, "-" * after))
+                        print(lh.read(name))
                         pass
                     pass
-                print "=" * 79
+                print("=" * 79)
                 try:
                     lh.printdir()
                     pass
                 except IOError:
                     pass
                 lh.close()
-                print
+                print("")
                 pass
             pass
         pass
@@ -948,7 +956,7 @@ def rsync(host, base, dlpath = None, paths = ["/"], port = None,
                     host + ":" + path,
                     fullpath])
         if DEBUG:
-            print `cmd`
+            print(repr(cmd))
             retval = -1
             pass
         else:
@@ -967,16 +975,16 @@ def rsync(host, base, dlpath = None, paths = ["/"], port = None,
                         os.close(1)
                         fd = os.open(os.path.join(base, ".rsync.out"),
                                      os.O_CREAT|os.O_TRUNC|os.O_WRONLY,
-                                     0664)
+                                     0o664)
                         os.dup2(fd, 2)
                         pass
                     try:
                         os.execve(RSYNC, cmd, os.environ)
-                    except OSError, e:
+                    except OSError as e:
                         sys.stderr.write(
                             "error: unable to exec '%s' - %s\n"
                             "error: args=%s\n"
-                            % (RSYNC, e.strerror, `cmd`))
+                            % (RSYNC, e.strerror, repr(cmd)))
                         pass
                     os._exit(127)
                     pass
@@ -1007,7 +1015,7 @@ def rmstar(host, port, delay, as_root, *args):
             cmd.extend(["sudo"])
         cmd.extend(["rm", "-rf", path ])
         if DEBUG:
-            print `cmd`
+            print(repr(cmd))
             retval = -1
             pass
         else:
@@ -1073,9 +1081,9 @@ def print_job_status(mode, hosts, jobs, hoststatus, hoststart):
     lmsg = "nodes todo/doing/done %d/%d/%d "
     rmsg = mode + " time min/avg/max: %.2f/%.2f/%.2f secs"
 
-    hosttimes = map(lambda x:
-                    hoststatus.get(x, (time.time(),))[0] - hoststart[x],
-                    hoststart.keys())
+    hosttimes = list(map(lambda x:
+                         hoststatus.get(x, (time.time(),))[0] - hoststart[x],
+                         hoststart.keys()))
     
     if len(hosttimes) == 0:
         hosttimes = [0]
@@ -1138,7 +1146,7 @@ def trace_pre(traces):
     rc = os.system(TEVC + " -w -t 30 -e %s/%s now __all_tracemon snapshot" %
                    (PID, EID))
     if rc != 0:
-        print "Could not SNAPSHOT the trace agents!";
+        print("Could not SNAPSHOT the trace agents!")
         pass
     return
 
@@ -1215,7 +1223,7 @@ def trace_post(link2trace):
         os.system("/bin/rm -f %s %s" % (SNORTCONF, SNORTOUT))
         
         fp = open(SNORTCONF, 'w')
-        os.chmod(SNORTCONF, 0600)
+        os.chmod(SNORTCONF, 0o600)
         fp.write("output database: log, mysql, user=%s dbname=%s password=%s\n" %
                  (USER, DPDBNAME, COLLAB_PW))
 
@@ -1299,8 +1307,8 @@ def do_sync(args, mode="sync", must_be_active=1, as_root=False):
                 pass
             pass
         pass
-    except getopt.error, e:
-        print e.args[0]
+    except getopt.error as e:
+        print(e.args[0])
         sync_usage()
         return 2
 
@@ -1325,7 +1333,7 @@ def do_sync(args, mode="sync", must_be_active=1, as_root=False):
         os.unlink(CLEANFILE)
         pass
 
-    dlhandle = tempfile.NamedTemporaryFile(prefix=".logholes")
+    dlhandle = tempfile.NamedTemporaryFile(mode="w",prefix=".logholes")
     dlhandle.write(DOT_LOGHOLES)
     dlhandle.flush()
 
@@ -1409,10 +1417,10 @@ def do_sync(args, mode="sync", must_be_active=1, as_root=False):
                           x["erole"] == "delaynode") and
                          (x["status"] != "up" or x["eventstatus"] != "ISUP"))]
 
-            phosts = sets.Set([x[0] for x in hosts])
-            vhosts = sets.Set([x[1] for x in hosts])
-            dphosts = sets.Set([x[0] for x in downhosts])
-            dvhosts = sets.Set([x[1] for x in downhosts])
+            phosts = set([x[0] for x in hosts])
+            vhosts = set([x[1] for x in hosts])
+            dphosts = set([x[0] for x in downhosts])
+            dvhosts = set([x[1] for x in downhosts])
             if len(node_list) == 0:
                 node_list = vhosts
                 
@@ -1438,8 +1446,8 @@ def do_sync(args, mode="sync", must_be_active=1, as_root=False):
                     assert 0
                 pass
 
-            known_nodes = sets.Set(node_list) & (phosts | vhosts)
-            unknown_nodes = known_nodes ^ sets.Set(node_list)
+            known_nodes = set(node_list) & (phosts | vhosts)
+            unknown_nodes = known_nodes ^ set(node_list)
 
             jobs = {}
             hoststatus = {}
@@ -1582,7 +1590,7 @@ def do_sync(args, mode="sync", must_be_active=1, as_root=False):
             for ht, (etime, sts) in hoststatus.items():
                 phost, vhost = ht
                 if VERBOSITY > VERBOSITY_HUMAN:
-                    print "info: %s - %.2f" % (vhost, etime - hoststart[ht])
+                    print("info: %s - %.2f" % (vhost, etime - hoststart[ht]))
                     pass
                 if mode == "clean":
                     continue
@@ -1683,7 +1691,7 @@ def do_sync(args, mode="sync", must_be_active=1, as_root=False):
     if delete_dir:
         os.chdir(logdir)
         open(CLEANFILE, 'w')
-        os.chmod(CLEANFILE, 0664)
+        os.chmod(CLEANFILE, 0o664)
         pass
 
     return retval
@@ -1737,8 +1745,8 @@ def do_list(args):
             raise getopt.error(
                 'error: too many arguments passed to "list" action')
         pass
-    except getopt.error, e:
-        print e.args[0]
+    except getopt.error as e:
+        print(e.args[0])
         list_usage()
         return 2
 
@@ -1747,7 +1755,17 @@ def do_list(args):
         pass
     
     logdir = os.path.join(EXPDIR_FMT % { "PID" : PID, "EID" : EID }, "logs")
-    os.chdir(logdir)
+    try:
+        os.chdir(logdir)
+    except OSError as e:
+        sys.stderr.write("error: could not chdir to %s: %s" % (logdir, e.strerror))
+        if all_experiments:
+            sys.stderr.write(", ignored ...\n")
+            return 0
+        else:
+            sys.stderr.write("\n")
+            sys.exit()
+        pass
 
     sa = sort_archives(keep_atmost, keep_size)
 
@@ -1767,8 +1785,8 @@ def do_list(args):
         max_entry_len = max([len(x[0]) for x in exp_logholes])
 
         if VERBOSITY >= VERBOSITY_HUMAN:
-            print "GC  Name%sDate" % (" " * (max_entry_len - 4 + 5))
-            print
+            print("GC  Name%sDate" % (" " * (max_entry_len - 4 + 5)))
+            print("")
             pass
         
         exp_logholes.sort(lambda x, y: cmp(y[2], x[2]))
@@ -1797,34 +1815,34 @@ def do_list(args):
 
             if ball in list_gc:
                 if VERBOSITY == VERBOSITY_MACHINE:
-                    print entry
+                    print(entry)
                     pass
                 elif VERBOSITY >= VERBOSITY_HUMAN:
                     gap = " " * (max_entry_len - len(entry) + 5)
-                    print "[%s] %s%s%s" % (ball, entry, gap, created_str)
+                    print("[%s] %s%s%s" % (ball, entry, gap, created_str))
                     pass
                 pass
             pass
         if len(exp_logholes) == 0:
             if VERBOSITY >= VERBOSITY_HUMAN:
-                print "  <No log holes found in %s/%s>" % (PID, EID)
+                print("  <No log holes found in %s/%s>" % (PID, EID))
                 pass
             pass
 
         if VERBOSITY == VERBOSITY_MACHINE:
             pass
         elif VERBOSITY >= VERBOSITY_HUMAN:
-            print
-            print "%d bytes are in use." % (sa["inuse-size"],)
-            print ("%d bytes will be reclaimed at the next gc." %
+            print("")
+            print("%d bytes are in use." % (sa["inuse-size"],))
+            print("%d bytes will be reclaimed at the next gc." %
                    (sa["reclaimed-size"],))
-            print
-            print "GC Legend:"
-            print "  O - Archive will not be deleted automatically."
-            print "  1 - Archive is one day away from its keep-until date."
-            print "  ! - Archive is past its keep-until date and will be"
-            print "      deleted when space is needed."
-            print "  X - Archive is ready to be garbage collected."
+            print("")
+            print("GC Legend:")
+            print("  O - Archive will not be deleted automatically.")
+            print("  1 - Archive is one day away from its keep-until date.")
+            print("  ! - Archive is past its keep-until date and will be")
+            print("      deleted when space is needed.")
+            print("  X - Archive is ready to be garbage collected.")
             pass
         pass
     
@@ -1880,8 +1898,8 @@ def do_change(args):
             raise getopt.error(
                 'error: not enough arguments for "change" action.')
         pass
-    except getopt.error, e:
-        print e.args[0]
+    except getopt.error as e:
+        print(e.args[0])
         change_usage()
         return 2
 
@@ -1904,7 +1922,7 @@ def do_change(args):
                     break
                 pass
             if full_archive_name != tmp_name:
-                print "error: bad archive name - " + archive_name
+                print("error: bad archive name - " + archive_name)
                 continue
             pass
 
@@ -1932,7 +1950,7 @@ def do_change(args):
             pass
 
         if keep_until or keep_atleast:
-            cio = cStringIO.StringIO()
+            cio = io.StringIO()
             cp.write(cio)
             
             loghole_zi = zipfile.ZipInfo()
@@ -1971,7 +1989,7 @@ def do_change(args):
         lh.close()
         
         if VERBOSITY >= VERBOSITY_HUMAN:
-            print "Changed log hole archive: " + archive_name
+            print("Changed log hole archive: " + archive_name)
             pass
         pass
     
@@ -1993,29 +2011,31 @@ def validate_visitor(arg, dirname, names):
                     pass
                 
                 if token != int(status.get("TOKEN", "-1")):
-                    print "warning: ignoring %s" % name
+                    print("warning: ignoring %s" % name)
                     continue
                 
                 base, ext = os.path.splitext(name)
                 base, ext = os.path.splitext(base)
                 
-                st = os.stat(os.path.join(dirname, base + ".out." + `token`))
+                st = os.stat(os.path.join(dirname, base + ".out." +
+                                          repr(token)))
                 if st[stat.ST_SIZE] != long(status.get("OUTSIZE", "-1")):
-                    print "warning: '%s' size doesn't match status" % fname
+                    print("warning: '%s' size doesn't match status" % fname)
                     arg["retval"] = 1
                     pass
                 if st[stat.ST_MTIME] != long(status.get("OUTMTIME", "-1")):
-                    print "warning: '%s' mtime doesn't match status" % fname
+                    print("warning: '%s' mtime doesn't match status" % fname)
                     arg["retval"] = 1
                     pass
                 
-                st = os.stat(os.path.join(dirname, base + ".err." + `token`))
+                st = os.stat(os.path.join(dirname, base + ".err." +
+                                          repr(token)))
                 if st[stat.ST_SIZE] != long(status.get("ERRSIZE", "-1")):
-                    print "warning: '%s' size doesn't match status" % fname
+                    print("warning: '%s' size doesn't match status" % fname)
                     arg["retval"] = 1
                     pass
                 if st[stat.ST_MTIME] != long(status.get("ERRMTIME", "-1")):
-                    print "warning: '%s' mtime doesn't match status" % fname
+                    print("warning: '%s' mtime doesn't match status" % fname)
                     arg["retval"] = 1
                     pass
                 pass
@@ -2024,7 +2044,7 @@ def validate_visitor(arg, dirname, names):
             pass
 
         if not os.path.exists(fname):
-            print "warning: '%s' references nonexistent file!" % fname
+            print("warning: '%s' references nonexistent file!" % fname)
             pass
         pass
     
@@ -2086,8 +2106,8 @@ def do_clean(args):
                 as_root = True
             pass
         pass
-    except getopt.error, e:
-        print e.args[0]
+    except getopt.error as e:
+        print(e.args[0])
         clean_usage()
         return 2
 
@@ -2147,8 +2167,8 @@ def do_compress(args, as_root=False):
                 as_root = True
             pass
         pass
-    except getopt.error, e:
-        print e.args[0]
+    except getopt.error as e:
+        print(e.args[0])
         clean_usage()
         return 2
 
@@ -2234,8 +2254,8 @@ def do_gc(args):
             raise getopt.error(
                 'error: too many arguments passed to "gc" action')
         pass
-    except getopt.error, e:
-        print e.args[0]
+    except getopt.error as e:
+        print(e.args[0])
         gc_usage()
         return 2
 
@@ -2251,12 +2271,12 @@ def do_gc(args):
         pass
 
     if VERBOSITY == VERBOSITY_MACHINE:
-        print "%s %s" % (str(reclaimed_size), str(inuse_size))
+        print("%s %s" % (str(reclaimed_size), str(inuse_size)))
         pass
     elif VERBOSITY >= VERBOSITY_HUMAN:
-        print ("Reclaimed %d bytes from %s/%s." %
+        print("Reclaimed %d bytes from %s/%s." %
                (sa["reclaimed-size"], PID, EID))
-        print "%d bytes are still in %s/%s." % (sa["inuse-size"], PID, EID)
+        print("%d bytes are still in %s/%s." % (sa["inuse-size"], PID, EID))
         pass
     
     return retval
@@ -2308,7 +2328,7 @@ try:
             sys.exit()
             pass
         elif opt in ("-V", "--version"):
-            print PACKAGE_VERSION
+            print(PACKAGE_VERSION)
             sys.exit()
             pass
         elif opt in ("-d", "--debug"):
@@ -2330,7 +2350,7 @@ try:
             pass
         elif opt in ("-a", "--all"):
             all_experiments = True
-            if 'get' or 'sync' in ACTIONS:
+            if action in ("get", "sync"):
                 raise getopt.error(
                     "\nError: You cannot use -a/--all and sync together.  When using the 'sync' action\n"
                     "       you must specify an experiment with the -e flag or the --experiment flag\n"
@@ -2369,8 +2389,8 @@ try:
                 'error: is not in an experiment directory.')
         pass
     pass
-except getopt.error, e:
-    print e.args[0]
+except getopt.error as e:
+    print(e.args[0])
     usage()
     sys.exit(2)
     pass
