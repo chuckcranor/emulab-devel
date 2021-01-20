@@ -308,23 +308,23 @@ pre {
 	  </div>
 	  <% if (isadmin) { %>
 	    <div class='clearfix'></div>	  
-	    <div class="exp-running hidden">
-	      <div class='pull-left'
-		   data-delay='{"show":750}'
-		   data-toggle='popover'
-		   data-content="When checked, only administrators can extend
-				 this experiment. No free time is granted to
-				 user at all."> 
-		<label class="checkbox-inline" style='margin-right: 10px;'>
-		  <input type="checkbox" id="lockout_checkbox" disabled
-			 <% if (expinfo.lockout) { %>checked<% } %> >Lockout</label>
-	      </div>
+	    <div class='exp-running hidden pull-left'
+		 style='margin-right: 10px;'
+		 data-toggle='popoverxx'
+		 data-delay='{"show":750}'
+		 data-content="When checked, only administrators can extend
+			       this experiment. No free time is granted to
+			       user at all.">
+	      <label class="checkbox-inline">
+		<input type="checkbox" id="lockout_checkbox" disabled
+		       <% if (expinfo.lockout) { %>checked<% } %> >
+		Lockout</label>
 	    </div>
-	    <div class="exp-running hidden">
-	      <div class='pull-left'
-		   data-delay='{"show":750}'
-		   data-toggle='popover'
-		   data-content="When checked, the experiment 
+	    <div class='exp-running hidden pull-left'
+		 style='margin-right: 10px;'
+		 data-toggle='popoverxx'
+		 data-delay='{"show":750}'
+		 data-content="When checked, the experiment 
 			       cannot be terminated by the user unless the
 			       user verifies 
 			       the lockdown code when clicking the Terminate
@@ -333,38 +333,33 @@ pre {
 			       is extended for more then two weeks.
 			       Use the admin lockdown flag to fully prevent
 			       termination."> 
-		<label class="checkbox-inline" style='margin-right: 10px;'>
-		  <input type="checkbox" id="user_lockdown_checkbox" disabled
-			 <% if (expinfo.user_lockdown) { %>checked<% } %> >
-		  User Lockdown</label>
-	      </div>
+	      <label class="checkbox-inline">
+		<input type="checkbox" id="user_lockdown_checkbox" disabled
+		       <% if (expinfo.user_lockdown) { %>checked<% } %> >
+		User Lockdown</label>
 	    </div>
-	    <div class="exp-running hidden">
-	      <div class='pull-left'
-		   data-delay='{"show":750}'
-		   data-toggle='popover'
-		   data-content="When checked, the experiment 
+	    <div class='exp-running hidden pull-left'
+		 style='margin-right: 10px;'
+		 data-toggle='popoverxx'
+		 data-delay='{"show":750}'
+		 data-content="When checked, the experiment 
 			       cannot be terminated by the user. Only an
 			       admin can do it.">
-		<label class="checkbox-inline" style='margin-right: 10px;'>
-		  <input type="checkbox" id="admin_lockdown_checkbox" disabled
-			 <% if (expinfo.admin_lockdown) { %>checked<% } %> >
-		  Admin Lockdown</label>
-	      </div>
+	      <label class="checkbox-inline">
+		<input type="checkbox" id="admin_lockdown_checkbox" disabled
+		       <% if (expinfo.admin_lockdown) { %>checked<% } %> >
+		Admin Lockdown</label>
 	    </div>
-	    <div class="exp-running hidden">
-	      <div class='pull-left'>
-		<span data-toggle='popover'
-		      data-delay='{"show":750}'
-		      <% if (expinfo.admin_notes == "") { %>
-		        data-content="Add admin notes to this experiment"
-		      <% } else { %>
-		        data-content="This experiment has admin notes"
-		      <% } %>>
-		  <a target="_blank"
-		     href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
-		</span>
-	      </div>
+	    <div class='exp-running hidden pull-left'>
+	      <a target="_blank"
+		 data-toggle='popover'
+		 data-delay='{"show":500, "hide":0}'
+		 <% if (expinfo.admin_notes == "") { %>
+		 data-content="Add admin notes to this experiment"
+		 <% } else { %>
+		 data-content="This experiment has admin notes"
+		 <% } %>
+		 href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
 	    </div>
 	  <% } %>
 	</div>
