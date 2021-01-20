@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -3434,7 +3434,7 @@ sub GenVirtLans($)
 		my (undef,$bw0)= @{$member->_delayinfo()};
 		my $wiretype   = $vlan->_wiretype();
 
-		if ($bw0 != 0) {
+		if ($bw0 != 0 && !$emulated) {
 		    $wiretype = $self->GetWiretype($wiretype, $bw0);
 		}
 		$self->createLink($vname, $plink,
