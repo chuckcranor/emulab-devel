@@ -210,13 +210,13 @@ B. Updating the base FreeBSD system
    boss:
      sudo /usr/testbed/sbin/testbed-control shutdown
      sudo /usr/local/etc/rc.d/apache24 stop
-     # the following may not be installed
+     # NOTE capture may not be installed
      sudo /usr/local/etc/rc.d/capture stop
 
    ops:
      sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
      sudo /usr/local/etc/rc.d/apache24 stop
-     # the following may not be installed
+     # NOTE capture may not be installed
      sudo /usr/local/etc/rc.d/capture stop
    
 3. Before installing the new binaries/libraries/etc., you might want to back
@@ -287,6 +287,7 @@ B. Updating the base FreeBSD system
      sudo /usr/local/etc/rc.d/apache24 stop
      sudo /usr/local/etc/rc.d/2.dhcpd.sh stop
      sudo /usr/local/etc/rc.d/2.mysql-server.sh stop
+     # NOTE capture may not be installed
      sudo /usr/local/etc/rc.d/capture stop
 
    ops:
@@ -368,43 +369,35 @@ B. Updating the base FreeBSD system
 
      # on boss you just need the "pw" patch
      cd /usr/src/usr.sbin/pw
-     sudo patch -p1 < ~/testbed/patches//FreeBSD-12.2-pw-2.patch
+     sudo patch -p1 < ~/testbed/patches/FreeBSD-12.2-pw-2.patch
      sudo make obj
-     sudo make all install
+     sudo make all install clean
 
      # on ops you should install all patches
      cd /usr/src/usr.sbin/pw
-     sudo patch -p1 < ~/testbed/patches//FreeBSD-12.2-pw-2.patch
+     sudo patch -p1 < ~/testbed/patches/FreeBSD-12.2-pw-2.patch
      sudo make obj
-     sudo make all install
-     #
-     cd /usr/src/usr.sbin/mountd
-     sudo patch -p1 < ~/testbed/patches//FreeBSD-12.2-mountd.patch
-     sudo make obj
-     sudo make all install
-     #
+     sudo make all install clean
+     # mountd patch is no longer needed, yea!
      cd /usr/src/sbin/mount
-     sudo patch -p1 < ~/testbed/patches//FreeBSD-12.2-mount.patch
+     sudo patch -p1 < ~/testbed/patches/FreeBSD-12.2-mount.patch
      sudo make obj
-     sudo make all install
+     sudo make all install clean
 
 6. How did that work out for ya?
 
    If all went well, skip to C (Updating ports/packages).
 
-   If that didn't work, see ~mike/upgrade-from-10.0.txt and follow steps
-   A1 - A10. Return here for upgrading your ports.
-
+   If that didn't work, contact testbed-ops.
 
 C. Updating ports/packages
 
    Updating the core ports from 11.3 to 12.2 is pretty easy if you were
-   running the most recent set of 11.3 packages. Otherwise there is an
-   upgrade of PHP involved. Note also that if you installed extra ports,
-   upgrading will require a bit more work.
+   running the most recent set of 11.3 packages. Note that if you installed
+   extra ports, upgrading will require a bit more work.
 
    You also need to ensure that Apache is not running (see A3 above)
-   as PHP might be getting upgraded.
+   as PHP will be getting upgraded.
 
 0. If you forgot to save off your package info back in A4, or it has been
    awhile, then you might want to go back and do that now.
@@ -503,7 +496,7 @@ C. Updating ports/packages
    port from source in the future. Make sure your DEFAULT_VERSION line(s)
    look like:
 
-  DEFAULT_VERSIONS=perl5=5.32 python=3.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+  DEFAULT_VERSIONS=perl5=5.32 python=3.7 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
   DEFAULT_VERSIONS+=ssl=base
 
 D. Repeat steps B and C for ops.
@@ -525,9 +518,6 @@ E. Update Emulab software
 
    You want everything to be built against the new ports and libraries
    anyway though, so just rebuild and install everything.
-
-   For this upgrade, you will also need to reinstall apache config files
-   and move over the certs.
 
    In your build tree, look at config.log to see how it was configured
    and then:
@@ -559,6 +549,8 @@ E. Update Emulab software
 
 3. Re-enable the testbed on boss.
 
+   # NOTE capture may not be installed
+   sudo /usr/local/etc/rc.d/capture start
    sudo /usr/local/etc/rc.d/apache24 start
    sudo /usr/local/etc/rc.d/2.dhcpd.sh start
    sudo /usr/testbed/sbin/testbed-control boot
