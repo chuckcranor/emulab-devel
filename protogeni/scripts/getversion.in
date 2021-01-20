@@ -107,6 +107,7 @@ my $credential = GeniCredential->GetSelfCredential($authority);
 if (!defined($credential)) {
     fatal("Could not create self signed clearinghouse credential");
 }
+GeniDB::DBSetDefault(GeniDB::DBConnect("geni"));
 
 my $manager = GeniAuthority->Lookup($urn);
 fatal("Could not find manager in the DB")

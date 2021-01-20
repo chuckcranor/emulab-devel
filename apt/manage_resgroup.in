@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1106,7 +1106,7 @@ sub DoDelete()
     # is an expiration, initiated by the daemon when it sees a reservation
     # group is done. 
     #
-    my $optlist   = "N:LMp";
+    my $optlist   = "N:LMps";
     my $takelock  = 0;
     my $nolock    = 0;	# Caller holds the lock.
     my $noemail   = 0;
@@ -1139,6 +1139,9 @@ sub DoDelete()
     }
     if (defined($options{"p"})) {
 	$pushonly = 1;
+    }
+    if (defined($options{"s"})) {
+	$noemail = 1;
     }
     usage()
 	if (@ARGV < 1);

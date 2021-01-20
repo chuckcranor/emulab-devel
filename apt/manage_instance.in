@@ -1553,7 +1553,7 @@ sub DoTerminate()
 	# Flag that we want to clear the panic, so send an auth credential.
 	return $sliver->Terminate($instance->paniced() ? 1 : undef);
     };
-    $errcode = CallMethodOnAggregates($coderef, 10, \$response, @agglist);
+    $errcode = CallMethodOnAggregates($coderef, 2, \$response, @agglist);
 				      
     if ($errcode) {
 	$exitcode = -1;

@@ -416,6 +416,9 @@ $ROOT_PUBKEY		= "$ROOT_PRIVKEY.pub";
 $ROOT_AUTHKEY		= "/root/.ssh/authorized_keys";
 $ROOT_DSA_PRIVKEY	= "/root/.ssh/id_dsa";
 $ROOT_DSA_PUBKEY	= "$ROOT_DSA_PRIVKEY.pub";
+# Stub RSA private key for switch expect module.
+$SWITCH_RSA_PRIVKEY     = "$PREFIX/etc/switch_sshrsa";
+$SWITCH_RSA_PUBKEY      = "$PREFIX/etc/switch_sshrsa.pub";
 
 $INIT_PRIVKEY		= "$main::TOP_SRCDIR/install/id_rsa";
 $INIT_PUBKEY		= "$main::TOP_SRCDIR/install/id_rsa.pub";

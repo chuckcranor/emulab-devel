@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -563,9 +563,7 @@ sub assemble_zonefile($) {
     open(MAPHEAD, "<$mapfilehead") || fatal("Couldn't open $mapfilehead\n");
     while (<MAPHEAD>) {
 	if ( /;\s*Serial\s+/i ) {
-	    my $serial = `date +%s`;
-	    chomp($serial);
-	    $serial = $serial | 0x70000000;
+	    my $serial = 537000000 + time();
 
 	    print MAP "\t\t\t$serial\t; Serial Number -- DO NOT EDIT\n";
 	}

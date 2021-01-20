@@ -1315,6 +1315,29 @@ sub HasValidEncryptedCert($)
 }
 
 #
+# Lookup certificate by serial number,
+#
+sub HasCertBySerial($$)
+{
+    my ($self, $serial) = @_;
+    my $uid_idx = $self->uid_idx();
+
+    if ($serial !~ /^(\d+)$/) {
+	return 0;
+    }
+    my $query_result =
+	DBQueryWarn("select idx from user_sslcerts ".
+		    "where uid_idx='$uid_idx' and idx='$serial' and ".
+		    "      revoked is null and expires > now()");
+
+    return 0
+	if (!defined($query_result));
+    return 0
+	if (!$query_result->numrows);
+    return 1;
+}
+
+#
 # Try to regenerate encrypted SSL cert using existing passphrase, or make
 # up a new passphrase if we do not have one in the DB.
 #

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2019 University of Utah and the Flux Group.
+# Copyright (c) 2019, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -833,10 +833,15 @@ sub PortInstance2native($$)
 sub native2PortInstance($$)
 {
     my ($self, $iface) = @_;
+    my $string;
 
-    my $rv = Port->LookupByStringForced(
-	Port->Tokens2IfaceString($self->{NAME}, $iface));
-    return $rv;
+    if ($iface =~ /^ethernet(\d+)\/(\d+)\/(\d+)$/) {
+	$string = Port->Tokens2TripleString($self->{NAME}, $3, $2);
+    }
+    else {
+	$string = Port->Tokens2IfaceString($self->{NAME}, $iface);
+    }
+    return Port->LookupByStringForced($string);
 }
 
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -183,6 +183,9 @@ sub PingEndpoints()
 	    if (!($aggregate->isFE() || $aggregate->ismobile() ||
 		  $aggregate->nickname() eq "BusTest2"));
 
+	next
+	    if ($aggregate->disabled());
+
 	#
 	# Fire and forget udp packet.
 	#
@@ -198,6 +201,7 @@ sub PingEndpoints()
 	    logit("Sending alive to $boss") if ($debug);
 	    send($sock, "alive", 0);
 	    close($sock);
+	    logit("Sent alive to $boss") if ($debug);
 	}
 	select(undef, undef, undef, 0.1);
     }
@@ -256,6 +260,8 @@ sub PingBaseStations()
 	    logit("Could not encode json data: " . Dumper($nodes));
 	    next;
 	}
+	logit("Connecting to $cnuc_id: '$string'") if ($debug);
+	
 	#
 	# Fire and forget udp packet.
 	#

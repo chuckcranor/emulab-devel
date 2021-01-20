@@ -92,15 +92,10 @@ if (!defined($certificate)) {
 }
 Genixmlrpc->SetContext(Genixmlrpc->Context($certificate));
 
-my $component = GeniComponent->CreateFromRegistry($urn);
+my $component = GeniAuthority->CreateFromRegistry("SA", $urn);
 if (!defined($component)) {
     fatal("Could not create local component object");
 }
-my $blob = $component->Resolve();
-if (!defined($blob)) {
-    fatal("Could not resolve $urn at the clearinghouse");
-}
-print Dumper($blob);
 exit(0);
 
 sub fatal($)

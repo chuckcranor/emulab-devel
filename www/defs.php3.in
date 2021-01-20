@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -435,6 +435,7 @@ define("SUEXEC_ACTION_DIE",		1);
 define("SUEXEC_ACTION_USERERROR",	2);
 define("SUEXEC_ACTION_IGNORE",		3);
 define("SUEXEC_ACTION_DUPDIE",		4);
+define("SUEXEC_ACTION_DEBUG",		5);
 # SUEXEC_ACTION_MAIL_TBLOGS to be ored with one of the above actions
 define("SUEXEC_ACTION_MAIL_TBLOGS",     64);
 
@@ -444,9 +445,9 @@ define("SUEXEC_ACTION_MAIL_TBLOGS",     64);
 function SUEXECERROR($action)
 {
     global $suexec_cmdandargs, $suexec_retval;
-    global $suexec_output;
+    global $suexec_output, $TBMAIL_OPS;
 
-    $foo  = "Shell Program Error. Exit status: $suexec_retval\n";
+    $foo  = "Shell program exit status: $suexec_retval\n";
     $foo .= "  '$suexec_cmdandargs'\n";
     $foo .= "\n";
     $foo .= $suexec_output;
@@ -466,6 +467,9 @@ function SUEXECERROR($action)
     case SUEXEC_ACTION_DUPDIE:
 	TBERROR($foo, 0, 1);
 	USERERROR("<XMP>$foo</XMP>", 1);
+        break;
+    case SUEXEC_ACTION_DEBUG:
+        TBMAIL($TBMAIL_OPS, "WEB DEBUG REPORT", $foo, "From: $TBMAIL_OPS");
         break;
     default:
 	TBERROR($foo, 1, 1);

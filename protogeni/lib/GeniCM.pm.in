@@ -1834,11 +1834,31 @@ sub GetTicketAuxAux($)
 	#
 	# If no osname by this point, try for the default.
 	#
-	if (defined($node) && !defined($osname) && !$isbridge && !$isvhost) {
-	    if (defined($node->default_osid())) {
-		$osinfo = OSImage->Lookup($node->default_osid());
-		$osname = $osinfo->osname()
-		    if (defined($osinfo));
+	if (!defined($osname) && !$isbridge && !$isvhost) {
+	    if (defined($node)) {
+		if (defined($node->default_osid())) {
+		    $osinfo = OSImage->Lookup($node->default_osid());
+		    if (!defined($osinfo)) {
+			print STDERR "node $node but cannot ".
+			    "lookup default_osid defined for it.\n";
+		    }
+		    else {
+			$osname = $osinfo->osname()
+		    }
+		}
+	    }
+	    elsif (defined($pctype) && GeniXML::UseTypeDefaultImage($ref)) {
+		my $nodetype = NodeType->Lookup($pctype);
+		if (defined($nodetype) && defined($nodetype->default_osid())) {
+		    $osinfo = OSImage->Lookup($nodetype->default_osid());
+		    if (!defined($osinfo)) {
+			print STDERR "node type $pctype but cannot ".
+			    "lookup default_osid defined for it.\n";
+		    }
+		    else {
+			$osname = $osinfo->osname()
+		    }
+		}
 	    }
 	}
 	# The slot does not like to be NULL.
@@ -3138,8 +3158,10 @@ sub GetTicketAuxAux($)
 	    my $dest   = GetText("dest_id", $property);
 	    if (!defined($source) || !defined($dest) ||
 		$source eq "" || $dest eq "") {
-		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+		$response = 
+		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 			     "$lanname: Missing source or dest in property");
+		goto bad;
 	    }
 	    $properties{"$source:$dest"} = $property;	    
 	}

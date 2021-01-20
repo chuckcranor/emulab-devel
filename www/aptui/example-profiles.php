@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -81,6 +81,7 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_MARKED();
 REQUIRE_TABLESORTER();
 AddTemplateList(array("example-profiles"));
 SPITREQUIRE("js/example-profiles.js");

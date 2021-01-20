@@ -42,6 +42,19 @@ sub Install($$$)
 			   "$MYSQL $DBNAME");
 	};
 	#
+	# Create a pointless unencrypted ssh key to use from the switch
+	# expect module to avoid loading user keys that might be bogus
+	# or encrypted. 
+	#
+	Phase "keygen", "Creating pointless switch RSA private key", sub {
+	    DoneIfExists($SWITCH_RSA_PRIVKEY);
+
+	    ExecQuietFatal("$SSH_KEYGEN -t rsa -P '' -f $SWITCH_RSA_PRIVKEY");
+	    ExecQuietFatal("$CHOWN $PROTOUSER $SWITCH_RSA_PRIVKEY");
+	    ExecQuietFatal("$CHMOD 444 $SWITCH_RSA_PRIVKEY");
+	};
+	
+	#
 	# Also create a DSA key. Useful and sometimes required.
 	#
 	Phase "keygen", "Creating root DSA private key", sub {

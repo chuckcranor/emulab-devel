@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -603,7 +603,7 @@ function Do_CheckForm()
         }
     }
     if ($ajax_args["step"] == 2.5) {
-        if (CheckMaxxDuration() == 0) {
+        if (CheckMaxDuration() == 0) {
             SPITAJAX_RESPONSE(0);
         }
     }
@@ -1424,9 +1424,9 @@ function Do_MaxDuration()
                      SUEXEC_ACTION_CONTINUE);
     $webtask->Refresh();
 
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);    
-        
     if ($retval) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);    
+        
         if (!$webtask->exited() || $retval < 0) {
             SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
         }
@@ -1439,6 +1439,9 @@ function Do_MaxDuration()
         }
         $webtask->Delete();
         return;
+    }
+    elseif ($ISPOWDER) {
+        SUEXECERROR(SUEXEC_ACTION_DEBUG);
     }
     unlink($filename);
     if (isset($filename2)) {
