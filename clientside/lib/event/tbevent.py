@@ -703,11 +703,11 @@ class EventClient:
         
         if url:
             if not url.startswith("elvin:"):
-                raise ValueError, "malformed url: " + url
+                raise ValueError("malformed url: " + url)
             pass
         else:
             if not server:
-                raise ValueError, "url or server must be given"
+                raise ValueError("url or server must be given")
             url = "elvin://" + server
             if port and len(port) > 0:
                 url = url + ":" + port
@@ -802,7 +802,7 @@ class EventClient:
             rc = c_event_poll_blocking(self.handle, self.timeout)
             if rc != 0:
                 sys.stderr.write("c_event_poll_blocking: " + str(rc) + "\n")
-                raise EventError, rc
+                raise EventError(rc)
             else:
                 for ev in self._callbacks():
                     retval = self.handle_event(ev)
@@ -814,7 +814,7 @@ class EventClient:
                     if self.timeout != 0:
                         # We're making a bit of an assumption here that no
                         # callbacks means a timeout occurred, oh well.
-                        raise EventTimedOutError, self.timeout
+                        raise EventTimedOutError(self.timeout)
                     pass
                 
                 if not retval:
@@ -836,13 +836,13 @@ class EventClient:
                 #
                 ev = CallbackIterator(self.handle).next()
                 return ev;
-            except StopIteration, e:
+            except StopIteration as e:
                 pass
             
             rc = c_event_poll_blocking(self.handle, 0)        
             if rc != 0:
                 sys.stderr.write("c_event_poll_blocking: " + str(rc) + "\n")
-                raise IOError, "Reading events"
+                raise IOError("Reading events")
             pass
     pass
 
