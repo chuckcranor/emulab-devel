@@ -4132,7 +4132,7 @@ CREATE TABLE `node_reservations` (
   `pid` varchar(48) NOT NULL default '',
   `pid_idx` mediumint(8) unsigned NOT NULL default '0',
   `reservation_name` varchar(48) NOT NULL default 'default',
-  PRIMARY KEY (`node_id`)
+  PRIMARY KEY (`node_id`,`pid_idx`,`reservation_name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
