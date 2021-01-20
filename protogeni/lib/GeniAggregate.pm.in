@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -338,6 +338,8 @@ sub resource_type($)	{ return field($_[0], "type"); }
 
 # Busy if status is working (start/restart/stop/reload/reboot).
 sub Busy($)             { return $_[0]->status() eq "working" ? 1 : 0; }
+
+sub Ready($)            { return $_[0]->status() eq "ready" ? 1 : 0; }
 
 # Are any slivers imaging.
 sub Imaging($)          { return $_[0]->CheckSliverStates("imaging") ? 1 : 0; }
