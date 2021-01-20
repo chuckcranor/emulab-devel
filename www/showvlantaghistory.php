@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,7 +42,14 @@ $optargs = OptionalPageArguments("datetime",  PAGEARG_STRING,
 				 "count",     PAGEARG_INTEGER,
 				 "current",   PAGEARG_BOOLEAN,
 				 "tag",       PAGEARG_INTEGER,
-				 "lanid",     PAGEARG_INTEGER);
+				 "lanid",     PAGEARG_INTEGER,
+                                 "classic",   PAGEARG_BOOLEAN);
+
+if (!$classic) {
+    $url = "portal/vlan-history.php";
+    header("Location: $url");
+    return;
+}
 
 #
 # Standard Testbed Header
