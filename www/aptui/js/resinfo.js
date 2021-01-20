@@ -469,14 +469,24 @@ $(function ()
 		    "categories": {
 			"Busy": { "color": "black" },
 			"Free": { "color": "green"},
+			"Overbook": { "color": "red"},
 		    },
 		};
 		for (var i = 0; i < forecast.length; i++) {
 		    var info  = forecast[i];
 		    var start = moment(info.stamp).toDate();
-		    var state = info.free ? "Free" : "Busy";
+		    var state;
 		    var end;
 
+		    if (info.free == 1) {
+			state = "Free";
+		    }
+		    else if (info.free == 0 || !isadmin) {
+			state = "Busy"
+		    }
+		    else {
+			state = "Overbook";
+		    }
 		    if (i < forecast.length - 1) {
 			end = moment(forecast[i + 1].stamp).toDate();
 		    }
