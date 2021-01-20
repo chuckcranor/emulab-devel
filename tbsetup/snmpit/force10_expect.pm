@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2013-2020 University of Utah and the Flux Group.
+# Copyright (c) 2013-2021 University of Utah and the Flux Group.
 # Copyright (c) 2006-2014 Universiteit Gent/iMinds, Belgium.
 # Copyright (c) 2004-2006 Regents, University of California.
 # 
@@ -38,6 +38,24 @@ $| = 1; # Turn off line buffering on output
 
 use English;
 use Expect;
+# Need this to get our TB prefix.
+use libtestbed;
+my $TB = libtestbed::TBPREFIX();
+
+#
+# Gack! we run snmpit as the user, which means the ssh command to create
+# the expect object will run as the user, and that means ssh will load the
+# user's ssh config file and the user's ssh private key. The former is easy
+# to deal with (via the -F command) but there is no way to convince ssh not
+# to load any keys unless we give it a -i command. Why does this matter?
+# Well, users are prone to messing with the keys we create for them in
+# their home dir, and if they mess those up or encrypt them, the ssh
+# command can hang up asking for a key passphrase. In general, we want to
+# remove all reference to the user's environment anyway, so we are going to
+# force ssh to use a well known unencrypted key. If that key does not
+# exist, throw back an error early.
+#
+my $SSHKEY = "$TB/etc/switch_sshrsa";
 
 # Constants
 my $CONN_TIMEOUT = 60;
@@ -54,6 +72,14 @@ sub new($$$$$) {
     my $debugLevel = shift;
     my $userpass = shift;  # username and password
     my $options = shift;
+
+    #
+    # Key must exist.
+    #
+    if (! -e $SSHKEY) {
+	warn "force10_expect: $SSHKEY does not exist!\n";
+	return undef;
+    }
 
     #
     # Create the actual object
@@ -109,8 +135,8 @@ sub createExpectObject($)
     my $self = shift;
     my $id = "$self->{NAME}::createExpectObject()";
     my $error = 0;
-    my $spawn_cmd = "ssh -o UserKnownHostsFile=/dev/null ".
-	"-o IdentitiesOnly=yes ".
+    my $spawn_cmd = "ssh -F /dev/null -o UserKnownHostsFile=/dev/null ".
+	"-o IdentitiesOnly=yes -i $SSHKEY ".
 	"-l $self->{USERNAME} $self->{NAME}";
     # Create Expect object and initialize it:
     my $exp = new Expect();
