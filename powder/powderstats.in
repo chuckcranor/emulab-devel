@@ -98,7 +98,8 @@ print "Powder Portal projects: " . $query_result->numrows . "\n";
 
 $query_result =
     DBQueryFatal("select uid_idx from users as u ".
-		 "where u.portal='powder' and u.status='active' and ".
+		 "where u.portal='powder' and ".
+		 "      (u.status='active' or u.status='inactive') and ".
 		 "      u.usr_created < '$ENDTIME' and ".
 		 "      u.usr_email not like '%utah.edu' and ".
 		 "      u.usr_email not like '%rice.edu'");
