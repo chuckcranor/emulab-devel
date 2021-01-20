@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2020 University of Utah and the Flux Group.
+# Copyright (c) 2013-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -185,6 +185,7 @@ else {
 #
 if ($lease->state() ne LEASE_STATE_GRACE()) {
     # Lets call this a user error.
+    $lease->Unlock();
     print STDERR "$pid/$lname: can only renew leases in the 'grace' state\n";
     exit(1);
 }
@@ -195,6 +196,7 @@ if ($lease->state() ne LEASE_STATE_GRACE()) {
 if (!$this_user->IsAdmin() &&
     $vars->{'maxextend'} > 0 && $lease->renewals() >= $vars->{'maxextend'}) {
     # Lets call this a user error.
+    $lease->Unlock();
     print STDERR "$pid/$lname: already extended maximum number of times\n";
     exit(1);
 }
