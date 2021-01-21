@@ -136,7 +136,7 @@ sub createExpectObject($)
     my $id = "$self->{NAME}::createExpectObject()";
     my $error = 0;
     my $spawn_cmd = "ssh -F /dev/null -o UserKnownHostsFile=/dev/null ".
-	"-o IdentitiesOnly=yes -i $SSHKEY ".
+	"-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -i $SSHKEY ".
 	"-l $self->{USERNAME} $self->{NAME}";
     # Create Expect object and initialize it:
     my $exp = new Expect();
