@@ -1032,7 +1032,7 @@ sub setPortMembership($$$$$) {
 # Remove the input ports from any VLAN they might be in, except for the
 # default vlan.
 sub removePortsFromAllVlans($$@) {
-    my ($self, $tagged_only, @ports) = @_;
+    my ($self, $which, @ports) = @_;
     my $id = "$self->{NAME}::removePortsFromAllVlans";
     my $errors = 0;
 
@@ -1062,9 +1062,14 @@ sub removePortsFromAllVlans($$@) {
 	my ($emask, $umask) = $self->getMemberBitmask($vlifidx,1);
 	my $checkmask = $emask;
 	my $rmports = \@ports;
-	if ($tagged_only) {
+	if ($which eq "tagged_only") {
 	    # see comments in removeSomePortsFromVlan()
 	    $checkmask = $portmask & ($emask ^ $umask);
+	    $rmports = $self->convertBitmaskToIfindexes($checkmask);
+	} 
+	elsif ($which eq "untagged_only") {
+	    # see comments in removeSomePortsFromVlan()
+	    $checkmask = $portmask & ($emask & $umask);
 	    $rmports = $self->convertBitmaskToIfindexes($checkmask);
 	} 
 	if ($self->checkBits("off", $portmask, $checkmask)) {
@@ -1491,8 +1496,7 @@ sub setPortVlan($$@) {
     # Zap the untagged ports from any vlan that they are currently in
     # (aside from the default).  Otherwise, the subsequent set operation
     # might fail.
-    my $tagged_only = 0;
-    $self->removePortsFromAllVlans($tagged_only, @upobjs);
+    $self->removePortsFromAllVlans("untagged_only", @upobjs);
 
     # Mix in the membership already set up on the target vlan.  Doing this
     # avoids accidentally removing tagged ports when adding new ports to the
@@ -1894,9 +1898,9 @@ sub enablePortTrunking2($$$$) {
 	return 0;
     }
 
-    # Remove the port from any vlans it might be in.
-    my $tagged_only = 0;
-    if ($self->removePortsFromAllVlans($tagged_only, $port)) {
+    # Remove the port from any untagged vlans it might be in.
+    if (!$equalmode &&
+	$self->removePortsFromAllVlans("untagged_only", $port)) {
 	warn "$id: ERROR: Failed to remove $port from existing vlan(s)!";
 	return 0;
     }
@@ -1948,8 +1952,7 @@ sub disablePortTrunking($$) {
     # Remove the port from any VLAN it might be in, except for the
     # native (untagged) vlan.  We do this as a precaution - upper
     # layers should have cleaned up already.
-    my $tagged_only = 1;
-    if ($self->removePortsFromAllVlans($tagged_only, $port)) {
+    if ($self->removePortsFromAllVlans("tagged_only", $port)) {
 	warn "$id: ERROR: Could not remove $port from any/all vlans!";
 	return 0;
     }
