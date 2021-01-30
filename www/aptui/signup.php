@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -403,8 +403,10 @@ if (!$joinproject) {
 	strcmp($formfields["proj_url"], $HTTPTAG) == 0) {    
 	$errors["proj_url"] = "Missing Field";
     }
-    elseif (! CHECKURL($formfields["proj_url"], $urlerror)) {
-	$errors["proj_url"] = $urlerror;
+    elseif (!preg_match('#^https?://#i', $formfields["proj_url"]) ||
+            strstr($formfields["proj_url"], " ") ||
+            !TBvalid_URL($formfields["proj_url"])) {
+	$errors["proj_url"] = "Improper url";
     }
     if (!isset($formfields["proj_why"]) ||
 	strcmp($formfields["proj_why"], "") == 0) {
