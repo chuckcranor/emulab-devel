@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2009-2015 University of Utah and the Flux Group.
+# Copyright (c) 2009-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,5 +26,5 @@ cd @prefix@/data/node_usage/
 
 mkdir -p @prefix@/www/node_usage/
 
-cp *.png index.php usage.php @prefix@/www/node_usage/
+cp  *.svg index.php usage.php @prefix@/www/node_usage/
 

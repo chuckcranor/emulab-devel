@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2009-2015 University of Utah and the Flux Group.
+# Copyright (c) 2009-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,15 +42,15 @@ sub false {0}
 
 #my $TERMINAL = "postscript eps enhanced color";
 #my $EXT = "eps";
-my $TERMINAL = "png";
-my $EXT = "png";
+my $TERMINAL = "svg";
+my $EXT = "svg";
 my $LW = 2;
 
 sub plot ( $@ ) {
     my ($what, %ops) = @_;
     open F, ">node_usage-$what.gpl";
 
-    print F "set terminal $TERMINAL\n";
+    print F "set terminal $TERMINAL size 1024,480\n";
     print F "set grid\n" unless defined $ops{grid} and !$ops{grid};
     print F "\n"; 
 
@@ -103,7 +103,7 @@ sub plot ( $@ ) {
 plot("hourly_last2weeks",timefmt=>'%Y-%m-%d_%H:$M', format_x=>'%a\n%m/%d');
 plot("weekly", timefmt=>'%Y-%m-%d');
 plot("daily_last2months", timefmt=>'%Y-%m-%d');
-plot("daily", timefmt=>'%Y-%m-%d', size=>'2,1');
+plot("daily", timefmt=>'%Y-%m-%d');
 plot("monthly", timefmt=>'%Y-%m', format_x=>'%m/%y');
 plot("yearly", grid=>false, xlabel => 'Year', xtics=>1);
 plot("by_hour", xrange=>"[0:23]",

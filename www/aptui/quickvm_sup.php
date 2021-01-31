@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -752,7 +752,7 @@ $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
                    href='#nsf_supported_modal'
 	           data-target='#nsf_supported_modal'>Supported by NSF</a>\n";
         }
-        echo "&copy; 2020
+        echo "&copy; 2021
               <a href='http://www.utah.edu' target='_blank'>
                  The University of Utah</a>
                </div>
