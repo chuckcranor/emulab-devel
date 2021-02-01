@@ -2091,7 +2091,11 @@ sub CreateOneVlan($$$@)
     if ($stack->vlanExists($vlanid)) {
 	print "  VLAN $vlanid already exists\n"
 	    if (!$quiet);
-	if ($stack->setPortVlan($vlanid,@ports)) {
+
+	if ($stack->checkVlanConsistency($vlanid, 1)) {
+	    $errors++;
+	}
+	elsif ($stack->setPortVlan($vlanid,@ports)) {
 	    $errors++;
 	}
     }
