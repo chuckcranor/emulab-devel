@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # Copyright (c) 2004-2009 Regents, University of California.
 # 
 # {{{EMULAB-LGPL
@@ -215,8 +215,10 @@ sub FlipDebug($$)
 #		num is the 802.1Q vlan tag number.
 #		members is a reference to an array of VLAN members
 #
-sub listVlans($) {
+sub listVlans($;$) {
     my $self = shift;
+    my $pempty = shift;
+    my %empty = ();
 
     #
     # We need to 'collate' the results from each switch by putting together
@@ -235,10 +237,18 @@ sub listVlans($) {
 	    ${$vlans{$vlan_id}}[0] = $vlan_number;
 	    push @{${$vlans{$vlan_id}}[1]}, @$memberRef;
 
-	    if (0 && ! @$memberRef) {
-		print STDERR
-		    "$vlan_id ($vlan_number) ".
-		    "exists on $devicename with no members\n";
+	    if (! @$memberRef) {
+		if (0) {
+		    print STDERR
+			"$vlan_id ($vlan_number) ".
+			"exists on $devicename with no members\n";
+		}
+		if ($pempty) {
+		    if (!exists($empty{$vlan_id})) {
+			$empty{$vlan_id} = [];
+		    }
+		    push(@{$empty{$vlan_id}}, $devicename);
+		}
 	    }
 	}
     }
@@ -250,7 +260,9 @@ sub listVlans($) {
     my @vlanList;
     foreach my $vlan (sort {tbsort($a,$b)} keys %vlans) {
 	push @vlanList, [$vlan, @{$vlans{$vlan}}];
-    } 
+    }
+    $$pempty = \%empty
+	if (defined($pempty));
     return @vlanList;
 }
 
@@ -788,6 +800,86 @@ sub vlanExists($$) {
 	return 0;
     }
 
+}
+
+#
+# Check vlan consistency across the switches in stack to make sure
+# it exists, with the correct tag. We are looking for stale vlans.
+#
+# usage: checkVlanConsistency(self, vlan identifier)
+#
+# returns 0 if eveything okay
+#
+sub checkVlanConsistency($$$) {
+    my $self = shift;
+    my $vlan_id = shift;
+    my $fixit = shift;
+    my $id = "checkVlanConsistency($vlan_id,$fixit)";
+    my $errors = 0;
+
+    my $tag = getReservedVlanTag($vlan_id);
+    if (!$tag) {
+	print STDERR "$id: No tag for vlan_id\n";
+	return 0;
+    }
+    foreach my $switch (keys %{$self->{DEVICES}}) {
+	#
+	# Check to see if the VLAN already exists on this switch
+	#
+	my $dev = $self->{DEVICES}{$switch};
+
+	if ($dev->vlanNumberExists($tag)) {
+	    my %mapping = $dev->findVlans();
+	    if (!exists($mapping{$vlan_id}) || $mapping{$vlan_id} != $tag) {
+		my $current_name;
+		    
+		print STDERR "  Vlan tag $tag already exists on ".
+		    "$switch, but with the wrong name\n";
+
+		# Find what name if any is associated with the tag.
+		foreach my $id (keys(%mapping)) {
+		    if ($mapping{$id} == $tag) {
+			$current_name = $id;
+			last;
+		    }
+		}
+		if (defined($current_name)) {
+		    print STDERR "  The current name is '$current_name'\n";
+		}
+		else {
+		    print STDERR "  Hmm, no name associated\n";
+		}
+		if ($tag < $dev->{MIN_VLAN} || $tag > $dev->{MAX_VLAN}) {
+		    print STDERR "  $tag is out of fixable range!\n";
+		    $errors++;
+		    next;
+		}
+		# Only fix if the existing name is ours.
+		if (! (defined($current_name) && $current_name =~ /^\d+$/)) {
+		    print STDERR "  Not allowed to fix this!\n";
+		    $errors++;
+		    next;
+		}
+		if (!$fixit) {
+		    $errors++;
+		    next;
+		}
+		print "  Removing ports from $current_name on $switch\n";
+
+		if ($dev->removePortsFromVlan($tag)) {
+		    print STDERR "  Unable to remove ports from vlan\n";
+		    $errors++;
+		    next;
+		}
+		if (!$dev->removeVlan($tag)) {
+		    print STDERR "  ERROR: Unable to remove vlan from $switch\n";
+		    $errors++;
+		    next;
+		}
+	    }
+	}
+    }
+    return $errors;
 }
 
 #

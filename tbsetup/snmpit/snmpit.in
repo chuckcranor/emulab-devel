@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -47,9 +47,13 @@ use English;
 use Getopt::Long;
 use emutil;
 use strict;
+use Data::Dumper;
+use Carp qw(cluck);
 use List::Util qw(shuffle);
 
 # Optional alternate version of libraries.
+#use lib '.';
+#use lib '../../../testbed/tbsetup/snmpit';
 use lib '@prefix@/lib/snmpit';
 use snmpit_lib;
 use snmpit_remote;
@@ -85,6 +89,7 @@ sub doEnableOpenflowListener($$);
 sub doReserveVlanTags($$@);
 sub doUnReserveVlanTags($$@);
 sub doSetVlanOnTrunks($$@);
+sub doDeleteStaleVlansFromDevices($@);
 
 #
 # Defaults
@@ -212,7 +217,8 @@ GetOptions(\%opt,
     'of-disable=s', 'of-enable=s', 'of-controller=s', 'of-listener=s',
     'o=s@{1,1}', 'redirect-err', 'blockmode', 'syncvlans', 'impotent',
     'shadow', 'skip-supplied', 'whol-magic', 'backtraceonwarning',
-    'prunestalevlans','setvlanontrunks','resetvlanontrunks','clearvlanontrunks');
+    'prunestalevlans','setvlanontrunks','resetvlanontrunks',
+    'clearvlanontrunks','deletestalevlans');
 
 if ($opt{h}) {
     exit &usage;
@@ -371,7 +377,7 @@ if ($opt{t} || $opt{r} || $opt{D} || $opt{R} || $opt{X} ||
     #
     @ports = ($opt{T});
 } elsif ($opt{'setvlanontrunks'} || $opt{'resetvlanontrunks'} ||
-         $opt{'clearvlanontrunks'}) {
+         $opt{'clearvlanontrunks'} || $opt{'deletestalevlans'}) {
     if (!@ARGV) {
 	tberror "At least one VLAN required";
 	exit &usage;
@@ -450,6 +456,7 @@ if ($opt{'prunestalevlans'}) { push @commands, ["prunestalevlans"]; }
 if ($opt{'setvlanontrunks'}) { push @commands, ["setvlanontrunks"]; }
 if ($opt{'resetvlanontrunks'}) { push @commands, ["resetvlanontrunks"]; }
 if ($opt{'clearvlanontrunks'}) { push @commands, ["clearvlanontrunks"]; }
+if ($opt{'deletestalevlans'}) { push @commands, ["deletestalevlans"]; }
 
 # This option combines with reset/remove
 if ($opt{C} && !($opt{r} || $opt{o})) { push @commands, ["unreservetags"]; }
@@ -580,7 +587,13 @@ my @supplied_stacks   = ();
 my $supplied_switches = 0; # Whether -i or -S was given
 if ($opt{i}) {
     $supplied_switches = 1;
-    push @supplied_switches, @{$opt{i}};
+    #
+    # Lets allow a comma separated list too. 
+    #
+    foreach my $arg (@{$opt{i}}) {
+	my @tokens = split(",", $arg);
+	push @supplied_switches, @tokens;
+    }
 }
 if ($opt{S}) {
     foreach my $stack (@{$opt{S}}) {
@@ -838,6 +851,21 @@ COMMAND: foreach my $command (@commands) {
 	(/resetvlanontrunks/ || /setvlanontrunks/ || /clearvlanontrunks/) && do {
 	    @devicenames = ($supplied_switches && !$skip_supplied)?
 			   @supplied_switches : getTestSwitches();
+	    @vlans = @optvlanids;
+	    last;
+	};
+	(/deletestalevlans/) && do {
+	    if (!$supplied_switches) {
+                print "snmpit: deletestalevlans requires -i option\n"
+		    if (!$quiet);
+                next COMMAND;
+            }
+	    if ($skip_supplied) {
+                print "snmpit: deletestalevlans skip-supplied not allowed\n"
+		    if (!$quiet);
+                next COMMAND;
+            }
+	    @devicenames = @supplied_switches;
 	    @vlans = @optvlanids;
 	    last;
 	};
@@ -1238,6 +1266,10 @@ COMMAND: foreach my $command (@commands) {
 		doSetVlanOnTrunks(\@stacks, $operation, @vlans);
 	    last;
 	}; # /trunkenable/ && do
+	(/deletestalevlans/) && do {
+	    $exitval += doDeleteStaleVlansFromDevices(\@stacks, @vlans);
+	    last;
+	}; # /trunkenable/ && do
 	/reset/ && do {
 	    $exitval += doReset(\@stacks,@vlans);
 	    last;
@@ -1351,6 +1383,7 @@ sub doListVlans ($) {
     my $stacks = shift;
     my %vlans;
     my %tags;
+    my $emptyList;
     my @vlanList;
 
     #
@@ -1372,7 +1405,7 @@ sub doListVlans ($) {
         }
     } else {
         foreach my $stack (@$stacks) {
-            @vlanList = $stack->listVlans();
+            @vlanList = $stack->listVlans(\$emptyList);
             foreach my $vlan (@vlanList) {
                 my ($id,$ddep,$memberref) = @$vlan;
                 ${$vlans{$id}}[0] = $ddep;
@@ -1448,6 +1481,8 @@ $vlan_id,$ddep, $pideid,           $vname,   $members
 	my $memberref;
         my $vlan;
 	($ddep,$memberref) = @{$vlans{$vid}};
+	my $empty = (exists($emptyList->{$vlan_id}) ?
+		     $emptyList->{$vlan_id} : undef);
 
 	if ($vlan_id =~ /^\d*$/) {
 	    $vlan = VLan->Lookup($vlan_id);
@@ -1525,6 +1560,9 @@ $vlan_id,$ddep, $pideid,           $vname,   $members
 	    	$members = Port->toStrings(@$memberref); 
 	    } else {
 	    	$members = join(" ",@$memberref);
+	    }
+	    if (defined($empty)) {
+		$members .= " " . join(" ", @{$empty});
 	    }
 	}
 	write;
@@ -4147,6 +4185,36 @@ sub doPruneStaleVlans($)
 {
     my $stacks = shift;
     my $errors = 0;
+    my $empty;
+
+    my $deletestalevlans = sub {
+	my ($id, @devices) = @_;
+
+	my $command = "$TB/bin/snmpit --deletestalevlans ";
+	$command .= "--impotent "
+	    if ($impotent);
+	$command .= "-i " . join(" -i ", @devices);
+	$command .= " '$id'";
+
+	print "  Invoking: '$command'\n";
+
+	my $child_pid = open(PIPE, "-|");
+	if (!defined($child_pid)) {
+	    print STDERR "popen failed!\n";
+	    return 1;
+	}
+	if ($child_pid) {
+	    while (<PIPE>) {
+		print "  " . $_;
+	    }
+	    close(PIPE);
+	}
+	else {
+	    open(STDERR, ">&STDOUT");
+	    exec($command);
+	    die("Exec failure\n");
+	}
+    };
 
     if ($ELABINELAB) {
 	die "Not allowed to do this inside an ELABINELAB\n";
@@ -4158,12 +4226,86 @@ sub doPruneStaleVlans($)
 	die "Disabling trunk ports should only involve one stack\n" .
 	    "Stacks are " . join(",",@$stacks) . "\n";
     }
-    my $stack = @$stacks[0];
+    my $stack  = @$stacks[0];
 
+    if (0) {
+	$stack->checkVlanConsistency(1581964, 0);
+	return 0;
+    }
+    my $leader = getStackLeader($stack->{STACKID});
+    if (!defined $leader) {
+        die "Unable to get stack leader for $stack->{STACKID}\n";
+    }
+    my $switch_options = getDeviceOptions($leader);
+    if (!defined $switch_options) {
+        die "Unable to get stack leader for $stack->{STACKID}\n";
+    }
+    my $min_vlan = $switch_options->{'min_vlan'};
+    my $max_vlan = $switch_options->{'max_vlan'};
     my %vlans;
-    my @vlanList = @$stacks[0]->listVlans();
+    my @vlanList = @$stacks[0]->listVlans(\$empty);
+
+    #
+    # First check consistency of existing vlans. Cleaning those up first
+    # will take care of a lot of the stale vlans.
+    #
     foreach my $vlan (@vlanList) {
 	my ($id,$tag,$memberref) = @$vlan;
+	
+	next
+	    if ($id !~ /^\d+$/);
+
+	my $vlan = VLan->Lookup($id);
+	if (defined($vlan)) {
+	    my $tag = getReservedVlanTag($id);
+	    if ($tag) {
+		print "Checking vlan $id ($tag) consistency.\n";
+		if ($stack->checkVlanConsistency($id, 0)) {
+		    if (!$impotent) {
+			die("\n");
+		    }
+		}
+	    }
+	}
+    }
+
+    #
+    # Now reload and and do a second pass.
+    #
+    @vlanList = @$stacks[0]->listVlans(\$empty);
+    
+    foreach my $vlan (@vlanList) {
+	my ($id,$tag,$memberref) = @$vlan;
+
+	#
+	# If we get back a tag and and the name is "Vlan XXX" then this
+	# is a dangling vlan.
+	#
+	if ($id !~ /^\d+$/) {
+	    if ($id =~ /^Vlan (\d+)$/ && $1 != 1) {
+		print "Orphan VLAN '$id' ($tag)\n";
+		if (@$memberref) {
+		    print "  Ports: ";
+		    foreach my $member (@$memberref) {
+			my $port = Port->Triple2Iface($member);
+			if (defined($port)) {
+			    print $port;
+			}
+			else {
+			    print $member;
+			}
+			print " ";
+		    }
+		    print "\n";
+		}
+		if (exists($empty->{$id})) {
+		    print "  But some devices have this vlan but no members: ";
+		    print join(",", @{$empty->{$id}}) . "\n";
+		    &$deletestalevlans($id, @{$empty->{$id}});
+		}
+	    }
+	    next
+	}
 	${$vlans{$id}}[0] = $tag;
         push @{${$vlans{$id}}[1]}, @$memberref;
     }
@@ -4270,6 +4412,10 @@ sub doPruneStaleVlans($)
 	    }
 	    else {
 		print "  so we will keep the entry.\n";
+		if (exists($empty->{$vlan_id})) {
+		    print "  But some devices have this vlan but no members: ";
+		    &$deletestalevlans($vlan_id, @{$empty->{$vlan_id}});
+		}
 	    }
 	}
     }
@@ -4316,6 +4462,50 @@ sub doSetVlanOnTrunks($$@) {
 	    $errors++;
 	    next;
 	}
+    }
+    return $errors;
+}
+
+#
+# Remove vlan id from specfic devices. This is used as a cleanup operation
+# only when a stale vlan_id/tag exists on a device but with no members. We
+# have no way to clean this up, except to log into the switch (and be
+# familiar with the switch CLI).
+#
+sub doDeleteStaleVlansFromDevices($@) {
+    my $stacks = shift;
+    my @vlans = @_;
+    my $errors = 0;
+
+    if ($ELABINELAB) {
+	print STDERR "doDeleteStaleVlansFromDevices: not in ELABINELAB!\n";
+	return 1;
+    }
+    if (@$stacks != 1) {
+	die "doDeleteStaleVlansFromDevices should only involve one stack\n" .
+	    "Stacks are " . join(",",@$stacks) . "\n";
+    }
+    my $stack = $$stacks[0];
+    my @existant_vlans = $stack->existantVlans(@vlans);
+    if (!@existant_vlans) {
+	print "Cannot find any of the vlans on supplied devices\n";
+	return 1;
+    }
+    if ($impotent) {
+	print "Would remove @existant_vlans from devices\n";
+	return 0;
+    }
+
+    if (!$stack->removeVlan(@existant_vlans)) {
+	#
+	# Find out what still exists.
+	#
+	foreach my $vlan_id (@existant_vlans) {
+	    if ($stack->vlanExists($vlan_id)) {
+		print "  $vlan_id was not deleted.\n";
+	    }
+	}
+	$errors++;
     }
     return $errors;
 }
