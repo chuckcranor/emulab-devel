@@ -1325,31 +1325,70 @@ sub setVlanOnSwitchTrunks($$$) {
 	    "not exist on stack " . $self->{STACKID} . "\n" ;
 	return 0;
     }
-
-    #
-    # First, get a list of all trunks
-    #
     my %trunks = getTrunks();
 
-    #
-    # Next, figure out which switches this VLAN exists on
-    #
-    my @switches = $self->switchesWithPortsInVlan($vlan_number);
+    if (!$enable) {
+	# Figure out which switches this VLAN currently exists on
+	my @switches = $self->switchesWithPortsInVlan($vlan_number);
+	
+	# And kill from all the trunks connecting those switches.
+	my @trunks = getExperimentTrunksForVlan($vlan_id, @switches);
+
+	return $self->setVlanOnTrunks2($vlan_number,$enable,\%trunks,@trunks);
+    }
+    my @ports  = getVlanPorts($vlan_id);
+    my %map    = mapPortsToDevices(@ports);
+    my @trunks = getTrunksForVlan($vlan_id, keys(%map));
+    return 0
+	if (!$self->setVlanOnTrunks2($vlan_number,$enable,\%trunks,@trunks));
 
     #
-    # Next, get a list of the trunks that are used to move between these
-    # switches. When disabling, we want the list from the DB if it exsists.
+    # Okay, this is brutal. We use this for modifying existing vlans.  But
+    # we can get into a situation where after the new set of trunk links is
+    # installed, there are switches that have the vlan but with no
+    # ports. Since these switches are not going to be in the switchpath we
+    # store in the database, we are going to miss removing the vlan from
+    # those switches during final cleanup when the vlan is deleted.  We
+    # could change vlan deletion to operate on all switches, but that has
+    # its own set of problems. But this approach does have a degree of
+    # fragility; if we do fail to remove these stale vlans, then they will
+    # get left behind after the vlan is deleted. But I have changed
+    # --prunestalevlans to look for these and kill them too.
     #
-    my @trunks = ($enable ?
-		  getTrunksForVlan($vlan_id, @switches) :
-		  getExperimentTrunksForVlan($vlan_id, @switches));
-	
-    return $self->setVlanOnTrunks2($vlan_number,$enable,\%trunks,@trunks);
+    my @existing = $self->switchesWithPortsInVlan($vlan_number);
+    my %current = ();
+
+    # Hash of switches that should have the vlan. 
+    foreach my $switch (keys(%map)) {
+	$current{$switch} = 1;
+    }
+    foreach my $trunk (@trunks) {
+	my ($src,$dst) = @$trunk;
+	$current{$src} = $current{$dst} = 1;
+    }
+    #
+    # Okay, any switch in the existing list that is not in the current
+    # list, is a switch that is not supposed to have the vlan. Remove.
+    #
+    foreach my $switch (@existing) {
+	if (!exists($current{$switch})) {
+	    $self->debug("setVlanOnSwitchTrunks($vlan_id): ".
+			 "Removing from $switch\n");
+
+	    my $device = $self->{DEVICES}{$switch};
+	    my $ok = $device->removeVlan($vlan_number);
+	    if (!$ok) {
+		warn "ERROR: Unable to remove ".
+		    "stale vlan $vlan_id from $switch\n";
+	    }
+	}
+    }
+    return 1;
 }
 
 #
 # Enables or disables (depending on $value) a VLAN on all the supplied
-# trunks. Returns 1 on sucess, 0 on failure.
+# trunks. Returns 1 on success, 0 on failure.
 #
 sub setVlanOnTrunks2($$$$@) {
     my $self = shift;

@@ -2389,6 +2389,8 @@ sub syncVlansFromTables($$@) {
     my %curvlans   = ();
     my %stale      = ();
     my $errors     = 0;
+    my $sharedvlans= 0;
+    my $sharedlock;
     my $vlan_number;
 
     if (@$stacks > 1) {
@@ -2410,8 +2412,30 @@ sub syncVlansFromTables($$@) {
 	# Narrow to provided vlanids.
 	$expvlans{$vlan->id()} = $vlan
 	    if (!@vlanids || grep {$_ == $vlan->id()} @vlanids);
+
+	if ($vlan->IsShared()) {
+	    $sharedvlans++;
+	}
     }
     debug("Experiment vlans: " . join(" ", keys(%expvlans)) . "\n");;
+
+    #
+    # When dealing with shared vlans we need to serialize. We know
+    # that shared vlans are updated as a separate call to snmpit,
+    # so bail if we get more then a single vlan when we get a shared
+    # vlan, to make the locking simple.
+    #
+    if ($sharedvlans && $sharedvlans != 1 && scalar(keys(%expvlans)) != 1) {
+	die("Not allowed to update more then one shared vlan at a time.\n");
+    }
+    if ($sharedvlans) {
+	my $vlan = (values(%expvlans))[0];
+	$sharedlock = "shared_vlan_" . $vlan->lanid();
+	if (snmpit_lock($sharedlock)) {
+	    die("Could not get the lock for shared vlan\n");
+	}
+	debug("Got shared vlan lock $sharedlock\n");
+    }
 
     #
     # List of trunks for the above set of vlans.
@@ -2507,7 +2531,8 @@ sub syncVlansFromTables($$@) {
 	# This one will be built later.
 	next
 	    if (!exists($curvlans{$vlanid}));
-	    
+
+	my $vlan       = $expvlans{$vlanid};
 	my @expports   = getVlanPorts($vlanid);
 	my @curports   = getExperimentVlanPorts($vlanid);
 	my @staleports = ();
@@ -2535,7 +2560,7 @@ sub syncVlansFromTables($$@) {
 	# changes that set. 
 	#
 	$stack->setVlanOnSwitchTrunks($vlanid, 0);
-	
+
 	if (@staleports) {
 	    debug("Removing stale ports from vlan $vlanid: @staleports\n");
 
@@ -2554,12 +2579,6 @@ sub syncVlansFromTables($$@) {
 	    }
 	}
 	#
-	# We can optimize this slightly by looking to see if this
-	# vlan is going to get new ports below, and waiting till then.
-	#
-	$stack->setVlanOnSwitchTrunks($vlanid, 1);
-
-	#
 	# Must record a modification so that the loop below that adds new 
 	# ports does not get confused.
 	#
@@ -2568,6 +2587,28 @@ sub syncVlansFromTables($$@) {
 	if (VLan->RecordVLanModification($vlanid, undef, \@tmp)) {
 	    print STDERR "Could not record vlan modification: $vlanid - @tmp\n";
 	    goto bad;
+	}
+
+	#
+	# THIS MUST BE LAST, so that when we add the trunks back, it is
+	# for the current set. If this fails, we will be left in an
+	# inconsistent state. But you can use --resetvlanontrunks option.
+	#
+	$stack->setVlanOnSwitchTrunks($vlanid, 1);
+
+	#
+	# For shared vlans, we want to record new switch path in the DB
+	# so it reflects reality. 
+	#
+	if ($vlan->IsShared()) {
+	    my $switchpath = $vlan->GetSwitchPath();
+	    debug("Storing switch trunk path for $vlan: $switchpath\n");
+
+	    # This updates the vlans table.
+	    if ($vlan->SetVlanSwitchPath($switchpath)) {
+		print STDERR "Could not store new vlan switchpath for $vlan\n";
+		goto bad;
+	    }
 	}
     }
 
@@ -2756,7 +2797,8 @@ sub syncVlansFromTables($$@) {
 	# This one will be built later.
 	next
 	    if (!exists($curvlans{$vlanid}));
-	    
+
+	my $vlan       = $expvlans{$vlanid};
 	my @expports   = getVlanPorts($vlanid);
 	my @curports   = getExperimentVlanPorts($vlanid);
 	my @newports   = ();
@@ -2782,6 +2824,20 @@ sub syncVlansFromTables($$@) {
 	if (CreateOneVlan($experiment, $stack, $vlanid, @newports)) {
 	    goto bad;
 	}
+	#
+	# For shared vlans, we want to record new switch path in the DB
+	# so it reflects reality. 
+	#
+	if ($vlan->IsShared()) {
+	    my $switchpath = $vlan->GetSwitchPath();
+	    debug("Storing switch trunk path for $vlan: $switchpath\n");
+
+	    # This updates the vlans table.
+	    if ($vlan->SetVlanSwitchPath($switchpath)) {
+		print STDERR "Could not store new vlan switchpath for $vlan\n";
+		goto bad;
+	    }
+	}
     }
 
     #
@@ -2802,26 +2858,13 @@ sub syncVlansFromTables($$@) {
 	    goto bad;
 	}
     }
-    #
-    # 
-    #
-    foreach my $vlan (values(%expvlans)) {
-	next
-	    if (!$vlan->IsShared());
-
-	my $switchpath = getSwitchTrunkPath($vlan);
-	debug("Storing switch trunk path for $vlan: $switchpath\n");
-	
-	next
-	    if ($impotent);
-
-	# Useful info, currently goes into Geni manifest. Needs to
-	# be updated as the lan changes with each experiment using it.
-	$vlan->SetAttribute("switchtrunks", $switchpath, "string");
-    }
+    snmpit_unlock($sharedlock)
+	if (defined($sharedlock));
     return 0;
 
  bad:
+    snmpit_unlock($sharedlock)
+	if (defined($sharedlock));
     return -1;
 }
 
@@ -3574,10 +3617,8 @@ sub doMakeVlan($$@) {
 		$errors++;
 	    }
 	    # This stores the newly computed switch trunk path in the lans
-	    # table entry. But we do not want to do this for shared vlans
-	    # since we need to compute the path each time we sync it (-X).
-	    setSwitchTrunkPath($source_vlan)
-		if (! $source_vlan->IsShared());
+	    # table entry.
+	    setSwitchTrunkPath($source_vlan);
 	    if (VLan->RecordVlanInsertion($source_vlan, $stack->{STACKID})) {
 		print "Could not record vlan insertion for $source_vlan\n";
 		$errors++;
@@ -3591,10 +3632,8 @@ sub doMakeVlan($$@) {
 		$errors++;
 	    }
 	    # This stores the newly computed switch trunk path in the lans
-	    # table entry. But we do not want to do this for shared vlans
-	    # since we need to compute the path each time we sync it (-X).
-	    setSwitchTrunkPath($target_vlan)
-		if (! $target_vlan->IsShared());
+	    # table entry. 
+	    setSwitchTrunkPath($target_vlan);
 	    if (VLan->RecordVlanInsertion($target_vlan, $stack->{STACKID})) {
 		print "Could not record vlan insertion for $target_vlan\n";
 		$errors++;
@@ -3987,20 +4026,17 @@ sub filterList($$) {
 #
 # Openflow lock and functions
 # 
-use libtestbed;
-
 my $of_lock_held = 0;
 
 sub oflock() {
-    my $token = "of_snmpit";
-    my $old_umask = umask(0);
-    die if (TBScriptLock($token,0,1800) != TBSCRIPTLOCK_OKAY());
-    umask($old_umask);
+    if (snmpit_lock("of_snmpit")) {
+	die("Could not get the snmpit lock");
+    }
     $of_lock_held = 1;
 }
 
 sub ofunlock() {
-	if ($of_lock_held) { TBScriptUnlock(); $of_lock_held = 0;}
+    if ($of_lock_held) { snmpit_unlock("of_snmpit"); $of_lock_held = 0;}
 }
 
 #

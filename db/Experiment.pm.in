@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,6 +43,8 @@ use File::Basename;
 use File::Temp;
 use overload ('""' => 'Stringify');
 use libtblog_simple;
+# In case we need to load snmpit_lib below.
+use lib '@prefix@/lib/snmpit';
 
 use vars qw($EXPT_PRELOAD $EXPT_START $EXPT_SWAPIN $EXPT_SWAPUPDATE
 	    $EXPT_SWAPOUT $EXPT_SWAPMOD %physicalTables @virtualTables
@@ -6145,6 +6147,7 @@ sub SetupPortLans($)
 {
     my ($self) = @_;
     require Lan;
+    require snmpit_lib;
 
     my @lans;
     if (Lan->ExperimentLans($self, \@lans) != 0) {
@@ -6250,6 +6253,10 @@ sub SetupPortLans($)
 	    $newmember->SetAttribute("portlan_exptidx", $self->idx());
 	    $newmember->SetAttribute("portlan_lanname", $lan->vname());
 	}
+	# Need the VLan class for this.
+	my $vlan = VLan->Lookup($portvlan->lanid());
+	$vlan->ClrSwitchPath();
+	snmpit_lib::setSwitchTrunkPath($vlan);
 	$portvlan->Unlock();
     }
     return 0;
@@ -6264,6 +6271,7 @@ sub ClearPortLans($;$@)
     my ($self, $nolock, @lans) = @_;
     $nolock = 0 if (!defined($nolock));
     require Lan;
+    require snmpit_lib;
 
     if (!@lans && Lan->ExperimentLans($self, \@lans) != 0) {
 	tberror("Could not get list of all lans for $self\n");
@@ -6356,6 +6364,10 @@ sub ClearPortLans($;$@)
 		return -1;
 	    }
 	}
+	my $vlan = VLan->Lookup($portvlan->lanid());
+	$vlan->ClrSwitchPath();
+	snmpit_lib::setSwitchTrunkPath($vlan);
+	
 	#
 	# Call snmpit on the lan.
 	#

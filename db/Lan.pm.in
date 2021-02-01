@@ -3367,15 +3367,8 @@ sub Instantiate($;$)
 
 sub GetVlanSwitchPath($)
 {
-    my ($class, $vlan) = @_;
-
-    if (!ref($vlan)) {
-	$vlan = VLan->Lookup($vlan);
-    }
-    return undef
-	if (!defined($vlan));
-
-    my $lanid = $vlan->lanid();
+    my ($self) = @_;
+    my $lanid  = $self->lanid();
 
     my $query_result =
         DBQueryWarn("select switchpath from vlans where id='$lanid'");
@@ -3384,6 +3377,19 @@ sub GetVlanSwitchPath($)
 
     my ($path) = $query_result->fetchrow_array();
     return $path;
+}
+
+sub SetVlanSwitchPath($$)
+{
+    my ($self, $path) = @_;
+    my $lanid = $self->lanid();
+    my $set   = defined($path) ? "switchpath='$path'" : "switchpath=null";
+
+    DBQueryWarn("update vlans set $set ".
+		"where id='$lanid'")
+	or return -1;
+
+    return 0;
 }
 
 #

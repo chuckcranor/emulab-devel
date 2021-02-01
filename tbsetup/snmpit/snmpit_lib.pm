@@ -68,6 +68,7 @@ $PORT_FORMAT_PORTINDEX= 5;
 		getSwitchTrunkPath setSwitchTrunkPath
 		mapPortsToSwitches findAndDumpLan
 	        getTrunkedStitchPorts
+		snmpit_lock snmpit_unlock
 		$PORT_FORMAT_IFINDEX $PORT_FORMAT_MODPORT
                 $PORT_FORMAT_NODEPORT $PORT_FORMAT_PORT $PORT_FORMAT_PORTINDEX
 );
@@ -1414,7 +1415,7 @@ sub getExperimentTrunksForVlan($@)
     #
     # We want to use the path that is in the DB.
     #
-    my $path = VLan->GetVlanSwitchPath($vlan);
+    my $path = $vlan->GetVlanSwitchPath();
     if (!defined($path) || $path eq "") {
 	#
 	# Nothing defined in the DB, so fall back to old method.
@@ -2131,6 +2132,47 @@ sub findAndDumpLan($)
 	if (!defined($lan));
 
     print STDERR Dumper($lan->{'LAN'}) . "\n";
+}
+
+#
+# Coarse grain locking
+#
+my $snmpit_lock_held;
+
+sub snmpit_lock($)
+{
+    my ($token) = @_;
+
+    if ($snmpit_lock_held) {
+	print STDERR "snmpit_lock($token): ".
+	    "Lock already held: $snmpit_lock_held\n";
+	return -1;
+    }
+    my $old_umask = umask(0);
+    my $rv = (TBScriptLock($token,0,1800) == TBSCRIPTLOCK_OKAY() ? 0 : 1);
+    umask($old_umask);
+    if ($rv == 0) {
+	$snmpit_lock_held = $token;
+    }
+    return $rv;
+}
+
+sub snmpit_unlock($)
+{
+    my ($token) = @_;
+    
+    if ($snmpit_lock_held) {
+	if ($snmpit_lock_held eq $token) {
+	    TBScriptUnlock();
+	    $snmpit_lock_held = undef;
+	}
+	else {
+	    print STDERR "snmpit_unlock($token): ".
+		"Lock help by another: $snmpit_lock_held\n";
+	    return -1;
+	}
+    }
+    return 0;
 }
 
 # End with true
