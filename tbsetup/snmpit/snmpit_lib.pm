@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -1342,7 +1342,9 @@ sub getTrunksForVlan($@)
     return ()
 	if (!defined($vlan));
 
-    print STDERR "getTrunksForVlan: $vlan_id: @switches\n";
+    if ($debug) {
+	print STDERR "getTrunksForVlan: $vlan_id: @switches\n";
+    }
     
     #
     # We want to use the path that is in the DB.
@@ -1364,11 +1366,13 @@ sub getTrunksForVlan($@)
 	#
 	@trunks = SpanningTree(\@trunks);
 
-	print STDERR " old style path: " .
-	    join(" ", map { join(":", @$_) } @trunks) . "\n";
+	if ($debug) {
+	    print STDERR " old style path: " .
+		join(" ", map { join(":", @$_) } @trunks) . "\n";
+	}
 	return @trunks;
     }
-    print STDERR " DB path: $path\n";
+    print STDERR " DB path: $path\n" if ($debug);
     my @path = ();
     foreach my $p (split(" ", $path)) {
 	my ($a,$b) = split(":", $p);
@@ -1382,7 +1386,7 @@ sub getTrunksForVlan($@)
 	}
 	push(@path, [$a, $b]);
     }
-    if (@path) {
+    if (@path && $debug) {
 	print STDERR " new style path: ".
 	    join(" ", map { join(":", @$_) } @path) . "\n";
     }
@@ -1403,7 +1407,9 @@ sub getExperimentTrunksForVlan($@)
     return ()
 	if (!defined($vlan));
 
-    print STDERR "getExperimentTrunksForVlan: $vlan_id: @switches\n";
+    if ($debug) {
+	print STDERR "getExperimentTrunksForVlan: $vlan_id: @switches\n";
+    }
 
     #
     # We want to use the path that is in the DB.
@@ -1425,11 +1431,13 @@ sub getExperimentTrunksForVlan($@)
 	#
 	@trunks = SpanningTree(\@trunks);
 
-	print STDERR " old style path: " .
-	    join(" ", map { join(":", @$_) } @trunks) . "\n";
+	if ($debug) {
+	    print STDERR " old style path: " .
+		join(" ", map { join(":", @$_) } @trunks) . "\n";
+	}
 	return @trunks;
     }
-    print STDERR " DB path: $path\n";
+    print STDERR " DB path: $path\n" if ($debug);
     my @path = ();
     foreach my $p (split(" ", $path)) {
 	my ($a,$b) = split(":", $p);
@@ -1443,7 +1451,7 @@ sub getExperimentTrunksForVlan($@)
 	}
 	push(@path, [$a, $b]);
     }
-    if (@path) {
+    if (@path && $debug) {
 	print STDERR " new style path: ".
 	    join(" ", map { join(":", @$_) } @path) . "\n";
     }
@@ -1488,7 +1496,7 @@ sub mapVlansToSwitches(@)
 	}
     }
     my @sorted = sort {tbsort($a,$b)} keys %switches;
-    print "mapVlansToSwitches: @sorted\n";
+    print "mapVlansToSwitches: @sorted\n" if ($debug);
     return @sorted;
 }
 
@@ -1529,7 +1537,7 @@ sub mapStaleVlansToSwitches(@)
 	}
     }
     my @sorted = sort {tbsort($a,$b)} keys %switches;
-    print "mapStaleVlansToSwitches: @sorted\n";
+    print "mapStaleVlansToSwitches: @sorted\n" if ($debug);
     return @sorted;
 }
 
@@ -1581,7 +1589,7 @@ sub mapPortsToSwitches(@)
 }
 
 #
-# 
+# Calc a new switch trunk path from the current set of devices.
 #
 sub getSwitchTrunkPath($)
 {
