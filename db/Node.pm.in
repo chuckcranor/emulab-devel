@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -4072,8 +4072,8 @@ sub CheckPreReserve($$$)
     my $type = $self->type();
     my $node_id = $self->node_id();
     
-    DBQueryWarn("lock tables project_reservations write, nodes write, ".
-		"            node_reservations write, reserved read")
+    DBQueryWarn("lock tables project_reservations as pr write, nodes write, ".
+		"            node_reservations as pnr write, reserved read")
 	or return undef;
 
     #
@@ -4102,9 +4102,9 @@ sub CheckPreReserve($$$)
     my $query_result =
 	DBQueryWarn("select reserved_pid,reservation_name, ".
 		    "  count,active,terminal,approved from nodes ".
-		    "left join project_reservations on ".
-		    "     project_reservations.pid=nodes.reserved_pid and ".
-		    "     project_reservations.name=nodes.reservation_name ".
+		    "left join project_reservations as pr on ".
+		    "     pr.pid=nodes.reserved_pid and ".
+		    "     pr.name=nodes.reservation_name ".
 		    "where nodes.node_id='$node_id'");
 
     # numrows would be zero if the node was suddenly deleted.
@@ -4137,72 +4137,43 @@ sub CheckPreReserve($$$)
 	}
     }
 
-    # Find only active unfilled reservations.
+    #
+    # Prereserves are very different now, since they look like reservations
+    # for a single specific node and so there can only be one (active)
+    # prereserve for this node. Also, the reservation system will not allow
+    # the current holder to extend beyond the start of prereservation. So this
+    # stuff is mostly a holdover from the old best effort prereserve system
+    # which was waiting until the node was released and then sucking it up.
+    # But we still need to set reserved_pid, to avoid chainging a bunch of
+    # other stuff (ptopgen, web UI, etc). 
+    #
     $query_result =
-	DBQueryWarn("select pid,count,name from project_reservations ".
-		    "where approved is not null and ".
-		    "      active=1 and terminal=0 and count>0 and ".
-		    "      (types is null or ".
-		    "        FIND_IN_SET('$type', types)) ".
-		    "order by priority desc, created asc ");
-
+	DBQueryWarn("select pr.pid,pr.count,pr.name ".
+		    "  from project_reservations as pr ".
+		    "left join node_reservations as pnr on ".
+		    "     pr.pid=pnr.pid and ".
+		    "     pr.name=pnr.reservation_name ".
+		    "where pnr.node_id='$node_id' and pr.terminal=0 and ".
+		    "      pr.active=1");
+    
     goto done
-	if (!$query_result);
+	if (! ($query_result && $query_result->numrows));
 
-    while (my ($pid,$count,$resname) = $query_result->fetchrow_array()) {
-	#
-	# See if this is fullfulling a specific node reservation request.
-	# Need to delete that row if so. 
-	#
-	my $noderes_result =
-	    DBQueryWarn("select node_id from node_reservations ".
-			"where pid='$pid' and ".
-			"      reservation_name='$resname'");
-	goto done
-	    if (!$noderes_result);
+    ($pid,$count,$resname) = $query_result->fetchrow_array();
 
-	#
-	# Note that if there any entries in the node_reservations table,
-	# then only those specific nodes can fulfill the request. Search
-	# the list for the node_id we are freeing.
-	#
-	if ($noderes_result->numrows) {
-	    my $okay = 0;
-	    
-	    while (my ($id) = $noderes_result->fetchrow_array()) {
-		if ($node_id eq $id) {
-		    $okay = 1;
-		    last;
-		}
-	    }
-	    #
-	    # We cannot use this node for this pre-reserve, but maybe the
-	    # next one.
-	    #
-	    next
-		if (!$okay);
-	}
+    if (DBQueryWarn("update nodes set reserved_pid='$pid', ".
+		    "    reservation_name='$resname' ".
+		    "where node_id='$node_id'") &&
+	DBQueryWarn("update project_reservations set count=count-1 ".
+		    "where pid='$pid' and name='$resname'")) {
+	
+	$result = $pid;
 
-	if (DBQueryWarn("update nodes set reserved_pid='$pid', ".
-			"    reservation_name='$resname' ".
-			"where node_id='$node_id'")) {
-	    
-	    DBQueryWarn("update project_reservations set count=count-1 ".
-			"where pid='$pid' and name='$resname'");
-	    if ($noderes_result->numrows) {
-		DBQueryWarn("delete from node_reservations ".
-			    "where node_id='$node_id' and pid='$pid' and ".
-			    "      reservation_name='$resname'");
-	    }
-	    $result = $pid;
-
-	    if ($count == 1) {
-		SENDMAIL($TBOPS,
-			 "Pre Reservation $pid,$resname has completed",
-			 "The pre reservation request for project ".
-			 "$pid,$resname has been fullfilled\n", $TBOPS);
-	    }
-	    last;
+	if ($count == 1) {
+	    SENDMAIL($TBOPS,
+		     "Pre Reservation $pid,$resname has completed",
+		     "The pre reservation request for project ".
+		     "$pid,$resname has been fullfilled\n", $TBOPS);
 	}
     }
   done:

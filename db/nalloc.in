@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,13 +38,15 @@ sub usage()
     print("Usage: nalloc [-d] [-f] [-p] <pid> <eid> <node> <node> <...>\n".
 	  "		-p enables partial allocation mode\n".
 	  "		-f forces allocation, overriding admission control\n" .
+	  "		-i prechecks and Reservation system checks only\n" .
 	  "		-d enables debugging output\n");
     exit(-1);
 }
-my $optlist = "dfp";
+my $optlist = "dfpi";
 my $debug   = 0;
 my $force   = 0;
 my $partial = 0;
+my $impotent= 0;
 
 #
 # Configure variables
@@ -92,6 +94,9 @@ if (defined($options{"f"})) {
 }
 if (defined($options{"p"})) {
     $partial = 1;
+}
+if (defined($options{"i"})) {
+    $impotent = 1;
 }
 if (@ARGV < 2) {
     usage();
@@ -186,14 +191,17 @@ while( my($node_id) = $query_result->fetchrow_array() ) {
 
 my %reservable_nodes = map {$_->node_id() => $_} Reservation->ReservableNodes();
 my $endtime = Reservation->ExpectedEnd( $experiment );
+# pre-res nodes are special here since the reservation system treats
+# them as in use when reserved_pid is set. 
+my %preres_nodes = ();
 
 # Argh, MySQL locking rules are horrendous!  These locks are required by
 # low-level library routines; this is a horrible violation of abstraction;
 # and it's all MySQL's fault...
 if( $PGENISUPPORT ) {
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read");
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as pnr read");
 } else {
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, project_reservations as pr read, reservation_version write, node_attributes as a read");
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as pnr read");
 }
 TBDebugTimeStamp("nalloc locked tables");
 
@@ -227,6 +235,17 @@ foreach my $n (@node_names) {
 	    $noalloc++;
 	    next;
 	}
+    }
+
+    #
+    # If any of the nodes are in a future pre-reserve, add those to the
+    # list of reservable nodes to individually check.
+    #
+    my $pr_result =
+	DBQueryFatal("select node_id from node_reservations as pnr ".
+		     "where pnr.node_id='$n'");
+    if ($pr_result->numrows)  {
+	$preres_nodes{$n} = $node;
     }
 
     #
@@ -300,6 +319,49 @@ foreach my $node (@nodes) {
     }
 }
 
+#
+# Preres nodes are special too, since if the node is prereserved to the
+# current project, it is going to look already allocated in the reservation
+# list returned by LookupAll(). This is by design; once the reserved_pid is
+# set on a node, it is effectively allocated to the end of the prereserve,
+# except when we want to actually nalloc to an experiment.
+#
+foreach my $node (values(%preres_nodes)) {
+    my $node_id = $node->node_id();
+
+    my $reservations = Reservation->LookupAll($node_id);
+
+    foreach my $res ( @$reservations ) {
+	if (defined($res->pid()) && defined($res->eid()) &&
+	    $res->pid() eq $pid &&
+	    ($res->eid() eq $eid || $res->eid() eq "**prereserve**")) {
+	    # Found existing nodes already reserved to the experiment
+	    # we're trying to allocate.  In this context, they should
+	    # be considered as available.
+	    $res->{'PID'} = undef;
+	    $res->{'EID'} = undef;
+	    $res->SetStart( 0 );
+	    $res->SetEnd( undef );
+	}
+    }
+    my $res = Reservation->CreateImmediate($pid, $eid,
+					   $this_user->uid(),
+					   $endtime, $node_id, 1);
+    push(@$reservations, $res);
+    
+    if (!Reservation->IsFeasible($reservations, \$errormsg)) {
+	print "*** Admission control violation for pre-reserved node ".
+	    "$node_id: $errormsg\n";
+	if ($force) {
+	    print "Forcing allocation anyway...\n";
+	    print STDERR "WARNING: SCHEDULED RESERVATIONS ARE NOW INFEASIBLE!\n";
+	    # FIXME notify admins about violation
+	}
+	$unavail_nodes{$node_id} = 1;
+    }
+    
+}
+
 foreach my $type ( keys( %types ) ) {
     next if( $unavail_types{ $type } );
     
@@ -342,6 +404,8 @@ foreach my $type ( keys( %types ) ) {
 	$unavail_types{ $type } = 1;
     }
 }
+exit(0)
+    if ($impotent);
 
 if( $admission_ctrl && !$force ) {
     my @goodnodes = ();

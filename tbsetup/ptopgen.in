@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -713,13 +713,18 @@ if( defined( $pid ) ) {
     foreach my $node (@reservable_nodes) {
 	my $node_id = $node->node_id();
 	foreach my $res (@activereservations) {
-	    if ($res->{'nodetype'} eq $node_id && $res->{'pid'} ne $pid) {
-		#
-		# Node is currently reserved to another project. Mark it
-		# to be pruned out below.
-		#
-		$reserved_nodes{$node_id} = $node;
-		last;
+	    if ($res->{'nodetype'} eq $node_id) {
+		if ($res->{'pid'} ne $pid) {
+		    #
+		    # Node is currently reserved to another project. Mark it
+		    # to be pruned out below.
+		    #
+		    $pruned_nodes{$node_id} = $node;
+		    last;
+		}
+		else {
+		    $reserved_nodes{$node_id} = $node;
+		}
 	    }
 	}
     }
@@ -1330,7 +1335,7 @@ while (($node,$type,$physnode,$class,$issubnode,$def_boot_osid,$reserved,
 	next
 	    if (! grep {$_ eq $pid} @allowed);	
     }
-    if (defined($pid) && exists($reserved_nodes{$node})) {
+    if (defined($pid) && exists($pruned_nodes{$node})) {
 	#
 	# We determined above that this node is currently reserved to
 	# another project but not currently allocated to that project.
@@ -1770,6 +1775,16 @@ foreach $node (@nodenames) {
 
     if (exists($is_prereserved{$node})) {
 	push(@features,"prereserved:0");
+    }
+
+    #
+    # Handle reservable nodes, we want to demote the other nodes of the
+    # same type,
+    #
+    if (keys(%reserved_nodes)) {
+	if (!exists($reserved_nodes{$node})) {
+	    push(@features, "notreserved_node:0.95");
+	}
     }
 
     # For robots, prefer ones that are already powered on and/or won't need to
