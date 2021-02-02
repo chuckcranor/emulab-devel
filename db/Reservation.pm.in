@@ -49,6 +49,7 @@ use overload ('""' => 'Stringify');
 # Configure variables
 my $TB		= "@prefix@";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
+my $MAINSITE    = @TBMAINSITE@;
 
 my %cache = ();
 BEGIN { use emutil; emutil::AddCache(\%cache); }
@@ -66,11 +67,15 @@ sub FlushAll($)
 #
 # Some logging for DB locking below
 #
+
 sub lockdebug($)
 {
     my ($message) = @_;
     my $logname = "/usr/testbed/log/lockdebug";
     my $string = "LockDebug: $PID: $message\n";
+
+    return
+	if (!$MAINSITE);
 
     if (sysopen(LOG, $logname, O_CREAT | O_WRONLY | O_APPEND, 0666)) {
 	syswrite(LOG, $string);
