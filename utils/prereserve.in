@@ -866,10 +866,11 @@ sub CheckAdmissionControl($$$$)
 
     foreach my $type ( keys( %{$nodetypes} ) ) {
 	my $reservations = Reservation->LookupAll( $type, undef, \$details);
-	print $details;
+	if ($debug) {
+	    print $details;
+	}
 	my $res = Reservation->Create( $pid, undef, $start, $end, $type,
 				       $nodetypes{ $type } );
-	print Dumper($res);
 	push( @$reservations, $res );
 	my $error;
 	if( !Reservation->IsFeasible( $reservations, \$error ) ) {
