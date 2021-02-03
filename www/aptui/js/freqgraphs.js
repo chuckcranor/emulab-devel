@@ -588,6 +588,9 @@ window.ShowFrequencyGraph = (function ()
 	    context.select(".brush")
 		.call(brush.move, x.range().map(t.invertX, t));
 	}
+	/*
+	 * Draw zoomed graph in lower panel, after user clicks on a point.
+	 */
 	function DrawSubGraph()
 	{
 	    var x0   = x.invert(d3.mouse(this)[0]);
@@ -605,6 +608,30 @@ window.ShowFrequencyGraph = (function ()
 		subdata = subdata.concat(sorted);
 	    }
 	    CreateGraph(args, subdata);
+	}
+	/*
+	 * Draw a zoomed graph after user searches for min/max
+	 */
+	$(args.selector + " .frequency-search button").off("click");
+	$(args.selector + " .frequency-search button").click(ZoomToSubGraph);
+	
+	function ZoomToSubGraph()
+	{
+	    var min = $.trim($(args.selector + " .min-freq-input").val());
+	    var max = $.trim($(args.selector + " .max-freq-input").val());
+	    
+	    if (min == "" || max == "") {
+		return;
+	    }
+	    var extents = d3.extent(bins, function(d) { return d.frequency; });
+	    if (min < extents[0] || max > extents[1]) {
+		alert("Search out of range: " + extents[0] + "," + extents[1]);
+		return;
+	    }
+	    x.domain(extents);
+	    console.info("ZoomToSubGraph", min, max, extents);
+	    console.info(x(min), x(max));
+	    context.select(".brush").call(brush.move, [x(min), x(max)]);
 	}
     }
     function type(d) {
