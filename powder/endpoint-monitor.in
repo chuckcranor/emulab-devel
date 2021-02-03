@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,15 +55,15 @@ my $batdebug  = 0;
 #  Bus power on  -> Power goes directly out the conditioner.
 #  Bus power off -> Battery provides power to our gear for 15 minutes.
 #
-#  Pin 0: ~100 when running on battery, ~800 when bus providing power. 
+#  Pin 0: Low when running on battery, High when bus providing power. 
 #  Pin 1: Voltage we see. When bus power off, use this to determine the
-#         voltage of our battery. Voltage = Pin1/1024*5*3.
+#         voltage of our battery. Conversion from pin value depends on
+#         the version.
 #
 # Simple check for being bus.
-#
 my $ONBUS = 0;
 my $PIN0_THRESHOLD = 150;
-my $PIN1_THRESHOLD = 830;
+my $POWDER_BUS_P0WER_VERSION = @POWDER_BUS_P0WER_VERSION@;
 
 my $hostname = `hostname`;
 chomp($hostname);
@@ -709,9 +709,15 @@ sub CheckTempAndBattery($$)
 sub PinConvert($)
 {
     my ($pin) = @_;
-    my $multiplier = 1024;
+    my $voltage;
     
-    return sprintf("%.3f", $pin / $multiplier * 5 * 3);
+    if ($POWDER_BUS_P0WER_VERSION == 0) {
+	$voltage = $pin / 1024 * 5 * 3;
+    }
+    else {
+	$voltage = $pin * 0.09824;
+    }
+    return sprintf("%.3f", $voltage);
 }
 sub TempConvert($)
 {
