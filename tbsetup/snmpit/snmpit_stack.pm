@@ -822,14 +822,23 @@ sub checkVlanConsistency($$$) {
 	print STDERR "$id: No tag for vlan_id\n";
 	return 0;
     }
+    foreach my $switch (values %{$self->{DEVICES}}) {
+	$switch->findVlans_start();
+    }
+    my %results = $self->reapCall("findVlans");
+    
     foreach my $switch (keys %{$self->{DEVICES}}) {
 	#
 	# Check to see if the VLAN already exists on this switch
 	#
 	my $dev = $self->{DEVICES}{$switch};
+	my %mapping = @{$results{$switch}};
 
-	if ($dev->vlanNumberExists($tag)) {
-	    my %mapping = $dev->findVlans();
+	#
+	# The mapping we get from findVlans is id => tag, so we have
+	# to scan the values to know if the tag exists on the device.
+	#
+	if (grep {$_ == $tag} values(%mapping)) {
 	    if (!exists($mapping{$vlan_id}) || $mapping{$vlan_id} != $tag) {
 		my $current_name;
 		    
