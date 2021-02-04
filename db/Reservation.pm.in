@@ -640,7 +640,7 @@ sub LookupAll($$;$$)
 				"s.lockdown as slice_lockdown, ".
 				"n.reserved_pid, " .
 				"UNIX_TIMESTAMP( pr.end ), ".
-				"e.lockdown, e.swappable " .
+				"e.lockdown, e.swappable, pr.name " .
 				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
@@ -664,8 +664,7 @@ sub LookupAll($$;$$)
 				"WHERE ".
 				" ((n.reservable=0 and n.type='$type') or ".
 				"  (n.reservable=1 and n.node_id='$type') or ".
-				"  ( ".
-				"   n.node_id='$type')) ".
+				"  (n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
 				"GROUP BY " .
 				"e.pid, e.eid, n.reserved_pid, nr.pid, " .
@@ -677,7 +676,7 @@ sub LookupAll($$;$$)
 				"nr.pid, NULL, " .
 				"NULL, n.reserved_pid, " .
 				"UNIX_TIMESTAMP( pr.end ), " .
-				"e.lockdown, e.swappable " .
+				"e.lockdown, e.swappable, pr.name " .
 				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
@@ -696,8 +695,10 @@ sub LookupAll($$;$$)
 				"n.reserved_pid=pr.pid AND " .
 				"n.reservation_name=pr.name AND " .
 	                        "pr.approved is not null ".
-				"WHERE ((n.reservable=0 and n.type='$type') or ".
-				"      (n.reservable=1 and n.node_id='$type')) ".
+				"WHERE ".
+				" ((n.reservable=0 and n.type='$type') or ".
+				"  (n.reservable=1 and n.node_id='$type') or ".
+				"  (n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
 				"GROUP BY e.pid, e.eid, n.reserved_pid, " .
 				"nr.pid, UNIX_TIMESTAMP( pr.end )";
@@ -707,7 +708,7 @@ sub LookupAll($$;$$)
     
     while( my($count, $pid, $eid, $uid, $end, $autoswap, $next_reserve,
 	      $slice_expire, $slice_lockdown, $reserved_pid, $pr_end,
-	      $expt_lockdown, $swappable) =
+	      $expt_lockdown, $swappable, $preres_name) =
 	   $query_result->fetchrow_array() ) {
 	my $endtime;
 
@@ -715,7 +716,8 @@ sub LookupAll($$;$$)
 	    no warnings 'uninitialized';
 	    $$details = $$details . "$count, $pid, $eid, $uid, $end, " .
 		"$autoswap, $next_reserve, $slice_expire, $slice_lockdown, " .
-		"$reserved_pid, $pr_end, $expt_lockdown, $swappable\n";
+		"$reserved_pid, $pr_end, $expt_lockdown, $swappable, ".
+		"$preres_name\n";
 	}
 
 	if( defined( $slice_expire ) ) {
@@ -767,30 +769,34 @@ sub LookupAll($$;$$)
 	    my $res = CreateCommon( $class, undef, undef, undef, 0, undef,
 				    $type, $count );
 	    push( @reservations, $res );
-	} elsif( defined( $endtime ) ) {
-	    # The nodes have a reserved_pid, but there's a known	    
-	    # end time (the current experiment end, or the
-	    # project_reservations end, whichever is later)... mark
-	    # them as available after that.
-	    my $res = CreateCommon( $class, $reserved_pid,
-				    # Tell IsFeasible() that this is not free
-				    # Needs to cleaned up
-				    $eid ? $eid : "**prereserve**",
-				    $uid, 0, $endtime, $type, $count );
-	    push( @reservations, $res );	    
 	}
 	else {
-	    # Also a reserved pid, but no endtime. Mark the node as in
-	    # use forever so it is reflected in the timeline. Will match
-	    # existing prereserve, added as a reservation, see below. 
-	    my $res = CreateCommon( $class, $reserved_pid,
-				    # Tell IsFeasible() that this is not free
-				    # Needs to cleaned up
-				    $eid ? $eid : "**prereserve**",
-				    $uid, 0, 0x7FFFFFFF, $type, $count );
-	    push( @reservations, $res );	    
+	    #
+	    # In general, there should be a prereserve that corresponds to
+	    # the reserved_pid and reservation_name. But sometimes the
+	    # reserved_pid does not get cleared, in which case we need to
+	    # make this node look like it is allocated instead of free
+	    # but unavailable.
+	    #
+	    if (!defined($preres_name)) {
+		my $res = CreateCommon($class, $reserved_pid,
+				       # Tell IsFeasible() that this is not free
+				       # Needs to cleaned up
+				       $eid ? $eid : "**prereserve**",
+				       $uid, 0, 0x7FFFFFFF, $type, $count );
+	    }
+	    else {
+		#
+		# The node is free, but there is a corresponding preres
+		# that will be added to the timeline below.
+		#
+		my $res = CreateCommon( $class, undef, undef, undef, 0, undef,
+					$type, $count );
+		push( @reservations, $res );
+	    }
 	}
     }
+    #print Dumper(\@reservations);
 
     $$details = $$details . "\n--- Reservations for $type:\n"
 	if( ref( $details ) );
@@ -1070,7 +1076,7 @@ sub Forecast($$;$$) {
     my $t = time();
     
     IsFeasible( $class, $reservations, undef, undef, undef, undef, \@forecast );
-    if (0) {
+    if ($debug > 1) {
 	print Dumper(\@forecast);
     }
 
@@ -1965,10 +1971,15 @@ sub MaxSwapInMap($$) {
 	$counts{ $type } = MaxSwapIn( $class, $experiment, $type );
     }
 
-    $query_result = DBQueryFatal("select distinct(node_id) from ".
-				 "node_reservations");
-    while( my ($node_id) = $query_result->fetchrow_array() ) {
+    $query_result =
+	DBQueryFatal("select r.node_id,n.type from ".
+		     " (select distinct(node_id) from node_reservations) as r ".
+		     "left join nodes as n on r.node_id=n.node_id");
+    while( my ($node_id,$type) = $query_result->fetchrow_array() ) {
 	$counts{$node_id} = MaxSwapIn($class, $experiment, $node_id);
+	if (!exists($counts{$type})) {
+	    $counts{$type} = MaxSwapIn($class, $experiment, $type);
+	}
     }
     return \%counts;
 }
