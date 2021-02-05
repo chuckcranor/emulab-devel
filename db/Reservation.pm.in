@@ -1971,6 +1971,15 @@ sub MaxSwapInMap($$) {
 	$counts{ $type } = MaxSwapIn( $class, $experiment, $type );
     }
 
+    $query_result = DBQueryFatal( "SELECT node_id FROM " .
+				  " nodes where reservable=1" );
+    
+    while( my ($node_id) = $query_result->fetchrow_array() ) {
+	if (!exists($counts{$node_id})) {
+	    $counts{$node_id} = MaxSwapIn( $class, $experiment, $node_id );
+	}
+    }
+
     $query_result =
 	DBQueryFatal("select r.node_id,n.type from ".
 		     " (select distinct(node_id) from node_reservations) as r ".
