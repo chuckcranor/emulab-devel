@@ -100,7 +100,7 @@ my $TEMP_MAXCUTOFF  = 250;
 # Mothership, then we consider ourself motherless and must power down
 # the experimental nodes.
 #
-my $NOALIVE_THRESHOLD = 900;
+my $NOALIVE_THRESHOLD = 1200;
 #
 # Once we start hearing from the Mothership again, we want this many
 # consecutive pings before we consider the link good, and we can power
