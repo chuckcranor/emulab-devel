@@ -4486,12 +4486,9 @@ COMMAND_PROTOTYPE(dotarballs)
 	}
 
 	/* 
-	 * Short-circuit tarballs for nodes tainted with 'blackbox' or
-	 * 'useronly'.  XXX: rc.tarfiles has to be reworked on the clientside
-	 * before this blanket ban can be lifted for 'useronly'.
+	 * Short-circuit tarballs for nodes tainted with 'blackbox'.
 	 */
-	if (HAS_ANY_TAINTS(reqp->taintstates, 
-			   (TB_TAINTSTATE_BLACKBOX | TB_TAINTSTATE_USERONLY)))
+	if (HAS_ANY_TAINTS(reqp->taintstates, TB_TAINTSTATE_BLACKBOX))
 		return 0;
 	
 	/*
