@@ -4819,7 +4819,9 @@ sub WaitForSliver($)
 		$response->code() == GENIRESPONSE_NETWORK_ERROR);
 		
 	$repblob = $response->value();
-	#print STDERR Dumper($repblob);
+	if ($seconds > 500) {
+	    print STDERR Dumper($repblob);
+	}
 
 	#
 	# Convert to something smaller, with info the web interface
