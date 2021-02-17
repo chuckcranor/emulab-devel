@@ -719,6 +719,7 @@ $(function ()
 		    $('#cluster-table .add-cluster').show();
 		    $('#cluster-table .add-cluster').not(":last").hide();
 		}
+		RegenCombinedGraph();
 		modified_callback();
 		
 	    });
