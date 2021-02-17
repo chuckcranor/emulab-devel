@@ -117,6 +117,7 @@ function Do_GetInfo()
     $blob["class"]           = $node->TypeClass();
     $blob["type_url"]        = $type_url;
     $blob["role"]            = $node->role();
+    $blob["reservable"]      = $node->reservable() ? 1 : 0;
     $blob["hasconsole"]      = $node->HasSerialConsole();
     $blob["attributes"]      = GetAttributes($node);
     $blob["typeattributes"]  = GetTypeAttributes($node, $blob["attributes"]);
