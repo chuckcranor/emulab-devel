@@ -999,7 +999,8 @@ sub UpdateProfileFromRepo()
 		    "Profile $profile_pid,$profile_name could not be pulled\n".
 		    "from its git repository:\n\n" . $output . "\n\n" .
 		    $profile->AdminURL() . "\n",
-		    $project->Brand()->OpsEmailAddress());
+		    $project->Brand()->OpsEmailAddress(),
+		    "BCC: " . $project->Brand()->LogsEmailAddress());
 	fatal("Could not update repo from $repourl");
     }
     if ($verbose) {
@@ -1035,9 +1036,7 @@ sub UpdateProfileFromRepo()
 		    "Profile $profile_pid,$profile_name could not be updated\n".
 		    "from its git repository:\n\n" . $output . "\n\n" .
 		    $profile->AdminURL() . "\n",
-		    $project->Brand()->OpsEmailAddress(),
-		    # Temporary.
-		    "BCC: " . $project->Brand()->LogsEmailAddress());
+		    $project->Brand()->OpsEmailAddress());
 	    
 	    print STDERR "UpdateProfileFromRepo: $RUNGENILIB failed\n";
 	    # Pass along the exit value.
