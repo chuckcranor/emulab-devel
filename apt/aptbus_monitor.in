@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -318,6 +318,19 @@ sub GetLocationData()
 	}
 	if (!defined($routeid) || !defined($bus->routeid()) ||
 	    $routeid != $bus->routeid()) {
+
+	    #
+	    # Update location whenever it is on a route or when it is
+	    # going off route.
+	    #
+	    if ($routeid || $bus->routeid()) {
+		if (!$impotent) {
+		    $bus->UpdateLocation({"latitude"   => $latitude,
+					  "longitude"  => $longitude,
+				          "speed"      => $speed,
+				          "heading"    => $heading});
+		}
+	    }
 	    
 	    #
 	    # Route changed. Mark it.
@@ -329,7 +342,12 @@ sub GetLocationData()
 		# that way, which indicates its running but not on one
 		# of our routes.
 		#
-		print "$busid changed to route $routeid ($description)\n";
+		if (!defined($bus->routeid()) || $routeid != $bus->routeid()) {
+		    print "$busid changed to route $routeid" .
+			(defined($description) ? " ($description)" : "") . "\n";
+
+		    $bus->RouteChange($routeid, $description);
+		}
 	    }
 	    elsif (defined($bus->routeid())) {
 		#
@@ -341,13 +359,7 @@ sub GetLocationData()
 		# experiment. 
 		#
 		print "$busid went off route\n";
-	    }
-	    if (!$impotent) {
 		$bus->RouteChange($routeid, $description);
-		$bus->UpdateLocation({"latitude"   => $latitude,
-				      "longitude"  => $longitude,
-				      "speed"      => $speed,
-				      "heading"    => $heading});
 	    }
 	}
 	elsif ($bus->routeid()) {
