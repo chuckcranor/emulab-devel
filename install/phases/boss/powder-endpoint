@@ -317,6 +317,10 @@ sub Install($$$)
 		      "0/5\t*\t*\t*\t*\troot\t$PREFIX/sbin/idlepower -r");
 	    };
 	}
+	Phase "deadman", "Enabling deadman watchdog", sub {
+	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+			   "powder/deadman_enable 1");
+	};
 
 	# We need tiplines and tipserver entries.
 	Phase "tip", "Adding tiplines and tipservers to DB", sub {
