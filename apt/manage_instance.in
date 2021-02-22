@@ -1343,6 +1343,7 @@ sub DoConsole()
     my $url;
     my $pswd;
     my $logurl;
+    my $authobject;
 	
     if (ref($response->value())) {
 	$url  = $response->value()->{'url'};
@@ -1350,7 +1351,10 @@ sub DoConsole()
 	    if (exists($response->value()->{'password'}));
 	$logurl = $response->value()->{'logurl'}
 	    if (exists($response->value()->{'logurl'}));
-
+	# This is a JSON string, just pass it along.
+	if (exists($response->value()->{'authobject'})) {
+	    $authobject = $response->value()->{'authobject'};
+	}
 	print Dumper($response->value());
     }
     else {
@@ -1364,6 +1368,7 @@ sub DoConsole()
 	    $webtask->url($url);
 	    $webtask->password($pswd) if (defined($pswd));
 	    $webtask->logurl($logurl) if (defined($logurl));
+	    $webtask->authobject($authobject) if (defined($authobject));
 	}
 	$webtask->Exited($response->code());
 	exit($response->code());

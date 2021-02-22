@@ -1585,6 +1585,51 @@ $(function ()
 	xmlthing.fail(callback_error);
     }
 
+    function StartSSHWebSSH(tabname, authobject)
+    {
+	var jsonauth = $.parseJSON(authobject);
+
+        var url     = jsonauth.baseurl + "/webssh/webssh.html";
+	var iwidth  = "100%";
+        var iheight = 400;
+
+	var loadiframe = function () {
+	    console.info("Sending message", jsonauth.baseurl);
+	    iframewindow.postMessage(authobject, "*");
+	    window.removeEventListener("message", loadiframe, false);
+	};
+	window.addEventListener("message", loadiframe);
+
+	var html = '<iframe id="' + tabname + '_iframe" ' +
+	    'width=' + iwidth + ' ' +
+            'height=' + iheight + ' ' +
+            'src=\'' + url + '\'>';
+
+	var html =
+	    '<div style="height:400px; width:100%; ' +
+	    '            resize:vertical;overflow-y:auto;padding-bottom:10px"> ' +
+	    '  <iframe id="' + tabname + '_iframe" ' +
+	    '     width="100%" height="100%"' + 
+            '     src=\'' + url + '\'>' +
+	    '</div>';
+	
+        $('#' + tabname).html(html);
+
+	var iframe = $('#' + tabname + '_iframe')[0];
+	var iframewindow = (iframe.contentWindow ?
+			    iframe.contentWindow :
+			    iframe.contentDocument.defaultView);	
+
+	/*
+	 * When the user activates this tab, we want to send a message
+	 * to the terminal to focus so we do not have to click inside.
+	 */
+	$('#quicktabs_ul a[href="#' + tabname + '"]')
+	    .on('shown.bs.tab', function (e) {
+		iframewindow.postMessage("Focus man!", "*");
+	    });
+    }
+
     //
     // User clicked on a node, so we want to create a tab to hold
     // the ssh tab with a panel in it, and then call StartSSH above
@@ -1664,7 +1709,15 @@ $(function ()
 		return;
 	    }
 	    else {
-		StartSSH(tabname, json.value);
+		var jsonauth = $.parseJSON(json.value);
+		
+		if (APT_OPTIONS.webssh &&
+		    _.has(jsonauth, "webssh") && jsonauth.webssh != 0) {
+		    StartSSHWebSSH(tabname, json.value);
+		}
+		else {
+		    StartSSH(tabname, json.value);
+		}
 	    }
 	}
 	var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -3312,12 +3365,13 @@ $(function ()
     // to get things going.
     //
     var constabcounter = 0;
-    
+
     function NewConsoleTab(client_id)
     {
 	sup.ShowModal('#waitwait-modal');
 
 	var callback = function(json) {
+	    console.info("NewConsoleTab", json);
 	    sup.HideModal('#waitwait-modal');
 	    
 	    if (json.code) {
@@ -3380,54 +3434,61 @@ $(function ()
 		$('#quicktabs_ul a:last').tab('show') // Select last tab
 
 		// Now create the console iframe inside the new tab
-		var iwidth = "100%";
-		var iheight = 400;
+		if (APT_OPTIONS.webssh && _.has(json.value, "authobject")) {
+		    StartConsoleNew(tabname, json.value);
+		}
+		else {
+		    var iwidth = "100%";
+		    var iheight = 400;
 		
-		var html = '<iframe id="' + tabname + '_iframe" ' +
-		    'width=' + iwidth + ' ' +
-		    'height=' + iheight + ' ' +
-		    'src=\'' + url + '\'>';
+		    var html = '<iframe id="' + tabname + '_iframe" ' +
+			'width=' + iwidth + ' ' +
+			'height=' + iheight + ' ' +
+			'src=\'' + url + '\'>';
 	    
-		if (_.has(json.value, "password")) {
-		    html =
-			"<div class='col-sm-4 col-sm-offset-4 text-center'>" +
-			" <small> " +
-			" <a data-toggle='collapse' " +
-			"    href='#password_" + tabname + "'>Password" +
-			"   </a></small> " +
-			" <div id='password_" + tabname + "' " +
-			"      class='collapse'> " +
-			"  <div class='well well-xs'>" +
-			nodePasswords[client_id] +
-			"  </div> " +
-			" </div> " +
-			"</div> " + html;
-		}		
-		$('#' + tabname).html(html);
+		    if (_.has(json.value, "password")) {
+			html =
+			    "<div class='col-sm-4 col-sm-offset-4 " +
+			    "     text-center'>" +
+			    " <small> " +
+			    " <a data-toggle='collapse' " +
+			    "    href='#password_" + tabname + "'>Password" +
+			    "   </a></small> " +
+			    " <div id='password_" + tabname + "' " +
+			    "      class='collapse'> " +
+			    "  <div class='well well-xs'>" +
+			    nodePasswords[client_id] +
+			    "  </div> " +
+			    " </div> " +
+			    "</div> " + html;
+		    }		
+		    $('#' + tabname).html(html);
 
-		//
-		// Setup a custom event handler so we can kill the connection.
-		// Called from the kill click handler above.
-		//
-		// Post a kill message to the iframe. See nodetipacl.php3.
-		// Since postmessage is async, we have to wait before we
-		// can actually kill the content div with the iframe, cause
-		// its gone before the message is delivered. Just delay a
-		// couple of seconds. Maybe add a reply message later. The
-		// delay is above.
-		//
-		// In firefox, nodetipacl.php3 does not install a handler,
-		// so now the shellinabox code has that handler, and so this
-		// gets posted to the box directly. Oh well, so much for
-		// trying to stay out of the box code.
-		//
-		var sendkillmessage = function (event) {
-		    var iframe = $('#' + tabname + '_iframe')[0];
-		    iframe.contentWindow.postMessage("kill", "*");
-		};
-		// This is the handler for the button, which invokes
-		// the function above.
-		$('#' + tabname).on("killconsole", sendkillmessage);
+		    //
+		    // Setup a custom event handler so we can kill the
+		    // connection.  Called from the kill click handler
+		    // above.
+		    //
+		    // Post a kill message to the iframe. See nodetipacl.php3.
+		    // Since postmessage is async, we have to wait before we
+		    // can actually kill the content div with the iframe, cause
+		    // its gone before the message is delivered. Just delay a
+		    // couple of seconds. Maybe add a reply message later. The
+		    // delay is above.
+		    //
+		    // In firefox, nodetipacl.php3 does not install a handler,
+		    // so now the shellinabox code has that handler, and so this
+		    // gets posted to the box directly. Oh well, so much for
+		    // trying to stay out of the box code.
+		    //
+		    var sendkillmessage = function (event) {
+			var iframe = $('#' + tabname + '_iframe')[0];
+			iframe.contentWindow.postMessage("kill", "*");
+		    };
+		    // This is the handler for the button, which invokes
+		    // the function above.
+		    $('#' + tabname).on("killconsole", sendkillmessage);
+		}
 	    }
 	    else {
 		// Switch back to it.
@@ -3441,6 +3502,57 @@ $(function ()
 					    {"uuid" : uuid,
 					     "node" : client_id});
 	xmlthing.done(callback);
+    }
+
+    function StartConsoleNew(tabname, coninfo)
+    {
+	var authobject = coninfo.authobject;
+	var jsonauth   = $.parseJSON(authobject);
+
+        var url     = jsonauth.baseurl + "/webssh/webssh.html";
+
+	var loadiframe = function () {
+	    console.info("Sending message", jsonauth.baseurl);
+	    iframewindow.postMessage(authobject, "*");
+	    window.removeEventListener("message", loadiframe, false);
+	};
+	window.addEventListener("message", loadiframe);
+
+	var html =
+	    '  <iframe id="' + tabname + '_iframe" ' +
+	    '	  style="height:30em; width:100%;" ' +
+            '     src="' + url + '">';
+
+	if (_.has(coninfo, "password")) {
+	    html =
+		"<div class='col-sm-4 col-sm-offset-4 " +
+		"     text-center'>" +
+		" <small> " +
+		" <a data-toggle='collapse' " +
+		"    href='#password_" + tabname + "'>Password" +
+		"   </a></small> " +
+		" <div id='password_" + tabname + "' " +
+		"      class='collapse'> " +
+		"  <div class='well well-xs'>" + coninfo.password +
+		"  </div> " +
+		" </div> " +
+		"</div> " + html;
+	}		
+        $('#' + tabname).html(html);
+
+	var iframe = $('#' + tabname + '_iframe')[0];
+	var iframewindow = (iframe.contentWindow ?
+			    iframe.contentWindow :
+			    iframe.contentDocument.defaultView);
+
+	/*
+	 * When the user activates this tab, we want to send a message
+	 * to the terminal to focus so we do not have to click inside.
+	 */
+	$('#quicktabs_ul a[href="#' + tabname + '"]')
+	    .on('shown.bs.tab', function (e) {
+		iframewindow.postMessage("Focus man!", "*");
+	    });
     }
 
     //

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -710,6 +710,9 @@ function Do_ConsoleURL()
     }
     if (isset($taskdata["logurl"])) {
         $blob["logurl"] = $taskdata["logurl"];
+    }
+    if (isset($taskdata["authobject"])) {
+        $blob["authobject"] = $taskdata["authobject"];
     }
     SPITAJAX_RESPONSE($blob);
     $webtask->Delete();

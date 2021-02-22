@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1834,6 +1834,24 @@ class User
                          "where FIND_IN_SET('$PORTAL_GENESIS',news.portals)");
 	$row = mysql_fetch_array($query_result);
 	return $row["count"];
+    }
+    function DoWebSSH() {
+        global $BROWSER_CONSOLE_WEBSSH;
+
+        if (!$BROWSER_CONSOLE_WEBSSH) {
+            return 0;
+        }
+        if ($this->admin() || FeatureEnabled("webssh", $self, null, null)) {
+            return 1;
+        }
+        # See if enabled in any of the users projects
+        $projlist = $self->ProjectMembershipList();
+        foreach ($projlist as $project) {
+            if (FeatureEnabled("webssh", null, $project, null)) {
+                return 1;
+            }
+        }
+        return 0;
     }
 }
 ?>
