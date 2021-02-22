@@ -28,6 +28,7 @@ CREATE TABLE `apt_mobile_buses` (
   `urn` varchar(128) NOT NULL default '',
   `busid` int(8) NOT NULL default '0',
   `last_ping` datetime default NULL,
+  `last_control_ping` datetime default NULL,
   `last_report` datetime default NULL,
   `routeid` smallint(5) default NULL,
   `routedescription` tinytext,

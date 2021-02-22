@@ -60,6 +60,7 @@ my $PROTOUSER	     = "elabman";
 my $SUDO	     = "/usr/local/bin/sudo";
 my $SLEEP_INTERVAL   = 180;
 my $HOURLY_INTERVAL  = 3600;
+my $OFFLINE_THRESHOLD= 2 * $SLEEP_INTERVAL;
 
 #
 # Bus URLS. No documentation available.
@@ -391,6 +392,21 @@ sub GetLocationData()
 	my $Balive    = $pingresults{$boss};
 	my $Calive    = $pingresults{$control};
 
+	if (!$Balive) {
+	    #
+	    # If the boss has not pinged in a while, lets mark it
+	    # down. We are not using the portal_monitor at this point,
+	    # to many of them and we lose contact with them often.
+	    #
+	    if (time() - $bus->LastPing() > $OFFLINE_THRESHOLD) {
+		$bus->status("offline");
+	    }
+	}
+	else {
+	    if (time() - $bus->LastPing() < $OFFLINE_THRESHOLD) {
+		$bus->status("up");
+	    }
+	}
 	if ($Balive || $Calive) {
 	    $bus->Ping($Balive, $Calive);
 	}

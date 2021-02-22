@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -128,12 +128,15 @@ function Do_GetMobileEndpoints()
     global $this_user, $ajax_args;
 
     $query_result =
-        DBQueryFatal("select *,r.description as routename ".
+        DBQueryFatal("select a.*,b.*,r.description as routename,aas.status ".
                      "   from apt_mobile_aggregates as a ".
                      "left join apt_mobile_buses as b on b.urn=a.urn ".
+                     "left join apt_aggregates as aa on aa.urn=a.urn ".
+                     "left join apt_aggregate_status as aas on aas.urn=a.urn ".
                      "left join apt_mobile_bus_routes as r on ".
                      "  r.routeid=b.routeid ".
-                     "where b.busid!='6969' and b.busid!='4209' and ".
+                     "where aa.disabled=0 and ".
+                     "      b.busid!='6969' and b.busid!='4209' and ".
                      "      b.busid!='6996' and b.busid!='6970'");
     if (!mysql_num_rows($query_result)) {
         SPITAJAX_RESPONSE(null);
@@ -147,6 +150,7 @@ function Do_GetMobileEndpoints()
             "type"          => $row["type"],
             "busid"         => $row["busid"],
             "last_ping"     => DateStringGMT($row["last_ping"]),
+            "status"        => $row["status"],
             "routeid"       => $row["routeid"],
             "routename"     => $row["routename"],
             "route_changed" => DateStringGMT($row["route_changed"]),

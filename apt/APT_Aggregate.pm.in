@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1036,19 +1036,25 @@ sub Ping($$$)
 {
     my ($self, $bossalive, $controlalive) = @_;
     my $safe_urn = DBQuoteSpecial($self->urn());
+    my @sets = ();
 
+    if ($controlalive) {
+	push(@sets, "last_control_ping=now()");
+    }
     if ($bossalive) {
+	push(@sets, "last_ping=now()");
+    }
+    if (@sets) {
 	DBQueryWarn("update apt_mobile_buses set ".
-		    "  last_ping=now() ".
+		    join(",", @sets) . 
 		    "where urn=$safe_urn")
 	    or return -1;
     }
-
     return 0;
 }
 
 #
-# Last ping time as unix time.
+# Last boss ping time as unix time.
 #
 sub LastPing($)
 {
@@ -1056,7 +1062,8 @@ sub LastPing($)
     my $safe_urn = DBQuoteSpecial($self->urn());
 
     my $query_result = 
-	DBQueryWarn("select UNIX_TIMESTAMP(last_ping) from apt_mobile_buses ".
+	DBQueryWarn("select UNIX_TIMESTAMP(last_ping) ".
+		    "  from apt_mobile_buses ".
 		    "where urn=$safe_urn");
     return -1
 	if (!$query_result || !$query_result->numrows);
