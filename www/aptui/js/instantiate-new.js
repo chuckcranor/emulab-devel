@@ -3082,6 +3082,8 @@ $(function ()
 	    }
 	    $('#end_day').val(end.format("MM/DD/YYYY"));
 	    $('#end_hour').val(end.format("H"));
+	    $("#end_hour option[value='" + end.hour() + "']")
+		.removeAttr("disabled");
 	};
 	var clearPickers = function() {
 	    // Set the pickers.
