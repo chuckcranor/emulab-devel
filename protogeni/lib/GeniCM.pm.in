@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -3128,8 +3128,10 @@ sub GetTicketAuxAux($)
 		$mask = GeniXML::GetMask($ref, $rspec);
 
 		# No IP required for blackbox nodes.
+		# Or if the interface is on a bridge node
 		$required_ips--
-		    if (defined($nodetype) && $nodetype->isblackbox());
+		    if ((defined($nodetype) && $nodetype->isblackbox()) ||
+			exists($bridgemap{$iface_id}));
 	    }
 	    $supplied_ips++
 		if (defined($ip));
