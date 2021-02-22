@@ -306,6 +306,11 @@ sub InUse()
 		     "reserved_pid" => $reserved_pid || "",
 		     "reserved_urn" => $reserved_urn});
     }
+    # The above leaves something in the Reservation cache that messes
+    # up these numbers. No idea what it is, but I do not think we actually
+    # need that cache, I might get rid of it.
+    Reservation->FlushAll();
+
     #
     # Reservation system info that affects the free counts.
     # We let the caller figure out how to use the info.
