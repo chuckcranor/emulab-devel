@@ -1875,7 +1875,7 @@ sub ExpectedEnd($$) {
     # debugging mode. So if we are here and the experiment is swapped, use
     # the current time.
     #
-    print STDERR "ExpectedEnd: No expiration for $experiment\n";
+    print STDERR "ExpectedEnd: No expiration for $experiment\n" if ($debug > 1);
     if ($experiment->state() eq EXPTSTATE_SWAPPED() &&
 	$experiment->autoswap()) {
 	return time() + ($experiment->autoswap_timeout() * 60);
