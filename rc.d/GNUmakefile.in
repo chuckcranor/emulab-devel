@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,6 +36,7 @@ CLUSTER_PORTAL  = @CLUSTER_PORTAL@
 CONFIG_TARGETSYS= @CONFIG_TARGETSYS@
 BOSSNODE        = @BOSSNODE@
 POWDER_DEADMAN  = @POWDER_DEADMAN@
+WEBSSH          = @BROWSER_CONSOLE_WEBSSH@
 
 SYSTEM         := $(shell uname -s)
 
@@ -96,6 +97,9 @@ OPS_SCRIPTS += pelab.sh
 endif
 ifeq ($(CONFIG_TARGETSYS),0)
 OPS_SCRIPTS += 1.mysql-client.sh 1.mysql-server.sh 
+endif
+ifeq ($(WEBSSH),1)
+OPS_SCRIPTS += webssh.sh
 endif
 
 #
