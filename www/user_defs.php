@@ -1845,7 +1845,7 @@ class User
             return 1;
         }
         # See if enabled in any of the users projects
-        $projlist = $self->ProjectMembershipList();
+        $projlist = $this->ProjectMembershipList();
         foreach ($projlist as $project) {
             if (FeatureEnabled("webssh", null, $project, null)) {
                 return 1;
