@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -248,6 +248,7 @@ my %vinterfaces   = ();
 my %rusagedata    = ();
 my %imagelist     = ();
 my %reserved_nodes= ();
+my %simple_links  = ();
 my $typelimitfile;
 
 my $DEADPID = NODEDEAD_PID();
@@ -2233,15 +2234,22 @@ while (($node1,$iface1,$node2,$iface2) = $result->fetchrow_array) {
 	if (!defined($node2obj)) {
 	    fatal("Could not lookup $node2");
 	}
+	my $nodeobj;
 	my $switchobj;
 	my $leaf_iface_type;
 	if ($node2obj->isswitch())
 	{
 	    $switchobj = $node2obj;
 	    $leaf_iface_type = get_iface_type($node1,$iface1);
+	    if (!$node1obj->isswitch()) {
+		$nodeobj = $node1obj;
+	    }
 	} elsif ($node1obj->isswitch()) {
 	    $switchobj = $node1obj;
 	    $leaf_iface_type = get_iface_type($node2,$iface2);
+	    if (!$node2obj->isswitch()) {
+		$nodeobj = $node2obj;
+	    }
 	} else {
 	    $switchobj = undef;
 	}
@@ -2375,12 +2383,56 @@ while (($node1,$iface1,$node2,$iface2) = $result->fetchrow_array) {
 	    }
 
 	    if ($bw < 10000000 || $printFastLinks) {
-		print_simple_link($node1, $iface1,
-				  $node2, $iface2,
-				  $bw, 0, 0, \@types);
+		#
+		# Store the info so we can do a post pass to determine
+		# which of the interfaces are fastest and get the special
+		# whacky interface type to make best effort work.
+		#
+		if (defined($switchobj) && defined($nodeobj)) {
+		    my $nodeid = $nodeobj->node_id();
+		    
+		    if (!exists($simple_links{$nodeid})) {
+			$simple_links{$nodeid} = [];
+		    }
+		    push(@{$simple_links{$nodeid}},
+			 [$node1, $iface1,
+			  $node2, $iface2,
+			  $bw, 0, 0, \@types]);
+		}
+		else {
+		    print_simple_link($node1, $iface1,
+				      $node2, $iface2,
+				      $bw, 0, 0, \@types);
+		}
 	    }
 	}
     } 
+}
+
+#
+# Process the node->switch links, the fastest interfaces on each node
+# are labeled so that best effort links can prefer them.
+#
+foreach my $nodeid (keys(%simple_links)) {
+    #
+    # Find fastest speed.
+    #
+    my $maxbw = 0;
+
+    foreach my $ref (@{$simple_links{$nodeid}}) {
+	my (undef,undef,undef,undef,$bw) = @$ref;
+	if ($bw > $maxbw) {
+	    $maxbw = $bw;
+	}
+    }
+    foreach my $ref (@{$simple_links{$nodeid}}) {
+	my ($n1,$i1,$n2,$i2,$bw,$d,$l,$types) = @$ref;
+	
+	push(@{$types}, "besteffort-interface")
+	    if ($bw == $maxbw);
+	
+	print_simple_link($n1,$i1,$n2,$i2,$bw,$d,$l,$types);
+    }
 }
 
 #
