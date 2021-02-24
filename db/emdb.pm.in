@@ -52,13 +52,14 @@ else {
 	     NewTBDBHandle DBQueryN DBQueryFatalN DBQueryWarnN DBErrN
 	     DBQuerySingleFatal DBQuerySingleFatalN TBDBDisconnect
 	     DBTableExists DBSlotExists DBSlotType DBQuoteSpecial
-	     DBKeyExists TBDBConnect TBDBReconnect);
+	     DBKeyExists TBDBConnect TBDBReconnect DBNumber);
 @EXPORT = (@EXPORT, @emdbi::EXPORT);
 
 sub TBDBConnect($)	{ return emdbi::TBDBConnect($_[0], $DBNAME); }
 sub TBDBReconnect($)    { return emdbi::TBDBReconnect($_[0]); }
 sub TBDBDisconnect()    { return emdbi::TBDBDisconnect(); }
 sub NewTBDBHandle()     { return emdbi::NewTBDBHandle($DBNAME); }
+sub DBNumber()		{ return 0; }
 sub DBHandle()		{ return emdbi::DBHandleN(0); }
 sub DBHandleN($)	{ return emdbi::DBHandleN($_[0]); }
 sub DBQueryN($$)	{ return emdbi::DBQueryN($_[0], $_[1]); }

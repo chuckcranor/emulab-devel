@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019, 2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -35,7 +35,7 @@ use vars qw(@ISA @EXPORT);
 @ISA    = "Exporter";
 @EXPORT = qw(DBQuery DBQueryFatal DBQueryWarn DBWarn DBFatal DBErr
 	     DBQuoteSpecial DBTableExists DBSlotExists DBSetDefault
-	     DBSlotType DBKeyExists
+	     DBSlotType DBKeyExists DBNumber
 	     DBConnect GENISA_DBNAME GENICH_DBNAME GENICM_DBNAME);
 
 # Configure variables
@@ -50,9 +50,11 @@ sub GENISA_DBNAME()	{ return "geni"; }
 sub GENICM_DBNAME()	{ return "geni-cm"; }
 sub GENICH_DBNAME()	{ return "geni-ch"; }
 
+sub DBNumber()		{ return $dbnum; }
 sub DBQuery($)		{ return emdbi::DBQueryN($dbnum, $_[0]); }
 sub DBQueryFatal($)	{ return emdbi::DBQueryFatalN($dbnum, $_[0]); }
 sub DBQueryWarn($)	{ return emdbi::DBQueryWarnN($dbnum, $_[0]); }
+sub DBQueryWarnN($$)	{ return emdbi::DBQueryWarnN($_[0], $_[1]); }
 sub DBQuoteSpecial($)	{ return emdbi::DBQuoteSpecialN($dbnum, $_[0]); }
 sub DBWarn($;$)		{ emdbi::DBError($_[0], $_[1]); }
 sub DBFatal($;$)	{ emdbi::DBFatal($_[0], $_[1]); }
