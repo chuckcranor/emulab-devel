@@ -384,7 +384,7 @@ sub GetVersion($)
     # from scratch.  Rather than fix it there, it's better to cope with
     # the situation right here, because this will work no matter what
     # convoluted history the db has been through.
-    lockdebug("GetVersion: $PID,$version: Locking tables");
+    #lockdebug("GetVersion: $PID,$version: Locking tables");
     
     DBQueryFatal( "LOCK TABLES reservation_version WRITE" );
     # Check existence again, with locking this time, to avoid race.
@@ -392,7 +392,7 @@ sub GetVersion($)
     unless( ($version) = $query_result->fetchrow_array() ) {
 	DBQueryFatal( "INSERT INTO reservation_version SET version=0" );
     }
-    lockdebug("GetVersion: $PID,$version: Unlocking tables");
+    #lockdebug("GetVersion: $PID,$version: Unlocking tables");
     DBQueryFatal( "UNLOCK TABLES" );
     
     return 0;
@@ -1899,11 +1899,11 @@ sub MaxSwapIn($$$) {
     my $pid = $experiment->pid();
     my $eid = $experiment->eid();
 
-    lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Locking tables");
+    #lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Locking tables");
 
     DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as pnr read");
 
-    lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Tables locked");
+    #lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Tables locked");
 
     my $reservations = LookupAll( $class, $type, undef, \$details );
     print $details . "\n" if ($debug);
@@ -1935,7 +1935,7 @@ sub MaxSwapIn($$$) {
 	   !IsFeasible( $class, $reservations, undef, undef, \$overflow ) ) {
 	$reservation->SetNodes( $reservation->nodes() - $overflow );
     }
-    lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Unlocking tables");
+    #lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Unlocking tables");
     
     DBQueryFatal("unlock tables");
 
