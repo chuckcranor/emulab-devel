@@ -135,6 +135,20 @@ if (! $impotent) {
 	fatal("Could not mark daemon as running!");
     }
 }
+#
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    my $SAVEEUID = $EUID;
+    
+    $EUID = 0;
+    ReOpenLog($LOGFILE);
+    $EUID = $SAVEEUID;
+}
+$SIG{HUP} = \&handler
+    if (! ($debug || $oneshot || $impotent));
+
 sleep(5) if (! $debug);
 
 while (1) {
