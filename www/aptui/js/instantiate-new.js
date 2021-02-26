@@ -3075,6 +3075,8 @@ $(function ()
 	    if (! start.isBefore()) {
 		$('#start_day').val(start.format("MM/DD/YYYY"));
 		$('#start_hour').val(start.format("H"));
+		$("#start_hour option[value='" + start.hour() + "']")
+		    .removeAttr("disabled");
 	    }
 	    else {
 		$('#start_day').val("");
