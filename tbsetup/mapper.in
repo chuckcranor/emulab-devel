@@ -906,6 +906,9 @@ sub RunAssign($$)
 
 	    print "Fixed: $node_id, $node_type\n";
 	    
+	    next
+		if ($node->IsReserved() && $node->sharing_mode());
+	    
 	    if ($reservation_bounds->{$node_id} == 0) {
 		tberror({type => 'primary', cause => 'temp',
 			 severity => SEV_ERROR,
