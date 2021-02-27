@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2020 University of Utah and the Flux Group.
+# Copyright (c) 2016-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,6 +32,7 @@ use vars qw(@ISA @EXPORT);
 
 use English;
 use Date::Parse;
+use Data::Dumper;
 use emdb;
 use libtestbed;
 use emutil;
@@ -42,20 +43,47 @@ use Experiment;
 use Node;
 use NodeType;
 use POSIX qw(strftime);
+use Fcntl;
 use overload ('""' => 'Stringify');
 
 # Configure variables
 my $TB		= "@prefix@";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
+my $MAINSITE    = @TBMAINSITE@;
 
 my %cache = ();
 BEGIN { use emutil; emutil::AddCache(\%cache); }
+
+# Local debugging flag.
+my $debug = 0;
 
 sub FlushAll($)
 {
     my ($class) = @_;
 
     %cache = ();
+}
+
+#
+# Some logging for DB locking below
+#
+
+sub lockdebug($)
+{
+    my ($message) = @_;
+    my $logname = "/usr/testbed/log/lockdebug";
+    my $string = "LockDebug: $PID: $message\n";
+
+    return
+	if (!$MAINSITE);
+
+    if (sysopen(LOG, $logname, O_CREAT | O_WRONLY | O_APPEND, 0666)) {
+	syswrite(LOG, $string);
+	close(LOG);
+    }
+    else {
+	print "LockDebug: Could not open file\n";
+    }
 }
 
 sub CreateCommon($$$$$$$$)
@@ -356,12 +384,15 @@ sub GetVersion($)
     # from scratch.  Rather than fix it there, it's better to cope with
     # the situation right here, because this will work no matter what
     # convoluted history the db has been through.
+    #lockdebug("GetVersion: $PID,$version: Locking tables");
+    
     DBQueryFatal( "LOCK TABLES reservation_version WRITE" );
     # Check existence again, with locking this time, to avoid race.
     $query_result = DBQueryFatal( "SELECT * FROM reservation_version" );    
     unless( ($version) = $query_result->fetchrow_array() ) {
 	DBQueryFatal( "INSERT INTO reservation_version SET version=0" );
     }
+    #lockdebug("GetVersion: $PID,$version: Unlocking tables");
     DBQueryFatal( "UNLOCK TABLES" );
     
     return 0;
@@ -609,7 +640,7 @@ sub LookupAll($$;$$)
 				"s.lockdown as slice_lockdown, ".
 				"n.reserved_pid, " .
 				"UNIX_TIMESTAMP( pr.end ), ".
-				"e.lockdown, e.swappable " .
+				"e.lockdown, e.swappable, pr.name " .
 				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
@@ -630,8 +661,10 @@ sub LookupAll($$;$$)
 				"LEFT OUTER JOIN" .
 				"`geni-cm`.geni_slices AS s ON " .
 				"e.eid_uuid=s.uuid " .
-				"WHERE ((n.reservable=0 and n.type='$type') or ".
-				"      (n.reservable=1 and n.node_id='$type')) ".
+				"WHERE ".
+				" ((n.reservable=0 and n.type='$type') or ".
+				"  (n.reservable=1 and n.node_id='$type') or ".
+				"  (n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
 				"GROUP BY " .
 				"e.pid, e.eid, n.reserved_pid, nr.pid, " .
@@ -643,7 +676,7 @@ sub LookupAll($$;$$)
 				"nr.pid, NULL, " .
 				"NULL, n.reserved_pid, " .
 				"UNIX_TIMESTAMP( pr.end ), " .
-				"e.lockdown, e.swappable " .
+				"e.lockdown, e.swappable, pr.name " .
 				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
@@ -662,18 +695,20 @@ sub LookupAll($$;$$)
 				"n.reserved_pid=pr.pid AND " .
 				"n.reservation_name=pr.name AND " .
 	                        "pr.approved is not null ".
-				"WHERE ((n.reservable=0 and n.type='$type') or ".
-				"      (n.reservable=1 and n.node_id='$type')) ".
+				"WHERE ".
+				" ((n.reservable=0 and n.type='$type') or ".
+				"  (n.reservable=1 and n.node_id='$type') or ".
+				"  (n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
 				"GROUP BY e.pid, e.eid, n.reserved_pid, " .
 				"nr.pid, UNIX_TIMESTAMP( pr.end )";
     my $query_result = DBQueryWarn( $query );
 
-    $$details = "--- Node usage:\n" if( ref( $details ) );
+    $$details = "--- Node usage for $type:\n" if( ref( $details ) );
     
     while( my($count, $pid, $eid, $uid, $end, $autoswap, $next_reserve,
 	      $slice_expire, $slice_lockdown, $reserved_pid, $pr_end,
-	      $expt_lockdown, $swappable) =
+	      $expt_lockdown, $swappable, $preres_name) =
 	   $query_result->fetchrow_array() ) {
 	my $endtime;
 
@@ -681,7 +716,8 @@ sub LookupAll($$;$$)
 	    no warnings 'uninitialized';
 	    $$details = $$details . "$count, $pid, $eid, $uid, $end, " .
 		"$autoswap, $next_reserve, $slice_expire, $slice_lockdown, " .
-		"$reserved_pid, $pr_end, $expt_lockdown, $swappable\n";
+		"$reserved_pid, $pr_end, $expt_lockdown, $swappable, ".
+		"$preres_name\n";
 	}
 
 	if( defined( $slice_expire ) ) {
@@ -733,18 +769,37 @@ sub LookupAll($$;$$)
 	    my $res = CreateCommon( $class, undef, undef, undef, 0, undef,
 				    $type, $count );
 	    push( @reservations, $res );
-	} elsif( defined( $endtime ) ) {
-	    # The nodes have a reserved_pid, but there's a known	    
-	    # end time (the current experiment end, or the
-	    # project_reservations end, whichever is later)... mark
-	    # them as available after that.
-	    my $res = CreateCommon( $class, $pid, $eid, $uid, 0, $endtime,
-				    $type, $count );
-	    push( @reservations, $res );	    
+	}
+	else {
+	    #
+	    # In general, there should be a prereserve that corresponds to
+	    # the reserved_pid and reservation_name. But sometimes the
+	    # reserved_pid does not get cleared, in which case we need to
+	    # make this node look like it is allocated instead of free
+	    # but unavailable.
+	    #
+	    if (!defined($preres_name)) {
+		my $res = CreateCommon($class, $reserved_pid,
+				       # Tell IsFeasible() that this is not free
+				       # Needs to cleaned up
+				       $eid ? $eid : "**prereserve**",
+				       $uid, 0, 0x7FFFFFFF, $type, $count );
+	    }
+	    else {
+		#
+		# The node is free, but there is a corresponding preres
+		# that will be added to the timeline below.
+		#
+		my $res = CreateCommon( $class, undef, undef, undef, 0, undef,
+					$type, $count );
+		push( @reservations, $res );
+	    }
 	}
     }
+    #print Dumper(\@reservations);
 
-    $$details = $$details . "\n--- Reservations:\n" if( ref( $details ) );
+    $$details = $$details . "\n--- Reservations for $type:\n"
+	if( ref( $details ) );
     
     $query_result = DBQueryWarn( "SELECT pid, uid, UNIX_TIMESTAMP( start ), " .
 				 "UNIX_TIMESTAMP( end ), nodes, idx FROM " .
@@ -761,6 +816,40 @@ sub LookupAll($$;$$)
 	if( ref( $details ) ) {
 	    no warnings 'uninitialized';
 	    $$details = $$details . "$pid, $uid, $start, $end, $nodes, $idx\n";
+	}
+    }
+
+    $query_result = DBQueryWarn( "SELECT pr.pid, pr.creator, ".
+				 "   UNIX_TIMESTAMP(start)," .
+				 "   UNIX_TIMESTAMP(end), pnr.node_id, n.type ".
+				 " from project_reservations as pr ".
+				 "left join node_reservations as pnr on ".
+				 "     pnr.pid=pr.pid and ".
+				 "     pnr.reservation_name=pr.name ".
+				 "left join nodes as n on ".
+				 "     n.node_id=pnr.node_id ".
+				 "where pr.approved is not null and ".
+				 "      pnr.node_id is not null and ".
+				 "      (n.type='$type' or n.node_id='$type')");
+
+    while( my ($pid, $uid, $start, $end, $node_id, $node_type) =
+	   $query_result->fetchrow_array() ) {
+	#
+	# If asking as the node_type, then add a type reservation to
+	# reflect one node of that type reserved. Otherwise, its a
+	# node specific question.
+	#
+	my $res = Create($class, $pid, $uid,
+			 defined($start) ? $start : 0,
+			 defined($end) ? $end : 0x7FFFFFFF,
+			 ($type eq $node_id ? $node_id : $type), 1);
+	push( @reservations, $res );
+	
+	if( ref( $details ) ) {
+	    no warnings 'uninitialized';
+	    $$details = $$details .
+		"$pid, $uid, $start, $end, $node_id, ".
+		($type eq $node_id ? $node_id : $type) . "\n";
 	}
     }
 
@@ -783,6 +872,7 @@ sub IsFeasible($$;$$$$$)
     
     foreach my $reservation ( @$reservations ) {
 	my $pid = $reservation->pid();
+	my $eid = $reservation->eid();
 	my $start;
 	my $end;
 
@@ -976,15 +1066,19 @@ sub FreeCount($$;$) {
 #
 # * 'free' is the number of nodes not allocated and not needed
 # for reservations; available for general use subject to other constraints.
-sub Forecast($$;$) {
-    my ($class, $type, $projlist) = @_;
+sub Forecast($$;$$) {
+    my ($class, $type, $projlist, $details) = @_;
 
-    my $reservations = LookupAll( $class, $type );
+    my $reservations = LookupAll( $class, $type, undef, $details );
+    
     my @forecast = ();
     my @answer = ();
     my $t = time();
     
     IsFeasible( $class, $reservations, undef, undef, undef, undef, \@forecast );
+    if ($debug > 1) {
+	print Dumper(\@forecast);
+    }
 
     foreach my $f ( @forecast ) {
 	my $unavailable = 0;
@@ -1367,6 +1461,12 @@ sub ExptTypes($) {
 		     "(SELECT n.node_id FROM " .
 		     " reserved AS r, nodes AS n WHERE " .
 		     " r.node_id=n.node_id AND n.reservable=1 AND " .
+		     " r.exptidx='$exptidx') ".
+		     "union ".
+		     "(SELECT n.node_id FROM " .
+		     " reserved AS r, nodes AS n, ".
+		     "   node_reservations as nr WHERE " .
+		     " r.node_id=n.node_id AND nr.node_id=r.node_id AND ".
 		     " r.exptidx='$exptidx')");
 
     my @types;
@@ -1436,9 +1536,10 @@ sub ExtendSlice($$$;$$$) {
 	}
 	return 0
 	    if( $impotent );
-	next if( !defined( BeginTransaction( $class, $version ) ) );
+	next if( !defined( BeginTransaction( $class, $version,
+					     "`geni-cm`.geni_slices" ) ) );
 
-	my $result = $slice->SetExpiration( $new_expire );
+	my $result = $slice->SetExpirationRes( $new_expire, emdb::DBNumber() );
 
 	if( $result < 0 && ref( $error ) ) {
 	    $$error = "Couldn't update slice expiration";
@@ -1775,7 +1876,7 @@ sub ExpectedEnd($$) {
     # debugging mode. So if we are here and the experiment is swapped, use
     # the current time.
     #
-    print STDERR "ExpectedEnd: No expiration for $experiment\n";
+    print STDERR "ExpectedEnd: No expiration for $experiment\n" if ($debug > 1);
     if ($experiment->state() eq EXPTSTATE_SWAPPED() &&
 	$experiment->autoswap()) {
 	return time() + ($experiment->autoswap_timeout() * 60);
@@ -1795,19 +1896,26 @@ sub MaxSwapIn($$$) {
     my $MAX = 10000;
     my $overflow;
     my $details;
+    my $pid = $experiment->pid();
+    my $eid = $experiment->eid();
 
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read");        
-    
+    #lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Locking tables");
+
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as pnr read");
+
+    #lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Tables locked");
+
     my $reservations = LookupAll( $class, $type, undef, \$details );
-    #print $details . "\n" if ($type eq "d430");
+    print $details . "\n" if ($debug);
 
     foreach my $res ( @$reservations ) {
-	if( defined( $res->pid() ) && defined( $res->eid() ) &&
+	if (defined($res->pid()) && defined($res->eid()) &&
 	    $res->pid() eq $experiment->pid() &&
-	    $res->eid() eq $experiment->eid() ) {
-	    # Found existing nodes already reserved to the experiment we're
-	    # trying to allocate.  In this context, they should be considered
-	    # as available.
+	    ($res->eid() eq $experiment->eid() ||
+	     $res->eid() eq "**prereserve**")) {
+	    # Found existing nodes already reserved to the experiment
+	    # we're trying to allocate.  In this context, they should
+	    # be considered as available.
 	    $res->{'PID'} = undef;
 	    $res->{'EID'} = undef;
 	    $res->SetStart( 0 );
@@ -1827,6 +1935,8 @@ sub MaxSwapIn($$$) {
 	   !IsFeasible( $class, $reservations, undef, undef, \$overflow ) ) {
 	$reservation->SetNodes( $reservation->nodes() - $overflow );
     }
+    #lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Unlocking tables");
+    
     DBQueryFatal("unlock tables");
 
     my $avail = $reservation->nodes() > 0 ? $reservation->nodes() : 0;
@@ -1852,14 +1962,35 @@ sub MaxSwapIn($$$) {
 sub MaxSwapInMap($$) {
 
     my ($class, $experiment) = @_;
+    my $pid = $experiment->pid();
     my %counts = ();
 
     my $query_result = DBQueryFatal( "SELECT DISTINCT( type ) FROM " .
-				     "future_reservations" );
+				     " future_reservations" );
+    
     while( my ($type) = $query_result->fetchrow_array() ) {
 	$counts{ $type } = MaxSwapIn( $class, $experiment, $type );
     }
 
+    $query_result = DBQueryFatal( "SELECT node_id FROM " .
+				  " nodes where reservable=1" );
+    
+    while( my ($node_id) = $query_result->fetchrow_array() ) {
+	if (!exists($counts{$node_id})) {
+	    $counts{$node_id} = MaxSwapIn( $class, $experiment, $node_id );
+	}
+    }
+
+    $query_result =
+	DBQueryFatal("select r.node_id,n.type from ".
+		     " (select distinct(node_id) from node_reservations) as r ".
+		     "left join nodes as n on r.node_id=n.node_id");
+    while( my ($node_id,$type) = $query_result->fetchrow_array() ) {
+	$counts{$node_id} = MaxSwapIn($class, $experiment, $node_id);
+	if (!exists($counts{$type})) {
+	    $counts{$type} = MaxSwapIn($class, $experiment, $type);
+	}
+    }
     return \%counts;
 }
 

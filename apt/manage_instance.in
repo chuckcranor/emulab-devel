@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -836,7 +836,7 @@ sub DoSnapshot()
 		$response->code() == GENIRESPONSE_NETWORK_ERROR);
 
 	my $imageblob = $response->value();
-	print Dumper($imageblob);
+	# print Dumper($imageblob);
 	if (defined($swebtask)) {
 	    my %blobcopy = %{ $imageblob };
 
@@ -968,7 +968,7 @@ sub DoSnapshot()
 	    Genixmlrpc->SetContext(undef);
 	    # We get back undefined if the image is not posted yet.
 	    if (defined($blob)) {
-		print Dumper($blob);
+		# print Dumper($blob);
 		
 		#
 		# We actually wait for the hash since might not be
@@ -1343,6 +1343,7 @@ sub DoConsole()
     my $url;
     my $pswd;
     my $logurl;
+    my $authobject;
 	
     if (ref($response->value())) {
 	$url  = $response->value()->{'url'};
@@ -1350,7 +1351,10 @@ sub DoConsole()
 	    if (exists($response->value()->{'password'}));
 	$logurl = $response->value()->{'logurl'}
 	    if (exists($response->value()->{'logurl'}));
-
+	# This is a JSON string, just pass it along.
+	if (exists($response->value()->{'authobject'})) {
+	    $authobject = $response->value()->{'authobject'};
+	}
 	print Dumper($response->value());
     }
     else {
@@ -1364,6 +1368,7 @@ sub DoConsole()
 	    $webtask->url($url);
 	    $webtask->password($pswd) if (defined($pswd));
 	    $webtask->logurl($logurl) if (defined($logurl));
+	    $webtask->authobject($authobject) if (defined($authobject));
 	}
 	$webtask->Exited($response->code());
 	exit($response->code());
@@ -1612,7 +1617,8 @@ sub DoTerminate()
 			  "manage_instance @SAVEARGV",
 			  "Name: $instance_name\n".
 			  "Slice: $slice_uuid\n\n",
-			  $brand->OpsEmailAddress(), undef, $logfile);
+			  $brand->OpsEmailAddress(),
+			  "X-Portal: Terminate", $logfile);
     }
   killit:
     $slice->Delete() if (defined($slice));
@@ -6222,6 +6228,7 @@ sub DoWarn()
 			  "Your $pid/$name experiment",
 			  $reason,
 			  $brand->OpsEmailAddress(),
+			  "X-Portal: Warned\n" .
 			  "CC: " . $project->GetLeader()->email() . "\n" .
 			  "BCC: " . $brand->OpsEmailAddress());
 
@@ -6338,14 +6345,17 @@ sub DoWarn()
 
     my $message;
     my $subject;
+    my $xheader;
 
     if ($panic) {
 	$message = "Your experiment, $pid/$name, has been quarantined!\n";
 	$subject = "Your experiment $name has been quarantined!";
+	$xheader = "Quarantined";
     }
     else {
 	$message = "Your experiment, $pid/$name, has been terminated!\n";
 	$subject = "Your experiment $name has been terminated with cause!";
+	$xheader = "Killed";
     }
     if ($freeze) {
 	$message .= "Your account has been frozen until this is resolved.\n";
@@ -6363,6 +6373,7 @@ sub DoWarn()
 		      $subject,
 		      $message,
 		      $brand->OpsEmailAddress(),
+		      "X-Portal: $xheader\n" .
 		      "CC: " . $project->GetLeader()->email() . "\n" .
 		      "BCC: " . $brand->OpsEmailAddress());
 		      

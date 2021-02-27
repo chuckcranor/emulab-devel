@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -263,6 +263,7 @@ INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/cvsweb/, $(ALLCVSWEB)) \
 	$(addprefix $(INSTALL_DIR)/opsdir/www/cvsweb/, $(ALLOPSCVSWEB)) \
+	$(INSTALL_DIR)/opsdir/www/webssh/webssh.html \
 	$(INSTALL_DIR)/opsdir/www/accept_cert.html \
 	$(INSTALL_WWWDIR)/wikidocs/wiki/ignore.html \
 	$(INSTALL_WWWDIR)/doc/LICENSE.txt
@@ -340,6 +341,11 @@ $(INSTALL_DIR)/opsdir/www/%.html: %.html htmlinstall
 	$(HTMLINSTALL) $(subst $$,\$$,$<) $(subst $$,\$$,$@) 
 
 $(INSTALL_DIR)/opsdir/www/%: %
+	@echo "Installing $<"
+	-mkdir -p $(patsubst %/,%,$(dir $@))
+	$(INSTALL_DATA) $(subst $$,\$$,$<) $(subst $$,\$$,$@) 
+
+$(INSTALL_DIR)/opsdir/www/webssh/%: %
 	@echo "Installing $<"
 	-mkdir -p $(patsubst %/,%,$(dir $@))
 	$(INSTALL_DATA) $(subst $$,\$$,$<) $(subst $$,\$$,$@) 

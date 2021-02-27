@@ -215,6 +215,12 @@
 	    <td>Role</td>
 	    <td><%- fields.role %></td>
 	  </tr>
+	  <% if (fields.reservable && isadmin) { %>
+	    <tr>
+	      <td>Reservable</td>
+	      <td>Yes</td>
+	    </tr>
+	  <% } %>
 	  <% if (fields.subbossinfo && isadmin) { %>
 	    <% _.each(fields.subbossinfo, function(val, key) { %>
 	      <tr>

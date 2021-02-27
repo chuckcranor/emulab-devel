@@ -195,6 +195,7 @@ class Node
     function reserved_pid() {return $this->field("reserved_pid"); }
     function reservation_name() {return $this->field("reservation_name"); }
     function taint_states() {return $this->field("taint_states"); }
+    function reservable() {return $this->field("reservable"); }
 
     function def_boot_image() {
 	return Image::Lookup($this->def_boot_osid(),

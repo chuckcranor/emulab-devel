@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2020 University of Utah and the Flux Group.
+# Copyright (c) 2010-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1179,9 +1179,9 @@ sub GetPortal($)
     my $url = GetText("url", $element);
     return ($tag, $url);
 }
-sub SetPortal($$$)
+sub SetPortal($$$$$)
 {
-    my ($rspec, $portal, $url) = @_;
+    my ($rspec, $portal, $url, $pid, $eid) = @_;
     
     my $element = FindNodesNS("n:portal", $rspec, $EMULAB_NS)->pop();
     if (!defined($element)) {
@@ -1189,6 +1189,8 @@ sub SetPortal($$$)
     }
     SetText("name", $element, $portal);
     SetText("url", $element, $url);
+    SetText("project", $element, $pid);
+    SetText("experiment", $element, $eid);
     return 0;
 }
 sub ClearPortal($)

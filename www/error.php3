@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,22 +21,7 @@
 # 
 # }}}
 #
-require("defs.php3");
-
-# No page arguments, but make sure that the environment is clean
-RequiredPageArguments();
-
-#
-# Standard Testbed Header
-#
-PAGEHEADER("Non Existent Page!");
-
-USERERROR("The URL you gave: <b>" . htmlentities( $_SERVER["REQUEST_URI"] ) . "</b>
-           is not available or is broken.", 1);
-
-#
-# Standard Testbed Footer
-# 
-PAGEFOOTER();
+echo "The URL you gave: <b>" . htmlentities( $_SERVER["REQUEST_URI"] ) . "</b>
+           is not available or is broken.";
 ?>
 

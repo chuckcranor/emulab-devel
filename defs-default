@@ -185,6 +185,8 @@ WINDOWS_KEY_7PRO_X86=""
 # Fancy new browser in the console support
 #
 BROWSER_CONSOLE_ENABLE=1
+# Fancier
+BROWSER_CONSOLE_WEBSSH=1
 
 # Image versioning and deltas.
 IMAGEPROVENANCE=1

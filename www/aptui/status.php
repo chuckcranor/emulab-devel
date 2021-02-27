@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -289,6 +289,9 @@ if (isset($maxextend) && $maxextend != "") {
 else {
     echo "  window.APT_OPTIONS.MAXEXTEND = null;\n";
 }
+# Temporary feature for webssh
+$webssh = $this_user->DoWebSSH();
+echo "  window.APT_OPTIONS.webssh = $webssh;\n";    
 
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";

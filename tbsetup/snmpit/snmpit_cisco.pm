@@ -2,7 +2,7 @@
 # vim: set et ts=4 sw=4:
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -1953,6 +1953,7 @@ sub resetVlanIfOnTrunk($$$) {
 sub enablePortTrunking2($$$$) {
     my ($self,$port,$native_vlan,$equaltrunking) = @_;
     my $trunking_vlan = ($equaltrunking ? 1 : $native_vlan);
+    my $rv;
     my $id = $self->{NAME}.
     "::enablePortTrunking2(".Port->toStrings(($port)).",$native_vlan,$equaltrunking)";
     $self->debug("$id\n");
@@ -1963,11 +1964,13 @@ sub enablePortTrunking2($$$$) {
     # Clear out the list of allowed VLANs for this trunk port, so that when it
     # comes up, there is not some race condition
     #
-    my $rv = $self->clearAllVlansOnTrunk($port);
+    if (0) {
+    $rv = $self->clearAllVlansOnTrunk($port);
     if (!$rv) {
         warn "ERROR: Unable to clear VLANs on trunk\n";
         return 0;
-    } 
+    }
+    }
 
     #
     # Set the type of the trunk - we only do dot1q for now

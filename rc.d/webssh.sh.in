@@ -1,0 +1,49 @@
+#!/bin/sh
+
+# PROVIDE: webssh
+# REQUIRE: LOGIN
+# BEFORE: apache24
+# KEYWORD: nojail shutdown
+
+TBROOT="@prefix@"
+APACHEDIR="@INSTALL_APACHE_CONFIG@"
+MAINSITE="@TBMAINSITE@"
+WEBSSH="@BROWSER_CONSOLE_WEBSSH@"
+USERNODE="@USERNODE@"
+BOSSNODE="@BOSSNODE@"
+WSSH="/usr/local/bin/wssh"
+PIDFILE="/var/run/wssh.pid"
+
+options="--fbidhttp --port=43456 --sslport=4367 --xsrf=False"
+hostopts="--hostfile=/dev/null --syshostfile=/dev/null"
+logopts="--log-file-max-size=1000000 --log-file-prefix=$TBROOT/log/wssh"
+certopts="--certfile=$APACHEDIR/ssl.crt/${USERNODE}.crt";
+keyopts="--keyfile=$APACHEDIR/ssl.key/${USERNODE}.key";
+origin="--origin=https://${USERNODE},https://${BOSSNODE}"
+allopts="$options $logopts $hostopts $certopts $keyopts $origin"
+
+if [ $WEBSSH == "0" ]; then
+    exit 0
+fi
+
+case "$1" in
+    start|faststart|quietstart|onestart|forcestart)
+	if [ -x $WSSH ]; then
+	    $TBROOT/sbin/daemon_wrapper -l $TBROOT/log/wssh.startup \
+		-p $PIDFILE $WSSH $allopts 
+	    echo -n " webssh";
+	fi
+	;;
+    stop|faststop|quietstop|onestop|forcestop)
+	if [ -r $pidfile ]; then
+	    kill `cat $PIDFILE`
+	fi
+	;;
+    *)
+	echo ""
+	echo "Usage: `basename $0` { start | stop }"
+	echo ""
+	exit 64
+	;;
+esac
+exit 0

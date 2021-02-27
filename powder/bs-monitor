@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -58,7 +58,7 @@ my $optlist      = "dnp:T";
 my $debug        = 0;
 my $verbose      = 1;
 my $impotent     = 0;
-my $mailonly     = 1;
+my $mailonly     = 0;
 my $tempdebug    = 0;
 my $last_isalive = 0;
 my $PORT         = 12487;
@@ -73,7 +73,7 @@ my $POWERLOCAL   = "/usr/local/bin/powerlocal";
 # Mothership, then we consider ourself motherless and must power down
 # the experimental nodes.
 #
-my $NOALIVE_THRESHOLD = 900;
+my $NOALIVE_THRESHOLD = 1200;
 #
 # Once we start hearing from the Mothership again, we want this many
 # consecutive pings before we consider the link good, and we can power

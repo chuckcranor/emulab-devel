@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -60,6 +60,7 @@ my $PROTOUSER	     = "elabman";
 my $SUDO	     = "/usr/local/bin/sudo";
 my $SLEEP_INTERVAL   = 180;
 my $HOURLY_INTERVAL  = 3600;
+my $OFFLINE_THRESHOLD= 2 * $SLEEP_INTERVAL;
 
 #
 # Bus URLS. No documentation available.
@@ -134,6 +135,20 @@ if (! $impotent) {
 	fatal("Could not mark daemon as running!");
     }
 }
+#
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    my $SAVEEUID = $EUID;
+    
+    $EUID = 0;
+    ReOpenLog($LOGFILE);
+    $EUID = $SAVEEUID;
+}
+$SIG{HUP} = \&handler
+    if (! ($debug || $oneshot || $impotent));
+
 sleep(5) if (! $debug);
 
 while (1) {
@@ -318,6 +333,19 @@ sub GetLocationData()
 	}
 	if (!defined($routeid) || !defined($bus->routeid()) ||
 	    $routeid != $bus->routeid()) {
+
+	    #
+	    # Update location whenever it is on a route or when it is
+	    # going off route.
+	    #
+	    if ($routeid || $bus->routeid()) {
+		if (!$impotent) {
+		    $bus->UpdateLocation({"latitude"   => $latitude,
+					  "longitude"  => $longitude,
+				          "speed"      => $speed,
+				          "heading"    => $heading});
+		}
+	    }
 	    
 	    #
 	    # Route changed. Mark it.
@@ -329,7 +357,12 @@ sub GetLocationData()
 		# that way, which indicates its running but not on one
 		# of our routes.
 		#
-		print "$busid changed to route $routeid ($description)\n";
+		if (!defined($bus->routeid()) || $routeid != $bus->routeid()) {
+		    print "$busid changed to route $routeid" .
+			(defined($description) ? " ($description)" : "") . "\n";
+
+		    $bus->RouteChange($routeid, $description);
+		}
 	    }
 	    elsif (defined($bus->routeid())) {
 		#
@@ -341,13 +374,7 @@ sub GetLocationData()
 		# experiment. 
 		#
 		print "$busid went off route\n";
-	    }
-	    if (!$impotent) {
 		$bus->RouteChange($routeid, $description);
-		$bus->UpdateLocation({"latitude"   => $latitude,
-				      "longitude"  => $longitude,
-				      "speed"      => $speed,
-				      "heading"    => $heading});
 	    }
 	}
 	elsif ($bus->routeid()) {
@@ -379,6 +406,21 @@ sub GetLocationData()
 	my $Balive    = $pingresults{$boss};
 	my $Calive    = $pingresults{$control};
 
+	if (!$Balive) {
+	    #
+	    # If the boss has not pinged in a while, lets mark it
+	    # down. We are not using the portal_monitor at this point,
+	    # to many of them and we lose contact with them often.
+	    #
+	    if (time() - $bus->LastPing() > $OFFLINE_THRESHOLD) {
+		$bus->status("offline");
+	    }
+	}
+	else {
+	    if (time() - $bus->LastPing() < $OFFLINE_THRESHOLD) {
+		$bus->status("up");
+	    }
+	}
 	if ($Balive || $Calive) {
 	    $bus->Ping($Balive, $Calive);
 	}

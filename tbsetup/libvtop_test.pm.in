@@ -90,7 +90,9 @@ $VTOP_FLAGS_COMMITMODE	= 0x200;
 @EXPORT_OK = qw($VTOP_FLAGS_UPDATE $VTOP_FLAGS_VERBOSE $VTOP_FLAGS_FIXNODES
 		$VTOP_FLAGS_IMPOTENT $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_QUIET
 		$VTOP_FLAGS_ALLOCONLY $VTOP_FLAGS_FIXLANNODES
-		$VTOP_FLAGS_PREASSIGN $VTOP_FLAGS_COMMITMODE);
+    $VTOP_FLAGS_PREASSIGN $VTOP_FLAGS_COMMITMODE);
+
+my $BESTEFFORT_WIRETYPE = "besteffort-interface";
 
 #
 # Create an object representing the stuff we need to create the vtop file.
@@ -3434,7 +3436,10 @@ sub GenVirtLans($)
 		my (undef,$bw0)= @{$member->_delayinfo()};
 		my $wiretype   = $vlan->_wiretype();
 
-		if ($bw0 != 0 && !$emulated) {
+		if ($besteffort) {
+		    $wiretype = $BESTEFFORT_WIRETYPE;
+		}
+		elsif ($bw0 != 0 && !$emulated) {
 		    $wiretype = $self->GetWiretype($wiretype, $bw0);
 		}
 		$self->createLink($vname, $plink,
@@ -3675,10 +3680,11 @@ sub GenVirtLans($)
 				     'virtual_interface_id' => "$member1" },
 				    ($top_bw == 0 ? "*" : 
 				     max($top_bw, $top_rbw)),
-				    ($emulated ?
-				     $vlan->_wiretype() :
-				     $self->GetWiretype($vlan->_wiretype(),
-						 max($top_bw, $top_rbw))),
+				    ($besteffort ? $BESTEFFORT_WIRETYPE :
+				     ($emulated ?
+				      $vlan->_wiretype() :
+				      $self->GetWiretype($vlan->_wiretype(),
+						 max($top_bw, $top_rbw)))),
 				    $others);
 		    }
 		    my @delayinfo = ($delay,$bw,$backfill,$loss,
@@ -3763,6 +3769,9 @@ sub GenVirtLans($)
 		    $vtbw = ($top_bw == 0 ? "*" : $vtbw);
 		    $wiretype = $self->GetWiretype($wiretype,
 						   max($top_bw, $top_rbw));
+		}
+		elsif ($besteffort) {
+		    $wiretype = $BESTEFFORT_WIRETYPE;
 		}
 		if ($emulated) {
 		    $others->{'emulated'} = 1
@@ -4017,6 +4026,9 @@ sub GenVirtLans($)
 				$self->GetWiretype($wiretype,
 						   max($top_bw, $top_rbw));
 			}
+			elsif ($besteffort) {
+			    $wiretype = $BESTEFFORT_WIRETYPE;
+			}
 			if ($emulated) {
 			    $others->{'emulated'} = 1 if ($member->_emulated());
 			    $others->{'virtualization_type'} =
@@ -4129,6 +4141,9 @@ sub GenVirtLans($)
 
 		    if (! ($emulated || $besteffort)) {
 			$wiretype = $self->GetWiretype($wiretype, $top_bw);
+		    }
+		    elsif ($besteffort) {
+			$wiretype = $BESTEFFORT_WIRETYPE;
 		    }
 		    if ($emulated) {
 			$others->{'emulated'} = 1 if ($member->_emulated());
@@ -4666,16 +4681,22 @@ sub virtlantopbw($$$) {
     }
     else {
 	#
-	# If this is an emulated link or a best effort link, we put in only
+	# If this is an emulated link or link linkdelay, we put in only
 	# the bandwidth from the virtual topology - otherwise, we put in
 	# the bandwidth of the type of physical interface it is likely to
 	# get mapped to.
 	#
+	# Best effort is special. We need small number that is guaranteed
+	# to map across the fabric (switch interconnect). But, if the node
+	# has a mix of interfaces, it is almost always the case that the
+	# user would prefer the faster interface, but there is no telling
+	# what assign will do, links do not have weighted features in the
+	# ptop file.
+	#
         my $shaped = $virtlan->membershaped($member);
 	
 	if ($virtlan->_besteffort()) {
-	    # 1G, which is guaranteed to map on all our clusters.
-	    $return_bw = 1000000;
+	    $return_bw = 10;
 	}
 	elsif ($virtlan->_emulated() ||
 	    $self->virtlan_use_linkdelay($virtlan, $shaped)) {
@@ -4691,15 +4712,12 @@ sub virtlantopbw($$$) {
     }
     else {
 	#
-	# If this is an emulated link or a best effort link, we put in only
-	# the reported bandwidth - otherwise, we put in the bandwidth of
-	# the type of physical interface it is likely to get mapped to.
+	# See comment up above.
 	#
         my $shaped = $virtlan->membershaped($member);
 
 	if ($virtlan->_besteffort()) {
-	    # 1G, which is guaranteed to map on all our clusters.
-	    $return_rbw = 1000000;
+	    $return_rbw = 10;
 	}
 	elsif ($virtlan->_emulated() ||
 	    $self->virtlan_use_linkdelay($virtlan, $shaped)) {

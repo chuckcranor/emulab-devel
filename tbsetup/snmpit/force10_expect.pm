@@ -147,7 +147,7 @@ sub createExpectObject($)
     $exp->raw_pty(0);
     $exp->log_stdout(0);
 
-    if ($self->{DEBUG} > 1) {
+    if ($self->{DEBUG} > 2) {
 	$exp->log_file($DEBUG_LOG,"w");
 	$exp->debug(1);
     }

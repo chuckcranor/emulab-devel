@@ -7,6 +7,7 @@
 	  <th class="text-nowrap">Route</th>
 	  <th>Route Change</th>
 	  <th>Location Change</th>
+	  <th>Last Ping</th>
 	  <th>Latitude</th>
 	  <th>Longitude</th>
 	  <th>Speed</th>
@@ -16,7 +17,12 @@
       <tbody>
 	<% _.each(endpoints, function(info, id) { %>
 	  <tr>
-	    <td><%- id %></td>
+	    <td>
+	      <% if (info.status != "up") { %>
+		<span class="text-danger"><%- id %></span>
+	      <% } else { %>
+		  <%- id %>
+	      <% } %>
 	    <td>
 	      <a href="powder-map.php?route=<%- id %>"
 		 class="location"
@@ -26,6 +32,7 @@
 	    </td>
 	    <td class="format-date"><%- info.route_changed %></td>
 	    <td class="format-date"><%- info.location_stamp %></td>
+	    <td class="format-date"><%- info.last_ping %></td>
 	    <td><%- info.latitude %></td>
 	    <td><%- info.longitude %></td>
 	    <td><%- info.speed %></td>

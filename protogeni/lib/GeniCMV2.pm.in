@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -5531,6 +5531,16 @@ sub ConsoleInfo($)
     # Another URL for the console log, but only phys nodes.
     $url =~ s/nodetipacl/spewconlog/;
     $blob->{"logurl"} = $url;
+
+    #
+    # Generate and return the authentication blob when we are using
+    # shellinabox consoles, so that the caller can route directly to
+    # console instead of through a second iframe layer.
+    #
+    my $auth = $node->ConsoleAuthObject("geniuser");
+    if ($auth) {
+	$blob->{"authobject"} = $auth;
+    }
 
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }

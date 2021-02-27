@@ -1044,10 +1044,10 @@ function SpitPageReplace($newpage, $when = 0) {
 #
 function SSHAuthObject($uid, $nodeid)
 {
-    global $USERNODE;
+    global $USERNODE, $BROWSER_CONSOLE_WEBSSH;
 	
     $file = "/usr/testbed/etc/sshauth.key";
-    
+
     #
     # We need the secret that is shared with ops.
     #
@@ -1066,13 +1066,13 @@ function SSHAuthObject($uid, $nodeid)
     $stuff = GENHASH();
     $now   = time();
 
-
     $authobj = array('uid'       => $uid,
 		     'stuff'     => $stuff,
 		     'nodeid'    => $nodeid,
 		     'timestamp' => $now,
 		     'baseurl'   => "https://${USERNODE}",
 		     'signature_method' => 'HMAC-SHA1',
+                     'webssh'    => $BROWSER_CONSOLE_WEBSSH,
 		     'api_version' => '1.0',
 		     'signature' => hash_hmac('sha1',
 					      $uid . $stuff . $nodeid . $now,

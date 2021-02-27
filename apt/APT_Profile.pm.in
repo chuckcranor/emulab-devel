@@ -2341,16 +2341,16 @@ sub EncryptBlocks($$$)
 #
 # Add a portal element.
 #
-sub AddPortalTag($$$$)
+sub AddPortalTag($$$$$$)
 {
-    my ($pxml, $tag, $url, $pmsg) = @_;
+    my ($pxml, $tag, $url, $pid, $eid, $pmsg) = @_;
     
     my $rspec = GeniXML::Parse($$pxml);
     if (! defined($rspec)) {
 	$$pmsg = "AddPortalTag: Could not parse rspec";
 	return -1;
     }
-    GeniXML::SetPortal($rspec, $tag, $url);
+    GeniXML::SetPortal($rspec, $tag, $url, $pid, $eid);
     $$pxml = GeniXML::Serialize($rspec);
     return 0;
 }

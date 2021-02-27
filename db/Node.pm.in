@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,10 +30,14 @@ use vars qw(@ISA @EXPORT $AUTOLOAD @EXPORT_OK);
 @EXPORT = qw();
 
 # Configure variables
-use vars qw($TB $BOSSNODE $WOL $OSSELECT $IPOD $ISUTAH $CONTROL_NETMASK
-            $TBOPS $JAILIPMASK $TBBASE $TBADB);
+use vars qw($TB $BOSSNODE $USERNODE $WWWHOST $WOL $OSSELECT $IPOD $ISUTAH
+	    $CONTROL_NETMASK $TBOPS $JAILIPMASK $TBBASE $TBADB 
+            $BROWSER_CONSOLE_PROXIED $BROWSER_CONSOLE_WEBSSH);
+
 $TB	     = "@prefix@";
 $BOSSNODE    = "@BOSSNODE@";
+$USERNODE    = "@USERNODE@";
+$WWWHOST     = "@WWWHOST@";
 $TBOPS       = "@TBOPSEMAIL@";
 $WOL         = "$TB/sbin/whol";
 $OSSELECT    = "$TB/bin/os_select";
@@ -45,6 +49,9 @@ $ISUTAH	     = @TBMAINSITE@;
 $CONTROL_NETMASK = "@CONTROL_NETMASK@";
 $JAILIPMASK  = "@JAILIPMASK@";
 $TBBASE      = "@TBBASE@";
+# Need these for the console object.
+$BROWSER_CONSOLE_PROXIED = @BROWSER_CONSOLE_PROXIED@;
+$BROWSER_CONSOLE_WEBSSH  = @BROWSER_CONSOLE_WEBSSH@;
 
 use libdb;
 use libtestbed;
@@ -4072,8 +4079,8 @@ sub CheckPreReserve($$$)
     my $type = $self->type();
     my $node_id = $self->node_id();
     
-    DBQueryWarn("lock tables project_reservations write, nodes write, ".
-		"            node_reservations write, reserved read")
+    DBQueryWarn("lock tables project_reservations as pr write, nodes write, ".
+		"            node_reservations as pnr write, reserved read")
 	or return undef;
 
     #
@@ -4102,9 +4109,9 @@ sub CheckPreReserve($$$)
     my $query_result =
 	DBQueryWarn("select reserved_pid,reservation_name, ".
 		    "  count,active,terminal,approved from nodes ".
-		    "left join project_reservations on ".
-		    "     project_reservations.pid=nodes.reserved_pid and ".
-		    "     project_reservations.name=nodes.reservation_name ".
+		    "left join project_reservations as pr on ".
+		    "     pr.pid=nodes.reserved_pid and ".
+		    "     pr.name=nodes.reservation_name ".
 		    "where nodes.node_id='$node_id'");
 
     # numrows would be zero if the node was suddenly deleted.
@@ -4137,72 +4144,43 @@ sub CheckPreReserve($$$)
 	}
     }
 
-    # Find only active unfilled reservations.
+    #
+    # Prereserves are very different now, since they look like reservations
+    # for a single specific node and so there can only be one (active)
+    # prereserve for this node. Also, the reservation system will not allow
+    # the current holder to extend beyond the start of prereservation. So this
+    # stuff is mostly a holdover from the old best effort prereserve system
+    # which was waiting until the node was released and then sucking it up.
+    # But we still need to set reserved_pid, to avoid chainging a bunch of
+    # other stuff (ptopgen, web UI, etc). 
+    #
     $query_result =
-	DBQueryWarn("select pid,count,name from project_reservations ".
-		    "where approved is not null and ".
-		    "      active=1 and terminal=0 and count>0 and ".
-		    "      (types is null or ".
-		    "        FIND_IN_SET('$type', types)) ".
-		    "order by priority desc, created asc ");
-
+	DBQueryWarn("select pr.pid,pr.count,pr.name ".
+		    "  from project_reservations as pr ".
+		    "left join node_reservations as pnr on ".
+		    "     pr.pid=pnr.pid and ".
+		    "     pr.name=pnr.reservation_name ".
+		    "where pnr.node_id='$node_id' and pr.terminal=0 and ".
+		    "      pr.active=1");
+    
     goto done
-	if (!$query_result);
+	if (! ($query_result && $query_result->numrows));
 
-    while (my ($pid,$count,$resname) = $query_result->fetchrow_array()) {
-	#
-	# See if this is fullfulling a specific node reservation request.
-	# Need to delete that row if so. 
-	#
-	my $noderes_result =
-	    DBQueryWarn("select node_id from node_reservations ".
-			"where pid='$pid' and ".
-			"      reservation_name='$resname'");
-	goto done
-	    if (!$noderes_result);
+    ($pid,$count,$resname) = $query_result->fetchrow_array();
 
-	#
-	# Note that if there any entries in the node_reservations table,
-	# then only those specific nodes can fulfill the request. Search
-	# the list for the node_id we are freeing.
-	#
-	if ($noderes_result->numrows) {
-	    my $okay = 0;
-	    
-	    while (my ($id) = $noderes_result->fetchrow_array()) {
-		if ($node_id eq $id) {
-		    $okay = 1;
-		    last;
-		}
-	    }
-	    #
-	    # We cannot use this node for this pre-reserve, but maybe the
-	    # next one.
-	    #
-	    next
-		if (!$okay);
-	}
+    if (DBQueryWarn("update nodes set reserved_pid='$pid', ".
+		    "    reservation_name='$resname' ".
+		    "where node_id='$node_id'") &&
+	DBQueryWarn("update project_reservations set count=count-1 ".
+		    "where pid='$pid' and name='$resname'")) {
+	
+	$result = $pid;
 
-	if (DBQueryWarn("update nodes set reserved_pid='$pid', ".
-			"    reservation_name='$resname' ".
-			"where node_id='$node_id'")) {
-	    
-	    DBQueryWarn("update project_reservations set count=count-1 ".
-			"where pid='$pid' and name='$resname'");
-	    if ($noderes_result->numrows) {
-		DBQueryWarn("delete from node_reservations ".
-			    "where node_id='$node_id' and pid='$pid' and ".
-			    "      reservation_name='$resname'");
-	    }
-	    $result = $pid;
-
-	    if ($count == 1) {
-		SENDMAIL($TBOPS,
-			 "Pre Reservation $pid,$resname has completed",
-			 "The pre reservation request for project ".
-			 "$pid,$resname has been fullfilled\n", $TBOPS);
-	    }
-	    last;
+	if ($count == 1) {
+	    SENDMAIL($TBOPS,
+		     "Pre Reservation $pid,$resname has completed",
+		     "The pre reservation request for project ".
+		     "$pid,$resname has been fullfilled\n", $TBOPS);
 	}
     }
   done:
@@ -4412,6 +4390,102 @@ sub ClrTipAclUrl($)
 	or return -1;
 
     return 0;
+}
+
+#
+# Generate an authentication object to pass to the browser that
+# is passed to the web server on ops. This is used to grant
+# permission to the user to invoke tip to the console. 
+#
+sub ConsoleAuthObject($$)
+{
+    my ($self, $uid) = @_;
+    my $node_id = $self->node_id();
+    my $capfile = "$TB/etc/capture.fingerprint";
+    my $keyfile = "$TB/etc/sshauth.key";
+    my $version = "1.0";
+    my $baseurl;
+    require JSON;
+    require Digest::HMAC_SHA1;
+
+    #
+    # We need the secret that is shared with ops.
+    #
+    my $key = emutil::ReadFile($keyfile);
+    if (!defined($key)) {
+	print STDERR "Could not read key from $keyfile\n";
+	return undef;
+    }
+    chomp($key);
+
+    #
+    # Also need the cert hash to put in,
+    #
+    my $certhash = emutil::ReadFile($capfile);
+    if (!defined($certhash)) {
+	print STDERR "Could not get Fingerprint from $capfile\n";
+	return undef;
+    }
+    if ($certhash =~ /Fingerprint=([\w:]+)$/) {
+	$certhash = $1;
+    }
+    else {
+	print STDERR "Could not find hash in Fingerprint\n";
+	return undef;
+    }
+    my $stuff = TBGenSecretKey();
+    if (!$stuff) {
+	print STDERR "Could not generate random data\n";
+	return undef;
+    }
+    my $now   = time();
+    if ($BROWSER_CONSOLE_PROXIED) {
+	$baseurl = "https://${WWWHOST}";
+    }
+    else {
+	$baseurl = "https://${USERNODE}";
+    }
+    #
+    # And the tipline stuff.
+    #
+    my ($server, $portnum, $conkey, $keylen);
+    
+    if ($self->TipServer(\$server, undef, \$portnum, \$conkey)) {
+	print STDERR "No console info for $node_id\n";
+	return undef;
+    }
+    $keylen = length($conkey);
+	
+    my $console = {
+	"server"   => $server,
+	"portnum"  => $portnum,
+	"keydata"  => $conkey,
+	"keylen"   => $keylen,
+	"certhash" => $certhash,
+	
+    };
+    my $sigstuff = $uid . $stuff . $node_id . $now . " " .
+	$server . "," . $portnum . "," . $keylen . "," . $conkey .
+	"," . $certhash;
+	
+    my $authobj = {
+	'uid'       => $uid,
+	'console'   => $console,
+	'stuff'     => $stuff,
+	'nodeid'    => $node_id,
+	'timestamp' => $now,
+	'webssh'    => $BROWSER_CONSOLE_WEBSSH,
+        'baseurl'   => $baseurl,
+        'signature_method' => 'HMAC-SHA1',
+        'api_version' => $version,
+	'signature'   => Digest::HMAC_SHA1::hmac_sha1_hex($sigstuff, $key)
+    };
+    my $json = eval { JSON::encode_json($authobj); };
+    if ($@) {
+	print STDERR "Could not encode auth object: $@\n";
+	return undef;
+    }
+    return $json;
 }
 
 # Stubs for calling "libTaintStates" common taint handling code

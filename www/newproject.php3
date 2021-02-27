@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014, 2018, 2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2018, 2020, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -828,15 +828,11 @@ if (! $returning) {
 	strcmp($formfields["usr_URL"], "") &&
 	strcmp($formfields["usr_URL"], $HTTPTAG) &&
 	! $FirstInitState) {
-	if (strcmp($HTTPTAG,
-		   substr($formfields["usr_URL"], 0, strlen($HTTPTAG))) &&
-	    strcmp($HTTPSTAG,
-		   substr($formfields["usr_URL"], 0, strlen($HTTPSTAG)))) {
-	    $formfields["usr_URL"] = "${HTTPTAG}" . $formfields["usr_URL"];
-	}
-	if (! CHECKURL($formfields["usr_URL"], $urlerror)) {
-	    $errors["Home Page URL"] = $urlerror;
-	}
+        if (!preg_match('#^https?://#i', $formfields["usr_URL"]) ||
+            strstr($formfields["usr_URL"], " ") ||
+            !TBvalid_URL($formfields["usr_URL"])) {
+	    $errors["Home Page URL"] = "Improper URL";
+        }
     }
     if (!isset($formfields["usr_addr"]) ||
 	strcmp($formfields["usr_addr"], "") == 0) {
@@ -958,14 +954,10 @@ if (!isset($formfields["proj_URL"]) ||
     $errors["Project URL"] = "Missing Field";
 }
 elseif (! $FirstInitState) {
-    if (strcmp($HTTPTAG,
-	       substr($formfields["proj_URL"], 0, strlen($HTTPTAG))) &&
-	strcmp($HTTPSTAG,
-	       substr($formfields["proj_URL"], 0, strlen($HTTPSTAG)))) {
-	$formfields["proj_URL"] = "${HTTPTAG}" . $formfields["proj_URL"];
-    }
-    if (!CHECKURL($formfields["proj_URL"], $urlerror)) {
-	$errors["Project URL"] = $urlerror;
+    if (!preg_match('#^https?://#i', $formfields["proj_URL"]) ||
+        strstr($formfields["proj_URL"], " ") ||
+        !TBvalid_URL($formfields["proj_URL"])) {
+        $errors["Project URL"] = "Improper URL";
     }
 }
 if (!isset($formfields["proj_funders"]) ||

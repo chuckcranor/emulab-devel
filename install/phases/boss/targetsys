@@ -316,6 +316,7 @@ sub Install($$$)
 			   "   -e 's/^EXTERNAL_NTPS/#EXTERNAL_NTPS/' ".
 			   "   > $NEWDEFSFILE");
 	};
+
 	#
 	# Extra defs.
 	#
@@ -326,7 +327,17 @@ sub Install($$$)
 		my $EXTRA = `/bin/cat $DEFSEXTRA`;
 		PhaseFail("Cannot read extra defs from file")
 		    if ($?);
-		
+
+		#
+		# A POWDER specific kludge.
+		#
+		if ($TARGETSYS_TARGET =~ /^POWDER/ &&
+		    exists($configvars{"CONFIG_NICKNAME"})) {
+		    my $nickname = $configvars{"CONFIG_NICKNAME"};
+		    
+		    $EXTRA .= "\n" +
+			"POWDER_NICKNAME=\"${nickname}\"\n";
+		}
 		AppendToFileFatal($NEWDEFSFILE, $EXTRA);
 	    };
 	}

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1018,6 +1018,39 @@ sub SetExpiration($$)
     # Has to be in the correct format.
     $query_result =
 	DBQueryWarn("select expires from geni_slices where uuid='$uuid'");
+    return -1
+	if (!$query_result || !$query_result->numrows);
+    ($expires) = $query_result->fetchrow_array();
+    
+    $self->{'SLICE'}->{'expires'} = $expires;
+    return 0;
+}
+# For Reservation.pm, and cross database locking of the geni-cm table.
+# There is probably a better way to do this. :-)
+sub SetExpirationRes($$$)
+{
+    my ($self, $expires, $dbnum) = @_;
+    my $uuid = $self->uuid();
+
+    if ($expires =~ /^\d+$/) {
+	$expires = "FROM_UNIXTIME($expires)";
+    }
+    else {
+	$expires = "'$expires'";
+    }
+    my $query_result =
+	GeniDB::DBQueryWarnN($dbnum,
+		     "update `geni-cm`.geni_slices set expires=$expires " .
+		     "where uuid='$uuid'");
+    
+    return -1
+	if (!$query_result);
+
+    # Has to be in the correct format.
+    $query_result =
+	GeniDB::DBQueryWarnN($dbnum,
+			     "select expires from `geni-cm`.geni_slices ".
+			     "where uuid='$uuid'");
     return -1
 	if (!$query_result || !$query_result->numrows);
     ($expires) = $query_result->fetchrow_array();

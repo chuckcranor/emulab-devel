@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -870,25 +870,17 @@ sub RunAssign($$)
 		    }
 		    else {
 			#
-			# User is allowed to use this node,
+			# User is not requesting the node specifically, but
+			# if the node is available to the user, we can
+			# increment upper bound for the type in case the
+			# user is requesting that type, or no type.
 			#
-			# If the node is already reserved to another
-			# experiment in the same project, stop here,
-			# we do not want to bump the bound count below
-			# since the node will not be in the ptop file
-			# and assign will pick some other node, and
-			# nalloc will whine. If we catch it here, the
-			# error is easier to grok.
-			#
-			if ($node->IsReserved() && $node->eid() ne $eid) {
-			    &$already_reserved($node);
-			    # Unretriable error
-			    return -1;
+			if ($reservation_bounds->{$node_id} != 0) {
+			    $bound += 1;
+			    $adjusted_adcontrol{$type} += 1;
+			    print "Incrementing bound count for $type ".
+				"($node_id)\n";
 			}
-			$bound += 1;
-			$adjusted_adcontrol{$type} += 1;
-			print "Incrementing bound count for $type ".
-			    "($node_id)\n";
 		    }
 		}
 	    }
@@ -913,6 +905,9 @@ sub RunAssign($$)
 	    my $node_type = $vtop->fixed()->{$node_id};
 
 	    print "Fixed: $node_id, $node_type\n";
+	    
+	    next
+		if ($node->IsReserved() && $node->sharing_mode());
 	    
 	    if ($reservation_bounds->{$node_id} == 0) {
 		tberror({type => 'primary', cause => 'temp',
