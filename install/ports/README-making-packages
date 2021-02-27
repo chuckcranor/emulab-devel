@@ -48,7 +48,7 @@ This is a condensed version of the steps below.
       
    e. Make sure /etc/make.conf is up to date. It should have:
 
-DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
+DEFAULT_VERSIONS=perl5=5.32 python=3.7 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
 DEFAULT_VERSIONS+=ssl=base
 
       We also add a bunch of custom port configurations to avoid needing to
