@@ -2225,7 +2225,7 @@ COMMAND_PROTOTYPE(doifconfig)
 				MYSQL_ROW row2;
 				res2 = mydb_query("select capval from "
 						  "interface_capabilities "
-						  "where "type='%s' and "
+						  "where type='%s' and "
 						  "capkey='autonegotiate'",
 						  1, type);
 				if (res2 && (int)mysql_num_rows(res2) > 0) {
