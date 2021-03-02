@@ -117,7 +117,7 @@ if (defined($options{"u"})) {
 if (defined($options{h})) {
     usage();
 }
-if (defined($options{v})) {
+if (defined($options{v}) || defined($options{d})) {
     $debug = 1;
 }
 if (defined($options{p})) {
@@ -201,14 +201,14 @@ if( $timeseries ) {
     my $details;
     my $last;
 
-    print "Time       Unavailable  Held  Free\n";
-    print "----------       -----  ----  ----\n";
-
     my @records = Reservation->Forecast( $type, \@ARGV, 
 					 $debug ? \$details : undef);
     if ($debug && $details) {
 	print $details;
     }
+    print "Time       Unavailable  Held  Free\n";
+    print "----------       -----  ----  ----\n";
+
     foreach my $rec (@records) {
 	next
 	    if ($last &&
