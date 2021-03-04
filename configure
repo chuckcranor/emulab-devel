@@ -721,6 +721,7 @@ IPV6_SUBNET_PREFIX
 IPV6_ENABLED
 BROWSER_CONSOLE_ENABLE
 BROWSER_CONSOLE_PROXIED
+BROWSER_CONSOLE_WEBSSH
 EC2META_ENABLE
 NOSITECHECKIN
 SPEWFROMOPS
@@ -5184,15 +5185,6 @@ done
 
 
 
-
-
-
-
-
-
-
-
-
 #
 # Offer both versions of the email addresses that have the @ escaped
 # for perl (the default), and that don't
@@ -5969,8 +5961,8 @@ fi
 if test -n "$PROTOGENI_EMAIL"; then
     PROTOGENI_EMAIL="`echo $PROTOGENI_EMAIL | sed -e 's/@/\\\@/'`"
 fi
-if test -n "ELABINELAB_MAILTARGET"; then
-    ELABINELAB_MAILTARGET="`echo $ELABINELAB | sed -e 's/@/\\\@/'`"
+if test -n "$ELABINELAB_MAILTARGET"; then
+    ELABINELAB_MAILTARGET="`echo $ELABINELAB_MAILTARGET | sed -e 's/@/\\\@/'`"
 fi
 PROTOGENI_PGERRORS="`echo $PROTOGENI_PGERRORS | sed -e 's/@/\\\@/'`"
 
