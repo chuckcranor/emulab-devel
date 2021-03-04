@@ -91,7 +91,9 @@ my $MIN_ONBATTERY_TIME  = 60 * 1;
 my $TEMP_WARN       = 100;
 my $TEMP_SHUTDOWN   = 110;
 my $TEMP_RESUME     = 95;
+# The arduino can give transient bogus values
 my $TEMP_MAXCUTOFF  = 250;
+my $TEMP_MAXDIFF    = 25;
 
 #
 # Deadman
@@ -461,6 +463,7 @@ my $tempWarningTime  = undef;
 my $tempShutdownTime = undef;
 my $tempOkayTime     = undef;
 my $tempLastCheck    = time();
+my $tempLastTemp     = 0;
 my $tempFailMail     = undef;
 
 # For temp testing.
@@ -528,9 +531,12 @@ sub CheckTempAndBattery($$)
     }
 
     #
-    # The temp can go wonky. Igore anything that seems bogus.
+    # The temp can go wonky. Ignore anything that seems bogus.
     #
-    if ($tempF >= $TEMP_WARN && $tempF < $TEMP_MAXCUTOFF) {
+    if ($tempLastTemp && abs($tempLastTemp - $tempF) > $TEMP_MAXDIFF) {
+	logit("Ignoring latest value $tempF, last value was $tempLastTemp\n");
+    }
+    elsif ($tempF >= $TEMP_WARN && $tempF < $TEMP_MAXCUTOFF) {
 	if ($tempF >= $TEMP_SHUTDOWN) {
 	    if (!defined($tempShutdownTime)) {
 		$tempShutdownTime = time();
@@ -567,6 +573,7 @@ sub CheckTempAndBattery($$)
 		"to protect them from overheating.\n")
 		if ($doemail);
 	}
+	$tempLastTemp = $tempF;
     }
     elsif ($tempF <= $TEMP_RESUME &&
 	   (defined($tempWarningTime) || defined($tempShutdownTime))) {
@@ -590,6 +597,7 @@ sub CheckTempAndBattery($$)
 	NotifyTBOPS("$SHORTNAME temperature is returning to normal", $message);
 	$tempShutdownTime = undef;
 	$tempWarningTime  = undef;
+	$tempLastTemp     = $tempF;
     }
     if ($tempShutdownTime) {
 	$status |= $POWER_OVERTTEMP;

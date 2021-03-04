@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2021 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -2225,7 +2225,9 @@ COMMAND_PROTOTYPE(doifconfig)
 				MYSQL_ROW row2;
 				res2 = mydb_query("select capval from "
 						  "interface_capabilities "
-						  "where type='%s'", 1, type);
+						  "where type='%s' and "
+						  "capkey='autonegotiate'",
+						  1, type);
 				if (res2 && (int)mysql_num_rows(res2) > 0) {
 					row2 = mysql_fetch_row(res2);
 					if (row2[0] &&
