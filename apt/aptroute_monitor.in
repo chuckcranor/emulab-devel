@@ -177,7 +177,7 @@ sub LookForThingsToDo()
     
     # Instances that need buses removed. Value is the list.
     my %removals = ();
-    # Instances that need buses added Value is the list.
+    # Instances that need buses added. Value is the list.
     my %additions = ();
     
     # Load all of the buses.
