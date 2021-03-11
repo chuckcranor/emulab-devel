@@ -90,6 +90,12 @@
 	  (<a class="toggle" data-name="project_disable">Toggle</a>)
 	</td>
       </tr>
+      <tr>
+	<td>Reservations Disabled</td>
+	<td><% if (fields.reservations_disabled) { %>Yes<% } else { %>No<% } %>
+	  (<a class="toggle" data-name="project_resdisable">Toggle</a>)
+	</td>
+      </tr>
       <% if (window.MAINSITE) { %>
 	<tr>
 	  <td>Bound to Portal</td>

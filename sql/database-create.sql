@@ -5260,6 +5260,7 @@ CREATE TABLE `projects` (
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `bound_portal` tinyint(1) default '0',
   `experiment_accounts` enum('none','swapper') default NULL,
+  `reservations_disabled` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`pid_idx`),
   UNIQUE KEY `pid` (`pid`),
   KEY `unix_gid` (`unix_gid`),

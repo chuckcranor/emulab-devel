@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -170,6 +170,8 @@ class Project
     function pcremote_ok()   { return $this->field("pcremote_ok"); }
     function default_user_interface()
 	                     { return $this->field("default_user_interface"); }
+    function reservations_disabled()
+	                     { return $this->field("reservations_disabled"); }
     function linked_to_us()  { return $this->field("linked_to_us"); }
     function forClass()      { return $this->field("forClass"); }
     function cvsrepo_public(){ return $this->field("cvsrepo_public"); }
@@ -737,6 +739,16 @@ class Project
 	$onoff  = ($onoff ? 1 : 0);
 
 	DBQueryFatal("update projects set disabled='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["disabled"] = $onoff;
+	return 0;
+    }
+    function SetResDisabled($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set reservations_disabled='$onoff' ".
 		     "where pid_idx='$idx'");
 
 	$this->project["disabled"] = $onoff;
