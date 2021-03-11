@@ -405,6 +405,25 @@ sub LookupByNickname($$)
     return Lookup($class, $aggregate_urn);
 }
 
+sub LookupByAbbreviation($$)
+{
+    my ($class, $abbreviation) = @_;
+
+    if ($abbreviation !~ /^[-\w]+$/) {
+	return undef;
+    }
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where abbreviation='$abbreviation'");
+    return undef
+	if (!$query_result);
+    return undef
+	if (!$query_result->numrows);
+
+    my ($aggregate_urn) = $query_result->fetchrow_array();
+    return Lookup($class, $aggregate_urn);
+}
+
 #
 # Check status of aggregate.
 #
