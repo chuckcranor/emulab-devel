@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2019, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,6 +28,7 @@ use English;
 use Carp;
 use Exporter;
 use Data::Dumper;
+use Fcntl;
 use vars qw(@ISA @EXPORT);
 @ISA = "Exporter";
 
@@ -36,6 +37,7 @@ my $TB		= "@prefix@";
 my $SCRIPTNAME  = "Unknown";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $USEDBI	= @TBUSEDBI@;
+my $MAINSITE    = @TBMAINSITE@;
 
 # Untainted scriptname for below.
 if ($PROGRAM_NAME =~ /^([-\w\.\/]+)$/) {
@@ -598,6 +600,36 @@ sub NewTBDBHandle($)
     return $dbnum;
 }
 
+sub LockDebugWrite($$)
+{
+    my ($dbw, $message) = @_;
+    my $now     = time();
+    my $dbname  = $dbw->dbname();
+    my $logname = "/usr/testbed/log/mysqllockdebug";
+    my $string  = "$dbname,$PID,$now: $message\n";
+
+    if (sysopen(LOG, $logname, O_CREAT | O_WRONLY | O_APPEND, 0666)) {
+	syswrite(LOG, $string);
+	close(LOG);
+    }
+    else {
+	print "LockDebug: Could not open file\n";
+    }
+}
+sub LockDebug($$)
+{
+    my ($dbw, $query) = @_;
+
+    return 0
+	if (! ($MAINSITE && $query =~ /lock\s+tables/i));
+
+    LockDebugWrite($dbw, $query);
+
+    return 0
+	if ($query =~ /unlock\s+tables/i);
+    return 1;
+}
+
 #
 # Issue a DB query. Argument is a string. Returns the actual query object, so
 # it is up to the caller to test it. I would not for one moment view this
@@ -657,6 +689,8 @@ sub DBQueryN($$)
 	$dbw = $DB[$dbnum];
     }
 
+    my $lockstatement = LockDebug($dbw, $query);
+
     while ($maxtries) {
 	# Get this each time through the loop since we try reconnect below.
 	$dbw    = $DB[$dbnum];
@@ -704,6 +738,9 @@ sub DBQueryN($$)
     }
     if (!$maxtries) {
 	DBWarn("mysqld went away in process $PID. No tries left", 0);
+    }
+    if ($lockstatement) {
+	LockDebugWrite($dbw, "lock tables returned");
     }
     return $result;
 }
