@@ -176,7 +176,8 @@ sub Stringify($)
     my $filename = $self->filename();
     my $logidx   = $self->logidx();
 
-    return "[Logfile: $logidx, $filename]";
+    return "[Logfile: $logidx" .
+	(defined($filename) ? ", $filename" : "") . "]";
 }
 
 #
