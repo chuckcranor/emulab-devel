@@ -270,6 +270,7 @@ if ($debug) {
     }
 }
 
+my $resdetails;
 my %types = ();
 my %unavail_types = ();
 my %unavail_nodes = ();
@@ -278,7 +279,9 @@ foreach my $node (@nodes) {
 	unless( grep( $_ eq $node->node_id(), @trivial_nodes ) );
 }
 foreach my $type ( keys( %types ) ) {
-    my $reservations = Reservation->LookupAll( $type );
+    my $reservations = Reservation->LookupAll( $type, 0,
+					       $debug ? \$resdetails : undef  );
+    print $resdetails if ($debug);
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
 	print "*** Existing admission control violation for ".
 	    "type $type: $errormsg\n";
@@ -301,7 +304,9 @@ foreach my $node (@nodes) {
     next
 	if ($unavail_types{$node->type()});
 
-    my $reservations = Reservation->LookupAll($node_id);
+    my $reservations = Reservation->LookupAll($node_id, 0,
+					      $debug ? \$resdetails : undef);
+    print $resdetails if ($debug);
     my $res = Reservation->CreateImmediate($pid, $eid,
 					   $this_user->uid(),
 					   $endtime, $node_id, 1);
@@ -329,7 +334,9 @@ foreach my $node (@nodes) {
 foreach my $node (values(%preres_nodes)) {
     my $node_id = $node->node_id();
 
-    my $reservations = Reservation->LookupAll($node_id);
+    my $reservations = Reservation->LookupAll($node_id, 0,
+					      $debug ? \$resdetails : undef);
+    print $resdetails if ($debug);
 
     foreach my $res ( @$reservations ) {
 	if (defined($res->pid()) && defined($res->eid()) &&
@@ -365,7 +372,10 @@ foreach my $node (values(%preres_nodes)) {
 foreach my $type ( keys( %types ) ) {
     next if( $unavail_types{ $type } );
     
-    my $reservations = Reservation->LookupAll( $type );
+    my $reservations = Reservation->LookupAll( $type, 0,
+					       $debug ? \$resdetails : undef);
+    print $resdetails if ($debug);
+    
     my $count = 0;
     foreach my $node (@nodes) {
 	#

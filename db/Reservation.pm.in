@@ -55,7 +55,7 @@ my %cache = ();
 BEGIN { use emutil; emutil::AddCache(\%cache); }
 
 # Local debugging flag.
-my $debug = 0;
+my $debug = 2;
 
 sub FlushAll($)
 {
@@ -384,7 +384,7 @@ sub GetVersion($)
     # from scratch.  Rather than fix it there, it's better to cope with
     # the situation right here, because this will work no matter what
     # convoluted history the db has been through.
-    #lockdebug("GetVersion: $PID,$version: Locking tables");
+    lockdebug("GetVersion: $PID,$version: Locking tables");
     
     DBQueryFatal( "LOCK TABLES reservation_version WRITE" );
     # Check existence again, with locking this time, to avoid race.
@@ -392,7 +392,7 @@ sub GetVersion($)
     unless( ($version) = $query_result->fetchrow_array() ) {
 	DBQueryFatal( "INSERT INTO reservation_version SET version=0" );
     }
-    #lockdebug("GetVersion: $PID,$version: Unlocking tables");
+    lockdebug("GetVersion: $PID,$version: Unlocking tables");
     DBQueryFatal( "UNLOCK TABLES" );
     
     return 0;
@@ -852,7 +852,9 @@ sub LookupAll($$;$$)
 		($type eq $node_id ? $node_id : $type) . "\n";
 	}
     }
-
+    if (1) {
+	return \@reservations;
+    }
     $cache{$cachekey} = \@reservations;
     
     return $cache{$cachekey};
@@ -967,7 +969,9 @@ sub IsFeasible($$;$$$$$)
 		t => $event->{'t'},
 		used => \%used_,
 		reserved => \%reserved_,
-		free => $free
+		free => $free,
+		ts => POSIX::strftime("%m/%d/20%y %H:%M:%S",
+				      localtime($event->{'t'})),
 		);
 	    push( @$forecast, \%stamp );
 	}
@@ -1876,11 +1880,15 @@ sub ExpectedEnd($$) {
     # debugging mode. So if we are here and the experiment is swapped, use
     # the current time.
     #
-    print STDERR "ExpectedEnd: No expiration for $experiment\n" if ($debug > 1);
     if ($experiment->state() eq EXPTSTATE_SWAPPED() &&
 	$experiment->autoswap()) {
-	return time() + ($experiment->autoswap_timeout() * 60);
+	my $when = time() + ($experiment->autoswap_timeout() * 60);
+	
+	print STDERR "ExpectedEnd: $experiment swapped, using ".
+	    POSIX::strftime("%m/%d/20%y %H:%M:%S", localtime($when)) . "\n";
+	return $when;
     }
+    print STDERR "ExpectedEnd: No expiration for $experiment\n" if ($debug > 1);
     return undef;
 }
 
@@ -1898,12 +1906,6 @@ sub MaxSwapIn($$$) {
     my $details;
     my $pid = $experiment->pid();
     my $eid = $experiment->eid();
-
-    #lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Locking tables");
-
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as pnr read");
-
-    #lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Tables locked");
 
     my $reservations = LookupAll( $class, $type, undef, \$details );
     print $details . "\n" if ($debug);
@@ -1935,9 +1937,6 @@ sub MaxSwapIn($$$) {
 	   !IsFeasible( $class, $reservations, undef, undef, \$overflow ) ) {
 	$reservation->SetNodes( $reservation->nodes() - $overflow );
     }
-    #lockdebug("MaxSwapIn: $pid,$eid,$PID,$type: Unlocking tables");
-    
-    DBQueryFatal("unlock tables");
 
     my $avail = $reservation->nodes() > 0 ? $reservation->nodes() : 0;
 
@@ -1965,32 +1964,43 @@ sub MaxSwapInMap($$) {
     my $pid = $experiment->pid();
     my %counts = ();
 
-    my $query_result = DBQueryFatal( "SELECT DISTINCT( type ) FROM " .
-				     " future_reservations" );
+    my $types_query_result = DBQueryFatal( "SELECT DISTINCT( type ) FROM " .
+					   " future_reservations" );
+
+    my $resnode_query_result = DBQueryFatal( "SELECT node_id FROM " .
+					     " nodes where reservable=1" );
     
-    while( my ($type) = $query_result->fetchrow_array() ) {
+    my $preres_query_result =
+	DBQueryFatal("select r.node_id,n.type from ".
+		     " (select distinct(node_id) from node_reservations) as r ".
+		     "left join nodes as n on r.node_id=n.node_id");
+
+    DBQueryFatal("lock tables reserved write, users read, groups read, ".
+		 "  projects read, future_reservations read, nodes as n read,".
+		 "  reserved as r read, experiments as e read, ".
+		 "  experiment_stats as stats read, next_reserve as nr read,".
+		 "  `geni-cm`.geni_slices as s read, ".
+		 "  project_reservations as pr read, ".
+		 "  reservation_version write, node_attributes as a read, ".
+		 "  node_reservations as pnr read");
+
+    while( my ($type) = $types_query_result->fetchrow_array() ) {
 	$counts{ $type } = MaxSwapIn( $class, $experiment, $type );
     }
 
-    $query_result = DBQueryFatal( "SELECT node_id FROM " .
-				  " nodes where reservable=1" );
-    
-    while( my ($node_id) = $query_result->fetchrow_array() ) {
+    while( my ($node_id) = $resnode_query_result->fetchrow_array() ) {
 	if (!exists($counts{$node_id})) {
 	    $counts{$node_id} = MaxSwapIn( $class, $experiment, $node_id );
 	}
     }
-
-    $query_result =
-	DBQueryFatal("select r.node_id,n.type from ".
-		     " (select distinct(node_id) from node_reservations) as r ".
-		     "left join nodes as n on r.node_id=n.node_id");
-    while( my ($node_id,$type) = $query_result->fetchrow_array() ) {
+    while( my ($node_id,$type) = $preres_query_result->fetchrow_array() ) {
 	$counts{$node_id} = MaxSwapIn($class, $experiment, $node_id);
 	if (!exists($counts{$type})) {
 	    $counts{$type} = MaxSwapIn($class, $experiment, $type);
 	}
     }
+    DBQueryFatal("unlock tables");
+    
     return \%counts;
 }
 
