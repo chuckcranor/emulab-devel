@@ -525,12 +525,11 @@ my %nodetypes = ();
 foreach my $nodeid (@nodelist) {
     my $node = Node->Lookup( $nodeid );
     if( exists( $nodetypes{ $node->type() } ) ) {
-	$nodetypes{ $node->type() }++;
+	push(@{$nodetypes{ $node->type() }}, $nodeid);
     }
     else {
-	$nodetypes{ $node->type() } = 1;
+	$nodetypes{ $node->type() } = [$nodeid];
     }
-    $nodetypes{ $nodeid } = 1;
 }
 
 if (!$force) {
@@ -748,13 +747,12 @@ sub ApproveReservation($$)
     #
     my %nodetypes = ();
     foreach my $node ($reservation->Nodes()) {
-	if (exists($nodetypes{$node->type()})) {
-	    $nodetypes{$node->type()}++;
+	if( exists( $nodetypes{ $node->type() } ) ) {
+	    push(@{$nodetypes{ $node->type() }}, $node->node_id());
 	}
 	else {
-	    $nodetypes{$node->type()} = 1;
+	    $nodetypes{ $node->type() } = [$node->node_id()];
 	}
-	$nodetypes{ $node->nodeid() } = 1;
     }
     # This will throw an error.
     CheckAdmissionControl($pid, $start, $end, \%nodetypes);
@@ -865,17 +863,43 @@ sub CheckAdmissionControl($$$$)
     $end = defined( $end ) ? $end : 0x7FFFFFFF;
 
     foreach my $type ( keys( %{$nodetypes} ) ) {
-	my $reservations = Reservation->LookupAll( $type, undef, \$details);
+	#
+	# Need to do a check on each specific node first.
+	#
+	my @nodes = @{$nodetypes{$type}};
+
+	foreach my $node_id (@nodes) {
+	    my $reservations = Reservation->LookupAll($node_id,
+						      undef, \$details);
+	    if ($debug) {
+		print $details;
+	    }
+	    my $res = Reservation->Create( $pid, undef, $start,
+					   $end, $node_id, 1);
+	    push( @$reservations, $res );
+	    my $error;
+	    if( !Reservation->IsFeasible( $reservations, \$error ) ) {
+		Exit(1, "prereserve: $error");
+	    }
+	}
+	Reservation->FlushAll();
+	#
+	# Then a check for the type.
+	#
+	my $reservations = Reservation->LookupAll($type, undef, \$details);
 	if ($debug) {
 	    print $details;
 	}
 	my $res = Reservation->Create( $pid, undef, $start, $end, $type,
-				       $nodetypes{ $type } );
+				       scalar(@nodes));
+	$res->data("prereserved", \@nodes);
+	
 	push( @$reservations, $res );
 	my $error;
 	if( !Reservation->IsFeasible( $reservations, \$error ) ) {
 	    Exit(1, "prereserve: $error");
 	}
+	Reservation->FlushAll();
     }
 }
 
