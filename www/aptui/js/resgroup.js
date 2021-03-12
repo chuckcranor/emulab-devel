@@ -999,6 +999,78 @@ $(function ()
     }
 
     /*
+     * If the start time of reservation is for today, then it must
+     * start before 9am (in the home timezone). Otherwise, the user
+     * has to push the start time out till the next business day. If
+     * today is a weekend, then the user must push the start time out
+     * till the next business day.
+     */
+    function CheckStartTime(callback)
+    {
+	adjustMorning();
+
+	if (!window.MAINSITE || editing || isadmin) {
+	    callback();
+	    return;
+	}
+	
+	if (!window.ISPOWDER || !window.BISONLY) {
+	    callback();
+	    return;
+	}
+
+	var start_day  = $('#reserve-request-form [name=start_day]').val();
+	var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	var toosoon    = false;
+
+	if (start_day && start_hour) {
+	    var now   = moment();
+	    var start = moment(start_day, "MM/DD/YYYY");
+	    start.hour(start_hour);
+
+	    if (now.isoWeekday() == start.isoWeekday()) {
+		toosoon = 1;
+	    }
+	    else {
+		console.info(now.format(), start.format());
+
+		// Advance, looking for a business day between now and start.
+		toosoon = 1;
+		var tmp = now.clone();
+		tmp.isoWeekday(tmp.isoWeekday() + 1);
+		console.info("clone: " + tmp.format());
+
+		while (tmp.isBefore(start)) {
+		    var dayofweek = tmp.isoWeekday();
+		    console.info("dayofweek: " + dayofweek);
+			
+		    if (dayofweek >= 1 && dayofweek <= 5) {
+			toosoon = 0;
+			break;
+		    }
+		    tmp.isoWeekday(tmp.isoWeekday() + 1);
+		}
+	    }
+	}
+	else {
+	    var now = moment();
+	    // Change the timezone to home base so we can check against
+	    // 9am and weekend in that timezone.
+	    now.tz(window.HOMETZ);
+
+	    if (now.hours() > 5 ||
+		now.isoWeekday() == 6 || now.isoWeekday() == 7) {
+		toosoon = 1;
+	    }
+	}
+	if (toosoon) {
+	    sup.ShowModal('#toosoon-modal');
+	    return;
+	}
+	callback();
+    }
+
+    /*
      * Mark a cluster field with an error.
      */
     function MarkClusterRowField(tbody, which, message) {
@@ -1443,6 +1515,38 @@ $(function ()
 	
 	errors += PreCheckClusterRows();
 	errors += PreCheckRangeRows();
+
+	/*
+	 * Avoid some confusion in the UI; if only one of start date or hour
+	 * is specified, error. Ditto end.
+	 */
+	var start_day  = $('#reserve-request-form [name=start_day]').val();
+	var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	var end_day    = $('#reserve-request-form [name=end_day]').val();
+	var end_hour   = $('#reserve-request-form [name=end_hour]').val();
+	if (start_day && !start_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"start" : "Missing start hour"});
+	    errors++;
+	}
+	else if (!start_day && start_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"start" : "Missing start date"});
+	    errors++;
+	}
+	if (end_day && !end_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"end" : "Missing start hour"});
+	    errors++;
+	}
+	else if (!end_day && end_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"end" : "Missing end date"});
+	    errors++;
+	}
+	if (errors) {
+	    return;
+	}
 	
 	/*
 	 * On a new reservation, start is optional. Must always have end
@@ -2377,7 +2481,7 @@ $(function ()
 	    modified_callback();
 	}
 	if (end_day != new_end_day || end_hour != new_end_hour) {
-	    UpdateFormTime("start");
+	    UpdateFormTime("end");
 	    modified_callback();
 	}
     }
@@ -2492,16 +2596,19 @@ $(function ()
 		args["override"] = 1;
 	    }
 	}
-	// Clear (hide) previous cluster table errors
-	$('#reserve-request-form .form-group-sm').addClass("hidden");
-	$('#reserve-request-form tbody').removeClass("has-warning has-error");
-	$('#reserve-request-form .form-control-div')
-	    .removeClass("has-warning has-error");
+	CheckStartTime(function () {
+	    // Clear (hide) previous cluster table errors
+	    $('#reserve-request-form .form-group-sm').addClass("hidden");
+	    $('#reserve-request-form tbody')
+		.removeClass("has-warning has-error");
+	    $('#reserve-request-form .form-control-div')
+		.removeClass("has-warning has-error");
 	
-	aptforms.SubmitForm('#reserve-request-form', "resgroup",
-			    "Validate", callback,
-			    "Checking to see if your request can be "+
-			    "accommodated", args);
+	    aptforms.SubmitForm('#reserve-request-form', "resgroup",
+				"Validate", callback,
+				"Checking to see if your request can be "+
+				"accommodated", args);
+	});
     }
 
     /*
@@ -2616,16 +2723,19 @@ $(function ()
 		args["override"] = 1;
 	    }
 	}
-	// Clear (hide) previous cluster table errors
-	$('#reserve-request-form .form-group-sm').addClass("hidden");
-	$('#reserve-request-form tbody').removeClass("has-warning has-error");
-	$('#reserve-request-form .form-control-div')
-	    .removeClass("has-warning has-error");
+	CheckStartTime(function () {
+	    // Clear (hide) previous cluster table errors
+	    $('#reserve-request-form .form-group-sm').addClass("hidden");
+	    $('#reserve-request-form tbody')
+		.removeClass("has-warning has-error");
+	    $('#reserve-request-form .form-control-div')
+		.removeClass("has-warning has-error");
 
-	aptforms.SubmitForm('#reserve-request-form', "resgroup",
-			    "Reserve", reserve_callback,
-			    "Submitting your reservation request; "+
-			    "patience please", args);
+	    aptforms.SubmitForm('#reserve-request-form', "resgroup",
+				"Reserve", reserve_callback,
+				"Submitting your reservation request; "+
+				"patience please", args);
+	});
     }
 
     function PopulateReservation()
@@ -4082,6 +4192,27 @@ $(function ()
 	}
 	var x = parseFloat(value);
 	return isNaN(x) ? false : true;
+    }
+
+    function adjustedMorning()
+    {
+	/*
+	 * Create a moment object that converts 9am in the Portal timezone
+	 * to whatever it is in the local timezone.
+	 */
+	var now = moment();
+	now.tz(window.HOMETZ);
+	now.hours(9);
+	now.local();
+	return now;
+    }
+    function adjustMorning()
+    {
+	if (moment.tz.guess() != window.HOMETZ) {
+	    var adjusteded = adjustedMorning();
+	    $('.adjustedmorning span').text(adjusteded.format("h A"));
+	    $('.adjustedmorning').removeClass("hidden");
+	}
     }
     $(document).ready(initialize);
 });
