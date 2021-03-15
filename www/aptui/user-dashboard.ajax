@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -476,7 +476,7 @@ function Do_FreezeOrThaw()
            "Your account has been $tag",
            "Your account has been ${tag}.\n\n" . $message,
            "From: $adminemail\n".
-           "Bcc: $adminemail");
+           "Cc: $adminemail");
     SPITAJAX_RESPONSE(1);
 }
 
