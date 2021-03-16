@@ -17,6 +17,7 @@ $(function ()
 	    "users"     : userlist,
 	    "projects"  : projlist,
 	    "profiles"  : proflist,
+	    "allusers"  : window.ALLUSERS,
 	    "days"      : window.DAYS,
 	});
 	$('#main-body').html(html);
@@ -35,9 +36,14 @@ $(function ()
         });
 
 	// Button to change the number of days.
-	$('#change_days').click(function () {
+	$('#update-results').click(function () {
 	    var days = $('#days').val();
-	    window.location.replace("ranking.php?days=" + days);
+	    var url  = "ranking.php?days=" + days;
+
+	    if ($('#allusers').is(':checked')) {
+		url = url + "&allusers=1";
+	    }
+	    window.location.replace(url);
 	});
     }
     

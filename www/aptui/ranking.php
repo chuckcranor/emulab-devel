@@ -36,9 +36,13 @@ $this_user = CheckLoginOrRedirect();
 $this_idx  = $this_user->uid_idx();
 $this_uid  = $this_user->uid();
 
-$optargs = OptionalPageArguments("days", PAGEARG_INTEGER);
+$optargs = OptionalPageArguments("days",     PAGEARG_INTEGER,
+                                 "allusers", PAGEARG_BOOLEAN);
 if (!isset($days)) {
     $days = 30;
+}
+if (!isset($allusers)) {
+    $allusers = 0;
 }
 
 #
@@ -53,12 +57,13 @@ if (!ISADMIN() && !ISFOREIGN_ADMIN()) {
 
 echo "<script type='text/javascript'>\n";
 echo "    window.DAYS = $days;\n";
+echo "    window.ALLUSERS = $allusers;\n";
 echo "</script>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
-function SpitRankList($target, $days)
+function SpitRankList($target, $days, $allusers)
 {
     $count = 1;
 
@@ -94,7 +99,9 @@ function SpitRankList($target, $days)
                      "   as c ".
                      "$join ".
                      "group by $which ".
-                     "order by phours desc limit 250");
+                     "order by phours desc ".
+                     ($allusers ? "" : "limit 250"));
+    
     $results = array();
 
     while ($row = mysql_fetch_array($query_result)) {
@@ -111,8 +118,8 @@ function SpitRankList($target, $days)
     echo json_encode($results);
     echo "</script>\n";
 }
-SpitRankList("user", $days);
-SpitRankList("project", $days);
+SpitRankList("user", $days, $allusers);
+SpitRankList("project", $days, 0);
 
 #
 # Most popular profiles.

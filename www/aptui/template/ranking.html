@@ -1,9 +1,19 @@
 <div class='row'>
   <div class='col-sm-12'>
-    <center>
-      <input value=<%= days %> id="days" size="4"> day ranking.
+    <center class="form-inline">
+      <div class="form-group">
+	<input value=<%= days %> id="days" size="3">
+	<label>day ranking;</label>
+      </div>
+      <div class="form-group">
+	<input type="checkbox"
+	       <% if (allusers) { %>checked<% } %>
+	       id="allusers">
+	<label>All Users</label>
+	</label>
+      </div>
       <button class='btn btn-primary btn-xs' 
-	      id='change_days'
+	      id='update-results'
               type='submit'>Go</button>
     </center>
   </div>
