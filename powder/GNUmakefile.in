@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -91,9 +91,9 @@ post-install:
 endpoint-install: $(INSTALL_SBINDIR)/endpoint-monitor
 
 endpoint-reinstall: endpoint-install
-	-sudo /usr/local/etc/rc.d/endpoint-monitor.sh stop
+	-sudo $(INSTALL_RCDIR)/endpoint-monitor.sh stop
 	sleep 1
-	-sudo /usr/local/etc/rc.d/endpoint-monitor.sh start
+	-sudo $(INSTALL_RCDIR)/endpoint-monitor.sh start
 
 endpoint-remove-old:
 	-$(INSTALL_RCDIR)/batterymon.sh stop
