@@ -216,6 +216,7 @@ function REQUIRE_MARKED()
 function REQUIRE_MOMENT()
 {
   AddLibrary("js/lib/moment.js");
+  AddLibrary("js/lib/moment-timezone.js");
 }
 
 function REQUIRE_TABLESORTER($extras = null)
