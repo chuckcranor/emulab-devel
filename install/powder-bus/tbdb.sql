@@ -24,6 +24,7 @@ REPLACE into node_attributes
 
 replace INTO `node_type_attributes` VALUES ('e300-8d','powercycleafterreload','1','boolean');
 replace INTO `node_type_attributes` VALUES ('e300-8d','delayreloadtillalloc','1','boolean');
+replace INTO `node_type_attributes` VALUES ('e300-8d','reservation_autoapprove_limit','0','integer');
 
 REPLACE INTO `interface_types` VALUES ('P2PLTE',100000,1,'NA','NA',1,'Wireless');
 REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','protocols','P2PLTE');
