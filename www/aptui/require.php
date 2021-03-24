@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -216,6 +216,11 @@ function REQUIRE_MARKED()
 function REQUIRE_MOMENT()
 {
   AddLibrary("js/lib/moment.js");
+}
+
+# This breaks the powder map, something in arcgis.
+function REQUIRE_MOMENTTIMEZONE()
+{
   AddLibrary("js/lib/moment-timezone.js");
 }
 
