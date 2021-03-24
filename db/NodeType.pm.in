@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -462,6 +462,9 @@ sub required_license($;$) {
 }
 sub requires_frequency_reservation($;$) {
     return GetAttribute($_[0], "requires_frequency_reservation", $_[1]);
+}
+sub requires_reservation($;$) {
+    return GetAttribute($_[0], "requires_reservation", $_[1]);
 }
 sub delayreloadtillalloc($;$) {
     return GetAttribute($_[0], "delayreloadtillalloc", $_[1]);

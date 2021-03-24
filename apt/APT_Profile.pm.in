@@ -1804,7 +1804,26 @@ sub CheckResources($$$$$$;$)
 		}
 		next;
 	    }
-	    if (!$noresokay &&
+	    #
+	    # Some node types require a reservation.
+	    #
+	    my $noresokayXX = $noresokay;
+	    
+	    my $nodetype = NodeType->Lookup($type);
+	    if (defined($nodetype)) {
+		# Only works for a local node type.
+		if ($nodetype->requires_reservation()) {
+		    $noresokayXX = 0;
+		}
+	    }
+	    elsif (my $node = Node->Lookup($type)) {
+		# Only works for a local node.
+		my $nodetype = $node->NodeTypeInfo();
+		if (defined($nodetype) && $nodetype->requires_reservation()) {
+		    $noresokayXX = 0;
+		}
+	    }
+	    if (!$noresokayXX &&
 		!APT_Reservation::Group::Reservation::Reserved(
 		     $project, $start, $end, $urn, $type, $count)) {
 		$$pmsg = "$count $type node(s) at $nickname are not reserved ".
