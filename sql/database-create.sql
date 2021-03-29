@@ -6126,6 +6126,8 @@ CREATE TABLE `users` (
   `ga_userid` varchar(32) default NULL,
   `portal_interface_warned` tinyint(1) NOT NULL default '0',
   `news_read` datetime NOT NULL default '0000-00-00 00:00:00',
+  `affiliation_matched` tinyint(1) default '0',
+  `affiliation_updated` date NOT NULL default '0000-00-00',
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
   KEY `status` (`status`),
