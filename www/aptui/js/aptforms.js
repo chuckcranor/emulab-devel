@@ -306,11 +306,12 @@ $(function () {
 	    console.info("Submitform", formfields);
 	    var submit_callback = function(json) {
 		console.info("SubmitForm", json);
-		sup.HideWaitWait();
 		if (!json.code) {
 		    DisableUnsavedWarning(form);
 		}
-		callback(json);
+		sup.HideWaitWait(function () {
+		    callback(json);
+		});
 	    };
 	    sup.ShowWaitWait(message);
 	    var xmlthing =
