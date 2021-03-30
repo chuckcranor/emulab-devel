@@ -342,7 +342,7 @@ sub CheckDeadman($$)
     #
     # Wait with timeout for the ping. 
     #
-    my (@ready) = IO::Select->new($deadmanSocket)->can_read(5);
+    my (@ready) = IO::Select->new($deadmanSocket)->can_read(15);
     if (@ready) {
 	my $client = $deadmanSocket->recv($data, 2048);
 	if (! $client) {
