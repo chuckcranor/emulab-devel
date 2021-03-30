@@ -761,6 +761,7 @@ sub GetTempAndBattery($$$)
 		$cause = "failed with exit value ". ($ecode >> 8);
 	    }
 	    logit("*** Powduino fetch failure: $cause\n");
+	    close(CHILD);
 	    return -1;
 	}
 	while (<CHILD>) {
