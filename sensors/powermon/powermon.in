@@ -1,6 +1,6 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -114,6 +114,10 @@ if (defined($options{"w"})) {
     } else {
 	print "*** Could not open $whinefile, $TBOPS whining disabled\n";
     }
+    # Send STDERR to the whiner.
+    close(STDERR);
+    open(STDERR, ">&WHINE");
+    autoflush STDERR 1;
 }
 if (defined($options{"A"})) {
     $dotemps = $dopower = $docurrent = 1;
@@ -187,10 +191,17 @@ sub dostatus(@) {
     $childpid = fork();
     if ($childpid) {
 	#
+	# Need a TERM handler here too (as when called from telegraf)
+	# to make sure that the child dies (in case it is stuck talking
+	# to capture, in which case it will never die, holding capture).
+	#
+	local $SIG{TERM} = sub { kill("TERM", $childpid); exit(1); };
+
+	#
 	# Allow 5 seconds per controller
 	#
 	local $SIG{ALRM} = sub { kill("TERM", $childpid); };
-	my $to = 5 * scalar(@wanted);
+	my $to = 5 + (5 * scalar(@wanted));
 	alarm $to;
 	waitpid($childpid, 0);
 	alarm 0;
