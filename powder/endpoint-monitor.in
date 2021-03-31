@@ -780,7 +780,7 @@ sub GetTempAndBattery($$$)
     if ($childpid) {
 	local $SIG{ALRM} = sub { kill("TERM", $childpid); };
 	
-	alarm 10;
+	alarm 5;
 	waitpid($childpid, 0);
 	alarm 0;
 	my $ecode = $?;
