@@ -101,8 +101,8 @@ echo "<div id='oops_div'></div>
       <div id='confirm_div'></div>
       <div id='waitwait_div'></div>\n";
 
-# Temp feature for debugging powder reservations
-$bisdaysonly = 0;
+# A Powder thing
+$bisdaysonly = 1;
 
 #
 # See what projects the user can do this in.
@@ -117,7 +117,7 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 $plist = array();
 while (list($p) = each($projlist)) {
     $plist[] = $p;
-    if ($ISPOWDER) {
+    if ($ISPOWDER && !$isadmin) {
         $ptmp = Project::LookupByPid($p);
         if ($ptmp && FeatureEnabled("BisDaysOnly", null, $ptmp)) {
             $bisdaysonly = 1;
@@ -243,6 +243,7 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_MOMENTTIMEZONE();
 REQUIRE_APTFORMS();
 REQUIRE_TABLESORTER();
 AddLibrary("js/resgraphs.js");

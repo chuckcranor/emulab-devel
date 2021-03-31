@@ -21,6 +21,7 @@ $(function ()
     var matrixinfo   = {};	// Powder
     var isadmin      = false;
     var editing      = false;
+    var resgroup     = null;	// Current resgroup when editing.
     var buttonstate  = "check";
     var forecasts    = {};
     var routeforecast= null;
@@ -28,6 +29,7 @@ $(function ()
     var allroutes    = [];
     var JACKS_NS     = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
     var IDEAL_STARTHOUR = 7;	// 7am start time preferred.
+    var IDEAL_ENDHOUR   = 18;	// 6pm end time preferred.
 
     var RouteColors = {
 	"Red Detour"       : "red",
@@ -913,7 +915,7 @@ $(function ()
      */
     function DateChange(which)
     {
-	console.info("DateChange");
+	console.info("DateChange: " + which);
 	
 	var now = new Date();
 	var date;
@@ -930,6 +932,8 @@ $(function ()
 	// Remember if the user already set the hour.
 	var hourset =
 	    ($(selecter + " option:selected").val() == "" ? false : true);
+
+	console.info("DateChange: " + hourset + " " + date);
 
 	if (moment(date).isSame(Date.now(), "day")) {
 	    for (var i = 0; i <= now.getHours(); i++) {
@@ -954,8 +958,11 @@ $(function ()
 	/*
 	 * Ok, init the hour if not set.
 	 */
+	var ideal_hour =
+	    (which == "start" ? adjustedMorning().hour() : IDEAL_ENDHOUR);
+	
 	if (!hourset && !moment(date).isSame(Date.now(), "day")) {
-	    $(selecter + ' option[value=' + IDEAL_STARTHOUR + ']')
+	    $(selecter + ' option[value=' + ideal_hour + ']')
 		.prop('selected', 'selected');
 	}
 	UpdateFormTime(which);
@@ -1005,23 +1012,38 @@ $(function ()
      * today is a weekend, then the user must push the start time out
      * till the next business day.
      */
-    function CheckStartTime(callback)
+    function StartTimeOkay()
     {
 	adjustMorning();
 
-	if (!window.MAINSITE || editing || isadmin) {
-	    callback();
-	    return;
-	}
-	
-	if (!window.ISPOWDER || !window.BISONLY) {
-	    callback();
-	    return;
-	}
+	console.info("StartTimeOkay");
 
+	if (!window.MAINSITE || isadmin || !window.BISONLY) {
+	    return 1;
+	}
+	if (editing) {
+	    /*
+	     * We want to prevent users from editing a submitted reservation
+	     * such that the start time violates the rules. But since the
+	     * form contains the start time, need to be careful we do not
+	     * try to check it, since it might even be in the past, if the
+	     * user has not changed it.
+	     */
+	    var formstart = $('#reserve-request-form [name=start]').val();
+	    var start     = moment(formstart);
+	    var resstart  = moment(resgroup.start);
+	    
+	    console.info(start, resstart);
+	    if (start.isSame(resstart)) {
+		console.info("submitted reservation, start unchanged");
+		return 1;
+	    }
+	}
 	var start_day  = $('#reserve-request-form [name=start_day]').val();
 	var start_hour = $('#reserve-request-form [name=start_hour]').val();
 	var toosoon    = false;
+
+	console.info("StartTimeOkay: ", start_day, start_hour);
 
 	if (start_day && start_hour) {
 	    var now   = moment();
@@ -1031,13 +1053,28 @@ $(function ()
 	    if (now.isoWeekday() == start.isoWeekday()) {
 		toosoon = 1;
 	    }
+	    else if (now.isoWeekday() + 1 == start.isoWeekday()) {
+		// Next day, has to be after 9am on a weekday.
+		start.tz(window.HOMETZ);
+		console.info("next day");
+		
+		if (start.hours() < 9 || 
+		    start.isoWeekday() == 6 || start.isoWeekday() == 7) {
+		    toosoon = 1;
+		}
+	    }
 	    else {
 		console.info(now.format(), start.format());
+		start.tz(window.HOMETZ);
+		now.tz(window.HOMETZ);
 
 		// Advance, looking for a business day between now and start.
 		toosoon = 1;
 		var tmp = now.clone();
 		tmp.isoWeekday(tmp.isoWeekday() + 1);
+		tmp.hour(8);
+		tmp.minute(59);
+		tmp.second(0);
 		console.info("clone: " + tmp.format());
 
 		while (tmp.isBefore(start)) {
@@ -1065,9 +1102,33 @@ $(function ()
 	}
 	if (toosoon) {
 	    sup.ShowModal('#toosoon-modal');
-	    return;
+	    return 0;
 	}
-	callback();
+	return 1;
+    }
+
+    /*
+     * Calculate the next business day after the current time.
+     */
+    function NextBusinessDay()
+    {
+	var now = moment();
+	// Change the timezone to home base so we can check against
+	// 9am and weekend in that timezone.
+	now.tz(window.HOMETZ);
+
+	if (now.isoWeekday() == 6 || now.isoWeekday() == 7 ||
+	    now.isoWeekday() == 5) {
+	    now.isoWeekday(1);
+	}
+	else {
+	    now.isoWeekday(now.isoWeekday() + 1);
+	}
+	now.hours(8);
+	now.minute(59);
+	now.second(59);
+	now.local();
+	return now;
     }
 
     /*
@@ -2323,7 +2384,7 @@ $(function ()
 	    console.info("findfirst return", results);
 	    return results;
 	};
-	var lower = null;
+	var lower = (window.BISONLY ? NextBusinessDay().unix() : null);
 	var fit   = null;
 	var loops = 100;  // Avoid infinite loop.
 	
@@ -2449,7 +2510,7 @@ $(function ()
 	 * It is okay if we cannot do this, we still want to give the
 	 * user the earliest possible reservation.
 	 */
-	if (start.hour() < IDEAL_STARTHOUR) {
+	if (!window.BISONLY && start.hour() < IDEAL_STARTHOUR) {
 	    var tmp = moment(start);
 	    tmp.hour(IDEAL_STARTHOUR);
 
@@ -2470,18 +2531,22 @@ $(function ()
 	var new_end_day    = end.format("MM/DD/YYYY");
 	var new_end_hour   = end.format("H");
 
-	$('#reserve-request-form [name=start_day]').val(new_start_day);
-	$('#reserve-request-form [name=start_hour]').val(new_start_hour);
-	$('#reserve-request-form [name=end_day]').val(new_end_day);
-	$('#reserve-request-form [name=end_hour]').val(new_end_hour);
+	$('#reserve-request-form [name=start_day]')
+	    .datepicker("setDate", new_start_day);
+	$('#reserve-request-form [name=start_hour]')
+	    .val(new_start_hour);
+	$('#reserve-request-form [name=end_day]')
+	    .datepicker("setDate", new_end_day);
+	$('#reserve-request-form [name=end_hour]')
+	    .val(new_end_hour);
 
 	// And if we actually changed anything.
 	if (start_day != new_start_day || start_hour != new_start_hour) {
-	    UpdateFormTime("start");
+	    DateChange("start");
 	    modified_callback();
 	}
 	if (end_day != new_end_day || end_hour != new_end_hour) {
-	    UpdateFormTime("end");
+	    DateChange("end")
 	    modified_callback();
 	}
     }
@@ -2546,8 +2611,6 @@ $(function ()
 		return;
 	    }
 	    
-	    // User can submit.
-	    ToggleSubmit(true, "submit");
 	    // Make sure we still warn about an unsaved form.
 	    aptforms.MarkFormUnsaved();
 
@@ -2579,11 +2642,17 @@ $(function ()
 	    if (needsApproval) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
+
+		if (!StartTimeOkay()) {
+		    return;
+		}
 	    }
 	    else {
 		$('#confirm-reservation .needs-approval')
 		    .addClass("hidden");
 	    }
+	    // User can submit.
+	    ToggleSubmit(true, "submit");
 	    sup.ShowModal('#confirm-reservation');
 	};
 	var args = {
@@ -2596,19 +2665,17 @@ $(function ()
 		args["override"] = 1;
 	    }
 	}
-	CheckStartTime(function () {
-	    // Clear (hide) previous cluster table errors
-	    $('#reserve-request-form .form-group-sm').addClass("hidden");
-	    $('#reserve-request-form tbody')
-		.removeClass("has-warning has-error");
-	    $('#reserve-request-form .form-control-div')
-		.removeClass("has-warning has-error");
+	// Clear (hide) previous cluster table errors
+	$('#reserve-request-form .form-group-sm').addClass("hidden");
+	$('#reserve-request-form tbody')
+	    .removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div')
+	    .removeClass("has-warning has-error");
 	
-	    aptforms.SubmitForm('#reserve-request-form', "resgroup",
-				"Validate", callback,
-				"Checking to see if your request can be "+
-				"accommodated", args);
-	});
+	aptforms.SubmitForm('#reserve-request-form', "resgroup",
+			    "Validate", callback,
+			    "Checking to see if your request can be "+
+			    "accommodated", args);
     }
 
     /*
@@ -2723,19 +2790,17 @@ $(function ()
 		args["override"] = 1;
 	    }
 	}
-	CheckStartTime(function () {
-	    // Clear (hide) previous cluster table errors
-	    $('#reserve-request-form .form-group-sm').addClass("hidden");
-	    $('#reserve-request-form tbody')
-		.removeClass("has-warning has-error");
-	    $('#reserve-request-form .form-control-div')
-		.removeClass("has-warning has-error");
+	// Clear (hide) previous cluster table errors
+	$('#reserve-request-form .form-group-sm').addClass("hidden");
+	$('#reserve-request-form tbody')
+	    .removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div')
+	    .removeClass("has-warning has-error");
 
-	    aptforms.SubmitForm('#reserve-request-form', "resgroup",
-				"Reserve", reserve_callback,
-				"Submitting your reservation request; "+
-				"patience please", args);
-	});
+	aptforms.SubmitForm('#reserve-request-form', "resgroup",
+			    "Reserve", reserve_callback,
+			    "Submitting your reservation request; "+
+			    "patience please", args);
     }
 
     function PopulateReservation()
@@ -2748,6 +2813,9 @@ $(function ()
 	    }
 	    // Messy.
 	    var details = json.value;
+	    // Save for checking any changes before submit.
+	    resgroup = details;
+	    
 	    $('#reserve-request-form [name=uuid]').val(details.uuid);
 	    $('#reserve-request-form [name=reason]').val(details.notes);
 	    var start = moment(details.start);
@@ -2920,7 +2988,7 @@ $(function ()
 		 * If this is an admin looking at an unapproved reservation,
 		 * show the approve button
 		 */
-		if (!details.approved) {
+		if (details.status != "approved") {
 		    $('#reserve-approve-button')
 			.removeClass("hidden")
 			.removeAttr("disabled")
@@ -2955,6 +3023,12 @@ $(function ()
 			$('#reserve-uncancel-button').removeClass("hidden");
 		    }
 		}
+	    }
+	    if (details.status == "approved") {
+		$('#unapproved-warning').addClass("hidden");
+	    }
+	    else {
+		$('#unapproved-warning').removeClass("hidden");
 	    }
 	    
 	    // Need this in Delete().
@@ -3072,15 +3146,6 @@ $(function ()
 		    .addClass("hidden");
 	    }
 	});
-	if (details.approved) {
-	    $('#unapproved-warning').addClass("hidden");
-	    if (isadmin) {
-		$('#reserve-approve-button').addClass("hidden");
-	    }
-	}
-	else {
-	    $('#unapproved-warning').removeClass("hidden");
-	}
 	// Only one reservation left, kill the delete buttons.
 	if ($('#cluster-table tbody.existing-cluster').length == 1) {
 	    $('#cluster-table .delete-reservation').addClass("hidden");
@@ -3161,11 +3226,6 @@ $(function ()
 		    .addClass(newClass);
 	    }
 	});
-	if (details.approved) {
-	    if (isadmin) {
-		$('#reserve-approve-button').addClass("hidden");
-	    }
-	}
 	// Always display delete button on existing ranges,
 	$('#range-table .existing-range .delete-range').removeClass("hidden");
 
@@ -3240,11 +3300,6 @@ $(function ()
 		    .addClass(newClass);
 	    }
 	});
-	if (details.approved) {
-	    if (isadmin) {
-		$('#reserve-approve-button').addClass("hidden");
-	    }
-	}
 	// Always display delete button on existing routes
 	$('#route-table .existing-route .delete-route').removeClass("hidden");
 
@@ -3265,23 +3320,31 @@ $(function ()
     function RefreshTables(operationResults)
     {
 	console.info("RefreshTables", operationResults);
-	
+
+	var callback = function(json) {
+	    console.info(json);
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    resgroup = json.value;
+	    UpdateClustersTable(resgroup, operationResults);
+	    UpdateRangeTable(resgroup, operationResults);
+	    UpdateRouteTable(resgroup, operationResults);
+
+	    if (resgroup.status == "approved" && isadmin) {
+		$('#reserve-approve-button').addClass("hidden");
+	    }
+	    if (resgroup.status == "approved") {
+		$('#unapproved-warning').addClass("hidden");
+	    }
+	    else {
+		$('#unapproved-warning').removeClass("hidden");
+	    }
+	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
-			     {"uuid"    : window.UUID},
-			     function(json) {
-				 console.info(json);
-				 if (json.code) {
-				     sup.SpitOops("oops", json.value);
-				     return;
-				 }
-				 UpdateClustersTable(json.value,
-						     operationResults);
-				 UpdateRangeTable(json.value,
-						  operationResults);
-				 UpdateRouteTable(json.value,
-						  operationResults);
-			     });
+			     {"uuid"    : window.UUID}, callback);
     }
 
     /*
@@ -4209,8 +4272,8 @@ $(function ()
     function adjustMorning()
     {
 	if (moment.tz.guess() != window.HOMETZ) {
-	    var adjusteded = adjustedMorning();
-	    $('.adjustedmorning span').text(adjusteded.format("h A"));
+	    var adjusted = adjustedMorning();
+	    $('.adjustedmorning span').text(adjusted.format("h A"));
 	    $('.adjustedmorning').removeClass("hidden");
 	}
     }
