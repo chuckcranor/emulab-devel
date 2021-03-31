@@ -165,7 +165,7 @@ sub powduinoctrl {
     }
 
     if ($debug) {
-	print "outlets: ", join(" ",map("($_)",@outlets)), "\n";
+	print STDERR "outlets: ", join(" ",map("($_)",@outlets)), "\n";
     }
 
     #
@@ -258,11 +258,11 @@ sub syncandsend($$$;$) {
 		return 1;
 	    }
 	    if ($debug) {
-		print "Read: $line";
+		print STDERR "Read: $line";
 	    }
 	    if ($line =~ /$PROMPT/) {
 		if ($debug) {
-		    print "Matched prompt '$PROMPT'!\n";
+		    print STDERR "Matched prompt '$PROMPT'!\n";
 		}
 		$insync = 1;
 		last;
@@ -278,7 +278,7 @@ sub syncandsend($$$;$) {
     }
 
     if ($debug) {
-	print "Sending '$cmd' to $controller\n";
+	print STDERR "Sending '$cmd' to $controller\n";
     }
 
     # Okay, got a prompt. Send it the string:
@@ -294,20 +294,23 @@ sub syncandsend($$$;$) {
     my %status = ();
     my $gotcmd = 0;
     my $gotstatus = 0;
-    print "Reading output following command\n"
+    print STDERR "Reading output following command\n"
 	if ($debug);
     while (my $line = rpc_readline($TIP)) {
-	print "Read: $line"
+	if (!defined($line)) {
+	    return -1;
+	}
+	print STDERR "Read: $line"
 	    if ($debug);
 	# skip echoed prompt+command
 	if ($line =~ /$cmd/) {
 	    $gotcmd = 1;
-	    print "GotCmd\n" if ($debug);
+	    print STDERR "GotCmd\n" if ($debug);
 	    next;
 	}
 	# didn't recognize our command for some reason, return failure
 	if ($line =~ /Invalid/) {
-	    print "Bad result\n" if ($debug);
+	    print STDERR "Bad result\n" if ($debug);
 	    return -1;
 	}
 	#
@@ -320,15 +323,18 @@ sub syncandsend($$$;$) {
 	    if ($line =~ /^Pin\s+(\d+)\s+(on|off)/) {
 		$status{"pin$1"} = $2;
 		$gotstatus = 1;
-		print "status 'pin$1' = ", $status{"pin$1"}, "\n" if ($debug);
+		print STDERR "status 'pin$1' = ", $status{"pin$1"}, "\n"
+		    if ($debug);
 	    } elsif ($line =~ /^Pin\s+(\d+):\s+(\d+)/) {
 		$status{"pin$1"} = $2;
 		$gotstatus = 1;
-		print "status 'pin$1' = ", $status{"pin$1"}, "\n" if ($debug);
+		print STDERR "status 'pin$1' = ", $status{"pin$1"}, "\n"
+		    if ($debug);
 	    } elsif ($line =~ /^(\-?\d+(\.\d+)?)/) {
 		$status{"tempC"} = $1;
 		$gotstatus = 1;
-		print "status 'temp' = ", $status{"tempC"}, "\n" if ($debug);
+		print STDERR "status 'temp' = ", $status{"tempC"}, "\n"
+		    if ($debug);
 	    }
 	}
     }
@@ -411,7 +417,7 @@ sub tipconnect($) {
     }
 
     if ($debug) {
-	print "tipconnect: $server $portnum $keylen $keydata\n";
+	print STDERR "tipconnect: $server $portnum $keylen $keydata\n";
     }
 
     #
@@ -466,7 +472,7 @@ sub tipconnect($) {
 
 	my $foo = unpack("i", $capret);
 	if ($debug) {
-	    print "Capture returned $foo\n";
+	    print STDERR "Capture returned $foo\n";
 	}
 	if ($foo == 0) {
 	    return($socket);
@@ -495,10 +501,11 @@ sub rpc_readline($)
 
     my $cc = 0;
     while (1) {
-	if ($TIP->sysread($line, 1, $cc) == 0) {
+	my $rval = $TIP->sysread($line, 1, $cc);
+	if (!defined($rval) || $rval == 0) {
 	    return undef;
 	}
-	print "got: =$line=\n" if ($debug > 1);
+	print STDERR "got: =$line=\n" if ($debug > 1);
 	$cc++;
 	last if ($line =~ /\n/ || $line =~ /$PROMPT/ || $cc > 1023);
     }
