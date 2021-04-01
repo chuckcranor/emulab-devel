@@ -184,19 +184,27 @@ sub dostatus(@) {
 	if ($doall);
 
     #
+    # Need a TERM handler here (as when called from telegraf)
+    # to make sure that the child dies (in case it is stuck talking
+    # to capture, in which case it will never die, holding capture).
+    #
+    local $SIG{TERM} = sub {
+	#print STDERR "$PID got a TERM. Childpid is $childpid\n";
+	if ($childpid <= 0) {
+	    exit(22);
+	}
+	else {
+	    kill("TERM", $childpid)
+	}
+    };
+
+    #
     # Loop through desired controllers getting status
     # We do this in a child process so we can time it out if
     # one of the controllers is not responding.
     #
     $childpid = fork();
     if ($childpid) {
-	#
-	# Need a TERM handler here too (as when called from telegraf)
-	# to make sure that the child dies (in case it is stuck talking
-	# to capture, in which case it will never die, holding capture).
-	#
-	local $SIG{TERM} = sub { kill("TERM", $childpid); exit(1); };
-
 	#
 	# Allow 5 seconds per controller
 	#
@@ -227,7 +235,8 @@ sub dostatus(@) {
 			 ($whinefile));
 	    }
 	}
-	return $ecode;
+	$childpid = -1;
+	return $ecode ? -1 : 0;
     }
 
     for my $ctrl (@wanted) {
