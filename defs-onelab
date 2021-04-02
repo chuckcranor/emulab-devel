@@ -33,7 +33,7 @@ THISHOMEBASE=Onelab.Eu
 
 # Fully-qualified hostname of the our web server.
 # This name should resolve to boss's IP address - though it can be a CNAME
-WWWHOST=cloudlab.lab.onelab.eu
+WWWHOST=www.lab.onelab.eu
 
 # Fully-qualified hostname of the boss node
 BOSSNODE=boss.lab.onelab.eu
@@ -416,9 +416,9 @@ IMAGEDIRECTORIES=1
 
 # ZFS -- added by hibler 12/17/15
 WITHZFS=1
-ZFS_ROOT=storage
+ZFS_ROOT=z
 ZFS_QUOTA_USER="1G"
-ZFS_QUOTA_PROJECT="100G"
+ZFS_QUOTA_PROJECT="50G"
 ZFS_QUOTA_GROUP="10G"
 WITHAMD=1
 AMD_ROOT=/.amd_mnt/ops

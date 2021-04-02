@@ -9,6 +9,7 @@ $(function ()
     var waitwaitString = templates['waitwait-modal'];
     var myaccountTemplate = _.template(myaccountString);
     var verifyTemplate    = _.template(verifyString);
+    var affiliations = null;
 
     function initialize()
     {
@@ -24,7 +25,16 @@ $(function ()
 	if (fields.country === "USA") {
 	    fields.country = "US";
 	}
-	renderForm(fields, null);
+
+	// Need the affiliation list before the form can be rendered.
+	$.getJSON("affiliations/us.json")
+	    .done(function (data) {
+		affiliations = data;
+		renderForm(fields, null);
+	    })
+	    .fail(function() {
+		alert("Could not get data file: " + window.URL);
+	    });
     }
 
     function renderForm(formfields)
@@ -45,8 +55,33 @@ $(function ()
 					state: formfields.state,
 					blank: false, ask: true });
 
+	$("#affiliation").autocomplete({
+	    source: affiliations
+	});
+
+	// When the country changes, change the list of affilations.
+	$('#signup_countries').change(function (event) {
+	    var country = $(this).val().toLowerCase();
+	    
+	    $.getJSON("affiliations/" + country + ".json")
+		.done(function (data) {
+		    affiliations = data;
+		    
+		    $("#affiliation").autocomplete("option", "source", data);
+		})
+		.fail(function() {
+		    console.info("Could not get data file for " + country);
+		});
+	});
+	
 	aptforms.EnableUnsavedWarning('#myaccount_form', function () {
-	    $('#submit_button').removeAttr("disabled");
+	    if (window.NEEDUPDATE && window.UPDATE == "affiliation") {
+		if (window.MATCHED) {
+		    $('#submit_button').html("Update Affiliation");
+		}
+	    }
+	    $('#submit_button')
+		.removeAttr("disabled");
 	});
 	$('#submit_button').click(function (event) {
 	    event.preventDefault();
@@ -59,8 +94,31 @@ $(function ()
 	    SubmitForm();
 	    return false;
 	});
-	if (window.ADDREQUIRED) {
-	    sup.ShowModal("#addrequired-modal");
+	if (window.NEEDUPDATE) {
+	    if (window.UPDATE == "affiliation") {
+		if (!window.MATCHED) {
+		    // Clear it from the form so the user is forced to enter.
+		    $("#affiliation").val("");
+		    // Make it easier for user to notice what needs to change.
+		    $("#affiliation").closest(".form-group")
+			.addClass("has-error");
+		    $('#submit_button')
+		        .html("Update Affiliation");
+		}
+		else {
+		    // User just needs to verify.
+		    $("#affiliation").closest(".form-group")
+			.addClass("has-warning");
+		    // Change Button to verify and enable.
+		    $('#submit_button')
+		        .html("Yes, this is current")
+			.removeAttr("disabled");
+		}
+		sup.ShowModal("#affiliation-update-modal");
+	    }
+	    else {
+		sup.ShowModal("#addrequired-modal");
+	    }
 	}
     }
     
@@ -69,6 +127,9 @@ $(function ()
     //
     function SubmitForm()
     {
+	var extras = {
+	    "needupdate" : window.NEEDUPDATE ? true : false
+	};
 	var submit_callback = function(json) {
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
@@ -93,10 +154,10 @@ $(function ()
 		return;
 	    }
 	    aptforms.SubmitForm('#myaccount_form', "myaccount", "update",
-				submit_callback);
+				submit_callback, undefined, extras);
 	};
 	aptforms.CheckForm('#myaccount_form', "myaccount", "update",
-			   checkonly_callback);
+			   checkonly_callback, undefined, extras);
     }
     $(document).ready(initialize);
 });
