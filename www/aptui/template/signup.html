@@ -1,3 +1,22 @@
+<style>
+ .ui-autocomplete {
+     max-height: 300px;
+     overflow-y: auto;
+     /* prevent horizontal scrollbar */
+     overflow-x: hidden;
+     font-family: Helvetica,Tahoma,Verdana,Sans-serif;
+ }
+ .ui-autocomplete-input {
+     font-family: Helvetica,Tahoma,Verdana,Sans-serif;
+ }
+ /* IE 6 doesn't support max-height
+  * we use height instead, but this forces the menu to always be this tall
+  */
+ * html .ui-autocomplete {
+     height: 300px;
+ }
+</style>
+
 <div class='row'>
   <div class='col-lg-10  col-lg-offset-1
        col-md-10 col-md-offset-1

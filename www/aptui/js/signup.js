@@ -8,6 +8,7 @@ $(function ()
     var personalTemplate = _.template(templates['signup-personal']);
     var projectTemplate = _.template(templates['signup-project']);
     var signupTemplate = _.template(templates['signup']);
+    var affiliations = null;
 
     function initialize()
     {
@@ -19,33 +20,26 @@ $(function ()
 	var licenses = JSON.parse(_.unescape($('#licenses-json')[0].textContent));
 	console.info(fields);
 	console.info(errors);
-	
-	renderForm(fields, errors, licenses,
-		   window.APT_OPTIONS.joinproject,
-		   window.APT_OPTIONS.ShowVerifyModal,
-		   window.APT_OPTIONS.this_user,
-		   (window.APT_OPTIONS.this_user ?
-		    window.APT_OPTIONS.promoting : false));
 
-	/*
-	 * When switching from start to join, show the hidden fields
-	 * and change the button.
-	 */
-	$("input[id='startorjoin']").change(function(e){
-	    if ($(this).val() == "join") {
-		$('#start_project_rollup').addClass("hidden");
-		$('#submit_button').text("Submit Request");
-		$('#signup_panel_title').text("Request to join a project");
-	    }
-	    else {
-		$('#start_project_rollup').removeClass("hidden");
-		$('#submit_button').text("Submit Request");
-		$('#signup_panel_title').text("Request to start a project");
-	    }
-	});
-	if (window.APT_OPTIONS.toomany) {
-	    sup.ShowModal('#toomany_modal');
-	}
+	// Need the affiliation list before the form can be rendered.
+	$.getJSON("affiliations/us.json")
+	    .done(function (data) {
+		affiliations = data;
+
+		renderForm(fields, errors, licenses,
+			   window.APT_OPTIONS.joinproject,
+			   window.APT_OPTIONS.ShowVerifyModal,
+			   window.APT_OPTIONS.this_user,
+			   (window.APT_OPTIONS.this_user ?
+			    window.APT_OPTIONS.promoting : false));
+
+		if (window.APT_OPTIONS.toomany) {
+		    sup.ShowModal('#toomany_modal');
+		}
+	    })
+	    .fail(function() {
+		alert("Could not get data file: " + window.URL);
+	    });
     }
 
     function renderForm(formfields, errors, licenses, joinproject, showVerify,
@@ -95,6 +89,43 @@ $(function ()
 	$('#signup_states').bfhstates({ country: 'signup_countries',
 					state: formfields.state,
 					blank: false, ask: true });
+
+	$("#signup_affiliation").autocomplete({
+	    source: affiliations
+	});
+
+	// When the country changes, change the list of affilations.
+	$('#signup_countries').change(function (event) {
+	    var country = $(this).val().toLowerCase();
+	    
+	    $.getJSON("affiliations/" + country + ".json")
+		.done(function (data) {
+		    affiliations = data;
+		    
+		    $("#signup_affiliation")
+			.autocomplete("option", "source", data);
+		})
+		.fail(function() {
+		    console.info("Could not get data file for " + country);
+		});
+	});
+
+	/*
+	 * When switching from start to join, show the hidden fields
+	 * and change the button.
+	 */
+	$("input[id='startorjoin']").change(function(e){
+	    if ($(this).val() == "join") {
+		$('#start_project_rollup').addClass("hidden");
+		$('#submit_button').text("Submit Request");
+		$('#signup_panel_title').text("Request to join a project");
+	    }
+	    else {
+		$('#start_project_rollup').removeClass("hidden");
+		$('#submit_button').text("Submit Request");
+		$('#signup_panel_title').text("Request to start a project");
+	    }
+	});
 	
 	aptforms.EnableUnsavedWarning('#quickvm_signup_form');
 	

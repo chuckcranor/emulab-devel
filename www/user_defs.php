@@ -379,6 +379,10 @@ class User
     function ga_userid()     { return $this->field("ga_userid"); }
     function portal_interface_warned() {
         return $this->field("portal_interface_warned"); }
+    function affiliation_updated() {
+        return $this->field("affiliation_updated"); }
+    function affiliation_matched() {
+        return $this->field("affiliation_matched"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -835,10 +839,31 @@ class User
     # Does the user need to fill out the extended address fields
     #
     function RequireAddress() {
-        if ($this->addr1() == "" || $this->zip() == "") {
+        global $ISPOWDER;
+        
+        #
+        # At the moment only the powder portal requires these.
+        #
+        if ($ISPOWDER && ($this->addr1() == "" || $this->zip() == "")) {
             return 1;
         }
         return 0;
+    }
+
+    #
+    # Does the user need to update their affiliation.
+    #
+    function RequireAffiliation() {
+        $affil = trim($this->affil());
+        $updated = strtotime($this->affiliation_updated());
+        
+        if ($affil == "" || time() - $updated > (365 * 24 * 3600)) {
+            return 1;
+        }
+        return 0;
+    }
+    function NeedAccountUpdate() {
+        return $this->RequireAffiliation() + $this->RequireAddress();
     }
     
     #

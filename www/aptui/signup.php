@@ -102,6 +102,8 @@ function SPITFORM($formfields, $showverify, $errors)
 
     echo "<link rel='stylesheet'
                 href='css/bootstrap-formhelpers.min.css'>\n";
+    echo "<link rel='stylesheet'
+                href='css/jquery-ui.min.css'>\n";
 
     echo "<div id='signup-body'></div>\n";
     echo "<div id='toomany_div'></div>\n";
@@ -146,14 +148,13 @@ function SPITFORM($formfields, $showverify, $errors)
 
     echo "</script>\n";
 
-    echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
     REQUIRE_MARKED();
     REQUIRE_APTFORMS();
     REQUIRE_FORMHELPERS();
-    SPITREQUIRE("js/signup.js");
+    SPITREQUIRE("js/signup.js",
+                "<script src='js/lib/jquery-ui.js'></script>");
 
     AddTemplateList(array("about-account", "verify-modal", "signup-personal", "signup-project", "signup", "toomany-modal"));
     SPITFOOTER();
@@ -298,10 +299,10 @@ if (!$this_user || $promoting) {
 	    "Already in use. Did you forget to login?";
     }
     if (!isset($formfields["affiliation"]) ||
-	strcmp($formfields["affiliation"], "") == 0) {
+        trim($formfields["affiliation"]) == "") {
 	$errors["affiliation"] = "Missing Field";
     }
-    elseif (! TBvalid_affiliation($formfields["affiliation"])) {
+    elseif (! TBvalid_affiliation(htmlentities($formfields["affiliation"]))) {
 	$errors["affiliation"] = TBFieldErrorString();
     }
     if (!isset($formfields["country"]) ||
@@ -505,7 +506,7 @@ if ($this_user && $promoting) {
     $args["state"]         = $formfields["state"];
     $args["country"]       = $formfields["country"];
     $args["shell"]         = 'tcsh';
-    $args["affiliation"]   = $formfields["affiliation"];
+    $args["affiliation"]   = htmlentities($formfields["affiliation"]);
     $args["address1"]      = $formfields["address1"];
     $args["address2"]      = $formfields["address2"];
     $args["zip"]           = $formfields["zip"];
@@ -532,7 +533,7 @@ if (!$this_user) {
     $args["state"]         = $formfields["state"];
     $args["country"]       = $formfields["country"];
     $args["shell"]         = 'tcsh';
-    $args["affiliation"]   = $formfields["affiliation"];
+    $args["affiliation"]   = htmlentities($formfields["affiliation"]);
     $args["password"]      = $formfields["password1"];
     # Force initial SSL cert generation.
     $args["passphrase"]    = $formfields["password1"];
