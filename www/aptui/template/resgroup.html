@@ -518,17 +518,20 @@
 	    size and/or duration means that the reservation needs to
 	    be approved by an administrator before it is fully active.</b>
 	  <div style="margin-top: 5px;">
-	    <% if (window.ISPOWDER) { %>
+	    <% if (window.MAINSITE) { %>
 	      <em>Reservations that require administrative approval
-		take time for review.  During normal business hours (8
-		AM - 5 PM Mountain Time), these are typically handled
-		within an hour or two.  Outside of business hours and on
-		weekends, administrative review may be delayed until the
-		next business day.  Please plan accordingly when
-		submitting your reservation requests.</em>
-	    <% } else { %>
-	      The administrator will be notified when you submit this
-	      request, and will act on this request as soon as possible.
+		take time to review and are processed the <b>next
+		business day at 9AM Mountain
+		time</b><span class="adjustedmorning hidden">
+		(<span></span> in your local timezone)</span>.
+		If you are
+		requesting a reservation that starts before the next
+		business day at 9AM, it is possible the reservation
+		will no longer be feasible (fit the schedule) by the
+		time it is processed.  Please plan accordingly, if you
+		start an experiment based on currently availability,
+		you might be forced to terminate that experiment, if
+		your reservation is not approved.</em>
 	    <% } %>
 	  </div>	  
 	</div>
@@ -773,7 +776,30 @@
         <center><h4>Confirm to Cancel Cancellation</h4>
 	  <br>
           <button class='btn btn-danger btn-sm'
-		  id='confirm-uncancel'>Confirm</a>
+		  id='confirm-uncancel'>Confirm</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='toosoon-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<br>
+	<div>
+	  Please specify a start time no earlier than 9 AM Mountain
+	  Time
+	  <span class="adjustedmorning hidden">
+	    (<span></span> in your local timezone)</span>
+	  on the next business day. This allows administrators
+	  sufficient time to review your request.
+	</div>
+	<center>
+          <button class='btn btn-default btn-xs'
+		  data-dismiss='modal'>Dismiss</button>
 	</center>
       </div>
     </div>

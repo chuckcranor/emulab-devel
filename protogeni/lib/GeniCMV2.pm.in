@@ -1792,6 +1792,7 @@ sub SliverStatus($)
     my ($argref)     = @_;
     my $slice_urn    = $argref->{'slice_urn'};
     my $credentials  = $argref->{'credentials'};
+    my $status;
     require Node;
 
     if (! (defined($credentials) && defined($slice_urn))) {
@@ -1831,22 +1832,25 @@ sub SliverStatus($)
     }
     $aggregate->Refresh();
     my $slice_experiment = $slice->GetExperiment();
-    
-    if ($aggregate->ComputeState()) {
-	print STDERR "SliverStatus: Could not compute state for $aggregate\n";
-	$slice->UnLock();
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
-    }
-    my $status = $aggregate->status();
+
     #
-    # Regardless of what the aggregate status is, we are "changing" if there
-    # is an active monitor process running.
+    # Do not call ComputeState() while in the "working" state, since the
+    # action workers in GeniAggregate() are typically running without
+    # locking, and changing things here causes a race. 
     #
-    # If the status is "working" convert to "changing" for the caller, this
-    # is an internal status for the newer start/restart code.
+    # Convert to "changing" for the caller, since "working" is an internal
+    # status for the newer start/restart code.
     #
     if ($aggregate->Busy()) {
 	$status = "changing";
+    }
+    else {
+	if ($aggregate->ComputeState()) {
+	    print STDERR "SliverStatus: Could not compute state for $aggregate\n";
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
+	$status = $aggregate->status();
     }
 
     #

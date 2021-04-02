@@ -10,7 +10,7 @@ sub DoUpdate($$$)
 
     DBSetDefault($dbhandle);
 
-    if (! DBKeyExists("geni_slices", "termination_pending")) {
+    if (! DBSlotExists("geni_slices", "termination_pending")) {
 	DBQueryFatal("alter table geni_slices add ".
 		     " `termination_pending` datetime default NULL ".
 		     "   after shutdown");

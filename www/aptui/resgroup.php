@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -101,6 +101,9 @@ echo "<div id='oops_div'></div>
       <div id='confirm_div'></div>
       <div id='waitwait_div'></div>\n";
 
+# A Powder thing
+$bisdaysonly = 1;
+
 #
 # See what projects the user can do this in.
 #
@@ -114,6 +117,12 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 $plist = array();
 while (list($p) = each($projlist)) {
     $plist[] = $p;
+    if ($ISPOWDER && !$isadmin) {
+        $ptmp = Project::LookupByPid($p);
+        if ($ptmp && FeatureEnabled("BisDaysOnly", null, $ptmp)) {
+            $bisdaysonly = 1;
+        }
+    }
 }
 echo "<script type='text/plain' id='projects-json'>\n";
 echo htmlentities(json_encode($plist));
@@ -227,11 +236,14 @@ else {
 }
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";
+echo "   window.HOMETZ   = '$OURTIMEZONE';\n";
+echo "   window.BISONLY  = $bisdaysonly;\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_MOMENTTIMEZONE();
 REQUIRE_APTFORMS();
 REQUIRE_TABLESORTER();
 AddLibrary("js/resgraphs.js");

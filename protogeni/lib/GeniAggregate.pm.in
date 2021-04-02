@@ -1691,10 +1691,7 @@ sub ActionStart($$;$)
 	$self->SetBootFailure(GENIRESPONSE_SETUPFAILURE_NETWORK);
 	$self->SetErrorLog("Testing network failure");
     }
-    # This has to be last so that SliverStatus() does not hand back a
-    # ready or failed state until we are fully done here.
-    $self->SetStatus("mixed");
-    $self->ComputeState();
+    $self->ComputeState("mixed");
     $experiment->SetState($expstate);
     $slice->ClearMonitorPid();
     # in case we were canceled by DeleteSlice()
@@ -1714,8 +1711,7 @@ sub ActionStart($$;$)
 	    if (defined($msg));
     }
     if ($self->status() eq "working") {
-	$self->SetStatus("mixed");
-	$self->ComputeState();
+	$self->ComputeState("mixed");
     }
     $experiment->SetState($expstate);
     $slice->ClearMonitorPid();
@@ -2715,9 +2711,7 @@ sub Action($$$;$)
 	$self->SetBootFailure(GENIRESPONSE_SETUPFAILURE);
 	$self->SetErrorLog("Testing");
     }
-    # Allow ComputeState to do its thing.
-    $self->SetStatus("mixed");
-    $self->ComputeState();
+    $self->ComputeState("mixed");
     return 0;
 
   bad:
@@ -2741,8 +2735,7 @@ sub Action($$$;$)
 	    if (defined($msg));
     }
     if ($self->status() eq "working") {
-	$self->SetStatus("mixed");
-	$self->ComputeState();
+	$self->ComputeState("mixed");
     }
     return -1;
 }
@@ -3341,17 +3334,13 @@ sub Stop($$;$)
 	$msg .= "Failed to stop the event system";
 	goto bad;
     }
-    # Flip back to mixed to allow ComputeState to do its thing. 
-    $self->SetStatus("mixed");
-    $self->ComputeState();
+    $self->ComputeState("mixed");
     return 0;
 
   bad:
     $self->SetBootFailure();
     if ($self->status() eq "working") {
-	# Flip back to mixed to allow ComputeState to do its thing. 
-	$self->SetStatus("mixed");
-	$self->ComputeState();
+	$self->ComputeState("mixed");
     }
     if (defined($msg)) {
 	$self->SetErrorLog($msg);
@@ -3572,9 +3561,7 @@ sub BatchAction($$@)
     foreach my $sliver (@slivers) {
 	$sliver->SetState("started");
     }
-    # Flip back to mixed to allow ComputeState to do its thing. 
-    $self->SetStatus("mixed");
-    $self->ComputeState();
+    $self->ComputeState("mixed");
     return 0;
 
   bad:
@@ -3591,8 +3578,7 @@ sub BatchAction($$@)
 	print STDERR "$msg\n";
     }
     if ($self->status() eq "working") {
-	$self->SetStatus("mixed");
-	$self->ComputeState();
+	$self->ComputeState("mixed");
     }
     return -1;
 }
@@ -3759,9 +3745,10 @@ sub UnProvision($;$)
     return 0;
 }
 
-sub ComputeState($)
+sub ComputeState($;$)
 {
-    my ($self) = @_;
+    my ($self, $unmix) = @_;
+    $unmix = 0 if (!defined($unmix));
     my $started = 0;
     my $stopped = 0;
     my $updating= 0;
@@ -3850,7 +3837,9 @@ sub ComputeState($)
 	$newstate = "mixed";
     }
     # Internal status, we do not want to force a change while in this status.
-    if ($self->status() eq "working") {
+    # To prevent a race, the caller tells us we are moving out of mixed and
+    # it is okay to clear working.
+    if (!$unmix && $self->status() eq "working") {
 	$newstatus = $self->status();
     }
     elsif ($ready == $count) {

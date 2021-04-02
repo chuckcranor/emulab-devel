@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -252,7 +252,7 @@ class ReservationGroup
         $details["created"]    = DateStringGMT($resgroup->created());
         $details["start"]      = DateStringGMT($resgroup->start());
         $details["end"]        = DateStringGMT($resgroup->end());
-        $details["approved"]   = 1;
+        $details["approved"]   = 0;
         $details["pending"]    = 0;
         $details["canceled"]   = 0;
         $details["uid"]        = $resgroup->creator_uid();
@@ -301,16 +301,14 @@ class ReservationGroup
 
             if (! $reservation->approved()) {
                 $status = "pending";
+                $details["pending"] += 1;
             }
             elseif ($reservation->canceled()) {
                 $status = "canceled";
-            }
-            if (!$reservation->approved()) {
-                $details["approved"] = 0;
-                $details["pending"] += 1;
-            }
-            if ($reservation->canceled()) {
                 $details["canceled"] += 1;
+            }
+            elseif ($reservation->approved()) {
+                $details["approved"] += 1;
             }
         }
         $ranges = array();
@@ -334,10 +332,10 @@ class ReservationGroup
 
             if (! $reservation->approved()) {
                 $status = "pending";
-            }
-            if (!$reservation->approved()) {
-                $details["approved"] = 0;
                 $details["pending"] += 1;
+            }
+            else {
+                $details["approved"] += 1;
             }
         }
         $routes = array();
@@ -361,10 +359,10 @@ class ReservationGroup
 
             if (! $reservation->approved()) {
                 $status = "pending";
-            }
-            if (!$reservation->approved()) {
-                $details["approved"] = 0;
                 $details["pending"] += 1;
+            }
+            else {
+                $details["approved"] += 1;
             }
         }
         $details["status"] = $status;

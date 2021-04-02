@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -244,6 +244,8 @@ function Do_ProjectProfile()
     $results["description"] = $target_project->name();
     $results["why"]         = $target_project->why();
     $results["forClass"]    = $target_project->forClass() ? true : false;
+    $results["reservations_disabled"] =
+        $target_project->reservations_disabled() ? true : false;
     $results["licenses"]    = array();
 
     if ($ISPOWDER) {
@@ -344,6 +346,10 @@ function Do_Toggle()
                "From: $TBMAIL_OPS\n".
                "Bcc: $TBMAIL_AUDIT\n".
                "Errors-To: $TBMAIL_WWW");
+    }
+    if ($toggle == "project_resdisable") {
+        $newvalue = $target_project->reservations_disabled() ? 0 : 1;
+        $target_project->SetResDisabled($newvalue);
     }
     elseif ($toggle == "bound_portal") {
         $target_project->SetBoundPortal($target_project->bound_portal() ? 0 : 1);

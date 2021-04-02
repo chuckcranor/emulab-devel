@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,15 +37,15 @@ use Date::Parse;
 sub usage()
 {
     print STDERR "Usage: manage_aggregate list\n";
-    print STDERR "       manage_aggregate show [-a <agg>] ... \n";
-    print STDERR "       manage_aggregate chflag [-a <agg>] <flag> yes|no\n";
-    print STDERR "       manage_aggregate ping [-a <agg>] [-s]\n";
-    print STDERR "       manage_aggregate portals [-a <agg>] add <portal> \n";
-    print STDERR "       manage_aggregate portals [-a <agg>] rem <portal> \n";
-    print STDERR "       manage_aggregate feature [-a <agg>] set <feature> \n";
-    print STDERR "       manage_aggregate feature [-a <agg>] clear \n";
+    print STDERR "       manage_aggregate [agg] show \n";
+    print STDERR "       manage_aggregate [agg] chflag <flag> yes|no\n";
+    print STDERR "       manage_aggregate [agg] ping [-s]\n";
+    print STDERR "       manage_aggregate [agg] portals add <portal> \n";
+    print STDERR "       manage_aggregate [agg] portals rem <portal> \n";
+    print STDERR "       manage_aggregate [agg] feature set <feature> \n";
+    print STDERR "       manage_aggregate [agg] feature clear \n";
     print STDERR "Options:\n";
-    print STDERR "  -a agg   - URN, nickname or domain of aggregate\n";
+    print STDERR "  agg   - URN, nickname, abbrev, or domain of aggregate\n";
     exit(-1);
 }
 my $optlist     = "d";
@@ -83,6 +83,10 @@ use APT_Geni;
 use APT_Aggregate;
 use APT_Utility;
 
+# Locals
+my $aggregate;
+my $action;
+
 # Protos
 sub fatal($);
 sub DoList();
@@ -103,17 +107,24 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug++;
 }
-if (@ARGV < 1) {
+if (!@ARGV) {
     usage();
 }
-my $action = shift(@ARGV);
-
-#
-# Default to local cluster, unless overridden in the action.
-#
-my $aggregate = APT_Utility::LookupAggregate($MYURN);
-if (!defined($aggregate)) {
-    fatal("Could not lookup local aggregate: $MYURN");
+$action = shift(@ARGV);
+if ($action ne "list") {
+    if ($action =~ /^(show|chflag|ping|portals|feature)$/) {
+	# Default to local cluster
+	$aggregate = APT_Utility::LookupAggregate($MYURN);
+    }
+    else {
+	usage()
+	    if (!@ARGV);
+	$aggregate = APT_Utility::LookupAggregate($action);
+	$action    = shift(@ARGV);
+    }
+    if (!defined($aggregate)) {
+	fatal("Could not lookup aggregate");
+    }
 }
 
 my $this_user = User->ThisUser();
@@ -156,15 +167,17 @@ sub DoList()
     usage()
 	if (@ARGV);
 
-    my @aggregates = APT_Aggregate->LookupAll();
+    my @aggregates = APT_Aggregate->LookupAll(1);
     exit(0)
 	if (!@aggregates);
 
-    printf("%-20s %-12s %s\n", "Name", "Nickname", "Abbrev");
-    printf("---------------------------------------------\n");
+    printf("%-30s %-15s %s\n", "Name", "Nickname", "Abbrev");
+    printf("--------------------------------------------------------------\n");
 
-    foreach my $aggregate (@aggregates) {
-	printf("%-20s %-12s %s\n",
+    my @sorted = sort { $a->name() cmp $b->name() } @aggregates;
+
+    foreach my $aggregate (@sorted) {
+	printf("%-30s %-15s %s\n",
 	       $aggregate->name(), $aggregate->nickname(),
 	       $aggregate->abbreviation());
     }
@@ -176,7 +189,7 @@ sub DoList()
 #
 sub DoShow()
 {
-    my $optlist = "a:";
+    my $optlist = "";
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -185,11 +198,6 @@ sub DoShow()
     usage()
 	if (@ARGV);
 
-    if (defined($options{"a"})) {
-	$aggregate = APT_Utility::LookupAggregate($options{"a"});
-	fatal("No such aggregate")
-	    if (!defined($aggregate));
-    }
     print "Name:            " . $aggregate->name() . "\n";
     print "NickName:        " . $aggregate->nickname() . "\n";
     print "Abbrev:          " . $aggregate->abbreviation() . "\n"; 
@@ -225,7 +233,7 @@ sub DoShow()
 #
 sub DoFlags()
 {
-    my $optlist = "a:";
+    my $optlist = "";
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -234,11 +242,6 @@ sub DoFlags()
     usage()
 	if (@ARGV != 2 || $ARGV[1] !~ /^(yes|no)$/);
 
-    if (defined($options{"a"})) {
-	$aggregate = APT_Utility::LookupAggregate($options{"a"});
-	fatal("No such aggregate")
-	    if (!defined($aggregate));
-    }
     my $flag  = $ARGV[0];
     my $onoff = $ARGV[1] eq "yes" ? 1 : 0;
 
@@ -328,7 +331,7 @@ sub DoFlags()
 #
 sub DoPing()
 {
-    my $optlist = "a:s";
+    my $optlist = "s";
     my $fastrpc = 1;
     
     my %options = ();
@@ -341,11 +344,6 @@ sub DoPing()
     usage()
 	if (@ARGV);
 
-    if (defined($options{"a"})) {
-	$aggregate = APT_Utility::LookupAggregate($options{"a"});
-	fatal("No such aggregate")
-	    if (!defined($aggregate));
-    }
     my $error;
     if ($aggregate->CheckStatus(\$error, $fastrpc)) {
 	print STDERR $error . "\n";
@@ -358,16 +356,11 @@ sub DoPing()
 #
 sub DoPortals()
 {
-    my $optlist = "a:";
+    my $optlist = "";
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
-    }
-    if (defined($options{"a"})) {
-	$aggregate = APT_Utility::LookupAggregate($options{"a"});
-	fatal("No such aggregate")
-	    if (!defined($aggregate));
     }
     usage()
 	if (@ARGV != 2);
@@ -407,16 +400,11 @@ sub DoPortals()
 #
 sub DoFeature()
 {
-    my $optlist = "a:";
+    my $optlist = "";
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
-    }
-    if (defined($options{"a"})) {
-	$aggregate = APT_Utility::LookupAggregate($options{"a"});
-	fatal("No such aggregate")
-	    if (!defined($aggregate));
     }
     usage()
 	if (@ARGV < 1 || @ARGV > 2);

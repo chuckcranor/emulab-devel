@@ -28,7 +28,7 @@
   interval = "10s"
   ## Rounds collection interval to 'interval'
   ## ie, if interval="10s" then always collect on :00, :10, :20, etc.
-  round_interval = true
+  round_interval = false
 
   ## Telegraf will send metrics to outputs in batches of at most
   ## metric_batch_size metrics.
@@ -45,7 +45,7 @@
   ## Each plugin will sleep for a random time within jitter before collecting.
   ## This can be used to avoid many plugins querying things like sysfs at the
   ## same time, which can have a measurable effect on the system.
-  collection_jitter = "0s"
+  collection_jitter = "3s"
 
   ## Default flushing interval for all outputs. You shouldn't set this below
   ## interval. Maximum flush_interval will be flush_interval + flush_jitter
@@ -1338,6 +1338,7 @@
 # # Read metrics from one or more commands that can output to stdout
 [[inputs.exec]]
     interval = "60s"
+    
 #   ## Commands array
     commands = ["/usr/testbed/sbin/wap /usr/testbed/sbin/powermon -Trc powduino"]
 #     "/tmp/test.sh",
@@ -1346,7 +1347,7 @@
 #   ]
 #
 #   ## Timeout for each command to complete.
-    timeout = "15s"
+    timeout = "10s"
 #
 #   ## measurement name suffix (for separating different commands)
     name_suffix = "_arduinotemp"

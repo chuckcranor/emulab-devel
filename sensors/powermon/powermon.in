@@ -1,6 +1,6 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -114,6 +114,10 @@ if (defined($options{"w"})) {
     } else {
 	print "*** Could not open $whinefile, $TBOPS whining disabled\n";
     }
+    # Send STDERR to the whiner.
+    close(STDERR);
+    open(STDERR, ">&WHINE");
+    autoflush STDERR 1;
 }
 if (defined($options{"A"})) {
     $dotemps = $dopower = $docurrent = 1;
@@ -180,6 +184,21 @@ sub dostatus(@) {
 	if ($doall);
 
     #
+    # Need a TERM handler here (as when called from telegraf)
+    # to make sure that the child dies (in case it is stuck talking
+    # to capture, in which case it will never die, holding capture).
+    #
+    local $SIG{TERM} = sub {
+	#print STDERR "$PID got a TERM. Childpid is $childpid\n";
+	if ($childpid <= 0) {
+	    exit(22);
+	}
+	else {
+	    kill("TERM", $childpid)
+	}
+    };
+
+    #
     # Loop through desired controllers getting status
     # We do this in a child process so we can time it out if
     # one of the controllers is not responding.
@@ -190,7 +209,7 @@ sub dostatus(@) {
 	# Allow 5 seconds per controller
 	#
 	local $SIG{ALRM} = sub { kill("TERM", $childpid); };
-	my $to = 5 * scalar(@wanted);
+	my $to = 5 + (5 * scalar(@wanted));
 	alarm $to;
 	waitpid($childpid, 0);
 	alarm 0;
@@ -216,7 +235,8 @@ sub dostatus(@) {
 			 ($whinefile));
 	    }
 	}
-	return $ecode;
+	$childpid = -1;
+	return $ecode ? -1 : 0;
     }
 
     for my $ctrl (@wanted) {

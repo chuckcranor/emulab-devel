@@ -27,6 +27,8 @@ REPLACE INTO `node_attributes`
 REPLACE INTO `node_attributes`
    VALUES ('nuc2','powercycleafterreload','1',0);
 
+replace INTO `node_type_attributes` VALUES ('nuc8650','reservation_autoapprove_limit','0','integer');
+
 REPLACE INTO `interface_types` VALUES ('P2PLTE',100000,1,'NA','NA',1,'Wireless');
 REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','protocols','P2PLTE');
 REPLACE INTO `interface_capabilities` VALUES ('P2PLTE','P2PLTE_defspeed','10000');

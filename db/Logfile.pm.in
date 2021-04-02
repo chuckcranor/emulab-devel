@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -140,6 +140,22 @@ sub filedescriptor($)	{ return $_[0]->{'FP'}; }
 sub Metadata($)		{ return $_[0]->{'METADATA'}; }
 sub MetadataList($)	{ return $_[0]->{'METADATALIST'}; }
 
+#
+# Return metadata value or undef
+#
+sub MetadataValue($$)
+{
+    my ($self, $key) = @_;
+
+    return undef
+	if (!$self->Metadata());
+
+    return undef
+	if (!exists($self->Metadata()->{$key}));
+    
+    return $self->Metadata()->{$key};
+}
+
 # Break circular reference someplace to avoid exit errors.
 sub DESTROY {
     my $self = shift;
@@ -156,10 +172,12 @@ sub DESTROY {
 sub Stringify($)
 {
     my ($self) = @_;
-    
-    my $logid = $self->logid();
 
-    return "[Logfile: $logid]";
+    my $filename = $self->filename();
+    my $logidx   = $self->logidx();
+
+    return "[Logfile: $logidx" .
+	(defined($filename) ? ", $filename" : "") . "]";
 }
 
 #

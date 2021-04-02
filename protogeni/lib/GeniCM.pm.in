@@ -3128,10 +3128,10 @@ sub GetTicketAuxAux($)
 		$mask = GeniXML::GetMask($ref, $rspec);
 
 		# No IP required for blackbox nodes.
-		# Or if the interface is on a bridge node
+		# Or if the interface is on a bridge node, or a layer 1 link.
 		$required_ips--
 		    if ((defined($nodetype) && $nodetype->isblackbox()) ||
-			exists($bridgemap{$iface_id}));
+			exists($bridgemap{$iface_id}) || $layer == 1);
 	    }
 	    $supplied_ips++
 		if (defined($ip));

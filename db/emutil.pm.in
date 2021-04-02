@@ -326,6 +326,9 @@ sub TBGetUniqueIndex($;$$)
 {
     my ($name, $initval, $nolock) = @_;
 
+    return TBGetUniqueIndexNew($name, $initval, $nolock)
+	if (1);
+
     #
     # Lock the table to avoid conflict, but not if the caller already did it.
     #
@@ -349,6 +352,47 @@ sub TBGetUniqueIndex($;$$)
     DBQueryFatal("unlock tables")
 	if (!$nolock);
 
+    return $curidx;
+}
+
+sub TBGetUniqueIndexNew($;$$)
+{
+    my ($name, $initval, $nolock) = @_;
+    $nolock = 0
+	if (!defined($nolock));
+    
+    #
+    # Determine if the index exists, if not already in the table, then
+    # we have to lock it and initialize.
+    #
+    my $query_result =
+	DBQueryFatal("select idx from emulab_indicies ".
+		     "where name='$name'");
+    
+    if (!$query_result->numrows) {
+	DBQueryFatal("lock tables emulab_indicies write")
+	    if (!$nolock);
+	
+	$query_result =
+	    DBQueryFatal("select idx from emulab_indicies ".
+			 "where name='$name'");
+
+	if (!$query_result->numrows) {
+	    DBQueryFatal("insert into emulab_indicies set ".
+			 " name='$name',idx='$initval'");
+	}
+	DBQueryFatal("unlock tables")
+	    if (!$nolock);
+    }
+
+    #
+    # Once it exists, we can do this atomically.
+    #
+    DBQueryFatal("update emulab_indicies set idx=LAST_INSERT_ID(idx) + 1 ".
+		 "where name='$name'");
+
+    $query_result = DBQueryFatal("select LAST_INSERT_ID()");
+    my ($curidx) = $query_result->fetchrow_array();
     return $curidx;
 }
 

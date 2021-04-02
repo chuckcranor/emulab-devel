@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -280,6 +280,10 @@ sub DoCreate()
     else {
 	if (!APT_Dataset::ValidBlockstoreBackend($aggregate_urn)) {	
 	    fatal("Invalid cluster selection");
+	}
+	$aggregate = APT_Aggregate->Lookup($aggregate_urn);
+	if (!defined($aggregate)) {
+	    fatal("Could not lookup aggregate: $aggregate_urn\n");
 	}
     }
     if (defined($options{"f"})) {

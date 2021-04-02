@@ -93,7 +93,9 @@ my $TEMP_SHUTDOWN   = 110;
 my $TEMP_RESUME     = 95;
 # The arduino can give transient bogus values
 my $TEMP_MAXCUTOFF  = 250;
-my $TEMP_MAXDIFF    = 25;
+# For temperature averaging
+my $TEMP_QSIZE      = 10;
+my @tempQueue       = ();
 
 #
 # Deadman
@@ -342,7 +344,7 @@ sub CheckDeadman($$)
     #
     # Wait with timeout for the ping. 
     #
-    my (@ready) = IO::Select->new($deadmanSocket)->can_read(5);
+    my (@ready) = IO::Select->new($deadmanSocket)->can_read(15);
     if (@ready) {
 	my $client = $deadmanSocket->recv($data, 2048);
 	if (! $client) {
@@ -485,6 +487,33 @@ sub InitTempAndBattery()
 		     [1, 12.3], [1, 12.2], [1, 12.3], [1, 12.2]);
 }
 
+#
+# Need to average out last few values cause of the whacky temps we sometimes
+# get back. Throw anything over 200 away.
+#
+sub AverageTemp($)
+{
+    my ($temp)  = @_;
+    my $average = 0.0;
+
+    logit("New tempF: $temp\n");
+
+    if ($temp <= $TEMP_MAXCUTOFF) {
+	if (scalar(@tempQueue) >= $TEMP_QSIZE) {
+	    shift(@tempQueue);
+	}
+	push(@tempQueue, $temp);
+	logit("TempQ: " . join(",", @tempQueue) . "\n") if ($debug);
+    }
+    return undef
+	if (scalar(@tempQueue) < $TEMP_QSIZE);
+
+    foreach my $temp (@tempQueue) {
+	$average += $temp / $TEMP_QSIZE;
+    }
+    return $average;
+}
+
 sub CheckTempAndBattery($$)
 {
     my ($pstatus, $doemail) = @_;
@@ -513,6 +542,9 @@ sub CheckTempAndBattery($$)
 	    $fakeTempIndex++;
 	}
     }
+    else {
+	$tempF = AverageTemp($tempF);
+    }
     # Debugging with fake battery values
     if ($batdebug) {
 	if ($fakeVoltageIndex < scalar(@fakeVoltages) - 1) {
@@ -522,7 +554,7 @@ sub CheckTempAndBattery($$)
     }
 
     if ($verbose) {
-	my $tmp = "temp:$tempF";
+	my $tmp = "temp:" . (defined($tempF) ? $tempF : "n/a");
 	if ($ONBUS) {
 	    $tmp .= ", onbat:$onbattery, voltage:$voltage";
 	}
@@ -531,12 +563,9 @@ sub CheckTempAndBattery($$)
     }
 
     #
-    # The temp can go wonky. Ignore anything that seems bogus.
+    # The temp can go wonky, so if tempF is undefined, skip the temp checks.
     #
-    if ($tempLastTemp && abs($tempLastTemp - $tempF) > $TEMP_MAXDIFF) {
-	logit("Ignoring latest value $tempF, last value was $tempLastTemp\n");
-    }
-    elsif ($tempF >= $TEMP_WARN && $tempF < $TEMP_MAXCUTOFF) {
+    if (defined($tempF) && $tempF >= $TEMP_WARN) {
 	if ($tempF >= $TEMP_SHUTDOWN) {
 	    if (!defined($tempShutdownTime)) {
 		$tempShutdownTime = time();
@@ -575,7 +604,7 @@ sub CheckTempAndBattery($$)
 	}
 	$tempLastTemp = $tempF;
     }
-    elsif ($tempF <= $TEMP_RESUME &&
+    elsif (defined($tempF) && $tempF <= $TEMP_RESUME &&
 	   (defined($tempWarningTime) || defined($tempShutdownTime))) {
 	#
 	# Once the Temperature fails below the resume temp, we call
@@ -627,7 +656,8 @@ sub CheckTempAndBattery($$)
 		    NotifyTBOPS("$SHORTNAME Monitor: back on bus power",
 				"$SHORTNAME is back on bus power\n".
 				"Voltage:   $voltage\n".
-				"Temp (F):  $tempF\n");
+				"Temp (F):  " . (defined($tempF) ?
+						 $tempF : "n/a") . "\n");
 		    
 		    NotifyUsers("$SHORTNAME Monitor: back on bus power",
 				"$SHORTNAME is back on bus power, nodes ".
@@ -649,8 +679,9 @@ sub CheckTempAndBattery($$)
 		NotifyTBOPS("$SHORTNAME Monitor: running on battery",
 			    "$SHORTNAME is running on battery\n".
 			    "Voltage:   $voltage\n".
-			    "Temp (F):  $tempF\n");
-		
+			    "Temp (F):  " . (defined($tempF) ?
+					     $tempF : "n/a") . "\n");
+
 		NotifyUsers(
 		    "$SHORTNAME Monitor: running on battery",
 		    "$SHORTNAME is running on battery\n\n".
@@ -701,7 +732,8 @@ sub CheckTempAndBattery($$)
 		    "Low voltage on $SHORTNAME\n".
 		    "Voltage:   $voltage\n".
 		    "OnBattery: " . (time() - $onBatteryTime) . " seconds\n".
-		    "Temp (F):  $tempF\n");
+		    "Temp (F):  " . (defined($tempF) ? $tempF : "n/a") . "\n");
+
 		# Give it a moment to get out the door.
 		sleep(15);
 		system("/sbin/shutdown -p now &");
@@ -748,7 +780,7 @@ sub GetTempAndBattery($$$)
     if ($childpid) {
 	local $SIG{ALRM} = sub { kill("TERM", $childpid); };
 	
-	alarm 10;
+	alarm 5;
 	waitpid($childpid, 0);
 	alarm 0;
 	my $ecode = $?;
@@ -761,6 +793,7 @@ sub GetTempAndBattery($$$)
 		$cause = "failed with exit value ". ($ecode >> 8);
 	    }
 	    logit("*** Powduino fetch failure: $cause\n");
+	    close(CHILD);
 	    return -1;
 	}
 	while (<CHILD>) {

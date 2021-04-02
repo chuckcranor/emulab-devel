@@ -4302,7 +4302,7 @@ sub doPruneStaleVlans($)
 		print "Checking vlan $id ($tag) consistency.\n";
 		if ($stack->checkVlanConsistency($id, !$impotent)) {
 		    if (!$impotent) {
-			die("\n");
+			next;
 		    }
 		}
 	    }

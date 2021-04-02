@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -533,6 +533,9 @@ sub AddLogfileMetaDataFromSlice($)
     AddLogfileMetaData("slice_idx",  $slice->idx());
     AddLogfileMetaData("slice_urn",  $slice->urn());
     AddLogfileMetaData("slice_uuid", $slice->uuid());
+    if (defined($logfile)) {
+	$logfile->SetMetadata(\@metadata, 1);
+    }
 }
 sub AddLogfileMetaDataFromSpeaksFor($)
 {
@@ -542,6 +545,9 @@ sub AddLogfileMetaDataFromSpeaksFor($)
     AddLogfileMetaData("speakfor_uuid",  $speaksfor->target_uuid());
     AddLogfileMetaData("speaking_urn",   $speaksfor->owner_urn());
     AddLogfileMetaData("speaking_uuid",  $speaksfor->owner_uuid());
+    if (defined($logfile)) {
+	$logfile->SetMetadata(\@metadata, 1);
+    }
 }
 sub AbortLogging()
 {
@@ -743,6 +749,7 @@ push(@metadata, ["Method", $method]);
 push(@metadata, ["Version", $GENI_VERSION]) if (defined($GENI_VERSION));
 push(@metadata, ["StartTime", TBTimeStamp()]);
 push(@metadata, ["Project", $PROJECT]) if (defined($PROJECT));
+push(@metadata, ["PID", $PID]);
 # To assist debugging, push the initial metadata so that it is in the DB.
 $logfile->SetMetadata(\@metadata, 1);
 

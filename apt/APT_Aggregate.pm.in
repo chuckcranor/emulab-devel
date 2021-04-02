@@ -341,14 +341,15 @@ sub LookupForPortal($$)
 #
 # Lookup all aggregates,
 #
-sub LookupAll($)
+sub LookupAll($;$)
 {
-    my ($class) = @_;
+    my ($class, $include_disabled) = @_;
     my @result = ();
+    $include_disabled = 0 if (!defined($include_disabled));
 
     my $query_result =
 	DBQueryWarn("select urn from apt_aggregates ".
-		    "where disabled=0");
+		    ($include_disabled ? "" : "where disabled=0"));
     return ()
 	if (!$query_result);
     return ()
@@ -396,6 +397,25 @@ sub LookupByNickname($$)
     my $query_result =
 	DBQueryWarn("select urn from apt_aggregates ".
 		    "where nickname='$nickname'");
+    return undef
+	if (!$query_result);
+    return undef
+	if (!$query_result->numrows);
+
+    my ($aggregate_urn) = $query_result->fetchrow_array();
+    return Lookup($class, $aggregate_urn);
+}
+
+sub LookupByAbbreviation($$)
+{
+    my ($class, $abbreviation) = @_;
+
+    if ($abbreviation !~ /^[-\w]+$/) {
+	return undef;
+    }
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where abbreviation='$abbreviation'");
     return undef
 	if (!$query_result);
     return undef

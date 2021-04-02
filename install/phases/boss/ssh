@@ -50,7 +50,6 @@ sub Install($$$)
 	    DoneIfExists($SWITCH_RSA_PRIVKEY);
 
 	    ExecQuietFatal("$SSH_KEYGEN -t rsa -P '' -f $SWITCH_RSA_PRIVKEY");
-	    ExecQuietFatal("$CHOWN $PROTOUSER $SWITCH_RSA_PRIVKEY");
 	    ExecQuietFatal("$CHMOD 444 $SWITCH_RSA_PRIVKEY");
 	};
 	

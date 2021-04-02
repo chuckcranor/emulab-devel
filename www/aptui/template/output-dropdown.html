@@ -1,10 +1,10 @@
 <style>
-  #output-dropdown {
+  .output-dropdown {
     min-width: 280px;
     font-size: 12px;
     padding: 10px;
   }
-  #output-dropdown h5 {
+  .output-dropdown h5 {
     text-align: right;
     margin-right: 4px;
   }
@@ -13,13 +13,13 @@
   }
 </style>
    <!-- Split button -->
-    <div class="btn-group btn-group-sm">
+    <div class="btn-group">
       <button type="button" class="btn btn-default btn-sm download">Download</button>
       <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown">
         <span class="caret"></span>
         <span class="sr-only">Toggle Dropdown</span>
       </button>
-      <ul class="dropdown-menu" id='output-dropdown' role="menu">
+      <ul class="dropdown-menu output-dropdown" role="menu">
         <li><h5><strong>Output options</strong></h5></li>
         <li>
           <label>Separator: <input class="output-separator-input" type="text" size="2" value=","></label>
@@ -66,4 +66,3 @@
         <li><label title="Choose a download filename">Filename: <input class="output-filename" type="text" size="15" value="mytable.csv"></label></li>
       </ul>
     </div>
-  </div>
