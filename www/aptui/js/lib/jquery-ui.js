@@ -8463,7 +8463,7 @@ $.widget( "ui.autocomplete", {
 
 	_renderItem: function( ul, item ) {
 		return $( "<li>" )
-			.append( $( "<div>" ).text( item.label ) )
+			.append( $( "<div>" ).html( item.label ) )
 			.appendTo( ul );
 	},
 
@@ -8489,8 +8489,12 @@ $.widget( "ui.autocomplete", {
 		return this.menu.element;
 	},
 
-	_value: function() {
-		return this.valueMethod.apply( this.element, arguments );
+	_value: function(value) {
+		if (value === undefined) {
+			return this.valueMethod.apply( this.element );
+		}
+		value = $('<div>').html(value).text();
+		return this.valueMethod.apply( this.element, [ value ] );
 	},
 
 	_keyEvent: function( keyEvent, event ) {
