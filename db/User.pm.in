@@ -1045,6 +1045,14 @@ sub ModUserInfo($$$$)
     if (keys %updates) {
 	if (exists($updates{"usr_affil"})) {
 	    $updates{"affiliation_updated"} = "now()";
+	    #
+	    # Avoid email when doing the affiliation update if it actually
+	    # did not change, we are here cause the web page forced the chane
+	    # so that we update affiliation_updated.
+	    #
+	    if ($updates{"usr_affil"} eq $target_user->affil()) {
+		delete($mods{"usr_affil"});
+	    }
 	}
 	if ($target_user->Update(\%updates)) {
 	    return undef;
