@@ -3435,9 +3435,14 @@ $(function ()
 
 		// Now create the console iframe inside the new tab
 		if (APT_OPTIONS.webssh && _.has(json.value, "authobject")) {
-		    StartConsoleNew(tabname, json.value);
+		    var jsonauth = $.parseJSON(json.value.authobject);
+		    
+		    if (_.has(jsonauth, "webssh") && jsonauth.webssh != 0) {
+			StartConsoleNew(tabname, json.value);
+			return;
+		    }
 		}
-		else {
+		if (1) {
 		    var iwidth = "100%";
 		    var iheight = 400;
 		
