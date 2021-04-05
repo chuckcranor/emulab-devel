@@ -360,6 +360,8 @@ sub TBGetUniqueIndexNew($;$$)
     my ($name, $initval, $nolock) = @_;
     $nolock = 0
 	if (!defined($nolock));
+    $initval = 1
+	if (!defined($initval));
     
     #
     # Determine if the index exists, if not already in the table, then
