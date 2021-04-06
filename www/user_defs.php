@@ -856,7 +856,7 @@ class User
     function RequireAffiliation() {
         global $TBMAINSITE;
 
-        if ($TBMAINSITE) {
+        if (!$TBMAINSITE) {
             return 0;
         }
         $affil = trim($this->affil());
