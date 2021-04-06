@@ -138,10 +138,10 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         # be back here later.
         ;
     }
-    elseif ($login_user && $ISPOWDER && $login_user->RequireAddress()) {
+    elseif (login_user && $login_user->NeedAccountUpdate()) {
         if ($script != "myaccount.php" && $script != "logout.php") {
             $referrer = urlencode($_SERVER['REQUEST_URI']);
-            header("Location: myaccount.php?addrequired=1&referrer=$referrer");
+            header("Location: myaccount.php?needupdate=1&referrer=$referrer");
             return;
         }
     }
