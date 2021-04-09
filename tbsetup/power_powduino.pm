@@ -32,7 +32,8 @@ use strict;
 use Exporter;
 use vars qw(@ISA @EXPORT);
 @ISA = ("Exporter");
-@EXPORT = qw( powduinoctrl powduinostatus powduinotemp powduinovoltage );
+@EXPORT = qw( powduinoctrl powduinostatus powduinotemp powduinovoltage
+              powduinocurrent );
 
 use Socket;
 use IO::Socket;
@@ -135,6 +136,40 @@ sub powduinovoltage {
 	$status = syncandsend($controller, $TIP, "voltage", $statusp);
 	last
 	    if $status >= 0;
+    }
+    $TIP->close();
+    return $status ? 1 : 0;
+}
+
+sub powduinocurrent {
+    my ($controller, $statusp) = @_;
+
+    my($TIP, $i, $insync);
+
+    #
+    # Form the connection to the controller via a "tip" line to the
+    # capture process. Once we have that, we can just talk to the
+    # controller directly.
+    #
+    if (!($TIP = tipconnect($controller))) {
+	print STDERR "*** Could not form TIP connection to $controller\n";
+	return 1;
+    }
+
+    #
+    # Send the command.  Try again a few times if there is a retryable error.
+    #
+    my $status;
+    for my $try (1..$ntries) {
+	$status = syncandsend($controller, $TIP, "current", $statusp);
+	last
+	    if $status >= 0;
+    }
+    # Oh ick, the way syncandsend is implmenented, the current looks
+    # like the temp.
+    if (exists($statusp->{"tempC"})) {
+	$statusp->{"current"} = $statusp->{"tempC"};
+	delete($statusp->{"tempC"});
     }
     $TIP->close();
     return $status ? 1 : 0;

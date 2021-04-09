@@ -158,7 +158,8 @@ sub InitDeadman();
 sub InitTempAndBattery();
 sub CheckDeadman($$);
 sub CheckTempAndBattery($$);
-sub GetTempAndBattery($$$);
+sub GetTempAndBattery($$$$);
+sub AdjustVoltage($$);
 sub NotifyTBOPS($$);
 sub NotifyUsers($$);
 sub PowerAll($);
@@ -519,8 +520,8 @@ sub CheckTempAndBattery($$)
     my ($pstatus, $doemail) = @_;
     my $status = 0;
     
-    my ($tempF, $onbattery, $voltage) = @_;
-    if (GetTempAndBattery(\$tempF, \$onbattery, \$voltage)) {
+    my ($tempF, $onbattery, $voltage, $current) = @_;
+    if (GetTempAndBattery(\$tempF, \$onbattery, \$voltage, \$current)) {
 	if (time() - $tempLastCheck > 300) {
 	    if (!$tempFailMail || time() - $tempFailMail > (24 * 3600)) {
 		NotifyTBOPS("$SHORTNAME Monitor: temp/battery check failure",
@@ -557,6 +558,13 @@ sub CheckTempAndBattery($$)
 	my $tmp = "temp:" . (defined($tempF) ? $tempF : "n/a");
 	if ($ONBUS) {
 	    $tmp .= ", onbat:$onbattery, voltage:$voltage";
+	    if (defined($current)) {
+		$tmp .= ", current:$current";
+		if ($current > 0) {
+		    $voltage = AdjustVoltage($voltage, $current);
+		    $tmp .= ", v':$voltage";
+		}
+	    }
 	}
 	$tmp .= "\n";
 	logit($tmp);
@@ -759,6 +767,19 @@ sub PinConvert($)
     }
     return sprintf("%.3f", $voltage);
 }
+sub CurrentConvert($)
+{
+    my ($current) = @_;
+
+    return sprintf("%.3f", (50.0 * ($current / 1023.0)));
+}
+# Adjust voltage using current.
+sub AdjustVoltage($$)
+{
+    my ($voltage, $current) = @_;
+
+    return sprintf("%.3f", $voltage + ($current * 0.044));
+}
 sub TempConvert($)
 {
     my ($celcius) = @_;
@@ -766,9 +787,9 @@ sub TempConvert($)
     return sprintf("%.3f", ($celcius * 9.0/5.0) + 32);
 }
 
-sub GetTempAndBattery($$$)
+sub GetTempAndBattery($$$$)
 {
-    my ($ptemp, $ponbat, $pvoltage) = @_;
+    my ($ptemp, $ponbat, $pvoltage, $pcurrent) = @_;
     my $output = "";
     
     my $childpid = open(CHILD, "-|");
@@ -844,6 +865,24 @@ sub GetTempAndBattery($$$)
 	    }
 	    $blob->{"pin0"} = $pin0;
 	    $blob->{"pin1"} = $pin1;
+
+	    if ($POWDER_BUS_P0WER_VERSION >= 2) {
+		my %tmp;
+		if (powduinocurrent("powduino", \%tmp)) {
+		    exit(1);
+		}
+		if (! exists($tmp{"current"})) {
+		    logit("Incomplete current data from powduino\n");
+		    exit(1);
+		}
+		my $current = $tmp{"current"};
+
+		if ($current !~ /^\d+$/ || $current < 0 || $current > 1000) {
+		    logit("Bad value for current: $current");
+		    exit(1);
+		}
+		$blob->{"current"} = $current;
+	    }
 	}
 	if ($verbose > 1) {
 	    logit(Dumper($blob));
@@ -864,7 +903,12 @@ sub GetTempAndBattery($$$)
     $$ptemp = TempConvert($tmp->{'tempC'});
     if ($ONBUS) {
 	$$ponbat = ($tmp->{'pin0'} < $PIN0_THRESHOLD ? 1 : 0);
-	$$pvoltage = PinConvert($tmp->{'pin1'});
+	my $voltage = PinConvert($tmp->{'pin1'});
+	if (exists($tmp->{'current'})) {
+	    my $current = CurrentConvert($tmp->{'current'});
+	    $$pcurrent  = $current;
+	}
+	$$pvoltage = $voltage;
 
 	if (defined($DBNUM) && !$impotent) {
 	    emdbi::DBQueryWarnN($DBNUM,
