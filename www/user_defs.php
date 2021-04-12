@@ -854,6 +854,11 @@ class User
     # Does the user need to update their affiliation.
     #
     function RequireAffiliation() {
+        global $TBMAINSITE;
+
+        if (!$TBMAINSITE) {
+            return 0;
+        }
         $affil = trim($this->affil());
         $updated = strtotime($this->affiliation_updated());
         
