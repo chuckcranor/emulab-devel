@@ -33,9 +33,9 @@
 
    which prints the serial number,
 
--- Create device mapping file using the serial number from above command.
+-- Clean up after previous two commands.
 
-	echo 'ue1 SERIAL' | sudo csh -c '(cat > /etc/emulab/tbadbmap)'
+	adb kill-server
 
 -- rsync over the emulab-devel source code to the control node to build
    tbadb.
@@ -50,6 +50,21 @@
 
 -- Copy over boss' root ssh public key and install in /root/.ssh
 
+	cd mobile
+	sudo make client-install
+	cd ../tmcc/common
+	sudo make path-install
+	cd ../../../../emulab-devel/clientside/tmcc/common/
+	sudo cp libtestbed.pm /usr/local/etc/emulab
+	sudo cp libtmcc.pm /usr/local/etc/emulab
+	
+-- Create device mapping file using the serial number from above command.
+
+	echo 'ue1 SERIAL' | sudo csh -c '(cat > /etc/emulab/tbadbmap)'
+
+-- And start it up:
+
+	sudo /usr/testbed/sbin/tbadb_serv
 
 -------
 
@@ -61,6 +76,17 @@ Add to tiny boss.
 	MOBILESUPPORT=1
 and rebuild/install
 
+Import the phone image. While this has an .ndz extension, this is not an
+ndz file and image_import eventually fails.
+
+wap image_import -g -p emulab-ops 'https://www.emulab.net/image_metadata.php?uuid=c40718d8-e56f-11e5-b570-99cadac50270'
+cd /usr/testbed/images/ANDROID444-STD/
+mv ANDROID444-STD.ndz.new ANDROID444-STD.ndz    
+mv ANDROID444-STD.ndz.new.sha1 ANDROID444-STD.ndz.sha1
+imagevalidate -u -V size emulab-ops,ANDROID444-STD
+
+wap editnodetype ~/emulab-devel/emulab-devel/install/powder-fixed/nexus5.xml
+
 wap addrfdevice -t nexus5 ue1
 
 insert into tiplines (tipname, node_id, server) values
@@ -71,4 +97,8 @@ insert into node_attributes set
 insert into node_attributes set
 	node_id="ue1", attrkey="sim_sequence_number", attrvalue="1000000";
 
+-- Add this pub key to root on the control node.
+sudo -E scp /root/.ssh/id_rsa.pub stoller@control:/tmp
+
+wap tbadb -n ue1 loadimage emulab-ops ANDROID444-STD
 
