@@ -134,14 +134,14 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         }
     }
     elseif ($login_user && ($login_status & CHECKLOGIN_PSWDEXPIRED)) {
-        # Bypass the next set of checks, let this proceee. User will
+        # Bypass the next set of checks, let this proceed. User will
         # be back here later.
         ;
     }
-    elseif (login_user && $login_user->NeedAccountUpdate()) {
+    elseif ($login_user && $login_user->NeedAccountUpdate()) {
         if ($script != "myaccount.php" && $script != "logout.php") {
             $referrer = urlencode($_SERVER['REQUEST_URI']);
-            header("Location: myaccount.php?needupdate=1&referrer=$referrer");
+            header("Location: myaccount.php?needupdate=1");
             return;
         }
     }
@@ -496,6 +496,7 @@ echo "
         ";
       if ($ISPOWDER) {
           echo "<li><a href='radioinfo.php'>Powder Radio Info</a></li>";
+          echo "<li><a href='powder-map.php'>Powder Map</a></li>";
       }
 echo " <li class='divider'></li>
         <li><a href='user-dashboard.php#experiments'>
