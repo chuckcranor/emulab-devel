@@ -1383,6 +1383,8 @@ sub WaitTillReloadDone($$$$$@)
     if ($waitmode > 1) {
 	$startwait = time;
 	foreach my $node (@nodes) {
+	    my $nodeobject = $self->node($node);
+	    
 	    print STDERR
 		"$self ($node): waiting for node to finish booting\n";
 	    if ($done{$node} < $waitmode) {
@@ -1399,6 +1401,7 @@ sub WaitTillReloadDone($$$$$@)
 		    $done{$node} = $waitmode;
 		} else {
 		    push(@failed, $node);
+		    $self->nodeinfo($nodeobject, 'retries', 0);
 		}
 	    }
 	}
