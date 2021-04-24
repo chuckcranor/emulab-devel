@@ -78,7 +78,11 @@
     Share</a>
   <center>
     <h4>
-      Radio Monitoring Graph for
+      <% if (window.BASELINE) { %>
+	Spectrum Monitoring Graph for
+      <% } else { %>
+	Radio Monitoring Graph for
+      <% } %>
       <span class="frequency-graph-cluster"></span>
       <span class="frequency-graph-nodeid">
 	<%- node_id %></span>:<span class="frequency-graph-iface"><%- iface %>
