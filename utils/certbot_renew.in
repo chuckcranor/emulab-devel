@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2011-2020 University of Utah and the Flux Group.
+# Copyright (c) 2011-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -115,7 +115,7 @@ LogStart(0);
 $UID = 0;
 
 my $CERT    = "/usr/local/etc/letsencrypt/live/$OURDOMAIN/cert.pem";
-my $CERTBOT = "certbot-2.7 certonly -n --agree-tos -m $TBOPS ".
+my $CERTBOT = "certbot certonly -n --agree-tos -m $TBOPS ".
     ($impotent ? "--dry-run " : "") .
     ($expand   ? "--expand " : "") .
     "--manual-public-ip-logging-ok ".
