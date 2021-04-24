@@ -4235,8 +4235,10 @@
 			filter1 = $.isArray(filter1) ? filter1 : [];
 			filter2 = $.isArray(filter2) ? filter2 : [];
 			for (indx = 0; indx < len; indx++) {
-				f1[indx] = filter1[indx] || '';
-				f2[indx] = filter2[indx] || '';
+			    f1[indx] =
+				filter1[indx] != "" ? filter1[indx] : '__X__';
+			    f2[indx] =
+				filter2[indx] != "" ? filter2[indx] : '__X__';
 			}
 			return f1.join(',') === f2.join(',');
 		},
