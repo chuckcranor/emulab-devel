@@ -995,7 +995,11 @@ sub GetTicketAuxAux($)
 		print STDERR 'DEBUG: Adding row to virt_address_allocation';
 		my $pool_id = $pool->{'client_id'};
 		# Ug, this causes named to croak.
-		$pool_id =~ s/_/-/g;
+		if ($pool_id =~ /\_/) {
+		    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+		     "Invalid client_id, no underscores allowed in pool name.");
+		    goto bad;
+		}
 		$virtexperiment->NewTableRow("virt_address_allocation",
 					 {"pool_id" => $pool_id,
 					  "count" => $pool->{'count'},
