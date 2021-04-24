@@ -620,6 +620,10 @@ sub LockDebug($$)
 {
     my ($dbw, $query) = @_;
 
+    # Disable, the race is dead! 
+    return 0
+	if (1);
+
     return 0
 	if (! ($MAINSITE && $query =~ /lock\s+tables/i));
 
