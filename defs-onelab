@@ -420,8 +420,10 @@ ZFS_ROOT=z
 ZFS_QUOTA_USER="1G"
 ZFS_QUOTA_PROJECT="50G"
 ZFS_QUOTA_GROUP="10G"
-WITHAMD=1
-AMD_ROOT=/.amd_mnt/ops
+
+# Use autofs, AMD is deprecated -- added by hibler 04/23/21
+#WITHAMD=1
+#AMD_ROOT=/.amd_mnt/ops
 
 # Use this with ZFS
 ZFS_NOEXPORT=1
