@@ -145,8 +145,10 @@ function Do_GetMobileEndpoints()
     $buses = array();
     
     while ($row = mysql_fetch_array($query_result)) {
+        $urn = $row["urn"];
+        
         $blob = array(
-            "urn"           => $row["urn"],
+            "urn"           => $urn,
             "type"          => $row["type"],
             "busid"         => $row["busid"],
             "last_ping"     => DateStringGMT($row["last_ping"]),
@@ -160,6 +162,18 @@ function Do_GetMobileEndpoints()
             "heading"       => $row["heading"],
             "location_stamp"=> DateStringGMT($row["location_stamp"]),
         );
+
+        #
+        # Lets try to determine what buses are free by looking at the local
+        # state. To many buses at the end of slow links to ask them anytime
+        # a user wants to know (say, from the resource availability page).
+        #
+        $free_result =
+            DBQueryFatal("select status from apt_instance_aggregates as ia ".
+                         "where ia.status!='terminated' and ".
+                         "      ia.aggregate_urn='$urn'");
+        $blob["free"] = (mysql_num_rows($free_result) == 0 ? 1 : 0);
+        
         $buses[$row["busid"]] = $blob;
     }
 

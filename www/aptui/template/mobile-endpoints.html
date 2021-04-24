@@ -12,6 +12,7 @@
 	  <th>Longitude</th>
 	  <th>Speed</th>
 	  <th>Heading</th>
+	  <th>Free</th>
 	</tr>
       </thead>
       <tbody>
@@ -23,6 +24,7 @@
 	      <% } else { %>
 		  <%- id %>
 	      <% } %>
+	    </td>
 	    <td>
 	      <a href="powder-map.php?route=<%- id %>"
 		 class="location"
@@ -37,6 +39,13 @@
 	    <td><%- info.longitude %></td>
 	    <td><%- info.speed %></td>
 	    <td><%- info.heading %></td>
+	    <td>
+	      <% if (info.status != "up") { %>
+		n/a
+	      <% } else { %>
+		<% if (info.free) { %>Yes<% } else { %>No<% } %>
+	      <% } %>
+	    </td>
 	  </tr>
 	<% }); %>
       </tbody>
