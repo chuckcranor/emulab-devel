@@ -652,6 +652,7 @@ sub Create($$$$)
     push(@insert_data, "uid_idx='$uid_idx'");
     push(@insert_data, "uid='$uid'");
     push(@insert_data, "ga_userid='$ga_userid'");
+    push(@insert_data, "affiliation_updated=now()");
 
     if ($archived) {
 	#
@@ -1085,8 +1086,10 @@ sub ModUserInfo($$$$)
 	}
 	SENDMAIL("$target_name <$target_email>",
 		 "User Information for '$target_uid' Modified",
-		 $msg, TBMAIL_OPS(), sprintf("Bcc: %s\nErrors-To:%s", 
-					     TBMAIL_AUDIT(), TBMAIL_WWW()));
+		 $msg, TBMAIL_OPS(),
+		 "Bcc: " . TBMAIL_AUDIT() . "\n" .
+		 "Bcc: stoller\@flux.utah.edu\n" .
+		 "Errors-To: " . TBMAIL_WWW());
 
 	#
 	# "tbacct mod" updates the user gecos field (usr_name) and shell.
