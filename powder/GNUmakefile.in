@@ -28,6 +28,7 @@ SUBDIR		= powder
 ISMAINSITE	= @TBMAINSITE@
 DEADMAN         = @POWDER_DEADMAN@
 RFMON           = @POWDER_RFMONITOR@
+TARGETSYS       = @TARGETSYS_TARGET@
 
 include $(OBJDIR)/Makeconf
 
@@ -48,6 +49,9 @@ INSTALLTARGET   = endpoint-install
 endif
 ifeq ($(RFMON),1)
 SBIN_SCRIPTS   += pokerffe
+endif
+ifeq ($(TARGETSYS),BUS)
+SBIN_SCRIPTS   += mobile-update
 endif
 
 #
