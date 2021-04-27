@@ -2160,6 +2160,37 @@ sub CheckRoutes($$$$$$)
     if (APT_Profile::GetRoutes($rspec, \$routes, $pmsg)) {
 	return -1;
     }
+    return 0
+	if (! @{$routes});
+
+    #
+    # Temporary route obfuscation.
+    #
+    if (scalar(@{$routes}) == 1) {
+	my $request   = $routes->[0];
+	my $routename = $request->{"name"};
+	my $routemap  = APT_Reservation::Group::RouteReservation::RouteMap();
+
+	if ($routename eq "allroutes") {
+	    my $node = $request->{"dom"};
+
+	    print Dumper($routemap);
+
+	    foreach my $name (keys(%{$routemap})) {
+		my $clone = $node->cloneNode(1);
+		GeniXML::SetText("name", $clone, "$name");
+		$rspec->addChild($clone);
+	    }
+	    $rspec->removeChild($node);
+
+	    $routes = [];
+	    if (APT_Profile::GetRoutes($rspec, \$routes, $pmsg)) {
+		return -1;
+	    }
+	    print GeniXML::Serialize($rspec);
+	}
+    }
+    
     foreach my $request (@{$routes}) {
 	my $routename = $request->{"name"};
 
@@ -2867,9 +2898,9 @@ sub BindingsToParams($)
 # Return an rspec fragment for a node at an aggregate. The node id
 # is optional.
 #
-sub RSpecNodeFragment($$$;$)
+sub RSpecNodeFragment($$$$)
 {
-    my ($aggregate_urn, $client_id, $protonode, $node_id) = @_;
+    my ($aggregate_urn, $client_id, $node_id, $protonode) = @_;
     my $aggregate_hrn = GeniHRN->new($aggregate_urn);
     my $component_id  = "";
 

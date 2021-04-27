@@ -815,6 +815,28 @@ if (APT_Profile::CheckRoutes($rspec, $project,
 			       $noresokay, \$errmsg)) {
     UserError($errmsg);
 }
+#
+# For now, any reservation with routes must end on the same
+# day by midnight.
+#
+if (! $this_user->IsAdmin()) {
+    my $routes = [];
+    if (APT_Profile::GetRoutes($rspec, \$routes, \$errmsg)) {
+	UserError($errmsg);
+    }
+    if (@{$routes}) {
+	my $s = (defined($start_at) ? $start_at : time());
+	my $e = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
+
+	my (undef,undef,$start_hour,$start_day) = localtime($s);
+	my (undef,undef,$end_hour,$end_day) = localtime($e);
+	    
+	if ($start_day != $end_day) {
+	    UserError("Experiments using mobile endpoints must end by ".
+		      "midnight (Mountain timezone) on the same day");
+	}
+    }
+}
 
 #
 # Now we know where to send to logs.
@@ -936,7 +958,7 @@ $tmp = APT_Profile::EncryptBlocks($rspec, $alt_certificate, \$errmsg);
 if ($tmp) {
     ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
 }
-$rspecstr = GeniXML::Serialize($rspec);
+$rspecstr = GeniXML::Serialize($rspec, 2);
 
 #
 # Got this far, lets create a quickvm record.
@@ -1125,7 +1147,9 @@ if (! ($debug || $foreground)) {
 }
 
 system("$CREATESLIVERS -L -f " .
-       ($debug ? "-d " : "") . ($usestitcher ? "-S " : "") . $quickvm_uuid);
+       ($debug ? "-d " : "") .
+       ($ignorefailures ? "-i " : "") .
+       ($usestitcher ? "-S " : "") . $quickvm_uuid);
 if ($?) {
     my $code = $? >> 8;
     $code = -1

@@ -158,13 +158,29 @@
 		  </table>
 		</div>
 	      </div>
-	      <div class="form-group hidden" id="route-table-div">
+	      <div class="form-group hidden" id="route-table-div-notyet">
 		<div class="format-me"
 		     data-label="Bus Routes"
 		     data-colsize="9">
 		  <table class="table table-condensed"
 			 id="route-table">
 		  </table>
+		</div>
+	      </div>
+	      <div class="form-group hidden" id="route-table-div">
+		<div class="format-me"
+		     data-label="Mobile Endpoints"
+		     data-optional="yep"
+		     data-key="allroutes">
+		  <input name="allroutes-checkbox" style="margin-top: 12px;"
+			 id="allroutes-checkbox"
+			 type="checkbox">
+		  <label id="allroutes-error"
+			 class="hidden control-label"></label>
+		  <a href='#' class='btn btn-xs route-help'>
+		    <span class='glyphicon glyphicon-question-sign'
+		          style="margin-bottom: 6px;"></span>
+		  </a>
 		</div>
 	      </div>
 	      <% if (1) { %>

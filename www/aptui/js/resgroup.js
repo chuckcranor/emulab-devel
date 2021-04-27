@@ -27,6 +27,7 @@ $(function ()
     var routeforecast= null;
     var allranges    = [];
     var allroutes    = [];
+    var fakeroutes   = true;
     var JACKS_NS     = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
     var IDEAL_STARTHOUR = 7;	// 7am start time preferred.
     var IDEAL_ENDHOUR   = 18;	// 6pm end time preferred.
@@ -531,9 +532,13 @@ $(function ()
 		// See below.
 		if (window.ISPOWDER) {
 		    AddRangeRow();
-		    // For now, only admins see routes
-		    if (isadmin) {
-			AddRouteRow();
+		    if (window.DOROUTES) {
+			if (fakeroutes) {
+			    SetupFakeRoutes();
+			}
+			else {
+			    AddRouteRow();
+			}
 		    }
 		}
 	    }
@@ -903,6 +908,48 @@ $(function ()
 	});
 	// See above
 	updateButtons();
+    }
+
+    /*
+     * For the short term, hide routes behind an all or nothing button
+     */
+    function SetupFakeRoutes()
+    {
+	console.info("SetupFakeRoutes");
+
+	var now = moment();
+	now.tz(window.HOMETZ);
+	now.hours(23);
+	now.local();
+	
+	$('#route-table-div .route-help').popover({
+	    trigger: 'hover',
+	    container: 'body',
+	    delay: '{"hide":1000}',
+	    content: 'Reservations that include mobile endpoints ' +
+		'must end on the same day by 11PM Mountain time ' +
+		'(' + now.format("h A") + ' in your local timezone).'
+	});
+	$("#route-table-div").removeClass("hidden");
+
+	$('#allroutes-checkbox').change(function () {
+	    var ischecked =  $('#allroutes-checkbox').is(":checked");
+	    console.info("all routes: " + ischecked);
+
+	    if (ischecked) {
+		_.each(routelist, function(details) {
+		    AddRouteRow(details.routename);
+		});
+	    }
+	    else {
+		$('#route-table tbody').each(function() {
+		    var routename = $(this).find(".routename").val();
+		    console.info(routename);
+		    $(this).find('.delete-route').trigger("click");
+		});
+	    }
+	    RegenCombinedGraph();
+	});
     }
     
     /*
@@ -1409,10 +1456,26 @@ $(function ()
 		    .removeClass("hidden");
 		tbody.removeClass("has-warning has-error")
 		    .addClass("has-error");
+		if (fakeroutes) {
+		    $('#allroutes-error').parent()
+			.removeClass("has-warning")
+			.addClass("has-error");
+		    $('#allroutes-error')
+		        .html(reservation.output)
+			.removeClass("has-warning")
+			.addClass("has-error")
+			.removeClass("hidden");
+		}
 	    }
 	    else if (parseInt(reservation.approved) != 0) {
 		tbody.find(".reservation-error span")
 		    .addClass("hidden");
+		if (fakeroutes) {
+		    $('#allroutes-error').parent()
+			.removeClass("has-warning")
+			.removeClass("has-error");
+		    $('#allroutes-error').addClass("hidden");
+		}
 	    }
 	    else {
 		tbody.find(".reservation-error span label")
@@ -1423,6 +1486,16 @@ $(function ()
 		    .removeClass("hidden");
 		tbody.removeClass("has-warning has-error")
 		    .addClass("has-warning");
+		if (fakeroutes) {
+		    $('#allroutes-error').parent()
+			.addClass("has-warning")
+			.removeClass("has-error");
+		    $('#allroutes-error')
+		        .html("Approval is required")
+			.removeClass("has-error")
+			.addClass("has-warning")
+			.removeClass("hidden");
+		}
 	    }
 	});
     }
@@ -1569,6 +1642,12 @@ $(function ()
 	}
 	// Clear (hide) previous cluster table errors
 	aptforms.ClearFormErrors('#reserve-request-form');
+	if (window.DOROUTES && fakeroutes) {
+	    $('#allroutes-error').parent()
+		.removeClass("has-warning")
+		.removeClass("has-error");
+	    $('#allroutes-error').addClass("hidden");
+	}
 	$('#reserve-request-form .form-group-sm').addClass("hidden");	
 	$('#reserve-request-form tbody').removeClass("has-warning has-error");
 	$('#reserve-request-form .form-control-div')
@@ -1734,7 +1813,7 @@ $(function ()
 	var deferred = [];
 	if (window.ISPOWDER) {
 	    LoadRangeReservations();
-	    if (isadmin) {
+	    if (window.DOROUTES) {
 		LoadRouteReservations();
 	    }
 	}
@@ -2941,11 +3020,21 @@ $(function ()
 		    AddRouteRow();
 		});
 		$('#route-table .add-route').last().removeClass("hidden");
+
+		if (fakeroutes) {
+		    $('#allroutes-checkbox').prop("checked", true);
+		    SetupFakeRoutes();
+		}
 	    }
 	    else {
 		// Always show an empty route row.
-		if (window.ISPOWDER && isadmin) {
-		    AddRouteRow();
+		if (window.ISPOWDER && window.DOROUTES) {
+		    if (fakeroutes) {
+			SetupFakeRoutes();
+		    }
+		    else {
+			AddRouteRow();
+		    }
 		}
 	    }
 
@@ -3441,9 +3530,7 @@ $(function ()
 	    $('#override-checkbox').prop("checked", false);	    
 	    RefreshTables(json.value);
 	    LoadRangeReservations();
-	    if (isadmin) {
-		LoadRouteReservations();
-	    }
+	    LoadRouteReservations();
 	};
 	var args = {
 	    "uuid"    : window.UUID,
@@ -3645,9 +3732,11 @@ $(function ()
 
 	console.info(thisuuid, selected_cluster, selected_type);
 	if (selected_cluster == "") {
+	    RegenCombinedGraph();
 	    return;
 	}
 	if (selected_type == "") {
+	    RegenCombinedGraph();
 	    return;
 	}
 	// Do not allow two rows with the same cluster/type.
@@ -3848,15 +3937,26 @@ $(function ()
 
 	    combinedForecasts[id] = forecasts[urn][type];
 	})
-	_.each(routes, function (details) {
-	    var routename = details.routename;
-
-	    if (_.has(routeforecast, routename)) {
-		combinedForecasts[routename] = routeforecast[routename]
+	if (fakeroutes) {
+	    // Pick any route and use it, renamed.
+	    if ($('#allroutes-checkbox').is(":checked")) {
+		combinedForecasts["mobile"] = routeforecast["Orange"];
 	    }
-	})
-	
+	}
+	else {
+	    _.each(routes, function (details) {
+		var routename = details.routename;
+
+		if (_.has(routeforecast, routename)) {
+		    combinedForecasts[routename] = routeforecast[routename]
+		}
+	    })
+	}
 	console.info("AddToCombinedGraph", combinedForecasts);
+	if (_.size(combinedForecasts) == 0) {
+	    $("#combined-resgraph").addClass("hidden");
+	    return;
+	}
 
 	// Must be visible before graph can be drawn.
 	$("#combined-resgraph").removeClass("hidden");
@@ -4036,7 +4136,7 @@ $(function ()
 	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
 	var xmlDoc    = $.parseXML(rspec.replace('&', '&amp;'));
 	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
-	var routes    = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'busroutes');
+	var routes    = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'busroute');
 	var tcounts   = {};
 	var untyped   = {};
 
@@ -4060,18 +4160,30 @@ $(function ()
 	    AddRangeRow();
 	}
 
-	if (routes.length) {
-	    _.each(routes, function(route) {
-		var routename  = $(route).attr("routename");
-		console.info(routename);
+	if (window.ISPOWDER && window.DOROUTES) {
+	    if (routes.length) {
+		if (fakeroutes) {
+		    SetupFakeRoutes();
+		    $('#allroutes-checkbox').trigger("click");
+		}
+		else {
+		    _.each(routes, function(route) {
+			var routename  = $(route).attr("routename");
+			console.info(routename);
 
-		AddRouteRow(routename);
-	    });
+			AddRouteRow(routename);
+		    });
+		}
+	    }
+	    else {
+		if (fakeroutes) {
+		    SetupFakeRoutes();
+		}
+		else {
+		    AddRouteRow();
+		}
+	    }
 	}
-	else if (window.ISPOWDER && isadmin) {
-	    // For now, only admins see routes
-	    AddRouteRow();
-	}	
 
 	// Find all the nodes, gather up type info.
 	$(xmlDoc).find("node").each(function() {

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2210,16 +2210,6 @@ use overload ('""' => 'Stringify');
 #
 # Mobile endpoints are buses. These are the routes we care about.
 #
-my $BusRoutes = [
-    # Name, RouteID
-    ["Purple",            19],
-    ["Green",             64],
-    ["Blue Detour",       65],
-    ["Guardsman Direct",  66],
-    ["Red Detour",        68],
-    ["Orange",            72],
-    ];
-
 my $RouteMap;
 
 sub RouteID($)
@@ -2227,18 +2217,27 @@ sub RouteID($)
     my ($routename) = @_;
 
     if (!defined($RouteMap)) {
+	my $query_result =
+	    DBQueryWarn("select * from apt_mobile_bus_routes");
+	return undef
+	    if (! (defined($query_result) && $query_result->numrows));
+
 	$RouteMap = {};
-	
-	foreach my $ref (@$BusRoutes) {
-	    my ($name, $id) = @$ref;
-	    
-	    $RouteMap->{$name} = $id;
+	while (my ($routeid,$description) = $query_result->fetchrow_array()) {
+	    $RouteMap->{$description} = $routeid;
 	}
     }
     if (exists($RouteMap->{$routename})) {
 	return $RouteMap->{$routename};
     }
     return undef;
+}
+sub RouteMap()
+{
+    if (!defined($RouteMap)) {
+	RouteID("Red");
+    }
+    return $RouteMap;
 }
 
 sub Lookup($$$)

@@ -80,6 +80,7 @@ if (isset($cluster)) {
         exit();
     }
 }
+
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
@@ -103,6 +104,8 @@ echo "<div id='oops_div'></div>
 
 # A Powder thing
 $bisdaysonly = 1;
+# Ditto
+$routesokay  = $isadmin;
 
 #
 # See what projects the user can do this in.
@@ -121,6 +124,9 @@ while (list($p) = each($projlist)) {
         $ptmp = Project::LookupByPid($p);
         if ($ptmp && FeatureEnabled("BisDaysOnly", null, $ptmp)) {
             $bisdaysonly = 1;
+        }
+        if ($ptmp && FeatureEnabled("powder-routes-allowed", null, $ptmp)) {
+            $routesokay = 1;
         }
     }
 }
@@ -238,6 +244,8 @@ echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";
 echo "   window.HOMETZ   = '$OURTIMEZONE';\n";
 echo "   window.BISONLY  = $bisdaysonly;\n";
+echo "   window.DOROUTES = $routesokay;\n";
+
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

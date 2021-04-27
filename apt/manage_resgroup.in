@@ -895,13 +895,35 @@ sub DoGroupReserve()
 	# For each (new or modified) reservation see if it fits the schedule
 	#
 	my @allgroups = APT_Reservation::Group->LookupAll();
-    
+
+	#
+	# For now, any reservation with routes must end on the same
+	# day by midnight.
+	#
+	my $toolong = 0;
+	
+	if (! $this_user->IsAdmin()) {
+	    my $s = (defined($start) ? $start : time());
+
+	    my (undef,undef,$start_hour,$start_day) = localtime($s);
+	    my (undef,undef,$end_hour,$end_day) = localtime($end);
+	    
+	    if ($start_day != $end_day) {
+		$toolong = 1;
+	    }
+	}
 	foreach my $ref (@route_reservations) {
 	    # These flags go back to the web interface.
 	    # We never auto approve route reservations.
-	    if (!($this_user->IsAdmin() ||
-		  APT_Reservation::Group::RouteReservation->RouteAllowed(
-		      $project, $ref))) {
+	    if ($toolong) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Exceeds maximum allowed duration";
+		$ref->{'valid'}    = 0;
+		$route_results->{'errors'}++;
+	    }
+	    elsif (!($this_user->IsAdmin() ||
+		     APT_Reservation::Group::RouteReservation->RouteAllowed(
+			 $project, $ref))) {
 		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
 		$ref->{'output'}   = "Not allowed to use this route";
 		$ref->{'valid'}    = 0;

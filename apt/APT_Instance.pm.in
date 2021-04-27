@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2546,6 +2546,11 @@ sub CheckRoutesReserved($$)
     my $slice    = $self->GetGeniSlice();
     my $expires  = str2time($slice->expires());
     my $routes   = [];
+    my $noresokay = 1;
+    my $duration  = $expires - time();
+    if ($duration > 16 * 3600) {
+	$noresokay = 0;
+    }
 
     if ($self->GetRoutes(\$routes, $perrmsg)) {
 	return -1;
@@ -2556,7 +2561,8 @@ sub CheckRoutesReserved($$)
 	my $routeid =
 	    APT_Reservation::Group::RouteReservation::RouteID($routename);
 
-	if (!APT_Reservation::Group::RouteReservation->RouteReserved($project,
+	if (!$noresokay &&
+	    !APT_Reservation::Group::RouteReservation->RouteReserved($project,
 		      time(), $expires, $routename)) {
 	    $$perrmsg = "Route $routename ($routeid) ".
 		    "is not reserved by your project for the duration of your ".
@@ -2643,9 +2649,17 @@ sub AddRouteNodes($$)
 	    my $client_id = "bus-" . $bus->busid();
 	    my $node      = GeniXML::GetNodeByVirtualId($client_id, $rspec);
 
+	    #
+	    # For now, if the bus is down, ignore it. 
+	    #
+	    if (!$bus->IsUp()) {
+		print "$client_id is not up, skipping\n";
+		next;
+	    }
+
 	    if (!defined($node)) {
 		my $node = APT_Profile::RSpecNodeFragment($bus->urn(),
-							  $client_id,
+							  $client_id, "ed1",
 							  $ref->{'dom'});
 		if (defined($repocommand)) {
 		    APT_Profile::SetRepoOnNode($node, $repocommand);
