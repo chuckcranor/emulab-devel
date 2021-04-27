@@ -36,10 +36,10 @@ use IO::Handle;
 #
 sub usage()
 {
-    print "Usage: mobile-update [-ndv]\n";
+    print "Usage: mobile-update [-ndvF]\n";
     exit(1);
 }
-my $optlist   = "dvn";
+my $optlist   = "dvnF";
 my $debug     = 0;
 my $verbose   = 1;
 my $impotent  = 1;
@@ -112,6 +112,9 @@ if (defined($options{"v"})) {
 if (defined($options{"n"})) {
     $impotent = 1;
 }
+if (defined($options{"F"})) {
+    $impotent = 0;
+}
 if (! chdir($TB)) {
     fatal("Could not chdir to $TB: $!");
 }
@@ -126,6 +129,11 @@ if (! -e $SRCDIR && ! mkdir($SRCDIR, 0775)) {
 }
 if (! -e $OBJDIR && ! mkdir($OBJDIR, 0775)) {
     fatal("Could not mkdir $OBJDIR: $!");
+}
+
+if ($impotent) {
+    print "New code will not be installed, use -F to make it happen.\n";
+    sleep(3);
 }
 
 #
@@ -167,6 +175,9 @@ if (! -e "$SRCDIR/.git") {
     if (system($GITCLONE)) {
 	fatal("git clone failed");
     }
+    if (! chdir($SRCDIR)) {
+	fatal("Could not chdir to $SRCDIR: $!");
+    }
 }
 else {
     if (! chdir($SRCDIR)) {
@@ -205,14 +216,13 @@ else {
     chomp($targethash);
     print "Target commit hash: $targethash\n";
 }
+if (system("$GITBIN checkout $targethash")) {
+    fatal("Could not checkout target hash");
+}
 if ($curhash eq $targethash) {
     print "No changes upstream, exiting ...\n";
     exit(0);
 }
-if (system("$GITBIN checkout $targethash")) {
-    fatal("Could not checkout target hash");
-}
-
 if (! chdir($OBJDIR)) {
     fatal("Could not chdir to $OBJDIR: $!");
 }
