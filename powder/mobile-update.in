@@ -144,9 +144,6 @@ chomp($hostname);
 if ($hostname =~ /^boss.bus-(\d+)/) {
     $DEFSFILE .= "bus-" . $1;
 }
-elsif (1) {
-    $DEFSFILE .= "bookstore-fe";
-}
 else {
     fatal("Cannot derive defs file name from $hostname");
 }
