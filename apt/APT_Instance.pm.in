@@ -4146,9 +4146,6 @@ sub SliceStatus($)
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
     
-    # Shorten default timeout
-    Genixmlrpc->SetTimeout(30);
-
     return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
@@ -4172,8 +4169,13 @@ sub SliceStatus($)
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 
+    # Shorten default timeout
+    my $oldtimeout = Genixmlrpc->SetTimeout(20);
+
     my $response =
 	Genixmlrpc::CallMethod($cmurl, $context, "SliverStatus", @params);
+
+    Genixmlrpc->SetTimeout($oldtimeout);
 
     return $response
 	if (!defined($response) ||
@@ -4788,13 +4790,15 @@ sub WaitForSliver($)
     my $webtask   = $aggobj->webtask();
     my $authority = $aggobj->GetGeniAuthority();
     my $urn       = $authority->urn();
-    my $aggname   = $aggobj->GetAptAggregate->name();
+    my $aptagg    = $aggobj->GetAptAggregate();
+    my $aggname   = $aptagg->name();
     $webtask->Refresh();
     $webtask->output("");
     $webtask->exitcode(0);
 
     my $seconds  = 7200;
     my $interval = 15;
+    my $unavail  = undef;
     my $ready    = 0;
     my $failed   = 0;
     my $rpcfail  = 0;
@@ -4803,7 +4807,7 @@ sub WaitForSliver($)
     my $repblob;
     my $laststatus;
 
-    while ($seconds > 0) {
+    while ($seconds > 0 && !$aggobj->instance()->IsCanceled()) {
 	sleep($interval);
 	$seconds -= $interval;
 	my $response = $aggobj->SliceStatus();
@@ -4820,22 +4824,44 @@ sub WaitForSliver($)
 	    $failed = 1;
 	    last;
 	}
-	if ($response->code() == GENIRESPONSE_NETWORK_ERROR) {
+	if ($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+	    $response->code() == GENIRESPONSE_NETWORK_ERROR) {
+
+	    print STDERR "Lost contact with $urn. ".
+		"Possibly a network failure or aggregate went offline\n";
+	    
 	    #
-	    # We just keep going, hoping to get back in touch. This is
-	    # better then giving up and hosing the extire experiment.
+	    # If no contact for continuous minutes, give up.
 	    #
-	    print STDERR "Lost contact with $urn. Possibly a network failure\n";
+	    $unavail = time() if (!defined($unavail));
+	    if ($aptagg->ismobile() && time() - $unavail > 300) {
+		$failed = 1;
+		$failure_code = GENIRESPONSE_SERVER_UNAVAILABLE();
+		$failure_output = "Experiment setup on the $aggname cluster ".
+		    "failed because we lost contact with it for an extended ".
+		    "period of time. It may be possible to recover when/if ".
+		    "contact is resumed.";
+		last;
+	    }
+	    next;
 	}
+	# Got a status response,
+	$unavail = undef;
+	# But busy.
 	next
-	    if ($response->code() == GENIRESPONSE_BUSY ||
-		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		$response->code() == GENIRESPONSE_NETWORK_ERROR);
-		
+	    if ($response->code() == GENIRESPONSE_BUSY);
+	    
 	$repblob = $response->value();
-	if ($seconds > 500) {
-	    print STDERR Dumper($repblob);
-	}
+
+	# Set the top level slice status. Need to create a hash with
+	# the subset we want in the DB. 
+	my $slice_status_blob = {
+	    "status" => $repblob->{'status'},
+	    "utc"    => $repblob->{'utc'},
+	    "state"  => $repblob->{'state'},
+	};
+	# This should probably be done atomically with sliver status.
+	$aggobj->UpdateSliceStatus($slice_status_blob);
 
 	#
 	# Convert to something smaller, with info the web interface
@@ -4935,6 +4961,21 @@ sub WaitForSliver($)
 	    if (exists($repblob->{'error'}) && $repblob->{'error'} ne "") {
 		$failure_output .= ": " . $repblob->{'error'};
 	    }
+	    last;
+	}
+	elsif ($repblob->{'state'} eq "interrupted") {
+	    #
+	    # This can happen if the aggregate reboots. Things get left in
+	    # a whacky state. If it enters this state, it is sometimes
+	    # possible to get things moving again (if the user wants to).
+	    #
+	    print STDERR Dumper($repblob);
+	    $failed = 1;
+	    $failure_code = GENIRESPONSE_SETUPFAILURE_INTERRUPTED();
+	    $failure_output = "Experiment setup on the $aggname cluster ".
+		"failed because the cluster rebooted at a bad time! ".
+		"We will continue trying to setup this aggregate, or ".
+		"you can delete the node(s) from your experiment.";
 	    last;
 	}
 	elsif ($aggobj->instance()->IsCanceled()) {
