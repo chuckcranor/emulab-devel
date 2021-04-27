@@ -50,7 +50,7 @@ endif
 ifeq ($(RFMON),1)
 SBIN_SCRIPTS   += pokerffe
 endif
-ifeq ($(TARGETSYS),BUS)
+ifeq ($(TARGETSYS),POWDER-BUS)
 SBIN_SCRIPTS   += mobile-update
 endif
 
