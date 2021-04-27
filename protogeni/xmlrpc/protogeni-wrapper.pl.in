@@ -266,6 +266,15 @@ if (exists($ENV{'PATH_INFO'}) && $ENV{'PATH_INFO'} ne "") {
 }
 
 #
+# Disable expperiments in the CM/AM
+#
+if (($MODULE eq "cm" || $MODULE eq $AM_MODULE) &&
+    GeniUtil::ExperimentsDisabled()) {
+    XMLError(HTTP_SERVICE_UNAVAILABLE(),
+	     "Server temporarily offline; please try again later");
+}
+
+#
 # The CERT data from apache holds the URN of the caller. 
 #
 if (exists($ENV{'SSL_CLIENT_CERT'})) {
