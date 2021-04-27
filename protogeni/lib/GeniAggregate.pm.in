@@ -1167,7 +1167,10 @@ sub ActionStart($$;$)
     $self->ClearBootFailure();
     # Set new status so ComputeState() knows what is going on.
     $self->SetStatus("working");
-
+    # If retrying an interrupted initial start, need to set the state properly.
+    if ($self->state() eq "interrupted") {
+	$self->SetState("new");
+    }    
     my $experiment = Experiment->Lookup($self->slice_uuid());
     if (!defined($experiment)) {
 	$msg .= "Could not map $self to its experiment";
@@ -3826,8 +3829,13 @@ sub ComputeState($;$)
 	}
     }
     my ($newstate,$newstatus);
-    
-    if ($stopped == $count) {
+
+    if ($self->state() eq "interrupted") {
+	# Rebooted in the middle of getting started. Leave it here
+	# so the user can decide how to proceed.
+	$newstate = "interrupted";
+    }
+    elsif ($stopped == $count) {
 	$newstate = "stopped";
     }
     elsif ($started == $count) {

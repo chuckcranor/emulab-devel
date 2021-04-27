@@ -572,6 +572,18 @@ sub UnLock($)
     $self->{'STITCHLOCKED'} = 0;
     return 0;
 }
+# Use this to cleanup, caller does not need to have the lock.
+sub ClearLock($)
+{
+    my ($self) = @_;
+    my $idx    = $self->idx();
+
+    DBQueryWarn("update geni_slices set ".
+		"locked=NULL,stitch_locked=NULL where idx='$idx'")
+	or return -1;
+    
+    return 0;
+}
 sub TakeLock($)
 {
     my ($self) = @_;

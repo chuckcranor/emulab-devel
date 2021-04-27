@@ -71,6 +71,10 @@ else
 RC_SCRIPTS	+= wbstore.sh
 endif
 
+ifeq ($(PROTOGENI),1)
+RC_SCRIPTS	+= geniboot.sh
+endif
+
 # Powder
 ifeq ($(TBMAINSITE),1)
 RC_SCRIPTS	+= powder_keepalive.sh
