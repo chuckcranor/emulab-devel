@@ -148,6 +148,7 @@ sub DoExtend();
 sub DoDenyOrMoreInfo($);
 sub DoRefresh();
 sub DoReboot();
+sub DoStart();
 sub DoPowerCycle();
 sub DoReload();
 sub DoRecovery();
@@ -274,6 +275,9 @@ elsif ($action eq "reboot") {
 }
 elsif ($action eq "reload") {
     DoReload()
+}
+elsif ($action eq "start") {
+    DoStart()
 }
 elsif ($action eq "recovery") {
     DoRecovery()
@@ -2962,6 +2966,16 @@ sub DoRefresh()
 	}
 	# This is the per-aggregate status, we always set this for web UI.
 	$agg->UpdateSliverStatusAll($blob->{'details'});
+	# And set the top level slice status. Need to create a hash with
+	# the subset we want in the DB. 
+	my $slice_status_blob = {
+	    "status" => $blob->{'status'},
+	    "utc"    => $blob->{'utc'},
+	    "state"  => $blob->{'state'},
+	};
+	# This should probably be done atomically with sliver status.
+	$agg->UpdateSliceStatus($slice_status_blob);
+	
 	if ($debug) {
 	    print STDERR Dumper($blob);
 	}
@@ -3031,6 +3045,7 @@ sub DoRebootOrReload($)
     }
 
     my %sliver_urns = ();
+    my %slice_urns  = ();
     my %node_ids    = ();
     my @slivers     = ();
     foreach my $obj ($instance->AggregateList()) {
@@ -3045,18 +3060,24 @@ sub DoRebootOrReload($)
 	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
 		     GeniXML::FindNodesNS("n:vhost", $manifest,
 					  $GeniXML::EMULAB_NS)->get_nodelist());
+
+	# List of this agg nodes as we find them.
+	my @aggnodes = ();
+	
 	foreach my $node (@nodes) {
-	    my $client_id = GeniXML::GetVirtualId($node);
+	    my $client_id   = GeniXML::GetVirtualId($node);
+	    my $sliver_urn  = GeniXML::GetSliverId($node);
+	    my $manager_urn = GetManagerId($node);
+
+	    # No sliver urn or a different aggregate.
+	    next
+		if (! (defined($sliver_urn) &&
+		       defined($manager_urn) &&
+		       $manager_urn eq $obj->aggregate_urn()));
+
+	    push(@aggnodes, $node);
+	    
 	    if (grep {$_ eq $client_id} @ARGV) {
-		my $sliver_urn  = GeniXML::GetSliverId($node);
-		my $manager_urn = GetManagerId($node);
-
-		# No sliver urn or a different aggregate.
-		next
-		    if (! (defined($sliver_urn) &&
-			   defined($manager_urn) &&
-			   $manager_urn eq $obj->aggregate_urn()));
-
 		if (!exists($sliver_urns{$obj->aggregate_urn()})) {
 		    $sliver_urns{$obj->aggregate_urn()} = [];
 		    push(@slivers, $obj);
@@ -3064,6 +3085,18 @@ sub DoRebootOrReload($)
 		push(@{ $sliver_urns{$obj->aggregate_urn()} }, $sliver_urn);
 		$node_ids{$sliver_urn} = $client_id;
 	    }
+	}
+	next
+	    if (!exists($sliver_urns{$obj->aggregate_urn()}));
+	
+	#
+	# If we are doing all the nodes at an aggregate, we want to apply
+	# the operation to the slice instead of individual slivers.
+	#
+	if (scalar(@aggnodes) ==
+	    scalar(@{ $sliver_urns{$obj->aggregate_urn()}})) {
+	    # This will cause the operation to apply to the entire aggregate.
+	    $sliver_urns{$obj->aggregate_urn()} = [];
 	}
     }
     if (!@slivers) {
@@ -3155,6 +3188,7 @@ sub DoRebootOrReload($)
 }
 sub DoReboot()     { return DoRebootOrReload("reboot"); }
 sub DoReload()     { return DoRebootOrReload("reload"); }
+sub DoStart()      { return DoRebootOrReload("start"); }
 sub DoPowerCycle() { return DoRebootOrReload("powercycle"); }
 
 #
