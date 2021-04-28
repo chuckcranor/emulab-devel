@@ -60,6 +60,7 @@ use GeniHRN;
 use Date::Parse;
 use Date::Format;
 use Data::Dumper;
+use POSIX qw(mktime);
 use vars qw($AUTOLOAD);
 use Scalar::Util qw(weaken);
 use overload ('""' => 'Stringify');
@@ -2659,18 +2660,11 @@ sub MaxDuration($$$$$)
 
     return 0
 	if (! @routes);
-    
+
     #
     # Look at all existing project reservations.
     #
     my @groups = APT_Reservation::Group->LookupAll();
-
-    #
-    # Default max duration if no reservations
-    #
-    if (!@groups) {
-	return 0;
-    }
 
     foreach my $ref (@$routes) {
 	my $routename  = $ref->{'name'};
@@ -2741,6 +2735,15 @@ sub MaxDuration($$$$$)
 		}
 	    }
 	}
+    }
+    #
+    # After all that work, we limit routes to 11pm on the same day. :-)
+    #
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+	localtime($start);
+    my $max = POSIX::mktime(0, 0, 23, $mday, $mon, $year, $wday, $yday, $isdst);
+    if (!defined($newend) || $newend > $max) {
+	$newend = $max;
     }
     $$pend = $newend;
     return 0;
