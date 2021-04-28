@@ -156,7 +156,11 @@ my $instance = APT_Instance->Lookup($ARGV[0]);
 if (!defined($instance)) {
     fatal("No such instance");
 }
-# 
+my $geniuser = $instance->GetGeniUser();
+if (!defined($geniuser)) {
+    fatal("Could not get geniuser for $instance\n");
+}
+my $emulab_user = $geniuser->emulab_user();
 my $curStatus   = $instance->status();
 my $uuid        = $instance->uuid();
 my $webtask     = $instance->webtask();
@@ -210,8 +214,8 @@ if ($instance->CheckRoutesReserved(\$errmsg)) {
 # deferred experiments are started from the scheduler, and I do not
 # want to do it there. Lets see how it goes.
 #
-if ($instance->AddRouteNodes(\$errmsg)) {
-    MyExit(1, "Not all routes are reserved: $errmsg");
+if ($instance->AddRouteNodes($emulab_user, \$errmsg)) {
+    MyExit(1, "Could not map routes to buses: $errmsg");
 }
 
 #
@@ -282,11 +286,6 @@ if (!@aggregate_list) {
     exit(0);
 }
 
-my $geniuser = $instance->GetGeniUser();
-if (!defined($geniuser)) {
-    fatal("Could not get geniuser for $instance\n");
-}
-my $emulab_user = $geniuser->emulab_user();
 my $slice_urn   = $genislice->urn();
 my $project     = $instance->GetProject();
 my $rspecstr    = $instance->rspec();

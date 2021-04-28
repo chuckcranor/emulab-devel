@@ -2608,9 +2608,9 @@ sub CheckRouteReserved($$$)
     return 0;
 }
 
-sub AddRouteNodes($$)
+sub AddRouteNodes($$$)
 {
-    my ($self, $perrmsg) = @_;
+    my ($self, $user, $perrmsg) = @_;
     my $modified = 0;
     my $repocommand;
     my $routes;
@@ -2654,6 +2654,10 @@ sub AddRouteNodes($$)
 	    #
 	    if (!$bus->IsUp()) {
 		print "$client_id is not up, skipping\n";
+		next;
+	    }
+	    if ($bus->adminonly() && !$user->IsAdmin()) {
+		print "$client_id is admin only, skipping\n";
 		next;
 	    }
 
