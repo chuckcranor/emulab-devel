@@ -267,7 +267,7 @@ if ($shutdown == 0) {
 #
 # Install
 #
-if (system("gmake update-testbed-nostop")) {
+if (system("gmake update-testbed-nostop update-rcd")) {
     fatal("install failed");
 }
 
