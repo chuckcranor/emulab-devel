@@ -1174,9 +1174,10 @@ sub CreateSlivers()
 	    if ($ismobile &&
 		($exitcode == GENIRESPONSE_NO_MAPPING() ||
 		 $exitcode == GENIRESPONSE_INSUFFICIENT_NODES()) &&
-		defined($aptagg->routename())) {
+		defined($aptagg->routename()) &&
+		$instance->CheckRouteReserved($aptagg->routename()) > 0) {
 		print STDERR "$cluster says not able to map experiment yet; ".
-		    "deferring till later\n";
+		    "deferring till later since project has it reserved\n";
 		$aggobj->Defer("Unable to map resources, deferring till later");
 		# Reset status back to created since we have to try again.
 		$aggobj->SetStatus("created");
