@@ -2720,6 +2720,16 @@ sub AddRoute($$)
     return $obj;
 }
 
+#
+# Delete all routes for an instance, as for termination.
+#
+sub DeleteRoutes($)
+{
+    my ($self) = @_;
+
+    return APT_Instance::Aggregate::BusRoute->DeleteForInstance($self);
+}
+
 ###################################################################
 package APT_Instance::History;
 use emdb;
@@ -5385,6 +5395,22 @@ sub LookupForInstance($$)
 	$result->{$routeid} = $route;
     }
     return $result;
+}
+
+#
+# Delete the bus routes for an instance, as when the instance is terminated
+# but in a canceled state cause some buses could not be contacted for cleanup.
+# Need to clear the routes so that someone else can use them.
+#
+sub DeleteForInstance($$)
+{
+    my ($class, $instance) = @_;
+    my $routes = LookupForInstance($class, $instance);
+
+    foreach my $route (values(%{$routes})) {
+	$route->Delete();
+    }
+    return 0;
 }
 
 #

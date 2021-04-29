@@ -1655,6 +1655,8 @@ sub DoTerminate()
     # pick it up later (for the case that the instance is not expired)
     #
     $instance->MarkCanceled();
+    # User has given up routes, even if we cannot terminate some aggregates.
+    $instance->DeleteRoutes();
     $slice->UnLock();
     exit($exitcode);
 }
