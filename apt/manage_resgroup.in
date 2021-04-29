@@ -2779,7 +2779,7 @@ sub DoCheckReserved()
 	UserError($errmsg);
     }
     if (APT_Profile::CheckRoutes($rspec, $project, $start, $end,
-				 $noresokay, \$errmsg)) {
+				 $noresokay, \$errmsg, $this_user)) {
 	UserError($errmsg);
     }
     if (defined($webtask)) {

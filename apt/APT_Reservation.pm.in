@@ -2549,7 +2549,7 @@ sub RouteAllowed($$$)
 #
 # Does the project hold a route reservation for the time. 
 #
-sub RouteReserved($$$$$$)
+sub RouteReserved($$$$$)
 {
     my ($class, $project, $start, $end, $routename) = @_;
     my $pid_idx = $project->pid_idx();
@@ -2569,6 +2569,115 @@ sub RouteReserved($$$$$$)
 	if (!defined($query_result) || !$query_result->numrows);
 
     return $query_result->numrows;
+}
+
+#
+# This variant is for checking that an experiment (possibly without
+# routes reserved) can swap in (does not conflict with existing
+# reservations in other projects for the start/end duration. 
+#
+sub CanStart($$$$$)
+{
+    my ($class, $project, $start, $end, $routes, $pmsg) = @_;
+    my @routes  = @$routes;
+    my @notreserved = ();
+
+    # Can start if not using routes, or there are no current reservations, 
+    return 1
+	if (!@routes);
+
+    my @groups = APT_Reservation::Group->LookupAll();
+
+    return 1
+	if (!@groups);
+
+    #
+    # No start time means starting up right now.
+    #
+    $start = time()
+	if (!defined($start));
+
+    #
+    # First, check to see if the project has all the routes reserved.
+    #
+    foreach my $request (@{$routes}) {
+	my $routename = $request->{"name"};
+	my $routeid   = RouteID($routename);
+
+	if (!RouteReserved($class, $project, $start, $end, $routename)) {
+	    push(@notreserved, $request);
+	}
+    }
+    # If everything reserved, good to go. 
+    return 1
+	if (!@notreserved);
+
+    #
+    # Because we now allow some experiments to start without having
+    # reserved the routes it is using, we have to check current experiments
+    # too.
+    #
+    foreach my $request (@notreserved) {
+	my $routename = $request->{"name"};
+	my $routeid   = RouteID($routename);
+
+	if (APT_Instance::Aggregate::BusRoute->InUse($project, $routeid,
+						     $start, $end)) {
+	    $$pmsg = "Bus route $routename ($routeid) is not ".
+		"available for the duration of your experiment because ".
+		"another project is currently using it. Maybe you want ".
+		"to create a reservation?";
+	    return 0;
+	}
+    }
+
+    #
+    # Make sure the not reserved list does not conflict with reservations
+    # in other projects
+    #
+    foreach my $request (@notreserved) {
+	my $routename = $request->{"name"};
+	my $routeid   = RouteID($routename);
+
+	foreach my $group (@groups) {
+	    my $res_project = $group->GetProject();
+	    
+	    next
+		if (! $group->RouteReservationList());
+
+	    # Skip reservations in our own project, they do not conflict
+	    next
+		if ($project->SameProject($res_project));	    
+
+	    my $res_start   = str2time($group->start());
+	    my $res_end     = str2time($group->end());
+
+	    # If this reservation does not overlap in time, skip it.
+	    if (($start < $res_start && $end < $res_start) ||
+		($start > $res_end - 1)) {
+		next;
+	    }
+
+	    foreach my $existing ($group->RouteReservationList()) {
+		next
+		    if (!$existing->approved());
+
+		my $res_routeid   = $existing->routeid();
+		my $res_routename = $existing->routename();
+
+		# Different route, skip it.
+		next
+		    if ($routeid != $res_routename &&
+			$routename ne $res_routename);
+
+		# Does not fit the schedule.
+		$$pmsg = "Bus route $routename ($routeid) is not ".
+		    "available for the duration of your experiment.";
+		return 0;
+	    }
+	}
+    }
+    return 1;
 }
 
 #

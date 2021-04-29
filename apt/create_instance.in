@@ -809,33 +809,11 @@ if (APT_Profile::CheckSpectrum($rspec, $project,
     UserError($errmsg);
 }
 if (APT_Profile::CheckRoutes($rspec, $project,
-			       (defined($start_at) ? $start_at : time()),
-			       (defined($stop_at) ? $stop_at :
-				time() + ($duration * 3600)),
-			       $noresokay, \$errmsg)) {
+			     (defined($start_at) ? $start_at : time()),
+			     (defined($stop_at) ? $stop_at :
+			      time() + ($duration * 3600)),
+			     $noresokay, \$errmsg, $geniuser->emulab_user())) {
     UserError($errmsg);
-}
-#
-# For now, any reservation with routes must end on the same
-# day by midnight.
-#
-if (! $this_user->IsAdmin()) {
-    my $routes = [];
-    if (APT_Profile::GetRoutes($rspec, \$routes, \$errmsg)) {
-	UserError($errmsg);
-    }
-    if (@{$routes}) {
-	my $s = (defined($start_at) ? $start_at : time());
-	my $e = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
-
-	my (undef,undef,$start_hour,$start_day) = localtime($s);
-	my (undef,undef,$end_hour,$end_day) = localtime($e);
-	    
-	if ($start_day != $end_day) {
-	    UserError("Experiments using mobile endpoints must end by ".
-		      "midnight (Mountain timezone) on the same day");
-	}
-    }
 }
 
 #

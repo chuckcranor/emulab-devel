@@ -205,17 +205,8 @@ if ($instance->CheckSpectrum(\$errmsg, \$havespectrum)) {
     MyExit(1, $errmsg);
 }
 # Ditto routes
-if ($instance->CheckRoutesReserved(\$errmsg)) {
-    MyExit(1, "Not all routes are reserved: $errmsg");
-}
-#
-# For routes, we need to see what buses are currently on the reserved
-# routes and add them to the rspec. We do this here cause scheduled and
-# deferred experiments are started from the scheduler, and I do not
-# want to do it there. Lets see how it goes.
-#
-if ($instance->AddRouteNodes($emulab_user, \$errmsg)) {
-    MyExit(1, "Could not map routes to buses: $errmsg");
+if ($instance->CheckRoutes(\$errmsg)) {
+    MyExit(1, $errmsg);
 }
 
 #
