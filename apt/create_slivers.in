@@ -204,7 +204,6 @@ $sendemail = 1
 if ($instance->CheckSpectrum(\$errmsg, \$havespectrum)) {
     MyExit(1, $errmsg);
 }
-# Ditto routes
 if ($instance->CheckRoutes(\$errmsg)) {
     MyExit(1, $errmsg);
 }
@@ -747,6 +746,7 @@ sub CreateSliver($)
 	Genixmlrpc->SetTimeout(15);
 	my $response = $aggobj->SliceStatus();
 	print STDERR "SliceStatus: " . $response->code() . "\n";
+	print STDERR Dumper($response->value());
 
 	if ($response->code() == GENIRESPONSE_NETWORK_ERROR() ||
 	    $response->code() == GENIRESPONSE_SERVER_UNAVAILABLE() ||
@@ -785,11 +785,18 @@ sub CreateSliver($)
 		    return 0;
 		}
 	    }
-	    elsif ($response->value()->{'state'} eq "ready") {
+	    elsif ($response->value()->{'status'} eq "ready" ||
+		   $response->value()->{'status'} eq "changing") {
 		#
 		# Just a network partition and the aggregate is happy.
 		#
-		$aggobj->SetStatus("ready");
+		if ($response->value()->{'status'} eq "ready") {
+		    $aggobj->SetStatus("ready");
+		}
+		else {
+		    $aggobj->SetStatus("provisioned");
+		    sleep(15);
+		}
 		$webtask->Exited(0);
 		return 0;
 	    }
@@ -1165,8 +1172,7 @@ sub CreateSlivers()
 	    if ($ismobile &&
 		($exitcode == GENIRESPONSE_NO_MAPPING() ||
 		 $exitcode == GENIRESPONSE_INSUFFICIENT_NODES()) &&
-		defined($aptagg->routename()) &&
-		$instance->CheckRouteReserved($aptagg->routename()) > 0) {
+		defined($aptagg->routename())) {
 		print STDERR "$cluster says not able to map experiment yet; ".
 		    "deferring till later since project has it reserved\n";
 		$aggobj->Defer("Unable to map resources, deferring till later");
@@ -1196,7 +1202,7 @@ sub CreateSlivers()
 	    # This will be the createsliver exit code if we got one, or -1.
 	    $return_code = $exitcode;
 
-	    # And the instance status as the end.
+	    # And the instance status at the end.
 	    $instance_status = "failed";
 	}
 	#

@@ -342,9 +342,10 @@ sub SameInstance($$)
 #
 # Refresh a class instance by reloading from the DB.
 #
-sub Refresh($)
+sub Refresh($;$)
 {
-    my ($self) = @_;
+    my ($self, $flush) = @_;
+    $flush = 0 if (!defined($flush));
 
     return -1
 	if (! ref($self));
@@ -359,14 +360,20 @@ sub Refresh($)
 
     $self->{'INSTANCE'} = $query_result->fetchrow_hashref();
 
-    #
-    # We do not want to replace existing aggregate objects, the caller
-    # might have a handle on them. Note that add/delete aggregate will
-    # add/remove them from the hash, so we do not worry about the
-    # membership changing as a result of the refresh.
-    #
-    foreach my $agg ($self->AggregateList()) {
-	$agg->Refresh();
+    if (!$flush) {
+	#
+	# We do not want to replace existing aggregate objects, the caller
+	# might have a handle on them. Note that add/delete aggregate will
+	# add/remove them from the hash, so we do not worry about the
+	# membership changing as a result of the refresh.
+	#
+	foreach my $agg ($self->AggregateList()) {
+	    $agg->Refresh();
+	}
+    }
+    else {
+	$self->{'AGGREGATES'} =
+	    APT_Instance::Aggregate->LookupForInstance($self);
     }
     return 0;
 }
@@ -2572,7 +2579,7 @@ sub CheckRoutes($$)
 	$$perrmsg = "Not enough permission to use mobile resources";
 	return -1;
     }
-    if (!APT_Reservation::Group::RouteReservation->CanStart($project,
+    if (!APT_Reservation::Group::RouteReservation->CanStart($self,
 			 time(), $expires, $routes, $perrmsg)) {
 	return -1;
     }
@@ -4862,7 +4869,7 @@ sub WaitForSliver($)
 	    # If no contact for continuous minutes, give up.
 	    #
 	    $unavail = time() if (!defined($unavail));
-	    if ($aptagg->ismobile() && time() - $unavail > 300) {
+	    if ($aptagg->ismobile() && time() - $unavail > 180) {
 		$failed = 1;
 		$failure_code = GENIRESPONSE_SERVER_UNAVAILABLE();
 		$failure_output = "Experiment setup on the $aggname cluster ".
@@ -5441,18 +5448,26 @@ sub LookupActive($)
 # Is a route currently in use by a running experiment, for the requested
 # start/end time.
 #
+# Bit of a problem here, routes are actually per-experiment at the moment.
+# So if the target is a project, we are making sure no one else is using
+# it, but if an instance, then only the supplied instance can be using it.
+#
 sub InUse($$$$$)
 {
-    my ($class, $project, $routeid, $start, $end) = @_;
-    my $pid_idx = $project->pid_idx();
+    my ($class, $target, $routeid, $start, $end) = @_;
+    my $clause  = "";
 
+    if (ref($target) eq "APT_Instance") {
+	my $uuid = $target->uuid();
+	$clause = " i.uuid!='$uuid' and ";
+    }
     my $query_result =
 	DBQueryWarn("select br.uuid from apt_instance_bus_routes as br ".
 		    "left join apt_instances as i on ".
 		    "   br.uuid=i.uuid ".
 		    "left join geni.geni_slices as s on ".
 		    "     s.uuid=i.slice_uuid ".
-		    "where br.routeid='$routeid' and ".
+		    "where br.routeid='$routeid' and $clause ".
 		    "      $start <= UNIX_TIMESTAMP(s.expires)");
     return 1
 	if ($query_result->numrows);

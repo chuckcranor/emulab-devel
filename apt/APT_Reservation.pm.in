@@ -2578,9 +2578,11 @@ sub RouteReserved($$$$$)
 #
 sub CanStart($$$$$)
 {
-    my ($class, $project, $start, $end, $routes, $pmsg) = @_;
+    my ($class, $target, $start, $end, $routes, $pmsg) = @_;
     my @routes  = @$routes;
     my @notreserved = ();
+    my $project = (ref($target) eq "APT_Instance" ?
+		   $target->GetProject() : $target);
 
     # Can start if not using routes, or there are no current reservations, 
     return 1
@@ -2621,12 +2623,12 @@ sub CanStart($$$$$)
 	my $routename = $request->{"name"};
 	my $routeid   = RouteID($routename);
 
-	if (APT_Instance::Aggregate::BusRoute->InUse($project, $routeid,
+	if (APT_Instance::Aggregate::BusRoute->InUse($target, $routeid,
 						     $start, $end)) {
 	    $$pmsg = "Bus route $routename ($routeid) is not ".
 		"available for the duration of your experiment because ".
-		"another project is currently using it. Maybe you want ".
-		"to create a reservation?";
+		"another project or experiment is currently using it. ".
+		"Maybe you want to create a reservation?";
 	    return 0;
 	}
     }
@@ -2689,27 +2691,16 @@ sub MaxExtension($)
     my $slice   = $instance->GetGeniSlice();
     my $project = $instance->GetProject();
     my $pid_idx = $project->pid_idx();
-    my $expires = str2time($slice->expires());
-    # This matches what MaxSliceExtension() does
-    my $newmax  = $expires + (60 * 60 * 24 * 180);
+    my $started = str2time($instance->started());
 
     #
-    # If the instance is not using any routes, we are done. Remember,
-    # an instance cannot use routes unless the routes are reserved, so we
-    # do not need to check if the current instance is using routes unless
-    # the project has some reserved.
+    # Default max for any experiment using routes is by 11pm on the same
+    # day it was started.
     #
-    my $query_result =
-	DBQueryWarn("select distinct g.uuid ".
-		    " from apt_reservation_group_route_reservations as r ".
-		    "left join apt_reservation_groups as g on ".
-		    "     g.uuid=r.uuid ".
-		    "where g.pid_idx='$pid_idx' and ".
-		    "      r.approved is not null");
-    return undef
-	if (!defined($query_result));
-    return $newmax
-	if (!$query_result->numrows);
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+	localtime($started);
+    my $newmax = POSIX::mktime(0, 0, 23,
+			       $mday, $mon, $year, $wday, $yday, $isdst);
 
     #
     # OK, get a list of all routes used by the instance.
@@ -2722,39 +2713,51 @@ sub MaxExtension($)
 	if (! @$routes);
 
     #
-    # Hmm, it turns out that the max extension is actually when the
-    # reservations that made it possible to start the experiment, are
-    # going to end. 
+    # We are looking for any existing route reservations that overlap
+    # with the routes being used by this instance. The start of that
+    # reservation is the longest this instance can run.
     #
-    while (my ($uuid) = $query_result->fetchrow_array()) {
-	my $resgroup = APT_Reservation::Group->Lookup($uuid);
-	next
-	    if (!defined($resgroup));
+    my @groups = APT_Reservation::Group->LookupAll();
 
-	my $res_end = str2time($resgroup->end());
+    foreach my $ref (@$routes) {
+	my $routename  = $ref->{'name'};
 
-	#
-	# Look for any overlap.
-	#
-	foreach my $ref (@$routes) {
-	    my $routename  = $ref->{'name'};
+	foreach my $group (@groups) {
+	    my $res_project = $group->GetProject();
+	    
+	    next
+		if (! $group->RouteReservationList());
 
-	    foreach my $existing ($resgroup->RouteReservationList()) {
-		my $res_name  = $existing->routename();
+	    # Skip reservations in our own project, they do not conflict
+	    next
+		if ($project->SameProject($res_project));	    
+
+	    my $res_start   = str2time($group->start());
+	    my $res_end     = str2time($group->end());
+
+	    foreach my $existing ($group->RouteReservationList()) {
+		my $res_name = $existing->routename();
+
+		next
+		    if (!$existing->approved());
 
 		# If this reservation is not the route, skip it.
 		if ($res_name ne $routename) {
 		    next;
 		}
-		# The end of this reservation is an upper bound on how
-		# long the experiment can be extended.
-		if ($newmax > $res_end) {
-		    # One hour pad, just like node reservations.
-		    $newmax = $res_end - 3600;
+		if ($res_start < $newmax) {
+		    $newmax = $res_start;
+		    # No need to check any more in this group.
+		    last;
 		}
 	    }
 	}
     }
+    
+    #
+    # What about scheduled experiments that are using overlapping
+    # routes? Who wins? For now the running experiment wins.
+    #
     return $newmax;
 }
 

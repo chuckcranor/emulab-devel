@@ -1398,6 +1398,7 @@ sub DoTerminate()
     my $logfile;
     my $doperms  = 0;
     my $takelock = 0;
+    my $nolock   = 0;
     my $expired  = $RECORDHISTORY_TERMINATED;
 
     my $optlist = "eLX";
@@ -3452,6 +3453,7 @@ sub DoDeleteNodes()
 	fatal("No slice for instance");
     }
     my @aggregates  = ();
+    my @delaggs     = ();
     my %allmap      = ();
     my %aggmap      = ();
     foreach my $obj ($instance->AggregateList()) {
@@ -3489,7 +3491,6 @@ sub DoDeleteNodes()
 	    if (grep {$_ eq $client_id} @ARGV) {
 		if (!exists($aggmap{$obj->aggregate_urn()})) {
 		    $aggmap{$obj->aggregate_urn()} = [];
-		    push(@aggregates, $obj);
 		}
 		push(@{ $aggmap{$obj->aggregate_urn()} }, $client_id);
 		$delcount++;
@@ -3502,15 +3503,42 @@ sub DoDeleteNodes()
 	# about this when it becomes a problem.
 	#
 	if ($delcount == scalar(@{ $allmap{$obj->aggregate_urn()} })) {
-	    $errmsg   = "Not allowed to delete all nodes, ".
-		"please use Terminate instead";
-	    print STDERR $errmsg . "\n";
-	    if (defined($webtask)) {
-		$webtask->output($errmsg);
-		$webtask->Exited(1);
+	    if (scalar($instance->AggregateList()) == 1) {
+		$errmsg   = "Not allowed to delete all nodes, ".
+		    "please use Terminate instead";
+		print STDERR $errmsg . "\n";
+		if (defined($webtask)) {
+		    $webtask->output($errmsg);
+		    $webtask->Exited(1);
+		}
+		exit(1);
 	    }
-	    exit(1);
+	    else {
+		push(@delaggs, $obj);
+	    }
 	}
+	elsif ($delcount) {
+	    push(@aggregates, $obj);
+	}
+    }
+    if (scalar(@delaggs) == scalar($instance->AggregateList())) {
+	$errmsg   = "Not allowed to delete all nodes, ".
+	    "please use Terminate instead";
+	print STDERR $errmsg . "\n";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+    if (! (@aggregates || @delaggs)) {
+	$errmsg   = "Cannot find anything to delete!";
+	print STDERR $errmsg . "\n";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited(1);
+	}
+	exit(1);
     }
 
     #
@@ -3569,6 +3597,19 @@ sub DoDeleteNodes()
     # Set the status back to provisioning for the web interface.
     #
     $instance->SetStatus("provisioning") if (!$nostatus);
+
+    #
+    # Delete aggregates first, that should be quick.
+    #
+    if (@delaggs) {
+	my $taskopt = (defined($webtask) ? "-t $webtask_id" : "");
+	
+	system("$MANAGEINSTANCE $taskopt deleteaggregates $uuid -N -S ".
+	       join(" ", map {"'" . $_->aggregate_urn() . "'"} @delaggs));
+	if ($?) {
+	    exit($? >> 8);
+	}
+    }
 
     # Invoke on all clusters
     $errcode = CallMethodOnAggregates($coderef, 0, \$response, @aggregates);
