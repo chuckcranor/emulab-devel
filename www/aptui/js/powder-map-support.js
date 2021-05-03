@@ -17,6 +17,7 @@ window.ShowPowderMap = (function()
     var OurBuses       = null;
     var routeList      = {};
     var Aggregates     = {};
+    var ShowBusIDs     = false;
     var Loaded         = false;
     var LOCATION_URL   = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
 	"GetMapVehiclePoints?ApiKey=ride1791";
@@ -150,12 +151,12 @@ window.ShowPowderMap = (function()
 		}
 
 		// Add a distance widget button.
-		var button =
+		var button1 =
 		    $('<button class="action-button esri-icon-measure-line" '+
 		      '        id="distanceButton" '+
 		      '   title="Measure distance between two or more points" '+
 		      '        type="button"></button>');
-		View.ui.add($(button).get(0), "top-left");
+		View.ui.add($(button1).get(0), "top-left");
 
 		var distanceWidget = null;
 
@@ -192,6 +193,26 @@ window.ShowPowderMap = (function()
 				.text(text);
 			}, 25);
 		    }
+		});
+
+		// Toggle bus IDs.
+		var button2 =
+		    $('<button class="action-button esri-icon-labels" '+
+		      '        id="toggleBusIDsButton" '+
+		      '   title="Toggle mobile endpoint IDs " '+
+		      '        type="button"></button>');
+		View.ui.add($(button2).get(0), "top-left");
+
+		$('#toggleBusIDsButton').click(function (event) {
+		    console.info("toggle bus IDs");
+
+		    if (ShowBusIDs) {
+			ShowBusIDs = false;
+		    }
+		    else {
+			ShowBusIDs = true;
+		    }
+		    ForceLocationData();
 		});
 
 		// Base layers
@@ -1448,10 +1469,20 @@ window.ShowPowderMap = (function()
 	    }
 	});
     }
+    var locationInterval = null;
+    
     function PollLocationData()
     {
 	UpdateLocationData();
-	setInterval(UpdateLocationData, 5000);
+	locationInterval = setInterval(UpdateLocationData, 5000);
+    }
+    function ForceLocationData()
+    {
+	if (locationInterval) {
+	    clearInterval(locationInterval);
+	    locationInterval = null;
+	}
+	PollLocationData();
     }
 
     /*
@@ -1541,15 +1572,43 @@ window.ShowPowderMap = (function()
 	    attributes: attributes,
 	    popupTemplate: popup,
         });
+	// Add label text below the point
+	var labelGraphic = new Graphic({
+	    geometry: {
+		type: "point",
+		longitude: data.Longitude,
+		latitude: data.Latitude,
+	    },
+	    symbol: {
+		type: "text",
+		color: [25,25,25],
+		text: busname,
+		xoffset: 0,
+		yoffset: 10,
+		font: {
+		    size: 8,
+		    weight: "bold",
+		}
+	    }
+	});
+	
 	// Kill the old point.
 	if (_.has(buses, busname)) {
 	    var oldpointGraphic = buses[busname].pointGraphic;
 	    layer.remove(oldpointGraphic);
+	    if (_.has(buses[busname], "labelGraphic")) {
+		layer.remove(buses[busname].labelGraphic);
+	    }
 	}
 	// Add the new point and remember it
 	data.pointGraphic = pointGraphic;
 	routeList[routeID].buses[busname] = data;
 	layer.add(pointGraphic);
+	// And the label if enabled.
+	if (ShowBusIDs) {
+	    data.labelGraphic = labelGraphic;
+	    layer.add(labelGraphic);
+	}
     }
 
     /*
