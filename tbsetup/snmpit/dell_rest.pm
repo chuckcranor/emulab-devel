@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2019-2020 University of Utah and the Flux Group.
+# Copyright (c) 2019-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -28,6 +28,10 @@
 # XXX taken from FreeNAS REST API support and probably very similar to other
 # REST APIs...
 #
+# Some of the spec generated here are from trial and error. The rest came
+# later and are from turning on "cli mode rest-translate" on an OS10 switch
+# and doing the corresponding CLI command to generate a curl command.
+#
 
 package dell_rest;
 use strict;
@@ -38,6 +42,7 @@ use JSON::PP;
 use MIME::Base64;
 use Data::Dumper;
 use Socket;
+use Time::HiRes qw(gettimeofday);
 
 $| = 1; # Turn off line buffering on output
 
@@ -116,7 +121,7 @@ sub call($$$;$$$$)
 
     my $url = "https://$server/restconf/data/$path";
     # we want to know with basic debugging whenever we go to the switch
-    print STDERR "dell_rest: make RESTAPI call to $server\n"
+    print STDERR "dell_rest: make RESTAPI ('$path') $method call to $server\n"
 	if ($self->{DEBUG});
     print STDERR "$server: REQUEST: method=$method URL=$url\nCONTENT=$datastr\n"
 	if ($self->{DEBUG} > 3);
@@ -129,14 +134,21 @@ sub call($$$;$$$$)
 	$headers{"Content-Type"} = "application/json";
     }
 
-
-    my $http = HTTP::Tiny->new("timeout" => 10);
+    my $http = $self->{HTTP};
+    if (!$http) {
+	$http = $self->{HTTP} = HTTP::Tiny->new("timeout" => 10);
+    }
     my %options = ("headers" => \%headers, "content" => $datastr); 
 
+    my $stamp = gettimeofday()
+	if ($self->{DEBUG} > 1);
     my $res = $http->request($method, $url, \%options);
-    print STDERR "$server: RESPONSE: ", Dumper($res), "\n"
-	if ($self->{DEBUG} > 3);
-
+    if ($self->{DEBUG} > 1) {
+	$stamp = sprintf "%.3f", gettimeofday() - $stamp;
+	print STDERR "$server: RESTAPI ('$path') call done in ${stamp} sec.\n";
+	print STDERR "$server: RESPONSE: ", Dumper($res), "\n"
+	    if ($self->{DEBUG} > 3);
+    }
     $exstat = $status{$method}
 	if (!defined($exstat));
 
@@ -234,7 +246,7 @@ sub makeVlanSpec($$$)
 # XXX without this, the REST data/interfaces/interface/vlanN PATCH command
 # (for adding ports to a VLAN) will fail with "Conflict" and "entry exists".
 #
-sub uniquePortList(@) {
+sub uniqueList(@) {
     my (@olist) = @_;
 
     my %pseen = ();
@@ -263,13 +275,52 @@ sub addPortsVlanSpec($$$$)
 
     if (@uports) {
 	$vlanhash->{"interface"}->[0]->{"dell-interface:untagged-ports"} =
-	    [uniquePortList(@uports)];
+	    [uniqueList(@uports)];
     }
     if (@tports) {
 	$vlanhash->{"interface"}->[0]->{"dell-interface:tagged-ports"} =
-	    [uniquePortList(@tports)];
+	    [uniqueList(@tports)];
     }
     
+    return $vlanhash;
+}
+
+sub removeTaggedPortsVlanSpec($$$)
+{
+    my ($self,$tag,$tportlist) = @_;
+
+    my @ports = uniqueList(@{$tportlist});
+    my $vlanhash = {
+	"ietf-interfaces:interfaces" => {
+	    "dell-interface-range:interface-range" => [{
+		"type" => "iana-if-type:l2vlan",
+		"name" => "$tag",
+		"config-template" => {
+		    "dell-interface:tagged-ports" => \@ports,
+		    "delete-object" => [ "tagged-ports" ]
+		}
+	    }]
+	}
+    };
+
+    return $vlanhash;
+}
+
+sub removeVlansSpec($$)
+{
+    my ($self,@taglist) = @_;
+
+    my $tagstr = join(',', uniqueList(@taglist));
+    my $vlanhash = {
+	"ietf-interfaces:interfaces" => {
+	    "dell-interface-range:interface-range" => [{
+		"type" => "iana-if-type:l2vlan",
+		"name" => $tagstr,
+		"operation" => "DELETE",
+	    }]
+	}
+    };
+
     return $vlanhash;
 }
 
@@ -289,7 +340,8 @@ sub trunkPortSpec($$)
 
 sub enablePortSpec($$$)
 {
-    my ($self,$iface,$state) = @_;
+    my ($self,$turnon,$iface) = @_;
+    my $state = $turnon ? JSON::PP::true : JSON::PP::false;
 
     my $porthash = {
 	"interface" => [{
@@ -298,5 +350,23 @@ sub enablePortSpec($$$)
 	}]
     };
 
+    return $porthash;
+}
+
+sub enableMultiplePortsSpec($$@)
+{
+    my ($self,$turnon,@ifaces) = @_;
+    my $state = $turnon ? JSON::PP::true : JSON::PP::false;
+
+    my @pinfo = ();
+    foreach my $iface (uniqueList(@ifaces)) {
+	push @pinfo, { "name" => "$iface", "enabled" => $state };
+    }
+
+    my $porthash = {
+	"ietf-interfaces:interfaces" => {
+	    "interface" => \@pinfo
+	}
+    };
     return $porthash;
 }
