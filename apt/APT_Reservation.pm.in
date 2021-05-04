@@ -2692,6 +2692,18 @@ sub MaxExtension($)
     my $project = $instance->GetProject();
     my $pid_idx = $project->pid_idx();
     my $started = str2time($instance->started());
+    my $expires = str2time($slice->expires());
+
+    #
+    # OK, get a list of all routes used by the instance.
+    #
+    my $routes;
+    if ($instance->GetRoutes(\$routes)) {
+	return undef;
+    }
+    # This matches what MaxSliceExtension() does
+    return $expires + (60 * 60 * 24 * 180)
+	if (! @$routes);
 
     #
     # Default max for any experiment using routes is by 11pm on the same
@@ -2701,16 +2713,6 @@ sub MaxExtension($)
 	localtime($started);
     my $newmax = POSIX::mktime(0, 0, 23,
 			       $mday, $mon, $year, $wday, $yday, $isdst);
-
-    #
-    # OK, get a list of all routes used by the instance.
-    #
-    my $routes;
-    if ($instance->GetRoutes(\$routes)) {
-	return undef;
-    }
-    return $newmax
-	if (! @$routes);
 
     #
     # We are looking for any existing route reservations that overlap
