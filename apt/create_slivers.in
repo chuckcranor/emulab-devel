@@ -554,7 +554,7 @@ foreach my $aggobj (@aggregate_list) {
 	if ($aptagg->ismobile() &&
 	    ($exitcode == GENIRESPONSE_SERVER_UNAVAILABLE() ||
 	     $exitcode == GENIRESPONSE_SETUPFAILURE_INTERRUPTED()) &&
-	    scalar(@aggregate_list) > 1) {
+	    scalar($instance->AggregateList()) > 1) {
 	    #
 	    # Convert from failure to defer, so we retry. 
 	    #
