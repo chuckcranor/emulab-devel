@@ -38,6 +38,11 @@ CREATE TABLE `apt_mobile_buses` (
   `speed` float(8,2) NOT NULL default '0.00',
   `heading` smallint(5) NOT NULL default '0',
   `location_stamp` datetime default NULL,
+  `gpsd_latitude` float(8,8) NOT NULL default '0.00000000',
+  `gpsd_longitude` float(8,8) NOT NULL default '0.00000000',
+  `gpsd_speed` float(8,2) NOT NULL default '0.00',
+  `gpsd_heading` float(8,2) NOT NULL default '0.00',
+  `gpsd_stamp` datetime default NULL,
   PRIMARY KEY  (`urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
