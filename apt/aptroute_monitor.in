@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -253,7 +253,7 @@ sub LookForThingsToDo()
 	my $errmsg;
 
 	next
-	    if ($busid == 6996 || $busid == 4209);
+	    if ($busid == 6996 || $busid == 6970);
 	
 	# Current holder of the bus.
 	my ($instance) = APT_Instance::Aggregate->LookupByURN($bus->urn());
@@ -274,14 +274,34 @@ sub LookForThingsToDo()
 	}
 	if (defined($instance) &&
 	    (!defined($routeholder) || !$instance->SameInstance($routeholder))){
+
+	    #
+	    # If this aggregate is in the terminated state, it no longer
+	    # counts, it is just taking up space in the database until
+	    # the entire instance can be terminated. Say nothing.
+	    #
+	    my $aggregate = $instance->GetAggregate($bus->urn());
+	    if ($aggregate->status() eq "terminated") {
+		next;
+	    }
 	    print "$busid still held by " . $instance->Printable() . " ";
 
+	    
 	    if (!defined($routeholder)) {
 		print "and needs to be released\n";
 	    }
 	    else {
 		print "and needs to be added to " .
 		    $routeholder->Printable() . "\n";
+	    }
+
+	    #
+	    # If the routeholder has been canceled, just wait for it to
+	    # be terminated by the apt daemon, do not duplicate here.
+	    #
+	    if (defined($instance) && $instance->IsCanceled()) {
+		print "Bus holder is waiting for termination, skipping\n";
+		next;
 	    }
 					      
 	    #
@@ -302,6 +322,12 @@ sub LookForThingsToDo()
 	    next;
 	}
 	if (defined($routeholder)) {
+	    if ($bus->adminonly()) {
+		my $creator = $routeholder->GetCreator();
+		if (!$creator->admin()) {
+		    next;
+		}
+	    }
 	    #
 	    # Bus has popped up on a route.
 	    #
@@ -330,12 +356,7 @@ sub LookForThingsToDo()
 	my $urns     = join(" ", @urnlist);
 	my $wtask;
 
-	#
-	# Do not bother if someone has the lock.
-	#
-	$instance->Refresh();
-	
-	if ($instance->Locked()) {
+	if ($instance->Lock()) {
 	    print $instance->Printable() . " is locked, skipping aggregate ".
 		"removals\n";
 	    foreach my $bus (@buslist) {
@@ -343,6 +364,21 @@ sub LookForThingsToDo()
 	    }
 	    next;
 	}
+	#
+	# If it is canceled, then the apt daemon will keep trying to kill
+	# it off. Let it keep trying, we just have to mark the buses as
+	# not being ready to be added.
+	#
+	if ($instance->IsCanceled()) {
+	    print $instance->Printable() . " is canceled, skipping aggregate ".
+		"removals\n";
+	    foreach my $bus (@buslist) {
+		$failedRemovals{$bus->urn()} = $bus;
+	    }
+	    goto skip;
+	}
+	$instance->Refresh();
+
 	my $command  = "$SUDO -u $PROTOUSER $WAP $MANAGEINSTANCE ";
 	if (!$impotent) {
 	    $wtask = WebTask->CreateAnonymous();
@@ -352,10 +388,10 @@ sub LookForThingsToDo()
 	    my $wtask_id = $wtask->task_id();
 	    $command .= "-t $wtask_id ";
 	}
-	$command .= "deleteaggregates $uuid $urns";
+	$command .= "deleteaggregates $uuid -N $urns";
 	if ($impotent) {
 	    print "Would run: $command\n";
-	    next;
+	    goto skip;
 	}
 	print "Running: $command\n";
 	system($command);
@@ -367,14 +403,15 @@ sub LookForThingsToDo()
 	    # Not sure about errors yet. Just keep trying.
 	    #
 	    if (!$wtask->HasExited() || $wtask->exitcode() < 0) {
-		print "Fatal error removing aggregates\n";
+		print "Fatal error removing/terminating aggregates\n";
 	    }
 	    else {
 		print "Exited with status $status\n" if ($debug);
 	    }
 	}
-	$instance->Refresh();
-
+	# Need to force the aggregate list to change.
+	$instance->Refresh(1);
+	    
 	#
 	# See what was actually removed, since not removing means 
 	# there is no point trying to add it to another instance.
@@ -392,8 +429,6 @@ sub LookForThingsToDo()
 		push(@tmp, $bus);
 	    }
 	}
-	$wtask->Delete();
-
 	if (@tmp) {
 	    NotifyCreator(
 		$instance,
@@ -404,17 +439,15 @@ sub LookForThingsToDo()
 		"that is in use by your experiment.\n\n".
 		"\t" . join(",", map {"bus-" . $_->busid()} @tmp));
 	}
+      skip:
+	$instance->Unlock();
+	$wtask->Delete() if (defined($wtask));
     }
     foreach my $uuid (keys(%additions)) {
 	my $instance = $instances{$uuid};
 	my @buslist  = @{$additions{$uuid}};
 
-	#
-	# Do not bother if someone has the lock.
-	#
-	$instance->Refresh();
-	
-	if ($instance->Locked()) {
+	if ($instance->Lock()) {
 	    print $instance->Printable() . " is locked, skipping aggregate ".
 		"additions\n";
 	    next;
@@ -436,14 +469,16 @@ sub LookForThingsToDo()
 	if (!@buslist) {
 	    print "Nothing to do for " . $instance->Printable() . " cause " .
 		"of previous removal operations\n";
+	    $instance->Unlock();
 	    next;
 	}
 
-	my $command  = "$SUDO -u $PROTOUSER $WAP $CREATESLIVERS ".
+	my $command  = "$SUDO -u $PROTOUSER $WAP $CREATESLIVERS -L ".
 	    ($debug ? "" : "") . $instance->uuid();
 	
 	if ($impotent) {
 	    print "Would run: $command\n";
+	    $instance->Unlock();
 	    next;
 	}
 	print "Running: $command\n";
