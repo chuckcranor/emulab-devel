@@ -1038,6 +1038,11 @@ $(function ()
 		}
 		return;
 	    }
+	    if (iblob.status == "terminated" ||
+		iblob.status == "canceled") {
+		TerminatedAggregate(iblob.status, urn);
+		return;
+	    }
 	    if (iblob.offline) {
 		OfflineAggregate(urn);
 		return;
@@ -1100,7 +1105,7 @@ $(function ()
 		else if (details.status == "failed") {
 		    // Bootstrap bg-danger color
 		    $('#' + jacksID + ' .node .nodebox')
-			.css("fill", "#f2dede");
+			.css("fill", "#e67795");
 		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
 		      '#listview-row-' + node_id + ' td[name="client_id"]')
 			.css("color", "#a94442");
@@ -1296,11 +1301,37 @@ $(function ()
 	    $('#' + jacksID + ' .node .nodebox')
 		.css("fill", "#fcf8e3");
 
-	    var html =
-		"This node is currently unreachable, operations on this " +
-		"node will fail until it becomes reachable again.";
+	    var html = "This node is currently unreachable, operations on " +
+		"this node will fail until it becomes reachable again.";
 
 	    UpdateNodePopover(node_id, jacksID, html);
+	});
+    }
+
+    function TerminatedAggregate(status, urn)
+    {
+	if (!_.has(jacksSites, urn)) {
+	    // Manifest not processed yet.
+	    return;
+	}
+	$.each(jacksSites[urn], function(node_id, jacksID) {
+	    //console.info("deferAggregate: ", urn, node_id, jacksID);
+	    $('#' + jacksID + ' .node .nodebox')
+		.css("fill", "red");
+
+	    var html;
+
+	    if (status == "terminated") {
+		html = "This node has been deallocated and is no longer " +
+		    "accessible by this experiment.";
+	    }
+	    else {
+		html = "This node has been marked for removal from your " +
+		    "experiment as soon as the aggregate comes back online.";
+	    }
+	    UpdateNodePopover(node_id, jacksID, html);
+	    $('#listview-row-' + node_id + ' td[name="status"]')
+		.html("terminated");
 	});
     }
 

@@ -121,14 +121,15 @@ function Do_GetInstanceStatus()
                   "havemanifest"    => 0,
                   "offline"         => false);
 
+        #
+        # See if the aggregate is offline.
+        #
+        $aggregate = Aggregate::Lookup($sliver->aggregate_urn());
+        if ($aggregate && ($aggregate->status() == "down" ||
+                           $aggregate->status() == "offline")) {
+            $sliverblob["offline"] = true;
+        }
         if ($sliver->deferred()) {
-            #
-            # See if the aggregate is offline.
-            #
-            $aggregate = Aggregate::Lookup($sliver->aggregate_urn());
-            if ($aggregate && $aggregate->status() == "down") {
-                $sliverblob["offline"] = true;
-            }
             $sliverblob["retry_count"] = $sliver->retry_count();
             $sliverblob["last_retry"]  = DateStringGMT($sliver->last_retry());
             $sliverblob["deferred_reason"] = $sliver->deferred_reason();
@@ -217,6 +218,15 @@ function Do_GetInstanceStatus()
                 "most likely because one or more nodes failed to boot. The ".
                 "node consoles may provide more information.\n\n";
         }
+        elseif ($webtask->exitcode() == GENIRESPONSE_TIMEDOUT) {
+            $blob["reason"]  = "Your experiment timed out while setting up, ".
+                "most likely because one or more nodes failed to boot. The ".
+                "node consoles may provide more information.\n\n";
+        }
+        elseif ($webtask->exitcode() == GENIRESPONSE_NETWORK_ERROR) {
+            $blob["reason"]  = "One or more clusters could no longer be ".
+                "reached after your experiment was provisioned.";
+        }
         elseif ($webtask->exitcode() == GENIRESPONSE_BADARGS) {
             #
             # This is GENIRESPONSE_BADARGS which typically means an error
@@ -247,8 +257,9 @@ function Do_GetInstanceStatus()
         }
         $blob["reason"] .= htmlentities($webtask->TaskValue("output"));
         $blob["canclearerror"]
-            = ($webtask->exitcode() ==
-               GENIRESPONSE_SETUPFAILURE_BOOTFAILED ? 1 : 0);
+            = ($webtask->TaskValue("canignore") != 0 ||
+               $webtask->exitcode() ==
+                 GENIRESPONSE_SETUPFAILURE_BOOTFAILED ? 1 : 0);
     }
     SPITAJAX_RESPONSE($blob);
 }
@@ -506,15 +517,13 @@ function Do_RequestExtension()
         unlink($filename);
     }
     if ($retval != 0) {
+        # Debugging for a while.
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    
         if (!$webtask->exited() || $retval < 0) {
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             SPITAJAX_ERROR(-1, "Internal error extending experiment");
         }
         else {
-            if ($webtask->exitcode() == GENIRESPONSE_REFUSED) {
-                # This is an important error, tell tbops.
-                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-            }
             # Need to pass exitcode through on this one.
             SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
         }
