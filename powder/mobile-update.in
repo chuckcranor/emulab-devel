@@ -296,7 +296,7 @@ sub fatal($)
 		 $TBOPS, undef,
 		 (defined($logname) ? $logname : undef));
     }
-    unlink("$logname") if (defined($logname));
+    #unlink("$logname") if (defined($logname));
     
     die("*** $0:\n".
 	"    $msg\n");
