@@ -46,6 +46,7 @@ sub Install($$$)
 	if (ISFS($server)) {
 	    # don't enable NFS server unless we are the fileserver
 	    push(@strings, qq|mountd_enable="YES"|);
+	    push(@strings, qq|mountd_flags="-r -p 900 -S"|);
 	    push(@strings, qq|nfs_server_enable="YES"|);
 	    push(@strings, qq|nfs_server_flags="-u -t -n 16"|);
 
