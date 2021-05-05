@@ -3785,12 +3785,22 @@ sub DoDeleteAggregates()
 	    $instance->RemoveAggregate($aggregate);
 	    next;
 	}
-	push(@tmp, $aggregate);
 	#
 	# Mark as canceled in case we cannot reach the clusters, the scheduler
 	# will look for this and try again
 	#
 	$aggregate->SetStatus("canceled");
+
+	#
+	# Look to see if the aggregate is online, lets not bounce the
+	# status page around more then necessary.
+	#
+	my $aptagg = $aggregate->GetAptAggregate();
+	if ($aptagg->CheckStatus(\$errmsg, 1) != 0) {
+	    print "$aptagg is not reachable, skipping: $errmsg\n";
+	    next;
+	}
+	push(@tmp, $aggregate);
     }
     if (!@tmp) {
 	goto done;
