@@ -274,8 +274,10 @@ if (system("gmake update-testbed-nostop update-rcd")) {
 #
 # Boot the testbed
 #
-if (system("$TBCONTROL boot")) {
-    fatal("Could not boot the testbed");
+if ($shutdown == 0) {
+    if (system("$TBCONTROL boot")) {
+	fatal("Could not boot the testbed");
+    }
 }
 
 exit(0);
