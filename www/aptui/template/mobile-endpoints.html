@@ -8,11 +8,14 @@
 	  <th>Route Change</th>
 	  <th>Location Change</th>
 	  <th>Last Ping</th>
-	  <th>Latitude</th>
-	  <th>Longitude</th>
+	  <th>Lat,Long</th>
 	  <th>Speed</th>
 	  <th>Heading</th>
 	  <th>Free</th>
+	  <% if (window.ISADMIN) { %>
+	    <th>GPSD</th>
+	    <th>GPSD Time</th>
+	  <% } %>
 	</tr>
       </thead>
       <tbody>
@@ -26,17 +29,26 @@
 	      <% } %>
 	    </td>
 	    <td>
-	      <a href="powder-map.php?route=<%- id %>"
-		 class="location"
-		 data-urn="<%- info.urn %>"
-		 data-routeid="<%- info.routeid %>">
-		<%- info.routename %></a>
+	      <% if (info.routeid) { %>
+		<a href="powder-map.php?route=<%- id %>"
+		  class="location"
+		  data-urn="<%- info.urn %>"
+		  data-routeid="<%- info.routeid %>">
+		  <%- info.routename %></a>
+	      <% } %>
 	    </td>
 	    <td class="format-date"><%- info.route_changed %></td>
 	    <td class="format-date"><%- info.location_stamp %></td>
 	    <td class="format-date"><%- info.last_ping %></td>
-	    <td><%- info.latitude %></td>
-	    <td><%- info.longitude %></td>
+	    <td>
+	      <% if (info.routeid) { %>
+		<a href="https://maps.google.com/?q=<%- info.latitude %>,<%- info.longitude %>&ll=<%- info.latitude %>,<%- info.longitude %>&z=18"
+		   target="_blank">
+		  <%- info.latitude %>,<%- info.longitude %></a>
+	      <% } else { %>
+		n/a
+	      <% }  %>
+	    </td>
 	    <td><%- info.speed %></td>
 	    <td><%- info.heading %></td>
 	    <td>
@@ -46,6 +58,19 @@
 		<% if (info.free) { %>Yes<% } else { %>No<% } %>
 	      <% } %>
 	    </td>
+	    <% if (window.ISADMIN) { %>
+	      <% if (info.gpsd_stamp) { %>
+		<td>
+		  <a href="https://maps.google.com/?q=<%- info.gpsd_latitude %>,<%- info.gpsd_longitude %>&ll=<%- info.gpsd_latitude %>,<%- info.gpsd_longitude %>&z=18"
+		     target="_blank">
+		    <%- info.gpsd_latitude %>,<%- info.gpsd_longitude %></a>
+		</td>
+		<td class="format-date"><%- info.gpsd_stamp %></td>
+	      <% } else { %>
+		<td>n/a</td>
+		<td>n/a</td>
+	      <% } %>
+	    <% } %>
 	  </tr>
 	<% }); %>
       </tbody>

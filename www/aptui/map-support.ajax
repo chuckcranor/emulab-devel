@@ -161,6 +161,12 @@ function Do_GetMobileEndpoints()
             "speed"         => $row["speed"],
             "heading"       => $row["heading"],
             "location_stamp"=> DateStringGMT($row["location_stamp"]),
+            # GPSD data
+            "gpsd_stamp"    => DateStringGMT($row["gpsd_stamp"]),
+            "gpsd_latitude" => $row["gpsd_latitude"],
+            "gpsd_longitude"=> $row["gpsd_longitude"],
+            "gpsd_speed"    => $row["gpsd_speed"],
+            "gpsd_heading"  => $row["gpsd_heading"],
         );
 
         #
