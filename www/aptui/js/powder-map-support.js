@@ -16,6 +16,7 @@ window.ShowPowderMap = (function()
     var ResInfo        = null;
     var OurBuses       = null;
     var routeList      = {};
+    var routeMap       = {};  // Map route name to route data structure
     var Aggregates     = {};
     var ShowBusIDs     = false;
     var Loaded         = false;
@@ -120,7 +121,21 @@ window.ShowPowderMap = (function()
 		if (Options.showlegend) {
 		    // Layer list to turn them on and off.
 		    var layerList = new LayerList({
-			view: View
+			view: View,
+			listItemCreatedFunction: function(event) {
+			    var item  = event.item;
+			    var layer = item.layer;
+			    var title = layer.title;
+
+			    if (_.has(routeMap, title)) {
+				var route = routeMap[title];
+
+				item.panel = {
+				    className: route.legendClass
+				};
+				console.info(route.legendClass);
+			    }
+			}
 		    });
 		    var expand = new Expand({
 			expandIconClass: "esri-icon-layer-list",
@@ -129,7 +144,7 @@ window.ShowPowderMap = (function()
 			expanded: true
 		    });
 		    // Add widget to the top right corner of the view
-		    View.ui.add(expand, "top-right");
+		    View.ui.add(layerList, "top-right");
 		}
 		var homeWidget = new Home({
 		    view: View
@@ -389,7 +404,7 @@ window.ShowPowderMap = (function()
     }
 
     /*
-     * Markthe current set of resources that are used by the experiment.
+     * Mark the current set of resources that are used by the experiment.
      */
     function MarkExperimentResources()
     {
@@ -1350,12 +1365,15 @@ window.ShowPowderMap = (function()
 		    return;
 		}
 		routeList[routeID] = {
+		    "routeID"    : routeID,
 		    "data"       : route,
 		    "path"       : polylineDecode(route.EncodedPolyline),
 		    "layer"      : null,
 		    "buses"      : {},
 		    "experiment" : routes[routeID].experiment,
+		    "legendClass": "",
 		};
+		routeMap[route.Description] = routeList[routeID];
 		DrawRoute(routeID);
 	    });
 	    console.info("routelist", routeList);
@@ -1407,13 +1425,14 @@ window.ShowPowderMap = (function()
 
 	var name  = routeList[routeID].data.Description;
 	var path  = routeList[routeID].path;
+	var color = routeList[routeID].data.MapLineColor;
 	var layer = GraphicsLayer({
 	    title: name,
 	})
 
 	var symbol = {
 	    type: "simple-line",
-	    color: routeList[routeID].data.MapLineColor,
+	    color: color,
 	    width: 2
 	};
 	var line = {
@@ -1424,6 +1443,20 @@ window.ShowPowderMap = (function()
 	    geometry:   line,
 	    symbol:     symbol,
 	});
+	/*
+	 * Create a class to use as the color icon in the legend.
+	 */
+	var className = "esri-icon-polygon-" + routeID;
+	var html =
+	    "<style>" +
+	    " ." + className + ":before { " +
+	    "  content: \"\ue68b\"; " +
+	    "  color: " + color + ";" +
+	    " } " +
+	"</style>";
+	$(html).appendTo("body");
+	routeList[routeID].legendClass = className;
+	
 	layer.visible = false;
 	layer.add(graphic);
 	Map.add(layer);
