@@ -133,7 +133,7 @@ window.ShowPowderMap = (function()
 				item.panel = {
 				    className: route.legendClass
 				};
-				console.info(route.legendClass);
+				//console.info(route.legendClass);
 			    }
 			}
 		    });
@@ -235,10 +235,10 @@ window.ShowPowderMap = (function()
 		DrawDataCenters();
 		// Need to wait till these are done before we mark resources
 		// They return the promise.
-		$.when(DrawFixedEndpoints(),
-		       DrawBaseStations(), DrawRoutes())
+		$.when(DrawRoutes(), DrawFixedEndpoints(),
+		       DrawBaseStations())
 		    .done(function (r1, r2, r3) {
-			console.info("done1", r1, r2, 3);
+			console.info("done1", r1, r2, r3);
 
 			if (Options.showlinks) {
 			    DrawLinks(Options.showlinks);
@@ -246,9 +246,6 @@ window.ShowPowderMap = (function()
 			
 			if (_.has(Options, "experiment")) {
 			    MarkExperimentResources();
-			    if (Options.showmobile) {
-				// Need to show routes used by an experiment.
-			    }
 			    Loaded = true;
 			}
 			else if (_.has(Options, "location")) {
@@ -408,6 +405,8 @@ window.ShowPowderMap = (function()
      */
     function MarkExperimentResources()
     {
+	console.info("MarkExperimentResources");
+	
 	UnmarkFixedEndpoints();
 	UnmarkBaseStations();
 	
@@ -434,6 +433,29 @@ window.ShowPowderMap = (function()
 	    // Experiment is using (part of) this base station.
 	    if (markit) {
 		MarkBaseStation(details.name, false);
+	    }
+	});
+
+	_.each(routeList, function (route, routeID) {
+	    // Only routes this experiment has
+	    if (route.experiment == Options.experiment) {
+		var markit = 0;
+		
+		// And only if it has one of our buses on the route.
+		_.each(route.buses, function(bus, busid) {
+		    if (_.has(OurBuses, busid)) {
+			// Need the urn from the global bus list.
+			var urn = OurBuses[busid].urn;
+
+			if (_.has(Aggregates, urn)) {
+			    markit = 1;
+			}
+		    }
+		});
+
+		if (markit) {
+		    ShowRoute(routeID);
+		}
 	    }
 	});
     }
@@ -1377,15 +1399,18 @@ window.ShowPowderMap = (function()
 		DrawRoute(routeID);
 	    });
 	    console.info("routelist", routeList);
-	    PollLocationData();
 	};
-	return $.when(getJSON(ROUTES_URL),
-		      sup.CallServerMethod(null, "map-support",
-					   "GetMobileEndpoints", null))
-	    .done(function(routedata, json) {
+	var deferred = 
+	    $.when(getJSON(ROUTES_URL),
+		   sup.CallServerMethod(null, "map-support",
+					"GetMobileEndpoints", null));
+	var chained =
+	    deferred.then(function(routedata, json) {
 		console.info("done2", routedata, json);
 		callback(routedata, json);
+		return PollLocationData();
 	    });
+	return chained;
     }
 
     function getJSON(url, callback)
@@ -1486,12 +1511,11 @@ window.ShowPowderMap = (function()
      */
     function UpdateLocationData()
     {
-	$.ajax({
+	var jqxhr = $.ajax({
 	    dataType: "json",
 	    url: LOCATION_URL,
 	    cache: false,
 	    success: function (data) {
-		//console.info("PollLocationData", data);
 		_.each(data, function (bus) {
 		    var routeID = bus.RouteID;
 
@@ -1501,13 +1525,22 @@ window.ShowPowderMap = (function()
 		});
 	    }
 	});
+	var defer = $.Deferred();
+	jqxhr.done(function (data) {
+	    defer.resolve(data);
+	});
+	return defer;
     }
     var locationInterval = null;
     
     function PollLocationData()
     {
-	UpdateLocationData();
-	locationInterval = setInterval(UpdateLocationData, 5000);
+	console.info("PollLocationData");
+
+	return $.when(UpdateLocationData())
+	    .done(function (r) {
+		locationInterval = setInterval(UpdateLocationData, 5000);
+	    });
     }
     function ForceLocationData()
     {
@@ -1869,6 +1902,9 @@ window.ShowPowderMap = (function()
 
 	if (_.has(Options, "experiment")) {
 	    GetExperimentInfo(function () {
+		// Default this toggle on in this mode.
+		ShowBusIDs = true;
+		
 		DrawBaseMap();
 
 		// Periodic poll to refresh things.

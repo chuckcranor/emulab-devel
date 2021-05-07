@@ -2430,11 +2430,12 @@ $(function ()
 		    UpdatePowderMap()
 		}
 		else {
-		    var showmap = true;
-		
+		    var showmap = false;
+
+		    // If we have at least one manifest, show the map.
 		    $.each(statusblob, function(urn) {
-			if (!_.has(manifests, urn)) {
-			    showmap = false;
+			if (_.has(manifests, urn)) {
+			    showmap = true;
 			}
 		    });
 		    if (showmap) {
