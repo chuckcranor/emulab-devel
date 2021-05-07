@@ -1508,6 +1508,10 @@ sub ActionStart($$;$)
 	print STDERR "os_setup exited with status $rval\n";
 	# Update to get the disk images into the manifest.
 	GeniCM::UpdateManifest($slice);
+	$rval = $rval >> 8;
+	if ($rval == 255) {
+	    $rval = -1;
+	}
     }
 
     #
