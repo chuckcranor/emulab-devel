@@ -271,7 +271,9 @@ if (!@aggregate_list) {
 	scalar($instance->DeferredAggregateList())) {
 	$instance->SetStatus("pending");
     }
-    $instance->Defer();
+    if ($instance->DeferredAggregateList()) {
+	$instance->Defer();
+    }
     $genislice->UnLock();
     exit(0);
 }

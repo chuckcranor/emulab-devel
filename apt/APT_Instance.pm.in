@@ -2673,6 +2673,10 @@ sub AddRouteNodes($$$)
 	    #
 	    # For now, if the bus is down, ignore it. 
 	    #
+	    if ($bus->disabled()) {
+		print "$client_id is disabled, skipping\n";
+		next;
+	    }
 	    if (!$bus->IsUp()) {
 		print "$client_id is not up, skipping\n";
 		next;
