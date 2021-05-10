@@ -17,7 +17,7 @@ case "$1" in
 	
 	if [ -x @prefix@/sbin/mobile-update ]; then
 	    echo -n " mobile-update"
-	    @prefix@/sbin/mobile-update -F >/var/log/mobile-update.log 2>&1
+	    @prefix@/sbin/mobile-update -bF >/var/log/mobile-update.log 2>&1
 	fi
 esac
 exit 0

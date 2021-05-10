@@ -36,13 +36,14 @@ use IO::Handle;
 #
 sub usage()
 {
-    print "Usage: mobile-update [-ndvF]\n";
+    print "Usage: mobile-update [-ndvFb]\n";
     exit(1);
 }
-my $optlist   = "dvnF";
+my $optlist   = "dvnFb";
 my $debug     = 0;
 my $verbose   = 1;
 my $impotent  = 1;
+my $boottime  = 0;
 my $logname;
 
 #
@@ -114,6 +115,9 @@ if (defined($options{"n"})) {
 }
 if (defined($options{"F"})) {
     $impotent = 0;
+}
+if (defined($options{"b"})) {
+    $boottime = 1;
 }
 if (! chdir($TB)) {
     fatal("Could not chdir to $TB: $!");
@@ -258,7 +262,7 @@ if ($?) {
     fatal("Could not determine if testbed is shutdown");
 }
 chomp($shutdown);
-if ($shutdown == 0) {
+if ($shutdown == 0 && !$boottime) {
     if (system("$TBCONTROL shutdown")) {
 	fatal("Could not shutdown the testbed");
     }
@@ -274,12 +278,12 @@ if (system("gmake update-testbed-nostop update-rcd")) {
 #
 # Boot the testbed
 #
-if ($shutdown == 0) {
+if ($shutdown == 0 && !$boottime) {
     if (system("$TBCONTROL boot")) {
 	fatal("Could not boot the testbed");
     }
 }
-
+#unlink("$logname") if (defined($logname));
 exit(0);
 
 sub fatal($)
