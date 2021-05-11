@@ -2290,5 +2290,41 @@ sub GetImageCredential($)
 				$image_credential->asString());
 }
 
+#
+# Receive a manifest from the Portal, that is the (updated) merge of
+# all per-aggregate manifests. This manfest changes as nodes are added
+# and deleted. 
+#
+sub PortalManifest($)
+{
+    my ($argref)  = @_;
+
+    #
+    # The Portal decides the user has permission and then uses "admin" mode.
+    #
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    if (!exists($argref->{'slice_urn'})) {
+	return GeniResponse->BadArgsResponse("Missing slice urn");
+    }
+    my $slice_urn = $argref->{'slice_urn'};
+    my $slice = GeniSlice->Lookup($slice_urn);    
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($slice));
+
+    if (!exists($argref->{'manifest'})) {
+	return GeniResponse->BadArgsResponse("Missing manifest");
+    }
+    my $manifest = $argref->{'manifest'};
+
+    if ($slice->SetPortalManifest($manifest)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not update portal manifest");
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, 1);
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

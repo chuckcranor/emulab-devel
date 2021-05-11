@@ -641,6 +641,7 @@ sub ActiveAggregateList($)
     foreach my $agg ($self->AggregateList()) {
 	push(@result, $agg)
 	    if ($agg->status() ne "terminated" &&
+		$agg->status() ne "canceled" &&
 		$agg->deferred() == 0);
     }
     return @result;
@@ -2741,6 +2742,136 @@ sub DeleteRoutes($)
     return APT_Instance::Aggregate::BusRoute->DeleteForInstance($self);
 }
 
+#
+# Merge manifests. Not comprehensive, just want to create a manifest
+# that include nodes and links from each of the aggregate manifests.
+#
+sub MergeManifests($)
+{
+    my ($self) = @_;
+    my @aggregates = $self->ActiveAggregateList();
+
+    # Promote the one manifest up to instance.
+    if (@aggregates == 1) {
+	my $aggregate = $aggregates[0];
+	if (defined($self->manifest()) &&
+	    $aggregate->manifest() eq $self->manifest()) {
+	    return 0;
+	}
+	if ($self->SetManifest($aggregate->manifest())) {
+	    return -1;
+	}
+	$aggregate->MarkManifestPush();
+	return 0;
+    }
+
+    #
+    # Find nodes and links specific to each manifest (aggregate).
+    #
+    my %nodes     = ();
+    my %links     = ();
+    my %linknames = ();
+
+    foreach my $aggregate (@aggregates) {
+	my $aggregate_urn = $aggregate->aggregate_urn();
+	my $manifest      = $aggregate->manifest();
+
+	# Might not be a manifest if deferred.
+	next
+	    if (!$manifest);
+
+	$nodes{$aggregate_urn} = [];
+	$links{$aggregate_urn} = [];
+
+	my $obj = GeniXML::Parse($aggregate->manifest());
+	if (!defined($obj)) {
+	    print STDERR "Could not parse manifest for $aggregate\n";
+	    return -1;
+	}
+	foreach my $ref (GeniXML::FindNodes("n:node", $obj)->get_nodelist()) {
+	    my $client_id   = GetVirtualId($ref);
+	    my $manager_urn = GetManagerId($ref);
+
+	    # The portal always puts this in.
+	    if (! defined($manager_urn)) {
+		print STDERR "Missing manager_urn for $client_id\n";
+		return -1;
+	    }
+	    if ($manager_urn eq $aggregate->aggregate_urn()) {
+		push(@{ $nodes{$aggregate_urn} }, $ref->cloneNode(1));
+	    }
+	}
+	foreach my $ref (GeniXML::FindNodes("n:link", $obj)->get_nodelist()) {
+	    my $client_id   = GetVirtualId($ref);
+
+	    # The portal always puts this in.
+	    if (!GeniXML::FindNodes("n:component_manager", $ref)) {
+		print STDERR "Missing manager_urn for $client_id\n";
+		return -1;
+	    }
+	    my @list = GeniXML::FindNodes("n:component_manager",
+					  $ref)->get_nodelist();
+
+	    if (@list == 1) {
+		my $manager_urn = GetLinkManager($list[0]);
+
+		if ($manager_urn eq $aggregate_urn) {
+		    push(@{ $links{$aggregate_urn} }, $ref->cloneNode(1));
+		}
+	    }
+	    else {
+		# Multisite. Mostly gonna punt for now.
+		foreach my $mref (@list) {
+		    my $manager_urn = GetLinkManager($mref);
+
+		    if ($manager_urn eq $aggregate_urn &&
+			!exists($linknames{$client_id})) {
+			push(@{ $links{$aggregate_urn} }, $ref->cloneNode(1));
+			$linknames{$client_id} = $ref;
+			last;
+		    }
+		}
+	    }	    
+	}
+    }
+    # The new manifest will start with the first manifest.
+    my $first = shift(@aggregates);
+    my $manifest = GeniXML::Parse($first->manifest());
+
+    # Remove existing nodes and links.
+    foreach my $ref (GeniXML::FindNodes("n:node", $manifest)->get_nodelist()) {
+	$manifest->removeChild($ref);	
+    }
+    foreach my $ref (GeniXML::FindNodes("n:link", $manifest)->get_nodelist()) {
+	$manifest->removeChild($ref);	
+    }
+
+    # Now add the aggregate specific nodes and links
+    foreach my $ref (values(%nodes)) {
+	foreach my $node (@{$ref}) {
+	    $manifest->appendChild($node);
+	}
+    }
+    foreach my $ref (values(%links)) {
+	foreach my $link (@{$ref}) {
+	    $manifest->appendChild($link);
+	}
+    }
+    #print $manifest;
+    if ($manifest ne $self->manifest()) {
+	if ($self->SetManifest(GeniXML::Serialize($manifest))) {
+	    return -1;
+	}
+	# Mark aggregates for needing a push
+	foreach my $aggregate (@aggregates) {
+	    if (! ($aggregate->isAL2S() || $aggregate->isStitch())) {
+		$aggregate->MarkManifestPush();
+	    }
+	}
+    }
+    return 0;
+}
+
 ###################################################################
 package APT_Instance::History;
 use emdb;
@@ -3594,6 +3725,18 @@ sub SetManifest($$)
     return 0;
 }
 
+sub IsActive($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->status() ne "terminated" &&
+	    $self->status() ne "canceled" &&
+	    $self->deferred() == 0);
+
+    return 0;
+}
+
 sub GetGeniAuthority($)
 {
     my ($self) = @_;
@@ -3641,6 +3784,34 @@ sub ClearExtensionPush($)
 
     DBQueryWarn("update apt_instance_aggregates set ".
 		"  extension_needpush=null ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return 0;
+}
+
+# Mark for needing the portal manifest pushed out.
+sub MarkManifestPush($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  manifest_needpush=now() ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return 0;
+}
+sub ClearManifestPush($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  manifest_needpush=null ".
 		"where uuid='$uuid' and aggregate_urn='$urn'")
 	or return -1;
 
@@ -5242,6 +5413,24 @@ sub Top($$)
 	"component_id" => $component_id,
     };
     return APT_Geni::PortalRPC($authority, undef, "NodeTop", $args);
+}
+
+#
+# Push the portal merged manifest.
+#
+sub PushPortalManifest($$)
+{
+    my ($self, $manifest) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $slice     = $self->instance()->GetGeniSlice();
+    return ContextError()
+	if (! (defined($authority)));
+
+    my $args = {
+	"slice_urn" => $slice->urn(),
+	"manifest"  => $manifest,
+    };
+    return APT_Geni::PortalRPC($authority, undef, "PortalManifest", $args);
 }
 
 ###################################################################

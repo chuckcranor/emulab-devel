@@ -442,6 +442,7 @@ CREATE TABLE `apt_instance_aggregate_history` (
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
   `extension_needpush` datetime default NULL,
+  `manifest_needpush` datetime default NULL,
   `prestage_data` mediumtext,  
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
@@ -467,6 +468,7 @@ CREATE TABLE `apt_instance_aggregates` (
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
   `extension_needpush` datetime default NULL,
+  `manifest_needpush` datetime default NULL,
   `prestage_data` mediumtext,  
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)

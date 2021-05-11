@@ -431,6 +431,7 @@ COMMAND_PROTOTYPE(dogeniall);
 COMMAND_PROTOTYPE(dogeniparam);
 COMMAND_PROTOTYPE(dogenirpccert);
 COMMAND_PROTOTYPE(dogeniinvalid);
+COMMAND_PROTOTYPE(dogeniportalmanifest);
 #endif
 
 /*
@@ -577,6 +578,7 @@ struct command {
 	{ "geni_all",     FULLCONFIG_NONE, 0, dogeniall },
 	{ "geni_param",   FULLCONFIG_NONE, 0, dogeniparam },
 	{ "geni_rpccert",   FULLCONFIG_NONE, 0, dogenirpccert },
+	{ "geni_portalmanifest", FULLCONFIG_NONE, 0, dogeniportalmanifest },
 	/* A rather ugly hack to avoid making error handling a special case.
 	   THIS MUST BE THE LAST ENTRY IN THE ARRAY! */
 	{ "geni_invalid", FULLCONFIG_NONE, 0, dogeniinvalid }
@@ -13617,6 +13619,38 @@ static char *getgenimanifest( tmcdreq_t *reqp ) {
 	return buf;
 }
 
+static char *getgeniportalmanifest( tmcdreq_t *reqp ) {
+    
+	MYSQL_RES	*res;
+	char		*buf;
+
+	res = mydb_query( "SELECT m.manifest FROM `geni-cm`.geni_slivers AS s, "
+			  "`geni-cm`.portal_manifests AS m WHERE "
+			  "s.resource_uuid='%s' AND "
+			  "m.slice_uuid = s.slice_uuid", 1, reqp->nodeuuid );
+
+	if( !res ) {
+		error( "geni_portal_manifest: %s: DB error getting manifest!\n",
+		       reqp->nodeid );
+		return NULL;
+	}
+
+	if( mysql_num_rows( res ) ) {
+		MYSQL_ROW row = mysql_fetch_row( res );
+
+		buf = strdup( row[ 0 ] );
+	} else {
+	        buf = strdup( "" );
+	}
+
+	mysql_free_result( res );
+
+	if( verbose )
+		info( "%s: geni_portal_manifest: %s", reqp->nodeid, buf );
+	
+	return buf;
+}
+
 static char *getgenicert( tmcdreq_t *reqp ) {
     
 	MYSQL_RES	*res;
@@ -13997,6 +14031,7 @@ MAKEGENICOMMAND(userurn)
 MAKEGENICOMMAND(useremail)
 MAKEGENICOMMAND(geniuser)
 MAKEGENICOMMAND(manifest)
+MAKEGENICOMMAND(portalmanifest)
 MAKEGENICOMMAND(cert)
 MAKEGENICOMMAND(key)
 MAKEGENICOMMAND(controlmac)
@@ -14039,6 +14074,8 @@ struct genicommand {
     { "certificate", getgenicert, 1, NULL },
     { "key", getgenikey, 1, NULL },
     { "rpccert", getgenirpccert, 1, NULL },
+    { "portalmanifest", getgeniportalmanifest, 1,
+      "Show the portal aggregated manifest for the local aggregate sliver" },
 };
 
 COMMAND_PROTOTYPE(dogenicommands)

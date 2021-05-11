@@ -8074,6 +8074,8 @@ sub CleanupDeadSlice($;$)
 
     DBQueryWarn("delete from geni_manifests ".
 		"where slice_uuid='$slice_uuid'");
+    DBQueryWarn("delete from portal_manifests ".
+		"where slice_uuid='$slice_uuid'");
 
     if (defined($experiment)) {
 	# Do this so that a full swapout is done. Better then trying

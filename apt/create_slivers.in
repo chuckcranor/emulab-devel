@@ -480,10 +480,21 @@ if (!@tmp) {
 @aggregate_list = @tmp;
 
 #
-# Cause of early return, we have to Check to see if all aggregates provisioned.
+# Cause of early return, we have to check to see if all aggregates provisioned.
 # This will update status and node counts.
 #
 $instance->CheckProvisioned();
+
+#
+# Set the toplevel manifest to a merge of all the aggregate manifests
+#
+$instance->MergeManifests();
+
+#
+# Do this now. It has a short timeout, and WaitForSlivers is going to
+# be waiting at first anyway, 
+#
+system("$MANAGEINSTANCE pushmanifest $uuid -N");
 
 #
 # Now wait for the sliver to be ready, which means polling.
