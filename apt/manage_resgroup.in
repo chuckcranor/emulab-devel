@@ -2858,11 +2858,10 @@ sub DoMaxDuration()
     }
 
     #
-    # Use this to get the type counts and do error checking. 
+    # Use this to get the type counts
     #
     my $resources = {};
-    if (APT_Profile::CheckResources($rspec, $project, $start, $end,
-				    1, \$errmsg, \$resources)) {
+    if (APT_Profile::GetResources($rspec, \$errmsg, \$resources)) {
 	fatal($errmsg);
     }
     #
