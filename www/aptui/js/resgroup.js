@@ -1096,11 +1096,13 @@ $(function ()
 	    var now   = moment();
 	    var start = moment(start_day, "MM/DD/YYYY");
 	    start.hour(start_hour);
-
-	    if (now.isoWeekday() == start.isoWeekday()) {
+	    
+	    if (now.isSame(start, 'day')) {
 		toosoon = 1;
 	    }
-	    else if (now.isoWeekday() + 1 == start.isoWeekday()) {
+	    else if (moment([start.year(), start.month(), start.date()])
+		     .diff(moment([now.year(), now.month(), now.date()]), 'day')
+		     == 1) {
 		// Next day, has to be after 9am on a weekday.
 		start.tz(window.HOMETZ);
 		console.info("next day");
