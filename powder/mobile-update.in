@@ -63,6 +63,7 @@ sub fatal($);
 use lib "@prefix@/lib";
 use emdb;
 use emutil;
+use libEmulab;
 use libtestbed;
 
 #
@@ -119,6 +120,17 @@ if (defined($options{"F"})) {
 if (defined($options{"b"})) {
     $boottime = 1;
 }
+
+#
+# Bail early if not enabled.
+#
+my $doupdate;
+
+if (GetSiteVar("powder/mobile_update", \$doupdate) && $doupdate == 0) {
+    print "Disabled by sitevar\n" if (!$boottime);
+    exit(0);
+}
+
 if (! chdir($TB)) {
     fatal("Could not chdir to $TB: $!");
 }

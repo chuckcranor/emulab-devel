@@ -199,6 +199,7 @@ INSERT INTO sitevariables VALUES ('hwcollect/outputdir',NULL,'/proj/emulab-ops/h
 INSERT INTO sitevariables VALUES ('hwcollect/commands',NULL,'Any,dmesg,dmesg;Linux,lshw,lshw','Collection programs to run. A semi-colon separated list of OS,program,cmdline triples.',0);
 INSERT INTO sitevariables VALUES ('rfmonitor/noisefloor',NULL,'-110.0','Noise floor threshold for determining if a radio is transmitting.',0);
 INSERT INTO sitevariables VALUES ('powder/deadman_enable',NULL,'0','Set to non-zero to enable Powder deadman operation.',0);
+INSERT INTO sitevariables VALUES ('powder/mobile_update',NULL,'1','Set to zero to disable automated software update at boot time.',0);
 INSERT INTO sitevariables VALUES ('images/listed_default',NULL,'1','By default, newly created or imported global images in the emulab-ops project will be listed for users to see (and use). Set this to zero to prevent automatic listing.',0);
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
