@@ -59,7 +59,7 @@ my $CREATESLIVERS    = "$TB/bin/create_slivers";
 my $MANAGEINSTANCE   = "$TB/bin/manage_instance";
 my $WAP              = "$TB/sbin/wap";
 my $SUDO	     = "/usr/local/bin/sudo";
-my $SLEEP_INTERVAL   = 30;
+my $SLEEP_INTERVAL   = 300;
 
 use lib "@prefix@/lib";
 use emdb;
@@ -253,7 +253,7 @@ sub LookForThingsToDo()
 	my $errmsg;
 
 	next
-	    if ($busid == 6996 || $busid == 6970);
+	    if ($busid == 6996 || $busid == 6970 || $bus->disabled());
 	
 	# Current holder of the bus.
 	my ($instance) = APT_Instance::Aggregate->LookupByURN($bus->urn());
@@ -303,22 +303,30 @@ sub LookForThingsToDo()
 		print "Bus holder is waiting for termination, skipping\n";
 		next;
 	    }
-					      
 	    #
-	    # This is likely to happen when an experiment has ended but
-	    # the bus could not be reached to terminate the slice. There
-	    # is no self termination on mobile aggregates, so we have to
-	    # do it when we are able to reach it.
-	    #
-	    # Note that we do not allow an experiment to start or extend
-	    # unless it holds the route reservation for the full duration.
-	    #
-	    if ($bus->CheckStatus(\$errmsg, 1) != 0) {
-		print "$busid is not reachable, skipping: $errmsg\n";
-		next;
-	    }
+	    # The bus might already be powered off, but we still need
+	    # to initiate the delete so it gets marked as canceled in
+	    # the DB and the web page reflects it on the status page.
+	    # 
 	    &$removeBus($bus, $instance);
-	    &$addBus($bus, $routeholder) if (defined($routeholder));
+					      
+	    if (defined($routeholder)) {
+		#
+		# But if the aggregate is down, no point in trying to add it.
+		#
+		# Note that we do not allow an experiment to start or extend
+		# unless it holds the route reservation for the full duration.
+		#
+		if (!$bus->IsUp()) {
+		    print "$busid is offline, skipping\n";
+		    next;
+		}
+		if ($bus->CheckStatus(\$errmsg, 1) != 0) {
+		    print "$busid is not reachable, skipping: $errmsg\n";
+		    next;
+		}
+		&$addBus($bus, $routeholder)
+	    }
 	    next;
 	}
 	if (defined($routeholder)) {
@@ -335,6 +343,10 @@ sub LookForThingsToDo()
 		$routeholder->Printable() . "\n";
 
 	    # But might not be reachable yet.
+	    if (!$bus->IsUp()) {
+		print "$busid is offline, skipping\n";
+		next;
+	    }
 	    if ($bus->CheckStatus(\$errmsg, 1) != 0) {
 		print "$busid is not reachable, skipping: $errmsg\n";
 		next;
@@ -487,19 +499,9 @@ sub LookForThingsToDo()
 	    # Hmm, what to do?
 	    ;
 	}
-	else {
-	    NotifyCreator(
-		$instance,
-		"Mobile endpoints added to experiment ".
-		$instance->Printable() . "\n",
-		"The following mobile endpoints have been added to your\n".
-		"experiment because they are now running on a route that\n".
-		"is in use by your experiment.\n\n".
-		"\t" . join(",", map {"bus-" . $_->busid()} @buslist) . "\n\n" .
-		"You can watch the progress on the experiment status page\n".
-		"(link below) or you can wait for further email indicating\n".
-		"the mobile endpoints are now running in your experiment.");
-	}
+	#
+	# create_slivers sends email when buses incorporated.
+	#
     }
 }
 
