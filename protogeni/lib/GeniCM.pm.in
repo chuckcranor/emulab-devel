@@ -992,7 +992,6 @@ sub GetTicketAuxAux($)
 		     "Only public address pools of type any are supported");
 		    goto bad;
 		}
-		print STDERR 'DEBUG: Adding row to virt_address_allocation';
 		my $pool_id = $pool->{'client_id'};
 		# Ug, this causes named to croak.
 		if ($pool_id =~ /\_/) {
@@ -1000,6 +999,7 @@ sub GetTicketAuxAux($)
 		     "Invalid client_id, no underscores allowed in pool name.");
 		    goto bad;
 		}
+		print STDERR 'DEBUG: Adding row to virt_address_allocation';
 		$virtexperiment->NewTableRow("virt_address_allocation",
 					 {"pool_id" => $pool_id,
 					  "count" => $pool->{'count'},
