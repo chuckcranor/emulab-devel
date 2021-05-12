@@ -266,6 +266,8 @@ function Do_AccountDetails()
                                      $target_user->portal() : "classic");
         $results["bound_portal"]  = $target_user->bound_portal() ? true:false;
         $results["created"]       = DateStringGMT($target_user->created());
+        $results["modified"]      = DateStringGMT($target_user->modified());
+        $results["pswd_expires"]  = DateStringGMT($target_user->pswd_expires());
         $results["status"]        = $target_user->status();
         $results["frozen_stamp"]  = DateStringGMT($target_user->frozen_stamp());
         $results["frozen_by"]     = $target_user->frozen_by();
@@ -276,8 +278,22 @@ function Do_AccountDetails()
         $results["nonlocal_id"]   = ($target_user->nonlocal_id() ?
                                      $target_user->nonlocal_id() : "");
         $results["last_weblogin"] = DateStringGMT(LASTWEBLOGIN($target_idx));
-        $results["inactive"]       = ($target_user->status() ==
+        $results["inactive"]      = ($target_user->status() ==
                                       TBDB_USERSTATUS_INACTIVE ? true : false);
+        $results["affil_matched"] = $target_user->affiliation_matched();
+        $results["affil_updated"] =
+            DateStringGMT($target_user->affiliation_updated());
+        $results["loggedin"]      = $target_user->LoggedIn();
+
+        $scopus_info = array();
+        $query_result =
+            DBQueryFatal("select * from user_scopus_info ".
+                         "where uid_idx='$target_idx'");
+	while ($row = mysql_fetch_array($query_result)) {
+            $scopus_id = $row["scopus_id"];
+            $scopus_info[$scopus_id] = $row;
+        }
+        $results["scopus_info"]   = $scopus_info;
     }
 
     SPITAJAX_RESPONSE($results);

@@ -1472,6 +1472,14 @@ class User
 	DBQueryFatal("delete from login where uid_idx='$idx'");
         return 0;
     }
+    function LoggedIn() {
+	$idx   = $this->uid_idx();
+
+        $query_result = 
+            DBQueryFatal("select * from login where uid_idx='$idx'");
+
+        return mysql_num_rows($query_result);
+    }
 
     #
     # Return project access list for a user. This returns just pid,eid for

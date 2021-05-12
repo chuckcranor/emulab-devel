@@ -6135,12 +6135,34 @@ CREATE TABLE `users` (
   `news_read` datetime NOT NULL default '0000-00-00 00:00:00',
   `affiliation_matched` tinyint(1) default '0',
   `affiliation_updated` date NOT NULL default '0000-00-00',
+  `scopus_lastcheck` date NOT NULL default '0000-00-00',
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
   KEY `status` (`status`),
   KEY `uid_uuid` (`uid_uuid`),
   KEY `uid` (`uid`),
   KEY `nonlocal_id` (`nonlocal_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+
+DROP TABLE IF EXISTS `user_scopus_info`;
+CREATE TABLE `user_scopus_info` (
+  `uid` varchar(8) NOT NULL default '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `scopus_id` varchar(32) NOT NULL default '',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `validated` datetime default NULL,
+  `validation_state` enum('valid','invalid','unknown') default 'unknown',
+  `author_url` text,
+  `latest_abstract_id` varchar(32) NOT NULL default '',
+  `latest_abstract_pubdate` date NOT NULL default '0000-00-00',
+  `latest_abstract_pubtype` varchar(64) NOT NULL default '',
+  `latest_abstract_pubname` text,
+  `latest_abstract_title` text,
+  `latest_abstract_authors` text,
+  `latest_abstract_cites` enum('emulab','cloudlab','phantomnet','powder') default NULL,
+  PRIMARY KEY  (`uid_idx`,`scopus_id`),
+  KEY `uid` (`uid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
