@@ -3355,7 +3355,12 @@ sub DoManifests()
     goto bad
 	if ($errcode);
 
-    $instance->MergeManifests();
+    if ($instance->MergeManifests()) {
+	print STDERR "Could not merge manifests\n";
+    }
+    elsif (PushManifestInternal($instance->manifest())) {
+	print STDERR "Could not push manifests\n";
+    }
     $slice->UnLock();
     exit(0);
   bad:
@@ -3836,6 +3841,9 @@ sub DoDeleteAggregates()
 	goto bad;
     }
 
+    # Flag, do we need to merge/push a new manifest.
+    my $needpush = 0;
+
     #
     # Look at all the responses, update the status. 
     #
@@ -3856,6 +3864,7 @@ sub DoDeleteAggregates()
 	    # history too.
 	    #
 	    $instance->RemoveAggregate($agg);
+	    $needpush = 1;
 	    next;
 	}
 	($exitcode,$errmsg) = ResponseErrorMessage($agg, $response);
@@ -3877,6 +3886,15 @@ sub DoDeleteAggregates()
 	    # how we will handle this error.
 	    $errcode  = $code;
 	    $exitcode = -1;
+	}
+    }
+    # If we made any changes, merge/push the manifests.
+    if ($needpush) {
+	if ($instance->MergeManifests()) {
+	    print STDERR "Could not merge manifests\n";
+	}
+	elsif (PushManifestInternal($instance->manifest())) {
+	    print STDERR "Could not push manifests\n";
 	}
     }
     # Will have to try again later.
