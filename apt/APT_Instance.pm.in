@@ -2834,8 +2834,9 @@ sub MergeManifests($)
 	    }	    
 	}
     }
-    # The new manifest will start with the first manifest.
-    my $first = shift(@aggregates);
+    # The new manifest will start with the first manifest. Sort for consistency
+    my @temp  = sort {$a->aggregate_urn() cmp $b->aggregate_urn()} @aggregates;
+    my $first = shift(@temp);
     my $manifest = GeniXML::Parse($first->manifest());
 
     # Remove existing nodes and links.
@@ -2847,19 +2848,25 @@ sub MergeManifests($)
     }
 
     # Now add the aggregate specific nodes and links
-    foreach my $ref (values(%nodes)) {
+    # Sort for consistency
+    foreach my $key (sort(keys(%nodes))) {
+	my $ref = $nodes{$key};
 	foreach my $node (@{$ref}) {
 	    $manifest->appendChild($node);
 	}
     }
-    foreach my $ref (values(%links)) {
+    foreach my $key (sort(keys(%links))) {
+	my $ref = $links{$key};
 	foreach my $link (@{$ref}) {
 	    $manifest->appendChild($link);
 	}
     }
-    #print $manifest;
+    $manifest = GeniXML::Serialize($manifest);
+    #print $manifest . "\n";
+    #print $self->manifest() . "\n";
+    
     if ($manifest ne $self->manifest()) {
-	if ($self->SetManifest(GeniXML::Serialize($manifest))) {
+	if ($self->SetManifest($manifest)) {
 	    return -1;
 	}
 	# Mark aggregates for needing a push
@@ -3802,7 +3809,7 @@ sub MarkManifestPush($)
 		"where uuid='$uuid' and aggregate_urn='$urn'")
 	or return -1;
 
-    return 0;
+    return $self->Refresh();
 }
 sub ClearManifestPush($)
 {
@@ -3815,7 +3822,7 @@ sub ClearManifestPush($)
 		"where uuid='$uuid' and aggregate_urn='$urn'")
 	or return -1;
 
-    return 0;
+    return $self->Refresh();
 }
 
 #
