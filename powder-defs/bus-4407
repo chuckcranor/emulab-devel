@@ -178,4 +178,8 @@ ZFS_QUOTA_PROJECT="10G"
 
 POWDER_BUS_P0WER_VERSION=1
 
+# Image updates take a long time on buses, this makes it smoother since
+# updates will not prevent experiments starting.
+IMAGEPROVENANCE=1
+
 # End of Emulab added section
