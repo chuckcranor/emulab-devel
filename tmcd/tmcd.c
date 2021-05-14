@@ -5013,6 +5013,16 @@ COMMAND_PROTOTYPE(dostorageconfig)
 	 * PROTO field to select, per-blockstore, its type. But that
 	 * will require additional per node (type) assign features
 	 * differentiating the amount of each type available.
+	 *
+	 * Ultimately is not here yet, but I need a penultimate fix to
+	 * handle the Powder d840 nodes. Right now, an ANY or NONSYSVOL
+	 * blockstore will wind up with a combination of the single small,
+	 * ugly-slow BOSS device RAID1 VD and the multiple large, stupid-fast
+	 * NVMe devices. So I have added the node/node_type feature so I can
+	 * restrict blockstores on these nodes to use just flash devices and
+	 * adjusted the existing nonsysvol/any assign features so that the
+	 * max size includes only that space. Right now, the node/type
+	 * features override the sitevar. Not sure if that is a good thing...
 	 */
 	localproto = NULL;
 	res = mydb_query("select value,defaultvalue from sitevariables "
@@ -5028,6 +5038,38 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		mysql_free_result(res);
 	}
 
+	/*
+	 * See if there are node or node_type overrides for the localproto.
+	 */
+	res = mydb_query("select na.attrvalue,nta.attrvalue from nodes as n "
+			 "left join node_type_attributes as nta on "
+			 "     nta.type=n.type and "
+			 "     nta.attrkey='blockstore_localproto' "
+			 "left join node_attributes as na on "
+			 "     na.node_id=n.node_id and "
+			 "     na.attrkey='blockstore_localproto' "
+			 "where n.node_id='%s'",
+			 2, reqp->pnodeid);
+	if (res) {
+		if ((int)mysql_num_rows(res) != 0) {
+			char *attrvalue = NULL;
+			
+			row = mysql_fetch_row(res);
+
+			if (row[0] && row[0][0])
+				attrvalue = row[0];
+			else if (row[1] && row[1][0]) {
+				attrvalue = row[1];
+			}
+			if (attrvalue) {
+				if (localproto)
+					free(localproto);
+				localproto = strdup(attrvalue);
+			}
+		}
+		mysql_free_result(res);
+	}
+	
 	/* 
 	 * Send across local blockstore volumes (slices).  These don't
 	 * show up in the reserved table, existing entirely in the
