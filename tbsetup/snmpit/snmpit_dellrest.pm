@@ -315,6 +315,33 @@ sub mapPortToIndex($$)
     return $index;
 }
 
+#
+# Get the SW version. Determines what optimizations we can do.
+# Return as an array of (version, subversion, ...)
+#
+sub getOS10Version($)
+{
+    my ($self) = @_;
+
+    if (!defined($self->{OS10VERSION})) {
+	$self->{CALLOTHER}++;
+	my $path = "dell-system-software:system-sw-state/sw-version";
+	my $json = $self->{ROBJ}->call("GET", $path);
+	if ($json) {
+	    $self->{OS10VERSION} =
+		$json->{"dell-system-software:sw-version"}->{"sw-version"};
+	} else {
+	    warn "WARNING: could not get OS10 version, assuming < 5\n";
+	    # XXX the oldest version I know with REST API
+	    $self->{OS10VERSION} = "10.4.3.1";
+	}
+	print "$self->{NAME}: OS10 version: $self->{OS10VERSION}\n"
+	    if ($self->{DEBUG});
+    }
+
+    return split('\.', $self->{OS10VERSION});
+}
+
 sub getOnePortInfo($$;$)
 {
     my ($self, $iface, $silent) = @_;
@@ -859,7 +886,8 @@ sub removeVlanPorts($$$$)
     }
 
     if (@{$tportlist} > 0) {
-	if ($OPTIMIZE) {
+	my @vers = $self->getOS10Version();
+	if ($OPTIMIZE && $vers[1] > 4) {
 	    $self->{CALLOTHER}++;
 	    my $calls = scalar(@${tportlist}) - 1;
 	    $self->{SAVEDCALLS} += $calls;
@@ -1640,7 +1668,8 @@ sub removeVlan($@)
     # and to determine which ones were not removed.
     #
     my @deadvlans = ();
-    if ($OPTIMIZE) {
+    my @vers = $self->getOS10Version();
+    if ($OPTIMIZE && $vers[1] > 4) {
 	print "  Removing VLANs # " . join(' ', @vlans) .
 	    " on switch $self->{NAME} ... ";
 
@@ -1972,7 +2001,8 @@ sub delPortVlan($$@)
     # This might be a very, very bad assumption.
     #
     if (@disablelist > 0) {
-	if ($OPTIMIZE) {
+	my @vers = $self->getOS10Version();
+	if ($OPTIMIZE && $vers[1] > 4) {
 	    my $calls = scalar(@disablelist) - 1;
 	    $self->{SAVEDCALLS} += $calls;
 	    $self->debug("$id: saved $calls RESTAPI calls\n", 2);
