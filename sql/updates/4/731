@@ -10,6 +10,11 @@ sub DoUpdate($$$)
 		     " `latest_abstract_doi` varchar(64) default NULL ".
 		     "     after latest_abstract_pubname");
     }
+    if (!DBSlotExists("user_scopus_info", "latest_abstract_url")) {
+        DBQueryFatal("alter table user_scopus_info add ".
+		     " `latest_abstract_url` text ".
+		     "     after latest_abstract_doi");
+    }
     return 0;
 }
 1;
