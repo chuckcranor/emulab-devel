@@ -6158,6 +6158,7 @@ CREATE TABLE `user_scopus_info` (
   `latest_abstract_pubdate` date NOT NULL default '0000-00-00',
   `latest_abstract_pubtype` varchar(64) NOT NULL default '',
   `latest_abstract_pubname` text,
+  `latest_abstract_doi` varchar(64) default NULL,
   `latest_abstract_title` text,
   `latest_abstract_authors` text,
   `latest_abstract_cites` enum('emulab','cloudlab','phantomnet','powder') default NULL,
