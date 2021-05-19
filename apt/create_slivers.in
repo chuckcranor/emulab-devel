@@ -394,6 +394,12 @@ if (!defined($instance->started())) {
 	system("$CREATEWBSTORE $opts $uuid");
     }
 }
+# Ditto any aggregates we are trying to start for the first time.
+foreach my $aggregate (@aggregate_list) {
+    if (!defined($aggregate->started())) {
+	$aggregate->MarkStarted();
+    }
+}
 
 if ($usestitcher) {
     my $rval = RunStitcher();
@@ -581,6 +587,18 @@ foreach my $aggobj (@aggregate_list) {
 	    $hosed++;
 	    $output = "Internal error creating experiment on the ".
 		"$cluster cluster";
+	    #
+	    # On a multi aggregate experiment that includes mobile devices,
+	    # we want to be more liberal with ignoring failures.
+	    #
+	    if ($aptagg->ismobile() &&
+		defined($aptagg->routename()) && 
+		scalar($instance->AggregateList()) > 1) {
+		# User can delete the aggregate. If on a route, the route
+		# monitor will try to add it back.
+		$aggobj->SetStatus("failed");		
+		next;
+	    }
 	}
 	$webtask->output($output);
 	$webtask->Exited($exitcode);
@@ -1211,6 +1229,9 @@ sub CreateSlivers()
 	    elsif (scalar($instance->AggregateList()) > 1) {
 		$error_output = "Error creating experiment on the $cluster ".
 		    "cluster:\n\n" . $output;
+	    }
+	    else {
+		$error_output = $output;
 	    }
 	    # This will be the createsliver exit code if we got one, or -1.
 	    $return_code = $exitcode;

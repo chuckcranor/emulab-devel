@@ -39,7 +39,7 @@ use POSIX qw(strftime ceil);
 #
 sub usage()
 {
-    print "Usage: aptbus_monitor [-dnv] [-s]\n";
+    print "Usage: aptroute_monitor [-dnv] [-s]\n";
     exit(1);
 }
 my $optlist   = "dnsv";
@@ -253,7 +253,8 @@ sub LookForThingsToDo()
 	my $errmsg;
 
 	next
-	    if ($busid == 6996 || $busid == 6970 || $bus->disabled());
+	    if ($busid == 6996 || $busid == 6970 ||
+		$bus->disabled() || $bus->adminonly());
 	
 	# Current holder of the bus.
 	my ($instance) = APT_Instance::Aggregate->LookupByURN($bus->urn());

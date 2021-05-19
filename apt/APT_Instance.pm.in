@@ -2751,17 +2751,26 @@ sub MergeManifests($)
     my ($self) = @_;
     my @aggregates = $self->ActiveAggregateList();
 
-    # Promote the one manifest up to instance.
-    if (@aggregates == 1) {
-	my $aggregate = $aggregates[0];
-	if (defined($self->manifest()) &&
-	    $aggregate->manifest() eq $self->manifest()) {
+    if (@aggregates <= 1) {
+	my $manifest;
+	my $aggregate;
+
+	if (@aggregates == 1) {
+	    # Promote the one manifest up to instance.
+	    $aggregate = $aggregates[0];
+	    $manifest  = $aggregate->manifest();
+	}
+	else {
+	    # All buses go off route, and nothing left in the experiment.
+	    $manifest = "";
+	}
+	if (defined($self->manifest()) && $manifest eq $self->manifest()) {
 	    return 0;
 	}
-	if ($self->SetManifest($aggregate->manifest())) {
+	if ($self->SetManifest($manifest)) {
 	    return -1;
 	}
-	$aggregate->MarkManifestPush();
+	$aggregate->MarkManifestPush() if (defined($aggregate));
 	return 0;
     }
 
@@ -2865,7 +2874,7 @@ sub MergeManifests($)
     #print $manifest . "\n";
     #print $self->manifest() . "\n";
     
-    if ($manifest ne $self->manifest()) {
+    if (!defined($self->manifest()) || $manifest ne $self->manifest()) {
 	if ($self->SetManifest($manifest)) {
 	    return -1;
 	}
@@ -3521,7 +3530,7 @@ sub Create($$$)
 
     DBQueryWarn("insert into apt_instance_aggregates set ".
 		"  uuid='$instance_uuid', name='$instance_name', ".
-		"  webtask_id='$webtask_id', ".
+		"  webtask_id='$webtask_id',added=now(), ".
 		"  aggregate_urn='$aggregate_urn', status='created'")
 	or return undef;
 
@@ -3819,6 +3828,34 @@ sub ClearManifestPush($)
 
     DBQueryWarn("update apt_instance_aggregates set ".
 		"  manifest_needpush=null ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return $self->Refresh();
+}
+
+sub MarkStarted($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  started=now() ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return $self->Refresh();
+}
+
+sub MarkTerminated($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  status='terminated',destroyed=now() ".
 		"where uuid='$uuid' and aggregate_urn='$urn'")
 	or return -1;
 

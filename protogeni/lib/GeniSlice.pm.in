@@ -1865,6 +1865,23 @@ sub CancelMonitor($)
     return 0;
 }
 
+#
+# Map a node to its slice.
+#
+sub LookupByNode($$)
+{
+    my ($class, $node) = @_;
+
+    return undef
+	if (!$node->IsReserved());
+
+    my $experiment = $node->Reservation();
+    return undef
+	if (!$experiment);
+
+    return LookupByExperiment($class, $experiment);
+}
+
 ##########################################################################
 #
 package GeniSlice::ClientSliver;

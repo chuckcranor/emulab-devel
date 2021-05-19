@@ -1587,7 +1587,7 @@ sub DoTerminate()
 	# SEARCHFAILED is success too
 	if ($code == GENIRESPONSE_SUCCESS ||
 	    $code == GENIRESPONSE_SEARCHFAILED) {
-	    $agg->SetStatus("terminated");
+	    $agg->MarkTerminated();
 	    next;
 	}
 	($exitcode,$errmsg) = ResponseErrorMessage($agg, $response);
@@ -3788,12 +3788,13 @@ sub DoDeleteAggregates()
     #
     my @tmp = ();
     foreach my $aggregate (@aggregates) {
-	if ($aggregate->status() eq "created") {
+	if ($aggregate->status() eq "created" ||
+	    $aggregate->status() eq "prestage") {
 	    #
 	    # Need to deal with history entries.
 	    #
-	    print "$aggregate in 'created' state, removing immediately.\n";
-	    $instance->RemoveAggregate($aggregate);
+	    print "$aggregate never started.\n";
+	    $aggregate->MarkTerminated();
 	    next;
 	}
 	#
@@ -3855,15 +3856,7 @@ sub DoDeleteAggregates()
 	# SEARCHFAILED is success too
 	if ($code == GENIRESPONSE_SUCCESS ||
 	    $code == GENIRESPONSE_SEARCHFAILED) {
-	    $agg->SetStatus("terminated");
-	    
-	    #
-	    # Remove all trace. We need to munge the manifests in all
-	    # aggregates so the web server does not show the stale
-	    # aggregates. This is annoying and probably messes up the
-	    # history too.
-	    #
-	    $instance->RemoveAggregate($agg);
+	    $agg->MarkTerminated();
 	    $needpush = 1;
 	    next;
 	}

@@ -2931,7 +2931,7 @@ sub RSpecNodeFragment($$$$)
     #
     # So that the following code works right.
     $protonode->setNamespace("http://www.geni.net/resources/rspec/3");
-    print "$protonode\n";
+    #print "$protonode\n";
 
     my $diskimage = GeniXML::FindFirst("n:disk_image", $protonode);
     if ($diskimage) {
@@ -2951,6 +2951,7 @@ sub RSpecNodeFragment($$$$)
 	    }
 	}
     }
+    print "$node\n";
     return $node;
 }
 
