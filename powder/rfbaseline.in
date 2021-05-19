@@ -571,7 +571,8 @@ sub Terminate($$)
 	my $output = `$TERMINATEEXP $PID,$name`;
 	if ($?) {
 	    my $status = $? >> 8;
-	    if ($status == GENIRESPONSE_REFUSED()) {
+	    if ($status == GENIRESPONSE_REFUSED() ||
+		$status == GENIRESPONSE_NETWORK_ERROR()) {
 		logit("$name: boss is offline, waiting for a bit");
 		sleep(60);
 		next;
@@ -632,7 +633,8 @@ sub GetStatus($$$$)
 	my $output = `$EXPSTATUS $opts $PID,$name`;
 	if ($?) {
 	    my $status = $? >> 8;
-	    if ($status == GENIRESPONSE_REFUSED()) {
+	    if ($status == GENIRESPONSE_REFUSED() ||
+		$status == GENIRESPONSE_NETWORK_ERROR()) {
 		logit("$name: boss is offline, waiting for a bit");
 		sleep(60);
 		next;
