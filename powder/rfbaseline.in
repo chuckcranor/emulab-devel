@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -129,33 +129,33 @@ my %endpoints = (
 	"last"  => {},
         "nickname" => "WEB",
     },
-    "bustest2" => {
-	"urn" => 'urn:publicid:IDN+bus-test2.powderwireless.net+authority+cm',
-	"nodes" => {"ed1" => "B210"},
-	"last"  => {},
-	"nickname" => "BusTest2",
-    },
+#    "bustest2" => {
+#	"urn" => 'urn:publicid:IDN+bus-test2.powderwireless.net+authority+cm',
+#	"nodes" => {"ed1" => "B210"},
+#	"last"  => {},
+#	"nickname" => "BusTest2",
+#    },
     "emulab" => {
 	"urn" => 'urn:publicid:IDN+emulab.net+authority+cm',
 	"nodes" => {
 	    "cellsdr1-bes"       => "X310",
-	    "cbrssdr1-bes"       => "X310",
+#	    "cbrssdr1-bes"       => "X310",
 	    "cellsdr1-browning"  => "X310",
-	    "cbrssdr1-browning"  => "X310",
+#	    "cbrssdr1-browning"  => "X310",
 	    "cellsdr1-dentistry" => "X310",
-	    "cbrssdr1-dentistry" => "X310",
+#	    "cbrssdr1-dentistry" => "X310",
 	    "cellsdr1-fm"        => "X310",
-	    "cbrssdr1-fm"        => "X310",
+#	    "cbrssdr1-fm"        => "X310",
 	    "cellsdr1-honors"    => "X310",
-	    "cbrssdr1-honors"    => "X310",
+#	    "cbrssdr1-honors"    => "X310",
 	    "cellsdr1-hospital"  => "X310",
 	    "cbrssdr1-hospital"  => "X310",
-	    "cellsdr1-meb"       => "X310",
-	    "cbrssdr1-meb"       => "X310",
+#	    "cellsdr1-meb"       => "X310",
+#	    "cbrssdr1-meb"       => "X310",
 	    "cellsdr1-smt"       => "X310",
 	    "cbrssdr1-smt"       => "X310",
 	    "cellsdr1-ustar"     => "X310",
-	    "cbrssdr1-ustar"     => "X310",
+#	    "cbrssdr1-ustar"     => "X310",
 	},
 	"last"  => {},
         "nickname" => "Emulab",
