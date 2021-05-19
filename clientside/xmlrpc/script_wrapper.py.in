@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2020 University of Utah and the Flux Group.
+# Copyright (c) 2004-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,6 +34,7 @@ sys.path.append("@prefix@/lib")
 import getopt
 import os
 import re
+import errno
 
 import ssl
 import xmlrpclib
@@ -273,8 +274,15 @@ def do_method(module, method, params):
     try:
         response = apply(meth, meth_args)
         pass
-    except xmlrpclib.Fault, e:
-        print e.faultString
+    except socket.error as e:
+        print e
+        rval = -1;
+        if e.args[0] == errno.ECONNREFUSED:
+            rval = RESPONSE_NETWORK_ERROR
+            pass
+        return (rval, None)
+    except Exception as e:
+        print e
         return (-1, None)
 
     #
