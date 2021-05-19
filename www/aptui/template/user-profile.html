@@ -63,6 +63,7 @@
       <td>Last Login</td>
       <td class="format-date"><%= fields.last_weblogin %></td>
     </tr>
+    
     <% if (isadmin) { %>
       <tr>
 	<td>Logged in now?</td>
@@ -162,10 +163,24 @@
       </tr>
       <% _.each(fields.scopus_info, function (info) { %>
 	<tr>
-	  <td>Scopus Profile (<%= info.scopus_id %>)</td>
+	  <td>Scopus Profile (<%= info.scopus_id %>)
+	    <% if (info.validation_state == "valid") { %>
+	      <span class="glyphicon glyphicon-asterisk"></span>
+	    <% } %>
+	  </td>
 	  <td><a href="<%= info.author_url %>" target="_blank">
 	    <%= info.author_url.substr(0, 23) %>...</a></td>
 	</tr>
+      <% }); %>
+    <% } else { %>
+      <% _.each(fields.scopus_info, function (info) { %>
+	<% if (info.validation_state == "valid") { %>
+	  <tr>
+	    <td>Scopus Profile (<%= info.scopus_id %>)</td>
+	    <td><a href="<%= info.author_url %>" target="_blank">
+	      <%= info.author_url.substr(0, 23) %>...</a></td>
+	  </tr>
+	<% } %>
       <% }); %>
     <% } %>
   </table>

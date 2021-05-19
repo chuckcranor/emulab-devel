@@ -284,17 +284,16 @@ function Do_AccountDetails()
         $results["affil_updated"] =
             DateStringGMT($target_user->affiliation_updated());
         $results["loggedin"]      = $target_user->LoggedIn();
-
-        $scopus_info = array();
-        $query_result =
-            DBQueryFatal("select * from user_scopus_info ".
-                         "where uid_idx='$target_idx'");
-	while ($row = mysql_fetch_array($query_result)) {
-            $scopus_id = $row["scopus_id"];
-            $scopus_info[$scopus_id] = $row;
-        }
-        $results["scopus_info"]   = $scopus_info;
     }
+    $scopus_info = array();
+    $query_result =
+        DBQueryFatal("select * from user_scopus_info ".
+                     "where uid_idx='$target_idx'");
+    while ($row = mysql_fetch_array($query_result)) {
+        $scopus_id = $row["scopus_id"];
+        $scopus_info[$scopus_id] = $row;
+    }
+    $results["scopus_info"] = $scopus_info;
 
     SPITAJAX_RESPONSE($results);
 }
