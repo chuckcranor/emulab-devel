@@ -1620,7 +1620,7 @@ $(function ()
     {
 	var jsonauth = $.parseJSON(authobject);
 
-        var url     = jsonauth.baseurl + "/webssh/webssh.html";
+        var url     = jsonauth.baseurl;
 	var iwidth  = "100%";
         var iheight = 400;
 
@@ -3546,7 +3546,7 @@ $(function ()
 	var authobject = coninfo.authobject;
 	var jsonauth   = $.parseJSON(authobject);
 
-        var url     = jsonauth.baseurl + "/webssh/webssh.html";
+        var url     = jsonauth.baseurl;
 
 	var loadiframe = function () {
 	    console.info("Sending message", jsonauth.baseurl);

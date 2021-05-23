@@ -1615,7 +1615,7 @@ class Node
         }
         if ($BROWSER_CONSOLE_WEBSSH) {
             # See httpd.conf
-            $baseurl .= "/websshnew";
+            $baseurl .= "/webssh";
         }
         $authobj = array('uid'       => $uid,
                          'console'   => $console,

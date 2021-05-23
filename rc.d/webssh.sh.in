@@ -12,6 +12,7 @@ WEBSSH="@BROWSER_CONSOLE_WEBSSH@"
 PROXIED="@BROWSER_CONSOLE_PROXIED@"
 USERNODE="@USERNODE@"
 BOSSNODE="@BOSSNODE@"
+WWWHOST="@WWWHOST@"
 WSSH="/usr/local/bin/wssh"
 PIDFILE="/var/run/wssh.pid"
 address=""
@@ -27,7 +28,7 @@ fi
 
 options="$address --port=8888 --xsrf=False"
 logopts="--log-file-max-size=1000000 --log-file-prefix=$TBROOT/log/wssh"
-origin="--origin=https://${USERNODE},https://${BOSSNODE}"
+origin="--origin=https://${USERNODE},https://${BOSSNODE},https://${WWWHOST}"
 allopts="$options $logopts $origin"
 
 case "$1" in
