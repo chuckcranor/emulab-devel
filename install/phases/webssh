@@ -21,13 +21,13 @@ sub Install($$$)
 	    Phase "tornado", "Installing tornado port", sub {
 		DoneIfPackageInstalled("py27-tornado");
 		$ENV{"ASSUME_ALWAYS_YES"} = "true";
-		ExecQuietFatal("sudo pkg install -r Emulab py27-tornado");
+		ExecQuietFatal("sudo pkg install -y -r Emulab py27-tornado");
 	    };
 
 	    Phase "paramiko", "Installing paramiko port", sub {
 		DoneIfPackageInstalled("py27-paramiko");
 		$ENV{"ASSUME_ALWAYS_YES"} = "true";
-		ExecQuietFatal("sudo pkg install -r Emulab py27-paramiko");
+		ExecQuietFatal("sudo pkg install -y -r Emulab py27-paramiko");
 	    };
 	
 	    Phase "clone", "Cloning webssh from repo", sub {
@@ -53,26 +53,27 @@ sub Install($$$)
 	Phase "httpd", "Checking for correct httpd.conf file", sub {
 	    PhaseSkip("Apache disabled in proxy mode")
 		if (ISOPSNODE($server) && $BROWSER_CONSOLE_PROXIED);
+	    PhaseSkip("Apache updates not needed")
+		if (ISBOSSNODE($server) && !$BROWSER_CONSOLE_PROXIED);
 	    
 	    DoneIfIdentical("$TOP_OBJDIR/apache/httpd.conf", "$HTTPD_CONF");
 	    BackUpFileFatal("$HTTPD_CONF");
-	    BackUpFileFatal("$HTTPD_GENI_CONF");
-	    if (-e "$APACHE_ETCDIR/httpd-www.conf") {
-		BackUpFileFatal("$APACHE_ETCDIR/httpd-www.conf");
-	    }
+	    BackUpFileFatal("$HTTPD_GENI_CONF")
+		if (-e $HTTPD_GENI_CONF);
+	    BackUpFileFatal("$APACHE_ETCDIR/httpd-www.conf")	    
+		if (-e "$APACHE_ETCDIR/httpd-www.conf");
 	    
 	    if (ISOPSNODE($server)) {
 		ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/apache control-install");
 	    }
 	    else {
 		ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/apache install");
-
-		if (-e "$APACHE_ETCDIR/httpd-www.conf") {
-		    ExecQuietFatal("/bin/cp -fp $HTTPD_CONF ".
-				   " $APACHE_ETCDIR/httpd-www.conf");
-		}
 	    }
-	    Phase "apcahe", "Restarting Apache", sub {
+	    if (-e "$APACHE_ETCDIR/httpd-www.conf") {
+		ExecQuietFatal("/bin/cp -fp $HTTPD_CONF ".
+			       " $APACHE_ETCDIR/httpd-www.conf");
+	    }
+	    Phase "apache", "Restarting Apache", sub {
 		ExecQuietFatal("$APACHE_START_COMMAND restart");
 	    };
 	};

@@ -1624,6 +1624,11 @@ $(function ()
 	var iwidth  = "100%";
         var iheight = 400;
 
+	// Backwards compat for a while.
+	if (!url.includes("webssh")) {
+	    url = url + "/webssh/webssh.html";
+	}
+
 	var loadiframe = function () {
 	    console.info("Sending message", jsonauth.baseurl);
 	    iframewindow.postMessage(authobject, "*");
@@ -3545,8 +3550,12 @@ $(function ()
     {
 	var authobject = coninfo.authobject;
 	var jsonauth   = $.parseJSON(authobject);
+        var url        = jsonauth.baseurl;
 
-        var url     = jsonauth.baseurl;
+	// Backwards compat for a while.
+	if (!url.includes("webssh")) {
+	    url = url + "/webssh/webssh.html";
+	}
 
 	var loadiframe = function () {
 	    console.info("Sending message", jsonauth.baseurl);
