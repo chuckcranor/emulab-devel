@@ -55,13 +55,32 @@ sub Install($$$)
 		if (ISOPSNODE($server) && $BROWSER_CONSOLE_PROXIED);
 	    PhaseSkip("Apache updates not needed")
 		if (ISBOSSNODE($server) && !$BROWSER_CONSOLE_PROXIED);
-	    
-	    DoneIfIdentical("$TOP_OBJDIR/apache/httpd.conf", "$HTTPD_CONF");
-	    BackUpFileFatal("$HTTPD_CONF");
+
 	    BackUpFileFatal("$HTTPD_GENI_CONF")
 		if (-e $HTTPD_GENI_CONF);
-	    BackUpFileFatal("$APACHE_ETCDIR/httpd-www.conf")	    
-		if (-e "$APACHE_ETCDIR/httpd-www.conf");
+
+	    if (-e "$APACHE_ETCDIR/httpd-www.conf") {
+		if (ISOPSNODE($server)) {
+		    DoneIfIdentical("$TOP_OBJDIR/apache/httpd-ops.conf",
+				    "$APACHE_ETCDIR/httpd-www.conf");
+		}
+		else {
+		    DoneIfIdentical("$TOP_OBJDIR/apache/httpd.conf",
+				    "$APACHE_ETCDIR/httpd-www.conf");
+		}
+		BackUpFileFatal("$APACHE_ETCDIR/httpd-www.conf")	    
+	    }
+	    else {
+		if (ISOPSNODE($server)) {
+		    DoneIfIdentical("$TOP_OBJDIR/apache/httpd-ops.conf",
+				    "$HTTPD_CONF");
+		}
+		else {
+		    DoneIfIdentical("$TOP_OBJDIR/apache/httpd.conf",
+				    "$HTTPD_CONF");
+		}
+		BackUpFileFatal("$HTTPD_CONF");
+	    }
 	    
 	    if (ISOPSNODE($server)) {
 		ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/apache control-install");
@@ -70,10 +89,13 @@ sub Install($$$)
 		ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/apache install");
 	    }
 	    if (-e "$APACHE_ETCDIR/httpd-www.conf") {
-		ExecQuietFatal("/bin/cp -fp $HTTPD_CONF ".
+		ExecQuietFatal("/bin/mv -f $HTTPD_CONF ".
 			       " $APACHE_ETCDIR/httpd-www.conf");
 	    }
 	    Phase "apache", "Restarting Apache", sub {
+		PhaseSkip("Apache not running")
+		    if (system("/usr/bin/killall -q -s httpd"));
+				
 		ExecQuietFatal("$APACHE_START_COMMAND restart");
 	    };
 	};
