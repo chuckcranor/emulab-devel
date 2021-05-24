@@ -552,6 +552,7 @@ NODE_USAGE_SUPPORT=1
 # Fancy new browser in the console support
 #
 BROWSER_CONSOLE_ENABLE=1
+BROWSER_CONSOLE_WEBSSH=1
 
 #
 # Set if direct NFS mounts from vnodes to ops don't work
