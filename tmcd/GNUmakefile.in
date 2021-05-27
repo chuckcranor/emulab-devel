@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@ SYSTEM	       := $(shell $(TESTBED_SRCDIR)/utils/osstuff.sh -o)
 include $(OBJDIR)/Makeconf
 
 all:	server
-server: tmcd tmcd.restart Ec2MetaServer.py
+server: tmcd tmcd.restart
 
 # For VPATH.
 MOSTLY_SRCDIRS = ${TESTBED_LIBSRCDIR}/libtb ${TESTBED_SRCDIR}/pxe \
@@ -89,8 +89,7 @@ version.c: tmcd.c
 install:	all
 
 install:	$(INSTALL_SBINDIR)/tmcd \
-		$(INSTALL_SBINDIR)/tmcd.restart \
-        $(INSTALL_SBINDIR)/Ec2MetaServer.py
+		$(INSTALL_SBINDIR)/tmcd.restart
 
 control-install:
 boss-install: install
