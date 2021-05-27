@@ -137,7 +137,7 @@ sub createExpectObject($)
     my $error = 0;
     my $spawn_cmd = "ssh -F /dev/null -o UserKnownHostsFile=/dev/null ".
 	"-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -i $SSHKEY ".
-	"-l $self->{USERNAME} $self->{NAME}";
+	"-c 3des-cbc -l $self->{USERNAME} $self->{NAME}";
     # Create Expect object and initialize it:
     my $exp = new Expect();
     if (!$exp) {

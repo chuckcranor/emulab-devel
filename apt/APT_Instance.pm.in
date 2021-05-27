@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -342,9 +342,10 @@ sub SameInstance($$)
 #
 # Refresh a class instance by reloading from the DB.
 #
-sub Refresh($)
+sub Refresh($;$)
 {
-    my ($self) = @_;
+    my ($self, $flush) = @_;
+    $flush = 0 if (!defined($flush));
 
     return -1
 	if (! ref($self));
@@ -359,14 +360,20 @@ sub Refresh($)
 
     $self->{'INSTANCE'} = $query_result->fetchrow_hashref();
 
-    #
-    # We do not want to replace existing aggregate objects, the caller
-    # might have a handle on them. Note that add/delete aggregate will
-    # add/remove them from the hash, so we do not worry about the
-    # membership changing as a result of the refresh.
-    #
-    foreach my $agg ($self->AggregateList()) {
-	$agg->Refresh();
+    if (!$flush) {
+	#
+	# We do not want to replace existing aggregate objects, the caller
+	# might have a handle on them. Note that add/delete aggregate will
+	# add/remove them from the hash, so we do not worry about the
+	# membership changing as a result of the refresh.
+	#
+	foreach my $agg ($self->AggregateList()) {
+	    $agg->Refresh();
+	}
+    }
+    else {
+	$self->{'AGGREGATES'} =
+	    APT_Instance::Aggregate->LookupForInstance($self);
     }
     return 0;
 }
@@ -634,6 +641,7 @@ sub ActiveAggregateList($)
     foreach my $agg ($self->AggregateList()) {
 	push(@result, $agg)
 	    if ($agg->status() ne "terminated" &&
+		$agg->status() ne "canceled" &&
 		$agg->deferred() == 0);
     }
     return @result;
@@ -881,6 +889,13 @@ sub GetGeniUser($)
     require GeniUser;
     
     return GeniUser->Lookup($self->creator_uuid(), 1);
+}
+
+sub GetCreator($)
+{
+    my ($self) = @_;
+
+    return $self->GetGeniUser()->emulab_user();
 }
 
 sub GetGeniAuthority($)
@@ -2538,31 +2553,44 @@ sub GetRoutes($$$)
 # Check that we have reservations for any routes used.
 # This check uses the current time and current experiment end,
 #
-sub CheckRoutesReserved($$)
+sub CheckRoutes($$)
 {
     my ($self, $perrmsg) = @_;
     my $rspecstr = $self->rspec();
     my $project  = $self->GetProject();
     my $slice    = $self->GetGeniSlice();
+    my $creator  = $self->GetCreator();
     my $expires  = str2time($slice->expires());
     my $routes   = [];
+    my $noresokay = 1;
+    my $duration  = $expires - time();
+    if ($duration > 16 * 3600) {
+	$noresokay = 0;
+    }
 
     if ($self->GetRoutes(\$routes, $perrmsg)) {
 	return -1;
     }
+    return 0
+	if (!@$routes);
 
-    foreach my $request (@{$routes}) {
-	my $routename = $request->{"name"};
-	my $routeid =
-	    APT_Reservation::Group::RouteReservation::RouteID($routename);
-
-	if (!APT_Reservation::Group::RouteReservation->RouteReserved($project,
-		      time(), $expires, $routename)) {
-	    $$perrmsg = "Route $routename ($routeid) ".
-		    "is not reserved by your project for the duration of your ".
-		    "experiment.";
-	    return 1;
-	}
+    # Top level check for Route access (might have been revoked)
+    if (!EmulabFeatures->FeatureEnabled("powder-routes-allowed",
+					undef, $project)) {
+	$$perrmsg = "Not enough permission to use mobile resources";
+	return -1;
+    }
+    if (!APT_Reservation::Group::RouteReservation->CanStart($self,
+			 time(), $expires, $routes, $perrmsg)) {
+	return -1;
+    }
+    #
+    # For routes, we need to see what buses are currently on the reserved
+    # routes and add them to the rspec. We do this here cause scheduled and
+    # deferred experiments are started from the scheduler.
+    #
+    if ($self->AddRouteNodes($creator, \$perrmsg)) {
+	return -1;
     }
     return 0;
 }
@@ -2602,9 +2630,9 @@ sub CheckRouteReserved($$$)
     return 0;
 }
 
-sub AddRouteNodes($$)
+sub AddRouteNodes($$$)
 {
-    my ($self, $perrmsg) = @_;
+    my ($self, $user, $perrmsg) = @_;
     my $modified = 0;
     my $repocommand;
     my $routes;
@@ -2643,9 +2671,25 @@ sub AddRouteNodes($$)
 	    my $client_id = "bus-" . $bus->busid();
 	    my $node      = GeniXML::GetNodeByVirtualId($client_id, $rspec);
 
+	    #
+	    # For now, if the bus is down, ignore it. 
+	    #
+	    if ($bus->disabled()) {
+		print "$client_id is disabled, skipping\n";
+		next;
+	    }
+	    if (!$bus->IsUp()) {
+		print "$client_id is not up, skipping\n";
+		next;
+	    }
+	    if ($bus->adminonly() && !$user->IsAdmin()) {
+		print "$client_id is admin only, skipping\n";
+		next;
+	    }
+
 	    if (!defined($node)) {
 		my $node = APT_Profile::RSpecNodeFragment($bus->urn(),
-							  $client_id,
+							  $client_id, "ed1",
 							  $ref->{'dom'});
 		if (defined($repocommand)) {
 		    APT_Profile::SetRepoOnNode($node, $repocommand);
@@ -2686,6 +2730,162 @@ sub AddRoute($$)
 
     $self->{'ROUTES'}->{$obj->routeid()} = $obj;
     return $obj;
+}
+
+#
+# Delete all routes for an instance, as for termination.
+#
+sub DeleteRoutes($)
+{
+    my ($self) = @_;
+
+    return APT_Instance::Aggregate::BusRoute->DeleteForInstance($self);
+}
+
+#
+# Merge manifests. Not comprehensive, just want to create a manifest
+# that include nodes and links from each of the aggregate manifests.
+#
+sub MergeManifests($)
+{
+    my ($self) = @_;
+    my @aggregates = $self->ActiveAggregateList();
+
+    if (@aggregates <= 1) {
+	my $manifest;
+	my $aggregate;
+
+	if (@aggregates == 1) {
+	    # Promote the one manifest up to instance.
+	    $aggregate = $aggregates[0];
+	    $manifest  = $aggregate->manifest();
+	}
+	else {
+	    # All buses go off route, and nothing left in the experiment.
+	    $manifest = "";
+	}
+	if (defined($self->manifest()) && $manifest eq $self->manifest()) {
+	    return 0;
+	}
+	if ($self->SetManifest($manifest)) {
+	    return -1;
+	}
+	$aggregate->MarkManifestPush() if (defined($aggregate));
+	return 0;
+    }
+
+    #
+    # Find nodes and links specific to each manifest (aggregate).
+    #
+    my %nodes     = ();
+    my %links     = ();
+    my %linknames = ();
+
+    foreach my $aggregate (@aggregates) {
+	my $aggregate_urn = $aggregate->aggregate_urn();
+	my $manifest      = $aggregate->manifest();
+
+	# Might not be a manifest if deferred.
+	next
+	    if (!$manifest);
+
+	$nodes{$aggregate_urn} = [];
+	$links{$aggregate_urn} = [];
+
+	my $obj = GeniXML::Parse($aggregate->manifest());
+	if (!defined($obj)) {
+	    print STDERR "Could not parse manifest for $aggregate\n";
+	    return -1;
+	}
+	foreach my $ref (GeniXML::FindNodes("n:node", $obj)->get_nodelist()) {
+	    my $client_id   = GetVirtualId($ref);
+	    my $manager_urn = GetManagerId($ref);
+
+	    # The portal always puts this in.
+	    if (! defined($manager_urn)) {
+		print STDERR "Missing manager_urn for $client_id\n";
+		return -1;
+	    }
+	    if ($manager_urn eq $aggregate->aggregate_urn()) {
+		push(@{ $nodes{$aggregate_urn} }, $ref->cloneNode(1));
+	    }
+	}
+	foreach my $ref (GeniXML::FindNodes("n:link", $obj)->get_nodelist()) {
+	    my $client_id   = GetVirtualId($ref);
+
+	    # The portal always puts this in.
+	    if (!GeniXML::FindNodes("n:component_manager", $ref)) {
+		print STDERR "Missing manager_urn for $client_id\n";
+		return -1;
+	    }
+	    my @list = GeniXML::FindNodes("n:component_manager",
+					  $ref)->get_nodelist();
+
+	    if (@list == 1) {
+		my $manager_urn = GetLinkManager($list[0]);
+
+		if ($manager_urn eq $aggregate_urn) {
+		    push(@{ $links{$aggregate_urn} }, $ref->cloneNode(1));
+		}
+	    }
+	    else {
+		# Multisite. Mostly gonna punt for now.
+		foreach my $mref (@list) {
+		    my $manager_urn = GetLinkManager($mref);
+
+		    if ($manager_urn eq $aggregate_urn &&
+			!exists($linknames{$client_id})) {
+			push(@{ $links{$aggregate_urn} }, $ref->cloneNode(1));
+			$linknames{$client_id} = $ref;
+			last;
+		    }
+		}
+	    }	    
+	}
+    }
+    # The new manifest will start with the first manifest. Sort for consistency
+    my @temp  = sort {$a->aggregate_urn() cmp $b->aggregate_urn()} @aggregates;
+    my $first = shift(@temp);
+    my $manifest = GeniXML::Parse($first->manifest());
+
+    # Remove existing nodes and links.
+    foreach my $ref (GeniXML::FindNodes("n:node", $manifest)->get_nodelist()) {
+	$manifest->removeChild($ref);	
+    }
+    foreach my $ref (GeniXML::FindNodes("n:link", $manifest)->get_nodelist()) {
+	$manifest->removeChild($ref);	
+    }
+
+    # Now add the aggregate specific nodes and links
+    # Sort for consistency
+    foreach my $key (sort(keys(%nodes))) {
+	my $ref = $nodes{$key};
+	foreach my $node (@{$ref}) {
+	    $manifest->appendChild($node);
+	}
+    }
+    foreach my $key (sort(keys(%links))) {
+	my $ref = $links{$key};
+	foreach my $link (@{$ref}) {
+	    $manifest->appendChild($link);
+	}
+    }
+    $manifest = GeniXML::Serialize($manifest);
+    #print $manifest . "\n";
+    #print $self->manifest() . "\n";
+    
+    if (!defined($self->manifest()) || $manifest ne $self->manifest()) {
+	if ($self->SetManifest($manifest)) {
+	    return -1;
+	}
+	# Mark aggregates for needing a push
+	foreach my $aggregate (@aggregates) {
+	    if (! ($aggregate->isAL2S() || $aggregate->isStitch())) {
+		$aggregate->MarkManifestPush();
+	    }
+	}
+    }
+    return 0;
 }
 
 ###################################################################
@@ -3330,7 +3530,7 @@ sub Create($$$)
 
     DBQueryWarn("insert into apt_instance_aggregates set ".
 		"  uuid='$instance_uuid', name='$instance_name', ".
-		"  webtask_id='$webtask_id', ".
+		"  webtask_id='$webtask_id',added=now(), ".
 		"  aggregate_urn='$aggregate_urn', status='created'")
 	or return undef;
 
@@ -3541,6 +3741,18 @@ sub SetManifest($$)
     return 0;
 }
 
+sub IsActive($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->status() ne "terminated" &&
+	    $self->status() ne "canceled" &&
+	    $self->deferred() == 0);
+
+    return 0;
+}
+
 sub GetGeniAuthority($)
 {
     my ($self) = @_;
@@ -3592,6 +3804,62 @@ sub ClearExtensionPush($)
 	or return -1;
 
     return 0;
+}
+
+# Mark for needing the portal manifest pushed out.
+sub MarkManifestPush($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  manifest_needpush=now() ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return $self->Refresh();
+}
+sub ClearManifestPush($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  manifest_needpush=null ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return $self->Refresh();
+}
+
+sub MarkStarted($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  started=now() ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return $self->Refresh();
+}
+
+sub MarkTerminated($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  status='terminated',destroyed=now() ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return $self->Refresh();
 }
 
 #
@@ -4132,9 +4400,6 @@ sub SliceStatus($)
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
     
-    # Shorten default timeout
-    Genixmlrpc->SetTimeout(30);
-
     return ContextError()
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
@@ -4158,8 +4423,13 @@ sub SliceStatus($)
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 
+    # Shorten default timeout
+    my $oldtimeout = Genixmlrpc->SetTimeout(20);
+
     my $response =
 	Genixmlrpc::CallMethod($cmurl, $context, "SliverStatus", @params);
+
+    Genixmlrpc->SetTimeout($oldtimeout);
 
     return $response
 	if (!defined($response) ||
@@ -4774,13 +5044,15 @@ sub WaitForSliver($)
     my $webtask   = $aggobj->webtask();
     my $authority = $aggobj->GetGeniAuthority();
     my $urn       = $authority->urn();
-    my $aggname   = $aggobj->GetAptAggregate->name();
+    my $aptagg    = $aggobj->GetAptAggregate();
+    my $aggname   = $aptagg->name();
     $webtask->Refresh();
     $webtask->output("");
     $webtask->exitcode(0);
 
     my $seconds  = 7200;
     my $interval = 15;
+    my $unavail  = undef;
     my $ready    = 0;
     my $failed   = 0;
     my $rpcfail  = 0;
@@ -4789,7 +5061,7 @@ sub WaitForSliver($)
     my $repblob;
     my $laststatus;
 
-    while ($seconds > 0) {
+    while ($seconds > 0 && !$aggobj->instance()->IsCanceled()) {
 	sleep($interval);
 	$seconds -= $interval;
 	my $response = $aggobj->SliceStatus();
@@ -4806,22 +5078,44 @@ sub WaitForSliver($)
 	    $failed = 1;
 	    last;
 	}
-	if ($response->code() == GENIRESPONSE_NETWORK_ERROR) {
+	if ($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+	    $response->code() == GENIRESPONSE_NETWORK_ERROR) {
+
+	    print STDERR "Lost contact with $urn. ".
+		"Possibly a network failure or aggregate went offline\n";
+	    
 	    #
-	    # We just keep going, hoping to get back in touch. This is
-	    # better then giving up and hosing the extire experiment.
+	    # If no contact for continuous minutes, give up.
 	    #
-	    print STDERR "Lost contact with $urn. Possibly a network failure\n";
+	    $unavail = time() if (!defined($unavail));
+	    if ($aptagg->ismobile() && time() - $unavail > 180) {
+		$failed = 1;
+		$failure_code = GENIRESPONSE_SERVER_UNAVAILABLE();
+		$failure_output = "Experiment setup on the $aggname cluster ".
+		    "failed because we lost contact with it for an extended ".
+		    "period of time. It may be possible to recover when/if ".
+		    "contact is resumed.";
+		last;
+	    }
+	    next;
 	}
+	# Got a status response,
+	$unavail = undef;
+	# But busy.
 	next
-	    if ($response->code() == GENIRESPONSE_BUSY ||
-		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		$response->code() == GENIRESPONSE_NETWORK_ERROR);
-		
+	    if ($response->code() == GENIRESPONSE_BUSY);
+	    
 	$repblob = $response->value();
-	if ($seconds > 500) {
-	    print STDERR Dumper($repblob);
-	}
+
+	# Set the top level slice status. Need to create a hash with
+	# the subset we want in the DB. 
+	my $slice_status_blob = {
+	    "status" => $repblob->{'status'},
+	    "utc"    => $repblob->{'utc'},
+	    "state"  => $repblob->{'state'},
+	};
+	# This should probably be done atomically with sliver status.
+	$aggobj->UpdateSliceStatus($slice_status_blob);
 
 	#
 	# Convert to something smaller, with info the web interface
@@ -4921,6 +5215,21 @@ sub WaitForSliver($)
 	    if (exists($repblob->{'error'}) && $repblob->{'error'} ne "") {
 		$failure_output .= ": " . $repblob->{'error'};
 	    }
+	    last;
+	}
+	elsif ($repblob->{'state'} eq "interrupted") {
+	    #
+	    # This can happen if the aggregate reboots. Things get left in
+	    # a whacky state. If it enters this state, it is sometimes
+	    # possible to get things moving again (if the user wants to).
+	    #
+	    print STDERR Dumper($repblob);
+	    $failed = 1;
+	    $failure_code = GENIRESPONSE_SETUPFAILURE_INTERRUPTED();
+	    $failure_output = "Experiment setup on the $aggname cluster ".
+		"failed because the cluster rebooted at a bad time! ".
+		"We will continue trying to setup this aggregate, or ".
+		"you can delete the node(s) from your experiment.";
 	    last;
 	}
 	elsif ($aggobj->instance()->IsCanceled()) {
@@ -5150,6 +5459,24 @@ sub Top($$)
     return APT_Geni::PortalRPC($authority, undef, "NodeTop", $args);
 }
 
+#
+# Push the portal merged manifest.
+#
+sub PushPortalManifest($$)
+{
+    my ($self, $manifest) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $slice     = $self->instance()->GetGeniSlice();
+    return ContextError()
+	if (! (defined($authority)));
+
+    my $args = {
+	"slice_urn" => $slice->urn(),
+	"manifest"  => $manifest,
+    };
+    return APT_Geni::PortalRPC($authority, undef, "PortalManifest", $args);
+}
+
 ###################################################################
 #
 # Record what instances are currently using rf ranges routes. Faster then
@@ -5315,6 +5642,22 @@ sub LookupForInstance($$)
 }
 
 #
+# Delete the bus routes for an instance, as when the instance is terminated
+# but in a canceled state cause some buses could not be contacted for cleanup.
+# Need to clear the routes so that someone else can use them.
+#
+sub DeleteForInstance($$)
+{
+    my ($class, $instance) = @_;
+    my $routes = LookupForInstance($class, $instance);
+
+    foreach my $route (values(%{$routes})) {
+	$route->Delete();
+    }
+    return 0;
+}
+
+#
 # Lookup all instances that are using bus routes.
 #
 sub LookupActive($)
@@ -5336,6 +5679,36 @@ sub LookupActive($)
 	push(@result, $instance);
     }
     return @result;
+}
+
+#
+# Is a route currently in use by a running experiment, for the requested
+# start/end time.
+#
+# Bit of a problem here, routes are actually per-experiment at the moment.
+# So if the target is a project, we are making sure no one else is using
+# it, but if an instance, then only the supplied instance can be using it.
+#
+sub InUse($$$$$)
+{
+    my ($class, $target, $routeid, $start, $end) = @_;
+    my $clause  = "";
+
+    if (ref($target) eq "APT_Instance") {
+	my $uuid = $target->uuid();
+	$clause = " i.uuid!='$uuid' and ";
+    }
+    my $query_result =
+	DBQueryWarn("select br.uuid from apt_instance_bus_routes as br ".
+		    "left join apt_instances as i on ".
+		    "   br.uuid=i.uuid ".
+		    "left join geni.geni_slices as s on ".
+		    "     s.uuid=i.slice_uuid ".
+		    "where br.routeid='$routeid' and $clause ".
+		    "      $start <= UNIX_TIMESTAMP(s.expires)");
+    return 1
+	if ($query_result->numrows);
+    return 0;
 }
 
 ###################################################################

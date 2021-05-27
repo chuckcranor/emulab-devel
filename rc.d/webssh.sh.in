@@ -9,22 +9,27 @@ TBROOT="@prefix@"
 APACHEDIR="@INSTALL_APACHE_CONFIG@"
 MAINSITE="@TBMAINSITE@"
 WEBSSH="@BROWSER_CONSOLE_WEBSSH@"
+PROXIED="@BROWSER_CONSOLE_PROXIED@"
 USERNODE="@USERNODE@"
 BOSSNODE="@BOSSNODE@"
+WWWHOST="@WWWHOST@"
 WSSH="/usr/local/bin/wssh"
 PIDFILE="/var/run/wssh.pid"
-
-options="--fbidhttp --port=43456 --sslport=4367 --xsrf=False"
-hostopts="--hostfile=/dev/null --syshostfile=/dev/null"
-logopts="--log-file-max-size=1000000 --log-file-prefix=$TBROOT/log/wssh"
-certopts="--certfile=$APACHEDIR/ssl.crt/${USERNODE}.crt";
-keyopts="--keyfile=$APACHEDIR/ssl.key/${USERNODE}.key";
-origin="--origin=https://${USERNODE},https://${BOSSNODE}"
-allopts="$options $logopts $hostopts $certopts $keyopts $origin"
+address=""
 
 if [ $WEBSSH == "0" ]; then
     exit 0
 fi
+
+# When proxied from boss, ops is a non routable IP.
+if [ $PROXIED == "0" ]; then
+    address="--address=127.0.0.1"
+fi
+
+options="$address --port=8888 --xsrf=False"
+logopts="--log-file-max-size=1000000 --log-file-prefix=$TBROOT/log/wssh"
+origin="--origin=https://${USERNODE},https://${BOSSNODE},https://${WWWHOST}"
+allopts="$options $logopts $origin"
 
 case "$1" in
     start|faststart|quietstart|onestart|forcestart)

@@ -38,6 +38,11 @@ CREATE TABLE `apt_mobile_buses` (
   `speed` float(8,2) NOT NULL default '0.00',
   `heading` smallint(5) NOT NULL default '0',
   `location_stamp` datetime default NULL,
+  `gpsd_latitude` float(12,8) NOT NULL default '0.00000000',
+  `gpsd_longitude` float(12,8) NOT NULL default '0.00000000',
+  `gpsd_speed` float(8,2) NOT NULL default '0.00',
+  `gpsd_heading` float(8,2) NOT NULL default '0.00',
+  `gpsd_stamp` datetime default NULL,
   PRIMARY KEY  (`urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -427,7 +432,9 @@ CREATE TABLE `apt_instance_aggregate_history` (
   `name` varchar(16) default NULL,
   `aggregate_urn` varchar(128) NOT NULL default '',
   `status` varchar(32) default NULL,
+  `added` datetime default NULL,
   `started` datetime default NULL,
+  `destroyed` datetime default NULL,
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
   `deferred` tinyint(1) NOT NULL default '0',
@@ -437,6 +444,7 @@ CREATE TABLE `apt_instance_aggregate_history` (
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
   `extension_needpush` datetime default NULL,
+  `manifest_needpush` datetime default NULL,
   `prestage_data` mediumtext,  
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
@@ -452,7 +460,9 @@ CREATE TABLE `apt_instance_aggregates` (
   `name` varchar(16) default NULL,
   `aggregate_urn` varchar(128) NOT NULL default '',
   `status` varchar(32) default NULL,
+  `added` datetime default NULL,  
   `started` datetime default NULL,
+  `destroyed` datetime default NULL,
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
   `deferred` tinyint(1) NOT NULL default '0',
@@ -462,6 +472,7 @@ CREATE TABLE `apt_instance_aggregates` (
   `public_url` tinytext,
   `webtask_id` varchar(128) NOT NULL default '',
   `extension_needpush` datetime default NULL,
+  `manifest_needpush` datetime default NULL,
   `prestage_data` mediumtext,  
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`,`aggregate_urn`)
@@ -6128,12 +6139,36 @@ CREATE TABLE `users` (
   `news_read` datetime NOT NULL default '0000-00-00 00:00:00',
   `affiliation_matched` tinyint(1) default '0',
   `affiliation_updated` date NOT NULL default '0000-00-00',
+  `scopus_lastcheck` date NOT NULL default '0000-00-00',
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
   KEY `status` (`status`),
   KEY `uid_uuid` (`uid_uuid`),
   KEY `uid` (`uid`),
   KEY `nonlocal_id` (`nonlocal_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+
+DROP TABLE IF EXISTS `user_scopus_info`;
+CREATE TABLE `user_scopus_info` (
+  `uid` varchar(8) NOT NULL default '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `scopus_id` varchar(32) NOT NULL default '',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `validated` datetime default NULL,
+  `validation_state` enum('valid','invalid','unknown') default 'unknown',
+  `author_url` text,
+  `latest_abstract_id` varchar(32) NOT NULL default '',
+  `latest_abstract_pubdate` date NOT NULL default '0000-00-00',
+  `latest_abstract_pubtype` varchar(64) NOT NULL default '',
+  `latest_abstract_pubname` text,
+  `latest_abstract_doi` varchar(64) default NULL,
+  `latest_abstract_url` text,
+  `latest_abstract_title` text,
+  `latest_abstract_authors` text,
+  `latest_abstract_cites` enum('emulab','cloudlab','phantomnet','powder') default NULL,
+  PRIMARY KEY  (`uid_idx`,`scopus_id`),
+  KEY `uid` (`uid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --

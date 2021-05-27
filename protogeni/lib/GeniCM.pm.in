@@ -992,10 +992,14 @@ sub GetTicketAuxAux($)
 		     "Only public address pools of type any are supported");
 		    goto bad;
 		}
-		print STDERR 'DEBUG: Adding row to virt_address_allocation';
 		my $pool_id = $pool->{'client_id'};
 		# Ug, this causes named to croak.
-		$pool_id =~ s/_/-/g;
+		if ($pool_id =~ /\_/) {
+		    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+		     "Invalid client_id, no underscores allowed in pool name.");
+		    goto bad;
+		}
+		print STDERR 'DEBUG: Adding row to virt_address_allocation';
 		$virtexperiment->NewTableRow("virt_address_allocation",
 					 {"pool_id" => $pool_id,
 					  "count" => $pool->{'count'},
@@ -8069,6 +8073,8 @@ sub CleanupDeadSlice($;$)
     }
 
     DBQueryWarn("delete from geni_manifests ".
+		"where slice_uuid='$slice_uuid'");
+    DBQueryWarn("delete from portal_manifests ".
 		"where slice_uuid='$slice_uuid'");
 
     if (defined($experiment)) {

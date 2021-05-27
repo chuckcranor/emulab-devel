@@ -1,4 +1,26 @@
 #! /usr/bin/perl
+#
+# Copyright (c) 2015-2021 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
 
 my $VOL_ID = '/lib/udev/vol_id';
 my $BLKID = '/sbin/blkid';
@@ -1374,6 +1396,26 @@ sub localize
 	if ($?) {
 	    print STDERR "Failed to create /etc/ssh/hostkeys\n";
 	    return;
+	}
+    }
+
+    #
+    # XXX more host key processing. We have to do this regardless of
+    # whether the keys have actually changed.
+    #
+    # On CentOS private keys must be readable by the group "ssh_keys".
+    # So we look up that group in the group file. If it exists, we chgrp
+    # the private key files and allow group readability.
+    #
+    my $_gr=`grep ssh_keys $imageroot/etc/group 2>/dev/null`;
+    if ($_gr) {
+	my (undef, undef, $_gid) = split(':', $_gr);
+	if ($_gid && $_gid =~ /^(\d+)$/) {
+	    print "Changing group of host keys to ssh_keys ($_gid)\n";
+	    system("chown root:$_gid $imageroot/etc/ssh/*_key");
+	    system("chmod g+r $imageroot/etc/ssh/*_key");
+	} else {
+	    print STDERR "Failed to parse $imageroot/etc/group ssh_keys entry, ignored\n";
 	}
     }
 

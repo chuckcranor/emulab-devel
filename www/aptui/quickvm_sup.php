@@ -1045,7 +1045,8 @@ function SpitPageReplace($newpage, $when = 0) {
 #
 function SSHAuthObject($uid, $nodeid)
 {
-    global $USERNODE, $BROWSER_CONSOLE_WEBSSH;
+    global $USERNODE, $WWWHOST;
+    global $BROWSER_CONSOLE_WEBSSH, $BROWSER_CONSOLE_PROXIED;
 	
     $file = "/usr/testbed/etc/sshauth.key";
 
@@ -1066,12 +1067,21 @@ function SSHAuthObject($uid, $nodeid)
     $key   = chop($key);
     $stuff = GENHASH();
     $now   = time();
-
+    if ($BROWSER_CONSOLE_PROXIED) {
+        $baseurl = "https://${WWWHOST}";
+    }
+    else {
+        $baseurl = "https://${USERNODE}";
+    }
+    if ($BROWSER_CONSOLE_WEBSSH) {
+        # See httpd.conf
+        $baseurl .= "/webssh";
+    }
     $authobj = array('uid'       => $uid,
 		     'stuff'     => $stuff,
 		     'nodeid'    => $nodeid,
 		     'timestamp' => $now,
-		     'baseurl'   => "https://${USERNODE}",
+		     'baseurl'   => $baseurl,
 		     'signature_method' => 'HMAC-SHA1',
                      'webssh'    => $BROWSER_CONSOLE_WEBSSH,
 		     'api_version' => '1.0',

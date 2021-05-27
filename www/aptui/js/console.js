@@ -10,7 +10,12 @@ $(function ()
 
 	authjson   = _.unescape($('#auth-json')[0].textContent);
 	authobject = JSON.parse(authjson);
-	StartConsole();
+	if (_.has(authobject, "webssh") && authobject.webssh != 0) {
+	    StartConsoleNew();
+	}
+	else {
+	    StartConsole();
+	}
     }
 
     function StartConsole()
@@ -104,5 +109,30 @@ $(function ()
 	xmlthing.done(callback);
 	xmlthing.fail(callback_failed);
     }
+
+    function StartConsoleNew()
+    {
+        var url = authobject.baseurl;
+
+	var loadiframe = function () {
+	    console.info("Sending message", url);
+	    iframewindow.postMessage(authjson, "*");
+	    window.removeEventListener("message", loadiframe, false);
+	};
+	window.addEventListener("message", loadiframe);
+
+	var html =
+	    '  <iframe id="console-div-iframe" ' +
+	    '	  style="height:30em; width:100%;" ' +
+            '     src="' + url + '">';
+
+        $('#console-div').html(html);
+
+	var iframe = $('#console-div-iframe')[0];
+	var iframewindow = (iframe.contentWindow ?
+			    iframe.contentWindow :
+			    iframe.contentDocument.defaultView);
+    }
+    
     $(document).ready(initialize);
 });

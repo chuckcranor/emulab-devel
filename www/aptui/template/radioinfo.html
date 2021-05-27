@@ -10,6 +10,7 @@
 	<th class="sorter-false">TX Ranges</th>
 	<th class="sorter-false">RX Ranges</th>
 	<th class="sorter-false">Monitor</th>
+	<th class="sorter-false">RF Scans</th>
 	<th class="sorter-false">Free?</th>
 	<th class="sorter-false">Notes</th>
       </tr>
@@ -38,6 +39,19 @@
 	    <td class="text-center">
 	      <% if (frontend.monitored) { %>
 		<% var url = "frequency-graph.php?cluster=" +
+		amlist[urn].nickname + "&node_id=" +
+		node_id + "&iface=" + iface;
+		%>
+		<a href='<%- url %>' target="_blank">
+		  <span class="glyphicon glyphicon-stats"
+			style="margin-right: 5px;"></span></a>
+	      <% } else { %>
+		  n/a
+	      <% } %>
+	    </td>
+	    <td class="text-center">
+	      <% if (node_id.startsWith("nuc") || node_id.startsWith("cell")) { %>
+		<% var url = "frequency-graph.php?baseline=1&cluster=" +
 		amlist[urn].nickname + "&node_id=" +
 		node_id + "&iface=" + iface;
 		%>

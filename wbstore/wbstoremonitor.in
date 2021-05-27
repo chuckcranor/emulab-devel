@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2020 University of Utah and the Flux Group.
+# Copyright (c) 2020-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -124,6 +124,9 @@ my $RUNMONITOR = @POWDER_WBSTORE@;
 my $STBIN    = "/usr/local/bin/syncthing";
 my $STMARKER = ".stfolder";
 my $MIKEMAGIC = "00000000-0000-0000-0000-000000000000";
+
+# If an experiment has been DONE for this long, mark it GONE
+my $GONETIME = (60 * 60 * 24 * 30);
 
 # Set this to turn off tblog in libraries.
 $ENV{'TBLOG_OFF'} = "yep";
@@ -1225,7 +1228,7 @@ sub getinstances()
 	my $inst = $instance{$t}{'obj'};
 	my $uuid = $inst->uuid();
 	my ($piddead,$apidead);
-	my ($mydevs,$msstate);
+	my ($mydevs,$msstate,$msstamp);
 
 	#
 	# See if syncthing process is running.
@@ -1331,13 +1334,17 @@ sub getinstances()
 	    #
 	    # XXX mothership hackery.
 	    #
-	    $msstate = $syncthing{$uuid}{'msstate'} = getmsstate($inst);
+	    $msstamp = time();
+	    $msstate = $syncthing{$uuid}{'msstate'} = getmsstate($inst, \$msstamp);
+	    $syncthing{$uuid}{'msstamp'} = $msstamp;
 	    if ($msstate) {
-		logit("$uuid: experiment forced to $msstate");
+		logit("$uuid: experiment forced to $msstate at " .
+		      scalar(localtime($msstamp)));
 	    }
 	} else {
 	    $mydevs = $syncthing{$uuid}{'devinfo'};
 	    $msstate = $syncthing{$uuid}{'msstate'};
+	    $msstamp = $syncthing{$uuid}{'msstamp'};
 	}
 
 	#
@@ -1362,13 +1369,31 @@ sub getinstances()
 	#
 	# Incorporate OOB mothership state into what we know.
 	#   DONE in this context means the experiment is past
-	#     (only applies on the mothership)
+	#     On the mothership, we mark the experiment as inactive,
+	#       if it has been done for a long time we mark it as GONE.
+	#     On aggregates, if this is an unknown instance and the
+	#       mothership has explicitly marked us as done, then
+	#       it never got setup correctly and we treat it as GONE.
 	#   GONE implies no further updates, mark instance as done
 	#   FAIL implies experiment failed, mark instance as FAILED
 	#
 	elsif ($msstate) {
-	    if ($MAINSITE && $msstate eq "DONE") {
-		$inst->active(0);
+	    if ($msstate eq "DONE") {
+		if ($MAINSITE) {
+		    $inst->active(0);
+		    if ($msstamp && (time() - $msstamp) > $GONETIME) {
+			logit("$uuid: experiment DONE for a long time, ".
+			      "forced to GONE");
+			$inst->done(1);			
+		    }
+		} elsif ($inst->unknown()) {
+		    logit("$uuid: found unknown experiment in DONE state, ".
+			  "forced to GONE");
+		    $inst->active(0);
+		    $inst->done(1);
+		    # XXX allow clean up an unknown instance
+		    $inst->unknown(0);
+		}
 	    }
 	    elsif ($msstate eq "GONE") {
 		$inst->active(0);
@@ -1475,9 +1500,9 @@ sub getinstances()
 # received all the state we are going to get (but that
 # we cannot automatically detect).
 #
-sub getmsstate($)
+sub getmsstate($;$)
 {
-    my ($inst) = @_;
+    my ($inst,$tsp) = @_;
 
     my $sfile = "$METADIR/". $inst->uuid(). "/$domain/status";
     my $state = "";
@@ -1488,6 +1513,9 @@ sub getmsstate($)
 	chomp $state;
 	if ($state =~ /^(DONE|GONE|FAIL)$/) {
 	    $state = $1;
+	}
+	if ($tsp) {
+	    $$tsp = (stat($sfile))[9];
 	}
     }
 

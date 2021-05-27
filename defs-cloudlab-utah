@@ -133,6 +133,7 @@ CLUSTER_PUBSUBD_ALTPORT=16507
 # Fancy new browser in the console support
 #
 BROWSER_CONSOLE_ENABLE=1
+BROWSER_CONSOLE_WEBSSH=1
 NOVIRTNFSMOUNTS=1
 
 # Image versioning and deltas.

@@ -68,6 +68,7 @@ sub usage()
     print("Usage: manage_instance openstackstats instance\n");
     print("Usage: manage_instance getmanifests instance\n");
     print("Usage: manage_instance dumpmanifests instance\n");
+    print("Usage: manage_instance pushmanifest instance\n");
     print("Usage: manage_instance warn instance\n");
     print("Usage: manage_instance status instance\n");
     print("Usage: manage_instance applyextensionpolicy instance\n");
@@ -148,6 +149,7 @@ sub DoExtend();
 sub DoDenyOrMoreInfo($);
 sub DoRefresh();
 sub DoReboot();
+sub DoStart();
 sub DoPowerCycle();
 sub DoReload();
 sub DoRecovery();
@@ -177,6 +179,7 @@ sub DoDelete();
 sub DoStatus();
 sub DoPrestageImages();
 sub DoPushExtension();
+sub DoPushManifest();
 sub DoTop();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$$);
@@ -275,6 +278,9 @@ elsif ($action eq "reboot") {
 elsif ($action eq "reload") {
     DoReload()
 }
+elsif ($action eq "start") {
+    DoStart()
+}
 elsif ($action eq "recovery") {
     DoRecovery()
 }
@@ -340,6 +346,9 @@ elsif ($action eq "prestageimages") {
 }
 elsif ($action eq "pushextension") {
     DoPushExtension()
+}
+elsif ($action eq "pushmanifest") {
+    DoPushManifest()
 }
 elsif ($action eq "top") {
     DoTop()
@@ -1394,6 +1403,7 @@ sub DoTerminate()
     my $logfile;
     my $doperms  = 0;
     my $takelock = 0;
+    my $nolock   = 0;
     my $expired  = $RECORDHISTORY_TERMINATED;
 
     my $optlist = "eLX";
@@ -1577,7 +1587,7 @@ sub DoTerminate()
 	# SEARCHFAILED is success too
 	if ($code == GENIRESPONSE_SUCCESS ||
 	    $code == GENIRESPONSE_SEARCHFAILED) {
-	    $agg->SetStatus("terminated");
+	    $agg->MarkTerminated();
 	    next;
 	}
 	($exitcode,$errmsg) = ResponseErrorMessage($agg, $response);
@@ -1651,6 +1661,8 @@ sub DoTerminate()
     # pick it up later (for the case that the instance is not expired)
     #
     $instance->MarkCanceled();
+    # User has given up routes, even if we cannot terminate some aggregates.
+    $instance->DeleteRoutes();
     $slice->UnLock();
     exit($exitcode);
 }
@@ -2962,6 +2974,16 @@ sub DoRefresh()
 	}
 	# This is the per-aggregate status, we always set this for web UI.
 	$agg->UpdateSliverStatusAll($blob->{'details'});
+	# And set the top level slice status. Need to create a hash with
+	# the subset we want in the DB. 
+	my $slice_status_blob = {
+	    "status" => $blob->{'status'},
+	    "utc"    => $blob->{'utc'},
+	    "state"  => $blob->{'state'},
+	};
+	# This should probably be done atomically with sliver status.
+	$agg->UpdateSliceStatus($slice_status_blob);
+	
 	if ($debug) {
 	    print STDERR Dumper($blob);
 	}
@@ -3031,6 +3053,7 @@ sub DoRebootOrReload($)
     }
 
     my %sliver_urns = ();
+    my %slice_urns  = ();
     my %node_ids    = ();
     my @slivers     = ();
     foreach my $obj ($instance->AggregateList()) {
@@ -3045,18 +3068,24 @@ sub DoRebootOrReload($)
 	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
 		     GeniXML::FindNodesNS("n:vhost", $manifest,
 					  $GeniXML::EMULAB_NS)->get_nodelist());
+
+	# List of this agg nodes as we find them.
+	my @aggnodes = ();
+	
 	foreach my $node (@nodes) {
-	    my $client_id = GeniXML::GetVirtualId($node);
+	    my $client_id   = GeniXML::GetVirtualId($node);
+	    my $sliver_urn  = GeniXML::GetSliverId($node);
+	    my $manager_urn = GetManagerId($node);
+
+	    # No sliver urn or a different aggregate.
+	    next
+		if (! (defined($sliver_urn) &&
+		       defined($manager_urn) &&
+		       $manager_urn eq $obj->aggregate_urn()));
+
+	    push(@aggnodes, $node);
+	    
 	    if (grep {$_ eq $client_id} @ARGV) {
-		my $sliver_urn  = GeniXML::GetSliverId($node);
-		my $manager_urn = GetManagerId($node);
-
-		# No sliver urn or a different aggregate.
-		next
-		    if (! (defined($sliver_urn) &&
-			   defined($manager_urn) &&
-			   $manager_urn eq $obj->aggregate_urn()));
-
 		if (!exists($sliver_urns{$obj->aggregate_urn()})) {
 		    $sliver_urns{$obj->aggregate_urn()} = [];
 		    push(@slivers, $obj);
@@ -3064,6 +3093,18 @@ sub DoRebootOrReload($)
 		push(@{ $sliver_urns{$obj->aggregate_urn()} }, $sliver_urn);
 		$node_ids{$sliver_urn} = $client_id;
 	    }
+	}
+	next
+	    if (!exists($sliver_urns{$obj->aggregate_urn()}));
+	
+	#
+	# If we are doing all the nodes at an aggregate, we want to apply
+	# the operation to the slice instead of individual slivers.
+	#
+	if (scalar(@aggnodes) ==
+	    scalar(@{ $sliver_urns{$obj->aggregate_urn()}})) {
+	    # This will cause the operation to apply to the entire aggregate.
+	    $sliver_urns{$obj->aggregate_urn()} = [];
 	}
     }
     if (!@slivers) {
@@ -3155,6 +3196,7 @@ sub DoRebootOrReload($)
 }
 sub DoReboot()     { return DoRebootOrReload("reboot"); }
 sub DoReload()     { return DoRebootOrReload("reload"); }
+sub DoStart()      { return DoRebootOrReload("start"); }
 sub DoPowerCycle() { return DoRebootOrReload("powercycle"); }
 
 #
@@ -3313,6 +3355,12 @@ sub DoManifests()
     goto bad
 	if ($errcode);
 
+    if ($instance->MergeManifests()) {
+	print STDERR "Could not merge manifests\n";
+    }
+    elsif (PushManifestInternal($instance->manifest())) {
+	print STDERR "Could not push manifests\n";
+    }
     $slice->UnLock();
     exit(0);
   bad:
@@ -3416,6 +3464,7 @@ sub DoDeleteNodes()
 	fatal("No slice for instance");
     }
     my @aggregates  = ();
+    my @delaggs     = ();
     my %allmap      = ();
     my %aggmap      = ();
     foreach my $obj ($instance->AggregateList()) {
@@ -3453,7 +3502,6 @@ sub DoDeleteNodes()
 	    if (grep {$_ eq $client_id} @ARGV) {
 		if (!exists($aggmap{$obj->aggregate_urn()})) {
 		    $aggmap{$obj->aggregate_urn()} = [];
-		    push(@aggregates, $obj);
 		}
 		push(@{ $aggmap{$obj->aggregate_urn()} }, $client_id);
 		$delcount++;
@@ -3466,15 +3514,42 @@ sub DoDeleteNodes()
 	# about this when it becomes a problem.
 	#
 	if ($delcount == scalar(@{ $allmap{$obj->aggregate_urn()} })) {
-	    $errmsg   = "Not allowed to delete all nodes, ".
-		"please use Terminate instead";
-	    print STDERR $errmsg . "\n";
-	    if (defined($webtask)) {
-		$webtask->output($errmsg);
-		$webtask->Exited(1);
+	    if (scalar($instance->AggregateList()) == 1) {
+		$errmsg   = "Not allowed to delete all nodes, ".
+		    "please use Terminate instead";
+		print STDERR $errmsg . "\n";
+		if (defined($webtask)) {
+		    $webtask->output($errmsg);
+		    $webtask->Exited(1);
+		}
+		exit(1);
 	    }
-	    exit(1);
+	    else {
+		push(@delaggs, $obj);
+	    }
 	}
+	elsif ($delcount) {
+	    push(@aggregates, $obj);
+	}
+    }
+    if (scalar(@delaggs) == scalar($instance->AggregateList())) {
+	$errmsg   = "Not allowed to delete all nodes, ".
+	    "please use Terminate instead";
+	print STDERR $errmsg . "\n";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+    if (! (@aggregates || @delaggs)) {
+	$errmsg   = "Cannot find anything to delete!";
+	print STDERR $errmsg . "\n";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited(1);
+	}
+	exit(1);
     }
 
     #
@@ -3533,6 +3608,19 @@ sub DoDeleteNodes()
     # Set the status back to provisioning for the web interface.
     #
     $instance->SetStatus("provisioning") if (!$nostatus);
+
+    #
+    # Delete aggregates first, that should be quick.
+    #
+    if (@delaggs) {
+	my $taskopt = (defined($webtask) ? "-t $webtask_id" : "");
+	
+	system("$MANAGEINSTANCE $taskopt deleteaggregates $uuid -N -S ".
+	       join(" ", map {"'" . $_->aggregate_urn() . "'"} @delaggs));
+	if ($?) {
+	    exit($? >> 8);
+	}
+    }
 
     # Invoke on all clusters
     $errcode = CallMethodOnAggregates($coderef, 0, \$response, @aggregates);
@@ -3700,20 +3788,31 @@ sub DoDeleteAggregates()
     #
     my @tmp = ();
     foreach my $aggregate (@aggregates) {
-	if ($aggregate->status() eq "created") {
+	if ($aggregate->status() eq "created" ||
+	    $aggregate->status() eq "prestage") {
 	    #
 	    # Need to deal with history entries.
 	    #
-	    print "$aggregate in 'created' state, removing immediately.\n";
-	    $instance->RemoveAggregate($aggregate);
+	    print "$aggregate never started.\n";
+	    $aggregate->MarkTerminated();
 	    next;
 	}
-	push(@tmp, $aggregate);
 	#
 	# Mark as canceled in case we cannot reach the clusters, the scheduler
 	# will look for this and try again
 	#
 	$aggregate->SetStatus("canceled");
+
+	#
+	# Look to see if the aggregate is online, lets not bounce the
+	# status page around more then necessary.
+	#
+	my $aptagg = $aggregate->GetAptAggregate();
+	if ($aptagg->CheckStatus(\$errmsg, 1) != 0) {
+	    print "$aptagg is not reachable, skipping: $errmsg\n";
+	    next;
+	}
+	push(@tmp, $aggregate);
     }
     if (!@tmp) {
 	goto done;
@@ -3743,6 +3842,9 @@ sub DoDeleteAggregates()
 	goto bad;
     }
 
+    # Flag, do we need to merge/push a new manifest.
+    my $needpush = 0;
+
     #
     # Look at all the responses, update the status. 
     #
@@ -3754,15 +3856,8 @@ sub DoDeleteAggregates()
 	# SEARCHFAILED is success too
 	if ($code == GENIRESPONSE_SUCCESS ||
 	    $code == GENIRESPONSE_SEARCHFAILED) {
-	    $agg->SetStatus("terminated");
-	    
-	    #
-	    # Remove all trace. We need to munge the manifests in all
-	    # aggregates so the web server does not show the stale
-	    # aggregates. This is annoying and probably messes up the
-	    # history too.
-	    #
-	    $instance->RemoveAggregate($agg);
+	    $agg->MarkTerminated();
+	    $needpush = 1;
 	    next;
 	}
 	($exitcode,$errmsg) = ResponseErrorMessage($agg, $response);
@@ -3784,6 +3879,15 @@ sub DoDeleteAggregates()
 	    # how we will handle this error.
 	    $errcode  = $code;
 	    $exitcode = -1;
+	}
+    }
+    # If we made any changes, merge/push the manifests.
+    if ($needpush) {
+	if ($instance->MergeManifests()) {
+	    print STDERR "Could not merge manifests\n";
+	}
+	elsif (PushManifestInternal($instance->manifest())) {
+	    print STDERR "Could not push manifests\n";
 	}
     }
     # Will have to try again later.
@@ -6815,5 +6919,146 @@ sub CallMethodOnAggregates($$$@)
     $$prval = \@return_values;
     map { $_->Delete(); } @webtasks;
     return 0;
+}
+
+sub PushManifestInternal($)
+{
+    my ($manifest) = @_;
+    my $errmsg;
+    my $errcode;
+    my @aggregates = ();
+    
+    foreach my $aggregate ($instance->ActiveAggregateList()) {
+	next
+	    if (!defined($aggregate->manifest_needpush()));
+
+	push(@aggregates, $aggregate);
+    }
+    return 0
+	if (!@aggregates);
+
+    #
+    # Push the manifest out.
+    #
+    my $coderef = sub {
+	my ($sliver) = @_;
+
+	return $sliver->PushPortalManifest($manifest);
+    };
+    my $responses;
+
+    my $oldtimeo   = Genixmlrpc->SetTimeout(30);
+    $errcode = CallMethodOnAggregates($coderef, 0, \$responses, @aggregates);
+    Genixmlrpc->SetTimeout($oldtimeo);
+    if ($errcode) {
+	print STDERR $responses . "\n";
+	return -1;
+    }
+    my $hosed = 0;
+
+    # Lets see which ones we were able to update.
+    foreach my $aggregate (@aggregates) {
+	my $response = shift(@{$responses});
+	my $code     = $response->code();
+	my $aptagg   = $aggregate->GetAptAggregate();
+
+	if ($code) {
+	    if ($code == GENIRESPONSE_NETWORK_ERROR ||
+		$code == GENIRESPONSE_SERVER_UNAVAILABLE) {
+		# Still out of contact, keep going.
+		print STDERR "Manifest push failed at ". $aptagg->name() .
+		    ": $aggregate is unreachable, skipping\n";
+	    }
+	    elsif ($response->code() == XMLRPC_NO_SUCH_METHOD) {
+		print STDERR "Manifest push failed at ". $aptagg->name() .
+		    ": does not support manifest push\n";
+		$aggregate->ClearManifestPush();
+	    }
+	    elsif ($code == GENIRESPONSE_SEARCHFAILED) {
+		print STDERR "Manifest push failed at ". $aptagg->name() .
+		    ": slice does not exist\n";
+		$aggregate->ClearManifestPush();
+	    }
+	    else {
+		# All other errors mean we are hosed!
+		(undef, $errmsg) = ResponseErrorMessage($aggregate, $response);
+		print STDERR "Manifest push failed at ". $aptagg->name() .
+		    ": $errmsg\n";
+		$aggregate->ClearManifestPush();
+		$hosed++;
+	    }
+	}
+	else {
+	    # Success, clear the push flag.
+	    print "Successfully pushed the manifest to " .
+		$aptagg->name() . "\n";
+	    $aggregate->ClearManifestPush();
+	}
+    }
+    if ($hosed) {
+	return 1;
+    }
+    return 0;
+}
+
+#
+# Push out the portal merged manifest.
+#
+sub DoPushManifest()
+{
+    my $slice    = $instance->GetGeniSlice();
+    my $optlist  = "N";
+    my $nolock   = 0;	# Caller holds the lock.
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"N"})) {
+	$nolock = 1;
+    }
+
+    #
+    # Lock the slice in case it is doing something else, like taking
+    # a disk image, since 
+    #
+    if (!$nolock && $slice->Lock()) {
+	my $errcode = GENIRESPONSE_BUSY;
+	my $errmsg  ="Experiment is busy, cannot lock it. Try again later.";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited($errcode);
+	}
+	print STDERR "$errmsg\n";
+	exit(1);
+    }
+    # Might as well regen it since that will flag any new updates.
+    if ($instance->MergeManifests()) {
+	$slice->UnLock() if (!$nolock);
+	fatal("Could not merge manifests");
+    }
+    my $manifest = $instance->manifest();
+    $slice->UnLock() if (!$nolock);
+    if ($instance->manifest() eq "") {
+	print "No manifest to push\n";
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+    if (0 && scalar($instance->AggregateList()) == 1) {
+	print "Only one aggregate, no need to push manifest\n";
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+    if (PushManifestInternal($manifest)) {
+	exit(-1);
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
 }
 

@@ -1584,7 +1584,8 @@ class Node
     #
     function ConsoleAuthObject($uid, $console)
     {
-        global $USERNODE, $WWWHOST, $BROWSER_CONSOLE_PROXIED;
+        global $USERNODE, $WWWHOST;
+        global $BROWSER_CONSOLE_PROXIED, $BROWSER_CONSOLE_WEBSSH;
         $node_id = $this->node_id();
 	
         $file = "/usr/testbed/etc/sshauth.key";
@@ -1612,11 +1613,16 @@ class Node
         else {
             $baseurl = "https://${USERNODE}";
         }
+        if ($BROWSER_CONSOLE_WEBSSH) {
+            # See httpd.conf
+            $baseurl .= "/webssh";
+        }
         $authobj = array('uid'       => $uid,
                          'console'   => $console,
                          'stuff'     => $stuff,
                          'nodeid'    => $node_id,
                          'timestamp' => $now,
+                         'webssh'    => $BROWSER_CONSOLE_WEBSSH,
                          'baseurl'   => $baseurl,
                          'signature_method' => 'HMAC-SHA1',
                          'api_version' => '1.0',

@@ -91,7 +91,7 @@ $(function ()
 	    if (hash == "") {
 		hash = "#rspec";
 	    }
-	    $('.nav-tabs a[href='+hash+']').tab('show');
+	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
 	});
     }
 

@@ -2145,9 +2145,9 @@ sub CheckForBuses($$$)
 #
 # Check route validity.
 #
-sub CheckRoutes($$$$$$)
+sub CheckRoutes($$$$$$$)
 {
-    my ($rspec, $project, $start, $end, $noresokay, $pmsg) = @_;
+    my ($rspec, $project, $start, $end, $noresokay, $pmsg, $user) = @_;
     my $routes = [];
 
     if (!ref($rspec)) {
@@ -2160,6 +2160,34 @@ sub CheckRoutes($$$$$$)
     if (APT_Profile::GetRoutes($rspec, \$routes, $pmsg)) {
 	return -1;
     }
+    return 0
+	if (! @{$routes});
+
+    #
+    # Temporary route obfuscation.
+    #
+    if (scalar(@{$routes}) == 1) {
+	my $request   = $routes->[0];
+	my $routename = $request->{"name"};
+	my $routemap  = APT_Reservation::Group::RouteReservation::RouteMap();
+
+	if ($routename eq "allroutes") {
+	    my $node = $request->{"dom"};
+
+	    foreach my $name (keys(%{$routemap})) {
+		my $clone = $node->cloneNode(1);
+		GeniXML::SetText("name", $clone, "$name");
+		$rspec->addChild($clone);
+	    }
+	    $rspec->removeChild($node);
+
+	    $routes = [];
+	    if (APT_Profile::GetRoutes($rspec, \$routes, $pmsg)) {
+		return -1;
+	    }
+	    print GeniXML::Serialize($rspec);
+	}
+    }
     foreach my $request (@{$routes}) {
 	my $routename = $request->{"name"};
 
@@ -2168,17 +2196,24 @@ sub CheckRoutes($$$$$$)
 	    $$pmsg = "Invalid name: $routename";
 	    return 1;
 	}
-	my $routeid =
-	    APT_Reservation::Group::RouteReservation::RouteID($routename);
-	
-	if (!$noresokay &&
-	    !APT_Reservation::Group::RouteReservation->RouteReserved($project,
-				$start, $end, $routename)) {
-	    $$pmsg = "Route $routename ($routeid) ".
-		"is not reserved by your project for the duration of your ".
-		"experiment.";
+    }
+    #
+    # For now, any reservation with routes must end on the same
+    # day by midnight.
+    #
+    if (! $user->IsAdmin()) {
+	my (undef,undef,$start_hour,$start_day) = localtime($start);
+	my (undef,undef,$end_hour,$end_day) = localtime($end);
+	    
+	if ($start_day != $end_day) {
+	    $$pmsg = "Experiments using mobile endpoints must end by ".
+		"midnight (Mountain timezone) on the same day";
 	    return 1;
 	}
+    }
+    if (!APT_Reservation::Group::RouteReservation->CanStart($project,
+			 $start, $end, $routes, $pmsg)) {
+	return 1;
     }
     return 0;
 }
@@ -2867,9 +2902,9 @@ sub BindingsToParams($)
 # Return an rspec fragment for a node at an aggregate. The node id
 # is optional.
 #
-sub RSpecNodeFragment($$$;$)
+sub RSpecNodeFragment($$$$)
 {
-    my ($aggregate_urn, $client_id, $protonode, $node_id) = @_;
+    my ($aggregate_urn, $client_id, $node_id, $protonode) = @_;
     my $aggregate_hrn = GeniHRN->new($aggregate_urn);
     my $component_id  = "";
 
@@ -2896,7 +2931,7 @@ sub RSpecNodeFragment($$$;$)
     #
     # So that the following code works right.
     $protonode->setNamespace("http://www.geni.net/resources/rspec/3");
-    print "$protonode\n";
+    #print "$protonode\n";
 
     my $diskimage = GeniXML::FindFirst("n:disk_image", $protonode);
     if ($diskimage) {
@@ -2916,6 +2951,7 @@ sub RSpecNodeFragment($$$;$)
 	    }
 	}
     }
+    print "$node\n";
     return $node;
 }
 

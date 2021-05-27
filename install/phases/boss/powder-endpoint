@@ -25,6 +25,7 @@ my $RADIOFILE    = "$PREFIX/etc/targetsys/radios.txt";
 my $IFACEFILE    = "$PREFIX/etc/targetsys/interfaces.txt";
 my $WIREFILE     = "$PREFIX/etc/targetsys/wires.txt";
 my $ADDNODETYPE  = "$PREFIX/bin/editnodetype";
+my $GRANTFEATURE = "$TBROOT/sbin/grantfeature";
 my $ADDNODE      = "$PREFIX/sbin/addnode";
 my $ADDINTERFACE = "$PREFIX/sbin/addinterface";
 my $ADDWIRE      = "$PREFIX/sbin/addwire";
@@ -229,8 +230,9 @@ sub Install($$$)
 	# Enable these features.
 	#
 	my %features = (
-	    "GeniOsSetup" => "Use libossetup for StartSliver",
-	    "NewOsload"   => "New version of osload library",
+	    "GeniOsSetup"     => "Use libossetup for StartSliver",
+	    "NewOsload"       => "New version of osload library",
+	    "ImageProvenance" => "Image Provenance and versioning",
 	    );
 
 	foreach my $name (keys(%features)) {
@@ -245,10 +247,22 @@ sub Install($$$)
 		    if (!defined($feature));
 	    };
 	    Phase "feature", "Enabling $name feature", sub {
-		$feature->SetGlobalEnable(1) == 0
-		    or PhaseFail("Could not enable feature");
-		$feature->SetGlobalDisable(0) == 0
-		    or PhaseFail("Could not clear disable flag on feature");
+		if ($name eq "ImageProvenance") {
+		    if ($TARGETSYS_TARGET eq "POWDER-BUS") {		    
+			ExecQuietFatal("$SUDO -u $PROTOUSER ".
+				       "$WAP $GRANTFEATURE ".
+				       "-p " . TBOPSPID() . " ImageProvenance");
+		    }
+		    else {
+			PhaseSkip("Not a Bus")
+		    }
+		}
+		else {
+		    $feature->SetGlobalEnable(1) == 0
+			or PhaseFail("Could not enable feature");
+		    $feature->SetGlobalDisable(0) == 0
+			or PhaseFail("Could not clear disable flag on feature");
+		}
 	    };
 	}
 

@@ -52,7 +52,7 @@
 	  <td class="format-date" style='white-space: nowrap;'>
 	    <%- value.created %></td>
 	  <td><%- value.portal %></td>
-	  <td><%- value.leader_affil %>
+	  <td><%= value.leader_affil %>
 	    <% if (_.has(value, "url")) { %>
 	      (<a href='<%- value.url %>'
 		  target="_blank"><span class="glyphicon

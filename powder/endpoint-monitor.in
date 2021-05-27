@@ -104,7 +104,7 @@ my @tempQueue       = ();
 # Mothership, then we consider ourself motherless and must power down
 # the experimental nodes.
 #
-my $NOALIVE_THRESHOLD = 1200;
+my $NOALIVE_THRESHOLD = 900;
 #
 # Once we start hearing from the Mothership again, we want this many
 # consecutive pings before we consider the link good, and we can power
@@ -147,6 +147,7 @@ use Node;
 use EmulabConstants;
 use power_powduino;
 use libtestbed;
+use GeniUtil;
 
 # In EmulabConstants
 my $PROTOUSER = PROTOUSER();
@@ -164,6 +165,8 @@ sub NotifyTBOPS($$);
 sub NotifyUsers($$);
 sub PowerAll($);
 sub PowerControl($@);
+sub DisableExperiments();
+sub EnableExperiments();
 
 #
 # Turn off line buffering on output
@@ -280,12 +283,14 @@ while (1)
 	    #
 	    # Going from power on to off.
 	    #
+	    DisableExperiments();
 	    PowerAll("off");
 	}
 	elsif ($powerstate && !$newpowerstate) {
 	    #
 	    # Going from power off to on.
 	    #
+	    EnableExperiments();
 	    PowerAll("on");
 	}
     }
@@ -651,11 +656,11 @@ sub CheckTempAndBattery($$)
 		    $onBusTime = time();
 		    logit("Back on bus power, waiting $MIN_ONBATTERY_TIME ".
 			  "seconds to make sure\n");
-		    $status |= $POWER_OVERTTEMP;
+		    $status |= $POWER_LOWBATTERY;
 		}
 		elsif (time() - $onBusTime < $MIN_ONBATTERY_TIME) {
 		    logit("Waiting to make sure bus power will stay on\n");
-		    $status |= $POWER_OVERTTEMP;
+		    $status |= $POWER_LOWBATTERY;
 		}
 		else {
 		    logit("Bus power appears to be staying on\n");
@@ -672,6 +677,7 @@ sub CheckTempAndBattery($$)
 				"and radios are being turned back on.\n")
 			if ($doemail);
 		}
+		EnableExperiments();
 	    }
 	}
 	else {
@@ -702,6 +708,9 @@ sub CheckTempAndBattery($$)
 		    "reserve power is in the battery.\n\n".
 		    "If power is restored soon enough, radios and nodes ".
 		    "will be powered back on.\n");
+
+		# As soon as we go on battery disable new experiments
+		DisableExperiments();
 	    }
 	    #
 	    # After a short time on battery we turn things off.  If go below
@@ -1097,3 +1106,14 @@ sub PowerControl($@)
     return 0;
 }
 
+#
+# Control the nologins sitevar.
+#
+sub DisableExperiments()
+{
+    GeniUtil::DisableExperiments();
+}
+sub EnableExperiments()
+{
+    GeniUtil::EnableExperiments();
+}

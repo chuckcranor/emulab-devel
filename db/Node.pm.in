@@ -4445,6 +4445,9 @@ sub ConsoleAuthObject($$)
     else {
 	$baseurl = "https://${USERNODE}";
     }
+    if ($BROWSER_CONSOLE_WEBSSH) {
+	$baseurl .= "/webssh";
+    }
     #
     # And the tipline stuff.
     #

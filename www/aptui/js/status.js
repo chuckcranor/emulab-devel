@@ -1038,6 +1038,11 @@ $(function ()
 		}
 		return;
 	    }
+	    if (iblob.status == "terminated" ||
+		iblob.status == "canceled") {
+		TerminatedAggregate(iblob.status, urn);
+		return;
+	    }
 	    if (iblob.offline) {
 		OfflineAggregate(urn);
 		return;
@@ -1100,7 +1105,7 @@ $(function ()
 		else if (details.status == "failed") {
 		    // Bootstrap bg-danger color
 		    $('#' + jacksID + ' .node .nodebox')
-			.css("fill", "#f2dede");
+			.css("fill", "#e67795");
 		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
 		      '#listview-row-' + node_id + ' td[name="client_id"]')
 			.css("color", "#a94442");
@@ -1296,11 +1301,37 @@ $(function ()
 	    $('#' + jacksID + ' .node .nodebox')
 		.css("fill", "#fcf8e3");
 
-	    var html =
-		"This node is currently unreachable, operations on this " +
-		"node will fail until it becomes reachable again.";
+	    var html = "This node is currently unreachable, operations on " +
+		"this node will fail until it becomes reachable again.";
 
 	    UpdateNodePopover(node_id, jacksID, html);
+	});
+    }
+
+    function TerminatedAggregate(status, urn)
+    {
+	if (!_.has(jacksSites, urn)) {
+	    // Manifest not processed yet.
+	    return;
+	}
+	$.each(jacksSites[urn], function(node_id, jacksID) {
+	    //console.info("deferAggregate: ", urn, node_id, jacksID);
+	    $('#' + jacksID + ' .node .nodebox')
+		.css("fill", "red");
+
+	    var html;
+
+	    if (status == "terminated") {
+		html = "This node has been deallocated and is no longer " +
+		    "accessible by this experiment.";
+	    }
+	    else {
+		html = "This node has been marked for removal from your " +
+		    "experiment as soon as the aggregate comes back online.";
+	    }
+	    UpdateNodePopover(node_id, jacksID, html);
+	    $('#listview-row-' + node_id + ' td[name="status"]')
+		.html("terminated");
 	});
     }
 
@@ -1589,9 +1620,14 @@ $(function ()
     {
 	var jsonauth = $.parseJSON(authobject);
 
-        var url     = jsonauth.baseurl + "/webssh/webssh.html";
+        var url     = jsonauth.baseurl;
 	var iwidth  = "100%";
         var iheight = 400;
+
+	// Backwards compat for a while.
+	if (!url.includes("webssh")) {
+	    url = url + "/webssh/webssh.html";
+	}
 
 	var loadiframe = function () {
 	    console.info("Sending message", jsonauth.baseurl);
@@ -2399,11 +2435,12 @@ $(function ()
 		    UpdatePowderMap()
 		}
 		else {
-		    var showmap = true;
-		
+		    var showmap = false;
+
+		    // If we have at least one manifest, show the map.
 		    $.each(statusblob, function(urn) {
-			if (!_.has(manifests, urn)) {
-			    showmap = false;
+			if (_.has(manifests, urn)) {
+			    showmap = true;
 			}
 		    });
 		    if (showmap) {
@@ -3513,8 +3550,12 @@ $(function ()
     {
 	var authobject = coninfo.authobject;
 	var jsonauth   = $.parseJSON(authobject);
+        var url        = jsonauth.baseurl;
 
-        var url     = jsonauth.baseurl + "/webssh/webssh.html";
+	// Backwards compat for a while.
+	if (!url.includes("webssh")) {
+	    url = url + "/webssh/webssh.html";
+	}
 
 	var loadiframe = function () {
 	    console.info("Sending message", jsonauth.baseurl);

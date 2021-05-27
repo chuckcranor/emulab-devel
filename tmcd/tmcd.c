@@ -431,6 +431,7 @@ COMMAND_PROTOTYPE(dogeniall);
 COMMAND_PROTOTYPE(dogeniparam);
 COMMAND_PROTOTYPE(dogenirpccert);
 COMMAND_PROTOTYPE(dogeniinvalid);
+COMMAND_PROTOTYPE(dogeniportalmanifest);
 #endif
 
 /*
@@ -577,6 +578,7 @@ struct command {
 	{ "geni_all",     FULLCONFIG_NONE, 0, dogeniall },
 	{ "geni_param",   FULLCONFIG_NONE, 0, dogeniparam },
 	{ "geni_rpccert",   FULLCONFIG_NONE, 0, dogenirpccert },
+	{ "geni_portalmanifest", FULLCONFIG_NONE, 0, dogeniportalmanifest },
 	/* A rather ugly hack to avoid making error handling a special case.
 	   THIS MUST BE THE LAST ENTRY IN THE ARRAY! */
 	{ "geni_invalid", FULLCONFIG_NONE, 0, dogeniinvalid }
@@ -5011,6 +5013,16 @@ COMMAND_PROTOTYPE(dostorageconfig)
 	 * PROTO field to select, per-blockstore, its type. But that
 	 * will require additional per node (type) assign features
 	 * differentiating the amount of each type available.
+	 *
+	 * Ultimately is not here yet, but I need a penultimate fix to
+	 * handle the Powder d840 nodes. Right now, an ANY or NONSYSVOL
+	 * blockstore will wind up with a combination of the single small,
+	 * ugly-slow BOSS device RAID1 VD and the multiple large, stupid-fast
+	 * NVMe devices. So I have added the node/node_type feature so I can
+	 * restrict blockstores on these nodes to use just flash devices and
+	 * adjusted the existing nonsysvol/any assign features so that the
+	 * max size includes only that space. Right now, the node/type
+	 * features override the sitevar. Not sure if that is a good thing...
 	 */
 	localproto = NULL;
 	res = mydb_query("select value,defaultvalue from sitevariables "
@@ -5026,6 +5038,38 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		mysql_free_result(res);
 	}
 
+	/*
+	 * See if there are node or node_type overrides for the localproto.
+	 */
+	res = mydb_query("select na.attrvalue,nta.attrvalue from nodes as n "
+			 "left join node_type_attributes as nta on "
+			 "     nta.type=n.type and "
+			 "     nta.attrkey='blockstore_localproto' "
+			 "left join node_attributes as na on "
+			 "     na.node_id=n.node_id and "
+			 "     na.attrkey='blockstore_localproto' "
+			 "where n.node_id='%s'",
+			 2, reqp->pnodeid);
+	if (res) {
+		if ((int)mysql_num_rows(res) != 0) {
+			char *attrvalue = NULL;
+			
+			row = mysql_fetch_row(res);
+
+			if (row[0] && row[0][0])
+				attrvalue = row[0];
+			else if (row[1] && row[1][0]) {
+				attrvalue = row[1];
+			}
+			if (attrvalue) {
+				if (localproto)
+					free(localproto);
+				localproto = strdup(attrvalue);
+			}
+		}
+		mysql_free_result(res);
+	}
+	
 	/* 
 	 * Send across local blockstore volumes (slices).  These don't
 	 * show up in the reserved table, existing entirely in the
@@ -13617,6 +13661,38 @@ static char *getgenimanifest( tmcdreq_t *reqp ) {
 	return buf;
 }
 
+static char *getgeniportalmanifest( tmcdreq_t *reqp ) {
+    
+	MYSQL_RES	*res;
+	char		*buf;
+
+	res = mydb_query( "SELECT m.manifest FROM `geni-cm`.geni_slivers AS s, "
+			  "`geni-cm`.portal_manifests AS m WHERE "
+			  "s.resource_uuid='%s' AND "
+			  "m.slice_uuid = s.slice_uuid", 1, reqp->nodeuuid );
+
+	if( !res ) {
+		error( "geni_portal_manifest: %s: DB error getting manifest!\n",
+		       reqp->nodeid );
+		return NULL;
+	}
+
+	if( mysql_num_rows( res ) ) {
+		MYSQL_ROW row = mysql_fetch_row( res );
+
+		buf = strdup( row[ 0 ] );
+	} else {
+	        buf = strdup( "" );
+	}
+
+	mysql_free_result( res );
+
+	if( verbose )
+		info( "%s: geni_portal_manifest: %s", reqp->nodeid, buf );
+	
+	return buf;
+}
+
 static char *getgenicert( tmcdreq_t *reqp ) {
     
 	MYSQL_RES	*res;
@@ -13997,6 +14073,7 @@ MAKEGENICOMMAND(userurn)
 MAKEGENICOMMAND(useremail)
 MAKEGENICOMMAND(geniuser)
 MAKEGENICOMMAND(manifest)
+MAKEGENICOMMAND(portalmanifest)
 MAKEGENICOMMAND(cert)
 MAKEGENICOMMAND(key)
 MAKEGENICOMMAND(controlmac)
@@ -14039,6 +14116,8 @@ struct genicommand {
     { "certificate", getgenicert, 1, NULL },
     { "key", getgenikey, 1, NULL },
     { "rpccert", getgenirpccert, 1, NULL },
+    { "portalmanifest", getgeniportalmanifest, 1,
+      "Show the portal aggregated manifest for the local aggregate sliver" },
 };
 
 COMMAND_PROTOTYPE(dogenicommands)

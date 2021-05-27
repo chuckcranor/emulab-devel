@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1018,7 +1018,8 @@ function HaveStoragePool()
 # Convert local time to GMT date string.
 function DateStringGMT($date)
 {
-    if (is_null($date) || $date == "" || $date == "0000-00-00 00:00:00") {
+    if (is_null($date) || $date == "" ||
+        $date == "0000-00-00 00:00:00" || $date == "0000-00-00") {
         return null;
     }
     elseif (is_int($date)) {

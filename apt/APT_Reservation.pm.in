@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,6 +60,7 @@ use GeniHRN;
 use Date::Parse;
 use Date::Format;
 use Data::Dumper;
+use POSIX qw(mktime);
 use vars qw($AUTOLOAD);
 use Scalar::Util qw(weaken);
 use overload ('""' => 'Stringify');
@@ -2210,16 +2211,6 @@ use overload ('""' => 'Stringify');
 #
 # Mobile endpoints are buses. These are the routes we care about.
 #
-my $BusRoutes = [
-    # Name, RouteID
-    ["Purple",            19],
-    ["Green",             64],
-    ["Blue Detour",       65],
-    ["Guardsman Direct",  66],
-    ["Red Detour",        68],
-    ["Orange",            72],
-    ];
-
 my $RouteMap;
 
 sub RouteID($)
@@ -2227,18 +2218,27 @@ sub RouteID($)
     my ($routename) = @_;
 
     if (!defined($RouteMap)) {
+	my $query_result =
+	    DBQueryWarn("select * from apt_mobile_bus_routes");
+	return undef
+	    if (! (defined($query_result) && $query_result->numrows));
+
 	$RouteMap = {};
-	
-	foreach my $ref (@$BusRoutes) {
-	    my ($name, $id) = @$ref;
-	    
-	    $RouteMap->{$name} = $id;
+	while (my ($routeid,$description) = $query_result->fetchrow_array()) {
+	    $RouteMap->{$description} = $routeid;
 	}
     }
     if (exists($RouteMap->{$routename})) {
 	return $RouteMap->{$routename};
     }
     return undef;
+}
+sub RouteMap()
+{
+    if (!defined($RouteMap)) {
+	RouteID("Red");
+    }
+    return $RouteMap;
 }
 
 sub Lookup($$$)
@@ -2549,7 +2549,7 @@ sub RouteAllowed($$$)
 #
 # Does the project hold a route reservation for the time. 
 #
-sub RouteReserved($$$$$$)
+sub RouteReserved($$$$$)
 {
     my ($class, $project, $start, $end, $routename) = @_;
     my $pid_idx = $project->pid_idx();
@@ -2572,6 +2572,117 @@ sub RouteReserved($$$$$$)
 }
 
 #
+# This variant is for checking that an experiment (possibly without
+# routes reserved) can swap in (does not conflict with existing
+# reservations in other projects for the start/end duration. 
+#
+sub CanStart($$$$$)
+{
+    my ($class, $target, $start, $end, $routes, $pmsg) = @_;
+    my @routes  = @$routes;
+    my @notreserved = ();
+    my $project = (ref($target) eq "APT_Instance" ?
+		   $target->GetProject() : $target);
+
+    # Can start if not using routes, or there are no current reservations, 
+    return 1
+	if (!@routes);
+
+    my @groups = APT_Reservation::Group->LookupAll();
+
+    return 1
+	if (!@groups);
+
+    #
+    # No start time means starting up right now.
+    #
+    $start = time()
+	if (!defined($start));
+
+    #
+    # First, check to see if the project has all the routes reserved.
+    #
+    foreach my $request (@{$routes}) {
+	my $routename = $request->{"name"};
+	my $routeid   = RouteID($routename);
+
+	if (!RouteReserved($class, $project, $start, $end, $routename)) {
+	    push(@notreserved, $request);
+	}
+    }
+    # If everything reserved, good to go. 
+    return 1
+	if (!@notreserved);
+
+    #
+    # Because we now allow some experiments to start without having
+    # reserved the routes it is using, we have to check current experiments
+    # too.
+    #
+    foreach my $request (@notreserved) {
+	my $routename = $request->{"name"};
+	my $routeid   = RouteID($routename);
+
+	if (APT_Instance::Aggregate::BusRoute->InUse($target, $routeid,
+						     $start, $end)) {
+	    $$pmsg = "Bus route $routename ($routeid) is not ".
+		"available for the duration of your experiment because ".
+		"another project or experiment is currently using it. ".
+		"Maybe you want to create a reservation?";
+	    return 0;
+	}
+    }
+
+    #
+    # Make sure the not reserved list does not conflict with reservations
+    # in other projects
+    #
+    foreach my $request (@notreserved) {
+	my $routename = $request->{"name"};
+	my $routeid   = RouteID($routename);
+
+	foreach my $group (@groups) {
+	    my $res_project = $group->GetProject();
+	    
+	    next
+		if (! $group->RouteReservationList());
+
+	    # Skip reservations in our own project, they do not conflict
+	    next
+		if ($project->SameProject($res_project));	    
+
+	    my $res_start   = str2time($group->start());
+	    my $res_end     = str2time($group->end());
+
+	    # If this reservation does not overlap in time, skip it.
+	    if (($start < $res_start && $end < $res_start) ||
+		($start > $res_end - 1)) {
+		next;
+	    }
+
+	    foreach my $existing ($group->RouteReservationList()) {
+		next
+		    if (!$existing->approved());
+
+		my $res_routeid   = $existing->routeid();
+		my $res_routename = $existing->routename();
+
+		# Different route, skip it.
+		next
+		    if ($routeid != $res_routename &&
+			$routename ne $res_routename);
+
+		# Does not fit the schedule.
+		$$pmsg = "Bus route $routename ($routeid) is not ".
+		    "available for the duration of your experiment.";
+		return 0;
+	    }
+	}
+    }
+    return 1;
+}
+
+#
 # Determine a max extension for an instance,
 #
 sub MaxExtension($)
@@ -2580,27 +2691,8 @@ sub MaxExtension($)
     my $slice   = $instance->GetGeniSlice();
     my $project = $instance->GetProject();
     my $pid_idx = $project->pid_idx();
+    my $started = str2time($instance->started());
     my $expires = str2time($slice->expires());
-    # This matches what MaxSliceExtension() does
-    my $newmax  = $expires + (60 * 60 * 24 * 180);
-
-    #
-    # If the instance is not using any routes, we are done. Remember,
-    # an instance cannot use routes unless the routes are reserved, so we
-    # do not need to check if the current instance is using routes unless
-    # the project has some reserved.
-    #
-    my $query_result =
-	DBQueryWarn("select distinct g.uuid ".
-		    " from apt_reservation_group_route_reservations as r ".
-		    "left join apt_reservation_groups as g on ".
-		    "     g.uuid=r.uuid ".
-		    "where g.pid_idx='$pid_idx' and ".
-		    "      r.approved is not null");
-    return undef
-	if (!defined($query_result));
-    return $newmax
-	if (!$query_result->numrows);
 
     #
     # OK, get a list of all routes used by the instance.
@@ -2609,43 +2701,65 @@ sub MaxExtension($)
     if ($instance->GetRoutes(\$routes)) {
 	return undef;
     }
-    return $newmax
+    # This matches what MaxSliceExtension() does
+    return $expires + (60 * 60 * 24 * 180)
 	if (! @$routes);
 
     #
-    # Hmm, it turns out that the max extension is actually when the
-    # reservations that made it possible to start the experiment, are
-    # going to end. 
+    # Default max for any experiment using routes is by 11pm on the same
+    # day it was started.
     #
-    while (my ($uuid) = $query_result->fetchrow_array()) {
-	my $resgroup = APT_Reservation::Group->Lookup($uuid);
-	next
-	    if (!defined($resgroup));
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+	localtime($started);
+    my $newmax = POSIX::mktime(0, 0, 23,
+			       $mday, $mon, $year, $wday, $yday, $isdst);
 
-	my $res_end = str2time($resgroup->end());
+    #
+    # We are looking for any existing route reservations that overlap
+    # with the routes being used by this instance. The start of that
+    # reservation is the longest this instance can run.
+    #
+    my @groups = APT_Reservation::Group->LookupAll();
 
-	#
-	# Look for any overlap.
-	#
-	foreach my $ref (@$routes) {
-	    my $routename  = $ref->{'name'};
+    foreach my $ref (@$routes) {
+	my $routename  = $ref->{'name'};
 
-	    foreach my $existing ($resgroup->RouteReservationList()) {
-		my $res_name  = $existing->routename();
+	foreach my $group (@groups) {
+	    my $res_project = $group->GetProject();
+	    
+	    next
+		if (! $group->RouteReservationList());
+
+	    # Skip reservations in our own project, they do not conflict
+	    next
+		if ($project->SameProject($res_project));	    
+
+	    my $res_start   = str2time($group->start());
+	    my $res_end     = str2time($group->end());
+
+	    foreach my $existing ($group->RouteReservationList()) {
+		my $res_name = $existing->routename();
+
+		next
+		    if (!$existing->approved());
 
 		# If this reservation is not the route, skip it.
 		if ($res_name ne $routename) {
 		    next;
 		}
-		# The end of this reservation is an upper bound on how
-		# long the experiment can be extended.
-		if ($newmax > $res_end) {
-		    # One hour pad, just like node reservations.
-		    $newmax = $res_end - 3600;
+		if ($res_start < $newmax) {
+		    $newmax = $res_start;
+		    # No need to check any more in this group.
+		    last;
 		}
 	    }
 	}
     }
+    
+    #
+    # What about scheduled experiments that are using overlapping
+    # routes? Who wins? For now the running experiment wins.
+    #
     return $newmax;
 }
 
@@ -2660,18 +2774,11 @@ sub MaxDuration($$$$$)
 
     return 0
 	if (! @routes);
-    
+
     #
     # Look at all existing project reservations.
     #
     my @groups = APT_Reservation::Group->LookupAll();
-
-    #
-    # Default max duration if no reservations
-    #
-    if (!@groups) {
-	return 0;
-    }
 
     foreach my $ref (@$routes) {
 	my $routename  = $ref->{'name'};
@@ -2742,6 +2849,15 @@ sub MaxDuration($$$$$)
 		}
 	    }
 	}
+    }
+    #
+    # After all that work, we limit routes to 11pm on the same day. :-)
+    #
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+	localtime($start);
+    my $max = POSIX::mktime(0, 0, 23, $mday, $mon, $year, $wday, $yday, $isdst);
+    if (!defined($newend) || $newend > $max) {
+	$newend = $max;
     }
     $$pend = $newend;
     return 0;

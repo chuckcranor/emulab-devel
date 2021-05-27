@@ -572,6 +572,18 @@ sub UnLock($)
     $self->{'STITCHLOCKED'} = 0;
     return 0;
 }
+# Use this to cleanup, caller does not need to have the lock.
+sub ClearLock($)
+{
+    my ($self) = @_;
+    my $idx    = $self->idx();
+
+    DBQueryWarn("update geni_slices set ".
+		"locked=NULL,stitch_locked=NULL where idx='$idx'")
+	or return -1;
+    
+    return 0;
+}
 sub TakeLock($)
 {
     my ($self) = @_;
@@ -1735,6 +1747,26 @@ sub GetPortalURL($)
 }
 
 #
+# Set the Portal manifest
+#
+sub SetPortalManifest($$)
+{
+    my ($self, $manifest) = @_;
+    my $uuid  = $self->uuid();
+    my $safe_manifest = DBQuoteSpecial($manifest);
+
+    my $query_result =
+	DBQueryWarn("replace into portal_manifests set ".
+		    " slice_uuid='$uuid',created=now(),".
+		    " manifest=$safe_manifest");
+    
+    return -1
+	if (!$query_result);
+
+    return 0;
+}
+
+#
 # Check the monitor process, clear it if it died.
 #
 sub CheckMonitor($)
@@ -1831,6 +1863,23 @@ sub CancelMonitor($)
 	$slice->UnLockTables();
     }
     return 0;
+}
+
+#
+# Map a node to its slice.
+#
+sub LookupByNode($$)
+{
+    my ($class, $node) = @_;
+
+    return undef
+	if (!$node->IsReserved());
+
+    my $experiment = $node->Reservation();
+    return undef
+	if (!$experiment);
+
+    return LookupByExperiment($class, $experiment);
 }
 
 ##########################################################################

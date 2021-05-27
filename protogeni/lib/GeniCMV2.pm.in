@@ -1578,8 +1578,7 @@ sub SliverAction($$$$$$)
 	my ($object, $action) = @_;
 
 	if ($action eq "start") {
-	    if ($object->state() ne "stopped" && $object->state() ne "new"
-		&& $object->state() ne "mixed") {
+	    if ($object->state() !~ /^(stopped|new|mixed|interrupted)$/) {
 		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 					    "Sliver is not stopped (yet)");
 	    }
@@ -1673,6 +1672,14 @@ sub SliverAction($$$$$$)
     }
 
     if (defined($slice_urn)) {
+	#
+	# If the user is trying to restart an interrupted slice, then
+	# switch to "start" since that makes more sense.
+	#
+	if ($action eq "restart" && $aggregate->state() eq "interrupted") {
+	    $action = "start";
+	}
+	
 	$response = &$CheckState($aggregate, $action);
 	goto bad
 	    if (GeniResponse::IsResponse($response));

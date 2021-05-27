@@ -77,7 +77,7 @@ $(function ()
 	aptforms.EnableUnsavedWarning('#myaccount_form', function () {
 	    if (window.NEEDUPDATE && window.UPDATE == "affiliation") {
 		if (window.MATCHED) {
-		    $('#submit_button').html("Update Affiliation");
+		    $('#submit_button').html("Update");
 		}
 	    }
 	    $('#submit_button')
@@ -103,7 +103,7 @@ $(function ()
 		    $("#affiliation").closest(".form-group")
 			.addClass("has-error");
 		    $('#submit_button')
-		        .html("Update Affiliation");
+		        .html("Update");
 		}
 		else {
 		    // User just needs to verify.
@@ -136,7 +136,7 @@ $(function ()
 		return;
 	    }
 	    if (window.REFERRER === undefined) {
-		window.location.reload();	    		
+		window.location.replace("user-dashboard.php");
 	    }
 	    else {
 		window.location.replace(window.REFERRER);

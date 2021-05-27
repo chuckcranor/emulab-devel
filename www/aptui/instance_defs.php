@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,6 +70,7 @@ define("GENIRESPONSE_INSUFFICIENT_MEMORY",     27);
 define("GENIRESPONSE_NO_MAPPING",              28);
 define("GENIRESPONSE_NO_CONNECT",              29);
 define("GENIRESPONSE_MAPPING_IMPOSSIBLE",      30);
+define("GENIRESPONSE_NETWORK_ERROR",           35);
 define("GENIRESPONSE_STITCHER_ERROR",          101);
 define("GENIRESPONSE_SETUPFAILURE_BOOTFAILED", 151);
 
