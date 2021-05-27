@@ -21,7 +21,7 @@ sub InstallUpdate($$)
     # If something should run in the post-install phase.
     #
     if ($phase eq "post") {
-	if ($TARGETSYS_TARGET eq "POWDER-BUS") {
+	if (0 && $TARGETSYS_TARGET eq "POWDER-BUS") {
 	    Phase "install", "Installing webssh on ops", sub {
 		my $realdir = `/bin/realpath $TOP_OBJDIR/install`;
 		chomp($realdir);
