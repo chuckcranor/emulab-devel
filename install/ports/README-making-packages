@@ -48,8 +48,26 @@ This is a condensed version of the steps below.
       
    e. Make sure /etc/make.conf is up to date. It should have:
 
-  DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
-  DEFAULT_VERSIONS+=ssl=base
+DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+DEFAULT_VERSIONS+=ssl=base
+
+      We also add a bunch of custom port configurations to avoid needing to
+      do "make config" for a bunch of ports:
+
+OPTIONS_UNSET=DOCS OPENGL DTRACE
+www_apache24_SET+=SUEXEC
+editors_emacs_UNSET+=DBUS GCONF GSETTINGS HARFBUZZ LCMS2 M17N OTF SCROLLBARS \
+                     XFT XIM CAIRO GIF MAGICK PNG SVG TIFF XPM OSS GTK3
+editors_emacs_SET+=XAW
+devel_subversion_UNSET+=GPG_AGENT
+devel_cmake_UNSET+=MANPAGES
+devel_doxygen_UNSET+=LATEX
+security_py-certbot_UNSET+=MANPAGES
+
+      The DTRACE option seems to be new (as of 12/8/20) and broke a couple
+      of ports:
+      - perl5.32 (configure error)
+      - tcl86 (build error)
 
    f. (NEW for 2020!) Create a /usr/obj filesystem. There is not enough
       space in the root filesystem to hold all the build trees. You need
@@ -82,40 +100,14 @@ This is a condensed version of the steps below.
       run up against certificate issues, the it won't reinstall it.
       In that case, I have found the easiest thing to do is:
 
-      pushd /share/freebsd/11.3/packages-64
+      pushd /share/freebsd/11.3/packages
       pkg add pkg-*
       pkg add ca_root*
       popd
 
    i. Make sure port options are correctly set:
 
-      NOTE: if you get a message about "unsupported release" when you
-      try to do a make, it might be because /usr/include/sys/param.h
-      is out of date. Diff it with /usr/src/sys/sys/param.h and update
-      as necessary.
-
-      - make -C devel/boost-all config
-        and deselect:
-          DOCS
-      - make -C editors/emacs config
-        and deselect:
-          DBUS
-          GCONF, GSETTINGS, LCMS2, M17N, OTF, SCROLLBARS, XFT, XIM,
-	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
-	  OSS,
-	  GTK3
-        and select:
-	  XAW
-      - make -C graphics/cairo config
-        and deselect OPENGL.
-      - make -C graphics/jasper config
-        and deselect OPENGL.
-      - make -C www/apache24 config
-        and select SUEXEC.
-      - make -C x11-toolkits/pango config
-        and deselect DOCS.
-      - make -C devel/subversion config
-        and deselect GPG_AGENT
+      This step is no longer needed given the /etc/make.conf options above.
 
    j. Build em all:
 
