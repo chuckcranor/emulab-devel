@@ -32,10 +32,14 @@ $page_title = "Matched Papers";
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLoginOrRedirect();
-$this_idx  = $this_user->uid_idx();
-$this_uid  = $this_user->uid();
-$isadmin   = (ISADMIN() ? 1 : 0);
+$this_user = CheckLogin($check_status);
+if (isset($this_user)) {
+    CheckLoginOrDie(CHECKLOGIN_NONLOCAL|CHECKLOGIN_WEBONLY);
+    $isadmin  = (ISADMIN() ? 1 : 0);
+}
+else {
+    $isadmin = 0;
+}
 
 SPITHEADER(1);
 

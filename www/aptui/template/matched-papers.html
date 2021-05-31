@@ -51,9 +51,16 @@
 	      <td><%= info.latest_abstract_pubname %></td>
 	      <td>
 		<% var authors = [];
-		   _.each(info.authors, function(info) {
-		     authors.push("<a target=_blank href='user-dashboard.php?user=" + info.uid_idx + "#myprofile'>" + info.name + "</a>");
-		   });
+		   if (window.ISADMIN) {
+		     _.each(info.authors, function(info) {
+		       authors.push("<a target=_blank href='user-dashboard.php?user=" + info.uid_idx + "#myprofile'>" + info.name + "</a>");
+		     });
+		   }
+		   else {
+		     _.each(info.authors, function(info) {
+		       authors.push(info.name);
+		     });
+		   }
 		   print(authors.join(","));
 		 %>
 	      </td>
