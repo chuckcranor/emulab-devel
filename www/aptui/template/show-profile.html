@@ -223,7 +223,7 @@
 	    </div>
 	  </fieldset>
 	</form>
-	<% if (!disabled) { %>
+	<% if (! (disabled || isguest)) { %>
 	  <% if (gotrspec) { %>
 	    <% 	var url = "instantiate.php?profile=" +
 	           version_uuid + "&from=manage-profile"; %>
@@ -254,7 +254,7 @@
             Edit
 	  </a>
 	<% } %>
-	<% if (!disabled) { %>
+	<% if (!(disabled || isguest)) { %>
 	  <span class='pull-right''
 		data-toggle='popover'
 		data-delay='{"hide":1500, "show":250}'
@@ -281,13 +281,12 @@
   <div id='renderer_div'></div>
   <div id='guest_div'></div>
   <div id='publish_div'></div>
-  <div id='instantiate_div'></div>
   <div id='rspectext_div'></div>
   <div id='share_div'></div>
   <div id='copy_repobased_profile_div'></div>
 </div>
 <div class='row hidden' id="gitpicker-div">
-  <div class='col-sm-12'>
+  <div class='col-sm-9 col-sm-offset-3 col-xs-12'>
     <div class='panel panel-default'>
       <div class='panel-heading'>
         <h4 class='panel-title text-center'>Repository</h4>

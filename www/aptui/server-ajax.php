@@ -131,20 +131,32 @@ $routing = array("geni-login" =>
                                                      "Do_UpdateRepository",
 						 "GetRepository" =>
                                                      "Do_GetRepository",
+						 "GetRepoHash" =>
+                                                     "Do_GetRepoHash",
+						 "SearchProfiles" =>
+                                                     "Do_SearchProfiles",
+						 "GetProfile" =>
+                                                     "Do_GetProfile")),
+		 "gitrepo" =>
+			array("file"    => "gitrepo.ajax",
+			      "guest"   => true,
+			      "methods" => array("GetRepository" =>
+                                                     "Do_GetRepository",
 						 "GetRepoSource" =>
                                                      "Do_GetRepoSource",
 						 "GetBranchList" =>
                                                      "Do_GetBranchList",
 						 "GetCommitInfo" =>
                                                      "Do_GetCommitInfo",
-						 "GetRepoHash" =>
-                                                     "Do_GetRepoHash",
-						 "GetCommitList" =>
-                                                     "Do_GetCommitList",
-						 "SearchProfiles" =>
-                                                     "Do_SearchProfiles",
-						 "GetProfile" =>
-                                                     "Do_GetProfile")),
+                              )
+                        ),
+		 "show-profile" =>
+			array("file"    => "show-profile.ajax",
+			      "guest"   => true,
+			      "methods" => array("CheckScript" =>
+						     "Do_CheckScript",
+                              )
+                        ),
 		 "status" =>
 			array("file"    => "status.ajax",
 			      "guest"   => false,

@@ -214,8 +214,10 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "    window.EMBEDDED = $embedded;\n";
     echo "    window.SUPPORT  = '$SUPPORT';\n";
     echo "    window.APTTILE  = '$APTTITLE';\n";
-    echo "    window.APTMAIL   = \"$APTMAIL\"\n";
-    echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
+    echo "    window.APTMAIL   = \"$APTMAIL\";\n";
+    echo "    window.APTMAILTO = \"$APTMAILTO\";\n";
+    echo "    window.LOGINUID  = " .
+        ($login_user ? "'$login_uid'" : "null") . ";\n";
     echo "</script>\n";
     
     if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {

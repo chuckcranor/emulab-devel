@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -207,6 +207,8 @@ function SPITFORM($formfields, $errors)
     echo "    window.CANPUBLISH= $canpublish;\n";
     echo "    window.DISABLED= $disabled;\n";
     echo "    window.ISADMIN  = $isadmin;\n";
+    # Compatabilty with show-profile.
+    echo "    window.ISGUEST  = 0;\n";
     echo "    window.ISSTUD  = $isstud;\n";
     echo "    window.ISCREATOR = $iscreator;\n";
     echo "    window.ISLEADER = $isleader;\n";

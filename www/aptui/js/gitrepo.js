@@ -14,7 +14,7 @@ $(function () {
 		console.info("InitRepoPicker", json);
 	    
 		if (json.code) {
-		    console.info(json.value);
+		    console.info(json);
 		    return;
 		}
 		branchlist = json.value.branchlist;
@@ -25,7 +25,7 @@ $(function () {
 	    // Visible cue that something is happening
 	    $('#gitpicker-div table').css("opacity", 0.4);
 	    var xmlthing = sup.CallServerMethod(null,
-						"manage_profile",
+						"gitrepo",
 						"GetBranchList",
 						{"uuid" : uuid});
 	    xmlthing.done(callback);
@@ -71,7 +71,7 @@ $(function () {
 	    sup.ShowWaitWait("We are getting the source code from the " +
 			     "repository. Patience please.");
 	    var xmlthing = sup.CallServerMethod(null,
-						"manage_profile",
+						"gitrepo",
 						"GetRepoSource",
 						{"uuid"    : uuid,
 						 "refspec" : refspec});
@@ -132,7 +132,7 @@ $(function () {
 	    $('#repoinfo-panel .panel-body').css("opacity", 0.4);
 	    var args = {"uuid" : uuid, "refspec" : refspec}
 	    var xmlthing = sup.CallServerMethod(null,
-						"manage_profile",
+						"gitrepo",
 						"GetCommitInfo", args);
 	    xmlthing.done(callback);
 	}
