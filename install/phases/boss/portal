@@ -46,7 +46,7 @@ sub Install($$$)
 	Phase "geni-lib", "Setting up geni-lib", sub {
 	    Phase "clone", "Cloning geni-lib from repo", sub {
 		PhaseSkip("Already cloned")
-		    if (-e "$GENILIB_SRCDIR/.hg");
+		    if (-e "$GENILIB_SRCDIR/.git");
 		ExecQuietFatal("cd $TOP_SRCDIR/..; ".
 			       "git clone $GENILIB_REPO");
 	    };
