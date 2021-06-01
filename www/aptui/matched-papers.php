@@ -56,7 +56,7 @@ echo "<div id='oops_div'></div>
 $query_result =
     DBQueryFatal("select * from user_scopus_info ".
                  "where latest_abstract_cites='$PORTAL_GENESIS' ".
-                 "order by latest_abstract_id,uid_idx");
+                 "order by latest_abstract_pubdate desc");
 $papers = array();
 while ($row = mysql_fetch_array($query_result)) {
     $abstract_id = $row["latest_abstract_id"];
@@ -64,8 +64,7 @@ while ($row = mysql_fetch_array($query_result)) {
     if (!array_key_exists("$abstract_id", $papers)) {
         $papers["$abstract_id"] = array(
             "latest_abstract_id"      => $row["latest_abstract_id"],
-            "latest_abstract_pubdate" =>
-                        DateStringGMT($row["latest_abstract_pubdate"]),
+            "latest_abstract_pubdate" => $row["latest_abstract_pubdate"],
             "latest_abstract_pubtype" => $row["latest_abstract_pubtype"],
             "latest_abstract_doi"     => $row["latest_abstract_doi"],
             "latest_abstract_url"     => $row["latest_abstract_url"],
@@ -76,15 +75,17 @@ while ($row = mysql_fetch_array($query_result)) {
         );
     }
     $paper  = $papers["$abstract_id"];
-    $author = User::Lookup($row["uid_idx"]);
-    if ($author) {
-        $authors = $paper["authors"];
-        $blob = array (
-            "uid_idx"  => $author->uid_idx(),
-            "uid"      => $author->uid(),
-            "name"     => $author->name(),
-        );
-        $paper["authors"][] = $blob;
+    if ($isadmin) {
+        $author = User::Lookup($row["uid_idx"]);
+        if ($author) {
+            $authors = $paper["authors"];
+            $blob = array (
+                "uid_idx"  => $author->uid_idx(),
+                "uid"      => $author->uid(),
+                "name"     => $author->name(),
+            );
+            $paper["authors"][] = $blob;
+        }
     }
     # PHP scoping is dumb.
     $papers["$abstract_id"] = $paper;
