@@ -852,6 +852,7 @@ class Instance
                            "nuc7100"   => true,
                            "x310"      => true,
                            "n310"      => true,
+                           "mmimotmp1" => true,
         );
 
         #
