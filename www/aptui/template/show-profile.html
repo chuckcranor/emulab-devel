@@ -41,10 +41,12 @@
 	    <td>Project:</td>
 	    <td><%- fields.profile_pid %></td>
 	  </tr>
-	  <tr>
-	    <td>Creator:</td>
-	    <td><%- fields.profile_creator %></td>
-	  </tr>
+	  <% if (!isguest) { %>
+	    <tr>
+	      <td>Creator:</td>
+	      <td><%- fields.profile_creator %></td>
+	    </tr>
+	  <% } %>
 	  <% if (fields.profile_version != 0) { %>
 	    <tr>
 	      <td>Updated by:</td>
