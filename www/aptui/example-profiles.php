@@ -32,7 +32,12 @@ $page_title = "Example Profiles";
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLoginOrRedirect();
+$this_user = CheckLogin($check_status);
+if (isset($this_user)) {
+    CheckLoginOrDie(CHECKLOGIN_NONLOCAL|CHECKLOGIN_WEBONLY);
+}
+else {
+}
 
 SPITHEADER(1);
 
