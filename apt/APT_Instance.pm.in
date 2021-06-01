@@ -1298,7 +1298,12 @@ sub GetSSHKeys($$;$)
 	if ($project->GetProjectGroup()->MemberList(\@members)) {
 	    print STDERR "Error getting memberlist for $project\n";
 	}
-	else {
+	#
+	# Lets say that if a project has more than X users, sending all
+	# the keys is wasted work 99% of the time. And clogs up the
+	# log files.
+	#
+	elsif (scalar(@members) <= 15) {
 	    foreach my $member (@members) {
 		next
 		    if ($member->SameUser($geniuser->emulab_user()));
