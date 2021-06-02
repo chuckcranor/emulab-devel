@@ -731,6 +731,16 @@ sub IsCanceled($)
     my ($canceled) = $query_result->fetchrow_array();
     return $canceled;
 }
+sub IsTerminated($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->status() eq "terminating" ||
+	    $self->status() eq "terminated");
+    
+    return 0;
+}
 
 #
 # Set to use the logfile. 
@@ -2676,9 +2686,29 @@ sub AddRouteNodes($$$)
 	    my $client_id = "bus-" . $bus->busid();
 	    my $node      = GeniXML::GetNodeByVirtualId($client_id, $rspec);
 
+	    # Already did all this work ...
+	    next
+		if ($self->GetAggregate($bus->urn()));
+	    
 	    #
-	    # For now, if the bus is down, ignore it. 
+	    # The bus might have been directly allocated by another
+	    # experiment, so we do not want to add it here. The route
+	    # daemon is making this check, but the scheduler also
+	    # invokes create_slivers. 
 	    #
+	    my $allocated = 0;
+	    my @others = APT_Instance::Aggregate->LookupByURN($bus->urn());
+	    foreach my $instance (@others) {
+		my $aggregate = $instance->GetAggregate($bus->urn());
+		if ($aggregate && $aggregate->IsActive()) {
+		    $allocated = 1;
+		    last;
+		}
+	    }
+	    if ($allocated) {
+		print "$client_id is already allocated, skipping\n";
+		next;
+	    }
 	    if ($bus->disabled()) {
 		print "$client_id is disabled, skipping\n";
 		next;

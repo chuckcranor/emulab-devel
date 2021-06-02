@@ -2104,6 +2104,7 @@ sub CheckFrontends($$)
 sub CheckForBuses($$$)
 {
     my ($rspec, $project, $perrmsg) = @_;
+    require APT_Instance;
     
     if (!ref($rspec)) {
 	my $rspec = GeniXML::Parse($rspec);
@@ -2130,13 +2131,35 @@ sub CheckForBuses($$$)
 	#
 	# Check that the project has the feature.
 	#
-	if (!(EmulabFeatures->FeatureEnabled("powder-routes-allowed",
-					     undef, $project) ||
-	      EmulabFeatures->FeatureEnabled("powder-me-allowed",
-					     undef, $project))) {
-	    $$perrmsg = "CheckForBuses: No permission to use buses: ".
-		$aggregate->nickname();
+	if (!EmulabFeatures->FeatureEnabled("powder-me-allowed",
+					    undef, $project)) {
+	    $$perrmsg = "Not allowed to allocate mobile  ".
+		"endpoints directly: " . $aggregate->nickname();
 	    return 1;
+	}
+
+	#
+	# Buses are single use, two experiments cannot allocate the
+	# same bus at the same time. Head that off early.
+	#
+	my @others = APT_Instance::Aggregate->LookupByURN($manager_urn);
+	foreach my $instance (@others) {
+	    next
+		if ($instance->IsCanceled() || $instance->IsTerminated());
+
+	    my $agg = $instance->GetAggregate($manager_urn);
+	    if ($aggregate && $aggregate->IsActive()) {
+		$$perrmsg = "Mobile endpoint in use by another ".
+		    "experiment: " . $aggregate->nickname();
+		return 1;
+	    }
+	}
+	# Make sure this element is removed, we use it to mark nodes
+	# we add internally (to routes).
+	my $element = GeniXML::FindFirstNS("n:portal-added", $ref,
+					   $GeniXML::EMULAB_NS);
+	if (defined($element)) {
+	    $ref->removeChild($element);
 	}
     }
     return 0;
@@ -2951,6 +2974,9 @@ sub RSpecNodeFragment($$$$)
 	    }
 	}
     }
+
+    # So we can tell a node added here from one the user put in. 
+    GeniXML::AddElement("portal-added", $node, $GeniXML::EMULAB_NS);
     print "$node\n";
     return $node;
 }

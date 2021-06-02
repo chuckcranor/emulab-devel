@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -815,6 +815,12 @@ if (APT_Profile::CheckRoutes($rspec, $project,
 			     $noresokay, \$errmsg, $geniuser->emulab_user())) {
     UserError($errmsg);
 }
+# This check ensures that people do not allocate buses directly unless
+# they have special permission. Mere users must allocate routes.
+my $retval = APT_Profile::CheckForBuses($rspec, $project, \$errmsg);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
 
 #
 # Now we know where to send to logs.
@@ -828,14 +834,8 @@ if (!$debug) {
     AddAuditInfo("brand", $project->Brand());
 }
 
-# Very temporary!
-my $foo = APT_Profile::CheckForBuses($rspec, $project, \$errmsg);
-if ($foo) {
-    ($foo < 0 ? fatal($errmsg) : UserError($errmsg));
-}
-
 # Check for expired certs and speaksfor.
-my $retval = APT_Geni::VerifyCredentials($geniuser, \$errmsg);
+$retval = APT_Geni::VerifyCredentials($geniuser, \$errmsg);
 if ($retval) {
     ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
