@@ -1,0 +1,424 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+#
+package scopus;
+
+use English;
+use strict;
+use Exporter;
+use vars qw(@ISA);
+@ISA = qw(Exporter);
+
+use Data::Dumper;
+use JSON;
+use Text::CSV qw(csv);
+use LWP::UserAgent;
+use HTTP::Request;
+use HTML::Entities;
+use URI::Encode qw(uri_encode uri_decode);
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+
+#
+# Scopus 
+#
+my $DEVURL	= "https://api.elsevier.com/content/";
+my $APIKEY	= "22d9af508ab9a74a069ae690083a0685";
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emutil;
+
+#
+# Retrieve something from scopus.
+#
+sub Retrieve($$)
+{
+    my ($which, $id) = @_;
+    my $view = "STANDARD";
+
+    # Must Throttle
+    sleep(2);
+    
+    my $url = $DEVURL;
+    if ($which eq "author") {
+	$url .= "author/author_id/$id";
+	$view = "DOCUMENTS";
+    }
+    elsif ($which eq "affiliation") {
+	$url .= "affiliation/affiliation_id/$id";
+    }
+    elsif ($which eq "paper" || $which eq "abstract") {
+	if ($id =~ /^\d+$/) {
+	    $url .= "abstract/scopus_id/$id";
+	}
+	else {
+	    $url .= "abstract/eid/$id";
+	}
+	$view = "FULL";
+    }
+    else {
+	die("Do not know how to retrieve $which\n");
+    }
+    $url .= "?view=$view";
+    
+    print STDERR "$url\n";
+    
+    my $ua  = LWP::UserAgent->new;
+    my $req = HTTP::Request->new(GET => $url);
+
+    # Some of the files are big and they seem to come slowly.
+    $ua->timeout(90);
+    $req->protocol('HTTP/1.0');
+    $req->header("X-ELS-APIKey" => $APIKEY);
+    $req->header("User-Agent"   => "flux-elsapy-perl");
+    $req->header("Accept"       => "application/json");
+
+    my $response;
+    eval {
+	$response = $ua->request($req);
+    };
+    if ($@) {
+	print STDERR "$@";
+	return undef;
+    }
+    if ($response->is_success) {
+	my $json = $response->decoded_content;
+	my $result = eval { decode_json($response->decoded_content); };
+	if ($@) {
+	    print STDERR "Failed to json decode blob: $@\n";
+	    return undef;
+	}
+	return ($json, $result);
+    }
+    my $code = $response->code();
+    my $message = $response->message();
+    print STDERR "Retrieve failed:$code $message\n";
+    print STDERR $response->as_string() . "\n";
+    
+    return undef;
+}
+
+#
+# To search, you specify an index (scopus,author,affiliation,etc) and a
+# search term. For example:
+#
+#   authlast(stoller) AND authfirst(Leigh) and affil(University of Utah)
+#
+# And you get back a (hopefully short) list of matches.
+#
+sub Search($$)
+{
+    my ($which, $query) = @_;
+    my $index;
+
+    # Must Throttle
+    sleep(2);
+
+    if ($which eq "author") {
+	$index = "author";
+    }
+    elsif ($which eq "affiliation") {
+	$index = "affiliation";
+    }
+    elsif ($which eq "paper") {
+	$index = "scopus";
+    }
+    else {
+	die("Do not know how to search $which\n");
+    }
+
+    if (0) {
+    # Stuff like &oacute; does not work, so convert to their ascii equiv
+    # Only some things can be directly converted, but only a few are needed.
+    my %convert = (
+	"slash" => 1,
+	"uml"   => 1,
+	"ring"  => 1,
+	"elig"  => 0,
+        "tilde" => 1,
+        "grave" => 1,
+	"circ"  => 1,
+	"acute" => 1,
+        "cedil" => 1,
+	);
+    foreach my $str (keys(%convert)) {
+	my $keep = $convert{$str};
+
+	if ($keep) {
+	    $query =~ s/\&(\w)$str\;/\?/g;
+	}
+	else {
+	    $query =~ s/\&(\w)$str\;//g;
+	}
+    }
+    }
+    else {
+	$query = decode_entities($query);
+    }
+    $query =~ s/\'/\\\'/g;
+    #print "$query\n";
+    
+    my $url = $DEVURL . "search/$index" . "?count=100".
+	"&query=" . uri_encode($query, { encode_reserved => 1 });
+    #print "$url\n";
+    
+    my $ua  = LWP::UserAgent->new;
+    my $req = HTTP::Request->new(GET => $url);
+
+    $ua->timeout(30);
+    $req->protocol('HTTP/1.0');
+    $req->header("X-ELS-APIKey" => $APIKEY);
+    $req->header("User-Agent"   => "flux-elsapy-perl");
+    $req->header("Accept"       => "application/json");
+
+    my $response;
+    eval {
+	$response = $ua->request($req);
+    };
+    if ($@) {
+	print STDERR "$@";
+	return undef;
+    }
+    if ($response->is_success) {
+	my $json = $response->decoded_content;
+	my $result = eval { decode_json($response->decoded_content); };
+	if ($@) {
+	    print STDERR "Failed to json decode blob: $@\n";
+	    return undef;
+	}
+	return ($json, $result);
+    }
+    my $code = $response->code();
+    my $message = $response->message();
+    print STDERR "Search failed:$code $message\n";
+    print "$query\n";
+    #print STDERR $response->as_string() . "\n";
+    
+    return undef;
+}
+
+#
+# Raw get,
+#
+sub Get($;$)
+{
+    my ($url, $asjson) = @_;
+    $asjson = 0 if (!defined($asjson));
+
+    # Must Throttle
+    sleep(1);
+    #print "$url\n";
+    
+    my $ua  = LWP::UserAgent->new;
+    my $req = HTTP::Request->new(GET => $url);
+
+    $ua->timeout(30);
+    $req->protocol('HTTP/1.0');
+    $req->header("X-ELS-APIKey" => $APIKEY);
+    $req->header("User-Agent"   => "flux-elsapy-perl");
+    $req->header("Accept"       => "application/json");
+
+    my $response;
+    eval {
+	$response = $ua->request($req);
+    };
+    if ($@) {
+	print STDERR "$@";
+	return undef;
+    }
+    if ($response->is_success) {
+	if ($asjson) {
+	    return $response->decoded_content;
+	}
+	my $result = eval { decode_json($response->decoded_content); };
+	if ($@) {
+	    print STDERR "Failed to json decode blob: $@\n";
+	    return undef;
+	}
+	return $result;
+    }
+    my $code = $response->code();
+    my $message = $response->message();
+    print STDERR "Get failed:$code $message\n";
+    #print STDERR $response->as_string() . "\n";
+    
+    return undef;
+}
+
+#
+# Retrieve all of the search results as a list.
+#
+sub SearchResults($)
+{
+    my ($ref)  = @_;
+    my $total  = $ref->{'search-results'}->{'opensearch:totalResults'};
+    my @result = @{$ref->{'search-results'}->{'entry'}};
+
+    while (scalar(@result) < $total) {
+	#
+	# Grab the next chunk.
+	#
+	my $url;
+	my $link = $ref->{'search-results'}->{'link'};
+	foreach my $l (@$link) {
+	    if ($l->{'@ref'} eq "next") {
+		$url = $l->{'@href'};
+		last;
+	    }
+	}
+	if (!defined($url)) {
+	    print STDERR "No next link!\n";
+	    return undef;
+	}
+	$ref = Get($url. 0);
+	if (!defined($ref)) {
+	    return undef;
+	}
+	@result = (@result, @{$ref->{'search-results'}->{'entry'}});
+	#print scalar(@result) . "\n";
+    }
+    return \@result;
+}
+
+#
+# Load or retrieve an affiliation.
+#
+sub GetAffiliation($;$)
+{
+    my ($scopus_id, $flush) = @_;
+    $flush   = 0 if (!defined($flush));
+    my $file = "$TB/scopus/affiliations/$scopus_id";
+
+    #
+    # Eventually need to think about updating stale content.
+    #
+    if (! -e $file || $flush) {
+	#print "Retrieving affiliation: $scopus_id\n";
+	
+	my ($json, $result) = scopus::Retrieve("affiliation", $scopus_id);
+
+	return undef
+	    if (!defined($json));
+
+	if (open(O, ">$file")) {
+	    print O $json;
+	    close(O);
+	}
+	else {
+	    die("Could not open $file for writing: $!");
+	}
+	return $result;
+    }
+    my $json = emutil::ReadFile($file);
+    if (!$json) {
+	die("Could not open $file: $!");
+    }
+    my $result = eval { decode_json($json); };
+    if ($@) {
+	print STDERR "Failed to json decode blob: $@\n";
+	return undef;
+    }
+    return $result->{'affiliation-retrieval-response'};
+}
+
+#
+# Load or retrieve an author.
+#
+sub GetAuthor($;$)
+{
+    my ($scopus_id, $flush) = @_;
+    $flush   = 0 if (!defined($flush));
+    my $file = "$TB/scopus/authors/$scopus_id";
+
+    if (! -e $file || $flush) {
+	#print "Retrieving author: $scopus_id\n";
+	
+	my ($json, $result) = scopus::Retrieve("author", $scopus_id);
+
+	return undef
+	    if (!defined($json));
+
+	if (open(O, ">$file")) {
+	    print O $json;
+	    close(O);
+	}
+	else {
+	    die("Could not open $file for writing: $!");
+	}
+	return $result->{'author-retrieval-response'}->[0];
+    }
+    my $json = emutil::ReadFile($file);
+    if (!$json) {
+	die("Could not open $file: $!");
+    }
+    my $result = eval { decode_json($json); };
+    if ($@) {
+	print STDERR "Failed to json decode blob: $@\n";
+	return undef;
+    }
+    return $result->{'author-retrieval-response'}->[0];
+}
+
+#
+# Load or retrieve an abstract
+#
+sub GetAbstract($;$)
+{
+    my ($scopus_id, $flush) = @_;
+    $flush   = 0 if (!defined($flush));
+    my $file = "$TB/scopus/abstracts/$scopus_id";
+
+    if (! -e $file || $flush) {
+	#print "Retrieving abstract: $scopus_id\n";
+	
+	my ($json, $result) = scopus::Retrieve("abstract", $scopus_id);
+
+	return undef
+	    if (!defined($json));
+
+	if (open(O, ">$file")) {
+	    print O $json;
+	    close(O);
+	}
+	else {
+	    die("Could not open $file for writing: $!");
+	}
+	return $result->{'abstracts-retrieval-response'};
+    }
+    my $json = emutil::ReadFile($file);
+    if (!$json) {
+	die("Could not open $file: $!");
+    }
+    my $result = eval { decode_json($json); };
+    if ($@) {
+	print STDERR "Failed to json decode blob: $@\n";
+	return undef;
+    }
+    return $result->{'abstracts-retrieval-response'};
+}
+
