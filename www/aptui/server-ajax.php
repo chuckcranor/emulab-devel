@@ -319,7 +319,11 @@ $routing = array("geni-login" =>
                                                  "ListParameterSets" =>
                                                      "Do_ListParameterSets",
                                                  "AcceptAUP" =>
-                                                     "Do_AcceptAUP")),
+                                                     "Do_AcceptAUP",
+                                                 "VerifyScopusInfo" =>
+                                                     "Do_VerifyScopusInfo"
+                              )
+                        ),
 		 "nag" =>
 			array("file"    => "user-dashboard.ajax",
                               "unapproved" => true,

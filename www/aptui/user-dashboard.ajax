@@ -685,6 +685,39 @@ function Do_ListParameterSets()
     return;
 }
 
+#
+# Verify scopus info (mark entries the user has indicated are theirs).
+#
+function Do_VerifyScopusInfo()
+{
+    global $this_user, $target_user, $ajax_args;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN() && !$this_user->SameUser($target_user)) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    $uid_idx = $target_user->uid_idx();
+
+    if (!isset($ajax_args["abstracts"])) {
+	SPITAJAX_ERROR(-1, "Missing abstract list");
+	return -1;
+    }
+    $abstracts = $ajax_args["abstracts"];
+    foreach ($abstracts as $scopus_id => $valid) {
+        if (!preg_match("/^\d+$/", $scopus_id)) {
+            SPITAJAX_ERROR(-1, "Invalid scopus_id ID");
+            return -1;
+        }
+        $state = ($valid == "true" ? "valid" : "invalid");
+
+        $target_user->ValidateScopusInfo($scopus_id, $state);
+    }
+    SPITAJAX_RESPONSE(1);
+}
+
 # Local Variables:
 # mode:php
 # End:

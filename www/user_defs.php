@@ -1897,5 +1897,39 @@ class User
         }
         return 0;
     }
+
+    function ValidateScopusInfo($scopus_id, $state) {
+    	$uid_idx = $this->uid_idx();
+
+        DBQueryFatal("update user_scopus_info set ".
+                     "  validation_state='$state', validated=now() ".
+                     "where uid_idx='$uid_idx' and scopus_id='$scopus_id'");
+
+        return 0;
+    }
+    function NeedScopusValidation() {
+        global $TBMAINSITE;
+
+        if (!$TBMAINSITE) {
+            return 0;
+        }
+        if ($this->uid() != "stoller" &&
+            !preg_match("/flux/i", $this->email())) {
+            return 0;
+        }
+	$uid_idx = $this->uid_idx();
+
+	$query_result =
+	    DBQueryFatal("select scopus_id from user_scopus_info ".
+			 "where uid_idx='$uid_idx' and ".
+                         "      latest_abstract_id!='' and ".
+                         "      validated is null");
+
+        # For now, do not show this if more then five papers.
+        if (mysql_num_rows($query_result) > 5) {
+            return 0;
+        }
+        return mysql_num_rows($query_result);
+    }
 }
 ?>
