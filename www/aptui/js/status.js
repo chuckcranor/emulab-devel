@@ -2388,6 +2388,17 @@ $(function ()
 	    clientid2nodeid = {};
 	    imageablenodes  = {};
 	    redrawpowdermap = true;
+
+	    // But might have deleted all the aggregates.
+	    if (Object.keys(statusblob).length == 0) {
+		changingtopo = false;
+		ClearViewer();
+		if (window.ISPOWDER) {
+		    UpdatePowderMap();
+		}
+		donefunc();
+		return;
+	    }
 	}
 	/*
 	 * If we have all the manifests then nothing to do.
@@ -2540,6 +2551,7 @@ $(function ()
 		else if (changingtopo) {
 		    // When we get first new manifest, clear the viewer palette.
 		    ClearViewer(manifest);
+		    AddToViewer(manifest);
 		}
 		else {
 		    AddToViewer(manifest);
@@ -3759,14 +3771,10 @@ $(function ()
 	}
     }
     // Clear the Jacks view to get ready for topo change.
-    function ClearViewer(manifest)
+    function ClearViewer()
     {
 	if (jacksInput) {
-	    jacksInput.trigger('change-topology',
-			       [{ rspec: manifest }]);
-	    // Jacks Bug.
-	    jacksInput.trigger('add-topology', 
-			       [{ rspec: manifest }]);
+	    jacksInput.trigger('change-topology', []);
 	}
     }
     // Add manifest to viewer.
