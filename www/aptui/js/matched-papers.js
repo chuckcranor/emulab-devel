@@ -6,7 +6,8 @@ $(function ()
 						   'waitwait-modal',
 						   'oops-modal']);
     var mainTemplate = _.template(templates['matched-papers']);
-    var papers = null;
+    var papers       = null;
+    var unmatched    = null;
     
     function initialize()
     {
@@ -14,6 +15,8 @@ $(function ()
 
 	papers = JSON.parse(_.unescape($("#papers-json")[0].textContent));
 	console.info(papers);
+	unmatched = JSON.parse(_.unescape($("#unmatched-json")[0].textContent));
+	console.info(unmatched);
 
 	// Now we can do this. 
 	$('#oops_div').html(templates['waitwait-modal']);	
@@ -27,6 +30,7 @@ $(function ()
 	// Generate the template.
 	var html = mainTemplate({
 	    "papers" : papers,
+	    "unmatched" : unmatched,
 	});
 	$('#main-body').html(html);
 
@@ -67,8 +71,45 @@ $(function ()
 
 	// Update the count of matches
 	table.bind('filterEnd', function(e, filter) {
-	    $(' .match-count').text(filter.filteredRows);
+	    $(' .papers-match-count').text(filter.filteredRows);
 	});
+
+	if (window.ISADMIN && _.size(unmatched)) {
+	    $('#unmatched').removeClass("hidden");
+	    
+	    table = $("#unmatched-table")
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra", "filter"],
+		    headerTemplate : '{content} {icon}',
+
+		    widgetOptions: {
+			// include child row content while filtering, if true
+			filter_childRows  : true,
+			// include all columns in the search.
+			filter_anyMatch   : true,
+			// class name applied to filter row and each input
+			filter_cssFilter  : 'form-control input-sm',
+			// search from beginning
+			filter_startsWith : false,
+			// Set this option to false for case sensitive search
+			filter_ignoreCase : true,
+			// Only one search box.
+			filter_columnFilters : false,
+		    }
+		});
+
+	    // Target the $('.search') input using built in functioning
+	    // this binds to the search using "search" and "keyup"
+	    // Allows using filter_liveSearch or delayed search &
+	    // pressing escape to cancel the search
+	    $.tablesorter.filter.bindSearch(table, $("#unmatched-search"));
+
+	    // Update the count of matches
+	    table.bind('filterEnd', function(e, filter) {
+		$(' .unmatched-match-count').text(filter.filteredRows);
+	    });
+	}
     }
     
     $(document).ready(initialize);

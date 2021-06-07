@@ -29,7 +29,8 @@ ISMAINSITE	= @TBMAINSITE@
 
 include $(OBJDIR)/Makeconf
 
-all:	scopus.pm retrieve search matchusers getpapers fixaffil checkaffil 
+all:	scopus.pm retrieve search matchusers getpapers fixaffil \
+        checkaffil findpapers reload
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 

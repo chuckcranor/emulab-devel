@@ -6148,6 +6148,9 @@ CREATE TABLE `users` (
   KEY `nonlocal_id` (`nonlocal_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+--
+-- Table structure for table `user_scopus_info`
+--
 
 DROP TABLE IF EXISTS `user_scopus_info`;
 CREATE TABLE `user_scopus_info` (
@@ -6169,6 +6172,38 @@ CREATE TABLE `user_scopus_info` (
   `latest_abstract_cites` enum('emulab','cloudlab','phantomnet','powder') default NULL,
   PRIMARY KEY  (`uid_idx`,`scopus_id`),
   KEY `uid` (`uid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `scopus_paper_info`
+--
+
+DROP TABLE IF EXISTS `scopus_paper_info`;
+CREATE TABLE `scopus_paper_info` (
+  `scopus_id` varchar(32) NOT NULL default '',
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `pubdate` date NOT NULL default '0000-00-00',
+  `pubtype` varchar(64) NOT NULL default '',
+  `pubname` text,
+  `doi` varchar(128) default NULL,
+  `url` text,
+  `title` text,
+  `authors` text,
+  `cites` enum('emulab','cloudlab','phantomnet','powder') default NULL,
+  `uses` enum('yes','no','unknown') default 'unknown',
+  PRIMARY KEY  (`scopus_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `scopus_paper_authors`
+--
+
+DROP TABLE IF EXISTS `scopus_paper_authors`;
+CREATE TABLE `scopus_paper_authors` (
+  `abstract_id` varchar(32) NOT NULL default '',
+  `author_id` varchar(32) NOT NULL default '',
+  `author` tinytext,
+  PRIMARY KEY  (`abstract_id`,`author_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --

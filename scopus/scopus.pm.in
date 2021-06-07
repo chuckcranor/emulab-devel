@@ -52,6 +52,7 @@ my $APIKEY	= "22d9af508ab9a74a069ae690083a0685";
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
 use emutil;
+use emdb;
 
 #
 # Retrieve something from scopus.
@@ -86,7 +87,7 @@ sub Retrieve($$)
     }
     $url .= "?view=$view";
     
-    print STDERR "$url\n";
+    #print STDERR "$url\n";
     
     my $ua  = LWP::UserAgent->new;
     my $req = HTTP::Request->new(GET => $url);
@@ -422,3 +423,179 @@ sub GetAbstract($;$)
     return $result->{'abstracts-retrieval-response'};
 }
 
+#
+# Enter a paper into the DB.
+#
+sub EnterPaper($$$;$)
+{
+    my ($dcid, $impotent, $citedus, $update) = @_;
+    $update = 0 if (!defined($update));
+    
+    my $abstract = GetAbstract($dcid);
+    if (!defined($abstract)) {
+	print STDERR " *** Could not download abstract $dcid\n";
+	return -1;
+    }
+    my $coredata = $abstract->{'coredata'};
+    my $title = $coredata->{'dc:title'};
+    if (!defined($title)) {
+	print STDERR " *** No title for abstract!\n";
+	return -1;
+    }
+    my $pubname = $coredata->{'prism:publicationName'};
+    if (!defined($pubname)) {
+	print " *** No pubname for abstract\n";
+    }
+    my $pubtype = $coredata->{'subtypeDescription'};
+    if (!defined($pubtype) || $pubtype eq "") {
+	$pubtype = $coredata->{'prism:aggregationType'};
+    }
+    my $pubdate = $coredata->{'prism:coverDate'};
+    my $authors = $abstract->{'authors'}->{'author'};
+    if (!defined($authors)) {
+	print STDERR " *** No authors for abstract!\n";
+	return -1;
+    }
+    my $doi = $coredata->{'prism:doi'} if (exists($coredata->{'prism:doi'}));
+    # Just names. 
+    my @authors = ();
+    my @author_ids = ();
+    foreach my $author (@$authors) {
+	my $name = $author->{'ce:indexed-name'};
+	if (!defined($name)) {
+	    $name = $author->{'preferred-name'}->{'ce:indexed-name'};
+	}
+	if (!defined($name)) {
+	    print STDERR " *** No author name ...\n";
+	    return -1;
+	}
+	my $auid = $author->{'@auid'};
+	if (!defined($auid)) {
+	    print STDERR " *** No auid for $name ...\n";
+	    return -1;
+	}
+	push(@authors, $name);
+	push(@author_ids, [$name,$auid]);
+    }
+    # Try to find the scopus URL.
+    my $url;
+    foreach my $lref (@{$coredata->{'link'}}) {
+	if ($lref->{'@rel'} eq "scopus") {
+	    $url = $lref->{'@href'};
+	    last;
+	}
+    }
+    if (1) {
+	print " Title: $title\n";
+	print " Date: $pubdate\n";
+	print " Pub: " . (defined($pubname) ? $pubname : "n/a") . "\n";
+	print " Type: " . (defined($pubtype) ? $pubtype : "n/a") . "\n";
+	print " DOI: " . (defined($doi) ? $doi : "n/a") . "\n";
+	print " URL: " . (defined($url) ? $url : "n/a") . "\n";
+	print " Authors: " . join(",", @authors) . "\n";
+    }
+    my $paper_result =
+	DBQueryFatal("select scopus_id from scopus_paper_info ".
+		     "where scopus_id=" . DBQuoteSpecial($dcid));
+    
+    if (!$paper_result->numrows || $update) {
+	my $safe_dcid = DBQuoteSpecial($dcid);
+	
+	print " New entry: $dcid\n";
+
+	my @sets = (
+	    "scopus_id=$safe_dcid",
+	    "pubdate=" . DBQuoteSpecial($pubdate),
+	    "pubtype=" . DBQuoteSpecial($pubtype),
+	    "pubname=" . (defined($pubname) ? DBQuoteSpecial($pubname) : "''"),
+	    "title=" . DBQuoteSpecial($title),
+	    "authors=" . DBQuoteSpecial(join(",", @authors)),
+	    "cites=". (defined($citedus) ? "'$citedus'" : "NULL"),
+	    "doi=" . (defined($doi) ? DBQuoteSpecial($doi) : "''"),
+	    "url=" . (defined($url) ? DBQuoteSpecial($url) : "''")
+	    );
+
+	my $query = "insert into scopus_paper_info set ". join(",", @sets);
+	if (!$impotent) {
+	    if (!$impotent) {
+		DBQueryFatal("delete from scopus_paper_info ".
+			     "where scopus_id=$safe_dcid");
+		DBQueryFatal("delete from scopus_paper_authors ".
+			     "where abstract_id=$safe_dcid");
+	    }
+	    DBQueryFatal($query);
+
+	    foreach my $a (@author_ids) {
+		my ($name,$auid) = @$a;
+		DBQueryFatal("replace into scopus_paper_authors set ".
+			     " abstract_id=$safe_dcid ," .
+			     " author_id=" . DBQuoteSpecial($auid) . ", " .
+			     " author=" . DBQuoteSpecial($name));
+	    }
+	}
+    }
+    return 0;
+}
+
+#
+# See if a paper cites us.
+#
+my @EMULABTITLES = ("integrated experimental environment for ".
+		    "distributed systems and networks",
+                    "emulab\.net");
+
+my @CLOUDTITLES = ("Introducing CloudLab: Scientific Infrastructure",
+		   "The Design and Operation of CloudLab",
+		   "The CloudLab Team Introducing CloudLab".
+		   "Cloudlab team introducing cloud-lab",
+		   "cloudlab\.us");
+
+my @POWDERTITLES = ("POWDER: Platform for Open Wireless",
+		    "powderwireless\.net");
+
+sub CitesUs($)
+{
+    my ($abstract) = @_;
+
+    my $tail = $abstract->{'item'}->{'bibrecord'}->{'tail'};
+    my $citations = $tail->{'bibliography'}->{'reference'};
+    if (defined($citations)) {
+	#
+	# Search for a reference to us.
+	#
+	#print " Searching abstract $dcid for citations\n";
+	if (ref($citations) eq "HASH") {
+	    $citations = [ $citations ];
+	}
+	my $paper;
+	foreach my $cite (@$citations) {
+	    my $fulltext = $cite->{'ref-fulltext'};
+	    if (!defined($fulltext)) {
+		$fulltext = $cite->{'ref-info'}->{'ref-title'}->{'ref-titletext'};
+	    }
+	    # Surprising number of citations without a title.
+	    next
+		if (!defined($fulltext));
+
+	    foreach my $poss (@CLOUDTITLES) {
+		if ($fulltext =~ /$poss/i) {
+		    return "cloudlab";
+		}
+	    }
+	    foreach my $poss (@EMULABTITLES) {
+		if ($fulltext =~ /$poss/i) {
+		    return "emulab";
+		}
+	    }
+	    foreach my $poss (@POWDERTITLES) {
+		if ($fulltext =~ /$poss/i) {
+		    return "powder";
+		}
+	    }
+	}
+    }
+    return undef;
+}
+
+
+    

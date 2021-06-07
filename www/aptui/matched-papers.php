@@ -54,23 +54,27 @@ echo "<div id='oops_div'></div>
       <div id='waitwait_div'></div>\n";
 
 $query_result =
-    DBQueryFatal("select * from user_scopus_info ".
-                 "where latest_abstract_cites='$PORTAL_GENESIS' ".
-                 "order by latest_abstract_pubdate desc");
+    DBQueryFatal("select u.uid_idx,p.* from user_scopus_info as u ".
+                 "left join scopus_paper_info as p on ".
+                 "     p.scopus_id=u.latest_abstract_id ".
+                 "where p.scopus_id is not null and ".
+                 "      p.cites='$PORTAL_GENESIS' ".
+                 "order by p.pubdate desc");
 $papers = array();
 while ($row = mysql_fetch_array($query_result)) {
-    $abstract_id = $row["latest_abstract_id"];
+    $abstract_id = $row["scopus_id"];
 
     if (!array_key_exists("$abstract_id", $papers)) {
         $papers["$abstract_id"] = array(
-            "latest_abstract_id"      => $row["latest_abstract_id"],
-            "latest_abstract_pubdate" => $row["latest_abstract_pubdate"],
-            "latest_abstract_pubtype" => $row["latest_abstract_pubtype"],
-            "latest_abstract_doi"     => $row["latest_abstract_doi"],
-            "latest_abstract_url"     => $row["latest_abstract_url"],
-            "latest_abstract_pubname" => $row["latest_abstract_pubname"],
-            "latest_abstract_title"   => $row["latest_abstract_title"],
-            "latest_abstract_authors" => $row["latest_abstract_authors"],
+            "latest_abstract_id"      => $row["scopus_id"],
+            "latest_abstract_pubdate" => $row["pubdate"],
+            "latest_abstract_pubtype" => $row["pubtype"],
+            "latest_abstract_doi"     => $row["doi"],
+            "latest_abstract_url"     => $row["url"],
+            "latest_abstract_pubname" => $row["pubname"],
+            "latest_abstract_title"   => $row["title"],
+            "latest_abstract_authors" => $row["authors"],
+            "uses"    => $row["uses"],
             "authors" => array(),
         );
     }
@@ -92,6 +96,39 @@ while ($row = mysql_fetch_array($query_result)) {
 }
 echo "<script type='text/plain' id='papers-json'>\n";
 echo json_encode($papers,
+                 JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
+echo "</script>\n";
+
+#
+# List of papers not matched to a specific user.
+#
+$query_result =
+    DBQueryFatal("select p.* from scopus_paper_info as p ".
+                 "left join user_scopus_info as u on ".
+                 "   u.latest_abstract_id=p.scopus_id ".
+                 "where p.cites='$PORTAL_GENESIS' and u.uid is null ".
+                 "order by p.pubdate desc");
+
+$unmatched = array();
+while ($row = mysql_fetch_array($query_result)) {
+    $abstract_id = $row["scopus_id"];
+
+    if (!array_key_exists("$abstract_id", $unmatched)) {
+        $unmatched["$abstract_id"] = array(
+            "latest_abstract_id"      => $row["scopus_id"],
+            "latest_abstract_pubdate" => $row["pubdate"],
+            "latest_abstract_pubtype" => $row["pubtype"],
+            "latest_abstract_doi"     => $row["doi"],
+            "latest_abstract_url"     => $row["url"],
+            "latest_abstract_pubname" => $row["pubname"],
+            "latest_abstract_title"   => $row["title"],
+            "latest_abstract_authors" => $row["authors"],
+            "uses"                    => $row["uses"],
+        );
+    }
+}
+echo "<script type='text/plain' id='unmatched-json'>\n";
+echo json_encode($unmatched,
                  JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 

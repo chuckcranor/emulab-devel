@@ -82,22 +82,6 @@ if (@ARGV) {
     $users_clause = "and u.uid in ($users)";
 }
 
-#
-# Our papers and websites.
-#
-my @EMULABTITLES = ("integrated experimental environment for ".
-		    "distributed systems and networks",
-                    "emulab\.net");
-
-my @CLOUDTITLES = ("Introducing CloudLab: Scientific Infrastructure",
-		   "The Design and Operation of CloudLab",
-		   "The CloudLab Team Introducing CloudLab".
-		   "Cloudlab team introducing cloud-lab",
-		   "cloudlab\.us");
-
-my @POWDERTITLES = ("POWDER: Platform for Open Wireless",
-		    "powderwireless\.net");
-
 my $query_result =
     DBQueryFatal("select u.uid,u.uid_idx,scopus.scopus_id ".
 		 "  from users as u ".
@@ -107,7 +91,7 @@ my $query_result =
 		 "   scopus.uid_idx=u.uid_idx ".
 		 "where scopus.uid is not null ".
 		 (!$update ? "and scopus.latest_abstract_id='' " : " ") .
-		 "$users_clause $limit");
+		 "$users_clause order by u.uid $limit");
 
 while (my ($uid,$idx,$scopus_id) = $query_result->fetchrow_array()) {
     print " $uid, $scopus_id\n";
@@ -151,66 +135,10 @@ while (my ($uid,$idx,$scopus_id) = $query_result->fetchrow_array()) {
 	    print " *** Could not retrieve abstract $dcid\n";
 	    next;
 	}
-	my $tail = $abstract->{'item'}->{'bibrecord'}->{'tail'};
-	my $citations = $tail->{'bibliography'}->{'reference'};
-	if (!defined($citations)) {
-	    #print " *** No citations for abstract $dcid\n";
-	}
-	else {
-	    #
-	    # Search for a reference to us.
-	    #
-	    #print " Searching abstract $dcid for citations\n";
-	    if (ref($citations) eq "HASH") {
-		$citations = [ $citations ];
-	    }
-	    my $paper;
-	    foreach my $cite (@$citations) {
-		my $fulltext = $cite->{'ref-fulltext'};
-		if (!defined($fulltext)) {
-		    $fulltext = $cite->{'ref-info'}->{'ref-title'}->{'ref-titletext'};
-		}
-		# Surprising number of citations without a title.
-		next
-		    if (!defined($fulltext));
-
-		foreach my $poss (@CLOUDTITLES) {
-		    if ($fulltext =~ /$poss/i) {
-			print " Cited Cloudlab!!!\n";
-			$citedus = "cloudlab";
-			$paper   = $document;
-			last;
-		    }
-		}
-		last
-		    if (defined($paper));
-
-		foreach my $poss (@EMULABTITLES) {
-		    if ($fulltext =~ /$poss/i) {
-			print " Cited Emulab!!!\n";
-			$citedus = "emulab";
-			$paper   = $document;
-			last;
-		    }
-		}
-		last
-		    if (defined($paper));
-		
-		foreach my $poss (@POWDERTITLES) {
-		    if ($fulltext =~ /$poss/i) {
-			print " Cited Powder!!!\n";
-			$citedus = "powder";
-			$paper   = $document;
-			last;
-		    }
-		}
-		last
-		    if (defined($paper));
-	    }
-	    if (defined($paper)) {
-		$mostrecent = $paper;
-		last;
-	    }
+	if ($citedus = scopus::CitesUs($abstract)) {
+	    print " Cited $citedus!!!\n";
+	    $mostrecent = $document;
+	    last;
 	}
 	if (!defined($mostrecent)) {
 	    $mostrecent = $document;
@@ -237,79 +165,14 @@ while (my ($uid,$idx,$scopus_id) = $query_result->fetchrow_array()) {
 	next;
     }
     print " Most recent document for $uid ($scopus_id): $dcid\n";
-    my $abstract = scopus::GetAbstract($dcid);
-    if (!defined($abstract)) {
-	print " *** Could not download abstract $dcid\n";
-	next;
+    if (scopus::EnterPaper($dcid, $impotent, $citedus)) {
+	exit(1);
     }
-    $coredata = $abstract->{'coredata'};
-    my $title = $coredata->{'dc:title'};
-    if (!defined($title)) {
-	print " *** No title for abstract!\n";
-	next;
-    }
-    my $pubname = $coredata->{'prism:publicationName'};
-    if (!defined($pubname)) {
-	print " *** No pubname for abstract!\n";
-	next;
-    }
-    my $pubtype = $coredata->{'subtypeDescription'};
-    if (!defined($pubtype) || $pubtype eq "") {
-	$pubtype = $coredata->{'prism:aggregationType'};
-    }
-    my $pubdate = $coredata->{'prism:coverDate'};
-    my $authors = $abstract->{'authors'}->{'author'};
-    if (!defined($authors)) {
-	print " *** No authors for abstract!\n";
-	next;
-    }
-    my $doi = $coredata->{'prism:doi'} if (exists($coredata->{'prism:doi'}));
-    # Just names. 
-    my @authors = ();
-    foreach my $author (@$authors) {
-	my $name = $author->{'ce:indexed-name'};
-	if (!defined($name)) {
-	    $name = $author->{'preferred-name'}->{'ce:indexed-name'};
-	}
-	if (!defined($name)) {
-	    print " *** No author name ...\n";
-	    next;
-	}
-	push(@authors, $name);
-    }
-    # Try to find the scopus URL.
-    my $url;
-    foreach my $lref (@{$coredata->{'link'}}) {
-	if ($lref->{'@rel'} eq "scopus") {
-	    $url = $lref->{'@href'};
-	    last;
-	}
-    }
-    print " Title: $title\n";
-    print " Date: $pubdate\n";
-    print " Pub: $pubname\n";
-    print " Type: " . (defined($pubtype) ? $pubtype : "n/a") . "\n";
-    print " DOI: " . (defined($doi) ? $doi : "n/a") . "\n";
-    print " URL: " . (defined($url) ? $url : "n/a") . "\n";
-    print " Authors: " . join(",", @authors) . "\n";
-
-    my @sets = (
-	"latest_abstract_id=" . DBQuoteSpecial($dcid),
-	"latest_abstract_pubdate=" . DBQuoteSpecial($pubdate),
-	"latest_abstract_pubtype=" . DBQuoteSpecial($pubtype),
-	"latest_abstract_pubname=" . DBQuoteSpecial($pubname),
-	"latest_abstract_title=" . DBQuoteSpecial($title),
-	"latest_abstract_authors=" . DBQuoteSpecial(join(",", @authors)),
-	"latest_abstract_cites=". (defined($citedus) ?
-				   "'$citedus'" : "NULL"),
-	"latest_abstract_doi=" . (defined($doi) ? DBQuoteSpecial($doi) : "''"),
-	"latest_abstract_url=" . (defined($url) ? DBQuoteSpecial($url) : "''")
-	);
-
     my $query = "update user_scopus_info set ".
-	join(",", @sets) . " where uid_idx='$idx' and scopus_id='$scopus_id'";
+	"  latest_abstract_id=" .  DBQuoteSpecial($dcid) . " " .
+	"where uid_idx='$idx' and scopus_id='$scopus_id'";
 
-    #print "$query\n";
+    print "$query\n";
     if (!$impotent) {
 	DBQueryFatal($query);
     }
