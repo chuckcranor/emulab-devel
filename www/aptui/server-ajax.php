@@ -668,6 +668,13 @@ $routing = array("geni-login" =>
                                                      "Do_GetMobileEndpoints",
                               )
                         ),
+		 "scopus" =>
+			array("file"    => "scopus.ajax",
+			      "guest"   => false,
+			      "methods" => array("MarkUses" =>
+						     "Do_MarkUses",
+                              )
+                        ),
 		 "frequency-graph" =>
 			array("file"    => "frequency-graph.ajax",
 			      "guest"   => true,

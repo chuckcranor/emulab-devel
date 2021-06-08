@@ -6171,7 +6171,8 @@ CREATE TABLE `user_scopus_info` (
   `latest_abstract_authors` text,
   `latest_abstract_cites` enum('emulab','cloudlab','phantomnet','powder') default NULL,
   PRIMARY KEY  (`uid_idx`,`scopus_id`),
-  KEY `uid` (`uid`)
+  KEY `uid` (`uid`),
+  KEY `scopus_id` (`scopus_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -6190,7 +6191,7 @@ CREATE TABLE `scopus_paper_info` (
   `title` text,
   `authors` text,
   `cites` enum('emulab','cloudlab','phantomnet','powder') default NULL,
-  `uses` enum('yes','no','unknown') default 'unknown',
+  `uses` enum('yes','no','unknown') default NULL,
   PRIMARY KEY  (`scopus_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

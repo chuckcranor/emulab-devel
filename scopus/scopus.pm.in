@@ -485,6 +485,18 @@ sub EnterPaper($$$;$)
 	    last;
 	}
     }
+    my $paper_result =
+	DBQueryFatal("select scopus_id,uses from scopus_paper_info ".
+		     "where scopus_id=" . DBQuoteSpecial($dcid));
+
+    my $uses = "NULL";
+    if ($paper_result->numrows) {
+	my $row = $paper_result->fetchrow_hashref();
+	if ($row->{"uses"}) {
+	    $uses = "'" . $row->{"uses"} . "'";
+	}
+    }
+    
     if (1) {
 	print " Title: $title\n";
 	print " Date: $pubdate\n";
@@ -493,15 +505,19 @@ sub EnterPaper($$$;$)
 	print " DOI: " . (defined($doi) ? $doi : "n/a") . "\n";
 	print " URL: " . (defined($url) ? $url : "n/a") . "\n";
 	print " Authors: " . join(",", @authors) . "\n";
+	print " Cites Us: " . (defined($citedus) ? $citedus : "No") . "\n";
+	print " Uses: $uses\n";
     }
-    my $paper_result =
-	DBQueryFatal("select scopus_id from scopus_paper_info ".
-		     "where scopus_id=" . DBQuoteSpecial($dcid));
-    
+
     if (!$paper_result->numrows || $update) {
 	my $safe_dcid = DBQuoteSpecial($dcid);
-	
-	print " New entry: $dcid\n";
+
+	if ($paper_result->numrows) {
+	    print " Update entry: $dcid\n";
+	}
+	else {
+	    print " New entry: $dcid\n";
+	}
 
 	my @sets = (
 	    "scopus_id=$safe_dcid",
@@ -512,10 +528,12 @@ sub EnterPaper($$$;$)
 	    "authors=" . DBQuoteSpecial(join(",", @authors)),
 	    "cites=". (defined($citedus) ? "'$citedus'" : "NULL"),
 	    "doi=" . (defined($doi) ? DBQuoteSpecial($doi) : "''"),
-	    "url=" . (defined($url) ? DBQuoteSpecial($url) : "''")
+	    "url=" . (defined($url) ? DBQuoteSpecial($url) : "''"),
+	    "uses=$uses",
 	    );
 
 	my $query = "insert into scopus_paper_info set ". join(",", @sets);
+	#print "$query\n";
 	if (!$impotent) {
 	    if (!$impotent) {
 		DBQueryFatal("delete from scopus_paper_info ".

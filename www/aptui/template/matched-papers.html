@@ -20,7 +20,7 @@
     <div class="text-center">
       <small>
 	There are <span class="papers-match-count"></span>
-	matching papers
+	matching papers <span class="papers-match-breakdown"></span>
       </small>
     </div>
     <table class='tablesorter' id='papers-table'>
@@ -40,6 +40,7 @@
       </thead>
       <tbody>
 	<% _.each(papers, function(info, scopus_id) { %>
+	  <% if (!window.ISADMIN && info.uses == "no") { return; } %>
 	  <tr data-scopus-id="<%= scopus_id %>">
 	    <td>
 	      <% if (info.latest_abstract_doi) { %>
@@ -91,7 +92,7 @@
 		</td>
 	      <% } %>
 	      <td style="width: 300px;">
-		<% if (window.ISADMIN) { %>
+		<% if (window.ISADMIN && info.authors) { %>
 		  <% var authors = [];
 		     _.each(info.authors, function(info) {
 		       authors.push("<a target=_blank href='user-dashboard.php?user=" + info.uid_idx + "#myprofile'>" + info.name + "</a>");
@@ -116,7 +117,7 @@
     <div class="text-center">
       <small>
 	There are <span class="unmatched-match-count"></span>
-	matching papers
+	(non) matching papers
       </small>
     </div>
     <table class='tablesorter' id='unmatched-table'>
