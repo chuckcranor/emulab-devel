@@ -122,7 +122,7 @@ function Do_CreateDataSet()
                $formfields["dataset_size"] != "")) {
             $errors["dataset_size"] = "Missing field";
         }
-        elseif (! preg_match('/^\d+(MB|GB|TB)$/i',
+        elseif (! preg_match('/^\d+(MB|GB|TB|MiB|GiB|TiB)$/i',
                          $formfields["dataset_size"])) {
             $errors["dataset_size"] = "Illegal value";
         }
