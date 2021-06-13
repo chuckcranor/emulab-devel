@@ -9,7 +9,7 @@ sub DoUpdate($$$)
 	DBQueryFatal("ALTER TABLE user_scopus_info add " .
 		     " KEY `scopus_id` (`scopus_id`)");
     }
-    DBQueryFatal("alter table user_scopus_info change `uses` ".
+    DBQueryFatal("alter table scopus_paper_info change `uses` ".
 		 " `uses` enum('yes','no','unknown') default NULL");
     return 0;
 }
