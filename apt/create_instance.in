@@ -846,7 +846,7 @@ if ($retval) {
 #
 my $safe_uid    = $user_uid; $safe_uid =~ s/_/-/;
 my $slice_id    = (defined($userslice_id) ? $userslice_id :
-		   $safe_uid . "-QV" . TBGetUniqueIndex('next_quickvm', 1));
+		   $safe_uid . "-" . TBGetUniqueIndex('next_quickvm', 1));
 my $slice_auth  = ($pid eq $gid ? $pid : "${pid}:${gid}");
 my $slice_urn   = GeniHRN::Generate("${OURDOMAIN}:${slice_auth}",
 				    "slice", $slice_id);
