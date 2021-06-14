@@ -431,7 +431,7 @@ sub EnterPaper($$$;$)
     my ($dcid, $impotent, $citedus, $update) = @_;
     $update = 0 if (!defined($update));
     
-    my $abstract = GetAbstract($dcid);
+    my $abstract = GetAbstract($dcid, $update);
     if (!defined($abstract)) {
 	print STDERR " *** Could not download abstract $dcid\n";
 	return -1;
@@ -455,6 +455,11 @@ sub EnterPaper($$$;$)
     if (!defined($authors)) {
 	print STDERR " *** No authors for abstract!\n";
 	return -1;
+    }
+    my $citedby_count = $coredata->{'citedby-count'};
+    if (!defined($citedby_count) || $citedby_count eq "") {
+	print " *** No citedby-count in the coredata\n";
+	$citedby_count = 0;
     }
     my $doi = $coredata->{'prism:doi'} if (exists($coredata->{'prism:doi'}));
     # Just names. 
@@ -507,6 +512,7 @@ sub EnterPaper($$$;$)
 	print " Authors: " . join(",", @authors) . "\n";
 	print " Cites Us: " . (defined($citedus) ? $citedus : "No") . "\n";
 	print " Uses: $uses\n";
+	print " Cited By: $citedby_count\n";
     }
 
     if (!$paper_result->numrows || $update) {
@@ -530,6 +536,7 @@ sub EnterPaper($$$;$)
 	    "doi=" . (defined($doi) ? DBQuoteSpecial($doi) : "''"),
 	    "url=" . (defined($url) ? DBQuoteSpecial($url) : "''"),
 	    "uses=$uses",
+	    "citedby_count=" . DBQuoteSpecial($citedby_count),
 	    );
 
 	my $query = "insert into scopus_paper_info set ". join(",", @sets);

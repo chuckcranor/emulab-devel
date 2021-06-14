@@ -31,6 +31,7 @@
 	  <th style="width: 25px; text-align:center;"
 	      class='filter-false sorter-false'>GS</th>
 	  <th>Publication</th>
+	  <th>Cites</th>
 	  <% if (window.ISADMIN) { %>
 	    <th class="filter-false sorter-false"
 		style="text-align:center;">Used Us</th>
@@ -69,6 +70,7 @@
 		<% } %>
 	      </td>
 	      <td><%= info.latest_abstract_pubname %></td>
+	      <td><%= info.citedby_count %></td>
 	      <% if (window.ISADMIN) { %>
 		<td style="text-align:center;">
 		  <div class="radio compact-radio">
@@ -128,6 +130,7 @@
 	  <th style="width: 25px; text-align:center;"
 	      class='filter-false sorter-false'>GS</th>
 	  <th>Publication</th>
+	  <th>Cites</th>
 	  <% if (window.ISADMIN) { %>
 	    <th class="filter-false sorter-false"
 		style="text-align:center;">Used Us</th>
@@ -165,6 +168,7 @@
 		<% } %>
 	      </td>
 	      <td><%= info.latest_abstract_pubname %></td>
+	      <td><%= info.citedby_count %></td>
 	      <% if (window.ISADMIN) { %>
 		<td style="text-align:center;">
 		  <div class="radio compact-radio">

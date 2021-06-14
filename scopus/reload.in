@@ -32,13 +32,14 @@ use Date::Parse;
 #
 sub usage()
 {
-    print "Usage: reload [-n] scopus_id\n";
+    print "Usage: reload [-n] [-f] scopus_id\n";
     print "Usage: reload [-n] -a\n";
     exit(1);
 }
-my $optlist   = "na";
+my $optlist   = "naf";
 my $impotent  = 0;
 my $all       = 0;
+my $flush     = 0;
 
 #
 # Configure variables
@@ -64,14 +65,22 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"a"})) {
     $all++;
 }
+if (defined($options{"f"})) {
+    $flush++;
+}
+if (defined($options{"n"})) {
+    $impotent++;
+}
 usage()
     if (!$all && !@ARGV);
+usage()
+    if ($all && $flush);
 
 sub ReloadOne($)
 {
     my ($scopus_id) = @_;
 
-    my $abstract  = scopus::GetAbstract($scopus_id);
+    my $abstract  = scopus::GetAbstract($scopus_id, $flush);
     if (!defined($abstract)) {
 	die("No such abstract abstract\n");
     }

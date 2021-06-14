@@ -80,6 +80,7 @@ while ($row = mysql_fetch_array($query_result)) {
             "latest_abstract_pubname" => $row["pubname"],
             "latest_abstract_title"   => $row["title"],
             "latest_abstract_authors" => $row["authors"],
+            "citedby_count"           => $row["citedby_count"],
             "uses"    => $row["uses"],
             "authors" => array(),
         );
@@ -123,6 +124,7 @@ while ($row = mysql_fetch_array($query_result)) {
         "latest_abstract_pubname" => $row["pubname"],
         "latest_abstract_title"   => $row["title"],
         "latest_abstract_authors" => $row["authors"],
+        "citedby_count"           => $row["citedby_count"],
         "uses"                    => $row["uses"],
         "authors"                 => null,
     );

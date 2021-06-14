@@ -6192,6 +6192,7 @@ CREATE TABLE `scopus_paper_info` (
   `authors` text,
   `cites` enum('emulab','cloudlab','phantomnet','powder') default NULL,
   `uses` enum('yes','no','unknown') default NULL,
+  `citedby_count` int(10) default '0',
   PRIMARY KEY  (`scopus_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
