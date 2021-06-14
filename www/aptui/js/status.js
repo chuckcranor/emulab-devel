@@ -3577,10 +3577,13 @@ $(function ()
 	window.addEventListener("message", loadiframe);
 
 	var html =
+	    '<div style="height:31em; width:100%; ' +
+	    '           resize:vertical;overflow-y:auto;padding-bottom:10px">' +
 	    '  <iframe id="' + tabname + '_iframe" ' +
-	    '	  style="height:30em; width:100%;" ' +
-            '     src="' + url + '">';
-
+	    '     width="100%" height="100%"' + 
+            '     src=\'' + url + '\'></iframe>' +
+	    '</div>';
+	
 	if (_.has(coninfo, "password")) {
 	    html =
 		"<div class='col-sm-4 col-sm-offset-4 " +
@@ -3595,7 +3598,13 @@ $(function ()
 		"  </div> " +
 		" </div> " +
 		"</div> " + html;
-	}		
+	}
+	html += 
+	    "<center> " +
+	    "  If you change the size of the window, you will " +
+	    "  need to use <b><em>stty</em></b> to tell your shell. " +
+	    "</center>\n";
+	
         $('#' + tabname).html(html);
 
 	var iframe = $('#' + tabname + '_iframe')[0];

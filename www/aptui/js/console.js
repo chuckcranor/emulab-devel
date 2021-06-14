@@ -45,10 +45,21 @@ $(function ()
 	    var iwidth = "100%";
 	    var iheight = 500;
 
-	    $('#console-div').html('<iframe id="console_iframe" ' +
-				   'width=' + iwidth + ' ' +
-				   'height=' + iheight + ' ' +
-				   'src=\'' + url + '\'>');
+	    var html =
+		'<iframe id="console_iframe" ' +
+		'width=' + iwidth + ' ' +
+		'height=' + iheight + ' ' +
+		'src=\'' + url + '\'>';
+
+	    var html =
+		'<div style="height:500px; width:100%; ' +
+		'      resize:vertical;overflow-y:auto;padding-bottom:10px"> ' +
+		'  <iframe id="' + tabname + '_iframe" ' +
+		'     width="100%" height="100%"' + 
+		'     src=\'' + url + '\'>' +
+		'</div>';
+
+	    $('#console-div').html(html);
 
 	    $('#console-close').removeClass("hidden");
 
@@ -122,11 +133,15 @@ $(function ()
 	window.addEventListener("message", loadiframe);
 
 	var html =
+	    '<div style="height:31em; width:100%; ' +
+	    '      resize:vertical;overflow-y:auto;padding-bottom:10px"> ' +
 	    '  <iframe id="console-div-iframe" ' +
-	    '	  style="height:30em; width:100%;" ' +
-            '     src="' + url + '">';
+	    '     width="100%" height="100%"' + 
+	    '     src=\'' + url + '\'></iframe>' +
+	    '</div>';
 
         $('#console-div').html(html);
+	$('.stty').removeClass("hidden");
 
 	var iframe = $('#console-div-iframe')[0];
 	var iframewindow = (iframe.contentWindow ?
