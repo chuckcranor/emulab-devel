@@ -35,12 +35,13 @@ use Date::Parse;
 #
 sub usage()
 {
-    print "Usage: getpapers [-n] [-u] [user ...]\n";
+    print "Usage: getpapers [-n] [-u] [-f] [user ...]\n";
     exit(1);
 }
-my $optlist   = "nl:u";
+my $optlist   = "nl:uf";
 my $impotent  = 0;
 my $update    = 0;
+my $flush     = 0;
 my $limit     = "";
 
 #
@@ -73,6 +74,9 @@ if (defined($options{"n"})) {
 if (defined($options{"u"})) {
     $update++;
 }
+if (defined($options{"f"})) {
+    $flush++;
+}
 if (defined($options{"l"})) {
     $limit = "limit " . $options{"l"};
 }
@@ -96,7 +100,7 @@ my $query_result =
 while (my ($uid,$idx,$scopus_id) = $query_result->fetchrow_array()) {
     print " $uid, $scopus_id\n";
     # Force author reload when updating
-    my $aref  = scopus::GetAuthor($scopus_id, $update);
+    my $aref  = scopus::GetAuthor($scopus_id, $flush);
     if (!defined($aref)) {
 	print STDERR "*** Cannot get author $scopus_id\n";
 	next;
@@ -104,6 +108,7 @@ while (my ($uid,$idx,$scopus_id) = $query_result->fetchrow_array()) {
     my $coredata  = $aref->{'coredata'};
     my $documents = $aref->{'documents'}->{'abstract-document'};
     my $citedus;
+    my $citedus_paper;
     my $mostrecent;
 
     if (!defined($documents)) {
@@ -130,15 +135,18 @@ while (my ($uid,$idx,$scopus_id) = $query_result->fetchrow_array()) {
 	    print " *** No date for $uid, $scopus_id, $dcid\n";
 	    next;
 	}
-	my $abstract = scopus::GetAbstract($dcid);
+	my $abstract = scopus::GetAbstract($dcid, $flush);
 	if (!defined($abstract)) {
 	    print " *** Could not retrieve abstract $dcid\n";
 	    next;
 	}
-	if ($citedus = scopus::CitesUs($abstract)) {
-	    print " Cited $citedus!!!\n";
-	    $mostrecent = $document;
-	    last;
+	if (my $tmp = scopus::CitesUs($abstract)) {
+	    if (!defined($citedus)) {
+		print " Cited $tmp!!!\n";
+		$citedus = $tmp;
+		$citedus_paper = $mostrecent;
+	    }
+	    next;
 	}
 	if (!defined($mostrecent)) {
 	    $mostrecent = $document;
@@ -150,6 +158,9 @@ while (my ($uid,$idx,$scopus_id) = $query_result->fetchrow_array()) {
 		$mostrecent = $document;
 	    }
 	}
+    }
+    if (defined($citedus_paper)) {
+	$mostrecent = $citedus_paper;
     }
     if (!defined($mostrecent)) {
 	print " *** Could not determine most document for $uid, $scopus_id\n";
@@ -165,7 +176,7 @@ while (my ($uid,$idx,$scopus_id) = $query_result->fetchrow_array()) {
 	next;
     }
     print " Most recent document for $uid ($scopus_id): $dcid\n";
-    if (scopus::EnterPaper($dcid, $impotent, $citedus)) {
+    if (scopus::EnterPaper($dcid, $impotent, $citedus, $update)) {
 	exit(1);
     }
     my $query = "update user_scopus_info set ".

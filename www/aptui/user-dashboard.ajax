@@ -287,7 +287,11 @@ function Do_AccountDetails()
     }
     $scopus_info = array();
     $query_result =
-        DBQueryFatal("select * from user_scopus_info ".
+        DBQueryFatal("select u.scopus_id,u.author_url,p.title, ".
+                     "    u.validation_state,p.authors,p.pubname ".
+                     "  from user_scopus_info as u ".
+                     "left join scopus_paper_info as p on ".
+                     "     p.scopus_id=u.latest_abstract_id ".
                      "where uid_idx='$target_idx'");
     while ($row = mysql_fetch_array($query_result)) {
         $scopus_id = $row["scopus_id"];

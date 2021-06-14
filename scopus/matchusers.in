@@ -211,6 +211,12 @@ while (my ($uid,$idx,$affil,$name,$scopus_info) =
 	print " Matches: " .
 	    join(",", map {$_->{'dc:identifier'}} @matches) . "\n";
 
+	# Remove old info, we checked above for force option
+	if (!$impotent) {
+	    DBQueryFatal("delete from user_scopus_info ".
+			 "where uid_idx='$idx'");
+	}
+
 	#
 	# Grab the author definitions so we can populate the DB.
 	#
@@ -243,9 +249,6 @@ while (my ($uid,$idx,$affil,$name,$scopus_info) =
 	    #print "$query\n";
 
 	    if (!$impotent) {
-		# Remove old info, we checked above for force option
-		DBQueryFatal("delete from user_scopus_info ".
-			     "where uid_idx='$idx'");
 		DBQueryFatal($query);
 	    }
 	}
