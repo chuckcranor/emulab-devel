@@ -283,7 +283,7 @@ if ($shutdown == 0 && !$boottime) {
 #
 # Install
 #
-if (system("gmake update-testbed-nostop update-rcd")) {
+if (system("gmake update-testbed-nostop update-rcd install-setbuildinfo")) {
     fatal("install failed");
 }
 
