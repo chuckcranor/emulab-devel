@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013 University of Utah and the Flux Group.
+# Copyright (c) 2013-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -790,6 +790,8 @@ getdrivenames() {
 		[[ -c /dev/amrd${i} ]] && drivelist+="/dev/amrd${i} " 
 		[[ -c /dev/mfid${i} ]] && drivelist+="/dev/mfid${i} " 
 		[[ -c /dev/mfisyspd${i} ]] && drivelist+="/dev/mfisyspd${i} " 
+		# XXX smartctl uses nvme names for nvd disk devices
+		[[ -c /dev/nvd${i} ]] && drivelist+="/dev/nvme${i} " 
 	    done
 	    ;;
 	* )
