@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -102,6 +102,7 @@ use Node;
 use libtestbed;
 use emutil;
 use libEmulab;
+use GeniUtil;
 use GeniResponse;
 use APT_Instance;
 use POSIX qw(strftime ceil);
@@ -156,7 +157,7 @@ while (1) {
     my $query_result =
 	DBQueryWarn("select distinct d.uuid from apt_deferred_instances as d ".
 		    "left join apt_instance_aggregates a on ".
-		    "  a.uuid= d.uuid ".
+		    "  a.uuid=d.uuid ".
 		    "where (d.start_at is null or now() >= d.start_at) and ".
 		    "      a.deferred!=0");
     
@@ -166,37 +167,44 @@ while (1) {
 	    next
 		if (!defined($instance));
 
-	    my $genislice = $instance->GetGeniSlice();
-	    goto skip
-		if (!defined($genislice));
-
-	    print $genislice->locked() . "\n" if ($genislice->locked());
-	    
-	    goto skip
-		if ($genislice->locked());
-	
+	    if ($instance->Lock()) {
+		print $instance . " is locked\n";
+		goto skip;
+	    }
 	    if ($impotent) {
 		print "Would try to call create_slivers on $uuid\n";
+		$instance->Unlock();
 	    }
 	    else {
 		print "Calling create_slivers on $uuid\n";
 		my $output = emutil::ExecQuiet("$SUDO -u $PROTOUSER ".
-					       "$CREATESLIVERS $uuid");
+					       "$CREATESLIVERS -L $uuid");
 		my $code = $? >> 8;
 		$code = -1
 		    if ($code == 255);
 		
 		print STDERR $output;
-		if ($code < 0) {
-		    
+		if ($code) {
 		    if (!exists($emailedErrors{$uuid}) ||
 			time() - $emailedErrors{$uuid} > (3 * 3600)) {
-			SENDMAIL($TBOPS,
-				 "Could not start scheduled experiment",
-				 "Error starting deferred experiment: ".
-				 $instance . "\n\n" . $output . "\n",
-				 $TBOPS);
 
+			if ($code < 0) {
+			    SENDMAIL($TBOPS,
+				     "Error starting experiment",
+				     "Error starting deferred experiment: ".
+				     $instance->Printable() . "\n\n" .
+				     $output . "\n\n" .
+				     $instance->webURL() . "\n",
+				     $TBOPS);
+			}
+			else {
+			    $instance->SendEmail(
+				"Error starting experiment",
+				"Error starting deferred experiment: ".
+				$instance->Printable() . "\n\n" .
+				$output . "\n",
+				"BCC: " .$instance->Brand()->OpsEmailAddress());
+			}
 			$emailedErrors{$uuid} = time();
 		    }
 		}
@@ -204,16 +212,18 @@ while (1) {
 		    delete($emailedErrors{$uuid});
 		}
 	    }
+	    
 	    # Slight delay between calling create_slivers.
-	    if ($query_result->numrows) {
+	    if ($query_result->numrows && !($oneshot || $impotent)) {
 		sleep(10);
 	    }
 	  skip:
-	    $genislice->Flush()
-		if (defined($genislice));
 	    $instance->Purge();
 	}
     }
+    emutil::FlushCaches();
+    GeniUtil::FlushCaches();
+    
     exit(0)
 	if ($oneshot);
     

@@ -152,6 +152,7 @@ sub Lookup($$)
     $self->{'HASH'}       = {};
     $self->{'AGGREGATES'} = {};
     $self->{'ROUTES'}     = {};
+    $self->{'RPSEC'}      = undef;
     $self->{'WEBTASK'}    = undef;
     bless($self, $class);
 
@@ -304,6 +305,24 @@ sub DESTROY {
     $self->{'HASH'}       = undef;
     $self->{'WEBTASK'}    = undef;
     $self->{'ROUTES'}     = undef;
+}
+
+#
+# Cache parsed rspec
+#
+sub RSPEC($)
+{
+    my ($self) = @_;
+
+    return $self->{'RSPEC'}
+        if (defined($self->{'RSPEC'}));
+
+    my $rspec = GeniXML::Parse($self->rspec());
+    return -1
+	if (!defined($rspec));
+    
+    $self->{'RSPEC'} = $rspec;
+    return $rspec;
 }
 
 #
@@ -981,6 +1000,22 @@ sub WarnExpiring($$)
 		     "Thanks!",
 		     $self->Brand()->LogsEmailAddress());
     
+    return 0;
+}
+
+#
+# Portal send mail to creator.
+#
+sub SendEmail($$$$)
+{
+    my ($self, $subject, $body, $headers) = @_;
+    my $creator = $self->GetCreator();
+
+    # Always include url.
+    $body = $body . "\n\n" . $self->webURL() . "\n";
+    
+    $self->Brand()->SendEmail($creator->email(), $subject, $body,
+			      $self->Brand()->OpsEmailAddress(), $headers);
     return 0;
 }
 
@@ -2492,46 +2527,53 @@ sub GetSpectrum($$)
 }
 
 #
-# Check that we have reservations for any spectrum used.
-# This check uses the current time and current experiment end,
+# Check resources for reservations we must have and other permissions.
+# We combine a few things here for efficiency.
 #
-sub CheckSpectrum($$$)
+sub CheckResources($$)
 {
-    my ($self, $perrmsg, $pflag) = @_;
-    my $rspecstr = $self->rspec();
-    my $project  = $self->GetProject();
-    my $slice    = $self->GetGeniSlice();
-    my $expires  = str2time($slice->expires());
+    my ($self, $perrmsg) = @_;
+    my $project   = $self->GetProject();
+    my $slice     = $self->GetGeniSlice();
+    my $expires   = str2time($slice->expires());
+    my $noresokay = 1;
+    my $duration  = $expires - time();
+    if ($duration > $DEFAULT_DURATION * 3600) {
+	$noresokay = 0;
+    }
+    my $rspec = $self->RSPEC();
+    return -1
+	if (!$rspec);
+
+    my $typeCounts;
+    if (APT_Profile::GetResources($rspec, $perrmsg, \$typeCounts)) {
+	return -1;
+    }
+    if (APT_Profile::CheckResourceReservations($rspec, $project,
+					       time(), $expires,
+					       $noresokay, $perrmsg,
+					       $typeCounts)) {
+	return -1;
+    }
+
     my $spectrum = [];
-
-    if (APT_Profile::GetSpectrum($rspecstr, \$spectrum, $perrmsg)) {
+    if (APT_Profile::GetSpectrum($rspec, \$spectrum, $perrmsg)) {
 	return -1;
     }
-    return 0
-	if (!@$spectrum);
-
-    # Top level check for OTA access (might have been revoked)
-    if (!EmulabFeatures->FeatureEnabled("OTA-allowed", undef, $project)) {
-	$$perrmsg = "Not enough permission to use OTA resources.";
-	return -1;
-    }
-    my $rfrange  = APT_RFRange::Project->Lookup($project);
-
-    foreach my $request (@{$spectrum}) {
-	my $frequency_low  = $request->{"frequency_low"};
-	my $frequency_high = $request->{"frequency_high"};
-	
-	if (!$rfrange->Allowed($frequency_low, $frequency_high)) {
-	    $$perrmsg = "Not enough permission to use ".
-		"frequency range $frequency_low,$frequency_high ".
-		"in your project.";
+    if (@$spectrum) {
+	if (APT_Profile::CheckSpectrumPermission($rspec, $project,
+						 $perrmsg, $spectrum)) {
 	    return -1;
 	}
     }
-    if (!APT_Reservation::Group::RFReservation->CanStart($project,
-			 time(), $expires, $spectrum, $perrmsg)) {
+    # This check must always be done.
+    if (APT_Profile::CheckSpectrumReservations($rspec, $project,
+					       time(), $expires,
+					       $noresokay, $perrmsg,
+					       $spectrum, $typeCounts)) {
 	return -1;
     }
+
     #
     # Add the spectrum to this instance (we are starting it).
     #
@@ -2548,8 +2590,7 @@ sub CheckSpectrum($$$)
 	    }
 	}
     }
-    $$pflag = 1;
-    return 0;
+    return $self->CheckRoutes($perrmsg);
 }
 
 #
@@ -2579,24 +2620,28 @@ sub CheckRoutes($$)
     my $routes   = [];
     my $noresokay = 1;
     my $duration  = $expires - time();
-    if ($duration > 16 * 3600) {
+    if ($duration > $DEFAULT_DURATION * 3600) {
 	$noresokay = 0;
     }
 
-    if ($self->GetRoutes(\$routes, $perrmsg)) {
+    my $rspec = $self->RSPEC();
+    return -1
+	if (!$rspec);
+
+    if (APT_Profile::GetRoutes($rspec, \$routes, $perrmsg)) {
 	return -1;
     }
     return 0
 	if (!@$routes);
 
-    # Top level check for Route access (might have been revoked)
-    if (!EmulabFeatures->FeatureEnabled("powder-routes-allowed",
-					undef, $project)) {
-	$$perrmsg = "Not enough permission to use mobile resources";
+    if (APT_Profile::CheckRoutesPermission($rspec, $project,
+					   time(), $expires,
+					   $perrmsg, $routes)) {
 	return -1;
     }
-    if (!APT_Reservation::Group::RouteReservation->CanStart($self,
-			 time(), $expires, $routes, $perrmsg)) {
+    if (APT_Profile::CheckRoutesReservations($rspec, $project,
+					     time(), $expires,
+					     $noresokay, $perrmsg)) {
 	return -1;
     }
     #
@@ -2604,61 +2649,19 @@ sub CheckRoutes($$)
     # routes and add them to the rspec. We do this here cause scheduled and
     # deferred experiments are started from the scheduler.
     #
-    if ($self->AddRouteNodes($creator, \$perrmsg)) {
+    if ($self->AddRouteNodes($routes, $creator, \$perrmsg)) {
 	return -1;
     }
     return 0;
 }
 
-#
-# Check that a specific route is currently allocated to the experiment for
-# the duration of the experiment.
-#
-sub CheckRouteReserved($$$)
+sub AddRouteNodes($$$$)
 {
-    my ($self, $routename) = @_;
-    my $rspecstr = $self->rspec();
-    my $project  = $self->GetProject();
-    my $slice    = $self->GetGeniSlice();
-    my $expires  = str2time($slice->expires());
-    my $routes   = [];
-    my $errmsg;
-
-    if ($self->GetRoutes(\$routes, \$errmsg)) {
-	return -1;
-    }
-
-    foreach my $request (@{$routes}) {
-	my $name = $request->{"name"};
-
-	next
-	    if ($name ne $routename);
-
-	if (APT_Reservation::Group::RouteReservation->RouteReserved($project,
-		      time(), $expires, $name)) {
-	    return 1;
-	}
-	else {
-	    return 0;
-	}
-    }
-    return 0;
-}
-
-sub AddRouteNodes($$$)
-{
-    my ($self, $user, $perrmsg) = @_;
+    my ($self, $routes, $user, $perrmsg) = @_;
     my $modified = 0;
     my $repocommand;
-    my $routes;
-    if ($self->GetRoutes(\$routes, $perrmsg)) {
-	return -1;
-    }
-    my $rspec = GeniXML::Parse($self->rspec());
-    if (! defined($rspec)) {
-	$$perrmsg = "Could not parse rspec for $self\n";
-	return -1;
-    }
+    my $rspec = $self->RSPEC();
+
     # Need to add this to nodes as we add new nodes.
     if ($self->repourl()) {
 	$repocommand = APT_Profile::GetRepoCommand($rspec);
@@ -2747,6 +2750,7 @@ sub AddRouteNodes($$$)
     }
     if ($modified) {
 	$self->Update({"rspec" => GeniXML::Serialize($rspec)});
+	$self->{'RSPEC'} = $rspec;
     }
     return 0;
 }

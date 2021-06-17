@@ -56,7 +56,6 @@ my $takelock        = 0;  # Use when called from create_instance.
 my $sendemail       = 0;
 my $errmsg;
 my $sshkeys;
-my $havespectrum    = 0;
 my @aggregate_list  = ();
 
 #
@@ -199,12 +198,10 @@ $sendemail = 1
     if ($curStatus ne "created");
 
 #
-# Check frequency ranges.
+# Check permissions and admission control now that we are trying to
+# start (an experiment that was scheduled for later start).
 #
-if ($instance->CheckSpectrum(\$errmsg, \$havespectrum)) {
-    MyExit(1, $errmsg);
-}
-if ($instance->CheckRoutes(\$errmsg)) {
+if ($instance->start_at() && $instance->CheckResources(\$errmsg)) {
     MyExit(1, $errmsg);
 }
 
