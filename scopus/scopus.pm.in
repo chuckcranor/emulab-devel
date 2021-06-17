@@ -184,7 +184,7 @@ sub Search($$)
     $query =~ s/\'/\\\'/g;
     #print "$query\n";
     
-    my $url = $DEVURL . "search/$index" . "?count=100".
+    my $url = $DEVURL . "search/$index" . "?count=200".
 	"&query=" . uri_encode($query, { encode_reserved => 1 });
     #print "$url\n";
     
@@ -424,6 +424,20 @@ sub GetAbstract($;$)
 }
 
 #
+# Do we have this abstract already processed.
+#
+sub PaperEntered($)
+{
+    my ($scopus_id) = @_;
+
+    my $paper_result =
+	DBQueryFatal("select scopus_id,uses from scopus_paper_info ".
+		     "where scopus_id=" . DBQuoteSpecial($scopus_id));
+
+    return $paper_result->numrows;
+}
+
+#
 # Enter a paper into the DB.
 #
 sub EnterPaper($$$;$)
@@ -607,14 +621,14 @@ sub CitesUs($)
 		    return "cloudlab";
 		}
 	    }
-	    foreach my $poss (@EMULABTITLES) {
-		if ($fulltext =~ /$poss/i) {
-		    return "emulab";
-		}
-	    }
 	    foreach my $poss (@POWDERTITLES) {
 		if ($fulltext =~ /$poss/i) {
 		    return "powder";
+		}
+	    }
+	    foreach my $poss (@EMULABTITLES) {
+		if ($fulltext =~ /$poss/i) {
+		    return "emulab";
 		}
 	    }
 	}
