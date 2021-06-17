@@ -1913,10 +1913,6 @@ class User
         if (!$TBMAINSITE) {
             return 0;
         }
-        if ($this->uid() != "stoller" &&
-            !preg_match("/flux/i", $this->email())) {
-            return 0;
-        }
 	$uid_idx = $this->uid_idx();
 
 	$query_result =
