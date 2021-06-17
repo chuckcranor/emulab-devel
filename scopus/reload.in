@@ -32,7 +32,7 @@ use Date::Parse;
 #
 sub usage()
 {
-    print "Usage: reload [-n] [-f] scopus_id\n";
+    print "Usage: reload [-n] [-f] scopus_id ...\n";
     print "Usage: reload [-n] -a\n";
     exit(1);
 }
@@ -97,6 +97,8 @@ if ($all) {
     }
 }
 else {
-    ReloadOne($ARGV[0]);
+    foreach my $id (@ARGV) {
+	ReloadOne($id)
+    }
 }
 exit(0)
