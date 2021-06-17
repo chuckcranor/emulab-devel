@@ -69,7 +69,7 @@ $(function ()
 	};
 	if (window.ISADMIN) {
 	    args["textExtraction"] = {
-		4: function(node) {return $(node).find("input:checked").val();}
+		5: function(node) {return $(node).find("input:checked").val();}
 	    };
 	}
 	var table = $("#papers-table").tablesorter(args);
