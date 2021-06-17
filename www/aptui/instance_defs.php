@@ -853,6 +853,8 @@ class Instance
                            "x310"      => true,
                            "n310"      => true,
                            "mmimotmp1" => true,
+                           "iris03"    => true,
+                           "iris04"    => true,
         );
 
         #
