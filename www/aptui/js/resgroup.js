@@ -4193,6 +4193,7 @@ $(function ()
 	    var component_id = $(this).attr("component_id");
 	    var manager_id   = $(this).attr("component_manager_id");
 	    var site         = this.getElementsByTagNameNS(JACKS_NS, 'site');
+	    var stype        = $(this).find("sliver_type");
 
 	    if (component_id) {
 		var hrn = sup.ParseURN(component_id);
@@ -4201,6 +4202,26 @@ $(function ()
 		    if (!manager_id) {
 			manager_id = sup.CreateURN(hrn.domain,
 						   "authority", "cm");
+		    }
+		}
+		else if (_.size(cluster_selections) == 1) {
+		    // Might be a site of one.
+		    var tag;
+
+		    if (site.length) {
+			var siteid = $(site).attr("id");
+			if (siteid === undefined) {
+			    console.error("No site ID in " + site);
+			}
+			else {
+			    tag = siteid;
+			}
+		    }
+		    else {
+			tag = "nosite_selector";
+		    }
+		    if (tag) {
+			manager_id = cluster_selections[tag];
 		    }
 		}
 	    }
@@ -4222,6 +4243,9 @@ $(function ()
 	    // We want to count up how many of each type, and how many
 	    // are untyped
 	    if (!htype.length) {
+		if (stype.length && !($(stype).attr("name") === "raw")) {
+		    return;
+		}
 		var tag;
 		
 		if (manager_id) {
