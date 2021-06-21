@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2008-2016, 2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -187,20 +187,52 @@ sub iloaction($$$@) {
 	    # returned from the db wins
 	}
 
-	$ilo_nodeinfo{$n} = [ $n,$IP,$krole,$kuid,$kkey,$kgkey,$kprivlvl ];
+	#
+	# Timeout for IPMI is the interval between retries (-N in ipmitool).
+	# This is a hack for slow IPMI engines that allows us to slow down
+	# retries so we don't overwhelm them.
+	#
+	my $timeout;
+	if ($type =~ /^ipmi/) {
+	    $res = DBQueryFatal("select nta.attrvalue,na.attrvalue".
+				"  from nodes as n".
+				"  left join node_attributes as na".
+				"    on n.node_id=na.node_id".
+				"      and na.attrkey='power_ipmidelay'".
+				"  left join node_type_attributes as nta".
+				"    on n.type=nta.type".
+				"      and nta.attrkey='power_ipmidelay'".
+				" where n.node_id='$n'");
+	    if ($res && $res->num_rows() > 0) {
+		my ($nta,$na) = $res->fetchrow_array();
+		if (defined($na)) {
+		    $timeout = $na;
+		} elsif (defined($nta)) {
+		    $timeout = $nta;
+		}
+	    }
+	}
+	#
+	# Otherwise (iLo), timeout represents an overall command timeout.
+	#
+	else {
+	    $timeout = 30;
+	}
+
+	$ilo_nodeinfo{$n} = [ $n,$IP,$krole,$kuid,$kkey,$kgkey,$kprivlvl,
+			      $timeout ];
     }
 
-    my $timeout = 30;
     if ($parallelize) {
 	my $coderef = sub {
-	    my ($n,$IP,$krole,$kuid,$kkey,$kgkey,$kprivlvl) = @{ $_[0] };
+	    my ($n,$IP,$krole,$kuid,$kkey,$kgkey,$kprivlvl,$timo) = @{ $_[0] };
 	    
 	    my $tret;
 	    eval {
 		if ($type =~ /^ipmi/) {
-		    $tret = ipmiexec($n,$type,$cmd,$IP,$krole,$kuid,$kkey,$kgkey,$kprivlvl,$timeout,$force);
+		    $tret = ipmiexec($n,$type,$cmd,$IP,$krole,$kuid,$kkey,$kgkey,$kprivlvl,$timo,$force);
 		} else {
-		    $tret = iloexec($n,$type,$cmd,$IP,$krole,$kuid,$kkey,$timeout);
+		    $tret = iloexec($n,$type,$cmd,$IP,$krole,$kuid,$kkey,$timo);
 		}
 	    };
 	    if ($@) {
@@ -235,13 +267,13 @@ sub iloaction($$$@) {
     }
     else {
 	for my $key (keys(%ilo_nodeinfo)) {
-	    my ($n,$IP,$krole,$kuid,$kkey,$kgkey,$kprivlvl) = @{$ilo_nodeinfo{$key}};
+	    my ($n,$IP,$krole,$kuid,$kkey,$kgkey,$kprivlvl,$timo) = @{$ilo_nodeinfo{$key}};
 
 	    my $rv;
 	    if ($type =~ /^ipmi/) {
-		$rv = ipmiexec($n,$type,$cmd,$IP,$krole,$kuid,$kkey,$kgkey,$kprivlvl,$timeout,$force);
+		$rv = ipmiexec($n,$type,$cmd,$IP,$krole,$kuid,$kkey,$kgkey,$kprivlvl,$timo,$force);
 	    } else {
-		$rv = iloexec($n,$type,$cmd,$IP,$krole,$kuid,$kkey,$timeout);
+		$rv = iloexec($n,$type,$cmd,$IP,$krole,$kuid,$kkey,$timo);
 	    }
 	    $statusp->{$n} = $rv;
 	    ++$exitval
@@ -535,12 +567,12 @@ sub ipmiexec($$$$$$$;$$$$) {
 	return -14;
     }
 
-    # XXX IPMI takes about 40 seconds to timeout and doesn't
-    # have an option to control?!
-
 again:
     my $privlvl_args = ($privlvl) ? " -L $privlvl" : '';
-    my $ipmicmd = "ipmitool -I $iface -H $IP -R 8 -U $key_uid $privlvl_args -E -K power $cmd";
+    my $txdelay_args = ($timeout) ? " -N $timeout" : '';
+    # XXX backward compat: if no timeout use legacy 8 tries, ow use default
+    my $retry_args = ($timeout) ? '' : "-R 8";
+    my $ipmicmd = "ipmitool -I $iface -H $IP $txdelay_args $retry_args -U $key_uid $privlvl_args -E -K power $cmd";
     print "*** Executing '$ipmicmd', output:\n"
 	if ($debug > 1);
 
