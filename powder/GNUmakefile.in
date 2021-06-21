@@ -87,6 +87,8 @@ rfmonitor-subdir:
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor/archive
 
 mainsite-install: $(INSTALL_DIR)/opsdir/sbin/rfbaseline
+	$(INSTALL_DATA) $(SRCDIR)/rfbaseline.json \
+		$(INSTALL_DIR)/opsdir/etc/rfbaseline.json
 
 subboss-install: 
 
