@@ -353,7 +353,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd10/GNUmakefile tmcc/freebsd10/netif-emulab \
 	  tmcc/freebsd11/GNUmakefile tmcc/freebsd11/netif-emulab \
 	  tmcc/freebsd12/GNUmakefile tmcc/freebsd12/netif-emulab \
-	  tmcc/freebsd13/GNUmakefile tmcc/freebsd13/netif-emulab \
+	  tmcc/freebsd13/GNUmakefile tmcc/freebsd13/netif_emulab \
 	  tmcc/freenas8/GNUmakefile tmcc/freenas9/GNUmakefile \
 	  tmcc/freenas11/GNUmakefile \
 	  tmcc/cygwinxp/GNUmakefile tmcc/dp/GNUmakefile \

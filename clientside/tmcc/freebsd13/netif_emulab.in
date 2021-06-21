@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,15 +29,15 @@
 #
 
 # PROVIDE: netif-emulab
-# REQUIRE: atm1 FILESYSTEMS iovctl serial sppp sysctl
-# REQUIRE: ipfilter ipfs
+# REQUIRE: FILESYSTEMS iovctl serial sppp sysctl
+# REQUIRE: hostid ipfs
 # BEFORE: netif
 # KEYWORD: nojailvnet
 
 . /etc/rc.subr
 . /etc/network.subr
 
-name="netif-emulab"
+name="netif_emulab"
 start_cmd="cnet_start"
 stop_cmd="cnet_stop"
 _cmdifn=
