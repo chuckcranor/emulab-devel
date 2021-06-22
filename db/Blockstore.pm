@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2019 University of Utah and the Flux Group.
+# Copyright (c) 2012-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -86,6 +86,51 @@ sub LookupByLease($$)
 
     bless($self, $class);
     return $self;
+}
+
+sub LookupByIndex($$)
+{
+    my ($class, $bsidx) = @_;
+
+    return undef
+	if (!defined($bsidx) || $bsidx !~ /^(\d+)$/ || $1 == 0);
+
+    my $query_result =
+	DBQueryWarn("select * from blockstores where bsidx=$bsidx");
+
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my $self         = {};
+    $self->{"HASH"}  = {};
+    $self->{"DBROW"} = $query_result->fetchrow_hashref();
+
+    bless($self, $class);
+    return $self;
+}
+
+#
+# Return a list of blockstore objects, one for each blockstores on this node.
+#
+sub LookupAll($$)
+{
+    my ($class, $nodeid) = @_;
+    my @result = ();
+
+    return undef
+	if (!defined($nodeid));
+
+    my $query_result =
+	DBQueryWarn("select bsidx from blockstores where node_id='$nodeid'");
+
+    return undef
+	if (!$query_result);
+
+    while (my ($bsidx) = $query_result->fetchrow_array()) {
+	push(@result, LookupByIndex($class, $bsidx));
+    }
+
+    return @result;
 }
 
 # To avoid writing out all the methods.
@@ -181,9 +226,26 @@ sub Create($$;$) {
 	$exported = 1;
     }
 
-    # Get a unique blockstore index and slam this stuff into the DB.
-    my $bs_idx = TBGetUniqueIndex('next_bsidx');
+    #
+    # Get a unique blockstore index.
+    #
+    # XXX if a blockstore index is specified by the caller, they had better
+    # know what they are doing; i.e., no conflicts and they will update
+    # next_bsidx as necessary!
+    #
+    my $bs_idx = $argref->{'bsidx'};
+    if ($bs_idx) {
+	if ($bs_idx =~ /^(\d+)$/ && $1 > 0) {
+	    $bs_idx = $1;
+	} else {
+	    print STDERR "Blockstore->Create: Bad data for bsidx\n";
+	    return undef;
+	}
+    } else {
+	$bs_idx = TBGetUniqueIndex('next_bsidx');
+    }
 
+    # Slam this stuff into the DB.
     DBQueryWarn("insert into blockstores set ".
 		"bsidx=$bs_idx,".
 		"node_id='$node_id',".
@@ -210,7 +272,7 @@ sub Create($$;$) {
 	    DBQueryWarn("insert into blockstore_attributes set ".
 			"bsidx=$bs_idx,".
 			"attrkey='$key',".
-			"attrval=$val,".
+			"attrvalue=$val,".
 			"attrtype='$type'")
 		or return undef;
 	}
@@ -280,6 +342,22 @@ sub Delete($) {
 	or return -1;
 
     return 0
+}
+
+sub GetAttribute($$)
+{
+    my ($self, $attrkey) = @_;
+    my $bsidx = $self->bsidx();
+    my $value;
+
+    my $query_result =
+	DBQueryWarn("select attrvalue from blockstore_attributes ".
+		    "where bsidx='$bsidx' and attrkey='$attrkey'");
+    if ($query_result && $query_result->numrows) {
+	($value) = $query_result->fetchrow_array();
+    }
+
+    return $value;
 }
 
 #

@@ -1671,7 +1671,7 @@ sub GetNodeFeatures($)
 	    DBQueryWarn("select * from node_features ".
 			"where node_id='$node_id'");
 
-	return -1
+	return undef
 	    if (!defined($query_result));
 
        	$self->{"FEATURES"} = {};
@@ -1683,6 +1683,56 @@ sub GetNodeFeatures($)
 	}
     }
     return $self->{"FEATURES"};
+}
+
+#
+# Set a feature for a node, overwriting the same feature if it
+# already exists.
+#
+sub SetNodeFeature($$$) {
+    my ($self, $feature, $weight) = @_;
+    my $node_id = $self->node_id();
+
+    return -1
+	if (!defined($feature) || !defined($weight));
+
+    return -1
+	if ($weight !~ /^\d+(\.\d+)?$/);
+
+    $feature = DBQuoteSpecial($feature);
+
+    return -1
+	if (!DBQueryWarn("replace into node_features set".
+			 "  node_id='$node_id',".
+			 "  feature=$feature,".
+			 "  weight=$weight"));
+
+    if (!defined($self->{"FEATURES"}) && !$self->GetNodeFeatures()) {
+	return -1;
+    }
+    $self->{"FEATURES"}->{$feature} = $weight;
+
+    return 0;
+}
+
+sub ClearNodeFeature($$)
+{
+    my ($self, $feature) = @_;
+    my $node_id = $self->node_id();
+
+    return -1
+	if (!$feature);
+
+    my $safe_feature = DBQuoteSpecial($feature);
+
+    return -1
+	if (!DBQueryWarn("delete from node_features ".
+			 "where node_id='$node_id' and feature=$safe_feature"));
+	    
+    if (defined($self->{"FEATURES"})) {
+	delete($self->{"FEATURES"}->{$feature});
+    }
+    return 0;
 }
 
 #

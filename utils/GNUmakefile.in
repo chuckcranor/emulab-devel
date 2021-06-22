@@ -59,7 +59,7 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  addrfdevice addrfpath reserve announce createimagealias \
 		  predict test-reserve notify-reservations \
 		  deprecate_image pushrootkey addinterface addwire cnetwatch \
-		  powerlog checkipmi \
+		  powerlog checkipmi adddisk \
 		  addswitch addtypetoimages resutil addstack addnode \
 		  processhwinfo cnetwatch_disable mksysproj mksysexp \
 		  certbot_renew certbot_authhook addnodeattribute signurl logfile
