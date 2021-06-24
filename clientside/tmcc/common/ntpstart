@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -250,7 +250,7 @@ foreach my $line (@ntpinfo) {
 	    if ($needrestrict && !$restricts{$server}) {
 		print NEW "restrict $server\n";
 	    }
-	    print NEW "server $server\n";
+	    print NEW "server $server iburst\n";
 	    last SWITCH1;
 	};
 	/^DRIFT=(.*)$/ && do {

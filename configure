@@ -7266,7 +7266,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	utils/mktestbedtest utils/pxelinux_makeconf \
 	utils/addvpubaddr utils/attend utils/atten utils/addrfdevice \
 	utils/addrfpath utils/reserve utils/predict utils/notify-reservations \
-	utils/setzfsquotas \
+	utils/setzfsquotas utils/checkipmi \
 	wbstore/GNUmakefile \
 	www/GNUmakefile www/defs.php3 www/dbdefs.php3 www/xmlrpc.php3 \
 	www/xmlrpcpipe.php3 \
@@ -7316,9 +7316,10 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
         apt/GNUmakefile \
-        powder/GNUmakefile \
+        powder/GNUmakefile powder/sasproxy/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \
+        scopus/GNUmakefile \
 	node_usage/GNUmakefile node_usage/mk-plots \
 	node_usage/analy node_usage/publish \
 	node_usage/analy2 node_usage/refresh \
@@ -7407,7 +7408,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/freebsd10/GNUmakefile clientside/tmcc/freebsd10/netif-emulab \
  clientside/tmcc/freebsd11/GNUmakefile clientside/tmcc/freebsd11/netif-emulab \
  clientside/tmcc/freebsd12/GNUmakefile clientside/tmcc/freebsd12/netif-emulab \
- clientside/tmcc/freebsd13/GNUmakefile clientside/tmcc/freebsd13/netif-emulab \
+ clientside/tmcc/freebsd13/GNUmakefile clientside/tmcc/freebsd13/netif_emulab \
  clientside/tmcc/cygwinxp/GNUmakefile clientside/tmcc/dp/GNUmakefile \
  clientside/tmcc/openbsd/GNUmakefile clientside/tmcc/ron/GNUmakefile \
  clientside/tmcc/plab/GNUmakefile clientside/tmcc/cygwinseven/GNUmakefile \

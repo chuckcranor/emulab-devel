@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -66,7 +66,6 @@ my $privkeyfile;
 my $slice;
 my $sitemap;
 my $usetracker = 0;
-my $maxduration = 16; # Hours. Need to make this a site variable.
 my @aggregate_urns = ();
 my @prestage = ();
 
@@ -297,13 +296,13 @@ if (exists($xmlparse->{'attribute'}->{"duration"}) &&
     if ($duration !~ /^\d+$/) {
 	fatal("Duration is not an integer");
     }
-    if ($duration < 1 || $duration > $maxduration) {
+    if ($duration < 1 || $duration > $DEFAULT_DURATION) {
 	UserError("Duration must be at least 1 hour but ".
-		  "not more then $maxduration hour(s)");
+		  "not more then $DEFAULT_DURATION hour(s)");
     }
 }
 else {
-    $duration = $maxduration; 
+    $duration = $DEFAULT_DURATION; 
 }
 
 #
@@ -785,35 +784,137 @@ if ($tmp) {
 #
 # New approach; if less then max duration, no reservations are needed.  But
 # if more then max duration (powder portal only), then user must have valid
-# reservations for the resources and time frame specified.
+# reservations for the resources and time frame specified. Note that only
+# the powder portal will get this far with duration greater than the default
+# max duration.
 #
 my $noresokay = 1;
 if (defined($stop_at)) {
     $duration = $stop_at - (defined($start_at) ? $start_at : time());
-    if ($duration > $maxduration * 3600) {
+    if ($duration > $DEFAULT_DURATION * 3600) {
 	$noresokay = 0;
     }
 }
-if (APT_Profile::CheckResources($rspec, $project,
-				(defined($start_at) ? $start_at : time()),
-				(defined($stop_at) ? $stop_at :
-				 time() + ($duration * 3600)),
-				$noresokay, \$errmsg)) {
-    UserError($errmsg);
+my $start = (defined($start_at) ? $start_at : time());
+my $end   = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
+
+#
+# First sanity check the resources, then resource reservation requirements.
+# The type counts can be expensive to compute on a big topology, so save
+# for the reservation checks.
+#
+my $typeCounts;
+my $retval = APT_Profile::CheckResources($rspec, \$errmsg, \$typeCounts);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
-if (APT_Profile::CheckSpectrum($rspec, $project,
-			       (defined($start_at) ? $start_at : time()),
-			       (defined($stop_at) ? $stop_at :
-				time() + ($duration * 3600)),
-			       $noresokay, \$errmsg)) {
-    UserError($errmsg);
+$retval =
+    APT_Profile::CheckResourceReservations($rspec, $project, $start, $end,
+					   $noresokay, \$errmsg, $typeCounts);
+if ($retval) {
+    if ($retval < 0) {
+	fatal($errmsg);
+    }
+    elsif (!defined($start_at)) {
+	# Immediate start, throw the error back to the user.
+	UserError($errmsg);
+    }
+    else {
+	#
+	# Warn user that resources must be reserved by the time the
+	# experiment starts.
+	#
+	if (defined($webtask)) {
+	    $webtask->reservationWarn($errmsg);
+	}
+	else {
+	    print "Some resources still need to be reserved before the ".
+		"experiment start time is reached\n";
+	}
+    }
 }
-if (APT_Profile::CheckRoutes($rspec, $project,
-			     (defined($start_at) ? $start_at : time()),
-			     (defined($stop_at) ? $stop_at :
-			      time() + ($duration * 3600)),
-			     $noresokay, \$errmsg, $geniuser->emulab_user())) {
-    UserError($errmsg);
+#
+# Spectrum sanity checks, then spectrum reservation checks.
+#
+my $spectrum;
+$retval = APT_Profile::CheckSpectrum($rspec, \$errmsg, \$spectrum);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+$retval =
+    APT_Profile::CheckSpectrumPermission($rspec, $project, \$errmsg, $spectrum);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+$retval =
+    APT_Profile::CheckSpectrumReservations($rspec, $project, $start, $end,
+					   $noresokay, \$errmsg,
+					   $spectrum, $typeCounts);
+if ($retval) {
+    if ($retval < 0) {
+	fatal($errmsg);
+    }
+    elsif (!defined($start_at)) {
+	# Immediate start, throw the error back to the user.
+	UserError($errmsg);
+    }
+    else {
+	#
+	# Warn user that spectrum must be reserved by the time the
+	# experiment starts.
+	#
+	if (defined($webtask)) {
+	    $webtask->reservationWarn($errmsg);
+	}
+	else {
+	    print "Some spectrum still needs to be reserved before the ".
+		"experiment start time is reached\n";
+	}
+    }
+}
+#
+# And the routes.
+#
+$retval = APT_Profile::CheckRoutes($rspec, \$errmsg, \$routes);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+$retval =
+    APT_Profile::CheckRoutesPermission($rspec, $project, $start, $end,
+				       \$errmsg, $routes);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+$retval =
+    APT_Profile::CheckRoutesReservations($rspec, $project, $start, $end,
+					 $noresokay, \$errmsg, $routes);
+if ($retval) {
+    if ($retval < 0) {
+	fatal($errmsg);
+    }
+    elsif (!defined($start_at)) {
+	# Immediate start, throw the error back to the user.
+	UserError($errmsg);
+    }
+    else {
+	#
+	# Warn user that routes must be reserved by the time the
+	# experiment starts.
+	#
+	if (defined($webtask)) {
+	    $webtask->reservationWarn($errmsg);
+	}
+	else {
+	    print "Some routes still need to be reserved before the ".
+		"experiment start time is reached.\n";
+	}
+    }
+}
+# This check ensures that people do not allocate buses directly unless
+# they have special permission. Mere users must allocate routes.
+$retval = APT_Profile::CheckForBuses($rspec, $project, \$errmsg);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
 
 #
@@ -828,14 +929,8 @@ if (!$debug) {
     AddAuditInfo("brand", $project->Brand());
 }
 
-# Very temporary!
-my $foo = APT_Profile::CheckForBuses($rspec, $project, \$errmsg);
-if ($foo) {
-    ($foo < 0 ? fatal($errmsg) : UserError($errmsg));
-}
-
 # Check for expired certs and speaksfor.
-my $retval = APT_Geni::VerifyCredentials($geniuser, \$errmsg);
+$retval = APT_Geni::VerifyCredentials($geniuser, \$errmsg);
 if ($retval) {
     ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
@@ -846,7 +941,7 @@ if ($retval) {
 #
 my $safe_uid    = $user_uid; $safe_uid =~ s/_/-/;
 my $slice_id    = (defined($userslice_id) ? $userslice_id :
-		   $safe_uid . "-QV" . TBGetUniqueIndex('next_quickvm', 1));
+		   $safe_uid . "-" . TBGetUniqueIndex('next_quickvm', 1));
 my $slice_auth  = ($pid eq $gid ? $pid : "${pid}:${gid}");
 my $slice_urn   = GeniHRN::Generate("${OURDOMAIN}:${slice_auth}",
 				    "slice", $slice_id);

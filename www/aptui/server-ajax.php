@@ -131,20 +131,32 @@ $routing = array("geni-login" =>
                                                      "Do_UpdateRepository",
 						 "GetRepository" =>
                                                      "Do_GetRepository",
+						 "GetRepoHash" =>
+                                                     "Do_GetRepoHash",
+						 "SearchProfiles" =>
+                                                     "Do_SearchProfiles",
+						 "GetProfile" =>
+                                                     "Do_GetProfile")),
+		 "gitrepo" =>
+			array("file"    => "gitrepo.ajax",
+			      "guest"   => true,
+			      "methods" => array("GetRepository" =>
+                                                     "Do_GetRepository",
 						 "GetRepoSource" =>
                                                      "Do_GetRepoSource",
 						 "GetBranchList" =>
                                                      "Do_GetBranchList",
 						 "GetCommitInfo" =>
                                                      "Do_GetCommitInfo",
-						 "GetRepoHash" =>
-                                                     "Do_GetRepoHash",
-						 "GetCommitList" =>
-                                                     "Do_GetCommitList",
-						 "SearchProfiles" =>
-                                                     "Do_SearchProfiles",
-						 "GetProfile" =>
-                                                     "Do_GetProfile")),
+                              )
+                        ),
+		 "show-profile" =>
+			array("file"    => "show-profile.ajax",
+			      "guest"   => true,
+			      "methods" => array("CheckScript" =>
+						     "Do_CheckScript",
+                              )
+                        ),
 		 "status" =>
 			array("file"    => "status.ajax",
 			      "guest"   => false,
@@ -307,7 +319,11 @@ $routing = array("geni-login" =>
                                                  "ListParameterSets" =>
                                                      "Do_ListParameterSets",
                                                  "AcceptAUP" =>
-                                                     "Do_AcceptAUP")),
+                                                     "Do_AcceptAUP",
+                                                 "VerifyScopusInfo" =>
+                                                     "Do_VerifyScopusInfo"
+                              )
+                        ),
 		 "nag" =>
 			array("file"    => "user-dashboard.ajax",
                               "unapproved" => true,
@@ -650,6 +666,13 @@ $routing = array("geni-login" =>
                                                      "Do_GetBaseStations",
                                                  "GetMobileEndpoints" =>
                                                      "Do_GetMobileEndpoints",
+                              )
+                        ),
+		 "scopus" =>
+			array("file"    => "scopus.ajax",
+			      "guest"   => false,
+			      "methods" => array("MarkUses" =>
+						     "Do_MarkUses",
                               )
                         ),
 		 "frequency-graph" =>

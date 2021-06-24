@@ -2770,16 +2770,16 @@ sub DoCheckReserved()
 	fatal("Could not parse rspec");
     }
     my $noresokay = 0;
-    if (APT_Profile::CheckResources($rspec, $project, $start, $end,
-				    $noresokay, \$errmsg)) {
+    if (APT_Profile::CheckResourceReservations($rspec, $project, $start, $end,
+					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckSpectrum($rspec, $project, $start, $end,
-				   $noresokay, \$errmsg)) {
+    if (APT_Profile::CheckSpectrumReservations($rspec, $project, $start, $end,
+					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckRoutes($rspec, $project, $start, $end,
-				 $noresokay, \$errmsg, $this_user)) {
+    if (APT_Profile::CheckRoutesReservations($rspec, $project, $start, $end,
+					     $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
     if (defined($webtask)) {

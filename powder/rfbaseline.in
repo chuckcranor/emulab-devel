@@ -55,6 +55,7 @@ my $skew      = 50;
 my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
+my $JSONFILE	     = "$TB/etc/rfbaseline.json";
 my $LOGFILE          = "$TB/log/rfbaseline.log";
 my $STARTEXP         = "$TB/bin/startExperiment";
 my $TERMINATEEXP     = "$TB/bin/terminateExperiment";
@@ -65,102 +66,7 @@ my $PID              = "PMonitor";
 my $PROFILE          = "testbed,monitor";
 my $SLEEP_INTERVAL   = 3600 * 6;
 
-#
-# We run the monitor on these endpoints.
-#
-my %endpoints = (
-    "bookstore" => {
-	"urn" => 'urn:publicid:IDN+bookstore.powderwireless.net+authority+cm',
-	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
-	"last"  => {},
-        "nickname" => "Bookstore",
-    },
-    "cpg" => {
-	"urn" => 'urn:publicid:IDN+cpg.powderwireless.net+authority+cm',
-	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
-	"last"  => {},
-        "nickname" => "Garage",
-    },
-    "ebc" => {
-	"urn" => 'urn:publicid:IDN+ebc.powderwireless.net+authority+cm',
-	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
-	"last"  => {},
-        "nickname" => "EBC",
-    },
-    "law73" => {
-        "urn" => 'urn:publicid:IDN+law73.powderwireless.net+authority+cm', 
-	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
-	"last"  => {},
-        "nickname" => "Law73",
-    },
-    "guesthouse" => {
-	"urn" => 'urn:publicid:IDN+guesthouse.powderwireless.net+authority+cm',
-	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
-	"last"  => {},
-        "nickname" => "Guesthouse",
-    },
-    "humanities" => {
-        "urn" => 'urn:publicid:IDN+humanities.powderwireless.net+authority+cm', 
-	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
-	"last"  => {},
-        "nickname" => "Humanities",
-    },
-    "madsen" => {
-        "urn" => 'urn:publicid:IDN+madsen.powderwireless.net+authority+cm',
-	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
-	"last"  => {},
-        "nickname" => "Madsen",
-    },
-    "moran" => {
-        "urn" => 'urn:publicid:IDN+moran.powderwireless.net+authority+cm', 
-	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
-	"last"  => {},
-        "nickname" => "Moran",
-    },
-    "sagepoint" => {
-	"urn" => 'urn:publicid:IDN+sagepoint.powderwireless.net+authority+cm',
-	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
-	"last"  => {},
-        "nickname" => "Sagepoint",
-    },
-    "web" => {
-        "urn" => 'urn:publicid:IDN+web.powderwireless.net+authority+cm', 
-	"nodes" => {"nuc1" => "B210", "nuc2" => "B210"},
-	"last"  => {},
-        "nickname" => "WEB",
-    },
-#    "bustest2" => {
-#	"urn" => 'urn:publicid:IDN+bus-test2.powderwireless.net+authority+cm',
-#	"nodes" => {"ed1" => "B210"},
-#	"last"  => {},
-#	"nickname" => "BusTest2",
-#    },
-    "emulab" => {
-	"urn" => 'urn:publicid:IDN+emulab.net+authority+cm',
-	"nodes" => {
-	    "cellsdr1-bes"       => "X310",
-#	    "cbrssdr1-bes"       => "X310",
-	    "cellsdr1-browning"  => "X310",
-#	    "cbrssdr1-browning"  => "X310",
-	    "cellsdr1-dentistry" => "X310",
-#	    "cbrssdr1-dentistry" => "X310",
-	    "cellsdr1-fm"        => "X310",
-#	    "cbrssdr1-fm"        => "X310",
-	    "cellsdr1-honors"    => "X310",
-#	    "cbrssdr1-honors"    => "X310",
-	    "cellsdr1-hospital"  => "X310",
-	    "cbrssdr1-hospital"  => "X310",
-#	    "cellsdr1-meb"       => "X310",
-#	    "cbrssdr1-meb"       => "X310",
-	    "cellsdr1-smt"       => "X310",
-	    "cbrssdr1-smt"       => "X310",
-	    "cellsdr1-ustar"     => "X310",
-#	    "cbrssdr1-ustar"     => "X310",
-	},
-	"last"  => {},
-        "nickname" => "Emulab",
-    },
-);
+my %endpoints;
 my %results = ();
 
 #
@@ -173,6 +79,7 @@ $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Protos
+sub ReadEndpoints();
 sub RunMonitor($$);
 sub GetStatus($$$$);
 sub Wait($$$);
@@ -203,10 +110,8 @@ if ($UID != 0) {
 if (!$MAINSITE) {
     exit(0);
 }
+ReadEndpoints();
 
-#
-# 
-#
 my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
@@ -240,7 +145,7 @@ use lib "@prefix@/lib";
 use libtestbed;
 use GeniResponse;
 
-if (! ($impotent)) {
+if (! ($impotent || $oneshot)) {
     if (CheckDaemonRunning("rfbaseline")) {
 	fatal("Not starting another rfbaseline daemon!");
     }
@@ -257,39 +162,39 @@ if (! ($impotent)) {
 
 FlipTo($USER);
 
-my @targets = ();
-    
-if (@ARGV) {
-    my $id  = lc(shift(@ARGV));
-    my $ref = $endpoints{$id};
-    my @nodes;
-
-    if (@ARGV) {
-	@nodes = @ARGV;
-    }
-    else {
-	@nodes = keys(%{$ref->{"nodes"}});
-    }
-    foreach my $node_id (@nodes) {
-	push(@targets, [$id, $node_id]);
-    }
-    #$skew = 10;
-}
-else {
-    foreach my $id (keys(%endpoints)) {
-	my $ref = $endpoints{$id};
-
-	foreach my $node_id (keys(%{$ref->{"nodes"}})) {
-	    push(@targets, [$id, $node_id]);
-	}
-    }
-}
-
 while (1) {
     my @return_codes = ();
-    
+    my @targets      = ();
+
     print "Running at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
+
+    #
+    # Read in the endpoints table each loop.
+    #
+    ReadEndpoints();
+    
+    if (@ARGV) {
+	my ($id, @nodes) = @ARGV;
+	my $ref = $endpoints{$id};
+
+	if (@ARGV == 1) {
+	    @nodes = keys(%{$ref->{"nodes"}});
+	}
+	foreach my $node_id (@nodes) {
+	    push(@targets, [$id, $node_id]);
+	}
+	#$skew = 10;
+    }
+    else {
+	foreach my $id (keys(%endpoints)) {
+	    my $ref = $endpoints{$id};
+	    
+	    foreach my $node_id (keys(%{$ref->{"nodes"}})) {
+		push(@targets, [$id, $node_id]);
+	    }
+	}
+    }
 
     my $coderef = sub {
 	my $ref = $_[0];
@@ -380,7 +285,7 @@ sub RunMonitor($$)
 
     # Create the bindings to pass to startExperiment
     my $bindings = sprintf($bindingsTemplate, $urn, $node_id, $type);
-    my $stop = time() + (3600 * 2);
+    my $stop = time() + (3600 * 1);
 
     my $command = "$STARTEXP -s -P -p $PID --bindings='$bindings' ".
 	"--name='$name' --stop='$stop' --refspec='refs/heads/UHD4' $PROFILE";
@@ -466,7 +371,8 @@ sub Wait($$$)
 	    if ($rval < 0 || $rval > 0);
 	
 	$tries--;
-	sleep(60);
+	sleep(60)
+	    if ($tries);
     }
     $$pmsg = "timed out waiting for monitor to finish";
     return -1;
@@ -610,7 +516,8 @@ sub Terminate($$)
 	
 	# Experiment is still hanging on. Wait some more.
 	$tries--;
-	sleep(30);
+	sleep(30)
+	    if ($tries);
     }
     # Experiment has not died. Need to think about this.
     $$pmsg = "timed out waiting for experiment to terminate";
@@ -675,14 +582,14 @@ sub fatal($)
 {
     my ($msg) = @_;
 
-    if (! ($debug || $impotent)) {
+    if (! ($debug || $impotent || $oneshot)) {
 	#
 	# Send a message to the testbed list. 
 	#
 	NotifyTBOPS("rfbaseline died", $msg);
     }
     MarkDaemonStopped("rfbaseline")
-	if (! ($impotent));
+	if (! ($impotent || $oneshot));
 
     die("*** $0:\n".
 	"    $msg\n");
@@ -953,5 +860,36 @@ sub ParRun($$$@)
 	if (defined($pref));
     return -1
 	if ($signaled);
+    return 0;
+}
+
+#
+# Read in the endpoints file each loop.
+#
+sub ReadEndpoints()
+{
+    my $json = "";
+    
+    fatal("json file does not exist")
+	if (! -e $JSONFILE);
+
+    open(L, $JSONFILE)
+	or fatal("Could not open $JSONFILE for reading");
+
+    while (<L>) {
+	$json .= $_;
+    }
+    close(L);
+    fatal("json file cannot be read")
+	if ($json eq "");
+
+    my $new = eval { from_json($json, {"relaxed" => 1}); };
+    if ($@) {
+	fatal($@);
+    }
+    if (!defined($new)) {
+	fatal("Invalid json file");
+    }
+    %endpoints = %{$new};
     return 0;
 }

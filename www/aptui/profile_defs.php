@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,8 +37,8 @@ class Profile
     # Constructor by lookup on unique index.
     #
     function Profile($token, $version = null) {
-	$safe_profileid = addslashes($token);
-	
+        $query_result = null;
+        
 	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $token)) {
 	    #
 	    # First look to see if the uuid is for the profile itself,
@@ -67,29 +67,30 @@ class Profile
 				"      v.deleted is null");
 	    }
 	}
-	elseif (is_null($version)) {
-	    $query_result =
-		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+        elseif (preg_match("/^\d+$/", $token)) {
+            if (is_null($version)) {
+                $query_result =
+                    DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
                             "    i.disabled as profile_disabled, ".
                             "    i.nodelete as profile_nodelete ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid and ".
 			    "     v.version=i.version ".
-			    "where i.profileid='$safe_profileid'");
-	}
-	else {
-	    $safe_version = addslashes($version);
-	    $query_result =
-	        DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+			    "where i.profileid='$token'");
+            }
+            elseif (preg_match("/^\d+$/", $version)) {
+                $query_result =
+                    DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
                             "    i.disabled as profile_disabled, ".
                             "    i.nodelete as profile_nodelete ".
 			    "  from apt_profile_versions as v ".
 			    "left join apt_profiles as i on ".
 			    "     i.profileid=v.profileid ".
-			    "where v.profileid='$safe_profileid' and ".
-			    "      v.version='$safe_version' and ".
+			    "where v.profileid='$token' and ".
+			    "      v.version='$version' and ".
 			    "      v.deleted is null");
+            }
 	}
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->profile = null;

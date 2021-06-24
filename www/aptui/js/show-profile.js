@@ -2,13 +2,12 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'instantiate-modal', 'oops-modal', 'share-modal', 'copy-repobased-profile']);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'oops-modal', 'share-modal', 'copy-repobased-profile']);
     var showString = templates['show-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
     var showtopoString = templates['showtopo-modal'];
     var rspectextviewString = templates['rspectextview-modal'];
-    var instantiateString = templates['instantiate-modal'];
     var oopsString = templates['oops-modal'];
     var shareString = templates['share-modal'];
     var copyrepoString = templates['copy-repobased-profile'];
@@ -23,11 +22,9 @@ $(function ()
     var fromrepo     = 0;
     var reporefspec  = null;
     var ajaxurl      = "";
-    var amlist       = null;
     var isppprofile  = false;
     var myCodeMirror = null;
     var showTemplate      = _.template(showString);
-    var InstTemplate      = _.template(instantiateString);
     var shareTemplate     = _.template(shareString);
     var pythonRe = /^import/m;
     var tclRe    = /^source tb_compat/m;
@@ -44,7 +41,6 @@ $(function ()
 	marked.setOptions({"sanitize" : true});
 
 	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
-	amlist     = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 
 	console.info("profile", fields);
 
@@ -78,6 +74,7 @@ $(function ()
 	    history:		window.HISTORY,
 	    activity:		window.ACTIVITY,
 	    isadmin:		window.ISADMIN,
+	    isguest:		window.ISGUEST,
 	    canedit:            window.CANEDIT,
 	    disabled:           window.DISABLED,
 	    withpublishing:     window.WITHPUBLISHING,
@@ -91,9 +88,6 @@ $(function ()
 
 	$('#waitwait_div').html(waitwaitString);
 	$('#showtopomodal_div').html(showtopoString);
-    	var instantiate_html = InstTemplate({ amlist: amlist,
-					      amdefault: window.AMDEFAULT});
-	$('#instantiate_div').html(instantiate_html);
 	$('#rspectext_div').html(rspectextviewString);
 	$('#oops_div').html(oopsString);
 	$('#copy_repobased_profile_div').html(copyrepoString);
@@ -215,13 +209,6 @@ $(function ()
 	    $('#modal_profile_rspec_textarea').val("");
 	});
 
-	// Handler for normal instantiate submit button, which is in
-	// the modal.
-	$('#instantiate_submit_button').click(function (event) {
-	    event.preventDefault();
-	    Instantiate();
-	});
-	
 	/*
 	 * Suck the description and instructions
 	 * out of the rspec and put them into the text boxes.
@@ -235,33 +222,6 @@ $(function ()
 	    _.has(fields, "paramdefs") && fields["paramdefs"] != "") {
 	    paramHelp.ShowParameterHelp(fields["paramdefs"]);
 	}
-    }
-
-    //
-    // Instantiate a profile.
-    //
-    function Instantiate()
-    {
-	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
-	    
-	    if (json.code) {
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	    window.location.replace(json.value);
-	}
-	sup.HideModal("#instantiate_modal");
-
-	var blob = {"uuid" : version_uuid};
-	if (amlist.length) {
-	    blob.where = $('#instantiate_where').val();
-	}
-	sup.ShowModal("#waitwait-modal");
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "instantiate",
-					    "Instantiate", blob);
-	xmlthing.done(callback);
     }
 
     /*
@@ -375,7 +335,7 @@ $(function ()
 	}
 	sup.ShowWaitWait("We are converting the geni-lib script");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "manage_profile",
+					    "show-profile",
 					    "CheckScript",
 					    {"script"   : script,
 					     "refspec"  : refspec,

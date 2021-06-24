@@ -32,7 +32,12 @@ $page_title = "Example Profiles";
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLoginOrRedirect();
+$this_user = CheckLogin($check_status);
+if (isset($this_user)) {
+    CheckLoginOrDie(CHECKLOGIN_NONLOCAL|CHECKLOGIN_WEBONLY);
+}
+else {
+}
 
 SPITHEADER(1);
 
@@ -62,6 +67,7 @@ while ($row = mysql_fetch_array($query_result)) {
     $blob["uuid"]      = $row["uuid"];
     $blob["version"]   = $row["version"];
     $blob["name"]      = $row["name"];
+    $blob["pid"]       = $row["pid"];
     $blob["desc"]      = CleanString($row["description"]);
     $blob["created"]   = DateStringGMT($row["created"]);
 

@@ -90,7 +90,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
     global $GOOGLEUA, $ISCLOUD, $TBBASE, $PORTAL_GENESIS, $APTBASE;
     global $ISPNET, $ISPOWDER, $ISEMULAB, $PROTOGENI_GENIWEBLOGIN;
-    global $login_user, $login_status, $SUPPORT, $FIRSTUSER;
+    global $login_user, $login_status, $SUPPORT, $FIRSTUSER, $PORTAL_NAME;
     global $disable_accounts, $page_title, $drewheader, $embedded;
     global $UI_EXTERNAL_ACCOUNTS, $BrandMapping;
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
@@ -145,6 +145,13 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
             return;
         }
     }
+    elseif ($login_user && $login_user->NeedScopusValidation()) {
+        if ($script != "verify-match.php" && $script != "logout.php") {
+            $referrer = urlencode($_SERVER['REQUEST_URI']);
+            header("Location: verify-match.php?referrer=$referrer");
+            return;
+        }
+    }
     elseif ($login_user && $login_user->IsActive() &&
             $login_user->RequireAUP()) {
         if ($script != "portal-aup.php" && $script != "logout.php") {
@@ -175,7 +182,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         <link rel='stylesheet' href='$APTBASE/css/bootstrap.css'>
         <link rel='stylesheet' href='$APTBASE/css/quickvm.css'>
         <link rel='stylesheet' href='$APTBASE/css/$APTSTYLE'>\n";
-    if ($ISPOWDER) {
+    if (0 && $ISPOWDER) {
         echo "<link href='https://www.powderwireless.net/powder/fonts/raleway/style.css' rel='stylesheet'>";
     }
     if ($TBMAINSITE) {
@@ -214,8 +221,11 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "    window.EMBEDDED = $embedded;\n";
     echo "    window.SUPPORT  = '$SUPPORT';\n";
     echo "    window.APTTILE  = '$APTTITLE';\n";
-    echo "    window.APTMAIL   = \"$APTMAIL\"\n";
-    echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
+    echo "    window.APTMAIL   = \"$APTMAIL\";\n";
+    echo "    window.APTMAILTO = \"$APTMAILTO\";\n";
+    echo "    window.LOGINUID  = " .
+        ($login_user ? "'$login_uid'" : "null") . ";\n";
+    echo "    window.PORTAL_NAME = \"$PORTAL_NAME\"\n";
     echo "</script>\n";
     
     if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {

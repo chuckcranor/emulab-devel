@@ -2388,6 +2388,17 @@ $(function ()
 	    clientid2nodeid = {};
 	    imageablenodes  = {};
 	    redrawpowdermap = true;
+
+	    // But might have deleted all the aggregates.
+	    if (Object.keys(statusblob).length == 0) {
+		changingtopo = false;
+		ClearViewer();
+		if (window.ISPOWDER) {
+		    UpdatePowderMap();
+		}
+		donefunc();
+		return;
+	    }
 	}
 	/*
 	 * If we have all the manifests then nothing to do.
@@ -2540,6 +2551,7 @@ $(function ()
 		else if (changingtopo) {
 		    // When we get first new manifest, clear the viewer palette.
 		    ClearViewer(manifest);
+		    AddToViewer(manifest);
 		}
 		else {
 		    AddToViewer(manifest);
@@ -3565,10 +3577,13 @@ $(function ()
 	window.addEventListener("message", loadiframe);
 
 	var html =
+	    '<div style="height:31em; width:100%; ' +
+	    '           resize:vertical;overflow-y:auto;padding-bottom:10px">' +
 	    '  <iframe id="' + tabname + '_iframe" ' +
-	    '	  style="height:30em; width:100%;" ' +
-            '     src="' + url + '">';
-
+	    '     width="100%" height="100%"' + 
+            '     src=\'' + url + '\'></iframe>' +
+	    '</div>';
+	
 	if (_.has(coninfo, "password")) {
 	    html =
 		"<div class='col-sm-4 col-sm-offset-4 " +
@@ -3583,7 +3598,13 @@ $(function ()
 		"  </div> " +
 		" </div> " +
 		"</div> " + html;
-	}		
+	}
+	html += 
+	    "<center> " +
+	    "  If you change the size of the window, you will " +
+	    "  need to use <b><em>stty</em></b> to tell your shell. " +
+	    "</center>\n";
+	
         $('#' + tabname).html(html);
 
 	var iframe = $('#' + tabname + '_iframe')[0];
@@ -3759,14 +3780,10 @@ $(function ()
 	}
     }
     // Clear the Jacks view to get ready for topo change.
-    function ClearViewer(manifest)
+    function ClearViewer()
     {
 	if (jacksInput) {
-	    jacksInput.trigger('change-topology',
-			       [{ rspec: manifest }]);
-	    // Jacks Bug.
-	    jacksInput.trigger('add-topology', 
-			       [{ rspec: manifest }]);
+	    jacksInput.trigger('change-topology', []);
 	}
     }
     // Add manifest to viewer.

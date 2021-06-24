@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -149,9 +149,7 @@ if (@ARGV < 1) {
 }
 my $action = shift(@ARGV);
 
-# For credentials.
-my $this_user = User->ThisUser();
-if (! defined($this_user)) {
+if (!defined(User->ThisUser()) && getpwuid($UID) ne "nobody") {
     fatal("You ($UID) do not exist!");
 }
 # We have to add the admin group so we can get into the repositories
@@ -1077,7 +1075,7 @@ sub GetCommitList($$)
 
 	push(@{ $commits }, {"hash"   => $hash,
 			     "author" => $author,
-			     "when"   => $when,
+			     "when"   => TBDateStringGMT(str2time($when)),
 			     "log"    => $log});
 	print "$hash,$author,$when,$log\n";
     }
@@ -1129,7 +1127,7 @@ sub DoCommitInfo()
     }
     my $blob = {"hash"      => $hash,
 		"author"    => $author,
-		"when"      => $when,
+		"when"      => TBDateStringGMT(str2time($when)),
 		"log"       => $log,
 		"reponame"  => $reponame,
 		"refspec"   => $which,

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -107,6 +107,10 @@ echo " <button class='btn btn-danger btn-sm hidden'
               style='margin-top: 15px;'
               id='console-close'>
         Close</button>
+      </center>
+      <center class='stty hidden'>
+          If you change the size of the window,
+        you will need to use <b><em>stty</em></b> to tell your shell.
       </center>\n";
 
 echo "<script type='text/javascript'>\n";

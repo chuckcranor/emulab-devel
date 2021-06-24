@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,13 +30,21 @@ include_once("profile_defs.php");
 include_once("instance_defs.php");
 $page_title = "Show Profile";
 
+$isadmin = 0;
+$isguest = 0;
+    
 #
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLoginOrRedirect(CHECKLOGIN_WEBONLY);
-$this_idx  = $this_user->uid_idx();
-$isadmin   = (ISADMIN() ? 1 : 0);
+$this_user = CheckLogin($check_status);
+if (isset($this_user)) {
+    CheckLoginOrDie(CHECKLOGIN_NONLOCAL|CHECKLOGIN_WEBONLY);
+    $isadmin  = (ISADMIN() ? 1 : 0);
+}
+else {
+    $isguest = 1;
+}
 
 #
 # Verify page arguments.
@@ -58,7 +66,8 @@ else {
 if (!$profile) {
     SPITUSERERROR("No such profile!");
 }
-if (!$profile->CanView($this_user) && !(ISADMIN() || ISFOREIGN_ADMIN())) {
+if (($isguest && !$profile->ispublic()) ||
+    (!$profile->CanView($this_user) && !(ISADMIN() || ISFOREIGN_ADMIN()))) {
     SPITUSERERROR("Not enough permission!");
 }
 # For the download source button.
@@ -81,16 +90,27 @@ echo "<div id='ppviewmodal_div'></div>\n";
 $profile_uuid = $profile->profile_uuid();
 $version_uuid = $profile->uuid();
 $ispp         = ($profile->isParameterized() ? 1 : 0);
-$history      = ($profile->HasHistory() ? 1 : 0);
-$activity     = ($profile->HasActivity($this_user) ? 1 : 0);
-$canedit      = ($profile->CanEdit($this_user) ? 1 : 0);
-$disabled     = ($profile->isDisabled() ? 1 : 0);
+
+if ($isguest) {
+    $history      = 0;
+    $activity     = 0;
+    $canedit      = 0;
+    $disabled     = 0;
+}
+else {
+    $history      = ($profile->HasHistory() ? 1 : 0);
+    $activity     = ($profile->HasActivity($this_user) ? 1 : 0);
+    $canedit      = ($profile->CanEdit($this_user) ? 1 : 0);
+    $disabled     = ($profile->isDisabled() ? 1 : 0);
+}
 
 $defaults = array();
 $defaults["profile_name"]        = $profile->name();
 $defaults["profile_version"]     = $profile->version();
-$defaults["profile_creator"]     = $profile->creator();
-$defaults["profile_updater"]     = $profile->updater();
+if (!$isguest) {
+    $defaults["profile_creator"]     = $profile->creator();
+    $defaults["profile_updater"]     = $profile->updater();
+}
 $defaults["profile_pid"]         = $profile->pid();
 $defaults["profile_created"]     = DateStringGMT($profile->created());
 $defaults["profile_published"]   = DateStringGMT($profile->published());
@@ -138,30 +158,11 @@ echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/ace.js'></scrip
 echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-vim.js'></script>\n";
 echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
 
-$am_array = Instance::DefaultAggregateList();
-$amlist   = array();
-$amdefault = "";
-if (($ISCLOUD || ISADMIN() || STUDLY())) {
-    while (list($index, $aggregate) = each($am_array)) {
-        $urn = $aggregate->urn();
-        $am  = $aggregate->name();
-        
-	$amlist[] = $am;
-    }
-    $amdefault = $DEFAULT_AGGREGATE;
-    # Temporary override until constraint system in place.
-    if ($profile->BestAggregate()) {
-	$amdefault = $profile->BestAggregate();
-    }
-}
-echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($amlist));
-echo "</script>\n";
-
 echo "<script type='text/javascript'>\n";
 echo "    window.PROFILE_UUID = '$profile_uuid';\n";
 echo "    window.VERSION_UUID = '$version_uuid';\n";
 echo "    window.AJAXURL      = 'server-ajax.php';\n";
+echo "    window.ISGUEST      = $isguest;\n";
 echo "    window.ISADMIN      = $isadmin;\n";
 echo "    window.CANEDIT      = $canedit;\n";
 echo "    window.DISABLED     = $disabled;\n";
@@ -187,7 +188,7 @@ SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
             "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>");
 
-AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "instantiate-modal", "oops-modal", "share-modal", "gitrepo-picker", "copy-repobased-profile"));
+AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "oops-modal", "share-modal", "gitrepo-picker", "copy-repobased-profile"));
 SPITFOOTER();
 
 ?>

@@ -67,6 +67,7 @@
 #ifdef USESOCKETS
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/resource.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <setjmp.h>
@@ -1902,6 +1903,23 @@ progmode(int isrestart)
 	int		pipefds[2];
 	sigset_t	mask;
 	int		rv = -1;
+	static int	first = 1;
+
+	/*
+	 * Since we are all paranoid and close all possible file descriptors
+	 * below, make sure the max per-process limit is not outrageous.
+	 * On one machine, the default was 1.8M descriptors and it was taking
+	 * five seconds of real time to close them all.
+	 */
+	if (first) {
+		struct rlimit maxfd;
+		maxfd.rlim_cur = maxfd.rlim_max = 1000;
+		if (setrlimit(RLIMIT_NOFILE, &maxfd)) {
+			warning("%s: could not lower file descriptor max",
+				Devname);
+		}
+		first = 0;
+	}
 
 	/*
 	 * Looks like select is woken up before the process winds up dead.

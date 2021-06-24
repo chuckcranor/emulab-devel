@@ -89,9 +89,7 @@
 #define DOTSFS		".sfs"
 #define RUNASUSER	"nobody"
 #define RUNASGROUP	"nobody"
-#ifndef NTPSERVER
-#define NTPSERVER       "ntp1"
-#endif
+#define NTPCNAME	"ntp1"
 #define PROTOUSER	"elabman"
 #define PRIVKEY_LEN	128
 #define URN_LEN		128
@@ -8755,7 +8753,7 @@ COMMAND_PROTOTYPE(dontpinfo)
 		 * which is typically a CNAME to ops.
 		 */
 		OUTPUT(buf, sizeof(buf), "SERVER=%s.%s\n",
-		       NTPSERVER, OURDOMAIN);
+		       NTPCNAME, OURDOMAIN);
 
 		client_writeback(sock, buf, strlen(buf), tcp);
 		if (verbose)

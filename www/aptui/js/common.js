@@ -113,7 +113,9 @@ window.APT_OPTIONS.initialize = function (sup)
     /*
      * Setup a timer to ask for announcements.
      */
-    setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
+    if (window.LOGINUID) {
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
+    }
     
     window.APT_OPTIONS.startPage();
     $(window).on('beforeunload.common', APT_OPTIONS.endPage);

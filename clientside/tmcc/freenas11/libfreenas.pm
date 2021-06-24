@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2019 University of Utah and the Flux Group.
+# Copyright (c) 2013-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -665,12 +665,17 @@ sub freenasVolumeCreate($$$;$$)
 	$sparsearg = JSON::PP::false;
     }
 
+    #
+    # XXX don't explicitly turn compression on/off, use the default from
+    # the pool. I.e., I removed the:
+    #			      "compression" => "off",
+    # attribute in the call below.
+    #
     my $msg;
     my $res = freenasRequest("$FREENAS_API_RESOURCE_VOLUME/${pool}/zvols",
 			     "POST", undef,
 			     {"name" => "$volname",
 			      "volsize" => "${size}M",
-			      "compression" => "off",
 			      "sparse" => $sparsearg },
 			     202, \$msg);
     if (!$res) {

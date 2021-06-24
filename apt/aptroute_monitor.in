@@ -68,6 +68,7 @@ use libEmulab;
 use libtestbed;
 use APT_Instance;
 use APT_Aggregate;
+use GeniXML;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -253,8 +254,7 @@ sub LookForThingsToDo()
 	my $errmsg;
 
 	next
-	    if ($busid == 6996 || $busid == 6970 ||
-		$bus->disabled() || $bus->adminonly());
+	    if ($bus->disabled() || $bus->adminonly());
 	
 	# Current holder of the bus.
 	my ($instance) = APT_Instance::Aggregate->LookupByURN($bus->urn());
@@ -282,13 +282,42 @@ sub LookForThingsToDo()
 	    # the entire instance can be terminated. Say nothing.
 	    #
 	    my $aggregate = $instance->GetAggregate($bus->urn());
-	    if ($aggregate->status() eq "terminated") {
-		next;
-	    }
+	    next
+		if ($aggregate->status() eq "terminated");
+
 	    print "$busid still held by " . $instance->Printable() . " ";
 
-	    
-	    if (!defined($routeholder)) {
+	    #
+	    # Watch for a directly allocated bus, which is allowed for
+	    # some users and admins. We will not remove the bus from
+	    # this experiment. It would be easier to store this in the
+	    # DB instead of having to parse the rspec each time. 
+	    #
+	    my $manifest = GeniXML::Parse($aggregate->manifest());
+	    if (! defined($manifest)) {
+		print STDERR "Could not parse rspec for $aggregate\n";
+		next;
+	    }
+	    my $directlyheld = 0;
+	    foreach my $node (GeniXML::FindNodes("n:node",
+						 $manifest)->get_nodelist()) {
+		my $manager_urn = GetManagerId($node);
+		next
+		    if (!defined($manager_urn) || $manager_urn ne $bus->urn());
+
+		# Special tag indicates this was added for a route holder.
+		my $element = GeniXML::FindFirstNS("n:portal-added", $node,
+						   $GeniXML::EMULAB_NS); 
+		if (!defined($element)) {
+		    $directlyheld = 1;
+		    last;
+		}
+	    }
+	    if ($directlyheld) {
+		print "and was directly allocated, so staying put\n";
+		next;
+	    }
+	    elsif (!defined($routeholder)) {
 		print "and needs to be released\n";
 	    }
 	    else {

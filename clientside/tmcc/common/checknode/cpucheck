@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2013 University of Utah and the Flux Group.
+# Copyright (c) 2013-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -241,7 +241,7 @@ case $os in
 		"IntelPentiumIII") arch="i686" ;;
 		"Xeon(TM)" | "Xeon" ) arch=x86_64 ;;
 		"IntelPentiumII") arch="i386" ;;
-		"AMDEPYC745232-CoreProcessor") arch="amd64" ;;
+		"AMDEPYC") arch="amd64" ;;
 		* ) arch="Unknown" ;;
 	    esac
 	    # find number of sockets
@@ -255,7 +255,15 @@ case $os in
 	    x=$(grep 'FreeBSD/SMP:' /var/run/dmesg.boot | grep core)
 	    x=${x#FreeBSD/SMP: }
 	    x=${x#*package(s) x }
+	    # AMDs and FreeBSD 12
+	    if [ "$x" != "${x#*cache groups x }" ]; then
+		mult=${x%%cache groups*}
+		x=${x#*cache groups x }
+	    else
+		mult=1
+	    fi
 	    [[ $x ]] && cores_socket=${x%%core(s)*} || cores_socket=1
+	    cores_socket=$(($cores_socket*$mult))
 
 	    # find number of thread per cord
 	    x=$(grep 'FreeBSD/SMP:' /var/run/dmesg.boot | grep thread)

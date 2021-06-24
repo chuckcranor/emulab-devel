@@ -107,6 +107,9 @@ A. Things to do in advance of shutting down Emulab.
        is set for ttyu? devices and "onifexists" is set for the ttyv?
        devices.
 
+     * /etc/ntp.conf: the diffs here could be rather extensive as we
+       simplified the file. Just choose the current version in diffs.
+
    NOTE: if you built and installed your system from sources originally,
    you may also get some conflicts with other files where it calls out diffs
    is the RCS header or in comments. Favor the newer versions of those to
@@ -415,7 +418,8 @@ C. Updating ports/packages
 
       ls -la /usr/bin/perl /usr/local/bin/python
 
-   If not, get them back with:
+
+If not, get them back with:
 
       sudo ln -sf /usr/local/bin/perl /usr/bin/perl
       sudo ln -sf /usr/local/bin/python2.7 /usr/local/bin/python
@@ -474,6 +478,15 @@ C. Updating ports/packages
      # otherwise pkg freaks out
      sudo pkg upgrade -f -r Emulab
    
+   IMPORTANT NOTE: if you reinstall all packages, you might have to redo
+   tweaks that were done when upgrading from 10.x to 11.2. One in particular
+   is for the mod_fcgid package:
+
+     # we run apache as 'nobody' but this dir gets installed as 'www'
+     sudo chown nobody:nobody /var/run/fcgidsock
+     sudo chmod 770 /var/run/fcgidsock
+
+
    To be extra tidy:
 
      # look carefully at what it wants to do!
@@ -527,19 +540,21 @@ LoadModule php5_module        libexec/apache24/libphp5.so
 
    This is a point at which you might want to check dependencies:
 
-     pkg check -Ba
-     pkg check -da
+     pkg check -adB
 
-   and security:
+   You can check security:
    
      pkg audit -F
+
+   but at this point, the ports are old enough that there are lots of
+   vulnerabilities.
 
 6. Update your /etc/make.conf file in the event that you need to build a
    port from source in the future. Make sure your DEFAULT_VERSION line(s)
    look like:
 
-  DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
-  DEFAULT_VERSIONS+=ssl=base
+DEFAULT_VERSIONS=perl5=5.30 python=2.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+DEFAULT_VERSIONS+=ssl=base
 
 D. Repeat steps B and C for ops.
 
