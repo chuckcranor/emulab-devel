@@ -53,7 +53,7 @@ sub LoadJson($)
 	print STDERR "Could not read $file\n";
 	return undef;
     }
-    my $result = eval { decode_json($text); };
+    my $result = eval { from_json($text, {"relaxed" => 1}); };
     if ($@) {
 	print STDERR "Failed to json decode blob: $@\n";
 	return undef;

@@ -656,13 +656,14 @@ sub UpdateVersionInfo($$)
 #
 # Run a command, being sure to capture all output. 
 #
-sub ExecQuiet($)
+sub ExecQuiet($;$)
 {
     #
     # Use a pipe read, so that we save away the output
     #
-    my ($command) = @_;
+    my ($command, $verbose) = @_;
     my $output    = "";
+    $verbose = 0 if (!defined($verbose));
     
     #
     # This open implicitly forks a child, which goes on to execute the
@@ -679,6 +680,7 @@ sub ExecQuiet($)
     if ($pid) {
 	while (<PIPE>) {
 	    $output .= $_;
+	    print $_ if ($verbose);
 	}
 	close(PIPE);
     }
@@ -687,6 +689,10 @@ sub ExecQuiet($)
 	exec($command);
     }
     return $output;
+}
+sub ExecVerbose($)
+{
+    return ExecQuiet($_[0], 1);
 }
 
 sub PipeCommand($$$)
