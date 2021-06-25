@@ -295,7 +295,7 @@ case $os in
 	    cpuflags="$(grep Features /var/run/dmesg.boot | head -1) $(grep Features2 /var/run/dmesg.boot | head -1) $(grep 'AMD Features' /var/run/dmesg.boot | head -1)"
 	    [[ "${cpuflags}" = "${cpuflags/HTT/}" ]] && hyperthread=0 || hyperthread=1
 	    [[ "${cpuflags}" = "${cpuflags/LM/}" ]] && x64bit=0 || x64bit=1
-	    [[ "${cpuflags}" = "${cpuflags/HVM/}" && ("${cpuflags}" = "${cpuflags/VMX/}") && ("${cpuflags}" = "${cpuflags/VME/}") ]] && hwvirt=0 || hwvirt=1
+	    [[ ("${cpuflags}" = "${cpuflags/VMX/}") && ("${cpuflags}" = "${cpuflags/SVM/}") ]] && hwvirt=0 || hwvirt=1
 	    ;;
 	    
 	  * )
