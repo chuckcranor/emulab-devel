@@ -30,9 +30,10 @@ ISMAINSITE	= @TBMAINSITE@
 include $(OBJDIR)/Makeconf
 
 SUBDIRS		= 
-SBIN_SCRIPTS	= sasops
-LIBEXEC_SCRIPTS	=
-LIB_STUFF       = sas.pm sasutil.pm
+SBIN_SCRIPTS	= sasops manage_cbsd
+TESTSCRIPTS     = test1
+LIBEXEC_SCRIPTS	= sas_daemon
+LIB_STUFF       = sas.pm sasutil.pm APT_SAS.pm
 
 #
 # Force dependencies on the scripts so that they will be rerun through
@@ -40,13 +41,14 @@ LIB_STUFF       = sas.pm sasutil.pm
 #
 TARGETS = $(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) $(LIB_STUFF)
 
-all:	$(TARGETS) test
+all:	$(TARGETS) $(TESTSCRIPTS)
 
 subboss: 
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-install:
+install: $(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS)) \
+	$(addprefix $(INSTALL_LIBDIR)/, $(LIB_STUFF))
 
 boss-install: install
 

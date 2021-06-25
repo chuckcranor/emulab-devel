@@ -31,6 +31,7 @@ use vars qw(@ISA @EXPORT);
 @ISA = qw(Exporter);
 
 use Data::Dumper;
+use Date::Parse;
 use JSON;
 use LWP::UserAgent;
 use HTTP::Request;
@@ -47,12 +48,12 @@ my $TB		     = "@prefix@";
 #
 # For the moment, hardwire these things.
 #
-my $CERTDIR   = "/home/stoller/tmp/sascerts/";
-my $PROXYCERT = $CERTDIR . "UUTDomainProxy_unified.pem";
-my $PROXYKEY  = $CERTDIR . "UUTDomainProxyprivkey.key";
-my $PROXYCA   = $CERTDIR . "cbrs_ca1.pem";
-my $SASHOST   = "node0.stoller-qv99283.testbed.emulab.net";
-my $SASURL    = "https://$SASHOST:5000/v1.2";
+my $CERTDIR   = "/home/stoller/tmp/googlesas/";
+my $PROXYCERT = $CERTDIR . "universityofutah01.cert";
+my $PROXYKEY  = $CERTDIR . "universityofutah01.key";
+my $PROXYCA   = $CERTDIR . "ca.cert";
+my $SASHOST   = "test.sas.goog";
+my $SASURL    = "https://$SASHOST/v1.2";
 
 # Load the Testbed support stuff.
 use sasutil;
@@ -67,6 +68,8 @@ sub SASERROR_MISSING_PARAM()		{ 102; }
 sub SASERROR_INVALID_VALUE()		{ 103; }
 sub SASERROR_CERT_ERROR()		{ 104; }
 sub SASERROR_DEREGISTER()		{ 105; }
+# Google specific code, happens during "cpas". 
+sub SASERROR_RESEND()			{ 106; }
 sub SASERROR_REG_PENDING()		{ 200; }
 sub SASERROR_GROUP_ERROR()		{ 201; }
 sub SASERROR_UNSUPPORTED_SPECTRUM()	{ 300; }
@@ -83,6 +86,7 @@ my %SASERROR_STRINGS = (
     "103" => "One or more parameters have invalid value",
     "104" => "Error in the certificate used to make the request",
     "105" => "CBSD has been automatically deregistered",
+    "106" => "SAS is during something else, try again later",
     "200" => "Incomplete registration information",
     "201" => "Error has been identified in CBSD grouping parameters",
     "300" => "Frequency range is at least partially outside the CBRS band",
@@ -111,13 +115,16 @@ sub SasRequest($$)
     my ($method, $request) = @_;
 
     if (ref($request) ne "SCALAR") {
-	$request = eval { encode_json($request); };
+	my $encoder = JSON->new;
+	$encoder = $encoder->convert_blessed(1);
+	
+	$request = eval { $encoder->encode($request); };
 	if ($@) {
 	    print STDERR "Failed to json encode request: $@\n";
 	    return undef;
 	}
     }
-    print "$request\n";
+    #print "$request\n";
     
     $Net::HTTPS::SSL_SOCKET_CLASS = "IO::Socket::SSL";
     # See the man page
@@ -132,7 +139,7 @@ sub SasRequest($$)
     my $ua  = LWP::UserAgent->new;
     my $req = HTTP::Request->new("POST" => $SASURL . "/" . $method);
 
-    $ua->timeout(30);
+    $ua->timeout(60);
     $ua->ssl_opts(%ssl_opts);
     $req->protocol('HTTP/1.0');
     $req->header("Host"         => $SASHOST);
@@ -262,6 +269,7 @@ package sas::Request;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
 use sas;
+use JSON;
 
 #
 # Optional ref to partially constructed request structure.
@@ -318,6 +326,15 @@ sub cbsdId($;$)
 	$self->object()->{'cbsdId'} = $arg;
     }
     return $self->object()->{'cbsdId'};
+}
+
+#
+# For JSON encode.
+#
+sub TO_JSON($)
+{
+    my ($self) = @_;
+    return $self->object();
 }
 
 #
@@ -545,6 +562,7 @@ sub ErrorMessage($)
 package sas::Response::Registration;
 use base qw(sas::Response);
 use sas;
+use Date::Parse;
 
 #
 #{
@@ -592,6 +610,20 @@ sub availableChannels($)
     return \@result;
 }
 
+sub printChannels($)
+{
+    my ($self) = @_;
+    my $i = 0;
+
+    foreach my $ref (@{ $self->object()->{'availableChannel'} }) {
+	my $low  = $ref->{'frequencyRange'}->{'lowFrequency'};
+	my $high = $ref->{'frequencyRange'}->{'highFrequency'};
+	print "Channel $i: $low,$high\n";
+	$i++;
+    }
+    return 0;
+}
+
 package sas::Response::SpectrumInquiry::AvailableChannel;
 
 sub new($$)
@@ -617,6 +649,8 @@ sub highFrequency($)	{ return $_[0]->frequencyRange()->{'highFrequency'}; }
 package sas::Response::Grant;
 use base qw(sas::Response);
 use sas;
+use Date::Parse;
+use emutil;
 
 #{
 #    'cbsdId' : '47Mock-SASD823956047',
@@ -631,6 +665,17 @@ sub grantId($)           { return $_[0]->object()->{'grantId'}; }
 sub heartbeatInterval($) { return $_[0]->object()->{'heartbeatInterval'}; }
 sub channelType($)       { return $_[0]->object()->{'channelType'}; }
 sub grantExpireTime($)   { return $_[0]->object()->{'grantExpireTime'}; }
+
+sub print($)
+{
+    my ($self) = @_;
+    
+    my $grantid  = $self->grantId();
+    my $interval = $self->heartbeatInterval();
+    my $expires  = TBDateStringLocal(str2time($self->grantExpireTime()));
+
+    print "Grant:$grantid, interval:$interval, expires:$expires\n";
+}
 
 #
 # Heartbeat response
@@ -649,6 +694,21 @@ use sas;
 sub grantId($)           { return $_[0]->object()->{'grantId'}; }
 sub channelType($)       { return $_[0]->object()->{'channelType'}; }
 sub transmitExpireTime($){ return $_[0]->object()->{'transmitExpireTime'}; }
+# These two are optional but must be respected.
+sub grantExpireTime($)
+{
+    return undef
+	if (!exists($_[0]->object()->{'grantExpireTime'}));
+    
+    return $_[0]->object()->{'grantExpireTime'};
+}
+sub heartbeatInterval($)
+{
+    return undef
+	if (!exists($_[0]->object()->{'heartbeatInterval'}));
+    
+    return $_[0]->object()->{'heartbeatInterval'};
+}
 
 #
 # Relinquishment response
@@ -665,3 +725,6 @@ sub grantId($)           { return $_[0]->object()->{'grantId'}; }
 package sas::Response::Deregistration;
 use base qw(sas::Response);
 use sas;
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;

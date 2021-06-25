@@ -40,9 +40,11 @@ sub usage()
     print STDERR "       sasops [options --] relinquish ...\n";
     exit(-1);
 }
-my $optlist     = "dn";
+my $optlist     = "dnt:";
 my $debug       = 0;
 my $impotent    = 0;
+my $webtask_id;
+my $webtask;
 
 #
 # Configure variables
@@ -67,6 +69,7 @@ $| = 1;
 use lib "@prefix@/lib";
 use lib ".";
 use emutil;
+use WebTask;
 use sas;
 use sasutil;
 
@@ -90,8 +93,17 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
-if (defined($options{"d"})) {
-    $debug = 1;
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup webtask $webtask_id");
+    }
+    # Convenient.
+    $webtask->AutoStore(1);
 }
 if (@ARGV < 1) {
     usage();
@@ -129,37 +141,40 @@ exit(0);
 sub DoRegister()
 {
     my $usage = sub {
-	print STDERR "Usage: sasops [options] register xmlfile\n";
+	print STDERR "Usage: sasops [options] register jsonfile\n";
 	exit(-1);
     };
     &$usage()
-	if (!@ARGV);
+	if (@ARGV != 1);
 
-    foreach my $file (@ARGV) {
-	if (! -e $file) {
-	    fatal("$file does not exist");
-	}
-	my $device = sasutil::LoadJson($file);
-	if (!$device) {
-	    fatal("Cannot load json from $file");
-	}
-	print Dumper($device) if ($debug);
+    my $file = $ARGV[0];
+    if (! -e $file) {
+	fatal("$file does not exist");
+    }
+    my $device = sasutil::LoadJson($file);
+    if (!$device) {
+	fatal("Cannot load json from $file");
+    }
+    print Dumper($device) if ($debug);
 
-	my $request = sas::Request::Registration->new($device);
-	$request->Dump() if ($debug);
+    my $request = sas::Request::Registration->new($device);
+    $request->Dump() if ($debug);
 	
-	my $response = $request->Send();
-	if (!$response) {
-	    fatal("No response to Registration for " .
-		  $request->cbsdSerialNumber());
-	}
-	$response->Dump() if ($debug);
+    my $response = $request->Send();
+    if (!$response) {
+	fatal("No response to Registration for ". $request->cbsdSerialNumber());
+    }
+    $response->Dump() if ($debug);
 
-	if ($response->responseCode()) {
-	    fatal("Registration error for " . $request->cbsdSerialNumber() .
-		  " " . $response->ErrorMessage());
-	}
-	print "Registration success: " . $response->cbsdId() . "\n";
+    if ($response->responseCode()) {
+	fatal("Registration error for " . $request->cbsdSerialNumber() .
+	      " " . $response->ErrorMessage());
+    }
+    print $response->cbsdId() . "\n";
+
+    if (defined($webtask)) {
+	$webtask->cbsdId($response->cbsdId());
+	$webtask->Exited(0);
     }
 }
 
@@ -173,22 +188,25 @@ sub DoDeregister()
 	exit(-1);
     };
     &$usage()
-	if (!@ARGV);
+	if (@ARGV != 1);
 
-    foreach my $cbsdid (@ARGV) {
-	my $request = sas::Request::Deregistration->new($cbsdid);
-	$request->Dump();
+    my $cbsdid = $ARGV[0];
+
+    my $request = sas::Request::Deregistration->new($cbsdid);
+    $request->Dump();
 	
-	my $response = $request->Send();
-	if (!$response) {
-	    fatal("No response to Deregistration for $cbsdid");
-	}
-	$response->Dump() if ($debug);
-	if ($response->responseCode()) {
-	    fatal("Deregistration error for $cbsdid " .
-		  $response->ErrorMessage());
-	}
-	print "Deregistration success\n";
+    my $response = $request->Send();
+    if (!$response) {
+	fatal("No response to Deregistration for $cbsdid");
+    }
+    $response->Dump() if ($debug);
+    if ($response->responseCode()) {
+	fatal("Deregistration error for $cbsdid " . $response->ErrorMessage());
+    }
+    print "Deregistration success\n";
+
+    if (defined($webtask)) {
+	$webtask->Exited(0);
     }
 }
 
@@ -218,11 +236,21 @@ sub DoSpectrumInquiry()
 	fatal("SpectrumInquiry error for $cbsdid " . $response->ErrorMessage());
     }
     my $channels = $response->availableChannels();
+    my @channels = ();
+    my $i = 0;
     foreach my $channel (@$channels) {
 	my $low  = $channel->lowFrequency();
 	my $high = $channel->highFrequency();
 	
-	print "Range: $low,$high\n";
+	print "Range $i: $low,$high\n";
+	if (defined($webtask)) {
+	    push(@channels, {"low" => $low, "high" => $high});
+	}
+	$i++;
+    }
+    if (defined($webtask)) {
+	$webtask->channels(\@channels);
+	$webtask->Exited(0);
     }
 }
 
@@ -249,13 +277,27 @@ sub DoGrant()
     }
     $response->Dump() if ($debug);
     if ($response->responseCode()) {
-	fatal("Grant error for $cbsdid " . $response->ErrorMessage());
+	print STDERR "Grant error for $cbsdid " .
+	    $response->ErrorMessage() . "\n";
+	
+	if (defined($webtask)) {
+	    $webtask->ErrorMessage($response->ErrorMessage());
+	    $webtask->Exited($response->responseCode());
+	}
+	exit(-1);
     }
     my $grantid  = $response->grantId();
     my $interval = $response->heartbeatInterval();
     my $expires  = TBDateStringLocal(str2time($response->grantExpireTime()));
     
     print "Grantid:$grantid, Interval:$interval, Expires:$expires\n";
+
+    if (defined($webtask)) {
+	$webtask->grantId($grantid);
+	$webtask->heartbeatInterval($interval);
+	$webtask->grantExpireTime($response->grantExpireTime());
+	$webtask->Exited(0);
+    }
 }
 
 #
@@ -290,12 +332,34 @@ sub DoHeartbeat()
     }
     $response->Dump() if ($debug);
     if ($response->responseCode()) {
-	fatal("Heartbeat error for $cbsdid,$grantid " .
-	      $response->ErrorMessage());
+	print STDERR "Heartbeat error for $cbsdid,$grantid " .
+	    $response->ErrorMessage() . "\n";
+	
+	if (defined($webtask)) {
+	    $webtask->ErrorMessage($response->ErrorMessage());
+	    $webtask->Exited($response->responseCode());
+	}
+	exit(-1);
     }
     my $expires = TBDateStringLocal(str2time($response->transmitExpireTime()));
     
     print "Grantid:$grantid, TransmitExpires:$expires\n";
+    if ($response->grantExpireTime()) {
+	print "New grantExpireTime: " .
+	    TBDateStringLocal(str2time($response->grantExpireTime())) . "\n";
+    }
+    if ($response->heartbeatInterval()) {
+	print "New interval: " . $response->heartbeatInterval() . "\n";
+    }
+    
+    if (defined($webtask)) {
+	$webtask->transmitExpireTime($response->transmitExpireTime());
+	$webtask->grantExpireTime($response->transmitExpireTime())
+	    if ($response->transmitExpireTime());
+	$webtask->heartbeatInterval($response->heartbeatInterval())
+	    if ($response->heartbeatInterval());
+	$webtask->Exited(0);
+    }
 }
 
 #
@@ -330,12 +394,20 @@ sub DoRelinquish()
 	      $response->ErrorMessage());
     }
     print "Grant has been relinquished\n";
+    
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
 }
 
 sub fatal($)
 {
     my ($msg) = @_;
 
+    if (defined($webtask)) {
+	$webtask->output($msg);
+	$webtask->Exited(-1);
+    }
     die("*** $0:\n".
 	"    $msg\n");
 }

@@ -26,14 +26,18 @@ use strict;
 use Getopt::Std;
 use Data::Dumper;
 use Date::Parse;
-use JSON;
+
+#
+# Test case 1&2: https://support.google.com/sas/answer/9281248
+#
 
 sub usage()
 {
     print "Usage: test\n";
     exit(1);
 }
-my $optlist   = "";
+my $optlist   = "d";
+my $debug     = 0;
 
 #
 # Configure variables
@@ -54,92 +58,80 @@ use sasutil;
 #
 $| = 1;
 
-my $device_a = sasutil::LoadJson("$SRCDIR/device_a.json");
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+
+sub CheckResponse($$$)
+{
+    my ($response, $request, $which) = @_;
+    
+    if (!$response) {
+	die("No response to $which");
+    }
+    if ($response->responseCode()) {
+	$response->Dump();
+	die("Error returned by $which");
+    }
+    return $response;
+}
+
+my $device_a = sasutil::LoadJson("$SRCDIR/google-meb.json");
+if (!$device_a) {
+    die("Cannot load device");
+}
 print Dumper($device_a);
 
-my $request = sas::Request::Registration->new($device_a);
+my $request  = sas::Request::Registration->new($device_a);
 my $response = $request->Send();
-if (!$response) {
-    die("No response to Registration");
-}
-$response->Dump();
-if ($response->responseCode()) {
-    die("Error returned by Registration");
-}
+CheckResponse($response, $request, "registration");
+print "cbsdId: " . $response->cbsdId() . "\n";
 
 my $spectrum = sas::Request::SpectrumInquiry->new($response->cbsdId(),
 						  3550000000, 3700000000);
-$spectrum->Dump();
 my $spectrumResponse = $spectrum->Send();
-if (!$spectrumResponse) {
-    die("No response to spectruminquiry");
-}
-$spectrumResponse->Dump();
-if ($spectrumResponse->responseCode()) {
-    die("Error returned by spectrumInquiry");
-}
+CheckResponse($spectrumResponse, $spectrum, "spectruminquiry");
+$spectrumResponse->Dump() if ($debug);
+$spectrumResponse->printChannels();
 my $slist = $spectrumResponse->availableChannels();
 my $channel = $slist->[0];
-print Dumper($channel);
 
 my $grant = sas::Request::Grant->new($response->cbsdId(),
 				     $channel->lowFrequency(),
 				     $channel->highFrequency());
-$grant->Dump();
 my $grantResponse = $grant->Send();
-if (!$grantResponse) {
-    die("No response to Grant");
-}
-$grantResponse->Dump();
-if ($grantResponse->responseCode()) {
-    die("Error returned by Grant");
-}
+CheckResponse($grantResponse, $grant, "grant");
+$grantResponse->print();
 
 sleep(2);
 my $heartbeat = sas::Request::Heartbeat->new($response->cbsdId(),
 					     $grantResponse->grantId());
-$heartbeat->Dump();
 my $heartbeatResponse = $heartbeat->Send();
-if (!$heartbeatResponse) {
-    die("No response to Heartbeat");
-}
-$heartbeatResponse->Dump();
-if ($heartbeatResponse->responseCode()) {
-    die("Error returned by Heartbeat");
-}
+CheckResponse($heartbeatResponse, $heartbeat, "heartbeat");
 
 sleep(2);
 $heartbeat->operationState("AUTHORIZED");
 $heartbeatResponse = $heartbeat->Send();
-if (!$heartbeatResponse) {
-    die("No response to Heartbeat");
-}
-$heartbeatResponse->Dump();
-if ($heartbeatResponse->responseCode()) {
-    die("Error returned by Heartbeat");
-}
+CheckResponse($heartbeatResponse, $heartbeat, "heartbeat");
+$heartbeatResponse->Dump() if ($debug);
+
+sleep(2);
+$heartbeatResponse = $heartbeat->Send();
+CheckResponse($heartbeatResponse, $heartbeat, "heartbeat");
+$heartbeatResponse->Dump() if ($debug);
 
 sleep(2);
 my $relinquishment = sas::Request::Relinquishment->new($response->cbsdId(),
 					       $grantResponse->grantId());
-$relinquishment->Dump();
 my $relinquishmentResponse = $relinquishment->Send();
-if (!$relinquishmentResponse) {
-    die("No response to Relinquishment");
-}
-$relinquishmentResponse->Dump();
-if ($relinquishmentResponse->responseCode()) {
-    die("Error returned by Relinquishment");
-}
+CheckResponse($relinquishmentResponse,
+	      $relinquishment, "relinquishment");
 
 my $deregistration = sas::Request::Deregistration->new($response->cbsdId());
-$deregistration->Dump();
 my $deregistrationResponse = $deregistration->Send();
-if (!$deregistrationResponse) {
-    die("No response to Deregistration");
-}
-$deregistrationResponse->Dump();
-if ($deregistrationResponse->responseCode()) {
-    die("Error returned by Deregistration");
-}
-
+CheckResponse($deregistrationResponse,
+	      $deregistrationResponse, "deregistration");
