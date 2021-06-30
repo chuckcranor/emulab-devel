@@ -1879,9 +1879,11 @@ sub CheckResourceReservations($$$$$$;$)
 		$noresokayXX = 0;
 	    }
 	    #print "$type, $noresokayXX, $start, $end\n";
-	    
+
 	    if (!$noresokayXX &&
 		!APT_Reservation::Group::Reservation::Reserved(
+		     $project, $start, $end, $urn, $type, $count) &&
+		!APT_Reservation::Group::Reservation::ReservedByType(
 		     $project, $start, $end, $urn, $type, $count)) {
 		$$pmsg = "$count $type node(s) at $nickname are not reserved ".
 		    "for the duration of the experiment";

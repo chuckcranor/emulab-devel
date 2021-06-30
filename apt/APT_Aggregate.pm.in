@@ -639,10 +639,21 @@ sub Nodes($)
 sub IsReservableNode($$)
 {
     my ($self, $node_id) = @_;
+
     return 1
 	if (exists($self->Nodes()->{$node_id}) &&
 	    $self->Nodes()->{$node_id}->{'reservable'} != 0);
     return 0;
+}
+sub ReservableNodeType($$)
+{
+    my ($self, $node_id) = @_;
+
+    return $self->Nodes()->{$node_id}->{'type'}
+	if (exists($self->Nodes()->{$node_id}) &&
+	    $self->Nodes()->{$node_id}->{'reservable'} != 0);
+
+    return undef;
 }
 sub IsReservableType($$)
 {
