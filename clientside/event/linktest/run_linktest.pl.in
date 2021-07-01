@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -590,7 +590,7 @@ sub run_loghole(;$$) {
     system("rm -rf $localdir");
     system("mkdir -p $localdir");
     system("chmod 775 $localdir");
-    system("$LOGHOLE -e $pid/$eid sync -P -n -l $localdir -r $remdir");
+    system("$LOGHOLE -e $pid/$eid -q sync -P -n -l $localdir -r $remdir");
     # XXX attempt to make sure directory can be removed by project leader
     system("chmod -R g+w $localdir");
 }
