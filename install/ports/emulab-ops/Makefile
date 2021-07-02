@@ -100,7 +100,9 @@ RUN_DEPENDS+=	\
 
 .if (${EMULAB_PORTVERSION} == "7.3" || ${EMULAB_PORTVERSION} == "8.1")
 RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot
+	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot \
+	${PYTHON_PKGNAMEPREFIX}tornado>0:${PORTSDIR}/www/py-tornado \
+	${PYTHON_PKGNAMEPREFIX}paramiko>0:${PORTSDIR}/security/py-paramiko
 .endif
 
 # apache related ports
