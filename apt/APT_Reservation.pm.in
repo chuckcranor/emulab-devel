@@ -823,6 +823,7 @@ sub DeleteAnnouncement($)
 package APT_Reservation::Group::Reservation;
 use emdb;
 use libtestbed;
+use APT_Aggregate;
 use Carp;
 use JSON;
 use English;
@@ -1207,12 +1208,52 @@ sub Reserved($$$$$$)
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
 		    "      r.approved is not null");
+
     return 0
 	if (!defined($query_result) || !$query_result->numrows);
-
+    
     return $query_result->numrows;
 }
 
+#
+# Well, we have a problem with reservable nodes. If the rspec is requesting
+# those nodes by type, we do not want to reject it. 
+#
+sub ReservedByType($$$$$$)
+{
+    my ($project, $start, $end, $urn, $type, $count) = @_;
+    my $pid_idx = $project->pid_idx();
+    my $aggregate = APT_Aggregate->Lookup($urn);
+    
+    my $query_result =
+	DBQueryWarn("select g.uuid,r.type from apt_reservation_groups as g ".
+		    "left join apt_reservation_group_reservations as r on ".
+		    "   r.uuid=g.uuid ".
+		    "where g.pid_idx='$pid_idx' and ".
+		    "      r.aggregate_urn='$urn' and ".
+		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
+		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
+		    "      r.approved is not null");
+    return 0
+	if (!defined($query_result) || !$query_result->numrows);
+
+    my $tcount = 0;
+    while (my ($uuid,$token) = $query_result->fetchrow_array()) {
+	next
+	    if (!$aggregate->IsReservableNode($token));
+
+	my $nodetype = $aggregate->ReservableNodeType($token);
+	next
+	    if (!defined($nodetype));
+
+	$tcount++
+	    if ($nodetype eq $type);
+    }
+    return 1
+	if ($tcount >= $count);
+    
+    return 0;
+}
 
 #
 # Determine a max duration for an experiment.

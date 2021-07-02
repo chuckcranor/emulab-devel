@@ -5981,11 +5981,13 @@ sub SliverWorkAux($)
 	# into the manifest. Use snmpit for this, since ELABINELAB will
 	# need to ask the outer boss for the reserved tags.
 	#
+	DebugTimeStamp("Reserving vlan tags");
 	system("$SNMPIT -A $pid $eid");
 	if ($?) {
 	    $message = "Could not reserve vlan tags";
 	    goto bad;
 	}
+	DebugTimeStamp("Done reserving vlan tags");
     }
     elsif (!$v2) {
 	require Lan;
