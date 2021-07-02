@@ -40,7 +40,7 @@ sub usage()
     print STDERR "       sasops [options --] relinquish ...\n";
     exit(-1);
 }
-my $optlist     = "dnt:";
+my $optlist     = "dnt:l";
 my $debug       = 0;
 my $impotent    = 0;
 my $webtask_id;
@@ -95,6 +95,9 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"n"})) {
     $impotent = 1;
+}
+if (defined($options{"l"})) {
+    sas::SetSAS("localhost", "https://localhost:8049/v1.2");
 }
 if (defined($options{"t"})) {
     $webtask_id = $options{"t"};

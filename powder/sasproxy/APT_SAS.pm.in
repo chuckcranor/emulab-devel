@@ -150,6 +150,7 @@ sub Stringify($)
 sub Idle($)		{ return $_[0]->state() eq "idle"; }
 sub Registered($)	{ return $_[0]->state() eq "registered"; }
 sub UnRegistered($)	{ return $_[0]->state() eq "unregistered"; }
+sub IsLocal($)		{ return $_[0]->aggregate_urn() eq $MYURN; }
 
 #
 # Perform some updates ...
@@ -335,6 +336,33 @@ sub Refresh($)
     return 0;
 }
 
+#
+# Lookup all grants,
+#
+sub LookupAll($$)
+{
+    my ($class, $pref) = @_;
+    my $cbsds;
+    my @grants = ();
+
+    if (APT_SAS::cbsd->LookupAll(\$cbsds)) {
+	print STDERR "Could not get the cbsd list\n";
+	return -1;
+    }
+    foreach my $cbsd (@$cbsds) {
+	my $tmp;
+
+	if ($cbsd->GrantList(\$tmp)) {
+	    print STDERR "Could not get the grant list for $cbsd\n";
+	    return -1;
+	}
+	push(@grants, @$tmp);
+	
+    }
+    $$pref = \@grants;
+    return 0;
+}
+
 AUTOLOAD {
     my $self  = $_[0];
     my $type  = ref($self) or croak "$self ($AUTOLOAD) is not an object";
@@ -350,9 +378,11 @@ AUTOLOAD {
 }
 sub cbsd($)		{ return $_[0]->{'CBSD'}; }
 sub cbsdid($)		{ return $_[0]->cbsd()->cbsdid(); }
+sub IsLocal($)		{ return $_[0]->cbsd()->IsLocal(); }
 sub granted($)		{ return $_[0]->state() eq "granted"; }
 sub authorized($)	{ return $_[0]->state() eq "authorized"; }
 sub terminated($)	{ return $_[0]->state() eq "terminated"; }
+sub suspended($)	{ return $_[0]->state() eq "suspended"; }
 
 # Break circular reference someplace to avoid exit errors.
 sub DESTROY {
@@ -366,8 +396,9 @@ sub Stringify($)
 {
     my $self = shift;
     my $node_id = $self->node_id();
+    my $index   = $self->idx();
 
-    return "[grant:$node_id]";
+    return "[grant:$node_id,$index]";
 }
 
 #
@@ -426,7 +457,7 @@ sub Update($$)
     }
 
     my $query = "update apt_sas_grant_state set " . join(",", @sets) .
-	"where cbsdid=$safe_cbsdid and grantid=$safe_cbsdid";
+	"where cbsdid=$safe_cbsdid and grantid=$safe_grantid";
 
     return -1
 	if (! DBQueryWarn($query));
