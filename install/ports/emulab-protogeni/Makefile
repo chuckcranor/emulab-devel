@@ -34,12 +34,8 @@ BATCH=		yes
 .MAKEFLAGS+=	BATCH=yes
 
 LIB_DEPENDS=	\
+	libabac.so:${PORTSDIR}/misc/abac \
 	libxml2.so:${PORTSDIR}/textproc/libxml2
-.if (${EMULAB_PORTVERSION} != "8.1")
-# XXX doesn't build yet for swig4 and python3
-LIB_DEPENDS=	\
-	libabac.so:${PORTSDIR}/misc/abac
-.endif
 
 # apps
 RUN_DEPENDS+=	\
