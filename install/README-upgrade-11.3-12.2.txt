@@ -4,6 +4,10 @@ These are fairly specific, but not always exact instructions for the process.
 They are also oriented toward the CloudLab family of clusters, hence the
 references to mothership, Clemson, Wisconsin, Apt, etc.
 
+The most significant changes are:
+ * python2.7 has been replaced by python 3.x
+ * swig3 has been replaced by swig4
+
 Start with the boss node, and then you will repeat the instructions for ops.
 Note that there are a couple of steps below that you only do on the boss or
 the ops node, so pay attention!

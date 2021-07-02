@@ -100,7 +100,7 @@ security_py-certbot_UNSET+=MANPAGES
       run up against certificate issues, the it won't reinstall it.
       In that case, I have found the easiest thing to do is:
 
-      pushd /share/freebsd/12.2/packages-64
+      pushd /share/freebsd/12.2/packages
       pkg add pkg-*
       pkg add ca_root*
       popd
