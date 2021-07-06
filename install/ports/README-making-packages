@@ -165,7 +165,7 @@ security_py-certbot_UNSET+=MANPAGES
 
        # tar up the ports tree that corresponds to these packages
        set tball="FreeBSD-12.2-ports.tar.gz"
-       sudo tar --exclude=ports/.svn -czf $tball ports
+       sudo tar --exclude=ports/.svn --exclude=ports/.git -czf $tball ports
        sudo cp $tball $www/downloads/
 
    o. Assuming you have put out the new repo in Emulab-devel above, you
