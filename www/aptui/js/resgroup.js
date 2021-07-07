@@ -2917,6 +2917,7 @@ $(function ()
 	    var days  = hours / 24;
 	    $('#reserve-request-form [name=days]')
 		.val(days.toFixed(1));
+	    $('#reserve-created').html(moment(details.created).format("lll"));
 
 	    // Add cluster rows as needed.
 	    if (_.size(details.clusters)) {

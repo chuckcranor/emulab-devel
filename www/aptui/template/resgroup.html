@@ -140,6 +140,15 @@
 		  </div>
 	        <% } %>
 	      <% } %>
+	      <% if (editing) { %>
+		<div class="form-group" style="margin-bottom: 0px;">
+		  <div class="form-control-fake format-me"
+		       data-label="Created"
+		       id="reserve-created"
+		       data-key="created">
+		  </div>
+		</div>
+	      <% } %>
 	      <div class="form-group">
 		<div class="format-me"
 		     data-label="Cluster(s)"
