@@ -371,6 +371,29 @@ function Do_Toggle()
     SPITAJAX_RESPONSE(1);
 }
 
+function Do_DeleteProject()
+{
+    global $this_user, $target_project;
+    global $suexec_output;
+    global $TBADMINGROUP;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    $uid = $this_user->uid();
+    $pid = $target_project->pid();
+    
+    if (SUEXEC($uid, $TBADMINGROUP, "webrmproj $pid", SUEXEC_ACTION_CONTINUE)) {
+        SPITAJAX_ERROR(-1, $suexec_output);
+        return -1;
+    }
+    SPITAJAX_RESPONSE(1);
+}
+
 # Local Variables:
 # mode:php
 # End:

@@ -722,6 +722,36 @@ function Do_VerifyScopusInfo()
     SPITAJAX_RESPONSE(1);
 }
 
+#
+# Delete user,
+#
+function Do_DeleteUser()
+{
+    global $this_user, $target_user, $ajax_args;
+    global $suexec_output;
+    global $TBADMINGROUP;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    if ($this_user->SameUser($target_user)) {
+	SPITAJAX_ERROR(-1, "Not allowed to self delete");
+	return -1;
+    }
+    $uid = $this_user->uid();
+
+    if (SUEXEC($uid, $TBADMINGROUP, "webrmuser " . $target_user->uid_idx(),
+               SUEXEC_ACTION_CONTINUE)) {
+        SPITAJAX_ERROR(-1, $suexec_output);
+        return -1;
+    }
+    SPITAJAX_RESPONSE(1);
+}
+
 # Local Variables:
 # mode:php
 # End:

@@ -83,6 +83,9 @@ $(function ()
 	$('#sendpasswordreset').click(function () {
 	    SendPasswordReset();
 	});
+	$('#confirm-deleteuser').click(function () {
+	    DeleteUser();
+	});
     }
 
     // Call back for bulk delete to remove the row from both tables.
@@ -935,6 +938,28 @@ $(function ()
 					    "SendPasswordReset",
 					    {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
+    }
+
+    function DeleteUser()
+    {
+	var callback = function(json) {
+	    if (json.code) {
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", json.value);
+		});
+		return;
+	    }
+	    window.location.replace("landing.php");
+	}
+	var xmlthing = sup.CallServerMethod(null,
+					    "user-dashboard",
+					    "DeleteUser",
+					    {"uid" : window.TARGET_USER});
+	
+	sup.HideModal('#confirm-deleteuser-modal', function () {
+	    sup.ShowWaitWait("This will take a minute. Patience please.");
+	    xmlthing.done(callback);
+	});
     }
 
     $(document).ready(initialize);
