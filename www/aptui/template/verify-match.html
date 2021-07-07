@@ -81,7 +81,10 @@
 		<div style="height: 75px;">
 		  <div class="checkbox centered">
 		    <label>
-		      <input type="checkbox" name="<%= scopus_id %>"> Yes
+		      <input type="checkbox"
+			     <% if (scopus_info.validation_state == "valid"){ %>
+			     checked <% } %>
+			     name="<%= scopus_id %>"> Yes
 		    </label>
 		  </div>
 		</div>
