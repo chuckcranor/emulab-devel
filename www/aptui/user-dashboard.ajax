@@ -292,7 +292,8 @@ function Do_AccountDetails()
                      "  from user_scopus_info as u ".
                      "left join scopus_paper_info as p on ".
                      "     p.scopus_id=u.latest_abstract_id ".
-                     "where uid_idx='$target_idx'");
+                     "where uid_idx='$target_idx' and ".
+                     "      u.validation_state!='invalid'");
     while ($row = mysql_fetch_array($query_result)) {
         $scopus_id = $row["scopus_id"];
         $scopus_info[$scopus_id] = $row;
