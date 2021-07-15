@@ -1679,8 +1679,16 @@
 		    new_xscale = d3.scaleTime()
 			.domain(xscale.domain())
 			.range([0, width * (trans.k / 2)]);
-		    var shift = (trans.k == 2 ? 0 :
-				 new_xscale(mid) - (width / 2));
+
+		    // The last zoom (scale == 1) is always no shift;
+		    var shift = 0;
+		    if (trans.k > 2) {
+			shift = new_xscale(mid) - (width / 2);
+			// Do not shift in the wrong direction if close.
+			if (shift < 0) {
+			    shift = 0;
+			}
+		    }
 		    console.info(new_xscale(mid), shift);
 		    
 		    var transform = d3.zoomIdentity
