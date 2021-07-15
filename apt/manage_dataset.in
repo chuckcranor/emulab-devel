@@ -923,7 +923,7 @@ sub CheckIMDataset($$$$$)
 
 		    if ($name eq $bsname) {
 			if (!defined($dataset_id) &&
-			    (!defined($size) || $size == 0)) {
+			    (!defined($size) || "$size" eq "0")) {
 			    $$perrmsg = "Not allowed to create an image ".
 				"backed dataset from a blcokstore that uses ".
 				"all available disk space ".
