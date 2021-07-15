@@ -624,7 +624,6 @@ $(function ()
 	    },
 	};
 	var chart = visavail.generate(options, dataset)
-	window.CHARTS[graph] = chart;
 
 	$(zoomin).click(function (event) {
 	    event.preventDefault();

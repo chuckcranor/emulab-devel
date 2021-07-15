@@ -4,7 +4,7 @@ $(function ()
 
     var template_list   = ["resgroup", "reserve-faq", "range-list",
 			   "reservation-graph", "oops-modal", "waitwait-modal",
-			   "resusage-graph"];
+			   "resusage-graph", "visavail-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
@@ -12,6 +12,7 @@ $(function ()
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var usageTemplate   = _.template(templates["resusage-graph"]);
     var rangeTemplate   = _.template(templates["range-list"]);
+    var visTemplate     = _.template(templates["visavail-graph"]);
     var current_pid  = null;
     var projlist     = null;
     var amlist       = null;
@@ -566,6 +567,15 @@ $(function ()
 		$('#reservation-lists').append(html);
 	    }
 	});
+	if (_.size(FEs)) {
+	    $('#FE-graph-div')
+		.html(visTemplate({
+		    "title" : "Fixed Endpoint Availability",
+		    "id"    : "FE",
+		}))
+		.removeClass("hidden")
+		.find(".panel").removeClass("hidden");
+	}
 
 	// Handler for the Help button
 	$('#reservation-help-button').click(function (event) {
@@ -1956,6 +1966,7 @@ $(function ()
     {
 	var details  = amlist[urn];
 	var forecast = {};
+	var groups   = {};
 
 	/*
 	 * The radio graph consists of individually reservable nodes that
@@ -1963,12 +1974,48 @@ $(function ()
 	 */
 	_.each(json.value.forecast, function (info, key) {
 	    if (_.has(radioinfo[urn], key)) {
-		forecast[key]  = info;
+		if (radioinfo[urn][key].grouping) {
+		    var group = radioinfo[urn][key].grouping;
+		    if (!_.has(groups, group)) {
+			groups[group] = {};
+		    }
+		    groups[group][key] = info;
+		}
+		else {
+		    forecast[key]  = info;
+		}
 		prunelist[key] = true;
 	    }
 	});
+	$('#powder-radios')
+	    .html(visTemplate({
+		    "title" : "Powder Outdoor Radio Availability",
+		    "id"    : "radio",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
 	$('#radio-graph-div').removeClass("hidden");
-	ShowNewGraph(forecast, "radio-graph-body", "radio-graph-visavail")
+	ShowNewGraph(forecast, "radio");
+
+	$('#powder-mmimo')
+	    .html(visTemplate({
+		"title" : "RENEW Massive MIMO Radio Availability",
+		"id"    : "mmimo",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
+	$('#powder-ota')
+	    .html(visTemplate({
+		"title" : "OTA Lab",
+		"id"    : "ota",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
+
+	_.each(groups, function (forecast, group) {
+	    $('#' + group + '-graph-div').removeClass("hidden");
+	    ShowNewGraph(forecast, group);
+	});
 
 	/*
 	 * The matrix graph consists of nodes in the matrixinfo object
@@ -1980,8 +2027,14 @@ $(function ()
 		prunelist[key] = true;
 	    }
 	});
-	$('#matrix-graph-div').removeClass("hidden");
-	ShowNewGraph(forecast, "matrix-graph-body", "matrix-graph-visavail")
+	$('#powder-matrix')
+	    .html(visTemplate({
+		"title" : "PhantomNet RF Attenuator Matrix",
+		"id"    : "matrix",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
+	ShowNewGraph(forecast, "matrix");
     }
 
     /*
@@ -4010,24 +4063,36 @@ $(function ()
 			combinedForecasts[id] = forecast;
 		    });
 	    });
-	ShowNewGraph(combinedForecasts, "FE-graph-body", "FE-graph-visavail");
+	ShowNewGraph(combinedForecasts, "FE");
     }
 
     function GenerateRouteGraph()
     {
-	$('#route-graph-div').removeClass("hidden");
+	$('#route-graph-div')
+	    .html(visTemplate({
+		"title" : "Bus Route Availability",
+		"id"    : "route",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
 
-	ShowNewGraph(routeforecast, "route-graph-body", "route-graph-visavail");
+	ShowNewGraph(routeforecast, "route");
     }
 
     /*
      * Generate a new style graph in the provide container.
      */
-    function ShowNewGraph(forecasts, container, graph)
+    function ShowNewGraph(forecasts, tag)
     {
 	var dataset = [];
 	var now     = new Date();
 	var maxend  = now;
+	var container = tag + "-graph-body";
+	var graph     = tag + "-graph-visavail";
+	var zoomin  = $('#' + container).closest(".panel")
+	    .find(".panel-heading .zoom-control .zoom-in");
+	var zoomout = $('#' + container).closest(".panel")
+	    .find(".panel-heading .zoom-control .zoom-out");
 	
 	Object.keys(forecasts)
 	    .sort()
@@ -4128,6 +4193,15 @@ $(function ()
 	    },
 	};
 	var chart = visavail.generate(options, dataset)
+
+	$(zoomin).click(function (event) {
+	    event.preventDefault();
+	    chart.zoomin();
+	})
+	$(zoomout).click(function (event) {
+	    event.preventDefault();
+	    chart.zoomout();
+	})
     }
 
     /*

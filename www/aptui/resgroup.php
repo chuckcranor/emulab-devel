@@ -259,7 +259,7 @@ AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
                       "range-list", "route-list",
                       "oops-modal", "waitwait-modal", "confirm-modal",
                       "resusage-list", "resusage-graph",
-                      "confirm-something", "resusage-graph"));
+                      "confirm-something", "resusage-graph", "visavail-graph"));
 SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n".
