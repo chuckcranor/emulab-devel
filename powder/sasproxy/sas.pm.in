@@ -100,12 +100,20 @@ sub SASERROR_STRING($)	{ return $SASERROR_STRINGS{$_[0]}; }
 
 @EXPORT = qw(SASERROR_VERSION SASERROR_BLACKLIST
              SASERROR_MISSING_PARAM SASERROR_INVALID_VALUE
-             SASERROR_CERT_ERROR SASERROR_DEREGISTER
+             SASERROR_CERT_ERROR SASERROR_DEREGISTER SASERROR_RESEND
              SASERROR_REG_PENDING SASERROR_GROUP_ERROR
              SASERROR_UNSUPPORTED_SPECTRUM SASERROR_INTERFERENCE
 	     SASERROR_GRANT_CONFLICT SASERROR_TERMINATED_GRANT
              SASERROR_SUSPENDED_GRANT SASERROR_UNSYNC_OP_PARAM
              SASERROR_STRING);
+
+#
+# For testing.
+#
+sub SetSAS($$)
+{
+    ($SASHOST, $SASURL) = @_;
+}
 
 #
 # Make a request to the SAS.
@@ -114,7 +122,7 @@ sub SasRequest($$)
 {
     my ($method, $request) = @_;
 
-    if (ref($request) ne "SCALAR") {
+    if (ref($request) eq "HASH" || ref($request) eq "ARRAY") {
 	my $encoder = JSON->new;
 	$encoder = $encoder->convert_blessed(1);
 	
@@ -162,14 +170,14 @@ sub SasRequest($$)
 	    print STDERR "Failed to json decode blob: $@\n";
 	    return undef;
 	}
-	return ($json, $result);
+	return ($json, $result, $response);
     }
     my $code = $response->code();
     my $message = $response->message();
     print STDERR "Retrieve failed:$code $message\n";
     print STDERR $response->as_string() . "\n";
     
-    return undef;
+    return (undef, undef, $response);
 }
 
 sub Registration($)
@@ -177,7 +185,7 @@ sub Registration($)
     my ($request) = @_;
 
     $request = {'registrationRequest' => $request};
-    my $response = SasRequest('registration', $request);
+    my (undef, $response) = SasRequest('registration', $request);
     return undef
 	if (!defined($response));
 
@@ -189,7 +197,7 @@ sub SpectrumInquiry($)
     my ($request) = @_;
 
     $request = {'spectrumInquiryRequest' => $request};
-    my $response = SasRequest('spectrumInquiry', $request);
+    my (undef,$response) = SasRequest('spectrumInquiry', $request);
     return undef
 	if (!defined($response));
 
@@ -201,7 +209,7 @@ sub Grant($)
     my ($request) = @_;
 
     $request = {'grantRequest' => $request};
-    my $response = SasRequest('grant', $request);
+    my (undef,$response) = SasRequest('grant', $request);
     return undef
 	if (!defined($response));
 
@@ -213,7 +221,7 @@ sub Heartbeat($)
     my ($request) = @_;
 
     $request = {'heartbeatRequest' => $request};
-    my $response = SasRequest('heartbeat', $request);
+    my (undef,$response) = SasRequest('heartbeat', $request);
     return undef
 	if (!defined($response));
 
@@ -225,7 +233,7 @@ sub Relinquishment($)
     my ($request) = @_;
 
     $request = {'relinquishmentRequest' => $request};
-    my $response = SasRequest('relinquishment', $request);
+    my (undef,$response) = SasRequest('relinquishment', $request);
     return undef
 	if (!defined($response));
 
@@ -238,7 +246,7 @@ sub Deregistration($)
     my ($request) = @_;
 
     $request = {'deregistrationRequest' => $request};
-    my $response = SasRequest('deregistration', $request);
+    my (undef,$response) = SasRequest('deregistration', $request);
     return undef
 	if (!defined($response));
 
@@ -725,6 +733,130 @@ sub grantId($)           { return $_[0]->object()->{'grantId'}; }
 package sas::Response::Deregistration;
 use base qw(sas::Response);
 use sas;
+
+#
+########################################################################
+#
+package sas::daemon;
+use sas;
+use Date::Parse;
+use emutil;
+use IO::Socket::SSL;
+use HTTP::Daemon::SSL;
+use HTTP::Status;
+
+my $SASDAEMON_PORT	= 8049;
+
+#
+# Create a new HTTP Daemon.
+#
+sub Create($$)
+{
+    my ($class, $args) = @_;
+
+    my %ssl_opts = (
+	"verify_hostname" => 0,
+	"SSL_ca_file"     => $PROXYCA,
+	"SSL_cert_file"   => $PROXYCERT,
+	"SSL_key_file"    => $PROXYKEY,
+	"LocalAddr"       => "localhost",
+	"LocalPort"       => $SASDAEMON_PORT,
+	"ReusePort"       => 1,
+	);
+
+    my $daemon = HTTP::Daemon::SSL->new(%ssl_opts);
+    return undef
+	if (!defined($daemon));
+
+    my $self = {
+	"daemon" => $daemon,
+    };
+    bless($self, $class);
+    return $self;
+}
+
+#
+# Serve up requests.
+#
+sub Serve($$)
+{
+    my ($self, $callback) = @_;
+    my $d = $self->{'daemon'};
+
+    while (my $c = $d->accept) {
+	my $r = $c->get_request;
+	if ($r->method eq 'POST' and $r->url->path =~ /^\/v1.2\//) {
+	    my $response = &$callback($r);
+	    if ($response) {
+		$c->send_response($response);
+	    }
+	    else {
+		$c->send_error(RC_BAD_REQUEST)
+	    }
+	}
+	else {
+	    $c->send_error(RC_FORBIDDEN)
+	}
+	$c->close();
+	undef($c);
+    }
+}
+
+#
+# Forking version. Not sure if its needed.
+#
+sub ForkingServe($$)
+{
+    my ($self, $callback) = @_;
+    my $d = $self->{'daemon'};
+    my $childcount = 0;
+
+    while (my $c = $d->accept) {
+	my $pid;
+	if ($childcount < 3) {
+	    $pid = fork();
+	    $childcount++;
+
+	    if (!defined($pid)) {
+		# Fork failure, done.
+		print STDERR "Fork Failure\n";
+		sleep(5);
+		$c->send_error(RC_INTERNAL_SERVER_ERROR);
+		$c->close();
+		undef($c);
+		next;
+	    }
+	    elsif ($pid) {
+		# Parent. Close the socket and wait for the child.
+		$c->close();
+		undef($c);
+		# We do not care how it exits.
+		waitpid($pid, 0);
+		$childcount--;
+		next;
+	    }
+	}
+	my $r = $c->get_request;
+	if ($r->method eq 'POST' and $r->url->path =~ /^\/v1.2\//) {
+	    my $response = &$callback($r);
+	    if ($response) {
+		$c->send_response($response);
+	    }
+	    else {
+		$c->send_error(RC_BAD_REQUEST)
+	    }
+	}
+	else {
+	    $c->send_error(RC_FORBIDDEN)
+	}
+	$c->close();
+	undef($c);
+	if (defined($pid)) {
+	    # Forked child, exit back to waitpit.
+	    exit(0);
+	}
+    }
+}
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;

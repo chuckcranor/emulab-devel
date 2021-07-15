@@ -31,8 +31,8 @@ include $(OBJDIR)/Makeconf
 
 SUBDIRS		= 
 SBIN_SCRIPTS	= sasops manage_cbsd
-TESTSCRIPTS     = test1
-LIBEXEC_SCRIPTS	= sas_daemon
+TESTSCRIPTS     = test1 test13
+LIBEXEC_SCRIPTS	= sas_daemon sas_proxy
 LIB_STUFF       = sas.pm sasutil.pm APT_SAS.pm
 
 #

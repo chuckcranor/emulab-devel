@@ -42,7 +42,7 @@ sub usage()
     print STDERR "       manage_cbsd [options] relinquish node_id ...\n";
     exit(-1);
 }
-my $optlist     = "dt:";
+my $optlist     = "dt:l";
 my $debug       = 0;
 my $webtask_id;
 my $webtask;
@@ -100,12 +100,15 @@ sub DoRelinquish();
 # left are the required arguments.
 #
 my %options = ();
-if (grep {$_ eq "--"} @ARGV &&
-    ! getopts($optlist, \%options)) {
+if (!getopts($optlist, \%options)) {
     usage();
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"l"})) {
+    sas::SetSAS("localhost", "https://localhost:8049/v1.2");
+    $SASOPS .= " -l";
 }
 if (defined($options{"t"})) {
     $webtask_id = $options{"t"};
