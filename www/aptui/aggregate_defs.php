@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -192,12 +192,14 @@ class Aggregate
     # Return a list of aggregates supporting datasets.
     #
     function SupportsDatasetsList() {
+        global $PORTAL_GENESIS;
 	$result  = array();
 
 	$query_result =
 	    DBQueryFatal("select urn from apt_aggregates ".
-			 "where has_datasets!=0 and disabled=0");
-
+			 "where has_datasets!=0 and disabled=0 and ".
+                         "      FIND_IN_SET('$PORTAL_GENESIS', portals)");
+        
 	while ($row = mysql_fetch_array($query_result)) {
 	    $urn = $row["urn"];
 
