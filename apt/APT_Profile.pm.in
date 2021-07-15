@@ -1754,7 +1754,7 @@ sub GetResources($$$)
 	}
 	else {
 	    print STDERR "No type for $client_id\n";
-	    next;
+	    $restoken = "pc";
 	}
 	if (!exists($typeCounts{$manager_urn})) {
 	    $typeCounts{$manager_urn} = {};
