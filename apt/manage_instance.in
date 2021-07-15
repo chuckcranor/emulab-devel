@@ -1150,7 +1150,8 @@ sub DoImageTrackerStuff($$$$$$$$)
     #
     # We can look for a deprecated image here and warn the user early.
     #
-    if (exists($blob->{'deprecated'}) && $blob->{'deprecated'}) {
+    if (!$this_user->IsAdmin() &&
+	exists($blob->{'deprecated'}) && $blob->{'deprecated'}) {
 	$$perrmsg = "$image_token is deprecated; not allowed to clone ".
 	    "or snapshot";
 	return 1;

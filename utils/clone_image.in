@@ -277,7 +277,7 @@ if (defined($image)) {
     # Do not allow a deprecated image to be snapshot, even if its
     # deprecated with warning only.
     #
-    if ($image->deprecated() && !$this_user->IsAdmin()) { 
+    if ($image->deprecated() && !$this_user->admin()) {
 	fatal("Not allowed to clone/snapshot a deprecated image!");
     }
 
