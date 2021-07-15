@@ -164,8 +164,41 @@ CREATE TABLE `apt_aggregate_radio_info` (
   `radio_type` tinytext,
   `power_id` varchar(32) default NULL,
   `cnuc_id` varchar(32) default NULL,
+  `grouping` varchar(32) default NULL,
   `notes` text,
   PRIMARY KEY  (`aggregate_urn`,`node_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+
+DROP TABLE IF EXISTS `apt_sas_radio_state`;
+CREATE TABLE `apt_sas_radio_state` (
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `node_id` varchar(32) NOT NULL default '',
+  `fccid` varchar(32) NOT NULL default '',
+  `serial` varchar(32) NOT NULL default '',
+  `state` enum('idle','unregistered','registered') default 'idle',
+  `updated` datetime default NULL,
+  `cbsdid` varchar(128) default NULL,
+  `locked` datetime default NULL, 
+  `locker_pid` int(11) default '0',
+  PRIMARY KEY  (`aggregate_urn`,`node_id`),
+  UNIQUE KEY `cbsdid` (`cbsdid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `apt_sas_grant_state`;
+CREATE TABLE `apt_sas_grant_state` (
+  `cbsdid` varchar(128) NOT NULL default '',
+  `idx` int(10) unsigned NOT NULL auto_increment,
+  `grantid` varchar(128) NOT NULL default '',
+  `state` enum('granted','authorized','suspended','terminated') default NULL,
+  `updated` datetime default NULL,
+  `freq_low` int(11) default '0',
+  `freq_high` int(11) default '0',
+  `interval` int(11) default '0',
+  `expires` datetime default NULL,
+  `transmitExpires` datetime default NULL,
+  PRIMARY KEY  (`cbsdid`,`idx`),
+  UNIQUE KEY `grantid` (`cbsdid`,`grantid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
