@@ -288,11 +288,12 @@ function Do_AccountDetails()
     $scopus_info = array();
     $query_result =
         DBQueryFatal("select u.scopus_id,u.author_url,p.title, ".
-                     "    u.validation_state,p.authors,p.pubname ".
+                     "    u.validation_state,p.authors,p.pubname,p.doi ".
                      "  from user_scopus_info as u ".
                      "left join scopus_paper_info as p on ".
                      "     p.scopus_id=u.latest_abstract_id ".
-                     "where uid_idx='$target_idx'");
+                     "where uid_idx='$target_idx' and ".
+                     "      u.validation_state!='invalid'");
     while ($row = mysql_fetch_array($query_result)) {
         $scopus_id = $row["scopus_id"];
         $scopus_info[$scopus_id] = $row;
@@ -718,6 +719,36 @@ function Do_VerifyScopusInfo()
         $state = ($valid == "true" ? "valid" : "invalid");
 
         $target_user->ValidateScopusInfo($scopus_id, $state);
+    }
+    SPITAJAX_RESPONSE(1);
+}
+
+#
+# Delete user,
+#
+function Do_DeleteUser()
+{
+    global $this_user, $target_user, $ajax_args;
+    global $suexec_output;
+    global $TBADMINGROUP;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    if ($this_user->SameUser($target_user)) {
+	SPITAJAX_ERROR(-1, "Not allowed to self delete");
+	return -1;
+    }
+    $uid = $this_user->uid();
+
+    if (SUEXEC($uid, $TBADMINGROUP, "webrmuser " . $target_user->uid_idx(),
+               SUEXEC_ACTION_CONTINUE)) {
+        SPITAJAX_ERROR(-1, $suexec_output);
+        return -1;
     }
     SPITAJAX_RESPONSE(1);
 }

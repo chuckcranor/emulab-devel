@@ -67,6 +67,9 @@ $(function ()
 	if (window.ISPOWDER) {
 	    LoadRFRanges();
 	}
+	$('#confirm-deleteproject').click(function () {
+	    DeleteProject();
+	});
     }
 
     function LoadUsage()
@@ -859,6 +862,28 @@ $(function ()
 			     {"pid" : window.TARGET_PROJECT,
 			      "idx" : license_idx},
 			     callback);
+    }
+
+    function DeleteProject()
+    {
+	var callback = function(json) {
+	    if (json.code) {
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", json.value);
+		});
+		return;
+	    }
+	    window.location.replace("landing.php");
+	}
+	var xmlthing = sup.CallServerMethod(null,
+					    "show-project",
+					    "DeleteProject",
+					    {"pid" : window.TARGET_PROJECT});
+	
+	sup.HideModal('#confirm-deleteproject-modal', function () {
+	    sup.ShowWaitWait("This will take a minute. Patience please.");
+	    xmlthing.done(callback);
+	});
     }
 
     $(document).ready(initialize);

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -125,7 +125,8 @@ REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
 AddLibrary("js/resgraphs.js");
 AddTemplateList(array("resinfo", "resinfo-totals", "reservation-graph",
-                      "range-list", "oops-modal", "waitwait-modal"));
+                      "range-list", "oops-modal", "waitwait-modal",
+                      "visavail-graph"));
 SPITREQUIRE("js/resinfo.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n".

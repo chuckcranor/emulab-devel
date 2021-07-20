@@ -27,7 +27,16 @@
 	<div class='panel-body'>
 	  <div style="font-size: 16px;">
 	    <div style="font-size: 20px; font-weight: 400;">
-	      <%= scopus_info.title %></div>
+	      <% if (scopus_info.doi) { %>
+		<a target="_blank"
+		   href="https://scholar.google.com/scholar?q=<%= scopus_info.doi %>">
+		  <%= scopus_info.title %></a>
+	      <% } else { %>
+		<a target="_blank"
+		   href="https://scholar.google.com/scholar?q=<%= scopus_info.title.split(/\s+/).join("+") %>">
+		  <%= scopus_info.title %></a>
+	      <% } %>
+	    </div>
 	    <div><%= scopus_info.authors %></div>
 	    <div><%= scopus_info.pubname %></div>
 	  </div>
@@ -72,14 +81,26 @@
 		<div style="height: 75px;">
 		  <div class="checkbox centered">
 		    <label>
-		      <input type="checkbox" name="<%= scopus_id %>"> Yes
+		      <input type="checkbox"
+			     <% if (scopus_info.validation_state == "valid"){ %>
+			     checked <% } %>
+			     name="<%= scopus_id %>"> Yes
 		    </label>
 		  </div>
 		</div>
 	      </div>
 	      <div class="col-sm-11" styleX="position: relative;">
 		<div style="font-size: 20px; font-weight: 400;">
-		  <%= scopus_info.title %></div>
+		  <% if (scopus_info.doi) { %>
+		    <a target="_blank"
+		       href="https://scholar.google.com/scholar?q=<%= scopus_info.doi %>">
+		      <%= scopus_info.title %></a>
+		  <% } else { %>
+		    <a target="_blank"
+		       href="https://scholar.google.com/scholar?q=<%= scopus_info.title.split(/\s+/).join("+") %>">
+		      <%= scopus_info.title %></a>
+		  <% } %>
+		</div>
 		<div><%= scopus_info.authors %></div>
 		<div><%= scopus_info.pubname %></div>
 	      </div>

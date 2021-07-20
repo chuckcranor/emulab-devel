@@ -1,0 +1,27 @@
+<div class="panel panel-default hidden">
+  <div class='panel-heading text-center'>
+    <div class="pull-left zoom-control" style="font-size: 18px;">
+      <a href="#" class="zoom-in">
+	<span class="glyphicon glyphicon-zoom-in"></span>
+      </a>	    
+      <a href="#" class="zoom-out">
+	<span class="glyphicon glyphicon-zoom-out"></span>
+      </a>
+      <a href='#'
+	 data-toggle='popover'
+	 data-html='true'
+	 data-delay='{"hide":500}'
+	 data-content='In addition to the zoom in/out buttons to the left,
+		       you can double click in the graph to zoom/recenter.
+		       You can also click-drag to pan left or right after
+		       zooming in.'>
+	<span class='glyphicon glyphicon-question-sign'></span>
+      </a>
+    </div>
+    <h3 class='panel-title'><%= title %></h3>
+  </div>
+  <div class='panel-body visavail' style="padding: 2px;"
+       id="<%= id %>-graph-body">
+    <div id="<%= id %>-graph-visavail" class="visavail-graph"></div>
+  </div>
+</div>

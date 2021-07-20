@@ -321,7 +321,9 @@ $routing = array("geni-login" =>
                                                  "AcceptAUP" =>
                                                      "Do_AcceptAUP",
                                                  "VerifyScopusInfo" =>
-                                                     "Do_VerifyScopusInfo"
+                                                     "Do_VerifyScopusInfo",
+                                                 "DeleteUser" =>
+                                                     "Do_DeleteUser"
                               )
                         ),
 		 "nag" =>
@@ -356,7 +358,9 @@ $routing = array("geni-login" =>
                                                  "Toggle" =>
                                                      "Do_Toggle",
                                                  "ProjectProfile" =>
-                                                      "Do_ProjectProfile"
+                                                     "Do_ProjectProfile",
+                                                 "DeleteProject" =>
+                                                     "Do_DeleteProject"
                               )
                         ),
 		 "groups" =>
