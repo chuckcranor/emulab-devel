@@ -158,7 +158,7 @@ security_py-certbot_UNSET+=MANPAGES
        set tball="FreeBSD-12.2-packages-64-`date +%Y%m%d`.tar.gz"
        sudo tar czf $tball packages
        sudo cp $tball $www/downloads/
-       sudo ln -sf $tball $www/downloads/FreeBSD-12.2-packages-64.tar.gz
+       sudo ln -sfn $tball $www/downloads/FreeBSD-12.2-packages-64.tar.gz
        sudo mv $www/FreeBSD/12.2/{packages,Opackages}
        sudo cp -rp packages $www/FreeBSD/12.2/
        sudo pkg repo $www/FreeBSD/12.2/packages
