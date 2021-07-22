@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2020 University of Utah and the Flux Group.
+# Copyright (c) 2004-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -726,16 +726,16 @@ sub doboot()
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-7.3";
     } elsif ($FBSD_VERSION > 11.3) {
 	my $suf = "-64";
-	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/12.1/packages${suf}";
+	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/12.2/packages${suf}";
 	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
 	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
 	$emulabconfig{EXTRA_PKG_DIR}= $emulabconfig{FS_PKG_DIR};
-	$emulabconfig{FS_PKG}       = "emulab-fs-8.1";
-	$emulabconfig{OPS_PKG}      = "emulab-ops-8.1";
-	$emulabconfig{BOSS_PKG}     = "emulab-boss-8.1";
-	$emulabconfig{EXTRA_PKG}    = "emulab-extras-8.1";
-	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-12.1-packages${suf}.tar.gz";
-	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-8.1";
+	$emulabconfig{FS_PKG}       = "emulab-fs-8.2";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-8.2";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-8.2";
+	$emulabconfig{EXTRA_PKG}    = "emulab-extras-8.2";
+	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-12.2-packages${suf}.tar.gz";
+	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-8.2";
     }
     #
     # If there is a package tarball, prefer that and grab it now.
