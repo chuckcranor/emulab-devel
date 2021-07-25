@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,6 +58,25 @@ my $daemon;
 my $incremental;
 my $issamba = 0;
 
+#
+# We don't want to run this script unless its the real version.
+#
+if ($UID != 0) {
+    die("Must be root!");
+}
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+$| = 1; #Turn off line buffering on output
+
+#
+# Testbed Support libraries
+# 
+use lib "@prefix@/lib";
+use libtestbed;
+
 # Are we modifying the Samba config file or the NFS exports?
 if (defined($opts{'S'})) {
     $issamba	 = 1;
@@ -87,10 +106,23 @@ else {
     $daemon      = "mountd";
     $exportfs    = ($LINUX_FSNODE ? "/usr/sbin/exportfs -ra" : undef);
 
-    # incremental only applies to mountd
+    #
+    # Incremental only applies to mountd.
+    # And as of 12.2, incremental updates are the default.
+    #
     if (defined($opts{'i'})) {
+	my $rel = `uname -r`;
+	if ($rel =~ /^(\d+\.\d+)-/) {
+	    $rel = $1;
+	} else {
+	    $rel = 0;
+	}
 	if ($INC_MOUNTD) {
-	    $incremental = 1;
+	    if ($rel < 12.2) {
+		$incremental = 1;
+	    } else {
+		print "WARNING: running FreeBSD $rel, incremental mode is not needed.\n";
+	    }
 	} else {
 	    print "WARNING: incremental updates not supported, ignoring option\n";
 	}
@@ -99,25 +131,6 @@ else {
 
 my $dbg		= 0;
 my @row;
-
-#
-# We don't want to run this script unless its the real version.
-#
-if ($UID != 0) {
-    die("Must be root!");
-}
-
-# un-taint path
-$ENV{'PATH'} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin';
-delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
-
-$| = 1; #Turn off line buffering on output
-
-#
-# Testbed Support libraries
-# 
-use lib "@prefix@/lib";
-use libtestbed;
 
 #
 # Create a new exports file by concatonating a bunch of pieces
