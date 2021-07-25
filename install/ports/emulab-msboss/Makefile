@@ -44,6 +44,7 @@ RUN_DEPENDS+=	\
 
 # For Leigh
 RUN_DEPENDS+=	\
+	autocutsel:${PORTSDIR}/deskutils/autocutsel \
 	vncviewer:${PORTSDIR}/net/tightvnc \
 	fvwm:${PORTSDIR}/x11-wm/fvwm2 \
 	xdpyinfo:${PORTSDIR}/x11/xdpyinfo \
