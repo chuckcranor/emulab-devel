@@ -213,7 +213,8 @@ WITHAMD=1
 AMD_ROOT=/.amd_mnt/ops
 
 # Utah-only hacked mountd
-INCREMENTAL_MOUNTD=1
+# XXX no longer needed as of FreeBSD 12.2 which has implemented it.
+INCREMENTAL_MOUNTD=0
 
 # Blockstores
 BS_IQN_PREFIX=iqn.2000-10.net.emulab
