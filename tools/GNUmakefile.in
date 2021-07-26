@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,9 +30,6 @@ ISMAINSITE	= @TBMAINSITE@
 include $(OBJDIR)/Makeconf
 
 SUBDIRS = webcamapplet whol svn
-ifeq ($(ISMAINSITE),1)
-SUBDIRS += rmanage
-endif
 
 all:	all-subdirs
 

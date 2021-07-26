@@ -1517,7 +1517,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	rc.d/3.mfrisbeed.sh rc.d/3.mfrisbeed-subboss.sh rc.d/3.mfrisbeed-ops.sh \
 	tools/GNUmakefile rc.d/1.mysql-server.sh tools/svn/GNUmakefile \
         tools/webcamapplet/GNUmakefile tools/whol/GNUmakefile \
-        tools/selectapplet/GNUmakefile tools/rmanage/GNUmakefile \
+        tools/selectapplet/GNUmakefile \
 	$eventfiles \
 	$winfiles \
 	$pelabfiles \
