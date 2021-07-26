@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -414,7 +414,6 @@ foreach my $power_id (keys %outlets) {
     my $class;
 
     if ($power_id eq "mail" || $power_id =~ /^whol-/ 
-	|| $power_id=~ /^rmcp-/
 	|| $power_id eq 'ipmi15' || $power_id eq 'ipmi20'
 	|| $power_id eq 'drac' || $power_id eq 'ue'
 	|| $power_id eq 'ilo' || $power_id eq 'ilo2' || $power_id eq 'ilo3') {
@@ -575,12 +574,6 @@ foreach my $power_id (keys %outlets) {
 	if (wholctrl($op,$iface,@nodes)) {
 	    print "Control of $nodestr failed.\n"; $exitval++;
 	    $errors++;
-	}
-    } elsif ($type =~ /rmcp-(\w+)/) {
-	require power_rmcp;
-	if (power_rmcp::rmcpctrl($1,$op,@nodes)) {
-	    print "Control of $nodestr failed.\n"; ++$exitval;
-	    ++$errors;
 	}
     } elsif ($type eq 'ipmi15' || $type eq 'ipmi20') {
 	#
