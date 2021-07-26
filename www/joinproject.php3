@@ -122,7 +122,7 @@ function SPITFORM($formfields, $returning, $errors)
 	}
         echo "<font size=+1>
                If you already have an Emulab account,
-               <a href=login.php3?refer=1>
+               <a href=login.php3>
                <font color=red>please log on first!</font></a>
               </font>\n";
 	if ($forwikionly) {

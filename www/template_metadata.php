@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2012, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,7 +43,6 @@ $optargs = OptionalPageArguments("template",      PAGEARG_TEMPLATE,
 				 "submit",        PAGEARG_STRING,
 				 "metadata",      PAGEARG_METADATA,
 				 "metadata_type", PAGEARG_STRING,
-				 "referrer",      PAGEARG_STRING,
 				 "formfields",    PAGEARG_ARRAY);
 
 # Need these below.
@@ -59,7 +58,7 @@ $unix_pid = $project->unix_gid();
 #
 function SPITFORM($action, $formfields, $errors)
 {
-    global $template, $metadata, $referrer;
+    global $template, $metadata;
     global $metadata_type;
 
     $template_guid = $template->guid();
@@ -113,10 +112,6 @@ function SPITFORM($action, $formfields, $errors)
     
     echo "<form action='${url}&action=$action' method=post>\n";
     echo "<table align=center border=1>\n";
-
-    if (isset($referrer) && $referrer != "") {
-	echo "<input type=hidden name=referrer value='$referrer'>";
-    }
 
     #
     # Template GUID and Version. These are read-only fields.
@@ -278,7 +273,6 @@ if (!isset($submit)) {
 	$defaults["name"]  = "";
 	$defaults["value"] = "";
     }
-    $referrer = $_SERVER['HTTP_REFERER'];
     
     #
     # Allow formfields that are already set to override defaults
@@ -479,11 +473,6 @@ if ($retval) {
     return;
 }
 
-if (isset($referrer)) {
-    header("Location: $referrer");
-}
-else {
-    header("Location: ". CreateURL("template_show", $template));
-}
+header("Location: ". CreateURL("template_show", $template));
 
 ?>

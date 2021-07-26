@@ -141,7 +141,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     elseif ($login_user && $login_user->NeedAccountUpdate()) {
         if ($script != "myaccount.php" && $script != "logout.php") {
             $referrer = urlencode($_SERVER['REQUEST_URI']);
-            header("Location: myaccount.php?needupdate=1");
+            header("Location: myaccount.php?referrer=$referrer&needupdate=1");
             return;
         }
     }
@@ -302,6 +302,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
                     $navbar_right .=
                         "<li id='loginitem' class='apt-left'>" .
                         "  <a class='btn btn-quickvm-home navbar-btn apt-navbar-btn'
+                                    href='login.php'
                                     id='loginbutton'>Login</a></li>\n";
 		}
 		REQUIRE_GENI_AUTH();
@@ -430,11 +431,6 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
             echo "</center>\n";
         }
         readfile("template/myusage.html");
-    }
-
-    if (!NOLOGINS() && !$login_user && $page_title != "Login") {
-	SpitLoginModal("quickvm_login_modal");
-	SpitWaitModal("waitwait-modal");
     }
 embed:
     echo " <!-- Page content -->
@@ -888,74 +884,6 @@ function SpitVerifyModal($id, $label)
             </div>
             </div>
          </div>\n";
-}
-
-#
-# Spit out the login modal. 
-#
-function SpitLoginModal($id)
-{
-    global $PORTAL_PASSWORD_HELP, $PROTOGENI_GENIWEBLOGIN;
-    global $APTTITLE, $ISCLOUD, $ISPNET, $ISPOWDER;
-    $referrer = CleanString($_SERVER['REQUEST_URI']);
-?>
-    <!-- This is the login modal -->
-    <div id='<?php echo $id ?>' class='modal fade' role='dialog'>
-        <div class='modal-dialog'>
-        <div id='quickvm_login_form_error'
-             class='align-center'></div>
-        <div class='modal-content'>
-           <div class='modal-header'>
-            <button type='button' class='close' data-dismiss='modal'
-               aria-hidden='true'>&times;</button>
-               <h4 class='modal-title'>Log in to <?php echo $APTTITLE ?></h4>
-           </div>
-           <form id='quickvm_login_form'
-                 role='form'
-                 method='post' action='login.php'>
-           <input type=hidden name=referrer value='<?php echo $referrer ?>'>
-           <div class='modal-body form-horizontal'>
-             <div class='form-group'>
-                <label for='uid' class='col-sm-2 control-label'>Username</label>
-                <div class='col-sm-10'>
-                    <input name='uid' class='form-control'
-                           placeholder='<?php echo $PORTAL_PASSWORD_HELP ?>'
-                           autofocus type='text'>
-                </div>
-             </div>
-             <div class='form-group'>
-                <label for='password' class='col-sm-2 control-label'>Password
-					  </label>
-                <div class='col-sm-10'>
-                   <input name='password' class='form-control'
-                          placeholder='Password'
-                          type='password'>
-                </div>
-             </div>
-             <div class='form-group'>
-               <div class='col-sm-offset-2 col-sm-10'>
-<?php
-        if ($PROTOGENI_GENIWEBLOGIN) {
-	?>
-                 <button class='btn btn-info btn-sm pull-left' disabled
-		    type='button'
-                    data-toggle="tooltip" data-placement="left"
-		    title="You can use your geni credentials to login"
-                    id='quickvm_geni_login_button'>Geni User?</button>
-        <?php
-    }
-?>
-                 <button class='btn btn-primary btn-sm pull-right'
-                         id='quickvm_login_modal_button'
-                         type='submit' name='login'>Login</button>
-               </div>
-             </div>
-           </div>
-           </form>
-        </div>
-        </div>
-     </div>
-<?php
 }
 
 #

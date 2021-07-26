@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018, 2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -537,7 +537,7 @@ function LoginStatus() {
 # message. The modifier allows you to turn off checks for specified
 # conditions. 
 #
-function LOGGEDINORDIE($uid, $modifier = 0, $login_url = NULL) {
+function LOGGEDINORDIE($uid, $modifier = 0) {
     global $TBBASE, $BASEPATH;
     global $TBAUTHTIMEOUT, $CHECKLOGIN_HASHKEY, $CHECKLOGIN_IDX;
     global $drewheader;
@@ -552,22 +552,13 @@ function LOGGEDINORDIE($uid, $modifier = 0, $login_url = NULL) {
 	    E_USER_WARNING);
     }
 
-    #
-    # We now ignore the $uid argument and let LoginStatus figure it out.
-    #
-    
-    #
-    # Allow the caller to specify a different URL to direct the user to
-    #
     $redirect_url = null;
-    if (!$login_url) {
-	$login_url = "$TBBASE/login.php3?refer=1";
-        if ($uid || REMEMBERED_ID()) {
-	    # HTTP_REFERER will not work reliably when redirecting so
-	    # pass in the URI for this page as an argument
-	    $redirect_url = "$TBBASE/login.php3?referrer=".
-                            urlencode($_SERVER['REQUEST_URI']);
-	}
+    $login_url = "$TBBASE/login.php3";
+    if ($uid || REMEMBERED_ID()) {
+        # HTTP_REFERER will not work reliably when redirecting so
+        # pass in the URI for this page as an argument
+        $redirect_url = "$TBBASE/login.php3?referrer=".
+            urlencode($_SERVER['REQUEST_URI']);
     }
 
     $link = "\n<a href=\"$login_url\">Please ".
@@ -664,7 +655,7 @@ function CheckLoginConditions($status)
 #
 # This is the new interface to the above function. 
 #
-function CheckLoginOrDie($modifier = 0, $login_url = NULL)
+function CheckLoginOrDie($modifier = 0)
 {
     global $CHECKLOGIN_USER;
     
