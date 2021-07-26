@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,8 +42,7 @@ if (! $isadmin) {
 # Verify form arguments.
 #
 $reqargs = RequiredPageArguments("node",       PAGEARG_NODE);
-$optargs = OptionalPageArguments("refer",      PAGEARG_STRING,
-				 "submit",     PAGEARG_STRING,
+$optargs = OptionalPageArguments("submit",     PAGEARG_STRING,
 				 "_delattrs",  PAGEARG_ARRAY,
 				 "_modattrs",  PAGEARG_ARRAY,
 				 "_newattrs",  PAGEARG_ARRAY,

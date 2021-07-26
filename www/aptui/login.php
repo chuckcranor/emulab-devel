@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,24 +39,12 @@ $this_user = CheckLogin($check_status);
 $optargs = OptionalPageArguments("login",       PAGEARG_STRING,
 				 "uid",         PAGEARG_STRING,
 				 "password",    PAGEARG_PASSWORD,
-				 "refer",       PAGEARG_BOOLEAN,
-				 "referrer",    PAGEARG_STRING,
+				 "referrer",    PAGEARG_URL,
 				 "from",        PAGEARG_STRING,
 				 "adminmode",   PAGEARG_BOOLEAN,
                                  "cleanmode",   PAGEARG_BOOLEAN,
 				 "ajax_request",PAGEARG_BOOLEAN);
-				 
-# See if referrer page requested that it be passed along so that it can be
-# redisplayed after login. Save the referrer for form below.
-if (isset($refer) &&
-    isset($_SERVER['HTTP_REFERER']) && $_SERVER['HTTP_REFERER'] != "") {
-    $referrer = $_SERVER['HTTP_REFERER'];
-
-    # In order to get the auth cookies, pages need to go through https. But,
-    # the user may have visited the last page with http. If they did, send them
-    # back through https
-    $referrer = preg_replace("/^http:/i","https:",$referrer);
-} else if (! isset($referrer)) {
+if (! isset($referrer)) {
     $referrer = null;
 }
 # Allow adminmode to be passed along to new login. Handy for letting admins
@@ -93,7 +81,7 @@ if (NOLOGINS() && !$adminmode) {
 function SPITFORM($uid, $referrer, $error)
 {
     global $PORTAL_PASSWORD_HELP;
-    global $TBDB_UIDLEN, $TBBASE, $refer;
+    global $TBDB_UIDLEN, $TBBASE;
     global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER, $PROTOGENI_GENIWEBLOGIN;
     global $adminmode, $cleanmode;
     global $UI_EXTERNAL_ACCOUNTS;
@@ -150,12 +138,9 @@ function SPITFORM($uid, $referrer, $error)
         }
         echo "</font></span>";
     }
-    elseif ($refer) {
-        echo "<span class='help-block'>Please login before continuing</span>";
-    }
     if ($referrer) {
 	echo "<input type=hidden name=referrer id='login_referrer' ".
-            "value=$referrer>\n";
+            "value='$referrer'>\n";
     }
 ?>
              <div class='form-group'>
