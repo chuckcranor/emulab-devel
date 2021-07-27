@@ -73,34 +73,6 @@ window.APT_OPTIONS.initialize = function (sup)
 	});
     }
 
-    // Every page calls this, and since the Login button is on every
-    // page, do this initialization here. 
-    if ($('#quickvm_geni_login_button').length) {
-	$('#quickvm_geni_login_button').click(function (event) {
-	    event.preventDefault();
-	    if ($('#quickvm_login_modal').length) {
-		sup.HideModal("#quickvm_login_modal");
-	    }
-	    sup.StartGeniLogin();
-	    return false;
-	});
-    }
-    // When the user clicks on the login button, we not only display
-    // the modal, but fire off the load of the geni-auth.js file so
-    // that the code is loaded. Something to do with popup rules from
-    // javascript event handlers, blah blah blah. Ask Jon.
-    if ($('#loginbutton').length) {
-	$('#loginbutton').click(function (event) {
-	    event.preventDefault();
-	    sup.ShowModal('#quickvm_login_modal');
-	    if (window.PGENILOGIN) {
-		console.info("Loading geni auth code");
-		sup.InitGeniLogin(embedded);
-	        $('#quickvm_geni_login_button').removeAttr("disabled");
-	    }
-	    return false;
-	});
-    }
     /*
      * When the clicks to read new news, tell the server and hide the button
      */
