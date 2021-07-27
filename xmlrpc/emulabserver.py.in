@@ -6428,6 +6428,16 @@ def escapeshellarg(s):
 
     return '\'' + s2 + '\''
 
+def _str2bytes(maybe_str):
+    if not isinstance(maybe_str,bytes) and isinstance(maybe_str,str):
+        maybe_str = maybe_str.encode()
+    return maybe_str
+
+def _bytes2str(maybe_bytes):
+    if isinstance(maybe_bytes,bytes) and not isinstance(maybe_bytes,str):
+        maybe_bytes = maybe_bytes.decode()
+    return maybe_bytes
+
 #
 # Run a command. args is a list of strings to pass as arguments to cmd.
 # Return the exitcode and the output as a tuple.
@@ -6436,21 +6446,21 @@ def runcommand(cmd, separate_stderr=None):
     if separate_stderr == True:
         p = subprocess.Popen(cmd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, close_fds=True)
         (stdoutdata, stderrdata) = p.communicate()
-        return (p.returncode << 8, stdoutdata, stderrdata)
+        return (p.returncode << 8, _bytes2str(stdoutdata), _bytes2str(stderrdata))
     elif separate_stderr == False:
         p = subprocess.Popen(cmd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, close_fds=True)
         (stdoutdata, stderrdata) = p.communicate()
-        return (p.returncode << 8, stdoutdata, stderrdata)
+        return (p.returncode << 8, _bytes2str(stdoutdata), _bytes2str(stderrdata))
     else:
-        p = Popen(cmd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, close_fds=True)
+        p = subprocess.Popen(cmd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, close_fds=True)
         (stdoutdata, stderrdata) = p.communicate()
-        return (p.returncode << 8, stdoutdata)
+        return (p.returncode << 8, _bytes2str(stdoutdata))
 
-def writensfile(str):
+def writensfile(mystr):
     tempfile.tempdir = "/var/tmp"
     try:
         fp = tempfile.NamedTemporaryFile(prefix="php")
-        fp.write(str)
+        fp.write(_str2bytes(mystr))
         fp.flush()
 
     except:
