@@ -159,7 +159,8 @@ $(function ()
 
 	var matches = howlong.match(/^(\d+)(D|H)?$/i);
 	if (matches) {
-	    if (matches[2] === undefined || matches[2] == "D") {
+	    if (matches[2] === undefined ||
+		matches[2] == "D" || matches[2] == "d") {
 		return parseInt(matches[1]) * 24;
 	    }
 	    return parseInt(matches[1]);
