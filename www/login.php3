@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,8 +33,7 @@ $optargs = OptionalPageArguments("login",    PAGEARG_STRING,
 				 "vuid",     PAGEARG_STRING,
 				 "simple",   PAGEARG_BOOLEAN,
 				 "adminmode",PAGEARG_BOOLEAN,
-				 "refer",    PAGEARG_BOOLEAN,
-				 "referrer", PAGEARG_STRING,
+				 "referrer", PAGEARG_URL,
 				 "error",    PAGEARG_STRING);
 				 
 # Allow adminmode to be passed along to new login. Handy for letting admins
@@ -55,17 +54,7 @@ if (! isset($error)) {
 # For redirect from the geni tool login.
 $isgenitool = 0;
 
-# See if referrer page requested that it be passed along so that it can be
-# redisplayed after login. Save the referrer for form below.
-if (isset($refer) &&
-    isset($_SERVER['HTTP_REFERER']) && $_SERVER['HTTP_REFERER'] != "") {
-    $referrer = $_SERVER['HTTP_REFERER'];
-
-    # In order to get the auth cookies, pages need to go through https. But,
-    # the user may have visited the last page with http. If they did, send them
-    # back through https
-    $referrer = preg_replace("/^http:/i","https:",$referrer);
-} else if (! isset($referrer)) {
+if (! isset($referrer)) {
     $referrer = null;
 }
 
@@ -200,7 +189,7 @@ function SPITFORM($uid, $key, $referrer, $error, $adminmode, $simple, $view)
           </tr>\n";
     
     if ($referrer) {
-	echo "<input type=hidden name=referrer value=$referrer>\n";
+	echo "<input type=hidden name=referrer value='$referrer'>\n";
     }
 
     if ($simple) {

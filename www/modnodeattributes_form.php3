@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,18 +42,12 @@ if (! $isadmin) {
 # Verify form arguments.
 #
 $reqargs = RequiredPageArguments("node",         PAGEARG_NODE);
-$optargs = OptionalPageArguments("refer",        PAGEARG_STRING,
-				 "add_numattrs", PAGEARG_INTEGER);
+$optargs = OptionalPageArguments("add_numattrs", PAGEARG_INTEGER);
 
 # Need these below ...
 $node_id = $node->node_id();
 $type    = $node->type();
 $url     = CreateURL("modnodeattributes", $node);
-# Note that $refer is set by the caller so we know how we got to
-# the webmodnodeattributes page. 
-if (isset($refer)) {
-    $url .= "&refer=$refer";
-}
 
 #
 # Standard Testbed Header

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,7 +37,7 @@ $AUPURL = "https://www.powderwireless.net/powder/templates/powder-aup-20.md";
 #
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
-$optargs = OptionalPageArguments("referrer", PAGEARG_STRING);
+$optargs = OptionalPageArguments("referrer", PAGEARG_URL);
 
 SPITHEADER(1);
 
@@ -46,7 +46,7 @@ echo "<div id='main-body'></div>\n";
 echo "<script type='text/javascript'>\n";
 echo "    window.AUPURL = '$AUPURL';\n";
 if ($referrer) {
-    $referrer = CleanString($referrer);
+    #$referrer = CleanString($referrer);
     echo "    window.REFERRER = '$referrer';\n";
 }
 echo "</script>\n";

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -188,7 +188,6 @@ $console_auth = $node->ConsoleAuthObject($uid, $console);
 if (!isset($key)) {
     PAGEHEADER("$node_id Console");
 }
-$referrer = $_SERVER['HTTP_REFERER'];
 if (!isset($closekills)) {
     $closekills = 0;
 }
@@ -200,7 +199,7 @@ echo "\n";
 echo "<script src='$TBBASE/emulab_sup.js'></script>\n";
 echo "<script src='https://code.jquery.com/jquery.js'></script>\n";
 echo "<script>\n";
-echo "var tbbaseurl  = '$referrer';\n";
+echo "var tbbaseurl  = '$TBBASE';\n";
 echo "var closekills = $closekills;\n";
 echo "var noclose    = $noclose;\n";
 echo "var proxied    = $BROWSER_CONSOLE_PROXIED;\n";

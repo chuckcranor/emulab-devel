@@ -44,7 +44,7 @@ else {
 # Verify page arguments.
 #
 $optargs = OptionalPageArguments("target_user", PAGEARG_USER,
-                                 "referrer",    PAGEARG_STRING,
+                                 "referrer",    PAGEARG_URL,
                                  "needupdate",  PAGEARG_BOOLEAN);
 
 if (! isset($target_user)) {
@@ -96,7 +96,7 @@ echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";
 if ($referrer) {
-    $referrer = CleanString($referrer);
+    #$referrer = CleanString($referrer);
     echo "    window.REFERRER = '$referrer';\n";
 }
 echo "    window.NEEDUPDATE  = $needupdate;\n";

@@ -41,7 +41,7 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 # Verify page arguments.
 #
 $optargs = OptionalPageArguments("target_user", PAGEARG_USER,
-                                 "referrer",    PAGEARG_STRING);
+                                 "referrer",    PAGEARG_URL);
 
 if (! isset($target_user)) {
     $target_user = $this_user;
@@ -57,7 +57,7 @@ echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN     = $isadmin;\n";
 echo "  window.TARGET_USER = '" . $target_user->uid() . "';\n";
 if ($referrer) {
-    $referrer = CleanString($referrer);
+    #$referrer = CleanString($referrer);
     echo "    window.REFERRER = '$referrer';\n";
 }
 echo "</script>\n";
