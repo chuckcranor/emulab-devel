@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2021 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2012 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -48,12 +48,6 @@
  * Prevent anyone from using this function
  */
 %rename event_main dont_use_this_function_because_it_does_not_work;
-
-/*
- * Swig cannot handle these and theyy do not need to be exported.
- */
-%ignore event_notification_create_v;
-%ignore event_do_v;
 
 /*
  * Simply allow access to everything in event.h
