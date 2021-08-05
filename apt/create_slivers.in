@@ -70,6 +70,9 @@ my $MYURN	     = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $SACERT	     = "$TB/etc/genisa.pem";
 my $MANAGEINSTANCE   = "$TB/bin/manage_instance";
 my $STITCHER         = "$TB/gcf/src/stitcher.py";
+if ($MAINSITE) {
+    $STITCHER        = ". /usr/testbed/venv/stitcher/bin/activate ; PYTHONPATH=$TB/gcf/src python $TB/gcf/src/stitcher.py";
+}
 my $CREATEWBSTORE    = "$TB/sbin/createwbstore";
 my $DESTROYWBSTORE   = "$TB/sbin/destroywbstore";
 
