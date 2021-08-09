@@ -421,10 +421,10 @@ sub DoCreate()
     #
     my $response = $dataset->CreateDataset();
     if ($response->code() != GENIRESPONSE_SUCCESS) {
-	$errmsg = "CreateDataset failed: ". $response->output() . "\n";
+	$dataset->Delete();
 	$instance->Unlock()
 	    if (defined($instance));
-	goto failed;
+	ExitWithError($response);
     }
     $blob = $response->value();
     $dataset->Update({"remote_uuid" => $blob->{"uuid"},
@@ -1489,6 +1489,7 @@ sub ExitWithError($)
     #
     if ($code == GENIRESPONSE_REFUSED ||
 	$code == GENIRESPONSE_SEARCHFAILED ||
+	$code == GENIRESPONSE_ALREADYEXISTS ||
 	$code == GENIRESPONSE_SERVER_UNAVAILABLE ||
 	$code == GENIRESPONSE_NETWORK_ERROR ||
 	$code == GENIRESPONSE_BUSY) {

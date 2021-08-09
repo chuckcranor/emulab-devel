@@ -5646,11 +5646,13 @@ sub CreateDataset($)
 
     my $image = Image->Lookup($group->pid(), $dataset_urn->id());
     if (defined($image)) {
-	GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS);
+	return GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS, undef,
+		    "A dataset or OS image with this name already exists");
     }
     my $lease = Lease->Lookup($group->pid(), $dataset_urn->id());
     if (defined($lease)) {
-	GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS);
+	return GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS, undef,
+		    "A long/short term dataset with this name already exists");
     }
     my $opts = "-b ";
     my $cmd  = "$CREATEDATASET ";
