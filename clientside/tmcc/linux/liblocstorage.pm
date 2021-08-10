@@ -1533,7 +1533,7 @@ sub os_create_storage($$)
 
 	    print STDERR "$command\n";
 
-	    if (mysystem($command)) {
+	    if (mysystem("$command $redir")) {
 		warn("*** $lv: frisbee of dataset to $mdev failed!\n");
 		return 0;
 	    }
