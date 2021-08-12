@@ -4344,8 +4344,7 @@ sub CreateImage($)
 	    $lastsize   = $webtask->imagesize();
 	    $laststatus = $webtask->status();
 	}
-	sleep(5);
-	# Deleted, but not supposed to happen.
+	sleep(1);
 	if ($webtask->Refresh()) {
 	    print STDERR "$webtask was deleted, not supposed to happen\n";
 	    $webtask = undef;
@@ -4369,6 +4368,9 @@ sub CreateImage($)
 	    }
 	}
 	$logfile->CloseFile();
+    }
+    if (defined($webtask) && defined($webtask->consumed())) {
+	print STDERR "$webtask has been consumed\n";
     }
     if (!defined($webtask) || $webtask->exitcode()) {
 	print STDERR "Failed to take the snapshot of $node_id\n";
@@ -4676,7 +4678,7 @@ sub ImageInfo($)
     # report that info. Otherwise the current file.
     #
     my $webtask = $image->webtask();
-    if (defined($webtask)) {
+    if (defined($webtask) && !defined($webtask->consumed())) {
 	my $logfile;
 	
 	if ($webtask->HasExited()) {
@@ -4685,13 +4687,19 @@ sub ImageInfo($)
 	    }
 	    
 	    #
-	    # Try to lock the image and get rid of the webtask.
+	    # Try to lock the image so we can mark the webtask as consumed.
+	    # Since the image lock is released after create_image is
+	    # done, there is a chance a new image was requested and the
+	    # webtask is a different one. Small chance, but it can happen.
 	    #
 	    if ($image->WaitLock(5) == 0) {
 		$image->Refresh();
 		if ($image->webtask_id() &&
 		    $image->webtask_id() eq $webtask->task_id()) {
-		    $image->ClearWebTask();
+		    # User has the final imaging status, do not show it again.
+		    # Deleted later, CreateImage() above is still watching it.
+		    $webtask->consumed(1);
+		    $webtask->Store();
 		}
 		$image->Unlock();
 	    }
