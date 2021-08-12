@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -637,7 +637,7 @@ sub LoadFromArray($$@)
     # one below.
     #
     if( !defined( $uuid ) ) {
-	if ($DN =~ /\/CN=([-\w\.]*)/) {
+	if ($DN =~ /(\/|,\s)CN\s?=\s?([-\w\.]*)/) {
 	    $uuid = $1;
 	}
 	else {
