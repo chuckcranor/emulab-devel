@@ -814,6 +814,13 @@ sub GetTempAndBattery($$$$)
 	waitpid($childpid, 0);
 	alarm 0;
 	my $ecode = $?;
+	while (<CHILD>) {
+	    $output .= $_;
+	}
+	close(CHILD);
+	if ($verbose > 1) {
+	    logit($output);
+	}
 	if ($ecode) {
 	    my $cause;
 	
@@ -823,18 +830,13 @@ sub GetTempAndBattery($$$$)
 		$cause = "failed with exit value ". ($ecode >> 8);
 	    }
 	    logit("*** Powduino fetch failure: $cause\n");
-	    close(CHILD);
-	    return -1;
-	}
-	while (<CHILD>) {
-	    $output .= $_;
-	}
-	close(CHILD);
-	if ($verbose > 1) {
 	    logit($output);
+	    return -1;
 	}
     }
     else {
+	#open(STDERR, ">&STDOUT");
+	
 	my $blob = {
 	};
 	my %temp;
@@ -878,19 +880,23 @@ sub GetTempAndBattery($$$$)
 	    if ($POWDER_BUS_P0WER_VERSION >= 2) {
 		my %tmp;
 		if (powduinocurrent("powduino", \%tmp)) {
-		    exit(1);
+		    # Silently ignore to avoid messing up parent.
+		    #logit("Failure in powduinocurrent\n");
 		}
-		if (! exists($tmp{"current"})) {
-		    logit("Incomplete current data from powduino\n");
-		    exit(1);
-		}
-		my $current = $tmp{"current"};
+		else {
+		    if (! exists($tmp{"current"})) {
+			logit("Incomplete current data from powduino\n");
+			exit(1);
+		    }
+		    my $current = $tmp{"current"};
 
-		if ($current !~ /^\d+$/ || $current < 0 || $current > 1000) {
-		    logit("Bad value for current: $current");
-		    exit(1);
+		    if ($current !~ /^\d+$/ ||
+			$current < 0 || $current > 1000) {
+			logit("Bad value for current: $current");
+			exit(1);
+		    }
+		    $blob->{"current"} = $current;
 		}
-		$blob->{"current"} = $current;
 	    }
 	}
 	if ($verbose > 1) {
