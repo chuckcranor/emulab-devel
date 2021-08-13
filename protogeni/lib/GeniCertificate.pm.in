@@ -844,7 +844,7 @@ sub PipeTo($$$$)
 {
     my ($self, $withkey, $string, $errorok) = @_;
 
-#    print STDERR "PipeTo: $self, '$string'\n";
+    #print STDERR "PipeTo: $self, $withkey, $errorok, '$string'\n";
 
     require Socket;
     import Socket qw(:DEFAULT);
@@ -1442,14 +1442,22 @@ sub VerifySSLChain($@)
 	if ($pem =~ /^(.*)$/) {
             $pem = $1;
         }
-	my @result = $self->PipeTo(0, "$OPENSSL verify -CAfile $pem ".
-				   "-purpose sslclient $optarg", 1);
+	if (0) {
+	    system("/bin/cat $pem");
+	}
+	my $command = "$OPENSSL verify -CAfile $pem -purpose sslclient $optarg";
+	if (0) {
+	    print STDERR "$command\n";
+	}
+	my @result = $self->PipeTo(0, $command, 1);
 
 	# We should always get something back.
 	# Okay, this changed in FreeBSD 10, which returns exit(2)
 	# when the certificate cannot be verified. See next comment.
-	goto bad
-	    if (!@result);
+	if (!@result) {
+	    goto bad;
+	}
+	#print STDERR join("\n", @result) . "\n";
 
 	# Stupid openssl programs; always exit with zero status.
 	# Have to look at output.
