@@ -210,6 +210,8 @@ AUTOLOAD {
 	elsif (exists($self->{'HASH'}->{$name})) {
 	    return $self->{'HASH'}->{$name};
 	}
+	# No noise for a local storage slot
+	return undef;
     }
     carp("No such slot '$name' field in class $type");
     return undef;
@@ -2534,8 +2536,8 @@ sub CheckResources($$)
 {
     my ($self, $perrmsg) = @_;
     my $project   = $self->GetProject();
-    my $slice     = $self->GetGeniSlice();
-    my $expires   = str2time($slice->expires());
+    my $expires   = str2time($self->Expires());
+    my $creator   = $self->GetCreator();
     my $noresokay = 1;
     my $duration  = $expires - time();
     if ($duration > $DEFAULT_DURATION * 3600) {
@@ -2549,31 +2551,24 @@ sub CheckResources($$)
     if (APT_Profile::GetResources($rspec, $perrmsg, \$typeCounts)) {
 	return -1;
     }
-    if (APT_Profile::CheckResourceReservations($rspec, $project,
-					       time(), $expires,
-					       $noresokay, $perrmsg,
-					       $typeCounts)) {
-	return -1;
-    }
+    $self->_typecounts($typeCounts);
 
     my $spectrum = [];
     if (APT_Profile::GetSpectrum($rspec, \$spectrum, $perrmsg)) {
 	return -1;
     }
-    if (@$spectrum) {
-	if (APT_Profile::CheckSpectrumPermission($rspec, $project,
-						 $perrmsg, $spectrum)) {
-	    return -1;
-	}
-    }
-    # This check must always be done.
-    if (APT_Profile::CheckSpectrumReservations($rspec, $project,
-					       time(), $expires,
-					       $noresokay, $perrmsg,
-					       $spectrum, $typeCounts)) {
+    $self->_spectrum($spectrum);
+
+    my $routes   = [];
+    if (APT_Profile::GetRoutes($rspec, \$routes, $perrmsg)) {
 	return -1;
     }
+    $self->_routes($routes);
 
+    if ($self->CheckResourceReservations($expires, $noresokay, $perrmsg)) {
+	return -1;
+    }
+    
     #
     # Add the spectrum to this instance (we are starting it).
     #
@@ -2590,7 +2585,73 @@ sub CheckResources($$)
 	    }
 	}
     }
-    return $self->CheckRoutes($perrmsg);
+    #
+    # For routes, we need to see what buses are currently on the reserved
+    # routes and add them to the rspec. We do this here cause scheduled and
+    # deferred experiments are started from the scheduler.
+    #
+    if (@$routes &&
+	$self->AddRouteNodes($routes, $creator, \$perrmsg)) {
+	return -1;
+    }
+    return 0;
+}
+
+#
+# Check resource reservations. Given an expiration time, do we have
+# reservations to cover all the resources till that time. Note that
+# admission control will not allow us to mess up, but we still have
+# the provblem of users in the same project stepping on each other.
+#
+sub CheckResourceReservations($$$$)
+{
+    my ($self, $end, $noresokay, $perrmsg) = @_;
+    my $project  = $self->GetProject();
+    my $rspec    = $self->RSPEC();
+    if (!$rspec) {
+	$$perrmsg = "Could not parse rspec";
+	return -1;
+    }
+    my $typeCounts = $self->_typecounts();
+    if (!defined($typeCounts) &&
+	APT_Profile::GetResources($rspec, $perrmsg, \$typeCounts)) {
+	return -1;
+    }
+    if (APT_Profile::CheckResourceReservations($rspec, $project,
+	       time(), $end, $noresokay, $perrmsg, $typeCounts)) {
+	return -1;
+    }
+
+    my $spectrum = $self->_spectrum();
+    if (!defined($spectrum) &&
+	APT_Profile::GetSpectrum($rspec, \$spectrum, $perrmsg)) {
+	return -1;
+    }
+    if (@$spectrum) {
+	if (APT_Profile::CheckSpectrumPermission($rspec, $project,
+						 $perrmsg, $spectrum)) {
+	    return -1;
+	}
+    }
+    # This check must always be done.
+    if (APT_Profile::CheckSpectrumReservations($rspec, $project,
+	       time(), $end, $noresokay, $perrmsg, $spectrum, $typeCounts)) {
+	return -1;
+    }
+
+    my $routes = $self->_routes();
+    if (!defined($routes) &&
+	APT_Profile::GetRoutes($rspec, \$routes, $perrmsg)) {
+	return -1;
+    }
+    if (@$routes &&
+	(APT_Profile::CheckRoutesPermission($rspec, $project,
+		      time(), $end, $perrmsg, $routes) ||
+	 APT_Profile::CheckRoutesReservations($rspec, $project,
+		      time(), $end, $noresokay, $perrmsg))) {
+	return -1;
+    }
+    return 0;
 }
 
 #
@@ -2600,56 +2661,6 @@ sub GetRoutes($$$)
 {
     my ($self, $ref, $perrmsg)  = @_;
     if (APT_Profile::GetRoutes($self->rspec(), $ref, $perrmsg)) {
-	return -1;
-    }
-    return 0;
-}
-
-#
-# Check that we have reservations for any routes used.
-# This check uses the current time and current experiment end,
-#
-sub CheckRoutes($$)
-{
-    my ($self, $perrmsg) = @_;
-    my $rspecstr = $self->rspec();
-    my $project  = $self->GetProject();
-    my $slice    = $self->GetGeniSlice();
-    my $creator  = $self->GetCreator();
-    my $expires  = str2time($slice->expires());
-    my $routes   = [];
-    my $noresokay = 1;
-    my $duration  = $expires - time();
-    if ($duration > $DEFAULT_DURATION * 3600) {
-	$noresokay = 0;
-    }
-
-    my $rspec = $self->RSPEC();
-    return -1
-	if (!$rspec);
-
-    if (APT_Profile::GetRoutes($rspec, \$routes, $perrmsg)) {
-	return -1;
-    }
-    return 0
-	if (!@$routes);
-
-    if (APT_Profile::CheckRoutesPermission($rspec, $project,
-					   time(), $expires,
-					   $perrmsg, $routes)) {
-	return -1;
-    }
-    if (APT_Profile::CheckRoutesReservations($rspec, $project,
-					     time(), $expires,
-					     $noresokay, $perrmsg)) {
-	return -1;
-    }
-    #
-    # For routes, we need to see what buses are currently on the reserved
-    # routes and add them to the rspec. We do this here cause scheduled and
-    # deferred experiments are started from the scheduler.
-    #
-    if ($self->AddRouteNodes($routes, $creator, \$perrmsg)) {
 	return -1;
     }
     return 0;
