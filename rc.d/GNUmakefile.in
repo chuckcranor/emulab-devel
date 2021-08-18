@@ -71,6 +71,11 @@ else
 RC_SCRIPTS	+= wbstore.sh
 endif
 
+# New firewall stuff.
+ifeq ($(TBMAINSITE),1)
+OPS_SCRIPTS	+= 3.sshbanlist.sh
+endif
+
 ifeq ($(PROTOGENI),1)
 RC_SCRIPTS	+= geniboot.sh
 endif
