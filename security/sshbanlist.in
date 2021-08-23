@@ -66,8 +66,10 @@ my $LOGINS	     = "/var/log/logins";
 # This runs on ops where things are a bit unusual.
 my $BANLIST	     = "/usr/local/www/apache24/data/sshbanlist.txt";
 my $WHITELIST        = "$TB/etc/sshwhitelist.txt";
+my $DATAFILE         = "$TB/etc/sshbanlist.json";
 my $THRESHOLD	     = 10;
 my $UPDATE_THRESHOLD = 10;
+my $RELEASE_TIMEOUT  = 3600 * 6;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -80,6 +82,9 @@ sub logit($);
 sub ProcessLoginFile($);
 sub GetList($);
 sub WriteBanList();
+sub ReadDataFile();
+sub WriteDataFile();
+sub PurgeOldEntries();
 
 #
 # Turn off line buffering on output
@@ -153,9 +158,14 @@ $SIG{USR1} = \&handler;
 $SIG{TERM} = \&handler;
 
 #
-# The count list, when an IP hits some threshold, we add it to the banlist.
+# The count list holds offending ips and the last time they offended.
 #
-my %counts = ();
+my $counts = {};
+
+#
+# The banlist holds the ips and the time it was banned.
+#
+my $banlist = {};
 
 #
 # Keep track of how many offenders have not been written.
@@ -175,10 +185,10 @@ my $control_netmask = inet_aton($CONTROL_NETMASK);
 my $control_network = inet_aton($CONTROL_NETWORK);
 
 #
-# Open the current banlist, we can skip processing these in the the logins
-# file since we already know they are bad.
+# The datafile stores the banned IPs and the timestamp they were banned (as
+# for timing them out).
 #
-my $banlist = GetList($BANLIST);
+ReadDataFile();
 
 #
 # Ditto the white list.
@@ -201,7 +211,6 @@ while (1) {
     }
     while (1) {
 	ProcessLoginFile(*IN);
-	sleep(2);
 
 	# We want the inode number so we know when it gets rolled.
 	# Shrinking would be another way to know.
@@ -225,6 +234,13 @@ while (1) {
 	if ($outstandingCount > $UPDATE_THRESHOLD) {
 	    WriteBanList();
 	}
+	
+	#
+	# Periodically purge old entries from the ban list. 
+	#
+	PurgeOldEntries();
+
+	sleep(5);
     }
 }
 exit(0);
@@ -257,22 +273,35 @@ sub ProcessLoginFile($)
 	next
 	    if (!defined($ip));
 
-	# Ignore if already done.
-	next
-	    if (exists($banlist->{$ip}));
-
 	# Ignore anything from boss (medusa).
 	next
 	    if ($ip eq $BOSSNODE_IP);
 
-	if (!exists($counts{$ip})) {
-	    $counts{$ip} = 0;
+	if (!exists($counts->{$ip})) {
+	    $counts->{$ip} = {
+		"ip"    => $ip,
+		"count" => 1,
+		"when"  => time(),
+	    };
 	}
-	$counts{$ip} = $counts{$ip} + 1;
-	if ($counts{$ip} > $THRESHOLD) {
+	else {
+	    $counts->{$ip}->{"count"} = $counts->{$ip}->{"count"} + 1;
+	    $counts->{$ip}->{"when"}  = time();
+	}
+	#
+	# If its already on the ban list, that is okay. Just means the
+	# firewall has not picked it up yet. Update the time so we know
+	# it is still being a bad actor.
+	#
+	if (exists($banlist->{$ip})) {
+	    $banlist->{$ip}->{"when"} = time();
+	    next;
+	}
+	
+	if ($counts->{$ip}->{"count"} > $THRESHOLD) {
 	    #
 	    # Anything from within the testbed is unusual and should be
-	    # reported but we do not want to ban it, to confusing for
+	    # reported but we do not want to ban it, too confusing for
 	    # users (and us). Just log it for now.
 	    #
 	    my $public_masked  = inet_aton($ip) & $public_netmask;
@@ -283,18 +312,54 @@ sub ProcessLoginFile($)
 		logit("*** Unusual number of password failures from $ip");
 		# Reset, if we see a lot of these for the same ip,
 		# might be time to take a look. 
-		$counts{$ip} = 1;
+		delete($counts->{$ip});
 	    }	    
 	    else {
 		if ($verbose) {
 		    logit("Banning $ip");
 		}
-		$banlist->{$ip} = $ip;
+		$banlist->{$ip} = {
+		    "ip"     => $ip,
+		    "when"   => time(),
+		};
 		$outstandingCount++;
 	    }
 	}
     }
     return 0;
+}
+
+#
+# Purge old entries from the lists.
+#
+sub PurgeOldEntries()
+{
+    my $now = time();
+    my $changed = 0;
+    
+    foreach my $ref (values(%$banlist)) {
+	my $when = $ref->{"when"};
+	my $ip   = $ref->{"ip"};
+
+	if ($now - $when > $RELEASE_TIMEOUT) {
+	    delete($banlist->{$ip});
+	    delete($counts->{$ip}) if (exists($counts->{$ip}));
+	    $changed++;
+	    logit("Released $ip from ban list");
+	}
+    }
+    foreach my $ref (values(%$counts)) {
+	my $when = $ref->{"when"};
+	my $ip   = $ref->{"ip"};
+
+	if ($now - $when > $RELEASE_TIMEOUT) {
+	    delete($counts->{$ip});
+	    logit("Released $ip from count list");
+	}
+    }
+    if ($changed) {
+	WriteBanList();
+    }
 }
 
 #
@@ -312,7 +377,7 @@ sub WriteBanList()
     if (!$in) {
 	fatal("Could not create a temp file");
     }
-    foreach my $ip (keys(%$banlist)) {
+    foreach my $ip (sort(keys(%$banlist))) {
 	print $in $ip . "\n";
     }
     close($in);
@@ -326,6 +391,7 @@ sub WriteBanList()
 	fatal("Could not rename $filename to $newfile: $!");
     }
     $outstandingCount = 0;
+    WriteDataFile();
     return 0;
 }
 
@@ -357,6 +423,78 @@ sub GetList($)
     }
     close(IN);
     return $result;
+}
+
+#
+# Get our datafile
+#
+sub ReadDataFile()
+{
+    my $json   = "";
+    
+    if (! -e $DATAFILE) {
+	logit("ReadDataFile: $DATAFILE does not exist");
+
+	if (-e $BANLIST) {
+	    logit("ReadDataFile: Creating one from $BANLIST");
+	    my $list = GetList($BANLIST);
+
+	    foreach my $ip (keys(%$list)) {
+		$banlist->{$ip} = {
+		    "ip"     => $ip,
+		    "when"   => time(),
+		};
+	    }
+	    if ($impotent) {
+		WriteBanList();
+	    }
+	    else {
+		WriteDataFile();
+	    }
+	}
+	return;
+    }
+    open(IN, $DATAFILE) or
+	fatal("Could not open $DATAFILE: $!");
+
+    while (<IN>) {
+	$json .= $_;
+    }
+    close(IN);
+
+    $banlist = eval { decode_json($json) };
+    if ($@) {
+	fatal("Could not decode $DATAFILE");
+    }
+    return 0;
+}
+sub WriteDataFile()
+{
+    my $tempname = $DATAFILE . "XXXXX";
+    
+    my $json = eval { encode_json($banlist); };
+    if ($@) {
+	fatal("Could not encode the banlist");
+    }
+    logit("Writing a new datafile to $DATAFILE");
+    
+    my ($fp, $filename) = tempfile($tempname, UNLINK => 0);
+
+    if (!$fp) {
+	fatal("Could not create a temp file");
+    }
+    print $fp $json;
+    close($fp);
+
+    if (! chmod(0644, $filename)) {
+	logit("Could not chmod $filename to 0644: $!");
+	unlink($filename);
+	return 1;
+    }
+    if (!rename($filename, $DATAFILE)) {
+	fatal("Could not rename $filename to $DATAFILE: $!");
+    }
+    return 0;
 }
 
 sub fatal($)
