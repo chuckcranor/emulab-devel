@@ -616,7 +616,8 @@ CREATE TABLE `apt_instance_history` (
   KEY `creator_idx` (`creator_idx`),
   KEY `pid_idx` (`pid_idx`),
   KEY `servername` (`uuid`,`servername`(32)),
-  KEY `slice_uuid` (`slice_uuid`)
+  KEY `slice_uuid` (`slice_uuid`),
+  KEY `portal` (`portal`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -724,7 +725,10 @@ CREATE TABLE `apt_instances` (
   `paramdefs` mediumtext,
   `manifest` mediumtext,
   `openstack_utilization` mediumtext,
-  PRIMARY KEY (`uuid`)
+  PRIMARY KEY (`uuid`),
+  KEY `creator` (`creator`),
+  KEY `creator_idx` (`creator_idx`),
+  KEY `pid_idx` (`pid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -5310,7 +5314,8 @@ CREATE TABLE `projects` (
   KEY `unix_gid` (`unix_gid`),
   KEY `approved` (`approved`),
   KEY `approved_2` (`approved`),
-  KEY `pcremote_ok` (`pcremote_ok`)
+  KEY `pcremote_ok` (`pcremote_ok`),
+  KEY `portal` (`portal`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
