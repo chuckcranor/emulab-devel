@@ -518,7 +518,7 @@ function Do_RequestExtension()
     }
     if ($retval != 0) {
         # Debugging for a while.
-        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     
         if (!$webtask->exited() || $retval < 0) {
             SPITAJAX_ERROR(-1, "Internal error extending experiment");
@@ -1664,7 +1664,7 @@ function Do_ExpInfo()
 	return;
     }
     $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
-    if (!slice) {
+    if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
     }
