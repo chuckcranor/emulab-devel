@@ -254,9 +254,11 @@ class User
 	fclose($fp);
 	chmod($xmlname, 0666);
 
-	
-	# Invoke the back-end script as the user if an admin for permissions.
-	$suexec_uid = ISADMIN() ? $uid : "nobody";
+        # The backend script is odd. 
+        $suexec_uid = "nobody";
+        if (ISADMIN() && HASREALACCOUNT($uid)) {
+            $suexec_uid = $uid;
+        }
 	$retval = SUEXEC($suexec_uid, "nobody", "webmoduserinfo $xmlname",
 			 SUEXEC_ACTION_IGNORE);
 
