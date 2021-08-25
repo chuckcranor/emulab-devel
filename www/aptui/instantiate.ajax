@@ -923,7 +923,8 @@ function CheckStep3()
     global $ajax_args;
     global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB, $ISPOWDER;
     global $maxduration;
-    $start = null;
+    $errors = array();
+    $start  = null;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
