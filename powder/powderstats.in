@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -35,10 +35,11 @@ use Date::Parse;
 
 sub usage()
 {
-    print STDERR "Usage: powderstats -e YYYY-MM-DD\n";
+    print STDERR "Usage: powderstats [-s YYYY-MM-DD] -e YYYY-MM-DD\n";
     exit(-1);
 }
-my $optlist   = "e:";
+my $optlist   = "e:s:";
+my $STARTTIME;
 my $ENDTIME;
 
 #
@@ -72,6 +73,13 @@ my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
 }
+if (defined($options{"s"})) {
+    $STARTTIME = $options{"s"};
+    if (!str2time($STARTTIME)) {
+	print STDERR "Cannot parse -s argument\n";
+	exit(-1);
+    }
+}
 if (defined($options{"e"})) {
     $ENDTIME = $options{"e"};
     if (!str2time($ENDTIME)) {
@@ -91,6 +99,8 @@ $query_result =
     DBQueryFatal("select pid from projects as p ".
 		 "left join users as u on u.uid_idx=p.head_idx ".
 		 "where p.portal='powder' and p.approved=1 and ".
+		 (defined($STARTTIME) ?
+		  "     p.created > '$STARTTIME' and " : "") .
 		 "      p.created < '$ENDTIME' and ".
 		 "      u.usr_email not like '%utah.edu' and ".
 		 "      u.usr_email not like '%rice.edu'");
@@ -100,6 +110,8 @@ $query_result =
     DBQueryFatal("select uid_idx from users as u ".
 		 "where u.portal='powder' and ".
 		 "      (u.status='active' or u.status='inactive') and ".
+		 (defined($STARTTIME) ?
+		  "     u.usr_created > '$STARTTIME' and " : "") .
 		 "      u.usr_created < '$ENDTIME' and ".
 		 "      u.usr_email not like '%utah.edu' and ".
 		 "      u.usr_email not like '%rice.edu'");
@@ -112,6 +124,8 @@ $query_result =
 		 "     h.pid!='PMonitor' and ".
 		 "     h.pid!='emulab-ops' and ".
 		 "     h.pid!='testbed' and ".
+		 (defined($STARTTIME) ?
+		  "    h.created > '$STARTTIME' and " : "") .
 		 "     h.created < '$ENDTIME' and ".
 		 "     u.usr_email not like '%utah.edu' and ".
 		 "     u.usr_email not like '%rice.edu'");
@@ -128,6 +142,11 @@ sub History($)
     my $total  = 0;
     my $dopt   = str2time($ENDTIME);
     my $topt   = 5 * 360 * 24 * 3600;
+
+    if (defined($STARTTIME)) {
+	my $tmp = str2time($STARTTIME);
+	$topt = $ENDTIME - $STARTTIME;
+    }
 
     if (!open(HIST, "$WAP $NHIST -l -a -r -T $type -d $dopt -t $topt |")) {
 	die("Could not start $NHIST");
@@ -183,6 +202,8 @@ $query_result =
                  "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "left join users as u on u.uid_idx=h.creator_idx ".
 		 "where h.started is not null and ".
+		 (defined($STARTTIME) ?
+		  "     h.started > '$STARTTIME' and " : "") .
 		 "      h.started < '$ENDTIME' and ".
 		 "      f.uuid is null and ".
 		 "      u.usr_email not like '%utah.edu' and ".
