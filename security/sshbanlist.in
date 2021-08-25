@@ -69,7 +69,7 @@ my $WHITELIST        = "$TB/etc/sshwhitelist.txt";
 my $DATAFILE         = "$TB/etc/sshbanlist.json";
 my $THRESHOLD	     = 10;
 my $UPDATE_THRESHOLD = 10;
-my $RELEASE_TIMEOUT  = 3600 * 6;
+my $RELEASE_TIMEOUT  = 3600 * 24;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
