@@ -201,10 +201,11 @@ $sendemail = 1
     if ($curStatus ne "created");
 
 #
-# Check permissions and admission control now that we are trying to
-# start (an experiment that was scheduled for later start).
+# Check permissions and admission control now that we are trying to start.
+# Note that we are duplicating some work just did in create_instance, but
+# we have deferred and scheduled experiments too.
 #
-if ($instance->start_at() && $instance->CheckResources(\$errmsg)) {
+if ($instance->CheckResources(\$errmsg)) {
     MyExit(1, $errmsg);
 }
 
