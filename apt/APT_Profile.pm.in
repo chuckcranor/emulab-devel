@@ -1704,6 +1704,7 @@ sub GetResources($$$)
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $client_id    = GetVirtualId($ref);
 	my $hardtype     = GeniXML::FindFirst("n:hardware_type", $ref);
+	my $subtype      = GeniXML::GetVirtualizationSubtype($ref);
 	my $component_id = GeniXML::GetNodeId($ref);
 	my $manager_urn  = GetManagerId($ref);
 	my $aggregate;
@@ -1753,6 +1754,10 @@ sub GetResources($$$)
 	    }
 	}
 	else {
+	    if (defined($subtype) && $subtype eq "emulab-blockstore") {
+		print STDERR "Ignoring $client_id ($subtype)\n";
+		next;
+	    }
 	    print STDERR "No type for $client_id\n";
 	    $restoken = "pc";
 	}
