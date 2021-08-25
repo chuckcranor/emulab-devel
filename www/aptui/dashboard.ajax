@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,17 +59,17 @@ function Do_GetStats()
     foreach ($scales as $key => $age) {
         $query_result =
             DBQueryFatal("select ".
-                 "(select count(uuid) from apt_instances ".
+                 "(select count(*) from apt_instances ".
                  " where $pclause ".
                  "       started > DATE_SUB(now(),interval $age second)),".
-                 "(select count(uuid) from apt_instance_history ".
+                 "(select count(*) from apt_instance_history ".
                  " where $pclause ".
                  "       started > DATE_SUB(now(),interval $age second))");
         $row = mysql_fetch_array($query_result);
         $started[$key] = $row[0] + $row[1];
 
         $query_result =
-            DBQueryFatal("select count(uuid) from apt_instance_failures ".
+            DBQueryFatal("select count(*) from apt_instance_failures ".
                     " where $pclause ".
                     "       started > DATE_SUB(now(),interval $age second)");
         $row = mysql_fetch_array($query_result);

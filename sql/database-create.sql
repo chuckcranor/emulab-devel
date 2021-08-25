@@ -617,7 +617,9 @@ CREATE TABLE `apt_instance_history` (
   KEY `pid_idx` (`pid_idx`),
   KEY `servername` (`uuid`,`servername`(32)),
   KEY `slice_uuid` (`slice_uuid`),
-  KEY `portal` (`portal`)
+  KEY `portal` (`portal`),
+  KEY `portal_started` (`portal`,`started`)
+  KEY `destroyed` (`destroyed`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -7292,7 +7294,9 @@ CREATE TABLE `wires` (
   PRIMARY KEY  (`node_id1`,`card1`,`port1`),
   KEY `node_id2` (`node_id2`,`card2`),
   KEY `dest` (`node_id2`,`card2`,`port2`),
-  KEY `src` (`node_id1`,`card1`,`port1`)
+  KEY `src` (`node_id1`,`card1`,`port1`),
+  KEY `node_id1_iface1` (`node_id1`,`iface1`(32)),
+  KEY `node_id2_iface2` (`node_id2`,`iface2`(32))
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

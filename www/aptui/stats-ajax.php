@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,7 +56,7 @@ $blob = array("active_experiments" => 0,
 # Number of active experiments.
 #
 $query_result =
-    DBQueryFatal("select count(uuid) from apt_instances " .
+    DBQueryFatal("select count(*) from apt_instances " .
                  "where servername='$servername'");
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
@@ -98,7 +98,7 @@ if ($query_result) {
 # Number Cloudlab projects.
 #
 $query_result =
-    DBQueryFatal("select count(pid) from projects as p ".
+    DBQueryFatal("select count(*) from projects as p ".
                  "where p.approved=1 and $portalclause");
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
@@ -135,7 +135,7 @@ if ($query_result) {
 # Number of profiles (both public and private)
 #
 $query_result =
-    DBQueryFatal("select count(profileid) from apt_profiles as a ".
+    DBQueryFatal("select count(*) from apt_profiles as a ".
                  "left join projects as p on p.pid_idx=a.pid_idx ".
                  "where $portalclause");
 if ($query_result) {

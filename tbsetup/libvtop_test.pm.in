@@ -833,18 +833,27 @@ sub LoadPhysInfo($)
     my %node_type_linkbw = ();
     
     $query_result =
-	DBQueryWarn("select distinct i.interface_type,n.type ".
+	DBQueryWarn("(select i.interface_type,n.type ".
+		    "  from interfaces as i ".
+		    "left join nodes as n on n.node_id=i.node_id ".
+		    "join wires as w on ".
+		    "     (w.node_id1=i.node_id and w.iface1=i.iface)".
+		    "where n.type is not null and ".
+		    "      (w.node_id2 is not null or ".
+		    "       i.interface_type='P2PLTE') and ".
+		    "      n.role='testnode' and ".
+		    "      i.role='" . TBDB_IFACEROLE_EXPERIMENT . "')" .
+		    "union".
+		    "(select i.interface_type,n.type ".
 		    "  from interfaces as i ".
 		    "left join nodes as n on n.node_id=i.node_id ".
 		    "left join wires as w on ".
-		    "     (w.node_id1=i.node_id and w.iface1=i.iface) or ".
 		    "     (w.node_id2=i.node_id and w.iface2=i.iface) ".
 		    "where n.type is not null and ".
 		    "      (w.node_id2 is not null or ".
-		    #       This special case needs work. See ptopgen.
 		    "       i.interface_type='P2PLTE') and ".
 		    "      n.role='testnode' and ".
-		    "      i.role='" . TBDB_IFACEROLE_EXPERIMENT . "'");
+		    "      i.role='" . TBDB_IFACEROLE_EXPERIMENT . "')");
 
     return -1
 	if (!$query_result);
@@ -10445,7 +10454,7 @@ sub GetWiretype($$$)
     if ($bandwidth == 0) {
 	$wiretype = "ethernet";
     }
-    elsif ($bandwidth <= 100000) {
+    elsif (0 && $bandwidth <= 100000) {
 	# 100 Mbit
 	$wiretype = "ethernet-100000";
     }
