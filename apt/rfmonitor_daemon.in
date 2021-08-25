@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -467,7 +467,7 @@ sub HandleChild($)
 	# worry users about them. I still dump them into log though.
 	#
 	next
-	    if ($frequency < 1000.0);
+	    if ($nodeid !~ /^cbrs/ && $frequency < 1000.0);
 	
 	#
 	# Check for a report that comes in after we have powered off the
