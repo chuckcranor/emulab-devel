@@ -82,6 +82,7 @@ sub plot ( $@ ) {
 
     print F "set output 'node_usage-$what.$EXT'\n";
     print F "set ylabel 'Node Usage %'\n";
+    print F "set key left bottom\n";
     undef @plot_lines;
     foreach (@to_plot) {
 	my $label = $_->[0];
