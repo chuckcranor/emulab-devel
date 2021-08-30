@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2017 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2021 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -167,7 +167,6 @@ static queue_head_t     WorkQ;
 static pthread_mutex_t	WorkQLock;
 #ifdef CONDVARS_WORK
 static pthread_cond_t	WorkQCond;
-static struct timespec	WorkQTimespec;
 #endif
 static int		WorkQDelay = -1;
 static int		WorkQSize = 0;
@@ -199,12 +198,10 @@ WorkQueueInit(void)
 	queue_init(&WorkQ);
 
 	if (WorkQDelay < 0)
-		WorkQDelay = sleeptime(1, NULL, 1);
+		WorkQDelay = sleeptime(1000, NULL, 1);
 
 #ifdef CONDVARS_WORK
 	pthread_cond_init(&WorkQCond, NULL);
-	WorkQTimespec.tv_sec = WorkQDelay / 1000000;
-	WorkQTimespec.tv_nsec = (WorkQDelay % 1000000) * 1000;
 #endif
 
 #ifdef STATS
@@ -358,11 +355,20 @@ WorkQueueDequeue(int *chunkp, int *blockp, int *countp)
 	 */
 	if (queue_empty(&WorkQ)) {
 #ifdef CONDVARS_WORK
+		struct timespec timo;
+		struct timeval stamp;
 		int rv;
 
+		gettimeofday(&stamp, 0);
+		timo.tv_sec = stamp.tv_sec;
+		timo.tv_nsec = (stamp.tv_usec + WorkQDelay) * 1000;
+		while (timo.tv_nsec >= 1000000000) {
+			timo.tv_nsec -= 1000000000;
+			timo.tv_sec++;
+		}
+
 		WorkChunk = -1;
-		rv = pthread_cond_timedwait(&WorkQCond, &WorkQLock,
-					    &WorkQTimespec);
+		rv = pthread_cond_timedwait(&WorkQCond, &WorkQLock, &timo);
 		if (rv != 0) {
 			assert(rv == ETIMEDOUT);
 			pthread_mutex_unlock(&WorkQLock);
