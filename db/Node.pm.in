@@ -4221,7 +4221,7 @@ sub CheckPreReserve($$$)
     if (DBQueryWarn("update nodes set reserved_pid='$pid', ".
 		    "    reservation_name='$resname' ".
 		    "where node_id='$node_id'") &&
-	DBQueryWarn("update project_reservations set count=count-1 ".
+	DBQueryWarn("update project_reservations as pr set count=count-1 ".
 		    "where pid='$pid' and name='$resname'")) {
 	
 	$result = $pid;
