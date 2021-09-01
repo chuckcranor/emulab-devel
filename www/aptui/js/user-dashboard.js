@@ -35,6 +35,17 @@ $(function ()
 	$('#waitwait_div').html(waitwaitString);
 	$('#conversion_help_div').html(converterHelpTemplate({}));
 
+	// Focus on the search box when switching to these tabs.
+        $('.nav-tabs a[href="#profiles"], ' +
+	  '.nav-tabs a[href="#projectprofiles"]')
+	    .on('shown.bs.tab', function (e) {
+		var target = $(this).attr("href");
+		var searchbox = $(target).find(".profile-search");
+		if ($(searchbox)[0]) {
+		    $(searchbox)[0].focus();
+		}
+	    });
+
         // Javascript to enable link to tab
         var hash = document.location.hash;
         if (hash) {
@@ -42,7 +53,7 @@ $(function ()
         }
         // Change hash for page-reload
         $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-            window.location.hash = e.target.hash;
+	    history.replaceState('', '', e.target.hash);
 
 	    // GA reporting
 	    var ganame = e.target.hash;
@@ -294,7 +305,7 @@ $(function ()
     function LoadProfileListTab()
     {
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("LoadProfileListTab", json);
 
 	    if (json.code) {
 		console.info(json.value);
@@ -342,6 +353,14 @@ $(function ()
 			    $(row).remove();
 			});
 		});
+
+	    // If this is the active tab after loading, focus the searchbox
+	    if ($('#profiles').hasClass("active")) {
+		var searchbox = $('#profiles .profile-search')
+		if ($(searchbox)[0]) {
+		    $(searchbox)[0].focus();
+		}
+	    }
 	    
 	    var table = $('#' + 'user-profiles-table')
 		.tablesorter({
@@ -437,7 +456,14 @@ $(function ()
 					  });
 		    
 		});
-
+	    // If this is the active tab after loading, focus the searchbox
+	    if ($('#projectprofiles').hasClass("active")) {
+		var searchbox = $('#projectprofiles .profile-search')
+		if ($(searchbox)[0]) {
+		    $(searchbox)[0].focus();
+		}
+	    }
+	    
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
 		    theme : 'bootstrap',

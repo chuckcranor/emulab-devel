@@ -35,6 +35,16 @@ $(function ()
 	$('#oops_div').html(oopsString);
 	$('#conversion_help_div').html(converterHelpTemplate({}));
 
+	// Focus on the search box when switching to these tabs.
+        $('.nav-tabs a[href="#profiles"]')
+	    .on('shown.bs.tab', function (e) {
+		var target = $(this).attr("href");
+		var searchbox = $(target).find(".profile-search");
+		if ($(searchbox)[0]) {
+		    $(searchbox)[0].focus();
+		}
+	    });
+
         // Javascript to enable link to tab
         var hash = document.location.hash;
         if (hash) {
@@ -42,7 +52,7 @@ $(function ()
         }
         // Change hash for page-reload
         $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-            window.location.hash = e.target.hash;
+	    history.replaceState('', '', e.target.hash);
         });
 	// Set the correct tab when a user uses their back/forward button
         $(window).on('hashchange', function (e) {
@@ -50,7 +60,7 @@ $(function ()
 	    if (hash == "") {
 		hash = "#experiments";
 	    }
-	    $('.nav-tabs a[href='+hash+']').tab('show');
+	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
 	});
 
 	LoadUsage();
@@ -296,6 +306,14 @@ $(function ()
 			    $(row).remove();
 			});
 		});
+
+	    // If this is the active tab after loading, focus the searchbox
+	    if ($('#profiles').hasClass("active")) {
+		var searchbox = $('#profiles .profile-search')
+		if ($(searchbox)[0]) {
+		    $(searchbox)[0].focus();
+		}
+	    }
 	    
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({

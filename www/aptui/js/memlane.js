@@ -79,11 +79,11 @@ $(function ()
 	// Must do this after ShowTopo, since it changes to that tab.
         var hash = document.location.hash;
         if (hash) {
-            $('.nav-tabs a[href='+hash+']').tab('show');
+            $('.nav-tabs a[href="'+hash+'"]').tab('show');
         }
         // Change hash for page-reload
         $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-            window.location.hash = e.target.hash;
+	    history.replaceState('', '', e.target.hash);
         });
 	// Set the correct tab when a user uses their back/forward button
         $(window).on('hashchange', function (e) {
