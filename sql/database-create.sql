@@ -825,6 +825,7 @@ CREATE TABLE `apt_profile_versions` (
   `updater` varchar(8) NOT NULL default '',
   `updater_idx` mediumint(8) unsigned NOT NULL default '0',
   `created` datetime default NULL,
+  `last_use` datetime default NULL,
   `published` datetime default NULL,
   `deleted` datetime default NULL,
   `disabled` tinyint(1) NOT NULL default '0',

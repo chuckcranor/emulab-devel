@@ -1,0 +1,18 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_profile_versions", "last_use")) {
+	DBQueryFatal("ALTER TABLE apt_profile_versions add " .
+		     "  `last_use` datetime default NULL after created");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
