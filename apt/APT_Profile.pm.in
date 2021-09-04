@@ -2657,6 +2657,22 @@ sub VersionCount($)
     return $count;
 }
 
+# Mark last use of a profile version.
+sub LastUse($)
+{
+    my ($self) = @_;
+    my $profileid = $self->profileid();
+    my $version   = $self->version();
+
+    return -1
+	if (! DBQueryWarn("update apt_profile_versions set last_use=now() ".
+			  "where profileid='$profileid' and ".
+			  "      version='$version'"));
+    
+    $self->{'DBROW'}->{'last_use'} = time();
+    return 0;
+}
+
 # Insert an image record.
 sub InsertImageRecord($$$)
 {

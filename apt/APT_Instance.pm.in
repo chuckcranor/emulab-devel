@@ -260,6 +260,10 @@ sub Start($)
 {
     my ($self) = @_;
     my $uuid = $self->uuid();
+    my $profile = $self->Profile();
+
+    $profile->LastUse()
+	if (defined($profile));
 
     DBQueryWarn("update apt_instances set started=now() ".
 		"where uuid='$uuid'")
