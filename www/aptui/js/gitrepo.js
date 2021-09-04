@@ -24,11 +24,10 @@ $(function () {
 	    }
 	    // Visible cue that something is happening
 	    $('#gitpicker-div table').css("opacity", 0.4);
-	    var xmlthing = sup.CallServerMethod(null,
-						"gitrepo",
-						"GetBranchList",
-						{"uuid" : uuid});
-	    xmlthing.done(callback);
+
+	    // We want to return the deferred.
+	    return sup.CallServerMethod(null, "gitrepo", "GetBranchList",
+					 {"uuid" : uuid}, callback);
 	}
 
 	function ShowRepoPicker(uuid, change_callback)

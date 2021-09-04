@@ -1440,12 +1440,13 @@ $(function ()
 	
 	var callback = function(blob) {
 	    console.info("HandleGitRepoUpdate", blob);
-	    if (blob) {
+	    if (!blob) {
+		repobusy = false;
+	    }
+	    else {
 		// Mark as HEAD in the page.
 		repohash = blob.hash;
-	    }
-	    
-	    if (blob) {
+
 		/*
 		 * If the source was an rspec, we updated the profile
 		 * to match the current repo right away. But to make things
@@ -1459,7 +1460,7 @@ $(function ()
 		    NewRspecHandler(blob.source);
 		    // Reset the list of tags and branches whenever we
 		    // successfully update our clone.
-		    SetupRepo();
+		    SetupRepo(function () { repobusy = false; });
 		    return;
 		}
 		/*
@@ -1470,7 +1471,7 @@ $(function ()
 		changeRspec(blob.source, function(modified) {
 		    // Reset the list of tags and branches whenever we
 		    // successfully update our clone.
-		    SetupRepo();
+		    SetupRepo(function () { repobusy = false; });
 		});
 	    }
 	};
@@ -1496,17 +1497,25 @@ $(function ()
 	checker();
     }
 
-    function SetupRepo()
+    function SetupRepo(callback)
     {
-	console.info("SetupRepo");
+	console.info("SetupRepo", callback);
 
-	gitrepo.InitRepoPicker(version_uuid, reporefspec,
-			       function(which) {
-				   // So we remember what the user selected.
-				   reporefspec = which;
-				   UpdateInstantiateButton();
-				   SelectRepoTarget(which);
-			       });
+	var deferred =
+	    gitrepo.InitRepoPicker(version_uuid, reporefspec,
+				   function(which) {
+				       // So we remember what the user selected.
+				       reporefspec = which;
+				       UpdateInstantiateButton();
+				       SelectRepoTarget(which);
+				   });
+	$.when(deferred)
+	    .done(function (r1) {
+		console.info("SetupRepo InitRepoPicker", r1)
+		if (callback) {
+		    callback();
+		}
+	    });
     }
 
     /*
