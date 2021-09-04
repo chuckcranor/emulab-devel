@@ -4152,7 +4152,16 @@ sub CreateImage($)
     }
     $aggregate->Refresh();
 
-    my $opt  = "";
+    #
+    # Create a web task for this.
+    #
+    my $webtask = WebTask->CreateAnonymous();
+    if (!defined($webtask)) {
+	print STDERR "Could not create web task\n";
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    my $opt = " -t " . $webtask->task_id();
     if (defined($image) && $image->isdataset()) {
 	$opt .= " -b $bsname ";
     }
@@ -4168,14 +4177,22 @@ sub CreateImage($)
 	$opt .= " -g " . ($argref->{'global'} ? "1" : "0");
     }
     print STDERR "CM: '$CLONEIMAGE $opt -s $imagename $node_id'\n";
-    
-    my $output =
-	GeniUtil::ExecQuiet("$CLONEIMAGE $opt -s $imagename $node_id");
+
+    my $output = GeniUtil::ExecQuiet("$CLONEIMAGE $opt -s $imagename $node_id");
     # Not a typical op, so always print debugging info;
     print STDERR $output;
     if ($?) {
 	$slice->UnLock();
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+	$webtask->Refresh();
+	$webtask->Delete();
+	if (!$webtask->HasExited()) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+	}
+	my $error = $webtask->output();
+	if ($webtask->exitcode() < 0) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $error);
+	}
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $error);
     }
     
     #
@@ -4185,6 +4202,7 @@ sub CreateImage($)
 	$image = OSImage->Lookup($experiment->pid(), $imagename);
 	if (!defined($image)) {
 	    $slice->UnLock();
+	    $webtask->Delete();
 	    print STDERR "Cannot lookup descriptor for $imagename\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR);
 	}
@@ -4235,19 +4253,16 @@ sub CreateImage($)
 
     # We just create the descriptor and return info.
     if ($nosnapshot) {
+	$webtask->Delete();
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $retval);
     }
 
     #
-    # Create a web task for this. We pass the id to create image so
-    # that we do not change the image descriptor until it is locked.
+    # Reset and pass the webtask id to create image so that we do not change
+    # the image descriptor until it is locked.
     #
-    my $webtask = WebTask->CreateAnonymous();
-    if (!defined($webtask)) {
-	print STDERR "Could not create web task\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
-    }
+    $webtask->Reset();
     $webtask->status("preparing");
     $webtask->imagesize(0);
     $webtask->Store();

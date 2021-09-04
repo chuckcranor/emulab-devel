@@ -708,6 +708,7 @@ sub DoSnapshot()
 	# Important to tell web user about these.
 	if ($response->code() == GENIRESPONSE_NOSPACE ||
 	    $response->code() == GENIRESPONSE_FORBIDDEN || 
+	    $response->code() == GENIRESPONSE_REFUSED || 
 	    $response->code() == GENIRESPONSE_ALREADYEXISTS) {
 	    $exitcode = 1;
 	}
