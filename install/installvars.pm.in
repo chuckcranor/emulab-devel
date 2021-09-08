@@ -170,7 +170,11 @@ $SELFLOAD_PATCH		= "$main::TOP_SRCDIR/patches/SelfLoader.patch";
 $PYM2_PKG = "py25-m2crypto-0.19.1";
 $PY_VER   = "python2.5";
 $PY_PKGPREFIX = "py27";
-if ($FBSD_MAJOR > 11 || ($FBSD_MAJOR == 11 && $FBSD_MINOR > 3)) {
+if ($FBSD_MAJOR > 11) {
+    $PYM2_PKG = "";
+    $PY_VER = "python3.8";
+    $PY_PKGPREFIX = "py38";
+} elsif ($FBSD_MAJOR == 11 && $FBSD_MINOR > 3) {
     $PYM2_PKG = "";
     $PY_VER = "python3.7";
     $PY_PKGPREFIX = "py37";

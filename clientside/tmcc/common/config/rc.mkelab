@@ -155,8 +155,18 @@ my $ZFSCMD =   "/sbin/zfs";
 my $ZFSPOOL =  "emulab";
 
 # Ick to deal with python differences
-my $PYBIN2 = "/usr/local/bin/python2";
-my $PYBIN3 = "/usr/local/bin/python3.7";
+my $PYBIN = "/usr/local/bin/python";
+if (! -x $PYBIN) {
+    if (-x "/usr/local/bin/python2") {
+	$PYBIN = "/usr/local/bin/python2";
+    } elsif (-x "/usr/local/bin/python3.7") {
+	$PYBIN = "/usr/local/bin/python3.7";
+    } elsif (-x "/usr/local/bin/python3.8") {
+	$PYBIN = "/usr/local/bin/python3.8";
+    } else {
+	$PYBIN = "NO-PYTHON-INSTALLED";
+    }
+}
 
 #
 # Support for Windows nodes.
@@ -1116,11 +1126,7 @@ sub SetupFsNode()
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
-		if (-x $PYBIN2) {
-		    system("ln -sfn $PYBIN2 /usr/local/bin/python");
-		} elsif (-x $PYBIN3) {
-		    system("ln -sfn $PYBIN3 /usr/local/bin/python");
-		}
+		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
 	    #
@@ -1739,11 +1745,7 @@ sub SetupOpsNode($)
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
-		if (-x $PYBIN2) {
-		    system("ln -sfn $PYBIN2 /usr/local/bin/python");
-		} elsif (-x $PYBIN3) {
-		    system("ln -sfn $PYBIN3 /usr/local/bin/python");
-		}
+		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
 	    #
@@ -2518,11 +2520,7 @@ sub SetupBossNode($)
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
-		if (-x $PYBIN2) {
-		    system("ln -sfn $PYBIN2 /usr/local/bin/python");
-		} elsif (-x $PYBIN3) {
-		    system("ln -sfn $PYBIN3 /usr/local/bin/python");
-		}
+		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
 	    #
@@ -3337,11 +3335,7 @@ sub SetupOpsJail()
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
-		if (-x $PYBIN2) {
-		    system("ln -sfn $PYBIN2 /usr/local/bin/python");
-		} elsif (-x $PYBIN3) {
-		    system("ln -sfn $PYBIN3 /usr/local/bin/python");
-		}
+		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
 	    #
