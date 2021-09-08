@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -75,6 +75,7 @@ my $PENDINGEID	= NODERELOADPENDING_EID;
 
 my $osload      = "$TB/bin/os_load -s";
 my $nalloc      = "$TB/bin/nalloc";
+my $exsetup	= "$TB/sbin/exports_setup";
 my $name        = "";
 my $error       = 0;
 my $debug       = 0;
@@ -282,6 +283,7 @@ if (! @nodes) {
 #
 # Loop through each node.
 # 
+my $needexport = 0;
 my @load_list=();
 foreach my $node (@nodes) {
     my $pc = $node->node_id();
@@ -341,6 +343,7 @@ foreach my $node (@nodes) {
 	    #
 	    DBQueryFatal("delete from last_reservation where node_id='$pc'");
 	    $allocated = 1;
+	    $needexport = 1;
 	}
     }
     else {
@@ -377,6 +380,18 @@ foreach my $node (@nodes) {
 	else {
 	    push(@{ $imagenodes{$this_imageid} }, $pc);
 	}
+    }
+}
+
+#
+# Run exports_setup if we moved any nodes.
+# This is for nodecheck in the MFS as it records info into /proj/emulab-ops
+# (and might require binaries from there).
+#
+if ($needexport) {
+    print "Running exports_setup\n";
+    if (system($exsetup)) {
+	print STDERR "*** WARNING: exports_setup failed, nodecheck may not run\n";
     }
 }
 
