@@ -51,6 +51,10 @@ RUN_DEPENDS+=	\
 	xterm:${PORTSDIR}/x11/xterm \
 	zsh:${PORTSDIR}/shells/zsh \
 	vim:${PORTSDIR}/editors/vim-console
+.if (${EMULAB_PORTVERSION} == "8.2")
+RUN_DEPENDS+=	\
+	gdb:${PORTSDIR}/devel/gdb
+.endif
 
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}subversion>0:${PORTSDIR}/devel/py-subversion
