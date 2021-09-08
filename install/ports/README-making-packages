@@ -119,18 +119,24 @@ security_py-certbot_UNSET+=MANPAGES
 	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
        end
 
-   k. Check for vulnerabilities. If any are revealed, you can either try
+   k. (Mothership only) Build the Mothership packages
+       foreach d (msboss msops)
+           (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean all install)
+	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
+       end
+
+   l. Check for vulnerabilities. If any are revealed, you can either try
       to update /share/freebsd/12.2/ports with a newer version of the port
       (e.g., from /share/freebsd/current/ports) or just live with the
       vulnerability for now.
 
        pkg audit -F
 
-   l. Create the packages:
+   m. Create the packages:
 
        pkg create -a -o $PACKAGES/All/
 
-   m. Create the alternate ipmitool package. The Moonshot chassis require
+   n. Create the alternate ipmitool package. The Moonshot chassis require
       an older ipmitool embodied in the emulab-ipmitool-old port. It conflicts
       with the regular packages so we have to remove that first.
 
@@ -138,7 +144,7 @@ security_py-certbot_UNSET+=MANPAGES
        cd /usr/ports/misc/emulab-ipmitool-old
        make BATCH=1 clean all install ; make BATCH=1 package clean
 
-   n. Save packages and update tarball and repo. On boss:
+   o. Save packages and update tarball and repo. On boss:
 
        set www=/usr/testbed/www
        cd /share/freebsd/12.2
@@ -168,7 +174,7 @@ security_py-certbot_UNSET+=MANPAGES
        sudo tar --exclude=ports/.svn --exclude=ports/.git -czf $tball ports
        sudo cp $tball $www/downloads/
 
-   o. Assuming you have put out the new repo in Emulab-devel above, you
+   p. Assuming you have put out the new repo in Emulab-devel above, you
       can test it by creating a config file on your test node. Put this in
       /etc/pkg/Emulab-devel.conf:
       
@@ -205,6 +211,8 @@ Emulab-devel: {
         PA emulab-fs
         PA emulab-tipserv
         PA emulab-extras
+	# for the mothership
+	PA emulab-msboss
         PC
 	PL
 
@@ -215,6 +223,8 @@ Emulab-devel: {
         PA emulab-genilib
         PA emulab-tipserv
         PA emulab-extras
+	# for the mothership
+	PA emulab-msops
         PC
 	PL
 
@@ -232,7 +242,7 @@ Emulab-devel: {
         PC
 	PL
 
-   p. Random useful commands to run on the package files.
+   q. Random useful commands to run on the package files.
 
       For comparing with older package sets, it is sometimes useful to
       trim off the version number, etc. if you want to see the difference
