@@ -109,6 +109,9 @@ A. Things to do in advance of shutting down Emulab.
    some conflicts. Many will just be the FreeBSD header, but some other
    possible diffs:
 
+     /etc/hosts.allow. We customized this to block rpcbind, tftpd, and
+     bootinfo access from outside the local network.
+
      /etc/ntp.conf. We may have replaced the version string with our own
      header. For the merge you should leave both. We leave out all the
      default restrict/server/etc. lines in favor of our own. Do leave in
