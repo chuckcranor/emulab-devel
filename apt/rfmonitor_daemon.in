@@ -77,6 +77,7 @@ my $GZIP             = "/usr/bin/gzip";
 my $FIND             = "/usr/bin/find";
 my $FORMAT1          = "portid,timestamp,frequency,power";
 my $FORMAT2          = $FORMAT1 . ",center_freq";
+my $FORMAT3          = $FORMAT2 . ",incident";
 my $MAILDELAY        = 3600;
 
 # un-taint path
@@ -352,7 +353,8 @@ sub HandleChild($)
 	return undef
 	    if ($line =~ /^0,/);
 
-	my ($portid,$timestamp,$frequency,$power,$center) = split(",", $line);
+	my ($portid,$timestamp,$frequency,$power,$center,$incident)
+	    = split(",", $line);
 	if (!(defined($portid) && defined($frequency) &&
 	      defined($power) && defined($timestamp))) {
 	    print STDERR "Missing data: '$line'\n";
@@ -361,7 +363,8 @@ sub HandleChild($)
 	if ($timestamp !~ /^[\.\d]+$/ ||
 	    $frequency !~ /^[\.\d]+$/ ||
 	    $power !~ /^[-\.\d]+$/ ||
-	    (defined($center) && $center !~ /^[-\.\d]+$/)) {
+	    (defined($center) && $center !~ /^[-\.\d]+$/) ||
+	    (defined($incident) && $incident !~ /^[-\.\d]+$/)) {
 	    print STDERR "Improper float(s) from $address:$port:\n";
 	    print STDERR "   $line\n";
 	    return undef;
@@ -386,6 +389,7 @@ sub HandleChild($)
 	    "frequency"  => $frequency,
 	    "power"      => $power,
 	    "center"     => $center,
+	    "incident"   => $incident,
    	    "timestamp"  => int($timestamp),
 	    "repeatcount"=> 0,
 	};
@@ -412,7 +416,7 @@ sub HandleChild($)
     #
     my $header = shift(@lines);
     chomp($header);
-    if ($header ne $FORMAT1 && $header ne $FORMAT2) {
+    if ($header ne $FORMAT1 && $header ne $FORMAT2 && $header ne $FORMAT3) {
 	print STDERR "Improper format from $address:$port: '$header'\n";
 	exit(1);
     }
@@ -430,6 +434,7 @@ sub HandleChild($)
 	my $power     = $measurement->{"power"} + 0.0;
 	my $timestamp = $measurement->{"timestamp"};
 	my $center    = $measurement->{"center"};
+	my $incident  = $measurement->{"incident"};
 	my $key       = "${nodeid}:${iface}:${frequency}";
 
 	my $node = Node->Lookup($nodeid);
@@ -448,6 +453,7 @@ sub HandleChild($)
 	}
 	my @csv = ($frequency, $power);
 	push(@csv, $center + 0.0) if (defined($center));
+	push(@csv, $incident + 0.0) if (defined($incident));
 	push(@{ $csvdata{"${nodeid}:${iface}"} }, \@csv);
 	
 	#
@@ -901,18 +907,22 @@ sub WriteRawData($$$)
 	    my $first = $samples[0];
 
 	    print CSV "frequency,power";
-	    if (scalar(@$first) == 3) {
+	    if (scalar(@$first) > 2) {
 		print CSV ",center_freq";
+	    }
+	    if (scalar(@$first) > 3) {
+		print CSV ",incident";
 	    }
 	    print CSV "\n";
 	    
 	    foreach my $ref (@samples) {
-		my ($freq, $power, $cfreq) = @$ref;
+		my ($freq, $power, $cfreq, $inci) = @$ref;
 		$freq  = sprintf("%.3f", $freq);
 		$power = sprintf("%.3f", $power);
 		$cfreq = (defined($cfreq) ? sprintf(",%.4f", $cfreq) : "");
+		$inci  = (defined($inci)  ? sprintf(",%.4f", $inci)  : "");
 		
-		print CSV "$freq,$power${cfreq}\n";
+		print CSV "$freq,$power${cfreq}${inci}\n";
 	    }
 	    if (close(CSV)) {
 		system("$GZIP -c $tmpname > $gzipname");
