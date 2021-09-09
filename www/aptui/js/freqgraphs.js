@@ -56,6 +56,10 @@ window.ShowFrequencyGraph = (function ()
             .x(function (d) { return x(d.frequency); })
             .y(function (d) { return y(d.power); });
 
+	var lineI = d3.line().curve(d3.curveStep)
+            .x(function (d) { return x(d.frequency); })
+            .y(function (d) { return y(d.incident); });
+
 	var line2 = d3.line().curve(d3.curveStep)
             .x(function (d) { return x2(d.frequency); })
             .y(function (d) { return y2(d.power); });
@@ -127,8 +131,13 @@ window.ShowFrequencyGraph = (function ()
 	
 	Line_chart.append("path")
 	    .datum(data)
-	    .attr("class", "line")
+	    .attr("class", "line line-power")
 	    .attr("d", line);
+
+	Line_chart.append("path")
+	    .datum(data)
+	    .attr("class", "line line-incident")
+	    .attr("d", lineI);
 
 	var tooltip = Line_chart.append("g")
 	    .attr("class", "tooltip")
@@ -145,7 +154,7 @@ window.ShowFrequencyGraph = (function ()
 	toolbox.append("rect")
 	    .attr("class", "tooltip-rect")
 	    .attr("width", 130)
-	    .attr("height", 75)
+	    .attr("height", 95)
             .attr("y", -22)
 	    .attr("rx", 4)
 	    .attr("ry", 4);
@@ -179,6 +188,17 @@ window.ShowFrequencyGraph = (function ()
 	    .attr("class", "tooltip-center")
 	    .attr("x", 65)
 	    .attr("y", 38);
+
+	toolbox.append("text")
+	    .attr("x", 5)
+	    .attr("y", 58)
+	    .attr("class", "line-incident")
+	    .text("Incident:");
+
+	toolbox.append("text")
+	    .attr("class", "tooltip-incident")
+	    .attr("x", 65)
+	    .attr("y", 58);
 
 	context.append("path")
 	    .datum(data)
@@ -236,6 +256,13 @@ window.ShowFrequencyGraph = (function ()
 	    else {
 		tooltip.select(".tooltip-center").text("n/a");
 	    }
+	    if (_.has(d, "incident")) {
+		tooltip.select(".tooltip-incident")
+		    .text(formatter(d.incident));
+	    }
+	    else {
+		tooltip.select(".tooltip-incident").text("n/a");
+	    }
 	}
 
 	function brushed() {
@@ -243,7 +270,8 @@ window.ShowFrequencyGraph = (function ()
 		return; // ignore brush-by-zoom
 	    var s = d3.event.selection || x2.range();
 	    x.domain(s.map(x2.invert, x2));
-	    Line_chart.select(".line").attr("d", line);
+	    Line_chart.select(".line-power").attr("d", line);
+	    Line_chart.select(".line-incident").attr("d", lineI);
 	    focus.select(".axis--x").call(xAxis);
 	    svg.select(".zoom").call(zoom.transform, d3.zoomIdentity
 				     .scale(width / (s[1] - s[0]))
@@ -255,7 +283,8 @@ window.ShowFrequencyGraph = (function ()
 		return; // ignore zoom-by-brush
 	    var t = d3.event.transform;
 	    x.domain(t.rescaleX(x2).domain());
-	    Line_chart.select(".line").attr("d", line);
+	    Line_chart.select(".line-power").attr("d", line);
+	    Line_chart.select(".line-incident").attr("d", lineI);
 	    focus.select(".axis--x").call(xAxis);
 	    context.select(".brush")
 		.call(brush.move, x.range().map(t.invertX, t));
@@ -637,6 +666,9 @@ window.ShowFrequencyGraph = (function ()
     function type(d) {
 	d.frequency = +d.frequency;
 	d.power     = +d.power;
+	if (_.has(d, "incident")) {
+	    d.incident = +d.incident;
+	}
 	return d;
     }
 
