@@ -2551,7 +2551,7 @@ $(function ()
 		else if (changingtopo) {
 		    // When we get first new manifest, clear the viewer palette.
 		    ClearViewer(manifest);
-		    AddToViewer(manifest);
+		    //AddToViewer(manifest);
 		}
 		else {
 		    AddToViewer(manifest);
@@ -3780,10 +3780,12 @@ $(function ()
 	}
     }
     // Clear the Jacks view to get ready for topo change.
-    function ClearViewer()
+    function ClearViewer(manifest)
     {
 	if (jacksInput) {
-	    jacksInput.trigger('change-topology', []);
+	    jacksInput.trigger('change-topology',
+			       [{ rspec: manifest }], {});
+
 	}
     }
     // Add manifest to viewer.
