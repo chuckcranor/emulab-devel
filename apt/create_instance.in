@@ -803,14 +803,14 @@ my $end   = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
 # The type counts can be expensive to compute on a big topology, so save
 # for the reservation checks.
 #
-my $typeCounts;
-my $retval = APT_Profile::CheckResources($rspec, \$errmsg, \$typeCounts);
+my $resources;
+my $retval = APT_Profile::CheckResources($rspec, \$errmsg, \$resources);
 if ($retval) {
     ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
 $retval =
     APT_Profile::CheckResourceReservations($rspec, $project, $start, $end,
-					   $noresokay, \$errmsg, $typeCounts);
+					   $noresokay, \$errmsg, $resources);
 if ($retval) {
     if ($retval < 0) {
 	fatal($errmsg);
@@ -834,6 +834,23 @@ if ($retval) {
     }
 }
 #
+# Warn user about deprecated image use. This will possibly duplicate the
+# email sent by the aggregates, but the email from the portal has a better
+# chance of getting through the user's spam filter. 
+#
+$retval = APT_Profile::CheckForDeprecatedImages($resources, $project,
+						$geniuser->emulab_user(),
+						\$errmsg);
+if ($retval) {
+    if ($retval < 0) {
+	fatal($errmsg);
+    }
+    else {
+	UserError($errmsg);
+    }
+}
+
+#
 # Spectrum sanity checks, then spectrum reservation checks.
 #
 my $spectrum;
@@ -849,7 +866,7 @@ if ($retval) {
 $retval =
     APT_Profile::CheckSpectrumReservations($rspec, $project, $start, $end,
 					   $noresokay, \$errmsg,
-					   $spectrum, $typeCounts);
+					   $spectrum, $resources);
 if ($retval) {
     if ($retval < 0) {
 	fatal($errmsg);

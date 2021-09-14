@@ -1524,11 +1524,13 @@ sub CheckForExtensionLimit($$$)
 {
     my ($self, $rspec, $pmsg)   = @_;
     my $limited = 0;
-    my $typeCounts;
+    my $resources;
     
-    if (APT_Profile::GetResources($rspec, $pmsg, \$typeCounts)) {
+    if (APT_Profile::GetResources($rspec, $pmsg, \$resources)) {
 	return -1;
-    }
+    } 
+    my $typeCounts = $resources->{"typeCounts"};
+   
     foreach my $urn (keys(%{$typeCounts})) {
 	my $aggregate = APT_Aggregate->Lookup($urn);
 	
@@ -2551,11 +2553,11 @@ sub CheckResources($$)
     return -1
 	if (!$rspec);
 
-    my $typeCounts;
-    if (APT_Profile::GetResources($rspec, $perrmsg, \$typeCounts)) {
+    my $resources;
+    if (APT_Profile::GetResources($rspec, $perrmsg, \$resources)) {
 	return -1;
     }
-    $self->_typecounts($typeCounts);
+    $self->_resources($resources);
 
     my $spectrum = [];
     if (APT_Profile::GetSpectrum($rspec, \$spectrum, $perrmsg)) {
@@ -2616,13 +2618,14 @@ sub CheckResourceReservations($$$$)
 	$$perrmsg = "Could not parse rspec";
 	return -1;
     }
-    my $typeCounts = $self->_typecounts();
-    if (!defined($typeCounts) &&
-	APT_Profile::GetResources($rspec, $perrmsg, \$typeCounts)) {
+    my $resources = $self->_resources();
+    if (!defined($resources) &&
+	APT_Profile::GetResources($rspec, $perrmsg, \$resources)) {
 	return -1;
     }
+    
     if (APT_Profile::CheckResourceReservations($rspec, $project,
-	       time(), $end, $noresokay, $perrmsg, $typeCounts)) {
+	       time(), $end, $noresokay, $perrmsg, $resources)) {
 	return -1;
     }
 
@@ -2639,7 +2642,7 @@ sub CheckResourceReservations($$$$)
     }
     # This check must always be done.
     if (APT_Profile::CheckSpectrumReservations($rspec, $project,
-	       time(), $end, $noresokay, $perrmsg, $spectrum, $typeCounts)) {
+	       time(), $end, $noresokay, $perrmsg, $spectrum, $resources)) {
 	return -1;
     }
 

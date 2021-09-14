@@ -53,10 +53,13 @@ use APT_Reservation;
 use APT_RFRange;
 use GeniXML;
 use GeniHRN;
+use GeniIMS;
+use GeniResponse;
 use libtestbed;
 use EmulabFeatures;
 use Project;
 use Lease;
+use OSImage;
 use Image;
 use Node;
 use NodeType;
@@ -1684,11 +1687,11 @@ sub CheckLicenses($$$$$)
 }
 
 #
-# Get the resource counts from an rspec
+# Get resource info from an rspec and cache it for use as needed. 
 #
 sub GetResources($$$)
 {
-    my ($rspec, $pmsg, $pcounts) = @_;
+    my ($rspec, $pmsg, $pref) = @_;
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -1697,6 +1700,9 @@ sub GetResources($$$)
 	    return -1;
 	}
     }
+    my %nodes = ();
+    my %links = ();
+    
     #
     # Build up counts for each reservable type (or reservable node).
     #
@@ -1719,6 +1725,8 @@ sub GetResources($$$)
 	    $$pmsg = "No such aggregate: $manager_urn";
 	    return -1;
 	}
+	$nodes{$client_id} = $ref;
+	    
 	if (defined($component_id)) {
 	    if (GeniHRN::IsValid($component_id)) {
 		my $hrn = GeniHRN->new($component_id);
@@ -1769,7 +1777,15 @@ sub GetResources($$$)
 	}
 	$typeCounts{$manager_urn}->{$restoken} += 1;
     }
-    $$pcounts = \%typeCounts;
+    foreach my $ref (GeniXML::FindNodes("n:link", $rspec)->get_nodelist()) {
+	my $client_id   = GetVirtualId($ref);
+	$links{$client_id} = $ref;
+    }
+    $$pref = {
+	"typeCounts"  => \%typeCounts,
+	"nodes"       => \%nodes,
+	"links"       => \%links,
+    };
     return 0;
 }
 
@@ -1778,7 +1794,7 @@ sub GetResources($$$)
 #
 sub CheckResources($$;$)
 {
-    my ($rspec, $pmsg, $pcounts) = @_;
+    my ($rspec, $pmsg, $presources) = @_;
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -1787,8 +1803,8 @@ sub CheckResources($$;$)
 	    return -1;
 	}
     }
-    my $typeCounts;
-    my $retval = APT_Profile::GetResources($rspec, $pmsg, \$typeCounts);
+    my $resources;
+    my $retval = APT_Profile::GetResources($rspec, $pmsg, \$resources);
     return $retval
 	if ($retval);
 
@@ -1800,6 +1816,8 @@ sub CheckResources($$;$)
     #
     # So check to to see if we have any of those nodes/types
     #
+    my $typeCounts = $resources->{"typeCounts"};
+    
     foreach my $urn (keys(%{$typeCounts})) {
 	my $aggregate = APT_Aggregate->Lookup($urn);
 	next
@@ -1827,7 +1845,7 @@ sub CheckResources($$;$)
 	    }
 	}
     }
-    $$pcounts = $typeCounts if (defined($pcounts));
+    $$presources = $resources if (defined($presources));
     return 0;
 }
 
@@ -1836,7 +1854,7 @@ sub CheckResources($$;$)
 #
 sub CheckResourceReservations($$$$$$;$)
 {
-    my ($rspec, $project, $start, $end, $noresokay, $pmsg, $typeCounts) = @_;
+    my ($rspec, $project, $start, $end, $noresokay, $pmsg, $resources) = @_;
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -1845,11 +1863,13 @@ sub CheckResourceReservations($$$$$$;$)
 	    return -1;
 	}
     }
-    if (!defined($typeCounts)) {
-	if (APT_Profile::GetResources($rspec, $pmsg, \$typeCounts)) {
+    if (!defined($resources)) {
+	if (APT_Profile::GetResources($rspec, $pmsg, \$resources)) {
 	    return -1;
 	}
     }
+    my $typeCounts = $resources->{"typeCounts"};
+    
     foreach my $urn (keys(%{$typeCounts})) {
 	my $nickname = APT_Aggregate->Lookup($urn)->nickname();
 	
@@ -1895,6 +1915,148 @@ sub CheckResourceReservations($$$$$$;$)
 		return 1;
 	    }	    
 	}
+    }
+    return 0;
+}
+
+#
+# Generate warning email.
+#
+sub CheckForDeprecatedImages($$$$)
+{
+    my ($resources, $project, $user, $pmsg) = @_;
+    my $nodes = $resources->{"nodes"};
+    my %deprecated  = ();
+
+    foreach my $client_id (keys(%{$nodes})) {
+	my $ref         = $nodes->{$client_id};
+	my $manager_urn = GeniHRN->new(GetManagerId($ref));
+	my $diskref     = GeniXML::GetDiskImage($ref);
+
+	if (! (defined($manager_urn) && $manager_urn->IsCM())) {
+	    $$pmsg = "$manager_urn is not a valid CM URN";
+	    return 1;
+	}
+
+	# Using the default (system) image. Never deprecated.
+	next
+	    if (!defined($diskref));
+
+	my $image_url = GeniXML::GetText("url", $diskref);
+	my $image_urn = GeniXML::GetText("name", $diskref);
+	next
+	    if (!defined($image_urn));
+	# Yep, people put the URL in the URN spot. We should throw an error.
+	next
+	    if ($image_urn =~ /^(http|https):/);
+
+	if (!GeniHRN::IsValid($image_urn)) {
+	    $$pmsg = "$image_urn is not a valid URN";
+	    return 1;	    
+	}
+	$image_urn = GeniHRN->new($image_urn);
+
+	# Marker to avoid repeated lookups.
+	if (!exists($deprecated{$image_urn})) {
+	    $deprecated{$image_urn} = undef;
+	}
+	elsif (defined($deprecated{$image_urn})) {
+	    next;
+	}
+
+	if ($image_urn->IsOurDomain()) {
+	    my $image = OSImage->Lookup($image_urn->ospid(),
+					$image_urn->osname());
+	    if (!defined($image)) {
+		$$pmsg = "Could not lookup local image $image_urn";
+		return 1;
+	    }
+	    # Skip anything that is not a real image
+	    next
+		if ($image->isImageAlias() || !defined($image->image()));
+	
+	    my $deprecated = 0;
+	    my $iserror    = 0;
+	    my $message;
+	    
+	    if ($image->IsDeprecated(\$deprecated, \$message, \$iserror)) {
+		$$pmsg = "Could not get deprecation info for $image_urn";
+		return -1;
+	    }
+	    $deprecated{$image_urn} = {
+		"deprecated" => $deprecated,
+		"iserror"    => $iserror,
+		"message"    => $message,
+	    }
+	}
+	else {
+	    #
+	    # Talk to IMS database directly.
+	    #
+	    my $blob = GeniIMS::GetImageBlob($image_urn, undef);
+	    if (GeniResponse::IsResponse($blob)) {
+		#
+		# We are gonna let this pass, the aggregate will have
+		# a better picture.
+		#
+		$deprecated{$image_urn} = {"deprecated" => 0};
+		next;
+	    }
+	    if (exists($blob->{"deprecated"})) {
+		$deprecated{$image_urn} = {
+		    "deprecated" => 1,
+		    "iserror"    => $blob->{"deprecated_iserror"},
+		    "message"    => (exists($blob->{"deprecated_message"}) ?
+				     $blob->{"deprecated_message"} : undef),
+		}
+	    }
+	    else {
+		$deprecated{$image_urn} = {"deprecated" => 0};
+	    }
+	}
+    }
+    print "deprecated\n";
+    print Dumper(\%deprecated);
+    
+    #
+    # Look for deprecated images that are no longer allowed to be used,
+    # and return immediate error.
+    #
+    my %errors   = ();
+    my %warnings = ();
+    
+    foreach my $urn (keys(%deprecated)) {
+	my $ref = $deprecated{$urn};
+	
+	next
+	    if (!defined($ref));
+
+	if ($ref->{'iserror'}) {
+	    $errors{$urn} = $ref;
+	}
+	else {
+	    $warnings{$urn} = $ref;
+	}
+    }
+    if (keys(%errors)) {
+	$$pmsg = "The following images are deprecated and may no " .
+	    "longer be used: " . join(",", keys(%errors));
+	return 1;
+    }
+    # No warnings for now, need to decide if the duplicate emails can
+    # be solved.
+    if (0 && keys(%warnings)) {
+	my $message =
+	    "The following images are deprecated. You may continue \n".
+	    "to use them, but you will not be able to create snapshots of\n".
+	    "nodes that are using them. You should consider updating your\n".
+	    "application to use newer images.\n\n";
+
+	foreach my $urn (keys(%warnings)) {
+	    $message .= "\t" . $urn . "\n";
+	}
+	$project->SendEmail($user->email(), "Deprecated Image Warning",
+			    $message, $project->Brand()->OpsEmailAddress());
     }
     return 0;
 }
@@ -2008,7 +2170,7 @@ sub CheckSpectrumPermission($$$;$$)
 sub CheckSpectrumReservations($$$$$$;$$)
 {
     my ($rspec, $project, $start, $end, $noresokay, $pmsg,
-	$spectrum, $typeCounts) = @_;
+	$spectrum, $resources) = @_;
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -2022,8 +2184,8 @@ sub CheckSpectrumReservations($$$$$$;$$)
 	    return -1;
 	}
     }
-    if (!defined($typeCounts)) {
-	if (APT_Profile::GetResources($rspec, $pmsg, \$typeCounts)) {
+    if (!defined($resources)) {
+	if (APT_Profile::GetResources($rspec, $pmsg, \$resources)) {
 	    return -1;
 	}
     }
@@ -2036,6 +2198,8 @@ sub CheckSpectrumReservations($$$$$$;$$)
     #
     # So check to to see if we have any of those nodes/types
     #
+    my $typeCounts = $resources->{"typeCounts"};
+
     foreach my $urn (keys(%{$typeCounts})) {
 	my $aggregate = APT_Aggregate->Lookup($urn);
 	next

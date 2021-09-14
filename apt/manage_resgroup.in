@@ -2864,10 +2864,11 @@ sub DoMaxDuration()
     if (APT_Profile::GetResources($rspec, \$errmsg, \$resources)) {
 	fatal($errmsg);
     }
+    my $typeCounts = $resources->{"typeCounts"}
     #
     # Ask for prediction info from the clusters referenced in the rspec.
     #
-    my $urns = join(",", keys(%{$resources}));
+    my $urns = join(",", keys(%{$typeCounts}));
 
     #
     # Get the prediction info. 
@@ -2886,9 +2887,9 @@ sub DoMaxDuration()
 	#print Dumper($prediction_info);
     }
     
-    if (keys(%{$resources})) {
+    if (keys(%{$typeCounts})) {
 	if (APT_Reservation::Group::Reservation::MaxDuration(
-		$project, $start, \$end, $resources,
+		$project, $start, \$end, $typeCounts,
 		$prediction_info, \$errmsg)) {
 	    fatal($errmsg);
 	}
