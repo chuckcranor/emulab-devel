@@ -109,9 +109,8 @@ $(function ()
 
 	if (window.ISADMIN && _.size(unmatched)) {
 	    $('#unmatched').removeClass("hidden");
-	    
-	    table = $("#unmatched-table")
-		.tablesorter({
+
+	    var args = {
 		    theme : 'bootstrap',
 		    widgets : [ "uitheme", "zebra", "filter"],
 		    headerTemplate : '{content} {icon}',
@@ -131,7 +130,11 @@ $(function ()
 			filter_columnFilters : false,
 		    },
 		    sortList: [[1,1]]
-		});
+	    };
+	    args["textExtraction"] = {
+		5: function(node) {return $(node).find("input:checked").val();}
+	    };
+	    var table = $("#unmatched-table").tablesorter(args);
 
 	    // Target the $('.search') input using built in functioning
 	    // this binds to the search using "search" and "keyup"
