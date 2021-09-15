@@ -2107,6 +2107,13 @@ $(function ()
 		// Convenience.
 		clone.find(" [name=select]").attr("id", node);
 
+		// Nice for Cloudlab/Powder
+		if (window.ISPOWDER || window.ISCLOUD) {
+		    var cluster = amlist[aggregate_urn].abbreviation;
+		    
+		    clone.find(" [name=cluster]").html(cluster);
+		}
+
 		if (stype.length &&
 		    $(stype).attr("name") === "emulab-blockstore") {
 		    clone.find(" [name=menu]").text("n/a");

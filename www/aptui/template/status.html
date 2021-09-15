@@ -564,6 +564,9 @@ pre {
                       <th>ID</th>
                       <th>Node</th>
                       <th>Type</th>
+		      <% if (window.ISPOWDER || window.ISCLOUD) { %>
+			<th>Cluster</th>
+		      <% } %>
                       <th>Status</th>
                       <th>Startup</th>
                       <th>Image</th>
@@ -591,7 +594,9 @@ pre {
 			</div>
 		      </th>
 		      <th class='filter-false sorter-false'
-			  style='text-align: center;'>Actions</th>
+			  style='text-align: center;'>
+			<span class='glyphicon glyphicon-cog'
+			      style="padding-bottom: 6px;"></span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1722,6 +1727,9 @@ pre {
       <td name='client_id'>n/a</td>
       <td name='node_id'>n/a</td>
       <td name='type'>n/a</td>
+      <% if (window.ISPOWDER || window.ISCLOUD) { %>
+	<td name='cluster'>n/a</td>
+      <% } %>
       <td name='status'>n/a</td>
       <td name='startup'>n/a</td>
       <td name='image'>n/a</td>
