@@ -1966,40 +1966,6 @@ $(function ()
 	}
     }
 
-    var listview_row = 
-	"<tr id='listview-row'>" +
-	" <td name='client_id'>n/a</td>" +
-	" <td name='node_id'>n/a</td>" +
-	" <td name='type'>n/a</td>" +
-	" <td name='status'>n/a</td>" +
-	" <td name='startup'>n/a</td>" +
-	" <td name='image'>n/a</td>" +
-	" <td name='sshurl'>n/a</td>" +
-	" <td align=left><input name='select' type=checkbox>" +
-	" <td name='menu' align=center> " +
-	"  <div name='action-menu' class='dropdown'>" +
-	"  <button id='action-menu-button' type='button' " +
-	"          class='btn btn-primary btn-xs dropdown-toggle' " +
-	"          data-toggle='dropdown'> " +
-	"      <span class='glyphicon glyphicon-cog'></span> " +
-	"  </button> " +
-	"  <ul class='dropdown-menu text-left' role='menu'> " +
-	"    <li><a href='#' name='shell'>Shell</a></li> " +
-	"    <li><a href='#' name='console'>Console</a></li> " +
-	"    <li><a href='#' name='consolelog'>Console Log</a></li> " +
-	"    <li><a href='#' name='recovery'>Recovery</a></li> " +
-	"    <li class='hidden'> " +
-	"       <a href='#' name='monitor'>Monitor Graph</a></li> " +
-	"    <li class='hidden'> " +
-	"       <a href='#' name='nodetop'>Top Processes</a></li> " +
-	"    <li class='hidden'> " +
-	"       <a href='#' name='powercycle'>Power Cycle</a></li> " +
-	"    <li><a href='#' name='delete'>Delete Node</a></li> " +
-	"  </ul>" +
-	"  </div>" +
-	" </td>" +
-	"</tr>";
-
     //
     // Show the topology inside the topo container. Called from the status
     // watchdog and the resize wachdog. Replaces the current topo drawing.
@@ -2091,7 +2057,7 @@ $(function ()
 		var isfw   = 0;
 		var node_id= null;
 		var hwtype = null;
-		var clone  = $(listview_row);
+		var clone  = $("#listview-row").clone();
 		var CMclone= $("#context-menu").clone();
 		
 		// Cause of nodes in the emulab namespace (vhost).

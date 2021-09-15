@@ -575,6 +575,7 @@ pre {
 			<div id='listview-action-menu' class='dropdown'>
 			  <input type="checkbox" id="select-all">
 			  <button id='action-menu-button' type='button'
+				  style="margin-top: -6px;"
 				  class='btn btn-primary btn-xs dropdown-toggle'
 				  data-toggle='dropdown'>
 			    <span class='glyphicon glyphicon-cog'></span>
@@ -1714,6 +1715,42 @@ pre {
 	</div>
       </div>
     </div>
+  </div>
+  <div class="hidden">
+    <table>
+    <tr id='listview-row'>
+      <td name='client_id'>n/a</td>
+      <td name='node_id'>n/a</td>
+      <td name='type'>n/a</td>
+      <td name='status'>n/a</td>
+      <td name='startup'>n/a</td>
+      <td name='image'>n/a</td>
+      <td name='sshurl'>n/a</td>
+      <td align=left><input name='select' type=checkbox></td>
+      <td name='menu' align=center> 
+	<div name='action-menu' class='dropdown'>
+	  <button id='action-menu-button' type='button' 
+		  class='btn btn-primary btn-xs dropdown-toggle' 
+		  data-toggle='dropdown'> 
+            <span class='glyphicon glyphicon-cog'></span> 
+	  </button> 
+	  <ul class='dropdown-menu text-left' role='menu'> 
+            <li><a href='#' name='shell'>Shell</a></li> 
+            <li><a href='#' name='console'>Console</a></li> 
+            <li><a href='#' name='consolelog'>Console Log</a></li> 
+            <li><a href='#' name='recovery'>Recovery</a></li> 
+            <li class='hidden'> 
+              <a href='#' name='monitor'>Monitor Graph</a></li> 
+            <li class='hidden'> 
+              <a href='#' name='nodetop'>Top Processes</a></li> 
+            <li class='hidden'> 
+              <a href='#' name='powercycle'>Power Cycle</a></li> 
+            <li><a href='#' name='delete'>Delete Node</a></li> 
+	  </ul>
+	</div>
+      </td>
+    </tr>
+    </table>
   </div>
   <div id='waitwait_div'></div>
   <div id='terminate_div'></div>
