@@ -3005,6 +3005,12 @@ $(function ()
 		    AddClusterRow();
 		});
 		$('#cluster-table .add-cluster').last().removeClass("hidden");
+		// Move the first cluster to the top.
+		if (window.ISPOWDER || window.ISCLOUD) {
+		    var first = _.first(_.values(details.clusters));
+
+		    ReorderGraphs(first.cluster_urn);
+		}
 	    }
 	    else {
 		// Always show an empty cluster row.
@@ -3870,7 +3876,7 @@ $(function ()
     function ReorderGraphs(which)
     {
 	console.info("ReorderGraphs", which);
-	var graphid;
+	var graphid = null;
 
 	if (which == "routes") {
 	    graphid = "route-graph-div";
@@ -3882,7 +3888,7 @@ $(function ()
 	    if (_.has(FEs, which)) {
 		graphid = "FE-graph-div";
 	    }
-	    else {
+	    else if (_.has(amlist, which)) {
 		var nickname = amlist[which].nickname;
 
 		if (window.ISPOWDER && nickname == "Emulab") {
@@ -3892,6 +3898,11 @@ $(function ()
 		    graphid = "resgraph-" + nickname;
 		}
 	    }
+	}
+	if (! graphid) {
+	    // If using the Cloudlab portal to look at a Powder
+	    // experiment, might not have all the ams.
+	    return;
 	}
     	if ($('#reservation-lists :first-child').attr("id") != graphid) {
 	    $('#' + graphid).fadeOut("fast", function () {
