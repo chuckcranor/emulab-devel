@@ -2864,7 +2864,8 @@ sub DoMaxDuration()
     if (APT_Profile::GetResources($rspec, \$errmsg, \$resources)) {
 	fatal($errmsg);
     }
-    my $typeCounts = $resources->{"typeCounts"}
+    my $typeCounts = $resources->{"typeCounts"};
+    
     #
     # Ask for prediction info from the clusters referenced in the rspec.
     #
