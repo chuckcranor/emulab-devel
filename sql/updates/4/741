@@ -1,0 +1,26 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("projects", "nsf_funded")) {
+	DBQueryFatal("ALTER TABLE projects add " .
+		     " `nsf_funded` tinyint(1) default '0'");
+    }
+    if (!DBSlotExists("projects", "nsf_updated")) {
+	DBQueryFatal("ALTER TABLE projects add " .
+		     " `nsf_updated` datetime default NULL");
+    }
+    if (!DBSlotExists("projects", "nsf_awards")) {
+	DBQueryFatal("ALTER TABLE projects add " .
+		     " `nsf_awards` tinytext");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
