@@ -17,6 +17,13 @@ sub DoUpdate($$$)
 	DBQueryFatal("ALTER TABLE projects add " .
 		     " `nsf_awards` tinytext");
     }
+    DBQueryFatal("REPLACE INTO table_regex VALUES ".
+		 "('projects','nsf_funded','int','redirect',".
+		 "'default:boolean',0,0,NULL)");
+    DBQueryFatal("REPLACE INTO table_regex VALUES ".
+		 "('projects','nsf_awards','int','regex',".
+		 " '^[-\\\\w,]*\$',1,128,NULL)");
+    
     return 0;
 }
 1;

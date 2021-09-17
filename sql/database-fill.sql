@@ -833,6 +833,8 @@ REPLACE INTO table_regex VALUES ('projects','URL','text','redirect','default:tin
 REPLACE INTO table_regex VALUES ('projects','manager_urn','text','regex','^[-_\\w\\.\\/:+]*$',10,128,NULL);
 REPLACE INTO table_regex VALUES ('projects','nonlocal_id','text','regex','^[-_\\w\\.\\/:+]*$',10,128,NULL);
 REPLACE INTO table_regex VALUES ('projects','nonlocal_type','text','regex','^[-\\w]*$',1,64,NULL);
+REPLACE INTO table_regex VALUES ('projects','nsf_funded','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('projects','nsf_awards','text','regex','^[-\\w,]*$',1,128,NULL);
 REPLACE INTO table_regex VALUES ('reserved','vname','text','redirect','virt_nodes:vname',1,32,NULL);
 REPLACE INTO table_regex VALUES ('users','manager_urn','text','regex','^[-_\\w\\.\\/:+]*$',10,128,NULL);
 REPLACE INTO table_regex VALUES ('users','nonlocal_id','text','regex','^[-_\\w\\.\\/:+]*$',10,128,NULL);
