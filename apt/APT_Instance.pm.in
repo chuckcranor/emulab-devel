@@ -1346,7 +1346,7 @@ sub GetSSHKeys($$;$)
 	# nonlocal users from the GPO portal are messy.
 	#
 	my @members;
-	if ($project->GetProjectGroup()->MemberList(\@members)) {
+	if ($group->MemberList(\@members)) {
 	    print STDERR "Error getting memberlist for $project\n";
 	}
 	#
