@@ -191,11 +191,6 @@ my $control_network = inet_aton($CONTROL_NETWORK);
 ReadDataFile();
 
 #
-# Ditto the white list.
-#
-#my $whitelist = GetList($WHILELIST);
-
-#
 # Process the logins file, generating a hash of all the IPs
 # we want to ban.
 #
@@ -256,6 +251,11 @@ sub ProcessLoginFile($)
 	logit("Processing file");
     }
 
+    #
+    # Reread the white list each time we process.
+    #
+    my $whitelist = GetList($WHILELIST);
+
     while (<$IN>) {
 	my $ip;
 	my $date;
@@ -276,6 +276,10 @@ sub ProcessLoginFile($)
 	# Ignore anything from boss (medusa).
 	next
 	    if ($ip eq $BOSSNODE_IP);
+
+	# Ignore anything in the whitelist.
+	next
+	    if (exists($whitelist->{$ip}));
 
 	if (!exists($counts->{$ip})) {
 	    $counts->{$ip} = {
