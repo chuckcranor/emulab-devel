@@ -226,7 +226,7 @@ while (1) {
 	# We want to periodically update so that we are not holding
 	# to many offenders in memory and not in the list.
 	#
-	if ($outstandingCount > $UPDATE_THRESHOLD) {
+	if ($outstandingCount) {
 	    WriteBanList();
 	}
 	
@@ -254,7 +254,7 @@ sub ProcessLoginFile($)
     #
     # Reread the white list each time we process.
     #
-    my $whitelist = GetList($WHILELIST);
+    my $whitelist = GetList($WHITELIST);
 
     while (<$IN>) {
 	my $ip;
@@ -411,10 +411,10 @@ sub GetList($)
 	logit("GetList: $filename does not exist");
 	return $result;
     }
-    open(IN, $filename) or
+    open(LIST, $filename) or
 	fatal("Could not open $filename");
 
-    while (<IN>) {
+    while (<LIST>) {
 	next
 	    if ($_ =~ /^#/);
 
@@ -425,7 +425,7 @@ sub GetList($)
 	    logit("Could not parse line from $filename: '$_'");
 	}
     }
-    close(IN);
+    close(LIST);
     return $result;
 }
 
