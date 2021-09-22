@@ -13510,12 +13510,14 @@ static char *getgeniuserurn( tmcdreq_t *reqp ) {
 	MYSQL_ROW	row;
 	char		buf[MYBUFSIZE];
 
-	res = mydb_query( "SELECT slice.creator_urn FROM "
-			  "`geni-cm`.geni_slices AS slice, "
-			  "`geni-cm`.geni_slivers AS sliver WHERE "
-			  "sliver.resource_uuid='%s' AND "
-			  "slice.uuid = sliver.slice_uuid", 1,
-			  reqp->nodeuuid );
+	res = mydb_query("SELECT u.nonlocal_id,slice.creator_urn FROM "
+			 "  `geni-cm`.geni_slices AS slice "
+			 "join `geni-cm`.geni_slivers AS sliver on "
+			 "   slice.uuid = sliver.slice_uuid "
+			 "join users as u on "
+			 "   u.uid_uuid=slice.creator_uuid "
+			 "WHERE sliver.resource_uuid='%s'",
+			 2, reqp->nodeuuid);
 
 	if( !res || !mysql_num_rows( res ) ) {
 		error( "geni_user_urn: %s: DB error getting URN!\n",
@@ -13524,9 +13526,12 @@ static char *getgeniuserurn( tmcdreq_t *reqp ) {
 	}
 
 	row = mysql_fetch_row( res );
-
-	GOUTPUT( buf, sizeof buf, "%s", row[ 0 ] );
-
+	if (row[0] && row[0][0]) {
+		GOUTPUT( buf, sizeof buf, "%s", row[ 0 ] );
+	}
+	else {
+		GOUTPUT( buf, sizeof buf, "%s", row[ 1 ] );
+	}
 	mysql_free_result( res );
 
 	if( verbose )
