@@ -138,34 +138,35 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         # be back here later.
         ;
     }
-    elseif ($login_user && $login_user->NeedAccountUpdate()) {
-        if ($script != "myaccount.php" && $script != "logout.php") {
-            $referrer = urlencode($_SERVER['REQUEST_URI']);
-            header("Location: myaccount.php?referrer=$referrer&needupdate=1");
-            return;
+    elseif ($login_user && $login_user->IsActive()) {
+        if ($login_user->NeedAccountUpdate()) {
+            if ($script != "myaccount.php" && $script != "logout.php") {
+                $referrer = urlencode($_SERVER['REQUEST_URI']);
+                header("Location: myaccount.php".
+                       "?referrer=$referrer&needupdate=1");
+                return;
+            }
         }
-    }
-    elseif ($login_user && $login_user->NeedScopusValidation()) {
-        if ($script != "verify-match.php" && $script != "logout.php") {
-            $referrer = urlencode($_SERVER['REQUEST_URI']);
-            header("Location: verify-match.php?referrer=$referrer");
-            return;
+        elseif ($login_user->NeedScopusValidation()) {
+            if ($script != "verify-match.php" && $script != "logout.php") {
+                $referrer = urlencode($_SERVER['REQUEST_URI']);
+                header("Location: verify-match.php?referrer=$referrer");
+                return;
+            }
         }
-    }
-    elseif ($login_user && $login_user->IsActive() &&
-            $login_user->RequireAUP()) {
-        if ($script != "portal-aup.php" && $script != "logout.php") {
-            $referrer = urlencode($_SERVER['REQUEST_URI']);
-            header("Location: portal-aup.php?referrer=$referrer");
-            return;
+        elseif ($login_user->RequireAUP()) {
+            if ($script != "portal-aup.php" && $script != "logout.php") {
+                $referrer = urlencode($_SERVER['REQUEST_URI']);
+                header("Location: portal-aup.php?referrer=$referrer");
+                return;
+            }
         }
-    }
-    elseif ($login_user && $login_user->IsActive() &&
-            $login_user->Licenses()) {
-        if ($script != "licenses.php" && $script != "logout.php") {
-            $referrer = urlencode($_SERVER['REQUEST_URI']);
-            header("Location: licenses.php?referrer=$referrer");
-            return;
+        elseif ($login_user->Licenses()) {
+            if ($script != "licenses.php" && $script != "logout.php") {
+                $referrer = urlencode($_SERVER['REQUEST_URI']);
+                header("Location: licenses.php?referrer=$referrer");
+                return;
+            }
         }
     }
 

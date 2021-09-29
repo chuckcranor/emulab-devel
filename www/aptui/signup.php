@@ -190,6 +190,7 @@ if (! isset($create)) {
         $defaults["startorjoin"] = "start";
     }
     $defaults["proj_class"] = 0;
+    $defaults["proj_nsf"]   = 0;
 
     if (count($license_defs)) {
         foreach ($license_defs as $name => $value) {
@@ -420,6 +421,20 @@ if (!$joinproject) {
         !TBvalid_boolean($formfields["proj_class"])) {
 	$errors["proj_class"] = TBFieldErrorString();
     }
+    if (isset($formfields["proj_nsf"])) {
+        if (!TBvalid_boolean($formfields["proj_nsf"])) {
+            $errors["proj_nsf"] = TBFieldErrorString();
+        }
+        elseif (!isset($formfields["proj_nsf_awards"]) ||
+                trim($formfields["proj_nsf_awards"]) == "") {
+            $errors["proj_nsf"] = "Please tell us the award numbers";
+        }
+        elseif (! TBcheck_dbslot(trim($formfields["proj_nsf_awards"]),
+                                 "projects", "nsf_awards",
+                                 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+            $errors["proj_nsf"] = TBFieldErrorString();
+        }
+    }
     if (count($license_defs)) {
         foreach ($license_defs as $name => $value) {
             $fname = "license_" . $name;
@@ -642,6 +657,14 @@ foreach ($licenses as $name => $value) {
 }
 if (isset($formfields["proj_class"])) {
     $args["class"]  = $formfields["proj_class"];
+}
+if (isset($formfields["proj_nsf"])) {
+    $args["nsf_funded"] = $formfields["proj_nsf"];
+    if ($formfields["proj_nsf"] == 1) {
+        $args["nsf_awards"] = trim($formfields["proj_nsf_awards"]);
+        $args["nsf_supplement"] =
+                    $formfields["proj_nsf_supplement"] == 1 ? 1 : 0;
+    }
 }
 
 if (! ($project = Project::NewNewProject($args, $error))) {

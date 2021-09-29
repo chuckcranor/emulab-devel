@@ -103,8 +103,30 @@
 	    (<a class="toggle" data-name="bound_portal">Toggle</a>)
 	  </td>
 	</tr>
+	<tr>
+	  <td>Industry</td>
+	  <td><% if (fields.industry) { %>Yes<% } else { %>No<% } %>
+	    (<a class="toggle" data-name="industry">Toggle</a>)
+	  </td>
+	</tr>
+	<tr>
+	  <td>Consortium</td>
+	  <td><% if (fields.consortium) { %>Yes<% } else { %>No<% } %>
+	    (<a class="toggle" data-name="consortium">Toggle</a>)
+	  </td>
+	</tr>
       <% } %>
     <% } %>
+    <% _.each(fields.nsf_awards, function(award) { %>
+      <tr>
+	<td>NSF Award</td>
+	<td><%- award.award %>
+	  <% if (award.supplement == 1) { %>
+	    (supplement)
+	  <% } %>
+	</td>
+      </tr>
+    <% }); %>
     <tr>
       <td colspan="2"><center>Long Description</center></td>
     </tr>

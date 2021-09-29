@@ -40,7 +40,7 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 #
 # Verify page arguments.
 #
-$optargs = RequiredPageArguments("project", PAGEARG_PROJECT);
+$reqargs = RequiredPageArguments("project", PAGEARG_PROJECT);
 
 SPITHEADER(1);
 

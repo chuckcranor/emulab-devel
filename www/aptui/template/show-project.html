@@ -109,6 +109,9 @@
 		      <% } %>
 		      <li><a href="activity.php?project=<%= target_project %>">
 			Experiment History</a></li>
+		      <li><a href="#" data-toggle='modal'
+			     data-target='#nsf-funding-modal'>
+			Add NSF Award</a></li>
 		      <% if (disabledres < 2) { %>
 		      <li><a href="reservation-history.php?project=<%= target_project %>">
 			Reservation History</a></li>
@@ -284,7 +287,7 @@
 	    <div class="checkbox centered">
 	      <label>
 		<input type="checkbox"
-  		 onchange="$('#confirm-deleteproject').removeAttr('disabled');">
+  		       onchange="$('#confirm-deleteproject').removeAttr('disabled');">
 		Check this box too!
 	      </label>
 	    </div>
@@ -295,6 +298,38 @@
 		    style="margin-right: 10px;">Cancel</button>
             <button class='btn btn-danger btn-sm' disabled
 		    id='confirm-deleteproject'>Confirm</button>
+	  </div>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='nsf-funding-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <center>
+	  <h4>Add NSF award to project <b><%- target_project %></b></h4>
+	  <div class="form-group" style="margin-bottom: 5px;">
+	    <input class="form-control"
+		   name="nsf_award"
+		   style="width: 25%; margin-top: 5px;"
+		   placeholder="NSF award number"
+		   type="text">
+	    <label class="control-label hidden"></label>
+	  </div>
+	  <div style="margin-top: 0px;">
+	    <label class="checkbox-inline"
+		   style='margin-right: 10px'>
+	      <input name="nsf_supplement"
+		     type="checkbox">Is this a supplement?</label>
+	  </div>
+	  <div style="margin-top: 15px;">
+            <button class='btn btn-primary btn-sm'
+		    data-dismiss='modal'
+		    style="margin-right: 10px;">Cancel</button>
+            <button class='btn btn-danger
+			   btn-sm save-button'>Save</button>
 	  </div>
 	</center>
       </div>

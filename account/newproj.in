@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,6 +45,7 @@ my $silent  = 0;
 my $portal;
 my $resend;
 my %licenses = ();
+my %nsf_awards = ();
 
 #
 # Configure variables
@@ -209,7 +210,11 @@ my %optional = ("newuser_xml"    => "newuser_xml",
 		"plab"           => "num_pcplab",
 		"class"          => "forClass",
 		"whynotpublic"	 => "public_whynot",
-		"user_interface" => "default_user_interface");
+		"user_interface" => "default_user_interface",
+		"nsf_funded"	 => "nsf_funded",
+		"nsf_awards"	 => "nsf_awards",
+		"nsf_supplement" => "nsf_supplement",
+    );
 
 #
 # This script is not audited cause we want the output to be sent back
@@ -374,6 +379,19 @@ if (exists($newproj_args{'newuser_xml'})) {
     $newproj_args{'head_uid'} = $2;
 }
 
+# NSF award. Only one allowed. Change later.
+if (exists($newproj_args{'nsf_funded'})) {
+    my $funded = $newproj_args{'nsf_funded'};
+    if ($funded == 1) {
+	my $award = $newproj_args{'nsf_awards'};
+	my $sup   = $newproj_args{'nsf_supplement'};
+	$nsf_awards{$award} = $sup;
+    }
+    delete($newproj_args{'nsf_funded'});
+    delete($newproj_args{'nsf_awards'});
+    delete($newproj_args{'nsf_supplement'});
+}
+
 #
 # Now do special checks.
 #
@@ -424,6 +442,13 @@ if (keys(%licenses)) {
 	if ($?) {
 	    fatal("Invalid license name: $name");
 	}
+    }
+}
+# And NSF awards
+if (keys(%nsf_awards)) {
+    foreach my $award (keys(%nsf_awards)) {
+	my $sup = $nsf_awards{$award};
+	$newproj->AddNSFAward($award, $sup);
     }
 }
 

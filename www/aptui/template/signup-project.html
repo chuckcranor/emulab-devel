@@ -47,6 +47,46 @@
 		 type="checkbox">Will this project be used for a class?</label>
       </div>
     </div>
+    <% if (window.ISPOWDER) { %>
+      <div class="form-group sidebyside-form" >
+	<div class="format-me" data-key="proj_nsf"
+	     style='padding-left: 15px; margin-bottom: 7px;'>
+	  <label class="checkbox-inline"
+		 style='margin-right: 10px; padding-lefttt: 0px;'>
+	    <input name="formfields[proj_nsf]"
+		   id="nsf-checkbox"
+		   style='margin-lefttt: 20px;'
+		   value="1"
+		   <% if (formfields.proj_nsf == 1) { %>checked<% } %>
+		   type="checkbox">Is this project funded by NSF?</label>
+	  <div id="nsf-awards-input"
+	       <% if (formfields.proj_nsf == 0) { %>
+	       class="row hidden"
+	       <% } else { %>
+	       class="row"
+	       <% } %>
+	       style="padding-left: 20px;">
+	    <div class="col-xs-4" style="padding-right: 5px;">
+	      <input name="formfields[proj_nsf_awards]"
+		     value="<%- formfields.proj_nsf_awards %>"
+		     class="form-control"
+		     placeholder="NSF award number"
+		     type="text">
+	    </div>
+	    <div class="col-xs-7" style="padding-top: 5px;">
+	      <label class="checkbox-inline"
+		     style='margin-right: 10px; padding-lefttt: 0px;'>
+	      <input name="formfields[proj_nsf_supplement]"
+		     value="1"
+		     <% if (formfields.proj_nsf_supplement == 1) { %>checked<% } %>
+		     type="checkbox">Is this work funded by a supplement to
+	      this award?</label>
+	    </div>
+	    
+	  </div>
+	</div>
+      </div>
+    <% } %>
     <% tbname="Emulab";
        if (window.ISCLOUD) { tbname="CloudLab"; } 
        else if (window.ISPNET) { tbname="PhantomNet"; }

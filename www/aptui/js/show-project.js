@@ -63,6 +63,11 @@ $(function ()
 	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
 	});
 
+	// Setup NSF funding modal
+	if (window.ISADMIN) {
+	    SetupNSFModal();
+	}
+
 	LoadUsage();
 	LoadExperimentTab();
 	LoadClassicExperiments();
@@ -275,7 +280,8 @@ $(function ()
 						 window.ISMANAGER ||
 						 window.ISADMIN ? 1 : 0),
 				"showCreator" : true,
-				"showProject" : false}));
+				"showProject" : false,
+				"showPrivacy" : true}));
 	    
 	    // Format dates with moment before display.
 	    $('#project-profiles-table .format-date').each(function() {
@@ -901,6 +907,49 @@ $(function ()
 	sup.HideModal('#confirm-deleteproject-modal', function () {
 	    sup.ShowWaitWait("This will take a minute. Patience please.");
 	    xmlthing.done(callback);
+	});
+    }
+
+    function SetupNSFModal()
+    {
+	var error = function (message) {
+	    var group = $('#nsf-funding-modal input[name=nsf_award]').parent();
+	    if (!message) {
+		group.removeClass("has-error");
+		group.find("label").addClass("hidden");
+		return;
+	    }
+	    group.addClass("has-error");
+	    group.find("label").html(message);
+	    group.find("label").removeClass("hidden");
+	};
+	var callback = function(json) {
+	    if (json.code) {
+		console.info("Server says: " + json.value);
+		if (json.code == 2) {
+		    error(json.value);
+		}
+		return;
+	    }
+	    LoadProjectTab();
+	    sup.HideModal('#nsf-funding-modal');
+	}
+	$('#nsf-funding-modal .save-button').click(function (e) {
+	    var supplement = $('#nsf-funding-modal ' +
+			       'input[name=nsf_supplement]').is(":checked");
+	    var award = $('#nsf-funding-modal input[name=nsf_award]').val();
+	    console.info(award, supplement);
+
+	    // Lets at least make sure it is not blank. 
+	    award = $.trim(award);
+	    if (award == "") {
+		error("Please tell us the award number");
+		return;
+	    }
+	    sup.CallServerMethod(null, "show-project", "NSF",
+				 {"pid"    : window.TARGET_PROJECT,
+				  "supplement" : supplement ? 1 : 0,
+				  "award" : award}, callback);
 	});
     }
 

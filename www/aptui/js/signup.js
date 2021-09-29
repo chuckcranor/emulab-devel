@@ -126,6 +126,18 @@ $(function ()
 		$('#signup_panel_title').text("Request to start a project");
 	    }
 	});
+
+	/*
+	 * Handler for the NSF checkbox; show/hide award input
+	 */
+	$("input[id='nsf-checkbox']").change(function(e) {
+	    if ($(this).is(":checked")) {
+		$('#nsf-awards-input').removeClass("hidden");
+	    }
+	    else {
+		$('#nsf-awards-input').addClass("hidden");
+	    }
+	});
 	
 	aptforms.EnableUnsavedWarning('#quickvm_signup_form');
 	

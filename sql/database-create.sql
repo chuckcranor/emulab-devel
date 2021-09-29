@@ -5315,6 +5315,8 @@ CREATE TABLE `projects` (
   `nsf_funded` tinyint(1) default '0',
   `nsf_updated` datetime default NULL,
   `nsf_awards` tinytext,
+  `industry` tinyint(1) default '0',
+  `consortium` tinyint(1) default '0',
   PRIMARY KEY  (`pid_idx`),
   UNIQUE KEY `pid` (`pid`),
   KEY `unix_gid` (`unix_gid`),
@@ -5322,6 +5324,19 @@ CREATE TABLE `projects` (
   KEY `approved_2` (`approved`),
   KEY `pcremote_ok` (`pcremote_ok`),
   KEY `portal` (`portal`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `project_nsf_awards`
+--
+DROP TABLE IF EXISTS `project_nsf_awards`;
+CREATE TABLE `project_nsf_awards` (
+  `idx` smallint(5) unsigned NOT NULL auto_increment,
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `award` varchar(32) NOT NULL default '',
+  `supplement` tinyint(1) default '0',
+  PRIMARY KEY  (`pid_idx`,`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --

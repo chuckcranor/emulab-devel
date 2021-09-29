@@ -360,7 +360,9 @@ $routing = array("geni-login" =>
                                                  "ProjectProfile" =>
                                                      "Do_ProjectProfile",
                                                  "DeleteProject" =>
-                                                     "Do_DeleteProject"
+                                                     "Do_DeleteProject",
+                                                 "NSF" =>
+                                                     "Do_NSF"
                               )
                         ),
 		 "groups" =>

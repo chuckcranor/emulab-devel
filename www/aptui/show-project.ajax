@@ -244,9 +244,12 @@ function Do_ProjectProfile()
     $results["description"] = $target_project->name();
     $results["why"]         = $target_project->why();
     $results["forClass"]    = $target_project->forClass() ? true : false;
+    $results["industry"]    = $target_project->industry() ? true : false;
+    $results["consortium"]  = $target_project->consortium() ? true : false;
     $results["reservations_disabled"] =
         $target_project->reservations_disabled() ? true : false;
     $results["licenses"]    = array();
+    $results["nsf_awards"]  = $target_project->nsf_awards();
 
     if ($ISPOWDER) {
         $licenses = $target_project->LicenseStatus();
@@ -364,6 +367,12 @@ function Do_Toggle()
     elseif ($toggle == "project_forClass") {
         $target_project->SetforClass($target_project->forClass() ? 0 : 1);
     }
+    elseif ($toggle == "industry") {
+        $target_project->SetIndustry($target_project->industry() ? 0 : 1);
+    }
+    elseif ($toggle == "consortium") {
+        $target_project->SetConsortium($target_project->consortium() ? 0 : 1);
+    }
     else {
 	SPITAJAX_ERROR(-1, "Unknown toggle name: $toggle");
         return;
@@ -391,6 +400,41 @@ function Do_DeleteProject()
         SPITAJAX_ERROR(-1, $suexec_output);
         return -1;
     }
+    SPITAJAX_RESPONSE(1);
+}
+
+function Do_NSF()
+{
+    global $this_user, $target_project, $ajax_args;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+        return;
+    }
+    $pid = $target_project->pid();
+
+    if (!isset($ajax_args["award"])) {
+	SPITAJAX_ERROR(2, "Missing award argument");
+	return -1;
+    }
+    else {
+        $award = trim($ajax_args["award"]);
+        if ($award == "" ||
+            !TBvalid_slot($award, "projects", "nsf_awards")) {
+            SPITAJAX_ERROR(2, "Invalid award argument");
+            return -1;
+        }
+    }
+    if (isset($ajax_args["supplement"]) && $ajax_args["supplement"]) {
+        $supplement = 1;
+    }
+    else {
+        $supplement = 0;
+    }
+    $target_project->AddNSFAward($award, $supplement);
     SPITAJAX_RESPONSE(1);
 }
 

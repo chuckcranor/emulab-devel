@@ -174,6 +174,8 @@ class Project
 	                     { return $this->field("reservations_disabled"); }
     function linked_to_us()  { return $this->field("linked_to_us"); }
     function forClass()      { return $this->field("forClass"); }
+    function industry()      { return $this->field("industry"); }
+    function consortium()    { return $this->field("consortium"); }
     function cvsrepo_public(){ return $this->field("cvsrepo_public"); }
     function allow_workbench(){ return $this->field("allow_workbench"); }
     function nonlocal_id()   { return $this->field("nonlocal_id"); }
@@ -764,6 +766,26 @@ class Project
 	$this->project["forClass"] = $onoff;
 	return 0;
     }
+    function SetIndustry($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set industry='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["industry"] = $onoff;
+	return 0;
+    }
+    function SetConsortium($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set consortium='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["consortium"] = $onoff;
+	return 0;
+    }
     function SetBoundPortal($onoff) {
 	$idx    = $this->pid_idx();
 	$onoff  = ($onoff ? 1 : 0);
@@ -1120,6 +1142,35 @@ class Project
 	while ($row = mysql_fetch_array($query_result)) {
             $result[] = $row;
         }
+        return $result;
+    }
+
+    #
+    # 
+    #
+    function AddNSFAward($award, $supplement) {
+	$pid_idx = $this->pid_idx();
+	$pid     = $this->pid();
+
+        DBQueryFatal("replace into project_nsf_awards set ".
+                     "  idx=null,pid='$pid',pid_idx='$pid_idx', ".
+                     "  award='$award',supplement='$supplement'");
+        return 0;
+    }
+    function nsf_awards() {
+	$pid_idx = $this->pid_idx();
+        $result  = array();
+
+	$query_result =
+	    DBQueryWarn("select * from project_nsf_awards ".
+			"where pid_idx='$pid_idx'");
+
+	if ($query_result && mysql_num_rows($query_result)) {
+            while ($row = mysql_fetch_array($query_result)) {
+                $idx = $row["idx"];
+                $result[$idx] = $row;
+            }
+	}
         return $result;
     }
 }
