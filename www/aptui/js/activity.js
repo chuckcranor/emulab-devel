@@ -146,6 +146,12 @@ $(function () {
 	// Allows using filter_liveSearch or delayed search &
 	// pressing escape to cancel the search
 	$.tablesorter.filter.bindSearch(table, $(searchname));
+
+	// This activates the popover subsystem.
+	$('[data-toggle="popover"]').popover({
+	    trigger: 'hover',
+	    placement: 'auto',
+	});
     }
 
     function SearchAgain()

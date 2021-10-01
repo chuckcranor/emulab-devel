@@ -182,6 +182,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
               type='image/vnd.microsoft.icon'>
         <link rel='stylesheet' href='$APTBASE/css/bootstrap.css'>
         <link rel='stylesheet' href='$APTBASE/css/quickvm.css'>
+        <link rel='stylesheet' href='$APTBASE/css/multilevel.css'>
         <link rel='stylesheet' href='$APTBASE/css/$APTSTYLE'>\n";
     if (0 && $ISPOWDER) {
         echo "<link href='https://www.powderwireless.net/powder/fonts/raleway/style.css' rel='stylesheet'>";
@@ -479,6 +480,7 @@ echo "  <ul class='nav navbar-nav navbar-left apt-left'>";
    if ($login_user && !$nonav && !($login_status & CHECKLOGIN_WEBONLY)) {
 
     if ($login_user->IsActive()) {
+      $recents = Instance::RecentExperiments($login_user);
       $then = time() - (90 * 3600 * 24);
     
 echo "
@@ -488,8 +490,28 @@ echo "
 	 data-toggle='dropdown'>
 	Experiments <b class='caret'></b></a>
       <ul class='dropdown-menu'>
-	<li><a href='instantiate.php'>Start Experiment</a></li>
-	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>";
+	<li><a href='instantiate.php'>Start Experiment</a></li>\n";
+
+     if ($recents) {
+         echo "<li class='multilevel-submenu'>
+                <a href='#'>Rerun Recent Experiment</a>
+                  <ul class='dropdown-menu'>";
+
+         foreach ($recents as $recent) {
+             $instance_name = $recent["instance_name"];
+             $profile_name  = $recent["profile_name"];
+             $rerun_url     = $recent["rerun_url"];
+             echo "<li><a href='${rerun_url}' target=_blank>
+                       $instance_name (${profile_name})</a></li>\n";
+         }
+         echo "<li class=text-center><a target=_blank
+                href='activity.php?user=$login_uid&min=$then'>More
+                <b class='caret'></b></a></li>";
+         echo "   </ul>
+              </li>\n";
+     }
+
+echo "	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>";
 
       if ($UI_DISABLE_RESERVATIONS == 0 ||
          ($UI_DISABLE_RESERVATIONS == 1 && ISADMIN()) ) {

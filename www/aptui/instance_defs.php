@@ -902,6 +902,49 @@ class Instance
         }
         return $result;
     }
+
+    #
+    # Most recent experiments for rerun.
+    #
+    function RecentExperiments($user)
+    {
+        $result = array();
+        $uid_idx = $user->uid_idx();
+
+        $query_result =
+            DBQueryFatal("select v.uuid,p.name,h.repohash, " .
+                         "   h.name as expname,h.uuid as expuuid ".
+                         " from apt_instance_history as h ".
+                         "join apt_profiles as p on p.profileid=h.profile_id ".
+                         "join apt_profile_versions as v on ".
+                         "     v.profileid=p.profileid and ".
+                         "     v.version=p.version ".
+                         "where h.creator_idx='$uid_idx' ".
+                         "order by h.created desc limit 10");
+        if (!mysql_num_rows($query_result)) {
+            return null;
+        }
+	while ($row = mysql_fetch_array($query_result)) {
+            $profile_name   = $row["name"];
+            $profile_uuid   = $row["uuid"];
+            $instance_uuid  = $row["expuuid"];
+            $instance_name  = $row["expname"];
+            $repohash       = $row["repohash"];
+            $rerun_url = "instantiate.php?profile=${profile_uuid}" .
+                       "&rerun_instance=${instance_uuid}";
+	    // Pull the same branch.
+	    if ($repohash) {
+		$rerun_url .= "&refspec=${repohash}";
+	    }
+            $result[] = array("profile_uuid"  => $profile_uuid,
+                              "profile_name"  => $profile_name,
+                              "instance_uuid" => $instance_uuid,
+                              "instance_name" => $instance_name,
+                              "rerun_url"     => $rerun_url,
+            );
+        }
+        return $result;
+    }
 }
 
 class InstanceHistory
