@@ -10,7 +10,6 @@
     },
     "emulab" : {
 	"nodes" : {
-            "ota-monitor" : "B210",
 #            "cellsdr1-browning" : "X310",
 #            "cellsdr1-fm" : "X310",
 #            "cellsdr1-dentistry" : "X310",
