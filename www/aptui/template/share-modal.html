@@ -19,30 +19,35 @@
         <center>
 	  <form class="form-horizontal">
 	    Share this version:
-	    <br>
-	    <div class="form-group">
-	      <div class="col-sm-12">
-		<input href='<%- formfields.profile_version_url %>'
-		       onClick="this.select();"
-		       class='form-control'
-		       readonly
+	    <div style="margin-top: 5px;">
+	      <div class="copy-to-clipboard form-inline">
+		<input readonly
+		       style="width: 90%"
+		       class="form-control"
 		       value='<%- formfields.profile_version_url %>'>
+		<a href='#' class='btn'>
+		  <span class='glyphicon glyphicon-copy'
+			style='margin-bottom: 4px;'></span>
+		</a>
 	      </div>
 	    </div>
-	    Share this profile:
-	    <br>
-	    <div class="form-group">
-	      <div class="col-sm-12">
-		<input href='<%- formfields.profile_profile_url %>'
-		       onClick="this.select();"
-		       class='form-control'
-		       readonly
+	    <div style="margin-top: 15px;">
+	      Share this profile:
+	    </div>
+	    <div style="margin-top: 5px;">
+	      <div class="copy-to-clipboard form-inline">
+		<input readonly
+		       style="width: 90%"
+		       class="form-control"
 		       value='<%- formfields.profile_profile_url %>'>
+		<a href='#' class='btn'>
+		  <span class='glyphicon glyphicon-copy'
+			style='margin-bottom: 4px;'></span>
+		</a>
 	      </div>
 	    </div>
 	  </form>
 	</center>
-	<small>Click on the link to select it</small>
       </div>
     </div>
   </div>

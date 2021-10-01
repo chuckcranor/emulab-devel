@@ -304,3 +304,13 @@ window.APT_OPTIONS.Announcements = function () {
     });
 }
 
+window.APT_OPTIONS.SetupCopyToClipboard = function (id) {
+    $(id).find(".copy-to-clipboard a").click(function (e) {
+	e.preventDefault();
+	var input = $(this).parent().find("input");
+	$(input).select();
+	document.execCommand("copy");
+	window.getSelection().removeAllRanges();	
+	$(input)[0].blur();
+    });
+}

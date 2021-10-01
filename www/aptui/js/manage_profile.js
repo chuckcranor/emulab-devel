@@ -638,6 +638,9 @@ $(function ()
 	    }
 	    sup.ShowModal("#share_profile_modal");
 	});
+	// Bind the copy to clipbload button in the share modal
+	window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
+	
 	// Handler for updates to the example portals field, on the
 	// the Mothership, where we have multiple portals.
 	$('.examples_portals_checkbox').click(function(event) {

@@ -107,10 +107,14 @@ else {
 $defaults = array();
 $defaults["profile_name"]        = $profile->name();
 $defaults["profile_version"]     = $profile->version();
-if (!$isguest) {
+if ($isguest) {
+    $defaults["profile_creator"]     = $profile->anonCreator();
+}
+else {
     $defaults["profile_creator"]     = $profile->creator();
     $defaults["profile_updater"]     = $profile->updater();
 }
+$defaults["profile_public"]      = $profile->ispublic() ? 1 : 0;
 $defaults["profile_pid"]         = $profile->pid();
 $defaults["profile_created"]     = DateStringGMT($profile->created());
 $defaults["profile_published"]   = DateStringGMT($profile->published());

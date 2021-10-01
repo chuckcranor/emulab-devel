@@ -93,6 +93,9 @@ $(function ()
 	$('#copy_repobased_profile_div').html(copyrepoString);
 	$('#share_div').html(shareTemplate({formfields: fields}))
 
+	// Bind the copy to clipbload button in the share modal
+	window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
+	
 	// Fireoff repo stuff now.
 	if (fromrepo) {
 	    SetupRepo();

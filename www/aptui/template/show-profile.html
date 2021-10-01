@@ -37,21 +37,23 @@
 	      </td>
 	    </tr>
 	  <% } %>
-	    <tr>
-	    <td>Project:</td>
-	    <td><%- fields.profile_pid %></td>
-	  </tr>
 	  <% if (!isguest) { %>
 	    <tr>
-	      <td>Creator:</td>
-	      <td><%- fields.profile_creator %></td>
+	      <td>Project:</td>
+	      <td><%- fields.profile_pid %></td>
 	    </tr>
 	  <% } %>
-	  <% if (fields.profile_version != 0) { %>
-	    <tr>
-	      <td>Updated by:</td>
-	      <td><%- fields.profile_updater %></td>
-	    </tr>
+	  <tr>
+	    <td>Creator:</td>
+	    <td><%- fields.profile_creator %></td>
+	  </tr>
+	  <% if (!isguest) { %>
+	    <% if (fields.profile_version != 0) { %>
+	      <tr>
+		<td>Updated by:</td>
+		<td><%- fields.profile_updater %></td>
+	      </tr>
+	    <% } %>
 	  <% } %>
 	  <tr>
 	    <% if (fields.profile_version == 0) { %>
@@ -61,6 +63,10 @@
 	    <% } %>
 	    <td class='format-date' style='word-wrap:break-word;'>
 	      <%- fields.profile_created %></td>
+	  </tr>
+	  <tr>
+	    <td>Public?:</td>
+	    <td><% if (fields.profile_public) { %>Yes<% } else { %>No<% } %></td>
 	  </tr>
 	  <% if (withpublishing) { %>
 	  <tr>
@@ -87,22 +93,24 @@
 	    </tr>
 	  <% } %>
 	</table>
-	<% if (history) { %>
-	<a class='btn btn-info btn-xs pull-left'
-           id='profile_history_button'
-           style='margin-right: 10px; font-size: 12px'
-           href='profile-history.php?uuid=<%= profile_uuid %>'
-           type='button'>Version History
-	</a>
-	<% } %>
-	<% if (activity) { %>
-	  <a class='btn btn-info btn-xs pull-left'
-             id='profile_history_button'
-             style='margin-right: 10px; font-size: 12px'
-             href='profile-activity.php?uuid=<%= profile_uuid %>'
-             type='button'>Activity
-	  </a>
-	<% } %>
+	<div>
+	  <% if (history) { %>
+	    <a class='btn btn-info btn-xs'
+               id='profile_history_button'
+               style='margin-right: 5px; font-size-foo: 12px'
+               href='profile-history.php?uuid=<%= profile_uuid %>'
+               type='button'>Version History
+	    </a>
+	  <% } %>
+	  <% if (activity) { %>
+	    <a class='btn btn-info btn-xs '
+               id='profile_history_button'
+               style='margin-right: 5px; font-size-foo: 12px'
+               href='profile-activity.php?uuid=<%= profile_uuid %>'
+               type='button'>Activity
+	    </a>
+	  <% } %>
+	</div>
       </div>
     </div>
     <% if (fromrepo) { %>
@@ -152,6 +160,57 @@
 	    </tr>
 	  </table>
 	</div>
+      </div>
+    <% } %>
+    <% if (! isguest) { %>
+      <div style="margin-top-foo: 10px;" class="text-center">
+	<% if (!disabled && (canedit || fields.profile_public != 0)) { %>
+	  <span data-toggle='popover'
+		data-delay='{"show":250}'
+		data-html='true'
+		data-content="Share this profile with other users by
+			      sending them a link to instantiate it.
+			      Click for more info.">
+	    <button class='btn btn-primary btn-xs'
+		    id='profile_share_button'
+     		    data-toggle='modal' data-target='#share_profile_modal'
+		    style='margin-right: 5px;'
+		    type='button'>
+	      Share
+	    </button>
+	  </span>
+	<% } %>
+	<% if (canedit) { %>
+	  <a class='btn btn-primary btn-xs'
+             style='margin-right: 5px;'
+             type='button'
+	     href='manage_profile.php?action=edit&uuid=<%= version_uuid %>'>
+            Edit
+	  </a>
+	<% } %>
+	<% if (! disabled) { %>
+	  <a id="copy-profile-button"
+	     class='btn btn-primary btn-xs'
+             style='margin-right: 5px;'
+	     <% if (fromrepo) { %>
+     	     data-toggle='modal' data-target='#copy-repobased-profile-modal'
+	     <% } else { %>
+             href='manage_profile.php?action=copy&uuid=<%= version_uuid %>'
+	     <% } %>
+	     type='button'>
+            Copy
+	  </a>
+	  <% if (gotrspec) { %>
+	    <% 	var url = "instantiate.php?profile=" +
+	    version_uuid + "&from=manage-profile"; %>
+	    <a class='btn btn-primary btn-xs'
+	       href="<%- url %>"
+	       id='profile_instantiate_button'
+	       style='margin-right: 5"px;'
+	       name='create'>Instantiate
+	    </a>
+	  <% } %>
+	<% } %>
       </div>
     <% } %>
   </div>
@@ -225,54 +284,6 @@
 	    </div>
 	  </fieldset>
 	</form>
-	<% if (! (disabled || isguest)) { %>
-	  <% if (gotrspec) { %>
-	    <% 	var url = "instantiate.php?profile=" +
-	           version_uuid + "&from=manage-profile"; %>
-	    <a class='btn btn-primary btn-xs pull-right'
-	       href="<%- url %>"
-	       id='profile_instantiate_button'
-	       style='margin-right: 10px;'
-	       name='create'>Instantiate
-	    </a>
-	  <% } %>
-	  <a id="copy-profile-button"
-	     class='btn btn-primary btn-xs pull-right'
-             style='margin-right: 10px;'
-	     <% if (fromrepo) { %>
-     	     data-toggle='modal' data-target='#copy-repobased-profile-modal'
-	     <% } else { %>
-             href='manage_profile.php?action=copy&uuid=<%= version_uuid %>'
-	     <% } %>
-	     type='button'>
-            Copy
-	  </a>
-	<% } %>
-	<% if (canedit) { %>
-	  <a class='btn btn-primary btn-xs pull-right'
-             style='margin-right: 10px;'
-             type='button'
-	     href='manage_profile.php?action=edit&uuid=<%= version_uuid %>'>
-            Edit
-	  </a>
-	<% } %>
-	<% if (!(disabled || isguest)) { %>
-	  <span class='pull-right''
-		data-toggle='popover'
-		data-delay='{"hide":1500, "show":250}'
-		data-html='true'
-		data-content="Share this profile with other users by
-			      sending them a link to instantiate it.
-			      Click for more info.">
-	    <button class='btn btn-info btn-xs'
-		    id='profile_share_button'
-     		    data-toggle='modal' data-target='#share_profile_modal'
-		    style='margin-right: 10px;'
-		    type='button'>
-              Share
-	    </button>
-	  </span>
-	<% } %>
       </div>
     </div>
   </div>

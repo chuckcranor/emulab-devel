@@ -1,10 +1,9 @@
 $(function ()
 {
     'use strict';
-    var template_list   = ["list-profiles", "profile-list",
+    var template_list   = ["list-profiles",
 			   "oops-modal", "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
-    var listTemplate    = _.template(templates["profile-list"]);
 
     function initialize()
     {
