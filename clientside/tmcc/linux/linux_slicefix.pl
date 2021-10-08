@@ -1659,6 +1659,12 @@ sub main
 	fix_sshd_config($imageroot);
 	hardwire_boss_node($imageroot);
 
+	# Handle one-off expired root certificate
+	if (-x $BINDIR . '/removecert') {
+	    print "Checking for expired CA root certificate";
+	    system($BINDIR . "/removecert -M");
+	}
+
 	# Run any postconfig scripts
 	if (-x $BINDIR . '/osconfig') {
 		print "Checking for dynamic client-side updates to slice...\n";
