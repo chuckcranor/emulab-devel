@@ -3012,8 +3012,9 @@ sub CallMethodOnReservations($$@)
     #
     # Generate a list of responses to return to caller.
     #
-    foreach my $agg (@reservations) {
-	my $webtask = shift(@webtasks);
+    for (my $i = 0; $i < scalar(@reservations); $i++) {
+	my $agg = $reservations[$i];
+	my $webtask = $webtasks[$i];
 
 	$webtask->Refresh();
 	push(@return_values, $webtask);
