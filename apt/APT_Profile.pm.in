@@ -1916,6 +1916,45 @@ sub CheckResourceReservations($$$$$$;$)
 	    }	    
 	}
     }
+
+    #
+    # Check for nodes that that require a reservation to use.
+    #
+    my $nodes = $resources->{"nodes"};
+    
+    foreach my $client_id (keys(%{$nodes})) {
+	my $ref = $nodes->{$client_id};
+	my $component_id = GeniXML::GetNodeId($ref);
+
+	next
+	    if (!$component_id);
+
+	# This was sanity checked in GetResources()
+	if (GeniHRN::IsValid($component_id)) {
+	    my $hrn = GeniHRN->new($component_id);
+
+	    # Eventually this will need to come from the aggregates.
+	    next
+		if ($hrn->domain() ne $OURDOMAIN);
+
+	    $component_id = $hrn->id();
+	}
+
+	# Eventually this will need to come from the aggregates.
+	my $node = Node->Lookup($component_id);
+	next
+	    if (!$node);
+
+	next
+	    if (!$node->requires_reservation());
+
+	if (!APT_Reservation::Group::Reservation::Reserved(
+		 $project, $start, $end, $MYURN, $component_id, 1)) {
+	    $$pmsg = "$client_id ($component_id) is not reserved ".
+		"for the duration of the experiment";
+	    return 1;
+	}	    
+    }
     return 0;
 }
 
