@@ -59,6 +59,7 @@ class Paramset
     function version_uuid() { return $this->field('version_uuid'); }
     function reporef()	    { return $this->field('reporef'); }
     function repohash()	    { return $this->field('repohash'); }
+    function bindings()	    { return $this->field('bindings'); }
 
     # Profile of paramset
     function Profile() {

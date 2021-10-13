@@ -40,10 +40,23 @@ $(function ()
 	// Standard option
 	marked.setOptions({"sanitize" : true});
 
-	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
+	$('#waitwait_div').html(waitwaitString);
+	$('#oops_div').html(oopsString);
 
-	console.info("profile", fields);
+	sup.CallServerMethod(null, "show-profile",
+			     "GetProfile", {"uuid" : version_uuid},
+			     function (json) {
+				 console.info(json);
+				 if (json.code) {
+				     sup.SpitOops("oops", json.value);
+				     return;
+				 }
+				 GeneratePage(json.value);
+			     });
+    }
 
+    function GeneratePage(fields)
+    {
 	if (_.has(fields, "profile_rspec") && fields["profile_rspec"] != "") {
 	    gotrspec = 1;
 	}
@@ -61,8 +74,7 @@ $(function ()
         if (_.has(fields, "profile_version")) {
 	    profile_version = fields['profile_version'];
         }
-	if (_.has(fields, "profile_repourl") &&
-	    fields["profile_repourl"] != "") {
+	if (_.has(fields, "profile_repourl") && fields["profile_repourl"]) {
 	    fromrepo = 1;
 	}
       
@@ -77,6 +89,7 @@ $(function ()
 	    isguest:		window.ISGUEST,
 	    canedit:            window.CANEDIT,
 	    disabled:           window.DISABLED,
+	    paramsets:          window.PARAMSETS,
 	    withpublishing:     window.WITHPUBLISHING,
 	    fromrepo:           fromrepo,
 	    gotrspec:           gotrspec,
@@ -86,10 +99,8 @@ $(function ()
 							{"wide" : true});
 	$('#page-body').html(show_html);
 
-	$('#waitwait_div').html(waitwaitString);
 	$('#showtopomodal_div').html(showtopoString);
 	$('#rspectext_div').html(rspectextviewString);
-	$('#oops_div').html(oopsString);
 	$('#copy_repobased_profile_div').html(copyrepoString);
 	$('#share_div').html(shareTemplate({formfields: fields}))
 

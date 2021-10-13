@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,7 +32,7 @@ include_once("instance_defs.php");
 #
 function Do_Create()
 {
-    global $this_user, $ajax_args;
+    global $this_user, $ajax_args, $TBBASE;
     $errors = array();
     $opts = "";
     $args = "";
@@ -82,9 +82,34 @@ function Do_Create()
     }
     $name = $ajax_args["name"];
     $description = $ajax_args["description"];
-    $bound = "";
+    $bound = 0;
     if (isset($ajax_args["bound"]) && $ajax_args["bound"] == 1) {
-        $bound = "-b";
+        $bound = 1;
+        $opts .= "-b ";
+    }
+    $public = 0;
+    if (isset($ajax_args["public"]) && $ajax_args["public"] == 1) {
+        $public = 1;
+        $opts  .= "-p ";
+    }
+    if (isset($ajax_args["replace"]) && $ajax_args["replace"] == 1) {
+        $opts  .= "-r ";
+    }
+    if (isset($ajax_args["reporef"]) && $ajax_args["reporef"] != "") {
+        $reporef = $ajax_args["reporef"];
+        if (!TBcheck_dbslot($reporef, "default", "tinytext",
+                            TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+            $errors["reporef"] = TBFieldErrorString();
+        }
+        $opts  .= "-R " . escapeshellarg($reporef) . " ";
+    }
+    if (isset($ajax_args["repohash"]) && $ajax_args["repohash"] != "") {
+        $repohash = $ajax_args["repohash"];
+        if (!TBcheck_dbslot($repohash, "apt_profiles", "repohash",
+                            TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+            $errors["repohash"] = TBFieldErrorString();
+        }
+        $opts  .= "-H " . escapeshellarg($repohash) . " ";
     }
     
     if (!TBcheck_dbslot($name, "virt_nodes", "vname",
@@ -109,7 +134,7 @@ function Do_Create()
         fwrite($fp, $bindings);
         fclose($fp);
         chmod($filename, 0666);        
-        $opts = "-B $filename";
+        $opts .= "-B $filename ";
     }
     $safe_name = escapeshellarg($name);
     $safe_description = escapeshellarg($description);
@@ -117,7 +142,7 @@ function Do_Create()
     $webtask    = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
     $command    = "webmanage_profile -t $webtask_id paramset ".
-                "-m $safe_description $bound $opts ".
+                "-m $safe_description $opts ".
                 "  add $safe_name $profile_uuid $args";
         
     $retval = SUEXEC($this_user->uid(), "nobody",
@@ -137,8 +162,16 @@ function Do_Create()
         $webtask->Delete();
         return;
     }
+    $newuuid = $webtask->TaskValue("uuid");
     $webtask->Delete();
-    SPITAJAX_RESPONSE(true);
+    if ($bound || $profile->repourl()) {
+        $url = $profile->URL(true);
+    }
+    else {
+        $url = $profile->ProfileURL(true);
+    }
+    $url .= "&rerun_paramset=${newuuid}";
+    SPITAJAX_RESPONSE($url);
 }
 
 #
@@ -167,20 +200,17 @@ function Do_Delete()
 	SPITAJAX_ERROR(-1, "No such user");
 	return;
     }
-    $query_result =
-        DBQueryFatal("select * from apt_parameter_sets ".
-                     "where uuid='$uuid'");
-    if (!mysql_num_rows($query_result)) {
+    $paramset = Paramset::Lookup($uuid);
+    if (!$paramset) {
 	SPITAJAX_ERROR(-1, "No such parameter set");
 	return;
     }
-    $row = mysql_fetch_array($query_result);
-    if ($row["uid_idx"] != $target_user->uid_idx() && !ISADMIN()) {
+    if (!$paramset->CanDelete($this_user)) {
 	SPITAJAX_ERROR(-1, "No permission to delete parameter set");
 	return;
     }
-    $profileid  = $row["profileid"];
-    $safe_name  = escapeshellarg($row["name"]);
+    $profileid  = $paramset->profileid();
+    $safe_name  = escapeshellarg($paramset->name());
     $webtask    = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
     $command    = "webmanage_profile -t $webtask_id paramset ".

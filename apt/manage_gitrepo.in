@@ -638,17 +638,20 @@ sub GetRepoSource($;$$)
     system("/usr/bin/fsync $repodir");
     sleep(1);
 
+    # If a hash, we need the "blob" argument.
+    my $blob = ($refspec =~ /\// ? "-e" : "blob");
+
     chdir("$repodir") or
 	fatal("Could not chdir to $repodir: $!");
 
     foreach my $maybe (@locations) {
 	my $file;
 	    
-	if (system("$GIT cat-file -e ".
+	if (system("$GIT cat-file $blob ".
 		   "$refspec:${maybe}.py >/dev/null 2>&1") == 0) {
 	    $file = "${maybe}.py";
 	}
-	elsif (system("$GIT cat-file -e ".
+	elsif (system("$GIT cat-file $blob ".
 		      "  $refspec:${maybe}.rspec >/dev/null 2>&1") == 0) {
 	    $file = "${maybe}.rspec";
 	}

@@ -252,6 +252,24 @@ pre {
 			     hardware used in this experiment.'>
  	      Performance History</a>
 	    <% if (registered && !isfadmin) { %>
+	      <button class='btn btn-xs btn-info hidden'
+		      id='rerun_button' type=button
+		      data-toggle='popover'
+	              data-delay='{"show":300}'
+		      data-html='true'
+		      data-content="Share a link to run this experiment using the
+				    same parameters."> 
+		Share</button>
+	      <button class='btn btn-info btn-xs hidden'
+		      style='margin-right: 30px;'
+		      id='save_paramset_button'
+		      data-toggle='popover'
+		      data-delay='{"show":300}'
+		      data-content='Save the parameters used to create this
+				    experiment, so you can quickly apply them
+				    when starting a new experiment using this
+				    profile. Click for more information.'
+		      type='button'>Save Parameters</button>
 	      <span>
 		<button class='btn btn-xs btn-success hidden' disabled
 			style='margin-right: 10px;'
@@ -284,24 +302,6 @@ pre {
 			 uses whatever images the original profile uses."> 
 		  Copy</a>
 	      <% } %>
-	      <button class='btn btn-xs btn-primary hidden'
-		      id='rerun_button' type=button
-		      data-toggle='popover'
-	              data-delay='{"show":300}'
-		      data-html='true'
-		      data-content="Share a link to run this experiment using the
-				    same parameters."> 
-		Share</button>
-	      <button class='btn btn-primary btn-xs hidden'
-		      style='margin-right: 10px;'
-		      id='save_paramset_button'
-		      data-toggle='popover'
-		      data-delay='{"show":300}'
-		      data-content='Save the parameters used to create this
-				    experiment, so you can quickly apply them
-				    when starting a new experiment using this
-				    profile. Click for more information.'
-		      type='button'>Save Parameters</button>
 	    <% } %>
 	    <button class='btn btn-xs btn-success exp-running hidden' disabled
 		    id='extend_button' type=button>

@@ -22,6 +22,7 @@
 # }}}
 #
 #
+include_once("paramset_defs.php");
 
 function TBvalid_rspec($token) {
     return TBcheck_dbslot($token, "apt_profiles", "rspec",
@@ -133,6 +134,7 @@ class Profile
     function project_write(){ return $this->field('project_write'); }
     function repourl()	    { return $this->field('repourl'); }
     function reponame()	    { return $this->field('reponame'); }
+    function reporef()	    { return $this->field('reporef'); }
     function repohash()	    { return $this->field('repohash'); }
     function repokey()	    { return $this->field('repokey'); }
     function webtask_id()   { return $this->field('webtask_id'); }
@@ -145,6 +147,14 @@ class Profile
     function portal_converted()    { return $this->field('portal_converted'); }
     function examples_portals()    { return $this->field('examples_portals'); }
 
+    # Project of profile
+    function Project() {
+        if ($this->project) {
+            return $this->project;
+        }
+        $this->project = Project::Lookup($this->pid_idx());
+        return $this->project;
+    }
     # Private means only in the same project.
     function IsPrivate() {
 	return !($this->ispublic() || $this->shared());
@@ -297,44 +307,60 @@ class Profile
     #
     # URL. To the specific version of the profile.
     #
-    function URL() {
+    function URL($plain = false) {
         global $APTBASE, $ISVSERVER, $ISAPT;
 	
 	$uuid = $this->uuid();
+        $url  = "$APTBASE";
 
 	if ($this->ispublic() || (!$ISAPT && $this->shared())) {
 	    $pid  = $this->pid();
 	    $name = $this->name();
 	    $vers = $this->version();
-	    if ($ISVSERVER)
-		return "$APTBASE/p/$pid/$name/$vers";
-	    return "$APTBASE/instantiate.php?profile=$name".
-		"&project=$pid&version=$vers";
+	    if ($ISVSERVER && !$plain) {
+                $url .= "/p/$pid/$name/$vers";
+            }
+            else {
+                $url .= "/instantiate.php?profile=$name".
+                     "&project=$pid&version=$vers";
+            }
 	}
 	else {
-	    if ($ISVSERVER)
-		return "$APTBASE/p/$uuid";	    
-	    return "$APTBASE/instantiate.php?profile=$uuid";
+	    if ($ISVSERVER && !$plain) {
+		$url .= "/p/$uuid";
+            }
+            else {
+                $url .= "/instantiate.php?profile=$uuid";
+            }
 	}
+        return $url;
     }
     # And the URL of the profile itself.
-    function ProfileURL() {
+    function ProfileURL($plain = false) {
         global $APTBASE, $ISVSERVER, $ISAPT;
 	
 	$uuid = $this->profile_uuid();
+        $url  = "$APTBASE";
 
 	if ($this->ispublic() || (!$ISAPT && $this->shared())) {
 	    $pid  = $this->pid();
 	    $name = $this->name();
-	    if ($ISVSERVER)
-		return "$APTBASE/p/$pid/$name";
-	    return "$APTBASE/instantiate.php?profile=$name&project=$pid";
+	    if ($ISVSERVER && !$plain) {
+		$url .= "/p/$pid/$name";
+            }
+            else {
+                $url .= "/instantiate.php?profile=$name&project=$pid";
+            }
 	}
 	else {
-	    if ($ISVSERVER)
-		return "$APTBASE/p/$uuid";	    
-	    return "$APTBASE/instantiate.php?profile=$uuid";
+	    if ($ISVSERVER && !$plain) {
+		$url .= "/p/$uuid";
+            }
+            else {
+                $url .= "/instantiate.php?profile=$uuid";
+            }
 	}
+        return $url;
     }
 
     #
@@ -568,6 +594,17 @@ class Profile
 	    return 1;
         }
         return 0;
+    }
+    function anonCreator() {
+        $creator = User::Lookup($this->creator_idx());
+        if (!$creator) {
+            return "";
+        }
+        $tokens = preg_split("/\s+/", $creator->name());
+        if (count($tokens) == 1) {
+            return $tokens[0];
+        }
+        return $tokens[0] . " " . substr(end($tokens), 0 , 1);
     }
 
     function UsageInfo($user) {
@@ -814,22 +851,73 @@ class Profile
 	return array($finalForm, $defaults);
     }
 
+    function RecentExperiments($user)
+    {
+        return Instance::RecentExperiments($user, $this);
+    }
+
+    function HasParamsets($user)
+    {
+        return $this->Paramsets($user, 1);
+    }
+
+    function Paramsets($user, $boolean = 0)
+    {
+        $uid_idx    = $user->uid_idx();
+        $profile_id = $this->profileid();
+
+        #
+        # Watch for version specific parameter set, switch the profile_uuid
+        # to that version. Note that repo based profiles are always version
+        # zero, we have to add another argument to the url instead.
+        #
+        $query_result =
+            DBQueryFatal("select s.*,v.uuid as version_uuid, ".
+                         "    p.name as profile_name,p.uuid as profile_uuid, ".
+                         "    v.version as profile_version,v.repourl ".
+                         " from apt_parameter_sets as s ".
+                         "left join apt_profiles as p on ".
+                         "     p.profileid=s.profileid ".
+                         "left join apt_profile_versions as v on ".
+                         "      v.uuid=s.version_uuid ".
+                         "where s.uid_idx='$uid_idx' and ".
+                         "      s.profileid='$profile_id' ".
+                         "order by s.name,s.created");
+
+        if ($boolean) {
+            return mysql_num_rows($query_result);
+        }
+        if (! mysql_num_rows($query_result)) {
+            return null;
+        }
+        $results = array();
+        while ($row = mysql_fetch_array($query_result)) {
+            $blob = array(
+                "uuid"              => $row["uuid"],
+                "name"              => $row["name"],
+                "description"       => $row["description"],
+                "public"            => $row["public"],
+                "created"           => DateStringGMT($row["created"]),
+                "bindings"          => json_decode($row["bindings"]),
+                "profile_uuid"      => $row["profile_uuid"],
+                "version_uuid"      => $row["version_uuid"],
+                "profile_name"      => $row["profile_name"],
+                "profile_version"   => $row["profile_version"],
+                "repourl"           => $row["repourl"],
+                "reporef"           => $row["reporef"],
+                "repohash"          => $row["repohash"],
+            );
+            $results[] = $blob;
+        }
+        return $results;
+    }
+
     #
     # Temporary hack to control who gets the new genilib code.
     #
     function UseNewGeniLib()
     {
-	$project = Project::Lookup($this->pid_idx());
-	if (!$project) {
-	    return 0;
-	}
-        if (0) {
-            if (FeatureEnabled("NewPParams", null,
-                               $project->DefaultGroup(), null)) {
-                return 1;
-            }
-        }
-        return 0;
+        return 1;
     }
 }
 ?>

@@ -47,10 +47,6 @@ $(function ()
 	if (record.profile_uuid) {
 	    var url = "instantiate.php?profile=" + record.profile_uuid +
 		"&rerun_instance=" + window.uuid;
-	    // Pull the same branch.
-	    if (_.has(record, "repohash") && record.repohash) {
-		url += "&refspec=" + record.repohash;
-	    }
 	    $('#rerun_button').attr("href", url);
 	    
 	    if (_.has(record, "bindings") && record.cansave_parameters) {

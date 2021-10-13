@@ -76,6 +76,8 @@ function Do_GetProfile()
 			    'ispprofile'  => $ispp,
                             'isscript'    => ($profile->script() ? 1 : 0),
                             'fromrepo'    => ($profile->repourl() ? 1 : 0),
+                            'reporef'     => ($profile->repourl() ?
+                                              $profile->reporef() : ""),
                             'repohash'    => ($profile->repourl() ?
                                               substr($profile->repohash(),0,8)
                                               : ""),
@@ -132,7 +134,9 @@ function Do_GetParameters()
                   "defaults"    => $defaults,
                   "hasactivity" => $profile->HasActivity($this_user),
                   "paramdefs"   => json_decode($paramdefs),
-                  "paramsets"   => $profile->ParameterSets($this_user));
+                  "paramsets"   => $profile->ParameterSets($this_user),
+                  "recents"     => $profile->RecentExperiments($this_user),
+    );
     
     #
     # If we get a rerun uuid, we need to get the bindings for that instance
@@ -143,6 +147,18 @@ function Do_GetParameters()
             return;
         }
         $rerun_uuid   = $ajax_args["rerun_instance"];
+        $record = Instance::Lookup($rerun_uuid);
+        if (!$record) {
+            $record = InstanceHistory::Lookup($rerun_uuid);
+            if (!$record) {
+                SPITAJAX_ERROR(1, "No such instance");
+                return;
+            }
+        }
+        if (!$record->CanView($this_user)) {
+            SPITAJAX_ERROR(1, "Not enough permission to view instance");
+            return;
+        }
         $profile_uuid = $profile->uuid();
         $webtask      = WebTask::CreateAnonymous();
         $webtask_id   = $webtask->task_id();
@@ -171,20 +187,17 @@ function Do_GetParameters()
             SPITAJAX_ERROR(1, "Rerun paramset UUID is not a valid UUID");
             return;
         }
-        $rerun_uuid   = $ajax_args["rerun_paramset"];
-        $query_result = DBQueryFatal("select * from apt_parameter_sets ".
-                                     "where uuid='$rerun_uuid'");
-
-        if (!mysql_num_rows($query_result)) {
+        $rerun_uuid = $ajax_args["rerun_paramset"];
+        $paramset = Paramset::Lookup($rerun_uuid);
+        if (!$paramset) {
             SPITAJAX_ERROR(1, "No such parameter set");
             return;
         }
-        $row = mysql_fetch_array($query_result);
-        if ($row["uid_idx"] != $this_user->uid_idx() && !ISADMIN()) {
+        if (!$paramset->CanUse($this_user)) {
             SPITAJAX_ERROR(1, "Not enough permission to use parameter set");
             return;
         }
-        $blob["rerun_bindings"] = json_decode($row["bindings"]);        
+        $blob["rerun_bindings"] = json_decode($paramset->bindings());
     }
     SPITAJAX_RESPONSE($blob);
 }
@@ -216,34 +229,68 @@ function Do_GetPreviousBindings()
 	SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
 	return;
     }
-
-    #
-    # Look for any running instances, use the latest if there are any.
-    #
     $profileid = $profile->profileid();
     $this_idx  = $this_user->uid_idx();
-    
-    $query_result =
-        DBQueryWarn("select uuid from apt_instances ".
-                    "where profile_id='$profileid' and ".
-                    "      creator_idx='$this_idx' ".
-                    "order by created desc limit 1");
-    if ($query_result && mysql_num_rows($query_result)) {
-        $row = mysql_fetch_array($query_result);
-        $rerun_uuid = $row["uuid"];
+
+    if (isset($ajax_args["rerun_uuid"]) && $ajax_args["rerun_uuid"] != "") {
+        $rerun_uuid = $ajax_args["rerun_uuid"];
+        #
+        # A specific instance.
+        #
+        if (!IsValidUUID($rerun_uuid)) {
+            SPITAJAX_ERROR(1, "Rerun UUID is not a valid UUID");
+            return;
+        }
+        $instance = Instance::Lookup($rerun_uuid);
+        if (!$instance) {
+            $instance = InstanceHistory::Lookup($rerun_uuid);
+            if (!$instance) {
+                SPITAJAX_ERROR(1, "Rerun UUID does not exist");
+                return;
+            }
+        }
+        # Check consistency and that current user actually created the instance.
+        if ($instance->profile_id() != $profileid) {
+            SPITAJAX_ERROR(1, "Instance is for a different profile");
+            return;
+        }
+        if (!$instance->CanView($this_user)) {
+            SPITAJAX_ERROR(1, "Not allowed to view the instance");
+            return;
+        }
     }
     else {
+        #
+        # Look for any running instances, use the latest if there are any.
+        #
         $query_result =
-            DBQueryWarn("select uuid from apt_instance_history ".
+            DBQueryWarn("select uuid from apt_instances ".
                         "where profile_id='$profileid' and ".
                         "      creator_idx='$this_idx' ".
                         "order by created desc limit 1");
         if ($query_result && mysql_num_rows($query_result)) {
             $row = mysql_fetch_array($query_result);
             $rerun_uuid = $row["uuid"];
+            $instance = Instance::Lookup($rerun_uuid);
         }
         else {
-            SPITAJAX_ERROR(1, "No previous bindings");
+            $query_result =
+                DBQueryWarn("select uuid from apt_instance_history ".
+                            "where profile_id='$profileid' and ".
+                            "      creator_idx='$this_idx' ".
+                            "order by created desc limit 1");
+            if ($query_result && mysql_num_rows($query_result)) {
+                $row = mysql_fetch_array($query_result);
+                $rerun_uuid = $row["uuid"];
+                $instance = InstanceHistory::Lookup($rerun_uuid);
+            }
+            else {
+                SPITAJAX_ERROR(1, "No previous bindings");
+                return;
+            }
+        }
+        if (!$instance) {
+            SPITAJAX_ERROR(1, "Could not lookup rerun UUID");
             return;
         }
     }
@@ -267,7 +314,14 @@ function Do_GetPreviousBindings()
         $webtask->Delete();
         return;
     }
-    $blob = $webtask->TaskValue("bindings");
+    $profile = $instance->Profile();
+    $blob = array(
+        "bindings" => $webtask->TaskValue("bindings"),
+        # This is the version uuid of the instantiated experiment.
+        "version_uuid" => $profile->uuid(),
+        "repohash" => $instance->repohash(),
+        "reporef" => $instance->reporef(),
+    );
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 }

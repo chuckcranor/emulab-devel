@@ -149,6 +149,7 @@ $(function ()
 	    isleader:		window.ISLEADER,
 	    history:		window.HISTORY,
 	    activity:		window.ACTIVITY,
+	    paramsets:		window.PARAMSETS,
 	    manual:             window.MANUAL,
 	    copyuuid:		(window.COPYUUID || null),
 	    snapuuid:		(window.SNAPUUID || null),

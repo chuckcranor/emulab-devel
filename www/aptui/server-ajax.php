@@ -155,6 +155,10 @@ $routing = array("geni-login" =>
 			      "guest"   => true,
 			      "methods" => array("CheckScript" =>
 						     "Do_CheckScript",
+						 "GetProfile" =>
+                                                     "Do_GetProfile",
+						 "GetParamsets" =>
+                                                     "Do_GetParamsets",
                               )
                         ),
 		 "status" =>

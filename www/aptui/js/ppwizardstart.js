@@ -21,6 +21,7 @@ $(function () {
 	var ppdivname     = null;
 	var uuid          = "";
 	var registered    = true;
+	var fromrepo      = false;
 	var multisite     = 0;
 	var RSPEC	  = null;
 	var configuredone_callback = null;
@@ -33,6 +34,7 @@ $(function () {
 	var rerun_warnings= null;
 	var setStepsMotion= null;
 	var resinfo_window= null;
+	var ppchanged     = false;
 
 	// List of form elements (fields,groups), in order of appearance.
 	var formFields    = [];
@@ -49,6 +51,10 @@ $(function () {
 		.replace(/>/g, "&gt;")
 		.replace(/"/g, "&quot;")
 		.replace(/'/g, "&#039;");
+	}
+	function Modified() {
+	    ppchanged = true;
+	    modified_callback();
 	}
 
 	var groupTemplateString =
@@ -653,7 +659,7 @@ $(function () {
 	    if (! details.multiValue) {
 		var name = details.name;
 
-		//console.info("foo", name, details);
+		//console.info("foo", name, details, details.hide);
 
 		if (rerun_bindings && _.has(rerun_bindings, name)) {
 		    if (Array.isArray(rerun_bindings[name])) {
@@ -668,7 +674,23 @@ $(function () {
 			details.values[name] = details.defaultValue;
 		    }
 		    else {
-			details.values[name] = rerun_bindings[name];
+			var val = rerun_bindings[name];
+			/*
+			 * Some bad planning in the past.
+			 */
+			if (details.type == "boolean" && typeof val === "string") {
+			    val = val.toLowerCase();
+			    if (val == "true") {
+				val = true;
+			    }
+			    else {
+				val = false;
+			    }
+			}
+			details.values[name] = val;
+			if (val != details.defaultValue) {
+			    details.hide = false;
+			}
 		    }
 		}
 		else {
@@ -700,7 +722,20 @@ $(function () {
 		if (rerun_bindings &&
 		    _.has(rerun_bindings, details.name) &&
 		    rerun_bindings[details.name].length > i) {
-		    details.values[tname] = rerun_bindings[details.name][i];
+		    var val = rerun_bindings[details.name][i];
+		    /*
+		     * Some bad planning in the past.
+		     */
+		    if (details.type == "boolean" && typeof val === "string") {
+			val = val.toLowerCase();
+			if (val == "true") {
+			    val = true;
+			}
+			else {
+			    val = false;
+			}
+		    }
+		    details.values[tname] = val;
 		}
 		else if (details.defaultValue &&
 		    details.defaultValue.length > i) {
@@ -757,10 +792,10 @@ $(function () {
 		    if (!groupName) {
 			details.groupName = groupName = groupId;
 		    }
+		    if (groupName == "Advanced") {
+			details.hide = true;
+		    }
 		    if (!_.has(formGroups, groupId)) {
-			if (groupName == "Advanced") {
-			    details.hide = true;
-			}
 			var field = {
 			    "isgroup" : true,
 			    "groupId" : groupId,
@@ -773,6 +808,7 @@ $(function () {
 			    "prompt"     : groupName,
 			    "fields"     : {},
 			    "formfield"  : field,
+			    "visible"    : details.hide ? false : true,
 			};
 			formFields.push(field);
 		    }
@@ -865,6 +901,9 @@ $(function () {
 
 		    // Setup the initial fields value.
 		    initFieldInitialValues(details);
+		    if (details.hide == false) {
+			formGroups[groupId].visible = true;
+		    }
 
 		    // Add to list of fields in the group.
 		    formGroups[groupId].fields[name] = details;
@@ -1407,7 +1446,7 @@ $(function () {
 		    $(innerdiv).find("input").val($(this).attr("name"))
 		    // Make sure the popover is gone too.
 		    $(innerdiv).find(".glyphicon-info-sign").popover("hide");
-		    modified_callback();
+		    Modified();
 		});
 		/*
 		 * Since this is not a "select" we need a way to let the
@@ -1783,7 +1822,7 @@ $(function () {
 	    // Set focus to new input field. 
 	    outerdiv.find("input").focus();
 
-	    modified_callback();
+	    Modified();
 
 	    //console.info("details", name, details);
 	    //console.info("values", values);
@@ -1807,7 +1846,7 @@ $(function () {
 		// Delete leaves tooltip behind, seems like a bootstrap bug.
 		fielddiv.find('[data-toggle="tooltip"]').tooltip("hide");
 		fielddiv.remove();
-	    	modified_callback();
+	    	Modified();
 		return;
 	    }
 	    
@@ -1845,7 +1884,7 @@ $(function () {
 	    // Update buttons and margins as needed.
 	    updateButtonsMargins(fieldset.find(".form-group"));
 	    
-	    modified_callback();
+	    Modified();
 	    
 	    //console.info("details", name, details);
 	    //console.info("values", values);
@@ -1896,7 +1935,7 @@ $(function () {
 	    // any longer.
 	    $(':focus').blur();
 	    
-	    modified_callback();
+	    Modified();
 	}
 
 	function GenerateGroup(fieldIndex, bindings)
@@ -1951,14 +1990,14 @@ $(function () {
 			.find(".subpanel-collapse-chevron .glyphicon");
 		    $(icon).removeClass("glyphicon-chevron-right");
 		    $(icon).addClass("glyphicon-chevron-down");
-		    field.visible = true;
+		    group.visible = true;
 		})
 		.bind("hidden.bs.collapse", function () {
 		    var icon = $(this).closest(".panel")
 			.find(".subpanel-collapse-chevron .glyphicon");
 		    $(icon).removeClass("glyphicon-chevron-down");
 		    $(icon).addClass("glyphicon-chevron-right");
-		    field.visible = false;
+		    group.visible = false;
 		});
 
 	    /*
@@ -1968,7 +2007,7 @@ $(function () {
 	     * screen to look funny when the group is opened right after
 	     * being drawn closed.
 	     */
-	    if (hasError || hasWarning || field.visible) {
+	    if (hasError || hasWarning || group.visible) {
 		$(groupdiv).find(".pp-param-group-subpanel-collapse")
 		    .addClass("in");
 		$(groupdiv).find(".subpanel-collapse-chevron .glyphicon")
@@ -2129,7 +2168,7 @@ $(function () {
 			groupdiv.remove();
 			// Set focus to first input
 			newdiv.find("input").first().focus();
-			modified_callback();
+			Modified();
 		    });
 		structdiv.find(".structset-panel-body").append(groupdiv);
 		return structdiv;
@@ -2602,7 +2641,7 @@ $(function () {
 	    // Set focus to first input
 	    groupdiv.find("input").first().focus();
 
-	    modified_callback();
+	    Modified();
 	}
 	
 	/*
@@ -2631,13 +2670,13 @@ $(function () {
 			groupdiv.remove();
 			// Set focus to first input
 			newdiv.find("input").first().focus();
-			modified_callback();
+			Modified();
 		    });
 		// We leave tooltips behind, seems like a bootstrap bug.
 		formdiv.find('[data-toggle="tooltip"]').tooltip("hide");
 		formdiv.after(groupdiv);
 		formdiv.remove();
-		modified_callback();
+		Modified();
 		return;
 	    }
 
@@ -2675,7 +2714,7 @@ $(function () {
 	    // Reset up/down buttons as needed.
 	    updateStructButtonsMargins(structset.find(".struct-row"));
 
-	    modified_callback();
+	    Modified();
 	}
 
 	/*
@@ -2723,7 +2762,7 @@ $(function () {
 	    // any longer.
 	    $(':focus').blur();
 	    
-	    modified_callback();
+	    Modified();
 	}
 
 	function GenerateForm(bindings)
@@ -2833,7 +2872,7 @@ $(function () {
 
 	    // Tell caller when user changes anything.
 	    $('#pp-form-body input, #pp-form-body select').change(function() {
-		modified_callback();
+		Modified();
 	    });
 
 	    // Show warnings, errors, changes, etc.
@@ -2967,14 +3006,6 @@ $(function () {
 	    $('#imagepicker-modal .modal-body > div').append(imagePicker.el);
 	    
 	    //
-	    // Handle submit button.
-	    //
-	    $('#modal_profile_continue_button').click(function (event) {
-		event.preventDefault();
-		HandleSubmit();
-	    });
-
-	    //
 	    // Handle the toggle-all help panels link.  Bootstrap
 	    // doesn't give us a simple way to collapse multiple panels
 	    // unless they're in an accordion... so do it the
@@ -3031,12 +3062,33 @@ $(function () {
 	    // the old wizard.
 	    $('#ppform-buttons').removeClass("hidden");	    
 
-	    $('#ppform-buttons .btn, #ppform-buttons .p-choose')
+	    $('#ppform-buttons [data-toggle="popover"]')
 		.popover({
 		    trigger: 'hover',
 		    delay: { "show": 300, "hide": 100 },
-		    placement: 'auto',
+		    placement: 'left',
 		    container: 'body',
+		});
+
+	    /*
+	     * save paramset bindings button. We need to convert to XML first since
+	     * the paramsets stuff operates from the rspec. We only need to convert
+	     * if the params are unmodified. 
+	     */
+	    $('#ppform-buttons .p-save')
+		.click(function (event) {
+		    var callback = function (success) {
+			if (success) {
+			    paramsets.InitSaveParameterSet('#save_paramset_div',
+							   uuid, RSPEC);
+			}
+		    };
+		    if (ppchanged) {
+			HandleSubmit(callback);
+		    }
+		    else {
+			callback(true);
+		    }
 		});
 
 	    // Only the "defaults" button starts out visible and active
@@ -3044,9 +3096,8 @@ $(function () {
 		.click(function (event) {
 		    event.preventDefault();
 		    // Need to kill the rerun bindings when user picks defaults.
-		    rerun_bindings = null;
-		    InitializeForm(paramdefs);
-		    GenerateForm(null);
+		    ClearAlert();
+		    LoadBindings(null);
 		});
 
 	    // We can bind this function, the button will be hidden as needed.
@@ -3055,21 +3106,7 @@ $(function () {
 		    event.preventDefault();
 		    // Hide the popover
 		    $(this).popover("hide");
-		    
-		    var callback = function(json) {
-			console.info("GetPreviousBindings", json);
-			if (json.code) {
-			    sup.SpitOops("oops", json.value);
-			    return;
-			}
-			rerun_bindings = json.value;
-			InitializeForm(paramdefs);
-			GenerateForm(null);		    
-		    };
-		    var xmlthing = sup.CallServerMethod(null, "instantiate",
-							"GetPreviousBindings",
-							{"uuid" : uuid});
-		    xmlthing.done(callback);
+		    LoadPreviousBindings();
 		});
 	    
 	    $('#ppform-buttons .p-resources')
@@ -3095,9 +3132,105 @@ $(function () {
 	}
 
 	/*
+	 * Load bindings from a previous experiment.
+	 */
+	function LoadPreviousBindings(instance_uuid)
+	{
+	    ClearAlert();
+	    
+	    var callback = function(json) {
+		console.info("LoadPreviousBindings", json);
+		if (json.code) {
+		    sup.SpitOops("oops", json.value);
+		    setStepsMotion(true);
+		    return;
+		}
+		LoadBindings(json.value.bindings);
+		if (json.value.version_uuid != uuid ||
+		    (fromrepo && json.value.repohash != window.PROFILE_REFHASH)) {
+		    InstanceWarning(json.value, instance_uuid);
+		}
+		setStepsMotion(true);
+	    };
+	    var args = {
+		"uuid" : uuid
+	    };
+	    if (instance_uuid) {
+		args["rerun_uuid"] = instance_uuid;
+	    }
+	    setStepsMotion(false);
+	    var xmlthing = sup.CallServerMethod(null, "instantiate",
+						"GetPreviousBindings", args);
+	    xmlthing.done(callback);
+	}
+
+	/*
+	 * Update bindings.
+	 */
+	function LoadBindings(bindings)
+	{
+	    rerun_bindings = bindings;
+	    InitializeForm(paramdefs);
+	    GenerateForm(null);
+	    // Always force a rerun of the script, do not worry about
+	    // a new set of bindings that are identical.
+	    Modified();
+	}
+
+	/*
+	 * Alert user when trying to apply a bound paramset to the wrong place
+	 */
+	function ParamsetWarning(set)
+	{
+	    var url = "instantiate.php?profile=" + set.version_uuid +
+		"&rerun_paramset=" + set.uuid;
+	    var link = "<a href='" + url + "'>here</a>";
+	    
+	    var warning = "The parameter set you applied is bound to a different ";
+	    if (set.version_uuid != uuid) {
+		warning += "version of this profile. ";
+	    }
+	    else {
+		warning += "commit of the repository for this profile. ";
+	    }
+	    warning += "This is typically okay, but might not be what you intended. " +
+		"Click " + link + " to instantiate the correct version of the profile. ";
+		
+	    $('#ppalert').html("WARNING: " + warning);
+	    $('#ppalert').removeClass("hidden");
+	}
+	/*
+	 * Ditto for applying instance bindings to wrong version.
+	 */
+	function InstanceWarning(set, instance_uuid)
+	{
+	    var url = "instantiate.php?profile=" + set.version_uuid +
+		"&rerun_instance=" + instance_uuid;
+	    var link = "<a href='" + url + "'>here</a>";
+	    
+	    var warning = "The bindings applied from the instance are for a different ";
+	    if (set.version_uuid != uuid) {
+		warning += "version of this profile. ";
+	    }
+	    else {
+		warning += "commit of the repository for this profile. ";
+	    }
+	    warning +=
+		"This is typically okay, but might not be what you intended. " +
+		"Click " + link + " to instantiate the correct version of the profile. ";
+		
+	    $('#ppalert').html("WARNING: " + warning);
+	    $('#ppalert').removeClass("hidden");
+	}
+	function ClearAlert()
+	{
+	    $('#ppalert').addClass("hidden");
+	}
+
+	/*
 	 * Setup the parameter buttons for this specific profile.
 	 */
-	function SetupPPButtons(hasactivity, paramsets)
+	function SetupPPButtons(hasactivity, paramsets, recents)
 	{
 	    // If the use has previous active on this profile, we can
 	    // show the last and activity buttons.
@@ -3105,9 +3238,10 @@ $(function () {
 		// History button opens up new window.
 		$('#ppform-buttons .p-history')
 		    .attr("href", "profile-activity.php?uuid=" + uuid)
+		$('#ppform-buttons .p-history').parent()
 		    .removeClass("hidden");
 
-		$('#ppform-buttons .p-last')
+		$('#ppform-buttons .p-last').parent()
 		    .removeClass("hidden");
 	    }
 	    // Create dropdown menu for the paramsets.
@@ -3121,32 +3255,62 @@ $(function () {
 			html:     false,
 			content:  set.description,
 			trigger:  'hover',
-			placement:'auto',
+			placement:'left',
 			container:'body',
 		    });
 		    // Handler to regenerate the form.
 		    $(item).find("a").click(function (event) {
 			event.preventDefault();
-			rerun_bindings = set.bindings;
-			InitializeForm(paramdefs);
-			GenerateForm(null);		    
+			ClearAlert();
+			LoadBindings(set.bindings);
+			/*
+			 * Warn user if the paramset is bound and being applied to
+			 * a different version (of the repo).
+			 */
+			if (set.version_uuid) {
+			    if (set.version_uuid != uuid ||
+				(fromrepo && set.repohash != window.PROFILE_REFHASH)) {
+				ParamsetWarning(set);
+			    }
+			}
 		    });
 		    $('#ppform-buttons .p-choose ul').append(item);
 
 		});
 		$('#ppform-buttons .p-choose')
 		    .removeClass("hidden");
-		
-		$('#ppform-buttons .p-choose .btn')
-		    .click(function () {
- 			// Hide the popover
-			$('#ppform-buttons .p-choose').popover("hide");
+	    }
+	    // Create dropdown menu for the 10 most recent
+	    if (recents) {
+		_.each(recents, function(info, index) {
+		    var iname  = info["instance_name"];
+		    var pname  = info["profile_name"];
+		    var item = $("<li>" +
+				 " <a href='#'>" + iname + "</a>" +
+				 "</li>");
+
+		    // Handler to regenerate the form.
+		    $(item).find("a").click(function (event) {
+			event.preventDefault();
+			LoadPreviousBindings(info["instance_uuid"]);
 		    });
+		    
+		    $('#ppform-buttons .p-recent ul').append(item);
+		});
+		$('#ppform-buttons .p-recent')
+		    .removeClass("hidden");
 	    }
 	}
 	    
         function HandleSubmit(callback, jacksGraphCallback)
 	{
+	    console.info("HandleSubmit", ppchanged);
+	    
+	    if (!ppchanged) {
+		callback(true);
+		ShowThumbnail(RSPEC, jacksGraphCallback);
+		return;
+	    }
 	    // Submit with check only at first, since this will return
 	    // very fast, so no need to throw up a waitwait.
 	    SubmitForm(1, callback, jacksGraphCallback);
@@ -3220,7 +3384,9 @@ $(function () {
 			    sup.SpitOops("oops", json.value);
 			}
 		    }
-		    steps_callback(false);
+		    if (steps_callback) {
+			steps_callback(false);
+		    }
 		    return;
 		}
 		if (checkonly) {
@@ -3229,6 +3395,7 @@ $(function () {
 		}
 		else {
 		    RSPEC = json.value.rspec;
+		    ppchanged = false;
 		    ConfigureDone();
 		    if (resinfo_window) {
 			resinfo_window.close();
@@ -3236,9 +3403,12 @@ $(function () {
 		    }
 		    // Must be after the callback, so that any changes to
 		    // the aggregate selector is reflected in the final tab
-		    steps_callback(true);
-		    ShowThumbnail(RSPEC, jacksGraphCallback);
-		    //ShowEditor();
+		    if (steps_callback) {
+			steps_callback(true);
+		    }
+		    if (jacksGraphCallback) {
+			ShowThumbnail(RSPEC, jacksGraphCallback);
+		    }
 		}
 	    }
 	    /*
@@ -3436,26 +3606,33 @@ $(function () {
 
 	    //
 	    // XXX: Look for paramdefs/script in the main form and pass along.
-	    // This is for repo-based profiles.
+	    // There is no need to pass the script along, we should get it from
+	    // the profile (or repo) on the server side. The paramdefs is generated
+	    // on the fly from the script, so we have to pass that along (with
+	    // repo based profiles, we have to go find the exact script each time).
 	    //
 	    if ($('#paramdefs').val() !== undefined) {
 		formfields["paramdefs"] = $('#paramdefs').val();
 		formfields["script"]    = $('#script_textarea').val();
 	    }
 	    //console.info("formfields", formfields);
-
+	    
 	    // Not in checkform mode, this will take time.
 	    if (!checkonly) {
 		sup.ShowModal("#waitwait-modal");
 	    }
+	    var args = {
+		"formfields"    : formfields,
+		"uuid"          : uuid,
+		"checkonly"     : checkonly,
+		"newparams"     : 1,
+		"warningsfatal" : warningsfatal,
+	    };
+	    if (window.TARGET_REPOREF !== undefined) {
+		args["refspec"] = window.TARGET_REPOREF;
+	    }
 	    var xmlthing =
-		sup.CallServerMethod(null, "manage_profile",
-				     "BindParameters",
-				     {"formfields" : formfields,
-				      "uuid"       : uuid,
-				      "checkonly"  : checkonly,
-				      "newparams"  : 1,
-				      "warningsfatal": warningsfatal});
+		sup.CallServerMethod(null, "manage_profile", "BindParameters", args);
 	    xmlthing.done(callback);
 	}
 
@@ -3474,6 +3651,7 @@ $(function () {
 	    ppdivname      = args.ppdivname;
 	    amlist         = args.amlist;
 	    prunetypes     = args.prunetypes;
+	    fromrepo       = args.fromrepo;
 	    
 	    if (formFields.length && uuid == args.uuid) {
 		GenerateForm(null);
@@ -3494,17 +3672,22 @@ $(function () {
 		}
 		uuid = args.uuid;
 		paramdefs = json.value.paramdefs;
+		ppchanged = true;
 
 		// Insert into the provided container.
 		$('#' + ppdivname).html(ppmodalString);
 		// Init the parameter buttons.
 		InitializePPButtons();
 		// Setup the parameter buttons for this profile.
-		SetupPPButtons(json.value.hasactivity, json.value.paramsets);
+		SetupPPButtons(json.value.hasactivity,
+			       json.value.paramsets, json.value.recents);
 		
 		if (args.rerun_instance !== undefined ||
 		    args.rerun_paramset !== undefined) {
 		    rerun_bindings = json.value.rerun_bindings;
+		}
+		else {
+		    rerun_bindings = null;
 		}
 		InitializeForm(paramdefs);
 		GenerateForm(null);

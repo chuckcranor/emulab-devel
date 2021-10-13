@@ -35,26 +35,56 @@ $(function () {
 	{
 	    console.info("InitSaveParameterSet", domid, profile_uuid);
 
+	    /*
+	     * We need to know if the profile is public so we can init
+	     * the public checkbox.
+	     */
+	    sup.CallServerMethod(null, "show-profile",
+				 "GetProfile", {"uuid" : profile_uuid},
+				 function (json) {
+				     console.info("profile", json);
+				     if (json.code) {
+					 sup.SpitOops("oops", json.value);
+					 return;
+				     }
+				     InitAux(domid, profile_uuid, uuidORrspec,
+					     json.value);
+				 });
+	}
+
+	function InitAux(domid, profile_uuid, uuidORrspec, profile)
+	{
 	    var templates = APT_OPTIONS
 		.fetchTemplateList(['save-paramset-modal']);
 	    $(domid).html(templates['save-paramset-modal']);
 
+	    var ispublic = profile.profile_public;
+
+	    // If the profile is public, default public checkbox to true.
+	    if (ispublic) {
+		$('#paramset-public').prop("checked", true);
+	    }
+
 	    // Bind the save button.
 	    $('#save-paramset-confirm').click(function (event) {
-		SaveParameterSet(profile_uuid, uuidORrspec);
+		SaveParameterSet(profile_uuid, uuidORrspec, profile);
 	    });
 	    sup.ShowModal('#save-paramset-modal', function () {
 		$('#save-paramset-confirm').off("click");
 	    });
+
+	    // Bind the copy to clipbload button in the saved modal
+	    window.APT_OPTIONS.SetupCopyToClipboard("#paramset-saved-modal");
 	}
 
 	// Save a paramset set.
-	function SaveParameterSet(profile_uuid, uuidORrspec)
+	function SaveParameterSet(profile_uuid, uuidORrspec, profile)
 	{
 	    var name  = $.trim($('#paramset-name').val());
 	    var desc  = $.trim($('#paramset-description').val());
 	    var bound = $('#paramset-bound').is(':checked') ? 1 : 0;
-	    console.info("SaveParameterSet", name, desc, bound);
+	    var publc = $('#paramset-public').is(':checked') ? 1 : 0;
+	    var ovwrt = $('#paramset-replace').is(':checked') ? 1 : 0;
 
 	    var showError = function (which, error) {
 		var id = "#save-paramset-modal ." + which + "-error";
@@ -78,6 +108,8 @@ $(function () {
 		"name"          : name,
 		"description"   : desc,
 		"bound"         : bound,
+		"public"        : publc,
+		"replace"       : ovwrt,
 	    };
 	    if (sup.IsUUID(uuidORrspec)) {
 		args["instance_uuid"] = uuidORrspec;
@@ -86,6 +118,19 @@ $(function () {
 		var xmlDoc   = $.parseXML(uuidORrspec);
 		var bindings = xmlDoc.getElementsByTagNameNS(PNS, 'data_set');
 		args["bindings"] = xmlToString(bindings);
+		/*
+		 * Coming from instantiate, need to pass along the specific
+		 * repo/hash since might not be on head of default branch
+		 * and the user wants it bound.
+		 */
+		if (bound) {
+		    if (window.PROFILE_REFHASH) {
+			args["repohash"] = window.PROFILE_REFHASH;
+		    }
+		    if (window.PROFILE_REFSPEC) {
+			args["reporef"] = window.PROFILE_REFSPEC;
+		    }
+		}
 	    }
 	    console.info(args);
 	    if (false) {
@@ -113,7 +158,10 @@ $(function () {
 		    }
 		    return;
 		}
-		sup.HideModal('#save-paramset-modal');
+		sup.HideModal('#save-paramset-modal', function () {
+		    $('#paramset-saved-link').val(json.value);
+		    sup.ShowModal('#paramset-saved-modal');
+		});
 	    };
 	    sup.CallServerMethod(null, "paramsets", "Create", args, callback);
 	}

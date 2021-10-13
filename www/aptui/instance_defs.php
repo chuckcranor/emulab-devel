@@ -297,6 +297,10 @@ class Instance
     function Group() {
         return Group::Lookup($this->gid_idx());
     }
+    # Profile version that was instantiated.
+    function Profile() {
+        return Profile::Lookup($this->profile_id(), $this->profile_version());
+    }
     
     #
     # Class function to create a new Instance
@@ -906,10 +910,16 @@ class Instance
     #
     # Most recent experiments for rerun.
     #
-    function RecentExperiments($user)
+    function RecentExperiments($user, $profile = null)
     {
         $result = array();
         $uid_idx = $user->uid_idx();
+        $clause  = "";
+
+        if ($profile) {
+            $profile_id = $profile->profileid();
+            $clause = "and h.profile_id='$profile_id'";
+        }
 
         $query_result =
             DBQueryFatal("select v.uuid,p.name,h.repohash, " .
@@ -919,7 +929,7 @@ class Instance
                          "join apt_profile_versions as v on ".
                          "     v.profileid=p.profileid and ".
                          "     v.version=p.version ".
-                         "where h.creator_idx='$uid_idx' ".
+                         "where h.creator_idx='$uid_idx' $clause ".
                          "order by h.created desc limit 10");
         if (!mysql_num_rows($query_result)) {
             return null;
@@ -932,10 +942,6 @@ class Instance
             $repohash       = $row["repohash"];
             $rerun_url = "instantiate.php?profile=${profile_uuid}" .
                        "&rerun_instance=${instance_uuid}";
-	    // Pull the same branch.
-	    if ($repohash) {
-		$rerun_url .= "&refspec=${repohash}";
-	    }
             $result[] = array("profile_uuid"  => $profile_uuid,
                               "profile_name"  => $profile_name,
                               "instance_uuid" => $instance_uuid,
@@ -1052,6 +1058,10 @@ class InstanceHistory
     # Project of instance.
     function Project() {
         return Project::Lookup($this->pid_idx());
+    }
+    # Profile version that was instantiated.
+    function Profile() {
+        return Profile::Lookup($this->profile_id(), $this->profile_version());
     }
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {

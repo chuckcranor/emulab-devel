@@ -385,8 +385,13 @@ if ($profile->repourl()) {
 			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	    fatal("Illegal script for repo-based profile");
 	}
-	if (!exists($xmlparse->{'attribute'}->{"reporef"})) {
-	    fatal("Missing refspec for repository");
+	if (! (exists($xmlparse->{'attribute'}->{"reporef"}) ||
+	       exists($xmlparse->{'attribute'}->{"repohash"}))) {
+	    fatal("Missing refspec or hash for repository");
+	}
+	if (exists($xmlparse->{'attribute'}->{"reporef"}) &&
+	    !exists($xmlparse->{'attribute'}->{"repohash"})) {
+	    fatal("Got a reporef but no hash");
 	}
     }
     if (exists($xmlparse->{'attribute'}->{"paramdefs"})) {
@@ -397,32 +402,30 @@ if ($profile->repourl()) {
 	    fatal("Illegal paramdefs for repo-based profile");
 	}
     }
-    if (exists($xmlparse->{'attribute'}->{"reporef"})) {
-	if (!exists($xmlparse->{'attribute'}->{"repohash"})) {
-	    fatal("Missing hash for repository");
-	}
-	$reporef  = $xmlparse->{'attribute'}->{"reporef"}->{'value'};
+    if (exists($xmlparse->{'attribute'}->{"repohash"})) {
 	$repohash = $xmlparse->{'attribute'}->{"repohash"}->{'value'};
 
 	if (! TBcheck_dbslot($repohash, "apt_profiles", "repohash",
 			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	    fatal("Illegal repository hash");
 	}
-	if (! TBcheck_dbslot($reporef, "default", "tinytext",
-			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-	    fatal("Illegal repository refspec");
+	if (exists($xmlparse->{'attribute'}->{"reporef"})) {
+	    $reporef  = $xmlparse->{'attribute'}->{"reporef"}->{'value'};
+	    if (! TBcheck_dbslot($reporef, "default", "tinytext",
+				 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+		fatal("Illegal repository refspec");
+	    }
 	}
     }
     else {
-	# Otherwise we are instantiating whatever the profile itself references.
-	#$reporef  = "refs/heads/master";
+	$reporef  = $profile->reporef();
 	$repohash = $profile->repohash();
 	$paramdefs= $profile->paramdefs();
     }
 }
 
 #
-# We want to stash simplified bindings in the DB whie the instance is
+# We want to stash simplified bindings in the DB while the instance is
 # active, for display purposes.
 #
 if (defined($paramdefs)) {

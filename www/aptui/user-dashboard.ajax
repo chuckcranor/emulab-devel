@@ -656,7 +656,7 @@ function Do_ListParameterSets()
     $query_result =
         DBQueryFatal("select s.*,v.uuid as version_uuid, ".
                      "    p.name as profile_name,p.uuid as profile_uuid, ".
-                     "    v.version as profile_version ".
+                     "    v.version as profile_version,v.repourl ".
                      " from apt_parameter_sets as s ".
                      "left join apt_profiles as p on ".
                      "     p.profileid=s.profileid ".
@@ -675,12 +675,14 @@ function Do_ListParameterSets()
             "uuid"              => $row["uuid"],
             "name"              => $row["name"],
             "description"       => $row["description"],
+            "public"            => $row["public"],
             "created"           => DateStringGMT($row["created"]),
             "bindings"          => json_decode($row["bindings"]),
             "profile_uuid"      => $row["profile_uuid"],
             "version_uuid"      => $row["version_uuid"],
             "profile_name"      => $row["profile_name"],
             "profile_version"   => $row["profile_version"],
+            "repourl"           => $row["repourl"],
             "reporef"           => $row["reporef"],
             "repohash"          => $row["repohash"],
         );

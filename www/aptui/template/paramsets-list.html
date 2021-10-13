@@ -7,6 +7,7 @@
       <tr>
 	<th>Profile</th>
 	<th>Set Name</th>
+	<th>Public</th>
 	<th>Created</th>
 	<th>Description</th>
       </tr>
@@ -22,11 +23,9 @@
 	  var runurl       = "instantiate.php?profile=";
 	  
 	  if (info.version_uuid) {
-	    if (info.reporef) {
-	      profile_name += ":" + info.reporef;
+	    if (info.repourl) {
 	      profile_name += ":" + info.repohash.substr(0,8);
 	      runurl += info.profile_uuid;
-	      runurl += "&refspec=" + info.repohash;
 	    }
 	    else {
 	      profile_uuid = info.version_uuid;
@@ -52,7 +51,7 @@
 		    title='Delete this parameter set'></span>
 	    </a>
 	    <a href="<%- runurl %>" class="run-paramset-button">
-	      <span class='glyphicon glyphicon-play pull-right'
+	      <span class='glyphicon glyphicon-play-circle pull-right'
 		    style='color: green; margin-right: 5px;
 			   margin-bottom: 4px;'
 		    data-toggle='tooltip'
@@ -61,6 +60,7 @@
 		    title='Run this parameter set'></span>
 	    </a>
 	  </td>
+	  <td><% if (info.public != 0) { %>Yes<% } else { %>No<% } %></td>
 	  <td class="format-date nowrap">
 	    <%- info.created %></td>
 	  <td><%- info.description %></td>

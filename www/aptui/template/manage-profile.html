@@ -120,16 +120,28 @@
 	  <% } %>
 	</table>
 	<% if (activity) { %>
-	<a class='btn btn-info btn-xs pull-left'
-           id='profile_activity_button'
-	   data-toggle='popover'
-	   data-delay='{"hide":1500, "show":250}'
-	   data-html='true'
-	   data-content="View a history of when your profile was
-	   instantiated."
-           style='margin-right: 10px; font-size: 12px'
-           href='profile-activity.php?uuid=<%= profile_uuid %>'
-           type='button'>Activity
+	  <a class='btn btn-info btn-xs pull-left'
+             id='profile_activity_button'
+	     data-toggle='popover'
+	     data-delay='{"hide":1500, "show":250}'
+	     data-html='true'
+	     data-content="View a history of when your profile was
+			   instantiated."
+             style='margin-right: 10px; font-size: 12px'
+             href='profile-activity.php?uuid=<%= profile_uuid %>'
+             type='button'>Activity
+	  </a>
+	<% } %>
+	<% if (paramsets) { %>
+	  <a class='btn btn-info btn-xs pull-left'
+             id='profile_activity_button'
+	     data-toggle='popover'
+	     data-delay='{"hide":1500, "show":250}'
+	     data-html='true'
+	     data-content="View parameter sets for your profile."
+             style='margin-right: 10px; font-size: 12px'
+             href='profile-paramsets.php?uuid=<%= profile_uuid %>'
+             type='button'>Paramsets
 	</a>
 	<% } %>
       </div>

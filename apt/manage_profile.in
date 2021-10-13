@@ -46,7 +46,7 @@ sub usage()
     print("Usage: manage_profile undelete pid,name:version\n");
     print("Usage: manage_profile listimages <profile>\n");
     print("Usage: manage_profile bindings <instance>\n");
-    print("Usage: manage_profile paramset ".
+    print("Usage: manage_profile paramset [-p] ".
 	  "[-u user] [-m description] [-b] add <name> <profile> <instance>\n");
     print("Usage: manage_profile paramset ".
 	  "[-u user] delete <name> <profile>\n");
@@ -1859,14 +1859,19 @@ sub Bindings()
 #
 sub ParamSet()
 {
-    my $optlist    = "u:m:bpB:";
+    my $optlist    = "u:m:bpB:prH:R:";
     my $bound      = 0;
     my $asparamdefs= 0;
+    my $public     = 0;
+    my $replace    = 0;
+    my $reporef;
+    my $repohash;
     my $user;
     my $description;
     my $bindings;
     my $errmsg;
     my $instance;
+    my $olduuid;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -1972,8 +1977,28 @@ sub ParamSet()
     if (defined($options{"b"})) {
 	$bound = 1;
     }
+    if (defined($options{"p"})) {
+	$public = 1;
+    }
+    if (defined($options{"r"})) {
+	$replace = 1;
+    }
+    if (defined($options{"H"})) {
+	$repohash = $options{"H"};
+	if (! TBcheck_dbslot($repohash, "apt_profiles", "repohash",
+			     TBDB_CHECKDBSLOT_ERROR)) {
+	    UserErrorSane({"repohash" => TBFieldErrorString()});
+	}
+    }
+    if (defined($options{"R"})) {
+	$reporef = $options{"R"};
+	if (! TBcheck_dbslot($reporef, "default", "tinytext",
+			     TBDB_CHECKDBSLOT_ERROR)) {
+	    UserErrorSane({"reporef" => TBFieldErrorString()});
+	}
+    }
     
-    # Ensure name is unique.
+    # Ensure name is unique if not doing a replace
     my $query_result =
 	DBQueryWarn("select uuid from apt_parameter_sets ".
 		    "where uid_idx='$uid_idx' and ".
@@ -1981,7 +2006,12 @@ sub ParamSet()
     fatal("Database error")
 	if (!defined($query_result));
     if ($query_result->numrows) {
-	UserErrorSane({"name" => "Already in use"});
+	if ($replace) {
+	    ($olduuid) = $query_result->fetchrow_array();
+	}
+	else {
+	    UserErrorSane({"name" => "Already in use"});
+	}
     }
     
     print Dumper($bindings);
@@ -1991,13 +2021,30 @@ sub ParamSet()
     }
     my $safe_bindings = DBQuoteSpecial($bindings);
     my $safe_descrip  = DBQuoteSpecial($description);
+    my $newuuid       = (defined($olduuid) ? $olduuid : NewUUID());
+    my $refspec;
 
     my $query =
-	"insert into apt_parameter_sets set created=now(), ".
-	" uuid=uuid(),uid='$uid',uid_idx='$uid_idx', ".
+	($replace ? "replace" : "insert") .
+	" into apt_parameter_sets set created=now(), ".
+	" uuid='$newuuid',uid='$uid',uid_idx='$uid_idx',public='$public', ".
 	" profileid='$profileid',bindings=$safe_bindings, ".
 	" name=$safe_name,description=$safe_descrip";
 
+    if (!defined($instance) && $profile->repourl()) {
+	if (!defined($reporef)) {
+	    $reporef = $profile->reporef();
+	}
+	if (!defined($repohash)) {
+	    $repohash = $profile->repohash();
+	}
+    }
+
+    #
+    # Note: The refspec is currently informational only, so we can tell the
+    # the user what branch corresponds to the hash. Hard to figure out later
+    # since a hash can map to multiple branches.
+    #
     if ($bound) {
 	$query .= ",version_uuid=" . DBQuoteSpecial($profile->uuid());
 	if ($profile->repourl()) {
@@ -2006,15 +2053,20 @@ sub ParamSet()
 		$query .= ",repohash=" . DBQuoteSpecial($instance->repohash());
 	    }
 	    else {
-		$query .= ",repohash=" . DBQuoteSpecial($profile->repohash());
+		$query .= ",reporef=" . DBQuoteSpecial($reporef);
+		$query .= ",repohash=" . DBQuoteSpecial($repohash);
 	    }
 	}
+    }
+    elsif ($profile->repourl()) {
+	$query .= ",reporef=" . DBQuoteSpecial($reporef);
     }
     $query_result = DBQueryWarn($query);
     if (!$query_result) {
 	fatal("Could not insert bindings into DB");
     }
     if (defined($webtask)) {
+	$webtask->uuid($newuuid);
 	$webtask->Exited(0);
     }
     return 0;

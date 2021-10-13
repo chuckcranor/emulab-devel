@@ -110,6 +110,14 @@
                type='button'>Activity
 	    </a>
 	  <% } %>
+	  <% if (paramsets) { %>
+	    <a class='btn btn-info btn-xs '
+               id='profile_history_button'
+               style='margin-right: 5px; font-size-foo: 12px'
+               href='profile-paramsets.php?uuid=<%= profile_uuid %>'
+               type='button'>Paramsets
+	    </a>
+	  <% } %>
 	</div>
       </div>
     </div>

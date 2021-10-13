@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,6 +65,7 @@ $optargs = OptionalPageArguments("create",        PAGEARG_STRING,
 				 "refspec",       PAGEARG_STRING,
                                  "rerun_instance",PAGEARG_UUID,
                                  "rerun_paramset",PAGEARG_UUID,
+                                 "rerun_branch",  PAGEARG_BOOLEAN,
                                  "skipfirststep", PAGEARG_BOOLEAN,
 				 "formfields",    PAGEARG_ARRAY);
 
@@ -74,6 +75,14 @@ $maxduration = 16;
 if (isset($rerun_instance) || isset($rerun_paramset) ||
     (isset($from) && ($from == "manage-profile" || $from == "show-profile"))) {
     $skipfirststep = 1;
+}
+if (isset($rerun_instance) && isset($rerun_paramset)) {
+    SPITUSERERROR("Only one of rerun_paramset or rerun_instance allowed.");
+    exit();
+}
+if ((isset($rerun_instance) || isset($rerun_paramset)) && isset($refspec)) {
+    SPITUSERERROR("refspec not allowed with rerun_paramset/rerun_instance.");
+    exit();
 }
 
 if ($this_user) {
@@ -124,6 +133,36 @@ else {
 }
 $profile_array  = array();
 $usageinfo      = UserUsageInfo($this_user);
+
+#
+# Make sure rerun instance or paramset exists.
+#
+if (isset($rerun_instance)) {
+    $record = Instance::Lookup($rerun_instance);
+    if (!$record) {
+        $record = InstanceHistory::Lookup($rerun_instance);
+        if (!$record) {
+            SPITUSERERROR("No such rerun instance");
+            exit();
+        }
+    }
+    if (! ($record->CanView($this_user) || ISADMIN())) {
+        SPITUSERERROR("Not allowed to to view the rerun instance");
+        exit();
+    }
+    $rerun_record = $record;
+}
+elseif ($rerun_paramset) {
+    $rerun_record = Paramset::Lookup($rerun_paramset);
+    if (!$rerun_record) {
+        SPITUSERERROR("No such parameter set");
+        exit();
+    }
+    if (! ($rerun_record->CanUse($this_user) || ISADMIN())) {
+        SPITUSERERROR("Not allowed to to use this parameter set");
+        exit();
+    }
+}
 
 #
 # if using the super secret URL, make sure the profile exists, and
@@ -332,8 +371,8 @@ function SPITFORM($formfields, $newuser, $errors)
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
     global $profile_array, $this_user, $profilename, $profile;
     global $projlist, $skipfirststep, $maxduration, $TBMAINSITE;
-    global $refspec, $ISPOWDER, $ISEMULAB, $rerun_instance, $rerun_paramset;
-    global $usenewschedule;
+    global $refspec, $ISPOWDER, $ISEMULAB, $usenewschedule;
+    global $rerun_instance, $rerun_paramset, $rerun_record;
     
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
     $registered = (isset($this_user) ? "true" : "false");
@@ -344,7 +383,7 @@ function SPITFORM($formfields, $newuser, $errors)
     $cancopy    = (isset($this_user) && !$this_user->webonly() ? 1 : 0);
     $nopprspec  = (!isset($this_user) ? "true" : "false");
     $portal     = "";
-    $showpicker = (isset($profile) ? 0 : 1);
+    $showpicker = (isset($profile) || isset($rerun_record) ? 0 : 1);
     if (isset($profilename)) {
         $profilename = "'$profilename'";
         $profilevers = $profile->version();
@@ -433,8 +472,13 @@ function SPITFORM($formfields, $newuser, $errors)
     if (isset($profile) && $profile->repourl()) {
         echo "    window.FROMREPO = true;\n";
         if (isset($refspec)) {
-            echo "    window.REFSPEC = '$refspec';\n";
+            echo "    window.TARGET_REFSPEC = '$refspec';\n";
+            echo "    window.TARGET_REFHASH = null;\n";
         }
+        $phash    = $profile->repohash();
+        $prefspec = $profile->reporef();
+        echo "    window.PROFILE_REFHASH = '$phash';\n";
+        echo "    window.PROFILE_REFSPEC = '$prefspec';\n";
     }
     else {
         echo "    window.FROMREPO = false;\n";
@@ -447,11 +491,19 @@ function SPITFORM($formfields, $newuser, $errors)
     else {
         echo "    window.CLUSTERSELECT = false;\n";
     }
-    if (isset($rerun_instance)) {
-        echo "    window.RERUN_INSTANCE = '$rerun_instance';\n";
-    }
-    if (isset($rerun_paramset)) {
-        echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
+    if (isset($rerun_instance) || isset($rerun_paramset)) {
+        if (isset($rerun_paramset)) {
+            echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
+        }
+        else {
+            echo "    window.RERUN_INSTANCE = '$rerun_instance';\n";
+        }
+        if ($profile->repourl()) {
+            $hash    = $rerun_record->repohash();
+            
+            echo "    window.TARGET_REFHASH = '$hash';\n";
+            echo "    window.TARGET_REFSPEC = null;\n";
+        }
     }
     echo "    window.USENEWSCHEDULE = $usenewschedule;\n";
     echo "    window.EMBEDDED_RESGROUPS = true;\n";

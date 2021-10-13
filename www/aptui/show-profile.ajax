@@ -28,6 +28,103 @@ include_once("profile_defs.php");
 include_once("checkscript.ajax");
 
 #
+# Return info about a profile.
+#
+function Do_GetProfile()
+{
+    global $this_user;
+    global $ajax_args;
+    $isguest = 0;
+
+    #
+    # We allow guests on this one
+    #
+    if (! isset($this_user)) {
+        $isguest = 1;
+    }
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(1, "Missing profile uuid");
+	return;
+    }
+    $profile = Profile::Lookup($ajax_args["uuid"]);
+    if (!$profile) {
+	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	return;
+    }
+    if (($isguest && !$profile->ispublic()) ||
+        (!$profile->CanView($this_user) && !(ISADMIN() || ISFOREIGN_ADMIN()))) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+	return;
+    }
+    $blob = array();
+
+    $blob["profile_name"]        = $profile->name();
+    $blob["profile_version"]     = $profile->version();
+    if ($isguest) {
+        $blob["profile_creator"] = $profile->anonCreator();
+    }
+    else {
+        $blob["profile_creator"] = $profile->creator();
+        $blob["profile_updater"] = $profile->updater();
+    }
+    $blob["profile_public"]      = $profile->ispublic() ? 1 : 0;
+    $blob["profile_pid"]         = $profile->pid();
+    $blob["profile_created"]     = DateStringGMT($profile->created());
+    $blob["profile_published"]   = DateStringGMT($profile->published());
+    $blob["profile_version_url"] = $profile->URL();
+    $blob["profile_profile_url"] = $profile->ProfileURL();
+    if ($profile->rspec() && $profile->rspec() != "") {
+        $blob["profile_rspec"] = $profile->rspec();
+    }
+    if ($profile->script() && $profile->script() != "") {
+        $blob["profile_script"] = $profile->script();
+    }
+    if ($profile->repourl() && $profile->repourl() != "") {
+        $blob["profile_repourl"] = $profile->repourl();
+    }
+    else {
+        $blob["profile_repourl"] = null;
+    }
+    if ($profile->isParameterized()) {
+        $blob["paramdefs"] = json_decode($profile->paramdefs());
+    }
+    $latest_profile = Profile::Lookup($profile->profile_uuid());
+    $blob["latest_uuid"] = $latest_profile->uuid();
+    $blob["latest_version"] = $latest_profile->version();
+    
+    SPITAJAX_RESPONSE($blob);
+}
+
+#
+# Return paramsets for a profile
+#
+function Do_GetParamsets()
+{
+    global $this_user;
+    global $ajax_args;
+
+    if (! isset($this_user)) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+	return;
+    }
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(1, "Missing profile uuid");
+	return;
+    }
+    $profile = Profile::Lookup($ajax_args["uuid"]);
+    if (!$profile) {
+	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	return;
+    }
+    if (!$profile->CanView($this_user) && !(ISADMIN() || ISFOREIGN_ADMIN())) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+	return;
+    }
+    $paramsets = $profile->Paramsets($this_user);
+    SPITAJAX_RESPONSE($paramsets);
+}
+
+#
 # Run a geni-lib script, returning the XML. This is a more constrained
 # version then the one in manage_profile.ajax since guest users can come
 # in on this path

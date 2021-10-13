@@ -181,7 +181,6 @@ $canterminate    = ((isset($this_user) &&
 $cancopy_profile   = 0;
 $canclone_profile  = 0;
 $canupdate_profile = 0;
-$cansave_parameters= 0;
 $isscript          = 0;
 
 if ($profile = Profile::Lookup($instance->profile_id(),
@@ -201,9 +200,6 @@ if ($profile = Profile::Lookup($instance->profile_id(),
                               ISADMIN() ? 1 : 0);
     }
     $isscript = ($profile->script() && $profile->script() != "" ? 1 : 0);
-    if ($profile->isParameterized()) {
-        $cansave_parameters= $profile->UseNewGeniLib() ? 1 : 0;
-    }
 }
 $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
@@ -273,7 +269,6 @@ echo "  window.APT_OPTIONS.cansnapshot = $cansnapshot;\n";
 echo "  window.APT_OPTIONS.canclone_profile = $canclone_profile;\n";
 echo "  window.APT_OPTIONS.canupdate_profile = $canupdate_profile;\n";
 echo "  window.APT_OPTIONS.cancopy_profile = $cancopy_profile;\n";
-echo "  window.APT_OPTIONS.cansave_parameters = $cansave_parameters;\n";
 echo "  window.APT_OPTIONS.canterminate = $canterminate;\n";
 echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";

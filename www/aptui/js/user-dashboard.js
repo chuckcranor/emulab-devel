@@ -322,7 +322,8 @@ $(function ()
 				"tablename"   : "user-profiles",
 				"bulkdelete"  : true,
 				"showCreator" : false,
-				"showProject" : true}));
+				"showProject" : true,
+				"showPrivacy" : true}));
 	    
 	    // Format dates with moment before display.
 	    $('#user-profiles-table .format-date').each(function() {
@@ -424,7 +425,8 @@ $(function ()
 				"tablename"   : "project-profiles",
 				"bulkdelete"  : false,
 				"showCreator" : true,
-				"showProject" : true}));
+				"showProject" : true,
+				"showPrivacy" : true}));
 	    
 	    // Format dates with moment before display.
 	    $('#project-profiles-table .format-date').each(function() {
@@ -558,11 +560,11 @@ $(function ()
 	    sup.ShowModal("#quickvm_topomodal");
 	    $("#quickvm_topomodal").one("shown.bs.modal", function () {
 		sup.maketopmap('#showtopo_nopicker',
-			       json.value.rspec, false, !window.ISADMIN);
+			       json.value.profile_rspec, false, !window.ISADMIN);
 	    });
 	};
 	var $xmlthing = sup.CallServerMethod(null,
-					     "manage_profile",
+					     "show-profile",
 					     "GetProfile",
 				     	     {"uuid" : profile});
 	$xmlthing.done(callback);

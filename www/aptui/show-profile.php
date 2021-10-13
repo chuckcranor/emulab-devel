@@ -96,45 +96,15 @@ if ($isguest) {
     $activity     = 0;
     $canedit      = 0;
     $disabled     = 0;
+    $paramsets    = 0;
 }
 else {
     $history      = ($profile->HasHistory() ? 1 : 0);
     $activity     = ($profile->HasActivity($this_user) ? 1 : 0);
+    $paramsets    = ($profile->HasParamsets($this_user) ? 1 : 0);
     $canedit      = ($profile->CanEdit($this_user) ? 1 : 0);
     $disabled     = ($profile->isDisabled() ? 1 : 0);
 }
-
-$defaults = array();
-$defaults["profile_name"]        = $profile->name();
-$defaults["profile_version"]     = $profile->version();
-if ($isguest) {
-    $defaults["profile_creator"]     = $profile->anonCreator();
-}
-else {
-    $defaults["profile_creator"]     = $profile->creator();
-    $defaults["profile_updater"]     = $profile->updater();
-}
-$defaults["profile_public"]      = $profile->ispublic() ? 1 : 0;
-$defaults["profile_pid"]         = $profile->pid();
-$defaults["profile_created"]     = DateStringGMT($profile->created());
-$defaults["profile_published"]   = DateStringGMT($profile->published());
-$defaults["profile_version_url"] = $profile->URL();
-$defaults["profile_profile_url"] = $profile->ProfileURL();
-if ($profile->rspec() && $profile->rspec() != "") {
-    $defaults["profile_rspec"] = $profile->rspec();
-}
-if ($profile->script() && $profile->script() != "") {
-    $defaults["profile_script"] = $profile->script();
-}
-if ($profile->repourl() && $profile->repourl() != "") {
-    $defaults["profile_repourl"] = $profile->repourl();
-}
-if ($profile->isParameterized()) {
-    $defaults["paramdefs"] = json_decode($profile->paramdefs());
-}
-$latest_profile = Profile::Lookup($profile->profile_uuid());
-$defaults["latest_uuid"] = $latest_profile->uuid();
-$defaults["latest_version"] = $latest_profile->version();
 
 # Place to hang the toplevel template.
 echo "<div id='page-body'></div>\n";
@@ -152,11 +122,6 @@ echo "<link rel='stylesheet'
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
 echo "<link rel='stylesheet' href='css/genilib-editor.css'>\n";
 
-# I think this will take care of XSS prevention?
-echo "<script type='text/plain' id='form-json'>\n";
-echo htmlentities(json_encode($defaults)) . "\n";
-echo "</script>\n";
-
 # Needed for genilib-editor
 echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/ace.js'></script>\n";
 echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-vim.js'></script>\n";
@@ -172,6 +137,7 @@ echo "    window.CANEDIT      = $canedit;\n";
 echo "    window.DISABLED     = $disabled;\n";
 echo "    window.HISTORY      = $history;\n";
 echo "    window.ACTIVITY     = $activity;\n";
+echo "    window.PARAMSETS    = $paramsets;\n";
 echo "    window.ISPPPROFILE  = $ispp;\n";
 echo "    window.WITHPUBLISHING = $WITHPUBLISHING;\n";
 echo "    window.EDITOR_READONLY = true;\n";

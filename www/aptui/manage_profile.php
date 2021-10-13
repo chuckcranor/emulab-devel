@@ -73,6 +73,7 @@ function SPITFORM($formfields, $errors)
     $canpublish = 0;
     $history    = 0;
     $activity   = 0;
+    $paramsets  = 0;
     $ispp       = 0;
     $isadmin    = (ISADMIN() ? 1 : 0);
     $isstud     = (STUDLY() ? 1 : 0);
@@ -97,6 +98,7 @@ function SPITFORM($formfields, $errors)
 	$candelete    = ($profile->CanDelete($this_user) ? 1 : 0);
 	$nodelete     = ($profile->isLocked() ? 1 : 0);
 	$history      = ($profile->HasHistory() ? 1 : 0);
+	$paramsets    = ($profile->HasParamsets($this_user) ? 1 : 0);
 	$canmodify    = ($profile->CanModify() ? 1 : 0);
 	$canpublish   = ($profile->CanPublish() ? 1 : 0);
 	$activity     = ($profile->HasActivity($this_user) ? 1 : 0);
@@ -217,6 +219,7 @@ function SPITFORM($formfields, $errors)
     echo "    window.CLONING  = $cloning;\n";
     echo "    window.COPYING  = $copying;\n";
     echo "    window.ACTIVITY = $activity;\n";
+    echo "    window.PARAMSETS= $paramsets;\n";
     echo "    window.TITLE    = '$title';\n";
     echo "    window.BUTTONLABEL = '$button_label';\n";
     echo "    window.ISPPPROFILE = $ispp;\n";
