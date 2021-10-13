@@ -23,12 +23,21 @@
 		       data-key="project">
 	      </div>
 	      <div class="form-group">
-		<input name="group_leader" readonly
-		       id="group_leader"
-		       value="<%- formfields.group_leader %>"
-		       class="form-control format-me"
-		       data-label="Leader"
-		       data-key="group_leader">
+		<select name="group_leader"
+			id='group_leader' 
+			class='form-control format-me'
+			data-label="Leader"
+			data-key="group_leader"			
+			placeholder='Please Select'>
+		  <% _.each(members, function(uid, idx) { %>
+	            <option 
+			<% if (formfields.group_leader == uid) { %>
+			selected
+			<% } %>
+			value='<%- uid %>'><%- uid %>
+		    </option>
+		  <% }); %>
+		</select>
 	      </div>
 	      <div class="form-group">
 		<input name="group_id"

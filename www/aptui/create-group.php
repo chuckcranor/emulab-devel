@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -67,8 +67,19 @@ $formfields["group_id"]     = "";
 $formfields["group_leader"] = (isset($leader) ? $leader->uid() : $this_uid);
 $formfields["group_description"] = "";
 
+#
+# Drop down of all members of the group.
+#
+$members = array();
+foreach ($project->MemberList() as $user) {
+    $members[$user->uid_idx()] = $user->uid();
+}
+
 echo "<script type='text/plain' id='form-json'>\n";
 echo htmlentities(json_encode($formfields)) . "\n";
+echo "</script>\n";
+echo "<script type='text/plain' id='members-json'>\n";
+echo htmlentities(json_encode($members)) . "\n";
 echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";
