@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,6 +50,8 @@ else if (! ($profile->CanView($this_user) || ISADMIN())) {
     SPITUSERERROR("Not enough permission!");
 }
 $profileid = $profile->profileid();
+$profile_pid = $profile->pid();
+$profile_name = $profile->name();
 $instances = array();
 
 #
@@ -61,7 +63,7 @@ $query1_result =
 		 "   i.creator,p.uuid as profile_uuid,u.email,".
                  "   GROUP_CONCAT(ia.public_url) as public_urls, ".
                  "   GROUP_CONCAT(aa.abbreviation) as clusters, ".
-                 "   i.slice_uuid,f.exitmessage,f.exitcode ".
+                 "   i.slice_uuid,f.exitmessage,f.exitcode,i.pid,i.name ".
 		 "  from apt_instances as i ".
                  "left join apt_instance_failures as f ".
                  "     on f.uuid=i.uuid ".
@@ -82,7 +84,7 @@ $query2_result =
 		 "    h.creator,p.uuid as profile_uuid,u.email, ".
                  "    GROUP_CONCAT(ia.public_url) as public_urls, ".
                  "    GROUP_CONCAT(aa.abbreviation) as clusters, ".
-                 "    h.slice_uuid,f.exitmessage,f.exitcode ".
+                 "    h.slice_uuid,f.exitmessage,f.exitcode,h.pid,h.name ".
 		 "  from apt_instance_history as h ".
                  "left join apt_instance_failures as f ".
                  "     on f.uuid=h.uuid ".
@@ -110,8 +112,8 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$uuid      = $row["uuid"];
 	$puuid     = $row["profile_uuid"];
 	$pversion  = $row["profile_version"];
-	$created   = $row["started"];
-	$destroyed = $row["destroyed"];
+	$created   = DateStringGMT($row["started"]);
+	$destroyed = DateStringGMT($row["destroyed"]);
 	$creator   = $row["creator"];
 	$email     = $row["email"];
         $exitmessage= $row["exitmessage"];
@@ -126,6 +128,8 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$instance = array();
         $instance["active"]      = intval($active);
 	$instance["uuid"]        = $uuid;
+	$instance["pid"]         = $row["pid"];
+	$instance["name"]        = $row["name"];
 	$instance["p_uuid"]      = $puuid;
 	$instance["p_version"]   = $pversion;
 	$instance["creator"]     = $creator;
@@ -155,6 +159,9 @@ echo "<div id='activity-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "    window.AJAXURL  = 'server-ajax.php';\n";
+echo "    window.PROFILE_UUID = '$uuid';\n";
+echo "    window.PROFILE_PID = '$profile_pid';\n";
+echo "    window.PROFILE_NAME = '$profile_name';\n";
 echo "    window.ISADMIN  = " . (ISADMIN() ? "true" : "false") . ";\n";
 echo "</script>\n";
 echo "<script type='text/plain' id='instances-json'>\n";
@@ -165,6 +172,8 @@ echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 SPITREQUIRE("js/profile-activity.js");
 
 AddTemplate("profile-activity");
