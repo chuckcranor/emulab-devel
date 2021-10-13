@@ -494,7 +494,7 @@ echo "
 
      if ($recents) {
          echo "<li class='multilevel-submenu'>
-                <a href='#'>Rerun Recent Experiment</a>
+                <a href='#'>Rerun Recent Experiment </a>
                   <ul class='dropdown-menu'>";
 
          foreach ($recents as $recent) {
