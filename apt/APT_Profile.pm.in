@@ -502,6 +502,7 @@ sub Create($$$$$$)
 	$vquery .= ",repourl="  . DBQuoteSpecial($argref->{'repourl'});
 	$vquery .= ",reponame=" . DBQuoteSpecial($argref->{'reponame'});
 	$vquery .= ",repohash=" . DBQuoteSpecial($argref->{'repohash'});
+	$vquery .= ",reporef="  . DBQuoteSpecial($argref->{'reporef'});
 	$vquery .= ",repokey="  . DBQuoteSpecial($argref->{'repokey'});
     }
     if (exists($argref->{'portal_converted'}) &&

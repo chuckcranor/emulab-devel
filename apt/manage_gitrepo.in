@@ -102,6 +102,7 @@ sub DoClone();
 sub DoUpdate();
 sub DoLog();
 sub DoHash();
+sub DoBranch();
 sub DoBranchList();
 sub DoTagList();
 sub DoCommitList();
@@ -179,6 +180,9 @@ elsif ($action eq "log") {
 }
 elsif ($action eq "hash") {
     DoHash();
+}
+elsif ($action eq "branch") {
+    DoBranch();
 }
 elsif ($action eq "branchlist") {
     DoBranchList();
@@ -725,6 +729,28 @@ sub DoHash()
 	$webtask->Exited(0);
     }
     print "$hash\n";
+    exit(0);
+}
+
+#
+# Get default branch
+#
+sub DoBranch()
+{
+    my $optlist = "n:p:";
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    my $reponame = GetRepoName(\%options);
+    my $branch = GetDefaultBranch($reponame);
+
+    if (defined($webtask)) {
+	$webtask->branch($branch);
+	$webtask->Exited(0);
+    }
+    print "$branch\n";
     exit(0);
 }
 

@@ -314,6 +314,7 @@ sub CreateProfile()
 	$reponame = NewUUID();
 	my $repourl  = $new_args{'repourl'};
 	my $repohash;
+	my $reporef;
 	my $checkout = ($this_user->IsAdmin() ? "-c" : "");
 	# Something recently broke in git, everyone gets --bare for now
 	# until we can figure out why git fetch fails to pick up new
@@ -339,6 +340,17 @@ sub CreateProfile()
 	chomp($repohash);
 	$new_args{'repohash'} = $repohash;
 	$fromrepo = 1;
+
+	#
+	# Get the refspec for the default branch
+	#
+	$output = emutil::ExecQuiet("$MANAGEGITREPO branch -n $reponame");
+	if ($?) {
+	    UserError($output);	
+	}
+	$reporef = $output;
+	chomp($reporef);
+	$new_args{'reporef'} = $reporef;
 
 	#
 	# And an access key for the push webhook.
@@ -722,6 +734,7 @@ sub ModifyProfileInternal($$$)
     if ($profile->IsRepoBased()) {
 	my $reponame = $profile->reponame();
 	my $repohash;
+	my $reporef;
 	# Ignore.
 	delete($new_args{'repourl'});
 
@@ -738,6 +751,19 @@ sub ModifyProfileInternal($$$)
 	chomp($repohash);
 	$update_args{'repohash'} = $repohash;
 	$fromrepo = 1;
+
+	#
+	# Get the refspec for the default branch
+	#
+	$output = emutil::ExecQuiet("$MANAGEGITREPO branch -n $reponame");
+	if ($?) {
+	    $$pmsg = $output;
+	    # User Error
+	    return 1;
+	}
+	$reporef = $output;
+	chomp($reporef);
+	$update_args{'reporef'} = $reporef;
     }
     # Script parameters
     if (defined($script) && $script ne "" && $script =~ /^import/m) {
@@ -776,14 +802,17 @@ sub ModifyProfileInternal($$$)
     #
     if (exists($update_args{"rspec"}) ||
 	exists($update_args{"script"}) ||
+	exists($update_args{"reporef"}) ||
 	exists($update_args{"repohash"})) {
 	if ((exists($update_args{"rspec"}) &&
 	     $update_args{"rspec"} ne $profile->rspec()) ||
 	    (exists($update_args{"script"}) &&
 	     $update_args{"script"} ne $profile->script()) ||
 	    (defined($profile->repourl()) &&
-	     exists($update_args{"repohash"}) &&
-	     $update_args{"repohash"} ne $profile->repohash())) {
+	     (exists($update_args{"repohash"}) &&
+	      $update_args{"repohash"} ne $profile->repohash()) ||
+	     (exists($update_args{"reporef"}) &&
+	      $update_args{"reporef"} ne $profile->reporef()))) {
 	    if ($doversions && !$fromrepo) {
 		$profile = $profile->NewVersion($this_user);
 		if (!defined($profile)) {
@@ -794,7 +823,7 @@ sub ModifyProfileInternal($$$)
 		$webtask->newProfile($profile->uuid())
 		    if (defined($webtask));
 	    }
-	    foreach my $key ("rspec", "script", "paramdefs",
+	    foreach my $key ("rspec", "script", "paramdefs", "reporef",
 			     "repohash", "portal_converted") {
 		$profile->UpdateVersion({$key => $update_args{$key}})
 		    if (exists($update_args{$key}));
@@ -806,7 +835,7 @@ sub ModifyProfileInternal($$$)
 		$profile->UpdateVersion({"paramdefs" => undef});
 	    }
 	}
-	foreach my $key ("rspec", "script", "paramdefs",
+	foreach my $key ("rspec", "script", "paramdefs",  "reporef",
 			 "repohash", "portal_converted") {
 	    delete($update_args{$key})
 		if (exists($update_args{$key}));
