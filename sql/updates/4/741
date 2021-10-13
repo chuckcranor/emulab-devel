@@ -21,7 +21,7 @@ sub DoUpdate($$$)
 		 "('projects','nsf_funded','int','redirect',".
 		 "'default:boolean',0,0,NULL)");
     DBQueryFatal("REPLACE INTO table_regex VALUES ".
-		 "('projects','nsf_awards','int','regex',".
+		 "('projects','nsf_awards','text','regex',".
 		 " '^[-\\\\w,]*\$',1,128,NULL)");
     
     return 0;
