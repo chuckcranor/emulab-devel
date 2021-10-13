@@ -1,7 +1,15 @@
 <table class='tablesorter' id='activity_table'>
   <thead>
     <tr>
-      <th>Name</th>
+      <th>Name
+	<span data-toggle="popover"
+	      data-trigger="hover"
+	      data-content='Click to view the history data for the experiment,
+			    including the topology, node list, manifest,
+			    bindings (if parameterized), etc.'
+	      class='glyphicon glyphicon-question-sign'
+	      style='margin-bottom: 4px;'></span>
+      </th>
       <th>Profile</th>
       <th>Pid</th>
       <th>Creator</th>
@@ -20,15 +28,6 @@
 	      class='glyphicon glyphicon-question-sign'
 	      style='margin-bottom: 4px;'></span>
       </th>
-      <th class='filter-false sorter-false'>View
-	<span data-toggle="popover"
-	      data-trigger="hover"
-	      data-content='Click to view the history data for the experiment,
-			    including the topology, node list, manifest,
-			    bindings (if parameterized), etc.'
-	      class='glyphicon glyphicon-question-sign'
-	      style='margin-bottom: 4px;'></span>
-      </th>
       <th class="hidden-column">UUID</th>
     </tr>
     <tr id='header-column-counts'>
@@ -39,7 +38,6 @@
 	  data-math-mask='##0'>0</th>
       <th class='filter-false sorter-false' data-math='col-sum'>0</th>
       <th class='filter-false sorter-false' data-math='col-count'>0</th>
-      <th class='filter-false sorter-false'></th>
       <th class='filter-false sorter-false'></th>
       <th class='filter-false sorter-false'></th>
       <th class="hidden-column"></th>
@@ -56,14 +54,20 @@
       <th class='filter-false sorter-false' data-math='col-count'>0</th>
       <th class='filter-false sorter-false'></th>
       <th class='filter-false sorter-false'></th>
-      <th class='filter-false sorter-false'></th>
       <th class="hidden-column"></th>
     </tr>
   </tfoot>
   <tbody>
     <% _.each(instances, function(instance) { %>
       <tr>
-	<td><%- instance[9] %></a></td>
+	<td>
+	  <% if (instance[7]) { %>
+	    <a href='memlane.php?uuid=<%- instance[10] %>' target="_blank">
+	  <% } else { %>
+	      <a href='status.php?uuid=<%- instance[10] %>' target="_blank">
+	  <% } %>
+	  <%- instance[9] %></a>
+	</td>
 	<td>
 	  <a href='show-profile.php?action=edit&uuid=<%- instance[2] %>'>
 	    <%- instance[0] %></a>
@@ -87,15 +91,6 @@
 	  <a href="instantiate.php?profile=<%- instance[2] %>&rerun_instance=<%- instance[10] %>" target="_blank">
 	    <span class="align-center-inline
 			 glyphicon glyphicon-play-circle"></span></a>
-	</td>
-	<td class="text-center">
-	  <% if (instance[7]) { %>
-	    <a href='memlane.php?uuid=<%- instance[10] %>' target="_blank">
-	  <% } else { %>
-	      <a href='status.php?uuid=<%- instance[10] %>' target="_blank">
-	  <% } %>
-	  <span class="align-center-inline
-		       glyphicon glyphicon-eye-open"></span></a>
 	</td>
 	<td class="hidden-column"><%- instance[10] %></td>
       </tr>
