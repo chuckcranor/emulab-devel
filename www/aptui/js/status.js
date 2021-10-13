@@ -2678,6 +2678,15 @@ $(function ()
 						   expinfo.profile_uuid,
 						   uuid);
 		});
+	    $('#rerun_button')
+	        .click(function (e) {
+		    e.preventDefault();
+		    sup.ShowModal("#rerun_modal");
+		})
+		.removeClass("hidden");
+	    // Bind the copy to clipbload button in the share modal
+	    window.APT_OPTIONS.SetupCopyToClipboard("#rerun_modal");
+
 	}
 	if (expinfo.params &&
 	    $('#quicktabs_content #bindings').hasClass("hidden")) {

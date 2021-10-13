@@ -225,7 +225,7 @@ pre {
 		      style='margin-left: 10px;'
 		      style='margin-right: 10px;'
 		      id='warnkill-experiment-button' type=button
-		      data-delay='{"show":750}'
+		      data-delay='{"show":300}'
 		      data-toggle='popover'
 		      data-content='Warn user or terminate/quarantine
 				    experiment with cause
@@ -256,7 +256,7 @@ pre {
 		<button class='btn btn-xs btn-success hidden' disabled
 			style='margin-right: 10px;'
 			id='linktest-stop-button' type=button
-                        data-delay='{"show":750}'
+                        data-delay='{"show":300}'
 			data-toggle='popover'
 			data-content='Stop a running or wedged linktest'>
  		  Stop Linktest</button>
@@ -264,7 +264,7 @@ pre {
 	      <button class='btn btn-xs btn-primary hidden' disabled
 		      id='snapshot_button' type=button
 		      data-toggle='popover'
-	              data-delay='{"show":750}'
+	              data-delay='{"show":300}'
 		      data-html='true'
 		      data-content="Create a disk image from one of your nodes.
 				    Click for more info."> 
@@ -274,7 +274,7 @@ pre {
 		   href='manage_profile.php?action=copy&uuid=<%= expinfo.profile_uuid %>'
 		   id='copy_button' type=button
 		   data-toggle='popover'
-	           data-delay='{"show":750}'
+	           data-delay='{"show":300}'
 		   data-html='true'
 		   data-content="When you <em>copy</em> a profile,
 			 you are creating a new profile that
@@ -284,11 +284,19 @@ pre {
 			 uses whatever images the original profile uses."> 
 		  Copy</a>
 	      <% } %>
+	      <button class='btn btn-xs btn-primary hidden'
+		      id='rerun_button' type=button
+		      data-toggle='popover'
+	              data-delay='{"show":300}'
+		      data-html='true'
+		      data-content="Share a link to run this experiment using the
+				    same parameters."> 
+		Share</button>
 	      <button class='btn btn-primary btn-xs hidden'
 		      style='margin-right: 10px;'
 		      id='save_paramset_button'
 		      data-toggle='popover'
-		      data-delay='{"hide":100, "show":300}'
+		      data-delay='{"show":300}'
 		      data-content='Save the parameters used to create this
 				    experiment, so you can quickly apply them
 				    when starting a new experiment using this
@@ -1717,6 +1725,38 @@ pre {
 	  </pre>
 	  Idle processes not shown, top run as:
 	  <tt>top -c -b -n 1 -i -w 120</tt>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='rerun_modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <button type='button'
+		  class='close' data-dismiss='modal'
+                  aria-hidden='true'>&times;</button>
+	  <h4 class='modal-title text-center'>Run this experiment again</h4>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    You can use this link, or share it with another user, to run this profile
+	    using the same parameters. 
+	  </p>
+          <center>
+	    <div style="margin-top: 5px;">
+	      <div class="copy-to-clipboard form-inline">
+		<input readonly
+		       style="width: 90%"
+		       class="form-control"
+		       value='<%- window.location.origin %>/instantiate.php?profile=<%- expinfo.profile_uuid %>&rerun_instance=<%= uuid %>'>
+		<a href='#' class='btn'>
+		  <span class='glyphicon glyphicon-copy'
+			style='margin-bottom: 4px;'></span>
+		</a>
+	      </div>
+	    </div>
+	  </center>
 	</div>
       </div>
     </div>
