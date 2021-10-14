@@ -83,13 +83,6 @@ $(function ()
 		$(this).html(moment(date).format("lll"));
 	    }
 	});
-	$(selector + ' .tablesorter.resgroup-list')
-	    .tablesorter({
-		theme : 'bootstrap',
-		widgets : [ "uitheme", "zebra"],
-		headerTemplate : '{content} {icon}',
-	    });
-
 	// Show the proper status, for the group and for each reservation
 	// in the group.
 	_.each(groups, function(group, uuid) {
@@ -184,11 +177,22 @@ $(function ()
 		}
 	    });
 	});
+	$(selector + ' .tablesorter.resgroup-list')
+	    .tablesorter({
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
+
+		textExtraction: {
+		    '.status-extractor': function(node, table, cellIndex) {
+			return $(node).find("> span:not(.hidden) .status-value").text();
+		    },
+		},
+	    });
 	$(selector + ' .tablesorter .tablesorter-childRow>td').hide();	
 	$(selector + ' .tablesorter .show-childrow .expando')
 	    .click(function (event) {
 		event.preventDefault();
-		console.info("foo");
 		// Determine current state for changing the chevron.
 		var row = $(this).closest('tr')
 		    .nextUntil('tr.tablesorter-hasChildRow').find('td')[0];
@@ -264,7 +268,7 @@ $(function ()
 	// See if we have any ranges.
 	var ranges = 0;
 	_.each(groups, function(group) {
-	    console.info(group, group.ranges);
+	    //console.info(group, group.ranges);
 	    if (_.size(group.ranges)) {
 		ranges++;
 	    }
@@ -309,7 +313,7 @@ $(function ()
 	// See if we have any routes
 	var routes = 0;
 	_.each(groups, function(group) {
-	    console.info(group, group.routes);
+	    //console.info(group, group.routes);
 	    if (_.size(group.routes)) {
 		routes++;
 	    }
@@ -374,6 +378,12 @@ $(function ()
 		theme : 'bootstrap',
 		widgets : [ "uitheme", "zebra"],
 		headerTemplate : '{content} {icon}',
+
+		textExtraction: {
+		    '.status-extractor': function(node, table, cellIndex) {
+			return $(node).find("> span:not(.hidden) .status-value").text();
+		    },
+		},
 	    });
 
 	// This activates the tooltip subsystem.
