@@ -749,6 +749,10 @@ function CheckLoginForAjax($route)
     if (array_key_exists("notloggedinokay", $route)) {
         $notloggedinokay = $route["notloggedinokay"];
     }
+    if (NOLOGINS()) {
+	SPITAJAX_ERROR(222, "Logins are disabled");
+	exit(1);
+    }
     # Known user, but timed out.
     if ($check_status & CHECKLOGIN_TIMEDOUT) {
 	SPITAJAX_ERROR(222, "Your login has timed out");
