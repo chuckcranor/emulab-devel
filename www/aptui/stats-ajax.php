@@ -117,14 +117,12 @@ if ($portal == "emulab") {
 }
 else {
     $query_result =
-        DBQueryFatal("select count(*) from ".
-                 " ((select distinct a.creator from apt_instance_history as a ".
-                 "   left join projects as p on p.pid_idx=a.pid_idx ".
-                 "   where $portalclause) ".
-                 "  union ".
-                 "  (select distinct a.creator from apt_instances as a ".
-                 "   left join projects as p on p.pid_idx=a.pid_idx ".
-                 "   where $portalclause)) as c");
+        DBQueryFatal("select count(distinct creator_idx) from ".
+                     " ((select creator_idx from apt_instances ".
+                     "   where portal='$PORTAL_GENESIS')".
+                     "  union ".
+                     "  (select creator_idx from apt_instance_history ".
+                     "   where portal='$PORTAL_GENESIS')) as c");
 }
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
