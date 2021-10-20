@@ -40,10 +40,12 @@ sub usage()
     print "Usage: matchusers [-n] [-f] [user ...]\n";
     exit(1);
 }
-my $optlist   = "nl:f";
+my $optlist   = "nl:fvr";
 my $impotent  = 0;
 my $force     = 0;
+my $verbose   = 0;
 my $limit     = "";
+my $recheck   = 0;
 
 #
 # Configure variables
@@ -62,6 +64,8 @@ use scopus;
 my $active = join(",", map {"'" . $_ . "'"} @User::USERSTATUS_VALIDSET);
 # For specific users,
 my $users_clause = "";
+# Match clause;
+my $match_clause = "";
 
 #
 # Turn off line buffering on output
@@ -78,6 +82,12 @@ if (defined($options{"n"})) {
 if (defined($options{"f"})) {
     $force++;
 }
+if (defined($options{"v"})) {
+    $verbose++;
+}
+if (defined($options{"r"})) {
+    $recheck++;
+}
 if (defined($options{"l"})) {
     $limit = "limit " . $options{"l"};
 }
@@ -85,6 +95,23 @@ if (defined($options{"l"})) {
 if (@ARGV) {
     my $users = join(",", map {"'" . $_ . "'"} @ARGV);
     $users_clause = "and u.uid in ($users)";
+}
+#
+# Match clause. When doing a recheck, we want to look at all users,
+# although not recent additions, there are unlikely to be any changes, and
+# it burns through our weekly quota. Likewise, no point in looking at
+# really old users.
+#
+if ($recheck) {
+    $match_clause =
+	"(u.usr_created < date_sub(now(), interval 3 month) && ".
+	" u.usr_created > date_sub(now(), interval 5 year) && ".
+	" u.scopus_lastcheck < date_sub(now(), interval 3 month))";
+}
+else {
+    $match_clause =
+	"(u.scopus_lastcheck='0000-00-00' or ".
+	" u.affiliation_updated > u.scopus_lastcheck)";
 }
 my $query_result =
     DBQueryFatal("select distinct u.uid,u.uid_idx,u.usr_affil,u.usr_name, ".
@@ -98,9 +125,9 @@ my $query_result =
 		 "where u.status in ($active) and ".
 		 "      u.usr_affil is not null and ".
 		 "      u.usr_affil!='' and ".
-		 "      (u.scopus_lastcheck='0000-00-00' or ".
-		 "       u.affiliation_updated > u.scopus_lastcheck) ".
-		 "$users_clause group by u.uid,u.uid_idx $limit");
+		 "      $match_clause ".
+		 "$users_clause group by u.uid,u.uid_idx ".
+		 "order by u.usr_created desc $limit");
 
 while (my ($uid,$idx,$affil,$name,$scopus_info) =
        $query_result->fetchrow_array()) {
@@ -109,16 +136,12 @@ while (my ($uid,$idx,$affil,$name,$scopus_info) =
     my $first = lc($tokens[0]);
     my $last  = lc($tokens[-1]);
     my $results;
+    my %existing  = ();
     my $validated = 0;
+    my $valid     = 0;
 
     if (defined($affil)) {
 	$affil =~ s/^\s+|\s+$//g;
-    }
-    print "$uid,$idx,$name" . (defined($affil) ? ", $affil" : "") . "\n";
-
-    if (!defined($affil) || $affil eq "") {
-	print " Skipping cause no affiliation\n";
-	next;
     }
 
     #
@@ -126,28 +149,53 @@ while (my ($uid,$idx,$affil,$name,$scopus_info) =
     # and the user has validated them, we do not want to overwrite
     # unless the force option is provided.
     #
-    if (defined($scopus_info)) {
+    if (defined($scopus_info) && $scopus_info ne "") {
 	my @matches = split(",", $scopus_info);
-
+	
 	foreach my $match (@matches) {
 	    my ($id,$state) = split(":", $match);
+	    $existing{$id} = $state;
+	    
 	    if ($state ne "unknown") {
 		$validated = 1;
+		if ($state eq "valid") {
+		    $valid = 1;
+		}
 		last;
 	    }
 	}
 	if ($validated) {
-	    if (!$force) {
-		print "User already validated, use -f option\n";
+	    if (@ARGV || $verbose) {
+		print "User already validated. ";
+		if ($valid) {
+		    print "And matched. ";
+		}
+	    }
+	    if ($valid && $recheck) {
+		# No reason to recheck. 
+		next;
+	    }
+	    if ($valid && !$force) {
+		if (@ARGV || $verbose) {
+		    print "Use -f option to overwrite.\n";
+		}
 		if (@ARGV) {
 		    exit(1);
 		}
 		next;
 	    }
-	    print "User already validated, will overwrite\n";
+	    if (@ARGV || $verbose) {
+		print "\n";
+	    }
+	}
+	elsif ($recheck) {
+	    # If the user has not logged into validate what we have,
+	    # do not bother to recheck, wasted work.
+	    next;
 	}
     }
-    
+    print "$uid,$idx,$name" . (defined($affil) ? ", $affil" : "") . "\n";
+
     #
     # Build a query to search for the author by name/affil.
     #
@@ -161,7 +209,6 @@ while (my ($uid,$idx,$affil,$name,$scopus_info) =
 
     my ($json,$search) = scopus::Search("author", $query);
     if (!defined($search)) {
-	print "'$query'\n";
 	next;
     }
 
@@ -211,11 +258,7 @@ while (my ($uid,$idx,$affil,$name,$scopus_info) =
 	print " Matches: " .
 	    join(",", map {$_->{'dc:identifier'}} @matches) . "\n";
 
-	# Remove old info, we checked above for force option
-	if (!$impotent) {
-	    DBQueryFatal("delete from user_scopus_info ".
-			 "where uid_idx='$idx'");
-	}
+	my %inserts = ();
 
 	#
 	# Grab the author definitions so we can populate the DB.
@@ -240,15 +283,36 @@ while (my ($uid,$idx,$affil,$name,$scopus_info) =
 		#print Dumper($aref);
 		next;
 	    }
+	    
+	    if ($validated) {
+		#
+		# If there are matches, then need the force option.
+		# If no matches, then we only want to add new ones.
+		#
+		if (exists($existing{$author_id}) &&
+		    $existing{$author_id} ne "unknown") {
+		    # Anything that has been validated can stay in the DB.
+		    next;
+		}
+		print "New: ";
+	    }
 	    print "$author_id: $url\n";
-	    my $query = "replace into user_scopus_info set ".
-		" uid='$uid',uid_idx='$idx', ".
-		" created=now(), ".
-		" scopus_id=" . DBQuoteSpecial($author_id) . ", ".
-		" author_url=" . DBQuoteSpecial($url);
-	    #print "$query\n";
+	    $inserts{$author_id} = $url;
+	}
+	if (!$impotent) {
+	    # Remove old info, we checked above for force option
+	    DBQueryFatal("delete from user_scopus_info ".
+			 "where uid_idx='$idx' ".
+			 (!$force ? "and validation_state='unknown'" : "")); 
 
-	    if (!$impotent) {
+	    foreach my $author_id (keys(%inserts)) {
+		my $url = $inserts{$author_id};
+
+		my $query = "replace into user_scopus_info set ".
+		    " uid='$uid',uid_idx='$idx', ".
+		    " created=now(), ".
+		    " scopus_id=" . DBQuoteSpecial($author_id) . ", ".
+		    " author_url=" . DBQuoteSpecial($url);
 		DBQueryFatal($query);
 	    }
 	}
