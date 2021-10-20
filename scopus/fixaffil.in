@@ -274,6 +274,9 @@ while (my ($uid,$uid_idx,$affil,$country,$city) =
 	elsif ($2 =~ /Los Angeles/) {
 	    $new = "University of California, Los Angeles";
 	}
+	elsif ($2 =~ /Merced/) {
+	    $new = "University of California, Merced";
+	}
 	else {
 	    $new = $2;
 	}
