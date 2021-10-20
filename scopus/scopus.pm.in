@@ -504,15 +504,17 @@ sub EnterPaper($$$;$)
 	    last;
 	}
     }
+    my $paper_row;
     my $paper_result =
-	DBQueryFatal("select scopus_id,uses from scopus_paper_info ".
+	DBQueryFatal("select * from scopus_paper_info ".
 		     "where scopus_id=" . DBQuoteSpecial($dcid));
 
+    # Do not want to lose this info!
     my $uses = "NULL";
     if ($paper_result->numrows) {
-	my $row = $paper_result->fetchrow_hashref();
-	if ($row->{"uses"}) {
-	    $uses = "'" . $row->{"uses"} . "'";
+	$paper_row = $paper_result->fetchrow_hashref();
+	if ($paper_row->{"uses"}) {
+	    $uses = "'" . $paper_row->{"uses"} . "'";
 	}
     }
     
@@ -577,19 +579,63 @@ sub EnterPaper($$$;$)
 }
 
 #
+# Update. Currently just the citation count.
+#
+sub UpdatePaper($$)
+{
+    my ($dcid, $impotent) = @_;
+
+    my $paper_result =
+	DBQueryFatal("select * from scopus_paper_info ".
+		     "where scopus_id=" . DBQuoteSpecial($dcid));
+
+    if (!$paper_result->numrows) {
+	print STDERR "Paper does not exist in the DB, cannot updated\n";
+	return -1;
+    }
+    my $paper_row = $paper_result->fetchrow_hashref();
+
+    my $abstract = GetAbstract($dcid, 1);
+    if (!defined($abstract)) {
+	print STDERR " *** Could not download abstract $dcid\n";
+	return -1;
+    }
+    my $coredata = $abstract->{'coredata'};
+    my $citedby_count = $coredata->{'citedby-count'};
+    if (!defined($citedby_count) || $citedby_count eq "") {
+	print " *** No citedby-count in the coredata\n";
+	$citedby_count = 0;
+    }
+    if ($paper_row->{"citedby_count"} == $citedby_count) {
+	return 0;
+    }
+    my $old = $paper_row->{"citedby_count"};
+    print "$dcid: citedby increased from $old to $citedby_count\n";
+
+    return 0
+	if ($impotent);
+
+    DBQueryFatal("update scopus_paper_info set ".
+		 " citedby_count=" . DBQuoteSpecial($citedby_count) . " ".
+		 "where scopus_id=" . DBQuoteSpecial($dcid));
+
+    return 0;
+}
+
+#
 # See if a paper cites us.
 #
 my @EMULABTITLES = ("integrated experimental environment for ".
 		    "distributed systems and networks",
                     "emulab\.net");
 
-my @CLOUDTITLES = ("Introducing CloudLab: Scientific Infrastructure",
-		   "The Design and Operation of CloudLab",
-		   "The CloudLab Team Introducing CloudLab".
-		   "Cloudlab team introducing cloud-lab",
+my @CLOUDTITLES = ("Introducing Cloud-?Lab: Scientif?ic Infrastructure",
+		   "The Design and Operation of Cloud-?Lab",
+		   "Cloud-?Lab Team Introducing Cloud-?Lab".
 		   "cloudlab\.us");
 
 my @POWDERTITLES = ("POWDER: Platform for Open Wireless",
+		    "Phantomnet: Research infrastructure",
 		    "powderwireless\.net");
 
 sub CitesUs($)
