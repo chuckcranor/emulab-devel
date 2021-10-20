@@ -446,7 +446,7 @@ function Do_RequestExtension()
     }
     $uuid = $instance->uuid();
     $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
-    if (!slice) {
+    if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	goto bad;
     }
@@ -555,7 +555,7 @@ function Do_DenyOrMoreinfo($action)
     }
     $uuid = $instance->uuid();
     $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
-    if (!slice) {
+    if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	goto bad;
     }
@@ -677,7 +677,7 @@ function Do_ConsoleURL()
     $node = $ajax_args["node"];
     $uuid = $instance->uuid();
     $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
-    if (!slice) {
+    if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
     }
@@ -1765,7 +1765,7 @@ function Do_Utilization()
     }
     $uuid = $instance->uuid();
     $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
-    if (!slice) {
+    if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
     }
@@ -2004,7 +2004,7 @@ function Do_WarnExperiment()
     }
     $uuid = $instance->uuid();
     $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
-    if (!slice) {
+    if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	goto bad;
     }
@@ -2091,7 +2091,7 @@ function Do_Recovery()
     $node = $ajax_args["node"];
     $uuid = $instance->uuid();
     $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
-    if (!slice) {
+    if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
     }
