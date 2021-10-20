@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2014 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -136,14 +136,9 @@ class SessionSaveHandler {
 	    return false;
 	}
 	$query_result =
-	    DBQueryWarn("delete from web_sessions ".
-			"where session_id='$id'");
-	
-        // if session was deleted, return true, 
-	if ($query_result && DBAffectedRows()) {
-            return true;
-	}
-	return false;
+	    DBQueryFatal("delete from web_sessions ".
+                         "where session_id='$id'");
+        return true;
     }
 
     public function gc($maxlifetime) {
