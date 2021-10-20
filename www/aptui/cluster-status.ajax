@@ -337,6 +337,7 @@ function Do_GetPreReservations()
     }
     $results = $webtask->TaskDataObject()->results;
     $inuse = $results->details;
+    $webtask->Delete();
 
     SPITAJAX_RESPONSE($inuse);
 }

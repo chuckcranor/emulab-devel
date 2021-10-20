@@ -560,8 +560,10 @@ sub Delete($)
     DBQueryWarn("delete from apt_instance_rfranges where uuid='$uuid'") or
 	return -1;
 
-    # We do not "own" the webtask until create_sliver exits successfully.
-    $self->webtask()->Delete() if (defined($self->{'WEBTASK'}));
+    # We do not "own" the webtask until create_instance sets it.
+    if (defined($self->webtask_id())) {
+	$self->webtask()->Delete();
+    }
     
     DBQueryWarn("delete from apt_instances where uuid='$uuid'") or
 	return -1;
@@ -3604,7 +3606,7 @@ sub Delete($)
     my $urn  = $self->aggregate_urn();
     
     $self->webtask()->Delete()
-	if ($self->webtask()->Delete());
+	if ($self->webtask());
     
     return 0
 	if ($self->{'FAKE'});

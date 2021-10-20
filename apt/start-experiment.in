@@ -332,6 +332,7 @@ if (defined($refspec)) {
 				   "  -n $reponame $which");
     if ($?) {
 	print STDERR "Could not get source from repo\n";
+	$webtask->Delete();
 	fatal($output);
     }
     if ($output =~ /^import/m) {
