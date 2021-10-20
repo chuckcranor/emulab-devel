@@ -1097,6 +1097,8 @@ sub DoGroupReserve()
 			  "but it needs approval.".
 			  "\n\n".
 			  $resgroup->InfoString() . "\n" .
+			  ($resgroup->reason() ne "" ?
+			   "Reason:\n" . $resgroup->reason() . "\n\n" : "") .
 			  "See: $url", $this_email);
 	    }
 	    else {
@@ -2895,7 +2897,7 @@ sub DoMaxDuration()
 	    fatal($errmsg);
 	}
 	if (defined($end)) {
-	    print POSIX::strftime("B %m/%d/20%y %H:%M", localtime($end)) . "\n";
+	    print POSIX::strftime("R %m/%d/20%y %H:%M", localtime($end)) . "\n";
 	}
 	else {
 	    print "undef\n";
@@ -2911,7 +2913,7 @@ sub DoMaxDuration()
 	    fatal($errmsg);
 	}
 	if (defined($end)) {
-	    print POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . "\n";
+	    print POSIX::strftime("S %m/%d/20%y %H:%M", localtime($end)) . "\n";
 	}
 	else {
 	    print "undef\n";
@@ -2934,8 +2936,13 @@ sub DoMaxDuration()
     elsif ($end < $start) {
 	$end = 0;
     }
-    print "Max duration is $end (" .
-	POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . ")\n";
+    if ($end == 0) {
+	print "Some or all resources unavailable\n";
+    }
+    else {
+	print "Max duration is $end (" .
+	    POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . ")\n";
+    }
     
     if (defined($webtask)) {
 	$webtask->maxend($end);
