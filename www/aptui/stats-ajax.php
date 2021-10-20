@@ -57,7 +57,7 @@ $blob = array("active_experiments" => 0,
 #
 $query_result =
     DBQueryFatal("select count(*) from apt_instances " .
-                 "where servername='$servername'");
+                 "where portal='$portal'");
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
     $blob["active_experiments"] = $row[0];
@@ -78,7 +78,7 @@ if ($query_result) {
 #
 $query_result =
     DBQueryFatal("select count(*) from apt_instance_history ".
-                 "where servername='$servername'");
+                 "where portal='$portal'");
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
     $blob["total_experiments"] = $row[0];
@@ -110,10 +110,10 @@ if ($query_result) {
 #
 if ($portal == "emulab") {
     $query_result =
-        DBQueryFatal("select count(distinct creator_idx) ".
-                     "  from experiment_stats as s ".
-                     "left join projects as p on p.pid_idx=s.pid_idx ".
-                     "where geniflags is null or $portalclause");
+        DBQueryFatal("select count(distinct creator_idx) from projects as p ".
+                     "join experiment_stats as s on p.pid_idx=s.pid_idx ".
+                     "where geniflags is null or ".
+                     "      (p.portal='emulab' or p.portal is null)");
 }
 else {
     $query_result =
