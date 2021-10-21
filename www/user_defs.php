@@ -385,6 +385,8 @@ class User
         return $this->field("affiliation_updated"); }
     function affiliation_matched() {
         return $this->field("affiliation_matched"); }
+    function expert_mode()   { return $this->field("expert_mode"); }
+    
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -1351,6 +1353,16 @@ class User
 		     "   weblogin_frozen='$freeze' ".
 		     "where uid_idx='$idx'");
 	$this->user["weblogin_frozen"] = $freeze;
+	return 0;
+    }
+    function SetExpertMode($mode) {
+	$idx   = $this->uid_idx();
+	$mode = ($mode ? 1 : 0);
+			    
+	DBQueryFatal("update users set ".
+		     "   expert_mode='$mode' ".
+		     "where uid_idx='$idx'");
+	$this->user["expert_mode"] = $mode;
 	return 0;
     }
     function SetCVSWeb($onoff) {

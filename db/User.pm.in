@@ -229,6 +229,7 @@ sub nonlocal_type($)	{ return field($_[0], "nonlocal_type"); }
 sub IsLocal($)		{ return (defined($_[0]->nonlocal_id()) ? 0 : 1); };
 sub IsNonLocal($)	{ return (defined($_[0]->nonlocal_id()) ? 1 : 0); };
 sub portal($)		{ return field($_[0], "portal"); }
+sub expert_mode($)	{ return field($_[0], "expert_mode"); }
 sub ga_userid($)	{ return field($_[0], "ga_userid"); }
 sub Brand($)		{ return $_[0]->{'BRAND'}; }
 sub isAPT($)	        { return $_[0]->Brand()->isAPT() ? 1 : 0; }

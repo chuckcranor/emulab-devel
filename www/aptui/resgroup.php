@@ -102,8 +102,8 @@ echo "<div id='oops_div'></div>
       <div id='confirm_div'></div>
       <div id='waitwait_div'></div>\n";
 
-# A Powder thing
-$bisdaysonly = 1;
+# Reservations now have to start next business day at 9am (unless expert).
+$bisdaysonly = $this_user->expert_mode() ? 0 : 1;
 # Ditto
 $routesokay  = $isadmin;
 
@@ -120,11 +120,13 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 $plist = array();
 while (list($p) = each($projlist)) {
     $plist[] = $p;
-    if ($ISPOWDER && !$isadmin) {
+    if (!$isadmin) {
         $ptmp = Project::LookupByPid($p);
-        if ($ptmp && FeatureEnabled("BisDaysOnly", null, $ptmp)) {
-            $bisdaysonly = 1;
+        if ($ptmp && $ptmp->expert_mode()) {
+            $bisdaysonly = 0;
         }
+    }
+    if ($ISPOWDER && !$isadmin) {
         if ($ptmp && FeatureEnabled("powder-routes-allowed", null, $ptmp)) {
             $routesokay = 1;
         }

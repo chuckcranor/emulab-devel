@@ -1901,7 +1901,8 @@ sub CheckResourceReservations($$$$$$;$)
 		    $nodetype = $node->NodeTypeInfo();
 		}
 	    }
-	    if (defined($nodetype) && $nodetype->requires_reservation()) {
+	    if (!$project->expert_mode() &&
+		defined($nodetype) && $nodetype->requires_reservation()) {
 		$noresokayXX = 0;
 	    }
 	    #print "$type, $noresokayXX, $start, $end\n";
@@ -1947,7 +1948,7 @@ sub CheckResourceReservations($$$$$$;$)
 	    if (!$node);
 
 	next
-	    if (!$node->requires_reservation());
+	    if ($project->expert_mode() || !$node->requires_reservation());
 
 	if (!APT_Reservation::Group::Reservation::Reserved(
 		 $project, $start, $end, $MYURN, $component_id, 1)) {

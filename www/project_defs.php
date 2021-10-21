@@ -181,6 +181,7 @@ class Project
     function nonlocal_id()   { return $this->field("nonlocal_id"); }
     function portal()	     { return $this->field("portal"); }
     function bound_portal()  { return $this->field("bound_portal"); }
+    function expert_mode()   { return $this->field("expert_mode"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -794,6 +795,16 @@ class Project
 		     "where pid_idx='$idx'");
 
 	$this->project["bound_portal"] = $onoff;
+	return 0;
+    }
+    function SetExpertMode($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set expert_mode='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["expert_mode"] = $onoff;
 	return 0;
     }
 

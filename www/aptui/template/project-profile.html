@@ -115,6 +115,12 @@
 	    (<a class="toggle" data-name="consortium">Toggle</a>)
 	  </td>
 	</tr>
+	<tr>
+	  <td>Expert Mode</td>
+	  <td><% if (fields.expert_mode) { %>Yes<% } else { %>No<% } %>
+	    (<a class="toggle" data-name="expert_mode">Toggle</a>)
+	  </td>
+	</tr>
       <% } %>
     <% } %>
     <% _.each(fields.nsf_awards, function(award) { %>

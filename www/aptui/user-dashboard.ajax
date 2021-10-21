@@ -274,6 +274,7 @@ function Do_AccountDetails()
         $results["stud"]          = $target_user->stud() ? true : false;
         $results["admin"]         = $target_user->admin() ? true : false;
         $results["foreign_admin"] = $target_user->foreign_admin() ? true:false;
+        $results["expert_mode"]   = $target_user->expert_mode() ? true:false;
         $results["web_frozen"]    = $target_user->weblogin_frozen()? true:false;
         $results["nonlocal_id"]   = ($target_user->nonlocal_id() ?
                                      $target_user->nonlocal_id() : "");
@@ -427,6 +428,9 @@ function Do_Toggle()
     }
     elseif ($toggle == "web_frozen") {
         $target_user->SetWebFreeze($target_user->weblogin_frozen() ? 0 : 1);
+    }
+    elseif ($toggle == "expert_mode") {
+        $target_user->SetExpertMode($target_user->expert_mode() ? 0 : 1);
     }
     else {
 	SPITAJAX_ERROR(-1, "Unknown toggle name: $toggle");
