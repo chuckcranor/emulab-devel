@@ -735,12 +735,18 @@ sub DoGroupReserve()
 		$res->{'errcode'}  = $webtask->exitcode();
 		$res->{'output'}   = $webtask->output();
 		$res->{"approved"} = 0;
+		if ($webtask->conflict()) {
+		    $res->{'conflict'} = $webtask->conflict();
+		}
 		$cluster_results->{'errors'}++;		
 	    }
 	    else {
 		$res->{"approved"} = int($webtask->approved());
 		if ($res->{"approved"}) {
 		    $cluster_results->{'approved'}++;
+		}
+		elsif ($webtask->conflict()) {
+		    $res->{'conflict'} = $webtask->conflict();
 		}
 	    }
 	    # Remote uuid of reservation, needed below for local record.

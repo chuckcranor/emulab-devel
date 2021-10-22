@@ -10,6 +10,7 @@ window.ShowResGraph = (function ()
 	var forecast = args.forecast;
 	// For the availablity page instead of reserve page.
 	var foralloc = args.foralloc;
+	var unapproved = args.unapproved;
 	var skiptypes= args.skiptypes;	
 	var showtypes= args.showtypes;	
 	var maxdays  = args.maxdays;
@@ -19,6 +20,9 @@ window.ShowResGraph = (function ()
 
 	if (foralloc === undefined) {
 	    foralloc = false;
+	}
+	if (unapproved === undefined) {
+	    unapproved = false;
 	}
 	if (skiptypes === undefined) {
 	    skiptypes = null;
@@ -54,15 +58,22 @@ window.ShowResGraph = (function ()
 	    var array = forecast[type];
 	
 	    if (array.length == 1) {
-		var free = parseInt(array[0].free);
+		var data = array[0];
+		var free = data.free;
 		if (foralloc) {
-		    free += parseInt(array[0].held);
+		    free += data.held;
+		}
+		else if (unapproved && _.has(data, "unapproved")) {
+		    free -= data.unapproved;
+		    if (free < 0) {
+			free = 0;
+		    }
 		}
 		if (free == 0) {
 		    continue;
 		}
 		/*
-		 * Need two points to make a line. Gove the second point
+		 * Need two points to make a line. Give the second point
 		 * just a day, we do not want to push the right side of
 		 * the graph out too much, we want decent scaling.
 		 *
@@ -70,8 +81,8 @@ window.ShowResGraph = (function ()
 		 * original data for popping up the graph in a modal.
 		 */
 		array = array.slice();
-		array.push($.extend({}, array[0]));
-		array[1].t = parseInt(array[1].t) +
+		array.push($.extend({}, data));
+		array[1].t = array[1].t +
 		    ((maxdays ? maxdays : 45) * 3600 * 24);
 	    }
 	    else if (array.length > 1) {
@@ -84,11 +95,18 @@ window.ShowResGraph = (function ()
 		for (var i = 0; i < array.length - 1; i++) {
 		    var data     = array[i];
 		    var nextdata = array[i + 1];
-		    
+
 		    if (data.t == nextdata.t) {
 			//console.info("toss1", type, data, nextdata);
 			continue;
 		    }
+		    if (!_.has(data, "unapproved")) {
+			data["unapproved"] = 0;
+		    }
+		    if (!_.has(nextdata, "unapproved")) {
+			nextdata["unapproved"] = 0;
+		    }
+		    
 		    /*
 		     * Oh, turns out two consecutive timestamps can have
 		     * the same free/held values. Cull those out too.
@@ -96,13 +114,15 @@ window.ShowResGraph = (function ()
 		     * timestamps with the same values.
 		     */
 		    if (data.free == nextdata.free &&
-			data.held == nextdata.held) {
+			data.held == nextdata.held &&
+			data.unapproved == nextdata.unapproved) {
 			//console.info("toss2", type, data);
 			temp.push(data);
 			for (i = i + 1; i < array.length - 1; i++) {
 			    nextdata = array[i];
 			    if (! (data.free == nextdata.free &&
-				   data.held == nextdata.held)) {
+				   data.held == nextdata.held &&
+				   data.unapproved == nextdata.unapproved)) {
 				// Back up for outer loop
 				i--;
 				break;
@@ -115,7 +135,7 @@ window.ShowResGraph = (function ()
 		     * Stop processing after we reach maxdays out. 
 		     */
 		    if (maxstamp) {
-			var t = parseInt(data.t);
+			var t = data.t;
 			if (t > maxstamp) {
 			    break;
 			}
@@ -130,17 +150,17 @@ window.ShowResGraph = (function ()
 		     * As above, generate two points.
 		     */
 		    var data = $.extend({}, array[0]);
-		    data.t = parseInt(data.t);
+		    data.t = data.t;
 		    temp.push(data);
 		    temp.push($.extend({}, data));
-		    temp[1].t = parseInt(temp[1].t) +
+		    temp[1].t = temp[1].t +
 			((maxdays ? maxdays : 45) * 3600 * 24);
 		}
 		else {
 		    // Tack on last one unless it violates maxdays limit.
 		    if (temp[temp.length - 1].t != array[array.length - 1].t) {
 			var data = array[array.length - 1];
-			var t = parseInt(data.t);
+			var t = data.t;
 
 			if (maxstamp && (t > maxstamp)) {
 			    // If only one point need to generate another.
@@ -161,15 +181,29 @@ window.ShowResGraph = (function ()
 	    for (var i = 0; i < array.length; i++) {
 		var data  = array[i];
 		var stamp = data.t;
-		var free  = parseInt(data.free);
+		var free  = data.free;
+		var avail = free;
 		if (foralloc) {
-		    free += parseInt(data.held);
+		    free  += data.held;
+		    avail += data.held;
 		}
+		else if (unapproved) {
+		    //console.info("a", free, data.unapproved);
+		    free -= data.unapproved;
+		    if (free < 0) {
+			free = 0;
+		    }
+		}
+		//console.info("a'", free);
 
 		if (! _.has(stamps, stamp)) {
 		    stamps[stamp] = {};
 		}
-		stamps[stamp][type] = free;
+		stamps[stamp][type] = {
+		    "free"  : free,
+		    "avail" : avail,
+		    "unapproved" : data.unapproved,
+		};
 
 		/*
 		 * We want the changes to look like step functions not
@@ -177,15 +211,30 @@ window.ShowResGraph = (function ()
 		 * the previous second with the old free count.
 		 */
 		if (i > 0) {
-		    var lastfree  = parseInt(array[i - 1].free);
+		    var lastfree  = array[i - 1].free;
+		    var lastavail = lastfree;
+		    var lastunapproved = array[i - 1].unapproved;
 		    var prevstamp = stamp - 1;
 		    if (foralloc) {
-			lastfree += parseInt(array[i - 1].held);
+			lastfree  += array[i - 1].held;
+			lastavail += array[i - 1].held;
 		    }
+		    else if (unapproved) {
+			//console.info("b", lastfree, array[i-1].unapproved);
+			lastfree -= lastunapproved;
+			if (lastfree < 0) {
+			    lastfree = 0;
+			}
+		    }
+		    //console.info("b'", lastfree);
 		    if (! _.has(stamps, prevstamp)) {
 			stamps[prevstamp] = {};
 		    }
-		    stamps[prevstamp][type] = lastfree;
+		    stamps[prevstamp][type] = {
+			"free" : lastfree,
+			"avail" : lastavail,
+			"unapproved" : lastunapproved,
+		    };
 		}
 	    }
 	}
@@ -209,7 +258,7 @@ window.ShowResGraph = (function ()
 	    // Ascending: first stamp less than the previous
 	    return obj1.stamp - obj2.stamp;
 	});
-	
+
 	/*
 	 * Nuts, the first timestamp does not always include all the
 	 * types. It should ... so fill those in with the first count
@@ -258,12 +307,12 @@ window.ShowResGraph = (function ()
 	var temp = [];
 	for (var i = 0; i < array.length; i++) {
 	    var counts    = array[i].counts;
-	    var stamp     = parseInt(array[i].stamp);
+	    var stamp     = array[i].stamp;
 	    
 	    temp.push(array[i]);
 
 	    if (i < array.length - 1) {
-		var nextstamp = parseInt(array[i + 1].stamp);
+		var nextstamp = array[i + 1].stamp;
 
 		if (nextstamp - stamp > (3600 * 48)) {
 		    while (stamp + (3600 * 24) < nextstamp) {
@@ -271,7 +320,7 @@ window.ShowResGraph = (function ()
 
 			var data = $.extend({}, array[i]);
 			data.stamp = stamp;
-			data.date  = new Date(parseInt(stamp) * 1000),
+			data.date  = new Date(stamp * 1000),
 			temp.push(data);
 		    }
 		}
@@ -281,7 +330,7 @@ window.ShowResGraph = (function ()
 	// at the very right hand side of the graph.
 	var data = $.extend({}, array[array.length - 1]);
 	data.stamp = data.stamp + (3600 * 24);
-	data.date  = new Date(parseInt(data.stamp) * 1000),
+	data.date  = new Date(data.stamp * 1000),
 	temp.push(data);
 	
 	array = temp;
@@ -311,14 +360,22 @@ window.ShowResGraph = (function ()
 		values[i] = {
 		    // convert seconds to milliseconds.
 		    "x" : stamp * 1000,
-		    "y" : counts[type],
+		    "y" : counts[type].free,
+		    "unapproved" : counts[type].unapproved,
+		    "avail" : counts[type].avail,
 		};
 	    }
 	}
 	return datums;
     }
 
-    function CreateGraph(datums, selector, click_callback, showbrush) {
+    function CreateGraph(datums, args)
+    {
+	var selector = args.selector;
+	var click_callback = args.click_callback;
+	var showbrush = args.showbrush;
+	var widebrush = args.widebrush;
+	var unapproved = args.unapproved;
 	var id = '#' + selector;
 	$(id + ' svg').html("");
 
@@ -347,7 +404,7 @@ window.ShowResGraph = (function ()
 	    var maxTime = d3.max(datums[0].values,
 				 function (d) { return d.x; });
 	    // Adjust the brush to the first day.
-	    if (maxTime - minTime > (3600 * 24 * 14 * 1000)) {
+	    if (!widebrush && maxTime - minTime > (3600 * 24 * 14 * 1000)) {
 		maxTime = minTime + (3600 * 24 * 14 * 1000);
 	    }
 	    if (showbrush) {
@@ -377,6 +434,18 @@ window.ShowResGraph = (function ()
             var tooltip = chart.interactiveLayer.tooltip;
             tooltip.headerFormatter(function (d) {
 		return tsFormat(new Date(d));
+	    });
+            tooltip.valueFormatter(function (d, i, p) {
+		//console.info(d, i, p);
+		if (!p.data.unapproved || !unapproved) {
+		    return d;
+		}
+		var u = p.data.unapproved;
+		var a = p.data.avail;
+		if (u > a) {
+		    u = a;
+		}
+		return d + " <span style='color: blue;'>(" + u + ")</span>";
 	    });
 
 	    /*
@@ -422,8 +491,7 @@ window.ShowResGraph = (function ()
 
 	    $(id).css("height", height).css("max-height", height);
 	}
-	CreateGraph(datums, args.selector, args.click_callback,
-		    args.showbrush);
+	CreateGraph(datums, args);
     };
 }
 )();

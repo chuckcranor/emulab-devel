@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2020 University of Utah and the Flux Group.
+# Copyright (c) 2016-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,6 +32,7 @@ use vars qw(@ISA @EXPORT);
 
 use English;
 use Date::Parse;
+use Data::Dumper;
 use emdb;
 use libtestbed;
 use emutil;
@@ -747,15 +748,16 @@ sub LookupAll($$;$$)
     $$details = $$details . "\n--- Reservations:\n" if( ref( $details ) );
     
     $query_result = DBQueryWarn( "SELECT pid, uid, UNIX_TIMESTAMP( start ), " .
-				 "UNIX_TIMESTAMP( end ), nodes, idx FROM " .
-				 "future_reservations WHERE type='$type'" .
+				 "UNIX_TIMESTAMP( end ), nodes, idx, approved ".
+				 "FROM future_reservations WHERE type='$type'" .
 				 ( $include_pending ? "" :
 				   " AND approved IS NOT NULL" ) );
 
-    while( my ($pid, $uid, $start, $end, $nodes, $idx) =
+    while( my ($pid, $uid, $start, $end, $nodes, $idx, $approved) =
 	   $query_result->fetchrow_array() ) {
 	my $res = Create( $class, $pid, $uid, $start, $end, $type, $nodes );
 	$res->{'IDX'} = $idx;
+	$res->{'APPROVED'} = $approved;
 	push( @reservations, $res );
 	
 	if( ref( $details ) ) {
@@ -769,17 +771,19 @@ sub LookupAll($$;$$)
     return $cache{$cachekey};
 }
 
-sub IsFeasible($$;$$$$$)
+sub IsFeasible($$;$$$$$$)
 {
     my ($class, $reservations, $error, $conflicttime, $conflictcount,
-	$projlist, $forecast) = @_;
+	$projlist, $forecast, $dounapproved) = @_;
 
     my @timeline = ();
     my $free = 0;
     my %used = ();
     my %reserved = ();
+    my %unapproved = ();
     my $answer = 1;
     my $now = time();
+    $dounapproved = 0 if (!defined($dounapproved));
     
     foreach my $reservation ( @$reservations ) {
 	my $pid = $reservation->pid();
@@ -792,7 +796,9 @@ sub IsFeasible($$;$$$$$)
 		$start = { 'pid' => $reservation->pid(),
 			   't' => $reservation->start(),
 			   'used' => $reservation->nodes(),
-			   'reserved' => 0 };
+			   'reserved' => 0,
+			   'unapproved' => 0,
+		};
 	    } else {
 		# A mapped experiment.  Using physical nodes now.
 		if( defined( $used{ $pid } ) ) {
@@ -806,7 +812,9 @@ sub IsFeasible($$;$$$$$)
 	    $end = { 'pid' => $reservation->pid(),
 		     't' => $reservation->end(),
 		     'used' => -$reservation->nodes(),
-		     'reserved' => 0 };
+		     'reserved' => 0,
+		     'unapproved' => 0,
+	    };
 	} elsif( defined( $reservation->pid() ) ) {
 	    # A reservation.  Uses then releases reserved nodes.
 
@@ -822,11 +830,23 @@ sub IsFeasible($$;$$$$$)
 	    $start = { 'pid' => $reservation->pid(),
 		       't' => $starttime,
 		       'used' => 0,
-		       'reserved' => $reservation->nodes() };
+	    };
 	    $end = { 'pid' => $reservation->pid(),
 		     't' => $reservation->end(),
 		     'used' => 0,
-		     'reserved' => -$reservation->nodes() };
+	    };
+	    if ($reservation->approved() || !$dounapproved) {
+		$start->{'reserved'}   = $reservation->nodes();
+		$start->{'unapproved'} = 0;
+		$end->{'reserved'}     = -$reservation->nodes();
+		$end->{'unapproved'}   = 0;
+	    }
+	    else {
+		$start->{'reserved'}   = 0;
+		$start->{'unapproved'} = $reservation->nodes();
+		$end->{'reserved'}     = 0;
+		$end->{'unapproved'}   = -$reservation->nodes();
+	    }
 	} else {
 	    # Available resources.  Provides nodes for all time.
 	    $free += $reservation->nodes();
@@ -858,12 +878,14 @@ sub IsFeasible($$;$$$$$)
 
 	$used{ $pid } = 0 if( !exists( $used{ $pid } ) );
 	$reserved{ $pid } = 0 if( !exists( $reserved{ $pid } ) );
+	$unapproved{ $pid } = 0 if( !exists( $unapproved{ $pid } ) );
 
 	my $oldsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
 	    $reserved{ $pid };
 
 	$used{ $pid } += $event->{ 'used' };
 	$reserved{ $pid } += $event->{ 'reserved' };
+	$unapproved{ $pid } += $event->{ 'unapproved' };
 
 	my $newsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
 	    $reserved{ $pid };
@@ -873,10 +895,12 @@ sub IsFeasible($$;$$$$$)
 	if( defined( $forecast ) ) {
 	    my %used_ = %used;
 	    my %reserved_ = %reserved;
+	    my %unapproved_ = %unapproved;
 	    my %stamp = (
 		t => $event->{'t'},
 		used => \%used_,
 		reserved => \%reserved_,
+		unapproved => \%unapproved_,
 		free => $free
 		);
 	    push( @$forecast, \%stamp );
@@ -887,8 +911,16 @@ sub IsFeasible($$;$$$$$)
 	    if( ref( $error ) ) {
 		my $time = localtime( $event->{'t'} );
 		my $needed = -$free;
-		$$error = "Insufficient free nodes at $time " .
+		my $string = "Insufficient free nodes at $time " .
 		    "($needed more needed).";
+		if (ref($error) == "HASH") {
+		    $error->{'error'}  = $string;
+		    $error->{'time'}   = $event->{'t'};
+		    $error->{'needed'} = $needed;
+		}
+		else {
+		    $$error = $string;
+		}
 	    }
 	    if( ref( $conflicttime ) ) {
 		$$conflicttime = $event->{'t'};
@@ -976,23 +1008,32 @@ sub FreeCount($$;$) {
 #
 # * 'free' is the number of nodes not allocated and not needed
 # for reservations; available for general use subject to other constraints.
-sub Forecast($$;$) {
-    my ($class, $type, $projlist) = @_;
+sub Forecast($$;$$) {
+    my ($class, $type, $projlist, $details, $dounapproved) = @_;
 
-    my $reservations = LookupAll( $class, $type );
+    my $reservations = LookupAll( $class, $type, $dounapproved, $details );
     my @forecast = ();
     my @answer = ();
     my $t = time();
-    
-    IsFeasible( $class, $reservations, undef, undef, undef, undef, \@forecast );
 
+    IsFeasible( $class, $reservations, undef, undef, undef, undef,
+		\@forecast, $dounapproved );
+
+    if ($dounapproved && $details) {
+	print Dumper(\@forecast);
+    }
+    
     foreach my $f ( @forecast ) {
 	my $unavailable = 0;
+	my $unapproved = 0;
 	my $held = 0;
 	my $free = $f->{'free'};
 
 	foreach my $pid ( keys( %{$f->{'used'}} ) ) {
 	    $unavailable += $f->{'used'}->{$pid};
+	}
+	foreach my $pid ( keys( %{$f->{'unapproved'}} ) ) {
+	    $unapproved += $f->{'unapproved'}->{$pid};
 	}
 	
 	foreach my $pid ( keys( %{$f->{'reserved'}} ) ) {
@@ -1011,6 +1052,7 @@ sub Forecast($$;$) {
 	my %r = (
 	    t => $f->{'t'},
 	    unavailable => $unavailable,
+	    unapproved => $unapproved,
 	    held => $held,
 	    free => $free
 	    );

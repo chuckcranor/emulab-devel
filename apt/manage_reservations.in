@@ -348,6 +348,15 @@ sub DoReserve()
 	if ($response->code() == GENIRESPONSE_REFUSED) {
 	    RecordReservationRequest($this_user,
 				     $project, $aggregate, \%rpcargs);
+	    #
+	    # Put the conflict info in the webtask too.
+	    #
+	    if (defined($webtask) && ref($response->value()) eq "HASH") {
+		my $blob = $response->value();
+		if (defined($blob->{'conflict'})) {
+		    $webtask->conflict($blob->{'conflict'});
+		}
+	    }
 	}
 	ExitWithError($response);
     }
@@ -362,12 +371,16 @@ sub DoReserve()
     my $approved;
     my $uuid;
     my $idx;
+    my $conflict;
 
     if (ref($response->value()) eq "HASH") {
 	my $blob  = $response->value();
 	$approved = $blob->{'approved'};
 	$uuid     = $blob->{'uuid'} if (exists($blob->{'uuid'}));
 	$idx      = $blob->{'idx'} if (exists($blob->{'idx'}));
+	if (defined($blob->{'conflict'})) {
+	    $conflict = $blob->{'conflict'};
+	}
 	if (defined($idx) && $idx !~ /^\d*$/) {
 	    fatal("Bad format for index from cluster");
 	}
@@ -384,6 +397,7 @@ sub DoReserve()
     if ($checkonly) {
 	if (defined($webtask)) {
 	    $webtask->approved($approved);
+	    $webtask->conflict($conflict) if ($conflict);
 	    $webtask->Exited(0);
 	}
 	exit($approved ? 0 : 2);

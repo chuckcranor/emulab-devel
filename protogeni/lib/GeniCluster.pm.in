@@ -1267,26 +1267,41 @@ sub Reserve($)
 	GeniUtil::FlipToGeniUser();
 	#print STDERR "$args\n";
 	$webtask->Refresh();
-	my $code = $webtask->code();
+	my $code = $webtask->exitcode();
 	my $mesg = $webtask->output();
-	$webtask->Delete();
 	if (!defined($mesg)) {
 	    $mesg = $output;
+	}	
+	my $blob = {
+	    "code"  => $code,
+	    "error" => $mesg,
+	};
+	if ($webtask->conflict()) {
+	    $blob->{"conflict"} = $webtask->conflict();
 	}
-	return GeniResponse->Create(GENIRESPONSE_REFUSED, $code, $mesg);
+	$webtask->Delete();
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, $blob, $mesg);
     }
+    $webtask->Refresh();
     
     my $approved = ($? >> 8 == 2 ? 0 : 1);
     GeniUtil::FlipToGeniUser();
     if ($check) {
-	$webtask->Delete();
 	my $blob = {
 	    "approved" => $approved,
 	};
+	if (!$approved && $webtask->conflict()) {
+	    $blob->{"conflict"} = $webtask->conflict();
+	    print STDERR "Conflicting: " . $webtask->output() . "\n";
+	}
 	if (defined($update)) {
 	    $blob->{"idx"}  = $reservation->idx();
 	    $blob->{"uuid"} = $reservation->uuid();
 	}
+	#$webtask->Dump();
+	#print STDERR Dumper($blob);
+	
+	$webtask->Delete();
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
     }
     if (!$update) {
@@ -1939,7 +1954,8 @@ sub ReservationPrediction($)
 	my $type = $type->type();
 	
 	$freecounts->{$type} = Reservation->FreeCount($type, \@projlist);
-	$forecast->{$type}   = [ Reservation->Forecast($type, \@projlist) ];
+	$forecast->{$type}   = [ Reservation->Forecast($type, \@projlist,
+						       undef, 1) ];
     }
     my @nodes = Reservation->ReservableNodes();
     foreach my $node (@nodes) {
@@ -1948,7 +1964,7 @@ sub ReservationPrediction($)
 	$freecounts->{$node_id} =
 	    Reservation->FreeCount($node_id, \@projlist);
 	$forecast->{$node_id}   =
-	    [ Reservation->Forecast($node_id, \@projlist) ];
+	    [ Reservation->Forecast($node_id, \@projlist, undef, 1) ];
     }
     
     goto nopids
@@ -1978,7 +1994,7 @@ sub ReservationPrediction($)
 		$pforecasts->{$rpid} = {};
 	    }
 	    $pforecasts->{$rpid}->{$type} =
-		[ Reservation->Forecast($type, [$pid]) ];
+		[ Reservation->Forecast($type, [$pid], undef, 1) ];
 	}
     }
     foreach my $node (@nodes) {
@@ -1991,7 +2007,7 @@ sub ReservationPrediction($)
 		$pforecasts->{$rpid} = {};
 	    }
 	    $pforecasts->{$rpid}->{$node_id} =
-		[ Reservation->Forecast($node_id, [$pid]) ];
+		[ Reservation->Forecast($node_id, [$pid], undef, 1) ];
 	}
     }
     

@@ -1376,8 +1376,18 @@ $(function ()
 	    var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
 
 	    if (_.has(reservation, "errcode")) {
-		tbody.find(".reservation-error span label")
-		    .html(reservation.output);
+		if (_.has(reservation, "conflict")) {
+		    // The string typically has the date in the wrong timezone,
+		    var when = moment(reservation.conflict.when).format("lll");
+		    var mesg = "Insufficient free nodes at " + when + " " +
+			"(" + reservation.conflict.needed + " more needed)";
+		    tbody.find(".reservation-error span label")
+			.html(mesg);
+		}
+		else {
+		    tbody.find(".reservation-error span label")
+			.html(reservation.output);
+		}
 		tbody.find(".reservation-error span")
 		    .removeClass("has-warning")
 		    .addClass("has-error")
@@ -1390,7 +1400,14 @@ $(function ()
 		    .addClass("hidden");
 	    }
 	    else {
-		if (_.has(reservation, "noautoapprove_reason")) {
+		if (_.has(reservation, "conflict")) {
+		    // The string typically has the date in the wrong timezone,
+		    var when = moment(reservation.conflict.when).format("lll");
+		    var mesg = "Conflicting reservation at " + when;
+		    tbody.find(".reservation-error span label")
+			.html("Approval is required. (" + mesg + ")");
+		}
+		else if (_.has(reservation, "noautoapprove_reason")) {
 		    tbody.find(".reservation-error span label")
 			.html("Approval is required: " +
 			      reservation.noautoapprove_reason);
@@ -1929,6 +1946,13 @@ $(function ()
 		data.free  = parseInt(data.free);
 		data.held  = parseInt(data.held);
 		data.stamp = new Date(parseInt(data.t) * 1000);
+		// New
+		if (_.has(data, "unapproved")) {
+		    data.unapproved = parseInt(data.unapproved);
+		}
+		else {
+		    data.unapproved = 0;
+		}
 	    }
 
 	    // No data or just one data point, nothing to do.
@@ -2450,28 +2474,45 @@ $(function ()
 	    console.info("tmp", tmp);
 	    while (tmp.length && starttime == null) {
 		var data = tmp.shift();
-
-		console.info("baz", data);
+		var free = data.free - data.unapproved;
+		if (free < 0) {
+		    free = 0;
+		}
+		//console.info("baz", data, free);
 		
-		if (data.free >= cluster.count) {
+		if (free >= cluster.count) {
 		    starttime = data.t;
 		    startdata = data;
-		    console.info("baz2", startdata, starttime, lower);
+		    //console.info("baz2", startdata, starttime, lower);
 		    if (lower) {
 			if (tmp.length) {
 			    var next = tmp[0];
-			    
-			    console.info("foo", lower, data, next);
+			    var nextfree = next.free - next.unapproved;
+			    if (nextfree < 0) {
+				nextfree = 0;
+			    }
+			    //console.info("foo", lower, nextfree, data, next);
 
-			    if (next.free >= cluster.count &&
+			    if (nextfree >= cluster.count &&
 				lower >= data.t && lower <= next.t) {
 				starttime = lower;
-				console.info("fee", starttime);
+				//console.info("fee1", starttime);
 			    }
 			    else if (data.t < lower) {
-				console.info("bar");
-				starttime = null;
-				continue;
+				/*
+				 * See if the current item is long enough that we
+				 * can start here. Otherwise need to jump to next.
+				 */
+				if (lower <= next.t &&
+				    lower + (3600 * 24 * days) + 3600 < next.t) {
+				    starttime = lower;
+				    //console.info("fee2", starttime);
+				}
+				else {
+				    //console.info("bar");
+				    starttime = null;
+				    continue;
+				}
 			    }
 			}
 			else {
@@ -2482,12 +2523,15 @@ $(function ()
 			    }
 			}
 		    }
-		    console.info("boop", data, starttime);
+		    //console.info("boop", data, starttime);
 		    
 		    for (var i = 0; i < tmp.length; i++) {
 			var next = tmp[i];
-
-			if (next.free >= cluster.count) {
+			var nextfree = next.free - next.unapproved;
+			if (nextfree < 0) {
+			    nextfree = 0;
+			}
+			if (nextfree >= cluster.count) {
 			    // The next time stamp still has enough nodes,
 			    // keep checking until no longer true, so we
 			    // have the biggest range possible.
@@ -2751,11 +2795,15 @@ $(function ()
 	    // Gotta search all the requests looking to see if any
 	    // are not approved and need admin intervention.
 	    var needsApproval = 0;
+	    var conflicts     = 0;
 
 	    if (cluster_results) {
 		_.each(cluster_results.clusters, function (result) {
 		    if (!result.approved) {
 			needsApproval++;
+			if (_.has(result, "conflict")) {
+			    conflicts++;
+			}
 		    }
 		});
 	    }
@@ -2776,7 +2824,18 @@ $(function ()
 	    if (needsApproval) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
-
+		if (conflicts) {
+		    $('#confirm-reservation .needs-approval-conflict')
+			.removeClass("hidden");
+		    $('#confirm-reservation .needs-approval-noconflict')
+			.addClass("hidden");
+		}
+		else {
+		    $('#confirm-reservation .needs-approval-conflict')
+			.addClass("hidden");
+		    $('#confirm-reservation .needs-approval-noconflict')
+			.removeClass("hidden");
+		}
 		if (!StartTimeOkay()) {
 		    return;
 		}
@@ -4039,6 +4098,8 @@ $(function ()
 		      "selector"       : "combined-resgraph",
 		      "skiptypes"      : {},
 		      "colors"         : RouteColors,
+		      "widebrush"      : true,
+		      "unapproved"     : true,
 		      "click_callback" : function(when, type) {
 			  if (!editing) {
 			      var start = moment(when);
@@ -4097,6 +4158,7 @@ $(function ()
     {
 	var dataset = [];
 	var now     = new Date();
+	var limit   = new Date();
 	var maxend  = now;
 	var container = tag + "-graph-body";
 	var graph     = tag + "-graph-visavail";
@@ -4104,7 +4166,12 @@ $(function ()
 	    .find(".panel-heading .zoom-control .zoom-in");
 	var zoomout = $('#' + container).closest(".panel")
 	    .find(".panel-heading .zoom-control .zoom-out");
+	var popover = $('#' + container).closest(".panel")
+	    .find('.panel-heading [data-toggle="popover"]');
 	
+	// Do not show more then 60 days, the graphs are hard to read.
+	limit.setDate(limit.getDate() + 60);
+
 	Object.keys(forecasts)
 	    .sort()
 	    .forEach(function(id, index) {
@@ -4116,15 +4183,31 @@ $(function ()
 		    "interval_s": 3600,
 		    "data"      : [],
 		    "categories": {
-			"Busy": { "color": "black" },
-			"Free": { "color": "green"},
+			"Busy"    : { "color": "black" },
+			"Free"    : { "color": "green"},
+			"Pending" : { "color": "blue"},
 		    },
 		};
 		for (var i = 0; i < forecast.length; i++) {
 		    var info  = forecast[i];
 		    var start = moment(info.stamp).toDate();
-		    var state = info.free ? "Free" : "Busy";
+		    var state;
 		    var end;
+
+		    if (info.free == 1) {
+			if (_.has(info, "unapproved") && info.unapproved != 0) {
+			    state = "Pending";
+			}
+			else {
+			    state = "Free";
+			}
+		    }
+		    else if (info.free == 0 || !isadmin) {
+			state = "Busy"
+		    }
+		    else {
+			state = "Overbook";
+		    }
 
 		    if (i < forecast.length - 1) {
 			end = moment(forecast[i + 1].stamp).toDate();
@@ -4137,6 +4220,9 @@ $(function ()
 		    // we can even things out on the very right
 		    // side.
 		    if (end > maxend) {
+			if (end > limit) {
+			    end = new Date(limit.valueOf());
+			}
 			maxend = end;
 		    }
 		    series.data.push([start, state, end]);
@@ -4213,6 +4299,10 @@ $(function ()
 	    event.preventDefault();
 	    chart.zoomout();
 	})
+	$(popover).popover({
+	    trigger: 'hover',
+	    container: 'body'
+	});
     }
 
     /*

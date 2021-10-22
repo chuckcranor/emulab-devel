@@ -261,7 +261,7 @@ $(function ()
 			.removeClass("hidden");
 		    return;
 		}
-		var forecast  = json.value.forecast;
+		var forecast  = FixForecast(json.value.forecast);
 		var skiptypes = json.value.prunelist;
 
 		ShowResGraph({"forecast"       : forecast,
@@ -507,6 +507,7 @@ $(function ()
     {
 	var dataset = [];
 	var now     = new Date();
+	var limit   = new Date();
 	var maxend  = now;
 	var container = tag + "-graph-body";
 	var graph     = tag + "-graph-visavail";
@@ -514,6 +515,9 @@ $(function ()
 	    .find(".panel-heading .zoom-control .zoom-in");
 	var zoomout = $('#' + container).closest(".panel")
 	    .find(".panel-heading .zoom-control .zoom-out");
+
+	// Do not show more then 60 days, the graphs are hard to read.
+	limit.setDate(limit.getDate() + 60);
 	
 	Object.keys(forecasts)
 	    .sort()
@@ -528,6 +532,7 @@ $(function ()
 		    "categories": {
 			"Busy": { "color": "black" },
 			"Free": { "color": "green"},
+			"Pending": { "color": "blue"},
 			"Overbook": { "color": "red"},
 		    },
 		};
@@ -538,7 +543,12 @@ $(function ()
 		    var end;
 
 		    if (info.free == 1) {
-			state = "Free";
+			if (_.has(info, "unapproved") && info.unapproved != 0) {
+			    state = "Pending";
+			}
+			else {
+			    state = "Free";
+			}
 		    }
 		    else if (info.free == 0 || !isadmin) {
 			state = "Busy"
@@ -557,6 +567,9 @@ $(function ()
 		    // we can even things out on the very right
 		    // side.
 		    if (end > maxend) {
+			if (end > limit) {
+			    end = new Date(limit.valueOf());
+			}
 			maxend = end;
 		    }
 		    series.data.push([start, state, end]);
@@ -651,6 +664,13 @@ $(function ()
 		data.free  = parseInt(data.free);
 		data.held  = parseInt(data.held);
 		data.stamp = new Date(parseInt(data.t) * 1000);
+		// New
+		if (_.has(data, "unapproved")) {
+		    data.unapproved = parseInt(data.unapproved);
+		}
+		else {
+		    data.unapproved = 0;
+		}
 	    }
 
 	    // No data or just one data point, nothing to do.

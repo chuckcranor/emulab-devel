@@ -46,6 +46,12 @@
      padding-top: 0px !important;
      padding-bottom: 0px !important;
  }
+ .nvfoo {
+     font-family: Arial, sans-serif;
+     font-size: 16px;
+     font-weight: bold;
+ }
+ 
 </style>  
 <div class='row main-row'>
   <div class='col-lg-7
@@ -402,6 +408,27 @@
       <div class='panel-heading'>
 	<center>
           <h3 class='panel-title'>Selected Types Availability</h3>
+	  <div><span class=small style="color:blue;">
+	    <a href="#" onclick="event.preventDefault();"
+	       data-toggle='popover'
+	       data-html='true'
+	       data-delay='{"hide":500}'
+	       data-content='Reservations are approved in the order they are
+			     submitted, so submitting
+			     a request for a time that already has a pending
+			     reservation will almost certainly
+			     result in a request that will be denied later.
+			     <div style="margin-top: 5px;">
+			     The graph below shows the number of nodes 
+			     available for each selected resource type, but 
+			     if the tooltip says:
+			     <center class=nvfoo>d820: 1 <font color=blue>(5)</font></center>
+			     it means
+			     five of the six free nodes have already been
+			     requested but not yet approved.'>
+	      More info about pending reservations
+	    </a></span>
+	  </div>
 	</center>
       </div>
       <div class='panel-body' style="padding: 2px;">
@@ -504,10 +531,25 @@
 		  data-dismiss='modal' aria-hidden='true'>Submit</button>
 	</center>
 	<div style="margin-top: 5px;" class="needs-approval hidden">
-	  <b>This reservation request can be accomodated, but the
-	    size and/or duration means that the reservation needs to
-	    be approved by an administrator before it is fully active.</b>
-	  <div style="margin-top: 5px;">
+	  <div class="needs-approval-noconflict hidden">
+	    <b>
+	      WARNING: This reservation request can be accomodated,
+	      but the size and/or duration means that the reservation
+	      needs to be approved by an administrator before it is
+	      fully active.</b>
+	  </div>
+	  <div style="margin-top: 5px;"
+	       class="needs-approval-conflict hidden">
+	    <b>
+	      WARNING: This reservation currently conflicts with
+	      another unapproved reservation. It might still be
+	      approved, but typically reservations are approved in the
+	      order they are submitted, so it will probably be
+	      denied. Please consider resubmitting for a time that
+	      does not conflict with pending reservations.</b>
+	  </div>
+	  </b>
+	  <div style="margin-top: 10px;">
 	    <% if (window.MAINSITE) { %>
 	      <em>Reservations that require administrative approval
 		take time to review and are processed the <b>next
