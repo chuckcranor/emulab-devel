@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,7 +38,7 @@ all:	$(SCRIPTS)
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 # clientside/tmcc OS depenedent directory for equivalent FreeBSD version
-FBSDBASEDIR	= freebsd11
+FBSDBASEDIR	= freebsd12
 
 OETCDIR		= $(DESTDIR)$(CLIENT_ETCDIR)
 NETCDIR		= $(DESTDIR)/conf/base/etc/emulab
@@ -109,7 +109,7 @@ install client-install: destdircheck basefbsd-install
 	$(INSTALL) -m 644 $(SRCDIR)/genvmtype $(NETCDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/testbed $(DESTDIR)/conf/base/etc/rc.d/
 	$(INSTALL) -m 755 $(SRCDIR)/bscontrol.proxy.pl $(NBINDIR)/bscontrol.proxy
-	$(INSTALL) -m 644 $(SRCDIR)/libfreenas.pm $(NBINDIR)/
+	$(INSTALL) -m 644 $(SRCDIR)/libfreenasV2.pm $(NBINDIR)/
 	$(INSTALL) -m 644 $(SRCDIR)/libvnode_blockstore.pm $(NBINDIR)/
 	echo "Installing legacy perl symlink..."
 	mkdir -p $(DESTDIR)/usr/bin
