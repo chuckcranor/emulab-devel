@@ -104,7 +104,7 @@ RUN_DEPENDS+=	\
 	rsync:${PORTSDIR}/net/rsync \
 	swig${SWIG_VER}:${PORTSDIR}/${SWIG_PORT} \
 	sudo:${PORTSDIR}/security/sudo \
-	medusa:${PORTSDIR}/security/medusa \
+	medusa:${PORTSDIR}/misc/emulab-medusa \
 	nmap:${PORTSDIR}/security/nmap \
 	wget:${PORTSDIR}/ftp/wget \
 	xvcg:${PORTSDIR}/graphics/vcg \

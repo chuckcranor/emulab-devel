@@ -35,7 +35,7 @@ PHP_VER=56
 PY_VER=2.7
 .if (${EMULAB_PORTVERSION} == "8.2")
 PY_VER=3.8
-DEFAULT_VERSIONS= perl5=5.32 python=3.8 tcltk=8.6 php=7.4 mysql=5.7 apache=2.4
+DEFAULT_VERSIONS= perl5=5.32 python=3.8 python3=3.8 tcltk=8.6 php=7.4 mysql=5.7 apache=2.4
 APACHE_PORT=www/apache24
 APACHEMODDIR=libexec/apache24
 MYSQL_VER=57

@@ -48,7 +48,7 @@ This is a condensed version of the steps below.
       
    e. Make sure /etc/make.conf is up to date. It should have:
 
-DEFAULT_VERSIONS=perl5=5.32 python=3.7 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
+DEFAULT_VERSIONS=perl5=5.32 python=3.8 python3=3.8 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
 DEFAULT_VERSIONS+=ssl=base
 
       We also add a bunch of custom port configurations to avoid needing to
@@ -134,7 +134,7 @@ security_py-certbot_UNSET+=MANPAGES
 
    m. Create the packages:
 
-       pkg create -a -o $PACKAGES/All/
+       pkg create -an -o $PACKAGES/All/
 
    n. Create the alternate ipmitool package. The Moonshot chassis require
       an older ipmitool embodied in the emulab-ipmitool-old port. It conflicts
@@ -243,6 +243,11 @@ Emulab-devel: {
 	PL
 
    q. Random useful commands to run on the package files.
+
+      To see what was installed (or not) by the Emulab repository:
+
+      pkg query "%n-%v %R" | grep Emulab
+      pkg query "%n-%v %R" | grep -v Emulab
 
       For comparing with older package sets, it is sometimes useful to
       trim off the version number, etc. if you want to see the difference
@@ -369,7 +374,7 @@ b. Allocate a node on which to build everything and load the appropriate
    DEFAULT_VERSIONS+=ssl=base
 
    # for 12.2
-   DEFAULT_VERSIONS=perl5=5.32 python=3.7 php=7.2 mysql=5.7 apache=2.4 tcltk=8.6
+   DEFAULT_VERSIONS=perl5=5.32 python=3.7 python3=3.7 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
    To avoid 
@@ -552,11 +557,11 @@ b. On boss, run:
 c. As part of the boss/ops/etc. install, we will need to start creating a file
    /etc/pkg/Emulab.conf with:
 
-   Emulab: {
-     url: "https://www.emulab.net/FreeBSD/10.2/packages",
-     mirror_type: NONE,
-     enabled: yes
-   }
+Emulab: {
+  url: "https://www.emulab.net/FreeBSD/12.2/packages",
+  mirror_type: NONE,
+  enabled: yes
+}
 
    (We should add either fingerprint or pubkey authentication here. See, e.g.:
    http://www.glenbarber.us/2012/06/11/Maintaining-Your-Own-pkgng-Repository.html)

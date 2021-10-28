@@ -45,7 +45,8 @@ RUN_DEPENDS+=	\
 # For Leigh
 RUN_DEPENDS+=	\
 	autocutsel:${PORTSDIR}/deskutils/autocutsel \
-	vncviewer:${PORTSDIR}/net/tightvnc \
+	vncserver:${PORTSDIR}/net/tigervnc-server \
+	xorg-fonts>=7.2:${PORTSDIR}/x11-fonts/xorg-fonts \
 	fvwm:${PORTSDIR}/x11-wm/fvwm2 \
 	xdpyinfo:${PORTSDIR}/x11/xdpyinfo \
 	xfontsel:${PORTSDIR}/x11-fonts/xfontsel \
