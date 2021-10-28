@@ -913,7 +913,7 @@ sub IsFeasible($$;$$$$$$)
 		my $needed = -$free;
 		my $string = "Insufficient free nodes at $time " .
 		    "($needed more needed).";
-		if (ref($error) == "HASH") {
+		if (ref($error) eq "HASH") {
 		    $error->{'error'}  = $string;
 		    $error->{'time'}   = $event->{'t'};
 		    $error->{'needed'} = $needed;
