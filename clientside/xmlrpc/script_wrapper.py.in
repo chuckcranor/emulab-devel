@@ -415,7 +415,7 @@ class reboot:
                 self.usage();
                 return -1;
 
-            params["nodes"]  = str.join(req_args, ",");
+            params["nodes"]  = str.join(",", req_args);
             pass
         else:
             if len(req_args):
@@ -502,7 +502,7 @@ class reload:
                 self.usage();
                 return -1;
 
-            params["nodes"]  = str.join(req_args, ",");
+            params["nodes"]  = str.join(",", req_args);
             pass
         else:
             if len(req_args):
@@ -1758,7 +1758,7 @@ class expinfo:
             self.usage();
             return -1;
 
-        params["show"] = str.join(show, ",");
+        params["show"] = str.join(",", show);
         rval,response = do_method("experiment", "expinfo", params);
         return rval;
 
@@ -3371,7 +3371,7 @@ class experimentReboot:
             return -1;
 
         params["experiment"] = req_args.pop(0)
-        params["nodes"]  = str.join(req_args, ",")
+        params["nodes"]  = str.join(",", req_args)
         rval,response = do_method("portal", "reboot", params)
         return rval
 
