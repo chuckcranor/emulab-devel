@@ -2954,6 +2954,7 @@ sub CreateVnodes($$$)
 			"role" => "virtnode",
 			"priority" => $vpriority,
 		        "op_mode" => $opmode,
+			"op_mode_timestamp" => time(),
 			"eventstate" => $eventstate,
 			"state_timestamp" => time(),
 			"allocstate" => $allocstate,
