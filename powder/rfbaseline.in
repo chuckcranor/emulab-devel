@@ -72,7 +72,8 @@ my %results = ();
 #
 # This the binding string we pass along to startExperiment.
 #
-my $bindingsTemplate = '{"Where" : "%s", "NodeID" : "%s", "Type" : "%s"}';
+my $bindingsTemplate =
+    '{"Where" : "%s", "NodeID" : "%s", "Type" : "%s", "ComputeType" : "d430"}';
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
