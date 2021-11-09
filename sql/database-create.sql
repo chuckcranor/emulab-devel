@@ -618,8 +618,10 @@ CREATE TABLE `apt_instance_history` (
   KEY `servername` (`uuid`,`servername`(32)),
   KEY `slice_uuid` (`slice_uuid`),
   KEY `portal` (`portal`),
-  KEY `portal_started` (`portal`,`started`),
   KEY `destroyed` (`destroyed`)
+  KEY `profile_id_created` (`profile_id`,`created`),
+  KEY `portal_started` (`portal`,`started`),
+  KEY `portal_creator` (`portal`,`creator_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -877,7 +879,8 @@ CREATE TABLE `apt_profiles` (
   `usecount` int(11) default '0',
   `examples_portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,  
   PRIMARY KEY (`profileid`),
-  UNIQUE KEY `pidname` (`pid_idx`,`name`,`version`)
+  UNIQUE KEY `pidname` (`pid_idx`,`name`,`version`),
+  KEY `profileid_version` (`profileid`,`version`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2226,7 +2229,8 @@ CREATE TABLE `experiment_stats` (
   KEY `pideid` (`pid`,`eid`),
   KEY `eid_uuid` (`eid_uuid`),
   KEY `pid_idx` (`pid_idx`),
-  KEY `creator_idx` (`creator_idx`)
+  KEY `creator_idx` (`creator_idx`),
+  KEY `geniflags` (`geniflags`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2893,7 +2897,8 @@ CREATE TABLE `group_membership` (
   PRIMARY KEY  (`uid_idx`,`gid_idx`),
   UNIQUE KEY `uid` (`uid`,`pid`,`gid`),
   KEY `pid` (`pid`),
-  KEY `gid` (`gid`)
+  KEY `gid` (`gid`),
+  KEY `pid_idx_gid_idx` (`pid_idx`,`gid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
