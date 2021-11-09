@@ -712,8 +712,18 @@ sub DBQueryN($$)
 	
 	if (defined($result) ||
 	    ($db->err != 2006 && $db->err != 1053 && $db->err != 2013 &&
-	     $db->err != 1046 && $db->err != 1317)) {
+	     $db->err != 1046 && $db->err != 1317 && $db->err != 1213)) {
 	    last;
+	}
+
+	#
+	# Rare dealock error.
+	#
+	if ($db->err == 2013) {
+	    DBWarn($db->errstr, 0);
+	    $maxtries--;
+	    sleep(10);
+	    next;
 	}
 
 	#
