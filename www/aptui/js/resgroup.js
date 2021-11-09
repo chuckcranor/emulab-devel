@@ -1179,6 +1179,7 @@ $(function ()
 	if (now.isoWeekday() == 6 || now.isoWeekday() == 7 ||
 	    now.isoWeekday() == 5) {
 	    now.isoWeekday(1);
+	    now.isoWeek(now.isoWeek() + 1);
 	}
 	else {
 	    now.isoWeekday(now.isoWeekday() + 1);
@@ -2030,7 +2031,7 @@ $(function ()
 	    .find(".panel").removeClass("hidden");
 	$('#powder-ota')
 	    .html(visTemplate({
-		"title" : "OTA Lab",
+		"title" : "Indoor OTA Lab",
 		"id"    : "ota",
 	    }))
 	    .removeClass("hidden")

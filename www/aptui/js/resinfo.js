@@ -101,12 +101,12 @@ $(function ()
 
 	    $('#powder-ota .graph-panel')
 		.html(visTemplate({
-		    "title" : "OTA Lab",
+		    "title" : "Indoor OTA Lab",
 		    "id"    : "ota",
 		}))
 		.find(".panel").removeClass("hidden");
 	    $('#powder-ota .counts-panel')
-		.html(totalsTemplate({"title" : "OTA Lab"}));
+		.html(totalsTemplate({"title" : "Indoor OTA Lab"}));
 	    $('#powder-ota .counts-panel .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
