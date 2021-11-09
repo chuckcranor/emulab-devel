@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -289,8 +289,8 @@ if ($WITHZFS && $ZFS_NOEXPORT) {
 	DBQueryFatal("select distinct u.uid,m.pid from user_stats as s ".
 		     "left join users as u on u.uid_idx=s.uid_idx ".
 		     "left join group_membership as m on ".
-		     "     m.uid_idx=u.uid_idx and m.pid=m.gid ".
-		     "left join projects as p on p.pid=m.pid ".
+		     "     m.uid_idx=u.uid_idx and m.pid_idx=m.gid_idx ".
+		     "left join projects as p on p.pid_idx=m.pid_idx ".
 		     "where u.status='" . USERSTATUS_ACTIVE() . "' and ".
 		     "      p.approved=1 and ".
 		     "      (((UNIX_TIMESTAMP(now()) - ".
