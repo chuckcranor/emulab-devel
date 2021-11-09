@@ -110,7 +110,7 @@ class Paramset
         if (ISADMIN()) {
             return 1;
         }
-	if ($this->ispublic() || $this->isCreator($user)) {
+	if ($this->public() || $this->isCreator($user)) {
 	    return 1;
 	}
 	# Otherwise a project membership test.
