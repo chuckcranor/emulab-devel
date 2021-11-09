@@ -37,6 +37,7 @@
 }
 .frequency-graph .tooltip-incident {
     stroke: green;
+    color: green;
 }
 .frequency-graph .tooltip-popover .table-condensed > thead > tr > th,
 .frequency-graph .tooltip-popover .table-condensed > tbody > tr > th,
