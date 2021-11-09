@@ -17,7 +17,7 @@ window.ShowFrequencyGraph = (function ()
 	var parentWidth  = $(selector).width();
 	var parentHeight = $(selector).height();
 	// Not all data files have the incident value.
-	var hasIncident  = (_.has(data[0], "incident") ? true : false);
+	var hasIncident  = false;
 	var lineI;
 
 	var margin  = {top: 20, right: 20, bottom: 130, left: 55};
@@ -311,7 +311,7 @@ window.ShowFrequencyGraph = (function ()
 	var result = [];
 	var bins   = [];
 	// Not all data files have the incident value.
-	var hasIncident  = (_.has(data[0], "incident") ? true : false);
+	var hasIncident  = false;
 	console.info("CreateBins: ", data);
 
 	_.each(data, function (d, index) {
@@ -392,7 +392,7 @@ window.ShowFrequencyGraph = (function ()
 	var parentHeight = $(selector).parent().height();
 	var ParentTop    = $(selector).parent().position().top;
 	var ParentLeft   = $(selector).parent().position().left;
-	var hasIncident  = (_.has(data[0], "incident") ? true : false);
+	var hasIncident  = false;
 	var lineI;
 
 	// Clear old graph
