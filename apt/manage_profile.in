@@ -2059,7 +2059,12 @@ sub ParamSet()
 	}
     }
     elsif ($profile->repourl()) {
-	$query .= ",reporef=" . DBQuoteSpecial($reporef);
+	if (defined($instance)) {
+	    $query .= ",reporef=" . DBQuoteSpecial($instance->reporef());
+	}
+	else {
+	    $query .= ",reporef=" . DBQuoteSpecial($reporef);
+	}
     }
     $query_result = DBQueryWarn($query);
     if (!$query_result) {
