@@ -493,16 +493,29 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     if (isset($rerun_instance) || isset($rerun_paramset)) {
         if (isset($rerun_paramset)) {
+            # This might be the private hashkey, send it along. 
             echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
+            if ($profile->repourl()) {
+                $phash    = $rerun_record->repohash();
+                $prefspec = $rerun_record->reporef();
+            
+                if ($rerun_record->IsBound()) {
+                    echo "    window.TARGET_REFHASH = '$phash';\n";
+                }
+                else {
+                    echo "    window.TARGET_REFHASH = null;\n";
+                }
+                echo "    window.TARGET_REFSPEC = '$prefspec';\n";
+            }
         }
         else {
             echo "    window.RERUN_INSTANCE = '$rerun_instance';\n";
-        }
-        if ($profile->repourl()) {
-            $hash    = $rerun_record->repohash();
+            if ($profile->repourl()) {
+                $hash    = $rerun_record->repohash();
             
-            echo "    window.TARGET_REFHASH = '$hash';\n";
-            echo "    window.TARGET_REFSPEC = null;\n";
+                echo "    window.TARGET_REFHASH = '$hash';\n";
+                echo "    window.TARGET_REFSPEC = null;\n";
+            }
         }
     }
     echo "    window.USENEWSCHEDULE = $usenewschedule;\n";

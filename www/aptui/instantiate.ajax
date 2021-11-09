@@ -79,8 +79,7 @@ function Do_GetProfile()
                             'reporef'     => ($profile->repourl() ?
                                               $profile->reporef() : ""),
                             'repohash'    => ($profile->repourl() ?
-                                              substr($profile->repohash(),0,8)
-                                              : ""),
+                                              $profile->repohash() : ""),
                             'newgenilib'  => $profile->UseNewGeniLib(),
 			    'amdefault'   => $amdefault));
 }
@@ -155,7 +154,7 @@ function Do_GetParameters()
                 return;
             }
         }
-        if (!$record->CanView($this_user)) {
+        if (! ($record->CanView($this_user) || ISADMIN())) {
             SPITAJAX_ERROR(1, "Not enough permission to view instance");
             return;
         }
