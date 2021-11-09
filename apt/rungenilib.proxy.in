@@ -113,7 +113,7 @@ if (defined($options{"W"})) {
     $warningsfatal = 1;
 }
 if (defined($options{"N"})) {
-    $GENILIB .= ".new";
+#    $GENILIB .= ".new";
     $ENV{"PYTHONPATH"} = $GENILIB;
 }
 if (defined($options{"J"})) {
