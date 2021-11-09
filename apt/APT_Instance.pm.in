@@ -3419,13 +3419,22 @@ sub DESTROY {
 sub webtask($)
 {
     my ($self) = @_;
+    my $webtask;
 
     return $self->{'WEBTASK'}
         if (defined($self->{'WEBTASK'}));
 
-    my $webtask = WebTask->Lookup($self->webtask_id());
-    return undef
-	if (!defined($webtask));
+    if (defined($self->webtask_id())) {
+	$webtask = WebTask->Lookup($self->webtask_id());
+    }
+    if (!defined($webtask)) {
+	$webtask = WebTask->Create();
+	return undef
+	    if (!defined($webtask));
+
+	$self->Update({"webtask_id" => $webtask->task_id()}) == 0
+	    or return undef;
+    }
     $self->{'WEBTASK'} = $webtask;
     $webtask->AutoStore(1);
     return $webtask;
