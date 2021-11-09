@@ -217,6 +217,14 @@ if (-x "$ANACRON") {
 }
 
 #
+# Update man-db.
+#
+if (-x "/usr/bin/mandb") {
+    print "Updating man db ...\n";
+    system("/usr/bin/mandb -q");
+}
+
+#
 # Create locate and makewhatis DBs, which are no longer in weekly cron.
 #
 if (-x "/etc/cron.pend/makewhatis.cron") {
