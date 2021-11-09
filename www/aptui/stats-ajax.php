@@ -77,11 +77,12 @@ if ($query_result) {
 # Number of experiments ever
 #
 $query_result =
-    DBQueryFatal("select count(*) from apt_instance_history ".
-                 "where portal='$portal'");
-if ($query_result) {
-    $row = mysql_fetch_array($query_result);
-    $blob["total_experiments"] = $row[0];
+    DBQueryFatal("select portal,count(*) as count from apt_instance_history ".
+                 "group by portal");
+while ($row = mysql_fetch_array($query_result)) {
+    if ($row["portal"] == $portal) {
+        $blob["total_experiments"] = $row["count"];
+    }
 }
 # Add classic to emulab portal numbers,
 if ($portal == "emulab") {
@@ -118,11 +119,8 @@ if ($portal == "emulab") {
 else {
     $query_result =
         DBQueryFatal("select count(distinct creator_idx) from ".
-                     " ((select creator_idx from apt_instances ".
-                     "   where portal='$PORTAL_GENESIS')".
-                     "  union ".
-                     "  (select creator_idx from apt_instance_history ".
-                     "   where portal='$PORTAL_GENESIS')) as c");
+                     "     apt_instance_history ".
+                     "   where portal='$PORTAL_GENESIS';");
 }
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
