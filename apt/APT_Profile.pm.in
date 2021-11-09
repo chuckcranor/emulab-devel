@@ -2253,7 +2253,7 @@ sub CheckSpectrumReservations($$$$$$;$$)
 		    $nodetype = $node->NodeTypeInfo();
 		}
 	    }
-	    if (defined($nodetype) && 
+	    if (defined($nodetype) && !$project->expert_mode() &&
 		$nodetype->requires_frequency_reservation()) {
 		$noresokay = 0;
 	    }
