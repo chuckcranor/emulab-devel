@@ -1952,7 +1952,7 @@ $(function ()
 		    data.unapproved = parseInt(data.unapproved);
 		}
 		else {
-		    data.unapproved = 0;
+		    data["unapproved"] = 0;
 		}
 	    }
 
