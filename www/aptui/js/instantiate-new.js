@@ -279,6 +279,11 @@ $(function ()
 	    container: 'body',
 	});
 
+	// It is okay to initialize this, we do not show the copy
+	// button unless appropriate. 
+	CopyProfile.InitCopyProfile('#profile-copy-button',
+				    window.PROFILE, _.keys(projlist));
+
 	// Format the step labels across the top to match the panel widths.
 	$('#stepsContainer .steps').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
 	$('#stepsContainer .actions').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
@@ -1686,14 +1691,12 @@ $(function ()
 		.attr("href", "show-profile.php?profile=" + selected_profile);
 
 	    if (window.CANCOPY && !profile_blob.fromrepo) {
-		$('#profile_copy_button')
-		    .attr("href", "manage_profile.php?action=copy&uuid=" +
-			  selected_uuid);
-		$('#profile_copy_button').removeClass("hidden");
+		CopyProfile.SwitchProfile(selected_profile);
+		$('#profile-copy-button').removeClass("hidden");
 	    }
 	    else {
 		// Not allowed to copy a repo based profile.
-		$('#profile_copy_button').addClass("hidden");
+		$('#profile-copy-button').addClass("hidden");
 	    }
 	    if (profile_blob.fromrepo) {
 		$('#selected_profile_text')

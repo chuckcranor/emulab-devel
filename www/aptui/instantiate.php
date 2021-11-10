@@ -559,6 +559,7 @@ AddLibrary("js/resgraphs.js");
 AddLibrary("js/gitrepo.js");
 AddLibrary("js/paramsets.js");
 AddLibrary("js/list-resgroups.js");
+AddLibrary("js/copy-profile.js");
 SPITREQUIRE("js/instantiate-new.js");
 
 echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
@@ -567,6 +568,7 @@ AddTemplateList(array("instantiate-new",
                       "aboutapt", "aboutcloudlab", "aboutpnet",
                       "waitwait-modal", "rspectextview-modal",
                       "picker-template","reservation-graph",
-                      "save-paramset-modal", "resgroup-list"));
+                      "save-paramset-modal", "resgroup-list",
+                      "copy-profile-modal"));
 SPITFOOTER();
 ?>
