@@ -4,6 +4,7 @@
 #
 # PROVIDE: geniboot
 # REQUIRE: tbdbcheck pubsub
+# REQUIRE: portalpsd
 # BEFORE: testbed
 
 case "$1" in

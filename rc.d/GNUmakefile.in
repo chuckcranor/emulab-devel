@@ -140,6 +140,14 @@ $(INSTALL_RCDIR)/capture: capture.sh
 	-mkdir -p $(INSTALL_RCDIR)
 	$(INSTALL_PROGRAM) capture.sh $@
 
+$(INSTALL_RCDIR)/geniboot.sh: geniboot.sh
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_RCDIR)
+ifeq ($(TBMAINSITE),0)
+	sed -i "" -e '/portalpsd/d' geniboot.sh
+endif
+	$(INSTALL_PROGRAM) geniboot.sh $@
+
 #
 # Well, this is awkward.  Make sure we don't try to install anything from
 # a dev tree both because it doesn't make any sense and because it would
