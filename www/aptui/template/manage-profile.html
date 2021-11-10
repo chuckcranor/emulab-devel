@@ -222,26 +222,15 @@
 			    Click for more info.">
         Share
       </button>
-      <a class='btn btn-primary btn-xs'
-         id='profile_copy_button'
-         style='margin-right: 5px;'
-	 <% if (fromrepo) { %>
-     	 data-toggle='modal'
-	 data-target='#copy-repobased-profile-modal'
-	 <% } else { %>
-	 href='manage_profile.php?action=copy&uuid=<%= version_uuid %>'
-	 data-toggle='popover'
-	 data-html='true'
-	 data-content="When you <em>copy</em> (instead of
-		       clone), you are creating a new profile that
-		       uses the same source code and metadata (description,
-		       instructions) as the original profile, but without
-		       creating a new disk image. Instead, the new profile
-		       uses whatever images the original profile uses."
-	 <% } %>
-         type='button'>
-        Copy
-      </a>
+      <button id="copy-profile-button"
+	      class='btn btn-primary btn-xs'
+	      style='margin-right: 5px;'
+	      <% if (fromrepo) { %>
+     	      data-toggle='modal'
+	      data-target='#copy-repobased-profile-modal'
+	      <% } %>
+	      type='button'>Copy
+      </button>
       <% if (!disabled && gotrspec) { %>
 	<% 	var url = "instantiate.php?profile=" +
 	version_uuid + "&from=manage-profile"; %>
@@ -1380,6 +1369,7 @@ Instructions are optional.
   <div id='copy_repobased_profile_div'></div>
   <div id='profile-imagelist-modal-div'></div>
   <div id='confirm-delete-profile-div'></div>
+  <div id='copy-profile-modal-div'></div>
 </div>
 <% if (viewing && Object.keys(versions).length > 1) { %>
 <div class='row'>

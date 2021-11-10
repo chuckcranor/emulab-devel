@@ -88,6 +88,7 @@ $(function ()
 	    isadmin:		window.ISADMIN,
 	    isguest:		window.ISGUEST,
 	    canedit:            window.CANEDIT,
+	    cancopy:            window.CANCOPY,
 	    disabled:           window.DISABLED,
 	    paramsets:          window.PARAMSETS,
 	    withpublishing:     window.WITHPUBLISHING,
@@ -103,6 +104,13 @@ $(function ()
 	$('#rspectext_div').html(rspectextviewString);
 	$('#copy_repobased_profile_div').html(copyrepoString);
 	$('#share_div').html(shareTemplate({formfields: fields}))
+	if (window.CANCOPY) {
+	    var plist = JSON.parse(_.unescape(
+		$('#projects-json')[0].textContent));
+	    
+	    CopyProfile.InitCopyProfile('#copy-profile-button',
+					window.PROFILE, plist);
+	}
 
 	// Bind the copy to clipbload button in the share modal
 	window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");

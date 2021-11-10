@@ -39,6 +39,7 @@ use JSON;
 sub usage()
 {
     print("Usage: manage_profile create [-s uuid | -c uuid] <xmlfile>\n");
+    print("Usage: manage_profile duplicate <copyuuid> <pid> <name>\n");
     print("Usage: manage_profile update <profile> <xmlfile>\n");
     print("Usage: manage_profile updatefromrepo <profile>\n");
     print("Usage: manage_profile publish <profile>\n");
@@ -113,6 +114,7 @@ use EmulabFeatures;
 sub fatal($);
 sub UserError($);
 sub CreateProfile();
+sub DuplicateProfile();
 sub ModifyProfile();
 sub UpdateProfileFromRepo();
 sub DeleteProfile();
@@ -210,6 +212,9 @@ if ($action eq "update") {
 }
 elsif ($action eq "updatefromrepo") {
     exit(UpdateProfileFromRepo());
+}
+elsif ($action eq "duplicate") {
+    exit(DuplicateProfile());
 }
 elsif ($action eq "delete") {
     exit(DeleteProfile());
@@ -640,6 +645,86 @@ sub CreateProfile()
 			"UUID:     ". $profile->uuid() . "\n".
 			"URL:      ". $profile->AdminURL() . "\n");
 
+    return 0;
+}
+
+#
+# Duplicate a profile.
+#
+sub DuplicateProfile()
+{
+    my $optlist    = "";
+    my $usererror;
+    my %errors = ();
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV != 3);
+
+    my ($copyuuid,$pid,$name) = @ARGV;
+    
+    #
+    # We need to make sure the project exists and is a valid project for
+    # the creator (current user). 
+    #
+    my $project = Project->Lookup($pid);
+    if (!defined($project)) {
+	UserErrorSane({"pid" => "No such project exists"})
+    }
+    elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
+	UserErrorSane({"pid" => "Not enough permission in this project"});
+    }
+    if (! TBcheck_dbslot($name, "apt_profiles",
+			 "name", TBDB_CHECKDBSLOT_ERROR)) {
+	UserErrorSane({"name" => TBFieldErrorString()});
+    }
+    my $profile = APT_Profile->Lookup($copyuuid);
+    if (!defined($profile)) {
+	UserErrorSane({"profile" => "No such profile"});
+    }
+    # No permission check, lets assume caller checked.
+
+    if (defined(APT_Profile->Lookup($project->pid(), $name))) {
+	UserErrorSane({"name" => "Already in use"});
+    }
+    my $args = {
+	"name"    => $name,
+    };
+    $args->{'rspec'}     = $profile->rspec() if ($profile->rspec());
+    $args->{'script'}    = $profile->script() if ($profile->script());
+    $args->{'paramdefs'} = $profile->paramdefs() if ($profile->paramdefs());
+    $args->{'portal_converted'} = $profile->portal_converted();
+    
+    $profile = APT_Profile->Create($profile, $project,
+				   $this_user, $args, \$usererror);
+    if (!defined($profile)) {
+	if (defined($usererror)) {
+	    UserErrorSane({"name" => $usererror});
+	}
+	fatal("Could not create new profile");
+    }
+    my $portalLogs =
+	($project->isAPT() ? "aptnet-logs\@flux.utah.edu" :
+	 $project->isCloud() ? "cloudlab-logs\@flux.utah.edu" : 
+	 $project->isPNet() ? "phantomnet-logs\@flux.utah.edu" :
+	 $project->isPowder() ? "powder-logs\@flux.utah.edu" :
+	 $TBLOGS);
+
+    $project->SendEmail($portalLogs, "New Profile Created",
+			"Name:     ". $profile->versname() . "\n".
+			"User:     ". $profile->creator() . "\n".
+			"Project:  ". $profile->pid() .
+			" (" . $project->Brand()->brand() . ")\n".
+			"UUID:     ". $profile->uuid() . "\n".
+			"URL:      ". $profile->AdminURL() . "\n");
+    
+    if (defined($webtask)) {
+	$webtask->uuid($profile->uuid());
+    }
+    print "New profile created: " . $profile->uuid() . "\n";
     return 0;
 }
 

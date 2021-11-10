@@ -199,6 +199,9 @@ $(function ()
 		    document.execCommand("copy");
 		});
 	}
+	// Copy profile.
+	CopyProfile.InitCopyProfile('#copy-profile-button',
+				    version_uuid, projlist);
 	
 	//
 	// Fix for filestyle problem; not a real class I guess, it

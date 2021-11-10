@@ -161,16 +161,9 @@ function SPITFORM($formfields, $errors)
     echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
 
     # Pass project list through. Need to convert to list without groups.
-    # When editing, pass through a single value. The template treats a
-    # a single value as a read-only field.
     $plist = array();
-    if ($viewing) {
-	$plist[] = $formfields["profile_pid"];
-    }
-    else {
-	while (list($project) = each($projlist)) {
-	    $plist[] = $project;
-	}
+    while (list($project) = each($projlist)) {
+        $plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";
     echo htmlentities(json_encode($plist));
@@ -252,13 +245,14 @@ function SPITFORM($formfields, $errors)
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
     REQUIRE_GENILIB_EDITOR();
+    AddLibrary("js/copy-profile.js");
     AddLibrary("js/gitrepo.js");
     AddLibrary("js/paramhelp.js");
     AddLibrary("js/profile-support.js");
     AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
     SPITREQUIRE("js/manage_profile.js");
 
-    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker', "copy-repobased-profile"));
+    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker', "copy-repobased-profile", "copy-profile-modal"));
     SPITFOOTER();
 }
 

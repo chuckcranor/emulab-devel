@@ -136,7 +136,11 @@ $routing = array("geni-login" =>
 						 "SearchProfiles" =>
                                                      "Do_SearchProfiles",
 						 "GetProfile" =>
-                                                     "Do_GetProfile")),
+                                                     "Do_GetProfile",
+						 "Duplicate" =>
+                                                     "Do_Duplicate",
+                              )
+                        ),
 		 "gitrepo" =>
 			array("file"    => "gitrepo.ajax",
 			      "guest"   => true,

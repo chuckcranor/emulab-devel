@@ -456,6 +456,92 @@ function Do_Create()
 }
 
 #
+# Duplicate Profile,
+#
+function Do_Duplicate()
+{
+    global $this_user;
+    global $ajax_args;
+    global $TB_PROJECT_CREATEEXPT;
+    $errors = array();
+
+    if (!isset($ajax_args["profile"])) {
+	SPITAJAX_ERROR(1, "Missing profile");
+	return;
+    }
+    $target = $ajax_args["profile"];
+
+    if (! (IsValidUUID($target) || IsValidHash($target))) {
+	SPITAJAX_ERROR(1, "Not a valid profile target");
+	return;
+    }
+    $profile = Profile::Lookup($target);
+    if (!$profile) {
+	SPITAJAX_ERROR(1, "No such profile $target");
+	return;
+    }
+    if (!isset($ajax_args["name"])) {
+        $errors["name"] = "Missing profile name";
+    }
+    elseif (! TBcheck_dbslot($ajax_args["name"], "apt_profiles", "name",
+                         TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+        $errors["name"] = TBFieldErrorString();
+    }
+    if (!isset($ajax_args["pid"])) {
+	$errors["pid"] = "Missing profile pid";
+    }
+    elseif (! TBcheck_dbslot($ajax_args["pid"], "apt_profiles", "pid",
+                         TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+        $errors["pid"] = TBFieldErrorString();
+    }
+    elseif (! ($project = Project::Lookup($ajax_args["pid"]))) {
+        $errors["pid"] = "No such project";
+    }
+    elseif (! $project->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
+        $errors["pid"] = "Not enough permission";
+    }
+    if (count($errors)) {
+	SPITAJAX_ERROR(2, $errors);
+	return;
+    }
+    $name = escapeshellarg($ajax_args["name"]);
+    $pid  = $ajax_args["pid"];
+
+    #
+    # Call out to the backend.
+    #
+    $webtask    = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+    $command    = "webmanage_profile -t $webtask_id duplicate ";
+    $command   .= $profile->uuid() . " $pid $name";
+
+    $retval = SUEXEC($this_user->uid(), $project->unix_gid(), $command,
+                     SUEXEC_ACTION_IGNORE);
+
+    $webtask->Refresh();
+    if ($retval) {
+        if ($retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal Error; please try again later.");
+        }
+        else {
+            if ($webtask->TaskValue("errors")) {
+                SPITAJAX_ERROR(2, $webtask->TaskValue("errors"));
+            }
+            else {
+                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                SPITAJAX_ERROR(-1, "Internal Error; please try again later.");
+            }
+        }
+        $webtask->Delete();
+        return;
+    }
+    $newuuid = $webtask->TaskValue("uuid");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($newuuid);
+}
+
+#
 # Return clone status.
 #
 function Do_CloneStatus()

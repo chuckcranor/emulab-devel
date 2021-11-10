@@ -32,6 +32,7 @@ $page_title = "Show Profile";
 
 $isadmin = 0;
 $isguest = 0;
+$ishashed= 0;
     
 #
 # Get current user.
@@ -95,15 +96,17 @@ if ($isguest) {
     $history      = 0;
     $activity     = 0;
     $canedit      = 0;
-    $disabled     = 0;
+    $cancopy      = 0;
+    $disabled     = ($profile->isDisabled() ? 1 : 0);
     $paramsets    = 0;
 }
 else {
     $history      = ($profile->HasHistory() ? 1 : 0);
     $activity     = ($profile->HasActivity($this_user) ? 1 : 0);
-    $paramsets    = ($profile->HasParamsets($this_user) ? 1 : 0);
     $canedit      = ($profile->CanEdit($this_user) ? 1 : 0);
     $disabled     = ($profile->isDisabled() ? 1 : 0);
+    $cancopy      = ($this_user->webonly() || $ishashed ? 0 : 1);
+    $paramsets    = ($profile->HasParamsets($this_user) ? 1 : 0);
 }
 
 # Place to hang the toplevel template.
@@ -128,12 +131,14 @@ echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-vim.
 echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
 
 echo "<script type='text/javascript'>\n";
+    echo "    window.PROFILE      = '$profile_uuid';\n";
 echo "    window.PROFILE_UUID = '$profile_uuid';\n";
 echo "    window.VERSION_UUID = '$version_uuid';\n";
 echo "    window.AJAXURL      = 'server-ajax.php';\n";
 echo "    window.ISGUEST      = $isguest;\n";
 echo "    window.ISADMIN      = $isadmin;\n";
 echo "    window.CANEDIT      = $canedit;\n";
+echo "    window.CANCOPY      = $cancopy;\n";
 echo "    window.DISABLED     = $disabled;\n";
 echo "    window.HISTORY      = $history;\n";
 echo "    window.ACTIVITY     = $activity;\n";
@@ -143,6 +148,19 @@ echo "    window.WITHPUBLISHING = $WITHPUBLISHING;\n";
 echo "    window.EDITOR_READONLY = true;\n";
 echo "</script>\n";
 
+# See what projects the user can make copies in.
+if ($cancopy) {
+    $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
+
+    # Need to convert to list without groups.
+    $plist = array();
+    while (list($project) = each($projlist)) {
+        $plist[] = $project;
+    }
+    echo "<script type='text/plain' id='projects-json'>\n";
+    echo htmlentities(json_encode($plist));
+    echo "</script>\n";
+}
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
@@ -152,13 +170,14 @@ REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 REQUIRE_MARKED();
 REQUIRE_GENILIB_EDITOR();
+AddLibrary("js/copy-profile.js");
 AddLibrary("js/gitrepo.js");
 AddLibrary("js/paramhelp.js");
 SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
             "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>");
 
-AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "oops-modal", "share-modal", "gitrepo-picker", "copy-repobased-profile"));
+AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "oops-modal", "share-modal", "gitrepo-picker", "copy-repobased-profile", "copy-profile-modal"));
 SPITFOOTER();
 
 ?>
