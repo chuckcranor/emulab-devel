@@ -18,7 +18,8 @@ $(function ()
     var profilelist   = null;
     var recentcount   = 5;
     var amdefault     = null;
-    var selected_uuid = null;
+    var selected_profile = null;
+    var selected_uuid    = null;
     var selected_rspec   = null;
     var selected_version = null;
     var ispprofile    = 0;
@@ -120,6 +121,7 @@ $(function ()
 	    projlist = decodejson('#projects-json');
 	}
 	profilelist = decodejson('#profiles-json');
+	console.info("profilelist", profilelist);
 	var profileToArray = _.pairs(profilelist);
 	prunetypes = decodejson('#prunelist-json');
 	console.info(prunetypes);
@@ -127,6 +129,7 @@ $(function ()
 	    radioinfo = decodejson('#radioinfo-json');
 	    console.info("radioinfo", radioinfo);
 	}
+	console.info("formfields", decodejson('#form-json'));
 
 	/*
 	 * Sort the entire list by recently used if a registered user,
@@ -187,7 +190,6 @@ $(function ()
 	    profileuuid:        window.PROFILEUUID,     
 	    profilevers:        window.PROFILEVERS,     
 	    showpicker:         showpicker,
-	    cancopy:            window.CANCOPY,
 	    fromrepo:           fromrepo,
 	    clustername:        window.PORTAL_NAME,
 	    admin:		isadmin,
@@ -319,8 +321,6 @@ $(function ()
 	    var selected = $('#quickvm_topomodal .selected');
 	    PickerEvent("select", selected, $('#profile_name').scrollTop());
 	    ChangeProfileSelection(selected);
-	    selected_uuid = selected.attr('value');
-	    console.log(selected_uuid);
 	    $('#quickvm_topomodal').modal('hide');
 	    $('.steps .error').removeClass('error');
 	});
@@ -342,31 +342,6 @@ $(function ()
 	    UpdateGroupSelector();
 	    UpdateImageConstraints();
 	    return true;
-	});
-	$('#profile_copy_button').click(function (event) {
-	    event.preventDefault();
-	    if (!registered) {
-		sup.SpitOops("oops", "You must be a registered user to copy " +
-			     "a profile.");
-		return;
-	    }
-	    window.APT_OPTIONS.gaButtonEvent(event);
-	    var url = "manage_profile.php?action=copy&uuid=" + selected_uuid;
-	    window.location.replace(url);
-	    return false;
-	});
-
-	$('#profile_show_button').click(function (event) {
-	    event.preventDefault();
-	    if (!registered) {
-		sup.SpitOops("oops", "You must be a registered user to view " +
-			     "profile details.");
-		return;
-	    }
-	    window.APT_OPTIONS.gaButtonEvent(event);
-	    var url = "show-profile.php?uuid=" + selected_uuid;
-	    window.location.replace(url);
-	    return false;
 	});
 
 	$('#show_xml_modal_button').click(function (event) {
@@ -588,6 +563,7 @@ $(function ()
 		    $('#stepsContainer-p-1 > div')
 			.attr('style','display:block');
 		    ppstart.StartPP({
+			profile      : selected_profile,
 			uuid         : selected_uuid,
 			ppdivname    : "pp-container",
 			registered   : registered,
@@ -1669,8 +1645,6 @@ $(function ()
       editor.show(selected_rspec);
     }
 
-
-
     function ChangeProfileSelection(selectedElement) {
 	if (!$(selectedElement).hasClass('current')) {
 	    $('#profile_name li').each(function() {
@@ -1697,7 +1671,8 @@ $(function ()
 
 	    ispprofile       = profile_blob.ispprofile;
 	    isscript         = profile_blob.isscript;
-	    selected_uuid    = profile_value;
+	    selected_profile = profile_value;
+	    selected_uuid    = profile_blob.uuid;
 	    selected_rspec   = SetClusters(profile_blob.rspec);
 	    selected_version = profile_blob.version;
 	    amdefault        = profile_blob.amdefault;
@@ -1707,10 +1682,20 @@ $(function ()
 	    else {
 		$('#save_paramset_button').addClass("hidden");
 	    }
+	    $('#profile_show_button')
+		.attr("href", "show-profile.php?profile=" + selected_profile);
 
-	    // Not allowed to copy a repo based profile.
-	    if (profile_blob.fromrepo) {
+	    if (window.CANCOPY && !profile_blob.fromrepo) {
+		$('#profile_copy_button')
+		    .attr("href", "manage_profile.php?action=copy&uuid=" +
+			  selected_uuid);
+		$('#profile_copy_button').removeClass("hidden");
+	    }
+	    else {
+		// Not allowed to copy a repo based profile.
 		$('#profile_copy_button').addClass("hidden");
+	    }
+	    if (profile_blob.fromrepo) {
 		$('#selected_profile_text')
 		    .html(profile_name + " (Repohash: " +
 			  profile_blob.repohash + ")");
@@ -1721,7 +1706,6 @@ $(function ()
 	    else {
 		window.PROFILE_REFSPEC = null;
 		window.PROFILE_REFHASH = null;
-		$('#profile_copy_button').removeClass("hidden");
 		fromrepo = false;
 	    }
 	    setStepsMotion(true);
@@ -1778,7 +1762,7 @@ $(function ()
 	}
 	var $xmlthing = sup.CallServerMethod(ajaxurl,
 					     "instantiate", "GetProfile",
-					     {"uuid" : profile});
+					     {"profile" : profile});
 
 	/*
 	 * If a repo-based and we got a specific branch/tag/hash, we have to
@@ -1801,7 +1785,10 @@ $(function ()
 	    window.TARGET_REPOREF = target;
 
 	    $xmlthing.done(function(json) {
-		gitrepo.GetRepoSource(profile, target, function(source, hash) {
+		gitrepo.GetRepoSource({
+		    "uuid"     : profile,
+		    "refspec"  : target,
+		    "callback" : function(source, hash) {
 		    var pythonRe = /^import/m;
 
 		    // For the form that is submitted.
@@ -1844,7 +1831,7 @@ $(function ()
 			$('#rspec_textarea').val(source);
 			callback(json);
 		    }
-		});
+		}})
 	    });
 	}
 	else {
@@ -2918,7 +2905,8 @@ $(function ()
 	
 	$('#request-license-button').click(function (event) {
 	    sup.HideModal('#request-licenses-modal');
-	    sup.CallServerMethod(null, "instantiate", "RequestLicenses", null,
+	    sup.CallServerMethod(null, "instantiate", "RequestLicenses",
+				 {"licenses" : JSON.stringify(licenses)},
 				 function (json) {
 				     if (json.code) {
 					 alert("Could not request resource " +

@@ -37,18 +37,22 @@ function Do_Create()
     $opts = "";
     $args = "";
     
-    if (!isset($ajax_args["profile_uuid"])) {
+    if (!isset($ajax_args["profile"])) {
 	SPITAJAX_ERROR(-1, "Missing profile uuid");
 	return;
     }
-    $profile_uuid = $ajax_args["profile_uuid"];
-    if (!IsValidUUID($profile_uuid)) {
-	SPITAJAX_ERROR(-1, "Not a valid profile uuid");
+    if (! (IsValidUUID($ajax_args["profile"]) ||
+           IsValidHash($ajax_args["profile"]))) {
+	SPITAJAX_ERROR(-1, "Not a valid profile");
 	return;
     }
-    $profile = Profile::Lookup($profile_uuid);
+    $profile = Profile::Lookup($ajax_args["profile"]);
     if (!$profile) {
 	SPITAJAX_ERROR(-1, "No such profile");
+	return;
+    }
+    if (! ($profile->CanView($this_user) || IsValidHash($target))) {
+	SPITAJAX_ERROR(1, "Not enough permission for the profile");
 	return;
     }
     if (! (isset($ajax_args["instance_uuid"]) ||
@@ -91,6 +95,15 @@ function Do_Create()
     if (isset($ajax_args["public"]) && $ajax_args["public"] == 1) {
         $public = 1;
         $opts  .= "-p ";
+    }
+    $global = 0;
+    if (isset($ajax_args["global"]) && $ajax_args["global"] == 1) {
+        $global = 1;
+        $opts  .= "-g ";
+        if (!$public) {
+            $public = 1;
+            $opts  .= "-p ";
+        }
     }
     if (isset($ajax_args["replace"]) && $ajax_args["replace"] == 1) {
         $opts  .= "-r ";
@@ -138,6 +151,7 @@ function Do_Create()
     }
     $safe_name = escapeshellarg($name);
     $safe_description = escapeshellarg($description);
+    $profile_uuid = $profile->uuid();
 
     $webtask    = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
@@ -164,13 +178,26 @@ function Do_Create()
     }
     $newuuid = $webtask->TaskValue("uuid");
     $webtask->Delete();
-    if ($bound || $profile->repourl()) {
-        $url = $profile->URL(true);
+    $paramset = Paramset::Lookup($newuuid);
+    if (!$paramset) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        SPITAJAX_ERROR(-1, "Internal error, we have been notified");
+        return;
+    }
+    if ($bound) {
+        $url = $profile->URL();
     }
     else {
-        $url = $profile->ProfileURL(true);
+        $url = $profile->ProfileURL();
     }
-    $url .= "&rerun_paramset=${newuuid}";
+    $url .= "&rerun_paramset=";
+
+    if ($public) {
+        $url .= $paramset->uuid();
+    }
+    else {
+        $url .= $paramset->hashkey();
+    }
     SPITAJAX_RESPONSE($url);
 }
 

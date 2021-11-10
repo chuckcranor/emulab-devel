@@ -29,12 +29,16 @@ class Paramset
     var $profile;
     var $project;
 
-    function Paramset($uuid) {
+    function Paramset($token) {
         $query_result = null;
         
-	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $uuid)) {
+	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $token)) {
             $query_result = DBQueryFatal("select * from apt_parameter_sets ".
-                                         "where uuid='$uuid'");
+                                         "where uuid='$token'");
+        }
+        elseif (IsValidHash($token)) {
+            $query_result = DBQueryFatal("select * from apt_parameter_sets ".
+                                         "where hashkey='$token'");
         }
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->paramset = null;
@@ -55,11 +59,13 @@ class Paramset
     function name()	    { return $this->field('name'); }
     function description()  { return $this->field('description'); }
     function public()	    { return $this->field('public'); }
+    function global()	    { return $this->field('global'); }
     function profileid()    { return $this->field('profileid'); }
     function version_uuid() { return $this->field('version_uuid'); }
     function reporef()	    { return $this->field('reporef'); }
     function repohash()	    { return $this->field('repohash'); }
     function bindings()	    { return $this->field('bindings'); }
+    function hashkey()	    { return $this->field('hashkey'); }
 
     # Profile of paramset
     function Profile() {
@@ -153,6 +159,83 @@ class Paramset
 	    return 1;
         }
         return 0;
+    }
+
+    #
+    # The second arg is to avoid looking up same profile repeatedly. 
+    #
+    function Blob($user, $profile = null)
+    {
+        if (!$profile) {
+            if ($this->version_uuid()) {
+                $profile = Profile::Lookup($this->version_uuid());
+            }
+            else {
+                $profile = Profile::Lookup($this->profileid());
+            }
+            if (!$profile) {
+                return null;
+            }
+        }
+        $blob = array(
+            "uuid"                 => $this->uuid(),
+            "name"                 => $this->name(),
+            "description"          => $this->description(),
+            "public"               => $this->public(),
+            "global"               => $this->global(),
+            "version_uuid"         => $this->version_uuid(),
+            "bound"                => $this->version_uuid() ? true : false,
+            "created"              => DateStringGMT($this->created()),
+            "bindings"             => json_decode($this->bindings()),
+            "profile_uuid"         => $profile->profile_uuid(),
+            "profile_version_uuid" => $profile->uuid(),
+            "profile_name"         => $profile->name(),
+            "profile_version"      => $profile->version(),
+            "repourl"              => $profile->repourl(),
+            "reporef"              => $profile->reporef(),
+            "repohash"             => $profile->repohash(),
+        );
+        $runurl = "instantiate.php?profile=";
+	  
+        if ($this->version_uuid()) {
+	    if ($profile->repourl()) {
+                $runurl .= $profile->profile_uuid();
+	    }
+	    else {
+                $runurl .= $this->version_uuid();
+	    }
+        }
+        else {
+	    $runurl .= $profile->profile_uuid();
+        }
+        $runurl .= "&rerun_paramset=" . $this->uuid();
+        $blob["run_url"] = $runurl;
+        
+        if ($profile->creator_idx() == $user->uid_idx()) {
+            #
+            # Try and figure out a share URL. To make this simple, not going
+            # to provide a share link if the paramset is for a non-public
+            # profile that belongs to another user.
+            #
+            if ($this->version_uuid()) {
+                # Bound paramset
+                $url = $profile->URL();
+            }
+            else {
+                $url = $profile->ProfileURL();
+            }
+            $url .= preg_match("\?", $url) ? "&" : "?";
+            $url .= "rerun_paramset=";
+            
+            if ($this->public()) {
+                $url .= $this->uuid();
+            }
+            else {
+                $url .= $this->hashkey();
+            }
+            $blob["share_url"] = $url;
+        }
+        return $blob;
     }
 }
 ?>

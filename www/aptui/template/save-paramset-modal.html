@@ -16,20 +16,22 @@
 	
 	<div style="margin-top: 20px;">
           <center>
-	    Please provide an alphanumeric name for this parameter set:
 	    <div>
+	      Please provide an alphanumeric name for this parameter set:
 	      <input id="paramset-name" style="width: 20%;"
-		     class="form-control">
+		     class="form-control" placeholder="alphanumeric only">
 	      <div class="text-danger hidden paramset-error name-error"
 		   style="text-align: center;"></div>
 	      <div style="margin-top: 0px">
-		Replace parameter set with this name <b>[1]</b>?
-		<div>
-		  <input id="paramset-replace" type="checkbox"> Yes
+		<div class="checkbox" style="margin-top: 0px;">
+		  <label>
+		    <input id="paramset-replace" type="checkbox">
+		    Replace parameter set with this name <b>[1]</b>?
+		  </label>
 		</div>
 	      </div>
 	    </div>
-	    <div style="margin-top: 10px">
+	    <div style="margin-top: 15px">
 	      Please briefly describe this parameter set to help you remember:
 	      <div>
 		<textarea id="paramset-description" style="width: 80%;"
@@ -38,19 +40,41 @@
 		     style="text-align: center;"></div>
 	      </div>
 	    </div>
-	    <div style="margin-top: 10px">
-	      Make this parameter set public <b>[2]</b>?
-	      <div>
-		<input id="paramset-public" type="checkbox"> Yes
-	      </div>
-	    </div>
-	    <div style="margin-top: 10px">
-	      Bind these parameters to the profile version <b>[3]</b>?
-	      <div>
-		<input id="paramset-bound" type="checkbox"> Yes
-	      </div>
-	    </div>
 	  </center>
+	  <form class="form-horizontal">	
+	    <div class="form-group" style="margin-bottom: 0px;">
+	      <div class="col-sm-offset-4 col-sm-8">
+		<div class="checkbox">
+		  <label>
+		    <input id="paramset-public" type="checkbox">
+		    Make this parameter set public <b>[2]</b>?
+		  </label>
+		</div>
+	      </div>
+	    </div>
+	    <% if (window.ISADMIN) { %>
+	      <div class="form-group" style="margin-bottom: 0px;">
+		<div class="col-sm-offset-4 col-sm-8">
+		  <div class="checkbox">
+		    <label>
+		      <input id="paramset-global" type="checkbox">
+		      Make this parameter set global?
+		    </label>
+		  </div>
+		</div>
+	      </div>
+	    <% } %>
+	    <div class="form-group" style="margin-bottom: 0px;">
+	      <div class="col-sm-offset-4 col-sm-8">
+		<div class="checkbox">
+		  <label>
+		    <input id="paramset-bound" type="checkbox">
+		    Bind these parameters to the profile version <b>[3]</b>?
+		  </label>
+		</div>
+	      </div>		
+	    </div>
+	  </form>
 	</div>
 	<div style="margin-top: 15px;">
           <center>

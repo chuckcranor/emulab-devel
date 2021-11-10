@@ -208,8 +208,8 @@
 		    type='button'>Copy</button>
 	  <% } %>
 	  <% if (gotrspec) { %>
-	    <% 	var url = "instantiate.php?profile=" +
-	    version_uuid + "&from=manage-profile"; %>
+	    <% 	var url = "instantiate.php?profile=" + window.PROFILE +
+	    "&from=manage-profile"; %>
 	    <a class='btn btn-primary btn-xs'
 	       href="<%- url %>"
 	       id='profile_instantiate_button'

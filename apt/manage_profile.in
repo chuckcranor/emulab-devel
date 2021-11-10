@@ -1944,10 +1944,11 @@ sub Bindings()
 #
 sub ParamSet()
 {
-    my $optlist    = "u:m:bpB:prH:R:";
+    my $optlist    = "u:m:bpB:prH:R:g";
     my $bound      = 0;
     my $asparamdefs= 0;
     my $public     = 0;
+    my $global     = 0;
     my $replace    = 0;
     my $reporef;
     my $repohash;
@@ -2065,6 +2066,10 @@ sub ParamSet()
     if (defined($options{"p"})) {
 	$public = 1;
     }
+    if (defined($options{"g"})) {
+	$global = 1;
+	$public = 1;
+    }
     if (defined($options{"r"})) {
 	$replace = 1;
     }
@@ -2107,13 +2112,15 @@ sub ParamSet()
     my $safe_bindings = DBQuoteSpecial($bindings);
     my $safe_descrip  = DBQuoteSpecial($description);
     my $newuuid       = (defined($olduuid) ? $olduuid : NewUUID());
+    my $hashkey       = TBGenSecretKey();
+
     my $refspec;
 
     my $query =
 	($replace ? "replace" : "insert") .
-	" into apt_parameter_sets set created=now(), ".
+	" into apt_parameter_sets set created=now(),hashkey='$hashkey', ".
 	" uuid='$newuuid',uid='$uid',uid_idx='$uid_idx',public='$public', ".
-	" profileid='$profileid',bindings=$safe_bindings, ".
+	" profileid='$profileid',bindings=$safe_bindings,global='$global', ".
 	" name=$safe_name,description=$safe_descrip";
 
     if (!defined($instance) && $profile->repourl()) {

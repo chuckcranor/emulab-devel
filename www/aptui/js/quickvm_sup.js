@@ -297,6 +297,21 @@ function addPopoverClip (id, contentfunction)
     });
 }
 
+function popoverClipContent(url) {
+    var string =
+	"<div style='width 100%'> "+
+	"  <input readonly type=text " +
+	"       style='display:inline; width: 93%; padding: 2px;'" +
+	"       class='form-control input-sm' "+
+	"       value='" + url + "'>" +
+	"  <a href='#' class='btn urn-copy-button' " +
+	"     style='padding: 0px'>" +
+	"    <span class='glyphicon glyphicon-copy'></span>" +
+	"  </a>" +
+	"</div>";
+    return string;
+}
+
 function GeniAuthenticate(cert, r1, success, failure)
 {
     var callback = function(json) {
@@ -510,6 +525,7 @@ return {
     ImageDisplay: ImageDisplay,
     ConfirmModal: ConfirmModal,
     addPopoverClip: addPopoverClip,
+    popoverClipContent: popoverClipContent,
 };
 })();
 });

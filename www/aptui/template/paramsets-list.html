@@ -8,8 +8,12 @@
 	<th>Profile</th>
 	<th>Set Name</th>
 	<th>Public</th>
+	<% if (isadmin) { %>
+	  <th>Global</th>
+	<% } %>
 	<th>Created</th>
-	<th>Description</th>
+	<th class="sorter-false">Share</th>
+	<th class="sorter-false">Description</th>
       </tr>
     </thead>
     <tbody>
@@ -20,23 +24,16 @@
 	  <%
 	  var profile_name = info.profile_name;
 	  var profile_uuid = info.profile_uuid;
-	  var runurl       = "instantiate.php?profile=";
 	  
 	  if (info.version_uuid) {
 	    if (info.repourl) {
 	      profile_name += ":" + info.repohash.substr(0,8);
-	      runurl += info.profile_uuid;
 	    }
 	    else {
 	      profile_uuid = info.version_uuid;
 	      profile_name += ":" + info.profile_version;
-	      runurl += info.version_uuid;
 	    }
 	  }
-	  else {
-	    runurl += info.profile_uuid;
-	  }
-	  runurl += "&rerun_paramset=" + info.uuid;
 	  %>
 	  <td><a href='show-profile.php?uuid=<%- profile_uuid %>'>
             <%- profile_name %></a></td>
@@ -50,7 +47,7 @@
 		    data-trigger="hover"
 		    title='Delete this parameter set'></span>
 	    </a>
-	    <a href="<%- runurl %>" class="run-paramset-button">
+	    <a href="<%- info.run_url %>" class="run-paramset-button">
 	      <span class='glyphicon glyphicon-play-circle pull-right'
 		    style='color: green; margin-right: 5px;
 			   margin-bottom: 4px;'
@@ -61,8 +58,24 @@
 	    </a>
 	  </td>
 	  <td><% if (info.public != 0) { %>Yes<% } else { %>No<% } %></td>
+	  <% if (isadmin) { %>
+	    <td><% if (info.global != 0) { %>Yes<% } else { %>No<% } %></td>
+	  <% } %>
 	  <td class="format-date nowrap">
 	    <%- info.created %></td>
+	  <td>
+	    <% if (_.has(info, "share_url")) { %>
+	      <span data-toggle='popover'
+		    data-delay='{"show":250}'
+		    data-html='false'
+		    data-trigger="hover"
+		    data-content="Share this parameter set with other users by
+				  sending them a link to instantiate it.">
+		<a class="btn btn-primary btn-xs paramset-share-button"
+		   href="<%- info.share_url %>" type=button>Share</a>
+	      </span>
+	    <% } %>
+	  </td>
 	  <td><%- info.description %></td>
 	</tr>
       <% }); %>

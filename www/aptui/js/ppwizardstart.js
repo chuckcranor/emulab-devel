@@ -20,6 +20,7 @@ $(function () {
 	var paramdefs     = null;
 	var ppdivname     = null;
 	var uuid          = "";
+	var profile       = "";
 	var registered    = true;
 	var fromrepo      = false;
 	var multisite     = 0;
@@ -3071,9 +3072,10 @@ $(function () {
 		});
 
 	    /*
-	     * save paramset bindings button. We need to convert to XML first since
-	     * the paramsets stuff operates from the rspec. We only need to convert
-	     * if the params are unmodified. 
+	     * save paramset bindings button. We need to convert to
+	     * XML first since the paramsets stuff operates from the
+	     * rspec. We only need to convert if the params are
+	     * unmodified.
 	     */
 	    $('#ppform-buttons .p-save')
 		.click(function (event) {
@@ -3153,7 +3155,7 @@ $(function () {
 		setStepsMotion(true);
 	    };
 	    var args = {
-		"uuid" : uuid
+		"profile" : profile
 	    };
 	    if (instance_uuid) {
 		args["rerun_uuid"] = instance_uuid;
@@ -3232,7 +3234,7 @@ $(function () {
 	 */
 	function SetupPPButtons(hasactivity, paramsets, recents)
 	{
-	    // If the use has previous active on this profile, we can
+	    // If the use has previous activity on this profile, we can
 	    // show the last and activity buttons.
 	    if (hasactivity) {
 		// History button opens up new window.
@@ -3244,41 +3246,52 @@ $(function () {
 		$('#ppform-buttons .p-last').parent()
 		    .removeClass("hidden");
 	    }
+	    //
+	    var addpset = function (menu, set) {
+		var item = $("<li>" +
+			     " <a href='#'>" + set.name  + "</a>" +
+			     "</li>");
+		// Add a popover to show the description.
+		$(item).popover({
+		    html:     false,
+		    content:  set.description,
+		    trigger:  'hover',
+		    placement:'left',
+		    container:'body',
+		});
+		// Handler to regenerate the form.
+		$(item).find("a").click(function (event) {
+		    event.preventDefault();
+		    ClearAlert();
+		    LoadBindings(set.bindings);
+		    /*
+		     * Warn user if the paramset is bound and being applied to
+		     * a different version (of the repo).
+		     */
+		    if (set.version_uuid) {
+			if (set.version_uuid != uuid ||
+			    (fromrepo && set.repohash !=
+			     window.PROFILE_REFHASH)) {
+			    ParamsetWarning(set);
+			}
+		    }
+		});
+		$(menu).append(item);
+	    };
 	    // Create dropdown menu for the paramsets.
 	    if (paramsets) {
-		_.each(paramsets, function(set, index) {
-		    var item = $("<li>" +
-				 " <a href='#'>" + set.name  + "</a>" +
-				 "</li>");
-		    // Add a popover to show the description.
-		    $(item).popover({
-			html:     false,
-			content:  set.description,
-			trigger:  'hover',
-			placement:'left',
-			container:'body',
+		if (_.size(paramsets.owner)) {
+		    _.each(paramsets.owner, function(set, index) {
+			addpset($('#ppform-buttons .p-choose ul'), set);
 		    });
-		    // Handler to regenerate the form.
-		    $(item).find("a").click(function (event) {
-			event.preventDefault();
-			ClearAlert();
-			LoadBindings(set.bindings);
-			/*
-			 * Warn user if the paramset is bound and being applied to
-			 * a different version (of the repo).
-			 */
-			if (set.version_uuid) {
-			    if (set.version_uuid != uuid ||
-				(fromrepo && set.repohash != window.PROFILE_REFHASH)) {
-				ParamsetWarning(set);
-			    }
-			}
+		    $('#ppform-buttons .p-choose').removeClass("hidden");
+		}
+		if (_.size(paramsets.global)) {
+		    _.each(paramsets.global, function(set, index) {
+			addpset($('#ppform-buttons .p-choose-public ul'), set);
 		    });
-		    $('#ppform-buttons .p-choose ul').append(item);
-
-		});
-		$('#ppform-buttons .p-choose')
-		    .removeClass("hidden");
+		    $('#ppform-buttons .p-choose-public').removeClass("hidden");
+		}
 	    }
 	    // Create dropdown menu for the 10 most recent
 	    if (recents) {
@@ -3623,7 +3636,7 @@ $(function () {
 	    }
 	    var args = {
 		"formfields"    : formfields,
-		"uuid"          : uuid,
+		"profile"       : profile,
 		"checkonly"     : checkonly,
 		"newparams"     : 1,
 		"warningsfatal" : warningsfatal,
@@ -3632,7 +3645,8 @@ $(function () {
 		args["refspec"] = window.TARGET_REPOREF;
 	    }
 	    var xmlthing =
-		sup.CallServerMethod(null, "manage_profile", "BindParameters", args);
+		sup.CallServerMethod(null, "manage_profile",
+				     "BindParameters", args);
 	    xmlthing.done(callback);
 	}
 
@@ -3670,7 +3684,8 @@ $(function () {
 		if (json.code) {
 		    sup.SpitOops("oops", json.value);
 		}
-		uuid = args.uuid;
+		uuid      = args.uuid;
+		profile   = args.profile;
 		paramdefs = json.value.paramdefs;
 		ppchanged = true;
 
@@ -3705,7 +3720,7 @@ $(function () {
 		}
 	    }
 	    setStepsMotion(false);
-	    var blob = {"uuid" : args.uuid};
+	    var blob = {"profile" : args.profile};
 	    if (args.rerun_instance !== undefined) {
 		blob["rerun_instance"] = args.rerun_instance;
 	    }

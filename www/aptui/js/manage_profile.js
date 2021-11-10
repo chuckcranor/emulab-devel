@@ -33,6 +33,7 @@ $(function ()
     var editor       = null;
     var myCodeMirror = null;
     var isppprofile  = false;
+    var profile      = null;
     var isadmin      = 0; 
     var multisite    = 0; 
     var APT_NS    = "http://www.protogeni.net/resources/rspec/ext/apt-tour/1";
@@ -69,6 +70,7 @@ $(function ()
 	var fields   = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	var errors   = JSON.parse(_.unescape($('#error-json')[0].textContent));
 	var projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
+	profile = fields;
 	var versions = null;
 	var sorted_versions = null;
 	if (window.VIEWING) {
@@ -141,7 +143,7 @@ $(function ()
 	    latest_uuid:	window.LATEST_UUID,
 	    latest_version:	window.LATEST_VERSION,
 	    candelete:		window.CANDELETE,
-	    canmodify:		window.CANMODIFY,
+	    canmodify:		window.CANEDIT,
 	    canpublish:		window.CANPUBLISH,
 	    isadmin:		window.ISADMIN,
 	    isstud:		window.ISSTUD,
@@ -181,7 +183,10 @@ $(function ()
 	$('#publish_div').html(publishString);
     	var rspectext_html = rspectextTemplate({});
 	$('#rspectext_div').html(rspectext_html);
-	$('#share_div').html(shareTemplate({formfields: fields}))
+	$('#share_div').html(shareTemplate({
+	    formfields: fields,
+	    fromrepo:   fromrepo
+	}));
 	$('#copy_repobased_profile_div').html(copyrepoString);
 
 	// Fireoff repo stuff now.
@@ -1509,13 +1514,18 @@ $(function ()
 	console.info("SetupRepo", callback);
 
 	var deferred =
-	    gitrepo.InitRepoPicker(version_uuid, reporefspec,
-				   function(which) {
-				       // So we remember what the user selected.
-				       reporefspec = which;
-				       UpdateInstantiateButton();
-				       SelectRepoTarget(which);
-				   });
+	    gitrepo.InitRepoPicker({
+		"uuid"      : version_uuid,
+		"share_url" : profile.profile_profile_url,
+		"refspec"   : reporefspec,
+		"callback"  : function(which) {
+		    // So we remember what the user selected.
+		    reporefspec = which;
+		    UpdateInstantiateButton();
+		    SelectRepoTarget(which);
+		}
+	    });
+				   
 	$.when(deferred)
 	    .done(function (r1) {
 		console.info("SetupRepo InitRepoPicker", r1)
@@ -1538,7 +1548,11 @@ $(function ()
 		changeRspec(source);
 	    }
 	};
-	gitrepo.GetRepoSource(version_uuid, which, callback);
+	gitrepo.GetRepoSource({
+	    "uuid"      : version_uuid,
+	    "refspec"   : which,
+	    "callback"  : callback
+	});
     }
 
     /*
@@ -1621,7 +1635,7 @@ $(function ()
     function openEditor(source)
     {
         var readonly = true;
-        if ((window.CANMODIFY !== 0 ||
+        if ((window.CANEDIT !== 0 ||
 	     window.ACTION === 'create') &&
 	     fromrepo === 0 &&
 	     gotscript == 1)
@@ -1728,7 +1742,7 @@ $(function ()
 
     function UpdateButtons()
     {
-	console.info(window.VIEWING, window.CANMODIFY,
+	console.info(window.VIEWING, window.CANEDIT,
 		     fromrepo, gotscript, gotrspec, portal_converted);
 
 	if (! (gotscript || gotrspec)) {
@@ -1741,7 +1755,7 @@ $(function ()
 	    $('#show_source_modal_button').html('Edit Code');
 	}
 	else {
-	    var caneditcode = (!window.VIEWING || window.CANMODIFY ? 1 : 0);
+	    var caneditcode = (!window.VIEWING || window.CANEDIT ? 1 : 0);
 	    var canedittopo = caneditcode;
 
 	    // In general, scripts can be edited, subject to changes below.

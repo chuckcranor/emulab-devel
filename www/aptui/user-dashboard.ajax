@@ -658,38 +658,23 @@ function Do_ListParameterSets()
     # zero, we have to add another argument to the url instead.
     #
     $query_result =
-        DBQueryFatal("select s.*,v.uuid as version_uuid, ".
-                     "    p.name as profile_name,p.uuid as profile_uuid, ".
-                     "    v.version as profile_version,v.repourl ".
-                     " from apt_parameter_sets as s ".
-                     "left join apt_profiles as p on ".
-                     "     p.profileid=s.profileid ".
-                     "left join apt_profile_versions as v on ".
-                     "      v.uuid=s.version_uuid ".
+        DBQueryFatal("select s.uuid from apt_parameter_sets as s ".
                      "where s.uid_idx='$uid_idx' ".
-                     "order by s.profileid,s.name,s.created");
-
+                     "order by s.name,s.profileid,s.created");
     if (! mysql_num_rows($query_result)) {
         SPITAJAX_RESPONSE(null);
         return;
     }
     $results = array();
     while ($row = mysql_fetch_array($query_result)) {
-        $blob = array(
-            "uuid"              => $row["uuid"],
-            "name"              => $row["name"],
-            "description"       => $row["description"],
-            "public"            => $row["public"],
-            "created"           => DateStringGMT($row["created"]),
-            "bindings"          => json_decode($row["bindings"]),
-            "profile_uuid"      => $row["profile_uuid"],
-            "version_uuid"      => $row["version_uuid"],
-            "profile_name"      => $row["profile_name"],
-            "profile_version"   => $row["profile_version"],
-            "repourl"           => $row["repourl"],
-            "reporef"           => $row["reporef"],
-            "repohash"          => $row["repohash"],
-        );
+        $paramset = Paramset::Lookup($row["uuid"]);
+        if (!$paramset) {
+            continue;
+        }
+        $blob = $paramset->Blob($this_user);
+        if (!$blob) {
+            continue;
+        }
         $results[] = $blob;
     }
     SPITAJAX_RESPONSE($results);

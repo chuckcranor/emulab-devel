@@ -40,7 +40,7 @@ $(function () {
 	     * the public checkbox.
 	     */
 	    sup.CallServerMethod(null, "show-profile",
-				 "GetProfile", {"uuid" : profile_uuid},
+				 "GetProfile", {"profile" : profile_uuid},
 				 function (json) {
 				     console.info("profile", json);
 				     if (json.code) {
@@ -56,7 +56,9 @@ $(function () {
 	{
 	    var templates = APT_OPTIONS
 		.fetchTemplateList(['save-paramset-modal']);
-	    $(domid).html(templates['save-paramset-modal']);
+	    var template  = _.template(templates['save-paramset-modal']);
+	    
+	    $(domid).html(template({}));
 
 	    var ispublic = profile.profile_public;
 
@@ -104,13 +106,16 @@ $(function () {
 		return;
 	    }
 	    var args = {
-		"profile_uuid"  : profile_uuid,
+		"profile"       : profile_uuid,
 		"name"          : name,
 		"description"   : desc,
 		"bound"         : bound,
 		"public"        : publc,
 		"replace"       : ovwrt,
 	    };
+	    if (window.ISADMIN) {
+		args["global"] = $('#paramset-global').is(':checked') ? 1 : 0;
+	    }
 	    if (sup.IsUUID(uuidORrspec)) {
 		args["instance_uuid"] = uuidORrspec;
 	    }

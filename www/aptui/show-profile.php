@@ -60,17 +60,33 @@ if (isset($uuid))  {
 }
 elseif (isset($project) && isset($profile)) {
     $profile = Profile::LookupByName($project, $profile);
-}    
+}
+elseif (isset($profile) && (IsValidHash($profile) || IsValidUUID($profile))) {
+    $obj = Profile::Lookup($profile);
+    if ($obj && IsValidHash($profile)) {
+        $ishashed = 1;
+    }
+    $profile = $obj;
+}
 else {
     SPITUSERERROR("Must provide a uuid or project/profile name!");
 }
 if (!$profile) {
     SPITUSERERROR("No such profile!");
 }
-if (($isguest && !$profile->ispublic()) ||
-    (!$profile->CanView($this_user) && !(ISADMIN() || ISFOREIGN_ADMIN()))) {
+if ($isguest) {
+    if (!$profile->ispublic()) {
+        SPITUSERERROR("This profile is not publicly accessible!");
+    }
+}
+elseif (! ($profile->CanView($this_user) || $ishashed || ISFOREIGN_ADMIN())) {
     SPITUSERERROR("Not enough permission!");
 }
+# If the user has permission without the hash, revert to normal access.
+if ($ishashed && $profile->CanView($this_user)) {
+    $ishashed = 0;
+}
+
 # For the download source button.
 if ($source || $rspec) {
     $filename = $profile->name() . ".xml";
@@ -92,7 +108,8 @@ $profile_uuid = $profile->profile_uuid();
 $version_uuid = $profile->uuid();
 $ispp         = ($profile->isParameterized() ? 1 : 0);
 
-if ($isguest) {
+# In case user has permission without the hashkey
+if ($isguest || $ishashed) {
     $history      = 0;
     $activity     = 0;
     $canedit      = 0;
@@ -131,7 +148,12 @@ echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-vim.
 echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
 
 echo "<script type='text/javascript'>\n";
+if ($ishashed) {
+    echo "    window.PROFILE      = '" . $profile->hashkey() . "';\n";
+}
+else {
     echo "    window.PROFILE      = '$profile_uuid';\n";
+}
 echo "    window.PROFILE_UUID = '$profile_uuid';\n";
 echo "    window.VERSION_UUID = '$version_uuid';\n";
 echo "    window.AJAXURL      = 'server-ajax.php';\n";

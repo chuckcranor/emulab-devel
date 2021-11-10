@@ -42,17 +42,30 @@ function Do_GetProfile()
     if (! isset($this_user)) {
         $isguest = 1;
     }
-    if (!isset($ajax_args["uuid"])) {
-	SPITAJAX_ERROR(1, "Missing profile uuid");
+    
+    if (!isset($ajax_args["profile"])) {
+	SPITAJAX_ERROR(1, "Missing profile");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $target = $ajax_args["profile"];
+
+    if (! (IsValidUUID($target) || IsValidHash($target))) {
+	SPITAJAX_ERROR(1, "Not a valid profile target");
+	return;
+    }
+    $profile = Profile::Lookup($target);
     if (!$profile) {
-	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	SPITAJAX_ERROR(1, "No such profile $target");
 	return;
     }
-    if (($isguest && !$profile->ispublic()) ||
-        (!$profile->CanView($this_user) && !(ISADMIN() || ISFOREIGN_ADMIN()))) {
+    if ($isguest) {
+        if (!$profile->ispublic()) {
+            SPITAJAX_ERROR(1, "This profile is not publicly accessible!");
+            return;
+        }
+    }
+    elseif (! ($profile->CanView($this_user) || IsValidHash($target) ||
+               ISFOREIGN_ADMIN())) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
@@ -66,6 +79,7 @@ function Do_GetProfile()
     else {
         $blob["profile_creator"] = $profile->creator();
         $blob["profile_updater"] = $profile->updater();
+        $blob["hashkey"]         = $profile->hashkey();
     }
     $blob["profile_public"]      = $profile->ispublic() ? 1 : 0;
     $blob["profile_pid"]         = $profile->pid();
@@ -91,7 +105,9 @@ function Do_GetProfile()
     $latest_profile = Profile::Lookup($profile->profile_uuid());
     $blob["latest_uuid"] = $latest_profile->uuid();
     $blob["latest_version"] = $latest_profile->version();
-    
+    if ($profile->CanEdit($this_user)) {
+        $blob["profile_hashkey"] = $latest_profile->hashkey();
+    }
     SPITAJAX_RESPONSE($blob);
 }
 
@@ -121,7 +137,12 @@ function Do_GetParamsets()
 	return;
     }
     $paramsets = $profile->Paramsets($this_user);
-    SPITAJAX_RESPONSE($paramsets);
+    if ($paramsets && count($paramsets["owner"])) {
+        SPITAJAX_RESPONSE($paramsets["owner"]);
+    }
+    else {
+        SPITAJAX_RESPONSE(null);
+    }
 }
 
 #
@@ -140,23 +161,31 @@ function Do_CheckScript()
     $getparams     = false;
     $blob          = null;
 
-    if (!isset($ajax_args["profile_uuid"])) {
-	SPITAJAX_ERROR(1, "Missing script");
+    if (!isset($ajax_args["profile"])) {
+	SPITAJAX_ERROR(1, "Missing profile");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["profile_uuid"]);
+    $target = $ajax_args["profile"];
+
+    if (! (IsValidUUID($target) || IsValidHash($target))) {
+	SPITAJAX_ERROR(1, "Not a valid profile target");
+	return;
+    }
+    $profile = Profile::Lookup($target);
     if (!$profile) {
-        SPITAJAX_ERROR(1, "Unknown profile uuid");
-        return;
+	SPITAJAX_ERROR(1, "No such profile $target");
+	return;
     }
-    if (isset($this_user)) {
-        $this_uid = $this_user->uid();
-    }
-    else {
+    if ($isguest) {
         if (!$profile->ispublic()) {
-            SPITAJAX_ERROR(1, "Not enough permission");
+            SPITAJAX_ERROR(1, "This profile is not publicly accessible!");
             return;
         }
+    }
+    elseif (! ($profile->CanView($this_user) || IsValidHash($target) ||
+               ISFOREIGN_ADMIN())) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+	return;
     }
     if (!isset($ajax_args["script"])) {
 	SPITAJAX_ERROR(1, "Missing script");

@@ -17,6 +17,7 @@ $(function ()
     var profile_pid = '';
     var profile_version = '';
     var version_uuid = null;
+    var profile      = null;
     var gotrspec     = 0;
     var gotscript    = 0;
     var fromrepo     = 0;
@@ -43,14 +44,19 @@ $(function ()
 	$('#waitwait_div').html(waitwaitString);
 	$('#oops_div').html(oopsString);
 
-	sup.CallServerMethod(null, "show-profile",
-			     "GetProfile", {"uuid" : version_uuid},
+	/*
+	 * Might have used the private key to access.
+	 */
+	var args = {"profile" : window.PROFILE};
+	
+	sup.CallServerMethod(null, "show-profile", "GetProfile", args,
 			     function (json) {
 				 console.info(json);
 				 if (json.code) {
 				     sup.SpitOops("oops", json.value);
 				     return;
 				 }
+				 profile = json.value;
 				 GeneratePage(json.value);
 			     });
     }
@@ -103,7 +109,11 @@ $(function ()
 	$('#showtopomodal_div').html(showtopoString);
 	$('#rspectext_div').html(rspectextviewString);
 	$('#copy_repobased_profile_div').html(copyrepoString);
-	$('#share_div').html(shareTemplate({formfields: fields}))
+	$('#share_div').html(shareTemplate({
+	    formfields: fields,
+	    fromrepo:   fromrepo,
+	}));
+
 	if (window.CANCOPY) {
 	    var plist = JSON.parse(_.unescape(
 		$('#projects-json')[0].textContent));
@@ -292,10 +302,14 @@ $(function ()
 
     function SetupRepo()
     {
-	gitrepo.InitRepoPicker(version_uuid, null,
-			       function(which) {
-				   SelectRepoTarget(which);
-			       });
+	gitrepo.InitRepoPicker({
+	    "uuid"      : window.PROFILE,
+	    "share_url" : profile.profile_profile_url,
+	    "refspec"   : null,
+	    "callback"  : function(which) {
+		SelectRepoTarget(which);
+	    }
+	});
     }
     /*
      * User has clicked on a branch/tag. We need to get that branch/tag
@@ -322,7 +336,11 @@ $(function ()
 		ExtractFromRspec();
 	    }
 	};
-	gitrepo.GetRepoSource(version_uuid, which, callback);
+	gitrepo.GetRepoSource({
+	    "uuid"      : version_uuid,
+	    "refspec"   : which,
+	    "callback"  : callback
+	});
     }
 
     //
@@ -362,7 +380,7 @@ $(function ()
 					    {"script"   : script,
 					     "refspec"  : refspec,
 					     "getparams": true,
-					     "profile_uuid" : profile_uuid});
+					     "profile"  : window.PROFILE});
 	xmlthing.done(callback);
     }
 
@@ -372,7 +390,7 @@ $(function ()
     function UpdateInstantiateButton()
     {
 	var url = "instantiate.php?profile=" +
-	    version_uuid + "&from=manage-profile";
+	    window.PROFILE + "&from=manage-profile";
 
 	if (reporefspec) {
 	    url += "&refspec=" + reporefspec;

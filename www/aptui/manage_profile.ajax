@@ -40,8 +40,6 @@ function Do_Create()
     $errors = array();
     $this_idx = $this_user->uid_idx();
     
-    session_start();
-
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(1, "Missing formfields");
 	return;
@@ -444,10 +442,11 @@ function Do_Create()
     }
     if ($profile) {
         $uuid = $profile->uuid();
-        SPITAJAX_RESPONSE("manage_profile.php?action=edit&uuid=$uuid");
+        $url  = "manage_profile.php?action=edit&uuid=$uuid";
         if ($action == "edit") {
-            $_SESSION["notifyupdate"] = 1;
+            $url .= "&updated=" . time();
         }
+        SPITAJAX_RESPONSE($url);
     }
     else {
         SPITAJAX_RESPONSE("user-dashboard.php#profiles");
@@ -926,27 +925,24 @@ function Do_BindParameters()
     # Allow for form precheck only. So JS code knows it will be fast. 
     $checkonly = isset($ajax_args["checkonly"]) && $ajax_args["checkonly"];
 
-    if (!isset($ajax_args["uuid"])) {
-	SPITAJAX_ERROR(1, "Missing profile uuid");
+    if (!isset($ajax_args["profile"])) {
+	SPITAJAX_ERROR(1, "Missing profile");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $target = $ajax_args["profile"];
+
+    if (! (IsValidUUID($target) || IsValidHash($target))) {
+	SPITAJAX_ERROR(1, "Not a valid profile target");
+	return;
+    }
+    $profile = Profile::Lookup($target);
     if (!$profile) {
-	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	SPITAJAX_ERROR(1, "No such profile $target");
 	return;
     }
     # Allow for new code path.
     $usenewgenilib = false;
     
-    # Guest users do not run geni-lib; return the rspec or error.
-    if (!isset($this_user)) {
-	if ($profile->rspec() && $profile->rspec() != "") {
-	    SPITAJAX_RESPONSE($profile->rspec());
-	}
-	else {
-	    SPITAJAX_ERROR(1, "No rspec for guest user");
-	}
-    }
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(1, "Missing formfields");
 	return;
@@ -956,12 +952,10 @@ function Do_BindParameters()
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
     
-    if (! ($profile->CanInstantiate($this_user) || ISADMIN())) {
+    if (! ($profile->CanInstantiate($this_user) || IsValidHash($target))) {
 	SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
 	return;
     }
-    # See instantiate.php; this code should probably move into instantiate.ajax
-    session_start();
 
     #
     # If this is a repo-based profile, look in the form for the script
@@ -1163,14 +1157,9 @@ function Do_CheckForm($formfields, $paramdefs, &$rval)
         $error   = null;
 
         if ($type == "pubkey") {
-            if (isset($_SESSION["pubkey"]) || GenGenilibKey() == 0) {
-                $binding["value"] = $_SESSION["pubkey"];
-            }
-            else {
-                $errors["$count"]  = array("message" => "Pubkey error");
-                $binding["errors"] = array($count);
-                $count++;
-            }
+            $errors["$count"]  = array("message" => "PUBKEY deprecated");
+            $binding["errors"] = array($count);
+            $count++;
         }
         elseif ($type == "struct") {
             if ($mvalue) {
@@ -1204,6 +1193,10 @@ function Do_CheckForm($formfields, $paramdefs, &$rval)
     return 0;
 }
 
+#
+# We no longer use this, if we have to bring it back, it has to be
+# done without session variables.
+#
 function GenGenilibKey()
 {
     $keyname  = tempnam("/tmp", "genilibkey");
@@ -1408,9 +1401,6 @@ function Do_GetRepository()
     $nameopt  = "";
     $checkout = (ISADMIN() ? "-c" : "");
 
-    // Use the session to save the reponame for running the script later.
-    session_start();
-    
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
 

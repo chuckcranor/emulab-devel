@@ -29,11 +29,27 @@
 		  <span style="width: 70px; display: inline-block;">
 		    <%= branch.hash %></span></a>
 		<% if (!window.ISGUEST) { %>
+		  <% var url = "instantiate.php?profile=" + uuid +
+		  "&refspec=" + branch.ref;
+		  %>
 		  <a class="btn btn-primary btn-xs instantiate-refspec-button"
 		     type=button
-		     href="instantiate.php?profile=<%= uuid %>&refspec=<%= branch.ref %>"
-		    style='margin-left: 10px; margin-bottom: 4px;'
+		     href="<%- url %>"
+		     style='margin-left: 10px; margin-bottom: 4px;'
 		     data-which="<%= branch.ref %>">Instantiate</a>
+		  <% if (window.CANEDIT) { %>
+		    <span data-toggle='popover'
+			  data-delay='{"show":250}'
+			  data-html='false'
+			  data-content="Share this profile with other users by
+			      sending them a link to instantiate it.">
+		      <button class="btn btn-primary btn-xs
+				     refspec-share-button"
+			      type=button
+			      style='margin-left: 10px; margin-bottom: 4px;'
+			      data-which="<%= branch.ref %>">Share</button>
+		    </span>
+		  <% } %>
 		<% } %>
 	      </td>
 	    </tr>

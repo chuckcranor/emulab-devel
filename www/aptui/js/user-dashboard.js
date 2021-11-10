@@ -771,7 +771,8 @@ $(function ()
 	    $('.paramsets-hidden').removeClass("hidden");
 	    
 	    $('#paramsets_content')
-		.html(template({"paramsets"   : json.value}));
+		.html(template({"paramsets"   : json.value,
+				"isadmin"     : window.ISADMIN}));
 
 	    // Bind the delete button.
 	    $('#paramsets_content #delete-paramset-button')
@@ -787,6 +788,14 @@ $(function ()
 				 paramsets_table.trigger('update');
 			     });
 		});
+
+	    sup.addPopoverClip('#paramsets_content .paramset-share-button',
+			       function (target) {
+				   $(target).parent().popover('hide');
+				   var url = $(target).attr("href");
+				   return sup.popoverClipContent(url);
+			       });
+	    
 	    
 	    // Format dates with moment before display.
 	    $('#paramsets_content table .format-date').each(function(){
@@ -798,6 +807,10 @@ $(function ()
 	    // This activates the tooltip subsystem.
 	    $('#paramsets_content [data-toggle="tooltip"]').tooltip({
 		delay: {"hide" : 100, "show" : 300},
+		placement: 'auto',
+	    });
+	    // This activates the popover subsystem.
+	    $('#paramsets_content [data-toggle="popover"]').popover({
 		placement: 'auto',
 	    });
 	    

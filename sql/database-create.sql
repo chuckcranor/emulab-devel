@@ -764,11 +764,13 @@ CREATE TABLE `apt_parameter_sets` (
   `name` varchar(64) NOT NULL default '',
   `description` text,
   `public` tinyint(1) NOT NULL default '0',
+  `global` tinyint(1) NOT NULL default '0',
   `profileid` int(10) unsigned NOT NULL default '0',
   `version_uuid` varchar(40) default NULL,
   `reporef` varchar(128) default NULL,
   `repohash` varchar(64) default NULL,
   `bindings` mediumtext,    
+  `hashkey` varchar(64) default NULL,
   PRIMARY KEY (`uuid`),
   UNIQUE KEY `uid_idx` (`uid_idx`,`profileid`,`name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -846,8 +848,10 @@ CREATE TABLE `apt_profile_versions` (
   `rspec` mediumtext,
   `script` mediumtext,
   `paramdefs` mediumtext,
+  `hashkey` varchar(64) default NULL,
   PRIMARY KEY (`profileid`,`version`),
-  UNIQUE KEY `uuid` (`uuid`)
+  UNIQUE KEY `uuid` (`uuid`),
+  KEY `hashkey` (`hashkey`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -878,9 +882,11 @@ CREATE TABLE `apt_profiles` (
   `lastused` datetime default NULL,
   `usecount` int(11) default '0',
   `examples_portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,  
+  `hashkey` varchar(64) default NULL,
   PRIMARY KEY (`profileid`),
   UNIQUE KEY `pidname` (`pid_idx`,`name`,`version`),
-  KEY `profileid_version` (`profileid`,`version`)
+  KEY `profileid_version` (`profileid`,`version`),
+  KEY `hashkey` (`hashkey`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --

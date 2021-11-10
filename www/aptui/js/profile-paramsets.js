@@ -45,6 +45,7 @@ $(function ()
     {
 	var list_html = listTemplate({
 	    "paramsets" : paramsets,
+	    "isadmin"   : window.ISADMIN,
 	});
 	$('#paramsets-div').html(list_html);
 	

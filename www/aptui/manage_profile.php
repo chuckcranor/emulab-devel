@@ -28,8 +28,6 @@ chdir("apt");
 include("quickvm_sup.php");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
-# Must be after quickvm_sup.php since it changes the auth domain.
-include_once("../session.php");
 $page_title = "Manage Profile";
 $notifyupdate = 0;
 $notifyclone = 0;
@@ -55,6 +53,7 @@ $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 				 "snapuuid",    PAGEARG_STRING,
 				 "snapnode_id", PAGEARG_NODEID,
 				 "finished",    PAGEARG_BOOLEAN,
+                                 "updated",     PAGEARG_INTEGER,
 				 "formfields",  PAGEARG_ARRAY);
 
 #
@@ -89,12 +88,14 @@ function SPITFORM($formfields, $errors)
     $this_version = "null";
     $latest_uuid    = "null";
     $latest_version = "null";
+    $profile_pid    = "null";
 
     if ($action == "edit") {
 	$button_label = "Save";
 	$viewing      = 1;
 	$version_uuid = "'" . $profile->uuid() . "'";
 	$profile_uuid = "'" . $profile->profile_uuid() . "'";
+	$profile_pid  = "'" . $profile->pid() . "'";
 	$candelete    = ($profile->CanDelete($this_user) ? 1 : 0);
 	$nodelete     = ($profile->isLocked() ? 1 : 0);
 	$history      = ($profile->HasHistory() ? 1 : 0);
@@ -189,6 +190,7 @@ function SPITFORM($formfields, $errors)
     echo "    window.VIEWING  = $viewing;\n";
     echo "    window.VERSION_UUID = $version_uuid;\n";
     echo "    window.PROFILE_UUID = $profile_uuid;\n";
+    echo "    window.PROFILE_PID = $profile_pid;\n";
     echo "    window.LATEST_UUID = $latest_uuid;\n";
     echo "    window.LATEST_VERSION = $latest_version;\n";
     echo "    window.THIS_VERSION = $this_version;\n";
@@ -198,7 +200,7 @@ function SPITFORM($formfields, $errors)
     echo "    window.ACTION   = '$action';\n";
     echo "    window.CANDELETE= $candelete;\n";
     echo "    window.NODELETE = $nodelete;\n";
-    echo "    window.CANMODIFY= $canmodify;\n";
+    echo "    window.CANEDIT= $canmodify;\n";
     echo "    window.CANPUBLISH= $canpublish;\n";
     echo "    window.DISABLED= $disabled;\n";
     echo "    window.ISADMIN  = $isadmin;\n";
@@ -339,9 +341,6 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
     }
 }
 
-# We use a session.
-session_start();
-
 if (! isset($create)) {
     $errors   = array();
     $defaults = array();
@@ -466,11 +465,8 @@ if (! isset($create)) {
                  $profile->examples_portals() : "");
 
 	    # Warm fuzzy message.
-	    if (isset($_SESSION["notifyupdate"])) {
+	    if (isset($updated) && time() - $updated < 3) {
 		$notifyupdate = 1;
-		unset($_SESSION["notifyupdate"]);
-		session_destroy();
-		session_commit();
 	    }
 	}
         #
