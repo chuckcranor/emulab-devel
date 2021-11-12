@@ -208,6 +208,8 @@ $routing = array("geni-login" =>
                                                      "Do_Reload",
 						 "Recovery" =>
                                                      "Do_Recovery",
+						 "Flash" =>
+                                                     "Do_Flash",
 						 "Refresh" =>
 						     "Do_Refresh",
 						 "ReloadTopology" =>

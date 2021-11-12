@@ -108,14 +108,14 @@ pre {
 	      <td class='border-none'>RefSpec:</td>
 	      <td class='border-none'>
 		<span><%= expinfo.reporef %></span>
-		(<%= expinfo.repohash %>)
+		(<%= expinfo.repohash.substring(0,8) %>)
 	      </td>
 	    </tr>
 	  <% } else if (expinfo.repohash) { %>
 	    <tr>
 	      <td class='border-none'>RepoHash:</td>
 	      <td class='border-none'>
-		<%= expinfo.repohash %>
+		<%= expinfo.repohash.substring(0,8) %>
 	      </td>
 	    </tr>
 	  <% } %>
@@ -1198,6 +1198,11 @@ pre {
 	   data-toggle='tooltip'
 	   title='Power cycle node, click to confirm'
 	   data-trigger="hover">Power Cycle</a></li>
+      <li id="flash" class="hidden">
+	<a name="flash"
+	   data-toggle='tooltip'
+	   title='Reflash via JTAG; only as a last resort!'
+	   data-trigger="hover">Flash Recovery</a></li>
       <li id="delete">
 	<a name="delete"
 	   data-toggle='tooltip'
@@ -1290,6 +1295,57 @@ pre {
             <button class='btn btn-danger btn-sm'
 		    id='confirm_recovery_button'>
 	      Confirm</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='confirm_flash_modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <center>
+	    <h3>Flash a recovery FPGA image onto radio</h3>
+	  </center>
+	  When you flash a new FPGA image onto a radio, it will replace
+	  the current FPGA image.
+	  <b><em>This is a last resort approach</em></b>,
+          typically you
+	  would use <em>uhd_image_loader</em> to replace the currently
+	  running FGPA image.
+	  <center style="margin-top: 10px;">
+            <button type='button' style='margin-right: 20px;'
+                    class='btn btn-primary btn-sm' 
+                    data-dismiss='modal' aria-hidden='true'>
+	      Cancel</button>
+            <button class='btn btn-danger btn-sm'
+		    id='confirm_flash_button'>
+	      Confirm</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='flash_done_modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <center>
+	    <h4>Flash operation has completed</h4>
+	  </center>
+	  Your radio has been flashed, <em>now you must do a proper image
+	    load onto it, and then a power cycle.</em> To load a new image,
+	  use uhd_image_loader. For example, an <tt>x310</tt> is loaded with:
+	  <center>
+	    <pre style="width: 80%; margin-top: 10px;">uhd_image_loader --args "type=x300,addr=192.168.40.2,fpga=XG</pre>
+	  </center>
+	  When <tt>uhd_image_loader</tt> finishes, power cycle the radio
+	  using the context menu option.
+	  <center style="margin-top: 15px;">
+            <button type='button'
+                    class='btn btn-primary btn-sm' 
+                    data-dismiss='modal' aria-hidden='true'>
+	      Dismiss</button>
 	  </center>
 	</div>
       </div>
@@ -1793,6 +1849,8 @@ pre {
               <a href='#' name='nodetop'>Top Processes</a></li> 
             <li class='hidden'> 
               <a href='#' name='powercycle'>Power Cycle</a></li> 
+            <li class='hidden'> 
+              <a href='#' name='flash'>Flash Recovery</a></li> 
             <li><a href='#' name='delete'>Delete Node</a></li> 
 	  </ul>
 	</div>

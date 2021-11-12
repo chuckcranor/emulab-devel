@@ -670,6 +670,7 @@ if ($method eq "CreateSliver"    ||
     $method eq "Update"          ||
     $method eq "Panic"           ||
     $method eq "Recovery"        ||
+    $method eq "Flash"           ||
     $method eq "AddNodes"        ||
     $method eq "DeleteNodes"     ||
     $method eq "DeleteSlice"     ||

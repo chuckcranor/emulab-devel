@@ -1543,6 +1543,44 @@ $(function ()
     }
 	
     /*
+     * Flash a flashable device.
+     */
+    function DoFlash(node)
+    {
+	// Handler for hide modal to unbind the click handler.
+	$('#confirm_flash_modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#confirm_flash_button').unbind("click.flash");
+	});
+	
+	// Throw up a confirmation modal, with handler bound to confirm.
+	$('#confirm_flash_button').bind("click.flash", function (event) {
+	    var callback = function(json) {
+		sup.HideModal('#waitwait-modal', function () {
+		    if (json.code) {
+			sup.SpitOops("oops",
+				     "Failed to set flash node: " + json.value);
+		    }
+		    else {
+			sup.ShowModal('#flash_done_modal');			
+		    }
+		});
+	    }
+	    var args = {"uuid"  : uuid,
+			"node"  : node};
+
+	    sup.HideModal('#confirm_flash_modal', function () {
+		sup.ShowWaitWait("Flashing takes 1-2 minutes, " +
+				 "patience please!");
+		var xmlthing = sup.CallServerMethod(ajaxurl, "status",
+						    "Flash", args);
+		xmlthing.done(callback);
+	    });
+	});
+	sup.ShowModal('#confirm_flash_modal');
+    }
+	
+    /*
      * Fire up the backend of the ssh tab.
      *
      * If the local ops node is using a self-signed certificate (typical)
@@ -1952,6 +1990,9 @@ $(function ()
 	else if (action == "monitor") {
 	    NewMonitorTab(clientList[0]);
 	}
+	else if (action == "flash") {
+	    DoFlash(clientList[0]);
+	}
     }
 
     //
@@ -2051,6 +2092,8 @@ $(function ()
 		var vnode  = this.getElementsByTagNameNS(EMULAB_NS, 'vnode');
 		var imageable =
 		    this.getElementsByTagNameNS(EMULAB_NS, 'imageable');
+		var flashable =
+		    this.getElementsByTagNameNS(EMULAB_NS, 'flashable');
 		var href   = "n/a";
 		var ssh    = "n/a";
 		var cons   = "n/a";
@@ -2272,6 +2315,21 @@ $(function ()
 
 			// Mark it as a radio with its info. 
 			radios[node] = info;
+		    }
+
+		    if (flashable.length) {
+			var available = $(flashable).attr("available");
+			if (available === "true") {
+			    clone.find(' [name=flash]')
+				.click(function (e) {
+				    ActionHandler("flash", [node]);
+				});
+			    clone.find(' [name=flash]')
+				.parent().removeClass('hidden');
+
+			    // Context menu option
+			    CMclone.find("li[id=flash]").removeClass("hidden");
+			}
 		    }
 		}
 

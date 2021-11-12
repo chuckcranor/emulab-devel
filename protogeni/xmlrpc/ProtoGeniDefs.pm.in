@@ -199,6 +199,7 @@ $V2_METHODS = {
     "Panic"             => \&GeniCMV2::Panic,
     "RunLinktest"       => \&GeniCMV2::RunLinktest,
     "Recovery"          => \&GeniCMV2::Recovery,
+    "Flash"             => \&GeniCMV2::Flash,
 };
 
 ProtoGeniDefs::AddModule("cm",

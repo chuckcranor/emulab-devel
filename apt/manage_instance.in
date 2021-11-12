@@ -47,6 +47,7 @@ sub usage()
     print("Usage: manage_instance powercycle instance node_id ...\n");
     print("Usage: manage_instance reload instance node_id ...\n");
     print("Usage: manage_instance recovery instance [-c] node_id\n");
+    print("Usage: manage_instance flash instance [-c] node_id\n");
     print("Usage: manage_instance deletenodes instance node_id ...\n");
     print("Usage: manage_instance deleteaggregates instance urn ...\n");
     print("Usage: manage_instance addaggregates instance rspec ...\n");
@@ -153,6 +154,7 @@ sub DoStart();
 sub DoPowerCycle();
 sub DoReload();
 sub DoRecovery();
+sub DoFlash();
 sub DoLockdown();
 sub DoPanic();
 sub DoManifests();
@@ -283,6 +285,9 @@ elsif ($action eq "start") {
 }
 elsif ($action eq "recovery") {
     DoRecovery()
+}
+elsif ($action eq "flash") {
+    DoFlash()
 }
 elsif ($action eq "monitor") {
     StartMonitor()
@@ -3021,6 +3026,7 @@ sub DoRebootOrReload($)
     my $errcode;
     my $exitcode = -1;
     my $doperms  = 0;
+    my $locked   = 0;
 
     my $optlist = "X";
     my %options = ();
@@ -3126,6 +3132,7 @@ sub DoRebootOrReload($)
 	$exitcode = 1;
 	goto bad;
     }
+    $locked = 1;
 
     #
     # Helper callback to send the proper arguments.
@@ -3188,7 +3195,7 @@ sub DoRebootOrReload($)
     $instance->Delete();
     exit(0);
   bad:
-    $slice->UnLock();
+    $slice->UnLock() if ($locked);
     print STDERR $errmsg . "\n";
     if (defined($webtask)) {
 	$webtask->output($errmsg);
@@ -3277,6 +3284,103 @@ sub DoRecovery()
     }
     exit(0);
   bad:
+    print STDERR "$errmsg\n";
+    if (defined($errmsg) && defined($webtask)) {
+	$webtask->Exited($errcode);
+	$webtask->output($errmsg);
+    }
+    exit($exitcode);
+}
+
+#
+# Flash a radio
+#
+sub DoFlash()
+{
+    my ($errmsg, $exitcode, $errcode);
+    my $locked = 0;
+
+    my $optlist = "";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (!@ARGV);
+    my $node_id = shift(@ARGV);
+
+    #
+    # Sanity check to make sure the node is really in the rspec, since
+    # we need its sliver urn.
+    #
+    my $sliver_urn;
+    my $sliver;
+    foreach my $obj ($instance->AggregateList()) {
+	my $manifest = GeniXML::Parse($obj->manifest());
+	if (! defined($manifest)) {
+	    fatal("Could not parse manifest for $obj");
+	}
+	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
+		     GeniXML::FindNodesNS("n:vhost", $manifest,
+					  $GeniXML::EMULAB_NS)->get_nodelist());
+	foreach my $node (@nodes) {
+	    my $client_id   = GeniXML::GetVirtualId($node);
+	    my $urn         = GeniXML::GetSliverId($node);
+	    my $manager_urn = GetManagerId($node);
+
+	    # No sliver urn or a different aggregate.
+	    next
+
+		if (! (defined($urn) &&
+		       defined($manager_urn) &&
+		       $manager_urn eq $obj->aggregate_urn()));
+
+	    if ($node_id eq $client_id) {
+		$sliver_urn = $urn;
+		$sliver = $obj;
+	    }
+	}
+    }
+    if (!defined($sliver_urn)) {
+	fatal("Could not find node '$node_id' in manifest");
+    }
+
+    #
+    # Lock the slice in case it is doing something else, like taking
+    # a disk image.
+    #
+    if ($instance->Lock()) {
+	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
+	$errcode  = GENIRESPONSE_BUSY;
+	$exitcode = 1;
+	goto bad;
+    }
+    $locked = 1;
+    
+    if ($sliver->GetAptAggregate()->CheckStatus(\$errmsg)) {
+	print STDERR "$errmsg\n";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited(GENIRESPONSE_SERVER_UNAVAILABLE);
+	}
+	$instance->Unlock();
+	exit(1);
+    }
+    my $response = $sliver->Flash($sliver_urn);
+    if ($response->code() != GENIRESPONSE_SUCCESS) {
+	$errcode = $response->code();
+	($exitcode,$errmsg) = ResponseErrorMessage($sliver, $response);
+	
+	# Important to tell web user about this
+	if ($response->code() == GENIRESPONSE_FORBIDDEN) {
+	    $exitcode = 1;
+	}
+	goto bad;
+    }
+    $instance->Unlock();
+    exit(0);
+  bad:
+    $instance->Unlock() if ($locked);
     print STDERR "$errmsg\n";
     if (defined($errmsg) && defined($webtask)) {
 	$webtask->Exited($errcode);

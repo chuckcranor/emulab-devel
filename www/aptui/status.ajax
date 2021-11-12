@@ -2124,6 +2124,54 @@ function Do_Recovery()
 }
 
 #
+# Flash a new FPGA image onto a radio
+#
+function Do_Flash()
+{
+    global $instance, $creator, $this_user;
+    global $ajax_args;
+    $opt = "";
+
+    if (StatusSetupAjax(1)) {
+	return;
+    }
+    if (!isset($ajax_args["node"])) {
+	SPITAJAX_ERROR(1, "Missing node argument");
+	return 1;
+    }
+    $node = $ajax_args["node"];
+    $uuid = $instance->uuid();
+    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    if (!$slice) {
+	SPITAJAX_ERROR(1, "no slice for instance");
+	return 1;
+    }
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() . " ".
+                     "  flash $uuid $opt " . escapeshellarg($node),
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error flashing radio");
+        }
+        else {
+            # JS needs this exitcode.
+            SPITAJAX_ERROR($webtask->exitcode(),
+                           "Could not flash radio: ". $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE(1);
+    return;
+}
+
+#
 # Request top processes
 #
 function Do_Top()

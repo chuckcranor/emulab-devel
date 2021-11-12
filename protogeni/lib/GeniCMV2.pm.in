@@ -105,6 +105,7 @@ my $MAPPER         = "$TB/bin/mapper";
 my $VTOPGEN        = "$TB/bin/vtopgen";
 my $SNMPIT         = "$TB/bin/snmpit";
 my $CLONEIMAGE     = "$TB/sbin/clone_image";
+my $FLASHNODE      = "$TB/sbin/flashnode";
 my $CREATEIMAGE    = "$TB/bin/create_image";
 my $DELETEIMAGE    = "$TB/sbin/delete_image";
 my $CREATEDATASET  = "$TB/bin/createdataset";
@@ -6916,6 +6917,107 @@ sub Recovery($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Failed to change recovery mode");
     }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
+#
+# Another Emulab specific function to flash a new FPGA image
+#
+sub Flash($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    my $sliver_urn   = $argref->{'sliver_urn'};
+    
+    if (! (defined($credentials) && 
+	   defined($slice_urn) && defined($sliver_urn))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my ($slice, $aggregate) = Credential2SliceAggregate($credential);
+    return $slice
+	if (defined($slice) && GeniResponse::IsResponse($slice));
+
+    if (! (defined($slice) && defined($aggregate))) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    return $user
+	if (GeniResponse::IsResponse($user));
+
+    main::AddLogfileMetaDataFromSlice($slice);
+
+    if ($slice_urn ne $slice->urn()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
+				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    my $sliver = GeniSliver->Lookup($sliver_urn);
+    if (!defined($sliver)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    if ($sliver->slice_uuid() ne $slice->uuid()) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver is not in slice");
+    }
+    my $node_id = $sliver->resource_id();
+    my $node = Node->Lookup($node_id);
+    if (!defined($node)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "No node for sliver urn");
+    }
+    if ($node->IsTainted()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+				    "node is tainted - flash denied");
+    }
+    my $flashable;
+    $node->NodeAttribute("flashable", \$flashable);
+    if (!defined($flashable)) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+				    "node is not flashable");
+    }
+    
+    if (!defined(GeniCM::FlipToUser($slice, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+    #
+    # Lock the slice; we do not let the user to mess with things.
+    #
+    if ($slice->Lock() != 0) {
+	return GeniResponse->BusyResponse();
+    }
+    $aggregate->Refresh();
+    # Check again after lock.
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
+	$slice->UnLock();
+	return GeniResponse->BusyResponse();
+    }    
+    
+    my $output = GeniUtil::ExecQuiet("$FLASHNODE $node_id");
+    print STDERR $output . "\n";
+    if ($?) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Failed to flash radio");
+    }
+    $slice->UnLock();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1008,6 +1008,16 @@ sub AnnotateManifest($)
 	}
 	elsif (defined($powercycle)) {
 	    $services->removeChild($powercycle);
+	}
+	#
+	# Flashable? 
+	#
+	my $flashable;
+	$node->NodeAttribute("flashable", \$flashable);
+	if (defined($flashable)) {
+	    my $flashable = GeniXML::AddElement("flashable",
+						$services, $GeniXML::EMULAB_NS);
+	    GeniXML::SetText("available", $flashable, "true");
 	}
     }
     
