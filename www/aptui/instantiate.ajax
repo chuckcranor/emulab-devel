@@ -1201,12 +1201,6 @@ function Do_MaxDuration()
 	SPITAJAX_ERROR(1, "Missing formfields");
 	return;
     }
-    #
-    # Must recheck form values of course. 
-    #
-    if (CheckStep0()) {
-        return;
-    }
     # Step1 is for a parameterized profile, handled elsewhere. 
     if (CheckStep2()) {
         return;
