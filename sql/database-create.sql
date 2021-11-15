@@ -6183,7 +6183,7 @@ CREATE TABLE `users` (
   `emulab_pubkey` text,
   `home_pubkey` text,
   `adminoff` tinyint(4) default '0',
-  `verify_key` varchar(32) default NULL,
+  `verify_key` varchar(64) default NULL,
   `widearearoot` tinyint(4) default '0',
   `wideareajailroot` tinyint(4) default '0',
   `notes` text,
