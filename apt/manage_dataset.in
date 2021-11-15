@@ -833,7 +833,7 @@ sub DoSnapshot()
 	}
     }
     # Check if the aggregate is online and reachable. 
-    if ($aggregate->CheckStatus(\$errmsg)) {
+    if ($aggregate->GetAptAggregate()->CheckStatus(\$errmsg)) {
 	UserError($errmsg);
     }
     
