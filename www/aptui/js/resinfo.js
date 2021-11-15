@@ -160,13 +160,13 @@ $(function ()
 		    widgets : [ "uitheme", "zebra"],
 		    headerTemplate : '{content} {icon}',
 		});
-	    $('#powder-matrix .panel-title')
-		.append("<div> " +
+	    $('#powder-matrix .graph-panel .panel-heading .right-side')
+		.html("<span class=small> " +
 			" <a href='#' " +
-			"    data-target='#matric-connections-modal' " +
+			"    data-target='#matrix-connections-modal' " +
 			"    data-toggle='modal'>" +
-			"  <span class=small>Matrix Connections</span></a>" +
-			"</div>");
+			"  Matrix Connections</a></span>" +
+			"");
 	}
 	_.each(amlist, function (details, urn) {
 	    var graphid = 'resgraph-' + details.nickname;
