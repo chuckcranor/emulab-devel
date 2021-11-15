@@ -4046,8 +4046,13 @@ sub UpdateSliceStatus($$$)
     my $uuid = $self->uuid();
     my $aggregate_urn = $self->aggregate_urn();
     my $timestamp     = $hash->{'utc'};
-    my $safe_stamp    = DBQuoteSpecial($timestamp);
     my $safe_json;
+
+    # We do not get a timestamp from AL2S.
+    if (!defined($timestamp)) {
+	$timestamp = time();
+    }
+    my $safe_stamp = DBQuoteSpecial($timestamp);
 
     if (defined($json)) {
 	$safe_json = DBQuoteSpecial($json);
