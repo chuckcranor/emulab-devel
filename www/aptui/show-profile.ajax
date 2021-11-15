@@ -105,7 +105,7 @@ function Do_GetProfile()
     $latest_profile = Profile::Lookup($profile->profile_uuid());
     $blob["latest_uuid"] = $latest_profile->uuid();
     $blob["latest_version"] = $latest_profile->version();
-    if ($profile->CanEdit($this_user)) {
+    if ($this_user && $profile->CanEdit($this_user)) {
         $blob["profile_hashkey"] = $latest_profile->hashkey();
     }
     SPITAJAX_RESPONSE($blob);
