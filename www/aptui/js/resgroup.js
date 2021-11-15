@@ -2036,6 +2036,13 @@ $(function ()
 	    }))
 	    .removeClass("hidden")
 	    .find(".panel").removeClass("hidden");
+	$('#powder-paired')
+	    .html(visTemplate({
+		"title" : "Paired Radio Workbenches",
+		"id"    : "paired",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
 
 	_.each(groups, function (forecast, group) {
 	    $('#' + group + '-graph-div').removeClass("hidden");

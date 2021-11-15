@@ -114,6 +114,21 @@ $(function ()
 		    headerTemplate : '{content} {icon}',
 		});
 
+	    $('#powder-paired .graph-panel')
+		.html(visTemplate({
+		    "title" : "Paired Radio Workbenches",
+		    "id"    : "paired",
+		}))
+		.find(".panel").removeClass("hidden");
+	    $('#powder-paired .counts-panel')
+		.html(totalsTemplate({"title" : "Paired Radio Workbenches"}));
+	    $('#powder-paired .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+
 	    $('#powder-servers .counts-panel')
 		.html(totalsTemplate({"title" : "Servers"}));
 	    $('#powder-servers .counts-panel .tablesorter')
