@@ -259,6 +259,7 @@ function Do_AccountDetails()
     $results["city"]         = $target_user->city();
     $results["zip"]          = $target_user->zip();
     $results["phone"]        = $target_user->phone();
+    $results["shell"]        = $target_user->shell();
 
     if (ISADMIN()) {
         $results["uid_idx"]       = $target_user->uid_idx();

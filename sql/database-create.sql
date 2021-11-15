@@ -4538,6 +4538,7 @@ CREATE TABLE `nonlocal_user_accounts` (
   `created` datetime default NULL,
   `updated` datetime default NULL,
   `privs` enum('user','local_root') default 'local_root',
+  `shell` enum('tcsh','bash','sh') default 'bash',
   `urn` tinytext,
   `name` tinytext,
   `email` tinytext,

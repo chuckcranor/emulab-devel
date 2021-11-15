@@ -8527,6 +8527,7 @@ sub AddKeys($$$)
 	    my $name;
 	    my $email;
 	    my $privs = "local_root";
+	    my $shell;
 
 	    if (exists($ref->{'urn'})) {
 		$urn = $ref->{'urn'};
@@ -8552,6 +8553,11 @@ sub AddKeys($$$)
 	    # Optional specification of privs.
 	    if (exists($ref->{'privs'}) && $ref->{'privs'} eq "user") {
 		$privs = "user";
+	    }
+	    # Optional specification of shell.
+	    if (exists($ref->{'shell'}) &&
+		$ref->{'shell'} =~ /^(sh|bash|tcsh)$/) {
+		$shell = $ref->{'shell'};
 	    }
  
 	    # The slice owner is easy.
@@ -8591,7 +8597,7 @@ sub AddKeys($$$)
 	    }
 	    $slice_experiment->BindNonLocalUser(\@keylist,
 						$uid, $urn,
-						$name, $email, $privs)
+						$name, $email, $privs, $shell)
 		== 0 or goto error;
 	}
     }

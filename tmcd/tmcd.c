@@ -3861,7 +3861,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "  u.privs,g.pid,g.gid,g.unix_gid,0, "
 				 "  NULL,NULL, "
 				 "  UNIX_TIMESTAMP(u.updated), "
-				 "  u.email,'bash', "
+				 "  u.email,u.shell, "
 				 "  0,0, "
 				 "  NULL,u.uid_idx "
 				 "from nonlocal_user_accounts as u "

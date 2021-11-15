@@ -1325,6 +1325,11 @@ sub GetSSHKeys($$;$)
 	print STDERR "No ssh keys for $geniuser\n";
 	return -1;
     }
+    # Get shell from emulab user.
+    my $shell = $geniuser->emulab_user()->shell();
+    if (!defined($shell)) {
+	$shell = 'tcsh';
+    }
 
     #
     # CM format.
@@ -1333,6 +1338,7 @@ sub GetSSHKeys($$;$)
 	      'login' => $geniuser->uid(),
 	      # Creator clearly has root privs!
 	      'privs' => 'root',
+	      'shell' => $shell,
 	      'keys'  => [ @keys ]
 	     }];
 
@@ -1382,6 +1388,11 @@ sub GetSSHKeys($$;$)
 			$privs = "user";
 		    }
 		}
+		# Get shell from emulab user.
+		my $shell = $member->shell();
+		if (!defined($shell)) {
+		    $shell = 'tcsh';
+		}
 
 		#
 		# So, users coming in from the trusted signer have their keys
@@ -1401,6 +1412,7 @@ sub GetSSHKeys($$;$)
 		push(@{$rval}, {'urn'   => $guser->urn(),
 				'login' => $guser->uid(),
 				'privs' => $privs,
+				'shell' => $shell,
 				'keys'  => [ @keys ]
 		               });
 	    }

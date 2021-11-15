@@ -80,6 +80,7 @@ $defaults["address1"]    = $target_user->addr1();
 $defaults["address2"]    = $target_user->addr2();
 $defaults["zip"]         = $target_user->zip();
 $defaults["phone"]       = $target_user->phone();
+$defaults["shell"]       = $target_user->shell();
 
 
 SPITHEADER(1);

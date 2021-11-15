@@ -138,6 +138,22 @@
 		 data-target='#institutional-why'
 		 data-toggle='modal'><tiny>Why is this important?</tiny></a>
 	    </div>
+	    <div class="form-group">
+	      <select id="signup_shell"
+		      name="shell"
+		      class="form-control format-me"
+		      data-label="Default Shell"
+		      data-key="shell">
+		<% _.each(["bash", "tcsh", "sh"], function (shell) { %>
+		  <option
+		      <% if (shell == formfields.shell) { %>
+	              selected
+		      <% } %>
+		      value='<%= shell %>'><%= shell %>
+		  </option>
+		<% }); %>
+	      </select>
+	    </div>
             <button class='btn btn-primary btn-sm pull-right'
 		    style="margin-top: 15px;"
 		    id='submit_button' disabled
