@@ -462,6 +462,10 @@ while ($row = $nodes_result->fetchrow_hashref) {
 	    #
 	    # Note that if we are isolating admins, only those users with
 	    # the same admin status as the swapper are allowed.
+	    #
+	    # Note also that we never export non-local user home directories.
+	    # Those are largely placeholder accounts and are not used on nodes.
+	    #
 	    my $adminclause = "";
 	    if ($ISOLATEADMIN) {
 		$adminclause = "u.admin=$admin and ";
@@ -473,7 +477,7 @@ while ($row = $nodes_result->fetchrow_hashref) {
 			     "left join users as u on u.uid_idx=g.uid_idx ".
 			     "where g.pid='$pid' and g.gid='$gid' and ".
 			     "      (g.trust!='none' and ".
-			     "       u.webonly=0 and ".
+			     "       u.webonly=0 and u.nonlocal_id is NULL and ".
 			     "       $adminclause ".
 			     "       u.status='" . USERSTATUS_ACTIVE() . "')");
 
