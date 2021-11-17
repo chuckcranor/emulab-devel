@@ -300,8 +300,14 @@ if ($WITHZFS && $ZFS_NOEXPORT) {
 		     "       admin=1)");
     while (my ($uid,$pid) = $active_result->fetchrow_array()) {
 	$bossexports{"$usersdir/$uid"} = "$usersdir/$uid";
-	$bossexports{"$projdir/$pid"}  = "$projdir/$pid";
-	$bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
+	#
+	# XXX don't export a proj/group dir just because geniuser is in it.
+	# geniuser is in EVERY project.
+	#
+	if ($uid ne "geniuser") {
+	    $bossexports{"$projdir/$pid"}  = "$projdir/$pid";
+	    $bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
+	}
     }
     #
     # Similar to above, but look for active projects instead of users.
