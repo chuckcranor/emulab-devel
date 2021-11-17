@@ -490,9 +490,17 @@ while ($row = $nodes_result->fetchrow_hashref) {
 	    while (@usersrow = $users_result->fetchrow_array) {
 		my $uid = $usersrow[0];
 
-		push(@dirlist, "$usersdir/$uid");
-		push(@smbshares, [$uid, "$usersdir/$uid"]);
-
+		#
+		# XXX don't export geniuser homedir to nodes either.
+		# For experiments that geniuser is a member of (portal
+		# experiments), geniuser will have a local home directory.
+		# We do continue to export it to boss, just because I am
+		# not sure if it is needed there.
+		#
+		if ($uid ne "geniuser") {
+		    push(@dirlist, "$usersdir/$uid");
+		    push(@smbshares, [$uid, "$usersdir/$uid"]);
+		}
 		if ($ZFS_NOEXPORT) {
 		    $bossexports{"$usersdir/$uid"} = "$usersdir/$uid";
 		}
