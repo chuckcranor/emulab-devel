@@ -304,7 +304,11 @@ if ($WITHZFS && $ZFS_NOEXPORT) {
 	# XXX don't export a proj/group dir just because geniuser is in it.
 	# geniuser is in EVERY project.
 	#
-	if ($uid ne "geniuser") {
+	# XXX we seem to have some other issue that the previous blanket
+	# export of projects that geniuser is in was covering up. So for
+	# now, we go ahead and export these projdirs. Sigh...
+	#
+	if (1 || $uid ne "geniuser") {
 	    $bossexports{"$projdir/$pid"}  = "$projdir/$pid";
 	    $bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
 	}
