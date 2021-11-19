@@ -304,11 +304,7 @@ if ($WITHZFS && $ZFS_NOEXPORT) {
 	# XXX don't export a proj/group dir just because geniuser is in it.
 	# geniuser is in EVERY project.
 	#
-	# XXX we seem to have some other issue that the previous blanket
-	# export of projects that geniuser is in was covering up. So for
-	# now, we go ahead and export these projdirs. Sigh...
-	#
-	if (1 || $uid ne "geniuser") {
+	if ($uid ne "geniuser") {
 	    $bossexports{"$projdir/$pid"}  = "$projdir/$pid";
 	    $bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
 	}
@@ -327,6 +323,25 @@ if ($WITHZFS && $ZFS_NOEXPORT) {
     while (my ($pid) = $active_result->fetchrow_array()) {
 	$bossexports{"$projdir/$pid"}  = "$projdir/$pid";
 	$bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
+    }
+
+    #
+    # Experiments in the process of creation will not have updated the
+    # project last_activity field yet. So if this is the first experiment
+    # in a while for that project, it would be missed. However new
+    # experiments will be in the experiments table by now, so add projects
+    # for all current experiments just to be sure. However, we have to
+    # watchout for swapped out classic experiments, no need to add those!
+    #
+    $active_result =
+	DBQueryFatal("select distinct pid from experiments ".
+		     "where not state in ('swapped','ended') group by pid");
+    while (my ($pid) = $active_result->fetchrow_array()) {
+	if (!exists($bossexports{"$projdir/$pid"})) {
+	    logit("Adding project $pid that would have been missed");
+	    $bossexports{"$projdir/$pid"}  = "$projdir/$pid";
+	    $bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
+	}
     }
 
     #
