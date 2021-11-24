@@ -217,6 +217,7 @@ if ($bosslistonly) {
 # We need to serialize this script to avoid a trashed map file.
 #
 if (!$TESTMODE) {
+    logit("Locking...");
     if ((my $locked = TBScriptLock("exports", 0)) != TBSCRIPTLOCK_OKAY()) {
 	exit(0)
 	    if ($locked == TBSCRIPTLOCK_IGNORE);
@@ -335,7 +336,8 @@ if ($WITHZFS && $ZFS_NOEXPORT) {
     #
     $active_result =
 	DBQueryFatal("select distinct pid from experiments ".
-		     "where not state in ('swapped','ended') group by pid");
+		     "where not state in ('swapped','modify_parse','ended') ".
+		     "group by pid");
     while (my ($pid) = $active_result->fetchrow_array()) {
 	if (!exists($bossexports{"$projdir/$pid"})) {
 	    logit("Adding project $pid that would have been missed");
@@ -821,6 +823,7 @@ if (!$TESTMODE) {
   # Release the lock!
   #
   TBScriptUnlock();
+  logit("Unlocked.");
 }
 
 exit(0);
