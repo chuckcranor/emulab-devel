@@ -1,0 +1,19 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("projects", "nfsmounts")) {
+	DBQueryFatal("ALTER TABLE projects add " .
+		     " `nfsmounts` enum('emulabdefault','genidefault','none') ".
+		     "    default 'emulabdefault' after experiment_accounts");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

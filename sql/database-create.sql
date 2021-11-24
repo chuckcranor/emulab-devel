@@ -5325,6 +5325,7 @@ CREATE TABLE `projects` (
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `bound_portal` tinyint(1) default '0',
   `experiment_accounts` enum('none','swapper') default NULL,
+  `nfsmounts` enum('emulabdefault','genidefault','none') default 'emulabdefault',
   `reservations_disabled` tinyint(1) NOT NULL default '0',
   `nsf_funded` tinyint(1) default '0',
   `nsf_updated` datetime default NULL,
