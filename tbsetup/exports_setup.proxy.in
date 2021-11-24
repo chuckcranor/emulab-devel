@@ -36,7 +36,7 @@ use Getopt::Std;
 #
 
 my %opts = ();
-getopts('Si', \%opts);
+getopts('Sfi', \%opts);
 
 #
 # Configure variables
@@ -216,10 +216,12 @@ if ($issamba) {
     system("/usr/bin/diff $exports $exportsnew >$outfile 2>&1");
 }
 if (! $?) {
-#    print "No changes to $exports; skipping ...\n";
     unlink($outfile)
 	if ($outfile && $outfile ne "/dev/null");
-    exit(0);
+    if (!$opts{'f'}) {
+	unlink($exportsnew);
+	exit(0);
+    }
 }
 
 #
@@ -345,16 +347,20 @@ else {
 # will not wait at all.
 #
 if ($checkstamp) {
+    # Start with sub-second sleeps
+    my @wtimes = (0.25, 0.25, 0.50);
+
     # On Utah Emulab with thousands of mount points, this can take 15 seconds!
     my $wtime = $incremental ? 8 : 15;
 
     for (my $i = 0; $i < $wtime; $i++) {
-	print "exports_setup.proxy: waiting for mountd to finish ($i)...\n";
 	if (-e "/var/run/mountd.ts") {
 	    print "exports_setup.proxy: mountd done.\n";
 	    last;
 	}
-	sleep(1);
+	my $sl = exists($wtimes[$i]) ? $wtimes[$i] : 1.0;
+	print "exports_setup.proxy: waiting $sl sec for mountd to finish...\n";
+	select(undef, undef, undef, $sl);
     }
 } else {
     sleep(1);

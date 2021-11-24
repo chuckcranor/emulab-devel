@@ -35,15 +35,16 @@ use Sys::Syslog;
 sub usage()
 {
     print(STDERR
-	  "Usage: exports_setup [-B] [-i] [-n] [-d] [-w]\n".
+	  "Usage: exports_setup [-Bfindw]\n".
 	  "switches and arguments:\n".
-	  "-B         - just create the list of valid mounts for boss (does not affect the fs exports file or mountd)\n".
-	  "-i         - incremental (differential) update (if mounted supports it)\n".
-	  "-w         - wait mode; wait for mountd to finish before exiting\n".
-	  "-n         - impotent; dump exports to stdout\n");
+	  "-B     just create the list of valid mounts for boss (does not affect the fs exports file or mountd)\n".
+	  "-f     force a HUP of mountd even if the exports are unchanged\n".
+	  "-i     incremental (differential) update (if mounted supports it)\n".
+	  "-w     wait mode; wait for mountd to finish before exiting\n".
+	  "-n     impotent; dump exports to stdout\n");
     exit(-1);
 }
-my $optlist    = "Bindw";
+my $optlist    = "Bfindw";
 my $bosslistonly = 0;
 my $impotent   = 0;
 my $debug      = 0;
@@ -103,6 +104,7 @@ if ($ZFS_NOEXPORT && !$WITHZFS) {
 # Note no -n option. We redirect stdin from the new exports file below.
 my $SSH		= "$TB/bin/sshtb -l root -host $FSNODE";
 my $PROG	= "$TB/sbin/exports_setup.proxy";
+my $PROGARGS    = "";
 my $exportstail = "/var/tmp/exports.tail";
 my $smbconftail = "/var/tmp/smbconf.tail";
 my $bossmountfile = "$TB/etc/validmounts.txt";
@@ -187,6 +189,9 @@ if (defined($options{"n"})) {
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"f"})) {
+    $PROGARGS = "-f";
 }
 if (defined($options{"w"})) {
     $waittildone = 1;
@@ -770,8 +775,8 @@ if (!$TESTMODE) {
   }
   elsif ($OPSVM_ENABLE) {
       logit("Invoking exports_setup.proxy on boss ...");
-      system("$PROG < $exportstail") == 0 or
-	  fatal("Failed: $PROG < $exportstail: $?");
+      system("$PROG $PROGARGS < $exportstail") == 0 or
+	  fatal("Failed: $PROG $PROGARGS < $exportstail: $?");
       logit("exports_setup.proxy done");
       unlink("$exportstail");
   }
@@ -780,16 +785,16 @@ if (!$TESTMODE) {
 
       # First do the NFS exports
       logit("Invoking exports_setup.proxy...");
-      system("$SSH $PROG $arg < $exportstail") == 0 or
-	  fatal("Failed: $SSH $PROG < $exportstail: $?");
+      system("$SSH $PROG $PROGARGS $arg < $exportstail") == 0 or
+	  fatal("Failed: $SSH $PROG $PROGARGS $arg < $exportstail: $?");
       logit("exports_setup.proxy done");
       unlink("$exportstail");
 
       # Next the SMB shares
       if ($WINSUPPORT) {
 	  logit("Invoking exports_setup.proxy (samba)...");
-	  system("$SSH $PROG -S < $smbconftail") == 0 or
-	      fatal("Failed: $SSH $PROG < $smbconftail: $?");
+	  system("$SSH $PROG $PROGARGS -S < $smbconftail") == 0 or
+	      fatal("Failed: $SSH $PROG $PROGARGS -S < $smbconftail: $?");
 	  logit("exports_setup.proxy (samba) done");
 	  unlink("$smbconftail");
       }
