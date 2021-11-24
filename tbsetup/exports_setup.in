@@ -95,6 +95,11 @@ if ($TOSTDOUT) {
     $TESTMODE = 1;
 }
 
+# ZFS_NOEXPORT requires WITHZFS
+if ($ZFS_NOEXPORT && !$WITHZFS) {
+    fatal("ZFS_NOEXPORT requires WITHZFS, reconfigure\n");
+}
+
 # Note no -n option. We redirect stdin from the new exports file below.
 my $SSH		= "$TB/bin/sshtb -l root -host $FSNODE";
 my $PROG	= "$TB/sbin/exports_setup.proxy";
@@ -280,7 +285,7 @@ $nodes_result =
 #
 my $bossexports = ();
 
-if ($WITHZFS && $ZFS_NOEXPORT) {
+if ($ZFS_NOEXPORT) {
     #
     # Find all web active users within last seven days, plus all admins.
     #
@@ -415,7 +420,7 @@ while ($row = $nodes_result->fetchrow_hashref) {
 
     # If we support NFS-based MFS, remember nodes that need an MFS exported
     # XXX we do this before eliminating non-nfs experiment nodes
-    if ($NFSMFSROOT && $WITHZFS && $ZFS_NOEXPORT) {
+    if ($NFSMFSROOT && $ZFS_NOEXPORT) {
 	if (defined($row->{'op_mode'}) && defined($row->{'next_op_mode'}) &&
 	    ($row->{'op_mode'} eq "PXEFBSD" ||
 	     $row->{'next_op_mode'} eq "PXEFBSD") &&
@@ -843,8 +848,15 @@ sub fatal {
 # points for exported filesystems.  We generate a list of mount points from
 # longest to shortest so that we will match the most specific one in fsof.
 #
+# We do not need to do this with ZFS since every /users, /proj, and /groups
+# directory is a filesystem.
+#
 sub fsinit() {
-    my @rawmounts;
+    my @rawmounts = ();
+
+    if ($WITHZFS) {
+	return @rawmounts;
+    }
 
     my $saveuid = $UID;
     $UID = 0;
@@ -865,8 +877,20 @@ sub fsinit() {
 # Return a unique (per-FS) string identifying the filesystem of
 # the given path.
 #
+# Again, for ZFS, every /users, /proj, and /groups directory is a filesystem.
+# We just return the path itself. We do add new paths to @mountpoints in the
+# case where it is used to create a valid mounts file for autofs.
+#
 sub fsof($) {
     my($path) = @_;
+
+    if ($WITHZFS) {
+	if ($bossdirlist && !$ZFS_NOEXPORT && !exists($fsofcache{$path})) {
+	    push @mountpoints, $path;
+	    $fsofcache{$path} = $path;
+	}
+	return $path;
+    }
 
     if (exists($fsofcache{$path})) {
 	return $fsofcache{$path};
