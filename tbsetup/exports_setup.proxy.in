@@ -283,7 +283,7 @@ if (!$issamba) {
 #
 # Back up the existing exports, and then mv in the new one.
 #
-system("cp $exports $exportsback") == 0 or
+system("cp -p $exports $exportsback") == 0 or
     fatal("Could not back up $exports to $exportsback\n");
 
 system("mv $exportsnew $exports") == 0 or
