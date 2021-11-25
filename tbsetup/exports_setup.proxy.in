@@ -209,7 +209,7 @@ if ($issamba) {
     system("/usr/bin/diff -q $exports $exportsnew >/dev/null");
 } else {
     if (-d "$DIFFDIR") {
-	$outfile = "$DIFFDIR/diff." . time();
+	$outfile = "$DIFFDIR/diff." . time() . ".$$";
     } else {
 	$outfile = "/dev/null";
     }
