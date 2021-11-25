@@ -8010,9 +8010,10 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "   AS isdedicated_wa, "
 				 " r.genisliver_idx,r.tmcd_redirect, "
 				 " r.sharing_mode,e.geniflags,n.uuid, "
-				 " n.nonfsmounts,e.nonfsmounts AS enonfs, "
+				 " 0,0, "
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
+				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
 				 " r.rootkey_private,r.rootkey_public "
 				 "FROM nodes AS n "
@@ -8045,7 +8046,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "     (SELECT node_id FROM widearea_nodeinfo "
 				 "      WHERE privkey='%s') "
 				 "  AND notmcdinfo_types.attrvalue IS NULL",
-				 45, nodekey);
+				 46, nodekey);
 	}
 	else if (reqp->isvnode) {
 		char	clause[BUFSIZ];
@@ -8081,9 +8082,10 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " u.admin,null, "
 				 " r.genisliver_idx,r.tmcd_redirect, "
 				 " r.sharing_mode,e.geniflags,nv.uuid, "
-				 " nv.nonfsmounts,e.nonfsmounts AS enonfs, "
+				 " 0,0, "
 				 " r.erole, nv.taint_states, "
 				 " nv.nfsmounts,e.nfsmounts AS enfsmounts, "
+				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,va.attrvalue, "
 				 " r.rootkey_private,r.rootkey_public "
 				 "from nodes as nv "
@@ -8112,7 +8114,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " va.vname=r.vname and "
 				 " va.attrkey='routable_control_ip' "
 				 "where nv.node_id='%s' and (%s)",
-				 45, reqp->vnodeid, clause);
+				 46, reqp->vnodeid, clause);
 	}
 	else {
 		char	clause[BUFSIZ];
@@ -8141,9 +8143,10 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "   as isdedicated_wa, "
 				 " r.genisliver_idx,r.tmcd_redirect, "
 				 " r.sharing_mode,e.geniflags,n.uuid, "
-				 " n.nonfsmounts,e.nonfsmounts AS enonfs, "
+				 " 0,0, "
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
+				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
 				 " r.rootkey_private,r.rootkey_public "
 				 "from interfaces as i "
@@ -8175,7 +8178,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "  on n.type=dedicated_wa_types.type "
 				 "where (%s) "
 				 "  and notmcdinfo_types.attrvalue is NULL",
-				 45, clause);
+				 46, clause);
 	}
 
 	if (!res) {
@@ -8295,7 +8298,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 		if (row[37])
 			strcpy(reqp->erole, row[37]);
 		/* nonlocal project flag */
-		if (row[41])
+		if (row[42])
 			reqp->isnonlocal_pid = 1;
 	}
 
@@ -8310,15 +8313,26 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 
 	reqp->iscontrol = (! strcasecmp(row[10], "ctrlnode") ? 1 : 0);
 
-	/* nfsmounts - per-experiment disable overrides per-node setting */
-	if (row[40]) {
-		if (strcmp(row[40], "none") == 0)
+	/*
+	 * nfsmounts - use the most restrictive of per-project [41],
+	 * per-experiment [40] or per-node [39] settings. If one of the
+	 * settings is "none", then "none" it is. Else, if one is
+	 * "genidefault" we go with that. Else, it is "emulabdefault".
+	 * Note that only the per-node setting could be NULL.
+	 */
+	if (row[41] && row[40]) {
+		if (strcmp(row[41], "none") == 0 ||
+		    strcmp(row[40], "none") == 0 ||
+		    (row[39] && strcmp(row[39], "none") == 0))
 			strcpy(reqp->nfsmounts, "none");
-		else if (row[39])
-			strcpy(reqp->nfsmounts, row[39]);
+		else if (strcmp(row[41], "genidefault") == 0 ||
+			 strcmp(row[40], "genidefault") == 0 ||
+			 (row[39] && strcmp(row[39], "genidefault") == 0))
+			strcpy(reqp->nfsmounts, "genidefault");
 		else
-			strcpy(reqp->nfsmounts, row[40]);
+			strcpy(reqp->nfsmounts, "emulabdefault");
 	} else {
+		/* this should never happen */
 		strcpy(reqp->nfsmounts, "none");
 	}
 
@@ -8345,16 +8359,16 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 	}
 	
 	/* Do we have a routable IP */
-	if (reqp->isvnode && row[42] && strcmp(row[42], "true") == 0)
+	if (reqp->isvnode && row[43] && strcmp(row[43], "true") == 0)
 		reqp->isroutable_vnode = 1;
 	else
 		reqp->isroutable_vnode = 0;
 
 	/* Which per-experiment root keys should be propogated if any */
 	reqp->experiment_keys = TB_ROOTKEYS_NONE;
-	if (row[43] && atoi(row[43]) > 0)
-		reqp->experiment_keys |= TB_ROOTKEYS_PRIVATE;
 	if (row[44] && atoi(row[44]) > 0)
+		reqp->experiment_keys |= TB_ROOTKEYS_PRIVATE;
+	if (row[45] && atoi(row[45]) > 0)
 		reqp->experiment_keys |= TB_ROOTKEYS_PUBLIC;
 
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
