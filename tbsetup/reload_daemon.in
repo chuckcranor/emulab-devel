@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -92,6 +92,7 @@ my $reboot	= "$TB/bin/node_reboot";
 my $tbrsync     = "$TB/bin/tbrsync";
 my $power	= "$TB/bin/power";
 my $nodeadmin	= "$TB/bin/node_admin";
+my $exsetup	= "$TB/sbin/exports_setup";
 my $logfile	= "$TB/log/reloadlog";
 my $debug	= 0;
 my $tag;
@@ -581,6 +582,7 @@ while (1) {
 	# We change the reservation EID over and fire up an osload
 	# directly.
 	#
+	my $nodesadded = 0;
 	foreach $ref (@pending_list) {
 	    ($node, $mustwipe, $isretry) = @{$ref};
 	    my $nodeobj = $nodeobjs{$node};
@@ -602,10 +604,22 @@ while (1) {
 		$nodeobj->MoveReservation($reloading_experiment) == 0) {
 		$nodeobj->SetNodeHistory(TB_NODEHISTORY_OP_MOVE, undef,
 					 $reloading_experiment);
+		$nodesadded++;
 	    }
 	}
 	# It is now safe to clear this.
 	@retry_list = ();
+
+	#
+	# If we added any new nodes to reloading, run exports_setup to ensure
+	# that /proj/emulab-ops is available on the nodes.
+	#
+	if ($nodesadded) {
+	    logit("Running exports_setup.");
+	    if (system($exsetup)) {
+		logit("WARNING: exports_setup failed, nodecheck may not run on some nodes.");
+	    }
+	}
 
 	#
 	# Now run an OS load for each image.

@@ -343,7 +343,11 @@ foreach my $node (@nodes) {
 	    #
 	    DBQueryFatal("delete from last_reservation where node_id='$pc'");
 	    $allocated = 1;
-	    $needexport = 1;
+
+	    # only force an exports_setup if going directly into reloading
+	    if (!$pend) {
+		$needexport = 1;
+	    }
 	}
     }
     else {
@@ -387,6 +391,13 @@ foreach my $node (@nodes) {
 # Run exports_setup if we moved any nodes.
 # This is for nodecheck in the MFS as it records info into /proj/emulab-ops
 # (and might require binaries from there).
+#
+# Note that we only do this here if a node is being sent directly into
+# reloading instead of reloadpending (i.e., on a manual call without -n).
+# We don't want to do this here on regular experiment termination since it
+# happens synchronously with the teardown and exports_setup can take a long
+# time. Instead, we will arrange for the reload_daemon to run exports_setup
+# whenever it moves a batch of nodes from reloadpending into reloading.
 #
 if ($needexport) {
     print "Running exports_setup\n";
