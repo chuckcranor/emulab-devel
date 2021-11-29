@@ -247,6 +247,7 @@ function Do_ProjectProfile()
     $results["industry"]    = $target_project->industry() ? true : false;
     $results["consortium"]  = $target_project->consortium() ? true : false;
     $results["expert_mode"] = $target_project->expert_mode() ? true : false;
+    $results["nfsmounts"]   = $target_project->nfsmounts();
     $results["reservations_disabled"] =
         $target_project->reservations_disabled() ? true : false;
     $results["licenses"]    = array();
