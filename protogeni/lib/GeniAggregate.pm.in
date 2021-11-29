@@ -1332,10 +1332,12 @@ sub ActionStart($$;$)
 
     # The nodes will not boot locally unless there is a DNS record,
     # but we also need it before we can issue the reloads.
+    DebugTimeStamp("named_setup");
     if (system("$NAMEDSETUP")) {
 	$msg .= "$NAMEDSETUP failed\n";
 	goto bad;
     }
+    DebugTimeStamp("named_setup done");
 
     if ($version >= 2) {
 	#
@@ -1383,12 +1385,6 @@ sub ActionStart($$;$)
 	DebugTimeStamp("arplockdown");
 	if (system("$ARPLOCKDOWN ")) {
 	    $msg .= "$ARPLOCKDOWN failed\n";
-	    goto bad;
-	}
-	# The nodes will not boot locally unless there is a DNS record.
-	DebugTimeStamp("named_setup");
-	if (system("$NAMEDSETUP")) {
-	    $msg .= "$NAMEDSETUP failed\n";
 	    goto bad;
 	}
 	DebugTimeStamp("setuportvlans");
