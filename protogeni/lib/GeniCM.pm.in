@@ -5974,20 +5974,21 @@ sub SliverWorkAux($)
     # Must have the topofile for node boot. Might need locking on this.
     #
     if ($v2) {
-	require Lan;
-
 	#
 	# We want to reserve the vlan tags now so that we can put them
 	# into the manifest. Use snmpit for this, since ELABINELAB will
 	# need to ask the outer boss for the reserved tags.
 	#
-	DebugTimeStamp("Reserving vlan tags");
-	system("$SNMPIT -A $pid $eid");
-	if ($?) {
-	    $message = "Could not reserve vlan tags";
-	    goto bad;
+	if (defined(GeniXML::FindFirst("n:link", $rspec))) {
+	    DebugTimeStamp("Reserving vlan tags");
+	    require Lan;
+	    system("$SNMPIT -A $pid $eid");
+	    if ($?) {
+		$message = "Could not reserve vlan tags";
+		goto bad;
+	    }
+	    DebugTimeStamp("Done reserving vlan tags");
 	}
-	DebugTimeStamp("Done reserving vlan tags");
     }
     elsif (!$v2) {
 	require Lan;
