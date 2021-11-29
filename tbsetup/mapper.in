@@ -1091,8 +1091,6 @@ sub RunAssign($$)
     TBDebugTimeStamp("assign started");
     if (my $childpid = fork()) {
 	while (1) {
-	    sleep(2);
-
 	    if (waitpid($childpid, &WNOHANG) == $childpid) {
 		$assignexitcode = $? >> 8;
 		$assignexitcode = -1 if ($assignexitcode == 255);
@@ -1112,6 +1110,7 @@ sub RunAssign($$)
 		}
 		# Loop again to reap child above before exit.
 	    }
+	    select(undef, undef, undef, 0.25);
 	}
     }
     else {
