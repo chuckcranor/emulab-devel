@@ -561,18 +561,6 @@ sub AssignLoop()
 		sleep(10);
 	    }
 	}
-	# Hack for Kirk.
-	if (!($impotent || $regression) &&
-	    ($pid eq "OAI2021FallWS" || $project->IsNonLocal())) {
-	    while (1) {
-		if (libEmulab::EmulabCountLock("mapperlock", 1) == 0) {
-		    $seriallock = 1;
-		    last;
-		}
-		chat("Waiting for mapper lock ...\n");
-		sleep(5);
-	    }
-	}
 	
 	#
 	# RunAssign returns  0 if successful.
@@ -591,6 +579,7 @@ sub AssignLoop()
 			 "where name='pool_daemon'");
 	    $gotlock = 0;
 	}
+	# Just in case.
 	if ($seriallock) {
 	    libEmulab::EmulabCountUnlock("mapperlock");
 	    $seriallock = 0;
@@ -744,10 +733,24 @@ sub RunAssign($$)
 	chat("Using existing assign results file\n");
 	goto skiprun;
     }
+
+    # Hack for Kirk.
+    if ($pid eq "OAI2021FallWS" || $project->IsNonLocal()) {
+	TBDebugTimeStamp("Trying to get the mapper lock");
+	while (1) {
+	    if (libEmulab::EmulabCountLock("mapperlock", 1) == 0) {
+		$seriallock = 1;
+		last;
+	    }
+	    sleep(1);
+	}
+	TBDebugTimeStamp("Got the mapper lock");	
+    }
     
     #
     # Do admission control test, and gather the info.
     #
+    TBDebugTimeStamp("TBAdmissionControlCheck started");	
     my %admission_control;
     if (!$regression) {
 	if (!TBAdmissionControlCheck(undef, $experiment, \%admission_control)){
@@ -1207,6 +1210,12 @@ sub RunAssign($$)
 	return -1;
     }
     my $retval = $vtop->AllocNodes();
+    # Once allocation is done we can release the serial lock.
+    if ($seriallock) {
+	libEmulab::EmulabCountUnlock("mapperlock");
+	$seriallock = 0;
+	TBDebugTimeStamp("Released the mapper lock");	
+    }
     return $retval
 	if ($retval != 0);
 
