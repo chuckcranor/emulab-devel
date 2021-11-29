@@ -1323,10 +1323,12 @@ sub LoadVirtNodes($)
 
 	#
 	# Record the type selections for the mapper. If this was a vtype,
-	# then we selected the first real type from the list. Might not be
-	# what we want to do.
+	# then no type we can use for the wrapper to determine reservation
+	# bounds. Eventually we will catch reservation violation, but at
+	# a point where the error is less obvious.
 	#
-	if (!$vnode->_typeinfo()->IsClass() || defined($fixed)) {
+	if (defined($fixed) ||
+	    (!$isvtyped && !$vnode->_typeinfo()->IsClass())) {
 	    my $t = $vnode->_typeinfo()->type();
 	    
 	    if (!exists($self->types()->{$t})) {
