@@ -1015,7 +1015,7 @@ sub RunAssign($$)
     $ptopargs   .= "-C "
 	if ($usecontrol);
     $ptopargs   .= "-v "
-	if ($vtop->virtnodecount());
+	if ($vtop->virtnodecount() || $vtop->subnodecount);
     $ptopargs   .= "-r "
 	if ($vtop->remotenodecount());
     $ptopargs   .= "-S "
@@ -1024,6 +1024,8 @@ sub RunAssign($$)
 	if ($vtop->sharednodecount());
     $ptopargs   .= "-b "
 	if ($vtop->bstorecount());
+    $ptopargs   .= "-N "
+	if (!$vtop->vlancount());
     $ptopargs	.= "-a "
     	if ($precheck || $allnodesfree);
     $ptopargs	.= "-c " . $experiment->delay_capacity() . " "
