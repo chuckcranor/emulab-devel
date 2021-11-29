@@ -282,6 +282,8 @@ sub virtnodecount($)	{ return $_[0]->counter("virtcount"); }
 sub simnodecount($)	{ return $_[0]->counter("simcount"); }
 sub remotenodecount($)	{ return $_[0]->counter("remotecount"); }
 sub sharednodecount($)	{ return $_[0]->counter("sharedcount"); }
+sub subnodecount($)	{ return $_[0]->counter("subnodecount"); }
+sub vlancount($)	{ return $_[0]->counter("vlans"); }
 sub bstorecount($)	{ return $_[0]->counter("bstorecount"); }
 sub gblinks($)		{ return $_[0]->counter("Gblinks"); }
 sub mgblinks($)		{ return $_[0]->counter("MGblinks"); }
@@ -1571,6 +1573,8 @@ sub LoadVirtNodes($)
 	    if ($isplab);
 	$self->{'COUNTERS'}->{'genicount'}++
 	    if ($isgeni);
+	$self->{'COUNTERS'}->{'subnodecount'}++
+	    if ($issub);
 	$self->{'COUNTERS'}->{'physcount'}++
 	    if (!$issim && !$isvirt);
 	$self->{'COUNTERS'}->{'sharedcount'}++
@@ -1928,6 +1932,7 @@ sub LoadVirtLans($)
 	    $self->vlans()->{$vlanname} = $virtlan;
 	    $virtlan->_accesspoint(undef);
 	    $virtlan->_sanlan(0);
+	    $self->{'COUNTERS'}->{'vlancount'}++;
 	}
 
 	# Now the local wrapper for the virt_lan table entry (the "member").
@@ -4432,6 +4437,8 @@ sub CreateVtop($;$)
     $self->{'COUNTERS'}->{'physcount'}   = 0;
     $self->{'COUNTERS'}->{'Gblinks'}     = 0;
     $self->{'COUNTERS'}->{'MGblinks'}    = 0;
+    $self->{'COUNTERS'}->{'vlancount'}   = 0;
+    $self->{'COUNTERS'}->{'subnodecount'}= 0;
 
     #
     # Experiment wide options.
@@ -5569,8 +5576,10 @@ sub AllocNodes($)
     #
     @nodeids = keys(%{ $self->solution()->{'TORESERVE'} });
     $self->printdb("Trying to allocate @nodeids\n");
+    TBDebugTimeStamp("nalloc started");
     system("$NALLOC -p $pid $eid @nodeids");
     my $exitval  = $? >> 8;
+    TBDebugTimeStamp("nalloc finished");
 
     #
     # If nalloc failed with a fatal error, lets give it up. No retry.
