@@ -1892,15 +1892,18 @@ sub MaxSwapIn($$$) {
 # Reservation->MaxSwapInMap( $experiment )
 #
 # Will return a hash of estimated number of available nodes, keyed by type.
-sub MaxSwapInMap($$) {
+sub MaxSwapInMap($$$) {
 
-    my ($class, $experiment) = @_;
+    my ($class, $experiment, $typelist) = @_;
+    my @typelist = ($typelist ? keys(%$typelist) : ());
     my %counts = ();
 
     my $query_result = DBQueryFatal( "SELECT DISTINCT( type ) FROM " .
 				     "future_reservations" );
     while( my ($type) = $query_result->fetchrow_array() ) {
-	$counts{ $type } = MaxSwapIn( $class, $experiment, $type );
+	if (!$typelist || grep($_ eq $type, @typelist)) {
+	    $counts{ $type } = MaxSwapIn( $class, $experiment, $type );
+	}
     }
 
     return \%counts;

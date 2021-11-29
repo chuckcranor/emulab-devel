@@ -758,12 +758,17 @@ sub RunAssign($$)
 	    return -1;
 	}
     }
+    TBDebugTimeStamp("TBAdmissionControlCheck ended");
     my %adjusted_adcontrol =
 	map {$_ => $admission_control{$_} } keys(%admission_control);
 
     # Bound the results to avoid future reservation conflicts.
     Reservation->FlushAll();
-    my $reservation_bounds = Reservation->MaxSwapInMap($experiment);
+    my $reservation_bounds =
+	Reservation->MaxSwapInMap($experiment,
+				  $seriallock && $vtop->AllNodesTyped() ?
+				  $vtop->types() : undef);
+    TBDebugTimeStamp("MaxSwapInMap finished"); 
     #print STDERR Dumper($reservation_bounds);
     # Skip this during tutorials, takes too long.
     if (!$seriallock) {
