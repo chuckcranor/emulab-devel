@@ -765,8 +765,12 @@ sub RunAssign($$)
     Reservation->FlushAll();
     my $reservation_bounds = Reservation->MaxSwapInMap($experiment);
     #print STDERR Dumper($reservation_bounds);
-    # Dump to file.
-    DumpReservationInfo($resinfolog, $reservation_bounds);
+    # Skip this during tutorials, takes too long.
+    if (!$seriallock) {
+	# Dump to file.
+	DumpReservationInfo($resinfolog, $reservation_bounds);
+	TBDebugTimeStamp("DumpReservationInfo finished");
+    }
     my %reservation_nodes = ();
     foreach my $type (keys(%$reservation_bounds)) {
 	#
