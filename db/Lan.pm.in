@@ -3313,6 +3313,28 @@ sub ExperimentVLans($$$)
 }
 
 #
+# Does an experiment have an vlans? This is a class method.
+#
+sub ExperimentHasVLans($$)
+{
+    my ($class, $experiment) = @_;
+    my $exptidx = $experiment->idx();
+
+    my $query_result =
+	DBQueryWarn("select l.lanid from lans as l ".
+		    "left join lan_attributes as la on ".
+		    "  la.lanid=l.lanid and la.attrkey='class' ".
+		    "where (l.type='vlan' or l.type='wire') ".
+                    " and l.exptidx='$exptidx' and ".
+		    "      (la.attrvalue='Experimental' or ".
+		    "       la.attrvalue is null)");
+    return -1
+	if (!defined($query_result));
+
+    return $query_result->numrows;
+}
+
+#
 # Find a vlan by looking an interface in the vlan.
 #
 sub FindVlanByInterface($$$)
