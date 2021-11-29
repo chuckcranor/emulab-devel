@@ -1912,42 +1912,8 @@ sub MaxSwapInMap($$) {
 sub ReservableTypes($)
 {
     my ($class)  = @_;
-    my @result   = ();
-    my @alltypes = NodeType->AllTypes();
-    
-    foreach my $type (@alltypes) {
-	#
-	# In general only class=pc types are reservable, but we allow
-	# for override using a type attribute.
-	#
-	next
-	    if ($type->class() ne "pc" && !$type->reservable());
 
-	my $typename = $type->type();
-	
-	#
-	# Skip if no physical testnodes of this type.
-	#
-	my $query_result =
-	    DBQueryWarn("select count(n.node_id) from nodes as n ".
-			"left join node_attributes as a on ".
-			"     a.node_id=n.node_id and ".
-			"     a.attrkey='not_reservable' ".
-			"where n.type='$typename' and ".
-			"      n.role='" . $Node::NODEROLE_TESTNODE . "' and ".
-			"      n.reservable=0 and ".
-			"      a.attrvalue is null");
-	return ()
-	    if (!$query_result);
-	next
-	    if (!$query_result->numrows);
-	
-	my ($count) = $query_result->fetchrow_array();
-	next
-	    if (!$count);
-	push(@result, $type);
-    }
-    return @result;
+    return NodeType->ReservableTypes();
 }
 
 #
