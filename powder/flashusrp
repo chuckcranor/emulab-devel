@@ -40,11 +40,12 @@ my $BASH     = "/bin/bash";
 #
 sub usage()
 {
-    print "Usage: reflash [-d] ... <serial>\n";
+    print "Usage: reflash [-dl] ... <serial>\n";
     exit(1);
 }
-my $optlist   = "d";
+my $optlist   = "dl";
 my $debug     = 0;
+my $listonly  = 0;
 
 # Protos
 sub GetDeviceList();
@@ -67,6 +68,11 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"l"})) {
+    $debug = 1;
+    GetDeviceList();
+    exit(0);
 }
 usage()
     if (!@ARGV);
