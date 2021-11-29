@@ -938,7 +938,8 @@ sub CreateSliver($)
     my $tries = 1;
     my $response;
     my $earlyreturn = 0;
-    my $doasync = ($aptagg->ismobile() ? 0 : 1);
+    my $doasync = ($aptagg->ismobile() ||
+		   $project->pid() eq "OAI2021FallWS" ? 0 : 1);
     my $isasync = 0;
     my $errmsg;
 
