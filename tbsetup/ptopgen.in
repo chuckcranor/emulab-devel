@@ -1323,9 +1323,13 @@ while (($node,$type,$physnode,$class,$issubnode,$def_boot_osid,$reserved,
 	$load_1min,$load_5min,$load_tstamp,$osid,$weight,$country,$latitude,
         $longitude,$isremote,$erole,
 	$allowed_projects,$osfeatures) = $result->fetchrow_array) {
-    my $current = $top->CreateNode($node);
-    $current->SetSubnode($physnode, $issubnode);
-    $current->SetRemote($isremote);
+    
+    my $current = $top->CreateNode($node,
+				   {
+				       "phys_nodeid"  => $physnode,
+				       "issubnode"    => $issubnode,
+				       "isremotenode" => $isremote,
+				   });
 
     #
     # Look for a specific node restriction. Easier to to do here
