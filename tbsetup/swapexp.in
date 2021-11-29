@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -92,6 +92,7 @@ my $TBDOCBASE = "@TBDOCBASE@";
 my $TBBASE = "@TBBASE@";
 my $CONTROL  = "@USERNODE@";
 my $ISFS     = ("@BOSSNODE_IP@" eq "@FSNODE_IP@") ? 1 : 0;
+my $EXPORTS_SETUP  = "$TB/sbin/exports_setup";
 
 #
 # Testbed Support libraries
@@ -850,6 +851,16 @@ $experiment->Refresh();
 # See the END block below.
 #
 $justexit = 0;
+
+#
+# Need to make sure the proj/group directories are exported since
+# this project might not have been active for a long time.
+#
+if (system("$EXPORTS_SETUP")) {
+    fatal({type => 'secondary', severity => SEV_SECONDARY,
+	   error => ['exports_setup_failed']},
+	  "$EXPORTS_SETUP failed");
+}
 
 # Need the previous swapper for rollback below. Safe now that tables unlocked.
 my $last_swapper = User->Lookup($experiment->swapper_idx());
