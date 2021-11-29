@@ -1377,10 +1377,13 @@ sub ActionStart($$;$)
 	    $msg .= "$GENTOPOFILE failed\n";
 	    goto bad;
 	}
-	DebugTimeStamp("exports_setup");
-	if (system("$EXPORTS_SETUP")) {
-	    $msg .= "$EXPORTS_SETUP failed\n";
-	    goto bad;
+	if ($pid ne "OAI2021FallWS") {
+	    DebugTimeStamp("exports_setup");
+	    if (system("$EXPORTS_SETUP")) {
+		$msg .= "$EXPORTS_SETUP failed\n";
+		goto bad;
+	    }
+	    DebugTimeStamp("exports_setup done");
 	}
 	DebugTimeStamp("arplockdown");
 	if (system("$ARPLOCKDOWN ")) {
