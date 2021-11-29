@@ -390,7 +390,7 @@ tblog_set_info($pid,$eid,$UID);
 # Need to make sure the proj/group directories are exported since
 # this project might not have been active for a long time.
 #
-if (system("$EXPORTS_SETUP")) {
+if ($pid ne "OAI2021FallWS" && system("$EXPORTS_SETUP")) {
     fatal({type => 'secondary', severity => SEV_SECONDARY,
 	   error => ['exports_setup_failed']},
 	  "$EXPORTS_SETUP failed");
