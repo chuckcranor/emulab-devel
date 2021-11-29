@@ -791,8 +791,13 @@ sub CreateLogFile($)
 #
 sub WrapperFork()
 {
-    # This tells libaudit to make sure the parent sends it email first.
-    #AuditPrefork();
+    # Need this in the child.
+    my $parent_lockname = "lock_$PID";
+
+    # Before the fork, lock the lock in the parent. It will be
+    # unlocked just before the parent exits, thus informing the
+    # child.
+    emdb::DBQueryWarn("select GET_LOCK('$parent_lockname', 5)");
     
     my $mypid = fork();
     if ($mypid) {
@@ -801,11 +806,21 @@ sub WrapperFork()
 	# Tell caller we are the parent,
 	return $mypid;
     }
+    # We want to form new event handles in the child. 
+    if (defined(&event::EventFork)) {
+	event::EventFork();
+    }
+
     # Reset in the child so that we can WrapperFork() again.
     $logforked = 0;
     # But children are not the parent;
     $parent = 0;
 
+    # XXX Need to let the parent finish up first, but the parent is
+    # is in the "defunct" state, so cannot use kill(0) to figure out
+    # it is gone.
+    emdb::DBQueryWarn("select GET_LOCK('$parent_lockname', 15)");
+    
     AuditFork();
     return 0;
 }

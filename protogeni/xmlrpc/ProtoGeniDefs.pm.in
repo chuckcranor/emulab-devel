@@ -200,6 +200,7 @@ $V2_METHODS = {
     "RunLinktest"       => \&GeniCMV2::RunLinktest,
     "Recovery"          => \&GeniCMV2::Recovery,
     "Flash"             => \&GeniCMV2::Flash,
+    "PrestageImages"    => \&GeniCMV2::PrestageImages,
 };
 
 ProtoGeniDefs::AddModule("cm",
