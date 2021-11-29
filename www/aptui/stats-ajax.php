@@ -77,7 +77,9 @@ if ($query_result) {
 # Number of experiments ever
 #
 $query_result =
-    DBQueryFatal("select portal,count(*) as count from apt_instance_history ".
+    DBQueryFatal("select portal,count(*) as count ".
+                 "  from apt_instance_history ".
+                 "where portal='$portal' ".
                  "group by portal");
 while ($row = mysql_fetch_array($query_result)) {
     if ($row["portal"] == $portal) {
