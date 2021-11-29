@@ -929,6 +929,7 @@ $(function ()
 	            submitted = false;
 		    return;
 	        }
+		sup.ShowWaitWait("This might take a minute. Patience please.");
 	        $("#waitwait-modal").modal('show');
 	        SubmitForm(0, 3, function(json) {
 		    if (json.code) {
