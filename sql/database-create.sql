@@ -3394,7 +3394,7 @@ CREATE TABLE `interfaces` (
   `IPaliases` text,
   `mask` varchar(15) default NULL,
   `interface_type` varchar(30) default NULL,
-  `iface` text NOT NULL,
+  `iface` varchar(64) NOT NULL default '',
   `role` enum('ctrl','expt','jail','fake','other','gw','outer_ctrl','mngmnt') default NULL,
   `current_speed` varchar(12) NOT NULL default '0',
   `duplex` enum('full','half') NOT NULL default 'full',
@@ -3408,7 +3408,7 @@ CREATE TABLE `interfaces` (
   `uuid` varchar(40) NOT NULL default '',
   `logical` tinyint(1) unsigned NOT NULL default '0',
   `autocreated` tinyint(1) unsigned NOT NULL default '0',
-  PRIMARY KEY  (`node_id`,`iface`(128)),
+  PRIMARY KEY  (`node_id`,`iface`),
   KEY `mac` (`mac`),
   KEY `IP` (`IP`),
   KEY `uuid` (`uuid`),
@@ -4471,7 +4471,8 @@ CREATE TABLE `nodes` (
   PRIMARY KEY  (`node_id`),
   KEY `phys_nodeid` (`phys_nodeid`),
   KEY `node_id` (`node_id`,`phys_nodeid`),
-  KEY `role` (`role`)
+  KEY `role` (`role`),
+  KEY `node_type` (`type`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -4715,7 +4716,8 @@ CREATE TABLE `os_info_versions` (
   KEY `OS` (`OS`),
   KEY `path` (`path`(255)),
   KEY `old_osid` (`old_osid`),
-  KEY `uuid` (`uuid`)
+  KEY `uuid` (`uuid`),
+  KEY `nextosid` (`nextosid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -4732,7 +4734,8 @@ CREATE TABLE `os_info` (
   `uuid` varchar(40) NOT NULL default '',
   PRIMARY KEY  (`osid`),
   UNIQUE KEY `pid` (`pid`,`osname`),
-  KEY `uuid` (`uuid`)
+  KEY `uuid` (`uuid`),
+  KEY `osname` (`osname`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -4796,7 +4799,8 @@ CREATE TABLE `osidtoimageid` (
   `osid` int(8) unsigned NOT NULL default '0',
   `type` varchar(30) NOT NULL default '',
   `imageid` int(8) unsigned NOT NULL default '0',
-  PRIMARY KEY  (`osid`,`type`)
+  PRIMARY KEY  (`osid`,`type`),
+  KEY `imageid` (`imageid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -5333,6 +5337,7 @@ CREATE TABLE `projects` (
   `industry` tinyint(1) default '0',
   `consortium` tinyint(1) default '0',
   `expert_mode` tinyint(1) default '0',
+  `allowed_clusters` text,
   PRIMARY KEY  (`pid_idx`),
   UNIQUE KEY `pid` (`pid`),
   KEY `unix_gid` (`unix_gid`),
@@ -7318,11 +7323,11 @@ CREATE TABLE `wires` (
   `node_id1` char(32) NOT NULL default '',
   `card1` tinyint(3) unsigned NOT NULL default '0',
   `port1` smallint(5) unsigned NOT NULL default '0',
-  `iface1` tinytext,
+  `iface1` varchar(64) NOT NULL default '',
   `node_id2` char(32) NOT NULL default '',
   `card2` tinyint(3) unsigned NOT NULL default '0',
   `port2` smallint(5) unsigned NOT NULL default '0',
-  `iface2` tinytext,
+  `iface2` varchar(64) NOT NULL default '',
   `logical` tinyint(1) unsigned NOT NULL default '0',
   `trunkid` mediumint(4) unsigned NOT NULL default '0',
   `external_interface` tinytext,
@@ -7331,8 +7336,8 @@ CREATE TABLE `wires` (
   KEY `node_id2` (`node_id2`,`card2`),
   KEY `dest` (`node_id2`,`card2`,`port2`),
   KEY `src` (`node_id1`,`card1`,`port1`),
-  KEY `node_id1_iface1` (`node_id1`,`iface1`(32)),
-  KEY `node_id2_iface2` (`node_id2`,`iface2`(32))
+  KEY `node_id1_iface1` (`node_id1`,`iface1`),
+  KEY `node_id2_iface2` (`node_id2`,`iface2`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

@@ -1,0 +1,63 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBKeyExists("osidtoimageid", "imageid")) {
+	DBQueryFatal("ALTER TABLE osidtoimageid add " .
+		     " KEY `imageid` (`imageid`)");
+    }
+    if (!DBKeyExists("nodes", "node_type")) {
+	DBQueryFatal("ALTER TABLE nodes add " .
+		     " KEY `node_type` (`type`)");
+    }
+    if (!DBKeyExists("os_info_versions", "nextosid")) {
+	DBQueryFatal("ALTER TABLE os_info_versions add " .
+		     " KEY `nextosid` (`nextosid`)");
+    }
+    if (!DBKeyExists("os_info", "osname")) {
+	DBQueryFatal("ALTER TABLE os_info add " .
+		     " KEY `osname` (`osname`)");
+    }
+
+    #
+    # text fields are not great to use if they are going to be in a KEY
+    # So change these iface fields to varchars.
+    #
+    if (DBSlotType("wires", "iface1") !~ /varchar/ ||
+	DBSlotType("wires", "iface2") !~ /varchar/) {
+
+	if (DBKeyExists("wires", "node_id1_iface1")) {
+	    DBQueryFatal("alter table wires drop key `node_id1_iface1`");
+	}
+	if (DBKeyExists("wires", "node_id2_iface2")) {
+	    DBQueryFatal("alter table wires drop key `node_id2_iface2`");
+	}
+	if (DBKeyExists("wires", "node_id2_iface1")) {
+	    DBQueryFatal("alter table wires drop key `node_id2_iface1`");
+	}
+	DBQueryFatal("alter table wires change iface1 ".
+		     "  iface1 varchar(64) NOT NULL default ''");
+	DBQueryFatal("alter table wires change iface2 ".
+		     "  iface2 varchar(64) NOT NULL default ''");
+	DBQueryFatal("alter table wires add ".
+		     "  KEY `node_id1_iface1` (`node_id1`,`iface1`)");
+	DBQueryFatal("alter table wires add ".
+		     "  KEY `node_id2_iface2` (`node_id2`,`iface2`)");
+    }
+    if (DBSlotType("interfaces", "iface") !~ /varchar/) {
+	DBQueryFatal("alter table interfaces drop primary key");
+	DBQueryFatal("alter table interfaces change iface ".
+		     "  `iface` varchar(64) NOT NULL default ''");
+	DBQueryFatal("alter table interfaces add ".
+		     "  PRIMARY KEY (`node_id`,`iface`)");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
