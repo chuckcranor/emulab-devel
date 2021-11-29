@@ -1145,7 +1145,24 @@ sub CreateSlivers()
     my ($perrmsg) = @_;
     my @return_codes = ();
 
-    $instance->SetStatus("provisioning");
+    #
+    # Limit concuurent instances provisioning
+    # This sets the status to "provisioning" if it can proceed.
+    #
+    while (1) {
+	my $delayed = $instance->ProvisioningLock();
+
+	if (!$delayed) {
+	    # Let the web interface know.
+	    $webtask->delayed(0);
+	    sleep(10);
+	    last;
+	}
+	# Let the web interface know.
+	$webtask->delayed(1);
+	print STDERR "Too many instances provisioning, Waiting.\n";
+	sleep(5);
+    }
     $webtask->canignore(0);
 
     #

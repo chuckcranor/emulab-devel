@@ -850,6 +850,44 @@ sub adminURL($)
     return $link;
 }
 
+# How many instances in delayed state.
+sub BusyCount($)
+{
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instances ".
+		    "where status='provisioning'");
+    
+    return 0
+	if (! $query_result);
+
+    return $query_result->numrows;
+}
+sub ProvisioningLock($)
+{
+    my ($self) = @_;
+    my $MAX = 12;
+
+    DBQueryWarn("lock tables apt_instances write")
+	or return 1;
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instances ".
+		    "where status='provisioning'");
+    
+    if (!$query_result) {
+	DBQueryWarn("unlock tables");
+	return 1;
+    }
+    my $count = $query_result->numrows;
+    if ($count >= $MAX) {
+	DBQueryWarn("unlock tables");
+	return 1;
+    }
+    $self->SetStatus("provisioning");
+    DBQueryWarn("unlock tables");
+    return 0;
+}
+
 #
 # Find the profile for this instance.
 #

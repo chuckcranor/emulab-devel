@@ -482,7 +482,7 @@ $(function ()
 	    expinfo.paniced = 1;
 	    instanceStatus = "quarantined";
 	}
-	if (instanceStatus != lastStatus) {
+	if (instanceStatus != lastStatus || instanceStatus == "created") {
             APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
 	    //console.info("New Status: ", json);
 	
@@ -497,6 +497,21 @@ $(function ()
 	    }
 	    if (instanceStatus == 'stitching') {
 		status_html = "stitching";
+	    }
+	    else if (instanceStatus == 'created' &&
+		     _.has(json.value, "delayedCount")) {
+		status_html = "waiting";
+		ProgressBarUpdate();
+		if (json.value.delayedCount > 1) {
+		    var count = json.value.delayedCount;
+
+		    status_message = "Portal is very busy, there are " +
+			count + " experiments waiting. ";
+		}
+		else {
+		    status_message = "Portal is very busy, waiting a moment. ";
+		}
+		status_message += "Patience please!";
 	    }
 	    else if (instanceStatus == 'pending') {
 		status_html = "pending";

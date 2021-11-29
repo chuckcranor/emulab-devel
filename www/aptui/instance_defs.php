@@ -414,6 +414,18 @@ class Instance
     }
 
     #
+    # How many instances waiting to start.
+    #
+    function DelayedCount() {
+        $query_result =
+            DBQueryFatal("select count(uuid) from apt_instances ".
+                         "where status='created'");
+        
+	$row = mysql_fetch_row($query_result);
+	return $row[0];
+    }
+
+    #
     # Number of active experiments a user or project has.
     #
     function CurrentInstanceCount($target) {
