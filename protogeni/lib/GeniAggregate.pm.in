@@ -1439,7 +1439,7 @@ sub ActionStart($$;$)
     #
     my $snmpit_child;
 
-    if (!$experiment->skipvlans()) {
+    if (!$experiment->skipvlans() && VLan->ExperimentHasVLans($experiment)) {
 	$snmpit_child = fork();
 	if ($snmpit_child) {
 	    #
