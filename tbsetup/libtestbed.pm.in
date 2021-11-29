@@ -61,6 +61,7 @@ my $NOREPLY      = "no-reply\@@OURDOMAIN@";
 my $SCRIPTNAME	 = "Unknown";
 my $TBSENDMAIL   = "$TB/libexec/tbsendmail";
 my $SENDMAIL     = "/usr/sbin/sendmail";
+my $TIMESTAMPS_FD;
 
 # So we can localize this variable.
 use vars qw($MAILTAG);
@@ -322,7 +323,8 @@ sub TBDebugTimeStamp(@)
 {
     my @strings = @_;
     if ($TIMESTAMPS) {
-	print "TIMESTAMP: ", TBTimeStamp(), " ", join("",@strings), "\n";
+	print $TIMESTAMPS_FD
+	    "TIMESTAMP: ", TBTimeStamp(), " ", join("",@strings), "\n";
     }
     return 0;
 }
@@ -331,9 +333,17 @@ sub TBDebugTimeStamp(@)
 # Turn on timestamps locally. We could do this globally by using an
 # env variable to pass it along, but lets see if we need that.
 # 
-sub TBDebugTimeStampsOn()
+sub TBDebugTimeStampsOn(;$)
 {
+    my ($usestderr) = @_;
+    
     $TIMESTAMPS = 1;
+    if (defined($usestderr) && $usestderr) {
+	$TIMESTAMPS_FD = *STDERR;
+    }
+    else {
+	$TIMESTAMPS_FD = *STDOUT;
+    }
 }
 
 #
