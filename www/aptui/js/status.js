@@ -32,6 +32,7 @@ $(function ()
     var wholedisk   = 0;
     var isscript    = 0;
     var dossh       = 1;
+    var lazytopo    = 0;
     var jacksIDs    = {};
     var jacksSites  = {};
     var publicURLs  = null;
@@ -92,6 +93,7 @@ $(function ()
 	dossh         = window.APT_OPTIONS.dossh;
 	isscript      = window.APT_OPTIONS.isscript;
 	hidelinktest  = window.APT_OPTIONS.hidelinktest;
+	lazytopo      = window.APT_OPTIONS.lazytopo;
 	lockdown_code = uuid.substr(2, 5);
 
 	// Standard option
@@ -2568,30 +2570,35 @@ $(function ()
 			});
 		}
 	    }
+	    var multisite = Object.keys(statusblob).length > 1;
+	    console.info("foo", multisite, nodecount);
 
-	    if (Object.keys(statusblob).length > 1 ||
-		nodecount < MAXJACKSNODES) {
+	    if (multisite || nodecount < MAXJACKSNODES) {
 		if (!jacksInstance) {
-		    $('#quicktabs_ul a[href="#topology"]')
-			.parent().removeClass("hidden");
-		    $('#quicktabs_content #topology').removeClass("hidden");
-		    $('#quicktabs_ul a[href="#topology"]').tab('show');
-		    ShowViewer('#showtopo_statuspage',
-			       Object.keys(statusblob).length > 1, manifest);
+		    if (lazytopo) {
+			LazyTopoTab(multisite, manifest);
+		    }
+		    else {
+			ShowTopologyTab(multisite, manifest);
+		    }
 		}
 		else if (changingtopo) {
 		    // When we get first new manifest, clear the viewer palette.
 		    ClearViewer(manifest);
-		    //AddToViewer(manifest);
 		}
 		else {
 		    AddToViewer(manifest);
 		}
 	    }
 	    else {
+		// Not going to show a topology, default to list.
 		$('#quicktabs_ul a[href="#listview"]').tab('show');
+		
+		// Without jacks, we show the manifest now, otherwise
+		// jacks combines them and hands it back.
 		ShowManifest(manifest);
 	    }
+
 	    // Clear changingtopo state on first new manifest.
 	    if (changingtopo) {
 		changingtopo = false;
@@ -2611,7 +2618,9 @@ $(function ()
 		if (managers.length == 1)
 		    showlinktest = true;
 	    });
-	    SetupLinktest(instanceStatus);
+	    if (!lazytopo) {
+		SetupLinktest(instanceStatus);
+	    }
 
 	    // Mark that we have this manifest;
 	    manifests[aggregate_urn] = manifest;
@@ -4306,6 +4315,55 @@ $(function ()
 			"exptID"   : "#expt-traffic-panel-div",
 			"refreshID": "#graphs-refresh-button",
 			"callback" : callback});
+    }
+
+    function LazyTopoTab(multisite, manifest)
+    {
+	if (! $('#show_topology_tab').parent().hasClass("hidden")) {
+	    return;
+	}
+	$('#show_topology_tab').parent().removeClass("hidden");
+	
+	// Helper function.
+	var loadScript = function (url, callback) {
+	    jQuery.ajax({
+		url: url,
+		dataType: 'html',
+		success: callback,
+		async: true
+	    });
+	};
+	var waitForJacks = function () {
+	    if (window.JACKS_LOADER.isReady) {
+		console.info("loaded");
+		ShowTopologyTab(multisite, manifest);
+		SetupLinktest(instanceStatus);
+		return;
+	    }
+	    console.info("waiting");
+	    setTimeout(function f() { waitForJacks() }, 500);	    
+	};
+	loadScript("jacksload.php", function (data) {
+	    console.info(data);
+
+	    $(document.body).append("<div>" + data + "</div>");
+	    waitForJacks();
+	});
+	lazytopo = 0;
+    }
+
+    function ShowTopologyTab(multisite, manifest)
+    {
+	if (! $('#quicktabs_content #topology').hasClass("hidden")) {
+	    return;
+	}
+	
+	// Show the tab.
+	$('#quicktabs_ul a[href="#topology"]').parent().removeClass("hidden");
+	$('#quicktabs_content #topology').removeClass("hidden");
+	$('#quicktabs_ul a[href="#topology"]').tab('show');
+
+	ShowViewer('#showtopo_statuspage', multisite, manifest);
     }
 
     /*

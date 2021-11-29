@@ -32,6 +32,7 @@ include_once("profile_defs.php");
 include_once("instance_defs.php");
 $page_title = "Experiment Status";
 $ajax_request = 0;
+$lazytopo = 0;
 
 #
 # Get current user.
@@ -217,6 +218,10 @@ $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
 #}
 #$cansnap = 0;
 
+if ($instance->pid() == "OAI2021FallWS") {
+    $lazytopo = 1;
+}
+
 #
 # We give ssh to the creator (real user or guest user).
 #
@@ -276,6 +281,7 @@ echo "  window.APT_OPTIONS.hidelinktest = false;\n";
 echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
 echo "  window.APT_OPTIONS.dossh = $dossh;\n";
 echo "  window.APT_OPTIONS.isscript = $isscript;\n";
+echo "  window.APT_OPTIONS.lazytopo = $lazytopo;\n";
 echo "  window.APT_OPTIONS.AJAXURL = 'server-ajax.php';\n";
 if (isset($maxextend) && $maxextend != "") {
     # Assumed to be hours.
@@ -299,7 +305,9 @@ echo "<script src='js/lib/filesize.min.js'></script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
-REQUIRE_JACKS();
+if (!$lazytopo) {
+    REQUIRE_JACKS();
+}
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
 REQUIRE_IMAGE();
