@@ -231,6 +231,8 @@ class MyServer(ForkingTCPServer, SimpleXMLRPCDispatcher):
             self, (ADDR,PORT), MyXMLRPCRequestHandler, bind_and_activate=False)
         # Oh, so glad this is built into TCPServer.
         self.allow_reuse_address = True
+        # This too!
+        self.request_queue_size = 150
 
         dargs = (self,)
         if sys.version_info[0] >= 2 and sys.version_info[1] >= 5:
