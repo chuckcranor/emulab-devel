@@ -34,6 +34,7 @@ use libadminctrl;
 use libptop;
 use EmulabFeatures;
 use OSImage;
+use libtestbed;
 
 my @SAVEARGV = @ARGV;
 
@@ -93,6 +94,7 @@ my $virtstuff = 0;
 my $widearea  = 0;
 my $simstuff  = 0;
 my $allnodes  = 0;
+my $nolinks   = 0;
 my $mnetcores = 0;
 my $mnetedges = 0;
 my $regression= 0;
@@ -197,8 +199,12 @@ TBGetSiteVar('general/default_country', \$default_country);
 my $delaycap_override;
 
 #
-# Turn off line buffering on output
+# Turn off line buffering on STDERR, but leave it on for STDOUT since we
+# call print about a million times so buffering is better.
 #
+select(STDERR);
+$| = 0;
+select(STDOUT);
 $| = 1;
 
 # Settings - Change these to your particular network.
@@ -246,7 +252,7 @@ my %globalcounts  = ();
 my %interfacestate= ();
 my %vinterfaces   = ();
 my %rusagedata    = ();
-my %imagelist     = ();
+my $imagelist;
 my %reserved_nodes= ();
 my %simple_links  = ();
 my $typelimitfile;
@@ -294,28 +300,14 @@ if (defined($options{"r"})) {
 if (defined($options{"S"})) {
     $simstuff = 1;
 }
+if (defined($options{"N"})) {
+    $nolinks = 1;
+}
 if (defined($options{"R"})) {
     $regression = 1;
 }
 if (defined($options{"p"})) {
     $pid = $options{"p"};
-
-    if (defined($pid) && ! defined($options{"Z"})) {
-	my $group = Group->Lookup($pid, $pid);
-	if (defined($group)) {
-	    $EmulabFeatures::verbose = 0;
-	    my $newptopgen = EmulabFeatures->FeatureEnabled("NewPtopgen", undef,
-							    $group, undef);
-	    if ($newptopgen) {
-		my $newpath = "$TBROOT/libexec/ptopgen_test";
-		print STDERR "Invoking new ptopgen from $newpath\n"
-		    if (!$genimode);
-		exec $newpath, @SAVEARGV;
-		die("*** $0:\n".
-		    "    Could not exec $newpath: $!");
-	    }
-	}
-    }
 }
 if (defined($options{"a"})) {
     $allnodes = 1;
@@ -365,9 +357,10 @@ if (defined($options{"I"})) {
     my @imlist = <IM>;
     close(IM);
 
+    $imagelist = {};
     foreach $line (@imlist) { 
 	chomp($line);
-	$imagelist{$line} = $line;
+	$imagelist->{$line} = $line;
     }
 }
 if (defined($options{"1"})) {
@@ -396,6 +389,19 @@ usage()
 	    && $genimode ne $V_2
 	    && $genimode ne $V_3));
 
+TBDebugTimeStampsOn(1);
+TBDebugTimeStamp("Starting ptopgen_test");
+
+sub MyQueryFatal($)
+{
+    my ($query) = @_;
+
+    #TBDebugTimeStamp($query);
+    my $query_result = DBQueryFatal($query);
+    #TBDebugTimeStamp("Query Done");
+    return $query_result;
+}
+
 # Figure out who is running this script, to be used in finding OSes
 # with per-user permissions.  We assume that the user we want
 # to look up is the one running this script (and hence the mapper
@@ -418,7 +424,7 @@ my %interfaceips = ();
 
 # Read interfaces
 my $result =
-    DBQueryFatal("SELECT node_id,iface,interface_type,role,IP" .
+    MyQueryFatal("SELECT node_id,iface,interface_type,role,IP" .
 		 " from interfaces where logical=0 " .
 		 ($genimode ne $NO_GENI ? "and role!='gw'" : ""));
 		 
@@ -435,14 +441,7 @@ while (my ($node,$iface,$type,$role,$ip) = $result->fetchrow_array) {
 	$interfaceips{"$node:$iface"} = $ip;
     }
 }
-
-my %used_vlans = ();
-
-$result =
-    DBQueryFatal("SELECT tag from reserved_vlantags");
-while (($vlantag) = $result->fetchrow_array) {
-    $used_vlans{$vlantag} = 1;
-}
+TBDebugTimeStamp("Finished reading interfaces");
 
 sub AvailableVlans($)
 {
@@ -492,20 +491,30 @@ my %contact_nodes;
 my %contact_ifaces;
 my %stitch_points;
 my %external_speeds;
+my %used_vlans = ();
 
-$result = DBQueryFatal("select w.node_id1, w.iface1, w.node_id2, w.iface2, ".
-		       "w.external_interface, w.external_wire, ".
-		       "e.node_id, e.vlans, ".
-		       "e.external_manager, e.network_id, e.external_interface, ".
-		       "e.external_wire, e.external_subport, i1.current_speed, i2.current_speed ".
-		       "from wires as w ".
-		       "left join external_networks as e ".
-		       "on w.node_id1=e.node_id or w.node_id2=e.node_id ".
-		       "left join interfaces as i1 on w.node_id1=i1.node_id and ".
-		       "     w.iface1=i1.iface ".
-		       "left join interfaces as i2 on w.node_id2=i2.node_id and ".
-		       "     w.iface2=i2.iface ".
-		       "where e.node_id is not null");
+if (!$NO_GENI) {
+
+$result =
+    MyQueryFatal("SELECT tag from reserved_vlantags");
+while (($vlantag) = $result->fetchrow_array) {
+    $used_vlans{$vlantag} = 1;
+}
+
+$result = MyQueryFatal("select w.node_id1, w.iface1, w.node_id2, w.iface2, ".
+	       "w.external_interface, w.external_wire, ".
+	       "e.node_id, e.vlans, ".
+	       "e.external_manager, e.network_id, e.external_interface, ".
+	       "e.external_wire, e.external_subport, i1.current_speed,".
+	       "    i2.current_speed ".
+	       "from wires as w ".
+	       "left join external_networks as e ".
+	       "on w.node_id1=e.node_id or w.node_id2=e.node_id ".
+	       "left join interfaces as i1 on w.node_id1=i1.node_id and ".
+	       "     w.iface1=i1.iface ".
+	       "left join interfaces as i2 on w.node_id2=i2.node_id and ".
+	       "     w.iface2=i2.iface ".
+	       "where e.node_id is not null");
 while (my ($cnode, $ciface, $enode, $eiface,
 	   $external_iface_urn, $external_link_urn, $external, $vlanList,
 	   $external_manager_urn,
@@ -565,13 +574,14 @@ while (my ($cnode, $ciface, $enode, $eiface,
     $contact_ifaces{"$cnode:$enode"} = $ciface_urn;
     $external_speeds{"$cnode:$enode"} = $speed;
 }
+}
 
 print_header();
 
 my %nodetouuid;
 my %nodetoavailable;
 
-$result = DBQueryFatal("SELECT n.node_id, n.eventstate, n.role, n.uuid, " .
+$result = MyQueryFatal("SELECT n.node_id, n.eventstate, n.role, n.uuid, " .
 		       "nt.isremotenode, " .
 		       "dedicated_wa_types.attrvalue, b.erole, " .
 		       "n.reserved_pid, b.eid " .
@@ -616,10 +626,11 @@ while (($node,$eventstate, $role, $uuid, $isremotenode,
 		  || $isshared || $isblockstore);
     $nodetoavailable{$node} = $isfree;
 }
+TBDebugTimeStamp("Finished node stuff");
 
 # Read class/type maps
 $result =
-    DBQueryFatal("select class,type,isvirtnode,architecture from node_types");
+    MyQueryFatal("select distinct nt.class,nt.type,nt.isvirtnode,nt.architecture from node_types as nt join nodes as n on n.type=nt.type");
 
 while (my ($class,$type,$isvirt,$architecture) = $result->fetchrow_array) {
     $map = {};
@@ -639,38 +650,54 @@ while (my ($class,$type,$isvirt,$architecture) = $result->fetchrow_array) {
     $map->{'TYPEINFO'} = $typeinfo;
     $map->{'FEATURES'} = [];
     $map->{'AUXTYPES'} = {};
-    $map->{'OSLIST'} = [];
+    $map->{'OSLIST'}   = [];
+    $map->{'EXPLICIT_REQUEST'} = $typeinfo->GetAttribute("explicit_request");
     $typemap{$type} = $map;
 
     # Default is permission to use all types,classes. 
     $permissions{$class} = 1;
     $permissions{$type}  = 1;
 }
+TBDebugTimeStamp("Finished reading node type stuff");
+
+#
+# Read the auxtypes for each type.
+# 
+$result = MyQueryFatal("select auxtype,type from node_types_auxtypes");
+while (my ($auxtype,$type) = $result->fetchrow()) {
+    if (exists($typemap{$type})) {
+	$typemap{$type}->{'AUXTYPES'}->{$auxtype} = 1;
+	$auxtypemap{$auxtype} = $type;
+    }
+}
+TBDebugTimeStamp("Finished reading node type auxtypes");
 
 # Figure out which nodes will use a USB dongle to boot. As a proxy, we
 # look for the pxe_boot_path pointing to the tpm version of grub.
 our %node_usb;
 
-$result = DBQueryFatal("select node_id from node_attributes ".
+$result = MyQueryFatal("select node_id from node_attributes ".
 		       "where attrkey='pxe_boot_path' and ".
 		       "      attrvalue='/tftpboot/pxeboot_tpm'");
 while (($node) = $result->fetchrow_array) {
     $node_usb{$node} = 1;
 }
+TBDebugTimeStamp("Finished reading usb stuff");
 
 #
 # Physical RAM overrides.
 #
 my %node_ram;
 
-$result = DBQueryFatal("select node_id,attrvalue from node_attributes ".
+$result = MyQueryFatal("select node_id,attrvalue from node_attributes ".
 		       "where attrkey='physical_ram'");
 while (my ($nodeid,$ram) = $result->fetchrow_array) {
     $node_ram{$nodeid} = $ram;
 }
+TBDebugTimeStamp("Finished reading node attribute stuff");
 
 # Read node_startloc
-$result = DBQueryFatal("select node_id,building from node_startloc");
+$result = MyQueryFatal("select node_id,building from node_startloc");
 while (($node,$building) = $result->fetchrow_array) {
     # TODO: This screws up the meaning of the @features list. Now it
     # is not just a list of feature strings, but a list of strings
@@ -678,14 +705,16 @@ while (($node,$building) = $result->fetchrow_array) {
     # strings. Fix this.
     $areamap{$node} .= " area-$building:0";
 }
+TBDebugTimeStamp("Finished reading node startloc stuff");
 
 #
 # Read the features table for each type.
 # 
-$result = DBQueryFatal("select type, feature, weight from node_type_features");
+$result = MyQueryFatal("select type, feature, weight from node_type_features");
 while (my ($type, $feature, $weight) = $result->fetchrow()) {
     push(@{$typemap{$type}->{'FEATURES'}}, "$feature:$weight");
 }
+TBDebugTimeStamp("Finished reading node features");
 
 # Augment the features table to discourage selection of node types other
 # than those the project has reserved (if any).
@@ -700,6 +729,8 @@ if( defined( $pid ) ) {
 			@reservations ) );
 	}
     }
+    TBDebugTimeStamp("Finished reservations 1");
+    
     #
     # We want to prune out nodes that are currently reserved to another
     # project but not yet allocated. This is imprecise, since a reservation
@@ -709,7 +740,9 @@ if( defined( $pid ) ) {
     # if that is needed.
     #
     my @reservable_nodes   = Reservation->ReservableNodes();
+    TBDebugTimeStamp("Finished reservations 2");
     my @activereservations = Reservation->CurrentReservations(undef, 1);
+    TBDebugTimeStamp("Finished reservations 3");
 
     foreach my $node (@reservable_nodes) {
 	my $node_id = $node->node_id();
@@ -729,21 +762,14 @@ if( defined( $pid ) ) {
 	    }
 	}
     }
+    TBDebugTimeStamp("Finished reservations 4");
 }
-
-#
-# Read the auxtypes for each type.
-# 
-$result = DBQueryFatal("select auxtype,type from node_types_auxtypes");
-while (my ($auxtype,$type) = $result->fetchrow()) {
-    $typemap{$type}->{'AUXTYPES'}->{$auxtype} = 1;
-    $auxtypemap{$auxtype} = $type;
-}
+TBDebugTimeStamp("Finished reading current reservation stuff");
 
 #
 # Read the features table for each individual node
 #
-$result = DBQueryFatal("select node_id, feature, weight from node_features");
+$result = MyQueryFatal("select node_id, feature, weight from node_features");
 while (my ($node_id, $feature, $weight) = $result->fetchrow()) {
     if (! defined($features{$node_id})) {
 	$features{$node_id} = ["$feature:$weight"];
@@ -752,11 +778,12 @@ while (my ($node_id, $feature, $weight) = $result->fetchrow()) {
 	push @{$features{$node_id}}, "$feature:$weight";
     }
 }
+TBDebugTimeStamp("Finished reading node features");
 
 #
 # Read in the node_auxtypes table for each node.
 #
-$result = DBQueryFatal("select node_id, type, count from node_auxtypes");
+$result = MyQueryFatal("select node_id, type, count from node_auxtypes");
 while (my ($node_id, $type, $count) = $result->fetchrow()) {
     if (! defined($auxtypes{$node_id})) {
 	$auxtypes{$node_id} = ["$type:$count"];
@@ -764,6 +791,8 @@ while (my ($node_id, $type, $count) = $result->fetchrow()) {
     }
     push @{$auxtypes{$node_id}}, "$type:$count";
 }
+TBDebugTimeStamp("Finished reading node auxtypes");
+
 #
 # Read the permission table if given a pid. If there is an entry in
 # the table for a type/class, then permission is granted only if there
@@ -771,107 +800,232 @@ while (my ($node_id, $type, $count) = $result->fetchrow()) {
 # 
 if (defined($pid)) {
     $result =
-	DBQueryFatal("select type from nodetypeXpid_permissions");
+	MyQueryFatal("select distinct type from nodetypeXpid_permissions");
     
     while (my ($type) = $result->fetchrow_array) {
 	$permissions{$type} = 0;
     }
     
     $result =
-	DBQueryFatal("select type from nodetypeXpid_permissions ".
+	MyQueryFatal("select type from nodetypeXpid_permissions ".
 		     "where pid='$pid'");
     
     while (my ($type) = $result->fetchrow_array) {
 	$permissions{$type} = 1;
     }
 }
+TBDebugTimeStamp("Finished reading nodetypeXpid_permissions");
 
-#
-# Read the table of which image types are supported on which hardware - we
-# limit this to global images and ones that match the PID (if given) or user. 
-# We do this limiting for two reasons:
-# 1) To avoid an explosion in the number of features for nodes
-# 2) To avoid information leaks, allowing projects to see each other's images
-#
-my $osidquery_common = 
-    "left join image_versions as iv on ".
-    "     iv.imageid=i.imageid and iv.version=i.version ".
-    "left join image_permissions as p1 on p1.imageid=i.imageid ".
-    "left join groups as g on ".
-    "     p1.permission_type='group' and p1.permission_idx=g.gid_idx ".
-    "left join users as u on ".
-    "     p1.permission_type='user' and p1.permission_idx=u.uid_idx ";
-
-#
-# Using osidtoimageid for type mapping. 
-#
-my $osidquery1 =
-    "select distinct o.osid,oi.type,o.osname,o.pid,ov.OS,".
-    "  ov.version,ov.description,ov.protogeni_export,ov.osfeatures,".
-    "  iv.metadata_url,i.imagename,i.pid ".
-    "    from os_info as o ".
-    "left join os_info_versions as ov on ".
-    "     ov.osid=o.osid and ov.vers=o.version ".
-    "left join osidtoimageid as oi on o.osid = oi.osid ".
-    "left join images as i on oi.imageid = i.imageid ".
-    $osidquery_common .
-    "where (iv.global = 1 ";
-
-#
-# Using newer architecture fields in node_types and images. 
-#
-my $osidquery2 =
-    "select distinct o.osid,nt.type,o.osname,o.pid,ov.OS,".
-    "  ov.version,ov.description,ov.protogeni_export,ov.osfeatures,".
-    "  iv.metadata_url,i.imagename,i.pid ".
-    "    from os_info as o ".
-    "left join os_info_versions as ov on ".
-    "     ov.osid=o.osid and ov.vers=o.version ".
-    "left join images as i on o.osid = i.imageid ".
-    # The image architecture could be a short list.
-    "inner join node_types as nt on ".
-    "   FIND_IN_SET(nt.architecture,i.architecture) ".
-    # Avoid processing the same image from both queries.
-    # When architecture is being used, we delete the osidtoimageid rows.
-    "left join osidtoimageid as oi on o.osid = oi.osid ".
-    $osidquery_common .
-    "where (1 or oi.type is null) and ".
-    "      i.architecture is not null and ".
-    "      nt.architecture is not null and (iv.global = 1 ";
-
-if ($pid) {
-    $osidquery1 .= " or i.pid='$pid' ".
-	" or (g.pid is not null and g.pid='$pid')";
-    $osidquery2 .= " or i.pid='$pid' ".
-	" or (g.pid is not null and g.pid='$pid')";
+sub processOs(@)
+{
+    my ($osid,$type,$osname,$ospid,$osos, $osversion,
+	$osdescription,$geni,$osfeatures,$remote_url,$imagename,
+	$imagepid,$aliasname,$aliasid) = @_;
+    
+    if (exists($typemap{$type}) && $genimode ne $NO_GENI) {
+	my $default = $typemap{$type}->{'OSID'};
+	if ($geni eq 1 ||
+	    (defined($default) && $default eq $osid)) {
+	    if (defined($remote_url)) {
+		$osid_url{$osid} = $remote_url;
+	    } elsif (defined($imagename) && defined($imagepid)) {
+		$image = OSImage->Lookup("$imagepid,$imagename");
+		# Just skip, does not matter.
+		next
+		    if (!defined($image));
+		$osid_url{$osid} = $image->LocalURL();
+	    }
+	    push(@{ $typemap{$type}->{'OSLIST'} }, $osid)
+		if (!grep {$_ == $osid} @{ $typemap{$type}->{'OSLIST'} });
+		
+	    if ($genimode && defined($aliasname)) {
+		$osid_name{$osid} = $aliasname;
+	    }
+	    else {
+		$osid_name{$osid} = $osname;
+	    }
+	    $osid_pid{$osid} = $ospid;
+	    $osid_os{$osid} = $osos;
+	    $osid_version{$osid} = $osversion;
+	    $osid_description{$osid} = $osdescription;
+	}
+    }
+    if ($node_type_osids{$type}) {
+	push(@{$node_type_osids{$type}}, $osid)
+	    if (!grep {$_ == $osid} @{$node_type_osids{$type}});
+    } else {
+	$node_type_osids{$type} = [$osid];
+    }
+    if (defined($osfeatures) && $osfeatures =~ /no-usb-boot/) {
+	$osid_avoid_usb{$osid} = 1;
+    }
+    #
+    # We have to maintain a data structure telling us which types an OSID
+    # could be on for use below with generic OSIDs
+    #
+    if ($osid_node_types{$osid}) {
+	push(@{$osid_node_types{$osid}}, $type)
+	    if (!grep {$_ eq $type} @{$osid_node_types{$osid}});
+    } else {
+	$osid_node_types{$osid} = [$type];
+    }
 }
-if ($this_user) {
-    $osidquery1 .= " or (u.uid is not null and u.uid='$this_user')";
-    $osidquery2 .= " or (u.uid is not null and u.uid='$this_user')";
-}
-$osidquery1 .= ")";
-$osidquery2 .= ")";
 
 #
-# No need to use osidtoimageid here cause:
-# 1. We only support EZ images now (osid=imageid).
-# 2. The type is made explicit by being in the node_type_attributes table!
+# Need to know these OSIDs.
 #
-my $defaultosidquery =
-    "select distinct o.osid,t.type,o.osname,o.pid,ov.OS,".
-    "   ov.version,ov.description,ov.protogeni_export,ov.osfeatures,".
-    "   iv.metadata_url,i.imagename,i.pid, ".
-    "   a.imagename as aliasname,a.imageid as aliasid ".
-    "   from os_info as o ".
-    "left join os_info_versions as ov on ".
-    "     ov.osid=o.osid and ov.vers=o.version ".
-    "left join images as i on o.osid = i.imageid ".
-    "left join image_versions as iv on ".
-    "     iv.imageid=i.imageid and iv.version=i.version ".
-    "left join image_aliases as a on a.target_imageid=i.imageid ".
-    "left join node_type_attributes as t ".
-    "on (o.osid=t.attrvalue) ".
-    "where t.attrkey='default_osid'";
+our $openvzid;
+our $dockerid;
+
+my $query_result =
+    MyQueryFatal("select o.osid,o.osname,nextosid from os_info as o ".
+		 "join os_info_versions as v on ".
+     		 "    v.osid=o.osid and v.vers=o.version ".
+		 "where o.osname='OPENVZ-STD' or o.osname='DOCKVH-STD'");
+while (my ($osid,$osname,$nextosid) = $query_result->fetchrow_array()) {
+    if ($osname eq "OPENVZ-STD") {
+	$openvzid = $nextosid;
+    }
+    if ($osname eq "DOCKVH-STD") {
+	$dockerid = $nextosid;
+    }
+}
+
+#
+# In Geni mode we are spitting out an advertisement which includes a bunch
+# of info we do not need otherwise. There is no user, but might be an
+# optional project.
+#
+if ($genimode ne $NO_GENI || !defined($options{"I"})) {
+    # First query uses osidtoimageid to get type info
+    my $query1 =
+	"select u.osid,u.type,o.osname,o.pid,ov.OS,".
+	"   ov.version,ov.description,ov.protogeni_export,ov.osfeatures, ".
+	"   iv.metadata_url,i.imagename,i.pid from " .
+	"((select oi.osid,oi.type from ".
+	"  (select distinct imageid from image_versions ".
+	"   where global=1" . ($pid ? " or pid='$pid'" : "") . ") as i ".
+        " join osidtoimageid as oi on oi.imageid=i.imageid) ".
+	($pid ?
+	 # Images granted to the project.
+	 " union ".
+	 " (select oi.osid,oi.type from group_membership as g ".
+	 " join image_permissions as p1 on ".
+	 "   p1.permission_type='group' and p1.permission_idx=g.gid_idx ".
+	 " join osidtoimageid as oi on oi.imageid=p1.imageid ".
+	 " where g.pid='$pid) " : " ") .
+	") as u ".
+	"join os_info as o on o.osid=u.osid ".
+	"join os_info_versions as ov on ".
+	"     ov.osid=o.osid and ov.vers=o.version ".
+	"join images as i on i.imageid = u.osid ".
+	"join image_versions as iv on ".
+	"     iv.imageid=i.imageid and iv.version=i.version";
+	
+    # Second query uses newer architecture slots.
+    my $query2 =
+	"select o.osid,u.type,o.osname,o.pid,ov.OS,".
+	"   ov.version,ov.description,ov.protogeni_export,ov.osfeatures, ".
+	"   iv.metadata_url,i.imagename,i.pid from " .
+	"((select i.imageid,nt.type from images as i ".
+	"  join node_types as nt on ".
+	"     FIND_IN_SET(nt.architecture,i.architecture) ".
+	"  join image_versions as iv on ".
+	"    iv.imageid=i.imageid and iv.version=i.version ".
+	# Prune what we got in the first query above
+	"  left join osidtoimageid as oi on oi.imageid=i.imageid ".
+	"  where oi.type is null and ".
+	"        i.architecture is not null and ".
+	"        nt.architecture is not null and ".
+	"        (iv.global=1" . ($pid ? " or pid='$pid'" : "") . ")) " .
+	($pid ?
+	 # Images granted to the project.
+	 " union ".
+	 " (select i.imageid,nt.type from group_membership as g ".
+	 "  join image_permissions as p1 on ".
+	 "     p1.permission_type='group' and p1.permission_idx=g.gid_idx ".
+	 "  join images as i on i.imageid=p1.imageid ".
+	 "  join node_types as nt on ".
+	 "     FIND_IN_SET(nt.architecture,i.architecture) ".
+	 " where g.pid='$pid') " : " ") .
+	") as u ".
+	"join os_info as o on o.osid=u.imageid ".
+	"join os_info_versions as ov on ".
+	"     ov.osid=o.osid and ov.vers=o.version ".
+	"join images as i on i.imageid=u.imageid ".
+	"join image_versions as iv on ".
+	"     iv.imageid=i.imageid and iv.version=i.version";
+
+    #
+    # No need to use osidtoimageid here cause:
+    # 1. We only support EZ images now (osid=imageid).
+    # 2. The type is made explicit by being in the node_type_attributes table
+    #
+    my $defaultosidquery =
+	"select distinct o.osid,t.type,o.osname,o.pid,ov.OS,".
+	"   ov.version,ov.description,ov.protogeni_export,ov.osfeatures,".
+	"   iv.metadata_url,i.imagename,i.pid, ".
+	"   a.imagename as aliasname,a.imageid as aliasid ".
+	"   from os_info as o ".
+	"left join os_info_versions as ov on ".
+	"     ov.osid=o.osid and ov.vers=o.version ".
+	"left join images as i on o.osid = i.imageid ".
+	"left join image_versions as iv on ".
+	"     iv.imageid=i.imageid and iv.version=i.version ".
+	"left join image_aliases as a on a.target_imageid=i.imageid ".
+	"left join node_type_attributes as t ".
+	"on (o.osid=t.attrvalue) ".
+	"where t.attrkey='default_osid'";
+
+    foreach my $q ($query1, $query2, $defaultosidquery) {
+	$result = MyQueryFatal($q);
+	while (my @stuff = $result->fetchrow_array()) {
+	    processOs(@stuff);
+	}
+    }
+}
+else {
+    TBDebugTimeStamp("Process images started");
+
+    foreach my $imageid (keys(%$imagelist)) {
+	my $image = OSImage->Lookup($imageid);
+	if (!defined($image)) {
+	    fatal("No such image: $imageid");
+	}
+	if (! ($image->global() ||
+	       ($pid && $image->pid() eq $pid) ||
+	       ($this_user &&
+		$image->AccessCheck($this_user, TB_IMAGEID_READINFO)))) {
+	    print STDERR "No permission to use $image\n";
+	    next;
+	}
+	my @typelist;
+	
+	if ($image->isImage()) {
+	    @typelist = $image->TypeList();
+
+	    foreach my $nodetype (@typelist) {
+		processOs($image->imageid(), $nodetype->type());
+	    }
+	}
+	elsif ($image->nextosid()) {
+	    my $realosid = TBResolveNextOSID($image->osid(), $pid, $exempt_eid);
+	    if (defined($realosid)) {
+		$nextimage = OSImage->Lookup($realosid);
+		if (defined($nextimage)) {
+		    @typelist = $nextimage->TypeList();
+		}
+		foreach my $nodetype (@typelist) {
+		    processOs($image->osid(), $nodetype->type());
+		}
+	    }
+	}
+	if (!@typelist) {
+	    fatal("Could not derive a typelist for $image");
+	}
+    }
+    TBDebugTimeStamp("Process images ended");
+}
 
 #
 # For subOS support (i.e., vnode OSes running atop vhost OSes), we have to
@@ -943,96 +1097,25 @@ our %node_countries;
 our %node_latitudes;
 our %node_longitudes;
 
-our $openvzid;
-our $dockerid;
-
-$result = DBQueryFatal($osidquery1);
-processOs($result);
-
-$result = DBQueryFatal($osidquery2);
-processOs($result);
-
-# We want this to be last since it will possibly alter results of previous.
-$result = DBQueryFatal($defaultosidquery);
-processOs($result);
-
-sub processOs
-{
-    my $result = shift(@_);
-    while (my ($osid,$type,$osname,$ospid,$osos, $osversion,
-	       $osdescription,$geni,$osfeatures,$remote_url,$imagename,
-	       $imagepid,$aliasname,$aliasid) = $result->fetchrow()) {
-	if ($osname eq "OPENVZ-STD") {
-	    $openvzid = $osid;
-	}
-	if ($osname eq "DOCKVH-STD") {
-	    $dockerid = $osid;
-	}
-	if ($typemap{$type}) {
-	    my $default = $typemap{$type}->{'OSID'};
-	    if ($geni eq 1 ||
-		(defined($default) && $default eq $osid)) {
-		if (defined($remote_url)) {
-		    $osid_url{$osid} = $remote_url;
-		} elsif (defined($imagename) && defined($imagepid)) {
-		    $image = OSImage->Lookup("$imagepid,$imagename");
-		    # Just skip, does not matter.
-		    next
-			if (!defined($image));
-		    $osid_url{$osid} = $image->LocalURL();
-		}
-		push(@{ $typemap{$type}->{'OSLIST'} }, $osid)
-		    if (!grep {$_ == $osid} @{ $typemap{$type}->{'OSLIST'} });
-		
-		if ($genimode && defined($aliasname)) {
-		    $osid_name{$osid} = $aliasname;
-		}
-		else {
-		    $osid_name{$osid} = $osname;
-		}
-		$osid_pid{$osid} = $ospid;
-		$osid_os{$osid} = $osos;
-		$osid_version{$osid} = $osversion;
-		$osid_description{$osid} = $osdescription;
-	    }
-	}
-	if ($node_type_osids{$type}) {
-	    push(@{$node_type_osids{$type}}, $osid)
-		if (!grep {$_ == $osid} @{$node_type_osids{$type}});
-	} else {
-	    $node_type_osids{$type} = [$osid];
-	}
-	if (defined($osfeatures) && $osfeatures =~ /no-usb-boot/) {
-	    $osid_avoid_usb{$osid} = 1;
-	}
-	#
-	# We have to maintain a data structure telling us which types an OSID
-	# could be on for use below with generic OSIDs
-	#
-	if ($osid_node_types{$osid}) {
-	    push(@{$osid_node_types{$osid}}, $type)
-		if (!grep {$_ eq $type} @{$osid_node_types{$osid}});
-	} else {
-	    $osid_node_types{$osid} = [$type];
-	}
-    }
-}
 #
 # XXX Note below that for now, subosids cannot redirect to other subosids.
 #
-foreach my $q ($subosidquery1, $subosidquery2) {
-    $result = DBQueryFatal($q);
-    while (my ($subosid,$osid,$defparent) = $result->fetchrow()) {
-	if ($osid_subosids{$osid}) {
-	    push @{$osid_subosids{$osid}}, $subosid;
-	} else {
-	    $osid_subosids{$osid} = [$subosid];
-	}
-	# This is default parent. See below, used for image aliases.
-	if (defined($defparent) && $defparent == $osid) {
-	    $osid_defparent{$subosid} = $defparent;
+if ($virtstuff || $useshared) {
+    foreach my $q ($subosidquery1, $subosidquery2) {
+	$result = MyQueryFatal($q);
+	while (my ($subosid,$osid,$defparent) = $result->fetchrow()) {
+	    if ($osid_subosids{$osid}) {
+		push @{$osid_subosids{$osid}}, $subosid;
+	    } else {
+		$osid_subosids{$osid} = [$subosid];
+	    }
+	    # This is default parent. See below, used for image aliases.
+	    if (defined($defparent) && $defparent == $osid) {
+		$osid_defparent{$subosid} = $defparent;
+	    }
 	}
     }
+    TBDebugTimeStamp("Finished subosid query stuff");
 }
 
 #
@@ -1051,11 +1134,13 @@ foreach my $alias (@aliases) {
 	}
     }
     if ($allowed) {
-	# Add subosid mappings for the alias name.
-	foreach my $image ($alias->imagelist()) {
-	    my $defparent = $osid_defparent{$image->osid()};
-	    if (defined($defparent)) {
-		push(@{$osid_subosids{$defparent}}, $alias->osid());
+	if ($virtstuff || $useshared) {
+	    # Add subosid mappings for the alias name.
+	    foreach my $image ($alias->imagelist()) {
+		my $defparent = $osid_defparent{$image->osid()};
+		if (defined($defparent)) {
+		    push(@{$osid_subosids{$defparent}}, $alias->osid());
+		}
 	    }
 	}
 	my @types = ();
@@ -1071,31 +1156,26 @@ foreach my $alias (@aliases) {
 	$osid_node_types{$alias->osid()} = \@types;
     }
 }
+TBDebugTimeStamp("Finished aliases stuff");
 
 #
 # We also have to resolve the 'generic' OSIDs, which use the nextosid field to
 # redirect to another OSID
 #
-$result = DBQueryFatal("select o.osid,v.nextosid from os_info as o ".
-		       "left join os_info_versions as v on ".
-		       "     v.osid=o.osid and v.vers=o.version ".
-		       "where v.nextosid is not null");
-while (my ($osid,$nextosid) = $result->fetchrow()) {
-    if (defined($openvzid) && $osid == $openvzid) {
-	$openvzid = $nextosid;
-    }
-    if (defined($dockerid) && $osid == $dockerid) {
-	$dockerid = $nextosid;
-    }
-    #
-    # Check to see if they were allowed to use the real OSID
-    #
-    my $realosid = TBResolveNextOSID($osid, $pid, $exempt_eid);
-    if (defined($realosid) && $osid_node_types{$realosid}) {
-	foreach my $type (@{$osid_node_types{$realosid}}) {
-	    push @{$node_type_osids{$type}}, $osid;
+if (!defined($options{"I"})) {
+    $result = MyQueryFatal("select o.osid,v.nextosid from os_info as o ".
+			   "join os_info_versions as v on ".
+			   "     v.osid=o.osid and v.vers=o.version ".
+			   "where v.nextosid is not null");
+    while (my ($osid,$nextosid) = $result->fetchrow()) {
+	my $realosid = TBResolveNextOSID($osid, $pid, $exempt_eid);
+	if (defined($realosid) && $osid_node_types{$realosid}) {
+	    foreach my $type (@{$osid_node_types{$realosid}}) {
+		push @{$node_type_osids{$type}}, $osid;
+	    }
 	}
     }
+    TBDebugTimeStamp("Finished reading nextosid stuff");
 }
 
 # Print switches
@@ -1105,9 +1185,9 @@ if (defined($switchtouse) && ! defined($component_name)) {
     print_switch($switchtouse,undef,undef,undef,undef,undef);
     $switches{$switchtouse} = 1;
 }
-elsif (! defined($component_name)) {
+elsif (! defined($component_name) && !$nolinks) {
     $result =
-	DBQueryFatal("select n.node_id,n.uuid,country,latitude,longitude, ".
+	MyQueryFatal("select n.node_id,n.uuid,country,latitude,longitude, ".
 		     "       na.attrvalue ".
                      "   from nodes as n ".
 		     "left join widearea_nodeinfo as wn ".
@@ -1130,20 +1210,24 @@ elsif (! defined($component_name)) {
 		     $country, $latitude, $longitude, $protocols);
 	$switches{$switch} = 1;
     }
+    TBDebugTimeStamp("Finished printing switch stuff");
 }
 
 #
 # Get the global counts.
 #
-$result =
-    DBQueryFatal("select phys_nodeid,count(phys_nodeid) from reserved as r ".
-		 "left join nodes as n on n.node_id=r.node_id ".
-		 "where n.node_id!=n.phys_nodeid ".
-		 (defined($exempt_eid) ?
-		  "and not (pid='$pid' and eid='$exempt_eid') " : " ") .
-		 "group by phys_nodeid");
-while (my ($node_id,$count) = $result->fetchrow_array) {
-    $globalcounts{$node_id} = $count;
+if ($virtstuff || $useshared) {
+    $result =
+	MyQueryFatal("select phys_nodeid,count(phys_nodeid) from reserved as r ".
+		       "left join nodes as n on n.node_id=r.node_id ".
+		       "where n.node_id!=n.phys_nodeid ".
+		       (defined($exempt_eid) ?
+			"and not (pid='$pid' and eid='$exempt_eid') " : " ") .
+		       "group by phys_nodeid");
+    while (my ($node_id,$count) = $result->fetchrow_array) {
+	$globalcounts{$node_id} = $count;
+    }
+    TBDebugTimeStamp("Finished global count stuff");
 }
 
 #
@@ -1154,9 +1238,9 @@ while (my ($node_id,$count) = $result->fetchrow_array) {
 #
 my %node_ramusage;
 
-if ($virtstuff) {
+if ($virtstuff || $useshared) {
     $result =
-	DBQueryFatal("select n.phys_nodeid,n.reserved_memory from nodes as n ".
+	MyQueryFatal("select n.phys_nodeid,n.reserved_memory from nodes as n ".
 		     "left join reserved as r on r.node_id=n.node_id ".
 		     "where n.node_id!=n.phys_nodeid ".
 		     (defined($experiment) ?
@@ -1178,7 +1262,7 @@ if ($virtstuff) {
     # for sure that the node is running XEN. Need to addres this at
     # some point.
     #
-    $result = DBQueryFatal("select node_id,attrvalue from nodes as n ".
+    $result = MyQueryFatal("select node_id,attrvalue from nodes as n ".
 			   "left join node_type_attributes as na on ".
 			   "     na.type=n.type and ".
 			   "     na.attrkey='dom0mem' ".
@@ -1195,6 +1279,7 @@ if ($virtstuff) {
 	$node_ramusage{$pnode} += $ram;
     }
 }
+TBDebugTimeStamp("Finished printing reserved memory stuff");
 
 # Find available nodes.
 #
@@ -1270,46 +1355,48 @@ if (defined($component_name)) {
 }
 
 $result =
-    DBQueryFatal("select a.node_id,a.type,a.phys_nodeid,t.class,t.issubnode," .
-		 "a.def_boot_osid,(b.pid is not null and b.eid is not null), ".
+    MyQueryFatal("select a.node_id,a.type,a.phys_nodeid,t.class,t.issubnode,".
+		 "  a.def_boot_osid, ".
+		 "  (b.pid is not null and b.eid is not null) as reserved, ".
 		 "  np.reserved_pid,np.eventstate, ".
-		 "  np.battery_percentage,np.uuid,b.sharing_mode, ".
-		 "  ru.load_1min, ru.load_5min, ru.status_timestamp, ".
-		 "  a.def_boot_osid, nat2.attrvalue, wn.country, " .
-                 "  wn.latitude, wn.longitude, t.isremotenode, b.erole, ".
-		 "  nat3.attrvalue, so.osfeatures ".
+		 "  np.uuid,b.sharing_mode, ".
+		 "  t.isremotenode, b.erole, ".
+		 "  nat3.attrvalue as allowed_projects, ".
+		 "  nat4.attrvalue as explicit_request ".
+		 ($useshared ?
+		  "  ,so.osfeatures,nat2.attrvalue as shared_weight, " .
+		  "  ru.load_1min,ru.load_5min,ru.status_timestamp " : " ").
 		 "from nodes as a ".
 		 "left join reserved as b on a.node_id=b.node_id ".
 		 "left join reserved as m on a.phys_nodeid=m.node_id ".
 		 "left join nodes as np on a.phys_nodeid=np.node_id ".
 		 "left join node_types as t on t.type=a.type ".
-		 "left join node_attributes as nat1 on ".
-		 "     nat1.node_id=a.node_id and ".
-		 "     nat1.attrkey='protogeni_exclude' ".
-		 "left join node_type_attributes as natype on ".
-		 "     natype.type=a.type and ".
-		 "     natype.attrkey='protogeni_exclude' ".
-		 "left join node_attributes as nat2 on ".
-		 "     nat2.node_id=a.node_id and ".
-		 "     nat2.attrkey='shared_weight' ".
+		 ($genimode ne $NO_GENI ?
+		  "left join node_attributes as nat1 on ".
+		  "     nat1.node_id=a.node_id and ".
+		  "     nat1.attrkey='protogeni_exclude' ".
+		  "left join node_type_attributes as natype on ".
+		  "     natype.type=a.type and ".
+		  "     natype.attrkey='protogeni_exclude' " : "") .
+		 ($useshared ?
+		  "left join node_attributes as nat2 on ".
+		  "     nat2.node_id=a.node_id and ".
+		  "     nat2.attrkey='shared_weight' " : "") .
 		 "left join node_attributes as nat3 on ".
 		 "     nat3.node_id=a.node_id and ".
 		 "     nat3.attrkey='allowed_projects' ".
-		 "left join node_rusage as ru on ru.node_id=a.node_id ".
-		 "left outer join ". 
-		 "  (select type,attrvalue ".
-		 "   from node_type_attributes ".
-		 "   where attrkey='dedicated_widearea' ".
-		 "   group by type) as dedicated_wa_types ".
-		 "  on t.type=dedicated_wa_types.type ".
-                 "left join widearea_nodeinfo as wn on a.node_id=wn.node_id ".
-		 "left join os_info_versions as so on ".
-		 "     a.def_boot_osid=so.osid and ".
-		 "     a.def_boot_osid_vers=so.vers ".
+		 "left join node_attributes as nat4 on ".
+		 "     nat4.node_id=a.node_id and ".
+		 "     nat4.attrkey='explicit_request' ".
+		 ($useshared ?  
+		  "left join node_rusage as ru on ru.node_id=a.node_id ".
+		  "left join os_info_versions as so on ".
+		  "     a.def_boot_osid=so.osid and ".
+		  "     a.def_boot_osid_vers=so.vers " : "").
 		 "where $free_condition and ".
-		 "   (a.role='testnode' and (t.isremotenode=0 or ".
-		 "                           dedicated_wa_types.attrvalue=1))");
+		 "   (a.role='testnode' and t.isremotenode=0 and a.type='d430')");
 
+TBDebugTimeStamp("Finished big node query");
 %storage_node = ();
 
 #
@@ -1318,92 +1405,100 @@ $result =
 # to use all nodes), or if there is no entry in the perms table for
 # the type/class of node.
 #
-while (($node,$type,$physnode,$class,$issubnode,$def_boot_osid,$reserved,
-	$prereserved,$eventstate,$battery_perc,$uuid,$sharing_mode,
-	$load_1min,$load_5min,$load_tstamp,$osid,$weight,$country,$latitude,
-        $longitude,$isremote,$erole,
-	$allowed_projects,$osfeatures) = $result->fetchrow_array) {
-    
-    my $current = $top->CreateNode($node,
-				   {
-				       "phys_nodeid"  => $physnode,
-				       "issubnode"    => $issubnode,
-				       "isremotenode" => $isremote,
-				   });
+while (my $row = $result->fetchrow_hashref()) {
+    my $node_id       = $row->{'node_id'};
+    my $type          = $row->{'type'};
+    my $physnode      = $row->{'phys_nodeid'};
+    my $class         = $row->{'class'};
+    my $issubnode     = $row->{'issubnode'};
+    my $def_boot_osid = $row->{'def_boot_osid'};
+    my $reserved      = $row->{'reserved'};
+    my $prereserved   = $row->{'reserved_pid'};
+    my $eventstate    = $row->{'eventstate'};
+    my $uuid          = $row->{'uuid'};
+    my $sharing_mode  = $row->{'sharing_mode'};
+    my $isremote      = $row->{'isremotenode'};
+    my $erole         = $row->{'erole'};
+    my $projects      = $row->{'allowed_projects'};
+
+    # Store everything in one place.
+    my $current = $top->CreateNode($node_id, $row);
 
     #
     # Look for a specific node restriction. Easier to to do here
     # then trying to do this up above in the already bizarre query.
     #
-    if (defined($pid) && defined($allowed_projects)) {
-	my @allowed = split(",", $allowed_projects);
+    if (defined($pid) && defined($projects)) {
+	my @allowed = split(",", $projects);
 	next
 	    if (! grep {$_ eq $pid} @allowed);	
     }
-    if (defined($pid) && exists($pruned_nodes{$node})) {
+    if (defined($pid) && exists($pruned_nodes{$node_id})) {
 	#
 	# We determined above that this node is currently reserved to
 	# another project but not currently allocated to that project.
 	#
 	next;
     }
-    $nodes{$node} = $type
+    $nodes{$node_id} = $type
 	if (!defined($pid) ||
 	    ($permissions{$type} && $permissions{$class}));
-    $node_def_boot_osid{$node} = $def_boot_osid;
+    $node_def_boot_osid{$node_id} = $def_boot_osid;
 
     if ($reserved) {
-	$is_reserved{$node} = 1;
+	$is_reserved{$node_id} = 1;
     } else {
-	$is_reserved{$node} = 0;
+	$is_reserved{$node_id} = 0;
     }
     if ($useshared && $sharing_mode) {
-	$sharing_mode{$node} = { "load_1min"   => $load_1min,
-				 "load_5min"   => $load_5min,
-				 "load_tstamp" => $load_tstamp,
-				 "osid"        => $osid,
-				 "osfeatures"  => $osfeatures,
-				 "weight"      => $weight };
+	$sharing_mode{$node_id} = { "load_1min"   => $row->{'load_1min'},
+				    "load_5min"   => $row->{'load_5min'},
+				    "load_tstamp" => $row->{'status_timestamp'},
+				    "osid"        => $def_boot_osid,
+				    "osfeatures"  => $row->{'osfeatures'},
+				    "weight"      => $row->{'shared_weight'} };
     } else {
-	$sharing_mode{$node} = 0;
+	$sharing_mode{$node_id} = 0;
     }
 
     if (defined($erole) && $erole eq "storagehost") {
-	$storage_node{$node} = 1;
+	$storage_node{$node_id} = 1;
     }
 
     if (defined($prereserved) && (defined($pid) && $prereserved eq $pid)) {
 	$is_prereserved{$node} = $prereserved;
     }
 
-    $curr_state{$node} = $eventstate;
-    $curr_batt{$node} = $battery_perc;
-
-    $node_countries{$node} = $country;
-    $node_latitudes{$node} = $latitude;
-    $node_longitudes{$node} = $longitude;
+    $node_countries{$node_id} = undef;
+    $node_latitudes{$node_id} = undef;
+    $node_longitudes{$node_id} = undef;
 }
+TBDebugTimeStamp("Finished loading results of big query");
 
 #
 # Find out which nodes are connected to which, so that we can add some special
 # features
 #
-$result = DBQueryFatal("SELECT DISTINCT node_id1, node_id2 " .
-                       "  FROM wires where logical=0 and type!='Unused'");
 my %connections = ();
-while (my ($node_id1, $node_id2) = $result->fetchrow()) {
-    foreach my $nodes ([$node_id1, $node_id2], [$node_id2, $node_id1]) {
-        my ($node1, $node2) = @$nodes;
-        if ($connections{$node1}) {
-            # Check to see if we've already added this one (possible if the
-            # nodes appeared in node1,node2 order, then node2,node1
-            if (!grep(/^$node2$/, @{$connections{$node1}})) {
-                push @{$connections{$node1}}, $node2;
-            }
-        } else {
-            $connections{$node1} = [$node2];
-        }
+
+if (!$nolinks) {
+    $result = MyQueryFatal("SELECT DISTINCT node_id1, node_id2 " .
+			   "  FROM wires where logical=0 and type!='Unused'");
+    while (my ($node_id1, $node_id2) = $result->fetchrow()) {
+	foreach my $nodes ([$node_id1, $node_id2], [$node_id2, $node_id1]) {
+	    my ($node1, $node2) = @$nodes;
+	    if ($connections{$node1}) {
+		# Check to see if we've already added this one (possible if the
+		# nodes appeared in node1,node2 order, then node2,node1
+		if (!grep(/^$node2$/, @{$connections{$node1}})) {
+		    push @{$connections{$node1}}, $node2;
+		}
+	    } else {
+		$connections{$node1} = [$node2];
+	    }
+	}
     }
+    TBDebugTimeStamp("Finished loading connections");
 }
 
 @nodenames = keys(%nodes);
@@ -1424,8 +1519,7 @@ foreach $node (@nodenames) {
 #    next
 #	if ($current->is_remote());
 
-    my $nodeobj = Node->Lookup($node);
-    my $type  = $nodes{$node};
+    my $type  = $current->type();
     my $class = $typemap{$type}->{'CLASS'};
     my $arch = $typemap{$type}->{'ARCH'};
     my $delay_capacity = $typemap{$type}->{'DELAYCAP'};
@@ -1481,17 +1575,11 @@ foreach $node (@nodenames) {
     if ($type ne $class) {
 	push(@types, "$class:1");
     }
-    my $explicit =
-	$typemap{$type}->{'TYPEINFO'}->GetAttribute("explicit_request");
-    if (!defined($explicit) && defined($nodeobj)) {
-	#
-	# Look on the node itself.
-	#
-	$nodeobj->NodeAttribute("explicit_request", \$explicit);
-    }
-    if (defined($explicit)) {
+
+    if ($typemap{$type}->{'EXPLICIT_REQUEST'} || $current->explicit_request()) {
 	push(@features, "$type-explicit:1");
     }
+
     if (defined($delay_capacity) && $delay_capacity > 0) {
 	# Comes from the NS file;
 	$delay_capacity = $delaycap_override
@@ -1499,10 +1587,9 @@ foreach $node (@nodenames) {
 		$delaycap_override > 0 &&
 		$delaycap_override < $delay_capacity);
 	
-	push @types, "delay:$delay_capacity";
-	push @types, "delay-${type}:$delay_capacity";
-	push @types, "bridge:100";
-	push @types, "bridge-${type}:100";
+	push(@types,
+	     "delay:$delay_capacity", "delay-${type}:$delay_capacity",
+	     "bridge:100", "bridge-${type}:100");
     }
     if (defined($allow_firewall) && $allow_firewall) {
 	push @types, "firewall:1";
@@ -1512,6 +1599,9 @@ foreach $node (@nodenames) {
     # Prototype shared mode.
     #
     if ($sharing_mode{$node}) {
+	next
+	    if (! ($virtstuff || $useshared));
+
 	#
 	# Add a feature that says this node should not be picked
 	# unless the cooresponding desire is in the vtop. This
@@ -1732,7 +1822,9 @@ foreach $node (@nodenames) {
 	if (defined($osid_subosids{$osid})) {
 	    foreach my $o2 (@{$osid_subosids{$osid}}) {
 		push @features, "OS-$osid-$o2:0"
-		    if (exists($imagelist{"${osid}-${o2}"}));
+		    if (!defined($imagelist) ||
+			exists($imagelist->{"${osid}-${o2}"}));
+			
 	    }
 	}
     }
@@ -1744,10 +1836,13 @@ foreach $node (@nodenames) {
 	foreach my $o1 (@{$node_type_osids{$type}}) {
 	    if (! exists($node_usb{$node}) || ! exists($osid_avoid_usb{$o1})) {
 		push @features, "OS-$o1:0"
-		    if (exists($imagelist{$o1}));
-		foreach my $o2 (@{$osid_subosids{$o1}}) {
-		    push @features, "OS-$o1-$o2:0"
-			if (exists($imagelist{"${o1}-${o2}"}));
+		    if (!defined($imagelist) || exists($imagelist->{$o1}));
+		if (keys(%osid_subosids)) {
+		    foreach my $o2 (@{$osid_subosids{$o1}}) {
+			push @features, "OS-$o1-$o2:0"
+			    if (!defined($imagelist) ||
+				exists($imagelist->{"${o1}-${o2}"}));
+		    }
 		}
 	    }
 	}
@@ -1780,6 +1875,16 @@ foreach $node (@nodenames) {
 
     if (exists($is_prereserved{$node})) {
 	push(@features,"prereserved:0");
+	#
+	# The idea here is that if the project has the node prereserved,
+	# we want them to explicitly request it so that another experiment
+	# in the same project that does not need the node, does not get it.
+	# But for backwards compatibility, we cannot make this a 1.0 feature,
+	# that might cause existing experiments not to map. Note that no
+	# desire is necessary, tb-fix-node is all that is needed, since that
+	# overrides.
+	#
+	push(@features, "${node}-explicit:0.90");
     }
 
     #
@@ -1790,15 +1895,6 @@ foreach $node (@nodenames) {
 	if (!exists($reserved_nodes{$node})) {
 	    push(@features, "notreserved_node:0.95");
 	}
-    }
-
-    # For robots, prefer ones that are already powered on and/or won't need to
-    # be recharged soon.
-    if (defined($curr_state{$node}) && ($curr_state{$node} eq TBDB_NODESTATE_POWEROFF)) {
-	push(@features,"poweroff:0.9");
-    }
-    if (defined($curr_batt{$node})) {
-	push(@features,"powerneeded:" . (1.0 - $curr_batt{$node} / 100.0));
     }
 
     #
@@ -1831,10 +1927,14 @@ foreach $node (@nodenames) {
     $longitude = $node_longitudes{$node};
 
     my @parse_features = split(" ", join(" ", @features));
+
+    #TBDebugTimeStamp($node);
     print_node($node, \@types, \@parse_features, \@flags, $uuid,
 	       $nodetointerface{$node}, $country, $latitude, $longitude,
 	       $type, \@sliver_types);
+    #TBDebugTimeStamp("Done");
 }
+TBDebugTimeStamp("Finished processing nodes");
 
 #
 # Print out all blockstores
@@ -1843,7 +1943,7 @@ foreach $node (@nodenames) {
 # those accessible by this user/project.
 #
 if ($useblockstore) {
-    $result = DBQueryFatal("select b.node_id, b.bs_id, b.lease_idx, b.type, ".
+    $result = MyQueryFatal("select b.node_id, b.bs_id, b.lease_idx, b.type, ".
 			   "s.remaining_capacity, b2.bs_id as pool ".
 			   "from blockstores as b ".
 			   "left join blockstore_state as s ".
@@ -1963,7 +2063,7 @@ if ($widearea && ! defined($component_name)) {
     # have only one control interface.
     #
     $result =
-	DBQueryFatal("select n.node_id,nt.type,ns.status,r.pid,r.eid,wn.site,".
+	MyQueryFatal("select n.node_id,nt.type,ns.status,r.pid,r.eid,wn.site,".
                      "wn.country,wn.latitude,wn.longitude, ".
                      "i.iface,wn.bwlimit,n.uuid ".
 		     "from nodes as n ".
@@ -2122,6 +2222,12 @@ if ($genimode ne $NO_GENI) {
     }
 }
 
+if ($nolinks) {
+    print_footer();
+    TBDebugTimeStamp("ending");
+    exit(0);
+}
+
 $interfaceprotocols = {};
 $interfacespeeds = {};
 $interface_auxspeeds = {};
@@ -2129,7 +2235,7 @@ $interface_auxspeeds = {};
 # Read interface types. First need to find the protocols an interface supports
 # and then then the speed for each of those protocols.
 # Note that we are going to assume anything attached to a switch is ethernet.
-$result = DBQueryFatal("SELECT type,capkey,capval from interface_capabilities ".
+$result = MyQueryFatal("SELECT type,capkey,capval from interface_capabilities ".
 		       "where capkey='protocols' or capkey like '%_defspeed'"); 
 while (($type,$capkey,$capval) = $result->fetchrow_array) {
     if ($capkey eq "protocols") {
@@ -2144,7 +2250,7 @@ while (($type,$capkey,$capval) = $result->fetchrow_array) {
 }
 
 # Read interface auxspeeds.
-$result = DBQueryFatal("SELECT type,capkey,capval from interface_capabilities ".
+$result = MyQueryFatal("SELECT type,capkey,capval from interface_capabilities ".
 		       "where capkey like '%_auxspeeds'");
 while (($type,$capkey,$capval) = $result->fetchrow_array) {
     if ($capkey =~ /^([-\w]+)_auxspeeds$/) {
@@ -2156,7 +2262,7 @@ while (($type,$capkey,$capval) = $result->fetchrow_array) {
 }
 
 # Read interface switches
-$result = DBQueryFatal("SELECT node_id1, i.iface, node_id2 FROM wires AS w " .
+$result = MyQueryFatal("SELECT node_id1, i.iface, node_id2 FROM wires AS w " .
 	"LEFT JOIN interfaces as i ON w.node_id1=i.node_id AND w.iface1=i.iface ".
 	"where w.logical=0");
 
@@ -2167,7 +2273,7 @@ while (($node,$iface,$switch) = $result->fetchrow_array) {
 }
 
 # Read interface_state
-$result = DBQueryFatal("select * from interface_state");
+$result = MyQueryFatal("select * from interface_state");
 
 while (my $ref = $result->fetchrow_hashref()) {
     my $node  = $ref->{'node_id'};
@@ -2185,16 +2291,16 @@ if (defined($experiment)) {
     my $exptidx   = $experiment->idx();
     my $pstateDir = $experiment->WorkDir() . "/pstate";
 
-    DBQueryFatal("create temporary table if not exists ".
+    MyQueryFatal("create temporary table if not exists ".
 		 "vinterfaces_${exptidx} like vinterfaces");
 
-    DBQueryFatal("delete from vinterfaces_${exptidx}");
+    MyQueryFatal("delete from vinterfaces_${exptidx}");
     
-    DBQueryFatal("load data infile '$pstateDir/vinterfaces' ".
+    MyQueryFatal("load data infile '$pstateDir/vinterfaces' ".
 		 "into table vinterfaces_${exptidx}")
 	    if (-e "$pstateDir/vinterfaces");
     
-    $result = DBQueryFatal("select * from vinterfaces_$exptidx ".
+    $result = MyQueryFatal("select * from vinterfaces_$exptidx ".
 			   "where exptidx=$exptidx");
 
     while (my $row = $result->fetchrow_hashref()) {
@@ -2213,7 +2319,7 @@ if (defined($experiment)) {
     }
 }
 
-$result = DBQueryFatal("SELECT node_id1,iface1,node_id2,iface2" .
+$result = MyQueryFatal("SELECT node_id1,iface1,node_id2,iface2" .
 		       " from wires where logical=0 and ".
 		       "   (type='Trunk' or ".
 		       ($usecontrol ? "type='Control'" : "type='Node'") . ") ".
@@ -2584,7 +2690,7 @@ if (! defined($component_name)) {
 }
 
 print_footer();
-
+TBDebugTimeStamp("ending");
 exit(0);
 
 # Print out links
@@ -2685,7 +2791,7 @@ sub print_header {
 			"\" />\n";
 		}
 	    }
-	    my $result = DBQueryFatal("select token,open from shared_vlans");
+	    my $result = MyQueryFatal("select token,open from shared_vlans");
 	    if ($result->rows > 0) {
 		print "<rspec_shared_vlan xmlns=\"" . $sharedns . "\">\n";
 		while (($token,$open) = $result->fetchrow_array) {
@@ -2700,11 +2806,11 @@ sub print_header {
 		print "</rspec_shared_vlan>\n";
 	    }
 
-	    $result = DBQueryFatal("select IP from virt_node_public_addr");
+	    $result = MyQueryFatal("select IP from virt_node_public_addr");
 	    if ($result->rows > 0) {
 		my $configured = $result->rows;
 		
-		$result = DBQueryFatal("select IP from virt_node_public_addr ".
+		$result = MyQueryFatal("select IP from virt_node_public_addr ".
 				       "where node_id is null and " .
 				       "pool_id is null");
 		my $available = $result->rows;

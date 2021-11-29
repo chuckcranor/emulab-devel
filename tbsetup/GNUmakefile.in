@@ -102,7 +102,7 @@ WEB_BIN_SCRIPTS = webnscheck webendexp webtbreport webbatchexp \
 
 LIBEXEC_STUFF	= wanlinksolve wanlinkinfo os_setup mkexpdir console_setup \
 		  assign_wrapper assign_wrapper2 os_setup_old \
-		  assign_prepass ptopgen \
+		  assign_prepass ptopgen ptopgen_test \
 		  spewlogfile staticroutes routecalc wanassign \
 		  switchmac spewrpmtar spewrpmtar_verify spewrpmtar_cgi \
 		  webfrisbeekiller gentopofile \
