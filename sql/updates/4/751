@@ -1,0 +1,18 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("projects", "allowed_clusters")) {
+	DBQueryFatal("ALTER TABLE projects add " .
+		     " `allowed_clusters` text");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
