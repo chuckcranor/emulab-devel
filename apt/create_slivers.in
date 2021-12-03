@@ -87,6 +87,31 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 #
 $| = 1;
 
+use lib "@prefix@/lib";
+
+# Limit. Do not initialize this variable, used in the BEGIN block.
+my $seriallock;
+
+BEGIN {
+    require libEmulab;
+    
+    while (1) {
+	if (libEmulab::EmulabCountLock("create_sliver_lock", 2) == 0) {
+	    $seriallock = 1;
+	    last;
+	}
+	print STDERR "Waiting for the create_sliver lock ...\n";
+	sleep(1);
+    }
+}
+END {
+    # Be careful not to leave this locked on abnormal exit.
+    if ($seriallock) {
+	libEmulab::EmulabCountUnlock("create_sliver_lock");
+	$seriallock = 0;
+    }
+}
+
 #
 # Load the Testbed support stuff.
 #
@@ -208,6 +233,7 @@ $sendemail = 1
 if ($instance->CheckResources(\$errmsg)) {
     MyExit(1, $errmsg);
 }
+my $project = $instance->GetProject();
 
 #
 # Anything to do?
@@ -237,7 +263,7 @@ foreach my $agg ($instance->AggregateList()) {
     # See if the aggregate is online, lets not go to a ton of trouble
     # if the aggregate is dead.
     #
-    if ($aptagg->CheckStatus(\$errmsg)) {
+    if ($project->pid() ne "OAI2021FallWS" && $aptagg->CheckStatus(\$errmsg)) {
 	print STDERR "$errmsg\n";
 	#
 	# If the cluster is not deferrable, then its an error and the
@@ -280,7 +306,6 @@ if (!@aggregate_list) {
 }
 
 my $slice_urn   = $genislice->urn();
-my $project     = $instance->GetProject();
 my $rspecstr    = $instance->rspec();
 
 #
@@ -358,6 +383,11 @@ $usetracker = 1
     if (GetSiteVar("protogeni/use_imagetracker") &&	
 	EmulabFeatures->FeatureEnabled("APT_UseImageTracker",
 				       $emulab_user, $project));
+
+if ($seriallock) {
+    libEmulab::EmulabCountUnlock("create_sliver_lock");
+    $seriallock = 0;
+}
 
 #
 # Exit and let caller poll for status. We use the libaudit daemonize option.
@@ -935,7 +965,7 @@ sub CreateSliver($)
     # This creates the sliver and starts it. We have to watch for the
     # server being too busy.
     #
-    my $tries = 1;
+    my $tries = ($project->pid() eq "OAI2021FallWS" ? 60 : 1);
     my $response;
     my $earlyreturn = 0;
     my $doasync = ($aptagg->ismobile() ||
@@ -944,6 +974,16 @@ sub CreateSliver($)
     my $errmsg;
 
     while (1) {
+	if ($project->pid() eq "OAI2021FallWS") {
+	    my $uptime = `/usr/bin/uptime`;
+	    if ($uptime =~ /load averages:\s+([\.\d]+),\s+([\.\d]+),\s+[\.\d]+/) {
+		if ($1 >= (@PROTOGENI_MAXSERVERLOAD@ - 2)) {
+		    print STDERR "Load too high, waiting\n";
+		    sleep(2);
+		    next;
+		}
+	    }
+	}
 	$response =
 	    Genixmlrpc::CallMethod($cmurl, undef,
 				   "CreateSliver",
@@ -964,7 +1004,7 @@ sub CreateSliver($)
 		if ($tries) {
 		    print STDERR "Server for $urn reports too busy or not ".
 			"reachable; waiting a while ...\n";
-		    sleep(int(rand(20)) + 10);
+		    sleep(int(rand(10)) + 10);
 		    $tries--;
 		    next;
 		}

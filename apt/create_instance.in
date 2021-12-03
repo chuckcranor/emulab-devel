@@ -56,7 +56,6 @@ my $webtask;
 my $webtask_id;
 my $localuser  = 0;
 my $usestitcher= 0;
-my $seriallock = 0;
 my $start_at;
 my $stop_at;
 my $quickuuid;
@@ -108,8 +107,33 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 #
 $| = 1;
 
-# Load the Testbed support stuff.
 use lib "@prefix@/lib";
+
+# Limit. Do not initialize this variable, used in the BEGIN block.
+my $seriallock;
+
+BEGIN {
+    require libEmulab;
+    
+    while (1) {
+	if (libEmulab::EmulabCountLock("create_instance_lock", 3) == 0) {
+	    $seriallock = 1;
+	    sleep(1);
+	    last;
+	}
+	print STDERR "Waiting for the create_instance_lock lock ...\n";
+	sleep(2);
+    }
+}
+END {
+    # Be careful not to leave this locked on abnormal exit.
+    if ($seriallock) {
+	libEmulab::EmulabCountUnlock("create_instance_lock");
+	$seriallock = 0;
+    }
+}
+
+# Load the Testbed support stuff.
 use EmulabConstants;
 use libtestbed;
 use libaudit;
@@ -257,18 +281,6 @@ if (!defined($context)) {
     fatal("Could not create context to talk to CM");
 }
 Genixmlrpc->SetContext($context);
-
-#
-# Serialize to just a few at a time.
-#
-while (1) {
-    if (libEmulab::EmulabCountLock("create_instance_lock", 4) == 0) {
-	$seriallock = 1;
-	last;
-    }
-    print STDERR "Waiting for the create_instance lock ...\n";
-    sleep(1);
-}
 
 #
 # Must wrap the parser in eval since it exits on error.
@@ -1139,7 +1151,8 @@ foreach my $aggregate_urn (@aggregate_urns) {
     # Check to make sure the aggregate is online and reachable
     # We do not do this if the experiment start is deferred.
     if (!defined($start_at)) {
-	if ($aptaggregate->CheckStatus(\$errmsg)) {
+	if ($project->pid() ne "OAI2021FallWS" &&
+	    $aptaggregate->CheckStatus(\$errmsg)) {
 	    if ($usestitcher ||
 		!$aptaggregate->deferrable() ||
 		$nopending ||
@@ -1259,15 +1272,31 @@ if (! ($debug || $foreground)) {
     libaudit::AuditFork();
 }
 
+if (0) {
+    while (libEmulab::EmulabCountValue("create_instance_lock") != 0) {
+	print STDERR "Waiting for the create_instance lock to go to zero\n";
+	sleep(1);
+    }
+}
+
+while (1) {
+    my $uptime = `/usr/bin/uptime`;
+    if ($uptime =~ /load averages:\s+([\.\d]+),\s+([\.\d]+),\s+[\.\d]+/) {
+	if ($1 <= 17) {
+	    last;
+	}
+	print STDERR "Load too high, waiting\n";
+	sleep(1);
+    }
+    else {
+	last;
+    }
+}
+
 system("$CREATESLIVERS -L -f " .
        ($debug ? "-d " : "") .
        ($ignorefailures ? "-i " : "") .
        ($usestitcher ? "-S " : "") . $quickvm_uuid);
-
-if ($seriallock) {
-    libEmulab::EmulabCountUnlock("instancelock");
-    $seriallock = 0;
-}
 
 if ($?) {
     my $code = $? >> 8;
@@ -1316,12 +1345,4 @@ sub UserError($;$) {
 	if (!$debug);
     print $mesg . "\n";
     exit($code);
-}
-
-END {
-    # Be careful not to leave this locked on abnormal exit.
-    if ($seriallock) {
-	libEmulab::EmulabCountUnlock("create_instance_lock");
-	$seriallock = 0;
-    }
 }
