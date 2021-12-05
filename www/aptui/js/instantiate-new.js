@@ -199,7 +199,7 @@ $(function ()
 	$('#main-body').html(html);
 
 	// Fire this off right away.
-	if (window.REGISTERED) {
+	if (window.REGISTERED && !window.NOPREDICTION) {
 	    LoadReservationInfo();
 	}
 
@@ -651,7 +651,7 @@ $(function ()
 
     // Step is done changing.
     function StepChanged(step, event, currentIndex, priorIndex) {
-	//console.info("StepChanged: ", step, currentIndex, priorIndex);
+	console.info("StepChanged: ", step, currentIndex, priorIndex);
 	//console.info(new Date());
 	
         APT_OPTIONS.updatePage({ 'instantiate-step': currentIndex });
@@ -718,6 +718,9 @@ $(function ()
 	}
 	else if (currentIndex == 3) {
 	    CheckForSpectrum();
+
+	    // This is for testing with Selenium.
+	    $('body').append("<div class='hidden' id='step3-loaded'></div>");
 	}
 	if (currentIndex < priorIndex) {
 	    // Disable going forward by clicking on the labels
@@ -3121,7 +3124,9 @@ $(function ()
 				     }
 				 });
 	}
-	showResgroupList();
+	if (!window.NOPREDICTION) {
+	    showResgroupList();
+	}
 	
 	/*
 	 * We hide the normal scheduling controls and show a list of

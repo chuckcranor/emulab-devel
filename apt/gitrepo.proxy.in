@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -251,7 +251,7 @@ sub Update()
 	    fatal("Not able to prune dead branches");
 	}
 	$command = "$GIT merge -q origin/$current_refspec";
-	my $status = RunCommand($command);
+	$status = RunCommand($command);
 	if ($status) {
 	    fatal("Not able to merge current branch");
 	}

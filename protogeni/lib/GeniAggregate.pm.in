@@ -1368,9 +1368,11 @@ sub ActionStart($$;$)
 	    close(MAP);
 	}
 	
-	if (system("$GENELISTS -c")) {
-	    $msg .= "$GENELISTS failed\n";
-	    goto bad;
+	if ($pid ne "OAI2021FallWS") {
+	    if (system("$GENELISTS -c")) {
+		$msg .= "$GENELISTS failed\n";
+		goto bad;
+	    }
 	}
 	DebugTimeStamp("gentopofile");
 	if (system("$GENTOPOFILE $pid $eid")) {

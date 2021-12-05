@@ -133,7 +133,7 @@ $(function ()
 	extension_blob  = expinfo.extension_info;
 
 	// For tutorials
-	if (expinfo.project == "sigcomm2019") {
+	if (expinfo.project == "OAI2021FallWS") {
 	    slowdown = true;
 	}
 	
@@ -2243,7 +2243,16 @@ $(function ()
 			    e.preventDefault();
 			    ActionHandler("shell", [node]);
 			    return false;
-			});		    
+			});
+		    // For selenium
+		    if ($('#selenium-shell-button').length) {
+			$('#selenium-shell-button')
+			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
+			    ActionHandler("shell", [node]);
+			    return false;
+			});
+		    }
 		}
 		else {
 		    // Need to do this on the context menu too, but painful.

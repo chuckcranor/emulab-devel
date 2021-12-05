@@ -38,6 +38,8 @@ $ishashed = 0;
 $usenewschedule = 0;
 # The specific profile to start with
 $selected_profile = null;
+# For tutorials skip prediction and maxduration.
+$noprediction = 0;
 
 #
 # Get current user but make sure coming in on SSL. 
@@ -100,8 +102,14 @@ while (list($pid) = each($projlist)) {
             $usenewschedule = 1;
         }
     }
+    if ($pid == "OAI2021FallWS") {
+        $noprediction   = 1;
+    }
 }
 $projlist = $tmp;
+if ($noprediction) {
+    $usenewschedule = 0;
+}
     
 if (count($projlist) == 0) {
     SPITUSERERROR("You do not belong to any projects with permission to ".
@@ -536,6 +544,7 @@ if (isset($rerun_instance) || isset($rerun_paramset)) {
     }
 }
 echo "    window.USENEWSCHEDULE = $usenewschedule;\n";
+echo "    window.NOPREDICTION = $noprediction;\n";
 echo "    window.EMBEDDED_RESGROUPS = true;\n";
 echo "    window.EMBEDDED_RESGROUPS_SELECT = true;\n";
 echo "</script>\n";
