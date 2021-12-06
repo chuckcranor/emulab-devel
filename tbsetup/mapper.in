@@ -672,6 +672,7 @@ sub RunAssign($$)
 {
     my ($precheck, $prefix) = @_;
 
+    my %adjusted_adcontrol = ();
     my $typelimitfile = $prefix .".limits";
     my $imagelistfile = $prefix .".images";
     my $ptopfile = $prefix . ".ptop";
@@ -744,7 +745,8 @@ sub RunAssign($$)
 	    }
 	    sleep(1);
 	}
-	TBDebugTimeStamp("Got the mapper lock");	
+	TBDebugTimeStamp("Got the mapper lock");
+	goto skipadctrl;
     }
     
     #
@@ -759,7 +761,7 @@ sub RunAssign($$)
 	}
     }
     TBDebugTimeStamp("TBAdmissionControlCheck ended");
-    my %adjusted_adcontrol =
+    %adjusted_adcontrol =
 	map {$_ => $admission_control{$_} } keys(%admission_control);
 
     # Bound the results to avoid future reservation conflicts.
@@ -981,7 +983,7 @@ sub RunAssign($$)
 	}
 	close(TYPELIMIT);
     }
-
+  skipadctrl:
     #
     # Give ptopgen a clue about images are is use by the vtop file,
     # to shrink the size of the ptop file (the nodes lines are huge!).
