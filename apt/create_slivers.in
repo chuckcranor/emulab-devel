@@ -45,10 +45,11 @@ sub usage()
     print "Usage: create_slivers [-S] [-i] uuid\n";
     exit(1);
 }
-my $optlist         = "dSLif";
+my $optlist         = "dSLifa";
 my $debug           = 0;
 my $verbose         = 1;
 my $foreground      = 0;
+my $doaudit         = 0;
 my $usestitcher     = 0;
 my $ignorefailures  = 0;
 my $usetracker      = 0;
@@ -87,6 +88,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 #
 $| = 1;
 
+# Needed in the BEGIN block.
 use lib "@prefix@/lib";
 
 # Limit. Do not initialize this variable, used in the BEGIN block.
@@ -94,13 +96,18 @@ my $seriallock;
 
 BEGIN {
     require libEmulab;
+    import libEmulab;
     
     while (1) {
-	if (libEmulab::EmulabCountLock("create_sliver_lock", 2) == 0) {
+	if (libEmulab::EmulabCountLock("create_sliver_lock", 3) == 0) {
 	    $seriallock = 1;
 	    last;
 	}
 	print STDERR "Waiting for the create_sliver lock ...\n";
+	sleep(1);
+    }
+    while (LoadAverage() > 17) {
+	print STDERR "Load too high, waiting\n";
 	sleep(1);
     }
 }
@@ -115,8 +122,6 @@ END {
 #
 # Load the Testbed support stuff.
 #
-# Load the Testbed support stuff.
-use lib "@prefix@/lib";
 use EmulabConstants;
 use libtestbed;
 use libaudit;
@@ -163,6 +168,9 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"d"})) {
     $debug++;
+}
+if (defined($options{"a"})) {
+    $doaudit++;
 }
 if (defined($options{"i"})) {
     $ignorefailures++;
@@ -389,15 +397,20 @@ if ($seriallock) {
     $seriallock = 0;
 }
 
-#
-# Exit and let caller poll for status. We use the libaudit daemonize option.
-#
-if (!($debug || $foreground)) {
-    if (AuditStart(1, undef,
-		   LIBAUDIT_LOGTBLOGS()|LIBAUDIT_LOGONLY()|LIBAUDIT_NOCHILD())){
+my $auditopts = LIBAUDIT_LOGTBLOGS()|LIBAUDIT_LOGONLY()|LIBAUDIT_NOCHILD();
+if ($doaudit) {
+    AuditStart(0, undef, $auditopts);
+}
+elsif (!($debug || $foreground)) {
+    #
+    # Exit and let caller poll for status. We use the libaudit daemonize option.
+    #
+    if (AuditStart(1, undef, $auditopts)) {
 	# Parent exits
 	exit(0);
     }
+}
+if ($doaudit || (!($debug || $foreground))) {
     AddAuditInfo("cc", $project->LogsEmailAddress());
     if ($MAINSITE) {
 	AddAuditInfo("cc", "stoller\@flux.utah.edu");
@@ -975,13 +988,10 @@ sub CreateSliver($)
 
     while (1) {
 	if ($project->pid() eq "OAI2021FallWS") {
-	    my $uptime = `/usr/bin/uptime`;
-	    if ($uptime =~ /load averages:\s+([\.\d]+),\s+([\.\d]+),\s+[\.\d]+/) {
-		if ($1 >= (@PROTOGENI_MAXSERVERLOAD@ - 2)) {
-		    print STDERR "Load too high, waiting\n";
-		    sleep(2);
-		    next;
-		}
+	    if (LoadAverage() >= (@PROTOGENI_MAXSERVERLOAD@ - 1)) {
+		print STDERR "Load too high, waiting\n";
+		sleep(2);
+		next;
 	    }
 	}
 	$response =

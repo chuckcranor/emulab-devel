@@ -36,6 +36,7 @@ use Date::Parse;
 use Data::Dumper;
 use JSON;
 use Cwd qw(realpath);
+use Carp qw(cluck);
 
 #
 # Create a quick VM.
@@ -107,6 +108,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 #
 $| = 1;
 
+# Needed in the BEGIN block.
 use lib "@prefix@/lib";
 
 # Limit. Do not initialize this variable, used in the BEGIN block.
@@ -114,15 +116,19 @@ my $seriallock;
 
 BEGIN {
     require libEmulab;
+    import libEmulab;
     
     while (1) {
-	if (libEmulab::EmulabCountLock("create_instance_lock", 3) == 0) {
+	if (libEmulab::EmulabCountLock("create_instance_lock", 5) == 0) {
 	    $seriallock = 1;
-	    sleep(1);
 	    last;
 	}
 	print STDERR "Waiting for the create_instance_lock lock ...\n";
 	sleep(2);
+    }
+    while (LoadAverage() > 25) {
+	print STDERR "Load too high, waiting\n";
+	sleep(1);
     }
 }
 END {
@@ -1041,6 +1047,11 @@ if ($slice->SetExpiration((defined($stop_at) ? $stop_at :
 }
 my $slice_uuid = $slice->uuid();
 
+# Avoid pointless geni churn
+if ($project->pid() eq "OAI2021FallWS") {
+    $slice->SetRegisteredFlag(1);
+}
+
 #
 # Generate a new ssl key/cert to be used to derive an ssh key pair
 # or whatever else is needed. This is sent along as an option when the
@@ -1272,47 +1283,15 @@ if (! ($debug || $foreground)) {
     libaudit::AuditFork();
 }
 
-if (0) {
-    while (libEmulab::EmulabCountValue("create_instance_lock") != 0) {
-	print STDERR "Waiting for the create_instance lock to go to zero\n";
-	sleep(1);
-    }
-}
+#
+# End the current audit, create_slivers will start a new one.
+# 
+AuditEnd();
 
-while (1) {
-    my $uptime = `/usr/bin/uptime`;
-    if ($uptime =~ /load averages:\s+([\.\d]+),\s+([\.\d]+),\s+[\.\d]+/) {
-	if ($1 <= 17) {
-	    last;
-	}
-	print STDERR "Load too high, waiting\n";
-	sleep(1);
-    }
-    else {
-	last;
-    }
-}
-
-system("$CREATESLIVERS -L -f " .
-       ($debug ? "-d " : "") .
-       ($ignorefailures ? "-i " : "") .
-       ($usestitcher ? "-S " : "") . $quickvm_uuid);
-
-if ($?) {
-    my $code = $? >> 8;
-    $code = -1
-	if ($code == 255);
-    #
-    # If we did not use the stitcher, a positive exit code indicates
-    # a user error, not a system error. We abort the logging so that
-    # only the user sees the error. 
-    #
-    if (!$usestitcher && $code > 0) {
-	AuditAbort()
-	    if (! ($debug || $foreground));
-    }
-    exit($code);
-}
+exec("$CREATESLIVERS -L -f -a " .
+     ($debug ? "-d " : "") .
+     ($ignorefailures ? "-i " : "") .
+     ($usestitcher ? "-S " : "") . $quickvm_uuid);
 exit(0);
 
 sub fatal($) {
