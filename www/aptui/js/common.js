@@ -85,7 +85,7 @@ window.APT_OPTIONS.initialize = function (sup)
     /*
      * Setup a timer to ask for announcements.
      */
-    if (window.LOGINUID) {
+    if (window.LOGINUID && !window.NOANNOUNCEMENTS) {
 	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
     }
     
@@ -172,6 +172,8 @@ APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
  
         // the type of data we expect back
         dataType : "json",
+
+	timeout : 0,
     });
     var defer = $.Deferred();
     

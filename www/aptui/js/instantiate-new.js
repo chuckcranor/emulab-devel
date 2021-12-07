@@ -3004,7 +3004,7 @@ $(function ()
 	 * Kirk requested that we do not predicate this on using spectrum
 	 * but always on the Powder portal.
 	 */
-	if (!window.ISPOWDER) {
+	if (!window.ISPOWDER || window.STRESSTEST) {
             $('#step3-div .reserve-resources-button').off("click");
             $('#step3-div .schedule-experiment').removeClass("hidden");
             $('#step3-div .reserve-resources').addClass("hidden");

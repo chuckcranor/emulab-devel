@@ -106,7 +106,7 @@ BEGIN {
 	print STDERR "Waiting for the create_sliver lock ...\n";
 	sleep(1);
     }
-    while (LoadAverage() > 17) {
+    while (LoadAverage() > 18) {
 	print STDERR "Load too high, waiting\n";
 	sleep(1);
     }
@@ -943,28 +943,32 @@ sub CreateSliver($)
 	    return 1;
 	}
     }
-    #
-    # Clear any stored max extensions for the aggregate between the
-    # provisioning and provisioned stages. This is a critical section,
-    # we cannot have another experiment use its saved maxextension until
-    # the CreateSliver returns. 
-    #
-    # Critical section start.
-    if (APT_Utility::ExtensionLock()) {
-	print STDERR "Could not get max extension lock\n";
-	$webtask->Exited(GENIRESPONSE_ERROR);
-	$webtask->output("Internal locking error");
-	$aggobj->SetStatus("failed");
-	return -1;
+    if ($project->pid() ne "OAI2021FallWS") {    
+	#
+	# Clear any stored max extensions for the aggregate between the
+	# provisioning and provisioned stages. This is a critical section,
+	# we cannot have another experiment use its saved maxextension until
+	# the CreateSliver returns. 
+	#
+	# Critical section start.
+	if (APT_Utility::ExtensionLock()) {
+	    print STDERR "Could not get max extension lock\n";
+	    $webtask->Exited(GENIRESPONSE_ERROR);
+	    $webtask->output("Internal locking error");
+	    $aggobj->SetStatus("failed");
+	    return -1;
+	}
     }
     # Mark that it is doing something.
     $aggobj->SetStatus("provisioning");
 
-    # Clear max extensions for any instances using this aggregate
-    APT_Instance->ClearAllMaxExtension($aggobj->aggregate_urn());
+    if ($project->pid() ne "OAI2021FallWS") {    
+	# Clear max extensions for any instances using this aggregate
+	APT_Instance->ClearAllMaxExtension($aggobj->aggregate_urn());
     
-    # Critical section end.
-    APT_Utility::ExtensionUnlock();
+	# Critical section end.
+	APT_Utility::ExtensionUnlock();
+    }
 
     Genixmlrpc->SetTimeout(900);
 

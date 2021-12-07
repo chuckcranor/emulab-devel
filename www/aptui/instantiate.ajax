@@ -64,7 +64,13 @@ function Do_GetProfile()
 	$amdefault = $profile->BestAggregate();
     }
     $ispp = ($profile->isParameterized() ? 1 : 0);
-    list ($lastused, $count) = $profile->UsageInfo($this_user);
+    if ($profile->pid() == "OAI2021FallWS") {
+        $lastused = 0;
+        $count    = 0;
+    }
+    else  {
+        list ($lastused, $count) = $profile->UsageInfo($this_user);
+    }
     
     #
     # Knowing the UUID means the user can instantiate it,
@@ -1134,7 +1140,7 @@ function Do_Submit()
     # Otherwise, the instance owns it.
     $webtask = WebTask::Create($uuid);
     $webtask_id = $webtask->task_id();
-           
+
     #
     # Invoke the backend.
     #

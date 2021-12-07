@@ -119,14 +119,14 @@ BEGIN {
     import libEmulab;
     
     while (1) {
-	if (libEmulab::EmulabCountLock("create_instance_lock", 5) == 0) {
+	if (libEmulab::EmulabCountLock("create_instance_lock", 10) == 0) {
 	    $seriallock = 1;
 	    last;
 	}
 	print STDERR "Waiting for the create_instance_lock lock ...\n";
 	sleep(2);
     }
-    while (LoadAverage() > 25) {
+    while (LoadAverage() > 30) {
 	print STDERR "Load too high, waiting\n";
 	sleep(1);
     }

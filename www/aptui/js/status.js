@@ -3759,17 +3759,20 @@ $(function ()
     //
     function ShowPowderMapTab()
     {
-	// Do nothing if already visible.
-	if (!$('#quicktabs_content #powder-map').hasClass("hidden")) {
+	if (! $('#show_powder-map_li').hasClass("hidden")) {
 	    return;
 	}
 	
 	// Show the tab.
-	$('#quicktabs_ul a[href="#powder-map"]')
-	    .parent().removeClass("hidden");
-	$('#quicktabs_content #powder-map').removeClass("hidden");
+	$('#show_powder-map_li').removeClass("hidden");
 
-	DrawPowderMapTab();
+	// Lazy load, wait until user clicks for the first time.
+	var handler = function () {
+	    $('#show_powder-map_tab').off("shown.bs.tab", handler);
+	    $('#quicktabs_content #powder-map').removeClass("hidden");
+	    DrawPowderMapTab();
+	};
+	$('#show_powder-map_tab').on("shown.bs.tab", handler);
     }
     function DrawPowderMapTab()
     {
@@ -3787,6 +3790,10 @@ $(function ()
     }
     function UpdatePowderMap()
     {
+	// Do nothing if not visible.
+	if ($('#quicktabs_content #powder-map').hasClass("hidden")) {
+	    return;
+	}
 	$('#powder-map_iframe')[0].contentWindow.PowderMapUpdate();
     }
 
@@ -4744,3 +4751,4 @@ $(function ()
     
     $(document).ready(initialize);
 });
+b

@@ -69,10 +69,15 @@ $optargs = OptionalPageArguments("profile",       PAGEARG_STRING,
                                  "rerun_paramset",PAGEARG_UUID,
                                  "rerun_branch",  PAGEARG_BOOLEAN,
                                  "skipfirststep", PAGEARG_BOOLEAN,
+                                 "stresstest",    PAGEARG_BOOLEAN,
 				 "formfields",    PAGEARG_ARRAY);
 
 # Need to make non-hardcoded
 $maxduration = 16;
+# Selenium
+if (!isset($stresstest)) {
+    $stresstest = 0;
+}
 
 if (isset($rerun_instance) || isset($rerun_paramset) ||
     (isset($from) && ($from == "manage-profile" || $from == "show-profile"))) {
@@ -545,6 +550,7 @@ if (isset($rerun_instance) || isset($rerun_paramset)) {
 }
 echo "    window.USENEWSCHEDULE = $usenewschedule;\n";
 echo "    window.NOPREDICTION = $noprediction;\n";
+echo "    window.STRESSTEST = $stresstest;\n";
 echo "    window.EMBEDDED_RESGROUPS = true;\n";
 echo "    window.EMBEDDED_RESGROUPS_SELECT = true;\n";
 echo "</script>\n";

@@ -407,9 +407,11 @@ $(function ()
 	return JSON.parse(_.unescape($(id)[0].textContent));
     }
     if (window.EMBEDDED_RESGROUPS) {
-	window.DrawResGroupList = function (selector, groups) {
-	    Embedded(selector, groups);
-	};
+	if (!window.NOPREDICTION) {
+	    window.DrawResGroupList = function (selector, groups) {
+		Embedded(selector, groups);
+	    };
+	}
     }
     else {
 	$(document).ready(initialize);

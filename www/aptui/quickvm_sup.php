@@ -228,6 +228,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "    window.LOGINUID  = " .
         ($login_user ? "'$login_uid'" : "null") . ";\n";
     echo "    window.PORTAL_NAME = \"$PORTAL_NAME\"\n";
+    # For OAI2021FallWS
+    echo "    window.NOANNOUNCEMENTS = 1\n";
     echo "</script>\n";
     
     if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {
