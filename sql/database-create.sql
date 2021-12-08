@@ -6173,7 +6173,7 @@ CREATE TABLE `users` (
   `usr_zip` tinytext,
   `usr_country` tinytext,
   `usr_phone` tinytext,
-  `usr_shell` tinytext,
+  `usr_shell` enum('tcsh','bash','sh') default 'bash',
   `usr_pswd` tinytext NOT NULL,
   `usr_w_pswd` tinytext,
   `unix_uid` int(10) unsigned NOT NULL default '0',
