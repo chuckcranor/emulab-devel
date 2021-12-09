@@ -224,7 +224,7 @@ class Paramset
             else {
                 $url = $profile->ProfileURL();
             }
-            $url .= preg_match("\?", $url) ? "&" : "?";
+            $url .= preg_match("/\?/", $url) ? "&" : "?";
             $url .= "rerun_paramset=";
             
             if ($this->public()) {
