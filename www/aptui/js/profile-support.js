@@ -198,9 +198,9 @@ window.profileSupport = (function ()
 	    "all"      : args.all
 	};
 	if (force) {
-	    args["force"] = 1;
+	    server_args["force"] = 1;
 	    if (keepimages) {
-		args["keepimages"] = 1;
+		server_args["keepimages"] = 1;
 	    }
 	}
 	console.info("DeleteProfile", args);
