@@ -597,7 +597,7 @@ sub AddUser()
     # do not like this.
     #
     if (! $batch) {
-	$target_user->BumpActivity()
+	$target_user->BumpActivity();
 	print "Updating exports file.\n";
 	system("$EXPORTSSETUP");
     }
