@@ -2918,6 +2918,16 @@ sub DoRefresh()
     my $errmsg;
     my $errcode = 0;
     my $exitcode = -1;
+    my $force   = 0;
+
+    my $optlist = "F";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"F"})) {
+	$force = 1;
+    }
     
     my $slice = $instance->GetGeniSlice();
     if (!defined($slice)) {
@@ -2933,7 +2943,7 @@ sub DoRefresh()
     # Lock the slice in case it is doing something else, like taking
     # a disk image.
     #
-    if ($slice->Lock()) {
+    if ($slice->Lock() && !$force) {
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	$errcode = GENIRESPONSE_BUSY;
 	$exitcode = 1;
