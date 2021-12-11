@@ -1086,6 +1086,8 @@ sub SetupFsNode()
 	if (-e "/etc/rc.conf.d/dhclient");
     unlink("/etc/rc.d/netif-emulab")
 	if (-e "/etc/rc.d/netif-emulab");
+    unlink("/etc/rc.d/netif_emulab")
+	if (-e "/etc/rc.d/netif_emulab");
 
     #
     # Load up packages if necessary
@@ -1674,6 +1676,8 @@ sub SetupOpsNode($)
 	if (-e "/etc/rc.conf.d/dhclient");
     unlink("/etc/rc.d/netif-emulab")
 	if (-e "/etc/rc.d/netif-emulab");
+    unlink("/etc/rc.d/netif_emulab")
+	if (-e "/etc/rc.d/netif_emulab");
 
     #
     # Load up packages if necessary
@@ -2435,6 +2439,8 @@ sub SetupBossNode($)
 	if (-e "/etc/rc.conf.d/dhclient");
     unlink("/etc/rc.d/netif-emulab")
 	if (-e "/etc/rc.d/netif-emulab");
+    unlink("/etc/rc.d/netif_emulab")
+	if (-e "/etc/rc.d/netif_emulab");
 
     #
     # Load up packages if necessary
@@ -3279,6 +3285,8 @@ sub SetupOpsJail()
 	if (-e "/etc/rc.conf.d/dhclient");
     unlink("/etc/rc.d/netif-emulab")
 	if (-e "/etc/rc.d/netif-emulab");
+    unlink("/etc/rc.d/netif_emulab")
+	if (-e "/etc/rc.d/netif_emulab");
 
     #
     # Load up packages if necessary

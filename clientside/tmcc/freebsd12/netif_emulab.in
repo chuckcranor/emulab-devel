@@ -37,7 +37,7 @@
 . /etc/rc.subr
 . /etc/network.subr
 
-name="netif-emulab"
+name="netif_emulab"
 start_cmd="cnet_start"
 stop_cmd="cnet_stop"
 _cmdifn=
