@@ -64,7 +64,7 @@ RUN_DEPENDS+=	\
 	p5-WWW-Curl>=4.17:${PORTSDIR}/www/p5-WWW-Curl \
 	p5-XML-Entities>=1.002:${PORTSDIR}/textproc/p5-XML-Entities \
 	${PYTHON_PKGNAMEPREFIX}ecdsa>=0.11:${PORTSDIR}/security/py-ecdsa \
-	${PYTHON_PKGNAMEPREFIX}pyjwt>=1.4.0:${PORTSDIR}/www/py-pyjwt
+	${PYTHON_PKGNAMEPREFIX}pyjwt1>=1.4.0:${PORTSDIR}/www/py-pyjwt1
 
 # XXX for old binaries
 RUN_DEPENDS+=	\

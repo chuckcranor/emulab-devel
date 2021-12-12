@@ -63,6 +63,10 @@ devel_subversion_UNSET+=GPG_AGENT
 devel_cmake_UNSET+=MANPAGES
 devel_doxygen_UNSET+=LATEX
 security_py-certbot_UNSET+=MANPAGES
+lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
+			   MCRYPT MYSQLI OPCACHE OPENSSL PDO PHAR POSIX \
+			   SESSION SIMPLEXML SOCKETS TOKENIZER XML XMLREADER \
+			   XMLRPC XMLWRITER
 
       The DTRACE option seems to be new (as of 12/8/20) and broke a couple
       of ports:
@@ -114,16 +118,20 @@ security_py-certbot_UNSET+=MANPAGES
        setenv PACKAGES /usr/obj/ports/packages
        rm -f $PACKAGES/All/*
        setenv myFLAGS DISABLE_VULNERABILITIES=1
+       date > /tmp/START
        foreach d (boss ops fs protogeni genilib tipserv extras)
            (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean all install)
 	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
        end
+       date > /tmp/END
 
    k. (Mothership only) Build the Mothership packages
+       date > /tmp/START2
        foreach d (msboss msops)
            (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean all install)
 	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
        end
+       date > /tmp/END2
 
    l. Check for vulnerabilities. If any are revealed, you can either try
       to update /share/freebsd/12.2/ports with a newer version of the port
@@ -195,7 +203,7 @@ Emulab-devel: {
         setenv ASSUME_ALWAYS_YES true
         alias PA "pkg install -r Emulab-devel"
         alias PD "pkg delete -af"
-        alias PC "pkg check -Bda"
+        alias PC "pkg check -adBs"
         alias PL "pkg install bsdadminscripts2 ; /usr/local/sbin/pkg_libchk"
 
       avoid problems with pkg:
@@ -211,8 +219,6 @@ Emulab-devel: {
         PA emulab-fs
         PA emulab-tipserv
         PA emulab-extras
-	# for the mothership
-	PA emulab-msboss
         PC
 	PL
 
@@ -223,8 +229,6 @@ Emulab-devel: {
         PA emulab-genilib
         PA emulab-tipserv
         PA emulab-extras
-	# for the mothership
-	PA emulab-msops
         PC
 	PL
 
@@ -239,6 +243,29 @@ Emulab-devel: {
         PD
         PA emulab-tipserv
         PA emulab-extras
+        PC
+	PL
+
+	# Mothership boss
+        PD
+        PA emulab-boss
+        PA emulab-protogeni
+        PA emulab-fs
+        PA emulab-tipserv
+        PA emulab-extras
+	PA emulab-msboss
+        PC
+	PL
+
+        # Mothership ops
+	# XXX you will need to kldload linux.ko and linux64.ko before this
+        PD
+        PA emulab-ops
+        PA emulab-fs
+        PA emulab-genilib
+        PA emulab-tipserv
+        PA emulab-extras
+	PA emulab-msops
         PC
 	PL
 

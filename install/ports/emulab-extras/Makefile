@@ -37,7 +37,7 @@ BATCH=		yes
 RUN_DEPENDS=	\
 	${LOCALBASE}/libdata/pkgconfig/cairo-gobject.pc:${PORTSDIR}/graphics/cairo
 
-# XXX do vim-lite to avoid dragging in gtk
+# XXX do vim-console (aka "lite") to avoid dragging in gtk
 RUN_DEPENDS+=	\
 	bash:${PORTSDIR}/shells/bash \
 	${LOCALBASE}/sbin/e2fsck:${PORTSDIR}/sysutils/e2fsprogs \
@@ -49,11 +49,15 @@ RUN_DEPENDS+=	\
 	sudo:${PORTSDIR}/security/sudo \
 	xauth:${PORTSDIR}/x11/xauth \
 	xterm:${PORTSDIR}/x11/xterm \
-	zsh:${PORTSDIR}/shells/zsh \
-	vim:${PORTSDIR}/editors/vim-console
+	zsh:${PORTSDIR}/shells/zsh
+
 .if (${EMULAB_PORTVERSION} == "8.2")
 RUN_DEPENDS+=	\
-	gdb:${PORTSDIR}/devel/gdb
+	gdb:${PORTSDIR}/devel/gdb \
+	vim:${PORTSDIR}/editors/vim
+.else
+RUN_DEPENDS+=	\
+	vim:${PORTSDIR}/editors/vim-console
 .endif
 
 RUN_DEPENDS+=	\

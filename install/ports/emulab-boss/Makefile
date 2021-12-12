@@ -27,7 +27,13 @@ WANT_PHP_MOD=	yes
 # PHP modules to build.
 # XXX based on current boss install.
 #
-.if (${EMULAB_PORTVERSION} == "7.3" || ${EMULAB_PORTVERSION} == "8.2")
+.if (${EMULAB_PORTVERSION} == "8.2")
+# add opcache, get rid of modules that no longer exist
+USE_PHP=	bz2 ctype curl dom filter gd iconv json mysqli \
+		opcache openssl pdo phar posix session simplexml sockets \
+		tokenizer xml xmlreader xmlrpc xmlwriter
+.else
+.if (${EMULAB_PORTVERSION} == "7.3")
 USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysqli \
 		openssl pdo phar posix session simplexml sockets tokenizer \
 		xml xmlreader xmlrpc xmlwriter
@@ -36,13 +42,17 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysql \
 		openssl pdo phar posix session simplexml sockets tokenizer \
 		xml xmlreader xmlrpc xmlwriter
 .endif
+.endif
 
 #
 # Various ports need to agree on what version of apache.
 #
-www_apache24_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
+.if (${EMULAB_PORTVERSION} == "8.2")
+www_apache24_SET=	SUEXEC
+.else
 .MAKEFLAGS+=	WITH_SUEXEC=yes
+.endif
 
 #
 # This prevents any ports from trying to configure interactively.
