@@ -215,14 +215,14 @@ sub ReservableTypes($)
 		    "join node_types as nt on nt.type=u.type ".
 		    "where nt.class='pc'");
     
-    return undef
+    return ()
 	if (!$query_result || !$query_result->numrows);
 
     while (my ($type) = $query_result->fetchrow_array()) {
 	my $typeinfo = Lookup($class, $type);
 
 	# Something went wrong?
-	return undef
+	next
 	    if (!defined($typeinfo));
 	
 	push(@alltypes, $typeinfo);
