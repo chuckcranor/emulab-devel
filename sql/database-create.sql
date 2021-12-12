@@ -618,7 +618,7 @@ CREATE TABLE `apt_instance_history` (
   KEY `servername` (`uuid`,`servername`(32)),
   KEY `slice_uuid` (`slice_uuid`),
   KEY `portal` (`portal`),
-  KEY `destroyed` (`destroyed`)
+  KEY `destroyed` (`destroyed`),
   KEY `profile_id_created` (`profile_id`,`created`),
   KEY `portal_started` (`portal`,`started`),
   KEY `portal_creator` (`portal`,`creator_idx`)

@@ -4183,6 +4183,9 @@ sub AddPackage($$$)
     my $args = $force ? "-f" : "";
     if ($FBSD_VERSION >= 10.0) {
 	my $path = defined($pkgdir) ? "$pkgdir/$pkg.txz" : "$pkg.txz";
+	if (! -e $path && defined($pkgdir)) {
+	    $path = "$pkgdir/$pkg.pkg";
+	}
 	if (! -e $path) {
 	    SetupFatal("No package file '$path'!");
 	}
@@ -4281,13 +4284,16 @@ EOF
 sub GetPackage($$) {
     my ($prefix, $packagedir) = @_;
 
-    my @pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
+    my @pname = `ls -t $packagedir/$prefix-*.pkg 2>/dev/null`;
     if ($?) {
-	@pname = `ls -t $packagedir/$prefix-*.tbz 2>/dev/null`;
+	my @pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
 	if ($?) {
-	    @pname = `ls -t $packagedir/$prefix-*.tgz 2>/dev/null`;
-	    SetupFatal("Cannot find $prefix package in $packagedir!")
-		if ($?);
+	    @pname = `ls -t $packagedir/$prefix-*.tbz 2>/dev/null`;
+	    if ($?) {
+		@pname = `ls -t $packagedir/$prefix-*.tgz 2>/dev/null`;
+		SetupFatal("Cannot find $prefix package in $packagedir!")
+		    if ($?);
+	    }
 	}
     }
     chomp(@pname);
