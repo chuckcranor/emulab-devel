@@ -7,7 +7,7 @@
 # NFSv3 and I doubt very much they will work with v4! 
 #
 #   cd /usr/src/usr.sbin
-#   sudo patch < patchfile
+#   sudo patch -p0 < patchfile
 #
 
 diff -Nur mountd.orig/Makefile mountd/Makefile
