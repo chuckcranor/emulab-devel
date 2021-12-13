@@ -1060,7 +1060,7 @@ function Do_ListReservationGroups()
         $resgroups = ReservationGroup::LookupForUser($this_user);
     }
     foreach ($resgroups as $resgroup) {
-        $reservations[$resgroup->uuid()] = $resgroup->Blob();
+        $reservations[$resgroup->uuid()] = $resgroup->Blob(false);
     }
     SPITAJAX_RESPONSE($reservations);
 }

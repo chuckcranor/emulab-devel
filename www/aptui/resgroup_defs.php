@@ -237,7 +237,7 @@ class ReservationGroup
         return 0;
     }
 
-    function Blob()
+    function Blob($alldata = true)
     {
         $resgroup = $this;
         $details  = array();
@@ -272,7 +272,6 @@ class ReservationGroup
                 "approved"    => DateStringGMT($reservation->approved()),
                 "canceled"    => DateStringGMT($reservation->canceled()),
                 "deleted"     => DateStringGMT($reservation->deleted()),
-                "jsondata"    => $reservation->jsondata(),
                 "using"       => null,
                 "utilization" => null,
                 "approved_pushed" => DateStringGMT(
@@ -284,6 +283,10 @@ class ReservationGroup
                 "deleted_pushed"  => DateStringGMT(
                     $reservation->deleted_pushed())
             );
+            # Too much data for the list page.
+            if ($alldata) {
+                $blob["jsondata"] = $reservation->jsondata();
+            }
             if (!is_null($reservation->using())) {
                 $blob["using"] = intval($reservation->using());
             }
