@@ -161,7 +161,13 @@
 	    <% if (!value.end) { %>
 	      &nbsp
 	    <% } else { %>
+	      <% if (!value.idledetection) { %>
+		<span class="text-warning">
+	      <% } %>
 	      <span class="format-date"><%- value.end %></span>
+	      <% if (!value.idledetection) { %>
+		</span>
+	      <% } %>
 	    <% } %>
 	  </td>
 	  <% if (showstatus) { %>

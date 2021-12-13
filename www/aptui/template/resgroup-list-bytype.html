@@ -103,7 +103,13 @@
 	      <% if (!group.end) { %>
 		&nbsp
 	      <% } else { %>
+		<% if (!group.idledetection) { %>
+		  <span class="text-warning">
+		<% } %>
 		<span class="format-date"><%- group.end %></span>
+		<% if (!group.idledetection) { %>
+		  </span>
+		<% } %>
 	      <% } %>
 	    </td>
 	    <% if (showstatus) { %>
