@@ -1,6 +1,4 @@
 /*-
- * SPDX-License-Identifier: BSD-3-Clause
- *
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -15,7 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,7 +41,7 @@ static const char copyright[] =
 static char sccsid[] = "@(#)init.c	8.1 (Berkeley) 7/15/93";
 #endif
 static const char rcsid[] =
-  "$FreeBSD: releng/12.1/sbin/init/init.c 337968 2018-08-17 14:57:13Z trasz $";
+  "$FreeBSD: releng/11.4/sbin/init/init.c 346481 2019-04-21 04:18:57Z kevans $";
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -106,6 +104,7 @@ static void stall(const char *, ...) __printflike(1, 2);
 static void warning(const char *, ...) __printflike(1, 2);
 static void emergency(const char *, ...) __printflike(1, 2);
 static void disaster(int);
+static void badsys(int);
 static void revoke_ttys(void);
 static int  runshutdown(void);
 static char *strk(char *);
@@ -306,15 +305,16 @@ invalid:
 	 * We catch or block signals rather than ignore them,
 	 * so that they get reset on exec.
 	 */
-	handle(disaster, SIGABRT, SIGFPE, SIGILL, SIGSEGV, SIGBUS, SIGSYS,
-	    SIGXCPU, SIGXFSZ, 0);
+	handle(badsys, SIGSYS, 0);
+	handle(disaster, SIGABRT, SIGFPE, SIGILL, SIGSEGV, SIGBUS, SIGXCPU,
+	    SIGXFSZ, 0);
 	handle(transition_handler, SIGHUP, SIGINT, SIGEMT, SIGTERM, SIGTSTP,
-	    SIGUSR1, SIGUSR2, SIGWINCH, 0);
+	    SIGUSR1, SIGUSR2, 0);
 	handle(alrm_handler, SIGALRM, 0);
 	sigfillset(&mask);
 	delset(&mask, SIGABRT, SIGFPE, SIGILL, SIGSEGV, SIGBUS, SIGSYS,
 	    SIGXCPU, SIGXFSZ, SIGHUP, SIGINT, SIGEMT, SIGTERM, SIGTSTP,
-	    SIGALRM, SIGUSR1, SIGUSR2, SIGWINCH, 0);
+	    SIGALRM, SIGUSR1, SIGUSR2, 0);
 	sigprocmask(SIG_SETMASK, &mask, NULL);
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
@@ -502,6 +502,22 @@ emergency(const char *message, ...)
 
 	vsyslog(LOG_EMERG, message, ap);
 	va_end(ap);
+}
+
+/*
+ * Catch a SIGSYS signal.
+ *
+ * These may arise if a system does not support sysctl.
+ * We tolerate up to 25 of these, then throw in the towel.
+ */
+static void
+badsys(int sig)
+{
+	static int badcount = 0;
+
+	if (badcount++ < 25)
+		return;
+	disaster(sig);
 }
 
 /*
@@ -940,7 +956,7 @@ single_user(void)
 			
 			myargv[0] = name;
 			myargv[1] = cmd;
-			myargv[2] = NULL;
+			myargv[2] = 0;
 			
 			execv(_PATH_BSHELL, myargv);
 			stall("can't exec %s for %s: %m", _PATH_BSHELL, cmd);
@@ -971,7 +987,7 @@ single_user(void)
 					_exit(0);
 				password = crypt(clear, pp->pw_passwd);
 				bzero(clear, _PASSWORD_LEN);
-				if (password != NULL &&
+				if (password == NULL ||
 				    strcmp(password, pp->pw_passwd) == 0)
 					break;
 				warning("single-user login failed\n");
@@ -1670,9 +1686,8 @@ transition_handler(int sig)
 		    current_state == clean_ttys || current_state == catatonia)
 			requested_transition = clean_ttys;
 		break;
-	case SIGWINCH:
 	case SIGUSR2:
-		howto = sig == SIGUSR2 ? RB_POWEROFF : RB_POWERCYCLE;
+		howto = RB_POWEROFF;
 	case SIGUSR1:
 		howto |= RB_HALT;
 	case SIGINT:
