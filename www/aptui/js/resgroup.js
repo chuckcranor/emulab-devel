@@ -3580,7 +3580,7 @@ $(function ()
 	    RefreshTables(json.value);
 	};
 	var args = {"uuid" : window.UUID};
-	sup.ShowWaitWait();
+	sup.ShowWaitWait("Refreshing group details, patience please");
 	var xmlthing = sup.CallServerMethod(null, "resgroup",
 					    "Refresh", args);
 	xmlthing.done(callback);
@@ -3801,7 +3801,11 @@ $(function ()
 			     function (json) {
 				 console.info(json);
 				 if (json.code == 0) {
-				     sup.HideModal('#waitwait-modal');
+				     sup.HideModal('#waitwait-modal',
+						   function () {
+						       if (!value) {
+							   Refresh();
+						   });
 				     return;
 				 }
 				 sup.HideModal('#waitwait-modal', function () {
