@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016, 2021 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -824,6 +824,63 @@ int get_active_bits(SLOTHD_PACKET *pkt, SLOTHD_PACKET *opkt) {
 
 #ifndef __CYGWIN__
 
+#ifdef __linux__
+void get_packet_counts(SLOTHD_PACKET *pkt) {
+  int i, pi;
+
+  pi = pkt->ifcnt = 0;
+
+  for (i = 0; i < numinterfaces; i++) {
+	  char *ifname = interfaces[i].name;
+	  char buf[BUFSIZ], path[BUFSIZ], *cp;
+	  FILE *fp = NULL;
+
+	  sprintf(path, "/sys/class/net/%s/statistics", ifname);
+	  if (access(path, R_OK)) {
+		  continue;
+	  }
+	  strncpy(pkt->ifaces[pi].ifname, ifname, interfaces[i].namelen);
+
+	  if (strcmp(interfaces[i].mac, "")) {
+		  strcpy(pkt->ifaces[pi].addr, interfaces[i].mac);
+	  }
+	  else {
+		  sprintf(path, "/sys/class/net/%s/address", ifname);
+		  if ((fp = fopen(path, "r")) != NULL &&
+		      fgets(buf, sizeof(buf), fp)) {
+			  if ((cp = rindex(buf, '\n')) != NULL)
+				  *cp = '\0';
+			  strcpy(pkt->ifaces[pi].addr, buf);
+		  }
+	  }
+	  sprintf(path, "/sys/class/net/%s/statistics/rx_packets", ifname);
+	  if ((fp = fopen(path, "r")) != NULL && fgets(buf, sizeof(buf), fp)) {
+		  if ((cp = rindex(buf, '\n')) != NULL)
+			  *cp = '\0';
+		  
+		  pkt->ifaces[pi].ipkts = atol(buf);
+	  }
+	  sprintf(path, "/sys/class/net/%s/statistics/tx_packets", ifname);
+	  if ((fp = fopen(path, "r")) != NULL && fgets(buf, sizeof(buf), fp)) {
+		  if ((cp = rindex(buf, '\n')) != NULL)
+			  *cp = '\0';
+		  pkt->ifaces[pi].opkts = atol(buf);
+	  }
+	  pi = ++pkt->ifcnt;
+  }
+
+  if (opts->debug) {
+    for (i = 0; i < pkt->ifcnt; ++i) {
+      printf("IFACE: %s  %s   ipkts: %ld  opkts: %ld\n", 
+             pkt->ifaces[i].addr, 
+             pkt->ifaces[i].ifname, 
+             pkt->ifaces[i].ipkts,
+             pkt->ifaces[i].opkts);
+    }
+  }
+  return;
+}
+#else
 void get_packet_counts(SLOTHD_PACKET *pkt) {
   int i;
   char *niprog[] = {"netstat", "-ni", NULL};
@@ -844,6 +901,7 @@ void get_packet_counts(SLOTHD_PACKET *pkt) {
   }
   return;
 }
+#endif
 
 #ifdef USE_TMCCINFO
 /*
