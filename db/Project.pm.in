@@ -155,6 +155,7 @@ sub disabled($)         { return field($_[0], "disabled"); }
 sub wikiname($)         { return field($_[0], "wikiname"); }
 sub mailman_password($) { return field($_[0], "mailman_password"); }
 sub allow_workbench($)  { return field($_[0], "allow_workbench"); }
+sub allowed_clusters($) { return field($_[0], "allowed_clusters"); }
 sub hidden($)		{ return field($_[0], "hidden"); }
 sub IsLocal($)		{ return (defined($_[0]->nonlocal_id()) ? 0 : 1); };
 sub IsNonLocal($)	{ return (defined($_[0]->nonlocal_id()) ? 1 : 0); };
