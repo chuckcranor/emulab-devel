@@ -324,6 +324,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd/init/10.4/GNUmakefile \
 	  tmcc/freebsd/init/11/GNUmakefile \
 	  tmcc/freebsd/init/11.2/GNUmakefile \
+	  tmcc/freebsd/init/11.4/GNUmakefile \
 	  tmcc/freebsd/init/12/GNUmakefile \
 	  tmcc/freebsd/init/13/GNUmakefile \
 	  tmcc/freebsd/supfile tmcc/freebsd/sethostname \

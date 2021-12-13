@@ -1609,6 +1609,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/freebsd/init/10.4/GNUmakefile \
  clientside/tmcc/freebsd/init/11/GNUmakefile \
  clientside/tmcc/freebsd/init/11.2/GNUmakefile \
+ clientside/tmcc/freebsd/init/11.4/GNUmakefile \
  clientside/tmcc/freebsd/init/12/GNUmakefile \
  clientside/tmcc/freebsd/init/13/GNUmakefile \
  clientside/tmcc/freebsd/supfile clientside/tmcc/freebsd/sethostname \
