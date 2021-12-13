@@ -477,6 +477,11 @@ if ($cancel || $abortcancel || defined($idledetection)) {
 	}
 	else {
 	    $res->DisableIdleDetection();
+	    # If we are turning off idle detection it is a good bet
+	    # we want to abort a scheduled cancel.
+	    if ($res->cancel()) {
+		$res->ClearCancel();
+	    }
 	}
 	exit(0);
     }
