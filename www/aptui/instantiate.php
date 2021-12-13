@@ -97,7 +97,13 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 # Cull out the nonlocal projects, we do not want to show those
 # since they are just the holding projects.
 #
+# Also if there are any cluster restrictions. These are per project
+# so easier to do this in the web UI, and then check when the user
+# submits the experiment.
+#
+$cluster_restrictions = array();
 $tmp = array();
+
 while (list($pid) = each($projlist)) {
     # Watch out for killing page variable called "project"
     $proj = Project::Lookup($pid);
@@ -105,6 +111,10 @@ while (list($pid) = each($projlist)) {
         $tmp[$pid] = $projlist[$pid];
         if (FeatureEnabled("NewScheduleStep", $this_user, $proj)) {
             $usenewschedule = 1;
+        }
+        $allowed_clusters = Aggregate::AllowedAggregates($proj);
+        if ($allowed_clusters) {
+            $cluster_restrictions[$proj->pid()] = array_keys($allowed_clusters);
         }
     }
     if ($pid == "OAI2021FallWS") {
@@ -434,6 +444,9 @@ echo htmlentities(json_encode($errors));
 echo "</script>\n";
 echo "<script type='text/plain' id='profiles-json'>\n";
 echo htmlentities(json_encode($profile_array));
+echo "</script>\n";
+echo "<script type='text/plain' id='restrictions-json'>\n";
+echo htmlentities(json_encode($cluster_restrictions));
 echo "</script>\n";
     
 # Gack.

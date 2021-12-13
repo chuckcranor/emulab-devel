@@ -252,6 +252,7 @@ function Do_ProjectProfile()
         $target_project->reservations_disabled() ? true : false;
     $results["licenses"]    = array();
     $results["nsf_awards"]  = $target_project->nsf_awards();
+    $results["allowed_clusters"] = $target_project->allowed_clusters();
 
     if ($ISPOWDER) {
         $licenses = $target_project->LicenseStatus();

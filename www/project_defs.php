@@ -183,6 +183,7 @@ class Project
     function bound_portal()  { return $this->field("bound_portal"); }
     function expert_mode()   { return $this->field("expert_mode"); }
     function nfsmounts()     { return $this->field("nfsmounts"); }
+    function allowed_clusters() { return $this->field("allowed_clusters"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&

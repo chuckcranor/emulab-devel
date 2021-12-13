@@ -683,6 +683,28 @@ sub Radio($$)
     return APT_Aggregate::Radio->Lookup($self, $node_id);
 }
 
+#
+# Allowed aggregates for a project.
+#
+sub AllowedAggregates($$)
+{
+    my ($class, $project) = @_;
+
+    if (! $project->allowed_clusters()) {
+	return undef;
+    }
+    my $result   = {};
+    my @clusters = split(/,/, $project->allowed_clusters());
+
+    foreach my $domain (@clusters) {
+	my $cluster = LookupByDomain($class, $domain);
+	if ($cluster) {
+	    $result->{$cluster->urn()} = $cluster;
+	}
+    }
+    return $result;
+}
+
 ###################################################################
 package APT_Aggregate::Mobile;
 use Carp;

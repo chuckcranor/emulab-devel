@@ -778,6 +778,23 @@ elsif (!$localuser) {
 	fatal("Project $pid does not exist");
     }
 }
+
+#
+# Watch for cluster restrictions on the project.
+#
+if ($project->allowed_clusters()) {
+    my $restrictions = APT_Aggregate->AllowedAggregates($project);
+    if ($restrictions) {
+	foreach my $urn (@aggregate_urns) {
+	    if (! exists($restrictions->{$urn})) {
+		my $agg = APT_Aggregate->Lookup($urn);
+		UserError("Project $pid is not allowed to use cluster ".
+			  $agg->name());
+	    }
+	}
+    }
+}
+
 if (defined($profile->repourl())) {
     #
     # Make sure the repo is still accessible.

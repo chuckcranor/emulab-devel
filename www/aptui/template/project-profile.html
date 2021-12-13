@@ -125,6 +125,12 @@
 	  <td>NFS Mounts</td>
 	  <td><%= fields.nfsmounts %></td>
 	</tr>
+	<% if (fields.allowed_clusters) { %>
+	  <tr>
+	    <td>Allowed Clusters</td>
+	    <td><%= fields.allowed_clusters %></td>
+	  </tr>
+	<% } %>
       <% } %>
     <% } %>
     <% _.each(fields.nsf_awards, function(award) { %>

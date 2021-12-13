@@ -125,6 +125,16 @@ class Aggregate
         return $url;
     }
 
+    function isLocalCluster() {
+        global $OURDOMAIN;
+        $myurn = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+
+        if ($this->urn() == $myurn) {
+            return 1;
+        }
+        return 0;
+    }
+
     # Powder Portal, Emulab is not a "federate", all others are.
     function isfederate() {
         global $PORTAL_GENESIS;
@@ -172,6 +182,25 @@ class Aggregate
         $query_result =
             DBQueryWarn("select urn from apt_aggregates ".
                         "where urn like 'urn:publicid:IDN+${domain}+%'");
+	if (!$query_result || !mysql_num_rows($query_result)) {
+            return null;
+        }
+	$row = mysql_fetch_array($query_result);
+	$urn = $row['urn'];
+
+        return Aggregate::Lookup($urn);
+    }
+
+    #
+    # Lookup using the name
+    #
+    function LookupByName($name) {
+        if (! preg_match("/^[-\w\.]+$/", $name)) {
+            return null;
+        }
+        $query_result =
+            DBQueryWarn("select urn from apt_aggregates ".
+                        "where name='$name'");
 	if (!$query_result || !mysql_num_rows($query_result)) {
             return null;
         }
@@ -667,6 +696,26 @@ class Aggregate
             }
         }
         return $blob;
+    }
+
+    #
+    # Get list of allowed clusters for a project, or null if none.
+    #
+    function AllowedAggregates($project)
+    {
+        if (! $project->allowed_clusters()) {
+            return null;
+        }
+        $result   = array();
+        $clusters = preg_split("/,/", $project->allowed_clusters());
+
+        foreach ($clusters as $domain) {
+            $cluster = Aggregate::LookupByDomain($domain);
+            if ($cluster) {
+                $result[$cluster->urn()] = $cluster;
+            }
+        }
+        return $result;
     }
 }
 

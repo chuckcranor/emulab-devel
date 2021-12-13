@@ -887,6 +887,19 @@ sub ProvisioningLock($)
     DBQueryWarn("unlock tables");
     return 0;
 }
+sub ProvisioningCount($)
+{
+    my ($class) = @_;
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instances ".
+		    "where status='provisioning'");
+
+    return 0
+	if (!$query_result);
+
+    return $query_result->numrows;
+}
 
 #
 # Find the profile for this instance.
@@ -2994,6 +3007,71 @@ sub MergeManifests($)
 	    }
 	}
     }
+    return 0;
+}
+
+#
+# Get the actual resources used from a manifest, which are contained
+# in the emulab:vnode extension. 
+#
+sub GetResources($$$)
+{
+    my ($self, $pmsg, $pref) = @_;
+
+    my $manifest = GeniXML::Parse($self->manifest());
+    if (! defined($manifest)) {
+	$$pmsg = "GetResources: Could not parse manifest";
+	return -1;
+    }
+    my %typeCounts = ();
+    
+    foreach my $ref (GeniXML::FindNodes("n:node", $manifest)->get_nodelist()) {
+	my $client_id    = GetVirtualId($ref);
+	my $vnoderef     = GeniXML::GetVnode($ref);
+	next
+	    if (!defined($vnoderef));
+	my $node_id      = GeniXML::GetText("name", $vnoderef);
+	my $hard_type    = GeniXML::GetText("hardware_type", $vnoderef);
+	next
+	    if (!defined($hard_type));
+
+	if (!TBcheck_dbslot($hard_type, "virt_nodes", "type",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+	    $$pmsg = "Invalid type: $hard_type";
+	    return 1;
+	}	
+	my $manager_urn  = GetManagerId($ref);
+	my $aggregate;
+	my $restoken;
+
+	if (!defined($manager_urn)) {
+	    $$pmsg = "No component_manager_urn for $client_id";
+	    return -1;
+	}
+	$aggregate = APT_Aggregate->Lookup($manager_urn);
+	if (!$aggregate) {
+	    $$pmsg = "No such aggregate: $manager_urn";
+	    return -1;
+	}
+	# Ignoring reservable nodes for now.
+	if (!$aggregate->IsReservableType($hard_type)) {
+	    print STDERR "GetResources: not a reservable type: $hard_type\n";
+	    $restoken = "pc";
+	}
+	else {
+	    $restoken = $hard_type;
+	}
+	if (!exists($typeCounts{$manager_urn})) {
+	    $typeCounts{$manager_urn} = {};
+	}
+	if (!exists($typeCounts{$manager_urn}->{$restoken})) {
+	    $typeCounts{$manager_urn}->{$restoken} = 0;
+	}
+	$typeCounts{$manager_urn}->{$restoken} += 1;
+    }
+    $$pref = {
+	"typeCounts"  => \%typeCounts,
+    };
     return 0;
 }
 

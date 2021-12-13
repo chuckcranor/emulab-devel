@@ -30,6 +30,7 @@ $(function ()
     var doconstraints = 0;
     var amValueToKey  = {};
     var showpicker    = 0;
+    var restrictions  = null;
     var portal        = null;
     var fromrepo      = false;
     var registered    = false;
@@ -119,6 +120,11 @@ $(function ()
 	}
 	if ($('#projects-json').length) {
 	    projlist = decodejson('#projects-json');
+	    console.info("projlist", projlist);
+	}
+	if ($('#restrictions-json').length) {
+	    restrictions = decodejson('#restrictions-json');
+	    console.info("cluster restrictions", restrictions);
 	}
 	profilelist = decodejson('#profiles-json');
 	console.info("profilelist", profilelist);
@@ -1916,6 +1922,7 @@ $(function ()
 	var bound  = 0;
 	var count  = 0;
 	var ammap  = {};
+	var pid    = $('#project_selector #profile_pid').val();	
 	sites = {};
 
 	// No need to do this if not showing selectors.
@@ -2006,6 +2013,20 @@ $(function ()
 		 */
 		if (0 && details.ismobile == 1 && !isadmin) {
 		    return;
+		}
+		/*
+		 * Cluster restrictions for the selected project.
+		 * This would make no sense on a single cluster
+		 * portal (!MAINSITE).
+		 */
+		if (_.has(restrictions, pid)) {
+		    if (!_.find(restrictions[pid],
+				function(urn) {
+				    return urn == key;
+				})) {
+			console.info("Skipping cluster " + key);
+			return;
+		    }
 		}
 		var name = details.name;
 		options = options + "<option value='" + name + "'";
@@ -2226,6 +2247,7 @@ $(function ()
      */
     function UpdateImageConstraints() {
 	if (!foundImages.length || !doconstraints) {
+	    CreateAggregateSelectors(selected_rspec);
 	    return;
 	}
       

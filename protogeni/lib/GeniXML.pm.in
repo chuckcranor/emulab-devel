@@ -564,6 +564,18 @@ sub GetVnodeId($)
     return $result;
 }
 
+# Returns the vnode emulab extension;
+sub GetVnode($)
+{
+    my ($node) = @_;
+    my $result = undef;
+    
+    if (!IsVersion0($node)) {
+	$result = GeniXML::FindNodesNS("n:vnode", $node, $EMULAB_NS)->pop();
+    }
+    return $result;
+}
+
 # Returns the uuid or urn of an RSpec node or undef if it is not a node.
 sub GetNodeId($)
 {
