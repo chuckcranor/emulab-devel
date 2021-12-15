@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -81,7 +81,7 @@ if ($this_user) {
     elseif ($this_user->IsNonLocal() && $this_user->webonly()) {
 	header("Location: $APTBASE/nomembership.php");
     }
-    elseif ($redirect && IsTutorialUser($this_user)) {
+    elseif (0 && $redirect && IsTutorialUser($this_user)) {
         header("Location: show-profile.php".
                "?project=OAI2021FallWS&profile=oai-5g-e2e-rfsim");
     }

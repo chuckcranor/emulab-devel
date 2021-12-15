@@ -117,7 +117,7 @@ while (list($pid) = each($projlist)) {
             $cluster_restrictions[$proj->pid()] = array_keys($allowed_clusters);
         }
     }
-    if ($pid == "OAI2021FallWS") {
+    if (0 && $pid == "OAI2021FallWS") {
         $noprediction   = 1;
     }
 }

@@ -486,7 +486,7 @@ else {
 	    $rval == GENIRESPONSE_MAPPING_IMPOSSIBLE ||
 	    $rval == GENIRESPONSE_NO_MAPPING) {
 	    AuditAbort()
-		if (!($debug || $foreground));
+		if ($doaudit || (!($debug || $foreground)));
 	    $exitcode = 1;
 	}
 	# Stop trying to instantiate.
