@@ -73,6 +73,7 @@ sub usage()
     print("Usage: manage_instance warn instance\n");
     print("Usage: manage_instance status instance\n");
     print("Usage: manage_instance applyextensionpolicy instance\n");
+    print("Usage: manage_instance deletereservations instance\n");
     exit(-1);
 }
 my $optlist     = "dt:s";
@@ -97,6 +98,7 @@ my $SUDO           = "/usr/local/bin/sudo";
 my $CREATESLIVERS  = "$TB/bin/create_slivers";
 my $MANAGEINSTANCE = "$TB/bin/manage_instance";
 my $MANAGEIMAGES   = "$TB/bin/manage_images";
+my $MANAGERESGROUP = "$TB/bin/manage_resgroup";
 my $IMPORTER       = "$TB/sbin/image_import";
 my $DESTROYWBSTORE = "$TB/sbin/destroywbstore";
 my $WAP            = "$TB/sbin/wap";
@@ -183,6 +185,7 @@ sub DoPrestageImages();
 sub DoPushExtension();
 sub DoPushManifest();
 sub DoTop();
+sub DoDeleteReservations();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$$);
 sub CallMethodOnAggregates($$$@);
@@ -357,6 +360,9 @@ elsif ($action eq "pushmanifest") {
 }
 elsif ($action eq "top") {
     DoTop()
+}
+elsif ($action eq "deletereservations") {
+    DoDeleteReservations();
 }
 else {
     usage();
@@ -2807,21 +2813,24 @@ sub DoDenyOrMoreInfo($)
 {
     my ($action) = @_;
     my $errcode = -1;
-    my $reason;
+    my $killres = 0;
+    my $reason  = "";
 
     if (! $this_user->IsAdmin()) {
 	fatal("Only administrators can deny extensions or request info");
     }
-    if (@ARGV == 2) {
-	my $arg = shift(@ARGV);
-	if ($arg eq "-m") {
-	    $reason = shift(@ARGV);
-	}
-	else {
-	    usage();
-	}
+    my $optlist = "m:k";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
     }
-    elsif (@ARGV == 1) {
+    if (defined($options{"m"})) {
+	$reason = $options{"m"};
+    }
+    if (defined($options{"k"})) {
+	$killres = 1 if ($action eq "deny");
+    }
+    if (@ARGV == 1) {
 	my $filename = shift(@ARGV);
 	if (! -e $filename) {
 	    fatal("$filename does not exist");
@@ -2906,7 +2915,102 @@ sub DoDenyOrMoreInfo($)
 			   "extension_denied"    => 1,
 			   "extension_denied_reason" => $reason});
     }
+    if ($killres) {
+	# Failure is not fatal.
+	DoDeleteReservations();
+    }
     return 0;
+}
+
+#
+# Find reservations associated with an experiment (same user, reserving
+# the same types as used in the experiment), and delete with prejudice.
+#
+sub DoDeleteReservations()
+{
+    my $errmsg;
+    my $errcode  = 0;
+    my $exitcode = -1;
+    my $impotent = 0;
+    require APT_Reservation;
+
+    my $optlist = "n";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"n"})) {
+	$impotent = 1;
+    }
+    my $project = $instance->GetProject();
+    my @reslist = APT_Reservation::Group->LookupForProject($project);
+    goto done
+	if (!@reslist);
+
+    # Find reservations for same user.
+    my @tmp;
+    foreach my $res (@reslist) {
+	if ($instance->creator_idx() == $res->creator_idx() && $res->Active()) {
+	    push(@tmp, $res);
+	}
+    }
+    goto done
+	if (!@tmp);
+    @reslist = @tmp;
+
+    #
+    # Need all resource types used.
+    #
+    my $resources;
+    if ($instance->GetResources(\$errmsg, \$resources)) {
+	goto bad;
+    }
+    if ($debug) {
+	print Dumper($resources);
+    }
+    my $counts = $resources->{'typeCounts'};
+
+    #
+    # Now find the reservations using using these resources.
+    #
+    @tmp = ();
+    foreach my $res (@reslist) {
+	foreach my $group ($res->ReservationList()) {
+	    if (exists($counts->{$group->aggregate_urn()}) &&
+		exists($counts->{$group->aggregate_urn()}->{$group->type()})){
+		if ($debug) {
+		    print "$res\n";
+		}
+		push(@tmp, $res);
+	    }
+	}
+    }
+    goto done
+	if (!@tmp);
+    @reslist = @tmp;
+
+    foreach my $res (@reslist) {
+	if ($impotent) {
+	    print "Would cancel $res\n";
+	}
+	else {
+	    my $when = time() + (3 * 3600);
+	    system("$MANAGERESGROUP cancel -e $when " . $res->uuid());
+	}
+    }
+  done:
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
+
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($exitcode);
 }
 
 #
@@ -6116,6 +6220,7 @@ sub DoSchedTerminate()
 {
     my $errcode  = 1;
     my $exitcode = 1;
+    my $killres  = 0;
     my $errmsg;
     my $days;
     my $reason;
@@ -6130,20 +6235,22 @@ sub DoSchedTerminate()
     my $created_time  = str2time($instance->started());
     my $extensions    = $instance->Brand()->ExtensionsEmailAddress();
     
+    my $optlist = "m:k";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"m"})) {
+	$reason = $options{"m"};
+    }
+    if (defined($options{"k"})) {
+	$killres = 1;
+    }
     usage()
 	if (!@ARGV);
     $days = shift(@ARGV);
 
-    if (@ARGV == 2) {
-	my $arg = shift(@ARGV);
-	if ($arg eq "-m") {
-	    $reason = shift(@ARGV);
-	}
-	else {
-	    usage();
-	}
-    }
-    elsif (@ARGV == 1) {
+    if (@ARGV) {
 	my $filename = shift(@ARGV);
 	if (! -e $filename) {
 	    fatal("$filename does not exist");
@@ -6192,6 +6299,10 @@ sub DoSchedTerminate()
     # No free time.
     $instance->Update({"extension_disabled" => 1});
 
+    # Do this now, failure is not fatal.
+    if ($killres) {
+	DoDeleteReservations();
+    }
     #
     # Need to set the new expiration before we clear the lockdown bit,
     # else it might get terminated at the cluster. But, if the

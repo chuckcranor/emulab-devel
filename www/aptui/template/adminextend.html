@@ -70,13 +70,22 @@ pre {
 		  data-toggle='modal' data-target='#confirm-terminate-modal'
 		  type='button' name='terminate'>Schedule Termination</button>
 	</span>
-	<span style='margin-left: 0px; margin-right: 0px;'
+	<span style='margin-left: 0px; margin-right: 5px;'
 	      data-toggle='popover'
 	      data-delay='{"hide":500, "show":500}'
 	      data-content="When checked, Deny and Schedule Termination
 			    buttons will also disable any new extension
 			    requests.">
 	  Lockout: <input type="checkbox" id="deny-lockout-checkbox" checked>
+	</span>
+	<span style='margin-left: 0px; margin-right: 0px;'
+	      data-toggle='popover'
+	      data-delay='{"hide":500, "show":500}'
+	      data-content="When checked, Deny and Schedule Termination
+			    buttons will also cancel any active reservations 
+			    by the experiment creator that using the same
+			    resource types as the experiment.">
+	  Kill Res: <input type="checkbox" id="deny-killres-checkbox" checked>
 	</span>
 	<button class='btn btn-danger btn-sm'
 		style='margin-left: 0px; margin-right: 30px;'

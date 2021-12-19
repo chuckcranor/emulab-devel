@@ -1176,18 +1176,25 @@ sub Usage($$$)
 }
 
 #
-# Return count of how many nodes of a type in use.
+# Return count of how many nodes of a type in use by a project, optionally
+# for a specific user.
 #
-sub TypeInUseCount($$)
+sub TypeInUseCount($$;$)
 {
-    my ($self, $type) = @_;
+    my ($self, $type, $user) = @_;
     my $pid = $self->pid();
+    my $uid_idx = (defined($user) ? $user->uid_idx() : "");
 
     my $result =
 	DBQueryWarn("select count(n.type) from reserved as r ".
 		    "left join nodes as n on n.node_id=r.node_id ".
-		    "where pid='$pid' and type='$type' ".
-		    "group by type");
+		    (defined($user) ?
+		     "left join experiments as e on e.idx=r.exptidx " : "").
+		    "where r.pid='$pid' and type='$type' ".
+		    (defined($user) ?
+		     "and (e.swapper_idx='$uid_idx' or ".
+		     "     (e.expt_swap_uid='geniuser' and ".
+		     "      e.creator_idx='$uid_idx'))" : ""));
     return 0
 	if (!defined($result) || !$result->numrows);
 
