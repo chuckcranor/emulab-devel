@@ -419,9 +419,41 @@ function Do_GetSSHAuthObject()
 	return;
     }
     
-    $nodeid = $ajax_args["nodeid"];
     $auth   = SSHAuthObject(isset($this_user) ?
                             $this_user->uid() : $creator->uid(), $hostport);
+    if (!$auth) {
+	SPITAJAX_ERROR(1, "Could not create authentication object");
+	return;
+    }
+    SPITAJAX_RESPONSE($auth);
+}
+
+#
+# VNC Auth Object
+#
+function Do_GetVNCAuthObject()
+{
+    global $instance, $creator, $this_user;
+    global $ajax_args;
+
+    if (!isset($ajax_args["host"])) {
+	SPITAJAX_ERROR(1, "Missing host");
+	return 1;
+    }
+    $host = $ajax_args["host"];
+    # XXX Needs to be dealt with.
+    $port = "5901";
+    
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    if (! (isset($this_user) && $instance->CanDoVNC($this_user))) {
+	SPITAJAX_ERROR(1, "Not allowed to connect to VNC; ".
+                       "only the creator can do this");
+	return;
+    }
+    
+    $auth   = VNCAuthObject($this_user->uid(), $host . ":" . $port);
     if (!$auth) {
 	SPITAJAX_ERROR(1, "Could not create authentication object");
 	return;

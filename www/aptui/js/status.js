@@ -60,6 +60,7 @@ $(function ()
     var radioinfo         = null;
     var radios            = {};
     var monitorTemplate   = null;
+    var vncpasswd         = null;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var GENIRESPONSE_REFUSED = 7;
@@ -1819,6 +1820,62 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    function DoVNC(node)
+    {
+	var hostport = hostportList[node].split(":");
+	var host     = hostport[0];
+
+	console.info("DoVNC", host);
+	
+	// Ask the server for an authentication object that allows
+	// to start an ssh shell.
+	var callback = function(json) {
+	    console.info(json.value);
+
+	    if (json.code) {
+		sup.SpitOops("oops", "Failed to get vnc auth object: " +
+			     json.value);
+		return;
+	    }
+	    OpenVNCWindow(node, json.value);
+	}
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "status",
+					    "GetVNCAuthObject",
+					    {"uuid" : uuid,
+					     "host" : host});
+	xmlthing.done(callback);
+    }
+    function OpenVNCWindow(node, authobject)
+    {
+	var vncwindow = null;
+	var jsonauth  = $.parseJSON(authobject);
+        var url       = jsonauth.baseurl + "/novnc/vnc_lite.html";
+
+	if (vncpasswd == null) {
+	    alert("You have not defined a VNC password in your profile");
+	    return;
+	}
+		
+	/*
+	 * As with the webssh iframe, we need to know when it is so we
+	 * can send it a message with the authobject and password.
+	 */
+	var data = {
+	    "authobject" : authobject,
+	    "password"   : vncpasswd,
+	};
+	var windowloaded = function () {
+	    console.info("Sending message", data);
+	    vncwindow.postMessage(JSON.stringify(data), "*");
+	    window.removeEventListener("message", windowloaded, false);
+	};
+	window.addEventListener("message", windowloaded);
+
+	vncwindow = window.open(url, "VNC " + node,
+				"left=10,top=10,width=1825,height=1025")
+    }
+
     // SSH info.
     var hostportList = {};
 
@@ -2009,6 +2066,9 @@ $(function ()
 	}
 	else if (action == "flash") {
 	    DoFlash(clientList[0]);
+	}
+	else if (action == "vnc") {
+	    DoVNC(clientList[0]);
 	}
     }
 
@@ -2812,9 +2872,6 @@ $(function ()
 	var needed  = $('#instructions_text').html().match(regex);
 	//console.log(needed);
 
-	if (!needed || !needed.length)
-	    return;
-
 	// Look for all the encryption blocks in the manifest ...
 	_.each(passwords, function (password) {
 	    var name  = $(password).attr('name');
@@ -2829,14 +2886,22 @@ $(function ()
 		    blocks[key] = stuff;
 		}
 	    });
+	    // XXX
+	    if (key == "password-vncpasswd" || key == "password-vncpswd") {
+		blocks[key] = stuff;
+	    }
 	});
+	if (!_.size(blocks)) {
+	    return;
+	}
+	
 	// These are blocks that are referenced in the instructions
 	// and need the server to decrypt.  At some point we might
 	// want to do that here in javascript, but maybe later.
 	//console.log(blocks);
 
 	var callback = function(json) {
-	    //console.log(json);
+	    console.log("decrypt blocks", json);
 	    if (json.code) {
 		sup.SpitOops("oops", "Could not decrypt secrets: " +
 			     json.value);
@@ -2845,6 +2910,11 @@ $(function ()
 	    var itext = $('#instructions_text').html();
 
 	    _.each(json.value, function(plaintext, key) {
+		// XXX
+		if (key == "password-vncpasswd" || key == "password-vncpswd") {
+		    vncpasswd = plaintext;
+		}
+		
 		key = new RegExp("{" + key + "}", "g");
 		// replace in the instructions text.
 		itext = itext.replace(key, plaintext);

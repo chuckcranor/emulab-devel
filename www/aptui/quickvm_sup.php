@@ -1006,11 +1006,8 @@ function SpitPageReplace($newpage, $when = 0) {
 # emulab generated (no passphrase) key. This is basically a clone
 # of what GateOne does, but that code was a mess. 
 #
-function SSHAuthObject($uid, $nodeid)
+function SignAuthObject($blob)
 {
-    global $USERNODE, $WWWHOST;
-    global $BROWSER_CONSOLE_WEBSSH, $BROWSER_CONSOLE_PROXIED;
-	
     $file = "/usr/testbed/etc/sshauth.key";
 
     #
@@ -1030,6 +1027,22 @@ function SSHAuthObject($uid, $nodeid)
     $key   = chop($key);
     $stuff = GENHASH();
     $now   = time();
+    $sig   = hash_hmac('sha1',
+                       $blob["uid"] . $stuff . $blob["nodeid"] . $now,
+                       $key);
+
+    $blob["stuff"]     = $stuff;
+    $blob["timestamp"] = $now;
+    $blob["signature"] = $sig;
+
+    return json_encode($blob);
+}
+
+function SSHAuthObject($uid, $hostport)
+{
+    global $USERNODE, $WWWHOST;
+    global $BROWSER_CONSOLE_WEBSSH, $BROWSER_CONSOLE_PROXIED;
+	
     if ($BROWSER_CONSOLE_PROXIED) {
         $baseurl = "https://${WWWHOST}";
     }
@@ -1041,18 +1054,39 @@ function SSHAuthObject($uid, $nodeid)
         $baseurl .= "/webssh";
     }
     $authobj = array('uid'       => $uid,
-		     'stuff'     => $stuff,
-		     'nodeid'    => $nodeid,
-		     'timestamp' => $now,
+		     'nodeid'    => $hostport,
 		     'baseurl'   => $baseurl,
 		     'signature_method' => 'HMAC-SHA1',
                      'webssh'    => $BROWSER_CONSOLE_WEBSSH,
 		     'api_version' => '1.0',
-		     'signature' => hash_hmac('sha1',
-					      $uid . $stuff . $nodeid . $now,
-					      $key),
     );
-    return json_encode($authobj);
+    return SignAuthObject($authobj);
+}
+# Ditto for VNC
+function VNCAuthObject($uid, $hostport)
+{
+    global $USERNODE, $WWWHOST;
+    global $BROWSER_CONSOLE_WEBSSH, $BROWSER_CONSOLE_PROXIED;
+
+    # Only when we are using webssh.
+    if (!$BROWSER_CONSOLE_WEBSSH) {
+        return null;
+    }
+	
+    if ($BROWSER_CONSOLE_PROXIED) {
+        $baseurl = "https://${WWWHOST}";
+    }
+    else {
+        $baseurl = "https://${USERNODE}";
+    }
+    $authobj = array('uid'       => $uid,
+		     'nodeid'    => $hostport,
+		     'baseurl'   => $baseurl,
+		     'signature_method' => 'HMAC-SHA1',
+                     'vncproxy'  => 1,
+		     'api_version' => '1.0',
+    );
+    return SignAuthObject($authobj);
 }
 
 #

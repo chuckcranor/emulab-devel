@@ -182,6 +182,8 @@ $routing = array("geni-login" =>
 						    "Do_GetInstanceManifest",
 						 "GetSSHAuthObject" =>
 						    "Do_GetSSHAuthObject",
+						 "GetVNCAuthObject" =>
+						    "Do_GetVNCAuthObject",
 						 "ConsoleURL" =>
 						     "Do_ConsoleURL",
 						 "DeleteNodes" =>

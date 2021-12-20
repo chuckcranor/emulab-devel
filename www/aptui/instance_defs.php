@@ -576,6 +576,12 @@ class Instance
         }
         return 0;
     }
+    function CanDoVNC($user) {
+	if ($this->creator_idx() == $user->uid_idx()) {
+	    return 1;
+	}
+        return 0;
+    }
 
     #
     # Determine user current usage.
