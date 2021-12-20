@@ -58,7 +58,7 @@ def dump( sock ):
         buf = sock.recv( 0x10000 )
         if not buf:
             break
-        sys.stdout.write( buf )
+        sys.stdout.write( buf.decode("utf-8") )
 
     sock.close()
 
@@ -127,12 +127,13 @@ server = socket.gethostbyname(server)
 
 sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
 sock.connect( (server, port) )
-sock.send( "geni_" + command )
+sock.send( ("geni_" + command).encode("utf-8") )
 
 firstchar = sock.recv( 1 )
 if not firstchar:
     print(sys.argv[ 0 ] + ": unexpected EOF from server", file=sys.stderr)
     sys.exit( 1 )
+firstchar = firstchar.decode("utf-8")
 
 if firstchar != "\x00":
     # old protocol -- just dump everything
@@ -156,5 +157,5 @@ if nextchar == "\x00":
         sys.stderr.write( buf )
 
 # new protocol, success
-sys.stdout.write( nextchar )
+sys.stdout.write( nextchar.decode("utf-8") )
 dump( sock )
