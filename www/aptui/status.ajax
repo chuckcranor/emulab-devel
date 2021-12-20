@@ -583,8 +583,10 @@ function Do_DenyOrMoreinfo($action)
 {
     global $instance, $creator, $this_user, $suexec_output;
     global $ajax_args;
+    $this_uid = $this_user->uid();
     $lockout  = 0;
     $extrargs = "";
+    $days = "";
 
     # Really, only admins can do this.
     if (StatusSetupAjax(0)) {
@@ -607,9 +609,14 @@ function Do_DenyOrMoreinfo($action)
         return;
 
     }
-    if (($action == "terminate" || $action == "deny") &&
-        isset($ajax_args["lockout"]) && $ajax_args["lockout"] != "0") {
-        $lockout = 1;
+    if ($action == "terminate" || $action == "deny") {
+        if (isset($ajax_args["lockout"]) && $ajax_args["lockout"] != "0") {
+            $lockout = 1;
+        }
+        if (isset($ajax_args["killres"]) && $ajax_args["killres"] != "0") {
+            $killres = 1;
+            $extrargs .= "-k ";
+        }
     }
     if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
         $reason = $ajax_args["reason"];
@@ -633,16 +640,18 @@ function Do_DenyOrMoreinfo($action)
             SPITAJAX_ERROR(1, "Invalid characters in days");
             goto bad;
         }
-        $extrargs = $days;
+        $extrargs .= "$days ";
     }
     $action = ($action == "deny" ? "denyextension" :
                ($action == "terminate" ? "schedterminate": "moreinfo"));
     $webtask = WebTask::CreateAnonymous();
-    $retval = SUEXEC("nobody", "nobody",
+    $retval = SUEXEC($this_uid, "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
                      "  $action $uuid $extrargs " .
                         (isset($filename) ? $filename : ""),
 		     SUEXEC_ACTION_IGNORE);
+    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    
     $webtask->Refresh();
     if (isset($filename)) {
         unlink($filename);
