@@ -28,6 +28,7 @@
 # }}}
 #
 
+from __future__ import print_function
 import getopt
 import re
 import socket
@@ -38,19 +39,19 @@ PORT=7777
 VERSION=1
 
 def usage():
-    print "Usage:"
-    print "    " + sys.argv[ 0 ] + " [options] [command]"
-    print ""
-    print "Options:"
-    print "    -a, --all             dump all information available"
-    print "    -c, --client-version  display client version"
-    print "    -h, --help            show this message"
-    print "    -n, --no-cache        disable reading cached results"
-    print "    -s, --server          specify server name/address"
-    print "    -p, --port            specify server port"
-    print "    -v, --version         display server version"
-    print ""
-    print "Try \"" + sys.argv[ 0 ] + " commands\" for a list of supported commands."
+    print("Usage:")
+    print("    " + sys.argv[ 0 ] + " [options] [command]")
+    print("")
+    print("Options:")
+    print("    -a, --all             dump all information available")
+    print("    -c, --client-version  display client version")
+    print("    -h, --help            show this message")
+    print("    -n, --no-cache        disable reading cached results")
+    print("    -s, --server          specify server name/address")
+    print("    -p, --port            specify server port")
+    print("    -v, --version         display server version")
+    print("")
+    print("Try \"" + sys.argv[ 0 ] + " commands\" for a list of supported commands.")
 
 def dump( sock ):
     while True:
@@ -64,7 +65,7 @@ def dump( sock ):
 try:
     opts, args = getopt.getopt( sys.argv[ 1: ], "achns:p:v", [ "all", "client-version", "help", "no-cache", "server=", "port=", "version" ] )
 except getopt.GetoptError as err:
-    print str( err )
+    print(str( err ))
     usage()
     sys.exit( 1 )
 
@@ -76,7 +77,7 @@ for opt, param in opts:
     if opt in ( "-a", "--all" ):
         command = "all"
     elif opt in ( "-c", "--client-version" ):
-        print "1.1"
+        print("1.1")
         sys.exit( 0 )
     elif opt in ( "-h", "--help" ):
         usage()
@@ -95,7 +96,7 @@ if command == None:
     if len( args ) > 0:
         command = args[ 0 ]
     else:
-        print >> sys.stderr, sys.argv[ 0 ] + ": no command specified"
+        print(sys.argv[ 0 ] + ": no command specified", file=sys.stderr)
         sys.exit( 1 )
 
 # Our tmcd server is also our DNS server, so that's how we find it.
@@ -117,7 +118,7 @@ if not server:
             server = match.group( 1 )
             break
     else:
-        print >> sys.stderr, sys.argv[ 0 ] + ": unable to find server address"
+        print(sys.argv[ 0 ] + ": unable to find server address", file=sys.stderr)
         sys.exit( 1 )
     resolv_conf.close()
 
@@ -130,7 +131,7 @@ sock.send( "geni_" + command )
 
 firstchar = sock.recv( 1 )
 if not firstchar:
-    print >> sys.stderr, sys.argv[ 0 ] + ": unexpected EOF from server"
+    print(sys.argv[ 0 ] + ": unexpected EOF from server", file=sys.stderr)
     sys.exit( 1 )
 
 if firstchar != "\x00":
@@ -141,7 +142,7 @@ if firstchar != "\x00":
 
 nextchar = sock.recv( 1 )
 if not nextchar:
-    print >> sys.stderr, sys.argv[ 0 ] + ": unexpected EOF from server"
+    print(sys.argv[ 0 ] + ": unexpected EOF from server", file=sys.stderr)
     sys.exit( 1 )
 
 if nextchar == "\x00":
