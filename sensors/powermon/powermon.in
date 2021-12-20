@@ -77,6 +77,7 @@ Usage: $0 [-rw] [-TPC] [-t <type>] [ <ctrl> ... ]
  <ctrl ...> is a list of specific power controllers to monitor.
  The default is to monitor temps on all controllers that support status.
 END
+    exit(1);
 }
 
 my $optlist = "crwANTPCt:";
@@ -274,7 +275,8 @@ sub dostatus(@) {
 		next;
 	    }
 	} elsif ($ctrls{$ctrl} =~ /^APC/) {
-	    my $device = new snmpit_apc($ctrl, 0);
+	    # XXX allow a little longer for our older APC units
+	    my $device = new snmpit_apc($ctrl, 0, 2);
 	    if (!defined($device) || $device->status(\%status)) {
 		logit("Could not get status for $ctrl.");
 		$errors++;
