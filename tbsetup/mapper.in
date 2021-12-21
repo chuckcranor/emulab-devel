@@ -746,7 +746,8 @@ sub RunAssign($$)
 	    sleep(1);
 	}
 	TBDebugTimeStamp("Got the mapper lock");
-	goto skipadctrl;
+	goto skipadctrl
+	    if ($pid eq "OAI2021FallWS");
     }
     
     #
@@ -773,7 +774,7 @@ sub RunAssign($$)
     TBDebugTimeStamp("MaxSwapInMap finished"); 
     #print STDERR Dumper($reservation_bounds);
     # Skip this during tutorials, takes too long.
-    if (!$seriallock) {
+    if ($pid ne "OAI2021FallWS") {
 	# Dump to file.
 	DumpReservationInfo($resinfolog, $reservation_bounds);
 	TBDebugTimeStamp("DumpReservationInfo finished");

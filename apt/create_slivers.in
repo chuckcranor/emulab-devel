@@ -1154,7 +1154,7 @@ sub CreateSliver($)
 		last;
 	    }
 	}
-	if ($seconds < 0) {
+	if ($seconds <= 0) {
 	    # XXX Need better handling for timeout.
 	    $code = GENIRESPONSE_TIMEDOUT;
 	    $errmsg = "Experiment setup timed out";

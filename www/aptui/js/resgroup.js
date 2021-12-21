@@ -3805,6 +3805,7 @@ $(function ()
 						   function () {
 						       if (!value) {
 							   Refresh();
+						       }
 						   });
 				     return;
 				 }

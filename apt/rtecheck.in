@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -180,7 +180,7 @@ if (!defined($fd)) {
 }
 print $fd $genilib;
 
-my $output = emutil::ExecQuiet("$DIFF -I '^\#\$' -E -B -b $copyname $filename");
+my $output = emutil::ExecQuiet("$DIFF -I '^\#\$' -B -b $copyname $filename");
 if ($?) {
     print STDERR $output;
     # For the web interface.
