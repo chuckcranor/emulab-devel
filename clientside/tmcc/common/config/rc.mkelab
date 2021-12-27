@@ -1031,7 +1031,7 @@ sub SetupFsNode()
     #
     foreach my $daemon (@SYSDAEMONS) {
 	if (-e "/etc/rc.d/$daemon") {
-	    system("/etc/rc.d/$daemon stop");
+	    system("/etc/rc.d/$daemon onestop");
 	} elsif (-e "/var/run/$daemon.pid") {
 	    system("kill `cat /var/run/$daemon.pid`");
 	} else {
@@ -1590,7 +1590,7 @@ sub SetupOpsNode($)
     #
     foreach my $daemon (@SYSDAEMONS) {
 	if (-e "/etc/rc.d/$daemon") {
-	    system("/etc/rc.d/$daemon stop");
+	    system("/etc/rc.d/$daemon onestop");
 	} elsif (-e "/var/run/$daemon.pid") {
 	    system("kill `cat /var/run/$daemon.pid`");
 	} else {
@@ -2376,7 +2376,7 @@ sub SetupBossNode($)
     #
     foreach my $daemon (@SYSDAEMONS) {
 	if (-e "/etc/rc.d/$daemon") {
-	    system("/etc/rc.d/$daemon stop");
+	    system("/etc/rc.d/$daemon onestop");
 	} elsif (-e "/var/run/$daemon.pid") {
 	    system("kill `cat /var/run/$daemon.pid`");
 	} else {
@@ -3245,7 +3245,7 @@ sub SetupOpsJail()
     #
     foreach my $daemon (@SYSDAEMONS) {
 	if (-e "/etc/rc.d/$daemon") {
-	    system("/etc/rc.d/$daemon stop");
+	    system("/etc/rc.d/$daemon onestop");
 	} elsif (-e "/var/run/$daemon.pid") {
 	    system("kill `cat /var/run/$daemon.pid`");
 	} else {
@@ -4299,7 +4299,7 @@ sub GetPackage($$) {
 
     my @pname = `ls -t $packagedir/$prefix-*.pkg 2>/dev/null`;
     if ($?) {
-	my @pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
+	@pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
 	if ($?) {
 	    @pname = `ls -t $packagedir/$prefix-*.tbz 2>/dev/null`;
 	    if ($?) {
@@ -4355,7 +4355,7 @@ sub DelAllPackages($)
     #
     # XXX must also set SIGNATURE_TYPE=NONE to prevent a signature check.
     #
-    $pkgpkg = GetPackage("pkg", $pkgdir);
+    my $pkgpkg = GetPackage("pkg", $pkgdir);
     my $oenv = $ENV{"SIGNATURE_TYPE"};
     $ENV{"SIGNATURE_TYPE"} = "NONE";
     if (system("pkg add -f $pkgpkg >/dev/null 2>&1")) {

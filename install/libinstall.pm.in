@@ -822,7 +822,7 @@ sub GetPackage($$) {
 
     my @pname = `ls -t $packagedir/$prefix-*.pkg 2>/dev/null`;
     if ($?) {
-	my @pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
+	@pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
 	if ($?) {
 	    @pname = `ls -t $packagedir/$prefix-*.tbz 2>/dev/null`;
 	    if ($?) {
