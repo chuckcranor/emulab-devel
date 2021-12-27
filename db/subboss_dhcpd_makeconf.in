@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,15 +32,17 @@ use Fcntl ':flock';
 # filled out. See the template file in the dhcp directory for an example.
 #
 sub usage {
-    print "Usage: $0 [-h] [-r]\n";
+    print "Usage: $0 [-hrn]\n";
     print "-h	Show this message\n";
     print "-r 	Restart DHCPD after config file regeneration\n";
+    print "-n 	Do not wait for restart to complete before returning\n";
     exit(1);
 }
-my $optlist = "h:r";
+my $optlist = "hrn";
 my $install = 1;
 my $vnames  = 0;
 my $restart = 0;
+my $waitfor = 1;
 
 #
 # Configure variables
@@ -88,6 +90,9 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"r"})) {
 	$restart = 1;
 }
+if (defined($options{"n"})) {
+	$waitfor = 0;
+}
 if (defined($options{"h"})) {
     usage();
 }
@@ -116,19 +121,36 @@ gendhcpdconf("$dhcpddir/dhcpd.conf",
 	     "$dhcpddir/dhcpd.conf.subboss.template");
 
 if ($restart) {
-	$dpid = `cat /var/run/dhcpd.pid`;
-	chomp($dpid);
+    my $dpid = `cat /var/run/dhcpd.pid`;
+    chomp($dpid);
 
-	# untaint
-	if ($dpid =~ /^([\d]+)$/) {
-		$dpid = $1;
+    # untaint
+    if ($dpid =~ /^([\d]+)$/) {
+	$dpid = $1;
+    }
+    else {
+	fatal("Bad pid for DHCPD: $dpid");
+    }
+    if (kill('TERM', $dpid) == 0) {
+	fatal("Could not kill(TERM) process $dpid (dhcpd): $!");
+    }
+
+    if ($waitfor) {
+	my $i;
+	for ($i = 0; $i < 3; $i++) {
+	    my $ndpid = `cat /var/run/dhcpd.pid`;
+	    if ($? == 0) {
+		chomp($ndpid);
+		if ($ndpid =~ /^(\d+)$/) {
+		    last if ($1 != $dpid);
+		}
+	    }
+	    sleep(1);
 	}
-	else {
-		fatal("Bad pid for DHCPD: $dpid");
+	if ($i == 3) {
+	    print STDERR "WARNING: subboss dhcpd did not appear to restart after kill!\n";
 	}
-	if (kill('TERM', $dpid) == 0) {
-		fatal("Could not kill(TERM) process $dpid (dhcpd): $!");
-	}
+    }
 }
 
 #
