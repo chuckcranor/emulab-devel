@@ -65,20 +65,15 @@ $OPS_PORT  = "emulab-ops-1.4";
 $FS_PORT   = "emulab-fs-1.4";
 if ($FBSD_MAJOR > 4) {
     if ($FBSD_MAJOR == 12) {
-	    $BOSS_PORT = "emulab-boss-8.1";
-	    $OPS_PORT = "emulab-ops-8.1";
-	    $FS_PORT = "emulab-fs-8.1";
+	my $ver = "8.$FBSD_MINOR";
+	$BOSS_PORT = "emulab-boss-$ver";
+	$OPS_PORT = "emulab-ops-$ver";
+	$FS_PORT = "emulab-fs-$ver";
     } elsif ($FBSD_MAJOR == 11) {
-	if ($FBSD_MINOR <= 1) {
-	    $BOSS_PORT = "emulab-boss-7.1";
-	    $OPS_PORT = "emulab-ops-7.1";
-	    $FS_PORT = "emulab-fs-7.1";
-	} else {
-	    my $ver = "7.$FBSD_MINOR";
-	    $BOSS_PORT = "emulab-boss-$ver";
-	    $OPS_PORT = "emulab-ops-$ver";
-	    $FS_PORT = "emulab-fs-$ver";
-	}
+	my $ver = ($FBSD_MINOR <= 1) ? "7.1" : "7.$FBSD_MINOR";
+	$BOSS_PORT = "emulab-boss-$ver";
+	$OPS_PORT = "emulab-ops-$ver";
+	$FS_PORT = "emulab-fs-$ver";
     } elsif ($FBSD_MAJOR == 10 && $FBSD_MINOR > 2) {
 	$BOSS_PORT = "emulab-boss-6.3";
 	$OPS_PORT = "emulab-ops-6.3";
@@ -280,7 +275,7 @@ $PORT_PYTHON_PATH	= "/usr/local/bin/python2";
 $PORT_PYTHON_PATH2	= "/usr/local/bin/python2.7";
 if ($FBSD_MAJOR > 11) {
     $PORT_PYTHON_PATH	= "/usr/local/bin/python3";
-    $PORT_PYTHON_PATH2	= "/usr/local/bin/python3.7";
+    $PORT_PYTHON_PATH2	= "/usr/local/bin/python3.8";
 }
 
 #

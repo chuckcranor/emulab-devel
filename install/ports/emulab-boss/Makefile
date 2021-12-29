@@ -27,7 +27,7 @@ WANT_PHP_MOD=	yes
 # PHP modules to build.
 # XXX based on current boss install.
 #
-.if (${EMULAB_PORTVERSION} == "8.2")
+.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
 # add opcache, get rid of modules that no longer exist
 USE_PHP=	bz2 ctype curl dom filter gd iconv json mysqli \
 		opcache openssl pdo phar posix session simplexml sockets \
@@ -48,7 +48,7 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysql \
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "8.2")
+.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
 www_apache24_SET=	SUEXEC
 .else
 .MAKEFLAGS+=	WITH_SUEXEC=yes
@@ -91,10 +91,6 @@ RUN_DEPENDS+=	\
 #
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libexec/tftpd:${PORTSDIR}/misc/emulab-tftp-hpa
-.if (${EMULAB_PORTVERSION} != "7.3" && ${EMULAB_PORTVERSION} != "8.2")
-RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}m2crypto>0:${PORTSDIR}/misc/emulab-py-m2crypto
-.endif
 
 # apps
 RUN_DEPENDS+=	\
@@ -119,17 +115,8 @@ RUN_DEPENDS+=	\
 	wget:${PORTSDIR}/ftp/wget \
 	xvcg:${PORTSDIR}/graphics/vcg \
 	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server \
-	${LOCALBASE}/include/boost/config.hpp:${PORTSDIR}/devel/boost-all
-
-#
-# Metis version changed
-.if (${EMULAB_PORTVERSION} == "7.3" || ${EMULAB_PORTVERSION} == "8.2")
-RUN_DEPENDS+=	\
+	${LOCALBASE}/include/boost/config.hpp:${PORTSDIR}/devel/boost-all \
 	gpmetis:${PORTSDIR}/math/metis
-.else
-RUN_DEPENDS+=	\
-	kmetis:${PORTSDIR}/math/metis4
-.endif
 
 
 # perl packages
@@ -167,7 +154,7 @@ RUN_DEPENDS+=	\
         p5-RRDTool-OO>=0.36:${PORTSDIR}/devel/p5-RRDTool-OO
 
 # python packages
-.if (${EMULAB_PORTVERSION} == "8.2")
+.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}mysqlclient>0:${PORTSDIR}/databases/py-mysqlclient
 .else
@@ -177,12 +164,8 @@ RUN_DEPENDS+=	\
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}dateutil>0:${PORTSDIR}/devel/py-dateutil \
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
-	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml
-
-.if (${EMULAB_PORTVERSION} == "7.3" || ${EMULAB_PORTVERSION} == "8.2")
-RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml \
 	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot
-.endif
 
 # apache related ports
 RUN_DEPENDS+=	\
@@ -193,13 +176,8 @@ RUN_DEPENDS+=	\
 # Port versions of current or former "core" utilties
 RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp44-server \
-	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind911
-
-.if (${EMULAB_PORTVERSION} == "7.3" || ${EMULAB_PORTVERSION} == "8.2")
-# dig and friends
-RUN_DEPENDS+=	\
+	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind911 \
 	${LOCALBASE}/bin/dig:${PORTSDIR}/dns/bind-tools
-.endif
 
 # XXX For building loghole doc from www/tutorial
 RUN_DEPENDS+=	\
