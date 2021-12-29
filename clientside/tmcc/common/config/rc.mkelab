@@ -1150,6 +1150,17 @@ sub SetupFsNode()
 	    #
 	    SyncPackages();
 	}
+	#
+	# XXX hack to deal with expired root cert.
+	# Normally the imaging process will fix up the trusted certs file,
+	# but we have removed the image-time packages and re-installed them.
+	# Unfortunately, the package sets for 11.3 and older contains an
+	# expired root certificate. We run our script here to deal with that.
+	#
+	if ($FBSD_VERSION <= 11.3 && -x "/usr/local/etc/emulab/removecert") {
+	    print "Removing expired root certs.\n";
+	    system("/usr/local/etc/emulab/removecert");
+	}
     }
 
     #
@@ -1770,6 +1781,17 @@ sub SetupOpsNode($)
 	    # up with it.
 	    #
 	    SyncPackages();
+	}
+	#
+	# XXX hack to deal with expired root cert.
+	# Normally the imaging process will fix up the trusted certs file,
+	# but we have removed the image-time packages and re-installed them.
+	# Unfortunately, the package sets for 11.3 and older contains an
+	# expired root certificate. We run our script here to deal with that.
+	#
+	if ($FBSD_VERSION <= 11.3 && -x "/usr/local/etc/emulab/removecert") {
+	    print "Removing expired root certs.\n";
+	    system("/usr/local/etc/emulab/removecert");
 	}
     }
 
@@ -2547,6 +2569,17 @@ sub SetupBossNode($)
 	    # up with it.
 	    #
 	    SyncPackages();
+	}
+	#
+	# XXX hack to deal with expired root cert.
+	# Normally the imaging process will fix up the trusted certs file,
+	# but we have removed the image-time packages and re-installed them.
+	# Unfortunately, the package sets for 11.3 and older contains an
+	# expired root certificate. We run our script here to deal with that.
+	#
+	if ($FBSD_VERSION <= 11.3 && -x "/usr/local/etc/emulab/removecert") {
+	    print "Removing expired root certs.\n";
+	    system("/usr/local/etc/emulab/removecert");
 	}
     }
 
@@ -3364,6 +3397,17 @@ sub SetupOpsJail()
 	    # up with it.
 	    #
 	    SyncPackages();
+	}
+	#
+	# XXX hack to deal with expired root cert.
+	# Normally the imaging process will fix up the trusted certs file,
+	# but we have removed the image-time packages and re-installed them.
+	# Unfortunately, the package sets for 11.3 and older contains an
+	# expired root certificate. We run our script here to deal with that.
+	#
+	if ($FBSD_VERSION <= 11.3 && -x "/usr/local/etc/emulab/removecert") {
+	    print "Removing expired root certs.\n";
+	    system("/usr/local/etc/emulab/removecert");
 	}
     }
 
