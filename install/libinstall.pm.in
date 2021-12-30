@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2019 University of Utah and the Flux Group.
+# Copyright (c) 2003-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -820,13 +820,16 @@ sub GetPackage($$) {
     PhaseFail("Must provide -p (packagedir) argument!")
 	if (!$packagedir);
 
-    my @pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
+    my @pname = `ls -t $packagedir/$prefix-*.pkg 2>/dev/null`;
     if ($?) {
-	@pname = `ls -t $packagedir/$prefix-*.tbz 2>/dev/null`;
+	@pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
 	if ($?) {
-	    @pname = `ls -t $packagedir/$prefix-*.tgz 2>/dev/null`;
-	    PhaseFail("Cannot find $prefix package in $packagedir!")
-		if ($?);
+	    @pname = `ls -t $packagedir/$prefix-*.tbz 2>/dev/null`;
+	    if ($?) {
+		@pname = `ls -t $packagedir/$prefix-*.tgz 2>/dev/null`;
+		PhaseFail("Cannot find $prefix package in $packagedir!")
+		    if ($?);
+	    }
 	}
     }
     chomp(@pname);
@@ -834,7 +837,7 @@ sub GetPackage($$) {
     if (@pname > 1) {
 	# if it matched more than one package, find one with exactly one '-'
 	foreach my $pn (@pname) {
-	    if ($pn =~ /^$packagedir\/$prefix-[^-]+\.t[bgx]z$/) {
+	    if ($pn =~ /^$packagedir\/$prefix-[^-]+\.(pkg|txz|tbz|tgz)$/) {
 		return $pn;
 	    }
 	}
@@ -885,8 +888,12 @@ sub AddPackage($$) {
 	    $pname = "$packagedir/$pname";
 	}
 	# and the suffix
-	if ($pname !~ /\.txz$/) {
-	    $pname .= ".txz";
+	if ($pname !~ /\.(pkg|txz)$/) {
+	    if (-e "$pname.pub") {
+		$pname .= ".pub";
+	    } else {
+		$pname .= ".txz";
+	    }
 	}
 	ExecQuietFatal("pkg add $pname");
     } else {

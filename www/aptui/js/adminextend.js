@@ -159,7 +159,8 @@ $(function ()
 
 	var matches = howlong.match(/^(\d+)(D|H)?$/i);
 	if (matches) {
-	    if (matches[2] === undefined || matches[2] == "D") {
+	    if (matches[2] === undefined ||
+		matches[2] == "D" || matches[2] == "d") {
 		return parseInt(matches[1]) * 24;
 	    }
 	    return parseInt(matches[1]);
@@ -217,9 +218,14 @@ $(function ()
 	    return;
 	}
 	var lockout = 0;
-	if ((action == "deny" || action == "terminate") &&
-	    $('#deny-lockout-checkbox').is(":checked")) {
-	    lockout = 1;
+	var killres = 0;
+	if (action == "deny" || action == "terminate") {
+	    if ($('#deny-lockout-checkbox').is(":checked")) {
+		lockout = 1;
+	    }
+	    if ($('#deny-killres-checkbox').is(":checked")) {
+		killres = 1;
+	    }
 	}
 	var callback = function(json) {
 	    sup.HideModal("#waitwait-modal");
@@ -254,7 +260,8 @@ $(function ()
 					     "howlong": howlong,
 					     "reason" : reason,
 					     "force"  : force,
-					     "lockout": lockout});
+					     "lockout": lockout,
+					     "killres": killres});
 	xmlthing.done(callback);	
     }
 

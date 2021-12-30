@@ -29,7 +29,7 @@ $NODE_USAGE_DB = 'node_usage';
 #   ...
 #
 @to_plot = (
-  ["pc3000s d710s d820s d430s", [qw(pc3000 d710 d820 d430)]],
+  ["All", [qw(pc3000 d710 d820 d430)]],
   ["pc3000s", [qw(pc3000)]],
 #  ["d710s", [qw(d710)], 1282575600] # latter start data: 
 #                                    #   when nodes were announced

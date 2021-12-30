@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2019 University of Utah and the Flux Group.
+# Copyright (c) 2013-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -428,16 +428,20 @@ sub get_poolattrs($)
     my $pool = $attrs->{'pool'};
     my $bstore = Blockstore->Lookup($server, $pool);
     if ($bstore) {
-	my $bsidx = $bstore->bsidx();
-	my $result =
-	    DBQueryFatal("SELECT attrvalue FROM blockstore_attributes ".
-			 "WHERE bsidx='$bsidx' and attrkey='allowed_bstores'");
-	if ($result && $result->numrows) {
-	    my ($allows) = $result->fetchrow_array;
-	    $attrs->{'allowed'} = $allows;
+	if ($bstore->exported()) {
+	    my $bsidx = $bstore->bsidx();
+	    my $result =
+		DBQueryFatal("SELECT attrvalue FROM blockstore_attributes ".
+			     "WHERE bsidx='$bsidx' and attrkey='allowed_bstores'");
+	    if ($result && $result->numrows) {
+		my ($allows) = $result->fetchrow_array;
+		$attrs->{'allowed'} = $allows;
+	    } else {
+		# XXX if nothing specified, assume non-persistent blockstores
+		$attrs->{'allowed'} = "volatile";
+	    }
 	} else {
-	    # XXX if nothing specified, assume non-persistent blockstores
-	    $attrs->{'allowed'} = "volatile";
+	    $attrs->{'allowed'} = "NOT-EXPORTED";
 	}
     } else {
 	print STDERR "WARNING: no blockstore object for $server/$pool\n";
@@ -654,7 +658,7 @@ sub bs_avail($$$@)
 
     if (keys(%{$poolref}) > 0) {
 	printf("%-12s %-12s %10s %10s %-5s %-s\n",
-	       "Server", "Pool", "Size", "Avail", "Free %", "Allows");
+	       "Server", "Pool", "Size", "Avail", "Free%", "Allows");
 
 	foreach my $pstr (sort keys(%{$poolref})) {
 	    my $attrs = $poolref->{$pstr};

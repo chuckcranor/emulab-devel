@@ -10,7 +10,12 @@ $(function ()
 
 	authjson   = _.unescape($('#auth-json')[0].textContent);
 	authobject = JSON.parse(authjson);
-	StartConsole();
+	if (_.has(authobject, "webssh") && authobject.webssh != 0) {
+	    StartConsoleNew();
+	}
+	else {
+	    StartConsole();
+	}
     }
 
     function StartConsole()
@@ -40,10 +45,21 @@ $(function ()
 	    var iwidth = "100%";
 	    var iheight = 500;
 
-	    $('#console-div').html('<iframe id="console_iframe" ' +
-				   'width=' + iwidth + ' ' +
-				   'height=' + iheight + ' ' +
-				   'src=\'' + url + '\'>');
+	    var html =
+		'<iframe id="console_iframe" ' +
+		'width=' + iwidth + ' ' +
+		'height=' + iheight + ' ' +
+		'src=\'' + url + '\'>';
+
+	    var html =
+		'<div style="height:500px; width:100%; ' +
+		'      resize:vertical;overflow-y:auto;padding-bottom:10px"> ' +
+		'  <iframe id="' + tabname + '_iframe" ' +
+		'     width="100%" height="100%"' + 
+		'     src=\'' + url + '\'>' +
+		'</div>';
+
+	    $('#console-div').html(html);
 
 	    $('#console-close').removeClass("hidden");
 
@@ -104,5 +120,34 @@ $(function ()
 	xmlthing.done(callback);
 	xmlthing.fail(callback_failed);
     }
+
+    function StartConsoleNew()
+    {
+        var url = authobject.baseurl;
+
+	var loadiframe = function () {
+	    console.info("Sending message", url);
+	    iframewindow.postMessage(authjson, "*");
+	    window.removeEventListener("message", loadiframe, false);
+	};
+	window.addEventListener("message", loadiframe);
+
+	var html =
+	    '<div style="height:31em; width:100%; ' +
+	    '      resize:vertical;overflow-y:auto;padding-bottom:10px"> ' +
+	    '  <iframe id="console-div-iframe" ' +
+	    '     width="100%" height="100%"' + 
+	    '     src=\'' + url + '\'></iframe>' +
+	    '</div>';
+
+        $('#console-div').html(html);
+	$('.stty').removeClass("hidden");
+
+	var iframe = $('#console-div-iframe')[0];
+	var iframewindow = (iframe.contentWindow ?
+			    iframe.contentWindow :
+			    iframe.contentDocument.defaultView);
+    }
+    
     $(document).ready(initialize);
 });

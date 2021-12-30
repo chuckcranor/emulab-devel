@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2019 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2021 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -67,6 +67,7 @@
 #ifdef USESOCKETS
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/resource.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <setjmp.h>
@@ -150,6 +151,7 @@ char	*Devname;
 char	*Machine;
 int	logfd = -1, runfd, devfd = -1, ptyfd = -1, xsfd = -1;
 int	hwflow = 0, speed = B9600, debug = 0, runfile = 0, standalone = 0;
+int     foreground = 0;
 int     nologfile = 0;
 int	stampinterval = -1;
 int	stamplast = 0;
@@ -452,6 +454,10 @@ main(int argc, char **argv)
 			debug++;
 			break;
 
+		case 'f':
+			foreground++;
+			break;
+
 		case 'r':
 			runfile++;
 			break;
@@ -504,7 +510,7 @@ main(int argc, char **argv)
 	if (!(programmode || xendomain) && argc != 2)
 		usage();
 
-	if (!debug && daemon(0, 0))
+	if (!(debug || foreground) && daemon(0, 0))
 		die("Could not daemonize");
 
 	Machine = argv[0];
@@ -905,6 +911,17 @@ send_to_client(const char *buf, int cc)
 				drop_topty_chars += (cc-lcc);
 #endif
 				return;
+			}
+			if (lerrno == ECONNRESET) {
+				if (debug == 1) {
+					fprintf(stderr,
+						"%s: client write ECONNRESET\n",
+						Machine);
+				}
+#ifdef	USESOCKETS
+				tipactive = 0;
+				return;
+#endif
 			}
 			die("%s: write: %s", Ptyname, geterr(lerrno));
 		}
@@ -1594,7 +1611,8 @@ die(char *format, ...)
 	vsnprintf(msgbuf, BUFSIZE, format, ap);
 	va_end(ap);
 	dolog(LOG_ERR, msgbuf);
-	quit(0);
+	cleanup();
+	exit(1);
 }
 
 void
@@ -1617,7 +1635,10 @@ void
 quit(int sig)
 {
 	cleanup();
-	exit(1);
+	// This used to be an exit(1). Lets use 15 instead, so we can run
+	// this from daemon_wrapper, which now looks for this exit code,
+	// since it will not otherwise know this was a TERM exit.
+	exit(15);
 }
 
 void
@@ -1882,6 +1903,23 @@ progmode(int isrestart)
 	int		pipefds[2];
 	sigset_t	mask;
 	int		rv = -1;
+	static int	first = 1;
+
+	/*
+	 * Since we are all paranoid and close all possible file descriptors
+	 * below, make sure the max per-process limit is not outrageous.
+	 * On one machine, the default was 1.8M descriptors and it was taking
+	 * five seconds of real time to close them all.
+	 */
+	if (first) {
+		struct rlimit maxfd;
+		maxfd.rlim_cur = maxfd.rlim_max = 1000;
+		if (setrlimit(RLIMIT_NOFILE, &maxfd)) {
+			warning("%s: could not lower file descriptor max",
+				Devname);
+		}
+		first = 0;
+	}
 
 	/*
 	 * Looks like select is woken up before the process winds up dead.

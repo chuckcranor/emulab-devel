@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -207,21 +207,6 @@ if (! defined($this_user)) {
 }
 # Run as the user for most of this script.
 $EUID = $UID;
-
-#
-# If looking for the parameter definition block, then see if there
-# are any define_parameter calls. If so, run the script to get the
-# JSON block.
-#
-if ($getparams && !$paramfile &&
-    system("egrep -q -s '^[^#]*defineParameter' $file") &&
-    system("egrep -q -s '^[^#]*defineStructParameter' $file")) {
-    # No parameters, return empty block.
-    if (defined($ofile)) {
-	system("echo '' > $ofile");
-    }
-    exit(0);
-}
 
 my $infile   = tmpnam();
 my $outfile  = tmpnam();

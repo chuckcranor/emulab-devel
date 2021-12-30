@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -157,6 +157,42 @@ my $status = $webtask->result();
 print Dumper($status);
 
 #
+# The new buses need the frontend and the switch turned on. Neither of these
+# use much power, nothing to worry about. Since these are not real nodes,
+# need to go look into the outlets table.
+#
+my $query_result =
+    DBQueryFatal("select node_id from outlets ".
+		 "where node_id='frontend' or node_id='switch'");
+
+while (my ($node_id) = $query_result->fetchrow_array()) {
+    if ($node_id eq "frontend") {
+	if ($status->{$FRONTEND_PIN} eq "off") {
+	    print "Powering on the front end\n";
+	    if (!$impotent) {
+		system("$SUDO $POWER on frontend");
+		if ($?) {
+		    fatal("Could not power on the frontend");
+		}
+		sleep(5);
+	    }
+	}
+    }
+    elsif ($node_id eq "switch") {
+	if ($status->{$SWITCH_PIN} eq "off") {
+	    print "Powering on the switch\n";
+	    if (!$impotent) {
+		system("$SUDO $POWER on switch");
+		if ($?) {
+		    fatal("Could not power on the switch");
+		}
+		sleep(5);
+	    }
+	}
+    }
+}
+
+#
 # If ED1 is powerered off, turn it on. It should boot up into PXEWAIT
 # or into ISUP (if allocated). If it goes into PXEWAIT, the idlepower
 # daemon will catch it and turn the IPMI power off.
@@ -203,41 +239,6 @@ if (defined($n300)) {
     }
 }
 
-#
-# The new buses need the frontend and the switch turned on. Neither of these
-# use much power, nothing to worry about. Since these are not real nodes,
-# need to go look into the outlets table.
-#
-my $query_result =
-    DBQueryFatal("select node_id from outlets ".
-		 "where node_id='frontend' or node_id='switch'");
-
-while (my ($node_id) = $query_result->fetchrow_array()) {
-    if ($node_id eq "frontend") {
-	if ($status->{$FRONTEND_PIN} eq "off") {
-	    print "Powering on the front end\n";
-	    if (!$impotent) {
-		system("$SUDO $POWER on frontend");
-		if ($?) {
-		    fatal("Could not power on the frontend");
-		}
-		sleep(5);
-	    }
-	}
-    }
-    elsif ($node_id eq "switch") {
-	if ($status->{$SWITCH_PIN} eq "off") {
-	    print "Powering on the switch\n";
-	    if (!$impotent) {
-		system("$SUDO $POWER on switch");
-		if ($?) {
-		    fatal("Could not power on the switch");
-		}
-		sleep(5);
-	    }
-	}
-    }
-}
 exit(0);
 
 sub fatal($)

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -561,18 +561,6 @@ sub AssignLoop()
 		sleep(10);
 	    }
 	}
-	# Hack for Kirk.
-	if (!($impotent || $regression) &&
-	    ($pid eq "mww2019" || $project->IsNonLocal())) {
-	    while (1) {
-		if (libEmulab::EmulabCountLock("mapperlock", 1) == 0) {
-		    $seriallock = 1;
-		    last;
-		}
-		chat("Waiting for mapper lock ...\n");
-		sleep(5);
-	    }
-	}
 	
 	#
 	# RunAssign returns  0 if successful.
@@ -591,6 +579,7 @@ sub AssignLoop()
 			 "where name='pool_daemon'");
 	    $gotlock = 0;
 	}
+	# Just in case.
 	if ($seriallock) {
 	    libEmulab::EmulabCountUnlock("mapperlock");
 	    $seriallock = 0;
@@ -683,6 +672,7 @@ sub RunAssign($$)
 {
     my ($precheck, $prefix) = @_;
 
+    my %adjusted_adcontrol = ();
     my $typelimitfile = $prefix .".limits";
     my $imagelistfile = $prefix .".images";
     my $ptopfile = $prefix . ".ptop";
@@ -744,10 +734,26 @@ sub RunAssign($$)
 	chat("Using existing assign results file\n");
 	goto skiprun;
     }
+
+    # Hack for Kirk.
+    if ($pid eq "OAI2021FallWS" || $project->IsNonLocal()) {
+	TBDebugTimeStamp("Trying to get the mapper lock");
+	while (1) {
+	    if (libEmulab::EmulabCountLock("mapperlock", 1) == 0) {
+		$seriallock = 1;
+		last;
+	    }
+	    sleep(1);
+	}
+	TBDebugTimeStamp("Got the mapper lock");
+	goto skipadctrl
+	    if ($pid eq "OAI2021FallWS");
+    }
     
     #
     # Do admission control test, and gather the info.
     #
+    TBDebugTimeStamp("TBAdmissionControlCheck started");	
     my %admission_control;
     if (!$regression) {
 	if (!TBAdmissionControlCheck(undef, $experiment, \%admission_control)){
@@ -755,15 +761,24 @@ sub RunAssign($$)
 	    return -1;
 	}
     }
-    my %adjusted_adcontrol =
+    TBDebugTimeStamp("TBAdmissionControlCheck ended");
+    %adjusted_adcontrol =
 	map {$_ => $admission_control{$_} } keys(%admission_control);
 
     # Bound the results to avoid future reservation conflicts.
     Reservation->FlushAll();
-    my $reservation_bounds = Reservation->MaxSwapInMap($experiment);
+    my $reservation_bounds =
+	Reservation->MaxSwapInMap($experiment,
+				  $seriallock && $vtop->AllNodesTyped() ?
+				  $vtop->types() : undef);
+    TBDebugTimeStamp("MaxSwapInMap finished"); 
     #print STDERR Dumper($reservation_bounds);
-    # Dump to file.
-    DumpReservationInfo($resinfolog, $reservation_bounds);
+    # Skip this during tutorials, takes too long.
+    if ($pid ne "OAI2021FallWS") {
+	# Dump to file.
+	DumpReservationInfo($resinfolog, $reservation_bounds);
+	TBDebugTimeStamp("DumpReservationInfo finished");
+    }
     my %reservation_nodes = ();
     foreach my $type (keys(%$reservation_bounds)) {
 	#
@@ -870,25 +885,17 @@ sub RunAssign($$)
 		    }
 		    else {
 			#
-			# User is allowed to use this node,
+			# User is not requesting the node specifically, but
+			# if the node is available to the user, we can
+			# increment upper bound for the type in case the
+			# user is requesting that type, or no type.
 			#
-			# If the node is already reserved to another
-			# experiment in the same project, stop here,
-			# we do not want to bump the bound count below
-			# since the node will not be in the ptop file
-			# and assign will pick some other node, and
-			# nalloc will whine. If we catch it here, the
-			# error is easier to grok.
-			#
-			if ($node->IsReserved() && $node->eid() ne $eid) {
-			    &$already_reserved($node);
-			    # Unretriable error
-			    return -1;
+			if ($reservation_bounds->{$node_id} != 0) {
+			    $bound += 1;
+			    $adjusted_adcontrol{$type} += 1;
+			    print "Incrementing bound count for $type ".
+				"($node_id)\n";
 			}
-			$bound += 1;
-			$adjusted_adcontrol{$type} += 1;
-			print "Incrementing bound count for $type ".
-			    "($node_id)\n";
 		    }
 		}
 	    }
@@ -913,6 +920,9 @@ sub RunAssign($$)
 	    my $node_type = $vtop->fixed()->{$node_id};
 
 	    print "Fixed: $node_id, $node_type\n";
+	    
+	    next
+		if ($node->IsReserved() && $node->sharing_mode());
 	    
 	    if ($reservation_bounds->{$node_id} == 0) {
 		tberror({type => 'primary', cause => 'temp',
@@ -974,7 +984,7 @@ sub RunAssign($$)
 	}
 	close(TYPELIMIT);
     }
-
+  skipadctrl:
     #
     # Give ptopgen a clue about images are is use by the vtop file,
     # to shrink the size of the ptop file (the nodes lines are huge!).
@@ -1008,7 +1018,7 @@ sub RunAssign($$)
     $ptopargs   .= "-C "
 	if ($usecontrol);
     $ptopargs   .= "-v "
-	if ($vtop->virtnodecount());
+	if ($vtop->virtnodecount() || $vtop->subnodecount);
     $ptopargs   .= "-r "
 	if ($vtop->remotenodecount());
     $ptopargs   .= "-S "
@@ -1017,6 +1027,8 @@ sub RunAssign($$)
 	if ($vtop->sharednodecount());
     $ptopargs   .= "-b "
 	if ($vtop->bstorecount());
+    $ptopargs   .= "-N "
+	if (!$vtop->vlancount());
     $ptopargs	.= "-a "
     	if ($precheck || $allnodesfree);
     $ptopargs	.= "-c " . $experiment->delay_capacity() . " "
@@ -1093,8 +1105,6 @@ sub RunAssign($$)
     TBDebugTimeStamp("assign started");
     if (my $childpid = fork()) {
 	while (1) {
-	    sleep(2);
-
 	    if (waitpid($childpid, &WNOHANG) == $childpid) {
 		$assignexitcode = $? >> 8;
 		$assignexitcode = -1 if ($assignexitcode == 255);
@@ -1114,6 +1124,7 @@ sub RunAssign($$)
 		}
 		# Loop again to reap child above before exit.
 	    }
+	    select(undef, undef, undef, 0.25);
 	}
     }
     else {
@@ -1212,6 +1223,12 @@ sub RunAssign($$)
 	return -1;
     }
     my $retval = $vtop->AllocNodes();
+    # Once allocation is done we can release the serial lock.
+    if ($seriallock) {
+	libEmulab::EmulabCountUnlock("mapperlock");
+	$seriallock = 0;
+	TBDebugTimeStamp("Released the mapper lock");	
+    }
     return $retval
 	if ($retval != 0);
 

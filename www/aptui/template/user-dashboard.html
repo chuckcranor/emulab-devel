@@ -112,6 +112,9 @@
 			Send Password Reset</a></li>
 		      <li><a href="suuser.php?user=<%= target_user %>">
 			<span class="text-danger">SU as User</span></a></li>
+		      <li><a href="#" data-toggle='modal'
+			     data-target='#confirm-deleteuser-modal'>
+			<span class="text-danger">Delete User</span></a></li>
 		      <li role="presentation">
 			<a href='<%- emulablink %>'>
 			  Emulab User Page</a></li>
@@ -272,6 +275,33 @@
 		  id='cancel-freezethaw'>Cancel</button>
           <button class='btn btn-danger btn-sm'
 		  id='confirm-freezethaw'>Confirm</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Confirm Delete User -->
+<div id='confirm-deleteuser-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <center><h4>Confirm to delete user</h4>
+	  <div>
+	    <div class="checkbox centered">
+	      <label>
+		<input type="checkbox"
+  		    onchange="$('#confirm-deleteuser').removeAttr('disabled');">
+		Check this box too!
+	      </label>
+	    </div>
+	  </div>
+	  <div>
+            <button class='btn btn-primary btn-sm'
+		    data-dismiss='modal'
+		    style="margin-right: 10px;">Cancel</button>
+            <button class='btn btn-danger btn-sm' disabled
+		    id='confirm-deleteuser'>Confirm</button>
+	  </div>
 	</center>
       </div>
     </div>

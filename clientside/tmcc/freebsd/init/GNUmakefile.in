@@ -61,10 +61,14 @@ endif
 endif
 endif
 ifeq ($(FBSDVERSION),FreeBSD11)
+ifeq ($(FBSDREL),11.4)
+FSUBDIR	       = 11.4
+else
 ifeq ($(FBSDREL),11.2)
 FSUBDIR	       = 11.2
 else
 FSUBDIR	       = 11
+endif
 endif
 endif
 ifeq ($(FBSDVERSION),FreeBSD12)

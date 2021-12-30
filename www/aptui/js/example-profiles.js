@@ -11,6 +11,12 @@ $(function ()
 	window.APT_OPTIONS.initialize(sup);
 	profiles = decodejson('#profiles-json');
 
+	// Standard option
+	marked.setOptions({"sanitize" : true});
+
+	_.each(profiles, function(value, name) {
+	    value.desc = marked(value.desc)
+	});
 	$('#main-body').html(listTemplate({"profiles" : profiles}));
 
 	// Format dates with moment before table update

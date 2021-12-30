@@ -411,3 +411,12 @@ CREATE TABLE `quickvm_rspecs` (
   PRIMARY KEY  (`idx`),
   UNIQUE KEY `name` (`name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `portal_manifests`;
+CREATE TABLE `portal_manifests` (
+  `slice_uuid` varchar(40) NOT NULL default '',
+  `created` datetime default NULL,
+  `manifest` mediumtext,
+  PRIMARY KEY  (`slice_uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2014 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -94,6 +94,7 @@ class SessionSaveHandler {
 	if (! $this->ValidSessionID($id)) {
 	    return "";
 	}
+        
         // new session-expire-time 
         $newExp = time() + $this->lifeTime;
 
@@ -107,28 +108,19 @@ class SessionSaveHandler {
 			     "where session_id = '$id'");
 	
         if (mysql_num_rows($query_result)) {
-		$query_result = 
-		    DBQueryWarn("update web_sessions set ".
-				"       session_expires=FROM_UNIXTIME($newExp), ".
-				"       session_data='$safe_data' ".
-				"where session_id='$id'");
-		if ($query_result && DBAffectedRows()) {
-		    return true;
-		}
+            DBQueryFatal("update web_sessions set ".
+                         "       session_expires=FROM_UNIXTIME($newExp), ".
+                         "       session_data='$safe_data' ".
+                         "where session_id='$id'");
         } 
         else { 
             // New session.
-	    $query_result =
-	        DBQueryWarn("replace into web_sessions set ".
-			     " session_id='$id', ".
-			    "  session_expires=FROM_UNIXTIME($newExp), ".
-			     " session_data='$safe_data'");
-	    if ($query_result && DBAffectedRows()) {
-		return true;
-	    }
-        } 
-        // an unknown error occured 
-        return false; 
+            DBQueryFatal("replace into web_sessions set ".
+                         " session_id='$id', ".
+                         "  session_expires=FROM_UNIXTIME($newExp), ".
+                         " session_data='$safe_data'");
+        }
+        return true;
     } 
 
     public function destroy($id) {
@@ -136,14 +128,9 @@ class SessionSaveHandler {
 	    return false;
 	}
 	$query_result =
-	    DBQueryWarn("delete from web_sessions ".
-			"where session_id='$id'");
-	
-        // if session was deleted, return true, 
-	if ($query_result && DBAffectedRows()) {
-            return true;
-	}
-	return false;
+	    DBQueryFatal("delete from web_sessions ".
+                         "where session_id='$id'");
+        return true;
     }
 
     public function gc($maxlifetime) {

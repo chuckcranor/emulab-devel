@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -217,6 +217,9 @@ if test ! -d "$PYTHON_PATH/include"; then
     PYTHON_PATH=`dirname ${PYTHON_PATH}`
 fi
 PYTHON_INCLUDE="${PYTHON_PATH}/include/python${PYTHON_VERSION}"
+if test ! -d "$PYTHON_INCLUDE" -a -d "${PYTHON_INCLUDE}m"; then
+      PYTHON_INCLUDE="${PYTHON_INCLUDE}m"
+fi
 CPPFLAGS="${CPPFLAGS} -I${PYTHON_INCLUDE}"
 AC_CHECK_HEADERS([Python.h],
 		 [],
@@ -321,6 +324,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd/init/10.4/GNUmakefile \
 	  tmcc/freebsd/init/11/GNUmakefile \
 	  tmcc/freebsd/init/11.2/GNUmakefile \
+	  tmcc/freebsd/init/11.4/GNUmakefile \
 	  tmcc/freebsd/init/12/GNUmakefile \
 	  tmcc/freebsd/init/13/GNUmakefile \
 	  tmcc/freebsd/supfile tmcc/freebsd/sethostname \
@@ -352,8 +356,8 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd9/GNUmakefile tmcc/freebsd9/netif-emulab \
 	  tmcc/freebsd10/GNUmakefile tmcc/freebsd10/netif-emulab \
 	  tmcc/freebsd11/GNUmakefile tmcc/freebsd11/netif-emulab \
-	  tmcc/freebsd12/GNUmakefile tmcc/freebsd12/netif-emulab \
-	  tmcc/freebsd13/GNUmakefile tmcc/freebsd13/netif-emulab \
+	  tmcc/freebsd12/GNUmakefile tmcc/freebsd12/netif_emulab \
+	  tmcc/freebsd13/GNUmakefile tmcc/freebsd13/netif_emulab \
 	  tmcc/freenas8/GNUmakefile tmcc/freenas9/GNUmakefile \
 	  tmcc/freenas11/GNUmakefile \
 	  tmcc/cygwinxp/GNUmakefile tmcc/dp/GNUmakefile \

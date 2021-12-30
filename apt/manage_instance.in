@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,6 +47,7 @@ sub usage()
     print("Usage: manage_instance powercycle instance node_id ...\n");
     print("Usage: manage_instance reload instance node_id ...\n");
     print("Usage: manage_instance recovery instance [-c] node_id\n");
+    print("Usage: manage_instance flash instance [-c] node_id\n");
     print("Usage: manage_instance deletenodes instance node_id ...\n");
     print("Usage: manage_instance deleteaggregates instance urn ...\n");
     print("Usage: manage_instance addaggregates instance rspec ...\n");
@@ -68,9 +69,11 @@ sub usage()
     print("Usage: manage_instance openstackstats instance\n");
     print("Usage: manage_instance getmanifests instance\n");
     print("Usage: manage_instance dumpmanifests instance\n");
+    print("Usage: manage_instance pushmanifest instance\n");
     print("Usage: manage_instance warn instance\n");
     print("Usage: manage_instance status instance\n");
     print("Usage: manage_instance applyextensionpolicy instance\n");
+    print("Usage: manage_instance deletereservations instance\n");
     exit(-1);
 }
 my $optlist     = "dt:s";
@@ -95,6 +98,7 @@ my $SUDO           = "/usr/local/bin/sudo";
 my $CREATESLIVERS  = "$TB/bin/create_slivers";
 my $MANAGEINSTANCE = "$TB/bin/manage_instance";
 my $MANAGEIMAGES   = "$TB/bin/manage_images";
+my $MANAGERESGROUP = "$TB/bin/manage_resgroup";
 my $IMPORTER       = "$TB/sbin/image_import";
 my $DESTROYWBSTORE = "$TB/sbin/destroywbstore";
 my $WAP            = "$TB/sbin/wap";
@@ -148,9 +152,11 @@ sub DoExtend();
 sub DoDenyOrMoreInfo($);
 sub DoRefresh();
 sub DoReboot();
+sub DoStart();
 sub DoPowerCycle();
 sub DoReload();
 sub DoRecovery();
+sub DoFlash();
 sub DoLockdown();
 sub DoPanic();
 sub DoManifests();
@@ -177,7 +183,9 @@ sub DoDelete();
 sub DoStatus();
 sub DoPrestageImages();
 sub DoPushExtension();
+sub DoPushManifest();
 sub DoTop();
+sub DoDeleteReservations();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$$);
 sub CallMethodOnAggregates($$$@);
@@ -275,8 +283,14 @@ elsif ($action eq "reboot") {
 elsif ($action eq "reload") {
     DoReload()
 }
+elsif ($action eq "start") {
+    DoStart()
+}
 elsif ($action eq "recovery") {
     DoRecovery()
+}
+elsif ($action eq "flash") {
+    DoFlash()
 }
 elsif ($action eq "monitor") {
     StartMonitor()
@@ -341,8 +355,14 @@ elsif ($action eq "prestageimages") {
 elsif ($action eq "pushextension") {
     DoPushExtension()
 }
+elsif ($action eq "pushmanifest") {
+    DoPushManifest()
+}
 elsif ($action eq "top") {
     DoTop()
+}
+elsif ($action eq "deletereservations") {
+    DoDeleteReservations();
 }
 else {
     usage();
@@ -699,6 +719,7 @@ sub DoSnapshot()
 	# Important to tell web user about these.
 	if ($response->code() == GENIRESPONSE_NOSPACE ||
 	    $response->code() == GENIRESPONSE_FORBIDDEN || 
+	    $response->code() == GENIRESPONSE_REFUSED || 
 	    $response->code() == GENIRESPONSE_ALREADYEXISTS) {
 	    $exitcode = 1;
 	}
@@ -836,7 +857,7 @@ sub DoSnapshot()
 		$response->code() == GENIRESPONSE_NETWORK_ERROR);
 
 	my $imageblob = $response->value();
-	print Dumper($imageblob);
+	# print Dumper($imageblob);
 	if (defined($swebtask)) {
 	    my %blobcopy = %{ $imageblob };
 
@@ -968,7 +989,7 @@ sub DoSnapshot()
 	    Genixmlrpc->SetContext(undef);
 	    # We get back undefined if the image is not posted yet.
 	    if (defined($blob)) {
-		print Dumper($blob);
+		# print Dumper($blob);
 		
 		#
 		# We actually wait for the hash since might not be
@@ -1141,7 +1162,8 @@ sub DoImageTrackerStuff($$$$$$$$)
     #
     # We can look for a deprecated image here and warn the user early.
     #
-    if (exists($blob->{'deprecated'}) && $blob->{'deprecated'}) {
+    if (!$this_user->IsAdmin() &&
+	exists($blob->{'deprecated'}) && $blob->{'deprecated'}) {
 	$$perrmsg = "$image_token is deprecated; not allowed to clone ".
 	    "or snapshot";
 	return 1;
@@ -1343,6 +1365,7 @@ sub DoConsole()
     my $url;
     my $pswd;
     my $logurl;
+    my $authobject;
 	
     if (ref($response->value())) {
 	$url  = $response->value()->{'url'};
@@ -1350,7 +1373,10 @@ sub DoConsole()
 	    if (exists($response->value()->{'password'}));
 	$logurl = $response->value()->{'logurl'}
 	    if (exists($response->value()->{'logurl'}));
-
+	# This is a JSON string, just pass it along.
+	if (exists($response->value()->{'authobject'})) {
+	    $authobject = $response->value()->{'authobject'};
+	}
 	print Dumper($response->value());
     }
     else {
@@ -1364,6 +1390,7 @@ sub DoConsole()
 	    $webtask->url($url);
 	    $webtask->password($pswd) if (defined($pswd));
 	    $webtask->logurl($logurl) if (defined($logurl));
+	    $webtask->authobject($authobject) if (defined($authobject));
 	}
 	$webtask->Exited($response->code());
 	exit($response->code());
@@ -1389,6 +1416,7 @@ sub DoTerminate()
     my $logfile;
     my $doperms  = 0;
     my $takelock = 0;
+    my $nolock   = 0;
     my $expired  = $RECORDHISTORY_TERMINATED;
 
     my $optlist = "eLX";
@@ -1553,7 +1581,7 @@ sub DoTerminate()
 	# Flag that we want to clear the panic, so send an auth credential.
 	return $sliver->Terminate($instance->paniced() ? 1 : undef);
     };
-    $errcode = CallMethodOnAggregates($coderef, 10, \$response, @agglist);
+    $errcode = CallMethodOnAggregates($coderef, 2, \$response, @agglist);
 				      
     if ($errcode) {
 	$exitcode = -1;
@@ -1572,7 +1600,7 @@ sub DoTerminate()
 	# SEARCHFAILED is success too
 	if ($code == GENIRESPONSE_SUCCESS ||
 	    $code == GENIRESPONSE_SEARCHFAILED) {
-	    $agg->SetStatus("terminated");
+	    $agg->MarkTerminated();
 	    next;
 	}
 	($exitcode,$errmsg) = ResponseErrorMessage($agg, $response);
@@ -1612,7 +1640,8 @@ sub DoTerminate()
 			  "manage_instance @SAVEARGV",
 			  "Name: $instance_name\n".
 			  "Slice: $slice_uuid\n\n",
-			  $brand->OpsEmailAddress(), undef, $logfile);
+			  $brand->OpsEmailAddress(),
+			  "X-Portal: Terminate", $logfile);
     }
   killit:
     $slice->Delete() if (defined($slice));
@@ -1645,6 +1674,8 @@ sub DoTerminate()
     # pick it up later (for the case that the instance is not expired)
     #
     $instance->MarkCanceled();
+    # User has given up routes, even if we cannot terminate some aggregates.
+    $instance->DeleteRoutes();
     $slice->UnLock();
     exit($exitcode);
 }
@@ -2782,21 +2813,24 @@ sub DoDenyOrMoreInfo($)
 {
     my ($action) = @_;
     my $errcode = -1;
-    my $reason;
+    my $killres = 0;
+    my $reason  = "";
 
     if (! $this_user->IsAdmin()) {
 	fatal("Only administrators can deny extensions or request info");
     }
-    if (@ARGV == 2) {
-	my $arg = shift(@ARGV);
-	if ($arg eq "-m") {
-	    $reason = shift(@ARGV);
-	}
-	else {
-	    usage();
-	}
+    my $optlist = "m:k";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
     }
-    elsif (@ARGV == 1) {
+    if (defined($options{"m"})) {
+	$reason = $options{"m"};
+    }
+    if (defined($options{"k"})) {
+	$killres = 1 if ($action eq "deny");
+    }
+    if (@ARGV == 1) {
 	my $filename = shift(@ARGV);
 	if (! -e $filename) {
 	    fatal("$filename does not exist");
@@ -2881,7 +2915,102 @@ sub DoDenyOrMoreInfo($)
 			   "extension_denied"    => 1,
 			   "extension_denied_reason" => $reason});
     }
+    if ($killres) {
+	# Failure is not fatal.
+	DoDeleteReservations();
+    }
     return 0;
+}
+
+#
+# Find reservations associated with an experiment (same user, reserving
+# the same types as used in the experiment), and delete with prejudice.
+#
+sub DoDeleteReservations()
+{
+    my $errmsg;
+    my $errcode  = 0;
+    my $exitcode = -1;
+    my $impotent = 0;
+    require APT_Reservation;
+
+    my $optlist = "n";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"n"})) {
+	$impotent = 1;
+    }
+    my $project = $instance->GetProject();
+    my @reslist = APT_Reservation::Group->LookupForProject($project);
+    goto done
+	if (!@reslist);
+
+    # Find reservations for same user.
+    my @tmp;
+    foreach my $res (@reslist) {
+	if ($instance->creator_idx() == $res->creator_idx() && $res->Active()) {
+	    push(@tmp, $res);
+	}
+    }
+    goto done
+	if (!@tmp);
+    @reslist = @tmp;
+
+    #
+    # Need all resource types used.
+    #
+    my $resources;
+    if ($instance->GetResources(\$errmsg, \$resources)) {
+	goto bad;
+    }
+    if ($debug) {
+	print Dumper($resources);
+    }
+    my $counts = $resources->{'typeCounts'};
+
+    #
+    # Now find the reservations using using these resources.
+    #
+    @tmp = ();
+    foreach my $res (@reslist) {
+	foreach my $group ($res->ReservationList()) {
+	    if (exists($counts->{$group->aggregate_urn()}) &&
+		exists($counts->{$group->aggregate_urn()}->{$group->type()})){
+		if ($debug) {
+		    print "$res\n";
+		}
+		push(@tmp, $res);
+	    }
+	}
+    }
+    goto done
+	if (!@tmp);
+    @reslist = @tmp;
+
+    foreach my $res (@reslist) {
+	if ($impotent) {
+	    print "Would cancel $res\n";
+	}
+	else {
+	    my $when = time() + (3 * 3600);
+	    system("$MANAGERESGROUP cancel -e $when " . $res->uuid());
+	}
+    }
+  done:
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
+
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($exitcode);
 }
 
 #
@@ -2893,6 +3022,16 @@ sub DoRefresh()
     my $errmsg;
     my $errcode = 0;
     my $exitcode = -1;
+    my $force   = 0;
+
+    my $optlist = "F";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"F"})) {
+	$force = 1;
+    }
     
     my $slice = $instance->GetGeniSlice();
     if (!defined($slice)) {
@@ -2908,7 +3047,7 @@ sub DoRefresh()
     # Lock the slice in case it is doing something else, like taking
     # a disk image.
     #
-    if ($slice->Lock()) {
+    if ($slice->Lock() && !$force) {
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	$errcode = GENIRESPONSE_BUSY;
 	$exitcode = 1;
@@ -2956,6 +3095,16 @@ sub DoRefresh()
 	}
 	# This is the per-aggregate status, we always set this for web UI.
 	$agg->UpdateSliverStatusAll($blob->{'details'});
+	# And set the top level slice status. Need to create a hash with
+	# the subset we want in the DB. 
+	my $slice_status_blob = {
+	    "status" => $blob->{'status'},
+	    "utc"    => $blob->{'utc'},
+	    "state"  => $blob->{'state'},
+	};
+	# This should probably be done atomically with sliver status.
+	$agg->UpdateSliceStatus($slice_status_blob);
+	
 	if ($debug) {
 	    print STDERR Dumper($blob);
 	}
@@ -2991,6 +3140,7 @@ sub DoRebootOrReload($)
     my $errcode;
     my $exitcode = -1;
     my $doperms  = 0;
+    my $locked   = 0;
 
     my $optlist = "X";
     my %options = ();
@@ -3025,6 +3175,7 @@ sub DoRebootOrReload($)
     }
 
     my %sliver_urns = ();
+    my %slice_urns  = ();
     my %node_ids    = ();
     my @slivers     = ();
     foreach my $obj ($instance->AggregateList()) {
@@ -3039,18 +3190,24 @@ sub DoRebootOrReload($)
 	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
 		     GeniXML::FindNodesNS("n:vhost", $manifest,
 					  $GeniXML::EMULAB_NS)->get_nodelist());
+
+	# List of this agg nodes as we find them.
+	my @aggnodes = ();
+	
 	foreach my $node (@nodes) {
-	    my $client_id = GeniXML::GetVirtualId($node);
+	    my $client_id   = GeniXML::GetVirtualId($node);
+	    my $sliver_urn  = GeniXML::GetSliverId($node);
+	    my $manager_urn = GetManagerId($node);
+
+	    # No sliver urn or a different aggregate.
+	    next
+		if (! (defined($sliver_urn) &&
+		       defined($manager_urn) &&
+		       $manager_urn eq $obj->aggregate_urn()));
+
+	    push(@aggnodes, $node);
+	    
 	    if (grep {$_ eq $client_id} @ARGV) {
-		my $sliver_urn  = GeniXML::GetSliverId($node);
-		my $manager_urn = GetManagerId($node);
-
-		# No sliver urn or a different aggregate.
-		next
-		    if (! (defined($sliver_urn) &&
-			   defined($manager_urn) &&
-			   $manager_urn eq $obj->aggregate_urn()));
-
 		if (!exists($sliver_urns{$obj->aggregate_urn()})) {
 		    $sliver_urns{$obj->aggregate_urn()} = [];
 		    push(@slivers, $obj);
@@ -3058,6 +3215,18 @@ sub DoRebootOrReload($)
 		push(@{ $sliver_urns{$obj->aggregate_urn()} }, $sliver_urn);
 		$node_ids{$sliver_urn} = $client_id;
 	    }
+	}
+	next
+	    if (!exists($sliver_urns{$obj->aggregate_urn()}));
+	
+	#
+	# If we are doing all the nodes at an aggregate, we want to apply
+	# the operation to the slice instead of individual slivers.
+	#
+	if (scalar(@aggnodes) ==
+	    scalar(@{ $sliver_urns{$obj->aggregate_urn()}})) {
+	    # This will cause the operation to apply to the entire aggregate.
+	    $sliver_urns{$obj->aggregate_urn()} = [];
 	}
     }
     if (!@slivers) {
@@ -3077,6 +3246,7 @@ sub DoRebootOrReload($)
 	$exitcode = 1;
 	goto bad;
     }
+    $locked = 1;
 
     #
     # Helper callback to send the proper arguments.
@@ -3139,7 +3309,7 @@ sub DoRebootOrReload($)
     $instance->Delete();
     exit(0);
   bad:
-    $slice->UnLock();
+    $slice->UnLock() if ($locked);
     print STDERR $errmsg . "\n";
     if (defined($webtask)) {
 	$webtask->output($errmsg);
@@ -3149,6 +3319,7 @@ sub DoRebootOrReload($)
 }
 sub DoReboot()     { return DoRebootOrReload("reboot"); }
 sub DoReload()     { return DoRebootOrReload("reload"); }
+sub DoStart()      { return DoRebootOrReload("start"); }
 sub DoPowerCycle() { return DoRebootOrReload("powercycle"); }
 
 #
@@ -3236,6 +3407,103 @@ sub DoRecovery()
 }
 
 #
+# Flash a radio
+#
+sub DoFlash()
+{
+    my ($errmsg, $exitcode, $errcode);
+    my $locked = 0;
+
+    my $optlist = "";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (!@ARGV);
+    my $node_id = shift(@ARGV);
+
+    #
+    # Sanity check to make sure the node is really in the rspec, since
+    # we need its sliver urn.
+    #
+    my $sliver_urn;
+    my $sliver;
+    foreach my $obj ($instance->AggregateList()) {
+	my $manifest = GeniXML::Parse($obj->manifest());
+	if (! defined($manifest)) {
+	    fatal("Could not parse manifest for $obj");
+	}
+	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
+		     GeniXML::FindNodesNS("n:vhost", $manifest,
+					  $GeniXML::EMULAB_NS)->get_nodelist());
+	foreach my $node (@nodes) {
+	    my $client_id   = GeniXML::GetVirtualId($node);
+	    my $urn         = GeniXML::GetSliverId($node);
+	    my $manager_urn = GetManagerId($node);
+
+	    # No sliver urn or a different aggregate.
+	    next
+
+		if (! (defined($urn) &&
+		       defined($manager_urn) &&
+		       $manager_urn eq $obj->aggregate_urn()));
+
+	    if ($node_id eq $client_id) {
+		$sliver_urn = $urn;
+		$sliver = $obj;
+	    }
+	}
+    }
+    if (!defined($sliver_urn)) {
+	fatal("Could not find node '$node_id' in manifest");
+    }
+
+    #
+    # Lock the slice in case it is doing something else, like taking
+    # a disk image.
+    #
+    if ($instance->Lock()) {
+	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
+	$errcode  = GENIRESPONSE_BUSY;
+	$exitcode = 1;
+	goto bad;
+    }
+    $locked = 1;
+    
+    if ($sliver->GetAptAggregate()->CheckStatus(\$errmsg)) {
+	print STDERR "$errmsg\n";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited(GENIRESPONSE_SERVER_UNAVAILABLE);
+	}
+	$instance->Unlock();
+	exit(1);
+    }
+    my $response = $sliver->Flash($sliver_urn);
+    if ($response->code() != GENIRESPONSE_SUCCESS) {
+	$errcode = $response->code();
+	($exitcode,$errmsg) = ResponseErrorMessage($sliver, $response);
+	
+	# Important to tell web user about this
+	if ($response->code() == GENIRESPONSE_FORBIDDEN) {
+	    $exitcode = 1;
+	}
+	goto bad;
+    }
+    $instance->Unlock();
+    exit(0);
+  bad:
+    $instance->Unlock() if ($locked);
+    print STDERR "$errmsg\n";
+    if (defined($errmsg) && defined($webtask)) {
+	$webtask->Exited($errcode);
+	$webtask->output($errmsg);
+    }
+    exit($exitcode);
+}
+
+#
 # 
 #
 sub DoManifests()
@@ -3307,6 +3575,12 @@ sub DoManifests()
     goto bad
 	if ($errcode);
 
+    if ($instance->MergeManifests()) {
+	print STDERR "Could not merge manifests\n";
+    }
+    elsif (PushManifestInternal($instance->manifest())) {
+	print STDERR "Could not push manifests\n";
+    }
     $slice->UnLock();
     exit(0);
   bad:
@@ -3410,6 +3684,7 @@ sub DoDeleteNodes()
 	fatal("No slice for instance");
     }
     my @aggregates  = ();
+    my @delaggs     = ();
     my %allmap      = ();
     my %aggmap      = ();
     foreach my $obj ($instance->AggregateList()) {
@@ -3447,7 +3722,6 @@ sub DoDeleteNodes()
 	    if (grep {$_ eq $client_id} @ARGV) {
 		if (!exists($aggmap{$obj->aggregate_urn()})) {
 		    $aggmap{$obj->aggregate_urn()} = [];
-		    push(@aggregates, $obj);
 		}
 		push(@{ $aggmap{$obj->aggregate_urn()} }, $client_id);
 		$delcount++;
@@ -3460,15 +3734,42 @@ sub DoDeleteNodes()
 	# about this when it becomes a problem.
 	#
 	if ($delcount == scalar(@{ $allmap{$obj->aggregate_urn()} })) {
-	    $errmsg   = "Not allowed to delete all nodes, ".
-		"please use Terminate instead";
-	    print STDERR $errmsg . "\n";
-	    if (defined($webtask)) {
-		$webtask->output($errmsg);
-		$webtask->Exited(1);
+	    if (scalar($instance->AggregateList()) == 1) {
+		$errmsg   = "Not allowed to delete all nodes, ".
+		    "please use Terminate instead";
+		print STDERR $errmsg . "\n";
+		if (defined($webtask)) {
+		    $webtask->output($errmsg);
+		    $webtask->Exited(1);
+		}
+		exit(1);
 	    }
-	    exit(1);
+	    else {
+		push(@delaggs, $obj);
+	    }
 	}
+	elsif ($delcount) {
+	    push(@aggregates, $obj);
+	}
+    }
+    if (scalar(@delaggs) == scalar($instance->AggregateList())) {
+	$errmsg   = "Not allowed to delete all nodes, ".
+	    "please use Terminate instead";
+	print STDERR $errmsg . "\n";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+    if (! (@aggregates || @delaggs)) {
+	$errmsg   = "Cannot find anything to delete!";
+	print STDERR $errmsg . "\n";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited(1);
+	}
+	exit(1);
     }
 
     #
@@ -3527,6 +3828,19 @@ sub DoDeleteNodes()
     # Set the status back to provisioning for the web interface.
     #
     $instance->SetStatus("provisioning") if (!$nostatus);
+
+    #
+    # Delete aggregates first, that should be quick.
+    #
+    if (@delaggs) {
+	my $taskopt = (defined($webtask) ? "-t $webtask_id" : "");
+	
+	system("$MANAGEINSTANCE $taskopt deleteaggregates $uuid -N -S ".
+	       join(" ", map {"'" . $_->aggregate_urn() . "'"} @delaggs));
+	if ($?) {
+	    exit($? >> 8);
+	}
+    }
 
     # Invoke on all clusters
     $errcode = CallMethodOnAggregates($coderef, 0, \$response, @aggregates);
@@ -3694,20 +4008,31 @@ sub DoDeleteAggregates()
     #
     my @tmp = ();
     foreach my $aggregate (@aggregates) {
-	if ($aggregate->status() eq "created") {
+	if ($aggregate->status() eq "created" ||
+	    $aggregate->status() eq "prestage") {
 	    #
 	    # Need to deal with history entries.
 	    #
-	    print "$aggregate in 'created' state, removing immediately.\n";
-	    $instance->RemoveAggregate($aggregate);
+	    print "$aggregate never started.\n";
+	    $aggregate->MarkTerminated();
 	    next;
 	}
-	push(@tmp, $aggregate);
 	#
 	# Mark as canceled in case we cannot reach the clusters, the scheduler
 	# will look for this and try again
 	#
 	$aggregate->SetStatus("canceled");
+
+	#
+	# Look to see if the aggregate is online, lets not bounce the
+	# status page around more then necessary.
+	#
+	my $aptagg = $aggregate->GetAptAggregate();
+	if ($aptagg->CheckStatus(\$errmsg, 1) != 0) {
+	    print "$aptagg is not reachable, skipping: $errmsg\n";
+	    next;
+	}
+	push(@tmp, $aggregate);
     }
     if (!@tmp) {
 	goto done;
@@ -3737,6 +4062,9 @@ sub DoDeleteAggregates()
 	goto bad;
     }
 
+    # Flag, do we need to merge/push a new manifest.
+    my $needpush = 0;
+
     #
     # Look at all the responses, update the status. 
     #
@@ -3748,15 +4076,8 @@ sub DoDeleteAggregates()
 	# SEARCHFAILED is success too
 	if ($code == GENIRESPONSE_SUCCESS ||
 	    $code == GENIRESPONSE_SEARCHFAILED) {
-	    $agg->SetStatus("terminated");
-	    
-	    #
-	    # Remove all trace. We need to munge the manifests in all
-	    # aggregates so the web server does not show the stale
-	    # aggregates. This is annoying and probably messes up the
-	    # history too.
-	    #
-	    $instance->RemoveAggregate($agg);
+	    $agg->MarkTerminated();
+	    $needpush = 1;
 	    next;
 	}
 	($exitcode,$errmsg) = ResponseErrorMessage($agg, $response);
@@ -3778,6 +4099,15 @@ sub DoDeleteAggregates()
 	    # how we will handle this error.
 	    $errcode  = $code;
 	    $exitcode = -1;
+	}
+    }
+    # If we made any changes, merge/push the manifests.
+    if ($needpush) {
+	if ($instance->MergeManifests()) {
+	    print STDERR "Could not merge manifests\n";
+	}
+	elsif (PushManifestInternal($instance->manifest())) {
+	    print STDERR "Could not push manifests\n";
 	}
     }
     # Will have to try again later.
@@ -5890,6 +6220,7 @@ sub DoSchedTerminate()
 {
     my $errcode  = 1;
     my $exitcode = 1;
+    my $killres  = 0;
     my $errmsg;
     my $days;
     my $reason;
@@ -5904,20 +6235,22 @@ sub DoSchedTerminate()
     my $created_time  = str2time($instance->started());
     my $extensions    = $instance->Brand()->ExtensionsEmailAddress();
     
+    my $optlist = "m:k";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"m"})) {
+	$reason = $options{"m"};
+    }
+    if (defined($options{"k"})) {
+	$killres = 1;
+    }
     usage()
 	if (!@ARGV);
     $days = shift(@ARGV);
 
-    if (@ARGV == 2) {
-	my $arg = shift(@ARGV);
-	if ($arg eq "-m") {
-	    $reason = shift(@ARGV);
-	}
-	else {
-	    usage();
-	}
-    }
-    elsif (@ARGV == 1) {
+    if (@ARGV) {
 	my $filename = shift(@ARGV);
 	if (! -e $filename) {
 	    fatal("$filename does not exist");
@@ -5966,6 +6299,10 @@ sub DoSchedTerminate()
     # No free time.
     $instance->Update({"extension_disabled" => 1});
 
+    # Do this now, failure is not fatal.
+    if ($killres) {
+	DoDeleteReservations();
+    }
     #
     # Need to set the new expiration before we clear the lockdown bit,
     # else it might get terminated at the cluster. But, if the
@@ -6222,6 +6559,7 @@ sub DoWarn()
 			  "Your $pid/$name experiment",
 			  $reason,
 			  $brand->OpsEmailAddress(),
+			  "X-Portal: Warned\n" .
 			  "CC: " . $project->GetLeader()->email() . "\n" .
 			  "BCC: " . $brand->OpsEmailAddress());
 
@@ -6338,14 +6676,17 @@ sub DoWarn()
 
     my $message;
     my $subject;
+    my $xheader;
 
     if ($panic) {
 	$message = "Your experiment, $pid/$name, has been quarantined!\n";
 	$subject = "Your experiment $name has been quarantined!";
+	$xheader = "Quarantined";
     }
     else {
 	$message = "Your experiment, $pid/$name, has been terminated!\n";
 	$subject = "Your experiment $name has been terminated with cause!";
+	$xheader = "Killed";
     }
     if ($freeze) {
 	$message .= "Your account has been frozen until this is resolved.\n";
@@ -6363,6 +6704,7 @@ sub DoWarn()
 		      $subject,
 		      $message,
 		      $brand->OpsEmailAddress(),
+		      "X-Portal: $xheader\n" .
 		      "CC: " . $project->GetLeader()->email() . "\n" .
 		      "BCC: " . $brand->OpsEmailAddress());
 		      
@@ -6794,8 +7136,9 @@ sub CallMethodOnAggregates($$$@)
     #
     # Generate a list of responses to return to caller.
     #
-    foreach my $agg (@aggregates) {
-	my $webtask = shift(@webtasks);
+    for (my $i = 0; $i < scalar(@aggregates); $i++) {
+	my $agg = $aggregates[$i];
+	my $webtask = $webtasks[$i];
 
 	# No need to refresh if we did not use ParRun above.
 	$webtask->Refresh() if (@aggregates > 1);
@@ -6804,5 +7147,146 @@ sub CallMethodOnAggregates($$$@)
     $$prval = \@return_values;
     map { $_->Delete(); } @webtasks;
     return 0;
+}
+
+sub PushManifestInternal($)
+{
+    my ($manifest) = @_;
+    my $errmsg;
+    my $errcode;
+    my @aggregates = ();
+    
+    foreach my $aggregate ($instance->ActiveAggregateList()) {
+	next
+	    if (!defined($aggregate->manifest_needpush()));
+
+	push(@aggregates, $aggregate);
+    }
+    return 0
+	if (!@aggregates);
+
+    #
+    # Push the manifest out.
+    #
+    my $coderef = sub {
+	my ($sliver) = @_;
+
+	return $sliver->PushPortalManifest($manifest);
+    };
+    my $responses;
+
+    my $oldtimeo   = Genixmlrpc->SetTimeout(30);
+    $errcode = CallMethodOnAggregates($coderef, 0, \$responses, @aggregates);
+    Genixmlrpc->SetTimeout($oldtimeo);
+    if ($errcode) {
+	print STDERR $responses . "\n";
+	return -1;
+    }
+    my $hosed = 0;
+
+    # Lets see which ones we were able to update.
+    foreach my $aggregate (@aggregates) {
+	my $response = shift(@{$responses});
+	my $code     = $response->code();
+	my $aptagg   = $aggregate->GetAptAggregate();
+
+	if ($code) {
+	    if ($code == GENIRESPONSE_NETWORK_ERROR ||
+		$code == GENIRESPONSE_SERVER_UNAVAILABLE) {
+		# Still out of contact, keep going.
+		print STDERR "Manifest push failed at ". $aptagg->name() .
+		    ": $aggregate is unreachable, skipping\n";
+	    }
+	    elsif ($response->code() == XMLRPC_NO_SUCH_METHOD) {
+		print STDERR "Manifest push failed at ". $aptagg->name() .
+		    ": does not support manifest push\n";
+		$aggregate->ClearManifestPush();
+	    }
+	    elsif ($code == GENIRESPONSE_SEARCHFAILED) {
+		print STDERR "Manifest push failed at ". $aptagg->name() .
+		    ": slice does not exist\n";
+		$aggregate->ClearManifestPush();
+	    }
+	    else {
+		# All other errors mean we are hosed!
+		(undef, $errmsg) = ResponseErrorMessage($aggregate, $response);
+		print STDERR "Manifest push failed at ". $aptagg->name() .
+		    ": $errmsg\n";
+		$aggregate->ClearManifestPush();
+		$hosed++;
+	    }
+	}
+	else {
+	    # Success, clear the push flag.
+	    print "Successfully pushed the manifest to " .
+		$aptagg->name() . "\n";
+	    $aggregate->ClearManifestPush();
+	}
+    }
+    if ($hosed) {
+	return 1;
+    }
+    return 0;
+}
+
+#
+# Push out the portal merged manifest.
+#
+sub DoPushManifest()
+{
+    my $slice    = $instance->GetGeniSlice();
+    my $optlist  = "N";
+    my $nolock   = 0;	# Caller holds the lock.
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"N"})) {
+	$nolock = 1;
+    }
+
+    #
+    # Lock the slice in case it is doing something else, like taking
+    # a disk image, since 
+    #
+    if (!$nolock && $slice->Lock()) {
+	my $errcode = GENIRESPONSE_BUSY;
+	my $errmsg  ="Experiment is busy, cannot lock it. Try again later.";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited($errcode);
+	}
+	print STDERR "$errmsg\n";
+	exit(1);
+    }
+    # Might as well regen it since that will flag any new updates.
+    if ($instance->MergeManifests()) {
+	$slice->UnLock() if (!$nolock);
+	fatal("Could not merge manifests");
+    }
+    my $manifest = $instance->manifest();
+    $slice->UnLock() if (!$nolock);
+    if ($instance->manifest() eq "") {
+	print "No manifest to push\n";
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+    if (0 && scalar($instance->AggregateList()) == 1) {
+	print "Only one aggregate, no need to push manifest\n";
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+    if (PushManifestInternal($manifest)) {
+	exit(-1);
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
 }
 

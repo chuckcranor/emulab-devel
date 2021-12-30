@@ -24,7 +24,7 @@ RUN_DEPENDS=	\
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml
 
-USES=		python:2.7
+USES=		python:$(PY_VER)
 
 NO_BUILD=	yes
 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2020 University of Utah and the Flux Group.
+# Copyright (c) 2004-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -153,6 +153,20 @@ my $TBDIR = "/usr/testbed";
 my $ZPOOLCMD = "/sbin/zpool";
 my $ZFSCMD =   "/sbin/zfs";
 my $ZFSPOOL =  "emulab";
+
+# Ick to deal with python differences
+my $PYBIN = "/usr/local/bin/python";
+if (! -x $PYBIN) {
+    if (-x "/usr/local/bin/python2") {
+	$PYBIN = "/usr/local/bin/python2";
+    } elsif (-x "/usr/local/bin/python3.7") {
+	$PYBIN = "/usr/local/bin/python3.7";
+    } elsif (-x "/usr/local/bin/python3.8") {
+	$PYBIN = "/usr/local/bin/python3.8";
+    } else {
+	$PYBIN = "NO-PYTHON-INSTALLED";
+    }
+}
 
 #
 # Support for Windows nodes.
@@ -708,7 +722,7 @@ sub doboot()
 	$emulabconfig{EXTRA_PKG}    = "emulab-extras-7.2";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-11.2-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-7.2";
-    } elsif ($FBSD_VERSION >= 11.3) {
+    } elsif ($FBSD_VERSION == 11.3) {
 	my $suf = "-64";
 	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/11.3/packages${suf}";
 	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
@@ -720,6 +734,31 @@ sub doboot()
 	$emulabconfig{EXTRA_PKG}    = "emulab-extras-7.3";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-11.3-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-7.3";
+    } elsif ($FBSD_VERSION == 12.2) {
+	my $suf = "-64";
+	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/12.2/packages${suf}";
+	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{EXTRA_PKG_DIR}= $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{FS_PKG}       = "emulab-fs-8.2";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-8.2";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-8.2";
+	$emulabconfig{EXTRA_PKG}    = "emulab-extras-8.2";
+	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-12.2-packages${suf}.tar.gz";
+	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-8.2";
+    } elsif ($FBSD_VERSION > 12.2) {
+	# XXX newer 12.2 package set, but same rev right now
+	my $suf = "-64";
+	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/12.3/packages${suf}";
+	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{EXTRA_PKG_DIR}= $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{FS_PKG}       = "emulab-fs-8.2";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-8.2";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-8.2";
+	$emulabconfig{EXTRA_PKG}    = "emulab-extras-8.2";
+	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-12.3-packages${suf}.tar.gz";
+	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-8.2";
     }
     #
     # If there is a package tarball, prefer that and grab it now.
@@ -992,7 +1031,7 @@ sub SetupFsNode()
     #
     foreach my $daemon (@SYSDAEMONS) {
 	if (-e "/etc/rc.d/$daemon") {
-	    system("/etc/rc.d/$daemon stop");
+	    system("/etc/rc.d/$daemon onestop");
 	} elsif (-e "/var/run/$daemon.pid") {
 	    system("kill `cat /var/run/$daemon.pid`");
 	} else {
@@ -1060,6 +1099,8 @@ sub SetupFsNode()
 	if (-e "/etc/rc.conf.d/dhclient");
     unlink("/etc/rc.d/netif-emulab")
 	if (-e "/etc/rc.d/netif-emulab");
+    unlink("/etc/rc.d/netif_emulab")
+	if (-e "/etc/rc.d/netif_emulab");
 
     #
     # Load up packages if necessary
@@ -1096,11 +1137,11 @@ sub SetupFsNode()
 	if ($FBSD_VERSION >= 10.1) {
 	    # XXX FreeBSD got rid of the /usr/bin/perl symlink; we need it.
 	    if (! -x "/usr/bin/perl") {
-		system("ln -sf /usr/local/bin/perl5 /usr/bin/perl");
+		system("ln -sfn /usr/local/bin/perl5 /usr/bin/perl");
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
-		system("ln -sf /usr/local/bin/python2 /usr/local/bin/python");
+		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
 	    #
@@ -1108,6 +1149,17 @@ sub SetupFsNode()
 	    # up with it.
 	    #
 	    SyncPackages();
+	}
+	#
+	# XXX hack to deal with expired root cert.
+	# Normally the imaging process will fix up the trusted certs file,
+	# but we have removed the image-time packages and re-installed them.
+	# Unfortunately, the package sets for 11.3 and older contains an
+	# expired root certificate. We run our script here to deal with that.
+	#
+	if ($FBSD_VERSION <= 11.3 && -x "/usr/local/etc/emulab/removecert") {
+	    print "Removing expired root certs.\n";
+	    system("/usr/local/etc/emulab/removecert");
 	}
     }
 
@@ -1549,7 +1601,7 @@ sub SetupOpsNode($)
     #
     foreach my $daemon (@SYSDAEMONS) {
 	if (-e "/etc/rc.d/$daemon") {
-	    system("/etc/rc.d/$daemon stop");
+	    system("/etc/rc.d/$daemon onestop");
 	} elsif (-e "/var/run/$daemon.pid") {
 	    system("kill `cat /var/run/$daemon.pid`");
 	} else {
@@ -1648,6 +1700,8 @@ sub SetupOpsNode($)
 	if (-e "/etc/rc.conf.d/dhclient");
     unlink("/etc/rc.d/netif-emulab")
 	if (-e "/etc/rc.d/netif-emulab");
+    unlink("/etc/rc.d/netif_emulab")
+	if (-e "/etc/rc.d/netif_emulab");
 
     #
     # Load up packages if necessary
@@ -1715,11 +1769,11 @@ sub SetupOpsNode($)
 	if ($FBSD_VERSION >= 10.1) {
 	    # XXX FreeBSD got rid of the /usr/bin/perl symlink; we need it.
 	    if (! -x "/usr/bin/perl") {
-		system("ln -sf /usr/local/bin/perl5 /usr/bin/perl");
+		system("ln -sfn /usr/local/bin/perl5 /usr/bin/perl");
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
-		system("ln -sf /usr/local/bin/python2 /usr/local/bin/python");
+		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
 	    #
@@ -1727,6 +1781,17 @@ sub SetupOpsNode($)
 	    # up with it.
 	    #
 	    SyncPackages();
+	}
+	#
+	# XXX hack to deal with expired root cert.
+	# Normally the imaging process will fix up the trusted certs file,
+	# but we have removed the image-time packages and re-installed them.
+	# Unfortunately, the package sets for 11.3 and older contains an
+	# expired root certificate. We run our script here to deal with that.
+	#
+	if ($FBSD_VERSION <= 11.3 && -x "/usr/local/etc/emulab/removecert") {
+	    print "Removing expired root certs.\n";
+	    system("/usr/local/etc/emulab/removecert");
 	}
     }
 
@@ -2333,7 +2398,7 @@ sub SetupBossNode($)
     #
     foreach my $daemon (@SYSDAEMONS) {
 	if (-e "/etc/rc.d/$daemon") {
-	    system("/etc/rc.d/$daemon stop");
+	    system("/etc/rc.d/$daemon onestop");
 	} elsif (-e "/var/run/$daemon.pid") {
 	    system("kill `cat /var/run/$daemon.pid`");
 	} else {
@@ -2409,6 +2474,8 @@ sub SetupBossNode($)
 	if (-e "/etc/rc.conf.d/dhclient");
     unlink("/etc/rc.d/netif-emulab")
 	if (-e "/etc/rc.d/netif-emulab");
+    unlink("/etc/rc.d/netif_emulab")
+	if (-e "/etc/rc.d/netif_emulab");
 
     #
     # Load up packages if necessary
@@ -2490,11 +2557,11 @@ sub SetupBossNode($)
 	if ($FBSD_VERSION >= 10.1) {
 	    # XXX FreeBSD got rid of the /usr/bin/perl symlink; we need it.
 	    if (! -x "/usr/bin/perl") {
-		system("ln -sf /usr/local/bin/perl5 /usr/bin/perl");
+		system("ln -sfn /usr/local/bin/perl5 /usr/bin/perl");
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
-		system("ln -sf /usr/local/bin/python2 /usr/local/bin/python");
+		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
 	    #
@@ -2502,6 +2569,17 @@ sub SetupBossNode($)
 	    # up with it.
 	    #
 	    SyncPackages();
+	}
+	#
+	# XXX hack to deal with expired root cert.
+	# Normally the imaging process will fix up the trusted certs file,
+	# but we have removed the image-time packages and re-installed them.
+	# Unfortunately, the package sets for 11.3 and older contains an
+	# expired root certificate. We run our script here to deal with that.
+	#
+	if ($FBSD_VERSION <= 11.3 && -x "/usr/local/etc/emulab/removecert") {
+	    print "Removing expired root certs.\n";
+	    system("/usr/local/etc/emulab/removecert");
 	}
     }
 
@@ -3200,7 +3278,7 @@ sub SetupOpsJail()
     #
     foreach my $daemon (@SYSDAEMONS) {
 	if (-e "/etc/rc.d/$daemon") {
-	    system("/etc/rc.d/$daemon stop");
+	    system("/etc/rc.d/$daemon onestop");
 	} elsif (-e "/var/run/$daemon.pid") {
 	    system("kill `cat /var/run/$daemon.pid`");
 	} else {
@@ -3253,6 +3331,8 @@ sub SetupOpsJail()
 	if (-e "/etc/rc.conf.d/dhclient");
     unlink("/etc/rc.d/netif-emulab")
 	if (-e "/etc/rc.d/netif-emulab");
+    unlink("/etc/rc.d/netif_emulab")
+	if (-e "/etc/rc.d/netif_emulab");
 
     #
     # Load up packages if necessary
@@ -3305,11 +3385,11 @@ sub SetupOpsJail()
 
 	if ($FBSD_VERSION >= 10.1) {
 	    if (! -x "/usr/bin/perl") {
-		system("ln -sf /usr/local/bin/perl5 /usr/bin/perl");
+		system("ln -sfn /usr/local/bin/perl5 /usr/bin/perl");
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
-		system("ln -sf /usr/local/bin/python2 /usr/local/bin/python");
+		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
 	    #
@@ -3317,6 +3397,17 @@ sub SetupOpsJail()
 	    # up with it.
 	    #
 	    SyncPackages();
+	}
+	#
+	# XXX hack to deal with expired root cert.
+	# Normally the imaging process will fix up the trusted certs file,
+	# but we have removed the image-time packages and re-installed them.
+	# Unfortunately, the package sets for 11.3 and older contains an
+	# expired root certificate. We run our script here to deal with that.
+	#
+	if ($FBSD_VERSION <= 11.3 && -x "/usr/local/etc/emulab/removecert") {
+	    print "Removing expired root certs.\n";
+	    system("/usr/local/etc/emulab/removecert");
 	}
     }
 
@@ -4078,6 +4169,16 @@ sub FindExtraFSConfig($)
 	foreach my $disk (@disks) {
 	    my ($dev,$path) = split(":", $disk);
 	    if (defined($path) && $path eq $mountpoint) {
+		#
+		# XXX attempt to map "ada" to the real disk type.
+		# Over time we have used "da", "ada", and now "xbd" depending
+		# on the version of Xen and FreeBSD. We only care about "xbd"
+		# going forward.
+		#
+		if ($dev =~ /^ada(.*)$/ && ! -e "/dev/$dev" &&
+		    -e "/dev/xbd$1") {
+		    $dev = "xbd$1";
+		}
 		return $dev;
 	    }
 	}
@@ -4139,6 +4240,9 @@ sub AddPackage($$$)
     my $args = $force ? "-f" : "";
     if ($FBSD_VERSION >= 10.0) {
 	my $path = defined($pkgdir) ? "$pkgdir/$pkg.txz" : "$pkg.txz";
+	if (! -e $path && defined($pkgdir)) {
+	    $path = "$pkgdir/$pkg.pkg";
+	}
 	if (! -e $path) {
 	    SetupFatal("No package file '$path'!");
 	}
@@ -4237,13 +4341,16 @@ EOF
 sub GetPackage($$) {
     my ($prefix, $packagedir) = @_;
 
-    my @pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
+    my @pname = `ls -t $packagedir/$prefix-*.pkg 2>/dev/null`;
     if ($?) {
-	@pname = `ls -t $packagedir/$prefix-*.tbz 2>/dev/null`;
+	@pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
 	if ($?) {
-	    @pname = `ls -t $packagedir/$prefix-*.tgz 2>/dev/null`;
-	    SetupFatal("Cannot find $prefix package in $packagedir!")
-		if ($?);
+	    @pname = `ls -t $packagedir/$prefix-*.tbz 2>/dev/null`;
+	    if ($?) {
+		@pname = `ls -t $packagedir/$prefix-*.tgz 2>/dev/null`;
+		SetupFatal("Cannot find $prefix package in $packagedir!")
+		    if ($?);
+	    }
 	}
     }
     chomp(@pname);
@@ -4292,7 +4399,7 @@ sub DelAllPackages($)
     #
     # XXX must also set SIGNATURE_TYPE=NONE to prevent a signature check.
     #
-    $pkgpkg = GetPackage("pkg", $pkgdir);
+    my $pkgpkg = GetPackage("pkg", $pkgdir);
     my $oenv = $ENV{"SIGNATURE_TYPE"};
     $ENV{"SIGNATURE_TYPE"} = "NONE";
     if (system("pkg add -f $pkgpkg >/dev/null 2>&1")) {

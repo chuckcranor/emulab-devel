@@ -29,11 +29,19 @@ $NODE_USAGE_DB = 'node_usage';
 #   ...
 #
 @to_plot = (
-  ["c8220s", [qw(c8220)]],
+  ["All", [qw(c8220 c8220x c6320 c4130 dss7500 c6420 ibm8335 r7525)]],
+  ["c8220s", [qw(c8220 c8220x)]],
+  ["c6320s", [qw(c6320)], 1463423092],
+  ["c4130s", [qw(c4130)], 1463423092],
+  ["dss7500", [qw(dss7500)], 1463423092],
+  ["c6420s", [qw(c6420)], 1521841656],
+  ["ibm8335s", [qw(ibm8335)], 1547827670],
+  ["r7525s", [qw(r7525)], 1594445283],
 );
 
 # List of nodes to put into current free bar graph.
-@free_types = ('c8220');
+@free_types = ('c8220', 'c8220x', 'c6320', 'c4130', 'dss7500',
+	       'c6420', 'ibm8335', 'r7525');
 
 #
 # PHP page header and footer for main page
@@ -56,10 +64,6 @@ trends.
 ---
 
 $avail_footer = <<'---';
-<p align=center>
-Note: The gap in the last two graphs represents periods when no data
-was availabe due to bugs in our system.
-</p>
 ---
 
 #

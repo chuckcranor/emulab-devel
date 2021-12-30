@@ -73,34 +73,6 @@ window.APT_OPTIONS.initialize = function (sup)
 	});
     }
 
-    // Every page calls this, and since the Login button is on every
-    // page, do this initialization here. 
-    if ($('#quickvm_geni_login_button').length) {
-	$('#quickvm_geni_login_button').click(function (event) {
-	    event.preventDefault();
-	    if ($('#quickvm_login_modal').length) {
-		sup.HideModal("#quickvm_login_modal");
-	    }
-	    sup.StartGeniLogin();
-	    return false;
-	});
-    }
-    // When the user clicks on the login button, we not only display
-    // the modal, but fire off the load of the geni-auth.js file so
-    // that the code is loaded. Something to do with popup rules from
-    // javascript event handlers, blah blah blah. Ask Jon.
-    if ($('#loginbutton').length) {
-	$('#loginbutton').click(function (event) {
-	    event.preventDefault();
-	    sup.ShowModal('#quickvm_login_modal');
-	    if (window.PGENILOGIN) {
-		console.info("Loading geni auth code");
-		sup.InitGeniLogin(embedded);
-	        $('#quickvm_geni_login_button').removeAttr("disabled");
-	    }
-	    return false;
-	});
-    }
     /*
      * When the clicks to read new news, tell the server and hide the button
      */
@@ -113,7 +85,9 @@ window.APT_OPTIONS.initialize = function (sup)
     /*
      * Setup a timer to ask for announcements.
      */
-    setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
+    if (window.LOGINUID && !window.NOANNOUNCEMENTS) {
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
+    }
     
     window.APT_OPTIONS.startPage();
     $(window).on('beforeunload.common', APT_OPTIONS.endPage);
@@ -198,6 +172,8 @@ APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
  
         // the type of data we expect back
         dataType : "json",
+
+	timeout : 0,
     });
     var defer = $.Deferred();
     
@@ -303,21 +279,22 @@ window.APT_OPTIONS.Announcements = function () {
     var callback = function(json) {
 	if (json.code) {
 	    console.info("announcements", json);
-	    return;
-	}
-	var newhtml = "";
-	
-	if (json.value.length) {
-	    //console.info("announcements", json);
-	    _.each(json.value, function(html) {
-		newhtml += html;
-	    });
 	}
 	else {
-	    // Clear current announcements; dismissed in another tab.
-	    newhtml = "";
+	    var newhtml = "";
+	
+	    if (json.value.length) {
+		//console.info("announcements", json);
+		_.each(json.value, function(html) {
+		    newhtml += html;
+		});
+	    }
+	    else {
+		// Clear current announcements; dismissed in another tab.
+		newhtml = "";
+	    }
+	    $('#portal-announcement-div').html(newhtml);
 	}
-	$('#portal-announcement-div').html(newhtml);
 	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 60000);
     }
 
@@ -329,3 +306,13 @@ window.APT_OPTIONS.Announcements = function () {
     });
 }
 
+window.APT_OPTIONS.SetupCopyToClipboard = function (id) {
+    $(id).find(".copy-to-clipboard a").click(function (e) {
+	e.preventDefault();
+	var input = $(this).parent().find("input");
+	$(input).select();
+	document.execCommand("copy");
+	window.getSelection().removeAllRanges();	
+	$(input)[0].blur();
+    });
+}

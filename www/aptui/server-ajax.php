@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -131,20 +131,40 @@ $routing = array("geni-login" =>
                                                      "Do_UpdateRepository",
 						 "GetRepository" =>
                                                      "Do_GetRepository",
+						 "GetRepoHash" =>
+                                                     "Do_GetRepoHash",
+						 "SearchProfiles" =>
+                                                     "Do_SearchProfiles",
+						 "GetProfile" =>
+                                                     "Do_GetProfile",
+						 "Duplicate" =>
+                                                     "Do_Duplicate",
+                              )
+                        ),
+		 "gitrepo" =>
+			array("file"    => "gitrepo.ajax",
+			      "guest"   => true,
+			      "methods" => array("GetRepository" =>
+                                                     "Do_GetRepository",
 						 "GetRepoSource" =>
                                                      "Do_GetRepoSource",
 						 "GetBranchList" =>
                                                      "Do_GetBranchList",
 						 "GetCommitInfo" =>
                                                      "Do_GetCommitInfo",
-						 "GetRepoHash" =>
-                                                     "Do_GetRepoHash",
-						 "GetCommitList" =>
-                                                     "Do_GetCommitList",
-						 "SearchProfiles" =>
-                                                     "Do_SearchProfiles",
+                              )
+                        ),
+		 "show-profile" =>
+			array("file"    => "show-profile.ajax",
+			      "guest"   => true,
+			      "methods" => array("CheckScript" =>
+						     "Do_CheckScript",
 						 "GetProfile" =>
-                                                     "Do_GetProfile")),
+                                                     "Do_GetProfile",
+						 "GetParamsets" =>
+                                                     "Do_GetParamsets",
+                              )
+                        ),
 		 "status" =>
 			array("file"    => "status.ajax",
 			      "guest"   => false,
@@ -162,6 +182,8 @@ $routing = array("geni-login" =>
 						    "Do_GetInstanceManifest",
 						 "GetSSHAuthObject" =>
 						    "Do_GetSSHAuthObject",
+						 "GetVNCAuthObject" =>
+						    "Do_GetVNCAuthObject",
 						 "ConsoleURL" =>
 						     "Do_ConsoleURL",
 						 "DeleteNodes" =>
@@ -188,6 +210,8 @@ $routing = array("geni-login" =>
                                                      "Do_Reload",
 						 "Recovery" =>
                                                      "Do_Recovery",
+						 "Flash" =>
+                                                     "Do_Flash",
 						 "Refresh" =>
 						     "Do_Refresh",
 						 "ReloadTopology" =>
@@ -307,7 +331,13 @@ $routing = array("geni-login" =>
                                                  "ListParameterSets" =>
                                                      "Do_ListParameterSets",
                                                  "AcceptAUP" =>
-                                                     "Do_AcceptAUP")),
+                                                     "Do_AcceptAUP",
+                                                 "VerifyScopusInfo" =>
+                                                     "Do_VerifyScopusInfo",
+                                                 "DeleteUser" =>
+                                                     "Do_DeleteUser"
+                              )
+                        ),
 		 "nag" =>
 			array("file"    => "user-dashboard.ajax",
                               "unapproved" => true,
@@ -340,7 +370,11 @@ $routing = array("geni-login" =>
                                                  "Toggle" =>
                                                      "Do_Toggle",
                                                  "ProjectProfile" =>
-                                                      "Do_ProjectProfile"
+                                                     "Do_ProjectProfile",
+                                                 "DeleteProject" =>
+                                                     "Do_DeleteProject",
+                                                 "NSF" =>
+                                                     "Do_NSF"
                               )
                         ),
 		 "groups" =>
@@ -536,7 +570,10 @@ $routing = array("geni-login" =>
 			      "methods" => array("GetInfo" =>
                                                      "Do_GetInfo",
                                                  "List" =>
-                                                     "Do_List")),
+                                                     "Do_List",
+                                                 "History" =>
+                                                     "Do_History",
+                              )),
 		 "wires" =>
 			array("file"    => "wires.ajax",
 			      "guest"   => false,
@@ -649,6 +686,13 @@ $routing = array("geni-login" =>
                                                      "Do_GetMobileEndpoints",
                               )
                         ),
+		 "scopus" =>
+			array("file"    => "scopus.ajax",
+			      "guest"   => false,
+			      "methods" => array("MarkUses" =>
+						     "Do_MarkUses",
+                              )
+                        ),
 		 "frequency-graph" =>
 			array("file"    => "frequency-graph.ajax",
 			      "guest"   => true,
@@ -712,6 +756,12 @@ function CheckLoginForAjax($route)
     }
     if (array_key_exists("notloggedinokay", $route)) {
         $notloggedinokay = $route["notloggedinokay"];
+    }
+    if (NOLOGINS()) {
+        if (!isset($this_user) || !ISADMIN()) {
+            SPITAJAX_ERROR(222, "Logins are disabled");
+            exit(1);
+        }
     }
     # Known user, but timed out.
     if ($check_status & CHECKLOGIN_TIMEDOUT) {

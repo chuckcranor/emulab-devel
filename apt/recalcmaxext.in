@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -357,8 +357,9 @@ sub CallMethodOnAggregates($$@)
     #
     # Generate a list of responses to return to caller.
     #
-    foreach my $agg (@aggregates) {
-	my $webtask = shift(@webtasks);
+    for (my $i = 0; $i < scalar(@aggregates); $i++) {
+	my $agg = $aggregates[$i];
+	my $webtask = $webtasks[$i];
 
 	# No need to refresh if we did not use ParRun above.
 	$webtask->Refresh() if (@aggregates > 1);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2010-2021 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -2247,8 +2247,8 @@ startclient(struct config_imageinfo *ii, in_addr_t meaddr, in_addr_t youaddr,
 		if (ci->imageinfo)
 			free_imageinfo(ci->imageinfo);
 		free(ci);
-		*errorp = MS_ERROR_FAILED;
 	}
+	*errorp = MS_ERROR_FAILED;
 	return NULL;
 }
 

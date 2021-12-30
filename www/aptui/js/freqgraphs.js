@@ -16,6 +16,9 @@ window.ShowFrequencyGraph = (function ()
 	var selector     = args.selector + " .frequency-graph-subgraph";
 	var parentWidth  = $(selector).width();
 	var parentHeight = $(selector).height();
+	// Not all data files have the incident value.
+	var hasIncident  = false;
+	var lineI;
 
 	var margin  = {top: 20, right: 20, bottom: 130, left: 55};
 	var width   = parentWidth - margin.left - margin.right;
@@ -55,6 +58,12 @@ window.ShowFrequencyGraph = (function ()
 	var line = d3.line().curve(d3.curveStep)
             .x(function (d) { return x(d.frequency); })
             .y(function (d) { return y(d.power); });
+
+	if (hasIncident) {
+	    lineI = d3.line().curve(d3.curveStep)
+		.x(function (d) { return x(d.frequency); })
+		.y(function (d) { return y(d.incident); });
+	}
 
 	var line2 = d3.line().curve(d3.curveStep)
             .x(function (d) { return x2(d.frequency); })
@@ -127,8 +136,15 @@ window.ShowFrequencyGraph = (function ()
 	
 	Line_chart.append("path")
 	    .datum(data)
-	    .attr("class", "line")
+	    .attr("class", "line line-power")
 	    .attr("d", line);
+
+	if (hasIncident) {
+	    Line_chart.append("path")
+		.datum(data)
+		.attr("class", "line line-incident")
+		.attr("d", lineI);
+	}
 
 	var tooltip = Line_chart.append("g")
 	    .attr("class", "tooltip")
@@ -145,7 +161,7 @@ window.ShowFrequencyGraph = (function ()
 	toolbox.append("rect")
 	    .attr("class", "tooltip-rect")
 	    .attr("width", 130)
-	    .attr("height", 75)
+	    .attr("height", 95)
             .attr("y", -22)
 	    .attr("rx", 4)
 	    .attr("ry", 4);
@@ -179,6 +195,19 @@ window.ShowFrequencyGraph = (function ()
 	    .attr("class", "tooltip-center")
 	    .attr("x", 65)
 	    .attr("y", 38);
+
+	if (hasIncident) {
+	    toolbox.append("text")
+		.attr("x", 5)
+		.attr("y", 58)
+		.attr("class", "line-incident")
+		.text("Incident:");
+
+	    toolbox.append("text")
+		.attr("class", "tooltip-incident")
+		.attr("x", 65)
+		.attr("y", 58);
+	}
 
 	context.append("path")
 	    .datum(data)
@@ -236,6 +265,15 @@ window.ShowFrequencyGraph = (function ()
 	    else {
 		tooltip.select(".tooltip-center").text("n/a");
 	    }
+	    if (hasIncident) {
+		if (_.has(d, "incident")) {
+		    tooltip.select(".tooltip-incident")
+			.text(formatter(d.incident));
+		}
+		else {
+		    tooltip.select(".tooltip-incident").text("n/a");
+		}
+	    }
 	}
 
 	function brushed() {
@@ -243,7 +281,10 @@ window.ShowFrequencyGraph = (function ()
 		return; // ignore brush-by-zoom
 	    var s = d3.event.selection || x2.range();
 	    x.domain(s.map(x2.invert, x2));
-	    Line_chart.select(".line").attr("d", line);
+	    Line_chart.select(".line-power").attr("d", line);
+	    if (hasIncident) {
+		Line_chart.select(".line-incident").attr("d", lineI);
+	    }
 	    focus.select(".axis--x").call(xAxis);
 	    svg.select(".zoom").call(zoom.transform, d3.zoomIdentity
 				     .scale(width / (s[1] - s[0]))
@@ -255,7 +296,10 @@ window.ShowFrequencyGraph = (function ()
 		return; // ignore zoom-by-brush
 	    var t = d3.event.transform;
 	    x.domain(t.rescaleX(x2).domain());
-	    Line_chart.select(".line").attr("d", line);
+	    Line_chart.select(".line-power").attr("d", line);
+	    if (hasIncident) {
+		Line_chart.select(".line-incident").attr("d", lineI);
+	    }
 	    focus.select(".axis--x").call(xAxis);
 	    context.select(".brush")
 		.call(brush.move, x.range().map(t.invertX, t));
@@ -266,7 +310,9 @@ window.ShowFrequencyGraph = (function ()
     {
 	var result = [];
 	var bins   = [];
-	console.info("CreateBins");
+	// Not all data files have the incident value.
+	var hasIncident  = false;
+	console.info("CreateBins: ", data);
 
 	_.each(data, function (d, index) {
 	    var freq  = +d.frequency;
@@ -281,6 +327,9 @@ window.ShowFrequencyGraph = (function ()
 		    "avg"       : power,
 		    "samples"   : [d],
 		};
+		if (hasIncident) {
+		    bin["imax"] = +d.incident;
+		}
 		bins[x] = bin;
 		result.push(bin);
 		return;
@@ -292,12 +341,18 @@ window.ShowFrequencyGraph = (function ()
 	    if (power < bin.min) {
 		bin.min = power;
 	    }
+	    if (hasIncident) {
+		var inci = +d.incident;
+		if (inci > bin.imax) {
+		    bin.imax = inci;
+		}
+	    }
 	    bin.samples.push(d);
 	    var sum = 0;
 	    _.each(bin.samples, function (d) {
-		sum = sum + d.power;
+		sum  += d.power;
 	    });
-	    bin.avg = sum / _.size(bin.samples);
+	    bin.avg  = sum / _.size(bin.samples);
 	});
 	//console.info("bins", result);
 	return result;
@@ -323,6 +378,10 @@ window.ShowFrequencyGraph = (function ()
 	'        <td class="border-none">Min Power:</td>' +
 	'        <td class="border-none tooltip-min"></td>' +
 	'      </tr>' +
+	'      <tr class="hidden tooltip-incident">' +
+	'        <td class="border-none">Incident Max:</td>' +
+	'        <td class="border-none incident"></td>' +
+	'      </tr>' +
 	'    </tbody>' +
 	'  </table>';
     
@@ -333,6 +392,8 @@ window.ShowFrequencyGraph = (function ()
 	var parentHeight = $(selector).parent().height();
 	var ParentTop    = $(selector).parent().position().top;
 	var ParentLeft   = $(selector).parent().position().left;
+	var hasIncident  = false;
+	var lineI;
 
 	// Clear old graph
 	$(selector).html("");
@@ -375,6 +436,12 @@ window.ShowFrequencyGraph = (function ()
 	var line = d3.line().curve(d3.curveStep)
             .x(function (d) { return x(d.frequency); })
             .y(function (d) { return y(d.max); });
+
+	if (hasIncident) {
+	    lineI = d3.line().curve(d3.curveStep)
+		.x(function (d) { return x(d.frequency); })
+		.y(function (d) { return y(d.imax); });
+	}
 
 	var line2 = d3.line().curve(d3.curveStep)
             .x(function (d) { return x2(d.frequency); })
@@ -441,8 +508,15 @@ window.ShowFrequencyGraph = (function ()
 	
 	Line_chart.append("path")
 	    .datum(bins)
-	    .attr("class", "line")
+	    .attr("class", "line line-power")
 	    .attr("d", line);
+
+	if (hasIncident) {
+	    Line_chart.append("path")
+		.datum(bins)
+		.attr("class", "line line-incident")
+		.attr("d", lineI);
+	}
 
 	var tooltip = Line_chart.append("g")
 	    .attr("class", "tooltip")
@@ -550,6 +624,12 @@ window.ShowFrequencyGraph = (function ()
 		    .html(formatter(d.max));
 		$(content).find(".tooltip-avg")
 		    .html(formatter(d.avg));
+		if (hasIncident) {
+		    $(content).find(".tooltip-incident .incident")
+			.html(formatter(d.imax));
+		    $(content).find(".tooltip-incident")
+			.removeClass("hidden");
+		}
 	    };
 	    if (isVisible) {
 		updater();
@@ -571,7 +651,10 @@ window.ShowFrequencyGraph = (function ()
 		return; // ignore brush-by-zoom
 	    var s = d3.event.selection || x2.range();
 	    x.domain(s.map(x2.invert, x2));
-	    Line_chart.select(".line").attr("d", line);
+	    Line_chart.select(".line-power").attr("d", line);
+	    if (hasIncident) {
+		Line_chart.select(".line-incident").attr("d", lineI);
+	    }
 	    focus.select(".axis--x").call(xAxis);
 	    svg.select(".zoom").call(zoom.transform, d3.zoomIdentity
 				     .scale(width / (s[1] - s[0]))
@@ -583,11 +666,17 @@ window.ShowFrequencyGraph = (function ()
 		return; // ignore zoom-by-brush
 	    var t = d3.event.transform;
 	    x.domain(t.rescaleX(x2).domain());
-	    Line_chart.select(".line").attr("d", line);
+	    Line_chart.select(".line-power").attr("d", line);
+	    if (hasIncident) {
+		Line_chart.select(".line-incident").attr("d", lineI);
+	    }
 	    focus.select(".axis--x").call(xAxis);
 	    context.select(".brush")
 		.call(brush.move, x.range().map(t.invertX, t));
 	}
+	/*
+	 * Draw zoomed graph in lower panel, after user clicks on a point.
+	 */
 	function DrawSubGraph()
 	{
 	    var x0   = x.invert(d3.mouse(this)[0]);
@@ -606,10 +695,37 @@ window.ShowFrequencyGraph = (function ()
 	    }
 	    CreateGraph(args, subdata);
 	}
+	/*
+	 * Draw a zoomed graph after user searches for min/max
+	 */
+	$(args.selector + " .frequency-search button").off("click");
+	$(args.selector + " .frequency-search button").click(ZoomToSubGraph);
+	
+	function ZoomToSubGraph()
+	{
+	    var min = $.trim($(args.selector + " .min-freq-input").val());
+	    var max = $.trim($(args.selector + " .max-freq-input").val());
+	    
+	    if (min == "" || max == "") {
+		return;
+	    }
+	    var extents = d3.extent(bins, function(d) { return d.frequency; });
+	    if (min < extents[0] || max > extents[1]) {
+		alert("Search out of range: " + extents[0] + "," + extents[1]);
+		return;
+	    }
+	    x.domain(extents);
+	    console.info("ZoomToSubGraph", min, max, extents);
+	    console.info(x(min), x(max));
+	    context.select(".brush").call(brush.move, [x(min), x(max)]);
+	}
     }
     function type(d) {
 	d.frequency = +d.frequency;
 	d.power     = +d.power;
+	if (_.has(d, "incident")) {
+	    d.incident = +d.incident;
+	}
 	return d;
     }
 

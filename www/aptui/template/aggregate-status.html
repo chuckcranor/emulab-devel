@@ -3,14 +3,23 @@
     <table class="table table-condensed table-bordered table-status">
       <thead>
 	<tr>
-	  <th class="text-nowrap">Name</th>
+	  <th class="text-nowrap">Name
+	    <a href='#' class='btn btn-xs'
+	       data-toggle='tooltip'
+	       data-trigger='hover'
+	       data-html="false"
+	       data-delay='{"hide":100, "show":300}'
+	       title='Click for current cluster details'>
+	      <span class='glyphicon glyphicon-question-sign'
+		    style='margin-bottom: 4px;'></span></a>	      
+	  </th>
 	  <th>Status
 	      <a href='#' class='btn btn-xs'
 		 data-toggle='tooltip'
 		 data-trigger='hover'
 		 data-html="false"
 		 data-delay='{"hide":100, "show":300}'
-		 title='Click for cluster status details'>
+		 title='Click for current cluster status details'>
 		<span class='glyphicon glyphicon-question-sign'
 		      style='margin-bottom: 4px;'></span></a>	      
 	  </th>
@@ -28,7 +37,7 @@
 	  <th>% Full</th>
 	  <th>Inuse</th>
 	  <th>Total</th>
-	  <th class="sorter-false">Activity</th>
+	  <th class="sorter-false">History</th>
 	  <th class="sorter-false">URN</th>
 	  <th class="sorter-false">URL</th>
 	</tr>
@@ -36,7 +45,11 @@
       <tbody>
 	<% _.each(status, function(value, key) { %>
 	  <tr>
-	    <td><%- value.name %></td>
+	    <td>
+	      <a target="_blank"
+                 href="cluster-status.php?cluster=<%- value.nickname %>">
+		<%- value.name %></a>
+	    </td>
 	    <td>
 	      <% if (value.status == "down" && value.last_error != "") { %>
 		<span style="text-decoration: underline;"

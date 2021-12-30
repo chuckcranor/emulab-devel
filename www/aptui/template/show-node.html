@@ -215,6 +215,12 @@
 	    <td>Role</td>
 	    <td><%- fields.role %></td>
 	  </tr>
+	  <% if (fields.reservable && isadmin) { %>
+	    <tr>
+	      <td>Reservable</td>
+	      <td>Yes</td>
+	    </tr>
+	  <% } %>
 	  <% if (fields.subbossinfo && isadmin) { %>
 	    <% _.each(fields.subbossinfo, function(val, key) { %>
 	      <tr>
@@ -222,6 +228,17 @@
 		<td><%- val %></td>
 	      </tr>
 	    <% }); %>
+	  <% } %>
+	  <% if (_.has(fields, "reserved_pid") && isadmin) { %>
+	    <tr>
+	      <td>Pre Reserve</td>
+	      <td><a href="show-project.php?pid=<%- fields.reserved_pid %>">
+		<%- fields.reserved_pid %></a>
+		<% if (_.has(fields, "reservation_name")) { %>
+		  (<%- fields.reservation_name %>)
+		<% } %>
+	      </td>
+	    </tr>
 	  <% } %>
 	</table>
       </div>

@@ -164,6 +164,7 @@ INSERT INTO sitevariables VALUES ('node/nfs_transport',NULL,'udp','Transport pro
 INSERT INTO sitevariables VALUES ('node/user_passwords',NULL,'0','If non-zero, password hashes for users are passed to nodes allow user logins on the console. For better security, you should leave this zero.',0);
 INSERT INTO sitevariables VALUES ('images/default_typelist',NULL,'','List of types to associate with an imported image when it is not appropriate to associate all existing types.',0);
 INSERT INTO sitevariables VALUES ('protogeni/use_imagetracker',NULL,'0','Enable use of the image tracker.',0);
+INSERT INTO sitevariables VALUES ('protogeni/disable_experiments',NULL,'0','When set, experiments are disabled on the protogeni path.',0);
 INSERT INTO sitevariables VALUES ('general/no_openflow',NULL,'0','Disallow topologies that specify openflow controllers, there is no local support for it.',0);
 INSERT INTO sitevariables VALUES ('phantomnet/message',NULL,'','Message to display at the top of the PhantomNet portal.',0);
 INSERT INTO sitevariables VALUES ('ue/sim_sequence_default',NULL,'1000000','Default initial sequence number for PhantomNet UE SIMs',0);
@@ -198,6 +199,7 @@ INSERT INTO sitevariables VALUES ('hwcollect/outputdir',NULL,'/proj/emulab-ops/h
 INSERT INTO sitevariables VALUES ('hwcollect/commands',NULL,'Any,dmesg,dmesg;Linux,lshw,lshw','Collection programs to run. A semi-colon separated list of OS,program,cmdline triples.',0);
 INSERT INTO sitevariables VALUES ('rfmonitor/noisefloor',NULL,'-110.0','Noise floor threshold for determining if a radio is transmitting.',0);
 INSERT INTO sitevariables VALUES ('powder/deadman_enable',NULL,'0','Set to non-zero to enable Powder deadman operation.',0);
+INSERT INTO sitevariables VALUES ('powder/mobile_update',NULL,'1','Set to zero to disable automated software update at boot time.',0);
 INSERT INTO sitevariables VALUES ('images/listed_default',NULL,'1','By default, newly created or imported global images in the emulab-ops project will be listed for users to see (and use). Set this to zero to prevent automatic listing.',0);
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

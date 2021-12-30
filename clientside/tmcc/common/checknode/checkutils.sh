@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013 University of Utah and the Flux Group.
+# Copyright (c) 2013-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -669,6 +669,18 @@ findSmartctl_getopt() {
     return 0
 }
 
+findMfiutil() {
+    local findit=""
+    if [ "$os" == "FreeBSD" ] ; then
+	findit=$(which mfiutil)
+	if [ -z "${findit}" ]; then
+	    findit=$(which mfiutil$osrel)
+	fi
+    fi
+    echo $findit
+    return 0
+}
+
 # Array of command to be run at exit time
 on_exit() {
 #  (( $DEBUG )) && echo "EXIT on_exit $(caller)"
@@ -790,6 +802,8 @@ getdrivenames() {
 		[[ -c /dev/amrd${i} ]] && drivelist+="/dev/amrd${i} " 
 		[[ -c /dev/mfid${i} ]] && drivelist+="/dev/mfid${i} " 
 		[[ -c /dev/mfisyspd${i} ]] && drivelist+="/dev/mfisyspd${i} " 
+		# XXX smartctl uses nvme names for nvd disk devices
+		[[ -c /dev/nvd${i} ]] && drivelist+="/dev/nvme${i} " 
 	    done
 	    ;;
 	* )

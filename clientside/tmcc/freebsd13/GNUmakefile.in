@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,7 +41,7 @@ SCRIPTS		=
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 # 
-all:	netif-emulab $(SCRIPTS)
+all:	netif_emulab $(SCRIPTS)
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
@@ -143,10 +143,10 @@ etc-install:	dir-install sysetc-install
 	$(INSTALL) -m 600 $(SRCDIR)/master.passwd $(ETCDIR)/master.passwd
 	$(INSTALL) -m 444 $(SRCDIR)/hosts $(ETCDIR)/hosts
 
-sysetc-install:	dir-install netif-emulab tweak-syslog
+sysetc-install:	dir-install netif_emulab tweak-syslog
 	$(INSTALL) -m 444 $(SRCDIR)/rc.conf $(SYSETCDIR)/rc.conf
 	$(INSTALL) -m 444 $(SRCDIR)/sysctl.conf $(SYSETCDIR)/sysctl.conf
-	$(INSTALL) -m 555 ./netif-emulab $(SYSETCDIR)/rc.d/netif-emulab
+	$(INSTALL) -m 555 ./netif_emulab $(SYSETCDIR)/rc.d/netif_emulab
 	rm -f $(SYSETCDIR)/rc.early
 	$(INSTALL) -m 644 $(SRCDIR)/loader.conf $(DESTDIR)/boot/loader.conf
 	$(INSTALL) -m 755 $(SRCDIR)/dhclient-exit-hooks \

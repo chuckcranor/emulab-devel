@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -357,6 +357,8 @@ $(INSTALL_DIR)/opsdir/sbin/%: %
 	-mkdir -p $(INSTALL_DIR)/opsdir/sbin
 	$(INSTALL_PROGRAM) $< $@
 
+noops-install:	$(INSTALL_SBINDIR)/mfrisbeed $(INSTALL_SBINDIR)/frisbeed $(INSTALL_SBINDIR)/frisbee $(INSTALL_SBINDIR)/frisuploadd
+
 install:	$(INSTALL_SBINDIR)/mfrisbeed $(INSTALL_SBINDIR)/frisbeed $(INSTALL_SBINDIR)/frisbee $(INSTALL_SBINDIR)/frisuploadd $(INSTALL_DIR)/opsdir/sbin/mfrisbeed $(INSTALL_DIR)/opsdir/sbin/frisuploadd
 
 control-install: control
@@ -364,7 +366,7 @@ control-install: control
 	$(INSTALL_PROGRAM) frisuploadd $(INSTALL_SBINDIR)/frisuploadd
 
 subboss-install: subboss
-	$(MAKE) WITH_MSERVER_EMULAB=0 install
+	$(MAKE) WITH_MSERVER_EMULAB=0 noops-install
 	$(INSTALL_PROGRAM) frisbee $(DESTDIR)/usr/local/bin/frisbee
 	$(INSTALL_PROGRAM) frisupload $(DESTDIR)/usr/local/bin/frisupload
 

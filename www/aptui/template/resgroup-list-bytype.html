@@ -24,7 +24,7 @@
 	<th>Created</th>
 	<th>Starts</th>
 	<th>Ends</th>
-	<% if (showstatus) { %><th>Status</th><% } %>
+	<% if (showstatus) { %><th class="status-extractor">Status</th><% } %>
 	<th class="sorter-false">Notes</th>
       </tr>
     </thead>
@@ -103,15 +103,25 @@
 	      <% if (!group.end) { %>
 		&nbsp
 	      <% } else { %>
+		<% if (!group.idledetection) { %>
+		  <span class="text-warning">
+		<% } %>
 		<span class="format-date"><%- group.end %></span>
+		<% if (!group.idledetection) { %>
+		  </span>
+		<% } %>
 	      <% } %>
 	    </td>
 	    <% if (showstatus) { %>
 	      <td class="reservation-status-column">
-		<span class="status-approved hidden">Approved</span>
-		<span class="status-pending hidden text-danger">Pending</span>
+		<span class="status-approved hidden">
+		  <span class="status-value">Approved</span>
+		</span>
+		<span class="status-pending hidden text-danger">
+		  <span class="status-value">Pending</span>
+		</span>
 		<span class="status-canceled hidden">
-		  <span class="text-danger">Canceled</span>
+		  <span class="status-value text-danger">Canceled</span>
 		  <% if (isadmin && showcontrols) { %>
 		    <a href="#" class="cancel-cancel-button">
 		      <span class='glyphicon glyphicon-thumbs-up'

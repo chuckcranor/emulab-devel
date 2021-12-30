@@ -160,7 +160,7 @@ $(function ()
 	$(panelid + ' .tablesorter')
 	    .tablesorter({
 		theme : 'bootstrap',
-		widgets: ["uitheme". "zebra"],
+		widgets: ["uitheme", "zebra"],
 		headerTemplate : '{content} {icon}',
 	    });
 	// Bind a delete handler.

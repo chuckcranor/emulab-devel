@@ -4,34 +4,36 @@ $(function () {
 	var repoTemplate  = _.template(repoString);
 	var branchlist    = null;
 	var taglist       = null;
+	var uuid          = null;
 
 	/*
 	 * Get the branches and tags for a profile, and draw the picker.
 	 */
-	function InitRepoPicker(uuid, refspec, change_callback)
+	function InitRepoPicker(args)
 	{
+	    uuid = args.uuid;
+	    
 	    var callback = function(json) {
 		console.info("InitRepoPicker", json);
 	    
 		if (json.code) {
-		    console.info(json.value);
+		    console.info(json);
 		    return;
 		}
 		branchlist = json.value.branchlist;
 		taglist    = json.value.taglist;
-		ShowRepoPicker(uuid, change_callback);
-		GetCommitInfo(uuid, refspec);
+		ShowRepoPicker(args);
+		GetCommitInfo(args);
 	    }
 	    // Visible cue that something is happening
 	    $('#gitpicker-div table').css("opacity", 0.4);
-	    var xmlthing = sup.CallServerMethod(null,
-						"manage_profile",
-						"GetBranchList",
-						{"uuid" : uuid});
-	    xmlthing.done(callback);
+
+	    // We want to return the deferred.
+	    return sup.CallServerMethod(null, "gitrepo", "GetBranchList",
+					 {"uuid" : args.uuid}, callback);
 	}
 
-	function ShowRepoPicker(uuid, change_callback)
+	function ShowRepoPicker(args)
 	{
 	    var html = repoTemplate({"branches" : branchlist,
 				     "tags"     : taglist,
@@ -40,19 +42,34 @@ $(function () {
 	    $('#gitpicker-div').removeClass("hidden");
 	    $('#gitpicker-div table').css("opacity", '');
 	    $('#gitrepo-picker').html(html);
-	    if (change_callback !== undefined) {
+	    if (args.callback !== undefined) {
 		$('.branch-button').click(function (event) {
 		    event.preventDefault();
-		    change_callback($(this).data("which"));
+		    args.callback($(this).data("which"));
 		});
 	    }
+	    // This activates the popover subsystem.
+	    $('#gitpicker-div [data-toggle="popover"]').popover({
+		trigger: 'hover',
+		placement: 'auto',
+		container: 'body'
+	    });
+
+	    sup.addPopoverClip('#gitpicker-div .refspec-share-button',
+			       function (target) {
+				   $(target).parent().popover('hide');
+				   var refspec = $(target).data("which");
+				   var url = args.share_url +
+				       "?refspec=" + refspec;
+				   return sup.popoverClipContent(url);
+			       });
 	}
 
 	/*
 	 * Get source code for a branch or tag and send it back to caller.
 	 * Also update the info panel as on the manage/show page. 
 	 */
-	function GetRepoSource(uuid, refspec, caller_callback)
+	function GetRepoSource(args)
 	{
 	    var callback = function(json) {
 		console.info("GetRepoSource", json);
@@ -60,21 +77,21 @@ $(function () {
 		if (json.code) {
 		    sup.HideWaitWait();
 		    sup.SpitOops("oops", json.value);
-		    caller_callback(null);
+		    args.callback(null);
 		    return;
 		}
 		sup.HideWaitWait(function() {
-		    caller_callback(json.value.script, json.value.hash);
+		    args.callback(json.value.script, json.value.hash);
 		});
-		GetCommitInfo(uuid, refspec);
+		GetCommitInfo(args);
 	    }
 	    sup.ShowWaitWait("We are getting the source code from the " +
 			     "repository. Patience please.");
 	    var xmlthing = sup.CallServerMethod(null,
-						"manage_profile",
+						"gitrepo",
 						"GetRepoSource",
-						{"uuid"    : uuid,
-						 "refspec" : refspec});
+						{"uuid"    : args.uuid,
+						 "refspec" : args.refspec});
 	    xmlthing.done(callback);
 	}
 
@@ -117,7 +134,7 @@ $(function () {
 	/*
 	 * Ask for commit info, then update the info panel.
 	 */
-	function GetCommitInfo(uuid, refspec)
+	function GetCommitInfo(args)
 	{
 	    var callback = function(json) {
 		console.info("GetCommitInfo", json);
@@ -130,10 +147,11 @@ $(function () {
 	    }
 	    // Visible cue that something is happening
 	    $('#repoinfo-panel .panel-body').css("opacity", 0.4);
-	    var args = {"uuid" : uuid, "refspec" : refspec}
 	    var xmlthing = sup.CallServerMethod(null,
-						"manage_profile",
-						"GetCommitInfo", args);
+						"gitrepo",
+						"GetCommitInfo",
+						{"uuid" : args.uuid,
+						 "refspec" : args.refspec});
 	    xmlthing.done(callback);
 	}
 

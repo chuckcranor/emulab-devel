@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2020 University of Utah and the Flux Group.
+# Copyright (c) 2009-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -93,7 +93,7 @@ $ENV{'TBLOG_OFF'} = "yep";
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
 use libdb;
-use libosload;
+use libosload_new;
 use libtestbed;
 use Experiment;
 use Node;
@@ -148,6 +148,11 @@ my $hwdown_experiment = Experiment->Lookup(NODEDEAD_PID(), NODEDEAD_EID());
 if (!defined($hwdown_experiment)) {
     fatal("Cannot find the hwdown experiment.");
 }
+
+#
+# New library resturns an object.
+#
+my $loadobj = libosload_new->New();
 
 # Go to ground.
 if (! $debug) {
@@ -306,7 +311,7 @@ while (1) {
 	$reload_args{'prepare'}   = 1; # XXX Clear out old disk metadata.
 	$reload_args{'nodelist'}  = [ @nodenames ];
 	logit("Running osload on @nodenames", 0);
-	my $failures = osload(\%reload_args, \%reload_results);
+	my $failures = $loadobj->osload(\%reload_args, \%reload_results);
 	if ($failures) {
 	    logit("osload returned $failures failures", 1);
 	}

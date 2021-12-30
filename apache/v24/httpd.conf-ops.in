@@ -5,6 +5,9 @@
 ## This file is intended for use by sites running the emulab software. It
 ## was installed by the testbed installation process.
 ##
+<If "@BROWSER_CONSOLE_WEBSSH@ == 1">
+Define BROWSER_CONSOLE_WEBSSH
+</If>
 
 #
 # This is the main Apache server configuration file.  It contains the
@@ -191,6 +194,14 @@ LoadModule alias_module libexec/apache24/mod_alias.so
 LoadModule rewrite_module libexec/apache24/mod_rewrite.so
 LoadModule cache_module libexec/apache24/mod_cache.so
 LoadModule cgi_module libexec/apache24/mod_cgi.so
+<IfDefine BROWSER_CONSOLE_WEBSSH>
+LoadModule proxy_module libexec/apache24/mod_proxy.so
+LoadModule proxy_http_module libexec/apache24/mod_proxy_http.so
+LoadModule proxy_html_module libexec/apache24/mod_proxy_html.so
+LoadModule proxy_wstunnel_module libexec/apache24/mod_proxy_wstunnel.so
+LoadModule filter_module libexec/apache24/mod_filter.so
+LoadModule substitute_module libexec/apache24/mod_substitute.so
+</IfDefine>
 # For shmcb below.
 LoadModule socache_shmcb_module libexec/apache24/mod_socache_shmcb.so
 
@@ -1241,6 +1252,23 @@ SetEnvIf User-Agent ".*MSIE.*" \
 CustomLog /var/log/apache_ssl_request_log \
           "%t %h %{SSL_PROTOCOL}x %{SSL_CIPHER}x \"%r\" %b"
 
+<IfDefine BROWSER_CONSOLE_WEBSSH>
+   <Location /webssh>
+	ProxyPass http://localhost:8888
+	ProxyPassReverse http://locahost:8888
+	
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} websocket [NC]
+        RewriteCond %{HTTP:Connection} upgrade [NC]
+	RewriteRule .* ws://localhost:8888/ws$1 [P,L]
+
+        # rewrite response html to fix paths
+        AddOutputFilterByType SUBSTITUTE text/html
+        Substitute "s|static/js/|webssh/static/js/|i"
+        Substitute "s|static/css/|webssh/static/css/|i"
+        Substitute "s|static/img/|webssh/static/img/|i"
+    </Location>
+</IfDefine>
 </VirtualHost>
 
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -109,7 +109,7 @@ my $m_network = inet_ntoa(inet_aton($MANAGEMENT_NETWORK) &
 			  inet_aton($MANAGEMENT_NETMASK));
 my $mgmt_just_nodes;
 
-sub RestartSubbossDhcp($$);
+sub RestartSubbossDhcp($$$);
 sub SetupPXEBoot($$$$);
 sub ClearPXEBoot($$);
 
@@ -577,10 +577,10 @@ if ($install) {
 	    fatal("Could not install new ${DHCPD_CONF}");
 
     if ($restart) {
-	$dpid = `cat /var/run/dhcpd.pid`;
+	my $dpid = `cat /var/run/dhcpd.pid`;
 	chomp($dpid);
         # untaint
-	if ($dpid =~ /^([\d]+)$/) {
+	if ($dpid =~ /^(\d+)$/) {
 	    $dpid = $1;
 	}
 	else {
@@ -593,12 +593,38 @@ if ($install) {
 		  "'/usr/local/etc/rc.d/2.dhcpd.sh start'\n");
 	}
 
+	#
+	# Restart all the subboss dhcpds.
+	# We only explicitly wait for the last one; that wait should
+	# ensure that all the others have restarted as well.
+	#
         my $old_uid = $UID;
         $UID = $EUID;
-        for my $subboss (keys %subboss_dhcp_servers) {
-            RestartSubbossDhcp($subboss, $restart);
+	my $nowait = int(keys %subboss_dhcp_servers) - 1;
+        for my $subboss (sort keys %subboss_dhcp_servers) {
+            RestartSubbossDhcp($subboss, $restart, $nowait--);
         }
         $UID = $old_uid;
+
+	#
+	# Before we drop the lock, make sure that dhcpd has restarted.
+	# We wait as long as possible (i.e., after subboss restarts) to
+	# avoid gratuitous sleeping.
+	#
+	my $i;
+	for ($i = 0; $i < 3; $i++) {
+	    my $ndpid = `cat /var/run/dhcpd.pid`;
+	    if ($? == 0) {
+		chomp($ndpid);
+		if ($ndpid =~ /^(\d+)$/) {
+		    last if ($1 != $dpid);
+		}
+	    }
+	    sleep(1);
+	}
+	if ($i == 3) {
+	    print STDERR "WARNING: dhcpd did not appear to restart after kill!\n";
+	}
     }
 
     TBScriptUnlock();
@@ -745,13 +771,14 @@ sub fatal {
 	"    $msg\n");
 }
 
-sub RestartSubbossDhcp($$)
+sub RestartSubbossDhcp($$$)
 {
-        my ($subboss, $restart) = @_;
+        my ($subboss, $restart, $nowait) = @_;
         
         my $cmd = "ssh -o ConnectTimeout=5 $subboss @prefix@/sbin/subboss_dhcpd_makeconf";
 
         $cmd .= " -r" if ($restart);
+        $cmd .= " -n" if ($nowait);
 
         print "Restarting dhcpd on subboss $subboss\n";
         if (system($cmd)) {

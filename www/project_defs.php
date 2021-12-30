@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -170,13 +170,20 @@ class Project
     function pcremote_ok()   { return $this->field("pcremote_ok"); }
     function default_user_interface()
 	                     { return $this->field("default_user_interface"); }
+    function reservations_disabled()
+	                     { return $this->field("reservations_disabled"); }
     function linked_to_us()  { return $this->field("linked_to_us"); }
     function forClass()      { return $this->field("forClass"); }
+    function industry()      { return $this->field("industry"); }
+    function consortium()    { return $this->field("consortium"); }
     function cvsrepo_public(){ return $this->field("cvsrepo_public"); }
     function allow_workbench(){ return $this->field("allow_workbench"); }
     function nonlocal_id()   { return $this->field("nonlocal_id"); }
     function portal()	     { return $this->field("portal"); }
     function bound_portal()  { return $this->field("bound_portal"); }
+    function expert_mode()   { return $this->field("expert_mode"); }
+    function nfsmounts()     { return $this->field("nfsmounts"); }
+    function allowed_clusters() { return $this->field("allowed_clusters"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -742,6 +749,16 @@ class Project
 	$this->project["disabled"] = $onoff;
 	return 0;
     }
+    function SetResDisabled($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set reservations_disabled='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["disabled"] = $onoff;
+	return 0;
+    }
     function SetforClass($onoff) {
 	$idx    = $this->pid_idx();
 	$onoff  = ($onoff ? 1 : 0);
@@ -752,6 +769,26 @@ class Project
 	$this->project["forClass"] = $onoff;
 	return 0;
     }
+    function SetIndustry($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set industry='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["industry"] = $onoff;
+	return 0;
+    }
+    function SetConsortium($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set consortium='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["consortium"] = $onoff;
+	return 0;
+    }
     function SetBoundPortal($onoff) {
 	$idx    = $this->pid_idx();
 	$onoff  = ($onoff ? 1 : 0);
@@ -760,6 +797,16 @@ class Project
 		     "where pid_idx='$idx'");
 
 	$this->project["bound_portal"] = $onoff;
+	return 0;
+    }
+    function SetExpertMode($onoff) {
+	$idx    = $this->pid_idx();
+	$onoff  = ($onoff ? 1 : 0);
+
+	DBQueryFatal("update projects set expert_mode='$onoff' ".
+		     "where pid_idx='$idx'");
+
+	$this->project["expert_mode"] = $onoff;
 	return 0;
     }
 
@@ -1108,6 +1155,35 @@ class Project
 	while ($row = mysql_fetch_array($query_result)) {
             $result[] = $row;
         }
+        return $result;
+    }
+
+    #
+    # 
+    #
+    function AddNSFAward($award, $supplement) {
+	$pid_idx = $this->pid_idx();
+	$pid     = $this->pid();
+
+        DBQueryFatal("replace into project_nsf_awards set ".
+                     "  idx=null,pid='$pid',pid_idx='$pid_idx', ".
+                     "  award='$award',supplement='$supplement'");
+        return 0;
+    }
+    function nsf_awards() {
+	$pid_idx = $this->pid_idx();
+        $result  = array();
+
+	$query_result =
+	    DBQueryWarn("select * from project_nsf_awards ".
+			"where pid_idx='$pid_idx'");
+
+	if ($query_result && mysql_num_rows($query_result)) {
+            while ($row = mysql_fetch_array($query_result)) {
+                $idx = $row["idx"];
+                $result[$idx] = $row;
+            }
+	}
         return $result;
     }
 }

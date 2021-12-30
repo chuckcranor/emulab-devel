@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -90,7 +90,9 @@ $VTOP_FLAGS_COMMITMODE	= 0x200;
 @EXPORT_OK = qw($VTOP_FLAGS_UPDATE $VTOP_FLAGS_VERBOSE $VTOP_FLAGS_FIXNODES
 		$VTOP_FLAGS_IMPOTENT $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_QUIET
 		$VTOP_FLAGS_ALLOCONLY $VTOP_FLAGS_FIXLANNODES
-		$VTOP_FLAGS_PREASSIGN $VTOP_FLAGS_COMMITMODE);
+    $VTOP_FLAGS_PREASSIGN $VTOP_FLAGS_COMMITMODE);
+
+my $BESTEFFORT_WIRETYPE = "besteffort-interface";
 
 #
 # Create an object representing the stuff we need to create the vtop file.
@@ -280,6 +282,8 @@ sub virtnodecount($)	{ return $_[0]->counter("virtcount"); }
 sub simnodecount($)	{ return $_[0]->counter("simcount"); }
 sub remotenodecount($)	{ return $_[0]->counter("remotecount"); }
 sub sharednodecount($)	{ return $_[0]->counter("sharedcount"); }
+sub subnodecount($)	{ return $_[0]->counter("subnodecount"); }
+sub vlancount($)	{ return $_[0]->counter("vlans"); }
 sub bstorecount($)	{ return $_[0]->counter("bstorecount"); }
 sub gblinks($)		{ return $_[0]->counter("Gblinks"); }
 sub mgblinks($)		{ return $_[0]->counter("MGblinks"); }
@@ -831,18 +835,27 @@ sub LoadPhysInfo($)
     my %node_type_linkbw = ();
     
     $query_result =
-	DBQueryWarn("select distinct i.interface_type,n.type ".
+	DBQueryWarn("(select i.interface_type,n.type ".
+		    "  from interfaces as i ".
+		    "left join nodes as n on n.node_id=i.node_id ".
+		    "join wires as w on ".
+		    "     (w.node_id1=i.node_id and w.iface1=i.iface)".
+		    "where n.type is not null and ".
+		    "      (w.node_id2 is not null or ".
+		    "       i.interface_type='P2PLTE') and ".
+		    "      n.role='testnode' and ".
+		    "      i.role='" . TBDB_IFACEROLE_EXPERIMENT . "')" .
+		    "union".
+		    "(select i.interface_type,n.type ".
 		    "  from interfaces as i ".
 		    "left join nodes as n on n.node_id=i.node_id ".
 		    "left join wires as w on ".
-		    "     (w.node_id1=i.node_id and w.iface1=i.iface) or ".
 		    "     (w.node_id2=i.node_id and w.iface2=i.iface) ".
 		    "where n.type is not null and ".
 		    "      (w.node_id2 is not null or ".
-		    #       This special case needs work. See ptopgen.
 		    "       i.interface_type='P2PLTE') and ".
 		    "      n.role='testnode' and ".
-		    "      i.role='" . TBDB_IFACEROLE_EXPERIMENT . "'");
+		    "      i.role='" . TBDB_IFACEROLE_EXPERIMENT . "')");
 
     return -1
 	if (!$query_result);
@@ -1310,10 +1323,12 @@ sub LoadVirtNodes($)
 
 	#
 	# Record the type selections for the mapper. If this was a vtype,
-	# then we selected the first real type from the list. Might not be
-	# what we want to do.
+	# then no type we can use for the wrapper to determine reservation
+	# bounds. Eventually we will catch reservation violation, but at
+	# a point where the error is less obvious.
 	#
-	if (!$vnode->_typeinfo()->IsClass() || defined($fixed)) {
+	if (defined($fixed) ||
+	    (!$isvtyped && !$vnode->_typeinfo()->IsClass())) {
 	    my $t = $vnode->_typeinfo()->type();
 	    
 	    if (!exists($self->types()->{$t})) {
@@ -1560,6 +1575,8 @@ sub LoadVirtNodes($)
 	    if ($isplab);
 	$self->{'COUNTERS'}->{'genicount'}++
 	    if ($isgeni);
+	$self->{'COUNTERS'}->{'subnodecount'}++
+	    if ($issub);
 	$self->{'COUNTERS'}->{'physcount'}++
 	    if (!$issim && !$isvirt);
 	$self->{'COUNTERS'}->{'sharedcount'}++
@@ -1917,6 +1934,7 @@ sub LoadVirtLans($)
 	    $self->vlans()->{$vlanname} = $virtlan;
 	    $virtlan->_accesspoint(undef);
 	    $virtlan->_sanlan(0);
+	    $self->{'COUNTERS'}->{'vlancount'}++;
 	}
 
 	# Now the local wrapper for the virt_lan table entry (the "member").
@@ -3434,7 +3452,10 @@ sub GenVirtLans($)
 		my (undef,$bw0)= @{$member->_delayinfo()};
 		my $wiretype   = $vlan->_wiretype();
 
-		if ($bw0 != 0) {
+		if ($besteffort) {
+		    $wiretype = $BESTEFFORT_WIRETYPE;
+		}
+		elsif ($bw0 != 0 && !$emulated) {
 		    $wiretype = $self->GetWiretype($wiretype, $bw0);
 		}
 		$self->createLink($vname, $plink,
@@ -3675,10 +3696,11 @@ sub GenVirtLans($)
 				     'virtual_interface_id' => "$member1" },
 				    ($top_bw == 0 ? "*" : 
 				     max($top_bw, $top_rbw)),
-				    ($emulated ?
-				     $vlan->_wiretype() :
-				     $self->GetWiretype($vlan->_wiretype(),
-						 max($top_bw, $top_rbw))),
+				    ($besteffort ? $BESTEFFORT_WIRETYPE :
+				     ($emulated ?
+				      $vlan->_wiretype() :
+				      $self->GetWiretype($vlan->_wiretype(),
+						 max($top_bw, $top_rbw)))),
 				    $others);
 		    }
 		    my @delayinfo = ($delay,$bw,$backfill,$loss,
@@ -3763,6 +3785,9 @@ sub GenVirtLans($)
 		    $vtbw = ($top_bw == 0 ? "*" : $vtbw);
 		    $wiretype = $self->GetWiretype($wiretype,
 						   max($top_bw, $top_rbw));
+		}
+		elsif ($besteffort) {
+		    $wiretype = $BESTEFFORT_WIRETYPE;
 		}
 		if ($emulated) {
 		    $others->{'emulated'} = 1
@@ -4017,6 +4042,9 @@ sub GenVirtLans($)
 				$self->GetWiretype($wiretype,
 						   max($top_bw, $top_rbw));
 			}
+			elsif ($besteffort) {
+			    $wiretype = $BESTEFFORT_WIRETYPE;
+			}
 			if ($emulated) {
 			    $others->{'emulated'} = 1 if ($member->_emulated());
 			    $others->{'virtualization_type'} =
@@ -4129,6 +4157,9 @@ sub GenVirtLans($)
 
 		    if (! ($emulated || $besteffort)) {
 			$wiretype = $self->GetWiretype($wiretype, $top_bw);
+		    }
+		    elsif ($besteffort) {
+			$wiretype = $BESTEFFORT_WIRETYPE;
 		    }
 		    if ($emulated) {
 			$others->{'emulated'} = 1 if ($member->_emulated());
@@ -4408,6 +4439,8 @@ sub CreateVtop($;$)
     $self->{'COUNTERS'}->{'physcount'}   = 0;
     $self->{'COUNTERS'}->{'Gblinks'}     = 0;
     $self->{'COUNTERS'}->{'MGblinks'}    = 0;
+    $self->{'COUNTERS'}->{'vlancount'}   = 0;
+    $self->{'COUNTERS'}->{'subnodecount'}= 0;
 
     #
     # Experiment wide options.
@@ -4666,16 +4699,22 @@ sub virtlantopbw($$$) {
     }
     else {
 	#
-	# If this is an emulated link or a best effort link, we put in only
+	# If this is an emulated link or link linkdelay, we put in only
 	# the bandwidth from the virtual topology - otherwise, we put in
 	# the bandwidth of the type of physical interface it is likely to
 	# get mapped to.
 	#
+	# Best effort is special. We need small number that is guaranteed
+	# to map across the fabric (switch interconnect). But, if the node
+	# has a mix of interfaces, it is almost always the case that the
+	# user would prefer the faster interface, but there is no telling
+	# what assign will do, links do not have weighted features in the
+	# ptop file.
+	#
         my $shaped = $virtlan->membershaped($member);
 	
 	if ($virtlan->_besteffort()) {
-	    # 1G, which is guaranteed to map on all our clusters.
-	    $return_bw = 1000000;
+	    $return_bw = 10;
 	}
 	elsif ($virtlan->_emulated() ||
 	    $self->virtlan_use_linkdelay($virtlan, $shaped)) {
@@ -4691,15 +4730,12 @@ sub virtlantopbw($$$) {
     }
     else {
 	#
-	# If this is an emulated link or a best effort link, we put in only
-	# the reported bandwidth - otherwise, we put in the bandwidth of
-	# the type of physical interface it is likely to get mapped to.
+	# See comment up above.
 	#
         my $shaped = $virtlan->membershaped($member);
 
 	if ($virtlan->_besteffort()) {
-	    # 1G, which is guaranteed to map on all our clusters.
-	    $return_rbw = 1000000;
+	    $return_rbw = 10;
 	}
 	elsif ($virtlan->_emulated() ||
 	    $self->virtlan_use_linkdelay($virtlan, $shaped)) {
@@ -5542,8 +5578,10 @@ sub AllocNodes($)
     #
     @nodeids = keys(%{ $self->solution()->{'TORESERVE'} });
     $self->printdb("Trying to allocate @nodeids\n");
+    TBDebugTimeStamp("nalloc started");
     system("$NALLOC -p $pid $eid @nodeids");
     my $exitval  = $? >> 8;
+    TBDebugTimeStamp("nalloc finished");
 
     #
     # If nalloc failed with a fatal error, lets give it up. No retry.
@@ -10427,7 +10465,7 @@ sub GetWiretype($$$)
     if ($bandwidth == 0) {
 	$wiretype = "ethernet";
     }
-    elsif ($bandwidth <= 100000) {
+    elsif (0 && $bandwidth <= 100000) {
 	# 100 Mbit
 	$wiretype = "ethernet-100000";
     }

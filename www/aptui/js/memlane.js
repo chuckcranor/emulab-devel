@@ -47,10 +47,6 @@ $(function ()
 	if (record.profile_uuid) {
 	    var url = "instantiate.php?profile=" + record.profile_uuid +
 		"&rerun_instance=" + window.uuid;
-	    // Pull the same branch.
-	    if (_.has(record, "repohash") && record.repohash) {
-		url += "&refspec=" + record.repohash;
-	    }
 	    $('#rerun_button').attr("href", url);
 	    
 	    if (_.has(record, "bindings") && record.cansave_parameters) {
@@ -79,11 +75,11 @@ $(function ()
 	// Must do this after ShowTopo, since it changes to that tab.
         var hash = document.location.hash;
         if (hash) {
-            $('.nav-tabs a[href='+hash+']').tab('show');
+            $('.nav-tabs a[href="'+hash+'"]').tab('show');
         }
         // Change hash for page-reload
         $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-            window.location.hash = e.target.hash;
+	    history.replaceState('', '', e.target.hash);
         });
 	// Set the correct tab when a user uses their back/forward button
         $(window).on('hashchange', function (e) {
@@ -91,7 +87,7 @@ $(function ()
 	    if (hash == "") {
 		hash = "#rspec";
 	    }
-	    $('.nav-tabs a[href='+hash+']').tab('show');
+	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
 	});
     }
 

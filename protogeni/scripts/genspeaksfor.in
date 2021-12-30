@@ -154,7 +154,7 @@ if ($doabac) {
 	print $xml;
     }
 }
-Else {
+else {
     my $credential = GeniCredential->Create($geniuser, $speaker);
     fatal("Could not create credential")
 	if (!defined($credential));

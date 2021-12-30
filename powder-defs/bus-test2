@@ -132,6 +132,7 @@ IMAGEDIRECTORIES=1
 # Fancy new browser in the console support
 BROWSER_CONSOLE_ENABLE=1
 BROWSER_CONSOLE_PROXIED=1
+BROWSER_CONSOLE_WEBSSH=1
 
 # Do not expire passwords.
 EXPIRE_PASSWORDS=0
@@ -170,5 +171,13 @@ POWDER_WBSTORE=1
 POWDER_DEADMAN=1
 
 DISABLE_RESERVATION_EMAIL=1
+
+ZFS_QUOTA_PROJECT="10G"
+
+POWDER_BUS_P0WER_VERSION=2
+
+# Image updates take a long time on buses, this makes it smoother since
+# updates will not prevent experiments starting.
+IMAGEPROVENANCE=1
 
 # End of Emulab added section

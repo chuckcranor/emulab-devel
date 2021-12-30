@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -102,6 +102,8 @@ function SPITFORM($formfields, $showverify, $errors)
 
     echo "<link rel='stylesheet'
                 href='css/bootstrap-formhelpers.min.css'>\n";
+    echo "<link rel='stylesheet'
+                href='css/jquery-ui.min.css'>\n";
 
     echo "<div id='signup-body'></div>\n";
     echo "<div id='toomany_div'></div>\n";
@@ -146,14 +148,13 @@ function SPITFORM($formfields, $showverify, $errors)
 
     echo "</script>\n";
 
-    echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
     REQUIRE_MARKED();
     REQUIRE_APTFORMS();
     REQUIRE_FORMHELPERS();
-    SPITREQUIRE("js/signup.js");
+    SPITREQUIRE("js/signup.js",
+                "<script src='js/lib/jquery-ui.js'></script>");
 
     AddTemplateList(array("about-account", "verify-modal", "signup-personal", "signup-project", "signup", "toomany-modal"));
     SPITFOOTER();
@@ -189,6 +190,7 @@ if (! isset($create)) {
         $defaults["startorjoin"] = "start";
     }
     $defaults["proj_class"] = 0;
+    $defaults["proj_nsf"]   = 0;
 
     if (count($license_defs)) {
         foreach ($license_defs as $name => $value) {
@@ -298,10 +300,10 @@ if (!$this_user || $promoting) {
 	    "Already in use. Did you forget to login?";
     }
     if (!isset($formfields["affiliation"]) ||
-	strcmp($formfields["affiliation"], "") == 0) {
+        trim($formfields["affiliation"]) == "") {
 	$errors["affiliation"] = "Missing Field";
     }
-    elseif (! TBvalid_affiliation($formfields["affiliation"])) {
+    elseif (! TBvalid_affiliation(htmlentities($formfields["affiliation"]))) {
 	$errors["affiliation"] = TBFieldErrorString();
     }
     if (!isset($formfields["country"]) ||
@@ -403,8 +405,10 @@ if (!$joinproject) {
 	strcmp($formfields["proj_url"], $HTTPTAG) == 0) {    
 	$errors["proj_url"] = "Missing Field";
     }
-    elseif (! CHECKURL($formfields["proj_url"], $urlerror)) {
-	$errors["proj_url"] = $urlerror;
+    elseif (!preg_match('#^https?://#i', $formfields["proj_url"]) ||
+            strstr($formfields["proj_url"], " ") ||
+            !TBvalid_URL($formfields["proj_url"])) {
+	$errors["proj_url"] = "Improper url";
     }
     if (!isset($formfields["proj_why"]) ||
 	strcmp($formfields["proj_why"], "") == 0) {
@@ -416,6 +420,20 @@ if (!$joinproject) {
     if (isset($formfields["proj_class"]) &&
         !TBvalid_boolean($formfields["proj_class"])) {
 	$errors["proj_class"] = TBFieldErrorString();
+    }
+    if (isset($formfields["proj_nsf"])) {
+        if (!TBvalid_boolean($formfields["proj_nsf"])) {
+            $errors["proj_nsf"] = TBFieldErrorString();
+        }
+        elseif (!isset($formfields["proj_nsf_awards"]) ||
+                trim($formfields["proj_nsf_awards"]) == "") {
+            $errors["proj_nsf"] = "Please tell us the award numbers";
+        }
+        elseif (! TBcheck_dbslot(trim($formfields["proj_nsf_awards"]),
+                                 "projects", "nsf_awards",
+                                 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+            $errors["proj_nsf"] = TBFieldErrorString();
+        }
     }
     if (count($license_defs)) {
         foreach ($license_defs as $name => $value) {
@@ -503,7 +521,7 @@ if ($this_user && $promoting) {
     $args["state"]         = $formfields["state"];
     $args["country"]       = $formfields["country"];
     $args["shell"]         = 'tcsh';
-    $args["affiliation"]   = $formfields["affiliation"];
+    $args["affiliation"]   = htmlentities($formfields["affiliation"]);
     $args["address1"]      = $formfields["address1"];
     $args["address2"]      = $formfields["address2"];
     $args["zip"]           = $formfields["zip"];
@@ -530,7 +548,7 @@ if (!$this_user) {
     $args["state"]         = $formfields["state"];
     $args["country"]       = $formfields["country"];
     $args["shell"]         = 'tcsh';
-    $args["affiliation"]   = $formfields["affiliation"];
+    $args["affiliation"]   = htmlentities($formfields["affiliation"]);
     $args["password"]      = $formfields["password1"];
     # Force initial SSL cert generation.
     $args["passphrase"]    = $formfields["password1"];
@@ -639,6 +657,14 @@ foreach ($licenses as $name => $value) {
 }
 if (isset($formfields["proj_class"])) {
     $args["class"]  = $formfields["proj_class"];
+}
+if (isset($formfields["proj_nsf"])) {
+    $args["nsf_funded"] = $formfields["proj_nsf"];
+    if ($formfields["proj_nsf"] == 1) {
+        $args["nsf_awards"] = trim($formfields["proj_nsf_awards"]);
+        $args["nsf_supplement"] =
+                    $formfields["proj_nsf_supplement"] == 1 ? 1 : 0;
+    }
 }
 
 if (! ($project = Project::NewNewProject($args, $error))) {

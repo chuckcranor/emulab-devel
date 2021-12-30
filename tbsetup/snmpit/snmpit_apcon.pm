@@ -1,7 +1,7 @@
 #!/usr/bin/perl -W
 
 #
-# Copyright (c) 2010, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2010-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -109,6 +109,24 @@ my %portRates =
 my %emptyVlans = ();
 
 #
+# Find a version of ssh that can talk to the Apcon.
+#
+# XXX our apcon has a 768-bit key that modern versions of OpenSSH will
+# refuse to talk to. So we may need to keep around a custom version of
+# ssh (7.5 or before, statically linked to avoid runtime problems) just
+# to use here.
+#
+# XXX Our hope is that this is all just a bad dream and that a newer Apcon
+# firmware release will make the problem Just Go Away. Hence, I have not
+# turned this into a .in file, just for the following path.
+#
+my $HACKSSH = "/usr/testbed/libexec/ssh-apcon";
+my $SSH = "/usr/bin/ssh";
+if (-x $HACKSSH) {
+    $SSH = $HACKSSH;
+}
+
+#
 # All functions are based on snmpit_hp class.
 #
 # NOTES: This device is a layer 1 switch that has no idea
@@ -214,7 +232,7 @@ sub createExpectObject($)
 {
     my $self = shift;
     
-    my $spawn_cmd = "ssh -l admin ".
+    my $spawn_cmd = "$SSH -l admin ".
 	"-o KexAlgorithms=+diffie-hellman-group1-sha1 $self->{NAME}";
     # Create Expect object and initialize it:
     my $exp = new Expect();

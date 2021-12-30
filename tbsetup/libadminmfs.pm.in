@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -122,6 +122,7 @@ sub TBAdminMfsBoot($$@)
     my $wait = $args->{'wait'};
     my $prepare = $args->{'prepare'};
     my $retry = $args->{'retry'};
+    my $timo = 0;
 
     $retry = 0
         if (!defined($retry) || !$wait);
@@ -151,6 +152,19 @@ sub TBAdminMfsBoot($$@)
 	    @$failedref = @nodes
 		if (defined($failedref));
 	    return 1;
+	}
+
+	#
+	# Calculate the maximum timeout that is needed based on nodes'
+	# bios_waittimes.
+	#
+	$timo = $reboottimo;
+	foreach my $n (@nodes) {
+	    my $nobj = Node->Lookup($n);
+	    if ($nobj && defined($nobj->bios_waittime()) &&
+		$nobj->bios_waittime() > $timo) {
+		$timo = $nobj->bios_waittime();
+	    }
 	}
     }
 
@@ -201,12 +215,12 @@ sub TBAdminMfsBoot($$@)
 	#
 	my @finished = ();
 	my @failed   = ();
-	my $endtime = time() + $reboottimo;
+	my $endtime = time() + $timo;
 
-	print STDOUT "Waiting for nodes to come up.\n";
+	print STDOUT "Waiting up to $timo seconds for nodes to come up.\n";
 	
 	# Now we can statewait.
-	if (waitForState(\@finished, \@failed, $reboottimo)) {
+	if (waitForState(\@finished, \@failed, $timo)) {
 	    print STDERR "*** $me:\n".
 		"    Failed in waitForState!\n";
 	    @$failedref = @nodes

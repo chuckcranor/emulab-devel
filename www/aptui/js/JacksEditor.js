@@ -128,8 +128,12 @@ $(function () {
 	  f();
 	});
       };
-      var xmlthing = sup.CallServerMethod(null, "instantiate", "GetImageList");
-      xmlthing.done(callback);
+	if (0) {
+	    // OAI2021FallWS
+	    var xmlthing = sup.CallServerMethod(null, "instantiate",
+						"GetImageList");
+	    xmlthing.done(callback);
+	}
     }
 
     function contextFail(fail1, fail2)

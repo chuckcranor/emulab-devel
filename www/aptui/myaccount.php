@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,8 +44,8 @@ else {
 # Verify page arguments.
 #
 $optargs = OptionalPageArguments("target_user", PAGEARG_USER,
-                                 "referrer", PAGEARG_STRING,
-                                 "addrequired", PAGEARG_BOOLEAN);
+                                 "referrer",    PAGEARG_URL,
+                                 "needupdate",  PAGEARG_BOOLEAN);
 
 if (! isset($target_user)) {
     $target_user = $this_user;
@@ -58,8 +58,8 @@ if ($target_user->uid() != $this_user->uid() && !ISADMIN()) {
     return;
 }
 $isadmin = (ISADMIN() ? 1 : 0);
-if (!isset($addrequired)) {
-    $addrequired = 0;
+if (!isset($needupdate)) {
+    $needupdate = 0;
 }
 
 # We use a session. in case we need to do verification
@@ -80,34 +80,47 @@ $defaults["address1"]    = $target_user->addr1();
 $defaults["address2"]    = $target_user->addr2();
 $defaults["zip"]         = $target_user->zip();
 $defaults["phone"]       = $target_user->phone();
+$defaults["shell"]       = $target_user->shell();
 
 
 SPITHEADER(1);
 echo "<script>\n";
 echo "</script>\n";
 echo "<link rel='stylesheet' href='css/bootstrap-formhelpers.min.css'>\n";
+echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
 echo "<div id='page-body'></div>\n";
 echo "<div id='oops_div'></div>\n";
 echo "<div id='waitwait_div'></div>\n";
 echo "<script type='text/plain' id='form-json'>\n";
 echo htmlentities(json_encode($defaults)) . "\n";
 echo "</script>\n";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 
 echo "<script type='text/javascript'>\n";
 if ($referrer) {
-    $referrer = CleanString($referrer);
+    #$referrer = CleanString($referrer);
     echo "    window.REFERRER = '$referrer';\n";
 }
-echo "    window.ADDREQUIRED = $addrequired;\n";
+echo "    window.NEEDUPDATE  = $needupdate;\n";
 echo "    window.ISADMIN     = $isadmin;\n";
+if ($target_user->RequireAddress()) {
+    echo "    window.UPDATE  = 'required';\n";
+}
+elseif ($target_user->RequireAffiliation()) {
+    $matched = $target_user->affiliation_matched();
+    echo "    window.UPDATE  = 'affiliation';\n";
+    echo "    window.MATCHED = $matched;\n";
+}
+else {
+    echo "    window.UPDATE  = null;\n";
+}
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_APTFORMS();
 REQUIRE_FORMHELPERS();
-SPITREQUIRE("js/myaccount.js");
+SPITREQUIRE("js/myaccount.js",
+            "<script src='js/lib/jquery-ui.js'></script>");
 
 AddTemplateList(array("myaccount", "verify-modal", "oops-modal", "waitwait-modal"));
 SPITFOOTER();

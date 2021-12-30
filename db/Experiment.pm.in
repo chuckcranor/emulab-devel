@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,6 +43,8 @@ use File::Basename;
 use File::Temp;
 use overload ('""' => 'Stringify');
 use libtblog_simple;
+# In case we need to load snmpit_lib below.
+use lib '@prefix@/lib/snmpit';
 
 use vars qw($EXPT_PRELOAD $EXPT_START $EXPT_SWAPIN $EXPT_SWAPUPDATE
 	    $EXPT_SWAPOUT $EXPT_SWAPMOD %physicalTables @virtualTables
@@ -4958,9 +4960,9 @@ sub UnBindNonLocalUsers($)
 #
 # Bind nonlocal user to experiment (slice, in Geni).
 #
-sub BindNonLocalUser($$$$$$;$)
+sub BindNonLocalUser($$$$$$;$$)
 {
-    my ($self, $keys, $uid, $urn, $name, $email, $privs) = @_;
+    my ($self, $keys, $uid, $urn, $name, $email, $privs, $shell) = @_;
 
     return -1
 	if (! ref($self));
@@ -5008,6 +5010,10 @@ sub BindNonLocalUser($$$$$$;$)
 	if (defined($privs)) {
 	    my $safe_privs = DBQuoteSpecial($privs);
 	    push(@insert_data, "privs=$safe_privs");
+	}
+	if (defined($shell)) {
+	    my $safe_shell = DBQuoteSpecial($shell);
+	    push(@insert_data, "shell=$safe_shell");
 	}
 
 	# Insert into DB.
@@ -6145,6 +6151,7 @@ sub SetupPortLans($)
 {
     my ($self) = @_;
     require Lan;
+    require snmpit_lib;
 
     my @lans;
     if (Lan->ExperimentLans($self, \@lans) != 0) {
@@ -6250,6 +6257,10 @@ sub SetupPortLans($)
 	    $newmember->SetAttribute("portlan_exptidx", $self->idx());
 	    $newmember->SetAttribute("portlan_lanname", $lan->vname());
 	}
+	# Need the VLan class for this.
+	my $vlan = VLan->Lookup($portvlan->lanid());
+	$vlan->ClrSwitchPath();
+	snmpit_lib::setSwitchTrunkPath($vlan);
 	$portvlan->Unlock();
     }
     return 0;
@@ -6264,6 +6275,7 @@ sub ClearPortLans($;$@)
     my ($self, $nolock, @lans) = @_;
     $nolock = 0 if (!defined($nolock));
     require Lan;
+    require snmpit_lib;
 
     if (!@lans && Lan->ExperimentLans($self, \@lans) != 0) {
 	tberror("Could not get list of all lans for $self\n");
@@ -6341,7 +6353,8 @@ sub ClearPortLans($;$@)
 
 	    if (! (defined($member_exptidx) || defined($member_lanname))) {
 		tberror("Could not get idx/lanname from $member\n");
-		$portvlan->Unlock();
+		$portvlan->Unlock()
+		    if (!$nolock);
 		return -1;
 	    }
 	    next
@@ -6365,19 +6378,196 @@ sub ClearPortLans($;$@)
 		if (!$nolock);
 	    return -1;
 	}
-	my $pid = $experiment->pid();
-	my $eid = $experiment->eid();
-	my $lanid = $portvlan->lanid();
-	
-	print "Syncing target vlan $lanid in $experiment\n";
-	mysystem("$TB/bin/snmpit -f --redirect-err -X $pid $eid $lanid");
-	if ($?) {
+	if ($experiment->SyncPortLan($portvlan) != 0) {
 	    $portvlan->Unlock()
 		if (!$nolock);
 	    return -1;
 	}
 	$portvlan->Unlock()
+	    if (!$nolock);
+    }
+    return 0;
+}
+
+sub RemoveMembersFromPortlan($;$$@)
+{
+    my ($self, $nolock, $portvlan, @ports) = @_;
+    $nolock = 0 if (!defined($nolock));
+    require Lan;
+    require snmpit_lib;
+    my %portmap = map {$_ => $_} @ports;
+
+    #
+    # The lan is obviously shared, so we have to lock it.
+    # It should not spend much time locked though, so the
+    # timeout should not be too long; indicates an error if
+    # it is.
+    #
+    if (!$nolock && $portvlan->Lock(180) != 0) {
+	print STDERR "Could not lock $portvlan for a long time!\n";
+	return -1;
+    }
+    #
+    # Once we get the lock, make sure the lan is actually still
+    # shared. 
+    #
+    if ($portvlan->Refresh() != 0) {
+	print STDERR "Could not refresh $portvlan after locking!\n";
+	$portvlan->Unlock()
+	    if (!$nolock);
+	return -1;
+    }
+    
+    #
+    # This does not need to be a fatal error since snmpit will not
+    # allow a shared vlan to removed. The only way to get here is
+    # if sharevlan -r -f is called, in which case the port was
+    # forcibly yanked out of the target vlan already, so we can just
+    # skip it. 
+    #
+    if (! $portvlan->IsShared()) {
+	print STDERR "$portvlan is not a shared lan\n";
+	$portvlan->Unlock()
+	    if (!$nolock);
+	return 0;
+    }
+
+    #
+    # Remove the ports from the portvlan, then sync the target. 
+    #
+    my @members;
+    if ($portvlan->MemberList(\@members) != 0) {
+	print STDERR "Could not get member list for $portvlan\n";
+	$portvlan->Unlock()
+	    if (!$nolock);
+	return -1;
+    }
+    foreach my $member (@members) {
+	my $node;
+	my $iface;
+
+	if ($member->GetNodeIface(\$node, \$iface)) {
+	    print STDERR "Could not get node/iface for $member\n";
+	    $portvlan->Unlock()
 		if (!$nolock);
+	    return -1;
+	}
+	my $node_id = $node->node_id();
+	
+	next
+	    if (!exists($portmap{"${node_id}:${iface}"}));
+
+	print "Removing ${node_id}:${iface} from $portvlan\n";
+	
+	# Delete the member.
+	if ($portvlan->DelMember($member)) {
+	    print STDERR "Could not delete $member from $portvlan\n";
+	    $portvlan->Unlock()
+		if (!$nolock);
+	    return -1;
+	}
+    }
+    if ($self->SyncPortLan($portvlan) != 0) {
+	$portvlan->Unlock()
+	    if (!$nolock);
+	return -1;
+    }
+    $portvlan->Unlock()
+	if (!$nolock);
+    return 0;
+}
+
+sub AddMembersToPortlan($;$$@)
+{
+    my ($self, $nolock, $portvlan, @ports) = @_;
+    $nolock = 0 if (!defined($nolock));
+    require Lan;
+    require snmpit_lib;
+
+    #
+    # The lan is obviously shared, so we have to lock it.
+    # It should not spend much time locked though, so the
+    # timeout should not be too long; indicates an error if
+    # it is.
+    #
+    if (!$nolock && $portvlan->Lock(180) != 0) {
+	print STDERR "Could not lock $portvlan for a long time!\n";
+	return -1;
+    }
+    #
+    # Once we get the lock, make sure the lan is actually still
+    # shared. 
+    #
+    if ($portvlan->Refresh() != 0) {
+	print STDERR "Could not refresh $portvlan after locking!\n";
+	$portvlan->Unlock()
+	    if (!$nolock);
+	return -1;
+    }
+    
+    #
+    # This does not need to be a fatal error since snmpit will not
+    # allow a shared vlan to removed. The only way to get here is
+    # if sharevlan -r -f is called, in which case the port was
+    # forcibly yanked out of the target vlan already, so we can just
+    # skip it. 
+    #
+    if (! $portvlan->IsShared()) {
+	print STDERR "$portvlan is not a shared lan\n";
+	$portvlan->Unlock()
+	    if (!$nolock);
+	return 0;
+    }
+
+    #
+    # Add ports to the portvlan, then sync the target. 
+    #
+    foreach my $port (@ports) {
+	my ($nodeid,$iface) = split(":", $port);
+	
+	if ($portvlan->IsMember($nodeid, $iface)) {
+	    print "$port is already a member of lan, skipping addition\n";
+	    next;
+	}
+	my $newmember = $portvlan->AddMember($nodeid, $iface);
+	if (!defined($newmember)) {
+	    print STDERR "Could not add $port to $portvlan\n";
+	    $portvlan->Unlock()
+		if (!$nolock);
+	    return -1;
+	}
+    }
+    if ($self->SyncPortLan($portvlan) != 0) {
+	$portvlan->Unlock()
+	    if (!$nolock);
+	return -1;
+    }
+    $portvlan->Unlock()
+	if (!$nolock);
+    return 0;
+}
+
+#
+# Call snmpit on a portvlan.
+#
+sub SyncPortLan($$)
+{
+    my ($self, $portvlan) = @_;
+    require Lan;
+    require snmpit_lib;
+
+    my $vlan = VLan->Lookup($portvlan->lanid());
+    $vlan->ClrSwitchPath();
+    snmpit_lib::setSwitchTrunkPath($vlan);
+	
+    my $pid   = $self->pid();
+    my $eid   = $self->eid();
+    my $lanid = $portvlan->lanid();
+	
+    print "Syncing target vlan $lanid in $self\n";
+    mysystem("$TB/bin/snmpit -f --redirect-err -X $pid $eid $lanid");
+    if ($?) {
+	return -1;
     }
     return 0;
 }

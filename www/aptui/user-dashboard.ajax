@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -259,6 +259,7 @@ function Do_AccountDetails()
     $results["city"]         = $target_user->city();
     $results["zip"]          = $target_user->zip();
     $results["phone"]        = $target_user->phone();
+    $results["shell"]        = $target_user->shell();
 
     if (ISADMIN()) {
         $results["uid_idx"]       = $target_user->uid_idx();
@@ -266,19 +267,40 @@ function Do_AccountDetails()
                                      $target_user->portal() : "classic");
         $results["bound_portal"]  = $target_user->bound_portal() ? true:false;
         $results["created"]       = DateStringGMT($target_user->created());
+        $results["modified"]      = DateStringGMT($target_user->modified());
+        $results["pswd_expires"]  = DateStringGMT($target_user->pswd_expires());
         $results["status"]        = $target_user->status();
         $results["frozen_stamp"]  = DateStringGMT($target_user->frozen_stamp());
         $results["frozen_by"]     = $target_user->frozen_by();
         $results["stud"]          = $target_user->stud() ? true : false;
         $results["admin"]         = $target_user->admin() ? true : false;
         $results["foreign_admin"] = $target_user->foreign_admin() ? true:false;
+        $results["expert_mode"]   = $target_user->expert_mode() ? true:false;
         $results["web_frozen"]    = $target_user->weblogin_frozen()? true:false;
         $results["nonlocal_id"]   = ($target_user->nonlocal_id() ?
                                      $target_user->nonlocal_id() : "");
         $results["last_weblogin"] = DateStringGMT(LASTWEBLOGIN($target_idx));
-        $results["inactive"]       = ($target_user->status() ==
+        $results["inactive"]      = ($target_user->status() ==
                                       TBDB_USERSTATUS_INACTIVE ? true : false);
+        $results["affil_matched"] = $target_user->affiliation_matched();
+        $results["affil_updated"] =
+            DateStringGMT($target_user->affiliation_updated());
+        $results["loggedin"]      = $target_user->LoggedIn();
     }
+    $scopus_info = array();
+    $query_result =
+        DBQueryFatal("select u.scopus_id,u.author_url,p.title, ".
+                     "    u.validation_state,p.authors,p.pubname,p.doi ".
+                     "  from user_scopus_info as u ".
+                     "left join scopus_paper_info as p on ".
+                     "     p.scopus_id=u.latest_abstract_id ".
+                     "where uid_idx='$target_idx' and ".
+                     "      u.validation_state!='invalid'");
+    while ($row = mysql_fetch_array($query_result)) {
+        $scopus_id = $row["scopus_id"];
+        $scopus_info[$scopus_id] = $row;
+    }
+    $results["scopus_info"] = $scopus_info;
 
     SPITAJAX_RESPONSE($results);
 }
@@ -408,6 +430,9 @@ function Do_Toggle()
     elseif ($toggle == "web_frozen") {
         $target_user->SetWebFreeze($target_user->weblogin_frozen() ? 0 : 1);
     }
+    elseif ($toggle == "expert_mode") {
+        $target_user->SetExpertMode($target_user->expert_mode() ? 0 : 1);
+    }
     else {
 	SPITAJAX_ERROR(-1, "Unknown toggle name: $toggle");
         return;
@@ -476,7 +501,7 @@ function Do_FreezeOrThaw()
            "Your account has been $tag",
            "Your account has been ${tag}.\n\n" . $message,
            "From: $adminemail\n".
-           "Bcc: $adminemail");
+           "Cc: $adminemail");
     SPITAJAX_RESPONSE(1);
 }
 
@@ -634,40 +659,90 @@ function Do_ListParameterSets()
     # zero, we have to add another argument to the url instead.
     #
     $query_result =
-        DBQueryFatal("select s.*,v.uuid as version_uuid, ".
-                     "    p.name as profile_name,p.uuid as profile_uuid, ".
-                     "    v.version as profile_version ".
-                     " from apt_parameter_sets as s ".
-                     "left join apt_profiles as p on ".
-                     "     p.profileid=s.profileid ".
-                     "left join apt_profile_versions as v on ".
-                     "      v.uuid=s.version_uuid ".
+        DBQueryFatal("select s.uuid from apt_parameter_sets as s ".
                      "where s.uid_idx='$uid_idx' ".
-                     "order by s.profileid,s.name,s.created");
-
+                     "order by s.name,s.profileid,s.created");
     if (! mysql_num_rows($query_result)) {
         SPITAJAX_RESPONSE(null);
         return;
     }
     $results = array();
     while ($row = mysql_fetch_array($query_result)) {
-        $blob = array(
-            "uuid"              => $row["uuid"],
-            "name"              => $row["name"],
-            "description"       => $row["description"],
-            "created"           => DateStringGMT($row["created"]),
-            "bindings"          => json_decode($row["bindings"]),
-            "profile_uuid"      => $row["profile_uuid"],
-            "version_uuid"      => $row["version_uuid"],
-            "profile_name"      => $row["profile_name"],
-            "profile_version"   => $row["profile_version"],
-            "reporef"           => $row["reporef"],
-            "repohash"          => $row["repohash"],
-        );
+        $paramset = Paramset::Lookup($row["uuid"]);
+        if (!$paramset) {
+            continue;
+        }
+        $blob = $paramset->Blob($this_user);
+        if (!$blob) {
+            continue;
+        }
         $results[] = $blob;
     }
     SPITAJAX_RESPONSE($results);
     return;
+}
+
+#
+# Verify scopus info (mark entries the user has indicated are theirs).
+#
+function Do_VerifyScopusInfo()
+{
+    global $this_user, $target_user, $ajax_args;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN() && !$this_user->SameUser($target_user)) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    $uid_idx = $target_user->uid_idx();
+
+    if (!isset($ajax_args["abstracts"])) {
+	SPITAJAX_ERROR(-1, "Missing abstract list");
+	return -1;
+    }
+    $abstracts = $ajax_args["abstracts"];
+    foreach ($abstracts as $scopus_id => $valid) {
+        if (!preg_match("/^\d+$/", $scopus_id)) {
+            SPITAJAX_ERROR(-1, "Invalid scopus_id ID");
+            return -1;
+        }
+        $state = ($valid == "true" ? "valid" : "invalid");
+
+        $target_user->ValidateScopusInfo($scopus_id, $state);
+    }
+    SPITAJAX_RESPONSE(1);
+}
+
+#
+# Delete user,
+#
+function Do_DeleteUser()
+{
+    global $this_user, $target_user, $ajax_args;
+    global $suexec_output;
+    global $TBADMINGROUP;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    if ($this_user->SameUser($target_user)) {
+	SPITAJAX_ERROR(-1, "Not allowed to self delete");
+	return -1;
+    }
+    $uid = $this_user->uid();
+
+    if (SUEXEC($uid, $TBADMINGROUP, "webrmuser " . $target_user->uid_idx(),
+               SUEXEC_ACTION_CONTINUE)) {
+        SPITAJAX_ERROR(-1, $suexec_output);
+        return -1;
+    }
+    SPITAJAX_RESPONSE(1);
 }
 
 # Local Variables:

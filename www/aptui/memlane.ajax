@@ -122,6 +122,8 @@ function GetRepoParamdefs($profile, $record, &$paramdefs)
     
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
+    $reponame = escapeshellarg($profile->reponame());
+    $repohash = escapeshellarg($record->repohash());
 
     $paramsname = tempnam("/tmp", "genilibparams");
     chmod($paramsname, 0666);
@@ -134,7 +136,6 @@ function GetRepoParamdefs($profile, $record, &$paramdefs)
         fclose($fp);
     }
     else {
-        $repohash = escapeshellarg($record->repohash());
         $retval = SUEXEC($this_uid, "tbadmin",
                          "webmanage_gitrepo " .
                          "  getsource -o $scriptname -p " . $profile->uuid() .
@@ -151,7 +152,8 @@ function GetRepoParamdefs($profile, $record, &$paramdefs)
         # We do not actually care about the script. We just pass it to the
         # next step.
     }
-    $opts = "";
+    # Have to checkout the correct version of the code in the jail.
+    $opts = "-r $reponame -h $repohash ";
     if ($profile->UseNewGeniLib($this_user)) {
         $opts .= " -N ";
     }    
@@ -164,8 +166,8 @@ function GetRepoParamdefs($profile, $record, &$paramdefs)
         if ($retval < 0) {
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         }
-        unlink($scriptname);
-        unlink($paramsname);
+        #unlink($scriptname);
+        #unlink($paramsname);
 	return -1;
     }
     $contents = file_get_contents($paramsname);

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -111,7 +111,8 @@ function Do_Reserve()
             $errors["error"] = "Not enough permission in project";
         }
         # XXX
-        if ($project->pid() == "cord-testdrive" ||
+        if ($project->reservations_disabled() ||
+            $project->pid() == "cord-testdrive" ||
             $project->pid() == $PROTOGENI_HOLDINGPROJECT) {
             $errors["pid"] = "Not allowed to reserve resources in this project";
         }
@@ -1059,7 +1060,7 @@ function Do_ListReservationGroups()
         $resgroups = ReservationGroup::LookupForUser($this_user);
     }
     foreach ($resgroups as $resgroup) {
-        $reservations[$resgroup->uuid()] = $resgroup->Blob();
+        $reservations[$resgroup->uuid()] = $resgroup->Blob(false);
     }
     SPITAJAX_RESPONSE($reservations);
 }

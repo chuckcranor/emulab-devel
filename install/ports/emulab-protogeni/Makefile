@@ -22,21 +22,11 @@ WANT_PHP_MOD=	yes
 #
 # Various ports need to agree on what version of apache.
 #
-.if (${EMULAB_PORTVERSION} == "7.1" || ${EMULAB_PORTVERSION} == "7.2" || ${EMULAB_PORTVERSION} == "7.3")
-www_apache24_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.MAKEFLAGS+=	WITH_SUEXEC=yes
+.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+www_apache24_SET=	SUEXEC
 .else
-www_apache22_SET=	SUEXEC
-.MAKEFLAGS+=	APACHE_PORT=www/apache22
 .MAKEFLAGS+=	WITH_SUEXEC=yes
-.endif
-
-.if (${EMULAB_PORTVERSION} != "7.1" && ${EMULAB_PORTVERSION} != "7.2" && ${EMULAB_PORTVERSION} != "7.3")
-#
-# Use the base version of openssl
-#
-.MAKEFLAGS+=	WITH_OPENSSL_BASE=yes
 .endif
 
 #
@@ -78,7 +68,7 @@ RUN_DEPENDS+=	\
 	p5-FCGI>=0.74:${PORTSDIR}/www/p5-FCGI
 
 #USE_PERL5=	yes
-USES=		perl5 python:2.7 php
+USES=		perl5 python:$(PY_VER) php
 
 NO_BUILD=	yes
 

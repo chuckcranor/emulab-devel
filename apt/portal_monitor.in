@@ -776,6 +776,8 @@ sub doPing($$)
     my ($hosts, $results) = @_;
     my @hostnames = keys(%{$hosts});
 
+    return if (!@hostnames);
+
     if (! -f "$FPING") {
         fatal("$FPING is not installed\n");
     }

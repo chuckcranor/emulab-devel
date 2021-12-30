@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -86,7 +86,7 @@ sub usage()
         exit(-1);
 }
 
-my $optlist = "s:e:m:vp:rSan:c:uxg:h1:l:zZCbfGRI:";
+my $optlist = "s:e:m:vp:rSan:c:uxg:h1:l:zZCbfGRI:N";
 my $is_advertisement = 0;
 my $mfactor;
 my $virtstuff = 0;
@@ -248,6 +248,7 @@ my %vinterfaces   = ();
 my %rusagedata    = ();
 my %imagelist     = ();
 my %reserved_nodes= ();
+my %simple_links  = ();
 my $typelimitfile;
 
 my $DEADPID = NODEDEAD_PID();
@@ -298,6 +299,23 @@ if (defined($options{"R"})) {
 }
 if (defined($options{"p"})) {
     $pid = $options{"p"};
+
+    if (defined($pid) && ! defined($options{"Z"})) {
+	my $group = Group->Lookup($pid, $pid);
+	if (defined($group)) {
+	    $EmulabFeatures::verbose = 0;
+	    my $newptopgen = EmulabFeatures->FeatureEnabled("NewPtopgen", undef,
+							    $group, undef);
+	    if ($newptopgen) {
+		my $newpath = "$TBROOT/libexec/ptopgen_test";
+		print STDERR "Invoking new ptopgen from $newpath\n"
+		    if (!$genimode);
+		exec $newpath, @SAVEARGV;
+		die("*** $0:\n".
+		    "    Could not exec $newpath: $!");
+	    }
+	}
+    }
 }
 if (defined($options{"a"})) {
     $allnodes = 1;
@@ -377,23 +395,6 @@ usage()
 	    && $genimode ne $V_0_2
 	    && $genimode ne $V_2
 	    && $genimode ne $V_3));
-
-if (defined($pid) && ! defined($options{"Z"})) {
-    my $group = Group->Lookup($pid, $pid);
-    if (defined($group)) {
-	$EmulabFeatures::verbose = 0;
-	my $newptopgen = EmulabFeatures->FeatureEnabled("NewPtopgen", undef,
-							$group, undef);
-	if ($newptopgen) {
-	    my $newpath = "$TBROOT/libexec/ptopgen_new";
-	    print STDERR "Invoking new ptopgen from $newpath\n"
-		if (!$genimode);
-	    exec $newpath, @SAVEARGV;
-	    die("*** $0:\n".
-		"    Could not exec $newpath: $!");
-	}
-    }
-}
 
 # Figure out who is running this script, to be used in finding OSes
 # with per-user permissions.  We assume that the user we want
@@ -713,13 +714,18 @@ if( defined( $pid ) ) {
     foreach my $node (@reservable_nodes) {
 	my $node_id = $node->node_id();
 	foreach my $res (@activereservations) {
-	    if ($res->{'nodetype'} eq $node_id && $res->{'pid'} ne $pid) {
-		#
-		# Node is currently reserved to another project. Mark it
-		# to be pruned out below.
-		#
-		$reserved_nodes{$node_id} = $node;
-		last;
+	    if ($res->{'nodetype'} eq $node_id) {
+		if ($res->{'pid'} ne $pid) {
+		    #
+		    # Node is currently reserved to another project. Mark it
+		    # to be pruned out below.
+		    #
+		    $pruned_nodes{$node_id} = $node;
+		    last;
+		}
+		else {
+		    $reserved_nodes{$node_id} = $node;
+		}
 	    }
 	}
     }
@@ -1317,9 +1323,13 @@ while (($node,$type,$physnode,$class,$issubnode,$def_boot_osid,$reserved,
 	$load_1min,$load_5min,$load_tstamp,$osid,$weight,$country,$latitude,
         $longitude,$isremote,$erole,
 	$allowed_projects,$osfeatures) = $result->fetchrow_array) {
-    my $current = $top->CreateNode($node);
-    $current->SetSubnode($physnode, $issubnode);
-    $current->SetRemote($isremote);
+    
+    my $current = $top->CreateNode($node,
+				   {
+				       "phys_nodeid"  => $physnode,
+				       "issubnode"    => $issubnode,
+				       "isremotenode" => $isremote,
+				   });
 
     #
     # Look for a specific node restriction. Easier to to do here
@@ -1330,7 +1340,7 @@ while (($node,$type,$physnode,$class,$issubnode,$def_boot_osid,$reserved,
 	next
 	    if (! grep {$_ eq $pid} @allowed);	
     }
-    if (defined($pid) && exists($reserved_nodes{$node})) {
+    if (defined($pid) && exists($pruned_nodes{$node})) {
 	#
 	# We determined above that this node is currently reserved to
 	# another project but not currently allocated to that project.
@@ -1770,6 +1780,16 @@ foreach $node (@nodenames) {
 
     if (exists($is_prereserved{$node})) {
 	push(@features,"prereserved:0");
+    }
+
+    #
+    # Handle reservable nodes, we want to demote the other nodes of the
+    # same type,
+    #
+    if (keys(%reserved_nodes)) {
+	if (!exists($reserved_nodes{$node})) {
+	    push(@features, "notreserved_node:0.95");
+	}
     }
 
     # For robots, prefer ones that are already powered on and/or won't need to
@@ -2218,15 +2238,22 @@ while (($node1,$iface1,$node2,$iface2) = $result->fetchrow_array) {
 	if (!defined($node2obj)) {
 	    fatal("Could not lookup $node2");
 	}
+	my $nodeobj;
 	my $switchobj;
 	my $leaf_iface_type;
 	if ($node2obj->isswitch())
 	{
 	    $switchobj = $node2obj;
 	    $leaf_iface_type = get_iface_type($node1,$iface1);
+	    if (!$node1obj->isswitch()) {
+		$nodeobj = $node1obj;
+	    }
 	} elsif ($node1obj->isswitch()) {
 	    $switchobj = $node1obj;
 	    $leaf_iface_type = get_iface_type($node2,$iface2);
+	    if (!$node2obj->isswitch()) {
+		$nodeobj = $node2obj;
+	    }
 	} else {
 	    $switchobj = undef;
 	}
@@ -2360,12 +2387,56 @@ while (($node1,$iface1,$node2,$iface2) = $result->fetchrow_array) {
 	    }
 
 	    if ($bw < 10000000 || $printFastLinks) {
-		print_simple_link($node1, $iface1,
-				  $node2, $iface2,
-				  $bw, 0, 0, \@types);
+		#
+		# Store the info so we can do a post pass to determine
+		# which of the interfaces are fastest and get the special
+		# whacky interface type to make best effort work.
+		#
+		if (defined($switchobj) && defined($nodeobj)) {
+		    my $nodeid = $nodeobj->node_id();
+		    
+		    if (!exists($simple_links{$nodeid})) {
+			$simple_links{$nodeid} = [];
+		    }
+		    push(@{$simple_links{$nodeid}},
+			 [$node1, $iface1,
+			  $node2, $iface2,
+			  $bw, 0, 0, \@types]);
+		}
+		else {
+		    print_simple_link($node1, $iface1,
+				      $node2, $iface2,
+				      $bw, 0, 0, \@types);
+		}
 	    }
 	}
     } 
+}
+
+#
+# Process the node->switch links, the fastest interfaces on each node
+# are labeled so that best effort links can prefer them.
+#
+foreach my $nodeid (keys(%simple_links)) {
+    #
+    # Find fastest speed.
+    #
+    my $maxbw = 0;
+
+    foreach my $ref (@{$simple_links{$nodeid}}) {
+	my (undef,undef,undef,undef,$bw) = @$ref;
+	if ($bw > $maxbw) {
+	    $maxbw = $bw;
+	}
+    }
+    foreach my $ref (@{$simple_links{$nodeid}}) {
+	my ($n1,$i1,$n2,$i2,$bw,$d,$l,$types) = @$ref;
+	
+	push(@{$types}, "besteffort-interface")
+	    if ($bw == $maxbw);
+	
+	print_simple_link($n1,$i1,$n2,$i2,$bw,$d,$l,$types);
+    }
 }
 
 #

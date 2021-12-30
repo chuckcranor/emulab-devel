@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -218,13 +218,18 @@ function REQUIRE_MOMENT()
   AddLibrary("js/lib/moment.js");
 }
 
+# This breaks the powder map, something in arcgis.
+function REQUIRE_MOMENTTIMEZONE()
+{
+  AddLibrary("js/lib/moment-timezone.js");
+}
+
 function REQUIRE_TABLESORTER($extras = null)
 {
     echo "<link rel='stylesheet'
                 href='css/tablesorter-bootstrap_3.css'>\n";
     
-  AddLibrary("js/lib/tablesorter/jquery.tablesorter.min.js");
-  AddLibrary("js/lib/tablesorter/jquery.tablesorter.widgets.js");
+  AddLibrary("js/lib/tablesorter/jquery.tablesorter.combined.js");
   AddLibrary("js/lib/sugar.min.js");
   AddLibrary("js/lib/tablesorter/parsers/parser-date.js");
   AddLibrary("js/lib/tablesorter/widgets/widget-math.js");

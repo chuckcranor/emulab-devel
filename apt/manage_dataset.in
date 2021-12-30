@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -281,6 +281,10 @@ sub DoCreate()
 	if (!APT_Dataset::ValidBlockstoreBackend($aggregate_urn)) {	
 	    fatal("Invalid cluster selection");
 	}
+	$aggregate = APT_Aggregate->Lookup($aggregate_urn);
+	if (!defined($aggregate)) {
+	    fatal("Could not lookup aggregate: $aggregate_urn\n");
+	}
     }
     if (defined($options{"f"})) {
 	$fstype = $options{"f"};
@@ -302,8 +306,11 @@ sub DoCreate()
 	    $size = $1;
 	}
 	elsif ($options{"s"} =~ /^(\d+)(\w+)$/) {
-	    # Converter wants upper case.
-	    $size = Blockstore::ConvertToMebi(uc($options{"s"}));
+	    # Get into form expected by the converter.
+	    $size = uc($options{"s"});
+	    $size =~ s/I/i/;
+
+	    $size = Blockstore::ConvertToMebi($size);
 	    if ($size < 0) {
 		fatal("Could not parse size.");
 	    }
@@ -332,6 +339,9 @@ sub DoCreate()
     if ($name =~ /^([-\w]+)\/([-\w]+)$/) {
 	$pid  = $1;
 	$name = $2;
+	if (length($name) > 24) {
+	    UserError("Dataset name is too long: maximum 24 characters");
+	}
     }
     else {
 	fatal("Dataset name $name not in the form <pid>/<name>.");
@@ -411,10 +421,10 @@ sub DoCreate()
     #
     my $response = $dataset->CreateDataset();
     if ($response->code() != GENIRESPONSE_SUCCESS) {
-	$errmsg = "CreateDataset failed: ". $response->output() . "\n";
+	$dataset->Delete();
 	$instance->Unlock()
 	    if (defined($instance));
-	goto failed;
+	ExitWithError($response);
     }
     $blob = $response->value();
     $dataset->Update({"remote_uuid" => $blob->{"uuid"},
@@ -823,7 +833,7 @@ sub DoSnapshot()
 	}
     }
     # Check if the aggregate is online and reachable. 
-    if ($aggregate->CheckStatus(\$errmsg)) {
+    if ($aggregate->GetAptAggregate()->CheckStatus(\$errmsg)) {
 	UserError($errmsg);
     }
     
@@ -913,7 +923,7 @@ sub CheckIMDataset($$$$$)
 
 		    if ($name eq $bsname) {
 			if (!defined($dataset_id) &&
-			    (!defined($size) || $size == 0)) {
+			    (!defined($size) || "$size" eq "0")) {
 			    $$perrmsg = "Not allowed to create an image ".
 				"backed dataset from a blcokstore that uses ".
 				"all available disk space ".
@@ -1479,6 +1489,7 @@ sub ExitWithError($)
     #
     if ($code == GENIRESPONSE_REFUSED ||
 	$code == GENIRESPONSE_SEARCHFAILED ||
+	$code == GENIRESPONSE_ALREADYEXISTS ||
 	$code == GENIRESPONSE_SERVER_UNAVAILABLE ||
 	$code == GENIRESPONSE_NETWORK_ERROR ||
 	$code == GENIRESPONSE_BUSY) {

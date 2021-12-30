@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2017 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2496,11 +2496,11 @@ sub Lookup($$;$)
     }
     elsif (!ref($arg1)) {
 	# Two args means lookup by $experiment,$vname
-	print STDERR "VLan->Lookup(): Bad first argument: $arg1\n";
+	#print STDERR "VLan->Lookup(): Bad first argument: $arg1\n";
 	return undef;
     }
     elsif (! ($arg2 =~ /^[-\w\/]*$/)) {
-	print STDERR "VLan->Lookup(): Bad second argument: $arg2\n";
+	#print STDERR "VLan->Lookup(): Bad second argument: $arg2\n";
 	return undef;
     }
     else {
@@ -3313,6 +3313,28 @@ sub ExperimentVLans($$$)
 }
 
 #
+# Does an experiment have an vlans? This is a class method.
+#
+sub ExperimentHasVLans($$)
+{
+    my ($class, $experiment) = @_;
+    my $exptidx = $experiment->idx();
+
+    my $query_result =
+	DBQueryWarn("select l.lanid from lans as l ".
+		    "left join lan_attributes as la on ".
+		    "  la.lanid=l.lanid and la.attrkey='class' ".
+		    "where (l.type='vlan' or l.type='wire') ".
+                    " and l.exptidx='$exptidx' and ".
+		    "      (la.attrvalue='Experimental' or ".
+		    "       la.attrvalue is null)");
+    return -1
+	if (!defined($query_result));
+
+    return $query_result->numrows;
+}
+
+#
 # Find a vlan by looking an interface in the vlan.
 #
 sub FindVlanByInterface($$$)
@@ -3367,15 +3389,8 @@ sub Instantiate($;$)
 
 sub GetVlanSwitchPath($)
 {
-    my ($class, $vlan) = @_;
-
-    if (!ref($vlan)) {
-	$vlan = VLan->Lookup($vlan);
-    }
-    return undef
-	if (!defined($vlan));
-
-    my $lanid = $vlan->lanid();
+    my ($self) = @_;
+    my $lanid  = $self->lanid();
 
     my $query_result =
         DBQueryWarn("select switchpath from vlans where id='$lanid'");
@@ -3384,6 +3399,19 @@ sub GetVlanSwitchPath($)
 
     my ($path) = $query_result->fetchrow_array();
     return $path;
+}
+
+sub SetVlanSwitchPath($$)
+{
+    my ($self, $path) = @_;
+    my $lanid = $self->lanid();
+    my $set   = defined($path) ? "switchpath='$path'" : "switchpath=null";
+
+    DBQueryWarn("update vlans set $set ".
+		"where id='$lanid'")
+	or return -1;
+
+    return 0;
 }
 
 #

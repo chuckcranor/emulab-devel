@@ -1,0 +1,20 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (DBSlotType("users", "usr_shell") !~ /enum/) {
+	DBQueryFatal("update users set usr_shell='bash' ".
+		     "where usr_shell is null");
+	DBQueryFatal("alter table users change usr_shell ".
+		     " `usr_shell` enum('tcsh','bash','sh') default 'bash'");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

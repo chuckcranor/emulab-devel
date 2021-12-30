@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2017 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,6 +69,7 @@ define("PAGEARG_ARRAY",		"array");
 define("PAGEARG_ANYTHING",	"anything");
 define("PAGEARG_ALPHALIST",     "alphalist");
 define("PAGEARG_UUID",		"uuid");
+define("PAGEARG_URL",   	"url");
 
 define("URL_USER",		"user");
 define("URL_PROJECT",		"project");
@@ -681,6 +682,24 @@ function VerifyPageArguments($argspec, $required)
 		    $object = htmlspecialchars($object);
 		    PAGEARGERROR("Invalid characters in '$name': $object");
 		}
+	    }
+	    break;
+	    
+	case PAGEARG_URL:
+            # Note that PHP has already urldecoded $_REQUEST values.
+	    if (isset($_REQUEST[$name])) {
+		$object = $_REQUEST[$name];
+		$yep = 1;
+
+                #
+                # We use this strictly for internal URLs, so we can be
+                # very narrow in what we allow, to avoid XSS attacks.
+                #
+                if (!preg_match("/^[-\w\?\/\&\.=\+\:]+$/", $object)) {
+                    error_log($object);
+		    $object = htmlspecialchars($object);
+		    PAGEARGERROR("Invalid characters in '$name': $object");
+                }
 	    }
 	    break;
 	    

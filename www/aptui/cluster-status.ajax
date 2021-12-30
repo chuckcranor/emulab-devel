@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -165,6 +165,8 @@ function Do_GetStatus()
                     # We can generate the maxttl here, ignoring whatever the
                     # cluster might think. We need the slice though.
                     #
+                    $tmpttl = $maxttl;
+                    
                     if ($slice && 
                         !($instance->admin_lockdown() ||
                           $instance->user_lockdown())) {
@@ -176,7 +178,7 @@ function Do_GetStatus()
 
                         if ($instance->extension_disabled() ||
                             ($cdiff > (3600 * 24 * $autoextend_maxage))) {
-                            $maxttl = $slice_expires - time();
+                            $tmpttl = $slice_expires - time();
                         }
                         else {
                             #
@@ -186,9 +188,12 @@ function Do_GetStatus()
                             # avoid termination before we get a chance to look
                             # at it.
                             #
-                            $maxttl = ($slice_created + (3600 * 24 * 2) +
+                            $tmpttl = ($slice_created + (3600 * 24 * 2) +
                                     (3600 * 24 * $autoextend_maxage)) - time();
                         }
+                    }
+                    if ($tmpttl < $maxttl) {
+                        $maxttl = $tmpttl;
                     }
                 }
                 else {
@@ -332,6 +337,7 @@ function Do_GetPreReservations()
     }
     $results = $webtask->TaskDataObject()->results;
     $inuse = $results->details;
+    $webtask->Delete();
 
     SPITAJAX_RESPONSE($inuse);
 }

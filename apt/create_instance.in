@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -36,6 +36,7 @@ use Date::Parse;
 use Data::Dumper;
 use JSON;
 use Cwd qw(realpath);
+use Carp qw(cluck);
 
 #
 # Create a quick VM.
@@ -66,7 +67,6 @@ my $privkeyfile;
 my $slice;
 my $sitemap;
 my $usetracker = 0;
-my $maxduration = 16; # Hours. Need to make this a site variable.
 my @aggregate_urns = ();
 my @prestage = ();
 
@@ -108,8 +108,38 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 #
 $| = 1;
 
-# Load the Testbed support stuff.
+# Needed in the BEGIN block.
 use lib "@prefix@/lib";
+
+# Limit. Do not initialize this variable, used in the BEGIN block.
+my $seriallock;
+
+BEGIN {
+    require libEmulab;
+    import libEmulab;
+    
+    while (1) {
+	if (libEmulab::EmulabCountLock("create_instance_lock", 10) == 0) {
+	    $seriallock = 1;
+	    last;
+	}
+	print STDERR "Waiting for the create_instance_lock lock ...\n";
+	sleep(2);
+    }
+    while (LoadAverage() > 30) {
+	print STDERR "Load too high, waiting\n";
+	sleep(1);
+    }
+}
+END {
+    # Be careful not to leave this locked on abnormal exit.
+    if ($seriallock) {
+	libEmulab::EmulabCountUnlock("create_instance_lock");
+	$seriallock = 0;
+    }
+}
+
+# Load the Testbed support stuff.
 use EmulabConstants;
 use libtestbed;
 use libaudit;
@@ -297,13 +327,13 @@ if (exists($xmlparse->{'attribute'}->{"duration"}) &&
     if ($duration !~ /^\d+$/) {
 	fatal("Duration is not an integer");
     }
-    if ($duration < 1 || $duration > $maxduration) {
+    if ($duration < 1 || $duration > $DEFAULT_DURATION) {
 	UserError("Duration must be at least 1 hour but ".
-		  "not more then $maxduration hour(s)");
+		  "not more then $DEFAULT_DURATION hour(s)");
     }
 }
 else {
-    $duration = $maxduration; 
+    $duration = $DEFAULT_DURATION; 
 }
 
 #
@@ -386,8 +416,13 @@ if ($profile->repourl()) {
 			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	    fatal("Illegal script for repo-based profile");
 	}
-	if (!exists($xmlparse->{'attribute'}->{"reporef"})) {
-	    fatal("Missing refspec for repository");
+	if (! (exists($xmlparse->{'attribute'}->{"reporef"}) ||
+	       exists($xmlparse->{'attribute'}->{"repohash"}))) {
+	    fatal("Missing refspec or hash for repository");
+	}
+	if (exists($xmlparse->{'attribute'}->{"reporef"}) &&
+	    !exists($xmlparse->{'attribute'}->{"repohash"})) {
+	    fatal("Got a reporef but no hash");
 	}
     }
     if (exists($xmlparse->{'attribute'}->{"paramdefs"})) {
@@ -398,32 +433,30 @@ if ($profile->repourl()) {
 	    fatal("Illegal paramdefs for repo-based profile");
 	}
     }
-    if (exists($xmlparse->{'attribute'}->{"reporef"})) {
-	if (!exists($xmlparse->{'attribute'}->{"repohash"})) {
-	    fatal("Missing hash for repository");
-	}
-	$reporef  = $xmlparse->{'attribute'}->{"reporef"}->{'value'};
+    if (exists($xmlparse->{'attribute'}->{"repohash"})) {
 	$repohash = $xmlparse->{'attribute'}->{"repohash"}->{'value'};
 
 	if (! TBcheck_dbslot($repohash, "apt_profiles", "repohash",
 			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	    fatal("Illegal repository hash");
 	}
-	if (! TBcheck_dbslot($reporef, "default", "tinytext",
-			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-	    fatal("Illegal repository refspec");
+	if (exists($xmlparse->{'attribute'}->{"reporef"})) {
+	    $reporef  = $xmlparse->{'attribute'}->{"reporef"}->{'value'};
+	    if (! TBcheck_dbslot($reporef, "default", "tinytext",
+				 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+		fatal("Illegal repository refspec");
+	    }
 	}
     }
     else {
-	# Otherwise we are instantiating whatever the profile itself references.
-	#$reporef  = "refs/heads/master";
+	$reporef  = $profile->reporef();
 	$repohash = $profile->repohash();
 	$paramdefs= $profile->paramdefs();
     }
 }
 
 #
-# We want to stash simplified bindings in the DB whie the instance is
+# We want to stash simplified bindings in the DB while the instance is
 # active, for display purposes.
 #
 if (defined($paramdefs)) {
@@ -745,6 +778,23 @@ elsif (!$localuser) {
 	fatal("Project $pid does not exist");
     }
 }
+
+#
+# Watch for cluster restrictions on the project.
+#
+if ($project->allowed_clusters()) {
+    my $restrictions = APT_Aggregate->AllowedAggregates($project);
+    if ($restrictions) {
+	foreach my $urn (@aggregate_urns) {
+	    if (! exists($restrictions->{$urn})) {
+		my $agg = APT_Aggregate->Lookup($urn);
+		UserError("Project $pid is not allowed to use cluster ".
+			  $agg->name());
+	    }
+	}
+    }
+}
+
 if (defined($profile->repourl())) {
     #
     # Make sure the repo is still accessible.
@@ -785,35 +835,154 @@ if ($tmp) {
 #
 # New approach; if less then max duration, no reservations are needed.  But
 # if more then max duration (powder portal only), then user must have valid
-# reservations for the resources and time frame specified.
+# reservations for the resources and time frame specified. Note that only
+# the powder portal will get this far with duration greater than the default
+# max duration.
 #
 my $noresokay = 1;
 if (defined($stop_at)) {
     $duration = $stop_at - (defined($start_at) ? $start_at : time());
-    if ($duration > $maxduration * 3600) {
+    if ($duration > $DEFAULT_DURATION * 3600) {
 	$noresokay = 0;
     }
 }
-if (APT_Profile::CheckResources($rspec, $project,
-				(defined($start_at) ? $start_at : time()),
-				(defined($stop_at) ? $stop_at :
-				 time() + ($duration * 3600)),
-				$noresokay, \$errmsg)) {
-    UserError($errmsg);
+my $start = (defined($start_at) ? $start_at : time());
+my $end   = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
+
+#
+# First sanity check the resources, then resource reservation requirements.
+# The type counts can be expensive to compute on a big topology, so save
+# for the reservation checks.
+#
+my $resources;
+my $retval = APT_Profile::CheckResources($rspec, \$errmsg, \$resources);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
-if (APT_Profile::CheckSpectrum($rspec, $project,
-			       (defined($start_at) ? $start_at : time()),
-			       (defined($stop_at) ? $stop_at :
-				time() + ($duration * 3600)),
-			       $noresokay, \$errmsg)) {
-    UserError($errmsg);
+$retval =
+    APT_Profile::CheckResourceReservations($rspec, $project, $start, $end,
+					   $noresokay, \$errmsg, $resources);
+if ($retval) {
+    if ($retval < 0) {
+	fatal($errmsg);
+    }
+    elsif (!defined($start_at)) {
+	# Immediate start, throw the error back to the user.
+	UserError($errmsg);
+    }
+    else {
+	#
+	# Warn user that resources must be reserved by the time the
+	# experiment starts.
+	#
+	if (defined($webtask)) {
+	    $webtask->reservationWarn($errmsg);
+	}
+	else {
+	    print "Some resources still need to be reserved before the ".
+		"experiment start time is reached\n";
+	}
+    }
 }
-if (APT_Profile::CheckRoutes($rspec, $project,
-			       (defined($start_at) ? $start_at : time()),
-			       (defined($stop_at) ? $stop_at :
-				time() + ($duration * 3600)),
-			       $noresokay, \$errmsg)) {
-    UserError($errmsg);
+#
+# Warn user about deprecated image use. This will possibly duplicate the
+# email sent by the aggregates, but the email from the portal has a better
+# chance of getting through the user's spam filter. 
+#
+$retval = APT_Profile::CheckForDeprecatedImages($resources, $project,
+						$geniuser->emulab_user(),
+						\$errmsg);
+if ($retval) {
+    if ($retval < 0) {
+	fatal($errmsg);
+    }
+    else {
+	UserError($errmsg);
+    }
+}
+
+#
+# Spectrum sanity checks, then spectrum reservation checks.
+#
+my $spectrum;
+$retval = APT_Profile::CheckSpectrum($rspec, \$errmsg, \$spectrum);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+$retval =
+    APT_Profile::CheckSpectrumPermission($rspec, $project, \$errmsg, $spectrum);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+$retval =
+    APT_Profile::CheckSpectrumReservations($rspec, $project, $start, $end,
+					   $noresokay, \$errmsg,
+					   $spectrum, $resources);
+if ($retval) {
+    if ($retval < 0) {
+	fatal($errmsg);
+    }
+    elsif (!defined($start_at)) {
+	# Immediate start, throw the error back to the user.
+	UserError($errmsg);
+    }
+    else {
+	#
+	# Warn user that spectrum must be reserved by the time the
+	# experiment starts.
+	#
+	if (defined($webtask)) {
+	    $webtask->reservationWarn($errmsg);
+	}
+	else {
+	    print "Some spectrum still needs to be reserved before the ".
+		"experiment start time is reached\n";
+	}
+    }
+}
+#
+# And the routes.
+#
+$retval = APT_Profile::CheckRoutes($rspec, \$errmsg, \$routes);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+$retval =
+    APT_Profile::CheckRoutesPermission($rspec, $project, $start, $end,
+				       \$errmsg, $routes);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+$retval =
+    APT_Profile::CheckRoutesReservations($rspec, $project, $start, $end,
+					 $noresokay, \$errmsg, $routes);
+if ($retval) {
+    if ($retval < 0) {
+	fatal($errmsg);
+    }
+    elsif (!defined($start_at)) {
+	# Immediate start, throw the error back to the user.
+	UserError($errmsg);
+    }
+    else {
+	#
+	# Warn user that routes must be reserved by the time the
+	# experiment starts.
+	#
+	if (defined($webtask)) {
+	    $webtask->reservationWarn($errmsg);
+	}
+	else {
+	    print "Some routes still need to be reserved before the ".
+		"experiment start time is reached.\n";
+	}
+    }
+}
+# This check ensures that people do not allocate buses directly unless
+# they have special permission. Mere users must allocate routes.
+$retval = APT_Profile::CheckForBuses($rspec, $project, \$errmsg);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
 
 #
@@ -828,14 +997,8 @@ if (!$debug) {
     AddAuditInfo("brand", $project->Brand());
 }
 
-# Very temporary!
-my $foo = APT_Profile::CheckForBuses($rspec, $project, \$errmsg);
-if ($foo) {
-    ($foo < 0 ? fatal($errmsg) : UserError($errmsg));
-}
-
 # Check for expired certs and speaksfor.
-my $retval = APT_Geni::VerifyCredentials($geniuser, \$errmsg);
+$retval = APT_Geni::VerifyCredentials($geniuser, \$errmsg);
 if ($retval) {
     ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
@@ -846,7 +1009,7 @@ if ($retval) {
 #
 my $safe_uid    = $user_uid; $safe_uid =~ s/_/-/;
 my $slice_id    = (defined($userslice_id) ? $userslice_id :
-		   $safe_uid . "-QV" . TBGetUniqueIndex('next_quickvm', 1));
+		   $safe_uid . "-" . TBGetUniqueIndex('next_quickvm', 1));
 my $slice_auth  = ($pid eq $gid ? $pid : "${pid}:${gid}");
 my $slice_urn   = GeniHRN::Generate("${OURDOMAIN}:${slice_auth}",
 				    "slice", $slice_id);
@@ -901,6 +1064,11 @@ if ($slice->SetExpiration((defined($stop_at) ? $stop_at :
 }
 my $slice_uuid = $slice->uuid();
 
+# Avoid pointless geni churn
+if ($project->pid() eq "OAI2021FallWS") {
+    $slice->SetRegisteredFlag(1);
+}
+
 #
 # Generate a new ssl key/cert to be used to derive an ssh key pair
 # or whatever else is needed. This is sent along as an option when the
@@ -936,7 +1104,7 @@ $tmp = APT_Profile::EncryptBlocks($rspec, $alt_certificate, \$errmsg);
 if ($tmp) {
     ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
 }
-$rspecstr = GeniXML::Serialize($rspec);
+$rspecstr = GeniXML::Serialize($rspec, 2);
 
 #
 # Got this far, lets create a quickvm record.
@@ -1011,7 +1179,8 @@ foreach my $aggregate_urn (@aggregate_urns) {
     # Check to make sure the aggregate is online and reachable
     # We do not do this if the experiment start is deferred.
     if (!defined($start_at)) {
-	if ($aptaggregate->CheckStatus(\$errmsg)) {
+	if ($project->pid() ne "OAI2021FallWS" &&
+	    $aptaggregate->CheckStatus(\$errmsg)) {
 	    if ($usestitcher ||
 		!$aptaggregate->deferrable() ||
 		$nopending ||
@@ -1099,6 +1268,13 @@ if (@prestage) {
 	$agg->SetStatus("prestage");
     }
 }
+
+# Ok to let other proceed.
+if ($seriallock) {
+    libEmulab::EmulabCountUnlock("create_instance_lock");
+    $seriallock = 0;
+}
+
 #
 # If scheduled, then mark it and exit immediately. If there are also prestage
 # aggregates, the scheduler will pick it up as needed.
@@ -1124,23 +1300,15 @@ if (! ($debug || $foreground)) {
     libaudit::AuditFork();
 }
 
-system("$CREATESLIVERS -L -f " .
-       ($debug ? "-d " : "") . ($usestitcher ? "-S " : "") . $quickvm_uuid);
-if ($?) {
-    my $code = $? >> 8;
-    $code = -1
-	if ($code == 255);
-    #
-    # If we did not use the stitcher, a positive exit code indicates
-    # a user error, not a system error. We abort the logging so that
-    # only the user sees the error. 
-    #
-    if (!$usestitcher && $code > 0) {
-	AuditAbort()
-	    if (! ($debug || $foreground));
-    }
-    exit($code);
-}
+#
+# End the current audit, create_slivers will start a new one.
+# 
+AuditEnd();
+
+exec("$CREATESLIVERS -L -f -a " .
+     ($debug ? "-d " : "") .
+     ($ignorefailures ? "-i " : "") .
+     ($usestitcher ? "-S " : "") . $quickvm_uuid);
 exit(0);
 
 sub fatal($) {
@@ -1174,4 +1342,3 @@ sub UserError($;$) {
     print $mesg . "\n";
     exit($code);
 }
-

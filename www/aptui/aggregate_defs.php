@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -125,6 +125,16 @@ class Aggregate
         return $url;
     }
 
+    function isLocalCluster() {
+        global $OURDOMAIN;
+        $myurn = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+
+        if ($this->urn() == $myurn) {
+            return 1;
+        }
+        return 0;
+    }
+
     # Powder Portal, Emulab is not a "federate", all others are.
     function isfederate() {
         global $PORTAL_GENESIS;
@@ -182,6 +192,25 @@ class Aggregate
     }
 
     #
+    # Lookup using the name
+    #
+    function LookupByName($name) {
+        if (! preg_match("/^[-\w\.]+$/", $name)) {
+            return null;
+        }
+        $query_result =
+            DBQueryWarn("select urn from apt_aggregates ".
+                        "where name='$name'");
+	if (!$query_result || !mysql_num_rows($query_result)) {
+            return null;
+        }
+	$row = mysql_fetch_array($query_result);
+	$urn = $row['urn'];
+
+        return Aggregate::Lookup($urn);
+    }
+
+    #
     # Generate the free nodes URL from the web url.
     #
     function FreeNodesURL() {
@@ -192,12 +221,14 @@ class Aggregate
     # Return a list of aggregates supporting datasets.
     #
     function SupportsDatasetsList() {
+        global $PORTAL_GENESIS;
 	$result  = array();
 
 	$query_result =
 	    DBQueryFatal("select urn from apt_aggregates ".
-			 "where has_datasets!=0 and disabled=0");
-
+			 "where has_datasets!=0 and disabled=0 and ".
+                         "      FIND_IN_SET('$PORTAL_GENESIS', portals)");
+        
 	while ($row = mysql_fetch_array($query_result)) {
 	    $urn = $row["urn"];
 
@@ -665,6 +696,26 @@ class Aggregate
             }
         }
         return $blob;
+    }
+
+    #
+    # Get list of allowed clusters for a project, or null if none.
+    #
+    function AllowedAggregates($project)
+    {
+        if (! $project->allowed_clusters()) {
+            return null;
+        }
+        $result   = array();
+        $clusters = preg_split("/,/", $project->allowed_clusters());
+
+        foreach ($clusters as $domain) {
+            $cluster = Aggregate::LookupByDomain($domain);
+            if ($cluster) {
+                $result[$cluster->urn()] = $cluster;
+            }
+        }
+        return $result;
     }
 }
 

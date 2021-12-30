@@ -33,6 +33,7 @@ $(function ()
     var editor       = null;
     var myCodeMirror = null;
     var isppprofile  = false;
+    var profile      = null;
     var isadmin      = 0; 
     var multisite    = 0; 
     var APT_NS    = "http://www.protogeni.net/resources/rspec/ext/apt-tour/1";
@@ -69,6 +70,7 @@ $(function ()
 	var fields   = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	var errors   = JSON.parse(_.unescape($('#error-json')[0].textContent));
 	var projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
+	profile = fields;
 	var versions = null;
 	var sorted_versions = null;
 	if (window.VIEWING) {
@@ -141,7 +143,7 @@ $(function ()
 	    latest_uuid:	window.LATEST_UUID,
 	    latest_version:	window.LATEST_VERSION,
 	    candelete:		window.CANDELETE,
-	    canmodify:		window.CANMODIFY,
+	    canmodify:		window.CANEDIT,
 	    canpublish:		window.CANPUBLISH,
 	    isadmin:		window.ISADMIN,
 	    isstud:		window.ISSTUD,
@@ -149,6 +151,7 @@ $(function ()
 	    isleader:		window.ISLEADER,
 	    history:		window.HISTORY,
 	    activity:		window.ACTIVITY,
+	    paramsets:		window.PARAMSETS,
 	    manual:             window.MANUAL,
 	    copyuuid:		(window.COPYUUID || null),
 	    snapuuid:		(window.SNAPUUID || null),
@@ -180,7 +183,10 @@ $(function ()
 	$('#publish_div').html(publishString);
     	var rspectext_html = rspectextTemplate({});
 	$('#rspectext_div').html(rspectext_html);
-	$('#share_div').html(shareTemplate({formfields: fields}))
+	$('#share_div').html(shareTemplate({
+	    formfields: fields,
+	    fromrepo:   fromrepo
+	}));
 	$('#copy_repobased_profile_div').html(copyrepoString);
 
 	// Fireoff repo stuff now.
@@ -198,6 +204,9 @@ $(function ()
 		    document.execCommand("copy");
 		});
 	}
+	// Copy profile.
+	CopyProfile.InitCopyProfile('#copy-profile-button',
+				    version_uuid, projlist);
 	
 	//
 	// Fix for filestyle problem; not a real class I guess, it
@@ -638,6 +647,9 @@ $(function ()
 	    }
 	    sup.ShowModal("#share_profile_modal");
 	});
+	// Bind the copy to clipbload button in the share modal
+	window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
+	
 	// Handler for updates to the example portals field, on the
 	// the Mothership, where we have multiple portals.
 	$('.examples_portals_checkbox').click(function(event) {
@@ -1440,12 +1452,13 @@ $(function ()
 	
 	var callback = function(blob) {
 	    console.info("HandleGitRepoUpdate", blob);
-	    if (blob) {
+	    if (!blob) {
+		repobusy = false;
+	    }
+	    else {
 		// Mark as HEAD in the page.
 		repohash = blob.hash;
-	    }
-	    
-	    if (blob) {
+
 		/*
 		 * If the source was an rspec, we updated the profile
 		 * to match the current repo right away. But to make things
@@ -1459,7 +1472,7 @@ $(function ()
 		    NewRspecHandler(blob.source);
 		    // Reset the list of tags and branches whenever we
 		    // successfully update our clone.
-		    SetupRepo();
+		    SetupRepo(function () { repobusy = false; });
 		    return;
 		}
 		/*
@@ -1470,7 +1483,7 @@ $(function ()
 		changeRspec(blob.source, function(modified) {
 		    // Reset the list of tags and branches whenever we
 		    // successfully update our clone.
-		    SetupRepo();
+		    SetupRepo(function () { repobusy = false; });
 		});
 	    }
 	};
@@ -1496,17 +1509,30 @@ $(function ()
 	checker();
     }
 
-    function SetupRepo()
+    function SetupRepo(callback)
     {
-	console.info("SetupRepo");
+	console.info("SetupRepo", callback);
 
-	gitrepo.InitRepoPicker(version_uuid, reporefspec,
-			       function(which) {
-				   // So we remember what the user selected.
-				   reporefspec = which;
-				   UpdateInstantiateButton();
-				   SelectRepoTarget(which);
-			       });
+	var deferred =
+	    gitrepo.InitRepoPicker({
+		"uuid"      : version_uuid,
+		"share_url" : profile.profile_profile_url,
+		"refspec"   : reporefspec,
+		"callback"  : function(which) {
+		    // So we remember what the user selected.
+		    reporefspec = which;
+		    UpdateInstantiateButton();
+		    SelectRepoTarget(which);
+		}
+	    });
+				   
+	$.when(deferred)
+	    .done(function (r1) {
+		console.info("SetupRepo InitRepoPicker", r1)
+		if (callback) {
+		    callback();
+		}
+	    });
     }
 
     /*
@@ -1522,7 +1548,11 @@ $(function ()
 		changeRspec(source);
 	    }
 	};
-	gitrepo.GetRepoSource(version_uuid, which, callback);
+	gitrepo.GetRepoSource({
+	    "uuid"      : version_uuid,
+	    "refspec"   : which,
+	    "callback"  : callback
+	});
     }
 
     /*
@@ -1605,7 +1635,7 @@ $(function ()
     function openEditor(source)
     {
         var readonly = true;
-        if ((window.CANMODIFY !== 0 ||
+        if ((window.CANEDIT !== 0 ||
 	     window.ACTION === 'create') &&
 	     fromrepo === 0 &&
 	     gotscript == 1)
@@ -1712,7 +1742,7 @@ $(function ()
 
     function UpdateButtons()
     {
-	console.info(window.VIEWING, window.CANMODIFY,
+	console.info(window.VIEWING, window.CANEDIT,
 		     fromrepo, gotscript, gotrspec, portal_converted);
 
 	if (! (gotscript || gotrspec)) {
@@ -1725,7 +1755,7 @@ $(function ()
 	    $('#show_source_modal_button').html('Edit Code');
 	}
 	else {
-	    var caneditcode = (!window.VIEWING || window.CANMODIFY ? 1 : 0);
+	    var caneditcode = (!window.VIEWING || window.CANEDIT ? 1 : 0);
 	    var canedittopo = caneditcode;
 
 	    // In general, scripts can be edited, subject to changes below.

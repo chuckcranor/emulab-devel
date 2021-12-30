@@ -119,6 +119,8 @@ sysetc-install:	dir-install
 	fi
 	$(INSTALL) -m 644 $(SRCDIR)/99-emulab-networkd.rules \
 		$(SYSETCDIR)/udev/rules.d/99-emulab-networkd.rules
+	$(INSTALL) -m 644 $(SRCDIR)/01-disable-bluefield-nvme.rules \
+		$(SYSETCDIR)/udev/rules.d/01-disable-bluefield-nvme.rules
 
 systemd-install: dir-install
 	# NB: this *has* to go into /lib/systemd/system, not /etc -- it will

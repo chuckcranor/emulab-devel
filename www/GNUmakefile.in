@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -167,6 +167,7 @@ APTCSSFILES = $(wildcard $(SRCDIR)/aptui/css/*.css)
 APTFONTS = $(wildcard $(SRCDIR)/aptui/fonts/*)
 APTIMAGES = $(wildcard $(SRCDIR)/aptui/images/*)
 JSTREE = $(wildcard $(SRCDIR)/aptui/jstree/*)
+AFFILIATIONS = $(wildcard $(SRCDIR)/aptui/affiliations/*)
 
 APTNEWJSFILES   = $(wildcard $(SRCDIR)/aptui/js/new/*.js)
 APTNEWTEMPLATES = $(wildcard $(SRCDIR)/aptui/template/new/*.html)
@@ -237,6 +238,7 @@ ALLAPTCSS = $(notdir $(APTCSSFILES))
 ALLAPTFONTS = $(notdir $(APTFONTS))
 ALLAPTIMAGES = $(notdir $(APTIMAGES))
 ALLJSTREE = $(notdir $(JSTREE))
+ALLAFFIL = $(notdir $(AFFILIATIONS))
 ALLAPTSORT = $(subst $(SRCDIR)/aptui/js/lib/,,$(APTSORTFILES))
 
 ALLAPTNEWJS  = $(notdir $(APTNEWJSFILES))
@@ -263,6 +265,7 @@ INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/cvsweb/, $(ALLCVSWEB)) \
 	$(addprefix $(INSTALL_DIR)/opsdir/www/cvsweb/, $(ALLOPSCVSWEB)) \
+	$(INSTALL_DIR)/opsdir/www/webssh/webssh.html \
 	$(INSTALL_DIR)/opsdir/www/accept_cert.html \
 	$(INSTALL_WWWDIR)/wikidocs/wiki/ignore.html \
 	$(INSTALL_WWWDIR)/doc/LICENSE.txt
@@ -294,6 +297,7 @@ apt-install: 	$(addprefix $(INSTALL_WWWDIR)/apt/, $(ALLAPTUI)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/fonts/, $(ALLAPTFONTS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/images/, $(ALLAPTIMAGES)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/jstree/, $(ALLJSTREE)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/affiliations/, $(ALLAFFIL)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/js/new/, $(ALLAPTNEWJS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/template/new/, $(ALLAPTNEWTEMPLATES))
 	cd $(INSTALL_WWWDIR) && \
@@ -340,6 +344,11 @@ $(INSTALL_DIR)/opsdir/www/%.html: %.html htmlinstall
 	$(HTMLINSTALL) $(subst $$,\$$,$<) $(subst $$,\$$,$@) 
 
 $(INSTALL_DIR)/opsdir/www/%: %
+	@echo "Installing $<"
+	-mkdir -p $(patsubst %/,%,$(dir $@))
+	$(INSTALL_DATA) $(subst $$,\$$,$<) $(subst $$,\$$,$@) 
+
+$(INSTALL_DIR)/opsdir/www/webssh/%: %
 	@echo "Installing $<"
 	-mkdir -p $(patsubst %/,%,$(dir $@))
 	$(INSTALL_DATA) $(subst $$,\$$,$<) $(subst $$,\$$,$@) 

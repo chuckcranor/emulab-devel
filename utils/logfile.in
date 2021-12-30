@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2020 University of Utah and the Flux Group.
+# Copyright (c) 2003-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,7 +33,7 @@ use Time::Local;
 #
 sub usage()
 {
-    print STDERR "Usage: logfile <logid | logidx | filename>";
+    print STDERR "Usage: logfile <logid | logidx | filename>\n";
     print STDERR "Options:\n";
     print STDERR " -d       - Turn on debugging\n";
     print STDERR " -o       - List all open logfiles.\n";
@@ -62,7 +62,9 @@ sub fatal($);
 my $TB          = "@prefix@";
 my $SUDO        = "/usr/local/bin/sudo";
 my $FSTAT       = "/usr/bin/fstat";
+my $PS          = "/bin/ps";
 my $CHMOD       = "/bin/chmod";
+my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 
 #
 # Testbed Support libraries
@@ -71,8 +73,10 @@ use lib "@prefix@/lib";
 use emdb;
 use emutil;
 use Logfile;
-use GeniHRN;
 use Group;
+if ($PGENISUPPORT) {
+    require GeniHRN;
+}
 
 #
 # Turn off line buffering on output
@@ -122,6 +126,9 @@ elsif ($prune) {
 elsif (@ARGV) {
     exit(ShowLogfiles(@ARGV));
 }
+else {
+    usage();
+}
 exit(0);
 
 #
@@ -140,7 +147,20 @@ sub ShowOpen()
 	    if (! -e $logfile->filename());
 	
 	my $filename = $logfile->filename();
-	print "$logid: $filename\n";
+	my $logidx   = $logfile->logidx();
+	print "$logidx: $filename";
+	
+	if ($logfile->MetadataValue("PID")) {
+	    print ", PID:" . $logfile->MetadataValue("PID");
+	}
+	if ($logfile->MetadataValue("Method")) {
+	    print ", Method:" . $logfile->MetadataValue("Method");
+	}
+	if ($logfile->MetadataValue("slice_urn")) {
+	    my $hrn = GeniHRN->new($logfile->MetadataValue("slice_urn"));
+	    print ", Slice:" . $hrn->id();
+	}
+	print "\n";
     }
     return 0;
 }
@@ -300,6 +320,37 @@ sub ShowLogfiles(@)
 		print "$key => $val\n";
 	    }
 	}
+	my $filename = $logfile->filename();
+	my $fstat = emutil::ExecQuiet("$SUDO $FSTAT $filename");
+	if (! $?) {
+	    my %pids = ();
+	    
+	    foreach my $line (split(/\n/, $fstat)) {
+		    
+		# In use.
+		if ($line =~ /${filename}$/) {
+		    #
+		    # Grab the pids from the third col.
+		    #
+		    if ($line =~ /^[-\w]+\s+[^\s]+\s+(\d+)/) {
+			$pids{$1} = $1;
+		    }
+		}
+	    }
+	    if (keys(%pids)) {
+		my $pids = join(",", keys(%pids));
+		my $psout = emutil::ExecQuiet("$PS u -p $pids");
+		if (! $?) {
+		    print "Processes holding logfile open:\n";
+		    foreach my $psline (split(/\n/, $psout)) {
+			if ($psline =~ /^[-\w]+\s+\d+/) {
+			    print "$psline\n";
+			}
+		    }
+		}
+	    }
+	}
+	print "-----------------\n";
     }
 }
 

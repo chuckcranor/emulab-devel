@@ -71,6 +71,10 @@
 	    <td class='format-date' style='word-wrap:break-word;'>
 	      <%- formfields.profile_created %></td>
 	  </tr>
+	  <tr>
+	    <td>Public?:</td>
+	    <td><% if (formfields.profile_who == "public") { %>Yes<% } else { %>No<% } %></td>
+	  </tr>
 	  <% if (withpublishing) { %>
 	  <tr>
 	    <td>Published:</td>
@@ -116,16 +120,28 @@
 	  <% } %>
 	</table>
 	<% if (activity) { %>
-	<a class='btn btn-info btn-xs pull-left'
-           id='profile_activity_button'
-	   data-toggle='popover'
-	   data-delay='{"hide":1500, "show":250}'
-	   data-html='true'
-	   data-content="View a history of when your profile was
-	   instantiated."
-           style='margin-right: 10px; font-size: 12px'
-           href='profile-activity.php?uuid=<%= profile_uuid %>'
-           type='button'>Activity
+	  <a class='btn btn-info btn-xs pull-left'
+             id='profile_activity_button'
+	     data-toggle='popover'
+	     data-delay='{"hide":1500, "show":250}'
+	     data-html='true'
+	     data-content="View a history of when your profile was
+			   instantiated."
+             style='margin-right: 10px; font-size: 12px'
+             href='profile-activity.php?uuid=<%= profile_uuid %>'
+             type='button'>Activity
+	  </a>
+	<% } %>
+	<% if (paramsets) { %>
+	  <a class='btn btn-info btn-xs pull-left'
+             id='profile_activity_button'
+	     data-toggle='popover'
+	     data-delay='{"hide":1500, "show":250}'
+	     data-html='true'
+	     data-content="View parameter sets for your profile."
+             style='margin-right: 10px; font-size: 12px'
+             href='profile-paramsets.php?uuid=<%= profile_uuid %>'
+             type='button'>Paramsets
 	</a>
 	<% } %>
       </div>
@@ -194,6 +210,38 @@
 	</div>
       </div>
     <% } %>
+    <div style="margin-top-foo: 10px;" class="text-center">
+      <button class='btn btn-primary btn-xs'
+	      id='profile_share_button'
+	      style='margin-right: 5px;'
+	      type='button'
+	      data-toggle='popover'
+	      data-html='true'
+	      data-content="Share your profile with other users by
+			    sending them a link to instantiate it.
+			    Click for more info.">
+        Share
+      </button>
+      <button id="copy-profile-button"
+	      class='btn btn-primary btn-xs'
+	      style='margin-right: 5px;'
+	      <% if (fromrepo) { %>
+     	      data-toggle='modal'
+	      data-target='#copy-repobased-profile-modal'
+	      <% } %>
+	      type='button'>Copy
+      </button>
+      <% if (!disabled && gotrspec) { %>
+	<% 	var url = "instantiate.php?profile=" +
+	version_uuid + "&from=manage-profile"; %>
+	<a class='btn btn-primary btn-xs' disabled
+	   href="<%- url %>"
+           id='profile_instantiate_button'
+           style='margin-right: 5px;'
+           type='submit' name='create'>Instantiate
+	</a>
+      <% } %>
+    </div>
   </div>
   <div class='col-lg-9
               col-md-9
@@ -875,70 +923,6 @@
 			type='button' name='delete'>Delete
 		</button>
 	      <% } %>
-	      <% if (viewing) { %>
-		  <a class='btn btn-primary btn-xs pull-left'
-                     id='profile_copy_button'
-                     style='margin-right: 10px;'
-		     <% if (fromrepo) { %>
-     		     data-toggle='modal'
-		     data-target='#copy-repobased-profile-modal'
-		     <% } else { %>
-		     href='manage_profile.php?action=copy&uuid=<%= version_uuid %>'
-		     data-toggle='popover'
-		     data-delay='{"hide":1500, "show":250}'
-		     data-html='true'
-		     data-content="When you <em>copy</em> (instead of
-			   clone), you are creating a new profile that
-			   uses the same source code and metadata (description,
-			   instructions) as the original profile, but without
-			   creating a new disk image. Instead, the new profile
-			   uses whatever images the original profile uses."
-		    <% } %>
-                    type='button'>
-                    Copy
-		  </a>
-		  <span class='pull-left'
-			data-toggle='popover'
-			data-delay='{"hide":1500, "show":250}'
-			data-html='true'
-			data-content="Share your profile with other users by
-				      sending them a link to instantiate it.
-				      Click for more info.">
-		    <button class='btn btn-primary btn-xs'
-			    id='profile_share_button'
-			    style='margin-right: 10px;'
-			    type='button'>
-                      Share
-		    </button>
-		  </span>
-		  <% if (!disabled && gotrspec) { %>
-		    <% 	var url = "instantiate.php?profile=" +
-		           version_uuid + "&from=manage-profile"; %>
-		    <a class='btn btn-primary btn-xs pull-left' disabled
-		       href="<%- url %>"
-                       id='profile_instantiate_button'
-                       style='margin-right: 10px;'
-                       type='submit' name='create'>Instantiate
-		    </a>
-		<% } %>
- 		<% if (withpublishing && canpublish) { %>
-		  <span class='pull-right'
-			data-toggle='popover'
-			data-delay='{"hide":1500, "show":250}'
-			data-html='true'
-			data-content="Publishing is like creating
-				      a <em>checkpoint</em>. Click for more
-				      info.">
-		    <button class='btn btn-success btn-xs' disabled
-			    id='profile_publish_button'
-			    style='margin-right: 10px;'
-     			    data-toggle='modal' data-target='#publish_modal'
-			    type='button'>
-		      Publish`
-		    </button>
-		  </span>
-		<% } %>
-	      <% } %>
 	    </div>
 	  </div>
 	  <div id='rspectext_div'></div>
@@ -1385,6 +1369,7 @@ Instructions are optional.
   <div id='copy_repobased_profile_div'></div>
   <div id='profile-imagelist-modal-div'></div>
   <div id='confirm-delete-profile-div'></div>
+  <div id='copy-profile-modal-div'></div>
 </div>
 <% if (viewing && Object.keys(versions).length > 1) { %>
 <div class='row'>
@@ -1449,7 +1434,7 @@ Instructions are optional.
 </div>
 <% } %>
 <div class='row hidden' id="gitpicker-div">
-  <div class='col-sm-12'>
+  <div class='col-sm-9 col-sm-offset-3 col-xs-12'>
     <div class='panel panel-default'>
       <div class='panel-heading'>
         <h4 class='panel-title text-center'>Repository</h4>

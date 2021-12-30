@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2004-2020 University of Utah and the Flux Group.
+# Copyright (c) 2004-2021 University of Utah and the Flux Group.
 # Copyright (c) 2006-2014 Universiteit Gent/iMinds, Belgium.
 # Copyright (c) 2004-2006 Regents, University of California.
 # 
@@ -279,7 +279,7 @@ sub new($$$;$) {
     if (exists($options->{"username"}) && exists($options->{"password"})) {
 	my $swcreds = $options->{"username"} . ":" . $options->{"password"};
 	$self->{EXP_OBJ} = force10_expect->new($self->{NAME},$debugLevel,
-					       $swcreds);
+					       $swcreds, $options);
 	if (!$self->{EXP_OBJ}) {
 	    warn "Could not create Expect object for $self->{NAME}\n";
 	    return undef;
@@ -318,6 +318,16 @@ sub new($$$;$) {
 	? 1 : 0;
 
     print "Switch $self->{NAME} is running $self->{OSVER}\n" if $self->{DEBUG};
+
+    # Gross hack for the 40G port bitmask problem at UMass. Someone smarter
+    # then me will need to generalize for all of the switches this module
+    # is intended to run on.
+    if (exists($options->{"lbsbithack"})) {
+	$self->{LBSBITHACK} = 1;
+    }
+    else {
+	$self->{LBSBITHACK} = 0;
+    }
 
     #
     # The bless needs to occur before readifIndex(), since it's a class 
@@ -380,7 +390,8 @@ sub readifIndex($) {
 
     foreach my $result (@{$rows}) {
 	my ($name,$iid,$descr) = @{$result};
-	$self->debug("got $name, $iid, descr $descr\n",2);
+	my $bits = sprintf("%b", $iid);
+	$self->debug("got $name, $iid ($bits), descr $descr\n",2);
 	if ($name ne "ifDescr") {
 	    warn "$id: WARNING: Foreign snmp var returned: $name";
 	    return 0;
@@ -641,16 +652,39 @@ sub convertBitmaskToIfindexes($$) {
         # the padding bits, cause some switches use _a lot_ of
         # these bits !!
         while ($port < $maxPortsPerModule) {
+	    # start index for first port of the module
+	    my $offset = $mod * $bitmaskBitsPerModule;
 
-            my $offset = 
-                # start index for first port of the module
-                $mod * $bitmaskBitsPerModule
-                # start index for first port of the block of 8
-                # ports containing the current port
-                + (int($port / 8) * 8)
-                # the offset we're actually looking for
-                + (7 - ($port % 8));
-
+	    if ($self->{LBSBITHACK}) {
+		if ($port < 48) {
+		    $offset +=
+			# start index for first port of the block of 8
+			# ports containing the current port
+			+ (int($port / 8) * 8)
+			# the offset we're actually looking for
+			+ (7 - ($port % 8));
+		}
+		else {
+		    $offset += 
+			# Skip the first 48 bits to get to the start
+			# of the 40G ports
+			48 +
+			# Each 40G port is a nybble, so 2 ports per byte.
+			(int(($port - 48) / 2) * 8) +
+			# Top bit in each nybble
+			(7 - ((($port - 48) & 0x1) * 4));
+		}
+		$self->debug("$id: $port, $offset, " .
+			     vec($bitmask,$offset,1) . "\n",2);
+	    }	    
+	    else {
+		$offset += 
+		    # start index for first port of the block of 8
+		    # ports containing the current port
+		    + (int($port / 8) * 8)
+		    # the offset we're actually looking for
+		    + (7 - ($port % 8));
+	    }
             if ( vec($bitmask,$offset,1) ) {
 		my $lmod  = $zeroBased ? $mod  : $mod  + 1;
 		my $lport = $zeroBased ? $port : $port + 1;
@@ -660,7 +694,7 @@ sub convertBitmaskToIfindexes($$) {
         }
         $mod++;
     }
-
+    $self->debug("$id: @ifIndexes\n",3);
     return \@ifIndexes;
 }
 
@@ -699,17 +733,38 @@ sub convertIfindexesToBitmask($@) {
             warn "$id: WARNING: Cannot set port larger than maxport.\n";
             next;
         }
+	# start index for first port of the module
+	my $offset = $mod * $bitmaskBitsPerModule;
 
-        
-        my $offset = 
-            # start index for first port of the module
-            $mod * $bitmaskBitsPerModule
-            # start index for first port of the block of 8
-            # ports containing the current port
-            + (int($port / 8) * 8)
-            # the offset we're actually looking for
-            + (7 - ($port % 8));
-
+	if ($self->{LBSBITHACK}) {
+	    if ($port < 48) {
+		$offset +=
+		    # start index for first port of the block of 8
+		    # ports containing the current port
+		    + (int($port / 8) * 8)
+		    # the offset we're actually looking for
+		    + (7 - ($port % 8));
+	    }
+	    else {
+		$offset += 
+		    # Skip the first 48 bits to get to the start
+		    # of the 40G ports
+		    48 +
+		    # Each 40G port is a nybble, so 2 ports per byte.
+		    (int(($port - 48) / 2) * 8) +
+		    # Top bit in each nybble
+		    (7 - ((($port - 48) & 0x1) * 4));
+	    }
+	    $self->debug("$id: $modport, $mod, $port, $offset\n", 2);
+	}
+	else {
+	    $offset += 
+		# start index for first port of the block of 8
+		# ports containing the current port
+		+ (int($port / 8) * 8)
+		# the offset we're actually looking for
+		+ (7 - ($port % 8));
+	}
         vec($bitmask, $offset, 1) = 0b1;
     }
     
@@ -957,6 +1012,10 @@ sub setPortMembership($$$$$) {
 	$self->debug("$id: Setting membership for vlan with ".
 		     "ifindex $vlifindex\n");
 	$self->debug("$id: Validate membership state to be: $onoff\n");
+	$self->debug("$id: Egress bitmask: " .
+		     unpack("H*", $eportmask) . "\n", 2);
+	$self->debug("$id: Untag bitmask:  " .
+		     unpack("H*", $uportmask) . "\n", 2);
 
 	# The egress ports and untagged ports have to be updated
 	# simultaneously.
@@ -1001,13 +1060,24 @@ sub setPortMembership($$$$$) {
 		     "membership bitmask for vlan with ifindex $vlifindex\n";
 		return $setcount;
 	}
-	
+	$self->debug("$id: Result bitmask: " .
+		     unpack("H*", $newmask) . "\n", 2);
+	#
 	# Should return 0 if everything is alright, no. of failed
 	# ports otherwise
-	my $checkmask = $onoff eq "on" ? $eportmask : $uportmask;
-	my $failcount = $self->checkBits($onoff, $checkmask, 
-					 $newmask);
-
+	#
+	my $failcount;
+	
+	if ($self->{DO_COMPLIANT_PORTSETS}) {
+	    #
+	    # Off is the same as on; the newmask should be the same as egress.
+	    #
+	    $failcount = $self->checkBits("on", $eportmask, $newmask);
+	}
+	else {
+	    my $checkmask = $onoff eq "on" ? $eportmask : $uportmask;
+	    $failcount = $self->checkBits($onoff, $checkmask, $newmask);
+	}
 	if ($failcount) {
 		warn "$id: Could not manipulate $failcount ".
 		     "ports in vlan with ifindex $vlifindex!\n";
@@ -1032,11 +1102,11 @@ sub setPortMembership($$$$$) {
 # Remove the input ports from any VLAN they might be in, except for the
 # default vlan.
 sub removePortsFromAllVlans($$@) {
-    my ($self, $tagged_only, @ports) = @_;
+    my ($self, $which, @ports) = @_;
     my $id = "$self->{NAME}::removePortsFromAllVlans";
     my $errors = 0;
 
-    $self->debug("$id: entering\n");
+    $self->debug("$id: entering ($which)\n");
 
     # Bail now if the list of ports is empty.
     if (!@ports) {
@@ -1062,9 +1132,14 @@ sub removePortsFromAllVlans($$@) {
 	my ($emask, $umask) = $self->getMemberBitmask($vlifidx,1);
 	my $checkmask = $emask;
 	my $rmports = \@ports;
-	if ($tagged_only) {
+	if ($which eq "tagged_only") {
 	    # see comments in removeSomePortsFromVlan()
 	    $checkmask = $portmask & ($emask ^ $umask);
+	    $rmports = $self->convertBitmaskToIfindexes($checkmask);
+	} 
+	elsif ($which eq "untagged_only") {
+	    # see comments in removeSomePortsFromVlan()
+	    $checkmask = $portmask & ($emask & $umask);
 	    $rmports = $self->convertBitmaskToIfindexes($checkmask);
 	} 
 	if ($self->checkBits("off", $portmask, $checkmask)) {
@@ -1209,8 +1284,12 @@ sub listVlans($) {
 	# Get corresponding port bitmaps from dot1qVlanStaticEgressPorts
 	# and find out the corresponding port ifIndexes
 	foreach $ifIndex (keys %Names) {
+	    my $name = $Names{$ifIndex};
 	    my $membermask = $self->getMemberBitmask($ifIndex);
 	    if (defined($membermask)) {
+		$self->debug("$id: $name: members: " .
+			     "0x" . unpack("H*", $membermask) . "\n", 2);
+		
 		my $indexes = $self->convertBitmaskToIfindexes($membermask);
 		my @ports = $self->convertPortFormat($PORT_FORMAT_PORT, 
 						     @{$indexes});
@@ -1480,7 +1559,7 @@ sub setPortVlan($$@) {
     foreach my $pobj (@portobjs) {
 	if ($pobj->tagged() == 0 && 
 	    !exists($self->{TRUNKS}->{$portlist[$i]})) {
-	    $self->debug("id: Adding port $pobj as untagged to $vlan_number\n",2);
+	    $self->debug("$id: Adding port $pobj as untagged to $vlan_number\n",2);
 	    push @uportlist, $portlist[$i];
 	    push @upobjs, $pobj;
 	}
@@ -1491,8 +1570,7 @@ sub setPortVlan($$@) {
     # Zap the untagged ports from any vlan that they are currently in
     # (aside from the default).  Otherwise, the subsequent set operation
     # might fail.
-    my $tagged_only = 0;
-    $self->removePortsFromAllVlans($tagged_only, @upobjs);
+    $self->removePortsFromAllVlans("untagged_only", @upobjs);
 
     # Mix in the membership already set up on the target vlan.  Doing this
     # avoids accidentally removing tagged ports when adding new ports to the
@@ -1894,9 +1972,9 @@ sub enablePortTrunking2($$$$) {
 	return 0;
     }
 
-    # Remove the port from any vlans it might be in.
-    my $tagged_only = 0;
-    if ($self->removePortsFromAllVlans($tagged_only, $port)) {
+    # Remove the port from any untagged vlans it might be in.
+    if (!$equalmode &&
+	$self->removePortsFromAllVlans("untagged_only", $port)) {
 	warn "$id: ERROR: Failed to remove $port from existing vlan(s)!";
 	return 0;
     }
@@ -1948,8 +2026,7 @@ sub disablePortTrunking($$) {
     # Remove the port from any VLAN it might be in, except for the
     # native (untagged) vlan.  We do this as a precaution - upper
     # layers should have cleaned up already.
-    my $tagged_only = 1;
-    if ($self->removePortsFromAllVlans($tagged_only, $port)) {
+    if ($self->removePortsFromAllVlans("tagged_only", $port)) {
 	warn "$id: ERROR: Could not remove $port from any/all vlans!";
 	return 0;
     }

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,8 +39,8 @@ PUBSUBLIBS_R    = -L/usr/local/lib -lpubsub_r
 #			/home/stoller/pubsub/.libs/libpubsub.so
 #PUBSUBLIBS_R    = -rpath /home/stoller/pubsub/.libs/ \
 #			/home/stoller/pubsub/.libs/libpubsub_r.so
-PUBSUBLIBS     += -lssl -lcrypto -lcrypt
-PUBSUBLIBS_R   += -lssl -lcrypto -lcrypt
+PUBSUBLIBS     += -L/usr/lib -lssl -lcrypto -lcrypt
+PUBSUBLIBS_R   += -L/usr/lib -lssl -lcrypto -lcrypt
 CFLAGS         += -DWITHSSL
 else
 PUBSUBLIBS     += -L/usr/local/lib -lpubsub -lcrypt

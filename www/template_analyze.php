@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,7 +36,6 @@ $isadmin   = ISADMIN();
 #
 $reqargs = RequiredPageArguments("instance",  PAGEARG_INSTANCE);
 $optargs = OptionalPageArguments("canceled",  PAGEARG_BOOLEAN,
-				 "referrer",  PAGEARG_STRING,
 				 "confirmed", PAGEARG_BOOLEAN);
 $template = $instance->GetTemplate();
 
@@ -73,16 +72,10 @@ if (!isset($confirmed)) {
 
     $url = CreateURL("template_analyze", $instance);
 
-    if (!isset($referrer)) {
-	$referrer = urlencode($referrer);
-	$referrer = $_SERVER['HTTP_REFERER'];
-    }
-
     echo "<form action='$url' method=post>\n";
     echo "<br>\n";
     echo "<b><input type=submit name=confirmed value=Confirm></b>\n";
     echo "<b><input type=submit name=canceled value=Cancel></b>\n";
-    echo "<input type=hidden name=referrer value=$referrer>\n";
     echo "</form>\n";
     echo "</center>\n";
     

@@ -30,6 +30,9 @@ www		IN	CNAME   boss
 db		IN	CNAME	boss
 cvsup		IN	CNAME	boss
 
+; SRV record pointing to emulab boss tmcd port. NixOS helper. 
+_emulab_boss    30 IN SRV 10 10 7777 boss
+
 ; Ops and names it is otherwise known as... 
 %usernode_ina%
 

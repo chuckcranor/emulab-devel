@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -68,6 +68,7 @@ $PORT_FORMAT_PORTINDEX= 5;
 		getSwitchTrunkPath setSwitchTrunkPath
 		mapPortsToSwitches findAndDumpLan
 	        getTrunkedStitchPorts
+		snmpit_lock snmpit_unlock
 		$PORT_FORMAT_IFINDEX $PORT_FORMAT_MODPORT
                 $PORT_FORMAT_NODEPORT $PORT_FORMAT_PORT $PORT_FORMAT_PORTINDEX
 );
@@ -1342,7 +1343,9 @@ sub getTrunksForVlan($@)
     return ()
 	if (!defined($vlan));
 
-    print STDERR "getTrunksForVlan: $vlan_id: @switches\n";
+    if ($debug) {
+	print STDERR "getTrunksForVlan: $vlan_id: @switches\n";
+    }
     
     #
     # We want to use the path that is in the DB.
@@ -1364,11 +1367,13 @@ sub getTrunksForVlan($@)
 	#
 	@trunks = SpanningTree(\@trunks);
 
-	print STDERR " old style path: " .
-	    join(" ", map { join(":", @$_) } @trunks) . "\n";
+	if ($debug) {
+	    print STDERR " old style path: " .
+		join(" ", map { join(":", @$_) } @trunks) . "\n";
+	}
 	return @trunks;
     }
-    print STDERR " DB path: $path\n";
+    print STDERR " DB path: $path\n" if ($debug);
     my @path = ();
     foreach my $p (split(" ", $path)) {
 	my ($a,$b) = split(":", $p);
@@ -1382,7 +1387,7 @@ sub getTrunksForVlan($@)
 	}
 	push(@path, [$a, $b]);
     }
-    if (@path) {
+    if (@path && $debug) {
 	print STDERR " new style path: ".
 	    join(" ", map { join(":", @$_) } @path) . "\n";
     }
@@ -1403,12 +1408,14 @@ sub getExperimentTrunksForVlan($@)
     return ()
 	if (!defined($vlan));
 
-    print STDERR "getExperimentTrunksForVlan: $vlan_id: @switches\n";
+    if ($debug) {
+	print STDERR "getExperimentTrunksForVlan: $vlan_id: @switches\n";
+    }
 
     #
     # We want to use the path that is in the DB.
     #
-    my $path = VLan->GetVlanSwitchPath($vlan);
+    my $path = $vlan->GetVlanSwitchPath();
     if (!defined($path) || $path eq "") {
 	#
 	# Nothing defined in the DB, so fall back to old method.
@@ -1425,11 +1432,13 @@ sub getExperimentTrunksForVlan($@)
 	#
 	@trunks = SpanningTree(\@trunks);
 
-	print STDERR " old style path: " .
-	    join(" ", map { join(":", @$_) } @trunks) . "\n";
+	if ($debug) {
+	    print STDERR " old style path: " .
+		join(" ", map { join(":", @$_) } @trunks) . "\n";
+	}
 	return @trunks;
     }
-    print STDERR " DB path: $path\n";
+    print STDERR " DB path: $path\n" if ($debug);
     my @path = ();
     foreach my $p (split(" ", $path)) {
 	my ($a,$b) = split(":", $p);
@@ -1443,7 +1452,7 @@ sub getExperimentTrunksForVlan($@)
 	}
 	push(@path, [$a, $b]);
     }
-    if (@path) {
+    if (@path && $debug) {
 	print STDERR " new style path: ".
 	    join(" ", map { join(":", @$_) } @path) . "\n";
     }
@@ -1488,7 +1497,7 @@ sub mapVlansToSwitches(@)
 	}
     }
     my @sorted = sort {tbsort($a,$b)} keys %switches;
-    print "mapVlansToSwitches: @sorted\n";
+    print "mapVlansToSwitches: @sorted\n" if ($debug);
     return @sorted;
 }
 
@@ -1529,7 +1538,7 @@ sub mapStaleVlansToSwitches(@)
 	}
     }
     my @sorted = sort {tbsort($a,$b)} keys %switches;
-    print "mapStaleVlansToSwitches: @sorted\n";
+    print "mapStaleVlansToSwitches: @sorted\n" if ($debug);
     return @sorted;
 }
 
@@ -1581,7 +1590,7 @@ sub mapPortsToSwitches(@)
 }
 
 #
-# 
+# Calc a new switch trunk path from the current set of devices.
 #
 sub getSwitchTrunkPath($)
 {
@@ -2123,6 +2132,47 @@ sub findAndDumpLan($)
 	if (!defined($lan));
 
     print STDERR Dumper($lan->{'LAN'}) . "\n";
+}
+
+#
+# Coarse grain locking
+#
+my $snmpit_lock_held;
+
+sub snmpit_lock($)
+{
+    my ($token) = @_;
+
+    if ($snmpit_lock_held) {
+	print STDERR "snmpit_lock($token): ".
+	    "Lock already held: $snmpit_lock_held\n";
+	return -1;
+    }
+    my $old_umask = umask(0);
+    my $rv = (TBScriptLock($token,0,1800) == TBSCRIPTLOCK_OKAY() ? 0 : 1);
+    umask($old_umask);
+    if ($rv == 0) {
+	$snmpit_lock_held = $token;
+    }
+    return $rv;
+}
+
+sub snmpit_unlock($)
+{
+    my ($token) = @_;
+    
+    if ($snmpit_lock_held) {
+	if ($snmpit_lock_held eq $token) {
+	    TBScriptUnlock();
+	    $snmpit_lock_held = undef;
+	}
+	else {
+	    print STDERR "snmpit_unlock($token): ".
+		"Lock help by another: $snmpit_lock_held\n";
+	    return -1;
+	}
+    }
+    return 0;
 }
 
 # End with true

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2020 University of Utah and the Flux Group.
+# Copyright (c) 2013-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1174,6 +1174,8 @@ sub os_check_storage_element($$)
 		    # XXX for ufs
 		    if ($fstype eq "ufs") {
 			$mopt .= ",ufstype=ufs2";
+		    } elsif ($fstype eq "ext3" || $fstype eq "ext4") {
+			$mopt .= ",noload";
 		    }
 		}
 		# OS only supports RO mounting, right now we just fail
@@ -1491,6 +1493,8 @@ sub os_create_storage($$)
 		# XXX for ufs
 		if ($fstype eq "ufs") {
 		    $mopt .= ",ufstype=ufs2";
+		} elsif ($fstype eq "ext3" || $fstype eq "ext4") {
+		    $mopt .= ",noload";
 		}
 	    }
 	    # OS only supports RO mounting, right now we just fail
@@ -1529,7 +1533,7 @@ sub os_create_storage($$)
 
 	    print STDERR "$command\n";
 
-	    if (mysystem($command)) {
+	    if (mysystem("$command $redir")) {
 		warn("*** $lv: frisbee of dataset to $mdev failed!\n");
 		return 0;
 	    }

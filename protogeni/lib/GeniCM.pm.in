@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -992,10 +992,14 @@ sub GetTicketAuxAux($)
 		     "Only public address pools of type any are supported");
 		    goto bad;
 		}
-		print STDERR 'DEBUG: Adding row to virt_address_allocation';
 		my $pool_id = $pool->{'client_id'};
 		# Ug, this causes named to croak.
-		$pool_id =~ s/_/-/g;
+		if ($pool_id =~ /\_/) {
+		    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+		     "Invalid client_id, no underscores allowed in pool name.");
+		    goto bad;
+		}
+		print STDERR 'DEBUG: Adding row to virt_address_allocation';
 		$virtexperiment->NewTableRow("virt_address_allocation",
 					 {"pool_id" => $pool_id,
 					  "count" => $pool->{'count'},
@@ -1834,11 +1838,31 @@ sub GetTicketAuxAux($)
 	#
 	# If no osname by this point, try for the default.
 	#
-	if (defined($node) && !defined($osname) && !$isbridge && !$isvhost) {
-	    if (defined($node->default_osid())) {
-		$osinfo = OSImage->Lookup($node->default_osid());
-		$osname = $osinfo->osname()
-		    if (defined($osinfo));
+	if (!defined($osname) && !$isbridge && !$isvhost) {
+	    if (defined($node)) {
+		if (defined($node->default_osid())) {
+		    $osinfo = OSImage->Lookup($node->default_osid());
+		    if (!defined($osinfo)) {
+			print STDERR "node $node but cannot ".
+			    "lookup default_osid defined for it.\n";
+		    }
+		    else {
+			$osname = $osinfo->osname()
+		    }
+		}
+	    }
+	    elsif (defined($pctype) && GeniXML::UseTypeDefaultImage($ref)) {
+		my $nodetype = NodeType->Lookup($pctype);
+		if (defined($nodetype) && defined($nodetype->default_osid())) {
+		    $osinfo = OSImage->Lookup($nodetype->default_osid());
+		    if (!defined($osinfo)) {
+			print STDERR "node type $pctype but cannot ".
+			    "lookup default_osid defined for it.\n";
+		    }
+		    else {
+			$osname = $osinfo->osname()
+		    }
+		}
 	    }
 	}
 	# The slot does not like to be NULL.
@@ -3027,6 +3051,17 @@ sub GetTicketAuxAux($)
 	#
 	my $default_bandwidth = 0;
 	
+	#
+	# Sanity check the IP. Need to think about the MASK.
+	#
+	# If rspec supplies an IP on any interface, it must supply all
+	# of them. The exception is blackbox nodes, which might have a
+	# hardwired address, and so the user does really need to supply
+	# the IP. For example, all the Powder radios.
+	#
+	my $required_ips = scalar(@interfaces);
+	my $supplied_ips = 0;
+	
 	foreach my $ref (@interfaces) {
 	    my $node_nickname = GeniXML::GetInterfaceNodeId($ref);
 	    my $iface_id = GeniXML::GetInterfaceId($ref);
@@ -3071,7 +3106,48 @@ sub GetTicketAuxAux($)
 		$trivial_ok = 0;
 		$besteffort = 1;
 	    }
+	    # Sanity check the IP/Mask assignments.
+	    my ($ip,$mask);
+
+	    if (exists($external_nodemap{$node_nickname})) {
+		my $external_noderef = $external_nodemap{$node_nickname};
+
+		$ip   = GeniXML::GetIp($ref, $external_noderef);
+		$mask = GeniXML::GetMask($ref, $external_noderef);
+
+		# Makes no sense not to supply IP on both sides of a
+		# stitched link.
+		if (!defined($ip)) {
+		    $response =
+			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "$lanname: Must supply IP/MASK on all members ".
+			     "of a stitched link");
+		    goto bad;
+		}
+	    }
+	    else {
+		my $rspec = $nodemap{$node_nickname}->{'rspec'};
+		
+		$ip   = GeniXML::GetIp($ref, $rspec);
+		$mask = GeniXML::GetMask($ref, $rspec);
+
+		# No IP required for blackbox nodes.
+		# Or if the interface is on a bridge node, or a layer 1 link.
+		$required_ips--
+		    if ((defined($nodetype) && $nodetype->isblackbox()) ||
+			exists($bridgemap{$iface_id}) || $layer == 1);
+	    }
+	    $supplied_ips++
+		if (defined($ip));
 	}
+	if ($supplied_ips && $supplied_ips < $required_ips) {
+	    $response =
+		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+		     "$lanname: Must supply IP/MASK on all members, ".
+			     "or no members");
+	    goto bad;
+	}
+
 	#
 	# Link wide properties. Saves a lot of XML when all the user
 	# wants is to set symmetrical properties for the entire lan.
@@ -3088,8 +3164,10 @@ sub GetTicketAuxAux($)
 	    my $dest   = GetText("dest_id", $property);
 	    if (!defined($source) || !defined($dest) ||
 		$source eq "" || $dest eq "") {
-		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+		$response = 
+		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 			     "$lanname: Missing source or dest in property");
+		goto bad;
 	    }
 	    $properties{"$source:$dest"} = $property;	    
 	}
@@ -5896,17 +5974,20 @@ sub SliverWorkAux($)
     # Must have the topofile for node boot. Might need locking on this.
     #
     if ($v2) {
-	require Lan;
-
 	#
 	# We want to reserve the vlan tags now so that we can put them
 	# into the manifest. Use snmpit for this, since ELABINELAB will
 	# need to ask the outer boss for the reserved tags.
 	#
-	system("$SNMPIT -A $pid $eid");
-	if ($?) {
-	    $message = "Could not reserve vlan tags";
-	    goto bad;
+	if (defined(GeniXML::FindFirst("n:link", $rspec))) {
+	    DebugTimeStamp("Reserving vlan tags");
+	    require Lan;
+	    system("$SNMPIT -A $pid $eid");
+	    if ($?) {
+		$message = "Could not reserve vlan tags";
+		goto bad;
+	    }
+	    DebugTimeStamp("Done reserving vlan tags");
 	}
     }
     elsif (!$v2) {
@@ -7996,6 +8077,8 @@ sub CleanupDeadSlice($;$)
 
     DBQueryWarn("delete from geni_manifests ".
 		"where slice_uuid='$slice_uuid'");
+    DBQueryWarn("delete from portal_manifests ".
+		"where slice_uuid='$slice_uuid'");
 
     if (defined($experiment)) {
 	# Do this so that a full swapout is done. Better then trying
@@ -8445,6 +8528,7 @@ sub AddKeys($$$)
 	    my $name;
 	    my $email;
 	    my $privs = "local_root";
+	    my $shell;
 
 	    if (exists($ref->{'urn'})) {
 		$urn = $ref->{'urn'};
@@ -8470,6 +8554,11 @@ sub AddKeys($$$)
 	    # Optional specification of privs.
 	    if (exists($ref->{'privs'}) && $ref->{'privs'} eq "user") {
 		$privs = "user";
+	    }
+	    # Optional specification of shell.
+	    if (exists($ref->{'shell'}) &&
+		$ref->{'shell'} =~ /^(sh|bash|tcsh)$/) {
+		$shell = $ref->{'shell'};
 	    }
  
 	    # The slice owner is easy.
@@ -8509,7 +8598,7 @@ sub AddKeys($$$)
 	    }
 	    $slice_experiment->BindNonLocalUser(\@keylist,
 						$uid, $urn,
-						$name, $email, $privs)
+						$name, $email, $privs, $shell)
 		== 0 or goto error;
 	}
     }

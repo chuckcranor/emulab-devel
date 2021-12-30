@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2018 University of Utah and the Flux Group.
+# Copyright (c) 2016-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -117,7 +117,7 @@ if (defined($options{"u"})) {
 if (defined($options{h})) {
     usage();
 }
-if (defined($options{v})) {
+if (defined($options{v}) || defined($options{d})) {
     $debug = 1;
 }
 if (defined($options{p})) {
@@ -198,17 +198,33 @@ if( $minfree ) {
 
 if( $timeseries ) {
     my $error = 0;
-    
+    my $details;
+    my $last;
+
+    my @records = Reservation->Forecast( $type, \@ARGV, 
+					 $debug ? \$details : undef);
+    if ($debug && $details) {
+	print $details;
+    }
     print "Time       Unavailable  Held  Free\n";
     print "----------       -----  ----  ----\n";
-    
-    foreach my $rec ( Reservation->Forecast( $type, \@ARGV ) ) {
-	printf( "%s %5d %5d %5d\n",
+
+    foreach my $rec (@records) {
+	next
+	    if ($last &&
+		$last->{'t'} eq $rec->{'t'} &&
+		$last->{'unavailable'} == $rec->{'unavailable'} &&
+		$last->{'held'} == $rec->{'held'} &&
+		$last->{'free'} == $rec->{'free'});
+
+	printf( "%s %5d %5d %5d %s\n",
 		strftime( "%Y-%m-%d %H:%M", localtime( $rec->{'t'} ) ),
-		$rec->{'unavailable'}, $rec->{'held'}, $rec->{'free'} );
+		$rec->{'unavailable'}, $rec->{'held'}, $rec->{'free'},
+		$debug ? "(" . $rec->{'t'} . ")" : "");
 	if ($rec->{'free'} < 0) {
 	    $error = 1;
 	}
+	$last = $rec;
     }
     exit( $error );
 }

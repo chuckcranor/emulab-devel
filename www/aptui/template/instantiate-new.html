@@ -228,7 +228,7 @@
 		</div>
 	      </div>
 	    <% } %>
-	    <% if (registered || !profilename) { %>
+	    <% if (registered) { %>
 	      <div class='form-group row' style='margin-bottom: 0px;'>
 		<div class='col-md-12'>
 		  <div class='panel panel-default'>
@@ -242,27 +242,14 @@
 		      <div id='selected_profile_description'></div>
 		    </div>
 		    <div class='panel-footer'>
-		      <% if (cancopy && !fromrepo) { %>
-			<button class='btn btn-default btn-sm pull-left' 
-				type='button' id='profile_copy_button'
-				style='margin-right: 10px;'
-				data-toggle='popover'
-				data-delay='{hide:1500, show:500}'
-				data-html='true'
-				data-content='When you copy a profile you are
-				  creating a new profile that uses the same
-				  source code and metadata (description,
-				  instructions) as the original profile, but
-				  without creating a new disk image. Instead,
-				  the new profile uses whatever images the
-				  original profile uses.'>
-			  Copy Profile
-			</button>
-		      <% } %>
-		      <button class='btn btn-default btn-sm pull-left'
-			      type='button' id='profile_show_button'>
+		      <button id="profile-copy-button"
+			      class='btn btn-default btn-sm pull-left hidden'
+			      style='margin-right: 10px;'
+			      type='button'>Copy Profile</button>
+		      <a href="" class='btn btn-default btn-sm pull-left'
+			 type='button' id='profile_show_button'>
 			Show Profile
-		      </button>
+		      </a>
 		      <!-- Profile selection box -->
 		      <% if (showpicker) { %>
 			<button id='change-profile'
@@ -319,16 +306,6 @@
 		<span id='finalize_profile_name'></span>
 	      </span>
 	      <span class="pull-right">
-		<button class='btn btn-primary btn-xs hidden'
-			type='button'
-			id="save_paramset_button"
-			data-toggle='popover'
-			data-delay='{"hide":100, "show":300}'
-			data-content='Save the parameters used to create this
-				      experiment, so you can quickly apply them
-				      when starting a new experiment using this
-				      profile. Click for more information.'>
-		  Save Parameters</button>
 		<button class='btn btn-info btn-xs'
 			type='button'
 			id="show_xml_modal_button">
@@ -1202,3 +1179,4 @@
 <div id='instantiate_div'></div>
 <div id='editmodal_div'></div>
 <div id='save_paramset_div'></div>
+<div id='copy-profile-modal-div'></div>

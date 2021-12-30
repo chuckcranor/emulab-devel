@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016, 2018, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,7 +28,7 @@ use vars qw(@ISA @EXPORT);
 @ISA    = qw(Exporter);
 @EXPORT = qw(SiteVarExists CreateSiteVar GetSiteVar SetSiteVar
 	     GetSiteVarDesc SetSiteVarDesc NoLogins IsShutDown.
-	     IsMultiPCArchitecture PCArchitectures);
+	     IsMultiPCArchitecture PCArchitectures LoadAverage);
 
 use emdb;
 
@@ -350,6 +350,20 @@ sub EmulabCountUnlock($)
     return 0;
 }
 
+sub EmulabCountValue($)
+{
+    my ($name) = @_;
+
+    my $query_result =
+	DBQueryWarn("select value from emulab_locks where name='$name'");
+
+    return 0
+	if (!$query_result || !$query_result->numrows);
+
+    my ($value) = $query_result->fetchrow_array();
+    return $value;
+}
+
 #
 # Are we multi architecture (pc class only). Only consider an architecture
 # if we have actual nodes for it.
@@ -379,6 +393,18 @@ sub PCArchitectures()
 	push(@results, $architecture);
     }
     return @results;
+}
+
+#
+# Load average (5 minute).
+#
+sub LoadAverage()
+{
+    my $uptime = `/usr/bin/uptime`;
+    if ($uptime =~ /load averages:\s+([\.\d]+),\s+([\.\d]+),\s+[\.\d]+/) {
+	return $1;
+    }
+    return 0;
 }
 
 1;

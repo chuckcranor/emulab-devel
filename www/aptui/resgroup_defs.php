@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -237,7 +237,7 @@ class ReservationGroup
         return 0;
     }
 
-    function Blob()
+    function Blob($alldata = true)
     {
         $resgroup = $this;
         $details  = array();
@@ -252,7 +252,7 @@ class ReservationGroup
         $details["created"]    = DateStringGMT($resgroup->created());
         $details["start"]      = DateStringGMT($resgroup->start());
         $details["end"]        = DateStringGMT($resgroup->end());
-        $details["approved"]   = 1;
+        $details["approved"]   = 0;
         $details["pending"]    = 0;
         $details["canceled"]   = 0;
         $details["uid"]        = $resgroup->creator_uid();
@@ -272,7 +272,6 @@ class ReservationGroup
                 "approved"    => DateStringGMT($reservation->approved()),
                 "canceled"    => DateStringGMT($reservation->canceled()),
                 "deleted"     => DateStringGMT($reservation->deleted()),
-                "jsondata"    => $reservation->jsondata(),
                 "using"       => null,
                 "utilization" => null,
                 "approved_pushed" => DateStringGMT(
@@ -284,6 +283,10 @@ class ReservationGroup
                 "deleted_pushed"  => DateStringGMT(
                     $reservation->deleted_pushed())
             );
+            # Too much data for the list page.
+            if ($alldata) {
+                $blob["jsondata"] = $reservation->jsondata();
+            }
             if (!is_null($reservation->using())) {
                 $blob["using"] = intval($reservation->using());
             }
@@ -301,16 +304,14 @@ class ReservationGroup
 
             if (! $reservation->approved()) {
                 $status = "pending";
+                $details["pending"] += 1;
             }
             elseif ($reservation->canceled()) {
                 $status = "canceled";
-            }
-            if (!$reservation->approved()) {
-                $details["approved"] = 0;
-                $details["pending"] += 1;
-            }
-            if ($reservation->canceled()) {
                 $details["canceled"] += 1;
+            }
+            elseif ($reservation->approved()) {
+                $details["approved"] += 1;
             }
         }
         $ranges = array();
@@ -334,10 +335,10 @@ class ReservationGroup
 
             if (! $reservation->approved()) {
                 $status = "pending";
-            }
-            if (!$reservation->approved()) {
-                $details["approved"] = 0;
                 $details["pending"] += 1;
+            }
+            else {
+                $details["approved"] += 1;
             }
         }
         $routes = array();
@@ -361,10 +362,10 @@ class ReservationGroup
 
             if (! $reservation->approved()) {
                 $status = "pending";
-            }
-            if (!$reservation->approved()) {
-                $details["approved"] = 0;
                 $details["pending"] += 1;
+            }
+            else {
+                $details["approved"] += 1;
             }
         }
         $details["status"] = $status;

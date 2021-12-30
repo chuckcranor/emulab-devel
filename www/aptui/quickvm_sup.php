@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -90,7 +90,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
     global $GOOGLEUA, $ISCLOUD, $TBBASE, $PORTAL_GENESIS, $APTBASE;
     global $ISPNET, $ISPOWDER, $ISEMULAB, $PROTOGENI_GENIWEBLOGIN;
-    global $login_user, $login_status, $SUPPORT, $FIRSTUSER;
+    global $login_user, $login_status, $SUPPORT, $FIRSTUSER, $PORTAL_NAME;
     global $disable_accounts, $page_title, $drewheader, $embedded;
     global $UI_EXTERNAL_ACCOUNTS, $BrandMapping;
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
@@ -134,31 +134,39 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         }
     }
     elseif ($login_user && ($login_status & CHECKLOGIN_PSWDEXPIRED)) {
-        # Bypass the next set of checks, let this proceee. User will
+        # Bypass the next set of checks, let this proceed. User will
         # be back here later.
         ;
     }
-    elseif ($login_user && $ISPOWDER && $login_user->RequireAddress()) {
-        if ($script != "myaccount.php" && $script != "logout.php") {
-            $referrer = urlencode($_SERVER['REQUEST_URI']);
-            header("Location: myaccount.php?addrequired=1&referrer=$referrer");
-            return;
+    elseif ($login_user && $login_user->IsActive()) {
+        if ($login_user->NeedAccountUpdate()) {
+            if ($script != "myaccount.php" && $script != "logout.php") {
+                $referrer = urlencode($_SERVER['REQUEST_URI']);
+                header("Location: myaccount.php".
+                       "?referrer=$referrer&needupdate=1");
+                return;
+            }
         }
-    }
-    elseif ($login_user && $login_user->IsActive() &&
-            $login_user->RequireAUP()) {
-        if ($script != "portal-aup.php" && $script != "logout.php") {
-            $referrer = urlencode($_SERVER['REQUEST_URI']);
-            header("Location: portal-aup.php?referrer=$referrer");
-            return;
+        elseif ($login_user->NeedScopusValidation()) {
+            if ($script != "verify-match.php" && $script != "logout.php") {
+                $referrer = urlencode($_SERVER['REQUEST_URI']);
+                header("Location: verify-match.php?referrer=$referrer");
+                return;
+            }
         }
-    }
-    elseif ($login_user && $login_user->IsActive() &&
-            $login_user->Licenses()) {
-        if ($script != "licenses.php" && $script != "logout.php") {
-            $referrer = urlencode($_SERVER['REQUEST_URI']);
-            header("Location: licenses.php?referrer=$referrer");
-            return;
+        elseif ($login_user->RequireAUP()) {
+            if ($script != "portal-aup.php" && $script != "logout.php") {
+                $referrer = urlencode($_SERVER['REQUEST_URI']);
+                header("Location: portal-aup.php?referrer=$referrer");
+                return;
+            }
+        }
+        elseif ($login_user->Licenses()) {
+            if ($script != "licenses.php" && $script != "logout.php") {
+                $referrer = urlencode($_SERVER['REQUEST_URI']);
+                header("Location: licenses.php?referrer=$referrer");
+                return;
+            }
         }
     }
 
@@ -174,8 +182,9 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
               type='image/vnd.microsoft.icon'>
         <link rel='stylesheet' href='$APTBASE/css/bootstrap.css'>
         <link rel='stylesheet' href='$APTBASE/css/quickvm.css'>
+        <link rel='stylesheet' href='$APTBASE/css/multilevel.css'>
         <link rel='stylesheet' href='$APTBASE/css/$APTSTYLE'>\n";
-    if ($ISPOWDER) {
+    if (0 && $ISPOWDER) {
         echo "<link href='https://www.powderwireless.net/powder/fonts/raleway/style.css' rel='stylesheet'>";
     }
     if ($TBMAINSITE) {
@@ -214,8 +223,13 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "    window.EMBEDDED = $embedded;\n";
     echo "    window.SUPPORT  = '$SUPPORT';\n";
     echo "    window.APTTILE  = '$APTTITLE';\n";
-    echo "    window.APTMAIL   = \"$APTMAIL\"\n";
-    echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
+    echo "    window.APTMAIL   = \"$APTMAIL\";\n";
+    echo "    window.APTMAILTO = \"$APTMAILTO\";\n";
+    echo "    window.LOGINUID  = " .
+        ($login_user ? "'$login_uid'" : "null") . ";\n";
+    echo "    window.PORTAL_NAME = \"$PORTAL_NAME\"\n";
+    # For OAI2021FallWS
+    echo "    window.NOANNOUNCEMENTS = 1\n";
     echo "</script>\n";
     
     if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {
@@ -292,6 +306,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
                     $navbar_right .=
                         "<li id='loginitem' class='apt-left'>" .
                         "  <a class='btn btn-quickvm-home navbar-btn apt-navbar-btn'
+                                    href='login.php'
                                     id='loginbutton'>Login</a></li>\n";
 		}
 		REQUIRE_GENI_AUTH();
@@ -421,11 +436,6 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         }
         readfile("template/myusage.html");
     }
-
-    if (!NOLOGINS() && !$login_user && $page_title != "Login") {
-	SpitLoginModal("quickvm_login_modal");
-	SpitWaitModal("waitwait-modal");
-    }
 embed:
     echo " <!-- Page content -->
            <div class='container-fluid'>\n";
@@ -472,6 +482,7 @@ echo "  <ul class='nav navbar-nav navbar-left apt-left'>";
    if ($login_user && !$nonav && !($login_status & CHECKLOGIN_WEBONLY)) {
 
     if ($login_user->IsActive()) {
+      $recents = Instance::RecentExperiments($login_user);
       $then = time() - (90 * 3600 * 24);
     
 echo "
@@ -481,8 +492,28 @@ echo "
 	 data-toggle='dropdown'>
 	Experiments <b class='caret'></b></a>
       <ul class='dropdown-menu'>
-	<li><a href='instantiate.php'>Start Experiment</a></li>
-	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>";
+	<li><a href='instantiate.php'>Start Experiment</a></li>\n";
+
+     if ($recents) {
+         echo "<li class='multilevel-submenu'>
+                <a href='#'>Rerun Recent Experiment </a>
+                  <ul class='dropdown-menu'>";
+
+         foreach ($recents as $recent) {
+             $instance_name = $recent["instance_name"];
+             $profile_name  = $recent["profile_name"];
+             $rerun_url     = $recent["rerun_url"];
+             echo "<li><a href='${rerun_url}' target=_blank>
+                       $instance_name (${profile_name})</a></li>\n";
+         }
+         echo "<li class=text-center><a target=_blank
+                href='activity.php?user=$login_uid&min=$then'>More
+                <b class='caret'></b></a></li>";
+         echo "   </ul>
+              </li>\n";
+     }
+
+echo "	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>";
 
       if ($UI_DISABLE_RESERVATIONS == 0 ||
          ($UI_DISABLE_RESERVATIONS == 1 && ISADMIN()) ) {
@@ -496,6 +527,7 @@ echo "
         ";
       if ($ISPOWDER) {
           echo "<li><a href='radioinfo.php'>Powder Radio Info</a></li>";
+          echo "<li><a href='powder-map.php'>Powder Map</a></li>";
       }
 echo " <li class='divider'></li>
         <li><a href='user-dashboard.php#experiments'>
@@ -752,7 +784,7 @@ $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
                    href='#nsf_supported_modal'
 	           data-target='#nsf_supported_modal'>Supported by NSF</a>\n";
         }
-        echo "&copy; 2020
+        echo "&copy; 2021
               <a href='http://www.utah.edu' target='_blank'>
                  The University of Utah</a>
                </div>
@@ -880,74 +912,6 @@ function SpitVerifyModal($id, $label)
 }
 
 #
-# Spit out the login modal. 
-#
-function SpitLoginModal($id)
-{
-    global $PORTAL_PASSWORD_HELP, $PROTOGENI_GENIWEBLOGIN;
-    global $APTTITLE, $ISCLOUD, $ISPNET, $ISPOWDER;
-    $referrer = CleanString($_SERVER['REQUEST_URI']);
-?>
-    <!-- This is the login modal -->
-    <div id='<?php echo $id ?>' class='modal fade' role='dialog'>
-        <div class='modal-dialog'>
-        <div id='quickvm_login_form_error'
-             class='align-center'></div>
-        <div class='modal-content'>
-           <div class='modal-header'>
-            <button type='button' class='close' data-dismiss='modal'
-               aria-hidden='true'>&times;</button>
-               <h4 class='modal-title'>Log in to <?php echo $APTTITLE ?></h4>
-           </div>
-           <form id='quickvm_login_form'
-                 role='form'
-                 method='post' action='login.php'>
-           <input type=hidden name=referrer value='<?php echo $referrer ?>'>
-           <div class='modal-body form-horizontal'>
-             <div class='form-group'>
-                <label for='uid' class='col-sm-2 control-label'>Username</label>
-                <div class='col-sm-10'>
-                    <input name='uid' class='form-control'
-                           placeholder='<?php echo $PORTAL_PASSWORD_HELP ?>'
-                           autofocus type='text'>
-                </div>
-             </div>
-             <div class='form-group'>
-                <label for='password' class='col-sm-2 control-label'>Password
-					  </label>
-                <div class='col-sm-10'>
-                   <input name='password' class='form-control'
-                          placeholder='Password'
-                          type='password'>
-                </div>
-             </div>
-             <div class='form-group'>
-               <div class='col-sm-offset-2 col-sm-10'>
-<?php
-        if ($PROTOGENI_GENIWEBLOGIN) {
-	?>
-                 <button class='btn btn-info btn-sm pull-left' disabled
-		    type='button'
-                    data-toggle="tooltip" data-placement="left"
-		    title="You can use your geni credentials to login"
-                    id='quickvm_geni_login_button'>Geni User?</button>
-        <?php
-    }
-?>
-                 <button class='btn btn-primary btn-sm pull-right'
-                         id='quickvm_login_modal_button'
-                         type='submit' name='login'>Login</button>
-               </div>
-             </div>
-           </div>
-           </form>
-        </div>
-        </div>
-     </div>
-<?php
-}
-
-#
 # Please Wait.
 #
 function SpitWaitModal($id)
@@ -1042,12 +1006,10 @@ function SpitPageReplace($newpage, $when = 0) {
 # emulab generated (no passphrase) key. This is basically a clone
 # of what GateOne does, but that code was a mess. 
 #
-function SSHAuthObject($uid, $nodeid)
+function SignAuthObject($blob)
 {
-    global $USERNODE;
-	
     $file = "/usr/testbed/etc/sshauth.key";
-    
+
     #
     # We need the secret that is shared with ops.
     #
@@ -1065,20 +1027,66 @@ function SSHAuthObject($uid, $nodeid)
     $key   = chop($key);
     $stuff = GENHASH();
     $now   = time();
+    $sig   = hash_hmac('sha1',
+                       $blob["uid"] . $stuff . $blob["nodeid"] . $now,
+                       $key);
 
+    $blob["stuff"]     = $stuff;
+    $blob["timestamp"] = $now;
+    $blob["signature"] = $sig;
 
+    return json_encode($blob);
+}
+
+function SSHAuthObject($uid, $hostport)
+{
+    global $USERNODE, $WWWHOST;
+    global $BROWSER_CONSOLE_WEBSSH, $BROWSER_CONSOLE_PROXIED;
+	
+    if ($BROWSER_CONSOLE_PROXIED) {
+        $baseurl = "https://${WWWHOST}";
+    }
+    else {
+        $baseurl = "https://${USERNODE}";
+    }
+    if ($BROWSER_CONSOLE_WEBSSH) {
+        # See httpd.conf
+        $baseurl .= "/webssh";
+    }
     $authobj = array('uid'       => $uid,
-		     'stuff'     => $stuff,
-		     'nodeid'    => $nodeid,
-		     'timestamp' => $now,
-		     'baseurl'   => "https://${USERNODE}",
+		     'nodeid'    => $hostport,
+		     'baseurl'   => $baseurl,
 		     'signature_method' => 'HMAC-SHA1',
+                     'webssh'    => $BROWSER_CONSOLE_WEBSSH,
 		     'api_version' => '1.0',
-		     'signature' => hash_hmac('sha1',
-					      $uid . $stuff . $nodeid . $now,
-					      $key),
     );
-    return json_encode($authobj);
+    return SignAuthObject($authobj);
+}
+# Ditto for VNC
+function VNCAuthObject($uid, $hostport)
+{
+    global $USERNODE, $WWWHOST;
+    global $BROWSER_CONSOLE_WEBSSH, $BROWSER_CONSOLE_PROXIED;
+
+    # Only when we are using webssh.
+    if (!$BROWSER_CONSOLE_WEBSSH) {
+        return null;
+    }
+	
+    if ($BROWSER_CONSOLE_PROXIED) {
+        $baseurl = "https://${WWWHOST}";
+    }
+    else {
+        $baseurl = "https://${USERNODE}";
+    }
+    $authobj = array('uid'       => $uid,
+		     'nodeid'    => $hostport,
+		     'baseurl'   => $baseurl,
+		     'signature_method' => 'HMAC-SHA1',
+                     'vncproxy'  => 1,
+		     'api_version' => '1.0',
+    );
+    return SignAuthObject($authobj);
 }
 
 #

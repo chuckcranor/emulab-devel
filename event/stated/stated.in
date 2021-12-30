@@ -426,12 +426,44 @@ sub readStates(;@) {
     #debug("readStates called\n");
     my $result = DBQueryFatal("SELECT node_id, eventstate, " .
 			      "state_timestamp, op_mode, " .
-			      "op_mode_timestamp, stated_tag FROM nodes ".
-			      "where node_id not like 'sh%'");
+			      "op_mode_timestamp, stated_tag FROM nodes");
 
     my %nodes;
     while (my ($node_id, $state, $timestamp, $mode, $mode_timestamp, $tag)
 	   = $result->fetchrow()) {
+
+	#
+	# XXX we ignore all nodes where op_mode is NULL, '', or 'NONE'.
+	#
+	if (!$mode || $mode eq "NONE") {
+	    debug("*** $node_id: WARNING: no op_mode, ignoring node\n");
+	    delete $oldnodes{$node_id} if (exists($oldnodes{$node_id}));
+	    next;
+	}
+
+	#
+	# Guard against other DB badness.
+	#
+	if (!$state) {
+	    debug("*** $node_id: WARNING: eventstate not set\n");
+	    $state = "ISUP"
+	}
+	if (!$timestamp) {
+	    debug("*** $node_id: WARNING: state timestamp not set\n");
+	    if ($oldnodes{$node_id}{timestamp}) {
+		$timestamp = $oldnodes{$node_id}{timestamp}
+	    } else {
+		$timestamp = $now;
+	    }
+	}
+	if (!$mode_timestamp) {
+	    debug("*** $node_id: WARNING: mode timestamp not set\n");
+	    $mode_timestamp = $now;
+	}
+
+	#
+	# Are we the right stated for the node?
+	#
 	$nodes{$node_id}{"tag"} = (defined($tag) ? $tag : "");
 
 	if ($dbtag ne "" && $dbtag eq $nodes{$node_id}{"tag"}) {
@@ -704,6 +736,10 @@ sub stateTransition($$) {
     my ($oldstate, $mode);
     $oldstate = $nodes{$node}{state};
     $mode     = $nodes{$node}{mode};
+
+    # XXX avoid uninitialized value crashes
+    $oldstate = "" if (!defined($oldstate));
+    $mode     = "" if (!defined($mode));
 
     if ($oldstate && $mode && !IsValidTransition($mode,$oldstate,$newstate)) {
 	notify("Invalid transition for node $node from $mode/$oldstate " .

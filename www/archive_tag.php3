@@ -95,11 +95,6 @@ function SPITFORM($formfields, $errors)
           <form action='" . CreateURL("archive_tag", $experiment) . "' ".
 	        "method=post>\n";
 
-    if (isset($referrer)) {
-	$referrer = urlencode($referrer);
-	echo "<input type=hidden name=referrer value=$referrer>\n";
-    }
-    
     echo "<tr>
               <td align=center>
                <b>Please enter a tag[<b>1</b>]</b>
@@ -158,9 +153,6 @@ if (! isset($submit)) {
     $defaults = array();
     $defaults["tag"]     = "";
     $defaults["message"] = "";
-    
-    if (!isset($referrer))
-	$referrer = $_SERVER['HTTP_REFERER'];
     
     SPITFORM($defaults, 0);
     PAGEFOOTER();

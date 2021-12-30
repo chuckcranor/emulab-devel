@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,9 +40,6 @@ function Do_GetSignerInfo()
         SPITAJAX_ERROR(1, "Geni Users are not allowed to login to this site");
 	return;
     }
-    # We use a session to hold stuff across the ajax calls
-    session_start();
-    session_regenerate_id(TRUE);
 
     $blob = array();
     $blob["HOST"]  = "https://ch.geni.net:8444";
@@ -98,9 +95,7 @@ function Do_CreateSecret()
     # Destroy any existing session data to prevent replay.
     #
     session_start();
-    session_unset();
-    session_destroy();
-    session_commit();
+    session_regenerate_id(TRUE);
 
     if (!session_start()) {
 	SPITAJAX_ERROR(-1, "Internal session error 2");

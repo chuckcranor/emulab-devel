@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,8 +34,10 @@ TBMAINSITE	= @TBMAINSITE@
 PROTOGENI       = @PROTOGENI_SUPPORT@
 CLUSTER_PORTAL  = @CLUSTER_PORTAL@
 CONFIG_TARGETSYS= @CONFIG_TARGETSYS@
+TARGETSYS       = @TARGETSYS_TARGET@
 BOSSNODE        = @BOSSNODE@
 POWDER_DEADMAN  = @POWDER_DEADMAN@
+WEBSSH          = @BROWSER_CONSOLE_WEBSSH@
 
 SYSTEM         := $(shell uname -s)
 
@@ -69,6 +71,15 @@ else
 RC_SCRIPTS	+= wbstore.sh
 endif
 
+# New firewall stuff.
+ifeq ($(TBMAINSITE),1)
+OPS_SCRIPTS	+= 3.sshbanlist.sh
+endif
+
+ifeq ($(PROTOGENI),1)
+RC_SCRIPTS	+= geniboot.sh
+endif
+
 # Powder
 ifeq ($(TBMAINSITE),1)
 RC_SCRIPTS	+= powder_keepalive.sh
@@ -97,6 +108,12 @@ endif
 ifeq ($(CONFIG_TARGETSYS),0)
 OPS_SCRIPTS += 1.mysql-client.sh 1.mysql-server.sh 
 endif
+ifeq ($(WEBSSH),1)
+OPS_SCRIPTS += webssh.sh
+endif
+ifeq ($(TARGETSYS),POWDER-BUS)
+RC_SCRIPTS   += mobile-update.sh
+endif
 
 #
 # Force dependencies to make sure configure regenerates if the .in file
@@ -122,6 +139,14 @@ $(INSTALL_RCDIR)/capture: capture.sh
 	@echo "Installing $<"
 	-mkdir -p $(INSTALL_RCDIR)
 	$(INSTALL_PROGRAM) capture.sh $@
+
+$(INSTALL_RCDIR)/geniboot.sh: geniboot.sh
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_RCDIR)
+ifeq ($(TBMAINSITE),0)
+	sed -i "" -e '/portalpsd/d' geniboot.sh
+endif
+	$(INSTALL_PROGRAM) geniboot.sh $@
 
 #
 # Well, this is awkward.  Make sure we don't try to install anything from

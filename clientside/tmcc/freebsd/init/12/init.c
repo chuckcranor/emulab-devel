@@ -934,7 +934,7 @@ single_user(void)
 
 			/* See comment below */
 			sigemptyset(&mask);
-			sigprocmask(SIG_SETMASK, &mask, (sigset_t *) 0);
+			sigprocmask(SIG_SETMASK, &mask, NULL);
 
 			char name[] = "-sh";
 			

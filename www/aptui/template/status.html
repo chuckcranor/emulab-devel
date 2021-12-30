@@ -108,14 +108,14 @@ pre {
 	      <td class='border-none'>RefSpec:</td>
 	      <td class='border-none'>
 		<span><%= expinfo.reporef %></span>
-		(<%= expinfo.repohash %>)
+		(<%= expinfo.repohash.substring(0,8) %>)
 	      </td>
 	    </tr>
 	  <% } else if (expinfo.repohash) { %>
 	    <tr>
 	      <td class='border-none'>RepoHash:</td>
 	      <td class='border-none'>
-		<%= expinfo.repohash %>
+		<%= expinfo.repohash.substring(0,8) %>
 	      </td>
 	    </tr>
 	  <% } %>
@@ -225,7 +225,7 @@ pre {
 		      style='margin-left: 10px;'
 		      style='margin-right: 10px;'
 		      id='warnkill-experiment-button' type=button
-		      data-delay='{"show":750}'
+		      data-delay='{"show":300}'
 		      data-toggle='popover'
 		      data-content='Warn user or terminate/quarantine
 				    experiment with cause
@@ -252,11 +252,29 @@ pre {
 			     hardware used in this experiment.'>
  	      Performance History</a>
 	    <% if (registered && !isfadmin) { %>
+	      <button class='btn btn-xs btn-info hidden'
+		      id='rerun_button' type=button
+		      data-toggle='popover'
+	              data-delay='{"show":300}'
+		      data-html='true'
+		      data-content="Share a link to run this experiment using the
+				    same parameters."> 
+		Share</button>
+	      <button class='btn btn-info btn-xs hidden'
+		      style='margin-right: 30px;'
+		      id='save_paramset_button'
+		      data-toggle='popover'
+		      data-delay='{"show":300}'
+		      data-content='Save the parameters used to create this
+				    experiment, so you can quickly apply them
+				    when starting a new experiment using this
+				    profile. Click for more information.'
+		      type='button'>Save Parameters</button>
 	      <span>
 		<button class='btn btn-xs btn-success hidden' disabled
 			style='margin-right: 10px;'
 			id='linktest-stop-button' type=button
-                        data-delay='{"show":750}'
+                        data-delay='{"show":300}'
 			data-toggle='popover'
 			data-content='Stop a running or wedged linktest'>
  		  Stop Linktest</button>
@@ -264,7 +282,7 @@ pre {
 	      <button class='btn btn-xs btn-primary hidden' disabled
 		      id='snapshot_button' type=button
 		      data-toggle='popover'
-	              data-delay='{"show":750}'
+	              data-delay='{"show":300}'
 		      data-html='true'
 		      data-content="Create a disk image from one of your nodes.
 				    Click for more info."> 
@@ -274,7 +292,7 @@ pre {
 		   href='manage_profile.php?action=copy&uuid=<%= expinfo.profile_uuid %>'
 		   id='copy_button' type=button
 		   data-toggle='popover'
-	           data-delay='{"show":750}'
+	           data-delay='{"show":300}'
 		   data-html='true'
 		   data-content="When you <em>copy</em> a profile,
 			 you are creating a new profile that
@@ -284,16 +302,6 @@ pre {
 			 uses whatever images the original profile uses."> 
 		  Copy</a>
 	      <% } %>
-	      <button class='btn btn-primary btn-xs hidden'
-		      style='margin-right: 10px;'
-		      id='save_paramset_button'
-		      data-toggle='popover'
-		      data-delay='{"hide":100, "show":300}'
-		      data-content='Save the parameters used to create this
-				    experiment, so you can quickly apply them
-				    when starting a new experiment using this
-				    profile. Click for more information.'
-		      type='button'>Save Parameters</button>
 	    <% } %>
 	    <button class='btn btn-xs btn-success exp-running hidden' disabled
 		    id='extend_button' type=button>
@@ -308,23 +316,23 @@ pre {
 	  </div>
 	  <% if (isadmin) { %>
 	    <div class='clearfix'></div>	  
-	    <div class="exp-running hidden">
-	      <div class='pull-left'
-		   data-delay='{"show":750}'
-		   data-toggle='popover'
-		   data-content="When checked, only administrators can extend
-				 this experiment. No free time is granted to
-				 user at all."> 
-		<label class="checkbox-inline" style='margin-right: 10px;'>
-		  <input type="checkbox" id="lockout_checkbox" disabled
-			 <% if (expinfo.lockout) { %>checked<% } %> >Lockout</label>
-	      </div>
+	    <div class='exp-running hidden pull-left'
+		 style='margin-right: 10px;'
+		 data-toggle='popoverxx'
+		 data-delay='{"show":750}'
+		 data-content="When checked, only administrators can extend
+			       this experiment. No free time is granted to
+			       user at all.">
+	      <label class="checkbox-inline">
+		<input type="checkbox" id="lockout_checkbox" disabled
+		       <% if (expinfo.lockout) { %>checked<% } %> >
+		Lockout</label>
 	    </div>
-	    <div class="exp-running hidden">
-	      <div class='pull-left'
-		   data-delay='{"show":750}'
-		   data-toggle='popover'
-		   data-content="When checked, the experiment 
+	    <div class='exp-running hidden pull-left'
+		 style='margin-right: 10px;'
+		 data-toggle='popoverxx'
+		 data-delay='{"show":750}'
+		 data-content="When checked, the experiment 
 			       cannot be terminated by the user unless the
 			       user verifies 
 			       the lockdown code when clicking the Terminate
@@ -333,38 +341,33 @@ pre {
 			       is extended for more then two weeks.
 			       Use the admin lockdown flag to fully prevent
 			       termination."> 
-		<label class="checkbox-inline" style='margin-right: 10px;'>
-		  <input type="checkbox" id="user_lockdown_checkbox" disabled
-			 <% if (expinfo.user_lockdown) { %>checked<% } %> >
-		  User Lockdown</label>
-	      </div>
+	      <label class="checkbox-inline">
+		<input type="checkbox" id="user_lockdown_checkbox" disabled
+		       <% if (expinfo.user_lockdown) { %>checked<% } %> >
+		User Lockdown</label>
 	    </div>
-	    <div class="exp-running hidden">
-	      <div class='pull-left'
-		   data-delay='{"show":750}'
-		   data-toggle='popover'
-		   data-content="When checked, the experiment 
+	    <div class='exp-running hidden pull-left'
+		 style='margin-right: 10px;'
+		 data-toggle='popoverxx'
+		 data-delay='{"show":750}'
+		 data-content="When checked, the experiment 
 			       cannot be terminated by the user. Only an
 			       admin can do it.">
-		<label class="checkbox-inline" style='margin-right: 10px;'>
-		  <input type="checkbox" id="admin_lockdown_checkbox" disabled
-			 <% if (expinfo.admin_lockdown) { %>checked<% } %> >
-		  Admin Lockdown</label>
-	      </div>
+	      <label class="checkbox-inline">
+		<input type="checkbox" id="admin_lockdown_checkbox" disabled
+		       <% if (expinfo.admin_lockdown) { %>checked<% } %> >
+		Admin Lockdown</label>
 	    </div>
-	    <div class="exp-running hidden">
-	      <div class='pull-left'>
-		<span data-toggle='popover'
-		      data-delay='{"show":750}'
-		      <% if (expinfo.admin_notes == "") { %>
-		        data-content="Add admin notes to this experiment"
-		      <% } else { %>
-		        data-content="This experiment has admin notes"
-		      <% } %>>
-		  <a target="_blank"
-		     href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
-		</span>
-	      </div>
+	    <div class='exp-running hidden pull-left'>
+	      <a target="_blank"
+		 data-toggle='popover'
+		 data-delay='{"show":500, "hide":0}'
+		 <% if (expinfo.admin_notes == "") { %>
+		 data-content="Add admin notes to this experiment"
+		 <% } else { %>
+		 data-content="This experiment has admin notes"
+		 <% } %>
+		 href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
 	    </div>
 	  <% } %>
 	</div>
@@ -477,6 +480,10 @@ pre {
 	      col-md-12  col-md-offset-0
 	      col-sm-12  col-sm-offset-0
 	      col-xs-12  col-xs-offset-0'>
+    <center>
+      <button class="hidden"
+	      type='button' id="selenium-shell-button">SHELL</button>
+    </center>
     <div class='panel panel-default invisible' id='showtopo_container'>
       <div class='panel-body'>
 	<div id='quicktabs_div'>
@@ -489,7 +496,7 @@ pre {
               <a href='#listview' id='show_listview_tab'
 		 data-toggle='tab'>List View</a>
             </li>
-	    <li class='hidden'>
+	    <li class='hidden' id="show_powder-map_li">
               <a href='#powder-map' id='show_powder-map_tab'
 		 data-toggle='tab'>Powder Map</a>
             </li>
@@ -569,6 +576,9 @@ pre {
                       <th>ID</th>
                       <th>Node</th>
                       <th>Type</th>
+		      <% if (window.ISPOWDER || window.ISCLOUD) { %>
+			<th>Cluster</th>
+		      <% } %>
                       <th>Status</th>
                       <th>Startup</th>
                       <th>Image</th>
@@ -580,6 +590,7 @@ pre {
 			<div id='listview-action-menu' class='dropdown'>
 			  <input type="checkbox" id="select-all">
 			  <button id='action-menu-button' type='button'
+				  style="margin-top: -6px;"
 				  class='btn btn-primary btn-xs dropdown-toggle'
 				  data-toggle='dropdown'>
 			    <span class='glyphicon glyphicon-cog'></span>
@@ -595,7 +606,9 @@ pre {
 			</div>
 		      </th>
 		      <th class='filter-false sorter-false'
-			  style='text-align: center;'>Actions</th>
+			  style='text-align: center;'>
+			<span class='glyphicon glyphicon-cog'
+			      style="padding-bottom: 6px;"></span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1189,6 +1202,14 @@ pre {
 	   data-toggle='tooltip'
 	   title='Power cycle node, click to confirm'
 	   data-trigger="hover">Power Cycle</a></li>
+      <li id="flash" class="hidden">
+	<a name="flash"
+	   data-toggle='tooltip'
+	   title='Reflash via JTAG; only as a last resort!'
+	   data-trigger="hover">Flash Recovery</a></li>
+      <li id="vnc" class="vnc">
+	<a name="vnc"
+	   data-trigger="hover">Open VNC window</a></li>
       <li id="delete">
 	<a name="delete"
 	   data-toggle='tooltip'
@@ -1281,6 +1302,57 @@ pre {
             <button class='btn btn-danger btn-sm'
 		    id='confirm_recovery_button'>
 	      Confirm</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='confirm_flash_modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <center>
+	    <h3>Flash a recovery FPGA image onto radio</h3>
+	  </center>
+	  When you flash a new FPGA image onto a radio, it will replace
+	  the current FPGA image.
+	  <b><em>This is a last resort approach</em></b>,
+          typically you
+	  would use <em>uhd_image_loader</em> to replace the currently
+	  running FGPA image.
+	  <center style="margin-top: 10px;">
+            <button type='button' style='margin-right: 20px;'
+                    class='btn btn-primary btn-sm' 
+                    data-dismiss='modal' aria-hidden='true'>
+	      Cancel</button>
+            <button class='btn btn-danger btn-sm'
+		    id='confirm_flash_button'>
+	      Confirm</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='flash_done_modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <center>
+	    <h4>Flash operation has completed</h4>
+	  </center>
+	  Your radio has been flashed, <em>now you must do a proper image
+	    load onto it, and then a power cycle.</em> To load a new image,
+	  use uhd_image_loader. For example, an <tt>x310</tt> is loaded with:
+	  <center>
+	    <pre style="width: 80%; margin-top: 10px;">uhd_image_loader --args "type=x300,addr=192.168.40.2,fpga=XG</pre>
+	  </center>
+	  When <tt>uhd_image_loader</tt> finishes, power cycle the radio
+	  using the context menu option.
+	  <center style="margin-top: 15px;">
+            <button type='button'
+                    class='btn btn-primary btn-sm' 
+                    data-dismiss='modal' aria-hidden='true'>
+	      Dismiss</button>
 	  </center>
 	</div>
       </div>
@@ -1719,6 +1791,79 @@ pre {
 	</div>
       </div>
     </div>
+  </div>
+  <div id='rerun_modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <button type='button'
+		  class='close' data-dismiss='modal'
+                  aria-hidden='true'>&times;</button>
+	  <h4 class='modal-title text-center'>Run this experiment again</h4>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    You can use this link, or share it with another user, to run this profile
+	    using the same parameters. 
+	  </p>
+          <center>
+	    <div style="margin-top: 5px;">
+	      <div class="copy-to-clipboard form-inline">
+		<input readonly
+		       style="width: 90%"
+		       class="form-control"
+		       value='<%- window.location.origin %>/instantiate.php?profile=<%- expinfo.profile_uuid %>&rerun_instance=<%= uuid %>'>
+		<a href='#' class='btn'>
+		  <span class='glyphicon glyphicon-copy'
+			style='margin-bottom: 4px;'></span>
+		</a>
+	      </div>
+	    </div>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div class="hidden">
+    <table>
+    <tr id='listview-row'>
+      <td name='client_id'>n/a</td>
+      <td name='node_id'>n/a</td>
+      <td name='type'>n/a</td>
+      <% if (window.ISPOWDER || window.ISCLOUD) { %>
+	<td name='cluster'>n/a</td>
+      <% } %>
+      <td name='status'>n/a</td>
+      <td name='startup'>n/a</td>
+      <td name='image'>n/a</td>
+      <td name='sshurl'>n/a</td>
+      <td align=left><input name='select' type=checkbox></td>
+      <td name='menu' align=center> 
+	<div name='action-menu' class='dropdown'>
+	  <button id='action-menu-button' type='button' 
+		  class='btn btn-primary btn-xs dropdown-toggle' 
+		  data-toggle='dropdown'> 
+            <span class='glyphicon glyphicon-cog'></span> 
+	  </button> 
+	  <ul class='dropdown-menu dropdown-menu-right text-left' role='menu'> 
+            <li><a href='#' name='shell'>Shell</a></li> 
+            <li><a href='#' name='console'>Console</a></li> 
+            <li><a href='#' name='consolelog'>Console Log</a></li> 
+            <li><a href='#' name='recovery'>Recovery</a></li> 
+            <li class='hidden'> 
+              <a href='#' name='monitor'>Monitor Graph</a></li> 
+            <li class='hidden'> 
+              <a href='#' name='nodetop'>Top Processes</a></li> 
+            <li class='hidden'> 
+              <a href='#' name='powercycle'>Power Cycle</a></li> 
+            <li class='hidden'> 
+              <a href='#' name='flash'>Flash Recovery</a></li> 
+            <li><a href='#' name='delete'>Delete Node</a></li> 
+	  </ul>
+	</div>
+      </td>
+    </tr>
+    </table>
   </div>
   <div id='waitwait_div'></div>
   <div id='terminate_div'></div>

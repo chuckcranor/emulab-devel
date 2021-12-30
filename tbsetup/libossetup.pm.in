@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2560,6 +2560,37 @@ use libtblog_simple;
 use Node;
 use English;
 use Data::Dumper;
+
+package libossetup_iris;
+use base qw(libossetup_handler);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+sub New($$) {
+    my ($class, $parent) = @_;
+
+    my $self = $class->SUPER::New("iris", $parent);
+    bless($self, $class);
+    return $self;
+}
+
+sub AddNode($$)
+{
+    my ($self, $node) = @_;
+
+    $self->SUPER::AddNode($node);
+
+    # Need something, should be in ISUP by the time we get there
+    # but stated might be delayed.
+    $node->_maxwait(60);
+    return 0;
+}
 
 # This needs to be the last thing in the file.
 1;

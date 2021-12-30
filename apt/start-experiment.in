@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -249,13 +249,31 @@ if (defined($paramset)) {
 	fatal("Invalid parameter set uid,name");
     }
     my $query_result =
-	DBQueryFatal("select bindings from apt_parameter_sets ".
+	DBQueryFatal("select * from apt_parameter_sets ".
 		     "where uid='$uid' and profileid='$profileid' and ".
 		     "      name='$name'");
     if (!$query_result->numrows) {
 	fatal("No such parameter set for profile");
     }
-    ($bindingstr) = $query_result->fetchrow_array();
+    #
+    # Permission check on the parameter set.
+    #
+    my $row = $query_result->fetchrow_hashref();
+    my $creator_idx = $row->{"uid_idx"};
+    if ($creator_idx != $this_user->uid_idx() && $row->['public'] != 1) {
+	my $creator = User->Lookup($creator_idx);
+	if (!$creator) {
+	    fatal("Could not look paramset creator");
+	}
+	my $paramset_project = Project->Lookup($profile->pid_idx());
+	if (!$paramset_project) {
+	    fatal("Could not look paramset project");
+	}
+	if (!$project->IsMember($creator)) {
+	    fatal("Not allowed to use parameter set");
+	}
+    }
+    ($bindingstr) = $row->{'bindings'};
 }
 
 if (defined($bindingstr)) {
@@ -314,6 +332,7 @@ if (defined($refspec)) {
 				   "  -n $reponame $which");
     if ($?) {
 	print STDERR "Could not get source from repo\n";
+	$webtask->Delete();
 	fatal($output);
     }
     if ($output =~ /^import/m) {

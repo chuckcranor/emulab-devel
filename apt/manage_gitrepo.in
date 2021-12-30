@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -102,6 +102,7 @@ sub DoClone();
 sub DoUpdate();
 sub DoLog();
 sub DoHash();
+sub DoBranch();
 sub DoBranchList();
 sub DoTagList();
 sub DoCommitList();
@@ -149,9 +150,7 @@ if (@ARGV < 1) {
 }
 my $action = shift(@ARGV);
 
-# For credentials.
-my $this_user = User->ThisUser();
-if (! defined($this_user)) {
+if (!defined(User->ThisUser()) && getpwuid($UID) ne "nobody") {
     fatal("You ($UID) do not exist!");
 }
 # We have to add the admin group so we can get into the repositories
@@ -181,6 +180,9 @@ elsif ($action eq "log") {
 }
 elsif ($action eq "hash") {
     DoHash();
+}
+elsif ($action eq "branch") {
+    DoBranch();
 }
 elsif ($action eq "branchlist") {
     DoBranchList();
@@ -636,17 +638,20 @@ sub GetRepoSource($;$$)
     system("/usr/bin/fsync $repodir");
     sleep(1);
 
+    # If a hash, we need the "blob" argument.
+    my $blob = ($refspec =~ /\// ? "-e" : "blob");
+
     chdir("$repodir") or
 	fatal("Could not chdir to $repodir: $!");
 
     foreach my $maybe (@locations) {
 	my $file;
 	    
-	if (system("$GIT cat-file -e ".
+	if (system("$GIT cat-file $blob ".
 		   "$refspec:${maybe}.py >/dev/null 2>&1") == 0) {
 	    $file = "${maybe}.py";
 	}
-	elsif (system("$GIT cat-file -e ".
+	elsif (system("$GIT cat-file $blob ".
 		      "  $refspec:${maybe}.rspec >/dev/null 2>&1") == 0) {
 	    $file = "${maybe}.rspec";
 	}
@@ -727,6 +732,28 @@ sub DoHash()
 	$webtask->Exited(0);
     }
     print "$hash\n";
+    exit(0);
+}
+
+#
+# Get default branch
+#
+sub DoBranch()
+{
+    my $optlist = "n:p:";
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    my $reponame = GetRepoName(\%options);
+    my $branch = GetDefaultBranch($reponame);
+
+    if (defined($webtask)) {
+	$webtask->branch($branch);
+	$webtask->Exited(0);
+    }
+    print "$branch\n";
     exit(0);
 }
 
@@ -1077,7 +1104,7 @@ sub GetCommitList($$)
 
 	push(@{ $commits }, {"hash"   => $hash,
 			     "author" => $author,
-			     "when"   => $when,
+			     "when"   => TBDateStringGMT(str2time($when)),
 			     "log"    => $log});
 	print "$hash,$author,$when,$log\n";
     }
@@ -1129,7 +1156,7 @@ sub DoCommitInfo()
     }
     my $blob = {"hash"      => $hash,
 		"author"    => $author,
-		"when"      => $when,
+		"when"      => TBDateStringGMT(str2time($when)),
 		"log"       => $log,
 		"reponame"  => $reponame,
 		"refspec"   => $which,

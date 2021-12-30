@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -112,10 +112,10 @@ function CheckForm()
         }
     }
     if (!isset($formfields["affiliation"]) ||
-        strcmp($formfields["affiliation"], "") == 0) {
+        trim($formfields["affiliation"]) == "") {
         $errors["affiliation"] = "Missing Field";
     }
-    elseif (! TBvalid_affiliation($formfields["affiliation"])) {
+    elseif (! TBvalid_affiliation(htmlentities($formfields["affiliation"]))) {
         $errors["affiliation"] = TBFieldErrorString();
     }
     if (!isset($formfields["country"]) ||
@@ -138,6 +138,16 @@ function CheckForm()
     }
     elseif (! TBvalid_city($formfields["city"])) {
         $errors["city"] = TBFieldErrorString();
+    }
+    if (!isset($formfields["shell"]) ||
+        strcmp($formfields["shell"], "") == 0) {
+        $errors["shell"] = "Missing Field";
+    }
+    elseif (! TBvalid_shell($formfields["shell"])) {
+        $errors["shell"] = TBFieldErrorString();
+    }
+    elseif (!preg_match("/^(sh|bash|tcsh)$/", $formfields["shell"])) {
+        $errors["shell"] = "Invalid shell";
     }
     if ($ISPOWDER) {
         if (!isset($formfields["address1"]) ||
@@ -235,6 +245,7 @@ function Do_Update()
         return;
     }
     $formfields = $ajax_args["formfields"];
+    $needupdate = $formfields["needupdate"];
     $target_uid = $target_user->uid();
     $args   = array();
     $errors = array();
@@ -264,8 +275,11 @@ function Do_Update()
     if ($formfields["country"] != $target_user->country()) {
         $args["country"] = $formfields["country"];
     }
-    if ($formfields["affiliation"] != $target_user->affil()) {
-        $args["affiliation"] = $formfields["affiliation"];
+    if ($needupdate || $formfields["affiliation"] != $target_user->affil()) {
+        $args["affiliation"] = htmlentities(trim($formfields["affiliation"]));
+    }
+    if ($formfields["shell"] != $target_user->shell()) {
+        $args["shell"] = $formfields["shell"];
     }
     if ($ISPOWDER) {
         if ($formfields["address1"] != $target_user->addr1()) {

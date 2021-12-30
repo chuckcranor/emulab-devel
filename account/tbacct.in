@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -597,6 +597,7 @@ sub AddUser()
     # do not like this.
     #
     if (! $batch) {
+	$target_user->BumpActivity();
 	print "Updating exports file.\n";
 	system("$EXPORTSSETUP");
     }

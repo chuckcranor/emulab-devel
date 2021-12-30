@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2010 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2010, 2021 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -220,8 +220,8 @@ mydb_iptonodeid(char *ipaddr, char *bufp)
 		return 0;
 	}
 	row = mysql_fetch_row(res);
-	mysql_free_result(res);
 	strcpy(bufp, row[0]);
+	mysql_free_result(res);
 
 	return 1;
 }

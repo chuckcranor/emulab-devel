@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -48,6 +48,7 @@ use libtestbed;
 use libEmulab;
 use GeniResponse;
 use GeniSlice;
+use GeniAggregate;
 use GeniCM;
 use GeniHRN;
 use GeniUtil;
@@ -247,6 +248,18 @@ sub InUse()
 		$ttl = "";
 	    }
 	    else {
+		#
+		# Compute a max extension if we can.
+		#
+		my $max;
+		my $genislice = GeniSlice->Lookup($slice_uuid);
+		if ($genislice) {
+		    my $aggregate = GeniAggregate->SliceAggregate($genislice);
+		    if ($aggregate && $aggregate->Ready() &&
+			Reservation->MaxSliceExtension($genislice, \$max) == 0){
+			$maxttl = $max - time();
+		    }
+		}
 		$ttl = $expires - time();
 	    }
 	}
@@ -293,6 +306,11 @@ sub InUse()
 		     "reserved_pid" => $reserved_pid || "",
 		     "reserved_urn" => $reserved_urn});
     }
+    # The above leaves something in the Reservation cache that messes
+    # up these numbers. No idea what it is, but I do not think we actually
+    # need that cache, I might get rid of it.
+    Reservation->FlushAll();
+
     #
     # Reservation system info that affects the free counts.
     # We let the caller figure out how to use the info.
@@ -311,7 +329,8 @@ sub InUse()
     my $results = {"api_version"  => $API_VERSION,
 		   "typeinfo"     => \%typeinfo,
 		   "details"      => \@blob};
-		  
+
+    Reservation->FlushAll();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $results);
 }
 
@@ -396,6 +415,7 @@ sub PreReservationList($;$$)
 	my $terminal = $row->{'terminal'};
 	my $types    = $row->{'types'};
 	my $creator  = $row->{'creator'};
+	my $notes    = $row->{'notes'};
 	my $created  = TBDateStringGMT($row->{'created'});
 	my $start    = TBDateStringGMT($row->{'start'});
 	my $end      = TBDateStringGMT($row->{'end'});
@@ -479,7 +499,7 @@ sub PreReservationList($;$$)
 		     "approved"     => TBDateStringGMT($approved),
 		     "canceled"     => TBDateStringGMT($canceled),
 		     "terminal"     => $terminal,
-		     "notes"        => $row->{'notes'} || "",
+		     "notes"        => $notes || "",
 	     });
 	# We ate the last row.
 	last
@@ -1247,26 +1267,41 @@ sub Reserve($)
 	GeniUtil::FlipToGeniUser();
 	#print STDERR "$args\n";
 	$webtask->Refresh();
-	my $code = $webtask->code();
+	my $code = $webtask->exitcode();
 	my $mesg = $webtask->output();
-	$webtask->Delete();
 	if (!defined($mesg)) {
 	    $mesg = $output;
+	}	
+	my $blob = {
+	    "code"  => $code,
+	    "error" => $mesg,
+	};
+	if ($webtask->conflict()) {
+	    $blob->{"conflict"} = $webtask->conflict();
 	}
-	return GeniResponse->Create(GENIRESPONSE_REFUSED, $code, $mesg);
+	$webtask->Delete();
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, $blob, $mesg);
     }
+    $webtask->Refresh();
     
     my $approved = ($? >> 8 == 2 ? 0 : 1);
     GeniUtil::FlipToGeniUser();
     if ($check) {
-	$webtask->Delete();
 	my $blob = {
 	    "approved" => $approved,
 	};
+	if (!$approved && $webtask->conflict()) {
+	    $blob->{"conflict"} = $webtask->conflict();
+	    print STDERR "Conflicting: " . $webtask->output() . "\n";
+	}
 	if (defined($update)) {
 	    $blob->{"idx"}  = $reservation->idx();
 	    $blob->{"uuid"} = $reservation->uuid();
 	}
+	#$webtask->Dump();
+	#print STDERR Dumper($blob);
+	
+	$webtask->Delete();
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
     }
     if (!$update) {
@@ -1919,7 +1954,8 @@ sub ReservationPrediction($)
 	my $type = $type->type();
 	
 	$freecounts->{$type} = Reservation->FreeCount($type, \@projlist);
-	$forecast->{$type}   = [ Reservation->Forecast($type, \@projlist) ];
+	$forecast->{$type}   = [ Reservation->Forecast($type, \@projlist,
+						       undef, 1) ];
     }
     my @nodes = Reservation->ReservableNodes();
     foreach my $node (@nodes) {
@@ -1928,7 +1964,7 @@ sub ReservationPrediction($)
 	$freecounts->{$node_id} =
 	    Reservation->FreeCount($node_id, \@projlist);
 	$forecast->{$node_id}   =
-	    [ Reservation->Forecast($node_id, \@projlist) ];
+	    [ Reservation->Forecast($node_id, \@projlist, undef, 1) ];
     }
     
     goto nopids
@@ -1958,7 +1994,7 @@ sub ReservationPrediction($)
 		$pforecasts->{$rpid} = {};
 	    }
 	    $pforecasts->{$rpid}->{$type} =
-		[ Reservation->Forecast($type, [$pid]) ];
+		[ Reservation->Forecast($type, [$pid], undef, 1) ];
 	}
     }
     foreach my $node (@nodes) {
@@ -1971,7 +2007,7 @@ sub ReservationPrediction($)
 		$pforecasts->{$rpid} = {};
 	    }
 	    $pforecasts->{$rpid}->{$node_id} =
-		[ Reservation->Forecast($node_id, [$pid]) ];
+		[ Reservation->Forecast($node_id, [$pid], undef, 1) ];
 	}
     }
     
@@ -2170,6 +2206,7 @@ sub NodeTop($)
     if ($?) {
 	GeniUtil::FlipToGeniUser();
 	print STDERR "$output\n";
+	$webtask->Delete();
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
     }
     GeniUtil::FlipToGeniUser();
@@ -2268,6 +2305,42 @@ sub GetImageCredential($)
 
     return GeniResponse->Create(GENIRESPONSE_SUCCESS,
 				$image_credential->asString());
+}
+
+#
+# Receive a manifest from the Portal, that is the (updated) merge of
+# all per-aggregate manifests. This manfest changes as nodes are added
+# and deleted. 
+#
+sub PortalManifest($)
+{
+    my ($argref)  = @_;
+
+    #
+    # The Portal decides the user has permission and then uses "admin" mode.
+    #
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    if (!exists($argref->{'slice_urn'})) {
+	return GeniResponse->BadArgsResponse("Missing slice urn");
+    }
+    my $slice_urn = $argref->{'slice_urn'};
+    my $slice = GeniSlice->Lookup($slice_urn);    
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($slice));
+
+    if (!exists($argref->{'manifest'})) {
+	return GeniResponse->BadArgsResponse("Missing manifest");
+    }
+    my $manifest = $argref->{'manifest'};
+
+    if ($slice->SetPortalManifest($manifest)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not update portal manifest");
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, 1);
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

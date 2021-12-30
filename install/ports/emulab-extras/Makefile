@@ -23,34 +23,6 @@ BATCH=		yes
 .MAKEFLAGS+=	-DBATCH
 
 #
-# Emacs configuration options. Controls the worst of the excesses.
-# I am reasonably confident that these options will not affect the
-# other ports listed.
-#
-.MAKEFLAGS+=	WITHOUT_DBUS=yes
-.MAKEFLAGS+=	WITHOUT_GCONF=yes
-.MAKEFLAGS+=	WITHOUT_GIF=yes
-.MAKEFLAGS+=	WITHOUT_GSETTINGS=yes
-.MAKEFLAGS+=	WITHOUT_GTK2=yes
-.MAKEFLAGS+=	WITH_JPEG=yes
-.MAKEFLAGS+=	WITHOUT_M17N=yes
-.MAKEFLAGS+=	WITHOUT_MOTIF=yes
-.MAKEFLAGS+=	WITHOUT_OTF=yes
-.MAKEFLAGS+=	WITHOUT_PNG=yes
-.MAKEFLAGS+=	WITHOUT_SOUND=yes
-.MAKEFLAGS+=	WITH_SOURCES=yes
-.MAKEFLAGS+=	WITHOUT_SVG=yes
-.MAKEFLAGS+=	WITHOUT_TIFF=yes
-.MAKEFLAGS+=	WITH_X11=yes
-.MAKEFLAGS+=	WITH_XAW=yes
-.MAKEFLAGS+=	WITHOUT_XAW3D=yes
-.MAKEFLAGS+=	WITH_SYNC_INPUT=yes
-.MAKEFLAGS+=	WITHOUT_SCROLLBARS=yes
-.MAKEFLAGS+=	WITHOUT_XFT=yes
-.MAKEFLAGS+=	WITHOUT_XIM=yes
-.MAKEFLAGS+=	WITHOUT_XPM=yes
-
-#
 # XXX hackary to get around bugs in Makefiles:
 #
 # Both pango (required by graphviz) and gtk-update-icon-cache (required by
@@ -65,7 +37,7 @@ BATCH=		yes
 RUN_DEPENDS=	\
 	${LOCALBASE}/libdata/pkgconfig/cairo-gobject.pc:${PORTSDIR}/graphics/cairo
 
-# XXX do vim-lite to avoid dragging in gtk
+# XXX do vim-console (aka "lite") to avoid dragging in gtk
 RUN_DEPENDS+=	\
 	bash:${PORTSDIR}/shells/bash \
 	${LOCALBASE}/sbin/e2fsck:${PORTSDIR}/sysutils/e2fsprogs \
@@ -79,18 +51,19 @@ RUN_DEPENDS+=	\
 	xterm:${PORTSDIR}/x11/xterm \
 	zsh:${PORTSDIR}/shells/zsh
 
-.if (${PORTVERSION} == "7.1" || ${PORTVERSION} == "7.2" || ${PORTVERSION} == "7.3")
+.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
 RUN_DEPENDS+=	\
-	vim:${PORTSDIR}/editors/vim-console
+	gdb:${PORTSDIR}/devel/gdb \
+	vim:${PORTSDIR}/editors/vim
 .else
 RUN_DEPENDS+=	\
-	vim:${PORTSDIR}/editors/vim-lite
+	vim:${PORTSDIR}/editors/vim-console
 .endif
 
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}subversion>0:${PORTSDIR}/devel/py-subversion
 
-USES=		python:2.7
+USES=		python:$(PY_VER)
 
 do-install:	# empty
 

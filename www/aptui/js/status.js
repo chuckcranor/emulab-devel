@@ -32,6 +32,7 @@ $(function ()
     var wholedisk   = 0;
     var isscript    = 0;
     var dossh       = 1;
+    var lazytopo    = 0;
     var jacksIDs    = {};
     var jacksSites  = {};
     var publicURLs  = null;
@@ -59,6 +60,7 @@ $(function ()
     var radioinfo         = null;
     var radios            = {};
     var monitorTemplate   = null;
+    var vncpasswd         = null;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var GENIRESPONSE_REFUSED = 7;
@@ -92,6 +94,7 @@ $(function ()
 	dossh         = window.APT_OPTIONS.dossh;
 	isscript      = window.APT_OPTIONS.isscript;
 	hidelinktest  = window.APT_OPTIONS.hidelinktest;
+	lazytopo      = window.APT_OPTIONS.lazytopo;
 	lockdown_code = uuid.substr(2, 5);
 
 	// Standard option
@@ -131,7 +134,7 @@ $(function ()
 	extension_blob  = expinfo.extension_info;
 
 	// For tutorials
-	if (expinfo.project == "sigcomm2019") {
+	if (expinfo.project == "OAI2021FallWS") {
 	    slowdown = true;
 	}
 	
@@ -480,7 +483,7 @@ $(function ()
 	    expinfo.paniced = 1;
 	    instanceStatus = "quarantined";
 	}
-	if (instanceStatus != lastStatus) {
+	if (instanceStatus != lastStatus || instanceStatus == "created") {
             APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
 	    //console.info("New Status: ", json);
 	
@@ -495,6 +498,21 @@ $(function ()
 	    }
 	    if (instanceStatus == 'stitching') {
 		status_html = "stitching";
+	    }
+	    else if (instanceStatus == 'created' &&
+		     _.has(json.value, "delayedCount")) {
+		status_html = "waiting";
+		ProgressBarUpdate();
+		if (json.value.delayedCount > 1) {
+		    var count = json.value.delayedCount;
+
+		    status_message = "Portal is very busy, there are " +
+			count + " experiments waiting. ";
+		}
+		else {
+		    status_message = "Portal is very busy, waiting a moment. ";
+		}
+		status_message += "Patience please!";
 	    }
 	    else if (instanceStatus == 'pending') {
 		status_html = "pending";
@@ -1038,6 +1056,11 @@ $(function ()
 		}
 		return;
 	    }
+	    if (iblob.status == "terminated" ||
+		iblob.status == "canceled") {
+		TerminatedAggregate(iblob.status, urn);
+		return;
+	    }
 	    if (iblob.offline) {
 		OfflineAggregate(urn);
 		return;
@@ -1100,7 +1123,7 @@ $(function ()
 		else if (details.status == "failed") {
 		    // Bootstrap bg-danger color
 		    $('#' + jacksID + ' .node .nodebox')
-			.css("fill", "#f2dede");
+			.css("fill", "#e67795");
 		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
 		      '#listview-row-' + node_id + ' td[name="client_id"]')
 			.css("color", "#a94442");
@@ -1296,11 +1319,37 @@ $(function ()
 	    $('#' + jacksID + ' .node .nodebox')
 		.css("fill", "#fcf8e3");
 
-	    var html =
-		"This node is currently unreachable, operations on this " +
-		"node will fail until it becomes reachable again.";
+	    var html = "This node is currently unreachable, operations on " +
+		"this node will fail until it becomes reachable again.";
 
 	    UpdateNodePopover(node_id, jacksID, html);
+	});
+    }
+
+    function TerminatedAggregate(status, urn)
+    {
+	if (!_.has(jacksSites, urn)) {
+	    // Manifest not processed yet.
+	    return;
+	}
+	$.each(jacksSites[urn], function(node_id, jacksID) {
+	    //console.info("deferAggregate: ", urn, node_id, jacksID);
+	    $('#' + jacksID + ' .node .nodebox')
+		.css("fill", "red");
+
+	    var html;
+
+	    if (status == "terminated") {
+		html = "This node has been deallocated and is no longer " +
+		    "accessible by this experiment.";
+	    }
+	    else {
+		html = "This node has been marked for removal from your " +
+		    "experiment as soon as the aggregate comes back online.";
+	    }
+	    UpdateNodePopover(node_id, jacksID, html);
+	    $('#listview-row-' + node_id + ' td[name="status"]')
+		.html("terminated");
 	});
     }
 
@@ -1512,6 +1561,44 @@ $(function ()
     }
 	
     /*
+     * Flash a flashable device.
+     */
+    function DoFlash(node)
+    {
+	// Handler for hide modal to unbind the click handler.
+	$('#confirm_flash_modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#confirm_flash_button').unbind("click.flash");
+	});
+	
+	// Throw up a confirmation modal, with handler bound to confirm.
+	$('#confirm_flash_button').bind("click.flash", function (event) {
+	    var callback = function(json) {
+		sup.HideModal('#waitwait-modal', function () {
+		    if (json.code) {
+			sup.SpitOops("oops",
+				     "Failed to set flash node: " + json.value);
+		    }
+		    else {
+			sup.ShowModal('#flash_done_modal');			
+		    }
+		});
+	    }
+	    var args = {"uuid"  : uuid,
+			"node"  : node};
+
+	    sup.HideModal('#confirm_flash_modal', function () {
+		sup.ShowWaitWait("Flashing takes 1-2 minutes, " +
+				 "patience please!");
+		var xmlthing = sup.CallServerMethod(ajaxurl, "status",
+						    "Flash", args);
+		xmlthing.done(callback);
+	    });
+	});
+	sup.ShowModal('#confirm_flash_modal');
+    }
+	
+    /*
      * Fire up the backend of the ssh tab.
      *
      * If the local ops node is using a self-signed certificate (typical)
@@ -1583,6 +1670,56 @@ $(function ()
 	});
 	xmlthing.done(callback);
 	xmlthing.fail(callback_error);
+    }
+
+    function StartSSHWebSSH(tabname, authobject)
+    {
+	var jsonauth = $.parseJSON(authobject);
+
+        var url     = jsonauth.baseurl;
+	var iwidth  = "100%";
+        var iheight = 400;
+
+	// Backwards compat for a while.
+	if (!url.includes("webssh")) {
+	    url = url + "/webssh/webssh.html";
+	}
+
+	var loadiframe = function () {
+	    console.info("Sending message", jsonauth.baseurl);
+	    iframewindow.postMessage(authobject, "*");
+	    window.removeEventListener("message", loadiframe, false);
+	};
+	window.addEventListener("message", loadiframe);
+
+	var html = '<iframe id="' + tabname + '_iframe" ' +
+	    'width=' + iwidth + ' ' +
+            'height=' + iheight + ' ' +
+            'src=\'' + url + '\'>';
+
+	var html =
+	    '<div style="height:400px; width:100%; ' +
+	    '            resize:vertical;overflow-y:auto;padding-bottom:10px"> ' +
+	    '  <iframe id="' + tabname + '_iframe" ' +
+	    '     width="100%" height="100%"' + 
+            '     src=\'' + url + '\'>' +
+	    '</div>';
+	
+        $('#' + tabname).html(html);
+
+	var iframe = $('#' + tabname + '_iframe')[0];
+	var iframewindow = (iframe.contentWindow ?
+			    iframe.contentWindow :
+			    iframe.contentDocument.defaultView);	
+
+	/*
+	 * When the user activates this tab, we want to send a message
+	 * to the terminal to focus so we do not have to click inside.
+	 */
+	$('#quicktabs_ul a[href="#' + tabname + '"]')
+	    .on('shown.bs.tab', function (e) {
+		iframewindow.postMessage("Focus man!", "*");
+	    });
     }
 
     //
@@ -1664,7 +1801,15 @@ $(function ()
 		return;
 	    }
 	    else {
-		StartSSH(tabname, json.value);
+		var jsonauth = $.parseJSON(json.value);
+		
+		if (APT_OPTIONS.webssh &&
+		    _.has(jsonauth, "webssh") && jsonauth.webssh != 0) {
+		    StartSSHWebSSH(tabname, json.value);
+		}
+		else {
+		    StartSSH(tabname, json.value);
+		}
 	    }
 	}
 	var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -1673,6 +1818,62 @@ $(function ()
 					    {"uuid" : uuid,
 					     "hostport" : hostport});
 	xmlthing.done(callback);
+    }
+
+    function DoVNC(node)
+    {
+	var hostport = hostportList[node].split(":");
+	var host     = hostport[0];
+
+	console.info("DoVNC", host);
+	
+	// Ask the server for an authentication object that allows
+	// to start an ssh shell.
+	var callback = function(json) {
+	    console.info(json.value);
+
+	    if (json.code) {
+		sup.SpitOops("oops", "Failed to get vnc auth object: " +
+			     json.value);
+		return;
+	    }
+	    OpenVNCWindow(node, json.value);
+	}
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "status",
+					    "GetVNCAuthObject",
+					    {"uuid" : uuid,
+					     "host" : host});
+	xmlthing.done(callback);
+    }
+    function OpenVNCWindow(node, authobject)
+    {
+	var vncwindow = null;
+	var jsonauth  = $.parseJSON(authobject);
+        var url       = jsonauth.baseurl + "/novnc/vnc_lite.html";
+
+	if (vncpasswd == null) {
+	    alert("You have not defined a VNC password in your profile");
+	    return;
+	}
+		
+	/*
+	 * As with the webssh iframe, we need to know when it is so we
+	 * can send it a message with the authobject and password.
+	 */
+	var data = {
+	    "authobject" : authobject,
+	    "password"   : vncpasswd,
+	};
+	var windowloaded = function () {
+	    console.info("Sending message", data);
+	    vncwindow.postMessage(JSON.stringify(data), "*");
+	    window.removeEventListener("message", windowloaded, false);
+	};
+	window.addEventListener("message", windowloaded);
+
+	vncwindow = window.open(url, "VNC " + node,
+				"left=10,top=10,width=1825,height=1025")
     }
 
     // SSH info.
@@ -1863,6 +2064,12 @@ $(function ()
 	else if (action == "monitor") {
 	    NewMonitorTab(clientList[0]);
 	}
+	else if (action == "flash") {
+	    DoFlash(clientList[0]);
+	}
+	else if (action == "vnc") {
+	    DoVNC(clientList[0]);
+	}
     }
 
     //
@@ -1876,40 +2083,6 @@ $(function ()
 	    DoDeleteSite(urn);
 	}
     }
-
-    var listview_row = 
-	"<tr id='listview-row'>" +
-	" <td name='client_id'>n/a</td>" +
-	" <td name='node_id'>n/a</td>" +
-	" <td name='type'>n/a</td>" +
-	" <td name='status'>n/a</td>" +
-	" <td name='startup'>n/a</td>" +
-	" <td name='image'>n/a</td>" +
-	" <td name='sshurl'>n/a</td>" +
-	" <td align=left><input name='select' type=checkbox>" +
-	" <td name='menu' align=center> " +
-	"  <div name='action-menu' class='dropdown'>" +
-	"  <button id='action-menu-button' type='button' " +
-	"          class='btn btn-primary btn-xs dropdown-toggle' " +
-	"          data-toggle='dropdown'> " +
-	"      <span class='glyphicon glyphicon-cog'></span> " +
-	"  </button> " +
-	"  <ul class='dropdown-menu text-left' role='menu'> " +
-	"    <li><a href='#' name='shell'>Shell</a></li> " +
-	"    <li><a href='#' name='console'>Console</a></li> " +
-	"    <li><a href='#' name='consolelog'>Console Log</a></li> " +
-	"    <li><a href='#' name='recovery'>Recovery</a></li> " +
-	"    <li class='hidden'> " +
-	"       <a href='#' name='monitor'>Monitor Graph</a></li> " +
-	"    <li class='hidden'> " +
-	"       <a href='#' name='nodetop'>Top Processes</a></li> " +
-	"    <li class='hidden'> " +
-	"       <a href='#' name='powercycle'>Power Cycle</a></li> " +
-	"    <li><a href='#' name='delete'>Delete Node</a></li> " +
-	"  </ul>" +
-	"  </div>" +
-	" </td>" +
-	"</tr>";
 
     //
     // Show the topology inside the topo container. Called from the status
@@ -1996,13 +2169,15 @@ $(function ()
 		var vnode  = this.getElementsByTagNameNS(EMULAB_NS, 'vnode');
 		var imageable =
 		    this.getElementsByTagNameNS(EMULAB_NS, 'imageable');
+		var flashable =
+		    this.getElementsByTagNameNS(EMULAB_NS, 'flashable');
 		var href   = "n/a";
 		var ssh    = "n/a";
 		var cons   = "n/a";
 		var isfw   = 0;
 		var node_id= null;
 		var hwtype = null;
-		var clone  = $(listview_row);
+		var clone  = $("#listview-row").clone();
 		var CMclone= $("#context-menu").clone();
 		
 		// Cause of nodes in the emulab namespace (vhost).
@@ -2051,6 +2226,13 @@ $(function ()
 		}
 		// Convenience.
 		clone.find(" [name=select]").attr("id", node);
+
+		// Nice for Cloudlab/Powder
+		if (window.ISPOWDER || window.ISCLOUD) {
+		    var cluster = amlist[aggregate_urn].abbreviation;
+		    
+		    clone.find(" [name=cluster]").html(cluster);
+		}
 
 		if (stype.length &&
 		    $(stype).attr("name") === "emulab-blockstore") {
@@ -2121,7 +2303,16 @@ $(function ()
 			    e.preventDefault();
 			    ActionHandler("shell", [node]);
 			    return false;
-			});		    
+			});
+		    // For selenium
+		    if ($('#selenium-shell-button').length) {
+			$('#selenium-shell-button')
+			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
+			    ActionHandler("shell", [node]);
+			    return false;
+			});
+		    }
 		}
 		else {
 		    // Need to do this on the context menu too, but painful.
@@ -2211,6 +2402,21 @@ $(function ()
 			// Mark it as a radio with its info. 
 			radios[node] = info;
 		    }
+
+		    if (flashable.length) {
+			var available = $(flashable).attr("available");
+			if (available === "true") {
+			    clone.find(' [name=flash]')
+				.click(function (e) {
+				    ActionHandler("flash", [node]);
+				});
+			    clone.find(' [name=flash]')
+				.parent().removeClass('hidden');
+
+			    // Context menu option
+			    CMclone.find("li[id=flash]").removeClass("hidden");
+			}
+		    }
 		}
 
 		//
@@ -2299,6 +2505,17 @@ $(function ()
 	    clientid2nodeid = {};
 	    imageablenodes  = {};
 	    redrawpowdermap = true;
+
+	    // But might have deleted all the aggregates.
+	    if (Object.keys(statusblob).length == 0) {
+		changingtopo = false;
+		ClearViewer();
+		if (window.ISPOWDER) {
+		    UpdatePowderMap();
+		}
+		donefunc();
+		return;
+	    }
 	}
 	/*
 	 * If we have all the manifests then nothing to do.
@@ -2346,11 +2563,12 @@ $(function ()
 		    UpdatePowderMap()
 		}
 		else {
-		    var showmap = true;
-		
+		    var showmap = false;
+
+		    // If we have at least one manifest, show the map.
 		    $.each(statusblob, function(urn) {
-			if (!_.has(manifests, urn)) {
-			    showmap = false;
+			if (_.has(manifests, urn)) {
+			    showmap = true;
 			}
 		    });
 		    if (showmap) {
@@ -2436,16 +2654,17 @@ $(function ()
 			});
 		}
 	    }
+	    var multisite = Object.keys(statusblob).length > 1;
+	    console.info("foo", multisite, nodecount);
 
-	    if (Object.keys(statusblob).length > 1 ||
-		nodecount < MAXJACKSNODES) {
+	    if (multisite || nodecount < MAXJACKSNODES) {
 		if (!jacksInstance) {
-		    $('#quicktabs_ul a[href="#topology"]')
-			.parent().removeClass("hidden");
-		    $('#quicktabs_content #topology').removeClass("hidden");
-		    $('#quicktabs_ul a[href="#topology"]').tab('show');
-		    ShowViewer('#showtopo_statuspage',
-			       Object.keys(statusblob).length > 1, manifest);
+		    if (lazytopo) {
+			LazyTopoTab(multisite, manifest);
+		    }
+		    else {
+			ShowTopologyTab(multisite, manifest);
+		    }
 		}
 		else if (changingtopo) {
 		    // When we get first new manifest, clear the viewer palette.
@@ -2456,9 +2675,14 @@ $(function ()
 		}
 	    }
 	    else {
+		// Not going to show a topology, default to list.
 		$('#quicktabs_ul a[href="#listview"]').tab('show');
+		
+		// Without jacks, we show the manifest now, otherwise
+		// jacks combines them and hands it back.
 		ShowManifest(manifest);
 	    }
+
 	    // Clear changingtopo state on first new manifest.
 	    if (changingtopo) {
 		changingtopo = false;
@@ -2478,7 +2702,9 @@ $(function ()
 		if (managers.length == 1)
 		    showlinktest = true;
 	    });
-	    SetupLinktest(instanceStatus);
+	    if (!lazytopo) {
+		SetupLinktest(instanceStatus);
+	    }
 
 	    // Mark that we have this manifest;
 	    manifests[aggregate_urn] = manifest;
@@ -2590,8 +2816,7 @@ $(function ()
 	    return;
 	}
 	// Enable the Save Params button. 
-	if (expinfo.profile_uuid != "unknown" &&
-	    window.APT_OPTIONS.cansave_parameters &&
+	if (expinfo.profile_uuid != "unknown" && expinfo.params &&
 	    $('#save_paramset_button').hasClass("hidden")) {
 	    $('#save_paramset_button')
 		.removeClass("hidden")
@@ -2603,6 +2828,15 @@ $(function ()
 						   expinfo.profile_uuid,
 						   uuid);
 		});
+	    $('#rerun_button')
+	        .click(function (e) {
+		    e.preventDefault();
+		    sup.ShowModal("#rerun_modal");
+		})
+		.removeClass("hidden");
+	    // Bind the copy to clipbload button in the share modal
+	    window.APT_OPTIONS.SetupCopyToClipboard("#rerun_modal");
+
 	}
 	if (expinfo.params &&
 	    $('#quicktabs_content #bindings').hasClass("hidden")) {
@@ -2638,9 +2872,6 @@ $(function ()
 	var needed  = $('#instructions_text').html().match(regex);
 	//console.log(needed);
 
-	if (!needed || !needed.length)
-	    return;
-
 	// Look for all the encryption blocks in the manifest ...
 	_.each(passwords, function (password) {
 	    var name  = $(password).attr('name');
@@ -2655,14 +2886,22 @@ $(function ()
 		    blocks[key] = stuff;
 		}
 	    });
+	    // XXX
+	    if (key == "password-vncpasswd" || key == "password-vncpswd") {
+		blocks[key] = stuff;
+	    }
 	});
+	if (!_.size(blocks)) {
+	    return;
+	}
+	
 	// These are blocks that are referenced in the instructions
 	// and need the server to decrypt.  At some point we might
 	// want to do that here in javascript, but maybe later.
 	//console.log(blocks);
 
 	var callback = function(json) {
-	    //console.log(json);
+	    console.log("decrypt blocks", json);
 	    if (json.code) {
 		sup.SpitOops("oops", "Could not decrypt secrets: " +
 			     json.value);
@@ -2671,6 +2910,11 @@ $(function ()
 	    var itext = $('#instructions_text').html();
 
 	    _.each(json.value, function(plaintext, key) {
+		// XXX
+		if (key == "password-vncpasswd" || key == "password-vncpswd") {
+		    vncpasswd = plaintext;
+		}
+		
 		key = new RegExp("{" + key + "}", "g");
 		// replace in the instructions text.
 		itext = itext.replace(key, plaintext);
@@ -3312,12 +3556,13 @@ $(function ()
     // to get things going.
     //
     var constabcounter = 0;
-    
+
     function NewConsoleTab(client_id)
     {
 	sup.ShowModal('#waitwait-modal');
 
 	var callback = function(json) {
+	    console.info("NewConsoleTab", json);
 	    sup.HideModal('#waitwait-modal');
 	    
 	    if (json.code) {
@@ -3380,54 +3625,66 @@ $(function ()
 		$('#quicktabs_ul a:last').tab('show') // Select last tab
 
 		// Now create the console iframe inside the new tab
-		var iwidth = "100%";
-		var iheight = 400;
+		if (APT_OPTIONS.webssh && _.has(json.value, "authobject")) {
+		    var jsonauth = $.parseJSON(json.value.authobject);
+		    
+		    if (_.has(jsonauth, "webssh") && jsonauth.webssh != 0) {
+			StartConsoleNew(tabname, json.value);
+			return;
+		    }
+		}
+		if (1) {
+		    var iwidth = "100%";
+		    var iheight = 400;
 		
-		var html = '<iframe id="' + tabname + '_iframe" ' +
-		    'width=' + iwidth + ' ' +
-		    'height=' + iheight + ' ' +
-		    'src=\'' + url + '\'>';
+		    var html = '<iframe id="' + tabname + '_iframe" ' +
+			'width=' + iwidth + ' ' +
+			'height=' + iheight + ' ' +
+			'src=\'' + url + '\'>';
 	    
-		if (_.has(json.value, "password")) {
-		    html =
-			"<div class='col-sm-4 col-sm-offset-4 text-center'>" +
-			" <small> " +
-			" <a data-toggle='collapse' " +
-			"    href='#password_" + tabname + "'>Password" +
-			"   </a></small> " +
-			" <div id='password_" + tabname + "' " +
-			"      class='collapse'> " +
-			"  <div class='well well-xs'>" +
-			nodePasswords[client_id] +
-			"  </div> " +
-			" </div> " +
-			"</div> " + html;
-		}		
-		$('#' + tabname).html(html);
+		    if (_.has(json.value, "password")) {
+			html =
+			    "<div class='col-sm-4 col-sm-offset-4 " +
+			    "     text-center'>" +
+			    " <small> " +
+			    " <a data-toggle='collapse' " +
+			    "    href='#password_" + tabname + "'>Password" +
+			    "   </a></small> " +
+			    " <div id='password_" + tabname + "' " +
+			    "      class='collapse'> " +
+			    "  <div class='well well-xs'>" +
+			    nodePasswords[client_id] +
+			    "  </div> " +
+			    " </div> " +
+			    "</div> " + html;
+		    }		
+		    $('#' + tabname).html(html);
 
-		//
-		// Setup a custom event handler so we can kill the connection.
-		// Called from the kill click handler above.
-		//
-		// Post a kill message to the iframe. See nodetipacl.php3.
-		// Since postmessage is async, we have to wait before we
-		// can actually kill the content div with the iframe, cause
-		// its gone before the message is delivered. Just delay a
-		// couple of seconds. Maybe add a reply message later. The
-		// delay is above.
-		//
-		// In firefox, nodetipacl.php3 does not install a handler,
-		// so now the shellinabox code has that handler, and so this
-		// gets posted to the box directly. Oh well, so much for
-		// trying to stay out of the box code.
-		//
-		var sendkillmessage = function (event) {
-		    var iframe = $('#' + tabname + '_iframe')[0];
-		    iframe.contentWindow.postMessage("kill", "*");
-		};
-		// This is the handler for the button, which invokes
-		// the function above.
-		$('#' + tabname).on("killconsole", sendkillmessage);
+		    //
+		    // Setup a custom event handler so we can kill the
+		    // connection.  Called from the kill click handler
+		    // above.
+		    //
+		    // Post a kill message to the iframe. See nodetipacl.php3.
+		    // Since postmessage is async, we have to wait before we
+		    // can actually kill the content div with the iframe, cause
+		    // its gone before the message is delivered. Just delay a
+		    // couple of seconds. Maybe add a reply message later. The
+		    // delay is above.
+		    //
+		    // In firefox, nodetipacl.php3 does not install a handler,
+		    // so now the shellinabox code has that handler, and so this
+		    // gets posted to the box directly. Oh well, so much for
+		    // trying to stay out of the box code.
+		    //
+		    var sendkillmessage = function (event) {
+			var iframe = $('#' + tabname + '_iframe')[0];
+			iframe.contentWindow.postMessage("kill", "*");
+		    };
+		    // This is the handler for the button, which invokes
+		    // the function above.
+		    $('#' + tabname).on("killconsole", sendkillmessage);
+		}
 	    }
 	    else {
 		// Switch back to it.
@@ -3441,6 +3698,70 @@ $(function ()
 					    {"uuid" : uuid,
 					     "node" : client_id});
 	xmlthing.done(callback);
+    }
+
+    function StartConsoleNew(tabname, coninfo)
+    {
+	var authobject = coninfo.authobject;
+	var jsonauth   = $.parseJSON(authobject);
+        var url        = jsonauth.baseurl;
+
+	// Backwards compat for a while.
+	if (!url.includes("webssh")) {
+	    url = url + "/webssh/webssh.html";
+	}
+
+	var loadiframe = function () {
+	    console.info("Sending message", jsonauth.baseurl);
+	    iframewindow.postMessage(authobject, "*");
+	    window.removeEventListener("message", loadiframe, false);
+	};
+	window.addEventListener("message", loadiframe);
+
+	var html =
+	    '<div style="height:31em; width:100%; ' +
+	    '           resize:vertical;overflow-y:auto;padding-bottom:10px">' +
+	    '  <iframe id="' + tabname + '_iframe" ' +
+	    '     width="100%" height="100%"' + 
+            '     src=\'' + url + '\'></iframe>' +
+	    '</div>';
+	
+	if (_.has(coninfo, "password")) {
+	    html =
+		"<div class='col-sm-4 col-sm-offset-4 " +
+		"     text-center'>" +
+		" <small> " +
+		" <a data-toggle='collapse' " +
+		"    href='#password_" + tabname + "'>Password" +
+		"   </a></small> " +
+		" <div id='password_" + tabname + "' " +
+		"      class='collapse'> " +
+		"  <div class='well well-xs'>" + coninfo.password +
+		"  </div> " +
+		" </div> " +
+		"</div> " + html;
+	}
+	html += 
+	    "<center> " +
+	    "  If you change the size of the window, you will " +
+	    "  need to use <b><em>stty</em></b> to tell your shell. " +
+	    "</center>\n";
+	
+        $('#' + tabname).html(html);
+
+	var iframe = $('#' + tabname + '_iframe')[0];
+	var iframewindow = (iframe.contentWindow ?
+			    iframe.contentWindow :
+			    iframe.contentDocument.defaultView);
+
+	/*
+	 * When the user activates this tab, we want to send a message
+	 * to the terminal to focus so we do not have to click inside.
+	 */
+	$('#quicktabs_ul a[href="#' + tabname + '"]')
+	    .on('shown.bs.tab', function (e) {
+		iframewindow.postMessage("Focus man!", "*");
+	    });
     }
 
     //
@@ -3508,17 +3829,20 @@ $(function ()
     //
     function ShowPowderMapTab()
     {
-	// Do nothing if already visible.
-	if (!$('#quicktabs_content #powder-map').hasClass("hidden")) {
+	if (! $('#show_powder-map_li').hasClass("hidden")) {
 	    return;
 	}
 	
 	// Show the tab.
-	$('#quicktabs_ul a[href="#powder-map"]')
-	    .parent().removeClass("hidden");
-	$('#quicktabs_content #powder-map').removeClass("hidden");
+	$('#show_powder-map_li').removeClass("hidden");
 
-	DrawPowderMapTab();
+	// Lazy load, wait until user clicks for the first time.
+	var handler = function () {
+	    $('#show_powder-map_tab').off("shown.bs.tab", handler);
+	    $('#quicktabs_content #powder-map').removeClass("hidden");
+	    DrawPowderMapTab();
+	};
+	$('#show_powder-map_tab').on("shown.bs.tab", handler);
     }
     function DrawPowderMapTab()
     {
@@ -3536,6 +3860,10 @@ $(function ()
     }
     function UpdatePowderMap()
     {
+	// Do nothing if not visible.
+	if ($('#quicktabs_content #powder-map').hasClass("hidden")) {
+	    return;
+	}
 	$('#powder-map_iframe')[0].contentWindow.PowderMapUpdate();
     }
 
@@ -3605,10 +3933,8 @@ $(function ()
     {
 	if (jacksInput) {
 	    jacksInput.trigger('change-topology',
-			       [{ rspec: manifest }]);
-	    // Jacks Bug.
-	    jacksInput.trigger('add-topology', 
-			       [{ rspec: manifest }]);
+			       [{ rspec: manifest }], {});
+
 	}
     }
     // Add manifest to viewer.
@@ -4090,6 +4416,55 @@ $(function ()
 			"exptID"   : "#expt-traffic-panel-div",
 			"refreshID": "#graphs-refresh-button",
 			"callback" : callback});
+    }
+
+    function LazyTopoTab(multisite, manifest)
+    {
+	if (! $('#show_topology_tab').parent().hasClass("hidden")) {
+	    return;
+	}
+	$('#show_topology_tab').parent().removeClass("hidden");
+	
+	// Helper function.
+	var loadScript = function (url, callback) {
+	    jQuery.ajax({
+		url: url,
+		dataType: 'html',
+		success: callback,
+		async: true
+	    });
+	};
+	var waitForJacks = function () {
+	    if (window.JACKS_LOADER.isReady) {
+		console.info("loaded");
+		ShowTopologyTab(multisite, manifest);
+		SetupLinktest(instanceStatus);
+		return;
+	    }
+	    console.info("waiting");
+	    setTimeout(function f() { waitForJacks() }, 500);	    
+	};
+	loadScript("jacksload.php", function (data) {
+	    console.info(data);
+
+	    $(document.body).append("<div>" + data + "</div>");
+	    waitForJacks();
+	});
+	lazytopo = 0;
+    }
+
+    function ShowTopologyTab(multisite, manifest)
+    {
+	if (! $('#quicktabs_content #topology').hasClass("hidden")) {
+	    return;
+	}
+	
+	// Show the tab.
+	$('#quicktabs_ul a[href="#topology"]').parent().removeClass("hidden");
+	$('#quicktabs_content #topology').removeClass("hidden");
+	$('#quicktabs_ul a[href="#topology"]').tab('show');
+
+	ShowViewer('#showtopo_statuspage', multisite, manifest);
     }
 
     /*

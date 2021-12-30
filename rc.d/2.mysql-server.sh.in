@@ -46,8 +46,8 @@ if [ $MAINSITE == "0" -a $BIGDB == "0" ]; then
 else
     opts="$opts -O key_buffer=256M -O table_cache=256 -O sort_buffer=4M"
     opts="$opts -O record_buffer=1M -O query_cache_size=16M"
-    opts="$opts -O join_buffer_size=256K -O thread_cache_size=4"
-    opts="$opts -O tmp_table_size=32M -O max_heap_table_size=32M"
+    opts="$opts -O join_buffer_size=1M -O thread_cache_size=50"
+    opts="$opts -O tmp_table_size=256M -O max_heap_table_size=256M"
     opts="$opts -O max_connections=1000"
     opts="$opts -O max_allowed_packet=16M"
     
@@ -66,15 +66,15 @@ if [ $major -eq 5 ]; then
 	    # XXX awkward: no -O, a couple of name changes
 	    opts="--default-storage-engine=MyISAM --long_query_time=2"
 	    if [ $MAINSITE == "0" -a $BIGDB == "0" ]; then
-		opts="$opts --key_buffer_size=32M --table_open_cache=128"
+		opts="$opts --key_buffer_size=256M --table_open_cache=128"
 		opts="$opts --sort_buffer_size=2M"
 		opts="$opts --read_buffer_size=1M --max_connections=250"
 	    else
 		opts="$opts --key_buffer_size=256M --table_open_cache=256"
 		opts="$opts --sort_buffer_size=4M"
 		opts="$opts --read_buffer_size=1M --query_cache_size=16M"
-		opts="$opts --join_buffer_size=256K --thread_cache_size=4"
-		opts="$opts --tmp_table_size=32M --max_heap_table_size=32M"
+		opts="$opts --join_buffer_size=1M --thread_cache_size=50"
+		opts="$opts --tmp_table_size=256M --max_heap_table_size=256M"
 		opts="$opts --max_connections=1000"
 		opts="$opts --max_allowed_packet=16M"
 	    fi

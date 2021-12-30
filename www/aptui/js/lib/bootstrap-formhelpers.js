@@ -18,7 +18,7 @@ if (!jQuery) { throw new Error("Bootstrap Form Helpers requires jQuery"); }
  * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * distributed under the License is distrisbuted on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -9926,6 +9926,7 @@ var BFHStatesList = {
     '11' : {'code':'GU','name':'Gujarat'},
     '12' : {'code':'HA','name':'Haryana'},
     '13' : {'code':'HP','name':'Himachal Pradesh'},
+    '33' : {'code':'JH','name':'Jharkhand'},
     '14' : {'code':'JA','name':'Jammu and Kashmir'},
     '15' : {'code':'KA','name':'Karnataka'},
     '16' : {'code':'KE','name':'Kerala'},
@@ -9944,7 +9945,7 @@ var BFHStatesList = {
     '29' : {'code':'TN','name':'Tamil Nadu'},
     '30' : {'code':'TR','name':'Tripura'},
     '31' : {'code':'UP','name':'Uttar Pradesh'},
-    '32' : {'code':'WB','name':'West Bengal'}
+    '32' : {'code':'WB','name':'West Bengal'},
   },
   'ID':{
     '1' : {'code':'DA','name':'Daista Aceh'},

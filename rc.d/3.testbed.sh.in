@@ -232,17 +232,6 @@ case "$1" in
 			@prefix@/sbin/attend
 		fi
 
-		if /usr/local/bin/mysql monitoring </dev/null >/dev/null 2>&1; then
-			if [ -x @prefix@/sbin/protogeni/mondbd ]; then
-			       echo -n " mondbd"
-			       @prefix@/sbin/protogeni/mondbd
-			fi
-			if [ -x @prefix@/sbin/protogeni/shared-node-listener ]; then
-			       echo -n " shared-node-listener"
-			       @prefix@/sbin/protogeni/shared-node-listener
-			fi
-		fi
-		
 		#
 		# Could trigger experiment creation, so make sure everything
 		# else is setup first; i.e., run this last!

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -63,6 +63,7 @@ use vars qw(@ISA @EXPORT);
               GENIRESPONSE_SETUPFAILURE_NETWORK
 	      GENIRESPONSE_SETUPFAILURE_BOOTFAILED
 	      GENIRESPONSE_SETUPFAILURE_EVENTSYS
+	      GENIRESPONSE_SETUPFAILURE_INTERRUPTED
 	      GENIRESPONSE_SETUPFAILURE_MAXERROR);
 
 use overload ('""' => 'Stringify');
@@ -107,6 +108,7 @@ sub GENIRESPONSE_SETUPFAILURE_BOOTFAILED() {151; }
 sub GENIRESPONSE_SETUPFAILURE_OSSETUP()    {152; }
 sub GENIRESPONSE_SETUPFAILURE_NETWORK()    {153; }
 sub GENIRESPONSE_SETUPFAILURE_EVENTSYS()   {154; }
+sub GENIRESPONSE_SETUPFAILURE_INTERRUPTED(){155; }
 sub GENIRESPONSE_SETUPFAILURE_MAXERROR()   {170; }
 
 # Yes, an odd place for this but I need it defined someplace.
@@ -395,6 +397,16 @@ sub SearchFailedResponse($;$)
 	if (!defined($msg));
     
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef, $msg);
+}
+
+sub ServerUnavailableResponse($;$)
+{
+    my (undef,$msg) = @_;
+
+    $msg = "Server temporarily offline; please try again later"
+	if (!defined($msg));
+    
+    return GeniResponse->Create(GENIRESPONSE_SERVER_UNAVAILABLE, undef, $msg);
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

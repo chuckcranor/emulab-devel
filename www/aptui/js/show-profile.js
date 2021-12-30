@@ -2,13 +2,12 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'instantiate-modal', 'oops-modal', 'share-modal', 'copy-repobased-profile']);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'oops-modal', 'share-modal', 'copy-repobased-profile']);
     var showString = templates['show-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
     var showtopoString = templates['showtopo-modal'];
     var rspectextviewString = templates['rspectextview-modal'];
-    var instantiateString = templates['instantiate-modal'];
     var oopsString = templates['oops-modal'];
     var shareString = templates['share-modal'];
     var copyrepoString = templates['copy-repobased-profile'];
@@ -18,16 +17,15 @@ $(function ()
     var profile_pid = '';
     var profile_version = '';
     var version_uuid = null;
+    var profile      = null;
     var gotrspec     = 0;
     var gotscript    = 0;
     var fromrepo     = 0;
     var reporefspec  = null;
     var ajaxurl      = "";
-    var amlist       = null;
     var isppprofile  = false;
     var myCodeMirror = null;
     var showTemplate      = _.template(showString);
-    var InstTemplate      = _.template(instantiateString);
     var shareTemplate     = _.template(shareString);
     var pythonRe = /^import/m;
     var tclRe    = /^source tb_compat/m;
@@ -43,11 +41,28 @@ $(function ()
 	// Standard option
 	marked.setOptions({"sanitize" : true});
 
-	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
-	amlist     = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	$('#waitwait_div').html(waitwaitString);
+	$('#oops_div').html(oopsString);
 
-	console.info("profile", fields);
+	/*
+	 * Might have used the private key to access.
+	 */
+	var args = {"profile" : window.PROFILE};
+	
+	sup.CallServerMethod(null, "show-profile", "GetProfile", args,
+			     function (json) {
+				 console.info(json);
+				 if (json.code) {
+				     sup.SpitOops("oops", json.value);
+				     return;
+				 }
+				 profile = json.value;
+				 GeneratePage(json.value);
+			     });
+    }
 
+    function GeneratePage(fields)
+    {
 	if (_.has(fields, "profile_rspec") && fields["profile_rspec"] != "") {
 	    gotrspec = 1;
 	}
@@ -65,8 +80,7 @@ $(function ()
         if (_.has(fields, "profile_version")) {
 	    profile_version = fields['profile_version'];
         }
-	if (_.has(fields, "profile_repourl") &&
-	    fields["profile_repourl"] != "") {
+	if (_.has(fields, "profile_repourl") && fields["profile_repourl"]) {
 	    fromrepo = 1;
 	}
       
@@ -78,8 +92,11 @@ $(function ()
 	    history:		window.HISTORY,
 	    activity:		window.ACTIVITY,
 	    isadmin:		window.ISADMIN,
+	    isguest:		window.ISGUEST,
 	    canedit:            window.CANEDIT,
+	    cancopy:            window.CANCOPY,
 	    disabled:           window.DISABLED,
+	    paramsets:          window.PARAMSETS,
 	    withpublishing:     window.WITHPUBLISHING,
 	    fromrepo:           fromrepo,
 	    gotrspec:           gotrspec,
@@ -89,16 +106,25 @@ $(function ()
 							{"wide" : true});
 	$('#page-body').html(show_html);
 
-	$('#waitwait_div').html(waitwaitString);
 	$('#showtopomodal_div').html(showtopoString);
-    	var instantiate_html = InstTemplate({ amlist: amlist,
-					      amdefault: window.AMDEFAULT});
-	$('#instantiate_div').html(instantiate_html);
 	$('#rspectext_div').html(rspectextviewString);
-	$('#oops_div').html(oopsString);
 	$('#copy_repobased_profile_div').html(copyrepoString);
-	$('#share_div').html(shareTemplate({formfields: fields}))
+	$('#share_div').html(shareTemplate({
+	    formfields: fields,
+	    fromrepo:   fromrepo,
+	}));
 
+	if (window.CANCOPY) {
+	    var plist = JSON.parse(_.unescape(
+		$('#projects-json')[0].textContent));
+	    
+	    CopyProfile.InitCopyProfile('#copy-profile-button',
+					window.PROFILE, plist);
+	}
+
+	// Bind the copy to clipbload button in the share modal
+	window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
+	
 	// Fireoff repo stuff now.
 	if (fromrepo) {
 	    SetupRepo();
@@ -215,13 +241,6 @@ $(function ()
 	    $('#modal_profile_rspec_textarea').val("");
 	});
 
-	// Handler for normal instantiate submit button, which is in
-	// the modal.
-	$('#instantiate_submit_button').click(function (event) {
-	    event.preventDefault();
-	    Instantiate();
-	});
-	
 	/*
 	 * Suck the description and instructions
 	 * out of the rspec and put them into the text boxes.
@@ -235,33 +254,6 @@ $(function ()
 	    _.has(fields, "paramdefs") && fields["paramdefs"] != "") {
 	    paramHelp.ShowParameterHelp(fields["paramdefs"]);
 	}
-    }
-
-    //
-    // Instantiate a profile.
-    //
-    function Instantiate()
-    {
-	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
-	    
-	    if (json.code) {
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	    window.location.replace(json.value);
-	}
-	sup.HideModal("#instantiate_modal");
-
-	var blob = {"uuid" : version_uuid};
-	if (amlist.length) {
-	    blob.where = $('#instantiate_where').val();
-	}
-	sup.ShowModal("#waitwait-modal");
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "instantiate",
-					    "Instantiate", blob);
-	xmlthing.done(callback);
     }
 
     /*
@@ -310,10 +302,14 @@ $(function ()
 
     function SetupRepo()
     {
-	gitrepo.InitRepoPicker(version_uuid, null,
-			       function(which) {
-				   SelectRepoTarget(which);
-			       });
+	gitrepo.InitRepoPicker({
+	    "uuid"      : window.PROFILE,
+	    "share_url" : profile.profile_profile_url,
+	    "refspec"   : null,
+	    "callback"  : function(which) {
+		SelectRepoTarget(which);
+	    }
+	});
     }
     /*
      * User has clicked on a branch/tag. We need to get that branch/tag
@@ -340,7 +336,11 @@ $(function ()
 		ExtractFromRspec();
 	    }
 	};
-	gitrepo.GetRepoSource(version_uuid, which, callback);
+	gitrepo.GetRepoSource({
+	    "uuid"      : version_uuid,
+	    "refspec"   : which,
+	    "callback"  : callback
+	});
     }
 
     //
@@ -375,12 +375,12 @@ $(function ()
 	}
 	sup.ShowWaitWait("We are converting the geni-lib script");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "manage_profile",
+					    "show-profile",
 					    "CheckScript",
 					    {"script"   : script,
 					     "refspec"  : refspec,
 					     "getparams": true,
-					     "profile_uuid" : profile_uuid});
+					     "profile"  : window.PROFILE});
 	xmlthing.done(callback);
     }
 
@@ -390,7 +390,7 @@ $(function ()
     function UpdateInstantiateButton()
     {
 	var url = "instantiate.php?profile=" +
-	    version_uuid + "&from=manage-profile";
+	    window.PROFILE + "&from=manage-profile";
 
 	if (reporefspec) {
 	    url += "&refspec=" + reporefspec;

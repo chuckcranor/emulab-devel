@@ -10,39 +10,57 @@
       </div>
       <div class='modal-body'>
 	<p> You can share a profile by sending a link to your
-	collaborators. When sharing a <em>version</em>, the link refers to
-	the specific version you are sending. When sharing
-	a <em>profile</em>, the link always refers to the most recent
-	version of the profile (regardless of when the link is
-	used).
+	  collaborators (even if they are in others projects). They
+	  will be able to view and instantiate the profile.
+	</p>
+	<p>
+	  <% if (fromrepo) { %>
+	    When sharing a repository based profile, this link will
+	    instantiate the head of the default branch. To send a link
+	    to a different branch, click on the <em>Share</em> button
+	    in the branch list below. 
+	  <% } else { %>
+	    When sharing a <em>version</em>, the link refers to
+	    the specific version you are sending. When sharing
+	    a <em>profile</em>, the link always refers to the most recent
+	    version of the profile (regardless of when the link is
+	    used).
+	  <% } %>
 	</p>
         <center>
 	  <form class="form-horizontal">
+	    <% if (!fromrepo) { %>
 	    Share this version:
-	    <br>
-	    <div class="form-group">
-	      <div class="col-sm-12">
-		<input href='<%- formfields.profile_version_url %>'
-		       onClick="this.select();"
-		       class='form-control'
-		       readonly
+	    <div style="margin-top: 5px;">
+	      <div class="copy-to-clipboard form-inline">
+		<input readonly
+		       style="width: 90%"
+		       class="form-control"
 		       value='<%- formfields.profile_version_url %>'>
+		<a href='#' class='btn'>
+		  <span class='glyphicon glyphicon-copy'
+			style='margin-bottom: 4px;'></span>
+		</a>
 	      </div>
 	    </div>
-	    Share this profile:
-	    <br>
-	    <div class="form-group">
-	      <div class="col-sm-12">
-		<input href='<%- formfields.profile_profile_url %>'
-		       onClick="this.select();"
-		       class='form-control'
-		       readonly
+	    <div style="margin-top: 15px;">
+	      Share this profile:
+	    </div>
+	    <% } %>
+	    <div style="margin-top: 5px;">
+	      <div class="copy-to-clipboard form-inline">
+		<input readonly
+		       style="width: 90%"
+		       class="form-control"
 		       value='<%- formfields.profile_profile_url %>'>
+		<a href='#' class='btn'>
+		  <span class='glyphicon glyphicon-copy'
+			style='margin-bottom: 4px;'></span>
+		</a>
 	      </div>
 	    </div>
 	  </form>
 	</center>
-	<small>Click on the link to select it</small>
       </div>
     </div>
   </div>

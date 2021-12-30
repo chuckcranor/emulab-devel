@@ -43,16 +43,21 @@ $(function ()
         // Javascript to enable link to tab
         var hash = document.location.hash;
         if (hash) {
-            $('.nav-tabs a[href='+hash+']').tab('show');
+            $('.nav-tabs a[href="'+hash+'"]').tab('show');
         }
         // Change hash for page-reload
-        $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-            window.location.hash = e.target.hash;
+        $('.nav-tabs a[role="tab"]').on('show.bs.tab', function (e) {
+	    history.replaceState('', '', e.target.hash);
         });
+	// Move focus to search box.
+        $('.nav-tabs a[role="tab"]').on('shown.bs.tab', function (e) {
+	    var searchname = e.target.hash + "-search";
+	    $(searchname)[0].focus();
+	});
 
 	var search_users_timeout = null;
-	$("#search_users_search").on("keyup", function (event) {
-	    var userInput = $("#search_users_search").val();
+	$("#search-users-search").on("keyup", function (event) {
+	    var userInput = $("#search-users-search").val();
 	    userInput = userInput.toLowerCase();
 	    window.clearTimeout(search_users_timeout);
 
@@ -66,8 +71,8 @@ $(function ()
 	});
 
 	var search_projects_timeout = null;
-	$("#search_projects_search").on("keyup", function (event) {
-	    var userInput = $("#search_projects_search").val();
+	$("#search-projects-search").on("keyup", function (event) {
+	    var userInput = $("#search-projects-search").val();
 	    userInput = userInput.toLowerCase();
 	    window.clearTimeout(search_users_timeout);
 
@@ -84,7 +89,7 @@ $(function ()
     function InitTable(name)
     {
 	var tablename  = "#" + name + "_table";
-	var searchname = "#" + name + "_search";
+	var searchname = "#" + name + "-search";
 	
 	var table = $(tablename)
 		.tablesorter({

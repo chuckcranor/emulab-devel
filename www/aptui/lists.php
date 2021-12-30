@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -76,7 +76,8 @@ function SpitUserList($days)
         $results[$row[0]] = $blob;
     }
     echo "<script type='text/plain' id='users-json'>\n";
-    echo json_encode($results);
+    echo json_encode($results,
+                     JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
     echo "</script>\n";
 }
 function SpitProjectList($days)
@@ -107,7 +108,8 @@ function SpitProjectList($days)
         $results[$row[0]] = $blob;
     }
     echo "<script type='text/plain' id='projects-json'>\n";
-    echo json_encode($results);
+    echo json_encode($results,
+                     JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
     echo "</script>\n";
 }
 SpitUserList($days);

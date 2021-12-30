@@ -17,3 +17,9 @@ POWDER_DEADMAN=1
 POWDER_WBSTORE=1
 
 ZFS_QUOTA_PROJECT="10G"
+
+POWDER_BUS_P0WER_VERSION=1
+
+# Image updates take a long time on buses, this makes it smoother since
+# updates will not prevent experiments starting.
+IMAGEPROVENANCE=1

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,7 +52,7 @@ my $TB           = "@prefix@";
 my $OPSVM_ENABLE = @OPSVM_ENABLE@;
 my $WITHZFS      = @WITHZFS@;
 my $CHFLAGS      = "/bin/chflags";
-my $DISABLEFLAGS = "@DISABLE_FSNODE_CHFLAGS@";
+my $DISABLEFLAGS = @DISABLE_FSNODE_CHFLAGS@;
 
 #
 # Store up the list of caches to flush
@@ -326,6 +326,9 @@ sub TBGetUniqueIndex($;$$)
 {
     my ($name, $initval, $nolock) = @_;
 
+    return TBGetUniqueIndexNew($name, $initval, $nolock)
+	if (1);
+
     #
     # Lock the table to avoid conflict, but not if the caller already did it.
     #
@@ -349,6 +352,49 @@ sub TBGetUniqueIndex($;$$)
     DBQueryFatal("unlock tables")
 	if (!$nolock);
 
+    return $curidx;
+}
+
+sub TBGetUniqueIndexNew($;$$)
+{
+    my ($name, $initval, $nolock) = @_;
+    $nolock = 0
+	if (!defined($nolock));
+    $initval = 1
+	if (!defined($initval));
+    
+    #
+    # Determine if the index exists, if not already in the table, then
+    # we have to lock it and initialize.
+    #
+    my $query_result =
+	DBQueryFatal("select idx from emulab_indicies ".
+		     "where name='$name'");
+    
+    if (!$query_result->numrows) {
+	DBQueryFatal("lock tables emulab_indicies write")
+	    if (!$nolock);
+	
+	$query_result =
+	    DBQueryFatal("select idx from emulab_indicies ".
+			 "where name='$name'");
+
+	if (!$query_result->numrows) {
+	    DBQueryFatal("insert into emulab_indicies set ".
+			 " name='$name',idx='$initval'");
+	}
+	DBQueryFatal("unlock tables")
+	    if (!$nolock);
+    }
+
+    #
+    # Once it exists, we can do this atomically.
+    #
+    DBQueryFatal("update emulab_indicies set idx=LAST_INSERT_ID(idx) + 1 ".
+		 "where name='$name'");
+
+    $query_result = DBQueryFatal("select LAST_INSERT_ID()");
+    my ($curidx) = $query_result->fetchrow_array();
     return $curidx;
 }
 
@@ -610,13 +656,14 @@ sub UpdateVersionInfo($$)
 #
 # Run a command, being sure to capture all output. 
 #
-sub ExecQuiet($)
+sub ExecQuiet($;$)
 {
     #
     # Use a pipe read, so that we save away the output
     #
-    my ($command) = @_;
+    my ($command, $verbose) = @_;
     my $output    = "";
+    $verbose = 0 if (!defined($verbose));
     
     #
     # This open implicitly forks a child, which goes on to execute the
@@ -633,6 +680,7 @@ sub ExecQuiet($)
     if ($pid) {
 	while (<PIPE>) {
 	    $output .= $_;
+	    print $_ if ($verbose);
 	}
 	close(PIPE);
     }
@@ -641,6 +689,10 @@ sub ExecQuiet($)
 	exec($command);
     }
     return $output;
+}
+sub ExecVerbose($)
+{
+    return ExecQuiet($_[0], 1);
 }
 
 sub PipeCommand($$$)

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,7 +61,7 @@ function Do_SearchUsers()
 	return -1;
     }
     $text = $ajax_args["text"];
-    if (!preg_match("/^[\.\@\w]*$/", $text)) {
+    if (!preg_match("/^[\.\@\w\ ]*$/", $text)) {
 	SPITAJAX_ERROR(-1, "Illegal text to search for");
 	return -1;
     }
@@ -108,7 +108,7 @@ function Do_SearchProjects()
 	return -1;
     }
     $text = $ajax_args["text"];
-    if (!preg_match("/^[\w\-]+$/", $text)) {
+    if (!preg_match("/^[\w\-\ ]+$/", $text)) {
 	SPITAJAX_ERROR(-1, "Illegal text to search for");
 	return -1;
     }

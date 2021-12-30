@@ -1,6 +1,6 @@
 # -*- python -*-
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015, 2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,7 @@
 # Database functions
 #
 
+from __future__ import print_function
 import sys
 import os, os.path
 import pwd
@@ -79,12 +80,12 @@ __DB = dict({})
 # If a connection required a password, we throw a ManualReconnectRequiredError.
 __DBConnectArgs = dict({})
 
-class ManualReconnectRequiredError(StandardError):
+class ManualReconnectRequiredError(Exception):
     pass
 
 def TBDBUnusedHandle():
     maxhandle = -1
-    for k,v in __DB.iteritems():
+    for k,v in __DB.items():
         if (type(k) == types.IntType) and k > maxhandle:
             maxhandle = k
             pass
@@ -103,7 +104,7 @@ def TBDBConnect(dbnum=0,db=None,user=None,host=None,passwd=None):
     if dbnum == None:
         dbnum = TBDBUnusedHandle()
 
-    if __DB.has_key(dbnum) and __DB[dbnum] != None:
+    if dbnum in __DB and __DB[dbnum] != None:
         return dbnum
 
     cargs = {}
@@ -122,7 +123,7 @@ def TBDBConnect(dbnum=0,db=None,user=None,host=None,passwd=None):
         dbuser = "%s:%s:%d" % (sys.argv[0], name, os.getpid())
         
         if debug:
-            print "Connecting to db %s (%d) as %s" % (dbname,dbnum,dbuser)
+            print("Connecting to db %s (%d) as %s" % (dbname,dbnum,dbuser))
     cargs['user'] = dbuser
     if host != None:
         cargs['host'] = host
@@ -130,7 +131,7 @@ def TBDBConnect(dbnum=0,db=None,user=None,host=None,passwd=None):
         cargs['passwd'] = passwd
 
     if debug:
-        print "About to try connect with args=%s" % str(cargs)
+        print("About to try connect with args=%s" % str(cargs))
     
     # Connect, with retries
     for tries in range(__dbConnMaxtries):
@@ -139,7 +140,7 @@ def TBDBConnect(dbnum=0,db=None,user=None,host=None,passwd=None):
             # Delete the password if it exists, but make a record of it
             # so that we throw a "must manually reconnect" exception if
             # a reconnect happens.  Not ideal, but necessary.
-            if cargs.has_key('passwd'):
+            if 'passwd' in cargs:
                 cargs['passwd'] = None
                 pass
             # XXX we need this for mysql 5.5 and above to avoid metadata
@@ -153,8 +154,8 @@ def TBDBConnect(dbnum=0,db=None,user=None,host=None,passwd=None):
         else:
             break
     else:
-        raise RuntimeError, "Cannot connect to DB %d after several " + \
-              "attempts!" % dbnum
+        raise RuntimeError("Cannot connect to DB %d after several " + \
+              "attempts!" % (dbnum))
 
     return dbnum
 
@@ -175,7 +176,7 @@ def TBDBReconnect(retry = False,dbnum = 0,passwd=None):
     __DB[dbnum] = None
 
     tconnargs = __DBConnectArgs[dbnum].copy()
-    if tconnargs.has_key('passwd') and tconnargs['passwd'] == None \
+    if 'passwd' in tconnargs and tconnargs['passwd'] == None \
            and passwd == None:
         raise ManualReconnectRequiredError("This connection requires a passwd!")
     if passwd != None:
@@ -191,8 +192,8 @@ def TBDBReconnect(retry = False,dbnum = 0,passwd=None):
         if retry:
             __dbConnMaxtries = tmpConnMaxtries
             pass
-        raise RuntimeError, "Cannot reconnect to DB %d after %d attempts!" \
-              % (dbnum,__dbConnMaxtries)
+        raise RuntimeError("Cannot reconnect to DB %d after %d attempts!" \
+              % (dbnum,__dbConnMaxtries))
 
     if retry:
         __dbConnMaxtries = tmpConnMaxtries
@@ -236,8 +237,8 @@ def TBDBPreFork():
     if len(unclosed) > 0:
         # don't just null out object; this could perhaps fail if there's an
         # uncommitted transaction or something...
-        raise RuntimeError, "Could not close db connection(s) (%s) " + \
-              "in prefork!" % (",".join(unclosed))
+        raise RuntimeError("Could not close db connection(s) (%s) " + \
+              "in prefork!" % (",".join(unclosed)))
     
     return
 
@@ -249,7 +250,7 @@ def TBDBDisconnect(dbnum=0):
             __DB[dbnum].close()
             __DB[dbnum] = None
         except:
-            print "Could not close db connection!"
+            print("Could not close db connection!")
             return False
         pass
     
@@ -259,7 +260,7 @@ def DBQuery(queryPat, querySub = (), asDict = False, dbnum = 0):
     TBDBConnect(dbnum=dbnum)
 
     if debug:
-        print "Executing DB query %s" % queryPat
+        print("Executing DB query %s" % (queryPat))
 
     tries = __dbQueryMaxtries
     while tries:
@@ -273,16 +274,16 @@ def DBQuery(queryPat, querySub = (), asDict = False, dbnum = 0):
             cursor.execute(queryPat, querySub)
             ret = cursor.fetchall()
             if debug:
-                rs = `ret`
+                rs = repr(ret)
                 if len(rs) > 60:
                     rs = rs[:60] + "..."
-                print "Result: %s" % rs
+                print("Result: %s" % (rs))
                 pass
             cursor.close()
             if ret == None:
                 return ()
             return ret
-        except MySQLdb.MySQLError, e:
+        except MySQLdb.MySQLError as e:
             try:
                 __DB[dbnum].ping()
             except MySQLdb.MySQLError:
@@ -291,7 +292,7 @@ def DBQuery(queryPat, querySub = (), asDict = False, dbnum = 0):
                     TBDBReconnect(True,dbnum=dbnum)
                     continue
                 except RuntimeError:
-                    print "Error: could not reconnect to mysqld!"
+                    print("Error: could not reconnect to mysqld!")
                     time.sleep(1)
                     pass
                 pass
@@ -313,7 +314,7 @@ def DBQuery(queryPat, querySub = (), asDict = False, dbnum = 0):
 def DBQueryFatal(*args,**kwargs):
     ret = DBQuery(*args,**kwargs)
     if ret == None:
-        raise RuntimeError, "DBQueryFatal failed"
+        raise RuntimeError("DBQueryFatal failed")
     return ret
 
 def DBQueryWarn(*args,**kwargs):
@@ -334,18 +335,18 @@ def DBQuoteSpecial(str,dbnum=0):
 #        returns username if the UID is okay.
 #        raises a UserError exception if the UID is bogus.
 #
-class UserError(StandardError): pass # XXX: need better suite of exceptions
+class UserError(Exception): pass # XXX: need better suite of exceptions
 def UNIX2DBUID (unix_uid):
     qres = \
          DBQueryFatal("select uid from users where unix_uid=%s",
                       (unix_uid))
     if not len(qres):
-	raise UserError, "*** %s not a valid Emulab user!" % uid
+        raise UserError("*** %s not a valid Emulab user!" % uid)
     pwname = pwd.getpwuid(unix_uid)[0]
     dbuser = qres[0][0]
     if dbuser != pwname:
-	raise UserError, "*** %s (passwd file) does not match %s (db)" % \
-              (pwname, dbuser)
+        raise UserError("*** %s (passwd file) does not match %s (db)" % \
+              (pwname, dbuser))
     return dbuser
 
 #
@@ -355,9 +356,9 @@ def MapNumericUID(uid):
     name = ""
     try:
         uid = int(uid)
-	name = UNIX2DBUID(uid)
+        name = UNIX2DBUID(uid)
     except ValueError:
-	name = uid
+        name = uid
         pass
     return name
 
@@ -369,7 +370,7 @@ def MapNumericUID(uid):
 #        returns 1 if okay.
 #	 returns 0 if error.
 #
-class UnknownExptID(StandardError): pass # XXX: need better suite of exceptions
+class UnknownExptID(Exception): pass # XXX: need better suite of exceptions
 def TBExptIDX(pid,eid):
     qres = \
          DBQueryWarn("select idx from experiments "
@@ -377,7 +378,7 @@ def TBExptIDX(pid,eid):
                      (pid, eid))
 
     if not len(qres):
-	raise UnknownExptID, "Experiment %s/%s unknown!" % (pid,eid)
+        raise UnknownExptID("Experiment %s/%s unknown!" % (pid,eid))
     
     idx = qres[0][0]
     return int(idx)
@@ -391,14 +392,14 @@ def TBExptIDX(pid,eid):
 #
 def TBSetNodeLogEntry(node, dbuid, etype, message):
     if not TBValidNodeName(node) or not TBValidNodeLogType(etype):
-	return 0
+        return 0
     idx = TBMapUIDtoIDX(dbuid)
 
     if type(idx) == tuple:
         idx = idx[0]
         pass
     return DBQueryWarn("insert into nodelog "
-		       "values "
+                       "values "
                        "(%s, NULL, %s, %s, %s, %s, now())",
                        (node, etype, dbuid, idx, message))
 
@@ -414,7 +415,7 @@ def TBValidNodeName(node):
          DBQueryWarn("select node_id from nodes where node_id=%s",
                      (node))
     if len(qres) == 0:
-	return 0
+        return 0
     return 1
 
 #
@@ -443,13 +444,13 @@ def MarkPhysNodeDown(pnode):
     try:
         exptidx = TBExptIDX(pid, eid)
     except:
-        print "*** WARNING: No such experiment %s/%s!" % (pid,eid)
-	return
+        print("*** WARNING: No such experiment %s/%s!" % (pid,eid))
+        return
 
     DBQueryFatal("lock tables reserved write")
     DBQueryFatal("update reserved set "
-		 "  exptidx=%s,pid=%s,eid=%s,rsrv_time=now() "
-		 "where node_id=%s",
+                 "  exptidx=%s,pid=%s,eid=%s,rsrv_time=now() "
+                 "where node_id=%s",
                  (exptidx,pid, eid, pnode))
     DBQueryFatal("unlock tables")
     TBSetNodeHistory(pnode, TB_NODEHISTORY_OP_MOVE, os.getuid(), pid, eid)
@@ -462,8 +463,8 @@ def TBSetNodeHistory(nodeid, op, uid, pid, eid):
     try:
         exptidx = TBExptIDX(pid, eid)
     except:
-        print "*** WARNING: No such experiment %s/%s!" % (pid,eid)
-	return 0
+        print("*** WARNING: No such experiment %s/%s!" % (pid,eid))
+        return 0
 
     try:
         uid = int(uid)
@@ -476,9 +477,9 @@ def TBSetNodeHistory(nodeid, op, uid, pid, eid):
     idx = TBMapUIDtoIDX(uid)
     
     return DBQueryWarn("insert into node_history set "
-		       "  history_id=0, node_id=%s, op=%s, "
-		       "  uid=%s, uid_idx=%s, stamp=UNIX_TIMESTAMP(now()), "
-		       "  exptidx=%s",
+                       "  history_id=0, node_id=%s, op=%s, "
+                       "  uid=%s, uid_idx=%s, stamp=UNIX_TIMESTAMP(now()), "
+                       "  exptidx=%s",
                        (nodeid,op,uid,idx,exptidx))
 
 
@@ -509,8 +510,8 @@ def TBGetSiteVar(name):
 
         pass
     
-    raise RuntimeException, \
-          "*** attempted to fetch unknown site variable name!"
+    raise RuntimeException(
+          "*** attempted to fetch unknown site variable name!")
 
 def TBMapUIDtoIDX(uid):
     uid = DBQuoteSpecial(uid)

@@ -25,7 +25,7 @@ sub Install($$$)
     # These are the images that are known to run as XEN guests.
     #
     my @images = ("UBUNTU16-64-STD", "UBUNTU18-64-STD", "CENTOS7-64-STD",
-		  "FBSD103-64-STD", "FBSD113-64-STD", "FBSD120-64-STD");
+		  "FBSD103-64-STD", "FBSD113-64-STD", "FBSD121-64-STD");
 
     if ($FBSD_MAJOR <= 10) {
 	$XENIMAGE = "XEN46-64-STD";

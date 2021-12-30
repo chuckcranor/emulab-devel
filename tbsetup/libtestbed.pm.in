@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,6 +61,7 @@ my $NOREPLY      = "no-reply\@@OURDOMAIN@";
 my $SCRIPTNAME	 = "Unknown";
 my $TBSENDMAIL   = "$TB/libexec/tbsendmail";
 my $SENDMAIL     = "/usr/sbin/sendmail";
+my $TIMESTAMPS_FD;
 
 # So we can localize this variable.
 use vars qw($MAILTAG);
@@ -103,6 +104,9 @@ sub GROUPROOT()	  { $GROUPROOT; }
 sub USERROOT()	  { $USERROOT; }
 sub SHAREROOT()   { $SHAREROOT; }
 sub SCRATCHROOT() { $FSDIR_SCRATCH ? $SCRATCHROOT : ""; }
+
+# Prefix.
+sub TBPREFIX()    { $TB; }
 
 # Hostname of our boss node
 sub TB_BOSSNODE()	{ $BOSSNODE; }
@@ -319,7 +323,8 @@ sub TBDebugTimeStamp(@)
 {
     my @strings = @_;
     if ($TIMESTAMPS) {
-	print "TIMESTAMP: ", TBTimeStamp(), " ", join("",@strings), "\n";
+	print $TIMESTAMPS_FD
+	    "TIMESTAMP: ", TBTimeStamp(), " ", join("",@strings), "\n";
     }
     return 0;
 }
@@ -328,9 +333,17 @@ sub TBDebugTimeStamp(@)
 # Turn on timestamps locally. We could do this globally by using an
 # env variable to pass it along, but lets see if we need that.
 # 
-sub TBDebugTimeStampsOn()
+sub TBDebugTimeStampsOn(;$)
 {
+    my ($usestderr) = @_;
+    
     $TIMESTAMPS = 1;
+    if (defined($usestderr) && $usestderr) {
+	$TIMESTAMPS_FD = *STDERR;
+    }
+    else {
+	$TIMESTAMPS_FD = *STDOUT;
+    }
 }
 
 #
@@ -436,7 +449,7 @@ sub TBMakeLogname($)
 #
 sub TBGenSecretKey()
 {
-    my $key=`/bin/dd if=/dev/urandom count=128 bs=1 2> /dev/null | /sbin/md5`;
+    my $key=`/bin/dd if=/dev/urandom count=128 bs=1 2> /dev/null | /sbin/sha1`;
     return undef
 	if ($?);
     # Silly taint check for caller.

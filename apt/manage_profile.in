@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,6 +39,7 @@ use JSON;
 sub usage()
 {
     print("Usage: manage_profile create [-s uuid | -c uuid] <xmlfile>\n");
+    print("Usage: manage_profile duplicate <copyuuid> <pid> <name>\n");
     print("Usage: manage_profile update <profile> <xmlfile>\n");
     print("Usage: manage_profile updatefromrepo <profile>\n");
     print("Usage: manage_profile publish <profile>\n");
@@ -46,7 +47,7 @@ sub usage()
     print("Usage: manage_profile undelete pid,name:version\n");
     print("Usage: manage_profile listimages <profile>\n");
     print("Usage: manage_profile bindings <instance>\n");
-    print("Usage: manage_profile paramset ".
+    print("Usage: manage_profile paramset [-p] ".
 	  "[-u user] [-m description] [-b] add <name> <profile> <instance>\n");
     print("Usage: manage_profile paramset ".
 	  "[-u user] delete <name> <profile>\n");
@@ -113,6 +114,7 @@ use EmulabFeatures;
 sub fatal($);
 sub UserError($);
 sub CreateProfile();
+sub DuplicateProfile();
 sub ModifyProfile();
 sub UpdateProfileFromRepo();
 sub DeleteProfile();
@@ -210,6 +212,9 @@ if ($action eq "update") {
 }
 elsif ($action eq "updatefromrepo") {
     exit(UpdateProfileFromRepo());
+}
+elsif ($action eq "duplicate") {
+    exit(DuplicateProfile());
 }
 elsif ($action eq "delete") {
     exit(DeleteProfile());
@@ -314,6 +319,7 @@ sub CreateProfile()
 	$reponame = NewUUID();
 	my $repourl  = $new_args{'repourl'};
 	my $repohash;
+	my $reporef;
 	my $checkout = ($this_user->IsAdmin() ? "-c" : "");
 	# Something recently broke in git, everyone gets --bare for now
 	# until we can figure out why git fetch fails to pick up new
@@ -339,6 +345,17 @@ sub CreateProfile()
 	chomp($repohash);
 	$new_args{'repohash'} = $repohash;
 	$fromrepo = 1;
+
+	#
+	# Get the refspec for the default branch
+	#
+	$output = emutil::ExecQuiet("$MANAGEGITREPO branch -n $reponame");
+	if ($?) {
+	    UserError($output);	
+	}
+	$reporef = $output;
+	chomp($reporef);
+	$new_args{'reporef'} = $reporef;
 
 	#
 	# And an access key for the push webhook.
@@ -632,6 +649,86 @@ sub CreateProfile()
 }
 
 #
+# Duplicate a profile.
+#
+sub DuplicateProfile()
+{
+    my $optlist    = "";
+    my $usererror;
+    my %errors = ();
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV != 3);
+
+    my ($copyuuid,$pid,$name) = @ARGV;
+    
+    #
+    # We need to make sure the project exists and is a valid project for
+    # the creator (current user). 
+    #
+    my $project = Project->Lookup($pid);
+    if (!defined($project)) {
+	UserErrorSane({"pid" => "No such project exists"})
+    }
+    elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
+	UserErrorSane({"pid" => "Not enough permission in this project"});
+    }
+    if (! TBcheck_dbslot($name, "apt_profiles",
+			 "name", TBDB_CHECKDBSLOT_ERROR)) {
+	UserErrorSane({"name" => TBFieldErrorString()});
+    }
+    my $profile = APT_Profile->Lookup($copyuuid);
+    if (!defined($profile)) {
+	UserErrorSane({"profile" => "No such profile"});
+    }
+    # No permission check, lets assume caller checked.
+
+    if (defined(APT_Profile->Lookup($project->pid(), $name))) {
+	UserErrorSane({"name" => "Already in use"});
+    }
+    my $args = {
+	"name"    => $name,
+    };
+    $args->{'rspec'}     = $profile->rspec() if ($profile->rspec());
+    $args->{'script'}    = $profile->script() if ($profile->script());
+    $args->{'paramdefs'} = $profile->paramdefs() if ($profile->paramdefs());
+    $args->{'portal_converted'} = $profile->portal_converted();
+    
+    $profile = APT_Profile->Create($profile, $project,
+				   $this_user, $args, \$usererror);
+    if (!defined($profile)) {
+	if (defined($usererror)) {
+	    UserErrorSane({"name" => $usererror});
+	}
+	fatal("Could not create new profile");
+    }
+    my $portalLogs =
+	($project->isAPT() ? "aptnet-logs\@flux.utah.edu" :
+	 $project->isCloud() ? "cloudlab-logs\@flux.utah.edu" : 
+	 $project->isPNet() ? "phantomnet-logs\@flux.utah.edu" :
+	 $project->isPowder() ? "powder-logs\@flux.utah.edu" :
+	 $TBLOGS);
+
+    $project->SendEmail($portalLogs, "New Profile Created",
+			"Name:     ". $profile->versname() . "\n".
+			"User:     ". $profile->creator() . "\n".
+			"Project:  ". $profile->pid() .
+			" (" . $project->Brand()->brand() . ")\n".
+			"UUID:     ". $profile->uuid() . "\n".
+			"URL:      ". $profile->AdminURL() . "\n");
+    
+    if (defined($webtask)) {
+	$webtask->uuid($profile->uuid());
+    }
+    print "New profile created: " . $profile->uuid() . "\n";
+    return 0;
+}
+
+#
 # Modify a profile.
 #
 sub ModifyProfile()
@@ -722,6 +819,7 @@ sub ModifyProfileInternal($$$)
     if ($profile->IsRepoBased()) {
 	my $reponame = $profile->reponame();
 	my $repohash;
+	my $reporef;
 	# Ignore.
 	delete($new_args{'repourl'});
 
@@ -738,6 +836,19 @@ sub ModifyProfileInternal($$$)
 	chomp($repohash);
 	$update_args{'repohash'} = $repohash;
 	$fromrepo = 1;
+
+	#
+	# Get the refspec for the default branch
+	#
+	$output = emutil::ExecQuiet("$MANAGEGITREPO branch -n $reponame");
+	if ($?) {
+	    $$pmsg = $output;
+	    # User Error
+	    return 1;
+	}
+	$reporef = $output;
+	chomp($reporef);
+	$update_args{'reporef'} = $reporef;
     }
     # Script parameters
     if (defined($script) && $script ne "" && $script =~ /^import/m) {
@@ -776,14 +887,17 @@ sub ModifyProfileInternal($$$)
     #
     if (exists($update_args{"rspec"}) ||
 	exists($update_args{"script"}) ||
+	exists($update_args{"reporef"}) ||
 	exists($update_args{"repohash"})) {
 	if ((exists($update_args{"rspec"}) &&
 	     $update_args{"rspec"} ne $profile->rspec()) ||
 	    (exists($update_args{"script"}) &&
 	     $update_args{"script"} ne $profile->script()) ||
 	    (defined($profile->repourl()) &&
-	     exists($update_args{"repohash"}) &&
-	     $update_args{"repohash"} ne $profile->repohash())) {
+	     (exists($update_args{"repohash"}) &&
+	      $update_args{"repohash"} ne $profile->repohash()) ||
+	     (exists($update_args{"reporef"}) &&
+	      $update_args{"reporef"} ne $profile->reporef()))) {
 	    if ($doversions && !$fromrepo) {
 		$profile = $profile->NewVersion($this_user);
 		if (!defined($profile)) {
@@ -794,7 +908,7 @@ sub ModifyProfileInternal($$$)
 		$webtask->newProfile($profile->uuid())
 		    if (defined($webtask));
 	    }
-	    foreach my $key ("rspec", "script", "paramdefs",
+	    foreach my $key ("rspec", "script", "paramdefs", "reporef",
 			     "repohash", "portal_converted") {
 		$profile->UpdateVersion({$key => $update_args{$key}})
 		    if (exists($update_args{$key}));
@@ -806,7 +920,7 @@ sub ModifyProfileInternal($$$)
 		$profile->UpdateVersion({"paramdefs" => undef});
 	    }
 	}
-	foreach my $key ("rspec", "script", "paramdefs",
+	foreach my $key ("rspec", "script", "paramdefs",  "reporef",
 			 "repohash", "portal_converted") {
 	    delete($update_args{$key})
 		if (exists($update_args{$key}));
@@ -1000,7 +1114,6 @@ sub UpdateProfileFromRepo()
 		    "from its git repository:\n\n" . $output . "\n\n" .
 		    $profile->AdminURL() . "\n",
 		    $project->Brand()->OpsEmailAddress(),
-		    # Temporary.
 		    "BCC: " . $project->Brand()->LogsEmailAddress());
 	fatal("Could not update repo from $repourl");
     }
@@ -1037,9 +1150,7 @@ sub UpdateProfileFromRepo()
 		    "Profile $profile_pid,$profile_name could not be updated\n".
 		    "from its git repository:\n\n" . $output . "\n\n" .
 		    $profile->AdminURL() . "\n",
-		    $project->Brand()->OpsEmailAddress(),
-		    # Temporary.
-		    "BCC: " . $project->Brand()->LogsEmailAddress());
+		    $project->Brand()->OpsEmailAddress());
 	    
 	    print STDERR "UpdateProfileFromRepo: $RUNGENILIB failed\n";
 	    # Pass along the exit value.
@@ -1833,14 +1944,20 @@ sub Bindings()
 #
 sub ParamSet()
 {
-    my $optlist    = "u:m:bpB:";
+    my $optlist    = "u:m:bpB:prH:R:g";
     my $bound      = 0;
     my $asparamdefs= 0;
+    my $public     = 0;
+    my $global     = 0;
+    my $replace    = 0;
+    my $reporef;
+    my $repohash;
     my $user;
     my $description;
     my $bindings;
     my $errmsg;
     my $instance;
+    my $olduuid;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -1946,8 +2063,32 @@ sub ParamSet()
     if (defined($options{"b"})) {
 	$bound = 1;
     }
+    if (defined($options{"p"})) {
+	$public = 1;
+    }
+    if (defined($options{"g"})) {
+	$global = 1;
+	$public = 1;
+    }
+    if (defined($options{"r"})) {
+	$replace = 1;
+    }
+    if (defined($options{"H"})) {
+	$repohash = $options{"H"};
+	if (! TBcheck_dbslot($repohash, "apt_profiles", "repohash",
+			     TBDB_CHECKDBSLOT_ERROR)) {
+	    UserErrorSane({"repohash" => TBFieldErrorString()});
+	}
+    }
+    if (defined($options{"R"})) {
+	$reporef = $options{"R"};
+	if (! TBcheck_dbslot($reporef, "default", "tinytext",
+			     TBDB_CHECKDBSLOT_ERROR)) {
+	    UserErrorSane({"reporef" => TBFieldErrorString()});
+	}
+    }
     
-    # Ensure name is unique.
+    # Ensure name is unique if not doing a replace
     my $query_result =
 	DBQueryWarn("select uuid from apt_parameter_sets ".
 		    "where uid_idx='$uid_idx' and ".
@@ -1955,7 +2096,12 @@ sub ParamSet()
     fatal("Database error")
 	if (!defined($query_result));
     if ($query_result->numrows) {
-	UserErrorSane({"name" => "Already in use"});
+	if ($replace) {
+	    ($olduuid) = $query_result->fetchrow_array();
+	}
+	else {
+	    UserErrorSane({"name" => "Already in use"});
+	}
     }
     
     print Dumper($bindings);
@@ -1965,13 +2111,32 @@ sub ParamSet()
     }
     my $safe_bindings = DBQuoteSpecial($bindings);
     my $safe_descrip  = DBQuoteSpecial($description);
+    my $newuuid       = (defined($olduuid) ? $olduuid : NewUUID());
+    my $hashkey       = TBGenSecretKey();
+
+    my $refspec;
 
     my $query =
-	"insert into apt_parameter_sets set created=now(), ".
-	" uuid=uuid(),uid='$uid',uid_idx='$uid_idx', ".
-	" profileid='$profileid',bindings=$safe_bindings, ".
+	($replace ? "replace" : "insert") .
+	" into apt_parameter_sets set created=now(),hashkey='$hashkey', ".
+	" uuid='$newuuid',uid='$uid',uid_idx='$uid_idx',public='$public', ".
+	" profileid='$profileid',bindings=$safe_bindings,global='$global', ".
 	" name=$safe_name,description=$safe_descrip";
 
+    if (!defined($instance) && $profile->repourl()) {
+	if (!defined($reporef)) {
+	    $reporef = $profile->reporef();
+	}
+	if (!defined($repohash)) {
+	    $repohash = $profile->repohash();
+	}
+    }
+
+    #
+    # Note: The refspec is currently informational only, so we can tell the
+    # the user what branch corresponds to the hash. Hard to figure out later
+    # since a hash can map to multiple branches.
+    #
     if ($bound) {
 	$query .= ",version_uuid=" . DBQuoteSpecial($profile->uuid());
 	if ($profile->repourl()) {
@@ -1980,8 +2145,17 @@ sub ParamSet()
 		$query .= ",repohash=" . DBQuoteSpecial($instance->repohash());
 	    }
 	    else {
-		$query .= ",repohash=" . DBQuoteSpecial($profile->repohash());
+		$query .= ",reporef=" . DBQuoteSpecial($reporef);
+		$query .= ",repohash=" . DBQuoteSpecial($repohash);
 	    }
+	}
+    }
+    elsif ($profile->repourl()) {
+	if (defined($instance)) {
+	    $query .= ",reporef=" . DBQuoteSpecial($instance->reporef());
+	}
+	else {
+	    $query .= ",reporef=" . DBQuoteSpecial($reporef);
 	}
     }
     $query_result = DBQueryWarn($query);
@@ -1989,6 +2163,7 @@ sub ParamSet()
 	fatal("Could not insert bindings into DB");
     }
     if (defined($webtask)) {
+	$webtask->uuid($newuuid);
 	$webtask->Exited(0);
     }
     return 0;

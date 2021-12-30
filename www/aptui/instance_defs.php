@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,6 +70,7 @@ define("GENIRESPONSE_INSUFFICIENT_MEMORY",     27);
 define("GENIRESPONSE_NO_MAPPING",              28);
 define("GENIRESPONSE_NO_CONNECT",              29);
 define("GENIRESPONSE_MAPPING_IMPOSSIBLE",      30);
+define("GENIRESPONSE_NETWORK_ERROR",           35);
 define("GENIRESPONSE_STITCHER_ERROR",          101);
 define("GENIRESPONSE_SETUPFAILURE_BOOTFAILED", 151);
 
@@ -296,6 +297,10 @@ class Instance
     function Group() {
         return Group::Lookup($this->gid_idx());
     }
+    # Profile version that was instantiated.
+    function Profile() {
+        return Profile::Lookup($this->profile_id(), $this->profile_version());
+    }
     
     #
     # Class function to create a new Instance
@@ -403,6 +408,18 @@ class Instance
                          "left join geni.geni_users as u on ".
                          "     u.uuid=h.creator_uuid ".
                          "where h.creator='$uid' and u.email is not null");
+        
+	$row = mysql_fetch_row($query_result);
+	return $row[0];
+    }
+
+    #
+    # How many instances waiting to start.
+    #
+    function DelayedCount() {
+        $query_result =
+            DBQueryFatal("select count(uuid) from apt_instances ".
+                         "where status='created'");
         
 	$row = mysql_fetch_row($query_result);
 	return $row[0];
@@ -557,6 +574,12 @@ class Instance
         if ($project->IsMember($user, $isapproved) && $isapproved) {
             return 1;
         }
+        return 0;
+    }
+    function CanDoVNC($user) {
+	if ($this->creator_idx() == $user->uid_idx()) {
+	    return 1;
+	}
         return 0;
     }
 
@@ -851,6 +874,9 @@ class Instance
                            "nuc7100"   => true,
                            "x310"      => true,
                            "n310"      => true,
+                           "mmimotmp1" => true,
+                           "iris03"    => true,
+                           "iris04"    => true,
         );
 
         #
@@ -895,6 +921,51 @@ class Instance
 	while ($row = mysql_fetch_array($query_result)) {
             $result[] = array("freq_low"  => $row["freq_low"],
                               "freq_high" => $row["freq_high"]);
+        }
+        return $result;
+    }
+
+    #
+    # Most recent experiments for rerun.
+    #
+    function RecentExperiments($user, $profile = null)
+    {
+        $result = array();
+        $uid_idx = $user->uid_idx();
+        $clause  = "";
+
+        if ($profile) {
+            $profile_id = $profile->profileid();
+            $clause = "and h.profile_id='$profile_id'";
+        }
+
+        $query_result =
+            DBQueryFatal("select v.uuid,p.name,h.repohash, " .
+                         "   h.name as expname,h.uuid as expuuid ".
+                         " from apt_instance_history as h ".
+                         "join apt_profiles as p on p.profileid=h.profile_id ".
+                         "join apt_profile_versions as v on ".
+                         "     v.profileid=p.profileid and ".
+                         "     v.version=p.version ".
+                         "where h.creator_idx='$uid_idx' $clause ".
+                         "order by h.created desc limit 10");
+        if (!mysql_num_rows($query_result)) {
+            return null;
+        }
+	while ($row = mysql_fetch_array($query_result)) {
+            $profile_name   = $row["name"];
+            $profile_uuid   = $row["uuid"];
+            $instance_uuid  = $row["expuuid"];
+            $instance_name  = $row["expname"];
+            $repohash       = $row["repohash"];
+            $rerun_url = "instantiate.php?profile=${profile_uuid}" .
+                       "&rerun_instance=${instance_uuid}";
+            $result[] = array("profile_uuid"  => $profile_uuid,
+                              "profile_name"  => $profile_name,
+                              "instance_uuid" => $instance_uuid,
+                              "instance_name" => $instance_name,
+                              "rerun_url"     => $rerun_url,
+            );
         }
         return $result;
     }
@@ -1005,6 +1076,10 @@ class InstanceHistory
     # Project of instance.
     function Project() {
         return Project::Lookup($this->pid_idx());
+    }
+    # Profile version that was instantiated.
+    function Profile() {
+        return Profile::Lookup($this->profile_id(), $this->profile_version());
     }
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {

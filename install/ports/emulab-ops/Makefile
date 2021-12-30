@@ -29,21 +29,11 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt \
 #
 # Various ports need to agree on what version of apache.
 #
-.if (${EMULAB_PORTVERSION} == "7.1" || ${EMULAB_PORTVERSION} == "7.2" || ${EMULAB_PORTVERSION} == "7.3")
-www_apache24_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.MAKEFLAGS+=	WITH_SUEXEC=yes
+.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+www_apache24_SET=	SUEXEC
 .else
-www_apache22_SET=	SUEXEC
-.MAKEFLAGS+=	APACHE_PORT=www/apache22
 .MAKEFLAGS+=	WITH_SUEXEC=yes
-.endif
-
-.if (${EMULAB_PORTVERSION} != "7.1" && ${EMULAB_PORTVERSION} != "7.2" && ${EMULAB_PORTVERSION} != "7.3")
-#
-# Use the base version of openssl
-#
-.MAKEFLAGS+=	WITH_OPENSSL_BASE=yes
 .endif
 
 #
@@ -63,10 +53,6 @@ RUN_DEPENDS:= ${BUILD_DEPENDS}
 #
 # Emulab-hacked versions of standard ports
 #
-.if (${EMULAB_PORTVERSION} != "7.3")
-RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}m2crypto>0:${PORTSDIR}/misc/emulab-py-m2crypto
-.endif
 
 # compensate for incomplete dependencies (boehm-gc via git)
 RUN_DEPENDS+=	\
@@ -109,12 +95,10 @@ RUN_DEPENDS+=	\
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}dateutil>0:${PORTSDIR}/devel/py-dateutil \
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
-	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml
-
-.if (${EMULAB_PORTVERSION} == "7.3")
-RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot
-.endif
+	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml \
+	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot \
+	${PYTHON_PKGNAMEPREFIX}tornado>0:${PORTSDIR}/www/py-tornado \
+	${PYTHON_PKGNAMEPREFIX}paramiko>0:${PORTSDIR}/security/py-paramiko
 
 # apache related ports
 RUN_DEPENDS+=	\
@@ -135,7 +119,7 @@ RUN_DEPENDS+=	\
 	${LOCALBASE}/libdata/pkgconfig/x11.pc:${PORTSDIR}/x11/xorg-libraries
 
 #USE_PERL5=	yes
-USES=		perl5 python:2.7 php
+USES=		perl5 python:$(PY_VER) php
 
 NO_BUILD=	yes
 

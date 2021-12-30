@@ -3,7 +3,8 @@ $(function ()
     'use strict';
 
     var template_list   = ["resinfo", "resinfo-totals", "reservation-graph",
-			   "range-list", "oops-modal", "waitwait-modal"];
+			   "range-list", "oops-modal", "waitwait-modal",
+			   "visavail-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
@@ -11,6 +12,7 @@ $(function ()
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var totalsTemplate  = _.template(templates["resinfo-totals"]);
     var rangeTemplate   = _.template(templates["range-list"]);
+    var visTemplate     = _.template(templates["visavail-graph"]);
     var amlist          = null;
     var FEs             = {};  // Powder
     var radioinfo       = {};  // Powder
@@ -20,6 +22,8 @@ $(function ()
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
+
+	window.CHARTS = {};
 
 	isadmin  = window.ISADMIN;
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
@@ -62,13 +66,63 @@ $(function ()
 	// Per clusters rows filled in with templates.
 
 	/*
-	 * Power is a spectial arrangement of graphs.
+	 * Powder is a special arrangement of graphs.
 	 */
 	if (window,ISPOWDER) {
+	    $('#powder-radios .graph-panel')
+		.html(visTemplate({
+		    "title" : "Powder Outdoor Radio Availability",
+		    "id"    : "radio",
+		}))
+		.find(".panel").removeClass("hidden");
 	    $('#powder-radios .counts-panel')
 		.html(totalsTemplate({"title" : "Radios"}));
-	    
 	    $('#powder-radios .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+
+	    $('#powder-mmimo .graph-panel')
+		.html(visTemplate({
+		    "title" : "RENEW Massive MIMO Radio Availability",
+		    "id"    : "mmimo",
+		}))
+		.find(".panel").removeClass("hidden");
+	    $('#powder-mmimo .counts-panel')
+		.html(totalsTemplate({"title" : "Massive MIMO"}));
+	    $('#powder-mmimo .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+
+	    $('#powder-ota .graph-panel')
+		.html(visTemplate({
+		    "title" : "Indoor OTA Lab",
+		    "id"    : "ota",
+		}))
+		.find(".panel").removeClass("hidden");
+	    $('#powder-ota .counts-panel')
+		.html(totalsTemplate({"title" : "Indoor OTA Lab"}));
+	    $('#powder-ota .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+
+	    $('#powder-paired .graph-panel')
+		.html(visTemplate({
+		    "title" : "Paired Radio Workbenches",
+		    "id"    : "paired",
+		}))
+		.find(".panel").removeClass("hidden");
+	    $('#powder-paired .counts-panel')
+		.html(totalsTemplate({"title" : "Paired Radio Workbenches"}));
+	    $('#powder-paired .counts-panel .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
 		    widgets : [ "uitheme", "zebra"],
@@ -77,21 +131,12 @@ $(function ()
 
 	    $('#powder-servers .counts-panel')
 		.html(totalsTemplate({"title" : "Servers"}));
-
 	    $('#powder-servers .counts-panel .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
 		    widgets : [ "uitheme", "zebra"],
 		    headerTemplate : '{content} {icon}',
 		});
-
-	    $('#powder-servers .counts-panel .tablesorter')
-		.tablesorter({
-		    theme : 'bootstrap',
-		    widgets : [ "uitheme", "zebra"],
-		    headerTemplate : '{content} {icon}',
-		});
-
   	    $('#powder-servers .resgraph-panel')
 		.html(graphTemplate({
 		    "graphid"        : "resgraph-powder-servers",
@@ -101,15 +146,27 @@ $(function ()
 		    "showfullscreen" : false
 		}));
 
+	    $('#powder-matrix .graph-panel')
+		.html(visTemplate({
+		    "title" : "PhantomNet RF Attenuator Matrix",
+		    "id"    : "matrix",
+		}))
+		.find(".panel").removeClass("hidden");
 	    $('#powder-matrix .counts-panel')
 		.html(totalsTemplate({"title" : "Attenuator Matrix"}));
-
 	    $('#powder-matrix .counts-panel .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
 		    widgets : [ "uitheme", "zebra"],
 		    headerTemplate : '{content} {icon}',
 		});
+	    $('#powder-matrix .graph-panel .panel-heading .right-side')
+		.html("<span class=small> " +
+			" <a href='#' " +
+			"    data-target='#matrix-connections-modal' " +
+			"    data-toggle='modal'>" +
+			"  Matrix Connections</a></span>" +
+			"");
 	}
 	_.each(amlist, function (details, urn) {
 	    var graphid = 'resgraph-' + details.nickname;
@@ -147,6 +204,12 @@ $(function ()
 		}));
 	});
 	if (window.ISPOWDER && _.size(FEs)) {
+	    $('#fixed-endpoints .graph-panel')
+		.html(visTemplate({
+		    "title" : "Fixed Endpoint Availability",
+		    "id"    : "FE",
+		}))
+		.find(".panel").removeClass("hidden");
 	    $('#fixed-endpoints .counts-panel')
 		.html(totalsTemplate({"title" : "Fixed Endpoints"}));
 
@@ -156,13 +219,6 @@ $(function ()
 		    widgets : [ "uitheme", "zebra"],
 		    headerTemplate : '{content} {icon}',
 	    });
-
-	    $("#fixed-endpoints .resgraph-panel")
-		.html(graphTemplate({"graphid"        : "resgraph-FEs",
-				     "title"          : "Fixed Endpoint",
-				     "showhelp"       : true,
-				     "showfullscreen" : false}));
-	    
 	    $('#fixed-endpoints').removeClass("hidden");
 	}
 
@@ -220,7 +276,7 @@ $(function ()
 			.removeClass("hidden");
 		    return;
 		}
-		var forecast  = json.value.forecast;
+		var forecast  = FixForecast(json.value.forecast);
 		var skiptypes = json.value.prunelist;
 
 		ShowResGraph({"forecast"       : forecast,
@@ -252,24 +308,21 @@ $(function ()
 	var forecast = {};
 
 	// Kill the spinners
-	$('#powder-radios .resgraph-spinner, ' +
-	  '#powder-matrix .resgraph-spinner, ' +
-	  '#powder-servers .resgraph-spinner')
+	$('[id^=powder-] .resgraph-spinner')
 	    .addClass("hidden");
 
 	if (json.code) {
 	    console.log("Could not get reservation data for " +
 			details.name + ": " + json.value);
 
-	    $('#powder-radios .resgraph-error, ' +
-	      '#powder-matrix .resgraph-error, ' +
-	      '#powder-servers .resgraph-error')
+	    $('[id^=powder-] .resgraph-error')
 		.html(json.value)
 		.reemoveClass("hidden");
 
 	    return;
 	}
 	var forecasts = FixForecast(json.value.forecast);
+	var groups = {};
 	
 	/*
 	 * The radio graph consists of individually reservable nodes that
@@ -277,12 +330,27 @@ $(function ()
 	 */
 	_.each(forecasts, function (info, key) {
 	    if (_.has(radioinfo[urn], key)) {
-		forecast[key] = info;
+		if (radioinfo[urn][key].grouping) {
+		    var group = radioinfo[urn][key].grouping;
+		    if (!_.has(groups, group)) {
+			groups[group] = {};
+		    }
+		    groups[group][key] = info;
+		}
+		else {
+		    forecast[key] = info;
+		}
 	    }
 	});
-	ShowNewGraph(forecast, "radio-graph-body", "radio-graph-visavail")
+	ShowNewGraph(forecast, "radio");
 	GenerateCountPanel(urn, "powder-radios .counts-panel",
 			   forecast, null, true);
+
+	_.each(groups, function (forecast, group) {
+	    ShowNewGraph(forecast, group);
+	    GenerateCountPanel(urn, "powder-" + group + " .counts-panel",
+			       forecast, null, true);
+	});
 
 	/*
 	 * The matrix graph consists of nodes in the matrixinfo object
@@ -293,7 +361,7 @@ $(function ()
 		forecast[key] = info;
 	    }
 	});
-	ShowNewGraph(forecast, "matrix-graph-body", "matrix-graph-visavail")
+	ShowNewGraph(forecast, "matrix");
 	GenerateCountPanel(urn, "powder-matrix .counts-panel",
 			   forecast, null, true);
 	
@@ -444,17 +512,27 @@ $(function ()
 		    });
 		GenerateCountPanel(urn, countid, tmp, null, true);
 	    });
-	ShowNewGraph(combinedForecasts, "FE-graph-body", "FE-graph-visavail")
+	ShowNewGraph(combinedForecasts, "FE");
     }
 
     /*
      * Generate a new style graph in the provide container.
      */
-    function ShowNewGraph(forecasts, container, graph)
+    function ShowNewGraph(forecasts, tag)
     {
 	var dataset = [];
 	var now     = new Date();
+	var limit   = new Date();
 	var maxend  = now;
+	var container = tag + "-graph-body";
+	var graph     = tag + "-graph-visavail";
+	var zoomin  = $('#' + container).closest(".panel")
+	    .find(".panel-heading .zoom-control .zoom-in");
+	var zoomout = $('#' + container).closest(".panel")
+	    .find(".panel-heading .zoom-control .zoom-out");
+
+	// Do not show more then 60 days, the graphs are hard to read.
+	limit.setDate(limit.getDate() + 60);
 	
 	Object.keys(forecasts)
 	    .sort()
@@ -469,14 +547,30 @@ $(function ()
 		    "categories": {
 			"Busy": { "color": "black" },
 			"Free": { "color": "green"},
+			"Pending": { "color": "blue"},
+			"Overbook": { "color": "red"},
 		    },
 		};
 		for (var i = 0; i < forecast.length; i++) {
 		    var info  = forecast[i];
 		    var start = moment(info.stamp).toDate();
-		    var state = info.free ? "Free" : "Busy";
+		    var state;
 		    var end;
 
+		    if (info.free == 1) {
+			if (_.has(info, "unapproved") && info.unapproved != 0) {
+			    state = "Pending";
+			}
+			else {
+			    state = "Free";
+			}
+		    }
+		    else if (info.free == 0 || !isadmin) {
+			state = "Busy"
+		    }
+		    else {
+			state = "Overbook";
+		    }
 		    if (i < forecast.length - 1) {
 			end = moment(forecast[i + 1].stamp).toDate();
 		    }
@@ -488,6 +582,9 @@ $(function ()
 		    // we can even things out on the very right
 		    // side.
 		    if (end > maxend) {
+			if (end > limit) {
+			    end = new Date(limit.valueOf());
+			}
 			maxend = end;
 		    }
 		    series.data.push([start, state, end]);
@@ -555,6 +652,15 @@ $(function ()
 	    },
 	};
 	var chart = visavail.generate(options, dataset)
+
+	$(zoomin).click(function (event) {
+	    event.preventDefault();
+	    chart.zoomin();
+	})
+	$(zoomout).click(function (event) {
+	    event.preventDefault();
+	    chart.zoomout();
+	})
     }
 
     //
@@ -573,6 +679,13 @@ $(function ()
 		data.free  = parseInt(data.free);
 		data.held  = parseInt(data.held);
 		data.stamp = new Date(parseInt(data.t) * 1000);
+		// New
+		if (_.has(data, "unapproved")) {
+		    data.unapproved = parseInt(data.unapproved);
+		}
+		else {
+		    data.unapproved = 0;
+		}
 	    }
 
 	    // No data or just one data point, nothing to do.

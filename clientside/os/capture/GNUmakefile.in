@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,8 +38,8 @@ WITH_TELNET	= 0
 
 all:		boss-all tipserv-all
 boss-all:	capserver
-tipserv-all:	capture capture-tty capquery caplogserver caplog caplog.bin
-client:		capture capture-nossl capquery caplog caplog.bin
+tipserv-all:	capture capture-tty capquery caplogserver caplog caplog.bin caplogroll
+client:		capture capture-nossl capquery caplog caplog.bin caplogroll
 control:
 subboss:	client
 rack-control:   capture-nossl
@@ -113,7 +113,8 @@ subboss-install: subboss client-install
 real-install:	all $(INSTALL_SBINDIR)/capserver $(INSTALL_SBINDIR)/capture
 
 tipserv-install:	tipserv-all $(INSTALL_SBINDIR)/capture \
-			$(INSTALL_SBINDIR)/caplogserver
+			$(INSTALL_SBINDIR)/caplogserver \
+			$(INSTALL_SBINDIR)/caplogroll
 
 rack-control-install: rack-control
 	-mkdir -p /var/log/tiplogs
@@ -153,5 +154,4 @@ rack-control-startup-install: rack-control-install
 
 clean:
 	rm -f *.o capture capture-tty capserver capquery core errs Errs
-	rm -f caplog caplog.bin caplogserver
-
+	rm -f caplog caplog.bin caplogserver caplogroll

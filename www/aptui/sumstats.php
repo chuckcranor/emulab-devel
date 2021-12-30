@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -312,7 +312,7 @@ function ShowByProject()
                                      "Emulab" => array("ecount" => 0,
                                                        "pcount" => 0,
                                                        "phours" => 0),
-                                     "DDC"    => array("ecount" => 0,
+                                     "Mass"   => array("ecount" => 0,
                                                        "pcount" => 0,
                                                        "phours" => 0));
         }
@@ -336,7 +336,7 @@ function ShowByProject()
            <th colspan=3>Wisc</th>
            <th colspan=3>Clem</th>
            <th colspan=3>Emulab</th>
-           <th colspan=3>DDC</th>
+           <th colspan=3>Mass</th>
           </tr>
           <tr>
            <th class='filter-false sorter-false'
@@ -454,9 +454,9 @@ function ShowByProject()
             "<td>" . $ref["Emulab"]["ecount"] . "</td> ".
             "<td>" . $ref["Emulab"]["pcount"] . "</td> ".
             "<td>" . $ref["Emulab"]["phours"] . "</td> ".
-            "<td>" . $ref["DDC"]["ecount"] . "</td> ".
-            "<td>" . $ref["DDC"]["pcount"] . "</td> ".
-            "<td>" . $ref["DDC"]["phours"] . "</td> ".
+            "<td>" . $ref["Mass"]["ecount"] . "</td> ".
+            "<td>" . $ref["Mass"]["pcount"] . "</td> ".
+            "<td>" . $ref["Mass"]["phours"] . "</td> ".
             "</tr>\n";
     }
     echo "</table>";

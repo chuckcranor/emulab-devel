@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,6 +43,7 @@ use vars qw($NEWUSER_FLAGS_PROJLEADER $NEWUSER_FLAGS_WIKIONLY
 	    $USERSTATUS_ACTIVE $USERSTATUS_FROZEN $USERSTATUS_INACTIVE
 	    $USERSTATUS_UNAPPROVED $USERSTATUS_UNVERIFIED
 	    $USERSTATUS_NEWUSER $USERSTATUS_ARCHIVED $USERSTATUS_NONLOCAL
+            @USERSTATUS_VALIDSET
 	    @EXPORT_OK);
 
 # Configure variables
@@ -84,6 +85,8 @@ $USERSTATUS_NEWUSER	        = "newuser";
 $USERSTATUS_ARCHIVED	        = "archived";
 $USERSTATUS_NONLOCAL	        = "nonlocal";
 $USERSTATUS_INACTIVE	        = "inactive";
+@USERSTATUS_VALIDSET            = ($USERSTATUS_ACTIVE, $USERSTATUS_FROZEN,
+		 		   $USERSTATUS_ARCHIVED, $USERSTATUS_INACTIVE);
 
 # Why, why, why?
 @EXPORT_OK = qw($NEWUSER_FLAGS_PROJLEADER $NEWUSER_FLAGS_WIKIONLY
@@ -91,7 +94,8 @@ $USERSTATUS_INACTIVE	        = "inactive";
 		$NEWUSER_FLAGS_NOUUID
 		$USERSTATUS_ACTIVE $USERSTATUS_FROZEN $USERSTATUS_INACTIVE
 		$USERSTATUS_UNAPPROVED $USERSTATUS_UNVERIFIED
-		$USERSTATUS_NEWUSER $USERSTATUS_ARCHIVED $USERSTATUS_NONLOCAL);
+		$USERSTATUS_NEWUSER $USERSTATUS_ARCHIVED $USERSTATUS_NONLOCAL
+                @USERSTATUS_VALIDSET);
 
 # Protos
 sub SetUserInterface($$);
@@ -225,6 +229,7 @@ sub nonlocal_type($)	{ return field($_[0], "nonlocal_type"); }
 sub IsLocal($)		{ return (defined($_[0]->nonlocal_id()) ? 0 : 1); };
 sub IsNonLocal($)	{ return (defined($_[0]->nonlocal_id()) ? 1 : 0); };
 sub portal($)		{ return field($_[0], "portal"); }
+sub expert_mode($)	{ return field($_[0], "expert_mode"); }
 sub ga_userid($)	{ return field($_[0], "ga_userid"); }
 sub Brand($)		{ return $_[0]->{'BRAND'}; }
 sub isAPT($)	        { return $_[0]->Brand()->isAPT() ? 1 : 0; }
@@ -652,6 +657,7 @@ sub Create($$$$)
     push(@insert_data, "uid_idx='$uid_idx'");
     push(@insert_data, "uid='$uid'");
     push(@insert_data, "ga_userid='$ga_userid'");
+    push(@insert_data, "affiliation_updated=now()");
 
     if ($archived) {
 	#
@@ -1043,6 +1049,17 @@ sub ModUserInfo($$$$)
 	}
     }
     if (keys %updates) {
+	if (exists($updates{"usr_affil"})) {
+	    $updates{"affiliation_updated"} = "now()";
+	    #
+	    # Avoid email when doing the affiliation update if it actually
+	    # did not change, we are here cause the web page forced the chane
+	    # so that we update affiliation_updated.
+	    #
+	    if ($updates{"usr_affil"} eq $target_user->affil()) {
+		delete($mods{"usr_affil"});
+	    }
+	}
 	if ($target_user->Update(\%updates)) {
 	    return undef;
 	}
@@ -1074,8 +1091,10 @@ sub ModUserInfo($$$$)
 	}
 	SENDMAIL("$target_name <$target_email>",
 		 "User Information for '$target_uid' Modified",
-		 $msg, TBMAIL_OPS(), sprintf("Bcc: %s\nErrors-To:%s", 
-					     TBMAIL_AUDIT(), TBMAIL_WWW()));
+		 $msg, TBMAIL_OPS(),
+		 "Bcc: " . TBMAIL_AUDIT() . "\n" .
+		 "Bcc: stoller\@flux.utah.edu\n" .
+		 "Errors-To: " . TBMAIL_WWW());
 
 	#
 	# "tbacct mod" updates the user gecos field (usr_name) and shell.
@@ -1308,6 +1327,29 @@ sub HasValidEncryptedCert($)
 		    "      revoked is null and expires > now()");
 
     return -1
+	if (!defined($query_result));
+    return 0
+	if (!$query_result->numrows);
+    return 1;
+}
+
+#
+# Lookup certificate by serial number,
+#
+sub HasCertBySerial($$)
+{
+    my ($self, $serial) = @_;
+    my $uid_idx = $self->uid_idx();
+
+    if ($serial !~ /^(\d+)$/) {
+	return 0;
+    }
+    my $query_result =
+	DBQueryWarn("select idx from user_sslcerts ".
+		    "where uid_idx='$uid_idx' and idx='$serial' and ".
+		    "      revoked is null and expires > now()");
+
+    return 0
 	if (!defined($query_result));
     return 0
 	if (!$query_result->numrows);

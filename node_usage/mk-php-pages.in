@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2009 University of Utah and the Flux Group.
+# Copyright (c) 2009, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -91,13 +91,13 @@ ${"${tag}_header"}
 <p align=center>
 <b>Last 2 Weeks (hourly)</b>
 <br>
-<img src="node_${tag}-hourly_last2weeks.png">
+<img src="node_${tag}-hourly_last2weeks.svg">
 <br> 
 <p align=center>
 
 <b>Last 2 Months (daily)</b>
 <br>
-<img src="node_${tag}-daily_last2months.png">
+<img src="node_${tag}-daily_last2months.svg">
 
 <p align=center>
 <hr>
@@ -107,7 +107,7 @@ ${"${tag}_header"}
 <p align=center>
 <b>A Typical Week (hourly, average since $start_date_short)</b>
 <br>
-<img src="node_${tag}-by_hourofweek.png">
+<img src="node_${tag}-by_hourofweek.svg">
 
 <p align=center>
 <hr>
@@ -118,21 +118,21 @@ ${"${tag}_header"}
 <b>Since $start_date_short (yearly)</b>
 
 <br>
-<img src="node_${tag}-yearly.png">
+<img src="node_${tag}-yearly.svg">
 
 <p align=center>
 
 <b>Since $start_date_short (monthly)</b>
 
 <br>
-<img src="node_${tag}-monthly.png">
+<img src="node_${tag}-monthly.svg">
 
 <p align=center>
 
 <b>Since $start_date_short (weekly)</b>
 
 <br>
-<img src="node_${tag}-weekly.png">
+<img src="node_${tag}-weekly.svg">
 
 <p align=center>
 

@@ -448,6 +448,13 @@ $(function ()
 		data.free  = parseInt(data.free);
 		data.held  = parseInt(data.held);
 		data.stamp = new Date(parseInt(data.t) * 1000);
+		// New
+		if (_.has(data, "unapproved")) {
+		    data.unapproved = parseInt(data.unapproved);
+		}
+		else {
+		    data.unapproved = 0;
+		}
 	    }
 
 	    // No data or just one data point, nothing to do.

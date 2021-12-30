@@ -10,11 +10,14 @@ $(function ()
 	embedded = window.EMBEDDED;
 	$('#waitwait_div').html(waitwaitString);
 
-	// We share code with the modal version of login, and the
-	// handler for the button is installed in initialize().
-	// See comment there.
 	if (window.PGENILOGIN) {
 	    sup.InitGeniLogin(embedded);
+
+	    $('#quickvm_geni_login_button').click(function (event) {
+		event.preventDefault();
+		sup.StartGeniLogin();
+		return false;
+	    });
 	}
 	window.APT_OPTIONS.initialize(sup);
 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -33,6 +33,8 @@ use Getopt::Std;
 use Data::Dumper;
 use JSON;
 use POSIX qw(strftime ceil);
+use Time::Local;
+use Date::Parse;
 
 #
 # Get the bus route location data.
@@ -56,10 +58,12 @@ my $MAINSITE         = @TBMAINSITE@;
 my $LOGFILE          = "$TB/log/aptbus_monitor.log";
 my $WGET             = "/usr/local/bin/wget";
 my $FPING            = "/usr/local/sbin/fping";
+my $CURL             = "/usr/local/bin/curl";
 my $PROTOUSER	     = "elabman";
 my $SUDO	     = "/usr/local/bin/sudo";
 my $SLEEP_INTERVAL   = 180;
 my $HOURLY_INTERVAL  = 3600;
+my $OFFLINE_THRESHOLD= 2 * $SLEEP_INTERVAL;
 
 #
 # Bus URLS. No documentation available.
@@ -68,6 +72,12 @@ my $LOCATION_URL = "https://www.uofubus.com/Services/JSONPRelay.svc/".
     "GetMapVehiclePoints?ApiKey=ride1791";
 my $ROUTES_URL = "https://www.uofubus.com/Services/JSONPRelay.svc/".
     "GetRoutesForMapWithScheduleWithEncodedLine?ApiKey=ride1791";
+
+# Overwatch data (gpsd data).
+my $OVERWATCH_URL   = "https://overwatch.emulab.net:8086/query?pretty=true";
+my $OVERWATCH_DB    = "telegraf";
+my $OVERWATCH_USER  = "elabman";
+my $OVERWATCH_PSWD  = "$TB/etc/overwatch.pswd";
 
 use lib "@prefix@/lib";
 use emdb;
@@ -85,6 +95,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 sub fatal($);
 sub GetLocationData();
 sub doPing($$);
+sub GetOverWatchData();
 
 # Local
 my %routes     = ();
@@ -134,6 +145,29 @@ if (! $impotent) {
 	fatal("Could not mark daemon as running!");
     }
 }
+#
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    my $SAVEEUID = $EUID;
+    
+    $EUID = 0;
+    ReOpenLog($LOGFILE);
+    $EUID = $SAVEEUID;
+}
+$SIG{HUP} = \&handler
+    if (! ($debug || $oneshot || $impotent));
+
+if (! -e $OVERWATCH_PSWD) {
+    fatal("$OVERWATCH_PSWD does not exist");
+}
+my $overwatch_password = `/bin/cat $OVERWATCH_PSWD`;
+if ($?) {
+    fatal("Cannot read $OVERWATCH_PSWD");
+}
+chomp($overwatch_password);
+
 sleep(5) if (! $debug);
 
 while (1) {
@@ -164,6 +198,7 @@ while (1) {
 	$routes{$routeid} = $description;
 	$routes{$description} = $routeid;
     }
+    GetOverWatchData();
     GetLocationData();
     
     exit(1)
@@ -262,7 +297,7 @@ sub GetLocationData()
 	
 	# Debugging
 	next
-	    if ($busid == 6969 || $busid == 6970);
+	    if ($busid == 6969 || $busid == 6970 || $bus->disabled());
 
 	# See below.
 	$pingchecks{$bus->busid()} = {
@@ -318,6 +353,19 @@ sub GetLocationData()
 	}
 	if (!defined($routeid) || !defined($bus->routeid()) ||
 	    $routeid != $bus->routeid()) {
+
+	    #
+	    # Update location whenever it is on a route or when it is
+	    # going off route.
+	    #
+	    if ($routeid || $bus->routeid()) {
+		if (!$impotent) {
+		    $bus->UpdateLocation({"latitude"   => $latitude,
+					  "longitude"  => $longitude,
+				          "speed"      => $speed,
+				          "heading"    => $heading});
+		}
+	    }
 	    
 	    #
 	    # Route changed. Mark it.
@@ -329,7 +377,12 @@ sub GetLocationData()
 		# that way, which indicates its running but not on one
 		# of our routes.
 		#
-		print "$busid changed to route $routeid ($description)\n";
+		if (!defined($bus->routeid()) || $routeid != $bus->routeid()) {
+		    print "$busid changed to route $routeid" .
+			(defined($description) ? " ($description)" : "") . "\n";
+
+		    $bus->RouteChange($routeid, $description);
+		}
 	    }
 	    elsif (defined($bus->routeid())) {
 		#
@@ -341,13 +394,7 @@ sub GetLocationData()
 		# experiment. 
 		#
 		print "$busid went off route\n";
-	    }
-	    if (!$impotent) {
 		$bus->RouteChange($routeid, $description);
-		$bus->UpdateLocation({"latitude"   => $latitude,
-				      "longitude"  => $longitude,
-				      "speed"      => $speed,
-				      "heading"    => $heading});
 	    }
 	}
 	elsif ($bus->routeid()) {
@@ -379,6 +426,21 @@ sub GetLocationData()
 	my $Balive    = $pingresults{$boss};
 	my $Calive    = $pingresults{$control};
 
+	if (!$Balive) {
+	    #
+	    # If the boss has not pinged in a while, lets mark it
+	    # down. We are not using the portal_monitor at this point,
+	    # to many of them and we lose contact with them often.
+	    #
+	    if (time() - $bus->LastPing() > $OFFLINE_THRESHOLD) {
+		$bus->status("offline");
+	    }
+	}
+	else {
+	    if (time() - $bus->LastPing() < $OFFLINE_THRESHOLD) {
+		$bus->status("up");
+	    }
+	}
 	if ($Balive || $Calive) {
 	    $bus->Ping($Balive, $Calive);
 	}
@@ -440,4 +502,89 @@ sub fatal($)
 
     die("*** $0:\n".
 	"    $msg\n");
+}
+
+#
+# Ask the overwatch data for what it thinks is the last location.
+#
+sub GetOverWatchData()
+{
+    my $url     = "$OVERWATCH_URL&db=${OVERWATCH_DB}";
+    my $command = "$CURL -s -G --max-time 15 ".
+	"-u '${OVERWATCH_USER}:${overwatch_password}' ";
+    my $query   = "select time,cluster,lat,lon,speed,track from gpsd_tpv ".
+	"group by host ORDER BY time DESC limit 1";
+
+    $command .= "'$url' --data-urlencode 'q=${query}'";
+    
+    print "Running $command\n" if ($debug);
+    my $json = emutil::ExecQuiet($command);
+    if (!$json) {
+	print STDERR "Could not retrieve overwatch data\n";
+	return;
+    }
+    #print "$json";
+    my $hash = eval { decode_json($json) };
+    if ($@) {
+	print STDERR "Could not decode overwatch json\n";
+	return;
+    }
+    foreach my $ref (@{$hash->{'results'}->[0]->{'series'}}) {
+	my @values  = @{$ref->{'values'}[0]};
+	my @columns = @{$ref->{'columns'}};
+	my @sets    = ();
+	my $busid;
+
+	foreach my $key (@columns) {
+	    my $val = shift(@values);
+
+	    if ($key eq "time") {
+		# Convert to a localtime.
+		my $stamp = eval { timegm(strptime($val)); };
+		if ($@) {
+		    print STDERR "$@";
+		    return;
+		}
+		push(@sets, "gpsd_stamp=FROM_UNIXTIME($stamp)");
+	    }
+	    elsif ($key eq "cluster") {
+		if ($val =~ /^bus-(\w+)\.powder/) {
+		    $busid = $1;
+		}
+		else {
+		    print STDERR "Invalid cluster name: $val\n";
+		    last;
+		}
+	    }
+	    else {
+		if ($val !~ /^[-+]?[\d\.]+$/) {
+		    print STDERR "Invalid value for $key: $val\n";
+		    return;
+		}
+		if ($key eq "lat") {
+		    push(@sets, "gpsd_latitude='$val'");
+		}
+		elsif ($key eq "lon") {
+		    push(@sets, "gpsd_longitude='$val'");
+		}
+		elsif ($key eq "speed") {
+		    push(@sets, "gpsd_speed='$val'");
+		}
+		elsif ($key eq "track") {
+		    push(@sets, "gpsd_heading='$val'");
+		}
+	    }
+	}
+	next
+	    if (!defined($busid) || $busid !~ /^\d+$/);
+	
+	my $query = "update apt_mobile_buses set " .
+	    join(",", @sets) . " where busid='$busid'";
+	if ($impotent) {
+	    print "$query\n";
+	}
+	else {
+	    DBQueryWarn($query);
+	}
+    }
 }

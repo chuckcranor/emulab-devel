@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016, 2018, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -243,6 +243,10 @@ sub LookupAggregate($)
 	if (defined($aggregate));
 
     $aggregate = APT_Aggregate->LookupByDomain($token);
+    return $aggregate
+	if (defined($aggregate));
+
+    $aggregate = APT_Aggregate->LookupByAbbreviation($token);
     return $aggregate
 	if (defined($aggregate));
 

@@ -138,8 +138,9 @@ sub Install($$$)
 	if ($PGENISUPPORT) {
 	    Phase "mod_wsgi3", "Looking for mod_wsgi3 and installing", sub {
 		if ($FBSD_MAJOR >= 11) {
-		    DoneIfPackageInstalled("ap24-py27-mod_wsgi");
-		    my $pname = GetPackage("ap24-py27-mod_wsgi", $packagedir);
+		    DoneIfPackageInstalled("ap24-${PY_PKGPREFIX}-mod_wsgi");
+		    my $pname = GetPackage("ap24-${PY_PKGPREFIX}-mod_wsgi",
+					   $packagedir);
 		    AddPackage($pname, $packagedir);
 		} else {
 		    DoneIfPackageInstalled("ap22-mod_wsgi");
@@ -148,8 +149,8 @@ sub Install($$$)
 		}
 	    };
 	    Phase "py-flask", "Looking for py-flask and installing", sub {
-		DoneIfPackageInstalled("py27-Flask");
-		my $pname = GetPackage("py27-Flask", $packagedir);
+		DoneIfPackageInstalled("${PY_PKGPREFIX}-Flask");
+		my $pname = GetPackage("${PY_PKGPREFIX}-Flask", $packagedir);
 		AddPackage($pname, $packagedir);
 	    };
 	    Phase "mod_fcgid", "Looking for mod_fcgid and installing", sub {

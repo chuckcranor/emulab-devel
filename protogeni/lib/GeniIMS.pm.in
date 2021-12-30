@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -772,8 +772,6 @@ sub GetImageInfo($)
     my $cred   = $argref->{'credential'};
     my $urn    = $argref->{'urn'};
     my $url    = $argref->{'url'};
-    my $query_result;
-    my $blob;
 
     if (! defined($cred)) {
 	return GeniResponse->MalformedArgsResponse("Where's the credential?");
@@ -797,6 +795,21 @@ sub GetImageInfo($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "Insufficient permission to getimageinfo");
 
+    my $blob = GetImageBlob($urn, $url);
+    print STDERR Dumper($blob);
+    
+    return $blob
+	if (GeniResponse::IsResponse($blob));
+
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+sub GetImageBlob($$)
+{
+    my ($urn, $url) = @_;
+    my $query_result;
+    my $blob;
+    
     # IMS database handle.
     InitDBHandle();
 
@@ -965,12 +978,7 @@ sub GetImageInfo($)
 		!$query_result->numrows());
 	$blob = &$createBlob($query_result->fetchrow_hashref());
     }
-    print STDERR Dumper($blob);
-    
-    return $blob
-	if (GeniResponse::IsResponse($blob));
-
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    return $blob;
 }
 
 sub DeleteImageInfo($)

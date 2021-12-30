@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,8 +56,8 @@ $blob = array("active_experiments" => 0,
 # Number of active experiments.
 #
 $query_result =
-    DBQueryFatal("select count(uuid) from apt_instances " .
-                 "where servername='$servername'");
+    DBQueryFatal("select count(*) from apt_instances " .
+                 "where portal='$portal'");
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
     $blob["active_experiments"] = $row[0];
@@ -77,11 +77,14 @@ if ($query_result) {
 # Number of experiments ever
 #
 $query_result =
-    DBQueryFatal("select count(*) from apt_instance_history ".
-                 "where servername='$servername'");
-if ($query_result) {
-    $row = mysql_fetch_array($query_result);
-    $blob["total_experiments"] = $row[0];
+    DBQueryFatal("select portal,count(*) as count ".
+                 "  from apt_instance_history ".
+                 "where portal='$portal' ".
+                 "group by portal");
+while ($row = mysql_fetch_array($query_result)) {
+    if ($row["portal"] == $portal) {
+        $blob["total_experiments"] = $row["count"];
+    }
 }
 # Add classic to emulab portal numbers,
 if ($portal == "emulab") {
@@ -98,7 +101,7 @@ if ($query_result) {
 # Number Cloudlab projects.
 #
 $query_result =
-    DBQueryFatal("select count(pid) from projects as p ".
+    DBQueryFatal("select count(*) from projects as p ".
                  "where p.approved=1 and $portalclause");
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
@@ -110,21 +113,16 @@ if ($query_result) {
 #
 if ($portal == "emulab") {
     $query_result =
-        DBQueryFatal("select count(distinct creator_idx) ".
-                     "  from experiment_stats as s ".
-                     "left join projects as p on p.pid_idx=s.pid_idx ".
-                     "where geniflags is null or $portalclause");
+        DBQueryFatal("select count(distinct creator_idx) from projects as p ".
+                     "join experiment_stats as s on p.pid_idx=s.pid_idx ".
+                     "where geniflags is null or ".
+                     "      (p.portal='emulab' or p.portal is null)");
 }
 else {
     $query_result =
-        DBQueryFatal("select count(*) from ".
-                 " ((select distinct a.creator from apt_instance_history as a ".
-                 "   left join projects as p on p.pid_idx=a.pid_idx ".
-                 "   where $portalclause) ".
-                 "  union ".
-                 "  (select distinct a.creator from apt_instances as a ".
-                 "   left join projects as p on p.pid_idx=a.pid_idx ".
-                 "   where $portalclause)) as c");
+        DBQueryFatal("select count(distinct creator_idx) from ".
+                     "     apt_instance_history ".
+                     "   where portal='$PORTAL_GENESIS';");
 }
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
@@ -135,7 +133,7 @@ if ($query_result) {
 # Number of profiles (both public and private)
 #
 $query_result =
-    DBQueryFatal("select count(profileid) from apt_profiles as a ".
+    DBQueryFatal("select count(*) from apt_profiles as a ".
                  "left join projects as p on p.pid_idx=a.pid_idx ".
                  "where $portalclause");
 if ($query_result) {

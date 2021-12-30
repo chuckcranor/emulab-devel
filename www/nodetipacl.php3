@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -188,7 +188,6 @@ $console_auth = $node->ConsoleAuthObject($uid, $console);
 if (!isset($key)) {
     PAGEHEADER("$node_id Console");
 }
-$referrer = $_SERVER['HTTP_REFERER'];
 if (!isset($closekills)) {
     $closekills = 0;
 }
@@ -200,15 +199,55 @@ echo "\n";
 echo "<script src='$TBBASE/emulab_sup.js'></script>\n";
 echo "<script src='https://code.jquery.com/jquery.js'></script>\n";
 echo "<script>\n";
-echo "var tbbaseurl  = '$referrer';\n";
+echo "var tbbaseurl  = '$TBBASE';\n";
 echo "var closekills = $closekills;\n";
 echo "var noclose    = $noclose;\n";
 echo "var proxied    = $BROWSER_CONSOLE_PROXIED;\n";
+echo "var webssh     = $BROWSER_CONSOLE_WEBSSH;\n";
 ?>
 function StartConsole(id, authobject)
 {
     var jsonauth = $.parseJSON(authobject);
 	
+    if (webssh) {
+        var url     = jsonauth.baseurl;
+	var iwidth  = "100%";
+        var iheight = 400;
+
+	var loadiframe = function () {
+	    console.info("Sending message", jsonauth.baseurl);
+	    iframewindow.postMessage(authobject, "*");
+	    window.removeEventListener("message", loadiframe, false);
+	};
+	window.addEventListener("message", loadiframe);
+
+        var iwidth  = $('#' + id).width();
+	var iheight = $(window).height();
+	var Iframe  = getObjbyName(id);
+	// Now get the Y offset of the outputframe.
+	var yoff    = Iframe.offsetTop;
+
+	if (iheight != 0 && yoff != 0) {
+	    iheight = iheight - yoff;
+	}
+	else {
+	    iheight = 200;
+	}
+        iheight = iheight - 25;
+
+        $('#' + id).html('<iframe id="' + id + '_iframe" ' +
+                         'width=' + iwidth + ' ' +
+                         'height=' + iheight + ' ' +
+                         'src=\'' + url + '\'>');
+
+	var iframe = $('#' + id + '_iframe')[0];
+	var iframewindow = (iframe.contentWindow ?
+			    iframe.contentWindow :
+			    iframe.contentDocument.defaultView);
+
+        return;
+    }
+
     var callback = function(stuff) {
         var split   = stuff.split(':');
         var session = split[0];

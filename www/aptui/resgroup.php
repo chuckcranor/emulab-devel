@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -80,6 +80,7 @@ if (isset($cluster)) {
         exit();
     }
 }
+
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
@@ -101,6 +102,11 @@ echo "<div id='oops_div'></div>
       <div id='confirm_div'></div>
       <div id='waitwait_div'></div>\n";
 
+# Reservations now have to start next business day at 9am (unless expert).
+$bisdaysonly = $this_user->expert_mode() ? 0 : 1;
+# Ditto
+$routesokay  = $isadmin;
+
 #
 # See what projects the user can do this in.
 #
@@ -114,6 +120,17 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 $plist = array();
 while (list($p) = each($projlist)) {
     $plist[] = $p;
+    if (!$isadmin) {
+        $ptmp = Project::LookupByPid($p);
+        if ($ptmp && $ptmp->expert_mode()) {
+            $bisdaysonly = 0;
+        }
+    }
+    if ($ISPOWDER && !$isadmin) {
+        if ($ptmp && FeatureEnabled("powder-routes-allowed", null, $ptmp)) {
+            $routesokay = 1;
+        }
+    }
 }
 echo "<script type='text/plain' id='projects-json'>\n";
 echo htmlentities(json_encode($plist));
@@ -227,11 +244,16 @@ else {
 }
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";
+echo "   window.HOMETZ   = '$OURTIMEZONE';\n";
+echo "   window.BISONLY  = $bisdaysonly;\n";
+echo "   window.DOROUTES = $routesokay;\n";
+
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_MOMENTTIMEZONE();
 REQUIRE_APTFORMS();
 REQUIRE_TABLESORTER();
 AddLibrary("js/resgraphs.js");
@@ -239,7 +261,7 @@ AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
                       "range-list", "route-list",
                       "oops-modal", "waitwait-modal", "confirm-modal",
                       "resusage-list", "resusage-graph",
-                      "confirm-something", "resusage-graph"));
+                      "confirm-something", "resusage-graph", "visavail-graph"));
 SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n".

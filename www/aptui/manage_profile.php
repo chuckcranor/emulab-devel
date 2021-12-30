@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,8 +28,6 @@ chdir("apt");
 include("quickvm_sup.php");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
-# Must be after quickvm_sup.php since it changes the auth domain.
-include_once("../session.php");
 $page_title = "Manage Profile";
 $notifyupdate = 0;
 $notifyclone = 0;
@@ -55,6 +53,7 @@ $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 				 "snapuuid",    PAGEARG_STRING,
 				 "snapnode_id", PAGEARG_NODEID,
 				 "finished",    PAGEARG_BOOLEAN,
+                                 "updated",     PAGEARG_INTEGER,
 				 "formfields",  PAGEARG_ARRAY);
 
 #
@@ -73,6 +72,7 @@ function SPITFORM($formfields, $errors)
     $canpublish = 0;
     $history    = 0;
     $activity   = 0;
+    $paramsets  = 0;
     $ispp       = 0;
     $isadmin    = (ISADMIN() ? 1 : 0);
     $isstud     = (STUDLY() ? 1 : 0);
@@ -88,15 +88,18 @@ function SPITFORM($formfields, $errors)
     $this_version = "null";
     $latest_uuid    = "null";
     $latest_version = "null";
+    $profile_pid    = "null";
 
     if ($action == "edit") {
 	$button_label = "Save";
 	$viewing      = 1;
 	$version_uuid = "'" . $profile->uuid() . "'";
 	$profile_uuid = "'" . $profile->profile_uuid() . "'";
+	$profile_pid  = "'" . $profile->pid() . "'";
 	$candelete    = ($profile->CanDelete($this_user) ? 1 : 0);
 	$nodelete     = ($profile->isLocked() ? 1 : 0);
 	$history      = ($profile->HasHistory() ? 1 : 0);
+	$paramsets    = ($profile->HasParamsets($this_user) ? 1 : 0);
 	$canmodify    = ($profile->CanModify() ? 1 : 0);
 	$canpublish   = ($profile->CanPublish() ? 1 : 0);
 	$activity     = ($profile->HasActivity($this_user) ? 1 : 0);
@@ -159,16 +162,9 @@ function SPITFORM($formfields, $errors)
     echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
 
     # Pass project list through. Need to convert to list without groups.
-    # When editing, pass through a single value. The template treats a
-    # a single value as a read-only field.
     $plist = array();
-    if ($viewing) {
-	$plist[] = $formfields["profile_pid"];
-    }
-    else {
-	while (list($project) = each($projlist)) {
-	    $plist[] = $project;
-	}
+    while (list($project) = each($projlist)) {
+        $plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";
     echo htmlentities(json_encode($plist));
@@ -194,6 +190,7 @@ function SPITFORM($formfields, $errors)
     echo "    window.VIEWING  = $viewing;\n";
     echo "    window.VERSION_UUID = $version_uuid;\n";
     echo "    window.PROFILE_UUID = $profile_uuid;\n";
+    echo "    window.PROFILE_PID = $profile_pid;\n";
     echo "    window.LATEST_UUID = $latest_uuid;\n";
     echo "    window.LATEST_VERSION = $latest_version;\n";
     echo "    window.THIS_VERSION = $this_version;\n";
@@ -203,10 +200,12 @@ function SPITFORM($formfields, $errors)
     echo "    window.ACTION   = '$action';\n";
     echo "    window.CANDELETE= $candelete;\n";
     echo "    window.NODELETE = $nodelete;\n";
-    echo "    window.CANMODIFY= $canmodify;\n";
+    echo "    window.CANEDIT= $canmodify;\n";
     echo "    window.CANPUBLISH= $canpublish;\n";
     echo "    window.DISABLED= $disabled;\n";
     echo "    window.ISADMIN  = $isadmin;\n";
+    # Compatabilty with show-profile.
+    echo "    window.ISGUEST  = 0;\n";
     echo "    window.ISSTUD  = $isstud;\n";
     echo "    window.ISCREATOR = $iscreator;\n";
     echo "    window.ISLEADER = $isleader;\n";
@@ -215,6 +214,7 @@ function SPITFORM($formfields, $errors)
     echo "    window.CLONING  = $cloning;\n";
     echo "    window.COPYING  = $copying;\n";
     echo "    window.ACTIVITY = $activity;\n";
+    echo "    window.PARAMSETS= $paramsets;\n";
     echo "    window.TITLE    = '$title';\n";
     echo "    window.BUTTONLABEL = '$button_label';\n";
     echo "    window.ISPPPROFILE = $ispp;\n";
@@ -247,13 +247,14 @@ function SPITFORM($formfields, $errors)
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
     REQUIRE_GENILIB_EDITOR();
+    AddLibrary("js/copy-profile.js");
     AddLibrary("js/gitrepo.js");
     AddLibrary("js/paramhelp.js");
     AddLibrary("js/profile-support.js");
     AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
     SPITREQUIRE("js/manage_profile.js");
 
-    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker', "copy-repobased-profile"));
+    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'publish-modal', 'share-modal', 'gitrepo-picker', "copy-repobased-profile", "copy-profile-modal"));
     SPITFOOTER();
 }
 
@@ -339,9 +340,6 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
         }
     }
 }
-
-# We use a session.
-session_start();
 
 if (! isset($create)) {
     $errors   = array();
@@ -467,11 +465,8 @@ if (! isset($create)) {
                  $profile->examples_portals() : "");
 
 	    # Warm fuzzy message.
-	    if (isset($_SESSION["notifyupdate"])) {
+	    if (isset($updated) && time() - $updated < 3) {
 		$notifyupdate = 1;
-		unset($_SESSION["notifyupdate"]);
-		session_destroy();
-		session_commit();
 	    }
 	}
         #

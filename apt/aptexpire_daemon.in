@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -201,6 +201,9 @@ sub PushExtensions()
 	    print STDERR "No such instance $uuid\n";
 	    next;
 	}
+	next
+	    if (!$instance->ActiveAggregateList());
+	
 	print STDERR "$uuid has pending extensions to push\n";
 
 	if ($impotent) {
@@ -228,6 +231,45 @@ sub PushExtensions()
 			      $output, 
 			      $brand->OpsEmailAddress(),
 			      "CC: " . $brand->OpsEmailAddress());
+	}
+    }
+}
+
+#
+# Push pending manifests
+#
+sub PushManifests()
+{
+    my $query_result =
+	DBQueryWarn("select distinct uuid from apt_instance_aggregates ".
+		    "where manifest_needpush is not null");
+    return
+	if (!$query_result);
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	if (!defined($instance)) {
+	    print STDERR "No such instance $uuid\n";
+	    next;
+	}
+	next
+	    if (!$instance->ActiveAggregateList());
+	
+	print STDERR "$uuid has pending manifest to push\n";
+
+	if ($impotent) {
+	    print STDERR "Would try to push manifest for $instance\n";
+	    next;
+	}
+	my $output = emutil::ExecQuiet("$SUDO -u $PROTOUSER ".
+				       "$MANAGEINSTANCE pushmanifest $uuid");
+	my $status = $?;
+	print STDERR "$output\n"
+	    if ($output ne "");
+	if ($status) {
+	    #
+	    # Not sure yet.
+	    #
 	}
     }
 }
@@ -264,6 +306,7 @@ while (1) {
     ExpireInstances();
     PushExtensions();
     RecalcMaxExtensions();
+    PushManifests();
 
     print "Waiting for $SLEEP_INTERVAL seconds ...\n";
     sleep($SLEEP_INTERVAL);

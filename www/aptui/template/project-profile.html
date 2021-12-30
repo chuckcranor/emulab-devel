@@ -90,6 +90,12 @@
 	  (<a class="toggle" data-name="project_disable">Toggle</a>)
 	</td>
       </tr>
+      <tr>
+	<td>Reservations Disabled</td>
+	<td><% if (fields.reservations_disabled) { %>Yes<% } else { %>No<% } %>
+	  (<a class="toggle" data-name="project_resdisable">Toggle</a>)
+	</td>
+      </tr>
       <% if (window.MAINSITE) { %>
 	<tr>
 	  <td>Bound to Portal</td>
@@ -97,8 +103,46 @@
 	    (<a class="toggle" data-name="bound_portal">Toggle</a>)
 	  </td>
 	</tr>
+	<tr>
+	  <td>Industry</td>
+	  <td><% if (fields.industry) { %>Yes<% } else { %>No<% } %>
+	    (<a class="toggle" data-name="industry">Toggle</a>)
+	  </td>
+	</tr>
+	<tr>
+	  <td>Consortium</td>
+	  <td><% if (fields.consortium) { %>Yes<% } else { %>No<% } %>
+	    (<a class="toggle" data-name="consortium">Toggle</a>)
+	  </td>
+	</tr>
+	<tr>
+	  <td>Expert Mode</td>
+	  <td><% if (fields.expert_mode) { %>Yes<% } else { %>No<% } %>
+	    (<a class="toggle" data-name="expert_mode">Toggle</a>)
+	  </td>
+	</tr>
+	<tr>
+	  <td>NFS Mounts</td>
+	  <td><%= fields.nfsmounts %></td>
+	</tr>
+	<% if (fields.allowed_clusters) { %>
+	  <tr>
+	    <td>Allowed Clusters</td>
+	    <td><%= fields.allowed_clusters %></td>
+	  </tr>
+	<% } %>
       <% } %>
     <% } %>
+    <% _.each(fields.nsf_awards, function(award) { %>
+      <tr>
+	<td>NSF Award</td>
+	<td><%- award.award %>
+	  <% if (award.supplement == 1) { %>
+	    (supplement)
+	  <% } %>
+	</td>
+      </tr>
+    <% }); %>
     <tr>
       <td colspan="2"><center>Long Description</center></td>
     </tr>

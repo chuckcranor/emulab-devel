@@ -35,14 +35,24 @@ $(function ()
 	$('#oops_div').html(oopsString);
 	$('#conversion_help_div').html(converterHelpTemplate({}));
 
+	// Focus on the search box when switching to these tabs.
+        $('.nav-tabs a[href="#profiles"]')
+	    .on('shown.bs.tab', function (e) {
+		var target = $(this).attr("href");
+		var searchbox = $(target).find(".profile-search");
+		if ($(searchbox)[0]) {
+		    $(searchbox)[0].focus();
+		}
+	    });
+
         // Javascript to enable link to tab
         var hash = document.location.hash;
         if (hash) {
-            $('.nav-tabs a[href='+hash+']').tab('show');
+            $('.nav-tabs a[href="'+hash+'"]').tab('show');
         }
         // Change hash for page-reload
         $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-            window.location.hash = e.target.hash;
+	    history.replaceState('', '', e.target.hash);
         });
 	// Set the correct tab when a user uses their back/forward button
         $(window).on('hashchange', function (e) {
@@ -50,8 +60,13 @@ $(function ()
 	    if (hash == "") {
 		hash = "#experiments";
 	    }
-	    $('.nav-tabs a[href='+hash+']').tab('show');
+	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
 	});
+
+	// Setup NSF funding modal
+	if (window.ISADMIN) {
+	    SetupNSFModal();
+	}
 
 	LoadUsage();
 	LoadExperimentTab();
@@ -67,6 +82,9 @@ $(function ()
 	if (window.ISPOWDER) {
 	    LoadRFRanges();
 	}
+	$('#confirm-deleteproject').click(function () {
+	    DeleteProject();
+	});
     }
 
     function LoadUsage()
@@ -262,7 +280,8 @@ $(function ()
 						 window.ISMANAGER ||
 						 window.ISADMIN ? 1 : 0),
 				"showCreator" : true,
-				"showProject" : false}));
+				"showProject" : false,
+				"showPrivacy" : true}));
 	    
 	    // Format dates with moment before display.
 	    $('#project-profiles-table .format-date').each(function() {
@@ -293,6 +312,14 @@ $(function ()
 			    $(row).remove();
 			});
 		});
+
+	    // If this is the active tab after loading, focus the searchbox
+	    if ($('#profiles').hasClass("active")) {
+		var searchbox = $('#profiles .profile-search')
+		if ($(searchbox)[0]) {
+		    $(searchbox)[0].focus();
+		}
+	    }
 	    
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
@@ -390,11 +417,11 @@ $(function ()
 	    sup.ShowModal("#quickvm_topomodal");
 	    $("#quickvm_topomodal").one("shown.bs.modal", function () {
 		sup.maketopmap('#showtopo_nopicker',
-			       json.value.rspec, false, !window.ISADMIN);
+			       json.value.profile_rspec, false, !window.ISADMIN);
 	    });
 	};
 	var $xmlthing = sup.CallServerMethod(null,
-					     "manage_profile",
+					     "show-profile",
 					     "GetProfile",
 				     	     {"uuid" : profile});
 	$xmlthing.done(callback);
@@ -859,6 +886,71 @@ $(function ()
 			     {"pid" : window.TARGET_PROJECT,
 			      "idx" : license_idx},
 			     callback);
+    }
+
+    function DeleteProject()
+    {
+	var callback = function(json) {
+	    if (json.code) {
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", json.value);
+		});
+		return;
+	    }
+	    window.location.replace("landing.php");
+	}
+	var xmlthing = sup.CallServerMethod(null,
+					    "show-project",
+					    "DeleteProject",
+					    {"pid" : window.TARGET_PROJECT});
+	
+	sup.HideModal('#confirm-deleteproject-modal', function () {
+	    sup.ShowWaitWait("This will take a minute. Patience please.");
+	    xmlthing.done(callback);
+	});
+    }
+
+    function SetupNSFModal()
+    {
+	var error = function (message) {
+	    var group = $('#nsf-funding-modal input[name=nsf_award]').parent();
+	    if (!message) {
+		group.removeClass("has-error");
+		group.find("label").addClass("hidden");
+		return;
+	    }
+	    group.addClass("has-error");
+	    group.find("label").html(message);
+	    group.find("label").removeClass("hidden");
+	};
+	var callback = function(json) {
+	    if (json.code) {
+		console.info("Server says: " + json.value);
+		if (json.code == 2) {
+		    error(json.value);
+		}
+		return;
+	    }
+	    LoadProjectTab();
+	    sup.HideModal('#nsf-funding-modal');
+	}
+	$('#nsf-funding-modal .save-button').click(function (e) {
+	    var supplement = $('#nsf-funding-modal ' +
+			       'input[name=nsf_supplement]').is(":checked");
+	    var award = $('#nsf-funding-modal input[name=nsf_award]').val();
+	    console.info(award, supplement);
+
+	    // Lets at least make sure it is not blank. 
+	    award = $.trim(award);
+	    if (award == "") {
+		error("Please tell us the award number");
+		return;
+	    }
+	    sup.CallServerMethod(null, "show-project", "NSF",
+				 {"pid"    : window.TARGET_PROJECT,
+				  "supplement" : supplement ? 1 : 0,
+				  "award" : award}, callback);
+	});
     }
 
     $(document).ready(initialize);

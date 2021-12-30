@@ -19,11 +19,19 @@
 	<% _.each(profiles, function(value, name) { %>
 	  <tr>
 	    <td class="text-nowrap">
-	      <a href="show-profile.php?uuid=<%= value.uuid %>"
-		 target="_blank"><%= value.name %></td>
+	      <% var url;
+	         if (window.MAINSITE) {
+		   url = "/show/" + value.pid + "/" + value.name;
+		 }
+	         else {
+		   url = "show-profile.php?uuid=" + value.uuid;
+		 }
+	       %>
+	      <a href='<%= url %>' target="_blank"><%= value.name %>
+	    </td>
 	    <td class="format-date text-nowrap">
 	      <%- value.created %></td>
-	    <td><%- value.desc %></td>
+	    <td><%= value.desc %></td>
 	  </tr>
 	<% }); %>
       </tbody>

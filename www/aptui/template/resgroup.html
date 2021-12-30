@@ -46,6 +46,12 @@
      padding-top: 0px !important;
      padding-bottom: 0px !important;
  }
+ .nvfoo {
+     font-family: Arial, sans-serif;
+     font-size: 16px;
+     font-weight: bold;
+ }
+ 
 </style>  
 <div class='row main-row'>
   <div class='col-lg-7
@@ -140,6 +146,15 @@
 		  </div>
 	        <% } %>
 	      <% } %>
+	      <% if (editing) { %>
+		<div class="form-group" style="margin-bottom: 0px;">
+		  <div class="form-control-fake format-me"
+		       data-label="Created"
+		       id="reserve-created"
+		       data-key="created">
+		  </div>
+		</div>
+	      <% } %>
 	      <div class="form-group">
 		<div class="format-me"
 		     data-label="Cluster(s)"
@@ -158,13 +173,29 @@
 		  </table>
 		</div>
 	      </div>
-	      <div class="form-group hidden" id="route-table-div">
+	      <div class="form-group hidden" id="route-table-div-notyet">
 		<div class="format-me"
 		     data-label="Bus Routes"
 		     data-colsize="9">
 		  <table class="table table-condensed"
 			 id="route-table">
 		  </table>
+		</div>
+	      </div>
+	      <div class="form-group hidden" id="route-table-div">
+		<div class="format-me"
+		     data-label="Mobile Endpoints"
+		     data-optional="yep"
+		     data-key="allroutes">
+		  <input name="allroutes-checkbox" style="margin-top: 12px;"
+			 id="allroutes-checkbox"
+			 type="checkbox">
+		  <label id="allroutes-error"
+			 class="hidden control-label"></label>
+		  <a href='#' class='btn btn-xs route-help'>
+		    <span class='glyphicon glyphicon-question-sign'
+		          style="margin-bottom: 6px;"></span>
+		  </a>
 		</div>
 	      </div>
 	      <% if (1) { %>
@@ -377,6 +408,27 @@
       <div class='panel-heading'>
 	<center>
           <h3 class='panel-title'>Selected Types Availability</h3>
+	  <div><span class=small style="color:blue;">
+	    <a href="#" onclick="event.preventDefault();"
+	       data-toggle='popover'
+	       data-html='true'
+	       data-delay='{"hide":500}'
+	       data-content='Reservations are approved in the order they are
+			     submitted, so submitting
+			     a request for a time that already has a pending
+			     reservation will almost certainly
+			     result in a request that will be denied later.
+			     <div style="margin-top: 5px;">
+			     The graph below shows the number of nodes 
+			     available for each selected resource type, but 
+			     if the tooltip says:
+			     <center class=nvfoo>d820: 1 <font color=blue>(5)</font></center>
+			     it means
+			     five of the six free nodes have already been
+			     requested but not yet approved.'>
+	      More info about pending reservations
+	    </a></span>
+	  </div>
 	</center>
       </div>
       <div class='panel-body' style="padding: 2px;">
@@ -440,59 +492,27 @@
 	</div>
       </div>
       <div id="powder-graph-div">
-	<div class='panel panel-default hidden' id="radio-graph-div">
-	  <div class='panel-heading'>
-	    <center>
-              <h3 class='panel-title'>Powder Radio Availability</h3>
-	    </center>
-	  </div>
-	  <div class='panel-body visavail' style="padding: 2px;"
-	       id="radio-graph-body">
-	    <div id="radio-graph-visavail"></div>
-	  </div>
+	<div id='powder-radios' class='hidden'>
+	  <!-- Template goes here -->	    
 	</div>
-	<div class='panel panel-default hidden' id="matrix-graph-div">
-	  <div class='panel-heading'
-	       style="padding-top: 5px; padding-bottom: 5px;">
-	    <center>
-              <h3 class='panel-title'>
-		PhantomNet RF Attenuator Matrix Availability</h3>
-	      <div>
-		<a href="#"
-		   data-target='#matric-connections-modal'
-		   data-toggle='modal'>
-		  <span class=small>Matrix Connections</a>
-		  </span>
-	      </div>
-	    </center>
-	  </div>
-	  <div class='panel-body visavail' style="padding: 2px;"
-	       id="matrix-graph-body">
-	    <div id="matrix-graph-visavail"></div>
-	  </div>
+	<div id='powder-mmimo' class='hidden'>
+	  <!-- Template goes here -->	    
+	</div>
+	<div id='powder-ota' class='hidden'>
+	  <!-- Template goes here -->	    
+	</div>
+	<div id='powder-paired' class='hidden'>
+	  <!-- Template goes here -->	    
+	</div>
+	<div id='powder-matrix' class='hidden'>
+	  <!-- Template goes here -->	    
 	</div>
       </div>
-      <div class='panel panel-default hidden' id="FE-graph-div">
-	<div class='panel-heading'>
-	  <center>
-            <h3 class='panel-title'>Fixed Endpoint Availability</h3>
-	  </center>
-	</div>
-	<div class='panel-body visavail' style="padding: 2px;"
-	     id="FE-graph-body">
-	  <div id="FE-graph-visavail"></div>
-	</div>
+      <div id='FE-graph-div' class='hidden'>
+	<!-- Template goes here -->	    
       </div>
-      <div class='panel panel-default hidden' id="route-graph-div">
-	<div class='panel-heading'>
-	  <center>
-            <h3 class='panel-title'>Bus Route Availability</h3>
-	  </center>
-	</div>
-	<div class='panel-body visavail' style="padding: 2px;"
-	     id="route-graph-body">
-	  <div id="route-graph-visavail"></div>
-	</div>
+      <div id='route-graph-div' class='hidden'>
+	<!-- Template goes here -->	    
       </div>
     </div>
   </div>
@@ -514,21 +534,39 @@
 		  data-dismiss='modal' aria-hidden='true'>Submit</button>
 	</center>
 	<div style="margin-top: 5px;" class="needs-approval hidden">
-	  <b>This reservation request can be accomodated, but the
-	    size and/or duration means that the reservation needs to
-	    be approved by an administrator before it is fully active.</b>
-	  <div style="margin-top: 5px;">
-	    <% if (window.ISPOWDER) { %>
+	  <div class="needs-approval-noconflict hidden">
+	    <b>
+	      WARNING: This reservation request can be accomodated,
+	      but the size and/or duration means that the reservation
+	      needs to be approved by an administrator before it is
+	      fully active.</b>
+	  </div>
+	  <div style="margin-top: 5px;"
+	       class="needs-approval-conflict hidden">
+	    <b>
+	      WARNING: This reservation currently conflicts with
+	      another unapproved reservation. It might still be
+	      approved, but typically reservations are approved in the
+	      order they are submitted, so it will probably be
+	      denied. Please consider resubmitting for a time that
+	      does not conflict with pending reservations.</b>
+	  </div>
+	  </b>
+	  <div style="margin-top: 10px;">
+	    <% if (window.MAINSITE) { %>
 	      <em>Reservations that require administrative approval
-		take time for review.  During normal business hours (8
-		AM - 5 PM Mountain Time), these are typically handled
-		within an hour or two.  Outside of business hours and on
-		weekends, administrative review may be delayed until the
-		next business day.  Please plan accordingly when
-		submitting your reservation requests.</em>
-	    <% } else { %>
-	      The administrator will be notified when you submit this
-	      request, and will act on this request as soon as possible.
+		take time to review and are processed the <b>next
+		business day at 9AM Mountain
+		time</b><span class="adjustedmorning hidden">
+		(<span></span> in your local timezone)</span>.
+		If you are
+		requesting a reservation that starts before the next
+		business day at 9AM, it is possible the reservation
+		will no longer be feasible (fit the schedule) by the
+		time it is processed.  Please plan accordingly, if you
+		start an experiment based on currently availability,
+		you might be forced to terminate that experiment, if
+		your reservation is not approved.</em>
 	    <% } %>
 	  </div>	  
 	</div>
@@ -773,7 +811,30 @@
         <center><h4>Confirm to Cancel Cancellation</h4>
 	  <br>
           <button class='btn btn-danger btn-sm'
-		  id='confirm-uncancel'>Confirm</a>
+		  id='confirm-uncancel'>Confirm</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='toosoon-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<br>
+	<div>
+	  Please specify a start time no earlier than 9 AM Mountain
+	  Time
+	  <span class="adjustedmorning hidden">
+	    (<span></span> in your local timezone)</span>
+	  on the next business day. This allows administrators
+	  sufficient time to review your request.
+	</div>
+	<center>
+          <button class='btn btn-default btn-xs'
+		  data-dismiss='modal'>Dismiss</button>
 	</center>
       </div>
     </div>

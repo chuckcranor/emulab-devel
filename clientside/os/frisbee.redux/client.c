@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2017 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2021 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -364,7 +364,7 @@ main(int argc, char **argv)
 			break;
 
 		case 'U':
-			strncpy(traceprefix, optarg, sizeof(traceprefix));
+			strncpy(traceprefix, optarg, sizeof(traceprefix)-1);
 			break;
 
 		case 'z':

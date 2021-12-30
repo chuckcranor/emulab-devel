@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,7 +38,6 @@ $optargs = OptionalPageArguments("instance",  PAGEARG_INSTANCE,
 				 "template",  PAGEARG_TEMPLATE,
 				 "canceled",  PAGEARG_BOOLEAN,
 				 "confirmed", PAGEARG_BOOLEAN,
-				 "referrer",  PAGEARG_STRING,
 				 "runidx",    PAGEARG_INTEGER,
 				 "tag",       PAGEARG_STRING,
 				 "overwrite", PAGEARG_BOOLEAN,
@@ -143,10 +142,7 @@ function SPITFORM($error)
     echo "<br>\n";
     echo "<b><input type=submit name=confirmed value=Confirm></b>\n";
     echo "<b><input type=submit name=canceled value=Cancel></b>\n";
-    if (isset($referrer)) {
-	$referrer = urlencode($referrer);
-	echo "<input type=hidden name=referrer value=$referrer>\n";
-    }
+
     echo "</form>\n";
     echo "</center>\n";
     echo "<blockquote><blockquote>
@@ -165,9 +161,6 @@ function SPITFORM($error)
     return;
 }
 if (!isset($confirmed)) {
-    if (!isset($referrer))
-	$referrer = $_SERVER['HTTP_REFERER'];
-    
     PAGEHEADER("Template Export");
     SPITFORM(null);
     PAGEFOOTER();

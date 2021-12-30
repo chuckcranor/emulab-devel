@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -678,6 +678,10 @@ sub RegisterSlices()
 	    # aggregate is gone, lets not worry.
 	    next;
 	}
+	if ($aggregate->hrn() =~ /OAI2021FallWS/) {
+	    next;
+	}
+	
 	my $slice = $aggregate->GetSlice();
 	if (!defined($slice)) {
 	    # slice is gone, lets not worry.
@@ -861,6 +865,7 @@ sub PushStats()
     my $query_result =
 	GeniDB::DBQueryWarn("select * from aggregate_history ".
 			    "where type='Aggregate' and ".
+			    "      hrn not like '%OAI2021FallWS%' and ".
 			    "      (idx>$lastidx or ".
 			    "       (idx<=$lastidx and reported is null)) ".
 			    "limit 100");

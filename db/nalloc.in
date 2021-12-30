@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,13 +38,15 @@ sub usage()
     print("Usage: nalloc [-d] [-f] [-p] <pid> <eid> <node> <node> <...>\n".
 	  "		-p enables partial allocation mode\n".
 	  "		-f forces allocation, overriding admission control\n" .
+	  "		-i prechecks and Reservation system checks only\n" .
 	  "		-d enables debugging output\n");
     exit(-1);
 }
-my $optlist = "dfp";
+my $optlist = "dfpi";
 my $debug   = 0;
 my $force   = 0;
 my $partial = 0;
+my $impotent= 0;
 
 #
 # Configure variables
@@ -92,6 +94,9 @@ if (defined($options{"f"})) {
 }
 if (defined($options{"p"})) {
     $partial = 1;
+}
+if (defined($options{"i"})) {
+    $impotent = 1;
 }
 if (@ARGV < 2) {
     usage();
@@ -251,6 +256,7 @@ if ($debug) {
     }
 }
 
+my $resdetails;
 my %types = ();
 my %unavail_types = ();
 my %unavail_nodes = ();
@@ -259,7 +265,9 @@ foreach my $node (@nodes) {
 	unless( grep( $_ eq $node->node_id(), @trivial_nodes ) );
 }
 foreach my $type ( keys( %types ) ) {
-    my $reservations = Reservation->LookupAll( $type );
+    my $reservations = Reservation->LookupAll( $type, 0,
+					       $debug ? \$resdetails : undef  );
+    print $resdetails if ($debug);
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
 	print "*** Existing admission control violation for ".
 	    "type $type: $errormsg\n";
@@ -282,7 +290,9 @@ foreach my $node (@nodes) {
     next
 	if ($unavail_types{$node->type()});
 
-    my $reservations = Reservation->LookupAll($node_id);
+    my $reservations = Reservation->LookupAll($node_id, 0,
+					      $debug ? \$resdetails : undef);
+    print $resdetails if ($debug);
     my $res = Reservation->CreateImmediate($pid, $eid,
 					   $this_user->uid(),
 					   $endtime, $node_id, 1);
@@ -303,7 +313,10 @@ foreach my $node (@nodes) {
 foreach my $type ( keys( %types ) ) {
     next if( $unavail_types{ $type } );
     
-    my $reservations = Reservation->LookupAll( $type );
+    my $reservations = Reservation->LookupAll( $type, 0,
+					       $debug ? \$resdetails : undef);
+    print $resdetails if ($debug);
+    
     my $count = 0;
     foreach my $node (@nodes) {
 	#
@@ -342,6 +355,8 @@ foreach my $type ( keys( %types ) ) {
 	$unavail_types{ $type } = 1;
     }
 }
+exit(0)
+    if ($impotent);
 
 if( $admission_ctrl && !$force ) {
     my @goodnodes = ();

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -89,6 +89,9 @@ if test ! -d "$PYTHON_PATH/include"; then
     PYTHON_PATH=`dirname ${PYTHON_PATH}`
 fi
 PYTHON_INCLUDE="${PYTHON_PATH}/include/python${PYTHON_VERSION}"
+if test ! -d "$PYTHON_INCLUDE" -a -d "${PYTHON_INCLUDE}m"; then
+      PYTHON_INCLUDE="${PYTHON_INCLUDE}m"
+fi
 CPPFLAGS="${CPPFLAGS} -I${PYTHON_INCLUDE}"
 AC_CHECK_HEADERS([Python.h],
 		 [],
@@ -341,6 +344,7 @@ AC_SUBST(NOSITECHECKIN)
 AC_SUBST(EC2META_ENABLE)
 AC_SUBST(BROWSER_CONSOLE_ENABLE)
 AC_SUBST(BROWSER_CONSOLE_PROXIED)
+AC_SUBST(BROWSER_CONSOLE_WEBSSH)
 AC_SUBST(IPV6_ENABLED)
 AC_SUBST(IPV6_SUBNET_PREFIX)
 AC_SUBST(NFSMAPTOUSER)
@@ -359,6 +363,7 @@ AC_SUBST(ZFS_QUOTA_USER_X)
 AC_SUBST(ZFS_QUOTA_PROJECT_X)
 AC_SUBST(ZFS_QUOTA_GROUP_X)
 AC_SUBST(ZFS_NOEXPORT)
+AC_SUBST(ZFS_NONFS_DIR)
 AC_SUBST(INCREMENTAL_MOUNTD)
 AC_SUBST(WITHAMD)
 AC_SUBST(AMD_ROOT)
@@ -381,6 +386,7 @@ AC_SUBST(POWDER_RFMONITOR)
 AC_SUBST(POWDER_RFMONITOR_HOST)
 AC_SUBST(POWDER_NICKNAME)
 AC_SUBST(POWDER_WBSTORE)
+AC_SUBST(POWDER_BUS_P0WER_VERSION);
 AC_SUBST(DISABLE_RESERVATION_EMAIL)
 AC_SUBST(MAILERNODE)
 
@@ -540,6 +546,7 @@ NOSITECHECKIN=0
 EC2META_ENABLE=0
 BROWSER_CONSOLE_ENABLE=0
 BROWSER_CONSOLE_PROXIED=0
+BROWSER_CONSOLE_WEBSSH=0
 IPV6_ENABLED=0
 IPV6_SUBNET_PREFIX=""
 MANAGEMENT_NETWORK="10.249.249.0"
@@ -561,6 +568,7 @@ ZFS_QUOTA_USER_X="1.0"
 ZFS_QUOTA_PROJECT_X="1.0"
 ZFS_QUOTA_GROUP_X="1.0"
 ZFS_NOEXPORT=0
+ZFS_NONFS_DIR=""
 INCREMENTAL_MOUNTD=0
 WITHAMD=0
 AMD_ROOT=/.amd_mnt/ops
@@ -583,6 +591,7 @@ POWDER_RFMONITOR=0
 POWDER_RFMONITOR_HOST="0.0.0.0"
 POWDER_WBSTORE=0
 POWDER_NICKNAME=""
+POWDER_BUS_P0WER_VERSION=0
 DISABLE_RESERVATION_EMAIL=0
 MAILERNODE="ops"
 
@@ -1494,7 +1503,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	utils/mktestbedtest utils/pxelinux_makeconf \
 	utils/addvpubaddr utils/attend utils/atten utils/addrfdevice \
 	utils/addrfpath utils/reserve utils/predict utils/notify-reservations \
-	utils/setzfsquotas \
+	utils/setzfsquotas utils/checkipmi \
 	wbstore/GNUmakefile \
 	www/GNUmakefile www/defs.php3 www/dbdefs.php3 www/xmlrpc.php3 \
 	www/xmlrpcpipe.php3 \
@@ -1510,7 +1519,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	rc.d/3.mfrisbeed.sh rc.d/3.mfrisbeed-subboss.sh rc.d/3.mfrisbeed-ops.sh \
 	tools/GNUmakefile rc.d/1.mysql-server.sh tools/svn/GNUmakefile \
         tools/webcamapplet/GNUmakefile tools/whol/GNUmakefile \
-        tools/selectapplet/GNUmakefile tools/rmanage/GNUmakefile \
+        tools/selectapplet/GNUmakefile \
 	$eventfiles \
 	$winfiles \
 	$pelabfiles \
@@ -1544,9 +1553,10 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
         apt/GNUmakefile \
-        powder/GNUmakefile \
+        powder/GNUmakefile powder/sasproxy/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \
+        scopus/GNUmakefile \
 	node_usage/GNUmakefile node_usage/mk-plots \
 	node_usage/analy node_usage/publish \
 	node_usage/analy2 node_usage/refresh \
@@ -1599,6 +1609,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/freebsd/init/10.4/GNUmakefile \
  clientside/tmcc/freebsd/init/11/GNUmakefile \
  clientside/tmcc/freebsd/init/11.2/GNUmakefile \
+ clientside/tmcc/freebsd/init/11.4/GNUmakefile \
  clientside/tmcc/freebsd/init/12/GNUmakefile \
  clientside/tmcc/freebsd/init/13/GNUmakefile \
  clientside/tmcc/freebsd/supfile clientside/tmcc/freebsd/sethostname \
@@ -1634,8 +1645,8 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/freebsd9/GNUmakefile clientside/tmcc/freebsd9/netif-emulab \
  clientside/tmcc/freebsd10/GNUmakefile clientside/tmcc/freebsd10/netif-emulab \
  clientside/tmcc/freebsd11/GNUmakefile clientside/tmcc/freebsd11/netif-emulab \
- clientside/tmcc/freebsd12/GNUmakefile clientside/tmcc/freebsd12/netif-emulab \
- clientside/tmcc/freebsd13/GNUmakefile clientside/tmcc/freebsd13/netif-emulab \
+ clientside/tmcc/freebsd12/GNUmakefile clientside/tmcc/freebsd12/netif_emulab \
+ clientside/tmcc/freebsd13/GNUmakefile clientside/tmcc/freebsd13/netif_emulab \
  clientside/tmcc/cygwinxp/GNUmakefile clientside/tmcc/dp/GNUmakefile \
  clientside/tmcc/openbsd/GNUmakefile clientside/tmcc/ron/GNUmakefile \
  clientside/tmcc/plab/GNUmakefile clientside/tmcc/cygwinseven/GNUmakefile \

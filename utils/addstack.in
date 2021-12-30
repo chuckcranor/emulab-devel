@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2018 University of Utah and the Flux Group.
+# Copyright (c) 2003-2018, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,7 +41,7 @@ sub usage()
     print STDERR " -n         - Dry run mode\n";
     print STDERR " -p passwd  - SNMP community string or password\n";
     print STDERR " -t type    - Stack type (defaults to generic)\n";
-    print STDERR " -m min/max - Min/Max vlan numbers. Defaults to 10/750\n";
+    print STDERR " -m min/max - Min/Max vlan numbers. Defaults to 128/750\n";
     print STDERR " stack_id   - Typically, Experiment or Control\n";
     print STDERR " leader_id  - Name of leader switch for the stack.\n";
     print STDERR "              Remember for later when adding switches,\n";
@@ -53,7 +53,7 @@ my $debug       = 0;
 my $impotent    = 0;
 my $remove      = 0;
 my $force       = 0;
-my $minvlan     = 10;
+my $minvlan     = 128;
 my $maxvlan     = 750;
 my $stack_type  = "generic";
 my $stack_id;

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,6 +32,7 @@ include_once("profile_defs.php");
 include_once("instance_defs.php");
 $page_title = "Experiment Status";
 $ajax_request = 0;
+$lazytopo = 0;
 
 #
 # Get current user.
@@ -181,7 +182,6 @@ $canterminate    = ((isset($this_user) &&
 $cancopy_profile   = 0;
 $canclone_profile  = 0;
 $canupdate_profile = 0;
-$cansave_parameters= 0;
 $isscript          = 0;
 
 if ($profile = Profile::Lookup($instance->profile_id(),
@@ -201,9 +201,6 @@ if ($profile = Profile::Lookup($instance->profile_id(),
                               ISADMIN() ? 1 : 0);
     }
     $isscript = ($profile->script() && $profile->script() != "" ? 1 : 0);
-    if ($profile->isParameterized()) {
-        $cansave_parameters= $profile->UseNewGeniLib() ? 1 : 0;
-    }
 }
 $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
@@ -220,6 +217,10 @@ $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
 #    $cansnap = 0;
 #}
 #$cansnap = 0;
+
+if ($instance->pid() == "OAI2021FallWS") {
+    $lazytopo = 1;
+}
 
 #
 # We give ssh to the creator (real user or guest user).
@@ -273,7 +274,6 @@ echo "  window.APT_OPTIONS.cansnapshot = $cansnapshot;\n";
 echo "  window.APT_OPTIONS.canclone_profile = $canclone_profile;\n";
 echo "  window.APT_OPTIONS.canupdate_profile = $canupdate_profile;\n";
 echo "  window.APT_OPTIONS.cancopy_profile = $cancopy_profile;\n";
-echo "  window.APT_OPTIONS.cansave_parameters = $cansave_parameters;\n";
 echo "  window.APT_OPTIONS.canterminate = $canterminate;\n";
 echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";
@@ -281,6 +281,7 @@ echo "  window.APT_OPTIONS.hidelinktest = false;\n";
 echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
 echo "  window.APT_OPTIONS.dossh = $dossh;\n";
 echo "  window.APT_OPTIONS.isscript = $isscript;\n";
+echo "  window.APT_OPTIONS.lazytopo = $lazytopo;\n";
 echo "  window.APT_OPTIONS.AJAXURL = 'server-ajax.php';\n";
 if (isset($maxextend) && $maxextend != "") {
     # Assumed to be hours.
@@ -289,6 +290,9 @@ if (isset($maxextend) && $maxextend != "") {
 else {
     echo "  window.APT_OPTIONS.MAXEXTEND = null;\n";
 }
+# Temporary feature for webssh
+$webssh = $this_user->DoWebSSH();
+echo "  window.APT_OPTIONS.webssh = $webssh;\n";    
 
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
@@ -301,7 +305,9 @@ echo "<script src='js/lib/filesize.min.js'></script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
-REQUIRE_JACKS();
+if (!$lazytopo) {
+    REQUIRE_JACKS();
+}
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
 REQUIRE_IMAGE();

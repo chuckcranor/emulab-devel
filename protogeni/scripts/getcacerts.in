@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -36,13 +36,19 @@ use Getopt::Std;
 # 
 sub usage()
 {
-    print "Usage: getcacerts [-l]\n";
+    print STDERR "Usage: getcacerts [-lpfn]\n";
+    print STDERR "Options:\n";
+    print STDERR "  -f    - Force bundle rebuild even if no apparent changes\n";
+    print STDERR "  -p    - Do not post new CRL\n";
+    print STDERR "  -l    - Do not generate a log file\n";
+    print STDERR "  -r    - Do not restart apache\n";
     exit(1);
 }
-my $optlist = "lpf";
+my $optlist = "lpfr";
 my $nolog   = 0;
 my $nopost  = 0;
 my $force   = 0;
+my $norestart = 0;
 
 #
 # Configure variables
@@ -100,6 +106,9 @@ if (defined($options{"p"})) {
 }
 if (defined($options{"f"})) {
     $force  = 1;
+}
+if (defined($options{"r"})) {
+    $norestart  = 1;
 }
 my $restartapache = 0;
 
@@ -228,7 +237,7 @@ if ($?) {
 unlink("/tmp/genicrl.bundle.$$")
     if (-e "/tmp/genicrl.bundle.$$");
 
-if ($restartapache) {
+if ($restartapache && !$norestart) {
     system("$APACHE_START graceful") == 0
 	or fatal("Could not restart apache!");
 }

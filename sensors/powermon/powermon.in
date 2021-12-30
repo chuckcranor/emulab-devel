@@ -1,6 +1,6 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,13 +25,14 @@
 #
 # Testbed Power controller monitor
 #
-# powermon [-TPC] [type...]
+# powermon [-TPC] [-t type] [ctrl ...]
 #
 # -T monitor temperature
 # -P monitor power consumed
 # -C monitor current used
 #
-# "type" is the types of power controllers to monitor.
+# "type" is the type of power controllers to monitor.
+# "ctrl..." is a list of specific power controllers to monitor.
 #
 # The default is to monitor TPC on all controllers in the DB that
 # support a status call.
@@ -61,28 +62,31 @@ sub dostatus(@);
 
 sub usage() {
     print << "END";
-Usage: $0 [-rw] [-TPC] [ <type> ... ]
+Usage: $0 [-rw] [-TPC] [-t <type>] [ <ctrl> ... ]
  -c print out temps in Celsius
  -r print out raw values, no syslog-style format
  -w whiner flag, send mail to $TBOPS about errors
  -T turn on temperature (in degrees F) monitoring
  -P turn on power (watts) consumption monitoring
  -C turn on current (amps) used monitoring
+ -t <type> does all controllers of a specific type (e.g., APC)
 
  -A turn on all monitoring
  -N turn off all monitoring
 
- <type> is the types of power controllers to monitor.
+ <ctrl ...> is a list of specific power controllers to monitor.
  The default is to monitor temps on all controllers that support status.
 END
+    exit(1);
 }
 
-my $optlist = "crwANTPC";
+my $optlist = "crwANTPCt:";
 my $docelsius = 0;
 my $doraw = 0;
 my $dotemps = 1;
 my $dopower = 0;
 my $docurrent = 0;
+my $dotype = "";
 my $whiner = 0;
 my $whinefile = "/tmp/powermon.$$";
 my $childpid = -1;
@@ -114,6 +118,10 @@ if (defined($options{"w"})) {
     } else {
 	print "*** Could not open $whinefile, $TBOPS whining disabled\n";
     }
+    # Send STDERR to the whiner.
+    close(STDERR);
+    open(STDERR, ">&WHINE");
+    autoflush STDERR 1;
 }
 if (defined($options{"A"})) {
     $dotemps = $dopower = $docurrent = 1;
@@ -129,6 +137,10 @@ if (defined($options{"P"})) {
 }
 if (defined($options{"C"})) {
     $docurrent = 1;
+}
+if (defined($options{"t"})) {
+    # XXX should check that this is a valid type
+    $dotype = $options{"t"};
 }
 die("Only admins are allowed to query status\n")
     if ($UID != 0 && !TBAdmin($UID));
@@ -173,11 +185,28 @@ sub dostatus(@) {
 			      "left join node_types as t on n.type=t.type " .
 			      "where n.role='powerctrl'");
     while (my ($ctrl, $type) = $result->fetchrow()) {
-	$ctrls{$ctrl} = $type;
+	if (!$dotype || $type eq $dotype) {
+	    $ctrls{$ctrl} = $type;
+	}
     }
 
     @wanted = sort byname keys(%ctrls)
 	if ($doall);
+
+    #
+    # Need a TERM handler here (as when called from telegraf)
+    # to make sure that the child dies (in case it is stuck talking
+    # to capture, in which case it will never die, holding capture).
+    #
+    local $SIG{TERM} = sub {
+	#print STDERR "$PID got a TERM. Childpid is $childpid\n";
+	if ($childpid <= 0) {
+	    exit(22);
+	}
+	else {
+	    kill("TERM", $childpid)
+	}
+    };
 
     #
     # Loop through desired controllers getting status
@@ -190,7 +219,7 @@ sub dostatus(@) {
 	# Allow 5 seconds per controller
 	#
 	local $SIG{ALRM} = sub { kill("TERM", $childpid); };
-	my $to = 5 * scalar(@wanted);
+	my $to = 5 + (5 * scalar(@wanted));
 	alarm $to;
 	waitpid($childpid, 0);
 	alarm 0;
@@ -216,7 +245,8 @@ sub dostatus(@) {
 			 ($whinefile));
 	    }
 	}
-	return $ecode;
+	$childpid = -1;
+	return $ecode ? -1 : 0;
     }
 
     for my $ctrl (@wanted) {
@@ -245,7 +275,8 @@ sub dostatus(@) {
 		next;
 	    }
 	} elsif ($ctrls{$ctrl} =~ /^APC/) {
-	    my $device = new snmpit_apc($ctrl, 0);
+	    # XXX allow a little longer for our older APC units
+	    my $device = new snmpit_apc($ctrl, 0, 2);
 	    if (!defined($device) || $device->status(\%status)) {
 		logit("Could not get status for $ctrl.");
 		$errors++;

@@ -245,7 +245,7 @@
 
 	        if (options.zoom.enabled) {
 		    var scrollTimeout = null;
-		    
+
 		    // Listen for scroll events
 		    window.addEventListener('scroll', function (event) {
 			//console.info("scroll event");
@@ -578,6 +578,7 @@
 					.append('g')
 					.attr('transform', 'translate(' + options.margin.left + ',' + options.margin.top + ')');
 
+			        options.svg = svg;
 				// create basic element groups
 				svg.append('g').attr('id', 'g_title');
 				svg.append('g').attr('id', 'g_axis');
@@ -654,9 +655,11 @@
 				.attr('x', 0)
 				.attr('y', 0)
 
+
 				if (options.zoom.enabled)
 					svg.select("#g_data")
-					.call(options.zoomed)
+				        .call(options.zoomed)
+				        .on("wheel.zoom", null)
 					.attr('cursor', "ew-resize")
 
 				if (options.show_y_title) {
@@ -1608,6 +1611,98 @@
 					.datum(dataset)
 					.call(chart);
 			return chart;
+		}
+
+	        chart.zoomin = function () {
+		    var svg    = options.svg;
+		    var zoomed = options.zoomed;
+		    var xscale = options.xScale;
+		    var width  = xscale.range()[1];
+		    var trans  = d3.zoomTransform(svg.select("#g_data").node());
+
+		    console.info(trans);
+
+		    // Rescale X axis according to the current transform
+		    // and determine the midpoint date of what the user
+		    // is looking at.
+		    var new_xscale = trans.rescaleX(xscale);
+		    var date1 = new Date(new_xscale.domain()[0]);
+		    var date2 = new Date(new_xscale.domain()[1]);
+		    var mid   = new Date((date1.getTime() + date2.getTime())/2);
+		    console.info(mid);
+
+		    // OK, now figure out where in the new scale the midpoint
+		    // date will be. This is the point that that needs to be
+		    // shifted left to fall in the middle.
+		    new_xscale = d3.scaleTime()
+			.domain(xscale.domain())
+			.range([0, width * trans.k * 2]);
+		    var shift = new_xscale(mid) - (width / 2);
+		    
+		    console.info(new_xscale(mid), shift);
+		    
+		    var transform = d3.zoomIdentity
+			.translate(0 - (shift))
+			.scale(trans.k * 2);
+
+		    console.info(transform);
+		    
+		    svg.select("#g_data")
+			.call(zoomed.transform, transform);
+		};
+	        chart.zoomout = function () {
+		    var svg    = options.svg;
+		    var xscale = options.xScale;
+		    var width  = xscale.range()[1];
+		    var zoomed = options.zoomed;
+		    var trans  = d3.zoomTransform(svg.select("#g_data").node());
+
+		    console.info(trans);
+
+		    // Min zoom.
+		    if (trans.k == 1) {
+			return;
+		    }
+
+		    // Rescale X axis according to the current transform
+		    // and determine the midpoint date of what the user
+		    // is looking at.
+		    var new_xscale = trans.rescaleX(xscale);
+		    var date1 = new Date(new_xscale.domain()[0]);
+		    var date2 = new Date(new_xscale.domain()[1]);
+		    var mid   = new Date((date1.getTime() + date2.getTime())/2);
+		    console.info(mid);
+
+		    // OK, now figure out where in the new scale the midpoint
+		    // date will be. This is the point that that needs to be
+		    // shifted left to fall in the middle.
+		    new_xscale = d3.scaleTime()
+			.domain(xscale.domain())
+			.range([0, width * (trans.k / 2)]);
+
+		    // The last zoom (scale == 1) is always no shift;
+		    var shift = 0;
+		    if (trans.k > 2) {
+			shift = new_xscale(mid) - (width / 2);
+			// Do not shift in the wrong direction if close.
+			if (shift < 0) {
+			    shift = 0;
+			}
+		    }
+		    console.info(new_xscale(mid), shift);
+		    
+		    var transform = d3.zoomIdentity
+			.translate(0 - (shift))
+			.scale(trans.k / 2);
+
+		    console.info(transform);
+
+		    svg.select("#g_data")
+			.call(zoomed.transform, transform);
+		};
+	    
+	        chart.options = function () {
+		    return options;
 		};
 
 		chart.destroy = function(_){

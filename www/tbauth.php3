@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018, 2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -93,6 +93,12 @@ define("DOLOGIN_STATUS_NOGENIUSER", 	-7);
 # So we can redefine this in the APT pages.
 $CHANGEPSWD_PAGE = "moduserinfo.php3";
 
+$HAVE_MHASH = 1;
+$version = explode('.', PHP_VERSION);
+if ($version[0] > 7 || ($version[0] == 7 && $version[1] >= 4)) {
+   $HAVE_MHASH = 0;
+}
+
 #
 # Generate a hash value suitable for authorization. We use the results of
 # microtime, combined with a random number.
@@ -105,8 +111,11 @@ function GENHASH() {
     $random_bytes = fread($fp, 128);
     fclose($fp);
 
-    $hash  = mhash (MHASH_MD5, bin2hex($random_bytes) . " " . microtime());
-    return bin2hex($hash);
+    if ($HAVE_MHASH) {
+	$hash = mhash(MHASH_MD5, bin2hex($random_bytes) . " " . microtime());
+	return bin2hex($hash);
+    }
+    return hash('md5', bin2hex($random_bytes) . " " . microtime(), false);
 }
 
 #
@@ -421,12 +430,25 @@ function LoginStatus() {
 	# of the real hash, and simply tells us what menu to draw, but does
 	# not impart any privs!
 	#
-	if (isset($hashhash) &&
-	    $hashhash == bin2hex(mhash(MHASH_CRC32, $hashkey))) {
-            #
-            # The login is probably valid, but we have no proof yet. 
-            #
-	    $CHECKLOGIN_STATUS = CHECKLOGIN_MAYBEVALID;
+	if (isset($hashhash)) {
+	    if ($HAVE_MHASH) {
+		$newhash = bin2hex(mhash(MHASH_CRC32, $hashkey));
+	    }
+	    else {
+		$newhash = hash('crc32', $hashkey, false);
+	    }
+	    if ($hashhash == $newhash) {
+		#
+		# The login is probably valid, but we have no proof yet. 
+		#
+		$CHECKLOGIN_STATUS = CHECKLOGIN_MAYBEVALID;
+	    }
+	    else {
+		#
+	    	# Hash of hash is invalid, so assume no real cookie either. 
+	    	# 
+		$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
+	    }
 	}
 	else {
 	    #
@@ -453,7 +475,8 @@ function LoginStatus() {
     # Now add in the modifiers.
     #
     # Do not expire passwords for admin users.
-    if (!is_null($expired) && $expired && !$admin)
+    if (!is_null($expired) && $expired && !$admin &&
+        !$CHECKLOGIN_USER->nonlocal_id())
 	$CHECKLOGIN_STATUS |= CHECKLOGIN_PSWDEXPIRED;
     if ($admin)
 	$CHECKLOGIN_STATUS |= CHECKLOGIN_ISADMIN;
@@ -537,7 +560,7 @@ function LoginStatus() {
 # message. The modifier allows you to turn off checks for specified
 # conditions. 
 #
-function LOGGEDINORDIE($uid, $modifier = 0, $login_url = NULL) {
+function LOGGEDINORDIE($uid, $modifier = 0) {
     global $TBBASE, $BASEPATH;
     global $TBAUTHTIMEOUT, $CHECKLOGIN_HASHKEY, $CHECKLOGIN_IDX;
     global $drewheader;
@@ -552,22 +575,13 @@ function LOGGEDINORDIE($uid, $modifier = 0, $login_url = NULL) {
 	    E_USER_WARNING);
     }
 
-    #
-    # We now ignore the $uid argument and let LoginStatus figure it out.
-    #
-    
-    #
-    # Allow the caller to specify a different URL to direct the user to
-    #
     $redirect_url = null;
-    if (!$login_url) {
-	$login_url = "$TBBASE/login.php3?refer=1";
-        if ($uid || REMEMBERED_ID()) {
-	    # HTTP_REFERER will not work reliably when redirecting so
-	    # pass in the URI for this page as an argument
-	    $redirect_url = "$TBBASE/login.php3?referrer=".
-                            urlencode($_SERVER['REQUEST_URI']);
-	}
+    $login_url = "$TBBASE/login.php3";
+    if ($uid || REMEMBERED_ID()) {
+        # HTTP_REFERER will not work reliably when redirecting so
+        # pass in the URI for this page as an argument
+        $redirect_url = "$TBBASE/login.php3?referrer=".
+            urlencode($_SERVER['REQUEST_URI']);
     }
 
     $link = "\n<a href=\"$login_url\">Please ".
@@ -664,7 +678,7 @@ function CheckLoginConditions($status)
 #
 # This is the new interface to the above function. 
 #
-function CheckLoginOrDie($modifier = 0, $login_url = NULL)
+function CheckLoginOrDie($modifier = 0)
 {
     global $CHECKLOGIN_USER;
     
@@ -1143,7 +1157,11 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     $timeout = $now + 3600;
     $hashkey = GENHASH();
     # See note in CrossLogin() in db/User.pm.in. Do not change this.
-    $crc     = bin2hex(mhash(MHASH_CRC32, $hashkey));
+    if ($HAVE_MHASH) {
+	$crc = bin2hex(mhash(MHASH_CRC32, $hashkey));
+    } else {
+	$crc = hash('crc32', $hashkey, false);
+    }
     $opskey  = GENHASH();
 
     #

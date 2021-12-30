@@ -1,6 +1,6 @@
 #! /bin/bash
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -67,7 +67,7 @@ main_diskcheck() {
     numberofdrives=${#drive[*]}
 
    # the index into dirveinv array
-    # DISKUNIT SN=<serial> TYPE=<PATA|SATA|SCSI|RAID> SECSIZE=<#> SECTORS=<#> RSPE ED=<MBs> WSPEED=<MBs> 
+    # DISKUNIT SN=<serial> TYPE=<PATA|SATA|SCSI|RAID|NVMe> SECSIZE=<#> SECTORS=<#> RSPE ED=<MBs> WSPEED=<MBs> 
     declare -i -r header=0
     declare -i -r header_val=1
     declare -i -r name=2
@@ -415,7 +415,8 @@ gettype() {
 	echo "NoInfo"
 	return 0
     fi
-    res=$($smtcl -i $1 | grep "ATA Version is")
+    smtinfo=$($smtcl -i $1)
+    res=$(echo $smtinfo | grep "ATA Version is")
     if [ -n "$res" ] ; then
 	res=${res##*is: }
 	res=${res// /} #get rid of spaces
@@ -423,14 +424,19 @@ gettype() {
 	echo $res
 	return 0
     fi
-    res=$($smtcl -i $1 | grep "SAS")
+    res=$(echo $smtinfo | grep "SAS")
     if [ -n "$res" ] ; then
 	echo "SAS"
 	return 0
     fi
-    res=$($smtcl -i $1 | grep "SCSI")
+    res=$(echo $smtinfo | grep "SCSI")
     if [ -n "$res" ] ; then
 	echo "SCSI"
+	return 0
+    fi
+    res=$(echo $smtinfo | grep "NVM Capacity")
+    if [ -n "$res" ] ; then
+	echo "NVMe"
 	return 0
     fi
     echo "UNKNOWN"
@@ -505,11 +511,9 @@ getserial() {
 	res=${res^^} # upper case
     fi
     if [ "$os" == "FreeBSD" ] ; then
-	# note: if the device is mfi then 'mfiutil show drives' will list
-	# serial numbers 
 	smtcl=$(findSmartctl)
 	if [ "${smtcl/smartctl}" == "$smtcl" ] ; then
-	#don't have smartctl, maybe we can use camcontrol
+	    # XXX don't have smartctl, try camcontrol
 	    cmc=$(which camcontrol)
 	    if [ "${cmc/camcontrol}" != "${cmc}" ] ; then
 		sd=$1
@@ -518,6 +522,18 @@ getserial() {
 	    fi
 	else
 	    res=$($smtcl -a $1 | grep -i 'Serial number:')
+
+	    # XXX smartctl failed and old mfi driver, we can try mfiutil
+	    if [ -z "${res}" -a "${1#/dev/mfisyspd}" != "$1" ]; then
+		mfiutil=$(findMfiutil)
+		if [ -n "${mfiutil}" ]; then
+		    dn=${1#/dev/mfisyspd}
+		    res=$($mfiutil show drives | grep "^ *${dn} ")
+		    res=${res##*serial=}
+		    res=${res%%> *}
+		fi
+	    fi
+
 	    res=${res,,} # lower case
 	    res=${res/serial number: }
 #	    res=$(echo $res | tr 'a-z' 'A-Z') # upper case
@@ -668,6 +684,7 @@ getsectors() {
 		    ad14 ) hdnamex="ada5" ;;
 		    ad16 ) hdnamex="ada6" ;;
 		    ad18 ) hdnamex="ada7" ;;
+		    nvme* ) hdnamex="nvd${hdname##nvme}" ;;
 		    * )   hdnamex=$hdname ;;
 		esac
 		res=$(grep sectors /var/run/dmesg.boot | grep $hdnamex)
@@ -708,6 +725,10 @@ getsectors() {
 
 getwspeed() {
     hdname=$1
+
+    # XXX NVME hack
+    [[ "$os" == "FreeBSD" ]] && hdname=${hdname/nvme/nvd}
+
     # disk is mounted somewhere then don't do the raw write speed
     canwe=$(df | grep $hdname)
     [[ $canwe ]] && { echo mounted; return 0; }
@@ -727,6 +748,9 @@ getwspeed() {
 
 getrspeed() { 
     hdname=$1
+
+    # XXX NVME hack
+    [[ "$os" == "FreeBSD" ]] && hdname=${hdname/nvme/nvd}
 
     # do we have a working dd
     dd=$USE_DD

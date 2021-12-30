@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -539,6 +539,7 @@ dofreebsd() {
 	changechrony=0
 	changesshd=0
 	changeauth=0
+	changercert=0
 
 	fixit=0
 
@@ -761,6 +762,14 @@ dofreebsd() {
 	    fixit=1
 	fi
 
+	# XXX See if we need to get rid of expired root certificate
+	if [ -x $BINDIR/removecert ]; then
+	    if $BINDIR/removecert -n -M >/dev/null 2>&1; then
+		changercert=1
+		fixit=1
+	    fi
+	fi
+	
 	if [ $fixit -eq 0 ]; then
 		echo "  no changes necessary"
 		umount $rootdev
@@ -1065,6 +1074,10 @@ EOF1
 
 	if [ $changeauth -eq 1 ]; then
 	    dofixauthkeys 0
+	fi
+
+	if [ $changercert -eq 1 ]; then
+	    $BINDIR/removecert -M
 	fi
 
 	# actually run any postconfig scripts if we're supposed to:

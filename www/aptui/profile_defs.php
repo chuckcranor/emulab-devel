@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,7 @@
 # }}}
 #
 #
+include_once("paramset_defs.php");
 
 function TBvalid_rspec($token) {
     return TBcheck_dbslot($token, "apt_profiles", "rspec",
@@ -37,8 +38,8 @@ class Profile
     # Constructor by lookup on unique index.
     #
     function Profile($token, $version = null) {
-	$safe_profileid = addslashes($token);
-	
+        $query_result = null;
+        
 	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $token)) {
 	    #
 	    # First look to see if the uuid is for the profile itself,
@@ -47,6 +48,7 @@ class Profile
 	    #
 	    $query_result =
 		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+			    "    i.hashkey as profile_hashkey, ".
                             "    i.disabled as profile_disabled, ".
                             "    i.nodelete as profile_nodelete ".
 			    "  from apt_profiles as i ".
@@ -58,6 +60,7 @@ class Profile
 	    if (!$query_result || !mysql_num_rows($query_result)) {
 		$query_result =
 		    DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+                                "    i.hashkey as profile_hashkey, ".
                                 "    i.disabled as profile_disabled, ".
                                 "    i.nodelete as profile_nodelete ".
 				"  from apt_profile_versions as v ".
@@ -67,29 +70,62 @@ class Profile
 				"      v.deleted is null");
 	    }
 	}
-	elseif (is_null($version)) {
-	    $query_result =
-		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+        elseif (preg_match("/^\d+$/", $token)) {
+            if (is_null($version)) {
+                $query_result =
+                    DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+			    "    i.hashkey as profile_hashkey, ".
                             "    i.disabled as profile_disabled, ".
                             "    i.nodelete as profile_nodelete ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid and ".
 			    "     v.version=i.version ".
-			    "where i.profileid='$safe_profileid'");
-	}
-	else {
-	    $safe_version = addslashes($version);
-	    $query_result =
-	        DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+			    "where i.profileid='$token'");
+            }
+            elseif (preg_match("/^\d+$/", $version)) {
+                $query_result =
+                    DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+			    "    i.hashkey as profile_hashkey, ".
                             "    i.disabled as profile_disabled, ".
                             "    i.nodelete as profile_nodelete ".
 			    "  from apt_profile_versions as v ".
 			    "left join apt_profiles as i on ".
 			    "     i.profileid=v.profileid ".
-			    "where v.profileid='$safe_profileid' and ".
-			    "      v.version='$safe_version' and ".
+			    "where v.profileid='$token' and ".
+			    "      v.version='$version' and ".
 			    "      v.deleted is null");
+            }
+	}
+	elseif (IsValidHash($token)) {
+	    #
+	    # First look to see if the hash is for the profile itself,
+	    # which means current version. Otherwise look for a
+	    # version with the hash
+	    #
+	    $query_result =
+		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+			    "    i.hashkey as profile_hashkey, ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
+			    "  from apt_profiles as i ".
+			    "left join apt_profile_versions as v on ".
+			    "     v.profileid=i.profileid and ".
+			    "     v.version=i.version ".
+			    "where i.hashkey='$token' and v.deleted is null");
+
+	    if (!$query_result || !mysql_num_rows($query_result)) {
+		$query_result =
+		    DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
+                                "    i.hashkey as profile_hashkey, ".
+                                "    i.disabled as profile_disabled, ".
+                                "    i.nodelete as profile_nodelete ".
+				"  from apt_profile_versions as v ".
+				"left join apt_profiles as i on ".
+				"     v.profileid=i.profileid ".
+				"where v.hashkey='$token' and ".
+				"      v.deleted is null");
+	    }
 	}
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->profile = null;
@@ -132,11 +168,14 @@ class Profile
     function project_write(){ return $this->field('project_write'); }
     function repourl()	    { return $this->field('repourl'); }
     function reponame()	    { return $this->field('reponame'); }
+    function reporef()	    { return $this->field('reporef'); }
     function repohash()	    { return $this->field('repohash'); }
     function repokey()	    { return $this->field('repokey'); }
     function webtask_id()   { return $this->field('webtask_id'); }
     function lastused()     { return $this->field('lastused'); }
     function usecount()     { return $this->field('usecount'); }
+    function hashkey()       { return $this->field('hashkey'); }
+    function profile_hashkey()     { return $this->field('profile_hashkey'); }
     function profile_disabled()    { return $this->field('profile_disabled'); }
     function parent_profileid()    { return $this->field('parent_profileid'); }
     function parent_version()      { return $this->field('parent_version'); }
@@ -144,6 +183,14 @@ class Profile
     function portal_converted()    { return $this->field('portal_converted'); }
     function examples_portals()    { return $this->field('examples_portals'); }
 
+    # Project of profile
+    function Project() {
+        if ($this->project) {
+            return $this->project;
+        }
+        $this->project = Project::Lookup($this->pid_idx());
+        return $this->project;
+    }
     # Private means only in the same project.
     function IsPrivate() {
 	return !($this->ispublic() || $this->shared());
@@ -207,7 +254,7 @@ class Profile
             $pid = addslashes($project);
         }
 	$safe_name = addslashes($name);
-
+        
 	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $name)) {
 	    return Profile::Lookup($name);
 	}
@@ -298,42 +345,64 @@ class Profile
     #
     function URL() {
         global $APTBASE, $ISVSERVER, $ISAPT;
-	
+
+        # Repo based profiles are always to the profile not version.
+        if ($this->repourl()) {
+            return $this->ProfileURL();
+        }
 	$uuid = $this->uuid();
+	$hash = $this->hashkey();
+        $url  = "$APTBASE";
 
 	if ($this->ispublic() || (!$ISAPT && $this->shared())) {
 	    $pid  = $this->pid();
 	    $name = $this->name();
 	    $vers = $this->version();
-	    if ($ISVSERVER)
-		return "$APTBASE/p/$pid/$name/$vers";
-	    return "$APTBASE/instantiate.php?profile=$name".
-		"&project=$pid&version=$vers";
+	    if ($ISVSERVER) {
+                $url .= "/p/$pid/$name/$vers";
+            }
+            else {
+                $url .= "/instantiate.php?profile=$name".
+                     "&project=$pid&version=$vers";
+            }
 	}
 	else {
-	    if ($ISVSERVER)
-		return "$APTBASE/p/$uuid";	    
-	    return "$APTBASE/instantiate.php?profile=$uuid";
+	    if ($ISVSERVER) {
+		$url .= "/p/$hash";
+            }
+            else {
+                $url .= "/instantiate.php?profile=$hash";
+            }
 	}
+        return $url;
     }
     # And the URL of the profile itself.
     function ProfileURL() {
         global $APTBASE, $ISVSERVER, $ISAPT;
 	
 	$uuid = $this->profile_uuid();
+	$hash = $this->profile_hashkey();
+        $url  = "$APTBASE";
 
 	if ($this->ispublic() || (!$ISAPT && $this->shared())) {
 	    $pid  = $this->pid();
 	    $name = $this->name();
-	    if ($ISVSERVER)
-		return "$APTBASE/p/$pid/$name";
-	    return "$APTBASE/instantiate.php?profile=$name&project=$pid";
+	    if ($ISVSERVER) {
+		$url .= "/p/$pid/$name";
+            }
+            else {
+                $url .= "/instantiate.php?profile=$name&project=$pid";
+            }
 	}
 	else {
-	    if ($ISVSERVER)
-		return "$APTBASE/p/$uuid";	    
-	    return "$APTBASE/instantiate.php?profile=$uuid";
+	    if ($ISVSERVER) {
+		$url .= "/p/$hash";
+            }
+            else {
+                $url .= "/instantiate.php?profile=$hash";
+            }
 	}
+        return $url;
     }
 
     #
@@ -451,39 +520,6 @@ class Profile
     }
 
     #
-    # Return parameter set info for user.
-    #
-    function ParameterSets($user) {
-	$profileid = $this->profileid();
-        $uid_idx   = $user->uid_idx();
-
-	$query_result =
-	    DBQueryWarn("select * from apt_parameter_sets  ".
-			"where profileid='$profileid' and ".
-                        "      uid_idx='$uid_idx' ".
-                        "order by name");
-	if (!$query_result || !mysql_num_rows($query_result)) {
-	    return null;
-	}
-        $result = array();
-        
-	while ($row = mysql_fetch_array($query_result)) {
-            $blob = array(
-                "uuid"          => $row["uuid"],
-                "name"          => $row["name"],
-                "description"   => $row["description"],
-                "created"       => DateStringGMT($row["created"]),
-                "bindings"      => json_decode($row["bindings"]),
-                "version_uuid"  => $row["version_uuid"],
-                "reporef"       => $row["reporef"],
-                "repohash"      => $row["repohash"],
-            );
-            $result[] = $blob;
-        }
-        return $result;
-    }
-
-    #
     # Permission check; does user have permission to instantiate the
     # profile. At the moment, view/instantiate are the same.
     #
@@ -567,6 +603,17 @@ class Profile
 	    return 1;
         }
         return 0;
+    }
+    function anonCreator() {
+        $creator = User::Lookup($this->creator_idx());
+        if (!$creator) {
+            return "";
+        }
+        $tokens = preg_split("/\s+/", $creator->name());
+        if (count($tokens) == 1) {
+            return $tokens[0];
+        }
+        return $tokens[0] . " " . substr(end($tokens), 0 , 1);
     }
 
     function UsageInfo($user) {
@@ -813,22 +860,89 @@ class Profile
 	return array($finalForm, $defaults);
     }
 
+    function RecentExperiments($user)
+    {
+        return Instance::RecentExperiments($user, $this);
+    }
+
+    function HasParamsets($user)
+    {
+        $uid_idx    = $user->uid_idx();
+        $profile_id = $this->profileid();
+
+        $query_result = 
+            DBQueryFatal("select s.uuid from apt_parameter_sets as s ".
+                         "where s.uid_idx='$uid_idx' and ".
+                         "      s.profileid='$profile_id' ");
+        
+        return mysql_num_rows($query_result);
+    }
+
+    function ParameterSets($user) {
+        return $this->Paramsets($user);
+    }
+    
+    function Paramsets($user)
+    {
+        $uid_idx    = $user->uid_idx();
+        $profile_id = $this->profileid();
+
+        #
+        # Watch for version specific parameter set, switch the profile_uuid
+        # to that version. Note that repo based profiles are always version
+        # zero, we have to add another argument to the url instead.
+        #
+        $query_result =
+            DBQueryFatal("select s.uuid from apt_parameter_sets as s ".
+                         "where (s.uid_idx='$uid_idx' or ".
+                         "       (s.uid_idx!='$uid_idx' and s.global=1)) and ".
+                         "      s.profileid='$profile_id' ".
+                         "order by s.name,s.created");
+        
+        if (! mysql_num_rows($query_result)) {
+            return null;
+        }
+
+        $owner  = array();
+        $global = array();
+        
+        while ($row = mysql_fetch_array($query_result)) {
+            $paramset = Paramset::Lookup($row["uuid"]);
+            if (!$paramset) {
+                continue;
+            }
+            if ($paramset->version_uuid()) {
+                $profile = Profile::Lookup($paramset->version_uuid());
+                if (!$profile) {
+                    continue;
+                }
+            }
+            else {
+                $profile = $this;
+            }
+            $blob = $paramset->Blob($user, $profile);
+            if (!$blob) {
+                continue;
+            }
+            if ($paramset->global() && $paramset->uid_idx() != $uid_idx) {
+                $global[] = $blob;
+            }
+            else {
+                $owner[] = $blob;
+            }
+        }
+        return array(
+            "owner"  => $owner,
+            "global" => $global,
+        );
+    }
+
     #
     # Temporary hack to control who gets the new genilib code.
     #
     function UseNewGeniLib()
     {
-	$project = Project::Lookup($this->pid_idx());
-	if (!$project) {
-	    return 0;
-	}
-        if (0) {
-            if (FeatureEnabled("NewPParams", null,
-                               $project->DefaultGroup(), null)) {
-                return 1;
-            }
-        }
-        return 0;
+        return 1;
     }
 }
 ?>

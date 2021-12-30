@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,7 +36,6 @@ $isadmin   = ISADMIN();
 $reqargs = RequiredPageArguments("instance",   PAGEARG_INSTANCE,
 				 "runidx",     PAGEARG_INTEGER);
 $optargs = OptionalPageArguments("submit",     PAGEARG_STRING,
-				 "referrer",   PAGEARG_STRING,
 				 "formfields", PAGEARG_ARRAY);
 
 $template = $instance->GetTemplate();
@@ -106,11 +105,6 @@ function SPITFORM($formfields, $errors)
     echo "<table align=center border=1> 
           <form action='$url' method=post>\n";
 
-    if (isset($referrer)) {
-	$url = urlencode($referrer);
-	echo "<input type=hidden name=referrer value='$url'>\n";
-    }
-    
     echo "<tr>
               <td align=center>
                <b>Please enter a message to be logged
@@ -151,9 +145,6 @@ function SPITFORM($formfields, $errors)
 if (! isset($submit)) {
     $defaults = array();
     $defaults["message"] = "";
-    
-    if (!isset($referrer))
-	$referrer = $_SERVER['HTTP_REFERER'];
     
     SPITFORM($defaults, 0);
     PAGEFOOTER();

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2019 University of Utah and the Flux Group.
+# Copyright (c) 2019, 2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -64,7 +64,44 @@ BEGIN { libtblog::tblog_stop_capture(); }
 my $PORT_FORMAT_NATIVE     = 6;
 
 #
-# XXX safety net: make sure we don't remove this vlan from any trunk.
+# In April 2021 I did an optimization pass to try to reduce the number of
+# REST API calls made (since they take a minimum of 2s each). Til they have
+# more real world testing, with different firmware versions, make this
+# optional. Set this to zero to revert to the "old ways" which have been
+# working for several years. The biggest difference was avoiding enabling
+# and disabling one port per call. For big LANs, this is a huge improvement.
+#
+# Quick numbers for 38 node LAN (38 ports, 1 VLAN):
+#  Old snmpit -t:  82 seconds, calls:  5 getinfo ( 4 cached),  40 other.
+#  New snmpit -t:  12 seconds, calls:  5 getinfo ( 4 cached),   3 other.
+#  Old snmpit -r: 155 seconds, calls:  7 getinfo ( 6 cached),  77 other.
+#  New snmpit -r:  12 seconds, calls:  7 getinfo ( 6 cached),   3 other.
+# Mostly these are savings of individual calls to enable/disable ports.
+#
+# With multiplexed links (tagged ports):
+#  Old snmpit -t: 228 seconds, calls: 43 getinfo (42 cached), 116 other.
+#  New snmpit -t: 154 seconds, calls: 43 getinfo (42 cached),  79 other.
+#  Old snmpit -r: 157 seconds, calls: 44 getinfo (43 cached),  77 other.
+#  New snmpit -r: 154 seconds, calls: 44 getinfo (43 cached),  77 other.
+# Not as dramatic due to the fact that the backend-independent part of
+# snmpit makes per-port calls to enable/disable trunking. So no easy
+# opportunities to reduce calls.
+#
+# A 38 node "snake" (76 ports, 38 VLANs):
+#  Old snmpit -t: 234 seconds, calls: 190 getinfo (189 cached), 114 other.
+#  New snmpit -t: 230 seconds, calls: 190 getinfo (189 cached), 114 other.
+#  Old snmpit -r: 378 seconds, calls:  81 getinfo ( 80 cached), 190 other.
+#  New snmpit -r: 159 seconds, calls:  81 getinfo ( 80 cached),  77 other.
+#
+# A 176 node LAN across seven switches now takes 69 seconds for either
+# create or remove vs. over 6 minutes to create and 12 minutes to destroy.
+#
+# Additional targets: enablePortTrunking2, disablePortTrunking
+#
+my $OPTIMIZE       = 1;
+
+#
+# XXX safety net: make sure we don't remove this vlan from any port.
 #
 # This is the Emulab/CloudLab/Powder hardware management VLAN. We don't want
 # to lose contact with any far-flung, hard to access Powder end-point switches.
@@ -146,6 +183,7 @@ sub new($$$)
     $self->{CALLGETINFO} = 0;
     $self->{CACHEGETINFO} = 0;
     $self->{CALLOTHER} = 0;
+    $self->{SAVEDCALLS} = 0;
 
     bless($self,$class);
 
@@ -159,8 +197,9 @@ sub DESTROY($)
     my $gicalls = $self->{CALLGETINFO};
     my $gihits = $self->{CACHEGETINFO};
     my $ocalls = $self->{CALLOTHER};
+    my $scalls = $self->{SAVEDCALLS};
 
-    print "$id: RESTCONF calls: $gicalls getinfo ($gihits cached), $ocalls other.\n"
+    print "$id: RESTCONF calls: $gicalls getinfo ($gihits cached), $ocalls other, $scalls other calls avoided.\n"
 	if ($self->{DEBUG});
 }
 
@@ -274,6 +313,33 @@ sub mapPortToIndex($$)
     }
 
     return $index;
+}
+
+#
+# Get the SW version. Determines what optimizations we can do.
+# Return as an array of (version, subversion, ...)
+#
+sub getOS10Version($)
+{
+    my ($self) = @_;
+
+    if (!defined($self->{OS10VERSION})) {
+	$self->{CALLOTHER}++;
+	my $path = "dell-system-software:system-sw-state/sw-version";
+	my $json = $self->{ROBJ}->call("GET", $path);
+	if ($json) {
+	    $self->{OS10VERSION} =
+		$json->{"dell-system-software:sw-version"}->{"sw-version"};
+	} else {
+	    warn "WARNING: could not get OS10 version, assuming < 5\n";
+	    # XXX the oldest version I know with REST API
+	    $self->{OS10VERSION} = "10.4.3.1";
+	}
+	print "$self->{NAME}: OS10 version: $self->{OS10VERSION}\n"
+	    if ($self->{DEBUG});
+    }
+
+    return split('\.', $self->{OS10VERSION});
 }
 
 sub getOnePortInfo($$;$)
@@ -683,22 +749,66 @@ sub enablePort($$$)
     my ($self,$on,$iface) = @_;
     my $id = "$self->{NAME}::enablePort()";
 
-    $on = $on ? "true" : "false";
     # Build up a hash with all the right stuff
-    my $porthash = $self->{ROBJ}->enablePortSpec($iface, $on);
+    my $porthash = $self->{ROBJ}->enablePortSpec($on, $iface);
 
     # Enable/disable the port
     $self->{CALLOTHER}++;
     my $path = "interfaces/interface/" . uri_escape($iface);
     my $RetVal = $self->{ROBJ}->call("PATCH", $path, $porthash);
     if (!defined($RetVal)) { 
-	my $able = ($on eq "true") ? "enable" : "disable";
+	my $able = $on ? "enable" : "disable";
 	warn "$id: ERROR: $able port '$iface' failed.\n";
 	return 0;
     }
 
+    # update cached info
     if ($self->{GOTPORTINFO}) {
-	$self->{PORTS}{$iface}->{"enabled"} = ($on eq "true") ? 1 : 0;
+	$self->{PORTS}{$iface}->{"enabled"} = $on;
+    }
+
+    return 1;
+}
+
+#
+# Bulk enable/disable.
+# We may need to enable or disable multiple ports during a VLAN operation
+# and doing them individually through enablePort is too expensive via this
+# interfaces (~2 seconds per call). So we take advantage of being able to
+# specify a list of ports to operate on.
+#
+# XXX This spec came from turning on "cli mode rest-translate" and doing
+# an "int range ..." followed by "no shutdown" to see what curl command it
+# produced.
+#
+sub enablePorts($$@)
+{
+    my ($self,$on,@ifaces) = @_;
+    my $id = "$self->{NAME}::enablePorts()";
+
+    # XXX for backware compat, we use enablePort for the single port case
+    if (@ifaces == 1) {
+	return $self->enablePort($on, @ifaces);
+    }
+
+    # Build up a hash with all the right stuff
+    my $porthash = $self->{ROBJ}->enableMultiplePortsSpec($on, @ifaces);
+
+    # Enable/disable the ports
+    $self->{CALLOTHER}++;
+    my $path = "ietf-interfaces:interfaces";
+    my $RetVal = $self->{ROBJ}->call("PATCH", $path, $porthash);
+    if (!defined($RetVal)) { 
+	my $able = $on ? "enable" : "disable";
+	warn "$id: ERROR: $able ports '" . join(' ', @ifaces) . "' failed.\n";
+	return 0;
+    }
+
+    # update cached info
+    if ($self->{GOTPORTINFO}) {
+	foreach my $iface (@ifaces) {
+	    $self->{PORTS}{$iface}->{"enabled"} = $on;
+	}
     }
 
     return 1;
@@ -767,58 +877,107 @@ sub removeVlanPorts($$$$)
     my $viface = "vlan$vlan_number";
     
     #
-    # XXX should investigate whether it is possible to delete multiple ports
-    # at once.
+    # XXX Sanity check. Don't remove ANY port from the management VLAN.
+    # Just fail if they try.
     #
-    foreach my $iface (@{$tportlist}) {
-	# XXX don't remove the sacred vlan from trunked ports
-	if ($vlan_number == $SACRED_VLAN) {
-	    warn "$id: ERROR: refusing to remove vlan $SACRED_VLAN from trunk port $iface!\n";
-	    $errors++;
-	    next;
-	}
-	
-	# XXX should this be an error?
-	if (!exists($self->{TRUNK}{$iface})) {
-	    warn "$id: ERROR: attempt to remove $viface from untrunked port $iface.\n";
-	    $errors++;
-	    next;
-	}
-
-	$self->{CALLOTHER}++;
-	my $path = "interfaces/interface/$viface/tagged-ports=" .
-	    uri_escape($iface);
-	my $error = "UNKNOWN";
-	if (!$self->{ROBJ}->call("DELETE", $path, undef, undef, \$error)) {
-	    warn "$id: ERROR: removing tagged port $iface from $viface.\n";
-	    $errors++;
-	    next;
-	}
-
-	$self->removeCacheTrunkVlan($vlan_number, $iface);
-	$self->removeCacheVlanPort($vlan_number, $iface, "tagged");
-
-    }
-    foreach my $iface (@{$uportlist}) {
-	$self->{CALLOTHER}++;
-	my $path = "interfaces/interface/$viface/untagged-ports=" .
-	    uri_escape($iface);
-	my $error = "UNKNOWN";
-	if (!$self->{ROBJ}->call("DELETE", $path, undef, undef, \$error)) {
-	    warn "$id: ERROR: removing untagged port $iface from $viface.\n";
-	    $errors++;
-	}
-
-	if (exists($self->{ACCESS}{$iface})) {
-	    $self->{ACCESS}{$iface}->{"avlan"} = 1;
-	} elsif (exists($self->{TRUNK}{$iface})) {
-	    delete $self->{TRUNK}{$iface}->{"avlan"};
-	}
+    if ($vlan_number == $SACRED_VLAN) {
+	warn "$id: ERROR: refusing to remove vlan $SACRED_VLAN from ports!\n";
+	return 1;
     }
 
-    # force cache refresh if any errors
-    $self->refreshPortInfo(1)
-	if ($errors);
+    if (@{$tportlist} > 0) {
+	my @vers = $self->getOS10Version();
+	if ($OPTIMIZE && $vers[1] > 4) {
+	    $self->{CALLOTHER}++;
+	    my $calls = scalar(@${tportlist}) - 1;
+	    $self->{SAVEDCALLS} += $calls;
+	    $self->debug("$id: saved $calls RESTAPI calls\n", 2);
+	    my $path = "ietf-interfaces:interfaces";
+	    my $vlanhash = $self->{ROBJ}->removeTaggedPortsVlanSpec($vlan_number, $tportlist);
+	    my $RetVal = $self->{ROBJ}->call("PATCH", $path, $vlanhash);
+	    if (!defined($RetVal)) {
+		warn "$id: ERROR: removing tagged ports '".
+		    join(',', @{$tportlist}), "' from $viface.\n";
+		$errors += scalar(@${tportlist});
+	    }
+	} else {
+	    foreach my $iface (@{$tportlist}) {
+		# XXX should this be an error?
+		if (!exists($self->{TRUNK}{$iface})) {
+		    warn "$id: ERROR: ".
+			"cannot remove $viface from untrunked port $iface.\n";
+		    $errors++;
+		    next;
+		}
+
+		$self->{CALLOTHER}++;
+		my $path = "interfaces/interface/$viface/tagged-ports=" .
+		    uri_escape($iface);
+		my $error = "UNKNOWN";
+		if (!$self->{ROBJ}->call("DELETE", $path, undef, undef, \$error)) {
+		    warn "$id: ERROR: ".
+			"removing tagged port $iface from $viface.\n";
+		    $errors++;
+		    next;
+		}
+	    }
+	}
+
+	# update cache stats, unless there were errors
+	if (!$errors) {
+	    foreach my $iface (@{$tportlist}) {
+		$self->removeCacheTrunkVlan($vlan_number, $iface);
+		$self->removeCacheVlanPort($vlan_number, $iface, "tagged");
+	    }
+	}
+    }
+
+    #
+    # For untagged ports, we can just add them to the default VLAN (1)
+    # and that will remove them from the other vlan.
+    #
+    if (@{$uportlist} > 0) {
+	if ($OPTIMIZE) {
+	    my @tports = ();
+	    my $calls = scalar(@{$uportlist}) - 1;
+	    $self->{SAVEDCALLS} += $calls;
+	    $self->debug("$id: saved $calls RESTAPI calls\n", 2);
+	    my $rv = $self->addVlanPorts(1, $uportlist, \@tports);
+	    if ($rv) {
+		warn "$id: ERROR: removing untagged ports '".
+		    join(',', @{$uportlist}), "' from $viface.\n";
+		$errors += $rv;
+	    }
+	} else {
+	    foreach my $iface (@{$uportlist}) {
+		$self->{CALLOTHER}++;
+		my $path = "interfaces/interface/$viface/untagged-ports=" .
+		    uri_escape($iface);
+		my $error = "UNKNOWN";
+		if (!$self->{ROBJ}->call("DELETE", $path, undef, undef, \$error)) {
+		    warn "$id: ERROR: removing untagged port ".
+			"'$iface' from $viface.\n";
+		    $errors++;
+		}
+	    }
+	}
+
+	# update cache stats, unless there were errors
+	if (!$errors) {
+	    foreach my $iface (@{$uportlist}) {
+		if (exists($self->{ACCESS}{$iface})) {
+		    $self->{ACCESS}{$iface}->{"avlan"} = 1;
+		} elsif (exists($self->{TRUNK}{$iface})) {
+		    delete $self->{TRUNK}{$iface}->{"avlan"};
+		}
+	    }
+	}
+    }
+
+    if ($errors) {
+	# force cache refresh if any errors
+	$self->refreshPortInfo(1);
+    }
 
     return $errors;
 }
@@ -833,10 +992,15 @@ sub PortInstance2native($$)
 sub native2PortInstance($$)
 {
     my ($self, $iface) = @_;
+    my $string;
 
-    my $rv = Port->LookupByStringForced(
-	Port->Tokens2IfaceString($self->{NAME}, $iface));
-    return $rv;
+    if ($iface =~ /^ethernet(\d+)\/(\d+)\/(\d+)$/) {
+	$string = Port->Tokens2TripleString($self->{NAME}, $3, $2);
+    }
+    else {
+	$string = Port->Tokens2IfaceString($self->{NAME}, $iface);
+    }
+    return Port->LookupByStringForced($string);
 }
 
 #
@@ -1202,6 +1366,9 @@ sub portControl ($$@) {
     $self->debug("portControl: $cmd -> (".Port->toStrings(@ports).")\n");
 
     my @nports = $self->convertPortFormat($PORT_FORMAT_NATIVE, @ports);
+    if (@nports == 0) {
+	return 0;
+    }
 
     # The Mellanox XML-gateway API doesn't support setting speed at
     # all, so we just pretend ...
@@ -1215,11 +1382,24 @@ sub portControl ($$@) {
 	);
 
     if ($cmd eq "enable" || $cmd eq "disable") {
-	foreach my $iface (@nports) {
-	    my $retval = $self->enablePort(($cmd eq "enable"), $iface);
+	if ($OPTIMIZE) {
+	    my $calls = scalar(@nports) - 1;
+	    $self->{SAVEDCALLS} += $calls;
+	    $self->debug("$id: saved $calls RESTAPI calls\n", 2);
+	    my $retval = $self->enablePorts(($cmd eq "enable" ? 1 : 0),
+					    @nports);
 	    if (!defined($retval)) {
-		warn "$id: WARNING: Failed to execute '$cmd' on $iface.\n";
-		$errors++;
+		warn "$id: WARNING: Failed to execute '$cmd' on " .
+		    join(' ', @nports) . ".\n";
+		$errors += scalar(@nports);
+	    }
+	} else {
+	    foreach my $iface (@nports) {
+		my $retval = $self->enablePort(($cmd eq "enable"), $iface);
+		if (!defined($retval)) {
+		    warn "$id: WARNING: Failed to execute '$cmd' on $iface.\n";
+		    $errors++;
+		}
 	    }
 	}
     } elsif (!defined $fakeCmds{$cmd}) {
@@ -1428,6 +1608,11 @@ sub removeSomePortsFromVlan($$@) {
 }
 
 #
+# Delete multiple vlans:
+# curl -i -k -H "Accept: application/json" -H "Content-Type: application/json" -u $USER_NAME:$PASSWORD -d '{"ietf-interfaces:interfaces":{"dell-interface-range:interface-range":[{"name":"358,343,415","type":"iana-if-type:l2vlan","operation":"DELETE"}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+
+#
 # Remove the given VLANs from this switch. Removes all ports from the VLAN,
 # so it's not necessary to call removePortsFromVlan() first. The VLAN is
 # given as a 802.1Q VLAN tag number (so NOT as a vlan_id from the database!)
@@ -1455,20 +1640,59 @@ sub removeVlan($@)
 	return 0;
     }
 
+    my @vlans = ();
     foreach my $vlan_number (@vlan_numbers) {
 	# We won't remove vlan 1.
-	next if $vlan_number == 1;
-	
+	next if ($vlan_number == 1);
+
+	# ...or a vlan that does not exist.
+	next if (!$self->vlanNumberExists($vlan_number));
+
 	# XXX we also won't remove the sacred vlan
 	if ($vlan_number == $SACRED_VLAN) {
 	    warn "$id: ERROR: refusing to remove vlan $SACRED_VLAN!\n";
-	    $errors++;
 	    next;
 	}
 
-	# Vlan does not exist
-	next if (!$self->vlanNumberExists($vlan_number));
+	push @vlans, $vlan_number;
+    }
 
+    # check again to see if there is anything to do
+    if (@vlans == 0) {
+	return 1;
+    }
+
+    #
+    # First we try removing all vlans in one operation.
+    # If that fails, we try again one at a time to get as many as possible
+    # and to determine which ones were not removed.
+    #
+    my @deadvlans = ();
+    my @vers = $self->getOS10Version();
+    if ($OPTIMIZE && $vers[1] > 4) {
+	print "  Removing VLANs # " . join(' ', @vlans) .
+	    " on switch $self->{NAME} ... ";
+
+	$self->{CALLOTHER}++;
+	my $path = "ietf-interfaces:interfaces";
+	my $vlanhash = $self->{ROBJ}->removeVlansSpec(@vlans);
+	my $RetVal = $self->{ROBJ}->call("PATCH", $path, $vlanhash);
+	if (!defined($RetVal)) {
+	    print "FAILED! Retrying individually ...\n";
+	    $self->{SAVEDCALLS} -= 1;
+	} else {
+	    print "Done.\n";
+
+	    my $calls = scalar(@vlans) - 1;
+	    $self->{SAVEDCALLS} += $calls;
+	    $self->debug("$id: saved $calls RESTAPI calls\n", 2);
+
+	    @deadvlans = @vlans;
+	    @vlans = ();
+	}
+    }
+
+    foreach my $vlan_number (@vlans) {
 	# Perform the removal (no need to remove ports from the VLAN first)
 	print "  Removing VLAN # $vlan_number ... ";
 	$self->{CALLOTHER}++;
@@ -1479,38 +1703,44 @@ sub removeVlan($@)
 					 undef, undef, \$error);
 	if ($RetVal) { 
 	    print "Removed VLAN $vlan_number on switch $self->{NAME}.\n";
-
-	    # XXX hack state update
-	    # removed untagged ports revert to vlan1
-	    # removed tagged ports remain in whatever other VLANs they are in
-	    if ($self->{GOTPORTINFO}) {
-		push(@{$self->{VLANS}{"vlan1"}->{"untagged"}},
-		     @{$self->{VLANS}{$vname}->{"untagged"}});
-		foreach my $port (@{$self->{VLANS}{$vname}->{"untagged"}}) {
-		    $self->{ACCESS}{$port}->{"avlan"} = 1;
-		}
-		foreach my $port (@{$self->{VLANS}{$vname}->{"tagged"}}) {
-		    if (exists($self->{TRUNK}{$port}->{"avlan"}) &&
-			$self->{TRUNK}{$port}->{"avlan"} == $vlan_number) {
-			$self->{TRUNK}{$port}->{"avlan"} = 1;
-			my @nvlans = ();
-			foreach my $tag (@{$self->{TRUNK}{$port}->{"vlans"}}) {
-			    push(@nvlans, $vlan_number)
-				if ($tag != $vlan_number);
-			}
-			$self->{TRUNK}{$port}->{"vlans"} = [ @nvlans ];
-		    }
-		}
-		delete $self->{VLANS}{$vname};
-		delete $self->{IFINDEXMAP}{$self->{IFINDEX}{$vname}};
-		delete $self->{IFINDEX}{$vname};
-	    }
+	    push @deadvlans, $vlan_number;
 	} else {
 	    warn "$id: ERROR: Removal of VLAN $vlan_number failed: $error\n";
 	    $errors++;
 	}
     }
     
+    #
+    # XXX hack state update:
+    # removed untagged ports revert to vlan1
+    # removed tagged ports remain in whatever other VLANs they are in
+    #
+    foreach my $vlan_number (@deadvlans) {
+	my $vname = "vlan$vlan_number";
+	if ($self->{GOTPORTINFO}) {
+	    push(@{$self->{VLANS}{"vlan1"}->{"untagged"}},
+		 @{$self->{VLANS}{$vname}->{"untagged"}});
+	    foreach my $port (@{$self->{VLANS}{$vname}->{"untagged"}}) {
+		$self->{ACCESS}{$port}->{"avlan"} = 1;
+	    }
+	    foreach my $port (@{$self->{VLANS}{$vname}->{"tagged"}}) {
+		if (exists($self->{TRUNK}{$port}->{"avlan"}) &&
+		    $self->{TRUNK}{$port}->{"avlan"} == $vlan_number) {
+		    $self->{TRUNK}{$port}->{"avlan"} = 1;
+		    my @nvlans = ();
+		    foreach my $tag (@{$self->{TRUNK}{$port}->{"vlans"}}) {
+			push(@nvlans, $vlan_number)
+			    if ($tag != $vlan_number);
+		    }
+		    $self->{TRUNK}{$port}->{"vlans"} = [ @nvlans ];
+		}
+	    }
+	    delete $self->{VLANS}{$vname};
+	    delete $self->{IFINDEXMAP}{$self->{IFINDEX}{$vname}};
+	    delete $self->{IFINDEX}{$vname};
+	}
+    }
+
     return ($errors == 0) ? 1 : 0;
 }
 
@@ -1551,7 +1781,7 @@ sub setPortVlan($$@) {
     
     if ($vlan_number == 1) {
 	warn "$id: ERROR: should not invoke with vlan1!\n";
-	return sclar(@ports);
+	return scalar(@ports);
     }
 
     # Get complete Port/Vlan info
@@ -1627,8 +1857,10 @@ sub setPortVlan($$@) {
 	    # gather these up so we can do it all at once
 	    push @tportlist, $swport;
 
-	    # must enable the port
-	    push @enablelist, $swport;
+	    # must enable the port if not already enabled
+	    if (!$self->{PORTS}{$swport}->{"enabled"}) {
+		push @enablelist, $swport;
+	    }
 	} else {
 	    warn "$id: ERROR: Unknown state for port $portobj[$i], fix it!\n";
 	}
@@ -1651,15 +1883,23 @@ sub setPortVlan($$@) {
     # Enable any ports that need it.
     # XXX we don't treat this as an error, though maybe we should.
     #
-    foreach my $iface (@enablelist) {
-	if (!$self->{PORTS}{$iface}->{"enabled"} &&
-	    !$self->enablePort(1, $iface)) {
-	    warn "$id: WARNING: could not enable port '$iface'\n";
+    if (@enablelist > 0) {
+	if ($OPTIMIZE) {
+	    my $calls = scalar(@enablelist) - 1;
+	    $self->{SAVEDCALLS} += $calls;
+	    $self->debug("$id: saved $calls RESTAPI calls\n", 2);
+	    if (!$self->enablePorts(1, @enablelist)) {
+		warn "$id: WARNING: could not enable ports '" .
+		    join(' ', @enablelist) . "'\n";
+	    }
 	} else {
-	    $self->{PORTS}{$iface}->{"enabled"} = 1;
+	    foreach my $iface (@enablelist) {
+		if (!$self->enablePort(1, $iface)) {
+		    warn "$id: WARNING: could not enable port '$iface'\n";
+		}
+	    }
 	}
     }
-    
     return 0;
 }
 
@@ -1757,15 +1997,27 @@ sub delPortVlan($$@)
     # Disable untagged ports that will be reverting to the default VLAN.
     # We don't want nodes to be able to send/receive traffic on that VLAN.
     #
-    # XXX right now we assume that if ths fails, no ports got disabled.
+    # XXX right now we assume that if this fails, no ports got disabled.
     # This might be a very, very bad assumption.
     #
-    foreach my $iface (@disablelist) {
-	if (!$self->enablePort(0, $iface)) {
-	    warn "$id: ERROR: could not disable port '$iface'\n";
-	    return scalar(@ports);
+    if (@disablelist > 0) {
+	my @vers = $self->getOS10Version();
+	if ($OPTIMIZE && $vers[1] > 4) {
+	    my $calls = scalar(@disablelist) - 1;
+	    $self->{SAVEDCALLS} += $calls;
+	    $self->debug("$id: saved $calls RESTAPI calls\n", 2);
+	    if (!$self->enablePorts(0, @disablelist)) {
+		warn "$id: WARNING: could not disable ports '" .
+		    join(' ', @disablelist) . "'\n";
+		return scalar(@ports);
+	    }
 	} else {
-	    $self->{PORTS}{$iface}->{"enabled"} = 0;
+	    foreach my $iface (@disablelist) {
+		if (!$self->enablePort(0, $iface)) {
+		    warn "$id: ERROR: could not disable port '$iface'\n";
+		    return scalar(@ports);
+		}
+	    }
 	}
     }
 
@@ -1959,9 +2211,6 @@ sub enablePortTrunking2($$$$) {
 	    warn "$id: ERROR: failed to enable $iface.\n";
 	    return 0;
 	}
-
-	# Update cached info
-	$self->{PORTS}{$iface}->{"enabled"} = 1;
     }
 
     return 1;

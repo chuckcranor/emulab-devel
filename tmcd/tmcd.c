@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2021 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -89,9 +89,7 @@
 #define DOTSFS		".sfs"
 #define RUNASUSER	"nobody"
 #define RUNASGROUP	"nobody"
-#ifndef NTPSERVER
-#define NTPSERVER       "ntp1"
-#endif
+#define NTPCNAME	"ntp1"
 #define PROTOUSER	"elabman"
 #define PRIVKEY_LEN	128
 #define URN_LEN		128
@@ -409,6 +407,8 @@ COMMAND_PROTOTYPE(dosubbossinfo);
 COMMAND_PROTOTYPE(dopublicaddrinfo);
 COMMAND_PROTOTYPE(dohwcollect);
 COMMAND_PROTOTYPE(dowbstore);
+COMMAND_PROTOTYPE(doattenuatorlist);
+COMMAND_PROTOTYPE(doattenuator);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -429,6 +429,7 @@ COMMAND_PROTOTYPE(dogeniall);
 COMMAND_PROTOTYPE(dogeniparam);
 COMMAND_PROTOTYPE(dogenirpccert);
 COMMAND_PROTOTYPE(dogeniinvalid);
+COMMAND_PROTOTYPE(dogeniportalmanifest);
 #endif
 
 /*
@@ -553,6 +554,8 @@ struct command {
 	{ "publicaddrinfo",  FULLCONFIG_NONE, F_ALLOCATED, dopublicaddrinfo },
 	{ "hwcollect",	  FULLCONFIG_NONE, 0, dohwcollect},
 	{ "wbstore",	  FULLCONFIG_NONE, 0, dowbstore},
+	{ "attenuatorlist", FULLCONFIG_NONE, F_ALLOCATED|F_REMREQSSL, doattenuatorlist },
+	{ "attenuator",   FULLCONFIG_NONE, F_ALLOCATED|F_REMREQSSL, doattenuator },
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
 	{ "geni_slice_urn", FULLCONFIG_NONE, 0, dogenisliceurn },
@@ -573,6 +576,7 @@ struct command {
 	{ "geni_all",     FULLCONFIG_NONE, 0, dogeniall },
 	{ "geni_param",   FULLCONFIG_NONE, 0, dogeniparam },
 	{ "geni_rpccert",   FULLCONFIG_NONE, 0, dogenirpccert },
+	{ "geni_portalmanifest", FULLCONFIG_NONE, 0, dogeniportalmanifest },
 	/* A rather ugly hack to avoid making error handling a special case.
 	   THIS MUST BE THE LAST ENTRY IN THE ARRAY! */
 	{ "geni_invalid", FULLCONFIG_NONE, 0, dogeniinvalid }
@@ -2221,7 +2225,9 @@ COMMAND_PROTOTYPE(doifconfig)
 				MYSQL_ROW row2;
 				res2 = mydb_query("select capval from "
 						  "interface_capabilities "
-						  "where type='%s'", 1, type);
+						  "where type='%s' and "
+						  "capkey='autonegotiate'",
+						  1, type);
 				if (res2 && (int)mysql_num_rows(res2) > 0) {
 					row2 = mysql_fetch_row(res2);
 					if (row2[0] &&
@@ -3855,7 +3861,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "  u.privs,g.pid,g.gid,g.unix_gid,0, "
 				 "  NULL,NULL, "
 				 "  UNIX_TIMESTAMP(u.updated), "
-				 "  u.email,'bash', "
+				 "  u.email,u.shell, "
 				 "  0,0, "
 				 "  NULL,u.uid_idx "
 				 "from nonlocal_user_accounts as u "
@@ -4482,12 +4488,9 @@ COMMAND_PROTOTYPE(dotarballs)
 	}
 
 	/* 
-	 * Short-circuit tarballs for nodes tainted with 'blackbox' or
-	 * 'useronly'.  XXX: rc.tarfiles has to be reworked on the clientside
-	 * before this blanket ban can be lifted for 'useronly'.
+	 * Short-circuit tarballs for nodes tainted with 'blackbox'.
 	 */
-	if (HAS_ANY_TAINTS(reqp->taintstates, 
-			   (TB_TAINTSTATE_BLACKBOX | TB_TAINTSTATE_USERONLY)))
+	if (HAS_ANY_TAINTS(reqp->taintstates, TB_TAINTSTATE_BLACKBOX))
 		return 0;
 	
 	/*
@@ -5008,6 +5011,16 @@ COMMAND_PROTOTYPE(dostorageconfig)
 	 * PROTO field to select, per-blockstore, its type. But that
 	 * will require additional per node (type) assign features
 	 * differentiating the amount of each type available.
+	 *
+	 * Ultimately is not here yet, but I need a penultimate fix to
+	 * handle the Powder d840 nodes. Right now, an ANY or NONSYSVOL
+	 * blockstore will wind up with a combination of the single small,
+	 * ugly-slow BOSS device RAID1 VD and the multiple large, stupid-fast
+	 * NVMe devices. So I have added the node/node_type feature so I can
+	 * restrict blockstores on these nodes to use just flash devices and
+	 * adjusted the existing nonsysvol/any assign features so that the
+	 * max size includes only that space. Right now, the node/type
+	 * features override the sitevar. Not sure if that is a good thing...
 	 */
 	localproto = NULL;
 	res = mydb_query("select value,defaultvalue from sitevariables "
@@ -5023,6 +5036,38 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		mysql_free_result(res);
 	}
 
+	/*
+	 * See if there are node or node_type overrides for the localproto.
+	 */
+	res = mydb_query("select na.attrvalue,nta.attrvalue from nodes as n "
+			 "left join node_type_attributes as nta on "
+			 "     nta.type=n.type and "
+			 "     nta.attrkey='blockstore_localproto' "
+			 "left join node_attributes as na on "
+			 "     na.node_id=n.node_id and "
+			 "     na.attrkey='blockstore_localproto' "
+			 "where n.node_id='%s'",
+			 2, reqp->pnodeid);
+	if (res) {
+		if ((int)mysql_num_rows(res) != 0) {
+			char *attrvalue = NULL;
+			
+			row = mysql_fetch_row(res);
+
+			if (row[0] && row[0][0])
+				attrvalue = row[0];
+			else if (row[1] && row[1][0]) {
+				attrvalue = row[1];
+			}
+			if (attrvalue) {
+				if (localproto)
+					free(localproto);
+				localproto = strdup(attrvalue);
+			}
+		}
+		mysql_free_result(res);
+	}
+	
 	/* 
 	 * Send across local blockstore volumes (slices).  These don't
 	 * show up in the reserved table, existing entirely in the
@@ -7965,9 +8010,10 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "   AS isdedicated_wa, "
 				 " r.genisliver_idx,r.tmcd_redirect, "
 				 " r.sharing_mode,e.geniflags,n.uuid, "
-				 " n.nonfsmounts,e.nonfsmounts AS enonfs, "
+				 " 0,0, "
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
+				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
 				 " r.rootkey_private,r.rootkey_public "
 				 "FROM nodes AS n "
@@ -8000,7 +8046,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "     (SELECT node_id FROM widearea_nodeinfo "
 				 "      WHERE privkey='%s') "
 				 "  AND notmcdinfo_types.attrvalue IS NULL",
-				 45, nodekey);
+				 46, nodekey);
 	}
 	else if (reqp->isvnode) {
 		char	clause[BUFSIZ];
@@ -8036,9 +8082,10 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " u.admin,null, "
 				 " r.genisliver_idx,r.tmcd_redirect, "
 				 " r.sharing_mode,e.geniflags,nv.uuid, "
-				 " nv.nonfsmounts,e.nonfsmounts AS enonfs, "
+				 " 0,0, "
 				 " r.erole, nv.taint_states, "
 				 " nv.nfsmounts,e.nfsmounts AS enfsmounts, "
+				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,va.attrvalue, "
 				 " r.rootkey_private,r.rootkey_public "
 				 "from nodes as nv "
@@ -8067,7 +8114,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " va.vname=r.vname and "
 				 " va.attrkey='routable_control_ip' "
 				 "where nv.node_id='%s' and (%s)",
-				 45, reqp->vnodeid, clause);
+				 46, reqp->vnodeid, clause);
 	}
 	else {
 		char	clause[BUFSIZ];
@@ -8096,9 +8143,10 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "   as isdedicated_wa, "
 				 " r.genisliver_idx,r.tmcd_redirect, "
 				 " r.sharing_mode,e.geniflags,n.uuid, "
-				 " n.nonfsmounts,e.nonfsmounts AS enonfs, "
+				 " 0,0, "
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
+				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
 				 " r.rootkey_private,r.rootkey_public "
 				 "from interfaces as i "
@@ -8130,7 +8178,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "  on n.type=dedicated_wa_types.type "
 				 "where (%s) "
 				 "  and notmcdinfo_types.attrvalue is NULL",
-				 45, clause);
+				 46, clause);
 	}
 
 	if (!res) {
@@ -8250,7 +8298,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 		if (row[37])
 			strcpy(reqp->erole, row[37]);
 		/* nonlocal project flag */
-		if (row[41])
+		if (row[42])
 			reqp->isnonlocal_pid = 1;
 	}
 
@@ -8265,15 +8313,26 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 
 	reqp->iscontrol = (! strcasecmp(row[10], "ctrlnode") ? 1 : 0);
 
-	/* nfsmounts - per-experiment disable overrides per-node setting */
-	if (row[40]) {
-		if (strcmp(row[40], "none") == 0)
+	/*
+	 * nfsmounts - use the most restrictive of per-project [41],
+	 * per-experiment [40] or per-node [39] settings. If one of the
+	 * settings is "none", then "none" it is. Else, if one is
+	 * "genidefault" we go with that. Else, it is "emulabdefault".
+	 * Note that only the per-node setting could be NULL.
+	 */
+	if (row[41] && row[40]) {
+		if (strcmp(row[41], "none") == 0 ||
+		    strcmp(row[40], "none") == 0 ||
+		    (row[39] && strcmp(row[39], "none") == 0))
 			strcpy(reqp->nfsmounts, "none");
-		else if (row[39])
-			strcpy(reqp->nfsmounts, row[39]);
+		else if (strcmp(row[41], "genidefault") == 0 ||
+			 strcmp(row[40], "genidefault") == 0 ||
+			 (row[39] && strcmp(row[39], "genidefault") == 0))
+			strcpy(reqp->nfsmounts, "genidefault");
 		else
-			strcpy(reqp->nfsmounts, row[40]);
+			strcpy(reqp->nfsmounts, "emulabdefault");
 	} else {
+		/* this should never happen */
 		strcpy(reqp->nfsmounts, "none");
 	}
 
@@ -8300,16 +8359,16 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 	}
 	
 	/* Do we have a routable IP */
-	if (reqp->isvnode && row[42] && strcmp(row[42], "true") == 0)
+	if (reqp->isvnode && row[43] && strcmp(row[43], "true") == 0)
 		reqp->isroutable_vnode = 1;
 	else
 		reqp->isroutable_vnode = 0;
 
 	/* Which per-experiment root keys should be propogated if any */
 	reqp->experiment_keys = TB_ROOTKEYS_NONE;
-	if (row[43] && atoi(row[43]) > 0)
-		reqp->experiment_keys |= TB_ROOTKEYS_PRIVATE;
 	if (row[44] && atoi(row[44]) > 0)
+		reqp->experiment_keys |= TB_ROOTKEYS_PRIVATE;
+	if (row[45] && atoi(row[45]) > 0)
 		reqp->experiment_keys |= TB_ROOTKEYS_PUBLIC;
 
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
@@ -8708,7 +8767,7 @@ COMMAND_PROTOTYPE(dontpinfo)
 		 * which is typically a CNAME to ops.
 		 */
 		OUTPUT(buf, sizeof(buf), "SERVER=%s.%s\n",
-		       NTPSERVER, OURDOMAIN);
+		       NTPCNAME, OURDOMAIN);
 
 		client_writeback(sock, buf, strlen(buf), tcp);
 		if (verbose)
@@ -13465,12 +13524,14 @@ static char *getgeniuserurn( tmcdreq_t *reqp ) {
 	MYSQL_ROW	row;
 	char		buf[MYBUFSIZE];
 
-	res = mydb_query( "SELECT slice.creator_urn FROM "
-			  "`geni-cm`.geni_slices AS slice, "
-			  "`geni-cm`.geni_slivers AS sliver WHERE "
-			  "sliver.resource_uuid='%s' AND "
-			  "slice.uuid = sliver.slice_uuid", 1,
-			  reqp->nodeuuid );
+	res = mydb_query("SELECT u.nonlocal_id,slice.creator_urn FROM "
+			 "  `geni-cm`.geni_slices AS slice "
+			 "join `geni-cm`.geni_slivers AS sliver on "
+			 "   slice.uuid = sliver.slice_uuid "
+			 "join users as u on "
+			 "   u.uid_uuid=slice.creator_uuid "
+			 "WHERE sliver.resource_uuid='%s'",
+			 2, reqp->nodeuuid);
 
 	if( !res || !mysql_num_rows( res ) ) {
 		error( "geni_user_urn: %s: DB error getting URN!\n",
@@ -13479,9 +13540,12 @@ static char *getgeniuserurn( tmcdreq_t *reqp ) {
 	}
 
 	row = mysql_fetch_row( res );
-
-	GOUTPUT( buf, sizeof buf, "%s", row[ 0 ] );
-
+	if (row[0] && row[0][0]) {
+		GOUTPUT( buf, sizeof buf, "%s", row[ 0 ] );
+	}
+	else {
+		GOUTPUT( buf, sizeof buf, "%s", row[ 1 ] );
+	}
 	mysql_free_result( res );
 
 	if( verbose )
@@ -13610,6 +13674,38 @@ static char *getgenimanifest( tmcdreq_t *reqp ) {
 
 	if( verbose )
 		info( "%s: geni_slice_urn: %s", reqp->nodeid, buf );
+	
+	return buf;
+}
+
+static char *getgeniportalmanifest( tmcdreq_t *reqp ) {
+    
+	MYSQL_RES	*res;
+	char		*buf;
+
+	res = mydb_query( "SELECT m.manifest FROM `geni-cm`.geni_slivers AS s, "
+			  "`geni-cm`.portal_manifests AS m WHERE "
+			  "s.resource_uuid='%s' AND "
+			  "m.slice_uuid = s.slice_uuid", 1, reqp->nodeuuid );
+
+	if( !res ) {
+		error( "geni_portal_manifest: %s: DB error getting manifest!\n",
+		       reqp->nodeid );
+		return NULL;
+	}
+
+	if( mysql_num_rows( res ) ) {
+		MYSQL_ROW row = mysql_fetch_row( res );
+
+		buf = strdup( row[ 0 ] );
+	} else {
+	        buf = strdup( "" );
+	}
+
+	mysql_free_result( res );
+
+	if( verbose )
+		info( "%s: geni_portal_manifest: %s", reqp->nodeid, buf );
 	
 	return buf;
 }
@@ -13994,6 +14090,7 @@ MAKEGENICOMMAND(userurn)
 MAKEGENICOMMAND(useremail)
 MAKEGENICOMMAND(geniuser)
 MAKEGENICOMMAND(manifest)
+MAKEGENICOMMAND(portalmanifest)
 MAKEGENICOMMAND(cert)
 MAKEGENICOMMAND(key)
 MAKEGENICOMMAND(controlmac)
@@ -14036,6 +14133,8 @@ struct genicommand {
     { "certificate", getgenicert, 1, NULL },
     { "key", getgenikey, 1, NULL },
     { "rpccert", getgenirpccert, 1, NULL },
+    { "portalmanifest", getgeniportalmanifest, 1,
+      "Show the portal aggregated manifest for the local aggregate sliver" },
 };
 
 COMMAND_PROTOTYPE(dogenicommands)
@@ -14803,4 +14902,106 @@ COMMAND_PROTOTYPE(dopublicaddrinfo)
 	client_writeback(sock, buf, strlen(buf), tcp);
 
 	return 0;
+}
+
+/*
+ * Attenuator inventory.
+ */
+COMMAND_PROTOTYPE(doattenuatorlist)
+{
+	MYSQL_RES   *res;
+	MYSQL_ROW   row;
+	int         nrows;
+	char	    buf[MYBUFSIZE];
+	char	    *bufp = buf, *ebufp = &buf[sizeof(buf)];
+	
+	res = mydb_query( "SELECT w.external_wire, w.node_id1, w.node_id2 "
+			  "FROM wires AS w, reserved AS r1, reserved AS r2 "
+			  "WHERE w.node_id1=r1.node_id AND "
+			  "w.node_id2=r2.node_id AND r1.exptidx=%d AND "
+			  "r2.exptidx=%d AND w.iface1 LIKE 'rf%%' AND "
+			  "w.iface2 LIKE 'rf%%'", 3,
+			  reqp->exptidx, reqp->exptidx );
+	
+	if( !res ) {
+		error( "ATTENUATORLIST: %s: query failed\n",
+		       reqp->nodeid );
+		
+		return 1;
+	}
+	
+	if( !mysql_num_rows( res ) ) {
+		/* no attenuated RF paths in experiment */
+		mysql_free_result( res );
+		return 0;
+	}
+
+	nrows = (int)mysql_num_rows(res);
+	while (nrows-- > 0) {
+		row = mysql_fetch_row(res);
+		bufp += OUTPUT( bufp, ebufp - buf,
+			        "%s:%s/%s\n", row[ 0 ], row[ 1 ], row[ 2 ] );
+	}
+	
+	mysql_free_result( res );
+	
+	client_writeback( sock, buf, strlen( buf ), tcp );
+
+	return 0;
+}
+
+/*
+ * Attenuator control.
+ */
+COMMAND_PROTOTYPE(doattenuator)
+{
+	int atten, val;
+	MYSQL_RES *res;
+	int attendsock;
+	struct sockaddr_in sin;
+	unsigned char cmd[ 3 ];
+	char *response;
+	
+	if( !sscanf( rdata, "%d %d", &atten, &val ) ) {
+		error( "ATTENUATOR: %s: Invalid format\n", reqp->nodeid );
+		
+		return 1;
+	}
+	
+	/* The attenuator must be on a wire path between two nodes both reserved
+	   to reqp->exptidx. */
+	res = mydb_query( "SELECT w.node_id1 FROM wires AS w, reserved AS r1, "
+			  "reserved AS r2 WHERE w.node_id1=r1.node_id AND "
+			  "w.node_id2=r2.node_id AND r1.exptidx=%d AND "
+			  "r2.exptidx=%d AND ( w.external_wire=%d OR "
+			  "w.external_wire LIKE '%d,%%' OR "
+			  "w.external_wire LIKE '%%,%d' )", 1, reqp->exptidx,
+			  reqp->exptidx, atten, atten, atten );
+
+	if( mysql_num_rows( res ) ) {
+		sin.sin_family = AF_INET;
+		sin.sin_addr.s_addr = htonl( INADDR_LOOPBACK );
+		sin.sin_port = htons( 0x10DB );
+	
+		cmd[ 0 ] = 1; /* version */
+		cmd[ 1 ] = atten; /* attenuator ID */
+		cmd[ 2 ] = val; /* attenuation in dB */
+		
+		if( ( attendsock = socket( AF_INET, SOCK_STREAM, 0 ) ) < 0 ||
+		    connect( attendsock, (struct sockaddr *) &sin,
+			     sizeof sin ) < 0 ||
+		    write( attendsock, cmd, sizeof cmd ) != sizeof cmd )
+			response = "error changing attenuation\n";
+		else
+			response = "changing attenuation\n";
+
+		close( attendsock );
+	} else
+	    response = "invalid attenuator ID\n";
+	    
+	client_writeback( sock, response, strlen( response ), tcp );
+
+	mysql_free_result( res );
+		
+	return 0;	    
 }

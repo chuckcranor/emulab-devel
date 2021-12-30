@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -105,6 +105,7 @@ my $MAPPER         = "$TB/bin/mapper";
 my $VTOPGEN        = "$TB/bin/vtopgen";
 my $SNMPIT         = "$TB/bin/snmpit";
 my $CLONEIMAGE     = "$TB/sbin/clone_image";
+my $FLASHNODE      = "$TB/sbin/flashnode";
 my $CREATEIMAGE    = "$TB/bin/create_image";
 my $DELETEIMAGE    = "$TB/sbin/delete_image";
 my $CREATEDATASET  = "$TB/bin/createdataset";
@@ -1578,8 +1579,7 @@ sub SliverAction($$$$$$)
 	my ($object, $action) = @_;
 
 	if ($action eq "start") {
-	    if ($object->state() ne "stopped" && $object->state() ne "new"
-		&& $object->state() ne "mixed") {
+	    if ($object->state() !~ /^(stopped|new|mixed|interrupted)$/) {
 		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 					    "Sliver is not stopped (yet)");
 	    }
@@ -1673,6 +1673,14 @@ sub SliverAction($$$$$$)
     }
 
     if (defined($slice_urn)) {
+	#
+	# If the user is trying to restart an interrupted slice, then
+	# switch to "start" since that makes more sense.
+	#
+	if ($action eq "restart" && $aggregate->state() eq "interrupted") {
+	    $action = "start";
+	}
+	
 	$response = &$CheckState($aggregate, $action);
 	goto bad
 	    if (GeniResponse::IsResponse($response));
@@ -1792,6 +1800,7 @@ sub SliverStatus($)
     my ($argref)     = @_;
     my $slice_urn    = $argref->{'slice_urn'};
     my $credentials  = $argref->{'credentials'};
+    my $status;
     require Node;
 
     if (! (defined($credentials) && defined($slice_urn))) {
@@ -1831,22 +1840,25 @@ sub SliverStatus($)
     }
     $aggregate->Refresh();
     my $slice_experiment = $slice->GetExperiment();
-    
-    if ($aggregate->ComputeState()) {
-	print STDERR "SliverStatus: Could not compute state for $aggregate\n";
-	$slice->UnLock();
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
-    }
-    my $status = $aggregate->status();
+
     #
-    # Regardless of what the aggregate status is, we are "changing" if there
-    # is an active monitor process running.
+    # Do not call ComputeState() while in the "working" state, since the
+    # action workers in GeniAggregate() are typically running without
+    # locking, and changing things here causes a race. 
     #
-    # If the status is "working" convert to "changing" for the caller, this
-    # is an internal status for the newer start/restart code.
+    # Convert to "changing" for the caller, since "working" is an internal
+    # status for the newer start/restart code.
     #
     if ($aggregate->Busy()) {
 	$status = "changing";
+    }
+    else {
+	if ($aggregate->ComputeState()) {
+	    print STDERR "SliverStatus: Could not compute state for $aggregate\n";
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
+	$status = $aggregate->status();
     }
 
     #
@@ -4141,7 +4153,16 @@ sub CreateImage($)
     }
     $aggregate->Refresh();
 
-    my $opt  = "";
+    #
+    # Create a web task for this.
+    #
+    my $webtask = WebTask->CreateAnonymous();
+    if (!defined($webtask)) {
+	print STDERR "Could not create web task\n";
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    my $opt = " -t " . $webtask->task_id();
     if (defined($image) && $image->isdataset()) {
 	$opt .= " -b $bsname ";
     }
@@ -4157,14 +4178,22 @@ sub CreateImage($)
 	$opt .= " -g " . ($argref->{'global'} ? "1" : "0");
     }
     print STDERR "CM: '$CLONEIMAGE $opt -s $imagename $node_id'\n";
-    
-    my $output =
-	GeniUtil::ExecQuiet("$CLONEIMAGE $opt -s $imagename $node_id");
+
+    my $output = GeniUtil::ExecQuiet("$CLONEIMAGE $opt -s $imagename $node_id");
     # Not a typical op, so always print debugging info;
     print STDERR $output;
     if ($?) {
 	$slice->UnLock();
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+	$webtask->Refresh();
+	$webtask->Delete();
+	if (!$webtask->HasExited()) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+	}
+	my $error = $webtask->output();
+	if ($webtask->exitcode() < 0) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $error);
+	}
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $error);
     }
     
     #
@@ -4174,6 +4203,7 @@ sub CreateImage($)
 	$image = OSImage->Lookup($experiment->pid(), $imagename);
 	if (!defined($image)) {
 	    $slice->UnLock();
+	    $webtask->Delete();
 	    print STDERR "Cannot lookup descriptor for $imagename\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR);
 	}
@@ -4224,19 +4254,16 @@ sub CreateImage($)
 
     # We just create the descriptor and return info.
     if ($nosnapshot) {
+	$webtask->Delete();
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $retval);
     }
 
     #
-    # Create a web task for this. We pass the id to create image so
-    # that we do not change the image descriptor until it is locked.
+    # Reset and pass the webtask id to create image so that we do not change
+    # the image descriptor until it is locked.
     #
-    my $webtask = WebTask->CreateAnonymous();
-    if (!defined($webtask)) {
-	print STDERR "Could not create web task\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
-    }
+    $webtask->Reset();
     $webtask->status("preparing");
     $webtask->imagesize(0);
     $webtask->Store();
@@ -4333,8 +4360,7 @@ sub CreateImage($)
 	    $lastsize   = $webtask->imagesize();
 	    $laststatus = $webtask->status();
 	}
-	sleep(5);
-	# Deleted, but not supposed to happen.
+	sleep(1);
 	if ($webtask->Refresh()) {
 	    print STDERR "$webtask was deleted, not supposed to happen\n";
 	    $webtask = undef;
@@ -4358,6 +4384,9 @@ sub CreateImage($)
 	    }
 	}
 	$logfile->CloseFile();
+    }
+    if (defined($webtask) && defined($webtask->consumed())) {
+	print STDERR "$webtask has been consumed\n";
     }
     if (!defined($webtask) || $webtask->exitcode()) {
 	print STDERR "Failed to take the snapshot of $node_id\n";
@@ -4665,7 +4694,7 @@ sub ImageInfo($)
     # report that info. Otherwise the current file.
     #
     my $webtask = $image->webtask();
-    if (defined($webtask)) {
+    if (defined($webtask) && !defined($webtask->consumed())) {
 	my $logfile;
 	
 	if ($webtask->HasExited()) {
@@ -4674,13 +4703,19 @@ sub ImageInfo($)
 	    }
 	    
 	    #
-	    # Try to lock the image and get rid of the webtask.
+	    # Try to lock the image so we can mark the webtask as consumed.
+	    # Since the image lock is released after create_image is
+	    # done, there is a chance a new image was requested and the
+	    # webtask is a different one. Small chance, but it can happen.
 	    #
 	    if ($image->WaitLock(5) == 0) {
 		$image->Refresh();
 		if ($image->webtask_id() &&
 		    $image->webtask_id() eq $webtask->task_id()) {
-		    $image->ClearWebTask();
+		    # User has the final imaging status, do not show it again.
+		    # Deleted later, CreateImage() above is still watching it.
+		    $webtask->consumed(1);
+		    $webtask->Store();
 		}
 		$image->Unlock();
 	    }
@@ -5532,6 +5567,16 @@ sub ConsoleInfo($)
     $url =~ s/nodetipacl/spewconlog/;
     $blob->{"logurl"} = $url;
 
+    #
+    # Generate and return the authentication blob when we are using
+    # shellinabox consoles, so that the caller can route directly to
+    # console instead of through a second iframe layer.
+    #
+    my $auth = $node->ConsoleAuthObject("geniuser");
+    if ($auth) {
+	$blob->{"authobject"} = $auth;
+    }
+
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
@@ -5625,11 +5670,13 @@ sub CreateDataset($)
 
     my $image = Image->Lookup($group->pid(), $dataset_urn->id());
     if (defined($image)) {
-	GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS);
+	return GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS, undef,
+		    "A dataset or OS image with this name already exists");
     }
     my $lease = Lease->Lookup($group->pid(), $dataset_urn->id());
     if (defined($lease)) {
-	GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS);
+	return GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS, undef,
+		    "A long/short term dataset with this name already exists");
     }
     my $opts = "-b ";
     my $cmd  = "$CREATEDATASET ";
@@ -6870,6 +6917,107 @@ sub Recovery($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Failed to change recovery mode");
     }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
+#
+# Another Emulab specific function to flash a new FPGA image
+#
+sub Flash($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    my $sliver_urn   = $argref->{'sliver_urn'};
+    
+    if (! (defined($credentials) && 
+	   defined($slice_urn) && defined($sliver_urn))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my ($slice, $aggregate) = Credential2SliceAggregate($credential);
+    return $slice
+	if (defined($slice) && GeniResponse::IsResponse($slice));
+
+    if (! (defined($slice) && defined($aggregate))) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    return $user
+	if (GeniResponse::IsResponse($user));
+
+    main::AddLogfileMetaDataFromSlice($slice);
+
+    if ($slice_urn ne $slice->urn()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
+				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    my $sliver = GeniSliver->Lookup($sliver_urn);
+    if (!defined($sliver)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    if ($sliver->slice_uuid() ne $slice->uuid()) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver is not in slice");
+    }
+    my $node_id = $sliver->resource_id();
+    my $node = Node->Lookup($node_id);
+    if (!defined($node)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "No node for sliver urn");
+    }
+    if ($node->IsTainted()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+				    "node is tainted - flash denied");
+    }
+    my $flashable;
+    $node->NodeAttribute("flashable", \$flashable);
+    if (!defined($flashable)) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+				    "node is not flashable");
+    }
+    
+    if (!defined(GeniCM::FlipToUser($slice, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+    #
+    # Lock the slice; we do not let the user to mess with things.
+    #
+    if ($slice->Lock() != 0) {
+	return GeniResponse->BusyResponse();
+    }
+    $aggregate->Refresh();
+    # Check again after lock.
+    if ($aggregate->Busy() ||
+	$aggregate->Imaging()) {
+	$slice->UnLock();
+	return GeniResponse->BusyResponse();
+    }    
+    
+    my $output = GeniUtil::ExecQuiet("$FLASHNODE $node_id");
+    print STDERR $output . "\n";
+    if ($?) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Failed to flash radio");
+    }
+    $slice->UnLock();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 

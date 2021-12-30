@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -338,6 +338,8 @@ sub resource_type($)	{ return field($_[0], "type"); }
 
 # Busy if status is working (start/restart/stop/reload/reboot).
 sub Busy($)             { return $_[0]->status() eq "working" ? 1 : 0; }
+
+sub Ready($)            { return $_[0]->status() eq "ready" ? 1 : 0; }
 
 # Are any slivers imaging.
 sub Imaging($)          { return $_[0]->CheckSliverStates("imaging") ? 1 : 0; }
@@ -1165,7 +1167,10 @@ sub ActionStart($$;$)
     $self->ClearBootFailure();
     # Set new status so ComputeState() knows what is going on.
     $self->SetStatus("working");
-
+    # If retrying an interrupted initial start, need to set the state properly.
+    if ($self->state() eq "interrupted") {
+	$self->SetState("new");
+    }    
     my $experiment = Experiment->Lookup($self->slice_uuid());
     if (!defined($experiment)) {
 	$msg .= "Could not map $self to its experiment";
@@ -1327,10 +1332,12 @@ sub ActionStart($$;$)
 
     # The nodes will not boot locally unless there is a DNS record,
     # but we also need it before we can issue the reloads.
+    DebugTimeStamp("named_setup");
     if (system("$NAMEDSETUP")) {
 	$msg .= "$NAMEDSETUP failed\n";
 	goto bad;
     }
+    DebugTimeStamp("named_setup done");
 
     if ($version >= 2) {
 	#
@@ -1361,29 +1368,28 @@ sub ActionStart($$;$)
 	    close(MAP);
 	}
 	
-	if (system("$GENELISTS -c")) {
-	    $msg .= "$GENELISTS failed\n";
-	    goto bad;
+	if ($pid ne "OAI2021FallWS") {
+	    if (system("$GENELISTS -c")) {
+		$msg .= "$GENELISTS failed\n";
+		goto bad;
+	    }
 	}
 	DebugTimeStamp("gentopofile");
 	if (system("$GENTOPOFILE $pid $eid")) {
 	    $msg .= "$GENTOPOFILE failed\n";
 	    goto bad;
 	}
-	DebugTimeStamp("exports_setup");
-	if (system("$EXPORTS_SETUP")) {
-	    $msg .= "$EXPORTS_SETUP failed\n";
-	    goto bad;
+	if ($pid ne "OAI2021FallWS") {
+	    DebugTimeStamp("exports_setup");
+	    if (system("$EXPORTS_SETUP")) {
+		$msg .= "$EXPORTS_SETUP failed\n";
+		goto bad;
+	    }
+	    DebugTimeStamp("exports_setup done");
 	}
 	DebugTimeStamp("arplockdown");
 	if (system("$ARPLOCKDOWN ")) {
 	    $msg .= "$ARPLOCKDOWN failed\n";
-	    goto bad;
-	}
-	# The nodes will not boot locally unless there is a DNS record.
-	DebugTimeStamp("named_setup");
-	if (system("$NAMEDSETUP")) {
-	    $msg .= "$NAMEDSETUP failed\n";
 	    goto bad;
 	}
 	DebugTimeStamp("setuportvlans");
@@ -1438,7 +1444,7 @@ sub ActionStart($$;$)
     #
     my $snmpit_child;
 
-    if (!$experiment->skipvlans()) {
+    if (!$experiment->skipvlans() && VLan->ExperimentHasVLans($experiment)) {
 	$snmpit_child = fork();
 	if ($snmpit_child) {
 	    #
@@ -1503,6 +1509,10 @@ sub ActionStart($$;$)
 	print STDERR "os_setup exited with status $rval\n";
 	# Update to get the disk images into the manifest.
 	GeniCM::UpdateManifest($slice);
+	$rval = $rval >> 8;
+	if ($rval == 255) {
+	    $rval = -1;
+	}
     }
 
     #
@@ -1689,10 +1699,7 @@ sub ActionStart($$;$)
 	$self->SetBootFailure(GENIRESPONSE_SETUPFAILURE_NETWORK);
 	$self->SetErrorLog("Testing network failure");
     }
-    # This has to be last so that SliverStatus() does not hand back a
-    # ready or failed state until we are fully done here.
-    $self->SetStatus("mixed");
-    $self->ComputeState();
+    $self->ComputeState("mixed");
     $experiment->SetState($expstate);
     $slice->ClearMonitorPid();
     # in case we were canceled by DeleteSlice()
@@ -1712,8 +1719,7 @@ sub ActionStart($$;$)
 	    if (defined($msg));
     }
     if ($self->status() eq "working") {
-	$self->SetStatus("mixed");
-	$self->ComputeState();
+	$self->ComputeState("mixed");
     }
     $experiment->SetState($expstate);
     $slice->ClearMonitorPid();
@@ -2713,9 +2719,7 @@ sub Action($$$;$)
 	$self->SetBootFailure(GENIRESPONSE_SETUPFAILURE);
 	$self->SetErrorLog("Testing");
     }
-    # Allow ComputeState to do its thing.
-    $self->SetStatus("mixed");
-    $self->ComputeState();
+    $self->ComputeState("mixed");
     return 0;
 
   bad:
@@ -2739,8 +2743,7 @@ sub Action($$$;$)
 	    if (defined($msg));
     }
     if ($self->status() eq "working") {
-	$self->SetStatus("mixed");
-	$self->ComputeState();
+	$self->ComputeState("mixed");
     }
     return -1;
 }
@@ -3339,17 +3342,13 @@ sub Stop($$;$)
 	$msg .= "Failed to stop the event system";
 	goto bad;
     }
-    # Flip back to mixed to allow ComputeState to do its thing. 
-    $self->SetStatus("mixed");
-    $self->ComputeState();
+    $self->ComputeState("mixed");
     return 0;
 
   bad:
     $self->SetBootFailure();
     if ($self->status() eq "working") {
-	# Flip back to mixed to allow ComputeState to do its thing. 
-	$self->SetStatus("mixed");
-	$self->ComputeState();
+	$self->ComputeState("mixed");
     }
     if (defined($msg)) {
 	$self->SetErrorLog($msg);
@@ -3570,9 +3569,7 @@ sub BatchAction($$@)
     foreach my $sliver (@slivers) {
 	$sliver->SetState("started");
     }
-    # Flip back to mixed to allow ComputeState to do its thing. 
-    $self->SetStatus("mixed");
-    $self->ComputeState();
+    $self->ComputeState("mixed");
     return 0;
 
   bad:
@@ -3589,8 +3586,7 @@ sub BatchAction($$@)
 	print STDERR "$msg\n";
     }
     if ($self->status() eq "working") {
-	$self->SetStatus("mixed");
-	$self->ComputeState();
+	$self->ComputeState("mixed");
     }
     return -1;
 }
@@ -3757,9 +3753,10 @@ sub UnProvision($;$)
     return 0;
 }
 
-sub ComputeState($)
+sub ComputeState($;$)
 {
-    my ($self) = @_;
+    my ($self, $unmix) = @_;
+    $unmix = 0 if (!defined($unmix));
     my $started = 0;
     my $stopped = 0;
     my $updating= 0;
@@ -3837,8 +3834,13 @@ sub ComputeState($)
 	}
     }
     my ($newstate,$newstatus);
-    
-    if ($stopped == $count) {
+
+    if ($self->state() eq "interrupted") {
+	# Rebooted in the middle of getting started. Leave it here
+	# so the user can decide how to proceed.
+	$newstate = "interrupted";
+    }
+    elsif ($stopped == $count) {
 	$newstate = "stopped";
     }
     elsif ($started == $count) {
@@ -3848,7 +3850,9 @@ sub ComputeState($)
 	$newstate = "mixed";
     }
     # Internal status, we do not want to force a change while in this status.
-    if ($self->status() eq "working") {
+    # To prevent a race, the caller tells us we are moving out of mixed and
+    # it is okay to clear working.
+    if (!$unmix && $self->status() eq "working") {
 	$newstatus = $self->status();
     }
     elsif ($ready == $count) {

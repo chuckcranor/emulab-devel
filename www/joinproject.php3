@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014, 2018, 2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -122,7 +122,7 @@ function SPITFORM($formfields, $returning, $errors)
 	}
         echo "<font size=+1>
                If you already have an Emulab account,
-               <a href=login.php3?refer=1>
+               <a href=login.php3>
                <font color=red>please log on first!</font></a>
               </font>\n";
 	if ($forwikionly) {
@@ -698,15 +698,11 @@ if (! $returning) {
 	if (isset($formfields["usr_URL"]) &&
 	    strcmp($formfields["usr_URL"], "") &&
 	    strcmp($formfields["usr_URL"], $HTTPTAG)) {
-	    if (strcmp($HTTPTAG,
-		       substr($formfields["usr_URL"], 0, strlen($HTTPTAG))) &&
-		strcmp($HTTPSTAG,
-		       substr($formfields["usr_URL"], 0, strlen($HTTPSTAG)))) {
-		$formfields["usr_URL"] = "${HTTPTAG}" . $formfields["usr_URL"];
-	    }
-	    if (! CHECKURL($formfields["usr_URL"], $urlerror)) {
-		$errors["Home Page URL"] = $urlerror;
-	    }
+            if (!preg_match('#^https?://#i', $formfields["usr_URL"]) ||
+                strstr($formfields["usr_URL"], " ") ||
+                !TBvalid_URL($formfields["usr_URL"])) {
+                $errors["Home Page URL"] = "Improper URL";
+            }
 	}
 	if (!isset($formfields["usr_addr"]) ||
 	    strcmp($formfields["usr_addr"], "") == 0) {

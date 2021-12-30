@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -254,9 +254,11 @@ class User
 	fclose($fp);
 	chmod($xmlname, 0666);
 
-	
-	# Invoke the back-end script as the user if an admin for permissions.
-	$suexec_uid = ISADMIN() ? $uid : "nobody";
+        # The backend script is odd. 
+        $suexec_uid = "nobody";
+        if (ISADMIN() && HASREALACCOUNT($uid)) {
+            $suexec_uid = $uid;
+        }
 	$retval = SUEXEC($suexec_uid, "nobody", "webmoduserinfo $xmlname",
 			 SUEXEC_ACTION_IGNORE);
 
@@ -379,6 +381,12 @@ class User
     function ga_userid()     { return $this->field("ga_userid"); }
     function portal_interface_warned() {
         return $this->field("portal_interface_warned"); }
+    function affiliation_updated() {
+        return $this->field("affiliation_updated"); }
+    function affiliation_matched() {
+        return $this->field("affiliation_matched"); }
+    function expert_mode()   { return $this->field("expert_mode"); }
+    
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -835,10 +843,36 @@ class User
     # Does the user need to fill out the extended address fields
     #
     function RequireAddress() {
-        if ($this->addr1() == "" || $this->zip() == "") {
+        global $ISPOWDER;
+        
+        #
+        # At the moment only the powder portal requires these.
+        #
+        if ($ISPOWDER && ($this->addr1() == "" || $this->zip() == "")) {
             return 1;
         }
         return 0;
+    }
+
+    #
+    # Does the user need to update their affiliation.
+    #
+    function RequireAffiliation() {
+        global $TBMAINSITE;
+
+        if (!$TBMAINSITE) {
+            return 0;
+        }
+        $affil = trim($this->affil());
+        $updated = strtotime($this->affiliation_updated());
+        
+        if ($affil == "" || time() - $updated > (365 * 24 * 3600)) {
+            return 1;
+        }
+        return 0;
+    }
+    function NeedAccountUpdate() {
+        return $this->RequireAffiliation() + $this->RequireAddress();
     }
     
     #
@@ -1321,6 +1355,16 @@ class User
 	$this->user["weblogin_frozen"] = $freeze;
 	return 0;
     }
+    function SetExpertMode($mode) {
+	$idx   = $this->uid_idx();
+	$mode = ($mode ? 1 : 0);
+			    
+	DBQueryFatal("update users set ".
+		     "   expert_mode='$mode' ".
+		     "where uid_idx='$idx'");
+	$this->user["expert_mode"] = $mode;
+	return 0;
+    }
     function SetCVSWeb($onoff) {
 	$idx   = $this->uid_idx();
 
@@ -1435,6 +1479,20 @@ class User
 		     "where uid_idx='$idx'");
 	$this->user["ga_userid"] = $id;
 	return 0;
+    }
+    function Logout() {
+	$idx   = $this->uid_idx();
+
+	DBQueryFatal("delete from login where uid_idx='$idx'");
+        return 0;
+    }
+    function LoggedIn() {
+	$idx   = $this->uid_idx();
+
+        $query_result = 
+            DBQueryFatal("select * from login where uid_idx='$idx'");
+
+        return mysql_num_rows($query_result);
     }
 
     #
@@ -1834,6 +1892,54 @@ class User
                          "where FIND_IN_SET('$PORTAL_GENESIS',news.portals)");
 	$row = mysql_fetch_array($query_result);
 	return $row["count"];
+    }
+    function DoWebSSH() {
+        global $BROWSER_CONSOLE_WEBSSH;
+
+        if (!$BROWSER_CONSOLE_WEBSSH) {
+            return 0;
+        }
+        if ($this->admin() || FeatureEnabled("webssh", $self, null, null)) {
+            return 1;
+        }
+        # See if enabled in any of the users projects
+        $projlist = $this->ProjectMembershipList();
+        foreach ($projlist as $project) {
+            if (FeatureEnabled("webssh", null, $project, null)) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    function ValidateScopusInfo($scopus_id, $state) {
+    	$uid_idx = $this->uid_idx();
+
+        DBQueryFatal("update user_scopus_info set ".
+                     "  validation_state='$state', validated=now() ".
+                     "where uid_idx='$uid_idx' and scopus_id='$scopus_id'");
+
+        return 0;
+    }
+    function NeedScopusValidation() {
+        global $TBMAINSITE;
+
+        if (!$TBMAINSITE) {
+            return 0;
+        }
+	$uid_idx = $this->uid_idx();
+
+	$query_result =
+	    DBQueryFatal("select scopus_id from user_scopus_info ".
+			 "where uid_idx='$uid_idx' and ".
+                         "      latest_abstract_id!='' and ".
+                         "      validated is null");
+
+        # For now, do not show this if more then five papers.
+        if (mysql_num_rows($query_result) > 5) {
+            return 0;
+        }
+        return mysql_num_rows($query_result);
     }
 }
 ?>

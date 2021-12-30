@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -341,14 +341,15 @@ sub LookupForPortal($$)
 #
 # Lookup all aggregates,
 #
-sub LookupAll($)
+sub LookupAll($;$)
 {
-    my ($class) = @_;
+    my ($class, $include_disabled) = @_;
     my @result = ();
+    $include_disabled = 0 if (!defined($include_disabled));
 
     my $query_result =
 	DBQueryWarn("select urn from apt_aggregates ".
-		    "where disabled=0");
+		    ($include_disabled ? "" : "where disabled=0"));
     return ()
 	if (!$query_result);
     return ()
@@ -396,6 +397,25 @@ sub LookupByNickname($$)
     my $query_result =
 	DBQueryWarn("select urn from apt_aggregates ".
 		    "where nickname='$nickname'");
+    return undef
+	if (!$query_result);
+    return undef
+	if (!$query_result->numrows);
+
+    my ($aggregate_urn) = $query_result->fetchrow_array();
+    return Lookup($class, $aggregate_urn);
+}
+
+sub LookupByAbbreviation($$)
+{
+    my ($class, $abbreviation) = @_;
+
+    if ($abbreviation !~ /^[-\w]+$/) {
+	return undef;
+    }
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where abbreviation='$abbreviation'");
     return undef
 	if (!$query_result);
     return undef
@@ -619,10 +639,21 @@ sub Nodes($)
 sub IsReservableNode($$)
 {
     my ($self, $node_id) = @_;
+
     return 1
 	if (exists($self->Nodes()->{$node_id}) &&
 	    $self->Nodes()->{$node_id}->{'reservable'} != 0);
     return 0;
+}
+sub ReservableNodeType($$)
+{
+    my ($self, $node_id) = @_;
+
+    return $self->Nodes()->{$node_id}->{'type'}
+	if (exists($self->Nodes()->{$node_id}) &&
+	    $self->Nodes()->{$node_id}->{'reservable'} != 0);
+
+    return undef;
 }
 sub IsReservableType($$)
 {
@@ -650,6 +681,28 @@ sub Radio($$)
     my ($self, $node_id) = @_;
 
     return APT_Aggregate::Radio->Lookup($self, $node_id);
+}
+
+#
+# Allowed aggregates for a project.
+#
+sub AllowedAggregates($$)
+{
+    my ($class, $project) = @_;
+
+    if (! $project->allowed_clusters()) {
+	return undef;
+    }
+    my $result   = {};
+    my @clusters = split(/,/, $project->allowed_clusters());
+
+    foreach my $domain (@clusters) {
+	my $cluster = LookupByDomain($class, $domain);
+	if ($cluster) {
+	    $result->{$cluster->urn()} = $cluster;
+	}
+    }
+    return $result;
 }
 
 ###################################################################
@@ -1036,19 +1089,25 @@ sub Ping($$$)
 {
     my ($self, $bossalive, $controlalive) = @_;
     my $safe_urn = DBQuoteSpecial($self->urn());
+    my @sets = ();
 
+    if ($controlalive) {
+	push(@sets, "last_control_ping=now()");
+    }
     if ($bossalive) {
+	push(@sets, "last_ping=now()");
+    }
+    if (@sets) {
 	DBQueryWarn("update apt_mobile_buses set ".
-		    "  last_ping=now() ".
+		    join(",", @sets) . 
 		    "where urn=$safe_urn")
 	    or return -1;
     }
-
     return 0;
 }
 
 #
-# Last ping time as unix time.
+# Last boss ping time as unix time.
 #
 sub LastPing($)
 {
@@ -1056,7 +1115,8 @@ sub LastPing($)
     my $safe_urn = DBQuoteSpecial($self->urn());
 
     my $query_result = 
-	DBQueryWarn("select UNIX_TIMESTAMP(last_ping) from apt_mobile_buses ".
+	DBQueryWarn("select UNIX_TIMESTAMP(last_ping) ".
+		    "  from apt_mobile_buses ".
 		    "where urn=$safe_urn");
     return -1
 	if (!$query_result || !$query_result->numrows);

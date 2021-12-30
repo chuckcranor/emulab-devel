@@ -27,6 +27,12 @@ WANT_PHP_MOD=	yes
 # PHP modules to build.
 # XXX based on current boss install.
 #
+.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+# add opcache, get rid of modules that no longer exist
+USE_PHP=	bz2 ctype curl dom filter gd iconv json mysqli \
+		opcache openssl pdo phar posix session simplexml sockets \
+		tokenizer xml xmlreader xmlrpc xmlwriter
+.else
 .if (${EMULAB_PORTVERSION} == "7.3")
 USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysqli \
 		openssl pdo phar posix session simplexml sockets tokenizer \
@@ -36,25 +42,16 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysql \
 		openssl pdo phar posix session simplexml sockets tokenizer \
 		xml xmlreader xmlrpc xmlwriter
 .endif
+.endif
 
 #
 # Various ports need to agree on what version of apache.
 #
-.if (${EMULAB_PORTVERSION} == "7.1" || ${EMULAB_PORTVERSION} == "7.2" || ${EMULAB_PORTVERSION} == "7.3")
-www_apache24_SET=	SUEXEC
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.MAKEFLAGS+=	WITH_SUEXEC=yes
+.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+www_apache24_SET=	SUEXEC
 .else
-www_apache22_SET=	SUEXEC
-.MAKEFLAGS+=	APACHE_PORT=www/apache22
 .MAKEFLAGS+=	WITH_SUEXEC=yes
-.endif
-
-.if (${EMULAB_PORTVERSION} != "7.1" && ${EMULAB_PORTVERSION} != "7.2" && ${EMULAB_PORTVERSION} != "7.3")
-#
-# Use the base version of openssl
-#
-.MAKEFLAGS+=	WITH_OPENSSL_BASE=yes
 .endif
 
 #
@@ -94,10 +91,6 @@ RUN_DEPENDS+=	\
 #
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libexec/tftpd:${PORTSDIR}/misc/emulab-tftp-hpa
-.if (${EMULAB_PORTVERSION} != "7.3")
-RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}m2crypto>0:${PORTSDIR}/misc/emulab-py-m2crypto
-.endif
 
 # apps
 RUN_DEPENDS+=	\
@@ -117,22 +110,13 @@ RUN_DEPENDS+=	\
 	rsync:${PORTSDIR}/net/rsync \
 	swig${SWIG_VER}:${PORTSDIR}/${SWIG_PORT} \
 	sudo:${PORTSDIR}/security/sudo \
-	medusa:${PORTSDIR}/security/medusa \
+	medusa:${PORTSDIR}/misc/emulab-medusa \
 	nmap:${PORTSDIR}/security/nmap \
 	wget:${PORTSDIR}/ftp/wget \
 	xvcg:${PORTSDIR}/graphics/vcg \
 	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server \
-	${LOCALBASE}/include/boost/config.hpp:${PORTSDIR}/devel/boost-all
-
-#
-# Metis version changed
-.if (${EMULAB_PORTVERSION} == "7.3")
-RUN_DEPENDS+=	\
+	${LOCALBASE}/include/boost/config.hpp:${PORTSDIR}/devel/boost-all \
 	gpmetis:${PORTSDIR}/math/metis
-.else
-RUN_DEPENDS+=	\
-	kmetis:${PORTSDIR}/math/metis4
-.endif
 
 
 # perl packages
@@ -170,16 +154,18 @@ RUN_DEPENDS+=	\
         p5-RRDTool-OO>=0.36:${PORTSDIR}/devel/p5-RRDTool-OO
 
 # python packages
+.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
 RUN_DEPENDS+=	\
-	${PYTHON_PKGNAMEPREFIX}MySQLdb>0:${PORTSDIR}/databases/py-MySQLdb \
+	${PYTHON_PKGNAMEPREFIX}mysqlclient>0:${PORTSDIR}/databases/py-mysqlclient
+.else
+RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}MySQLdb>0:${PORTSDIR}/databases/py-MySQLdb
+.endif
+RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}dateutil>0:${PORTSDIR}/devel/py-dateutil \
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
-	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml
-
-.if (${EMULAB_PORTVERSION} == "7.3")
-RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml \
 	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot
-.endif
 
 # apache related ports
 RUN_DEPENDS+=	\
@@ -190,13 +176,8 @@ RUN_DEPENDS+=	\
 # Port versions of current or former "core" utilties
 RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp44-server \
-	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind911
-
-.if (${EMULAB_PORTVERSION} == "7.3")
-# dig and friends
-RUN_DEPENDS+=	\
+	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind911 \
 	${LOCALBASE}/bin/dig:${PORTSDIR}/dns/bind-tools
-.endif
 
 # XXX For building loghole doc from www/tutorial
 RUN_DEPENDS+=	\
@@ -207,7 +188,7 @@ RUN_DEPENDS+= \
 	syncthing:${PORTSDIR}/net/syncthing
 
 #USE_PERL5=	yes
-USES=		perl5 python:2.7 php
+USES=		perl5 python:$(PY_VER) php
 
 NO_BUILD=	yes
 

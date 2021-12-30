@@ -4,7 +4,7 @@ $(function ()
 
     var template_list   = ["resgroup", "reserve-faq", "range-list",
 			   "reservation-graph", "oops-modal", "waitwait-modal",
-			   "resusage-graph"];
+			   "resusage-graph", "visavail-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
@@ -12,6 +12,7 @@ $(function ()
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var usageTemplate   = _.template(templates["resusage-graph"]);
     var rangeTemplate   = _.template(templates["range-list"]);
+    var visTemplate     = _.template(templates["visavail-graph"]);
     var current_pid  = null;
     var projlist     = null;
     var amlist       = null;
@@ -21,13 +22,16 @@ $(function ()
     var matrixinfo   = {};	// Powder
     var isadmin      = false;
     var editing      = false;
+    var resgroup     = null;	// Current resgroup when editing.
     var buttonstate  = "check";
     var forecasts    = {};
     var routeforecast= null;
     var allranges    = [];
     var allroutes    = [];
+    var fakeroutes   = true;
     var JACKS_NS     = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
     var IDEAL_STARTHOUR = 7;	// 7am start time preferred.
+    var IDEAL_ENDHOUR   = 18;	// 6pm end time preferred.
 
     var RouteColors = {
 	"Red Detour"       : "red",
@@ -529,9 +533,13 @@ $(function ()
 		// See below.
 		if (window.ISPOWDER) {
 		    AddRangeRow();
-		    // For now, only admins see routes
-		    if (isadmin) {
-			AddRouteRow();
+		    if (window.DOROUTES) {
+			if (fakeroutes) {
+			    SetupFakeRoutes();
+			}
+			else {
+			    AddRouteRow();
+			}
 		    }
 		}
 	    }
@@ -559,6 +567,15 @@ $(function ()
 		$('#reservation-lists').append(html);
 	    }
 	});
+	if (_.size(FEs)) {
+	    $('#FE-graph-div')
+		.html(visTemplate({
+		    "title" : "Fixed Endpoint Availability",
+		    "id"    : "FE",
+		}))
+		.removeClass("hidden")
+		.find(".panel").removeClass("hidden");
+	}
 
 	// Handler for the Help button
 	$('#reservation-help-button').click(function (event) {
@@ -719,6 +736,7 @@ $(function ()
 		    $('#cluster-table .add-cluster').show();
 		    $('#cluster-table .add-cluster').not(":last").hide();
 		}
+		RegenCombinedGraph();
 		modified_callback();
 		
 	    });
@@ -901,6 +919,48 @@ $(function ()
 	// See above
 	updateButtons();
     }
+
+    /*
+     * For the short term, hide routes behind an all or nothing button
+     */
+    function SetupFakeRoutes()
+    {
+	console.info("SetupFakeRoutes");
+
+	var now = moment();
+	now.tz(window.HOMETZ);
+	now.hours(23);
+	now.local();
+	
+	$('#route-table-div .route-help').popover({
+	    trigger: 'hover',
+	    container: 'body',
+	    delay: '{"hide":1000}',
+	    content: 'Reservations that include mobile endpoints ' +
+		'must end on the same day by 11PM Mountain time ' +
+		'(' + now.format("h A") + ' in your local timezone).'
+	});
+	$("#route-table-div").removeClass("hidden");
+
+	$('#allroutes-checkbox').change(function () {
+	    var ischecked =  $('#allroutes-checkbox').is(":checked");
+	    console.info("all routes: " + ischecked);
+
+	    if (ischecked) {
+		_.each(routelist, function(details) {
+		    AddRouteRow(details.routename);
+		});
+	    }
+	    else {
+		$('#route-table tbody').each(function() {
+		    var routename = $(this).find(".routename").val();
+		    console.info(routename);
+		    $(this).find('.delete-route').trigger("click");
+		});
+	    }
+	    RegenCombinedGraph();
+	});
+    }
     
     /*
      * When the date selected is today, need to disable the hours
@@ -912,7 +972,7 @@ $(function ()
      */
     function DateChange(which)
     {
-	console.info("DateChange");
+	console.info("DateChange: " + which);
 	
 	var now = new Date();
 	var date;
@@ -929,6 +989,8 @@ $(function ()
 	// Remember if the user already set the hour.
 	var hourset =
 	    ($(selecter + " option:selected").val() == "" ? false : true);
+
+	console.info("DateChange: " + hourset + " " + date);
 
 	if (moment(date).isSame(Date.now(), "day")) {
 	    for (var i = 0; i <= now.getHours(); i++) {
@@ -953,8 +1015,11 @@ $(function ()
 	/*
 	 * Ok, init the hour if not set.
 	 */
+	var ideal_hour =
+	    (which == "start" ? adjustedMorning().hour() : IDEAL_ENDHOUR);
+	
 	if (!hourset && !moment(date).isSame(Date.now(), "day")) {
-	    $(selecter + ' option[value=' + IDEAL_STARTHOUR + ']')
+	    $(selecter + ' option[value=' + ideal_hour + ']')
 		.prop('selected', 'selected');
 	}
 	UpdateFormTime(which);
@@ -995,6 +1060,135 @@ $(function ()
 		console.info("UpdateFormTime clear end");
 	    }
 	}
+    }
+
+    /*
+     * If the start time of reservation is for today, then it must
+     * start before 9am (in the home timezone). Otherwise, the user
+     * has to push the start time out till the next business day. If
+     * today is a weekend, then the user must push the start time out
+     * till the next business day.
+     */
+    function StartTimeOkay()
+    {
+	adjustMorning();
+
+	console.info("StartTimeOkay");
+
+	if (!window.MAINSITE || isadmin || !window.BISONLY) {
+	    return 1;
+	}
+	if (editing) {
+	    /*
+	     * We want to prevent users from editing a submitted reservation
+	     * such that the start time violates the rules. But since the
+	     * form contains the start time, need to be careful we do not
+	     * try to check it, since it might even be in the past, if the
+	     * user has not changed it.
+	     */
+	    var formstart = $('#reserve-request-form [name=start]').val();
+	    var start     = moment(formstart);
+	    var resstart  = moment(resgroup.start);
+	    
+	    console.info(start, resstart);
+	    if (start.isSame(resstart)) {
+		console.info("submitted reservation, start unchanged");
+		return 1;
+	    }
+	}
+	var start_day  = $('#reserve-request-form [name=start_day]').val();
+	var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	var toosoon    = false;
+
+	console.info("StartTimeOkay: ", start_day, start_hour);
+
+	if (start_day && start_hour) {
+	    var now   = moment();
+	    var start = moment(start_day, "MM/DD/YYYY");
+	    start.hour(start_hour);
+	    
+	    if (now.isSame(start, 'day')) {
+		toosoon = 1;
+	    }
+	    else if (moment([start.year(), start.month(), start.date()])
+		     .diff(moment([now.year(), now.month(), now.date()]), 'day')
+		     == 1) {
+		// Next day, has to be after 9am on a weekday.
+		start.tz(window.HOMETZ);
+		console.info("next day");
+		
+		if (start.hours() < 9 || 
+		    start.isoWeekday() == 6 || start.isoWeekday() == 7) {
+		    toosoon = 1;
+		}
+	    }
+	    else {
+		console.info(now.format(), start.format());
+		start.tz(window.HOMETZ);
+		now.tz(window.HOMETZ);
+
+		// Advance, looking for a business day between now and start.
+		toosoon = 1;
+		var tmp = now.clone();
+		tmp.isoWeekday(tmp.isoWeekday() + 1);
+		tmp.hour(8);
+		tmp.minute(59);
+		tmp.second(0);
+		console.info("clone: " + tmp.format());
+
+		while (tmp.isBefore(start)) {
+		    var dayofweek = tmp.isoWeekday();
+		    console.info("dayofweek: " + dayofweek);
+			
+		    if (dayofweek >= 1 && dayofweek <= 5) {
+			toosoon = 0;
+			break;
+		    }
+		    tmp.isoWeekday(tmp.isoWeekday() + 1);
+		}
+	    }
+	}
+	else {
+	    var now = moment();
+	    // Change the timezone to home base so we can check against
+	    // 9am and weekend in that timezone.
+	    now.tz(window.HOMETZ);
+
+	    if (now.hours() > 5 ||
+		now.isoWeekday() == 6 || now.isoWeekday() == 7) {
+		toosoon = 1;
+	    }
+	}
+	if (toosoon) {
+	    sup.ShowModal('#toosoon-modal');
+	    return 0;
+	}
+	return 1;
+    }
+
+    /*
+     * Calculate the next business day after the current time.
+     */
+    function NextBusinessDay()
+    {
+	var now = moment();
+	// Change the timezone to home base so we can check against
+	// 9am and weekend in that timezone.
+	now.tz(window.HOMETZ);
+
+	if (now.isoWeekday() == 6 || now.isoWeekday() == 7 ||
+	    now.isoWeekday() == 5) {
+	    now.isoWeekday(1);
+	    now.isoWeek(now.isoWeek() + 1);
+	}
+	else {
+	    now.isoWeekday(now.isoWeekday() + 1);
+	}
+	now.hours(8);
+	now.minute(59);
+	now.second(59);
+	now.local();
+	return now;
     }
 
     /*
@@ -1183,8 +1377,18 @@ $(function ()
 	    var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
 
 	    if (_.has(reservation, "errcode")) {
-		tbody.find(".reservation-error span label")
-		    .html(reservation.output);
+		if (_.has(reservation, "conflict")) {
+		    // The string typically has the date in the wrong timezone,
+		    var when = moment(reservation.conflict.when).format("lll");
+		    var mesg = "Insufficient free nodes at " + when + " " +
+			"(" + reservation.conflict.needed + " more needed)";
+		    tbody.find(".reservation-error span label")
+			.html(mesg);
+		}
+		else {
+		    tbody.find(".reservation-error span label")
+			.html(reservation.output);
+		}
 		tbody.find(".reservation-error span")
 		    .removeClass("has-warning")
 		    .addClass("has-error")
@@ -1197,7 +1401,14 @@ $(function ()
 		    .addClass("hidden");
 	    }
 	    else {
-		if (_.has(reservation, "noautoapprove_reason")) {
+		if (_.has(reservation, "conflict")) {
+		    // The string typically has the date in the wrong timezone,
+		    var when = moment(reservation.conflict.when).format("lll");
+		    var mesg = "Conflicting reservation at " + when;
+		    tbody.find(".reservation-error span label")
+			.html("Approval is required. (" + mesg + ")");
+		}
+		else if (_.has(reservation, "noautoapprove_reason")) {
 		    tbody.find(".reservation-error span label")
 			.html("Approval is required: " +
 			      reservation.noautoapprove_reason);
@@ -1275,10 +1486,26 @@ $(function ()
 		    .removeClass("hidden");
 		tbody.removeClass("has-warning has-error")
 		    .addClass("has-error");
+		if (fakeroutes) {
+		    $('#allroutes-error').parent()
+			.removeClass("has-warning")
+			.addClass("has-error");
+		    $('#allroutes-error')
+		        .html(reservation.output)
+			.removeClass("has-warning")
+			.addClass("has-error")
+			.removeClass("hidden");
+		}
 	    }
 	    else if (parseInt(reservation.approved) != 0) {
 		tbody.find(".reservation-error span")
 		    .addClass("hidden");
+		if (fakeroutes) {
+		    $('#allroutes-error').parent()
+			.removeClass("has-warning")
+			.removeClass("has-error");
+		    $('#allroutes-error').addClass("hidden");
+		}
 	    }
 	    else {
 		tbody.find(".reservation-error span label")
@@ -1289,6 +1516,16 @@ $(function ()
 		    .removeClass("hidden");
 		tbody.removeClass("has-warning has-error")
 		    .addClass("has-warning");
+		if (fakeroutes) {
+		    $('#allroutes-error').parent()
+			.addClass("has-warning")
+			.removeClass("has-error");
+		    $('#allroutes-error')
+		        .html("Approval is required")
+			.removeClass("has-error")
+			.addClass("has-warning")
+			.removeClass("hidden");
+		}
 	    }
 	});
     }
@@ -1435,6 +1672,12 @@ $(function ()
 	}
 	// Clear (hide) previous cluster table errors
 	aptforms.ClearFormErrors('#reserve-request-form');
+	if (window.DOROUTES && fakeroutes) {
+	    $('#allroutes-error').parent()
+		.removeClass("has-warning")
+		.removeClass("has-error");
+	    $('#allroutes-error').addClass("hidden");
+	}
 	$('#reserve-request-form .form-group-sm').addClass("hidden");	
 	$('#reserve-request-form tbody').removeClass("has-warning has-error");
 	$('#reserve-request-form .form-control-div')
@@ -1442,6 +1685,38 @@ $(function ()
 	
 	errors += PreCheckClusterRows();
 	errors += PreCheckRangeRows();
+
+	/*
+	 * Avoid some confusion in the UI; if only one of start date or hour
+	 * is specified, error. Ditto end.
+	 */
+	var start_day  = $('#reserve-request-form [name=start_day]').val();
+	var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	var end_day    = $('#reserve-request-form [name=end_day]').val();
+	var end_hour   = $('#reserve-request-form [name=end_hour]').val();
+	if (start_day && !start_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"start" : "Missing start hour"});
+	    errors++;
+	}
+	else if (!start_day && start_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"start" : "Missing start date"});
+	    errors++;
+	}
+	if (end_day && !end_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"end" : "Missing start hour"});
+	    errors++;
+	}
+	else if (!end_day && end_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"end" : "Missing end date"});
+	    errors++;
+	}
+	if (errors) {
+	    return;
+	}
 	
 	/*
 	 * On a new reservation, start is optional. Must always have end
@@ -1568,7 +1843,7 @@ $(function ()
 	var deferred = [];
 	if (window.ISPOWDER) {
 	    LoadRangeReservations();
-	    if (isadmin) {
+	    if (window.DOROUTES) {
 		LoadRouteReservations();
 	    }
 	}
@@ -1672,6 +1947,13 @@ $(function ()
 		data.free  = parseInt(data.free);
 		data.held  = parseInt(data.held);
 		data.stamp = new Date(parseInt(data.t) * 1000);
+		// New
+		if (_.has(data, "unapproved")) {
+		    data.unapproved = parseInt(data.unapproved);
+		}
+		else {
+		    data["unapproved"] = 0;
+		}
 	    }
 
 	    // No data or just one data point, nothing to do.
@@ -1709,6 +1991,7 @@ $(function ()
     {
 	var details  = amlist[urn];
 	var forecast = {};
+	var groups   = {};
 
 	/*
 	 * The radio graph consists of individually reservable nodes that
@@ -1716,12 +1999,55 @@ $(function ()
 	 */
 	_.each(json.value.forecast, function (info, key) {
 	    if (_.has(radioinfo[urn], key)) {
-		forecast[key]  = info;
+		if (radioinfo[urn][key].grouping) {
+		    var group = radioinfo[urn][key].grouping;
+		    if (!_.has(groups, group)) {
+			groups[group] = {};
+		    }
+		    groups[group][key] = info;
+		}
+		else {
+		    forecast[key]  = info;
+		}
 		prunelist[key] = true;
 	    }
 	});
+	$('#powder-radios')
+	    .html(visTemplate({
+		    "title" : "Powder Outdoor Radio Availability",
+		    "id"    : "radio",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
 	$('#radio-graph-div').removeClass("hidden");
-	ShowNewGraph(forecast, "radio-graph-body", "radio-graph-visavail")
+	ShowNewGraph(forecast, "radio");
+
+	$('#powder-mmimo')
+	    .html(visTemplate({
+		"title" : "RENEW Massive MIMO Radio Availability",
+		"id"    : "mmimo",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
+	$('#powder-ota')
+	    .html(visTemplate({
+		"title" : "Indoor OTA Lab",
+		"id"    : "ota",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
+	$('#powder-paired')
+	    .html(visTemplate({
+		"title" : "Paired Radio Workbenches",
+		"id"    : "paired",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
+
+	_.each(groups, function (forecast, group) {
+	    $('#' + group + '-graph-div').removeClass("hidden");
+	    ShowNewGraph(forecast, group);
+	});
 
 	/*
 	 * The matrix graph consists of nodes in the matrixinfo object
@@ -1733,8 +2059,14 @@ $(function ()
 		prunelist[key] = true;
 	    }
 	});
-	$('#matrix-graph-div').removeClass("hidden");
-	ShowNewGraph(forecast, "matrix-graph-body", "matrix-graph-visavail")
+	$('#powder-matrix')
+	    .html(visTemplate({
+		"title" : "PhantomNet RF Attenuator Matrix",
+		"id"    : "matrix",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
+	ShowNewGraph(forecast, "matrix");
     }
 
     /*
@@ -2150,28 +2482,45 @@ $(function ()
 	    console.info("tmp", tmp);
 	    while (tmp.length && starttime == null) {
 		var data = tmp.shift();
-
-		console.info("baz", data);
+		var free = data.free - data.unapproved;
+		if (free < 0) {
+		    free = 0;
+		}
+		//console.info("baz", data, free);
 		
-		if (data.free >= cluster.count) {
+		if (free >= cluster.count) {
 		    starttime = data.t;
 		    startdata = data;
-		    console.info("baz2", startdata, starttime, lower);
+		    //console.info("baz2", startdata, starttime, lower);
 		    if (lower) {
 			if (tmp.length) {
 			    var next = tmp[0];
-			    
-			    console.info("foo", lower, data, next);
+			    var nextfree = next.free - next.unapproved;
+			    if (nextfree < 0) {
+				nextfree = 0;
+			    }
+			    //console.info("foo", lower, nextfree, data, next);
 
-			    if (next.free >= cluster.count &&
+			    if (nextfree >= cluster.count &&
 				lower >= data.t && lower <= next.t) {
 				starttime = lower;
-				console.info("fee", starttime);
+				//console.info("fee1", starttime);
 			    }
 			    else if (data.t < lower) {
-				console.info("bar");
-				starttime = null;
-				continue;
+				/*
+				 * See if the current item is long enough that we
+				 * can start here. Otherwise need to jump to next.
+				 */
+				if (lower <= next.t &&
+				    lower + (3600 * 24 * days) + 3600 < next.t) {
+				    starttime = lower;
+				    //console.info("fee2", starttime);
+				}
+				else {
+				    //console.info("bar");
+				    starttime = null;
+				    continue;
+				}
 			    }
 			}
 			else {
@@ -2182,12 +2531,15 @@ $(function ()
 			    }
 			}
 		    }
-		    console.info("boop", data, starttime);
+		    //console.info("boop", data, starttime);
 		    
 		    for (var i = 0; i < tmp.length; i++) {
 			var next = tmp[i];
-
-			if (next.free >= cluster.count) {
+			var nextfree = next.free - next.unapproved;
+			if (nextfree < 0) {
+			    nextfree = 0;
+			}
+			if (nextfree >= cluster.count) {
 			    // The next time stamp still has enough nodes,
 			    // keep checking until no longer true, so we
 			    // have the biggest range possible.
@@ -2218,7 +2570,7 @@ $(function ()
 	    console.info("findfirst return", results);
 	    return results;
 	};
-	var lower = null;
+	var lower = (window.BISONLY ? NextBusinessDay().unix() : null);
 	var fit   = null;
 	var loops = 100;  // Avoid infinite loop.
 	
@@ -2344,7 +2696,7 @@ $(function ()
 	 * It is okay if we cannot do this, we still want to give the
 	 * user the earliest possible reservation.
 	 */
-	if (start.hour() < IDEAL_STARTHOUR) {
+	if (!window.BISONLY && start.hour() < IDEAL_STARTHOUR) {
 	    var tmp = moment(start);
 	    tmp.hour(IDEAL_STARTHOUR);
 
@@ -2365,18 +2717,22 @@ $(function ()
 	var new_end_day    = end.format("MM/DD/YYYY");
 	var new_end_hour   = end.format("H");
 
-	$('#reserve-request-form [name=start_day]').val(new_start_day);
-	$('#reserve-request-form [name=start_hour]').val(new_start_hour);
-	$('#reserve-request-form [name=end_day]').val(new_end_day);
-	$('#reserve-request-form [name=end_hour]').val(new_end_hour);
+	$('#reserve-request-form [name=start_day]')
+	    .datepicker("setDate", new_start_day);
+	$('#reserve-request-form [name=start_hour]')
+	    .val(new_start_hour);
+	$('#reserve-request-form [name=end_day]')
+	    .datepicker("setDate", new_end_day);
+	$('#reserve-request-form [name=end_hour]')
+	    .val(new_end_hour);
 
 	// And if we actually changed anything.
 	if (start_day != new_start_day || start_hour != new_start_hour) {
-	    UpdateFormTime("start");
+	    DateChange("start");
 	    modified_callback();
 	}
 	if (end_day != new_end_day || end_hour != new_end_hour) {
-	    UpdateFormTime("start");
+	    DateChange("end")
 	    modified_callback();
 	}
     }
@@ -2441,19 +2797,21 @@ $(function ()
 		return;
 	    }
 	    
-	    // User can submit.
-	    ToggleSubmit(true, "submit");
 	    // Make sure we still warn about an unsaved form.
 	    aptforms.MarkFormUnsaved();
 
 	    // Gotta search all the requests looking to see if any
 	    // are not approved and need admin intervention.
 	    var needsApproval = 0;
+	    var conflicts     = 0;
 
 	    if (cluster_results) {
 		_.each(cluster_results.clusters, function (result) {
 		    if (!result.approved) {
 			needsApproval++;
+			if (_.has(result, "conflict")) {
+			    conflicts++;
+			}
 		    }
 		});
 	    }
@@ -2474,11 +2832,28 @@ $(function ()
 	    if (needsApproval) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
+		if (conflicts) {
+		    $('#confirm-reservation .needs-approval-conflict')
+			.removeClass("hidden");
+		    $('#confirm-reservation .needs-approval-noconflict')
+			.addClass("hidden");
+		}
+		else {
+		    $('#confirm-reservation .needs-approval-conflict')
+			.addClass("hidden");
+		    $('#confirm-reservation .needs-approval-noconflict')
+			.removeClass("hidden");
+		}
+		if (!StartTimeOkay()) {
+		    return;
+		}
 	    }
 	    else {
 		$('#confirm-reservation .needs-approval')
 		    .addClass("hidden");
 	    }
+	    // User can submit.
+	    ToggleSubmit(true, "submit");
 	    sup.ShowModal('#confirm-reservation');
 	};
 	var args = {
@@ -2493,7 +2868,8 @@ $(function ()
 	}
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");
-	$('#reserve-request-form tbody').removeClass("has-warning has-error");
+	$('#reserve-request-form tbody')
+	    .removeClass("has-warning has-error");
 	$('#reserve-request-form .form-control-div')
 	    .removeClass("has-warning has-error");
 	
@@ -2617,7 +2993,8 @@ $(function ()
 	}
 	// Clear (hide) previous cluster table errors
 	$('#reserve-request-form .form-group-sm').addClass("hidden");
-	$('#reserve-request-form tbody').removeClass("has-warning has-error");
+	$('#reserve-request-form tbody')
+	    .removeClass("has-warning has-error");
 	$('#reserve-request-form .form-control-div')
 	    .removeClass("has-warning has-error");
 
@@ -2637,6 +3014,9 @@ $(function ()
 	    }
 	    // Messy.
 	    var details = json.value;
+	    // Save for checking any changes before submit.
+	    resgroup = details;
+	    
 	    $('#reserve-request-form [name=uuid]').val(details.uuid);
 	    $('#reserve-request-form [name=reason]').val(details.notes);
 	    var start = moment(details.start);
@@ -2657,6 +3037,7 @@ $(function ()
 	    var days  = hours / 24;
 	    $('#reserve-request-form [name=days]')
 		.val(days.toFixed(1));
+	    $('#reserve-created').html(moment(details.created).format("lll"));
 
 	    // Add cluster rows as needed.
 	    if (_.size(details.clusters)) {
@@ -2691,6 +3072,12 @@ $(function ()
 		    AddClusterRow();
 		});
 		$('#cluster-table .add-cluster').last().removeClass("hidden");
+		// Move the first cluster to the top.
+		if (window.ISPOWDER || window.ISCLOUD) {
+		    var first = _.first(_.values(details.clusters));
+
+		    ReorderGraphs(first.cluster_urn);
+		}
 	    }
 	    else {
 		// Always show an empty cluster row.
@@ -2762,11 +3149,21 @@ $(function ()
 		    AddRouteRow();
 		});
 		$('#route-table .add-route').last().removeClass("hidden");
+
+		if (fakeroutes) {
+		    $('#allroutes-checkbox').prop("checked", true);
+		    SetupFakeRoutes();
+		}
 	    }
 	    else {
 		// Always show an empty route row.
-		if (window.ISPOWDER && isadmin) {
-		    AddRouteRow();
+		if (window.ISPOWDER && window.DOROUTES) {
+		    if (fakeroutes) {
+			SetupFakeRoutes();
+		    }
+		    else {
+			AddRouteRow();
+		    }
 		}
 	    }
 
@@ -2809,7 +3206,7 @@ $(function ()
 		 * If this is an admin looking at an unapproved reservation,
 		 * show the approve button
 		 */
-		if (!details.approved) {
+		if (details.status != "approved") {
 		    $('#reserve-approve-button')
 			.removeClass("hidden")
 			.removeAttr("disabled")
@@ -2844,6 +3241,12 @@ $(function ()
 			$('#reserve-uncancel-button').removeClass("hidden");
 		    }
 		}
+	    }
+	    if (details.status == "approved") {
+		$('#unapproved-warning').addClass("hidden");
+	    }
+	    else {
+		$('#unapproved-warning').removeClass("hidden");
 	    }
 	    
 	    // Need this in Delete().
@@ -2961,15 +3364,6 @@ $(function ()
 		    .addClass("hidden");
 	    }
 	});
-	if (details.approved) {
-	    $('#unapproved-warning').addClass("hidden");
-	    if (isadmin) {
-		$('#reserve-approve-button').addClass("hidden");
-	    }
-	}
-	else {
-	    $('#unapproved-warning').removeClass("hidden");
-	}
 	// Only one reservation left, kill the delete buttons.
 	if ($('#cluster-table tbody.existing-cluster').length == 1) {
 	    $('#cluster-table .delete-reservation').addClass("hidden");
@@ -3050,11 +3444,6 @@ $(function ()
 		    .addClass(newClass);
 	    }
 	});
-	if (details.approved) {
-	    if (isadmin) {
-		$('#reserve-approve-button').addClass("hidden");
-	    }
-	}
 	// Always display delete button on existing ranges,
 	$('#range-table .existing-range .delete-range').removeClass("hidden");
 
@@ -3129,11 +3518,6 @@ $(function ()
 		    .addClass(newClass);
 	    }
 	});
-	if (details.approved) {
-	    if (isadmin) {
-		$('#reserve-approve-button').addClass("hidden");
-	    }
-	}
 	// Always display delete button on existing routes
 	$('#route-table .existing-route .delete-route').removeClass("hidden");
 
@@ -3154,23 +3538,31 @@ $(function ()
     function RefreshTables(operationResults)
     {
 	console.info("RefreshTables", operationResults);
-	
+
+	var callback = function(json) {
+	    console.info(json);
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    resgroup = json.value;
+	    UpdateClustersTable(resgroup, operationResults);
+	    UpdateRangeTable(resgroup, operationResults);
+	    UpdateRouteTable(resgroup, operationResults);
+
+	    if (resgroup.status == "approved" && isadmin) {
+		$('#reserve-approve-button').addClass("hidden");
+	    }
+	    if (resgroup.status == "approved") {
+		$('#unapproved-warning').addClass("hidden");
+	    }
+	    else {
+		$('#unapproved-warning').removeClass("hidden");
+	    }
+	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
-			     {"uuid"    : window.UUID},
-			     function(json) {
-				 console.info(json);
-				 if (json.code) {
-				     sup.SpitOops("oops", json.value);
-				     return;
-				 }
-				 UpdateClustersTable(json.value,
-						     operationResults);
-				 UpdateRangeTable(json.value,
-						  operationResults);
-				 UpdateRouteTable(json.value,
-						  operationResults);
-			     });
+			     {"uuid"    : window.UUID}, callback);
     }
 
     /*
@@ -3188,7 +3580,7 @@ $(function ()
 	    RefreshTables(json.value);
 	};
 	var args = {"uuid" : window.UUID};
-	sup.ShowWaitWait();
+	sup.ShowWaitWait("Refreshing group details, patience please");
 	var xmlthing = sup.CallServerMethod(null, "resgroup",
 					    "Refresh", args);
 	xmlthing.done(callback);
@@ -3267,9 +3659,7 @@ $(function ()
 	    $('#override-checkbox').prop("checked", false);	    
 	    RefreshTables(json.value);
 	    LoadRangeReservations();
-	    if (isadmin) {
-		LoadRouteReservations();
-	    }
+	    LoadRouteReservations();
 	};
 	var args = {
 	    "uuid"    : window.UUID,
@@ -3411,7 +3801,12 @@ $(function ()
 			     function (json) {
 				 console.info(json);
 				 if (json.code == 0) {
-				     sup.HideModal('#waitwait-modal');
+				     sup.HideModal('#waitwait-modal',
+						   function () {
+						       if (!value) {
+							   Refresh();
+						       }
+						   });
 				     return;
 				 }
 				 sup.HideModal('#waitwait-modal', function () {
@@ -3471,9 +3866,11 @@ $(function ()
 
 	console.info(thisuuid, selected_cluster, selected_type);
 	if (selected_cluster == "") {
+	    RegenCombinedGraph();
 	    return;
 	}
 	if (selected_type == "") {
+	    RegenCombinedGraph();
 	    return;
 	}
 	// Do not allow two rows with the same cluster/type.
@@ -3551,7 +3948,7 @@ $(function ()
     function ReorderGraphs(which)
     {
 	console.info("ReorderGraphs", which);
-	var graphid;
+	var graphid = null;
 
 	if (which == "routes") {
 	    graphid = "route-graph-div";
@@ -3563,7 +3960,7 @@ $(function ()
 	    if (_.has(FEs, which)) {
 		graphid = "FE-graph-div";
 	    }
-	    else {
+	    else if (_.has(amlist, which)) {
 		var nickname = amlist[which].nickname;
 
 		if (window.ISPOWDER && nickname == "Emulab") {
@@ -3573,6 +3970,11 @@ $(function ()
 		    graphid = "resgraph-" + nickname;
 		}
 	    }
+	}
+	if (! graphid) {
+	    // If using the Cloudlab portal to look at a Powder
+	    // experiment, might not have all the ams.
+	    return;
 	}
     	if ($('#reservation-lists :first-child').attr("id") != graphid) {
 	    $('#' + graphid).fadeOut("fast", function () {
@@ -3674,15 +4076,26 @@ $(function ()
 
 	    combinedForecasts[id] = forecasts[urn][type];
 	})
-	_.each(routes, function (details) {
-	    var routename = details.routename;
-
-	    if (_.has(routeforecast, routename)) {
-		combinedForecasts[routename] = routeforecast[routename]
+	if (fakeroutes) {
+	    // Pick any route and use it, renamed.
+	    if ($('#allroutes-checkbox').is(":checked")) {
+		combinedForecasts["mobile"] = routeforecast["Orange"];
 	    }
-	})
-	
+	}
+	else {
+	    _.each(routes, function (details) {
+		var routename = details.routename;
+
+		if (_.has(routeforecast, routename)) {
+		    combinedForecasts[routename] = routeforecast[routename]
+		}
+	    })
+	}
 	console.info("AddToCombinedGraph", combinedForecasts);
+	if (_.size(combinedForecasts) == 0) {
+	    $("#combined-resgraph").addClass("hidden");
+	    return;
+	}
 
 	// Must be visible before graph can be drawn.
 	$("#combined-resgraph").removeClass("hidden");
@@ -3698,6 +4111,8 @@ $(function ()
 		      "selector"       : "combined-resgraph",
 		      "skiptypes"      : {},
 		      "colors"         : RouteColors,
+		      "widebrush"      : true,
+		      "unapproved"     : true,
 		      "click_callback" : function(when, type) {
 			  if (!editing) {
 			      var start = moment(when);
@@ -3733,25 +4148,43 @@ $(function ()
 			combinedForecasts[id] = forecast;
 		    });
 	    });
-	ShowNewGraph(combinedForecasts, "FE-graph-body", "FE-graph-visavail");
+	ShowNewGraph(combinedForecasts, "FE");
     }
 
     function GenerateRouteGraph()
     {
-	$('#route-graph-div').removeClass("hidden");
+	$('#route-graph-div')
+	    .html(visTemplate({
+		"title" : "Bus Route Availability",
+		"id"    : "route",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
 
-	ShowNewGraph(routeforecast, "route-graph-body", "route-graph-visavail");
+	ShowNewGraph(routeforecast, "route");
     }
 
     /*
      * Generate a new style graph in the provide container.
      */
-    function ShowNewGraph(forecasts, container, graph)
+    function ShowNewGraph(forecasts, tag)
     {
 	var dataset = [];
 	var now     = new Date();
+	var limit   = new Date();
 	var maxend  = now;
+	var container = tag + "-graph-body";
+	var graph     = tag + "-graph-visavail";
+	var zoomin  = $('#' + container).closest(".panel")
+	    .find(".panel-heading .zoom-control .zoom-in");
+	var zoomout = $('#' + container).closest(".panel")
+	    .find(".panel-heading .zoom-control .zoom-out");
+	var popover = $('#' + container).closest(".panel")
+	    .find('.panel-heading [data-toggle="popover"]');
 	
+	// Do not show more then 60 days, the graphs are hard to read.
+	limit.setDate(limit.getDate() + 60);
+
 	Object.keys(forecasts)
 	    .sort()
 	    .forEach(function(id, index) {
@@ -3763,15 +4196,31 @@ $(function ()
 		    "interval_s": 3600,
 		    "data"      : [],
 		    "categories": {
-			"Busy": { "color": "black" },
-			"Free": { "color": "green"},
+			"Busy"    : { "color": "black" },
+			"Free"    : { "color": "green"},
+			"Pending" : { "color": "blue"},
 		    },
 		};
 		for (var i = 0; i < forecast.length; i++) {
 		    var info  = forecast[i];
 		    var start = moment(info.stamp).toDate();
-		    var state = info.free ? "Free" : "Busy";
+		    var state;
 		    var end;
+
+		    if (info.free == 1) {
+			if (_.has(info, "unapproved") && info.unapproved != 0) {
+			    state = "Pending";
+			}
+			else {
+			    state = "Free";
+			}
+		    }
+		    else if (info.free == 0 || !isadmin) {
+			state = "Busy"
+		    }
+		    else {
+			state = "Overbook";
+		    }
 
 		    if (i < forecast.length - 1) {
 			end = moment(forecast[i + 1].stamp).toDate();
@@ -3784,6 +4233,9 @@ $(function ()
 		    // we can even things out on the very right
 		    // side.
 		    if (end > maxend) {
+			if (end > limit) {
+			    end = new Date(limit.valueOf());
+			}
 			maxend = end;
 		    }
 		    series.data.push([start, state, end]);
@@ -3851,6 +4303,19 @@ $(function ()
 	    },
 	};
 	var chart = visavail.generate(options, dataset)
+
+	$(zoomin).click(function (event) {
+	    event.preventDefault();
+	    chart.zoomin();
+	})
+	$(zoomout).click(function (event) {
+	    event.preventDefault();
+	    chart.zoomout();
+	})
+	$(popover).popover({
+	    trigger: 'hover',
+	    container: 'body'
+	});
     }
 
     /*
@@ -3862,7 +4327,7 @@ $(function ()
 	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
 	var xmlDoc    = $.parseXML(rspec.replace('&', '&amp;'));
 	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
-	var routes    = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'busroutes');
+	var routes    = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'busroute');
 	var tcounts   = {};
 	var untyped   = {};
 
@@ -3886,18 +4351,30 @@ $(function ()
 	    AddRangeRow();
 	}
 
-	if (routes.length) {
-	    _.each(routes, function(route) {
-		var routename  = $(route).attr("routename");
-		console.info(routename);
+	if (window.ISPOWDER && window.DOROUTES) {
+	    if (routes.length) {
+		if (fakeroutes) {
+		    SetupFakeRoutes();
+		    $('#allroutes-checkbox').trigger("click");
+		}
+		else {
+		    _.each(routes, function(route) {
+			var routename  = $(route).attr("routename");
+			console.info(routename);
 
-		AddRouteRow(routename);
-	    });
+			AddRouteRow(routename);
+		    });
+		}
+	    }
+	    else {
+		if (fakeroutes) {
+		    SetupFakeRoutes();
+		}
+		else {
+		    AddRouteRow();
+		}
+	    }
 	}
-	else if (window.ISPOWDER && isadmin) {
-	    // For now, only admins see routes
-	    AddRouteRow();
-	}	
 
 	// Find all the nodes, gather up type info.
 	$(xmlDoc).find("node").each(function() {
@@ -3905,6 +4382,7 @@ $(function ()
 	    var component_id = $(this).attr("component_id");
 	    var manager_id   = $(this).attr("component_manager_id");
 	    var site         = this.getElementsByTagNameNS(JACKS_NS, 'site');
+	    var stype        = $(this).find("sliver_type");
 
 	    if (component_id) {
 		var hrn = sup.ParseURN(component_id);
@@ -3913,6 +4391,26 @@ $(function ()
 		    if (!manager_id) {
 			manager_id = sup.CreateURN(hrn.domain,
 						   "authority", "cm");
+		    }
+		}
+		else if (_.size(cluster_selections) == 1) {
+		    // Might be a site of one.
+		    var tag;
+
+		    if (site.length) {
+			var siteid = $(site).attr("id");
+			if (siteid === undefined) {
+			    console.error("No site ID in " + site);
+			}
+			else {
+			    tag = siteid;
+			}
+		    }
+		    else {
+			tag = "nosite_selector";
+		    }
+		    if (tag) {
+			manager_id = cluster_selections[tag];
 		    }
 		}
 	    }
@@ -3934,6 +4432,9 @@ $(function ()
 	    // We want to count up how many of each type, and how many
 	    // are untyped
 	    if (!htype.length) {
+		if (stype.length && !($(stype).attr("name") === "raw")) {
+		    return;
+		}
 		var tag;
 		
 		if (manager_id) {
@@ -4081,6 +4582,27 @@ $(function ()
 	}
 	var x = parseFloat(value);
 	return isNaN(x) ? false : true;
+    }
+
+    function adjustedMorning()
+    {
+	/*
+	 * Create a moment object that converts 9am in the Portal timezone
+	 * to whatever it is in the local timezone.
+	 */
+	var now = moment();
+	now.tz(window.HOMETZ);
+	now.hours(9);
+	now.local();
+	return now;
+    }
+    function adjustMorning()
+    {
+	if (moment.tz.guess() != window.HOMETZ) {
+	    var adjusted = adjustedMorning();
+	    $('.adjustedmorning span').text(adjusted.format("h A"));
+	    $('.adjustedmorning').removeClass("hidden");
+	}
     }
     $(document).ready(initialize);
 });

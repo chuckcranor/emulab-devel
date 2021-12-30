@@ -35,14 +35,25 @@ $(function ()
 	$('#waitwait_div').html(waitwaitString);
 	$('#conversion_help_div').html(converterHelpTemplate({}));
 
+	// Focus on the search box when switching to these tabs.
+        $('.nav-tabs a[href="#profiles"], ' +
+	  '.nav-tabs a[href="#projectprofiles"]')
+	    .on('shown.bs.tab', function (e) {
+		var target = $(this).attr("href");
+		var searchbox = $(target).find(".profile-search");
+		if ($(searchbox)[0]) {
+		    $(searchbox)[0].focus();
+		}
+	    });
+
         // Javascript to enable link to tab
         var hash = document.location.hash;
         if (hash) {
-            $('.nav-tabs a[href='+hash+']').tab('show');
+            $('.nav-tabs a[href="'+hash+'"]').tab('show');
         }
         // Change hash for page-reload
         $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-            window.location.hash = e.target.hash;
+	    history.replaceState('', '', e.target.hash);
 
 	    // GA reporting
 	    var ganame = e.target.hash;
@@ -57,7 +68,7 @@ $(function ()
 	    if (hash == "") {
 		hash = "#experiments";
 	    }
-	    $('.nav-tabs a[href='+hash+']').tab('show');
+	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
 	});
 
 	LoadUsage();
@@ -82,6 +93,9 @@ $(function ()
 	});
 	$('#sendpasswordreset').click(function () {
 	    SendPasswordReset();
+	});
+	$('#confirm-deleteuser').click(function () {
+	    DeleteUser();
 	});
     }
 
@@ -291,7 +305,7 @@ $(function ()
     function LoadProfileListTab()
     {
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("LoadProfileListTab", json);
 
 	    if (json.code) {
 		console.info(json.value);
@@ -308,7 +322,8 @@ $(function ()
 				"tablename"   : "user-profiles",
 				"bulkdelete"  : true,
 				"showCreator" : false,
-				"showProject" : true}));
+				"showProject" : true,
+				"showPrivacy" : true}));
 	    
 	    // Format dates with moment before display.
 	    $('#user-profiles-table .format-date').each(function() {
@@ -339,6 +354,14 @@ $(function ()
 			    $(row).remove();
 			});
 		});
+
+	    // If this is the active tab after loading, focus the searchbox
+	    if ($('#profiles').hasClass("active")) {
+		var searchbox = $('#profiles .profile-search')
+		if ($(searchbox)[0]) {
+		    $(searchbox)[0].focus();
+		}
+	    }
 	    
 	    var table = $('#' + 'user-profiles-table')
 		.tablesorter({
@@ -402,7 +425,8 @@ $(function ()
 				"tablename"   : "project-profiles",
 				"bulkdelete"  : false,
 				"showCreator" : true,
-				"showProject" : true}));
+				"showProject" : true,
+				"showPrivacy" : true}));
 	    
 	    // Format dates with moment before display.
 	    $('#project-profiles-table .format-date').each(function() {
@@ -434,7 +458,14 @@ $(function ()
 					  });
 		    
 		});
-
+	    // If this is the active tab after loading, focus the searchbox
+	    if ($('#projectprofiles').hasClass("active")) {
+		var searchbox = $('#projectprofiles .profile-search')
+		if ($(searchbox)[0]) {
+		    $(searchbox)[0].focus();
+		}
+	    }
+	    
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
 		    theme : 'bootstrap',
@@ -529,11 +560,11 @@ $(function ()
 	    sup.ShowModal("#quickvm_topomodal");
 	    $("#quickvm_topomodal").one("shown.bs.modal", function () {
 		sup.maketopmap('#showtopo_nopicker',
-			       json.value.rspec, false, !window.ISADMIN);
+			       json.value.profile_rspec, false, !window.ISADMIN);
 	    });
 	};
 	var $xmlthing = sup.CallServerMethod(null,
-					     "manage_profile",
+					     "show-profile",
 					     "GetProfile",
 				     	     {"uuid" : profile});
 	$xmlthing.done(callback);
@@ -740,7 +771,8 @@ $(function ()
 	    $('.paramsets-hidden').removeClass("hidden");
 	    
 	    $('#paramsets_content')
-		.html(template({"paramsets"   : json.value}));
+		.html(template({"paramsets"   : json.value,
+				"isadmin"     : window.ISADMIN}));
 
 	    // Bind the delete button.
 	    $('#paramsets_content #delete-paramset-button')
@@ -756,6 +788,14 @@ $(function ()
 				 paramsets_table.trigger('update');
 			     });
 		});
+
+	    sup.addPopoverClip('#paramsets_content .paramset-share-button',
+			       function (target) {
+				   $(target).parent().popover('hide');
+				   var url = $(target).attr("href");
+				   return sup.popoverClipContent(url);
+			       });
+	    
 	    
 	    // Format dates with moment before display.
 	    $('#paramsets_content table .format-date').each(function(){
@@ -767,6 +807,10 @@ $(function ()
 	    // This activates the tooltip subsystem.
 	    $('#paramsets_content [data-toggle="tooltip"]').tooltip({
 		delay: {"hide" : 100, "show" : 300},
+		placement: 'auto',
+	    });
+	    // This activates the popover subsystem.
+	    $('#paramsets_content [data-toggle="popover"]').popover({
 		placement: 'auto',
 	    });
 	    
@@ -935,6 +979,28 @@ $(function ()
 					    "SendPasswordReset",
 					    {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
+    }
+
+    function DeleteUser()
+    {
+	var callback = function(json) {
+	    if (json.code) {
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", json.value);
+		});
+		return;
+	    }
+	    window.location.replace("landing.php");
+	}
+	var xmlthing = sup.CallServerMethod(null,
+					    "user-dashboard",
+					    "DeleteUser",
+					    {"uid" : window.TARGET_USER});
+	
+	sup.HideModal('#confirm-deleteuser-modal', function () {
+	    sup.ShowWaitWait("This will take a minute. Patience please.");
+	    xmlthing.done(callback);
+	});
     }
 
     $(document).ready(initialize);

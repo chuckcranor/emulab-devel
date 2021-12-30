@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,7 +48,12 @@ use strict;
 #
 my $ignore_errors = 0;
 
-sub new($$;$) {
+#
+# No need to read the MIBs more than once
+#
+my $gotmibs = 0;
+
+sub new($$;$$) {
 
     # The next two lines are some voodoo taken from perltoot(1)
     my $proto = shift;
@@ -56,6 +61,7 @@ sub new($$;$) {
 
     my $devicename = shift;
     my $debug = shift;
+    my $timo = shift;
 
     if (!defined($debug)) {
 	$debug = 0;
@@ -65,18 +71,35 @@ sub new($$;$) {
 	print "snmpit_apc module initializing... debug level $debug\n";
     }
 
-    $SNMP::debugging = ($debug - 5) if $debug > 5;
-    my $mibpath = "/usr/local/share/snmp/mibs";
-    &SNMP::addMibDirs($mibpath);
-    &SNMP::addMibFiles("$mibpath/SNMPv2-SMI.txt",
-		       "$mibpath/SNMPv2-MIB.txt",
-		       "$mibpath/RFC1155-SMI.txt",
-		       "$mibpath/PowerNet-MIB.txt");
-    $SNMP::save_descriptions = 1; # must be set prior to mib initialization
-    SNMP::initMib();              # parses default list of Mib modules
-    $SNMP::use_enums = 1;         #use enum values instead of only ints
-    print "Opening SNMP session to $devicename..." if $debug;
-    my $sess =new SNMP::Session(DestHost => $devicename, Community => 'private', Version => '1');
+    if (!$gotmibs) {
+	print "Fetching MIBs...\n" if $debug;
+	$SNMP::debugging = ($debug - 5) if $debug > 5;
+	my $mibpath = "/usr/local/share/snmp/mibs";
+	&SNMP::addMibDirs($mibpath);
+	&SNMP::addMibFiles("$mibpath/SNMPv2-SMI.txt",
+			   "$mibpath/SNMPv2-MIB.txt",
+			   "$mibpath/RFC1155-SMI.txt",
+			   "$mibpath/PowerNet-MIB.txt");
+	$SNMP::save_descriptions = 1; # must be set prior to mib initialization
+	SNMP::initMib();              # parses default list of Mib modules
+	$SNMP::use_enums = 1;         #use enum values instead of only ints
+	$gotmibs = 1;
+    }
+    print "Opening SNMP session to $devicename...\n" if $debug;
+    my $sess;
+    if ($timo) {
+	print "Setting timeout to $timo seconds...\n" if $debug;
+	# SNMP timeout is in microseconds
+	$timo *= 1000000;
+	$sess = new SNMP::Session(DestHost => $devicename,
+				  Community => 'private',
+				  Timeout => $timo,
+				  Version => '1');
+    } else {
+	$sess = new SNMP::Session(DestHost => $devicename,
+				  Community => 'private',
+				  Version => '1');
+    }
     if (!defined($sess)) {
 	warn("ERROR: Unable to connect to $devicename via SNMP\n");
 	return undef;

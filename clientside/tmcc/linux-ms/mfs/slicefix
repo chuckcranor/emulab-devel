@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -410,6 +410,14 @@ dolinux() {
     #
     if ! dofixauthkeys 1; then
 	dofixauthkeys 0
+    fi
+
+    #
+    # Handle one-off expired root certificate
+    #
+    if [ -x $BINDIR/removecert ]; then
+	echo "  checking for expired CA root certificate"
+	$BINDIR/removecert -M
     fi
 
     #

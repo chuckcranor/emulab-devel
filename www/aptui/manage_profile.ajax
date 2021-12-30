@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,6 +27,7 @@ include_once("geni_defs.php");
 chdir("apt");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
+include_once("checkscript.ajax");
 
 #
 # Create for a new profile.
@@ -39,8 +40,6 @@ function Do_Create()
     $errors = array();
     $this_idx = $this_user->uid_idx();
     
-    session_start();
-
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(1, "Missing formfields");
 	return;
@@ -443,15 +442,102 @@ function Do_Create()
     }
     if ($profile) {
         $uuid = $profile->uuid();
-        SPITAJAX_RESPONSE("manage_profile.php?action=edit&uuid=$uuid");
+        $url  = "manage_profile.php?action=edit&uuid=$uuid";
         if ($action == "edit") {
-            $_SESSION["notifyupdate"] = 1;
+            $url .= "&updated=" . time();
         }
+        SPITAJAX_RESPONSE($url);
     }
     else {
         SPITAJAX_RESPONSE("user-dashboard.php#profiles");
     }
     $webtask->Delete();
+}
+
+#
+# Duplicate Profile,
+#
+function Do_Duplicate()
+{
+    global $this_user;
+    global $ajax_args;
+    global $TB_PROJECT_CREATEEXPT;
+    $errors = array();
+
+    if (!isset($ajax_args["profile"])) {
+	SPITAJAX_ERROR(1, "Missing profile");
+	return;
+    }
+    $target = $ajax_args["profile"];
+
+    if (! (IsValidUUID($target) || IsValidHash($target))) {
+	SPITAJAX_ERROR(1, "Not a valid profile target");
+	return;
+    }
+    $profile = Profile::Lookup($target);
+    if (!$profile) {
+	SPITAJAX_ERROR(1, "No such profile $target");
+	return;
+    }
+    if (!isset($ajax_args["name"])) {
+        $errors["name"] = "Missing profile name";
+    }
+    elseif (! TBcheck_dbslot($ajax_args["name"], "apt_profiles", "name",
+                         TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+        $errors["name"] = TBFieldErrorString();
+    }
+    if (!isset($ajax_args["pid"])) {
+	$errors["pid"] = "Missing profile pid";
+    }
+    elseif (! TBcheck_dbslot($ajax_args["pid"], "apt_profiles", "pid",
+                         TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+        $errors["pid"] = TBFieldErrorString();
+    }
+    elseif (! ($project = Project::Lookup($ajax_args["pid"]))) {
+        $errors["pid"] = "No such project";
+    }
+    elseif (! $project->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
+        $errors["pid"] = "Not enough permission";
+    }
+    if (count($errors)) {
+	SPITAJAX_ERROR(2, $errors);
+	return;
+    }
+    $name = escapeshellarg($ajax_args["name"]);
+    $pid  = $ajax_args["pid"];
+
+    #
+    # Call out to the backend.
+    #
+    $webtask    = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+    $command    = "webmanage_profile -t $webtask_id duplicate ";
+    $command   .= $profile->uuid() . " $pid $name";
+
+    $retval = SUEXEC($this_user->uid(), $project->unix_gid(), $command,
+                     SUEXEC_ACTION_IGNORE);
+
+    $webtask->Refresh();
+    if ($retval) {
+        if ($retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal Error; please try again later.");
+        }
+        else {
+            if ($webtask->TaskValue("errors")) {
+                SPITAJAX_ERROR(2, $webtask->TaskValue("errors"));
+            }
+            else {
+                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                SPITAJAX_ERROR(-1, "Internal Error; please try again later.");
+            }
+        }
+        $webtask->Delete();
+        return;
+    }
+    $newuuid = $webtask->TaskValue("uuid");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($newuuid);
 }
 
 #
@@ -715,105 +801,6 @@ function Do_PublishProfile()
 }
 
 #
-# Helper function to run a geni-lib (or NS) script.
-#
-function CheckScript($profile, $script, $project, 
-                     $warningsfatal, $usenewgenilib,
-                     $refspec, $getparams, $reponame, &$blob)
-{
-    global $this_user;
-    global $ajax_args;
-
-    $this_idx = $this_user->uid_idx();
-    $this_uid = $this_user->uid();
-
-    if (preg_match("/^import/m", $script)) {
-        $command = "webrungenilib";
-        if ($warningsfatal) {
-            $command .= " -W";
-        }
-        if ($usenewgenilib) {
-            $command .= " -N";
-        }
-        if ($getparams) {
-            $pfname = tempnam("/tmp", "genilibparams");
-            chmod($pfname, 0666);
-            
-            $command .= " -P $pfname";
-        }
-        if ($profile) {
-            if ($profile->repourl()) {
-                # Repo argument to rungenilib;
-                $command .= " -r " . $profile->reponame();
-                if ($refspec)
-                    $command .= " -h " . escapeshellarg($refspec);
-            }
-        }
-        elseif ($reponame) {
-            # Repo argument to rungenilib, when creating new profile.
-            $command .= " -r " . $reponame;
-        }
-    }
-    elseif (preg_match("/^source tb_compat/m", $script)) {
-        $command = "webns2rspec";
-        #
-        # We want to parse in the context of the project, so we can do
-        # project based checks. 
-        #
-        if ($project) {
-            $command .= " -p " . $project->pid();
-        }
-        else {
-            $command .= " -a ";
-        }
-    }
-
-    $infname  = tempnam("/tmp", "genilibin");
-    $outfname = tempnam("/tmp", "genilibout");
-
-    $fp = fopen($infname, "w");
-    fwrite($fp, $script);
-    fclose($fp);
-    chmod($infname, 0666);
-    chmod($outfname, 0666);
-
-    #
-    # Invoke the backend.
-    #
-    $retval = SUEXEC($this_uid, "nobody", "$command -o $outfname $infname",
-		     SUEXEC_ACTION_IGNORE);
-    
-    if ($retval != 0) {
-	if ($retval < 0) {
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	    SPITAJAX_ERROR(-1, "Internal error, we have been notified");
-	}
-	else {
-	    $errors = file_get_contents($outfname);
-	    SPITAJAX_ERROR(1, $errors);
-	}
-        unlink($infname);
-        unlink($outfname);
-        if ($getparams) {
-            unlink($pfname);
-        }
-        return -1;
-    }
-    $blob = array("rspec" => file_get_contents($outfname));
-    if ($getparams) {
-        $paramdefs = file_get_contents($pfname);
-        if ($paramdefs != "") {
-            $blob["paramdefs"] = $paramdefs;
-        }
-        unlink($pfname);
-    }
-    unlink($infname);
-    unlink($outfname);
-    return 0;
-}
-                     
-
-#
 # Run a geni-lib script, returning the XML.
 #
 function Do_CheckScript()
@@ -938,27 +925,24 @@ function Do_BindParameters()
     # Allow for form precheck only. So JS code knows it will be fast. 
     $checkonly = isset($ajax_args["checkonly"]) && $ajax_args["checkonly"];
 
-    if (!isset($ajax_args["uuid"])) {
-	SPITAJAX_ERROR(1, "Missing profile uuid");
+    if (!isset($ajax_args["profile"])) {
+	SPITAJAX_ERROR(1, "Missing profile");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $target = $ajax_args["profile"];
+
+    if (! (IsValidUUID($target) || IsValidHash($target))) {
+	SPITAJAX_ERROR(1, "Not a valid profile target");
+	return;
+    }
+    $profile = Profile::Lookup($target);
     if (!$profile) {
-	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	SPITAJAX_ERROR(1, "No such profile $target");
 	return;
     }
     # Allow for new code path.
     $usenewgenilib = false;
     
-    # Guest users do not run geni-lib; return the rspec or error.
-    if (!isset($this_user)) {
-	if ($profile->rspec() && $profile->rspec() != "") {
-	    SPITAJAX_RESPONSE($profile->rspec());
-	}
-	else {
-	    SPITAJAX_ERROR(1, "No rspec for guest user");
-	}
-    }
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(1, "Missing formfields");
 	return;
@@ -968,12 +952,10 @@ function Do_BindParameters()
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
     
-    if (! ($profile->CanInstantiate($this_user) || ISADMIN())) {
+    if (! ($profile->CanInstantiate($this_user) || IsValidHash($target))) {
 	SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
 	return;
     }
-    # See instantiate.php; this code should probably move into instantiate.ajax
-    session_start();
 
     #
     # If this is a repo-based profile, look in the form for the script
@@ -1175,14 +1157,9 @@ function Do_CheckForm($formfields, $paramdefs, &$rval)
         $error   = null;
 
         if ($type == "pubkey") {
-            if (isset($_SESSION["pubkey"]) || GenGenilibKey() == 0) {
-                $binding["value"] = $_SESSION["pubkey"];
-            }
-            else {
-                $errors["$count"]  = array("message" => "Pubkey error");
-                $binding["errors"] = array($count);
-                $count++;
-            }
+            $errors["$count"]  = array("message" => "PUBKEY deprecated");
+            $binding["errors"] = array($count);
+            $count++;
         }
         elseif ($type == "struct") {
             if ($mvalue) {
@@ -1216,6 +1193,10 @@ function Do_CheckForm($formfields, $paramdefs, &$rval)
     return 0;
 }
 
+#
+# We no longer use this, if we have to bring it back, it has to be
+# done without session variables.
+#
 function GenGenilibKey()
 {
     $keyname  = tempnam("/tmp", "genilibkey");
@@ -1420,9 +1401,6 @@ function Do_GetRepository()
     $nameopt  = "";
     $checkout = (ISADMIN() ? "-c" : "");
 
-    // Use the session to save the reponame for running the script later.
-    session_start();
-    
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
 
@@ -1685,234 +1663,6 @@ function UpdateMaster($profile, $script, $rspec)
 }
 
 #
-# Update a repository and send back the script or rspec.
-#
-function Do_GetRepoSource()
-{
-    global $this_user;
-    global $ajax_args;
-    $which = "";
-    
-    $this_idx = $this_user->uid_idx();
-    $this_uid = $this_user->uid();
-
-    if (!isset($ajax_args["refspec"])) {
-	SPITAJAX_ERROR(1, "Missing branch or tag name");
-	return;
-    }
-    if ($ajax_args["refspec"] != null) {
-        $which = escapeshellarg($ajax_args["refspec"]);
-    }
-    if (!isset($ajax_args["uuid"])) {
-	SPITAJAX_ERROR(1, "Missing profile uuid");
-	return;
-    }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
-    if (!$profile) {
-	SPITAJAX_ERROR(1, "Unknown profile uuid");
-	return;
-    }
-    
-    $webtask = WebTask::CreateAnonymous();
-    if (!$webtask) {
-	SPITAJAX_ERROR(-1, "Internal webtask Error");
-	return;
-    }
-    $outfname = tempnam("/tmp", "repofile");
-    chmod($outfname, 0666);
-    
-    $retval = SUEXEC($this_uid, "tbadmin",
-		     "webmanage_gitrepo -t " . $webtask->task_id() . " " .
-                     "  getsource -o $outfname -p " . $profile->uuid() .
-                     "  $which",
-		     SUEXEC_ACTION_IGNORE);
-    $webtask->Refresh();
-    
-    if ($retval != 0) {
-        if ($retval < 0) {
-            $error = $webtask->TaskValue("output");
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-        }
-        else {
-            $error = $webtask->TaskValue("output");
-        }
-        $webtask->Delete();
-        unlink($outfname);
-	SPITAJAX_ERROR(1, $error);
-	return;
-    }
-    $blob = array("script"  => file_get_contents($outfname),
-                  "hash"    => $webtask->TaskValue("hash"));
-    $webtask->Delete();
-    unlink($outfname);
-    SPITAJAX_RESPONSE($blob);
-}
-
-#
-# 
-#
-function Do_GetBranchList()
-{
-    global $this_user;
-    global $ajax_args;
-    
-    $this_idx = $this_user->uid_idx();
-    $this_uid = $this_user->uid();
-
-    if (!isset($ajax_args["uuid"])) {
-	SPITAJAX_ERROR(1, "Missing profile uuid");
-	return;
-    }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
-    if (!$profile) {
-	SPITAJAX_ERROR(1, "Unknown profile uuid");
-	return;
-    }
-    if (!$profile->repourl()) {
-	SPITAJAX_ERROR(1, "Not a repo-based profile");
-	return;
-    }
-    $webtask = WebTask::CreateAnonymous();
-    if (!$webtask) {
-	SPITAJAX_ERROR(-1, "Internal webtask Error");
-	return;
-    }
-    
-    $retval = SUEXEC($this_uid, "tbadmin",
-		     "webmanage_gitrepo -t " . $webtask->task_id() . " " .
-                     "  branchlist -p " . $profile->uuid(),
-		     SUEXEC_ACTION_IGNORE);
-    $webtask->Refresh();
-    
-    if ($retval != 0) {
-        if ($retval < 0) {
-            $error = $webtask->TaskValue("output");
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-        }
-        else {
-            $error = $webtask->TaskValue("output");
-        }
-        $webtask->Delete();
-	SPITAJAX_ERROR(1, $error);
-	return;
-    }
-    $blob = array("branchlist" => $webtask->TaskValue("branchlist"),
-                  "taglist"    => $webtask->TaskValue("taglist"));
-    $webtask->Delete();
-    SPITAJAX_RESPONSE($blob);
-}
-
-#
-# 
-#
-function Do_GetCommitList()
-{
-    global $this_user;
-    global $ajax_args;
-    
-    $this_idx = $this_user->uid_idx();
-    $this_uid = $this_user->uid();
-
-    if (!isset($ajax_args["branch"])) {
-	SPITAJAX_ERROR(1, "Missing branch name");
-	return;
-    }
-    if (!isset($ajax_args["uuid"])) {
-	SPITAJAX_ERROR(1, "Missing profile uuid");
-	return;
-    }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
-    if (!$profile) {
-	SPITAJAX_ERROR(1, "Unknown profile uuid");
-	return;
-    }
-    if (!$profile->repourl()) {
-	SPITAJAX_ERROR(1, "Not a repo-based profile");
-	return;
-    }
-    $webtask = WebTask::CreateAnonymous();
-    if (!$webtask) {
-	SPITAJAX_ERROR(-1, "Internal webtask Error");
-	return;
-    }
-    $branch = escapeshellarg($ajax_args["branch"]);
-    
-    $retval = SUEXEC($this_uid, "tbadmin",
-		     "webmanage_gitrepo -t " . $webtask->task_id() . " " .
-                     "  commitlist -p " . $profile->uuid() . " $branch",
-		     SUEXEC_ACTION_IGNORE);
-    $webtask->Refresh();
-    
-    if ($retval != 0) {
-        if ($retval < 0) {
-            $error = $webtask->TaskValue("output");
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-        }
-        else {
-            $error = $webtask->TaskValue("output");
-        }
-        $webtask->Delete();
-	SPITAJAX_ERROR(1, $error);
-	return;
-    }
-    $blob = $webtask->TaskValue("commitlist");
-    $webtask->Delete();
-    SPITAJAX_RESPONSE($blob);
-}
-
-#
-# Get info about a commit (or whatever).
-#
-function Do_GetCommitInfo()
-{
-    global $this_user;
-    global $ajax_args;
-    $which = "";
-    
-    $this_idx = $this_user->uid_idx();
-    $this_uid = $this_user->uid();
-
-    if (isset($ajax_args["refspec"]) && $ajax_args["refspec"]) {
-        $which = escapeshellarg($ajax_args["refspec"]);
-    }
-    if (!isset($ajax_args["uuid"])) {
-	SPITAJAX_ERROR(1, "Missing profile uuid");
-	return;
-    }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
-    if (!$profile) {
-	SPITAJAX_ERROR(1, "Unknown profile uuid");
-	return;
-    }
-    
-    $webtask = WebTask::CreateAnonymous();
-    if (!$webtask) {
-	SPITAJAX_ERROR(-1, "Internal webtask Error");
-	return;
-    }
-    $retval = SUEXEC($this_uid, "tbadmin",
-		     "webmanage_gitrepo -t " . $webtask->task_id() . " " .
-                     "  commitinfo -p " . $profile->uuid() . "  $which",
-		     SUEXEC_ACTION_IGNORE);
-    $webtask->Refresh();
-    
-    if ($retval != 0) {
-        if ($retval < 0) {
-            $error = $webtask->TaskValue("output");
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-        }
-        else {
-            $error = $webtask->TaskValue("output");
-        }
-        $webtask->Delete();
-	SPITAJAX_ERROR(1, $error);
-	return;
-    }
-    $webtask->Delete();
-    SPITAJAX_RESPONSE($webtask->TaskValue("commitinfo"));
-}
-
-#
 # Get the repo hash
 #
 function Do_GetRepoHash()
@@ -1991,7 +1741,7 @@ function Do_SearchProfiles()
 	return -1;
     }
     $text = $ajax_args["text"];
-    if (!preg_match("/^[\w\s]*$/", $text)) {
+    if (!preg_match("/^[\w\s\-]*$/", $text)) {
 	SPITAJAX_ERROR(-1, "Illegal text to search for");
 	return -1;
     }

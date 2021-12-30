@@ -16,7 +16,9 @@ window.ShowPowderMap = (function()
     var ResInfo        = null;
     var OurBuses       = null;
     var routeList      = {};
+    var routeMap       = {};  // Map route name to route data structure
     var Aggregates     = {};
+    var ShowBusIDs     = false;
     var Loaded         = false;
     var LOCATION_URL   = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
 	"GetMapVehiclePoints?ApiKey=ride1791";
@@ -119,7 +121,21 @@ window.ShowPowderMap = (function()
 		if (Options.showlegend) {
 		    // Layer list to turn them on and off.
 		    var layerList = new LayerList({
-			view: View
+			view: View,
+			listItemCreatedFunction: function(event) {
+			    var item  = event.item;
+			    var layer = item.layer;
+			    var title = layer.title;
+
+			    if (_.has(routeMap, title)) {
+				var route = routeMap[title];
+
+				item.panel = {
+				    className: route.legendClass
+				};
+				//console.info(route.legendClass);
+			    }
+			}
 		    });
 		    var expand = new Expand({
 			expandIconClass: "esri-icon-layer-list",
@@ -128,7 +144,7 @@ window.ShowPowderMap = (function()
 			expanded: true
 		    });
 		    // Add widget to the top right corner of the view
-		    View.ui.add(expand, "top-right");
+		    View.ui.add(layerList, "top-right");
 		}
 		var homeWidget = new Home({
 		    view: View
@@ -150,12 +166,12 @@ window.ShowPowderMap = (function()
 		}
 
 		// Add a distance widget button.
-		var button =
+		var button1 =
 		    $('<button class="action-button esri-icon-measure-line" '+
 		      '        id="distanceButton" '+
 		      '   title="Measure distance between two or more points" '+
 		      '        type="button"></button>');
-		View.ui.add($(button).get(0), "top-left");
+		View.ui.add($(button1).get(0), "top-left");
 
 		var distanceWidget = null;
 
@@ -194,15 +210,35 @@ window.ShowPowderMap = (function()
 		    }
 		});
 
+		// Toggle bus IDs.
+		var button2 =
+		    $('<button class="action-button esri-icon-labels" '+
+		      '        id="toggleBusIDsButton" '+
+		      '   title="Toggle mobile endpoint IDs " '+
+		      '        type="button"></button>');
+		View.ui.add($(button2).get(0), "top-left");
+
+		$('#toggleBusIDsButton').click(function (event) {
+		    console.info("toggle bus IDs");
+
+		    if (ShowBusIDs) {
+			ShowBusIDs = false;
+		    }
+		    else {
+			ShowBusIDs = true;
+		    }
+		    ForceLocationData();
+		});
+
 		// Base layers
 		DrawCoverageArea();
 		DrawDataCenters();
 		// Need to wait till these are done before we mark resources
 		// They return the promise.
-		$.when(DrawFixedEndpoints(),
-		       DrawBaseStations(), DrawRoutes())
+		$.when(DrawRoutes(), DrawFixedEndpoints(),
+		       DrawBaseStations())
 		    .done(function (r1, r2, r3) {
-			console.info("done1", r1, r2, 3);
+			console.info("done1", r1, r2, r3);
 
 			if (Options.showlinks) {
 			    DrawLinks(Options.showlinks);
@@ -210,9 +246,6 @@ window.ShowPowderMap = (function()
 			
 			if (_.has(Options, "experiment")) {
 			    MarkExperimentResources();
-			    if (Options.showmobile) {
-				// Need to show routes used by an experiment.
-			    }
 			    Loaded = true;
 			}
 			else if (_.has(Options, "location")) {
@@ -368,10 +401,12 @@ window.ShowPowderMap = (function()
     }
 
     /*
-     * Markthe current set of resources that are used by the experiment.
+     * Mark the current set of resources that are used by the experiment.
      */
     function MarkExperimentResources()
     {
+	console.info("MarkExperimentResources");
+	
 	UnmarkFixedEndpoints();
 	UnmarkBaseStations();
 	
@@ -398,6 +433,29 @@ window.ShowPowderMap = (function()
 	    // Experiment is using (part of) this base station.
 	    if (markit) {
 		MarkBaseStation(details.name, false);
+	    }
+	});
+
+	_.each(routeList, function (route, routeID) {
+	    // Only routes this experiment has
+	    if (route.experiment == Options.experiment) {
+		var markit = 0;
+		
+		// And only if it has one of our buses on the route.
+		_.each(route.buses, function(bus, busid) {
+		    if (_.has(OurBuses, busid)) {
+			// Need the urn from the global bus list.
+			var urn = OurBuses[busid].urn;
+
+			if (_.has(Aggregates, urn)) {
+			    markit = 1;
+			}
+		    }
+		});
+
+		if (markit) {
+		    ShowRoute(routeID);
+		}
 	    }
 	});
     }
@@ -1329,24 +1387,30 @@ window.ShowPowderMap = (function()
 		    return;
 		}
 		routeList[routeID] = {
+		    "routeID"    : routeID,
 		    "data"       : route,
 		    "path"       : polylineDecode(route.EncodedPolyline),
 		    "layer"      : null,
 		    "buses"      : {},
 		    "experiment" : routes[routeID].experiment,
+		    "legendClass": "",
 		};
+		routeMap[route.Description] = routeList[routeID];
 		DrawRoute(routeID);
 	    });
 	    console.info("routelist", routeList);
-	    PollLocationData();
 	};
-	return $.when(getJSON(ROUTES_URL),
-		      sup.CallServerMethod(null, "map-support",
-					   "GetMobileEndpoints", null))
-	    .done(function(routedata, json) {
+	var deferred = 
+	    $.when(getJSON(ROUTES_URL),
+		   sup.CallServerMethod(null, "map-support",
+					"GetMobileEndpoints", null));
+	var chained =
+	    deferred.then(function(routedata, json) {
 		console.info("done2", routedata, json);
 		callback(routedata, json);
+		return PollLocationData();
 	    });
+	return chained;
     }
 
     function getJSON(url, callback)
@@ -1386,13 +1450,14 @@ window.ShowPowderMap = (function()
 
 	var name  = routeList[routeID].data.Description;
 	var path  = routeList[routeID].path;
+	var color = routeList[routeID].data.MapLineColor;
 	var layer = GraphicsLayer({
 	    title: name,
 	})
 
 	var symbol = {
 	    type: "simple-line",
-	    color: routeList[routeID].data.MapLineColor,
+	    color: color,
 	    width: 2
 	};
 	var line = {
@@ -1403,6 +1468,20 @@ window.ShowPowderMap = (function()
 	    geometry:   line,
 	    symbol:     symbol,
 	});
+	/*
+	 * Create a class to use as the color icon in the legend.
+	 */
+	var className = "esri-icon-polygon-" + routeID;
+	var html =
+	    "<style>" +
+	    " ." + className + ":before { " +
+	    "  content: \"\ue68b\"; " +
+	    "  color: " + color + ";" +
+	    " } " +
+	"</style>";
+	$(html).appendTo("body");
+	routeList[routeID].legendClass = className;
+	
 	layer.visible = false;
 	layer.add(graphic);
 	Map.add(layer);
@@ -1432,12 +1511,11 @@ window.ShowPowderMap = (function()
      */
     function UpdateLocationData()
     {
-	$.ajax({
+	var jqxhr = $.ajax({
 	    dataType: "json",
 	    url: LOCATION_URL,
 	    cache: false,
 	    success: function (data) {
-		//console.info("PollLocationData", data);
 		_.each(data, function (bus) {
 		    var routeID = bus.RouteID;
 
@@ -1447,11 +1525,30 @@ window.ShowPowderMap = (function()
 		});
 	    }
 	});
+	var defer = $.Deferred();
+	jqxhr.done(function (data) {
+	    defer.resolve(data);
+	});
+	return defer;
     }
+    var locationInterval = null;
+    
     function PollLocationData()
     {
-	UpdateLocationData();
-	setInterval(UpdateLocationData, 5000);
+	console.info("PollLocationData");
+
+	return $.when(UpdateLocationData())
+	    .done(function (r) {
+		locationInterval = setInterval(UpdateLocationData, 5000);
+	    });
+    }
+    function ForceLocationData()
+    {
+	if (locationInterval) {
+	    clearInterval(locationInterval);
+	    locationInterval = null;
+	}
+	PollLocationData();
     }
 
     /*
@@ -1541,15 +1638,43 @@ window.ShowPowderMap = (function()
 	    attributes: attributes,
 	    popupTemplate: popup,
         });
+	// Add label text below the point
+	var labelGraphic = new Graphic({
+	    geometry: {
+		type: "point",
+		longitude: data.Longitude,
+		latitude: data.Latitude,
+	    },
+	    symbol: {
+		type: "text",
+		color: [25,25,25],
+		text: busname,
+		xoffset: 0,
+		yoffset: 10,
+		font: {
+		    size: 8,
+		    weight: "bold",
+		}
+	    }
+	});
+	
 	// Kill the old point.
 	if (_.has(buses, busname)) {
 	    var oldpointGraphic = buses[busname].pointGraphic;
 	    layer.remove(oldpointGraphic);
+	    if (_.has(buses[busname], "labelGraphic")) {
+		layer.remove(buses[busname].labelGraphic);
+	    }
 	}
 	// Add the new point and remember it
 	data.pointGraphic = pointGraphic;
 	routeList[routeID].buses[busname] = data;
 	layer.add(pointGraphic);
+	// And the label if enabled.
+	if (ShowBusIDs) {
+	    data.labelGraphic = labelGraphic;
+	    layer.add(labelGraphic);
+	}
     }
 
     /*
@@ -1777,6 +1902,9 @@ window.ShowPowderMap = (function()
 
 	if (_.has(Options, "experiment")) {
 	    GetExperimentInfo(function () {
+		// Default this toggle on in this mode.
+		ShowBusIDs = true;
+		
 		DrawBaseMap();
 
 		// Periodic poll to refresh things.

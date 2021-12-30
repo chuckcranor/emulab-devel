@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2010 University of Utah and the Flux Group.
+# Copyright (c) 2010-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,8 @@
 package libptop;
 
 use strict;
+use English;
+use Carp;
 use Exporter;
 use vars qw(@ISA @EXPORT @EXPORT_OK);
 
@@ -48,11 +50,11 @@ sub nodes($) { return $_[0]->{'NODES'}; }
 sub links($) { return $_[0]->{'LINKS'}; }
 
 # Add new nodes and links
-sub CreateNode($$)
+sub CreateNode($$$)
 {
-    my ($self, $name) = @_;
-    my $node = libptop::pnode->Create($name);
-    $self->nodes()->{$name} = $node;
+    my ($self, $node_id, $row) = @_;
+    my $node = libptop::pnode->Create($node_id, $row);
+    $self->nodes()->{$node_id} = $node;
     return $node;
 }
 
@@ -61,41 +63,58 @@ sub CreateNode($$)
 # generate ptop or xml files.
 
 package libptop::pnode;
+use Carp;
+use vars qw($AUTOLOAD);
 
-sub Create($$)
+sub Create($$$)
 {
-    my ($class, $name) = @_;
+    my ($class, $node_id, $row) = @_;
 
     my $self = {};
 
-    $self->{'NAME'} = $name;
-    $self->{'SUBNODE_OF'} = undef;
-    $self->{'IS_REMOTE'} = undef;
+    $self->{'NODE_ID'}    = $node_id;
+    $self->{'ROW'}        = $row;
+    $self->{'HASH'}       = {};
 
     bless($self, $class);
     return $self;
 }
 
-# Accessors
-sub name($)       { return $_[0]->{'NAME'}; }
-sub subnode_of($) { return $_[0]->{'SUBNODE_OF'}; }
-sub is_subnode($) { return defined($_[0]->subnode_of()); }
-sub is_remote($)  { return $_[0]->{'IS_REMOTE'}; }
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or confess "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
 
-sub SetSubnode($$$)
-{
-    my ($self, $phys_name, $is_subnode) = @_;
-    if ($is_subnode) {
-	$self->{'SUBNODE_OF'} = $phys_name;
-    } else {
-	$self->{'SUBNODE_OF'} = undef;
+    # A DB row proxy method call.
+    if (exists($self->{'ROW'}->{$name})) {
+	return $self->{'ROW'}->{$name};
     }
+    # Or it is for a local storage slot.
+    if ($name =~ /^_.*$/) {
+	if (scalar(@_) == 2) {
+	    return $self->{'HASH'}->{$name} = $_[1];
+	}
+	elsif (exists($self->{'HASH'}->{$name})) {
+	    return $self->{'HASH'}->{$name};
+	}
+	# No noise for a local storage slot
+	return undef;
+    }
+    carp("No such slot '$name' field in class $type");
+    return undef;
 }
+# Accessors
+sub name($)       { return $_[0]->{'NODE_ID'}; }
+sub subnode_of($) { return $_[0]->{'ROW'}->{'phys_nodeid'}; }
+sub is_subnode($) { return $_[0]->{'ROW'}->{'issubnode'}; }
+sub is_remote($)  { return $_[0]->{'ROW'}->{'isremotenode'}; }
 
-sub SetRemote($$)
-{
-    my ($self, $isremote) = @_;
-    $self->{'IS_REMOTE'} = $isremote;
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'ROW'}     = undef;
+    $self->{'HASH'}    = undef;
 }
 
 1;

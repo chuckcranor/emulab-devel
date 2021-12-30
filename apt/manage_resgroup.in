@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -735,12 +735,18 @@ sub DoGroupReserve()
 		$res->{'errcode'}  = $webtask->exitcode();
 		$res->{'output'}   = $webtask->output();
 		$res->{"approved"} = 0;
+		if ($webtask->conflict()) {
+		    $res->{'conflict'} = $webtask->conflict();
+		}
 		$cluster_results->{'errors'}++;		
 	    }
 	    else {
 		$res->{"approved"} = int($webtask->approved());
 		if ($res->{"approved"}) {
 		    $cluster_results->{'approved'}++;
+		}
+		elsif ($webtask->conflict()) {
+		    $res->{'conflict'} = $webtask->conflict();
 		}
 	    }
 	    # Remote uuid of reservation, needed below for local record.
@@ -895,13 +901,35 @@ sub DoGroupReserve()
 	# For each (new or modified) reservation see if it fits the schedule
 	#
 	my @allgroups = APT_Reservation::Group->LookupAll();
-    
+
+	#
+	# For now, any reservation with routes must end on the same
+	# day by midnight.
+	#
+	my $toolong = 0;
+	
+	if (! $this_user->IsAdmin()) {
+	    my $s = (defined($start) ? $start : time());
+
+	    my (undef,undef,$start_hour,$start_day) = localtime($s);
+	    my (undef,undef,$end_hour,$end_day) = localtime($end);
+	    
+	    if ($start_day != $end_day) {
+		$toolong = 1;
+	    }
+	}
 	foreach my $ref (@route_reservations) {
 	    # These flags go back to the web interface.
 	    # We never auto approve route reservations.
-	    if (!($this_user->IsAdmin() ||
-		  APT_Reservation::Group::RouteReservation->RouteAllowed(
-		      $project, $ref))) {
+	    if ($toolong) {
+		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
+		$ref->{'output'}   = "Exceeds maximum allowed duration";
+		$ref->{'valid'}    = 0;
+		$route_results->{'errors'}++;
+	    }
+	    elsif (!($this_user->IsAdmin() ||
+		     APT_Reservation::Group::RouteReservation->RouteAllowed(
+			 $project, $ref))) {
 		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
 		$ref->{'output'}   = "Not allowed to use this route";
 		$ref->{'valid'}    = 0;
@@ -1075,6 +1103,8 @@ sub DoGroupReserve()
 			  "but it needs approval.".
 			  "\n\n".
 			  $resgroup->InfoString() . "\n" .
+			  ($resgroup->reason() ne "" ?
+			   "Reason:\n" . $resgroup->reason() . "\n\n" : "") .
 			  "See: $url", $this_email);
 	    }
 	    else {
@@ -1106,7 +1136,7 @@ sub DoDelete()
     # is an expiration, initiated by the daemon when it sees a reservation
     # group is done. 
     #
-    my $optlist   = "N:LMp";
+    my $optlist   = "N:LMps";
     my $takelock  = 0;
     my $nolock    = 0;	# Caller holds the lock.
     my $noemail   = 0;
@@ -1139,6 +1169,9 @@ sub DoDelete()
     }
     if (defined($options{"p"})) {
 	$pushonly = 1;
+    }
+    if (defined($options{"s"})) {
+	$noemail = 1;
     }
     usage()
 	if (@ARGV < 1);
@@ -2745,16 +2778,16 @@ sub DoCheckReserved()
 	fatal("Could not parse rspec");
     }
     my $noresokay = 0;
-    if (APT_Profile::CheckResources($rspec, $project, $start, $end,
-				    $noresokay, \$errmsg)) {
+    if (APT_Profile::CheckResourceReservations($rspec, $project, $start, $end,
+					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckSpectrum($rspec, $project, $start, $end,
-				   $noresokay, \$errmsg)) {
+    if (APT_Profile::CheckSpectrumReservations($rspec, $project, $start, $end,
+					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckRoutes($rspec, $project, $start, $end,
-				 $noresokay, \$errmsg)) {
+    if (APT_Profile::CheckRoutesReservations($rspec, $project, $start, $end,
+					     $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
     if (defined($webtask)) {
@@ -2833,17 +2866,18 @@ sub DoMaxDuration()
     }
 
     #
-    # Use this to get the type counts and do error checking. 
+    # Use this to get the type counts
     #
     my $resources = {};
-    if (APT_Profile::CheckResources($rspec, $project, $start, $end,
-				    1, \$errmsg, \$resources)) {
+    if (APT_Profile::GetResources($rspec, \$errmsg, \$resources)) {
 	fatal($errmsg);
     }
+    my $typeCounts = $resources->{"typeCounts"};
+    
     #
     # Ask for prediction info from the clusters referenced in the rspec.
     #
-    my $urns = join(",", keys(%{$resources}));
+    my $urns = join(",", keys(%{$typeCounts}));
 
     #
     # Get the prediction info. 
@@ -2862,14 +2896,14 @@ sub DoMaxDuration()
 	#print Dumper($prediction_info);
     }
     
-    if (keys(%{$resources})) {
+    if (keys(%{$typeCounts})) {
 	if (APT_Reservation::Group::Reservation::MaxDuration(
-		$project, $start, \$end, $resources,
+		$project, $start, \$end, $typeCounts,
 		$prediction_info, \$errmsg)) {
 	    fatal($errmsg);
 	}
 	if (defined($end)) {
-	    print POSIX::strftime("B %m/%d/20%y %H:%M", localtime($end)) . "\n";
+	    print POSIX::strftime("R %m/%d/20%y %H:%M", localtime($end)) . "\n";
 	}
 	else {
 	    print "undef\n";
@@ -2885,7 +2919,7 @@ sub DoMaxDuration()
 	    fatal($errmsg);
 	}
 	if (defined($end)) {
-	    print POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . "\n";
+	    print POSIX::strftime("S %m/%d/20%y %H:%M", localtime($end)) . "\n";
 	}
 	else {
 	    print "undef\n";
@@ -2908,8 +2942,13 @@ sub DoMaxDuration()
     elsif ($end < $start) {
 	$end = 0;
     }
-    print "Max duration is $end (" .
-	POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . ")\n";
+    if ($end == 0) {
+	print "Some or all resources unavailable\n";
+    }
+    else {
+	print "Max duration is $end (" .
+	    POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . ")\n";
+    }
     
     if (defined($webtask)) {
 	$webtask->maxend($end);
@@ -2986,8 +3025,9 @@ sub CallMethodOnReservations($$@)
     #
     # Generate a list of responses to return to caller.
     #
-    foreach my $agg (@reservations) {
-	my $webtask = shift(@webtasks);
+    for (my $i = 0; $i < scalar(@reservations); $i++) {
+	my $agg = $reservations[$i];
+	my $webtask = $webtasks[$i];
 
 	$webtask->Refresh();
 	push(@return_values, $webtask);

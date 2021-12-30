@@ -18,18 +18,19 @@ $(function ()
     var profilelist   = null;
     var recentcount   = 5;
     var amdefault     = null;
-    var selected_uuid = null;
+    var selected_profile = null;
+    var selected_uuid    = null;
     var selected_rspec   = null;
     var selected_version = null;
     var ispprofile    = 0;
     var isscript      = 0;
-    var rerunscripts  = 0;
     var webonly       = 0;
     var isadmin       = 0;
     var multisite     = 0;
     var doconstraints = 0;
     var amValueToKey  = {};
     var showpicker    = 0;
+    var restrictions  = null;
     var portal        = null;
     var fromrepo      = false;
     var registered    = false;
@@ -119,8 +120,14 @@ $(function ()
 	}
 	if ($('#projects-json').length) {
 	    projlist = decodejson('#projects-json');
+	    console.info("projlist", projlist);
+	}
+	if ($('#restrictions-json').length) {
+	    restrictions = decodejson('#restrictions-json');
+	    console.info("cluster restrictions", restrictions);
 	}
 	profilelist = decodejson('#profiles-json');
+	console.info("profilelist", profilelist);
 	var profileToArray = _.pairs(profilelist);
 	prunetypes = decodejson('#prunelist-json');
 	console.info(prunetypes);
@@ -128,6 +135,7 @@ $(function ()
 	    radioinfo = decodejson('#radioinfo-json');
 	    console.info("radioinfo", radioinfo);
 	}
+	console.info("formfields", decodejson('#form-json'));
 
 	/*
 	 * Sort the entire list by recently used if a registered user,
@@ -188,7 +196,6 @@ $(function ()
 	    profileuuid:        window.PROFILEUUID,     
 	    profilevers:        window.PROFILEVERS,     
 	    showpicker:         showpicker,
-	    cancopy:            window.CANCOPY,
 	    fromrepo:           fromrepo,
 	    clustername:        window.PORTAL_NAME,
 	    admin:		isadmin,
@@ -198,7 +205,7 @@ $(function ()
 	$('#main-body').html(html);
 
 	// Fire this off right away.
-	if (window.REGISTERED) {
+	if (window.REGISTERED && !window.NOPREDICTION) {
 	    LoadReservationInfo();
 	}
 
@@ -278,21 +285,10 @@ $(function ()
 	    container: 'body',
 	});
 
-	/*
-	 * The save paramset bindings button. This will be hidden when
-	 * the user selects a non-pp profle.
-	 */
-	$('#save_paramset_button')
-	    .popover({
-		trigger: 'hover',
-		placement: 'auto',
-		container: 'body',
-	    })
-	    .click(function (event) {
-		    paramsets.InitSaveParameterSet('#save_paramset_div',
-						   selected_uuid,
-						   selected_rspec);
-	    });
+	// It is okay to initialize this, we do not show the copy
+	// button unless appropriate. 
+	CopyProfile.InitCopyProfile('#profile-copy-button',
+				    window.PROFILE, _.keys(projlist));
 
 	// Format the step labels across the top to match the panel widths.
 	$('#stepsContainer .steps').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
@@ -336,8 +332,6 @@ $(function ()
 	    var selected = $('#quickvm_topomodal .selected');
 	    PickerEvent("select", selected, $('#profile_name').scrollTop());
 	    ChangeProfileSelection(selected);
-	    selected_uuid = selected.attr('value');
-	    console.log(selected_uuid);
 	    $('#quickvm_topomodal').modal('hide');
 	    $('.steps .error').removeClass('error');
 	});
@@ -359,31 +353,6 @@ $(function ()
 	    UpdateGroupSelector();
 	    UpdateImageConstraints();
 	    return true;
-	});
-	$('#profile_copy_button').click(function (event) {
-	    event.preventDefault();
-	    if (!registered) {
-		sup.SpitOops("oops", "You must be a registered user to copy " +
-			     "a profile.");
-		return;
-	    }
-	    window.APT_OPTIONS.gaButtonEvent(event);
-	    var url = "manage_profile.php?action=copy&uuid=" + selected_uuid;
-	    window.location.replace(url);
-	    return false;
-	});
-
-	$('#profile_show_button').click(function (event) {
-	    event.preventDefault();
-	    if (!registered) {
-		sup.SpitOops("oops", "You must be a registered user to view " +
-			     "profile details.");
-		return;
-	    }
-	    window.APT_OPTIONS.gaButtonEvent(event);
-	    var url = "show-profile.php?uuid=" + selected_uuid;
-	    window.location.replace(url);
-	    return false;
 	});
 
 	$('#show_xml_modal_button').click(function (event) {
@@ -576,7 +545,6 @@ $(function ()
     }
 
     var doingformcheck = 0;
-    var doingrunscript = 0;
 
     // Step is changing
     function StepChanging(step, event, currentIndex, newIndex) {
@@ -606,6 +574,7 @@ $(function ()
 		    $('#stepsContainer-p-1 > div')
 			.attr('style','display:block');
 		    ppstart.StartPP({
+			profile      : selected_profile,
 			uuid         : selected_uuid,
 			ppdivname    : "pp-container",
 			registered   : registered,
@@ -616,6 +585,7 @@ $(function ()
 		        multisite    : multisite,
 			amlist       : amlist,
 			prunetypes   : prunetypes,
+			fromrepo     : fromrepo,
 			rerun_instance : window.RERUN_INSTANCE,
 			rerun_paramset : window.RERUN_PARAMSET,
 		        jacksGraphCallback: updateJacksGraph,
@@ -625,23 +595,6 @@ $(function ()
 		    ppchanged = true; 
 		}
 	    }
-	    else if (isscript && rerunscripts && !doingrunscript) {
-		// Run the genilib script to get an updated rspec.
-		doingrunscript = 1;
-		RunScript(selected_uuid, function (success) {
-		    if (success) {
-			$('#stepsContainer-t-0').parent().removeClass('error');
-			$('#stepsContainer').steps('next');
-		    }
-		    else {
-			$('#stepsContainer-t-0').parent().addClass('error');
-		    }
-		    // Here to avoid recursion.
-		    doingrunscript = 0;
-		});
-		// Prevent step from advancing until check is finished.
-		return false;
-	    }
 	    else {
 		$('#stepsContainer-p-1 > div').attr('style','display:none');
 		loaded_uuid = selected_uuid;
@@ -649,6 +602,7 @@ $(function ()
 	}
 	else if (currentIndex == 1 && newIndex == 2) {
 	    if (ispprofile && ppchanged) {
+		console.info("foo", ppchanged);
 		ppstart.HandleSubmit(function(success) {
 		    if (success) {
 			ppchanged = false;
@@ -703,7 +657,7 @@ $(function ()
 
     // Step is done changing.
     function StepChanged(step, event, currentIndex, priorIndex) {
-	//console.info("StepChanged: ", step, currentIndex, priorIndex);
+	console.info("StepChanged: ", step, currentIndex, priorIndex);
 	//console.info(new Date());
 	
         APT_OPTIONS.updatePage({ 'instantiate-step': currentIndex });
@@ -770,6 +724,9 @@ $(function ()
 	}
 	else if (currentIndex == 3) {
 	    CheckForSpectrum();
+
+	    // This is for testing with Selenium.
+	    $('body').append("<div class='hidden' id='step3-loaded'></div>");
 	}
 	if (currentIndex < priorIndex) {
 	    // Disable going forward by clicking on the labels
@@ -939,38 +896,6 @@ $(function ()
 	});
     }
 
-    /*
-     * Run the genilib script.
-     */
-    function RunScript(uuid, step_callback)
-    {
-	var callback = function(json) {
-	    $("#waitwait-modal").modal('hide');
-	    console.info(json);
-
-	    if (json.code == 0) {
-		selected_rspec = SetClusters(json.value);
-		step_callback(true);
-		return;
-	    }
-	    // Internal error.
-	    if (json.code) {
-		step_callback(false);
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	};
-	var args = {"uuid" : uuid};
-	// Another repo based profile thing.
-	if (window.REFSPEC !== undefined) {
-	    args["refspec"] = window.REFSPEC;
-	}
-	$("#waitwait-modal").modal('show');
-	var xmlthing = sup.CallServerMethod(null, "instantiate",
-					    "RunScript", args);
-	xmlthing.done(callback);
-    };
-
     var Instantiate = function () {
         var submitted = false;
 
@@ -1013,6 +938,7 @@ $(function ()
 	            submitted = false;
 		    return;
 	        }
+		sup.ShowWaitWait("This might take a minute. Patience please.");
 	        $("#waitwait-modal").modal('show');
 	        SubmitForm(0, 3, function(json) {
 		    if (json.code) {
@@ -1652,9 +1578,11 @@ $(function ()
 	    if (profile_blob.fromrepo) {
 		$('#showtopo_repohash').html(profile_blob.repohash);
 		$('.showtopo_repoinfo').removeClass("hidden");
+		fromrepo = true;
 	    }
 	    else {
 		$('.showtopo_repoinfo').addClass("hidden");
+		fromrepo = false;
 	    }
 
 	    sup.maketopmap('#showtopo_div',
@@ -1732,8 +1660,6 @@ $(function ()
       editor.show(selected_rspec);
     }
 
-
-
     function ChangeProfileSelection(selectedElement) {
 	if (!$(selectedElement).hasClass('current')) {
 	    $('#profile_name li').each(function() {
@@ -1760,7 +1686,8 @@ $(function ()
 
 	    ispprofile       = profile_blob.ispprofile;
 	    isscript         = profile_blob.isscript;
-	    selected_uuid    = profile_value;
+	    selected_profile = profile_value;
+	    selected_uuid    = profile_blob.uuid;
 	    selected_rspec   = SetClusters(profile_blob.rspec);
 	    selected_version = profile_blob.version;
 	    amdefault        = profile_blob.amdefault;
@@ -1770,16 +1697,29 @@ $(function ()
 	    else {
 		$('#save_paramset_button').addClass("hidden");
 	    }
+	    $('#profile_show_button')
+		.attr("href", "show-profile.php?profile=" + selected_profile);
 
-	    // Not allowed to copy a repo based profile.
+	    if (window.CANCOPY && !profile_blob.fromrepo) {
+		CopyProfile.SwitchProfile(selected_profile);
+		$('#profile-copy-button').removeClass("hidden");
+	    }
+	    else {
+		// Not allowed to copy a repo based profile.
+		$('#profile-copy-button').addClass("hidden");
+	    }
 	    if (profile_blob.fromrepo) {
-		$('#profile_copy_button').addClass("hidden");
 		$('#selected_profile_text')
 		    .html(profile_name + " (Repohash: " +
 			  profile_blob.repohash + ")");
+		window.PROFILE_REFSPEC = profile_blob.reporef;
+		window.PROFILE_REFHASH = profile_blob.repohash;
+		fromrepo = true;
 	    }
 	    else {
-		$('#profile_copy_button').removeClass("hidden");
+		window.PROFILE_REFSPEC = null;
+		window.PROFILE_REFHASH = null;
+		fromrepo = false;
 	    }
 	    setStepsMotion(true);
 
@@ -1835,27 +1775,49 @@ $(function ()
 	}
 	var $xmlthing = sup.CallServerMethod(ajaxurl,
 					     "instantiate", "GetProfile",
-					     {"uuid" : profile});
+					     {"profile" : profile});
 
 	/*
-	 * If a repo-based and we got a specific branch/tag, we have to
+	 * If a repo-based and we got a specific branch/tag/hash, we have to
 	 * get the source for that, since it will be different then what
 	 * is stored in the profile descriptor.
 	 */
-	if (fromrepo && window.REFSPEC !== undefined) {
-	    var which = window.REFSPEC;
+	if (fromrepo &&
+	    (window.TARGET_REFHASH !== undefined ||
+	     window.TARGET_REFSPEC !== undefined)) {
+
+	    // This is what we checkout below. 
+	    var target = window.TARGET_REFHASH || window.TARGET_REFSPEC;
+	    
+	    // Rerun refspec is what we need for the form, just passing along.
+	    // Might be null (paramset or rerun instance)
+	    var refspec = window.TARGET_REFSPEC;
+
+	    // See ppwizard, it will run the script again if the params change
+	    // and need to know what to checkout in the jail.
+	    window.TARGET_REPOREF = target;
 
 	    $xmlthing.done(function(json) {
-		gitrepo.GetRepoSource(profile, which, function(source, hash) {
+		gitrepo.GetRepoSource({
+		    "uuid"     : profile,
+		    "refspec"  : target,
+		    "callback" : function(source, hash) {
 		    var pythonRe = /^import/m;
 
+		    // For the form that is submitted.
 		    $('#repohash').val(hash);
-		    $('#reporef').val(which);
+		    if (refspec) {
+			$('#reporef').val(refspec);
+		    }
+		    // We change this whenever we switch around.
+		    window.PROFILE_REFHASH = hash;
+		    window.PROFILE_REFSPEC = refspec;
+		    
 		    // Pass along.
 		    json.value.repohash = hash;
 
 		    if (pythonRe.test(source)) {
-			ConvertScript(source, profile, which,
+			ConvertScript(source, profile, target,
 				      function(rspec, paramdefs) {
 			    // Need to pass these along at submit.
 			    $('#rspec_textarea').val(rspec);
@@ -1882,7 +1844,7 @@ $(function ()
 			$('#rspec_textarea').val(source);
 			callback(json);
 		    }
-		});
+		}})
 	    });
 	}
 	else {
@@ -1893,7 +1855,11 @@ $(function ()
     //
     // Pass a geni-lib script to the server to run (convert to XML).
     // We use this on repo-based profiles, where we have to get the
-    // source code from the repo, and convert to an rspec. 
+    // source code from the repo, and convert to an rspec.
+    //
+    // We pass along the refspec (which might be a hash) so that the
+    // corresponding commit can be checked out in the genilib jail.
+    // Really, why are we passing the script around?
     //
     function ConvertScript(script, profile_uuid, refspec, continuation)
     {
@@ -1956,6 +1922,7 @@ $(function ()
 	var bound  = 0;
 	var count  = 0;
 	var ammap  = {};
+	var pid    = $('#project_selector #profile_pid').val();	
 	sites = {};
 
 	// No need to do this if not showing selectors.
@@ -2046,6 +2013,20 @@ $(function ()
 		 */
 		if (0 && details.ismobile == 1 && !isadmin) {
 		    return;
+		}
+		/*
+		 * Cluster restrictions for the selected project.
+		 * This would make no sense on a single cluster
+		 * portal (!MAINSITE).
+		 */
+		if (_.has(restrictions, pid)) {
+		    if (!_.find(restrictions[pid],
+				function(urn) {
+				    return urn == key;
+				})) {
+			console.info("Skipping cluster " + key);
+			return;
+		    }
 		}
 		var name = details.name;
 		options = options + "<option value='" + name + "'";
@@ -2266,6 +2247,7 @@ $(function ()
      */
     function UpdateImageConstraints() {
 	if (!foundImages.length || !doconstraints) {
+	    CreateAggregateSelectors(selected_rspec);
 	    return;
 	}
       
@@ -2772,6 +2754,7 @@ $(function ()
 		}
 	    }
 	}
+	if (1) {
 	if (window.ISPOWDER &&
 	    (which == "#start_day" || which == "#start_hour")) {
 	    if (isadmin || window.USENEWSCHEDULE) {
@@ -2797,6 +2780,7 @@ $(function ()
 		$("#end_day").datepicker("refresh");
 		$("#end_hour").val(maxdate.getHours());
 	    }
+	}
 	}
     }
 
@@ -2950,7 +2934,8 @@ $(function ()
 	
 	$('#request-license-button').click(function (event) {
 	    sup.HideModal('#request-licenses-modal');
-	    sup.CallServerMethod(null, "instantiate", "RequestLicenses", null,
+	    sup.CallServerMethod(null, "instantiate", "RequestLicenses",
+				 {"licenses" : JSON.stringify(licenses)},
 				 function (json) {
 				     if (json.code) {
 					 alert("Could not request resource " +
@@ -3041,7 +3026,7 @@ $(function ()
 	 * Kirk requested that we do not predicate this on using spectrum
 	 * but always on the Powder portal.
 	 */
-	if (!window.ISPOWDER) {
+	if (!window.ISPOWDER || window.STRESSTEST) {
             $('#step3-div .reserve-resources-button').off("click");
             $('#step3-div .schedule-experiment').removeClass("hidden");
             $('#step3-div .reserve-resources').addClass("hidden");
@@ -3075,6 +3060,8 @@ $(function ()
 	    if (! start.isBefore()) {
 		$('#start_day').val(start.format("MM/DD/YYYY"));
 		$('#start_hour').val(start.format("H"));
+		$("#start_hour option[value='" + start.hour() + "']")
+		    .removeAttr("disabled");
 	    }
 	    else {
 		$('#start_day').val("");
@@ -3082,6 +3069,8 @@ $(function ()
 	    }
 	    $('#end_day').val(end.format("MM/DD/YYYY"));
 	    $('#end_hour').val(end.format("H"));
+	    $("#end_hour option[value='" + end.hour() + "']")
+		.removeAttr("disabled");
 	};
 	var clearPickers = function() {
 	    // Set the pickers.
@@ -3157,7 +3146,9 @@ $(function ()
 				     }
 				 });
 	}
-	showResgroupList();
+	if (!window.NOPREDICTION) {
+	    showResgroupList();
+	}
 	
 	/*
 	 * We hide the normal scheduling controls and show a list of

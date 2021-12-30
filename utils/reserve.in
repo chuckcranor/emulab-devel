@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2020 University of Utah and the Flux Group.
+# Copyright (c) 2016-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -477,6 +477,11 @@ if ($cancel || $abortcancel || defined($idledetection)) {
 	}
 	else {
 	    $res->DisableIdleDetection();
+	    # If we are turning off idle detection it is a good bet
+	    # we want to abort a scheduled cancel.
+	    if ($res->cancel()) {
+		$res->ClearCancel();
+	    }
 	}
 	exit(0);
     }
@@ -584,20 +589,22 @@ if (! ($pending || $approve)) {
     # zero instead of unlimited. As above, this limit is node hours.
     #
     my $limit;
-    
-    my $nodetype = NodeType->Lookup($type);
-    if (defined($nodetype)) {
-	$limit = $nodetype->GetAttribute("reservation_autoapprove_limit");
-    }
-    else {
-	# Lets see if type is really a node ID.
-	my $node = Node->Lookup($type);
-	if (!defined($node)) {
-	    fatal("Could not look up node type");
+
+    if (! ($target_user->expert_mode() || $project->expert_mode())) {
+	my $nodetype = NodeType->Lookup($type);
+	if (defined($nodetype)) {
+	    $limit = $nodetype->GetAttribute("reservation_autoapprove_limit");
 	}
-	$node->NodeAttribute("reservation_autoapprove_limit", \$limit);
-	if (!defined($limit)) {
-	    $limit = $node->NodeTypeAttribute("reservation_autoapprove_limit");
+	else {
+	    # Lets see if type is really a node ID.
+	    my $node = Node->Lookup($type);
+	    if (!defined($node)) {
+		fatal("Could not look up node type");
+	    }
+	    $node->NodeAttribute("reservation_autoapprove_limit", \$limit);
+	    if (!defined($limit)) {
+		$limit = $node->NodeTypeAttribute("reservation_autoapprove_limit");
+	    }
 	}
     }
     if (defined($limit)) {
@@ -651,6 +658,7 @@ print "$res\n" if( $debug );
 while( 1 ) {
     my $version = Reservation->GetVersion();
     my $reservations = Reservation->LookupAll( $type );
+    my $reservations_all = Reservation->LookupAll($type, 1) if ($impotent);
     my $found = 0;
     if( defined( $modify_idx ) ) {
 	my $i;
@@ -664,29 +672,76 @@ while( 1 ) {
 		last;
 	    }
 	}
-
 	if( !$found ) {
 	    # Couldn't find existing reservation in LookupAll() results:
 	    # probably because it wasn't previously approved.
 	    push( @$reservations, $res );	    
 	}
+
+	if ($impotent) {
+	    $found = 0;
+	    for( $i = 0; $i < @$reservations_all; $i++ ) {
+		my $r = $$reservations_all[ $i ];
+
+		if( defined( $r->idx() ) && $r->idx() == $modify_idx ) {
+		    $$reservations_all[ $i ] = $res;
+		    last;
+		}
+	    }
+	    if( !$found ) {
+		# Couldn't find existing reservation in LookupAll() results:
+		# probably because it wasn't previously approved.
+		push( @$reservations_all, $res );	    
+	    }
+	}
     } else {
 	push( @$reservations, $res );
+	push( @$reservations_all, $res ) if ($impotent);
     }
-    my $error;
-    if( !Reservation->IsFeasible( $reservations, \$error ) ) {
-	print STDERR "reserve: $error\n";
+    my $error = {};
+    if( !Reservation->IsFeasible( $reservations, $error ) ) {
+	print STDERR "reserve: " . $error->{'error'} . "\n";
 	if( $force ) {
 	    print STDERR "Continuing anyway!\n";
 	} else {
 	    if (defined($webtask)) {
+		#
+		# More detailed conflict info to avoid parsing the error.
+		#
+		$webtask->conflict({
+		    "error"  => $error->{'error'},
+		    "when"   => TBDateStringGMT($error->{'time'}),
+		    "needed" => $error->{'needed'}});
+		$webtask->output($error->{'error'});
 		$webtask->Exited(1);
-		$webtask->output($error);
 	    }
 	    exit( 1 );
 	}
     }
-    exit( $approve ? 0 : 2 ) if( $impotent );
+    if ($impotent) {
+	my $exitval = $approve ? 0 : 2;
+	print "Approve: $approve\n";
+	
+	#
+	# Doing a check Check against pending reservations for overlap so
+	# we can warn the user.
+	#
+	my $feasible = Reservation->IsFeasible($reservations_all, $error);
+	if (!$feasible) {
+	    print STDERR "Conflict with pending: " . $error->{'error'} . "\n";
+	}
+	if (!$feasible && defined($webtask)) {
+	    $webtask->conflict({
+		"error"  => $error->{'error'},
+		"when"   => TBDateStringGMT($error->{'time'}),
+		"needed" => $error->{'needed'}});
+	    $webtask->output($error->{'error'});
+	}
+	if (defined($webtask)) {
+	    $webtask->Exited($exitval);
+	}
+	exit($exitval);
+    }
     # FIXME if $modify_idx is set, the old reservation was approved,
     # and $approve is false, then things get ugly.  e-mail the
     # admins and leave the database untouched???

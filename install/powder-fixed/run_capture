@@ -3,6 +3,9 @@
 # This should be auto-generated, but isn't yet.
 #
 
+TB=/usr/testbed
+CAPTURE=$TB/sbin/capture
+
 arduino=powduino
 nodes=""
 
@@ -27,7 +30,9 @@ if [ -n "$arduino" ]; then
     #stty -g -f /dev/cuaU0
     #echo "About to start capture"
 
-    /usr/testbed/sbin/capture -y 2 -T 15 -s 9600 powduino cuaU0 >/dev/null 2>&1 &
+    $TB/sbin/daemon_wrapper \
+	-i 30 -l $TB/log/powduino.log -p /var/run/powduino.pid \
+	$CAPTURE -d -y 2 -T 15 -s 9600 powduino cuaU0
 
     ## XXX debugging
     #echo "Capture started, cuaU0:"
@@ -38,7 +43,6 @@ fi
 # Node consoles
 #
 if [ -n "$nodes" ]; then
-    capturebin=/usr/testbed/sbin/capture
     captureopts="-L -T 15 -r"
     ipmibin=/usr/local/bin/ipmitool
     ipmiopts="-C 3 -I lanplus -U ADMIN -E"
@@ -46,7 +50,7 @@ if [ -n "$nodes" ]; then
 
     i=0
     for node in $nodes; do
-	$capturebin $captureopts -M $node \
+	$CAPTURE $captureopts -M $node \
 		    $ipmibin -H $node-mng $ipmiopts sol activate
 	i=$(((i + 1) % 3))
 	if [ $i -eq 0 ]; then

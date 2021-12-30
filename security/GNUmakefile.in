@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,8 +29,9 @@ SUBDIR		= security
 include $(OBJDIR)/Makeconf
 
 BINS		= suexec runsuid
-SBINS		= genlastlog lastlog_daemon runmedusa
+SBINS		= genlastlog lastlog_daemon runmedusa sshbanlist
 OTHERS          = hosts.allow
+CTRL_SBINS      = sshbanlist
 
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = 
@@ -70,7 +71,8 @@ genlastlog:	genlastlog.c
 
 install: $(addprefix $(INSTALL_LIBEXECDIR)/, $(BINS)) \
 	$(addprefix $(INSTALL_SBINDIR)/, $(SBINS)) \
-	$(addprefix $(INSTALL_DIR)/opsdir/libexec/, $(SETUID_CTRL_LIBX_PROGS))
+	$(addprefix $(INSTALL_DIR)/opsdir/libexec/, $(SETUID_CTRL_LIBX_PROGS)) \
+	$(addprefix $(INSTALL_DIR)/opsdir/sbin/, $(CTRL_SBINS))
 
 install-hosts-allow: hosts.allow
 	sudo $(INSTALL_DATA) hosts.allow /etc/hosts.allow
@@ -80,12 +82,18 @@ post-install:
 	@echo "post-install no longer required"
 
 control-install: \
-	$(addprefix $(INSTALL_LIBEXECDIR)/, $(SETUID_CTRL_LIBX_PROGS))
+	$(addprefix $(INSTALL_LIBEXECDIR)/, $(SETUID_CTRL_LIBX_PROGS)) \
+	$(addprefix $(INSTALL_SBINDIR)/, $(CTRL_SBINS))
 
 $(INSTALL_DIR)/opsdir/libexec/runsuid: runsuid
 	echo "Installing (setuid) $<"
 	-mkdir -p $(INSTALL_DIR)/opsdir/libexec
 	$(SUDO) $(INSTALL) -o root -m 4755 $< $@
+
+$(INSTALL_DIR)/opsdir/sbin/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_DIR)/opsdir/sbin
+	$(INSTALL) $< $@
 
 clean:
 	rm -f *.o genlastlog suexec runsuid core

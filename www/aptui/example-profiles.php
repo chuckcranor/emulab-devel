@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,7 +32,12 @@ $page_title = "Example Profiles";
 # Get current user.
 #
 RedirectSecure();
-$this_user = CheckLoginOrRedirect();
+$this_user = CheckLogin($check_status);
+if (isset($this_user)) {
+    CheckLoginOrDie(CHECKLOGIN_NONLOCAL|CHECKLOGIN_WEBONLY);
+}
+else {
+}
 
 SPITHEADER(1);
 
@@ -53,7 +58,8 @@ $query_result
                    "     v.version=p.version ".
                    "where (p.public!=0 and ".
                    "        FIND_IN_SET('$PORTAL_GENESIS',examples_portals)) ".
-                   "order by p.name");
+                   "order by " .
+                   ($ISPOWDER ? "examples_portals,p.name" : "p.name"));
 
 while ($row = mysql_fetch_array($query_result)) {
     $blob = array();
@@ -61,6 +67,7 @@ while ($row = mysql_fetch_array($query_result)) {
     $blob["uuid"]      = $row["uuid"];
     $blob["version"]   = $row["version"];
     $blob["name"]      = $row["name"];
+    $blob["pid"]       = $row["pid"];
     $blob["desc"]      = CleanString($row["description"]);
     $blob["created"]   = DateStringGMT($row["created"]);
 
@@ -80,6 +87,7 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_MARKED();
 REQUIRE_TABLESORTER();
 AddTemplateList(array("example-profiles"));
 SPITREQUIRE("js/example-profiles.js");

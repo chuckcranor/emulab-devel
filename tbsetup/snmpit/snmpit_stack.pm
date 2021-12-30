@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # Copyright (c) 2004-2009 Regents, University of California.
 # 
 # {{{EMULAB-LGPL
@@ -215,8 +215,10 @@ sub FlipDebug($$)
 #		num is the 802.1Q vlan tag number.
 #		members is a reference to an array of VLAN members
 #
-sub listVlans($) {
+sub listVlans($;$) {
     my $self = shift;
+    my $pempty = shift;
+    my %empty = ();
 
     #
     # We need to 'collate' the results from each switch by putting together
@@ -235,10 +237,18 @@ sub listVlans($) {
 	    ${$vlans{$vlan_id}}[0] = $vlan_number;
 	    push @{${$vlans{$vlan_id}}[1]}, @$memberRef;
 
-	    if (0 && ! @$memberRef) {
-		print STDERR
-		    "$vlan_id ($vlan_number) ".
-		    "exists on $devicename with no members\n";
+	    if (! @$memberRef) {
+		if (0) {
+		    print STDERR
+			"$vlan_id ($vlan_number) ".
+			"exists on $devicename with no members\n";
+		}
+		if ($pempty) {
+		    if (!exists($empty{$vlan_id})) {
+			$empty{$vlan_id} = [];
+		    }
+		    push(@{$empty{$vlan_id}}, $devicename);
+		}
 	    }
 	}
     }
@@ -250,7 +260,9 @@ sub listVlans($) {
     my @vlanList;
     foreach my $vlan (sort {tbsort($a,$b)} keys %vlans) {
 	push @vlanList, [$vlan, @{$vlans{$vlan}}];
-    } 
+    }
+    $$pempty = \%empty
+	if (defined($pempty));
     return @vlanList;
 }
 
@@ -791,6 +803,95 @@ sub vlanExists($$) {
 }
 
 #
+# Check vlan consistency across the switches in stack to make sure
+# it exists, with the correct tag. We are looking for stale vlans.
+#
+# usage: checkVlanConsistency(self, vlan identifier)
+#
+# returns 0 if eveything okay
+#
+sub checkVlanConsistency($$$) {
+    my $self = shift;
+    my $vlan_id = shift;
+    my $fixit = shift;
+    my $id = "checkVlanConsistency($vlan_id,$fixit)";
+    my $errors = 0;
+
+    my $tag = getReservedVlanTag($vlan_id);
+    if (!$tag) {
+	print STDERR "$id: No tag for vlan_id\n";
+	return 0;
+    }
+    foreach my $switch (values %{$self->{DEVICES}}) {
+	$switch->findVlans_start();
+    }
+    my %results = $self->reapCall("findVlans");
+    
+    foreach my $switch (keys %{$self->{DEVICES}}) {
+	#
+	# Check to see if the VLAN already exists on this switch
+	#
+	my $dev = $self->{DEVICES}{$switch};
+	my %mapping = @{$results{$switch}};
+
+	#
+	# The mapping we get from findVlans is id => tag, so we have
+	# to scan the values to know if the tag exists on the device.
+	#
+	if (grep {$_ == $tag} values(%mapping)) {
+	    if (!exists($mapping{$vlan_id}) || $mapping{$vlan_id} != $tag) {
+		my $current_name;
+		    
+		print STDERR "  Vlan tag $tag already exists on ".
+		    "$switch, but with the wrong name\n";
+
+		# Find what name if any is associated with the tag.
+		foreach my $id (keys(%mapping)) {
+		    if ($mapping{$id} == $tag) {
+			$current_name = $id;
+			last;
+		    }
+		}
+		if (defined($current_name)) {
+		    print STDERR "  The current name is '$current_name'\n";
+		}
+		else {
+		    print STDERR "  Hmm, no name associated\n";
+		}
+		if ($tag < $dev->{MIN_VLAN} || $tag > $dev->{MAX_VLAN}) {
+		    print STDERR "  $tag is out of fixable range!\n";
+		    $errors++;
+		    next;
+		}
+		# Only fix if the existing name is ours.
+		if (! (defined($current_name) && $current_name =~ /^\d+$/)) {
+		    print STDERR "  Not allowed to fix this!\n";
+		    $errors++;
+		    next;
+		}
+		if (!$fixit) {
+		    $errors++;
+		    next;
+		}
+		print "  Removing ports from $current_name on $switch\n";
+
+		if ($dev->removePortsFromVlan($tag)) {
+		    print STDERR "  Unable to remove ports from vlan\n";
+		    $errors++;
+		    next;
+		}
+		if (!$dev->removeVlan($tag)) {
+		    print STDERR "  ERROR: Unable to remove vlan from $switch\n";
+		    $errors++;
+		    next;
+		}
+	    }
+	}
+    }
+    return $errors;
+}
+
+#
 # Return a list of which VLANs from the input set exist on this stack
 #
 # usage: existantVlans(self, vlan identifiers)
@@ -1233,31 +1334,70 @@ sub setVlanOnSwitchTrunks($$$) {
 	    "not exist on stack " . $self->{STACKID} . "\n" ;
 	return 0;
     }
-
-    #
-    # First, get a list of all trunks
-    #
     my %trunks = getTrunks();
 
-    #
-    # Next, figure out which switches this VLAN exists on
-    #
-    my @switches = $self->switchesWithPortsInVlan($vlan_number);
+    if (!$enable) {
+	# Figure out which switches this VLAN currently exists on
+	my @switches = $self->switchesWithPortsInVlan($vlan_number);
+	
+	# And kill from all the trunks connecting those switches.
+	my @trunks = getExperimentTrunksForVlan($vlan_id, @switches);
+
+	return $self->setVlanOnTrunks2($vlan_number,$enable,\%trunks,@trunks);
+    }
+    my @ports  = getVlanPorts($vlan_id);
+    my %map    = mapPortsToDevices(@ports);
+    my @trunks = getTrunksForVlan($vlan_id, keys(%map));
+    return 0
+	if (!$self->setVlanOnTrunks2($vlan_number,$enable,\%trunks,@trunks));
 
     #
-    # Next, get a list of the trunks that are used to move between these
-    # switches. When disabling, we want the list from the DB if it exsists.
+    # Okay, this is brutal. We use this for modifying existing vlans.  But
+    # we can get into a situation where after the new set of trunk links is
+    # installed, there are switches that have the vlan but with no
+    # ports. Since these switches are not going to be in the switchpath we
+    # store in the database, we are going to miss removing the vlan from
+    # those switches during final cleanup when the vlan is deleted.  We
+    # could change vlan deletion to operate on all switches, but that has
+    # its own set of problems. But this approach does have a degree of
+    # fragility; if we do fail to remove these stale vlans, then they will
+    # get left behind after the vlan is deleted. But I have changed
+    # --prunestalevlans to look for these and kill them too.
     #
-    my @trunks = ($enable ?
-		  getTrunksForVlan($vlan_id, @switches) :
-		  getExperimentTrunksForVlan($vlan_id, @switches));
-	
-    return $self->setVlanOnTrunks2($vlan_number,$enable,\%trunks,@trunks);
+    my @existing = $self->switchesWithPortsInVlan($vlan_number);
+    my %current = ();
+
+    # Hash of switches that should have the vlan. 
+    foreach my $switch (keys(%map)) {
+	$current{$switch} = 1;
+    }
+    foreach my $trunk (@trunks) {
+	my ($src,$dst) = @$trunk;
+	$current{$src} = $current{$dst} = 1;
+    }
+    #
+    # Okay, any switch in the existing list that is not in the current
+    # list, is a switch that is not supposed to have the vlan. Remove.
+    #
+    foreach my $switch (@existing) {
+	if (!exists($current{$switch})) {
+	    $self->debug("setVlanOnSwitchTrunks($vlan_id): ".
+			 "Removing from $switch\n");
+
+	    my $device = $self->{DEVICES}{$switch};
+	    my $ok = $device->removeVlan($vlan_number);
+	    if (!$ok) {
+		warn "ERROR: Unable to remove ".
+		    "stale vlan $vlan_id from $switch\n";
+	    }
+	}
+    }
+    return 1;
 }
 
 #
 # Enables or disables (depending on $value) a VLAN on all the supplied
-# trunks. Returns 1 on sucess, 0 on failure.
+# trunks. Returns 1 on success, 0 on failure.
 #
 sub setVlanOnTrunks2($$$$@) {
     my $self = shift;

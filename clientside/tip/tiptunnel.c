@@ -485,7 +485,7 @@ void loadAcl( const char * filename )
   
   bzero( &key, sizeof( key ) );
 
-  while (fscanf(aclFile, "%s %s\n", &b1, &b2) != EOF) {
+  while (fscanf(aclFile, "%255s %255s\n", b1, b2) != EOF) {
     if ( strcmp(b1, "host:") == 0 || strcmp(b1, "server:") == 0 ) {
       if (!uploadmode)
 	hostname = strdup( b2 );
@@ -594,7 +594,7 @@ void doAuthenticate()
 
 void doCreateTunnel()
 {
-  int i;
+  unsigned int i;
   struct sockaddr_in name;
 
   tunnelSock = socket(AF_INET, SOCK_STREAM, 0);
@@ -889,13 +889,15 @@ void sslConnect()
   // X509_digest( &peer, EVP_sha() , digest, &len );
 
   //X509_digest( peer, EVP_md5(), digest, &len );
-  
-  X509_digest( peer, EVP_sha(), digest, &len );
+  //X509_digest( peer, EVP_sha(), digest, &len );
+
+  X509_digest( peer, EVP_sha1(), digest, &len );
 
   X509_free( peer );
 
   for (i = 0; i < len; i++) {
-    sprintf( digestHex + (i * 2), "%02x", (unsigned int) digest[i] );
+	  sprintf( (char *)digestHex + (i * 2), "%02x",
+		   (unsigned int) digest[i] );
   }
 
   if (debug) {
@@ -905,7 +907,7 @@ void sslConnect()
 	   digestHex );
   }
 
-  if (/*!localmode && */0 != strcmp( certString, digestHex )) {
+  if (/*!localmode && */0 != strcmp( certString, (char *)digestHex )) {
     fprintf(stderr, 
 	    "Server does not have certificate described in ACL:\n"
 	    "ACL's  cert digest: %s\n" 

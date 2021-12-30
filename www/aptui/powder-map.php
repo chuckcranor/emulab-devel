@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,7 +70,7 @@ if ($nomobile) {
     $showmobile = 0;
 }
 if (!isset($showlinks)) {
-    $showlinks = null;
+    $showlinks = "null";
 }
 else {
     $showlinks = "'$showlinks'";

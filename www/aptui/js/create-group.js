@@ -7,7 +7,6 @@ $(function ()
     var oopsString = templates['oops-modal'];
     var waitwaitString = templates['waitwait-modal'];
     var mainTemplate = _.template(mainString);
-    var fields       = null;
     var isadmin      = false;
     
     function initialize()
@@ -15,9 +14,10 @@ $(function ()
 	window.APT_OPTIONS.initialize(sup);
 
 	isadmin  = window.ISADMIN;
-	fields   = JSON.parse(_.unescape($('#form-json')[0].textContent));
+	var fields  = JSON.parse(_.unescape($('#form-json')[0].textContent));
+	var members = JSON.parse(_.unescape($('#members-json')[0].textContent));
 
-	GeneratePageBody(fields);
+	GeneratePageBody(fields, members);
 
 	// Now we can do this. 
 	$('#oops_div').html(oopsString);	
@@ -28,11 +28,12 @@ $(function ()
     // Moved into a separate function since we want to regen the form
     // after each submit, which happens via ajax on this page. 
     //
-    function GeneratePageBody(formfields)
+    function GeneratePageBody(formfields, members)
     {
 	// Generate the template.
 	var html = mainTemplate({
 	    formfields:		formfields,
+	    members:            members,
 	    isadmin:		isadmin,
 	});
 	html = aptforms.FormatFormFieldsHorizontal(html);
@@ -43,7 +44,7 @@ $(function ()
 	    trigger: 'hover',
 	    container: 'body'
 	});
-	aptforms.EnableUnsavedWarning('#create_dataset_form');
+	aptforms.EnableUnsavedWarning('#create-group-form');
 
 	// Handler for submit button.
 	$('#create-group-button').click(function (event) {

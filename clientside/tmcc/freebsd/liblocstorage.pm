@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2019 University of Utah and the Flux Group.
+# Copyright (c) 2013-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -907,12 +907,20 @@ sub get_fstype($$;$$)
 	return "ext2fs";
     }
 
-    # Only FreeBSD 10+ can handle ext4 and then only RO
+    # Only FreeBSD 10+ can handle ext4 to varying degrees
     if ($type eq "ext4") {
-	if ($rwref) {
-	    $$rwref = 0;
+	# 12+ seems to support most features
+	if ($FBSD_VERSION >= 12) {
+	    if ($rwref) {
+		$$rwref = 1;
+	    }
+	    return "ext2fs";
 	}
 	if ($FBSD_VERSION >= 10) {
+	    # 10-11, maybe read-only
+	    if ($rwref) {
+		$$rwref = 0;
+	    }
 	    return "ext2fs";
 	}
     }
