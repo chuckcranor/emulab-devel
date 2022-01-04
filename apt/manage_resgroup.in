@@ -1115,10 +1115,12 @@ sub DoGroupReserve()
 		my $this_uid   = $this_user->uid();
 		my $this_email = $this_user->email();
 		my $url        = $resgroup->WebURL();
+		my $pid        = $project->pid();
     
 		$brand->SendEmail($brand->ReservationsEmailAddress(),
 			  "Pending reservation group request needs approval",
-			  "A reservation group request was made by $this_uid, ".
+			  "A reservation group request was made by $this_uid ".
+			  "in project $pid,\n".
 			  "but it needs approval.".
 			  "\n\n".
 			  $resgroup->InfoString() . "\n" .
