@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -179,9 +179,10 @@ exit(0);
 #
 sub DoGroupReserve()
 {
-    my $optlist    = "s:e:nN:u:p:O";
+    my $optlist    = "s:e:nN:u:p:OC";
     my @argvcopy   = @ARGV[0..$#ARGV-1];
     my $update     = 0;
+    my $forclass   = 0;
     my $exitcode   = 0;
     my $autoapprove= 1; # This might be turned off below
     my $updateall  = 0;
@@ -240,6 +241,16 @@ sub DoGroupReserve()
 			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	    fatal("Invalid characters in reason string");
 	}
+    }
+    if (defined($options{"C"})) {
+	#
+	# Only leader and managers can set this.
+	#
+	if (! ($this_user->IsAdmin() || $project->IsManager($this_user))) {
+	    fatal("Not allowed to declare this reservation is for a class.");
+	}
+	$forclass = 1;
+	@argvcopy = map { "$_" ne "-C" ? $_ : () } @argvcopy;
     }
     if (defined($options{"O"})) {
 	if (!$this_user->IsAdmin()) {
@@ -686,6 +697,10 @@ sub DoGroupReserve()
 	if (!$checkonly && !$autoapprove) {
 	    $command .= "-P ";
 	}
+	# Initial idle detection.
+	if (!$checkonly && $forclass) {
+	    $command .= "-I ";
+	}
 	$command .= " @argvcopy $count";
 	print "Running: $command\n";
 	system($command);
@@ -999,10 +1014,14 @@ sub DoGroupReserve()
 		    "end"         => $end,
 		    "reason"      => $reason,
 		    "portal"      => $brand->brand(),
+		    "forclass"    => $forclass,
 		};
 		$resgroup = APT_Reservation::Group->Create($args);
 		if (!defined($resgroup)) {
 		    fatal("Could not create a new reservation group");
+		}
+		if ($forclass) {
+		    $resgroup->DisableIdleDetection();
 		}
 	    }
 	    foreach my $res (@cluster_reservations) {

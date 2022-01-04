@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1025,6 +1025,7 @@ sub Reserve($)
     my %blob      = ();
     my $reserror;
     my $asadmin   = 0;
+    my $noidledetection = 0;
     my $reservation;
     my ($geniuser, $project);
 
@@ -1312,6 +1313,10 @@ sub Reserve($)
 	    $webtask->Delete();
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 					"Could not find reservation after create");
+	}
+	# Allow for idle detection to be disabled on initial create.
+	if (exists($argref->{"noidledetection"})) {
+	    $reservation->DisableIdleDetection();
 	}
     }
     $webtask->Delete();

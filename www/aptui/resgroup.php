@@ -103,7 +103,7 @@ echo "<div id='oops_div'></div>
       <div id='waitwait_div'></div>\n";
 
 # Reservations now have to start next business day at 9am (unless expert).
-$bisdaysonly = $this_user->expert_mode() ? 0 : 1;
+$bisdaysonly = $this_user->expert_mode() || $isadmin ? 0 : 1;
 # Ditto
 $routesokay  = $isadmin;
 
@@ -117,14 +117,16 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 # When editing, pass through a single value. The template treats a
 # a single value as a read-only field.
 #
+$mlist = array();
 $plist = array();
 while (list($p) = each($projlist)) {
     $plist[] = $p;
-    if (!$isadmin) {
-        $ptmp = Project::LookupByPid($p);
-        if ($ptmp && $ptmp->expert_mode()) {
+    $ptmp = Project::LookupByPid($p);
+    if ($ptmp) {
+        if ($ptmp->expert_mode()) {
             $bisdaysonly = 0;
         }
+        $mlist[$p] = $ptmp->IsManager($this_user);
     }
     if ($ISPOWDER && !$isadmin) {
         if ($ptmp && FeatureEnabled("powder-routes-allowed", null, $ptmp)) {
@@ -134,6 +136,9 @@ while (list($p) = each($projlist)) {
 }
 echo "<script type='text/plain' id='projects-json'>\n";
 echo htmlentities(json_encode($plist));
+echo "</script>\n";
+echo "<script type='text/plain' id='manager-json'>\n";
+echo htmlentities(json_encode($mlist));
 echo "</script>\n";
 
 # List of clusters.
@@ -223,14 +228,6 @@ if ($ISPOWDER) {
     echo "</script>\n";
 }
 
-$default_pid = "";
-# Default project.
-if (isset($project)) {
-    $default_pid = $project->pid();
-}
-elseif (count($plist) == 1) {
-    $default_pid = $plist[0];
-}
 echo "<script type='text/javascript'>\n";
 if ($edit) {
     echo "   window.EDITING  = true;\n";
@@ -238,6 +235,13 @@ if ($edit) {
     echo "   window.ISGROUP  = true;\n";
 }
 else {
+    # Default project.
+    if (isset($project)) {
+        $default_pid = $project->pid();
+    }
+    else {
+        $default_pid = $plist[0];
+    }
     echo "   window.EDITING  = false;\n";
     echo "   window.PID      = '$default_pid';\n";
     echo "   window.FROMRSPEC= $fromrspec;\n";
