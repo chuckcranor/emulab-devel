@@ -240,6 +240,24 @@
 	      </td>
 	    </tr>
 	  <% } %>
+	  <% if (fields.outlet && isadmin) { %>
+	    <tr>
+	      <td>Outlet</td>
+	      <td>
+		<%
+		var url = 'show-node.php?node_id=' + fields.outlet.power_id;
+		%>
+		<a href='<%- url %>' target=_blank><%- fields.outlet.power_id %></a>:<%- fields.outlet.outlet %></td>
+	    </tr>
+	  <% } %>
+	  <% if (fields.tipline && isadmin) { %>
+	    <tr>
+	      <td>Tipline</td>
+	      <td>
+		<%- fields.tipline.server %>:<%- fields.tipline.tipname %>
+	      </td>
+	    </tr>
+	  <% } %>
 	</table>
       </div>
     </div>
