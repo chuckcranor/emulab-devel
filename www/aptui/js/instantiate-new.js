@@ -1802,7 +1802,7 @@ $(function ()
 		    "uuid"     : profile,
 		    "refspec"  : target,
 		    "callback" : function(source, hash) {
-		    var pythonRe = /^import/m;
+		    var pythonRe = /^(import|from)/m;
 
 		    // For the form that is submitted.
 		    $('#repohash').val(hash);

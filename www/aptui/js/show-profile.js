@@ -27,7 +27,7 @@ $(function ()
     var myCodeMirror = null;
     var showTemplate      = _.template(showString);
     var shareTemplate     = _.template(shareString);
-    var pythonRe = /^import/m;
+    var pythonRe = /^(import|from)/m;
     var tclRe    = /^source tb_compat/m;
 
     function initialize()
