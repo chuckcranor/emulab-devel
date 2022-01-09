@@ -1850,7 +1850,7 @@ $(function ()
     {
 	var vncwindow = null;
 	var jsonauth  = $.parseJSON(authobject);
-        var url       = jsonauth.baseurl + "/novnc/vnc_lite.html";
+        var url       = jsonauth.baseurl + "/novnc/vnc_emulab.html";
 
 	if (vncpasswd == null) {
 	    alert("You have not defined a VNC password in your profile");
@@ -1873,7 +1873,7 @@ $(function ()
 	window.addEventListener("message", windowloaded);
 
 	vncwindow = window.open(url, "VNC " + node,
-				"left=10,top=10,width=1825,height=1025")
+				"left=10,top=10,width=1825,height=1060")
     }
 
     // SSH info.
@@ -2167,6 +2167,7 @@ $(function ()
 		var pcycle = this.getElementsByTagNameNS(EMULAB_NS, 'powercycle');
 		var recover= this.getElementsByTagNameNS(EMULAB_NS, 'recovery');
 		var vnode  = this.getElementsByTagNameNS(EMULAB_NS, 'vnode');
+		var x11vnc = this.getElementsByTagNameNS(EMULAB_NS, 'x11vnc');
 		var imageable =
 		    this.getElementsByTagNameNS(EMULAB_NS, 'imageable');
 		var flashable =
@@ -2435,6 +2436,22 @@ $(function ()
 		    // Context menu option
 		    CMclone.find("li[id=powercycle]").removeClass("hidden");
 		}
+
+		// Optional X11 VNC
+		if (x11vnc.length) {
+		    // Attach handler to the menu button.
+		    clone.find(' [name=vnc]')
+			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
+			    ActionHandler("vnc", [node]);
+			});
+		    clone.find(' [name=vnc]')
+			.parent().removeClass('hidden');
+
+		    // Context menu option
+		    $(CMclone).find("li[id=vnc]").removeClass("hidden");
+		}
+		
 
 		// Node "top"
 		clone.find(' [name=nodetop]')
