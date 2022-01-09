@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2015-2019 University of Utah and the Flux Group.
+# Copyright (c) 2015-2019, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -435,6 +435,16 @@ if ($action != 1) {
 	    print STDERR "Could not clone repo in the jail\n";
 	    exit(-1);
 	}
+	if (-e "${jailrootdir}${tempdir}/repository/.gitmodules") {
+	    mysystem("cd ${jailrootdir}${tempdir}/repository; ".
+		     "$GIT submodule --quiet init && ".
+		     "$GIT submodule --quiet update");
+	    if ($?) {
+		print STDERR "Could not initialize submodules\n";
+		exit(-1);
+	    }
+	}
+	
 	# The root of the repository for module imports.
 	$ENV{"PYTHONPATH"} = "/${tempdir}/repository:" . $ENV{"PYTHONPATH"};
 	

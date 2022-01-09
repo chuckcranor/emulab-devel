@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,7 +43,7 @@ function CheckScript($profile, $script, $project,
         $this_uid = $profile->creator();
     }
 
-    if (preg_match("/^import/m", $script)) {
+    if (preg_match("/^(import|from)/m", $script)) {
         $command = "webrungenilib";
         if ($warningsfatal) {
             $command .= " -W";

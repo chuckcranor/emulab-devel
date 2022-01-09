@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -161,13 +161,42 @@ sub Clone()
     chdir("$REPODIR/$reponame") or
 	fatal("Could not chdir to $REPODIR/$reponame");
 
+    my $refspec = GetDefaultBranch($reponame);
+    
+    #
+    # Check to see if there are submodules. If so we want a full checkout.
+    #
+    if (system("$GIT cat-file -e ${refspec}:.gitmodules") == 0) {
+	# Need the branch name for switch.
+	my $branch;
+	if ($refspec =~ /^refs\/heads\/(\w+)/) {
+	    $branch = $1;
+	}
+	else {
+	    fatal("Not a proper default branch: $refspec");
+	}
+	#
+	# The internet knows all.
+	#
+	if (system("/bin/mkdir .git") ||
+	    system("/bin/mv * .git") ||
+	    system("$GIT config --local --bool core.bare false") ||
+	    system("$GIT config remote.origin.fetch ".
+		   "  '+refs/heads/*:refs/remotes/origin/*'") ||
+	    system("$GIT checkout -q $refspec") ||
+	    system("$GIT switch -q $branch")) {
+	    fatal("Could not convert bare repo to checkout");
+	}
+	$checkout = 1;
+    }
+
     #
     # If we did a checkout, look for submodules that need to be initialized
     #
     if ($checkout) {
 	if (-e ".gitmodules") {
-	    if (system("$GIT submodule init") ||
-		system("$GIT submodule update")) {
+	    if (system("$GIT submodule --quiet init") ||
+		system("$GIT submodule --quiet update")) {
 		fatal("Could not initialize submodules");
 	    }
 	}
@@ -187,8 +216,6 @@ sub Clone()
 	}
     }
     else {
-	my $refspec = GetDefaultBranch($reponame);
-    
 	if (system("$GIT cat-file -e ${refspec}:profile.py") &&
 	    system("$GIT cat-file -e ${refspec}:profile.rspec")) {
 	    print STDERR "No geni-lib script or rspec in this repository\n";
@@ -250,13 +277,14 @@ sub Update()
 	if ($status) {
 	    fatal("Not able to prune dead branches");
 	}
-	$command = "$GIT merge -q origin/$current_refspec";
+	$command = "$GIT reset -q --hard HEAD";
 	$status = RunCommand($command);
 	if ($status) {
 	    fatal("Not able to merge current branch");
 	}
 	if (-e ".gitmodules") {
-	    $status = RunCommand("$GIT submodule update");
+	    $status = RunCommand("$GIT submodule --quiet ".
+				 "  update --recursive --remote");
 	    if ($status) {
 		fatal("Not able to update submodules");
 	    }
