@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -283,7 +283,7 @@ sub simnodecount($)	{ return $_[0]->counter("simcount"); }
 sub remotenodecount($)	{ return $_[0]->counter("remotecount"); }
 sub sharednodecount($)	{ return $_[0]->counter("sharedcount"); }
 sub subnodecount($)	{ return $_[0]->counter("subnodecount"); }
-sub vlancount($)	{ return $_[0]->counter("vlans"); }
+sub vlancount($)	{ return $_[0]->counter("vlancount"); }
 sub bstorecount($)	{ return $_[0]->counter("bstorecount"); }
 sub gblinks($)		{ return $_[0]->counter("Gblinks"); }
 sub mgblinks($)		{ return $_[0]->counter("MGblinks"); }

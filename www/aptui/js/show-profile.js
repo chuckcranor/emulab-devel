@@ -114,7 +114,7 @@ $(function ()
 	    fromrepo:   fromrepo,
 	}));
 
-	if (window.CANCOPY) {
+	if (window.CANCOPY && !fromrepo) {
 	    var plist = JSON.parse(_.unescape(
 		$('#projects-json')[0].textContent));
 	    

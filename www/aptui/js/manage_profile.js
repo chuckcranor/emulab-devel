@@ -205,8 +205,10 @@ $(function ()
 		});
 	}
 	// Copy profile.
-	CopyProfile.InitCopyProfile('#copy-profile-button',
-				    version_uuid, projlist);
+	if (!fromrepo) {
+	    CopyProfile.InitCopyProfile('#copy-profile-button',
+					version_uuid, projlist);
+	}
 	
 	//
 	// Fix for filestyle problem; not a real class I guess, it

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -987,7 +987,22 @@ if ($genimode ne $NO_GENI || !defined($options{"I"})) {
 else {
     TBDebugTimeStamp("Process images started");
 
+    #
+    # The image list can contain parent-child images (xxxx-yyyy).
+    # Need to split those apart and check the constituent images.
+    #
+    my %tmp = ();
+
     foreach my $imageid (keys(%$imagelist)) {
+	if ($imageid =~ /^(\d+)-(\d+)$/) {
+	    $tmp{"$1"} = $1;
+	    $tmp{"$2"} = $2;
+	}
+	else {
+	    $tmp{"$imageid"} = $imageid;
+	}
+    }
+    foreach my $imageid (keys(%tmp)) {
 	my $image = OSImage->Lookup($imageid);
 	if (!defined($image)) {
 	    fatal("No such image: $imageid");
