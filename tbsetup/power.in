@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,6 +58,7 @@ use power_racktivity;
 use power_ue;
 use power_powduino;
 use power_5gstore;
+use power_enlogic;
 use libtestbed;
 use User;
 use Node;
@@ -511,6 +512,19 @@ foreach my $power_id (keys %outlets) {
 		$errors++;
 	    }
 	}
+    } elsif ($type eq "Enlogic") {
+	my $device = new power_enlogic($IP,$verbose);
+	if (!defined $device) {
+	    warn "Unable to contact controller for $nodestr. Skipping...\n";
+	    next;
+	} else {
+	    print "Calling device->power($op,@outlets)\n"
+		if $verbose > 1;
+	    if ($device->power($op,@outlets)) {
+		print "Control of $nodestr failed.\n";
+		$errors++;
+	    }
+	}
     } elsif ($type eq "RACKTIVITY") {
         my $device = new power_racktivity($IP,$verbose);
         if (!defined $device) {
@@ -921,6 +935,33 @@ sub dostatus(@) {
 		my $ostr = "outlet$outlet";
 		print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
 		    if (defined($status{$ostr}));
+	    }
+	    print "\n";
+	} elsif ($ctrls{$ctrl} eq "Enlogic") {
+	    my $device = new power_enlogic($IPs{$ctrl}, $verbose);
+	    if (!defined $device) {
+		warn "Unable to contact controller $ctrl.\n";
+		$errors++;
+		next;
+	    } else {
+		print "Calling device->status()\n"
+		    if $verbose > 1;
+		if ($device->status(\%status)) {
+		    print "Could not get status for $ctrl.\n";
+		    $errors++;
+		    next;
+		}
+	    }
+	    print "$ctrl Current: ", $status{current}, " Amps\n"
+		if defined($status{current});
+	    print "$ctrl Power: ", $status{power}, " Watts\n"
+		if defined($status{power});
+	    print "$ctrl Energy: ", $status{energy}, " KW hours\n"
+		if defined($status{energy});
+	    for my $outlet (1..48) {
+		my $ostr = "outlet$outlet";
+		print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
+		    if (exists($status{$ostr}));
 	    }
 	    print "\n";
 	} elsif ($ctrls{$ctrl} =~ /^RPC/) {
