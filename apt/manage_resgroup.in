@@ -270,19 +270,24 @@ sub DoGroupReserve()
 	$checkonly = 1;
 	@argvcopy = map { "$_" ne "-n" ? $_ : () } @argvcopy;
     }
-    if ($update) {
-	usage()
-	    if (! (defined($end) && defined($start)));
+    if (! defined($end)) {
+	print STDERR "Missing end time\n";
+	usage();
     }
-    else {
-	usage()
-	    if (! defined($end));
+    if ($update) {
 	#
-	# No start time means user wants the reservation right now.
+	# Only admins can move start to "now".
 	#
-	if (!defined($start)) {
-	    $start = time();
+	if (! (defined($start) || $this_user->IsAdmin())) {
+	    print STDERR "Missing start time\n";
+	    usage();
 	}
+    }
+    #
+    # No start time means user wants the reservation right now.
+    #
+    if (!defined($start)) {
+	$start = time();
     }
     
     #

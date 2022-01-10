@@ -1741,7 +1741,7 @@ $(function ()
 	 */
 	start = $('#reserve-request-form [name=start]').val();
 	end   = $('#reserve-request-form [name=end]').val();
-	if (editing && !start) {
+	if (editing && !start && !isadmin) {
 	    aptforms.GenerateFormErrors('#reserve-request-form',
 					{"start" : "Missing start date/hour"});
 	    errors++;
