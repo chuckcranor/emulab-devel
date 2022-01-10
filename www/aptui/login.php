@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -81,7 +81,7 @@ if (NOLOGINS() && !$adminmode) {
 function SPITFORM($uid, $referrer, $error)
 {
     global $PORTAL_PASSWORD_HELP;
-    global $TBDB_UIDLEN, $TBBASE;
+    global $TBDB_UIDLEN;
     global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER, $PROTOGENI_GENIWEBLOGIN;
     global $adminmode, $cleanmode;
     global $UI_EXTERNAL_ACCOUNTS;

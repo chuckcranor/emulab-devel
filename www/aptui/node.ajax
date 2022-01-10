@@ -217,7 +217,7 @@ function Do_GetInfo()
 function GetAttributes($node)
 {
     global $this_user, $ajax_args;
-    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
     global $TB_NODEACCESS_MODIFYINFO;
     $node_id = $node->node_id();
     $blob = array();
@@ -242,7 +242,7 @@ function GetAttributes($node)
 function GetFeatures($node)
 {
     global $this_user, $ajax_args;
-    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
     global $TB_NODEACCESS_MODIFYINFO;
     $node_id = $node->node_id();
     $blob = array();
@@ -377,7 +377,7 @@ function GetExpInfo($node)
 function Do_GetHardwareInfo()
 {
     global $this_user, $ajax_args, $node, $GuestUserOkay;
-    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
 
     # This function allows guest users.
     $GuestUserOkay = true;
