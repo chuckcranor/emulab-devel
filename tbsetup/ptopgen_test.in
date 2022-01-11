@@ -1484,7 +1484,7 @@ while (my $row = $result->fetchrow_hashref()) {
     }
 
     if (defined($prereserved) && (defined($pid) && $prereserved eq $pid)) {
-	$is_prereserved{$node} = $prereserved;
+	$is_prereserved{$node_id} = $prereserved;
     }
 
     $node_countries{$node_id} = undef;
