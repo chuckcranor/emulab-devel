@@ -24,7 +24,7 @@
 #
 
 #
-# snmpit module for Enlogic Edge series power controllers
+# Power module for Enlogic Edge series power controllers
 #
 # supports new(ip), power(on|off|cyc[le],port), status
 #
@@ -63,7 +63,7 @@ sub new($$;$$) {
     }
 
     if ($debug) {
-	print "$devicename: snmpit_enlogic module initializing... debug level $debug\n";
+	print "$devicename: power_enlogic module initializing... debug level $debug\n";
     }
 
     if (!$gotmibs) {

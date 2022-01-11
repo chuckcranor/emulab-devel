@@ -284,7 +284,7 @@ sub dostatus(@) {
 		next;
 	    }
 	} elsif ($ctrls{$ctrl} =~ /^Enlogic/) {
-	    my $device = new snmpit_enlogic($ctrl, 0);
+	    my $device = new power_enlogic($ctrl, 0);
 	    if (!defined($device) || $device->status(\%status)) {
 		logit("Could not get status for $ctrl.");
 		$errors++;
