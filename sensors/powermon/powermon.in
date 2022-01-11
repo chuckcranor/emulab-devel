@@ -51,6 +51,7 @@ use power_rpc27;
 use power_mail;
 use power_whol;
 use power_apc;
+use power_raritan;
 use power_enlogic;
 use power_powduino;
 use libtestbed;
@@ -278,6 +279,13 @@ sub dostatus(@) {
 	} elsif ($ctrls{$ctrl} =~ /^APC/) {
 	    # XXX allow a little longer for our older APC units
 	    my $device = new snmpit_apc($ctrl, 0, 2);
+	    if (!defined($device) || $device->status(\%status)) {
+		logit("Could not get status for $ctrl.");
+		$errors++;
+		next;
+	    }
+	} elsif ($ctrls{$ctrl} =~ /^Raritan/) {
+	    my $device = new power_raritan($ctrl, 0);
 	    if (!defined($device) || $device->status(\%status)) {
 		logit("Could not get status for $ctrl.");
 		$errors++;
