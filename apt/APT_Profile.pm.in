@@ -2665,7 +2665,7 @@ sub SetRepo($$$$$$)
     if (defined($reporef) && $reporef =~ m"^(refs/|)heads/(.+)") {
 	my $branchname = $2;
 	$command .= "&& git branch -ft $branchname origin/$branchname" .
-	    "&& git checkout -B $branchname HEAD ";
+	    "&& git checkout -B $branchname HEAD && git submodule update --init --recursive";
     }
     $command .= "&& sudo chown -R $owner . ";
 
