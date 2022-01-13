@@ -517,6 +517,8 @@ $(function ()
 	    else if (instanceStatus == 'pending') {
 		status_html = "pending";
 		ProgressBarUpdate();
+		ShowRspec();
+		ShowBindings();
 		status_message = "Some or all aggregates currently unreachable";
 	    }
 	    else if (instanceStatus == 'scheduled') {
@@ -1873,7 +1875,7 @@ $(function ()
 	window.addEventListener("message", windowloaded);
 
 	vncwindow = window.open(url, "VNC " + node,
-				"left=10,top=10,width=1825,height=1060")
+				"left=10,top=10,width=1825,height=1060");
     }
 
     // SSH info.
