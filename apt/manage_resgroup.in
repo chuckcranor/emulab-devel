@@ -2903,12 +2903,8 @@ sub DoMaxDuration()
     #
     # Ask for prediction info from the clusters referenced in the rspec.
     #
-    my $urns = join(",", keys(%{$typeCounts}));
-
-    #
-    # Get the prediction info. 
-    #
-    if (!defined($prediction_info)) {
+    if (!defined($prediction_info) && keys(%{$typeCounts})) {
+	my $urns = join(",", keys(%{$typeCounts}));
 	my $local_webtask = WebTask->CreateAnonymous();
 	my $local_task_id = $local_webtask->task_id();
 	system("$RESCOMMAND -t $local_task_id prediction -a '$urns' $pid");
