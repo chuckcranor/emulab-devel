@@ -27,6 +27,7 @@ $(function ()
     var repohash     = null;
     var reporefspec  = null;
     var repobusy     = false;
+    var pollrepo     = true;
     var ajaxurl      = "";
     var amlist       = null;
     var modified     = false;
@@ -1514,7 +1515,7 @@ $(function ()
 	 * not running. It hurts to run this at the same time that
 	 * is running.
 	 *
-	 * We are never going to set repobusy=false after this, so
+	 * We are going to set pollrepo=false after this, so
 	 * CheckRepoChange() will never run again once the user has
 	 * used the update button. Not worth the trouble to get the
 	 * synchronization correct.
@@ -1523,6 +1524,7 @@ $(function ()
 	    if (!repobusy) {
 		// See comment above ...
 		repobusy = true;
+		pollrepo = false;
 		gitrepo.UpdateRepo(version_uuid, callback);
 		return;
 	    }
@@ -1583,8 +1585,10 @@ $(function ()
      */
     function CheckRepoChange()
     {
-	//console.info("CheckRepoChange", repobusy);
-	
+	//console.info("CheckRepoChange", pollrepo, repobusy);
+	if (!pollrepo) {
+	    return;
+	}
 	if (repobusy) {
 	    setTimeout(function f() { CheckRepoChange() }, 15000);
 	    return;
