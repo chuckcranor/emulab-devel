@@ -32,7 +32,7 @@ RUN_DEPENDS+=	\
 	syncthing:${PORTSDIR}/net/syncthing \
 	telegraf:${PORTSDIR}/net-mgmt/telegraf \
 	zfs-stats:${PORTSDIR}/sysutils/zfs-stats \
-	bareos-fd:${PORTSDIR}/sysutils/bareos18-client \
+	bareos-fd:${PORTSDIR}/sysutils/bareos-client \
 	znapzend:${PORTSDIR}/sysutils/znapzend
 
 # Things we like
