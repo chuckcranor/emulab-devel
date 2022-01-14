@@ -166,7 +166,7 @@ AMD_ROOT=/.amd_mnt/ops
 # otherwise filesystems will be exported twice.
 #
 ZFS_NOEXPORT=1
-INCREMENTAL_MOUNTD=1
+INCREMENTAL_MOUNTD=0
 
 # Blockstores
 BS_IQN_PREFIX=iqn.2014-05.net.emulab.apt
