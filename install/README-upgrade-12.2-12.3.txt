@@ -199,6 +199,7 @@ B. Updating the base FreeBSD system
 
    The easiest thing to do is just:
 
+     sudo rm -rf /Oetc
      sudo cp -rp /etc /Oetc
 
 4. Install the new system binaries/libraries/etc:
@@ -389,6 +390,7 @@ C. Updating ports/packages
 
    You may also want to back up config files for third-party packages:
 
+      sudo rm -rf /usr/local/Oetc
       sudo cp -rp /usr/local/etc /usr/local/Oetc
 
 1. Modify your /etc/pkg/Emulab.conf file, replacing "12.2" with "12.3" in
@@ -416,8 +418,8 @@ C. Updating ports/packages
 
 If not, get them back with:
 
-      sudo ln -sf /usr/local/bin/perl /usr/bin/perl
-      sudo ln -sf /usr/local/bin/python2.7 /usr/local/bin/python
+      sudo ln -sfn /usr/local/bin/perl /usr/bin/perl
+      sudo ln -sfn /usr/local/bin/python3.8 /usr/local/bin/python
 
    Note that as the 12.3 install, we should now be doing this automatically
    in the install of the Emulab metaports. But check to make sure:
@@ -530,8 +532,9 @@ E. Update Emulab software
    You want everything to be built against the new ports and libraries
    anyway though, so just rebuild and install everything.
 
-   For this upgrade, you will also need to reinstall apache config files
-   and move over the certs.
+   Check the defs-* file you use and make sure that INCREMENTAL_MOUNTD=0
+   (or remove the line entirely). The standard mountd now supports incremental
+   updates by default.
 
    In your build tree, look at config.log to see how it was configured
    and then:
@@ -547,7 +550,8 @@ E. Update Emulab software
 
       # on boss -- do this after ops
       sudo /usr/local/etc/rc.d/2.mysql-server.sh start
-      sudo gmake all boss-install 
+      gmake 
+      sudo gmake boss-install 
 
       # boss random: this file may be leftover from an elabinelab origin;
       # it should not be here (it SHOULD exist on ops)
