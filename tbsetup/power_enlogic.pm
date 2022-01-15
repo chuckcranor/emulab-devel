@@ -112,9 +112,13 @@ sub new($$;$$) {
     # and get the number of phases and outlets.
     #
     my $rv = $sess->get("pduNumberPDU.0");
-    if (!defined $rv || $rv > 1) {
-	warn("ERROR: $rv PDUs in chain, only handle one right now.\n");
+    if (!defined $rv) {
+	warn("ERROR: cannot talk to $devicename via SNMP\n");
 	return undef;
+    }
+    if ($rv > 1) {
+	warn("WARNING: $rv PDUs in chain, only handle one right now.\n");
+	$rv = 1;
     }
     $self->{CPDUS} = $rv;
     $rv = $sess->get("pduInputPhaseCount.1");
