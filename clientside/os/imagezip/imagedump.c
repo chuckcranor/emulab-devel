@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -234,7 +234,7 @@ dumpfile(char *name, int fd)
 			perror(name);
 			return 1;
 		}
-		if ((st.st_size % CHUNKSIZE) != 0 && !quickcheck)
+		if ((st.st_size % CHUNKSIZE) != 0 && (!quickcheck || detail))
 			printf("%s: WARNING: "
 			       "file size not a multiple of chunk size\n",
 			       name);
@@ -251,7 +251,7 @@ dumpfile(char *name, int fd)
 			count = DEFAULTREGIONSIZE;
 			if (lseek(infd, (off_t)chunkno*sizeof(chunkbuf),
 				  SEEK_SET) < 0) {
-				if (!quickcheck)
+				if (!quickcheck || detail)
 					perror("seeking on zipped image");
 				return 1;
 			}
@@ -269,9 +269,9 @@ dumpfile(char *name, int fd)
 				if (cc == 0) {
 					if (bp == chunkbuf)
 						goto done;
-					if (!quickcheck)
+					if (!quickcheck || detail)
 						fprintf(stderr, "short read on imagezip header\n");
-				} else if (!quickcheck)
+				} else if (!quickcheck || detail)
 					perror("reading zipped image");
 				return 1;
 			}
@@ -284,14 +284,18 @@ dumpfile(char *name, int fd)
 			magic = hdr->magic;
 			if (magic < COMPRESSED_MAGIC_BASE ||
 			    magic > COMPRESSED_MAGIC_CURRENT) {
-				if (!quickcheck)
+				if (!quickcheck || detail)
 					fprintf(stderr, "%s: bad version %x\n", name, magic);
 				return 1;
 			}
 
 			/* for quickcheck, just check for legit magic */
-			if (quickcheck)
+			if (quickcheck) {
+				if (detail)
+					printf("Version: %d\n",
+					       magic-COMPRESSED_MAGIC_BASE+1);
 				return 0;
+			}
 
 			if (checksums && magic < COMPRESSED_V4) {
 				printf("%s: WARNING: -c given, but file version "
