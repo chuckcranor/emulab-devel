@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,7 +35,7 @@ SYSTEM         := $(shell uname -s)
 include $(OBJDIR)/Makeconf
 
 LOCALBOSS_BIN_STUFF = powerlocal 
-LOCALBOSS_LIB_STUFF = libtestbed.pm power_apc.pm power_raritan.pm
+LOCALBOSS_LIB_STUFF = libtestbed.pm power_apc.pm power_raritan.pm power_enlogic.pm
 
 SUBBOSS_SBIN_SCRIPTS = reportboot reportboot_daemon
 SUBDIRS		= checkpass ns2ir nseparse checkup template_cvsroot \
@@ -111,6 +111,7 @@ LIBEXEC_STUFF	= wanlinksolve wanlinkinfo os_setup mkexpdir console_setup \
 LIB_STUFF       = libtbsetup.pm exitonwarn.pm libtestbed.pm \
                   power_rpc27.pm power_apc.pm power_ue.pm power_powduino.pm \
 		  power_5gstore.pm power_racktivity.pm power_raritan.pm \
+		  power_enlogic.pm \
 		  libaudit.pm libreboot.pm libosload.pm libtestbed.py \
 		  libadminmfs.pm libtblog.pm libtblog_simple.pm libArchive.pm \
 		  power_mail.pm power_whol.pm Template.pm \
@@ -385,6 +386,8 @@ cnuc-install: powerlocal
 	$(INSTALL) $(SRCDIR)/power_apc.pm /usr/local/etc/emulab/power_apc.pm
 	$(INSTALL) $(SRCDIR)/power_raritan.pm \
 		/usr/local/etc/emulab/power_raritan.pm
+	$(INSTALL) $(SRCDIR)/power_enlogic.pm \
+		/usr/local/etc/emulab/power_enlogic.pm
 	$(INSTALL) $(SRCDIR)/power_powduino.pm \
 		/usr/local/etc/emulab/power_powduino.pm
 

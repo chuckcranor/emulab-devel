@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,6 +57,7 @@ BEGIN {
 }
 use power_apc;
 use power_raritan;
+use power_enlogic;
 use libtestbed;
 use strict;
 use English;
@@ -342,10 +343,18 @@ foreach my $power_id (keys %outlets) {
 		$errors++;
 	    }
 	}
-    } elsif ($type =~ "RPC") {
-	if (rpc27ctrl($op,$power_id,@outlets)) {
-	    print "Control of $nodestr failed.\n"; $exitval++;
-	    $errors++;
+    } elsif ($type eq "Enlogic") {
+	my $device = new power_enlogic($IP,$verbose);
+	if (!defined $device) {
+	    warn "Unable to contact controller for $nodestr. Skipping...\n";
+	    next;
+	} else {
+	    print "Calling device->power($op,@outlets)\n"
+		if $verbose > 1;
+	    if ($device->power($op,@outlets)) {
+		print "Control of $nodestr failed.\n";
+		$errors++;
+	    }
 	}
     } elsif ($type eq "powduino") {
 	if (powduinoctrl($op,$power_id,@outlets)) {
@@ -357,7 +366,7 @@ foreach my $power_id (keys %outlets) {
 	# XXX a "cycle" operation will do nothing if the node is off.
 	# See comment above for forced power cycles.
 	# 
-	my $device = new power_5gstore($IP,$verbose);
+	my $device = new power_5gstore($power_id,$verbose);
 	if (!defined $device) {
 	    warn "Unable to contact controller for $nodestr. Skipping...\n";
 	    next;
@@ -451,7 +460,7 @@ sub getPowerInfo($)
 	    warn "Bogus power_id on line $lineno\n";
 	    $errors++;
 	}
-	elsif ($type !~ /^(APC|Raritan|RPC.*|powduino|ue|ipmi.*|ilo.*)$/) {
+	elsif ($type !~ /^(APC|Raritan|Enogic|powduino|ue|ipmi.*|ilo.*)$/) {
 	    warn "Unsupported power controller on line $lineno\n";
 	    $errors++;
 	}
@@ -630,33 +639,41 @@ sub dostatus(@) {
 	    }
 	    print "$ctrl Current: ", $status{current}, " Amps\n"
 		if defined($status{current});
+	    print "$ctrl Power: ", $status{power}, " Watts\n"
+		if defined($status{power});
+	    print "$ctrl Energy: ", $status{energy}, " KW hours\n"
+		if defined($status{energy});
 	    for my $outlet (1..24) {
 		my $ostr = "outlet$outlet";
 		print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
 		    if (defined($status{$ostr}));
 	    }
 	    print "\n";
-	} elsif ($ctrls{$ctrl} =~ /^RPC/) {
-	    if (rpc27status($ctrl,\%status)) {
-		print "Could not get status for $ctrl.\n";
+	} elsif ($ctrls{$ctrl} eq "Enlogic") {
+	    my $device = new power_enlogic($IPs{$ctrl}, $verbose);
+	    if (!defined $device) {
+		warn "Unable to contact controller $ctrl.\n";
 		$errors++;
 		next;
+	    } else {
+		print "Calling device->status()\n"
+		    if $verbose > 1;
+		if ($device->status(\%status)) {
+		    print "Could not get status for $ctrl.\n";
+		    $errors++;
+		    next;
+		}
 	    }
 	    print "$ctrl Current: ", $status{current}, " Amps\n"
 		if defined($status{current});
 	    print "$ctrl Power: ", $status{power}, " Watts\n"
 		if defined($status{power});
-	    if (defined($status{tempF}) || defined($status{tempC})) {
-		my $temp = $status{tempF};
-		if (!defined($temp)) {
-		    $temp = $status{tempC} * 9 / 5 + 32;
-		}
-		printf "$ctrl Temperature: %.1f F\n", $temp;
-	    }
-	    for my $outlet (1..24) {
+	    print "$ctrl Energy: ", $status{energy}, " KW hours\n"
+		if defined($status{energy});
+	    for my $outlet (1..48) {
 		my $ostr = "outlet$outlet";
 		print "$ctrl Outlet $outlet: ", $status{$ostr}, "\n"
-		    if (defined($status{$ostr}));
+		    if (exists($status{$ostr}));
 	    }
 	    print "\n";
 	} elsif ($ctrls{$ctrl} eq 'powduino') {

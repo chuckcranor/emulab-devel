@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -126,7 +126,7 @@ function ClassicExperimentList($which, $target, $state = "active")
 
 function ExperimentList($which, $target)
 {
-    global $urn_mapping, $TBBASE;
+    global $urn_mapping;
     global $this_user;
     $trust_none = TBDB_TRUSTSTRING_NONE;
     $extraclause = "";
@@ -262,7 +262,7 @@ function ExperimentList($which, $target)
 
 function ProfileList($which, $target)
 {
-    global $urn_mapping, $TBBASE;
+    global $urn_mapping;
     global $this_user;
 
     if ($which == "user") {
@@ -294,7 +294,7 @@ function ProfileList($which, $target)
 #
 function ProjectProfileList($target_user)
 {
-    global $urn_mapping, $TBBASE;
+    global $urn_mapping;
     global $this_user;
     $trust_none = TBDB_TRUSTSTRING_NONE;
 
@@ -320,7 +320,7 @@ function ProjectProfileList($target_user)
 #
 function ProfileListAux($query_result)
 {
-    global $urn_mapping, $TBBASE;
+    global $urn_mapping;
     global $this_user;
     $results = array();
 
@@ -373,7 +373,7 @@ function ProfileListAux($query_result)
 
 function DatasetList($which, $target)
 {
-    global $urn_mapping, $TBBASE, $ISEMULAB, $DEFAULT_AGGREGATE_URN;
+    global $urn_mapping, $ISEMULAB, $DEFAULT_AGGREGATE_URN;
     global $this_user;
 
     if ($which == "user") {
@@ -459,7 +459,7 @@ function DatasetList($which, $target)
 
 function ClassicDatasetList($which, $target)
 {
-    global $urn_mapping, $TBBASE, $ISEMULAB;
+    global $urn_mapping, $ISEMULAB;
     global $this_user;
 
     if ($which == "user") {
@@ -536,7 +536,7 @@ function ClassicDatasetList($which, $target)
 #
 function ClassicImageList($target)
 {
-    global $urn_mapping, $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $urn_mapping, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
     global $this_user;
 
     $target_idx = $target->uid_idx();

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -842,7 +842,7 @@ function Do_CheckScript()
         }
     }
     
-    if (preg_match("/^import/m", $script)) {
+    if (preg_match("/^(import|from)/m", $script)) {
         if (isset($ajax_args["warningsfatal"]) && $ajax_args["warningsfatal"]){
             $warningsfatal = true;
         }
@@ -1473,7 +1473,7 @@ function Do_GetRepository()
     if ($retval != 0) {
         if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-            SPITAJAX_ERROR(-1, "Internal error checking repository");
+            SPITAJAX_ERROR(-1, "Internal error cloning repository");
         }
         else {
             $error = $webtask->TaskValue("output");
@@ -1583,7 +1583,7 @@ function Do_UpdateRepository()
     #
     # If the source is an rspec, update the profile now.
     #
-    if (! preg_match("/^import/m", $blob["source"])) {
+    if (! preg_match("/^(import|from)/m", $blob["source"])) {
         if (UpdateMaster($profile, null, $blob["source"])) {
             return;
         }

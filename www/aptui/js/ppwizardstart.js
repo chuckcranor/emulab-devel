@@ -3149,8 +3149,11 @@ $(function () {
 		}
 		LoadBindings(json.value.bindings);
 		if (json.value.version_uuid != uuid ||
-		    (fromrepo && json.value.repohash != window.PROFILE_REFHASH)) {
-		    InstanceWarning(json.value, instance_uuid);
+		    (fromrepo && json.value.repohash !=
+		     window.PROFILE_REFHASH)) {
+		    InstanceWarning(json.value,
+				    (instance_uuid ?
+				     instance_uuid : json.value.rerun_uuid));
 		}
 		setStepsMotion(true);
 	    };
@@ -3184,6 +3187,8 @@ $(function () {
 	 */
 	function ParamsetWarning(set)
 	{
+	    console.info("ParamsetWarning:", set);
+	    
 	    var url = "instantiate.php?profile=" + set.version_uuid +
 		"&rerun_paramset=" + set.uuid;
 	    var link = "<a href='" + url + "'>here</a>";
@@ -3206,6 +3211,8 @@ $(function () {
 	 */
 	function InstanceWarning(set, instance_uuid)
 	{
+	    console.info("InstanceWarning: ", set, instance_uuid);
+	    
 	    var url = "instantiate.php?profile=" + set.version_uuid +
 		"&rerun_instance=" + instance_uuid;
 	    var link = "<a href='" + url + "'>here</a>";

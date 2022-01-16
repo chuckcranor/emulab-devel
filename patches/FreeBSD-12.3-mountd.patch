@@ -1,0 +1,212 @@
+#
+# Utah changes to speed up mountd updates in the presence of 2000+ entries
+# in the exports file. The FreeBSD 12.x version now does incremental updates
+# to the kernel export info (as opposed to completely removing the info and
+# then putting it all in again) so we no longer need our changes for that.
+#
+# We add caching of "--maproot=root" credentials, recording a timestamp
+# to a file when exports are complete (for processes that did a HUP and are
+# waiting for completion), and some stats collection and reporting.
+#
+#   cd /usr/src/usr.sbin
+#   sudo patch -p0 < patchfile
+#
+
+diff -Nur mountd.orig/Makefile mountd/Makefile
+--- mountd.orig/Makefile	2021-12-11 09:26:56.117515000 -0700
++++ mountd/Makefile	2022-01-14 13:03:06.377681000 -0700
+@@ -9,6 +9,9 @@
+ CFLAGS+= -I${MOUNT}
+ WARNS?= 2
+ 
++# Emulab-specific CFLAGS
++CFLAGS+= -DCACHE_ROOT_CRED -DTS_WHEN_DONE -DMOUNTD_STATS # -g # -pg -O0 # -DDEBUG
++
+ .PATH: ${MOUNT}
+ 
+ LIBADD=	util
+diff -Nur mountd.orig/mountd.c mountd/mountd.c
+--- mountd.orig/mountd.c	2021-12-11 09:26:56.118717000 -0700
++++ mountd/mountd.c	2022-01-14 13:08:34.998860000 -0700
+@@ -91,6 +91,27 @@
+ #include <stdarg.h>
+ #endif
+ 
++#ifdef MOUNTD_STATS
++#include <sys/time.h>
++#define TS_DEF(s)	struct timeval s = {0, 0}
++#define TS_GET(s)	{ gettimeofday(&s, NULL); }
++#define TS_DIFF(o,n,r)	{ timersub(&n, &o, &r); }
++#define TS_SUM(o,n,r)	{ timeradd(&n, &o, &r); }
++#define TS_ZERO(s)	{ s.tv_sec = s.tv_usec = 0; }
++#define TSC_DEF(c)	int c = 0
++#define TSC_INC(c)	{ c++; }
++#define TSC_ZERO(c)	{ c = 0; }
++#else
++#define TS_DEF(s)
++#define TS_GET(s)
++#define TS_DIFF(n,o,r)
++#define TS_SUM(o,n,r)
++#define TS_ZERO(s)
++#define TSC_DEF(c)
++#define TSC_INC(c)
++#define TSC_ZERO(c)
++#endif
++
+ /*
+  * Structures for keeping the mount list and export list
+  */
+@@ -1537,6 +1558,11 @@
+ static size_t linesize;
+ static FILE *exp_file;
+ 
++TS_DEF(tsexport);	/* total time spend in the export function */
++TSC_DEF(rcalls);	/* export entries removed */
++TSC_DEF(icalls);	/* export entries inserted */
++TS_DEF(tse);
++
+ /*
+  * Get the export list from one, currently open file
+  */
+@@ -1877,6 +1903,10 @@
+ 	FILE *debug_file;
+ 	size_t nfs_maxvers_size;
+ 
++#ifdef MOUNTD_STATS
++	int cmpfailed = 0;
++#endif
++
+ 	if ((debug_file = fopen(_PATH_MOUNTDDEBUG, "r")) != NULL) {
+ 		fclose(debug_file);
+ 		logdebug = 1;
+@@ -1916,6 +1946,7 @@
+ 	iovlen = 0;
+ 	bzero(errmsg, sizeof(errmsg));
+ 
++	TS_GET(tsexport);
+ 	if (suspend_nfsd != 0)
+ 		(void)nfssvc(NFSSVC_SUSPENDNFSD, NULL);
+ 	/*
+@@ -1948,6 +1979,10 @@
+ 		/* Free up the old lists. */
+ 		free_exports(oldexphead);
+ 	} else {
++#ifdef MOUNTD_STATS
++		if (passno != 0)
++			cmpfailed = 1;
++#endif
+ 		LOGDEBUG("doing passno=0");
+ 		/*
+ 		 * Clear flag that notes if a public fh has been exported.
+@@ -2039,6 +2074,37 @@
+ 	/* Resume the nfsd. If they weren't suspended, this is harmless. */
+ 	(void)nfssvc(NFSSVC_RESUMENFSD, NULL);
+ 	LOGDEBUG("eo get_exportlist");
++	TS_GET(tse);
++	TS_DIFF(tsexport, tse, tsexport);
++
++#ifdef TS_WHEN_DONE
++	{
++		char *tsfile = "/var/run/mountd.ts";
++		FILE *tsfd;
++
++		/*
++		 * Update a timestamp file so that anyone signalling us can
++		 * tell when we have finished our work.
++		 */
++		unlink(tsfile);
++		tsfd = fopen(tsfile, "w");
++		if (tsfd != NULL) {
++			fprintf(tsfd, "%lu\n", (unsigned long)time(NULL));
++			fclose(tsfd);
++		}
++	}
++#endif
++#ifdef MOUNTD_STATS
++	syslog(LOG_INFO, "=== %s export: %ld.%06ld seconds",
++	       passno == 0 ? "full" :
++	       (cmpfailed ? "forced-full" : "incremental"),
++	       tsexport.tv_sec, tsexport.tv_usec);
++	syslog(LOG_INFO, "    %d export remove calls", rcalls);
++	syslog(LOG_INFO, "    %d export insert calls", icalls);
++	TS_ZERO(tsexport);
++	TSC_ZERO(rcalls);
++	TSC_ZERO(icalls);
++#endif
+ }
+ 
+ /*
+@@ -2385,6 +2451,7 @@
+ 		    "can't delete exports for %s: %m %s",
+ 		    fsp->f_mntonname, errmsg);
+ 	}
++	TSC_INC(rcalls);
+ }
+ 
+ /*
+@@ -3275,6 +3342,7 @@
+ 		/* free iov, allocated by realloc() */
+ 		free(iov);
+ 	}
++	TSC_INC(icalls);
+ 	return (ret);
+ }
+ 
+@@ -3498,6 +3566,15 @@
+ 	struct group *gr;
+ 	gid_t groups[XU_NGROUPS + 1];
+ 	int ngroups;
++#ifdef CACHE_ROOT_CRED
++	/*
++	 * Cache credential for -maproot=root, which is common and
++	 * typically does not change. This really matters when you have
++	 * thousands of export lines with -maproot=root. Otherwise you
++	 * burn up half your time stat()ing /etc/nsswitch.conf.
++	 */
++	static struct xucred rootcred;
++#endif
+ 
+ 	cr->cr_version = XUCRED_VERSION;
+ 	/*
+@@ -3524,6 +3601,12 @@
+ 			syslog(LOG_ERR, "unknown user: %s", name);
+ 			return;
+ 		}
++#ifdef CACHE_ROOT_CRED
++		if (pw->pw_uid == 0 && rootcred.cr_ngroups > 0) {
++			*cr = rootcred;
++			return;
++		}
++#endif
+ 		cr->cr_uid = pw->pw_uid;
+ 		ngroups = XU_NGROUPS + 1;
+ 		if (getgrouplist(pw->pw_name, pw->pw_gid, groups, &ngroups)) {
+@@ -3546,6 +3629,19 @@
+ 			for (cnt = 1; cnt < cr->cr_ngroups; cnt++)
+ 				cr->cr_groups[cnt] = groups[cnt];
+ 		}
++#ifdef CACHE_ROOT_CRED
++		if (cr->cr_uid == 0) {
++			rootcred = *cr;
++			if (debug) {
++				fprintf(stderr, "caching root credentials: %d",
++					rootcred.cr_uid);
++				for (cnt = 0; cnt < rootcred.cr_ngroups; cnt++)
++					fprintf(stderr, "/%d",
++						rootcred.cr_groups[cnt]);
++				fprintf(stderr, "\n");
++			}
++		}
++#endif
+ 		return;
+ 	}
+ 	/*
+@@ -3756,7 +3852,7 @@
+ 		}
+ 		cp++;
+ 	}
+-	if (lstat(dirp, &sb) < 0 || !S_ISDIR(sb.st_mode))
++	if (ret && (lstat(dirp, &sb) < 0 || !S_ISDIR(sb.st_mode)))
+ 		ret = 0;
+ 	return (ret);
+ }

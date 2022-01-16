@@ -206,7 +206,7 @@ B. Updating the base FreeBSD system
    the cluster offline at the CloudLab portal to allow things to settle:
 
      # On mothership boss
-     wap manage_aggregate chflag -a <clustername> disabled yes
+     wap manage_aggregate <clustername> chflag disabled yes
 
    Cluster name comes from running "wap manage_aggregate list" on
    the Mothership boss. Use the "Nickname".
@@ -226,6 +226,12 @@ B. Updating the base FreeBSD system
      # NOTE capture may not be installed
      sudo /usr/local/etc/rc.d/capture stop
    
+   On the Utah clusters you may need to also need to stop some additional
+   services:
+
+     sudo /usr/local/etc/rc.d/bareos-fd stop
+     sudo /usr/local/etc/rc.d/telegraf stop
+
 3. Before installing the new binaries/libraries/etc., you might want to back
    up the files that have Emulab changes just in case. The easiest thing to do
    is just:
@@ -294,6 +300,10 @@ B. Updating the base FreeBSD system
    ops:
      sudo /usr/local/etc/rc.d/apache24 stop
 
+   Utah:
+     sudo /usr/local/etc/rc.d/bareos-fd stop
+     sudo /usr/local/etc/rc.d/telegraf stop
+   
    and then again run freebsd-update to finish:
 
     sudo /usr/sbin/freebsd-update install
@@ -414,6 +424,7 @@ C. Updating ports/packages
 
    You may also want to back up config files for third-party packages:
 
+      sudo rm -rf /usr/local/Oetc
       sudo cp -rp /usr/local/etc /usr/local/Oetc
 
 1. Modify your /etc/pkg/Emulab.conf file, replacing "11.3" with "12.3" in
@@ -428,19 +439,19 @@ C. Updating ports/packages
    so instead just reinstall pkg:
 
     sudo pkg update
-    sudo pkg install -f -r Emulab pkg
+    sudo -E ASSUME_ALWAYS_YES=true pkg install -f -r Emulab pkg
     sudo -E ASSUME_ALWAYS_YES=true pkg upgrade -r Emulab
 
 3. Tweak package installs:
 
    REALLY, REALLY IMPORTANT: at some point, the perl port stopped installing
    the /usr/bin/perl link which we use heavily in Emulab scripts. Ditto for
-   python and the /usr/local/bin/python link. Since the version of python
-   also changed, just be safe and remake the symlinks:
+   python and the /usr/local/bin/python link. Make sure those two symlinks
+   exist and are correct:
 
       sudo ln -sfn /usr/local/bin/perl /usr/bin/perl
       sudo ln -sfn /usr/local/bin/python3.8 /usr/local/bin/python
-      # verify
+      # verify they resolve
       ls -laL /usr/bin/perl /usr/local/bin/python
 
    REALLY, REALLY IMPORTANT PART 2: Because perl changed, you will need
@@ -467,14 +478,26 @@ C. Updating ports/packages
 
    But ONLY do this if you have Moonshot chassis.
 
-3b. (OPTIONAL) Additional package cleanup.
+3b. Additional package cleanup.
 
-   To make sure your packages are in a consistent state you should remove
-   some lingering packages:
+   IMPORTANT: we run apache as 'nobody' but the FreeBSD default is 'www'.
+   One place this makes a difference is on boss for the fcgid module where
+   a directory is installed as accessable by only 'www'. You will need to
+   fix this:
 
-     # look carefully at what it wants to do!
+     # boss only
+     sudo chown nobody:nobody /var/run/fcgidsock
+     sudo chmod 770 /var/run/fcgidsock
+
+   To be extra tidy, get rid of any abandoned ports on boss and ops.
+   Look carefully at what the following wants to do (it will prompt you).
+   If there is any doubt, just say no:
+
      sudo pkg autoremove
-     # check everything
+   
+   To make sure your packages are in a consistent state you should check
+   everything:
+
      sudo pkg check -adBs
    
    If you discover in "check" that "autoremove" took out a library
@@ -513,6 +536,12 @@ C. Updating ports/packages
    and attempt to reinstall them with "pkg install". Note that just because
    they are old that doesn't mean they need to be reinstalled.
 
+   IMPORTANT NOTE: at Utah, we have bareos installed and the upgrade seems
+   to remove the old bareos16-client so the command above will not pick up
+   that bareos-client needs to be updated. So you will need to manually:
+
+     sudo pkg install -r Emulab bareos18-client
+
    This is a point at which you might want to check for security problems:
 
      sudo pkg audit -F
@@ -524,8 +553,8 @@ C. Updating ports/packages
    port from source in the future. Make sure your DEFAULT_VERSION line(s)
    look like:
 
-  DEFAULT_VERSIONS=perl5=5.32 python3=3.8 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
-  DEFAULT_VERSIONS+=ssl=base
+DEFAULT_VERSIONS=perl5=5.32 python3=3.8 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
+DEFAULT_VERSIONS+=ssl=base
 
 D. Repeat steps B and C for ops.
 
@@ -547,6 +576,10 @@ E. Update Emulab software
    You want everything to be built against the new ports and libraries
    anyway though, so just rebuild and install everything.
 
+   Check the defs-* file you use and make sure that INCREMENTAL_MOUNTD=0
+   (or remove the line entirely). The standard mountd now supports incremental
+   updates by default.
+
    In your build tree, look at config.log to see how it was configured
    and then:
 
@@ -558,23 +591,32 @@ E. Update Emulab software
 
       # on ops -- do this first
       sudo gmake opsfs-install
-
-      # on boss -- do this after ops
-      sudo /usr/local/etc/rc.d/2.mysql-server.sh start
-      # install any DB updates
-      sudo gmake
-      sudo gmake update-testbed-noinstall
-      # install everything
-      sudo gmake boss-install 
-
-      # boss random: this file may be leftover from an elabinelab origin;
-      # it should not be here (it SHOULD exist on ops)
-      sudo rm /usr/local/etc/rc.d/ctrlnode.sh
+      # mysql is no longer installed
+      sudo rm /usr/local/etc/rc.d/1.mysql*
 
    The reason for the ops install is that, while boss-install updates
    most of the ops binaries/libraries via NFS, there are some that it
    doesn't. So by doing a separate build/install on ops, you are
    guaranteed to catch everything.
+
+      # on boss -- do this after ops
+      sudo /usr/local/etc/rc.d/2.mysql-server.sh start
+      gmake
+      sudo gmake boss-install
+
+   If the boss install tells you that there are updates to install,
+   run the command like it says:
+
+      sudo gmake update-testbed
+      
+   This will actually turn the testbed back on at the end so you will
+   not have to do #3 below. Note also that this command may take awhile
+   and provide no feedback.
+
+      # boss random: this file may be leftover from an elabinelab origin;
+      # it should not be here (it SHOULD exist on ops)
+      # BUT ONLY DO THIS IF IT IS NOT AN ELABINELAB
+      sudo rm /usr/local/etc/rc.d/ctrlnode.sh
 
 3. Re-enable the testbed on boss.
 
@@ -600,13 +642,7 @@ E. Update Emulab software
 6. (CloudLab clusters only) Reenable the cluster at the portal.
 
      # On mothership boss
-     wap manage_aggregate chflag -a <clustername> disabled no
+     wap manage_aggregate <clustername> chflag disabled no
 
    Cluster name comes from running "wap manage_aggregate list" on
    the Mothership boss. Use the "Nickname".
-
-F. Update the MFSes
-
-   This is not strictly part of updating the OS, but it would be good to
-   do this if you have not for awhile. See the instructions in
-   ops.emulab.net:~mike/upgrade-mfs.txt.

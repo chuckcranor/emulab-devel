@@ -52,6 +52,7 @@ function Do_Reserve()
     $this_idx = $this_user->uid_idx();
     $validate = 0;
     $override = 0;
+    $forclass = 0;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
@@ -120,6 +121,13 @@ function Do_Reserve()
     if (!$project) {
         $errors["pid"] = "No such project";
     }
+
+    if (isset($formfields["for-class"]) && $formfields["for-class"] == "yes") {
+        if (ISADMIN() || $project->IsManager($this_user)) {
+            $forclass = 1;
+        }
+    }
+    
     # Admins do not need a reason.
     if (!isset($formfields["reason"]) || $formfields["reason"] == "") {
         if (ISADMIN()) {
@@ -438,6 +446,7 @@ function Do_Reserve()
         (isset($uuid) ? "-u $uuid " : "") .
         (isset($start) ? "-s $start " : "") .
         ($override ? "-O " : "") .
+        ($forclass ? "-C " : "") .
         " -e $end $pid ";
 
     #

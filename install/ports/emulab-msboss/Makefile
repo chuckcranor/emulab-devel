@@ -27,7 +27,7 @@ RUN_DEPENDS+=	\
 	racket:${PORTSDIR}/lang/racket \
 	syncthing:${PORTSDIR}/net/syncthing \
 	telegraf:${PORTSDIR}/net-mgmt/telegraf \
-	bareos-fd:${PORTSDIR}/sysutils/bareos18-client
+	bareos-fd:${PORTSDIR}/sysutils/bareos-client
 
 # Things we like
 RUN_DEPENDS+=	\

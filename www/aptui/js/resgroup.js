@@ -16,6 +16,7 @@ $(function ()
     var current_pid  = null;
     var projlist     = null;
     var amlist       = null;
+    var managerlist  = null;
     var routelist    = null;	// Powder
     var FEs          = {};	// Powder
     var radioinfo    = {};	// Powder
@@ -425,7 +426,9 @@ $(function ()
 	editing  = window.EDITING; 
 	projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	managerlist = JSON.parse(_.unescape($('#manager-json')[0].textContent));
 	console.info("amlist", amlist);
+	console.info("managerlist", managerlist);
 	
 	if (window.ISPOWDER) {
 	    routelist= JSON.parse(
@@ -509,7 +512,7 @@ $(function ()
 	    amlist:		amlist,
 	    isadmin:		isadmin,
 	    editing:		editing,
-	    default_pid:        window.PID !== undefined ? window.PID : null,
+	    default_pid:        window.PID,
 	    matrixinfo:		matrixinfo,
 	});
 	html = aptforms.FormatFormFieldsHorizontal(html);
@@ -518,6 +521,21 @@ $(function ()
 
 	// Add one unassigned row.
 	if (!editing) {
+	    if (isadmin || managerlist[window.PID]) {
+		$('#for-class-checkbox').removeClass("hidden");
+	    }
+	    if (!isadmin) {
+		$('#pid').change(function (event) {
+		    var pid = $(this).val();
+		    
+		    if (managerlist[pid]) {
+			$('#for-class-checkbox').removeClass("hidden");
+		    }
+		    else {
+			$('#for-class-checkbox').addClass("hidden");
+		    }
+		});
+	    }
 	    if (window.FROMRSPEC) {
 		// XXX Need slight delay to wait for parent to write the
 		// rspec into our DOM. Need to revisit this approach.
@@ -1723,7 +1741,7 @@ $(function ()
 	 */
 	start = $('#reserve-request-form [name=start]').val();
 	end   = $('#reserve-request-form [name=end]').val();
-	if (editing && !start) {
+	if (editing && !start && !isadmin) {
 	    aptforms.GenerateFormErrors('#reserve-request-form',
 					{"start" : "Missing start date/hour"});
 	    errors++;
@@ -3241,6 +3259,12 @@ $(function ()
 			$('#reserve-uncancel-button').removeClass("hidden");
 		    }
 		}
+	    }
+	    if (details.forclass) {
+		$('#for-class').prop("checked", true);
+		$('#for-class').attr("disabled", 'disabled');
+		$('#for-class').attr("readonly", 'readonly');
+		$('#for-class-checkbox').removeClass("hidden");
 	    }
 	    if (details.status == "approved") {
 		$('#unapproved-warning').addClass("hidden");

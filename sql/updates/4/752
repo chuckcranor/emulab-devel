@@ -8,6 +8,10 @@ sub DoUpdate($$$)
     if (DBSlotType("users", "usr_shell") !~ /enum/) {
 	DBQueryFatal("update users set usr_shell='bash' ".
 		     "where usr_shell is null");
+	DBQueryFatal("update users set usr_shell='sh' ".
+		     "where usr_shell='zsh'");
+	DBQueryFatal("update users set usr_shell='tcsh' ".
+		     "where usr_shell='csh'");
 	DBQueryFatal("alter table users change usr_shell ".
 		     " `usr_shell` enum('tcsh','bash','sh') default 'bash'");
     }

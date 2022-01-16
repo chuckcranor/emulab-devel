@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018, 2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018, 2021, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,7 @@ include_once("aggregate_defs.php");
 function Do_GetStatus()
 {
     global $ajax_args, $this_user, $geni_response_codes, $urn_mapping;
-    global $TBSUEXEC_PATH, $TBBASE, $TB_PROJECT_CREATEEXPT, $OURDOMAIN;
+    global $TBSUEXEC_PATH, $TB_PROJECT_CREATEEXPT, $OURDOMAIN;
     global $TB_PROJECT_READINFO, $DEFAULT_AGGREGATE_URN;
     global $TBADMINGROUP;
     $isadmin = 0;
@@ -300,7 +300,7 @@ function Do_GetStatus()
 
 function Do_GetPreReservations()
 {
-    global $ajax_args, $geni_response_codes, $urn_mapping, $TBBASE;
+    global $ajax_args, $geni_response_codes, $urn_mapping;
     global $TBSUEXEC_PATH, $TBADMINGROUP;
 
     if (! (ISADMIN() || ISFOREIGN_ADMIN())) {

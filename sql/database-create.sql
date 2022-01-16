@@ -906,6 +906,7 @@ CREATE TABLE `apt_reservation_groups` (
   `canceled` datetime DEFAULT NULL,
   `deleted` datetime DEFAULT NULL,
   `noidledetection` datetime DEFAULT NULL,
+  `forclass` tinyint(1) NOT NULL default '0',
   `locked` datetime DEFAULT NULL,
   `locker_pid` int(11) default '0',
   `notified` datetime DEFAULT NULL,
@@ -1072,6 +1073,7 @@ CREATE TABLE `apt_reservation_group_history` (
   `created` datetime DEFAULT NULL,
   `canceled` datetime DEFAULT NULL,
   `deleted` datetime DEFAULT NULL,
+  `forclass` tinyint(1) NOT NULL default '0',
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `reason` mediumtext,
   PRIMARY KEY (`uuid`)

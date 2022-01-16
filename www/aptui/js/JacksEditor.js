@@ -128,7 +128,7 @@ $(function () {
 	  f();
 	});
       };
-	if (0) {
+	if (1) {
 	    // OAI2021FallWS
 	    var xmlthing = sup.CallServerMethod(null, "instantiate",
 						"GetImageList");

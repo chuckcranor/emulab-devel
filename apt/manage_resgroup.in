@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -179,9 +179,10 @@ exit(0);
 #
 sub DoGroupReserve()
 {
-    my $optlist    = "s:e:nN:u:p:O";
+    my $optlist    = "s:e:nN:u:p:OC";
     my @argvcopy   = @ARGV[0..$#ARGV-1];
     my $update     = 0;
+    my $forclass   = 0;
     my $exitcode   = 0;
     my $autoapprove= 1; # This might be turned off below
     my $updateall  = 0;
@@ -241,6 +242,16 @@ sub DoGroupReserve()
 	    fatal("Invalid characters in reason string");
 	}
     }
+    if (defined($options{"C"})) {
+	#
+	# Only leader and managers can set this.
+	#
+	if (! ($this_user->IsAdmin() || $project->IsManager($this_user))) {
+	    fatal("Not allowed to declare this reservation is for a class.");
+	}
+	$forclass = 1;
+	@argvcopy = map { "$_" ne "-C" ? $_ : () } @argvcopy;
+    }
     if (defined($options{"O"})) {
 	if (!$this_user->IsAdmin()) {
 	    fatal("Only administrators can override (-O)");
@@ -259,19 +270,24 @@ sub DoGroupReserve()
 	$checkonly = 1;
 	@argvcopy = map { "$_" ne "-n" ? $_ : () } @argvcopy;
     }
-    if ($update) {
-	usage()
-	    if (! (defined($end) && defined($start)));
+    if (! defined($end)) {
+	print STDERR "Missing end time\n";
+	usage();
     }
-    else {
-	usage()
-	    if (! defined($end));
+    if ($update) {
 	#
-	# No start time means user wants the reservation right now.
+	# Only admins can move start to "now".
 	#
-	if (!defined($start)) {
-	    $start = time();
+	if (! (defined($start) || $this_user->IsAdmin())) {
+	    print STDERR "Missing start time\n";
+	    usage();
 	}
+    }
+    #
+    # No start time means user wants the reservation right now.
+    #
+    if (!defined($start)) {
+	$start = time();
     }
     
     #
@@ -686,6 +702,10 @@ sub DoGroupReserve()
 	if (!$checkonly && !$autoapprove) {
 	    $command .= "-P ";
 	}
+	# Initial idle detection.
+	if (!$checkonly && $forclass) {
+	    $command .= "-I ";
+	}
 	$command .= " @argvcopy $count";
 	print "Running: $command\n";
 	system($command);
@@ -999,10 +1019,14 @@ sub DoGroupReserve()
 		    "end"         => $end,
 		    "reason"      => $reason,
 		    "portal"      => $brand->brand(),
+		    "forclass"    => $forclass,
 		};
 		$resgroup = APT_Reservation::Group->Create($args);
 		if (!defined($resgroup)) {
 		    fatal("Could not create a new reservation group");
+		}
+		if ($forclass) {
+		    $resgroup->DisableIdleDetection();
 		}
 	    }
 	    foreach my $res (@cluster_reservations) {
@@ -1096,10 +1120,12 @@ sub DoGroupReserve()
 		my $this_uid   = $this_user->uid();
 		my $this_email = $this_user->email();
 		my $url        = $resgroup->WebURL();
+		my $pid        = $project->pid();
     
 		$brand->SendEmail($brand->ReservationsEmailAddress(),
 			  "Pending reservation group request needs approval",
-			  "A reservation group request was made by $this_uid, ".
+			  "A reservation group request was made by $this_uid ".
+			  "in project $pid,\n".
 			  "but it needs approval.".
 			  "\n\n".
 			  $resgroup->InfoString() . "\n" .
@@ -2877,12 +2903,8 @@ sub DoMaxDuration()
     #
     # Ask for prediction info from the clusters referenced in the rspec.
     #
-    my $urns = join(",", keys(%{$typeCounts}));
-
-    #
-    # Get the prediction info. 
-    #
-    if (!defined($prediction_info)) {
+    if (!defined($prediction_info) && keys(%{$typeCounts})) {
+	my $urns = join(",", keys(%{$typeCounts}));
 	my $local_webtask = WebTask->CreateAnonymous();
 	my $local_task_id = $local_webtask->task_id();
 	system("$RESCOMMAND -t $local_task_id prediction -a '$urns' $pid");

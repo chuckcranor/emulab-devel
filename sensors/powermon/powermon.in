@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,6 +51,8 @@ use power_rpc27;
 use power_mail;
 use power_whol;
 use power_apc;
+use power_raritan;
+use power_enlogic;
 use power_powduino;
 use libtestbed;
 use strict;
@@ -277,6 +279,20 @@ sub dostatus(@) {
 	} elsif ($ctrls{$ctrl} =~ /^APC/) {
 	    # XXX allow a little longer for our older APC units
 	    my $device = new snmpit_apc($ctrl, 0, 2);
+	    if (!defined($device) || $device->status(\%status)) {
+		logit("Could not get status for $ctrl.");
+		$errors++;
+		next;
+	    }
+	} elsif ($ctrls{$ctrl} =~ /^Raritan/) {
+	    my $device = new power_raritan($ctrl, 0);
+	    if (!defined($device) || $device->status(\%status)) {
+		logit("Could not get status for $ctrl.");
+		$errors++;
+		next;
+	    }
+	} elsif ($ctrls{$ctrl} =~ /^Enlogic/) {
+	    my $device = new power_enlogic($ctrl, 0);
 	    if (!defined($device) || $device->status(\%status)) {
 		logit("Could not get status for $ctrl.");
 		$errors++;

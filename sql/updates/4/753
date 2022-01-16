@@ -1,0 +1,24 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_reservation_groups", "forclass")) {
+	DBQueryFatal("ALTER TABLE apt_reservation_groups add " .
+		     " `forclass` tinyint(1) NOT NULL default '0' ".
+		     "    after noidledetection");
+    }
+    if (!DBSlotExists("apt_reservation_group_history", "forclass")) {
+	DBQueryFatal("ALTER TABLE apt_reservation_group_history add " .
+		     " `forclass` tinyint(1) NOT NULL default '0' ".
+		     "    after deleted");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

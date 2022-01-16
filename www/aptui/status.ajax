@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -629,6 +629,7 @@ function Do_DenyOrMoreinfo($action)
         $fp = fopen($filename, "w");
         fwrite($fp, $reason);
         fclose($fp);
+        chmod($filename, 0666);
     }
     if ($action == "terminate") {
         if (!isset($ajax_args["howlong"]) || $ajax_args["howlong"] == "") {
@@ -650,7 +651,6 @@ function Do_DenyOrMoreinfo($action)
                      "  $action $uuid $extrargs " .
                         (isset($filename) ? $filename : ""),
 		     SUEXEC_ACTION_IGNORE);
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     
     $webtask->Refresh();
     if (isset($filename)) {

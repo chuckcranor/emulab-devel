@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013 University of Utah and the Flux Group.
+# Copyright (c) 2013, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -177,6 +177,15 @@ sub loadReservedRanges($;$) {
 	my $virtlans   = $virtexpt->Table("virt_lans");
 	foreach my $vlrow ($virtlans->Rows()) {
 	    my $ip     = inet_aton($vlrow->ip());
+	    if (!$ip) {
+		# XXX layer1 links will not have an IP, ignore them
+		# Otherwise we fail in a more graceful way.
+		if ($vlrow->layer() != 1) {
+		    tberror("IPBuddyWrapper: found layer 2 link with no IP!\n");
+		    return -1;
+		}
+		next;
+	    }
 	    my $mask   = inet_aton($vlrow->mask());
 	    my $prefix = unpack('%32b*', $mask);
 	    my $base   = inet_ntoa($ip & $mask);

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -124,6 +124,8 @@ function Do_GetInfo()
     $blob["features"]        = GetFeatures($node);
     $blob["typefeatures"]    = GetTypeFeatures($node, $blob["features"]);
     $blob["interfaces"]      = $node->GetInterfaceInfo();
+    $blob["outlet"]          = $node->OutletInfo();
+    $blob["tipline"]         = $node->TiplineInfo();
     $blob["op_mode"]         = $node->op_mode();
     $blob["control_ip"]      = $node->ControlIP();
     $blob["eventstate"]      = $node->eventstate();
@@ -215,7 +217,7 @@ function Do_GetInfo()
 function GetAttributes($node)
 {
     global $this_user, $ajax_args;
-    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
     global $TB_NODEACCESS_MODIFYINFO;
     $node_id = $node->node_id();
     $blob = array();
@@ -240,7 +242,7 @@ function GetAttributes($node)
 function GetFeatures($node)
 {
     global $this_user, $ajax_args;
-    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
     global $TB_NODEACCESS_MODIFYINFO;
     $node_id = $node->node_id();
     $blob = array();
@@ -375,7 +377,7 @@ function GetExpInfo($node)
 function Do_GetHardwareInfo()
 {
     global $this_user, $ajax_args, $node, $GuestUserOkay;
-    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
 
     # This function allows guest users.
     $GuestUserOkay = true;

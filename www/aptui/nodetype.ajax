@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -79,7 +79,7 @@ function CheckPageArgs($write)
 function Do_GetInfo()
 {
     global $this_user, $ajax_args, $GuestUserOkay, $nodetype;
-    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
     $blob = array();
     $osinfo = array();
 
@@ -132,7 +132,6 @@ function ConvertOSID($osid)
 
 function ConvertImageID($imageid)
 {
-    global $TBBASE;
     $image = Image::Lookup($imageid);
 
     if ($image) {
@@ -410,7 +409,7 @@ function Delete($which)
 function Do_GetHardwareInfo()
 {
     global $this_user, $ajax_args, $node, $GuestUserOkay, $nodetype;
-    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
 
     # Only this function allows guest users.
     $GuestUserOkay = true;

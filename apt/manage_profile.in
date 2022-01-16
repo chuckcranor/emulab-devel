@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -367,7 +367,7 @@ sub CreateProfile()
 	$new_args{'repokey'} = $repokey;
     }
     # Script parameters
-    if (defined($script) && $script ne "" && $script =~ /^import/m) {
+    if (defined($script) && $script ne "" && $script =~ /^(import|from)/m) {
 	my $paramdefs;
 	my $retval = GetScriptParameters($script, $reponame, \$paramdefs);
 	if ($retval) {
@@ -851,7 +851,7 @@ sub ModifyProfileInternal($$$)
 	$update_args{'reporef'} = $reporef;
     }
     # Script parameters
-    if (defined($script) && $script ne "" && $script =~ /^import/m) {
+    if (defined($script) && $script ne "" && $script =~ /^(import|from)/m) {
 	#
 	# For a Parameterized Profile, need to generate and store the form
 	# data. Only python scripts of course.

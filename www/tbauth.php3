@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -561,9 +561,14 @@ function LoginStatus() {
 # conditions. 
 #
 function LOGGEDINORDIE($uid, $modifier = 0) {
-    global $TBBASE, $BASEPATH;
+    global $TBBASE, $APTBASE, $BASEPATH;
     global $TBAUTHTIMEOUT, $CHECKLOGIN_HASHKEY, $CHECKLOGIN_IDX;
     global $drewheader;
+
+    $login_url = "$TBBASE/login.php3";
+    if (isset($APTBASE)) {
+        $login_url = "$APTBASE/login.php";
+    }
 
     if ($drewheader) {
 	trigger_error(
@@ -576,11 +581,10 @@ function LOGGEDINORDIE($uid, $modifier = 0) {
     }
 
     $redirect_url = null;
-    $login_url = "$TBBASE/login.php3";
     if ($uid || REMEMBERED_ID()) {
         # HTTP_REFERER will not work reliably when redirecting so
         # pass in the URI for this page as an argument
-        $redirect_url = "$TBBASE/login.php3?referrer=".
+        $redirect_url = "${login_url}?referrer=".
             urlencode($_SERVER['REQUEST_URI']);
     }
 

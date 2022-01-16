@@ -27,6 +27,7 @@ $(function ()
     var repohash     = null;
     var reporefspec  = null;
     var repobusy     = false;
+    var pollrepo     = true;
     var ajaxurl      = "";
     var amlist       = null;
     var modified     = false;
@@ -50,7 +51,7 @@ $(function ()
     var stepsInitialized  = false;
     var portal_converted  = false;
 
-    var pythonRe = /^import/m;
+    var pythonRe = /^(import|from)/m;
     var tclRe    = /^source tb_compat/m;
 
     function initialize()
@@ -205,8 +206,10 @@ $(function ()
 		});
 	}
 	// Copy profile.
-	CopyProfile.InitCopyProfile('#copy-profile-button',
-				    version_uuid, projlist);
+	if (!fromrepo) {
+	    CopyProfile.InitCopyProfile('#copy-profile-button',
+					version_uuid, projlist);
+	}
 	
 	//
 	// Fix for filestyle problem; not a real class I guess, it
@@ -776,31 +779,51 @@ $(function ()
 	    // A geni-lib script. We are going to pass the script to
 	    // the server to be "run", which returns XML.
 	    //
-	    // Need to normalize the newline characters for this
-	    // comparison to be meaningful, else we think the
-	    // source has changed when it really has not.
-	    //
-	    var newr = $.trim(newRspec);
-	    var oldr = $.trim($('#profile_script_textarea').val());
-	    newr = newr.replace(new RegExp(/\r?\n|\r/g), " ");
-	    oldr = oldr.replace(new RegExp(/\r?\n|\r/g), " ");
-	    
-	    if (oldr != newr || goodscript == 0) {
-		console.info("geni-lib code has changed");
-		if (portal_converted) {
-		    /*
-		     * User might not want to proceed down this path,
-		     * will not be able to use Jacks. 
-		     */
-		    rteCheckScript(newRspec);
-		}
-	        else {
-		    gotscript = 1;
-		    checkScript(newRspec, repoupdate_callback);
-		}
+	    if (repoupdate_callback) {
+		/*
+		 * For repo based profiles always run the script.
+		 * Might be in a submodule or import, etc. So looking
+		 * at just profile.py is not an indicator. checkScript()
+		 * is what causes the profile to be "saved". 
+		 *
+		 * This is silly, and is a hold over from when I
+		 * thought we would give the user the option of
+		 * "saving" the change. But that makes no sense for a
+		 * repo backed profile, and when the user clicks
+		 * "Update" we should just update in the backend and
+		 * not go through all this jumping around.
+		 */
+		gotscript = 1;
+		checkScript(newRspec, repoupdate_callback);
 	    }
-	    else if (repoupdate_callback !== undefined) {
-		repoupdate_callback(false /* unmodified. */);
+	    else {
+		//
+		// Need to normalize the newline characters for this
+		// comparison to be meaningful, else we think the
+		// source has changed when it really has not.
+		//
+		var newr = $.trim(newRspec);
+		var oldr = $.trim($('#profile_script_textarea').val());
+		newr = newr.replace(new RegExp(/\r?\n|\r/g), " ");
+		oldr = oldr.replace(new RegExp(/\r?\n|\r/g), " ");
+	    
+		if (oldr != newr || goodscript == 0) {
+		    console.info("geni-lib code has changed");
+		    if (portal_converted) {
+			/*
+			 * User might not want to proceed down this path,
+			 * will not be able to use Jacks. 
+			 */
+			rteCheckScript(newRspec);
+		    }
+	            else {
+			gotscript = 1;
+			checkScript(newRspec, repoupdate_callback);
+		    }
+		}
+		else if (repoupdate_callback !== undefined) {
+		    repoupdate_callback(false /* unmodified. */);
+		}
 	    }
 	}
         else
@@ -1492,7 +1515,7 @@ $(function ()
 	 * not running. It hurts to run this at the same time that
 	 * is running.
 	 *
-	 * We are never going to set repobusy=false after this, so
+	 * We are going to set pollrepo=false after this, so
 	 * CheckRepoChange() will never run again once the user has
 	 * used the update button. Not worth the trouble to get the
 	 * synchronization correct.
@@ -1501,6 +1524,7 @@ $(function ()
 	    if (!repobusy) {
 		// See comment above ...
 		repobusy = true;
+		pollrepo = false;
 		gitrepo.UpdateRepo(version_uuid, callback);
 		return;
 	    }
@@ -1561,8 +1585,10 @@ $(function ()
      */
     function CheckRepoChange()
     {
-	//console.info("CheckRepoChange", repobusy);
-	
+	//console.info("CheckRepoChange", pollrepo, repobusy);
+	if (!pollrepo) {
+	    return;
+	}
 	if (repobusy) {
 	    setTimeout(function f() { CheckRepoChange() }, 15000);
 	    return;
@@ -1716,6 +1742,8 @@ $(function ()
 
     function CreateJacksEditor()
     {
+	console.info("CreateJacksEditor");
+	
         var isViewer = window.ISPOWDER || (gotscript && !portal_converted);
 	if (editor) {
 	    $('#editmodal_div').empty();

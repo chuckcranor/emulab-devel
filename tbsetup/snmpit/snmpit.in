@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -1926,15 +1926,15 @@ sub doVlansFromTables($$@) {
     my $stacks  = shift;
     my @vlanids = @_;
     my %vlans   = ();
+    my $pid     = $experiment->pid();
+    my $eid     = $experiment->eid();
 
+    my %stacks = map { $_->{STACKID} => $_ } @$stacks;
+    my %stackvlans = map { $_->{STACKID} => [] } @$stacks;
     my $errors = 0;
+    my %trunkedPorts = ();
     my $vlan_number;
 
-    if (@$stacks > 1) {
-	die "VLAN creation across multiple stacks is not yet supported\n" .
-	    "Stacks are " . join(", ",map {$_->{STACKID}} @$stacks) . "\n";
-    }
-    
     #
     # Hand over to outer boss.
     # 
@@ -1942,14 +1942,66 @@ sub doVlansFromTables($$@) {
 	return RemoteDoVlansFromTables($experiment, @vlanids);
     }
 
-    my ($stack) = @$stacks;
+    #$debug = 1;
 
-#    $debug = 1;
-#    $stack->FlipDebug(1);   
+    foreach my $id (@vlanids) {
+	my $vlan = VLan->Lookup($id);
+	if (!defined($vlan)) {
+	    die("Could not locate vlan $id in the DB\n");
+	}
+	#
+	# Make sure it does not cross stacks, we can handle multiple
+	# stacks here as long as each vlan is on just one stack.
+	#
+	my @planned = getPlannedStacksForVlans($id);
+	if (@planned > 1) {
+	    die "$vlan creation crosses multiple stacks. ".
+		"Stacks are " . join(", ", @planned) . "\n";
+	}
+	my ($planned) = @planned;
+	my $ref = {
+	    "vlan"       => $vlan,
+	    "stack"      => $stacks{$planned},
+	    "trunkports" => { getExperimentTrunks($pid, $eid, $id) },
+	};
+	# Vlans to create (which might change below).
+	$vlans{"$id"} = $ref;
+	# Vlans per stack. 
+	push(@{$stackvlans{$planned}}, $ref);
 
-    my %trunkedPorts = getExperimentTrunks($experiment->pid(),
-					   $experiment->eid(), @vlanids);
+	#$stacks{$planned}->FlipDebug(1);   
+    }
+    
+    #
+    # Sanity check: make sure that this experiment does not use more VLANs than
+    # we can put on the stack(s). Note that we don't try to check how many are
+    # available (ie. total - used), because getting the 'used' value is not
+    # trivial.
+    #
+    foreach my $stackid (keys(%stackvlans)) {
+	my $stack = $stacks{$stackid};
+	my $vlans = $stackvlans{$stackid};
 
+	my $leader = getStackLeader($stackid);
+	if (!defined $leader) {
+	    tberror "Unable to get stack leader for stack $stackid";
+	    return 1;
+	}
+	my $switch_options = getDeviceOptions($leader);
+	if (!defined $switch_options) {
+	    tberror "Unable to get switch options for switch $leader";
+	    return 1;
+	}
+	my $vlan_count = $switch_options->{'max_vlan'} -
+	                 $switch_options->{'min_vlan'};
+	my $expt_vlan_count = scalar(@$vlans);
+	if ($expt_vlan_count > $vlan_count) {
+	    tberror "Too many VLANs for stack $stackid: ".
+		"$expt_vlan_count requested, $vlan_count available";
+	    return 1;
+	}
+    }
+    
     #
     # Look for a lan that requires dual mode trunking. The ports in that
     # lan need to be trunked after the native lan is created, so that we
@@ -1957,18 +2009,12 @@ sub doVlansFromTables($$@) {
     # not a general solution to this, but I have not found a solution I am
     # really happy with. 
     #
-    my %dualTrunkPorts = ();
-    
-    foreach my $id (@vlanids) {
-	my $vlan = VLan->Lookup($id);
-	if (!defined($vlan)) {
-	    die("Could not locate vlan $id in the DB\n");
-	}
-	$vlans{"$id"} = $vlan;
-    }
-    
-    foreach my $vlan (values(%vlans)) {
+    foreach my $ref (values(%vlans)) {
+	my $vlan   = $ref->{'vlan'};
+	my $stack  = $ref->{'stack'};
+	my $tports = $ref->{'trunkports'};
 	my $vlanid = $vlan->id();
+	
 	my $trunk_mode;
 	$vlan->GetAttribute("trunk_mode", \$trunk_mode);
 	my $trunk_vlanid;
@@ -2005,11 +2051,11 @@ sub doVlansFromTables($$@) {
 		#
 		foreach my $port (@ports) {
 		    if (!IsPortTagged($port) &&
-			doTrunkEnable($stacks,$port,0,$trunk_vlanid)) {
+			doTrunkEnable([$stack],$port,0,$trunk_vlanid)) {
 			die("Could not put $port ($trunk_vlan) into ".
 			    "dual trunk mode\n");
 		    }
-		    delete($trunkedPorts{$port->toString()});
+		    delete($tports->{$port->toString()});
 		}
 		# Now we can create the actual vlan.
 		if (CreateOneVlan($experiment,$stack, $vlanid, @ports))  {
@@ -2023,11 +2069,11 @@ sub doVlansFromTables($$@) {
 		}
 		# Trunk these ports, removing from list.
 		foreach my $port (@ports) {
-		    if (doTrunkEnable($stacks,$port,0,$vlanid)) {
+		    if (doTrunkEnable([$stack],$port,0,$vlanid)) {
 			die("Could not port $port ($vlan) into ".
 			    "dual trunk mode\n");
 		    }
-		    delete($trunkedPorts{$port->toString()});
+		    delete($tports->{$port->toString()});
 		}
 	    }
 
@@ -2038,36 +2084,18 @@ sub doVlansFromTables($$@) {
     #
     # Do the rest of the trunked ports in equalmode.
     #
-    foreach my $port (values(%trunkedPorts)) {
-	$errors += doTrunkEnable($stacks,$port,1);
-    }
+    foreach my $stackid (keys(%stackvlans)) {
+	my $stack = $stacks{$stackid};
 
-    #
-    # Sanity check: make sure that this experiment does not use more VLANs than
-    # we can put on the stack. Note that we don't try to check how many are
-    # available (ie. total - used), because getting the 'used' value is not
-    # trivial.
-    #
-    my $leader = getStackLeader($stack->{STACKID});
-    if (!defined $leader) {
-        tberror "Unable to get stack leader for $stack->{STACKID}";
-        return 1;
+	foreach my $ref (@{ $stackvlans{$stackid} }) {
+	    foreach my $port (values(%{$ref->{"trunkports"}})) {
+		$errors += doTrunkEnable([$stack], $port, 1);
+	    }
+	}
     }
-    my $switch_options = getDeviceOptions($leader);
-    if (!defined $switch_options) {
-        tberror "Unable to get stack leader for $stack->{STACKID}";
-        return 1;
-    }
-    my $vlan_count = $switch_options->{'max_vlan'} -
-                     $switch_options->{'min_vlan'};
-    my $expt_vlan_count = scalar(keys(%vlans));
-    if ($expt_vlan_count > $vlan_count) {
-        tberror "Too many VLANs in experiment: $expt_vlan_count requested, " .
-                "$vlan_count available";
-        return 1;
-    }
-
-    foreach my $vlan (values(%vlans)) {
+    foreach my $ref (values(%vlans)) {
+	my $vlan   = $ref->{'vlan'};
+	my $stack  = $ref->{'stack'};
 	my $vlanid = $vlan->id();
 	my @ports  = getVlanPorts($vlanid);
 

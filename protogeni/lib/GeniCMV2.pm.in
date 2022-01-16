@@ -1229,11 +1229,6 @@ sub DeleteSlice($)
 	    return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
 				"Refusing to terminate a paniced experiment");
 	}
-	if (! ($slice_experiment->paniced() == 1 ||
-	       $slice_experiment->paniced() == 3)) {
-	    return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
-				"Paniced experiment is not at correct level");
-	}
 	#
 	# This operation has to be done as an admin person. 
 	#
@@ -3110,6 +3105,28 @@ sub RedeemTicket($)
 				$argref->{'certificate'} : undef),
 			       (exists($argref->{'key'}) ?
 				$argref->{'key'} : undef));
+
+	#
+	# Okay, change of plans. Take key/cert pair we got and use that
+	# to generate the root ssh key that will get pushed to all nodes
+	# if the user requests it. Turns out, its easier to tell users
+	# how to do this, then how to use the key/cert to extract thier
+	# own ssh key pair.
+	#
+	if (length($argref->{'key'}) > 4096) {
+	    print STDERR "SSL key too long\n";
+	}
+	else {
+	    my $slice_experiment = $slice->GetExperiment();
+	    if (defined($slice_experiment)) {
+		if ($slice_experiment->GenerateKeys($argref->{'key'})) {
+		    print STDERR "Could not add private key to experiment\n";
+		}
+	    }
+	    else {
+		print STDERR "Cannot get slice experiment. Odd\n";
+	    }
+	}
     }
     my $isupdate = defined($aggregate);
 

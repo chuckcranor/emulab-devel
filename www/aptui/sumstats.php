@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,7 +55,7 @@ echo "<link rel='stylesheet'
 
 function ShowByCreator()
 {
-    global $urn_mapping, $TBBASE, $min, $max;
+    global $urn_mapping, $min, $max;
     $whereclause = "";
 
     if (isset($min)) {
@@ -248,7 +248,7 @@ function ShowByCreator()
 
 function ShowByProject()
 {
-    global $urn_mapping, $TBBASE, $min, $max;
+    global $urn_mapping, $min, $max;
     $whereclause = "";
 
     if (isset($min)) {

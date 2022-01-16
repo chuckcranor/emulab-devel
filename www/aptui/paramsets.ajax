@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,7 +32,7 @@ include_once("instance_defs.php");
 #
 function Do_Create()
 {
-    global $this_user, $ajax_args, $TBBASE;
+    global $this_user, $ajax_args;
     $errors = array();
     $opts = "";
     $args = "";

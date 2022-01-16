@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -396,6 +396,27 @@ class Node
     }
 
     #
+    # Tipline info for show-node.
+    #
+    function TiplineInfo()
+    {
+	$node_id = $this->node_id();
+
+        # This goes back to the web UI, DO NOT INCLUDE THE KEY!
+	$query_result =
+	    DBQueryFatal("select tipname,server from tiplines ".
+			 "where node_id='$node_id' and disabled=0");
+	
+	if (mysql_num_rows($query_result) == 0) {
+	    return null;
+	}
+
+        # This goes back to the web UI, DO NOT INCLUDE THE KEY!
+	$row = mysql_fetch_array($query_result);
+        return $row;
+    }
+    
+    #
     # Return the class of the node.
     #
     function TypeClass() {
@@ -436,7 +457,24 @@ class Node
             $result[$service] = $subboss;
         }
         return $result;
-    }        
+    }
+
+    #
+    # Get outlet info.
+    #
+    function OutletInfo()
+    {
+        $node_id = $this->node_id();
+
+        $query_result = DBQueryFatal("select * from outlets ".
+                                     "where node_id='$node_id'");
+
+        if (mysql_num_rows($query_result) == 0) {
+            return null;
+        }
+        $row = mysql_fetch_array($query_result);
+        return $row;
+    }
 
     #
     # Return the virtual name of a reserved node.
