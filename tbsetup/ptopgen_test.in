@@ -893,8 +893,8 @@ while (my ($osid,$osname,$nextosid) = $query_result->fetchrow_array()) {
 
 #
 # In Geni mode we are spitting out an advertisement which includes a bunch
-# of info we do not need otherwise. There is no user, but might be an
-# optional project.
+# of info we do not need otherwise. Additionally, if we have a type file,
+# then we can bypass using these giant queries, see below.
 #
 if ($genimode ne $NO_GENI || !defined($options{"I"})) {
     # First query uses osidtoimageid to get type info
@@ -1033,6 +1033,12 @@ else {
 		foreach my $nodetype (@typelist) {
 		    processOs($image->osid(), $nodetype->type());
 		}
+	    }
+	}
+	elsif (!$image->isImage()) {
+	    @typelist = $image->osinfo()->TypeList();
+	    foreach my $nodetype (@typelist) {
+		processOs($image->osid(), $nodetype->type());
 	    }
 	}
 	if (!@typelist) {
