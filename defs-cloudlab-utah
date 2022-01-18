@@ -164,7 +164,7 @@ AMD_ROOT=/.amd_mnt/ops
 # otherwise filesystems will be exported twice.
 #
 ZFS_NOEXPORT=1
-INCREMENTAL_MOUNTD=1
+INCREMENTAL_MOUNTD=0
 
 #
 # If you use an NFS-based admin MFS, this is the root of the exported
