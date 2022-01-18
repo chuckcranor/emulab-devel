@@ -173,6 +173,8 @@ BROWSER_CONSOLE_PROXIED=1
 POWDER_DEADMAN=1
 POWDER_WBSTORE=1
 
+POWDER_BUS_P0WER_VERSION=1
+
 ZFS_QUOTA_PROJECT="10G"
 
 # Image updates take a long time on buses, this makes it smoother since
