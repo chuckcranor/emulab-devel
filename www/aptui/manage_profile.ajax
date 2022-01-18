@@ -1399,7 +1399,6 @@ function Do_GetRepository()
     global $ajax_args;
     $project  = null;
     $nameopt  = "";
-    $checkout = (ISADMIN() ? "-c" : "");
 
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
@@ -1467,7 +1466,7 @@ function Do_GetRepository()
     
     $retval = SUEXEC($this_uid, "tbadmin",
 		     "webmanage_gitrepo -t " . $webtask->task_id() . " " .
-                     "  clone $nameopt $checkout -o $outfname $repourl",
+                     "  clone $nameopt -o $outfname $repourl",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     if ($retval != 0) {
