@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -999,6 +999,22 @@ sub AddNSFAward($$$)
 	or return -1;
 
     return 0;
+}
+
+sub NSFAwardList($)
+{
+    my ($self) = @_;
+    my $pid_idx = $self->pid_idx();
+    my @result  = ();
+
+    my $query_result =
+	DBQueryWarn("select award from project_nsf_awards ".
+		    "where pid_idx='$pid_idx'");
+
+    while (my ($award) = $query_result->fetchrow_array()) {
+	push(@result, $award);
+    }
+    return @result;
 }
 
 #
