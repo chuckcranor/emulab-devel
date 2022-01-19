@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -163,6 +163,17 @@ $| = 1;
 #  value ..."  to cause assign_wrapper to fail. -- kevina
 #
 $SIG{__WARN__} = sub { tbwarn $_[0];$warnings++; };
+
+#
+# Setup a signal handler cause of the locks.
+#
+sub handler()
+{
+    fatal("Caught a signal");
+}
+$SIG{HUP}  = \&handler;
+$SIG{TERM} = \&handler;
+$SIG{INT}  = \&handler;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
