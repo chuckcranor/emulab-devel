@@ -70,6 +70,7 @@ use emdb;
 use libtestbed;
 use Project;
 use User;
+use GeniXML;
 use APT_Instance;
 use APT_Aggregate;
 
@@ -243,13 +244,18 @@ while (<HIST>) {
 	    "eid"      => $eid,
             "uid"      => $uid,
 	    "types"    => {},
-            "radios"   => 0,
-            "iris"     => 0,
-            "compute"  => 0,
+            "cbrssdr"  => 0,
+            "cellsdr"  => 0,
             "mmimo"    => 0,
-            "rfenv"    => 0,
-	    "FEs"      => {},
-	    "OTA"      => 0,
+            "iris"     => 0,
+            "ota-nuc"  => 0,
+            "ota-x310" => 0,
+            "oai-wb"   => 0,
+            "phantom"  => 0,
+            "FE-nuc1"  => 0,
+            "FE-nuc2"  => 0,
+	    "buses"    => 0,
+            "compute"  => 0,
 	};
     }
     my $types = $stats{$pid}->{$exptidx}->{"types"};
@@ -260,8 +266,11 @@ while (<HIST>) {
     #
     # Now combine usage into compute,radios,mmimo,etc
     #
-    if ($type eq "x310" || $type eq "n310") {
-	$stats{$pid}->{$exptidx}->{"radios"} += 1;
+    if ($node_id =~ /^cbrssdr/) {
+	$stats{$pid}->{$exptidx}->{"cbrssdr"} += 1;
+    }
+    elsif ($node_id =~ /^cellsdr/) {
+	$stats{$pid}->{$exptidx}->{"cellsdr"} += 1;
     }
     elsif ($type eq "faros_sfp") {
 	$stats{$pid}->{$exptidx}->{"mmimo"} += 1;
@@ -269,24 +278,29 @@ while (<HIST>) {
     elsif ($type eq "iris030") {
 	$stats{$pid}->{$exptidx}->{"iris"} += 1;
     }
+    elsif ($node_id =~ /^ota-nuc/) {
+	$stats{$pid}->{$exptidx}->{"ota-nuc"} += 1;
+    }
+    elsif ($node_id =~ /^ota-x310/) {
+	$stats{$pid}->{$exptidx}->{"ota-x310"} += 1;
+    }
+    elsif ($node_id =~ /^oai-wb/) {
+	$stats{$pid}->{$exptidx}->{"oai-wb"} += 1;
+    }
     elsif ($type eq "nuc5300") {
-	$stats{$pid}->{$exptidx}->{"rfenv"} += 1;
+	$stats{$pid}->{$exptidx}->{"phantom"} += 1;
     }
     elsif (exists($compute{$type})) {
 	$stats{$pid}->{$exptidx}->{"compute"} += 1;
     }
-    # Just want to know if OTA lab is used.
-    if ($node_id =~ /^ota/) {
-	$stats{$pid}->{$exptidx}->{"OTA"} = 1;
-    }
 }
 
 my $query_result =
-    DBQueryFatal("select h.uuid,h.pid,h.creator,h.name, ".
+    DBQueryFatal("select h.uuid,h.pid,h.creator,h.name,ia.aggregate_urn, ".
 		 "      ia.physnode_count,aa.nickname, ".
                  "      (UNIX_TIMESTAMP(h.destroyed) - ".
                  "        UNIX_TIMESTAMP(h.started)) as seconds, ".
-		 "      h.started,s.exptidx ".
+		 "      h.started,s.exptidx,aa.isFE,aa.ismobile".
 		 "  from apt_instance_history as h ".
 		 "left join apt_instance_failures as f on ".
 		 "     f.uuid=h.uuid ".
@@ -305,9 +319,10 @@ my $query_result =
 		 "      h.pid!='PMonitor' and ".
 		 "      h.pid!='emulab-ops' and ".
 		 "      h.pid!='testbed' and ".
-		 "      aa.isFE=1");
+		 "      (aa.isFE=1 or aa.ismobile=1)");
 
-while (my ($uuid,$pid,$uid,$eid,$count,$nickname,$seconds,$started,$exptidx) =
+while (my ($uuid,$pid,$uid,$eid,$aggregate_urn,$count,$nickname,$seconds,
+	   $started,$exptidx,$isFE,$ismobile) =
        $query_result->fetchrow_array()) {
 
     #
@@ -344,17 +359,63 @@ while (my ($uuid,$pid,$uid,$eid,$count,$nickname,$seconds,$started,$exptidx) =
 	    "eid"      => $eid,
             "uid"      => $uid,
 	    "types"    => {},
-            "radios"   => 0,
+            "cbrssdr"  => 0,
+            "cellsdr"  => 0,
+            "mmimo"    => 0,
             "iris"     => 0,
+            "ota-nuc"  => 0,
+            "ota-x310" => 0,
+            "oai-wb"   => 0,
+            "phantom"  => 0,
+            "FE-nuc1"  => 0,
+            "FE-nuc2"  => 0,
+	    "buses"    => 0,
             "compute"  => 0,
-	    "mmimo"    => 0,
-            "rfenv"    => 0,
-	    "FEs"      => {},
-	    "OTA"      => 0,
 	};
     }
-    my $FEs = $stats{$pid}->{$exptidx}->{"FEs"};
-    $FEs->{$nickname} = $count;
+    my $instance;
+
+    if (exists($instances{$uuid})) {
+	$instance = $instances{$uuid};
+    }
+    else {
+	$instance = APT_Instance::History->Lookup($uuid);
+	if (!defined($instance)) {
+	    print STDERR "No history entry $pid/$eid/$uuid\n";
+	    next;
+	}
+	$instances{$uuid} = $instance;
+    }
+    if ($ismobile) {
+	$stats{$pid}->{$exptidx}->{"buses"} += 1;
+    }
+    else {
+	my $agg = $instance->AggregateHash()->{$aggregate_urn};
+	
+	if (!defined($agg)) {
+	    print STDERR "No history entry $pid/$eid/$uuid/$aggregate_urn\n";
+	    next;
+	}
+	my $manifest = $agg->Manifest();
+	if (!defined($manifest)) {
+	    print STDERR "No manifest $pid/$eid/$uuid/$aggregate_urn\n";
+	    next;
+	}
+	foreach my $ref (GeniXML::FindNodes("n:node", $manifest)->get_nodelist()) {
+	    my $client_id    = GeniXML::GetVirtualId($ref);
+	    my $vnoderef     = GeniXML::GetVnode($ref);
+	    if (!defined($vnoderef)) {
+		next;
+	    }
+	    my $node_id = GeniXML::GetText("name", $vnoderef);
+	    if ($node_id eq "nuc1") {
+		$stats{$pid}->{$exptidx}->{"FE-nuc1"} += 1;
+	    }
+	    else {
+		$stats{$pid}->{$exptidx}->{"FE-nuc2"} += 1;
+	    }
+	}
+    }
 }
 
 #print Dumper(\%stats);
@@ -386,11 +447,8 @@ else {
     print $POUT "\n";
 }
 
-print "project,experiment,user,email,started,duration,radios,compute,shared,mmimo,iris,Controlled RF,OTA";
-foreach my $fe (@FEList) {
-    print ",$fe";
-}
-print "\n";
+print "project,experiment,user,email,started,duration,compute,shared,cbrssdr,cellsdr,mmimo,iris,ota-nuc,ota-x310,oai-wb,phantomnet,FE-nuc1,FE-nuc2,buses\n";
+
 foreach my $pid (sort(keys(%stats))) {
     foreach my $idx (sort(keys(%{$stats{$pid}}))) {
 	my $ref      = $stats{$pid}->{$idx};
@@ -398,14 +456,19 @@ foreach my $pid (sort(keys(%stats))) {
 	my $uid      = $ref->{'uid'};
 	my $started  = $ref->{'started'};
 	my $seconds  = $ref->{'duration'};
-	my $radios   = $ref->{'radios'};
-	my $compute  = $ref->{'compute'};
-	my $mimos    = $ref->{'mmimo'};
-	my $iris     = $ref->{'iris'};
-	my $rfenv    = $ref->{'rfenv'};
-	my $FEs      = $ref->{'FEs'};
+	my $cbrssdr  = $ref->{"cbrssdr"};
+	my $cellsdr  = $ref->{"cellsdr"};
+	my $mmimo    = $ref->{"mmimo"};
+	my $iris     = $ref->{"iris"};
+	my $ota_nuc  = $ref->{"ota-nuc"};
+	my $ota_x310 = $ref->{"ota-x310"};
+	my $oai_wb   = $ref->{"oai-wb"};
+	my $phantom  = $ref->{"phantom"};
+	my $FE_nuc1  = $ref->{"FE-nuc1"};
+	my $FE_nuc2  = $ref->{"FE-nuc2"};
+	my $buses    = $ref->{"buses"};
+	my $compute  = $ref->{"compute"};
 	my $types    = $ref->{'types'};
-	my $ota      = $ref->{'OTA'};
 	my $shared   = 0;
 	my $email    = "";
 
@@ -421,16 +484,8 @@ foreach my $pid (sort(keys(%stats))) {
 	    $shared = 1;
 	}
 
-	print "$pid,$eid,$uid,$email,$started,$seconds,$radios,$compute,".
-	    "$shared,$mimos,$iris,$rfenv,$ota";
-	foreach my $fe (@FEList) {
-	    if (exists($FEs->{$fe})) {
-		print "," . $FEs->{$fe};
-	    }
-	    else {
-		print ",0";
-	    }
-	}
-	print "\n";
+	print "$pid,$eid,$uid,$email,$started,$seconds,$compute,$shared,";
+	print "$cbrssdr,$cellsdr,$mmimo,$iris,$ota_nuc,$ota_x310,$oai_wb,";
+	print "$phantom,$FE_nuc1,$FE_nuc2,$buses\n";
     }
 }
