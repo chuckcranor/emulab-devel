@@ -747,6 +747,7 @@ sub RunAssign($$)
     }
 
     # Hack for Kirk.
+    if (!$MAINSITE) {
     if ($pid eq "OAI2021FallWS" || $project->IsNonLocal()) {
 	TBDebugTimeStamp("Trying to get the mapper lock");
 	while (1) {
@@ -759,6 +760,7 @@ sub RunAssign($$)
 	TBDebugTimeStamp("Got the mapper lock");
 	goto skipadctrl
 	    if ($pid eq "OAI2021FallWS");
+    }
     }
     
     #
