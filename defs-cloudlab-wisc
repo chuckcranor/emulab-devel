@@ -599,7 +599,7 @@ AMD_ROOT=/.amd_mnt/ops.wisc.cloudlab.us
 # 2015-04-04
 # bpkroth
 ZFS_NOEXPORT=1
-INCREMENTAL_MOUNTD=1
+INCREMENTAL_MOUNTD=0
 
 # Enable idle stats collection (RRD files)
 SDCOLLECTD_DOSTATS=1
