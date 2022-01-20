@@ -1372,6 +1372,105 @@ window.ShowPowderMap = (function()
 	    }
 	    OurBuses = json.value.buses;
 	    var routes = json.value.routes;
+
+	    /*
+	     * Set up the static part of the bus popup.
+	     */
+	    _.each(OurBuses, function (businfo, busid) {
+		var popupcontent = [];
+		var attributes   = {};
+		
+		_.each(businfo.radioinfo, function (info, index) {
+		    var node_id = info.node_id;
+		    var prefix  = "radioinfo " + node_id + " ";
+		    
+		    attributes[prefix + "node_id"]    = node_id;
+		    attributes[prefix + "radio_type"] = info.radio_type;
+		    attributes[prefix + "notes"]      = info.notes;
+
+		    var fieldInfos = [
+			{
+			    fieldName: prefix + "node_id",
+			    label: "Node ID"
+			},
+			{
+			    fieldName: prefix + "radio_type",
+			    label: "Radio Type"
+			},
+		    ];
+
+		    /*
+		     * Parse the comma separated strings into arrays
+		     * of low/high frequency info. See below.
+		     */
+		    info["txRanges"] = [];
+		    info["rxRanges"] = [];
+
+		    /*
+		     * Each frontend has its own frequencies and notes.
+		     */
+		    _.each(info.frontends, function (frontend, iface) {
+			var fe_prefix = prefix + iface + " ";
+			var tx       = frontend.transmit_frequencies;
+			var rx       = frontend.receive_frequencies;
+			var fe       = frontend.frontend;
+			var notes    = frontend.notes;
+			var fe_infos = [];
+
+			if (fe != "none") {
+			    fe_infos.push({
+				fieldName: fe_prefix + "frontend",
+				label: "Frontend"
+			    });
+			    attributes[fe_prefix + "frontend"] = fe;
+			}
+			fe_infos.push({
+			    fieldName: fe_prefix + "tx_freq",
+			    label: "TX Frequencies"
+			});
+			fe_infos.push({
+			    fieldName: fe_prefix + "rx_freq",
+			    label: "RX Frequencies"
+			});
+			fe_infos.push({
+			    fieldName: fe_prefix + "notes",
+			    label: "Notes"
+			});
+			attributes[fe_prefix + "tx_freq"] = tx;
+			attributes[fe_prefix + "rx_freq"] = rx;
+			attributes[fe_prefix + "notes"]   = notes;
+
+			fieldInfos = fieldInfos.concat(fe_infos);
+
+			_.each(tx.split(","),
+			       function (range) {
+				   var tokens = range.split("-");
+			       
+				   info.txRanges.push({
+				       "low"  : tokens[0],
+				       "high" : tokens[1]
+				   });
+			       });
+			_.each(rx.split(","),
+			       function (range) {
+				   var tokens = range.split("-");
+			       
+				   info.rxRanges.push({
+				       "low"  : tokens[0],
+				       "high" : tokens[1]
+				   });
+			       });
+		    });
+		    popupcontent.push({
+			type: "fields",
+			fieldInfos: fieldInfos,
+		    });
+		});
+		businfo["popup"] = {
+		    content:    popupcontent,
+		    attributes: attributes,
+		};
+	    });
 	
 	    // Grab the routes we care about and draw the paths.
 	    _.each(routedata, function(route) {
@@ -1489,6 +1588,12 @@ window.ShowPowderMap = (function()
     }
     function ShowRoute(routeID)
     {
+	if (routeID == "allroutes") {
+	    _.each(routeList, function (route, id) {
+		ShowRoute(id);
+	    });
+	    return
+	}
 	var layer = routeList[routeID].layer;
 	
 	layer.visible = true;
@@ -1561,6 +1666,7 @@ window.ShowPowderMap = (function()
 	var color        = routeList[routeID].data.MapLineColor;
 	var routeDesc    = routeList[routeID].data.Description;
 	var busname      = data.Name;
+	var businfo      = null;
 
 	var point = {
 	    type:      "point", // autocasts as new Point()
@@ -1578,6 +1684,7 @@ window.ShowPowderMap = (function()
 		color: "green",
 		width: 3,
             };
+	    businfo = OurBuses[busname];
 	}
 	var attributes = {
 	    routeID     : routeID,
@@ -1586,15 +1693,15 @@ window.ShowPowderMap = (function()
 	    latitude    : data.Latitude,
 	    longitude   : data.Longitude,
 	    groundSpeed : data.GroundSpeed,
+	    free        : (businfo && businfo.free ? "Yes" : "No"),
 	    heading     : data.Heading,
 	    earthurl    : " https://earth.google.com/web/search/" +
 		data.Latitude + "," + data.Longitude,
 	    mapurl      : " https://maps.google.com/maps?q=" +
 		data.Latitude + "," + data.Longitude,
 	};
-	var popup = {
-	    title: "Bus " + busname + " on " + routeDesc,
-	    content: [{
+	var popupcontent = [
+	    {
 		type: "fields",
 		fieldInfos: [
                     {
@@ -1605,6 +1712,10 @@ window.ShowPowderMap = (function()
 			fieldName: "routeDesc",
 			label: "Route"
                     },
+		    {
+			fieldName: "free",
+			label: "Available?"
+		    },
                     {
 			fieldName: "latitude",
 			label: "Latitude"
@@ -1630,8 +1741,20 @@ window.ShowPowderMap = (function()
 			label: "Google Earth"
                     },
 		],
-	    }],
+	    }
+	];
+
+	// Add additional tables for the radio info.
+	if (businfo) {
+	    popupcontent = popupcontent.concat(businfo.popup.content);
+	    $.extend(attributes, businfo.popup.attributes);
 	}
+	//console.info(attributes, popupcontent);
+	
+	var popup = {
+	    title: "Bus " + busname + " on " + routeDesc,
+	    content: popupcontent,
+	};
         var pointGraphic = new Graphic({
 	    geometry:   point,
 	    symbol:     markerSymbol,

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -179,7 +179,40 @@ function Do_GetMobileEndpoints()
                          "where ia.status!='terminated' and ".
                          "      ia.aggregate_urn='$urn'");
         $blob["free"] = (mysql_num_rows($free_result) == 0 ? 1 : 0);
+
+        #
+        # Radio info
+        #
+        $radioinfo = array();
         
+        $radio_result =
+            DBQueryFatal("select i.* ".
+                         "  from apt_aggregate_radio_locations as l ".
+                         "left join apt_aggregate_radio_info as i on ".
+                         "  i.aggregate_urn=l.aggregate_urn and ".
+                         "  i.location=l.location ".
+                         "where l.aggregate_urn='$urn'");
+
+        while ($rrow = mysql_fetch_array($radio_result)) {
+            $node_id   = $rrow["node_id"];
+            $frontends = array();
+
+            $frontend_result =
+                DBQueryFatal("select * from apt_aggregate_radio_frontends ".
+                             "where aggregate_urn='$urn' and ".
+                             "      node_id='$node_id'");
+            while ($frow = mysql_fetch_array($frontend_result)) {
+                $iface = $frow["iface"];
+            
+                if (!$frow["notes"]) {
+                    $frow["notes"] = $rrow["notes"];
+                }
+                $frontends[$iface] = $frow;
+            }
+            $rrow["frontends"] = $frontends;
+            $radioinfo[$node_id] = $rrow;
+        }
+        $blob["radioinfo"] = $radioinfo;
         $buses[$row["busid"]] = $blob;
     }
 
