@@ -2273,19 +2273,24 @@ sub doReset($@) {
     }
 
     my $errors = 0;
-    my %trunkedPorts = getExperimentTrunks($pid, $eid, @vlans);
     my @controlports = ();
-    foreach my $port (values(%trunkedPorts)) {
-	#
-	# If operating on the control interface, the trunk disable
-	# will remove the port from the control vlan. Move it back.
-	#
-	if (doTrunkDisable($stacks,$port) == 0) {
-	    push(@controlports, $port)
-		if ($port->role() eq TBDB_IFACEROLE_CONTROL());
-	}
-	else {
-	    $errors++;
+
+    foreach my $stack (@$stacks) {
+	my @existant_vlans = $stack->existantVlans(@vlans);
+	my %trunkedPorts = getExperimentTrunks($pid, $eid, @existant_vlans);
+    
+	foreach my $port (values(%trunkedPorts)) {
+	    #
+	    # If operating on the control interface, the trunk disable
+	    # will remove the port from the control vlan. Move it back.
+	    #
+	    if (doTrunkDisable([$stack],$port) == 0) {
+		push(@controlports, $port)
+		    if ($port->role() eq TBDB_IFACEROLE_CONTROL());
+	    }
+	    else {
+		$errors++;
+	    }
 	}
     }
     return -1
@@ -4291,7 +4296,7 @@ sub doPruneStaleVlans($)
     # Sanity checking
     #
     if (@$stacks != 1) {
-	die "Disabling trunk ports should only involve one stack\n" .
+	die "Pruning stale vlans should only involve one stack\n" .
 	    "Stacks are " . join(",",@$stacks) . "\n";
     }
     my $stack  = @$stacks[0];
