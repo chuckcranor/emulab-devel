@@ -217,20 +217,28 @@ B. Updating the base FreeBSD system
    boss:
      sudo /usr/testbed/sbin/testbed-control shutdown
      sudo /usr/local/etc/rc.d/apache24 stop
-     # NOTE capture may not be installed
+
+     # The following may or may not be installed
      sudo /usr/local/etc/rc.d/capture stop
+     sudo /usr/local/etc/rc.d/telegraf stop
 
    ops:
      sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
      sudo /usr/local/etc/rc.d/apache24 stop
-     # NOTE capture may not be installed
+
+     # The following may or may not be installed
      sudo /usr/local/etc/rc.d/capture stop
-   
+     sudo /usr/local/etc/rc.d/telegraf stop   
+
    On the Utah clusters you may need to also need to stop some additional
    services:
 
      sudo /usr/local/etc/rc.d/bareos-fd stop
-     sudo /usr/local/etc/rc.d/telegraf stop
+
+Other newer stuff:
+
+ * on ops, kill wssh
+ * what about eventsys proxies?
 
 3. Before installing the new binaries/libraries/etc., you might want to back
    up the files that have Emulab changes just in case. The easiest thing to do
@@ -294,15 +302,21 @@ B. Updating the base FreeBSD system
      sudo /usr/local/etc/rc.d/apache24 stop
      sudo /usr/local/etc/rc.d/2.dhcpd.sh stop
      sudo /usr/local/etc/rc.d/2.mysql-server.sh stop
-     # NOTE capture may not be installed
+
+     # The following may or may not be installed
      sudo /usr/local/etc/rc.d/capture stop
+     sudo /usr/local/etc/rc.d/telegraf stop
 
    ops:
      sudo /usr/local/etc/rc.d/apache24 stop
 
+     # The following may or may not be installed
+     sudo /usr/local/etc/rc.d/capture stop
+     sudo /usr/local/etc/rc.d/telegraf stop
+
    Utah:
      sudo /usr/local/etc/rc.d/bareos-fd stop
-     sudo /usr/local/etc/rc.d/telegraf stop
+
    
    and then again run freebsd-update to finish:
 
@@ -322,19 +336,10 @@ B. Updating the base FreeBSD system
    If there are differences, other than new FreeBSD users (ntpd, tests),
    you will need to manually merge the new accounts from /Oetc to /etc.
 
-   LATE BREAKING NEWS: we have noticed that the changes to the password
-   file (adding user _ypldap and changing "games" homedir) don't seem
-   to be reflected due to the .db files not get properly recreated.
-   (If "echo ~games" shows "/usr/games" instead of "/"). Remake the DB
-   files to be certain:
-
+   Even if you don't add new accounts manually above, rebuild the password
+   database as we have had inconsistencies in the past:
+   
      sudo pwd_mkdb -p /etc/master.passwd
-
-   If you don't get this sorted out now, it may cause problems when you
-   add users to the testbed later. In particular, when adding user "foo"
-   it might spit out messages:
-
-     pw: user 'foo' disappeared during update
 
    In general, if you are paranoid you can now compare against the files
    you saved to make sure all the Emulab changes were propagated; e.g.:
@@ -459,22 +464,36 @@ C. Updating ports/packages
    and then all the event clients. Otherwise you will get bus errors when
    they all try to start. So do not skip step E2 below!
 
-   REALLY, REALLY IMPORTANT PART 3: For those with Moonshot chassis,
-   you cannot use an ipmitool port *newer* than 1.8.15 due to issues with
-   "double bridged" requests. Either ipmitool or HPE got it wrong and it
+   REALLY, REALLY IMPORTANT PART 3 (boss node only): For those with Moonshot
+   chassis, you cannot use an ipmitool port *newer* than 1.8.15 due to issues
+   with "double bridged" requests. Either ipmitool or HPE got it wrong and it
    doesn't behave like ipmitool expects as of commit 6dec83ff on
-   Sat Jul 25 13:15:41 2015. Anyway, you will need to relace the standard
+   Sat Jul 25 13:15:41 2015. Anyway, you will need to replace the standard
    ipmitool install with the "emulab-ipmitool-old-1.8.15_1" package from
-   the emulab repository, unless you already had it installed. Do:
+   the emulab repository, unless you already had it installed. This is
+   unfortunately a bit complicated and warranted its own README file in
+   the Emulab source repo:
 
-     pkg info | grep ipmi
+     install/ports/README-update-moonshot-ipmitool
 
-   and if it shows the "-old" version is installed, you are okay. Otherwise:
+   The short version is:
 
-     sudo pkg unlock ipmitool
-     sudo pkg delete ipmitool
-     sudo pkg install -r Emulab emulab-ipmitool-old
-     sudo pkg lock ipmitool
+     # unlock package if it is locked and remove it
+     sudo pkg unlock emulab-ipmitool-old
+     sudo pkg delete -f emulab-ipmitool-old
+
+     # force an upgrade to reinstall the new (wrong) ipmitool
+     sudo pkg upgrade -r Emulab -f emulab-boss
+
+     # delete just that package
+     sudo pkg delete -f ipmitool
+
+     # re-add the old (right) ipmitool USING THE PACKAGE
+     # (which you will need to copy over to /tmp)
+     sudo pkg add -M /tmp/emulab-ipmitool-old-1.8.15_1.txz
+
+     # change the dependency
+     sudo pkg set -n ipmitool:emulab-ipmitool-old
 
    But ONLY do this if you have Moonshot chassis.
 
@@ -528,13 +547,26 @@ C. Updating ports/packages
    To find ports that are installed but that are not part of the Emulab
    repository:
    
+   # boss
    cd ~/upgrade
    pkg query "%t %n-%v %R" `cat boss.pkg.reinstall` |\
+       grep -v Emulab | sort -n
+
+   # ops
+   cd ~/upgrade
+   pkg query "%t %n-%v %R" `cat ops.pkg.reinstall` |\
        grep -v Emulab | sort -n
 
    These will be sorted by install time. You can see ones that are old
    and attempt to reinstall them with "pkg install". Note that just because
    they are old that doesn't mean they need to be reinstalled.
+
+   Note that these local packages might reload some dependent packages
+   from the FreeBSD repo, overwriting the versions installed from the Emulab
+   repo. So once you have installed all of the additional packages, you should
+   re-update from Emulab again:
+   
+      sudo -E ASSUME_ALWAYS_YES=true pkg upgrade -r Emulab
 
    IMPORTANT NOTE: at Utah, we have bareos installed and the upgrade seems
    to remove the old bareos16-client so the command above will not pick up
@@ -600,8 +632,8 @@ E. Update Emulab software
    guaranteed to catch everything.
 
       # on boss -- do this after ops
-      sudo /usr/local/etc/rc.d/2.mysql-server.sh start
       gmake
+      sudo /usr/local/etc/rc.d/2.mysql-server.sh start
       sudo gmake boss-install
 
    If the boss install tells you that there are updates to install,
