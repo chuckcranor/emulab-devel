@@ -127,6 +127,12 @@ lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
        date > /tmp/END
 
    k. (Mothership only) Build the Mothership packages
+      You will need to load the Linux kernel modules for the emulab-msops
+      port since it loads the linux_base-c7 package:
+
+       sudo kldload linux.ko
+       sudo kldload linux64.ko
+
        date > /tmp/START2
        foreach d (msboss msops)
            (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean all install)
@@ -283,15 +289,15 @@ Emulab-devel: {
       make a list of package name only:
 
         cd packages
-        echo *.txz | xargs -n 1 -J % pkg query -F % '%n' | sort > /tmp/list
+        echo *.pkg | xargs -n 1 -J % pkg query -F % '%n' | sort > /tmp/list
 
       To see what other packages "foo" needs:
 
-        pkg info -F foo.txz -d
+        pkg info -F foo.pkg -d
 
       To see what other packages need "foo":
 
-        pkg info -F foo.txz -r
+        pkg info -F foo.pkg -r
 
 ################ End of TL;DR ################
 
@@ -576,7 +582,7 @@ b. Allocate a node on which to build everything and load the appropriate
 8. Managing the package repository.
 
 a. Out on boss:/usr/testbed/www/FreeBSD, make a directory for the FreeBSD release
-   (e.g., 10.2), and in that a directory called "packages". Copy all the .txz
+   (e.g., 10.2), and in that a directory called "packages". Copy all the .pkg
    package files into that.
 
 b. On boss, run:
@@ -751,7 +757,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
     cd packages
     rm *.txt
     /bin/ls > 1.Packages.txt
-    foreach f (*.txz)
+    foreach f (*.pkg)
 	pkg query -F $f "%n-%v %dn-%dv" | sort +1 >> 2.Deps.txt
 	pkg query -F $f "%n-%v %Fp" | sort +1 >> 3.Files.txt
 	pkg query -F $f "%n %Ok %Ov" | sort +1 >> 4.Options.txt
@@ -761,7 +767,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
     cd packages.tmp
     rm *.txt
     /bin/ls > 1.Packages.txt
-    foreach f (*.txz)
+    foreach f (*.pkg)
 	pkg query -F $f "%n-%v %dn-%dv" | sort +1 >> 2.Deps.txt
 	pkg query -F $f "%n-%v %Fp" | sort +1 >> 3.Files.txt
 	pkg query -F $f "%n %Ok %Ov" | sort +1 >> 4.Options.txt
