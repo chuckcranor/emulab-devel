@@ -3322,10 +3322,13 @@ sub GetAptAggregate($)
 sub Manifest($)
 {
     my ($self) = @_;
+    return undef
+	if (!defined($self->manifest()));
+    
     my $manifest = GeniXML::Parse($self->manifest());
-    if (! defined($manifest)) {
-	return undef;
-    }
+    return undef
+	if (! defined($manifest));
+
     return $manifest;
 }
 
