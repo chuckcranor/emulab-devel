@@ -381,7 +381,7 @@ while (my ($uuid,$pid,$uid,$eid,$aggregate_urn,$count,$nickname,$seconds,
     else {
 	$instance = APT_Instance::History->Lookup($uuid);
 	if (!defined($instance)) {
-	    print STDERR "No history entry $pid/$eid/$uuid\n";
+	    #print STDERR "No history entry $pid/$eid/$uuid\n";
 	    next;
 	}
 	$instances{$uuid} = $instance;
@@ -393,12 +393,12 @@ while (my ($uuid,$pid,$uid,$eid,$aggregate_urn,$count,$nickname,$seconds,
 	my $agg = $instance->AggregateHash()->{$aggregate_urn};
 	
 	if (!defined($agg)) {
-	    print STDERR "No history entry $pid/$eid/$uuid/$aggregate_urn\n";
+	    #print STDERR "No history entry $pid/$eid/$uuid/$aggregate_urn\n";
 	    next;
 	}
 	my $manifest = $agg->Manifest();
 	if (!defined($manifest)) {
-	    print STDERR "No manifest $pid/$eid/$uuid/$aggregate_urn\n";
+	    #print STDERR "No manifest $pid/$eid/$uuid/$aggregate_urn\n";
 	    next;
 	}
 	foreach my $ref (GeniXML::FindNodes("n:node", $manifest)->get_nodelist()) {
