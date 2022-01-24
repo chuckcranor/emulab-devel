@@ -52,6 +52,22 @@ $(function ()
 			     .format("MMM D, h:mm:ss a"));
 	    }
 	});
+
+	$.tablesorter.addParser({
+            // set a unique id 
+            id: 'mobiledates',
+            is: function (s) {
+		// return false so this parser is not auto detected 
+		return false;
+            },
+            format: function (s, table, cell, cellIndex) {
+		// get data attributes from $(cell).attr('data-something');
+		// check specific column using cellIndex
+		return $(cell).attr('data-date');
+            },
+            // set type, either numeric or text 
+            type: 'text'
+	});	
 	
 	$('#mobile-endpoints-table')
 	    .tablesorter({

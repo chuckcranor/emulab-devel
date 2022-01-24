@@ -5,16 +5,16 @@
 	<tr>
 	  <th class="text-nowrap">ID</th>
 	  <th class="text-nowrap">Route</th>
-	  <th class="sorter-sugar">Route Change</th>
-	  <th class="sorter-sugar">Location Change</th>
-	  <th class="sorter-sugar">Last Ping</th>
+	  <th class="sorter-mobiledates">Route Change</th>
+	  <th class="sorter-mobiledates">Location Change</th>
+	  <th class="sorter-mobiledates">Last Ping</th>
 	  <th>Lat,Long</th>
 	  <th>Speed</th>
 	  <th>Heading</th>
 	  <th>Free</th>
 	  <% if (window.ISADMIN) { %>
 	    <th>GPSD</th>
-	    <th class="sorter-sugar">GPSD Time</th>
+	    <th class="sorter-mobiledates">GPSD Time</th>
 	  <% } %>
 	</tr>
       </thead>
@@ -37,9 +37,12 @@
 		  <%- info.routename %></a>
 	      <% } %>
 	    </td>
-	    <td class="format-date"><%- info.route_changed %></td>
-	    <td class="format-date"><%- info.location_stamp %></td>
-	    <td class="format-date"><%- info.last_ping %></td>
+	    <td class="format-date" data-date="<%- info.route_changed %>">
+	      <%- info.route_changed %></td>
+	    <td class="format-date" data-date="<%- info.location_stamp %>">
+	      <%- info.location_stamp %></td>
+	    <td class="format-date" data-date="<%- info.last_ping %>">
+	      <%- info.last_ping %></td>
 	    <td>
 	      <% if (info.routeid) { %>
 		<a href="https://maps.google.com/?q=<%- info.latitude %>,<%- info.longitude %>&ll=<%- info.latitude %>,<%- info.longitude %>&z=18"
@@ -65,7 +68,8 @@
 		     target="_blank">
 		    <%- info.gpsd_latitude %>,<%- info.gpsd_longitude %></a>
 		</td>
-		<td class="format-date"><%- info.gpsd_stamp %></td>
+		<td class="format-date" data-date="<%- info.gpsd_stamp %>">
+		  <%- info.gpsd_stamp %></td>
 	      <% } else { %>
 		<td>n/a</td>
 		<td>n/a</td>
