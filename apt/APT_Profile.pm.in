@@ -565,6 +565,7 @@ sub NewVersion($$)
     my $version     = $self->version();
     my $uid         = $creator->uid();
     my $uid_idx     = $creator->uid_idx();
+    my $vhashkey    = TBGenSecretKey();
 
     DBQueryWarn("lock tables apt_profiles write, ".
 		"            apt_profile_versions write, ".
@@ -594,13 +595,13 @@ sub NewVersion($$)
 			  "   created,uuid, ".
 			  "   parent_profileid,parent_version,rspec, ".
 			  "   script,paramdefs,reponame,repourl, ".
-			  "   portal_converted) ".
+			  "   portal_converted,hashkey) ".
 			  "select name,profileid,'$newvers',pid,pid_idx, ".
 			  "  gid,gid_idx, ".
 			  "  creator,creator_idx,'$uid','$uid_idx',".
 			  "  now(),uuid(),'$profileid', ".
 			  "  '$version',rspec,script,paramdefs, ".
-			  "  reponame,repourl,portal_converted ".
+			  "  reponame,repourl,portal_converted,'$vhashkey' ".
 			  "from apt_profile_versions as v ".
 			  "where v.profileid='$profileid' and ".
 			  "      v.version='$version'"));
