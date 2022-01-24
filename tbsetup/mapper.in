@@ -590,10 +590,11 @@ sub AssignLoop()
 			 "where name='pool_daemon'");
 	    $gotlock = 0;
 	}
-	# Just in case.
+	# An error in RunAssign leaves the lock held.
 	if ($seriallock) {
 	    libEmulab::EmulabCountUnlock("mapperlock");
 	    $seriallock = 0;
+	    TBDebugTimeStamp("Released the mapper lock after RunAssign1");
 	}
 
 	# Success!
@@ -627,6 +628,12 @@ sub AssignLoop()
 	    my $save_impotent = $impotent;
 	    $impotent  = 1;
 	    my $retval = RunAssign(1, $prefix . ".empty");
+	    # An error in RunAssign leaves the lock held.
+	    if ($seriallock) {
+		libEmulab::EmulabCountUnlock("mapperlock");
+		$seriallock = 0;
+		TBDebugTimeStamp("Released the mapper lock after RunAssign2");
+	    }
 	    if ($retval != 0) {
 		return [{type=>'extra', cause=>'user', severity=>SEV_ERROR,
 			 error=>['infeasible_resource_assignment']}, 
@@ -747,7 +754,6 @@ sub RunAssign($$)
     }
 
     # Hack for Kirk.
-    if (!$MAINSITE) {
     if ($pid eq "OAI2021FallWS" || $project->IsNonLocal()) {
 	TBDebugTimeStamp("Trying to get the mapper lock");
 	while (1) {
@@ -760,7 +766,6 @@ sub RunAssign($$)
 	TBDebugTimeStamp("Got the mapper lock");
 	goto skipadctrl
 	    if ($pid eq "OAI2021FallWS");
-    }
     }
     
     #
@@ -1362,6 +1367,7 @@ END {
     if ($seriallock) {
 	libEmulab::EmulabCountUnlock("mapperlock");
 	$seriallock = 0;
+	TBDebugTimeStamp("Released the mapper lock in the END block");	
     }
 
     if ($exitcode && $exitcode != $WRAPPER_FAILED) {
