@@ -314,8 +314,12 @@ class Aggregate
         #
         if ($PORTAL_GENESIS == "powder") {
             $ordered = array();
-            $ordered[] = $unordered["Emulab"];
-            $ordered[] = $unordered["Utah"];
+            if (array_key_exists("Emulab", $unordered)) {
+                $ordered[] = $unordered["Emulab"];
+            }
+            if (array_key_exists("Utah", $unordered)) {
+                $ordered[] = $unordered["Utah"];
+            }
             foreach ($unordered as $aggregate) {
                 if ($aggregate->nickname() != "Emulab" &&
                     $aggregate->nickname() != "Utah") {
