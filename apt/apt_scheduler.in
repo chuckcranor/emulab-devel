@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -155,11 +155,8 @@ while (1) {
     #
 
     my $query_result =
-	DBQueryWarn("select distinct d.uuid from apt_deferred_instances as d ".
-		    "left join apt_instance_aggregates a on ".
-		    "  a.uuid=d.uuid ".
-		    "where (d.start_at is null or now() >= d.start_at) and ".
-		    "      a.deferred!=0");
+	DBQueryWarn("select d.uuid from apt_deferred_instances as d ".
+		    "where (d.start_at is null or now() >= d.start_at) ");
     
     if ($query_result && $query_result->numrows) {
 	while (my ($uuid) = $query_result->fetchrow_array()) {
