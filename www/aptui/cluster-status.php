@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -84,6 +84,10 @@ else {
 
 $aggregates = array();
 foreach ($agglist as $aggregate) {
+    # Do not show mobile nodes here.
+    if ($aggregate->ismobile() && !$isadmin) {
+        continue;
+    }
     $aggregates[$aggregate->nickname()] =
         array("urn"          => $aggregate->urn(),
               "name"         => $aggregate->name(),

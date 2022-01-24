@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -588,12 +588,12 @@ class Aggregate
         $blob = array();
 
         $query_result =
-            DBQueryFatal("select *,r.available ".
+            DBQueryFatal("select l.*,i.*,r.available ".
                          " from apt_aggregate_radio_locations as l ".
                          "left join apt_aggregate_radio_info as i on ".
                          "  i.aggregate_urn=l.aggregate_urn and ".
                          "  i.location=l.location ".
-                         "join apt_aggregate_reservable_nodes as r on ".
+                         "left join apt_aggregate_reservable_nodes as r on ".
                          "  r.urn=i.aggregate_urn and r.node_id=i.node_id ".
                          "order by itype desc, l.location asc");
 
