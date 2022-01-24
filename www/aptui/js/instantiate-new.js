@@ -3196,10 +3196,17 @@ $(function ()
 				iframe.contentDocument.defaultView);
 
 	    iframewindow.addEventListener('DOMContentLoaded', function (event) {
+		var foo = selected_rspec
+		    .replace(/&/g, '&amp;')
+		    .replace(/</g, '&lt;')
+		    .replace(/>/g, '&gt;')
+		    .replace(/"/g, '&quot;')
+		    .replace(/'/g, '&apos;');
+		
 		var html =
 		    "<div id=rspec class=hidden>" +
 		    "  <textarea type='textarea'>" +
-		        selected_rspec + "</textarea>" +
+		        foo + "</textarea>" +
 		    "</div>" +
 		    "<script type='text/plain' id='cluster-selections'>" +
 		       JSON.stringify(ClusterSelections()) +
