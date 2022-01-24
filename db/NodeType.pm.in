@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -213,7 +213,12 @@ sub ReservableTypes($)
 		    "        n.role='" . $Node::NODEROLE_TESTNODE . "' and ".
 		    "        a.attrvalue is null) as u ".
 		    "join node_types as nt on nt.type=u.type ".
-		    "where nt.class='pc'");
+		    "left join node_type_attributes as a on ".
+		    "     a.type=u.type and ".
+		    "     a.attrkey='reservable' ".
+		    "where nt.class='pc' or ".
+		    # User allocatable switches.
+		    "      (nt.class='switch' and a.attrkey is not null)");
     
     return ()
 	if (!$query_result || !$query_result->numrows);
