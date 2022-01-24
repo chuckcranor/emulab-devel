@@ -74,7 +74,8 @@ function CheckPageArgs($write)
     }
     if (($write && 
          ! $node->AccessCheck($this_user, $TB_NODEACCESS_MODIFYINFO)) ||
-        ! $node->AccessCheck($this_user, $TB_NODEACCESS_READINFO)) {
+        (!$GuestUserOkay &&
+         !$node->AccessCheck($this_user, $TB_NODEACCESS_READINFO))) {
 	SPITAJAX_ERROR(-1, "Not enough permission");
 	return -1;
     }
@@ -88,6 +89,7 @@ function Do_GetInfo()
 {
     global $this_user, $ajax_args, $node, $GuestUserOkay;
     global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $TB_NODEACCESS_READINFO, $TB_NODEACCESS_MODIFYINFO;
 
     # This function allows guest users.
     $GuestUserOkay = true;
@@ -101,6 +103,15 @@ function Do_GetInfo()
     if (!$this_user && $node->role() != "testnode") {
 	SPITAJAX_ERROR(-1, "Not enough permission");
 	return -1;
+    }
+    #
+    # If we allow guest users to see nodes, we might as well let other
+    # cluster users without READINFO access see the same stuff!
+    #
+    $restricted = false;
+    if (!$this_user ||
+        !$node->AccessCheck($this_user, $TB_NODEACCESS_READINFO)) {
+        $restricted = true;
     }
     if ($node->def_boot_osid()) {
         $def_boot_image = $node->def_boot_image();
@@ -124,8 +135,6 @@ function Do_GetInfo()
     $blob["features"]        = GetFeatures($node);
     $blob["typefeatures"]    = GetTypeFeatures($node, $blob["features"]);
     $blob["interfaces"]      = $node->GetInterfaceInfo();
-    $blob["outlet"]          = $node->OutletInfo();
-    $blob["tipline"]         = $node->TiplineInfo();
     $blob["op_mode"]         = $node->op_mode();
     $blob["control_ip"]      = $node->ControlIP();
     $blob["eventstate"]      = $node->eventstate();
@@ -136,12 +145,14 @@ function Do_GetInfo()
             $blob["reservation_name"] = $node->reservation_name();
         }
     }
-    if ($this_user) {
+    if (!$restricted) {
         $blob["management_ip"] = $node->ManagementIP();
         $blob["expinfo"]       = GetExpInfo($node);
         $blob["subbossinfo"]   = $node->SubBossInfo();
         $blob["vinterfaces"]   = $node->GetVinterfaces();
         $blob["vlans"]         = $node->GetVlans();
+        $blob["outlet"]        = $node->OutletInfo();
+        $blob["tipline"]       = $node->TiplineInfo();
         if (!$node->IsVirtNode()) {
             $blob["vnodes"] = $node->GetVnodes();
         }
@@ -170,7 +181,7 @@ function Do_GetInfo()
         $blob["def_boot_image_vers"] = $def_boot_osinfo->vers();
         $blob["def_boot_image_url"]  = $url;
     }
-    if ($this_user && $node->next_boot_osid()) {
+    if (!$restricted && $node->next_boot_osid()) {
         $osid   = $node->next_boot_osid();
         $vers   = $node->next_boot_osid_vers();
         $osinfo = OSInfo::Lookup($osid, $vers);
@@ -187,7 +198,7 @@ function Do_GetInfo()
             $blob["next_boot_cmd_line"] = $node->next_boot_cmd_line();
         }
     }
-    if ($this_user && $node->temp_boot_osid()) {
+    if (!$restricted && $this_user && $node->temp_boot_osid()) {
         $osid   = $node->temp_boot_osid();
         $vers   = $node->temp_boot_osid_vers();
         $osinfo = OSInfo::Lookup($osid, $vers);
@@ -200,13 +211,11 @@ function Do_GetInfo()
             $blob["temp_boot_osinfo_url"]  = $url;
         }
     }
-    if ($this_user) {
-        if ($node->pxe_boot_path() && $node->pxe_boot_path() != "") {
-            $blob["pxe_boot_path"] = $node->pxe_boot_path();
-        }
-        if ($node->next_pxe_boot_path() && $node->next_pxe_boot_path() != "") {
-            $blob["next_pxe_boot_path"] = $node->next_pxe_boot_path();
-        }
+    if ($node->pxe_boot_path() && $node->pxe_boot_path() != "") {
+        $blob["pxe_boot_path"] = $node->pxe_boot_path();
+    }
+    if ($node->next_pxe_boot_path() && $node->next_pxe_boot_path() != "") {
+        $blob["next_pxe_boot_path"] = $node->next_pxe_boot_path();
     }
     SPITAJAX_RESPONSE($blob);
 }
