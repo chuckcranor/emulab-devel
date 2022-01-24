@@ -281,6 +281,24 @@ else {
 	SPITFOOTER();
 	return;
     }
+    elseif ($dologin_status == DOLOGIN_STATUS_IPFREEZE) {
+	# Short delay.
+	sleep(1);
+
+	SPITHEADER();
+	$IP = $_SERVER['REMOTE_ADDR'];
+	echo "<h4>
+              Your IP address ($IP) has been frozen because of too many
+              failures.
+              You must contact $SUPPORT to address this problen.
+              <br> <br>
+              Please do not attempt to login again; it will not work!
+              </h4>\n";
+        echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+	SPITNULLREQUIRE();
+	SPITFOOTER();
+	return;
+    }
     elseif ($dologin_status == DOLOGIN_STATUS_PROJDISABLED) {
 	# Short delay.
 	sleep(1);
