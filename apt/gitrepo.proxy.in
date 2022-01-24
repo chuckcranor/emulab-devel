@@ -169,7 +169,7 @@ sub Clone()
     if (system("$GIT cat-file -e ${refspec}:.gitmodules") == 0) {
 	# Need the branch name for switch.
 	my $branch;
-	if ($refspec =~ /^refs\/heads\/(\w+)/) {
+	if ($refspec =~ /^refs\/heads\/([-\w]+)/ || $refspec =~ /^([-\w]+)$/) {
 	    $branch = $1;
 	}
 	else {
