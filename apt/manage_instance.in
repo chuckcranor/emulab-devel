@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -6771,24 +6771,31 @@ sub DoStatus()
     my $asjson     = 0;
     my $refresh    = 0;
     my $doperms    = 1;
+    my $dokey      = 0;
     my $status     = $instance->status();
     my $slice      = $instance->GetGeniSlice();
     my $slice_uuid = $instance->slice_uuid();
     my $blob;
 
-    my $optlist = "jrX";
+    my $optlist = "jrXk";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
     }
     if (defined($options{"j"})) {
 	$asjson = 1;
+	if (defined($options{"k"})) {
+	    $dokey = 1;
+	}
     }
     if (defined($options{"X"})) {
 	$doperms = 1;
     }
     if (defined($options{"r"})) {
 	$refresh = 1;
+    }
+    if ($dokey && !$doperms) {
+	fatal("Cannot request key without -X option");
     }
 
     #
@@ -6823,6 +6830,9 @@ sub DoStatus()
 	    "wbstore" => $slice_uuid,
 	    "url"     => $instance->webURL(),
 	    "expires" => TBDateStringGMT($instance->Expires()),
+	};
+	if ($dokey) {
+	    $blob->{"certificate"} = $instance->cert() . $instance->privkey(); 
 	}
     }
     else {
