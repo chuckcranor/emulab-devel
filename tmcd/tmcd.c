@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2021 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -290,6 +290,7 @@ typedef struct {
 	char		erole[TBDB_FLEN_TINYTEXT];
 	char            privkey[PRIVKEY_LEN+1];
 	char		nodeuuid[TBDB_FLEN_UUID];
+	char		slice_uuid[TBDB_FLEN_UUID];
         /* This key is a replacement for privkey, on protogeni resources */
 	char            external_key[PRIVKEY_LEN+1];
 } tmcdreq_t;
@@ -3696,10 +3697,24 @@ COMMAND_PROTOTYPE(doaccounts)
 						 2, row[17]);
 		}
 		else {
-			pubkeys_res = mydb_query("select idx,pubkey "
-						 " from user_pubkeys "
-						 "where uid_idx='%s'",
-						 2, row[17]);
+			char *q1 = "select idx,pubkey from user_pubkeys "
+				   " where uid_idx='%s'";
+			char *q2 = "(select idx,pubkey from user_pubkeys "
+				   " where uid_idx='%s') "
+				   "union "
+				   "(select 9999,sshpubkey from apt_instances "
+				   " where slice_uuid='%s' and "
+				   "       creator_idx='%s' and "
+				   "       sshpubkey is not null)";
+
+			if (reqp->slice_uuid[0]) {
+				pubkeys_res = mydb_query(q2, 2, row[17],
+							 reqp->slice_uuid,
+							 row[17]);
+			}
+			else {
+				pubkeys_res = mydb_query(q1, 2, row[17]);
+			}
 		}
 		if (!pubkeys_res) {
 			error("ACCOUNTS: %s: DB Error getting keys\n", row[0]);
@@ -8015,7 +8030,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
-				 " r.rootkey_private,r.rootkey_public "
+				 " r.rootkey_private,r.rootkey_public,NULL "
 				 "FROM nodes AS n "
 				 "LEFT JOIN reserved AS r ON "
 				 "  r.node_id=n.node_id "
@@ -8046,7 +8061,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "     (SELECT node_id FROM widearea_nodeinfo "
 				 "      WHERE privkey='%s') "
 				 "  AND notmcdinfo_types.attrvalue IS NULL",
-				 46, nodekey);
+				 47, nodekey);
 	}
 	else if (reqp->isvnode) {
 		char	clause[BUFSIZ];
@@ -8087,7 +8102,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " nv.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,va.attrvalue, "
-				 " r.rootkey_private,r.rootkey_public "
+				 " r.rootkey_private,r.rootkey_public, "
+				 " es.slice_uuid "
 				 "from nodes as nv "
 				 "left join nodes as np on "
 				 " np.node_id=nv.phys_nodeid "
@@ -8097,6 +8113,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " r.node_id=nv.node_id "
 				 "left join experiments as e on "
 				 "  e.pid=r.pid and e.eid=r.eid "
+				 "left join experiment_stats as es on "
+				 " es.exptidx=r.exptidx "
 				 "left join projects AS p ON "
 				 " p.pid=r.pid "
 				 "left join node_types as pt on "
@@ -8114,7 +8132,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " va.vname=r.vname and "
 				 " va.attrkey='routable_control_ip' "
 				 "where nv.node_id='%s' and (%s)",
-				 46, reqp->vnodeid, clause);
+				 47, reqp->vnodeid, clause);
 	}
 	else {
 		char	clause[BUFSIZ];
@@ -8148,13 +8166,16 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
-				 " r.rootkey_private,r.rootkey_public "
+				 " r.rootkey_private,r.rootkey_public, "
+				 " es.slice_uuid "
 				 "from interfaces as i "
 				 "left join nodes as n on n.node_id=i.node_id "
 				 "left join reserved as r on "
 				 "  r.node_id=i.node_id "
 				 "left join experiments as e on "
 				 " e.pid=r.pid and e.eid=r.eid "
+				 "left join experiment_stats as es on "
+				 " es.exptidx=r.exptidx "
 				 "left join projects AS p ON "
 				 " p.pid=r.pid "
 				 "left join node_types as t on "
@@ -8178,7 +8199,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "  on n.type=dedicated_wa_types.type "
 				 "where (%s) "
 				 "  and notmcdinfo_types.attrvalue is NULL",
-				 46, clause);
+				 47, clause);
 	}
 
 	if (!res) {
@@ -8371,6 +8392,11 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 	if (row[45] && atoi(row[45]) > 0)
 		reqp->experiment_keys |= TB_ROOTKEYS_PUBLIC;
 
+	/* Slice uuid */
+	if (row[46]) {
+		strcpy(reqp->slice_uuid, row[46]);
+	}
+	
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
 	strcpy(reqp->pnodeid, reqp->nodeid);
 	if (reqp->isvnode) {

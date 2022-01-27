@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -123,6 +123,8 @@ my $duration;
 my $paramset;
 my $bindingfile;
 my $bindingstr;
+my $sshpubkeyfile;
+my $sshpubkeystr;
 my ($refspec, $repohash, $reporef, $script, $rspec, $bindings);
 my $default_urn;
 my $logfile;
@@ -141,6 +143,7 @@ my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's',
 	       "stop=i"      => \$stop_at,
 	       "paramset=s"  => \$paramset,
 	       "bindings=s"  => \$bindingfile,
+	       "sshpubkey=s" => \$sshpubkeyfile,
 	       "refspec=s"   => \$refspec,
     );
 #
@@ -228,6 +231,21 @@ if (defined($bindingfile)) {
     $bindingstr = emutil::ReadFile($bindingfile);
     if ($bindingstr eq "") {
 	fatal("Binding file could not be read or is empty");
+    }
+}
+if (defined($sshpubkeyfile)) {
+    if (! -e $sshpubkeyfile) {
+	fatal("SSH pubkeyfile does not exist");
+    }
+    $sshpubkeystr = emutil::ReadFile($sshpubkeyfile);
+    if ($sshpubkeystr eq "") {
+	fatal("SSH pubkey file could not be read or is empty");
+    }
+    if (!($sshpubkeystr =~
+	  /^(ssh-rsa|ssh-ed25519) ([-\w\.\@\+\/\=]*) ([-\w\@\.:\ ]*)$/ ||
+	  $sshpubkeystr =~
+	  /^(ssh-rsa|ssh-ed25519) ([-\w\.\@\+\/\=:]*)$/)) {
+	fatal("SSH pubkey is not a valid openssh protocol 2 key");
     }
 }
 
@@ -413,6 +431,9 @@ if (defined($reporef)) {
 }
 if (defined($rspec)) {
     $xmlstuff{"rspec"} = $rspec;
+}
+if (defined($sshpubkeystr)) {
+    $xmlstuff{"sshkey"} = $sshpubkeystr;
 }
 
 #

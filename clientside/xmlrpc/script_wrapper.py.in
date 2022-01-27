@@ -3068,7 +3068,7 @@ class startExperiment:
             opts, req_args = getopt.getopt(self.argv, "a:p:Ps",
                                            [ "help", "name=", "duration=",
                                              "project=", "site=", "start=",
-                                             "bindings=",
+                                             "bindings=", "sshpubkey=",
                                              "stop=", "paramset=", "refspec="]);
             pass
         except getopt.error as e:
@@ -3116,6 +3116,9 @@ class startExperiment:
                 pass
             elif opt == "--site":
                 params["site"] = val;
+                pass
+            elif opt == "--sshpubkey":
+                params["sshpubkey"] = val;
                 pass
             pass
 

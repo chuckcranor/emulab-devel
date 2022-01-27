@@ -719,6 +719,7 @@ CREATE TABLE `apt_instances` (
   `logfileid` varchar(40) default NULL,
   `cert` mediumtext,
   `privkey` mediumtext,
+  `sshpubkey` mediumtext,
   `repourl` tinytext,
   `reponame` varchar(40) default NULL,
   `reporef` varchar(128) default NULL,

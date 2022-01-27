@@ -1376,6 +1376,10 @@ sub GetSSHKeys($$;$)
 	print STDERR "No ssh keys for $geniuser\n";
 	return -1;
     }
+    if ($self->sshpubkey()) {
+	push(@keys, {"type" => 'ssh',
+		     "key"  => $self->sshpubkey()});
+    }
     # Get shell from emulab user.
     my $shell = $geniuser->emulab_user()->shell();
     if (!defined($shell)) {

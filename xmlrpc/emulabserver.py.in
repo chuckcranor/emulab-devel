@@ -6145,6 +6145,21 @@ class portal:
             elif opt == "profile":
                 profile = val
                 pass
+            elif opt == "sshpubkey":
+                argstr += " --sshpubkey "
+                pubkey = val
+            
+                if len(pubkey) > 4096:
+                    return EmulabResponse(RESPONSE_TOOBIG,
+                                         output="Public key way too big!");
+        
+                (pfp, pfilename) = writensfile(pubkey)
+                if not pfilename:
+                    return EmulabResponse(RESPONSE_SERVERERROR,
+                                         output="Server Error")
+
+                argstr += escapeshellarg(pfilename)
+                pass
             pass
         
         argstr += " "
