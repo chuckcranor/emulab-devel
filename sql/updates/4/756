@@ -1,0 +1,30 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("login_history", "location")) {
+	DBQueryFatal("ALTER TABLE login_history add " .
+		     " `location` varchar(64) default NULL after portal");
+    }
+    if (!DBSlotExists("login_history", "country")) {
+	DBQueryFatal("ALTER TABLE login_history add " .
+		     " `country` tinytext after location");
+    }
+    if (!DBSlotExists("login_history", "region")) {
+	DBQueryFatal("ALTER TABLE login_history add " .
+		     " `region` tinytext after country");
+    }
+    if (!DBKeyExists("login_history", "IP")) {
+	DBQueryFatal("ALTER TABLE login_history add " .
+		     " KEY `IP` (`IP`)");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

@@ -3838,9 +3838,13 @@ CREATE TABLE `login_history` (
   `tstamp` datetime NOT NULL default '0000-00-00 00:00:00',
   `IP` varchar(16) default NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
+  `location` varchar(64) default NULL,
+  `country` tinytext,
+  `region` tinytext,
   PRIMARY KEY (`idx`),
   KEY `idxstamp` (`uid_idx`,`tstamp`),
-  KEY `uidstamp` (`uid`,`tstamp`)
+  KEY `uidstamp` (`uid`,`tstamp`),
+  KEY `IP` (`IP`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
