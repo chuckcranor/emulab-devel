@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -168,6 +168,7 @@ APTFONTS = $(wildcard $(SRCDIR)/aptui/fonts/*)
 APTIMAGES = $(wildcard $(SRCDIR)/aptui/images/*)
 JSTREE = $(wildcard $(SRCDIR)/aptui/jstree/*)
 AFFILIATIONS = $(wildcard $(SRCDIR)/aptui/affiliations/*)
+APTMAPS = $(wildcard $(SRCDIR)/aptui/usage-maps/*)
 
 APTNEWJSFILES   = $(wildcard $(SRCDIR)/aptui/js/new/*.js)
 APTNEWTEMPLATES = $(wildcard $(SRCDIR)/aptui/template/new/*.html)
@@ -239,7 +240,9 @@ ALLAPTFONTS = $(notdir $(APTFONTS))
 ALLAPTIMAGES = $(notdir $(APTIMAGES))
 ALLJSTREE = $(notdir $(JSTREE))
 ALLAFFIL = $(notdir $(AFFILIATIONS))
+ALLAFFIL = $(notdir $(AFFILIATIONS))
 ALLAPTSORT = $(subst $(SRCDIR)/aptui/js/lib/,,$(APTSORTFILES))
+ALLAPTMAPS = $(notdir $(APTMAPS))
 
 ALLAPTNEWJS  = $(notdir $(APTNEWJSFILES))
 ALLAPTNEWTEMPLATES = $(notdir $(APTNEWTEMPLATES))
@@ -298,6 +301,7 @@ apt-install: 	$(addprefix $(INSTALL_WWWDIR)/apt/, $(ALLAPTUI)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/images/, $(ALLAPTIMAGES)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/jstree/, $(ALLJSTREE)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/affiliations/, $(ALLAFFIL)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/usage-maps/, $(ALLAPTMAPS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/js/new/, $(ALLAPTNEWJS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/template/new/, $(ALLAPTNEWTEMPLATES))
 	cd $(INSTALL_WWWDIR) && \
