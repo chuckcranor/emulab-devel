@@ -1,0 +1,27 @@
+#
+# Something happened between 12.2 and 12.3, or at least something in our environment,
+# that made this call start returning ENOTSUP. So we not accept that error to indicate
+# we are not on a tty.
+#
+# cd /usr/src
+# sudo patch -p1 < patchfile
+#
+diff --git a/crypto/openssl/crypto/ui/ui_openssl.c b/crypto/openssl/crypto/ui/ui_openssl.c
+index 9526c1653..9799131bb 100644
+--- a/crypto/openssl/crypto/ui/ui_openssl.c
++++ b/crypto/openssl/crypto/ui/ui_openssl.c
+@@ -457,6 +457,14 @@ static int open_console(UI *ui)
+         if (errno == ENODEV)
+             is_a_tty = 0;
+         else
++#  endif
++#  ifdef ENOTSUP
++           /*
++            * FreeBSD (12 and above only?) returns ENOTSUP.
++            */
++        if (errno == ENOTSUP)
++            is_a_tty = 0;
++        else
+ #  endif
+             {
+                 char tmp_num[10];
