@@ -42,7 +42,6 @@ $(function ()
 	    projection =
 		d3.geoNaturalEarth1()
 		.scale(width / 1.7 / Math.PI)
-		.rotate([60, 0])
 		.center([0, 10])
 		.translate([width / 2, height / 2]);
 	}
