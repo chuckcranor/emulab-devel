@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -630,7 +630,11 @@ $routing = array("geni-login" =>
 						 "GetHealthStatusExtended" =>
                                                    "Do_GetHealthStatusExtended",
 						 "GetWirelessStatus" =>
-						    "Do_GetWirelessStatus")),
+						    "Do_GetWirelessStatus",
+						 "GetPowderStats" =>
+                                                     "Do_GetPowderStats",
+                              )
+                        ),
 		 "memlane" =>
 			array("file"    => "memlane.ajax",
 			      "guest"   => false,
