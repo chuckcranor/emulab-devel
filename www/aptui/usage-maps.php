@@ -28,6 +28,8 @@ chdir("apt");
 include("quickvm_sup.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 $page_title = "Usage Map";
+# Mark the page as allowing it to be iframed.
+$page_allowframing = true;
 
 #
 # Get current user.
