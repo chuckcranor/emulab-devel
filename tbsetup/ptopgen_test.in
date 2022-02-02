@@ -610,6 +610,9 @@ while (($node,$eventstate, $role, $uuid, $isremotenode,
 	    || $eventstate eq TBDB_NODESTATE_PXEWAIT
 	    || $eventstate eq TBDB_NODESTATE_POWEROFF
 	    || $eventstate eq TBDB_NODESTATE_ALWAYSUP);
+    my $isreallyup = defined($eventstate)
+	&& ($eventstate eq TBDB_NODESTATE_ISUP
+	    || $eventstate eq TBDB_NODESTATE_ALWAYSUP);
     my $isshared = (defined($erole)
 		    && $erole eq "sharedhost"
 		    && $useshared
@@ -617,7 +620,7 @@ while (($node,$eventstate, $role, $uuid, $isremotenode,
     my $isblockstore = (defined($erole)
 			&& $erole eq "storagehost"
 			&& $useblockstore
-			&& $isup);
+			&& $isreallyup);
     my $isreserved = (defined($reserved_eid)
 		      || (defined($reserved_pid)
 			  && (! defined($pid) || $pid ne $reserved_pid)));
@@ -1986,6 +1989,12 @@ if ($useblockstore) {
     my %bspools = ();
     while (my ($nodeId, $bsId, $leaseIdx, $typeName,
 	       $capacity, $pool) = $result->fetchrow_array) {
+
+	# Skip blockstores on dead storage nodes.
+	next
+	    if (exists($nodetoavailable{$nodeId}) &&
+		!$nodetoavailable{$nodeId});
+		       
 	if ($pool) {
 	    my $key = "$nodeId/$pool";
 	    if (!exists($bspools{$key})) {
