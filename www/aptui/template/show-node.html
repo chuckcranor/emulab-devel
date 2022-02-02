@@ -244,10 +244,15 @@
 	    <tr>
 	      <td>Outlet</td>
 	      <td>
-		<%
-		var url = 'show-node.php?node_id=' + fields.outlet.power_id;
-		%>
-		<a href='<%- url %>' target=_blank><%- fields.outlet.power_id %></a>:<%- fields.outlet.outlet %></td>
+		<% if (_.has(fields.outlet, "outlet")) { %>
+		  <%
+		  var url = 'show-node.php?node_id=' + fields.outlet.power_id;
+		  %>
+		  <a href='<%- url %>' target=_blank><%- fields.outlet.power_id %></a>:<%- fields.outlet.outlet %>
+		<% } else { %>
+		  <%- fields.outlet.power_id %>
+		<% } %>
+	      </td>
 	    </tr>
 	  <% } %>
 	  <% if (fields.tipline && isadmin) { %>

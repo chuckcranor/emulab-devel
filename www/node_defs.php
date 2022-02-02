@@ -473,6 +473,16 @@ class Node
             return null;
         }
         $row = mysql_fetch_array($query_result);
+        $power_id = $row["power_id"];
+
+        #
+        # If the power_id is not an actual node, it is probably
+        # ipmi, ilo, etc. 
+        #
+        $node = Node::Lookup($power_id);
+        if (!$node) {
+            unset($row["outlet"]);
+        }
         return $row;
     }
 
