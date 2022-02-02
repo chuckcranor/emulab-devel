@@ -290,6 +290,10 @@
 		<td>Startup Command</td>
 		<td class="longline"><%- fields.expinfo.startupcmd %></td>
 	      </tr>
+	      <tr>
+		<td>Startup Exit Status</td>
+		<td class="longline"><%- fields.expinfo.startstatus %></td>
+	      </tr>
 	    <% } %>
 	    <% if (_.has(fields.expinfo, "tarballs")) { %>
 	      <tr>

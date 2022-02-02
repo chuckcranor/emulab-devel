@@ -337,7 +337,8 @@ function GetExpInfo($node)
     $blob["pid"]       = $experiment->pid();
     $blob["eid"]       = $experiment->eid();
     if ($node->startupcmd() && $node->startupcmd() != "") {
-        $blob["startupcmd"] = $node->startupcmd();
+        $blob["startupcmd"]  = $node->startupcmd();
+        $blob["startstatus"] = $node->startstatus();
     }
     $blob["routertype"] = $node->routertype();
     $blob["boot_errno"] = $node->boot_errno();
