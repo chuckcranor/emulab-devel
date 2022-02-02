@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -165,9 +165,8 @@ while (my ($uid,$uid_idx,$affil,$country,$city) =
     elsif (lc($affil) eq lc("University of Maryland")) {
 	$new = "University of Maryland, College Park";
     }
-    elsif (lc($affil) eq lc("Rice University")) {
-	# XXX
-	#$new = "William Marsh Rice University";
+    elsif (lc($affil) =~ /^rice/) {
+	$new = "Rice University";
     }
     elsif (lc($affil) eq lc("Hunter College")) {
 	# XXX

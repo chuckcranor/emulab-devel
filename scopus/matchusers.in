@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -104,9 +104,9 @@ if (@ARGV) {
 #
 if ($recheck) {
     $match_clause =
-	"(u.usr_created < date_sub(now(), interval 3 month) && ".
+	"(u.usr_created < date_sub(now(), interval 1 year) && ".
 	" u.usr_created > date_sub(now(), interval 5 year) && ".
-	" u.scopus_lastcheck < date_sub(now(), interval 3 month))";
+	" u.scopus_lastcheck < date_sub(now(), interval 6 month))";
 }
 else {
     $match_clause =
