@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1117,8 +1117,22 @@ sub UpdateNodeTypeXpidPermissions()
     
     foreach my $gid_idx (keys(%permissions)) {
 	my @typelist = keys(%{ $permissions{$gid_idx} });
-	my $group    = Group->Lookup($gid_idx);
-	my $pid      = $group->pid();
+
+	next
+	    if (!@typelist);
+	
+	my $group = Group->Lookup($gid_idx);
+	#
+	# Watch for race with project deletion. Which only happens when
+	# Rob is doing a batch, and deletes one and approves another, at
+	# almost the same time. I do not want to lock this entire routine
+	# since it takes a long time to run the stuff above (on the
+	# Mothership we have a lot projects and lots of types).
+	#
+	next
+	    if (!defined($group));
+	
+	my $pid = $group->pid();
 
 	foreach my $type (@typelist) {
 	    return -1
