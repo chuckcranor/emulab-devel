@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,6 +40,9 @@ $embedded = 0;
 if (isset($_REQUEST["embedded"]) && $_REQUEST["embedded"]) {
     $embedded = 1;
 }
+
+# Global flage to allow specific pages to let themselves be iframed.
+$page_allowframing = 0;
 
 # For backend scripts to know how they were invoked.
 if (isset($_SERVER['SERVER_NAME'])) { 
@@ -92,7 +95,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     global $ISPNET, $ISPOWDER, $ISEMULAB, $PROTOGENI_GENIWEBLOGIN;
     global $login_user, $login_status, $SUPPORT, $FIRSTUSER, $PORTAL_NAME;
     global $disable_accounts, $page_title, $drewheader, $embedded;
-    global $UI_EXTERNAL_ACCOUNTS, $BrandMapping;
+    global $UI_EXTERNAL_ACCOUNTS, $BrandMapping, $page_allowframing;
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
                   $_COOKIE['cleanmode'] == 1 ? 1 : 0);
     $showmenus = 0;
@@ -173,7 +176,9 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
     header("Cache-Control: no-cache, must-revalidate");
     header("Pragma: no-cache");
-    header("X-Frame-Options: SAMEORIGIN");
+    if (!$page_allowframing) {
+        header("X-Frame-Options: SAMEORIGIN");
+    }
     
     echo "<html>
       <head>
