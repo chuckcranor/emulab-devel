@@ -110,7 +110,8 @@ function Do_GetInfo()
     #
     $restricted = false;
     if (!$this_user ||
-        !$node->AccessCheck($this_user, $TB_NODEACCESS_READINFO)) {
+        !($node->AccessCheck($this_user,
+                             $TB_NODEACCESS_READINFO) || ISADMIN())) {
         $restricted = true;
     }
     if ($node->def_boot_osid()) {
