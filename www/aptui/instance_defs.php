@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -916,7 +916,7 @@ class Instance
         $result = array();
 
         $query_result =
-            DBQueryFatal("select freq_low,freq_high ".
+            DBQueryFatal("select distinct freq_low,freq_high ".
                          "from apt_instance_rfranges");
 	while ($row = mysql_fetch_array($query_result)) {
             $result[] = array("freq_low"  => $row["freq_low"],
