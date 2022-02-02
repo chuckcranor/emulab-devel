@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2018 University of Utah and the Flux Group.
+# Copyright (c) 2003-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,11 +37,15 @@ sub usage()
     print STDERR " -d       - Turn on debugging\n";
     print STDERR " -n       - Dry run mode\n";
     print STDERR " -t type  - Type name (eg: bbg, spp, goober, whatever)\n";
+    print STDERR " -r role  - Node role, defaults to 'testnode'\n";
+    print STDERR " -F       - Do not reserve to hwdown, leave free\n";
     exit(-1);
 }
-my $optlist   = "t:dn";
+my $optlist   = "t:dnr:F";
 my $debug     = 0;
 my $impotent  = 0;
+my $role      = "testnode";
+my $free      = 0;
 my $type;
 
 # Protos
@@ -93,8 +97,14 @@ if (defined($options{'d'})) {
 if (defined($options{'n'})) {
     $impotent = 1;
 }
+if (defined($options{'F'})) {
+    $free = 1;
+}
 if (defined($options{'t'})) {
     $type = $options{'t'};
+}
+if (defined($options{'r'})) {
+    $role = $options{'r'};
 }
 usage()
     if (@ARGV != 1 || !(defined($type)));
@@ -137,14 +147,14 @@ if (!defined($nodetype)) {
 
 my $blob = {
     "type"               => $type,
-    "role"               => "testnode",
+    "role"               => "$role",
     "initial_eventstate" => TBDB_NODESTATE_ISUP(),
 };
 
 my $node;
 print "Creating new node $node_id\n";
 if (!$impotent) {
-    $node = Node->Create($node_id, $experiment, $blob);
+    $node = Node->Create($node_id, $free ? undef : $experiment, $blob);
     if (!defined($node)) {
 	fatal("Could not create new node");
     }
