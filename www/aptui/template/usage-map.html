@@ -13,10 +13,11 @@
      pointer-events: none;         
  }
 </style>
-<center>
-  <div id="states-map" class="hidden"></div>
-</center>
-<center>
-  <div id="country-map" class="hidden"></div>
-</center>
-
+<% if (!window.EMBEDDED) { %>
+  <center>
+<% } %>
+   <div id="states-map" class="hidden"></div>
+   <div id="country-map" class="hidden" style="margin-top: 10px;"></div>
+<% if (!window.EMBEDDED) { %>
+  </center>
+<% } %>

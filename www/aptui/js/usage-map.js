@@ -26,8 +26,18 @@ $(function ()
     {
 	var selector = (whichmap == "states" ? "#states-map" : "#country-map");
 	//Width and height of map
-	var width = 960;
-	var height = 500;
+	var width;
+	var height;
+
+	if (window.EMBEDDED) {
+	    width  = $(window).width() - 50;
+	    height = $(window).height() - 50;
+	    console.info(width, height);
+	}
+	else {
+	    width  = 1000;
+	    height = 500;
+	}
 
 	// D3 Projection
 	var projection;
