@@ -173,6 +173,28 @@ function Do_GetPowderStats()
     SPITAJAX_RESPONSE($status);
 }
 
+#
+# Return portal paper list
+#
+function Do_GetPaperList()
+{
+    global $PORTAL_GENESIS;
+    $blob = array();
+
+    # Allow this to be fetched from pages loaded anywhere
+    header("Access-Control-Allow-Origin: *");
+
+    $query_result =
+        DBQueryFatal("select p.* from scopus_paper_info as p ".
+                     "where p.cites='$PORTAL_GENESIS' and p.uses='yes' ".
+                     "order by p.pubdate desc limit 5");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $blob[] = $row;
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
 # Local Variables:
 # mode:php
 # End:

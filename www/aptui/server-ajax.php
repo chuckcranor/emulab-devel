@@ -633,6 +633,8 @@ $routing = array("geni-login" =>
 						    "Do_GetWirelessStatus",
 						 "GetPowderStats" =>
                                                      "Do_GetPowderStats",
+						 "GetPaperList" =>
+                                                     "Do_GetPaperList",
                               )
                         ),
 		 "memlane" =>
