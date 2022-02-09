@@ -34,6 +34,15 @@ $(function ()
     var IDEAL_STARTHOUR = 7;	// 7am start time preferred.
     var IDEAL_ENDHOUR   = 18;	// 6pm end time preferred.
 
+    // Helper function, can existing reservation be added to.
+    function canEnlarge()
+    {
+	if (isadmin || !editing || !resgroup.active) {
+	    return 1
+	}
+	return 0;
+    }
+
     var RouteColors = {
 	"Red Detour"       : "red",
 	"Blue Detour"      : "blue",
@@ -676,10 +685,6 @@ $(function ()
 		modified_callback();
 	    }
 	});
-	$('#idle-detection-checkbox').change(function(event) {
-	    ToggleIdleDetection();
-	});
-
 	aptforms.EnableUnsavedWarning('#reserve-request-form',
 				      modified_callback);
     }
@@ -3086,10 +3091,13 @@ $(function ()
 		    $('#cluster-table').append(row);
 		});
 		UpdateClustersTable(details);
-		$('#cluster-table .add-cluster').click(function (event) {
-		    AddClusterRow();
-		});
-		$('#cluster-table .add-cluster').last().removeClass("hidden");
+		if (canEnlarge()) {
+		    $('#cluster-table .add-cluster').click(function (event) {
+			AddClusterRow();
+		    });
+		    $('#cluster-table .add-cluster').last()
+			.removeClass("hidden");
+		}
 		// Move the first cluster to the top.
 		if (window.ISPOWDER || window.ISCLOUD) {
 		    var first = _.first(_.values(details.clusters));
@@ -3097,8 +3105,8 @@ $(function ()
 		    ReorderGraphs(first.cluster_urn);
 		}
 	    }
-	    else {
-		// Always show an empty cluster row.
+	    else if (canEnlarge()) {
+		// Show an empty cluster row.
 		AddClusterRow();
 	    }
 
@@ -3126,19 +3134,18 @@ $(function ()
 		    $('#range-table').append(row);
 		});
 		UpdateRangeTable(details);
-		$('#range-table .add-range').click(function (event) {
-		    AddRangeRow();
-		});
-		$('#range-table .add-range').last().removeClass("hidden");
+		if (canEnlarge()) {
+		    $('#range-table .add-range').click(function (event) {
+			AddRangeRow();
+		    });
+		    $('#range-table .add-range').last().removeClass("hidden");
+		}
 		if (window.ISADMIN) {
 		    $('#override-checkbox').removeClass("hidden");
 		}
 	    }
-	    else {
-		// Always show an empty range row.
-		if (window.ISPOWDER) {
-		    AddRangeRow();
-		}
+	    else if (window.ISPOWDER && canEnlarge()) {
+		AddRangeRow();
 	    }
 
 	    // Add route rows as needed.
@@ -3163,25 +3170,23 @@ $(function ()
 		    $('#route-table').append(row);
 		});
 		UpdateRouteTable(details);
-		$('#route-table .add-route').click(function (event) {
-		    AddRouteRow();
-		});
-		$('#route-table .add-route').last().removeClass("hidden");
-
+		if (canEnlarge()) {
+		    $('#route-table .add-route').click(function (event) {
+			AddRouteRow();
+		    });
+		    $('#route-table .add-route').last().removeClass("hidden");
+		}
 		if (fakeroutes) {
 		    $('#allroutes-checkbox').prop("checked", true);
 		    SetupFakeRoutes();
 		}
 	    }
-	    else {
-		// Always show an empty route row.
-		if (window.ISPOWDER && window.DOROUTES) {
-		    if (fakeroutes) {
-			SetupFakeRoutes();
-		    }
-		    else {
-			AddRouteRow();
-		    }
+	    else if (window.ISPOWDER && window.DOROUTES && canEnlarge()) {
+		if (fakeroutes) {
+		    SetupFakeRoutes();
+		}
+		else {
+		    AddRouteRow();
 		}
 	    }
 
@@ -3220,6 +3225,17 @@ $(function ()
 	    current_pid = details.pid;
 	    
 	    if (isadmin) {
+		if (details.idledetection) {
+		    $('#idle-detection-checkbox').prop("checked", true);
+		}
+		else {
+		    $('#idle-detection-checkbox').prop("checked", false);
+		}
+		$('#idle-detection-checkbox').change(function(event) {
+		    ToggleIdleDetection();
+		});
+		$('#idle-detection-checkbox-div').removeClass("hidden");
+		
 		/*
 		 * If this is an admin looking at an unapproved reservation,
 		 * show the approve button
@@ -3233,16 +3249,6 @@ $(function ()
 			    Approve();
 			});
 		}
-		else {
-		    if (details.idledetection) {
-			$('#idle-detection-checkbox').prop("checked", true);
-		    }
-		    else {
-			$('#idle-detection-checkbox').prop("checked", false);
-		    }
-		    $('#idle-detection-checkbox-div').removeClass("hidden");
-		}
-		
 		var now   = new Date();
 		var start = new Date(details.start);
 
@@ -3395,13 +3401,15 @@ $(function ()
 	else {
 	    $('#cluster-table .delete-reservation').removeClass("hidden");
 	}
-	// If no new reservations have been added, need to display
-	// add button on last existing reservation.
-	if ($('#cluster-table tbody.new-cluster').length == 0) {
-	    $('#cluster-table tbody.existing-cluster .add-cluster')
-		.addClass("hidden");
-	    $('#cluster-table tbody.existing-cluster .add-cluster')
-		.last().removeClass("hidden");
+	if (canEnlarge()) {
+	    // If no new reservations have been added, need to display
+	    // add button on last existing reservation.
+	    if ($('#cluster-table tbody.new-cluster').length == 0) {
+		$('#cluster-table tbody.existing-cluster .add-cluster')
+		    .addClass("hidden");
+		$('#cluster-table tbody.existing-cluster .add-cluster')
+		    .last().removeClass("hidden");
+	    }
 	}
 	// Add append history graphs under the reservation panel
 	DrawHistoryGraphs(details);
@@ -3471,13 +3479,15 @@ $(function ()
 	// Always display delete button on existing ranges,
 	$('#range-table .existing-range .delete-range').removeClass("hidden");
 
-	// If no new reservations have been added, need to display
-	// add button on last existing reservation.
-	if ($('#range-table tbody.new-range').length == 0) {
-	    $('#range-table tbody.existing-range .add-range')
-		.addClass("hidden");
-	    $('#range-table tbody.existing-range .add-range')
-		.last().removeClass("hidden");
+	if (canEnlarge()) {
+	    // If no new reservations have been added, need to display
+	    // add button on last existing reservation.
+	    if ($('#range-table tbody.new-range').length == 0) {
+		$('#range-table tbody.existing-range .add-range')
+		    .addClass("hidden");
+		$('#range-table tbody.existing-range .add-range')
+		    .last().removeClass("hidden");
+	    }
 	}
     }
 
@@ -3545,13 +3555,15 @@ $(function ()
 	// Always display delete button on existing routes
 	$('#route-table .existing-route .delete-route').removeClass("hidden");
 
-	// If no new reservations have been added, need to display
-	// add button on last existing reservation.
-	if ($('#route-table tbody.new-route').length == 0) {
-	    $('#route-table tbody.existing-route .add-route')
-		.addClass("hidden");
-	    $('#route-table tbody.existing-route .add-route')
-		.last().removeClass("hidden");
+	if (canEnlarge()) {
+	    // If no new reservations have been added, need to display
+	    // add button on last existing reservation.
+	    if ($('#route-table tbody.new-route').length == 0) {
+		$('#route-table tbody.existing-route .add-route')
+		    .addClass("hidden");
+		$('#route-table tbody.existing-route .add-route')
+		    .last().removeClass("hidden");
+	    }
 	}
     }
 
