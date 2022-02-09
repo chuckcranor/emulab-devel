@@ -37,6 +37,14 @@ pre {
 {
     min-width: 500px !important;
 }
+/* Important part */
+#top-processes-modal .modal-dialog {
+    overflow-y: initial !important
+}
+#top-processes-modal .modal-body {
+    height: 80vh;
+    overflow-y: auto;
+} 
 </style>
 <div class='row'>
   <div class='col-lg-8  col-lg-offset-2
@@ -1786,8 +1794,6 @@ pre {
                   data-dismiss='modal' aria-hidden='true'>&times;</button>
 	  <pre>
 	  </pre>
-	  Idle processes not shown, top run as:
-	  <tt>top -c -b -n 1 -i -w 120</tt>
 	</div>
       </div>
     </div>
