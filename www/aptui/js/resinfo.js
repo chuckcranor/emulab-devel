@@ -17,6 +17,7 @@ $(function ()
     var FEs             = {};  // Powder
     var radioinfo       = {};  // Powder
     var matrixinfo      = {};  // Powder
+    var fakeroutes      = true;
     var isadmin         = false;
 
     function initialize()
@@ -123,6 +124,21 @@ $(function ()
 	    $('#powder-paired .counts-panel')
 		.html(totalsTemplate({"title" : "Paired Radio Workbenches"}));
 	    $('#powder-paired .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+
+	    $('#powder-mobile .graph-panel')
+		.html(visTemplate({
+		    "title" : "Mobile Endpoints",
+		    "id"    : "mobile",
+		}))
+		.find(".panel").removeClass("hidden");
+	    $('#powder-mobile .counts-panel')
+		.html(totalsTemplate({"title" : "Mobile Endpoints"}));
+	    $('#powder-mobile .counts-panel .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
 		    widgets : [ "uitheme", "zebra"],
@@ -245,6 +261,10 @@ $(function ()
      */
     function LoadReservations()
     {
+	if (window.ISPOWDER) {
+	    LoadRouteReservations();
+	}
+	
 	_.each(amlist, function(details, urn) {
  	    var callback = function(json) {
 		console.log("LoadReservations " + details.nickname, json);
@@ -389,7 +409,42 @@ $(function ()
 			   forecast, json.value.prunelist, false);
     }
 
-    function GenerateCountPanel(urn, selector, forecast, skiptypes, asnodes)
+    /*
+     * Load the route reservation info.
+     */
+    function LoadRouteReservations()
+    {
+	var callback = function(json) {
+	    console.log("LoadRouteReservations", json);
+	    if (json.code) {
+		console.info("Could not get route info");
+		return;
+	    }
+	    var routeforecast = json.value.forecast;
+	    GenerateRouteGraph(routeforecast);
+
+	    if (!_.size(json.value.list)) {
+		return;
+	    }
+	};
+	var xmlthing = sup.CallServerMethod(null, "resgroup",
+					    "RouteReservations");
+	xmlthing.done(callback);
+    }
+    function GenerateRouteGraph(routeforecast)
+    {
+	if (fakeroutes) {
+	    routeforecast = {
+		"All Routes" : routeforecast["Orange"]
+	    };
+	}
+	ShowNewGraph(routeforecast, "mobile");
+	GenerateCountPanel(window.EMULABURN, "powder-mobile .counts-panel",
+			   routeforecast, null, true, true);
+    }
+
+    function GenerateCountPanel(urn, selector,
+				forecast, skiptypes, asnodes, isroutes)
     {
 	var details = amlist[urn];
 	var html    = "";
@@ -440,6 +495,14 @@ $(function ()
 	    if (asnodes) {
 		free = (free ? "Yes" : "No");
 	    }
+	    if (isroutes) {
+		if (fakeroutes) {
+		    weburl = "All Routes";
+		}
+		else {
+		    weburl = type;
+		}
+	    }
 	    html +=
 		"<tr>" +
 		" <td>" + weburl + "</td>" +
@@ -447,7 +510,10 @@ $(function ()
 		"</tr>";
 	}
 	$('#' + selector + ' tbody').append(html);
-	if (asnodes) {
+	if (isroutes) {
+	    $('#' + selector + ' .type-header').html("Route");
+	}
+	else if (asnodes) {
 	    $('#' + selector + ' .type-header').html("Node");
 	}
 	$('#' + selector + ' table')

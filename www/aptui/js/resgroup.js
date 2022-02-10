@@ -973,6 +973,7 @@ $(function ()
 		_.each(routelist, function(details) {
 		    AddRouteRow(details.routename);
 		});
+		ReorderGraphs("routes")
 	    }
 	    else {
 		$('#route-table tbody').each(function() {
@@ -4191,13 +4192,19 @@ $(function ()
     {
 	$('#route-graph-div')
 	    .html(visTemplate({
-		"title" : "Bus Route Availability",
+		"title" : "Mobile Endpoint Availability",
 		"id"    : "route",
 	    }))
 	    .removeClass("hidden")
 	    .find(".panel").removeClass("hidden");
 
-	ShowNewGraph(routeforecast, "route");
+	var forecast = routeforecast;
+	if (fakeroutes) {
+	    forecast = {
+		"All Routes" : routeforecast["Orange"]
+	    };
+	}
+	ShowNewGraph(forecast, "route");
     }
 
     /*
