@@ -1031,10 +1031,12 @@ sub PeerExports($$)
 # Do an exports setup if needed (ZFS). See exports_setup, when ZFS is on
 # we do not export all projects, only recently active ones. 
 #
-sub UpdateExports($)
+sub UpdateExports($;$)
 {
-    my ($self) = @_;
+    my ($self, $redirect) = @_;
     my $pid_idx = $self->pid_idx();
+    # Redirect output, see spewimage.
+    $redirect = 0 if (!defined($redirect));
 
     return 0
 	if (! ($WITHZFS && ($ZFS_NOEXPORT || !$WITHAMD)));
@@ -1059,13 +1061,14 @@ sub UpdateExports($)
 
     if (!defined($lastactivity) ||
 	time() - $lastactivity > ((($exports_limit * 24) - 12) * 3600)) {
-	if ($ZFS_NOEXPORT) {
-	    mysystem($EXPORTS_SETUP);
+	my $cmd = $EXPORTS_SETUP;
+	if (!$ZFS_NOEXPORT && !$WITHAMD) {
+	    $cmd .= " -B";
 	}
-	elsif (!$WITHAMD) {
-	    mysystem($EXPORTS_SETUP . " -B");
+	if ($redirect) {
+	    $cmd .= " >/dev/null 2>&1";
 	}
-
+	system($cmd);
 	# failed, reset the timestamp
 	if ($?) {
 	    my $set = (defined($lastactivity) ?
