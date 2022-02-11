@@ -36,6 +36,8 @@ $(function () {
 	var setStepsMotion= null;
 	var resinfo_window= null;
 	var ppchanged     = false;
+	var rerun_instance= null;
+	var rerun_paramset= null;
 
 	// List of form elements (fields,groups), in order of appearance.
 	var formFields    = [];
@@ -3134,12 +3136,11 @@ $(function () {
 	}
 
 	/*
-	 * Load bindings from a previous experiment.
+	 * Load bindings from a previous experiment
+	 * No instance_uuid means the last one.
 	 */
 	function LoadPreviousBindings(instance_uuid)
 	{
-	    ClearAlert();
-	    
 	    var callback = function(json) {
 		console.info("LoadPreviousBindings", json);
 		if (json.code) {
@@ -3147,14 +3148,7 @@ $(function () {
 		    setStepsMotion(true);
 		    return;
 		}
-		LoadBindings(json.value.bindings);
-		if (json.value.version_uuid != uuid ||
-		    (fromrepo && json.value.repohash !=
-		     window.PROFILE_REFHASH)) {
-		    InstanceWarning(json.value,
-				    (instance_uuid ?
-				     instance_uuid : json.value.rerun_uuid));
-		}
+		ApplyPreviousBindings(json.value)
 		setStepsMotion(true);
 	    };
 	    var args = {
@@ -3168,7 +3162,16 @@ $(function () {
 						"GetPreviousBindings", args);
 	    xmlthing.done(callback);
 	}
-
+	/*
+	 * Apply the bindings, possible with a warning.
+	 */
+	function ApplyPreviousBindings(details)
+	{
+	    ClearAlert();
+	    
+	    LoadBindings(details.bindings);
+	    CheckInstanceWarning(details);
+	}
 	/*
 	 * Update bindings.
 	 */
@@ -3182,6 +3185,128 @@ $(function () {
 	    Modified();
 	}
 
+	/*
+	 * Alert user when they are not runing the most recent version/commit
+	 * of a profile. This happens when using the Rerun Recent menu.
+	 * Only show on initial load of the page. 
+	 */
+	function CheckNotLatest()
+	{
+	    console.info("CheckNotLatest",
+			 window.PROFILE_REFSPEC, window.TARGET_REFSPEC,
+			 window.PROFILE_REFHASH, window.TARGET_REFHASH);
+	    var warning;
+	    
+	    if (window.FROMREPO) {
+		if (window.PROFILE_REFSPEC != window.TARGET_REFSPEC) {
+		    if (window.TARGET_REFHASH &&
+			window.PROFILE_HEADHASH != window.TARGET_REFHASH) {
+			warning = 
+			    "You are not at the head of the branch (" +
+			    window.TARGET_REFSPEC + ") you are instantiating. "+
+			    "This is okay, but might not be what you intend.";
+		    }
+		    else {
+			warning =
+			    "You are currently on " +
+			    window.TARGET_REFSPEC + " instead of the default "+
+			    "branch " + window.PROFILE_REFSPEC + ". " +
+			    "This is okay, but might not be what you intend.";
+		    }
+		}
+		else if (window.PROFILE_REFHASH != window.TARGET_REFHASH) {
+		    warning = 
+			"You are not instantiating at the head of the default "+
+			"branch (" + window.PROFILE_REFSPEC + "). " +
+			"This is okay, but might not be what you intend.";
+		}
+	    }
+	    else {
+
+	    }
+	    if (warning) {
+		$('#ppalert').html("WARNING: " + warning);
+		$('#ppalert').removeClass("hidden");
+	    }
+	}
+
+	/*
+	 * Warn user if the paramset is bound and being applied to a
+	 * different version (of the repo).
+	 */
+	function CheckParamsetWarning(set)
+	{
+	    console.info("CheckParamsetWarning:", set,
+			 window.PROFILE_REFSPEC, window.TARGET_REFSPEC,
+			 window.PROFILE_REFHASH, window.TARGET_REFHASH);
+	    var warning;
+
+	    if (window.FROMREPO) {
+
+	    }
+	    else {
+		
+	    }
+	    
+	    if (set.version_uuid) {
+		if (set.version_uuid != uuid ||
+		    (fromrepo && set.repohash != window.PROFILE_REFHASH)) {
+		    console.info("foo");
+		}
+	    }
+
+	    if (warning) {
+		$('#ppalert').html("WARNING: " + warning);
+		$('#ppalert').removeClass("hidden");
+	    }
+	}
+	/*
+	 * Ditto for applying instance bindings to the wrong version.
+	 */
+	function CheckInstanceWarning(details)
+	{
+	    console.info("InstanceWarning: ", details,
+			 window.PROFILE_REFSPEC, window.TARGET_REFSPEC,
+			 window.PROFILE_REFHASH, window.TARGET_REFHASH);
+	    var warning;
+	    var url = "instantiate.php?profile=" + details.version_uuid +
+		"&rerun_instance=" + details.rerun_uuid;
+	    var link = "<a href='" + url + "'>here</a>";
+
+	    if (window.FROMREPO) {
+		if (details.reporef != window.TARGET_REFSPEC) {
+		    warning =
+			"The bindings applied from the instance are for "+
+			details.reporef + " instead of the current branch "+
+			window.TARGET_REFSPEC + ". ";
+		}
+		else if ((window.TARGET_REFHASH &&
+			  window.TARGET_REFHASH != details.repohash) ||
+			 (!window.TARGET_REFHASH &&
+			  window.PROFILE_REFHASH != details.repohash)) {
+		    warning =
+			"The bindings applied from the instance are for " +
+			"a different commit of " + details.reporef +
+			"(instead of the HEAD). ";
+		}
+	    }
+	    else if (details.version_uuid != uuid) {
+		warning =
+		    "The bindings applied from the instance are for version " +
+		    details.profile_version + " of the profile, which is not "+
+		    "the latest version. ";
+	    }
+	    if (warning) {
+		warning +=
+		    "This is typically okay, but might not be what you " +
+		    "intended. Click " + link + " to apply these bindings " +
+		    "to the latest version of the profile. ";
+		
+		$('#ppalert').html("WARNING: " + warning);
+		$('#ppalert').removeClass("hidden");
+	    }
+	}
+	
 	/*
 	 * Alert user when trying to apply a bound paramset to the wrong place
 	 */
@@ -3209,16 +3334,16 @@ $(function () {
 	/*
 	 * Ditto for applying instance bindings to wrong version.
 	 */
-	function InstanceWarning(set, instance_uuid)
+	function InstanceWarning(details)
 	{
-	    console.info("InstanceWarning: ", set, instance_uuid);
+	    console.info("InstanceWarning: ", details);
 	    
-	    var url = "instantiate.php?profile=" + set.version_uuid +
-		"&rerun_instance=" + instance_uuid;
+	    var url = "instantiate.php?profile=" + details.version_uuid +
+		"&rerun_instance=" + details.rerun_uuid;
 	    var link = "<a href='" + url + "'>here</a>";
 	    
 	    var warning = "The bindings applied from the instance are for a different ";
-	    if (set.version_uuid != uuid) {
+	    if (details.version_uuid != uuid) {
 		warning += "version of this profile. ";
 	    }
 	    else {
@@ -3271,17 +3396,7 @@ $(function () {
 		    event.preventDefault();
 		    ClearAlert();
 		    LoadBindings(set.bindings);
-		    /*
-		     * Warn user if the paramset is bound and being applied to
-		     * a different version (of the repo).
-		     */
-		    if (set.version_uuid) {
-			if (set.version_uuid != uuid ||
-			    (fromrepo && set.repohash !=
-			     window.PROFILE_REFHASH)) {
-			    ParamsetWarning(set);
-			}
-		    }
+		    CheckParamsetWarning(set);
 		});
 		$(menu).append(item);
 	    };
@@ -3704,15 +3819,17 @@ $(function () {
 		SetupPPButtons(json.value.hasactivity,
 			       json.value.paramsets, json.value.recents);
 		
-		if (args.rerun_instance !== undefined ||
-		    args.rerun_paramset !== undefined) {
-		    rerun_bindings = json.value.rerun_bindings;
+		InitializeForm(paramdefs);
+		if (args.rerun_instance !== undefined) {
+		    ApplyPreviousBindings(json.value.rerun_instance);
+		}
+		else if (args.rerun_paramset !== undefined) {
 		}
 		else {
 		    rerun_bindings = null;
+		    GenerateForm(null);
 		}
-		InitializeForm(paramdefs);
-		GenerateForm(null);
+		CheckNotLatest();
 		setStepsMotion(true);
 
 		if (args.rspec) {
@@ -3730,9 +3847,11 @@ $(function () {
 	    var blob = {"profile" : args.profile};
 	    if (args.rerun_instance !== undefined) {
 		blob["rerun_instance"] = args.rerun_instance;
+		rerun_instance = args.rerun_instance;
 	    }
 	    else if (args.rerun_paramset !== undefined) {
 		blob["rerun_paramset"] = args.rerun_paramset;
+		rerun_paramset = args.rerun_paramset;
 	    }
 	    //
 	    // XXX: Look for paramdefs/script in the form and pass that along.
