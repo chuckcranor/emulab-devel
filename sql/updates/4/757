@@ -1,0 +1,24 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (DBSlotType("users", "usr_shell") !~ /zsh/) {
+	DBQueryFatal("alter table users change usr_shell ".
+		     " `usr_shell` enum('tcsh','bash','sh','zsh') ".
+		     "   default 'bash'");
+    }
+    if (DBSlotType("nonlocal_user_accounts", "shell") !~ /zsh/) {
+	DBQueryFatal("alter table nonlocal_user_accounts change shell ".
+		     " `shell` enum('tcsh','bash','sh','zsh') ".
+		     "   default 'bash'");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

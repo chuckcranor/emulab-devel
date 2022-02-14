@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -146,7 +146,7 @@ function CheckForm()
     elseif (! TBvalid_shell($formfields["shell"])) {
         $errors["shell"] = TBFieldErrorString();
     }
-    elseif (!preg_match("/^(sh|bash|tcsh)$/", $formfields["shell"])) {
+    elseif (!preg_match("/^(sh|bash|tcsh|zsh)$/", $formfields["shell"])) {
         $errors["shell"] = "Invalid shell";
     }
     if ($ISPOWDER) {
