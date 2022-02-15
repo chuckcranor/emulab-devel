@@ -89,6 +89,12 @@ function HideWaitWait(continuation)
 function CallServerMethod(url, route, method, args, callback)
 {
   // Main body of function moved to common.js
+  return APT_OPTIONS.CallServerMethod(null, route, method, args, callback);
+}
+
+function CallServerMethodURL(url, route, method, args, callback)
+{
+  // Main body of function moved to common.js
   return APT_OPTIONS.CallServerMethod(url, route, method, args, callback);
 }
 
@@ -516,6 +522,7 @@ return {
     ShowWaitWait: ShowWaitWait,
     HideWaitWait: HideWaitWait,
     CallServerMethod: CallServerMethod,
+    CallServerMethodURL: CallServerMethodURL,
     DownloadOnClick: DownloadOnClick,
     ClearDownloadOnClick: ClearDownloadOnClick,
     maketopmap: maketopmap,

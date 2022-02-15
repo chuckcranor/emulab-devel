@@ -133,10 +133,12 @@ window.APT_OPTIONS.gaTabEvent = function (action, id)
 
 APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
 {
-    // ignore url now.
-    url = 'https://' + window.location.host + '/apt/server-ajax.php';
-    url = 'server-ajax.php';
-
+    if (url) {
+	url = url + '/apt/server-ajax.php';
+    }
+    else {
+	url = 'server-ajax.php';
+    }
     var networkError = {
 	"code"  : -1,
 	"value" : "Server error, possible network failure. Try again later.",
