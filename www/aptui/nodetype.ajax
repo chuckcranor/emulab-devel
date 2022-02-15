@@ -421,12 +421,6 @@ function Do_GetHardwareInfo()
                 SPITUSERERROR("$t contains illegal characters!");
                 return -1;
             }
-            $query_result =
-                DBQueryFatal("select type from node_types where type='$t'");
-            if (!mysql_num_rows($query_result)) {
-                SPITUSERERROR("No such node type $t");
-                return -1;
-            }
         }
     }
     elseif (CheckPageArgs(0)) {
@@ -438,8 +432,8 @@ function Do_GetHardwareInfo()
         foreach ($typelist as $t) {
             $blob = GetHardwareInfoForType($t);
             if (!$blob) {
-                SPITAJAX_ERROR(-1, "No hardware info available for $t");
-                return -1;
+                $blob = array("type"    => $t,
+                              "paths"   => null);
             }
             $result[$t] = $blob;
         }
@@ -453,6 +447,9 @@ function Do_GetHardwareInfo()
         }
         $result[$type] = $blob;
     }
+    # Allow this to be fetched from pages loaded anywhere
+    header("Access-Control-Allow-Origin: *");
+
     SPITAJAX_RESPONSE($result);
 }
 
