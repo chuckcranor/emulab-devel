@@ -67,7 +67,6 @@ my $timestamp;			# GM Time.
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $TBLOGS      = "@TBLOGSEMAIL@";
-my $PROJROOT    = "@PROJROOT_DIR@";
 
 #
 # Load the Testbed support stuff. 
@@ -167,7 +166,7 @@ if (!defined($project)) {
 }
 $project->UpdateExports(1) == 0 or
     fatal("Could not export project directory");
-emutil::waitForMount($PROJROOT . "/" . $project->pid()) == 0 or
+$project->WaitForMount() == 0 or
     fatal("Timed out waiting for project mount");
 
 if (my $retval = VerifyImage()) {

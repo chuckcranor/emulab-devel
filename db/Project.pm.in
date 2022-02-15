@@ -51,6 +51,7 @@ my $TBAUDIT	= "@TBAUDITEMAIL@";
 my $TBBASE      = "@TBBASE@";
 my $TBWWW       = "@TBWWW@";
 my $OURDOMAIN   = "@OURDOMAIN@";
+my $PROJROOT    = "@PROJROOT_DIR@";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $WIKISUPPORT = @WIKISUPPORT@;
 my $WITHZFS     = @WITHZFS@;
@@ -1080,6 +1081,15 @@ sub UpdateExports($;$)
 	}
     }
     return 0;
+}
+# Helper for after using above.
+sub WaitForMount($)
+{
+    my ($self) = @_;
+    my $pid  = $self->pid();
+    my $path = "$PROJROOT/$pid";
+
+    return emutil::waitForMount($path);
 }
 
 #

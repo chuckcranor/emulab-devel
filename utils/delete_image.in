@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -93,6 +93,7 @@ use EmulabFeatures;
 use libEmulab;
 use libtestbed;
 use User;
+use emutil;
 use OSImage;
 if ($PGENISUPPORT) {
     use vars qw($GENI_DBNAME);
@@ -142,6 +143,18 @@ my $image = OSImage->Lookup($imageid);
 if (!defined($image)) {
     fatal("Image does not exist in the DB!");
 }
+#
+# If the local project has not been active in a while, it might not
+# be exported from ops. Need to bump activity and export.
+#
+my $project = $image->GetProject();
+if (!defined($project)) {
+    fatal("Project for $image does not exist!\n");
+}
+$project->UpdateExports() == 0 or
+    fatal("Could not export project directory");
+$project->WaitForMount() == 0 or
+    fatal("Timed out waiting for project mount");
 
 #
 # See if we should use libimageops instead.  Eventually it will be
