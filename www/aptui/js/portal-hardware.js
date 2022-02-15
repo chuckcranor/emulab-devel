@@ -1,6 +1,8 @@
 $(function ()
 {
     'use strict';
+    var amlist;
+    
     var URL = "https://docs.google.com/spreadsheets/d/" +
 	"1G212F80SZvu2yLzUkoeMpLIFmWnmpw7qRECNlqTqsQs/export?format=csv";
     var ignore = [
@@ -8,6 +10,7 @@ $(function ()
 	"Control network speed",
 	"Notes",
 	"Processor Link",
+	"URN",
     ];
     var typeLinks = {
 	"Emulab" : "https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/Utah%20Cluster",
@@ -24,13 +27,16 @@ $(function ()
     {
 	window.APT_OPTIONS.initialize(sup);
 
+	amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	console.info("amlist", amlist);
+	
 	$.ajax({
 	    type: "GET",  
 	    url: URL,
 	    dataType: "text",       
 	    success: function(response)  
 	    {
-		console.info(response);
+		//console.info(response);
 		/*
 		 * First line is Mike's column grouping. Cut that out,
 		 * and process it later.
@@ -54,11 +60,16 @@ $(function ()
 		return;
 	    }
 	    html += "<th>" + key + "</th>";
+	    if (key == "Circa") {
+		html += "<th>lshw</th>";
+	    }
 	});
 	html += "</tr>";
 	$('#portal-hardware-table thead').append(html);
 
 	_.each(data, function (row) {
+	    console.info(row);
+	    var hwtype;
 	    var html = "<tr>";
 	    _.each(row, function (val, key) {
 		if (_.contains(ignore, key)) {
@@ -71,6 +82,7 @@ $(function ()
 		    var link    = typeLinks[cluster];
 			
 		    html += "<a href='" + link + "'>" + val + "</a>";
+		    hwtype = val;
 		}
 		else if (key == "Processor type") {
 		    var link = row["Processor Link"];
@@ -81,7 +93,19 @@ $(function ()
 		else {
 		    html += val;
 		}
-		html += "</td>";		
+		html += "</td>";
+		
+		if (key == "Circa") {
+		    var urn = row["URN"];
+		    var url = amlist[urn].url +
+			"/portal/show-hardware.php?type=" + hwtype;
+		    var link = "<a href='" + url + "' target=_blank>" +
+			"<span class='glyphicon glyphicon-link'></span></a>";
+
+		    html += "<td class='text-nowrap'>";
+		    html += link;
+		    html += "</td>";
+		}
 	    });
 	    html += "</tr>";
 	    $('#portal-hardware-table tbody').append(html);

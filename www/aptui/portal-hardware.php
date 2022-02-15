@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,7 +42,7 @@ echo "<div id='main-body'>
     <table id='portal-hardware-table' class='tablesorter hidden'>
       <thead>
        <tr>
-        <th class='sorter-false' colspan=4></th>
+        <th class='sorter-false' colspan=5></th>
         <th class='sorter-false text-center' colspan=6>CPU</th>
         <th class='sorter-false'></th>
         <th class='sorter-false text-center' colspan=4>Storage</th>
@@ -56,6 +56,23 @@ echo "<div id='main-body'>
   </div>
  </div>
 </div>";
+
+$all = Aggregate::AllAggregatesList();
+$amlist  = array();
+while (list($index, $aggregate) = each($all)) {
+    $urn = $aggregate->urn();
+    $am  = $aggregate->name();
+    $url = $aggregate->weburl();
+
+    $amlist[$urn] = array(
+        "urn"   => $urn,
+        "url"   => $url,
+        "name"  => $am,
+    );
+}
+echo "<script type='text/plain' id='amlist-json'>\n";
+echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
+echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
