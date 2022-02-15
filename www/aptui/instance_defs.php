@@ -877,6 +877,9 @@ class Instance
                            "mmimotmp1" => true,
                            "iris03"    => true,
                            "iris04"    => true,
+                           "iris030"   => true,
+                           "n300"      => true,
+                           "nuvo7501"  => true,
         );
 
         #
@@ -887,8 +890,6 @@ class Instance
         if ($TBMAINSITE && 
             !($ISPOWDER || $ISPNET) &&
             ($all || $aggregate_urn == $DEFAULT_AGGREGATE_URN)) {
-            $skiptypes["nuc5300"]  = true;
-            $skiptypes["iris030"]  = true;
             $skiptypes["d840"]     = true;
             $skiptypes["d740"]     = true;
             #
