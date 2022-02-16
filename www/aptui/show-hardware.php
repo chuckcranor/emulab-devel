@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,7 @@ include("defs.php3");
 include("node_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
+include_once("instance_defs.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 $page_title = "Show Hardware";
 
@@ -44,6 +45,7 @@ if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
 #
 $reqargs = OptionalPageArguments("type",     PAGEARG_STRING,
                                  "typelist", PAGEARG_STRING,
+                                 "clusters", PAGEARG_STRING,
                                  "node",     PAGEARG_NODE);
 
 if (isset($type)) {
@@ -67,6 +69,9 @@ elseif (isset($typelist)) {
             SPITUSERERROR("No such node type $t");
         }
     }
+}
+elseif (isset($clusters)) {
+    # The argurment does not matter at the moment.
 }
 elseif (!isset($node)) {
     SPITUSERERROR("Must provide a node type or node ID");
@@ -92,10 +97,46 @@ if (isset($node)) {
 elseif (isset($typelist)) {
     echo "    window.TYPELIST  = '$typelist';\n";
 }
+elseif (isset($clusters)) {
+    echo "    window.AMLIST    = '$clusters';\n";
+}
 else {
     echo "    window.TYPE      = '$type';\n";
 }
 echo "</script>\n";
+
+if (isset($clusters)) {
+    $all = Aggregate::DefaultAggregateList();
+    $skiptypes = Instance::NodeTypePruneList();
+    $amlist  = array();
+    while (list($index, $aggregate) = each($all)) {
+        $urn = $aggregate->urn();
+        $am  = $aggregate->name();
+        $url = $aggregate->weburl();
+
+        #
+        # This is awful.
+        #
+        $types = array();
+        foreach ($aggregate->TypeList() as $type) {
+            if (!array_key_exists($type, $skiptypes)) {
+                $types[$type] = $type;
+            }
+        }
+        if (!count($types)) {
+            continue;
+        }
+        $amlist[$urn] = array(
+            "urn"   => $urn,
+            "url"   => $url,
+            "name"  => $am,
+            "types" => $types,
+        );
+    }
+    echo "<script type='text/plain' id='amlist-json'>\n";
+    echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+}
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

@@ -6,7 +6,6 @@ $(function ()
 						   'oops-modal',
 						   'waitwait-modal']);
     var mainTemplate = _.template(templates['show-hardware']);
-    var rootid;
     
     function initialize()
     {
@@ -25,32 +24,32 @@ $(function ()
 	$('#oops_div').html(templates['oops-modal']);
 	$('#waitwait_div').html(templates['waitwait-modal']);
 
-	if (window.TYPE !== undefined) {
+	if (window.AMLIST !== undefined) {
+	    text  = "Clusters";
+	    title = title + "all clusters";
+	}
+	else if (window.TYPE !== undefined) {
 	    route = "nodetype";
 	    args  = {"type" : window.TYPE};
 	    text  = window.TYPE;
 	    title = title + "type " + window.TYPE;
-	    id    = window.TYPE;
 	}
 	else if (window.NODEID !== undefined) {
 	    route = "node";
 	    args  = {"node_id" : window.NODEID};
 	    text  = window.NODEID;
 	    title = title + "node " + window.NODEID;
-	    id    = window.NODEID;
 	}
 	else {
 	    route = "nodetype";
 	    args  = {"typelist" : window.TYPELIST};
 	    text  = "Types";
 	    title = title + "typelist " + window.TYPELIST;
-	    id    = "root";
 	}
 	$('.panel-title').html(title);
-	rootid = id;
 	
 	var root = {
-	    "id"         : id,
+	    "id"         : "root",
 	    "text"       : text,
 	    "children"   : [],
 	    "properties" : {},
@@ -61,6 +60,9 @@ $(function ()
 		"selected"  : false,  // is the node selected
 	    },
 	};
+	if (window.AMLIST !== undefined) {
+	    return GenerateClusters(root);
+	}
 	sup.CallServerMethod(null, route, "GetHardwareInfo", args,
 			     function(json) {
 				 console.info("info", json);
@@ -69,8 +71,64 @@ $(function ()
 					   "from server: " + json.value);
 				     return;
 				 }
-				 GenerateJStree(root, json.value);
+				 var stuff = json.value;
+
+				 if (_.size(stuff) == 1) {
+				     var name    = Object.keys(stuff)[0];
+				     var details = stuff[name];
+				     GenerateOne(root, name, details);
+				 }
+				 else {
+				     GenerateList(root, stuff);
+				 }
+				 GenerateJStree(root);
 			     });
+    }
+
+    /*
+     * Generate for all clusters in amlist.
+     */
+    function GenerateClusters(root)
+    {
+	var promises = [];
+	var amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	console.info("amlist", amlist);
+	
+	_.each(amlist, function(details, urn) {
+	    var url   = details.url;
+	    var types = details.types;
+	    var name  = details.name;
+	    var args  = {
+		"typelist" : Object.keys(types).join(",")
+	    };
+
+	    var callback = function (json) {
+		console.info(urn, json);
+		
+		if (json.code) {
+		    console.info("Could not get hardware info " +
+				 "from server: " + json.value);
+		    return;
+		}
+		var top = {
+		    "id"         : urn,
+		    "text"       : name,
+		    "children"   : [],
+		    "properties" : {},
+		    "values"     : [],
+		};
+		GenerateList(top, json.value);
+		root.children.push(top);
+	    };
+	    var promise = sup.CallServerMethodURL(url, "nodetype",
+						  "GetHardwareInfo", args,
+						  callback);
+	    promises.push(promise);
+	});
+	$.when.apply($, promises).then(function () {
+	    console.info("promises delivered");
+	    GenerateJStree(root)
+	});
     }
 
     /*
@@ -122,52 +180,54 @@ $(function ()
 	    }
 	}
 	console.info(root);
-    }    
+    }
+
+    /*
+     * Generate one type or node
+     */
+    function GenerateOne(root, name, details)
+    {
+	/*
+	 * We add the updated time and uname
+	 */
+	details.paths["/updated"] = moment(details.updated).format("lll");
+	if (details.uname) {
+	    details.paths["/uname"]   = details.uname;
+	}
+	GenerateJson(root, details.paths, name);
+	// We need the path keys below for search, so save for later.
+	details.pathkeys = Object.keys(details.paths);
+    }
+
+    /*
+     * Generate a list
+     */
+    function GenerateList(root, list)
+    {
+	_.each(list, function (details, name) {
+	    // Watch for no data.
+	    if (details.paths == null) {
+		return;
+	    }
+	    var top = {
+		"id"         : name,
+		"text"       : name,
+		"children"   : [],
+		"properties" : {},
+		"values"     : [],
+	    };
+	    root.children.push(top);
+	    GenerateOne(top, name, details);	
+	});
+    }
 
     /*
      * Generate the jstree.
      */
-    function GenerateJStree(root, stuff)
+    function GenerateJStree(root)
     {
-	if (_.size(stuff) == 1) {
-	    var name    = Object.keys(stuff)[0];
-	    var details = stuff[name];
-
-	    /*
-	     * We add the updated time and uname
-	     */
-	    details.paths["/updated"] = moment(details.updated).format("lll");
-	    if (details.uname) {
-		details.paths["/uname"]   = details.uname;
-	    }
-	    GenerateJson(root, details.paths, name);
-	    // We need the path keys below for search, so save for later.
-	    details.pathkeys = Object.keys(details.paths);
-	}
-	else {
-	    _.each(stuff, function (details, name) {
-		var top = {
-		    "id"         : name,
-		    "text"       : name,
-		    "children"   : [],
-		    "properties" : {},
-		    "values"     : [],
-		};
-		/*
-		 * We add the updated time and uname
-		 */
-		details.paths["/updated"] =
-		    moment(details.updated).format("lll");
-		if (details.uname) {
-		    details.paths["/uname"]   = details.uname;
-		}
-		GenerateJson(top, details.paths, name);
-		root.children.push(top);
-		// We need the path keys below for search, so save for later.
-		details.pathkeys = Object.keys(details.paths);
-	    });
-	}
-
+	var rootid = root.id;
+	
 	$('#tree').jstree({
 	    'core' : {
 		'data' : [ root ],
@@ -212,7 +272,7 @@ $(function ()
 	    $('#tree').jstree(true).select_node(rootid);
 	}, 150);
 
-	// Search boxe
+	// Search box
 	var timer = false;
 	$('#hardware-search').keyup(function () {
 	    if (timer) {
@@ -221,7 +281,7 @@ $(function ()
 	    timer = setTimeout(function () {
 		var v = $('#hardware-search').val();
 		$('#tree').jstree(true).search(v);
-	    }, 250);
+	    }, 500);
 	});
 
 	// Expand All button.
