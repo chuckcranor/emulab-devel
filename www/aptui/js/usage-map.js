@@ -46,12 +46,14 @@ $(function ()
 	    projection = 
 		d3.geoAlbersUsa()
 		.translate([width/2, height/2]) // translate to center of screen
-		.scale([1000]);		  // scale things down so see entire US
+		.scale([height * 2]);	  // scale things down so see entire US
 	}
 	else {
+	    height = height - 10;
+	    
 	    projection =
 		d3.geoNaturalEarth1()
-		.scale(width / 1.7 / Math.PI)
+		.scale(width / 1.6 / Math.PI)
 		.center([0, 10])
 		.translate([width / 2, height / 2]);
 	}
