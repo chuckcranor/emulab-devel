@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1502,16 +1502,18 @@ sub ActionStart($$;$)
     }
     
     my @nodes = keys(%nodes);
-    my $rval  = 0;
+    my $os_setup_rval  = 0;
+    my $os_setup_output;
     if (@nodes) {
 	print STDERR "Calling os_setup @nodes\n";
-	$rval = system("$OSSETUP $pid $eid @nodes");
-	print STDERR "os_setup exited with status $rval\n";
+	$os_setup_output = emutil::ExecVerbose("$OSSETUP $pid $eid @nodes");
+	$os_setup_rval = $?;
+	print STDERR "os_setup exited with status $os_setup_rval\n";
 	# Update to get the disk images into the manifest.
 	GeniCM::UpdateManifest($slice);
-	$rval = $rval >> 8;
-	if ($rval == 255) {
-	    $rval = -1;
+	$os_setup_rval = $os_setup_rval >> 8;
+	if ($os_setup_rval == 255) {
+	    $os_setup_rval = -1;
 	}
     }
 
@@ -1624,11 +1626,26 @@ sub ActionStart($$;$)
 	    goto bad;
 	}
     }
-    if ($rval < 0) {
+    if ($os_setup_rval < 0) {
 	# More serious error. Otherwise if its just that some nodes
 	# failed, we will catch that below.
 	$bootfailure_code = GENIRESPONSE_SETUPFAILURE_OSSETUP();
 	$msg .= "Unable to OS setup nodes\n";
+	#
+	# See if we can find some useful info in the output.
+	#
+	if ($os_setup_output) {
+	    my $oserr = "";
+	    
+	    foreach my $l (split(/\n/, $os_setup_output)) {
+		if ($l =~ /^\s*\*\*\*/) {
+		    $oserr .= $l . "\n";
+		}
+	    }
+	    if ($oserr ne "") {
+		$msg .= "\n" . $oserr;
+	    }
+	}
 	goto bad;
     }
 

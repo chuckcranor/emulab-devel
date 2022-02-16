@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,6 +57,7 @@ my $NODEREBOOT  = "$TB/bin/node_reboot";
 my $POWER       = "$TB/bin/power";
 my $VNODESETUP  = "$TB/sbin/vnode_setup";
 my $ELABINELAB  = "$TB/sbin/elabinelab";
+my $IMAGEINFO   = "$TB/sbin/imageinfo";
 my $TBADB       = "$TB/bin/tbadb";
 
 # Setup Operation Flags
@@ -105,6 +106,7 @@ sub New($$$@)
     $self->{'FAILED'}     = {};
     $self->{'FAILCOUNT'}  = 0;
     $self->{'OSMAP'}      = {};
+    $self->{'OSVERIFIED'} = {};
     $self->{'TYPECACHE'}  = {};
     $self->{'CLASSCACHE'} = {};
     $self->{'OPLIST'}     = {};
@@ -241,6 +243,21 @@ sub SetupReload($$$$)
     }
 
     if ((my $image = $osimage->MapToImage($type))) {
+	#
+	# We do not appear to cache images. Need to investigate that.
+	#
+	if (!exists($self->{'OSVERIFIED'}->{$image->versid()})) {
+	    system("$IMAGEINFO -e " . $image->versid());
+	    if ($?) {
+		die_noretry({type => 'primary', severity => SEV_ERROR,
+			     error => ['file_not_found', 'image',
+				       $osimage, $node]},
+			    "Image file for image " . $image->versname() . " ".
+			    "on $node ($type) does not exist");
+	    }
+	    $self->{'OSVERIFIED'}->{$image->versid()} = 1;
+	}
+	
 	#
 	# We support aux image loading, but have to distingush between a boot
 	# load and an aux load, since an aux load should not change what is
