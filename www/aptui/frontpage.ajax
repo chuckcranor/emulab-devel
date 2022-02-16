@@ -179,7 +179,7 @@ function Do_GetPowderStats()
 function Do_GetPaperList()
 {
     global $PORTAL_GENESIS;
-    $blob = array();
+    $result = array();
 
     # Allow this to be fetched from pages loaded anywhere
     header("Access-Control-Allow-Origin: *");
@@ -192,7 +192,15 @@ function Do_GetPaperList()
     while ($row = mysql_fetch_array($query_result)) {
         $blob[] = $row;
     }
-    SPITAJAX_RESPONSE($blob);
+
+    $query_result =
+        DBQueryFatal("select count(*) from scopus_paper_info as p ".
+                     "where p.cites='$PORTAL_GENESIS' and p.uses='yes'");
+    $row = mysql_fetch_array($query_result);
+    
+    $result["papers"] = $blob;
+    $result["uses"] = $row[0];
+    SPITAJAX_RESPONSE($result);
 }
 
 # Local Variables:
