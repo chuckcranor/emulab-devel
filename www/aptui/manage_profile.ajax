@@ -1164,11 +1164,13 @@ function Do_CheckForm($formfields, $paramdefs, &$rval)
         elseif ($type == "struct") {
             if ($mvalue) {
                 // Array of dicts.
-                foreach ($binding["value"] as &$B) {
-                    foreach ($B["value"] as $paramname => &$BB) {
-                        $definition = $def["parameters"][$paramname];
+                if ($binding["value"]) {
+                    foreach ($binding["value"] as &$B) {
+                        foreach ($B["value"] as $paramname => &$BB) {
+                            $definition = $def["parameters"][$paramname];
                     
-                        CheckBinding($definition, $BB, $errors);
+                            CheckBinding($definition, $BB, $errors);
+                        }
                     }
                 }
             }
