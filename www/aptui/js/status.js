@@ -2210,7 +2210,13 @@ $(function ()
 		    var html   = "<a href='" + weburl + "' target=_blank>" +
 			node_id + "</a>";
 		    clone.find(" [name=node_id]").html(html);
-		    clone.find(" [name=type]").html(hwtype);
+
+		    // Ditto for the node type.
+		    weburl = amlist[aggregate_urn].weburl +
+			"/portal/show-nodetype.php?type=" + hwtype;
+		    html   = "<a href='" + weburl + "' target=_blank>" +
+			hwtype + "</a>";
+		    clone.find(" [name=type]").html(html);
 		    clientid2nodeid[node] = node_id;
 
 		    // Append to the CONFIRM button URL.
