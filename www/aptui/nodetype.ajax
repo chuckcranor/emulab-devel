@@ -447,8 +447,11 @@ function Do_GetHardwareInfo()
         }
         $result[$type] = $blob;
     }
-    # Allow this to be fetched from pages loaded anywhere
-    header("Access-Control-Allow-Origin: *");
+    # We add a CORS header in httpd-www.conf on the Mothership.
+    if (!$TBMAINSITE) {
+        # Allow this to be fetched from pages loaded anywhere
+        header("Access-Control-Allow-Origin: *");
+    }
 
     SPITAJAX_RESPONSE($result);
 }
