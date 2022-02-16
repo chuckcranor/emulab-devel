@@ -3346,9 +3346,13 @@ sub RSpecNodeFragment($$$$)
 	if (!defined($protonode));
 
     #
-    # Now update with stuff from the protonode.
+    # Now update with stuff from the protonode. We have to change its
+    # namespace so that the following code works right. Have to set it
+    # back after (which I neglected to do originally), but when I tried
+    # it did not seem to do the right thing. I probably do not grok
+    # something about namespaces. So ... just clone it.
     #
-    # So that the following code works right.
+    $protonode = $protonode->cloneNode(1);
     $protonode->setNamespace("http://www.geni.net/resources/rspec/3");
     #print "$protonode\n";
 
