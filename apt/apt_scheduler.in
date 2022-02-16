@@ -156,7 +156,11 @@ while (1) {
 
     my $query_result =
 	DBQueryWarn("select d.uuid from apt_deferred_instances as d ".
-		    "where (d.start_at is null or now() >= d.start_at) ");
+		    "left join apt_instances as i on i.uuid=d.uuid ".
+		    "where i.canceled=0 and ".
+		    "      (d.start_at is null or ".
+		    "       (now() >= d.start_at and ".
+		    "        (i.stop_at is null or now() < i.stop_at)))");
     
     if ($query_result && $query_result->numrows) {
 	while (my ($uuid) = $query_result->fetchrow_array()) {
