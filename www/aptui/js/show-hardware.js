@@ -59,6 +59,7 @@ $(function ()
 		"disabled"  : false,  // is the node disabled
 		"selected"  : false,  // is the node selected
 	    },
+	    "pretag" : "",
 	};
 	if (window.AMLIST !== undefined) {
 	    return GenerateClusters(root);
@@ -91,7 +92,8 @@ $(function ()
     function GenerateClusters(root)
     {
 	var promises = [];
-	var amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	var amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	var counter  = 0;
 	console.info("amlist", amlist);
 	
 	_.each(amlist, function(details, urn) {
@@ -116,6 +118,7 @@ $(function ()
 		    "children"   : [],
 		    "properties" : {},
 		    "values"     : [],
+		    "pretag"     : counter++,
 		};
 		GenerateList(top, json.value);
 		root.children.push(top);
@@ -128,6 +131,7 @@ $(function ()
 	$.when.apply($, promises).then(function () {
 	    console.info("promises delivered");
 	    GenerateJStree(root)
+	    console.info(root);
 	});
     }
 
@@ -168,7 +172,7 @@ $(function ()
 		}
 		if (!next) {
 		    next = {
-			"id"         : id,
+			"id"         : root.pretag + "-" + id,
 			"text"       : token,
 			"children"   : [],
 			"properties" : {},
@@ -210,11 +214,12 @@ $(function ()
 		return;
 	    }
 	    var top = {
-		"id"         : name,
+		"id"         : root.pretag + "-" + name,
 		"text"       : name,
 		"children"   : [],
 		"properties" : {},
 		"values"     : [],
+		"pretag"     : root.pretag,
 	    };
 	    root.children.push(top);
 	    GenerateOne(top, name, details);	
