@@ -37,10 +37,27 @@ $(function ()
     // Helper function, can existing reservation be added to.
     function canEnlarge()
     {
-	if (isadmin || !editing || !resgroup.active) {
-	    return 1
+	if (isadmin || !editing) {
+	    return 1;
 	}
-	return 0;
+	if (editing) {
+	    var now   = moment();
+	    var start = moment(resgroup.start);
+
+	    // Once start time has past, no editing allowed.
+	    if (now > start) {
+		console.info("Start time has past, no mods allowed");
+		return 0;
+	    }
+	    // Ug, not started yet, but subject to next business day rule.
+	    var nextbusinessday = NextBusinessDay();
+	    if (start < nextbusinessday) {
+		console.info("Start is before the next business day",
+			     nextbusinessday)
+		return 0;
+	    }
+	}
+	return 1;
     }
 
     var RouteColors = {
@@ -1214,6 +1231,7 @@ $(function ()
 	now.local();
 	return now;
     }
+    window.NextBusinessDay = NextBusinessDay;
 
     /*
      * Mark a cluster field with an error.
@@ -1632,9 +1650,15 @@ $(function ()
 	 */
 	$('#route-table tbody').each(function () {
 	    var tbody   = $(this);
-	    var name    = tbody.find(".routename option:selected").val();
 	    var uuid    = tbody.data("uuid");
+	    var name;
 
+	    if (tbody.hasClass("new-route")) {
+		name = tbody.find(".routename option:selected").val();
+	    }
+	    else {
+		name = tbody.find(".routename").val();
+	    }
 	    console.info(tbody, name, uuid);
 
 	    // Skip an empty row
