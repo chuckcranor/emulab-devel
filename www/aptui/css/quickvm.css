@@ -665,3 +665,24 @@ a.disabled, a[disabled] {
     opacity: .65;
     pointer-events: none;
 }
+
+.aligned-title-buttons {
+    margin: 0;
+    padding: 0;
+}
+.aligned-title-buttons > .left-edge {
+    display: inline-block;
+    width: 20.0%;
+    text-align: left;
+}
+.aligned-title-buttons > .middle {
+    display: inline-block;
+    width: 59.0%;
+    text-align: center;
+}
+.aligned-title-buttons > .right-edge {
+    display: inline-block;
+    width: 20.0%;
+    text-align: right;
+}
+

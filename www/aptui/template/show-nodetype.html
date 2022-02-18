@@ -7,51 +7,53 @@
  }
 </style>
 
-<div class='col-sm-10 col-sm-offset-1'>
+<div class='col-sm-12'>
   <div class='panel panel-default'>
-    <div class='panel-heading text-center'>
-      <% if (isadmin) { %>
- 	<% if (window.ISEMULAB) { %>
-	  <% if (window.EDITING) { %>
-	    <a href="../editnodetype.php3?node_type=<%= window.TYPE %>&classic=1"
-	       class='btn btn-primary btn-xs pull-right'
+    <div class='panel-heading'>
+      <div class="aligned-title-buttons">
+	<span class="left-edge">
+	  <% if (window.HASHWINFO) { %>
+	    <a href="show-hardware.php?type=<%= window.TYPE %>"
+	       class='btn btn-info btn-xs'
                style='margin-right: 10px; margin-top: -4px;'
 	       data-toggle='tooltip'
-	       title="Classic edit type page"
-               type='button'>Classic</a>
-	  <% } else { %>
-	    <a href="../shownodetype.php3?node_type=<%= window.TYPE %>&classic=1"
-	       class='btn btn-primary btn-xs pull-right'
-               style='margin-right: 10px; margin-top: -4px;'
-	       data-toggle='tooltip'
-	       title="Classic show type page"
-               type='button'>Classic</a>
+	       title="Detailed hardware info from lshw"
+               type='button'>Hardware Details</a>
 	  <% } %>
-	<% } %>
-	<button class='btn btn-danger btn-xs pull-right hidden'
-                id='type-delete-button'
-                style='margin-right: 10px; margin-top: -4px;'
-		data-toggle='modal'
-		data-target='#confirm-type-delete-modal'
-		data-tooltip="Delete this type"
-                type='button' name='delete'>Delete
-	</button>
-	<% if (!window.EDITING) { %>
-	  <a href="show-nodetype.php?type=<%= window.TYPE %>&edit=1"
-	     class='btn btn-primary btn-xs pull-right'
-             style='margin-right: 10px; margin-top: -4px;'
-             type='button'>Edit</a>
-	<% } %>
-      <% } %>
-      <% if (window.HASHWINFO) { %>
-	<a href="show-hardware.php?type=<%= window.TYPE %>"
-	   class='btn btn-info btn-xs pull-right'
-           style='margin-right: 10px; margin-top: -4px;'
-	   data-toggle='tooltip'
-	   title="Detailed hardware info"
-           type='button'>Hardware</a>
-      <% } %>
-      <h3 class='panel-title'>Type info for <%- window.TYPE %></h3>
+	</span>
+	<span class="middle">
+	  <h3 class='panel-title'>Type info for <%- window.TYPE %></h3>
+	</span>
+	<span class="right-edge">
+	  <% if (isadmin) { %>
+ 	    <% if (window.ISEMULAB) { %>
+	      <% if (window.EDITING) { %>
+		<a href="../editnodetype.php3?node_type=<%= window.TYPE %>&classic=1"
+		   class='btn btn-primary btn-xs'
+		   style='margin-left: 10px; margin-top: -4px;'
+		   data-toggle='tooltip'
+		   title="Classic edit type page"
+		   type='button'>Classic</a>
+	      <% } else { %>
+		<a href="../shownodetypea.php3?node_type=<%= window.TYPE %>&classic=1"
+		   class='btn btn-primary btn-xs'
+		   style='margin-left: 10px; margin-top: -4px;'
+		   data-toggle='tooltip'
+		   title="Classic show type page"
+		   type='button'>Classic</a>
+	      <% } %>
+	    <% } %>
+	    <button class='btn btn-danger btn-xs hidden'
+                    id='type-delete-button'
+                    style='margin-left: 10px; margin-top: -4px;'
+		    data-toggle='modal'
+		    data-target='#confirm-type-delete-modal'
+		    data-tooltip="Delete this type"
+                    type='button' name='delete'>Delete
+	    </button>
+	  <% } %>
+	</span>
+      </div>
     </div>
     <div class='panel-body' style="padding-top: 10px;">
       <div class='row'>
