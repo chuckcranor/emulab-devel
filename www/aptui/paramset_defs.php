@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,7 +72,7 @@ class Paramset
         if ($this->profile) {
             return $this->profile;
         }
-        $this->profile = Profile::Lookup($this->profileid);
+        $this->profile = Profile::Lookup($this->profileid());
         return $this->profile;
     }
     # Project of paramset
@@ -89,6 +89,13 @@ class Paramset
     }
     function IsBound() {
 	return $this->version_uuid() ? 1 : 0;
+    }
+    # Bound version of the Profile.
+    function BoundProfile() {
+        if ($this->version_uuid()) {
+            return Profile::Lookup($this->version_uuid());
+        }
+        return null;
     }
 
     # Hmm, how does one cause an error in a php constructor?

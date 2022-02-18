@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -420,6 +420,27 @@ class Profile
 	$row = mysql_fetch_row($query_result);
 	return ($this->version() == $row[0] ? 1 : 0);
     }
+
+    #
+    # Get the highest numbered profile
+    #
+    function HeadProfile()
+    {
+	$profileid = $this->profileid();
+
+	$query_result =
+	    DBQueryWarn("select max(version) from apt_profile_versions ".
+			"where profileid='$profileid' and deleted is null");
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    return -1;
+	}
+	$row = mysql_fetch_row($query_result);
+        if ($this->version() == $row[0]) {
+            return $this;
+        }
+        return Profile::Lookup($profileid, $row[0]);
+    }
+    
     #
     # Does this profile have more then one version (history).
     # 
@@ -935,6 +956,27 @@ class Profile
             "owner"  => $owner,
             "global" => $global,
         );
+    }
+
+    #
+    # Helper to run git commands.
+    #
+    function GitRepoCommand($user, $command, $args)
+    {
+        $reponame   = $this->reponame();
+        $webtask    = WebTask::CreateAnonymous();
+        $webtask_id = $webtask->task_id();
+        $command    = "webmanage_gitrepo -t $webtask_id $command ".
+                    "-n $reponame $args";
+                    
+        $retval = SUEXEC($user, "tbadmin", $command, SUEXEC_ACTION_CONTINUE);
+        if ($retval) {
+            $webtask->Delete();
+            return null;
+        }
+        $webtask->Refresh();
+        # User must delete this.
+        return $webtask;
     }
 
     #
