@@ -75,6 +75,12 @@
 	      <td class='border-none format-date'><%- record.start_at %></td>
 	    </tr>
 	  <% } %>
+	  <% if (record.stop_at) { %>
+	    <tr>
+	      <td class='border-none'>Stop:</td>
+	      <td class='border-none format-date'><%- record.stop_at %></td>
+	    </tr>
+	  <% } %>
 	  <tr>
 	    <td class='border-none'>Started:</td>
 	    <td class='border-none format-date'><%- record.started %></td>
