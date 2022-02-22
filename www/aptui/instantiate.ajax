@@ -190,7 +190,17 @@ function Do_GetParameters()
             $webtask->Delete();
             return;
         }
-        $blob["rerun_bindings"] = $webtask->TaskValue("bindings");
+        # This matches what is returned below in Do_GetPreviousBindings
+        $blob["rerun_instance"] = array(
+            "bindings" => $webtask->TaskValue("bindings"),
+            # This is the version uuid of the instantiated experiment.
+            "version_uuid" => $profile->uuid(),
+            "repohash" => $record->repohash(),
+            "reporef" => $record->reporef(),
+            "profile_version" => $record->profile_version(),
+            # And since it might be for last instance, return that.
+            "rerun_uuid" => $rerun_uuid,
+        );
         $webtask->Delete();
     }
     elseif (isset($ajax_args["rerun_paramset"])) {
@@ -209,7 +219,7 @@ function Do_GetParameters()
             SPITAJAX_ERROR(1, "Not enough permission to use parameter set");
             return;
         }
-        $blob["rerun_bindings"] = json_decode($paramset->bindings());
+        $blob["rerun_paramset"] = $paramset->Blob($this_user);
     }
     SPITAJAX_RESPONSE($blob);
 }
@@ -333,6 +343,7 @@ function Do_GetPreviousBindings()
         "version_uuid" => $profile->uuid(),
         "repohash" => $instance->repohash(),
         "reporef" => $instance->reporef(),
+        "profile_version" => $instance->profile_version(),
         # And since it might be for last instance, return that.
         "rerun_uuid" => $rerun_uuid,
     );

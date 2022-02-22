@@ -32,7 +32,6 @@ $(function ()
     var showpicker    = 0;
     var restrictions  = null;
     var portal        = null;
-    var fromrepo      = false;
     var registered    = false;
     var JACKS_NS      = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
     var jacks = {
@@ -106,7 +105,6 @@ $(function ()
 	multisite  = window.MULTISITE;
 	portal     = window.PORTAL;
 	ajaxurl    = window.AJAXURL;
-	fromrepo   = window.FROMREPO;
 	doconstraints = window.DOCONSTRAINTS;
 	showpicker    = window.SHOWPICKER;
 
@@ -196,7 +194,7 @@ $(function ()
 	    profileuuid:        window.PROFILEUUID,     
 	    profilevers:        window.PROFILEVERS,     
 	    showpicker:         showpicker,
-	    fromrepo:           fromrepo,
+	    fromrepo:           window.FROMREPO,
 	    clustername:        window.PORTAL_NAME,
 	    admin:		isadmin,
 	    maxduration:        window.MAXDURATION,
@@ -585,7 +583,7 @@ $(function ()
 		        multisite    : multisite,
 			amlist       : amlist,
 			prunetypes   : prunetypes,
-			fromrepo     : fromrepo,
+			fromrepo     : window.FROMREPO,
 			rerun_instance : window.RERUN_INSTANCE,
 			rerun_paramset : window.RERUN_PARAMSET,
 		        jacksGraphCallback: updateJacksGraph,
@@ -1578,11 +1576,11 @@ $(function ()
 	    if (profile_blob.fromrepo) {
 		$('#showtopo_repohash').html(profile_blob.repohash);
 		$('.showtopo_repoinfo').removeClass("hidden");
-		fromrepo = true;
+		window.FROMREPO = true;
 	    }
 	    else {
 		$('.showtopo_repoinfo').addClass("hidden");
-		fromrepo = false;
+		window.FROMREPO = false;
 	    }
 
 	    sup.maketopmap('#showtopo_div',
@@ -1708,18 +1706,35 @@ $(function ()
 		// Not allowed to copy a repo based profile.
 		$('#profile-copy-button').addClass("hidden");
 	    }
+	    /*
+	     * If not showing the picker, we are not switching profiles
+	     * so do not overwrite the current profile info.
+	     */
+	    if (showpicker) {
+		window.PROFILENAME = profile_name;
+		window.PROFILEVERS = profile_blob.version;
+		
+		if (profile_blob.fromrepo) {
+		    window.PROFILE_REFSPEC = profile_blob.reporef;
+		    window.PROFILE_REFHASH = profile_blob.repohash;
+		    window.TARGET_REFSPEC  = profile_blob.reporef;
+		    window.TARGET_REFHASH  = profile_blob.repohash;
+		    // The picker always switches to head of default branch.
+		    window.TARGET_HEADHASH = window.TARGET_REFHASH;
+		    window.FROMREPO = true;
+		}
+		else {
+		    window.PROFILE_REFSPEC = window.TARGET_REFSPEC = null;
+		    window.PROFILE_REFHASH = window.TARGET_REFHASH = null;
+		    // The picker always gets the most recent version.
+		    window.PROFILE_HEADVERS = window.PROFILEVERS;
+		    window.FROMREPO = false;
+		}
+	    }
 	    if (profile_blob.fromrepo) {
 		$('#selected_profile_text')
 		    .html(profile_name + " (Repohash: " +
 			  profile_blob.repohash + ")");
-		window.PROFILE_REFSPEC = profile_blob.reporef;
-		window.PROFILE_REFHASH = profile_blob.repohash;
-		fromrepo = true;
-	    }
-	    else {
-		window.PROFILE_REFSPEC = null;
-		window.PROFILE_REFHASH = null;
-		fromrepo = false;
 	    }
 	    setStepsMotion(true);
 
@@ -1773,51 +1788,42 @@ $(function ()
 	    json.value.description = description;
 	    continuation(json.value);
 	}
-	var $xmlthing = sup.CallServerMethod(ajaxurl,
-					     "instantiate", "GetProfile",
-					     {"profile" : profile});
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "instantiate", "GetProfile",
+					    {"profile" : profile});
 
 	/*
 	 * If a repo-based and we got a specific branch/tag/hash, we have to
 	 * get the source for that, since it will be different then what
 	 * is stored in the profile descriptor.
 	 */
-	if (fromrepo &&
-	    (window.TARGET_REFHASH !== undefined ||
-	     window.TARGET_REFSPEC !== undefined)) {
-
-	    // This is what we checkout below. 
-	    var target = window.TARGET_REFHASH || window.TARGET_REFSPEC;
+	if (window.FROMREPO &&
+	    window.TARGET_REFHASH != window.PROFILE_REFHASH) {
 	    
 	    // Rerun refspec is what we need for the form, just passing along.
-	    // Might be null (paramset or rerun instance)
 	    var refspec = window.TARGET_REFSPEC;
 
 	    // See ppwizard, it will run the script again if the params change
 	    // and need to know what to checkout in the jail.
-	    window.TARGET_REPOREF = target;
+	    window.TARGET_REPOREF = window.TARGET_REFHASH;
 
-	    $xmlthing.done(function(json) {
+	    xmlthing.done(function(json) {
 		gitrepo.GetRepoSource({
 		    "uuid"     : profile,
-		    "refspec"  : target,
+		    // This used to be a refspec, now always a hash
+		    "refspec"  : window.TARGET_REFHASH,
 		    "callback" : function(source, hash) {
 		    var pythonRe = /^(import|from)/m;
 
 		    // For the form that is submitted.
 		    $('#repohash').val(hash);
-		    if (refspec) {
-			$('#reporef').val(refspec);
-		    }
-		    // We change this whenever we switch around.
-		    window.PROFILE_REFHASH = hash;
-		    window.PROFILE_REFSPEC = refspec;
-		    
+		    $('#reporef').val(refspec);
+
 		    // Pass along.
 		    json.value.repohash = hash;
 
 		    if (pythonRe.test(source)) {
-			ConvertScript(source, profile, target,
+			ConvertScript(source, profile, window.TARGET_REFHASH,
 				      function(rspec, paramdefs) {
 			    // Need to pass these along at submit.
 			    $('#rspec_textarea').val(rspec);
@@ -1848,7 +1854,7 @@ $(function ()
 	    });
 	}
 	else {
-	    $xmlthing.done(callback);
+	    xmlthing.done(callback);
 	}
     }
 

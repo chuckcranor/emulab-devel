@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -513,20 +513,6 @@ echo "    window.DOCONSTRAINTS = $doconstraints;\n";
 echo "    window.SKIPFIRSTSTEP = " . ($skipfirststep ? "true" : "false") .";\n";
 echo "    window.PORTAL_NAME = '$PORTAL_NAME';\n";
 echo "    window.USERNAME = '" . $formfields["username"] . "';\n";
-if (isset($profile) && $profile->repourl()) {
-    echo "    window.FROMREPO = true;\n";
-    if (isset($refspec)) {
-        echo "    window.TARGET_REFSPEC = '$refspec';\n";
-        echo "    window.TARGET_REFHASH = null;\n";
-    }
-    $phash    = $profile->repohash();
-    $prefspec = $profile->reporef();
-    echo "    window.PROFILE_REFHASH = '$phash';\n";
-    echo "    window.PROFILE_REFSPEC = '$prefspec';\n";
-}
-else {
-    echo "    window.FROMREPO = false;\n";
-}
 # Do we show an aggregate selector?
 if (!$this_user->webonly() && !$ISAPT && !$ISPNET && !$ISEMULAB) {
     echo "    window.CLUSTERSELECT = true;\n";
@@ -534,31 +520,108 @@ if (!$this_user->webonly() && !$ISAPT && !$ISPNET && !$ISEMULAB) {
 else {
     echo "    window.CLUSTERSELECT = false;\n";
 }
-if (isset($rerun_instance) || isset($rerun_paramset)) {
-    if (isset($rerun_paramset)) {
-        # This might be the private hashkey, send it along. 
-        echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
-        if ($profile->repourl()) {
-            $phash    = $rerun_record->repohash();
-            $prefspec = $rerun_record->reporef();
-            
+if (isset($profile)) {
+    if ($profile->repourl()) {
+        # Head of default branch
+        $phash    = $profile->repohash();
+        $prefspec = $profile->reporef();
+        # What the user wants to instantiate (target);
+        $thash    = null;
+        $trefspec = null;
+
+        echo "    window.FROMREPO = true;\n";
+        echo "    window.PROFILE_REFHASH = '$phash';\n";
+        echo "    window.PROFILE_REFSPEC = '$prefspec';\n";
+
+        if (isset($refspec)) {
+            # A branch or a tag in refs format. We derive the hash below.
+            $trefspec = $refspec;
+        }
+        elseif (! (isset($rerun_instance) || isset($rerun_paramset))) {
+            # The target is the HEAD of the default branch.
+            $trefspec = $prefspec;
+            $thash    = $phash;
+        }
+        elseif (isset($rerun_paramset)) {
             if ($rerun_record->IsBound()) {
-                echo "    window.TARGET_REFHASH = '$phash';\n";
+                $thash = $rerun_record->repohash();
+                # The refspec might not exist any more. That would be bad
+                $trefspec = $rerun_record->reporef();
             }
             else {
-                echo "    window.TARGET_REFHASH = null;\n";
+                # The target is the HEAD of the default branch.
+                $trefspec = $prefspec;
+                $thash    = $phash;
             }
-            echo "    window.TARGET_REFSPEC = '$prefspec';\n";
+        }
+        elseif (isset($rerun_instance)) {
+            $thash    = $rerun_record->repohash();
+            $trefspec = $rerun_record->reporef();
+        }
+        if (!$thash) {
+            #
+            # Get the hash for the refspec the user wants to run.
+            #
+            $webtask = $profile->GitRepoCommand($this_user, "hash", $trefspec);
+            if (!$webtask) {
+                SPITUSERERROR("Repository error");
+            }
+            $thash = $webtask->TaskValue("hash");
+            $webtask->Delete();
+        }
+        echo "    window.TARGET_REFSPEC = '$trefspec';\n";
+        echo "    window.TARGET_REFHASH = '$thash';\n";
+
+        #
+        # For warning messages, the head of the target branch.
+        #
+        if ($thash != $phash) {
+            $webtask = $profile->GitRepoCommand($this_user, "hash", $trefspec);
+            if (!$webtask) {
+                SPITUSERERROR("Repository error");
+            }
+            $branchhash = $webtask->TaskValue("hash");
+            $webtask->Delete();
+            echo "    window.TARGET_HEADHASH = '$branchhash';\n";
+        }
+        else {
+            echo "    window.TARGET_HEADHASH = '$thash';\n";
         }
     }
     else {
-        echo "    window.RERUN_INSTANCE = '$rerun_instance';\n";
-        if ($profile->repourl()) {
-            $hash    = $rerun_record->repohash();
-            
-            echo "    window.TARGET_REFHASH = '$hash';\n";
-            echo "    window.TARGET_REFSPEC = null;\n";
+        $tvers = null;
+
+        if (isset($rerun_paramset)) {
+            if ($rerun_record->IsBound()) {
+                $tvers = $rerun_record->BoundProfile()->version();
+            }
+            else {
+                $tvers = $rerun_record->Profile()->version();
+            }
         }
+        elseif (isset($rerun_instance)) {
+            $tvers = $rerun_record->Profile()->version();
+        }
+        else {
+            $tvers = $profile->version();
+        } 
+        echo "    window.FROMREPO = false;\n";
+        echo "    window.TARGET_VERSION = '$tvers';\n";
+        if ($profile->IsHead()) {
+            $headvers = $profile->version();
+        }
+        else {
+            $head = $profile->HeadProfile();
+            $headvers = $head->version();
+        }
+        echo "    window.PROFILE_HEADVERS = '$headvers';\n";
+    }
+    if (isset($rerun_paramset)) {
+        # This might be the private hashkey, send it along. 
+        echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
+    }
+    elseif (isset($rerun_instance)) {
+        echo "    window.RERUN_INSTANCE = '$rerun_instance';\n";
     }
 }
 echo "    window.USENEWSCHEDULE = $usenewschedule;\n";
