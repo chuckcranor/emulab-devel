@@ -245,6 +245,8 @@ class ReservationGroup
         # Compute a status column based on reservations.
         $status   = "approved";
         $project  = Project::Lookup($resgroup->pid_idx());
+        # We will use any one of the approval stamps below.
+        $approval = null;
     
         $details["uuid"]       = $resgroup->uuid();
         $details["pid"]        = $resgroup->pid();
@@ -285,6 +287,9 @@ class ReservationGroup
                 "deleted_pushed"  => DateStringGMT(
                     $reservation->deleted_pushed())
             );
+            if (!$approval) {
+                $approval = DateStringGMT($reservation->approved());
+            }
             # Too much data for the list page.
             if ($alldata) {
                 $blob["jsondata"] = $reservation->jsondata();
@@ -326,6 +331,9 @@ class ReservationGroup
                 "approved"    => DateStringGMT($reservation->approved()),
                 "canceled"    => DateStringGMT($reservation->canceled()));
             
+            if (!$approval) {
+                $approval = DateStringGMT($reservation->approved());
+            }
             if (time() > strtotime($resgroup->start()) &&
                 $reservation->approved()) {
                 $blob["active"] = true;
@@ -353,6 +361,9 @@ class ReservationGroup
                 "approved"    => DateStringGMT($reservation->approved()),
                 "canceled"    => DateStringGMT($reservation->canceled()));
             
+            if (!$approval) {
+                $approval = DateStringGMT($reservation->approved());
+            }
             if (time() > strtotime($resgroup->start()) &&
                 $reservation->approved()) {
                 $blob["active"] = true;
@@ -378,6 +389,7 @@ class ReservationGroup
         else {
             $details["active"] = false;
         }
+        $details["approval"] = $approval;
         $details["clusters"] = $clusters;
         $details["ranges"]   = $ranges;
         $details["routes"]   = $routes;
