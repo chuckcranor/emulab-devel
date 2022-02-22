@@ -667,22 +667,22 @@ a.disabled, a[disabled] {
 }
 
 .aligned-title-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
     margin: 0;
     padding: 0;
 }
 .aligned-title-buttons > .left-edge {
-    display: inline-block;
-    width: 20.0%;
+    flex: 1;
     text-align: left;
 }
 .aligned-title-buttons > .middle {
-    display: inline-block;
-    width: 59.0%;
+    flex: 1;
     text-align: center;
 }
 .aligned-title-buttons > .right-edge {
-    display: inline-block;
-    width: 20.0%;
+    flex: 1;
     text-align: right;
 }
 
