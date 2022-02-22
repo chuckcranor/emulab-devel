@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2019 University of Utah and the Flux Group.
+# Copyright (c) 2003-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -76,7 +76,6 @@ my %prunedKeys = (
     "claimed" => 1,
 );
 my %prunedClasses = (
-    "display"   => 1,
     "volume"    => 1,
     "generic"   => 1,
 );
