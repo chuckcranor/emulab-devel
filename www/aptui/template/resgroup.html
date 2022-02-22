@@ -154,6 +154,17 @@
 		       data-key="created">
 		  </div>
 		</div>
+		<% if (window.ISADMIN) { %>
+		  <div id="reserve-approved-div" class="hidden">
+		    <div class="form-group" style="margin-bottom: 0px;">
+		      <div class="form-control-fake format-me"
+			   data-label="Approved"
+			   id="reserve-approved"
+			   data-key="approved">
+		      </div>
+		    </div>
+		  </div>
+		<% } %>
 	      <% } %>
 	      <div class="form-group">
 		<div class="format-me"

@@ -3086,6 +3086,11 @@ $(function ()
 	    $('#reserve-request-form [name=days]')
 		.val(days.toFixed(1));
 	    $('#reserve-created').html(moment(details.created).format("lll"));
+	    if (details.approval) {
+		$('#reserve-approved')
+		    .html(moment(details.approval).format("lll"));
+		$('#reserve-approved-div').removeClass("hidden");
+	    }
 
 	    // Add cluster rows as needed.
 	    if (_.size(details.clusters)) {
