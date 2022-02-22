@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -106,6 +106,7 @@ function SPITTABLE($which, $results, $where) {
         echo "     <th>State</th>
                    <th>Size (GB)</th>
                    <th>Created</th>
+                   <th>Last Used</th>
                    <th>Expires</th>
               </tr>
             </thead>
@@ -131,6 +132,7 @@ function SPITTABLE($which, $results, $where) {
             $creator = $dataset->owner_uid();
             $expires = $dataset->expires();
             $created = $dataset->created();
+            $lastuse = $dataset->last_used();
             $size    = $dataset->size() ? $dataset->size() : 0;
             # Convert to GB.
             $size     = sprintf('%0.2f', $size * 0.00104858);
@@ -164,6 +166,7 @@ function SPITTABLE($which, $results, $where) {
             echo "  <td>$state</td>
                     <td>$size</td>
                     <td class='format-date'>$created</td>
+                    <td class='format-date'>$lastuse</td>
                     <td class='format-date'>$expires</td>
                  </tr>\n";
         }
