@@ -69,9 +69,6 @@ window.ShowResGraph = (function ()
 			free = 0;
 		    }
 		}
-		if (free == 0) {
-		    continue;
-		}
 		/*
 		 * Need two points to make a line. Give the second point
 		 * just a day, we do not want to push the right side of
