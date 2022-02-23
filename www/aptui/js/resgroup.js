@@ -4143,8 +4143,10 @@ $(function ()
 	    combinedForecasts[id] = forecasts[urn][type];
 	})
 	if (fakeroutes) {
-	    // Pick any route and use it, renamed.
-	    if ($('#allroutes-checkbox').is(":checked")) {
+	    // Pick any route and use it, renamed. Note that we still have
+	    // to deal with the reservations not being available yet.
+	    if ($('#allroutes-checkbox').is(":checked") &&
+		_.has(routeforecast, "Orange")) {
 		combinedForecasts["mobile"] = routeforecast["Orange"];
 	    }
 	}
