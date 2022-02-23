@@ -935,7 +935,7 @@ sub RecordHistory($$)
 		"       extension_count,extension_days,extension_hours, ".
 		"       physnode_count,virtnode_count, ".
 		"       servername,portal,repourl,reponame,reporef,repohash, ".
-		"       rspec,script,params,manifest ".
+		"       rspec,script,params,manifest,webinfo ".
 		" from apt_instances where uuid='$uuid'")
 	or return -1;
 
