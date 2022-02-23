@@ -189,10 +189,6 @@ $(function ()
 	    favorites:          projcategories.favorite,
 	    projects:           projlist,
 	    amlist:             amlist,
-	    registered:         registered,
-	    profilename:        window.PROFILENAME,
-	    profileuuid:        window.PROFILEUUID,     
-	    profilevers:        window.PROFILEVERS,     
 	    showpicker:         showpicker,
 	    fromrepo:           window.FROMREPO,
 	    clustername:        window.PORTAL_NAME,
@@ -1059,7 +1055,23 @@ $(function ()
     {
 	// Current form contents as formfields array.
 	var formfields  = SerializeForm();
-	
+	var args = {
+	    "formfields" : formfields,
+	    "step"       : step,
+	};
+	// Extra stuff for generating some stats. Only matters on step 3
+	if (step == 3 && !checkonly) {
+	    var info = {
+		// User instantiates a specific profile. Otherwise used picker.
+		"PROFILE_UUID"      : window.PROFILE_UUID || null,
+		"RERUN_PARAMSET"    : window.RERUN_PARAMSET || null,
+		"RERUN_INSTANCE"    : window.RERUN_INSTANCE || null,
+		"SELECTED_PARAMSET" : window.SELECTED_PARAMSET || null,
+		"SELECTED_INSTANCE" : window.SELECTED_INSTANCE || null,
+		"MODIFIED_PARAMS"   : window.MODIFIED_PARAMS || null,
+	    };
+	    args["webinfo"] = info;
+	}
 	var rpc_callback = function(json) {
 	    console.info(json);
 	    callback(json);
@@ -1068,9 +1080,7 @@ $(function ()
 
 	var xmlthing = sup.CallServerMethod(null, "instantiate",
 					    (checkonly ?
-					     "CheckForm" : "Submit"),
-					    {"formfields" : formfields,
-					     "step"       : step});
+					     "CheckForm" : "Submit"), args);
 	xmlthing.done(rpc_callback);
     }
 
@@ -1711,8 +1721,8 @@ $(function ()
 	     * so do not overwrite the current profile info.
 	     */
 	    if (showpicker) {
-		window.PROFILENAME = profile_name;
-		window.PROFILEVERS = profile_blob.version;
+		// The point of changing these is for the ppwizard warnings.
+		window.PROFILE_VERSION = profile_blob.version;
 		
 		if (profile_blob.fromrepo) {
 		    window.PROFILE_REFSPEC = profile_blob.reporef;
@@ -1727,7 +1737,7 @@ $(function ()
 		    window.PROFILE_REFSPEC = window.TARGET_REFSPEC = null;
 		    window.PROFILE_REFHASH = window.TARGET_REFHASH = null;
 		    // The picker always gets the most recent version.
-		    window.PROFILE_HEADVERS = window.PROFILEVERS;
+		    window.PROFILE_HEADVERS = window.PROFILE_VERSION;
 		    window.FROMREPO = false;
 		}
 	    }

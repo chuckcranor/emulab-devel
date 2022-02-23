@@ -314,11 +314,23 @@ foreach my $key ("username", "email", "profile", "portal") {
 my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
     $userslice_id, $portal, $script, $paramdefs, $bindings,
-    $reporef, $repohash, $duration);
+    $reporef, $repohash, $duration, $webinfo);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
 
+# Some info from the web UI, saving it as is for now.
+if (exists($xmlparse->{'attribute'}->{"webinfo"})) {
+    my $json = $xmlparse->{'attribute'}->{"webinfo"}->{'value'};
+
+    # Sanity check this.
+    my $tmp = eval { decode_json($json); };
+    if ($@) {
+	UserError("Could not json decode webinfo");
+    }
+    $webinfo = $json;
+}
+    
 # User specified duration.
 if (exists($xmlparse->{'attribute'}->{"duration"}) &&
     defined($xmlparse->{'attribute'}->{"duration"}) &&
@@ -1116,6 +1128,9 @@ if (defined($project)) {
 if (defined($sshkey)) {
     $blob->{"sshpubkey"} = $sshkey;
 }
+if (defined($webinfo)) {
+    $blob->{"webinfo"} = $webinfo;
+}
 $errmsg = undef;
 $instance = APT_Instance->Create($blob, \$errmsg);
 if (!defined($instance)) {
@@ -1225,6 +1240,7 @@ print STDERR "Duration: $duration hours\n";
 print STDERR "Cluster: ";
 print STDERR join(",", map($_->aggregate_urn(), @aggregate_list))  . "\n";
 print STDERR "\n";
+print STDERR "$webinfo\n\n" if (defined($webinfo));
 print STDERR "$rspecstr\n";
 
 #

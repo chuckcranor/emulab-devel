@@ -99,136 +99,9 @@
       <form id='step0-form' role='form' class="step-forms"
 	    enctype='multipart/form-data'
 	    method='post' action='instantiate.php'>
-	<!-- Guest users see the first wizard step in a panel -->
-	<div <% if (!registered) { %>class='panel panel-default'<% } %>>
-	  <% if (!registered) { %>
-	    <div class='panel-heading'>
-	      <h3 class='panel-title'>
-		<center>Start Experiment
-		  <% if (profilename) { %>
-		    using profile '<%= profilename %>'
-		  <% } %>
-		</center>
-	      </h3>
-	    </div>
-	  <% } %>
-	  <div <% if (!registered) { %>class='panel-body'<% } %>>
-	    <% if (!registered) { %>
-	      <% if (profilename) { %>
-		<!-- Will only show header when linked to a profile -->
-		<h3 style='margin: 0px;'>
-		  <center>Start Experiment
-		    using profile '<%= profilename %>'
-		  </center>
-		</h3>
-	      <% } %>
-	      <!-- If linked to a specific profile, description goes here -->
-	      <% if (profilename) { %>
-		<p>
-		  Fill out the form below to run an experiment
-		  using this profile:
-		</p>
-		<blockquote>
-		  <p><span id='selected_profile_description'></span></p>
-		</blockquote>
-		<p>
-		  When you click the 'Create' button, the virtual or
-		  physical machines described in the profile will be booted
-		  on <%= clustername %>'s hardware
-		</p>
-	      <% } %>
-	      <div class='form-group format-me'>
-		<input name="username"
-		       id='input_username'
-		       value='<%- formfields.username %>'
-		       class="form-control"
-		       data-key="username"
-		       data-label="Username"
-		       placeholder='Pick a user name'
-		       autofocus
-		       type='text'>
-		<label class='control-label control-error hidden'
-		       for='input_username'></label>
-	      </div>
-	      <div class='form-group format-me'>
-		<input name="email"
-		       id='input_email'
-		       value="<%- formfields.email %>"
-		       class="form-control"
-		       data-key="email"
-		       data-label="Email"
-		       placeholder='Your email address'
-		       type='text'>
-		<label class='control-label control-error hidden'
-		       for='input_email'></label>
-	      </div>
-	      <%
-	      var title_text  = "";
-	      var expand_text = "";
-	      if (formfields.sshkey == "") {
-		title_text = "<span class='text-warning'>" +
-		      "No SSH key, browser shell only!<span>";
-		expand_text = "Add Key";
-	      }
-	      else {
-		title_text  = "<span class='text-info'>Your SSH key</span>";
-		expand_text = "Update";
-	      }
-	      %>
-	      <div class='form-group row' style='margin-bottom: 0px;'>
-		<div class='col-md-12'>
-		  <div class='panel panel-default'>
-		    <div class='panel-heading'><%= title_text %>
-		      <a class='pull-right'
-			 data-toggle='collapse' href='#mysshkey'>
-			<%- expand_text %>
-		      </a>
-		    </div>
-		    <div id='mysshkey' class='panel-collapse collapse'>
-		      <div class='panel-body'>
-			<div class='form-group format-me'>
-			  <span class='help-block'>
-			    Upload a file or paste it in the
-			    text box. This will allow you to
-			    login using your favorite ssh
-			    client. Without a SSH key, you will
-			    be limited to using a shell window
-			    in your browser. If you already see
-			    a key here, you can change it and
-			    we will remember your new key for
-			    next time.  Not sure how to
-			    generate your SSH key?
-			    See <a href='https://help.github.com/articles/generating-ssh-keys'>this tutorial.</a>
-			  </span>
-			  <input type='file'
-				 name='keyfile'
-				 id="input_keyfile"
-				 class="form-control"
-				 data-key="keyfile"
-				 data-label="Keyfile">
-			  <label class='control-label control-error hidden'
-				 for='input_keyfile'></label>
-			</div>
-			<div class='form-group format-me'>
-			  <textarea name="sshkey"
-				    id='input_sshkey'
-				    placeholder='Paste in your ssh public key.'
-				    class='form-control'
-				    data-key='sshkey'
-				    data-label='SSH key'
-				    rows=4
-				    cols=45><%- formfields.sshkey %></textarea>
-			  <label class='control-label control-error hidden'
-				 for='input_sshkey'></label>
-			</div>
-		      </div>
-		      <div class='clearfix'></div>
-		    </div>
-		  </div>
-		</div>
-	      </div>
-	    <% } %>
-	    <% if (registered) { %>
+	<div>
+	  <div>
+	    <% if (1) { %>
 	      <div class='form-group row' style='margin-bottom: 0px;'>
 		<div class='col-md-12'>
 		  <div class='panel panel-default'>
@@ -313,14 +186,7 @@
 	      </span>
 	    </div>
 	  </div>
-	  <% if (!registered) { %>
-	    <!-- Show non-specific errors here. -->
-	    <div style='margin-bottom: 10px;'>
-	      <font color=red>
-		<center><span id="general_error"></span></center>
-	      </font>
-	    </div>
-	  <% } else { %>
+	  <% { %>
 	    <div class='panel panel-default'>
 	      <div class='panel-heading'>
 		<span style='text-align: center;'>
@@ -882,7 +748,7 @@
 	    <ul class='list-group' id='profile_name'
 		name='profile'>
 		<span id='title_recently_used'>
-		  <% if (!registered || showpopular) { %>Popular<% }
+		  <% if (showpopular) { %>Popular<% }
 		     else { %>Recent<% } %>
 		  <span class='category_collapsable expanded'></span>
 		</span>
@@ -896,7 +762,7 @@
 		<% }; %>
 		</ul>
 
-	      <% var hidefav = (registered && !$.isEmptyObject(favorites)) ? '' : 'hidden';%>
+	      <% var hidefav = (!$.isEmptyObject(favorites)) ? '' : 'hidden';%>
 		<span id='title_favorites' class='<%- hidefav %>'>
 		  Favorites
 		  <span class='category_collapsable expanded'></span>
@@ -910,7 +776,7 @@
 		<% }); %>
 		</ul>   
 
-		<% var hidemy = (registered && !$.isEmptyObject(myprofiles)) ? '' : 'hidden';%>
+		<% var hidemy = (!$.isEmptyObject(myprofiles)) ? '' : 'hidden';%>
 		<span id='title_myprofiles' class='<%- hidemy %>'>
 		  My Profiles
 		  <span class='category_collapsable expanded'></span>

@@ -58,6 +58,7 @@ $(function () {
 	function Modified() {
 	    ppchanged = true;
 	    modified_callback();
+	    window.MODIFIED_PARAMS = true;
 	}
 
 	var groupTemplateString =
@@ -3102,6 +3103,10 @@ $(function () {
 		    // Need to kill the rerun bindings when user picks defaults.
 		    ClearAlert();
 		    LoadBindings(null);
+		    // Clear these for stats reporting.
+		    window.SELECTED_INSTANCE = undefined;
+		    window.SELECTED_PARAMSET = undefined;
+		    window.MODIFIED_PARAMS   = false;
 		});
 
 	    // We can bind this function, the button will be hidden as needed.
@@ -3149,6 +3154,8 @@ $(function () {
 		    return;
 		}
 		ApplyPreviousBindings(json.value)
+		window.SELECTED_INSTANCE = json.value.rerun_uuid;
+		window.SELECTED_PARAMSET = undefined;
 		setStepsMotion(true);
 	    };
 	    var args = {
@@ -3183,6 +3190,8 @@ $(function () {
 	    // Always force a rerun of the script, do not worry about
 	    // a new set of bindings that are identical.
 	    Modified();
+	    // We do not want this flag set immediately after new bindings.
+	    window.MODIFIED_PARAMS = false;
 	}
 
 	/*
@@ -3199,7 +3208,7 @@ $(function () {
 			 window.PROFILE_REFSPEC, window.TARGET_REFSPEC,
 			 window.PROFILE_REFHASH, window.TARGET_REFHASH,
 			 window.TARGET_HEADHASH,
-			 window.PROFILEVERS, window.PROFILE_HEADVERS);
+			 window.PROFILE_VERSION, window.PROFILE_HEADVERS);
 	    var warning;
 
 	    // Only when starting from a specific profile. 
@@ -3227,10 +3236,10 @@ $(function () {
 			"branch (" + window.PROFILE_REFSPEC + "). ";
 		}
 	    }
-	    else if (window.PROFILEVERS != window.PROFILE_HEADVERS) {
+	    else if (window.PROFILE_VERSION != window.PROFILE_HEADVERS) {
 		    warning = 
 		    "You are are instantiating version " +
-		    window.PROFILEVERS + " instead of the most recent " +
+		    window.PROFILE_VERSION + " instead of the most recent " +
 		    "version (" + window.PROFILE_HEADVERS + "). ";
 	    }
 	    if (warning) {
@@ -3249,7 +3258,7 @@ $(function () {
 			 window.PROFILE_REFSPEC, window.TARGET_REFSPEC,
 			 window.PROFILE_REFHASH, window.TARGET_REFHASH,
 			 window.TARGET_HEADHASH,
-			 window.PROFILEVERS, window.PROFILE_HEADVERS);
+			 window.PROFILE_VERSION, window.PROFILE_HEADVERS);
 	    var warning;
 	    var link = "<a href='" + set.run_url + "'>here</a>";
 
@@ -3285,7 +3294,7 @@ $(function () {
 			 window.PROFILE_REFSPEC, window.TARGET_REFSPEC,
 			 window.PROFILE_REFHASH, window.TARGET_REFHASH,
 			 window.TARGET_HEADHASH,
-			 window.PROFILEVERS, window.PROFILE_HEADVERS);
+			 window.PROFILE_VERSION, window.PROFILE_HEADVERS);
 	    var warning;
 	    
 	    if (window.FROMREPO) {
@@ -3360,6 +3369,9 @@ $(function () {
 		    event.preventDefault();
 		    ClearAlert();
 		    LoadBindings(set.bindings);
+		    window.SELECTED_INSTANCE = undefined;
+		    window.SELECTED_PARAMSET = set.uuid;
+		    window.MODIFIED_PARAMS   = false;
 		    CheckParamsetWarning(set);
 		});
 		$(menu).append(item);

@@ -388,8 +388,8 @@ $cancopy    = $this_user->webonly() || $ishashed ? 0 : 1;
 $nopprspec  = "false";  # Deprecated guest user stuff
 $portal     = "";
 $showpicker = isset($profile) || isset($rerun_record) ? 0 : 1;
-if (isset($profilename)) {
-    $profilename = "'$profilename'";
+if (isset($profile)) {
+    $profilename = "'" . $profilename . "'";
     $profilevers = $profile->version();
 }
 else {
@@ -487,8 +487,6 @@ echo "</script>\n";
 SpitOopsModal("oops");
 echo "<script type='text/javascript'>\n";
 echo "    window.PROFILE    = '" . $formfields["profile"] . "';\n";
-echo "    window.PROFILENAME= $profilename;\n";
-echo "    window.PROFILEVERS= $profilevers;\n";
 if ($ishashed) {
     # For gitrepo-picker template
     echo "    window.HASHKEY= '" . $formfields["hashkey"] . "';\n";
@@ -521,6 +519,9 @@ else {
     echo "    window.CLUSTERSELECT = false;\n";
 }
 if (isset($profile)) {
+    echo "    window.PROFILE_UUID = '" . $profile->uuid() . "';\n";
+    echo "    window.PROFILE_VERSION = '" . $profile->version() . "';\n";
+    
     if ($profile->repourl()) {
         # Head of default branch
         $phash    = $profile->repohash();

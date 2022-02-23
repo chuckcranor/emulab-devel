@@ -1131,7 +1131,15 @@ function Do_Submit()
     else {
         $args["duration"]  = $formfields["duration"];
     }
-    
+    if (isset($ajax_args["webinfo"])) {
+        $tmp = json_encode($ajax_args["webinfo"]);
+        if (!$tmp) {
+	    SPITAJAX_ERROR(1, "Internal error json encoding webinfo");
+	    return;
+        }
+        $args["webinfo"] = $tmp;
+    }
+
     # This is deprecated.
     if (0 && isset($_SESSION["privkey"])) {
         $keyname = tempnam("/tmp", "genilibkey");
