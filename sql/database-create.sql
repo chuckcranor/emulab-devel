@@ -4300,6 +4300,8 @@ CREATE TABLE `node_type_hardware_paths` (
   `type` varchar(30) NOT NULL default '',
   `path` varchar(255) NOT NULL default '',
   `value` text,
+  `hidden` tinyint(1) default '0',
+  `summary` tinyint(1) default '0',
   PRIMARY KEY  (`type`,`path`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -4325,6 +4327,8 @@ CREATE TABLE `node_hardware_paths` (
   `node_id` varchar(30) NOT NULL default '',
   `path` varchar(255) NOT NULL default '',
   `value` text,
+  `hidden` tinyint(1) default '0',
+  `summary` tinyint(1) default '0',
   PRIMARY KEY  (`node_id`,`path`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
