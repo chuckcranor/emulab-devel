@@ -4285,6 +4285,7 @@ CREATE TABLE `node_type_features` (
 DROP TABLE IF EXISTS `node_type_hardware`;
 CREATE TABLE `node_type_hardware` (
   `type` varchar(30) NOT NULL default '',
+  `node_id` varchar(30) default NULL,
   `updated` datetime default NULL,
   `uname` text,
   `rawjson` mediumtext,  
