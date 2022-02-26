@@ -11,7 +11,8 @@ sub DoUpdate($$$)
     }
     if (!DBSlotExists("node_hardware_paths", "summary")) {
 	DBQueryFatal("alter table node_hardware_paths add ".
-		     "  `summary` tinyint(1) default '0' after hidden");
+		     "  `summary` tinyint(1) NOT NULL default '0' ".
+		     "   after hidden");
     }
     if (!DBSlotExists("node_type_hardware_paths", "hidden")) {
 	DBQueryFatal("alter table node_type_hardware_paths add ".
@@ -19,7 +20,8 @@ sub DoUpdate($$$)
     }
     if (!DBSlotExists("node_type_hardware_paths", "summary")) {
 	DBQueryFatal("alter table node_type_hardware_paths add ".
-		     "  `summary` tinyint(1) default '0' after hidden");
+		     "  `summary` tinyint(1) NOT NULL default '0' ".
+		     "   after hidden");
     }
     if (!DBSlotExists("node_type_hardware", "node_id")) {
 	DBQueryFatal("alter table node_type_hardware add ".
