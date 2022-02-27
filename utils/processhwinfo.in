@@ -26,6 +26,7 @@ use English;
 use Getopt::Std;
 use Data::Dumper;
 use JSON;
+use File::Basename;
 
 #
 # Process hardware info for a node.
@@ -70,7 +71,6 @@ sub PruneRawInfo();
 # We prune out anything with these keys/class.
 my %prunedKeys = (
     "class"   => 1,
-    "serial"  => 1,
     "isa"     => 1,
     "ip"      => 1,
     "claimed" => 1,
@@ -79,6 +79,7 @@ my %prunedClasses = (
     "volume"    => 1,
     "generic"   => 1,
 );
+my %summary = ();
 
 #
 # Configure variables
@@ -328,8 +329,8 @@ sub ReadInfoFile($$$$$)
 #
 # Replace hardware info for a node, optionally replacing type table also.
 #
-sub doArray($$$);
-sub doList($$$);
+sub doArray($$$$$);
+sub doList($$$$$);
 
 sub UpdateInfo($$$)
 {
@@ -337,6 +338,8 @@ sub UpdateInfo($$$)
     my $node_id  = $node->node_id();
     my $type     = $node->type();
     my $pathinfo = [];
+    my $summary  = {};
+    my $suminfo  = [];
     my $prefix;
 
     if (! -d $location) {
@@ -426,7 +429,8 @@ sub UpdateInfo($$$)
 	    "Could not decode json data: $@\n";
 	return 1;
     }
-    doArray($ref, "", $pathinfo);
+    doArray($ref, "", $pathinfo, $node, $summary);
+    doArray($summary, "", $pathinfo, $node, undef);
     if ($verbose) {
 	print Dumper($ref);
     }
@@ -439,17 +443,18 @@ sub UpdateInfo($$$)
 	print "$node_id: Entering data into the DB for type $type ...\n";
 	DBQueryFatal("replace into node_type_hardware set ".
 		     "  type='$type',updated=FROM_UNIXTIME($prefix), ".
-		     "  uname=$uninfo,rawjson=$safe_json");
+		     "  node_id='$node_id',uname=$uninfo,rawjson=$safe_json");
 
 	DBQueryFatal("delete from node_type_hardware_paths ".
 		     "where type='$type'");
 	
 	foreach my $ref (@{$pathinfo}) {
-	    my ($path, $val) = @{$ref};
+	    my ($path, $val, $hidden, $summary) = @{$ref};
 	    my $safe_path = DBQuoteSpecial($path);
 	    my $safe_val  = DBQuoteSpecial($val);
 	    DBQueryFatal("replace into node_type_hardware_paths set ".
-			 " type='$type',path=$safe_path,value=$safe_val");
+			 " type='$type',path=$safe_path,value=$safe_val,".
+			 " hidden='$hidden',summary='$summary'");
 	}
     }
     print "$node_id: Entering data into the DB ...\n";
@@ -461,19 +466,20 @@ sub UpdateInfo($$$)
 		 "where node_id='$node_id'");
 	
     foreach my $ref (@{$pathinfo}) {
-	my ($path, $val) = @{$ref};
+	my ($path, $val, $hidden, $summary) = @{$ref};
 	my $safe_path = DBQuoteSpecial($path);
 	my $safe_val  = DBQuoteSpecial($val);
 	DBQueryFatal("replace into node_hardware_paths set ".
-		     " node_id='$node_id',path=$safe_path,value=$safe_val");
+		     " node_id='$node_id',path=$safe_path,value=$safe_val,".
+		     " hidden='$hidden',summary='$summary'");
     }
 
     return 0;
 }
 
-sub doArray($$$)
+sub doArray($$$$$)
 {
-    my ($ref, $path, $result) = @_;
+    my ($ref, $path, $result, $node, $summary) = @_;
     my $id = ($path eq "" ? "" : $ref->{'id'});
 
     #
@@ -492,29 +498,73 @@ sub doArray($$$)
 		if (!exists($ref->{'children'}));
 	}
     }
+    #
+    # Maybe not the best place for this ... prune out interfaces that
+    # are not wired up.
+    #
+    if (defined($summary) && $path =~ /(network)(\/(\d+))?$/) {
+	my $mac  = lc($ref->{'serial'});
+	$mac =~ s/://g;
+
+	my @interfaces;
+	if ($node->AllInterfaces(\@interfaces)) {
+	    fatal("Looking up interfaces for $node");
+	}
+	my $iface;
+	foreach my $if (@interfaces) {
+	    if ($mac eq lc($if->mac())) {
+		$iface = $if;
+		last;
+	    }
+	}
+	if (!$iface) {
+	    $ref->{"role"} = "UNAVAILABLE";
+	}
+	elsif ($iface->role() eq TBDB_IFACEROLE_CONTROL()) {
+	    $ref->{"role"} = "control";
+	}
+	elsif ($iface->role() eq TBDB_IFACEROLE_MANAGEMENT()) {
+	    $ref->{"role"} = "management";
+	}
+	elsif (!$iface->wiredup()) {
+	    $ref->{"role"} = "UNAVAILABLE";
+	}
+	elsif ($iface->role() eq TBDB_IFACEROLE_EXPERIMENT()) {
+	    $ref->{"role"} = "experiment";
+	}
+    }
+
+    # Summary structure.
+    Summarize($path, $ref, $summary) if (defined($summary));
+    
     foreach my $key (sort(keys(%{$ref}))) {
 	my $val = $ref->{$key};
 	if (ref($val) eq "ARRAY" && $key eq "children") {
-	    doList($val, "$path", $result);
+	    doList($val, "$path", $result, $node, $summary);
 	}
 	elsif (ref($val) eq "HASH") {
-	    doArray($val, "$path/$key", $result);
+	    doArray($val, "$path/$key", $result, $node, $summary);
 	}
 	elsif (!exists($prunedKeys{$key})) {
 	    if (ref($val) eq "ARRAY") {
 		$val = join(",", @{$val});
 	    }
-	    push(@{$result}, ["$path/$key", $val]);
+	    my $hidden  = 0;
+	    if ($key eq "serial" || $key eq "uuid") {
+		$hidden = 1;
+	    }
+	    my $suminfo = (defined($summary) ? 0 : 1);
+	    push(@{$result}, ["$path/$key", $val, $hidden, $suminfo]);
 	}
     }
 }
-sub doList($$$)
+sub doList($$$$$)
 {
-    my ($ref, $path, $result) = @_;
+    my ($ref, $path, $result, $node, $summary) = @_;
 
     foreach my $child (@{$ref}) {
 	if (ref($child) eq "ARRAY") {
-	    doList($child, "$path", $result);
+	    doList($child, "$path", $result, $node, $summary);
 	}
 	else {
 	    my $id    = $child->{'id'};
@@ -527,9 +577,9 @@ sub doList($$$)
 		    exists($prunedClasses{$class}));
 
 	    $id =~ s/:/\//;
-	    doArray($child, "$path/$id", $result);
+	    doArray($child, "$path/$id", $result, $node, $summary);
 	}
-    }    
+    }
 }
 
 #
@@ -676,5 +726,183 @@ sub PruneRawInfo()
 		unlink(@files);
 	    }
 	}
+    }
+}
+
+#
+# Summarize the data.
+#
+sub Summarize($$$)
+{
+    my ($path, $ref, $summary) = @_;
+
+    # All the machines have these, so set them all up now.
+    if (!exists($summary->{"cpu"})) {
+	$summary->{"cpu"}     = {};
+	$summary->{"memory"}  = {"banks" => 0};
+	$summary->{"disk"}    = {};
+	$summary->{"network"} = {};
+    }
+
+    if ($path eq "") {
+	foreach my $key ("product", "vendor") {
+	    $summary->{$key} = $ref->{$key} if (exists($ref->{$key}));
+	}
+	return;
+    }
+    if ($path =~ /core\/cpu\/(\d+)$/) {
+	if (!exists($summary->{"cpu"}->{$1})) {
+	    $summary->{"cpu"}->{$1} = {};
+	}
+	my $cpu = $summary->{"cpu"}->{$1};
+	$cpu->{"product"} = $ref->{"product"};
+
+	foreach my $key (keys(%{$ref->{"configuration"}})) {
+	    $cpu->{$key} = $ref->{"configuration"}->{$key};
+	}
+    }
+    if ($path =~ /core\/cpu\/(\d+)\/cache\/(\d+)$/ ||
+	$path =~ /core\/cache\/(\d+)$/) {
+	my $cache;
+
+	if (defined($2)) {
+	    if (!exists($summary->{"cpu"}->{$1})) {
+		$summary->{"cpu"}->{$1} = {};
+	    }
+	    my $cpu = $summary->{"cpu"}->{$1};
+	    
+	    if (!exists($cpu->{"cache"})) {
+		$cpu->{"cache"} = {};
+	    }
+	    if (!exists($cpu->{"cache"}->{$2})) {
+		$cpu->{"cache"}->{$2} = {};
+	    }
+	    $cache = $cpu->{"cache"}->{$2};
+	}
+	else {
+	    if (!exists($summary->{"cache"})) {
+		$summary->{"cache"} = {};
+	    }
+	    if (!exists($summary->{"cache"}->{$1})) {
+		$summary->{"cache"}->{$1} = {};
+	    }
+	    $cache = $summary->{"cache"}->{$1};
+	}
+	foreach my $key (keys(%{$ref})) {
+	    if ($key =~ /^(size|description|units)$/i) {
+		$cache->{$key} = $ref->{$key};
+	    }
+	    elsif ($key eq "capabilities") {
+		foreach my $subkey (keys(%{$ref->{'capabilities'}})) {
+		    $cache->{$subkey} = $ref->{'capabilities'}->{$subkey};
+		}
+	    }
+	}
+	return;
+    }
+    if ($path =~ /core\/memory$/) {
+	my $memory = $summary->{"memory"};
+
+	foreach my $key (keys(%{$ref})) {
+	    if ($key =~ /^(size|capacity|units)$/i) {
+		$memory->{$key} = $ref->{$key};
+	    }
+	    elsif ($key eq "children") {
+		foreach my $bank (@{$ref->{$key}}) {
+		    next
+			if ($bank->{"description"} =~ /empty/);
+		    $memory->{"banks"}++;
+		    # In general, all banks will be the same.
+		    $memory->{"description"} = $bank->{"description"};
+		    $memory->{"product"} = $bank->{"product"};
+		}
+	    }
+	}
+	return;
+    }
+    if ($path =~ /(network)(\/(\d+))?$/) {
+	my $name = $ref->{"logicalname"};
+	
+	my $blob = {
+	    "speed"       => $ref->{'capacity'},
+	    "units"       => $ref->{'units'},
+	    "product"     => $ref->{'product'},
+	    "description" => $ref->{'description'},
+	    "mac"         => $ref->{'serial'},
+	    "role"        => $ref->{'role'},
+	};
+	if (exists($ref->{'vendor'})) {
+	    $blob->{"vendor"} = $ref->{"vendor"};
+	}
+	foreach my $k (keys(%{$ref->{"configuration"}})) {
+	    if ($k =~ /^(driverversion|driver|firmware)$/) {
+		$blob->{$k} = $ref->{"configuration"}->{$k};
+	    }
+	}
+	$summary->{'network'}->{$name} = $blob;
+	return;
+    }
+    if ($path =~ /(disk)(\/(\d+))?$/) {
+	# No slashes allowed, just get device name,
+	my $name = basename($ref->{"logicalname"});
+	
+	my $blob = {
+	    "size"        => $ref->{'size'},
+	    "units"       => $ref->{'units'},
+	    "product"     => $ref->{'product'},
+	    "description" => $ref->{'description'},
+	};
+	if (exists($ref->{'vendor'})) {
+	    $blob->{"vendor"} = $ref->{"vendor"};
+	}
+	foreach my $k (keys(%{$ref->{"configuration"}})) {
+	    if ($k =~ /^(driverversion|driver|firmware)$/) {
+		$blob->{$k} = $ref->{"configuration"}->{$k};
+	    }
+	}
+	$summary->{'disk'}->{$name} = $blob;
+	return;
+    }
+    if ($path =~ /nvme(\/\d+)?$/) {
+	if (!exists($summary->{"nvme"})) {
+	    $summary->{"nvme"} = {};
+	}
+	# No slashes allowed, just get device name,
+	my $name = basename($ref->{"logicalname"});
+	
+	if (!exists($summary->{"nvme"}->{$name})) {
+	    $summary->{"nvme"}->{$name} = {};
+	}
+	my $blob = {
+	    "product"     => $ref->{'product'},
+	    "description" => $ref->{'description'},
+	};
+	if (exists($ref->{'vendor'})) {
+	    $blob->{"vendor"} = $ref->{"vendor"};
+	}
+	foreach my $k (keys(%{$ref->{"configuration"}})) {
+	    if ($k =~ /^(driverversion|driver|firmware)$/) {
+		$blob->{$k} = $ref->{"configuration"}->{$k};
+	    }
+	}
+	$summary->{'nvme'}->{$name} = $blob;
+	return;
+    }
+    if ($path =~ /display$/) {
+	my $description = $ref->{"description"};
+	if ($description =~ /vga/i) {
+	    return;
+	}
+	if (!exists($summary->{"gpu"})) {
+	    $summary->{"gpu"} = {};
+	}
+	my $gpu = {
+	    "description" => $description,
+	    "product"     => $ref->{"product"},
+	    "vendor"      => $ref->{"vendor"},
+	};
+	my $idx = scalar(keys(%{$summary->{"gpu"}}));
+	$summary->{"gpu"}->{$idx} = $gpu;
+	return;
     }
 }

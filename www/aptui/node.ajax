@@ -389,6 +389,8 @@ function Do_GetHardwareInfo()
 {
     global $this_user, $ajax_args, $node, $GuestUserOkay;
     global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    $hidden  = 0;
+    $summary = 0;
 
     # This function allows guest users.
     $GuestUserOkay = true;
@@ -403,6 +405,12 @@ function Do_GetHardwareInfo()
 	SPITAJAX_ERROR(-1, "Not enough permission");
 	return -1;
     }
+    if (isset($ajax_args["summary"])) {
+        $summary = 1;
+    }
+    if ($this_user) {
+        $hidden = 1;
+    }
     $node_id = $node->node_id();
     $query_result =
         DBQueryFatal("select * from node_hardware where node_id='$node_id'");
@@ -416,10 +424,14 @@ function Do_GetHardwareInfo()
                   "updated" => DateStringGMT($row["updated"]),
                   "uname"   => $row["uname"],
                   "paths"   => array(),
+                  "summary" => array(),
     );
     $query_result =
-        DBQueryFatal("select path,value from node_hardware_paths ".
-                     "where node_id='$node_id'");
+        DBQueryFatal("select path,value,summary from node_hardware_paths ".
+                     "where node_id='$node_id' ".
+                     (!$hidden ? "and hidden=0 " : "") .
+                     ($summary ? "and summary=1 " : "and summary=0 "));
+    
     if (!mysql_num_rows($query_result)) {
 	SPITAJAX_ERROR(-1, "No hardware path info available for $node_id");
 	return -1;
@@ -427,7 +439,11 @@ function Do_GetHardwareInfo()
     while ($row = mysql_fetch_array($query_result)) {
         $path  = $row["path"];
         $value = $row["value"];
+        $summary = $row["summary"];
         $blob["paths"][$path] = $value;
+        if ($summary == 1) {
+            $blob["summary"][$path] = $value;
+        }
     }
     $result = array("$node_id" => $blob);
     SPITAJAX_RESPONSE($result);

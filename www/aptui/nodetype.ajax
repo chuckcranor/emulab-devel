@@ -410,6 +410,8 @@ function Do_GetHardwareInfo()
 {
     global $this_user, $ajax_args, $node, $GuestUserOkay, $nodetype;
     global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    $hidden  = 0;
+    $summary = 0;
 
     # Only this function allows guest users.
     $GuestUserOkay = true;
@@ -426,11 +428,17 @@ function Do_GetHardwareInfo()
     elseif (CheckPageArgs(0)) {
         return;
     }
+    if (isset($ajax_args["summary"])) {
+        $summary = 1;
+    }
+    if ($this_user) {
+        $hidden = 1;
+    }
     $result = array();
     
     if (isset($typelist)) {
         foreach ($typelist as $t) {
-            $blob = GetHardwareInfoForType($t);
+            $blob = GetHardwareInfoForType($t, $summary, $hidden);
             if (!$blob) {
                 $blob = array("type"    => $t,
                               "paths"   => null);
@@ -440,7 +448,7 @@ function Do_GetHardwareInfo()
     }
     else {
         $type = $nodetype->type();
-        $blob = GetHardwareInfoForType($type);
+        $blob = GetHardwareInfoForType($type, $summary, $hidden);
         if (!$blob) {
             SPITAJAX_ERROR(-1, "No hardware info available for $type");
             return -1;
@@ -456,7 +464,7 @@ function Do_GetHardwareInfo()
     SPITAJAX_RESPONSE($result);
 }
 
-function GetHardwareInfoForType($type)
+function GetHardwareInfoForType($type, $summary, $hidden)
 {
     $query_result =
         DBQueryFatal("select * from node_type_hardware where type='$type'");
@@ -472,7 +480,9 @@ function GetHardwareInfoForType($type)
     );
     $query_result =
         DBQueryFatal("select path,value from node_type_hardware_paths ".
-                     "where type='$type'");
+                     "where type='$type' ".
+                     (!$hidden ? "and hidden=0" : "") .
+                     ($summary ? "and summary=1 " : "and summary=0 "));
     if (!mysql_num_rows($query_result)) {
         return null;
     }

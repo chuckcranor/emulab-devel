@@ -21,15 +21,25 @@
       <div class='col-xs-5'
 	   style="border-right:1px solid; height: 80vh; overflow: scroll;">
 	<div class="input-group">
-	  <input type="search"
+	  <input type="search" disabled
 		 id="hardware-search"
 		 class="form-control search" placeholder="Search">
 	  <span class="input-group-btn">
-            <button class="btn btn-default"
+            <button class="btn btn-default" disabled
 		    data-expanded="false"
 		    id="expand-all"
 		    type="button">Expand All</button>
 	  </span>
+	  <% if (window.AMLIST === undefined) { %>
+	    <span class="input-group-btn">
+              <button class="btn btn-default" disabled
+		      data-expanded="false"
+		      id="summary"
+		      type="button">
+		<% if (window.SUMMARY) { %>Details<% } else { %>Summary<% } %>
+	      </button>
+	    </span>
+	  <% } %>
 	</div>	
 	<div id="tree" style="margin-top: 5px;"></div>
       </div>

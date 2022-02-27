@@ -6,6 +6,7 @@ $(function ()
 						   'oops-modal',
 						   'waitwait-modal']);
     var mainTemplate = _.template(templates['show-hardware']);
+    var rootid = null;
     
     function initialize()
     {
@@ -47,7 +48,58 @@ $(function ()
 	    title = title + "typelist " + window.TYPELIST;
 	}
 	$('.panel-title').html(title);
-	
+
+	// Search box
+	var timer = false;
+	$('#hardware-search').keyup(function () {
+	    if (timer) {
+		clearTimeout(timer);
+	    }
+	    timer = setTimeout(function () {
+		var v = $('#hardware-search').val();
+		$('#tree').jstree(true).search(v);
+	    }, 500);
+	});
+
+	// Expand All button.
+	$('#expand-all').click(function (event) {
+	    if ($('#expand-all').data("expanded") == false) {
+		$('#tree').jstree(true).open_all();
+		$('#expand-all').data("expanded", true)
+	    }
+	    else {
+		$('#tree').jstree(true).close_all();
+		$('#tree').jstree(true).open_node(rootid, null, false);
+		$('#expand-all').data("expanded", false)
+	    }
+	});
+	if (window.AMLIST !== undefined) {
+	    return GenerateClusters(text);
+	}
+	// Switch between summary and detailed.
+	$('#summary').click(function (event) {
+	    $('#tree').jstree(true).destroy(false);
+	    if (window.SUMMARY) {
+		window.SUMMARY = false;	
+		$('#summary').html("Summary");
+	    }
+	    else {
+		window.SUMMARY = true;
+		$('#summary').html("Details");
+	    }
+	    $('#expand-all').attr("disabled", "disabled");
+	    $('#hardware-search').removeAttr("disabled");
+	    $('#summary').removeAttr("disabled");
+	    Generate(text, route, args);
+	});
+	Generate(text, route, args);
+    }
+
+    /*
+     * Regen the tree.
+     */
+    function Generate(text, route, args)
+    {
 	var root = {
 	    "id"         : "root",
 	    "text"       : text,
@@ -61,8 +113,11 @@ $(function ()
 	    },
 	    "pretag" : "",
 	};
-	if (window.AMLIST !== undefined) {
-	    return GenerateClusters(root);
+	if (window.SUMMARY) {
+	    args["summary"] = true;
+	}
+	else {
+	    delete args["summary"];
 	}
 	sup.CallServerMethod(null, route, "GetHardwareInfo", args,
 			     function(json) {
@@ -89,12 +144,26 @@ $(function ()
     /*
      * Generate for all clusters in amlist.
      */
-    function GenerateClusters(root)
+    function GenerateClusters(text)
     {
 	var promises = [];
 	var amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 	var counter  = 0;
 	console.info("amlist", amlist);
+
+	var root = {
+	    "id"         : "root",
+	    "text"       : text,
+	    "children"   : [],
+	    "properties" : {},
+	    "values"     : [],
+	    "state"      : {
+		"opened"    : true,   // is the node open
+		"disabled"  : false,  // is the node disabled
+		"selected"  : false,  // is the node selected
+	    },
+	    "pretag" : "",
+	};
 	
 	_.each(amlist, function(details, urn) {
 	    var url   = details.url;
@@ -140,6 +209,7 @@ $(function ()
      */
     function GenerateJson(root, paths, prefix)
     {
+	var idx  = 0;
 	var keys = Object.keys(paths);
 	
 	for (var i = 0; i < keys.length; i++) {
@@ -151,7 +221,7 @@ $(function ()
 
 	    for (var j = 1; j < tokens.length; j++) {
 		var token = tokens[j];
-		id += "-" + token;
+		id += "-" + idx++;
 
 		if (j == tokens.length - 1) {
 		    // Last token is a property of the current group.
@@ -231,7 +301,7 @@ $(function ()
      */
     function GenerateJStree(root)
     {
-	var rootid = root.id;
+	rootid = root.id;
 	
 	$('#tree').jstree({
 	    'core' : {
@@ -251,8 +321,16 @@ $(function ()
 		    // Search the property values for a match.
 		    var length = node.original.values.length;
 		    for (var i = 0; i < length; i++) {
-			var val = node.original.values[i];
+			var val  = node.original.values[i];
 			if (f.search(val).isMatch) {
+			    return true;
+			}
+		    }
+		    // No match, search the keys.
+		    var keys = _.keys(node.original.properties);
+		    for (var i = 0; i < keys.length; i++) {
+			var prop = keys[i];
+			if (f.search(prop).isMatch) {
 			    return true;
 			}
 		    }
@@ -277,30 +355,10 @@ $(function ()
 	    $('#tree').jstree(true).select_node(rootid);
 	}, 150);
 
-	// Search box
-	var timer = false;
-	$('#hardware-search').keyup(function () {
-	    if (timer) {
-		clearTimeout(timer);
-	    }
-	    timer = setTimeout(function () {
-		var v = $('#hardware-search').val();
-		$('#tree').jstree(true).search(v);
-	    }, 500);
-	});
-
-	// Expand All button.
-	$('#expand-all').click(function (event) {
-	    if ($('#expand-all').data("expanded") == false) {
-		$('#tree').jstree(true).open_all();
-		$('#expand-all').data("expanded", true)
-	    }
-	    else {
-		$('#tree').jstree(true).close_all();
-		$('#tree').jstree(true).open_node(rootid, null, false);
-		$('#expand-all').data("expanded", false)
-	    }
-	});
+	// Enable
+	$('#expand-all').removeAttr("disabled");
+	$('#hardware-search').removeAttr("disabled");
+	$('#summary').removeAttr("disabled");
     }
 
     $(document).ready(initialize);

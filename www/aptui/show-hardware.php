@@ -46,6 +46,7 @@ if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
 $reqargs = OptionalPageArguments("type",     PAGEARG_STRING,
                                  "typelist", PAGEARG_STRING,
                                  "clusters", PAGEARG_STRING,
+                                 "summary",  PAGEARG_BOOLEAN,
                                  "node",     PAGEARG_NODE);
 
 if (isset($type)) {
@@ -102,6 +103,9 @@ elseif (isset($clusters)) {
 }
 else {
     echo "    window.TYPE      = '$type';\n";
+}
+if (isset($summary) && $summary) {
+    echo "    window.SUMMARY    = true;\n";
 }
 echo "</script>\n";
 
