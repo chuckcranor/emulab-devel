@@ -1,0 +1,25 @@
+#
+#
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    DBQueryFatal("alter table node_hardware_paths drop primary key");
+    DBQueryFatal("alter table node_hardware_paths add primary key ".
+		     "  (`node_id`,`path`,`summary`)");
+
+    DBQueryFatal("alter table node_type_hardware_paths drop primary key");
+    DBQueryFatal("alter table node_type_hardware_paths add primary key ".
+		     "  (`type`,`path`,`summary`)");
+    return 0;
+}
+
+1;
+
+# Local Variables:
+# mode:perl
+# End:
