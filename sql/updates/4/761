@@ -1,0 +1,22 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("node_hardware", "summaryjson")) {
+	DBQueryFatal("alter table node_hardware add ".
+		     "  `summaryjson` mediumtext after rawjson");
+    }
+    if (!DBSlotExists("node_type_hardware", "summaryjson")) {
+	DBQueryFatal("alter table node_type_hardware add ".
+		     "  `summaryjson` mediumtext after rawjson");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
