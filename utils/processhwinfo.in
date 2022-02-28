@@ -439,11 +439,13 @@ sub UpdateInfo($$$)
 	return 0;
     }
     my $safe_json = DBQuoteSpecial($text);
+    my $safe_summary = DBQuoteSpecial(encode_json($summary));
     if ($typetoo) {
 	print "$node_id: Entering data into the DB for type $type ...\n";
 	DBQueryFatal("replace into node_type_hardware set ".
 		     "  type='$type',updated=FROM_UNIXTIME($prefix), ".
-		     "  node_id='$node_id',uname=$uninfo,rawjson=$safe_json");
+		     "  node_id='$node_id',uname=$uninfo,rawjson=$safe_json,".
+		     "  summaryjson=$safe_summary");
 
 	DBQueryFatal("delete from node_type_hardware_paths ".
 		     "where type='$type'");
@@ -460,7 +462,8 @@ sub UpdateInfo($$$)
     print "$node_id: Entering data into the DB ...\n";
     DBQueryFatal("replace into node_hardware set ".
 		 "  node_id='$node_id',updated=FROM_UNIXTIME($prefix), ".
-		 "  uname=$uninfo,rawjson=$safe_json");
+		 "  uname=$uninfo,rawjson=$safe_json, ".
+		 "  summaryjson=$safe_summary");
 
     DBQueryFatal("delete from node_hardware_paths ".
 		 "where node_id='$node_id'");
@@ -794,6 +797,8 @@ sub Summarize($$$)
 	    }
 	    elsif ($key eq "capabilities") {
 		foreach my $subkey (keys(%{$ref->{'capabilities'}})) {
+		    next
+			if ($subkey eq "microcode");
 		    $cache->{$subkey} = $ref->{'capabilities'}->{$subkey};
 		}
 	    }
