@@ -87,6 +87,8 @@ $(function ()
 		window.SUMMARY = true;
 		$('#summary').html("Details");
 	    }
+	    // Reset the expando state.
+	    $('#expand-all').data("expanded", false)		
 	    $('#expand-all').attr("disabled", "disabled");
 	    $('#hardware-search').removeAttr("disabled");
 	    $('#summary').removeAttr("disabled");
