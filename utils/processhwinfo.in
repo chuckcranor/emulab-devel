@@ -521,7 +521,7 @@ sub doArray($$$$$)
 	    }
 	}
 	if (!$iface) {
-	    $ref->{"role"} = "UNAVAILABLE";
+	    $ref->{"role"} = "UNCONNECTED";
 	}
 	elsif ($iface->role() eq TBDB_IFACEROLE_CONTROL()) {
 	    $ref->{"role"} = "control";
@@ -530,11 +530,12 @@ sub doArray($$$$$)
 	    $ref->{"role"} = "management";
 	}
 	elsif (!$iface->wiredup()) {
-	    $ref->{"role"} = "UNAVAILABLE";
+	    $ref->{"role"} = "UNCONNECTED";
 	}
 	elsif ($iface->role() eq TBDB_IFACEROLE_EXPERIMENT()) {
 	    $ref->{"role"} = "experiment";
 	}
+	$ref->{"iface"} = $iface->iface();
     }
 
     # Summary structure.
@@ -749,7 +750,13 @@ sub Summarize($$$)
 
     if ($path eq "") {
 	foreach my $key ("product", "vendor") {
-	    $summary->{$key} = $ref->{$key} if (exists($ref->{$key}));
+	    if (exists($ref->{$key})) {
+		my $val = $ref->{$key};
+		if ($key eq "product" && $val =~ /^(.*) \(.*\)$/) {
+		    $val = $1;
+		}
+		$summary->{$key} = $val;
+	    }
 	}
 	return;
     }
@@ -826,15 +833,17 @@ sub Summarize($$$)
 	return;
     }
     if ($path =~ /(network)(\/(\d+))?$/) {
-	my $name = $ref->{"logicalname"};
+	my $iface = $ref->{"iface"};
 	
 	my $blob = {
 	    "speed"       => $ref->{'capacity'},
 	    "units"       => $ref->{'units'},
 	    "product"     => $ref->{'product'},
 	    "description" => $ref->{'description'},
+	    "logicalname" => $ref->{'logicalname'},
 	    "mac"         => $ref->{'serial'},
 	    "role"        => $ref->{'role'},
+	    "iface"       => $ref->{'iface'},
 	};
 	if (exists($ref->{'vendor'})) {
 	    $blob->{"vendor"} = $ref->{"vendor"};
@@ -844,7 +853,7 @@ sub Summarize($$$)
 		$blob->{$k} = $ref->{"configuration"}->{$k};
 	    }
 	}
-	$summary->{'network'}->{$name} = $blob;
+	$summary->{'network'}->{$iface} = $blob;
 	return;
     }
     if ($path =~ /(disk)(\/(\d+))?$/) {
