@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -122,20 +122,27 @@ foreach my $node (@nodes) {
     #
     # Determine the unix group for the node. 
     #
-    $db_result =
-	DBQueryFatal("select g.unix_name from reserved as r ".
-		     "left join experiments as e on ".
-		     " r.pid=e.pid and r.eid=e.eid ".
-		     "left join groups as g on ".
-		     " g.pid=e.pid and g.gid=e.gid ".
-		     "where r.node_id='$node'");
+    $pid = $TBPID;
 
-    if ($db_result->numrows > 0) {
-	@row = $db_result->fetchrow_array();
-	$pid = $row[0];
-    }
-    else {
-	$pid = $TBPID;
+    #
+    # XXX we don't allow direct console access anymore via /dev/tip or
+    # console log access via NFS mounted /var/log/tiplogs directories.
+    # So there is no need for the groups to exist on tipservers anymore
+    # and we just set the group to the default.
+    #
+    if (0) {
+	$db_result =
+	    DBQueryFatal("select g.unix_name from reserved as r ".
+			 "left join experiments as e on ".
+			 " r.pid=e.pid and r.eid=e.eid ".
+			 "left join groups as g on ".
+			 " g.pid=e.pid and g.gid=e.gid ".
+			 "where r.node_id='$node'");
+
+	if ($db_result->numrows > 0) {
+	    @row = $db_result->fetchrow_array();
+	    $pid = $row[0];
+	}
     }
 
     #

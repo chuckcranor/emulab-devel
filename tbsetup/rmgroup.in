@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -259,14 +259,21 @@ if (system("grep -q '^${unix_gid}:' /etc/group")) {
     }
 
     #
-    # Remove group on the tip servers. 
+    # XXX we don't allow direct console access anymore via /dev/tip or
+    # console log access via NFS mounted /var/log/tiplogs directories.
+    # So the groups will no longer exist on tipservers.
     #
-    foreach my $tipserver ( TBTipServers() ) {
-	print "Removing group $unix_name ($unix_gid) on $tipserver.\n";
+    if (0) {
+	#
+	# Remove group on the tip servers. 
+	#
+	foreach my $tipserver ( TBTipServers() ) {
+	    print "Removing group $unix_name ($unix_gid) on $tipserver.\n";
 
-	if (system("$SSH -host $tipserver $GROUPDEL $unix_name")) {
-	    if (($? >> 8) != 65) {
-		fatal("Could not remove group $unix_name from $tipserver!");
+	    if (system("$SSH -host $tipserver $GROUPDEL $unix_name")) {
+		if (($? >> 8) != 65) {
+		    fatal("Could not remove group $unix_name from $tipserver!");
+		}
 	    }
 	}
     }
