@@ -505,7 +505,8 @@ sub doArray($$$$$)
     # Maybe not the best place for this ... prune out interfaces that
     # are not wired up.
     #
-    if (defined($summary) && $path =~ /(network)(\/(\d+))?$/) {
+    if (defined($summary) &&
+	$path =~ /(network)(\/(\d+))?$/ && exists($ref->{'serial'})) {
 	my $mac  = lc($ref->{'serial'});
 	$mac =~ s/://g;
 
@@ -760,36 +761,24 @@ sub Summarize($$$)
 	}
 	return;
     }
-    if ($path =~ /core\/cpu\/(\d+)$/) {
-	if (!exists($summary->{"cpu"}->{$1})) {
-	    $summary->{"cpu"}->{$1} = {};
+    if ($path =~ /core\/cpu(\/(\d+))?$/) {
+	my $id = (defined($2) ? $2 : 0);
+	    
+	if (!exists($summary->{"cpu"}->{$id})) {
+	    $summary->{"cpu"}->{$id} = {};
 	}
-	my $cpu = $summary->{"cpu"}->{$1};
+	my $cpu = $summary->{"cpu"}->{$id};
 	$cpu->{"product"} = $ref->{"product"};
 
 	foreach my $key (keys(%{$ref->{"configuration"}})) {
 	    $cpu->{$key} = $ref->{"configuration"}->{$key};
 	}
     }
-    if ($path =~ /core\/cpu\/(\d+)\/cache\/(\d+)$/ ||
+    if ($path =~ /core\/cpu(\/(\d+))?\/cache\/(\d+)$/ ||
 	$path =~ /core\/cache\/(\d+)$/) {
 	my $cache;
 
-	if (defined($2)) {
-	    if (!exists($summary->{"cpu"}->{$1})) {
-		$summary->{"cpu"}->{$1} = {};
-	    }
-	    my $cpu = $summary->{"cpu"}->{$1};
-	    
-	    if (!exists($cpu->{"cache"})) {
-		$cpu->{"cache"} = {};
-	    }
-	    if (!exists($cpu->{"cache"}->{$2})) {
-		$cpu->{"cache"}->{$2} = {};
-	    }
-	    $cache = $cpu->{"cache"}->{$2};
-	}
-	else {
+	if ($path =~ /core\/cache/) {
 	    if (!exists($summary->{"cache"})) {
 		$summary->{"cache"} = {};
 	    }
@@ -797,6 +786,23 @@ sub Summarize($$$)
 		$summary->{"cache"}->{$1} = {};
 	    }
 	    $cache = $summary->{"cache"}->{$1};
+	}
+	elsif ($path =~ /core\/cpu(\/(\d+))?\/cache\/(\d+)$/) {
+	    my $cpuid   = (defined($1) ? $2 : 0);
+	    my $cacheid = $3;
+	    
+	    if (!exists($summary->{"cpu"}->{$cpuid})) {
+		$summary->{"cpu"}->{$cpuid} = {};
+	    }
+	    my $cpu = $summary->{"cpu"}->{$cpuid};
+	    
+	    if (!exists($cpu->{"cache"})) {
+		$cpu->{"cache"} = {};
+	    }
+	    if (!exists($cpu->{"cache"}->{$cacheid})) {
+		$cpu->{"cache"}->{$cacheid} = {};
+	    }
+	    $cache = $cpu->{"cache"}->{$cacheid};
 	}
 	foreach my $key (keys(%{$ref})) {
 	    if ($key =~ /^(size|description|units)$/i) {
@@ -834,6 +840,8 @@ sub Summarize($$$)
     }
     if ($path =~ /(network)(\/(\d+))?$/) {
 	my $iface = $ref->{"iface"};
+	return
+	    if (!defined($iface));
 	
 	my $blob = {
 	    "speed"       => $ref->{'capacity'},
