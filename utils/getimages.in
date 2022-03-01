@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2021 University of Utah and the Flux Group.
+# Copyright (c) 2003-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,6 +64,9 @@ my $TARGETSYS    = "@TARGETSYS_TARGET@";
 # This should be a sitevar.
 if ($TARGETSYS eq "POWDER-BUS") {
     $METAURL      = "http://www.emulab.net/powder-bus-imageinfo.xml";
+}
+elsif ($TARGETSYS eq "POWDER-FIXED") {
+    $METAURL      = "http://www.emulab.net/powder-fixed-imageinfo.xml";
 }
 
 my $FBSD_VERSION = 4;
