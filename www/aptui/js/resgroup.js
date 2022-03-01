@@ -3694,10 +3694,14 @@ $(function ()
 	// Helper for common issue;
 	$('#delete-reservation-modal .nolongerfits').click(function (e) {
 	    e.preventDefault();
-	    $('#delete-reason').val("This reservation no longer fits the " +
-				    "schedule. Please login and create a " +
-				    "new one, and we will get it approved " +
-				    "as soon as possible.");
+	    $('#delete-reason')
+		.val("This reservation no longer fits the " +
+		     "schedule. Until a reservation is approved, the " +
+		     "resources are still available to other users, either " +
+		     "in a new experiment or a smaller reservation that is " +
+		     "automatically approved. Please login and create a " +
+		     "new one, and we will get it approved " +
+		     "as soon as possible.\n\n");
 	});
 	
 	// Handler so we know the user closed the modal. We need to
