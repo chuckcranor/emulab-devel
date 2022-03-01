@@ -413,7 +413,8 @@ function Do_GetHardwareInfo()
     }
     $node_id = $node->node_id();
     $query_result =
-        DBQueryFatal("select * from node_hardware where node_id='$node_id'");
+        DBQueryFatal("select updated,uname,summaryjson from node_hardware ".
+                     "where node_id='$node_id'");
     if (!mysql_num_rows($query_result)) {
 	SPITAJAX_ERROR(-1, "No hardware info available for $node_id");
 	return -1;
@@ -426,6 +427,12 @@ function Do_GetHardwareInfo()
                   "paths"   => array(),
                   "summary" => array(),
     );
+    if ($summary && isset($ajax_args["asjson"])) {
+        $blob["json"] = json_decode($row["summaryjson"]);
+        SPITAJAX_RESPONSE($blob);
+        return 0;
+    }
+    
     $query_result =
         DBQueryFatal("select path,value,summary from node_hardware_paths ".
                      "where node_id='$node_id' ".
