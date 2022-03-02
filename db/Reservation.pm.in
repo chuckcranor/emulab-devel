@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2021 University of Utah and the Flux Group.
+# Copyright (c) 2016-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,6 +51,8 @@ my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 
 my %cache = ();
 BEGIN { use emutil; emutil::AddCache(\%cache); }
+
+my $debug = 0;
 
 sub FlushAll($)
 {
@@ -606,11 +608,12 @@ sub LookupAll($$;$$)
 				"e.expt_swap_uid, " .
 				"UNIX_TIMESTAMP( e.expt_expires ), ".
 				"e.autoswap, " .
-				"nr.pid, UNIX_TIMESTAMP( s.expires ), " .
+				"nr.pid as nr_pid, ".
+				"UNIX_TIMESTAMP( s.expires ), " .
 				"s.lockdown as slice_lockdown, ".
 				"n.reserved_pid, " .
 				"UNIX_TIMESTAMP( pr.end ), ".
-				"e.lockdown, e.swappable " .
+				"e.lockdown, e.swappable, nr.eid as nr_eid " .
 				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
@@ -641,10 +644,10 @@ sub LookupAll($$;$$)
 				"e.expt_swap_uid, " .
 				"UNIX_TIMESTAMP( e.expt_expires ), " .
 				"e.autoswap, " .
-				"nr.pid, NULL, " .
+				"nr.pid as nr_pid, NULL, " .
 				"NULL, n.reserved_pid, " .
 				"UNIX_TIMESTAMP( pr.end ), " .
-				"e.lockdown, e.swappable " .
+				"e.lockdown, e.swappable, nr.eid as nr_eid " .
 				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
@@ -672,16 +675,16 @@ sub LookupAll($$;$$)
 
     $$details = "--- Node usage:\n" if( ref( $details ) );
     
-    while( my($count, $pid, $eid, $uid, $end, $autoswap, $next_reserve,
+    while( my($count, $pid, $eid, $uid, $end, $autoswap, $nr_pid,
 	      $slice_expire, $slice_lockdown, $reserved_pid, $pr_end,
-	      $expt_lockdown, $swappable) =
+	      $expt_lockdown, $swappable, $nr_eid) =
 	   $query_result->fetchrow_array() ) {
 	my $endtime;
 
 	if( ref( $details ) ) {
 	    no warnings 'uninitialized';
 	    $$details = $$details . "$count, $pid, $eid, $uid, $end, " .
-		"$autoswap, $next_reserve, $slice_expire, $slice_lockdown, " .
+		"$autoswap, $nr_pid, $nr_eid, $slice_expire, $slice_lockdown, ".
 		"$reserved_pid, $pr_end, $expt_lockdown, $swappable\n";
 	}
 
@@ -701,8 +704,16 @@ sub LookupAll($$;$$)
 	# FIXME can we obtain more precise predictions by doing a
 	# CreateExisting() for the current experiment then something
 	# else at $endtime?
-	if( defined( $next_reserve ) ) {
-	    $endtime = undef;
+	if( defined( $nr_pid ) ) {
+	    #
+	    # So we want to treat hwcheckup like reloading since it is
+	    # transient and should not throw things into overbook. So
+	    # leave the endtime as is, and later it will shift to reloading
+	    # and then to hwcheckup.
+	    #
+	    if (! ($nr_pid eq NODEILL_PID() && $nr_eid eq NODEILL_EID())) {
+		$endtime = undef;
+	    }
 	}
 
 	# If reserved_pid is set, assume the node is assigned to the
@@ -714,14 +725,25 @@ sub LookupAll($$;$$)
 	    $endtime = $pr_end;
 	}
 
+	if (0 && defined($pid) &&
+	    $pid eq OLDRESERVED_PID() && $eid eq OLDRESERVED_EID()) {
+	    #
+	    # oldreserved nodes are nodes that are still in an experiment,
+	    # but moved out of the way during the mapper. See comment there.
+	    #
+	    # These nodes are not free. We just ignore them.
+	    #
+	    ;
+	}
 	# Consider nodes in reloading to be available.  One important
 	# reason for doing so is that if a project has a current reservation
 	# and swaps one experiment out and a replacement in, then during
 	# the transition period, sufficient nodes must be considered available
 	# for assignment to that project.
-	if( defined( $pid ) && ( $pid ne "emulab-ops" ||
+	elsif( defined( $pid ) && ( $pid ne "emulab-ops" ||
 				 ( $eid ne "reloading" &&
-				   $eid ne "reloadpending" ) ) ) {
+				   $eid ne "reloadpending" &&
+				   $eid ne "hwcheckup" ) ) ) {
 	    # Handle the case where an experiment is swapped in.  The
 	    # nodes aren't free right now, but at some time in the
 	    # future they could become so.
@@ -873,8 +895,20 @@ sub IsFeasible($$;$$$$$$)
 	}
     } @timeline;
 
+    if ($debug) {
+	print "IsFeasible:\n";
+	print Dumper(\%used);
+	print Dumper(\%reserved);
+	print "Free: $free\n";
+    }
+
     foreach my $event ( @events ) {
 	my $pid = $event->{'pid'};
+
+	if ($debug) {
+	    print "-----\n";
+	    print Dumper($event);
+	}
 
 	$used{ $pid } = 0 if( !exists( $used{ $pid } ) );
 	$reserved{ $pid } = 0 if( !exists( $reserved{ $pid } ) );
@@ -891,6 +925,11 @@ sub IsFeasible($$;$$$$$$)
 	    $reserved{ $pid };
 
 	$free += $oldsum - $newsum;
+
+	if ($debug) {
+	    print $used{ $pid } . "," . $reserved{ $pid } . "\n";
+	    print "$oldsum,$newsum,$free\n";
+	}
 
 	if( defined( $forecast ) ) {
 	    my %used_ = %used;
@@ -1837,6 +1876,7 @@ sub MaxSwapIn($$$) {
     my ($class, $experiment, $type) = @_;
     my $MAX = 10000;
     my $overflow;
+    my $error = {};
     my $details;
 
     DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read");        
@@ -1867,7 +1907,7 @@ sub MaxSwapIn($$$) {
     push( @$reservations, $reservation );
 
     while( $reservation->nodes() > 0 &&
-	   !IsFeasible( $class, $reservations, undef, undef, \$overflow ) ) {
+	   !IsFeasible( $class, $reservations, $error, undef, \$overflow ) ) {
 	$reservation->SetNodes( $reservation->nodes() - $overflow );
     }
     DBQueryFatal("unlock tables");
