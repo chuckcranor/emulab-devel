@@ -4484,6 +4484,7 @@ CREATE TABLE `nodes` (
   `nonfsmounts` tinyint(1) NOT NULL default '0',
   `nfsmounts` enum('emulabdefault','genidefault','all','none') default NULL,
   `taint_states` set('useronly','blackbox','dangerous','mustreload') default NULL,
+  `checkup_timestamp` int(10) unsigned NOT NULL default '0',
   PRIMARY KEY  (`node_id`),
   KEY `phys_nodeid` (`phys_nodeid`),
   KEY `node_id` (`node_id`,`phys_nodeid`),

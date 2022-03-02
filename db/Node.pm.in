@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -981,6 +981,25 @@ sub GetEventState($;$$$)
     $$pstamp= $stamp
  	if (defined($pstamp));
     return 0;
+}
+
+sub SetCheckupStamp($;$)
+{
+    my ($self, $stamp) = @_;
+
+    # Must be a real reference.
+    return -1
+	if (!ref($self));
+
+    $stamp = time()
+	if (!$stamp);
+
+    my $node_id = $self->node_id();
+    DBQueryWarn("update nodes set checkup_timestamp=$stamp".
+		"    where node_id='$node_id'")
+	or return -1;
+
+    return Refresh($self);
 }
 
 #

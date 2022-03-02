@@ -201,6 +201,8 @@ INSERT INTO sitevariables VALUES ('rfmonitor/noisefloor',NULL,'-110.0','Noise fl
 INSERT INTO sitevariables VALUES ('powder/deadman_enable',NULL,'0','Set to non-zero to enable Powder deadman operation.',0);
 INSERT INTO sitevariables VALUES ('powder/mobile_update',NULL,'1','Set to zero to disable automated software update at boot time.',0);
 INSERT INTO sitevariables VALUES ('images/listed_default',NULL,'1','By default, newly created or imported global images in the emulab-ops project will be listed for users to see (and use). Set this to zero to prevent automatic listing.',0);
+INSERT INTO sitevariables VALUES ('hwcheckup/interval',NULL,'0','Interval (in days) at which nodes should be run through hwcheckup. Zero disables periodic checks.',0);
+INSERT INTO sitevariables VALUES ('hwcheckup/maxnodes',NULL,'10','Maximum number of healthy nodes to run through hwcheckup in one pass.',0);
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

@@ -1,0 +1,43 @@
+#
+# Add state for periodic checkups (run free nodes through hwcheckup).
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    # Unix timestamp of when node last went to hwcheckup
+    if (!DBSlotExists("nodes", "checkup_timestamp")) {
+	DBQueryFatal("alter table nodes add ".
+		     "  `checkup_timestamp` int(10) unsigned NOT NULL default '0' ".
+		     "     after taint_states");
+    }
+
+    # Sitevars
+    my %value = (
+	"interval" => 0,
+	"maxnodes" => 10
+    );
+    my %desc = (
+	"interval" => "Interval (in days) at which nodes should be run through hwcheckup. Zero disables periodic checks.",
+	"maxnodes" => "Maximum number of healthy nodes to run through hwcheckup in one pass.",
+    );
+
+    foreach my $name (keys %value) {
+	my $val = $value{$name};
+	my $desc = $desc{$name};
+	DBQueryFatal("INSERT INTO sitevariables VALUES ".
+		     " ('hwcheckup/$name',NULL,'$val','$desc',0)")
+	    if (!TBSiteVarExists("hwcheckup/$name"));
+    }
+
+    return 0;
+}
+
+1;
+
+# Local Variables:
+# mode:perl
+# End:
