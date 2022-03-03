@@ -59,6 +59,7 @@ sub usage()
 my $optlist = "d";
 my $action  = "boot";
 my $debug = 0;
+my $force = 0;
 my $outdir = "/proj/emulab-ops/hwcollect";
 my $prefix = "";
 my @commands = ();
@@ -127,6 +128,11 @@ SWITCH: for ($action) {
 	doreset();
 	last SWITCH;
     };
+    /^force$/i && do {
+	$force = 1;
+	doboot();
+	last SWITCH;
+    };
     warn("hwcollect: invalid action '$action' ignored\n");
 }
 exit(0);
@@ -148,20 +154,49 @@ sub doboot()
 	return;
     }
 
-    my %tmccargs = ( 'nocache' => 1 );
-
     my @tmccinfo = ();
-    if (tmcc(TMCCCMD_HWCOLLECT, undef, \@tmccinfo, %tmccargs) < 0) {
-	warn("*** WARNING: Could not get hwcollect info from server, ignored\n");
-	return;
+    #
+    # XXX hackary to allow collecting basic data on long lived lived nodes.
+    # tmcd will NOT pass in any info if we are not in the correct experiment context.
+    # So, we fake it up here using our current set of commands:
+    #     Any,uname,uname -a; \
+    #     Linux,lscpu,lscpu; \
+    #     Linux,lshw,lshw -json -quiet; \
+    #     Linux,nlshw,/proj/emulab-ops/hwcollect/bin/lshw-static -json -quiet
+    # We should really have tmcd pass us at least the command list even if the
+    # experiment is wrong, but that is more work for tmcd for the 99% of cases
+    # that will never use the info. If we start changing around the commands a lot,
+    # I will reconsider.
+    #
+    if ($force) {
+	if (! -d $outdir) {
+	    $outdir = "/tmp";
+	}
+	push(@tmccinfo,
+	     "COLLECT=1",
+	     "OUTDIR=$outdir",
+	     "PREFIX=" . time() . "-",
+	     "OS=Any NAME=uname CMDLINE=uname -a",
+	     "OS=Linux NAME=lscpu CMDLINE=lscpu",
+	     "OS=Linux NAME=lshw CMDLINE=lshw -json -quiet");
+	if ($outdir eq "/proj/emulab-ops/hwcollect") {
+	    push(@tmccinfo, "OS=Linux NAME=nlshw CMDLINE=$outdir/bin/lshw-static -json -quiet");
+	}
+    } else {
+	my %tmccargs = ( 'nocache' => 1 );
+
+	if (tmcc(TMCCCMD_HWCOLLECT, undef, \@tmccinfo, %tmccargs) < 0) {
+	    warn("*** WARNING: Could not get hwcollect info from server, ignored\n");
+	    return;
+	}
+	if (@tmccinfo == 0) {
+	    return;
+	}
     }
-    if (@tmccinfo == 0) {
-	return;
-    }
-    
+   
     foreach my $str (@tmccinfo) {
 	if ($str =~ /^COLLECT=(\d)$/) {
-	    if (!$1) {
+	    if (!$1 && !$force) {
 		warn("*** WARNING: hwcollect disabled.\n");
 		return;
 	    }
@@ -170,7 +205,7 @@ sub doboot()
 	if ($str =~ /^OUTDIR=(.+)$/) {
 	    $outdir = $1;
 	    if (! -d $outdir) {
-		warn("*** WARNING: hwcollect OUTDIR not a directory, ignored\n");
+		warn("*** WARNING: hwcollect OUTDIR does not exist or is not a directory, ignored\n");
 		return;
 	    }
 	    next;
@@ -214,6 +249,17 @@ sub doboot()
 	}
     }
 
+    #
+    # If we had to stash the results in /tmp, just make up a tarball that can
+    # be dropped into /proj/emulab-ops.
+    #
+    if ($outdir eq "/tmp") {
+	if (system("tar -czf /tmp/hwcollect-$nodeid.tar.gz -C /tmp $nodeid")) {
+	    print STDERR "Failed to create tarball of /tmp/$nodeid\n";
+	} else {
+	    print STDERR "node info in /tmp/hwcollect-$nodeid.tar.gz\n";
+	}
+    }
 }
 
 sub doshutdown()
