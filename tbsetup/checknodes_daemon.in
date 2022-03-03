@@ -349,12 +349,9 @@ while (1) {
 	    fatal("Could not free nodes: @informtbopswarn");
 	}
 	else {
-	    my $count = scalar(@informtbopswarn);
-	    SENDMAIL($TBOPS, "$count nodes appear to be okay",
-		     "Nodes:\n".
-		     "  " . join(" ", @informtbopswarn) . "\n".
-		     "have reloaded and rebooted okay.\n\n".
-		     "The nodes have been freed.\n");
+	    # XXX just log nodes that passed, don't send mail.
+	    logit("successfully reloaded and freed: ".
+		  join(" ", @informtbopswarn), 1);
 	}
     }
 
