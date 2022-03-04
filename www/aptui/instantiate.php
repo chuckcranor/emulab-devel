@@ -412,20 +412,17 @@ if ($ishashed) {
     $formfields["hashkey"] = $profile->hashkey();
 }
 
-#
-# If the user is in the same project as the profile, default to that
-# project, else use the first in the list (which is ordered by last
-# time the user instantiated in it).
-#
-if (isset($profile) && array_key_exists($profile->pid(), $projlist)) {
-    $project = $profile->pid();
-}
-else {
+# Default project if only one, otherwise user must select,
+if (count($projlist) == 1) {
     list($project, $grouplist) = each($projlist);
+    $formfields["pid"] = $project;
+    $formfields["gid"] = $project;
     reset($projlist);
 }
-$formfields["pid"] = $project;
-$formfields["gid"] = $project;
+else {
+    $formfields["pid"] = "";
+    $formfields["gid"] = "";
+}
 $formfields["username"] = $this_user->uid();
 $formfields["email"]    = $this_user->email();
 
