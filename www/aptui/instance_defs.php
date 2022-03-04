@@ -995,33 +995,10 @@ class InstanceHistory
 	    return;
 	}
 	$this->record  = mysql_fetch_array($query_result);
-
-        #
-        # Get the list of aggregate records. Early records do not have one.
-        #
-	$query_result =
-	    DBQueryWarn("select * from apt_instance_aggregate_history ".
-			"where uuid='$uuid'");
-	if (!$query_result) {
-	    $this->record = null;
-	    return;
-	}
-        if (!mysql_num_rows($query_result)) {
-            $this->slivers = array(
-                array("uuid" => $this->record["uuid"],
-                      "name" => $this->record["name"],
-                      "aggregate_urn" => $this->record["aggregate_urn"],
-                      "status" => $this->record["status"],
-                      "public_url" => $this->record["public_url"],
-                      "manifest" => $this->record["manifest"],
-                ));
-        }
-        else {
-            $this->slivers = array();
-
-            while ($row = mysql_fetch_array($query_result)) {
-                $this->slivers[] = $row;
-            }
+        $this->slivers = InstanceSliver::LookupForInstance($this);
+        if (!count($this->slivers) && $this->aggregate_urn()) {
+            $this->slivers =
+                array(InstanceSliver::Lookup($this, $this->aggregate_urn()));
         }
     }
     # accessors
@@ -1159,10 +1136,13 @@ class InstanceSliver
         }
 	$uuid = $instance->uuid();
         $safe_urn = addslashes($urn);
-
-	$query_result =
-	    DBQueryWarn("select * from apt_instance_aggregates ".
-			"where uuid='$uuid' and aggregate_urn='$safe_urn'");
+        $table = "apt_instance_aggregates";
+        if (get_class($instance) == "InstanceHistory") {
+            $table = "apt_instance_aggregate_history";
+        }
+        $query_result =
+            DBQueryWarn("select * from $table ".
+                        "where uuid='$uuid' and aggregate_urn='$safe_urn'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->sliver = null;
@@ -1230,9 +1210,12 @@ class InstanceSliver
     function LookupForInstance($instance) {
         $result = array();
         $uuid   = $instance->uuid();
-
+        $table  = "apt_instance_aggregates";
+        if (get_class($instance) == "InstanceHistory") {
+            $table = "apt_instance_aggregate_history";
+        }
         $query_result =
-            DBQueryFatal("select aggregate_urn from apt_instance_aggregates ".
+            DBQueryFatal("select aggregate_urn from $table ".
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {

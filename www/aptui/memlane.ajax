@@ -54,8 +54,11 @@ function Do_HistoryRecord()
 	return;
     }
     $blob = $record->record;
-    $blob["slivers"] = $record->slivers();
-
+    $blob["slivers"] = array();
+    $slivers = $record->slivers();
+    foreach ($slivers as &$sliver) {
+        $blob["slivers"][] = $sliver->sliver;
+    }
     #
     # Need to add a few things.
     #

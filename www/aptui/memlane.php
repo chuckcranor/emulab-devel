@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -130,7 +130,7 @@ echo "<div id='page-body'>
 #
 $blob = array();
 foreach ($record->slivers as $sliver) {
-    $aggregate_urn = $sliver["aggregate_urn"];
+    $aggregate_urn = $sliver->aggregate_urn();
     $aggregate     = Aggregate::Lookup($aggregate_urn);
     $weburl        = $aggregate->weburl();
 
