@@ -56,6 +56,8 @@ $(function ()
     var mainTemplate  = _.template(instantiateString);
     var graphTemplate = _.template(templates["reservation-graph"]);
     var reslistTemplate= _.template(templates["resgroup-list"]);
+    var rerun_instance = null;
+    var rerun_loaded   = false;
 
     function enableStepsMotion()
     {
@@ -87,6 +89,22 @@ $(function ()
 	}
 	else {
 	    disableStepsMotion();
+	}
+    }
+    // Called from ppwizard when the user loads a previous instance.
+    // We need it for finalization (name,project,clusters).
+    function setRerunInstance(record)
+    {
+	console.info("setRerunInstance", record);
+	if (record) {
+	    rerun_instance = record;
+	    window.SELECTED_INSTANCE = record.rerun_uuid;
+	    rerun_loaded   = false;
+	}
+	else {
+	    rerun_instance = null;
+	    window.SELECTED_INSTANCE = undefined;
+	    rerun_loaded   = true;
 	}
     }
 
@@ -208,10 +226,7 @@ $(function ()
 
 	// Check if the browser has cookies stating what they previoiusly had minimized.
         CookieCollapse('#profile_name > span', 'pp_collpased');
-        _.defer(function () {
-	    monitor = JSON.parse(_.unescape($('script#amstatus-json').html()));
-	    //CreateClusterStatus();
-        });
+	monitor = JSON.parse(_.unescape($('script#amstatus-json').html()));
 	$('#waitwait_div').html(waitwaitString);
         $('#waitwait-modal').modal({ backdrop: 'static', keyboard: false, show: false });
 	$('#rspecview_div').html(rspecviewString);
@@ -344,6 +359,7 @@ $(function ()
 	 * is changed.
 	 */
 	$('#profile_pid').change(function (event) {
+	    event.preventDefault();
 	    UpdateGroupSelector();
 	    UpdateImageConstraints();
 	    return true;
@@ -444,9 +460,18 @@ $(function ()
 		reader.readAsText(this.files[0]);
 	    });
 	}
-	    
-	var startProfile = $('#profile_name li[value = ' + window.PROFILE + ']:first');
-	ChangeProfileSelection(startProfile);
+	// This needs to change.
+	var startProfile = $('#profile_name li[value = ' +
+			     window.PROFILE + ']:first');
+
+	// Load previous bindings if applicable.
+	if (window.PROFILE_UUID && window.RERUN_INSTANCE) {
+	    // We do not know yet if its parameterized. But that is okay.
+	    LoadPreviousBindings().done(ChangeProfileSelection(startProfile))
+	}
+	else {
+	    ChangeProfileSelection(startProfile);
+	}
 	_.delay(function () {
 	    $('.dropdown-toggle').dropdown();
 	}, 500);
@@ -547,22 +572,6 @@ $(function ()
 	
 	if (currentIndex == 0 && newIndex == 1) {
 	    // Check step 0 form values. Any errors, we stop here.
-	    if (!registered && !doingformcheck) {
-		doingformcheck = 1;
-		CheckStep0(function (success) {
-		    if (success) {
-			$('#stepsContainer-t-0').parent().removeClass('error');
-			$('#stepsContainer').steps('next');
-		    }
-		    else {
-			$('#stepsContainer-t-0').parent().addClass('error');
-		    }
-		    // Here to avoid recursion.
-		    doingformcheck = 0;
-		});
-		// Prevent step from advancing until check is finished.
-		return false;
-	    } 
 	    if (ispprofile) {
 		if (selected_uuid != loaded_uuid) {
 		    $('#stepsContainer-p-1 > div')
@@ -575,15 +584,14 @@ $(function ()
 			isadmin      : isadmin,
 			config_callback : ConfigureDone,
 			modified_callback : function () { ppchanged = true; },
-			rspec        : null,
 		        multisite    : multisite,
 			amlist       : amlist,
 			prunetypes   : prunetypes,
 			fromrepo     : window.FROMREPO,
 			rerun_instance : window.RERUN_INSTANCE,
 			rerun_paramset : window.RERUN_PARAMSET,
-		        jacksGraphCallback: updateJacksGraph,
 			setStepsMotion : setStepsMotion,
+			setRerunInstance : setRerunInstance,
 		    });
 		    loaded_uuid = selected_uuid;
 		    ppchanged = true; 
@@ -611,7 +619,7 @@ $(function ()
 		    else {
 			$('#stepsContainer-t-1').parent().addClass('error');
 		    }
-		}, updateJacksGraph);
+		});
 		// We do not proceed until the form is submitted
 		// properly. This has a bad side effect; the steps
 		// code assumes this means failure and adds the error
@@ -661,10 +669,7 @@ $(function ()
 	    if (!ispprofile) {
 		if (priorIndex < currentIndex) {
 		    // Generate the profile on the third tab
-		    ppstart.ShowThumbnail(selected_rspec, updateJacksGraph);
-		    //ShowProfileSelectionInline($('#profile_name .current'),
-			       //$('#stepsContainer-p-2 #inline_jacks'), true);
-
+		    ShowThumbnail(selected_rspec, updateJacksGraph);
 		    $(step).steps('next');
 		    $('#stepsContainer-t-1').parent().removeClass('done')
 			.addClass('disabled');
@@ -714,6 +719,9 @@ $(function ()
 	    }
 	    if (priorIndex < currentIndex) {
 		CheckForRadioUsage();
+		if (rerun_instance) {
+		    LoadRerunInstance();
+		}
 	    }
 	}
 	else if (currentIndex == 3) {
@@ -1273,8 +1281,17 @@ $(function ()
 	$('#reservation_warning').addClass('hidden');
 	$('#reservation_future').addClass('hidden');
 
+	/*
+	 * Ick, the reservation prediction info uses canonical project names
+	 * from the urn. But locally they can have a different case, so need
+	 * a quick map them from the user project list. 
+	 */
+	var pidmap = {};
+	_.each(projlist, function (glist, pid) {
+	    pidmap[pid.toLowerCase()] = pid;
+	});
+
 	$('#finalize_options .cluster-group').each(function() {
-	    var click  = false;
 	    var siteid = $(this).find("> label").attr("name");
 
 	    $(this).find('.dropdown-menu > .enabled:not(.hidden)').each(function() {
@@ -1309,9 +1326,8 @@ $(function ()
 			    
 			    // Current project has a future reservation
 			    // Used for cluster icons
-			    if (project == resproj) {
+			    if (project.toLowerCase() == resproj) {
 				hasReservation = true;
-				click = true;
 
 				// Find earliest starting reservation time
 				if (earliest == null ||
@@ -1320,8 +1336,8 @@ $(function ()
 				}
 			    }
 			    // Do not override a current entry (from above).
-			    if (!_.has(projectReservations, resproj)) {
-				projectReservations[resproj] = {
+			    if (!_.has(projectReservations, pidmap[resproj])) {
+				projectReservations[pidmap[resproj]] = {
 				    // Icon for projects
 				    class: "futureReservation",
 				    // Used for sorting projects
@@ -1347,9 +1363,9 @@ $(function ()
 			    
 			    // Current project has a current reservation
 			    // Used for cluster icons
-			    if (project == resproj) {
+			    if (project.toLowerCase() == resproj) {
 				hasReservation = true;
-				click = true;
+
 				// All nodes for current project reservations.
 				requested += parseInt(req);
 				inuse += parseInt(used);
@@ -1357,7 +1373,7 @@ $(function ()
 				reloading += parseInt(obj.reloading);
 				currentReservations = true;
 			    }
-			    projectReservations[resproj] = {
+			    projectReservations[pidmap[resproj]] = {
 				// Icon for projects
 				class: "hasReservation",
 				// Used for sorting projects
@@ -1373,17 +1389,19 @@ $(function ()
 			resinfo[cluster]['pressure'] != null) {
 			_.each(resinfo[cluster]['pressure'],
 			       function(reslist, type) {
+				   var pidlc = project.toLowerCase();
+				   
 				   //console.info("P1", reslist,
 				   //             type, hardware, siteid);
 				   if (_.has(hardware, siteid) &&
 				       _.has(hardware[siteid], type) &&
-				       _.has(reslist, project)) {
+				       _.has(reslist, pidlc)) {
 				       //console.info("P", siteid,
 				       //              type, project);
 				       if (start == null ||
-					   start > reslist[project][0][0]) {
-					   start = reslist[project][0][0];
-					   end = reslist[project][0][1];
+					   start > reslist[pidlc][0][0]) {
+					   start = reslist[pidlc][0][0];
+					   end = reslist[pidlc][0][1];
 				       }
 				   }
 			       });
@@ -1443,25 +1461,43 @@ $(function ()
 	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.native').sort(SortClusterStatus).prependTo($('#'+which+' .cluster_picker_status .dropdown-menu'));
 	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(SortClusterStatus).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
 
-	    var pickerStatus = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a');
-	    if (0 && click) {
-		// Do not do this anymore, its annoying.
-		pickerStatus[1].click();
-	    }
-	    else {
-		$('#'+which+' .cluster_picker_status .dropdown-menu .selected a').click();
-	    }
+	    // This makes sure that we keep the already selected cluster
+	    // This happens asynchronously, and the user may have already
+	    // decided on the cluster before we get here.
+	    $('#'+which+' .cluster_picker_status .dropdown-menu .selected a')
+		.click();
 	});
-	if (_.keys(projectReservations).length > 0 && $('#profile_pid_picker').length == 0) {
-	    picker.MakePicker('#profile_pid', wt.ResClickEvent, projectReservations);
+	console.info("ShowClusterReservations",
+		     projectReservations, $('#profile_pid_picker').length);
+
+	if (_.keys(projectReservations).length > 0 && 
+	    $('#profile_pid_picker').length == 0) {
+	    picker.MakePicker('#profile_pid',
+			      wt.ResClickEvent, projectReservations);
+
+	    /*
+	     * As with the cluster selector, we do not want to change
+	     * the project selection if the user has already changed it.
+	     */
+	    var selected = $('#profile_pid option:selected').val();
 
 	    // Add icons
-	    $('#profile_pid_picker .dropdown-menu .hasReservation a').append(wt.HasReservationHTML(project, 'project', 1))
-	    $('#profile_pid_picker .dropdown-menu .futureReservation a').append(wt.FutureReservationHTML(project, 'project', 1))
+	    $('#profile_pid_picker .dropdown-menu .hasReservation a')
+		.append(wt.HasReservationHTML(project, 'project', 1))
+	    $('#profile_pid_picker .dropdown-menu .futureReservation a')
+		.append(wt.FutureReservationHTML(project, 'project', 1))
 
-	    $('#profile_pid_picker .dropdown-menu > li').sort(SortProfileList).prependTo($('#profile_pid_picker .dropdown-menu'));
+	    $('#profile_pid_picker .dropdown-menu > li')
+		.sort(SortProfileList)
+		.prependTo($('#profile_pid_picker .dropdown-menu'));  
 
-	    $($('#profile_pid_picker .dropdown-menu a')[0]).click();
+	    if (selected != "") {
+		$('#profile_pid_picker .dropdown-menu ' +
+		  'a[value="' + selected + '"]').click();
+	    }
+	    else {
+		$($('#profile_pid_picker .dropdown-menu a')[0]).click();
+	    }
 	}
     }
 
@@ -1505,13 +1541,7 @@ $(function ()
 	  .addClass('col-lg-8 col-md-8 col-sm-8');
 	$('#stepsContainer #inline_large_jacks').html('');
 	$('#inline_large_container').addClass('hidden');
-	ppstart.ShowThumbnail(selected_rspec, null);
-			//if (ispprofile) {
-				//ppstart.ChangeJacksRoot($('#stepsContainer-p-2 #inline_jacks'), true);
-			//}
-			//else {
-				//ShowProfileSelectionInline($('#profile_name .current'), $('#stepsContainer-p-2 #inline_jacks'), true);
-			//}
+	ShowThumbnail(selected_rspec, null);
 	$('#stepsContainer-p-2 #inline_container')
 	  .removeClass('hidden');
       }
@@ -1544,7 +1574,7 @@ $(function ()
 
 	if (ispprofile)
 	{
-	  ppstart.ChangeJacksRoot($('#stepsContainer #inline_large_jacks'), false);
+	  ChangeJacksRoot($('#stepsContainer #inline_large_jacks'), false);
 	}
 	else
 	{
@@ -1742,6 +1772,8 @@ $(function ()
 		    window.PROFILE_HEADVERS = window.PROFILE_VERSION;
 		    window.FROMREPO = false;
 		}
+		rerun_instance = null;
+		rerun_loaded   = null;
 	    }
 	    if (profile_blob.fromrepo) {
 		var text = profile_name + " (Repo: " +
@@ -1802,10 +1834,12 @@ $(function ()
 	    json.value.description = description;
 	    continuation(json.value);
 	}
+	var args = {
+	    "profile" : profile,
+	};
 	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "instantiate", "GetProfile",
-					    {"profile" : profile});
-
+					    "instantiate", "GetProfile", args);
+					    
 	/*
 	 * If a repo-based and we got a specific branch/tag/hash, we have to
 	 * get the source for that, since it will be different then what
@@ -1913,18 +1947,14 @@ $(function ()
      * Callback from the PP configurator. Stash rspec into the form.
      */
     function ConfigureDone(newRspec) {
-	// If not a registered user, we do not get an rspec back, since
-	// the user is not allowed to change the configuration.
+	console.info("ConfigureDone: " + (newRspec ? "changed" : "no change"));
+
+	// New rspec means it changed in ppwizard
 	if (newRspec) {
 	    selected_rspec = SetClusters(newRspec);
 	    $('#rspec_textarea').val(selected_rspec);
 	    CreateAggregateSelectors(selected_rspec);
-	}
-	if (window.NOPPRSPEC) {
-	    alert("Guest users may configure parameterized profiles " +
-		  "for demonstration purposes only. The parameterized " +
-		  "configuration will not be used if you Create this " +
-		  "experiment.");
+	    ShowThumbnail(selected_rspec, updateJacksGraph);
 	}
     }
 
@@ -2077,7 +2107,7 @@ $(function ()
 	     * selection if the user has already made one. 
 	     */
 	    var selected;
-	    if ($('#finalize_options .cluster-group').length) {
+	    if ($('#finalize_options .cluster-group').leangth) {
 		selected = $('#finalize_options .cluster-group ' +
 			     'select option:selected').text();
 	    }
@@ -2240,6 +2270,8 @@ $(function ()
 
     function onFoundImages(images)
     {
+	console.info("onFoundImages", images);
+	
 	if (! doconstraints) {
 	    return true;
 	}
@@ -2253,7 +2285,7 @@ $(function ()
 
     function onFoundTypes(t) 
     {
-	//console.info("onFoundTypes", t);
+	console.info("onFoundTypes", t);
 	types = {};
 	hardware = {};
 	_.each(t, function(item) {
@@ -2266,6 +2298,12 @@ $(function ()
      * Update the image constraints if anything changes.
      */
     function UpdateImageConstraints() {
+	console.info("UpdateImageConstraints");
+
+	if (rerun_instance) {
+	    // This stuff makes it really hard to honor the rerun instance.
+	    return;
+	}
 	if (!foundImages.length || !doconstraints) {
 	    CreateAggregateSelectors(selected_rspec);
 	    return;
@@ -2423,6 +2461,18 @@ $(function ()
 
     function updateJacksGraph(newGraph)
     {
+      console.log('updateJacksGraph', newGraph);
+	
+      // This stuff makes it really hard to honor the rerun instance.
+      // Mostly cause it is asynchronous and comes back after I have set
+      // the pid/cluster(s). For now just neuter since the whole point
+      // is to do whatever the rerun instance did.
+      if (rerun_instance) {
+	  CreateClusterStatus();
+	  $('.site-wait').hide();
+	  $('.site-selector').show();
+	  return;
+      }
       jacksGraph = newGraph;
       validList = new JACKS_LOADER.ValidList(jacksGraph, constraints);
       var images = [];
@@ -2433,7 +2483,6 @@ $(function ()
 	}
       }.bind(this));
       onFoundImages(images);
-      //console.log('updateJacksGraph');
       updateWhere();
     }
 
@@ -2447,7 +2496,12 @@ $(function ()
 	    CreateClusterStatus();
 	    return;
 	}
-	//console.info("updateWhere");
+	if (rerun_instance) {
+	    // This stuff makes it really hard to honor the rerun instance.
+	    CreateClusterStatus();
+	    return;
+	}
+	console.info("updateWhere");
 	
 	//if (jacks.input && constraints && selected_rspec)
 	//{
@@ -2471,7 +2525,7 @@ $(function ()
 
     function finishUpdateWhere(allNodes, nodesBySite)
     {
-        //console.log('finishUpdateWhere');
+        console.log('finishUpdateWhere');
 	if (!multisite || Object.keys(sites).length <= 1) {
 	    updateSiteConstraints(allNodes,
 				  $('#cluster_selector .cluster-group'));
@@ -2636,6 +2690,11 @@ $(function ()
     function UpdateGroupSelector()
     {
 	var pid = $('#project_selector #profile_pid').val();
+
+	if (pid == "") {
+	    $('#group_selector').addClass("hidden");
+	    return;
+	}
 	var glist = projlist[pid];
 	console.info(pid, glist);
 
@@ -3370,5 +3429,135 @@ $(function ()
 	return rspec;
     }
 
+    // If not parameterized we need to pick up the rerun details here.
+    function LoadPreviousBindings()
+    {
+	var callback = function(json) {
+	    console.info("LoadPreviousBindings (instantiate)", json);
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    rerun_instance = json.value;
+	};
+	var args = {
+	    "profile"    : window.HASHKEY || window.PROFILE_UUID,
+	    "rerun_uuid" : window.RERUN_INSTANCE,
+	};
+	return sup.CallServerMethod(null, "instantiate",
+				    "GetPreviousBindings", args, callback);
+    }
+    // Load rerun instance stuff as needed. We only do this once, unless
+    // user goes back and loads a new instance.
+    function LoadRerunInstance()
+    {
+	if (rerun_loaded) {
+	    return;
+	}
+	console.info("LoadRerunInstance", rerun_instance);
+	var name = rerun_instance.rerun_name;
+	var pid  = rerun_instance.rerun_pid;
+	var gid  = rerun_instance.rerun_gid;
+
+	console.info(name, pid, gid);
+
+	// Do not replace auto generated name.
+	if (!name.match(/[^-]+\-(QV)?\d+/)) {
+	    $('#experiment_name').val(name);
+	}
+	if (_.size(projlist) > 1) {
+	    // Oh jeez, we have to worry about the pickered selectors.
+	    if ($('#profile_pid').hasClass("pickered")) {
+		// This is dumb.
+		$('#profile_pid_picker ul li a[value="' + pid + '"]').click();
+	    }
+	    else {
+		$('#profile_pid').val(pid);
+		$('#profile_pid').trigger("change");
+	    }
+	}
+	if (gid != pid) {
+	    $('#profile_gid').val(gid);
+	}
+	if ($('#nosite_selector').length &&
+	    rerun_instance.rerun_clusters.length == 1) {
+	    var urn = rerun_instance.rerun_clusters[0];
+	    var name = amlist[urn].name;
+
+	    console.info(urn, name);
+
+	    // Oh jeez, we have to worry about the pickered selectors.
+	    if ($('#site0_selector').hasClass("pickered")) {
+		// This is dumb.
+		$('#site0_selector_picker ul li[urn="' + urn + '"] a').click();
+	    }
+	    else {
+		$('#site0_selector').val(name);
+	    }
+	}
+	rerun_loaded = true;
+    }
+
+    /*
+     * This stuff used to be in ppwizard but it currently makes no sense
+     * to have there. And it confuses the hell out of things.
+     */
+    var thumbnail = null;
+    var jacksGraphCallback = null;
+
+    function countNodes(rspec)
+    {
+	//console.info("countNodes");
+	var xmlDoc = $.parseXML(rspec);
+	var count  = $(xmlDoc).find("node").length;
+	return count;
+    }
+    function setJacksGraph(newGraph)
+    {
+	if (jacksGraphCallback) {
+	    jacksGraphCallback(newGraph);
+	}
+    }
+    
+    function ShowThumbnail(rspec, jacks_callback)
+    {
+	console.info("ShowThumbnail", jacks_callback);
+	jacksGraphCallback = jacks_callback;
+
+	var root = $('#stepsContainer-p-2 #inline_jacks');
+	if (! thumbnail) {
+	    thumbnail = new jacksmod.Thumb(setJacksGraph);
+	    root.append(thumbnail.el);
+	}
+	thumbnail.replaceRspec(rspec);
+	if (countNodes(rspec) > 100) { 
+	    $('#stepsContainer #inline_overlay').addClass("hidden");
+	}
+	else {
+	  $('#stepsContainer #inline_overlay').removeClass("hidden");
+	}
+    }
+
+    function ChangeJacksRoot(root, selectionPane)
+    {
+	console.info("ChangeJacksRoot: ", root, selectionPane);
+	
+	if (selected_rspec) {
+	    if (countNodes(selected_rspec) > 100) {
+		$('#stepsContainer #inline_overlay').addClass("hidden");
+		$('#inline_jacks #edit_dialog #edit_container')
+		    .addClass("hidden");
+		return;
+	    }
+	    else {
+		$('#stepsContainer #inline_overlay').removeClass("hidden");
+		$('#inline_jacks #edit_dialog #edit_container')
+		    .removeClass("hidden");
+	    }
+	    var editor = new JacksEditor(root, true, true, selectionPane, true);
+	    editor.show(selected_rspec);
+	}
+    }
+    
     $(document).ready(initialize);
 });

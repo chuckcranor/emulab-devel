@@ -200,6 +200,10 @@ function Do_GetParameters()
             "profile_version" => $record->profile_version(),
             # And since it might be for last instance, return that.
             "rerun_uuid" => $rerun_uuid,
+            "rerun_name" => $record->name(),
+            "rerun_pid" => $record->pid(),
+            "rerun_gid" => $record->gid(),
+            "rerun_clusters" => $record->rerunClusters(),
         );
         $webtask->Delete();
     }
@@ -346,6 +350,10 @@ function Do_GetPreviousBindings()
         "profile_version" => $instance->profile_version(),
         # And since it might be for last instance, return that.
         "rerun_uuid" => $rerun_uuid,
+        "rerun_name" => $instance->name(),
+        "rerun_pid" => $instance->pid(),
+        "rerun_gid" => $instance->gid(),
+        "rerun_clusters" => $instance->rerunClusters(),
     );
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);

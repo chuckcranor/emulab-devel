@@ -15,8 +15,6 @@ $(function () {
         var ppmodalString = templates['ppform-wizard'];
         var imagePickerString = templates['image-picker-modal'];
 	var debug         = 0;
-	var editor        = null;
-	var editorLarge   = null;
 	var paramdefs     = null;
 	var ppdivname     = null;
 	var uuid          = "";
@@ -34,6 +32,7 @@ $(function () {
 	var rerun_bindings= null;
 	var rerun_warnings= null;
 	var setStepsMotion= null;
+	var setRerunInstance= null;
 	var resinfo_window= null;
 	var ppchanged     = false;
 	var rerun_instance= null;
@@ -3104,7 +3103,7 @@ $(function () {
 		    ClearAlert();
 		    LoadBindings(null);
 		    // Clear these for stats reporting.
-		    window.SELECTED_INSTANCE = undefined;
+		    setRerunInstance(null);
 		    window.SELECTED_PARAMSET = undefined;
 		    window.MODIFIED_PARAMS   = false;
 		});
@@ -3154,7 +3153,6 @@ $(function () {
 		    return;
 		}
 		ApplyPreviousBindings(json.value)
-		window.SELECTED_INSTANCE = json.value.rerun_uuid;
 		window.SELECTED_PARAMSET = undefined;
 		setStepsMotion(true);
 	    };
@@ -3178,6 +3176,7 @@ $(function () {
 	    
 	    LoadBindings(details.bindings);
 	    CheckInstanceWarning(details);
+	    setRerunInstance(details);
 	}
 	/*
 	 * Update bindings.
@@ -3369,7 +3368,7 @@ $(function () {
 		    event.preventDefault();
 		    ClearAlert();
 		    LoadBindings(set.bindings);
-		    window.SELECTED_INSTANCE = undefined;
+		    setRerunInstance(null);
 		    window.SELECTED_PARAMSET = set.uuid;
 		    window.MODIFIED_PARAMS   = false;
 		    CheckParamsetWarning(set);
@@ -3413,18 +3412,19 @@ $(function () {
 	    }
 	}
 	    
-        function HandleSubmit(callback, jacksGraphCallback)
+        function HandleSubmit(callback)
 	{
 	    console.info("HandleSubmit", ppchanged);
 	    
 	    if (!ppchanged) {
+		// No new rspec
+		configuredone_callback(null);
 		callback(true);
-		ShowThumbnail(RSPEC, jacksGraphCallback);
 		return;
 	    }
 	    // Submit with check only at first, since this will return
 	    // very fast, so no need to throw up a waitwait.
-	    SubmitForm(1, callback, jacksGraphCallback);
+	    SubmitForm(1, callback);
 	}
 
 	//
@@ -3442,9 +3442,9 @@ $(function () {
 	// Submit the form. If no errors, we get back the rspec. Throw that
 	// up in a Jack editor window. 
 	//
-        function SubmitForm(checkonly, steps_callback, jacksGraphCallback)
+        function SubmitForm(checkonly, steps_callback)
 	{
-	    console.info("SubmitForm", checkonly, steps_callback);
+	    console.info("SubmitForm", checkonly);
 	    var nosubmit = 0;
 	    
 	    // Current form contents as formfields array.
@@ -3502,7 +3502,7 @@ $(function () {
 		}
 		if (checkonly) {
 		    // Form checked out okay, submit again to generate rspec.
-		    SubmitForm(0, steps_callback, jacksGraphCallback);
+		    SubmitForm(0, steps_callback);
 		}
 		else {
 		    RSPEC = json.value.rspec;
@@ -3516,9 +3516,6 @@ $(function () {
 		    // the aggregate selector is reflected in the final tab
 		    if (steps_callback) {
 			steps_callback(true);
-		    }
-		    if (jacksGraphCallback) {
-			ShowThumbnail(RSPEC, jacksGraphCallback);
 		    }
 		}
 	    }
@@ -3748,15 +3745,6 @@ $(function () {
 	    xmlthing.done(callback);
 	}
 
-	function countNodes()
-	{
-	    //console.info("countNodes");
-	    var xmlDoc = $.parseXML(RSPEC);
-	    var count  = $(xmlDoc).find("node").length;
-	    //console.info(count);
-	    return count;
-	}
-
 	function StartPP(args) {
 	    registered     = args.registered;
 	    multisite      = args.multisite;
@@ -3772,6 +3760,7 @@ $(function () {
 	    configuredone_callback = args.config_callback;
 	    modified_callback = args.modified_callback;
 	    setStepsMotion = args.setStepsMotion;
+	    setRerunInstance = args.setRerunInstance;
 	    
 	    /*
 	     * Need to ask for the profile parameter form fragment and
@@ -3811,12 +3800,6 @@ $(function () {
 		CheckNotLatest();
 		setStepsMotion(true);
 
-		if (args.rspec) {
-		    RSPEC = args.rspec;
-		    ConfigureDone();
-		    //ShowEditor();
-		    ShowThumbnail(RSPEC, args.jacksGraphCallback);
-		}
 		if (! $('#pp-wizard-ready').length) {
 		    $('#' + ppdivname).append("<div class='hidden' " +
 					      " id='pp-wizard-ready'></div>");
@@ -3842,79 +3825,6 @@ $(function () {
 	    var xmlthing = sup.CallServerMethod(null, "instantiate",
 						"GetParameters", blob);
 	    xmlthing.done(callback);
-	}
-
-      var thumbnail = null;
-      var jacksGraphCallback = null;
-      function ShowThumbnail(selected_rspec, updateJacksGraph)
-      {
-	if (updateJacksGraph)
-	{
-	  jacksGraphCallback = updateJacksGraph;
-	}
-	var root = $('#stepsContainer-p-2 #inline_jacks');
-	if (! thumbnail)
-	{
-	  thumbnail = new jacksmod.Thumb(setJacksGraph);
-	  root.append(thumbnail.el);
-	}
-	thumbnail.replaceRspec(selected_rspec);
-	if (countNodes() > 100)
-	{
-	  $('#stepsContainer #inline_overlay').addClass("hidden");
-	}
-	else
-	{
-	  $('#stepsContainer #inline_overlay').removeClass("hidden");
-	}
-	
-      }
-
-      function setJacksGraph(newGraph)
-      {
-	if (jacksGraphCallback)
-	{
-	  jacksGraphCallback(newGraph);
-	}
-      }
- 
-
-	function ChangeJacksRoot(root, selectionPane) {
-	  // console.info("ChangeJacksRoot: ", root, selectionPane);
-	  if (RSPEC)
-	    {
-	      if (countNodes() > 100) {
-		  $('#stepsContainer #inline_overlay').addClass("hidden");
-		  $('#inline_jacks #edit_dialog #edit_container')
-		      .addClass("hidden");
-		  return;
-	      }
-	      else {
-		  $('#stepsContainer #inline_overlay').removeClass("hidden");
-		  $('#inline_jacks #edit_dialog #edit_container')
-		      .removeClass("hidden");
-	      }
-	      editor = new JacksEditor(root, true, true, selectionPane, true);
-	      editor.show(RSPEC);
-	  }
-	}
-	function ShowEditor() {
-	  // console.info("ShowEditor");
-	  if (RSPEC)
-	  {
-//	      if (countNodes() > 100) {
-//		  $('#stepsContainer #inline_overlay').addClass("hidden");
-//		  $('#inline_jacks #edit_dialog #edit_container')
-//		      .addClass("hidden");
-//		  return;
-//	      }
-//	      else {
-		  $('#stepsContainer #inline_overlay').removeClass("hidden");
-		  $('#inline_jacks #edit_dialog #edit_container')
-		      .removeClass("hidden");
-//	      }
-	      editor.show(RSPEC);
-	  }
 	}
 
       var globalImages = [
@@ -4014,8 +3924,6 @@ $(function () {
 	return {
 		HandleSubmit: HandleSubmit,
 		StartPP: StartPP,
-	        ChangeJacksRoot: ChangeJacksRoot,
-	        ShowThumbnail: ShowThumbnail,
 	};
     }
 )();

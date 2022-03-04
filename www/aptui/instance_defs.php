@@ -1119,6 +1119,17 @@ class InstanceHistory
 	}
 	return 0;
     }
+
+    # Make up a list of clusters used by this experiment, for sending
+    # to the web ui, as for reruning an experiment.
+    function rerunClusters() {
+        $result  = array();
+        $slivers = $this->slivers();
+        foreach ($slivers as $sliver) {
+            $result[] = $sliver->aggregate_urn();
+        }
+        return $result;
+    }
 }
 
 class InstanceSliver
