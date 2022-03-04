@@ -536,7 +536,7 @@ sub doArray($$$$$)
 	elsif ($iface->role() eq TBDB_IFACEROLE_EXPERIMENT()) {
 	    $ref->{"role"} = "experiment";
 	}
-	$ref->{"iface"} = $iface->iface();
+	$ref->{"iface"} = $iface->iface() if ($iface);
     }
 
     # Summary structure.
