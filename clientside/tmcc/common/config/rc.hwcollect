@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2019 University of Utah and the Flux Group.
+# Copyright (c) 2019-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -155,18 +155,19 @@ sub doboot()
     }
 
     my @tmccinfo = ();
+
     #
-    # XXX hackary to allow collecting basic data on long lived lived nodes.
-    # tmcd will NOT pass in any info if we are not in the correct experiment context.
-    # So, we fake it up here using our current set of commands:
+    # XXX hackary to allow collecting basic data on long lived nodes.
+    # tmcd will NOT pass in any info if we are not in the correct experiment
+    # context. So, we fake it up here using our current set of commands:
     #     Any,uname,uname -a; \
     #     Linux,lscpu,lscpu; \
     #     Linux,lshw,lshw -json -quiet; \
     #     Linux,nlshw,/proj/emulab-ops/hwcollect/bin/lshw-static -json -quiet
     # We should really have tmcd pass us at least the command list even if the
     # experiment is wrong, but that is more work for tmcd for the 99% of cases
-    # that will never use the info. If we start changing around the commands a lot,
-    # I will reconsider.
+    # that will never use the info. If we start changing around the commands
+    # a lot, I will reconsider.
     #
     if ($force) {
 	if (! -d $outdir) {
@@ -179,8 +180,9 @@ sub doboot()
 	     "OS=Any NAME=uname CMDLINE=uname -a",
 	     "OS=Linux NAME=lscpu CMDLINE=lscpu",
 	     "OS=Linux NAME=lshw CMDLINE=lshw -json -quiet");
-	if ($outdir eq "/proj/emulab-ops/hwcollect") {
-	    push(@tmccinfo, "OS=Linux NAME=nlshw CMDLINE=$outdir/bin/lshw-static -json -quiet");
+	if ($outdir ne "/tmp") {
+	    # XXX we do not use a full path, we have a local bindir now
+	    push(@tmccinfo, "OS=Linux NAME=nlshw CMDLINE=lshw-static -json -quiet");
 	}
     } else {
 	my %tmccargs = ( 'nocache' => 1 );
@@ -228,11 +230,25 @@ sub doboot()
 	return;
     }
 
+    #
+    # Allow use of an OS-specific, architecture-specific, hwcollect-local
+    # bin directory in the $outdir, e.g.:
+    #   /proj/emulab-ops/hwcollect/bin/Linux/x86_64
+    #
+    my $archname = `uname -p`;
+    chomp($archname);
+    my $bindir = "$outdir/bin/$sysname/$archname";
+    if (-d $bindir) {
+	$ENV{'PATH'} = "$bindir:" . $ENV{'PATH'};
+    }
+
     print "Collecting hardware info into $outdir/$nodeid/${prefix}* ...\n";
 
     mkdir("$outdir/$nodeid")
 	if (! -e "$outdir/$nodeid");
 
+    print STDERR "command path: " . $ENV{'PATH'} . "\n"
+	if ($debug);
     foreach my $cref (@commands) {
 	my $name = $cref->{'name'};
 	my $cmdline = $cref->{'cmdline'};
