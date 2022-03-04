@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016, 2021 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016, 2021, 2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -846,25 +846,33 @@ void get_packet_counts(SLOTHD_PACKET *pkt) {
 	  }
 	  else {
 		  sprintf(path, "/sys/class/net/%s/address", ifname);
-		  if ((fp = fopen(path, "r")) != NULL &&
-		      fgets(buf, sizeof(buf), fp)) {
-			  if ((cp = rindex(buf, '\n')) != NULL)
-				  *cp = '\0';
-			  strcpy(pkt->ifaces[pi].addr, buf);
+		  if ((fp = fopen(path, "r")) != NULL) {
+			  if (fgets(buf, sizeof(buf), fp)) {
+				  if ((cp = rindex(buf, '\n')) != NULL)
+					  *cp = '\0';
+				  strcpy(pkt->ifaces[pi].addr, buf);
+			  }
+			  fclose(fp);
 		  }
+
 	  }
 	  sprintf(path, "/sys/class/net/%s/statistics/rx_packets", ifname);
-	  if ((fp = fopen(path, "r")) != NULL && fgets(buf, sizeof(buf), fp)) {
-		  if ((cp = rindex(buf, '\n')) != NULL)
-			  *cp = '\0';
-		  
-		  pkt->ifaces[pi].ipkts = atol(buf);
+	  if ((fp = fopen(path, "r")) != NULL) {
+		  if (fgets(buf, sizeof(buf), fp)) {
+			  if ((cp = rindex(buf, '\n')) != NULL)
+				  *cp = '\0';
+			  pkt->ifaces[pi].ipkts = atol(buf);
+		  }
+		  fclose(fp);
 	  }
 	  sprintf(path, "/sys/class/net/%s/statistics/tx_packets", ifname);
-	  if ((fp = fopen(path, "r")) != NULL && fgets(buf, sizeof(buf), fp)) {
-		  if ((cp = rindex(buf, '\n')) != NULL)
-			  *cp = '\0';
-		  pkt->ifaces[pi].opkts = atol(buf);
+	  if ((fp = fopen(path, "r")) != NULL) {
+		  if (fgets(buf, sizeof(buf), fp)) {
+			  if ((cp = rindex(buf, '\n')) != NULL)
+				  *cp = '\0';
+			  pkt->ifaces[pi].opkts = atol(buf);
+		  }
+		  fclose(fp);
 	  }
 	  pi = ++pkt->ifcnt;
   }
@@ -961,7 +969,7 @@ int get_counters(char *buf, void *data) {
     else
       fmt = "%s %*s %*s %s %lu %*s %lu";
 
-      if (sscanf(buf, fmt,
+    if (sscanf(buf, fmt,
                pkt->ifaces[pkt->ifcnt].ifname,
                pkt->ifaces[pkt->ifcnt].addr,
                &pkt->ifaces[pkt->ifcnt].ipkts,
