@@ -458,7 +458,8 @@ while (1) {
     my $CLASSCLAUSE = "(n.class='pc' or n.class='pct')";
     
     $query_result =
-	DBQueryWarn("select a.node_id,b.pid,b.eid,b.mustwipe,a.type,a.checkup_timestamp ".
+	DBQueryWarn("select a.node_id,b.pid,b.eid,b.mustwipe,a.type,".
+		    "a.checkup_timestamp,n.class ".
 		    "from reserved as b ".
 		    "left join nodes as a on a.node_id=b.node_id ".
 		    "left join last_reservation as l on l.node_id=a.node_id ".
@@ -508,6 +509,7 @@ while (1) {
 	$mustwipe = $hrow{'mustwipe'};
 	$type = $hrow{'type'};
 	$lastcheckup = $hrow{'checkup_timestamp'};
+	$class = $hrow{'class'};
 	$imageable = NodeType->LookupSync($type)->imageable();
 
 	#
@@ -527,8 +529,10 @@ while (1) {
 	    # Look for nodes that are past due for a checkup and shunt those
 	    # off to hwcheckup instead of reloading. Any failure to move a
 	    # node will result in it going into reloading instead.
+	    # XXX we only handle "pc"s right now.
 	    #
-	    if ($checkup_int && ($time - $lastcheckup) >= $checkup_int &&
+	    if ($class eq "pc" &&
+		$checkup_int && ($time - $lastcheckup) >= $checkup_int &&
 		($checkup_max == 0 || $cc < $checkup_max)) {
 		my $nodeobj = Node->Lookup($node);
 		if ($nodeobj &&
