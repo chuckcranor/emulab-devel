@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2010 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -414,9 +414,9 @@ int ParseRecord(IDLE_DATA *iddata) {
 	  }
 	}
 	else {
-	  error("Packet from node %s rejected: Bad data in iface field: %s", 
+	  error("Skipping bad data from node %s in iface field: %s", 
 		iddata->id, value);
-	  return 0;
+	  continue;
 	}
       }
       else {
