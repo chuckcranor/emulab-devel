@@ -48,6 +48,7 @@ use overload ('""' => 'Stringify');
 # Configure variables
 my $TB		= "@prefix@";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
+my $TRANSIENTS  = [NODERELOADING_EID(), NODERELOADPENDING_EID(), NODEILL_EID()];
 
 my %cache = ();
 BEGIN { use emutil; emutil::AddCache(\%cache); }
@@ -740,10 +741,8 @@ sub LookupAll($$;$$)
 	# and swaps one experiment out and a replacement in, then during
 	# the transition period, sufficient nodes must be considered available
 	# for assignment to that project.
-	elsif( defined( $pid ) && ( $pid ne "emulab-ops" ||
-				 ( $eid ne "reloading" &&
-				   $eid ne "reloadpending" &&
-				   $eid ne "hwcheckup" ) ) ) {
+	elsif( defined( $pid ) && ( $pid ne TBOPSPID() ||
+				    !grep($pid eq $_, @$TRANSIENTS))) {
 	    # Handle the case where an experiment is swapped in.  The
 	    # nodes aren't free right now, but at some time in the
 	    # future they could become so.
@@ -1250,8 +1249,8 @@ sub CurrentReservations($;$$) {
 	    "       (n.reservable=1 and n.node_id=r.type)) and ".
 	    "      res.pid IS NULL)," .
 	    "(SELECT COUNT(*) FROM nodes AS n, reserved AS res " .
-	    "WHERE n.node_id=res.node_id AND res.pid='emulab-ops' AND " .
-	    "res.eid IN ('reloading', 'reloadpending')) " .
+	    "WHERE n.node_id=res.node_id AND res.pid='" . TBOPSPID() ."' AND " .
+	    "res.eid IN (" . join(",", map {"'$_'"} @$TRANSIENTS) . ")) " .
 	"FROM future_reservations AS r WHERE $pclause ".
              "r.approved IS NOT NULL ".
 	     ($activeonly ? 
