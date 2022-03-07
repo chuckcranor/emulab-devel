@@ -1584,7 +1584,9 @@ $(function ()
 	    $('#showtopo_last_updated').html(profile_blob.created);
 	    $('#showtopo_description').html(profile_blob.description);
 	    if (profile_blob.fromrepo) {
-		$('#showtopo_repohash').html(profile_blob.repohash);
+		var text = profile_blob.repohash.substr(0, 8) + " (" +
+		    profile_blob.reporef + ")";
+		$('#showtopo_repohash').html(text);
 		$('.showtopo_repoinfo').removeClass("hidden");
 		window.FROMREPO = true;
 	    }
@@ -1742,9 +1744,11 @@ $(function ()
 		}
 	    }
 	    if (profile_blob.fromrepo) {
-		$('#selected_profile_text')
-		    .html(profile_name + " (Repohash: " +
-			  profile_blob.repohash + ")");
+		var text = profile_name + " (Repo: " +
+		    profile_blob.repohash.substr(0, 8) + ", " +
+		    profile_blob.reporef + ")";
+		
+		$('#selected_profile_text').html(text);
 	    }
 	    setStepsMotion(true);
 
