@@ -233,6 +233,13 @@ sub Expires($)
 
     return $slice->expires();
 }
+sub IsExpired($)
+{
+    my ($self) = @_;
+    my $slice  = $self->GetGeniSlice();
+
+    return $slice->IsExpired();
+}
 
 # For print statements.
 sub Printable($)
