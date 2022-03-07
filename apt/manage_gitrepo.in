@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,10 +24,7 @@
 use English;
 use strict;
 use Getopt::Std;
-use XML::Simple;
 use Data::Dumper;
-use CGI;
-use POSIX ":sys_wait_h";
 use Date::Parse;
 use File::Basename;
 
