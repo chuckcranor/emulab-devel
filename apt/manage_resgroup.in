@@ -1240,7 +1240,12 @@ sub DoDelete()
 	    fatal("Could not look up experiments for $project");
 	}
 	foreach my $instance (@$current) {
-	    # Only Route reservations actually matter here
+	    # Only Route reservations actually matter here.
+	    # And ignore expired experiments, they hang around until
+	    # we can clean up the state at buses that went offline.
+	    next
+		if ($instance->IsExpired());
+	    
 	    if ($resgroup->RoutesInUse($instance)) { 
 		$resgroup->Unlock() if (!$nolock);
 		UserError("You have experiments running that are using this ".
