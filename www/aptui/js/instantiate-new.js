@@ -52,7 +52,6 @@ $(function ()
     var maxEndDate    = null;
     var usingRadios   = false;
     var currentStep   = 0;
-    var deprecatedList = [];
     var mainTemplate  = _.template(instantiateString);
     var graphTemplate = _.template(templates["reservation-graph"]);
     var reslistTemplate= _.template(templates["resgroup-list"]);
@@ -1618,11 +1617,9 @@ $(function ()
 		    profile_blob.reporef + ")";
 		$('#showtopo_repohash').html(text);
 		$('.showtopo_repoinfo').removeClass("hidden");
-		window.FROMREPO = true;
 	    }
 	    else {
 		$('.showtopo_repoinfo').addClass("hidden");
-		window.FROMREPO = false;
 	    }
 
 	    sup.maketopmap('#showtopo_div',
@@ -1633,7 +1630,7 @@ $(function ()
 		ToggleFavorite(selectedElement)}
 	    );
 	};
-	GetProfile($(selectedElement).attr('value'), continuation);
+	GetProfile($(selectedElement).attr('value'), false, continuation);
     }
     
     function ToggleFavorite(target) {
@@ -1681,23 +1678,12 @@ $(function ()
 	console.info("ShowProfileSelectionInline: " +
 		     $(selectedElement).attr('value'));
 
-	var xmlDoc = $.parseXML(selected_rspec);
-	var nodecount  = $(xmlDoc).find("node").length;
-	
-//	if (nodecount > 100) {
-//	    $('#stepsContainer #inline_overlay').addClass("hidden");
-//	    $('#inline_jacks #edit_dialog #edit_container')
-//		.addClass("hidden");
-//	    return;
-//	}
-//	else {
-	    $('#stepsContainer #inline_overlay').removeClass("hidden");
-	    $('#inline_jacks #edit_dialog #edit_container')
-		.removeClass("hidden");
-//	}
+	$('#stepsContainer #inline_overlay').removeClass("hidden");
+	$('#inline_jacks #edit_dialog #edit_container')
+	    .removeClass("hidden");
 	editor = new JacksEditor(root, true, true,
 				 selectionPane, true, !multisite);
-      editor.show(selected_rspec);
+	editor.show(selected_rspec);
     }
 
     function ChangeProfileSelection(selectedElement) {
@@ -1781,6 +1767,11 @@ $(function ()
 		    profile_blob.reporef + ")";
 		
 		$('#selected_profile_text').html(text);
+
+		// See ppwizard, it will run the script again if
+		// the params change and need to know what to
+		// checkout in the jail.
+		window.TARGET_REPOREF = profile_blob.repohash;
 	    }
 	    setStepsMotion(true);
 
@@ -1802,19 +1793,27 @@ $(function ()
 		window.SKIPFIRSTSTEP = false;
 	    }
 	};
-	GetProfile($(selectedElement).attr('value'), continuation);
+	GetProfile($(selectedElement).attr('value'), true, continuation);
     }
-    
-    function GetProfile(profile, continuation) {
+
+    /*
+     * No need to get script source code when getting the profile for
+     * the profile picker.
+     */
+    function GetProfile(profile, getsource, continuation) {
+	console.info("GetProfile", profile, getsource);
+	var args = {
+	    "profile"   : profile,
+	    "getsource" : getsource,
+	};
+	
 	var callback = function(json) {
 	    if (json.code) {
 		alert("Could not get profile: " + json.value);
 		return;
 	    }
 	    console.info("GetProfile:", json);
-	    
-	    var xmlDoc = $.parseXML(json.value.rspec);
-	    var xml    = $(xmlDoc);
+	    var blob = json.value;
 
 	    /*
 	     * We now use the desciption from inside the rspec, unless there
@@ -1822,88 +1821,106 @@ $(function ()
 	     * rpc reply, which we will until all profiles converted over to
 	     * new format rspecs.
 	     */
-	    var description = null;
-	    $(xml).find("rspec_tour").each(function() {
-		$(this).find("description").each(function() {
-		    description = marked($(this).text());
-		});
-	    });
-	    if (!description || description == "") {
-		description = "Hmm, no description for this profile";
-	    }
-	    json.value.description = description;
-	    continuation(json.value);
-	}
-	var args = {
-	    "profile" : profile,
-	};
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "instantiate", "GetProfile", args);
-					    
-	/*
-	 * If a repo-based and we got a specific branch/tag/hash, we have to
-	 * get the source for that, since it will be different then what
-	 * is stored in the profile descriptor.
-	 */
-	if (window.FROMREPO &&
-	    window.TARGET_REFHASH != window.PROFILE_REFHASH) {
+	    var getDescription = function(rspec) {
+		var xmlDoc = $.parseXML(blob.rspec);
+		var xml    = $(xmlDoc);
+		var description = null;
 	    
-	    // Rerun refspec is what we need for the form, just passing along.
-	    var refspec = window.TARGET_REFSPEC;
+		$(xml).find("rspec_tour").each(function() {
+		    $(this).find("description").each(function() {
+			description = marked($(this).text());
+		    });
+		});
+		if (!description || description == "") {
+		    description = "Hmm, no description for this profile";
+		}
+		return description;
+	    };
 
-	    // See ppwizard, it will run the script again if the params change
-	    // and need to know what to checkout in the jail.
-	    window.TARGET_REPOREF = window.TARGET_REFHASH;
-
-	    xmlthing.done(function(json) {
-		gitrepo.GetRepoSource({
-		    "uuid"     : profile,
-		    // This used to be a refspec, now always a hash
-		    "refspec"  : window.TARGET_REFHASH,
-		    "callback" : function(source, hash) {
+	    /*
+	     * If a repo based profile and we are not getting the HEAD
+	     * of the default branch, then we need to store the script in
+	     * the form. We also get back the actual hash for the
+	     * case that we did not request something specific, and
+	     * we need to remember that in the form too.
+	     */
+	    if (getsource) {
+		if (blob.fromrepo && _.has(args, "refhash")) {
+		    // Need to pass these along at submit.
+		    $('#repohash').val(blob.repohash);
+		    $('#reporef').val(blob.reporef);
+		    
+		    /*
+		     * So why not do the conversion when we asked for the
+		     * source? Doing it now sure makes the logic confused,
+		     * but it gives us an opportunity to interact with the
+		     * user since script conversion can take an arbitrary
+		     * amount of time. 
+		     */
 		    var pythonRe = /^(import|from)/m;
 
-		    // For the form that is submitted.
-		    $('#repohash').val(hash);
-		    $('#reporef').val(refspec);
-
-		    // Pass along.
-		    json.value.repohash = hash;
-
-		    if (pythonRe.test(source)) {
-			ConvertScript(source, profile, window.TARGET_REFHASH,
+		    if (pythonRe.test(blob.source)) {
+			ConvertScript(blob.source, profile, blob.repohash,
 				      function(rspec, paramdefs) {
 			    // Need to pass these along at submit.
 			    $('#rspec_textarea').val(rspec);
-			    $('#script_textarea').val(source);
-			    json.value.rspec      = rspec;
-			    json.value.isscript   = true;
+			    $('#script_textarea').val(blob.source);
+
+			    // New rspec after conversion.
+			    blob.rspec = rspec;
+			    blob.description = getDescription(rspec);
+
 			    //
-			    // We can get a parameterized profile, or not.
-			    //
+			    // We can get a parameterized profile or this
+		            // version might not be parameterized.
+  			    //
 			    if (paramdefs === undefined) {
-				json.value.ispprofile = false;
+				blob.ispprofile = false;
 			    }
 			    else {
 				$('#paramdefs').val(paramdefs);
-				json.value.ispprofile = true;
+				blob.ispprofile = true;
 			    }
-			    callback(json);
+			    continuation(blob);
 			});
+                        // continuation called in the callback,
+                        return;
 		    }
 		    else {
 			// New rspec, proceed
-			json.value.rspec = source;
+			blob.rspec = source;
+			
 			// Need to pass this along at submit.
 			$('#rspec_textarea').val(source);
-			callback(json);
+			// Fall through to calling the continuation.
 		    }
-		}})
-	    });
+		}
+	    }
+	    blob.description = getDescription(blob.rspec);
+	    continuation(blob);
 	}
-	else {
-	    xmlthing.done(callback);
+	/*
+	 * When instantiating a specific repo based profile, need to
+	 * indicate what source we want if not the default.
+	 */
+	if (window.PROFILE_UUID && window.FROMREPO &&
+	    window.TARGET_REFHASH != window.PROFILE_REFHASH) {
+	    args["refhash"] = window.TARGET_REFHASH;
+	    args["refspec"] = window.TARGET_REFSPEC;
+	    sup.ShowWaitWait("We are getting the source code from the " +
+			     "repository. Patience please.");
 	}
+	sup.CallServerMethod(null, "instantiate", "GetProfile", args,
+			     function (json) {
+				 if (_.has(args, "refhash")) {
+				     sup.HideWaitWait(function() {
+					 callback(json);
+				     });
+				 }
+				 else {
+				     callback(json);
+				 }
+			     });
     }
 
     //
@@ -1918,6 +1935,7 @@ $(function ()
     function ConvertScript(script, profile_uuid, refspec, continuation)
     {
 	var callback = function(json) {
+	    console.info("ConvertScript", json);
 	    sup.HideWaitWait();
 
 	    if (json.code) {
@@ -1933,14 +1951,15 @@ $(function ()
 	}
 	sup.ShowWaitWait("We are converting the geni-lib script to an rspec. " +
 			 "Patience please.");
-	var xmlthing = sup.CallServerMethod(null,
-					    "manage_profile",
-					    "CheckScript",
-					    {"script"       : script,
-					     "profile_uuid" : profile_uuid,
-					     "refspec"      : refspec,
-					     "getparams"    : true});
-	xmlthing.done(callback);
+	var args = {
+	    "script"       : script,
+	    "profile_uuid" : profile_uuid,
+	    "refspec"      : refspec,
+	    "getparams"    : true,
+	};
+	console.info("ConvertScript", args);
+	sup.CallServerMethod(null, "manage_profile",
+			     "CheckScript", args, callback);
     }
 
     /*
@@ -2138,7 +2157,6 @@ $(function ()
 	    "<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. Please check your profile or parameters for errors. If you are sure they are correct, you can report the problem to support@cloudlab.us and make sure to link to the problematic profile.</div>" +
 	    "<div class='col-sm-4 col-sm-offset-1' style='display: none; margin-top: 5px; margin-bottom: 5px;'><button class='btn btn-default' type='button' data-toggle='collapse' data-target='#nowhere-breakdown' aria-expanded='false' id='nowhere-breakdown-button'>Cluster Compatibility Report</button></div>" +
 	        "<div class='col-sm-12 collapse' id='nowhere-breakdown'></div>"+
-	        "<div class='col-sm-6 alert alert-warning hidden' id='where-deprecated' style='margin-top: 5px; margin-bottom: 5px'></div>" +
 	        "<div class='col-sm-2 site-wait'><img src='images/spinner.gif' /></div>" +
 		"  </div>" +
 		"</div>";
@@ -2178,7 +2196,6 @@ $(function ()
 		    "    </div>" +
 		    "<div class='col-sm-4'></div>" +
 		    "<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This site <b>will not work on any clusters</b>. All clusters are unselectable.</div>" +
-		    "<div class='col-sm-6 alert alert-warning hidden' id='where-deprecated' style='margin-top: 5px; margin-bottom: 5px'></div>" +
 	            "<div class='col-sm-2 site-wait'><img src='images/spinner.gif' /></div>" +
 	            "  </div>" +
 		    "</div>";
@@ -2251,19 +2268,12 @@ $(function ()
 	root: '#jacks-dummy',
 	nodeSelect: true,
 	readyCallback: function (input, output) {
-	  //jacks.input = input;
-	  //jacks.output = output;
-	  //jacks.output.on('found-images', onFoundImages);
-	  //jacks.output.on('found-types', onFoundTypes);
           constraints = new JACKS_LOADER.Constraints(context);
 	  updateWhere();
 	},
 	canvasOptions: context.canvasOptions,
 	constraints: context.constraints
       });
-      
-      //constraints = new JACKS_LOADER.Constraints(context);
-      //updateWhere();
     }
 
     var foundImages = [];
@@ -2283,28 +2293,14 @@ $(function ()
 	return true;
     }
 
-    function onFoundTypes(t) 
-    {
-	console.info("onFoundTypes", t);
-	types = {};
-	hardware = {};
-	_.each(t, function(item) {
-	    types[item.name] = item.types;
-	    hardware[item.name] = item.hardware;
-	});
-    }
-
     /*
      * Update the image constraints if anything changes.
      */
     function UpdateImageConstraints() {
 	console.info("UpdateImageConstraints");
 
-	if (rerun_instance) {
-	    // This stuff makes it really hard to honor the rerun instance.
-	    return;
-	}
-	if (!foundImages.length || !doconstraints) {
+	if (!foundImages.length || !doconstraints ||
+	    $('#profile_pid').val() == "") {
 	    CreateAggregateSelectors(selected_rspec);
 	    return;
 	}
@@ -2319,15 +2315,16 @@ $(function ()
 	    // is not what actually comes back. Copy before print.
 	    var mycopy = $.extend(true, {}, json.value);
 	    //console.log('json', mycopy);
-	    updateDeprecated(json.value[0].images)
-	    if (!window.CLUSTERSELECT) {
-		showDeprecated($('#nocluster-selector'));
+	    showDeprecatedImages(json.value[0].images);
+
+	    // When doing a rerun skip the rest of this.
+	    if (!rerun_instance) {
+		constraints = new JACKS_LOADER.Constraints(context);
+		constraints.addPossibles({ images: foundImages });
+		allowWithSites(json.value[0].images, json.value[0].constraints);
+		CreateAggregateSelectors(selected_rspec);
+		ShowClusterReservations();
 	    }
-	    constraints = new JACKS_LOADER.Constraints(context);
-	    constraints.addPossibles({ images: foundImages });
-	    allowWithSites(json.value[0].images, json.value[0].constraints);
-	    CreateAggregateSelectors(selected_rspec);
-	    ShowClusterReservations();
 	    $('#stepsContainer .actions a[href="#finish"]')
 		.removeAttr('disabled');
 	};
@@ -2344,40 +2341,33 @@ $(function ()
 	return true;
     }
 
-    // Show the deprecated warnings in the proper cluster selector div.
-    function showDeprecated(domNode)
+    // Show the deprecated warnings.
+    function showDeprecatedImages(images)
     {
-	//console.info("showDeprecated:", domNode, deprecatedList);
-	if (deprecatedList.length === 0) {
-	    domNode.find('#where-deprecated').hide();
-	}
-	else {
-	    var current = domNode.find('#where-deprecated');
-	    current.html('');
-	    _.each(deprecatedList, function (item) {
-		var errorMessage = '';
-		if (item.deprecated_iserror) {
-		    errorMessage = ': Using this image will cause your ' +
+	console.info("showDeprecated:", images);
+	var html = "";
+
+	_.each(images, function(image) {
+	    if (image.deprecated) {
+		html += '<p>Image ' +
+		    sup.ImageDisplay(image.id) + ' is deprecated: ' +
+		    image.deprecated_message;
+		
+		if (image.deprecated_iserror) {
+		    html += ': Using this image will cause your ' +
 			'experiment to fail.';
 		}
-		current.append('<p>Image ' + sup.ImageDisplay(item.id) +
-			       ' is deprecated: ' + item.deprecated_message +
-			       errorMessage + '</p>');
-	    });
-	    current.removeClass("hidden");
+		html += '</p>';
+	    }
+	});
+	
+	if (html == "") {
+	    $('#deprecated-images').addClass("hidden");
+	}
+	else {
+	    $('#deprecated-images').html(html).removeClass("hidden");
 	}
     }
-
-  function updateDeprecated(images)
-  {
-    deprecatedList = [];
-    _.each(images, function (image) {
-      if (image.deprecated)
-      {
-	deprecatedList.push(image);
-      }
-    });
-  }
   
   function allowWithSites(newImages, newConstraints)
   {
@@ -2462,17 +2452,7 @@ $(function ()
     function updateJacksGraph(newGraph)
     {
       console.log('updateJacksGraph', newGraph);
-	
-      // This stuff makes it really hard to honor the rerun instance.
-      // Mostly cause it is asynchronous and comes back after I have set
-      // the pid/cluster(s). For now just neuter since the whole point
-      // is to do whatever the rerun instance did.
-      if (rerun_instance) {
-	  CreateClusterStatus();
-	  $('.site-wait').hide();
-	  $('.site-selector').show();
-	  return;
-      }
+
       jacksGraph = newGraph;
       validList = new JACKS_LOADER.ValidList(jacksGraph, constraints);
       var images = [];
@@ -2482,6 +2462,7 @@ $(function ()
 	  images = _.union(images, [node.image]);
 	}
       }.bind(this));
+	
       onFoundImages(images);
       updateWhere();
     }
@@ -2492,35 +2473,27 @@ $(function ()
 	if (!window.MAINSITE) {
 	    return;
 	}
-	if (!doconstraints) {
+	if (!doconstraints || rerun_instance) {
+	    // Site contraints do not matter when rerunning.
 	    CreateClusterStatus();
-	    return;
-	}
-	if (rerun_instance) {
-	    // This stuff makes it really hard to honor the rerun instance.
-	    CreateClusterStatus();
+	    $('.site-wait').hide();
+	    $('.site-selector').show();
 	    return;
 	}
 	console.info("updateWhere");
 	
-	//if (jacks.input && constraints && selected_rspec)
-	//{
-	//  jacks.input.trigger('change-topology',
-	//		      [{ rspec: selected_rspec }],
-	//		      { constrainedFields: finishUpdateWhere });
-      //}
-      if (jacksGraph && validList && constraints)
-      {
-	finishUpdateWhere(validList.getNodeCandidates(true),
-			  validList.getNodeCandidatesBySite(true));
-	$('.site-wait').hide();
-	$('.site-selector').show();
-      }
-      else
-      {
-      	$('.site-wait').show();
-	$('.site-selector').hide();
-      }
+	if (jacksGraph && validList && constraints)
+	{
+	    finishUpdateWhere(validList.getNodeCandidates(true),
+			      validList.getNodeCandidatesBySite(true));
+	    $('.site-wait').hide();
+	    $('.site-selector').show();
+	}
+	else
+	{
+      	    $('.site-wait').show();
+	    $('.site-selector').hide();
+	}
     }
 
     function finishUpdateWhere(allNodes, nodesBySite)
@@ -2546,7 +2519,7 @@ $(function ()
 	}
 
 	// Moved here to deal with race condition of custer status
-      // getting built before constraints were finished running
+	// getting built before constraints were finished running
         if ($('#profile_pid').val() != $('#profile_pid_picker .dropdown-toggle .value').html()) {
 	    $($('#profile_pid_picker .dropdown-menu a')[0]).click();
         }
@@ -2594,7 +2567,6 @@ $(function ()
 	domNode.find('#where-warning').hide();
 	domNode.find('#where-nowhere').hide();
       }
-      showDeprecated(domNode);
       domNode.find('select').children().each(function () {
 	var value = $(this).attr('value');
 	// Skip the Please Select option

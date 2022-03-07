@@ -71,29 +71,72 @@ function Do_GetProfile()
     else  {
         list ($lastused, $count) = $profile->UsageInfo($this_user);
     }
-    
+
     #
     # Knowing the UUID means the user can instantiate it,
     # so no permission checks on the profile. 
     #
-    SPITAJAX_RESPONSE(array('rspec'       => $profile->rspec(),
-			    'name'        => $profile->name(),
-                            'pid'         => $profile->pid(),
-                            'version'     => $profile->version(),
-                            'uuid'        => $profile->uuid(),
-                            'lastused'    => $lastused,
-                            'usecount'    => $count,
-                            'creator'     => $profile->creator(),
-                            'created'     => $profile->created(),
-			    'ispprofile'  => $ispp,
-                            'isscript'    => ($profile->script() ? 1 : 0),
-                            'fromrepo'    => ($profile->repourl() ? 1 : 0),
-                            'reporef'     => ($profile->repourl() ?
-                                              $profile->reporef() : ""),
-                            'repohash'    => ($profile->repourl() ?
-                                              $profile->repohash() : ""),
-                            'newgenilib'  => $profile->UseNewGeniLib(),
-			    'amdefault'   => $amdefault));
+    $blob = array('rspec'       => $profile->rspec(),
+                  'name'        => $profile->name(),
+                  'pid'         => $profile->pid(),
+                  'version'     => $profile->version(),
+                  'uuid'        => $profile->uuid(),
+                  'lastused'    => $lastused,
+                  'usecount'    => $count,
+                  'creator'     => $profile->creator(),
+                  'created'     => $profile->created(),
+                  'ispprofile'  => $ispp,
+                  'isscript'    => ($profile->script() ? 1 : 0),
+                  'fromrepo'    => ($profile->repourl() ? 1 : 0),
+                  'reporef'     => ($profile->repourl() ?
+                                    $profile->reporef() : ""),
+                  'repohash'    => ($profile->repourl() ?
+                                    $profile->repohash() : ""),
+                  'newgenilib'  => $profile->UseNewGeniLib(),
+                  'amdefault'   => $amdefault);
+
+    if (isset($ajax_args["getsource"])) {
+        if ($profile->repourl() && isset($ajax_args["refhash"])) {
+            #
+            # Specific hash, need to get that source. 
+            # 
+            $webtask = WebTask::CreateAnonymous();
+            if (!$webtask) {
+                SPITAJAX_ERROR(-1, "Internal webtask Error");
+                return;
+            }
+            $outfname = tempnam("/tmp", "repofile");
+            chmod($outfname, 0666);
+    
+            $retval = SUEXEC($this_user, "tbadmin",
+                             "webmanage_gitrepo -t " . $webtask->task_id() .
+                             " getsource -o $outfname -p " . $profile->uuid() .
+                             "  $which",
+                             SUEXEC_ACTION_IGNORE);
+            $webtask->Refresh();
+    
+            if ($retval != 0) {
+                if ($retval < 0) {
+                    $error = $webtask->TaskValue("output");
+                    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                }
+                else {
+                    $error = $webtask->TaskValue("output");
+                }
+                $webtask->Delete();
+                unlink($outfname);
+                SPITAJAX_ERROR(1, $error);
+                return;
+            }
+            $webtask->Delete();
+
+            $blob["source"]   = file_get_contents($outfname); 
+            $blob["repohash"] = $ajax_args["refhash"];
+            $blob["reporef"]  = $ajax_args["refspec"];
+            unlink($outfname);
+        }
+    }
+    SPITAJAX_RESPONSE($blob);
 }
 
 #
