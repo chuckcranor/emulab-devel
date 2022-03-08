@@ -1031,7 +1031,12 @@ else {
 	    if (defined($realosid)) {
 		$nextimage = OSImage->Lookup($realosid);
 		if (defined($nextimage)) {
-		    @typelist = $nextimage->TypeList();
+		    if ($nextimage->isImage()) {
+			@typelist = $nextimage->TypeList();
+		    }
+		    else {
+			@typelist = $nextimage->osinfo()->TypeList();
+		    }
 		}
 		foreach my $nodetype (@typelist) {
 		    processOs($image->osid(), $nodetype->type());
@@ -2261,37 +2266,57 @@ if ($nolinks) {
     exit(0);
 }
 
-$interfaceprotocols = {};
-$interfacespeeds = {};
-$interface_auxspeeds = {};
+#
+# Read interface type capabilities we care about.
+#
+my %interface_capabilities = ();
 
-# Read interface types. First need to find the protocols an interface supports
-# and then then the speed for each of those protocols.
-# Note that we are going to assume anything attached to a switch is ethernet.
-$result = MyQueryFatal("SELECT type,capkey,capval from interface_capabilities ".
-		       "where capkey='protocols' or capkey like '%_defspeed'"); 
-while (($type,$capkey,$capval) = $result->fetchrow_array) {
+$result = MyQueryFatal("SELECT type,capkey,capval from interface_capabilities");
+while (my ($type,$capkey,$capval) = $result->fetchrow_array()) {
+    if (!exists($interface_capabilities{$type})) {
+	$interface_capabilities{$type} = {
+	    "besteffort" => 1,
+	};
+    }
+    my $caps = $interface_capabilities{$type};
+    
     if ($capkey eq "protocols") {
-	$interfaceprotocols{$type} = [ split(",", $capval) ];
+	$caps->{"protocols"} = [ split(",", $capval) ];
+    }
+    elsif ($capkey =~ /^([-\w]+)_auxspeeds$/) {
+	$caps->{"auxspeeds"} = [ split(",", $capval) ];
     }
     elsif ($capkey =~ /^([-\w]+)_defspeed$/) {
-	$interfacespeeds{$type}{$1} = $capval;
+	if (!exists($caps->{"defspeeds"})) {
+	    $caps->{"defspeeds"} = {};
+	}
+	$caps->{"defspeeds"}->{$1} = $capval;
     }
-    else {
-	die("Improper defspeed $capval for $type!\n");
+    elsif ($capkey eq "nobesteffort") {
+	$caps->{"besteffort"} = 0;
     }
 }
+sub interfaceCapability($$)
+{
+    my ($type, $capkey) = @_;
 
-# Read interface auxspeeds.
-$result = MyQueryFatal("SELECT type,capkey,capval from interface_capabilities ".
-		       "where capkey like '%_auxspeeds'");
-while (($type,$capkey,$capval) = $result->fetchrow_array) {
-    if ($capkey =~ /^([-\w]+)_auxspeeds$/) {
-	$interface_auxspeeds{$type} = [ split(",", $capval) ];
-    }
-    else {
-	die("Improper auxspeeds $capval for $type!\n");
-    }
+    return undef
+	if (!exists($interface_capabilities{$type}) ||
+	    !exists($interface_capabilities{$type}->{$capkey}));
+
+    return $interface_capabilities{$type}->{$capkey};
+}
+sub interfaceProtocols($) { return interfaceCapability($_[0], "protocols"); }
+sub interfaceAuxspeeds($) { return interfaceCapability($_[0], "auxspeeds"); }
+sub interfaceBesteffort($){ return interfaceCapability($_[0], "besteffort"); }
+sub interfaceSpeeds($$)
+{
+    my ($type, $which) = @_;
+    my $defspeeds = interfaceCapability($type, "defspeeds");
+    return undef
+	if (! (defined($defspeeds) && exists($defspeeds->{$which})));
+
+    return $defspeeds->{$which};
 }
 
 # Read interface switches
@@ -2563,7 +2588,15 @@ foreach my $nodeid (keys(%simple_links)) {
     my $maxbw = 0;
 
     foreach my $ref (@{$simple_links{$nodeid}}) {
-	my (undef,undef,undef,undef,$bw) = @$ref;
+	my ($n1,$i1,$n2,$i2,$bw,$d,$l,$types) = @$ref;
+
+	#
+	# Prune out interfaces that are marked as not allowing best effort.
+	#
+	next
+	    if (! (get_iface_besteffort($n1,$i1) &&
+		   get_iface_besteffort($n2,$i2)));
+	
 	if ($bw > $maxbw) {
 	    $maxbw = $bw;
 	}
@@ -2680,9 +2713,9 @@ if (! defined($component_name)) {
       my $type    = $interfacetypes{$interface};
       
       next
-	  if (!defined($interfaceprotocols{$type}));
+	  if (!defined(interfaceProtocols($type)));
       
-      my @protos  = @{ $interfaceprotocols{$type} };
+      my @protos  = @{ interfaceProtocols($type) };
 
       #
       # Get the intersection of the protocols supported by this interface, and
@@ -2732,7 +2765,7 @@ exit(0);
 sub get_ifacebw {
     my ($node,$iface,$protocol) = @_;
     if (defined($interfacetypes{"$node:$iface"})) {
-	my $bw = $interfacespeeds{$interfacetypes{"$node:$iface"}}{$protocol};
+	my $bw = interfaceSpeeds($interfacetypes{"$node:$iface"}, $protocol);
 	return $bw if defined( $bw );
     }
     return $default_switchport_speed;
@@ -2745,11 +2778,20 @@ sub get_iface_type {
 
 sub get_iface_auxspeeds {
     my ($type) = @_;
-    my @result = ();
-    if (exists($interface_auxspeeds{"$type"})) {
-	push(@result, @{ $interface_auxspeeds{"$type"} });
-    }
-    return @result;
+    my $auxpeeds = interfaceAuxspeeds($type);
+    return ()
+	if (!defined($auxpeeds));
+
+    return @{$auxpeeds};
+}
+
+sub get_iface_besteffort {
+    my ($node,$iface) = @_;
+    my $type = get_iface_type($node, $iface);
+    # Default to yes.
+    return 1
+	if (!defined($type));
+    return interfaceBesteffort($type);
 }
 
 sub get_ifaceswitch {
