@@ -370,6 +370,10 @@ class Instance
                 $webtask->code(GENIRESPONSE_ERROR);
                 return null;
             }
+            # Temp debugging.
+            if (1) {
+                SUEXECERROR(SUEXEC_ACTION_DEBUG);
+            }
             # Error in the webtask for the caller.
             return null;
 	}

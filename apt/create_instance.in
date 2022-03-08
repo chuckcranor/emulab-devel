@@ -1323,6 +1323,18 @@ sub UserError($;$) {
     }
     AuditAbort()
 	if (!$debug);
-    print $mesg . "\n";
+
+    print $mesg . "\n\n";
+    
+    if (1) {
+	print "----------------------------------------------------\n";
+	print Dumper($xmlparse)
+	    if (defined($xmlparse));
+
+	print "\n\n";
+
+	print GeniXML::Serialize($rspec, 2)
+	    if (defined($rspec));
+    }
     exit($code);
 }
