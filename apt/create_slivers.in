@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -623,6 +623,15 @@ foreach my $aggobj (@aggregate_list) {
 	    #
 	    $aggobj->Defer("Setup interrupted or timed out.");
 	    $aggobj->SetStatus("interrupted");
+	    next;
+	}
+	elsif ($aptagg->ismobile() &&
+	       scalar($instance->AggregateList()) > 1 &&
+	       ($exitcode >= GENIRESPONSE_SETUPFAILURE() &&
+		$exitcode <= GENIRESPONSE_SETUPFAILURE_MAXERROR())) {
+	    # User can delete the aggregate. If on a route, the route
+	    # monitor will try to add it back.
+	    $aggobj->SetStatus("failed");
 	    next;
 	}
 	elsif (! (($exitcode >= GENIRESPONSE_SETUPFAILURE() &&
