@@ -2083,6 +2083,11 @@ sub CreateImageCreds($$$;$)
 	}
 	$image_urn = GeniHRN->new($image_urn);
 
+	if (!defined($image_urn->ospid())) {
+	    $$pmsg = "$image_urn is not a valid URN";
+	    return 1;
+	}
+
 	# System images are global (well, it would be rare if not).
 	next
 	    if ($image_urn->ospid() eq TBOPSPID());
