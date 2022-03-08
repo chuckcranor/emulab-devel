@@ -4188,6 +4188,11 @@ $(function ()
 		      "click_callback" : function(when, type) {
 			  if (!editing) {
 			      var start = moment(when);
+			      // Need to round to next hour if not already
+			      // at the top of the hour.
+			      if (start.minute()) {
+				  start.add(60, 'minutes').startOf('hour');
+			      }
 			      $('#reserve-request-form [name=start_day]')
 				  .val(start.format("MM/DD/YYYY"));
 			      $('#reserve-request-form [name=start_hour]')
