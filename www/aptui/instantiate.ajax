@@ -278,6 +278,7 @@ function Do_GetPreviousBindings()
 {
     global $this_user;
     global $ajax_args;
+    $bindings = null;
 
     if (!isset($ajax_args["profile"])) {
 	SPITAJAX_ERROR(1, "Missing profile");
@@ -363,29 +364,33 @@ function Do_GetPreviousBindings()
             return;
         }
     }
-    $profile_uuid = $profile->uuid();
-    $webtask      = WebTask::CreateAnonymous();
-    $webtask_id   = $webtask->task_id();
-
-    $retval = SUEXEC($this_user->uid(), "nobody",
-                     "webmanage_profile -t $webtask_id -- ".
-                     "  bindings $rerun_uuid ",
-                     SUEXEC_ACTION_CONTINUE);
-    $webtask->Refresh();
-        
-    if ($retval) {
-        if (!$webtask->exited() || $retval < 0) {
-            SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-        }
-        else {
-            SPITAJAX_ERROR(1, $webtask->output());
-        }
-        $webtask->Delete();
-        return;
-    }
     $profile = $instance->Profile();
+    
+    if ($profile->isParameterized()) {
+        $webtask      = WebTask::CreateAnonymous();
+        $webtask_id   = $webtask->task_id();
+
+        $retval = SUEXEC($this_user->uid(), "nobody",
+                         "webmanage_profile -t $webtask_id -- ".
+                         "  bindings $rerun_uuid ",
+                         SUEXEC_ACTION_CONTINUE);
+        $webtask->Refresh();
+        
+        if ($retval) {
+            if (!$webtask->exited() || $retval < 0) {
+                SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
+            }
+            else {
+                SPITAJAX_ERROR(1, $webtask->output());
+            }
+            $webtask->Delete();
+            return;
+        }
+        $bindings = $webtask->TaskValue("bindings");
+        $webtask->Delete();
+    }
     $blob = array(
-        "bindings" => $webtask->TaskValue("bindings"),
+        "bindings" => $bindings,
         # This is the version uuid of the instantiated experiment.
         "version_uuid" => $profile->uuid(),
         "repohash" => $instance->repohash(),
@@ -398,7 +403,6 @@ function Do_GetPreviousBindings()
         "rerun_gid" => $instance->gid(),
         "rerun_clusters" => $instance->rerunClusters(),
     );
-    $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 }
 

@@ -466,7 +466,7 @@ $(function ()
 	// Load previous bindings if applicable.
 	if (window.PROFILE_UUID && window.RERUN_INSTANCE) {
 	    // We do not know yet if its parameterized. But that is okay.
-	    LoadPreviousBindings().done(ChangeProfileSelection(startProfile))
+	    LoadPreviousInstance().done(ChangeProfileSelection(startProfile))
 	}
 	else {
 	    ChangeProfileSelection(startProfile);
@@ -3402,10 +3402,10 @@ $(function ()
     }
 
     // If not parameterized we need to pick up the rerun details here.
-    function LoadPreviousBindings()
+    function LoadPreviousInstance()
     {
 	var callback = function(json) {
-	    console.info("LoadPreviousBindings (instantiate)", json);
+	    console.info("LoadPreviousInstance", json);
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
