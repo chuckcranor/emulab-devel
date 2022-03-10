@@ -97,6 +97,8 @@ function Do_GetProfile()
 
     if (isset($ajax_args["getsource"])) {
         if ($profile->repourl() && isset($ajax_args["refhash"])) {
+            $which = escapeshellarg($ajax_args["refhash"]);
+
             #
             # Specific hash, need to get that source. 
             # 
