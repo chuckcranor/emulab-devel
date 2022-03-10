@@ -5382,6 +5382,7 @@ sub DoPrestageImages()
 		# till later. Do not exit with an error.
 		#
 		if ($code == GENIRESPONSE_BUSY ||
+		    $code == GENIRESPONSE_SERVERERROR ||
 		    $code == GENIRESPONSE_NETWORK_ERROR ||
 		    $code == GENIRESPONSE_SERVER_UNAVAILABLE) {
 		    $exitcode = 0;
@@ -5457,6 +5458,11 @@ sub DoPrestageImages()
 			print $info->{"progress"} . "KB have been imported.";
 		    }
 		    print "\n";
+		    # Switch to asking for status so we do not try to
+		    # prestage it again.
+		    if ($aggregateops{$agg->aggregate_urn()} eq "prestage") {
+			$aggregateops{$agg->aggregate_urn()} = "status";
+		    }
 		}
 		else {
 		    print "Image $urn at $agg is ready\n";

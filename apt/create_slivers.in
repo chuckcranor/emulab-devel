@@ -948,7 +948,7 @@ sub CreateSliver($)
 	    # it is still in prestage.
 	    #
 	    $webtask->output("Image prestaging has not completed");
-	    $webtask->Exited(GENIRESPONSE_SERVER_UNAVAILABLE());
+	    $webtask->Exited(GENIRESPONSE_INPROGRESS());
 	    return 1;
 	}
     }
@@ -1278,6 +1278,13 @@ sub CreateSlivers()
 	    if (($exitcode == GENIRESPONSE_SERVER_UNAVAILABLE() ||
 		 $exitcode == GENIRESPONSE_NETWORK_ERROR()) && $deferrable) {
 		print STDERR "$cluster is offline; deferring till later\n";
+		$aggobj->Defer();
+		push(@deferred, $aggobj);
+		next;
+	    }
+	    # Typically prestaging, also defer.
+	    if ($exitcode == GENIRESPONSE_INPROGRESS()) {
+		print STDERR "$cluster: $output\n";
 		$aggobj->Defer();
 		push(@deferred, $aggobj);
 		next;
