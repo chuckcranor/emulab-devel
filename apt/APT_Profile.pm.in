@@ -1333,6 +1333,8 @@ sub SetSites($$$$$$)
 	$pneedstitcher, $perrmsg) = @_;
     my %interface_map   = ();
     my %aggregates      = ();
+    # Catch bogus remote blockstores that span clusters. Happens a lot.
+    my %blockstores     = ();
 
     #
     # Fill the APT_Aggregate cache.
@@ -1354,6 +1356,7 @@ sub SetSites($$$$$$)
 	my $manager_urn = GetManagerId($ref);	
 	my $site_id     = GeniXML::GetJacksSiteId($ref);
 	my $hardtype    = GeniXML::FindFirst("n:hardware_type", $ref);
+	my $slivertype  = GeniXML::GetVirtualizationSubtype($ref);
 	if ($hardtype) {
 	    $hardtype = GeniXML::GetText("name", $hardtype);
 	}
@@ -1404,11 +1407,24 @@ sub SetSites($$$$$$)
 	foreach my $iref (GeniXML::FindNodes("n:interface",
 					     $ref)->get_nodelist()) {
 	    my $client_id = GeniXML::GetInterfaceId($iref);
-	    $interface_map{$client_id} = $manager_urn;
+	    
+	    $interface_map{$client_id} = {
+		"manager_urn" => $manager_urn,
+		# Not checking too deeply, the CM will catch it too.
+		"hasIP"       => GeniXML::FindFirst("n:ip", $iref),
+	    };
+	    # Catch globe spanning blockstore lans.
+	    if ($slivertype && $slivertype eq "emulab-blockstore") {
+		$blockstores{$client_id} = $manager_urn;
+	    }
 	}
     }
     foreach my $ref (GeniXML::FindNodes("n:link", $rspec)->get_nodelist()) {
-	my %linksites = ();
+	my %linksites  = ();
+	my $blockcount = 0;
+	my $link_id      = GeniXML::GetInterfaceId($ref);
+	my $supplied_ips = 0;
+	my $possible_ips = 0;
 
 	foreach my $iref (GeniXML::FindNodes("n:interface_ref",
 					     $ref)->get_nodelist()) {
@@ -1416,11 +1432,20 @@ sub SetSites($$$$$$)
 	    next
 		if (!exists($interface_map{$client_id}));
 
-	    my $manager_urn = $interface_map{$client_id};
+	    my $manager_urn = $interface_map{$client_id}->{'manager_urn'};
 	    
 	    GeniXML::AddManagerToLink($ref, $manager_urn)
 		if (!exists($linksites{$manager_urn}));
 	    $linksites{$manager_urn} = 1;
+
+	    # Catch globe spanning blockstore lans.
+	    if (exists($blockstores{$client_id})) {
+		$blockcount++;
+	    }
+	    $possible_ips++;
+	    $supplied_ips++
+		if (defined($interface_map{$client_id}->{'hasIP'}));
+	    
 	}
 	# Two clusters only (point to point links and lans).
 	if (keys(%linksites) > 2) {
@@ -1429,6 +1454,20 @@ sub SetSites($$$$$$)
 	}
 	# if more then one site for a link, must use the stitcher.
 	if (keys(%linksites) > 1) {
+	    if ($blockcount) {
+		$$perrmsg = "Blockstore links are not allowed to span clusters";
+		return 1;
+	    }
+	    #
+	    # Sanity check early, a globe spanning link must define the
+	    # IP on every interface. The CM does this too of course, but
+	    # that takes forever to get to cause of the stitcher.
+	    #
+	    if ($possible_ips != $supplied_ips) {
+		$$perrmsg = "Must supply IP/MASK on every interface of " .
+		    "link $link_id since it spans multiple clusters";
+		return 1;
+	    }
 	    $$pneedstitcher = 1 if (defined($pneedstitcher));
 
 	    #
