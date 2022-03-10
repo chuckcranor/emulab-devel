@@ -470,9 +470,11 @@ sub Reservation($$)
     my ($self, $uuid) = @_;
     my $hash   = $self->ReservationHash();
     my $rfhash = $self->RFReservationHash();
+    my $rhash  = $self->RouteReservationHash();
 
     return $hash->{$uuid} if (exists($hash->{$uuid}));
     return $rfhash->{$uuid} if (exists($rfhash->{$uuid}));
+    return $rhash->{$uuid} if (exists($rhash->{$uuid}));
 
     return undef;
 }
