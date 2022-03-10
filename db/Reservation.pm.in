@@ -1046,10 +1046,11 @@ sub FreeCount($$;$) {
 #
 # * 'free' is the number of nodes not allocated and not needed
 # for reservations; available for general use subject to other constraints.
-sub Forecast($$;$$) {
-    my ($class, $type, $projlist, $details, $dounapproved) = @_;
+sub Forecast($$;$$$$) {
+    my ($class, $type, $projlist, $details, $dounapproved, $reservations) = @_;
 
-    my $reservations = LookupAll( $class, $type, $dounapproved, $details );
+    $reservations = LookupAll( $class, $type, $dounapproved, $details )
+	if (!defined($reservations));
     my @forecast = ();
     my @answer = ();
     my $t = time();

@@ -78,6 +78,7 @@ use User;
 use Project;
 use EmulabConstants;
 use EmulabFeatures;
+use Reservation;
 use libEmulab;
 use libtestbed;
 use WebTask;
@@ -105,6 +106,7 @@ sub DoIdleDetection();
 sub DoConvertReservationsToGroups();
 sub DoCheckReserved();
 sub DoMaxDuration();
+sub DoRouteForecast();
 sub CallMethodOnReservations($$@);
 
 #
@@ -167,6 +169,9 @@ elsif ($action eq "checkreserved") {
 }
 elsif ($action eq "maxduration") {
     DoMaxDuration();
+}
+elsif ($action eq "routeforecast") {
+    DoRouteForecast();
 }
 else {
     usage();
@@ -1793,6 +1798,7 @@ sub DoApprove()
     
 	foreach my $res (@route_reservations) {
 	    my $ref = {};
+	    $ref->{'routename'}= $res->routename();
 	    $ref->{'routeid'}  = $res->routeid();
 	    $ref->{'uuid'}     = $res->route_uuid();
 
@@ -3063,6 +3069,107 @@ sub CallMethodOnReservations($$@)
     # Yes, we delete the webtasks even though we return the in-memory version.
     map { $_->Delete(); } @webtasks;
     return 0;
+}
+
+#
+# Construct a forecast for routes that looks like Reservation system
+# forecasts, including unapproved info for the web interface.
+#
+sub DoRouteForecast()
+{
+    my $optlist      = "p:";
+    my %forecasts    = ();
+    my %reservations = ();
+    my %current      = ();
+    my $routemap     = APT_Reservation::Group::RouteReservation::RouteMap();
+    my $now          = time();
+    my @projlist;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"p"})) {
+	@projlist = split(",", $options{"p"});
+    }
+    my @groups = APT_Reservation::Group->LookupAll();
+    goto done
+	if (!@groups);
+
+    foreach my $routename (keys(%{$routemap})) {
+	$reservations{$routename} = [];
+    }
+
+    foreach my $group (@groups) {
+	next
+	    if (! $group->RouteReservationList());
+
+	my $starttime = str2time($group->start());
+	my $endtime   = str2time($group->end());
+
+	#print "$group\n";
+	
+	foreach my $route ($group->RouteReservationList()) {
+	    my $routename = $route->routename();
+	    my $res;
+
+	    #print "$route\n";
+
+	    $res = Reservation->Create($group->pid(),
+				       $group->creator_uid(),
+				       $starttime, $endtime,
+				       $routename, 1);
+	    $res->Approve()
+		if ($route->approved());
+
+	    push(@{$reservations{$routename}}, $res);	    
+
+	    # The equiv of a node in use reservation.
+	    if ($route->approved() &&
+		$starttime < $now && $endtime > $now) {
+		$res = Reservation->CreateExisting($group->pid(),
+						   "unimportant",
+						   $group->creator_uid(),
+						   $endtime,
+						   $routename, 1);
+		$res->Approve();
+		$current{$routename} = $res;
+	    }
+	}
+    }
+    foreach my $routename (keys(%{$routemap})) {
+	my $res;
+	
+	if (exists($current{$routename})) {
+	    $res = $current{$routename};
+	}
+	else {
+	    # Need to push on a route free declaration.
+	    $res = Reservation->CreateCommon(undef, undef, undef, 0, undef,
+					     $routename, 1);
+	}
+	$reservations{$routename} = [$res, @{$reservations{$routename}}];
+    }
+    
+    #print Dumper(\%reservations);
+    foreach my $routename (keys(%reservations)) {
+	my $reslist  = $reservations{$routename};
+	my @forecast = Reservation->Forecast($routename, \@projlist,
+					     undef, 1, $reslist);
+
+	$forecasts{$routename} = \@forecast;
+    }
+    
+  done:
+    if (defined($webtask)) {
+	$webtask->forecast(\%forecasts);
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper(\%forecasts);
+    }
+    exit(0);
+
 }
 
 sub fatal($)

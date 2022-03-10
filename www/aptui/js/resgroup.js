@@ -3548,39 +3548,60 @@ $(function ()
 	    var uuid  = res.route_uuid;
 	    var tbody = $('#route-table tbody[data-uuid="' + uuid + '"]');
 	    var newClass = "";
+	    var newHtml  = "";
 
 	    if (operationResults &&
 		_.has(operationResults, uuid) &&
 		operationResults[uuid].errcode) {
-		tbody.find(".reservation-error span label")
-		    .html(operationResults[uuid].errmesg);
+		newHtml  = operationResults[uuid].errmesg;
 		newClass = "has-error";
 	    }
 	    else if (!res.approved) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above has not been approved yet");
+		newHtml  = "The reservation has not been approved yet";
 		newClass = "has-warning";
 	    }
 	    else if (res.canceled) {
 		var when = moment(res.canceled).format("lll");
-		tbody.find(".reservation-error span label")
-  		   .html("The reservation above is scheduled to be canceled " +
-		         "at " + when);
+		newHtml  = "The reservation is scheduled to be canceled " +
+		    "at " + when;
 		newClass = "has-error";
 	    }
-	    if (newClass == "") {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
-		tbody.removeClass("has-warning has-error");
+	    if (fakeroutes) {
+		$('#allroutes-error').html(newHtml);
 	    }
 	    else {
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning has-error")
-		    .addClass(newClass)
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass(newClass);
+		tbody.find(".reservation-error span label").html(newHtml);
 	    }
+	    if (newClass == "") {
+		if (fakeroutes) {
+		    $('#allroutes-error')
+			.removeClass("text-warning text-danger")
+			.addClass("hidden");
+		}
+		else {
+		    tbody.find(".reservation-error span").addClass("hidden");
+		    tbody.removeClass("has-warning has-error");
+		}
+	    }
+	    else {
+		if (fakeroutes) {
+		    var lc = (newClass == "has-error" ?
+			      "text-danger" : "text-warning");
+		    $('#allroutes-error')
+			.removeClass("text-warning text-danger")
+			.addClass(lc)
+			.removeClass("hidden");
+		}
+		else {
+		    tbody.find(".reservation-error span")
+			.removeClass("has-warning has-error")
+			.addClass(newClass)
+			.removeClass("hidden");
+		    tbody.removeClass("has-warning has-error")
+			.addClass(newClass);
+		}
+	    }
+	    
 	});
 	// Always display delete button on existing routes
 	$('#route-table .existing-route .delete-route').removeClass("hidden");
@@ -3720,7 +3741,7 @@ $(function ()
     function Approve()
     {
 	var callback = function (json) {
-	    console.info(json);
+	    console.info("Approve: ", json);
 	    sup.HideModal('#waitwait-modal');
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);

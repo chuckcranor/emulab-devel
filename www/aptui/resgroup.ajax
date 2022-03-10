@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -1156,65 +1156,36 @@ function Do_RouteReservations()
             $info[] = $blob;
         }
     }
-    $forecast = array();
-    $query_result =
-        DBQueryFatal("select r.*,g.start,g.end ".
-                     "   from apt_reservation_group_route_reservations as r ".
-                     "left join apt_reservation_groups as g on ".
-                     "   g.uuid=r.uuid ".
-                     "where r.approved is not null and g.start is not null ".
-                     "order by r.routeid,g.start asc");
-    while ($row = mysql_fetch_array($query_result)) {
-        $routename = $row["routename"];
-        $start     = strtotime($row["start"]);
-        $end       = strtotime($row["end"]);
+    $webtask  = WebTask::CreateAnonymous();
 
-        // Nothing before now.
-        if ($start < time()) {
-            $start = time();
-        }
-        if (!array_key_exists($routename, $forecast)) {
-            $forecast[$routename] = array();
-            #
-            # Need an initial entry stating that the route is free between
-            # now and the time of the first reservation.
-            #
-            if ($start > time()) {
-                $forecast[$routename][] =
-                    array("free"  => 1,
-                          "held"  => 0,
-                          "t"     => time(),
-                          "stamp" => DateStringGMT(time()));
-            }
-        }
-        $forecast[$routename][] = array("free"  => 0,
-                                        "held"  => 1,
-                                        "t"     => $start,
-                                        "stamp" => DateStringGMT($start));
-        $forecast[$routename][] = array("free"  => 1,
-                                        "held"  => 0,
-                                        "t"     => $end,
-                                        "stamp" => DateStringGMT($end));
-    }
-    #
-    # We need stub forecast entries for routes with no reservations.
-    #
-    $query_result =
-        DBQueryFatal("select * from apt_mobile_bus_routes");
+    $retval = SUEXEC("elabman", "nobody",
+                     "webmanage_resgroup ".
+                     "-t " . $webtask->task_id() .
+                     "   routeforecast ",
+                     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
     
-    while ($row = mysql_fetch_array($query_result)) {
-        $routename = $row["description"];
-        $routeid   = $row["routeid"];
+    if ($retval) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        if (!$webtask->exited() || $retval < 0) {
+            SPITAJAX_ERROR(-1, "Internal error route forecast");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $forecasts = $webtask->TaskValue("forecast");
+    $webtask->Delete();
 
-        if (!array_key_exists($routename, $forecast)) {
-            $forecast[$routename] = array();
-            $forecast[$routename][] = array("free"  => 1,
-                                            "held"  => 0,
-                                            "t"     => time(),
-                                            "stamp" => DateStringGMT(time()));
+    # Add the stamps. Change later.
+    foreach ($forecasts as $routename => &$forecast) {
+        foreach ($forecast as &$info) {
+            $info["stamp"] = DateStringGMT($info["t"]);
         }
     }
-    $blob = array("list" => $info, "forecast" => $forecast);
+    $blob = array("list" => $info, "forecast" => $forecasts);
     SPITAJAX_RESPONSE($blob);
 }
 
