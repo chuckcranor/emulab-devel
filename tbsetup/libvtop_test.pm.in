@@ -1233,6 +1233,7 @@ sub LoadVirtNodes($)
 	$vnode->_blockstore_attributes(undef);
 	$vnode->_sanhostname(undef);
 	$vnode->_forcedarchitecture(undef);
+	$vnode->_pnode(undef);
 
 	#
 	# Explicit type request desire to match feature.
@@ -1511,9 +1512,9 @@ sub LoadVirtNodes($)
 	    !($vnode->type() eq "blockstore" ||
 	      $vnode->type() eq "interconnect" ||
 	      $vnode->type() eq "interconnect-vm")) {
-	    my $defmem = 128;
-	    my $minmem = 128;
-	    my $maxmem = 128;
+	    my $defmem = 1024;
+	    my $minmem = 1024;
+	    my $maxmem = 1024;
 
 	    if (defined($vnode->_parent_osinfo())
 		&& $vnode->_parent_osinfo()->FeatureSupported("xen-host")) {
@@ -7963,6 +7964,35 @@ sub nodejailosinfo($$)
     my $osinfo    = $virtnode->_osinfo();
 
     $self->printdb("nodejailosid: $virtnode, $osinfo\n");
+    if ($osinfo->isImageAlias()) {
+	#
+	#  
+	#
+	my $posinfo;
+	
+	if ($virtnode->_pnode()) {
+	    my $vpnode  = $virtnode->_pnode();
+	    my $pnode   = $vpnode->GetPhysHost();
+	    $posinfo = $osinfo->MapToImage($pnode->type());
+	}
+	else {
+	    #
+	    # The problem on say, the Moonshot cluster, is that ARM
+	    # images do not do XEN, so we have to ata least find an image
+	    # that is jail capable. 
+	    #
+	    foreach my $image ($osinfo->imagelist()) {
+		if ($image->DefaultParent()) {
+		    $posinfo = $image;
+		    last
+		}
+	    }
+	}
+	if (defined($posinfo)) {
+	    $self->printdb("nodejailosid: Mapped image alias to $posinfo\n");
+	    $osinfo = $posinfo;
+	}
+    }
 
     #
     # The old method was to use nextosid, but the new method uses
