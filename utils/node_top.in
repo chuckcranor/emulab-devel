@@ -45,6 +45,8 @@ my $webtask;
 #
 my $TB		= "@prefix@";
 my $NMAP        = "/usr/local/bin/nmap";
+my $SCP		= "/usr/bin/scp";
+my $NODETOP     = "$TB/bin/node_top.sh";
 
 #
 # Testbed Support libraries
@@ -164,13 +166,6 @@ sub GetTop($$)
 {
     my ($node, $pref) = @_;
     my $node_id = $node->node_id();
-    my $topcmd  = "top -c -b -n 1 -w 120";
-    my $lscmd1  = "/bin/ls -lat /tmp | head -n 20";
-    my $lscmd2  = "/bin/ls -lat /etc | head -n 20";
-    my $lscmd   =
-	"echo '$lscmd1'\; echo ''\; $lscmd1\; echo ''\;" .
-	"echo '--------------------------------------------'\;".
-	"echo '$lscmd2'\; echo ''\; $lscmd2";
 
     #
     # Basic nmap to see what ports are open. Note that boss has some
@@ -180,35 +175,33 @@ sub GetTop($$)
     if ($?) {
 	print STDERR "$node_id failed: $nmap\n";
     }
-
     # Perl sillyness
     $UID = $EUID;
 
-    my $cmd = "$TB/bin/sshtb -host $node_id $topcmd | head -n 20";
-    my $output = emutil::ExecQuiet($cmd);
+    # We copy over the script, easier.
+    my $scp = "$SCP $NODETOP ${node_id}:/var/tmp";
+    my $output = emutil::ExecQuiet($scp);
+    if ($?) {
+	print STDERR "$node_id scp failed: $output\n";
+	$$pref = $output;
+	return -1;
+    }
+
+    my $cmd = "$TB/bin/sshtb -host $node_id /var/tmp/node_top.sh";
+    $output = emutil::ExecQuiet($cmd);
     if ($?) {
 	print STDERR "$node_id failed: $output\n";
 	$$pref = $output;
 	return -1;
     }
-    $cmd = "$TB/bin/sshtb -host $node_id \"$lscmd\"";
-    my $ls = emutil::ExecQuiet($cmd);
-    if ($?) {
-	print STDERR "$node_id failed: $ls\n";
-    }
-    
     if ($debug) {
 	print $nmap;
 	print $output;
-	print $ls;
     }
     my $result =
-	$topcmd . "\n\n" .
 	$output . "\n" .
-	"------------------------------------\n" .
-	$nmap . "\n" .
-	"------------------------------------\n" .
-	$ls;
+	"-------------------------------------------------------------\n" .
+	$nmap . "\n";
     
     $$pref = $result;
     return 0;
