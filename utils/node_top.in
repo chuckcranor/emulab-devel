@@ -30,13 +30,15 @@ use Getopt::Std;
 #
 sub usage()
 {
-    print STDOUT "Usage: node_top [-h] [node ....]\n";
-    print STDOUT "       node_top [-h] -e pid,eid\n";
+    print STDOUT "Usage: node_top [-hG] [node ....]\n";
+    print STDOUT "       node_top [-hG] -e pid,eid\n";
+    print STDOUT "       node_top [-hG] -T type\n";
     print STDOUT "-h     This message\n";
     exit(-1);
 }
-my $optlist  = "hdt:e:";
+my $optlist  = "hdt:e:T:G";
 my $debug    = 0;
+my $gpuonly  = 0;
 my $webtask_id;
 my $webtask;
 
@@ -59,6 +61,7 @@ use EmulabConstants;
 use libtestbed;
 use User;
 use Node;
+use NodeType;
 use Experiment;
 
 #
@@ -103,6 +106,9 @@ if (defined($options{"h"})) {
 if (defined($options{"d"})) {
     $debug++;
 }
+if (defined($options{"G"})) {
+    $gpuonly = 1;
+}
 if (defined($options{"t"})) {
     $webtask_id = $options{"t"};
     $webtask = WebTask->Lookup($webtask_id);
@@ -138,6 +144,36 @@ if (defined($options{"e"})) {
 	fatal("There are no nodes reserved in $experiment");
     }
 }
+if (defined($options{"T"})) {
+    if (@ARGV) {
+	usage();
+    }
+    my $nodetype = NodeType->Lookup($options{"T"});
+    if (!defined($nodetype)) {
+	fatal("Unknown node type!");
+    }
+    if (!$this_user->IsAdmin()) {
+	fatal("You not have permission to do this!");
+    }
+    @nodes = Node->LookupByType($nodetype->type());
+    if (! @nodes) {
+	fatal("There are no nodes of this type");
+    }
+    # But only allocated nodes.
+    my @tmp = ();
+    foreach my $node (@nodes) {
+	next
+	    if (! $node->IsReserved());
+
+	my $pid = $node->pid();
+	my $eid = $node->eid();
+	next
+	    if ($pid eq TBOPSPID());
+	
+	push(@tmp, $node)
+    }
+    @nodes = @tmp;
+}
 else {
     if (! @ARGV) {
 	usage();
@@ -166,17 +202,23 @@ sub GetTop($$)
 {
     my ($node, $pref) = @_;
     my $node_id = $node->node_id();
-
+    my $arg = ($gpuonly ? "-GPU" : "");
+    my $nmap = "";
+    
     #
     # Basic nmap to see what ports are open. Note that boss has some
     # extra access that the outside world does not. 
     #
-    my $nmap = emutil::ExecQuiet("$NMAP $node_id");
-    if ($?) {
-	print STDERR "$node_id failed: $nmap\n";
+    if (!$gpuonly) {
+	$EUID = $UID;
+	
+	my $nmap = emutil::ExecQuiet("$NMAP -oN - $node_id");
+	if ($?) {
+	    print STDERR "$node_id failed: $nmap\n";
+	}
     }
-    # Perl sillyness
-    $UID = $EUID;
+    
+    $UID = $EUID = 0;
 
     # We copy over the script, easier.
     my $scp = "$SCP $NODETOP ${node_id}:/var/tmp";
@@ -187,7 +229,7 @@ sub GetTop($$)
 	return -1;
     }
 
-    my $cmd = "$TB/bin/sshtb -host $node_id /var/tmp/node_top.sh";
+    my $cmd = "$TB/bin/sshtb -host $node_id /var/tmp/node_top.sh $arg";
     $output = emutil::ExecQuiet($cmd);
     if ($?) {
 	print STDERR "$node_id failed: $output\n";
@@ -198,12 +240,15 @@ sub GetTop($$)
 	print $nmap;
 	print $output;
     }
-    my $result =
-	$output . "\n" .
-	"-------------------------------------------------------------\n" .
-	$nmap . "\n";
-    
-    $$pref = $result;
+    if ($gpuonly) {
+	$$pref = $output;
+    }
+    else {
+	$$pref =
+	    $output . "\n" .
+	    "-------------------------------------------------------------\n" .
+	    $nmap . "\n";
+    }
     return 0;
 }
 
