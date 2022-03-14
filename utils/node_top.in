@@ -212,7 +212,7 @@ sub GetTop($$)
     if (!$gpuonly) {
 	$EUID = $UID;
 	
-	my $nmap = emutil::ExecQuiet("$NMAP -oN - -T4 --host-timeout 30s $node_id");
+	$nmap = emutil::ExecQuiet("$NMAP -oN - -T4 --host-timeout 30s $node_id");
 	if ($?) {
 	    print STDERR "$node_id failed: $nmap\n";
 	}
