@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -278,8 +278,15 @@ sub ProcessLoginFile($)
 	    if ($ip eq $BOSSNODE_IP);
 
 	# Ignore anything in the whitelist.
-	next
-	    if (exists($whitelist->{$ip}));
+	if (exists($whitelist->{$ip})) {
+	    if (exists($banlist->{$ip})) {
+		delete($banlist->{$ip});
+		logit("Removing $ip from ban list cause its white listed");
+		$outstandingCount++
+	    }
+	    delete($counts->{$ip}) if (exists($counts->{$ip}));
+	    next;
+	}
 
 	if (!exists($counts->{$ip})) {
 	    $counts->{$ip} = {
