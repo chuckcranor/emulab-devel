@@ -3841,7 +3841,8 @@ $(function ()
 		sup.ShowModal('#top-processes-modal');
 	    });
 	}
-	sup.ShowModal('#waitwait-modal');
+
+	sup.ShowWaitWait("This will take a minute ... patience please");	
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status", "Top",
 					    {"uuid" : uuid,
