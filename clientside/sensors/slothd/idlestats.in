@@ -377,7 +377,6 @@ foreach my $node (@g_nodelist) {
 	$mac = uc($mac);
 	next if (!exists($ifmap{$mac})); # skip if iface is not in DB.
 	$ifmap{$mac}->{'SEEN'} = 1; # mark.
-	print STDERR $intfrrd . "\n";
 	if ($g_doboth) {
 	     my $avg = get_stats($intfrrd, "AVERAGE", $iheader, $f_intf);
 	     my $max = get_stats($intfrrd, "MAX", $iheader, $f_intf);
