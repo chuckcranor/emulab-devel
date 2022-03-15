@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2019 University of Utah and the Flux Group.
+# Copyright (c) 2019-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -154,9 +154,9 @@ sub getpduinfo()
     }
     my $query_result =
 	DBQueryWarn("select n.node_id from nodes as n,".
-		    "node_types as nt,node_attributes as na where ".
-		    "  n.type=nt.type and n.node_id=na.node_id and ".
-		    "  nt.class='power' and na.attrkey='reports_energy'".
+		    "node_attributes as na where ".
+		    "  n.role='powerctrl' and n.node_id=na.node_id and ".
+		    "  na.attrkey='reports_energy' and na.attrvalue!='0' ".
 		    $nclause);
     if (!$query_result || $query_result->numrows == 0) {
 	return 0;
