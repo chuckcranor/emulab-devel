@@ -330,6 +330,7 @@ int ParseRecord(IDLE_DATA *iddata) {
   char maddr[18];
 
   iddata->ifcnt = 0;
+  iddata->gpucnt = 0;
   
   /* First parsing pass: separate out the key/value pairs. */
   itemptr = strtok(iddata->buf, " \t");
@@ -419,6 +420,20 @@ int ParseRecord(IDLE_DATA *iddata) {
 	  continue;
 	}
       }
+      else if (!strcmp(key,"gpu")) {
+	sres = sscanf(value, LONG_FORMAT "," DBL_FORMAT "," DBL_FORMAT , 
+		      &val1, &dval1, &dval2);
+	if (sres == 3) {
+	    iddata->gpus[iddata->gpucnt].sm  = dval1;
+	    iddata->gpus[iddata->gpucnt].mem = dval2;
+	    iddata->gpucnt++;
+	}
+	else {
+	  error("Skipping bad data from node %s in gpu field: %s", 
+		iddata->id, value);
+	  continue;
+	}
+      }
       else {
 	error("Packet rejected from node %s: Unknown key: %s", iddata->id, key);
 	return 0;
@@ -456,6 +471,11 @@ void PrintRecord(IDLE_DATA *iddata) {
 	   iddata->ifaces[i].mac,
 	   iddata->ifaces[i].ipkts,
 	   iddata->ifaces[i].opkts);
+  }
+  for (i = 0; i < iddata->gpucnt; ++i) {
+    printf("GPU %d: sm: %.2lf  mem: %.2lf\n", i,
+	   iddata->gpus[i].sm,
+	   iddata->gpus[i].mem);
   }
   printf("\n\n");
 
@@ -590,6 +610,35 @@ void PutRRDStats(IDLE_DATA *iddata) {
       error("Failed to update RRD file for node/iface %s/%s: %s",
 	    iddata->id, iddata->ifaces[i].mac,
 	    rrd_get_error());
+      return;
+    }
+  }
+  /* Now do the same for each GPU interface. One RRD for each GPU */
+  for (i = 0; i < iddata->gpucnt; i++) {
+    sprintf(rrdfile, "%s/%s-gpu%d.rrd", SD_RRD_STORAGEDIR, iddata->id, i);
+    if (access(rrdfile, F_OK) == -1) {
+      if (errno == ENOENT) {
+	if (rrd_create_r(rrdfile,
+			 SD_RRD_STEPSIZE,
+			 now - 10,
+			 sizeof(SD_RRD_GPU_LAYOUT)/sizeof(char*),
+			 SD_RRD_GPU_LAYOUT) != 0) {
+	  error("Failed to create RRD file for node/gpu %s/%d: %s",
+		iddata->id, i, rrd_get_error());
+	  return;
+	}
+      } else {
+	errorc("RRD file check failed for node/gpu %s/%d",
+	       iddata->id, i);
+	return;
+      }
+    }
+
+    sprintf(updstr, "N:%.2f:%.2f",
+	    iddata->gpus[i].sm, iddata->gpus[i].mem);
+    if (rrd_update_r(rrdfile, NULL, 1, updarr) != 0) {
+      error("Failed to update RRD file for node/gpu %s/%d: %s",
+	    iddata->id, i, rrd_get_error());
       return;
     }
   }

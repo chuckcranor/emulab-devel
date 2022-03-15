@@ -669,6 +669,34 @@ pre {
 		  </div>
 		</div>
 	      </div>
+		<div class='panel panel-default hidden'
+		     id="gpu-panel-div">
+		  <div class="panel-heading">
+		    <div class="maxavg-toggles pull-right">
+		      <label class="radio-inline">
+			<input type="radio" name="gpu-radio"
+			       checked="checked" value="max"> Max
+		      </label>
+		      <label class="radio-inline">
+			<input type="radio" name="gpu-radio"
+			       value="avg"> Avg
+		      </label>
+		    </div>
+		    <h5>GPU Usage Graph</h5>
+		  </div>
+		  <div class='panel-body panel-body-nopad'>
+		    <!-- The col setting gives us a "relative" position div -->
+		    <div class='col-xs-12 col-xs-offset-0'
+			 style="padding:0px;">
+		      <div id="gpu-chart"
+			   class='fixedsize-panel idlegraph-div
+				  with-3d-shadow with-transitions'>
+			<svg></svg>
+		      </div>
+		    </div>
+		  </div>
+		</div>
+	      </div>
 	      <div class='row'>
 		<div class='panel panel-default hidden'
 		     id="ctrl-traffic-panel-div">

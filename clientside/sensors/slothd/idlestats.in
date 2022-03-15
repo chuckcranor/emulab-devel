@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2017 University of Utah and the Flux Group.
+# Copyright (c) 2016-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -366,11 +366,18 @@ foreach my $node (@g_nodelist) {
     my @intfrrds = glob "$SD_STATSDIR/${node_id}-*.rrd"; # iface stats files.
     my $iheader = ["timestamp","ipkt_rate","opkt_rate"];
     foreach my $intfrrd (@intfrrds) {
-	$intfrrd =~ /${node_id}-([0-9a-f]{12}).rrd$/i;	
-	next if (!$1); # skip if mac addr in filename is malformed.
-	my $mac = uc($1);
+	my $mac;
+	
+	if ($intfrrd =~ /${node_id}-([0-9a-f]{12}).rrd$/i) {
+	    $mac = $1;
+	}
+	else {
+	    next;
+	}
+	$mac = uc($mac);
 	next if (!exists($ifmap{$mac})); # skip if iface is not in DB.
 	$ifmap{$mac}->{'SEEN'} = 1; # mark.
+	print STDERR $intfrrd . "\n";
 	if ($g_doboth) {
 	     my $avg = get_stats($intfrrd, "AVERAGE", $iheader, $f_intf);
 	     my $max = get_stats($intfrrd, "MAX", $iheader, $f_intf);
@@ -391,6 +398,30 @@ foreach my $node (@g_nodelist) {
     foreach my $mac (keys %ifmap) {
 	if (!$ifmap{$mac}->{'SEEN'}) {
 	    $nobj->{'interfaces'}->{$mac} = [];
+	}
+    }
+
+    my $gheader = ["timestamp","sm","mem"];
+    foreach (my $i = 0; $ i < 8; $i++) {
+	my $rrdfile = "$SD_STATSDIR/${node_id}-gpu${i}.rrd";
+	if (-e $rrdfile) {
+	    if ($g_doboth) {
+		my $avg = get_stats($rrdfile, "AVERAGE", $gheader, $f_intf);
+		my $max = get_stats($rrdfile, "MAX", $gheader, $f_intf);
+		if (@$avg || @$max) {
+		    $nobj->{'gpus'}->{"$i"}->{"AVG"} = $avg;
+		    $nobj->{'gpus'}->{"$i"}->{"MAX"} = $max;
+		} else {
+		    $nobj->{'gpus'}->{"$i"} = [];
+		}
+	    } else {
+		$nobj->{'gpus'}->{"$i"}->{($g_valtype eq
+					   "MAX" ? "MAX" : "AVG")} =
+		    get_stats($rrdfile, $g_valtype, $gheader, $f_intf);
+	    }
+	}
+	else {
+	    $nobj->{'gpus'}->{"$i"} = [];
 	}
     }
 

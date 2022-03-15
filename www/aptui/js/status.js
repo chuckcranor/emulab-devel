@@ -4437,6 +4437,7 @@ $(function ()
 	ShowIdleGraphs({"uuid"     : uuid,
 			"showwait" : true,
 			"loadID"   : "#loadavg-panel-div",
+			"gpuID"    : "#gpu-panel-div",
 			"ctrlID"   : "#ctrl-traffic-panel-div",
 			"exptID"   : "#expt-traffic-panel-div",
 			"refreshID": "#graphs-refresh-button",

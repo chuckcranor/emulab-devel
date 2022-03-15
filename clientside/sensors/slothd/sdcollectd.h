@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2003, 2007 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -51,6 +51,7 @@
 #define BUFSIZE 1500
 #define MAXNUMIFACES 10
 #define MACADDRLEN 12
+#define MAXGPUS 8
 
 #define MAXKEYSIZE 10
 #define MAXVALUESIZE 40
@@ -94,9 +95,18 @@ const char *SD_RRD_NODE_LAYOUT[] = {
   "RRA:AVERAGE:0.5:12:168"       /* Avg of 12 x 5m samples (1 hr), keep 1w. */
 };
 
+
 const char *SD_RRD_IFACE_LAYOUT[] = {
   "DS:ipkts:DERIVE:600:0:U",
   "DS:opkts:DERIVE:600:0:U",
+  "RRA:AVERAGE:0.5:1:288",       /* 5m samples for a day. */
+  "RRA:MAX:0.5:12:168",          /* Max of 12 x 5m samples (1 hr), keep 1w. */
+  "RRA:AVERAGE:0.5:12:168"       /* Avg of 12 x 5m samples (1 hr), keep 1w. */
+};
+
+const char *SD_RRD_GPU_LAYOUT[] = {
+  "DS:sm:GAUGE:600:0:U",
+  "DS:mem:GAUGE:600:0:U",
   "RRA:AVERAGE:0.5:1:288",       /* 5m samples for a day. */
   "RRA:MAX:0.5:12:168",          /* Max of 12 x 5m samples (1 hr), keep 1w. */
   "RRA:AVERAGE:0.5:12:168"       /* Avg of 12 x 5m samples (1 hr), keep 1w. */
@@ -117,6 +127,7 @@ typedef struct {
   double l5m;
   double l15m;
   u_char ifcnt;
+  u_char gpucnt;
   u_int  actbits;
   u_int  version;
   struct {
@@ -124,6 +135,10 @@ typedef struct {
     unsigned long ipkts;
     unsigned long opkts;
   }      ifaces[MAXNUMIFACES];
+  struct {
+    double sm;
+    double mem;
+  } gpus[MAXGPUS];
   char   id[NODENAMESIZE];      /* Host identifier - probably local part of hostname */
   char   buf[BUFSIZE];    /* String containing monitor output values */
 } IDLE_DATA;

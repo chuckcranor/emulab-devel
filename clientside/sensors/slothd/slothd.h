@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016, 2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -80,6 +80,7 @@
 #define MIN_CTHRSH 0     /* No packets */
 #define DEF_CTHRSH 1     /* At least 1 packet */
 #define OFFSET_FRACTION 0.5
+#define MAXGPUS 8
 
 #define SLOTHD_DEF_PORT 8509 /* XXX change */
 
@@ -121,6 +122,11 @@ typedef struct {
     char ifname[MAXIFNAMELEN];
     char addr[MACADDRLEN];
   } ifaces[MAXNUMIFACES];
+  int maxgpu;
+	struct {
+	  double sm;
+    double mem;
+	} gpus[MAXGPUS];
 } SLOTHD_PACKET;
 
 typedef struct {

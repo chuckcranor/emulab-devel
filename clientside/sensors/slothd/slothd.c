@@ -160,6 +160,9 @@ int main(int argc, char **argv) {
         get_min_tty_idle(pkt);
         get_packet_counts(pkt);
         myabits = get_active_bits(pkt,opkt);
+#ifdef __linux__				
+				get_gpu_stats(pkt);
+#endif
 
         /*
          * Time to send a packet?
@@ -636,6 +639,14 @@ int send_pkt(SLOTHD_PACKET *pkt) {
             pkt->ifaces[i].ipkts,
             pkt->ifaces[i].opkts);
     strcat(pktbuf, minibuf);
+  }
+
+  /* get all the GPUs too */
+  for (i = 0; i <= pkt->maxgpu; ++i) {
+      sprintf(minibuf, "gpu=%d,%lf,%lf ", i,
+							pkt->gpus[i].sm,
+							pkt->gpus[i].mem);
+			strcat(pktbuf, minibuf);
   }
   
   if (opts->debug) {
@@ -1192,3 +1203,60 @@ int procpipe(char *const prog[], int (procfunc)(char*,void*), void* data) {
   }
   return retcode;
 }
+#ifdef __linux__
+int get_smi_stats(char *buf, void *data) {
+  SLOTHD_PACKET *pkt = (SLOTHD_PACKET*)data;
+	int count, index, pid;
+	double sm, mem;
+
+	if (buf[0] == '#') {
+					return 0;
+	}
+	count = sscanf(buf, " %d %d %*s %lf %lf",
+								 &index, &pid, &sm, &mem);
+
+	if (index >= MAXGPUS) {
+					lwarn("Too many GPUs");
+					return 0;
+	}
+	
+	if (count == 1) {
+					pkt->maxgpu = index;
+					pkt->gpus[index].sm  = 0;
+					pkt->gpus[index].mem = 0;
+					return 0;
+	}
+	if (count != 4) {
+					printf("Failed to parse smi output.\n");
+					return -1;
+	}
+	pkt->maxgpu = index;
+	if (sm > pkt->gpus[index].sm) {
+					pkt->gpus[index].sm  = sm;
+					pkt->gpus[index].mem = mem;
+	}
+	return 0;
+}
+
+void get_gpu_stats(SLOTHD_PACKET *pkt) {
+	char *nvprog[] = {"nvidia-smi", "pmon", "-c", "1", NULL};
+	int i;
+
+	if (access("/usr/bin/nvidia-smi", X_OK)) {
+    return;
+	}
+
+	if (procpipe(nvprog, &get_smi_stats, (void*)pkt)) {
+  	/* No warning, this will happen a lot if drivers not installed */
+		pkt->maxgpu = 0;
+	}
+	else if (opts->debug) {
+		for (i = 0; i <= pkt->maxgpu; ++i) {
+      printf("GPU: %d  sm: %.2f  mem: %.2f\n", i,
+						 pkt->gpus[i].sm,
+						 pkt->gpus[i].mem);
+		}
+	}
+	return;
+}
+#endif
