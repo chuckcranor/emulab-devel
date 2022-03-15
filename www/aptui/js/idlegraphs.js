@@ -121,7 +121,9 @@ window.ShowIdleGraphs = (function ()
 			}
 			// Default to MAX;
 			datum["values"] = datum.arrays["MAX"];
-			result[index++] = datum;
+			if (datum["values"] && datum.values.length) {
+			    result[index++] = datum;
+			}
 			continue;
 		    }
 		    if (which == "ctrl" || which == "expt") {
