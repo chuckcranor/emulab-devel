@@ -140,11 +140,20 @@ if (defined($options{"e"})) {
 	fatal("You not have permission to do this!");
     }
     @nodes = $experiment->NodeList();
+    # But only PCs
+    my @tmp = ();
+    foreach my $node (@nodes) {
+	next
+	    if ($node->class() ne "pc" || $node->op_mode() eq "ALWAYSUP");
+
+	push(@tmp, $node)
+    }
+    @nodes = @tmp;
     if (! @nodes) {
-	fatal("There are no nodes reserved in $experiment");
+	fatal("There are no PCs reserved in $experiment");
     }
 }
-if (defined($options{"T"})) {
+elsif (defined($options{"T"})) {
     if (@ARGV) {
 	usage();
     }
@@ -354,7 +363,11 @@ foreach my $node (@nodes) {
     }
     else {
 	if (@nodes > 1) {
-	    print $node->node_id() . ":\n";
+	    print $node->node_id();
+	    if (! defined($options{"e"})) {
+		print " (" . $node->pid() . "," . $node->eid() . ")";
+	    }
+	    print ":\n";	    
 	}
 	print $output;
 	if (@results) {
