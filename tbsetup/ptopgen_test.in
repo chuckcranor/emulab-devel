@@ -1019,7 +1019,7 @@ else {
 	}
 	my @typelist;
 	
-	if ($image->isImage()) {
+	if ($image->isImage() || $image->isImageAlias()) {
 	    @typelist = $image->TypeList();
 
 	    foreach my $nodetype (@typelist) {
