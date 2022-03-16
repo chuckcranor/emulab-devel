@@ -2056,7 +2056,7 @@ sub CheckForDeprecatedImages($$$$)
 	    next;
 	}
 
-	if ($image_urn->IsOurDomain()) {
+	if ($image_urn->IsOurDomain() || $image_urn->ospid() eq TBOPSPID()) {
 	    my $image = OSImage->Lookup($image_urn->ospid(),
 					$image_urn->osname());
 	    if (!defined($image)) {
