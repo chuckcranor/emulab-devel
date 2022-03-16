@@ -12,6 +12,11 @@ smibin="/usr/bin/nvidia-smi";
 smicmd="$smibin pmon -c 1"
 
 if [ "$1" != "-GPU" ]; then
+    uname -a
+    echo ""
+    if [ -e /etc/lsb-release ]; then
+	cat /etc/lsb-release
+    fi
     echo "$topcmd"
     echo "------------------------------------------------------"
     $topcmd | head -n 20
