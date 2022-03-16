@@ -400,13 +400,20 @@ foreach my $node (@g_nodelist) {
 	}
     }
 
+    # anonymous func to process entries returned by rrd.
+    # Note that on this one we return 0 for undefined entries.
+    my $f_gpuf = sub {
+	my ($tstamp, $vals) = @_;
+	@$vals = map { defined($_) ? sprintf("%.2f", $_)/1 : 0 } @$vals;
+    };
+    
     my $gheader = ["timestamp","sm","mem"];
     foreach (my $i = 0; $ i < 8; $i++) {
 	my $rrdfile = "$SD_STATSDIR/${node_id}-gpu${i}.rrd";
 	if (-e $rrdfile) {
 	    if ($g_doboth) {
-		my $avg = get_stats($rrdfile, "AVERAGE", $gheader, $f_intf);
-		my $max = get_stats($rrdfile, "MAX", $gheader, $f_intf);
+		my $avg = get_stats($rrdfile, "AVERAGE", $gheader, $f_gpuf);
+		my $max = get_stats($rrdfile, "MAX", $gheader, $f_gpuf);
 		if (@$avg || @$max) {
 		    $nobj->{'gpus'}->{"$i"}->{"AVG"} = $avg;
 		    $nobj->{'gpus'}->{"$i"}->{"MAX"} = $max;
@@ -416,7 +423,7 @@ foreach my $node (@g_nodelist) {
 	    } else {
 		$nobj->{'gpus'}->{"$i"}->{($g_valtype eq
 					   "MAX" ? "MAX" : "AVG")} =
-		    get_stats($rrdfile, $g_valtype, $gheader, $f_intf);
+		    get_stats($rrdfile, $g_valtype, $gheader, $f_gpuf);
 	    }
 	}
 	else {
