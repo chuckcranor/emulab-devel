@@ -14,9 +14,11 @@ smicmd="$smibin pmon -c 1"
 if [ "$1" != "-GPU" ]; then
     uname -a
     echo ""
-    if [ -e /etc/lsb-release ]; then
-	cat /etc/lsb-release
+    if [ -e /etc/os-release ]; then
+	cat /etc/os-release
     fi
+    echo "------------------------------------------------------"
+    echo ""
     echo "$topcmd"
     echo "------------------------------------------------------"
     $topcmd | head -n 20
