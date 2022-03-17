@@ -642,11 +642,13 @@ int send_pkt(SLOTHD_PACKET *pkt) {
   }
 
   /* get all the GPUs too */
-  for (i = 0; i <= pkt->maxgpu; ++i) {
+  if (pkt->maxgpu >= 0) {
+    for (i = 0; i <= pkt->maxgpu; ++i) {
       sprintf(minibuf, "gpu=%d,%lf,%lf ", i,
 	      pkt->gpus[i].sm,
 	      pkt->gpus[i].mem);
       strcat(pktbuf, minibuf);
+    }
   }
   
   if (opts->debug) {
@@ -1243,12 +1245,13 @@ void get_gpu_stats(SLOTHD_PACKET *pkt) {
 	int i;
 
 	if (access("/usr/bin/nvidia-smi", X_OK)) {
+		pkt->maxgpu = -1;
 		return;
 	}
 
 	if (procpipe(nvprog, &get_smi_stats, (void*)pkt)) {
 		/* No warning, this will happen a lot if drivers not installed */
-		pkt->maxgpu = 0;
+		pkt->maxgpu = -1;
 	}
 	else if (opts->debug) {
 		for (i = 0; i <= pkt->maxgpu; ++i) {
