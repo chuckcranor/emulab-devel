@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -414,6 +414,79 @@ EOF8
     fi
 
     return 0
+}
+
+#
+# XXX tmp hack for custom images.
+# Check that the image has a recent "slothd" binary that supports
+# collecting data for GPU usage. A lot of heavy GPU users have custom
+# images that predate this addition, but we really want to monitor them.
+#
+dofixslothd() {
+    # Check /etc/os-release to see what OS and version it is
+    if [ ! -e /mnt/etc/os-release ]; then
+	return
+    fi
+    _os=`grep ^NAME= /mnt/etc/os-release | sed -E -e 's/NAME="?([^"]+)"?/\1/'`
+    _vers=`grep ^VERSION_ID= /mnt/etc/os-release | sed -E -e 's/VERSION_ID="?([^"]+)"?/\1/'`
+    case $_os in
+    Ubuntu*)
+	_os=ubuntu
+	_vers=${_vers%%.*}
+	case $_vers in
+	16|18|20)
+	    ;;
+	*)	
+            return
+	    ;;
+	esac
+	;;
+    CentOS*)
+	_os=centos
+	case $_vers in
+	7|8)
+	    ;;
+	*)	
+            return
+	    ;;
+	esac
+	;;
+    FreeBSD*)
+	_os=freebsd
+	_vers=${_vers%%.*}
+	case $_vers in
+	11|12|13)
+	    ;;
+	*)	
+            return
+	    ;;
+	esac
+	;;
+    esac
+    # Make sure we have a newer version
+    _bin="slothd-$_os-$_vers"
+    if [ ! -e /etc/emulab/$_bin ]; then
+	return
+    fi
+
+    _doit=0
+    # If slothd doesn't exist, always install it
+    if [ ! -x /mnt/usr/local/etc/emulab/slothd ]; then
+	_doit=1
+    else
+	# find will return /etc/emulab/$_bin if newer than the
+	# installed version. There may be an easier way to do this...
+	_out=`find /etc/emulab/$_bin -newer /mnt/usr/local/etc/emulab/slothd`
+	if [ $? -eq 0 -a -n "$_out" ]; then
+	    _doit=1
+	fi
+    fi
+
+    # Install the new version.
+    if [ $_doit -ne 0 ]; then
+	echo "  installing updated slothd"
+	cp -p /etc/emulab/$_bin /mnt/usr/local/etc/emulab/slothd
+    fi
 }
 
 dofreebsd() {
@@ -1632,6 +1705,11 @@ EOF7
 	    echo "  checking for expired CA root certificate"
 	    $BINDIR/removecert -M
 	fi
+
+	#
+	# XXX update slothd binary
+	#
+	dofixslothd
 
 	#
 	# Localize the image. We only do this if the MFS we are running in
