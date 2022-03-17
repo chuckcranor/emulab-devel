@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
         get_packet_counts(pkt);
         myabits = get_active_bits(pkt,opkt);
 #ifdef __linux__				
-				get_gpu_stats(pkt);
+	get_gpu_stats(pkt);
 #endif
 
         /*
@@ -641,6 +641,7 @@ int send_pkt(SLOTHD_PACKET *pkt) {
     strcat(pktbuf, minibuf);
   }
 
+#ifdef __linux__  
   /* get all the GPUs too */
   if (pkt->maxgpu >= 0) {
     for (i = 0; i <= pkt->maxgpu; ++i) {
@@ -650,7 +651,7 @@ int send_pkt(SLOTHD_PACKET *pkt) {
       strcat(pktbuf, minibuf);
     }
   }
-  
+#endif  
   if (opts->debug) {
     printf("packet: %s\n", pktbuf);
   }
@@ -1244,8 +1245,10 @@ void get_gpu_stats(SLOTHD_PACKET *pkt) {
 	char *nvprog[] = {"nvidia-smi", "pmon", "-c", "1", NULL};
 	int i;
 
+	// Marker for no data. 
+	pkt->maxgpu = -1;
+
 	if (access("/usr/bin/nvidia-smi", X_OK)) {
-		pkt->maxgpu = -1;
 		return;
 	}
 
