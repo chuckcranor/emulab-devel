@@ -44,6 +44,7 @@ $(function ()
 		    sup.SpitOops("oops", json.value);
 		    return;
 		}
+		window.location.replace("landing.php");
 		return;
 	    }
 	    sup.ShowModal('#confirm-submit-modal');

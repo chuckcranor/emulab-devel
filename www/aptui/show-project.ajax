@@ -448,7 +448,7 @@ function Do_NSF()
 function Do_SendotaAgreement()
 {
     global $this_user, $target_project, $ajax_args;
-    global $SUPPORT, $APTBASE;
+    global $SUPPORT, $APTBASE, $APTMAIL;
 
     if (CheckPageArgs()) {
         return;
@@ -470,7 +470,8 @@ function Do_SendotaAgreement()
            $url . "\n\n".
            "Thank you!\n".
            "Powder Support\n",
-           "From: $SUPPORT", "BCC: $SUPPORT");
+           "From: $APTMAIL\n".
+           "Bcc: $APTMAIL");
 
     SPITAJAX_RESPONSE(1);
 }

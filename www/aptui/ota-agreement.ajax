@@ -29,7 +29,7 @@ function Do_Submit()
 {
     global $this_user;
     global $ajax_args;
-    global $SUPPORT;
+    global $SUPPORT, $APTMAIL;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
@@ -82,14 +82,15 @@ function Do_Submit()
     }
     $email = $this_user->email();
     
-    TBMAIL($SUPPORT,
+    TBMAIL($APTMAIL,
            "OTA Agreement form for project $pid submitted",
            "OTA Agreement form for project $pid submitted\n\n".
            "Description:\n" . $formfields["description"] . "\n\n" .
            "Frequencies:\n" . $formfields["frequencies"] . "\n\n" .
            "Encodings:\n" . $formfields["encodings"] . "\n\n\n".
            $project->PortalURL() . "\n",
-           "From: $email", "BCC: $email");
+           "From: $email\n".
+           "Bcc: $email");
 
     SPITAJAX_RESPONSE(0);
 }
