@@ -3268,9 +3268,10 @@ $(function ()
 		
 		/*
 		 * If this is an admin looking at an unapproved reservation,
-		 * show the approve button
+		 * show the approve button. A canceled reservation is obviously
+		 * approved.
 		 */
-		if (details.status != "approved") {
+		if (details.status != "approved" && details.status != "canceled") {
 		    $('#reserve-approve-button')
 			.removeClass("hidden")
 			.removeAttr("disabled")
@@ -3302,10 +3303,12 @@ $(function ()
 		$('#for-class').attr("readonly", 'readonly');
 		$('#for-class-checkbox').removeClass("hidden");
 	    }
-	    if (details.status == "approved") {
-		$('#unapproved-warning').addClass("hidden");
+	    
+	    $('#canceled-warning, #unapproved-warning').addClass("hidden");
+	    if (details.status === "canceled") {
+		$('#canceled-warning').removeClass("hidden");
 	    }
-	    else {
+	    else if (details.status !== "approved") {
 		$('#unapproved-warning').removeClass("hidden");
 	    }
 	    
@@ -3640,10 +3643,11 @@ $(function ()
 	    if (resgroup.status == "approved" && isadmin) {
 		$('#reserve-approve-button').addClass("hidden");
 	    }
-	    if (resgroup.status == "approved") {
-		$('#unapproved-warning').addClass("hidden");
+	    $('#canceled-warning, #unapproved-warning').addClass("hidden");
+	    if (resgroup.status === "canceled") {
+		$('#canceled-warning').removeClass("hidden");
 	    }
-	    else {
+	    else if (resgroup.status !== "approved") {
 		$('#unapproved-warning').removeClass("hidden");
 	    }
 	};
@@ -4204,7 +4208,7 @@ $(function ()
 		      "selector"       : "combined-resgraph",
 		      "skiptypes"      : {},
 		      "colors"         : RouteColors,
-		      "widebrush"      : true,
+		      "widebrush"      : false,
 		      "unapproved"     : true,
 		      "click_callback" : function(when, type) {
 			  if (!editing) {

@@ -316,6 +316,7 @@ class ReservationGroup
             elseif ($reservation->canceled()) {
                 $status = "canceled";
                 $details["canceled"] += 1;
+                $details["approved"] += 1;
             }
             elseif ($reservation->approved()) {
                 $details["approved"] += 1;
@@ -383,7 +384,8 @@ class ReservationGroup
         }
         $details["status"] = $status;
         if (time() > strtotime($resgroup->start()) &&
-            ($status == "approved" || $details["pending"] > 0)) {
+            ($status == "approved" || $details["pending"] > 0) ||
+            ($status == "canceled" && $details["approved"] > 0)) {
             $details["active"] = true;
         }
         else {
