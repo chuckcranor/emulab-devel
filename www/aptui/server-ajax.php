@@ -374,7 +374,9 @@ $routing = array("geni-login" =>
                                                  "DeleteProject" =>
                                                      "Do_DeleteProject",
                                                  "NSF" =>
-                                                     "Do_NSF"
+                                                     "Do_NSF",
+                                                 "SendotaAgreement" =>
+                                                     "Do_SendotaAgreement",
                               )
                         ),
 		 "groups" =>
@@ -721,6 +723,13 @@ $routing = array("geni-login" =>
                                                      "Do_ProjectInuseRanges",
                                                  "AllInuseRanges" =>
                                                      "Do_AllInuseRanges"
+                              )
+                        ),
+		 "ota-agreement" =>
+			array("file"    => "ota-agreement.ajax",
+			      "guest"   => false,
+			      "methods" => array("Submit" =>
+                                                     "Do_Submit",
                               )
                         ),
 );

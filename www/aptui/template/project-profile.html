@@ -1,5 +1,5 @@
 <style>
-.toggle {
+.toggle, .ota-agreement {
   cursor: pointer;
 }
 </style>
@@ -131,6 +131,17 @@
 	    <td><%= fields.allowed_clusters %></td>
 	  </tr>
 	<% } %>
+      <% } %>
+      <% if (window.ISPOWDER) { %>
+	<tr>
+	  <td>OTA Enabled</td>
+	  <td><% if (fields.otaEnabled) { %>
+	    Yes
+	  <% } else { %>
+	    No (<a id="send-ota-agreement" class="ota-agreement">Send OTA
+	    agreement to project leader</a>)
+	  <% } %>
+	</tr>
       <% } %>
     <% } %>
     <% _.each(fields.nsf_awards, function(award) { %>

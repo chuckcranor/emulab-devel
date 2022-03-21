@@ -1,0 +1,95 @@
+<div>
+  <div class="panel panel-default">
+    <div class="panel-heading text-center">
+      POWDER Over-The-Air (OTA) Use Agreement
+    </div>
+    <div class="panel-body">
+      <p>
+	As the leader of the <strong id="powder-project"></strong>
+	project on POWDER, you are responsible
+	for reading and agreeing to the conditions presented in this
+	document before use of OTA resources on POWDER will be granted.
+	Please share the text of this agreement with all project members.
+      </p>
+      <p class="bg-info" id="ota-agreement">
+      </p>
+      <p>
+	As part of the process to enable access to POWDER OTA resources,
+	please fill in the form below to provide details on how your project
+	plans to operate over-the-air.
+      </p>
+      <form id="ota-form">
+	<input id='ota-pid' type='hidden' name='pid'>	
+	<div class="form-group">
+	  <label>Detailed description of the OTA research/work you
+	    are planning:</label>
+	  <textarea name="description"
+		    data-key="description"
+		    class="form-control format-me" rows="5"></textarea>
+	</div>
+	<div class="form-group">
+	  <label>Frequency ranges you wish to operate in:</label>
+	  <input type="text" class="form-control format-me"
+		 name="frequencies"
+		 data-key="frequencies"
+		 placeholder="Comma separated list of ranges (xxx-yyy)">
+	</div>
+	<div class="form-group">
+	  <label>Types of signal encodings you will send/receive
+	    (DSSS, OFDM, etc.):</label>
+	  <input type="text" class="form-control format-me"
+		 name="encodings"
+		 data-key="encodings"
+		 placeholder="Comma separated list of encodings">
+	</div>
+      </form>
+      <p>
+	This information will be kept confidential, and is meant to
+	inform POWDER operators of the types of transmissions to
+	anticipate. If your project's OTA operation plan changes, you
+	must send an updated write-up to the
+	<a href="mailto:powder-support@powderwireless.net">
+	  powder-support@powderwireless.net</a>
+	BEFORE operating according
+	to your updated scheme. We will review your submitted
+	information and either grant your OTA access request, or
+	follow up with you if more discussion or information is
+	required. This request may take a few days to process.
+      </p>
+      <p><b>Note:</b>
+	Access to certain resources, such as Massive MIMO devices,
+	requires additional review and permissions.
+      </p>
+      <center>
+	<div class="checkbox">
+	  <label>
+	    <input type="checkbox" id="ota-agreed" name="agreed" value="yes">
+	    I agree to the above terms and conditions
+	  </label>
+	</div>	
+        <button class='btn btn-primary btn-sm' disabled
+		id="ota-submit"
+                type='submit' name='submit'>Submit</button>
+      </center>
+    </div>
+  </div>
+</div>
+<div id='confirm-submit-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	<center>
+	  <h4>Your request has been submitted</h4>
+	  <p>
+	    Please watch your email for further discussion about your
+	    submittal. Thanks!
+	  </p>
+	  <div style="margin-top: 10px;">
+            <button class='btn btn-primary btn-sm' 
+                    data-dismiss='modal' aria-hidden='true'>Dimiss</button>
+	  </div>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>

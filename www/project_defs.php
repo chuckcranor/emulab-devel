@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1185,6 +1185,18 @@ class Project
             }
 	}
         return $result;
+    }
+    function otaAllowed()
+    {
+        return FeatureEnabled("OTA-allowed", null, $this);
+    }
+
+    function PortalURL()
+    {
+        global $APTBASE;
+        $pid = $this->pid();
+        
+        return $APTBASE . "/show-project.php?pid=${pid}";
     }
 }
 ?>

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -266,6 +266,7 @@ function Do_ProjectProfile()
 
             $results["licenses"][] = $blob;
         }
+        $results["otaAllowed"] = $target_project->otaAllowed();
     }
     SPITAJAX_RESPONSE($results);
 }
@@ -441,6 +442,36 @@ function Do_NSF()
         $supplement = 0;
     }
     $target_project->AddNSFAward($award, $supplement);
+    SPITAJAX_RESPONSE(1);
+}
+
+function Do_SendotaAgreement()
+{
+    global $this_user, $target_project, $ajax_args;
+    global $SUPPORT, $APTBASE;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+        return;
+    }
+    $pid    = $target_project->pid();
+    $leader = $target_project->GetLeader();
+    $email  = $leader->email();
+    $name   = $leader->name();
+    $url    = $APTBASE . "/ota-agreement.php?pid=${pid}";
+    
+    TBMAIL("$name <$email>",
+           "Over The Air agreement form for project $pid",
+           "Hi. Please click on this link to fill out the OTA agreement\n".
+           "form for project $pid:\n\n".
+           $url . "\n\n".
+           "Thank you!\n".
+           "Powder Support\n",
+           "From: $SUPPORT", "BCC: $SUPPORT");
+
     SPITAJAX_RESPONSE(1);
 }
 
