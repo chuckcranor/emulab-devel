@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2021 University of Utah and the Flux Group.
+# Copyright (c) 2003-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -363,6 +363,21 @@ sub PruneLogfiles()
     my $query_result =
 	DBQueryFatal("select m.logidx,l.logid from logfile_metadata as m ".
 		     "left join logfiles as l on m.logidx=l.logidx ".
+		     "where metakey='Method' and metaval='ImageInfo'");
+    while (my ($logidx,$logid) = $query_result->fetchrow_array()) {
+	my $logfile = Logfile->Lookup($logid);
+	next
+	    if (!defined($logfile));
+	if ($impotent) {
+	    print "Would delete ImageInfo $logfile\n";
+	}
+	else {
+	    $logfile->Delete();
+	}
+    }
+    $query_result =
+	DBQueryFatal("select m.logidx,l.logid from logfile_metadata as m ".
+		     "left join logfiles as l on m.logidx=l.logidx ".
 		     "where metakey='Method' and metaval='SliverStatus' and ".
 		     "      l.filename is null");
     while (my ($logidx,$logid) = $query_result->fetchrow_array()) {
@@ -370,7 +385,7 @@ sub PruneLogfiles()
 	next
 	    if (!defined($logfile));
 	if ($impotent) {
-	    print "Would delete $logfile\n";
+	    print "Would delete SliverStatus $logfile\n";
 	}
 	else {
 	    $logfile->Delete();
@@ -394,7 +409,7 @@ sub PruneLogfiles()
 	    next
 	}
 	if ($impotent) {
-	    print "Would delete $logfile\n";
+	    print "Would delete DeleteSliver $logfile\n";
 	}
 	else {
 	    $logfile->Delete();
