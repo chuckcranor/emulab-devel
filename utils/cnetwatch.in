@@ -493,6 +493,10 @@ sub diffem($$$)
 	# multiplied out by the length of the interval. Ie., we assume the
 	# whole interval played out at the latest rate recorded by slothd.
 	#
+	# Note that the consumer of these counts expects them to be coming
+	# from portstats with a switch-relative view. So we reverse the
+	# counts to conform to that.
+	#
 	if ($pcs{$node}{'nodestats'}) {
 	    my $cref = $aref->{$node}{'counts'};
 	    my $ipps = $cref->[1];
@@ -500,11 +504,11 @@ sub diffem($$$)
 	    my $iv = $dref->{'tstamp'};
 	    if ($ipps && $opps && $iv) {
 		$dref->{$node}{'counts'} =
-		    [0,			# in octets
-		     int($ipps * $iv),	# in ucast packets
+		    [0,			# switch-in octets
+		     int($opps * $iv),	# in ucast packets
 		     0, 0,		# in mcast/bcast packets
-		     0,			# out octets
-		     int($opps * $iv),	# out ucast packets
+		     0,			# switch-out octets
+		     int($ipps * $iv),	# out ucast packets
 		     0, 0		# out mcast/bcast packets
 		    ];
 	    } else {
@@ -567,6 +571,11 @@ sub sortem($$)
 
 #
 # Check for prolonged high traffic volumes from nodes.
+#
+# Note that the first four counters are "in", and the last four "out"
+# as they come from portstats. But this is switch relative, so we need
+# to reverse to get the node's "send" and "receive" perspective, i.e.:
+#
 # Counts: 0==s-bytes, 1==s-uni, 2==s-multi, 3==s-broad
 #         4==r-bytes, 5==r-uni, 6==r-multi, 7==r-broad
 #
@@ -657,10 +666,17 @@ sub reportevents($)
 		    }
 		    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S",
 						localtime($ref->{'start'}));
-		    push(@mailbody,
-			 sprintf("%20s %30s %8d %8d %s for %d sec",
-				 $node, $expname, $pps,
-				 int($bps/1000000), $stamp, $secs));
+		    if ($pcs{$node}{'nodestats'}) {
+			push(@mailbody,
+			     sprintf("%20s %30s %8d %8s %s for %d sec",
+				     $node, $expname, $pps,
+				     "--", $stamp, $secs));
+		    } else {
+			push(@mailbody,
+			     sprintf("%20s %30s %8d %8d %s for %d sec",
+				     $node, $expname, $pps,
+				     int($bps/1000000), $stamp, $secs));
+		    }
 		    push(@mailbody, sprintf("%30s %s", "", $url))
 			if (defined($url));
 		    push(@mailbody, sprintf("%30s %s", "", $portalurl))
