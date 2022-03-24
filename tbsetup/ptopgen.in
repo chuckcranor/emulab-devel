@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1618,6 +1618,11 @@ foreach $node (@nodenames) {
 	    #
 	    if ($sharing_mode{$node} && exists($globalcounts{$node})) {
 		$count -= $globalcounts{$node};
+		# We can go negative, not super important if we do,
+		# but assign will choke on a negative number.
+		if ($count < 0) {
+		    $count = 0;
+		}
 	    }
 	    if (defined($mfactor) && $mfactor <= $count) {
 		$count = $mfactor;
