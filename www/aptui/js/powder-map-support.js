@@ -48,6 +48,16 @@ window.ShowPowderMap = (function()
 	},
     };
 
+    /*
+     * We use the same icon for the layer list.
+     */
+    var layerIcons = {
+	"Dense"       : "images/dense.png",
+	"BaseStation" : "images/base-station.png",
+	"FE"          : "images/cell.png",
+	"DataCenter"  : "images/datacenter.png",
+    };
+
     // x,y is the point to test
     // cx, cy is circle center, and radius is circle radius
     function pointInCircle(x, y, cx, cy, radius)
@@ -134,6 +144,13 @@ window.ShowPowderMap = (function()
 				    className: route.legendClass
 				};
 				//console.info(route.legendClass);
+			    }
+			    else if (_.has(layerIcons, layer.id)) {
+				var path = layerIcons[layer.id];
+				
+				item.panel = {
+				    image: path
+				};
 			    }
 			}
 		    });
@@ -233,6 +250,7 @@ window.ShowPowderMap = (function()
 		// Base layers
 		DrawCoverageArea();
 		DrawDataCenters();
+		DrawDenseDeployment();
 		// Need to wait till these are done before we mark resources
 		// They return the promise.
 		$.when(DrawRoutes(), DrawFixedEndpoints(),
@@ -534,12 +552,16 @@ window.ShowPowderMap = (function()
     
     function DrawDataCenters()
     {
+	var id   = "DataCenter";
+	var icon = layerIcons[id];
+	
 	var layer = GraphicsLayer({
 	    title: "Data Centers",
+	    id: id,
 	});
 	var symbol = {
 	    type: "picture-marker",
-	    url: "images/datacenter.png",
+	    url: icon,
 	    width: "24px",
 	    height: "24px",
 	};
@@ -594,14 +616,143 @@ window.ShowPowderMap = (function()
 	});
 	Map.add(layer);
     }
+
+    /*
+     * Draw the dense deployment. Temporarily hardwired for now. 
+     */
+    var denseDeployment = [
+	{
+	    "ID": "NC Wasatch",
+	    "Y": 40.771279, 
+	    "X": -111.843169,
+	},
+	{
+	    "ID": "NC Mario",
+	    "Y": 40.773019,
+	    "X": -111.840896,
+	},
+	{
+	    "ID": "Moran",
+	    "Y": 40.770063,
+	    "X": -111.838722,
+	},
+	{
+	    "ID": "Guest House",
+	    "Y": 40.767688,
+	    "X": -111.836089,
+	},
+	{
+	    "ID": "EBC",
+	    "Y": 40.767196,
+	    "X": -111.838103,
+	},
+	{
+	    "ID": "USTAR",
+	    "Y": 40.768721, 
+	    "X": -111.840428,
+	}
+    ];
+    
+    function DrawDenseDeployment()
+    {
+	var id   = "Dense";
+	var icon = layerIcons[id];
+	
+	var layer = GraphicsLayer({
+	    title: "Dense Deployment",
+	    id: id,
+	});
+	var symbol = {
+	    type: "picture-marker",
+	    url: icon,
+	    width: "24px",
+	    height: "24px",
+	};
+	_.each(denseDeployment, function (details) {
+	    var point = {
+		type: "point", // autocasts as new Point()
+		longitude: details.X,
+		latitude: details.Y,
+            };
+	    var attributes = {
+		name        : details.ID,
+		description : "Dense Deployment (coming soon)",
+		latitude    : details.X,
+		longitude   : details.Y,
+//		url         : details.Details,
+	    };
+	    var popup = {
+		title: details.ID,
+		content: [{
+		    type: "fields",
+		    fieldInfos: [
+			{
+			    fieldName: "name",
+			    label: "Name"
+			},
+			{
+			    fieldName: "description",
+			    label: "Description"
+			},
+			{
+			    fieldName: "latitude",
+			    label: "Latitude"
+			},
+			{
+			    fieldName: "longitude",
+			    label: "Longitude"
+			},
+/*
+			{
+			    fieldName: "url",
+			    label: "Details"
+			},
+ */
+		    ],
+		}],
+	    };
+	    var graphic = new Graphic({
+		geometry:      point,
+		symbol:        symbol,
+		attributes:    attributes,
+		popupTemplate: popup,
+	    });
+	    layer.add(graphic);
+
+	    // Add label text above the icon
+	    var textGraphic = new Graphic({
+		geometry: {
+		    type: "point",
+		    longitude: details.X,
+		    latitude: details.Y,
+		},
+		    symbol: {
+			type: "text",
+			color: "green",
+			text: details.ID,
+			xoffset: 0,
+			yoffset: 10,
+			font: {
+			    size: 8,
+			    weight: "bold",
+			}
+		    }
+		});
+		layer.add(textGraphic);
+	});
+	Map.add(layer);
+    }
      
     function DrawFixedEndpoints()
     {
-	var url = "https://docs.powderwireless.net/hardware.html" +
+	var id   = "FE";
+	var icon = layerIcons[id];
+	var url   = "https://docs.powderwireless.net/hardware.html" +
 	    "#%28part._powder-fe-hw%29";
 	
 	var layer = GraphicsLayer({
 	    title: "Fixed Endpoints",
+	    id: id,
 	})
 	// Hidden layer to mark filtered FEs
 	var filter = GraphicsLayer({
@@ -637,7 +788,7 @@ window.ShowPowderMap = (function()
 	    
 	    var symbol = {
 		type: "picture-marker",
-		url: "images/cell.png",
+		url: icon,
 		width: "24px",
 		height: "24px",
 	    };
@@ -1019,10 +1170,13 @@ window.ShowPowderMap = (function()
      */
     function DrawBaseStations()
     {
+	var id   = "BaseStation";
+	var icon = layerIcons[id];
 	var url = "https://docs.powderwireless.net/hardware.html" +
 	    "#%28part._powder-bs-hw%29";
 	var layer = GraphicsLayer({
 	    title: "Base Stations",
+	    id: id,
 	})
 
 	// Hidden layer to mark filtered BSs
@@ -1054,7 +1208,7 @@ window.ShowPowderMap = (function()
 
 	    var symbol = {
 		type: "picture-marker",
-		url: "images/base-station.png",
+		url: icon,
 		width: "24px",
 		height: "24px",
 	    };
