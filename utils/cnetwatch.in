@@ -1036,7 +1036,8 @@ sub getrrdstats($$)
 	my $rrd;
 
 	if (! -e "$rrdfile" ||
-	    !defined($rrd = RRDTool::OO->new(file => $rrdfile))) {
+	    !defined($rrd = RRDTool::OO->new(file => $rrdfile,
+					     raise_error => 0))) {
 	    logit("$node: no RRD info")
 		if ($debug);
 	    next;
