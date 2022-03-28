@@ -2606,54 +2606,6 @@ sub DoMaxExtensionInternal($$)
 	    if (!defined($newmax));
 	$newmax = $max
 	    if ($max < $newmax);
-
-	# Map project/user to local users (if appropriate).
-	foreach my $res (values(%{$reslist})) {
-	    my $project = APT_Utility::MapProjectURN($res->{'project'});
-	    if (defined($project)) {
-		$res->{'remote_pid'} = $res->{'pid'};
-		$res->{'pid'}        = $project->pid();
-		$res->{'pid_idx'}    = $project->pid_idx();
-	    }
-	    else {
-		$res->{'remote_pid'} = $res->{'pid'};
-	    }
-	    my $geniuser = APT_Utility::MapUserURN($res->{'user'});
-	    if (defined($geniuser)) {
-		$res->{'remote_uid'} = $res->{'uid'};
-		$res->{'uid'}        = $geniuser->uid();
-		$res->{'uid_idx'}    = $geniuser->uid_idx();
-	    }
-	    else {
-		$res->{'remote_uid'} = $res->{'uid'};
-	    }
-		
-	    #
-	    # Add these for the web interface since we are already messing
-	    # with the results.
-	    #
-	    $res->{'cluster'} = $aptagg->urn();
-	    $res->{'cluster_id'} = $aptagg->nickname();
-
-	    # We need numbers.
-	    $res->{'nodes'} = int($res->{'nodes'});
-	    $res->{'using'} = int($res->{'using'});
-
-	    #
-	    # Hmm, undef/null is a pain with XMLRPC.
-	    #
-	    foreach my $key ("approved", "cancel", "deleted") {
-		if (!exists($res->{$key}) || $res->{$key} eq "") {
-		    $res->{$key} = undef;
-		}
-	    }
-	    #
-	    # Lets calculate a utilization numbers, this will update the
-	    # res hash. Flag says not an active reservation.
-	    #
-	    APT_Utility::ReservationUtilization($res, 0);
-	}
-	$blob->{'reservations'}->{$aptagg->urn()} = $reslist;
     }
     #
     # See if we are bounded by RF reservations.
