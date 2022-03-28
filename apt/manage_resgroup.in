@@ -1628,7 +1628,7 @@ sub DoRefresh()
 		$res->Update("using", $details->{'using'});
 	    }
 	    # We set this, not the remote cluster.
-	    if ($details->{'utilization'}) {
+	    if (defined($details->{'utilization'})) {
 		$res->Update("utilization", $details->{'utilization'});
 	    }
 	    # Store this for generating the graphs.
