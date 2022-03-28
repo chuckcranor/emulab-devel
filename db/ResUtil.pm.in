@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,7 +37,10 @@ use strict;
 use English;
 use Date::Parse;
 use Data::Dumper;
+use Storable qw(dclone); 
 use POSIX qw(strftime);
+
+$Data::Dumper::Deepcopy = 1;
 
 # Emulab
 use Reservation;
@@ -116,8 +119,6 @@ sub CreateTimeline($@)
     # expire; that is the actual end time for the reservation.
     #
     my $sortfunc = sub {
-	my $a  = $_[0];
-	my $b  = $_[1];
 	my $s1 = (defined($a->deleted()) ? $a->deleted() : $a->end());
 	my $s2 = (defined($b->deleted()) ? $b->deleted() : $b->end());
 	return $s1 <=> $s2;
@@ -141,6 +142,7 @@ sub CreateTimeline($@)
 
     @tmp = ();
     foreach my $ref (@$usage) {
+	# Watch for reservable nodes.
 	foreach my $type (keys(%typesinuse)) {
 	    if (exists($ref->{'nodes'}->{$type})) {
 	        $ref->{'types'}->{$type} = {"count" => 1};
@@ -259,34 +261,50 @@ sub CreateTimeline($@)
     #
     my @counts = ComputeCounts($project, \%typesinuse, @timeline);
 
-    return @counts
-	if (1);
+    #
+    # Now loop again and assign allocation counts to reservations.
+    #
+    for (my $i = 0; $i < scalar(@counts); $i++) {
+	my $ref = $counts[$i];
+	#
+	# Assign nodes to reservations at this stamp. Start with a copy of the
+	# allocation counts and apply to reservations. 
+	#
+	my $nowcounts = dclone($ref->{'allocated'});
+	my %rescounts = map {$_->uuid() => {}} @{$ref->{'reslist'}};
+	
+	foreach my $res (@{$ref->{'reslist'}}) {
+	    my $uuid    = $res->uuid();
+	    my $type    = $res->type();
+	    my $count   = $res->nodes();
+	    my $pid     = $res->pid();
+	    my $uid     = $res->uid();
+	    my $apcount = $nowcounts->{$pid}->{$type};
+	    my $aucount = $nowcounts->{$uid}->{$type};
+	    my $rpcount = 0;
+	    my $rucount = 0;
 
-    #
-    # We want to add additional entrys for the start of each reservation.
-    #
-    @tmp = ();
-    
-    foreach my $ref (@counts) {
-	#
-	# If this entry is after the timestamp for the first
-	# reservation on the list (which is also sorted), then
-	# create a new timeline entry for the very start of
-	# the reservation so we have counts in use at the very
-	# start (since often nodes will not be allocated till
-	# sometime later).
-	#
-	while (@reservations &&
-	       $ref->{'t'} >= $reservations[0]->start()) {
-	    # Shallow copy.
-	    my $new = { %{$ref} };
-	    $new->{'t'} = $reservations[0]->start();
-	    push(@tmp, $new);
-	    shift(@reservations);
+	    # nothing allocated for this type at this time.
+	    next
+		if (!defined($apcount));
+
+	    $rpcount = $apcount > $count ? $count : $apcount;
+	    $rucount = $aucount > $count ? $count : $aucount
+		if (defined($aucount));
+	    
+	    $rescounts{$uuid} = {
+		"project" => $rpcount,
+		"user"    => $rucount,
+	    };
+	    $nowcounts->{$pid}->{$type} -= $rpcount;
+	    $nowcounts->{$uid}->{$type} -= $rucount;
 	}
-	push(@tmp, $ref)
+	$ref->{'rescounts'} = \%rescounts;
     }
-    return @tmp;
+    if ($debug > 1) {
+	print Dumper(\@counts);
+    }
+    return @counts;
 }
 
 #
@@ -367,13 +385,15 @@ sub ComputeCounts($$@)
 	$allocated->{$user_uid} = $ucounts;
 	$ref->{'allocated'} = $allocated;
     }
+
     #
     # OK, now we have the project timeline
     #
     my @bypid = map { {"t"         => $_->{'t'},
 		       "allocated" => $_->{'allocated'},
 		       "reserved"  => $_->{'reserved'},
-		       "reslist"   => $_->{'reservations'}
+		       "reslist"   => $_->{'reservations'},
+		       "rescounts" => $_->{'rescounts'},
 	} } @timeline;
 
     if ($debug) {
@@ -426,6 +446,7 @@ sub ReservationUtilization($@)
     $res->data('reshours', $reshours);
     $res->data('usedhours', undef);
     $res->data('utilization', undef);
+    $res->data('tt') = TBDateStringGMT($resstart);
 
     #
     # Scan past timeline entries that are *before* the start of the
@@ -484,6 +505,139 @@ sub ReservationUtilization($@)
     $utilization = 100 if ($utilization > 100);
     $res->data('utilization', $utilization);
 
+    return 0;
+}
+
+#
+# Given a reservation details hash, calculate a utilization number
+# from the history array.
+#
+sub ReservationUtilizationNew($@)
+{
+    my ($res, @records) = @_;
+    my $uuid       = $res->uuid();
+    my $count      = $res->nodes();
+    my $active     = defined($res->idx()) ? 1 : 0;
+    my $resstart   = $res->start();
+    my $resend     = ($active ? time() :
+		      (defined($res->deleted()) ?
+		       $res->deleted() : $res->end()));
+    my $reshours   = (($resend - $resstart) / 3600) * $count;
+    my $pHours     = 0;
+    my $pInuse     = 0;
+    my $uHours     = 0;
+    my $uInuse     = 0;
+    my $type       = $res->type();
+    my $uid        = $res->uid();
+    my @tmp        = @records;
+    my $laststamp;
+
+    #
+    # Scan past entries that are not associated with the reservation
+    # we are working on.
+    #
+    while (@tmp) {
+	my $ref       = $tmp[0];
+	my $stamp     = $ref->{'t'};
+	my $tt        = TBDateStringGMT($stamp);
+	$ref->{'tt'}  = $tt;
+
+	#print STDERR Dumper($ref);
+
+	last
+	    if (exists($ref->{'rescounts'}->{$uuid}));
+
+	print "S: $tt\n" if ($debug);
+	shift(@tmp);
+    }
+    #print STDERR "FOO\n";
+
+    #
+    # Look at first record. Asjust the start time; if the experiment
+    # started before the reservation start, we bump to reservation
+    # start since that is the utilization we care about. 
+    #
+    if (@tmp) {
+	my $ref       = $tmp[0];
+	my $stamp     = $ref->{'t'};
+
+	if ($stamp < $resstart) {
+	    $laststamp = $resstart;
+	}
+	else {
+	    $laststamp = $stamp;
+	}
+    }
+
+    #
+    # Hours assigned up above when the timeline created.
+    #
+    foreach my $ref (@tmp) {
+	#print STDERR Dumper($ref);
+	
+	my $stamp     = $ref->{'t'};
+	my $tt        = TBDateStringGMT($stamp);
+	$ref->{'tt'}  = $tt;
+
+	# Skip if this timeline entry does not have an entry for the
+	# reservation are working on.
+	next
+	    if (!exists($ref->{'rescounts'}->{$uuid}));
+
+	if ($debug) {
+	    print "N: $tt\n";
+	    print Dumper($ref->{'rescounts'});
+	}
+
+	# If this stamp is after the reservation, we can stop. The
+	# last entry will be the current number of nodes used till
+	# the end of the reservation. This entry is typically for the
+	# end of an experiment start before the end of the reservation.
+	last
+	    if ($stamp > $resend);
+
+	my $pcount  = $ref->{'rescounts'}->{$uuid}->{"project"} || 0;
+	my $ucount  = $ref->{'rescounts'}->{$uuid}->{"user"} || 0;
+
+	if ($stamp < $resstart) {
+	    $pInuse     = $pcount;
+	    $uInuse     = $ucount;
+	    $laststamp  = $resstart;
+	}
+	else {
+	    $pHours    += (($stamp - $laststamp) / 3600) * $pInuse;
+	    $uHours    += (($stamp - $laststamp) / 3600) * $uInuse;
+	    $pInuse     = $pcount;
+	    $uInuse     = $ucount;
+	    $laststamp  = $stamp;
+	}
+	$tt = TBDateStringGMT($laststamp);
+	print "A: $tt, $pcount, $pHours, $pInuse, $ucount, $uHours, $uInuse\n"
+	    if ($debug);
+    }
+    #
+    # Final part. 
+    #
+    if ($laststamp) {
+	$pHours += (($resend - $laststamp) / 3600) * $pInuse;
+	$uHours += (($resend - $laststamp) / 3600) * $uInuse;
+    }
+    my $pUtil = POSIX::ceil(($pHours/$reshours) * 100.0);
+    my $uUtil = POSIX::ceil(($uHours/$reshours) * 100.0);
+    $pUtil = 100 if ($pUtil > 100);
+    $uUtil = 100 if ($uUtil > 100);
+    
+    my $stats = {
+	"reshours"     => $reshours,
+	"projectHours" => $pHours,
+	"userHours"    => $uHours,
+	"projectUtilization" => $pUtil,
+	"userUtilization"    => $uUtil,
+	'resstart' => TBDateStringGMT($resstart),
+	'resend' => TBDateStringGMT($resend),
+	'now' => TBDateStringGMT(time()),
+    };
+    $res->data('utilization', $stats);
     return 0;
 }
 

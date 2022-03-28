@@ -41,8 +41,10 @@ my $impotent = 0;
 #
 # Configure variables
 #
-my $SITE  = "@THISHOMEBASE@";
-my $TBOPS = "@TBOPSEMAIL@";
+my $TB		 = "@prefix@";
+my $RESCHECK     = "$TB/sbin/check-reservations";
+my $SITE         = "@THISHOMEBASE@";
+my $TBOPS        = "@TBOPSEMAIL@";
 my $DISABLE_EMAIL= @DISABLE_RESERVATION_EMAIL@;
 
 #
@@ -214,119 +216,12 @@ while( my ($idx, $pid, $count, $type, $start, $end, $email, $cancel) =
 	      $TBOPS);
 }
 
-
-
 #
-# Handle reservations that are unused within the first six hours. The
-# idea is that we start check after four hours. If idle we mark it for
-# cancel in two hours, and then if they start using it, we cancel the
-# cancelation. We stop checking after a while, in case we missed it
-# cause the testbed was down; do not want to keep checking cause its
-# expensive.
+# Check for unused reservation. The code was moved from here to its
+# own command line tool.
 #
-$query_result = DBQueryFatal("SELECT r.idx,".
-			     "       TIMESTAMPDIFF(MINUTE, r.start, now())/60 ".
-			     "    from future_reservations as r ".
-			     "where r.approved IS NOT NULL AND " .
-			     "      r.start <= NOW() AND ".
-			     "      r.override_unused=0 AND ".
-			     "      (TIMESTAMPDIFF(MINUTE, r.start, now()) > ".
-			     "       (6 * 60)) AND ".
-			     "      (TIMESTAMPDIFF(MINUTE, r.start, now()) < ".
-			     "       (10 * 60))");
+my $opts = ($impotent ? "-n " : "");
+$opts   .= ($debug ? "-d " : "");
 
-while (my ($idx, $hours) = $query_result->fetchrow_array()) {
-    my $res = Reservation->Lookup($idx);
-    next
-	if (!defined($res));
-
-    my $project = Project->Lookup($res->pid());
-    next
-	if (!defined($project));
-
-    eval {
-	my @records = CreateTimeline($project, $res);
-
-	ReservationUtilization($res, @records);
-    };
-    if ($@) {
-	print STDERR $@;
-	next;
-    }
-    my $utilization = $res->data("utilization");
-    print STDERR "$res - utilization:$utilization\n"
-	if ($debug);
-
-    if ($utilization == 0.0) {
-	# Skip if cancel already set; do not interfere with a command
-	# line operation that set the cancel.
-	next
-	    if ($res->cancel());
-	
-	# Mark for cancelation.
-	print "Marking unused reservation for cancellation.\n"
-	    if ($debug);
-	next
-	    if ($impotent);
-	my $cancel = time() + (3 * 3600);
-
-	while (1) {
-	    if (!defined(Reservation->
-			 BeginTransaction(Reservation->GetVersion()))) {
-		sleep(1);
-		next;
-	    }
-	    $res->MarkUnused($cancel);
-	    Reservation->EndTransaction();
-	    last;
-	}
-	my $user = User->Lookup($res->uid());
-	if (!defined($user)) {
-	    print STDERR "Could not lookup user " . $res->uid() ."\n";
-	    next;
-	}
-	my $email = $user->email();
-	my $count = $res->nodes();
-	my $pid   = $res->pid();
-	my $type  = $res->type();
-	my $start = TBDateStringUTC($res->start());
-	my $end   = TBDateStringUTC($res->end());
-	$cancel   = TBDateStringUTC($cancel);
-	
-	SENDMAIL($email, "$SITE reservation",
-	      "Your reservation for $count $type nodes in project $pid,\n" .
-	      "starting at $start and ending at $end,\n".
-	      "has not been used since it started.\n".
-	      "\n".
-	      "We have marked your reservation for cancellation at $cancel.\n".
-	      "\n".
-	      "If you use your reservation before then, we will rescind\n".
-	      "the cancellation.\n",
-	      $TBOPS, "Bcc: $TBOPS");
-    }
-    elsif ($res->notified_unused()) {
-	#
-	# We only cancel our own cancellation. If the command line tool
-	# aborts the cancel (or even sets the cancel), we view that as an
-	# override on our cancel (the notified_unused flag is cleared on
-	# that path, and override_unused is set).
-	#
-	print "Clearing unused reservation cancellation.\n"
-	    if ($debug);
-	next
-	    if ($impotent);
-	
-	while (1) {
-	    if (!defined(Reservation->
-			 BeginTransaction(Reservation->GetVersion()))) {
-		sleep(1);
-		next;
-	    }
-	    $res->ClearUnused();
-	    Reservation->EndTransaction();
-	    last;
-	}
-    }
-}
-			     
-exit( 0 );
+exec("$RESCHECK $opts");
+die("Could not exec $RESCHECK");

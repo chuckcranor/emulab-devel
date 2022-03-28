@@ -1355,73 +1355,92 @@ sub Reservations($)
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
     }
 
+    #
+    # Grab the list, we need to know all the projects and ALL the reservations
+    # in each project, for generating the usage timelines. 
+    #
+    # Turns out we hardly ever ask about group of reservations, which makes
+    # this inefficient, but thats an optimization for another time.
+    #
+    my %timelines = ();
+    my @rows      = ();
+    my %pidres    = ();
+    my %projects  = ();
+    
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $pid = $row->{'pid'};
+	my $project = Project->Lookup($pid);
+	if (!defined($project)) {
+	    print STDERR "Reservations: No such project $pid\n";
+	    next;
+	}
+	$projects{$pid} = $project;
+	if (!exists($pidres{$pid})) {
+	    my @allres   = ResUtil::CollectReservations($project, undef, 0);
+	    my @timeline = ResUtil::CreateTimeline($project, @allres);
+	    if (!@timeline) {
+		print STDERR "Reservations: No timeline for $pid\n";
+		next;
+	    }
+	    $pidres{$pid} = \@allres;
+	    $timelines{$pid} = \@timeline;
+	}
+	push(@rows, $row);
+    }
+
     # Current reservations by pid,type so we can tell the caller
     # how many are actually reserved now.
     my %current = ();
-    # Project usage numbers;
-    my %projusage = ();
-    my %projects  = ();
 
-    while (my $row = $query_result->fetchrow_hashref()) {
+    foreach my $row (@rows) {
 	my $blob = {};
    	my $idx  = $row->{'idx'};
 	my $pid  = $row->{'pid'};
 	my $uid  = $row->{'uid'};
 	my $uuid = $row->{'uuid'};
 	my $type = $row->{'type'};
-	my $using = 0;
-	
-	my $project = Project->Lookup($pid);
-	if (!defined($project)) {
-	    print STDERR "Reservations: No such project $pid\n";
-	    next;
-	}
-	my $projurn = $project->nonlocalurn();
-	# Remember for usage numbers below.
-	$projects{$projurn} = $project;
+	my $using= 0;
+	my $project  = $projects{$pid};
+	my $projurn  = $project->nonlocalurn();
+	my @timeline = @{$timelines{$pid}};
 	
 	my $user = User->Lookup($uid);
 	if (!defined($user)) {
 	    print STDERR "Reservations: No such user $uid\n";
 	    next;
 	}
-	if (!exists($current{"$pid:$type"})) {
-	    $current{"$pid:$type"} = $project->TypeInUseCount($type);
-	}
-	if (time() > $row->{'start'}) {
-	    $using = $current{"$pid:$type"};
-	    if ($using >= $row->{'nodes'}) {
-		$using = $row->{'nodes'};
-		$current{"$pid:$type"} -= $using;
-	    }
-	}
-	my $pstart;
-	my @timeline = ();
 	my $reservation = Reservation->Lookup($idx);
 	next
 	    if (!defined($reservation));
-	
+
 	if ($reservation->approved() && $reservation->start() < time()) {
-	    @timeline = ResUtil::CreateTimeline($project, $reservation);
-	    # We do not want to send back more then we need.
-	    if (@timeline) {
-		@timeline = map { {"t"         => $_->{'t'},
-				   "allocated" => $_->{'allocated'} || {},
-				   "reserved"  => $_->{'reserved'} || {},
-		                } } @timeline;
+	    ResUtil::ReservationUtilizationNew($reservation, @timeline);
+	    $blob->{'utilization'} = $reservation->data("utilization");
+	    
+	    #
+	    # Narrow the timeline to just the data needed by the caller.
+	    #
+	    my @tmp = ();
+	    foreach my $ref (@timeline) {
+		my $allocated = {
+		    $pid => {
+			$type => $ref->{'rescounts'}->{$uuid}->{"project"} || 0
+		    },
+		    $uid => {
+			$type => $ref->{'rescounts'}->{$uuid}->{"user"} || 0
+		    },
+		};
+		push(@tmp, {
+		    "t"         => $ref->{'t'},
+		    "allocated" => $allocated,
+		    "reserved"  => $ref->{'reserved'} || {}});
 	    }
-	    #print STDERR Dumper(@timeline);
-	    # We want experiment history back to the beginning of the res.
-	    $pstart = $reservation->start() - (3600 * 24);
+	    @timeline = @tmp;
+	    if (@timeline) {
+		my $ref = $timeline[-1];
+		$using = $ref->{'allocated'}->{$pid}->{$type};
+	    }
 	}
-	else {
-	    $pstart = time() - (3600 * 24 * 4);
-	}
-	# We want proj usage starting at earliest reservation start.
-	if (!exists($projusage{$projurn}) || $pstart < $projusage{$projurn}) {
-	    $projusage{$projurn} = $pstart;
-	}
-	
 	$blob->{"idx"}         = $idx;
 	$blob->{"uuid"}        = $uuid;
 	$blob->{"project"}     = $projurn;
@@ -1445,15 +1464,8 @@ sub Reservations($)
 	$blob->{"history"}     = \@timeline;
 	$results{"$idx"}       = $blob;
     }
-    # Now get the project usage history back to start of earliest reservation.
-    foreach my $projurn (keys(%projusage)) {
-	my $project = $projects{$projurn};
-	my $pstart  = $projusage{$projurn};
-
-	$projusage{$projurn} = $project->Usage($pstart, time());
-    }    
     $blob->{"reservations"} = \%results;
-    $blob->{"history"}      = \%projusage;
+    print STDERR Dumper($blob);
 
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }

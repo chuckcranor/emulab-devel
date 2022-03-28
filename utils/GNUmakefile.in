@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,7 +57,7 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  node_exclude managetaint shutdown-shared imagerelease \
 		  runsonxen pxelinux_makeconf attend atten \
 		  addrfdevice addrfpath reserve announce createimagealias \
-		  predict test-reserve notify-reservations \
+		  predict test-reserve notify-reservations check-reservations \
 		  deprecate_image pushrootkey addinterface addwire cnetwatch \
 		  powerlog checkipmi adddisk \
 		  addswitch addtypetoimages resutil addstack addnode \

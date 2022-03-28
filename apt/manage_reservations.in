@@ -584,11 +584,25 @@ sub DoList()
 	    }
 	}
 
-	#
-	# Lets calculate a utilization numbers, this will update the
-	# res hash. Flag says not an active reservation.
-	#
-	APT_Utility::ReservationUtilization($details, 1);
+	print STDERR Dumper($details);
+
+	# Cluster now computes utilization for us.
+	if (exists($details->{'utilization'}) &&
+	    defined($details->{'utilization'})) {
+	    my $util = $details->{'utilization'};
+	    
+	    $details->{'util'}        = $util;
+	    $details->{'reshours'}    = $util->{'reshours'};
+	    $details->{'usedhours'}   = $util->{'projectHours'};
+	    $details->{'utilization'} = $util->{'projectUtilization'};
+	}
+	else {
+	    #
+	    # Lets calculate a utilization numbers, this will update the
+	    # res hash. Flag says not an active reservation.
+	    #
+	    APT_Utility::ReservationUtilization($details, 1);
+	}
 
 	#
 	# If we have the history, then go through and map the
@@ -1444,11 +1458,21 @@ sub DoHistory()
 
 	    }
 	}
-	#
-	# Lets calculate a utilization numbers, this will update the
-	# res hash. Flag says not an active reservation.
-	#
-	APT_Utility::ReservationUtilization($res, 0);
+	if (exists($res->{'utilization'}) && $res->{'utilization'}) {
+	    my $util = $res->{'utilization'};
+	    
+	    $res->{'util'}        = $util;
+	    $res->{'reshours'}    = $util->{'reshours'};
+	    $res->{'usedhours'}   = $util->{'projectHours'};
+	    $res->{'utilization'} = $util->{'projectUtilization'};
+	}
+	else {
+	    #
+	    # Lets calculate a utilization numbers, this will update the
+	    # res hash. Flag says not an active reservation.
+	    #
+	    APT_Utility::ReservationUtilization($res, 0);
+	}
     }
   done:
     if (defined($webtask)) {
