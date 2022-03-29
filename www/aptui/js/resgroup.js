@@ -3446,6 +3446,7 @@ $(function ()
 	}
 	// Add append history graphs under the reservation panel
 	DrawHistoryGraphs(details);
+	DrawUtilizationTable(details);
     }
 
     /*
@@ -4098,6 +4099,31 @@ $(function ()
 	    $('#reserve-submit-button').attr("disabled", "disabled");
 	}
 	buttonstate = which;
+    }
+
+    /*
+     *
+     */
+    function DrawUtilizationTable(details)
+    {
+	var html = "";
+
+	_.each(details.clusters, function (res) {
+	    var type   = res.type;
+	    var name   = amlist[res.cluster_urn].name;
+	    var using  = res.using;
+	    var util   = res.utilization;
+
+	    html +=
+		'<tr>' +
+		' <td>' + name + '</td>' +
+		' <td>' + type + '</td>' +
+		' <td>' + using + '</td>' +
+		' <td>' + util + '%</td>' +
+		'</tr>';
+	});
+	$('#utilization-table tbody').html(html);
+	$('#utilization-div').removeClass("hidden");
     }
 
     // Draw the history bar graph.
