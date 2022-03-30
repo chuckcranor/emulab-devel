@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -568,7 +568,6 @@ function Do_SendTestMessage()
         return;
     }
     $target_idx   = $target_user->uid_idx();
-    $target_uuid  = $target_user->uuid();
     $target_email = $target_user->email();
     $target_name  = $target_user->name();
     $target_uid   = $target_user->uid();
@@ -585,6 +584,40 @@ function Do_SendTestMessage()
            "may be forced to freeze your account.\n".
            "\n".
            "Thank you very much!\n",
+           "From: $adminemail\n".
+           "Bcc: $adminemail");
+           
+    SPITAJAX_RESPONSE(1);
+}
+
+function Do_SendMessage()
+{
+    global $this_user, $target_user, $ajax_args;
+    global $APTMAIL;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(1, "Only administrators can do this.");
+        return;
+    }
+    if (!isset($ajax_args["message"]) || trim($ajax_args["message"]) == "") {
+	SPITAJAX_ERROR(-1, "No message provided");
+	return;
+    }    
+    $message      = $ajax_args["message"];
+    $target_idx   = $target_user->uid_idx();
+    $target_email = $target_user->email();
+    $target_name  = $target_user->name();
+    $target_uid   = $target_user->uid();
+    $adminemail   = $APTMAIL;
+
+    TBMAIL("$target_name '$target_uid' <$target_email>",
+           "Message from the operations staff",
+           $message . "\n\n" .
+           "Thank you very much!\n".
+           "Portal Operations\n",
            "From: $adminemail\n".
            "Bcc: $adminemail");
            

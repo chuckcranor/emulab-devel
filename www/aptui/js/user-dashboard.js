@@ -91,6 +91,9 @@ $(function ()
 	$('#sendtestmessage').click(function () {
 	    SendTestMessage();
 	});
+	$('#sendmessage').click(function () {
+	    SendMessage();
+	});
 	$('#sendpasswordreset').click(function () {
 	    SendPasswordReset();
 	});
@@ -963,6 +966,39 @@ $(function ()
 					    "user-dashboard", "SendTestMessage",
 					    {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
+    }
+
+    //
+    // Send email message,
+    //
+    function SendMessage() {
+	// Handler for hide modal to unbind the click handler.
+	$('#sendemail-modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#confirm-sendemail').unbind("click.sendemail");
+	});
+	$('#confirm-sendemail').bind("click.sendemail", function (event) {
+	    var callback = function(json) {
+		console.info(json);
+		if (json.code) {
+		    sup.SpitOops("oops",
+				 "Failed to send email to user: " + json.value);
+		    return;
+		}
+	    };
+	    sup.HideModal('#sendemail-modal');
+	    var message = $('#sendemail-modal .user-message').val().trim();
+		
+	    var args = {
+		"uid"     : window.TARGET_USER,
+		"message" : message,
+	    };
+	    var xmlthing =
+		sup.CallServerMethod(null, "user-dashboard",
+				     "SendMessage", args);
+	    xmlthing.done(callback);
+	});
+	sup.ShowModal('#sendemail-modal');
     }
 
     function SendPasswordReset()
