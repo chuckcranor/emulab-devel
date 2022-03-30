@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -729,6 +729,20 @@ sub Delete($)
 
     DBQueryWarn("delete from apt_project_rfranges ".
 		"where pid_idx='$pid_idx' and idx='$idx'")
+	or return -1;
+    
+    return 0;
+}
+
+#
+# Delete a named range from all projects.
+#
+sub DeleteFromAllProjects($$)
+{
+    my ($class, $name) = @_;
+    
+    DBQueryWarn("delete from apt_project_rfranges ".
+		"where range_id='$name'")
 	or return -1;
     
     return 0;
