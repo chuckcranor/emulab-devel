@@ -355,6 +355,11 @@ $(function ()
 		    if (!_.has(groups, group)) {
 			groups[group] = {};
 		    }
+		    // Gross Hack
+		    if (group == "mmimo" &&
+			(key == "mmimo1-meb" || key == "mmimo1-honors")) {
+			return;
+		    }
 		    groups[group][key] = info;
 		}
 		else {
