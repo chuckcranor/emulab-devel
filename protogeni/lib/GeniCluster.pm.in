@@ -1377,9 +1377,14 @@ sub Reservations($)
 	$projects{$pid} = $project;
 	if (!exists($pidres{$pid})) {
 	    my @allres   = ResUtil::CollectReservations($project, undef, 0);
-	    my @timeline = ResUtil::CreateTimeline($project, @allres);
-	    if (!@timeline) {
-		print STDERR "Reservations: No timeline for $pid\n";
+	    my @timeline = ();
+	    # This does not return unapproved reservations, but we still
+	    # need to process them below.
+	    if (@allres) {
+		@timeline = ResUtil::CreateTimeline($project, @allres);
+		if (!@timeline) {
+		    print STDERR "Reservations: No timeline for $pid\n";
+		}
 	    }
 	    $pidres{$pid} = \@allres;
 	    $timelines{$pid} = \@timeline;
@@ -1412,6 +1417,9 @@ sub Reservations($)
 	next
 	    if (!defined($reservation));
 
+	# Backwards compatibility requires we always return something for this.
+	$blob->{'utilization'} = {};	
+
 	if ($reservation->approved() && $reservation->start() < time()) {
 	    if (@timeline) {
 		ResUtil::ReservationUtilizationNew($reservation, @timeline);
@@ -1442,9 +1450,6 @@ sub Reservations($)
 		    my $ref = $timeline[-1];
 		    $using = $ref->{'allocated'}->{$pid}->{$type};
 		}
-	    }
-	    else {
-		$blob->{'utilization'} = {};
 	    }
 	}
 	$blob->{"idx"}         = $idx;
