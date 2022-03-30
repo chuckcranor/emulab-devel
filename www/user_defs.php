@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -379,6 +379,7 @@ class User
     function require_aup()   { return $this->field("require_aup"); }
     function accepted_aup()  { return $this->field("accepted_aup"); }
     function ga_userid()     { return $this->field("ga_userid"); }
+    function ota_agreed()    { return $this->field("ota_agreed"); }
     function portal_interface_warned() {
         return $this->field("portal_interface_warned"); }
     function affiliation_updated() {
@@ -1941,5 +1942,16 @@ class User
         }
         return mysql_num_rows($query_result);
     }
+
+    function SetOtaAgreed()
+    {
+    	$uid_idx = $this->uid_idx();
+
+        DBQueryFatal("update users set ota_agreed=now() ".
+                     "where uid_idx='$uid_idx'");
+
+        return 0;
+    }
+    
 }
 ?>

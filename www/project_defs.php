@@ -184,6 +184,7 @@ class Project
     function expert_mode()   { return $this->field("expert_mode"); }
     function nfsmounts()     { return $this->field("nfsmounts"); }
     function allowed_clusters() { return $this->field("allowed_clusters"); }
+    function ota_notified()  { return $this->field("ota_notified"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -1189,6 +1190,15 @@ class Project
     function otaAllowed()
     {
         return FeatureEnabled("OTA-allowed", null, $this);
+    }
+    function SetOtaNotified()
+    {
+	$idx    = $this->pid_idx();
+
+	DBQueryFatal("update projects set ota_notified=now() ".
+		     "where pid_idx='$idx'");
+
+	return 0;
     }
 
     function PortalURL()

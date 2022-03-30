@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -113,6 +113,12 @@ $routesokay  = $isadmin;
 $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 
 #
+# Powder, send OTA permission flag for the projects.
+#
+$otaAllowed = array();
+$doOtaCheck = 0;
+
+#
 # Pass project list through. Need to convert to list without groups.
 # When editing, pass through a single value. The template treats a
 # a single value as a read-only field.
@@ -127,13 +133,34 @@ while (list($p) = each($projlist)) {
             $bisdaysonly = 0;
         }
         $mlist[$p] = $ptmp->IsManager($this_user);
-    }
-    if ($ISPOWDER && !$isadmin) {
-        if ($ptmp && FeatureEnabled("powder-routes-allowed", null, $ptmp)) {
-            $routesokay = 1;
+
+        if ($ISPOWDER) {
+            if (!$isadmin) {            
+                if (FeatureEnabled("powder-routes-allowed", null, $ptmp)) {
+                    $routesokay = 1;
+                }
+            }
+            # Temporary for testing.
+            if (FeatureEnabled("powder-doota-check", null, $ptmp)) {
+                $doOtaCheck++;
+            }
+            $otaAllowed[$p] = array(
+                "allowed"  => $ptmp->otaAllowed(),
+                "isleader" => $ptmp->IsLeader($this_user),
+            );
         }
     }
 }
+#
+# Deal with OTA temporary enable.
+#
+if (!$doOtaCheck) {
+    foreach ($otaAllowed as $pid => &$details) {
+        $details["allowed"] = 1;
+    }
+    reset($otaAllowed);
+}
+
 echo "<script type='text/plain' id='projects-json'>\n";
 echo htmlentities(json_encode($plist));
 echo "</script>\n";
@@ -226,6 +253,22 @@ if ($ISPOWDER) {
     echo "<script type='text/plain' id='routelist-json'>\n";
     echo htmlentities(json_encode($routelist, JSON_NUMERIC_CHECK));
     echo "</script>\n";
+
+    echo "<script type='text/plain' id='otaAllowed-json'>\n";
+    echo htmlentities(json_encode($otaAllowed));
+    echo "</script>\n";
+
+    # User has seen and agreed to the OTA agreement.
+    # Temporary for testing.
+    if ($doOtaCheck) {
+        $ota_agreed = $this_user->ota_agreed() ? "true" : "false";
+    }
+    else {
+        $ota_agreed = "true";
+    }
+    echo "<script type='text/javascript'>\n";
+    echo "    window.OTA_AGREED  = $ota_agreed;\n";
+    echo "</script>\n";
 }
 
 echo "<script type='text/javascript'>\n";
@@ -261,11 +304,13 @@ REQUIRE_MOMENTTIMEZONE();
 REQUIRE_APTFORMS();
 REQUIRE_TABLESORTER();
 AddLibrary("js/resgraphs.js");
+AddLibrary("js/ota-permission.js");
 AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
                       "range-list", "route-list",
                       "oops-modal", "waitwait-modal", "confirm-modal",
                       "resusage-list", "resusage-graph",
-                      "confirm-something", "resusage-graph", "visavail-graph"));
+                      "confirm-something", "resusage-graph", "visavail-graph",
+                      "ota-agreement", "ota-permission"));
 SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n".

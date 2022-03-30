@@ -102,6 +102,12 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 # submits the experiment.
 #
 $cluster_restrictions = array();
+#
+# Powder, send OTA permission flag for the projects.
+#
+$otaAllowed = array();
+$doOtaCheck = 0;
+
 $tmp = array();
 
 while (list($pid) = each($projlist)) {
@@ -115,6 +121,16 @@ while (list($pid) = each($projlist)) {
         $allowed_clusters = Aggregate::AllowedAggregates($proj);
         if ($allowed_clusters) {
             $cluster_restrictions[$proj->pid()] = array_keys($allowed_clusters);
+        }
+        if ($ISPOWDER) {
+            # Temporary for testing.
+            if (FeatureEnabled("powder-doota-check", null, $proj)) {
+                $doOtaCheck++;
+            }
+            $otaAllowed[$pid] = array(
+                "allowed"  => $proj->otaAllowed(),
+                "isleader" => $proj->IsLeader($this_user),
+            );
         }
     }
     if (0 && $pid == "OAI2021FallWS") {
@@ -132,6 +148,17 @@ if (count($projlist) == 0) {
                   "leader to grant you the neccessary privilege.");
     exit();
 }
+
+#
+# Deal with OTA temporary enable.
+#
+if (!$doOtaCheck) {
+    foreach ($otaAllowed as $pid => &$details) {
+        $details["allowed"] = 1;
+    }
+    reset($otaAllowed);
+}
+
 if ($ISCLOUD) {
     $portal_default_profile = TBGetSiteVar("cloudlab/default_profile");
     list ($profile_default_pid,
@@ -474,6 +501,22 @@ if ($ISPOWDER) {
     echo "<script type='text/plain' id='radioinfo-json'>\n";
     echo htmlentities(json_encode($radioinfo));
     echo "</script>\n";
+    
+    echo "<script type='text/plain' id='otaAllowed-json'>\n";
+    echo htmlentities(json_encode($otaAllowed));
+    echo "</script>\n";
+
+    # User has seen and agreed to the OTA agreement.
+    # Temporary for testing.
+    if ($doOtaCheck) {
+        $ota_agreed = $this_user->ota_agreed() ? "true" : "false";
+    }
+    else {
+        $ota_agreed = "true";
+    }
+    echo "<script type='text/javascript'>\n";
+    echo "    window.OTA_AGREED  = $ota_agreed;\n";
+    echo "</script>\n";
 }
 
 $prunelist = Instance::NodeTypePruneList(null, true);
@@ -647,6 +690,7 @@ AddLibrary("js/powder-types.js");
 AddLibrary("js/resgraphs.js");
 AddLibrary("js/gitrepo.js");
 AddLibrary("js/paramsets.js");
+AddLibrary("js/ota-permission.js");
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/copy-profile.js");
 SPITREQUIRE("js/instantiate-new.js");
@@ -658,6 +702,6 @@ AddTemplateList(array("instantiate-new",
                       "waitwait-modal", "rspectextview-modal",
                       "picker-template","reservation-graph",
                       "save-paramset-modal", "resgroup-list",
-                      "copy-profile-modal"));
+                      "copy-profile-modal", "ota-agreement", "ota-permission"));
 SPITFOOTER();
 ?>

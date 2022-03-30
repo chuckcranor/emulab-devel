@@ -39,12 +39,16 @@
  .table > tbody + tbody {
      border-top: 0px;
  }
- .form-group-sm .control-label {
+ .form-group-sm .control-label, .form-group-ota .control-label {
      padding-top: 0px !important;
  }
- .reservation-error, .underused-warning {
+ .reservation-error, .underused-warning, .ota-message {
      padding-top: 0px !important;
      padding-bottom: 0px !important;
+ }
+ .ota-request-permission {
+     color: #8a6d3b;
+     text-decoration: underline;
  }
  .nvfoo {
      font-family: Arial, sans-serif;
@@ -187,7 +191,7 @@
 		  </table>
 		</div>
 	      </div>
-	      <div class="form-group hidden" id="route-table-div-notyet">
+	      <div class="form-group hidden" id="route-table-div-foo">
 		<div class="format-me"
 		     data-label="Bus Routes"
 		     data-colsize="9">
@@ -204,12 +208,19 @@
 		  <input name="allroutes-checkbox" style="margin-top: 12px;"
 			 id="allroutes-checkbox"
 			 type="checkbox">
-		  <label id="allroutes-error"
-			 class="hidden control-label"></label>
 		  <a href='#' class='btn btn-xs route-help'>
 		    <span class='glyphicon glyphicon-question-sign'
 		          style="margin-bottom: 6px;"></span>
 		  </a>
+		  <label id="allroutes-error"
+			 class="hidden control-label"></label>
+		  <span id="allroutes-ota-warning" class="has-warning hidden">
+		    <label class="control-label">
+		      Current project does not have OTA permission.
+		      <a href='' class='ota-request-permission'>
+			Request permission.</a>
+		    </label>
+		  </span>
 		</div>
 	      </div>
 	      <% if (1) { %>

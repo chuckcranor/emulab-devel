@@ -69,6 +69,18 @@ $(function ()
 	"Guardsman Direct" : "pink",
     };
 
+    var OtaWarning = "Current project does not have OTA permission. " +
+	"<a href='' class='ota-request-permission'>" +
+	"Request permission.</a>";
+
+    function requestOtaPermission (event)
+    {
+	event.preventDefault();
+	
+	var pid = (editing ? current_pid : $('#pid').val());
+	otaStuff.RequestOtaPermission(pid);
+    }
+
     var addClusterRowString = 
 	' <tbody data-uuid="<%- remote_uuid %>" class="new-cluster">' +
 	'    <tr>' +
@@ -133,10 +145,17 @@ $(function ()
 	'        </button>' +
 	'      </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>' +
+	'    <tr class="ota-row hidden has-warning">' +
+	'      <td colspan=4 class="ota-message">' +
+	'         <span class="form-group-sm"> ' +
+	'           <label class="control-label">' + OtaWarning + '</label>' +
 	'         </span>' +
 	'      </td>' +
 	'    </tr>' +
@@ -207,9 +226,9 @@ $(function ()
 	'         </span>' +
 	'      </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
 	'         </span>' +
 	'      </td>' +
@@ -222,7 +241,7 @@ $(function ()
 	' <tbody data-uuid="<%- freq_uuid %>" class="new-range">' +
 	'    <tr>' +
 	'      <td>' +
-	'       <div> ' +
+	'       <div class="form-control-div"> ' +
 	'	  <input placeholder="Lower Frequency"' +
 	'	         value="<%- freq_low %>"' +
 	'	         size="8"' +
@@ -235,7 +254,7 @@ $(function ()
 	'       </div> '+
 	'      </td>' +
 	'      <td>' +
-	'       <div> ' +
+	'       <div class="form-control-div"> ' +
 	'	  <input placeholder="Upper Frequency"' +
 	'	         value="<%- freq_high %>"' +
 	'	         size="8"' +
@@ -268,10 +287,17 @@ $(function ()
 	'        </button>' +
 	'      </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>' +
+	'    <tr class="ota-row hidden has-warning">' +
+	'      <td colspan=4 class="ota-message">' +
+	'         <span class="form-group-sm"> ' +
+	'           <label class="control-label">' + OtaWarning + '</label>' +
 	'         </span>' +
 	'      </td>' +
 	'    </tr>' +
@@ -319,9 +345,9 @@ $(function ()
 	'       </button>' +
 	'     </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
 	'         </span>' +
 	'      </td>' +
@@ -334,7 +360,7 @@ $(function ()
 	' <tbody data-uuid="<%- route_uuid %>" class="new-route">' +
 	'    <tr>' +
 	'      <td>' +
-	'        <div> ' +
+	'        <div class="form-control-div"> ' +
 	'  	   <select class="form-control routename"' +
 	'	   	   placeholder="Please Select">' +
 	'	     <option value="">Select Route</option>' +
@@ -375,10 +401,17 @@ $(function ()
 	'        </button>' +
 	'      </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>' +
+	'    <tr class="ota-row hidden hidden has-warning">' +
+	'      <td colspan=4 class="ota-message">' +
+	'         <span class="form-group-sm"> ' +
+	'           <label class="control-label">' + OtaWarning + '</label>' +
 	'         </span>' +
 	'      </td>' +
 	'    </tr>' +
@@ -419,9 +452,9 @@ $(function ()
 	'       </button>' +
 	'     </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
 	'         </span>' +
 	'      </td>' +
@@ -442,6 +475,17 @@ $(function ()
 	if (editing) {
 	    $('#reserve-approve-button').attr("disabled", "disabled");
 	}
+    }
+
+    /*
+     * Is a type (or a reservable node) a radio.
+     */
+    function isRadio(urn, type)
+    {
+	if (radioinfo && _.has(radioinfo, urn) && _.has(radioinfo[urn], type)) {
+	    return 1;
+	}
+	return 0;
     }
     
     function initialize()
@@ -468,6 +512,9 @@ $(function ()
 	    matrixinfo = JSON.parse(
 		_.unescape($('#matrixinfo-json')[0].textContent));
 	    console.info("matrixinfo", matrixinfo);
+
+	    // Ick. 
+	    otaStuff.init("resgroup");
 	}
 	GeneratePageBody();
 
@@ -550,18 +597,9 @@ $(function ()
 	    if (isadmin || managerlist[window.PID]) {
 		$('#for-class-checkbox').removeClass("hidden");
 	    }
-	    if (!isadmin) {
-		$('#pid').change(function (event) {
-		    var pid = $(this).val();
-		    
-		    if (managerlist[pid]) {
-			$('#for-class-checkbox').removeClass("hidden");
-		    }
-		    else {
-			$('#for-class-checkbox').addClass("hidden");
-		    }
-		});
-	    }
+	    $('#pid').change(function (event) {
+		HandleProjectChange();
+	    });
 	    if (window.FROMRSPEC) {
 		// XXX Need slight delay to wait for parent to write the
 		// rspec into our DOM. Need to revisit this approach.
@@ -780,6 +818,8 @@ $(function ()
 		modified_callback();
 		
 	    });
+	// OTA permission request.
+	row.find('.ota-request-permission').click(requestOtaPermission);
 	
 	if ($('#cluster-table tbody').length == 1) {
 	    $('#cluster-table .delete-cluster').hide();
@@ -863,10 +903,28 @@ $(function ()
 	    });
 	row.find('input.freq-low, input.freq-high').change(function () {
 	    modified_callback();
+
+	    // OTA perm check once the user sets something.
+	    var pid = (editing ? current_pid : $('#pid').val());
+
+	    // Clear before check.
+	    row.find(".ota-row").addClass("hidden");
+	    
+	    if (!otaStuff.HasOtaPermission(pid)) {
+		var low  = $.trim(row.find('input.freq-low').val());
+		var high = $.trim(row.find('input.freq-high').val());
+
+		if (low != "" || high != "") {
+		    row.find(".ota-row").removeClass("hidden");
+		}
+	    }
 	});
 	row.find('input.freq-low, input.freq-high').focus(function () {
 	    ReorderGraphs("ranges");
 	});
+	// OTA permission request.
+	row.find('.ota-request-permission').click(requestOtaPermission);
+	
 	// See above
 	updateButtons();
     }
@@ -953,9 +1011,24 @@ $(function ()
 		updateButtons();
 		modified_callback();
 	    });
-	row.find('input.routename').change(function () {
+	row.find('select.routename').change(function () {
+	    var name = $(this).val();
+	    console.info("FOO", name, this);
+	    
+	    // OTA permission checks/warning.
+	    var pid  = (editing ? current_pid : $('#pid').val());
+
+	    // Clear before check.
+	    row.find(".ota-row").addClass("hidden");
+	    
+	    if (name != "" && !otaStuff.HasOtaPermission(pid)) {
+		row.find(".ota-row").removeClass("hidden");
+	    }
 	    modified_callback();
 	});
+	// OTA permission request.
+	row.find('.ota-request-permission').click(requestOtaPermission);
+
 	// See above
 	updateButtons();
     }
@@ -990,7 +1063,14 @@ $(function ()
 		_.each(routelist, function(details) {
 		    AddRouteRow(details.routename);
 		});
-		ReorderGraphs("routes")
+		ReorderGraphs("routes");
+
+		// OTA perm warning.
+		var pid = (editing ? current_pid : $('#pid').val());
+		if (!otaStuff.HasOtaPermission(pid)) {
+		    // OTA perm warning.
+		    $('#allroutes-ota-warning').removeClass("hidden");
+		}
 	    }
 	    else {
 		$('#route-table tbody').each(function() {
@@ -998,9 +1078,14 @@ $(function ()
 		    console.info(routename);
 		    $(this).find('.delete-route').trigger("click");
 		});
+		// OTA perm warning.
+		$('#allroutes-ota-warning').addClass("hidden");
 	    }
 	    RegenCombinedGraph();
 	});
+	// OTA permission request.
+	$('#allroutes-ota-warning .ota-request-permission')
+	    .click(requestOtaPermission);
     }
     
     /*
@@ -1417,55 +1502,42 @@ $(function ()
     {
 	_.each(clusters, function (reservation, uuid) {
 	    var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
+	    var html  = "";
+	    var newclass = "";
 
 	    if (_.has(reservation, "errcode")) {
 		if (_.has(reservation, "conflict")) {
 		    // The string typically has the date in the wrong timezone,
 		    var when = moment(reservation.conflict.when).format("lll");
-		    var mesg = "Insufficient free nodes at " + when + " " +
+		    html = "Insufficient free nodes at " + when + " " +
 			"(" + reservation.conflict.needed + " more needed)";
-		    tbody.find(".reservation-error span label")
-			.html(mesg);
 		}
 		else {
-		    tbody.find(".reservation-error span label")
-			.html(reservation.output);
+		    html = reservation.output;
 		}
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning")
-		    .addClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-error");
+		newclass = "has-error";
 	    }
 	    else if (parseInt(reservation.approved) != 0) {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
+		// No errors
+		html = "";
 	    }
 	    else {
 		if (_.has(reservation, "conflict")) {
 		    // The string typically has the date in the wrong timezone,
 		    var when = moment(reservation.conflict.when).format("lll");
 		    var mesg = "Conflicting reservation at " + when;
-		    tbody.find(".reservation-error span label")
-			.html("Approval is required. (" + mesg + ")");
+		    html = "Approval is required. (" + mesg + ")";
 		}
 		else if (_.has(reservation, "noautoapprove_reason")) {
-		    tbody.find(".reservation-error span label")
-			.html("Approval is required: " +
-			      reservation.noautoapprove_reason);
+		    html = "Approval is required: " +
+			reservation.noautoapprove_reason;
 		}
 		else {
-		    tbody.find(".reservation-error span label")
-			.html("Approval is required");
+		    html = "Approval is required";
 		}
-		tbody.find(".reservation-error span")
-		    .addClass("has-warning")
-		    .removeClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-warning");
+		newclass = "has-warning";
 	    }
+	    SetClusterError(tbody, html, newclass);
 	});
     }
 
@@ -1476,38 +1548,27 @@ $(function ()
     {
 	_.each(ranges, function (reservation, uuid) {
 	    var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
+	    var html  = "";
+	    var newclass = "";
 
 	    if (_.has(reservation, "errcode")) {
-		tbody.find(".reservation-error span label")
-		    .html(reservation.output);
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning")
-		    .addClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-error");
+		html = reservation.output;
+		newclass = "has-error";
 	    }
 	    else if (parseInt(reservation.approved) != 0) {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
+		// No errors
 	    }
 	    else {
 		if (_.has(reservation, "noautoapprove_reason")) {
-		    tbody.find(".reservation-error span label")
-			.html("Approval is required: " +
-			      reservation.noautoapprove_reason);
+		    html = "Approval is required: " +
+			reservation.noautoapprove_reason;
 		}
 		else {
-		    tbody.find(".reservation-error span label")
-			.html("Approval is required");
+		    html = "Approval is required";
 		}
-		tbody.find(".reservation-error span")
-		    .addClass("has-warning")
-		    .removeClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-warning");
+		newclass = "has-warning";
 	    }
+	    SetRangeError(tbody, html, newclass);
 	});
     }
 
@@ -1518,57 +1579,23 @@ $(function ()
     {
 	_.each(routes, function (reservation, uuid) {
 	    var tbody = $('#route-table tbody[data-uuid="' + uuid + '"]');
+	    var html  = "";
+	    var newclass = "";
 
 	    if (_.has(reservation, "errcode")) {
-		tbody.find(".reservation-error span label")
-		    .html(reservation.output);
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning")
-		    .addClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-error");
-		if (fakeroutes) {
-		    $('#allroutes-error').parent()
-			.removeClass("has-warning")
-			.addClass("has-error");
-		    $('#allroutes-error')
-		        .html(reservation.output)
-			.removeClass("has-warning")
-			.addClass("has-error")
-			.removeClass("hidden");
-		}
+		html = reservation.output;
+		newclass = "has-error";
 	    }
 	    else if (parseInt(reservation.approved) != 0) {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
-		if (fakeroutes) {
-		    $('#allroutes-error').parent()
-			.removeClass("has-warning")
-			.removeClass("has-error");
-		    $('#allroutes-error').addClass("hidden");
-		}
+		// No error.
+		html = "";
+		newclass = "";
 	    }
 	    else {
-		tbody.find(".reservation-error span label")
-		    .html("Approval is required");
-		tbody.find(".reservation-error span")
-		    .addClass("has-warning")
-		    .removeClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-warning");
-		if (fakeroutes) {
-		    $('#allroutes-error').parent()
-			.addClass("has-warning")
-			.removeClass("has-error");
-		    $('#allroutes-error')
-		        .html("Approval is required")
-			.removeClass("has-error")
-			.addClass("has-warning")
-			.removeClass("hidden");
-		}
+		html = "Approval is required";
+		newclass = "has-warning";
 	    }
+	    SetRouteError(tbody, html, newclass);
 	});
     }
 
@@ -1683,7 +1710,8 @@ $(function ()
 	var ranges   = {};
 	var routes   = {};
 	var errors   = 0;
-	
+	var pid      = (editing ? current_pid : $('#pid').val());
+
 	var checkonly_callback = function(json) {
 	    if (json.code) {
 		if (json.code != 2) {
@@ -1726,10 +1754,14 @@ $(function ()
 		.removeClass("has-error");
 	    $('#allroutes-error').addClass("hidden");
 	}
-	$('#reserve-request-form .form-group-sm').addClass("hidden");	
-	$('#reserve-request-form tbody').removeClass("has-warning has-error");
+	$('#reserve-request-form tbody')
+	    .removeClass("has-warning has-error");
 	$('#reserve-request-form .form-control-div')
 	    .removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div .form-group-sm')
+	    .addClass("hidden");	
+	$('#reserve-request-form .error-row')
+	    .addClass("hidden");
 	
 	errors += PreCheckClusterRows();
 	errors += PreCheckRangeRows();
@@ -1794,6 +1826,7 @@ $(function ()
 	    alert("No reservations have been specified");
 	    return;
 	}
+
 	var args = {
 	    "clusters" : clusters,
 	    "ranges"   : ranges,
@@ -1806,8 +1839,31 @@ $(function ()
 		args["override"] = 1;
 	    }
 	}
-	aptforms.CheckForm('#reserve-request-form', "resgroup",
-			   "Validate", checkonly_callback, args);
+	var submit = function () {
+	    aptforms.CheckForm('#reserve-request-form', "resgroup",
+			       "Validate", checkonly_callback, args);
+	};
+
+	// Deal with OTA permissions and agreement.
+	if (window.ISPOWDER) {
+	    var needcheck = _.size(ranges) + _.size(routes) +
+		$('tbody.isradio').length;
+
+	    if (needcheck && !otaStuff.HasOtaPermission(pid)) {
+		otaStuff.RequestOtaPermission(pid);
+		return;
+	    }
+	    // User cannot proceed without OTA agreement.
+	    if (!window.OTA_AGREED) {
+		otaStuff.RequestOtaAgreement(function (agreed) {
+		    if (agreed) {
+			submit();
+		    }
+		});
+		return;
+	    }
+	}
+	submit();
     }
 
     // Call back from the graphs to change the dates on a blank form
@@ -2403,7 +2459,8 @@ $(function ()
 	    return;
 	}
 	// Remove old sanity check errors.
-	$('#reserve-request-form .form-group-sm').addClass("hidden");
+	$('#reserve-request-form .form-control-div .form-group-sm')
+	    .addClass("hidden");
 
 	// Clear old search result.
 	$("#reserve-request-form #start_day")
@@ -2915,12 +2972,15 @@ $(function ()
 	    }
 	}
 	// Clear (hide) previous cluster table errors
-	$('#reserve-request-form .form-group-sm').addClass("hidden");
 	$('#reserve-request-form tbody')
 	    .removeClass("has-warning has-error");
 	$('#reserve-request-form .form-control-div')
 	    .removeClass("has-warning has-error");
-	
+	$('#reserve-request-form .form-control-div .form-group-sm')
+	    .addClass("hidden");	
+	$('#reserve-request-form .error-row')
+	    .addClass("hidden");
+
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
 			    "Validate", callback,
 			    "Checking to see if your request can be "+
@@ -3040,10 +3100,14 @@ $(function ()
 	    }
 	}
 	// Clear (hide) previous cluster table errors
-	$('#reserve-request-form .form-group-sm').addClass("hidden");
 	$('#reserve-request-form tbody')
 	    .removeClass("has-warning has-error");
 	$('#reserve-request-form .form-control-div')
+	    .removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div .form-group-sm')
+	    .addClass("hidden");	
+	$('#reserve-request-form .error-row')
+	    .addClass("hidden")
 	    .removeClass("has-warning has-error");
 
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
@@ -3353,6 +3417,7 @@ $(function ()
 	    var uuid  = res.remote_uuid;
 	    var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
 	    var newClass = "";
+	    var newHtml  = "";
 
 	    // Update the hidden using count.
 	    if (details.active && res.using != null) {
@@ -3362,56 +3427,39 @@ $(function ()
 	    if (operationResults &&
 		_.has(operationResults, uuid) &&
 		operationResults[uuid].errcode) {
-		tbody.find(".reservation-error span label")
-		    .html(operationResults[uuid].errmesg);
+		newHtml  = operationResults[uuid].errmesg;
 		newClass = "has-error";
 	    }
 	    else if (!res.approved) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above has not been approved yet");
+		newHtml  = "The reservation above has not been approved yet";
 		newClass = "has-warning";
 	    }
 	    else if (!res.approved_pushed) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above is approved but the cluster " +
-			  "is not reachable");
+		newHtml  = "The reservation above is approved but the " +
+		    "cluster is not reachable";
 		newClass = "has-warning";
 	    }
 	    else if (res.canceled) {
 		var when = moment(res.canceled).format("lll");
-		tbody.find(".reservation-error span label")
-  		   .html("The reservation above is scheduled to be canceled " +
-		         "at " + when +
-			 (!res.canceled_pushed ?
-			  " but the cluster is not reachable" : ""));
+		newHtml  = "The reservation above is scheduled to be " +
+		    "canceled at " + when +
+		    (!res.canceled_pushed ?
+		     " but the cluster is not reachable" : "");
 		newClass = "has-error";
 	    }
 	    else if (res.cancel_canceled) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above has been un-canceled" +
-			  " but the cluster is not reachable");
+		newHtml  = "The reservation above has been un-canceled " +
+		    "but the cluster is not reachable";
 		newClass = "has-error";
 	    }
 	    else if (res.deleted) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above has been deleted" +
-			  (!res.deleted_pushed ?
-			   " but the cluster is not reachable" : ""));
+		newHtml  = "The reservation above has been deleted" +
+		    (!res.deleted_pushed ?
+		     " but the cluster is not reachable" : "");
 		newClass = "has-error";
 	    }
-	    if (newClass == "") {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
-		tbody.removeClass("has-warning has-error");
-	    }
-	    else {
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning has-error")
-		    .addClass(newClass)
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass(newClass);
-	    }
+	    SetClusterError(tbody, newHtml, newClass);
+
 	    // Watch for underused.
 	    if (details.active && res.approved && details.using != null && 
 		res.using < res.count) {
@@ -3448,6 +3496,30 @@ $(function ()
 	DrawHistoryGraphs(details);
 	DrawUtilizationTable(details);
     }
+    // Helper function to set/clear warning/error.
+    function SetClusterError(tbody, html, newclass)
+    {
+	console.info("setClusterError", tbody, html, newclass);
+	
+	if (html === undefined) {
+	    html = "";
+	}
+	tbody.find(".error-row span label").html(html);
+	
+	if (newclass === undefined || newclass == "") {
+	    tbody.find(".error-row")
+		.addClass("hidden");
+	    tbody.removeClass("has-warning has-error");
+	}
+	else {
+	    tbody.removeClass("has-warning has-error")
+		.addClass(newclass);
+	    tbody.find(".error-row")
+		.removeClass("has-warning has-error")
+		.addClass(newclass)
+		.removeClass("hidden");
+	}
+    }
 
     /*
      * Update just the range table from current info, say after a refresh.
@@ -3476,39 +3548,24 @@ $(function ()
 	    var uuid  = res.freq_uuid;
 	    var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
 	    var newClass = "";
+	    var newHtml  = "";
 
 	    if (operationResults &&
 		_.has(operationResults, uuid) &&
 		operationResults[uuid].errcode) {
-		tbody.find(".reservation-error span label")
-		    .html(operationResults[uuid].errmesg);
+		newHtml  = operationResults[uuid].errmesg;
 		newClass = "has-error";
 	    }
 	    else if (!res.approved) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above has not been approved yet");
+		newHtml  = "The reservation above has not been approved yet";
 		newClass = "has-warning";
 	    }
 	    else if (res.canceled) {
-		var when = moment(res.canceled).format("lll");
-		tbody.find(".reservation-error span label")
-  		   .html("The reservation above is scheduled to be canceled " +
-		         "at " + when);
+		newHtml  = "The reservation above is scheduled to be " +
+		    "canceled at " + moment(res.canceled).format("lll");
 		newClass = "has-error";
 	    }
-	    if (newClass == "") {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
-		tbody.removeClass("has-warning has-error");
-	    }
-	    else {
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning has-error")
-		    .addClass(newClass)
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass(newClass);
-	    }
+	    SetRangeError(tbody, newHtml, newClass);
 	});
 	// Always display delete button on existing ranges,
 	$('#range-table .existing-range .delete-range').removeClass("hidden");
@@ -3522,6 +3579,28 @@ $(function ()
 		$('#range-table tbody.existing-range .add-range')
 		    .last().removeClass("hidden");
 	    }
+	}
+    }
+    // Helper function to set/clear warning/error.
+    function SetRangeError(tbody, html, newclass)
+    {
+	if (html == undefined) {
+	    html = "";
+	}
+	tbody.find(".reservation-error span label").html(html);
+	
+	if (newclass === undefined || newclass == "") {
+	    tbody.find(".error-row")
+		.addClass("hidden");
+	    tbody.removeClass("has-warning has-error");
+	}
+	else {
+	    tbody.removeClass("has-warning has-error")
+		.addClass(newclass);
+	    tbody.find(".error-row")
+		.removeClass("has-warning has-error")
+		.addClass(newclass)
+		.removeClass("hidden");
 	}
     }
 
@@ -3570,42 +3649,7 @@ $(function ()
 		    "at " + when;
 		newClass = "has-error";
 	    }
-	    if (fakeroutes) {
-		$('#allroutes-error').html(newHtml);
-	    }
-	    else {
-		tbody.find(".reservation-error span label").html(newHtml);
-	    }
-	    if (newClass == "") {
-		if (fakeroutes) {
-		    $('#allroutes-error')
-			.removeClass("text-warning text-danger")
-			.addClass("hidden");
-		}
-		else {
-		    tbody.find(".reservation-error span").addClass("hidden");
-		    tbody.removeClass("has-warning has-error");
-		}
-	    }
-	    else {
-		if (fakeroutes) {
-		    var lc = (newClass == "has-error" ?
-			      "text-danger" : "text-warning");
-		    $('#allroutes-error')
-			.removeClass("text-warning text-danger")
-			.addClass(lc)
-			.removeClass("hidden");
-		}
-		else {
-		    tbody.find(".reservation-error span")
-			.removeClass("has-warning has-error")
-			.addClass(newClass)
-			.removeClass("hidden");
-		    tbody.removeClass("has-warning has-error")
-			.addClass(newClass);
-		}
-	    }
-	    
+	    SetRouteError(tbody, newHtml, newClass);
 	});
 	// Always display delete button on existing routes
 	$('#route-table .existing-route .delete-route').removeClass("hidden");
@@ -3618,6 +3662,49 @@ $(function ()
 		    .addClass("hidden");
 		$('#route-table tbody.existing-route .add-route')
 		    .last().removeClass("hidden");
+	    }
+	}
+    }
+    // Helper functions to set/clear warning/error.
+    function SetRouteError(tbody, html, newclass)
+    {
+	if (html == undefined) {
+	    html = "";
+	}
+	if (fakeroutes) {
+	    $('#allroutes-error').html(html);
+	}
+	else {
+	    tbody.find(".reservation-error span label").html(html);
+	}
+	if (newclass === undefined || newclass == "") {
+	    if (fakeroutes) {
+		$('#allroutes-error')
+		    .removeClass("text-warning text-danger")
+		    .addClass("hidden");
+	    }
+	    else {
+		tbody.find(".error-row")
+		    .addClass("hidden");
+		tbody.removeClass("has-warning has-error");
+	    }
+	}
+	else {
+	    if (fakeroutes) {
+		var lc = (newclass == "has-error" ?
+			  "text-danger" : "text-warning");
+		$('#allroutes-error')
+		    .removeClass("text-warning text-danger")
+		    .addClass(lc)
+		    .removeClass("hidden");
+	    }
+	    else {
+		tbody.removeClass("has-warning has-error")
+		    .addClass(newclass);
+		tbody.find(".error-row")
+		    .removeClass("has-warning has-error")
+		    .addClass(newclass)
+		    .removeClass("hidden");
 	    }
 	}
     }
@@ -3948,6 +4035,11 @@ $(function ()
 	row.find(".hardware-select")	
 	    .html("<option value=''>Select Hardware</option>" + options);
 
+	if (window.ISPOWDER) {
+	    // Clear any radio/OTA warning.
+	    $(".ota-row").addClass("hidden");
+	}
+	
 	ReorderGraphs(selected_cluster);
 	modified_callback();
     }
@@ -4000,6 +4092,28 @@ $(function ()
 		    .prop("readonly", false);
 	    }
 	}
+	if (window.ISPOWDER) {
+	    var pid = (editing ? current_pid : $('#pid').val());
+
+	    /*
+	     * When selecting a type, look to see if its a radio and if
+	     * the project has OTA permission. We will add a warning label
+	     * immediately. 
+	     */
+	    $(row).find(".ota-row").addClass("hidden");
+
+	    // Flag for project change, etc.
+	    $(row).removeClass("isradio");
+	    
+	    if (isRadio(selected_cluster, selected_type)) {
+		$(row).addClass("isradio");
+		
+		if (!otaStuff.HasOtaPermission(pid)) {
+		    console.info("Need OTA permission");
+		    $(row).find(".ota-row").removeClass("hidden");
+		}
+	    }
+	}
 	RegenCombinedGraph();
 	modified_callback();
     }
@@ -4033,6 +4147,67 @@ $(function ()
 		    alert("There are only " + max + " node(s) of this type");
 		    $(row).find(".node-count").val("")
 		    return;
+		}
+	    }
+	}
+    }
+
+    /*
+     * Project change tasks.
+     */
+    function HandleProjectChange()
+    {
+	var pid = $('#pid').val();
+	
+	// Project managers can set the for class checkbox
+	if (!isadmin) {
+	    if (managerlist[pid]) {
+		$('#for-class-checkbox').removeClass("hidden");
+	    }
+	    else {
+		$('#for-class-checkbox').addClass("hidden");
+	    }
+	}
+
+	if (window.ISPOWDER) {
+	    // Clear/Set OTA warning. Messy.
+
+	    if (otaStuff.HasOtaPermission(pid)) {
+		// All rows for nodes, ranges and routes.
+		$('.ota-row').addClass("hidden");
+		
+		// Special all routes case.
+		if (fakeroutes) {
+		    $('#allroutes-ota-warning').addClass("hidden");
+		}
+	    }
+	    else {
+		// Only radios
+		$('tbody.isradio .ota-row').removeClass("hidden");
+
+		// And non-zero ranges
+		$('tbody.new-range').each(function () {
+		    var low = $(this).find(".freq-low").val();
+
+		    if (low != "") {
+			$(this).find('.ota-row').removeClass("hidden");
+		    }
+		});
+
+		// Special all routes case.
+		if (fakeroutes) {
+		    if ($('#allroutes-checkbox').is(":checked")) {
+			$('#allroutes-ota-warning').removeClass("hidden");
+		    }
+		}
+		else {
+		    $('tbody.new-route').each(function () {
+			var name = $(this).find(".routename").val();
+	    
+			if (name != "") {
+			    $(this).find(".ota-row").removeClass("hidden");
+			}
+		    });
 		}
 	    }
 	}
@@ -4738,6 +4913,7 @@ $(function ()
 	    $('.adjustedmorning').removeClass("hidden");
 	}
     }
+
     $(document).ready(initialize);
 });
 

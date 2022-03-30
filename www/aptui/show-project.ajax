@@ -462,6 +462,11 @@ function Do_SendotaAgreement()
     $email  = $leader->email();
     $name   = $leader->name();
     $url    = $APTBASE . "/ota-agreement.php?pid=${pid}";
+
+    if (0) {
+        SPITAJAX_RESPONSE(1);
+        return;
+    }
     
     TBMAIL("$name <$email>",
            "Over The Air agreement form for project $pid",
@@ -473,6 +478,7 @@ function Do_SendotaAgreement()
            "From: $APTMAIL\n".
            "Bcc: $APTMAIL");
 
+    $target_project->SetOtaNotified();
     SPITAJAX_RESPONSE(1);
 }
 

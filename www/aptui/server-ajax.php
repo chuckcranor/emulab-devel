@@ -299,7 +299,7 @@ $routing = array("geni-login" =>
 			      "methods" => array("ExperimentList" =>
 						      "Do_ExperimentList",
                                                  "ClassicExperimentList" =>
-						      "Do_ClassicExperimentList",
+						     "Do_ClassicExperimentList",
                                                  "ClassicProfileList" =>
 						      "Do_ClassicProfileList",
                                                  "DatasetList" =>
@@ -732,6 +732,8 @@ $routing = array("geni-login" =>
 			      "guest"   => false,
 			      "methods" => array("Submit" =>
                                                      "Do_Submit",
+                                                 "Agree" =>
+                                                     "Do_Agree",
                               )
                         ),
 );

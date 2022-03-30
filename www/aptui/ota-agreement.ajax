@@ -81,7 +81,7 @@ function Do_Submit()
         return;
     }
     $email = $this_user->email();
-    
+
     TBMAIL($APTMAIL,
            "OTA Agreement form for project $pid submitted",
            "OTA Agreement form for project $pid submitted\n\n".
@@ -92,6 +92,21 @@ function Do_Submit()
            "From: $email\n".
            "Bcc: $email");
 
+    $this_user->SetOtaAgreed();
+    SPITAJAX_RESPONSE(0);
+}
+
+#
+# More project members, not leaders.
+#
+function Do_Agree()
+{
+    global $this_user;
+
+    #
+    # Current user agrees.
+    #
+    $this_user->SetOtaAgreed();
     SPITAJAX_RESPONSE(0);
 }
 

@@ -51,6 +51,7 @@ $(function ()
     var radioinfo     = null;
     var maxEndDate    = null;
     var usingRadios   = false;
+    var usingSpectrum = false;
     var currentStep   = 0;
     var mainTemplate  = _.template(instantiateString);
     var graphTemplate = _.template(templates["reservation-graph"]);
@@ -90,6 +91,18 @@ $(function ()
 	    disableStepsMotion();
 	}
     }
+    function setStepsFinish(enable)
+    {
+	if (enable) {
+	    $('#stepsContainer .actions a[href="#finish"]')
+		.removeAttr('disabled');
+	}
+	else {
+	    $('#stepsContainer .actions a[href="#finish"]')
+		.attr('disabled', true);
+	}
+    }
+    
     // Called from ppwizard when the user loads a previous instance.
     // We need it for finalization (name,project,clusters).
     function setRerunInstance(record)
@@ -2304,8 +2317,8 @@ $(function ()
 	    CreateAggregateSelectors(selected_rspec);
 	    return;
 	}
-      
-	$('#stepsContainer .actions a[href="#finish"]').attr('disabled', true);
+	
+      	setStepsFinish(false);
 	var callback = function(json) {
 	    if (json.code) {
 		alert("Could not get image info: " + json.value);
@@ -2314,7 +2327,7 @@ $(function ()
 	    // This gets munged someplace, and so the printed value
 	    // is not what actually comes back. Copy before print.
 	    var mycopy = $.extend(true, {}, json.value);
-	    //console.log('json', mycopy);
+	    console.log('UpdateImageConstraints json', mycopy);
 	    showDeprecatedImages(json.value[0].images);
 
 	    // When doing a rerun skip the rest of this.
@@ -2325,8 +2338,7 @@ $(function ()
 		CreateAggregateSelectors(selected_rspec);
 		ShowClusterReservations();
 	    }
-	    $('#stepsContainer .actions a[href="#finish"]')
-		.removeAttr('disabled');
+	    setStepsFinish(true);
 	};
 	/*
 	 * Must pass the selected project along for constraint checking.
@@ -3011,10 +3023,11 @@ $(function ()
 	var xmlDoc    = $.parseXML(selected_rspec);
 	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
 
-	console.info("CheckForRadioUsage");
+	console.info("CheckForRadioUsage", spectrum);
 
 	// In case user changes profile late.
-	usingRadios = false;
+	usingRadios   = false;
+	usingSpectrum = spectrum.length;
 
 	if (radioinfo) {
 	    var usingTransmitter = false;
@@ -3062,16 +3075,11 @@ $(function ()
     }
      
     /*
-     * Check for spectrum used.
+     * Check for spectrum used. This is on the last (schedule) step.
      */
     function CheckForSpectrum()
     {
-	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
-	var xmlDoc    = $.parseXML(selected_rspec);
-	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
-	var win;
-
-	console.info("CheckForSpectrum", spectrum);
+	console.info("CheckForSpectrum", usingSpectrum);
 
 	/*
 	 * Kirk requested that we do not predicate this on using spectrum
@@ -3098,7 +3106,29 @@ $(function ()
 	    $('#step3-div .reserve-resources .noradio-warning')
 		.removeClass("hidden");
 	}
+	if (usingRadios || usingSpectrum) {
+	    var pid = $('#profile_pid').val();
 
+	    // Project cannot proceed without OTA permission.
+	    if (!otaStuff.HasOtaPermission(pid)) {
+		setStepsFinish(false);
+		otaStuff.RequestOtaPermission(pid);
+		return;
+	    }
+	    // User cannot proceed without OTA agreement.
+	    else if (!window.OTA_AGREED) {
+		setStepsFinish(false);
+		otaStuff.RequestOtaAgreement(function (agreed) {
+		    if (agreed) {
+			setStepsFinish(true);
+		    }
+		});
+	    }
+	    else {
+		setStepsFinish(true);
+	    }
+	}
+	
 	/*
 	 * Helper functions
 	 */

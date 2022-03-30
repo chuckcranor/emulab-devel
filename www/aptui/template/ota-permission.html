@@ -1,0 +1,60 @@
+<div id='no-ota-permission' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body' style="font-size: 18px;">
+	<p>
+	  <b>Warning:</b> Project <strong class="powder-project"></strong>
+	  does not have permission to use Over The Air (OTA) resources.
+	  You will not be allowed to	  
+	  <span class="ota-instantiate">start this experiment</span>
+	  <span class="ota-resgroup hidden">create this reservation</span>
+	  until this project has OTA permission.
+	</p>
+	<div class="notleader">
+	  <p>
+	    If you would like OTA permission for this project, we can
+	    <a href="" class="ota-nagpi">send a message to the project
+	      leader</a> for you. Or you can select a different project
+	    that has OTA permission.
+	  </p>
+	</div>
+	<div class="isleader">
+	  <p>
+	    Since you are the project leader, you can request OTA
+	    permission by
+	    <a class="ota-link" href="">
+	      submitting this form.</a> Or you can select a different project
+	    that has OTA permission.
+	  </p>
+	</div>
+	<center>
+	  <button type='button' class='btn btn-default btn-sm'
+		  data-dismiss='modal'>
+	    Dismiss</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='need-ota-agreement' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class="modal-header text-center">
+	<h4 class="modal-title">POWDER Over-The-Air (OTA) Use Agreement</h4>
+      </div>
+      <div class='modal-body' style="font-size: 18px;">
+	<p class="bg-info ota-agreement"></p>
+	<center>
+	  <div class="checkbox">
+	    <label>
+	      <input type="checkbox" name="agreed" value="yes">
+	      I agree to the above terms and conditions
+	    </label>
+	  </div>	
+          <button class='btn btn-primary btn-sm' disabled
+                  type='submit' name="submit">Submit</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
