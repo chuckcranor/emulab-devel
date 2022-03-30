@@ -587,14 +587,13 @@ sub DoList()
 	print STDERR Dumper($details);
 
 	# Cluster now computes utilization for us.
-	if (exists($details->{'utilization'}) &&
-	    defined($details->{'utilization'})) {
+	if (exists($details->{'utilization'})) {
 	    my $util = $details->{'utilization'};
 	    
 	    $details->{'util'}        = $util;
-	    $details->{'reshours'}    = $util->{'reshours'};
-	    $details->{'usedhours'}   = $util->{'projectHours'};
-	    $details->{'utilization'} = $util->{'projectUtilization'};
+	    $details->{'reshours'}    = $util->{'reshours'} || 0;
+	    $details->{'usedhours'}   = $util->{'projectHours'} || 0;
+	    $details->{'utilization'} = $util->{'projectUtilization'} || 0;
 	}
 	else {
 	    #
@@ -1458,13 +1457,13 @@ sub DoHistory()
 
 	    }
 	}
-	if (exists($res->{'utilization'}) && $res->{'utilization'}) {
+	if (exists($res->{'utilization'})) {
 	    my $util = $res->{'utilization'};
 	    
 	    $res->{'util'}        = $util;
-	    $res->{'reshours'}    = $util->{'reshours'};
-	    $res->{'usedhours'}   = $util->{'projectHours'};
-	    $res->{'utilization'} = $util->{'projectUtilization'};
+	    $res->{'reshours'}    = $util->{'reshours'} || 0;
+	    $res->{'usedhours'}   = $util->{'projectHours'} || 0;
+	    $res->{'utilization'} = $util->{'projectUtilization'} || 0;
 	}
 	else {
 	    #

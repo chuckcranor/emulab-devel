@@ -1380,7 +1380,6 @@ sub Reservations($)
 	    my @timeline = ResUtil::CreateTimeline($project, @allres);
 	    if (!@timeline) {
 		print STDERR "Reservations: No timeline for $pid\n";
-		next;
 	    }
 	    $pidres{$pid} = \@allres;
 	    $timelines{$pid} = \@timeline;
@@ -1414,31 +1413,38 @@ sub Reservations($)
 	    if (!defined($reservation));
 
 	if ($reservation->approved() && $reservation->start() < time()) {
-	    ResUtil::ReservationUtilizationNew($reservation, @timeline);
-	    $blob->{'utilization'} = $reservation->data("utilization");
-	    
-	    #
-	    # Narrow the timeline to just the data needed by the caller.
-	    #
-	    my @tmp = ();
-	    foreach my $ref (@timeline) {
-		my $allocated = {
-		    $pid => {
-			$type => $ref->{'rescounts'}->{$uuid}->{"project"} || 0
-		    },
-		    $uid => {
-			$type => $ref->{'rescounts'}->{$uuid}->{"user"} || 0
-		    },
-		};
-		push(@tmp, {
-		    "t"         => $ref->{'t'},
-		    "allocated" => $allocated,
-		    "reserved"  => $ref->{'reserved'} || {}});
-	    }
-	    @timeline = @tmp;
 	    if (@timeline) {
-		my $ref = $timeline[-1];
-		$using = $ref->{'allocated'}->{$pid}->{$type};
+		ResUtil::ReservationUtilizationNew($reservation, @timeline);
+		$blob->{'utilization'} = $reservation->data("utilization");
+	    
+		#
+		# Narrow the timeline to just the data needed by the caller.
+		#
+		my @tmp = ();
+		foreach my $ref (@timeline) {
+		    my $allocated = {
+			$pid => {
+			    $type =>
+				$ref->{'rescounts'}->{$uuid}->{"project"} || 0
+			},
+			    $uid => {
+				$type =>
+				    $ref->{'rescounts'}->{$uuid}->{"user"} || 0
+			},
+		    };
+		    push(@tmp, {
+			"t"         => $ref->{'t'},
+			    "allocated" => $allocated,
+			    "reserved"  => $ref->{'reserved'} || {}});
+		}
+		@timeline = @tmp;
+		if (@timeline) {
+		    my $ref = $timeline[-1];
+		    $using = $ref->{'allocated'}->{$pid}->{$type};
+		}
+	    }
+	    else {
+		$blob->{'utilization'} = {};
 	    }
 	}
 	$blob->{"idx"}         = $idx;
