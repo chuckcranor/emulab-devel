@@ -2652,6 +2652,10 @@ sub CheckResources($$)
     }
     $self->_routes($routes);
 
+    # For the project level OTA feature checks
+    if (APT_Profile::CheckResources($rspec, $project, $perrmsg, \$resources)) {
+	return -1;
+    }
     if ($self->CheckResourceReservations($expires, $noresokay, $perrmsg)) {
 	return -1;
     }
