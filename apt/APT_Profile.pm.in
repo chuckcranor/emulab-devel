@@ -2056,12 +2056,44 @@ sub CheckForDeprecatedImages($$$$)
 	    next;
 	}
 
+	my $checkIMSdep = sub {
+	    my ($image_urn) = @_;
+	    
+	    #
+	    # Talk to IMS database directly.
+	    #
+	    my $blob = GeniIMS::GetImageBlob($image_urn, undef);
+	    if (GeniResponse::IsResponse($blob)) {
+		#
+		# We are gonna let this pass, the aggregate will have
+		# a better picture.
+		#
+		$deprecated{$image_urn} = {"deprecated" => 0};
+		return 0;
+	    }
+	    if (exists($blob->{"deprecated"})) {
+		$deprecated{$image_urn} = {
+		    "deprecated" => 1,
+		    "iserror"    => $blob->{"deprecated_iserror"},
+		    "message"    => (exists($blob->{"deprecated_message"}) ?
+				     $blob->{"deprecated_message"} : undef),
+		};
+		return 1;
+	    }
+	    $deprecated{$image_urn} = {"deprecated" => 0};
+	    return 0;
+	};
+
 	if ($image_urn->IsOurDomain() || $image_urn->ospid() eq TBOPSPID()) {
 	    my $image = OSImage->Lookup($image_urn->ospid(),
 					$image_urn->osname());
 	    if (!defined($image)) {
-		$$pmsg = "Could not lookup local image $image_urn";
-		return 1;
+		if ($image_urn->IsOurDomain()) {
+		    $$pmsg = "Could not lookup local image $image_urn";
+		    return 1;
+		}
+		&$checkIMSdep($image_urn);
+		next;
 	    }
 	    # Skip anything that is not a real image
 	    next
@@ -2082,29 +2114,7 @@ sub CheckForDeprecatedImages($$$$)
 	    }
 	}
 	else {
-	    #
-	    # Talk to IMS database directly.
-	    #
-	    my $blob = GeniIMS::GetImageBlob($image_urn, undef);
-	    if (GeniResponse::IsResponse($blob)) {
-		#
-		# We are gonna let this pass, the aggregate will have
-		# a better picture.
-		#
-		$deprecated{$image_urn} = {"deprecated" => 0};
-		next;
-	    }
-	    if (exists($blob->{"deprecated"})) {
-		$deprecated{$image_urn} = {
-		    "deprecated" => 1,
-		    "iserror"    => $blob->{"deprecated_iserror"},
-		    "message"    => (exists($blob->{"deprecated_message"}) ?
-				     $blob->{"deprecated_message"} : undef),
-		}
-	    }
-	    else {
-		$deprecated{$image_urn} = {"deprecated" => 0};
-	    }
+	    &$checkIMSdep($image_urn);
 	}
     }
     print "deprecated\n";
