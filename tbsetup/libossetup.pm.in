@@ -1058,8 +1058,15 @@ sub NewType($$)
     my $typeinfo = NodeType->Lookup($type);
     my $packname = "libossetup_${type}";
 
+    my $forcedtype;
+    $typeinfo->GetAttribute("ossetup_objtype",\$forcedtype)
+	if (defined($typeinfo));
+
+    if (defined($forcedtype)) {
+	$packname = "libossetup_${forcedtype}";
+    }
     # Switches are special.
-    if (defined($typeinfo) && $typeinfo->isswitch()) {
+    elsif (defined($typeinfo) && $typeinfo->isswitch()) {
 	eval "require libossetup_switch";
 	if ($@) {
 	    print STDERR "$self libossetup_switch load failed: " . $@;
