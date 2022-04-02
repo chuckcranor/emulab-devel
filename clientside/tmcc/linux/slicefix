@@ -206,7 +206,9 @@ if [ $CONSOLE = "unknown" ]; then
     CONSOLE=sio1
 fi
 # XXX reset SLICEFIX_CONSOLE for the benefit of linux_slicefix
-SLICEFIX_CONSOLE=$CONSOLE
+# NB: don't do this; linux_slicefix accepts ,<speed> and sets speed, so we
+# can't drop it.
+#SLICEFIX_CONSOLE=$CONSOLE
 
 # Console ISA port
 PORT=
