@@ -832,7 +832,8 @@ my $end   = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
 # for the reservation checks.
 #
 my $resources;
-my $retval = APT_Profile::CheckResources($rspec, \$errmsg, \$resources);
+my $retval = APT_Profile::CheckResources($rspec, $project,
+					 \$errmsg, \$resources);
 if ($retval) {
     ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
