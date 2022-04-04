@@ -4283,6 +4283,9 @@ $(function ()
     {
 	var html = "";
 
+	if (!details.active) {
+	    return;
+	}
 	_.each(details.clusters, function (res) {
 	    var type   = res.type;
 	    var name   = amlist[res.cluster_urn].name;
