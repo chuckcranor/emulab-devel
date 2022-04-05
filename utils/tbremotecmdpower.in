@@ -1,0 +1,179 @@
+#!/usr/bin/perl -wT
+#
+# Copyright (c) 2022 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+#
+# tbremotecmdpower - An emulab frontend to turning on and off the power to a node
+# based on node attributes.
+#
+# Here are the node attributes that should be set:
+#   power_remotecmd_host - set to a hostname or IP, resolvable on boss,
+#     that can be reached by boss's root pubkey.
+#   power_remotecmd_user - the remote ssh user; defaults to root.
+#     that can be reached by boss's root pubkey, with the root username.
+#   power_remotecmd_cycle - a command that cycles the node
+#   power_remotecmd_off - a command that powers off the node
+#   power_remotecmd_on - a command that powers on the node
+#
+
+use lib '@prefix@/lib';
+my $TB = '@prefix@';
+
+use libdb;
+use Node;
+use English;
+
+#
+# We have to be setuid root so that we can ssh into the target host using
+# the root pubkey.
+#
+if ($EUID != 0) {
+    die("*** $0:\n".
+	"    Must be root! Maybe its a development version?\n");
+}
+
+# un-taint path
+$ENV{'PATH'} = "/bin:/usr/bin:/usr/local/bin:$TB/bin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+ 
+use strict;
+
+#
+# Constants
+#
+my $SSH     = "/usr/bin/ssh";
+
+#
+# Handle command-line arguments
+#
+sub usage() {
+    warn "Usage: $0 <on | off | cycle> <nodes ...>\n";
+    return 1;
+}
+
+my $operation = shift @ARGV;
+if (!$operation) {
+    exit usage();
+}
+
+# Check the operation type
+if ($operation !~ /^(on|off|cycle)$/) {
+    exit &usage;
+} else {
+    # Untaint operation
+    $operation = $1;
+}    
+
+# They have to give us at least one node
+my @nodes = @ARGV;
+if (!@nodes) {
+    exit usage();
+}
+
+#
+# Tait check the node names
+#
+@nodes = map {
+    if (/^([-\w]+)$/) {
+	$1;
+    } else {
+	die("*** Tainted node name: $_\n");
+    }
+} @nodes;
+
+#
+# Permission check
+#
+if ($UID && !TBNodeAccessCheck($UID,TB_NODEACCESS_LOADIMAGE,@nodes)) {
+    die "You do not have permission to modify one or more nodes\n";
+}
+
+#
+# Log into each remote host to reboot the node
+#
+my $errors = 0;
+foreach my $nodename (@nodes) {
+    #
+    # Make sure they gave us an actual node
+    #
+    my $node = Node->Lookup($nodename);
+    if (!defined($node)) {
+	warn "$node is not a testbed node - skipping\n";
+	$errors++;
+	next;
+    }
+
+    #
+    # Grab our node attributes and run.
+    #
+    my ($remotehost,$remoteuser,$remotecmd);
+    if ($node->NodeAttribute("power_remotecmd_host",\$remotehost) != 0) {
+	warn "$node does not have a 'power_remotecmd_host' node attribute set - skipping\n";
+	$errors++;
+	next;
+    }
+    if ($node->NodeAttribute("power_remotecmd_$operation",\$remotecmd) != 0) {
+	warn "$node does not have a 'power_remotecmd_$operation' node attribute set - skipping\n";
+	$errors++;
+	next;
+    }
+    $node->NodeAttribute("power_remotecmd_user",\$remoteuser);
+    $remoteuser = "root"
+	if (!defined($remoteuser) || !$remoteuser);
+
+    if ($remotehost !~ /^[-\w\d\._]+$/) {
+	warn "invalid characters in 'power_remotecmd_user' node attribute for $node - skipping\n";
+	$errors++;
+	next;
+    }
+    if ($remoteuser !~ /^[\w\d]+$/) {
+	warn "invalid characters in 'power_remotecmd_user' node attribute for $node - skipping\n";
+	$errors++;
+	next;
+    }
+    if ($remotecmd =~ /'/) {
+	warn "invalid characters in 'power_remotecmd_$operation' node attribute for $node - skipping\n";
+	$errors++;
+	next;
+    }
+
+    #
+    # Actually do the power control
+    #
+    my $commandstr = "$SSH -l $remoteuser $remotehost '$remotecmd'";
+
+    #
+    # SSH gets ticked if UID != EUID, so set that now
+    #
+    $UID = $EUID;
+    if (system($commandstr)) {
+	$errors++;
+	warn "Failed to control power for $node";
+    }
+}
+
+if ($errors) {
+    exit 1;
+} else {
+    exit 0;
+}

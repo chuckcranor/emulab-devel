@@ -36,7 +36,7 @@ BIN_SCRIPTS	= delay_config sshtb create_image node_admin link_config \
 		  template_record spewevents \
 		  wbts_dump mkblob rmblob \
 		  showlease createlease deletelease modlease approvelease \
-		  extendlease createdataset grantlease
+		  extendlease createdataset grantlease tbremotecmdpower
 SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
                   eventping grantnodetype import_commitlog daemon_wrapper \
 		  opsreboot deletenode node_statewait grabwebcams \
@@ -82,7 +82,7 @@ CTRLSBIN_SCRIPTS= opsdb_control.proxy daemon_wrapper ec2import.proxy \
 SBSBIN_SCRIPTS=   daemon_wrapper subboss_cacheclean
 
 # These scripts installed setuid, with sudo. 
-SETUID_BIN_SCRIPTS   = create_image
+SETUID_BIN_SCRIPTS   = create_image tbremotecmdpower
 SETUID_SBIN_SCRIPTS  = grabwebcams checkquota spewconlog opsdb_control suchown \
                        readblob image_import delete_image node_top flashnode \
                        pxelinux_makeconf imageinfo image_import-new pushrootkey

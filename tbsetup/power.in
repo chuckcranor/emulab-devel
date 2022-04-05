@@ -59,6 +59,7 @@ use power_ue;
 use power_powduino;
 use power_5gstore;
 use power_enlogic;
+use power_remotecmd;
 use libtestbed;
 use User;
 use Node;
@@ -417,7 +418,8 @@ foreach my $power_id (keys %outlets) {
     if ($power_id eq "mail" || $power_id =~ /^whol-/ 
 	|| $power_id eq 'ipmi15' || $power_id eq 'ipmi20'
 	|| $power_id eq 'drac' || $power_id eq 'ue'
-	|| $power_id eq 'ilo' || $power_id eq 'ilo2' || $power_id eq 'ilo3') {
+	|| $power_id eq 'ilo' || $power_id eq 'ilo2' || $power_id eq 'ilo3'
+	|| $power_id eq 'remotecmd') {
 	$type = $power_id;
 	$IP = "";
 	$class = "";
@@ -653,6 +655,11 @@ foreach my $power_id (keys %outlets) {
 	    $errors++;
 	}
 	$sendevent = 0; # power_mail sends this itself.
+    } elsif ($type eq "remotecmd") {
+	if (remotecmdctrl($op,@nodes)) {
+	    print "Control of $nodestr failed.\n"; $exitval++;
+	    $errors++;
+	}
     } else {
 	print "power: Unknown power type '$type'\n";
 	$errors++;
