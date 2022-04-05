@@ -3022,11 +3022,12 @@ $(function ()
 	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
 	var xmlDoc    = $.parseXML(selected_rspec);
 	var spectrum  = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'spectrum');
+	var routes    = xmlDoc.getElementsByTagNameNS(EMULAB_NS, 'busroute');
 
-	console.info("CheckForRadioUsage", spectrum);
+	console.info("CheckForRadioUsage", spectrum, routes);
 
 	// In case user changes profile late.
-	usingRadios   = false;
+	usingRadios   = routes.length;
 	usingSpectrum = spectrum.length;
 
 	if (radioinfo) {
