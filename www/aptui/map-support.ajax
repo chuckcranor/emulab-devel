@@ -174,11 +174,22 @@ function Do_GetMobileEndpoints()
         # state. To many buses at the end of slow links to ask them anytime
         # a user wants to know (say, from the resource availability page).
         #
+        $blob["free"] = 1;
+
         $free_result =
-            DBQueryFatal("select status from apt_instance_aggregates as ia ".
-                         "where ia.status!='terminated' and ".
-                         "      ia.aggregate_urn='$urn'");
-        $blob["free"] = (mysql_num_rows($free_result) == 0 ? 1 : 0);
+            DBQueryFatal("select status,uuid ".
+                         "    from apt_instance_aggregates as ia ".
+                         "where ia.aggregate_urn='$urn'");
+        if (mysql_num_rows($free_result)) {
+            while ($iarow = mysql_fetch_array($free_result)) {
+                if ($iarow["status"] != "terminated") {
+                    $blob["free"] = 0;
+                    if (ISADMIN()) {
+                        $blob["holding_uuid"] = $iarow["uuid"];
+                    }
+                }
+            }
+        }
 
         #
         # Radio info

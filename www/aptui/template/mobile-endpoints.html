@@ -58,7 +58,14 @@
 	      <% if (info.status != "up") { %>
 		n/a
 	      <% } else { %>
-		<% if (info.free) { %>Yes<% } else { %>No<% } %>
+		<% if (info.free) { %>Yes<% } else { %>
+		  <% if (_.has(info, "holding_uuid")) { %>
+		    <a href="status.php?uuid=<%- info.holding_uuid %>"
+		       target="_blank">No</a>
+		  <% } else { %>
+		    No
+		  <% } %>
+		<% } %>
 	      <% } %>
 	    </td>
 	    <% if (window.ISADMIN) { %>
