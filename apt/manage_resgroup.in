@@ -2005,6 +2005,7 @@ sub DoApprove()
     
 	foreach my $res (@route_reservations) {
 	    my $ref = {};
+	    $ref->{'routename'}= $res->routename();
 	    $ref->{'routeid'}  = $res->routeid();
 	    $ref->{'uuid'}     = $res->route_uuid();
 

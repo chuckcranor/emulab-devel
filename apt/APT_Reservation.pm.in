@@ -680,7 +680,7 @@ sub RoutesInUse($$)
     
     foreach my $r ($self->RouteReservationList()) {
 	foreach my $route (@$routes) {
-	    if ($r->routename() == $route->{'routename'}) {
+	    if ($r->routename() eq $route->{'name'}) {
 		return 1;
 	    }
 	}
