@@ -453,10 +453,6 @@ function Do_SendotaAgreement()
     if (CheckPageArgs()) {
         return;
     }
-    if (!ISADMIN()) {
-	SPITAJAX_ERROR(-1, "Not enough permission");
-        return;
-    }
     $pid    = $target_project->pid();
     $leader = $target_project->GetLeader();
     $email  = $leader->email();

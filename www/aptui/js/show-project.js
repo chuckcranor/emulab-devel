@@ -312,23 +312,6 @@ $(function ()
 			    $(row).remove();
 			});
 		});
-	    // Powder OTA agreement.
-	    if (window.ISPOWDER) {
-		$('#send-ota-agreement').click(function (event) {
-		    event.preventDefault();
-		    sup.CallServerMethod(null,
-					 "show-project", "SendotaAgreement",
-					 {"pid" : window.TARGET_PROJECT},
-					 function (json) {
-					     console.info(json);
-					     if (json.code) {
-						 sup.SpitOops("oops",
-							      json.value);
-					     }
-					 });
-		});
-	    }
-
 	    // If this is the active tab after loading, focus the searchbox
 	    if ($('#profiles').hasClass("active")) {
 		var searchbox = $('#profiles .profile-search')
@@ -667,6 +650,23 @@ $(function ()
 		event.preventDefault();
 		RequestLicense(this);
 	    });
+	    // Powder OTA agreement.
+	    if (window.ISPOWDER) {
+		$('#send-ota-agreement').click(function (event) {
+		    event.preventDefault();
+		    console.info("SendotaAgreement clicked");
+		    sup.CallServerMethod(null,
+					 "show-project", "SendotaAgreement",
+					 {"pid" : window.TARGET_PROJECT},
+					 function (json) {
+					     console.info(json);
+					     if (json.code) {
+						 sup.SpitOops("oops",
+							      json.value);
+					     }
+					 });
+		});
+	    }
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "show-project", "ProjectProfile",
