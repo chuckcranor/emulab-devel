@@ -1777,8 +1777,10 @@ window.ShowPowderMap = (function()
 	    success: function (data) {
 		_.each(data, function (bus) {
 		    var routeID = bus.RouteID;
+		    var busname = bus.Name;
 
-		    if (_.has(routeList, routeID)) {
+		    if (_.has(routeList, routeID) &&
+			OurBuses && _.has(OurBuses, busname)) {
 			UpdateBusLocation(routeID, bus);
 		    }
 		});
@@ -1820,7 +1822,7 @@ window.ShowPowderMap = (function()
 	var color        = routeList[routeID].data.MapLineColor;
 	var routeDesc    = routeList[routeID].data.Description;
 	var busname      = data.Name;
-	var businfo      = null;
+	var businfo      = OurBuses[busname];
 
 	var point = {
 	    type:      "point", // autocasts as new Point()
@@ -1832,14 +1834,13 @@ window.ShowPowderMap = (function()
 	    color: color,
 	    size: 10,
 	};
-	if (OurBuses && _.has(OurBuses, busname)) {
-	    markerSymbol["outline"] = {
-		// autocasts as new SimpleLineSymbol()
-		color: "green",
-		width: 3,
-            };
-	    businfo = OurBuses[busname];
-	}
+	// Leave the green outline, users will be confused.
+	markerSymbol["outline"] = {
+	    // autocasts as new SimpleLineSymbol()
+	    color: "green",
+	    width: 3,
+        };
+
 	var attributes = {
 	    routeID     : routeID,
 	    busname     : busname,
