@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["resgroup", "reserve-faq", "range-list",
+    var template_list   = ["resgroup", "reserve-faq", "range-tabs",
 			   "reservation-graph", "oops-modal", "waitwait-modal",
 			   "resusage-graph", "visavail-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
@@ -11,7 +11,7 @@ $(function ()
     var mainTemplate    = _.template(templates["resgroup"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var usageTemplate   = _.template(templates["resusage-graph"]);
-    var rangeTemplate   = _.template(templates["range-list"]);
+    var rangeTemplate   = _.template(templates["range-tabs"]);
     var visTemplate     = _.template(templates["visavail-graph"]);
     var current_pid  = null;
     var projlist     = null;
@@ -469,7 +469,7 @@ $(function ()
      */
     function modified_callback()
     {
-	console.info("modified_callback");
+	//console.info("modified_callback");
 	ToggleSubmit(true, "check");
 	aptforms.MarkFormUnsaved();
 	if (editing) {
@@ -591,7 +591,10 @@ $(function ()
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
 	$('.faq-contents').html(templates["reserve-faq"]);
-
+	if (window.ISPOWDER) {
+	    $('#range-info-div').html(templates["range-tabs"]);
+	}
+ 	
 	// Add one unassigned row.
 	if (!editing) {
 	    if (isadmin || managerlist[window.PID]) {
@@ -1013,7 +1016,6 @@ $(function ()
 	    });
 	row.find('select.routename').change(function () {
 	    var name = $(this).val();
-	    console.info("FOO", name, this);
 	    
 	    // OTA permission checks/warning.
 	    var pid  = (editing ? current_pid : $('#pid').val());
@@ -1686,7 +1688,7 @@ $(function ()
 	    else {
 		name = tbody.find(".routename").val();
 	    }
-	    console.info(tbody, name, uuid);
+	    //console.info(tbody, name, uuid);
 
 	    // Skip an empty row
 	    if (name == "") {
@@ -1953,7 +1955,7 @@ $(function ()
 	}
 	_.each(amlist, function(details, urn) {
 	    var callback = function(json) {
-		console.log("LoadReservations: " + details.nickname, json);
+		//console.log("LoadReservations: " + details.nickname, json);
 		var id = "resgraph-" + details.nickname;
 		
 		// Kill the spinner.
@@ -2243,9 +2245,6 @@ $(function ()
 		});
 	};
 	var ReservedRanges = function(json1, json2) {
-	    $('#reserved-ranges table tbody').html("");
-	    $('.reserved-ranges-hidden').addClass("hidden");
-	    
 	    if (json1.code || json2.code) {
 		if (json1.code) {
 		    console.info("Could not get reserved range info");
@@ -2262,18 +2261,17 @@ $(function ()
 		allranges = [];
 		return;
 	    }
-	    var html = "";
 	    var reserved = [];
+	    var inuse    = [];
 	    
 	    if (_.size(json1.value)) {
 		// For the search button
 		allranges = json1.value;
 	    
-
 		_.each(allranges, function(info) {
 		    /*
 		     * If this range does not overlap with any of the ranges
-		     * the projet is allowed to use, then skip it.
+		     * the project is allowed to use, then skip it.
 		     */
 		    var overlaps = 0;
 		
@@ -2289,19 +2287,9 @@ $(function ()
 			return;
 		    }
 		    reserved.push(info);
-		    
-		    html = html +
-			"<tr>" +
-			"<td>" + info.freq_low + "</td>" +
-			"<td>" + info.freq_high + "</td>" +
-			"<td>" + moment(info.start).format("lll") + "</td>" +
-			"<td>" + moment(info.end).format("lll") + "</td>" +
-			"</tr>";
 		});
 	    }
 	    if (_.size(json2.value)) {
-		var inuse = "";
-		
 		_.each(json2.value, function(range) {
 		    /*
 		     * If this range does not overlap with any of the ranges
@@ -2340,36 +2328,15 @@ $(function ()
 		    if (isdup) {
 			return;
 		    }
-		    inuse = inuse +
-			"<tr>" +
-			"<td>" + range.freq_low + "<small>" +
-			"   <span class='inuse-range pull-right " +
-			"        glyphicon glyphicon-asterisk'>" +
-			"   </span></small>" + "</td>" +
-			"<td>" + range.freq_high + "</td>" +
-			"<td>" + moment(range.start).format("lll") + "</td>" +
-			"<td>" + moment(range.end).format("lll") + "</td>" +
-			"</tr>";
+		    inuse.push(range);
 		});
-		if (inuse != "") {
-		    html += inuse;
-		    $('#reserved-ranges .experiment-reserved-ranges')
-			.removeClass("hidden");
-		}
 	    }
-	    if (html == "") {
-		return;
-	    }
-	    $('#reserved-ranges table tbody').html(html);
 	    $('#range-info-div').removeClass("hidden");
-	    $('.reserved-ranges-hidden').removeClass("hidden");
-
-	    $('#reserved-ranges .tablesorter')
-		.tablesorter({
-		    theme : 'bootstrap',
-		    widgets : [ "uitheme", "zebra"],
-		    headerTemplate : '{content} {icon}',
-		});
+	    CreateRangeCharts({
+		"selector" : "#range-info-div",
+		"reserved" : reserved,
+		"inuse"    : inuse,
+	    });
 	};
 	var xmlthing1 = sup.CallServerMethod(null, "rfrange", "ProjectRanges",
 					     {"pid" : this_pid});
@@ -4501,7 +4468,7 @@ $(function ()
 	    .sort()
 	    .forEach(function(id, index) {
 		var forecast = forecasts[id];
-		console.info(id, forecast);
+		//console.info(id, forecast);
 
 		var series = {
 		    "measure"   : id,

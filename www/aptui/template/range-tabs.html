@@ -1,0 +1,167 @@
+<style>
+ .range-chart-tooltip {
+     position       : absolute;
+     visibility     : hidden;
+     border         : solid;
+     border-width   : 1px;
+     border-radius  : 2px;
+     padding        : 5px;
+     opacity        : 1;
+     background-color : #fff;
+ }
+ .range-chart {
+     height	: 500px;
+     border	: 1px solid black;
+ }
+ .range-bar {
+     fill: grey;
+     stroke-width: 2;
+     stroke: rgb(0,0,0)
+ }
+ .range-bar-unapproved {
+     fill: #33b5e5;
+     stroke-width: 2;
+     stroke: rgb(0,0,0)
+ }
+ .range-bar-inuse {
+     fill: #99AABB
+     stroke-width: 2;
+     stroke: rgb(0,0,0)
+ }
+ .range-chart-zoom {
+     cursor: move;
+     fill: none;
+     pointer-events: all;
+ }
+ .range-chart-tooltip .table-condensed > thead > tr > th,
+ .range-chart-tooltip .table-condensed > tbody > tr > th,
+ .range-chart-tooltip .table-condensed > tfoot > tr > th,
+ .range-chart-tooltip .table-condensed > thead > tr > td,
+ .range-chart-tooltip .table-condensed > tbody > tr > td,
+ .range-chart-tooltip .table-condensed > tfoot > tr > td {
+     padding-top: 0px;
+     padding-bottom: 0px;
+ }
+ .nav > li.lookright {
+     text-decoration: none;
+     cursor: default;
+     background-color: transparent;
+     border-color: transparent;
+     pointer-events: none;
+ }
+ .nav > li.lookright > a {
+     color: #555;
+ }
+ 
+</style>
+<div class='panel panel-default'>
+  <div class='panel-heading'>
+    <div class="aligned-title-buttons">
+      <span class="left-edge" style="font-size: 18px;">
+	<a href="#" class="zoom-in">
+	  <span class="glyphicon glyphicon-zoom-in"></span>
+	</a>	    
+	<a href="#" class="zoom-out">
+	  <span class="glyphicon glyphicon-zoom-out"></span>
+	</a>
+	<a href='#'
+	   data-toggle='popover'
+	   data-html='true'
+	   data-delay='{"hide":500}'
+	   data-content='In addition to the zoom in/out buttons to the left,
+			 you can double click in the graph to zoom/recenter.
+			 You can also click-drag to pan left or right after
+			 zooming in.
+			 Areas in <span style="color: blue"><b>blue</b></span>
+			 denote an existing but unapproved reservation that
+			 might conflict with your request.'>
+	  <span class='glyphicon glyphicon-question-sign'></span>
+	</a>
+      </span>
+      <span class="middle">
+	<h3 class='panel-title'>Frequency Information</h3>
+      </span>
+      <span class="right-edge"> </span>
+    </div>
+  </div>
+  <div class='panel-body' style="padding: 2px;">
+    <ul class="nav nav-tabs" role="tablist">
+      <li role="presentation" class="allowed-ranges-hidden hidden">
+	<a href="#allowed-ranges" role="tab" 
+	   data-toggle="tab">Allowed Ranges</a>
+      </li>
+      <li role="presentation" class="lookright">
+	<a href="" role="tab" 
+	   data-toggle="tab">Reserved Ranges
+	  <span class="glyphicon glyphicon-hand-right"
+		style="margin-left: 3px;"></span>
+	</a>
+      </li>
+      <li role="presentation" class="active">
+	<a href="#cbrs-ranges" role="tab" 
+	   data-toggle="tab">CBRS</a>
+      </li>
+      <li role="presentation">
+	<a href="#ism900-ranges" role="tab"
+	   data-toggle="tab">ISM 900</a>
+      </li>
+      <li role="presentation">
+	<a href="#ism2400-ranges" role="tab"
+	   data-toggle="tab">ISM 2400</a>
+      </li>
+      <li role="presentation">
+	<a href="#ism5800-ranges" role="tab"
+	   data-toggle="tab">ISM 5800</a>
+      </li>
+    </ul>
+    <div class="tab-content">
+      <div role="tabpanel" id="allowed-ranges"
+	   class="tab-pane allowed-ranges-hidden hidden">
+	<table class='tablesorter'>
+	  <thead>
+	    <th>ID</th>
+	    <th>Low (MHz)</th>
+	    <th>High (MHz)</th>
+	  </thead>
+	  <tbody>
+	  </tbody>
+	</table>
+      </div>
+      <div role="tabpanel" id="cbrs-ranges" class="tab-pane active">
+	<div class="range-chart"></div>
+      </div>
+      <div role="tabpanel" id="ism900-ranges" class="tab-pane">
+	<div class="range-chart"></div>
+      </div>
+      <div role="tabpanel" id="ism2400-ranges" class="tab-pane">
+	<div class="range-chart"></div>
+      </div>
+      <div role="tabpanel" id="ism5800-ranges" class="tab-pane">
+	<div class="range-chart"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="range-chart-tooltip">
+  <table class="table table-condensed border-none" 
+         style="font-size: 14px; margin: 0px;">
+    <tbody>
+      <tr>
+        <td class="border-none">Start:</td>
+        <td class="border-none tooltip-start"></td>
+      </tr>
+      <tr>
+        <td class="border-none">End:</td>
+        <td class="border-none tooltip-end"></td>
+      </tr>
+      <tr>
+        <td class="border-none">Range:</td>
+        <td class="border-none tooltip-range"></td>
+      </tr>
+      <tr>
+        <td class="border-none">Approved?:</td>
+        <td class="border-none tooltip-approved">Yes</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

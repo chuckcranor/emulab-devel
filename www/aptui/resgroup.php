@@ -304,9 +304,10 @@ REQUIRE_MOMENTTIMEZONE();
 REQUIRE_APTFORMS();
 REQUIRE_TABLESORTER();
 AddLibrary("js/resgraphs.js");
+AddLibrary("js/rfchart.js");
 AddLibrary("js/ota-permission.js");
 AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
-                      "range-list", "route-list",
+                      "range-tabs", "route-list",
                       "oops-modal", "waitwait-modal", "confirm-modal",
                       "resusage-list", "resusage-graph",
                       "confirm-something", "resusage-graph", "visavail-graph",

@@ -1115,13 +1115,11 @@ function Do_RangeReservations()
         }
         $rfarray = array();
         foreach ($rf as $rfres) {
-            if (!$rfres->approved()) {
-                continue;
-            }
             $blob = array("freq_low"   => $rfres->freq_low(),
                           "freq_high"  => $rfres->freq_high(),
                           "start"      => DateStringGMT($reservation->start()),
-                          "end"        => DateStringGMT($reservation->end()));
+                          "end"        => DateStringGMT($reservation->end()),
+                          "approved"   => $rfres->approved());
             $info[] = $blob;
         }
     }

@@ -3,7 +3,7 @@ $(function ()
     'use strict';
 
     var template_list   = ["resinfo", "resinfo-totals", "reservation-graph",
-			   "range-list", "oops-modal", "waitwait-modal",
+			   "range-tabs", "oops-modal", "waitwait-modal",
 			   "visavail-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var oopsString      = templates["oops-modal"];
@@ -11,7 +11,6 @@ $(function ()
     var mainTemplate    = _.template(templates["resinfo"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var totalsTemplate  = _.template(templates["resinfo-totals"]);
-    var rangeTemplate   = _.template(templates["range-list"]);
     var visTemplate     = _.template(templates["visavail-graph"]);
     var amlist          = null;
     var FEs             = {};  // Powder
@@ -48,9 +47,6 @@ $(function ()
 	// Not really sure why they do not.
 	setTimeout(function () {
 	    LoadReservations();
-	    if (window.ISPOWDER) {
-		LoadRangeReservations();
-	    }
 	}, 100);	
     }
 
@@ -263,6 +259,7 @@ $(function ()
     {
 	if (window.ISPOWDER) {
 	    LoadRouteReservations();
+	    LoadRangeReservations();
 	}
 	
 	_.each(amlist, function(details, urn) {
@@ -798,28 +795,23 @@ $(function ()
 	    if (! (_.size(json1.value) || _.size(json2.value))) {
 		return;
 	    }
-	    var html = rangeTemplate({
-		"ranges" : json1.value.concat(json2.value),
-	    });
-	    $('#range-list').html(html).removeClass("hidden");
+	    $('#range-info-div').html(templates["range-tabs"]);
+	    $('#range-info-div .panel-title')
+		.html("All Frequency Usage");
+	    $('#range-info-div').removeClass("hidden");
 
-	    // Format dates with moment before display.
-	    $('#range-list .format-date').each(function() {
-		var date = $.trim($(this).html());
-		if (date != "") {
-		    $(this).html(moment(date).format("lll"));
-		}
+	    // This activates the popover subsystem.
+	    $('#range-info-div [data-toggle="popover"]').popover({
+		trigger: 'hover',
+		container: 'body'
 	    });
-	    $('#range-list .tablesorter')
-		.tablesorter({
-		    theme : 'bootstrap',
-		    widgets : [ "uitheme", "zebra"],
-		    headerTemplate : '{content} {icon}',
-		});
-	    if (_.size(json2.value)) {
-		$('#range-list .experiment-reserved-ranges')
-		    .removeClass("hidden");
-	    }
+	    
+	    CreateRangeCharts({
+		"selector" : "#range-info-div",
+		"reserved" : json1.value,
+		"inuse"    : json2.value,
+		"activate" : "cbrs",
+	    });
 	};
 
 	var xmlthing1 = sup.CallServerMethod(null, "resgroup",
