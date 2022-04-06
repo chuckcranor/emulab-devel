@@ -32,7 +32,6 @@ $(function ()
     var showpicker    = 0;
     var restrictions  = null;
     var portal        = null;
-    var registered    = false;
     var JACKS_NS      = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
     var jacks = {
       instance: null,
@@ -129,7 +128,6 @@ $(function ()
 	marked.setOptions({"sanitize" : true});
 
 	window.APT_OPTIONS.initialize(sup);
-	registered = window.REGISTERED;
 	webonly    = window.WEBONLY;
 	isadmin    = window.ISADMIN;
 	multisite  = window.MULTISITE;
@@ -166,28 +164,21 @@ $(function ()
 	console.info("formfields", decodejson('#form-json'));
 
 	/*
-	 * Sort the entire list by recently used if a registered user,
-	 * else just the use count.
+	 * Sort the entire list by recently used.
 	 */
-	if (registered) {
-	    profileToArray = _.sortBy(profileToArray, function (value) {
-		return value[1].lastused;
-	    });
-	}
-	else {
-	    profileToArray = _.sortBy(profileToArray, function (value) {
-		return value[1].usecount;
-	    });
-	}
+	profileToArray = _.sortBy(profileToArray, function (value) {
+	    return value[1].lastused;
+	});
 	// Note that sortBy orders by ascending, so reverse.
 	profileToArray = profileToArray.reverse();
-	
+
+	// Show most recently used profiles at top of list
 	var recentlist = _.filter(profileToArray, function(value) {
 	    return value[1]['usecount'] > 0;
 	});
 
 	var neverUsed = 0;
-	if (recentlist.length == 0 || !registered) {
+	if (recentlist.length == 0) {
 	    neverUsed = 1;
 	    recentlist = profileToArray;
 	}
@@ -229,7 +220,7 @@ $(function ()
 	$('#main-body').html(html);
 
 	// Fire this off right away.
-	if (window.REGISTERED && !window.NOPREDICTION) {
+	if (!window.NOPREDICTION) {
 	    LoadReservationInfo();
 	}
 
@@ -455,23 +446,6 @@ $(function ()
 	    }
 	});
 
-	//
-	// SSH file upload handler, to move the file contents into
-	// the ssh text area. 
-	//
-	if (!registered) {
-	    $('#input_keyfile').change(function() {
-		var reader = new FileReader();
-		reader.onload = function(event) {
-		    /*
-		     * Clear the file so that the change handler will
-		     * run if the same file is selected again.
-		     */
-		    $("#input_sshkey").text(event.target.result);
-		};
-		reader.readAsText(this.files[0]);
-	    });
-	}
 	// This needs to change.
 	var startProfile = $('#profile_name li[value = ' +
 			     window.PROFILE + ']:first');
@@ -592,7 +566,6 @@ $(function ()
 			profile      : selected_profile,
 			uuid         : selected_uuid,
 			ppdivname    : "pp-container",
-			registered   : registered,
 			isadmin      : isadmin,
 			config_callback : ConfigureDone,
 			modified_callback : function () { ppchanged = true; },
@@ -2221,12 +2194,6 @@ $(function ()
 	$("#cluster_selector").html(html);
 	updateWhere();  
 	$("#cluster_selector").removeClass("hidden");
-
-	// This event will be overriden when the fancy cluster status
-	// stuff is initialized.
-	$('.select_where').change(function (event) {
-	    ClusterSelected(event, false);
-	});
     }
 
     /*
@@ -2748,23 +2715,6 @@ $(function ()
 	}
 	//console.info("picker event", action, id, value);
 	ga('send', 'event', 'picker', action, id, value);
-    }
-
-    function ClusterSelected(selected, pickered)
-    {
-	var cluster = null;
-
-	/*
-	 * Dig out which cluster has been selected. Depending on whether
-	 * it came from the plain drop down or the pickered dropdown.
-	 */
-	if (pickered) {
-	    cluster = $(selected).attr("value");
-	}
-	else {
-	    cluster = $(selected.target).find(":selected").val()
-	}
-	//console.info("ClusterSelected: " + cluster);
     }
 
     /*
