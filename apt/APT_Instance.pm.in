@@ -2791,10 +2791,36 @@ sub AddRouteNodes($$$$)
 	foreach my $bus (APT_Aggregate::Mobile::Bus->LookupForRoute($id)) {
 	    my $client_id = "bus-" . $bus->busid();
 	    my $node      = GeniXML::GetNodeByVirtualId($client_id, $rspec);
+	    my $agg       = $self->GetAggregate($bus->urn());
 
-	    # Already did all this work ...
-	    next
-		if ($self->GetAggregate($bus->urn()));
+	    #
+	    # Try to deal with buses that went off route or were otherise
+	    # deleted. We kept these in the aggregate for history reporting
+	    # but we are not going to worry about ones that come and go,
+	    # the history will not be exact. 
+	    #
+	    if ($agg) {
+		#
+		# We want to watch just for terminated which means we
+		# managed to get things cleaned up after going off route.
+		# Canceled means we have not been able to cleanup, and
+		# we are going to wait till we get to terminated.
+		#
+		# Most other status are troublesome and so we will
+		# not try to add the aggregate back in.
+		#
+		next
+		    if (! ($agg->status() eq "terminated" ||
+			   $agg->status() eq "canceled"));
+
+		if ($agg->status() eq "canceled") {
+		    print "AddRouteNodes: $client_id is still in the canceled ".
+			"state, waiting until it terminates\n";
+		    next;
+		}
+		print "AddRouteNodes: $client_id is in the terminated ".
+		    "state, will attempt to reincarnate\n";
+	    }
 	    
 	    #
 	    # The bus might have been directly allocated by another
@@ -2805,6 +2831,9 @@ sub AddRouteNodes($$$$)
 	    my $allocated = 0;
 	    my @others = APT_Instance::Aggregate->LookupByURN($bus->urn());
 	    foreach my $instance (@others) {
+		next
+		    if ($self->SameInstance($instance));
+		    
 		my $aggregate = $instance->GetAggregate($bus->urn());
 		if ($aggregate && $aggregate->IsActive()) {
 		    $allocated = 1;
@@ -2838,7 +2867,8 @@ sub AddRouteNodes($$$$)
 		$rspec->appendChild($node);
 		$modified = 1;
 	    }
-	    if (!$self->GetAggregate($bus->urn())) {
+	    my $aggobj = $self->GetAggregate($bus->urn());
+	    if (!$aggobj) {
 		my $aggobj = $self->AddAggregate($bus->urn());
 		if (!defined($aggobj)) {
 		    $$perrmsg = "Could not create aggregate object for ".
@@ -2848,6 +2878,11 @@ sub AddRouteNodes($$$$)
 		if ($bus->prestageimages()) {
 		    $aggobj->SetStatus("prestage");
 		}
+	    }
+	    else {
+		# It will be in the terminated state. Reset.
+		$aggobj->ClearTerminated("created");
+		$aggobj->DeleteSliverStatus($client_id);
 	    }
 	}
     }
@@ -4085,6 +4120,20 @@ sub MarkTerminated($)
 
     DBQueryWarn("update apt_instance_aggregates set ".
 		"  status='terminated',destroyed=now() ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    return $self->Refresh();
+}
+
+sub ClearTerminated($$)
+{
+    my ($self, $newstate) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  status='$newstate',destroyed=null ".
 		"where uuid='$uuid' and aggregate_urn='$urn'")
 	or return -1;
 
