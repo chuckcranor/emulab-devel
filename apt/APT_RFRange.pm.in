@@ -883,7 +883,7 @@ sub Smush($)
 	}
     }
     foreach my $range (@smushed) {
-	$range->Dump();
+	# $range->Dump();
     }
     $self->{'SMUSHED'} = \@smushed;
 }
