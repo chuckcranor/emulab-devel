@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -144,6 +144,12 @@ static void output_uuid(char *, char *);
 unsigned long inputminsec	= 0;
 unsigned long inputmaxsec	= 0;	/* 0 means the entire input image */
 
+/*
+ * For limiting the amount of allocated data in an image (-A)
+ */
+unsigned maxallocsec	= 0;
+unsigned curallocsec	= 0;
+
 struct range	*ranges, *skips, *fixups;
 int		numranges, numskips, numfixups;
 struct blockreloc	*relocs;
@@ -154,6 +160,7 @@ static void	sortrange(struct range **head, int domerge,
 		  int (*rangecmp)(struct range *, struct range *));
 int	mergeskips(int verbose);
 int	mergeranges(struct range *head);
+void	checkvalidcount(void);
 void	makeranges(void);
 void	dumpranges(int verbose);
 uint32_t sectinranges(struct range *range);
@@ -408,7 +415,7 @@ main(int argc, char *argv[])
 	memset(imageid, '\0', UUID_LENGTH);
 
 	gettimeofday(&sstamp, 0);
-	while ((ch = getopt(argc, argv, "vlbnNdihrs:c:z:ofI:13F:DR:S:XxH:U:P:Me:k:u:a:ZL")) != -1)
+	while ((ch = getopt(argc, argv, "vlbnNdihrs:c:z:ofI:13F:DR:S:XxH:U:P:Me:k:u:a:ZLA:")) != -1)
 		switch(ch) {
 		case 'v':
 			version++;
@@ -583,6 +590,12 @@ main(int argc, char *argv[])
 			if (!hexstr_to_mem(imageid, optarg, UUID_LENGTH))
 				usage();
 			got_imageid = 1;
+			break;
+		case 'A':
+			/* Count is in MiB, convert to sectors */
+			maxallocsec = atoi(optarg);
+			maxallocsec = bytestosec((off_t)maxallocsec *
+						 (1024 * 1024));
 			break;
 		case 'h':
 		case '?':
@@ -1287,45 +1300,64 @@ read_raw(int fd)
 }
 
 char *usagestr =
- "usage: imagezip [-vihor] [-s #] <image | device> [outputfilename]\n"
- " -v             Print version info and exit\n"
- " -i             Info mode only.  Do not write an output file\n"
- " -h             Print this help message\n"
- " -o             Print progress indicating dots\n"
- " -r             Generate a `raw' image.  No FS compression is attempted\n"
- " -f             Generate an image from a regular file (implies -r)\n"
- " -s slice       Compress a particular slice (DOS numbering 1-4)\n"
- " image | device The input image or a device special file (ie: /dev/ad0)\n"
- " outputfilename The output file ('-' for stdout)\n"
- "\n"
- " Authentication and integrity options\n"
- " -a hashalg     Create per-chunk signatures using the hash algorithm given\n"
- " -u uuid        Assign the given value as the image UUID\n"
- "\n"
- " Encryption options\n"
- " -e cipher      Encrypt the image with the given cipher\n"
- " -k keyfile     File containing a key to use for encrypting\n"
+ "usage: imagezip [-vihorf] [-s #] <image | device> [outputfilename]\n"
+ " -v             Print version info and exit.\n"
+ " -i             Info mode only.  Do not write an output file.\n"
+ " -h             Print this help message.\n"
+ " -o             Print progress indicating dots.\n"
+ " -r             Generate a `raw' image.  No FS compression is attempted.\n"
+ " -f             Generate an image from a regular file (implies -r).\n"
+ " -s slice       Compress a particular slice (DOS numbering 1-4).\n"
+ " image | device The input image or a device special file (e.g. /dev/da0).\n"
+ " outputfilename The output file ('-' for stdout).\n"
  "\n"
  " Advanced options\n"
- " -z level       Set the compression level.  Range 0-9 (0==none, default==4)\n"
- " -I slice       Ignore (skip) the indicated slice (not with slice mode)\n"
- " -R slice       Force raw compression of the indicated slice (not with slice mode)\n"
- " -c count       Compress <count> number of sectors (not with slice mode)\n"
- " -D             Do `dangerous' writes (don't check for async errors)\n"
- " -1             Output a version one image file\n"
- " -H hashfile    Use the specified imagehash-generated signature to produce a delta image\n"
- " -U sigfile     Update or create the signature to reflect the new image.\n"
- "                Image is written to named sigfile or <outfile>.sig if ''.\n"
- " -P pct         With -H, if the resulting delta would be <pct> percent or\n"
- "                greater of the (uncompressed) size of a full image, create\n"
- "                a full image instead\n"
+ " -z level       Set the compression level.  Range 0-9 (0==none, default==4).\n"
+ " -I slice       Ignore (skip) the indicated slice (not with slice mode).\n"
+ " -R slice       Force raw compression of the indicated slice (not with slice mode).\n"
+ " -D             Do `dangerous' writes (don't check for async errors).\n"
+ " -X             If a sector cannot be read, replace it with zeroed data.\n"
+ " -F nsec        Require ignored ranges to be at least <nsec> sectors.\n"
+ "                Shorter ranges are compressed and included in the image.\n"
+ "                Default value is 64, use 0 to disable.\n"
+ " -Z             With -F, zero ranges less than <nsec> before compressing.\n"
+ " -x             Ignore sectors outside of a filesystem but within the\n"
+ "                partition. The default is to consider them allocated.\n"
+ " -A max         Maximum uncompressed size (in MB) of allocated data to allow\n"
+ "                in an image. Default is zero (no limit).\n"
+ " -L             Force generation of relocations where normally omitted.\n"
+ " -N             Do not generate any relocations.\n"
  "\n"
- " Debugging options (not to be used by mere mortals!)\n"
- " -d             Turn on debugging.  Multiple -d options increase output\n"
- " -b             FreeBSD slice only.  Input must be a FreeBSD FFS slice\n"
- " -l             Linux slice only.  Input must be a Linux EXT2FS slice\n"
- " -n             NTFS slice only.  Input must be an NTFS slice\n"
- " -S DOS-ptype   Treat the input device as containing a slice of the given type\n";
+ " Authentication and integrity options\n"
+ " -a hashalg     Create per-chunk signatures using the hash algorithm given.\n"
+ " -u uuid        Assign the given value as the image UUID.\n"
+ "\n"
+ " Encryption options\n"
+ " -e cipher      Encrypt the image with the given cipher.\n"
+ " -k keyfile     File containing a key to use for encrypting.\n"
+ "\n"
+ "Delta (incremental) image options\n"
+ " -H hashfile    Use the specified imagehash-generated signature to produce\n"
+ "                a delta image from the given device.\n"
+ " -U sigfile     Update or create the signature to reflect the new image.\n"
+ "                Signature is written to named sigfile or <outfile>.sig if ''.\n"
+ " -P pct         With -H, when the resulting delta would be <pct> percent or\n"
+ "                greater of the (uncompressed) size of a full image, create\n"
+ "                a full image instead.\n"
+ "\n"
+ " Compatibility options\n"
+ " -1             Generate a version 1 format image if possible.\n"
+ " -3             Generate a version 3 format image if possible.\n"
+ "\n"
+ " Debugging and experimental options (not to be used by mere mortals!)\n"
+ " -d             Turn on debugging.  Multiple -d options increase output.\n"
+ " -b             Treat input as a FreeBSD slice (slice mode only).\n"
+ " -l             Treat input as a Linux slice (slice mode only).\n"
+ " -n             Treat input as an NTFS slice (slice mode only).\n"
+ " -S DOS-ptype   Treat input as a slice of the given type (slice mode only).\n"
+ " -c count       Compress <count> number of sectors (not with slice mode).\n"
+ " -M             Clear empty UFS inode blocks, creating relocations to\n"
+ "                initialize them when unzipped (FreeBSD slices only).\n";
 
 void
 usage()
@@ -1549,6 +1581,14 @@ mergeskips(int verbose)
 
 	sortrange(&skips, 0, 0);
 	freed += mergeranges(skips);
+
+	/*
+	 * If limiting the amount of data going into the image (-A),
+	 * we check here before we cull the small free ranges since we
+	 * want an accurate check of allocated data.
+	 */
+	if (maxallocsec > 0)
+		checkvalidcount();
 
 	/*
 	 * After merging, make another pass to cull out the too-small ranges.
@@ -1826,6 +1866,38 @@ mergeranges(struct range *head)
 	}
 
 	return (freed);
+}
+
+void
+checkvalidcount(void)
+{
+	struct range	*pskip, *ptmp;
+	uint32_t	offset;
+
+	assert(maxallocsec > 0 && curallocsec == 0);
+
+	offset = inputminsec;
+
+	pskip = skips;
+	while (pskip) {
+		if ((pskip->start - offset) > 0)
+			curallocsec += (pskip->start - offset);
+		offset = pskip->start + pskip->size;
+
+		ptmp  = pskip;
+		pskip = pskip->next;
+		free(ptmp);
+	}
+	if (inputmaxsec > offset)
+		curallocsec += (inputmaxsec - offset);
+
+	if (curallocsec > maxallocsec) {
+		fprintf(stderr,
+			"Number of allocated sectors (%u) exceeds the maximum "
+			"allowed (%u), try again with larger limit (-A)\n",
+			curallocsec, maxallocsec);
+		exit(1);
+	}
 }
 
 /*
