@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,12 +56,20 @@ use Errno qw(ENOSPC);
 #		and comes from sitevar images/create/maxsize if set. It should
 #		probably be finer-grained (per-project? per-user?) than that.
 #
+# $maximagedata	Max size of allocated data in a partition above which we will
+#		not attempt to even create an image. This is detected and
+#		enforced by imagezip via a parameter we pass in. Zero means
+#		we do not enforce a limit. This value comes from the sitevar
+#		images/create/maxdata if set. It should also probably be
+#		finer-grained (per-project? per-user?).
+#
 my $maxwait      = (72 * 60);
 my $idlewait     = ( 8 * 60);
 my $reportwait   = ( 2 * 60);
 # Check more frequently for web updates, sez Leigh.
 my $checkwait    = 5;
 my $maximagesize = (6 * 1024**3);
+my $maximagedata = 0;
 
 #
 # Options for imagezipper on the client-side. These apply only to imagezip,
@@ -76,6 +84,13 @@ my $maximagesize = (6 * 1024**3);
 #   N,z=9,d,a=SHA1
 #
 # Specific options:
+#
+# As of 2022 we start passing in an uncompressed data limit for imagezip
+# (new -A option). This allows the image creation process to fail early
+# if a user attempts to capture an image of a filesystem with a ridiculous
+# amount of data. This is more likely to happen now that we have increased
+# the default root filesystem partition to 64GB. Any limit to be enforced
+# comes from a sitevar (images/create/maxdata) right now.
 #
 # By default we do not create relocations (-N) in the resulting image for a
 # couple of reasons. One is that we never did relocation support for GRUB
@@ -457,6 +472,10 @@ if (TBGetSiteVar("images/create/idlewait", \$tmp)) {
 }
 if (TBGetSiteVar("images/create/maxsize", \$tmp)) {
     $maximagesize = $tmp * 1024**3;
+}
+if (TBGetSiteVar("images/create/maxdata", \$tmp)) {
+    # XXX sitevar is in GiB, imagezip wants MiB
+    $maximagedata = $tmp * 1024;
 }
 $idlewait = $maxwait
     if ($maxwait < $idlewait);
@@ -1112,6 +1131,11 @@ else {
 	    $needrelocs = 1;
 	}
     }
+    if ($maximagedata > 0) {
+	$zipperopts .= ","
+	    if ($zipperopts);
+	$zipperopts .= "A=$maximagedata";
+    }
     if (!$needrelocs) {
 	$zipperopts .= ","
 	    if ($zipperopts);
@@ -1283,20 +1307,63 @@ if ($isec2node) {
 }
 
 #
+# If we are limiting the size of filesystem allocated space, we check that
+# now before we go to the trouble of booting into the MFS.
+#
+# XXX Note that if this fails for any reason (timeout, wrong FS type,
+# no imagezip binary), we will still check again in the MFS.
+#
+if ($maximagedata) {
+    # if it is a dataset, we have to specify a type, otherwise a partition
+    # XXX assume Linux, if wrong we will check again later.
+    my $arg = $isdataset ? "-l" : "-s " . $image->loadpart();
+
+    my $cmd = "$TB/bin/sshtb -n -o ConnectTimeout=10 -host $node_id ".
+	"/usr/local/bin/imagezip -i -F 0 $arg $device";
+    print STDERR "About to: '$cmd'\n" if ($debug);
+
+    my $SAVEUID	= $UID;
+    $EUID = $UID = 0;
+    my @output = `$cmd 2>&1`;
+    $EUID = $UID = $SAVEUID;
+
+    if ($? == 0) {
+	foreach my $line (@output) {
+	    if ($line =~ /^Total Number of Valid Sectors: (\d+)/) {
+		# XXX assumes 512 byte sectors
+		my $mib = int($1 / 2048);
+		print STDERR "imagezip returned $mib, limit $maximagedata\n"
+		    if ($debug);
+		if ($mib > $maximagedata) {
+		    # XXX do not reboot
+		    $nomfs = 1;
+		    fatal("Amount of allocated data ($mib MiB) exceeds ".
+			  "the maximum allowed ($maximagedata MiB)");
+		}
+	    }
+	}
+    }
+}
+
+#
 # Big hack; we want to tell the node to update the master password
 # files. But need to do this in a backwards compatable manner, and
 # in way that does not require too much new plumbing. So, just touch
 # file in /var/run, the current version of prepare looks for it.
 #
 if ($update_prepare) {
-    my $SAVEUID	= $UID;
-    $EUID = $UID = 0;
     my $cmd = "$TB/bin/sshtb -n -o ConnectTimeout=10 ".
 	"-host $node_id touch /var/run/updatemasterpasswdfiles";
     print STDERR "About to: '$cmd'\n" if ($debug);
+
+    my $SAVEUID	= $UID;
+    $EUID = $UID = 0;
     system($cmd);
-    fatal("'$cmd' failed")
-	if ($?);
+    if ($?) {
+	# XXX do not reboot
+	$nomfs = 1;
+	fatal("'$cmd' failed");
+    }
     $EUID = $UID = $SAVEUID;
 }
 
