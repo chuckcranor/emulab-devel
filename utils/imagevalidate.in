@@ -800,6 +800,10 @@ sub doimage($)
     $dhash = ""
 	if (!defined($dhash));
 
+    my $mbr = $image->mbr_version();
+    my $lpart = $image->loadpart();
+    my ($mpstart, $mpsize) = Image->MBRPartInfo($mbr, $lpart);
+    my $mpend = $mpstart + $mpsize - 1;
     my $size = $image->size();
     my $lbalo = $image->lba_low();
     my $lbahi = $image->lba_high();
@@ -845,6 +849,7 @@ sub doimage($)
 	}
 	# XXX do sector range
 	if ($validate{"all"} || $validate{"range"}) {
+	    print "$pidimage: MBR$mbr partition $lpart [$mpstart-$mpend]\n";
 	    print "$pidimage: range: [$lbalo-$lbahi] (ssize: $lbasize), ".
 		  "relocatable=$relocatable\n";
 	}
@@ -1503,6 +1508,36 @@ sub doimage($)
 		    }
 		} else {
 		    $rv = 1;
+		}
+	    }
+
+	    #
+	    # XXX highly-specific hack: If MBR==3 and the new image doesn't
+	    # fit, see if it fits in MBR==4. If so, modify the DB mbr_version.
+	    # If not, fail.
+	    #
+	    if ($lo >= 0 && $mbr == 3) {
+		my $isize = $hi - $lo + 1;
+		if ($isize > $mpsize) {
+		    print("$pidimage: range: DB MBR3 partition $lpart size ($mpsize) < file range size ($isize)\n")
+			if (!$update || !$quiet);
+		    if ($update) {
+			print("$pidimage: MBR3 -> MBR4: ")
+			    if (!$quiet);
+			my ($m4start, $m4size) = Image->MBRPartInfo(4, $lpart);
+			if (defined($m4start) &&
+			    $isize <= $m4size && !$image->SetMBRVersion(4)) {
+			    $changed = 1;
+			    print "[FIXED]\n"
+				if (!$quiet);
+			} else {
+			    print "[FAILED]\n"
+				if (!$quiet);
+			    $rv = 1;
+			}
+		    } else {
+			$rv = 1;
+		    }
 		}
 	    }
 	}
