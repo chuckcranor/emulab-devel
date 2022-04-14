@@ -2112,7 +2112,7 @@ $(function ()
 	     * selection if the user has already made one. 
 	     */
 	    var selected;
-	    if ($('#finalize_options .cluster-group').leangth) {
+	    if ($('#finalize_options .cluster-group').length) {
 		selected = $('#finalize_options .cluster-group ' +
 			     'select option:selected').text();
 	    }
