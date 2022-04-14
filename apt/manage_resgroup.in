@@ -1167,11 +1167,12 @@ sub DoDelete()
     # is an expiration, initiated by the daemon when it sees a reservation
     # group is done. 
     #
-    my $optlist   = "N:LMps";
+    my $optlist   = "N:LMpsf";
     my $takelock  = 0;
     my $nolock    = 0;	# Caller holds the lock.
     my $noemail   = 0;
     my $pushonly  = 0;
+    my $force     = 0;
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
@@ -1190,6 +1191,9 @@ sub DoDelete()
 	    if (! -e $options{"N"});
 
 	$reason = emutil::ReadFile($options{"N"});
+    }
+    if (defined($options{"f"})) {
+	$force = 1;
     }
     if (defined($options{"L"})) {
 	$takelock = 1;
@@ -1238,27 +1242,29 @@ sub DoDelete()
     # are using this reservation; not allowed to delete the reservation
     # until the experiments are terminated.
     #
-    if ($resgroup->RouteReservationList()) {
-	my $current;
-	if (APT_Instance->LookupForProject($project, \$current)) {
-	    $resgroup->Unlock() if (!$nolock);
-	    fatal("Could not look up experiments for $project");
-	}
-	foreach my $instance (@$current) {
-	    # Only Route reservations actually matter here.
-	    # And ignore expired experiments, they hang around until
-	    # we can clean up the state at buses that went offline.
-	    next
-		if ($instance->IsExpired());
-	    
-	    if ($resgroup->RoutesInUse($instance)) { 
+    my $checkForRouteUsage = sub () {
+	if ($resgroup->RouteReservationList()) {
+	    my $current;
+	    if (APT_Instance->LookupForProject($project, \$current)) {
 		$resgroup->Unlock() if (!$nolock);
-		UserError("You have experiments running that are using this ".
-			  "reservation, please terminate those first");
+		fatal("Could not look up experiments for $project");
+	    }
+	    foreach my $instance (@$current) {
+		# Only Route reservations actually matter here.
+		# And ignore expired experiments, they hang around until
+		# we can clean up the state at buses that went offline.
+		next
+		    if ($instance->IsExpired());
+	    
+		if ($resgroup->RoutesInUse($instance) && !$force) { 
+		    $resgroup->Unlock() if (!$nolock);
+		    UserError("You have experiments running that are using ".
+			      "this reservation, please terminate those first");
+		}
 	    }
 	}
-    }
-    
+    };
+
     #
     # See if we got specific reservations to delete.
     #
@@ -1289,6 +1295,11 @@ sub DoDelete()
 		push(@route_reservations, $reservation);
 	    }
 	}
+	# For now, if using routes and an experiment is active, not
+	# allowed to delete.
+	if (@route_reservations) {
+	    &$checkForRouteUsage();
+	}
 	#
 	# Mark the reservations as deleted in case the clusters are offline.
 	#
@@ -1298,6 +1309,8 @@ sub DoDelete()
 	# entry reflects what actually happened. 
 	#
 	if (!$resgroup->Expired()) {
+	    my $needemail = 0;
+	    
 	    foreach my $res (@cluster_reservations,
 			     @range_reservations, @route_reservations) {
 		if ($res->IsCluster()) {
@@ -1305,14 +1318,16 @@ sub DoDelete()
 		    if (!$res->deleted()) {
 			$res->MarkDeleted();
 			$res->ClearDeletedPushed();
+			$needemail++;
 		    }
 		}
 		else {
 		    # This is immediately deleted below.
 		    $res->MarkDeleted();
+		    $needemail++;
 		}
 	    }
-	    if (!$noemail) {
+	    if (!$noemail && $needemail) {
 		#
 		# Notify the user that a resgroup has been deleted.
 		#
@@ -1337,6 +1352,11 @@ sub DoDelete()
 	@range_reservations   = $resgroup->RFReservationList();
 	@route_reservations   = $resgroup->RouteReservationList();
 
+	# For now, if using routes and an experiment is active, not
+	# allowed to delete.
+	if (@route_reservations) {
+	    &$checkForRouteUsage();
+	}
 	#
 	# Deleting entire reservation. If doing this before expired, mark
 	# it. If after expiration, or if already set, leave it alone. The
@@ -1441,6 +1461,15 @@ sub DoDelete()
 		    # This is easy!
 		    $res->Delete();
 		    next;
+		}
+		elsif ($webtask->exitcode() ==
+		       GENIRESPONSE_SERVER_UNAVAILABLE ||
+		       $webtask->exitcode() ==
+		       GENIRESPONSE_NETWORK_ERROR) {
+		    #
+		    # This is okay, we have marked it as deleted, it will
+		    # get pushed out later.
+		    #
 		}
 		else {
 		    $blob->{'errcode'} = $webtask->exitcode();
@@ -1742,7 +1771,8 @@ sub DoApprove()
     
     foreach my $res ($resgroup->ReservationList()) {
 	push(@cluster_reservations, $res)
-	    if (!$res->approved() || !$res->approved_pushed());
+	    if (!$res->deleted() &&
+		(!$res->approved() || !$res->approved_pushed()));
     }
     foreach my $res ($resgroup->RFReservationList()) {
 	push(@range_reservations, $res)

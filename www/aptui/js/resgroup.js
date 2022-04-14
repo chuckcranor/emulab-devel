@@ -3398,6 +3398,12 @@ $(function ()
 		newHtml  = operationResults[uuid].errmesg;
 		newClass = "has-error";
 	    }
+	    else if (res.deleted) {
+		newHtml  = "The reservation above has been deleted" +
+		    (!res.deleted_pushed ?
+		     " but the cluster is not reachable" : "");
+		newClass = "has-error";
+	    }
 	    else if (!res.approved) {
 		newHtml  = "The reservation above has not been approved yet";
 		newClass = "has-warning";
@@ -3418,12 +3424,6 @@ $(function ()
 	    else if (res.cancel_canceled) {
 		newHtml  = "The reservation above has been un-canceled " +
 		    "but the cluster is not reachable";
-		newClass = "has-error";
-	    }
-	    else if (res.deleted) {
-		newHtml  = "The reservation above has been deleted" +
-		    (!res.deleted_pushed ?
-		     " but the cluster is not reachable" : "");
 		newClass = "has-error";
 	    }
 	    SetClusterError(tbody, newHtml, newClass);

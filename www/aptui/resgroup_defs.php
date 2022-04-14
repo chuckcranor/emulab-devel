@@ -309,7 +309,10 @@ class ReservationGroup
             }
             $clusters[$reservation->remote_uuid()] = $blob;
 
-            if (! $reservation->approved()) {
+            if ($reservation->deleted()) {
+                # Does not count.
+            }
+            elseif (! $reservation->approved()) {
                 $status = "pending";
                 $details["pending"] += 1;
             }
