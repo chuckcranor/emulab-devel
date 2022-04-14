@@ -11,7 +11,8 @@ use OSinfo;
 my $UTAHURL       = "http://www.emulab.net/downloads";
 my $DESCRIPTORS   = "$TOP_SRCDIR/install/descriptors-v4.xml";
 my $GENDEV        = "$TOP_SRCDIR/install/descriptors-gendev.xml";
-my @MBRS          = ("emulab-mbr.dd", "emulab-mbr2.dd", "emulab-mbr3.dd");
+my @MBRS          = ("emulab-mbr.dd", "emulab-mbr2.dd",
+		     "emulab-mbr3.dd", "emulab-mbr4.dd");
 
 my $LINUXSTDIMAGE = "UBUNTU18-64-STD";
 my $FBSDSTDIMAGE  = "FBSD113-64-STD";
@@ -39,7 +40,7 @@ my %OLDIMAGES     = (
 
 my %NEWIMAGES     = (
     "UBUNTU20-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=bb5bfa77-a5a7-11ea-b1eb-e4434b2381fc",
-    "FBSD121-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=534f70f7-0d66-11ea-b1eb-e4434b2381fc",
+    "FBSD123-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=b01bd90f-5abd-11ec-b318-e4434b2381fc",
 );
 
 #
