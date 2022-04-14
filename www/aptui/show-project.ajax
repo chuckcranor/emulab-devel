@@ -354,7 +354,7 @@ function Do_Toggle()
                "Bcc: $TBMAIL_AUDIT\n".
                "Errors-To: $TBMAIL_WWW");
     }
-    if ($toggle == "project_resdisable") {
+    elseif ($toggle == "project_resdisable") {
         $newvalue = $target_project->reservations_disabled() ? 0 : 1;
         $target_project->SetResDisabled($newvalue);
     }
