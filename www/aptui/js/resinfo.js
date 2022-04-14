@@ -354,7 +354,8 @@ $(function ()
 		    }
 		    // Gross Hack
 		    if (group == "mmimo" &&
-			(key == "mmimo1-meb" || key == "mmimo1-honors")) {
+			(key == "mmimo1-meb" || key == "mmimo1-honors" ||
+			 key == "irisclients2-meb")) {
 			return;
 		    }
 		    groups[group][key] = info;
