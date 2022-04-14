@@ -1,0 +1,34 @@
+#
+# Add sitevar for limiting max size of filesystems captured in images.
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    # Sitevars
+    my %value = (
+	"images/create/maxdata" => 0,
+    );
+    my %desc = (
+	"images/create/maxdata" => "Maximum amount of uncompressed allocated data (GB) in a filesystem allowed for image creation. Default is zero (no limit)."
+    );
+
+    foreach my $name (keys %value) {
+	my $val = $value{$name};
+	my $desc = $desc{$name};
+	DBQueryFatal("INSERT INTO sitevariables VALUES ".
+		     " ('$name',NULL,'$val','$desc',0)")
+	    if (!TBSiteVarExists("$name"));
+    }
+
+    return 0;
+}
+
+1;
+
+# Local Variables:
+# mode:perl
+# End:
