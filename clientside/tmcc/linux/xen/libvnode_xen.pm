@@ -256,16 +256,17 @@ sub VGNAME()  { return $VGNAME; }
 ##
 
 # Minimum memory for dom0
-my $MIN_MB_DOM0MEM = 256;
+my $MIN_MB_DOM0MEM = 512;
 
 #
 # Minimum acceptible size (in GB) of LVM VG for domUs.
 #
 # XXX we used to calculate this in terms of anticipated maximum number
 # of vnodes and minimum vnode images size, blah, blah. Now we just pick
-# a value that allows us to use a pc3000 node with a single 144GB disk!
+# a value that allows us to use a node with a 240GB disk and host three
+# MBR4 (~66GB) vnodes.
 #
-my $XEN_MIN_VGSIZE = 120;
+my $XEN_MIN_VGSIZE = 200;
 
 #
 # When loading an Emulab partition image, we use a compressed version of our
@@ -283,6 +284,10 @@ my $XEN_MIN_VGSIZE = 120;
 #    P1: 16GB (XEN_LDSIZE_3) offset at 2048, standard OS partition
 #    P2: 1MB (XEN_EMPTYSIZE), as small as we can make it
 #    P3: 1GB (XEN_SWAPSIZE), standard MBR2 swap size
+# MBR 4:
+#    P1: 64GB (XEN_LDSIZE_4) offset at 2048, standard OS partition
+#    P2: 1MB (XEN_EMPTYSIZE), as small as we can make it
+#    P3: 1GB (XEN_SWAPSIZE), standard MBR2 swap size
 #
 # P4 is sized based on what the user told us. If they do not specify
 # XEN_EXTRA, then we default to 1G (XEN_EXTRASIZE). We need enough
@@ -293,6 +298,7 @@ my $XEN_MIN_VGSIZE = 120;
 #
 my $XEN_LDSIZE    =  6152895;
 my $XEN_LDSIZE_3  = 16777216;
+my $XEN_LDSIZE_4  = 67108864;
 my $XEN_SWAPSIZE  =  1048576;
 my $XEN_EMPTYSIZE =     1024;
 my $XEN_EXTRASIZE =  1048576;
@@ -3650,9 +3656,9 @@ sub CreatePrimaryDisk($$$$;$$)
 	my ($slice1_active,$slice2_active);
 	my $slice1_start = 63; 
 
-	if ($mbrvers == 3) {
+	if ($mbrvers == 3 || $mbrvers == 4) {
 	    $slice1_start = 2048;
-	    $slice1_size  = $XEN_LDSIZE_3 * 2;
+	    $slice1_size  = ($mbrvers == 3 ? $XEN_LDSIZE_3 : $XEN_LDSIZE_4) * 2;
 	    $slice2_size  = $s2size * 2;
 	    if ($imagemetadata->{'PARTOS'} =~ /freebsd/i) {
 		$slice1_type  = "0xA5";
