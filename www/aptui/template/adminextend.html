@@ -221,7 +221,7 @@ pre {
 	      col-xs-12 col-xs-offset-0'>
     <div class="well well-sm text-danger hidden" id="idledata-error"></div>
     <div class="well well-sm hidden" id="idledata-nodata">
-	There is insufficient data to graph, please check back later.
+      There is insufficient data to graph, please check back later.
     </div>
     <div class='panel panel-default hidden' id="loadavg-panel-div">
       <div class="panel-heading">
@@ -249,6 +249,49 @@ pre {
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
 	    <div id="loadavg-chart"
+		 class='fixedsize-panel idlegraph-div
+			with-3d-shadow with-transitions'>
+	      <svg></svg>
+	    </div>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class='row'>
+  <div class='col-sm-10 col-sm-offset-1
+	      col-xs-12 col-xs-offset-0'>
+    <div class="well well-sm text-danger hidden" id="idledata-error"></div>
+    <div class="well well-sm hidden" id="idledata-nodata">
+	There is insufficient data to graph, please check back later.
+    </div>
+    <div class='panel panel-default hidden' id="gpuload-panel-div">
+      <div class="panel-heading">
+	<a data-toggle="collapse" id="gpuload-toggle"
+	   href="#gpuload-collapse">
+	  <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+	</a>
+	<div class="maxavg-toggles pull-right"
+	     style="margin-right: 10px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="gpuload-radio"
+		   checked="checked" value="max"> Max
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="gpuload-radio"
+		   value="avg"> Avg
+	  </label>
+	</div>
+	<h5><span>GPU Load Graph</span></h5>
+      </div>
+      <div id="gpuload-collapse"
+	   class="panel-collapse collapse">
+	<div style="padding-top:5px;" class='panel-body'>
+	  <!-- The col setting gives us a "relative" position div -->
+	  <div class='col-xs-12 col-xs-offset-0'
+	       style="padding:0px;">
+	    <div id="gpuload-chart"
 		 class='fixedsize-panel idlegraph-div
 			with-3d-shadow with-transitions'>
 	      <svg></svg>
