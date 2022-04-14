@@ -1754,6 +1754,21 @@ sub ClearNodeFeature($$)
     return 0;
 }
 
+sub HasFeature($$)
+{
+    my ($self, $feature) = @_;
+    my $node_id = $self->node_id();
+    my $safe_feature = DBQuoteSpecial($feature);
+
+    my $query_result =
+	DBQueryWarn("select * from node_features ".
+		    "where node_id='$node_id' and feature=$safe_feature");
+    return 1
+	if (!$query_result);
+	    
+    return $query_result->numrows;
+}
+
 #
 # Return type info. We cache this in the instance since node_type stuff
 # does not change much.

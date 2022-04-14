@@ -1899,6 +1899,14 @@ sub CheckResources($$$;$)
 		}
 		next
 		    if (!defined($aggregate->Radio($component_id)));
+
+		# A couple of special local cases. Sigh.
+		if ($aggregate->IsLocalCluster()) {
+		    my $node = Node->Lookup($component_id);
+		    next
+			if ($node && ($node->HasFeature("rf-controlled") ||
+				      $node->HasFeature("rf-paired")));
+		}
 		
 		if (!EmulabFeatures->FeatureEnabled($OTAALLOW,undef,$project)) {
 		    $$pmsg = "CheckResources: Use of some resources requires ".
