@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -84,6 +84,7 @@ getvar() {
 #	v1 (partition 1 size 6281352)
 #	v2 (partition 1 size 12305790)
 #	v3 (partition 1 size 33554432)
+#	v4 (partition 1 size 134217728)
 # Currently we only install a new MBR if the existing one is the
 # wrong size or if ALWAYS is specified, just in case the user has
 # customized the boot program.
@@ -108,6 +109,9 @@ tweakmbr() {
 	;;
     33554432s)
 	_CUR=3
+	;;
+    134217728s)
+	_CUR=4
 	;;
     s)
         # special case: no part1 so probably no MBR at all, make sure we install
