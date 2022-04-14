@@ -453,6 +453,17 @@ function Do_SendotaAgreement()
     if (CheckPageArgs()) {
         return;
     }
+    #
+    # Lets make sure we do not send email every time.
+    #
+    if ($target_project->ota_notified()) {
+        $sent = strtotime($target_project->ota_notified());
+        if (time() - $sent < (3600 * 24 * 2)) {
+            SPITAJAX_RESPONSE(1);
+            return;
+        }
+    }
+        
     $pid    = $target_project->pid();
     $leader = $target_project->GetLeader();
     $email  = $leader->email();
