@@ -57,6 +57,9 @@ $(function () {
 
 	function HasOtaPermission(pid)
 	{
+	    if (window.ISADMIN) {
+		return 1;
+	    }
 	    if (templates == null) {
 		init();
 	    }

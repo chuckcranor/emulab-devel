@@ -1859,6 +1859,7 @@ $(function ()
 	    if (!window.OTA_AGREED) {
 		otaStuff.RequestOtaAgreement(function (agreed) {
 		    if (agreed) {
+			window.OTA_AGREED = true;
 			submit();
 		    }
 		});

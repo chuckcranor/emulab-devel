@@ -3072,6 +3072,7 @@ $(function ()
 		otaStuff.RequestOtaAgreement(function (agreed) {
 		    if (agreed) {
 			setStepsFinish(true);
+			window.OTA_AGREED = true;
 		    }
 		});
 	    }
