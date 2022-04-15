@@ -675,6 +675,21 @@ else {
     }
     $pid = $experiment->pid();
 
+    #
+    # See if the project/user/experiment is allowed to override any data limit.
+    #
+    if ($maximagedata) {
+	my $project = Project->Lookup($image->pid());
+	if (!defined($project)) {
+	    fatal("Could not lookup project for $image");
+	}
+	my $group = Group->Lookup($image->pid(), $image->gid());
+	if (EmulabFeatures->FeatureEnabled("UnlimitedImageData",
+					   $this_user, $group, $experiment)) {
+	    $maximagedata = 0;
+	}
+    }
+
     if ($isvirtnode) {
 	#
 	# Need to know this is a xen-host to tailor method below.
