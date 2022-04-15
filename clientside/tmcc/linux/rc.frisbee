@@ -285,6 +285,19 @@ tweakmbr()
 	    echo "Unknown partition table on $disk!"
 	fi
 
+	# Get known MBR/GPT sizes, so that we can know if the old MBR is
+	# "one of ours" -- we are happy to overwrite our old MBRs with one
+	# of our newer MBRs if needed.
+	known_sizes=
+	for mbrfile in ls -1 $MBR_PATH/mbr*.dd ; do
+		known_size=`get_part_size $mbrfile 1`
+		known_sizes="$known_sizes $known_size "
+	done
+	is_known_size=0
+	if [ -n "$size" ]; then
+		( echo "$known_sizes" | grep -q " $size " ) && is_known_size=1
+	fi
+
 	mbrfile=$MBR_PATH/mbr${new_mbr_ver}.dd
 	if ! [ -r $mbrfile ]; then
 		echo "WARNING: cannot find MBR/GPT version $new_mbr_ver ($mbrfile), not installing!"
@@ -326,6 +339,8 @@ tweakmbr()
 	elif [ ! $size -eq $newsize ]; then
 	    if [ $always -ne 0 ]; then
 		echo "WARNING: overwriting (always!=0) mismatched $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size)!"
+	    elif [ $is_known_size -eq 1 ]; then
+		echo "Overwriting mismatched $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size) because the existing MBR appears to be ours"
 	    else
 		echo "WARNING: custom $pttype/$size on $disk, not always-installing version $new_mbr_ver ($newpttype/$newsize)"
 		return 0
