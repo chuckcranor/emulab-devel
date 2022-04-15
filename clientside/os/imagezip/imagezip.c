@@ -1871,7 +1871,7 @@ mergeranges(struct range *head)
 void
 checkvalidcount(void)
 {
-	struct range	*pskip, *ptmp;
+	struct range	*pskip;
 	uint32_t	offset;
 
 	assert(maxallocsec > 0 && curallocsec == 0);
@@ -1884,9 +1884,7 @@ checkvalidcount(void)
 			curallocsec += (pskip->start - offset);
 		offset = pskip->start + pskip->size;
 
-		ptmp  = pskip;
 		pskip = pskip->next;
-		free(ptmp);
 	}
 	if (inputmaxsec > offset)
 		curallocsec += (inputmaxsec - offset);
