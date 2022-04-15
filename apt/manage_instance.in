@@ -882,6 +882,9 @@ sub DoSnapshot()
 	}
 	elsif ($imageblob->{'status'} eq "failed") {
 	    $failed = 1;
+	    if (exists($imageblob->{'output'}) && $imageblob->{'output'} ne ""){
+		$errmsg = $imageblob->{'output'};
+	    }
 	    last;
 	}
     }
