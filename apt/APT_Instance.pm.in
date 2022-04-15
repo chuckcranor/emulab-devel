@@ -4437,6 +4437,35 @@ sub UpdateFrisbeeStatusNew($$$)
 }
 
 #
+# Get the current frisbee data.
+#
+sub FrisbeeStatus($$)
+{
+    my ($self, $urn) = @_;
+
+    my $uuid = $self->uuid();
+    my $aggregate_urn = $self->aggregate_urn();
+    my $sliver_urn    = DBQuoteSpecial($urn);
+
+    my $query_result =
+	DBQueryWarn("select frisbee_data from apt_instance_sliver_status ".
+		    "where uuid='$uuid' and ".
+		    "      frisbee_data is not null and ".
+		    "      aggregate_urn='$aggregate_urn' and ".
+		    "      sliver_urn=$sliver_urn");
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($frisbee_data) = $query_result->fetchrow_array();
+    my $blob = eval { decode_json($frisbee_data) };
+    if ($@) {
+	print STDERR "Could not decode frisbee_data: $frisbee_data\n";
+	return undef;
+    }
+    return $blob;
+}
+
+#
 # A variant for updating above from the results of a SliverStatus() API call.
 #
 sub UpdateSliverStatusAll($$)
@@ -5443,15 +5472,19 @@ sub WaitForSliver($)
 			# See if we are continuing to get frisbee events.
 			# This implies forward progress, keep waiting.
 			#
-			elsif (exists($details->{"frisbeestatus"})) {
-			    my $stamp = $details->{"frisbeestatus"}->{"utc"};
-			    if (time() - $stamp < 120) {
-				$seconds = 300
-				    if ($seconds < 300);
-				print STDERR
-				    "Got a recent frisbee event for ".
-				    $details->{"frisbeestatus"}->{"imagename"} .
-				    "\n";
+			elsif ($details->{"rawstate"} eq "RELOADING") {
+			    my $fblob = $aggobj->FrisbeeStatus($urn);
+			    if ($fblob) {
+				my $stamp = $fblob->{'utc'};
+				# Ignore events that are slightly stale.
+				if (time() - $stamp < 120) {
+				    $seconds = 450
+					if ($seconds < 450);
+				    print STDERR
+					"Frisbee progress: utc:$stamp, ".
+					$fblob->{'imagename'} . ":" .
+					$fblob->{'MB_written'} . "MB\n";
+				}
 			    }
 			}
 		    }
