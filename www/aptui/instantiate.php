@@ -693,11 +693,11 @@ AddLibrary("js/paramsets.js");
 AddLibrary("js/ota-permission.js");
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/copy-profile.js");
-SPITREQUIRE("js/instantiate-new.js");
+SPITREQUIRE("js/instantiate.js");
 
 echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
 
-AddTemplateList(array("instantiate-new",
+AddTemplateList(array("instantiate",
                       "aboutapt", "aboutcloudlab", "aboutpnet",
                       "waitwait-modal", "rspectextview-modal",
                       "picker-template","reservation-graph",
