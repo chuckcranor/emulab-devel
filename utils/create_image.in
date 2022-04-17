@@ -1146,7 +1146,12 @@ else {
 	    $needrelocs = 1;
 	}
     }
-    if ($maximagedata > 0) {
+    #
+    # Add the imagezip option for limiting allocated data.
+    # XXX we cannot do this for datasets and vnodes since the running
+    # imagezip is in the client image and may not be up to date.
+    #
+    if ($maximagedata > 0 && !$isdataset && !$isvirtnode) {
 	$zipperopts .= ","
 	    if ($zipperopts);
 	$zipperopts .= "A=$maximagedata";
@@ -1328,10 +1333,29 @@ if ($isec2node) {
 # XXX Note that if this fails for any reason (timeout, wrong FS type,
 # no imagezip binary), we will still check again in the MFS.
 #
+# XXX Dataset images don't have an associated device, that is conjured
+# up by the client blockstore code. As a quick hack we assume the node
+# is running Linux with an LVM-based dataset filesystem using the current
+# naming convention. We really need a client-side script to do this
+# check correctly. But you know...backward compatibility.
+#
+# XXX Unless we are a vnode or a dataset in which case the node will
+# not be in an MFS and the latter check is not made either because it
+# would require a newer imagezip binary which we cannot guarantee is
+# in the client OS. So in these cases, we will still catch it (fail)
+# during the upload process, likely 10s of minutes after the image
+# capture has started.
+#
 if ($maximagedata) {
     # if it is a dataset, we have to specify a type, otherwise a partition
     # XXX assume Linux, if wrong we will check again later.
     my $arg = $isdataset ? "-l" : "-s " . $image->loadpart();
+
+    # XXX no device for datasets, again assume linux (with LVM)
+    if ($isdataset && !$device) {
+	($device = $bsname) =~ s/-/--/g;
+	$device = "/dev/mapper/emulab-$device";
+    }
 
     my $cmd = "$TB/bin/sshtb -n -o ConnectTimeout=10 -host $node_id ".
 	"/usr/local/bin/imagezip -i -F 0 $arg $device";
