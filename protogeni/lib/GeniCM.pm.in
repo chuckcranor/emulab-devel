@@ -8282,6 +8282,16 @@ sub FlipToUser($$)
 	$group   = $object->GetGroup();
 	$creator = $object->GetCreator();	
     }
+    elsif (ref($object) eq "Project") {
+	#
+	# See CreateDataset() in the GeniCMV2. This is really intended to
+	# make sure we do the right thing for a nonlocal project when
+	# PROTOGENI_LOCALUSER=1
+	#
+	$project = $object;
+	$group   = $object->GetProjectGroup();
+	$creator = $object->GetLeader();	
+    }
     return undef
 	if (! (defined($project) && defined($group) && defined($creator)));
 
@@ -8328,11 +8338,14 @@ sub FlipToUser($$)
 	    $user = $creator;
 	}
     }
-    else {
+    elsif (defined($image)) {
 	if (!$image->AccessCheck($user->emulab_user(),
 				 TB_IMAGEID_MODIFYINFO())) {
 	    $user = $creator;
 	}
+    }
+    elsif (defined($project)) {
+	# Does it make sense to do anything here? 
     }
   flip:
     return undef
