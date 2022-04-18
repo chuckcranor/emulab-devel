@@ -3003,6 +3003,9 @@ $(function ()
 		if (hrn) {
 		    component_id = hrn.id;
 		}
+		if (component_id.startsWith("oai-wb")) {
+		    return;
+		}
 		//console.info("CheckForRadioUsage", manager_urn, component_id);
 		
 		if (_.has(radioinfo, manager_urn) &&
@@ -3513,5 +3516,21 @@ $(function ()
 	}
     }
     
+    function ClusterSelected(selected, pickered)
+    {
+	var cluster = null;
+
+	/*
+	 * Dig out which cluster has been selected. Depending on whether
+	 * it came from the plain drop down or the pickered dropdown.
+	 */
+	if (pickered) {
+	    cluster = $(selected).attr("value");
+	}
+	else {
+	    cluster = $(selected.target).find(":selected").val()
+	}
+	//console.info("ClusterSelected: " + cluster);
+    }
     $(document).ready(initialize);
 });
