@@ -6048,6 +6048,10 @@ sub InUse($$$$$)
 	my $uuid = $target->uuid();
 	$clause = " i.uuid!='$uuid' and ";
     }
+    elsif (ref($target) eq "Project") {
+	my $pid_idx = $target->pid_idx();
+	$clause = " i.pid_idx!='$pid_idx' and ";
+    }
     my $query_result =
 	DBQueryWarn("select br.uuid from apt_instance_bus_routes as br ".
 		    "left join apt_instances as i on ".
