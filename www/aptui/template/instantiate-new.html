@@ -81,7 +81,12 @@
      padding-top: 2px;
      padding-bottom: 2px;
  }
- 
+ .alert-sm {
+     padding: 5px;
+     margin-bottom: 3px;
+     border: 1px solid transparent;
+     border-radius: 3px;
+ } 
 </style>  
 <div>
   <div id='about_div'
@@ -224,78 +229,27 @@
 			       name='name'
 			       value='<%= formfields.name %>'>
 			<label class='control-label control-error hidden'
-			       for='experiment_name'></label>
+			       for='name'></label>
 		      </div>
 		    </div>
 		  </div>
-		  <% if (projects && Object.keys(projects).length) { %>
-		    <% if (Object.keys(projects).length == 1) { %>
-		      <!-- We need this to look like the selector below,
-			   for the JS code. -->
-		      <div class='hidden' id='project_selector'>
-			<input id='profile_pid' type='hidden'
-			       name='pid'
-			       value='<%- formfields.pid %>'>
-		      </div>
-		    <% } else { %>
-		      <div class='form-horizontal experiment_option'
-			   id='project_selector'>
-			<div class='form-group format-me'>
-			  <label class='col-sm-4 control-label'
-				 style='text-align: right;'>Project:</label>
-			  <div class='col-sm-6'>
-			    <select name="pid"
-				    data-key='pid'
-				    id='profile_pid'
-				    class='form-control'>
-			      <option value=''>Please Select</option>
-			      <% _.each(projects, function(gids, name) { %>
-				<option 
-				    <% if (formfields.pid == name) { %>
-				    selected
-				    <% } %>
-				    value='<%- name %>'><%- name %>
-				</option>
-			      <% }); %>
-			    </select>
-			    <label class='control-label control-error hidden'
-				   for='profile_pid'></label>
-			  </div>
-			</div>
-		      </div>
-		    <% } %>
-		    <div class='form-horizontal experiment_option hidden'
-			 id='group_selector'>
-		      <div class='form-group format-me'>
-			<label class='col-sm-4 control-label'
-			       style='text-align: right;'>Group:</label>
-			<div class='col-sm-6'>
-			  <select name='gid'
-				  data-key='gid'
-				  id='profile_gid'
-				  class='form-control'></select>
-			  <label class='control-label control-error hidden'
-				 for='profile_gid'></label>
-			</div>
-		      </div>
-		    </div>
-		  <% } %>
+		  <!-- The JS code fills this in -->
+		  <div id='project_selector'></div>
+		  <!-- This is updated when project changes -->
+		  <div id='group_selector'></div>
 		  <% if (clusterselect) { %>
 		    <div id='aggregate_selector'>
 		      <!-- The JS code fills this in -->
 		      <div id='cluster_selector' class='hidden'></div>
-		      <div id='reservation_warning' class='hidden col-sm-12'>
-			<label id='reservation_text' class='alert-warning col-sm-10 col-sm-offset-1'>There is an upcoming reservation on this cluster that may impact your ability to reserve or extend resources. This reservation is from <span class='reservation_start'>start</span> until <span class='reservation_end'>end</span>.</label> 
+		      <div>
+			<div class="col-sm-offset-4 col-sm-6">
+			  <center class='site-wait hidden'>
+			    <img src='images/spinner.gif' />
+			  </center>
+			</div>
 		      </div>
-		      <div id='reservation_confirmation'
-			   class='hidden col-sm-12'>
-			<label id='reservation_text'
-			       class='alert-success col-sm-10 col-sm-offset-1'>
-			</label> 
-		      </div>
-		      <div id='reservation_future' class='hidden col-sm-12'>
-			<label id='reservation_text' class='alert-warning col-sm-10 col-sm-offset-1'>Project <span class="reservation_project"></span> has a reservation on this cluster beginning <span class='reservation_start'>start</span>.</label> 
-		      </div>
+		      <div id="reservation-warnings"
+			   class="col-sm-offset-2 col-sm-10 hidden"></div>
 		    </div>
 		  <% } else { %>
 		    <div id="nocluster-selector"></div>
@@ -479,7 +433,7 @@
 			   data-key="start_day"		 
 			   type="text">
 		    <label class='control-label control-error hidden'
-			   for='start_hour'></label>
+			   for='start_day'></label>
 		  </div>
 		  <div class="col-xs-4 format-me">
 		    <select name="start_hour"
@@ -515,7 +469,7 @@
 		      <option value="23">11:00 PM</option>
 		    </select>
 		    <label class='control-label control-error hidden'
-			   for='start_day'></label>
+			   for='start_hour'></label>
 		  </div>
 		</div>
 		<div class="schedule-experiment">
@@ -729,159 +683,6 @@
     </div>
   </div>
 </div>
-<!-- This is the topology view modal -->
-<div id='quickvm_topomodal' class='modal fade'>
-  <div class='modal-dialog'  id='showtopo_dialog'>
-    <div class='modal-content'>
-      <div class='modal-header'>
-	<button type='button' class='close' data-dismiss='modal'
-		aria-hidden='true'>
-	  &times;</button>
-	<h3>Select a Profile</h3>
-      </div>
-      <div class='modal-body'>
-	<!-- This topo diagram goes inside this div -->
-	<div class='row' id='showtopo_container'>
-	  <div class='form-group col-md-3 col-sm-3 col-xs-3'>
-	    <input type='text' class='form-control'
-		   placeholder='Search'
-		   id='profile_picker_search'>
-	    <ul class='list-group' id='profile_name'
-		name='profile'>
-		<span id='title_recently_used'>
-		  <% if (showpopular) { %>Popular<% }
-		     else { %>Recent<% } %>
-		  <span class='category_collapsable expanded'></span>
-		</span>
-		<ul class='list-category' id='recently_used'>
-		<% for (var i = 0; i < recent.length; i++) { 
-		  var key = recent[i][0]; var value = recent[i][1]; %>
-		  <li class='list-group-item profile-item clearfix'
-		      value='<%- key %>' name='<%- value.name %>'><%- value.name %>
-		    <div class="project_info pull-right"><%- value.project %></div>
-		  </li>
-		<% }; %>
-		</ul>
-
-	      <% var hidefav = (!$.isEmptyObject(favorites)) ? '' : 'hidden';%>
-		<span id='title_favorites' class='<%- hidefav %>'>
-		  Favorites
-		  <span class='category_collapsable expanded'></span>
-		</span>
-		<ul class='list-category' id='favorites'>
-		<% _.each(favorites, function(value, key) {  %>
-		  <li class='list-group-item profile-item clearfix'
-		      value='<%- key %>' name='<%- value.name %>'><%- value.name %>
-		    <div class="project_info pull-right"><%- value.project %></div>
-		  </li>
-		<% }); %>
-		</ul>   
-
-		<% var hidemy = (!$.isEmptyObject(myprofiles)) ? '' : 'hidden';%>
-		<span id='title_myprofiles' class='<%- hidemy %>'>
-		  My Profiles
-		  <span class='category_collapsable expanded'></span>
-		</span>
-		<ul class='list-category' id='myprofiles'>
-		<% _.each(myprofiles, function(value, key) {  %>
-		  <li class='list-group-item profile-item clearfix'
-		      value='<%- key %>' name='<%- value.name %>'><%- value.name %>
-		    <div class="project_info pull-right"><%- value.project %></div>
-		  </li>
-		<% }); %>
-		</ul>
-
-	      <% _.each(projprofiles, function(value, key) { %>
-		<span id='title_<%- key %>_profiles'>
-		  <%- key %>
-		  <span class='category_collapsable expanded'></span>
-		</span>
-		<ul class='list-category' id='<%- key %>_profiles'>
-		<% _.each(value, function(v,k) { %>
-		  <li class='list-group-item profile-item clearfix'
-		    value='<%- k %>' name='<%- v.name %>'><%- v.name %> 
-		  </li>
-		<% }); %>
-		</ul>
-	      <%}); %>
-
-		<span id='title_default_profiles'>
-		  Default Profiles
-		  <span class='category_collapsable expanded'></span>
-		</span>
-		<ul class='list-category' id='default_profiles'>
-	      <% _.each(systemprofiles, function(value, key) { %>
-		<li class='list-group-item profile-item clearfix'
-		    value='<%- key %>' name='<%- value.name %>'><%- value.name %>
-		</li>
-	      <% }); %>
-		</ul>
-
-		<span id='title_other_profiles'>
-		  Other Profiles
-		  <span class='category_collapsable expanded'></span>
-		</span>
-		<ul class='list-category' id='other_profiles'>
-	      <% _.each(otherprofiles, function(value, key) { %>
-		<li class='list-group-item profile-item clearfix'
-		    value='<%- key %>' name='<%- value.name %>'><%- value.name %>
-		    <div class="project_info pull-right"><%- value.project %></div>
-		</li>
-	      <% }); %>
-		</ul>
-	    </ul>
-	  </div> 
-	  <div class='col-md-9 col-sm-9 col-xs-9'>
-	    <div class='panel-body'>
-	      <span id='showtopo_title'></span>
-	      <div id='showtopo_details'>
-		  <div class='clearfix'>
-		      <div class='col-md-3'>Created By:</div>
-		      <div id='showtopo_author' class='col-md-9'></div>
-		  </div>
-		  <div class='clearfix'>
-		      <div class='col-md-3'>Project:</div>
-		      <div id='showtopo_project' class='col-md-9'></div>
-		  </div>
-		  <div class='clearfix'>
-		      <div class='col-md-3'>Latest Version:</div>
-		      <div id='showtopo_version' class='col-md-9'></div>
-		  </div>
-		  <div class='clearfix hidden showtopo_repoinfo'>
-		      <div class='col-md-3'>Repo Based?:</div>
-		      <div id='showtopo_repobased' class='col-md-9'>Yes</div>
-		  </div>
-		  <div class='clearfix hidden showtopo_repoinfo'>
-		      <div class='col-md-3'>Repo Hash:</div>
-		      <div id='showtopo_repohash' class='col-md-9'></div>
-		  </div>
-		  <div class='clearfix'>
-		      <div class='col-md-3'>Last Updated:</div>
-		      <div id='showtopo_last_updated' class='col-md-9'></div>
-		  </div>
-		  <div class='clearfix'>
-		      <div class='col-md-3'>Description:</div>
-		      <div id='showtopo_description' class='col-md-9'></div>
-		  </div>
-	      </div>
-	      <div id='showtopo_div' class='jacks'></div>
-	    </div>
-	  </div>
-	</div>
-	<div id='showtopo_buttons' class='pull-right'>
-	  <button id='showtopo_select'
-		  class='btn btn-primary btn-sm'
-		  type='submit' name='select'>
-	    Select Profile</button>
-	  <button type='button' class='btn btn-default btn-sm'
-		  id='showtopo_cancel'		  
-		  data-dismiss='modal' aria-hidden='true'>
-	    Cancel</button>
-	</div>
-      </div>
-    </div>
-  </div>
-</div>
 <!-- Graph Help -->
 <div id='resgraph-help-modal' class='modal fade'>
   <div class='modal-dialog'>
@@ -1047,3 +848,4 @@
 <div id='editmodal_div'></div>
 <div id='save_paramset_div'></div>
 <div id='copy-profile-modal-div'></div>
+<div id='profile-picker-modal-div'></div>

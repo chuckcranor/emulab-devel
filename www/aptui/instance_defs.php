@@ -1450,7 +1450,9 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                                   "ismobile" => $aggregate->ismobile(),
                                   "nickname" => $aggregate->nickname(),
                                   "typelist" => $typelist,
-                                  "typeinfo" => $aggregate->typeinfo);
+                                  "typeinfo" => $aggregate->typeinfo,
+                                  "isfederate" => $aggregate->isfederate(),
+            );
         }
         else {
             $amlist[$urn] = $am;
@@ -1530,7 +1532,7 @@ function SpitAggregateStatus($extended = false, $user = null) {
     $status     = array();
     CalculateAggregateStatus($amlist, $fedlist, $status, $extended, $user);
     echo "<script type='text/plain' id='amlist-json'>\n";
-    echo htmlentities(json_encode($amlist));
+    echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
     echo "</script>\n";
     echo "<script type='text/plain' id='amstatus-json'>\n";
     echo htmlentities(json_encode($status));

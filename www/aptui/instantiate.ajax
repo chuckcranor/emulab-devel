@@ -793,7 +793,7 @@ function CheckStep2()
         if (isset($formfields["sites"]) && is_array($formfields["sites"])) {
             while (list($siteid, $am) = each($formfields["sites"])) {
                 if (!array_key_exists($am, $am_array)) {
-                    $errors["sites"] = "Invalid Aggregate: $siteid";
+                    $errors["sites[$siteid]"] = "Invalid Aggregate: $siteid";
                     break;
                 }
             }

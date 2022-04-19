@@ -400,6 +400,57 @@ class ReservationGroup
         $details["routes"]   = $routes;
         return $details;
     }
+
+    #
+    # Reservation info for the instantiate page; current and upcoming
+    # reservations in all of the projects a user is a member of.
+    # Only care about cluster reservations.
+    #
+    function ReservationInfo($projlist)
+    {
+        $current = array();
+        $future  = array();
+        $pidlist = array();
+
+        while (list($pid) = each($projlist)) {
+            $pidlist[] = "'" . $pid . "'";
+        }
+        $pidlist = join(",", $pidlist);
+
+        $query_result =
+            DBQueryFatal("select distinct gr.uuid,gr.aggregate_urn,".
+                         "       gr.type,gr.count ".
+                         "   from apt_reservation_group_reservations as gr ".
+                         "join apt_reservation_groups as g on ".
+                         "     g.uuid=gr.uuid ".
+                         "where gr.approved is not null and ".
+                         "     g.pid in ($pidlist)");
+        
+	while ($row = mysql_fetch_array($query_result)) {
+            $res = ReservationGroup::Lookup($row["uuid"]);
+            $urn = $row["aggregate_urn"];
+            $pid = $res->pid();
+
+            $info = array(
+                "pid"           => $pid,
+                "starttime"     => $res->start(),
+                "endtime"       => $res->end(),
+                "nodetype"      => $row["type"],
+                "nodecount"     => $row["count"],
+                "aggregate_urn" => $urn,
+            );
+
+            if ($res->Active()) {
+                $current[$pid][] = $info;
+                $current[$urn][$pid][] = $info;
+            }
+            else {
+                $future[$pid][] = $info;
+                $future[$urn][$pid][] = $info;
+            }
+        }
+        return array("current" => $current, "future" => $future);
+    }
 }
 
 class ReservationGroupReservation
