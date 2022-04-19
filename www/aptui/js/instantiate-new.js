@@ -3003,6 +3003,9 @@ $(function ()
 		if (hrn) {
 		    component_id = hrn.id;
 		}
+		if (component_id.startsWith("oai-wb")) {
+		    return;
+		}
 		//console.info("CheckForRadioUsage", manager_urn, component_id);
 		
 		if (_.has(radioinfo, manager_urn) &&
