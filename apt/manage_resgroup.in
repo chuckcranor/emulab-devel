@@ -1343,7 +1343,8 @@ sub DoDelete()
 		  "Resources in your reservation group in project $pid ".
 		  "have been removed from the group.\n".
 		  (defined($reason) ? "\n$reason\n" : "\n") . $string,
-		  $brand->ReservationsEmailAddress());
+		  $brand->ReservationsEmailAddress(),
+		  "BCC: " . $brand->ReservationsEmailAddress());
 	    }
 	}
     }
@@ -1381,7 +1382,8 @@ sub DoDelete()
 			  "has been deleted.\n".
 			  (defined($reason) ? "\n$reason\n" : "\n"). 
 			  $resgroup->InfoString(),
-			  $brand->ReservationsEmailAddress());
+			  $brand->ReservationsEmailAddress(),
+			  "BCC: " . $brand->ReservationsEmailAddress());
 	    }
 	}
     }
@@ -2080,7 +2082,9 @@ sub DoApprove()
 			  (defined($reason) ? "\n$reason\n" : "") . "\n" .
 			  $resgroup->InfoString() .
 			  "\n".
-			  "See: $url", $brand->ReservationsEmailAddress());
+			  "See: $url",
+			  $brand->ReservationsEmailAddress(),
+			  "BCC: " . $brand->ReservationsEmailAddress());
 
 	# Schedule an announcement for the user.
 	$resgroup->AddAnnouncement();
@@ -2166,7 +2170,6 @@ sub DoInfoOrWarn()
 		      $resgroup->InfoString() .
 		      "See: $url",
 		      $brand->ReservationsEmailAddress(),
-		      "CC: "  . $brand->OpsEmailAddress() . "\n" .
 		      "BCC: " . $brand->ReservationsEmailAddress());
   done:
     if (defined($webtask)) {
@@ -2293,7 +2296,9 @@ sub DoCancel()
 			  "scheduled for cancellation, is no longer scheduled ".
 			  "for cancellation.\n\n".
 			  $resgroup->InfoString() .
-			  "See: $url", $brand->ReservationsEmailAddress());
+			  "See: $url", 
+			  $brand->ReservationsEmailAddress(),
+			  "BCC: " . $brand->ReservationsEmailAddress());
 	}
 	else {
 	    my $whentime = TBDateStringGMT($when);
@@ -2309,7 +2314,9 @@ sub DoCancel()
                 "Please contact the support staff if you would like to keep\n".
 		"your reservation.\n\n".
 		$resgroup->InfoString() .
-		"See: $url", $brand->ReservationsEmailAddress());
+		"See: $url", 
+		$brand->ReservationsEmailAddress(),
+		"BCC: " . $brand->ReservationsEmailAddress());
 	}
     }
     
