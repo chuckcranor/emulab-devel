@@ -3198,7 +3198,7 @@ sub AdminURL($)
     $wwwbase .= "/apt"
 	if ($project->Brand()->isEmulab());
 
-    return $wwwbase . "/manage_profile.php?uuid=$uuid";
+    return $wwwbase . "/manage_profile.php?uuid=$uuid&action=edit";
 }
 
 #
