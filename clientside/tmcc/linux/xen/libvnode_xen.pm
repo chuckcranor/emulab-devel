@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1950,12 +1950,38 @@ okay:
 	#
 	# Not sure how to do this for PVM.
 	#
+	if (exists($attributes->{'XEN_USBCONTROLLERS'})) {
+	    my $controllers = $attributes->{'XEN_USBCONTROLLERS'};
+	    #
+	    # controllers are expected to be in "[...],[...]" format.
+	    #
+	    addConfig($vninfo, "usbctrl=$controllers", 2);
+	}
 	if (exists($attributes->{'XEN_USBDEVICES'})) {
 	    my $devices = $attributes->{'XEN_USBDEVICES'};
-	    addConfig($vninfo, "usb=1", 2);
-	    addConfig($vninfo, "usbdevice=[".
-		      join(",", map {"'" . $_ . "'"} split(",", $devices)) .
-		      "]", 2);
+
+	    if (!exists($attributes->{'XEN_USBCONTROLLERS'})) {
+		addConfig($vninfo, "usb=1", 2);
+	    }
+	    my $devstring;
+
+	    # How annoying.
+	    if ($xeninfo{xen_major} > 4 ||
+		($xeninfo{xen_major} == 4 && $xeninfo{xen_minor} >= 11)) {
+		$devstring = "usbdev=";
+	    }
+	    else {
+		$devstring = "usbdevice=";
+	    }
+
+	    if ($devices =~ /^\s*\[/) {
+		$devstring .= $devices;
+	    }
+	    else {
+		$devstring .= "[" .
+		    join(",", map {"'" . $_ . "'"} split(",", $devices)) . "]";
+	    }
+	    addConfig($vninfo, $devstring, 2);
 	}
     } else {
 	if ($os eq "FreeBSD") {
