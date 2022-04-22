@@ -1151,7 +1151,7 @@ else {
     # XXX we cannot do this for datasets and vnodes since the running
     # imagezip is in the client image and may not be up to date.
     #
-    if ($maximagedata > 0 && !$isdataset && !$isvirtnode) {
+    if (0 && $maximagedata > 0 && !$isdataset && !$isvirtnode) {
 	$zipperopts .= ","
 	    if ($zipperopts);
 	$zipperopts .= "A=$maximagedata";
