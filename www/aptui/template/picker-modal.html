@@ -66,7 +66,7 @@
 		<% }); %>
 	      </ul>
 
-	      <% _.each(categories.projprofiles, function(value, key) { %>
+	      <% _.each(categories.inproj, function(value, key) { %>
 		<span id='title_<%- key %>_profiles'>
 		  <%- key %>
 		  <span class='category_collapsable expanded'></span>
@@ -85,7 +85,7 @@
 		<span class='category_collapsable expanded'></span>
 	      </span>
 	      <ul class='list-category' id='default_profiles'>
-		<% _.each(categories.systemprofiles, function(value, key) { %>
+		<% _.each(categories.sysproj, function(value, key) { %>
 		  <li class='list-group-item profile-item clearfix'
 		      value='<%- key %>'
 		      name='<%- value.name %>'><%- value.name %>
@@ -98,7 +98,7 @@
 		<span class='category_collapsable expanded'></span>
 	      </span>
 	      <ul class='list-category' id='other_profiles'>
-		<% _.each(categories.otherprofiles, function(value, key) { %>
+		<% _.each(categories.otherproj, function(value, key) { %>
 		  <li class='list-group-item profile-item clearfix'
 		      value='<%- key %>'
 		      name='<%- value.name %>'><%- value.name %>

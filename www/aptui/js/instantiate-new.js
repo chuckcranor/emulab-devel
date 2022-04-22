@@ -1868,7 +1868,7 @@ $(function ()
 	var $xmlthing =
 	    sup.CallServerMethod(null,
 				 "instantiate", "GetImageInfo",
-				 {"images"  : foundImages,
+				 {"images"  : images,
 				  "project" : pid});
 	$xmlthing.done(callback);
 	return true;
