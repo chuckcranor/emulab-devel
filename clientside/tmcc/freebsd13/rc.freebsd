@@ -25,10 +25,25 @@ use English;
 use Getopt::Std;
 
 #
+# Turn off line buffering on output
+#
+$| = 1;
+
+# Drag in path stuff so we can find emulab stuff.
+BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
+
+#
+# Load the OS independent support library. It will load the OS dependent
+# library and initialize itself.
+#
+use libsetup;
+
+#
 # Move swap partition to end of root disk.
 #
 my $moveswap = 0;
-my $newssize = (8 * 1024 * 1024 * 1024 / 512);
+my $newssize = (GENVNODE() && GENVNODETYPE() eq "xen") ?
+    (1 * 1024 * 1024 * 1024 / 512) : (8 * 1024 * 1024 * 1024 / 512);
 
 #
 # Automatically grow the partition/filesystem as much as possible.
@@ -209,8 +224,12 @@ sub gpartswapenable($$$$)
 	if ($ptype ne "free") {
 	    my $pend = $pstart + $psize;
 	    if ($pend > $sstart) {
+		# if we already found a swap partition, just use that
+		if ($opart) {
+		    addswap("${disk}s${opart}", $osize);
+		}
 		print STDERR "*** WARNING: existing partition $ppart overlaps with desired swap partition, ".
-		    "no swap enabled\n";
+		    ($opart ? "using the old one\n" : "no swap enabled\n");
 		return 0;
 	    }
 	}
