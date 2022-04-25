@@ -1634,12 +1634,27 @@ sub LoadVirtNodes($)
 	if (!defined($fixnode) || $vnode->_fixedvm() eq $vname) {
 	    # Lets make sure its a real node.
 	    my $fixvname = $vnode->_fixedvm();
-	    
-	    if (!defined(Node->Lookup($fixvname))) {
+
+	    my $realnode = Node->Lookup($fixvname);
+	    if (!defined($realnode)) {
 		tberror("Cannot fix $vnode to $fixvname; No such phys node\n");
 		return -1;
 	    }
 	    $vnode->_fixedvm(undef);
+
+	    #
+	    # If fixed to a specific *shared* node, then we know the OS
+	    # that needs to be a parent of the VM's OS, which might not
+	    # be the default parent we set it to above.
+	    #
+	    if ($realnode->sharing_mode()) {
+		my $realos = $realnode->RunningOsImage();
+		if (!defined($realos)) {
+		    tberror("No current OS for shared node $fixvname\n");
+		    return -1;
+		}
+		$vnode->_parent_osinfo($realos);
+	    }
 	    next;
 	}
 	my $osimage;
