@@ -1791,9 +1791,11 @@ sub ReservationIdleDetection($)
 
     if (exists($argref->{"clear"}) && $argref->{"clear"} == 1) {
 	$reservation->DisableIdleDetection();
+	print STDERR "$reservation idledetection disabled\n";
     }
     else {
 	$reservation->EnableIdleDetection();
+	print STDERR "$reservation idledetection enabled\n";
     }
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
