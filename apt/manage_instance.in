@@ -2318,13 +2318,15 @@ sub ExtendInternal($$$$$$)
     };
     my $responses;
 
+    # Skip terminated and canceled aggregates.
+    my @aggregates = $instance->ActiveAggregateList();
+
     #
     # The retries could leave the user hanging on the modal for close
     # to a minute, but thats much better then bailing too soon cause of
     # a transient issue.
     #
-    $errcode = CallMethodOnAggregates($coderef, 2, \$responses,
-				      $instance->AggregateList());
+    $errcode = CallMethodOnAggregates($coderef, 2, \$responses, @aggregates);
     if ($errcode) {
 	$errmsg = $responses;
 	goto bad;
@@ -2335,7 +2337,7 @@ sub ExtendInternal($$$$$$)
     # the only error is a network error, we might be able to use the
     # saved max extension.
     #
-    foreach my $agg ($instance->AggregateList()) {
+    foreach my $agg (@aggregates) {
 	my $response = shift(@{$responses});
 	my $code     = $response->code();
 	my $aptagg   = $agg->GetAptAggregate();
