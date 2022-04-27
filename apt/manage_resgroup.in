@@ -1254,7 +1254,7 @@ sub DoDelete()
 		# And ignore expired experiments, they hang around until
 		# we can clean up the state at buses that went offline.
 		next
-		    if ($instance->IsExpired());
+		    if ($instance->IsExpired() || $instance->IsCanceled());
 	    
 		if ($resgroup->RoutesInUse($instance) && !$force) { 
 		    $resgroup->Unlock() if (!$nolock);
@@ -2591,6 +2591,10 @@ sub DoIdleDetection()
 		next;
 	    }
 	    push(@reservations, $res);
+	    # If disabling and the res marked for cancel, do the uncancel
+	    if ($clear && $res->canceled()) {
+		$res->ClearCanceled();
+	    }
 	}
     }
     # nopush is a debugging flag only.
