@@ -251,13 +251,25 @@ sub LookForThingsToDo()
 	my $busid      = $bus->busid();
 	my $routeid    = $bus->routeid();
 	my $routename  = $bus->routename();
+	my $instance;
 	my $errmsg;
 
 	next
 	    if ($bus->disabled() || $bus->adminonly());
 	
-	# Current holder of the bus.
-	my ($instance) = APT_Instance::Aggregate->LookupByURN($bus->urn());
+	# Current holder of the bus. Terminated does not count.
+	my @instances = APT_Instance::Aggregate->LookupByURN($bus->urn());
+	foreach my $i (@instances) {
+	    next
+		if ($i->IsTerminated());
+	    
+	    my $aggregate = $instance->GetAggregate($bus->urn());
+
+	    if ($aggregate->status() ne "terminated") {
+		$instance = $i;
+		last;
+	    }
+	}
 	
 	# Current holder of the route the bus is on.
 	my $routeholder;
@@ -275,15 +287,7 @@ sub LookForThingsToDo()
 	}
 	if (defined($instance) &&
 	    (!defined($routeholder) || !$instance->SameInstance($routeholder))){
-
-	    #
-	    # If this aggregate is in the terminated state, it no longer
-	    # counts, it is just taking up space in the database until
-	    # the entire instance can be terminated. Say nothing.
-	    #
 	    my $aggregate = $instance->GetAggregate($bus->urn());
-	    next
-		if ($aggregate->status() eq "terminated");
 
 	    print "$busid still held by " . $instance->Printable() . " ";
 
