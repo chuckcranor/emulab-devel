@@ -828,6 +828,8 @@ sub DoSnapshot()
 		$response->code() == GENIRESPONSE_NETWORK_ERROR);
 
 	my $blob = $response->value();
+	#print Dumper($blob);
+	
 	# This is the per-aggregate status, we always set this for web UI.
 	$aggregate->UpdateSliverStatusAll($blob->{'details'});
 	
@@ -857,7 +859,7 @@ sub DoSnapshot()
 		$response->code() == GENIRESPONSE_NETWORK_ERROR);
 
 	my $imageblob = $response->value();
-	# print Dumper($imageblob);
+	#print Dumper($imageblob);
 	if (defined($swebtask)) {
 	    my %blobcopy = %{ $imageblob };
 
@@ -2292,7 +2294,7 @@ sub ExtendInternal($$$$$$)
 	}
 	if (!$force) {
 	    $errmsg = "Extension refused cause it conflicts with an existing ".
-		"Range reservation";
+		"Route reservation";
 	    $errcode = 1;
 	    goto bad;
 	}
@@ -2532,7 +2534,7 @@ sub DoMaxExtensionInternal($$)
 	goto bad;
     }
 
-    foreach my $aggregate ($instance->AggregateList()) {
+    foreach my $aggregate ($instance->ActiveAggregateList()) {
 	next
 	    if ($aggregate->isAL2S() || $aggregate->isStitch());
 	push(@aggregates, $aggregate);
@@ -3133,7 +3135,7 @@ sub DoRebootOrReload($)
     my %slice_urns  = ();
     my %node_ids    = ();
     my @slivers     = ();
-    foreach my $obj ($instance->AggregateList()) {
+    foreach my $obj ($instance->ActiveAggregateList()) {
 	# Not finished or failure.
 	next
 	    if (!$obj->manifest());
@@ -3303,7 +3305,7 @@ sub DoRecovery()
     #
     my $sliver_urn;
     my $sliver;
-    foreach my $obj ($instance->AggregateList()) {
+    foreach my $obj ($instance->ActiveAggregateList()) {
 	my $manifest = GeniXML::Parse($obj->manifest());
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest for $obj");
@@ -3384,7 +3386,7 @@ sub DoFlash()
     #
     my $sliver_urn;
     my $sliver;
-    foreach my $obj ($instance->AggregateList()) {
+    foreach my $obj ($instance->ActiveAggregateList()) {
 	my $manifest = GeniXML::Parse($obj->manifest());
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest for $obj");
@@ -3643,6 +3645,9 @@ sub DoDeleteNodes()
     my %allmap      = ();
     my %aggmap      = ();
     foreach my $obj ($instance->AggregateList()) {
+	next
+	    if (!$obj->manifest());
+	
 	my $manifest = GeniXML::Parse($obj->manifest());
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest");
@@ -4856,14 +4861,14 @@ sub DoLinktest()
     #
     my @aggregates = ();
 
-    if ($instance->AggregateList() > 1) {
-	foreach my $agg ($instance->AggregateList()) {
+    if ($instance->ActiveAggregateList() > 1) {
+	foreach my $agg ($instance->ActiveAggregateList()) {
 	    push(@aggregates, $agg)
 		if ($agg->physnode_count() || $agg->virtnode_count());	    
 	}
     }
     else {
-	@aggregates = $instance->AggregateList();
+	@aggregates = $instance->ActiveAggregateList();
     }
 
     #
@@ -5164,7 +5169,7 @@ sub DoPrestageImages()
 	}
     }
     else {
-	@aggregate_list = $instance->AggregateList();
+	@aggregate_list = $instance->ActiveAggregateList();
 	$wholeexpt = 1;
     }
 
@@ -5549,7 +5554,7 @@ sub DoUtilization()
     # Get the nodeid to client id mapping
     #
     my %client_ids = ();
-    foreach my $aggregate ($instance->AggregateList()) {
+    foreach my $aggregate ($instance->ActiveAggregateList()) {
 	#
 	# Skip aggregates with no nodes.
 	#
@@ -5755,7 +5760,7 @@ sub DoIdleData()
     #
     # Cull out any aggregates with no nodes.
     #
-    foreach my $aggregate ($instance->AggregateList()) {
+    foreach my $aggregate ($instance->ActiveAggregateList()) {
 	push(@aggregates, $aggregate)
 	    if ($aggregate->physnode_count() || $aggregate->virtnode_count());
     }
@@ -6364,7 +6369,7 @@ sub DoTop()
     my $aggregate;
     my $component_id;
 
-    foreach my $obj ($instance->AggregateList()) {
+    foreach my $obj ($instance->ActiveAggregateList()) {
 	my $manifest = GeniXML::Parse($obj->manifest());
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest");
