@@ -4641,6 +4641,27 @@ $(function ()
 		$('#destroy-quarantine-checkbox').prop("checked", false);
 	    }
 	});
+	$('#destroy-experiment-modal .traffic-violation').click(function (e) {
+	    e.preventDefault();
+	    var msg =
+		"Please tell us what you are doing, you are sending a very\n" +
+		"unusual amount of traffic over the shared control network\n " +
+		"instead of your own internal network(s). Your internal\n" +
+		"networks have IP addresses in the 10.XXX.YYY.ZZZ range, see\n"+
+		"/etc/hosts on your nodes for the specific addresses to use\n" +
+		"in your software configuration.\n\n" +
+		"We need to know very soon so we do not have to terminate\n" +
+		"this experiment. You are not permitted to send high volume\n" +
+		"traffic on the public facing shared network!\n" +
+		"-------------------------------------------------------\n" +
+		$('#destroy-experiment-reason').val();		
+	    
+	    $('#destroy-experiment-reason').val(msg);
+	});
+	if (isadmin) {
+	    $('#destroy-experiment-modal .traffic-violation')
+		.removeClass("hidden");
+	}
     }
     
     function WarnExperiment()
