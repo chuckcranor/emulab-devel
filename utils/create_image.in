@@ -219,6 +219,7 @@ sub cleanup();
 sub fatal($);
 sub check_progress($$);
 sub run_with_ssh($$);
+sub ssh_command($$;$);
 
 my $nodereboot	= "$TB/bin/node_reboot";
 my $createimage = "/usr/local/bin/create-versioned-image";
@@ -1307,19 +1308,11 @@ if ($delta || $signature) {
 if ($isec2node) {
     my $safe_target = User::escapeshellarg($target);
     
-    my $cmd = "$TB/bin/sshtb -host $CONTROL $EC2SNAP -u $user_uid ".
+    my $cmd = "$EC2SNAP -u $user_uid ".
 	"$safe_target $pid $user_uid $imageid $ofilename";
-    print STDERR "About to: '$cmd'\n" if (1 || $debug);
-
-    my $SAVEUID	= $UID;
-    $EUID = $UID = 0;
-
-    system($cmd);
-    fatal("'$cmd' failed")
-	if ($?);
-
-    $EUID = $UID = $SAVEUID;
-
+    if (ssh_command($CONTROL, $cmd)) {
+	fatal("$CONTROL: '$cmd' failed");
+    }
     if (defined($webtask)) {
 	$webtask->status("finishing");
     }
@@ -1339,6 +1332,10 @@ if ($isec2node) {
 # naming convention. We really need a client-side script to do this
 # check correctly. But you know...backward compatibility.
 #
+# XXX surprise! Vnode images don't have a device either. Resort to more
+# hinky-ness. We first ssh over and do a "df /" and then parse the
+# root dev out of that! Again, all in the name of backward compatibility.
+#
 # XXX Unless we are a vnode or a dataset in which case the node will
 # not be in an MFS and the latter check is not made either because it
 # would require a newer imagezip binary which we cannot guarantee is
@@ -1347,39 +1344,77 @@ if ($isec2node) {
 # capture has started.
 #
 if ($maximagedata) {
-    # if it is a dataset, we have to specify a type, otherwise a partition
-    # XXX assume Linux, if wrong we will check again later.
+    my ($cmd, $outref);
+    my $fssize = 0;
+
+    #
+    # If it is a dataset, we have to specify the type of the filesystem
+    # we expect, otherwise it will be an MBR partition on the boot disk.
+    # XXX For a dataset, we assume a Linux filesystem.
+    #
     my $arg = $isdataset ? "-l" : "-s " . $image->loadpart();
 
-    # XXX no device for datasets, again assume linux (with LVM)
-    if ($isdataset && !$device) {
-	($device = $bsname) =~ s/-/--/g;
-	$device = "/dev/mapper/emulab-$device";
-    }
-
-    my $cmd = "$TB/bin/sshtb -n -o ConnectTimeout=10 -host $node_id ".
-	"/usr/local/bin/imagezip -i -F 0 $arg $device";
-    print STDERR "About to: '$cmd'\n" if ($debug);
-
-    my $SAVEUID	= $UID;
-    $EUID = $UID = 0;
-    my @output = `$cmd 2>&1`;
-    $EUID = $UID = $SAVEUID;
-
-    if ($? == 0) {
-	foreach my $line (@output) {
-	    if ($line =~ /^Total Number of Valid Sectors: (\d+)/) {
-		# XXX assumes 512 byte sectors
-		my $mib = int($1 / 2048);
-		print STDERR "imagezip returned $mib, limit $maximagedata\n"
-		    if ($debug);
-		if ($mib > $maximagedata) {
-		    # XXX do not reboot
-		    $nomfs = 1;
-		    fatal("Amount of allocated data ($mib MiB) exceeds ".
-			  "the maximum allowed ($maximagedata MiB)");
+    if (!$device) {
+	# XXX no device for datasets, again assume linux (with LVM)
+	if ($isdataset) {
+	    ($device = $bsname) =~ s/-/--/g;
+	    $device = "/dev/mapper/emulab-$device";
+	}
+	# XXX no device for vnodes either, ssh over and do "df /"
+	elsif ($isvirtnode) {
+	    $cmd = "df -k /";
+	    if (ssh_command($node_id, $cmd, \$outref) == 0) {
+		foreach my $line (@$outref) {
+		    if ($line =~ /^(\/dev\/\S+)\s+\d+\s+(\d+).*\/\s*$/) {
+			$device = $1;
+			# XXX strip the partition identifier
+			if ($device =~ /^(.*)(s1a|1)$/) {
+			    $device = $1;
+			}
+			# Remember the used amount in case imagezip fails
+			$fssize = int($2 / 1024)
+			    if ($2);
+			last;
+		    }
 		}
 	    }
+	}
+    }
+
+    #
+    # If we have a target device, we first try to run imagezip in "info"
+    # mode which will quickly tell us how much allocated data would be saved.
+    # Failing that, we try a "df" on the device.
+    #
+    if ($device) {
+	$cmd = "/usr/local/bin/imagezip -i -F 0 $arg $device";
+	if (ssh_command($node_id, $cmd, \$outref) == 0) {
+	    foreach my $line (@$outref) {
+		if ($line =~ /^Total Number of Valid Sectors: (\d+)/) {
+		    # XXX assumes 512 byte sectors
+		    $fssize = int($1 / 2048);
+		    print STDERR "imagezip returned $fssize, limit $maximagedata\n"
+			if ($debug);
+		}
+	    }
+	}
+	elsif (!$fssize) {
+	    $cmd = "df -k $device";
+	    if (ssh_command($node_id, $cmd, \$outref) == 0) {
+		foreach my $line (@$outref) {
+		    if ($line =~ /^$device\s+\d+\s+(\d+).*\/\s*$/) {
+			$fssize = int($1 / 1024)
+			    if ($1);
+			last;
+		    }
+		}
+	    }
+	}
+	if ($fssize && $fssize > $maximagedata) {
+	    # XXX do not reboot node from cleanup (fatal)
+	    $nomfs = 1;
+	    fatal("Amount of allocated data ($fssize MiB) exceeds ".
+		  "the maximum allowed ($maximagedata MiB)");
 	}
     }
 }
@@ -1391,19 +1426,12 @@ if ($maximagedata) {
 # file in /var/run, the current version of prepare looks for it.
 #
 if ($update_prepare) {
-    my $cmd = "$TB/bin/sshtb -n -o ConnectTimeout=10 ".
-	"-host $node_id touch /var/run/updatemasterpasswdfiles";
-    print STDERR "About to: '$cmd'\n" if ($debug);
-
-    my $SAVEUID	= $UID;
-    $EUID = $UID = 0;
-    system($cmd);
-    if ($?) {
+    my $cmd = "touch /var/run/updatemasterpasswdfiles";
+    if (ssh_command($node_id, $cmd)) {
 	# XXX do not reboot
 	$nomfs = 1;
-	fatal("'$cmd' failed");
+	fatal("$node_id: '$cmd' failed");
     }
-    $EUID = $UID = $SAVEUID;
 }
 
 #
@@ -1411,9 +1439,6 @@ if ($update_prepare) {
 # Run on vnode host.
 #
 if ($isvirtnode || $isdataset) {
-    my $SAVEUID	= $UID;
-    $EUID = $UID = 0;
-
     if (!$isdataset) {
 	#
 	# XEN creates a problem; the physical host cannot actually
@@ -1423,12 +1448,10 @@ if ($isvirtnode || $isdataset) {
 	# does not run it, and a shutdown from outside the VM has the
 	# sae effect; prepare does not run. What a pain. 
 	#
-	my $cmd = "$TB/bin/sshtb -n -o ConnectTimeout=10 ".
-	    "-host $node_id $reboot_prep";
-	print STDERR "About to: '$cmd'\n" if ($debug);
-	system($cmd);
-	fatal("'$cmd' failed")
-	    if ($?);
+	my $cmd = "$reboot_prep";
+	if (ssh_command($node_id, $cmd)) {
+	    fatal("$node_id: '$cmd' failed");
+	}
     }
 
     # Mark webtask
@@ -1438,6 +1461,8 @@ if ($isvirtnode || $isdataset) {
     #
     # Now execute command and wait.
     #
+    my $SAVEUID	= $UID;
+    $EUID = $UID = 0;
     if ($NONFS) {
 	$result = run_with_ssh($command, $ofilename);
     } else {
@@ -2095,6 +2120,31 @@ sub run_with_ssh($$)
     }
 
     return $stat;
+}
+
+#
+# Just execute a command as root on the indicated node. Similar to
+# run_with_ssh() but without the progress monitoring. It is intended
+# for running the image capture, this is more for running quicky commands.
+#
+sub ssh_command($$;$)
+{
+    my ($host, $cmdstr, $outref) = @_;
+
+    my $cmd = "$TB/bin/sshtb -n -o ConnectTimeout=5 -host $host $cmdstr";
+    print STDERR "About to: '$cmd'\n" if ($debug);
+
+    my $SAVEUID	= $UID;
+    $EUID = $UID = 0;
+    if ($outref) {
+	my @output = `$cmd 2>&1`;
+	$$outref = \@output;
+    } else {
+	system($cmd);
+    }
+    $EUID = $UID = $SAVEUID;
+
+    return $?;
 }
 
 #
