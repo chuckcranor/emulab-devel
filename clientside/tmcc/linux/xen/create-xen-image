@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,7 +43,7 @@ my $TAR         = "/bin/tar";
 #
 sub usage()
 {
-    print STDOUT "Usage: create-image [-p] [-r] [-s slice] ".
+    print STDOUT "Usage: create-xen-image [-p] [-r] [-s slice] ".
 	"<vnodeid> filename KEY=VALUE ...\n";
     exit(-1);
 }
@@ -154,7 +154,14 @@ if ($status ne "") {
 	print STDERR "Container is still running. Waiting ...\n";
     }
     if ($status ne "stopped") {
-	die("Container would not stop!\n");
+	#
+	# XXX FreeBSD in a HVM domU seems to have issues with
+	# halting; FreeBSD will be halted but the domU will linger
+	# in some sort of comatose state.
+	#
+	if (!libvnode_xen::domainKill($vnodeid, 1)) {
+	    die("Container would not stop!\n");
+	}
     }
 }
 # Settling time :-)

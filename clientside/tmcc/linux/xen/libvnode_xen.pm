@@ -5220,6 +5220,48 @@ sub domainGone($$)
 }
 
 #
+# Highly specialized hack to get rid of FreeBSD instances in HVM domains.
+# When FreeBSD does a "halt" it leaves behind the domU in the "------" state. 
+# If we do an "xl destroy" we can kill them off in the eyes of xl. They
+# will leave behind a qemu process (the reason they hang in the first place?)
+# which we can optionally kill. These reproduces a lot of vnodeHalt but
+# skips the "xl shutdown" step which will hang for 90 seconds and not do
+# anything.
+#
+sub domainKill($$)
+{
+    my ($vnode_id,$killqemu) = @_;
+    my $zombiestate = "------";
+    my $domID;
+    
+    my $stat = domainStatus($vnode_id, \$domID);
+    if ($stat ne $zombiestate) {
+	print STDERR "$vnode_id: status='$stat', cannot kill\n"
+	    if ($debug);
+	return 0;
+    }
+    $stat = RunWithLock("xmtool", "$XM destroy $vnode_id");
+    if ($stat) {
+	print STDERR "$vnode_id: could not destroy\n"
+	    if ($debug);
+	return 0;
+    }
+    if (!domainGone($vnode_id, 3)) {
+	print STDERR "$vnode_id: destroyed, but did not go away\n"
+	    if ($debug);
+	return 0;
+    }
+    if ($killqemu && $domID) {
+	if (mysystem2("pkill -f 'qemu.* -xen-domid $domID '")) {
+	    print STDERR "$vnode_id: could not kill orphaned qemu ($domID)\n"
+		if ($debug);
+	}
+    }
+
+    return 1;
+}
+
+#
 # Add a line 'str' to the XenConfig array for vnode 'vmid'.
 #
 # If overwrite is set, any existing line with the same key is overwritten,
