@@ -15,8 +15,6 @@
 #
 # Updated 04/22/2022
 #
-# Fields in this file are: Service name, portnum/protocol, open-frequency, optional comments
-#
 zookeeper	2181/tcp	0.000000	# ZooKeeper master
 docker		2375/tcp	0.000076	# docker.com | Docker REST API (plain text)
 docker		2376/tcp	0.000076	# docker-s | docker.com | Docker REST API (ssl)

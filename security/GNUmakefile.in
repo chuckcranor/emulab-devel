@@ -32,6 +32,7 @@ BINS		= suexec runsuid
 SBINS		= genlastlog lastlog_daemon runmedusa sshbanlist
 OTHERS          = hosts.allow
 CTRL_SBINS      = sshbanlist
+NMAPSERVICES    = /usr/local/share/nmap/nmap-services
 
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = 
@@ -96,9 +97,13 @@ $(INSTALL_DIR)/opsdir/sbin/%: %
 	-mkdir -p $(INSTALL_DIR)/opsdir/sbin
 	$(INSTALL) $< $@
 
-$(INSTALL_DIR)/etc/nmap/nmap-services: nmap-services
+$(INSTALL_DIR)/etc/nmap/nmap-services: nmap-services.txt
 	-mkdir -p $(INSTALL_DIR)/etc/nmap
 	$(INSTALL_DATA) $< $@
+
+nmap-services.txt: nmap-services $(NMAPSERVICES)
+	cat $(NMAPSERVICES) | sed '/1024\/udp/q;p' > nmap-services.txt
+	cat $< >> nmap-services.txt
 
 clean:
 	rm -f *.o genlastlog suexec runsuid core
