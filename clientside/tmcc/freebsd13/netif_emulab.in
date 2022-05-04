@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -163,7 +163,7 @@ cnet_start()
 	# XXX skip Intel 10Gb for now; they require huge numbers of mbufs
 	# XXX this should no longer be a problem as of FreeBSD 10.1 and we
 	#     relax to allow ixl0 for certain Powder nodes.
-	ix[0-9]|ixl[1-9])
+	ix[1-9]|ixl[1-9])
 		;;
 	ath*)
 		;;
