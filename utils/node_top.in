@@ -47,6 +47,7 @@ my $webtask;
 #
 my $TB		= "@prefix@";
 my $NMAP        = "/usr/local/bin/nmap";
+my $NMAPDIR     = "$TB/etc/nmap";
 my $SCP		= "/usr/bin/scp";
 my $NODETOP     = "$TB/bin/node_top.sh";
 
@@ -221,7 +222,9 @@ sub GetTop($$)
     if (!$gpuonly) {
 	$EUID = $UID;
 	
-	$nmap = emutil::ExecQuiet("$NMAP -oN - -T4 --host-timeout 30s $node_id");
+	$nmap = emutil::ExecQuiet("$NMAP -oN - -T4 --host-timeout 30s ".
+				  "--datadir $NMAPDIR ".
+				  "-p '1-1024,[1025-60000]' $node_id");
 	if ($?) {
 	    print STDERR "$node_id failed: $nmap\n";
 	}

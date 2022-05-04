@@ -1,0 +1,92 @@
+#
+# List of third-party app ports that often show up in CloudLab experiments.
+# Intended for running NMAP scans on nodes for a quick check of potentially
+# exposed and vulnerable ports. Includes:
+#
+#  * Apache stuff: Hadoop (HDFS, MapReduce, YARN), Spark, ZooKeeper
+#  * Docker
+#  * ELK stack (Elasticsearch, Logstash, Kibana)
+#  * VNC
+#
+# XXX need to add UDP ports where appropriate, though scanning those
+# is slow.
+#
+# There are of course many other ports for many other apps.
+#
+# Updated 04/22/2022
+#
+# Fields in this file are: Service name, portnum/protocol, open-frequency, optional comments
+#
+zookeeper	2181/tcp	0.000000	# ZooKeeper master
+docker		2375/tcp	0.000076	# docker.com | Docker REST API (plain text)
+docker		2376/tcp	0.000076	# docker-s | docker.com | Docker REST API (ssl)
+zookeeper-peer	2888/tcp	0.000076	# ZooKeeper replicated peer communication
+zookeeper-lead	3888/tcp	0.000152	# ZooKeeper replicated peer leader election
+spark-webui	4040/tcp	0.000152	# Spark Web UI
+kibana		5601/tcp	0.000000	# Kibana server
+vnc-http	5800/tcp	0.005947	# Virtual Network Computer HTTP Access, display 0
+vnc-http-1	5801/tcp	0.000841	# Virtual Network Computer HTTP Access, display 1
+vnc-http-2	5802/tcp	0.000276	# Virtual Network Computer HTTP Access, display 2
+vnc-http-3	5803/tcp	0.000125	# Virtual Network Computer HTTP Access, display 3
+vnc		5900/tcp	0.023560	# rfb | Virtual Network Computer display 0 | Remote Framebuffer
+vnc-1		5901/tcp	0.023560	# rfb | Virtual Network Computer display 1 | Remote Framebuffer
+vnc-2		5902/tcp	0.023560	# rfb | Virtual Network Computer display 2 | Remote Framebuffer
+vnc-3		5903/tcp	0.023560	# rfb | Virtual Network Computer display 4 | Remote Framebuffer
+spark-rest	6066/tcp	0.100000	# Spark master REST job submission
+spark-job	7077/tcp	0.100000	# Spark master job submission
+spark-shuffle	7337/tcp	0.100000	# Spark shuffle service
+yarn-1		8030/tcp	0.000076	# YARN ResourceManager scheduler interface
+yarn-2		8031/tcp	0.000076	# YARN ResourceManager resource tracker
+yarn-3		8032/tcp	0.000076	# YARN ResourceManager applications manager
+yarn-3		8033/tcp	0.000076	# YARN ResourceManager admin interface
+yarn-4		8040/tcp	0.000076	# YARN NodeManager localizer IPC
+yarn-5		8042/tcp	0.000076	# YARN NodeManager HTTP Web interface
+yarn-6		8044/tcp	0.000076	# YARN NodeManager HTTPS Web interface
+yarn-7		8045/tcp	0.000076	# YARN Shared cache manager client interface
+yarn-8		8046/tcp	0.000076	# YARN Shared cache manager uploader interface
+yarn-9		8047/tcp	0.000076	# YARN Shared cache manager admin interface
+yarn-10		8048/tcp	0.000076	# YARN NodeManager collector service IPC
+yarn-11		8049/tcp	0.000076	# YARN NodeManager AMRMProxyService
+spark-alt	8080/tcp	0.000076	# Common alternate web port (e.g., Spark master, Zookeeper)
+spark-worker	8081/tcp	0.000076	# Common alternate web port (e.g., Spark worker)
+yarn-12		8088/tcp	0.000076	# YARN ResourceManager HTTP web application
+yarn-13		8089/tcp	0.000076	# YARN Router HTTP Web interface
+yarn-14		8090/tcp	0.000076	# YARN ResourceManager HTTPS web application
+yarn-15		8091/tcp	0.000076	# YARN Router HTTPS Web interface
+hdfs-1		8111/tcp	0.000076	# HDFS 3 federation router admin requests
+yarn-16		8188/tcp	0.000076	# YARN Timeline HTTP Web interface
+yarn-17		8190/tcp	0.000076	# YARN Timeline HTTPS Web interface
+hdfs-2		8480/tcp	0.000076	# HDFS 3 JournalNode HTTP server
+hdfs-3		8481/tcp	0.000076	# HDFS 3 JournalNode HTTPS server
+hdfs-4		8485/tcp	0.000076	# HDFS 3 JournalNode RPC server
+yarn-18		8788/tcp	0.000076	# YARN Shared cache manager HTTP Web interface
+elastic-1	9200/tcp	0.000076	# Elasticsearch server requests
+elastic-2	9300/tcp	0.000076	# Elasticsearch server internode
+logstash	9600/tcp	0.000076	# Logstash server or KMS REST API
+hdfs-5		9864/tcp	0.000076	# HDFS 3 datanode http server
+hdfs-6		9865/tcp	0.000076	# HDFS 3 datanode secure http server
+hdfs-7		9866/tcp	0.000076	# HDFS 3 datanode server
+hdfs-8		9867/tcp	0.000076	# HDFS 3 datanode ipc server
+hdfs-9		9868/tcp	0.000076	# HDFS 3 secondary namenode http server
+hdfs-10		9869/tcp	0.000076	# HDFS 3 secondary namenode HTTPS server
+hdfs-11		9870/tcp	0.000076	# HDFS 3 namenode web ui
+hdfs-12		9871/tcp	0.000076	# HDFS 3 namenode secure http server
+mapreduce-1	10020/tcp	0.000076	# MapReduce JobHistory Server IPC
+mapreduce-2	10033/tcp	0.000076	# MapReduce JobHistory Server admin
+yarn-19		10200/tcp	0.000076	# YARN Timeline RPC server
+httpfs		14000/tcp	0.000076	# HttpFS REST API
+spark-history	18080/tcp	0.000076	# Spark history UI
+mapreduce-3	19888/tcp	0.000076	# MapReduce JobHistory Server HTTP Web UI
+mapreduce-4	19890/tcp	0.000076	# MapReduce JobHistory Server HTTPS Web UI
+hdfs-13		50010/tcp	0.000076	# HDFS 2 datanode server
+hdfs-14		50020/tcp	0.000076	# HDFS 2 datanode ipc server
+hdfs-15		50070/tcp	0.000076	# HDFS 2 namenode web ui
+hdfs-16		50071/tcp	0.000076	# HDFS 3 federation router HTTP web requests
+hdfs-17		50072/tcp	0.000076	# HDFS 3 federation router HTTPS requests
+hfds-18		50075/tcp	0.000076	# HDFS 2 datanode http server
+hdfs-19		50090/tcp	0.000076	# HDFS 2 secondary namenode http server
+hdfs-20		50091/tcp	0.000076	# HDFS 2 secondary namenode HTTPS server
+hdfs-21		50100/tcp	0.000076	# HDFS 3 backup node server
+hdfs-22		50105/tcp	0.000076	# HDFS 3 backup node http server
+hdfs-23		50470/tcp	0.000076	# HDFS 2 namenode secure http server
+hdfs-34		50475/tcp	0.000076	# HDFS 2 datanode secure http server
