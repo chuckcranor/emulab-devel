@@ -54,6 +54,7 @@ $(function ()
     function PopulateTable(first, data)
     {
 	var html = "<tr>";
+	console.info("PopulateTable", data);
 
 	_.each(data[0], function (val, key) {
 	    if (_.contains(ignore, key)) {
@@ -64,6 +65,8 @@ $(function ()
 		html += "<th>lshw</th>";
 	    }
 	});
+	// Duplicate first column
+	html += "<th>Type Name</th>";
 	html += "</tr>";
 	$('#portal-hardware-table thead').append(html);
 
@@ -107,6 +110,8 @@ $(function ()
 		    html += "</td>";
 		}
 	    });
+	    // Duplicate first column
+	    html += "<td class='text-nowrap'>" + hwtype + "</td>";
 	    html += "</tr>";
 	    $('#portal-hardware-table tbody').append(html);
 	});
