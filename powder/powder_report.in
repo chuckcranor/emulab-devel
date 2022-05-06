@@ -40,8 +40,11 @@ sub usage()
 	"[-p filename]\n";
     exit(-1);
 }
-my $optlist   = "s:e:p:";
+my $optlist   = "s:e:p:PRB";
 my $start     = "2020-04-01";
+my $noprojects= 0;
+my $remoteonly= 0;
+my $busonly   = 0;
 my $end;
 my $pcsvname;
 
@@ -94,6 +97,15 @@ if (defined($options{"s"})) {
 }
 if (defined($options{"p"})) {
     $pcsvname = $options{"p"};
+}
+if (defined($options{"P"})) {
+    $noprojects = 1;
+}
+if (defined($options{"B"})) {
+    $busonly = 1;
+}
+if (defined($options{"R"})) {
+    $remoteonly = 1;
 }
 
 #
@@ -177,6 +189,7 @@ if (defined($end)) {
 else {
     $dopt = str2time($start);
 }
+if (!$remoteonly) {
 if (!open(HIST, "$WAP $NHIST -l -a -r -A -d $dopt $topt |")) {
     die("Could not start $NHIST");
 }
@@ -294,6 +307,7 @@ while (<HIST>) {
 	$stats{$pid}->{$exptidx}->{"compute"} += 1;
     }
 }
+}
 
 my $query_result =
     DBQueryFatal("select h.uuid,h.pid,h.creator,h.name,ia.aggregate_urn, ".
@@ -313,7 +327,7 @@ my $query_result =
 		 "where h.started is not null and ".
 		 "      h.started > '$start' and ".
 		 (defined($end) ? "h.started < '$end' and " : "") .
-		 "      f.uuid is null and ".
+#		 "      f.uuid is null and ".
 		 "      u.usr_email not like '%utah.edu' and ".
 		 "      u.usr_email not like '%rice.edu' and ".
 		 "      h.pid!='PMonitor' and ".
@@ -420,31 +434,33 @@ while (my ($uuid,$pid,$uid,$eid,$aggregate_urn,$count,$nickname,$seconds,
 
 #print Dumper(\%stats);
 
-# The output stream for the project CSV file.
-my $POUT = *STDOUT;
-if ($pcsvname) {
-   open(PCSV, "> $pcsvname") or
-	die("Could not create $pcsvname: $!\n");
-   $POUT = *PCSV;
-}
-print $POUT "project,leader,email,NSF awards,description\n";
-foreach my $project (@projects) {
-    my $creator = $project->GetLeader();
-    my @awards  = $project->NSFAwardList();
-    
-    print $POUT $project->pid() . "," . $creator->uid() . "," .
-	$creator->email() . ",";
-    if (@awards) {
-	print $POUT escapeString(join(",", @awards));
+if (!$noprojects) {
+    # The output stream for the project CSV file.
+    my $POUT = *STDOUT;
+    if ($pcsvname) {
+	open(PCSV, "> $pcsvname") or
+	    die("Could not create $pcsvname: $!\n");
+	$POUT = *PCSV;
     }
-    print $POUT ",";
-    print $POUT escapeString($project->why()) . "\n";
-}
-if ($pcsvname) {
-    close(PCSV);
-}
-else {
-    print $POUT "\n";
+    print $POUT "project,leader,email,NSF awards,description\n";
+    foreach my $project (@projects) {
+	my $creator = $project->GetLeader();
+	my @awards  = $project->NSFAwardList();
+    
+	print $POUT $project->pid() . "," . $creator->uid() . "," .
+	    $creator->email() . ",";
+	if (@awards) {
+	    print $POUT escapeString(join(",", @awards));
+	}
+	print $POUT ",";
+	print $POUT escapeString($project->why()) . "\n";
+    }
+    if ($pcsvname) {
+	close(PCSV);
+    }
+    else {
+	print $POUT "\n";
+    }
 }
 
 print "project,experiment,user,email,started,duration,compute,shared,cbrssdr,cellsdr,mmimo,iris,ota-nuc,ota-x310,oai-wb,phantomnet,FE-nuc1,FE-nuc2,buses\n";
@@ -483,6 +499,9 @@ foreach my $pid (sort(keys(%stats))) {
 	if ($compute == 0 && exists($types->{"pcvm"})) {
 	    $shared = 1;
 	}
+
+	next
+	    if ($busonly && !$buses);
 
 	print "$pid,$eid,$uid,$email,$started,$seconds,$compute,$shared,";
 	print "$cbrssdr,$cellsdr,$mmimo,$iris,$ota_nuc,$ota_x310,$oai_wb,";
