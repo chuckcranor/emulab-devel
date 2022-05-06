@@ -199,6 +199,10 @@ API = {
                             "help" : "Get manifests for a Portal experiment" },
     "experimentReboot"  : { "func" : "experimentReboot",
                             "help" : "Reboot nodes in a Portal experiment" },
+    "connectSharedLan"  : { "func" : "connectSharedLan",
+                            "help" : "Connect to a shared lan" },
+    "disconnectSharedLan" : { "func" : "disconnectSharedLan",
+                              "help" : "Disconnect from a shared lan" },
 };
 
 #
@@ -3383,11 +3387,106 @@ class experimentReboot:
         return rval
 
     def usage(self):
-        print("Usage: experimentStatus <optons> <experiment> node [node ...]")
+        print("Usage: experimentReboot <options> <experiment> node [node ...]")
         print("where:")
         print(" -f            - power cycle instead of reboot")
         print("experiment     - Either UUID or pid,name")
         print("node           - List of node client ids to reboot")
+        wrapperoptions();
+        return
+    pass
+
+#
+# Connect shared lan
+#
+class connectSharedLan:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "h", [ "help"]);
+            pass
+        except getopt.error as e:
+            print(e.args[0])
+            self.usage();
+            return -1;
+        
+        params = {};
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+                pass
+            pass
+
+        # Do this after so --help is seen.
+        if len(req_args) != 4:
+            self.usage();
+            return -1;
+
+        params["experiment"] = req_args[0]
+        params["sourcelan"]  = req_args[1]
+        params["targetexp"]  = req_args[2]
+        params["targetlan"]  = req_args[3]
+        rval,response = do_method("portal", "connectSharedLan", params)
+        return rval
+
+    def usage(self):
+        print("Usage: connectSharedLan <options> <experiment> <sourcelan> " +
+              "<target-experiment> <targetlan>")
+        print("where:")
+        print("experiment        - Either UUID or pid,name")
+        print("sourcelan         - Source lan client_id")
+        print("target-experiment - Either UUID or pid,name")
+        print("targetlan         - Target shared lan name")
+        wrapperoptions();
+        return
+    pass
+
+#
+# Disconnect shared lan
+#
+class disconnectSharedLan:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "h", [ "help"]);
+            pass
+        except getopt.error as e:
+            print(e.args[0])
+            self.usage();
+            return -1;
+        
+        params = {};
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+                pass
+            pass
+
+        # Do this after so --help is seen.
+        if len(req_args) != 2:
+            self.usage();
+            return -1;
+
+        params["experiment"] = req_args[0]
+        params["sourcelan"]  = req_args[1]
+        rval,response = do_method("portal", "disconnectSharedLan", params)
+        return rval
+
+    def usage(self):
+        print("Usage: connectSharedLan <options> <experiment> <sourcelan>")
+        print("where:")
+        print("experiment        - Either UUID or pid,name")
+        print("sourcelan         - Source lan client_id")
         wrapperoptions();
         return
     pass
