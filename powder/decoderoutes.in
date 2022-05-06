@@ -1,0 +1,223 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use JSON;
+
+#
+# Get the bus route data and spit out a list of lat/lon points.
+#
+sub usage()
+{
+    print "Usage: decoderoutes\n";
+    exit(1);
+}
+my $optlist   = "d";
+my $debug     = 0;
+
+# Configure variables.
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $WGET             = "/usr/local/bin/wget";
+my $CURL             = "/usr/local/bin/curl";
+
+#
+# Bus URLS. No documentation available.
+#
+my $LOCATION_URL = "https://www.uofubus.com/Services/JSONPRelay.svc/".
+    "GetMapVehiclePoints?ApiKey=ride1791";
+my $ROUTES_URL = "https://www.uofubus.com/Services/JSONPRelay.svc/".
+    "GetRoutesForMapWithScheduleWithEncodedLine?ApiKey=ride1791";
+
+use lib "@prefix@/lib";
+use emdb;
+use emutil;
+use libEmulab;
+use libtestbed;
+use APT_Instance;
+use APT_Aggregate;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub fatal($);
+sub polylineDecode($);
+
+# Local
+my %routes     = ();
+	  
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+
+#
+# Grab route dats
+#
+my $string = "";
+
+my $cmd  = "$WGET -q --no-check-certificate ".
+    "--dns-timeout=10 --connect-timeout=10 --read-timeout=30 ".
+    "--retry-connrefused --waitretry=30 -O - '$ROUTES_URL' ";
+
+if (!open(INFO, "$cmd |")) {
+    fatal("Could not fetch bus info from $ROUTES_URL");
+}
+while (<INFO>) {
+    $string .= $_;
+}
+if (!close(INFO)) {
+    fatal("Fetch failure from $ROUTES_URL");
+}
+chomp($string);
+
+my $data = eval { decode_json($string) };
+if ($@) {
+    fatal("Could not decode json location data - $@: $string");
+}
+if (ref($data) ne "ARRAY") {
+    fatal("Not an array");
+}
+foreach my $ref (@{$data}) {
+    if (ref($ref) ne "HASH") {
+	print STDERR "Not a hash\n";
+	next;
+    }
+    $routes{$ref->{'RouteID'}} = $ref->{'EncodedPolyline'};
+}
+
+#
+# Grab current routes from the DB.
+#
+my $query_result = DBQueryFatal("select * from apt_mobile_bus_routes");
+if (!$query_result->numrows) {
+    print "No routes in the database; skipping\n";
+    exit(0);
+}
+while (my $ref = $query_result->fetchrow_hashref()) {
+    my $routeid = $ref->{'routeid'};
+    my $description = $ref->{'description'};
+    if (!exists($routes{$routeid})) {
+	print STDERR "No route for $description\n";
+    }
+    print "$description\n";
+    my $points = polylineDecode($routes{$routeid});
+    foreach my $point (@$points) {
+	my ($lat,$lon) = @$point;
+	printf("%.10lf,%.10lf\n", $lat, $lon);
+    }
+    last;
+}
+
+exit(0);
+
+#
+# Decodes to a [latitude, longitude] coordinates array.
+#
+# This is adapted from the implementation in Project-OSRM.
+#
+# see https://github.com/Project-OSRM/osrm-frontend/blob/master/WebContent/routing/OSRM.RoutingGeometry.js
+#
+sub polylineDecode($)
+{
+    my ($string) = @_;
+    my $index = 0;
+    my $lat = 0;
+    my $lng = 0;
+    my @coordinates = ();
+    my $shift = 0;
+    my $result = 0;
+    my $byte = undef;
+    my $factor = 100000;
+
+    #
+    # Coordinates have variable length when encoded, so just keep
+    # track of whether we've hit the end of the string. In each
+    # loop iteration, a single coordinate is decoded.
+    #
+    while ($index < length($string)) {
+	# Reset shift, result, and byte
+	$byte = undef;
+	$shift = 0;
+	$result = 0;
+
+	do {
+	    $byte = ord(substr($string, $index, 1)) - 63;
+	    $result |= ($byte & 0x1F) << $shift;
+	    $shift += 5;
+	    $index++;
+	} while ($byte >= 0x20);
+
+	my $dlat = $result >> 1;
+	if ($result & 1) {
+	    use integer; # force 2's complement
+	    $dlat = ~$dlat;
+	}
+
+	$shift = $result = 0;
+
+	do {
+	    $byte = ord(substr($string, $index, 1)) - 63;
+	    $result |= ($byte & 0x1F) << $shift;
+	    $shift += 5;
+	    $index++;
+	} while ($byte >= 0x20);
+	my $dlon = $result >> 1;
+	if ($result & 1) {
+	    use integer; # force 2's complement
+	    $dlon = ~$dlon;
+	}
+	$lat += $dlat;
+	$lng += $dlon;
+
+	push(@coordinates, [$lng / $factor, $lat / $factor]);
+    }
+    return \@coordinates;
+}
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
