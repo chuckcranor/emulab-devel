@@ -105,9 +105,12 @@ RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
 	${LOCALBASE}/${APACHEMODDIR}/libphp$(PHP_MAJ).so:${PORTSDIR}/www/mod_php$(PHP_VER)
 
+.if (${EMULAB_PORTVERSION} != "8.3")
 # PHP packages
+# XXX I don't think this has been used in forever and the port is gone
 RUN_DEPENDS+= \
         ${LOCALBASE}/share/adodb/adodb.inc.php:${PORTSDIR}/databases/adodb
+.endif
 
 # Alternative shells that we allow users to select
 RUN_DEPENDS+= \

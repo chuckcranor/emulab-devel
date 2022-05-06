@@ -74,7 +74,10 @@ lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
       - perl5.32 (configure error)
       - tcl86 (build error)
 
-   f. (NEW for 2020!) Create a /usr/obj filesystem. There is not enough
+   f1.(NEW for 2022!) You do not need to do f2 below if you are running
+      on the newest 12.3 image which has a 64GB root partition.
+
+   f2.(NEW for 2020!) Create a /usr/obj filesystem. There is not enough
       space in the root filesystem to hold all the build trees. You need
       on the order of 25GB, so just use the rest of the root disk
       (YOU MUST DO THIS BEFORE REMOVING /usr/local!):

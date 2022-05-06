@@ -176,7 +176,7 @@ RUN_DEPENDS+=	\
 # Port versions of current or former "core" utilties
 RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp44-server \
-	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind911 \
+	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind916 \
 	${LOCALBASE}/bin/dig:${PORTSDIR}/dns/bind-tools
 
 # XXX For building loghole doc from www/tutorial
