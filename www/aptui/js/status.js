@@ -63,6 +63,7 @@ $(function ()
     var vncpasswd         = null;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+    var SVLAN_NS  = "http://www.geni.net/resources/rspec/ext/shared-vlan/1";
     var GENIRESPONSE_REFUSED = 7;
     var GENIRESPONSE_ALREADYEXISTS = 17;
     var GENIRESPONSE_INSUFFICIENT_NODES = 26;
@@ -829,6 +830,8 @@ $(function ()
 	    button = "#linktest-modal-button";
 	else if (button == "stop-linktest")
 	    button = "#linktest-stop-button";
+	else if (button == "connect-sharedlan")
+	    button = "#connect-sharedlan-confirm";
 	else
 	    return;
 
@@ -1299,9 +1302,9 @@ $(function ()
 	    }
 	    else {
 		html =
-		    "This node is currently unavailable and cannot be added " +
-		    "to your experiment. We will continue trying to contact " +
-		    "this node.";
+		    "This aggregate is currently unavailable so the node " +
+		    "cannot be added to your experiment. We will continue " +
+		    "trying to contact this aggregate.";
 	    }
 	    if (cause) {
 		html = html + "<br><pre>" + cause + "</pre>";
@@ -2731,6 +2734,15 @@ $(function ()
 		SetupLinktest(instanceStatus);
 	    }
 
+	    // If there is a shared lan, show the connect-sharedlan button
+	    $(xml).find("link").each(function() {
+		var shared = this.getElementsByTagNameNS(SVLAN_NS,
+							 'link_shared_vlan');
+		if (shared.length != 0) {
+		    SetupConnectLanModal($(this).attr('client_id'));
+		}
+	    });
+
 	    // Mark that we have this manifest;
 	    manifests[aggregate_urn] = manifest;
 	}
@@ -3457,6 +3469,119 @@ $(function ()
 		 args["checkonly"] = 0;
 		 continuation(args);
 	     });
+    }
+
+    var connectsetup = 0;
+    
+    function SetupConnectLanModal(linkname)
+    {
+	if (connectsetup) {
+	    return;
+	}
+	connectsetup = 1;
+			 
+	$("button#connect-sharedlan-button").click(function(event) {
+	    event.preventDefault();
+	    $('button#connect-sharedlan-button').popover('hide');
+	    sup.ShowModal('#connect-sharedlan-modal');
+	});
+	$("button#connect-sharedlan-confirm").click(function(event) {
+	    event.preventDefault();
+	    ConnectSharedLan();
+	});
+	var checkform = function () {
+	    var which = $('#connect-sharedlan-modal ' +
+			  'input[name="sharedlanradio"]:checked').val();
+	    var enable = 0;
+
+	    if (which === undefined) {
+		DisableButton("connect-sharedlan");
+		return;
+	    }
+	    var slan = $.trim($('#connect-sharedlan-modal .source-lan').val());
+	    var texp = $.trim($('#connect-sharedlan-modal .target-uuid').val());
+	    var tlan = $.trim($('#connect-sharedlan-modal .target-lan').val());
+
+	    if (which == "connect") {
+		if (slan != "" && texp != "" && tlan != "") {
+		    enable = 1;
+		}
+	    }
+	    else if (which == "disconnect") {	    
+		if (slan != "") {
+		    enable = 1;
+		}
+	    }
+	    if (enable) {
+		EnableButton("connect-sharedlan");		
+	    }
+	    else {
+		DisableButton("connect-sharedlan");
+	    }
+	};
+	$('#connect-sharedlan-modal .target-uuid, ' +
+	  '#connect-sharedlan-modal .source-lan, ' +
+	  '#connect-sharedlan-modal .target-lan').on("keyup", function () {
+	      checkform();
+	  });
+	$('#connect-sharedlan-modal input[name="sharedlanradio"]')
+	    .change(function () {
+		var which = $('#connect-sharedlan-modal ' +
+			      'input[name="sharedlanradio"]:checked').val();
+
+		if (which === "connect") {
+		    $('#connect-sharedlan-modal .target-uuid, ' +
+		      '#connect-sharedlan-modal .target-lan')
+			.removeClass("hidden");
+		}
+		else if (which === "disconnect") {
+		    $('#connect-sharedlan-modal .target-uuid, ' +
+		      '#connect-sharedlan-modal .target-lan')
+			.addClass("hidden");
+		}
+		checkform();
+	    });
+
+	// Seed the form, most of the time there is one shared lan.
+	$('#connect-sharedlan-modal .source-lan').val(linkname);
+
+	// And show the button.
+	$("#connect-sharedlan-button").removeClass("hidden");
+    }
+
+    function ConnectSharedLan()
+    {
+	var target_uuid = $('#connect-sharedlan-modal .target-uuid').val();
+	var source_lan  = $('#connect-sharedlan-modal .source-lan').val();
+	var target_lan  = $('#connect-sharedlan-modal .target-lan').val();
+	var which       = $('#connect-sharedlan-modal ' +
+			    'input[name="sharedlanradio"]:checked').val();
+
+	var args = {
+	    "uuid"        : uuid,
+	    "target-uuid" : $.trim(target_uuid),
+	    "source-lan"  : $.trim(source_lan),
+	    "target-lan"  : $.trim(target_lan),
+	    "which"       : which,
+	};
+
+	var callback = function (json) {
+	    console.log("ConnectSharedLan", json);
+	    sup.HideWaitWait(function () {
+		if (json.code) {
+		    sup.SpitOops("oops", json.value);
+		    return;
+		}
+		sup.ShowModal('#success-modal');
+	    });
+	};
+	sup.HideModal('#connect-sharedlan-modal', function () {
+	    sup.ShowWaitWait("This will take a minute or two. " +
+			     "Patience please.");
+	    var xmlthing = sup.CallServerMethod(null, "status",
+						"ConnectSharedLan", args);
+	    xmlthing.done(callback);
+	});
     }
 
     function CheckCreateProfileArgs(args, continuation)

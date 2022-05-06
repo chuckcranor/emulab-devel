@@ -2197,6 +2197,12 @@ sub LoadVirtLans($)
 	my $porttoken = $virtlan->_portvlan();
 
 	#
+	# Unbound, connect later. 
+	#
+	next
+	    if ($porttoken eq "__placeholder__");
+
+	#
 	# Map the token.
 	#
 	my $rowref = Lan->LookupSharedVLanByToken($porttoken);
@@ -7469,7 +7475,13 @@ sub InterpLinksAux($)
 	    $protolan->SetType("portlan");
 	    $protolan->SetRole("port/lan");
 	    $protolan->SetAttribute("link/lan", $lan);
-	    $protolan->SetAttribute("target_lanid", $portvlan->lanid());
+	    # Watch for placeholder shared vlan.
+	    if (ref($portvlan)) {
+		$protolan->SetAttribute("target_lanid", $portvlan->lanid());
+	    }
+	    else {
+		$protolan->SetAttribute("target_lanid", "unbound");
+	    }
 
 	    if ($member0->usevirtiface()) {
 		$protolan->AddMember($nodeA, $portA);
@@ -7486,7 +7498,10 @@ sub InterpLinksAux($)
 		# so that tmcd can find the vlan tag. Do this here
 		# since we have what we need in hand. 
 		#
-		$virtiface->Update({"vlanid" => $portvlan->lanid()});
+		# Watch for placeholder shared vlan.
+		#
+		$virtiface->Update({"vlanid" =>
+				    ref($portvlan) ? $portvlan->lanid() : -1});
 	    }
 	    else {
 		$protolan->AddInterface($nodeA, $vnodeA, $vportA, $portA);

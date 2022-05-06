@@ -1605,23 +1605,46 @@ sub DelayImage($)
     return $result;
 }
 
+sub IsSharedLanClient($)
+{
+    my ($lan) = @_;
+
+    if (! IsVersion0($lan)) {
+	my $element = FindNodesNS("n:link_shared_vlan", $lan,
+				  $SHAREDVLAN_NS)->pop();
+	if (! defined($element)) {
+	    $element = FindNodesNS("n:link_shared_vlan", $lan,
+				   $SHAREDVLAN_PG_NS)->pop();
+	}
+	return $element
+	    if (defined($element));
+    }
+    return undef;
+}
+
 sub GetSharedLanName($)
 {
-    my ($iface) = @_;
+    my ($lan) = @_;
+    my $element = IsSharedLanClient($lan);
 
-    if (! IsVersion0($iface)) {
-	my $interface_name = FindNodesNS("n:link_shared_vlan", $iface,
-					 $SHAREDVLAN_NS)->pop();
-	if (! defined($interface_name)) {
-	    $interface_name = FindNodesNS("n:link_shared_vlan", $iface,
-					  $SHAREDVLAN_PG_NS)->pop();
-	}
-	if (defined($interface_name)) {
-	    my $name = GetText("name", $interface_name);
-	    if (defined($name) and $name ne "") {
-		return $name;
-	    }
-	}
+    return undef
+	if (!defined($element));
+
+    my $name = GetText("name", $element);
+    if (defined($name) and $name ne "") {
+	return $name;
+    }
+    return undef;
+}
+
+sub IsSharedLanPlaceholder($)
+{
+    my ($lan) = @_;
+    my $element = IsSharedLanClient($lan);
+
+    my $attr = GetText("placeholder", $element);
+    if (defined($attr) and lc($attr) eq "true") {
+	return 1;
     }
     return undef;
 }

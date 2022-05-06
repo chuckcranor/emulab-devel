@@ -94,6 +94,7 @@ my $NFREE	   = "$TB/bin/nfree";
 my $TEVC	   = "$TB/bin/tevc";
 my $AVAIL	   = "$TB/sbin/avail";
 my $PTOPGEN	   = "$TB/libexec/ptopgen";
+my $NODEREBOOT	   = "$TB/bin/node_reboot";
 my $TBSWAP	   = "$TB/bin/tbswap";
 my $SWAPEXP	   = "$TB/bin/swapexp";
 my $PLABSLICE	   = "$TB/sbin/plabslicewrapper";
@@ -122,6 +123,7 @@ my $LINKTEST       = "$TB/sbin/linktest_control";
 my $NODEADMIN      = "$TB/bin/node_admin";
 my $XMLLINT	   = "/usr/local/bin/xmllint";
 my $IMAGEINFO      = "$TB/sbin/imageinfo";
+my $MODPORTVLAN    = "$TB/sbin/modportvlan";
 my $PRERENDER      = "$TB/libexec/vis/prerender";
 my $IMPORTER       = "$TB/sbin/image_import";
 my $POSTIMAGEDATA  = "$TB/sbin/protogeni/postimagedata";
@@ -7037,6 +7039,221 @@ sub Flash($)
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Failed to flash radio");
+    }
+    $slice->UnLock();
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
+#
+# Connect two shared lans together
+#
+sub ConnectSharedLan($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    # These are the shared lan names in the create_shared_vlan rspec element.
+    my $sourcelan    = $argref->{'source'};
+    my $targetlan    = $argref->{'target'};
+    my $disconnect   = $argref->{'disconnect'};
+    my $target_sharedlan;
+    require Node;
+    require Interface;
+    require Lan;
+
+    # We always want a log of this one.
+    print STDERR "ConnectSharedLan\n";
+    
+    if (! (defined($credentials) && 
+	   defined($slice_urn) && defined($sourcelan))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my ($slice, $aggregate) = Credential2SliceAggregate($credential);
+    return $slice
+	if (defined($slice) && GeniResponse::IsResponse($slice));
+
+    if (! (defined($slice) && defined($aggregate))) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    return $user
+	if (GeniResponse::IsResponse($user));
+
+    main::AddLogfileMetaDataFromSlice($slice);
+
+    if ($slice_urn ne $slice->urn()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
+				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
+				    "Slice is marked for termination");
+    }
+    return GeniResponse->MalformedArgsResponse("Invalid source lan name")
+	if (!TBcheck_dbslot($sourcelan, "virt_lans", "vname",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+
+    if (!$disconnect) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments")
+	    if (!defined($targetlan));
+	
+	return GeniResponse->MalformedArgsResponse(
+	    "Invalid target shared lan name")
+	    if (!TBcheck_dbslot($targetlan, "virt_lans", "vname",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+
+	# We need the target vlan.
+	$target_sharedlan = VLan->FindSharedVLanByToken($targetlan);
+	return GeniResponse->MalformedArgsResponse("No such target lan name")
+	    if (!defined($target_sharedlan));
+
+	if (!$target_sharedlan->IsShared()) {
+	    return GeniResponse->MalformedArgsResponse(
+		"Target lan is not a shared lan")
+	}
+    }
+
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+    my $source_sharedlan = Lan->Lookup($experiment, $sourcelan);
+    return GeniResponse->MalformedArgsResponse("No such source lan name")
+	if (!defined($source_sharedlan));
+
+    my $role;
+    if ($source_sharedlan->GetAttribute("role", \$role)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No role value for source lan");
+    }
+    if ($role ne "port/lan") {    
+	return GeniResponse->MalformedArgsResponse(
+	    "Source lan is not a shared lan")
+    }
+
+    my $target_lanid;
+    if ($source_sharedlan->GetAttribute("target_lanid", \$target_lanid)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No target_lanid value for source lan");
+    }
+    if ($disconnect) {
+	if ("$target_lanid" eq "unbound") {
+	    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+					"Not connected to a shared lan");
+	}
+	# Need the target below.
+	$target_sharedlan = Lan->Lookup($target_lanid);
+    }
+    else {
+	# The source should not be connected yet.
+	if ("$target_lanid" ne "unbound") {
+	    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+					"Already connected to a shared lan");
+	}
+    }
+    if (!defined(GeniCM::FlipToUser($slice, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    if ($slice->Lock() != 0) {
+	return GeniResponse->BusyResponse();
+    }
+    $aggregate->Refresh();
+    # Check again after lock.
+    if ($aggregate->Busy()) {
+	$slice->UnLock();
+	return GeniResponse->BusyResponse();
+    }
+    my @members;
+    if ($source_sharedlan->MemberList(\@members)) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not get member list for source lan");
+    }
+    # Need to gather up all the vinterfaces;
+    my @vinterfaces = ();
+
+    foreach my $member (@members) {
+	my $interface = $member->GetInterface();
+
+	# Need the node for next lookup, ick.
+	my $node = Node->Lookup($interface->node_id());
+
+	#
+	# Need the vinterface so that we can set/unset the vlanid, which is
+	# how tmcd tracks down the vlan tag. For now, unset means setting
+	# it to -1, fix later.
+	#
+	my $vinterface = Interface::VInterface->LookupByVirtLan($experiment,
+						$sourcelan, $node->vname());
+
+	push(@vinterfaces, $vinterface);
+    }
+
+    if ($disconnect) {
+	my @ports = map { $_->node_id() . ":" . $_->iface(); } @vinterfaces;
+	    
+	#
+	# Need to apply this to the experiment owning the target sharedlan
+	#
+	my $exp = $target_sharedlan->GetExperiment();
+	if ($exp->RemoveMembersFromPortlan(0, $target_sharedlan, @ports)) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"RemoveMembersFromPortlan() failed");
+	}
+	# Set the target lanid so that experiment terminate knows to clean up.
+	if ($source_sharedlan->SetAttribute("target_lanid", "unbound")) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not set target_lanid on source lan");
+	}
+	# For tmcd
+	foreach my $v (@vinterfaces) {
+	    $v->Update({"vlanid" => -1});
+	}
+    }
+    else {
+	# Set the target lanid so that experiment terminate knows to clean up.
+	if ($source_sharedlan->SetAttribute("target_lanid",
+					    $target_sharedlan->lanid())) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not set target_lanid on source lan");
+	}
+	# Now this will do the right thing.
+	if ($experiment->SetupPortLans()) {
+	    $source_sharedlan->SetAttribute("target_lanid", "unbound");
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"SetupPortLans() failed");
+	}
+	# And get snmpit to do its thing.
+	if ($experiment->SyncPortLans()) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"SyncPortLans() failed");
+	}
+	# For tmcd
+	foreach my $v (@vinterfaces) {
+	    $v->Update({"vlanid" => $target_sharedlan->lanid()});
+	}
+    }
+    #
+    # And now reconfig the node.
+    #
+    system("$NODEREBOOT -c " . join(" ", map { $_->node_id(); } @vinterfaces));
+    if ($?) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not reconfig all nodes");
     }
     $slice->UnLock();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);

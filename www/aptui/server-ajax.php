@@ -241,7 +241,11 @@ $routing = array("geni-login" =>
 						 "Top" =>
 						     "Do_Top",
 						 "dismissExtensionDenied" =>
-                                                 "Do_DismissExtensionDenied")),
+                                                    "Do_DismissExtensionDenied",
+						 "ConnectSharedLan" =>
+						     "Do_ConnectSharedLan",
+                              )
+                        ),
 		 "approveuser" =>
 			array("file"    => "approveuser.ajax",
 			      "guest"   => false,

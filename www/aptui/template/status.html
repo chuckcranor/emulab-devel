@@ -287,6 +287,15 @@ pre {
 			data-content='Stop a running or wedged linktest'>
  		  Stop Linktest</button>
 	      </span>
+	      <button class='btn btn-xs btn-primary hidden'
+		      style='margin-right: 10px;'
+		      id='connect-sharedlan-button' type=button
+		      data-toggle='popover'
+	              data-delay='{"show":300}'
+		      data-html='true'
+		      data-content="Connect to a shared lan in another
+				    experiment."> 
+		(Dis)Connect Shared Lan</button>
 	      <button class='btn btn-xs btn-primary hidden' disabled
 		      id='snapshot_button' type=button
 		      data-toggle='popover'
@@ -1855,6 +1864,80 @@ pre {
 	      </div>
 	    </div>
 	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='connect-sharedlan-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <h3 class="text-center" style="margin: 0;">
+	    Connect To Shared Lan</h3>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    To connect (or disconnect) a shared lan in your experiment
+	    to/from a shared lan
+	    in another experiment, you need to know the UUID of the target
+	    experiment and the name of the shared lan in the target
+	    experiment. Note that the <em>target lan name</em> is the
+	    argument provided
+	    to <code>lan.createSharedVlan("somename")</code> in the profile
+	    that <b>created</b> the shared lan (in the target experiment).
+	  </p>
+	  <form>
+	    <center>
+	      <div class="form-group">
+		<label class="radio-inline">
+		  <input type="radio" name="sharedlanradio"
+			 value="connect"> Connect
+		</label>
+		<label class="radio-inline">
+		  <input type="radio" name="sharedlanradio"
+			 value="disconnect"> Disconnect
+		</label>
+	      </div>
+	      <div class="form-group">
+		<input placeholder="Source Lan Name"
+		       style="width: 300px;"
+		       class="source-lan" type="text">
+	      </div>
+	      <div class="form-group">
+		<input placeholder="Target Experiment UUID"
+		       style="width: 300px;"
+		       class="target-uuid hidden" type="text">
+	      </div>
+	      <div class="form-group">
+		<input placeholder="Target Shared Lan Name"
+		       style="width: 300px;"
+		       class="target-lan hidden" type="text">
+	      </div>
+	    </center>
+	  </form>
+	  <center>
+            <button style='margin-right: 10px;'
+                    class='btn btn-danger btn-sm' 
+                    data-dismiss='modal' aria-hidden='true'>
+	      Cancel</button>
+            <button class='btn btn-success btn-sm'; type='button' disabled
+		    id='connect-sharedlan-confirm'>
+	      Continue</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='success-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+          <button type='button' class='close' data-dismiss='modal'
+                  aria-hidden='true'>&times;</button>
+          <center><h3>Operation Successful</h3>
+	    <br>
+            <button class='btn btn-success btn-sm'
+		    data-dismiss='modal'>Close</button></center>
 	</div>
       </div>
     </div>

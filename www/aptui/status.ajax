@@ -2328,6 +2328,79 @@ function Do_DeleteSite()
     SPITAJAX_RESPONSE("Success");
 }
 
+#
+# Connect to a shared lan in another experiment
+#
+function Do_ConnectSharedLan()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+    $disconnect = 0;
+    
+    if (StatusSetupAjax(1)) {
+	return;
+    }
+    if ($instance->paniced()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined.");
+        return;
+    }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $instance->uuid();
+
+    if (!isset($ajax_args["which"]) || $ajax_args["which"] == "") {
+        SPITAJAX_ERROR(1, "Missing which operation to perform");
+        return;
+    }
+    if ($ajax_args["which"] == "disconnect") {
+        $disconnect = 1;
+        $required = array("source-lan");
+    }
+    else {
+        $required = array("source-lan", "target-uuid", "target-lan");
+    }
+    foreach ($required as $key) {
+        if (!isset($ajax_args[$key]) || $ajax_args[$key] == "") {
+            SPITAJAX_ERROR(1, "Missing $key");
+            return;
+        }
+        elseif (! preg_match("/^[-\w]+$/", $ajax_args[$key])) {
+            SPITAJAX_ERROR(1, "Invalid characters in $key");
+            return;
+        }
+    }
+    if ($disconnect) {
+        $args = "-r " . $ajax_args["source-lan"];
+    }
+    else {
+        $args = $ajax_args["source-lan"] . " " .
+              $ajax_args["target-uuid"] . " " . $ajax_args["target-lan"];
+    }
+    
+    #
+    # Call out to the backend.
+    #
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() .
+                     "  connectsharedlan $uuid $args",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error (dis)connecting shared lan");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE("Success");
+}
+
 # Local Variables:
 # mode:php
 # End:

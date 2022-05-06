@@ -74,6 +74,8 @@ sub usage()
     print("Usage: manage_instance status instance\n");
     print("Usage: manage_instance applyextensionpolicy instance\n");
     print("Usage: manage_instance deletereservations instance\n");
+    print("Usage: manage_instance connectsharedlan instance sourceLanName ".
+	  "targetInstance targetLanName\n");
     exit(-1);
 }
 my $optlist     = "dt:s";
@@ -186,6 +188,7 @@ sub DoPushExtension();
 sub DoPushManifest();
 sub DoTop();
 sub DoDeleteReservations();
+sub DoConnectSharedLan();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$$);
 sub CallMethodOnAggregates($$$@);
@@ -363,6 +366,9 @@ elsif ($action eq "top") {
 }
 elsif ($action eq "deletereservations") {
     DoDeleteReservations();
+}
+elsif ($action eq "connectsharedlan") {
+    DoConnectSharedLan();
 }
 else {
     usage();
@@ -7266,5 +7272,137 @@ sub DoPushManifest()
 	$webtask->Exited(0);
     }
     exit(0);
+}
+
+#
+# Connect to a shared lan. 
+#
+sub DoConnectSharedLan()
+{
+    my $slice    = $instance->GetGeniSlice();
+    my $errmsg;
+    my $errcode  = -1;
+    my $exitcode = -1;
+    my $optlist  = "r";
+    my $remove   = 0;
+    my $sourcelan;
+    my $targetuuid;
+    my $targetlan;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"r"})) {
+	$remove = 1;
+	usage()
+	    if (@ARGV != 1);
+    }
+    elsif (@ARGV != 3) {
+	usage();
+    }
+    $sourcelan = shift(@ARGV);
+
+    #
+    # Sanity check the source and target *shared lan* names. Not the client_id
+    # but the name provided to link2.createSharedVlan("name"). 
+    #
+    my $resources;
+    my ($tref,$sref);
+
+    if (APT_Profile::GetResources($instance->rspec(), \$errmsg, \$resources)) {
+	fatal($errmsg);
+    }
+    foreach my $ref (values(%{$resources->{'links'}})) {
+	my $client_id = GeniXML::GetVirtualId($ref);
+	if ($client_id eq $sourcelan) {
+	    if (! (GeniXML::GetSharedLanName($ref) ||
+		   GeniXML::IsSharedLanPlaceholder($ref))) {
+		UserError("$sourcelan is not a shared lan");
+	    }
+	    $sref = $ref;
+	    last;
+	}
+    }
+    if (!defined($sref)) {
+	UserError("No such lan $sourcelan in source experiment");
+    }
+    # Source aggregate urn
+    my $smanagerref = GeniXML::FindNodes("n:component_manager", $sref)->pop();
+    my $smanager    = GeniXML::GetLinkManager($smanagerref);
+    
+    if (!$remove) {
+	$targetuuid = shift(@ARGV);
+	$targetlan  = shift(@ARGV);
+
+	if ($instance->uuid() eq $targetuuid) {
+	    UserError("Source and target experiments cannot be the same");
+	}
+	my $target = APT_Instance->Lookup($targetuuid);
+	if (!defined($target)) {
+	    UserError("No such target experiment");
+	}
+	if (APT_Profile::GetResources($target->rspec(),
+				      \$errmsg, \$resources)) {
+	    fatal($errmsg);
+	}
+	foreach my $ref (values(%{$resources->{'links'}})) {
+	    my $sharedname = GeniXML::CreateSharedLan($ref);
+	    if (defined($sharedname) && $sharedname eq $targetlan) {
+		$tref = $ref;
+		last;
+	    }
+	}
+	if (!defined($tref)) {
+	    UserError("No such lan $targetlan in target experiment");
+	}
+	#
+	# Must be on the same cluster of course. And shared lans do not
+	# span clusters.
+	#
+	my $tmanagerref = GeniXML::FindNodes("n:component_manager",
+					     $tref)->pop();
+	my $tmanager    = GeniXML::GetLinkManager($tmanagerref);
+
+	if ($smanager ne $tmanager) {
+	    UserError("Not allowed to connect to a shared ".
+		      "lan on a different cluster");
+	}
+    }
+    if ($slice->Lock()) {
+	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
+	$errcode  = GENIRESPONSE_BUSY;
+	$exitcode = 1;
+	goto bad;
+    }
+    my $aggregate = $instance->GetAggregate($smanager);
+    my $response  = $aggregate->ConnectSharedLan($sourcelan,
+						 $targetlan, $remove);
+
+    if (!defined($response)) {
+	$errmsg   = "RPC Error calling ConnectSharedLan on $aggregate\n";
+	$errcode = -1;
+	goto bad;
+    }
+    if ($response->code() != GENIRESPONSE_SUCCESS) {
+	$errmsg  = "Could not (dis)connect shared lan: ". $response->output();
+	$errcode = $response->code();
+	# We want the user to see this one, most other errors are our fault
+	if ($response->code() == GENIRESPONSE_REFUSED) {
+	    $exitcode = 1;
+	}
+	goto bad;
+    }
+    $slice->UnLock();
+    exit(0);
+
+  bad:
+    $slice->UnLock();
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($exitcode);
 }
 

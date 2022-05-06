@@ -2511,6 +2511,7 @@ COMMAND_PROTOTYPE(doifconfig)
 						  "  and vls.vname=vll.vname "
 						  "  and vls.capkey='jumboframes' "
 						  "where v.exptidx='%d' "
+						  " and v.vlanid>=0 "
 						  " and v.node_id='%s' "
 						  " and v.iface='%s' "
 						  " and (la2.attrvalue='Experimental' "
@@ -2609,6 +2610,7 @@ COMMAND_PROTOTYPE(doifconfig)
 			 "  vls.exptidx=vll.exptidx and vls.vname=vll.vname "
 			 "      and vls.capkey='jumboframes' "
 			 "where v.exptidx='%d' and v.node_id='%s' and "
+			 "      v.vlanid>=0 and "
 			 "      (la2.attrvalue='Experimental' or "
 			 "       la2.attrvalue is null) "
 			 "      and %s",

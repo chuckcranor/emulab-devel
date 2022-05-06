@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -127,6 +127,7 @@ elsif ($GENI_VERSION eq "2.0") {
 	"Recovery"          => \&GeniCMV2::Recovery,
 	"Flash"             => \&GeniCMV2::Flash,
 	"PrestageImages"    => \&GeniCMV2::PrestageImages,
+	"ConnectSharedLan"  => \&GeniCMV2::ConnectSharedLan,
     };
 }
 

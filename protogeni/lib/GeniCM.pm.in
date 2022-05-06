@@ -2920,7 +2920,18 @@ sub GetTicketAuxAux($)
 	#
 	my $shared_vlan;
 	
-	if ($shared_vlan = GeniXML::GetSharedLanName($linkref)) {
+	if (GeniXML::IsSharedLanClient($linkref) &&
+	    GeniXML::IsSharedLanPlaceholder($linkref)) {
+
+	    # This is the magic for libvtop.
+	    $virtexperiment->NewTableRow("virt_lan_settings",
+					 {"vname"   => $lanname,
+					  "capkey"  => "sharedvlan",
+					  "capval"  => "__placeholder__"});
+	    $isshared = 1;
+	    $encap    = "vlan";
+	}
+	elsif ($shared_vlan = GeniXML::GetSharedLanName($linkref)) {
 	    if ($shared_vlan !~ /^[-\w]*$/) {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
