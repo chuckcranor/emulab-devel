@@ -6350,10 +6350,10 @@ sub RenewSliverAux($$$$)
 
     foreach my $pnode (@pnodes) {
 	my $pnodeid = $pnode->node_id();
+	my $respid  = $pnode->ActivePreReserve();
 	
-	if (defined($pnode->reserved_pid()) &&
-	    lc($pnode->reserved_pid()) ne lc($slice_experiment->pid())) {
-	    if ($credential->HasActualPrivilege("admin")) {
+	if (defined($respid) && lc($respid) ne lc($slice_experiment->pid())) {
+	    if (0 && $credential->HasActualPrivilege("admin")) {
 		SENDMAIL($TBOPS, "Admin override on pre-reserved node!",
 			 "Admin override on pre-reserved node $pnodeid\n".
 			 "while extending $slice\n",

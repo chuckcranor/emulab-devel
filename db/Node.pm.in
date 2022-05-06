@@ -4289,6 +4289,36 @@ sub CheckPreReserve($$$)
 }
 
 #
+# Is there an "active" prereserve for a node. For this purpose, active
+# means that reserved_pid is set OR there is specific node prereserve that
+# is now active. In effect, a specific node prereserve is slighty less
+# best effort then a type prereserve.
+#
+sub ActivePreReserve($)
+{
+    my ($self)  = @_;
+    my $node_id = $self->node_id();
+
+    return $self->reserved_pid()
+	if (defined($self->reserved_pid()));
+
+    my $query_result =
+	DBQueryWarn("select pr.pid from project_reservations as pr ".
+		    "join node_reservations as pnr on ".
+		    "     pr.pid=pnr.pid and ".
+		    "     pr.name=pnr.reservation_name ".
+		    "where pnr.node_id='$node_id' and pr.terminal=0 and ".
+		    "      pr.active=1");
+
+    return undef
+	if (! ($query_result && $query_result->numrows));
+    
+    my ($pid) = $query_result->fetchrow_array();
+
+    return $pid;
+}
+
+#
 # Add an outlet entry. Optional authorization info.
 #
 sub AddOutlet($$$$)
