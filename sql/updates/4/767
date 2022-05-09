@@ -1,0 +1,38 @@
+#
+# Add sitevar
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    # Sitevars
+    my %value = (
+	"portal/grantnodetypes" => "",
+	"cloudlab/grantnodetypes" => "",
+	"powder/grantnodetypes" => "",
+    );
+    my %desc = (
+	"portal/grantnodetypes" => "Default set of node types to grant to newly approved projects.",
+	"cloudlab/grantnodetypes" => "Default set of node types to grant to newly approved projects (cloudlab portal).",
+	"powder/grantnodetypes" => "Default set of node types to grant to newly approved projects (powder portal).",
+    );
+
+    foreach my $name (keys %value) {
+	my $val = $value{$name};
+	my $desc = $desc{$name};
+	DBQueryFatal("INSERT INTO sitevariables VALUES ".
+		     " ('$name',NULL,'$val','$desc',0)")
+	    if (!TBSiteVarExists("$name"));
+    }
+
+    return 0;
+}
+
+1;
+
+# Local Variables:
+# mode:perl
+# End:

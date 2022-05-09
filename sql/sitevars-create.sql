@@ -205,6 +205,10 @@ INSERT INTO sitevariables VALUES ('images/listed_default',NULL,'1','By default, 
 INSERT INTO sitevariables VALUES ('hwcheckup/interval',NULL,'0','Interval (in days) at which nodes should be run through hwcheckup. Zero disables periodic checks.',0);
 INSERT INTO sitevariables VALUES ('hwcheckup/maxnodes',NULL,'10','Maximum number of healthy nodes to run through hwcheckup in one pass.',0);
 INSERT INTO sitevariables VALUES ('general/panic_does_recovery_mode',NULL,'0','When non-zero, panic mode level 1 will use the recovery MFS instead of the admin MFS.',0);
+INSERT INTO sitevariables VALUES ('portal/grantnodetypes',NULL,'','Default set of node types to grant to newly approved projects.',0);
+INSERT INTO sitevariables VALUES ('cloudlab/grantnodetypes',NULL,'','Default set of node types to grant to newly approved projects (cloudlab portal).',0);
+INSERT INTO sitevariables VALUES ('powder/grantnodetypes',NULL,'','Default set of node types to grant to newly approved projects (powder portal).',0);
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -456,48 +456,27 @@ if (! -e $infodir) {
 }
 
 #
-# If approved to use remote nodes, then grant permission to use the
-# specific types of virtual nodes on those remote physical nodes.
-# Unfortunately, the node_types table does not store a relationship
-# between the phys type and the virtual types that are hosted on them.
-# Need to add that I guess, but in the meantime we have just 3 remote
-# phys types to worry about. 
+# When approving a project, look to see if there is a list of
+# node types that are automatically granted (per portal). 
 #
 if (! ($ELABINELAB || $isnonlocal)) {
-    my $query_result =
-	DBQueryFatal("select pcremote_ok from projects where pid='$pid'");
-    if ($query_result->num_rows) {
-	my ($pcremote) = $query_result->fetchrow_array();
-
-	if (defined($pcremote)) {
-	    print "$pcremote\n";
-	
-	    foreach my $type (split(",", $pcremote)) {
-		print "$type\n";
-		
-		if ($type eq "pcplabphys") {
-		    $type = "pcplab";
-		}
-		elsif ($type eq "pcron") {
-		    $type = "pcvwa";
-		}
-		elsif ($type eq "pcwa") {
-		    $type = "pcvwa";
-		}
-		else {
-		    fatal("Unknown remote type $type!");
-		}
-		print "$type\n";
-
-		$EUID = $UID;
-
-		system("$GRANTTYPE -p $pid $type") == 0 or
-		    fatal("Could not grant permission to use type $type!");
-		
-		$EUID = 0;
-	    }
-	}
+    my $portal = $target_project->portal() || "emulab";
+    # Special case at the Mothership.
+    if ($portal ne "powder" && $portal ne "cloudlab") {
+	$portal = "portal";
     }
+    my $sitevar = "$portal/grantnodetypes";
+    my $types   = TBGetSiteVar($sitevar);
+    my @types   = split(",", $types);
+
+    $EUID = $UID;
+    foreach my $type (@types) {
+	print "Granting node type: $type\n";
+	
+	system("$GRANTTYPE -p $pid $type") == 0 or
+	    fatal("Could not grant permission to use type $type!");
+    }
+    $EUID = 0;
 }
 
 #
