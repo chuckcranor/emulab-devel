@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -78,7 +78,7 @@
 #undef WITH_HASH_CHUNKSPLIT
 
 /* XXX this is a hack right now */
-#define USE_HACKSORT 0
+#define USE_HACKSORT 1
 
 #define min(a,b) ((a) <= (b) ? (a) : (b))
 
@@ -612,6 +612,8 @@ main(int argc, char *argv[])
 #if COMPRESSED_MAGIC_CURRENT > COMPRESSED_V3
 			fprintf(stderr, "64-bit block numbers");
 			fprintf(stderr, ",unique image ID");
+#else
+			fprintf(stderr, "32-bit block numbers");
 #endif
 #ifdef WITH_CRYPTO
 #ifdef SIGN_CHECKSUM
@@ -624,6 +626,9 @@ main(int argc, char *argv[])
 #endif
 #ifdef WITH_HASH
 			fprintf(stderr, ",delta image creation");
+#endif
+#if USE_HACKSORT > 0
+			fprintf(stderr, ",hacky quick sort");
 #endif
 			fprintf(stderr, "\n");
 			exit(0);
