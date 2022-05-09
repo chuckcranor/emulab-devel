@@ -263,7 +263,7 @@ sub LookForThingsToDo()
 	    next
 		if ($i->IsTerminated());
 	    
-	    my $aggregate = $instance->GetAggregate($bus->urn());
+	    my $aggregate = $i->GetAggregate($bus->urn());
 
 	    if ($aggregate->status() ne "terminated") {
 		$instance = $i;
