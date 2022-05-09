@@ -1647,7 +1647,7 @@ sub LoadVirtNodes($)
 	    # that needs to be a parent of the VM's OS, which might not
 	    # be the default parent we set it to above.
 	    #
-	    if ($realnode->sharing_mode()) {
+	    if ($realnode->sharing_mode() && $vnode->type() ne "blockstore") {
 		my $realos = $realnode->RunningOsImage();
 		if (!defined($realos)) {
 		    tberror("No current OS for shared node $fixvname\n");
