@@ -622,7 +622,8 @@ main(int argc, char *argv[])
 			fprintf(stderr, "\n  Partition types: ");
 			printslicemap();
 			fprintf(stderr, "\n  Features: ");
-			fprintf(stderr, "image UUIDs");
+			fprintf(stderr, "32-bit block numbers");
+			fprintf(stderr, ",image UUIDs");
 #ifdef WITH_CRYPTO
 #ifdef SIGN_CHECKSUM
 			fprintf(stderr, ",signed");
@@ -634,6 +635,9 @@ main(int argc, char *argv[])
 #endif
 #ifdef WITH_HASH
 			fprintf(stderr, ",delta image creation");
+#endif
+#if USE_HACKSORT > 0
+			fprintf(stderr, ",hacky quick sort");
 #endif
 			fprintf(stderr, "\n");
 			exit(0);
