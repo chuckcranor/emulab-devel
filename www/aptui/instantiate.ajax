@@ -326,7 +326,7 @@ function Do_GetPreviousBindings()
             SPITAJAX_ERROR(1, "Instance is for a different profile");
             return;
         }
-        if (!$instance->CanView($this_user)) {
+        if (! ($instance->CanView($this_user) || ISADMIN())) {
             SPITAJAX_ERROR(1, "Not allowed to view the instance");
             return;
         }
