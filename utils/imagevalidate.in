@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014-2017 University of Utah and the Flux Group.
+# Copyright (c) 2014-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1512,11 +1512,12 @@ sub doimage($)
 	    }
 
 	    #
-	    # XXX highly-specific hack: If MBR==3 and the new image doesn't
-	    # fit, see if it fits in MBR==4. If so, modify the DB mbr_version.
-	    # If not, fail.
+	    # XXX highly-specific hack: If MBR==3 (103 for m400 nodes) and
+	    # the new image doesn't fit, see if it fits in MBR==4 (104).
+	    # If so, modify the DB mbr_version. If not, fail.
 	    #
-	    if ($lo >= 0 && $mbr == 3) {
+	    if ($lo >= 0 && ($mbr == 3 || $mbr == 103)) {
+		my $nmbr = $mbr + 1;
 		my $isize = $hi - $lo + 1;
 		if ($isize > $mpsize) {
 		    print("$pidimage: range: DB MBR3 partition $lpart size ($mpsize) < file range size ($isize)\n")
@@ -1524,9 +1525,11 @@ sub doimage($)
 		    if ($update) {
 			print("$pidimage: MBR3 -> MBR4: ")
 			    if (!$quiet);
-			my ($m4start, $m4size) = Image->MBRPartInfo(4, $lpart);
+			my ($m4start, $m4size) =
+			    Image->MBRPartInfo($nmbr, $lpart);
 			if (defined($m4start) &&
-			    $isize <= $m4size && !$image->SetMBRVersion(4)) {
+			    $isize <= $m4size &&
+			    !$image->SetMBRVersion($nmbr)) {
 			    $changed = 1;
 			    print "[FIXED]\n"
 				if (!$quiet);
