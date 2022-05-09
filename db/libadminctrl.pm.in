@@ -953,11 +953,15 @@ sub MaximumAllowed($$)
 
 	next if
 	    ($policy ne TBADMINCTRL_POLICY_TYPE());
+	next
+	    if ($auxdata ne $type);
 
-	return $count
-	    if ($ppid eq $pid && $auxdata eq $type);
+	#
+	# Note that LoadPolicies handles the "-" policy override.
+	# 
+	return $count;
     }
-    return undef;
+    return $PLUS_GIDIDX;
 }
 
 #
