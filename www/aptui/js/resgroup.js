@@ -482,6 +482,10 @@ $(function ()
      */
     function isRadio(urn, type)
     {
+	if (type.startsWith("oai-wb")) {
+	    return 0;
+	}
+	
 	if (radioinfo && _.has(radioinfo, urn) && _.has(radioinfo[urn], type)) {
 	    return 1;
 	}
@@ -3776,7 +3780,7 @@ $(function ()
 	$('#delete-reservation-modal .nolongerfits').click(function (e) {
 	    e.preventDefault();
 	    $('#delete-reason')
-		.val("This reservation no longer fits the " +
+		.val("This reservation request no longer fits the " +
 		     "schedule. Until a reservation is approved, the " +
 		     "resources are still available to other users, either " +
 		     "in a new experiment or a smaller reservation that is " +
