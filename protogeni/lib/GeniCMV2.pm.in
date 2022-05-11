@@ -5610,6 +5610,7 @@ sub CreateDataset($)
     my $POLICY_FAIL  = 2;
     my $needapproval = 0;
     my $unapproved_reason;
+    my $isimdataset  = 0;
     require WebTask;
     require Lease;
     require Image;
@@ -5698,20 +5699,6 @@ sub CreateDataset($)
 		    "A long/short term dataset with this name already exists");
     }
     my $opts = "-b ";
-    my $cmd  = "$CREATEDATASET ";
-    if ($PROTOGENI_LOCALUSER) {
-	#
-	# For nonlocal projects, images are actually created as GeniUser.
-	# and we store the urn of the user in the descriptor. Lets be
-	# consistent with that, even if it makes no sense to have choosen
-	# to do it this way. If a local project/user, we are going to
-	# operate as the actual user. 
-	#
-	if (!defined(GeniCM::FlipToUser($group->GetProject(), $user))) {
-	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					"FlipToUser failed");
-	}
-    }
     if (exists($argref->{'size'})) {
 	my $size = $argref->{'size'};
 	return GeniResponse->MalformedArgsResponse("Bad size, use MiBs")
@@ -5725,6 +5712,9 @@ sub CreateDataset($)
 	return GeniResponse->MalformedArgsResponse("Mismatching type")
 	    if ($type ne $credential->target_urn()->type());
 	$opts .= " -t $type ";
+	if ($type eq "imdataset") {
+	    $isimdataset = 1;
+	}
     }
     if (exists($argref->{'fstype'})) {
 	my $fstype = $argref->{'fstype'};
@@ -5759,6 +5749,27 @@ sub CreateDataset($)
 	}
 	$opts .= " -e '$when' ";
     }
+
+    my $cmd = "$CREATEDATASET ";
+    if ($PROTOGENI_LOCALUSER && $isimdataset) {
+	#
+	# For nonlocal projects, images are actually created as GeniUser.
+	# and we store the urn of the user in the descriptor. Lets be
+	# consistent with that, even if it makes no sense to have choosen
+	# to do it this way. If a local project/user, we are going to
+	# operate as the actual user. 
+	#
+	if (!defined(GeniCM::FlipToUser($group->GetProject(), $user))) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"FlipToUser failed");
+	}
+    }
+    else {
+	# This works best for lt/st datasets
+	$opts .= " -o ". $user->uid() . " ";
+	$cmd   = "$WAP $cmd ";
+	GeniUtil::FlipToElabMan();	
+    }
     $opts .= $group->pid() . "/" . $group->gid() . "/" . $dataset_urn->id();
 
     #
@@ -5780,7 +5791,7 @@ sub CreateDataset($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
     }
     GeniUtil::FlipToGeniUser()
-	if ($PROTOGENI_LOCALUSER);
+	if ($PROTOGENI_LOCALUSER && $isimdataset);
 
     $webtask->Refresh();
     if ($webtask->needapproval()) {
@@ -5796,7 +5807,7 @@ sub CreateDataset($)
     # Grab the lease or image to see if its been created/approved, we want
     # to tell the user something.
     #
-    if (exists($argref->{'type'}) && $argref->{'type'} eq "imdataset") {
+    if ($isimdataset) {
 	my $image = Image->Lookup($group->pid(), $dataset_urn->id());
 	if (!defined($image)) {
 	    print STDERR "Could not lookup image after createdataset\n";
