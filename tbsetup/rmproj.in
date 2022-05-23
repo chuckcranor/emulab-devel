@@ -32,14 +32,14 @@ use Getopt::Std;
 #
 sub usage()
 {
-    print STDERR "Usage: rmproj [-s] [-l | -L] <pid>\n";
+    print STDERR "Usage: rmproj [-s] [-l] <pid>\n";
     print STDERR "Options:\n";
     print STDERR "  -s  - Silent, no email to the leader or members\n";
-    print STDERR "  -l  - Remove the project leader account if last project\n";
-    print STDERR "  -L  - Force account removal if an approved project\n";
+    print STDERR "  -l  - Remove the project leader account is user was ".
+	"never approved\n";
     exit(1);
 }
-my $optlist   = "lLs";
+my $optlist   = "ls";
 my $rmleader  = 0;
 my $silent    = 0;
 my $sopt      = "";
@@ -147,10 +147,6 @@ my $pid     = $target_project->pid();
 my $pid_idx = $target_project->pid_idx();
 my $gid_idx = $target_project->gid_idx();
 my $leader  = $target_project->GetLeader();
-
-if ($rmleader && $target_project->approved() && !defined($options{"L"})) {
-    fatal("Project is approved, use -L option to force leader removal");
-}
 
 #
 # Sanity checks.
@@ -297,15 +293,11 @@ if ($rmleader) {
 	fatal("Could not get ProjectMembershipList() for $leader");
     }
     if (!@plist) {
-	print "Removing project leader $uid as directed ...\n";
-	if ($leader->status() eq $User::USERSTATUS_UNAPPROVED) {
-	    # Easy case.
+	if ($leader->status() eq $User::USERSTATUS_UNAPPROVED ||
+	    $leader->status() eq $User::USERSTATUS_NEWUSER) {
+	    print "Removing project leader $uid as directed ...\n";
 	    $leader->Delete() == 0 or
 		fatal("Could not delete unapproved $leader");
-	}
-	else {
-	    system("$RMUSER $sopt $uid") == 0 or
-		fatal("Could not delete $leader");
 	}
     }
 }
