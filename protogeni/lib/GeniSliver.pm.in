@@ -1712,15 +1712,16 @@ sub SendStatusEvent($)
     my ($self) = @_;
 
     my $slice = $self->GetSlice();
-    return -1
+    return 1
 	if (!defined($slice));
 
     my $blob = $self->GenerateStatusBlob();
     if (defined($blob)) {
-	GeniEvent->SendEvent({"type"    => "SLIVERSTATUS",
-			      "slice"   => $slice->urn(),
-			      "urn"     => $self->sliver_urn(),
-			      "details" => $blob});
+	return -1
+	    if (GeniEvent->SendEvent({"type"    => "SLIVERSTATUS",
+				      "slice"   => $slice->urn(),
+				      "urn"     => $self->sliver_urn(),
+				      "details" => $blob}));
     }
     return 0;
 }
@@ -1732,7 +1733,7 @@ sub SendFrisbeeEvent($$$)
 {
     my ($self, $imagename, $mb_written) = @_;
     my $slice = $self->GetSlice();
-    return -1
+    return 1
 	if (!defined($slice));
 
     my $resource_id   = $self->resource_id();
@@ -1745,10 +1746,11 @@ sub SendFrisbeeEvent($$$)
 	"MB_written"    => $mb_written,
 	"utc"           => time(),
     };
-    GeniEvent->SendEvent({"type"    => "FRISBEESTATUS",
-			  "slice"   => $slice->urn(),
-			  "urn"     => $self->sliver_urn(),
-			  "details" => $blob});
+    return -1
+	if (GeniEvent->SendEvent({"type"    => "FRISBEESTATUS",
+				  "slice"   => $slice->urn(),
+				  "urn"     => $self->sliver_urn(),
+				  "details" => $blob}));
     return 0;
 }
 

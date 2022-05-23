@@ -668,9 +668,9 @@ sub SetStateStatus($$$)
     $self->{'AGGREGATE'}->{'status'} = $status;
 
     # Any change, send the event.
-    $self->SendStatusEvent()
-	if ($self->type() eq "Aggregate" && $query_result->affectedrows);
-
+    if ($self->type() eq "Aggregate" && $query_result->affectedrows) {    
+	return $self->SendStatusEvent();
+    }
     return 0;
 }
 
@@ -699,7 +699,7 @@ sub SendStatusEvent($)
     my ($self) = @_;
 
     my $slice = $self->GetSlice();
-    return -1
+    return 1
 	if (!defined($slice));
     
     my $blob = {
@@ -708,10 +708,11 @@ sub SendStatusEvent($)
 	# Fall back to current time if no timestamp yet.
 	"utc"     => $self->status_state_timestamp() || time(),
     };
-    GeniEvent->SendEvent({"type"    => "SLICESTATUS",
-			  "slice"   => $slice->urn(),
-			  "urn"     => $slice->urn(),
-			  "details" => $blob});
+    return -1
+	if (GeniEvent->SendEvent({"type"    => "SLICESTATUS",
+				  "slice"   => $slice->urn(),
+				  "urn"     => $slice->urn(),
+				  "details" => $blob}));
     return 0;
 }
 
