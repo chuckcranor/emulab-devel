@@ -3763,7 +3763,8 @@ CREATE TABLE `logfiles` (
   PRIMARY KEY  (`logid`),
   KEY `logidx` (`logidx`),
   KEY `filename` (`filename`(128)),
-  KEY `isopen` (`isopen`)
+  KEY `isopen` (`isopen`),
+  KEY `date_created` (`date_created`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
