@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,8 +39,10 @@ sub usage()
 	"Use the -p option to remove user from a specific project\n";
     exit(-1);
 }
-my $optlist = "p:n";
+my $optlist = "p:nPs";
 my $nuke    = 0;
+my $purge   = 0;
+my $silent  = 0;
 my $pid;
 
 #
@@ -120,6 +122,12 @@ if (defined($options{"p"})) {
 }
 if (defined($options{"n"})) {
     $nuke = 1;
+}
+if (defined($options{"P"})) {
+    $purge = 1;
+}
+if (defined($options{"s"})) {
+    $silent = 1;
 }
 if ($nuke && !defined($pid)) {
     usage();
@@ -298,11 +306,12 @@ if (AuditStart(0)) {
 # to do the rest.
 #
 if (defined($project)) {
+    my $opt = ($silent ? "-s" : "");
     #
     # Drop root for calling modgroups.
     #
     $EUID = $UID;
-    system("$MODGROUPS -r $pid:$pid $target_uid");
+    system("$MODGROUPS $opt -r $pid:$pid $target_uid");
     my $estatus = ($? >> 8);
 
     #
@@ -348,8 +357,9 @@ else {
     $EUID = $UID;
     foreach my $project (@projectlist) {
 	my $this_pid = $project->pid();
+	my $opt = ($silent ? "-s" : "");
 	
-	system("$MODGROUPS -r $this_pid:$this_pid $target_uid");
+	system("$MODGROUPS $opt -r $this_pid:$this_pid $target_uid");
 
 	exit($? >> 8)
 	    if ($?);
@@ -412,7 +422,7 @@ EmulabFeatures->DeleteAll($target_user) == 0 or
 #
 # Otherwise, the user is "archived" by setting his status accordingly.
 #
-if ($nuke) {
+if ($nuke || $purge) {
     $target_user->Delete() == 0
 	or fatal("Could not delete $target_user from the DB!");
     
