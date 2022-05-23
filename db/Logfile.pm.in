@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2021 University of Utah and the Flux Group.
+# Copyright (c) 2007-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -272,7 +272,7 @@ sub Delete($;$)
     my $logid    = $self->logid();
     my $logidx   = $self->logidx();
     my $filename = $self->filename();
-    if ($delete) {
+    if ($delete && defined($filename)) {
 	unlink($filename);
     }
     return -1
@@ -374,7 +374,7 @@ sub Empty($)
     my $filename = $self->filename();
 
     return 1
-	if (! -e $filename || ! -s $filename);
+	if (!defined($filename) || ! -e $filename || ! -s $filename);
 
     return 0;
 }
