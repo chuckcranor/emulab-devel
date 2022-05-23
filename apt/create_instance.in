@@ -209,10 +209,10 @@ if (defined($options{"P"})) {
     $nopending = 1;
 }
 if (defined($start_at) && $start_at !~ /^\d+$/) {
-    fatal("Invalid --start_at parameter");
+    fatal("Invalid --start parameter");
 }
 if (defined($stop_at) && $stop_at !~ /^\d+$/) {
-    fatal("Invalid --stop_at parameter");
+    fatal("Invalid --stop parameter");
 }
 if (defined($options{"t"})) {
     $webtask_id = $options{"t"};
