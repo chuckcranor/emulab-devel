@@ -355,24 +355,31 @@ sub ShowLogfiles(@)
 }
 
 #
-# Prune logfiles we do not care about; for now these are deletesliver
-# logs where the slice was busy, and sliverstatus calls.
+# Prune logfiles we do not care about
 #
 sub PruneLogfiles()
 {
+    my @prunelist = ('GetImageInfo','Remove','get_credentials','Reservations',
+		     'SliceMaxExtension', 'ReservationPrediction',
+		     'DescribeDataset');
+    my $prunelist = join(",", map { "'$_'" } @prunelist);
+    
     my $query_result =
-	DBQueryFatal("select m.logidx,l.logid from logfile_metadata as m ".
+	DBQueryFatal("select m.logidx,l.logid,m.metaval ".
+		     "   from logfile_metadata as m ".
 		     "left join logfiles as l on m.logidx=l.logidx ".
-		     "where metakey='Method' and metaval='ImageInfo'");
-    while (my ($logidx,$logid) = $query_result->fetchrow_array()) {
+		     "where metakey='Method' and ".
+		     "      metaval in ($prunelist) and ".
+		     "      l.date_created < DATE_SUB(NOW(),INTERVAL 60 DAY)");
+    while (my ($logidx,$logid,$method) = $query_result->fetchrow_array()) {
 	my $logfile = Logfile->Lookup($logid);
 	next
 	    if (!defined($logfile));
 	if ($impotent) {
-	    print "Would delete ImageInfo $logfile\n";
+	    print "Would delete $method $logfile\n";
 	}
 	else {
-	    $logfile->Delete();
+	    $logfile->Delete(1);
 	}
     }
     $query_result =
