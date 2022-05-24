@@ -1541,10 +1541,11 @@ sub Stop($$)
     return 0;
 }
 
-sub ComputeStatus($;$)
+sub ComputeStatus($;$$)
 {
-    my ($self, $pref) = @_;
+    my ($self, $pref, $nosend) = @_;
     my $status = undef;
+    $nosend = 0 if (!defined($nosend));
 
     return -1
 	if (! ref($self));
@@ -1590,7 +1591,7 @@ sub ComputeStatus($;$)
 	}
 	else {
 	    # return to normal started state and continue below.
-	    $self->SetState("started");
+	    $self->SetState("started", $nosend);
 	}
     }
     if ($self->state() eq "imaging" || $self->state() eq "restarting") {
@@ -1640,18 +1641,20 @@ sub ComputeStatus($;$)
 	$status = "changing";
     }
   done:
-    $self->SetStatus($status);
+    # Caller will send if nosend is set. For igevent_daemon.
+    $self->SetStatus($status, $nosend);
     $$pref = $status
 	if (defined($pref));
     return 0;
 }
 
 #
-# Set the status for the sliver.
+# Set the status for the sliver. $nosend for igevent_daemon.
 #
-sub SetStatus($$)
+sub SetStatus($$;$)
 {
-    my ($self, $status) = @_;
+    my ($self, $status, $nosend) = @_;
+    $nosend = 0 if (!defined($nosend));
     my $idx = $self->idx();
 
     #
@@ -1669,7 +1672,7 @@ sub SetStatus($$)
     $self->{'SLIVER'}->{'status'} = $status;
     # No change.
     return 0
-	if (!$query_result->affectedrows);
+	if (!$query_result->affectedrows || $nosend);
 
     return $self->SendStatusEvent();
 }
@@ -1677,9 +1680,10 @@ sub SetStatus($$)
 #
 # Set the state for the sliver.
 #
-sub SetState($$)
+sub SetState($$;$)
 {
-    my ($self, $state) = @_;
+    my ($self, $state, $nosend) = @_;
+    $nosend = 0 if (!defined($nosend));
     my $idx = $self->idx();
 
     #
@@ -1698,7 +1702,7 @@ sub SetState($$)
     $self->{'SLIVER'}->{'state'} = $state;
     # No change.
     return 0
-	if (!$query_result->affectedrows);
+	if (!$query_result->affectedrows || $nosend);
     
     return $self->SendStatusEvent();
 }

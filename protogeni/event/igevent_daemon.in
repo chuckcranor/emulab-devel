@@ -409,22 +409,20 @@ sub HandleNotification($$)
 	$objtype eq TBDB_TBEVENT_NODESTATUS() ||
 	$objtype eq TBDB_TBEVENT_NODEACCOUNTS()) {
 	my $oldstatus = $sliver->status();
-	my $newstatus;
 
 	if ($verbose) {
 	    print "State/Status event for $node_id\n";
 	}
 	if (!$impotent) {
 	    #
-	    # The point here, is that we do not want to send an event if
-	    # ComputeStatus sent one, but since the rawstate has probably
-	    # changed, we want to make sure an event goes out. 
+	    # We tell ComputeStatus not to send the event, we send it
+	    # here to prevent duplicate events.
 	    #
-	    if ($sliver->ComputeStatus(\$newstatus) == 0 &&
-		$oldstatus eq $newstatus) {
+	    if ($sliver->ComputeStatus(undef, 1) == 0) {
 		$sliver->SendStatusEvent();
 	    }
 	    if ($verbose) {
+		my $newstatus = $sliver->status();
 		print "Status for $node_id $oldstatus -> $newstatus\n";
 	    }
 	}
