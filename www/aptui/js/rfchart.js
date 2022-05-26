@@ -14,7 +14,7 @@ window.CreateRangeCharts = (function ()
      * Range/graph we show in tabs.
      */
     var rfRanges = {
-	"cbrs"    : { "low": 3550, "high": 3700, "ranges" : [], "zoom": null},
+	"cbrs"    : { "low": 3350, "high": 3700, "ranges" : [], "zoom": null},
 	"ism900"  : { "low": 910,  "high": 920,  "ranges" : [], "zoom": null},
 	"ism2400" : { "low": 2400, "high": 2483.5, "ranges" : [], "zoom": null},
 	"ism5800" : { "low": 5725, "high": 5850, "ranges" : [], "zoom": null},
