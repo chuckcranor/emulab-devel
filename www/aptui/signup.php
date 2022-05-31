@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -265,6 +265,20 @@ if (!$this_user || $promoting) {
             (User::Lookup($formfields["uid"]) ||
              posix_getpwnam($formfields["uid"]))) {
 	$errors["uid"] = "Already in use. Pick another";
+    }
+    else {
+        #
+        # Damn users, they like to pick stupid user names like root, admin, etc.
+        #
+        $bogos = array("user", "test", "root", "admin", "toor", "daemon",
+                       "nobody", "student", "research", "cloud", "guest",
+                       "network", "mininet");
+
+        foreach ($bogos as $bogo) {
+            if (preg_match("/^${bogo}\d*$/i", $formfields["uid"])) {
+                $errors["uid"] = "Improper user name. Pick another";
+            }
+        }
     }
     if (!isset($formfields["fullname"]) ||
 	strcmp($formfields["fullname"], "") == 0) {
