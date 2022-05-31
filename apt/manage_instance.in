@@ -3720,7 +3720,7 @@ sub DoDeleteNodes()
 	    push(@aggregates, $obj);
 	}
     }
-    if (scalar(@delaggs) == scalar($instance->AggregateList())) {
+    if (scalar(@delaggs) == scalar($instance->ActiveAggregateList())) {
 	$errmsg   = "Not allowed to delete all nodes, ".
 	    "please use Terminate instead";
 	print STDERR $errmsg . "\n";
@@ -3976,6 +3976,15 @@ sub DoDeleteAggregates()
     #
     my @tmp = ();
     foreach my $aggregate (@aggregates) {
+	#
+	# If deleting a deferred aggregate cleanup.
+	#
+	if ($aggregate->deferred()) {
+	    $aggregate->ResolveDefer();
+	    if (! $instance->DeferredAggregateList()) {
+		$instance->ResolveDefer();
+	    }
+	}
 	if ($aggregate->status() eq "created" ||
 	    $aggregate->status() eq "prestage") {
 	    #
