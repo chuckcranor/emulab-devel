@@ -2747,6 +2747,47 @@ sub CheckResourceReservations($$$$)
 }
 
 #
+# Helper function, are all resources at an aggregate reserved. 
+#
+sub AllResourcesReserved($$)
+{
+    my ($self, $aggregate) = @_;
+    my $errmsg;
+    my $urn      = $aggregate->aggregate_urn();
+    my $project  = $self->GetProject();
+    my $expires  = str2time($self->Expires());
+    my $rspec    = $self->RSPEC();
+    if (!$rspec) {
+	print STDERR "Could not parse rspec\n";
+	return 0;
+    }
+    my $resources = $self->_resources();
+    if (!defined($resources) &&
+	APT_Profile::GetResources($rspec, \$errmsg, \$resources)) {
+	print STDERR "$errmsg\n";
+	return 0;
+    }
+    my $typeCounts = $resources->{"typeCounts"}->{$urn};
+
+    print Dumper($typeCounts);
+
+    foreach my $type (keys(%{ $typeCounts })) {
+	my $count = $typeCounts->{$type};
+
+	# Clearly not reserved.
+	return 0
+	    if ($type eq "pc");
+
+	return 0
+	    if (!(APT_Reservation::Group::Reservation::Reserved(
+		      $project, time(), $expires, $urn, $type, $count) ||
+		  APT_Reservation::Group::Reservation::ReservedByType(
+		      $project, time(), $expires, $urn, $type, $count)));
+    }
+    return 1;
+}
+
+#
 # Get the routes used by an instance.
 #
 sub GetRoutes($$$)

@@ -291,7 +291,8 @@ foreach my $agg ($instance->AggregateList()) {
 	# The scheduler is going to pick us up again later, since we will
 	# defer the instance (below);
 	#
-	$agg->Defer("Aggregate offline");
+	$agg->Defer("The " . $aptagg->nickname() .
+		    " cluster is current offline");
 	next;
     }
     push(@aggregate_list, $agg);
@@ -625,7 +626,7 @@ foreach my $aggobj (@aggregate_list) {
 	    #
 	    # Convert from failure to defer, so we retry. 
 	    #
-	    $aggobj->Defer("Setup interrupted or timed out.");
+	    $aggobj->Defer("Setup on $cluster interrupted or timed out.");
 	    $aggobj->SetStatus("interrupted");
 	    next;
 	}
@@ -1290,31 +1291,35 @@ sub CreateSlivers()
 	    if (($exitcode == GENIRESPONSE_SERVER_UNAVAILABLE() ||
 		 $exitcode == GENIRESPONSE_NETWORK_ERROR()) && $deferrable) {
 		print STDERR "$cluster is offline; deferring till later\n";
-		$aggobj->Defer();
+		$aggobj->Defer("$cluster is offline or not reachable");
 		push(@deferred, $aggobj);
 		next;
 	    }
 	    # Typically prestaging, also defer.
 	    if ($exitcode == GENIRESPONSE_INPROGRESS()) {
 		print STDERR "$cluster: $output\n";
-		$aggobj->Defer();
+		$aggobj->Defer("Prestaging in progress");
 		push(@deferred, $aggobj);
 		next;
 	    }
-	    if ($ismobile &&
-		($exitcode == GENIRESPONSE_NO_MAPPING() ||
+	    if (($exitcode == GENIRESPONSE_NO_MAPPING() ||
 		 $exitcode == GENIRESPONSE_INSUFFICIENT_NODES()) &&
-		defined($aptagg->routename())) {
+		$instance->AllResourcesReserved($aggobj)) {
 		print STDERR "$cluster says not able to map experiment yet; ".
 		    "deferring till later since project has it reserved\n";
-		$aggobj->Defer("Unable to map resources, deferring till later");
+		
+		$aggobj->Defer("Unable to map all resources, but since this ".
+			       "project has the resources reserved, we will ".
+			       "keep trying until you delete the resources ".
+			       "or terminate the experiment");
 		# Reset status back to created since we have to try again.
 		$aggobj->SetStatus("created");
 		push(@deferred, $aggobj);
 		next;
 	    }
-	    # If a mobile node fails, we allow the user to ignore errors.
-	    if ($ismobile) {
+	    # With mulitple aggregates allow user to ignore errors and
+	    # delete the failed nodes. 
+	    if (scalar($instance->ActiveAggregateList()) > 1) {
 		$canignore++;
 	    }
 

@@ -463,6 +463,11 @@ $(function ()
 	else {
 	    instanceStatus = json.value.status;
 	}
+	// Clear this since it is transient.
+	if (instanceStatus != "pending") {
+	    $('#pending-panel').addClass("hidden");
+	}
+	
 	// The urls can show up at any time cause of async/early return.
 	if (_.has(json.value, "sliverstatus")) {
 	    ShowSliverURLs(json.value.sliverstatus);
@@ -520,7 +525,9 @@ $(function ()
 		ProgressBarUpdate();
 		ShowRspec();
 		ShowBindings();
-		status_message = "Some or all aggregates currently unreachable";
+		status_message = "Your experiment cannot be instantiated " +
+		    "yet, trying again in a few minutes.";
+		ShowPendingInfo(json.value);
 	    }
 	    else if (instanceStatus == 'scheduled') {
 		status_html = "scheduled";
@@ -1154,6 +1161,10 @@ $(function ()
 		    "<tr><td class='border-none'>Status:</td><td class='border-none'>" +
    		    (recovery ? "<b>recovery</b>" : details.status) +
 		          "</td></tr>" +
+		    "<tr><td class='border-none'>State:</td>" +
+		        "<td class='border-none'>" +
+		    details.state + "</td></tr>" +
+		    
 		    "<tr><td class='border-none'>Raw State:</td>" +
 		        "<td class='border-none'>" +
 		    details.rawstate + "</td></tr>";
@@ -1408,6 +1419,28 @@ $(function ()
 	}
 	return 0;
     }
+
+    //
+    // Show info when experiment is pending.
+    //
+    function ShowPendingInfo(blob)
+    {
+	if (_.has(blob, "sliverstatus")) {
+	    for (var urn in blob.sliverstatus) {
+		var details = blob.sliverstatus[urn];
+		if (details.deferred == "1") {
+		    $('#pending-panel .pending-reason')
+			.html(details.deferred_reason);
+		    if (_.has(details, "deferred_cause")) {
+			$('#pending-panel .pending-cause')
+			    .html(details.deferred_cause);
+		    }
+		    $('#pending-panel').removeClass("hidden");
+		    return;
+		}
+	    }
+	}
+    }
 	
     //
     // Request a node reboot or reload from the backend cluster.
@@ -1500,6 +1533,8 @@ $(function ()
 		changingtopo = true;
 		// Trigger status to change the nodes.
 		GetStatus();
+		// And max extension update
+		LoadMaxExtension();
 	    }
 	    sup.ShowWaitWait("This will take several minutes. " +
 			     "Patience please.");

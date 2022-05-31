@@ -442,6 +442,40 @@ pre {
     </div>
   </div>
 </div>
+<div class='row hidden' id='pending-panel'>
+  <div class='col-lg-8  col-lg-offset-2
+	      col-md-8  col-md-offset-2
+	      col-sm-10 col-sm-offset-1
+	      col-xs-12 col-xs-offset-0'>
+    <div class="panel panel-info">
+      <div class="panel-heading">
+        <center><h4 class="panel-title">Experiment is Pending</h4></center>
+      </div>
+      <div class="panel-body">
+	<code class="pending-cause" style="white-space: pre-wrap"></code>
+	<div class="pending-reason"
+	     style="margin-top: 15px; font-weight: bold;"></div>
+      </div>
+      <div class="panel-footer">
+	More info about pending experiments:
+	<ul>
+	  <li>
+	    An experiment enters the <em>pending</em> state when none
+	    of the resources can be allocated, but the system decides
+	    that it should attempt again later.
+	  </li>
+	  <li>
+	    For example, if you have a reservation for all of the
+	    resources, the error is possibly transient, and might
+	    clear up in a short time.
+	  </li>
+	  <li>
+	    You can terminate the experiment any time.
+	  </li>
+	</ul>
+      </div>
+    </div>
+  </div>
 </div>
 <!-- Add a div for the prestaging info -->
 <div class='row hidden' id='prestage-panel'>
