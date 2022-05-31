@@ -450,7 +450,7 @@ sub DoStatus()
     my $which = shift(@ARGV);
 
     fatal("Must be one of 'up' or 'down' or 'offline'")
-	if ($action ne "up" && $action ne "down" && $action ne "offline");
+	if ($which ne "up" && $which ne "down" && $which ne "offline");
     
     $aggregate->status($which);
     $aggregate->StatusEvent($which);
