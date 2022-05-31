@@ -58,6 +58,7 @@ my $sendemail       = 0;
 my $errmsg;
 my $sshkeys;
 my @aggregate_list  = ();
+my @deferred_list   = ();
 
 #
 # Configure variables
@@ -294,6 +295,9 @@ foreach my $agg ($instance->AggregateList()) {
 	next;
     }
     push(@aggregate_list, $agg);
+    # Mark if we are retrying a deferred aggregate, for email below.
+    push(@deferred_list, $agg)
+	if ($agg->deferred());
 }
 if (!@aggregate_list) {
     print "No uncreated aggregates to process.\n";
@@ -729,6 +733,14 @@ else {
 		push(@buslist, $aptagg);
 	    }
 	}
+	#
+	# Did we resolve anything this time.
+	#
+	my @resolved = ();
+	foreach my $agg (@deferred_list) {
+	    push(@resolved, $agg)
+		if (!$agg->deferred());
+	}
 	
 	if ($instance->start_at() && $curStatus eq "created") {
 	    #
@@ -760,13 +772,13 @@ else {
 		    "email when those resources become available.";
 	    }
 	}
-	elsif ($instance->DeferredAggregateList()) {
+	elsif (@resolved) {
 	    $subject = "Resources in experiment $pid/$eid are now running";
 	    $message = 
 		"The following deferred resources have been incorporated\n".
 		"into your experiment and are now running:\n\n".
-		"\t" . join(",", map {$_->GetAptAggregate()->nickname()}
-			    $instance->DeferredAggregateList());
+		"\t" . join(",",
+			    map {$_->GetAptAggregate()->nickname()} @resolved);
 	    
 	    if ($instance->DeferredAggregateList()) {
 		$message .= "\n\n" .
