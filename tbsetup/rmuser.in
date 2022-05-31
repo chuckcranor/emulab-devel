@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,14 +35,20 @@ use Getopt::Std;
 #
 sub usage()
 {
-    print STDOUT "Usage: rmuser [-p <pid> [-n]] uid\n" .
-	"Use the -p option to remove user from a specific project\n";
+    print STDOUT "Usage: rmuser [-F] [-p <pid> [-n]] uid\n" .
+	"Options:\n" .
+	" -s pid  - Remove user from specific project\n".
+	" -n      - Web option; nuke user account during project denial\n".
+	" -s      - Silence email\n".
+	" -F      - Force removal by terminating user's experiments\n".
+	" -P      - Purge user from the DB instead of archiving\n";
     exit(-1);
 }
-my $optlist = "p:nPs";
+my $optlist = "p:nPsF";
 my $nuke    = 0;
 my $purge   = 0;
 my $silent  = 0;
+my $force   = 0;
 my $pid;
 
 #
@@ -59,6 +65,7 @@ my $PEER_ENABLE    = @PEER_ENABLE@;
 my $PEER_PRIMARY   = @PEER_ISPRIMARY@;
 my $MODGROUPS	   = "$TB/sbin/modgroups";
 my $TBACCT	   = "$TB/sbin/tbacct";
+my $ENDEXP	   = "$TB/bin/endexp";
 my $POSTCRL	   = "$TB/sbin/protogeni/postcrl";
 
 # Locals
@@ -67,6 +74,7 @@ my $project;
 
 # Protos
 sub fatal($);
+sub endexp($);
 
 #
 # We don't want to run this script unless its the real version.
@@ -125,6 +133,9 @@ if (defined($options{"n"})) {
 }
 if (defined($options{"P"})) {
     $purge = 1;
+}
+if (defined($options{"F"})) {
+    $force = 1;
 }
 if (defined($options{"s"})) {
     $silent = 1;
@@ -229,16 +240,22 @@ if (Experiment->UserExperimentList($target_user, \@explist) != 0) {
     fatal("Could not get experiment list for $target_user");
 }
 if (@explist) {
-    if (defined($project)) {
-	foreach my $experiment (@explist) {
+    foreach my $experiment (@explist) {
+	if (defined($project)) {
 	    if ($experiment->pid_idx() == $project->pid_idx()) {
-		fatal("$target_user is still heading up experiments in ".
-		      "project $project!");
+		if (!$force) {
+		    fatal("$target_user is still heading up experiments in ".
+			  "project $project!");
+		}
 	    }
+	    endexp($experiment);
 	}
-    }
-    else {
-	fatal("$target_uid is still heading up experiments!");
+	else {
+	    if (!$force) {
+		fatal("$target_uid is still heading up experiments!");
+	    }
+	    endexp($experiment);
+	}
     }
 }
 
@@ -442,4 +459,28 @@ sub fatal($) {
 
     die("*** $0:\n".
 	"    $mesg\n");
+}
+
+sub endexp($)
+{
+    my ($experiment) = @_;
+    my $user = $experiment->GetCreator();
+    my $cmd  = "$ENDEXP -f -o -w -q -N " . $experiment->pideid();
+
+    #
+    # Before we can do anything, we have to reactivate.
+    #
+    if ($reactivate) {
+	$EUID = $UID;
+	if (system("$TBACCT -s -u -f reactivate $target_uid")) {
+	    fatal("$TBACCT -s -u -f reactivate $target_uid failed!");
+	}
+	$EUID = 0;
+	$reactivate = 0;
+    }
+    my ($status, $output) = $user->ExecuteAs($cmd, $experiment->unix_gid());
+    if ($status) {
+	print STDERR $output;
+	fatal("Could not terminate $experiment");
+    }
 }
