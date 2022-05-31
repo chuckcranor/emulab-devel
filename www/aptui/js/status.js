@@ -574,7 +574,7 @@ $(function ()
 		}
 		if (lastStatus == "failed") {
 		    $('#error_panel').addClass("hidden");
-		    $('#ignore-failure').addClass("hidden");
+		    $('.ignore-failure').addClass("hidden");
 		}
 		ProgressBarUpdate();
 		ShowIdleDataTab();
@@ -599,7 +599,7 @@ $(function ()
 		    $('#error_panel .resource-error').removeClass("hidden");
 		}
 		if (json.value.canclearerror) {
-		    $('#ignore-failure').removeClass("hidden");
+		    $('.ignore-failure').removeClass("hidden");
 		}
 		
 		status_html = "<font color=red>failed</font>";
@@ -635,7 +635,7 @@ $(function ()
 		status_message = "Your experiment has been terminated!";
 		StartCountdownClock.stop = 1;
 		if (lastStatus == "failed") {
-		    $('#ignore-failure').addClass("hidden");
+		    $('.ignore-failure').addClass("hidden");
 		}
 	    }
 	    else if (instanceStatus == "unknown") {

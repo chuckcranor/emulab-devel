@@ -90,11 +90,11 @@ pre {
               <span id='quickvm_status'>
 		<font></font>
               </span>
-	      <span class="hidden" id="ignore-failure"
+	      <span class="hidden ignore-failure"
 		    style='margin-left: 10px;'>
-		(<a id='ignore-failure-button' href="#"
+		(You can <a class='ignore-failure-button' href="#"
 		    data-target='#ignore-failure-modal'
-		    data-toggle='modal'>Ignore this failure</a>?)</span>
+			    data-toggle='modal'>ignore this failure</a>)</span>
 	      <span class="hidden" id="explain-quarantine"
 		    style='margin-left: 10px;'>
 		(<a id='explain-quarantine-button' href="#"
@@ -438,6 +438,15 @@ pre {
         sure to include the error message in your question, and the name
 	of your profile and experiment:
 	'<%= expinfo.profile_name %>/<%= expinfo.name %>'.
+	<span class="hidden ignore-failure">
+	  <em>This error can be
+	    <a class='ignore-failure-button' href="#"
+	       data-target='#ignore-failure-modal'
+	       data-toggle='modal'>ignored</a> if you do not want the
+	    experiment to be reaped automatically.</em>
+	  Nodes can sometimes be resurrected by rebooting or reloading, click
+	  on the node(s) to view the context menu.
+	</span>
       </div>
     </div>
   </div>
@@ -1842,8 +1851,8 @@ pre {
 	  <p>
 	    Other errors cannot be easily fixed, for example failed
    	    hardware or a bad cable that causes your network to fail.
-   	    You cannot those failures of course since your experiment
-   	    cannot be productively used.
+   	    You cannot ignore those failures of course since your
+	    experiment cannot be productively used.
 	  </p>
 	  <center>
             <button type='button' style='margin-right: 20px;'
