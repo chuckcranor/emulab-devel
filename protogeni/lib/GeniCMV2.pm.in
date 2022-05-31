@@ -1572,57 +1572,13 @@ sub SliverAction($$$$$$)
 	print STDERR "Could not determine current state\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
-    my $CheckState = sub {
-	my ($object, $action) = @_;
-
-	if ($action eq "start") {
-	    if ($object->state() !~ /^(stopped|new|mixed|interrupted)$/) {
-		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-					    "Sliver is not stopped (yet)");
-	    }
-	}
-	elsif ($action eq "stop") {
-	    if ($object->state() ne "started" && $object->state() ne "mixed") {
-		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-					    "Sliver is not started (yet)");
-	    }
-	}
-	elsif ($action eq "restart") {
-	    if ($object->state() ne "started" && $object->state() ne "mixed") {
-		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-					    "Sliver is not started (yet)");
-	    }
-	}
-	elsif ($action eq "powercycle") {
-	    if ($object->state() ne "started" && $object->state() ne "mixed") {
-		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-					    "Sliver is not started (yet)");
-	    }
-	}
-	elsif ($action eq "reload") {
-	    # We want to make this check before the fork, which makes it messy
-	    if (ref($object) eq "GeniSliver::Node" ||
-		ref($object) eq "Aggregate") {
-		if ($object->InRecovery()) {
-		    return
-			GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-				 "Must clear recovery mode before reload");
-		}
-	    }
-	    if ($object->state() ne "started" && $object->state() ne "stopped"){
-		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-				    "Sliver is not started or stopped (yet)");
-	    }
-	}
-	return 0;
-    };
     my $PerformAction = sub {
 	my ($object, $action, @slivers) = @_;
 
 	my $exitval = 0;
 
 	if ($action eq "start") {
-	    $exitval = $object->Start($API_VERSION);
+	    $exitval = $object->Start($API_VERSION, undef, @slivers);
 	}
 	elsif ($action eq "stop") {
 	    $exitval = $object->Stop($API_VERSION);
@@ -1677,11 +1633,34 @@ sub SliverAction($$$$$$)
 	if ($action eq "restart" && $aggregate->state() eq "interrupted") {
 	    $action = "start";
 	}
-	
-	$response = &$CheckState($aggregate, $action);
-	goto bad
-	    if (GeniResponse::IsResponse($response));
-	    
+	elsif ($action eq "restart") {
+	    my @slivers = ();
+	    my $isnew   = 0;
+
+	    if ($aggregate->SliverList(\@slivers) != 0) {
+		$response = GeniResponse->Create(GENIRESPONSE_ERROR,
+						 undef,
+						 "Error getting sliver list");
+		goto bad;
+	    }
+	    foreach my $sliver (@slivers) {
+		$isnew++
+		    if ($sliver->state() eq "new");
+	    }
+	    #
+	    # If doing a restart and all the slivers are "new", then these
+	    # failed early enough that we should just do "start" instead.
+	    #
+	    if ($isnew == scalar(@slivers)) {
+		$action = "start";
+	    }
+	}
+	my $reason;
+	if (!$aggregate->IsActionAllowed($action, \$reason)) {
+	    $response = GeniResponse->Create(GENIRESPONSE_REFUSED,
+					     undef, $reason);
+	    goto bad;
+	}
 	if ($action eq "start" || $action eq "restart" || $action eq "reload"){
 	    if (defined($manifest) &&
 		$aggregate->ProcessManifest($manifest)) {
@@ -1718,10 +1697,8 @@ sub SliverAction($$$$$$)
     }
     else {
 	my @slivers = ();
+	my $isnew   = 0;
 
-	#
-	# Sanity check all arguments before doing anything.
-	#
 	foreach my $urn (@{ $sliver_urns }) {
 	    my $sliver = GeniSliver->Lookup($urn);
 	    if (!defined($sliver)) {
@@ -1730,12 +1707,29 @@ sub SliverAction($$$$$$)
 						 "Nothing here by that name");
 		goto bad;
 	    }
-	    
-	    $response = &$CheckState($sliver, $action);
-	    goto bad
-		if (GeniResponse::IsResponse($response));
-
 	    push(@slivers, $sliver);
+
+	    $isnew++
+		if ($sliver->state() eq "new");
+	}
+	#
+	# If doing a restart and all the slivers are "new", then these
+	# failed early enough that we should just do "start" instead.
+	#
+	if ($action eq "restart" && $isnew == scalar(@slivers)) {
+	    $action = "start";
+	}
+
+	#
+	# Sanity check all arguments before doing anything.
+	#
+	foreach my $sliver (@slivers) {
+	    my $reason;
+	    if (!$sliver->IsActionAllowed($action, \$reason)) {
+		$response = GeniResponse->Create(GENIRESPONSE_REFUSED,
+						 undef, $reason);
+		goto bad;
+	    }
 	}
 	foreach my $sliver (@slivers) {
 	    if ($action eq "start" && defined($manifest)) {
@@ -1747,7 +1741,7 @@ sub SliverAction($$$$$$)
 		}
 	    }
 	}
-	if ($asyncmode && $action =~ /^(restart|reload)$/) {
+	if ($asyncmode && $action =~ /^(start|restart|reload)$/) {
 	    #
 	    # At this point we want to return and let the startsliver proceed
 	    # in the background

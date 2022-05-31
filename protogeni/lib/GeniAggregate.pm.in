@@ -1108,14 +1108,14 @@ sub UseOsSetup($)
 					  $user, $group, undef);
 }
 
-sub Start($$;$)
+sub Start($$;$@)
 {
-    my ($self, $version, $flags) = @_;
+    my ($self, $version, $flags, @slivers) = @_;
 
     if ($self->UseOsSetup()) {
-	return $self->ActionStart($version, $flags);
+	return $self->ActionStart($version, $flags, @slivers);
     }
-    return $self->Action($version, "start", $flags);
+    return $self->Action($version, "start", $flags, @slivers);
 }
 
 sub Restart($$;$)
@@ -1149,11 +1149,50 @@ sub PowerCycle($$;$)
 }
 
 #
+# Determine if SliverAction() can do what the user requested.
+# We need to this before the wrapperfork in the caller.
+#
+sub IsActionAllowed($$$)
+{
+    my ($self, $action, $perrmsg) = @_;
+    my $error;
+
+    if ($action eq "start") {
+	if ($self->state() !~ /^(stopped|new|mixed|interrupted)$/) {
+	    $error = "Sliver is not stopped (yet)";
+	}
+    }
+    elsif ($action =~ /^(stop)$/) {
+	if ($self->state() !~ /^(started|mixed)$/) {
+	    $error = "Sliver is not started (yet)";
+	}
+    }
+    elsif ($action =~ /^(restart|powercycle)$/) {
+	if ($self->state() !~ /^(started|mixed)$/) {
+	    $error = "Sliver is not started or stopped (yet)";
+	}
+    }
+    elsif ($action eq "reload") {
+	if ($self->InRecovery()) {
+	    $error = "Must clear recovery mode before reload";
+	}
+	elsif ($self->state() !~ /^(started|stopped)$/) {
+	    $error = "Sliver is not started or stopped (yet)";
+	}
+    }
+    if (defined($error)) {
+	$$perrmsg = $error;
+	return 0;
+    }
+    return 1;
+}
+
+#
 # New version of start that uses libossetup.
 #
-sub ActionStart($$;$)
+sub ActionStart($$;$@)
 {
-    my ($self, $version, $flags) = @_;
+    my ($self, $version, $flags, @slivers) = @_;
     my $msg = "SliverStart: ";
     my $bootfailure_code = GENIRESPONSE_SETUPFAILURE();
     $flags      = 0 if (!defined($flags));
@@ -1196,14 +1235,17 @@ sub ActionStart($$;$)
 	$msg = "Could not map $self to its creator";
 	goto bad;
     }
-    
-    my @slivers = ();
-    if ($self->SliverList(\@slivers) != 0) {
-	$msg .= "Could not get sliver list for $self";
-	goto bad;
+
+    #
+    # Allow for a list of slivers to come in.
+    #
+    if (!@slivers) {
+	if ($self->SliverList(\@slivers) != 0) {
+	    $msg .= "Could not get sliver list for $self";
+	    goto bad;
+	}
     }
     my %nodes    = ();
-    my @restarts = ();
     my @failed   = ();
     my %imports  = ();
     my $sliver;
@@ -1231,10 +1273,8 @@ sub ActionStart($$;$)
 	# Instead we want to bring it back via Restart (which handles this
 	# case).
 	#
-	if ($sliver->state() eq "stopped") {
-	    push(@restarts, $sliver);
-	    next;
-	}
+	next
+	    if ($sliver->state() eq "stopped");
 	
 	my $node = Node->Lookup($sliver->resource_id());
 	if (!defined($node)) {
@@ -1259,6 +1299,17 @@ sub ActionStart($$;$)
 
 	# Back pointer, see below.
 	$node->_sliver($sliver);
+
+	#
+	# If the node is a previous failure, we want to change the
+	# the allocstate so that os_setup actually does something.
+	#
+	if ($sliver->status() eq "failed" && $sliver->state() eq "new") {
+	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_INIT_DIRTY());
+	}
+
+	# We do this so the slivers no longer say "ready" in the status.
+	$sliver->SetStatus("changing");
 
 	# Add pnodes for exclusive virtual nodes that are not explicitly
 	# part of the rspec. 
@@ -1547,12 +1598,27 @@ sub ActionStart($$;$)
     foreach my $node_id (keys(%nodes)) {
 	my $node = $nodes{$node_id};
 	$node->Refresh();
+	# igevent_daemon is updating the sliver as node events come in
+	$node->_sliver()->Refresh()
+	    if (defined($node->_sliver()));
+
+	#print STDERR "$node eventstate is " . $node->eventstate() . "\n";
 
 	# os_setup will set failed nodes to this state.
 	if ($node->allocstate() eq TBDB_ALLOCSTATE_DOWN()) {
 	    push(@failed, $node);
-	    $node->_sliver()->SetState("failed")
-		if (defined($node->_sliver()));
+
+	    if (defined($node->_sliver())) {
+		$node->_sliver()->SetStatus("failed");
+
+		#
+		# If we made it through reloading, we set the state
+		# so that the user can reload/restart
+		#
+		if ($node->eventstate() eq TBDB_NODESTATE_TBFAILED) {
+		    $node->_sliver()->SetState("started");
+		}
+	    }
 	}
 	else {
 	    $node->_sliver()->SetState("started")
@@ -1560,6 +1626,7 @@ sub ActionStart($$;$)
 	}
 	if (grep {$_ eq $node->eventstate()}
 	    (TBDB_NODESTATE_TBFAILED, TBDB_NODESTATE_RELOADFAILED)) {
+
 	    my $bootlog;
 	    if ($node->GetBootLog(\$bootlog) == 0 && $bootlog ne "") {
 		my $logfile = Logfile->CreateFromString($group, $bootlog);
@@ -1842,9 +1909,9 @@ sub ActionRestart($$;$)
 # XXX Is is assumed that there is a single toplevel aggregate for the
 # slice, so we can get all the nodes.
 #
-sub Action($$$;$)
+sub Action($$$;$@)
 {
-    my ($self, $version, $action, $flags) = @_;
+    my ($self, $version, $action, $flags, @slivers) = @_;
     my $msg = "Internal Error: ";
     my $bootfailure_code = GENIRESPONSE_SETUPFAILURE();
     my $restart = ($action eq "restart" || $action eq "powercycle" ? 1 : 0);
@@ -1907,10 +1974,11 @@ sub Action($$$;$)
 	goto bad;
     }    
 
-    my @slivers = ();
-    if ($self->SliverList(\@slivers) != 0) {
-	$msg .= "Could not get sliver list for $self";
-	goto bad;
+    if (!@slivers) {
+	if ($self->SliverList(\@slivers) != 0) {
+	    $msg .= "Could not get sliver list for $self";
+	    goto bad;
+	}
     }
     my %reboots  = ();
     my %vnodes   = ();
@@ -3775,6 +3843,7 @@ sub ComputeState($;$)
 {
     my ($self, $unmix) = @_;
     $unmix = 0 if (!defined($unmix));
+    my $new     = 0;
     my $started = 0;
     my $stopped = 0;
     my $updating= 0;
@@ -3816,7 +3885,10 @@ sub ComputeState($;$)
 	if ($state eq "started") {
 	    $started++;
 	}
-	elsif ($state eq "stopped" || $state eq "new") {
+	elsif ($state eq "new") {
+	    $new++;
+	}
+	elsif ($state eq "stopped") {
 	    $stopped++;
 	}
 	elsif ($state eq "updating_users") {
@@ -3847,9 +3919,6 @@ sub ComputeState($;$)
 	    $self->SetStatus("changing");
 	    return 0;
 	}
-	else {
-
-	}
     }
     my ($newstate,$newstatus);
 
@@ -3860,6 +3929,9 @@ sub ComputeState($;$)
     }
     elsif ($stopped == $count) {
 	$newstate = "stopped";
+    }
+    elsif ($new == $count) {
+	$newstate = "new";
     }
     elsif ($started == $count) {
 	$newstate = "started";
@@ -4687,7 +4759,7 @@ sub Start($$)
 	$self->SetErrorLog($msg);
 	print STDERR "$msg\n";
     }
-    $self->SetState("failed");
+    $self->SetStatus("failed");
     return -1;
 }
 
