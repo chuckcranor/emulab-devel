@@ -3482,9 +3482,6 @@ sub MarkAsIll($)
     my ($self) = @_;
     my $nodeid = (ref($self) ? $self->node_id() : $self);
 
-    if (ClearBootAttributes($nodeid)) {
-	print STDERR "*** WARNING: Could not clear boot attributes: $self!\n";
-    }
     my $pid = NODEILL_PID();
     my $eid = NODEILL_EID();
     my $experiment = LocalExpLookup($pid, $eid);
