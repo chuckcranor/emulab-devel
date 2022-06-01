@@ -5,14 +5,22 @@
       <tr>
 	<th>Location</th>
 	<th>Node</th>
-	<th>Radio Type</th>
+	<th>Radio Type 
+	  <span class="glyphicon glyphicon-edit"
+		style="margin-left: 5px;"></span></th>
 	<th>Frontend (iface)</th>
-	<th class="sorter-false">TX Ranges</th>
-	<th class="sorter-false">RX Ranges</th>
+	<th class="sorter-false">TX Ranges
+	  <span class="glyphicon glyphicon-edit"
+		style="margin-left: 5px;"></span></th>	  
+	<th class="sorter-false">RX Ranges
+	  <span class="glyphicon glyphicon-edit"
+		style="margin-left: 5px;"></span></th>	  
 	<th class="sorter-false">Monitor</th>
 	<th class="sorter-false">RF Scans</th>
 	<th class="sorter-false">Free?</th>
-	<th class="sorter-false">Notes</th>
+	<th class="sorter-false">Notes
+	  <span class="glyphicon glyphicon-edit"
+		style="margin-left: 5px;"></span></th>	  
       </tr>
     </thead>
     <tbody>
@@ -21,7 +29,9 @@
 	  <% var url = amlist[urn].weburl +
   	  "/portal/show-node.php?node_id=" + node_id; %>
 	  <% _.each(node.frontends, function(frontend, iface) { %>
-	  <tr>
+	    <tr data-urn="<%- urn %>"
+		data-node_id="<%- node_id %>"
+		data-iface="<%- iface %>">
 	    <td><a href="powder-map.php?location=<%- node.location %>"
 		   class="location"
 		   data-urn="<%- urn %>"
@@ -32,10 +42,10 @@
 	    <td><a href="<%- url %>" target="_blank">
 	      <%- node_id %></a>
 	    </td>
-	    <td><%- node.radio_type %></td>
+	    <td data-field="radio_type"><%- node.radio_type %></td>
 	    <td><%- frontend.frontend %> (<%- iface %>)</td>
-	    <td><%- frontend.transmit_frequencies %></td>
-	    <td><%- frontend.receive_frequencies %></td>
+	    <td data-field="tx_freq"><%- frontend.transmit_frequencies %></td>
+	    <td data-field="rx_freq"><%- frontend.receive_frequencies %></td>
 	    <td class="text-center">
 	      <% if (frontend.monitored) { %>
 		<% var url = "frequency-graph.php?cluster=" +
@@ -63,7 +73,7 @@
 	      <% } %>
 	    </td>
 	    <td><%- node.available ? "Yes" : "No" %></td>
-	    <td><%- frontend.notes %></td>
+	    <td data-field="notes"><%- frontend.notes %></td>
 	  </tr>
 	<% }); %>
 	<% }); %>

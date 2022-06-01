@@ -28,13 +28,50 @@ $(function ()
 	$('#oops_div').html(templates["oops-modal"]);
 	$('#waitwait_div').html(templates["waitwait-modal"]);
 
+	var widgets = [ "uitheme", "zebra"];
+	if (window.ISADMIN) {
+	    widgets.push("editable");
+	}
+
 	$('#radioinfo-table')
 	    .tablesorter({
 		theme : 'bootstrap',
-		widgets : [ "uitheme", "zebra"],
+		widgets : widgets,
 		headerTemplate : '{content} {icon}',
-	    });
+		widgetOptions: {
+		    editable_columns       : [2,4,5,9],
+		    editable_enterToAccept : true,   
+		    editable_autoAccept    : false,   
+		    editable_autoResort    : false,
+		},
+	    })
+	    .children('tbody').on('editComplete', 'td', function(event, config) {
+		var newContent = $(this).text();
+		var cellIndex  = this.cellIndex;
+		var urn        = $(this).closest('tr').data('urn');
+		var node_id    = $(this).closest('tr').data('node_id');
+		var iface      = $(this).closest('tr').data('iface');
+		var field      = $(this).closest('td').data('field');
 
+		console.info(newContent, cellIndex, urn, node_id, iface, field);
+
+		var args = {
+		    "content"    : newContent,
+		    "aggregate"  : urn,
+		    "node_id"    : node_id,
+		    "iface"      : iface,
+		    "field"      : field,
+		};
+		var callback = function (json) {
+		    if (json.code) {
+			alert(json.value);
+			return;
+		    }
+		};
+		sup.CallServerMethod(null, "radioinfo",
+				     "EditTable", args, callback);
+	    });
+	
 	$("#mobile-endpoints").click(function () {
 	    if (mobile && !mobile.closed) {
 		mobile.focus();

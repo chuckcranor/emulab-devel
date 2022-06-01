@@ -740,6 +740,13 @@ $routing = array("geni-login" =>
                                                      "Do_Agree",
                               )
                         ),
+		 "radioinfo" =>
+			array("file"    => "radioinfo.ajax",
+			      "guest"   => false,
+			      "methods" => array("EditTable" =>
+                                                     "Do_EditTable",
+                              )
+                        ),
 );
 
 #

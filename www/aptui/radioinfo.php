@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -82,6 +82,7 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
+AddLibrary("js/lib/tablesorter/widgets/widget-editable.js");
 AddTemplateList(array("radioinfo", "waitwait-modal", "oops-modal"));
 SPITREQUIRE("js/radioinfo.js");
 SPITFOOTER();

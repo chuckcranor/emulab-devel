@@ -1,0 +1,116 @@
+<?php
+#
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+chdir("..");
+chdir("apt");
+include_once("rfrange_defs.php");
+include_once("aggregate_defs.php");
+
+function Do_EditTable()
+{
+    global $this_user, $ajax_args;
+
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+        return;
+    }
+    #
+    # All fields required,
+    #
+    $required = array("content", "aggregate", "node_id", "iface", "field");
+
+    foreach ($required as $field) {
+	if (!isset($ajax_args[$field])) {
+            SPITAJAX_ERROR(-1, "Missing parameter: " . $field);
+            return;
+	}
+    }
+    $aggregate = Aggregate::Lookup($ajax_args["aggregate"]);
+    if (!$aggregate) {
+        SPITAJAX_ERROR(-1, "Bad aggregate: " . $ajax_args["aggregate"]);
+        return;
+    }
+    $urn     = $aggregate->urn();
+    $node_id = $ajax_args["node_id"];
+    $iface   = $ajax_args["iface"];
+    $field   = $ajax_args["field"];
+
+    $radioinfo = Aggregate::RadioInfoNew();
+    if (!array_key_exists($urn, $radioinfo)) {
+        SPITAJAX_ERROR(-1, "No radios at aggregate: " . $urn);
+        return;
+    }
+    if (!array_key_exists($node_id, $radioinfo[$urn])) {
+        SPITAJAX_ERROR(-1, "Radio " . $node_id .
+                       " does not exist at aggregate: " . $urn);
+        return;
+    }
+    if (!array_key_exists($iface, $radioinfo[$urn][$node_id]["frontends"])) {
+        SPITAJAX_ERROR(-1, "No iface " . $iface . " on radio " . $node_id .
+                       " at aggregate: " . $urn);
+        return;
+    }
+    $frontend = $radioinfo[$urn][$node_id]["frontends"][$iface];
+
+    #
+    # Only these fields.
+    #
+    $fields = array(
+        "radio_type" => "radio_type",
+        "tx_freq"    => "transmit_frequencies",
+        "rx_freq"    => "receive_frequencies",
+        "notes"      => "notes",
+    );
+    if (!array_key_exists($field, $fields)) {
+        SPITAJAX_ERROR(-1, "Bad field: " . $field);
+        return;
+    }
+    $dbfield = $fields[$field];
+    $content = addslashes($ajax_args["content"]);
+    
+    if ($field == "notes" || $field == 'radio_type') {
+         if (!DBQueryWarn("update apt_aggregate_radio_info set ".
+                          "     ${dbfield}='$content' ".
+                          "where aggregate_urn='$urn' and ".
+                          "      node_id='$node_id'")) {
+             SPITAJAX_ERROR(-1, "Internal DB error");
+             return;
+         }
+    }
+    else {
+         if (!DBQueryWarn("update apt_aggregate_radio_frontends set ".
+                          "     ${dbfield}='$content' ".
+                          "where aggregate_urn='$urn' and ".
+                          "      node_id='$node_id' and ".
+                          "      iface='$iface'")) {
+             SPITAJAX_ERROR(-1, "Internal DB error");
+             return;
+         }
+    }
+    SPITAJAX_RESPONSE(1);
+}
+
+# Local Variables:
+# mode:php
+# End:
+?>
