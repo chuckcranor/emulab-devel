@@ -2118,6 +2118,7 @@ $(function ()
 		    // Gross Hack
 		    if (group == "mmimo" &&
 			(key == "mmimo1-honors")) {
+			prunelist[key] = true;
 			return;
 		    }
 		    groups[group][key] = info;

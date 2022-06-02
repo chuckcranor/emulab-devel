@@ -599,6 +599,7 @@ class Aggregate
                          "  i.location=l.location ".
                          "left join apt_aggregate_reservable_nodes as r on ".
                          "  r.urn=i.aggregate_urn and r.node_id=i.node_id ".
+                         "where i.node_id not like 'cellsdr%' ".
                          "order by itype desc, l.location asc");
 
         while ($row = mysql_fetch_array($query_result)) {

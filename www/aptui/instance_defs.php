@@ -884,6 +884,17 @@ class Instance
                            "iris030"   => true,
                            "n300"      => true,
                            "nuvo7501"  => true,
+                           "pnbase2"   => true,
+                           "pnbase1"   => true,
+                           "cellsdr1-bes"       => true,
+                           "cellsdr1-browning"  => true,
+                           "cellsdr1-dentistry" => true,
+                           "cellsdr1-fm"        => true,
+                           "cellsdr1-honors"    => true,
+                           "cellsdr1-hospital"  => true,
+                           "cellsdr1-meb"       => true,
+                           "cellsdr1-smt"       => true,
+                           "cellsdr1-ustar"     => true,
         );
 
         #
