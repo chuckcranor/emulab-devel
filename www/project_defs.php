@@ -412,6 +412,26 @@ class Project
 	}
 	return $result;
     }
+
+    #
+    # Correspondence, as for the approval page
+    #
+    function ApprovalCorrespondence() {
+	$result  = array();
+        $pid_idx = $this->pid_idx();
+
+	$query_result =
+	    DBQueryFatal("select * from project_approval_correspondence ".
+			 "where pid_idx='$pid_idx' ".
+                         "order by idx asc");
+			     
+	while ($row = mysql_fetch_array($query_result)) {
+            $row["sent"] = DateStringGMT($row["sent"]);
+
+            $result[] = $row;
+        }
+        return $result;
+    }
     
     function AccessCheck($user, $access_type) {
 	$group = $this->DefaultGroup();

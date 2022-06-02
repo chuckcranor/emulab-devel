@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -97,7 +97,9 @@ function Do_ProjectList()
         $blob["leader_name"]  = $leader->name();
         $blob["leader_affil"] = $leader->affil();
         $blob["leader_email"] = $leader->email();
-        $blob["leader_notyet"]= ($leader->status() == TBDB_USERSTATUS_NEWUSER ? 1 : 0);
+        $blob["leader_notyet"]= ($leader->status() ==
+                                 TBDB_USERSTATUS_NEWUSER ? 1 : 0);
+        $blob["correspondence"]= $project->ApprovalCorrespondence();
 
         $results[$project->pid()] = $blob;
     }
@@ -162,6 +164,7 @@ function Do_MoreInfo()
     $headuid_email = $leader->email();
     $headname      = $leader->name();
     $pid           = $project->pid();
+    $pid_idx       = $project->pid_idx();
 
     SendProjAdminMail
         ($project, "ADMIN", "$headname '$headuid' <$headuid_email>",
@@ -175,6 +178,11 @@ function Do_MoreInfo()
          $message.
          "\n\n".
          "Thanks!\n");
+
+    $message = addslashes($message);
+    DBQueryWarn("insert into project_approval_correspondence set ".
+                "  pid='$pid', pid_idx='$pid_idx',".
+                "  sent=now(),message='$message'");
     
     SPITAJAX_RESPONSE(0);
 }

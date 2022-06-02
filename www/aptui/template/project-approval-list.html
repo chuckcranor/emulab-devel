@@ -35,6 +35,13 @@
 			   glyphicon-info-sign text-info"
 		    style='margin-left: 3px;'
 		    margin-bottom: 4px;'></span></a>
+	    <% if (value.correspondence.length) { %>
+	      <a href="#" class="correspondence-button">
+		<span class="glyphicon
+			     glyphicon-envelope text-info"
+		      style='margin-left: 3px;'
+		      margin-bottom: 4px;'></span></a>
+	    <% } %>
 	    <div class="clearfix"></div>
 	    <a class='btn btn-danger btn-xs pull-right why-save-button hidden' 
 	       style="margin-right: 10px;"
@@ -182,6 +189,16 @@
     </div>
   </div>
 </div>
-
-
-
+<div id='correspondence-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-header'>
+	<button type='button' class='close' data-dismiss='modal'
+		aria-hidden='true'>&times;</button>
+	<center><h4>Project Correspondence</h4></center>
+      </div>
+      <div class='modal-body'>
+      </div>
+    </div>
+  </div>
+</div>

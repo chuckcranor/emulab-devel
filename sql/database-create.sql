@@ -5382,6 +5382,19 @@ CREATE TABLE `project_nsf_awards` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `project_approval_correspondence`
+--
+DROP TABLE IF EXISTS `project_approval_correspondence`;
+CREATE TABLE `project_approval_correspondence` (
+  `idx` smallint(5) unsigned NOT NULL auto_increment,
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `sent` datetime DEFAULT NULL,
+  `message` text NOT NULL,
+  PRIMARY KEY  (`pid_idx`,`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `report_assign_violation`
 --
 

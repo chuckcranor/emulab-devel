@@ -12,6 +12,7 @@ $(function ()
     var waitwaitString = templates['waitwait-modal'];
     var oopsString     = templates['oops-modal'];
     var table          = null;
+    var projects       = null;
 
     function initialize()
     {
@@ -27,11 +28,12 @@ $(function ()
     function LoadTable()
     {
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("LoadTable", json);
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
+	    projects = json.value;
 	    var template = _.template(listString);
 	    var html = template({"projects" : json.value});
 	    $('#projects-content').html(html);
@@ -127,6 +129,11 @@ $(function ()
 			  function () {
 			      $("#request-info-confirm").off("click");
 			  });
+	});
+	$(".correspondence-button").click(function (event) {
+	    event.preventDefault();
+	    var pid = $(this).closest('tr').data("pid");
+	    ShowCorrespondence(pid);
 	});
     }
 
@@ -268,6 +275,21 @@ $(function ()
 					     "deleteuser" : deleteuser,
 					     "silent"     : silent});
 	xmlthing.done(callback);
+    }
+
+    // Show the project correspondence
+    function ShowCorrespondence(pid)
+    {
+	var list = projects[pid].correspondence.map(function (details) {
+	    var date = moment(details.sent).format("llll");
+
+	    return "<pre>Sent: " + date + "\n\n" +
+		details.message + "\n" + "</pre>";
+	});
+	$("#correspondence-modal .modal-body")
+	    .html(list.join("<hr>"));
+
+	sup.ShowModal("#correspondence-modal");
     }
     
     $(document).ready(initialize);
