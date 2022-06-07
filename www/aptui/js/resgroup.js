@@ -1,3 +1,4 @@
+
 $(function ()
 {
     'use strict';
@@ -72,6 +73,11 @@ $(function ()
     var OtaWarning = "Current project does not have OTA permission. " +
 	"<a href='' class='ota-request-permission'>" +
 	"Request permission.</a>";
+
+    var RangeWarning = "This frequency range is not valid for some of the " +
+	"radios above. Please see the " +
+	"<a href='radioinfo.php' target=_blank>radio information</a> page " +
+	"for details.";
 
     function requestOtaPermission (event)
     {
@@ -298,6 +304,13 @@ $(function ()
 	'      <td colspan=4 class="ota-message">' +
 	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">' + OtaWarning + '</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>' +
+	'    <tr class="badrange-row hidden has-warning">' +
+	'      <td colspan=4 class="unsupported-message">' +
+	'         <span class="form-group-sm"> ' +
+	'           <label class="control-label">' + RangeWarning + '</label>' +
 	'         </span>' +
 	'      </td>' +
 	'    </tr>' +
@@ -822,6 +835,9 @@ $(function ()
 		    $('#cluster-table .add-cluster').not(":last").hide();
 		}
 		RegenCombinedGraph();
+		if (window.ISPOWDER) {
+		    CheckAllRangesAgainstRadios();
+		}
 		modified_callback();
 		
 	    });
@@ -916,14 +932,18 @@ $(function ()
 
 	    // Clear before check.
 	    row.find(".ota-row").addClass("hidden");
+
+	    var low  = $.trim(row.find('input.freq-low').val());
+	    var high = $.trim(row.find('input.freq-high').val());
 	    
 	    if (!otaStuff.HasOtaPermission(pid)) {
-		var low  = $.trim(row.find('input.freq-low').val());
-		var high = $.trim(row.find('input.freq-high').val());
-
 		if (low != "" || high != "") {
 		    row.find(".ota-row").removeClass("hidden");
 		}
+	    }
+	    // Range consistency checks against radios requested.
+	    if (low != "" && high != "") {
+		CheckRangeAgainstRadios(row);
 	    }
 	});
 	row.find('input.freq-low, input.freq-high').focus(function () {
@@ -4091,6 +4111,7 @@ $(function ()
 		    $(row).find(".ota-row").removeClass("hidden");
 		}
 	    }
+	    CheckAllRangesAgainstRadios();
 	}
 	RegenCombinedGraph();
 	modified_callback();
@@ -4893,6 +4914,91 @@ $(function ()
 	    $('.adjustedmorning span').text(adjusted.format("h A"));
 	    $('.adjustedmorning').removeClass("hidden");
 	}
+    }
+
+    /*
+     * Check to see if a frquency range is okay for all of the radios
+     * currently declared in the reservation.
+     */
+    function CheckRangeAgainstRadios(row)
+    {
+	var low  = parseFloat($.trim(row.find('input.freq-low').val()));
+	var high = parseFloat($.trim(row.find('input.freq-high').val()));
+	var clusters = GetClusterRows();
+	var okay     = 1;
+
+	if (!window.VERIFY_SPECTRUM) {
+	    return;
+	}
+
+	// Clear before check.
+	row.find(".badrange-row").addClass("hidden");
+
+	if (!_.size(clusters)) {
+	    return 0;
+	}
+	
+	_.each(clusters, function(details, uuid) {
+	    if (!isRadio(details.cluster, details.type)) {
+		return;
+	    }
+	    var info = radioinfo[details.cluster][details.type];
+	    console.info("CheckRangeAgainstRadios", info);
+
+	    if (!_.has(info, "frontends")) {
+		return;
+	    }
+	    var frontends = info.frontends;
+	    var goodrange = 0;
+	    _.each(frontends, function (frontend) {
+		var ranges = frontend.transmit_frequencies;
+		if (!ranges || ranges == "") {
+		    goodrange = 1;
+		    return;
+		}
+		console.info(ranges);
+		_.each(ranges.split(","), function (range) {
+		    var rlh   = range.split("-");
+		    var rlow  = parseFloat(rlh[0]);
+		    var rhigh = parseFloat(rlh[1]);
+		    console.info(rlh, rlow, rhigh);
+		    
+		    if (low  >= rlow &&
+			high <= rhigh && low <= high) {
+			goodrange = 1;
+			return;
+		    }
+		});
+	    });
+	    if (!goodrange) {
+		okay = 0;
+	    }
+	});
+	if (!okay) {
+	    row.find(".badrange-row").removeClass("hidden");
+	}
+    }
+
+    /*
+     * Check all ranges against radios.
+     */
+    function CheckAllRangesAgainstRadios()
+    {
+	/*
+	 * Collect the range rows into an array.
+	 */
+	$('#range-table tbody').each(function () {
+	    var tbody   = $(this);
+	    var low     = tbody.find(".freq-low").val();
+	    var high    = tbody.find(".freq-high").val();
+
+	    // Skip a partial row.
+	    if (low == "" || high == "") {
+		row.find(".badrange-row").addClass("hidden");
+		return;
+	    }
+	    CheckRangeAgainstRadios(tbody);
+	});
     }
 
     $(document).ready(initialize);

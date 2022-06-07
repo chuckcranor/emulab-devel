@@ -882,8 +882,14 @@ if ($retval) {
 #
 # Spectrum sanity checks, then spectrum reservation checks.
 #
+my $checkranges = 1
+    if (EmulabFeatures->FeatureEnabled("powder-verify-spectrum",
+				       $geniuser->emulab_user(), $project));
+
+
 my $spectrum;
-$retval = APT_Profile::CheckSpectrum($rspec, \$errmsg, \$spectrum);
+$retval = APT_Profile::CheckSpectrum($rspec, \$errmsg, \$spectrum,
+				     $resources, $checkranges);
 if ($retval) {
     ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
@@ -1322,7 +1328,7 @@ sub UserError($;$) {
 	$webtask->output($mesg);
 	$webtask->Exited($code);
     }
-    AuditAbort()
+    AuditEnd()
 	if (!$debug);
 
     print $mesg . "\n\n";

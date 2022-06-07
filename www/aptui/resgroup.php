@@ -117,6 +117,7 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 #
 $otaAllowed = array();
 $doOtaCheck = 0;
+$doVerifySpectrum = 0;
 
 #
 # Pass project list through. Need to convert to list without groups.
@@ -143,6 +144,9 @@ while (list($p) = each($projlist)) {
             # Temporary for testing.
             if (FeatureEnabled("powder-doota-check", null, $ptmp)) {
                 $doOtaCheck++;
+            }
+            if (FeatureEnabled("powder-verify-spectrum", $this_user, $ptmp)) {
+                $doVerifySpectrum++;
             }
             $otaAllowed[$p] = array(
                 "allowed"  => $ptmp->otaAllowed(),
@@ -268,6 +272,7 @@ if ($ISPOWDER) {
     }
     echo "<script type='text/javascript'>\n";
     echo "    window.OTA_AGREED  = $ota_agreed;\n";
+    echo "    window.VERIFY_SPECTRUM  = $doVerifySpectrum;\n";
     echo "</script>\n";
 }
 

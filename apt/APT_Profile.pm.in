@@ -47,6 +47,7 @@ use EmulabConstants;
 use emutil;
 use WebTask;
 use emdb;
+use APT_Aggregate;
 use APT_Dataset;
 use APT_Aggregate;
 use APT_Reservation;
@@ -2223,15 +2224,21 @@ sub CheckForDeprecatedImages($$$$)
 #
 # Check spectrum validity.
 #
-sub CheckSpectrum($$;$)
+sub CheckSpectrum($$;$$$)
 {
-    my ($rspec, $pmsg, $pspectrum) = @_;
+    my ($rspec, $pmsg, $pspectrum, $resources, $checkranges) = @_;
     my $spectrum = [];
+    $checkranges = 0 if (!defined($checkranges));
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
 	if (! defined($rspec)) {
 	    $$pmsg = "CheckSpectrum: Could not parse rspec";
+	    return -1;
+	}
+    }
+    if (!defined($resources)) {
+	if (APT_Profile::GetResources($rspec, $pmsg, \$resources)) {
 	    return -1;
 	}
     }
@@ -2274,6 +2281,85 @@ sub CheckSpectrum($$;$)
 	return -1;
     }
     if (&$check($spectrum)) {
+	return 1;
+    }
+    if ($checkranges) {
+    foreach my $urn (keys(%{$resources->{'aggregates'}})) {
+	my $aggregate = APT_Aggregate->Lookup($urn);
+	my $cluster   = $aggregate->nickname();
+	my @nodes = @{$resources->{'aggregates'}->{$urn}};
+
+	foreach my $ref (@nodes) {
+	    my $component_id = GeniXML::GetNodeId($ref);
+	    my $client_id = GetVirtualId($ref);
+
+	    #
+	    # Ug, this test only works when the user specifies the
+	    # specific radio. Mostly it makes no sense to not specify
+	    # the exact component_id, so not a perfect test.
+	    #
+	    next
+		if (!defined($component_id));
+
+	    if (GeniHRN::IsValid($component_id)) {
+		my $hrn = GeniHRN->new($component_id);
+		$component_id = $hrn->id();
+	    }
+	    my $radio = $aggregate->Radio($component_id);
+	    next
+		if (!defined($radio));
+
+	    #
+	    # Not worrying about multiple frontends, not till it happens.
+	    #
+	    my $frontend = $radio->FrontendInterface("rf0");
+	    if (!defined($frontend)) {
+		$$pmsg = "CheckSpectrum: Radio $component_id on $cluster ".
+		    "does not have frontend rf0";
+		return 1;
+	    }
+	    
+	    foreach my $request (@$spectrum) {
+		my $low   = $request->{"frequency_low"};
+		my $high  = $request->{"frequency_high"};
+		my $which = $request->{"which"};
+
+		next
+		    if (! ($which eq "global" || $which eq $client_id));
+
+		next
+		    if ($frontend->ValidTransmitRange($low, $high));
+
+		if ($request->{"which"} eq "global") {
+		    $$pmsg = "CheckSpectrum: Global frequency ".
+			"declaration is out of range for transmission from ".
+			"$component_id on $cluster. ".
+			"Perhaps you need to declare the frequency range for ".
+			"$component_id instead of using a global ".
+			"declaration. ".
+			"Please check the ".
+			"<a href='radioinfo.php' target=_blank>".
+			"radio information</a> page for details.";
+		    return 1;
+		}
+		elsif ($request->{"which"} eq $client_id) {
+		    $$pmsg = "CheckSpectrum: Node frequency ".
+			"declaration is out of range for transmission from ".
+			"$component_id on ".
+			"$cluster. Please check the radio information page ".
+			"to find out what frequency ranges are valid for ".
+			"transmission from $component_id. ".
+			"Please check the ".
+			"<a href='radioinfo.php' target=_blank>".
+			"radio information</a> page for details.";
+		    return 1;
+		}
+	    }
+	}
+    }
+    }
+    if (0) {
+	$$pmsg = "oops";
 	return 1;
     }
     $$pspectrum = $spectrum if (defined($pspectrum));
@@ -2421,9 +2507,11 @@ sub GetSpectrum($$$)
     }
 
     my $collect = sub () {
-	my ($spectrum) = @_;
+	my ($spectrum, $which) = @_;
 	
 	foreach my $request (@{$spectrum}) {
+	    # global, node, or link
+	    $request->{"which"} = $which;
 	    push(@ranges, $request);
 	}
     };
@@ -2431,15 +2519,16 @@ sub GetSpectrum($$$)
     # Global spectrum
     my $global_spectrum = GeniXML::GetSpectrum($rspec);
     if (@$global_spectrum) {
-	&$collect($global_spectrum);
+	&$collect($global_spectrum, "global");
     }
     
     # Node spectrum
     foreach my $ref (GeniXML::FindNodes("n:node",
 					$rspec)->get_nodelist()) {
 	my $spectrum = GeniXML::GetSpectrum($ref);
+	my $client_id = GetVirtualId($ref);
 	if (@$spectrum) {
-	    &$collect($spectrum);
+	    &$collect($spectrum, $client_id);
 	}
     }
     
@@ -2449,8 +2538,9 @@ sub GetSpectrum($$$)
 	foreach my $ifaceref (GeniXML::FindNodes("n:interface",
 						 $ref)->get_nodelist()) {
 	    my $spectrum = GeniXML::GetSpectrum($ifaceref);
+	    my $client_id = GetVirtualId($ref);
 	    if (@$spectrum) {
-		&$collect($spectrum);
+		&$collect($spectrum, $client_id);
 	    }
 	}
     }
