@@ -142,6 +142,7 @@ function Do_GetInfo()
     $blob["released"]     = $image->released() ? 1 : 0;
     $blob["isdataset"]    = $image->isdataset() ? 1 : 0;
     $blob["hash"]         = $image->hash();
+    $blob["taint_states"] = $osinfo->taint_states();
     $blob["version_url"]  = "show-image.php?imageid=${id}&version=${vers}";
     if ($embedded) {
         $blob["version_url"] .= "&embedded=1";
@@ -310,6 +311,7 @@ function Do_Modify()
                      "listed"          => true,
                      "ims_noreport"    => true,
                      "osfeatures"      => true,
+                     "taint_states"   => true,
     );
     if (!array_key_exists($field, $allowed)) {
 	SPITAJAX_ERROR(-1, "Not allowed to change this field");
@@ -319,14 +321,21 @@ function Do_Modify()
 	SPITAJAX_ERROR(-1, "No permission to change this field");
 	return -1;
     }
-    if ($field == "reboot_waittime" || $field == "osfeatures") {
+    if ($field == "reboot_waittime" || $field == "osfeatures" ||
+        $field == "taint_states") {
         $table = "os_info";
     }
     else {
         $table = "images";
     }
-    if (!TBcheck_dbslot($value, $table, $field,
-                       TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+    if ($field == "taint_states") {
+        if ($value != "blackbox" && $value != "useronly" && $value != "") {
+            SPITAJAX_ERROR(1, "Illegal value");
+            return 1;
+        }
+    }
+    elseif (!TBcheck_dbslot($value, $table, $field,
+                        TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	SPITAJAX_ERROR(1, "Illegal value: " . TBFieldErrorString());
         return 1;
     }
@@ -339,12 +348,19 @@ function Do_Modify()
         }
     }
     $safe_value = DBQuoteSpecial($value);
-    if ($field == "osfeatures" || $field == "reboot_waittime") {
+    if ($field == "osfeatures" || $field == "reboot_waittime" ||
+        $field == "taint_states") {
         $imageid = $image->imageid();
         $version = $image->version();
-        
+
+        if ($field == "taint_states" && $value == "") {
+            $safe_value = "null";
+        }
+        else {
+            $safe_value = "'" . $safe_value . "'";
+        }
         $query_result = 
-            DBQueryWarn("update os_info_versions set ${field}='$safe_value' ".
+            DBQueryWarn("update os_info_versions set ${field}=$safe_value ".
                         "where osid='$imageid' and vers='$version'");
     }
     elseif ($field == "architecture" && $value == "") {
