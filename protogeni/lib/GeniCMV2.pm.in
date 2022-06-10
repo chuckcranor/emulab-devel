@@ -729,6 +729,7 @@ sub CreateSliver($)
 	#
 	$aggregate->SetBootFailure(GENIRESPONSE_SERVERERROR);
 	$aggregate->SetErrorLog("Internal Error: $@");
+	print STDERR "Internal Error: $@\n";
 	$retval = -1;
     }
     if ($retval) {
