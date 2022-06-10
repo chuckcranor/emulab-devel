@@ -137,6 +137,9 @@ $(function ()
 	    var html = "";
 	    for (var i in json.value) {
 		var user = json.value[i];
+		var last = (user.last_login ?
+			    moment(user.last_login).format('lll') : "");
+		    
 		html = html +
 		    "<tr>" +
 		    "<td><a href='user-dashboard.php?user=" + user.usr_uid + "'>" +
@@ -144,7 +147,9 @@ $(function ()
 		    "<td>" + user.usr_name + "</td>" +
 		    "<td>" + user.usr_email + "</td>" +
 		    "<td>" + user.usr_affil + "</td>" +
-		    "<td>" + user.portal + "</td></tr>";
+		    "<td>" + user.portal + "</td>" +
+		    "<td>" + last + "</td>" +
+		    "</tr>";
 	    }
 	    $('#search_users_table tbody').html(html);
 	    $('#search_users_table').trigger("update", [false]);
