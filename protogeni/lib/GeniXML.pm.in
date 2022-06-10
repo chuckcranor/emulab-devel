@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2021 University of Utah and the Flux Group.
+# Copyright (c) 2010-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1659,7 +1659,7 @@ sub CreateSharedLan($)
     my $ref = FindNodesNS("n:create_shared_vlan",
 			  $linkref, $SHAREDVLAN_NS)->pop();
     if (!defined($ref)) {
-	$ref = FindNodesNS("n:link_shared_vlan", $linkref,
+	$ref = FindNodesNS("n:create_shared_vlan", $linkref,
 			   $SHAREDVLAN_PG_NS)->pop();
     }
     if (defined($ref)) {
