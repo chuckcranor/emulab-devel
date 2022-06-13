@@ -939,7 +939,8 @@ $(function ()
 		        }
 		        submitted = false;
 			sup.HideWaitWait(function () {			
-		            sup.SpitOops("oops", json.value);
+		            sup.SpitOops("oops",
+					 json.value.replaceAll("\n", "<br>"));
 			});
 			return;
 		    }

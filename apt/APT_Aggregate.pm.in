@@ -83,6 +83,7 @@ sub Lookup($$)
     $self->{'TYPEINFO'}  = {};
     $self->{'RESNODES'}  = undef;
     $self->{'NODES'}     = undef;
+    $self->{'RADIOS'}    = {};
 
     #
     # Look to see if there is a status row. Create it if it does not exist.
@@ -180,6 +181,7 @@ sub DESTROY {
     $self->{'TYPEINFO'}  = undef;
     $self->{'RESNODES'}  = undef;
     $self->{'NODES'}     = undef;
+    $self->{'RADIOS'}    = undef;
 }
 
 #
@@ -680,7 +682,13 @@ sub Radio($$)
 {
     my ($self, $node_id) = @_;
 
-    return APT_Aggregate::Radio->Lookup($self, $node_id);
+    return $self->{'RADIOS'}->{$node_id}
+        if (exists($self->{'RADIOS'}->{$node_id}));
+
+    $self->{'RADIOS'}->{$node_id} =
+	APT_Aggregate::Radio->Lookup($self, $node_id);
+    
+    return $self->{'RADIOS'}->{$node_id};
 }
 
 #
