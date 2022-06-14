@@ -31,19 +31,17 @@ x=$(caller)
 
 declare arch="" failed="" s=""
 declare -i sockets=0 cores_socket=0 threads_core=0 mhz=0 err=0
-declare -i hyperthread=0  x64bit=0 hwvirt=0
+declare -i hyperthread=0  x64bit=0 hwvirt=0 cores_enabled=0 thread_count=0
 declare p1="" p2="" p3=""
 declare phy="" cid=" "
 declare d=0
 declare p p1 p3 p3 phy
 
+# this function is only called if not running in MFS mode or error
 finish() {
     echo -n "Cpucheck `date`: " >> ${logfile}
-
 #    cat ${tmplog} >> ${logfile} 
-    
-    summary="Arch:$arch Sockets:$sockets Cores_socket:$cores_socket Threads_core:$th\
-reads_core Mhz:$mhz HT:${hyperthread} 64bit:${x64bit} HV:${hwvirt}"
+    summary="Arch:$arch Sockets:$sockets Cores_socket:$cores_socket Threads_core:$threads_core Mhz:$mhz HT:${hyperthread} 64bit:${x64bit} HV:${hwvirt}"
     if [ -z "${failed}" ]
     then
 	echo -n "$summary"
@@ -162,9 +160,55 @@ fi
 
 case $os in
     Linux )
-	# XXX if have lscpu then us it to get arch
 	save_e
 	set +e
+
+	# If dmidecode can give the info we need use it over /proc/cpuinfo
+	x=$(dmidecode -t processor | grep "Thread")
+	if [ -n "$x" ] ; then
+	    ttf=/tmp/.$$ttf
+	    $(dmidecode -t processor > $ttf)
+
+	    # sockets = count # Version lines
+	    sockets=$(grep 'Version:' $ttf | wc -l)
+
+	    # cores_socket = Core Count
+	    x=$(grep "Core Count" $ttf)
+            unset -v d ; declare -a d=(${x// / })
+	    cores_socket=${d[2]}
+
+	    # threads_core = Thread Count - Core Enabled
+	    x=$(grep "Core Enabled" $ttf)
+            unset -v d ; declare -a d=(${x// / })
+	    cores_enabled=${d[2]}
+	    x=$(grep "Thread Count" $ttf)
+            unset -v d ; declare -a d=(${x// / })
+	    thread_count=${d[2]}
+	    threads_core=$((thread_count / cores_enabled))
+
+	    #MHz = Current Speed
+	    x=$(grep "Current Speed" $ttf)
+            unset -v d ; declare -a d=(${x// / })
+	    mhz=${d[2]}
+
+	    # hyperthread = Thread count greater then Core Enabled
+	    [[ ${thread_count} -gt ${cores_enabled} ]] && hyperthread=1 || hyperthread=0
+
+	    # ARCH = Version
+	    x=$(grep Version $ttf | head -1)
+	    # strip
+	    arch=${x/"Version: "/}
+
+	    # x64bit = 64-bit capable
+	    x=$(grep "64-bit" $ttf)
+	    [[ -n "$x" ]] && x64bit=1 || x64bit=0
+
+	    # hwvirt = Enhanced Virtualization
+	    x=$(grep "Virtualization" $ttf)
+	    [[ -n $x ]] && hwvirt=1 || hwvit=0
+
+	    rm -f $ttf
+	else
 	    x=$(grep "model name" /proc/cpuinfo | head -1)
 	    x=${x##*: }
 	    #takeout all the spaces
@@ -202,11 +246,6 @@ case $os in
 	    x=${x##*: }
 	    threads_core=$(($x / $cores_socket))
 
-    	    x=$(grep "processor" /proc/cpuinfo | tail -1)
-	    x=${x##*: }
-	    ((++x))
-	    cpus=$x
-
 	    #better if dmesg not to old; else use proc/cpuinfo
     	    dmesgmhz=$(dmesg | grep -i mhz | grep processor)
 	    if [ -n "$dmesgmhz" ] ; then
@@ -224,6 +263,7 @@ case $os in
 	    [[ "${cpuflags}" = "${cpuflags/ht/}" ]] && hyperthread=0 || hyperthread=1
 	    [[ "${cpuflags}" = "${cpuflags/lm/}" ]] && x64bit=0 || x64bit=1
 	    [[ ("${cpuflags}" = "${cpuflags/vmx/}") && ("${cpuflags}" = "${cpuflags/svm/}") ]] && hwvirt=0 || hwvirt=1
+	    fi
 	    ;;
     FreeBSD )
 	    # find system arch
@@ -330,6 +370,7 @@ if (( $check_flag )) ; then
 	failed="TBmiss Have |SOCKETS=$sockets CORES=$cores_socket THREADS=$threads_core SPEED=$mhz BITS=$bits HV=$hwvirt| Want |$tbinfo| FAILED"
     fi
 fi
+
 
 finish
 
