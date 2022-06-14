@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -428,7 +428,7 @@ sub CreateNewCert() {
 	    ($encrypted ? " -passout 'pass:${sh_password}' -des3 " : "");
 
 	system("$OPENSSL genrsa $genopts -out usercert_key.pem 2048")
-	    == 0 or fatal("Could generate new key");
+	    == 0 or fatal("Could not generate new key");
     }
     my $reqopts = ($encrypted ? "-passin 'pass:${sh_password}' " : "");
     
