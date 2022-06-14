@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -775,7 +775,7 @@ sub downloadImage($$$$) {
 	    $server = $1;
 	}
 	if ($reload_args_ref->{"IMAGEID"} =~
-	    /^([-\d\w]+),([-\d\w]+),([-\d\w\.:]+)$/) {
+	    /^([-\d\w]+),([-\d\w]+),([-\d\w\.\+:]+)$/) {
 	    $imageid = "$1/$3";
 	}
 	if (SHAREDHOST()) {
