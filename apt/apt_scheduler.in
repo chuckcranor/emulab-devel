@@ -160,8 +160,9 @@ while (1) {
 		    "      (d.start_at is null or ".
 		    "       (now() >= d.start_at and ".
 		    "        (i.stop_at is null or now() < i.stop_at))) and ".
-		    "      TIME_TO_SEC(TIMEDIFF(now(), ".
-		    "                      d.last_retry)) > $RETRY_INTERVAL");
+		    "      (d.last_retry is null or ".
+		    "       TIME_TO_SEC(TIMEDIFF(now(), ".
+		    "                      d.last_retry)) > $RETRY_INTERVAL)");
     
     if ($query_result && $query_result->numrows) {
 	while (my ($uuid) = $query_result->fetchrow_array()) {
@@ -217,7 +218,7 @@ while (1) {
 	    
 	    # Slight delay between calling create_slivers.
 	    if ($query_result->numrows && !($oneshot || $impotent)) {
-		sleep(10);
+		sleep(20);
 	    }
 	  skip:
 	    $instance->Purge();
