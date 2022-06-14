@@ -1374,6 +1374,7 @@ function Do_IgnoreFailure()
 {
     global $this_user;
     global $ajax_args, $instance;
+    global $TBMAIL_OPS, $TBMAIL_AUDIT;
 
     if (StatusSetupAjax(1)) {
 	return;
@@ -1385,6 +1386,12 @@ function Do_IgnoreFailure()
 	SPITAJAX_ERROR(1, "Internal Error");
 	return -1;
     }
+    TBMAIL($TBMAIL_OPS, "WEB DEBUG REPORT",
+           "Failures have been ignored on experiment:\n\n".
+           $instance->AdminURL() . "\n",
+           "From: $TBMAIL_OPS\n".
+           "CC: $TBMAIL_AUDIT");
+    
     SPITAJAX_RESPONSE("Success");
     return 0;
 }
