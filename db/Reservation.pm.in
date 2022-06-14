@@ -742,7 +742,7 @@ sub LookupAll($$;$$)
 	# the transition period, sufficient nodes must be considered available
 	# for assignment to that project.
 	elsif( defined( $pid ) && ( $pid ne TBOPSPID() ||
-				    !grep($pid eq $_, @$TRANSIENTS))) {
+				    !grep($eid eq $_, @$TRANSIENTS))) {
 	    # Handle the case where an experiment is swapped in.  The
 	    # nodes aren't free right now, but at some time in the
 	    # future they could become so.
