@@ -1028,6 +1028,8 @@ CREATE TABLE `apt_instance_rfranges` (
   `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
   `uuid` varchar(40) NOT NULL default '',
   `name` varchar(16) default NULL,
+  `type` enum('global','node','iface','route') default NULL, 
+  `target` tinytext,
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
   `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
   PRIMARY KEY (`uuid`,`idx`)
@@ -1041,6 +1043,8 @@ DROP TABLE IF EXISTS `apt_instance_rfrange_history`;
 CREATE TABLE `apt_instance_rfrange_history` (
   `idx` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
   `uuid` varchar(40) NOT NULL default '',
+  `type` enum('global','node','iface','route') default NULL, 
+  `target` tinytext,
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
   `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
   PRIMARY KEY (`uuid`,`idx`)
