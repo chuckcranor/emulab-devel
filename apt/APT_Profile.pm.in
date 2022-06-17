@@ -2283,20 +2283,23 @@ sub CheckSpectrum($$;$$$)
     if (&$check($spectrum)) {
 	return 1;
     }
+    
     if ($checkranges) {
 
     my %global_errors = ();
     my %node_errors   = ();
     my %route_errors  = ();
 
-    my $checkone = sub($$$$$) {
-	my ($component_id, $client_id, $radio, $request, $cluster) = @_;
-	my $low   = $request->{"frequency_low"};
-	my $high  = $request->{"frequency_high"};
-	my $tag   = "${low}-${high}";
-	my $which = $request->{"which"};
+    my $checkone = sub($$$$) {
+	my ($radio, $request, $cluster, $client_id) = @_;
+	my $low     = $request->{"frequency_low"};
+	my $high    = $request->{"frequency_high"};
+	my $tag     = "${low}-${high}";
+	my $type    = $request->{"type"};
+	my $target  = $request->{"target"};
+	my $node_id = $radio->node_id();
 
-	#print STDERR "$component_id, $client_id, $radio, $cluster, $which\n";
+	#print STDERR "$node_id, $radio, $cluster, $type, $target,$client_id\n";
 	#print STDERR Dumper($request);
 
 	#
@@ -2304,7 +2307,7 @@ sub CheckSpectrum($$;$$$)
 	#
 	my $frontend = $radio->FrontendInterface("rf0");
 	if (!defined($frontend)) {
-	    $$pmsg = "CheckSpectrum: Radio $component_id on $cluster ".
+	    $$pmsg = "CheckSpectrum: Radio $node_id on $cluster ".
 		"does not have frontend rf0";
 	    return 1;
 	}
@@ -2312,27 +2315,27 @@ sub CheckSpectrum($$;$$$)
 	return 0
 	    if ($frontend->ValidTransmitRange($low, $high));
 
-	if ($request->{"which"} eq "global") {
+	if ($type eq "global") {
 	    if (!exists($global_errors{$tag})) {
 		$global_errors{$tag} = {};
 	    }
 	    if (!exists($global_errors{$tag}->{$cluster})) {
 		$global_errors{$tag}->{$cluster} = {};
 	    }
-	    $global_errors{$tag}->{$cluster}->{$component_id} = $component_id;
+	    $global_errors{$tag}->{$cluster}->{$node_id} = $node_id;
 	}
-	elsif ($request->{"which"} eq "route") {
+	elsif ($type eq "route") {
 	    # Does not matter what bus here, just whine about a problem
 	    $route_errors{$tag} = $tag;
 	}
-	elsif ($request->{"which"} eq $client_id) {
+	elsif ($type eq "node" && $target eq $client_id) {
 	    if (!exists($node_errors{$tag})) {
 		$node_errors{$tag} = {};
 	    }
 	    if (!exists($node_errors{$tag}->{$cluster})) {
 		$node_errors{$tag}->{$cluster} = {};
 	    }
-	    $node_errors{$tag}->{$cluster}->{$component_id} = $component_id;
+	    $node_errors{$tag}->{$cluster}->{$node_id} = $node_id;
 	}
 	return 0;
     };
@@ -2344,7 +2347,7 @@ sub CheckSpectrum($$;$$$)
 
 	foreach my $ref (@nodes) {
 	    my $component_id = GeniXML::GetNodeId($ref);
-	    my $client_id = GetVirtualId($ref);
+	    my $client_id    = GetVirtualId($ref);
 
 	    #
 	    # Ug, this test only works when the user specifies the
@@ -2363,8 +2366,7 @@ sub CheckSpectrum($$;$$$)
 		if (!defined($radio));
 
 	    foreach my $request (@$spectrum) {
-		if (&$checkone($component_id, $client_id,
-			       $radio, $request, $cluster)) {
+		if (&$checkone($radio, $request, $cluster, $client_id)) {
 		    return 1;
 		}
 	    }
@@ -2391,8 +2393,7 @@ sub CheckSpectrum($$;$$$)
 		if (!defined($radio));
 
 	    foreach my $request (@$spectrum) {
-		if (&$checkone("ed1", "route", 
-			       $radio, $request, "mobile endpoints")) {
+		if (&$checkone($radio, $request, "mobile endpoints", "")) {
 		    return 1;
 		}
 	    }
@@ -2602,11 +2603,12 @@ sub GetSpectrum($$$)
     }
 
     my $collect = sub () {
-	my ($spectrum, $which) = @_;
+	my ($spectrum, $type, $target, $component_id) = @_;
 	
 	foreach my $request (@{$spectrum}) {
-	    # global, node, or link
-	    $request->{"which"} = $which;
+	    # global, node, or iface
+	    $request->{"type"}   = $type;
+	    $request->{"target"} = $target;
 	    push(@ranges, $request);
 	}
     };
@@ -2614,17 +2616,27 @@ sub GetSpectrum($$$)
     # Global spectrum
     my $global_spectrum = GeniXML::GetSpectrum($rspec);
     if (@$global_spectrum) {
-	&$collect($global_spectrum, "global");
+	&$collect($global_spectrum, "global", "global");
     }
     
     # Node spectrum
     foreach my $ref (GeniXML::FindNodes("n:node",
 					$rspec)->get_nodelist()) {
-	my $spectrum = GeniXML::GetSpectrum($ref);
-	my $client_id = GetVirtualId($ref);
-	if (@$spectrum) {
-	    &$collect($spectrum, $client_id);
+	my $spectrum     = GeniXML::GetSpectrum($ref);
+	my $component_id = GeniXML::GetNodeId($ref);
+	my $client_id    = GetVirtualId($ref);
+
+	next
+	    if (!@$spectrum);
+
+	#
+	# When using radios and spectrum, the component_id must be set.
+	#
+	if (!defined($component_id)) {
+	    $$perrmsg = "GetSpectrum: Must set the component_id for $client_id";
+	    return 1;
 	}
+	&$collect($spectrum, "node", $client_id);
     }
     
     # Iface spectrum
@@ -2633,13 +2645,13 @@ sub GetSpectrum($$$)
 	foreach my $ifaceref (GeniXML::FindNodes("n:interface",
 						 $ref)->get_nodelist()) {
 	    my $spectrum = GeniXML::GetSpectrum($ifaceref);
-	    my $client_id = GetVirtualId($ref);
+	    my $client_id = GetVirtualId($ifaceref);
 	    if (@$spectrum) {
 		if (1) {
 		    $$perrmsg = "GetSpectrum: Could not parse rspec";
 		    return -1;
 		}
-		&$collect($spectrum, $client_id);
+		&$collect($spectrum, "iface", $client_id);
 	    }
 	}
     }
@@ -2650,7 +2662,9 @@ sub GetSpectrum($$$)
     }
     foreach my $route (@{$routes}) {
 	my $spectrum = GeniXML::GetSpectrum($route->{'dom'});
-	&$collect($spectrum, "route");
+	my $name = $route->{'name'};
+	
+	&$collect($spectrum, "route", $name);
     }
     
     $$pref = \@ranges;

@@ -101,7 +101,6 @@ sub devurl($)
 
     if ($usemydevtree) {
 	$cmurl =~ s/protogeni/protogeni\/stoller/;
-#	$cmurl =~ s/12369/12396/;
     }
     return $cmurl;
 }
@@ -2666,11 +2665,14 @@ sub CheckResources($$)
     foreach my $request (@{$spectrum}) {
 	my $frequency_low  = $request->{"frequency_low"};
 	my $frequency_high = $request->{"frequency_high"};
+	my $type           = $request->{"type"};
+	my $target         = $request->{"target"};
 	
 	if (!APT_Instance::RFRanges->Lookup($self,
 					    $frequency_low, $frequency_high)) {
 	    if (!APT_Instance::RFRanges->Create($self,
-				       $frequency_low, $frequency_high)) {
+						$frequency_low, $frequency_high,
+						$type, $target)) {
 		$$perrmsg = "Could not create rfrange entry";
 		return -1;
 	    }
@@ -3217,7 +3219,7 @@ sub Lookup($$$)
 		"uuid"          => $self->uuid(),
 		"name"          => $self->name(),
 		"aggregate_urn" => $self->aggregate_urn(),
-		"status"        => $self->status(),
+		"status"        => "terminated",
 		"public_url"    => $self->public_url(),
 		"manifest"      => $self->manifest(),
 	    }
@@ -6204,20 +6206,22 @@ sub Lookup($$$;$)
 #
 # Add an rfrange to an instance.
 #
-sub Create($$$)
+sub Create($$$$$)
 {
-    my ($class, $instance, $freq_low, $freq_high) = @_;
+    my ($class, $instance, $freq_low, $freq_high, $type, $target) = @_;
     my $instance_uuid = $instance->uuid();
     my $instance_name = $instance->name();
 
     DBQueryWarn("insert into apt_instance_rfranges set ".
 		"  uuid='$instance_uuid', name='$instance_name', ".
+		"  `type`='$type', target='$target', ".
 		"  freq_low='$freq_low', freq_high='$freq_high'")
 	or return undef;
 
     # Add to the history table.
     DBQueryWarn("insert into apt_instance_rfrange_history set ".
 		"  uuid='$instance_uuid', ".
+		"  `type`='$type', target='$target', ".
 		"  freq_low='$freq_low', freq_high='$freq_high'")
 	or return undef;
 
