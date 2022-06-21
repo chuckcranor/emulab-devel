@@ -231,7 +231,7 @@ function Do_RangeHistory()
     global $this_user;
     global $ajax_args;
     global $TB_PROJECT_READINFO;
-    $whereclause = "";
+    $pidclause = "";
 
     if (isset($ajax_args["pid"])) {
         $pid = $ajax_args["pid"];
@@ -251,7 +251,7 @@ function Do_RangeHistory()
             return -1;
         }
         $pid_idx = $target_project->pid_idx();
-        $whereclause = "where h.pid_idx='$pid_idx'";
+        $pidclause = "and h.pid_idx='$pid_idx'";
     }
     elseif (!ISADMIN()) {
 	SPITAJAX_ERROR(-1, "Not enough permission");
@@ -263,8 +263,9 @@ function Do_RangeHistory()
                      "     r.type,r.target,h.started,h.destroyed ".
                      "   from apt_instance_rfrange_history as r ".
                      "join apt_instance_history as h on h.uuid=r.uuid ".
-                     $whereclause . " " .
-                     "order by h.started desc limit 1000");
+                     "where h.started > DATE_SUB(now(),interval 1 year) ".
+                     $pidclause . " " .
+                     "order by h.started desc");
 
     while ($row = mysql_fetch_array($query_result)) {
         $range = array(

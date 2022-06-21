@@ -6212,6 +6212,10 @@ sub Create($$$$$)
     my $instance_uuid = $instance->uuid();
     my $instance_name = $instance->name();
 
+    if ($type eq "global") {
+	$target = "";
+    }
+
     DBQueryWarn("insert into apt_instance_rfranges set ".
 		"  uuid='$instance_uuid', name='$instance_name', ".
 		"  `type`='$type', target='$target', ".
