@@ -1,0 +1,24 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (DBSlotType("apt_aggregate_radio_locations", "itype") !~ /DD/) {
+	DBQueryFatal("alter table apt_aggregate_radio_locations ".
+		     "  change itype itype ".
+		     "    enum('FE','ME','BS','PE','DD','unknown') ".
+		     "       NOT NULL default 'unknown'");
+    }
+    DBQueryFatal("alter table apt_aggregate_radio_locations drop primary key");
+    DBQueryFatal("alter table apt_aggregate_radio_locations add primary key ".
+		     "  (`aggregate_urn`,`location`,`itype`)");
+    
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
