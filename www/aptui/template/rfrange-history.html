@@ -1,0 +1,32 @@
+<div>
+  <table class='tablesorter'>
+    <thead>
+      <tr>
+	<th>Project</th>
+	<th>ID</th>
+	<th>Lower (MHz)</th>
+	<th>Upper (MHz)</th>
+	<th>Type</th>
+	<th>Target</th>
+	<th>Started</th>
+	<th>Destroyed</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% _.each(ranges, function(range) { %>
+	<tr>
+	  <td><a href="memlane.php?uuid=<%- range.uuid %>">
+	    <%- range.name %></a></td>
+	  <td><a href="show-project.php?project=<%- range.pid %>">
+	    <%- range.pid %></a></td>
+	  <td><%- range.freq_low %></td>
+	  <td><%- range.freq_high %></td>
+	  <td><%- range.type %></td>
+	  <td><%- range.target %></td>
+	  <td><%- moment(range.started).format("lll") %></td>
+	  <td><%- moment(range.destroyed).format("lll") %></td>
+	</tr>
+      <% }); %>
+    </tbody>
+  </table>
+</div>

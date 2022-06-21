@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -131,7 +131,7 @@ function Do_ProjectInuseRanges()
 
     $query_result =
         DBQueryFatal("select i.uuid,i.name,r.freq_low,r.freq_high, ".
-                     "     s.expires ".
+                     "     r.type,r.target,s.expires ".
                      "   from apt_instance_rfranges as r ".
                      "left join apt_instances as i on i.uuid=r.uuid ".
                      "left join geni.geni_slices as s on ".
@@ -146,6 +146,8 @@ function Do_ProjectInuseRanges()
                 "name"      => $row["name"],
                 "freq_low"  => $row["freq_low"],
                 "freq_high" => $row["freq_high"],
+                "type"      => $row["type"],
+                "target"    => $row["target"],
                 "expires"   => DateStringGMT($row["expires"]),
                 "isexp"     => 1,
             );
@@ -196,7 +198,7 @@ function Do_AllInuseRanges()
 
     $query_result =
         DBQueryFatal("select i.uuid,i.pid,i.name,r.freq_low,r.freq_high, ".
-                     "     s.expires,i.started ".
+                     "     r.type,r.target,s.expires,i.started ".
                      "   from apt_instance_rfranges as r ".
                      "left join apt_instances as i on i.uuid=r.uuid ".
                      "left join geni.geni_slices as s on ".
@@ -207,6 +209,8 @@ function Do_AllInuseRanges()
         $range = array(
             "freq_low"  => $row["freq_low"],
             "freq_high" => $row["freq_high"],
+            "type"      => $row["type"],
+            "target"    => $row["target"],
             "start"     => DateStringGMT($row["started"]),
             "end"       => DateStringGMT($row["expires"]),
             "isexp"     => 1,
@@ -217,6 +221,63 @@ function Do_AllInuseRanges()
             $range["uuid"] = $row["uuid"];
             $range["name"] = $row["name"];
         }
+        $blob[] = $range;
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
+function Do_RangeHistory()
+{
+    global $this_user;
+    global $ajax_args;
+    global $TB_PROJECT_READINFO;
+    $whereclause = "";
+
+    if (isset($ajax_args["pid"])) {
+        $pid = $ajax_args["pid"];
+    
+        if (!TBvalid_pid($pid)) {
+            SPITAJAX_ERROR(-1, "Invalid target pid");
+            return -1;
+        }
+        $target_project = Project::Lookup($pid);
+        if (!$target_project) {
+            SPITAJAX_ERROR(-1, "Unknown target pid");
+            return -1;
+        }
+        if (!ISADMIN() &&
+            !$target_project->AccessCheck($this_user, $TB_PROJECT_READINFO)) {
+            SPITAJAX_ERROR(-1, "Not enough permission");
+            return -1;
+        }
+        $pid_idx = $target_project->pid_idx();
+        $whereclause = "where h.pid_idx='$pid_idx'";
+    }
+    elseif (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+
+    $query_result =
+        DBQueryFatal("select h.uuid,h.pid,h.name,r.freq_low,r.freq_high, ".
+                     "     r.type,r.target,h.started,h.destroyed ".
+                     "   from apt_instance_rfrange_history as r ".
+                     "join apt_instance_history as h on h.uuid=r.uuid ".
+                     $whereclause . " " .
+                     "order by h.started desc limit 1000");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $range = array(
+            "freq_low"  => $row["freq_low"],
+            "freq_high" => $row["freq_high"],
+            "type"      => $row["type"],
+            "target"    => $row["target"],
+            "started"   => DateStringGMT($row["started"]),
+            "destroyed" => DateStringGMT($row["destroyed"]),
+            "pid"       => $row["pid"],
+            "uuid"      => $row["uuid"],
+            "name"      => $row["name"],
+        );
         $blob[] = $range;
     }
     SPITAJAX_RESPONSE($blob);

@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal']);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal', "rfrange-history"]);
     var mainString = templates['show-project'];
     var experimentString = templates['experiment-list'];
     var profileString = templates['profile-list'];
@@ -830,6 +830,8 @@ $(function ()
 		    "<td><a href='" + url + "'>" + info.name + "</a></td>" +
 		    "<td>" + info.freq_low + "</td>" +
 		    "<td>" + info.freq_high + "</td>" +
+		    "<td>" + info.type + "</td>" +
+		    "<td>" + info.target + "</td>" +
 		    "<td>" + moment(info.expires).format("MMM Do, h:m A") +
 		    "</td>" +
 		    "</tr>";
@@ -858,6 +860,8 @@ $(function ()
 		ProjectRanges(result1);
 		InuseRanges(result2);
 	    });
+
+	LoadRangeHistory();
     }
     
     //
@@ -967,6 +971,77 @@ $(function ()
 				  "supplement" : supplement ? 1 : 0,
 				  "award" : award}, callback);
 	});
+    }
+
+    function LoadRangeHistory()
+    {
+	var callback = function (json) {
+	    console.info("range history", json);
+	    if (json.code) {
+		console.info("Not enough permission for range history");
+		return;
+	    }
+	    if (json.value.length == 0) {
+		return;
+	    }
+	    var template = _.template(templates['rfrange-history']);
+	    $('#rfranges .history-rfranges .waiting')
+		.html(template({"ranges" : json.value}));
+	    $('.rfranges-hidden').removeClass("hidden");
+	    $('#rfranges .history-rfranges').removeClass("hidden");
+
+	    $('#rfranges .history-rfranges .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets: ["uitheme", "zebra", "filter"],
+		    headerTemplate : '{content} {icon}',
+		    widthFixed : true,
+		    
+		    widgetOptions: {
+			// class name applied to filter row and each input
+			//filter_cssFilter  : 'form-control input-sm',
+			// search from beginning
+			filter_startsWith : false,
+			// Set this option to false for case sensitive search
+			filter_ignoreCase : true,
+			// Only one search box.
+			filter_columnFilters : true,
+
+			filter_formatter : {
+			    // Date (two inputs)
+			    6 : function($cell, indx) {
+				return $.tablesorter.filterFormatter
+				    .uiDatepicker( $cell, indx, {
+					textFrom : "",
+					textTo : "-",
+					from : "",
+					to   : "",
+					changeMonth : true,
+					changeYear : true
+				    });
+			    },
+			    // Date (two inputs)
+			    7 : function($cell, indx) {
+				return $.tablesorter.filterFormatter
+				    .uiDatepicker( $cell, indx, {
+					textFrom : "",
+					textTo : "-",
+					from : "",
+					to   : "",
+					changeMonth : true,
+					changeYear : true
+				    });
+			    },
+			},
+			filter_placeholder : {
+			    from : 'From...',
+			    to   : 'To...'
+			},
+		    }
+		});
+	};
+	sup.CallServerMethod(null, "rfrange", "RangeHistory",
+			     {"pid" : window.TARGET_PROJECT}, callback);
     }
 
     $(document).ready(initialize);

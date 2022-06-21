@@ -728,7 +728,9 @@ $routing = array("geni-login" =>
                                                  "ProjectInuseRanges" =>
                                                      "Do_ProjectInuseRanges",
                                                  "AllInuseRanges" =>
-                                                     "Do_AllInuseRanges"
+                                                     "Do_AllInuseRanges",
+                                                 "RangeHistory" =>
+                                                     "Do_RangeHistory",
                               )
                         ),
 		 "ota-agreement" =>

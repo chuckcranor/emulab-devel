@@ -209,7 +209,7 @@
 			</table>
 		      </span>
 		      <span class="hidden inuse-rfranges"
-			    style="width: 500px; display: inline-block;">
+			    style="width: 700px; display: inline-block;">
 			<h5 class="text-center">
 			  Radio frequency ranges in use by this project</h5>
 			<table class='tablesorter'>
@@ -218,12 +218,24 @@
 			      <th>Name</th>
 			      <th>Lower (MHz)</th>
 			      <th>Upper (MHz)</th>
+			      <th>Type</th>
+			      <th>Target</th>
 			      <th>Expires</th>
 			    </tr>
 			  </thead>
 			  <tbody></tbody>
 			</table>
 		      </span>
+		      <div class="hidden history-rfranges
+				  col-sm-10 col-sm-offset-1">
+			<center>
+			  <h4 class="text-center">
+			    Recent History</h4>
+			  <div class="waiting">
+			    <img src='images/spinner.gif' />
+			  </div>
+			</center>
+		      </div>
 		    </div>
 		  </div>
 		<% }  %>

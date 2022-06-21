@@ -1,5 +1,5 @@
 <div id="inuse-ranges"
-     class='row hidden col-sm-6 col-sm-offset-3'>
+     class='row hidden col-sm-8 col-sm-offset-2'>
   <center>
     <h4 class="text-center">
       Frequency Ranges Currently In Use</h4>
@@ -10,6 +10,8 @@
 	  <th>Project</th>
 	  <th>Lower (MHz)</th>
 	  <th>Upper (MHz)</th>
+	  <th>Type</th>
+	  <th>Target</th>
 	  <th>Expires</th>
 	</tr>
       </thead>
@@ -22,6 +24,8 @@
 	      <%- range.pid %></a></td>
 	    <td><%- range.freq_low %></td>
 	    <td><%- range.freq_high %></td>
+	    <td><%- range.type %></td>
+	    <td><%- range.target %></td>
 	    <td><%- moment(range.end).format("MMM Do, h:m A") %></td>
 	  </tr>
 	<% }); %>
@@ -30,7 +34,7 @@
   </center>
 </div>
 <div id="global-ranges"
-     class='row hidden col-sm-6 col-sm-offset-3'>
+     class='row hidden col-sm-8 col-sm-offset-2'>
   <center>
     <h4 class="text-center">
       Global Frequency Ranges</h4>
@@ -55,7 +59,7 @@
   </center>
 </div>
 <div id="project-ranges"
-     class='row hidden col-sm-6 col-sm-offset-3'>
+     class='row hidden col-sm-8 col-sm-offset-2'>
   <center>
     <h4 class="text-center">
       Project Frequency Ranges</h4>
@@ -82,5 +86,15 @@
 	<% }); %>
       </tbody>
     </table>
+  </center>
+</div>
+<div id="history-ranges"
+     class='row col-sm-10 col-sm-offset-1'>
+  <center>
+    <h4 class="text-center">
+      Recent History</h4>
+    <div class="waiting">
+      <img src='images/spinner.gif' />
+    </div>
   </center>
 </div>
