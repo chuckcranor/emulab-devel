@@ -693,6 +693,9 @@ if ($failed) {
     else {
         $instance->SetStatus("failed");
     }
+    # Stop trying to instantiate.
+    $instance->ResolveDefer();
+    
     # Webtask exit status set above.
     $instance->RecordError($webtask->exitcode(),
 			   (defined($webtask->output()) ?
