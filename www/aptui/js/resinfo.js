@@ -68,12 +68,12 @@ $(function ()
 	if (window,ISPOWDER) {
 	    $('#powder-radios .graph-panel')
 		.html(visTemplate({
-		    "title" : "Powder Outdoor Radio Availability",
+		    "title" : "Powder Rooftop Radio Availability",
 		    "id"    : "radio",
 		}))
 		.find(".panel").removeClass("hidden");
 	    $('#powder-radios .counts-panel')
-		.html(totalsTemplate({"title" : "Radios"}));
+		.html(totalsTemplate({"title" : "Rooftop Radios"}));
 	    $('#powder-radios .counts-panel .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
@@ -90,6 +90,21 @@ $(function ()
 	    $('#powder-mmimo .counts-panel')
 		.html(totalsTemplate({"title" : "Massive MIMO"}));
 	    $('#powder-mmimo .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+
+	    $('#powder-dense .graph-panel')
+		.html(visTemplate({
+		    "title" : "Dense Deployment Availability",
+		    "id"    : "dense",
+		}))
+		.find(".panel").removeClass("hidden");
+	    $('#powder-dense .counts-panel')
+		.html(totalsTemplate({"title" : "Dense Deployment"}));
+	    $('#powder-dense .counts-panel .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
 		    widgets : [ "uitheme", "zebra"],
