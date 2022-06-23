@@ -2151,7 +2151,7 @@ $(function ()
 	});
 	$('#powder-radios')
 	    .html(visTemplate({
-		    "title" : "Powder Outdoor Radio Availability",
+		    "title" : "Powder Rooftop Radio Availability",
 		    "id"    : "radio",
 	    }))
 	    .removeClass("hidden")
@@ -2163,6 +2163,13 @@ $(function ()
 	    .html(visTemplate({
 		"title" : "RENEW Massive MIMO Radio Availability",
 		"id"    : "mmimo",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
+	$('#powder-dense')
+	    .html(visTemplate({
+		"title" : "Dense Deployment Availability",
+		"id"    : "dense",
 	    }))
 	    .removeClass("hidden")
 	    .find(".panel").removeClass("hidden");
