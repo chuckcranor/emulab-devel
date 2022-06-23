@@ -916,7 +916,7 @@ if ($genimode ne $NO_GENI || !defined($options{"I"})) {
 	 " join image_permissions as p1 on ".
 	 "   p1.permission_type='group' and p1.permission_idx=g.gid_idx ".
 	 " join osidtoimageid as oi on oi.imageid=p1.imageid ".
-	 " where g.pid='$pid) " : " ") .
+	 " where g.pid='$pid') " : " ") .
 	") as u ".
 	"join os_info as o on o.osid=u.osid ".
 	"join os_info_versions as ov on ".
@@ -940,7 +940,7 @@ if ($genimode ne $NO_GENI || !defined($options{"I"})) {
 	"  where oi.type is null and ".
 	"        i.architecture is not null and ".
 	"        nt.architecture is not null and ".
-	"        (iv.global=1" . ($pid ? " or pid='$pid'" : "") . ")) " .
+	"        (iv.global=1" . ($pid ? " or iv.pid='$pid'" : "") . ")) " .
 	($pid ?
 	 # Images granted to the project.
 	 " union ".
