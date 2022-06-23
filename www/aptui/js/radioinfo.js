@@ -10,6 +10,17 @@ $(function ()
     var map           = null;
     var mobile        = null;
 
+    // Site Types
+    var siteTypes = {
+	"FE"  : "Fixed Endpoint",
+	"ME"  : "Mobile Endpoint",
+	"BS"  : "Rooftop",
+	"PE"  : "Portable",
+	"DD"  : "Dense Deployment",
+	"OAI" : "Paired Workbench",
+	"OTA" : "Indoor Lab",
+    };
+
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
@@ -21,7 +32,8 @@ $(function ()
 
 	var options = {
 	    "amlist"    : amlist,
-	    "radioinfo" : radioInfo
+	    "radioinfo" : radioInfo,
+	    "siteTypes" : siteTypes,
 	};
 	$('#main-body').html(mainTemplate(options));
 	// Now we can do this. 

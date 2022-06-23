@@ -143,7 +143,7 @@ DROP TABLE IF EXISTS `apt_aggregate_radio_locations`;
 CREATE TABLE `apt_aggregate_radio_locations` (
   `aggregate_urn` varchar(128) NOT NULL default '',
   `location` varchar(64) NOT NULL default '',
-  `itype` enum('FE','ME','BS','PE','DD','unknown') NOT NULL default 'unknown',
+  `itype` enum('FE','ME','BS','PE','DD','OTA','OAI','unknown') NOT NULL default 'unknown',
   `latitude` float(8,5) default NULL,
   `longitude` float(8,5) default NULL,
   `mapurl` tinytext,

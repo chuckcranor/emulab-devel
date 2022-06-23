@@ -605,7 +605,17 @@ class Aggregate
         while ($row = mysql_fetch_array($query_result)) {
             $urn      = $row["aggregate_urn"];
             $node_id  = $row["node_id"];
+            $itype    = $row["itype"];
             $alive    = true;
+
+            # XXX Need to change the radio tables for this.
+            if (preg_match("/^ota/", $node_id)) {
+                $itype = "OTA";
+            }
+            elseif (preg_match("/^oai/", $node_id)) {
+                $itype = "OAI";
+            }
+            $row["itype"] = $itype;
 
             #
             # Grab the aggregate. We use the status info to determine if the
@@ -616,9 +626,9 @@ class Aggregate
                     $blob[$urn] = array();
                 }
                 # Backwards compat for the frontpage.
-                $row["installation_type"] = $row["itype"];
+                $row["installation_type"] = $itype;
                 
-                if ($row["itype"] == "BS") {
+                if ($itype == "BS") {
                     #
                     # The CNUC determines if a base station is alive.
                     #

@@ -1,3 +1,6 @@
+<style type="text/css">
+ .nowrap {  white-space: nowrap; }
+</style>
 <div class='col-xs-12 col-sm-12 col-md-12'>
   Looking for <a href="#" id="mobile-endpoints">route info?</a>
   <table id='radioinfo-table' "class='tablesorter'>
@@ -5,6 +8,7 @@
       <tr>
 	<th>Location</th>
 	<th>Node</th>
+	<th class="nowrap">Site Type</th>
 	<th>Radio Type 
 	  <span class="glyphicon glyphicon-edit"
 		style="margin-left: 5px;"></span></th>
@@ -42,6 +46,7 @@
 	    <td><a href="<%- url %>" target="_blank">
 	      <%- node_id %></a>
 	    </td>
+	    <td class="nowrap"><%- siteTypes[node.itype] %></td>
 	    <td data-field="radio_type"><%- node.radio_type %></td>
 	    <td><%- frontend.frontend %> (<%- iface %>)</td>
 	    <td data-field="tx_freq"><%- frontend.transmit_frequencies %></td>
