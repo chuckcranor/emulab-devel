@@ -895,6 +895,8 @@ class Instance
                            "cellsdr1-meb"       => true,
                            "cellsdr1-smt"       => true,
                            "cellsdr1-ustar"     => true,
+                           "mmimo-ac"           => true,
+                           "irisclients-ac"     => true,
         );
 
         #
