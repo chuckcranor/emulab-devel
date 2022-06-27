@@ -161,6 +161,7 @@ CREATE TABLE `apt_aggregate_radio_info` (
   `aggregate_urn` varchar(128) NOT NULL default '',
   `node_id` varchar(32) NOT NULL default '',
   `location` varchar(64) NOT NULL default '',
+  `itype` enum('FE','ME','BS','PE','DD','OTA','OAI','unknown') NOT NULL default 'unknown',
   `radio_type` tinytext,
   `power_id` varchar(32) default NULL,
   `cnuc_id` varchar(32) default NULL,
