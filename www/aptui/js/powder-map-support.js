@@ -41,6 +41,11 @@ window.ShowPowderMap = (function()
 	    "all"    : null,
 	    "filter" : null,
 	},
+	"DD"  : {
+	    "data"   : null,	// Raw data
+	    "all"    : null,
+	    "filter" : null,
+	},
 	"Links"  : {
 	    "data"   : null,	// Raw data
 	    "all"    : null,
@@ -250,13 +255,12 @@ window.ShowPowderMap = (function()
 		// Base layers
 		DrawCoverageArea();
 		DrawDataCenters();
-		DrawDenseDeployment();
 		// Need to wait till these are done before we mark resources
 		// They return the promise.
 		$.when(DrawRoutes(), DrawFixedEndpoints(),
-		       DrawBaseStations())
-		    .done(function (r1, r2, r3) {
-			console.info("done1", r1, r2, r3);
+		       DrawBaseStations(), DrawDenseDeployment())
+		    .done(function (r1, r2, r3, r4) {
+			console.info("done1", r1, r2, r3, r4);
 
 			if (Options.showlinks) {
 			    DrawLinks(Options.showlinks);
@@ -374,8 +378,10 @@ window.ShowPowderMap = (function()
 	var filter = function () {
 	    UnmarkFixedEndpoints();
 	    UnmarkBaseStations();
+	    UnmarkDenseDeployment();
 	    FilterFixedEndpoints();
 	    FilterBaseStations();
+	    FilterDenseDeployment();
 	};
 	$('.radio-type, .range-one input, .range-two input')
 	    .change(function (event) {
@@ -427,10 +433,31 @@ window.ShowPowderMap = (function()
 	
 	UnmarkFixedEndpoints();
 	UnmarkBaseStations();
-	
+	UnmarkDenseDeployment();
+
 	_.each(Layers["FE"].data, function (details, urn) {
 	    if (_.has(Aggregates, urn)) {
 		MarkFixedEndpoint(details.name, false);
+	    }
+	});
+
+	_.each(Layers["DD"].data, function (details) {
+	    var markit = 0;
+	    var urn = details.cluster_urn;
+
+	    if (details.radioinfo) {
+		_.each(details.radioinfo, function (info, index) {
+		    var node_id = info.node_id;
+		    
+		    if (_.has(Aggregates, urn) &&
+			_.has(Aggregates[urn], node_id)) {
+			markit = 1;
+		    }
+		});
+	    }
+	    // Experiment is using (part of) this base station.
+	    if (markit) {
+		MarkDenseDeployment(details.name, false);
 	    }
 	});
 
@@ -618,118 +645,208 @@ window.ShowPowderMap = (function()
     }
 
     /*
-     * Draw the dense deployment. Temporarily hardwired for now. 
+     * Draw the dense deployment.
      */
-    var denseDeployment = [
-	{
-	    "ID": "NC Wasatch",
-	    "Y": 40.771279, 
-	    "X": -111.843169,
-	},
-	{
-	    "ID": "NC Mario",
-	    "Y": 40.773019,
-	    "X": -111.840896,
-	},
-	{
-	    "ID": "Moran",
-	    "Y": 40.770063,
-	    "X": -111.838722,
-	},
-	{
-	    "ID": "Guest House",
-	    "Y": 40.767688,
-	    "X": -111.836089,
-	},
-	{
-	    "ID": "EBC",
-	    "Y": 40.767196,
-	    "X": -111.838103,
-	},
-	{
-	    "ID": "USTAR",
-	    "Y": 40.768721, 
-	    "X": -111.840428,
-	}
-    ];
-    
     function DrawDenseDeployment()
     {
 	var id   = "Dense";
 	var icon = layerIcons[id];
-	
 	var layer = GraphicsLayer({
 	    title: "Dense Deployment",
 	    id: id,
-	});
-	var symbol = {
-	    type: "picture-marker",
-	    url: icon,
-	    width: "24px",
-	    height: "24px",
-	};
-	_.each(denseDeployment, function (details) {
-	    var point = {
-		type: "point", // autocasts as new Point()
-		longitude: details.X,
-		latitude: details.Y,
-            };
-	    var attributes = {
-		name        : details.ID,
-		description : "Dense Deployment (coming soon)",
-		latitude    : details.X,
-		longitude   : details.Y,
-//		url         : details.Details,
-	    };
-	    var popup = {
-		title: details.ID,
-		content: [{
-		    type: "fields",
-		    fieldInfos: [
-			{
-			    fieldName: "name",
-			    label: "Name"
-			},
-			{
-			    fieldName: "description",
-			    label: "Description"
-			},
-			{
-			    fieldName: "latitude",
-			    label: "Latitude"
-			},
-			{
-			    fieldName: "longitude",
-			    label: "Longitude"
-			},
-/*
-			{
-			    fieldName: "url",
-			    label: "Details"
-			},
- */
-		    ],
-		}],
-	    };
-	    var graphic = new Graphic({
-		geometry:      point,
-		symbol:        symbol,
-		attributes:    attributes,
-		popupTemplate: popup,
-	    });
-	    layer.add(graphic);
+	})
 
-	    // Add label text above the icon
-	    var textGraphic = new Graphic({
-		geometry: {
-		    type: "point",
-		    longitude: details.X,
-		    latitude: details.Y,
-		},
+	// Hidden layer to mark filtered DDs
+	var filter = GraphicsLayer({
+	    title: "Filtered Dense Deployment",
+	})
+	filter.listMode = "hide";
+	Map.add(filter);
+	Layers["DD"].filter = filter;
+
+	// Add now so it goes into the legend in the correct order, and
+	// on top of the filter layer.
+	Map.add(layer);
+	Layers["DD"].all = layer;
+
+	// Turn on/off the filter layer when the main layer is turned on/off.
+        WatchUtils.init(layer, "visible", function(visible) {
+	    filter.visible = visible;
+	});
+
+	var callback = function (json) {
+	    console.info("DrawDenseDeployment", json);
+	    if (json.code) {
+		console.info("Could not get dense deployment: " + json.value);
+		return;
+	    }
+	    var cabinets = json.value;
+	    Layers["DD"].data = cabinets;
+
+	    var symbol = {
+		type: "picture-marker",
+		url: icon,
+		width: "24px",
+		height: "24px",
+	    };
+	    _.each(cabinets, function (details) {
+		// For specific experiment marking.
+		var markit = 0;
+		var urn = details.cluster_urn;
+		
+		var point = {
+		    type: "point", // autocasts as new Point()
+		    latitude: details.latitude,
+		    longitude: details.longitude,
+		};
+		var attributes = {
+		    name        : details.name,
+		    description : details.type,
+		    longitude   : details.longitude,
+		    latitude    : details.latitude,
+		};
+		var popupcontent = [
+			{
+			    type: "fields",
+			    fieldInfos: [
+				{
+				    fieldName: "name",
+				    label: "Name"
+				},
+				{
+				    fieldName: "description",
+				    label: "Description"
+				},
+				{
+				    fieldName: "latitude",
+				    label: "Latitude"
+				},
+				{
+				    fieldName: "longitude",
+				    label: "Longitude"
+				},
+			    ],
+			},
+		];
+		// Add additional tables for the radio info.
+		if (details.radioinfo) {
+		    _.each(details.radioinfo, function (info, index) {
+			var node_id = info.node_id;
+			var prefix  = "radioinfo " + node_id + " ";
+
+			attributes[prefix + "node_id"]    = node_id;
+			attributes[prefix + "radio_type"] = info.radio_type;
+			attributes[prefix + "notes"] = info.notes;
+			attributes[prefix + "free"]  =
+			    (info.available ? "Yes" : "No");
+
+			var fieldInfos = [
+			    {
+				fieldName: prefix + "node_id",
+				label: "Node ID"
+			    },
+			    {
+				fieldName: prefix + "free",
+				label: "Available?"
+			    },
+			    {
+				fieldName: prefix + "radio_type",
+				label: "Radio Type"
+			    }
+			];
+
+			/*
+			 * Parse the comma separated strings into arrays
+			 * of low/high frequency info. See below.
+			 */
+			info["txRanges"] = [];
+			info["rxRanges"] = [];
+
+			/*
+			 * Each frontend has its own frequencies and notes.
+			 */
+			_.each(info.frontends, function (frontend, iface) {
+			    var fe_prefix = prefix + iface + " ";
+			    var tx       = frontend.transmit_frequencies;
+			    var rx       = frontend.receive_frequencies;
+			    var fe       = frontend.frontend;
+			    var notes    = frontend.notes;
+			    var fe_infos = [];
+
+			    if (fe != "none") {
+				fe_infos.push({
+				    fieldName: fe_prefix + "frontend",
+				    label: "Frontend"
+				});
+				attributes[fe_prefix + "frontend"] = fe;
+			    }
+			    fe_infos.push({
+				fieldName: fe_prefix + "tx_freq",
+				label: "TX Frequencies"
+			    });
+			    fe_infos.push({
+				fieldName: fe_prefix + "rx_freq",
+				label: "RX Frequencies"
+			    });
+			    fe_infos.push({
+				fieldName: fe_prefix + "notes",
+				label: "Notes"
+			    });
+			    attributes[fe_prefix + "tx_freq"] = tx;
+			    attributes[fe_prefix + "rx_freq"] = rx;
+			    attributes[fe_prefix + "notes"]   = notes;
+
+			    fieldInfos = fieldInfos.concat(fe_infos);
+
+			    _.each(tx.split(","),
+				   function (range) {
+				       var tokens = range.split("-");
+
+				       info.txRanges.push({
+					   "low"  : tokens[0],
+					   "high" : tokens[1]
+				       });
+				   });
+			    _.each(rx.split(","),
+				   function (range) {
+				       var tokens = range.split("-");
+
+				       info.rxRanges.push({
+					   "low"  : tokens[0],
+					   "high" : tokens[1]
+				       });
+				   });
+			});
+			popupcontent.push({
+			    type: "fields",
+			    fieldInfos: fieldInfos,
+			});
+		    });
+		}
+		var popup = {
+		    title: details.name,
+		    content: popupcontent,
+		};
+		var graphic = new Graphic({
+		    geometry:      point,
+		    symbol:        symbol,
+		    attributes:    attributes,
+		    popupTemplate: popup,
+		});
+		layer.add(graphic);
+		details["graphic"] = graphic;
+
+		// Add label text below the icon
+		var textGraphic = new Graphic({
+		    geometry: {
+			type: "point",
+			longitude: details.longitude,
+			latitude: details.latitude,
+		    },
 		    symbol: {
 			type: "text",
 			color: "green",
-			text: details.ID,
+			text: details.name,
 			xoffset: 0,
 			yoffset: 10,
 			font: {
@@ -739,10 +856,63 @@ window.ShowPowderMap = (function()
 		    }
 		});
 		layer.add(textGraphic);
-	});
-	Map.add(layer);
+	    });
+	};
+	return sup.CallServerMethod(null, "map-support", "GetDenseDeployment",
+				    null, callback);
     }
-     
+    /*
+     * Mark a DD on the filter layer.
+     */
+    function MarkDenseDeployment(name, partial)
+    {
+	var cabinets     = Layers["DD"].data;
+	var layer        = Layers["DD"].filter;
+	var cabinet      = null;
+
+	_.each(cabinets, function (details) {
+	    if (details.name == name) {
+		cabinet = details;
+	    }
+	});
+	if (!cabinet) {
+	    console.info("MarkDenseDeployment: Could not find " + name);
+	    return null;
+	}
+	// First create a point geometry (location of the BS).
+        var point = {
+            type:	"point", // autocasts as new Point()
+            longitude:  cabinet.longitude,
+            latitude:   cabinet.latitude,
+        };
+
+        // Create a symbol for drawing a circle around it
+        var symbol = {
+            type:	"simple-marker",
+            color:	[0, 0, 0, 0],
+	    size:       "30px",
+            outline: {
+		// autocasts as new SimpleLineSymbol()
+		color: (partial ? "purple" : "green"),
+		width: 3,
+            }
+        };
+	var graphic = new Graphic({
+	    geometry:      point,
+	    symbol:        symbol,
+	});
+	layer.add(graphic);
+	return cabinet;
+    }
+    function UnmarkDenseDeployment()
+    {
+        Layers["DD"].filter.removeAll();
+    }
+    function FilterDenseDeployment()
+    {
+	FilterLayer("DD", MarkDenseDeployment);
+    }
+    
     function DrawFixedEndpoints()
     {
 	var id   = "FE";
@@ -765,7 +935,7 @@ window.ShowPowderMap = (function()
 	// Add now so it goes into the legend in the correct order, and
 	// on top of the filter layer.
 	Map.add(layer);
-	Layers["BS"].all = layer;
+	Layers["FE"].all = layer;
 
 	// Turn on/off the filter layer when the main layer is turned on/off.
         WatchUtils.init(layer, "visible", function(visible) {
@@ -855,8 +1025,7 @@ window.ShowPowderMap = (function()
 			attributes[prefix + "radio_type"] = info.radio_type;
 			attributes[prefix + "notes"] = info.notes;
 			attributes[prefix + "free"]  =
-			    (details.reservable_nodes[node_id].available ?
-			     "Yes" : "No");
+			    (info.available ? "Yes" : "No");
 
 			var fieldInfos = [
 			    {
@@ -1034,10 +1203,12 @@ window.ShowPowderMap = (function()
      */
     function FilterFixedEndpoints()
     {
-	var endpoints = Layers["FE"].data;
-	var layer     = Layers["FE"].filter;
+	FilterLayer("FE", MarkFixedEndpoint)
+    }
 
-	_.each(endpoints, function (details, urn) {
+    function FilterLayer(layer, markfunction)
+    {
+	_.each(Layers[layer].data, function (details, urn) {
 	    var showme = 0;
 	    
 	    if (details.radioinfo) {
@@ -1060,7 +1231,7 @@ window.ShowPowderMap = (function()
 		    };
 
 		    if ($('#show-available').is(":checked")) {
-			update(details.reservable_nodes[node_id].available);
+			update(info.available);
 		    }
 		    if (Options.showreserved &&
 			$('#show-reserved').is(":checked")) {
@@ -1099,11 +1270,11 @@ window.ShowPowderMap = (function()
 		});
 	    }
 	    if (showme) {
-		MarkFixedEndpoint(details.name,
-				  showme != _.size(details.radioinfo));
+		markfunction(details.name, showme != _.size(details.radioinfo));
 	    }
 	});
     }
+    
     function FilterRange(which, info, updater)
     {
 	var tx       = $(which + " .range-tx").is(":checked");
@@ -1443,75 +1614,7 @@ window.ShowPowderMap = (function()
     }
     function FilterBaseStations()
     {
-	var basestations = Layers["BS"].data;
-	var layer        = Layers["BS"].filter;
-	
-	_.each(basestations, function (details) {
-	    var showme = 0;
-	    
-	    if (details.radioinfo) {
-		_.each(details.radioinfo, function (info, index) {
-		    var node_id = info.node_id;
-
-		    // Basically an "and" of all marked clauses.
-		    var passed = undefined;
-		    var update = function (val) {
-			val = (val ? true : false);
-			
-			if (passed === undefined) {
-			    passed = val;
-			    return;
-			}
-			if (passed == false) {
-			    return;
-			}
-			passed = val;
-		    };
-
-		    if ($('#show-available').is(":checked")) {
-			update(info.available);
-		    }
-		    if (Options.showreserved &&
-			$('#show-reserved').is(":checked")) {
-			update(isReserved(details.cluster_urn, node_id));
-		    }
-		    if ($('.radio-type').is(":checked")) {
-			var found = false;
-			
-			$('.radio-type').each(function () {
-			    var type = $(this).data("radio-type");
-			    var checked = $(this).is(":checked");
-
-			    if (checked) {
-				var radio = info.radio_type;
-				if (radio.includes(type)) {
-				    found = true;
-				}
-			    }
-			});
-			update(found);
-		    }
-		    if ($('.range-one .range-checkbox').is(":checked") &&
-			$.trim($('.range-one .range-low').val()) != "" &&
-			$.trim($('.range-one .range-high').val()) != "") {
-			FilterRange(".range-one", info, update);
-		    }
-		    if ($('.range-two .range-checkbox').is(":checked") &&
-			$.trim($('.range-two .range-low').val()) != "" &&
-			$.trim($('.range-two .range-high').val()) != "") {
-			FilterRange(".range-two", info, update);
-		    }
-		    // Only one node has to pass all tests
-		    if (passed === true) {
-			showme++;
-		    }
-		});
-	    }
-	    if (showme) {
-		MarkBaseStation(details.name,
-				showme != _.size(details.radioinfo));		
-	    }
-	});
+	FilterLayer("BS", MarkBaseStation);
     }
 
     /*

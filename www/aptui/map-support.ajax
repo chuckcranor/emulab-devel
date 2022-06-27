@@ -40,8 +40,6 @@ function Do_GetFixedEndpoints()
         if (! $aggregate->isFE() || $aggregate->disabled()) {
             continue;
         }
-        $reservablenodes = $aggregate->ReservableNodes(true);
-
         $blob[$urn] =
             array("urn"       => $urn,
                   "latitude"  => $aggregate->latitude(),
@@ -49,9 +47,7 @@ function Do_GetFixedEndpoints()
                   "nickname"  => $aggregate->nickname(),
                   "name"      => $aggregate->name(),
                   "typelist"  => $typelist,
-                  "radioinfo" => null,
-                  # Ask for extended info.
-                  "reservable_nodes" => $reservablenodes);
+                  "radioinfo" => null);
         if (array_key_exists($urn, $radioinfo)) {
             $blob[$urn]["radioinfo"] = $radioinfo[$urn];
         }
@@ -76,6 +72,9 @@ function Do_GetBaseStations()
     $locationRadios   = array();
     # Split up radios by location
     foreach ($radioinfo[$urn] as $node_id => &$info) {
+        if ($info["itype"] != "BS") {
+            continue;
+        }
         $location = $info["location"];
         if (!array_key_exists($location, $locationRadios)) {
             $locationRadios[$location] = array();
@@ -118,6 +117,67 @@ function Do_GetBaseStations()
         }
     }
     SPITAJAX_RESPONSE($baseStations);
+}
+
+#
+# Return Dense Deployment info. All DDs are attached to the MotherShip.
+#
+function Do_GetDenseDeployment()
+{
+    global $this_user, $ajax_args;
+    global $this_user, $ajax_args;
+    $aggregate = Aggregate::ThisAggregate();
+    if (!$aggregate) {
+	SPITAJAX_ERROR(-1, "No aggregate info");
+	return -1;
+    }
+    $urn = $aggregate->urn();
+    $radioinfo        = Aggregate::RadioInfoNew();
+    $locationRadios   = array();
+    # Split up radios by location
+    foreach ($radioinfo[$urn] as $node_id => &$info) {
+        if ($info["itype"] != "DD") {
+            continue;
+        }
+        $location = $info["location"];
+        if (!array_key_exists($location, $locationRadios)) {
+            $locationRadios[$location] = array();
+        }
+        $locationRadios[$location][$node_id] = $info;
+    }
+
+    #
+    # Grab the dense locations,
+    #
+    $query_result =
+        DBQueryFatal("select * from apt_aggregate_radio_locations ".
+                     "where itype='DD' and aggregate_urn='$urn'");
+    if (!mysql_num_rows($query_result)) {
+        SPITAJAX_RESPONSE(null);
+        return 0;
+    }
+    $result = array();
+    
+    while ($row = mysql_fetch_array($query_result)) {
+        $location   = $row["location"];
+        $latitude   = $row["latitude"];
+        $longitude  = $row["longitude"];
+        $streeturl  = $row["streeturl"];
+
+        $result[$location] = array(
+            "name"        => $location,
+            "latitude"    => $latitude,
+            "longitude"   => $longitude,
+            "type"        => "Dense Deployment",
+            "street"      => $streeturl,
+            "cluster_urn" => $urn,
+            "radioinfo"   => null
+        );
+        if (array_key_exists($location, $locationRadios)) {
+            $result[$location]["radioinfo"] = $locationRadios[$location];
+        }
+    }
+    SPITAJAX_RESPONSE($result);
 }
 
 #

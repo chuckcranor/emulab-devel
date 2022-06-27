@@ -596,11 +596,12 @@ class Aggregate
                          " from apt_aggregate_radio_locations as l ".
                          "left join apt_aggregate_radio_info as i on ".
                          "  i.aggregate_urn=l.aggregate_urn and ".
-                         "  i.location=l.location ".
+                         "  i.location=l.location and ".
+                         "  i.itype=l.itype ".
                          "left join apt_aggregate_reservable_nodes as r on ".
                          "  r.urn=i.aggregate_urn and r.node_id=i.node_id ".
                          "where i.node_id not like 'cellsdr%' ".
-                         "order by itype desc, l.location asc");
+                         "order by l.itype desc, l.location asc");
 
         while ($row = mysql_fetch_array($query_result)) {
             $urn      = $row["aggregate_urn"];
@@ -616,6 +617,9 @@ class Aggregate
                 $itype = "OAI";
             }
             $row["itype"] = $itype;
+
+            # Sigh
+            $row["available"] = intval($row["available"]);
 
             #
             # Grab the aggregate. We use the status info to determine if the

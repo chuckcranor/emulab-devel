@@ -698,6 +698,8 @@ $routing = array("geni-login" =>
                                                      "Do_GetBaseStations",
                                                  "GetMobileEndpoints" =>
                                                      "Do_GetMobileEndpoints",
+                                                 "GetDenseDeployment" =>
+                                                     "Do_GetDenseDeployment",
                               )
                         ),
 		 "scopus" =>
