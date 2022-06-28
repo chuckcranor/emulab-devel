@@ -12942,6 +12942,45 @@ COMMAND_PROTOTYPE(dohwinfo)
 		mysql_free_result(res);
 
 	/*
+	 * Allow individual node_type or node attributes to override global
+	 * settings for collect and check.
+	 */
+	res = mydb_query("(select attrkey,attrvalue from nodes as n,"
+			 " node_type_attributes as a where "
+			 "   n.type=a.type and n.node_id='%s' and "
+			 "   a.attrkey like 'nodecheck_%%') "
+			 "union "
+			 "(select attrkey,attrvalue "
+			 "   from node_attributes "
+			 " where node_id='%s' and "
+			 "   attrkey like 'nodecheck_%%')",
+			 2, reqp->nodeid, reqp->nodeid);
+	if (!res) {
+		error("dohwinfo: %s: DB Error getting nodecheck attributes!\n",
+		      reqp->nodeid);
+		return 1;
+	}
+
+	if ((nrows = (int)mysql_num_rows(res)) > 0) {
+		while (nrows) {
+			row = mysql_fetch_row(res);
+			if (row[1] && row[1][0]) {
+				char *key = row[0]+10; /* skip "nodecheck_" */
+				char *val = row[1];
+
+				if (strcmp(key, "check") == 0) {
+					check = atoi(val);
+				}
+				else if (strcmp(key, "collect") == 0) {
+					collect = atoi(val);
+				}
+			}
+			nrows--;
+		}
+	}
+	mysql_free_result(res);
+
+	/*
 	 * If collecting, set the path
 	 * XXX hardwired for now.
 	 */
