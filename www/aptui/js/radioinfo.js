@@ -51,7 +51,7 @@ $(function ()
 		widgets : widgets,
 		headerTemplate : '{content} {icon}',
 		widgetOptions: {
-		    editable_columns       : [2,4,5,9],
+		    editable_columns       : [3,5,6,10],
 		    editable_enterToAccept : true,   
 		    editable_autoAccept    : false,   
 		    editable_autoResort    : false,
