@@ -610,6 +610,7 @@ $(function ()
 		status_message = "Your experiment has been quarantined";
 		status_html = "<font color=red>quarantined</font>";
 		ProgressBarUpdate();
+		ShowIdleDataTab();
 	    }
 	    else if (instanceStatus == 'imaging') {
 		bgtype = "panel-warning";
