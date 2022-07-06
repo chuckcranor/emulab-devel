@@ -890,7 +890,7 @@ window.ShowPowderMap = (function()
         var symbol = {
             type:	"simple-marker",
             color:	[0, 0, 0, 0],
-	    size:       "30px",
+	    size:       "31px",
             outline: {
 		// autocasts as new SimpleLineSymbol()
 		color: (partial ? "purple" : "green"),
