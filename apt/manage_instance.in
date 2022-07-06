@@ -3757,12 +3757,14 @@ sub DoDeleteNodes()
     # it into DeleteNodes.
     #
     my $credentials;
+    Genixmlrpc->SetContext(APT_Geni::GeniContext());
     if ($instance->GetAllCredentials(1, \$credentials, \$errmsg)) {
 	$errmsg   = "Cannot generate credentials";
 	$errcode  = GENIRESPONSE_ERROR;
 	$exitcode = -1;
 	goto bad;
     }
+    Genixmlrpc->SetContext(undef);
     
     #
     # Helper callback to send the proper arguments.
