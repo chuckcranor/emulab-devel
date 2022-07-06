@@ -432,6 +432,7 @@ sub CreateSliver($)
     my $impotent     = $argref->{'impotent'} || 0;
     my $usetracker   = $argref->{'usetracker'} || 0;
     my $async        = $argref->{'asyncmode'} || 0;
+    my $update       = $argref->{'isupdate'} || 0;
     my $mypid        = $PID;
     my $cachedebug   = 0;
     my $rspec;
@@ -504,7 +505,7 @@ sub CreateSliver($)
 	    }
 	    $slice->UnLock();
 	}
-	if (defined($aggregate)) {
+	if (defined($aggregate) && !$update) {
 	    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 					"Must delete existing slice first");
 	}
@@ -534,7 +535,7 @@ sub CreateSliver($)
     }
     eval {$rspec = GeniCM::GetTicketAux({"credential" => $credential,
 					 "rspecstr"   => $rspecstr,
-					 "isupdate"   => 0,
+					 "isupdate"   => $update,
 					 "impotent"   => $impotent,
 					 "v2"         => 1,
 					 "level"      => 0,
@@ -631,7 +632,7 @@ sub CreateSliver($)
 	       GeniCM::SliverWorkAux({"credential"  => $credential,
 				      "object"      => $rspec,
 				      "keys"        => $keys,
-				      "isupdate"    => 0,
+				      "isupdate"    => $update,
 				      "impotent"    => $impotent,
 				      "v2"          => 1,
 				      "level"       => 0,
