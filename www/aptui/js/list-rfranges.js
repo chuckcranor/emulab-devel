@@ -76,6 +76,15 @@ $(function ()
 	    $('#history-ranges .waiting')
 		.html(template({"ranges" : json.value}));
 
+	    // Default dates for the date pickers.
+	    var first = _.first(json.value);
+	    var last  = _.last(json.value);
+
+	    var start_from = moment(last.started).format("L");
+	    var start_to   = moment(first.started).format("L");
+	    var end_from   = moment(last.destroyed).format("L");
+	    var end_to     = moment(first.destroyed).format("L");
+
 	    $('#history-ranges .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
@@ -100,8 +109,8 @@ $(function ()
 				    .uiDatepicker( $cell, indx, {
 					textFrom : "",
 					textTo : "-",
-					from : "",
-					to   : "",
+					from : start_from,
+					to   : start_to,
 					changeMonth : true,
 					changeYear : true
 				    });
@@ -112,8 +121,8 @@ $(function ()
 				    .uiDatepicker( $cell, indx, {
 					textFrom : "",
 					textTo : "-",
-					from : "",
-					to   : "",
+					from : end_from,
+					to   : end_to,
 					changeMonth : true,
 					changeYear : true
 				    });
