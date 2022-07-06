@@ -729,6 +729,7 @@ CREATE TABLE `apt_instances` (
   `reporef` varchar(128) default NULL,
   `repohash` varchar(64) default NULL,
   `rspec` mediumtext,
+  `update_rspec` mediumtext,
   `script` mediumtext,
   `params` mediumtext,
   `paramdefs` mediumtext,
