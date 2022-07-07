@@ -2,26 +2,24 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['instantiate', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal', 'reservation-graph', 'resgroup-list']);
-    var instantiateString = templates['instantiate'];
+    var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal', 'reservation-graph', 'resgroup-list', 'instantiate-templates']);
+    var instantiateString = templates['instantiate-new'];
     var aboutaptString = templates['aboutapt'];
     var aboutcloudString = templates['aboutcloudlab'];
     var aboutpnetString = templates['aboutpnet'];
     var waitwaitString = templates['waitwait-modal'];
     var rspecviewString = templates['rspectextview-modal'];
-    var ajaxurl;
     var amlist        = null;
     var amstatus      = null;
     var projlist      = null;
-    var sysprojlist   = ['emulab-ops', 'PortalProfiles'];
-    var psysprojlist  = ['PhantomNet', 'PortalProfiles'];
     var profilelist   = null;
-    var recentcount   = 5;
     var amdefault     = null;
+    var formfields    = null;
     var selected_profile = null;
     var selected_uuid    = null;
     var selected_rspec   = null;
     var selected_version = null;
+    var selected_pid     = null;
     var ispprofile    = 0;
     var isscript      = 0;
     var webonly       = 0;
@@ -43,24 +41,239 @@ $(function ()
     var loaded_uuid   = null;
     var ppchanged     = false;
     var monitor       = null;
-    var types         = null;
     var prunetypes    = null;
     var hardware      = null;
     var resinfo       = null;
+    var resgroups     = null;
     var radioinfo     = null;
     var maxEndDate    = null;
     var usingRadios   = false;
     var usingSpectrum = false;
     var currentStep   = 0;
     var mainTemplate  = _.template(instantiateString);
-    var graphTemplate = _.template(templates["reservation-graph"]);
-    var reslistTemplate= _.template(templates["resgroup-list"]);
     var rerun_instance = null;
     var rerun_loaded   = false;
 
+    /*
+     * The template file has several different sections inside
+     * script tags. We need to compile each one separately.
+     */
+    var extraTemplates = templates['instantiate-templates'];
+    var html           = $.parseHTML(extraTemplates, document, true);
+    var siteTemplate   = _.template($('#pickered-site-template', html).html());
+    var clusterTemplate= _.template($('#pickered-agg-template', html).html());
+    var projectTemplate= _.template($('#pickered-proj-template', html).html());
+    var pidTemplate    = _.template($('#pickered-pid-template', html).html());
+    var groupTemplate  = _.template($('#pickered-group-template', html).html());
+    var gidTemplate    = _.template($('#pickered-gid-template', html).html());
+
+    function initialize()
+    {
+	// Fire this off right away.
+	if (!window.NOPREDICTION) {
+	    LoadReservationInfo();
+	}
+	
+	// Get context for constraints
+	var contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
+	$.get(contextUrl).then(contextReady, contextFail);
+	// Standard view option
+	marked.setOptions({"sanitize" : true});
+
+	window.APT_OPTIONS.initialize(sup);
+	webonly    = window.WEBONLY;
+	isadmin    = window.ISADMIN;
+	multisite  = window.MULTISITE;
+	portal     = window.PORTAL;
+	doconstraints = window.DOCONSTRAINTS;
+	showpicker    = window.SHOWPICKER;
+
+	if ($('#amlist-json').length) {
+	    amlist = decodejson('#amlist-json');
+	    _.each(_.keys(amlist), function (key) {
+		amValueToKey[amlist[key].name] = key;
+	    });
+	    console.info("amlist", amlist);
+	    monitor = decodejson('#amstatus-json');
+	    console.info("monitor status", monitor);
+
+	    /*
+	     * Resort the amlist so that federated clusters are at the
+	     * end. Not really sure why this ended up here and not on
+	     * the server side.
+	     */
+	    var tmp = {};
+	    _.each(amlist, function (details, urn) {
+		if (!details.isfederate) {
+		    tmp[urn] = details;
+		}
+	    });
+	    _.each(amlist, function (details, urn) {
+		if (details.isfederate) {
+		    tmp[urn] = details;
+		}
+	    });
+	    amlist = tmp;
+	}
+	if ($('#projects-json').length) {
+	    projlist = decodejson('#projects-json');
+	    console.info("projlist", projlist);
+	}
+	if ($('#restrictions-json').length) {
+	    restrictions = decodejson('#restrictions-json');
+	    console.info("cluster restrictions", restrictions);
+	}
+	resgroups = decodejson('#resinfo-json');
+	console.info("resgroups", resgroups);
+	profilelist = decodejson('#profiles-json');
+	console.info("profilelist", profilelist);
+	prunetypes = decodejson('#prunelist-json');
+	console.info(prunetypes);
+	if ($('#radioinfo-json').length) {
+	    radioinfo = decodejson('#radioinfo-json');
+	    console.info("radioinfo", radioinfo);
+	}
+	formfields = decodejson('#form-json');
+	console.info("formfields", formfields);
+
+	var html = mainTemplate({
+	    formfields:         formfields,
+	    projects:           projlist,
+	    amlist:             amlist,
+	    showpicker:         showpicker,
+	    fromrepo:           window.FROMREPO,
+	    clustername:        window.PORTAL_NAME,
+	    admin:		isadmin,
+	    maxduration:        window.MAXDURATION,
+	    clusterselect:      window.CLUSTERSELECT,
+	});
+	$('#main-body').html(html);
+	$('#waitwait_div').html(waitwaitString);
+	$('#rspecview_div').html(rspecviewString);
+	$('#rspec_modal_download_button').addClass("hidden");
+
+	$('#stepsContainer').steps({
+	    headerTag: "h3",
+	    bodyTag: "div",
+	    transitionEffect: "slideLeft",
+	    autoFocus: true,
+	    onStepChanging: function(event, currentIndex, newIndex) {
+		return StepChanging(this, event, currentIndex, newIndex);
+	    },
+	    onStepChanged: function(event, currentIndex, priorIndex) {
+		// Globally record what step we are on.
+		currentStep = currentIndex;
+		return StepChanged(this, event, currentIndex, priorIndex);
+	    },
+	    onFinishing: function(event, currentIndex) {
+		_.defer(function () {
+		    CheckStep3(function (success) {
+			if (success) {
+			    Instantiate(event);
+			}
+			else {
+			    $('#stepsContainer-t-3').parent().addClass('error');
+			}
+		    });
+		});
+		// Avoid Error indicator until form validation completes.
+		return true;
+	    },
+	});
+	setStepsMotion(false);
+
+	// Format the step labels across the top to match the panel widths.
+	$('#stepsContainer .steps').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
+	$('#stepsContainer .actions').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
+
+	// Insert datepicker on schedule tab,
+	$("#start_day").datepicker({
+	    minDate: 0,		/* earliest date is today */
+	    disabled: false,
+	    showButtonPanel: true,
+	    onSelect: function (dateString, dateobject) {
+		DateChange("#start_day");
+	    }
+	});
+	$("#end_day").datepicker({
+	    minDate: 0,		/* earliest date is today */
+	    maxDate: "+1d",
+	    showButtonPanel: true,
+	    onSelect: function (dateString, dateobject) {
+		DateChange("#end_day");
+	    }
+	});
+	$("#start_hour").change(function () {
+	    DateChange("#start_hour");
+	});
+	$('#start-hour-help, #end-hour-help').popover({
+	    trigger: 'hover',
+	    placement: 'auto',
+	    container: 'body',
+	});
+
+	// It is okay to initialize this, we do not show the copy
+	// button unless appropriate. 
+	CopyProfile.InitCopyProfile('#profile-copy-button',
+				    window.DEFAULT_PROFILE, _.keys(projlist));
+
+	// Set up jacks swap
+	$('#stepsContainer #inline_overlay').click(function() {
+	    SwitchJacks('large');
+	});
+
+	// Profile picker in its own module now.
+	if (showpicker) {
+	    ProfilePicker.init({
+		"profileList"    : profilelist,
+		"projList"       : projlist,
+		"multiSite"      : multisite,
+		"defaultProfile" : window.DEFAULT_PROFILE,
+		"changeProfile"  : function (selected) {
+		    console.info("selected", selected);
+		    ChangeProfileSelection(selected);
+		    $('.steps .error').removeClass('error');
+		},
+	    });
+	    // Needs to be after steps init.
+	    $('button#change-profile').click(function (event) {
+		event.preventDefault();
+		ProfilePicker.showPicker();
+	    });
+	}
+	// Must be after steps init. This will init the Group selector
+	CreateProjectSelector();
+
+	$('#show_xml_modal_button').click(function (event) {
+	    showXMLModal();
+	});
+
+	// Load previous bindings if applicable.
+	if (window.PROFILE_UUID && window.RERUN_INSTANCE) {
+	    // We do not know yet if its parameterized. But that is okay.
+	    LoadPreviousInstance()
+		.done(ChangeProfileSelection(window.PROFILE_UUID))
+	}
+	else {
+	    ChangeProfileSelection(window.DEFAULT_PROFILE);
+	}
+	_.delay(function () {
+	    $('.dropdown-toggle').dropdown();
+	}, 500);
+
+    }
+
+    // Helper.
+    function decodejson(id) {
+	return JSON.parse(_.unescape($(id)[0].textContent));
+    }
+
+    /*
+     * Helper functions for enable/disable of steps motion/finish
+     */
     function enableStepsMotion()
     {
-	console.info("enableStepsMotion");
+	//console.info("enableStepsMotion");
 	
 	$('#stepsContainer').steps("enableMotion");
 	$('body').on("keyup.stepsNav", function (event) {
@@ -74,7 +287,7 @@ $(function ()
     }
     function disableStepsMotion()
     {
-	console.info("disableStepsMotion");
+	//console.info("disableStepsMotion");
 	
 	$('#stepsContainer').steps("disableMotion");
 	$('body').off("keyup.stepsNav");
@@ -117,436 +330,6 @@ $(function ()
 	    window.SELECTED_INSTANCE = undefined;
 	    rerun_loaded   = true;
 	}
-    }
-
-    function initialize()
-    {
-    // Get context for constraints
-	var contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
-	$.get(contextUrl).then(contextReady, contextFail);
-	// Standard view option
-	marked.setOptions({"sanitize" : true});
-
-	window.APT_OPTIONS.initialize(sup);
-	webonly    = window.WEBONLY;
-	isadmin    = window.ISADMIN;
-	multisite  = window.MULTISITE;
-	portal     = window.PORTAL;
-	ajaxurl    = window.AJAXURL;
-	doconstraints = window.DOCONSTRAINTS;
-	showpicker    = window.SHOWPICKER;
-
-	if ($('#amlist-json').length) {
-	    amlist = decodejson('#amlist-json');
-	    _.each(_.keys(amlist), function (key) {
-		amValueToKey[amlist[key].name] = key;
-	    });
-	    amstatus = decodejson('#amstatus-json');
-	    console.info("amlist", amlist);
-	}
-	if ($('#projects-json').length) {
-	    projlist = decodejson('#projects-json');
-	    console.info("projlist", projlist);
-	}
-	if ($('#restrictions-json').length) {
-	    restrictions = decodejson('#restrictions-json');
-	    console.info("cluster restrictions", restrictions);
-	}
-	profilelist = decodejson('#profiles-json');
-	console.info("profilelist", profilelist);
-	var profileToArray = _.pairs(profilelist);
-	prunetypes = decodejson('#prunelist-json');
-	console.info(prunetypes);
-	if ($('#radioinfo-json').length) {
-	    radioinfo = decodejson('#radioinfo-json');
-	    console.info("radioinfo", radioinfo);
-	}
-	console.info("formfields", decodejson('#form-json'));
-
-	/*
-	 * Sort the entire list by recently used.
-	 */
-	profileToArray = _.sortBy(profileToArray, function (value) {
-	    return value[1].lastused;
-	});
-	// Note that sortBy orders by ascending, so reverse.
-	profileToArray = profileToArray.reverse();
-
-	// Show most recently used profiles at top of list
-	var recentlist = _.filter(profileToArray, function(value) {
-	    return value[1]['usecount'] > 0;
-	});
-
-	var neverUsed = 0;
-	if (recentlist.length == 0) {
-	    neverUsed = 1;
-	    recentlist = profileToArray;
-	}
-	recentlist = _.first(recentlist, recentcount);
-	
-	_.each(recentlist, function(obj, key) {
-	    if (window.ISPNET) {
-		if (_.contains(psysprojlist, obj[1].project)) {
-		    obj[1].project = "System";
-		}
-	    }
-	    else {
-		if (_.contains(sysprojlist, obj[1].project)) {
-		    obj[1].project = "System";
-		}
-	    }
-	});
-	var projcategories = MakeProfileCategories(profileToArray);
-
-	var html = mainTemplate({
-	    formfields:         decodejson('#form-json'),
-	    profiles:           profilelist,
-	    myprofiles:         projcategories.myprofiles,
-	    projprofiles:       projcategories.inproj,
-	    systemprofiles:        projcategories.sysproj,
-	    otherprofiles:      projcategories.otherproj,
-	    recent:             recentlist,
-	    showpopular:        neverUsed,
-	    favorites:          projcategories.favorite,
-	    projects:           projlist,
-	    amlist:             amlist,
-	    showpicker:         showpicker,
-	    fromrepo:           window.FROMREPO,
-	    clustername:        window.PORTAL_NAME,
-	    admin:		isadmin,
-	    maxduration:        window.MAXDURATION,
-	    clusterselect:      window.CLUSTERSELECT,
-	});
-	$('#main-body').html(html);
-
-	// Fire this off right away.
-	if (!window.NOPREDICTION) {
-	    LoadReservationInfo();
-	}
-
-	if (projlist)
-	    UpdateGroupSelector();
-
-	// Check if the browser has cookies stating what they previoiusly had minimized.
-        CookieCollapse('#profile_name > span', 'pp_collpased');
-	monitor = JSON.parse(_.unescape($('script#amstatus-json').html()));
-	$('#waitwait_div').html(waitwaitString);
-        $('#waitwait-modal').modal({ backdrop: 'static', keyboard: false, show: false });
-	$('#rspecview_div').html(rspecviewString);
-	$('#rspec_modal_download_button').addClass("hidden");
-	
-	// The about panel.
-	if (window.SHOWABOUT) {
-	    $('#about_div').html(window.ISCLOUD ? aboutcloudString :
-				 (window.ISPNET ? aboutpnetString : 
-				  aboutaptString));
-	}
-	$('#stepsContainer').steps({
-	    headerTag: "h3",
-	    bodyTag: "div",
-	    transitionEffect: "slideLeft",
-	    autoFocus: true,
-	    onStepChanging: function(event, currentIndex, newIndex) {
-		return StepChanging(this, event, currentIndex, newIndex);
-	    },
-	    onStepChanged: function(event, currentIndex, priorIndex) {
-		// Globally record what step we are on.
-		currentStep = currentIndex;
-		return StepChanged(this, event, currentIndex, priorIndex);
-	    },
-	    onFinishing: function(event, currentIndex) {
-		_.defer(function () {
-		    CheckStep3(function (success) {
-			if (success) {
-			    Instantiate(event);
-			}
-			else {
-			    $('#stepsContainer-t-3').parent().addClass('error');
-			}
-		    });
-		});
-		// Avoid Error indicator until form validation completes.
-		return true;
-	    },
-	});
-	setStepsMotion(false);
-	
-	// Insert datepicker on schedule tab,
-	$("#start_day").datepicker({
-	    minDate: 0,		/* earliest date is today */
-	    disabled: false,
-	    showButtonPanel: true,
-	    onSelect: function (dateString, dateobject) {
-		DateChange("#start_day");
-	    }
-	});
-	$("#end_day").datepicker({
-	    minDate: 0,		/* earliest date is today */
-	    maxDate: "+1d",
-	    showButtonPanel: true,
-	    onSelect: function (dateString, dateobject) {
-		DateChange("#end_day");
-	    }
-	});
-	$("#start_hour").change(function () {
-	    DateChange("#start_hour");
-	});
-	$('#start-hour-help, #end-hour-help').popover({
-	    trigger: 'hover',
-	    placement: 'auto',
-	    container: 'body',
-	});
-
-	// It is okay to initialize this, we do not show the copy
-	// button unless appropriate. 
-	CopyProfile.InitCopyProfile('#profile-copy-button',
-				    window.PROFILE, _.keys(projlist));
-
-	// Format the step labels across the top to match the panel widths.
-	$('#stepsContainer .steps').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
-	$('#stepsContainer .actions').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
-
-	// Set up jacks swap
-	$('#stepsContainer #inline_overlay').click(function() {
-		SwitchJacks('large');
-	});
-
-	$('#quickvm_topomodal').on('shown.bs.modal', function() {
-	    ShowProfileSelection($('#profile_name .current'))
-	});
-
-	$('button#reset-form').click(function (event) {
-	    event.preventDefault();
-	    resetForm($('#quickvm_form'));
-	});
-	$('button#change-profile').click(function (event) {
-	    event.preventDefault();
-	    PickerEvent("show");
-	    $('#quickvm_topomodal').modal('show');
-	});
-	$('button#showtopo_cancel').click(function (event) {
-	    event.preventDefault();
-	    PickerEvent("hide");
-	    $('#quickvm_topomodal').modal('hide');
-	});
-	$('li.profile-item').click(function (event) {
-	    event.preventDefault();
-	    // Ignore clicks over the project. Probably a better way to do this.
-	    if (! $(event.target).is("li")) {
-		return;
-	    }
-	    PickerEvent("switch", $(event.target),
-			$('#profile_name').scrollTop());
-	    ShowProfileSelection(event.target);
-	});
-	$('button#showtopo_select').click(function (event) {
-	    event.preventDefault();
-	    var selected = $('#quickvm_topomodal .selected');
-	    PickerEvent("select", selected, $('#profile_name').scrollTop());
-	    ChangeProfileSelection(selected);
-	    $('#quickvm_topomodal').modal('hide');
-	    $('.steps .error').removeClass('error');
-	});
-	/*
-	 * Handler for scroll inside the picker. We want to send the
-	 * event when the user stops scrolling.
-	 */
-	$('#profile_name').scroll(function (event) {
-	    clearTimeout($.data(this, 'scrollTimer'));
-	    $.data(this, 'scrollTimer', setTimeout(function() {
-		PickerEvent("scroll", $('#profile_name').scrollTop());
-	    }, 750));	    
-	});
-	/*
-	 * Need to update image constraints when the project selector
-	 * is changed.
-	 */
-	$('#profile_pid').change(function (event) {
-	    event.preventDefault();
-	    UpdateGroupSelector();
-	    UpdateImageConstraints();
-	    return true;
-	});
-
-	$('#show_xml_modal_button').click(function (event) {
-	    //
-	    // Show the XML source in the modal. This is used when we
-	    // have a script, and the XML was generated. We show the
-	    // XML, but it is not intended to be edited.
-	    //
-	    $('#rspec_modal_editbuttons').addClass("hidden");
-	    $('#rspec_modal_viewbuttons').removeClass("hidden");
-	    $('#modal_profile_rspec_textarea').val(selected_rspec);
-	    $('#modal_profile_rspec_textarea').prop("readonly", true);
-	    $('#modal_profile_rspec_div').addClass("hidden");
-	    $('#modal_profile_rspec_textarea').removeClass("hidden");
-	    $('#rspec_modal').modal({'backdrop':'static','keyboard':false});
-	    $('#rspec_modal').modal('show');
-	});
-	$('#close_rspec_modal_button').click(function (event) {
-	    $('#rspec_modal').modal('hide');
-	    $('#modal_profile_rspec_textarea').val("");
-	});
-
-	// Profile picker search box.
-	var profile_picker_timeout  = null;
-	var profile_picker_searched = false;
-	
-	$("#profile_picker_search").on("keyup", function (event) {
-	    var options   = $('#profile_name');
-	    var userInput = $("#profile_picker_search").val();
-	    userInput = userInput.toLowerCase();
-	    window.clearTimeout(profile_picker_timeout);
-
-	    profile_picker_timeout =
-		window.setTimeout(function() {
-		    var matches = 
-			options.children("ul").children("li").filter(function() {
-			    var text = $(this).text();
-			    text = text.toLowerCase();
-
-			    if (text.indexOf(userInput) > -1)
-				return true;
-			    return false;
-			});
-		    options.children("ul").children("li").hide();
-		    matches.show();
-		    
-		    if (userInput == '') {
-			$('#title_recently_used').removeClass('hidden');
-			$('#recently_used').removeClass('hidden');
-			$('#title_favorites').removeClass('hidden');
-			$('#favorites').removeClass('hidden');
-			profile_picker_searched = false;
-		    }
-		    else {
-			$('#title_recently_used').addClass('hidden');
-			$('#recently_used').addClass('hidden');
-			$('#title_favorites').addClass('hidden');
-			$('#favorites').addClass('hidden');
-			if (profile_picker_searched == false) {
-			    PickerEvent("search");
-			}
-			profile_picker_searched = true;
-		    }
-		}, 500);
-
-	    // User types return while searching, if there was only one
-	    // choice, then we select it. Convenience. 
-	    if (event.keyCode == 13) {
-		var matches = 
-		    options.find("li").filter(function() {
-			return (!$(this).parent().hasClass('hidden') && $(this).css('display') == 'block');
-		    });
-		if (matches && matches.length == 1) {
-		    PickerEvent("select", $(matched[0]),
-				$('#profile_name').scrollTop());
-		    ShowProfileSelection(matches[0]);
-		}
-	    }
-	});
-
-	// This needs to change.
-	var startProfile = $('#profile_name li[value = ' +
-			     window.PROFILE + ']:first');
-
-	// Load previous bindings if applicable.
-	if (window.PROFILE_UUID && window.RERUN_INSTANCE) {
-	    // We do not know yet if its parameterized. But that is okay.
-	    LoadPreviousInstance().done(ChangeProfileSelection(startProfile))
-	}
-	else {
-	    ChangeProfileSelection(startProfile);
-	}
-	_.delay(function () {
-	    $('.dropdown-toggle').dropdown();
-	}, 500);
-
-	// Set up the click function for expanding and collapsing profile groups
-	$('#profile_name > span').click(function() {
-	    var ul = '#'+($(this).attr('id').slice('title-'.length));
-	    if ($(this).children('.category_collapsable').hasClass('expanded')) {
-		$(ul).addClass('hidden');
-		$(this).children('.category_collapsable').removeClass('expanded');
-		$(this).children('.category_collapsable').addClass('collapsed');
-	    }
-	    else {
-		$(ul).removeClass('hidden');
-		$(this).children('.category_collapsable').addClass('expanded');
-		$(this).children('.category_collapsable').removeClass('collapsed');
-	    }
-
-	    var collapsed = [];
-	    $('#profile_name .category_collapsable.collapsed').each(function() {
-		collapsed.push($(this).parent().attr('id'));
-	    });
-
-	    SetCookie('pp_collpased',JSON.stringify(collapsed),30);
-	});
-    }
-
-    // Helper.
-    function decodejson(id) {
-	return JSON.parse(_.unescape($(id)[0].textContent));
-    }
-
-    // Handler to minimize span elements based on the cookie name
-    function CookieCollapse(target, cookieName) {
-	var cookie = GetCookie(cookieName);
-
-	if (cookie != null) {  
-	    var collapsed = JSON.parse(cookie);
-    
-	    $(target).each(function() {
-		if (_.contains(collapsed, $(this).attr('id'))) {
-		    $(this).children('.category_collapsable').removeClass('expanded').addClass('collapsed');
-		    var ul = '#'+($(this).attr('id').slice('title-'.length));
-		    $(ul).addClass('hidden');
-		}
-	    });
-	}
-    } 
-
-    // Put profiles into the correct categories to be built in the template
-    function MakeProfileCategories(profiles) {
-      var result = {favorite:{},myprofiles:{},inproj:{},sysproj:{},otherproj:{}};
-
-      // This section should probably be rethought as it's not very clean. 
-      // Didn't have time to refactor for initial release.
-      _.each(profiles, function(obj, key) {
-	  key = obj[0];
-	  obj = obj[1];
-	  
-	    var isSystem = (window.ISPNET && _.contains(psysprojlist, obj.project)) || (!window.ISPNET &&_.contains(sysprojlist, obj.project))
-	    if (obj.favorite == 1) {
-	      if (isSystem	) {
-		result.favorite[key] = $.parseJSON(JSON.stringify(obj));
-		result.favorite[key].project = "System";
-	      }
-	      else {
-		result.favorite[key] = obj;
-	      }
-	    }
-
-	    if (window.USERNAME == obj.creator) {
-		result.myprofiles[key] = obj;
-	    }
-
-	    if (isSystem) {
-	      result.sysproj[key] = obj;
-	    }
-
-	    if (projlist && _.has(projlist, obj.project)) {
-	      if (!result.inproj[obj.project]) {
-		result.inproj[obj.project] = {};
-	      }
-	      result.inproj[obj.project][key] = obj;
-	    }
-	    else if (!isSystem) {
-	      result.otherproj[key] = obj;
-	    }
-	});
-      return result;
     }
 
     var doingformcheck = 0;
@@ -664,32 +447,6 @@ $(function ()
 		    cIndex--;
 		}
 	    }
-
-	    // TEMPORARY STOPGAP
-	    // Refer to Issue #71
-	    // https://gitlab.flux.utah.edu/emulab/emulab-devel/issues/71
-	    if ($('#pp-form #hwinfo').length == 0) {
-		$('#pp-form input[data-key=osNodeType]').parent().append(''+
-		    '<a href="' + window.MANUAL + '/hardware.html" style="'+
-			'position:absolute;'+
-			'right:21px;'+
-			'top: 8.5px;'+
-		    '" target="_blank">'+
-		    '<span id="hwinfo" class="glyphicon glyphicon-info-sign" style="font-size:16px;"'+
-			'data-toggle="popover" data-trigger="hover"'+
-			'data-content="Click here to see what hardware types are available">'+
-		    '</span>'+
-		    '</a>'+
-		'');
-	    }
-
-	    $('#hwinfo').popover({
-		trigger: 'hover',
-		placement: 'auto',
-		container: 'body',
-	    });
-
-	    // END STOPGAP
 	}
 	else if (currentIndex == 2) {
 	    if (priorIndex == 1) {
@@ -746,52 +503,6 @@ $(function ()
 		ShowFormErrors(json.value);
 		step_callback(false);
 		return;
-	    }
-	    // Email not verified, throw up form.
-	    if (json.code == 3) {
-		sup.ShowModal('#verify_modal');
-		
-		var doverify = function() {
-		    var check_callback = function(json) {
-			console.info(json);
-
-			if (!json.code) {
-			    // Token was good, we can keep going.
-			    sup.HideModal('#verify_modal');
-			    $('#verify_modal_submit').off("click");
-			    $('#verification_token').parent()
-				.removeClass("has-error");
-			    $('#verification_token_error')
-				.addClass("hidden");
-
-			    if (_.has(json.value, "cookies")) {
-				SetCookies(json.value.cookies);
-			    }
-			    // Redirect if so instructed.
-			    if (_.has(json.value, "redirect")) {
-				window.location.replace(json.value.redirect);
-				return;
-			    }
-			    // Otherwise continue the work flow.
-			    step_callback(true);
-			    return;
-			}
-			// Bad token. Show the error. Continue button
-			// is still active.
-			$('#verification_token').parent().addClass("has-error");
-			$('#verification_token_error').removeClass("hidden");
-			$('#verification_token_error').html("Incorrect!");
-		    };
-		    var token = $('#verification_token').val();
-		    var xmlthing = sup.CallServerMethod(null, "instantiate",
-							"VerifyEmail",
-							{"token" : token});
-		    xmlthing.done(check_callback);
-		};
-		$('#verify_modal_submit').on("click", function (event) {
-		    // Submit token for check. We loop until it passes.
-		    doverify();
-		});
 	    }
 	});
     }
@@ -959,15 +670,15 @@ $(function ()
     }();
 
     function ShowFormErrors(errors) {
-	$('.step-forms').find('.format-me').each(function () {
-	    var input = $(this).find(":input")[0];
-	    var label = $(this).find(".control-error")[0];
-	    var key   = $(input).data("key");
-	    if (key && _.has(errors, key)) {
-		$(this).addClass("has-error");
-		$(label).html(_.escape(errors[key]));
-		$(label).removeClass("hidden");
-	    }
+	_.each(errors, function (error, key) {
+	    var which = '[for="' + key + '"]';
+	    var label = $('.step-forms .control-error' + which);
+
+	    // Parent form-group gets the error.
+	    $(label).closest(".form-group").addClass("has-error");
+	    // Hmm, need to fix this, not everything is a form-group
+	    $(label).closest(".format-me").addClass("has-error");
+	    $(label).html(_.escape(error)).removeClass("hidden");
 	});
 	// General Error on the last step.
 	if (_.has(errors, "error")) {
@@ -975,17 +686,12 @@ $(function ()
 	}
     }
 
-    function ClearFormErrors() {
-	$('.step-forms').find('.format-me').each(function () {
-	    var input = $(this).find(":input")[0];
-	    var label = $(this).find(".control-error")[0];
-	    var key   = $(input).data("key");
-	    if (key) {
-		$(this).removeClass("has-error");
-		$(label).html("");
-		$(label).addClass("hidden");
-	    }
-	});
+    function ClearFormErrors()
+    {
+	$('.step-forms .control-error').html("").addClass("hidden");
+	$('.step-forms .form-group').removeClass("has-error");
+	// See above, this needs to be fixed.
+	$('.step-forms .format-me').removeClass("has-error");
 	$('#general_error').html("");
     }
 
@@ -1108,412 +814,25 @@ $(function ()
 	document.cookie = cookie;
     }
 
-    // Cookie parser found from Google
-    function GetCookie(name) {
-	var nameEQ = name + "=";
-	var ca = document.cookie.split(';');
-	for(var i=0;i < ca.length;i++) {
-	    var c = ca[i];
-	    while (c.charAt(0)==' ') c = c.substring(1,c.length);
-	    if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
-	}
-	return null;
-    }
-    
-    function CreateClusterStatus() {
-	if (monitor == null || $.isEmptyObject(monitor)) {
-	    return;
-	}
-	// No need to do this if not showing selectors.
-	if (!window.CLUSTERSELECT) {
-	    return;
-	}
+    /*
+     * Show the XML in a modal. Read only so hide the edit buttons.
+     */
+    function showXMLModal()
+    {
+	$('#rspec_modal_editbuttons').addClass("hidden");
+	$('#rspec_modal_viewbuttons').removeClass("hidden");
+	$('#modal_profile_rspec_textarea').val(selected_rspec);
+	$('#modal_profile_rspec_textarea').prop("readonly", true);
+	$('#modal_profile_rspec_div').addClass("hidden");
+	$('#modal_profile_rspec_textarea').removeClass("hidden");
+	$('#rspec_modal').modal({'backdrop':'static','keyboard':false});
+	$('#rspec_modal').modal('show');
 
-	$('#finalize_options .cluster-group').each(function() {
-	    if ($(this).hasClass("pickered")) {
-		return;
-	    }
-	    $(this).addClass("pickered");
-
-	    var resourceTypes = ["PC"];
-	    // Have to do look this up based off of the site name since that's 
-	    // the only hook Jacks is giving.
-	    var label = $(this).find('.control-label').attr('name');
-	    if (types && label && types[label]) {
-		if (types[label]['emulab-xen']) {
-		    if (Object.keys(types[label]).length == 1) {
-			resourceTypes = [];
-		    }
-		    resourceTypes.push("VM");
-		}
-	    }
-	    var which = $(this).parent().attr('id');
-
-	    // Decide what classes each option element should have
-	    var pickerTarget = '#'+which+' .select_where';
-	    var attributes = {}
-	    var selected = null;
-
-	    $(pickerTarget).find('option').each(function() {
-		var attrs = {}
-		var siteName = $(this).attr('value');
-
-		// Hide "Please Select" option
-		if (siteName == "") {
-		    attrs['class'] = 'enabled';
-		}
-		else if ($(this).prop('disabled')) {
-		    attrs['class'] = 'disabled';
-		    attrs['tooltip'] = {
-			placement: 'right',
-			title: '<div>This testbed is incompatible with the selected profile</div>'
-		    }
-		}
-		else {
-		    attrs['class'] = 'enabled';
-		    if ($(this).attr('selected')) {
-			// Do not not lose selection if its enabled.
-			selected = siteName;
-		    }
-		}
-
-		if (_.contains(window.FEDERATEDLIST, $(this).attr('value'))) {
-		    attrs['class'] += " federated";
-		}
-
-		attributes[siteName] = attrs;
-	    });
-
-	    var dividers = [{ match: 'class',
-			      key: 'federated',
-			      text: 'Federated Clusters'
-			    },
-			    { match: 'class',
-			      key: 'disabled'
-			    }];
-
-	    picker.MakePicker(pickerTarget,
-			      function (container, that, target) {
-				  ClusterSelected(that, true);
-				  wt.StatusClickEvent(container, that, target);
-			      },
-			      attributes, dividers,
-			      {class: 'cluster_picker_status'});
-
-	    // Assign health ratings and icons
-	    _.each(amlist, function(details, key) {
-		var name = details.name;
-		var data = monitor[key];
-		var rating, classes;
-		var target = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a:contains("'+name+'")');
-		if (data && !$.isEmptyObject(data)) {
-		    // Calculate testbed rating and set up tooltips.
-		    rating = wt.CalculateRating(data, resourceTypes);
-		    classes = wt.AssignStatusClass(rating[0], rating[1]);
-		}
-		else {
-		    rating = wt.InactiveRating();
-		    classes = wt.AssignInactiveClass();
-		}
-		target.parent().attr('data-health', rating[0]).attr('data-rating', rating[1]).attr('urn', key);
-		    
-		target.addClass(classes[0]).addClass(classes[1]);
-
-		target.append(wt.StatsLineHTML(classes, rating[2]));
-	    });
-
-	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.native').sort(SortClusterStatus).prependTo($('#'+which+' .cluster_picker_status .dropdown-menu'));
-	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(SortClusterStatus).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
-
-	    var pickerStatus = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a');
-
-	    // If only two enabled choices, one of which is always the
-	    // "Please Select" option, then force that cluster.
-	    if (pickerStatus.length == 2) {
-		pickerStatus[1].click();
-	    }
-	    else if (selected) {
-		// User already selected an enabled cluster, we want to keep it.
-		pickerStatus.filter(function () {
-		    if ($(this).attr("value") == selected) {
-			$(this).click();
-		    }
-		});
-	    }
-	    else {
-		// Back to Please Select.
-		pickerStatus[0].click();
-	    }
-	});	  
-	
-	$('[data-toggle="tooltip"]').tooltip();
-
-	ShowClusterReservations();
-    }
-
-    function ShowClusterReservations() {
-	if (resinfo == null || $.isEmptyObject(resinfo)) {
-	    return
-	}
-
-	var project = $('#profile_pid').val();
-	var projectReservations = {}
-	var requested = 0;
-	var inuse = 0;
-	var ready = 0;
-	var reloading = 0;
-
-	$('#reservation_confirmation').addClass('hidden');
-	$('#reservation_warning').addClass('hidden');
-	$('#reservation_future').addClass('hidden');
-
-	/*
-	 * Ick, the reservation prediction info uses canonical project names
-	 * from the urn. But locally they can have a different case, so need
-	 * a quick map them from the user project list. 
-	 */
-	var pidmap = {};
-	_.each(projlist, function (glist, pid) {
-	    pidmap[pid.toLowerCase()] = pid;
+	$('#close_rspec_modal_button').click(function (event) {
+	    $('#rspec_modal').modal('hide');
+	    $('#modal_profile_rspec_textarea').val("");
+	    $('#close_rspec_modal_button').off("click");
 	});
-
-	$('#finalize_options .cluster-group').each(function() {
-	    var siteid = $(this).find("> label").attr("name");
-
-	    $(this).find('.dropdown-menu > .enabled:not(.hidden)').each(function() {
-		$(this).find('.reservation_tooltip').remove();
-
-		var start = null;
-		var end = null;
-		var earliest = null;
-		var hasReservation = false;
-		var currentReservations = false;
-
-		var target = $(this).find('a');
-		var cluster = $(this).attr('urn');
-
-		if (_.has(resinfo, cluster) && resinfo[cluster] != null) {
-		    if (typeof(resinfo[cluster]) == "string") {
-			console.info("Timed out getting reservation system " +
-				     "info for cluster " + cluster);
-			return;
-		    }
-		    /*
-		     * Upcoming is lower priority so do first.
-		     */
-		    if (_.has(resinfo[cluster], 'upcoming') &&
-			resinfo[cluster]['upcoming'] != null) {
-			_.each(resinfo[cluster]['upcoming'],
-			       function(thelist, resproj) {
-				   _.each(thelist, 
-					  function(obj) {
-			    console.info("upcoming", obj.starttime,
-					 resproj, project);
-			    
-			    // Current project has a future reservation
-			    // Used for cluster icons
-			    if (project.toLowerCase() == resproj) {
-				hasReservation = true;
-
-				// Find earliest starting reservation time
-				if (earliest == null ||
-				    earliest > obj.starttime) {
-				    earliest = obj.starttime;
-				}
-			    }
-			    // Do not override a current entry (from above).
-			    if (!_.has(projectReservations, pidmap[resproj])) {
-				projectReservations[pidmap[resproj]] = {
-				    // Icon for projects
-				    class: "futureReservation",
-				    // Used for sorting projects
-				    attr: {'data-priority': 2}
-				}
-			    }
-			 });
-		      });
-		    }
-
-		    if (_.has(resinfo[cluster], 'current') &&
-			resinfo[cluster]['current'] != null) {
-			_.each(resinfo[cluster]['current'],
-			       function(thelist, resproj) {
-				   _.each(thelist, 
-					  function(obj) {
-			    var req        = obj.reserved;
-			    var used       = obj.used;
-			    var type       = obj.nodetype;
-
-			    console.info("current", req, used, obj.ready,
-					 obj.reloading, type, resproj, project);
-			    
-			    // Current project has a current reservation
-			    // Used for cluster icons
-			    if (project.toLowerCase() == resproj) {
-				hasReservation = true;
-
-				// All nodes for current project reservations.
-				requested += parseInt(req);
-				inuse += parseInt(used);
-				ready += parseInt(obj.ready);
-				reloading += parseInt(obj.reloading);
-				currentReservations = true;
-			    }
-			    projectReservations[pidmap[resproj]] = {
-				// Icon for projects
-				class: "hasReservation",
-				// Used for sorting projects
-				attr: {'data-priority': 1}
-			    }
-			  });
-		       });
-		    }
-		    // These are reservations that could interfere with
-		    // the user getting nodes. 
-		    if (!hasReservation && 
-			_.has(resinfo[cluster], 'pressure') &&
-			resinfo[cluster]['pressure'] != null) {
-			_.each(resinfo[cluster]['pressure'],
-			       function(reslist, type) {
-				   var pidlc = project.toLowerCase();
-				   
-				   //console.info("P1", reslist,
-				   //             type, hardware, siteid);
-				   if (_.has(hardware, siteid) &&
-				       _.has(hardware[siteid], type) &&
-				       _.has(reslist, pidlc)) {
-				       //console.info("P", siteid,
-				       //              type, project);
-				       if (start == null ||
-					   start > reslist[pidlc][0][0]) {
-					   start = reslist[pidlc][0][0];
-					   end = reslist[pidlc][0][1];
-				       }
-				   }
-			       });
-		    }
-
-		    if (hasReservation || start != null) {
-			if (0) {
-			    console.info("res", project, start, end, earliest,
-					 requested, inuse, ready, reloading);
-			}
-			$(this).attr('data-res-pid', project);
-			$(this).attr('data-res-requested', requested);
-			$(this).attr('data-res-used', inuse);
-			$(this).attr('data-res-ready', ready);
-			$(this).attr('data-res-reloading', reloading);
-			if (hasReservation) {
-			    $(this).removeAttr('data-res-end');
-			    $(this).removeAttr('data-res-upcoming');
-			    
-			    if (currentReservations) {
-				$(this).attr('data-now', 'true');
-				target.append(wt.HasReservationHTML(project, 'cluster', 2));
-			    }
-			    else {
-				$(this).attr('data-res-upcoming', earliest);
-				$(this).attr('data-now', 'false');
-				target.append(wt.FutureReservationHTML(project, 'cluster', 2));
-			    }
-			}
-			else if (start) {
-			    $(this).attr('data-res-start', start);
-			    if (end != null) {
-				$(this).removeAttr('data-now');
-
-				$(this).attr('data-res-end', end);
-				target.append(wt.ReservationWarningHTML('cluster', 2));
-			    }
-			}
-			$('.reservation_tooltip > div').tooltip();
-		    }
-		    else {
-			$(this).removeAttr('data-now');
-			$(this).removeAttr('data-res-pid');
-			$(this).removeAttr('data-res-start');
-			$(this).removeAttr('data-res-end');
-			$(this).removeAttr('data-res-requested');
-			$(this).removeAttr('data-res-used');
-			$(this).removeAttr('data-res-ready');
-			$(this).removeAttr('data-res-reloading');
-			$(this).removeAttr('data-res-upcoming');
-		    }
-		}
-	    });
-
-	    var which = $(this).parent().attr('id');
-
-	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.native').sort(SortClusterStatus).prependTo($('#'+which+' .cluster_picker_status .dropdown-menu'));
-	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(SortClusterStatus).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
-
-	    // This makes sure that we keep the already selected cluster
-	    // This happens asynchronously, and the user may have already
-	    // decided on the cluster before we get here.
-	    $('#'+which+' .cluster_picker_status .dropdown-menu .selected a')
-		.click();
-	});
-	console.info("ShowClusterReservations",
-		     projectReservations, $('#profile_pid_picker').length);
-
-	if (_.keys(projectReservations).length > 0 && 
-	    $('#profile_pid_picker').length == 0) {
-	    picker.MakePicker('#profile_pid',
-			      wt.ResClickEvent, projectReservations);
-
-	    /*
-	     * As with the cluster selector, we do not want to change
-	     * the project selection if the user has already changed it.
-	     */
-	    var selected = $('#profile_pid option:selected').val();
-
-	    // Add icons
-	    $('#profile_pid_picker .dropdown-menu .hasReservation a')
-		.append(wt.HasReservationHTML(project, 'project', 1))
-	    $('#profile_pid_picker .dropdown-menu .futureReservation a')
-		.append(wt.FutureReservationHTML(project, 'project', 1))
-
-	    $('#profile_pid_picker .dropdown-menu > li')
-		.sort(SortProfileList)
-		.prependTo($('#profile_pid_picker .dropdown-menu'));  
-
-	    if (selected != "") {
-		$('#profile_pid_picker .dropdown-menu ' +
-		  'a[value="' + selected + '"]').click();
-	    }
-	    else {
-		$($('#profile_pid_picker .dropdown-menu a')[0]).click();
-	    }
-	}
-    }
-
-    function SortClusterStatus(a, b) {
-	if ((a.dataset.now && !b.dataset.now) || (a.dataset.now == 'true' && b.dataset.now == 'false')) {
-	    return -1;
-	}
-
-	if ((b.dataset.now && !a.dataset.now) || (b.dataset.now == 'true' && a.dataset.now == 'false')) {
-	    return 1;
-	}
-
-	var aHealth = Math.ceil((+a.dataset.health)/50);
-	var bHealth = Math.ceil((+b.dataset.health)/50);
-
-	if (aHealth > bHealth) {
-	    return -1;
-	}
-	else if (aHealth < bHealth) {
-	    return 1;
-	}
-	return +b.dataset.rating - +a.dataset.rating;
-    }
-
-    function SortProfileList(a, b) {
-	if ((!a.dataset.priority && b.dataset.priority) || (a.dataset.priority < b.dataset.priority)) {
-	    return 1;
-	}
-
-	return -1;
     }
 
     function SwitchJacks(which)
@@ -1560,150 +879,51 @@ $(function ()
 
 	if (ispprofile)
 	{
-	  ChangeJacksRoot($('#stepsContainer #inline_large_jacks'), false);
+	    ChangeJacksRoot();
 	}
 	else
 	{
-	  ShowProfileSelectionInline($('#profile_name .current'), $('#stepsContainer #inline_large_jacks'), false);
+	    ShowProfileSelectionInline();
 	}
 	$('#inline_large_container').removeClass('hidden');
       }
     }
 
-    function resetForm($form) {
-	$form.find('input:text, input:password, select, textarea').val('');
-    }
-
-    function ShowProfileSelection(selectedElement) {
-	if (!$(selectedElement).hasClass('selected')) {
-	    $('#profile_name li').each(function() {
-		$(this).removeClass('selected');
-	    });
-	    $(selectedElement).addClass('selected');
-	}
-	console.info("ShowProfileSelection: " +
-		     $(selectedElement).attr('value'));
-	
-	var continuation = function(profile_blob) {
-	    var profileInfo = profilelist[$(selectedElement).attr('value')]
-	    var isFavorite = profileInfo.favorite;
-
-	    // Add title name and favorite button
-	    $('#showtopo_title').html("<h3>" + profile_blob.name + "</h3>" +
-		"<button id='favorite_button' class='btn btn-default btn-sm'>" + 
-		"<span id='set_favorite' class='glyphicon glyphicon-star" + ((isFavorite == 1) ? " favorite" : "") + "'></span>" + 
-		"</button>");
-
-	    $('#showtopo_author').html(profile_blob.creator);
-	    $('#showtopo_project').html(profileInfo.project);  
-	    $('#showtopo_version').html(profile_blob.version); 
-	    $('#showtopo_last_updated').html(profile_blob.created);
-	    $('#showtopo_description').html(profile_blob.description);
-	    if (profile_blob.fromrepo) {
-		var text = profile_blob.repohash.substr(0, 8) + " (" +
-		    profile_blob.reporef + ")";
-		$('#showtopo_repohash').html(text);
-		$('.showtopo_repoinfo').removeClass("hidden");
-	    }
-	    else {
-		$('.showtopo_repoinfo').addClass("hidden");
-	    }
-
-	    sup.maketopmap('#showtopo_div',
-			   profile_blob.rspec, false, !multisite);
-
-	    // Set favorite toggle click event
-	    $('#favorite_button').click(function() {
-		ToggleFavorite(selectedElement)}
-	    );
-	};
-	GetProfile($(selectedElement).attr('value'), false, continuation);
-    }
-    
-    function ToggleFavorite(target) {
-	var wasFav = profilelist[$(target).attr('value')].favorite;
-	var callback = function(e) {    
-	    if (wasFav) {
-		$('#set_favorite').removeClass('favorite');
-		profilelist[$(target).attr('value')].favorite = 0;
-		$('#favorites li[value='+$(target).attr('value')+']').remove();
-
-		// They were selected on the item in the favorites list, which was just removed
-		// Adjust their selection to the first instance of that profile.
-		if ($('#profile_name .selected').length == 0) {
-		    $('#profile_name li[value='+$(target).attr('value')+']')[0].click();
-		}
-
-		if ($('#favorites li').length == 0) {
-		    $('#title_favorites').addClass('hidden');
-		}
-	    }
-	    else {
-		$('#set_favorite').addClass('favorite');
-		profilelist[$(target).attr('value')].favorite = 1;
-
-		var clone = $(target).clone();
-		$(clone).removeClass('selected');
-		$('#favorites').append(clone);
-		$(clone).click(function (event) {
-		    event.preventDefault();
-		    ShowProfileSelection(event.target);
-		});
-
-		$('#title_favorites').removeClass('hidden');
-	    }
-	}
-	var $xmlthing = sup.CallServerMethod(ajaxurl,
-					     "instantiate", (wasFav ? "ClearFavorite" : "MarkFavorite"),
-					     {"uuid" : $(target).attr('value')});
-	$xmlthing.done(callback);
-    }
-
-
     // Used to generate the topology on Tab 3 of the wizard for non-pp profiles
-    function ShowProfileSelectionInline(selectedElement, root, selectionPane) {
-	console.info("ShowProfileSelectionInline: " +
-		     $(selectedElement).attr('value'));
+    function ShowProfileSelectionInline()
+    {
+	console.info("ShowProfileSelectionInline");
+	var root = $('#stepsContainer #inline_large_jacks');
 
 	$('#stepsContainer #inline_overlay').removeClass("hidden");
 	$('#inline_jacks #edit_dialog #edit_container')
 	    .removeClass("hidden");
-	editor = new JacksEditor(root, true, true,
-				 selectionPane, true, !multisite);
+	editor = new JacksEditor(root, true, true, false, true, !multisite);
 	editor.show(selected_rspec);
     }
 
-    function ChangeProfileSelection(selectedElement) {
-	if (!$(selectedElement).hasClass('current')) {
-	    $('#profile_name li').each(function() {
-		$(this).removeClass('current');
-	    });
-	    $(selectedElement).addClass('current');
-	}
-	console.info("ChangeProfileSelection: " +
-		     $(selectedElement).attr('value'));
-
+    // Called when the user selects a profile in the picker.
+    function ChangeProfileSelection(selected) {
+	console.info("ChangeProfileSelection", selected);
 	setStepsMotion(false);
 	
-	var profile_name = $(selectedElement).attr('name');
-	var profile_value = $(selectedElement).attr('value');
-	$('#selected_profile').attr('value', profile_value);
-	$('#selected_profile_text').html("" + profile_name);
-	
-	var continuation = function(profile_blob) {
-	    $('#showtopo_title').html("<h3>" + profile_blob.name + "</h3>");
-	    $('#showtopo_description').html(profile_blob.description);
-	    $('#selected_profile_description').html(profile_blob.description);
-	    $('#finalize_profile_name')
-		.text(profile_blob.name + ":" + profile_blob.version);
+	var continuation = function(blob) {
+	    var profile_name = blob.name;
 
-	    ispprofile       = profile_blob.ispprofile;
-	    isscript         = profile_blob.isscript;
-	    selected_profile = profile_value;
-	    selected_uuid    = profile_blob.uuid;
-	    selected_rspec   = SetClusters(profile_blob.rspec);
-	    selected_version = profile_blob.version;
-	    amdefault        = profile_blob.amdefault;
+	    // The selected profile in the submitted form.
+	    // Might be a secret hash.
+	    $('#selected_profile').attr('value', selected);
+	    $('#selected_profile_text').html("" + profile_name);
+	    $('#selected_profile_description').html(blob.description);
+	    $('#finalize_profile_name').text(profile_name + ":" + blob.version);
+
+	    ispprofile       = blob.ispprofile;
+	    isscript         = blob.isscript;
+	    selected_profile = selected;
+	    selected_uuid    = blob.uuid;
+	    selected_rspec   = SetClusters(blob.rspec);
+	    selected_version = blob.version;
+	    amdefault        = blob.amdefault;
 	    if (ispprofile) {
 		$('#save_paramset_button').removeClass("hidden");
 	    }
@@ -1713,7 +933,7 @@ $(function ()
 	    $('#profile_show_button')
 		.attr("href", "show-profile.php?profile=" + selected_profile);
 
-	    if (window.CANCOPY && !profile_blob.fromrepo) {
+	    if (window.CANCOPY && !blob.fromrepo) {
 		CopyProfile.SwitchProfile(selected_profile);
 		$('#profile-copy-button').removeClass("hidden");
 	    }
@@ -1727,13 +947,13 @@ $(function ()
 	     */
 	    if (showpicker) {
 		// The point of changing these is for the ppwizard warnings.
-		window.PROFILE_VERSION = profile_blob.version;
+		window.PROFILE_VERSION = blob.version;
 		
-		if (profile_blob.fromrepo) {
-		    window.PROFILE_REFSPEC = profile_blob.reporef;
-		    window.PROFILE_REFHASH = profile_blob.repohash;
-		    window.TARGET_REFSPEC  = profile_blob.reporef;
-		    window.TARGET_REFHASH  = profile_blob.repohash;
+		if (blob.fromrepo) {
+		    window.PROFILE_REFSPEC = blob.reporef;
+		    window.PROFILE_REFHASH = blob.repohash;
+		    window.TARGET_REFSPEC  = blob.reporef;
+		    window.TARGET_REFHASH  = blob.repohash;
 		    // The picker always switches to head of default branch.
 		    window.TARGET_HEADHASH = window.TARGET_REFHASH;
 		    window.FROMREPO = true;
@@ -1748,29 +968,20 @@ $(function ()
 		rerun_instance = null;
 		rerun_loaded   = null;
 	    }
-	    if (profile_blob.fromrepo) {
+	    if (blob.fromrepo) {
 		var text = profile_name + " (Repo: " +
-		    profile_blob.repohash.substr(0, 8) + ", " +
-		    profile_blob.reporef + ")";
+		    blob.repohash.substr(0, 8) + ", " +
+		    blob.reporef + ")";
 		
 		$('#selected_profile_text').html(text);
 
 		// See ppwizard, it will run the script again if
 		// the params change and need to know what to
 		// checkout in the jail.
-		window.TARGET_REPOREF = profile_blob.repohash;
+		window.TARGET_REPOREF = blob.repohash;
 	    }
 	    setStepsMotion(true);
-
-	    /*
-	     * Change the project; if the user's project list includes
-	     * the project the profile belongs to, that becomes the default.
-	     */
-	    if (0 && projlist && _.has(projlist, profile_blob.pid)) {
-		$('#project_selector #profile_pid').val(profile_blob.pid);
-		UpdateGroupSelector();
-	    }
-	    CreateAggregateSelectors(selected_rspec);
+	    CreateAggregateSelectors();
 
 	    /*
 	     * First time, if skipfirststep is set, do it and clear.
@@ -1780,18 +991,19 @@ $(function ()
 		window.SKIPFIRSTSTEP = false;
 	    }
 	};
-	GetProfile($(selectedElement).attr('value'), true, continuation);
+	GetProfile(selected, continuation);
     }
 
     /*
      * No need to get script source code when getting the profile for
      * the profile picker.
      */
-    function GetProfile(profile, getsource, continuation) {
-	console.info("GetProfile", profile, getsource);
+    function GetProfile(profile, continuation)
+    {
+	console.info("GetProfile", profile);
 	var args = {
 	    "profile"   : profile,
-	    "getsource" : getsource,
+	    "getsource" : 1,
 	};
 	
 	var callback = function(json) {
@@ -1831,7 +1043,7 @@ $(function ()
 	     * case that we did not request something specific, and
 	     * we need to remember that in the form too.
 	     */
-	    if (getsource) {
+	    if (1) {
 		if (blob.fromrepo && _.has(args, "refhash")) {
 		    // Need to pass these along at submit.
 		    $('#repohash').val(blob.repohash);
@@ -1959,7 +1171,7 @@ $(function ()
 	if (newRspec) {
 	    selected_rspec = SetClusters(newRspec);
 	    $('#rspec_textarea').val(selected_rspec);
-	    CreateAggregateSelectors(selected_rspec);
+	    CreateAggregateSelectors();
 	    ShowThumbnail(selected_rspec, updateJacksGraph);
 	}
     }
@@ -1970,11 +1182,10 @@ $(function ()
      * Build up a list of Aggregate selectors. Normally just one, but for
      * a multisite aggregate, need more then one.
      */
-    function CreateAggregateSelectors(rspec)
+    function CreateAggregateSelectors()
     {
-	var xmlDoc = $.parseXML(rspec);
+	var xmlDoc = $.parseXML(selected_rspec);
 	var xml    = $(xmlDoc);
-	var html   = "";
 	var bound  = 0;
 	var count  = 0;
 	var ammap  = {};
@@ -1985,6 +1196,17 @@ $(function ()
 	if (!window.CLUSTERSELECT) {
 	    return;
 	}
+
+	// Assign health ratings and icons
+	// Only need to do this once, needs to move.
+	_.each(amlist, function(details, key) {
+	    if (monitor && _.size(monitor)) {
+		details["status"] = CalculateAggregateStatus(monitor[key]);
+	    }
+	    else {
+		details["status"] = null;
+	    }
+	});
 
 	var nodecount  = $(xmlDoc).find("node").length;
 	if (nodecount > 3000) {
@@ -2061,9 +1283,10 @@ $(function ()
 	 * constraints change, when the reservation info come in).
 	 */
 	var createDropdowns = function (selected) {
-	    var options = "";
+	    var gotfed   = 0;
+	    var options  = "";
 	    
-	    _.each(amlist, function(details, key) {
+	    _.each(amlist, function(details, urn) {
 		/*
 		 * Temp; do not show mobile if not an admin
 		 */
@@ -2077,19 +1300,50 @@ $(function ()
 		 */
 		if (_.has(restrictions, pid)) {
 		    if (!_.find(restrictions[pid],
-				function(urn) {
+				function(key) {
 				    return urn == key;
 				})) {
-			console.info("Skipping cluster " + key);
+			console.info("Skipping cluster " + urn);
 			return;
 		    }
 		}
-		var name = details.name;
-		options = options + "<option value='" + name + "'";
-		if (amlist.count == 1 || name == selected) {
-		    options = options + " selected";
+		// Look for current or upcoming resgroups.
+		var resgroup = null;
+		if (_.has(resgroups.current, urn) &&
+		    _.has(resgroups.current[urn], pid)) {
+		    resgroup = {
+			"which"   : "active",
+			"class"   : "has_reservation",
+			"project" : pid,
+		    };
 		}
-		options = options + ">" + name + "</option>";
+		else if (_.has(resgroups.future, urn) &&
+			 _.has(resgroups.future[urn], pid)) {
+		    resgroup = {
+			"which"   : "upcoming",
+			"class"   : "future_reservation",
+			"project" : pid,
+		    };
+		}
+
+		//console.info("resgroup", resgroup, pid, urn);
+		
+		// If we see a federate, add the divider. Kinda gross.
+		var addfed = 0;
+		if (!gotfed && details.isfederate) {
+		    addfed = gotfed = 1;
+		}
+		var name = details.name;
+		options = options +
+		    clusterTemplate({
+			"name"     : name,
+			"selected" : name === selected,
+			"addfed"   : addfed,
+			"urn"      : details.urn,
+			"resgroup" : resgroup,
+			"health"   : details["health"],
+			"status"   : details["status"],
+		    });
 	    });
 	    return options;
 	};
@@ -2098,24 +1352,17 @@ $(function ()
 	console.info(ammap);
 
 	// If multisite is disabled for the user, or no sites or 1 site.
-	if (!multisite ||
-	    (Object.keys(sites).length <= 1))  {
-	    var siteid;
-	    if (Object.keys(sites).length == 0) {
-		siteid = "Site 1";
-	    }
-	    else {
-		siteid = _.values(sites)[0]
-	    }
+	if (!multisite || Object.keys(sites).length == 0) {
+	    var siteid = "nosite_selector";
+
 	    /*
 	     * Since we call this multiple times (after constraints change,
 	     * when the reservation info come in), lets not change the
-	     * selection if the user has already made one. 
+	     * selection if the user has already made one.
 	     */
 	    var selected;
-	    if ($('#finalize_options .cluster-group').length) {
-		selected = $('#finalize_options .cluster-group ' +
-			     'select option:selected').text();
+	    if ($("#cluster_selector .select_where").length) {
+		selected = $("#cluster_selector .select_where").val();
 	    }
 	    else {
 		// Always default Powder dropdown to Emulab
@@ -2123,35 +1370,19 @@ $(function ()
 		    selected = "Emulab";
 		}
 	    }
-	    var options = createDropdowns(selected);
-	    
-	    html = 
-		"<div id='nosite_selector' " +
-		"     class='form-horizontal experiment_option'>" +
-		"  <div class='form-group cluster-group'>" +
-		"    <label class='col-sm-4 control-label' name='" + siteid + "' " +
-		"           style='text-align: right;'>Cluster:</a>" +
-		"    </label> " +
-		"    <div class='col-sm-6 site-selector'>" +
-		"      <select id='site"+sitenum+"_selector' name='where' " +
-		"              data-siteid='nosite_selector' " +
-		"              class='form-control select_where'>" +
-		"        <option value=''>Please Select</option>" +
-		options +
-		"      </select>" +
-		"    </div>" +
-		"<div class='col-sm-4'></div>" +
-	    "<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. Please check your profile or parameters for errors. If you are sure they are correct, you can report the problem to support@cloudlab.us and make sure to link to the problematic profile.</div>" +
-	    "<div class='col-sm-4 col-sm-offset-1' style='display: none; margin-top: 5px; margin-bottom: 5px;'><button class='btn btn-default' type='button' data-toggle='collapse' data-target='#nowhere-breakdown' aria-expanded='false' id='nowhere-breakdown-button'>Cluster Compatibility Report</button></div>" +
-	        "<div class='col-sm-12 collapse' id='nowhere-breakdown'></div>"+
-	        "<div class='col-sm-2 site-wait'><img src='images/spinner.gif' /></div>" +
-		"  </div>" +
-		"</div>";
+	    var picker = $(siteTemplate({
+		"siteid"    : siteid,
+		"sitenum"   : sitenum,
+		"multisite" : false,
+		"clusters"  : createDropdowns(selected),
+	    }));
+	    $("#cluster_selector").html(picker);
 	}
 	else {
+	    var pickers = [];
 	    _.each(sites, function(siteid) {
 		siteIdToSiteNum[siteid] = sitenum;
-		var selectID = 'site' + sitenum + '_selector';
+		var divID = '#site' + sitenum + 'cluster';
 
 		/*
 		 * Since we call this multiple times (after constraints change,
@@ -2159,44 +1390,381 @@ $(function ()
 		 * selection if the user has already made one. 
 		 */
 		var selected;
-		if ($('#' + selectID).length) {
-		    selected = $('#' + selectID + ' option:selected').text();
+		if ($(divID).length) {
+		    selected = $(divID + ' .select_where').val();
 		}
-		var options = createDropdowns(selected);
-
-		html = html +
-		    "<div id='site"+sitenum+"cluster' " +
-		    "     class='form-horizontal experiment_option'>" +
-		    "  <div class='form-group cluster-group'>" +
-		    "    <label class='col-sm-4 control-label' name='" + siteid + "' " +
-		    "           style='text-align: right;'>"+
-		    "          Site " + siteid  + " Cluster:</a>" +
-		    "    </label> " +
-		    "    <div class='col-sm-6 site-selector'>" +
-		    "      <select id='" + selectID + "' " +
-		    "              data-siteid='" + siteid + "' " +
-		    "              name=\"sites[" + siteid + "]\"" +
-		    "              class='form-control select_where'>" +
-		    "        <option value=''>Please Select</option>" +
-		    options +
-		    "      </select>" +
-		    "    </div>" +
-		    "<div class='col-sm-4'></div>" +
-		    "<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This site <b>will not work on any clusters</b>. All clusters are unselectable.</div>" +
-	            "<div class='col-sm-2 site-wait'><img src='images/spinner.gif' /></div>" +
-	            "  </div>" +
-		    "</div>";
+		var picker = $(siteTemplate({
+		    "siteid"    : siteid,
+		    "sitenum"   : sitenum,
+		    "multisite" : true,
+		    "clusters"  : createDropdowns(selected),
+		}));
+		pickers.push(picker);
 		sitenum++;
 	    });
+	    $("#cluster_selector").html("");
+	    $("#cluster_selector").append(pickers);
 	}
-	//console.info(html);
+	$('#cluster_selector [data-toggle="tooltip"]').tooltip();	
 
-	$("#cluster_selector").html("");
-	$("#cluster_selector").html(html);
-	updateWhere();  
+	/* 
+	 * When a choice is made, need to update the button contents 
+	 * and the hidden form input.
+	 */
+	$("#cluster_selector .site-selector").find("ul li a")
+	    .click(function (event) {
+		event.preventDefault();
+		var value    = $(this).attr("value");
+		var urn      = $(this).closest("li").attr("urn");
+		var tooltips = "";
+		var where    = "";
+
+		// Watch for reset back to "Please Select"
+		if (value == "") {
+		    value = "Please Select";
+		    urn   = "";
+		}
+		else {
+		    tooltips = $(this).find(".cluster-tooltips").html();
+		    where   = value;
+		}
+		if ($(picker).find(".select_where").val() == where) {
+		    // No change to be made. 
+		    return;
+		}
+		var picker = $(this).closest(".site-selector");
+		
+		$(picker).find("button .value").html(value);
+		$(picker).find("button .cluster-tooltips").html(tooltips);
+		$(picker).find(".select_where").val(where);
+		$(picker).find(".select_where").attr("urn", urn);
+		$(picker).find("li").removeClass("selected");
+		$(this).closest("li").addClass("selected");
+
+		// Say something useful about current reservations
+		GenerateReservationInfo();
+	    });
+
+	/*
+	 * Trigger any previous selections
+	 */
+	$("#cluster_selector .site-selector")
+	    .find("ul li.selected").each(function () {
+		$(this).find("a").click();
+	    });
 	$("#cluster_selector").removeClass("hidden");
     }
 
+    /*
+     * Helper functions for above. Originally authored by Keith, but
+     * cleaned up since then.
+     */
+    function CalculateAggregateStatus(data)
+    {
+	var health        = 0;
+	var status        = 0;
+	var healthTooltip = "";
+	var statusTooltip = "";
+	var pickerClasses = [];
+
+	if (! (data && _.size(data))) {
+	    statusTooltip = "Testbed status unavailable";
+	    pickerClasses = ['status_inactive', 'resource_inactive'];
+	}
+	else if (data.status == 'SUCCESS') {
+	    if (data.health) {
+		health = data.health;
+		if (health > 50) {
+		    healthTooltip = 'Testbed is healthy';
+		    pickerClasses.push('status_healthy');
+		}
+		else if (health > 0) {
+		    healthTooltip = 'Testbed is unhealthy';
+		    pickerClasses.push('status_unhealthy');
+		}
+		else {
+		    healthTooltip = 'Testbed is down';
+		    pickerClasses.push('status_down');
+		}
+	    }
+	    else {
+		health = 100;
+		healthTooltip = 'Testbed is up'
+		pickerClasses.push('resource_healthy');
+	    }
+	    // Only care about PCs now. VMs are not interesting.
+	    var available = parseInt(data.rawPCsAvailable);
+	    var max       = parseInt(data.rawPCsTotal);
+	    var ratio     = available / max;
+
+	    status = available;
+	    statusTooltip = available + "/" + max +
+		"(" + Math.round(ratio*100) + '%) PCs available';
+
+	    if (available > 20) {
+		pickerClasses.push('resource_healthy');
+	    }
+	    else if (available > 10) {
+		pickerClasses.push('resource_unhealthy');
+	    }
+	    else {
+		pickerClasses.push('resource_down');
+	    }
+	}
+	else {
+	    healthTooltip = 'Testbed is down';
+	    pickerClasses = ["resource_down", "status_down"];
+	}
+	return {
+	    "health"        : health,
+	    "status"        : status,
+	    "healthTooltip" : healthTooltip,
+	    "statusTooltip" : statusTooltip,
+	    "pickerClasses" : pickerClasses.join(" "),
+	};
+    }
+
+    /*
+     * The idea here is to tell the user about current/active reservations
+     * in the project they have selected, on the clusters they select. 
+     */
+    function GenerateReservationInfo()
+    {
+	var warnings = [];
+	var pid = $('#project_selector #profile_pid').val();
+
+	if (pid == "") {
+	    $('#reservation-warnings').addClass("hidden");
+	    return;
+	}
+
+	$('#cluster_selector .site-selector').each(function () {
+	    var urn   = $(this).find(".select_where").attr("urn");
+	    var types = {};
+	    
+	    console.info("GenerateReservationInfo", urn);
+	    
+	    if (urn == "" || !_.has(resgroups.current[urn], pid)) {
+		return;
+	    }
+	    /*
+	     * Total up all reservations for each type reserved.
+	     */
+	    _.each(resgroups.current[urn][pid], function (group) {
+		console.info(group);
+		var type  = group.nodetype;
+		var count = group.nodecount;
+
+		if (!_.has(types, type)) {
+		    types[type] = {"total" : 0, "rescount" : 0};
+		}
+		types[type].total    += count;
+		types[type].rescount += 1;
+	    });
+	    console.info("GenerateReservationInfo", urn, types);
+
+	    _.each(types, function (info, type) {
+		var nodecount = info.total;
+		var rescount  = info.rescount;
+		var cluster   = amlist[urn].name;
+		
+		var text = "Project " + pid + " has " + rescount + " active " +
+		    "reservation(s) at the " + cluster + " cluster for " +
+		    nodecount + " " + type + " node(s)";
+
+		/*
+		 * If the reseservation info has come back, we also know
+		 * how many of the type are in use.
+		 */
+		if (resinfo &&
+		    _.has(resinfo, urn) &&
+		    _.has(resinfo[urn].current, pid)) {
+		    _.each(resinfo[urn].current[pid], function (cur) {
+			if (cur.nodetype == type) {
+			    text += " and is currently using " + cur.used;
+			}
+		    });
+		}
+		text += ".";
+		warnings.push("<div class='alert alert-success alert-sm'>" +
+			      text + "</div>");
+	    });
+	});
+	if (_.size(warnings)) {
+	    console.info("GenerateReservationInfo", warnings);
+	    $('#reservation-warnings')
+		.html(warnings.join(" "))
+		.removeClass("hidden");
+	}
+	else {
+	    $('#reservation-warnings').addClass("hidden");
+	}
+    }
+
+    /*
+     * This is called only once now.
+     */
+    function CreateProjectSelector()
+    {
+	var options   = "";
+	var selected  = formfields.pid;
+
+	_.each(projlist, function(gids, pid) {
+	    // Look for current or upcoming resgroups.
+	    var resgroup = null;
+	    if (_.has(resgroups.current, pid)) {
+		resgroup = {
+		    "which"   : "active",
+		    "class"   : "has_reservation",
+		};
+	    }
+	    else if (_.has(resgroups.future, pid)) {
+		resgroup = {
+		    "which"   : "upcoming",
+		    "class"   : "future_reservation",
+		};
+	    }
+	    options = options +
+		pidTemplate({
+		    "pid"      : pid,
+		    "selected" : pid === selected,
+		    "resgroup" : resgroup,
+		    "priority" : 1,
+		});
+	});
+	var picker = projectTemplate({
+	    "projects"  : options,
+	    "count"     : _.size(projlist),
+	});
+	$("#project_selector").html(picker);
+	$('#project_selector [data-toggle="tooltip"]').tooltip();
+
+	/* 
+	 * When a choice is made, need to update the button contents 
+	 * and the hidden form input.
+	 */
+	$("#project_selector ul li a")
+	    .click(function (event) {
+		event.preventDefault();
+		var value    = $(this).attr("value");
+		var picker   = $(this).closest(".project-picker");
+		var tooltips = "";
+		var which    = "";
+
+		// Watch for reset back to "Please Select"
+		if (value == "") {
+		    value = "Please Select";
+		}
+		else {
+		    tooltips = $(this).find(".reservation-tooltips").html();
+		    which   = value;
+		}
+		if ($(picker).find("#profile_pid").val() == which) {
+		    // No changea to be made. 
+		    return;
+		}
+		$(picker).find("button .value").html(value);
+		$(picker).find("button .reservation-tooltips").html(tooltips);
+		$(picker).find("#profile_pid").val(which);
+		$(picker).find("li").removeClass("selected");
+		$(this).closest("li").addClass("selected");
+
+		UpdateGroupSelector();
+		// Need to update the reservation tooltips after pid select
+		CreateAggregateSelectors();
+		// This might duplicate work since it called from CreateAggregateSelectors
+		GenerateReservationInfo();
+		// Need to update image constraints when the project changes
+		UpdateImageConstraints();
+	    });
+
+	// Trigger selection
+	if (selected != "") {
+	    $("#project_selector ul li.selected a").click();
+	}
+    }
+
+    /*
+     * Called whenever the project changes
+     */
+    function UpdateGroupSelector()
+    {
+	var options  = "";
+	var pid      = $('#project_selector #profile_pid').val();
+	var selected = "";
+
+	if (pid == "") {
+	    console.info("Clearing the group selector");
+	    $('#group_selector').html("");
+	    return;
+	}
+
+	/*
+	 * If there is a default project, then whenever we return to
+	 * it, use the default gid. Otherwise if there is only one group
+	 * in the project, default to that. See below, we will hide the
+	 * group selector when there is only one group in the project.
+	 */
+	if (pid == formfields.pid) {
+	    selected = formfields.gid;
+	}
+	else {
+	    selected = pid;
+	}
+	console.info("CreateGroupSelector", pid, selected);
+	
+	_.each(projlist[pid], function(gid) {
+	    options = options +
+		gidTemplate({
+		    "gid"      : gid,
+		    "selected" : gid === selected,
+		});
+	});
+	var picker = groupTemplate({
+	    "groups"  : options,
+	});
+	$("#group_selector").html(picker);
+
+	/* 
+	 * When a choice is made, need to update the button contents 
+	 * and the hidden form input.
+	 */
+	$("#group_selector ul li a")
+	    .click(function (event) {
+		event.preventDefault();
+		var value    = $(this).attr("value");
+		var picker   = $(this).closest(".group-picker");
+		var which    = "";
+
+		// Watch for reset back to "Please Select"
+		if (value == "") {
+		    value = "Please Select";
+		}
+		else {
+		    which   = value;
+		}
+		if ($(picker).find("#profile_gid").val() == which) {
+		    // No change to be made. 
+		    return;
+		}
+		$(picker).find("button .value").html(value);
+		$(picker).find("#profile_gid").val(which);
+		$(picker).find("li").removeClass("selected");
+		$(this).closest("li").addClass("selected");
+	    });
+
+	// Trigger selection
+	if (selected != "") {
+	    $("#group_selector ul li.selected a").click();
+	}
+	if (_.size(projlist[pid]) == 1) {
+	    $("#group_selector").addClass("hidden");
+	}
+	else {
+	    $("#group_selector").removeClass("hidden");
+	}
+    }
+    
     /*
      * Make sure all clusters selected before submit.
      */
@@ -2204,7 +1772,7 @@ $(function ()
     {
 	var allgood = 1;
 
-	$('#cluster_selector').find('select').each(function () {
+	$('#cluster_selector').find('.select_where').each(function () {
 	    if ($(this).val() == null || $(this).val() == "") {
 		allgood = 0;
 		return;
@@ -2217,7 +1785,7 @@ $(function ()
     {
 	var clusters = {};
 	
-	$('#cluster_selector').find('select').each(function () {
+	$('#cluster_selector').find('.select_where').each(function () {
 	    var cluster = $(this).val();
 	    var urn     = amValueToKey[cluster];
 	    
@@ -2226,63 +1794,63 @@ $(function ()
 	return clusters;
     }
 
-    var constraints;
-    var validList;
-    var jacksGraph;
-    var context;
-
     function contextReady(data)
     {
-      context = data;
-      if (typeof(context) === 'string')
-      {
-	context = JSON.parse(context);
-      }
-      if (context.canvasOptions.defaults.length === 0)
-      {
-	delete context.canvasOptions.defaults;
-      }
-      
-      jacks.instance = new window.Jacks({
-	mode: 'viewer',
-	source: 'rspec',
-	root: '#jacks-dummy',
-	nodeSelect: true,
-	readyCallback: function (input, output) {
-          constraints = new JACKS_LOADER.Constraints(context);
-	  updateWhere();
-	},
-	canvasOptions: context.canvasOptions,
-	constraints: context.constraints
-      });
+	var constraints;
+	var context = data;
+	
+	if (typeof(context) === 'string')
+	{
+	    context = JSON.parse(context);
+	}
+	if (context.canvasOptions.defaults.length === 0)
+	{
+	    delete context.canvasOptions.defaults;
+	}
+	
+	jacks.instance = new window.Jacks({
+	    mode: 'viewer',
+	    source: 'rspec',
+	    root: '#jacks-dummy',
+	    nodeSelect: true,
+	    readyCallback: function (input, output) {
+		constraints = new JACKS_LOADER.Constraints(context);
+	    },
+	    canvasOptions: context.canvasOptions,
+	    constraints: context.constraints
+	});
     }
 
-    var foundImages = [];
+    // This has the Jacks parsed rspec that we use for some simple
+    // constraint checking.
+    var jacksGraph = null;
 
-    function onFoundImages(images)
+    function updateJacksGraph(newGraph)
     {
-	console.info("onFoundImages", images);
-	
-	if (! doconstraints) {
-	    return true;
-	}
-	if (! _.isEqual(foundImages, images)) {
-	    foundImages = images;
-
-	    UpdateImageConstraints();
-	}
-	return true;
+	console.log('updateJacksGraph', newGraph);
+	jacksGraph = newGraph;
     }
 
     /*
      * Update the image constraints if anything changes.
      */
-    function UpdateImageConstraints() {
-	console.info("UpdateImageConstraints");
+    function UpdateImageConstraints()
+    {
+	var pid = $('#project_selector #profile_pid').val();
+	
+	console.info("UpdateImageConstraints", pid);
 
-	if (!foundImages.length || !doconstraints ||
-	    $('#profile_pid').val() == "") {
-	    CreateAggregateSelectors(selected_rspec);
+	if (!doconstraints || pid == "" || jacksGraph == null) {
+	    //CreateAggregateSelectors();
+	    return;
+	}
+	var images = [];
+	_.each(jacksGraph.nodes, function (node) {
+	    if (node.image) {
+		images = _.union(images, [node.image]);
+	    }
+	});
+	if (!images.length) {
 	    return;
 	}
 	
@@ -2292,31 +1860,17 @@ $(function ()
 		alert("Could not get image info: " + json.value);
 		return;
 	    }
-	    // This gets munged someplace, and so the printed value
-	    // is not what actually comes back. Copy before print.
-	    var mycopy = $.extend(true, {}, json.value);
-	    console.log('UpdateImageConstraints json', mycopy);
 	    showDeprecatedImages(json.value[0].images);
-
-	    // When doing a rerun skip the rest of this.
-	    if (!rerun_instance) {
-		constraints = new JACKS_LOADER.Constraints(context);
-		constraints.addPossibles({ images: foundImages });
-		allowWithSites(json.value[0].images, json.value[0].constraints);
-		CreateAggregateSelectors(selected_rspec);
-		ShowClusterReservations();
-	    }
 	    setStepsFinish(true);
 	};
 	/*
 	 * Must pass the selected project along for constraint checking.
 	 */
 	var $xmlthing =
-	    sup.CallServerMethod(ajaxurl,
+	    sup.CallServerMethod(null,
 				 "instantiate", "GetImageInfo",
-				 {"images"  : foundImages,
-				  "project" : $('#project_selector #profile_pid')
-						  .val()});
+				 {"images"  : images,
+				  "project" : pid});
 	$xmlthing.done(callback);
 	return true;
     }
@@ -2349,330 +1903,12 @@ $(function ()
 	}
     }
   
-  function allowWithSites(newImages, newConstraints)
-  {
-    console.log('newImages', newImages);
-    console.log('newConstraints', newConstraints);
-    var sites = context.canvasOptions.site_info;
-    var finalItems = [];
-    _.each(newConstraints, function (item) {
-      console.log('item:', item);
-      var valid = [];
-      _.each(_.keys(sites), function (key) {
-	// Items from server might just be comma-separated lists in
-	// strings instead of split out properly. Let's split them out
-	// here.
-	item.node.hardware = splitItems(item.node.hardware);
-	item.node.types = splitItems(item.node.types);
-
-	// The image list returned are the only valid images
-	if (_.findWhere(newImages, { id: item.node.images[0] }))
-	{
-	  _.each(item.node.hardware, function (hardware) {
-	    if (_.contains(sites[key].hardware, hardware))
-	    {
-	      finalItems.push({
-		node: {
-		  hardware: [hardware],
-		  images: item.node.images,
-		  aggregates: [key]
-		}
-	      });
-	    }
-	  });
-	  _.each(item.node.types, function (type) {
-	    if (_.contains(sites[key].types, type))
-	    {
-	      finalItems.push({
-		node: {
-		  types: [type],
-		  images: item.node.images,
-		  aggregates: [key]
-		}
-	      });
-	    }
-	  });
-	}
-      });
-    });
-    //console.log(finalItems);
-    constraints.allowAllSets(finalItems);
-    constraints.allowAllSets([
-      {
-	node: {
-	  aggregates: ['!'],
-	  images: ['!'],
-	  hardware: ['!']
-	}
-      },
-      {
-	node: {
-	  aggregates: ['!'],
-	  images: ['!'],
-	  types: ['!']
-	}
-      },
-    ]);
-  }
-
-  function splitItems(list) {
-    var result = [];
-    _.each(list, function (item) {
-      result = result.concat(item.split(','));
-    });
-    return result;
-  }
-
     function contextFail(fail1, fail2)
     {
 	console.log('Failed to fetch context', fail1, fail2);
-	alert('Failed to fetch context from ' + contextUrl + '\n\n' + 'Check your network connection and try again or contact testbed support with this message and the URL of this webpage.');
-    }
-
-    function updateJacksGraph(newGraph)
-    {
-      console.log('updateJacksGraph', newGraph);
-
-      jacksGraph = newGraph;
-      validList = new JACKS_LOADER.ValidList(jacksGraph, constraints);
-      var images = [];
-      _.each(newGraph.nodes, function (node) {
-	if (node.image)
-	{
-	  images = _.union(images, [node.image]);
-	}
-      }.bind(this));
-	
-      onFoundImages(images);
-      updateWhere();
-    }
-
-    function updateWhere()
-    {
-	// Temporary
-	if (!window.MAINSITE) {
-	    return;
-	}
-	if (!doconstraints || rerun_instance) {
-	    // Site contraints do not matter when rerunning.
-	    CreateClusterStatus();
-	    $('.site-wait').hide();
-	    $('.site-selector').show();
-	    return;
-	}
-	console.info("updateWhere");
-	
-	if (jacksGraph && validList && constraints)
-	{
-	    finishUpdateWhere(validList.getNodeCandidates(true),
-			      validList.getNodeCandidatesBySite(true));
-	    $('.site-wait').hide();
-	    $('.site-selector').show();
-	}
-	else
-	{
-      	    $('.site-wait').show();
-	    $('.site-selector').hide();
-	}
-    }
-
-    function finishUpdateWhere(allNodes, nodesBySite)
-    {
-        console.log('finishUpdateWhere');
-	if (!multisite || Object.keys(sites).length <= 1) {
-	    updateSiteConstraints(allNodes,
-				  $('#cluster_selector .cluster-group'));
-	}
-	else {
-	    _.each(_.keys(sites), function (siteId) {
-		var nodes   = nodesBySite[siteId];
-		var sitenum = siteIdToSiteNum[siteId];
-		var domid   = '#cluster_selector #site' + sitenum + 'cluster' +
-		    ' .cluster-group';
-		if (nodes) {
-		    updateSiteConstraints(nodes, $(domid));
-		}
-		else {
-		    console.log('Could not find siteId', siteId, nodesBySite);
-		}
-	    })
-	}
-
-	// Moved here to deal with race condition of custer status
-	// getting built before constraints were finished running
-        if ($('#profile_pid').val() != $('#profile_pid_picker .dropdown-toggle .value').html()) {
-	    $($('#profile_pid_picker .dropdown-menu a')[0]).click();
-        }
-	CreateClusterStatus();
-    }
-
-    function updateSiteConstraints(nodes, domNode)
-    {
-	if (1) {
-	    return 0;
-	}
-      var allowed = [];
-      var rejected = [];
-      var breakdown = {};
-      var bound = nodes;
-      var subclause = 'node';
-      var clause = 'aggregates';
-      allowed = constraints.getValidList(bound, subclause,
-					 clause, rejected,
-					 breakdown);
-      if (0) {
-        console.info('REJECT BREAKDOWN', breakdown);
-        console.info('POSSIBLES', constraints.possible);
-        console.info('GROUPS', constraints.groups);
-	console.info("updateSiteConstraints");
-	console.info("domNode:", domNode);
-	console.info("bound:", bound);
-	console.info("allowed", allowed);
-	console.info("rejected", rejected);
-      }
-	
-      updateBreakdown(domNode.find('#nowhere-breakdown'), breakdown);
-      if (allowed.length == 0)
-      {
-	domNode.find('#where-warning').hide();
-	domNode.find('#where-nowhere').show();
-      }
-      else if (rejected.length > 0)
-      {
-	domNode.find('#where-warning').show();
-	domNode.find('#where-nowhere').hide();
-      }
-      else
-      {
-	domNode.find('#where-warning').hide();
-	domNode.find('#where-nowhere').hide();
-      }
-      domNode.find('select').children().each(function () {
-	var value = $(this).attr('value');
-	// Skip the Please Select option
-	if (value == "") {
-	    return;
-	}
-	var key = amValueToKey[value];
-	var i = 0;
-	var found = false;
-	for (; i < allowed.length; i += 1)
-	{
-	  if (allowed[i] === key)
-	  {
-	    found = true;
-	    break;
-	  }
-	}
-	if (found || isadmin || window.ISSTUD || window.ISPOWDER)
-	{
-	  $(this).prop('disabled', false);
-	  if (allowed.length == 1 ||
-	      (window.ISPOWDER && value == "Emulab")) {
-	      $(this).attr('selected', "selected");
-	      // This does not appear to do anything, at least in Chrome
-	      $(this).prop('selected', true);
-	  }
-	}
-	else
-	{
-	  $(this).prop('disabled', true);
-	  $(this).removeAttr('selected');
-	  // See above comment.
-	  $(this).prop('selected', false);
-	}
-      });
-    }
-
-    function updateBreakdown(dom, breakdown)
-    {
-      var list = $('<ul class="list-group"></ul>');
-      _.each(breakdown, function (site, key) {
-	var choices = $('<ul style="margin-left: 20px"></ul>');
-	var chosen = {};
-	_.each(site, function (candidate) {
-	  delete candidate.node.aggregates;
-	  var unique = JSON.stringify(candidate.node, undefined, "");
-	  if (chosen[unique] === undefined)
-	  {
-	    chosen[unique] = 1;
-	    var line = $('<li></li>');
-	    var found = 0;
-	    if (candidate.node.hardware !== undefined)
-	    {
-	      line.append('Hardware <b>' +
-			  candidate.node.hardware + '</b>');
-	      ++found;
-	    }
-	    if (candidate.node.types !== undefined)
-	    {
-	      if (found == 1)
-	      {
-		line.append(' with ');
-	      }
-	      line.append('Type <b>' +
-			  candidate.node.types + '</b>');
-	      ++found
-	    }
-	    if (candidate.node.images !== undefined)
-	    {
-	      if (found == 1)
-	      {
-		line.append(' with ');
-	      }
-	      else if (found == 2)
-	      {
-		line.append(' and ');
-	      }
-	      line.append('Image <b>' +
-			  sup.ImageDisplay(candidate.node.images) + '</b>');
-	    }
-	    choices.append(line);
-	  }
-	});
-	list.append($('<li class="list-group-item">Site <b>' + amlist[key] + 
-		      '</b> cannot instantiate </li>').append(choices));
-      });
-      dom.html(list);
-    }
-  
-    // When the project is changed, look to see if the new project includes
-    // multiple subgroups. If only one subgroup, hide the group selector.
-    // Otherwise build/show a group selector.
-    function UpdateGroupSelector()
-    {
-	var pid = $('#project_selector #profile_pid').val();
-
-	if (pid == "") {
-	    $('#group_selector').addClass("hidden");
-	    return;
-	}
-	var glist = projlist[pid];
-	console.info(pid, glist);
-
-	if (glist.length == 1) {
-	    var gid = glist[0];
-	    // No need to show it.
-	    $('#group_selector').addClass("hidden");
-
-	    // But need to add an option so we can select it for submit.
-	    var html = "<option selected value=" + gid + ">" + gid + "</option>";
-	    $('#group_selector #profile_gid').html(html);
-	    $('#group_selector #profile_gid').val(gid);
-	    return;
-	}
-	var html = "";
-	_.each(glist, function(gid) {
-	    var selected = "";
-	    // Select the project group by default.
-	    if (gid == pid) {
-		selected = "selected";
-	    }
-	    html = html +
-		"<option " + selected + " value=" + gid + ">" + gid + "</option>";
-	});
-	$('#group_selector #profile_gid').html(html);
-	$('#group_selector').removeClass("hidden");
+	alert('Failed to fetch context from ' + contextUrl + '\n\n' +
+	      'Check your network connection and try again or contact testbed support ' +
+	      'with this message and the URL of this webpage.');
     }
 
     function LoadReservationInfo()
@@ -2684,38 +1920,11 @@ $(function ()
 	    }
 	    console.info("resinfo", json.value);
 	    resinfo = json.value;
-	    
-	    ShowClusterReservations();
+	    GenerateReservationInfo();
 	};
 	var xmlthing =
 	    sup.CallServerMethod(null, "reserve", "ReservationInfo", null);
 	xmlthing.done(callback);
-    }
-
-    // Google Analytics.
-    function PickerEvent(action, selected, value)
-    {
-	if (window.GOOGLEUA === undefined) {
-	    return;
-	}
-	var id = "default";
-	if (value === undefined) {
-	    value = 0;
-	}
-	if (action == "scroll") {
-	    id = selected.toString();
-	    value = selected;
-	}
-	else if (selected !== undefined) {
-	    var info = profilelist[selected.attr('value')];
-	    if (info === undefined) {
-		// Not sure why this happens
-		return;
-	    }
-	    id = info.pid + "," + info.name;
-	}
-	//console.info("picker event", action, id, value);
-	ga('send', 'event', 'picker', action, id, value);
     }
 
     /*
@@ -3417,41 +2626,29 @@ $(function ()
 	var pid  = rerun_instance.rerun_pid;
 	var gid  = rerun_instance.rerun_gid;
 
-	console.info(name, pid, gid);
+	console.info("LoadRerunInstance", name, pid, gid);
 
 	// Do not replace auto generated name.
 	if (!name.match(/[^-]+\-(QV)?\d+/)) {
 	    $('#experiment_name').val(name);
 	}
 	if (_.size(projlist) > 1) {
-	    // Oh jeez, we have to worry about the pickered selectors.
-	    if ($('#profile_pid').hasClass("pickered")) {
-		// This is dumb.
-		$('#profile_pid_picker ul li a[value="' + pid + '"]').click();
-	    }
-	    else {
-		$('#profile_pid').val(pid);
-		$('#profile_pid').trigger("change");
-	    }
+	    $('#project_selector ul li a[value="' + pid + '"]').click();
 	}
 	if (gid != pid) {
-	    $('#profile_gid').val(gid);
+	    $('#group_selector ul li a[value="' + gid + '"]').click();
 	}
-	if ($('#nosite_selector').length &&
-	    rerun_instance.rerun_clusters.length == 1) {
+	/*
+	 * Cannot handle multiple clusters cause of the site info. 
+	 */
+	if (rerun_instance.rerun_clusters.length == 1) {
 	    var urn = rerun_instance.rerun_clusters[0];
 	    var name = amlist[urn].name;
 
-	    console.info(urn, name);
+	    console.info("LoadRerunInstance", urn, name);
 
-	    // Oh jeez, we have to worry about the pickered selectors.
-	    if ($('#site0_selector').hasClass("pickered")) {
-		// This is dumb.
-		$('#site0_selector_picker ul li[urn="' + urn + '"] a').click();
-	    }
-	    else {
-		$('#site0_selector').val(name);
-	    }
+	    // Ick.
+	    $('#site0cluster ul li[urn="' + urn + '"] a').click();
 	}
 	rerun_loaded = true;
     }
@@ -3496,9 +2693,9 @@ $(function ()
 	}
     }
 
-    function ChangeJacksRoot(root, selectionPane)
+    function ChangeJacksRoot()
     {
-	console.info("ChangeJacksRoot: ", root, selectionPane);
+	var root = $('#stepsContainer #inline_large_jacks');
 	
 	if (selected_rspec) {
 	    if (countNodes(selected_rspec) > 100) {
@@ -3512,26 +2709,10 @@ $(function ()
 		$('#inline_jacks #edit_dialog #edit_container')
 		    .removeClass("hidden");
 	    }
-	    var editor = new JacksEditor(root, true, true, selectionPane, true);
+	    var editor = new JacksEditor(root, true, true, false, true);
 	    editor.show(selected_rspec);
 	}
     }
     
-    function ClusterSelected(selected, pickered)
-    {
-	var cluster = null;
-
-	/*
-	 * Dig out which cluster has been selected. Depending on whether
-	 * it came from the plain drop down or the pickered dropdown.
-	 */
-	if (pickered) {
-	    cluster = $(selected).attr("value");
-	}
-	else {
-	    cluster = $(selected.target).find(":selected").val()
-	}
-	//console.info("ClusterSelected: " + cluster);
-    }
     $(document).ready(initialize);
 });
