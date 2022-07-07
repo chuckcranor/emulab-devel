@@ -723,7 +723,12 @@ sub CreateSliver($)
     #
     $mypid = $PID;
 
-    eval { $retval = $aggregate->Start($API_VERSION); };
+    # When doing an update, different flags.
+    my $startflags = ($update ?
+		      $GeniAggregate::ACTION_FLAGS_SYNCVLANS|
+		      $GeniAggregate::ACTION_FLAGS_NOEVENTSTART : undef);
+
+    eval { $retval = $aggregate->Start($API_VERSION, $startflags); };
     if ($@) {
 	#
 	# This will cause the slice status to be failure.

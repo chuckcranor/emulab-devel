@@ -1496,7 +1496,9 @@ sub ActionStart($$;$@)
     #
     my $snmpit_child;
 
-    if (!$experiment->skipvlans() && VLan->ExperimentHasVLans($experiment)) {
+    if (!$experiment->skipvlans() &&
+	(VLan->ExperimentHasVLans($experiment) ||
+	 $flags & $ACTION_FLAGS_SYNCVLANS)) { 
 	$snmpit_child = fork();
 	if ($snmpit_child) {
 	    #
