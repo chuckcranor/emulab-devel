@@ -1265,7 +1265,8 @@ sub ActionStart($$;$@)
 	# in the started state. We skip those.
 	#
 	next
-	    if ($sliver->state() eq "started");
+	    if ($sliver->state() eq "started" &&
+		($flags & $ACTION_FLAGS_SYNCVLANS == 0));
 
 	#
 	# If the sliver is stopped, then we do not want to run it through
@@ -1306,6 +1307,11 @@ sub ActionStart($$;$@)
 	#
 	if ($sliver->status() eq "failed" && $sliver->state() eq "new") {
 	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_INIT_DIRTY());
+	}
+	elsif ($sliver->state() eq "started" &&
+	       $flags & $ACTION_FLAGS_SYNCVLANS) {
+	    # Tell os_setup to reconfig the nodes instead of reboot.
+	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_RECONFIG());
 	}
 
 	# We do this so the slivers no longer say "ready" in the status.
