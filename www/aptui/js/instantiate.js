@@ -2,8 +2,8 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal', 'reservation-graph', 'resgroup-list', 'instantiate-templates']);
-    var instantiateString = templates['instantiate-new'];
+    var templates = APT_OPTIONS.fetchTemplateList(['instantiate', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal', 'reservation-graph', 'resgroup-list', 'instantiate-templates']);
+    var instantiateString = templates['instantiate'];
     var aboutaptString = templates['aboutapt'];
     var aboutcloudString = templates['aboutcloudlab'];
     var aboutpnetString = templates['aboutpnet'];

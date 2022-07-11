@@ -435,9 +435,6 @@ $formfields["username"] = "";
 $formfields["email"]    = "";
 $formfields["sshkey"]   = "";
 $formfields["where"]    = $DEFAULT_AGGREGATE;
-if (!$usenewinstantiate) {
-$formfields["profile"]  = $selected_profile;
-}
 
 #
 # If the user provided the key, pass it along for ajax calls
@@ -464,12 +461,7 @@ $formfields["email"]    = $this_user->email();
 SPITHEADER(1);
 
 echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
-if ($usenewinstantiate) {
-    echo "<link rel='stylesheet' href='css/profile-picker.css'>\n";
-}
-else {
-    echo "<link rel='stylesheet' href='css/picker.css'>\n";
-}
+echo "<link rel='stylesheet' href='css/profile-picker.css'>\n";
 echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
 
 # I think this will take care of XSS prevention?
@@ -495,13 +487,11 @@ if ($this_user->IsNonLocal()) {
     }
 }
 
-if ($usenewinstantiate) {
-    # Current and Future reservations for the cluster picker.
-    $resinfo = ReservationGroup::ReservationInfo($projlist);
-    echo "<script type='text/plain' id='resinfo-json'>\n";
-    echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
-    echo "</script>\n";
-}
+# Current and Future reservations for the cluster picker.
+$resinfo = ReservationGroup::ReservationInfo($projlist);
+echo "<script type='text/plain' id='resinfo-json'>\n";
+echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
+echo "</script>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
@@ -547,12 +537,7 @@ echo "</script>\n";
 
 SpitOopsModal("oops");
 echo "<script type='text/javascript'>\n";
-if ($usenewinstantiate) {
-    echo "    window.DEFAULT_PROFILE = '$selected_profile';\n";
-}
-else {
-    echo "    window.PROFILE    = '" . $formfields["profile"] . "';\n";
-}
+echo "    window.DEFAULT_PROFILE = '$selected_profile';\n";
 if ($ishashed) {
     # For gitrepo-picker template
     echo "    window.HASHKEY= '" . $formfields["hashkey"] . "';\n";
@@ -719,8 +704,8 @@ AddLibrary("js/paramsets.js");
 AddLibrary("js/ota-permission.js");
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/copy-profile.js");
+AddLibrary("js/profile-picker.js");
 if ($usenewinstantiate) {
-    AddLibrary("js/profile-picker.js");
     SPITREQUIRE("js/instantiate-new.js");
 }
 else {
@@ -733,10 +718,11 @@ AddTemplateList(array("aboutapt", "aboutcloudlab", "aboutpnet",
                       "waitwait-modal", "rspectextview-modal",
                       "picker-template","reservation-graph",
                       "save-paramset-modal", "resgroup-list",
-                      "copy-profile-modal", "ota-agreement", "ota-permission"));
+                      "copy-profile-modal", "ota-agreement", "ota-permission",
+                      "picker-modal", "instantiate-templates"));
+
 if ($usenewinstantiate) {
-    AddTemplateList(array("instantiate-new", "picker-modal",
-                          "instantiate-templates"));
+    AddTemplate("instantiate-new");
 }
 else {
     AddTemplate("instantiate");
