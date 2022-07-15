@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -644,6 +644,13 @@ inithostname() {
 
 findSmartctl() {
     local findit=$(which smartctl)
+    if [ "$os" == "Linux" ] ; then
+	if [ -x "/usr/sbin/smartctl" ]; then
+	    findit="/usr/sbin/smartctl"
+	    echo $findit
+	    return 0
+	fi
+    fi
     if [ "$os" == "FreeBSD" ] ; then
 	findit=$(which smartctl$osrel)
 	if [ -z "${findit}" ] ; then
@@ -787,6 +794,13 @@ getdrivenames() {
 	    do
 		if [ -b /dev/sd${i} ] ; then
 		    drivelist+="/dev/sd${i} "
+		fi
+	    done
+	    list="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49"
+	    for i in $list
+	    do
+		if [ -c /dev/nvme${i} ] ; then
+		    drivelist+="/dev/nvme${i} "
 		fi
 	    done
 	    ;;
