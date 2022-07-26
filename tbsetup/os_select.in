@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -233,7 +233,7 @@ sub debug($;$)
     if ($notice) { $prio = "notice"; }
     
     syslog($prio, $msg);
-    if ($debug) { print $msg; }
+    if ($debug || -t) { print $msg; }
 }
 
 sub notify($)
