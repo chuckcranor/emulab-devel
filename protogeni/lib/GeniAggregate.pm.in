@@ -1266,7 +1266,7 @@ sub ActionStart($$;$@)
 	#
 	next
 	    if ($sliver->state() eq "started" &&
-		($flags & $ACTION_FLAGS_SYNCVLANS == 0));
+		!($flags & $ACTION_FLAGS_SYNCVLANS));
 
 	#
 	# If the sliver is stopped, then we do not want to run it through
