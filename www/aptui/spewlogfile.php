@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,7 +49,7 @@ header("Access-Control-Allow-Origin: *");
 echo "<html>\n";
 echo "<script type='text/javascript'>\n";
 echo "    window.LOGFILEID = '$logfileid';\n";
-echo "    window.SPEWURL   = '$TBBASE/spewlogfile.php3?logfile=$logfileid';\n";
+echo "    window.SPEWURL   = 'spewlogfile_text.php?logfile=$logfileid';\n";
 echo "</script>\n";
 
 echo "<script src='js/lib/jquery.min.js'></script>\n";
