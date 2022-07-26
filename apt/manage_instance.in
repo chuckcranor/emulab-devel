@@ -7262,7 +7262,7 @@ sub DoPushManifest()
     }
     my $manifest = $instance->manifest();
     $slice->UnLock() if (!$nolock);
-    if ($instance->manifest() eq "") {
+    if (!defined($manifest) || $instance->manifest() eq "") {
 	print "No manifest to push\n";
 	if (defined($webtask)) {
 	    $webtask->Exited(0);

@@ -739,9 +739,10 @@ sub MarkCanceled($)
 
     my $uuid = $self->uuid();
 
+    # Do not want to update the timestamp if already canceled.
     DBQueryWarn("update apt_instances set ".
 		"  canceled=1,canceled_timestamp=now() ".
-		"where uuid='$uuid'")
+		"where uuid='$uuid' and canceled=0")
 	or return -1;
 
     $self->{'INSTANCE'}->{'canceled'} = 1;
@@ -2979,6 +2980,7 @@ sub MergeManifests($)
 	    # Promote the one manifest up to instance.
 	    $aggregate = $aggregates[0];
 	    $manifest  = $aggregate->manifest();
+	    $manifest  = "" if (!defined($aggregate));
 	}
 	else {
 	    # All buses go off route, and nothing left in the experiment.
