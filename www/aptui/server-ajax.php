@@ -244,6 +244,8 @@ $routing = array("geni-login" =>
                                                     "Do_DismissExtensionDenied",
 						 "ConnectSharedLan" =>
 						     "Do_ConnectSharedLan",
+						 "ModifyExperiment" =>
+						     "Do_ModifyExperiment",
                               )
                         ),
 		 "approveuser" =>

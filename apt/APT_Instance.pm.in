@@ -67,6 +67,7 @@ use Genixmlrpc;
 use GeniResponse;
 use GeniCertificate;
 use GeniCredential;
+use GeniAuthority;
 use GeniUser;
 use GeniHRN;
 use GeniXML;
@@ -329,12 +330,106 @@ sub RSPEC($)
     return $self->{'RSPEC'}
         if (defined($self->{'RSPEC'}));
 
-    my $rspec = GeniXML::Parse($self->rspec());
+    # Operate on the update rspec if in the process of doing an update.
+    my $rspec = GeniXML::Parse($self->update_rspec() || $self->rspec());
     return -1
 	if (!defined($rspec));
     
     $self->{'RSPEC'} = $rspec;
     return $rspec;
+}
+sub SetRSPEC($$;$)
+{
+    my ($self, $rspec, $forceupdate) = @_;
+    my $rspecstr;
+
+    if (ref($rspec)) {
+	$rspecstr = GeniXML::Serialize($rspec);
+    }
+    else {
+	$rspecstr = $rspec;
+    }
+    # Operate on the update rspec if in the process of doing an update.
+    my $which = ($forceupdate || $self->update_rspec() ?
+		 "update_rspec" : "rspec");
+    
+    if ($self->Update({$which => $rspecstr})) {
+	print STDERR "SetRSpec: Could not update rspec\n";
+	return -1;
+    }
+
+    if (ref($rspec)) {
+	$self->{'RSPEC'} = $rspec;
+    }
+    else {
+	$self->{'RSPEC'} = undef;
+    }
+    return 0;
+}
+
+#
+# Finalize the rspec after the instance object is created.
+#
+sub FinalizeRSpec($$;$)
+{
+    my ($self, $perrmsg, $update_rspec) = @_;
+    my $profile  = $self->Profile();
+    my $project  = $self->GetProject();
+    my $rspec    = $update_rspec || $self->RSPEC();
+    my $cert     = GeniCertificate->LoadFromString($self->cert());
+    my $geniuser = $self->GetGeniUser();
+    
+    #
+    # Encrypt blocks.
+    #
+    my $retval = APT_Profile::EncryptBlocks($rspec, $cert, $perrmsg);
+    return $retval
+	if ($retval);
+
+    #
+    # Add the repo checkout stuff.
+    #
+    if (defined($profile->repourl())) {
+	$retval = APT_Profile::SetRepo($rspec, $profile->repourl(),
+				       $self->reporef(), $self->repohash(),
+				       $geniuser, $perrmsg);
+	return $retval
+	    if ($retval);
+    }
+
+    #
+    # Tell the CM the portal information, which is used by Emulab based
+    # CMs to send email links.
+    #
+    # Special: This also tells the CM to do normal NFS mounts if this is
+    # the "Emulab" portal making the request.
+    #
+    # XXX The local instance will not have these tags, but no big deal.
+    # XXX Need to handle this differently if we use the stitcher?
+    #
+    $retval = APT_Profile::AddPortalTag($rspec,
+					$self->Brand()->brand(),
+					$self->webURL(),
+					$project->pid(),
+					$self->name(),
+					time(), $perrmsg);
+    return $retval
+	if ($retval);
+
+    if ($self->SetRSPEC($rspec, $update_rspec)) {
+	$$perrmsg = "Could not store finalized rspec";
+	return -1;
+    }
+    return 0;
+}
+#
+# Get the sequence number when doing an update.
+#
+sub GetPortalSequence($)
+{
+    my ($self) = @_;
+    my (undef, undef, $sequence) = GeniXML::GetPortal($self->RSPEC());
+    return $sequence;
 }
 
 #
@@ -660,7 +755,7 @@ sub SetAggregateStatus($$)
 {
     my ($self, $status) = @_;
 
-    foreach my $agg ($self->AggregateList()) {
+    foreach my $agg ($self->ActiveAggregateList()) {
 	$agg->SetStatus($status);
     }
     return 0;
@@ -787,6 +882,15 @@ sub SetLogFile($$)
 	if ($self->Update({'logfileid' => $logfile->logid()}));
 
     return 0;
+}
+sub GetLogFile($$)
+{
+    my ($self) = @_;
+
+    return undef
+	if (!defined($self->logfileid()));
+
+    return Logfile->Lookup($self->logfileid());
 }
 
 #
@@ -1203,6 +1307,72 @@ sub GetNodeDetails($)
 	$rval->{$sliver->aggregate_urn()} = $nodes;
     }
     return $rval;
+}
+
+#
+# Given a list of urns, sanity check and add to the instance if not
+# already created.
+#
+sub AddAggregates($$$$@)
+{
+    my ($self, $nopending, $presult, $perrmsg, @aggregate_urns) = @_;
+    my $project = $self->GetProject();
+    my $user    = $self->GetCreator();
+    my $portal  = $self->portal();
+    my @result  = ();
+    
+    foreach my $aggregate_urn (@aggregate_urns) {
+	my $aptagg = APT_Aggregate->Lookup($aggregate_urn);
+	
+	if (!defined($aptagg)) {
+	    $$perrmsg = "$aggregate_urn is not a valid (known) aggregate";
+	    return 1;
+	}
+	my $aggregate_name = $aptagg->name();
+
+	# Check to make sure the aggregate is online and reachable
+	# We do not do this if the experiment start is deferred.
+	if (!defined($self->start_at()) || defined($self->started())) {
+	    if ($project->pid() ne "OAI2021FallWS") {
+		if ($aptagg->CheckStatus($perrmsg)) {
+		    if (!$aptagg->deferrable() ||
+			$nopending ||
+			# CheckStatus catches this and sets the error message.
+			$aptagg->disabled()) {
+			return 1;
+		    }
+		}
+	    }
+	}
+	
+	if (! $aptagg->CanInstantiate($portal, $user, $project)) {
+	    $$perrmsg = "Not allowed to use the $aggregate_name cluster.";
+	    return 1;
+	}
+	
+	my $authority = GeniAuthority->Lookup($aggregate_urn);
+	if (!defined($authority)) {
+	    $authority = GeniAuthority->CreateFromRegistry("cm",
+							   $aggregate_urn);
+	    if (!defined($authority)) {
+		$$perrmsg = "Could not load CM authority object ".
+		    "for $aggregate_urn";
+		return -1;
+	    }
+	}
+	my $aggobj = $self->GetAggregate($aggregate_urn);
+	if (!defined($aggobj)) {
+	    $aggobj = $self->AddAggregate($aggregate_urn);
+	    if (!defined($aggobj)) {
+		$$perrmsg = "Could not create aggregate object ".
+		    "for $aggregate_urn";
+		return -1;
+	    }
+	}
+	push(@result, $aggobj);
+    }
+    @$presult = @result;
+    return 0;
 }
 
 #
@@ -2931,8 +3101,7 @@ sub AddRouteNodes($$$$)
 	}
     }
     if ($modified) {
-	$self->Update({"rspec" => GeniXML::Serialize($rspec)});
-	$self->{'RSPEC'} = $rspec;
+	$self->SetRSPEC($rspec);
     }
     return 0;
 }
@@ -4049,6 +4218,42 @@ sub SetManifest($$)
     $self->{'DBROW'}->{'manifest'} = $manifest_string;
     return 0;
 }
+sub ClearManifest($)
+{
+    my ($self) = @_;
+
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set manifest=null ".
+		"where uuid='$uuid' and aggregate_urn='$urn'") or
+	return -1;
+
+    $self->{'DBROW'}->{'manifest'} = undef;
+}
+
+sub SetTicket($$)
+{
+    my ($self,$ticket_string) = @_;
+
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+    my $safe_ticket;
+
+    if (defined($ticket_string)) {
+	$safe_ticket = DBQuoteSpecial($ticket_string);
+    }
+    else {
+	$safe_ticket = "null";
+    }
+    DBQueryWarn("update apt_instance_aggregates set ticket=$safe_ticket ".
+		"where uuid='$uuid' and aggregate_urn='$urn'") or
+	return -1;
+
+    $self->{'DBROW'}->{'ticket'} = $ticket_string;
+    return 0;
+}
+sub ClearTicket($) { return $_[0]->SetTicket(undef); }
 
 sub IsActive($)
 {
@@ -5423,7 +5628,7 @@ sub WaitForSliver($)
 	$seconds -= $interval;
 	my $response = $aggobj->SliceStatus();
 
-	print STDERR "WaitForSliver: " . TBTimeStamp() . ": code:" .
+	print STDERR "WaitForSliver $urn : " . TBTimeStamp() . ": code:" .
 	    $response->code() . "\n";
 
 	if (($response->code() != GENIRESPONSE_SUCCESS &&

@@ -18,6 +18,8 @@
 }
 pre {
 	white-space: pre-wrap;
+        word-break: normal;
+        word-wrap: normal;
 }
 .panel-body-nopad {
      padding: 5px;
@@ -46,6 +48,7 @@ pre {
     overflow-y: auto;
 } 
 </style>
+<div id="main-template">
 <div class='row'>
   <div class='col-lg-8  col-lg-offset-2
        col-md-8  col-md-offset-2
@@ -225,12 +228,11 @@ pre {
 	       id='logfile_button'
                href='#'
 	       target='_blank'
-               type='button'>Stitcher</a>
+               type='button'>Portal Log</a>
 	  </div>
 	  <% if (isadmin) { %>
 	    <div class='pull-left'>
 	      <button class='btn btn-xs btn-danger' disabled hidden
-		      style='margin-left: 10px;'
 		      style='margin-right: 10px;'
 		      id='warnkill-experiment-button' type=button
 		      data-delay='{"show":300}'
@@ -240,7 +242,6 @@ pre {
 				    and optionally freeze the user account.'>
  		Warn/Kill</button>
 	      <button class='btn btn-xs btn-danger' disabled hidden
-		      style='margin-left: 10px;'
 		      style='margin-right: 10px;'
 		      id='release-quarantine-button' type=button
 		      data-toggle='popover'
@@ -269,7 +270,6 @@ pre {
 				    same parameters."> 
 		Share</button>
 	      <button class='btn btn-info btn-xs hidden'
-		      style='margin-right: 30px;'
 		      id='save_paramset_button'
 		      data-toggle='popover'
 		      data-delay='{"show":300}'
@@ -278,6 +278,13 @@ pre {
 				    when starting a new experiment using this
 				    profile. Click for more information.'
 		      type='button'>Save Parameters</button>
+	      <button class='btn btn-info btn-xs hidden' disabled
+		      id='modify_experiment_button'
+		      style='margin-right: 30px;'
+		      data-toggle='popover'
+		      data-delay='{"show":300}'
+		      data-content='Modify experiment'
+		      type='button'>Modify</button>
 	      <span>
 		<button class='btn btn-xs btn-success hidden' disabled
 			style='margin-right: 10px;'
@@ -400,7 +407,7 @@ pre {
 	      col-xs-12 col-xs-offset-0'>
     <div class="panel panel-danger">
       <div class="panel-heading">
-        <center><h4 class="panel-title">Error Message</h4></center>
+        <center><h4 class="panel-title">Error Messages</h4></center>
       </div>
       <div class="panel-body"><code style="white-space: pre-wrap"
 				    id="error_panel_text"></code>
@@ -435,9 +442,9 @@ pre {
 	Not sure how to proceed or have further questions about this
 	error? Join the
         <a href='<%= errorURL %>'>users group</a> and ask a question. Be
-        sure to include the error message in your question, and the name
-	of your profile and experiment:
-	'<%= expinfo.profile_name %>/<%= expinfo.name %>'.
+        sure to include the error message in your question and the
+	<a href="#" class="status-page-link">URL</a> of your experiment
+	status page.
 	<span class="hidden ignore-failure">
 	  <em>This error can be
 	    <a class='ignore-failure-button' href="#"
@@ -451,6 +458,89 @@ pre {
     </div>
   </div>
 </div>
+<!-- Add a hidden div for errors returned by the instantiation. -->
+<div class='row hidden' id='general-error'>
+  <div class='col-lg-8  col-lg-offset-2
+	      col-md-8  col-md-offset-2
+	      col-sm-10 col-sm-offset-1
+	      col-xs-12 col-xs-offset-0
+	      alert alert-danger'>
+  </div>
+</div>
+<div class='row hidden' id='error-panel-new'>
+  <div class='col-lg-8  col-lg-offset-2
+	      col-md-8  col-md-offset-2
+	      col-sm-10 col-sm-offset-1
+	      col-xs-12 col-xs-offset-0'>
+    <div class="panel panel-danger">
+      <div class="panel-heading">
+        <center><h4 class="panel-title">Error Information</h4></center>
+      </div>
+      <div class="panel-body">
+	<div class="multisite-errors hidden">
+	  <div class="panel-group" style="margin-bottom: 5px; "
+	       role="tablist">
+	    <div class="panel panel-danger error-template hidden">
+	      <div class="panel-heading" role="tab">
+		<h4 class="panel-title">
+		  <a role="button" data-toggle="collapse"
+		     style="text-decoration: underline;"
+		     data-parent="#error-panel-new .panel-group"
+		     href="#fooey"></a>
+		</h4>
+	      </div>
+	      <div id="fooey" class="panel-collapse collapse" role="tabpanel">
+		<div class="panel-body">
+		  <div class="error-message hidden"
+		       style="margin-bottom:10px;"></div>
+		  <div style="padding-left: 20px;">
+		    <code class="error-cause"
+			  style="white-space: pre-wrap; padding:0px;"></code>
+		  </div>
+		</div>
+	      </div>
+	    </div>	  
+	  </div>
+	</div>
+	<div class="singlesite-errors hidden">
+	  <div class="error-message" style="margin-bottom:10px;"></div>
+	  <div style="padding-left: 20px;">
+	    <code class="error-cause"
+		  style="white-space: pre-wrap; padding:0px;"></code></div>
+	</div>
+      </div>
+      <div class="panel-footer resource-error hidden">
+	<div>
+	  <b>More info about resource errors (not enough nodes):</b>
+	  <ul>
+	    <li> To see how many nodes are available right now, or
+	      when nodes will be available in the future, check out
+	      the <a href="resinfo.php" target="_blank">cluster status</a>
+	      page.
+	    </li>
+	    <li> Try asking for a smaller number of nodes, or nodes of a
+	      different type.
+	      <% if (window.ISCLOUD) { %>
+		Or try using a different cluster.
+	      <% } %>
+	    </li>
+	    <li> Try setting the initial experiment duration to a
+	      shorter amount of time. You will find this option in the
+	      <em>Advanced Options</em> section of the
+	      <a href="instantiate" target="_blank">Start Experiment</a>
+	      page.
+	    </li>
+	    <li> Still cannot get enough nodes right away? Try making a
+	      <a href="resgroup.php" target="_blank">reservation</a>
+	      for the future.
+	    </li>
+	  </ul>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class='row hidden' id='pending-panel'>
   <div class='col-lg-8  col-lg-offset-2
 	      col-md-8  col-md-offset-2
@@ -544,7 +634,7 @@ pre {
       <button class="hidden"
 	      type='button' id="selenium-shell-button">SHELL</button>
     </center>
-    <div class='panel panel-default invisible' id='showtopo_container'>
+    <div class='panel panel-default hidden' id='showtopo_container'>
       <div class='panel-body'>
 	<div id='quicktabs_div'>
 	  <ul id='quicktabs_ul' class='nav nav-tabs'>
@@ -594,8 +684,6 @@ pre {
 	  <div id='quicktabs_content' class='tab-content'>
             <div class='tab-pane hidden' id='topology'>
 	      <div id='showtopo_statuspage' class='jacks'></div>
-              <small>Click on a node for more options. 
-                Click and drag to move things around.</small>
 	      <% if (registered) { %>
 		<button class='btn btn-xs btn-success pull-right' disabled
 			id='refresh_button' type=button
@@ -627,6 +715,11 @@ pre {
 		  </span>
 		<% } %>
 	      <% } %>
+              <small class="pull-left">Click on a node for more options. 
+                Click and drag to move things around.
+		<span id="multisite-context-menu-notice" class="hidden">
+		  Click on a <em>site name</em> to delete the site.</span>
+	      </small>
 	    </div>
             <div class='tab-pane hidden' id='listview'>
 	      <div id='showtopo_listview'>
@@ -917,6 +1010,20 @@ pre {
       </div>
     </div>
   </div>
+</div>
+<div class="row" id='error-help'>
+  <div class='col-lg-8  col-lg-offset-2
+	      col-md-8  col-md-offset-2
+	      col-sm-10 col-sm-offset-1
+	      col-xs-12 col-xs-offset-0'>
+    <small>
+    Not sure how to proceed or have further questions? Join the
+    <a href='<%= errorURL %>'>users group</a> and ask a question. Be
+    sure to include any error messages in your question <b>and the
+    <a href="#" class="status-page-link">URL</a> of your experiment
+    status page.</small></b>
+  </div>
+</div>
 </div>
 <div>
   <!-- place to hang the modals for now -->
@@ -2027,6 +2134,133 @@ pre {
       </td>
     </tr>
     </table>
+  </div>
+  <div id='ppwizard-body'
+       class='col-lg-8  col-lg-offset-2
+	      col-md-8  col-md-offset-2
+	      col-sm-10  col-sm-offset-1
+	      col-xs-12 col-xs-offset-0 hidden'>
+    <div id="ppwizard-form"></div>
+    <center>
+      <button type='button' class='btn btn-default btn-sm ppwizard-cancel'
+	      style="margin-right: 10px;">
+	Cancel</button>
+      <button id='ppwizard-accept' type='button' disabled
+	      class='btn btn-primary btn-sm'>
+	Continue
+      </button>
+    </center>
+    <style>
+     .container {
+	 margin-top: 0px !important;
+     }
+     .jacks {
+	 background-color: #FFF;
+     }
+    </style>
+    <div class="topo-compare row" style="margin-top: 15px;">
+      <div class='col-xs-6'>
+	<div class='panel panel-default'>
+	  <div class='panel-heading text-center'>Topology Before</div>
+	  <div class='panel-body' style="padding: 0px;">
+	    <div class="topo-before jacks"
+		 style="height: 350px; position: relative;"></div>
+	  </div>
+	</div>
+      </div>
+      <div class='col-xs-6'>
+	<div class='panel panel-default'>
+	  <div class='panel-heading text-center'>Topology After</div>
+	  <div class='panel-body' style="padding: 0px;">
+	    <div class="topo-after jacks"
+		 style="height: 350px; position: relative;">
+	    </div>
+	  </div>
+	</div>
+      </div>
+    </div>
+    <div id='cluster_selector' class='hidden'></div>
+    <div id="reservation-warnings"
+	 class="col-sm-offset-2 col-sm-10 hidden"></div>
+    <div class="row" style="margin-top: 0px; margin-bottom: 10px;">
+      <div class='col-xs-12'>
+	<center>
+	  <div id="ppwizard-finish-message" class="hidden"
+	       style="margin-bottom: 5px;">
+	    <p style="margin-bottom: 5px;">
+	      Click <b>Finish</b> if you are sure you want to apply
+	      these changes to your experiment. View the
+	      <a href="" class="show-newrspec"
+		 data-target='#ppwizard-rspec-modal'
+		 data-toggle='modal'>new rspec</a>.
+	    </p>
+	    <p>
+	      Once we begin experiment
+	      modification, it cannot be stopped until it finishes.
+	    </p>
+	  </div>
+	  <button type='button' class='btn btn-default btn-sm ppwizard-cancel'
+		  style="margin-right: 10px;">
+	    Cancel</button>
+	  <button id='ppwizard-finish' type='button' disabled
+		  class='btn btn-primary btn-sm'>
+	    Finish
+	  </button>
+	</center>
+      </div>
+    </div>
+  </div>
+  <div id='ppwizard-continue' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  Click <b>Continue</b> if you are sure you want to apply
+	  these changes to your experiment. Once we begin experiment
+	  modification, it cannot be stopped until it finishes (or fails).
+	  <center>
+	    <button type='button' class='btn btn-default btn-sm ppwizard-cancel'
+		    style="margin-right: 10px;">
+	      Cancel</button>
+	    <button id='ppwizard-modify' type='button'
+		    class='btn btn-primary btn-sm'>
+	      Continue
+	    </button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='ppwizard-rspec-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body''>
+          <button type='button' class='close' data-dismiss='modal'
+                  aria-hidden='true'>&times;</button>
+	  <textarea rows=30 readonly class="form-control"
+                    type='textarea'></textarea>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='nospectrum-warning' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <div style="font-size: 18px;">
+	    <p>
+	      <b>Warning:</b> You have not specified any frequency
+	      request(s) for this experiment. Any transmissions will
+	      result in a quarantined experiment and frozen account.
+	    </p>
+	    <center>
+	      <button type='button' class='btn btn-default btn-sm'
+		      data-dismiss='modal'>
+		Dismiss</button>
+	    </center>
+	  </div>
+	</div>
+      </div>
+    </div>
   </div>
   <div id='waitwait_div'></div>
   <div id='terminate_div'></div>

@@ -72,6 +72,7 @@ sub usage()
     print("Usage: manage_instance pushmanifest instance\n");
     print("Usage: manage_instance warn instance\n");
     print("Usage: manage_instance status instance\n");
+    print("Usage: manage_instance modify instance [filename]\n");
     print("Usage: manage_instance applyextensionpolicy instance\n");
     print("Usage: manage_instance deletereservations instance\n");
     print("Usage: manage_instance connectsharedlan instance sourceLanName ".
@@ -189,6 +190,7 @@ sub DoPushManifest();
 sub DoTop();
 sub DoDeleteReservations();
 sub DoConnectSharedLan();
+sub DoModify();
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$$);
 sub CallMethodOnAggregates($$$@);
@@ -369,6 +371,9 @@ elsif ($action eq "deletereservations") {
 }
 elsif ($action eq "connectsharedlan") {
     DoConnectSharedLan();
+}
+elsif ($action eq "modify") {
+    DoModify();
 }
 else {
     usage();
@@ -7417,3 +7422,196 @@ sub DoConnectSharedLan()
     exit($exitcode);
 }
 
+#
+# Modify an experiment.
+#
+sub DoModify()
+{
+    my $logname;
+    my $errmsg;
+    my $errcode;
+    my $exitcode = -1;
+    my $response;
+    my $gotlock = 0;
+
+    my $optlist    = "fNS";
+    my $foreground = 0;
+    my $nolock     = 0;	# Caller holds the lock.
+    my $nostatus   = 0; # Caller handles instance status changes.
+    my $docreate   = 1; # Fire off create_slivers.
+    my $nopending  = 0;
+    my %options    = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"f"})) {
+	$foreground = 1;
+    }
+    if (defined($options{"N"})) {
+	$nolock = 1;
+    }
+    if (defined($options{"S"})) {
+	$nostatus = 1;
+    }
+    usage()
+	if (!@ARGV);
+
+    if ($instance->canceled()) {
+	UserError("Not allowed to modify; this experiment has been canceled.");
+    }
+    if ($instance->DeferredAggregateList()) {
+	UserError("Not allowed to modify; there " .
+		  "are currently deferred aggregates.");
+    }
+    if ($instance->update_rspec()) {
+	UserError("Not allowed to modify; a modify " .
+		  "operation is already in progress and not complete.");
+    }
+    my $creator   = $instance->GetCreator();
+    my $project   = $instance->GetProject();
+    my $expires   = str2time($instance->Expires());
+    my $noresokay = 1;
+    my $duration  = $expires - time();
+    if ($duration > $DEFAULT_DURATION * 3600) {
+	$noresokay = 0;
+    }
+    
+    my $rspecstr = emutil::ReadFile($ARGV[0]);
+    if (!$rspecstr) {
+	fatal("Could not read " . $ARGV[0] . ": $!");
+    }
+    # Trim()
+    $rspecstr =~ s/^\s+|\s+$//g;
+    if ($rspecstr eq "") {
+	UserError("Not a valid rspec");
+    }
+    my $rspec = GeniXML::Parse($rspecstr);
+    if (! defined($rspec)) {
+	fatal("Could not parse rspec");
+    }
+    
+    my $slice = $instance->GetGeniSlice();
+    if (!defined($slice)) {
+	fatal("No slice for instance");
+    }
+
+    my $default_aggregate_urn = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
+    my $needstitcher = 0;
+    my @aggregate_urns;
+    my $sitemap;
+
+    $errcode = APT_Profile::SetSites(\$rspec, $sitemap, $default_aggregate_urn,
+			     \@aggregate_urns, \$needstitcher, \$errmsg);
+    if ($errcode) {
+	($errcode < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
+
+    #
+    # All checks in one place.
+    #
+    $errcode = APT_Profile::CheckEverything($rspec, $creator,
+					    $project, time(), $expires, 1,
+					    $noresokay, $webtask, \$errmsg);
+    if ($errcode) {
+	($errcode < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
+
+    my $bindings;
+    $errcode = APT_Profile::GetBindings($rspec, \$bindings, \$errmsg);
+    if ($errcode) {
+	($errcode < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
+    $bindings = eval { encode_json($bindings); };
+    if ($@) {
+	fatal("Could not json encode bindings");
+    }
+
+    #
+    # Lock the slice in case it is doing something else, like taking
+    # a disk image.
+    #
+    if (!$nolock && $slice->Lock()) {
+	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
+	$errcode  = GENIRESPONSE_BUSY;
+	$exitcode = 1;
+	goto bad;
+    }
+    $gotlock = 1;
+
+    #
+    # This will add any new aggregates
+    #
+    my @aggregate_list = ();
+    #
+    # Various checks are made in this function.
+    #
+    $errcode = $instance->AddAggregates($nopending + $needstitcher,
+				 \@aggregate_list, \$errmsg, @aggregate_urns);
+    if ($errcode) {
+	$errcode  = GENIRESPONSE_ERROR;
+	$exitcode = $errcode;
+	goto bad;
+    }
+
+    #
+    # Mark for prestaging images if needed.
+    #
+    foreach my $aggobj (@aggregate_list) {
+	my $aptaggregate = $aggobj->GetAptAggregate();
+    
+	if ($aptaggregate->prestageimages()) {
+	    $aggobj->SetStatus("prestage");
+	}
+    }
+
+    # Finalize the updated rspec. This will store it into the instance.
+    $errcode = $instance->FinalizeRSpec(\$errmsg, $rspec);
+    if ($errcode) {
+	$errcode  = GENIRESPONSE_ERROR;
+	$exitcode = $errcode;
+	goto bad;
+    }
+
+    #
+    # Need to compare the rspec, we really do not want to initiate a modify
+    # at every aggregate.
+    #
+    $instance->SetAggregateStatus("created");
+
+    if ($docreate) {
+	system("$CREATESLIVERS -L " .
+	       ($debug ? "-d " : "") .  $instance->uuid());
+	if ($?) {
+	    my $code = $? >> 8;
+	    $code = -1
+		if ($code == 255);
+	    if (defined($webtask)) {
+		$webtask->Exited($code)
+	    }
+	    exit($code);
+	}
+	# Sleep a few seconds to give the web interface time to react.
+	sleep(5);
+	# We passed the lock to create_slivers.
+	exit(0);
+    }
+    else {
+	#
+	# Mark it as deferred so the scheduler will pick it up. 
+	#
+	$instance->Defer();
+    }
+    $slice->UnLock() if (!$nolock);
+    $webtask->Exited(0)
+	if (defined($webtask));
+    exit(0);
+  bad:
+    $instance->SetStatus("ready") if (!$nostatus);
+    $slice->UnLock() if (!$nolock && $gotlock);
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($exitcode);
+}

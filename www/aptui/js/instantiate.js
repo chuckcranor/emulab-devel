@@ -358,6 +358,8 @@ $(function ()
 			fromrepo     : window.FROMREPO,
 			rerun_instance : window.RERUN_INSTANCE,
 			rerun_paramset : window.RERUN_PARAMSET,
+			paramdefs      : null,
+			bindings       : null,
 			setStepsMotion : setStepsMotion,
 			setRerunInstance : setRerunInstance,
 		    });

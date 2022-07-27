@@ -705,6 +705,7 @@ AddLibrary("js/ota-permission.js");
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/copy-profile.js");
 AddLibrary("js/profile-picker.js");
+AddLibrary("js/instantiate-common.js");
 if ($usenewinstantiate) {
     SPITREQUIRE("js/instantiate-new.js");
 }

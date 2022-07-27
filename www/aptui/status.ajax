@@ -87,8 +87,75 @@ function StatusSetupAjax($needmodify)
     return 0;
 }
 
+# Map geni response code to a pithy message.
+function MapGeniResponse($code)
+{
+    $reason = "";
+    
+    if ($code == GENIRESPONSE_INSUFFICIENT_BANDWIDTH) {
+        $reason = "Not enough available bandwidth for a link.";
+    }
+    elseif ($code == GENIRESPONSE_NO_CONNECT) {
+        $reason = "Could not map all requested links to physical ".
+                "resources. Not enough free resources currently. ".
+                "Please try again later.";
+    }
+    elseif ($code == GENIRESPONSE_MAPPING_IMPOSSIBLE) {
+        $reason = "Your topology cannot be instantiated. ".
+                "You have most likely asked for hardware that does not exist, ".
+                "such as nodes of a type that are not at the target cluster, ".
+                "or more network interfaces that exist on any of the nodes ".
+                "at the target cluster. You will need to modify your profile ".
+                "or try a different cluster.";
+    }
+    elseif ($code == GENIRESPONSE_NO_MAPPING ||
+            $code == GENIRESPONSE_INSUFFICIENT_NODES) {            
+        $reason = "Your topology could not be mapped to physical ".
+                "resources. In addition to any information below, you can ".
+                "click on the 'Logs' button above, which will provide ".
+                "lots of info, some of which might be useful in figuring out ".
+                "why it failed.";
+    }
+    elseif ($code == GENIRESPONSE_TIMEDOUT) {
+        $reason = "Your experiment timed out while setting up, ".
+                "most likely because one or more nodes failed to boot. The ".
+                "node consoles may provide more information.";
+    }
+    elseif ($code == GENIRESPONSE_TIMEDOUT) {
+        $reason = "Your experiment timed out while setting up, ".
+                "most likely because one or more nodes failed to boot. The ".
+                "node consoles may provide more information.";
+    }
+    elseif ($code == GENIRESPONSE_NETWORK_ERROR) {
+        $reason = "One or more clusters could no longer be ".
+                "reached after your experiment was provisioned.";
+    }
+    elseif ($code == GENIRESPONSE_BADARGS) {
+        #
+        # This is GENIRESPONSE_BADARGS which typically means an error
+        # in the input rspec, something the user must have put in it.
+        #
+        $reason = "Your topology source contains invalid values.";
+    }
+    elseif ($code == GENIRESPONSE_NOSPACE) {
+        $reason = "You are over your disk quota at the target ".
+                "cluster, probably because of too many saved disk images. ".
+                "Please click on the 'Storage->My Disk Images' above and ".
+                "delete images you no longer need.";
+    }
+    elseif ($code == GENIRESPONSE_STITCHER_ERROR) {
+        #
+        # This is GENIRESPONSE_STITCHER_ERROR which is a catch all.
+        #
+        $reason = "Your multi-site topology could not be ".
+                "stitched together. Please look closely at the ".
+                "error message below to see what went wrong.";
+    }
+    return $reason;
+}
+
 #
-# Status/
+# Status
 #
 function Do_GetInstanceStatus()
 {
@@ -114,6 +181,8 @@ function Do_GetInstanceStatus()
     $haveopenstack = $instance->isopenstack() ? 1 : 0;
 
     foreach ($instance->slivers() as $sliver) {
+        $wtask = $sliver->WebTask();
+        
         $sliverblob =
             array("aggregate_urn"   => $sliver->aggregate_urn(),
                   "status"          => $sliver->status(),
@@ -142,7 +211,6 @@ function Do_GetInstanceStatus()
             # going on.
             #
             if ($sliver->retry_count()) {
-                $wtask = $sliver->WebTask();
                 if ($wtask && $wtask->TaskValue("output")) {
                     $sliverblob["deferred_cause"] =
                         htmlentities($wtask->TaskValue("output"));
@@ -161,6 +229,19 @@ function Do_GetInstanceStatus()
                     }
                 }
                 $sliverblob["details"] = $statusblob;
+            }
+            if ($sliver->status() == "failed") {
+                if ($wtask) {
+                    # Small race between updating wtask and setting failed.
+                    $wtask->Refresh();
+                    $sliverblob["failure_code"] = $wtask->exitcode();
+                    if ($wtask->TaskValue("output")) {
+                        $sliverblob["failure_cause"] =
+                                htmlentities($wtask->TaskValue("output"));
+                        $sliverblob["failure_message"] =
+                                MapGeniResponse($wtask->exitcode());
+                    }
+                }
             }
         }
         if ($sliver->public_url()) {
@@ -185,77 +266,9 @@ function Do_GetInstanceStatus()
     # Reflect errors back to the user.
     if ($webtask && $webtask->exited()) {
         $blob["code"] = $webtask->exitcode();
-        
-        if ($webtask->exitcode() == GENIRESPONSE_INSUFFICIENT_NODES) {
-            # All the info in the results from the cluster.
-            $blob["reason"]  = "";
+        if ($wtask->TaskValue("output")) {
+            $blob["message"] = htmlentities($webtask->TaskValue("output"));
         }
-        elseif ($webtask->exitcode() == GENIRESPONSE_INSUFFICIENT_BANDWIDTH) {
-            $blob["reason"]  = "Not enough available bandwidth for a link.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_NO_CONNECT) {
-            $blob["reason"]  = "Could not map all requested links to physical ".
-	    "resources. Not enough free resources currently. ".
-	    "Please try again later.\n\n";
-	}
-        elseif ($webtask->exitcode() == GENIRESPONSE_MAPPING_IMPOSSIBLE) {
-            $blob["reason"]  = "Your topology cannot be instantiated. ".
-	    "You have most likely asked for hardware that does not exist, ".
-            "such as nodes of a type that are not at the target cluster, ".
-            "or more network interfaces that exist on any of the nodes ".
-            "at the target cluster. You will need to modify your profile ".
-            "or try a different cluster.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_NO_MAPPING) {
-            $blob["reason"]  = "Your topology could not be mapped to physical ".
-                "resources. In addition to any information below, you can ".
-                "click on the 'Logs' button above, which will provide ".
-                "lots of info, some of which might be useful in figuring out ".
-                "why it failed.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_TIMEDOUT) {
-            $blob["reason"]  = "Your experiment timed out while setting up, ".
-                "most likely because one or more nodes failed to boot. The ".
-                "node consoles may provide more information.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_TIMEDOUT) {
-            $blob["reason"]  = "Your experiment timed out while setting up, ".
-                "most likely because one or more nodes failed to boot. The ".
-                "node consoles may provide more information.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_NETWORK_ERROR) {
-            $blob["reason"]  = "One or more clusters could no longer be ".
-                "reached after your experiment was provisioned.";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_BADARGS) {
-            #
-            # This is GENIRESPONSE_BADARGS which typically means an error
-            # in the input rspec, something the user must have put in it.
-            #
-            $blob["reason"]  = "Your topology source contains invalid ".
-                "values.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_NOSPACE) {
-            #
-            # Over Quota.
-            #
-            $blob["reason"]  = "You are over your disk quota at the target ".
-                "cluster, probably because of too many saved disk images. ".
-                "Please click on the 'Storage->My Disk Images' above and ".
-                "delete images you no longer need.";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_STITCHER_ERROR) {
-            #
-            # This is GENIRESPONSE_STITCHER_ERROR which is a catch all.
-            #
-            $blob["reason"]  = "Your multi-site topology could not be ".
-                "stitched together. Please look closely at the ".
-                "error message below to see what went wrong.\n\n";
-        }
-        else {
-            $blob["reason"] = "";
-        }
-        $blob["reason"] .= htmlentities($webtask->TaskValue("output"));
         $blob["canclearerror"]
             = ($webtask->TaskValue("canignore") != 0 ||
                $webtask->exitcode() ==
@@ -1775,6 +1788,8 @@ function Do_ExpInfo()
     else {
         $blob["admin_notes"] = "";
     }
+    $blob["rspec"] = $instance->rspec();
+    
     #
     # Extension stuff
     #
@@ -2397,6 +2412,60 @@ function Do_ConnectSharedLan()
         if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             SPITAJAX_ERROR(-1, "Internal error (dis)connecting shared lan");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE("Success");
+}
+
+#
+# Modify an experiment.
+#
+function Do_ModifyExperiment()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+    
+    if (StatusSetupAjax(1)) {
+	return;
+    }
+    if ($instance->paniced()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined.");
+        return;
+    }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $instance->uuid();
+
+    if (!isset($ajax_args["rspec"]) || $ajax_args["rspec"] == "") {
+        SPITAJAX_ERROR(1, "Missing rspec");
+        return;
+    }
+    $filename = tempnam("/tmp", "modify");
+    $fp = fopen($filename, "w");
+    fwrite($fp, $ajax_args["rspec"]);
+    fclose($fp);
+    chmod($filename, 0666);
+    
+    #
+    # Call out to the backend.
+    #
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() .
+                     "  modify $uuid $filename",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+    unlink($filename);
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error modifying experiment");
         }
         else {
             SPITAJAX_ERROR(1, $webtask->output());

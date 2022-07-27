@@ -1189,11 +1189,12 @@ sub GetPortal($)
     }
     my $tag = GetText("name", $element);
     my $url = GetText("url", $element);
-    return ($tag, $url);
+    my $seq = GetText("sequence", $element);
+    return ($tag, $url, $seq);
 }
-sub SetPortal($$$$$)
+sub SetPortal($$$$$$)
 {
-    my ($rspec, $portal, $url, $pid, $eid) = @_;
+    my ($rspec, $portal, $url, $pid, $eid, $sequence) = @_;
     
     my $element = FindNodesNS("n:portal", $rspec, $EMULAB_NS)->pop();
     if (!defined($element)) {
@@ -1203,6 +1204,18 @@ sub SetPortal($$$$$)
     SetText("url", $element, $url);
     SetText("project", $element, $pid);
     SetText("experiment", $element, $eid);
+    SetText("sequence", $element, $sequence);
+    return 0;
+}
+sub UpdatePortalSequence($$)
+{
+    my ($rspec, $sequence) = @_;
+    
+    my $element = FindNodesNS("n:portal", $rspec, $EMULAB_NS)->pop();
+    if (!defined($element)) {
+	return -1;
+    }
+    SetText("sequence", $element, $sequence);
     return 0;
 }
 sub ClearPortal($)

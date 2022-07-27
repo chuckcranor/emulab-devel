@@ -14,7 +14,7 @@ $(function () {
 						       'image-picker-modal']);
         var ppmodalString = templates['ppform-wizard'];
         var imagePickerString = templates['image-picker-modal'];
-	var debug         = 0;
+	var debug         = 1;
 	var paramdefs     = null;
 	var ppdivname     = null;
 	var uuid          = "";
@@ -709,13 +709,20 @@ $(function () {
 		    return;
 		}
 		m = details.defaultValue.length;
-		if (details.min && details.min > m) {
+		if (rerun_bindings &&
+		    _.has(rerun_bindings, details.name) &&
+		    rerun_bindings[details.name].length > m) {
+		    m = rerun_bindings[details.name].length;
+		}
+		else if (details.min && details.min > m) {
 		    m = details.min;
 		}
 	    }
 	    else if (details.min) {
 		m = details.min;
 	    }
+
+	    console.info("ffoo2", details, i, m);
 			
 	    while (i < m) {
 		var tname = details.name;
@@ -2874,6 +2881,10 @@ $(function () {
 	    $('#ppmodal-body').find('[data-toggle="tooltip"]').tooltip();
 
 	    // Tell caller when user changes anything.
+	    $('#pp-form-body input')
+		.on("paste input textInput", function() {
+		    Modified();
+		});
 	    $('#pp-form-body input, #pp-form-body select').change(function() {
 		Modified();
 	    });
@@ -3175,8 +3186,10 @@ $(function () {
 	    ClearAlert();
 	    
 	    LoadBindings(details.bindings);
-	    CheckInstanceWarning(details);
-	    setRerunInstance(details);
+	    if (!window.EXPMODIFY) {
+		CheckInstanceWarning(details);
+		setRerunInstance(details);
+	    }
 	}
 	/*
 	 * Update bindings.
@@ -3746,22 +3759,46 @@ $(function () {
 	}
 
 	function StartPP(args) {
+	    console.info(args);
+	    
 	    registered     = args.registered;
 	    multisite      = args.multisite;
 	    ppdivname      = args.ppdivname;
 	    amlist         = args.amlist;
 	    prunetypes     = args.prunetypes;
 	    fromrepo       = args.fromrepo;
-	    
+
+	    /*
+	     * Once we have things set up, all that changes will 
+	     * be the bindings.
+	     */
+	    if (window.EXPMODIFY && uuid != "") {
+		setStepsMotion(false);
+		LoadBindings(args.bindings);
+		setStepsMotion(true);
+		if (args.ready_callback) {
+		    args.ready_callback();
+		}
+		return;
+	    }
+
+	    /*
+	     * Otherwise, do not change anything if the user has not changed
+	     * the profile.
+	     */
 	    if (formFields.length && uuid == args.uuid) {
+		console.info("foo");
 		GenerateForm(null);
+		if (args.ready_callback) {
+		    args.ready_callback();
+		}
 		return;
 	    }
 	    configuredone_callback = args.config_callback;
 	    modified_callback = args.modified_callback;
 	    setStepsMotion = args.setStepsMotion;
 	    setRerunInstance = args.setRerunInstance;
-	    
+
 	    /*
 	     * Need to ask for the profile parameter form fragment and
 	     * the initial values.
@@ -3783,7 +3820,15 @@ $(function () {
 		// Setup the parameter buttons for this profile.
 		SetupPPButtons(json.value.hasactivity,
 			       json.value.paramsets, json.value.recents);
-		
+
+		if (window.EXPMODIFY) {
+		    // Switch the message at the top of the panel.
+		    $('#' + ppdivname + ' .ppform-instantiate')
+			.addClass("hidden");
+		    $('#' + ppdivname + ' .ppform-modify')
+			.removeClass("hidden");
+		}
+
 		if (args.rerun_instance !== undefined) {
 		    ApplyPreviousBindings(json.value.rerun_instance);
 		}
@@ -3797,8 +3842,13 @@ $(function () {
 		    InitializeForm(paramdefs);
 		    GenerateForm(null);
 		}
-		CheckNotLatest();
+		if (!window.EXPMODIFY) {
+		    CheckNotLatest();
+		}
 		setStepsMotion(true);
+		if (args.ready_callback) {
+		    args.ready_callback();
+		}
 
 		if (! $('#pp-wizard-ready').length) {
 		    $('#' + ppdivname).append("<div class='hidden' " +
@@ -3817,11 +3867,19 @@ $(function () {
 	    }
 	    //
 	    // XXX: Look for paramdefs/script in the form and pass that along.
-	    // This is for repo-based profiles.
+	    // This is for repo-based profiles since we can be on any branch
+	    // or tag and this is easy and faster since the server would have
+	    // to dig the profile source out of the repo and recompute them.
+	    // This is a terrible way to do this, but it saves a bunch of time
+	    // when starting the ppwizard.
 	    //
 	    if ($('#paramdefs').val() !== undefined) {
 		blob["paramdefs"] = $('#paramdefs').val();
 	    }
+	    else if (args.paramdefs) {
+		blob["paramdefs"] = args.paramdefs;
+	    }
+	    console.info("GetParameters arguments", blob);
 	    var xmlthing = sup.CallServerMethod(null, "instantiate",
 						"GetParameters", blob);
 	    xmlthing.done(callback);

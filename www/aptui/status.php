@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,6 +30,7 @@ chdir("apt");
 include("quickvm_sup.php");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
+include_once("resgroup_defs.php");
 $page_title = "Experiment Status";
 $ajax_request = 0;
 $lazytopo = 0;
@@ -292,7 +293,7 @@ else {
 }
 # Temporary feature for webssh
 $webssh = $this_user->DoWebSSH();
-echo "  window.APT_OPTIONS.webssh = $webssh;\n";    
+echo "  window.APT_OPTIONS.webssh = $webssh;\n";
 
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
@@ -302,12 +303,14 @@ echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 echo "<script src='js/lib/filesize.min.js'></script>\n";
 
+
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
 if (!$lazytopo) {
     REQUIRE_JACKS();
 }
+REQUIRE_JACKS_EDITOR();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
 REQUIRE_IMAGE();
@@ -316,6 +319,13 @@ REQUIRE_IDLEGRAPHS();
 REQUIRE_OPENSTACKGRAPHS();
 REQUIRE_CONTEXTMENU();
 REQUIRE_SUP();
+
+AddTemplate("image-picker-modal");
+AddTemplate("ppform-wizard");
+AddLibrary("js/ppwizardstart.js");
+AddLibrary("js/powder-types.js");
+AddLibrary("js/instantiate-common.js");
+
 AddLibrary("js/bindings.js");
 AddLibrary("js/paramsets.js");
 if ($ISPOWDER) {
@@ -347,22 +357,16 @@ foreach ($instance->slivers() as $sliver) {
         $aggregates[$aggregate_urn] = $aggregate;
     }
 }
-$blob = array();
 
-foreach ($aggregates as $aggregate) {
-    $aggregate_urn = $aggregate->urn();
-    $weburl        = $aggregate->weburl();
+$prunelist = Instance::NodeTypePruneList(null, true);
+echo "<script type='text/plain' id='prunelist-json'>\n";
+echo htmlentities(json_encode($prunelist));
+echo "</script>\n";
 
-    $blob[$aggregate_urn] =
-        array("weburl"       => $weburl,
-              "name"         => $aggregate->name(),
-              "nickname"     => $aggregate->nickname(),
-              "abbreviation" => $aggregate->abbreviation(),
-              "ismobile"     => $aggregate->ismobile(),
-              "isFE"         => $aggregate->isFE());
-}
-echo "<script type='text/plain' id='amlist-json'>\n";
-echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
+SpitAggregateStatus(true, $this_user, $aggregates);
+$multisite = (isset($this_user) && ($ISCLOUD || $ISPOWDER) ? 1 : 0);
+echo "<script type='text/javascript'>\n";
+echo "    window.MULTISITE  = $multisite;\n";
 echo "</script>\n";
 
 #
@@ -388,11 +392,20 @@ if (isset($this_user)) {
     echo "</script>\n";
 }
 
+# Current and Future reservations for the cluster picker during modify
+$project = $instance->Project();
+$resinfo = ReservationGroup::ReservationInfo(
+    array($project->pid() => $project));
+echo "<script type='text/plain' id='resgroup-json'>\n";
+echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
+echo "</script>\n";
+
 AddTemplateList(array("status", "waitwait-modal", "oops-modal",
                       "register-modal", "terminate-modal", "oneonly-modal",
                       "approval-modal", "linktest-modal",
                       "destroy-experiment", "save-paramset-modal",
-                      "prestage-table", "frequency-graph"));
+                      "prestage-table", "frequency-graph",
+                      "picker-template", "instantiate-templates"));
 
 AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();

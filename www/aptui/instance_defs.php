@@ -1406,9 +1406,12 @@ class ExtensionInfo
 # $amlist, $fedlist, and $status are all output arrays
 function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                                   $extended = false, $user = null,
-                                  $frontpage = false) {
+                                  $frontpage = false, $am_array = null) {
     global $TBMAINSITE, $DEFAULT_AGGREGATE_URN, $CHECKLOGIN_USER;
-    $am_array = Aggregate::DefaultAggregateList($user, $frontpage);
+
+    if ($am_array == null) {
+        $am_array = Aggregate::DefaultAggregateList($user, $frontpage);
+    }
 
     #
     # If not the Cloudlab Portal then we get local status only.
@@ -1430,7 +1433,9 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                       "nickname" => $aggregate->nickname(),
                       "typelist" => $typelist,
                       "typeinfo" => $aggregate->typeinfo,
-                      "reservable_nodes" => $aggregate->ReservableNodes());
+                      "reservable_nodes" => $aggregate->ReservableNodes(),
+                      "abbreviation"     => $aggregate->abbreviation(),
+                );
         }
         else {
             $amlist[$urn] = $am;
@@ -1464,7 +1469,8 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                                   "nickname" => $aggregate->nickname(),
                                   "typelist" => $typelist,
                                   "typeinfo" => $aggregate->typeinfo,
-                                  "isfederate" => $aggregate->isfederate(),
+                                  "isfederate"   => $aggregate->isfederate(),
+                                  "abbreviation" => $aggregate->abbreviation(),
             );
         }
         else {
@@ -1539,19 +1545,16 @@ function CalculateWirelessStatus(&$result) {
     $result["controlled"] = $controlled1 + $controlled2;
 }
     
-function SpitAggregateStatus($extended = false, $user = null) {
+function SpitAggregateStatus($extended = false, $user = null, $agglist = null) {
     $amlist     = array();
-    $fedlist    = array();
     $status     = array();
-    CalculateAggregateStatus($amlist, $fedlist, $status, $extended, $user);
+    CalculateAggregateStatus($amlist, $fedlist,
+                             $status, $extended, $user, false, $agglist);
     echo "<script type='text/plain' id='amlist-json'>\n";
     echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
     echo "</script>\n";
     echo "<script type='text/plain' id='amstatus-json'>\n";
     echo htmlentities(json_encode($status));
-    echo "</script>\n";
-    echo "<script type='text/javascript'>\n";
-    echo "    window.FEDERATEDLIST  = [". implode(",", $fedlist) . "];\n";
     echo "</script>\n";
 }
 

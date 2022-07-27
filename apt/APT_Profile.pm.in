@@ -374,6 +374,7 @@ sub DESTROY {
     $self->{'WEBTASK'} = undef;
     $self->{'DBROW'}   = undef;
     $self->{'IMAGES'}  = undef;
+    $self->{'RSPEC'}   = undef;
 }
 
 sub IsRepoBased($) {
@@ -1557,6 +1558,175 @@ sub NeedStitcher($$)
     foreach my $ref (values(%linksites)) {
 	return 1
 	    if (keys(%{$ref}) > 1);
+    }
+    return 0;
+}
+
+#
+# Check everything that needs to be checked. :-)
+#
+sub CheckEverything($$$$$$$$$)
+{
+    my ($rspec, $user, $project,
+	$start, $end, $isnow, $noresokay, $webtask, $perrmsg) = @_;
+
+    my $resources;
+    my $retval = APT_Profile::CheckResources($rspec, $project,
+					     $perrmsg, \$resources);
+    if ($retval) {
+	return $retval;
+    }
+   
+    $retval = APT_Profile::CheckResourceReservations($rspec, $project,
+						     $start, $end, $noresokay,
+						     $perrmsg, $resources);
+    if ($retval) {
+	if ($retval < 0) {
+	    return $retval;
+	}
+	elsif ($isnow) {
+	    # Immediate start, throw the error back to the user.
+	    return 1;
+	}
+	else {
+	    #
+	    # Warn user that resources must be reserved by the time the
+	    # experiment starts.
+	    #
+	    print "Some resources still need to be reserved before the ".
+		"experiment start time is reached\n";
+
+	    if (defined($webtask)) {
+		$webtask->reservationWarn($$perrmsg);
+	    }
+	}
+    }
+    #
+    # Warn user about deprecated image use. This will possibly duplicate the
+    # email sent by the aggregates, but the email from the portal has a better
+    # chance of getting through the user's spam filter. 
+    #
+    $retval = APT_Profile::CheckForDeprecatedImages($resources, $project,
+						    $user, $perrmsg);
+    if ($retval) {
+	return $retval;
+    }
+
+    #
+    # Spectrum sanity checks, then spectrum reservation checks.
+    #
+    my $checkranges = 1
+	if (EmulabFeatures->FeatureEnabled("powder-verify-spectrum",
+					   $user, $project));
+
+    my $spectrum;
+    $retval = APT_Profile::CheckSpectrum($rspec, $perrmsg, \$spectrum,
+					 $resources, $checkranges);
+    if ($retval) {
+	return $retval;
+    }
+    $retval = APT_Profile::CheckSpectrumPermission($rspec, $project,
+						   $perrmsg, $spectrum);
+    if ($retval) {
+	return $retval;
+    }
+    $retval = APT_Profile::CheckSpectrumReservations($rspec, $project,
+						     $start, $end,
+						     $noresokay, $perrmsg,
+						     $spectrum, $resources);
+    if ($retval) {
+	if ($retval < 0) {
+	    return $retval;
+	}
+	elsif ($isnow) {
+	    # Immediate start, throw the error back to the user.
+	    return 1;
+	}
+	else {
+	    #
+	    # Warn user that spectrum must be reserved by the time the
+	    # experiment starts.
+	    #
+	    if (defined($webtask)) {
+		$webtask->reservationWarn($$perrmsg);
+	    }
+	    print "Some spectrum still needs to be reserved before the ".
+		"experiment start time is reached\n";
+	}
+    }
+
+    #
+    # see if there are routes; we will bind the nodes later.
+    #
+    my $routes;
+    $retval = APT_Profile::GetRoutes($rspec, \$routes, $perrmsg);
+    if ($retval) {
+	return $retval;
+    }
+    $retval = APT_Profile::CheckRoutes($rspec, $perrmsg, \$routes);
+    if ($retval) {
+	return $retval;
+    }
+    $retval = APT_Profile::CheckRoutesPermission($rspec, $project,
+						 $start, $end,
+						 $perrmsg, $routes);
+    if ($retval) {
+	return $retval;
+    }
+    $retval = APT_Profile::CheckRoutesReservations($rspec, $project,
+						   $start, $end, $noresokay,
+						   $perrmsg, $routes);
+    if ($retval) {
+	if ($retval < 0) {
+	    return $retval;
+	}
+	elsif ($isnow) {
+	    # Immediate start, throw the error back to the user.
+	    return 1;
+	}
+	else {
+	    #
+	    # Warn user that routes must be reserved by the time the
+	    # experiment starts.
+	    #
+	    if (defined($webtask)) {
+		$webtask->reservationWarn($$perrmsg);
+	    }
+	    print "Some routes still need to be reserved before the ".
+		"experiment start time is reached.\n";
+	}
+    }
+    #
+    # This check ensures that people do not allocate buses directly unless
+    # they have special permission. Mere users must allocate routes.
+    #
+    $retval = APT_Profile::CheckForBuses($rspec, $project, $perrmsg);
+    if ($retval) {
+	return $retval;
+    }
+
+    #
+    # Check for nodes/types/aggregates that require a License. 
+    #
+    my $licenses;
+
+    $retval  = APT_Profile::CheckLicenses($rspec, $user, $project,
+					  \$licenses, $perrmsg);
+    if ($retval) {
+	if ($retval < 0) {
+	    $$perrmsg = "Could not determine license requirements: $$perrmsg";
+	    return -1;
+	}
+	# Special handling.
+	if ($licenses) {
+	    if (defined($webtask)) {
+		$webtask->required_licenses($licenses);
+	    }
+	    $$perrmsg = "Licenses are required before you can start ".
+		"this experiment";
+	}
+	# Reflect back to user.
+	return 1;
     }
     return 0;
 }
@@ -3117,6 +3287,7 @@ sub EncryptBlocks($$$)
 				"-aes256 $certname",
 				$ref->textContent(), $pmsg);
 	    if ($?) {
+		$$pmsg = "Could not encrypt block";
 		return -1;
 	    }
 	    my $encrypted = `cat $tempname`;
@@ -3132,30 +3303,29 @@ sub EncryptBlocks($$$)
 #
 # Add a portal element.
 #
-sub AddPortalTag($$$$$$)
+sub AddPortalTag($$$$$$$)
 {
-    my ($pxml, $tag, $url, $pid, $eid, $pmsg) = @_;
+    my ($rspec, $tag, $url, $pid, $eid, $sequence, $pmsg) = @_;
     
-    my $rspec = GeniXML::Parse($$pxml);
-    if (! defined($rspec)) {
-	$$pmsg = "AddPortalTag: Could not parse rspec";
-	return -1;
-    }
-    GeniXML::SetPortal($rspec, $tag, $url, $pid, $eid);
-    $$pxml = GeniXML::Serialize($rspec);
-    return 0;
+    return GeniXML::SetPortal($rspec, $tag, $url, $pid, $eid, $sequence);
 }
-sub ClearPortalTag($$)
+#
+# Update the sequence number. We do not yet have parsed XML when we do this.
+#
+sub UpdatePortalSequence($$$)
 {
-    my ($pxml, $pmsg) = @_;
-    
-    my $rspec = GeniXML::Parse($$pxml);
+    my ($prspecstr, $sequence, $pmsg) = @_;
+
+    my $rspec = GeniXML::Parse($$prspecstr);
     if (! defined($rspec)) {
-	$$pmsg = "ClearPortalTag: Could not parse rspec";
+	$$pmsg = "UpdatePortalSequence: Could not parse rspec";
 	return -1;
     }
-    GeniXML::ClearPortal($rspec);
-    $$pxml = GeniXML::Serialize($rspec);
+    if (GeniXML::UpdatePortalSequence($rspec, $sequence)) {
+	$$pmsg = "UpdatePortalSequence: Could not update sequence number";
+	return -1;
+    }
+    $$prspecstr = GeniXML::Serialize($rspec);
     return 0;
 }
 

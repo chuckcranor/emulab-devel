@@ -150,6 +150,7 @@ function Do_GetParameters()
     global $ajax_args;
     global $suexec_output, $suexec_output_array;
     $parameter_sets = null;
+    $bindings = null;
 
     if (!isset($ajax_args["profile"])) {
 	SPITAJAX_ERROR(1, "Missing profile");
@@ -171,7 +172,9 @@ function Do_GetParameters()
 	return;
     }
     #
-    # For a repo-based profile, the paramdefs will be passed in.
+    # For a repo-based profile, the paramdefs will be passed in since
+    # instantiate page can be on any branch or commit, and no point in
+    # calling out to get them again.
     # Note that different refspecs might be parameterized, but others not.
     #
     if ($profile->repourl() &&
@@ -215,29 +218,37 @@ function Do_GetParameters()
             SPITAJAX_ERROR(1, "Not enough permission to view instance");
             return;
         }
-        $profile_uuid = $profile->uuid();
-        $webtask      = WebTask::CreateAnonymous();
-        $webtask_id   = $webtask->task_id();
-
-        $retval = SUEXEC($this_user->uid(), "nobody",
-                         "webmanage_profile -t $webtask_id -- ".
-                         "  bindings $rerun_uuid ",
-                         SUEXEC_ACTION_CONTINUE);
-        $webtask->Refresh();
-        
-        if ($retval) {
-            if (!$webtask->exited() || $retval < 0) {
-                SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-            }
-            else {
-                SPITAJAX_ERROR(1, $webtask->output());
-            }
-            $webtask->Delete();
-            return;
+        if ($record->isActive()) {
+            $bindings = json_decode($record->params());
         }
+        else {
+            $webtask      = WebTask::CreateAnonymous();
+            $webtask_id   = $webtask->task_id();
+
+            $retval = SUEXEC($this_user->uid(), "nobody",
+                             "webmanage_profile -t $webtask_id -- ".
+                             "  bindings $rerun_uuid ",
+                             SUEXEC_ACTION_CONTINUE);
+            $webtask->Refresh();
+        
+            if ($retval) {
+                if (!$webtask->exited() || $retval < 0) {
+                    SPITAJAX_ERROR(-1, "Internal Error. ".
+                                   "Please try again later");
+                }
+                else {
+                    SPITAJAX_ERROR(1, $webtask->output());
+                }
+                $webtask->Delete();
+                return;
+            }
+            $bindings = $webtask->TaskValue("bindings");
+            $webtask->Delete();
+        }
+        
         # This matches what is returned below in Do_GetPreviousBindings
         $blob["rerun_instance"] = array(
-            "bindings" => $webtask->TaskValue("bindings"),
+            "bindings" => $bindings,
             # This is the version uuid of the instantiated experiment.
             "version_uuid" => $profile->uuid(),
             "repohash" => $record->repohash(),
@@ -250,7 +261,6 @@ function Do_GetParameters()
             "rerun_gid" => $record->gid(),
             "rerun_clusters" => $record->rerunClusters(),
         );
-        $webtask->Delete();
     }
     elseif (isset($ajax_args["rerun_paramset"])) {
         if (!IsValidUUID($ajax_args["rerun_paramset"])) {
@@ -369,27 +379,33 @@ function Do_GetPreviousBindings()
     $profile = $instance->Profile();
     
     if ($profile->isParameterized()) {
-        $webtask      = WebTask::CreateAnonymous();
-        $webtask_id   = $webtask->task_id();
-
-        $retval = SUEXEC($this_user->uid(), "nobody",
-                         "webmanage_profile -t $webtask_id -- ".
-                         "  bindings $rerun_uuid ",
-                         SUEXEC_ACTION_CONTINUE);
-        $webtask->Refresh();
-        
-        if ($retval) {
-            if (!$webtask->exited() || $retval < 0) {
-                SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-            }
-            else {
-                SPITAJAX_ERROR(1, $webtask->output());
-            }
-            $webtask->Delete();
-            return;
+        if ($instance->isActive()) {
+            $bindings = json_decode($instance->params());
         }
-        $bindings = $webtask->TaskValue("bindings");
-        $webtask->Delete();
+        else {
+            $webtask      = WebTask::CreateAnonymous();
+            $webtask_id   = $webtask->task_id();
+
+            $retval = SUEXEC($this_user->uid(), "nobody",
+                             "webmanage_profile -t $webtask_id -- ".
+                             "  bindings $rerun_uuid ",
+                             SUEXEC_ACTION_CONTINUE);
+            $webtask->Refresh();
+        
+            if ($retval) {
+                if (!$webtask->exited() || $retval < 0) {
+                    SPITAJAX_ERROR(-1, "Internal Error. ".
+                                   "Please try again later");
+                }
+                else {
+                    SPITAJAX_ERROR(1, $webtask->output());
+                }
+                $webtask->Delete();
+                return;
+            }
+            $bindings = $webtask->TaskValue("bindings");
+            $webtask->Delete();
+        }
     }
     $blob = array(
         "bindings" => $bindings,
@@ -886,7 +902,7 @@ function CheckStep3()
     if (isset($formfields["start"]) && $formfields["start"] != "") {
         $start_ascii = $formfields["start"];
         $start = strtotime($formfields["start"]);
-        if (!$start) {
+        if (!$start || $start < 0) {
             $errors["start_day"] = "Cannot parse start time";
         }
         elseif ($start < time()) {
@@ -899,7 +915,7 @@ function CheckStep3()
     if (isset($formfields["end"]) && $formfields["end"] != "") {
         $end_ascii = $formfields["end"];
         $end = strtotime($formfields["end"]);
-        if (!$end) {
+        if (!$end || $end < 0) {
             $errors["end_day"] = "Cannot parse end time";
         }
         elseif ($end < time()) {
