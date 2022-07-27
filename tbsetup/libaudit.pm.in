@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -88,6 +88,9 @@ my $forked      = 0;
 
 # Do not send email from children, just the parent.
 my $nochild     = 0;
+
+# Do not send email from the parent of a prefork.
+my $noparent    = 0;
 
 # Branding for email. Set via audit info.
 my $brand;
@@ -397,8 +400,10 @@ sub AuditAbort()
 # file might get deleted out from under the child.
 # So we use some sleaze to make sure that happens.
 #
-sub AuditPrefork()
+sub AuditPrefork(;$)
 {
+    ($noparent) = @_;
+    
     return 0
 	if (!$auditing);
 
@@ -424,7 +429,8 @@ sub AuditFork()
 	}
 	unlink($prefork);
     }
-    $prefork = undef;
+    $noparent = 0;
+    $prefork  = undef;
 
     open(LOG, ">> $logfile") or
 	die("opening $logfile for $logfile: $!");
@@ -748,6 +754,12 @@ sub AddAuditInfo ($$) {
 END {
     return
 	if (($forked || $nochild) && $PID != $SAVEPID);
+
+    if ($noparent) {
+	system("/usr/bin/touch $prefork")
+	    if (defined($prefork));
+	return;
+    }
     
     # Save, since shell commands will alter it.
     my $exitstatus = $?;
