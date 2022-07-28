@@ -148,6 +148,7 @@ function ExperimentList($which, $target)
         $extraclause = "left join group_membership as g on ".
                        "     g.uid_idx='$target_idx' and  ".
                        "     g.pid_idx=a.pid_idx and " .
+                       "     g.pid_idx=g.gid_idx and " .
                        "     g.trust!='$trust_none' ";
     }
     else {
@@ -163,20 +164,19 @@ function ExperimentList($which, $target)
                      "  truncate(a.physnode_count * ".
                      "   ((UNIX_TIMESTAMP(now()) - ".
                      "     UNIX_TIMESTAMP(a.started)) / 3600.0),2) as phours, ".
-                     " IFNULL(aggs.count,0) as aggrows, ".
-                     " agg.aggregate_urn as aggrow_urn".
-                     "  from apt_instances as a ".
-                     "left join (".
-                     "    select uuid, COUNT(*) AS count ".
-                     "    from apt_instance_aggregates group by uuid) AS aggs ".
-                     "  on aggs.uuid=a.uuid ".
+                     "  GROUP_CONCAT(aa.abbreviation) as clusters ".
+                     " from apt_instances as a ".
                      "left join apt_instance_aggregates as agg ".
                      "     on agg.uuid=a.uuid ".
+                     "left join apt_aggregates as aa on ".
+                     "     aa.urn=agg.aggregate_urn ".
                      "left join geni.geni_slices as s on ".
                      "     s.uuid=a.slice_uuid ".
                      "left join geni.geni_users as u on u.uuid=a.creator_uuid ".
                      "$extraclause ".
-                     "$whereclause");
+                     "$whereclause ".
+                     "group by a.uuid ".
+                     "order by a.name");
 
     while ($row = mysql_fetch_array($query_result)) {
         $profile_id   = $row["profile_id"];
@@ -227,24 +227,7 @@ function ExperimentList($which, $target)
         else {
             $blob["profile_name"] = $profile_name;
         }
-        
-        #
-        # If arows non-zero, then we use that for aggregate_urn,
-        # and if its more then 1, we need to consume the extras rows
-        # to get the rest of the aggregate urns.
-        #
-        if ($row["aggrows"] > 0) {
-            $cluster = $urn_mapping[$row["aggrow_urn"]];
-
-            for ($i = 1; $i < $row["aggrows"]; $i++) {
-                $row = mysql_fetch_array($query_result);
-                $cluster .= "," . $urn_mapping[$row["aggrow_urn"]];
-            }
-        }
-        else {
-            $cluster = $urn_mapping[$row["aggregate_urn"]];
-        }
-        $blob["cluster"] = $cluster;
+        $blob["cluster"] = $row["clusters"];
         $blob["name"] = "<a href='status.php?uuid=$uuid'>$name</a>";
         $blob["project"] = "<a href='show-project.php?project=$pid'>$pid</a>";
         $blob["pcount"]   = $pcount;
