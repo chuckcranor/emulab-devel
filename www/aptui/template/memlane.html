@@ -129,14 +129,15 @@
 	       type='button'>Go</a>
 	  </div>
 	</div>
-	<div class='pull-left'>
-	  <a class='hidden'
-             style='margin-right: 10px;'
-	     id='logfile_button'
-             href='#'
-	     target='_blank'
-             type='button'>Stitcher</a>
-	</div>
+	<% if (record.logfileid) { %>
+	  <div class='pull-left'>
+	    <a style='margin-right: 10px;'
+	       id='logfile_button'
+               href='spewlogfile.php?logfile=<%- record.logfileid %>'
+	       target='_blank'
+               type='button'>Portal Log</a>
+	  </div>
+	<% } %>
       </div>
     </div>
   </div>
