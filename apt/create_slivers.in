@@ -126,6 +126,9 @@ END {
 	$seriallock = 0;
     }
     if (defined($logfile) && $logpid == $PID) {
+	# Need to do this before we close the log since it gets moved.
+	AuditEnd($?);
+	
 	$logfile->Close();
 	$logfile->Store();
 	$logfile = undef;
@@ -780,6 +783,10 @@ else {
 				      $brand->OpsEmailAddress(), $headers);
     }
 }
+
+# Need to do this before we close the log since it gets moved.
+AuditEnd($hosed);
+
 if (defined($logfile)) {
     $logfile->Close();
     $logfile->Store();
@@ -1883,6 +1890,9 @@ sub MyExit($$)
 	$webtask->Exited($code);
     }
     if (defined($logfile)) {
+	# Need to do this before we close the log since it gets moved.
+	AuditEnd($?);
+	
 	$logfile->Close();
 	$logfile->Store();
 	$logfile = undef;

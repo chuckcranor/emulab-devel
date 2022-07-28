@@ -89,9 +89,6 @@ my $forked      = 0;
 # Do not send email from children, just the parent.
 my $nochild     = 0;
 
-# Do not send email from the parent of a prefork.
-my $noparent    = 0;
-
 # Branding for email. Set via audit info.
 my $brand;
 
@@ -384,12 +381,6 @@ sub AuditAbort()
 	    undef($logfile);
 	}
 	delete @ENV{'TBAUDITLOG', 'TBAUDITON'};
-	
-	if (defined($prefork)) {
-	    my $oldmask = umask(0000);
-	    system("/usr/bin/touch $prefork");
-	    umask($oldmask);
-	}
     }
     return 0;
 }
@@ -400,10 +391,8 @@ sub AuditAbort()
 # file might get deleted out from under the child.
 # So we use some sleaze to make sure that happens.
 #
-sub AuditPrefork(;$)
+sub AuditPrefork()
 {
-    ($noparent) = @_;
-    
     return 0
 	if (!$auditing);
 
@@ -429,7 +418,6 @@ sub AuditFork()
 	}
 	unlink($prefork);
     }
-    $noparent = 0;
     $prefork  = undef;
 
     open(LOG, ">> $logfile") or
@@ -608,8 +596,6 @@ sub SendAuditMail($)
 	    if (defined($logfile) && !$savelog);
 
       done:
-	system("/usr/bin/touch $prefork")
-	    if (defined($prefork));
     }
 }
 
@@ -755,16 +741,16 @@ END {
     return
 	if (($forked || $nochild) && $PID != $SAVEPID);
 
-    if ($noparent) {
-	system("/usr/bin/touch $prefork")
-	    if (defined($prefork));
-	return;
-    }
-    
     # Save, since shell commands will alter it.
     my $exitstatus = $?;
     
     SendAuditMail($exitstatus);
+
+    if (defined($prefork)) {
+	my $oldmask = umask(0000);
+	system("/usr/bin/touch $prefork");
+	umask($oldmask);
+    }
 
     $? = $exitstatus;
 }

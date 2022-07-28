@@ -1648,7 +1648,7 @@ sub DoTerminate()
 
     $instance->SetStatus("terminated");
     $instance->RecordHistory($expired);
-    if (defined($logfile)) {
+    if (defined($logfile) && $instance->pid() ne "PMonitor") {
 	my $instance_name = $instance->name();
 	my $slice_uuid    = $slice->uuid();
 	my $brand         = $instance->Brand();

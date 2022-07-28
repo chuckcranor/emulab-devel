@@ -140,6 +140,9 @@ END {
 	$seriallock = 0;
     }
     if (defined($logfile)) {
+	# Need to do this before we close the log since it gets moved.
+	AuditEnd($?);
+	
 	$logfile->Close();
 	$logfile->Store();
 	$logfile = undef;
@@ -1119,6 +1122,8 @@ if (! ($debug || $foreground)) {
     if ($child) {
 	# Parent exits but avoid libaudit email.
 	AuditAbort();
+	# And avoid the END block above, since this normal exit.
+	$logfile = undef;
 	exit(0);
     }
     # All of the logging magic happens in here.
@@ -1135,8 +1140,15 @@ system("$CREATESLIVERS -L -f " .
        ($usestitcher ? "-S " : "") . $quickvm_uuid);
 my $status = $? >> 8;
 
-# Need to do this before we close the log since it gets moved.
-AuditEnd($status);
+# Special case for this one. Too much email.
+if ($status == 0 && $project->pid() eq "PMonitor") {
+    # Need to do this before we close the log since it gets moved.
+    AuditAbort();
+}
+else {
+    # Need to do this before we close the log since it gets moved.
+    AuditEnd($status);
+}
 
 if (defined($logfile)) {
     $logfile->Close();
@@ -1162,6 +1174,9 @@ sub fatal($) {
     print STDERR "*** $0:\n".
 	"    $mesg\n";
 
+    # Need to do this before we close the log since it gets moved.
+    AuditEnd(-1);
+    
     if (defined($logfile)) {
 	$logfile->Close();
 	$logfile->Store();
@@ -1177,8 +1192,10 @@ sub UserError($;$) {
 	$webtask->output($mesg);
 	$webtask->Exited($code);
     }
-    AuditEnd()
-	if (!$debug);
+    # Need to do this before we close the log since it gets moved.
+    # Do we even need to mail these errors?
+    AuditEnd();
+    
     #
     # We do not save these logfiles, email is enough.
     #
