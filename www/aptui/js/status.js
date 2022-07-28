@@ -272,11 +272,13 @@ $(function ()
 	    event.preventDefault();
 	    IgnoreFailure();
 	});
-	// Handler for the modify experiment button.
-	$('button#modify_experiment_button').click(function (event) {
-	    event.preventDefault();
-	    Modify();
-	});
+	// Handler for the modify experiment button. Only parameterized profiles
+	if (expinfo.paramdefs && window.APT_OPTIONS.canmodify) {
+	    $('button#modify_experiment_button').click(function (event) {
+		event.preventDefault();
+		Modify();
+	    });
+	}
 
 	// Terminate an experiment.
 	$('button#terminate').click(function (event) {
@@ -463,6 +465,8 @@ $(function ()
     // Call back for above.
     function StatusWatchCallBack(json, donefunc)
     {
+	window.EXPSTATUS = json;
+	
 	//console.info("StatusWatchCallBack: ", json);
 	if (json.code) {
 	    // GENIRESPONSE_SEARCHFAILED
@@ -598,8 +602,10 @@ $(function ()
 		ShowIdleDataTab();
 		if (json.value.haveopenstackstats) {
 		    ShowOpenstackTab();
-show		}
-		$('#modify_experiment_button').removeClass("hidden");
+		}
+		if (expinfo.paramdefs && window.APT_OPTIONS.canmodify) {
+		    $('#modify_experiment_button').removeClass("hidden");
+		}
 	    }
 	    else if (instanceStatus == 'failed') {
 		bgtype = "panel-danger";

@@ -180,6 +180,10 @@ $cansnapshot     = ((isset($this_user) &&
 $canterminate    = ((isset($this_user) &&
                      $instance->CanTerminate($this_user)) ||
                     ISADMIN() ? 1 : 0);
+$canmodify       = ((FeatureEnabled("ModifyExperiment",
+                                   $creator, $instance->Group()) &&
+                     $this_user->idx() == $creator->idx()) ||
+                    ISADMIN() ? 1 : 0);
 $cancopy_profile   = 0;
 $canclone_profile  = 0;
 $canupdate_profile = 0;
@@ -277,6 +281,7 @@ echo "  window.APT_OPTIONS.canupdate_profile = $canupdate_profile;\n";
 echo "  window.APT_OPTIONS.cancopy_profile = $cancopy_profile;\n";
 echo "  window.APT_OPTIONS.canterminate = $canterminate;\n";
 echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
+echo "  window.APT_OPTIONS.canmodify = $canmodify;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";
 echo "  window.APT_OPTIONS.hidelinktest = false;\n";
 echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
