@@ -99,25 +99,6 @@ function Do_Search()
             return;
         }
     }
-    $whereclause = "";
-
-    if (isset($target_project)) {
-        $target_idx   = $target_project->pid_idx();
-        $whereclause = "where h.pid_idx='$target_idx'";
-    }
-    elseif (isset($target_user)) {
-        $target_idx  = $target_user->idx();
-        $whereclause = "where h.creator_idx='$target_idx'";
-    }
-    if (isset($ajax_args["portalonly"])) {
-        if ($whereclause != "") {
-            $whereclause = "$whereclause and ";
-        }
-        else {
-            $whereclause = "where ";
-        }
-        $whereclause .= "servername='$APTHOST' ";
-    }
     if (!(isset($ajax_args["min"]) && isset($ajax_args["max"]))) {
         SPITAJAX_ERROR(1, "Must provide min and max");
         return;
@@ -136,21 +117,37 @@ function Do_Search()
     if ($isadmin && isset($ajax_args["IP"])) {
         return SearchForIP($ajax_args["IP"], $min, $max);
     }
-    if ($whereclause != "") {
-        $whereclause = "$whereclause and ";
+    $clauses = array();
+
+    # Do not show failures on this page.
+    $clauses[] = "fa.uuid is null";
+    # And these are noise.
+    $clauses[] = "h.pid != 'PMonitor'";
+
+    if (isset($target_project)) {
+        $target_idx = $target_project->pid_idx();
+        $clauses[]  = "h.pid_idx='$target_idx'";
     }
-    else {
-        $whereclause = "where ";
+    elseif (isset($target_user)) {
+        $target_idx = $target_user->idx();
+        $clauses[]  = "h.creator_idx='$target_idx'";
+    }
+    if (isset($ajax_args["portalonly"])) {
+        $clauses[] = "servername='$APTHOST' ";
     }
     if (isset($min)) {
-        $whereclause .= "UNIX_TIMESTAMP(h.started) > $min ";
-        if (isset($max)) {
-            $whereclause .= "and ";
-        }
+        $clauses[] = "UNIX_TIMESTAMP(h.started) > $min";
     }
     if (isset($max)) {
-        $whereclause .= "UNIX_TIMESTAMP(h.started) < $max ";
+        $clauses[] = "UNIX_TIMESTAMP(h.started) < $max";
     }
+    if (count($clauses)) {
+        $whereclause = "where " . join(" and ", $clauses);
+    }
+    else {
+        $whereclause = "";
+    }
+
     $query_result =
         DBQueryFatal("select h.uuid,h.profile_version,h.created, ".
                  "    h.started,h.destroyed,h.servername, ".
@@ -165,6 +162,8 @@ function Do_Search()
 		 "  from apt_instance_history as h ".
                  "left join apt_instance_aggregate_history as ia ".
                  "     on ia.uuid=h.uuid ".
+                 "left join apt_instance_failures as fa ".
+                 "     on fa.uuid=h.uuid ".
                  "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "left join apt_profile_versions as p on ".
 		 "     p.profileid=h.profile_id and ".
@@ -172,6 +171,12 @@ function Do_Search()
 		 "left join geni.geni_users as u on u.uuid=h.creator_uuid ".
                  $whereclause . " " .
 		 "group by h.uuid order by h.started desc");
+
+    if (mysql_num_rows($query_result) > 15000) {
+        SPITAJAX_ERROR(1, "Too much data, please narrow the date range. ".
+                       "3-4 months is typically okay.");
+        return;
+    }
 
     while ($row = mysql_fetch_array($query_result)) {
         if ($aggregate &&
