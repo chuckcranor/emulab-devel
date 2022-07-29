@@ -4086,7 +4086,7 @@ sub DoDeleteAggregates()
 	}
     }
     # If we made any changes, merge/push the manifests.
-    if ($needpush) {
+    if ($needpush && !$nostatus) {
 	if ($instance->MergeManifests()) {
 	    print STDERR "Could not merge manifests\n";
 	}
@@ -7456,6 +7456,13 @@ sub DoModify()
     usage()
 	if (!@ARGV);
 
+    my $creator = $instance->GetCreator();
+    if (!defined($creator)) {
+	fatal("Cannot lookup creator");
+    }
+    if (!($this_user->SameUser($creator) || $this_user->IsAdmin())) {
+	UserError("Not enough permission to modify experiment");
+    }
     if ($instance->canceled()) {
 	UserError("Not allowed to modify; this experiment has been canceled.");
     }
@@ -7467,7 +7474,6 @@ sub DoModify()
 	UserError("Not allowed to modify; a modify " .
 		  "operation is already in progress and not complete.");
     }
-    my $creator   = $instance->GetCreator();
     my $project   = $instance->GetProject();
     my $expires   = str2time($instance->Expires());
     my $noresokay = 1;
@@ -7498,6 +7504,7 @@ sub DoModify()
     my $default_aggregate_urn = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
     my $needstitcher = 0;
     my @aggregate_urns;
+    my @deleted_urns = ();
     my $sitemap;
 
     $errcode = APT_Profile::SetSites(\$rspec, $sitemap, $default_aggregate_urn,
@@ -7539,6 +7546,20 @@ sub DoModify()
     $gotlock = 1;
 
     #
+    # See if any aggregates deleted from the rspec and call DeleteAggregate
+    # on those first. 
+    #
+    foreach my $agg ($instance->AggregateList()) {
+	next
+	    if ($agg->IsTerminated());
+
+	next
+	    if (grep {$_ eq $agg->aggregate_urn()} @aggregate_urns);
+	
+	push(@deleted_urns, $agg->aggregate_urn());
+    }
+
+    #
     # This will add any new aggregates
     #
     my @aggregate_list = ();
@@ -7570,6 +7591,25 @@ sub DoModify()
 	$errcode  = GENIRESPONSE_ERROR;
 	$exitcode = $errcode;
 	goto bad;
+    }
+
+    #
+    # First delete aggregates.
+    #
+    if (@deleted_urns) {
+	system("$MANAGEINSTANCE deleteaggregates $uuid -N -S ".
+	       join(" ", @deleted_urns));
+	my $exitval = $? >> 8;
+
+	# Positive exit value means transient problem, the daemon will
+	# try again later.
+	if ($exitval && $exitval != 1) {
+	    $errmsg   = "Could not delete all aggregates";
+	    $errcode  = GENIRESPONSE_ERROR;
+	    $exitcode = $errcode;
+	    goto bad;
+	}
+	$instance->RefreshAggregateStatus();
     }
 
     #

@@ -48,6 +48,7 @@ $(function ()
     var prestageTemplate  = _.template(templates['prestage-table']);
     var instanceStatus    = "";
     var lastStatus        = "";
+    var lastStatusBlob    = null;
     var lockdown_code     = "";
     var consolenodes      = {};
     var showlinktest      = false;
@@ -55,7 +56,6 @@ $(function ()
     var projlist          = null;
     var amlist            = null;
     var prunetypes        = null;
-    var lastSliverStatus  = null;
     var jacksInstance     = null;
     var changingtopo      = false;
     var slowdown          = false;
@@ -723,8 +723,9 @@ $(function ()
 	     * we clean the topology/list tabs and draw new ones. Basically,
 	     * need to compare against last time and look for changes.
 	     */
-	    if (lastSliverStatus != null) {
-		var newSliverStatus = json.value.sliverstatus;
+	    if (lastStatusBlob != null) {
+		var newSliverStatus  = json.value.sliverstatus;
+		var lastSliverStatus = lastStatusBlob.sliverstatus;
 		
 		$.each(lastSliverStatus , function(urn) {
 		    if (!_.has(newSliverStatus, urn)) {
@@ -759,7 +760,7 @@ $(function ()
 		// Do this after updates for manifest, which is async.
 		UpdateSliverStatus(json.value.sliverstatus);
 		// Also save the sliverstatus so we can detect changes
-		lastSliverStatus = json.value.sliverstatus;
+		lastStatusBlob = json.value;
 		// Async activity is now done, we can tell the caller.
 		// Be nice to use a promise, but have not figured them out yet
 		donefunc();
@@ -1112,6 +1113,11 @@ $(function ()
 		else if (iblob.status == "failed") {
 		    failedAggregate(iblob);
 		}
+		else if (iblob.status == "terminated" ||
+			 iblob.status == "canceled") {
+		    TerminatedAggregate(iblob.status, urn);
+		    return;
+		}
 		return;
 	    }
 	    if (iblob.status == "terminated" ||
@@ -1398,6 +1404,8 @@ $(function ()
 
     function TerminatedAggregate(status, urn)
     {
+	//console.info("terminatedAggregate: ", urn, status);
+	
 	if (!_.has(jacksSites, urn)) {
 	    // Manifest not processed yet.
 	    return;
@@ -1405,7 +1413,7 @@ $(function ()
 	$.each(jacksSites[urn], function(node_id, jacksID) {
 	    var html;
 
-	    //console.info("deferAggregate: ", urn, node_id, jacksID);
+	    //console.info("terminatedAggregate: ", urn, node_id, jacksID);
 
 	    if (status == "terminated") {
 		html = "This node has been deallocated and is no longer " +
@@ -5323,7 +5331,7 @@ $(function ()
 	    var args = {"uuid"  : uuid,
 			"rspec" : rspec};
 
-	    sup.ShowWaitWait("Patience please!");
+	    sup.ShowWaitWait("This will take a minute ... patience please");	
 	    sup.CallServerMethod(null, "status", "ModifyExperiment", args,
 		 function(json) {
 		     console.info("ModifyExperiment", json);
