@@ -146,9 +146,31 @@ $query_result =
 		 "   h.pid!='emulab-ops' and ".
 		 "   h.pid!='testbed' ".
 		 "group by h.creator,u.usr_name,h.pid ".
-		 "order by ecount desc limit 10");
+		 "order by ecount desc limit 20");
 
-print "Top 10 powder users:\n";
+print "Top 20 powder users:\n";
 while (my ($uid,$name,$pid,$ecount) = $query_result->fetchrow_array()) {
     print "  $uid, $name, $pid, $ecount\n";
+}
+
+$query_result =
+    DBQueryFatal("select h.pid,count(h.pid) as ecount ".
+		 "  from apt_instance_history as h ".
+		 "join users as u on u.uid_idx=h.creator_idx ".
+		 "join projects as p on p.pid_idx=h.pid_idx ".
+		 "where h.portal='powder' and ".
+		 "   u.usr_email not like '%utah.edu' and ".
+		 "   u.usr_email not like '%rice.edu' and ".
+		 (defined($STARTTIME) ?
+		  "    h.created > '$STARTTIME' and " : "") .
+		 "     h.created < '$ENDTIME' and ".
+		 "   h.pid!='PMonitor' and ".
+		 "   h.pid!='emulab-ops' and ".
+		 "   h.pid!='testbed' ".
+		 "group by h.pid ".
+		 "order by ecount desc limit 20");
+
+print "Top 20 powder projects:\n";
+while (my ($pid,$ecount) = $query_result->fetchrow_array()) {
+    print "  $pid, $ecount\n";
 }
