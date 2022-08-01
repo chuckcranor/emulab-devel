@@ -1,0 +1,32 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBTableExists("other_paper_info")) {
+	DBQueryFatal("CREATE TABLE `other_paper_info` ( ".
+		     "  `idx` int(10) unsigned NOT NULL AUTO_INCREMENT, ".
+		     "  `created` datetime NOT NULL default ".
+		     "       '0000-00-00 00:00:00', ".
+		     "  `pubdate` date NOT NULL default '0000-00-00', ".
+		     "  `pubtype` varchar(64) NOT NULL default '', ".
+		     "  `pubname` text, ".
+		     "  `doi` varchar(128) default NULL, ".
+		     "  `url` text, ".
+		     "  `title` text, ".
+		     "  `authors` text, ".
+		     "  `cites` enum('emulab','cloudlab',".
+		     "               'phantomnet','powder') default NULL, ".
+		     "  `uses` enum('yes','no','unknown') default NULL, ".
+		     "  PRIMARY KEY  (`idx`) ".
+		     ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
