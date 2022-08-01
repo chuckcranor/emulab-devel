@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -142,6 +142,32 @@ while ($row = mysql_fetch_array($query_result)) {
             $unmatched["$abstract_id"] = $blob;
         }
     }
+}
+
+#
+# List of "other" papers that have not made it into scopus.
+#
+$query_result =
+    DBQueryFatal("select * from other_paper_info ".
+                 "where cites='$PORTAL_GENESIS' and uses='yes'");
+
+while ($row = mysql_fetch_array($query_result)) {
+    $idx = $row["idx"];
+    
+    $blob = array(
+        "latest_abstract_id"      => $idx,
+        "latest_abstract_pubdate" => $row["pubdate"],
+        "latest_abstract_pubtype" => $row["pubtype"],
+        "latest_abstract_doi"     => $row["doi"],
+        "latest_abstract_url"     => $row["url"],
+        "latest_abstract_pubname" => $row["pubname"],
+        "latest_abstract_title"   => $row["title"],
+        "latest_abstract_authors" => $row["authors"],
+        "citedby_count"           => 0,
+        "uses"                    => $row["uses"],
+        "authors"                 => null,
+    );
+    $papers["$idx"] = $blob;
 }
 
 echo "<script type='text/plain' id='papers-json'>\n";

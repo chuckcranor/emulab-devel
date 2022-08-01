@@ -6318,6 +6318,26 @@ CREATE TABLE `scopus_paper_info` (
   PRIMARY KEY  (`scopus_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+
+--
+-- Table structure for table `other_paper_info`
+--
+DROP TABLE IF EXISTS `other_paper_info`;
+CREATE TABLE `other_paper_info` (
+  `idx` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `created` datetime NOT NULL default '0000-00-00 00:00:00',
+  `pubdate` date NOT NULL default '0000-00-00',
+  `pubtype` varchar(64) NOT NULL default '',
+  `pubname` text,
+  `doi` varchar(128) default NULL,
+  `url` text,
+  `title` text,
+  `authors` text,
+  `cites` enum('emulab','cloudlab','phantomnet','powder') default NULL,
+  `uses` enum('yes','no','unknown') default NULL,
+  PRIMARY KEY  (`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 --
 -- Table structure for table `scopus_paper_authors`
 --
