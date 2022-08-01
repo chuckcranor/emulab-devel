@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2013 University of Utah and the Flux Group.
+ * Copyright (c) 2009-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -69,7 +69,7 @@ checksum_keyfile(char *imagename)
 int
 init_checksum(char *keyfile)
 {
-	char str[1024];
+	char str[1024+1];
 	FILE *file;
 	BIGNUM *n, *e, *dmp1, *dmq1, *iqmp;
 	n = e = dmp1 = dmq1 = iqmp = NULL;

@@ -156,8 +156,8 @@ struct blockreloc	*relocs;
 int			numregions, numrelocs;
 
 void	dumpskips(int verbose);
-static void	sortrange(struct range **head, int domerge,
-		  int (*rangecmp)(struct range *, struct range *));
+static void	sortrange(struct range **head,
+			  int (*rangecmp)(struct range *, struct range *));
 int	mergeskips(int verbose);
 int	mergeranges(struct range *head);
 void	checkvalidcount(void);
@@ -711,7 +711,17 @@ main(int argc, char *argv[])
 	 * The pubkey is written to <imagename>.skey.
 	 */
 	if (do_checksum) {
+#if OPENSSL_VERSION_NUMBER >= 0x0090800fL
+		RSA *rsa = RSA_new();
+		BIGNUM *e = BN_new();
+
+		BN_set_word(e, 17);
+		RSA_generate_key_ex(rsa, CSUM_MAX_LEN*8, e, NULL);
+		BN_free(e);
+		sig_key = rsa;
+#else
 		sig_key = RSA_generate_key(CSUM_MAX_LEN*8, 17, NULL, NULL);
+#endif
 		if (!info)
 			output_public_key(outfilename, sig_key);
 	}
@@ -831,7 +841,7 @@ main(int argc, char *argv[])
 			"*** No valid data on specified disk/partition!?\n");
 		exit(1);
 	}
-	sortrange(&fixups, 0, cmpfixups);
+	sortrange(&fixups, cmpfixups);
 	if (debug > 1)
 		dumpfixups(debug > 2, 0);
 	fflush(stderr);
@@ -1046,11 +1056,11 @@ read_image(int fd)
 	if (debug) {
 		int i;
 
-		fprintf(stderr, "Disk:            start %12d, size %12d\n",
+		fprintf(stderr, "Disk:            start %12u, size %12u\n",
 			0, dsize);
-		fprintf(stderr, "Usable:          start %12d, size %12d\n",
+		fprintf(stderr, "Usable:          start %12u, size %12u\n",
 			disk.lodata, disk.hidata - disk.lodata + 1);
-		fprintf(stderr, "Partition range: start %12d, size %12d\n",
+		fprintf(stderr, "Partition range: start %12u, size %12u\n",
 			disk.losect, disk.hisect - disk.losect + 1);
 		fprintf(stderr, "%s Partitions:\n", bbstr);
 		for (i = 0; i < MAXSLICES; i++) {
@@ -1066,7 +1076,7 @@ read_image(int fd)
 			else
 				fprintf(stderr, "%-12s", sinfo->desc);
 
-			fprintf(stderr, "  start %12d, size %12d",
+			fprintf(stderr, "  start %12u, size %12u",
 				parttab[i].offset, parttab[i].size);
 			if (parttab[i].flags) {
 				fprintf(stderr, " (");
@@ -1583,7 +1593,7 @@ mergeskips(int verbose)
 	memset(histo, 0, sizeof(histo));
 #endif
 
-	sortrange(&skips, 0, 0);
+	sortrange(&skips, 0);
 	freed += mergeranges(skips);
 
 	/*
@@ -1776,8 +1786,7 @@ bettersort(struct range *head, size_t count,
  * A very dumb bubblesort!
  */
 void
-sortrange(struct range **headp, int domerge,
-	  int (*rangecmp)(struct range *, struct range *))
+sortrange(struct range **headp, int (*rangecmp)(struct range *, struct range *))
 {
 	struct range	*prange, tmp, *head = *headp;
 	int		changed = 1;
@@ -1790,7 +1799,7 @@ sortrange(struct range **headp, int domerge,
 		size_t count = 0;
 		for (prange = head; prange; prange = prange->next)
 			count++;
-		fprintf(stderr, "sorting %u records\n", count);
+		fprintf(stderr, "sorting %lu records\n", (unsigned long)count);
 		if (count > 10000) {
 			head = bettersort(head, count, rangecmp);
 			if (head != NULL) {
@@ -1829,9 +1838,6 @@ sortrange(struct range **headp, int domerge,
 			prange  = prange->next;
 		}
 	}
-
-	if (domerge)
-		(void)mergeranges(head);
 
 	return;
 }
@@ -2036,7 +2042,7 @@ addfixupentry(off_t offset, off_t poffset, off_t size, void *data, off_t dsize,
 
 	/*
 	 * Malloc the range separate from the fixup data since
-	 * sortranges will swap contents of the former.
+	 * sortrange will swap contents of the former.
 	 */
 	if ((entry = malloc(sizeof(*entry))) == NULL ||
 	    (buf = malloc(sizeof(*buf) + (size_t)dsize)) == NULL) {
@@ -2184,7 +2190,7 @@ savefixups(void)
 	assert(numfixups == Onumfixups);
 
 	/* sort--addfixupentry adds to the end, so the list is reversed */
-	sortrange(&fixups, 0, cmpfixups);
+	sortrange(&fixups, cmpfixups);
 }
 
 void
