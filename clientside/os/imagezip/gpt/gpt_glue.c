@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -146,6 +146,7 @@ struct gptmap gptmap[] = {
 	{GPT_ENT_TYPE_FREEBSD_VINUM, "FreeBSD Vinum/RAID", IZTYPE_UNKNOWN, 0xA505},
 	{GPT_ENT_TYPE_FREEBSD_ZFS, "FreeBSD ZFS", IZTYPE_UNKNOWN, 0xA504},
 	{GPT_ENT_TYPE_PREP_BOOT, "PowerPC PReP boot", IZTYPE_UNKNOWN, 0x4100},
+	{GPT_ENT_TYPE_MS_RECOVERY, "Microsoft recovery", IZTYPE_NTFS, 0x0C01},
 	{GPT_ENT_TYPE_MS_RESERVED, "Microsoft reserved", IZTYPE_UNKNOWN, 0x0C01},
 	{GPT_ENT_TYPE_MS_BASIC_DATA, "Microsoft basic data", IZTYPE_NTFS, 0x0700},
 	{GPT_ENT_TYPE_MS_LDM_METADATA, "Windows LDM metadata", IZTYPE_UNKNOWN, 0x4201},
