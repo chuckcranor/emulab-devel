@@ -875,7 +875,7 @@ $(function ()
 	else if (button == "stop-linktest")
 	    button = "#linktest-stop-button";
 	else if (button == "connect-sharedlan")
-	    button = "#connect-sharedlan-confirm";
+	    button = "#connect-sharedlan-button";
 	else if (button == "modify")
 	    button = "#modify_experiment_button";
 	else
