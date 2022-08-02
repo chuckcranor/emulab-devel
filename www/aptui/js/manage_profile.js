@@ -29,7 +29,6 @@ $(function ()
     var repobusy     = false;
     var pollrepo     = true;
     var ajaxurl      = "";
-    var amlist       = null;
     var modified     = false;
     var editor       = null;
     var myCodeMirror = null;
@@ -82,7 +81,6 @@ $(function ()
 		return versions.length - profile.version;
 	    });
 	}
-	amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 
 	// Notice if we have an rspec in the formfields, to start from.
 	if (_.has(fields, "profile_rspec")) {

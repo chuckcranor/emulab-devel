@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -185,7 +185,6 @@ function SPITFORM($formfields, $errors)
     echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
     echo "<link rel='stylesheet' href='css/genilib-editor.css'>\n";
 
-    SpitAggregateStatus();
     echo "<script type='text/javascript'>\n";
     echo "    window.VIEWING  = $viewing;\n";
     echo "    window.VERSION_UUID = $version_uuid;\n";
