@@ -1141,7 +1141,7 @@ system("$CREATESLIVERS -L -f " .
 my $status = $? >> 8;
 
 # Special case for this one. Too much email.
-if ($status == 0 && $project->pid() eq "PMonitor") {
+if (($status == 0 && $project->pid() eq "PMonitor") || $status == 1) {
     # Need to do this before we close the log since it gets moved.
     AuditAbort();
 }

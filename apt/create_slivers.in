@@ -616,7 +616,6 @@ Genixmlrpc->SetTimeout(60);
 # Returns a flag to start the monitor.
 #
 my $failed = 0;
-my $hosed  = 0;
 if (@aggregate_list) {
     if (WaitForSlivers()) {
 	#
@@ -780,19 +779,19 @@ else {
 	$message .= "\n\n" . $instance->webURL() . "\n\n";
 	
 	$instance->Brand()->SendEmail($email, $subject, $message,
-				      $brand->OpsEmailAddress(), $headers);
+				      $brand->LogsEmailAddress(), $headers);
     }
 }
 
 # Need to do this before we close the log since it gets moved.
-AuditEnd($hosed);
+AuditEnd(0);
 
 if (defined($logfile)) {
     $logfile->Close();
     $logfile->Store();
     $logfile = undef;
 }
-exit($hosed);
+exit(0);
 
 #
 # Create a sliver at a single aggregate. This is called from parrun
