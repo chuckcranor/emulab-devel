@@ -26,7 +26,7 @@
 #
 # Testbed Power Control script
 #
-# power [on|off|cycle] <node> [<node>] ...
+# power [on|off|cycle|status] <node> [<node>] ...
 #
 ############################################################
 
@@ -60,6 +60,7 @@ use power_powduino;
 use power_5gstore;
 use power_enlogic;
 use power_remotecmd;
+use power_esi;
 use libtestbed;
 use User;
 use Node;
@@ -73,7 +74,7 @@ use Sys::Syslog;
 
 sub usage() {
     print << "END";
-Usage: $0 [-v n] [-e] [-a] <on|off|cycle> <node ...>
+Usage: $0 [-v n] [-e] [-a] <on|off|cycle|status> <node ...>
 -e     Surpress sending of event - for use by scripts that have already sent it
 -v n   Run with verbosity level n
 -a     Skip the access check, caller is knows what it is doing
@@ -417,6 +418,7 @@ foreach my $power_id (keys %outlets) {
 
     if ($power_id eq "mail" || $power_id =~ /^whol-/ 
 	|| $power_id eq 'ipmi15' || $power_id eq 'ipmi20'
+	|| $power_id eq 'esi'
 	|| $power_id eq 'drac' || $power_id eq 'ue'
 	|| $power_id eq 'ilo' || $power_id eq 'ilo2' || $power_id eq 'ilo3'
 	|| $power_id eq 'remotecmd') {
@@ -660,6 +662,21 @@ foreach my $power_id (keys %outlets) {
 	    print "Control of $nodestr failed.\n"; $exitval++;
 	    $errors++;
 	}
+	} elsif ($type eq "esi") {
+
+       my $device = new power_esi($type,@nodes,$verbose);
+
+       if (!defined $device) {
+	   	warn "Unable to contact controller for $nodestr. Skipping...\n";
+	   	next;
+       }
+       else {
+	   	print "Calling device->power($op,@outlets)\n" if $verbose > 1;
+	   	if ($device->power($op,@nodes)) {
+	       print "Control of $nodestr failed.\n";
+	       $errors++;
+	   	}
+       }
     } else {
 	print "power: Unknown power type '$type'\n";
 	$errors++;
@@ -815,7 +832,7 @@ sub dostatus(@) {
 		($ctrl, $outlet) = $result->fetchrow();
 
 		# XXX hack for IPMI/iLo nodes
-		if ($ctrl =~ /^(ipmi15|ipmi20|ilo|ilo2|ilo3|drac)$/) {
+		if ($ctrl =~ /^(ipmi15|ipmi20|ilo|ilo2|ilo3|drac|esi)$/) {
 		    push(@{$pernode{$ctrl}}, $node);
 		    next;
 		}
@@ -1073,25 +1090,54 @@ sub dostatus(@) {
     }
 
     #
-    # Now handle all IPMI/iLo nodes
+    # Now handle all IPMI/iLo/ESI nodes
     #
     foreach my $ctrl (keys %pernode) {
 	my @cnodes = @{$pernode{$ctrl}};
 
 	my %status = ();
-	$errors += ilostatus($ctrl, \%status, @cnodes);
-	foreach my $node (@cnodes) {
-	    my $state;
-	    if (!exists($status{$node})) {
-		$state = "<unknown>";
-	    } elsif ($status{$node} == 1) {
-		$state = "on";
-	    } elsif ($status{$node} == 0) {
-		$state = "off";
+	
+	if ($ctrl eq 'esi') {		
+	    my $esidevice = new power_esi("esi", @cnodes, $verbose);
+	    if (!defined $esidevice) {
+		    warn "Unable to contact controller $ctrl.\n";
+		    $errors++;
+		    next;
 	    } else {
-		$state = "<unknown>";
+		print "Calling ESI esidevice->status()\n"
+		    if $verbose > 1;
+		$errors += $esidevice->status(\%status, @cnodes);
+		for my $outlet (@cnodes) {
+		    my $oname = "outlet$outlet";
+		    print "Retrieving status for $oname\n" if ($verbose);	
+		    my $state;
+		    if (!exists($status{$oname})) {
+			$state = "<no status>";
+		    } elsif ($status{$oname} == 1) {
+			$state = "on";
+		    } elsif ($status{$oname} == 0) {
+			$state = "off";
+		    } else {
+			$state = "<unknown>";
+		    }
+		    print "$outlet: $state\n";
+		}
 	    }
-	    print "$node: $state\n";
+	} else { ## IPMI/iLo
+	    $errors += ilostatus($ctrl, \%status, @cnodes);
+	    foreach my $node (@cnodes) {
+		my $state;
+		if (!exists($status{$node})) {
+		    $state = "<unknown>";
+		} elsif ($status{$node} == 1) {
+		    $state = "on";
+		} elsif ($status{$node} == 0) {
+		    $state = "off";
+		} else {
+		    $state = "<unknown>";
+		}
+		print "$node: $state\n";
+	    }
 	}
     }
 
