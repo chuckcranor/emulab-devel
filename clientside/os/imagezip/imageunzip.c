@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -133,7 +133,7 @@ static int	 readretries = 0;
 static int	 nodecompress = 0;
 static char	 chunkbuf[CHUNKSIZE];
 #endif
-int		 getslicebounds(int slice);
+static int	 getslicebounds(int slice);
 void		 setslicetype(int slice, int dostype);
 static int	 write_subblock(int, const char *, int);
 static int	 inflate_subblock(const char *);
@@ -1977,32 +1977,46 @@ zero_remainder()
 static long long outputmaxsize = 0;
 static int ismbr;
 
-int
+static int
+getdiskinfo(int fd, int dowarn, struct iz_disk *disk)
+{
+	int gotbb = 0;
+
+#ifdef WITH_GPT
+	if (!gotbb && parse_gpt(fd, disk, dowarn) == 0) {
+		gotbb = 1;
+		ismbr = 0;
+	}
+#endif
+#ifdef WITH_MBR
+	if (!gotbb && parse_mbr(fd, disk, dowarn) == 0) {
+		gotbb = 1;
+		ismbr = 1;
+	}
+#endif
+	if (!gotbb) {
+		if (dowarn)
+			fprintf(stderr, "Could not find valid partition table\n");
+		return 1;
+	}
+
+	return 0;
+}
+
+
+static int
 getslicebounds(int slice)
 {
 	struct iz_disk disk;
 	struct iz_slice *parttab;
 	int dowarn = debug ? 2 : 0;
-	int gotbb = 0;
 
 	if (slice < 1 || slice > MAXSLICES) {
 		fprintf(stderr, "Slice must be between 1-%d\n", MAXSLICES);
 		return 1;
 	}
 
-#ifdef WITH_GPT
-	if (!gotbb && parse_gpt(outfd, &disk, dowarn) == 0) {
-		gotbb = 1;
-		ismbr = 0;
-	}
-#endif
-#ifdef WITH_MBR
-	if (!gotbb && parse_mbr(outfd, &disk, dowarn) == 0) {
-		gotbb = 1;
-		ismbr = 1;
-	}
-#endif
-	if (!gotbb) {
+	if (getdiskinfo(outfd, dowarn, &disk)) {
 		fprintf(stderr, "Could not find valid partition table\n");
 		return 1;
 	}
@@ -2156,6 +2170,12 @@ applyrelocs(off_t offset, size_t size, void *buf)
 				 */
 				if (!directio)
 					nsize -= (SECSIZE - reloc->size);
+				break;
+			/*
+			 * Not yet implemented.
+			 * See the comment in imagezip.c.
+			 */
+			case RELOC_GPTFIX:
 				break;
 			default:
 				fprintf(stderr,

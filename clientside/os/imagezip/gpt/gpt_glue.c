@@ -347,6 +347,8 @@ parse_gpt(int fd, struct iz_disk *disk, int dowarn)
 		disk->hidata = (iz_lba)hdr->hdr_lba_end;
 		disk->losect = (iz_lba)losect;
 		disk->hisect = (iz_lba)hisect - 1;
+		/* XXX always return the primary copy */
+		disk->metasect = (iz_lba)prilba;
 	}
 
 	return 0;

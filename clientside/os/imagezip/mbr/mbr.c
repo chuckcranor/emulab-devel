@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -76,6 +76,7 @@ parse_mbr(int fd, struct iz_disk *disk, int dowarn)
 	disk->hidata = disk->dsize - 1;
 	disk->losect = (iz_lba)losect;
 	disk->hisect = (iz_lba)hisect - 1;
+	disk->metasect = (iz_lba)DOSBBSECTOR;
 
 	return 0;
 }
@@ -217,7 +218,7 @@ read_mbr(int fd, uint32_t bbstart, uint32_t pstart, uint32_t extstart,
 			break;
 		}
 
-		if (start < losect)
+		if ((start != 0 || size != 0) && start < losect)
 			losect = start;
 		if (start + size > hisect)
 			hisect = start + size;

@@ -90,6 +90,7 @@ int	dots	  = 0;
 int	info	  = 0;
 int	version	  = 0;
 int	slicemode = 0;
+int	bootpartmode = 0;
 int	maxmode	  = 0;
 int	slice	  = 0;
 int	level	  = 4;
@@ -415,7 +416,7 @@ main(int argc, char *argv[])
 	memset(imageid, '\0', UUID_LENGTH);
 
 	gettimeofday(&sstamp, 0);
-	while ((ch = getopt(argc, argv, "vlbnNdihrs:c:z:ofI:13F:DR:S:XxH:U:P:Me:k:u:a:ZLA:")) != -1)
+	while ((ch = getopt(argc, argv, "vlbnNdihrs:c:z:ofI:13F:DR:S:XxH:U:P:Me:k:u:a:ZLA:B:")) != -1)
 		switch(ch) {
 		case 'v':
 			version++;
@@ -597,6 +598,10 @@ main(int argc, char *argv[])
 			maxallocsec = bytestosec((off_t)maxallocsec *
 						 (1024 * 1024));
 			break;
+		case 'B':
+			bootpartmode = 1;
+			slice = atoi(optarg);
+			break;
 		case 'h':
 		case '?':
 		default:
@@ -661,9 +666,19 @@ main(int argc, char *argv[])
 			"or extended DOS partition (5-%d)\n\n", MAXSLICES);
 		usage();
 	}
+	if (bootpartmode && (slice < 1 || slice > MAXSLICES)) {
+		fprintf(stderr, "Boot partition must be between 1 and %d\n\n",
+			MAXSLICES);
+		usage();
+	}
 	if (maxmode && slicemode) {
 		fprintf(stderr, "Count option (-c) cannot be used with "
 			"the slice (-s) option\n\n");
+		usage();
+	}
+	if (bootpartmode && (slicemode || slicetype || rawmode)) {
+		fprintf(stderr, "Bootpartition option (-B) cannot be used with "
+			"slice (-s), type (-S), or raw (-r) options\n\n");
 		usage();
 	}
 	if (!info && argc != 2) {
@@ -1062,7 +1077,8 @@ read_image(int fd)
 			disk.lodata, disk.hidata - disk.lodata + 1);
 		fprintf(stderr, "Partition range: start %12u, size %12u\n",
 			disk.losect, disk.hisect - disk.losect + 1);
-		fprintf(stderr, "%s Partitions:\n", bbstr);
+		fprintf(stderr, "%s Partitions (%s at lba %u):\n",
+			bbstr, bbstr, disk.metasect);
 		for (i = 0; i < MAXSLICES; i++) {
 			struct sliceinfo *sinfo;
 
@@ -1129,6 +1145,134 @@ read_image(int fd)
 	if (rval)
 		return 1;
 
+	/*
+	 * For the special boot partition mode, we only interested in the
+	 * MBR/GPT, any EFI partition, and the specified root partition.
+	 * Anything beyond the end of the highest of those partitions is
+	 * not even recorded as free in the image. Any space inbetween
+	 * an EFI and root partition is ignored. Any space below the lowest
+	 * partition is included as it might be MBR magic.
+	 */
+	if (bootpartmode) {
+		iz_lba efistart, rpstart, gapstart;
+		iz_size efisize, rpsize, gapsize;
+		int efipartno, rppartno;
+
+		efipartno = rppartno = 0;
+		for (i = 0; i < MAXSLICES; i++) {
+			if (i+1 == slice) {
+				if (parttab[i].type == IZTYPE_INVALID) {
+					warnx("P%d: partition type is not valid!", i+1);
+					exit(1);
+				}
+				if (parttab[i].type == IZTYPE_EFISYSTEM) {
+					warnx("P%d: partition is EFI partition, need the root partition", i+1);
+					exit(1);
+				}
+				if ((rpsize = parttab[i].size) == 0) {
+					warnx("P%d: partition is zero length!", i+1);
+					exit(1);
+				}
+				rpstart = parttab[i].offset;
+				rppartno = i+1;
+				continue;
+			}
+			if (parttab[i].type == IZTYPE_EFISYSTEM) {
+				if ((efisize = parttab[i].size) == 0) {
+					warnx("P%d: EFI partition is zero length!", i+1);
+					exit(1);
+				}
+				efistart = parttab[i].offset;
+				efipartno = i+1;
+				continue;
+			}
+
+			/*
+			 * Mark all other partitions as invalid since we
+			 * don't care about them.
+			 */
+			parttab[i].type = IZTYPE_INVALID;
+		}
+		if (debug && efipartno != 0)
+			fprintf(stderr, "Bootpart: EFI in P%d [%u-%u]\n",
+				efipartno, efistart, efistart+efisize-1);
+		if (debug && rppartno != 0)
+			fprintf(stderr, "Bootpart: Root in P%d [%u-%u]\n",
+				rppartno, rpstart, rpstart+efisize-1);
+		if (rppartno == 0) {
+			warnx("Bootpart: Root partition not found!");
+			exit(1);
+		}
+		if (efipartno != 0) {
+			if (efistart <= rpstart) {
+				gapstart = efistart + efisize;
+				gapsize = rpstart - gapstart;
+				inputmaxsec = rpstart + rpsize;
+			} else {
+				gapstart = rpstart + rpsize;
+				gapsize = efistart - gapstart;
+				inputmaxsec = efistart + efisize;
+			}
+			if (debug)
+				fprintf(stderr, "Bootpart: gap at [%u-%u]\n",
+					gapstart, gapstart+gapsize-1);
+			if (gapsize > 0) {
+				addskip(gapstart, gapsize);
+				if (dowarn > 1)
+					warnx("%s: skipping %u sectors at %u",
+					      bbstr, gapsize, gapstart);
+			}
+		} else {
+			inputmaxsec = rpstart + rpsize;
+		}
+
+		if (gotbb == 1) {
+#if 0
+			/*
+			 * XXX needs more thought.
+			 *
+			 * This would work for the primary copy of the GPT,
+			 * but how do we get the backup copy onto disk in unzip?
+			 * We cannot do anything here because we have no idea
+			 * how big the target disk will be. We cannot do it
+			 * easily in unzip when processing the relocation for
+			 * the primary copy, because just writing the last
+			 * sector of the disk at that point in time would not
+			 * work with non-seekable output devices (which we
+			 * probably don't care much about anymore) and would
+			 * require us to schedule the write rather than just
+			 * doing it right then so we do not interfere with the
+			 * separate writer thread.
+			 *
+			 * So we are going to punt and print a big ol' warning
+			 * in imageunzip that "The backup copy is invalid and
+			 * you had better fix it!"
+			 */
+
+			/*
+			 * If this is GPT, arrange for imageunzip to drop the
+			 * alternate copy at the end of the disk.
+			 * XXX another mild abuse of the relocation mechanism...
+			 */
+			addreloc(sectobytes(disk.metasect), sectobytes(1),
+				 RELOC_GPTFIX);
+#else
+			warnx(
+			      "WARNING: image is GPT-based and loading it onto a target disk of a\n"
+			      "          different size will result in a corrupt GPT that must be repaired.\n");
+#endif
+		}
+
+
+		/*
+		 * Make sure we use inputmaxsec as the max sector to look at.
+		 */
+		maxmode = 1;
+		if (debug)
+			fprintf(stderr, "Bootpart: only saving to %lu\n",
+				inputmaxsec);
+	}
+	
 	/*
 	 * If not in slice mode, skip sectors outside of any partition.
 	 *
@@ -1327,6 +1471,10 @@ char *usagestr =
  "\n"
  " Advanced options\n"
  " -z level       Set the compression level.  Range 0-9 (0==none, default==4).\n"
+ " -B slice       Specify a slice to capture as the boot (root filesystem).\n"
+ "                This is used to create a full image containing just the\n"
+ "                the MBR/GPT, any EFI partition, and the indicated partition.\n"
+ "                All other partitions are skipped.\n"
  " -I slice       Ignore (skip) the indicated slice (not with slice mode).\n"
  " -R slice       Force raw compression of the indicated slice (not with slice mode).\n"
  " -D             Do `dangerous' writes (don't check for async errors).\n"

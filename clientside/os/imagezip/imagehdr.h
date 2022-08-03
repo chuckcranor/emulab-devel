@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -205,6 +205,7 @@ struct blockreloc {
 #define RELOC_LILOMAPSECT	4	/* LILO map sector */
 #define RELOC_LILOCKSUM		5	/* LILO descriptor block cksum */
 #define RELOC_SHORTSECTOR	6	/* indicated sector < sectsize */
+#define RELOC_GPTFIX		7	/* update GPT metadata */
 
 /* XXX potential future alternatives to hard-wiring BSD disklabel knowledge */
 #define RELOC_ADDPARTOFFSET	100	/* add partition offset to location */
