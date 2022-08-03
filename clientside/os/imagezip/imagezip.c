@@ -1198,7 +1198,7 @@ read_image(int fd)
 				efipartno, efistart, efistart+efisize-1);
 		if (debug && rppartno != 0)
 			fprintf(stderr, "Bootpart: Root in P%d [%u-%u]\n",
-				rppartno, rpstart, rpstart+efisize-1);
+				rppartno, rpstart, rpstart+rpsize-1);
 		if (rppartno == 0) {
 			warnx("Bootpart: Root partition not found!");
 			exit(1);
