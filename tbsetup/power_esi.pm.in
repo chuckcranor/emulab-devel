@@ -1,0 +1,273 @@
+#!/usr/bin/perl -w
+
+#
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2022 Univeristy of Massachusetts Amherst
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+#
+# module for interfacing with OpenStack ESI extensions
+# needs a working "/usr/local/bin/openstack" binary installed
+# (try pip install python-esiclient and pip install python-esileapclient)
+#
+# supports power(on|off|cyc[le]), status
+#
+
+package power_esi;
+
+$| = 1; 
+
+use strict;
+use warnings;
+use JSON;
+use lib "@prefix@/lib";
+use libdb;
+use emutil;
+
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin'; # Required when using system() or backticks `` in combination with the perl -T taint checks
+
+my $ESICLI = "/usr/local/bin/openstack";
+my $KTYPE    = "esi";
+
+sub new {
+    # The next two lines are some voodoo taken from perltoot(1)
+    my $proto = shift;
+    my $class = ref($proto) || $proto;
+
+    my $devicetype = shift;
+    my $devicename = shift;
+    my $debug = shift;
+
+    if (!defined($debug)) {
+        $debug = 0;
+    }
+
+    if ($debug) {
+        print "power_esi module initializing... debug level $debug\n";
+    }
+
+    my $self = {};
+
+    $self->{DEBUG} = $debug;
+
+    $self->{DEVICETYPE} = $devicetype;
+    $self->{DEVICENAME} = $devicename;
+    $self->{ESINAME}   = "-";              # Resource name in ESI
+    $self->{PASSWORD}   = "ADMIN";        # default password
+
+    # Fetch authentication credentials from the DB.
+    my $res = DBQueryFatal("select key_role,key_uid,mykey" . 
+			   " from outlets_remoteauth" . 
+			   " where node_id='$devicename'".
+                           " and key_type='$KTYPE'");
+    if (!defined($res) || !$res || $res->num_rows() == 0) {
+	warn "No remote auth info for $devicename. Aborting!\n";
+        return undef;
+    } else {
+	while (my $row = $res->fetchrow_hashref()) {
+	    my $role = $row->{'key_role'};
+	    if ($role eq "esi-passwd") {
+		$self->{ESINAME} = $row->{'key_uid'};
+		$self->{PASSWORD} = $row->{'mykey'};
+	    }
+	    else {
+		warn "ERROR: No ESI credentials found for $devicename\n";
+		return undef;
+	    }
+	}
+    }
+
+    $self->{ESICMD} = "$self->{ESINAME} $self->{PASSWORD}";
+    bless($self,$class);
+
+    if ($debug > 1) {
+	my %status = ();
+	my @outlets = $devicename;
+	printf("DEBUG: Checking ESI command for ${devicename}\n");
+
+	if ($self->status(\%status, @outlets)) {
+	    print "Could not get status for $devicename.\n";
+	}
+	else {
+            for my $outlet (@outlets) {
+                my $oname = "outlet$outlet";
+		print "Retrieving status for $oname\n";	
+                my $state;
+                if (!exists($status{$oname})) {
+                    $state = "<no status>";
+                } elsif ($status{$oname} == 1) {
+                    $state = "on";
+                } elsif ($status{$oname} == 0) {
+                    $state = "off";
+                } else {
+                    $state = "<unknown>";
+                }
+                print "Node $outlet: $state\n";
+            }
+	}
+
+    }
+
+    return $self;
+}
+
+
+sub status {
+    my $self = shift;
+    my $statusp = shift;
+    my @outlets = @_;
+    my %status;
+
+    my $errors = 0;
+    my ($retval, $output);
+
+    my %lstatus = ();
+
+    $retval = $self->_execesicmd("show", \@outlets, \%lstatus, 0);
+    if ( $retval != 0 ) {
+        $errors++;
+        print STDERR $self->{DEVICENAME}, ": could not get power status from device\n";
+    }
+    else {
+	foreach my $outlet (@outlets) {
+	    my $oname = "outlet" . $outlet;
+	    
+	    $output = "UNKNOWN";
+	    if (exists($lstatus{$oname})) {
+		$output = $lstatus{$oname};
+	    }
+	    print("CLI status for $oname: $output\n") if $self->{DEBUG};
+	    $status{'cli'} = $output;
+	}
+    }
+
+    if ($statusp) { %$statusp = %lstatus; } # update passed-by-reference array
+    return $errors;
+}
+
+
+sub power {
+    my $self = shift;
+    my $op = shift;
+    my @outlets = @_;
+    my %status = ();
+
+    my $errors = 0;
+    my $cycle = 0;
+
+    if ($op eq "cycle") {
+	$cycle = 1;
+    }
+    
+    if    ($op eq "on")  { $op = "power on";    }
+    else { $op = "power off";   }
+
+    $errors = $self->_execesicmd($op, \@outlets, \%status);
+    if ($errors) {
+        print STDERR $self->{DEVICENAME}, ": command '$op' failed for some/all outlets: @outlets\n";
+    }
+
+    if ($cycle){
+	$op = "power on"; 
+	$errors += $self->_execesicmd($op, \@outlets, \%status);
+	if ($errors) {
+	    print STDERR $self->{DEVICENAME}, ": command '$op' failed for some/all outlets: @outlets\n";
+	}
+    }
+    
+    return $errors;
+}
+
+
+#
+# The returned status is expected to be:
+#
+#    $status{'outletN'} = <status string from command> (e.g., "on", "off")
+#
+# where N is the outlet number.
+#
+sub _execesicmd($$$$$) {
+    my ($self, $op, $outletsp, $statusp) = @_;
+    my $exitval = 0;
+    my @results = ();
+
+    if (!defined($outletsp)) {
+	return 0;
+    }
+    
+    my $isstatus = ($op eq "show") ? 1 : 0;
+    
+    my $coderef = sub {
+	my $outlet = shift;
+	my $output = "";
+	my $cmd;
+	
+	$cmd = "${ESICLI} baremetal node ${op} $self->{ESICMD}";
+
+	if ($isstatus) { # Only extract the power_state value
+	    $cmd = $cmd . " -c power_state";
+	}
+	
+      again:
+	print STDERR "**** Executing $cmd\n"
+	    if ($self->{DEBUG});
+	$output = `$cmd 2>&1`;
+	chomp ( $output );
+
+	print STDERR "ESI CLI output:\n$output\n"
+	    if ($self->{DEBUG});
+
+	# for a status command we have to interpret the output
+	if ($isstatus) {
+	    if ($output =~ /power (off|on)/i) {
+		return ($1 eq "off") ? 0 : 1;
+	    }
+	    print STDERR "*** power_esi: unexpected power status:\n$output\n";
+	    return -1;
+	}
+
+	return 0;
+    };
+
+    my @outlets = @$outletsp;
+    if (ParRun(undef, \@results, $coderef, @outlets)) {
+	print STDERR "*** power_esi: Internal error in ParRun()!\n";
+	return -1;
+    }
+    #
+    # Check the exit codes. 
+    #
+    for (my $ix = 0; $ix < @outlets; $ix++) {
+	my $outlet = "outlet" . $outlets[$ix];
+	my $rv = ($results[$ix] >> 8);
+	$statusp->{$outlet} = $rv;
+	if ($isstatus) {
+	    ++$exitval
+		if ($rv < 0);
+	} else {
+	    ++$exitval
+		if ($rv != 0);
+	}
+    }
+
+    return $exitval;
+}
