@@ -245,8 +245,7 @@ function Do_ExperimentErrors()
             # If there is a log file, show that instead.
             #
             if ($logfileid) {
-                $url = $TBBASE . "/" .
-                    CreateURL("spewlogfile", "logfile", $logfileid);
+                $url = "spewlogfile.php?logfile=${logfileid}";
             }
         }
         elseif (preg_match("/^(https:.*)\/showslicepub/", $url, $matches)) {
