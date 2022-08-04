@@ -1496,6 +1496,10 @@ $(function ()
 	var template = ePanel.find(".error-template");
 
 	$.each(statusblob , function(urn, sblob) {
+	    if (!_.has(amlist, urn)) {
+		console.info("UpdateErrorPanel: Not in the amlist: " + urn);
+		return;
+	    }
 	    var cluster = amlist[urn].nickname;
 	    var gid = '[data-urn="' + urn + '"]';
 	    var current = ePanel.find(".panel-group " + gid);
@@ -3239,7 +3243,7 @@ $(function ()
 	}
 	
 	_.each(manifests, function (manifest, urn) {
-	    var nickname = amlist[urn].name;
+	    var nickname = amlist[urn].nickname;
 
 	    if (_.has(sitetags, nickname)) {
 		var sitetag  = sitetags[nickname];
