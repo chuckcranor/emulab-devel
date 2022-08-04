@@ -1,3 +1,0 @@
-%%SITE_PERL%%/IO/EventMux.pm
-%%SITE_PERL%%/IO/EventMux/Dump.pm
-@dirrm %%SITE_PERL%%/IO/EventMux
