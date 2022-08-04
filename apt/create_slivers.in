@@ -716,7 +716,7 @@ else {
 	# New deferred list
 	@deferred_list = $instance->DeferredAggregateList();
 	
-	if ($instance->start_at() && $curStatus eq "created") {
+	if ($instance->start_at() && $curStatus eq "scheduled") {
 	    #
 	    # Send this email when we first start a scheduled experiment,
 	    # not when we are adding deferred aggregates later.
@@ -1503,7 +1503,7 @@ sub WaitForSlivers()
 		    next;
 		}
 	    }
-#	    $webtask->output($output);
+	    $webtask->output($output);
 	    $webtask->Exited($exitcode);
 	    # Never fail in update mode.
 	    $failed++ if (!$update);
