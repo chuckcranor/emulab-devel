@@ -1435,6 +1435,7 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                       "typeinfo" => $aggregate->typeinfo,
                       "reservable_nodes" => $aggregate->ReservableNodes(),
                       "abbreviation"     => $aggregate->abbreviation(),
+                      "weburl"           => $aggregate->weburl(),
                 );
         }
         else {
@@ -1471,6 +1472,7 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                                   "typeinfo" => $aggregate->typeinfo,
                                   "isfederate"   => $aggregate->isfederate(),
                                   "abbreviation" => $aggregate->abbreviation(),
+                                  "weburl"       => $aggregate->weburl(),
             );
         }
         else {
