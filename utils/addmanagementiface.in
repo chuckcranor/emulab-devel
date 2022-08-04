@@ -38,10 +38,10 @@ sub usage()
 {
     print STDERR "Usage: addmanagementiface -t <type> -a [key|pswd] ";
     print STDERR "[-s <switchinfo>] <node_id> mac IP key_uid key\n";
-    print STDERR "       management_iface -r <node_id>\n";
-    print STDERR "       management_iface -i <node_id>\n";
+    print STDERR "       addmanagementiface -r <node_id>\n";
+    print STDERR "       addmanagementiface -i <node_id>\n";
     print STDERR "  -h       This message\n";
-    print STDERR "  -t type  Management type; ilo, ilo2, ilo3, drac, ipmi15, ipmi20\n";
+    print STDERR "  -t type  Management type; ilo, ilo2, ilo3, drac, ipmi15, ipmi20, esi\n";
     print STDERR "  -s info  Optional switch info; switch,card,port\n";
     print STDERR "  -s -     Search output of switchmac to find switch info\n";
     print STDERR "  -a pswd  Password auth; provide login and password.\n";
@@ -142,8 +142,8 @@ if (defined($options{'T'})) {
 if (defined($options{'t'})) {
     $type = $options{'t'};
     usage()
-	if ($type !~ /^(ilo|ilo2|ilo3|drac|ipmi15|ipmi20)$/);
-}
+	if ($type !~ /^(ilo|ilo2|ilo3|drac|ipmi15|ipmi20|esi)$/);
+}}
 if (defined($options{'a'})) {
     $authtype = $options{'a'};
     usage()
@@ -253,7 +253,7 @@ if (defined($switchinfo)) {
 }
 
 my $isipmi = ($type =~ /^ipmi/ ? 1 : 0);
-
+my $isesi = ($type eq 'esi' ? 1 : 0);
 #
 # Add the outlet and authinfo.
 #
@@ -261,7 +261,7 @@ $node->AddOutlet($type, 0,
 		 {"key_type"  => $type,
 		  "key_role"  => ($authtype eq "key" ?
 				  ($isipmi ? "ipmi-kgkey" : "ssh-key") :
-				  ($isipmi ? "ipmi-passwd" : "ssh-passwd")),
+				  ($isipmi ? "ipmi-passwd" : ($isesi ? "esi-passwd" : "ssh-passwd"))),
 		  "key_uid"   => $ARGV[0],
 		  "key"       => $ARGV[1]}) == 0
     or fatal("Could not add outlet records");
