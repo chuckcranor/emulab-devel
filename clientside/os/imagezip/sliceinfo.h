@@ -124,14 +124,17 @@ extern partmap_t ignore, forceraw;
 
 extern struct sliceinfo *getslicemap(iz_type stype);
 extern void printslicemap(void);
+extern void dumpdiskinfo(struct iz_disk *disk);
 
 #ifdef WITH_MBR
 extern int parse_mbr(int fd, struct iz_disk *disk, int dowarn);
 extern int set_mbr_type(int fd, int slice, iz_type type);
+void mbr_fixup(void *start, size_t size, struct iz_disk *dinfo, int debug);
 #endif
 #ifdef WITH_GPT
 extern int parse_gpt(int fd, struct iz_disk *disk, int dowarn);
 extern int set_gpt_type(int fd, int slice, iz_type type);
+void gpt_fixup(void *start, size_t size, struct iz_disk *dinfo, int debug);
 #endif
 
 #endif /* _SLICEINFO_H_ */

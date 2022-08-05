@@ -474,3 +474,74 @@ gpt_utf8_to_utf16(const uint8_t *s8, uint16_t *s16, size_t s16len)
 	if (utfbytes != 0 && s16idx < s16len)
 		s16[s16idx++] = htole16(0xfffd);
 }
+
+/*
+ * Do (limited) fixes to the GPT info in the buffer [start - start+size]
+ * based on the info in dinfo.
+ *
+ * Currently we only delete partitions. We don't mess with attributes
+ * or anything else.
+ */
+void gpt_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug)
+{
+	struct gpt_hdr *hdr = (struct gpt_hdr *)start;
+	struct iz_slice *nparttab;
+	struct gpt_ent *ent;
+	off_t entoff;
+	int i;
+
+	if (gptcheckhdr(hdr, dinfo->metasect, "primary", 0)) {
+		fprintf(stderr, "WARNING: gpt_fixup: GPT header check failed.\n");
+		return;
+	}
+
+	if (hdr->hdr_entries == 0) {
+		fprintf(stderr, "WARNING: gpt_fixup: GPT no partitions!\n");
+		return;
+	}
+
+	entoff = sectobytes(hdr->hdr_lba_table - hdr->hdr_lba_self);
+	if (entoff + hdr->hdr_entries * sizeof(struct gpt_ent) > size) {
+		fprintf(stderr, "WARNING: gpt_fixup: too many entries!\n");
+	}
+
+	ent = (struct gpt_ent *)(start + entoff);
+	nparttab = dinfo->slices;
+	for (i = 0; i < hdr->hdr_entries; i++) {
+		struct gptmap *gmap = getgpttypebyuuid(&ent[i].ent_type);
+		uint64_t start = ent[i].ent_lba_start;
+		uint64_t size = ent[i].ent_lba_end - ent[i].ent_lba_start + 1;
+		iz_type type = IZTYPE_UNKNOWN;
+
+		if (gmap) {
+			type = gmap->iztype;
+			/* consider a zero-length unused partition as invalid */
+			if (type == IZTYPE_UNUSED && start == 0 && size == 1) {
+				type = IZTYPE_INVALID;
+			}
+		}
+
+		/* We only care if we have changed the type of the partition */
+		if (nparttab[i].type == type)
+			continue;
+
+		/* and only that we deleted it */
+		if (nparttab[i].type != IZTYPE_INVALID) {
+			fprintf(stderr,
+				"gpt_fixup: P%d changed from %x to %x!?\n",
+				i+1, type, nparttab[i].type);
+			continue;
+		}
+
+		if (debug)
+			fprintf(stderr,
+				"gpt_fixup: marking P%d (%s) as unused\n",
+				i+1, gmap ? gmap->desc : "???");
+
+		/* make it unused */
+		memset(&ent[i], 0, sizeof(struct gpt_ent));
+	}
+
+	/* recompute table and header CRC */
+	gptcomputecrc(hdr, ent);
+}

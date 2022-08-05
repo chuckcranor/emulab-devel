@@ -59,6 +59,14 @@ static int curent, bootonce;
  */
 static char *secbuf;
 
+void
+gptcomputecrc(struct gpt_hdr *hdr, struct gpt_ent *table)
+{
+	hdr->hdr_crc_table = crc32(table, hdr->hdr_entries * hdr->hdr_entsz);
+	hdr->hdr_crc_self = 0;
+	hdr->hdr_crc_self = crc32(hdr, hdr->hdr_size);
+}
+
 #ifndef IMAGEZIP
 static
 #endif
@@ -87,9 +95,7 @@ gptupdate(const char *which, struct dsk *dskp, struct gpt_hdr *hdr,
 		    BOOTPROG, which);
 		return;
 	}
-	hdr->hdr_crc_table = crc32(table, hdr->hdr_entries * hdr->hdr_entsz);
-	hdr->hdr_crc_self = 0;
-	hdr->hdr_crc_self = crc32(hdr, hdr->hdr_size);
+	gptcomputecrc(hdr, table);
 	bzero(secbuf, DEV_BSIZE);
 	bcopy(hdr, secbuf, hdr->hdr_size);
 	if (drvwrite(dskp, secbuf, hdr->hdr_lba_self, 1)) {
@@ -192,33 +198,42 @@ found:
 }
 #endif
 
-static int
-gptread_hdr(const char *which, struct dsk *dskp, struct gpt_hdr *hdr,
-    uint64_t hdrlba)
+int
+gptcheckhdr(struct gpt_hdr *hdr, uint64_t hdrlba, const char *which, int verbose)
 {
 	uint32_t crc;
 
-	if (drvread(dskp, secbuf, hdrlba, 1)) {
-		printf("%s: unable to read %s GPT header\n", BOOTPROG, which);
-		return (-1);
-	}
-	bcopy(secbuf, hdr, sizeof(*hdr));
 	if (bcmp(hdr->hdr_sig, GPT_HDR_SIG, sizeof(hdr->hdr_sig)) != 0 ||
 	    hdr->hdr_lba_self != hdrlba || hdr->hdr_revision < 0x00010000 ||
 	    hdr->hdr_entsz < sizeof(struct gpt_ent) ||
 	    hdr->hdr_entries > MAXTBLENTS || DEV_BSIZE % hdr->hdr_entsz != 0) {
-		printf("%s: invalid %s GPT header\n", BOOTPROG, which);
+		if (verbose)
+			printf("%s: invalid %s GPT header\n", BOOTPROG, which);
 		return (-1);
 	}
 	crc = hdr->hdr_crc_self;
 	hdr->hdr_crc_self = 0;
 	if (crc32(hdr, hdr->hdr_size) != crc) {
-		printf("%s: %s GPT header checksum mismatch\n", BOOTPROG,
-		    which);
+		if (verbose)
+			printf("%s: %s GPT header checksum mismatch\n",
+			       BOOTPROG, which);
 		return (-1);
 	}
 	hdr->hdr_crc_self = crc;
-	return (0);
+	return(0);
+}
+
+static int
+gptread_hdr(const char *which, struct dsk *dskp, struct gpt_hdr *hdr,
+    uint64_t hdrlba)
+{
+	if (drvread(dskp, secbuf, hdrlba, 1)) {
+		printf("%s: unable to read %s GPT header\n", BOOTPROG, which);
+		return (-1);
+	}
+	bcopy(secbuf, hdr, sizeof(*hdr));
+
+	return gptcheckhdr(hdr, hdrlba, which, 1);
 }
 
 #ifndef IMAGEZIP
@@ -279,9 +294,7 @@ gptbootconv(const char *which, struct dsk *dskp, struct gpt_hdr *hdr,
 	}
 	if (!table_updated)
 		return;
-	hdr->hdr_crc_table = crc32(table, hdr->hdr_entries * hdr->hdr_entsz);
-	hdr->hdr_crc_self = 0;
-	hdr->hdr_crc_self = crc32(hdr, hdr->hdr_size);
+	gptcomputecrc(hdr, table);
 	bzero(secbuf, DEV_BSIZE);
 	bcopy(hdr, secbuf, hdr->hdr_size);
 	if (drvwrite(dskp, secbuf, hdr->hdr_lba_self, 1))
