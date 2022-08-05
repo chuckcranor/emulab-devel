@@ -9,6 +9,7 @@
 
 if [ -f "/bootcmd" ]; then
     script=`cat /bootcmd`;
+    rm -f /bootcmd
     if [ -x "$script" ]; then
 	echo "Running Emulab pre-imaging cleanup script $script..."
 	exec $script

@@ -2,9 +2,6 @@
 
 #
 # Arrange for "prepare" to be run on the way down, and then shutdown.
-# Since we use the rc.final mechanism on FreeBSD 13 and beyond, we do
-# a "shutdown -r" instead of just "shutdown" in order to trigger its
-# execution.
 #
 . /etc/emulab/paths.sh
 
@@ -30,7 +27,7 @@ if [ $reboot -eq 1 ]; then
     if [ $dohalt -eq 1 ]; then
 	shutdown -h now "Halting with Prepare"
     else
-	shutdown -r now "Rebooting with Prepare"
+	shutdown now "Rebooting with Prepare"
     fi
 fi
 
