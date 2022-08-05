@@ -285,3 +285,48 @@ set_mbr_type(int fd, int slice, iz_type dostype)
 	}
 	return 0;
 }
+
+void mbr_fixup(void *start, size_t size, struct iz_disk *dinfo, int debug)
+{
+	struct doslabel label;
+	struct iz_slice *nparttab;
+	int i;
+
+	memcpy(&label.pad2, start, DOSPARTSIZE);
+	if (label.magic != BOOT_MAGIC) {
+		fprintf(stderr, "Wrong magic number in DOS partition table\n");
+		return;
+	}
+
+	nparttab = dinfo->slices;
+	for (i = 0; i < NDOSPART; i++) {
+		unsigned char	type  = label.parts[i].dp_typ;
+
+		/* We only care if we have changed the type of the partition */
+		if (nparttab[i].type == type ||
+		    (type == DOSPTYP_UNUSED &&
+		     nparttab[i].type == IZTYPE_INVALID))
+			continue;
+
+		/* and only that we deleted it */
+		if (nparttab[i].type != IZTYPE_INVALID) {
+			fprintf(stderr,
+				"mbr_fixup: P%d changed from %x to %x!?\n",
+				i+1, type, nparttab[i].type);
+			continue;
+		}
+
+		if (debug)
+			fprintf(stderr,
+				"mbr_fixup: marking P%d (0x%x) as unused\n",
+				i+1, type);
+
+		/* make it unused */
+		label.parts[i].dp_typ = DOSPTYP_UNUSED;
+		label.parts[i].dp_start = 0;
+		label.parts[i].dp_size = 0;
+	}
+
+	memcpy(start, &label.pad2, DOSPARTSIZE);
+}
+

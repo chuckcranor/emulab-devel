@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2014-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -74,5 +74,8 @@ void gptgettables(struct gpt_hdr **hdr, struct gpt_ent **ent,
 void gptupdate(const char *which, struct dsk *dskp, struct gpt_hdr *hdr,
 	       struct gpt_ent *table);
 void gptsetcurent(int idx);
+int gptcheckhdr(struct gpt_hdr *hdr, uint64_t hdrlba, const char *which,
+		int verbose);
+void gptcomputecrc(struct gpt_hdr *hdr, struct gpt_ent *table);
 
 #endif /* _GPT_GLUE_H */

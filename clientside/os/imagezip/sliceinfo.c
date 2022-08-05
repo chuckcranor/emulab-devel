@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -80,4 +80,51 @@ printslicemap(void)
 			fprintf(stderr, "%s%s", i > 1 ? "," : "",
 				fsmap[i].desc);
 		}
+}
+
+void
+dumpdiskinfo(struct iz_disk *disk)
+{
+	int i;
+	char *bbstr = (disk->metasect > 0) ? "GPT" : "MBR";
+	struct iz_slice	*parttab = disk->slices;
+
+	fprintf(stderr, "Disk:            start %12u, size %12u\n",
+		0, disk->dsize);
+	fprintf(stderr, "Usable:          start %12u, size %12u\n",
+		disk->lodata, disk->hidata - disk->lodata + 1);
+	fprintf(stderr, "Partition range: start %12u, size %12u\n",
+		disk->losect, disk->hisect - disk->losect + 1);
+	fprintf(stderr, "%s Partitions (%s at lba %u):\n",
+		bbstr, bbstr, disk->metasect);
+	for (i = 0; i < MAXSLICES; i++) {
+		struct sliceinfo *sinfo;
+
+		if (parttab[i].type == IZTYPE_INVALID)
+			continue;
+
+		fprintf(stderr, "  P%d: ", i+1);
+		sinfo = getslicemap(parttab[i].type);
+		if (sinfo == 0)
+			fprintf(stderr, "0x%x", parttab[i].type);
+		else
+			fprintf(stderr, "%-12s", sinfo->desc);
+
+		fprintf(stderr, "  start %12u, size %12u",
+			parttab[i].offset, parttab[i].size);
+		if (parttab[i].flags) {
+			fprintf(stderr, " (");
+			if (parttab[i].flags & IZFLAG_NOTSUP)
+				fprintf(stderr, "Not supported,");
+			if (parttab[i].flags & IZFLAG_IGNORE)
+				fprintf(stderr, "IGNORED,");
+			if (parttab[i].flags & IZFLAG_RAW)
+				fprintf(stderr, "compress RAW");
+			fprintf(stderr, ")\n");
+		} else {
+			fprintf(stderr, "\n");
+		}
+	}
+	fprintf(stderr, "\n");
+
 }

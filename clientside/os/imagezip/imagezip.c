@@ -1011,6 +1011,29 @@ read_slice(int snum, iz_type stype, iz_lba start, iz_size size,
 	return -1;
 }
 
+static void
+bbfixup(void *bstart, off_t bsize, void *fdata)
+{
+	struct iz_disk *dinfo = (struct iz_disk *)fdata;
+	assert(fdata != NULL);
+	int isgpt = (dinfo->metasect > 0) ? 1 : 0;
+
+	if (debug > 1) {
+		fprintf(stderr, "bbfixup: fixing %s in bootblock %p for %lu bytes\n",
+			(isgpt ? "GPT" : "MBR"), bstart, (unsigned long)bsize);
+		dumpdiskinfo(dinfo);
+	}
+#ifdef WITH_GPT
+	if (isgpt)
+		gpt_fixup(bstart, bsize, dinfo, debug);
+#endif
+#ifdef WITH_MBR
+	if (!isgpt)
+		mbr_fixup(bstart, bsize, dinfo, debug);
+#endif
+	free(fdata);
+}
+
 /*
  * Parse the MBR/GPT and dispatch to the individual readers.
  */
@@ -1068,47 +1091,8 @@ read_image(int fd)
 	dstart = 0;
 	dsize = disk.dsize;
 
-	if (debug) {
-		int i;
-
-		fprintf(stderr, "Disk:            start %12u, size %12u\n",
-			0, dsize);
-		fprintf(stderr, "Usable:          start %12u, size %12u\n",
-			disk.lodata, disk.hidata - disk.lodata + 1);
-		fprintf(stderr, "Partition range: start %12u, size %12u\n",
-			disk.losect, disk.hisect - disk.losect + 1);
-		fprintf(stderr, "%s Partitions (%s at lba %u):\n",
-			bbstr, bbstr, disk.metasect);
-		for (i = 0; i < MAXSLICES; i++) {
-			struct sliceinfo *sinfo;
-
-			if (parttab[i].type == IZTYPE_INVALID)
-				continue;
-
-			fprintf(stderr, "  P%d: ", i+1);
-			sinfo = getslicemap(parttab[i].type);
-			if (sinfo == 0)
-				fprintf(stderr, "0x%x", parttab[i].type);
-			else
-				fprintf(stderr, "%-12s", sinfo->desc);
-
-			fprintf(stderr, "  start %12u, size %12u",
-				parttab[i].offset, parttab[i].size);
-			if (parttab[i].flags) {
-				fprintf(stderr, " (");
-				if (parttab[i].flags & IZFLAG_NOTSUP)
-					fprintf(stderr, "Not supported,");
-				if (parttab[i].flags & IZFLAG_IGNORE)
-					fprintf(stderr, "IGNORED,");
-				if (parttab[i].flags & IZFLAG_RAW)
-					fprintf(stderr, "compress RAW");
-				fprintf(stderr, ")\n");
-			} else {
-				fprintf(stderr, "\n");
-			}
-		}
-		fprintf(stderr, "\n");
-	}
+	if (debug)
+		dumpdiskinfo(&disk);
 
 	/*
 	 * Quick, brute-force check for overlap of partitions.
@@ -1146,19 +1130,25 @@ read_image(int fd)
 		return 1;
 
 	/*
-	 * For the special boot partition mode, we only interested in the
-	 * MBR/GPT, any EFI partition, and the specified root partition.
-	 * Anything beyond the end of the highest of those partitions is
-	 * not even recorded as free in the image. Any space inbetween
-	 * an EFI and root partition is ignored. Any space below the lowest
-	 * partition is included as it might be MBR magic.
+	 * For the special boot partition mode, we are only interested in the
+	 * MBR/GPT, any EFI partition, any BIOS boot partition and the specified
+	 * root partition. Anything beyond the end of the highest of those
+	 * partitions is not even recorded as free in the image. Any space
+	 * inbetween an EFI and root partition is ignored. Any space below
+	 * the lowest partition is included as it might be MBR magic.
+	 *
+	 * XXX to make our life easier, we require the partitions to be
+	 * "inorder" (increasing partition numbers at increasing locations)
+	 * and non-overlapping (checked above). Is this too much to ask?
 	 */
 	if (bootpartmode) {
-		iz_lba efistart, rpstart, gapstart;
-		iz_size efisize, rpsize, gapsize;
-		int efipartno, rppartno;
+		iz_lba pstart, gapstart, hisect;
+		iz_size psize, gapsize;
+		int biospartno, rootpartno;
+		struct iz_disk *dinfo;
 
-		efipartno = rppartno = 0;
+		biospartno = rootpartno = 0;
+		hisect = 0;
 		for (i = 0; i < MAXSLICES; i++) {
 			if (i+1 == slice) {
 				if (parttab[i].type == IZTYPE_INVALID) {
@@ -1169,21 +1159,65 @@ read_image(int fd)
 					warnx("P%d: partition is EFI partition, need the root partition", i+1);
 					exit(1);
 				}
-				if ((rpsize = parttab[i].size) == 0) {
+				if (parttab[i].type == IZTYPE_BIOSBOOT ||
+				    parttab[i].type == IZTYPE_FBSDBOOT) {
+					warnx("P%d: partition is a BIOS boot partition, need the root partition", i+1);
+					exit(1);
+				}
+				if ((pstart = parttab[i].offset) < hisect) {
+					warnx("P%d: partition starts before lower numbered partition!", i+1);
+					exit(1);
+				}
+				if ((psize = parttab[i].size) == 0) {
 					warnx("P%d: partition is zero length!", i+1);
 					exit(1);
 				}
-				rpstart = parttab[i].offset;
-				rppartno = i+1;
+				rootpartno = i+1;
+				hisect = pstart;
+				if (debug)
+					fprintf(stderr,
+						"Bootpart: Root in P%d [%u-%u]\n",
+						i+1, pstart, pstart + psize - 1);
 				continue;
 			}
 			if (parttab[i].type == IZTYPE_EFISYSTEM) {
-				if ((efisize = parttab[i].size) == 0) {
+				if ((pstart = parttab[i].offset) < hisect) {
+					warnx("P%d: EFI partition starts before lower numbered partition!", i+1);
+					exit(1);
+				}
+				if ((psize = parttab[i].size) == 0) {
 					warnx("P%d: EFI partition is zero length!", i+1);
 					exit(1);
 				}
-				efistart = parttab[i].offset;
-				efipartno = i+1;
+				hisect = pstart;
+				if (debug)
+					fprintf(stderr,
+						"Bootpart: EFI in P%d [%u-%u]\n",
+						i+1, pstart, pstart + psize - 1);
+				continue;
+			}
+			if (parttab[i].type == IZTYPE_BIOSBOOT ||
+			    parttab[i].type == IZTYPE_FBSDBOOT) {
+				if (biospartno > 0) {
+					warnx("P%d: Already found BIOS boot partition P%d, ignoring this one.",
+					      i+1, biospartno);
+					parttab[i].type = IZTYPE_INVALID;
+					continue;
+				}
+				if ((pstart = parttab[i].offset) < hisect) {
+					warnx("P%d: BIOS partition starts before lower numbered partition!", i+1);
+					exit(1);
+				}
+				if ((psize = parttab[i].size) == 0) {
+					warnx("P%d: BIOS boot partition is zero length!", i+1);
+					exit(1);
+				}
+				biospartno = i+1;
+				hisect = pstart;
+				if (debug)
+					fprintf(stderr,
+						"Bootpart: BIOS boot in P%d [%u-%u]\n",
+						i+1, pstart, pstart + psize - 1);
 				continue;
 			}
 
@@ -1193,38 +1227,53 @@ read_image(int fd)
 			 */
 			parttab[i].type = IZTYPE_INVALID;
 		}
-		if (debug && efipartno != 0)
-			fprintf(stderr, "Bootpart: EFI in P%d [%u-%u]\n",
-				efipartno, efistart, efistart+efisize-1);
-		if (debug && rppartno != 0)
-			fprintf(stderr, "Bootpart: Root in P%d [%u-%u]\n",
-				rppartno, rpstart, rpstart+rpsize-1);
-		if (rppartno == 0) {
+		if (rootpartno == 0) {
 			warnx("Bootpart: Root partition not found!");
 			exit(1);
 		}
-		if (efipartno != 0) {
-			if (efistart <= rpstart) {
-				gapstart = efistart + efisize;
-				gapsize = rpstart - gapstart;
-				inputmaxsec = rpstart + rpsize;
-			} else {
-				gapstart = rpstart + rpsize;
-				gapsize = efistart - gapstart;
-				inputmaxsec = efistart + efisize;
+
+		/*
+		 * Make another pass to skip gaps between the remaining
+		 * partitions and record the end location of the last partition
+		 * so we don't even scan past that. Could do this all in
+		 * one pass, but I am that lazy.
+		 *
+		 * N.B. gap calculation only works because partitions are
+		 * in order.
+		 */
+		gapstart = ~0;
+		hisect = 0;
+		for (i = 0; i < MAXSLICES; i++) {
+			iz_lba partend;
+
+			if (parttab[i].type == IZTYPE_INVALID)
+				continue;
+			
+			partend = parttab[i].offset + parttab[i].size;
+			if (partend > hisect)
+				hisect = partend;
+
+			fprintf(stderr, "Found P%d: [%u-%u]\n",
+				i+1, parttab[i].offset, partend);
+
+			if (gapstart == ~0 || gapstart == parttab[i].offset) {
+				gapstart = partend;
+				continue;
 			}
+
+			gapsize = parttab[i].offset - gapstart;
 			if (debug)
 				fprintf(stderr, "Bootpart: gap at [%u-%u]\n",
-					gapstart, gapstart+gapsize-1);
+					gapstart, gapstart + gapsize - 1);
 			if (gapsize > 0) {
 				addskip(gapstart, gapsize);
 				if (dowarn > 1)
 					warnx("%s: skipping %u sectors at %u",
 					      bbstr, gapsize, gapstart);
 			}
-		} else {
-			inputmaxsec = rpstart + rpsize;
+			gapstart = ~0;
 		}
+		inputmaxsec = hisect;
 
 		if (gotbb == 1) {
 #if 0
@@ -1254,15 +1303,24 @@ read_image(int fd)
 			 * alternate copy at the end of the disk.
 			 * XXX another mild abuse of the relocation mechanism...
 			 */
-			addreloc(sectobytes(disk.metasect), sectobytes(1),
-				 RELOC_GPTFIX);
 #else
 			warnx(
 			      "WARNING: image is GPT-based and loading it onto a target disk of a\n"
 			      "          different size will result in a corrupt GPT that must be repaired.\n");
 #endif
 		}
-
+		
+		/*
+		 * We need to fixup the MBR or primary GPT to reflect the
+		 * partitions we pruned out. We schedule a fixup for that.
+		 */
+		dinfo = malloc(sizeof(disk));
+		memcpy(dinfo, &disk, sizeof(disk));
+		addfixupfunc(bbfixup,
+			     sectobytes(disk.metasect), 0,
+			     sectobytes(disk.lodata-disk.metasect),
+			     dinfo, sizeof(*dinfo),
+			     RELOC_NONE);
 
 		/*
 		 * Make sure we use inputmaxsec as the max sector to look at.
