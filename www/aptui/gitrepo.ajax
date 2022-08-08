@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -94,7 +94,7 @@ function Do_GetCommitInfo()
     $which = "";
     
     if (isset($ajax_args["refspec"]) && $ajax_args["refspec"]) {
-        if (!TBvalid_userdata($ajax_args["refspec"])) {
+        if (!TBvalid_refspec($ajax_args["refspec"])) {
             SPITAJAX_ERROR(1, "Invalid refspec");
             return;
         }
@@ -130,7 +130,7 @@ function Do_GetCommitInfo()
                      "  commitinfo -p " . $profile->uuid() . "  $which",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
-    
+
     if ($retval != 0) {
         if ($retval < 0) {
             $error = $webtask->TaskValue("output");
@@ -161,7 +161,7 @@ function Do_GetRepoSource()
 	return;
     }
     if ($ajax_args["refspec"] != null) {
-        if (!TBvalid_userdata($ajax_args["refspec"])) {
+        if (!TBvalid_refspec($ajax_args["refspec"])) {
             SPITAJAX_ERROR(1, "Invalid refspec");
             return;
         }

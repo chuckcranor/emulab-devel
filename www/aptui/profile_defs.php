@@ -28,6 +28,16 @@ function TBvalid_rspec($token) {
     return TBcheck_dbslot($token, "apt_profiles", "rspec",
 			  TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR);
 }
+function TBvalid_refspec($refspec)
+{
+    if (preg_match("/^\w+$/", $refspec)) {
+        return 1;
+    }
+    if (preg_match("/^(([-\w]+)\/?)+$/", $refspec)) {
+        return 1;
+    }
+    return 0;
+}
 
 class Profile
 {
