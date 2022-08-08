@@ -331,6 +331,10 @@ function TBERROR ($message, $death, $xmp = 0) {
     # print backtrace
     $e = new Exception();
     $trace = $e->getTraceAsString();
+    $trace .= "\n\n" .
+           "IP:   " . $_SERVER['REMOTE_ADDR'] . "\n" .
+           "URI:  " . $_SERVER['REQUEST_URI'] . "\n" .
+           "Time: " . gmdate("d/M/Y:H:i:s", time()) . "\n";
 
     if (function_exists("CLEARBUSY")) {
         CLEARBUSY();
