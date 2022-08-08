@@ -17,9 +17,14 @@
     <center>
       <h3>Published papers that have used <%- window.APTTILE %></h3>
     </center>
-    <input class='form-control search' type='search'
-	   data-column='all'
-	   id='papers-search' placeholder='Search'>
+    <div class="row">
+      <div class="col-xs-5">
+	<input class='form-control search' type='search'
+	       data-column='all'
+	       id='papers-search' placeholder='Search'>
+      </div>
+      <div id='output_dropdown'></div>
+    </div>
     <div class="text-center">
       <small>
 	There are <span class="papers-match-count"></span>

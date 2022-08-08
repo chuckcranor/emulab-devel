@@ -184,10 +184,12 @@ REQUIRE_UNDERSCORE();
 REQUIRE_TABLESORTER();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-REQUIRE_TABLESORTER();
+REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
 SPITREQUIRE("js/matched-papers.js");
 
 AddTemplateList(array("matched-papers",
                       "oops-modal", "waitwait-modal"));
+AddTemplate("output-dropdown");
+
 SPITFOOTER();
 ?>
