@@ -65,6 +65,7 @@ $query_result =
                  "     i.scopus_id=a.author_id ".
                  "left join users as u on u.uid_idx=i.uid_idx ".
                  "where p.cites='$PORTAL_GENESIS' and u.uid is not null ".
+                 ($isadmin ? "" : "and p.uses='yes' ") .
                  "order by p.pubdate desc");
 
 while ($row = mysql_fetch_array($query_result)) {
@@ -110,6 +111,7 @@ $query_result =
                  "left join user_scopus_info as i on ".
                  "     i.scopus_id=a.author_id ".
                  "where p.cites='$PORTAL_GENESIS' ".
+                 ($isadmin ? "" : "and p.uses='yes' ") .
                  "group by p.scopus_id having auids is null");
 
 while ($row = mysql_fetch_array($query_result)) {
