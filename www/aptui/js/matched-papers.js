@@ -35,7 +35,9 @@ $(function ()
 	    "unmatched" : unmatched,
 	});
 	$('#main-body').html(html);
-	$('#output_dropdown').html(dropdown);
+	if (window.ISADMIN) {
+	    $('#output_dropdown').html(dropdown);
+	}
 
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
@@ -45,7 +47,7 @@ $(function ()
 	});
 
 	// "Uses" radio button handler.
-	$('.compact-radio').change(function() {
+	$('.compact-radio input[type=radio]').change(function() {
 	    HandleUsesChange(this);
 	});
 
@@ -71,7 +73,7 @@ $(function ()
 		// ',' 'json', 'array' or separator (e.g. ',')
 		output_separator     : ',',
 		// columns to ignore [0, 1,... ] (zero-based index)
-		output_ignoreColumns : [5],
+		output_ignoreColumns : [2,5],
 		// include hidden columns in the output
 		output_hiddenColumns : false,
 		// include footer rows in the output
