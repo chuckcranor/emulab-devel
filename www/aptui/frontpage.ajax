@@ -197,9 +197,16 @@ function Do_GetPaperList()
         DBQueryFatal("select count(*) from scopus_paper_info as p ".
                      "where p.cites='$PORTAL_GENESIS' and p.uses='yes'");
     $row = mysql_fetch_array($query_result);
+    $count = $row[0];
+
+    $query_result =
+        DBQueryFatal("select count(*) from other_paper_info ".
+                     "where cites='$PORTAL_GENESIS' and uses='yes'");
+    $row = mysql_fetch_array($query_result);
+    $count += $row[0];
     
     $result["papers"] = $blob;
-    $result["uses"] = $row[0];
+    $result["uses"] = $count;
     SPITAJAX_RESPONSE($result);
 }
 
