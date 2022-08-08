@@ -958,7 +958,8 @@ class Instance
         }
 
         $query_result =
-            DBQueryFatal("select v.uuid,p.name,h.repohash, " .
+            DBQueryFatal("select c.* from ".
+                         "((select v.uuid,p.name,h.repohash,h.created, " .
                          "   h.name as expname,h.uuid as expuuid ".
                          " from apt_instance_history as h ".
                          "join apt_profiles as p on p.profileid=h.profile_id ".
@@ -966,7 +967,19 @@ class Instance
                          "     v.profileid=p.profileid and ".
                          "     v.version=p.version ".
                          "where h.creator_idx='$uid_idx' $clause ".
-                         "order by h.created desc limit 10");
+                         "order by h.created desc limit 20) ".
+                         "union ".
+                         " (select v.uuid,p.name,h.repohash,h.created, " .
+                         "   h.name as expname,h.uuid as expuuid ".
+                         " from apt_instances as h ".
+                         "join apt_profiles as p on p.profileid=h.profile_id ".
+                         "join apt_profile_versions as v on ".
+                         "     v.profileid=p.profileid and ".
+                         "     v.version=p.version ".
+                         "where h.creator_idx='$uid_idx' $clause ".
+                         "order by h.created desc limit 20)) as c ".
+                         "order by c.created desc limit 10");
+
         if (!mysql_num_rows($query_result)) {
             return null;
         }
