@@ -751,6 +751,16 @@ sub SetStatus($$)
     
 }
 
+sub RefreshAggregateStatus($)
+{
+    my ($self) = @_;
+
+    foreach my $agg ($self->AggregateList()) {
+	$agg->Refresh();
+    }
+    return 0;
+}
+
 sub SetAggregateStatus($$)
 {
     my ($self, $status) = @_;
@@ -4264,6 +4274,17 @@ sub IsActive($)
 	    $self->status() ne "canceled" &&
 	    $self->deferred() == 0);
 
+    return 0;
+}
+
+sub IsTerminated($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->status() eq "terminated" ||
+	    $self->status() eq "terminating");
+    
     return 0;
 }
 
