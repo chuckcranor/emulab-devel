@@ -334,7 +334,7 @@ function TBERROR ($message, $death, $xmp = 0) {
     $trace .= "\n\n" .
            "IP:   " . $_SERVER['REMOTE_ADDR'] . "\n" .
            "URI:  " . $_SERVER['REQUEST_URI'] . "\n" .
-           "Time: " . gmdate("d/M/Y:H:i:s", time()) . "\n";
+           "Time: " . date("d/M/Y:H:i:s T", time()) . "\n";
 
     if (function_exists("CLEARBUSY")) {
         CLEARBUSY();
