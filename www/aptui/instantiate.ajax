@@ -26,6 +26,7 @@ include_once("webtask.php");
 chdir("apt");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
+include_once("checkscript.ajax");
 
 # Need to make non-hardcoded
 $maxduration = 16;
@@ -136,6 +137,25 @@ function Do_GetProfile()
             $blob["repohash"] = $ajax_args["refhash"];
             $blob["reporef"]  = $ajax_args["refspec"];
             unlink($outfname);
+
+            if ($ajax_args["getxml"] == 1 &&
+                (preg_match("/^(import|from)/m", $blob["source"]) ||
+                 preg_match("/^source tb_compat/m", $blob["source"]))) {
+                #
+                # And run the script.
+                #
+                $warningsfatal = false;
+                $usenewgenilib = false;
+                $getparams     = true;
+                $script        = $blob["source"];
+    
+                if (CheckScript($profile, $script, null, 
+                                $warningsfatal, $usenewgenilib,
+                                $refspec, $getparams, null, $blob) != 0) {
+                    # Error already spit.
+                    return;
+                }
+            }
         }
     }
     SPITAJAX_RESPONSE($blob);

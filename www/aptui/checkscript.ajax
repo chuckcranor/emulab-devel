@@ -116,7 +116,10 @@ function CheckScript($profile, $script, $project,
         }
         return -1;
     }
-    $blob = array("rspec" => file_get_contents($outfname));
+    if (! isset($blob)) {
+        $blob = array();
+    }
+    $blob["rspec"] = file_get_contents($outfname);
     if ($getparams) {
         $paramdefs = file_get_contents($pfname);
         if ($paramdefs != "") {

@@ -321,39 +321,10 @@ $(function ()
 
 	reporefspec = which;
 	UpdateInstantiateButton();
-	
-	var callback = function (source, hash) {
-	    console.info(source);
-
-	    // Need to put the source into correct hidden textarea.
-	    // But if its a script, we have to convert it first.
-	    if (pythonRe.test(source)) {
-		$('#profile_script_textarea').val(source);
-		ConvertScript(source, which);
-	    }
-	    else {
-		$('#profile_rspec_textarea').val(source);
-		ExtractFromRspec();
-	    }
-	};
-	gitrepo.GetRepoSource({
-	    "uuid"      : version_uuid,
-	    "refspec"   : which,
-	    "callback"  : callback
-	});
-    }
-
-    //
-    // Pass a geni-lib script to the server to run (convert to XML).
-    //
-    function ConvertScript(script, refspec)
-    {
-	// Save for later.
-	$('#profile_script_textarea').val(script);
 
 	var callback = function(json) {
 	    sup.HideWaitWait();
-	    console.info("ConvertScript", json.value);
+	    console.info("GetRepoSource", json.value);
 
 	    if (json.code) {
 		sup.SpitOops("oops",
@@ -373,14 +344,14 @@ $(function ()
 		paramHelp.HideParameterHelp();
 	    }
 	}
-	sup.ShowWaitWait("We are converting the geni-lib script");
+	sup.ShowWaitWait("We are getting the source code from the " +
+			 "repository and converting it to XML ... " +
+			 "Patience please.");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "show-profile",
-					    "CheckScript",
-					    {"script"   : script,
-					     "refspec"  : refspec,
-					     "getparams": true,
-					     "profile"  : window.PROFILE});
+					    "GetSource",
+					    {"refspec"  : reporefspec,
+					     "uuid"     : window.PROFILE});
 	xmlthing.done(callback);
     }
 

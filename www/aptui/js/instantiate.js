@@ -1006,6 +1006,7 @@ $(function ()
 	var args = {
 	    "profile"   : profile,
 	    "getsource" : 1,
+	    "getxml"    : 0,
 	};
 	
 	var callback = function(json) {

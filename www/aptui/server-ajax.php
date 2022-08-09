@@ -157,8 +157,8 @@ $routing = array("geni-login" =>
 		 "show-profile" =>
 			array("file"    => "show-profile.ajax",
 			      "guest"   => true,
-			      "methods" => array("CheckScript" =>
-						     "Do_CheckScript",
+			      "methods" => array("GetSource" =>
+						     "Do_GetSource",
 						 "GetProfile" =>
                                                      "Do_GetProfile",
 						 "GetParamsets" =>

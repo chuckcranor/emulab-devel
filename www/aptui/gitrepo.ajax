@@ -154,7 +154,7 @@ function Do_GetRepoSource()
 {
     global $this_user;
     global $ajax_args;
-    $which = "";
+    $refspec = "";
     
     if (!isset($ajax_args["refspec"])) {
 	SPITAJAX_ERROR(1, "Missing branch or tag name");
@@ -165,7 +165,7 @@ function Do_GetRepoSource()
             SPITAJAX_ERROR(1, "Invalid refspec");
             return;
         }
-        $which = escapeshellarg($ajax_args["refspec"]);
+        $refspec = $ajax_args["refspec"];
     }
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(1, "Missing profile uuid");
@@ -176,20 +176,31 @@ function Do_GetRepoSource()
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
     }
+    $blob = null;
+    if (GetRepoSource($profile, $refspec, $blob)) {
+        return;
+    }
+    SPITAJAX_RESPONSE($blob);    
+}
+
+function GetRepoSource($profile, $refspec, &$blob)
+{
+    global $this_user;
+    
     if (isset($this_user)) {
         $this_uid = $this_user->uid();
     }
     else {
         if (!$profile->ispublic()) {
             SPITAJAX_ERROR(1, "Not enough permission");
-            return;
+            return -1;
         }
         $this_uid = "nobody";
     }
     $webtask = WebTask::CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
-	return;
+	return -1;
     }
     $outfname = tempnam("/tmp", "repofile");
     chmod($outfname, 0666);
@@ -200,7 +211,7 @@ function Do_GetRepoSource()
                      "  $which",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
-    
+
     if ($retval != 0) {
         if ($retval < 0) {
             $error = $webtask->TaskValue("output");
@@ -212,13 +223,13 @@ function Do_GetRepoSource()
         $webtask->Delete();
         unlink($outfname);
 	SPITAJAX_ERROR(1, $error);
-	return;
+	return -1;
     }
     $blob = array("script"  => file_get_contents($outfname),
                   "hash"    => $webtask->TaskValue("hash"));
     $webtask->Delete();
     unlink($outfname);
-    SPITAJAX_RESPONSE($blob);
+    return 0;
 }
 
 # Local Variables:

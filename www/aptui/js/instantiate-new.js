@@ -1005,6 +1005,7 @@ $(function ()
 	var args = {
 	    "profile"   : profile,
 	    "getsource" : 1,
+	    "getxml"    : 1,
 	};
 	
 	var callback = function(json) {
@@ -1044,58 +1045,40 @@ $(function ()
 	     * case that we did not request something specific, and
 	     * we need to remember that in the form too.
 	     */
-	    if (1) {
-		if (blob.fromrepo && _.has(args, "refhash")) {
-		    // Need to pass these along at submit.
-		    $('#repohash').val(blob.repohash);
-		    $('#reporef').val(blob.reporef);
+	    if (blob.fromrepo && _.has(args, "refhash")) {
+		// Need to pass these along at submit.
+		$('#repohash').val(blob.repohash);
+		$('#reporef').val(blob.reporef);
+
+		if (_.has(blob, "rspec")) {
+		    // This is a script.
 		    
+		    // Need to pass these along at submit.
+		    $('#rspec_textarea').val(blob.rspec);
+		    $('#script_textarea').val(blob.source);
+
 		    /*
-		     * So why not do the conversion when we asked for the
-		     * source? Doing it now sure makes the logic confused,
-		     * but it gives us an opportunity to interact with the
-		     * user since script conversion can take an arbitrary
-		     * amount of time. 
+		     * We can get a parameterized profile or this
+		     * version might not be parameterized.
 		     */
-		    var pythonRe = /^(import|from)/m;
-
-		    if (pythonRe.test(blob.source)) {
-			ConvertScript(blob.source, profile, blob.repohash,
-				      function(rspec, paramdefs) {
-			    // Need to pass these along at submit.
-			    $('#rspec_textarea').val(rspec);
-			    $('#script_textarea').val(blob.source);
-
-			    // New rspec after conversion.
-			    blob.rspec = rspec;
-			    blob.description = getDescription(rspec);
-
-			    //
-			    // We can get a parameterized profile or this
-		            // version might not be parameterized.
-  			    //
-			    if (paramdefs === undefined) {
-				blob.ispprofile = false;
-			    }
-			    else {
-				$('#paramdefs').val(paramdefs);
-				blob.ispprofile = true;
-			    }
-			    continuation(blob);
-			});
-                        // continuation called in the callback,
-                        return;
+		    if (_.has(blob, "paramdefs")) {
+			// Need to pass along at submit.
+			$('#paramdefs').val(blob.paramdefs);
+			blob.ispprofile = true;
 		    }
 		    else {
-			// New rspec, proceed
-			blob.rspec = source;
-			
-			// Need to pass this along at submit.
-			$('#rspec_textarea').val(source);
-			// Fall through to calling the continuation.
+			blob.ispprofile = false;
 		    }
 		}
+		else {
+		    // This is not a script.
+		    blob.rspec = blob.source;
+		    
+		    // Need to pass this along at submit.
+		    $('#rspec_textarea').val(blob.source);
+		}
 	    }
+	    // Easier to do this here.
 	    blob.description = getDescription(blob.rspec);
 	    continuation(blob);
 	}
