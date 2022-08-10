@@ -1,0 +1,26 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBKeyExists("apt_announcements", "uid_idx")) {
+	DBQueryFatal("ALTER TABLE apt_announcements add " .
+		     " KEY `uid_idx` (`uid_idx`)");
+    }
+    if (!DBKeyExists("apt_announcement_info", "uid_idx")) {
+	DBQueryFatal("ALTER TABLE apt_announcement_info add " .
+		     " KEY `uid_idx` (`uid_idx`)");
+    }
+    if (!DBKeyExists("apt_announcement_info", "aid")) {
+	DBQueryFatal("ALTER TABLE apt_announcement_info add " .
+		     " KEY `aid` (`aid`)");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

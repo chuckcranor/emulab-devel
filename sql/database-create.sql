@@ -1210,7 +1210,8 @@ CREATE TABLE `apt_announcements` (
   `link_url` tinytext,
   `display_start` datetime default NULL,
   `display_end` datetime default NULL,
-  PRIMARY KEY (`idx`)
+  PRIMARY KEY (`idx`),
+  KEY `uid_idx` (`uid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -1225,7 +1226,9 @@ CREATE TABLE `apt_announcement_info` (
   `dismissed` tinyint(1) NOT NULL default '0',
   `clicked` tinyint(1) NOT NULL default '0',
   `seen_count` int(8) NOT NULL default '0',
-  PRIMARY KEY (`idx`)
+  PRIMARY KEY (`idx`),
+  KEY `uid_idx` (`uid_idx`),
+  KEY `aid` (`aid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
