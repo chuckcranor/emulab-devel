@@ -137,7 +137,7 @@ while (list($p) = each($projlist)) {
 
         if ($ISPOWDER) {
             if (!$isadmin) {            
-                if (FeatureEnabled("powder-routes-allowed", null, $ptmp)) {
+                if (FeatureEnabled("OTA-allowed", null, $ptmp)) {
                     $routesokay = 1;
                 }
             }

@@ -280,7 +280,7 @@ class Aggregate
             }
             elseif ($user && $aggregate->canuse_feature()) {
                 $allowed = 0;
-                $feature = $PORTAL_GENESIS . "-" . $aggregate->canuse_feature();
+                $feature = $aggregate->canuse_feature();
 
                 # Does the user have the feature?
                 if (FeatureEnabled($feature, $user, null, null)) {
@@ -379,7 +379,7 @@ class Aggregate
             }
             elseif ($user && $aggregate->canuse_feature()) {
                 $allowed = 0;
-                $feature = $PORTAL_GENESIS . "-" . $aggregate->canuse_feature();
+                $feature = $aggregate->canuse_feature();
 
                 # Does the user have the feature?
                 if (FeatureEnabled($feature, $user, null, null)) {

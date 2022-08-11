@@ -2584,8 +2584,8 @@ sub RouteAllowed($$$)
 	if ($project->pid() eq TBOPSPID());
 
     return 1
-	if (EmulabFeatures->FeatureEnabled("powder-routes-allowed",
-					   undef, $project));
+	if (EmulabFeatures->FeatureEnabled("OTA-allowed", undef, $project));
+
     return 0;
 }
 

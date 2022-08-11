@@ -510,7 +510,7 @@ sub CanInstantiate($$$$)
 	if ($self->adminonly() && !($user->admin() || $user->stud()));
 
     if (defined($self->canuse_feature())) {
-	my $feature = $portal . "-" . $self->canuse_feature();
+	my $feature = $self->canuse_feature();
 
 	return 1
 	    if (EmulabFeatures->FeatureEnabled($feature, $user));
@@ -522,6 +522,15 @@ sub CanInstantiate($$$$)
 	return 1
 	    if ($project->approved() && !$project->disabled() &&
 		EmulabFeatures->FeatureEnabled($feature, undef, $project));
+
+	return 0;
+    }
+    elsif ($self->portals()) {
+	# Otherwise it has to be marked as okay to use for the portal.
+	my @portals = split(/,/, $self->portals());
+
+	return 1
+	    if (grep {$_ eq $portal} @portals);
 
 	return 0;
     }
