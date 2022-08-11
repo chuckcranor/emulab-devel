@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2546,35 +2546,6 @@ sub TBActivityReport($)
     # Set last_ext_act to now(), but don't update the last_report
     return DBQueryFatal("update node_activity set last_ext_act= now() " .
 			"where node_id='$node'");
-}
-
-#
-# Return the number of *available* nodes. These are nodes that are not
-# reserved and in the proper state. See corresponding code in ptopgen
-# and in the web server which reports the free node counts to users.
-#
-# usage: TBAvailablePCs(char *pid)
-#        Returns count.
-#
-sub TBAvailablePCs(;$)
-{
-    my ($pid) = @_;
-    my $clause = (defined($pid) ? "or p.pid='$pid'" : "");
-
-    my $query_result =
-	DBQueryFatal("select count(a.node_id) from nodes as a ".
-		     "left join reserved as b on a.node_id=b.node_id ".
-		     "left join node_types as nt on a.type=nt.type ".
-		     "left join nodetypeXpid_permissions as p ".
-		     "  on a.type=p.type ".
-		     "where b.node_id is null and a.role='testnode' and ".
-		     "      nt.class='pc' and ".
-                     "      (a.eventstate='" . TBDB_NODESTATE_ISUP . "' or ".
-                     "       a.eventstate='" . TBDB_NODESTATE_PXEWAIT . "') and".
-		     "      (p.pid is null $clause)");
-
-    my ($count) = $query_result->fetchrow_array();
-    return $count;
 }
 
 #

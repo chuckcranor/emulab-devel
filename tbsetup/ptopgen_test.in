@@ -27,6 +27,7 @@ use English;
 use Getopt::Std;
 use Math::BigInt;
 use List::Util 'shuffle';
+use Data::Dumper;
 
 use lib "@prefix@/lib";
 use libdb qw(TBGetSiteVar);
@@ -659,7 +660,8 @@ while (my ($class,$type,$isvirt,$architecture) = $result->fetchrow_array) {
 
     # Default is permission to use all types,classes. 
     $permissions{$class} = 1;
-    $permissions{$type}  = 1;
+    $permissions{$type}  =
+	(defined($pid) ? libadminctrl::MaximumAllowed($pid, $type) : 1);
 }
 TBDebugTimeStamp("Finished reading node type stuff");
 
@@ -671,6 +673,8 @@ while (my ($auxtype,$type) = $result->fetchrow()) {
     if (exists($typemap{$type})) {
 	$typemap{$type}->{'AUXTYPES'}->{$auxtype} = 1;
 	$auxtypemap{$auxtype} = $type;
+	$permissions{$auxtype} =
+	    (defined($pid) ? libadminctrl::MaximumAllowed($pid, $type) : 1);
     }
 }
 TBDebugTimeStamp("Finished reading node type auxtypes");
@@ -795,29 +799,6 @@ while (my ($node_id, $type, $count) = $result->fetchrow()) {
     push @{$auxtypes{$node_id}}, "$type:$count";
 }
 TBDebugTimeStamp("Finished reading node auxtypes");
-
-#
-# Read the permission table if given a pid. If there is an entry in
-# the table for a type/class, then permission is granted only if there
-# is a record with the pid. If not, remove the permission granted above.
-# 
-if (defined($pid)) {
-    $result =
-	MyQueryFatal("select distinct type from nodetypeXpid_permissions");
-    
-    while (my ($type) = $result->fetchrow_array) {
-	$permissions{$type} = 0;
-    }
-    
-    $result =
-	MyQueryFatal("select type from nodetypeXpid_permissions ".
-		     "where pid='$pid'");
-    
-    while (my ($type) = $result->fetchrow_array) {
-	$permissions{$type} = 1;
-    }
-}
-TBDebugTimeStamp("Finished reading nodetypeXpid_permissions");
 
 sub processOs(@)
 {

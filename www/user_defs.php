@@ -1787,16 +1787,8 @@ class User
     # Eventually this needs to be a much more restrictive test.
     #
     function WebCamAllowed() {
-	$uid_idx = $this->uid_idx();
-	
-	$query_result =
-	    DBQueryFatal("select distinct class from group_membership as g ".
-			 "left join nodetypeXpid_permissions as p on ".
-			 "     g.pid=p.pid ".
-			 "left join node_types as nt on nt.type=p.type ".
-			 "where g.uid_idx='$uid_idx' and class='robot'");
-	
-	return mysql_num_rows($query_result);
+        # No more webcams
+        return 0;
     }
 
     #

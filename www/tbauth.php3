@@ -210,7 +210,7 @@ function GETUID() {
 #
 function LoginStatus() {
     global $TBAUTHCOOKIE, $TBLOGINCOOKIE, $TBAUTHTIMEOUT;
-    global $CHECKLOGIN_STATUS, $CHECKLOGIN_UID, $CHECKLOGIN_NODETYPES;
+    global $CHECKLOGIN_STATUS, $CHECKLOGIN_UID;
     global $CHECKLOGIN_WIKINAME, $TBOPSPID;
     global $EXPOSEARCHIVE, $EXPOSETEMPLATES;
     global $CHECKLOGIN_HASHKEY, $CHECKLOGIN_HASHHASH;
@@ -276,7 +276,7 @@ function LoginStatus() {
     $query_result =
 	DBQueryFatal("select NOW()>=u.pswd_expires,l.hashkey,l.timeout, ".
 		     "       status,admin,cvsweb,g.trust,l.adminon,webonly, " .
-		     "       user_interface,n.type,u.stud,u.wikiname, ".
+		     "       user_interface,null,u.stud,u.wikiname, ".
 		     "       u.wikionly,g.pid,u.foreign_admin,u.uid_idx, " .
 		     "       p.allow_workbench,u.weblogin_frozen, ".
                      "       u.nonlocal_id,p.disabled ".
@@ -284,7 +284,6 @@ function LoginStatus() {
 		     "left join login as l on l.uid_idx=u.uid_idx ".
 		     "left join group_membership as g on g.uid_idx=u.uid_idx ".
 		     "left join projects as p on p.pid_idx=g.pid_idx ".
-		     "left join nodetypeXpid_permissions as n on g.pid=n.pid ".
 		     "where u.uid_idx='$safe_idx' and ".
 		     (isset($curhash) ?
 		      "l.hashkey='$safe_curhash'" :
@@ -332,7 +331,6 @@ function LoginStatus() {
 	$webonly  = $row[8];
 	$interface= $row[9];
 
-	$type     = $row[10];
 	$stud     = $row[11];
 	$wikiname = $row[12];
 	$wikionly = $row[13];
@@ -353,8 +351,6 @@ function LoginStatus() {
         if ($disable) {
             $pdisabled++;
         }
-
-	$CHECKLOGIN_NODETYPES[$type] = 1;
     }
 
     #
@@ -864,29 +860,6 @@ function ISPLABUSER() {
 	return (($CHECKLOGIN_STATUS &
 		 (CHECKLOGIN_PLABUSER)) ==
 		(CHECKLOGIN_PLABUSER));
-    }
-}
-
-#
-# Check to see if a user is allowed, in some project, to use the given node
-# type. Returns 1 if allowed, 0 if not.
-#
-# NOTE: This is NOT intended as a real permissions check. It is intended only
-# for display purposes (ie. deciding whether or not to give the user a link to
-# the plab_ez page.) It does not require the user to be actually logged in, so
-# that it still works for pages fetched through http. Thus, it may be possible
-# for a clever user to fake it out.
-#
-function NODETYPE_ALLOWED($type) {
-    global $CHECKLOGIN_NODETYPES;
-
-    if (! GETUID())
-	return 0;
-
-    if (isset($CHECKLOGIN_NODETYPES[$type])) {
-	return 1;
-    } else {
-	return 0;
     }
 }
 

@@ -5171,6 +5171,16 @@ CREATE TABLE `portmap` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `portal_allowedtypes`
+--
+
+CREATE TABLE `portal_allowedtypes` (
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') NOT NULL default 'emulab',
+  `type` varchar(30) NOT NULL DEFAULT '',
+  PRIMARY KEY  (`portal`,`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `priorities`
 --
 

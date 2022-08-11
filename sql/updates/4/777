@@ -1,0 +1,22 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBTableExists("portal_allowedtypes")) {
+	DBQueryFatal("CREATE TABLE `portal_allowedtypes` ( ".
+		     " `portal` enum('emulab','aptlab','cloudlab', ".
+		     "      'phantomnet','powder') NOT NULL default 'emulab', ".
+		     " `type` varchar(30) NOT NULL DEFAULT '', ".
+		     " PRIMARY KEY  (`portal`,`type`) ".
+		     ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
