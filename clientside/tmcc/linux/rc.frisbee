@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -115,9 +115,9 @@ get_part_type()
 	# Failing that, if the GPT magic is in place, it's GPT (although
 	# we should never see this).
 	#
-	b512=`dd if=$disk bs=1 count=8 skip=512 status=none | hexdump -e '16/1 "%02x""\n"'`
+	b512=`dd if=$disk bs=1 count=8 skip=512 status=none | hexdump -e '8/1 "%02x""\n"'`
 	b510=`dd if=$disk bs=1 count=2 skip=510 status=none | hexdump -e '2/1 "%02x""\n"'`
-	b450=`dd if=$disk bs=1 count=1 skip=450 status=none | hexdump -e '2/1 "%02x""\n"'`
+	b450=`dd if=$disk bs=1 count=1 skip=450 status=none | hexdump -e '1/1 "%02x""\n"'`
 	if [ "$b512" = 4546492050415254 -a \( "$b510" != 55aa -o "$b450" = ee \) ]; then
 	    echo "GPT"
 	    return 0
@@ -699,7 +699,12 @@ handle_loadinfo()
 	if [ $rc -eq 0 -a "$pttype" = "GPT" ]; then
 	    #build_secondary_gpt /dev/$DISK /dev/$DISK
 	    #build_protective_mbr /dev/$DISK
-	    /bin/echo -e '\n\nr\nd\nv\nw\ny\n' | gdisk /dev/$DISK
+	    echo "Fixing secondary GPT on /dev/$DISK ..."
+	    if [ -x /usr/sbin/sgdisk ]; then
+		sgdisk -e /dev/$DISK
+	    else
+		/bin/echo -e '\n\nr\nd\nv\nw\ny\n' | gdisk /dev/$DISK
+	    fi
 	    echo "Re-reading partition table after GPT fixups ..."
 	    if [ -x /usr/sbin/partprobe ]; then
 		/usr/sbin/partprobe /dev/$DISK > /dev/null 2>&1
@@ -885,9 +890,11 @@ if [ $RELOADALL -eq 1 ]; then
 	else
 	    zapsuperblocks /dev/$d
 	    echo "Invalidating MBR/GPT on /dev/$d"
-	    # XXX not in the Linux MFS yet
-	    #sgdisk -Z /dev/$d >/dev/null 2>&1
-	    dd if=/dev/zero of=/dev/$d bs=512 count=8192
+	    if [ -x /usr/sbin/sgdisk ]; then
+		sgdisk -Z /dev/$d >/dev/null 2>&1
+	    else
+		dd if=/dev/zero of=/dev/$d bs=512 count=8192
+	    fi
 	fi
 
     	echo "Re-reading partition table for /dev/$d after zap ..."
@@ -976,9 +983,14 @@ for dev in $devs; do
 	# for an image fetched via HTTP).
 	#
 	if [ $PART -eq 0 ]; then
-	    echo "Resizing final disk partition"
 	    LDISK=`getvar LDISK "$line" hda`
-	    growdisk -vW /dev/$LDISK
+	    spttype=`get_part_type /dev/$LDISK`
+	    if [ $? -eq 0 -a "$spttype" = "MBR" ]; then
+		echo "Resizing final disk partition on /dev/$LDISK"
+		growdisk -vW /dev/$LDISK
+	    else
+		echo "NOT resizing final disk partition on /dev/$LDISK"
+	    fi
 	fi
 
 	# whack the info so we don't slicefix again
