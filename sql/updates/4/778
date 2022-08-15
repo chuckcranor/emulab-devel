@@ -1,0 +1,21 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBTableExists("apt_aggregate_monitor_nodes")) {
+	DBQueryFatal("CREATE TABLE `apt_aggregate_monitor_nodes` ( ".
+		     " `urn` varchar(128) NOT NULL default '', ".
+		     " `hostname` varchar(128) NOT NULL default '', ".
+		     " PRIMARY KEY  (`urn`, `hostname`) ".
+		     ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

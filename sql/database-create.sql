@@ -326,6 +326,17 @@ CREATE TABLE `apt_aggregate_status` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_aggregate_monitor_nodes`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_monitor_nodes`;
+CREATE TABLE `apt_aggregate_monitor_nodes` (
+  `urn` varchar(128) NOT NULL default '',
+  `hostname` varchar(128) NOT NULL default '',
+  PRIMARY KEY  (`urn`, `hostname`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregates`
 --
 

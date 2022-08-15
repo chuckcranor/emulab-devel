@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -81,20 +81,6 @@ my $AGGDOWN_THRESHOLD= 180;
 my $DAILY_INTERVAL   = 24 * 3600;
 my $SLACK	     = "https://hooks.slack.com/services";
 my $SLACKURL         = "$SLACK/T0D79QFGC/B9V105D99/kTE1wzm0binEIsBsQFuCkqfK";
-
-#
-# Mothership extra node definitions, which will go into the database
-# at some point.
-#
-my %mothershipnodes = (
-    "emulab.net"          => ["dbox1", "dbox2",
-			      "subboss", "subboss2", "subboss3",
-			      "tipserv3", "tipserv4", "tipserv5", "tipserv6"],
-    "apt.emulab.net"      => ["subboss"],
-    "utah.cloudlab.us"    => ["dbox1"],
-    "wisc.cloudlab.us"    => ["dbox"],
-    "clemson.cloudlab.us" => ["dbox"],
-);
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -230,16 +216,20 @@ sub CheckAggregates()
 	# Hack alert; we have a gross test in for powderwireless until
 	# DB is updated; the ops nodes do not have public IPs.
 	#
-	if ($hrn->domain() !~ /powderwireless\.net$/) {
+	if ($hrn->domain() !~ /powderwireless\.net$/ &&
+	    $hrn->domain() !~ /leefedlab/) {
 	    $aggregates{$urn}->{"nodes"}->{"ops." . $hrn->domain()} = undef;
 	}
 
 	#
-	# Another hacky check for other nodes that need to be checked.
+	# List of additonal nodes that are specific to the Mothership.
 	#
 	if ($MAINSITE) {
-	    if (exists($mothershipnodes{$hrn->domain()})) {
-		foreach my $hostname (@{$mothershipnodes{$hrn->domain()}}) {
+	    my $extras =
+		DBQueryWarn("select hostname from apt_aggregate_monitor_nodes ".
+			    "where urn='$urn'");
+	    if ($extras) {
+		while (my ($hostname) = $extras->fetchrow_array()) {
 		    my $host = "${hostname}." . $hrn->domain();
 		    
 		    $aggregates{$urn}->{"nodes"}->{$host} = undef;
