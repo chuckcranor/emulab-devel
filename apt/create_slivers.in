@@ -1437,7 +1437,7 @@ sub WaitForSlivers()
 	# If someone gets the lock, this will fail. But the apt daemon will
 	# see the canceled flag too and fire off a termination. 
 	#
-	system("$MANAGEINSTANCE -t $webtask_id terminate -L $uuid");
+	system("$MANAGEINSTANCE -t $webtask_id terminate $uuid -L");
 	exit(0);
     }
 
