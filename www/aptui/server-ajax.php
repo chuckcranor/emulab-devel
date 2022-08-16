@@ -779,7 +779,7 @@ $this_user = CheckLogin($check_status);
 function CheckLoginForAjax($route)
 {
     global $this_user, $check_status;
-    global $ISAPT;
+    global $ISAPT, $LOG_TESTBED;
     $guestokay = false;
     $unapprovedokay = false;
     $notloggedinokay = false;
@@ -895,6 +895,12 @@ if (! array_key_exists($ajax_method, $routing[$ajax_route]["methods"])) {
     exit(1);
 }
 CheckLoginForAjax($routing[$ajax_route]);
+if (!$this_user) {
+    openlog("server-ajax", LOG_CONS, constant("${LOG_TESTBED}"));
+    syslog(LOG_INFO, $_SERVER['REMOTE_ADDR'] . " $ajax_route:$ajax_method " .
+           json_encode($ajax_args));
+    closelog();
+}
 include($routing[$ajax_route]["file"]);
 call_user_func($routing[$ajax_route]["methods"][$ajax_method]);
 
