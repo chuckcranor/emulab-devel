@@ -4242,6 +4242,19 @@ sub ClearManifest($)
     $self->{'DBROW'}->{'manifest'} = undef;
 }
 
+sub Manifest($)
+{
+    my ($self) = @_;
+    return undef
+	if (!defined($self->manifest()));
+    
+    my $manifest = GeniXML::Parse($self->manifest());
+    return undef
+	if (! defined($manifest));
+
+    return $manifest;
+}
+
 sub SetTicket($$)
 {
     my ($self,$ticket_string) = @_;
