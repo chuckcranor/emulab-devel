@@ -2809,11 +2809,6 @@ $(function ()
 	var gotallmanifests = function() {
 	    console.info("gotallmanifests", xml);
 	    
-	    // Do not show secrets if viewing using foreign admin creds
-	    if (!isfadmin && onlyfirst) {
-		// This will update the instructions.
-		FindEncryptionBlocks(xml);
-	    }
 	    // Update the snapshot modal with new nodes.
 	    UpdateSnapshotModal();
 
@@ -2858,6 +2853,12 @@ $(function ()
 
 	    if (onlyfirst) {
 		UpdateInstructions(xml, uridata);
+
+		// Do not show secrets if viewing using foreign admin creds
+		if (!isfadmin) {
+		    // This will update the instructions.
+		    FindEncryptionBlocks(xml);
+		}
 	    }
 
 	    /*
