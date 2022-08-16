@@ -576,6 +576,18 @@ sub GetVnode($)
     return $result;
 }
 
+# Returns the host element;
+sub GetHost($)
+{
+    my ($node) = @_;
+    my $result = undef;
+    
+    if (!IsVersion0($node)) {
+	$result = GeniXML::FindNodes("n:host", $node)->pop();
+    }
+    return $result;
+}
+
 # Returns the uuid or urn of an RSpec node or undef if it is not a node.
 sub GetNodeId($)
 {
