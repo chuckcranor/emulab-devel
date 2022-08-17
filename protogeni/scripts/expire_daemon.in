@@ -678,7 +678,7 @@ sub RegisterSlices()
 	    # aggregate is gone, lets not worry.
 	    next;
 	}
-	if ($aggregate->hrn() =~ /OAI2021FallWS/) {
+	if ($aggregate->hrn() =~ /@TUTORIALPID@/) {
 	    next;
 	}
 	
@@ -862,10 +862,14 @@ sub PushStats()
     #
     # Limit to small number of records at a time to avoid pounding the CH.
     #
+    my $tutorialclause =
+	("@TUTORIALPID@" eq "" ? "" :
+	 "hrn not like '%" . "@TUTORIALPID@" . "%' and ");
+    
     my $query_result =
 	GeniDB::DBQueryWarn("select * from aggregate_history ".
 			    "where type='Aggregate' and ".
-			    "      hrn not like '%OAI2021FallWS%' and ".
+			    $tutorialclause .
 			    "      (idx>$lastidx or ".
 			    "       (idx<=$lastidx and reported is null)) ".
 			    "limit 100");

@@ -1724,7 +1724,7 @@ function Do_DismissExtensionDenied()
 #
 function Do_ExpInfo()
 {
-    global $instance, $creator;
+    global $instance, $creator, $TUTORIALPID;
 
     if (StatusSetupAjax(0)) {
 	return;
@@ -1789,6 +1789,9 @@ function Do_ExpInfo()
         $blob["admin_notes"] = "";
     }
     $blob["rspec"] = $instance->rspec();
+
+    # Tutorial
+    $blob["istutorial"] = ($instance->pid() == $TUTORIALPID ? 1 : 0);
     
     #
     # Extension stuff

@@ -754,7 +754,7 @@ sub RunAssign($$)
     }
 
     # Hack for Kirk.
-    if ($pid eq "OAI2021FallWS" || $project->IsNonLocal()) {
+    if ($pid eq "@TUTORIALPID@" || $project->IsNonLocal()) {
 	TBDebugTimeStamp("Trying to get the mapper lock");
 	while (1) {
 	    if (libEmulab::EmulabCountLock("mapperlock", 1) == 0) {
@@ -765,7 +765,7 @@ sub RunAssign($$)
 	}
 	TBDebugTimeStamp("Got the mapper lock");
 	goto skipadctrl
-	    if ($pid eq "OAI2021FallWS");
+	    if ($pid eq "@TUTORIALPID@");
     }
     
     #
@@ -792,7 +792,7 @@ sub RunAssign($$)
     TBDebugTimeStamp("MaxSwapInMap finished"); 
     #print STDERR Dumper($reservation_bounds);
     # Skip this during tutorials, takes too long.
-    if ($pid ne "OAI2021FallWS") {
+    if ($pid ne "@TUTORIALPID@") {
 	# Dump to file.
 	DumpReservationInfo($resinfolog, $reservation_bounds);
 	TBDebugTimeStamp("DumpReservationInfo finished");

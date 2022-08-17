@@ -38,7 +38,7 @@ function Do_GetProfile()
 {
     global $this_user;
     global $ajax_args;
-    global $DEFAULT_AGGREGATE;
+    global $DEFAULT_AGGREGATE, $TUTORIALPID;
     
     if (!isset($ajax_args["profile"])) {
 	SPITAJAX_ERROR(1, "Missing profile");
@@ -65,7 +65,7 @@ function Do_GetProfile()
 	$amdefault = $profile->BestAggregate();
     }
     $ispp = ($profile->isParameterized() ? 1 : 0);
-    if ($profile->pid() == "OAI2021FallWS") {
+    if ($profile->pid() == $TUTORIALPID) {
         $lastused = 0;
         $count    = 0;
     }

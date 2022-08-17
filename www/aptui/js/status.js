@@ -136,7 +136,7 @@ $(function ()
 	extension_blob  = expinfo.extension_info;
 
 	// For tutorials
-	if (expinfo.project == "OAI2021FallWS") {
+	if (expinfo.istutorial) {
 	    slowdown = true;
 	}
 	

@@ -875,6 +875,23 @@ class User
     function NeedAccountUpdate() {
         return $this->RequireAffiliation() + $this->RequireAddress();
     }
+
+    #
+    # Tutorial Hack.
+    #
+    function IsTutorialUser() {
+        global $TUTORIALPID;
+    
+        if ($TUTORIALPID == "") {
+            return 0;
+        }
+        $uid_idx = $this->uid_idx();
+        $query_result = DBQueryFatal("select uid from group_membership ".
+                                     "where pid='$TUTORIALPID' and ".
+                                     "      uid_idx='$uid_idx' and ".
+                                     "      trust!='none'");
+        return mysql_num_rows($query_result);
+    }
     
     #
     # Find all the project licenses this user needs to accept (as leader

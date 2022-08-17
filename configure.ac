@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -389,6 +389,8 @@ AC_SUBST(POWDER_WBSTORE)
 AC_SUBST(POWDER_BUS_P0WER_VERSION);
 AC_SUBST(DISABLE_RESERVATION_EMAIL)
 AC_SUBST(MAILERNODE)
+AC_SUBST(TUTORIALPID)
+AC_SUBST(TUTORIALPROFILE)
 
 #
 # Offer both versions of the email addresses that have the @ escaped
@@ -594,6 +596,8 @@ POWDER_NICKNAME=""
 POWDER_BUS_P0WER_VERSION=0
 DISABLE_RESERVATION_EMAIL=0
 MAILERNODE="ops"
+TUTORIALPID=""
+TUTORIALPROFILE=""
 
 #
 # XXX You really don't want to change these!

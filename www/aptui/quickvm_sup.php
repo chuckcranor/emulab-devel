@@ -106,6 +106,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     $height = ($thinheader ? 150 : 250);
     $drewheader = 1;
     $nonav = 0;
+    $noannouncements = 0;
     $parsed_url = parse_url($_SERVER['REQUEST_URI']);
     $script = basename($parsed_url["path"]);
 
@@ -116,6 +117,10 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
 	$login_status = $status;
 	$login_uid    = $login_user->uid();
         $ga_userid    = $login_user->ga_userid();
+        if ($login_user->IsTutorialUser()) {
+            # TUTORIALPID
+            $noannouncements = 1;
+        }
     }
     if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
         $showmenus = 1;
@@ -233,8 +238,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "    window.LOGINUID  = " .
         ($login_user ? "'$login_uid'" : "null") . ";\n";
     echo "    window.PORTAL_NAME = \"$PORTAL_NAME\"\n";
-    # For OAI2021FallWS
-    echo "    window.NOANNOUNCEMENTS = 0\n";
+    # For TUTORIALPID
+    echo "    window.NOANNOUNCEMENTS = $noannouncements\n";
     echo "</script>\n";
     
     if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {

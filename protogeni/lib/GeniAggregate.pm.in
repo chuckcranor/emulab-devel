@@ -1426,7 +1426,7 @@ sub ActionStart($$;$@)
 	    close(MAP);
 	}
 	
-	if ($pid ne "OAI2021FallWS") {
+	if ($pid ne "@TUTORIALPID@") {
 	    if (system("$GENELISTS -c")) {
 		$msg .= "$GENELISTS failed\n";
 		goto bad;
@@ -1437,7 +1437,7 @@ sub ActionStart($$;$@)
 	    $msg .= "$GENTOPOFILE failed\n";
 	    goto bad;
 	}
-	if ($pid ne "OAI2021FallWS") {
+	if ($pid ne "@TUTORIALPID@") {
 	    DebugTimeStamp("exports_setup");
 	    if (system("$EXPORTS_SETUP")) {
 		$msg .= "$EXPORTS_SETUP failed\n";

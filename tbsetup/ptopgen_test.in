@@ -1405,8 +1405,8 @@ $result =
 		  "     a.def_boot_osid_vers=so.vers " : "").
 		 "where $free_condition and ".
 		 "   (a.role='testnode' and t.isremotenode=0 ".
-		 # OAI2021FallWS
-		 #"    and a.type='d430'".
+		 (defined($pid) && $pid eq "@TUTORIALPID@" ?
+		  " and a.type='d430' " : "") .
 		 "   )");
 
 TBDebugTimeStamp("Finished big node query");

@@ -1343,7 +1343,7 @@ sub AddAggregates($$$$@)
 	# Check to make sure the aggregate is online and reachable
 	# We do not do this if the experiment start is deferred.
 	if (!defined($self->start_at()) || defined($self->started())) {
-	    if ($project->pid() ne "OAI2021FallWS") {
+	    if ($project->pid() ne "@TUTORIALPID@") {
 		if ($aptagg->CheckStatus($perrmsg)) {
 		    if (!$aptagg->deferrable() ||
 			$nopending ||

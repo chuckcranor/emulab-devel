@@ -913,7 +913,7 @@ if ($slice->SetExpiration((defined($stop_at) ? $stop_at :
 my $slice_uuid = $slice->uuid();
 
 # Avoid pointless geni churn
-if ($project->pid() eq "OAI2021FallWS") {
+if ($project->pid() eq "@TUTORIALPID@") {
     $slice->SetRegisteredFlag(1);
 }
 

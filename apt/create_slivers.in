@@ -286,7 +286,7 @@ foreach my $agg ($instance->AggregateList()) {
     # See if the aggregate is online, lets not go to a ton of trouble
     # if the aggregate is dead.
     #
-    if ($project->pid() ne "OAI2021FallWS" && $aptagg->CheckStatus(\$errmsg)) {
+    if ($project->pid() ne "@TUTORIALPID@" && $aptagg->CheckStatus(\$errmsg)) {
 	print STDERR "$errmsg\n";
 	#
 	# If the cluster is not deferrable, then its an error and the
@@ -946,7 +946,7 @@ sub CreateSliver($)
 	    return 1;
 	}
     }
-    if ($project->pid() ne "OAI2021FallWS") {    
+    if ($project->pid() ne "@TUTORIALPID@") {    
 	#
 	# Clear any stored max extensions for the aggregate between the
 	# provisioning and provisioned stages. This is a critical section,
@@ -965,7 +965,7 @@ sub CreateSliver($)
     # Mark that it is doing something.
     $aggobj->SetStatus("provisioning");
 
-    if ($project->pid() ne "OAI2021FallWS") {    
+    if ($project->pid() ne "@TUTORIALPID@") {    
 	# Clear max extensions for any instances using this aggregate
 	APT_Instance->ClearAllMaxExtension($aggobj->aggregate_urn());
     
@@ -985,16 +985,16 @@ sub CreateSliver($)
     # This creates the sliver and starts it. We have to watch for the
     # server being too busy.
     #
-    my $tries = ($project->pid() eq "OAI2021FallWS" ? 60 : 1);
+    my $tries = ($project->pid() eq "@TUTORIALPID@" ? 60 : 1);
     my $response;
     my $earlyreturn = 0;
     my $doasync = ($aptagg->ismobile() ||
-		   $project->pid() eq "OAI2021FallWS" ? 0 : 1);
+		   $project->pid() eq "@TUTORIALPID@" ? 0 : 1);
     my $isasync = 0;
     my $errmsg;
 
     while (1) {
-	if ($project->pid() eq "OAI2021FallWS") {
+	if ($project->pid() eq "@TUTORIALPID@") {
 	    if (LoadAverage() >= (@PROTOGENI_MAXSERVERLOAD@ - 1)) {
 		print STDERR "Load too high, waiting\n";
 		sleep(2);

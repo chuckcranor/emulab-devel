@@ -129,7 +129,7 @@ $(function () {
 	});
       };
 	if (1) {
-	    // OAI2021FallWS
+	    // TUTORIALPID
 	    var xmlthing = sup.CallServerMethod(null, "instantiate",
 						"GetImageList");
 	    xmlthing.done(callback);

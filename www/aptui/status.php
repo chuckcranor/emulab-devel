@@ -223,7 +223,7 @@ $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
 #}
 #$cansnap = 0;
 
-if ($instance->pid() == "OAI2021FallWS") {
+if ($instance->pid() == $TUTORIALPID) {
     $lazytopo = 1;
 }
 

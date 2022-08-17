@@ -139,7 +139,7 @@ while (list($pid) = each($projlist)) {
             );
         }
     }
-    if (0 && $pid == "OAI2021FallWS") {
+    if ($pid == $TUTORIALPID) {
         $noprediction   = 1;
     }
 }
