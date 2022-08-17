@@ -266,7 +266,7 @@ function Do_GetInstanceStatus()
     # Reflect errors back to the user.
     if ($webtask && $webtask->exited()) {
         $blob["code"] = $webtask->exitcode();
-        if ($wtask->TaskValue("output")) {
+        if ($webtask->TaskValue("output")) {
             $blob["message"] = htmlentities($webtask->TaskValue("output"));
         }
         $blob["canclearerror"]
