@@ -286,7 +286,7 @@ set_mbr_type(int fd, int slice, iz_type dostype)
 	return 0;
 }
 
-void mbr_fixup(void *start, size_t size, struct iz_disk *dinfo, int debug)
+void mbr_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug)
 {
 	struct doslabel label;
 	struct iz_slice *nparttab;
