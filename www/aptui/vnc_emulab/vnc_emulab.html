@@ -12,12 +12,12 @@
     <nav class="navbar navbar-inverse navbar-fixed-top">
       <div class="container-fluid">
 	<div>
-          <form class="navbar-form navbar-left">
-            <div class="form-group">
+          <form class="navbar-form" style="padding: 0px; margin-bottom: 2px;">
+            <div class="col-xs-3 col-md-4 col-lg-6">
               <input type="text"
 		     id="clipboard-paste-area"
-		     style="width: 1100px;"
-		     placeholder="Paste text here from the system clipboard, and it will be transferred to the VNC clipboard. Use the Copy to System Clipboard button to transfer from the VNC clipboard to the system clipboard."
+		     style="width: 100%;"
+		     placeholder=""
 		     class="form-control input-sm">
             </div>
             <button id="copyToClipboard-button"
@@ -28,10 +28,17 @@
 		    onclick="event.preventDefault();"
 		    data-toggle='modal'
 		    data-target="#help-modal">Help!</button>
+
+	    <p class="navbar-text pull-right"
+	       style="margin-top: 5px; margin-bottom: 5px;">Status:
+	      <span id="status">Connected to pc841.emulab.net:1 (guest1)
+	      </span></p>
           </form>
-	  <p class="navbar-text navbar-right"
-	     style="margin-right: 15px;">Status:
-	    <span id="status">Loading</span></p>
+	  <p class="navbar-text"
+	     style="margin-top: 0px; margin-bottom: 0px; color:white;">
+	    <small>For more information on copy/paste between VNC and your
+	      desktop click on the
+	      <b><em>Help</em></b> button</small></p>
 	</div>
       </div>
     </nav>
