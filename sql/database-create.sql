@@ -3254,6 +3254,7 @@ CREATE TABLE `image_versions` (
   `ready` tinyint(1) NOT NULL default '0',
   `isdelta` tinyint(1) NOT NULL default '0',
   `isdataset` tinyint(1) NOT NULL default '0',
+  `isbootimage` tinyint(1) NOT NULL default '0',
   `released` tinyint(1) NOT NULL default '0',
   `ims_reported` datetime default NULL,
   `ims_update` datetime default NULL,
