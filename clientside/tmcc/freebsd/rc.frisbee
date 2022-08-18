@@ -520,6 +520,13 @@ loadone() {
 
     case $fstat in
     0)
+	#
+	# If the disk has a corrupt GPT (secondary in the wrong place),
+	# recover it.
+	#
+	if gpart show $DISK 2>/dev/null | grep -q CORRUPT; then
+	    gpart recover $DISK
+	fi
 	;;
     *)
 	echo "Frisbee run failed, status $fstat"

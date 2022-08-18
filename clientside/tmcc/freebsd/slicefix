@@ -56,6 +56,16 @@ case $# in
 esac
 
 #
+# See if we are GPT or MBR
+#
+isgpt=0
+pchar=s
+if gpart show $disk 2>/dev/null | grep -q GPT; then
+	isgpt=1
+	pchar=p
+fi
+
+#
 # Handle pseudo arguments in the environment.
 #
 
@@ -527,21 +537,26 @@ dofreebsd() {
 	#
 	vers=`uname -v | sed -e 's/FreeBSD \([0-9][0-9]*\).*/\1/'`
 
-	# see if there is a root ('a') partition on this BSD slice
-	`disklabel ${disk}s${part} 2>&1 | grep -s -E '^[ ]+a:' >/dev/null` || {
+	if [ $isgpt -eq 0 ]; then
+	    # see if there is a root ('a') partition on this BSD slice
+	    `disklabel ${disk}s${part} 2>&1 | grep -s -E '^[ ]+a:' >/dev/null` || {
 		return 1
-	}
+	    }
 
-	rootdev=/dev/${disk}s${part}a
-	echo "fixing FreeBSD root partition ${disk}s${part}a"
-	fsck -p $rootdev || {
+	    rootdev=/dev/${disk}s${part}a
+	    echo "fixing FreeBSD root partition ${disk}s${part}a"
+	    fsck -p $rootdev || {
 		# 8.x fsck fails to determine the FS type, try again with ufs
 		echo "retrying fsck with '-t ufs'"
 		fsck -t ufs -p $rootdev || {
 		    echo "Fsck of $rootdev failed"
 		    return 1
 		}
-	}
+	    }
+	else
+	    rootdev=/dev/${disk}p${part}
+	fi
+
 	mount -o ro $rootdev /mnt || {
 		echo "RO-mount of $rootdev failed"
 		return 1
@@ -565,6 +580,7 @@ dofreebsd() {
 	changesshd=0
 	changeauth=0
 	changercert=0
+	changelconf=0
 
 	fixit=0
 
@@ -579,7 +595,7 @@ dofreebsd() {
 	fi
 
 	# If our disk/part does not appear anywhere in fstab, we need to fix it
-	grep "^/dev/${disk}s${part}" /mnt/etc/fstab >/dev/null 2>&1
+	grep "^/dev/${disk}${pchar}${part}" /mnt/etc/fstab >/dev/null 2>&1
 	case $? in
 	0)
 	    ;;
@@ -619,6 +635,7 @@ dofreebsd() {
 		*)
 		    if [ $ACPI = "yes" ]; then
 			changeacpi=1
+			changelconf=1
 			fixit=1
 		    fi
 		    ;;
@@ -644,12 +661,14 @@ dofreebsd() {
 		0)
 		    if [ $ASF = "no" ]; then
 			changeasf=1
+			changelconf=1
 			fixit=1
 		    fi
 		    ;;
 		*)
 		    if [ $ASF = "yes" ]; then
 			changeasf=1
+			changelconf=1
 			fixit=1
 		    fi
 		    ;;
@@ -663,6 +682,7 @@ dofreebsd() {
 	fi
 
 	if [ $NOCLFLUSH != "unknown" ]; then
+	    changelconf=1
 	    fixit=1
 	fi
 
@@ -674,6 +694,7 @@ dofreebsd() {
 	null|vid)
 	    if [ "$curconsole" != "${CONSOLE}console" ]; then
 		changecons=1
+		changelconf=1
 		fixit=1
 	    fi
 	    ;;
@@ -681,6 +702,7 @@ dofreebsd() {
 	    if [ "$curconsole" != "comconsole" ]; then
 		# not comconsole, fix it
 		changecons=1
+		changelconf=1
 		fixit=1
 	    else
 		# see if the com port has changed
@@ -691,6 +713,7 @@ dofreebsd() {
 		fi
 		if [ "$flags" != "0x10" ]; then
 		    changecons=1
+		    changelconf=1
 		    fixit=1
 		fi
 	    fi
@@ -801,6 +824,27 @@ dofreebsd() {
 		return 0
 	fi
 
+	if [ 0 -eq 1 ]; then
+		echo changedisk=$changedisk
+		echo changeentropy=$changeentropy
+		echo changeacpi=$changeacpi
+		echo changeasf=$changeasf
+		echo changeclflush=$changeclflush
+		echo changecons=$changecons
+		echo changecerts=$changecerts
+		echo changehostkeys=$changehostkeys
+		echo changerootkeys=$changerootkeys
+		echo changezone=$changezone
+		echo changentp=$changentp
+		echo changechrony=$changechrony
+		echo changesshd=$changesshd
+		echo changeauth=$changeauth
+		echo changercert=$changercert
+		echo changelconf=$changelconf
+		umount $rootdev
+		return 0
+	fi
+
 	# We need to change something, remount RW and change it
 	umount $rootdev
 	mount $rootdev /mnt || {
@@ -820,15 +864,28 @@ dofreebsd() {
 
 	if [ $changedisk -eq 1 ]; then
 	    echo "  updating /etc/fstab"
-	    sed -E -i .preemulab -e "s;^/dev/[a-zA-Z]+[0-9]+s[0-9]+;/dev/${disk}s${part};" /mnt/etc/fstab || {
-		echo "Failed to update /etc/fstab"
-		umount $rootdev
-		return 1
-	    }
-	    echo "  updating /etc/dumpdates"
-	    sed -E -i .preemulab -e "s;^/dev/[a-zA-Z]+[0-9]+s[0-9]+;/dev/${disk}s${part};" /mnt/etc/dumpdates || {
-		echo "WARNING: Failed to update /etc/dumpdates"
-	    }
+	    if [ $isgpt -ne 0 ]; then
+		# XXX for GPT we need to remove any BSD partition specifier
+		# There should only be a root partition specified.
+		sed -i .preemulab -E -e "s;^/dev/[a-zA-Z]+[0-9]+[sp][0-9]+[a-z]*;/dev/${disk}${pchar}${part};" /mnt/etc/fstab || {
+		    echo "Failed to update /etc/fstab"
+		    umount $rootdev
+		    return 1
+		}
+	    else
+		# XXX otherwise we need to leave any BSD partition specifier
+		sed -i .preemulab -E -e "s;^/dev/[a-zA-Z]+[0-9]+[sp][0-9]+([a-z]*);/dev/${disk}${pchar}${part}\1;" /mnt/etc/fstab || {
+		    echo "Failed to update /etc/fstab"
+		    umount $rootdev
+		    return 1
+		}
+	    fi
+	    if [ -f /mnt/etc/dumpdates ]; then
+		echo "  updating /etc/dumpdates"
+		sed -i .preemulab -E -e "s;^/dev/[a-zA-Z]+[0-9]+[sp][0-9]+;/dev/${disk}${pchar}${part};" /mnt/etc/dumpdates || {
+		    echo "WARNING: Failed to update /etc/dumpdates"
+		}
+	    fi
 	    echo "  updating /etc/ttys"
 	    sed -i .preemulab -e "/^console/s;std.115200;std.$SPEED;" /mnt/etc/ttys || {
 		echo "WARNING: Failed to update /etc/ttys"
@@ -851,10 +908,12 @@ dofreebsd() {
 	cp -p /mnt/boot/loader.conf /mnt/boot/loader.conf.preemulab || {
 	    echo "WARNING: could not create a copy of loader.conf"
 	}
-	cat <<EOF4 >>/mnt/boot/loader.conf
+	if [ $changelconf -eq 1 ]; then
+	    cat <<EOF4 >>/mnt/boot/loader.conf
 # The remaining lines were added by Emulab slicefix.
 # DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.
 EOF4
+	fi
 
 	if [ $changeacpi -eq 1 ]; then
 	    if [ $ACPI = "no" ]; then
@@ -1786,30 +1845,38 @@ EOF7
 }
 
 fixone() {
-    echo "*** ${disk}s${part}:"
-    ptype=`fdisk -${part} ${disk} | grep sysid | sed 's/^sysid \([0-9][0-9]*\).*/\1/'`
+    echo "*** ${disk}${pchar}${part}:"
+    if [ $isgpt -eq 0 ]; then
+	ptype=`fdisk -${part} ${disk} | grep sysid | \
+	    sed 's/^sysid \([0-9][0-9]*\).*/\1/'`
+    else
+	# Human readable gpart output...Bah! Who knew this could be such fun?
+	ptype=`gpart show /dev/ada0 | \
+	    grep -E " +[0-9]+ +[0-9]+ +$part +[^ ]+" | \
+	    sed -E "s/ +[0-9]+ +[0-9]+ +$part +([^ ]+).*/\1/"`
+    fi
     ptype=${ptype:-0}
 
     case $ptype in
-    165)
+    165|freebsd-ufs)
 	dofreebsd
 	return $?
 	;;
-    131)
+    131|linux-data)
 	dolinux
 	return $?
 	;;
-    130)
+    130|linux-swap)
 	echo "ignoring Linux swap partition"
 	;;
-    7)
+    7|ms-basic-data)
 	echo "ignoring NTFS partition"
 	;;
     0)
-	echo "ignoring unused partition"
+	echo "ignoring unused/non-existent partition $part"
 	;;
     *)
-	echo "ignoring partition type $ptype"
+	echo "ignoring partition $part type $ptype"
 	;;
     esac
     return 0
