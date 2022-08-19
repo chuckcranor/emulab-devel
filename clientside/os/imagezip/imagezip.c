@@ -1031,7 +1031,6 @@ bbfixup(void *bstart, off_t bsize, void *fdata)
 	if (!isgpt)
 		mbr_fixup(bstart, bsize, dinfo, debug);
 #endif
-	free(fdata);
 }
 
 /*
@@ -1145,7 +1144,6 @@ read_image(int fd)
 		iz_lba pstart, gapstart, hisect;
 		iz_size psize, gapsize;
 		int biospartno, rootpartno;
-		struct iz_disk *dinfo;
 
 		biospartno = rootpartno = 0;
 		hisect = 0;
@@ -1314,12 +1312,10 @@ read_image(int fd)
 		 * We need to fixup the MBR or primary GPT to reflect the
 		 * partitions we pruned out. We schedule a fixup for that.
 		 */
-		dinfo = malloc(sizeof(disk));
-		memcpy(dinfo, &disk, sizeof(disk));
 		addfixupfunc(bbfixup,
 			     sectobytes(disk.metasect), 0,
 			     sectobytes(disk.lodata-disk.metasect),
-			     dinfo, sizeof(*dinfo),
+			     &disk, sizeof(disk),
 			     RELOC_NONE);
 
 		/*
@@ -2646,6 +2642,11 @@ compress_image(void)
 	inputoffset = 0;
 #ifdef SIGINFO
 	signal(SIGINFO, compress_status);
+#else
+#ifdef linux
+	/* be like dd and let SIGUSR1 print stats */
+	signal(SIGUSR1, compress_status);
+#endif
 #endif
 
 	buf = output_buffer;
