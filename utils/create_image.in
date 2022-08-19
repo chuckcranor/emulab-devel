@@ -112,6 +112,7 @@ my $maximagedata = 0;
 # relocations anywhere!
 #
 my $zipperopts = "";
+my %zipperoptsneeded = ();
 
 #
 # Create a disk image.
@@ -124,6 +125,7 @@ sub usage()
     print(STDERR
 	  "Usage: create_image [-wsN] [-p <pid>] <imagename> <node>\n" .
 	  "switches and arguments:\n".
+	  "-f          - run in the foreground\n".
 	  "-w          - wait for image to be fully created\n".
 	  "-s          - use ssh instead of frisbee uploader\n".
 	  "-N          - use NFS (if available) instead of frisbee uploader\n".
@@ -220,6 +222,8 @@ sub fatal($);
 sub check_progress($$);
 sub run_with_ssh($$);
 sub ssh_command($$;$);
+sub getimagebootslice($);
+sub imagezipcompat($);
 
 my $nodereboot	= "$TB/bin/node_reboot";
 my $createimage = "/usr/local/bin/create-versioned-image";
@@ -972,6 +976,7 @@ my $command;
 
 my $SERVER = ($UPLOADTOFS ? $FSIP : $BOSSIP)
 ;
+
 #
 # EC2 images use a special command which is hardwired below.
 #
@@ -1028,7 +1033,13 @@ elsif (!$doprovenance) {
 	$command .= " -S $SERVER -F $id";
     }
 
-    if ($isdataset) {
+    if ($image->isbootimage()) {
+	$startslice = getimagebootslice($image);
+	$command .= " -B $startslice";
+	$command .= " $device";
+	$zipperoptsneeded{'B'} = 1;
+    }
+    elsif ($isdataset) {
 	# This is not backward compatable, but none of the BS code is.
 	$command .= " -b $bsname";
     }
@@ -1140,7 +1151,7 @@ else {
     # We only include generate relocations for FreeBSD parititon images.
     #
     my $needrelocs = 0;
-    if ($image->loadpart()) {
+    if ($image->loadpart() && !$image->isbootimage()) {
 	my $pnode   = Node->Lookup($node->phys_nodeid());
 	my $osimage = OSImage->Lookup($pnode->def_boot_osid());
 	if (defined($osimage) && $osimage->OS() eq "FreeBSD") {
@@ -1148,27 +1159,38 @@ else {
 	}
     }
     #
-    # Add the imagezip option for limiting allocated data.
-    # XXX we cannot do this for datasets and vnodes since the running
-    # imagezip is in the client image and may not be up to date.
+    # Add the imagezip option for limiting allocated data if the client
+    # imagezip supports it.
+    #
+    # XXX we can check this without imagezip in the client. 
     #
     if (0 && $maximagedata > 0 && !$isdataset && !$isvirtnode) {
 	$zipperopts .= ","
 	    if ($zipperopts);
 	$zipperopts .= "A=$maximagedata";
+	$zipperoptsneeded{'A'} = 1;
     }
     if (!$needrelocs) {
 	$zipperopts .= ","
 	    if ($zipperopts);
 	$zipperopts .= "N";
+	# this has been supported since the beginning of time.
+	#$zipperoptsneeded{'N'} = 1;
     }
-
     if ($deltapct > 0) {
 	$zipperopts .= ","
 	    if ($zipperopts);
 	$zipperopts .= "P=$deltapct";
+	# uses a different script that has always supported this option.
+	#$zipperoptsneeded{'P'} = 1;
     }
-
+    if ($image->isbootimage()) {
+	$startslice = getimagebootslice($image);
+	$zipperopts .= ","
+	    if ($zipperopts);
+	$zipperopts .= "B=$startslice";
+	$zipperoptsneeded{'B'} = 1;
+    }
     if ($isdataset) {
 	# This is not backward compatable, but none of the BS code is.
 	$oargs .= " BSNAME=$bsname";
@@ -1647,6 +1669,9 @@ elsif ($result eq "timeout") {
 elsif ($result eq "toobig") {
     fatal("FAILED: Maximum image size ($maximagesize bytes) exceeded ... \n");
 }
+elsif ($result eq "imagezipincompat") {
+    fatal("FAILED: Imagezip on node does not support necessary option ... \n");
+}
 elsif ($result ne "0") {
     fatal("FAILED: Returned error code $result generating image ... \n");
 }
@@ -2037,12 +2062,79 @@ sub check_progress($$)
     return 1;
 }
 
+#
+# I am sure there is a more elegant way to do this... 
+sub getimagebootslice($)
+{
+    my ($image) = @_;
+    
+    my $slice = 0;
+    if ($image->part1_osid()) {
+	$slice = 1;
+    } elsif ($image->part2_osid()) {
+	$slice = 2;
+    } elsif ($image->part3_osid()) {
+	$slice = 3;
+    } elsif ($image->part4_osid()) {
+	$slice = 4;
+    }
+    return $slice;
+}
+
+#
+# Does the client-side imagezip support the options in $zipperopts?
+# We ssh over and check. If it does, we return 1 else return 0.
+#
+sub imagezipcompat($)
+{
+    my ($node_id) = @_;
+    my %izopts = ();
+    my $outref;
+
+    print STDERR "imagezipcompat: collecting imagezip option info...\n"
+	if ($debug > 1);
+
+    my $cmd = "/usr/local/bin/imagezip -h";
+    # XXX usage message does exit(1) so have to ignore exit code here
+    ssh_command($node_id, $cmd, \$outref);
+    foreach my $line (@$outref) {
+	if ($line =~ /^\s+-([a-zA-Z0-9])\s/) {
+	    $izopts{$1} = 1;
+	}
+    }
+    print STDERR "imagezipcompat:\n".
+	"need:     ". join(',', sort(keys %zipperoptsneeded)). "\n".
+	"supports: ". join(',', sort(keys %izopts)). "\n"
+	if ($debug > 1 && scalar(keys %izopts) > 0);
+
+    foreach my $key (keys %zipperoptsneeded) {
+	if (!exists($izopts{$key})) {
+	    return 0;
+	}
+    }
+
+    return 1;
+}
+
 sub run_with_ssh($$)
 {
     my ($cmd,$output) = @_;
     my $stat = undef;
     $node_id = $node->phys_nodeid()
 	if ($isvirtnode && !$isdataset);
+
+    #
+    # XXX horrible, horrible face-melting hack.
+    #
+    # We have no mechanism for determining in advance if imagezip on the client
+    # side supports a particular option. So we have to run "imagezip -h" and
+    # check the usage message. But...if the node has to be booted into an MFS
+    # to capture the image, we need to wait til it is running in the MFS to
+    # make that check. That would be now.
+    #
+    if (keys(%zipperoptsneeded) > 0 && !imagezipcompat($node_id)) {
+	return "imagezipincompat";
+    }
 
     $cmd = "$TB/bin/sshtb -n -host $node_id $cmd";
     if (defined($output)) {
