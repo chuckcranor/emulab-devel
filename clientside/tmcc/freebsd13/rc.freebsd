@@ -38,10 +38,17 @@ BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
 #
 use libsetup;
 
-#
 # Move swap partition to end of root disk.
-#
 my $moveswap = 0;
+
+# Partition number for swap partition.
+my $MBR_SWAPPART = 3;
+my $GPT_SWAPPART = 99;
+
+# Alignment for swap partition in sectors (1MB).
+my $PARTALIGN = 2048;
+
+# Size of swap partition. For FreeBSD this cannot be larger than 64GB.
 my $newssize = (GENVNODE() && GENVNODETYPE() eq "xen") ?
     (1 * 1024 * 1024 * 1024 / 512) : (8 * 1024 * 1024 * 1024 / 512);
 
@@ -183,11 +190,11 @@ sub gpartswapenable($$$$)
 	if ($field[0] eq "=>") {
 	    if ($field[4] eq "MBR") {
 		$isgpt = 0;
-		$spart = 3;
+		$spart = $MBR_SWAPPART;
 		$slet = 's';
 	    } elsif ($field[4] eq "GPT") {
 		$isgpt = 1;
-		$spart = 5;
+		$spart = $GPT_SWAPPART;
 		$slet = 'p';
 	    } else {
 		print STDERR "*** WARNING: boot disk $disk not MBR/GPT, ".
@@ -198,6 +205,9 @@ sub gpartswapenable($$$$)
 	    # where we want swap to be
 	    $ssize = $newssize;
 	    $sstart = $dsize - $ssize;
+	    # align the start
+	    $sstart = int($sstart / $PARTALIGN) * $PARTALIGN;
+	    $ssize = $dsize - $sstart;
 	    next;
 	}
 
