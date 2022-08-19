@@ -54,6 +54,7 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <zlib.h>
+#include <signal.h>
 
 #include "imagehdr.h"
 #include "sliceinfo.h"
