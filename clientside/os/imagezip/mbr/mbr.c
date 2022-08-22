@@ -286,12 +286,50 @@ set_mbr_type(int fd, int slice, iz_type dostype)
 	return 0;
 }
 
+/*
+ * Hack function for protective MBR in a GPT configuration.
+ * Make sure there is a pMBR and it has exactly one partition.
+ * Set the size of that partition to the given value.
+ * Return 0 on success, 1 on error.
+ */
+int pmbr_setsize(void *start, uint32_t psize, uint32_t *osize)
+{
+	struct doslabel label;
+
+	memcpy(&label.pad2, start, DOSPARTSIZE);
+	if (label.magic != BOOT_MAGIC) {
+		fprintf(stderr, "Wrong magic number in GPT pMBR!\n");
+		return 1;
+	}
+
+	if (label.parts[0].dp_typ != DOSPTYP_PROTECTIVE) {
+		fprintf(stderr, "pMBR partition 1 not correct type!\n");
+		return 1;
+	}
+
+	if (label.parts[1].dp_typ != DOSPTYP_UNUSED ||
+	    label.parts[2].dp_typ != DOSPTYP_UNUSED ||
+	    label.parts[3].dp_typ != DOSPTYP_UNUSED) {
+		fprintf(stderr, "pMBR has more than one partition!\n");
+		return 1;
+	}
+
+	/* All is well, set partition 1 size to our "disk" size. */
+	if (osize)
+		*osize = label.parts[0].dp_size;
+	label.parts[0].dp_size = psize - label.parts[0].dp_start;
+	memcpy(start, &label.pad2, DOSPARTSIZE);
+
+	return 0;
+}
+
 void mbr_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug)
 {
 	struct doslabel label;
 	struct iz_slice *nparttab;
 	int i;
 
+	start += sectobytes(dinfo->metasect);
 	memcpy(&label.pad2, start, DOSPARTSIZE);
 	if (label.magic != BOOT_MAGIC) {
 		fprintf(stderr, "Wrong magic number in DOS partition table\n");

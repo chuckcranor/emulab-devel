@@ -42,6 +42,11 @@ WITH_RANGEMAP	= 0
 WITH_MBR	= 1
 WITH_GPT	= 1
 
+# Need for PMBR manipulation
+ifeq ($(WITH_GPT),1)
+WITH_MBR	= 1
+endif
+
 #
 # Support disk erase (e.g., TRIM) operations
 # (incomplete as of 1/2016)

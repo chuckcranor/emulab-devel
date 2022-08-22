@@ -135,6 +135,7 @@ void mbr_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug);
 extern int parse_gpt(int fd, struct iz_disk *disk, int dowarn);
 extern int set_gpt_type(int fd, int slice, iz_type type);
 void gpt_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug);
+int pmbr_setsize(void *start, uint32_t psize, uint32_t *osize);
 #endif
 
 #endif /* _SLICEINFO_H_ */

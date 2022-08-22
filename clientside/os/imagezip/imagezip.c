@@ -1019,11 +1019,13 @@ bbfixup(void *bstart, off_t bsize, void *fdata)
 	assert(fdata != NULL);
 	int isgpt = (dinfo->metasect > 0) ? 1 : 0;
 
+	assert(bsize == sectobytes(dinfo->lodata));
 	if (debug > 1) {
 		fprintf(stderr, "bbfixup: fixing %s in bootblock %p for %lu bytes\n",
 			(isgpt ? "GPT" : "MBR"), bstart, (unsigned long)bsize);
 		dumpdiskinfo(dinfo);
 	}
+
 #ifdef WITH_GPT
 	if (isgpt)
 		gpt_fixup(bstart, bsize, dinfo, debug);
@@ -1111,8 +1113,8 @@ read_image(int fd)
 
 		if ((size1 = parttab[i].size) == 0)
 			continue;
-
 		start1 = parttab[i].offset;
+
 		for (ii = i + 1; ii < MAXSLICES; ii++) {
 			if (parttab[ii].type == IZTYPE_INVALID)
 				continue;
@@ -1253,7 +1255,7 @@ read_image(int fd)
 				hisect = partend;
 
 			fprintf(stderr, "Found P%d: [%u-%u]\n",
-				i+1, parttab[i].offset, partend);
+				i+1, parttab[i].offset, partend - 1);
 
 			if (gapstart == ~0 || gapstart == parttab[i].offset) {
 				gapstart = partend;
@@ -1272,7 +1274,16 @@ read_image(int fd)
 			}
 			gapstart = ~0;
 		}
-		inputmaxsec = hisect;
+
+		/*
+		 * Adjust the disk size for the maximum partition end while
+		 * also allowing for any metadata (GPT). We assume that the
+		 * end metadata will be the same size as the beginning, which
+		 * is true for both MBR (0) and GPT (34-40ish) and is
+		 * reflected by the value of disk.lodata.
+		 */
+		inputmaxsec = hisect + disk.lodata;
+		assert(inputmaxsec <= disk.dsize);
 
 		if (gotbb == 1) {
 #if 0
@@ -1312,20 +1323,24 @@ read_image(int fd)
 		/*
 		 * We need to fixup the MBR or primary GPT to reflect the
 		 * partitions we pruned out. We schedule a fixup for that.
+		 * Note that we pass the base of the boot area instead of
+		 * location of the MBR/GPT header. This is for GPT, where
+		 * we might need to fixup the pMBR which is just before
+		 * the GPT header. The fixup routines know how to compensate
+		 * and find the header.
 		 */
+		disk.dsize = inputmaxsec;
 		addfixupfunc(bbfixup,
-			     sectobytes(disk.metasect), 0,
-			     sectobytes(disk.lodata-disk.metasect),
-			     &disk, sizeof(disk),
-			     RELOC_NONE);
+			     0, 0, sectobytes(disk.lodata),
+			     &disk, sizeof(disk), RELOC_NONE);
 
 		/*
-		 * Make sure we use inputmaxsec as the max sector to look at.
+		 * Ensure we use inputmaxsec as the number of sectors to save.
 		 */
 		maxmode = 1;
 		if (debug)
-			fprintf(stderr, "Bootpart: only saving to %lu\n",
-				inputmaxsec);
+			fprintf(stderr, "Bootpart: only saving [0-%lu]\n",
+				inputmaxsec - 1);
 	}
 	
 	/*

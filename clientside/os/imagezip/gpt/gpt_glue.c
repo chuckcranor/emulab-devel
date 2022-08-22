@@ -349,6 +349,24 @@ parse_gpt(int fd, struct iz_disk *disk, int dowarn)
 		disk->hisect = (iz_lba)hisect - 1;
 		/* XXX always return the primary copy */
 		disk->metasect = (iz_lba)prilba;
+
+		/*
+		 * XXX this will cause assertion failures later on if we just
+		 * let it go. Adjust the value to reflect end of disk minus
+		 * enough space for the GPT secondary header minus another one
+		 * for the last sector of the last partition.
+		 *
+		 * Note that we are not fixing the GPT, so there will be blood
+		 * at some point in the future.
+		 */
+		if (disk->hidata >= disk->dsize) {
+			warnx("GPT: hdr_lba_end >= disk size (%u >= %u); "
+			      "adjusting to %u and hoping for the best!",
+			      disk->hidata, disk->dsize,
+			      disk->dsize-(iz_lba)hdr->hdr_lba_start);
+			disk->hidata =
+				disk->dsize - (iz_lba)hdr->hdr_lba_start - 1;
+		}
 	}
 
 	return 0;
@@ -479,26 +497,61 @@ gpt_utf8_to_utf16(const uint8_t *s8, uint16_t *s16, size_t s16len)
  * Do (limited) fixes to the GPT info in the buffer [start - start+size]
  * based on the info in dinfo.
  *
- * Currently we only delete partitions. We don't mess with attributes
- * or anything else.
+ * Currently we only adjust the disk size and delete excess partitions.
+ * We don't mess with attributes or anything else.
  */
 void gpt_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug)
 {
-	struct gpt_hdr *hdr = (struct gpt_hdr *)start;
+	struct gpt_hdr *hdr;
 	struct iz_slice *nparttab;
 	struct gpt_ent *ent;
+	void *pmbr;
+	uint64_t olba;
+	uint32_t pmbr_osize = 0;
 	off_t entoff;
 	int i;
 
+	pmbr = start;
+	start += sectobytes(dinfo->metasect);
+	hdr = (struct gpt_hdr *)start;
+
+	/* Make sure the primary header is internally consistent. */
 	if (gptcheckhdr(hdr, dinfo->metasect, "primary", 0)) {
 		fprintf(stderr, "WARNING: gpt_fixup: GPT header check failed.\n");
 		return;
 	}
 
-	if (hdr->hdr_entries == 0) {
-		fprintf(stderr, "WARNING: gpt_fixup: GPT no partitions!\n");
-		return;
-	}
+	/*
+	 * Adjust the primary GPT lba_end value so it is in our saved space
+	 * after leaving space for the secondary GPT.
+	 */
+	olba = hdr->hdr_lba_end;
+	hdr->hdr_lba_end = dinfo->dsize - hdr->hdr_lba_start;
+	if (debug)
+		fprintf(stderr, "gpt_fixup: lba_end was %lu, now %lu\n",
+			olba, hdr->hdr_lba_end);
+
+	/*
+	 * Point the alt table pointer to the space we leave at the end of our
+	 * image, even though it is not a legit GPT.
+	 */
+	olba = hdr->hdr_lba_alt;
+	hdr->hdr_lba_alt = dinfo->dsize - 1;
+	if (debug)
+		fprintf(stderr, "gpt_fixup: lba_alt was %lu, now %lu\n",
+			olba, hdr->hdr_lba_alt);
+
+	/*
+	 * We have to fix the pMBR size too to match the part we save.
+	 */
+	if (pmbr_setsize(pmbr, dinfo->dsize, &pmbr_osize))
+		fprintf(stderr,
+			"WARNING: gpt_fixup: Could not fix size of pMBR, "
+			"continuing anyway.\n");
+	if (debug)
+		fprintf(stderr,
+			"gpt_fixup: pMBR partition 1 had size %u, now %u\n",
+			pmbr_osize, (unsigned int)dinfo->dsize);
 
 	entoff = sectobytes(hdr->hdr_lba_table - hdr->hdr_lba_self);
 	if (entoff + hdr->hdr_entries * sizeof(struct gpt_ent) > size) {
@@ -509,14 +562,15 @@ void gpt_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug)
 	nparttab = dinfo->slices;
 	for (i = 0; i < hdr->hdr_entries; i++) {
 		struct gptmap *gmap = getgpttypebyuuid(&ent[i].ent_type);
-		uint64_t start = ent[i].ent_lba_start;
-		uint64_t size = ent[i].ent_lba_end - ent[i].ent_lba_start + 1;
+		uint64_t pstart = ent[i].ent_lba_start;
+		uint64_t psize = ent[i].ent_lba_end - ent[i].ent_lba_start + 1;
 		iz_type type = IZTYPE_UNKNOWN;
 
 		if (gmap) {
 			type = gmap->iztype;
 			/* consider a zero-length unused partition as invalid */
-			if (type == IZTYPE_UNUSED && start == 0 && size == 1) {
+			if (type == IZTYPE_UNUSED &&
+			    pstart == 0 && psize == 1) {
 				type = IZTYPE_INVALID;
 			}
 		}
