@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,10 +32,10 @@ use Getopt::Std;
 sub usage()
 {
     print STDOUT "Usage: create-image [-S image-server] [-F imageid] ".
-	"[-s slice] [-b bsname | <device file>] [<filename>]\n";
+	"[-B bootpart] [-s slice] [-b bsname | <device file>] [<filename>]\n";
     exit(-1);
 }
-my  $optlist = "F:S:s:b:";
+my  $optlist = "F:S:s:b:B:";
 
 # Drag in path stuff so we can find emulab stuff.
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -62,6 +62,7 @@ my $uploader = "/usr/local/bin/frisupload";
 my $xenscript = "/usr/local/bin/create-xen-image";
 my $slice  = "";
 my $slicenum = 0;
+my $bootpart = 0;
 my $device;
 my $filename;
 my $bsname;
@@ -122,6 +123,9 @@ if (defined($options{"F"})) {
     }
 }
 if (defined($options{"s"})) {
+    if ($bootpart > 0) {
+	die("Cannot use -s with -B");
+    }
     $slicenum = $options{"s"};
 
     if ($slicenum =~ /(\d)/) {
@@ -136,6 +140,21 @@ if (defined($options{"s"})) {
     # XXX for now we do not generate relocation info on slices
     # XXX there are still some issues with LILO/GRUB
     $slice = "-N $slice";
+}
+if (defined($options{"B"})) {
+    if ($slicenum > 0) {
+	die("Cannot use -B with -s");
+    }
+    $bootpart = $options{"B"};
+
+    if ($bootpart =~ /(\d)/) {
+	$bootpart = $1;
+    }
+    else {
+	die("Tainted slice number: $bootpart");
+    }
+    
+    $slice = "-B $bootpart";
 }
 if (defined($options{"b"})) {
     $bsname = $options{"b"};
