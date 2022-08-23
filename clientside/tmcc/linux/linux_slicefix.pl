@@ -176,7 +176,7 @@ sub find_swap_partitions
 	my @swap_devices;
 
 	if (-x $SGDISK) {
-	    open CMD, $SGDISK . " -p /dev/$device|" ||
+	    open CMD, $SGDISK . " -p $device|" ||
 		die "Couldn't run sgdisk: $!\n";
 
 	    while (<CMD>) {
@@ -286,7 +286,7 @@ sub fix_swap_partitions
 
 	my ($root_disk) = get_linux_device_components($root);
 	my ($old_root_disk) = get_linux_device_components($old_root);
-	my @swap_partitions = find_swap_partitions($root_disk);
+	my @swap_partitions = find_swap_partitions("/dev/$root_disk");
 	my ($l, $u) = binary_supports_blkid("$imageroot/sbin/swapon");
 
 	for my $part (@swap_partitions) {
