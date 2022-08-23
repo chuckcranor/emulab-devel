@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 #
-# Copyright (c) 2015-2021 University of Utah and the Flux Group.
+# Copyright (c) 2015-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,8 @@
 my $VOL_ID = '/lib/udev/vol_id';
 my $BLKID = '/sbin/blkid';
 my $FDISK = '/sbin/fdisk';
+my $SGDISK = '/usr/sbin/sgdisk';
+my $E2FSCK = '/sbin/e2fsck';
 my $MOUNT = '/bin/mount';
 my $UMOUNT = '/bin/umount';
 my $RM = '/bin/rm';
@@ -78,13 +80,13 @@ sub get_uuid
 		close CMD;
 	}
 	elsif (-x $BLKID) {
-		open CMD, "$BLKID|" || die
+		open CMD, "$BLKID $device|" || die
 			"Couldn't run blkid: $!\n";
 
 		while (<CMD>) {
 			next unless m#^$device:\s+#;
 			chomp;
-			next unless s/.*\s+UUID="([a-f0-9-]+)".*/\1/;
+			next unless s/.*\sUUID="([a-f0-9-]+)".*/\1/;
 			$uuid = $_;
 		}
 
@@ -135,14 +137,19 @@ sub set_random_rootfs_uuid
 {
 	my ($root) = @_;
 	
-	system("$TUNE2FS -U random $root");
+	my $output = `echo yes | $TUNE2FS -U random $root 2>&1`;
+	if ($? && $output =~ /requires a freshly checked filesystem/) {
+		print STDERR "Running fsck on $root ...";
+		system("$E2FSCK -yf $root");
+		system("echo yes | $TUNE2FS -U random $root");
+	}
 }
 
 sub disable_time_dependent_fsck
 {
 	my ($root) = @_;
 	
-	system("$TUNE2FS -i 0 $root >/dev/null 2>&1");
+	system("echo yes | $TUNE2FS -i 0 $root >/dev/null 2>&1");
 }
 
 sub kernel_version_compare
@@ -168,17 +175,27 @@ sub find_swap_partitions
 	my ($device) = @_;
 	my @swap_devices;
 
-	open CMD, $FDISK . " -l $device|" ||
-	     die "Couldn't run fdisk: $!\n";
+	if (-x $SGDISK) {
+	    open CMD, $SGDISK . " -p /dev/$device|" ||
+		die "Couldn't run sgdisk: $!\n";
 
-	while (<CMD>) {
-		next unless m#^$device#;
-		split /\s+/;
-		if ($_[4] eq '82') {
-			push @swap_devices, $_[0];
+	    while (<CMD>) {
+		if (/^\s+(\d+)\s+.*\sLinux swap/) {
+		    push @swap_devices, "$device$1";
 		}
-	}
+	    }
+	} else {
+	    open CMD, $FDISK . " -l $device|" ||
+		die "Couldn't run fdisk: $!\n";
 
+	    while (<CMD>) {
+		next unless m#^$device#;
+		@_ = split /\s+/;
+		if ($_[4] eq '82') {
+		    push @swap_devices, $_[0];
+		}
+	    }
+	}
 	close CMD;
 
 	return @swap_devices;
@@ -472,7 +489,7 @@ sub set_grub_root_device
 		open FILE, $BOOTDIR . "/edd_map";
 		while (<FILE>) {
 			chomp;
-			split /=/;
+			@_ = split /=/;
 			if ($_[0] eq $root_disk) {
 				$grub_disk = hex($_[1]) - 0x80;
 				print "Found GRUB root device using EDD\n";
@@ -514,7 +531,7 @@ sub set_grub2_root_device
 		open FILE, $BOOTDIR . "/edd_map";
 		while (<FILE>) {
 			chomp;
-			split /=/;
+			@_ = split /=/;
 			if ($_[0] eq $root_disk) {
 				$grub_disk = hex($_[1]) - 0x80;
 				print "Found GRUB root device using EDD\n";
@@ -633,7 +650,8 @@ sub guess_bootloader
 {
 	my ($device) = @_;
 	my $buffer;
-	my $bootloader;
+	# assume grub unless we can prove otherwise
+	my $bootloader = 'grub';
 
 	open DEVICE, $device || die "Couldn't open $device: $!\n";
 	read DEVICE, $buffer, 512;
@@ -718,7 +736,8 @@ sub get_fstab_root
 	     die "Couldn't open fstab: $!\n";
 
 	while (<FSTAB>) {
-		split /\s+/;
+		next if (/^#/);
+		@_ = split /\s+/;
 		if ($_[1] eq '/') {
 			$root = $_[0];
 		}
@@ -740,6 +759,15 @@ sub check_kernel
 	my $kernel_has_ide = 0;
 	my $version_string;
 	my $compression;
+
+	#
+	# XXX this is just bizarre, a lot of work just to get a version number
+	# or evidence of IDE? If the kernel name has what appears to be a
+	# version string in it, return that. And just say "no" to IDE!
+	#
+	if ($kernel =~ /^[^-]+-(\d+.\d+.\d+)/) {
+	    return ("$1", 0);
+	}
 
 	open KERNEL, $kernel or die "Couldn't open $kernel: $!\n";
 	read KERNEL, $buffer, 4;
@@ -929,7 +957,7 @@ sub check_initrd
 	open LOSETUP, "$LOSETUP -a |";
 	while (<LOSETUP>) {
 		chomp;
-		split /:/;
+		@_ = split /:/;
 		push @loopdevs, $_[0];
 	}
 	close LOSETUP;
@@ -946,7 +974,7 @@ sub mount_image
 	my ($root, $imageroot) = @_;
 	my $fstype;
 
-	for my $type (qw/ext3 ext2/) {
+	for my $type (qw/ext4 ext3 ext2/) {
 		`mount -t $type $root $imageroot`;
 		if (!($? >> 8)) {
 			$fstype = $type;
@@ -1585,7 +1613,7 @@ sub main
 	print "Root FS UUID: $uuid\n";
 	print "Root FS LABEL: $label\n";
 	print "Installed bootloader: $bootloader\n";
-	print "fstab root: $old_fstab_root\n";
+	print "Old fstab root: $old_fstab_root\n";
 	print "kernel: $kernel\n";
 	print "kernel version: $kernel_version\n";
 	print "kernel has IDE support: $kernel_has_ide\n";
