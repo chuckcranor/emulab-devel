@@ -64,6 +64,7 @@ old_linux_disk=${linux_disk#* }
 linux_disk=${linux_disk%% *}
 
 isgpt=0
+freebsd_pchar=s
 if [ $OS = Linux ]; then
 	disk=$linux_disk
 	if fdisk -l /dev/$disk 2>/dev/null | grep -qi 'found valid gpt'; then

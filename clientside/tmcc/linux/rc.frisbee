@@ -289,7 +289,7 @@ tweakmbr()
 	# "one of ours" -- we are happy to overwrite our old MBRs with one
 	# of our newer MBRs if needed.
 	known_sizes=
-	for mbrfile in ls -1 $MBR_PATH/mbr*.dd ; do
+	for mbrfile in $MBR_PATH/mbr*.dd ; do
 		known_size=`get_part_size $mbrfile 1`
 		known_sizes="$known_sizes $known_size "
 	done
@@ -700,9 +700,15 @@ handle_loadinfo()
 	    #build_secondary_gpt /dev/$DISK /dev/$DISK
 	    #build_protective_mbr /dev/$DISK
 	    echo "Fixing secondary GPT on /dev/$DISK ..."
+	    rc=1
 	    if [ -x /usr/sbin/sgdisk ]; then
-		sgdisk -e /dev/$DISK
-	    else
+		sgdisk -e /dev/$DISK >/dev/null 2>&1
+		rc=$?
+		if [ $rc -ne 0 ]; then
+		    echo "*** could not repair secondary GPT, trying gdisk"
+		fi
+	    fi
+	    if [ $rc -ne 0 ]; then
 		/bin/echo -e '\n\nr\nd\nv\nw\ny\n' | gdisk /dev/$DISK
 	    fi
 	    echo "Re-reading partition table after GPT fixups ..."
@@ -828,7 +834,7 @@ RESIDMEM=`expr \( $RESIDMEM + 2 \) \* 1024`
 FREEMEM=`free | sed -n 's/^-\/+ buffers.* \([0-9]*\)$/\1/p'`
 if [ -z "$FREEMEM" ]; then
 	# BusyBox's 'free' command has slightly different output
-	FREEMEM=`free | sed -n 's/^  *Mem: *[0-9]* *[0-9]* *\([0-9]*\) *.*$/\1/p'`
+	FREEMEM=`free | sed -n 's/^ *Mem: *[0-9]* *[0-9]* *\([0-9]*\) *.*$/\1/p'`
 fi
 if [ $FREEMEM -gt $RESIDMEM ]; then
 	BUFFERMEM=`expr $FREEMEM - $RESIDMEM`
