@@ -1225,7 +1225,7 @@ dolinux() {
 
 		# XXX assume "n1"
 		ldisk="${dtype}${dunit}n1p"
-		rootdev="/dev/${disk}s${part}"
+		rootdev="/dev/${disk}${pchar}${part}"
 		;;
 	# SCSI
 	da[0-7])
@@ -1259,7 +1259,7 @@ dolinux() {
 	dunit=`echo $dunit | sed -e 'y/0123456789/abcdefghij/'`;
 	if [ "$dtype" != "nvme" ]; then
 	    ldisk=$dtype$dunit
-	    rootdev=/dev/${disk}s${part}
+	    rootdev=/dev/${disk}${pchar}${part}
 	fi
 
 	#
@@ -1328,7 +1328,7 @@ dolinux() {
 	#
 	# Attempt to mount filesystem   
 	#
-	echo "  fixing Linux root partition ${disk}s${part}"
+	echo "  fixing Linux root partition ${disk}${pchar}${part}"
 	mount -t ext2fs $rootdev /mnt || {
 	    # might need a journal recovery, try fsck
 	    echo "EXT2FS mount failed, trying recovery..."
@@ -1851,7 +1851,7 @@ fixone() {
 	    sed 's/^sysid \([0-9][0-9]*\).*/\1/'`
     else
 	# Human readable gpart output...Bah! Who knew this could be such fun?
-	ptype=`gpart show /dev/ada0 | \
+	ptype=`gpart show $disk | \
 	    grep -E " +[0-9]+ +[0-9]+ +$part +[^ ]+" | \
 	    sed -E "s/ +[0-9]+ +[0-9]+ +$part +([^ ]+).*/\1/"`
     fi
@@ -1859,10 +1859,12 @@ fixone() {
 
     case $ptype in
     165|freebsd-ufs)
+	echo "fixing FreeBSD OS partition"
 	dofreebsd
 	return $?
 	;;
     131|linux-data)
+	echo "fixing Linux OS partition"
 	dolinux
 	return $?
 	;;
