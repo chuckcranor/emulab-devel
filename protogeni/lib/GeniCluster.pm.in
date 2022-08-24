@@ -641,10 +641,12 @@ sub SliceIdleData($)
 	if (!defined($experiment));
     return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 				"Experiment has been quarantined")
-	if ($experiment->state() eq EXPTSTATE_PANICED());
+	if (0 && $experiment->state() eq EXPTSTATE_PANICED());
 
     # Watch for busy experiment.
-    if ($slice->locked() || $experiment->state() ne EXPTSTATE_ACTIVE()) {
+    if ($slice->locked() ||
+	($experiment->state() ne EXPTSTATE_ACTIVE() &&
+	 $experiment->state() ne EXPTSTATE_PANICED())) {
 	return GeniResponse->Create(GENIRESPONSE_BUSY);
     }
     #
