@@ -691,6 +691,14 @@ $(function ()
 		if (aggregatesDeferred(json.value)) {
 		    status_html += " (but some aggregates deferred)";
 		}
+		else {
+		    // For Selenium.
+		    console.info("services done");
+		    if (! $('#execute-services-done').length) {
+			$('body').append("<div class='hidden' " +
+				 " id='execute-services-done'></div>");
+		    }
+		}
 	    }
 	}
 	lastStatus = instanceStatus;
