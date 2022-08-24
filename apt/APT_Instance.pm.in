@@ -986,7 +986,7 @@ sub BusyCount($)
 sub ProvisioningLock($)
 {
     my ($self) = @_;
-    my $MAX = 12;
+    my $MAX = 10;
 
     DBQueryWarn("lock tables apt_instances write")
 	or return 1;
