@@ -3137,9 +3137,10 @@ sub GetRoutes($$$)
 # Set the repository for the rspec. This is a top level element. At
 # some point we can think about per-node repos.
 #
-sub SetRepo($$$$$$)
+sub SetRepo($$$$$$$)
 {
-    my ($rspec, $repourl, $reporef, $repohash, $geniuser, $perrmsg) = @_;
+    my ($rspec, $repourl, $reporef,
+	$repohash, $geniuser, $project, $perrmsg) = @_;
 
     #
     # Temporary, lets just throw an execute service onto each node.
@@ -3165,10 +3166,16 @@ sub SetRepo($$$$$$)
     #
     my $url = new URI::URL $repourl;
     my $host = $url->host();
-    my ($org,$project) = ($url->path() =~ /^\/([^\/]+)(\/.*)$/);
-    if (defined($org) && defined($project)) {
-	my $sshurl = "git\@${host}:${org}${project}";
+    my ($org,$proj) = ($url->path() =~ /^\/([^\/]+)(\/.*)$/);
+    if (defined($org) && defined($proj)) {
+	my $sshurl = "git\@${host}:${org}${proj}";
 	$command .= "&& git remote set-url --push origin '$sshurl'";
+    }
+
+    if ($MAINSITE && $project->pid() eq "@TUTORIALPID@") {
+	$command =
+	    "/bin/echo 'nameserver 155.98.60.2' | ".
+	    "sudo /bin/csh -c '/bin/cat >> /etc/resolv.conf' && $command";
     }
 
     #
