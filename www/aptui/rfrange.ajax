@@ -232,6 +232,7 @@ function Do_RangeHistory()
     global $ajax_args;
     global $TB_PROJECT_READINFO;
     $pidclause = "";
+    $blob = array();
 
     if (isset($ajax_args["pid"])) {
         $pid = $ajax_args["pid"];

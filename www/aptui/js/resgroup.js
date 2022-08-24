@@ -5001,7 +5001,7 @@ $(function ()
 
 	    // Skip a partial row.
 	    if (low == "" || high == "") {
-		row.find(".badrange-row").addClass("hidden");
+		tbody.find(".badrange-row").addClass("hidden");
 		return;
 	    }
 	    CheckRangeAgainstRadios(tbody);
