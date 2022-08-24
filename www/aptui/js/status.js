@@ -2920,7 +2920,7 @@ $(function ()
 		}
 	    }
 	    multisite = Object.keys(statusblob).length > 1;
-	    console.info("foo", multisite, nodecount);
+	    console.info("foo", multisite, nodecount, lazytopo, jacksInstance);
 
 	    if (multisite || nodecount < MAXJACKSNODES) {
 		if (!jacksInstance) {

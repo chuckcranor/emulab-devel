@@ -128,7 +128,7 @@ $(function () {
 	  f();
 	});
       };
-	if (1) {
+	if (window.NOPREDICTION !== 1) {
 	    // TUTORIALPID
 	    var xmlthing = sup.CallServerMethod(null, "instantiate",
 						"GetImageList");
