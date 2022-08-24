@@ -1572,7 +1572,7 @@ $(function ()
     {
 	if (_.has(blob, "sliverstatus")) {
 	    for (var urn in blob.sliverstatus) {
-		var nodes = blob.sliverstatus[urn];
+		var nodes = blob.sliverstatus[urn].details;
 		for (var nodeid in nodes) {
 		    var status = nodes[nodeid];
 		    if (_.has(status, "execute_state") &&
@@ -1588,7 +1588,7 @@ $(function ()
     {
 	if (_.has(blob, "sliverstatus")) {
 	    for (var urn in blob.sliverstatus) {
-		var nodes = blob.sliverstatus[urn];
+		var nodes = blob.sliverstatus[urn].details;
 		for (var nodeid in nodes) {
 		    var status = nodes[nodeid];
 		    if (_.has(status, "execute_state")) {
