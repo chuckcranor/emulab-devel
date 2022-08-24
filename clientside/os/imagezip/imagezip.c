@@ -668,7 +668,7 @@ main(int argc, char *argv[])
 		usage();
 	}
 	if (bootpartmode && (slice < 1 || slice > MAXSLICES)) {
-		fprintf(stderr, "Boot partition must be between 1 and %d\n\n",
+		fprintf(stderr, "Boot image root partition must be between 1 and %d\n\n",
 			MAXSLICES);
 		usage();
 	}
@@ -678,7 +678,7 @@ main(int argc, char *argv[])
 		usage();
 	}
 	if (bootpartmode && (slicemode || slicetype || rawmode)) {
-		fprintf(stderr, "Bootpartition option (-B) cannot be used with "
+		fprintf(stderr, "Boot image option (-B) cannot be used with "
 			"slice (-s), type (-S), or raw (-r) options\n\n");
 		usage();
 	}
@@ -1177,7 +1177,7 @@ read_image(int fd)
 				hisect = pstart;
 				if (debug)
 					fprintf(stderr,
-						"Bootpart: Root in P%d [%u-%u]\n",
+						"Boot image: Root in P%d [%u-%u]\n",
 						i+1, pstart, pstart + psize - 1);
 				continue;
 			}
@@ -1193,7 +1193,7 @@ read_image(int fd)
 				hisect = pstart;
 				if (debug)
 					fprintf(stderr,
-						"Bootpart: EFI in P%d [%u-%u]\n",
+						"Boot image: EFI in P%d [%u-%u]\n",
 						i+1, pstart, pstart + psize - 1);
 				continue;
 			}
@@ -1217,7 +1217,7 @@ read_image(int fd)
 				hisect = pstart;
 				if (debug)
 					fprintf(stderr,
-						"Bootpart: BIOS boot in P%d [%u-%u]\n",
+						"Boot image: BIOS boot in P%d [%u-%u]\n",
 						i+1, pstart, pstart + psize - 1);
 				continue;
 			}
@@ -1229,7 +1229,7 @@ read_image(int fd)
 			parttab[i].type = IZTYPE_INVALID;
 		}
 		if (rootpartno == 0) {
-			warnx("Bootpart: Root partition not found!");
+			warnx("Boot image: Root partition not found!");
 			exit(1);
 		}
 
@@ -1264,7 +1264,7 @@ read_image(int fd)
 
 			gapsize = parttab[i].offset - gapstart;
 			if (debug)
-				fprintf(stderr, "Bootpart: gap at [%u-%u]\n",
+				fprintf(stderr, "Boot image: gap at [%u-%u]\n",
 					gapstart, gapstart + gapsize - 1);
 			if (gapsize > 0) {
 				addskip(gapstart, gapsize);
@@ -1339,7 +1339,7 @@ read_image(int fd)
 		 */
 		maxmode = 1;
 		if (debug)
-			fprintf(stderr, "Bootpart: only saving [0-%lu]\n",
+			fprintf(stderr, "Boot image: only saving [0-%lu]\n",
 				inputmaxsec - 1);
 	}
 	
@@ -1541,10 +1541,10 @@ char *usagestr =
  "\n"
  " Advanced options\n"
  " -z level       Set the compression level.  Range 0-9 (0==none, default==4).\n"
- " -B slice       Specify a slice to capture as the boot (root filesystem).\n"
- "                This is used to create a full image containing just the\n"
- "                the MBR/GPT, any EFI partition, and the indicated partition.\n"
- "                All other partitions are skipped.\n"
+ " -B slice       Create a boot image with <slice> as the root FS partition.\n"
+ "                A boot image is a full image containing just the MBR/GPT,\n"
+ "                any boot partitions (EFI, bios-boot, freebsd-boot), and the\n"
+ "                root filesystem partition. All other partitions are skipped.\n"
  " -I slice       Ignore (skip) the indicated slice (not with slice mode).\n"
  " -R slice       Force raw compression of the indicated slice (not with slice mode).\n"
  " -D             Do `dangerous' writes (don't check for async errors).\n"
