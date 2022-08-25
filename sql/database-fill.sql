@@ -1278,6 +1278,7 @@ REPLACE INTO table_regex VALUES ('images','auth_key','text','regex','^[0-9a-fA-F
 REPLACE INTO table_regex VALUES ('images','auth_uuid','text','regex','^[0-9a-fA-F]+$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','decryption_key','text','regex','^[0-9a-fA-F]+$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','isdataset','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('images','isbootimage','int','redirect','default:boolean',0,0,NULL);
 
 REPLACE INTO table_regex VALUES ('experiment_blobs','path','text','redirect','default:text',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiment_blobs','action','text','redirect','default:text',0,0,NULL);
