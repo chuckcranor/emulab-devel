@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2017 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -467,13 +467,46 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 			}
 		}
 		else if (DEFINED(DEF_BOOT_PARTITION)) {
+			/*
+			 * Check to see if the default boot OSID is part of a
+			 * whole disk "boot image". In this case we always
+			 * return partition 0; i.e. boot through the "boot
+			 * block" (which might be MBR code, a boot partition
+			 * or an EFI partition.
+			 *
+			 * XXX we check this for just default boot, which is
+			 * assumed to be the only on-disk boot (next and temp
+			 * likely being MFSes).
+			 */
+			int bootpart = TOINT(DEF_BOOT_PARTITION);
+			if (bootpart > 0) {
+				res2 = mydb_query("select isbootimage from"
+						  " interfaces as i,partitions as p,"
+						  " image_versions as iv where"
+						  " i.IP='%s' and i.node_id=p.node_id"
+						  " and p.`partition`=%d"
+						  " and p.imageid=iv.imageid"
+						  " and p.imageid_version=iv.version",
+						  1, inet_ntoa(ipaddr), bootpart);
+				if (res2 && mysql_num_rows(res2) == 1) {
+					row2 = mysql_fetch_row(res2);
+					if (row2[0] && atoi(row2[0]) != 0) {
+						warning("%s: bootimage, change part from %d to 0\n",
+							inet_ntoa(ipaddr), bootpart);
+						bootpart = 0;
+					}
+				}
+				if (res2)
+					mysql_free_result(res2);
+			}
+
 			if (bootdisk_bios_id) {
 				info->type = BIBOOTWHAT_TYPE_DISKPART;
 				info->what.dp.disk = bootdisk_bios_id;
-				info->what.dp.partition = TOINT(DEF_BOOT_PARTITION);
+				info->what.dp.partition = bootpart;
 			} else {
 				info->type = BIBOOTWHAT_TYPE_PART;
-				info->what.partition = TOINT(DEF_BOOT_PARTITION);
+				info->what.partition = bootpart;
 			}
 		}
 		else {
