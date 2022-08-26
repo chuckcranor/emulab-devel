@@ -215,10 +215,15 @@ if [ $CONSOLE = "unknown" ]; then
     echo "WARNING: console type not set, assuming \"sio1\""
     CONSOLE=sio1
 fi
-# XXX reset SLICEFIX_CONSOLE for the benefit of linux_slicefix
-# NB: don't do this; linux_slicefix accepts ,<speed> and sets speed, so we
-# can't drop it.
-#SLICEFIX_CONSOLE=$CONSOLE
+
+#
+# XXX if we picked a console here, reset SLICEFIX_CONSOLE for the benefit
+# of linux_slicefix. Otherwise, we don't want to mess with any speed setting
+# in the original SLICEFIX_CONSOLE string.
+#
+if [ $OS = Linux -a "$SLICEFIX_CONSOLE" = "unknown" ]; then
+    SLICEFIX_CONSOLE=$CONSOLE
+fi
 
 # Console ISA port
 PORT=
