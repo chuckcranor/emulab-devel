@@ -228,12 +228,11 @@ if ($instance->pid() == $TUTORIALPID) {
 }
 
 #
-# We give ssh to the creator (real user or guest user).
+# We give ssh to the creator and project members. Only the creator
+# gets the VNC option (if the profile started it).
 #
-$dossh =
-    (((isset($this_user) && $instance->CanDoSSH($this_user)) ||
-      (isset($_COOKIE['quickvm_user']) &&
-       $_COOKIE['quickvm_user'] == $creator->uuid())) ? 1 : 0);
+$dossh = $instance->CanDoSSH($this_user);
+$dovnc = $instance->CanDoVNC($this_user);
 
 #
 # See if we have a task running in the background for this instance.
@@ -286,6 +285,7 @@ echo "  window.APT_OPTIONS.snapping = $snapping;\n";
 echo "  window.APT_OPTIONS.hidelinktest = false;\n";
 echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
 echo "  window.APT_OPTIONS.dossh = $dossh;\n";
+echo "  window.APT_OPTIONS.dovnc = $dovnc;\n";
 echo "  window.APT_OPTIONS.isscript = $isscript;\n";
 echo "  window.APT_OPTIONS.lazytopo = $lazytopo;\n";
 echo "  window.APT_OPTIONS.AJAXURL = 'server-ajax.php';\n";

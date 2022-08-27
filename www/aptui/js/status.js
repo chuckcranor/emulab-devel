@@ -32,6 +32,7 @@ $(function ()
     var wholedisk   = 0;
     var isscript    = 0;
     var dossh       = 1;
+    var dovnc       = 0;
     var lazytopo    = 0;
     var jacksIDs    = {};
     var jacksSites  = {};
@@ -99,6 +100,7 @@ $(function ()
 	isguest       = (window.APT_OPTIONS.registered ? false : true);
 	wholedisk     = window.APT_OPTIONS.wholedisk;
 	dossh         = window.APT_OPTIONS.dossh;
+	dovnc         = window.APT_OPTIONS.dovnc;
 	isscript      = window.APT_OPTIONS.isscript;
 	hidelinktest  = window.APT_OPTIONS.hidelinktest;
 	lazytopo      = window.APT_OPTIONS.lazytopo;
@@ -2690,7 +2692,7 @@ $(function ()
 		}
 
 		// Optional X11 VNC
-		if (x11vnc.length) {
+		if (x11vnc.length && dovnc) {
 		    var host   = $(this).find("host");
 		    
 		    // Attach handler to the menu button.
@@ -2699,13 +2701,11 @@ $(function ()
 			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("vnc", [node]);
 			});
-		    clone.find(' [name=vnc]')
-			.parent().removeClass('hidden');
-
-		    // Context menu option
-		    $(CMclone).find("li[id=vnc]").removeClass("hidden");
-
 		    vnchost[node] = $(host).attr("name");
+		}
+		else {
+		    clone.find(' [name=vnc]')
+			.parent().addClass('disabled');
 		}
 
 		// Node "top"
@@ -2750,6 +2750,13 @@ $(function ()
 		}
 		if (! (login.length && dossh)) {
 		    $(CMclone).find("li[id=shell]").addClass("disabled");
+		    // For ActionHandler()
+		    $(CMclone).find("[name=shell]").attr("disabled", true);
+		}
+		if (! (x11vnc.length && dovnc)) {
+		    $(CMclone).find("li[id=vnc]").addClass("disabled");
+		    // For ActionHandler()
+		    $(CMclone).find("[name=vnc]").attr("disabled", true);
 		}
 		
 		// If a vhost/firewall, then grey out options. Or if there
