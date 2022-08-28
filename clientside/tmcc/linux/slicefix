@@ -1004,6 +1004,8 @@ EOF1
 		    cat <<EOF2 >>/mnt/boot/loader.conf
 comconsole_port="$PORT"
 comconsole_speed="$SPEED"
+boot_multicons="YES"
+boot_serial="YES"
 hint.$drv.0.flags="0x0"
 hint.$drv.1.flags="0x0"
 hint.$drv.2.flags="0x0"
