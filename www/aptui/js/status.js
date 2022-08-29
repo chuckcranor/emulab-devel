@@ -3778,10 +3778,12 @@ $(function ()
 		}
 	    }
 	    if (enable) {
-		EnableButton("connect-sharedlan");		
+		$("button#connect-sharedlan-confirm")
+		    .removeAttr("disabled");
 	    }
 	    else {
-		DisableButton("connect-sharedlan");
+		$("button#connect-sharedlan-confirm")
+		    .attr("disabled", "disabled");
 	    }
 	};
 	$('#connect-sharedlan-modal .target-uuid, ' +
