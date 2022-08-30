@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2019 University of Utah and the Flux Group.
+# Copyright (c) 2010-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -263,11 +263,16 @@ sub DumpImage($)
 		    if ($image->size());
 	    }
 	    
+	    if ($clientvers > 5) {
+		$xmlfields{'isbootimage'} = $image->isbootimage()
+		    if ($image->isbootimage());
+	    }
+	    
 	    #
 	    # Send along the history so that the caller can get all
 	    # the versions, which is important for delta based images.
 	    #
-	    if ($clientvers > 5) {
+	    if ($clientvers > 6) {
 		#
 		# Send the non-version metadata url so that the other side
 		# can have it for when an experiment wants whatever the
@@ -284,7 +289,7 @@ sub DumpImage($)
 		    if (defined($image->deltahash()) &&
 			$image->deltahash() ne "");
 
-		if ($clientvers > 6) {
+		if ($clientvers > 7) {
 		    $xmlfields{'size'} = $image->size()
 			if ($image->size());
 		    $xmlfields{'deltasize'} = $image->deltasize()

@@ -248,6 +248,7 @@ my %xmlfields =
      "lba_size",	=> ["lba_size",		$SLOT_OPTIONAL],
      "architecture",	=> ["architecture",	$SLOT_OPTIONAL],
      "taint_states",	=> ["taint_states",	$SLOT_OPTIONAL],
+     "isbootimage",	=> ["isbootimage",	$SLOT_OPTIONAL],
 );
 
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -692,7 +692,8 @@ sub Create($$$$$$$$$$)
     foreach my $key ("path", "shared", "global", "ezid", "mbr_version",
 		     "format", "metadata_url", "imagefile_url", "released",
 		     "isdataset", "lba_size", "lba_low", "lba_high",
-		     "origin_uuid", "origin_urn", "origin_name") {
+		     "origin_uuid", "origin_urn", "origin_name",
+		     "isbootimage") {
 	if (exists($argref->{$key})) {
 	    push(@arg_slots, $key);
 	}

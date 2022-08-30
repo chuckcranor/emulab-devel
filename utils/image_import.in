@@ -105,7 +105,7 @@ my $doprovenance  = 0;
 # version of the software we are so it gives something we can handle.
 # Be sure to update this if you change the version in dumpdescriptor.
 #
-my $METADATA_CLIENTVERSION = 5;
+my $METADATA_CLIENTVERSION = 6;
 
 #
 # Untaint the path
