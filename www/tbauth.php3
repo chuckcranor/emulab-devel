@@ -872,7 +872,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     global $TBMAIL_OPS, $TBMAIL_AUDIT, $TBMAIL_WWW;
     global $WIKISUPPORT, $WIKICOOKIENAME;
     global $BUGDBSUPPORT, $BUGDBCOOKIENAME, $CHECKLOGIN_USER;
-    global $TB_PROJECT_READINFO;
+    global $TB_PROJECT_READINFO, $TUTORIALSTATS;
     
     # Caller makes these checks too.
     if ((!TBvalid_uid($token) && !TBvalid_email($token)) ||
@@ -892,6 +892,10 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     unset($IP);
     if (isset($_SERVER['REMOTE_ADDR'])) {
 	$IP = $_SERVER['REMOTE_ADDR'];
+
+        if ($TUTORIALSTATS) {
+            TutorialStat("Login: $token");
+        }
 	
 	$ip_result =
 	    DBQueryFatal("select * from login_failures ".

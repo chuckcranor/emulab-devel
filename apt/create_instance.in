@@ -86,6 +86,7 @@ my $OURDOMAIN     = "@OURDOMAIN@";
 my $MAINSITE      = @TBMAINSITE@;
 my $PGENIDOMAIN   = "@PROTOGENI_DOMAIN@";
 my $PROTOGENI_URL = "@PROTOGENI_URL@";
+my $LOG_TESTBED   = "@LOG_TESTBED@";
 my $SACERT	  = "$TB/etc/genisa.pem";
 my $CMCERT	  = "$TB/etc/genicm.pem";
 my $SSHKEYGEN     = "/usr/bin/ssh-keygen";
@@ -118,20 +119,26 @@ my $seriallock;
 
 BEGIN {
     require libEmulab;
-    import libEmulab;
+    require APT_Utility;
+    
+    my $remote = (exists($ENV{"REMOTE_ADDR"}) ? $ENV{"REMOTE_ADDR"} : "");
+    APT_Utility::TutorialStat("create_instance: beginning $remote");
     
     while (1) {
-	if (libEmulab::EmulabCountLock("create_instance_lock", 10) == 0) {
+	if (libEmulab::EmulabCountLock("create_instance_lock", 15) == 0) {
 	    $seriallock = 1;
 	    last;
 	}
 	print STDERR "Waiting for the create_instance_lock lock ...\n";
+	APT_Utility::TutorialStat("create_instance: waiting for lock");
 	sleep(2);
     }
-    while (LoadAverage() > 30) {
-	print STDERR "Load too high, waiting\n";
+    while ((my $load = libEmulab::LoadAverage()) > 25) {
+	print STDERR "Load too high at $load, waiting ...\n";
+	APT_Utility::TutorialStat("create_instance: load too high at $load");
 	sleep(1);
     }
+    APT_Utility::TutorialStat("create_instance: done waiting, got serial lock");
 }
 END {
     # Be careful not to leave this locked on abnormal exit.
@@ -158,6 +165,7 @@ use APT_Instance;
 use APT_Geni;
 use APT_Dataset;
 use APT_Aggregate;
+use APT_Utility;
 use Experiment;
 use User;
 use Project;
@@ -214,6 +222,9 @@ if (defined($options{"S"})) {
 }
 if (defined($options{"u"})) {
     $quickuuid = $options{"u"};
+    my $remote = (exists($ENV{"REMOTE_ADDR"}) ? $ENV{"REMOTE_ADDR"} : "");
+    APT_Utility::TutorialStat("create_instance $remote $quickuuid");
+    $ENV{"QUICKUUID"} = $quickuuid;
 }
 if (defined($options{"P"})) {
     $nopending = 1;
@@ -1100,6 +1111,7 @@ if (@prestage) {
 if ($seriallock) {
     libEmulab::EmulabCountUnlock("create_instance_lock");
     $seriallock = 0;
+    APT_Utility::TutorialStat("create_instance: released serial lock");
 }
 
 #

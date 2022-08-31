@@ -73,6 +73,7 @@ my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
 my $OURDOMAIN	     = "@OURDOMAIN@";
+my $LOG_TESTBED      = "@LOG_TESTBED@";
 my $ANNOUNCE         = "$TB/sbin/announce";
 my $MYURN	     = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $SACERT	     = "$TB/etc/genisa.pem";
@@ -104,20 +105,34 @@ my $seriallock;
 
 BEGIN {
     require libEmulab;
-    import libEmulab;
-    
+    require APT_Utility;
+
+    my $uuid = (exists($ENV{"QUICKUUID"}) ? $ENV{"QUICKUUID"} : "");
+    APT_Utility::TutorialStat("create_slivers: beginning $uuid");
+
     while (1) {
+	my $icount = libEmulab::EmulabCountValue("create_instance_lock");
+	
 	if (libEmulab::EmulabCountLock("create_sliver_lock", 3) == 0) {
 	    $seriallock = 1;
 	    last;
 	}
-	print STDERR "Waiting for the create_sliver lock ...\n";
+	print STDERR "Waiting for the create_sliver lock ($icount) ...\n";
+	APT_Utility::TutorialStat("create_slivers: waiting for sliver lock ".
+	       "(instances $icount)");
+	sleep(2);
+    }
+    while ((my $load = libEmulab::LoadAverage()) > 15) {
+	print STDERR "Load too high at $load, waiting ...\n";
+	APT_Utility::TutorialStat("create_slivers: load too high at $load");
 	sleep(1);
     }
-    while (LoadAverage() > 18) {
-	print STDERR "Load too high, waiting\n";
+    while (libEmulab::EmulabCountValue("create_instance_lock") >= 3) {
+	my $icount = libEmulab::EmulabCountValue("create_instance_lock");
+	print STDERR "Too many create_instances queued ($icount) ...\n";
 	sleep(1);
     }
+    APT_Utility::TutorialStat("create_slivers: done waiting, got serial lock");
 }
 END {
     # Be careful not to leave this locked on abnormal exit.
@@ -813,6 +828,8 @@ sub CreateSliver($)
     my $manifest;
     $webtask->Refresh();
 
+    APT_Utility::TutorialStat("create_slivers: CreateSliver $uuid $urn");
+
     # Debugging
     $cmurl = APT_Instance::devurl($cmurl);
 
@@ -995,12 +1012,15 @@ sub CreateSliver($)
 
     while (1) {
 	if ($project->pid() eq "@TUTORIALPID@") {
-	    if (LoadAverage() >= (@PROTOGENI_MAXSERVERLOAD@ - 1)) {
-		print STDERR "Load too high, waiting\n";
+	    if ((my $load = LoadAverage()) >= (@PROTOGENI_MAXSERVERLOAD@ - 1)) {
+		print STDERR "Load too high at $load, waiting\n";
+		APT_Utility::TutorialStat("create_slivers: ".
+					  "load too high at $load");
 		sleep(2);
 		next;
 	    }
 	}
+	APT_Utility::TutorialStat("create_slivers: calling Geni CreateSliver");
 	$response =
 	    Genixmlrpc::CallMethod($cmurl, undef,
 				   "CreateSliver",
@@ -1014,6 +1034,7 @@ sub CreateSliver($)
 				     "asyncmode"   => $doasync,
 				     "isupdate"    => $aggobj->_isupdate(),
 				   });
+	APT_Utility::TutorialStat("create_slivers: Geni CreateSliver returned");
 
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
 	    if ($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
@@ -1183,6 +1204,8 @@ sub CreateSliver($)
 		last;
 	    }
 	}
+	APT_Utility::TutorialStat("create_slivers: async wait done");
+	
 	if ($seconds <= 0) {
 	    # XXX Need better handling for timeout.
 	    $code = GENIRESPONSE_TIMEDOUT;
@@ -1251,6 +1274,8 @@ sub CreateSlivers()
 	# Let the web interface know.
 	$webtask->delayed(1);
 	print STDERR "Too many instances provisioning, Waiting.\n";
+	APT_Utility::TutorialStat("create_slivers: too many instances ".
+				  "provisioning");
 	sleep(5);
     }
     $webtask->canignore(0);

@@ -54,6 +54,11 @@ if (isset($this_user)) {
     if (NOPROJECTMEMBERSHIP()) {
         return NoProjectMembershipError($this_user);
     }
+    if ($TUTORIALSTATS) {
+        $loaduid = $this_user->uid();
+
+        TutorialStat("instantiate $loaduid");
+    }
 }
 else {
     RedirectLoginPage();

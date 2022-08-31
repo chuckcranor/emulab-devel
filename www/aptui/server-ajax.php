@@ -901,7 +901,19 @@ if (!$this_user) {
            json_encode($ajax_args));
     closelog();
 }
+if ($TUTORIALSTATS &&
+    ($ajax_route == "instantiate" ||
+     ($ajax_route == "manage_profile" && $ajax_method == "BindParameters"))) {
+    TutorialStat("instantiate:$ajax_method");
+}
+
 include($routing[$ajax_route]["file"]);
 call_user_func($routing[$ajax_route]["methods"][$ajax_method]);
+
+if ($TUTORIALSTATS &&
+    ($ajax_route == "instantiate" ||
+     ($ajax_route == "manage_profile" && $ajax_method == "BindParameters"))) {
+    TutorialStat("instantiate:$ajax_method done");
+}
 
 ?>

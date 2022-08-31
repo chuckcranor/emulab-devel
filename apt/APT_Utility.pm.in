@@ -33,6 +33,7 @@ use Date::Parse;
 use Carp;
 use Exporter;
 use POSIX qw(ceil);
+use Sys::Syslog qw(:standard :macros);
 use vars qw(@ISA @EXPORT);
 
 @ISA    = "Exporter";
@@ -48,12 +49,15 @@ use Group;
 use GeniHRN;
 use GeniUser;
 use emutil;
+use libEmulab;
 
 # Configure variables
 my $TB		  = "@prefix@";
 my $MAINSITE      = @TBMAINSITE@;
 my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
+my $LOG_TESTBED   = "@LOG_TESTBED@";
+my $TUTORIALSTATS = 0;
 
 #
 # Find all of the instances a user has (should have) an account on, and
@@ -268,3 +272,22 @@ sub ExtensionUnlock()
 {
     DBQueryWarn("select RELEASE_LOCK('maxextlock')");
 }
+
+#
+# For gathering stats during stress testing for tutorials.
+#
+sub TutorialStat($)
+{
+    my ($msg) = @_;
+
+    return
+	if (!$TUTORIALSTATS);
+
+    my $load = LoadAverage();
+
+    openlog("tutorial-stats", "pid", $LOG_TESTBED);
+    syslog(LOG_INFO, "$msg (load $load)");
+    closelog();
+}
+
+

@@ -1099,11 +1099,16 @@ function Do_Submit()
     global $ajax_args;
     global $PORTAL_GENESIS, $DEFAULT_AGGREGATE_URN;
     global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $ISPOWDER;
+    global $TUTORIALSTATS;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(1, "Missing formfields");
 	return;
     }
+    if ($TUTORIALSTATS) {
+        TutorialStat("Submit");
+    }
+
     #
     # Must recheck form values of course. 
     #

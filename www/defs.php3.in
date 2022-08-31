@@ -103,6 +103,7 @@ $OURTIMEZONE = "@OURTIMEZONE@";
 $LOG_TESTBED = "@LOG_TESTBED@";
 $TUTORIALPID = "@TUTORIALPID@";
 $TUTORIALPROFILE = "@TUTORIALPROFILE@";
+$TUTORIALSTATS = 0;
 
 $TBMAILADDR_OPS		= "@TBOPSEMAIL_NOSLASH@";
 $TBMAILADDR_WWW		= "@TBWWWEMAIL_NOSLASH@";
@@ -858,6 +859,21 @@ function RedirectHTTPS() {
 function CleanString($string)
 {
     return htmlspecialchars($string, ENT_QUOTES);
+}
+
+#
+# For gathering stats during stress testing for tutorials.
+#
+function TutorialStat($msg)
+{
+    global $LOG_TESTBED;
+    
+    $loadavg = sys_getloadavg();
+    $load = sprintf("%.2f", $loadavg[0]);
+
+    openlog("tutorial-stats", LOG_CONS, constant("${LOG_TESTBED}"));
+    syslog(LOG_INFO, $_SERVER['REMOTE_ADDR'] . " " . $msg . " (load $load)");
+    closelog();
 }
 
 #

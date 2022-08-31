@@ -306,7 +306,7 @@ class Instance
     # Class function to create a new Instance
     #
     function Instantiate($uuid, $creator, $options, $args, $webtask) {
-	global $suexec_output, $suexec_output_array;
+	global $suexec_output, $suexec_output_array, $TUTORIALSTATS;
 
 	#
         # Generate a temporary file and write in the XML goo. 
@@ -354,6 +354,14 @@ class Instance
 	    putenv("SERVER_NAME=" . $_SERVER['SERVER_NAME']);
 	}
         $options .= " -t " . $webtask->task_id();
+
+        if ($TUTORIALSTATS) {
+            $name = "n/a";
+            if (isset($args["instance_name"])) {
+                $name = $args["instance_name"];
+            }
+            TutorialStat("instantiate $pid:$name $uuid");
+        }
         
 	$retval = SUEXEC($uid, $pid,
 			 "webcreate_instance $options -u $uuid $xmlname",
