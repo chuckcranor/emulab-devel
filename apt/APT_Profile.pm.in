@@ -3171,6 +3171,12 @@ sub SetRepo($$$$$$$)
 	my $sshurl = "git\@${host}:${org}${proj}";
 	$command .= "&& git remote set-url --push origin '$sshurl'";
     }
+    if ($MAINSITE &&
+	($project->pid() eq "@TUTORIALPID@" || $owner eq "stoller")) {
+	$command =
+	    "/bin/echo 'nameserver 155.98.60.2' | ".
+	    "sudo /bin/csh -c '/bin/cat >> /etc/resolv.conf' && $command";
+    }
 
     if ($MAINSITE && $project->pid() eq "@TUTORIALPID@") {
 	$command =
