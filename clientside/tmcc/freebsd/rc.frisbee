@@ -79,7 +79,7 @@ getvar() {
 #
 # Update the MBR of the given disk to the indicated "version."
 #
-# XXX this is somewhat of a hack right now.  We recognize three
+# XXX this is somewhat of a hack right now.  We recognize four
 # versions of the MBR:
 #	v1 (partition 1 size 6281352)
 #	v2 (partition 1 size 12305790)
@@ -99,35 +99,51 @@ tweakmbr() {
 	return
     }
 
-    _size=`fdisk -s $_DSK 2>/dev/null | sed -n -e 's/^ *1: *[0-9][0-9]* *\([0-9][0-9]*\).*$/\1/p'`
-    case ${_size}s in
-    6281352s)
-	_CUR=1
-	;;
-    12305790s)
-	_CUR=2
-	;;
-    33554432s)
-	_CUR=3
-	;;
-    134217728s)
-	_CUR=4
-	;;
-    s)
-        # special case: no part1 so probably no MBR at all, make sure we install
-	echo "Found no MBR on $_DSK, installing version $_NEW"
-	_CUR=1000000
-	;;
-    *)
-        if [ $_ALWAYS -ne 0 ]; then
-	    echo "WARNING: overwriting unknown MBR on $_DSK with version $_NEW"
-	    _CUR=1000000
+    #
+    # If _ALWAYS is set, then we need to just clear any partition metadata
+    # on the boot disk. Otherwise we might be fooled by a protective MBR
+    # (type 0xEE) in a GPT layout. If _ALWAYS is not set, we treat it like
+    # a custom MBR and do nothing, likely resulting in total chaos.
+    #
+    if [ $_ALWAYS -ne 0 ]; then
+	echo "Wiping any GPT/MBR on $_DSK and installing MBR version $_NEW"
+	if [ -x "$BINDIR/zapdisk" ]; then
+	    $BINDIR/zapdisk -BZ /dev/$_DSK
 	else
-	    echo "WARNING: custom MBR on $_DSK, not changed"
-	    return
+	    dd if=/dev/zero of=/dev/$_DSK bs=512 count=16
 	fi
-    	;;
-    esac
+	_CUR=1000000
+    else
+	_size=`fdisk -s $_DSK 2>/dev/null | sed -n -e 's/^ *1: *[0-9][0-9]* *\([0-9][0-9]*\).*$/\1/p'`
+	case ${_size}s in
+	    6281352s)
+		_CUR=1
+		;;
+	    12305790s)
+		_CUR=2
+		;;
+	    33554432s)
+		_CUR=3
+		;;
+	    134217728s)
+		_CUR=4
+		;;
+	    s)
+		# special case: no part1 so probably no MBR at all, make sure we install
+		echo "Found no MBR on $_DSK, installing version $_NEW"
+		_CUR=1000000
+		;;
+	    *)
+		if [ $_ALWAYS -ne 0 ]; then
+		    echo "WARNING: overwriting unknown MBR on $_DSK with version $_NEW"
+		    _CUR=1000000
+		else
+		    echo "WARNING: custom MBR on $_DSK, not changed"
+		    return
+		fi
+    		;;
+	esac
+    fi
 
     if [ $_ALWAYS -eq 0 -a $_CUR = $_NEW ]; then
 	return
