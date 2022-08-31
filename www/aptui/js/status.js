@@ -529,14 +529,11 @@ $(function ()
 		     _.has(json.value, "delayedCount")) {
 		status_html = "waiting";
 		ProgressBarUpdate();
-		if (json.value.delayedCount > 1) {
+		if (json.value.delayedCount) {
 		    var count = json.value.delayedCount;
 
 		    status_message = "Portal is very busy, there are " +
 			count + " experiments waiting. ";
-		}
-		else {
-		    status_message = "Portal is very busy, waiting a moment. ";
 		}
 		status_message += "Patience please!";
 	    }

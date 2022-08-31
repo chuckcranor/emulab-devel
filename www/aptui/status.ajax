@@ -274,10 +274,11 @@ function Do_GetInstanceStatus()
                $webtask->exitcode() ==
                  GENIRESPONSE_SETUPFAILURE_BOOTFAILED ? 1 : 0);
     }
-    elseif ($instance->status() == "created" && $webtask && 
-            $webtask->TaskValue("delayed") &&
-            $webtask->TaskValue("delayed") != 0) {
-        $blob["delayedCount"] = Instance::DelayedCount();
+    elseif ($instance->status() == "created") {
+        $delayed = Instance::DelayedCount();
+        if ($delayed >= 5) {
+            $blob["delayedCount"] = $delayed;
+        }
     }
     SPITAJAX_RESPONSE($blob);
 }

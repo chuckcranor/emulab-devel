@@ -1266,13 +1266,8 @@ sub CreateSlivers()
 	my $delayed = $instance->ProvisioningLock();
 
 	if (!$delayed) {
-	    # Let the web interface know.
-	    $webtask->delayed(0);
-	    sleep(10);
 	    last;
 	}
-	# Let the web interface know.
-	$webtask->delayed(1);
 	print STDERR "Too many instances provisioning, Waiting.\n";
 	APT_Utility::TutorialStat("create_slivers: too many instances ".
 				  "provisioning");
