@@ -859,7 +859,11 @@ sub CreateSliver($)
 	    if ($response->value()->{'state'} eq "interrupted") {
 		Genixmlrpc->SetTimeout(60);
 		$response = $aggobj->SliverAction("start");
+		print STDERR "Sliver Start: $urn " . $response->code() . "\n";
+		print STDERR Dumper($response->value());
+		
 		if ($response->code() != GENIRESPONSE_SUCCESS()) {
+		    print STDERR "$urn: sliver start failed\n";
 		    #
 		    # Not sure what to do ...
 		    #
@@ -1474,7 +1478,7 @@ sub WaitForSlivers()
 
 	# Updated in a forked child, must refresh. 
 	$aggobj->Refresh();
-	print $aggobj->aggregate_urn() . "\n";
+	print "WaitForSlivers: " . $aggobj->aggregate_urn() . ": code:$code\n";
 	if ($code) {
 	    my $exitcode = $aggobj->webtask()->exitcode();
 	    my $output   = $aggobj->webtask()->output();
