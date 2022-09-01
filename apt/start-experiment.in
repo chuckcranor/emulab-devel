@@ -73,6 +73,7 @@ use Group;
 use WebTask;
 use emutil;
 use GeniHRN;
+use EmulabConstants;
 
 # Protos
 sub fatal($);
@@ -246,6 +247,30 @@ if (defined($sshpubkeyfile)) {
 	  $sshpubkeystr =~
 	  /^(ssh-rsa|ssh-ed25519) ([-\w\.\@\+\/\=:]*)$/)) {
 	fatal("SSH pubkey is not a valid openssh protocol 2 key");
+    }
+}
+
+#
+# Check permission and disabled early so we return an reasonable error
+#
+if ($project->disabled()) {
+    print STDERR "Project is disabled\n";
+    exit(1);
+}
+if ($pid eq $gid) {
+    if (!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT)) {
+	print STDERR "No permission to create experiments in $pid\n";
+	exit(1);
+    }
+}
+else {
+    my $group = $project->LookupGroup($gid);
+    if (!defined($group)) {
+	fatal("Group $gid does not exist in project $pid");
+    }
+    if (!$group->AccessCheck($this_user, TB_PROJECT_CREATEEXPT)) {
+	print STDERR "No permission to create experiments in $pid/$gid\n";
+	exit(1);
     }
 }
 
