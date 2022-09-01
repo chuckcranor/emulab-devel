@@ -1354,9 +1354,12 @@ sub SetSites($$$$$$)
 	    return -1;
 	}
     }
+    #print STDERR GeniXML::Serialize($rspec);
+    
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $client_id   = GetVirtualId($ref);
 	my $manager_urn = GetManagerId($ref);	
+	my $component_id= GeniXML::GetNodeId($ref);
 	my $site_id     = GeniXML::GetJacksSiteId($ref);
 	my $hardtype    = GeniXML::FindFirst("n:hardware_type", $ref);
 	my $slivertype  = GeniXML::GetVirtualizationSubtype($ref);
@@ -1370,6 +1373,17 @@ sub SetSites($$$$$$)
 		$$perrmsg = "$client_id has an invalid manager URN";
 		return 1;
 	    }
+	}
+	# Or is the component_id a URN (so we have a domain).
+	elsif (defined($component_id) && GeniHRN::IsValid($component_id)) {
+	    my $hrn = GeniHRN->new($component_id);
+	    my $agg = APT_Aggregate->LookupByDomain($hrn->domain());
+	    if (!defined($agg)) {
+		$$perrmsg = "$client_id has an invalid component_id";
+		return 1;
+	    }
+	    $manager_urn = $agg->urn();
+	    GeniXML::SetManagerId($ref, $manager_urn);
 	}
 	# Or there is a site tag, and a site mapping for it.
 	elsif (defined($site_id) && defined($sitemap)) {
@@ -1964,7 +1978,8 @@ sub GetResources($$$)
 		$component_id = $hrn->id();
 
 		if ($hrn->domain() ne $aggregate->Domain()) {
-		    $$pmsg = "Domain mismatch: $client_id";
+		    $$pmsg = "Domain mismatch: $client_id, $hrn, " .
+			$aggregate->Domain();
 		    return -1;
 		}
 	    }
