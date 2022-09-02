@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,6 +59,10 @@ echo "<div id='page-body'></div>\n";
 
 if ($action != "approve" && $action != "deny") {
     SPITUSERERROR("Action is not one of approve or deny");
+    return;
+}
+if ($project->disabled()) {
+    SPITUSERERROR("This project has been disabled, you cannot modify users");
     return;
 }
 

@@ -305,7 +305,6 @@ function LoginStatus() {
     $frozen    = 0;
     $nonlocal  = 0;
     $pcount    = 0;
-    $pdisabled = 0;
     
     while ($row = mysql_fetch_array($query_result)) {
 	$expired = $row[0];
@@ -315,13 +314,14 @@ function LoginStatus() {
 	$admin   = $row[4];
 	$cvsweb  = $row[5];
         $trust   = $row[6];
+        $disable = $row[20];
 
         #
         # Count up number of projects where user has local_root or better.
         # These are projects where user has viable permission to do things,
         # like create experiments.
         #
-        if ($trust != "none" && $trust != "user") {
+        if ($trust != "none" && $trust != "user" && $disable == 0) {
             $pcount++;
         }
 	if ($trust == "project_root" || $trust == "group_root") {
@@ -347,10 +347,6 @@ function LoginStatus() {
 	$workbench      += $row[17];
 	$frozen          = $row[18];
 	$nonlocal        = $row[19] ? 1 : 0;
-        $disable         = $row[20];
-        if ($disable) {
-            $pdisabled++;
-        }
     }
 
     #
@@ -364,7 +360,7 @@ function LoginStatus() {
     #
     # Check for frozen account. Might do something interesting later.
     #
-    if ($pdisabled || $frozen ||
+    if ($frozen ||
 	$status == TBDB_USERSTATUS_FROZEN) {
 	DBQueryFatal("DELETE FROM login WHERE uid_idx='$uid_idx'");
 	$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
@@ -956,11 +952,6 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	    $user->UpdateWebLoginFail();
 	    return DOLOGIN_STATUS_WEBFREEZE;
 	}
-        # Check for membership in disabled project.
-        $plist = $user->DisabledProjects();
-        if (count($plist)) {
-            return DOLOGIN_STATUS_PROJDISABLED;
-        }
         # Check for a geni user trying to login with a password.
         if (!$nopassword && $user->nonlocal_id()) {
             return DOLOGIN_STATUS_NOGENIUSER;

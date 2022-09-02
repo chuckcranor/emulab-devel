@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,6 +44,14 @@ function CommonSetup()
     }
     $pid     = $ajax_args["pid"];
     $project = Project::Lookup($pid);
+    if (!$project) {
+	SPITAJAX_ERROR(1, "No such project");
+	return;
+    }
+    if ($project->disabled()) {
+	SPITAJAX_ERROR(1, "This project has been disabled");
+	return;
+    }
 
     #
     # Check that the current user has the necessary trust level
@@ -108,7 +116,7 @@ function Do_Deny()
 function Do_Approve()
 {
     global $this_user;
-    global $TBADMINGROUP;
+    global $TBADMINGROUP, $TB_PROJECT_READINFO;
     $this_uid = $this_user->uid();
 
     list ($target_user, $project) = CommonSetup();
@@ -127,6 +135,25 @@ function Do_Approve()
 	    SPITAJAX_ERROR(-1, "Internal error creating new user");
 	    return;
 	}
+    }
+    else {
+        $projlist = $this_user->ProjectAccessList($TB_PROJECT_READINFO);
+
+        #
+        # User was removed from all projects, and then joined a new one.
+        # When a user is removed from last project, we killed all the SSL
+        # certs, but now we have to create the unencrypted cert again. since
+        # that is typically done in tbacct add. 
+        #
+        if (count($projlist) == 0) {
+            $retval = SUEXEC($this_uid, $TBADMINGROUP,
+                             "webmkusercert $user_uid",
+                             SUEXEC_ACTION_CONTINUE);
+            if ($retval) {
+                SPITAJAX_ERROR(-1, "Internal error creating certificate");
+                return;
+            }
+        }
     }
     # And update the trust level in the group.
     $retval = SUEXEC($this_uid, $TBADMINGROUP,

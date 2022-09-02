@@ -40,7 +40,13 @@
   <div class='col-sm-12'>
     <div class='panel panel-default'>
       <div class='panel-heading'>
-	<h4 class="text-center">Project <%- target_project %></h4>
+	<h4 class="text-center">Project <%- target_project %>
+	  <% if (disabled) { %>
+	    <center>
+	      <small class="text-danger">This project is disabled</small>
+	    </center>
+	  <% } %>
+	</h4>
       </div>
 	<div class='panel-body'>
 	<div class='row'>

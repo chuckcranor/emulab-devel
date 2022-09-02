@@ -1527,8 +1527,11 @@ class User
 	$uid_idx     = $this->uid_idx();
 	$result      = array();
 	$ordered     = array();
-	$user_clause = "where uid_idx='$uid_idx' and p.nonlocal_id is null and";
-	$trust_clause= "";
+	$all         = 0;
+        $user_clause = "";
+        $trust_clause= "";
+        # Anything more than READINFO requires the project not be disabled
+        $pdisabled   = "p.disabled=0 and";
 
 	# Constants.
 	$trust_none   = TBDB_TRUSTSTRING_NONE;
@@ -1539,6 +1542,7 @@ class User
 	
 	if ($access_type == $TB_PROJECT_READINFO) {
 	    $trust_clause = "trust!='$trust_none'";
+            $pdisabled    = "";
 	}
 	elseif ($access_type == $TB_PROJECT_MAKEGROUP) {
 	    $trust_clause = "trust='$trust_group'";
@@ -1551,7 +1555,7 @@ class User
 	elseif ($access_type == $TB_PROJECT_MAKEOSID ||
 		$access_type == $TB_PROJECT_MAKEIMAGEID) {
 	    if (ISADMIN()) {
-		$user_clause = "";
+                $all = 1;
 	    }
 	    else {
 		$trust_clause =
@@ -1563,7 +1567,11 @@ class User
 	else {
 	    TBERROR("Invalid access type $access_type!", 1);
 	}
-    
+
+        if (!$all) {
+            $user_clause = "where uid_idx='$uid_idx' and ".
+                         "p.nonlocal_id is null and $pdisabled ";
+        }
 	$query_result =
 	    DBQueryFatal("SELECT distinct g.pid,g.gid ".
                          "   FROM group_membership as g ".

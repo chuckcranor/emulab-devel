@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -738,9 +738,28 @@ sub AccessCheck($$$)
 	if ($user->IsAdmin() && $access_type != TB_PROJECT_LEADGROUP());
 
     if ($access_type == TB_PROJECT_READINFO()) {
+	#
+	# Group root in the project can see any group.
+	#
+	if (TBMinTrust($self->Trust($user), PROJMEMBERTRUST_GROUPROOT())) {
+	    return 1;
+	}
+	my $project = $self->GetProject();
+	my $leader  = $self->GetLeader();
+	return 1
+	    if ($user->SameUser($leader));
+	
 	$mintrust = PROJMEMBERTRUST_USER();
+	return TBMinTrust($self->Trust($user), $mintrust);
     }
-    elsif ($access_type == TB_PROJECT_MAKEGROUP() ||
+    #
+    # Nothing else is allowed if the project is disabled
+    #
+    if ($self->GetProject()->disabled()) {
+	return 0;
+    }
+    
+    if ($access_type == TB_PROJECT_MAKEGROUP() ||
 	   $access_type == TB_PROJECT_DELGROUP()) {
 	#
 	# Project leader can always do this

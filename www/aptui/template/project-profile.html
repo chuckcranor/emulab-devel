@@ -36,6 +36,12 @@
       <td>Approved</td>
       <td><% if (fields.approved) { %>Yes<% } else { %>No<% } %></td>
     </tr>
+    <% if (!isadmin && fields.disabled) { %>
+      <tr>
+	<td>Disabled</td>
+	<td><b>Yes</b></td>
+      </tr>
+    <% } %>
     <% _.each(fields.licenses, function(license) { %>
       <tr>
 	<td><%- license.name %> license

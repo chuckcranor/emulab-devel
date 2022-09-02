@@ -22,6 +22,7 @@ $(function ()
 	
 	// Generate the main template.
 	var html = mainTemplate({
+	    disabled       : window.PROJECT_DISABLED,
 	    disabledset    : window.UI_DISABLE_DATASETS,
 	    disabledres    : window.UI_DISABLE_RESERVATIONS,
 	    emulablink     : window.EMULAB_LINK,

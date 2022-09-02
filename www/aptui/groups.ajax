@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -119,6 +119,9 @@ function Do_CreateGroup()
             !$project->AccessCheck($this_user, $TB_PROJECT_MAKEGROUP)) {
         $errors["project"] = "No permission to create groups";
     }
+    if (!ISADMIN() && $project->disabled()) {
+        $errors["project"] = "Project is disabled";
+    }
     $pid = $project->pid();
 
     # Group leader.
@@ -188,13 +191,19 @@ function Do_DeleteGroup()
 	SPITAJAX_ERROR(-1, "You are not allowed to delete this group");
 	return -1;
     }
+    $project = $target_group->Project();
+    
+    if (!ISADMIN() && $project->disabled()) {
+	SPITAJAX_ERROR(-1, "Project is disabled");
+	return -1;
+    }
+    
     # Check to see if there are any active experiments. Abort if there are.
     if ($target_group->ExperimentList(0)) {
         SPITAJAX_ERROR(-1, "There are active experiments in the group");
         return;
     }
     $uid      = $this_user->uid();
-    $project  = $target_group->Project();
     $unix_gid = $project->unix_gid();
     $pid      = $project->pid();
     $gid_idx  = $target_group->gid_idx();
@@ -351,9 +360,14 @@ function Do_EditMembership()
     $pid = $target_group->pid();
     $gid = $target_group->gid();
     $isproject = ($pid == $gid ? 1 : 0);
-
+    $project   = $target_group->Project();
+    
     if (!$target_group->AccessCheck($this_user, $TB_PROJECT_ADDUSER)) {
 	SPITAJAX_ERROR(-1, "You are not allowed to manage group membership");
+	return -1;
+    }
+    if (!ISADMIN() && $project->disabled()) {
+	SPITAJAX_ERROR(-1, "Project is disabled");
 	return -1;
     }
     if (!isset($ajax_args["action"])) {

@@ -55,6 +55,7 @@ $canbestow  = $project->AccessCheck($this_user,
                                     $TB_PROJECT_BESTOWGROUPROOT) ? 1 : 0;
 $isleader   = $project->IsLeader($this_user);
 $ismanager  = $project->IsManager($this_user);
+$disabled   = $project->disabled();
 
 echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN        = $isadmin;\n";
@@ -64,6 +65,7 @@ echo "  window.CANAPPROVE     = $canapprove;\n";
 echo "  window.CANBESTOW      = $canbestow;\n";
 echo "  window.EMULAB_LINK    = '$emulablink';\n";
 echo "  window.TARGET_PROJECT = '" . $project->pid() . "';\n";
+echo "  window.PROJECT_DISABLED = $disabled;\n";
 echo "  window.UI_DISABLE_DATASETS = '" . $UI_DISABLE_DATASETS . "';\n";
 echo "  window.UI_DISABLE_RESERVATIONS = '" .
         $UI_DISABLE_RESERVATIONS . "';\n";
