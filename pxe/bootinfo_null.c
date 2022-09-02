@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2003 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -34,6 +34,7 @@
  * For now, hardwired.
  */
 #define NETBOOT		"/tftpboot/netboot"
+#define MFSBOOT		"/tftpboot/recovery_linux"
 
 int
 open_bootinfo_db(void)
@@ -42,17 +43,31 @@ open_bootinfo_db(void)
 }
 
 int
-query_bootinfo_db(struct in_addr ipaddr, int version, boot_what_t *info, char* key)
+findnode_bootinfo_db(struct in_addr ipaddr, int *events)
+{
+	*events = 0;
+	return 1;
+}
+
+int
+query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
+		  boot_what_t *info, char* key)
 {
 #if 0
 	info->type  = BIBOOTWHAT_TYPE_MB;
 	info->flags = 0;
 	info->what.mb.tftp_ip.s_addr = 0;
-	strcpy(info->what.mb.filename, NETBOOT);
-#else
+	strncpy(info->what.mb.filename, NETBOOT, sizeof(info->what.mb.filename));
+#endif
+#if 0
 	info->type  = BIBOOTWHAT_TYPE_SYSID;
 	info->flags = 0;
 	info->what.sysid = 165; /* BSD */
+#endif
+#if 1
+	info->type  = BIBOOTWHAT_TYPE_MFS;
+	info->flags = 0;
+	strncpy(info->what.mfs, MFSBOOT, sizeof(info->what.mfs));
 #endif
 	return 0;
 }
