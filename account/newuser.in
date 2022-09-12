@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,14 +36,16 @@ sub usage()
     print("Usage: newuser [-s] -t <type> <xmlfile>\n");
     exit(-1);
 }
-my $optlist = "dt:nsprP";
+my $optlist = "dt:nsprGP";
 my $debug   = 0;
 my $impotent= 0;
 my $type    = "";
 my $silent  = 0;
 my $relaxed = 0;
 my $dopass  = 0;
+my $genuser = 0;
 my $portal;
+
 my $passhash;
 my @keyfiles = ();
 
@@ -125,6 +127,9 @@ if (defined($options{"r"})) {
 }
 if (defined($options{"P"})) {
     $dopass = 1;
+}
+if (defined($options{"G"})) {
+    $genuser = 1;
 }
 if (@ARGV != 1) {
     usage();
@@ -345,7 +350,8 @@ if ($WIKISUPPORT) {
 # And the email address has to be unique.
 #
 UserError("Email address already in use; please pick another!")
-    if ($newuser_args{'usr_email'} ne $TBOPS &&
+    if (!$genuser &&
+	$newuser_args{'usr_email'} ne $TBOPS &&
 	User->LookupByEmail($newuser_args{'usr_email'}));
 
 #
