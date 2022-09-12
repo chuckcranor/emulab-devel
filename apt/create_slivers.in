@@ -509,6 +509,7 @@ foreach my $aggregate (@aggregate_list) {
 if ($usestitcher) {
     my $rval = RunStitcher();
     if ($rval) {
+	my $exitcode = -1;
 	$genislice->UnLock();
 	$instance->SetStatus("failed");
 	$instance->RecordError($rval,
@@ -519,7 +520,29 @@ if ($usestitcher) {
 	if (defined($webtask->output())) {
 	    print STDERR "RunStitcher error: " . $webtask->output() . "\n";
 	}
-	exit($rval);
+	if ($rval == GENIRESPONSE_BADARGS ||
+	    $rval == GENIRESPONSE_INSUFFICIENT_NODES ||
+	    $rval == GENIRESPONSE_INSUFFICIENT_MEMORY ||
+	    $rval == GENIRESPONSE_INSUFFICIENT_BANDWIDTH ||
+	    $rval == GENIRESPONSE_NOSPACE ||
+	    $rval == GENIRESPONSE_NO_CONNECT ||
+	    $rval == GENIRESPONSE_MAPPING_IMPOSSIBLE ||
+	    $rval == GENIRESPONSE_NO_MAPPING) {
+	    AuditAbort()
+		if (!($debug || $foreground));
+	    $exitcode = 1;
+	}
+	else {
+	    # Need to do this before we close the log since it gets moved.
+	    AuditEnd($exitcode)
+		if (!($debug || $foreground));
+	}
+	if (defined($logfile)) {
+	    $logfile->Close();
+	    $logfile->Store();
+	    $logfile = undef;
+	}
+	exit($exitcode);
     }
     $instance->SetStatus("provisioned");
     $instance->ComputeNodeCounts();
@@ -553,6 +576,11 @@ else {
 		$logfile = undef;
 	    }
 	    $exitcode = 1;
+	}
+	else {
+	    # Need to do this before we close the log since it gets moved.
+	    AuditEnd($exitcode)
+		if (!($debug || $foreground));
 	}
 	# Stop trying to instantiate.
 	$instance->ResolveDefer();
