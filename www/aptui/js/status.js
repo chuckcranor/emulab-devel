@@ -561,6 +561,9 @@ $(function ()
 	    }
 	    else if (instanceStatus == 'provisioning') {
 		status_html = "provisioning";
+		if (json.value.canceled) {
+		    status_html += " (but canceled)";
+		}
 		ProgressBarUpdate();
 	    }
 	    else if (instanceStatus == 'provisioned') {
