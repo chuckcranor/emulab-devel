@@ -669,7 +669,8 @@ if (@aggregate_list) {
 	print "$MANAGEINSTANCE -t $webtask_id monitor $uuid -w\n";
 	system("$MANAGEINSTANCE -t $webtask_id monitor $uuid -w")
     }
-    else {
+    elsif (!$failed) {
+	# WaitForSlivers will set the exitcode when failed.
 	$webtask->Exited(0);
     }
 }
