@@ -1200,6 +1200,10 @@ sub UserError($;$) {
     my($mesg,$code) = @_;
     $code = 1 if (!defined($code));
 
+    $slice->Delete()
+	if (defined($slice));
+    $instance->Delete()
+	if (defined($instance));
     if (defined($webtask)) {
 	$webtask->output($mesg);
 	$webtask->Exited($code);
