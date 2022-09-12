@@ -2094,6 +2094,9 @@ $(function ()
 					     "host" : host});
 	xmlthing.done(callback);
     }
+    // For Selenium testing
+    window.DoVNC = DoVNC;
+    
     function OpenVNCWindow(node, authobject)
     {
 	var vncwindow = null;
