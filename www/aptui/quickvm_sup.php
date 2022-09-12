@@ -537,6 +537,7 @@ echo "
         ";
       if ($ISPOWDER) {
           echo "<li><a href='radioinfo.php'>Powder Radio Info</a></li>";
+          echo "<li><a href='mobile-endpoints.php'>Mobile Endpoint Info</a></li>";
           echo "<li><a href='powder-map.php'>Powder Map</a></li>";
       }
 echo " <li class='divider'></li>
