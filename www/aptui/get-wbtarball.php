@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,8 +49,18 @@ $instance = InstanceHistory::LookupBySlice($uuid);
 if (!$instance) {
     $instance = InstanceHistory::Lookup($uuid);
     if (!$instance) {
-        SPITUSERERROR("No such instance");
-        return;
+        #
+        # Check the current experiments table, which can happen if we forced
+        # the wbstore to complete while some aggregates are offline.
+        #
+        $instance = Instance::LookupBySlice($uuid);
+        if (!$instance) {
+            $instance = Instance::Lookup($uuid);
+            if (!$instance) {
+                SPITUSERERROR("No such instance");
+                return;
+            }
+        }
     }
 }
 $project = $instance->Project();
