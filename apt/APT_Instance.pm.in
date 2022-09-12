@@ -3181,6 +3181,7 @@ sub MergeManifests($)
     my %nodes     = ();
     my %links     = ();
     my %linknames = ();
+    my @tmp       = ();
 
     foreach my $aggregate (@aggregates) {
 	my $aggregate_urn = $aggregate->aggregate_urn();
@@ -3189,6 +3190,7 @@ sub MergeManifests($)
 	# Might not be a manifest if deferred.
 	next
 	    if (!$manifest);
+	push(@tmp, $aggregate);
 
 	$nodes{$aggregate_urn} = [];
 	$links{$aggregate_urn} = [];
@@ -3244,6 +3246,11 @@ sub MergeManifests($)
 	    }	    
 	}
     }
+    # Cause of deferred aggregates
+    @aggregates = @tmp;
+    return 0
+	if (!@aggregates);
+
     # The new manifest will start with the first manifest. Sort for consistency
     my @temp  = sort {$a->aggregate_urn() cmp $b->aggregate_urn()} @aggregates;
     my $first = shift(@temp);
