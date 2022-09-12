@@ -13161,12 +13161,18 @@ COMMAND_PROTOTYPE(dohwinfo)
 	 *    just used by the management HW.
 	 *  - Infiniband (guid != NULL) interfaces. We need support on
 	 *    the client side before we start sending those over.
+	 *  - Interfaces with the "nonodecheck" capability. For interfaces
+	 *    that might require drivers not present in the MFSes that
+	 *    run nodecheck.
 	 */
-	res = mydb_query("select mac,iface from interfaces where "
-			 " mac not like '000000%%' and "
-			 " role!='mngmnt' and "
-			 " node_id='%s' order by iface",
-			 2, reqp->nodeid);
+	res = mydb_query("select i.mac,i.iface from interfaces as i"
+			 " left join interface_capabilities as c"
+			 "   on i.interface_type=c.type and"
+			 "   c.capkey='nonodecheck'"
+			 " where i.mac not like '000000%%' and"
+			 "   i.role!='mngmnt' and i.node_id='%s' and"
+			 "   (c.capval is NULL or c.capval=0)"
+			 " order by iface", 2, reqp->nodeid);
 	if (!res) {
 		error("dohwinfo: %s: DB Error getting NET attributes!\n",
 		      reqp->nodeid);
