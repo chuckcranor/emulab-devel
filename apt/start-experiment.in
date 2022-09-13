@@ -257,7 +257,7 @@ if ($project->disabled()) {
     print STDERR "Project is disabled\n";
     exit(1);
 }
-if ($pid eq $gid) {
+if (!defined($gid) || $pid eq $gid) {
     if (!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT)) {
 	print STDERR "No permission to create experiments in $pid\n";
 	exit(1);
