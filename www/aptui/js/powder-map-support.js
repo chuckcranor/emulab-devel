@@ -5,7 +5,7 @@ window.ShowPowderMap = (function()
 
     var templates      = APT_OPTIONS.fetchTemplateList(['powder-filters']);
     //var PowderMap      = "ede4026643ec40f7b73ab12d6c01b1da";
-    var PowderMap      = "6bb70a0d4abf42fa9efb159db1f169f6";
+    var PowderMap      = "bb4f35e5e5fe4246b8172236feb4df28";
     var Container      = null;
     var Options        = null;
     var View           = null;
