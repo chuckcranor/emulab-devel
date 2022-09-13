@@ -504,6 +504,11 @@ foreach my $aggregate (@aggregate_list) {
 	$aggregate->_isupdate($update);
     }
     $aggregate->webtask()->Reset();
+    #
+    # We want to tell CreateSlivers() if the CreateSliver() call reached
+    # the point of allocating resources. Hack. 
+    #
+    $aggregate->webtask()->committed(0);
 }
 
 if ($usestitcher) {
@@ -694,13 +699,41 @@ if ($failed) {
     $instance->ResolveDefer();
 }
 else {
+    my $updateAbort = 0;
+    
+    #
+    # Update of one aggregate vs multiple aggregates. Complicated by
+    # whether any of the aggregates got to the point where resources
+    # have been modified. Which is really hard to know since we use
+    # the monolithic CreateSlivers() instead of Allocate/Provision/Start
+    # But if we can prevent single aggregate experiments from getting
+    # into a confusing state, I will be happy.
+    #
+    # Another problem; we are calling CreateSliver() on all aggregate
+    # not just the ones that actually need a change. Need to fix that,
+    # but that means comparing the new rspec to the old rspec.
+    #
+    if ($update && $instance->ActiveAggregateList() == 0 && @failed_list == 1) {
+	my ($agg) = @failed_list;
+	
+	#
+	# In other words, just a single aggregate and it failed before commit.
+	#
+	$updateAbort = !$agg->committed();
+    }
     #
     # If all the aggregates are resolved, then we can resolve the instance.
     #
     if (!$instance->DeferredAggregateList()) {
 	$instance->ResolveDefer();
 	if ($update) {
-	    $instance->Update({"rspec" => $rspecstr, "update_rspec" => undef});
+	    if ($updateAbort) {
+		$instance->Update({"update_rspec" => undef});
+	    }
+	    else {
+		$instance->Update({"rspec" => $rspecstr,
+				   "update_rspec" => undef});
+	    }
 	}
     }
     else {
@@ -708,7 +741,7 @@ else {
 	$instance->Defer();
     }
     $instance->SetStatus("ready");
-    if ($update) {
+    if ($update && !$updateAbort) {
 	#
 	# Need to stash the new bindings. But maybe we need to do
 	# this earlier, still thinking about it.
@@ -1227,8 +1260,16 @@ sub CreateSliver($)
 		else {
 		    $manifest = $blob->{'manifest'};
 		}
-		last
-		    if (defined($manifest));
+		if (defined($manifest)) {
+		    #
+		    # This is the point at which GetTicket has completed.
+		    # Not perfect of course, this is the downside of using
+		    # CreateSliver() instead of Allocate/Provision/Start
+		    # seperate phases.
+		    #
+		    $aggobj->committed(1);
+		    last;
+		}
 	    }
 	    if (exists($blob->{'async_code'})) {
 		# We are getting back async error status.
@@ -1265,6 +1306,17 @@ sub CreateSliver($)
 	    if (!defined($manifest)) {
 		$code = GENIRESPONSE_ERROR;
 		$errmsg = "No manifest returned";
+	    }
+	    else {
+		#
+		# This is the point at which GetTicket has completed.  Not
+		# perfect of course, this is the downside of using
+		# CreateSliver() instead of Allocate/Provision/Start
+		# seperate phases. Note that the entire CreateSliver() has
+		# finished, without async we really have no idea what has
+		# happened so treat it as provisioned (committed).
+		#
+		$aggobj->committed(1);
 	    }
 	}
 	if ($code) {
