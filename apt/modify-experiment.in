@@ -1,0 +1,417 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Long;
+use XML::Simple;
+use POSIX qw(isatty);
+use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
+use Date::Parse;
+use Data::Dumper;
+use JSON;
+use HTML::Entities;
+
+#
+# Configure variables
+#
+my $TB		    = "@prefix@";
+my $TBOPS           = "@TBOPSEMAIL@";
+my $TBLOGS          = "@TBLOGSEMAIL@";
+my $OURDOMAIN       = "@OURDOMAIN@";
+my $MAINSITE        = @TBMAINSITE@;
+my $MANAGEINSTANCE  = "$TB/bin/manage_instance";
+my $RUNGENILIB      = "$TB/bin/rungenilib";
+my $MANAGEGITREPO   = "$TB/bin/manage_gitrepo";
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use libtestbed;
+use emdb;
+use libaudit;
+use APT_Profile;
+use APT_Instance;
+use User;
+use Project;
+use Group;
+use WebTask;
+use emutil;
+use GeniHRN;
+use EmulabConstants;
+
+# Protos
+sub fatal($);
+sub UserError($);
+
+#
+# Front end to create_instance.
+# 
+sub usage()
+{
+    print "Usage: modify-experiment ".
+	"<optons> [--bindings | --bindingstr] <experiment>\n";
+    print "Options:\n";
+    print " -d           - Turn on debugging (run in foreground)\n";
+    print " -w           - Wait mode (wait for experiment to finish starting)\n";
+    print " -P           - Do not pend deferrable aggregates.\n";
+    print " -s           - Do not send status email\n";
+    print " -a urn       - Override default aggregate URN.\n";
+    print " --bindings   - File containting json string of bindings to apply\n";
+    print " --bindingstr - Json string of bindings to apply\n";
+    print "experiment    - Either UUID or pid,name\n";
+
+    exit(-1);
+}
+my $debug	   = 0;
+my $waitmode       = 0;
+my $nopending      = 0;
+my $noemail        = 0;
+my $locked         = 0;
+my $sitemap;
+my $pid;
+my $gid;
+my $name;
+my $paramset;
+my $bindingfile;
+my $bindingstr;
+my ($refspec, $repohash, $reporef, $script, $rspec, $bindings);
+my $default_urn;
+my $logfile;
+
+#
+# So many options ...
+#
+my @optlist = ('d', 'w', 'a=s', 'P', 's',
+	       "bindings=s"    => \$bindingfile,
+	       "bindingstr=s"  => \$bindingstr,
+    );
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+Getopt::Long::Configure("no_ignore_case");
+my %options = ();
+if (! GetOptions(\%options, @optlist)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"P"})) {
+    $nopending = 1;
+}
+if (defined($options{"s"})) {
+    $noemail = 1;
+}
+usage()
+    if (@ARGV != 1 || !($bindings || $bindingstr));
+
+my $this_user = User->ThisUser();
+if (!defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+my $instance = APT_Instance->Lookup($ARGV[0]);
+if (!defined($instance)) {
+    fatal("Instance does not exist");
+}
+my $project = $instance->GetProject();
+my $uuid    = $instance->uuid();
+my $profile = $instance->Profile();
+if (!defined($profile)) {
+    fatal("Profile has been deleted");
+}
+
+if (defined($options{"a"})) {
+    if (!GeniHRN::IsValid($options{"a"})) {
+	fatal("Invalid aggregate URN");
+    }
+}
+if (defined($bindingfile)) {
+    if (! -e $bindingfile) {
+	fatal("Binding file does not exist");
+    }
+    $bindingstr = emutil::ReadFile($bindingfile);
+    if ($bindingstr eq "") {
+	fatal("Binding file could not be read or is empty");
+    }
+}
+elsif (!defined($bindingstr)) {
+    UserError("Must provide a new set of bindings to modify");
+}
+
+#
+# Check permission and disabled early so we return an reasonable error
+#
+if ($project->disabled()) {
+    UserError("Project is disabled");
+}
+my $creator = $instance->GetGeniUser();
+if (!defined($creator)) {
+    fatal("Cannot lookup creator");
+}
+if (!$this_user->SameUser($creator->emulab_user())) {
+    UserError("Not enough permission to modify experiment");
+}
+
+# This was a dumb mistake, I need to convert from servername to portal.
+$ENV{"SERVER_NAME"} = $project->Brand()->Server();
+
+#
+# Bindings can come as json string on the command line.
+#
+if (defined($bindingstr)) {
+    $bindings = eval { decode_json($bindingstr); };
+    if ($@) {
+	UserError("Could not json decode the bindings\n");
+    }
+
+    #
+    # Need to convert simple bindings to paramdefs. 
+    #
+    # print Dumper($bindings);
+    $bindings = APT_Profile::BindingsToParams($bindings);
+    # print Dumper($p);
+    
+    # This is how geni-lib wants it
+    $bindings = {"bindings" => $bindings};
+}
+
+#
+# Lock here and pass to manage_instance
+#
+if ($instance->Lock()) {
+    UserError("Experiment is locked, please try again later");
+}
+$locked = 1;
+
+#
+# Need the script. 
+#
+if ($instance->script()) {
+    $script = $instance->script();
+}
+elsif ($profile->IsRepoBased()) {
+    my $reponame = $profile->reponame();
+    my $which    = $instance->repohash();
+
+    #
+    # We need a webtask to talk to manage_gitrepo to get the hash
+    # (since we might not have it). We get the source on stdout.
+    #
+    my $webtask = WebTask::CreateAnonymous();
+    if (!defined($webtask)) {
+	fatal("Could not create webtask");
+    }
+    my $webtask_id = $webtask->task_id();
+    my $output = emutil::ExecQuiet("$MANAGEGITREPO -t $webtask_id getsource ".
+				   "  -n $reponame $which");
+    if ($?) {
+	print STDERR "Could not get source from repo\n";
+	$webtask->Delete();
+	fatal($output);
+    }
+    $webtask->Delete();
+    
+    if ($output =~ /^import/m) {
+	$script = $output;
+    }
+    else {
+	UserError("Not a geni-lib script based profile");
+    }
+}
+elsif ($profile->script()) {
+    $script = $profile->script();
+}
+else {
+    UserError("Only geni-lib scripted experiments can be modified");
+}
+
+#
+# Apply the bindings to the geni-lib script.
+#
+if (defined($bindings)) {
+    my ($pfp, $paramfile)  = tempfile(UNLINK => 0);
+    my ($sfp, $scriptfile) = tempfile(UNLINK => 0);
+
+    print $sfp $script;
+    eval { print $pfp encode_json($bindings); };
+    if ($@) {
+	unlink($paramfile);
+	unlink($scriptfile);
+	fatal($@);
+    }
+    close($pfp);
+    close($sfp);
+
+    my $output = emutil::ExecQuiet("$RUNGENILIB -b $paramfile $scriptfile");
+    if ($?) {
+	print STDERR "Could not apply parameter set to script\n";
+	print STDERR $output;
+	fatal($output);
+    }
+    $rspec = $output;
+    unlink($paramfile);
+    unlink($scriptfile);
+}
+my ($fp, $rspecfile) = tempfile(UNLINK => 0);
+print $fp $rspec;
+close($fp);
+
+#
+# Go into the background so libaudit logging runs normally even when
+# attached to a tty. In general, this script is going to get called in
+# a disconnected state.
+#
+if (isatty(\*STDOUT) && !$debug) {
+    $logfile = TBMakeLogname("modify-experiment");
+
+    if (my $childpid = TBBackGround($logfile)) {
+	#
+	# create_slivers is going to fork/detach or die. We can just
+	# wait here for a while in case there is an error.
+	#
+	print "Modifying experiment, patience please, this takes a minute.\n";
+	waitpid($childpid, 0);
+	my $status = $?;
+	if ($status) {
+	    print STDERR "Error modifying experiment\n";
+	    if (-s $logfile) {
+		system("/bin/cat $logfile");
+	    }
+	    $status = $status >> 8;
+	    exit($status);
+	}
+	print "Starting modification, please check the\n".
+	    "web interface for further status. You will also receive email.\n";
+	exit(0);
+    }
+}
+my $webtask = WebTask->CreateAnonymous();
+
+system("$MANAGEINSTANCE -t " .
+       $webtask->task_id() . " modify $uuid -N $rspecfile");
+unlink($rspecfile);
+if ($?) {
+    my $status = $? >> 8;
+    my $body = "";
+    
+    $webtask->Refresh();
+    if ($webtask->HasExited()) {
+	$body = $webtask->output();
+    }
+    elsif (defined($logfile)) {
+	$body = emutil::ReadFile($logfile);
+    }
+    else {
+	$body = "Unknown error!";
+    }
+    if (!isatty(\*STDOUT) && !$noemail) {
+	$project->SendEmail($this_user->email(),
+			    "Failed to modify portal experiment",
+			    "Failed to modify portal experiment ".
+			    $instance->Printable() . "\n\n" .
+			    $body, $project->OpsEmailAddress());
+    }
+    unlink($logfile) if (defined($logfile));
+    chomp($body);
+    print STDERR $body . "\n";
+    print STDERR "Could not modify experiment\n";
+    $webtask->Delete();
+    exit($status);
+}
+# We passed the lock.
+$locked = 0;
+
+#
+# create_slivers forked off. We want to wait so we can send mail, but do
+# not hold up the caller. Note that we might already be in the background
+# (see above).
+#
+if (!isatty(\*STDOUT) && !$waitmode) {
+    $logfile = TBMakeLogname("modify-experiment");
+
+    if (my $childpid = TBBackGround($logfile)) {
+	exit(0);
+    }
+}
+#
+# Wait for failure or ready. 
+#
+while (1) {
+    sleep(15);
+    # Reload to make sure it still exists.
+    $instance->Flush();
+    $instance = APT_Instance->Lookup($uuid);
+    if (!defined($instance)) {
+	# I do not think we need to send email, I bet someone terminated it.
+	fatal("Instance is gone, giving up!");
+    }
+    last
+	if ($instance->status() eq "ready" ||
+	    $instance->status() eq "failed" ||
+	    $instance->status() eq "pending" ||
+	    $instance->status() eq "deferred");
+
+    print "Still waiting for $instance to fail or go ready ...\n";
+}
+#
+# create_slivers send the email for modify
+#
+unlink($logfile) if (defined($logfile));
+$webtask->Delete();
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+    unlink($logfile) if (defined($logfile));
+    $instance->Unlock() if ($locked);
+
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(-1);
+}
+sub UserError($)
+{
+    my ($mesg) = @_;
+    unlink($logfile) if (defined($logfile));
+    $instance->Unlock() if ($locked);
+
+    print STDERR "$mesg\n";
+    exit(1);
+}

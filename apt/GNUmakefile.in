@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,8 @@ BIN_SCRIPTS	= manage_profile manage_instance manage_dataset \
                   create_instance rungenilib ns2rspec nsgenilib.py \
                   rspec2genilib ns2genilib manage_reservations manage_gitrepo \
                   manage_images rtecheck checkprofile manage_extensions \
-		  create_slivers searchip start-experiment manage_resgroup
+		  create_slivers searchip start-experiment manage_resgroup \
+		  modify-experiment
 SBIN_SCRIPTS	= apt_daemon aptevent_daemon portal_xmlrpc apt_checkup \
 		  portal_monitor apt_scheduler portal_resources \
 		  manage_licenses manage_aggregate \
