@@ -189,6 +189,8 @@ API = {
                             "help" : "Show persistent datasets" },
     "startExperiment"   : { "func" : "startExperiment",
                             "help" : "Start a Portal experiment" },
+    "modifyExperiment"  : { "func" : "modifyExperiment",
+                            "help" : "Modify a Portal experiment" },
     "terminateExperiment" : { "func" : "terminateExperiment",
                               "help" : "Terminate a Portal experiment" },
     "extendExperiment"  : { "func" : "extendExperiment",
@@ -3136,11 +3138,9 @@ class startExperiment:
         return rval
 
     def usage(self):
-        print("Usage: startExperiment <optons> ", end=' ')
-        "[--site 'site:1=aggregate ...'] <profile>"
+        print("Usage: startExperiment <options> ", end=' ')
+        print("[--site 'site:1=aggregate ...'] <profile>")
         print("where:")
-        print(" -d           - Turn on debugging (run in foreground)")
-        print(" -w           - Wait mode (wait for experiment to start)")
         print(" -s           - Do not send status email")
         print(" -P           - Do not pend deferrable aggregates")
         print(" -a urn       - Override default aggregate URN")
@@ -3154,6 +3154,60 @@ class startExperiment:
         print(" --refspec    - refspec[:hash] of a repo based profile to use")
         print(" --site       - Bind sites used in the profile")
         print("profile       - Either UUID or pid,name")
+        wrapperoptions();
+        return
+    pass
+
+#
+# modify a portal experiment
+#
+class modifyExperiment:
+    def __init__(self, argv=None):
+        self.argv = argv;
+        return
+
+    def apply(self):
+        try:
+            opts, req_args = getopt.getopt(self.argv, "a:P",
+                                           [ "help", "bindings="]);
+            pass
+        except getopt.error as e:
+            print(e.args[0])
+            self.usage();
+            return -1;
+
+        params = {};
+        for opt, val in opts:
+            if opt in ("-h", "--help"):
+                self.usage()
+                return 0
+            elif opt == "-a":
+                params["aggregate"] = val
+                pass
+            elif opt == "-P":
+                params["nopending"] = 1
+                pass
+            elif opt == "--bindings":
+                params["bindings"] = val;
+                pass
+            pass
+
+        # Do this after so --help is seen.
+        if len(req_args) != 1:
+            self.usage();
+            return -1;
+
+        params["experiment"] = req_args[0]
+        rval,response = do_method("portal", "modifyExperiment", params)
+        return rval
+
+    def usage(self):
+        print("Usage: modifyExperiment <options> --bindings json <profile>")
+        print("where:")
+        print(" -P           - Do not pend deferrable aggregates")
+        print(" -a urn       - Override default aggregate URN")
+        print(" --bindings   - json string of bindings to apply to parameters")
+        print("experiment    - Either UUID or pid,name")
         wrapperoptions();
         return
     pass
@@ -3192,7 +3246,7 @@ class terminateExperiment:
         return rval
 
     def usage(self):
-        print("Usage: terminateExperiment <optons> <experiment>")
+        print("Usage: terminateExperiment <options> <experiment>")
         print("where:")
         print("experiment     - Either UUID or pid,name")
         wrapperoptions();
@@ -3246,7 +3300,7 @@ class extendExperiment:
         return rval
 
     def usage(self):
-        print("Usage: extendExperiment <optons> <experiment> <hours>")
+        print("Usage: extendExperiment <options> <experiment> <hours>")
         print("where:")
         print(" -m str        - Your reason for the extension (a string)")
         print(" -f file       - A file containing your reason")
@@ -3299,7 +3353,7 @@ class experimentStatus:
         return rval
 
     def usage(self):
-        print("Usage: experimentStatus <optons> <experiment>")
+        print("Usage: experimentStatus <options> <experiment>")
         print("where:")
         print(" -j            - json string instead of text")
         print(" -k            - include instance cert/key pair (with -j)")
@@ -3342,7 +3396,7 @@ class experimentManifests:
         return rval
 
     def usage(self):
-        print("Usage: experimentManifests <optons> <experiment>")
+        print("Usage: experimentManifests <options> <experiment>")
         print("where:")
         print("experiment     - Either UUID or pid,name")
         wrapperoptions();
@@ -3577,9 +3631,12 @@ def infer_pideid(path):
 # after that which is passed to the handler for additional getopt parsing.
 #
 wrapper_argv = [];
+wrapper_opts = ["help", "server=", "port=", "login=", "cert=", "admin",
+                "devel", "develuser=", "impotent", "debug",
+                "cacert=", "verify"]
 
 for arg in sys.argv[1:]:
-    if arg.startswith("--"):
+    if arg.startswith("--") and arg[2:arg.find("=")+1] in wrapper_opts:
         wrapper_argv.append(arg);
         pass
     else:
@@ -3588,10 +3645,7 @@ for arg in sys.argv[1:]:
 
 try:
     # Parse the options,
-    opts, req_args =  getopt.getopt(wrapper_argv[0:], "",
-                      [ "help", "server=", "port=", "login=", "cert=", "admin", "devel",
-                        "develuser=", "impotent", "debug",
-                        "cacert=", "verify" ])
+    opts, req_args =  getopt.getopt(wrapper_argv[0:], "", wrapper_opts)
     # ... act on them appropriately, and
     for opt, val in opts:
         if opt in ("-h", "--help"):

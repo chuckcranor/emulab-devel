@@ -84,7 +84,7 @@ sub UserError($);
 sub usage()
 {
     print "Usage: modify-experiment ".
-	"<optons> [--bindings | --bindingstr] <experiment>\n";
+	"<options> [--bindings | --bindingstr] <experiment>\n";
     print "Options:\n";
     print " -d           - Turn on debugging (run in foreground)\n";
     print " -w           - Wait mode (wait for experiment to finish starting)\n";
@@ -139,7 +139,7 @@ if (defined($options{"s"})) {
     $noemail = 1;
 }
 usage()
-    if (@ARGV != 1 || !($bindings || $bindingstr));
+    if (@ARGV != 1 || !($bindingfile || $bindingstr));
 
 my $this_user = User->ThisUser();
 if (!defined($this_user)) {

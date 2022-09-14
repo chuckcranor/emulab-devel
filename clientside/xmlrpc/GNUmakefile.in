@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2004-2020 University of Utah and the Flux Group.
+# Copyright (c) 2004-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,7 +48,7 @@ SYMLINKS        = node_admin node_reboot os_load create_image node_list \
 		  createdataset deletedataset showdataset extenddataset \
 		  startExperiment terminateExperiment experimentStatus \
 		  extendExperiment experimentManifests imageinfo \
-		  experimentReboot
+		  experimentReboot modifyExperiment
 
 LINKS		= cd $(INSTALL_BINDIR) && \
 		  list='$(SYMLINKS)'; for file in $$list; do \

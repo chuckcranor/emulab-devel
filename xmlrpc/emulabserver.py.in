@@ -6174,6 +6174,70 @@ class portal:
         return EmulabResponse(RESPONSE_SUCCESS, output=output)
 
     #
+    # Modify a portal experiment.
+    #
+    def modifyExperiment(self, version, argdict):
+        if version != self.VERSION:
+            return EmulabResponse(RESPONSE_BADVERSION,
+                                  output="Client version mismatch!")
+
+        if self.readonly:
+            return EmulabResponse(RESPONSE_FORBIDDEN,
+                              output="Insufficient privledge to invoke method")
+        
+        try:
+            checknologins()
+            pass
+        except NoLoginsError as e:
+            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
+
+        argerror = CheckRequiredArgs(argdict, ("experiment",))
+        if (argerror):
+            return argerror
+
+        argstr     = ""
+        experiment = None
+        
+        for opt, val in argdict.items():
+            if opt == "experiment":
+                experiment = val
+                pass
+            elif opt == "bindings":
+                argstr += " --bindings "
+                bindings = val
+            
+                if len(bindings) > (1024 * 16):
+                    return EmulabResponse(RESPONSE_TOOBIG,
+                                         output="Bindings way too big!");
+        
+                (fp, filename) = writensfile(bindings)
+                if not filename:
+                    return EmulabResponse(RESPONSE_SERVERERROR,
+                                         output="Server Error")
+
+                argstr += escapeshellarg(filename)
+                pass
+            elif opt == "aggregate":
+                argstr += " -a "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "nopending":
+                argstr += " -P "
+                pass
+            pass
+        
+        argstr += " "
+        argstr += escapeshellarg(experiment)
+        
+        (exitval, output) = runcommand(TBDIR +
+                                       "/bin/modify-experiment " + argstr)
+
+        if exitval:
+            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+        
+        return EmulabResponse(RESPONSE_SUCCESS, output=output)
+
+    #
     # Terminate a portal experiment.
     #
     def terminateExperiment(self, version, argdict):
@@ -6197,16 +6261,24 @@ class portal:
 
         argstr     = "terminate "
         experiment = None
+        begone     = False
         
         for opt, val in argdict.items():
             if opt == "experiment":
                 experiment = val
+                pass
+            elif opt == "nosync":
+                begone = True
                 pass
             pass
         
         argstr += escapeshellarg(experiment)
         # Tell manage_instance to do permission checks.
         argstr += " -X "
+        # Tell syncthing to end right away.
+        if begone:
+            argstr += " -G "
+            pass
         
         (exitval, output) = runcommand(TBDIR +
                                        "/bin/manage_instance " + argstr)
