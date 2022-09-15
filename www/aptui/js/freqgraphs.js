@@ -1005,7 +1005,7 @@ window.ShowFrequencyGraph = (function ()
 		    }
 		    // Latest graph will be shown if nothing else.
 		    if (dirname != "archive" && 
-			(!latest || info.latest > latest.logid)) {
+			(!latest || info.logid > latest.logid)) {
 			latest = info;
 		    }
 		});
