@@ -1,0 +1,74 @@
+To add collection of RF monitoring data from buses and other endpoints.
+
+Mothership boss:
+
+0. Pick a bus, changing XXXX to the appropriate value:
+
+   tarball=/usr/testbed/tmp/syncthing/bus-XXXX.tar.gz
+   aggregate=bus-XXXX
+
+1. Copy over the appropriate tarball (TBD):
+
+   sudo scp $tarball boss.$aggregate.powderwireless.net:/tmp/st.tar.gz
+
+2. Create the mirror directory where aggregate data goes, along with the
+   marker:
+
+   sudo mkdir -p /usr/testbed/www/rfmonitor-mobile/$aggregate/.stfolder
+   sudo chown -R elabman:tbadmin /usr/testbed/www/rfmonitor-mobile/$aggregate
+
+
+
+Aggregate boss:
+
+1. Enable the "global" syncthing daemon, append this to the aggregate boss
+   node's /etc/rc.conf:
+
+   sudo ed /etc/rc.conf
+   $a
+
+# Syncthing for Powder RF data collection
+syncthing_enable="YES"
+syncthing_home="/usr/testbed/etc/syncthing"
+syncthing_log_file="/usr/testbed/log/syncthing.log"
+syncthing_user="elabman"
+syncthing_group="tbadmin"
+.
+   w
+   q
+
+2. Install the syncthing config for the aggregate boss.
+
+   sudo mkdir -m 700 /usr/testbed/etc/syncthing
+   sudo tar -C /usr/testbed/etc/syncthing -xzf /tmp/st.tar.gz
+   sudo chown -R elabman:tbadmin /usr/testbed/etc/syncthing
+   sudo rm /tmp/st.tar.gz
+
+3. Mark the data directory so that syncthing knows we really intended it
+   to operate on the directory:
+
+   sudo mkdir /usr/testbed/www/rfmonitor/.stfolder
+   sudo chown elabman:tbadmin /usr/testbed/www/rfmonitor/.stfolder
+
+   Nothing goes into this directory, syncthing just makes sure it exists.
+   If you start up syncthing and it doesn't appear to be doing anything
+   (no files show up in the mirror directory on mothership boss), then
+   it is probably because this subdir is missing.
+
+4. Start em up and see if there was anything obviously wrong:
+
+   sudo /usr/local/etc/rc.d/syncthing start
+   sleep 1
+   tail -50 /usr/testbed/log/syncthing.log
+
+To monitor what is going on:
+
+Syncthing has a GUI that listens just on localhost, but you can do a port
+forward on your local machine if you want to look at it:
+
+   ssh -N -L 9090:127.0.0.1:8384 boss.$aggregate.powderwireless.net &
+
+and then go to "localhost:9090" in your browser.
+
+You can do the same with the boss.emulab.net syncthing as well, running
+a port forward on boss.emulab.net.

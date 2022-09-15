@@ -1,0 +1,483 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2022 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+
+#
+# Generate a syncthing config for all monitor nodes and the mothership boss.
+#
+# Right now this is a one-time thing, but I could see periodically running it,
+# getting info from the DB, to make sure everything is current.
+#
+
+use strict;
+use English;
+use Getopt::Std;
+use POSIX qw(strftime);
+use Data::Dumper;
+
+sub usage()
+{
+    print "Usage: genstconfig [-dn] [-D] [-m node,...] [-M node-list-file] [-T template-file]\n";
+    exit(1);
+}
+my $optlist      = "dnm:M:T:D:";
+my $debug        = 0;
+my $verbose      = 1;
+my $impotent     = 0;
+my $mnodefile	 = "";
+my $tempfile	 = "";
+my $usedb	 = 0;
+my @mnodes	 = ();
+my %hosts	 = ();
+
+# Global vars
+my $TB		 = "@prefix@";
+my $TEMPLATEDIR	 = "@srcdir@";
+my $STCMD	 = "/usr/local/bin/syncthing";
+my $STDIR        = "$TB/tmp/syncthing";
+my $DATADIR      = "$TB/www/rfmonitor";
+my $SERVER       = "@BOSSNODE@";
+my $EMULABNET	 = "155.98.32.0/20";
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Testbed Support libraries
+use lib "@prefix@/lib";
+use libtestbed;
+use APT_Instance;
+
+# Protos
+sub parsehostname($);
+sub createconfig($);
+sub customizeconfig($);
+sub expandconfig($$$$@);
+sub dumpinfo();
+sub fatal($);
+sub stampprint($);
+
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if (0 && $UID != 0) {
+    fatal("Must be root to run this script\n");
+}
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"m"})) {
+    @mnodes = split(',',$options{"m"});
+}
+if (defined($options{"D"})) {
+    $usedb = 1;
+}
+if (defined($options{"M"})) {
+    $mnodefile = $options{"M"};
+}
+if (defined($options{"T"})) {
+    $tempfile = $options{"T"};
+}
+
+# read monitor nodes from the DB
+# XXX just aggregate boss nodes? include cnode-* and cnuc-* as well?
+if ($usedb) {
+    ;
+}
+
+# read monitor nodes from a file
+if ($mnodefile) {
+    if (open(FD, "<$mnodefile")) {
+	while (<FD>) {
+	    chomp;
+	    push @mnodes, $_;
+	}
+	close(FD);
+    } else {
+	fatal("Could not open monitor node list file '$mnodefile'");
+    }
+}
+
+# validate monitor node names
+foreach my $fqdn (@mnodes) {
+    my ($host, $domain) = parsehostname($fqdn);
+    if (!$host || !$domain) {
+	print STDERR "Invalid fully-qualified hostname '$fqdn' skipped ...\n";
+	next;
+    }
+    $hosts{$fqdn}{'host'} = $host;
+    $hosts{$fqdn}{'domain'} = $domain;
+    ($hosts{$fqdn}{'site'}) = split('\.', $domain);
+}
+
+if (keys(%hosts) == 0) {
+    fatal("Must have at least one valid FQDN");
+}
+
+#
+# Create syncthing hierarchy for each monitor node and the server.
+#
+# XXX this adds info to the %hosts hash so must be done before any
+# configuration.
+#
+foreach my $h (keys %hosts) {
+    createconfig($h);
+}
+
+#
+# Preconfigure the syncthing config.xml files to reflect all monitor nodes
+# sending to the server.
+#
+foreach my $rh (keys %hosts) {
+    customizeconfig($rh);
+}
+dumpinfo()
+    if ($debug);
+
+stampprint("genstconfig: done")
+    if ($debug);
+
+exit(0);
+
+#
+# Create the configuration directory contents for a syncthing instance.
+# This mirrors what will be installed in /usr/testbed/wbstore on the aggregate.
+#
+sub createconfig($)
+{
+    my ($fqdn) = @_;
+
+    # Setup syncthing config for each node
+    my $metadir = "$STDIR/$fqdn";
+
+    #
+    # If the configuration already exists, use the existing info.
+    #
+    if (-d $metadir) {
+	print STDERR "$fqdn: configuration already exists, using it...\n";
+    } else {
+	if (mysystem("mkdir -m 750 -p $metadir")) {
+	    fatal("$fqdn: could not create config directory");
+	}
+	print STDERR "made '$metadir'\n"
+	    if ($debug);
+
+	# Generate the syncthing configuration. Includes config, keys, certs, ID.
+	if (mysystem("$STCMD -generate=$metadir >$metadir/st.log 2>&1")) {
+	    fatal("$fqdn: could not create syncthing config in '$metadir'");
+	}
+    }
+
+    # Extract the Device ID and API key for customizing our template
+    my $stuuid = `$STCMD -home=$metadir -device-id 2>/dev/null`;
+    if ($? || !$stuuid) {
+	fatal("$fqdn: could not read device-id");
+    }
+    chomp($stuuid);
+    $hosts{$fqdn}{'devid'} = $stuuid;
+
+    my $apikey = `fgrep '<apikey>' $metadir/config.xml`;
+    if ($? || $apikey !~ /<apikey>(.*)<\/apikey>/) {
+	fatal("$fqdn: could not read API key");
+    }
+    $hosts{$fqdn}{'apikey'} = $1;
+}
+
+sub customizeconfig($)
+{
+    my ($fqdn) = @_;
+    my $metadir = "$STDIR/$fqdn";
+    my $domain = $hosts{$fqdn}{'domain'};
+    my $site = $hosts{$fqdn}{'site'};
+
+    # Customize the config.xml file from our template
+    my $cfile = "$metadir/config.xml";
+    my $port = 22000;
+    my $gport = 8384;
+
+    if (-e $cfile && ! -e "$cfile.bak") {
+	system("cp -p $cfile $cfile.bak");
+    }
+
+    if ($fqdn eq $SERVER) {
+	my %vars = (
+	    APIKEY    => $hosts{$fqdn}{'apikey'},
+	    FID       => $fqdn,
+	    FLABEL    => $domain,
+	    FPATH     => "$DATADIR/$site",
+	    GUILISTEN => "127.0.0.1:$gport",
+	    MAXBW     => "0",
+	    MYADDR    => "tcp4://$fqdn:$port",
+	    MYDEVID   => $hosts{$fqdn}{'devid'},
+	    MYNAME    => $fqdn,
+	    MYNET     => $EMULABNET,
+	    OTHERADDR => "",
+	    OTHERDEVID=> "",
+	    OTHERNAME => "",
+	    OTHERNET  => "$EMULABNET",
+	);
+	my $template = "$TEMPLATEDIR/recv-template.xml";
+
+	# Note that the server is different since it receives from all nodes
+	my @rhlist = sort grep { $_ ne $SERVER } keys %hosts;
+	expandconfig($cfile, $template, \%vars, $SERVER, @rhlist);
+    } else {
+	my %vars = (
+	    APIKEY    => $hosts{$fqdn}{'apikey'},
+	    FID       => $fqdn,
+	    FLABEL    => $domain,
+	    FPATH     => "$DATADIR",
+	    GUILISTEN => "127.0.0.1:$gport",
+	    MAXBW     => "500",
+	    MYADDR    => "tcp4://$fqdn:$port",
+	    MYDEVID   => $hosts{$fqdn}{'devid'},
+	    MYNAME    => $fqdn,
+	    MYNET     => $EMULABNET,
+	    OTHERADDR => "tcp4://$SERVER:$port",
+	    OTHERDEVID=> $hosts{$SERVER}{'devid'},
+	    OTHERNAME => $SERVER,
+	    OTHERNET  => $EMULABNET,
+	);
+	my $template = "$TEMPLATEDIR/send-template.xml";
+
+	expandconfig($cfile, $template, \%vars, $fqdn, $SERVER);
+    }
+}
+
+#
+# Expand variables in the given config file. Variables are:
+#
+#    APIKEY     Generated by syncthing
+#    FPATH      /proj/<pid>/wbstore/<expt-uuid>/<aggregate-domain>
+#    FID        <expt-uuid>-<aggregate-domain>
+#    FLABEL     <aggregate-domain>
+#    GUILISTEN  127.0.0.1:<unique-port>
+#    MAXBW      500
+#    MYADDR     tcp4://<ipaddr>:<port> (maybe just tcp4://<fqdn>)
+#    MYDEVID    Generated by syncthing
+#    MYNAME     <fqdn>
+#    MYNET      <network>/<bits>
+#    OTHERADDR  tcp4://<ipaddr>:<port> (maybe just tcp4://<fqdn>)
+#    OTHERDEVID Generated by syncthing
+#    OTHERNAME  <fqdn>
+#    OTHERNET   <network>/<bits>
+#
+# We just do a simple textual find and replace rather than parsing XML.
+#
+sub expandconfig($$$$@)
+{
+    my ($cfile, $template, $vars, $fqdn, @rhosts) = @_;
+    my $port = 22000;
+
+    print "Vars:\n", Dumper($vars), "\n"
+	if ($debug);
+
+    open(OF, "<$template") or
+	fatal("Cannot open config template file '$template'");
+    open(NF, ">$cfile") or
+	fatal("Cannot open new config file '$cfile'");
+  LINE: while (<OF>) {
+	while (/\@([A-Z]+)\@/) {
+	    my $var = $1;
+
+	    # expand the folder template for all remote devices
+	    if ($var eq "FOLDERS") {
+		if (@rhosts == 0) {
+		    fatal("Must have at least one remote device");
+		}
+		open(TF, "<$TEMPLATEDIR/recv-folder-template.xml") or
+		    fatal("Cannot open device template file");
+
+		foreach my $rh (@rhosts) {
+		    my $domain = $hosts{$rh}{'domain'};
+		    my $site = $hosts{$rh}{'site'};
+		    my $msdatadir = $DATADIR;
+		    if ($site =~ /^bus-/) {
+			$msdatadir .= "-mobile";
+		    }
+		    my %fvars = (
+			FID    => $rh,
+			FLABEL => $domain,
+			FPATH  => "$msdatadir/$site",
+			MYDEVID    => $vars->{'MYDEVID'},
+			OTHERADDR  => "tcp4://$rh:$port",
+			OTHERDEVID => $hosts{$rh}{'devid'},
+			OTHERNAME  => $rh,
+		    );
+
+		    seek(TF, 0, 0);
+		    while (<TF>) {
+			while (/\@([A-Z]+)\@/) {
+			    my $v = $1;
+			    if (!exists($fvars{$v}) || !defined($fvars{$v})) {
+				close(NF);
+				unlink($cfile);
+				fatal("No expansion for variable $v");
+			    }
+			    s/\@$v\@/$fvars{$v}/;
+			}
+			print NF $_;
+		    }
+		}
+		close(TF);
+		next LINE;
+	    }
+
+	    # expand the device template for all remote devices 
+	    if ($var eq "DEVICES") {
+		if (@rhosts == 0) {
+		    fatal("Must have at least one remote device");
+		}
+		open(TF, "<$TEMPLATEDIR/recv-device-template.xml") or
+		    fatal("Cannot open device template file");
+		foreach my $rh (@rhosts) {
+		    my %ovars = (
+			OTHERADDR  => "tcp4://$rh:$port",
+			OTHERDEVID => $hosts{$rh}{'devid'},
+			OTHERNAME  => $rh,
+			OTHERNET   => $EMULABNET,
+		    );
+
+		    seek(TF, 0, 0);
+		    while (<TF>) {
+			while (/\@([A-Z]+)\@/) {
+			    my $v = $1;
+			    if (!exists($ovars{$v}) || !defined($ovars{$v})) {
+				close(NF);
+				unlink($cfile);
+				fatal("No expansion for variable $v");
+			    }
+			    s/\@$v\@/$ovars{$v}/;
+			}
+			print NF $_;
+		    }
+		}
+		close(TF);
+		next LINE;
+	    }
+	    if (!exists($vars->{$var}) || !defined($vars->{$var})) {
+		close(NF);
+		unlink($cfile);
+		fatal("No expansion for variable $var");
+	    }
+	    s/\@$var\@/$vars->{$var}/g;
+	}
+	print NF $_;
+    }
+    close(OF);
+    close(NF);
+}
+
+#
+# Parse a FQDN.
+# Must be of the form <host>.<domain>+.<tld>
+# Returns (host,domain) if success, undef otherwise.
+#
+sub parsehostname($)
+{
+    my ($str) = @_;
+    my @names = split('\.', $str);
+    if (@names < 3) {
+	return undef;
+    }
+    my @utnames = ();
+    foreach my $n (@names) {
+	if ($n !~ /^([-a-zA-Z0-9]+)$/) {
+	    return undef;
+	}
+	push(@utnames, $1);
+    }
+    my $host = shift @utnames;
+    my $dom = join('.', @utnames);
+
+    return ($host, $dom);
+}
+
+sub dumpinfo()
+{
+    if ($debug) {
+	foreach my $h (keys %hosts) {
+	    print "$h: host='", $hosts{$h}{'host'},
+		"', domain='", $hosts{$h}{'domain'},
+		"', site='", $hosts{$h}{'site'},
+		"', devid='", $hosts{$h}{'devid'},
+		"', apikey='", $hosts{$h}{'apikey'}, "'\n";
+	}
+    }
+}
+
+#
+# Print timestamped message.
+#
+sub stampprint($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print STDERR "$stamp: $msg\n";
+}
+
+# system run as root
+sub mysystem($)
+{
+    my ($cmd) = @_;
+
+    stampprint("system($cmd) as root ...")
+	if ($debug);
+
+    my $SAVEUID = $UID;
+    $UID = 0;
+    my $rv = system($cmd);
+    $UID = $SAVEUID;
+
+    return $rv;
+}
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    stampprint("genstconfig: FAILED")
+	if ($debug);
+    die("*** $0:\n".
+	"    $mesg\n");
+}
