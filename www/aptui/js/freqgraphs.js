@@ -738,58 +738,6 @@ window.ShowFrequencyGraph = (function ()
 	return d;
     }
 
-    function GetFrequencyData(datatype, route, method, args, callback)
-    {
-	var url = 'server-ajax.php';
-	if (!datatype) {
-	    datatype = "text";
-	}
-
-	var networkError = {
-	    "code"  : -1,
-	    "value" : "Server error, possible network failure.",
-	};
-
-	var jqxhr = $.ajax({
-            // the URL for the request
-            url: url,
-            success: function (json) {
-		window.APT_OPTIONS.gaAjaxEvent(route, method, json.code);
-		if (callback !== undefined) {
-		    callback(json);
-		}
-	    },
-	    error: function (jqXHR, textStatus, errorThrown) {
-		if (callback !== undefined) {
-		    callback(networkError);
-		}
-	    },
- 
-            // the data to send (will be converted to a query string)
-            data: {
-		ajax_route:     route,
-		ajax_method:    method,
-		ajax_args:      args,
-            },
- 
-            // whether this is a POST or GET request
-            type: "GET",
- 
-            // the type of data we expect back
-            dataType : datatype,
-	});
-	var defer = $.Deferred();
-    
-	jqxhr.done(function (data) {
-	    defer.resolve(data);
-	});
-	jqxhr.fail(function (jqXHR, textStatus, errorThrown) {
-	    networkError["jqXHR"] = jqXHR;
-	    defer.resolve(networkError);
-	});
-	return defer;
-    }
-
     // Easier to get a binary (gzip) file this way, since jquery does
     // not directly support doing this. 
     function GetBlob(url, success, failure) {
@@ -804,34 +752,6 @@ window.ShowFrequencyGraph = (function ()
 	    failure();
 	};
 	oReq.send();
-    }
-
-    /*
-     * Saving this. It is faster to go directly to the aggregate, but
-     * they all have to have valid certificates. Note that we cannot load
-     * it via http from inside an https page, the browser will block it.
-     */
-    function SaveMe(args) {
-	console.info("ShowFrequencyGraph", args);
-	GetBlob(window.URL + ".gz",
-		function (arrayBuffer) {
-		    console.info("gz version");
-		    var output = pako.inflate(arrayBuffer, { 'to': 'string' });
-		    
-		    var data = d3.csvParse(output, type);
-		    CreateBinGraph(args, data);
-		},
-		function () {
-		    $.get(window.URL)
-			.done(function (data) {
-			    console.info("text version");
-			    data = d3.csvParse(data, type);
-			    CreateBinGraph(args, data);
-			})
-			.fail(function() {
-			    alert("Could not get data file: " + window.URL);
-			});
-		});
     }
 
     function getRandomInt() {
@@ -1116,56 +1036,6 @@ window.ShowFrequencyGraph = (function ()
 	console.info("BuildMenu", url);
 	
 	$.get(url, callback);
-    }
-
-    /*
-     * Setup the download button to download the CSV data as a file.
-     */
-    function SetupDownloadOld(args, csvdata)
-    {
-	var selector = args.selector + " .download-button";
-	var filename = args.node_id + ":" + args.iface +
-	    (args.logid ? "-" + args.logid : "") + ".csv";
-
-	console.info("Download", args, filename);
-	$(selector)
-	    .unbind("click")
-	    .removeAttr("disabled")
-	    .click(function (event) {
-		event.preventDefault();
-	    
-		var blob     = new Blob([csvdata], {type: 'text/csv'});
-		const fileStream = streamSaver.createWriteStream(filename, {
-		    size: blob.size 
-		});
-		
-		var readableStream;
-		if (0) {
-		    readableStream = blob.stream();
-		}
-		else {
-		    readableStream = new Response(Blob).body;
-		}
-
-		// more optimized pipe version
-		// (Safari may have pipeTo but it's useless
-		//   without the WritableStream)
-		if (window.WritableStream && readableStream.pipeTo) {
-		    return readableStream.pipeTo(fileStream)
-			.then(() => console.log('done writing'));
-		}
-		// Write (pipe) manually
-		window.writer = fileStream.getWriter();
-		
-		const reader = readableStream.getReader();
-		
-		const pump = () => reader.read()
-		    .then(res => res.done
-			  ? writer.close()
-			  : writer.write(res.value).then(pump));
-
-		pump();
-	    });
     }
 
     function SetupDownload(args, url)
