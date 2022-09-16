@@ -1523,6 +1523,8 @@ sub DoTerminate()
 	}
 	print "Marking instance canceled\n";
 	$instance->MarkCanceled();
+	# No point in trying to start things now.
+	$instance->ResolveDefer();
 	# We have an obvious race here since we do not have the lock.
 	exit(0);
     }
@@ -1582,9 +1584,12 @@ sub DoTerminate()
 	    $agg->status() eq "staging" ||
 	    $agg->status() eq "staged") {
 	    $agg->SetStatus("terminated");
+	    $agg->ResolveDefer();
 	}
-	push(@agglist, $agg)
-	    if ($agg->status() ne "terminated");
+	if ($agg->status() ne "terminated") {
+	    $agg->ResolveDefer();
+	    push(@agglist, $agg);
+	}
     }
     my $response;
 

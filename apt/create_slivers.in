@@ -321,7 +321,7 @@ foreach my $agg ($instance->AggregateList()) {
 	# defer the instance (below);
 	#
 	$agg->Defer("The " . $aptagg->nickname() .
-		    " cluster is current offline");
+		    " cluster is currently offline");
 	next;
     }
     push(@aggregate_list, $agg);
