@@ -1047,6 +1047,7 @@ window.ShowFrequencyGraph = (function ()
     {
 	// If no logid (timestamp) use the lastmod from the listing.
 	var when = (info.logid ? info.logid : info.lastmod);
+	var cluster = null;
 		    
 	$(args.selector + " .frequency-graph-date")
 	    .html(moment(when, "X").format("L LTS"))
@@ -1059,14 +1060,30 @@ window.ShowFrequencyGraph = (function ()
 	    .html(info.iface);
 
 	if (args.cluster || args.endpoint) {
-	    $(args.selector + " .frequency-graph-cluster")
-		.html(args.endpoint ? args.endpoint : args.cluster);
+	    cluster = args.endpoint ? args.endpoint : args.cluster;
 	}
 	else if (_.has(info, "path")) {
-	    $(args.selector + " .frequency-graph-cluster")
-		.html(info.path.split('/').reverse()[0]);
+	    cluster = info.path.split('/').reverse()[0];
+	}
+	if (cluster) {
+	    $(args.selector + " .frequency-graph-cluster").html(cluster)
 	}
 
+	// GPS link
+	if (args.which == "rfmonitor-mobile" && info.logid && cluster) {
+	    var to     = info.logid;
+	    var from   = (to - 75);
+	    
+	    var gpsurl = "https://overwatch.emulab.net:8889/" +
+		"d/VY5WqX1Mz/mobile-endpoint?orgId=3" +
+		"&from=" + (from * 1000) + "&to=" + (to * 1000) +
+		"&var-fixedNode=" + cluster + "&viewPanel=9";
+	    
+	    $(args.selector + " .gps-button")
+		.attr("href", gpsurl)
+		.removeAttr("disabled");
+	}
+	
 	$(args.selector + ' .moregraphs-dropdown')
 	    .find(".active").removeClass("active");
 	$(args.selector + ' .moregraphs-dropdown')
@@ -1103,6 +1120,11 @@ window.ShowFrequencyGraph = (function ()
 
 	// Disable the download button until we have the data.
 	$(args.selector + " .download-button").attr("disabled", "disabled");
+
+	// Ditto the GPS link
+	if (args.which == "rfmonitor-mobile") {
+	    $(args.selector + " .gps-button").attr("disabled", "disabled");
+	}
 
 	// Clear the graph now and show the spinner.	
 	$(args.selector + " .frequency-graph-maingraph").html("");
