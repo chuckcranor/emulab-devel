@@ -777,14 +777,13 @@ window.ShowFrequencyGraph = (function ()
 	if (args.cluster) {
 	    url = url + "&cluster=" + args.cluster;
 	}
-	if (args.baseline) {
-	    url = url + "&baseline=1";
-	    
-	    if (!args.cluster) {
-		url = url + "&cluster=" + dirname;
-	    }
+	if (args.endpoint) {
+	    url = url + "&endpoint=" + args.endpoint;
 	}
-	else if (dirname == "archive") {
+	if (args.which) {
+	    url = url + "&which=" + args.which;
+	}
+	if (dirname == "archive") {
 	    url = url + "&archived=1";
 	}
 	// Remember it so we can add a link at top of page when selected
@@ -834,7 +833,7 @@ window.ShowFrequencyGraph = (function ()
 		    return;
 		}
 		// Prune out other radios and interfaces unless browsing
-		if (args.baseline) {
+		if (args.which == "rfbaseline") {
 		    info["node_id"] = node_id = match[1];
 		    info["iface"]   = match[2];
 		}
@@ -1022,17 +1021,13 @@ window.ShowFrequencyGraph = (function ()
 		    .html("Please select a graph to view");
 	    }
 	};
-	var url = args.url;
-	if (args.baseline) {
-	    url = url + "/rfbaseline/";
-	    if (args.cluster) {
-		url = url + args.cluster + "/";
+	var url = args.url + "/" + args.which + "/";
+	if (args.which != "rfmonitor") {
+	    if (args.endpoint) {
+		url = url + args.endpoint + "/";
 	    }
 	}
-	else {
-	    url = url + "/rfmonitor/";
-	}
-	url = url + "/listing.php";
+	url = url + "listing.php";
 	console.info("BuildMenu", url);
 	
 	$.get(url, callback);
@@ -1063,9 +1058,9 @@ window.ShowFrequencyGraph = (function ()
 	$(args.selector + " .frequency-graph-iface")
 	    .html(info.iface);
 
-	if (args.cluster) {
+	if (args.cluster || args.endpoint) {
 	    $(args.selector + " .frequency-graph-cluster")
-		.html(args.cluster);
+		.html(args.endpoint ? args.endpoint : args.cluster);
 	}
 	else if (_.has(info, "path")) {
 	    $(args.selector + " .frequency-graph-cluster")
@@ -1093,21 +1088,11 @@ window.ShowFrequencyGraph = (function ()
 	 * possible with jquery ajax call, so we have to something
 	 * special.
 	 */
-	var url = args.url;
-	if (args.baseline) {
-	    url = url + "/rfbaseline/";
-	    if (args.cluster) {
-		url = url + args.cluster + "/";
-	    }
-	    url = url + info["path"] + "/";
+	var url = args.url + "/" + args.which + "/";
+	if (args.endpoint) {
+	    url = url + args.endpoint + "/";
 	}
-	else {
-	    url = url + "/rfmonitor/";
-	    
-	    if (info.archived) {
-		url = url + "/archive/";
-	    }
-	}
+	url = url + info["path"] + "/";
 	url = url + info.node_id + ":" + info.iface;
 	if (info.logid) {
 	    url = url + "-" + info.logid;

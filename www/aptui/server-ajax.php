@@ -713,7 +713,7 @@ $routing = array("geni-login" =>
                         ),
 		 "frequency-graph" =>
 			array("file"    => "frequency-graph.ajax",
-			      "guest"   => true,
+			      "guest"   => false,
 			      "methods" => array("GetFrequencyData" =>
 						     "Do_GetFrequencyData",
                                                  "GetListing" =>

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -50,12 +50,42 @@ $optargs = OptionalPageArguments("cluster",   PAGEARG_STRING,
                                  "iface",     PAGEARG_STRING,
                                  "logid",     PAGEARG_STRING,
                                  "archived",  PAGEARG_BOOLEAN,
-                                 "baseline",  PAGEARG_BOOLEAN);
+                                 "baseline",  PAGEARG_BOOLEAN,
+                                 "which",     PAGEARG_STRING,
+                                 "endpoint",  PAGEARG_STRING);
+
+if (isset($which)) {
+    if (! ($which == "rfmonitor" || $which == "rfbaseline" ||
+           $which == "rfmonitor-mobile")) {
+        SPITUSERERROR("Which graphs do you want to look at?");
+        exit();
+    }
+}
+elseif (isset($baseline)) {
+    $which = "rfbaseline";    
+}
+else {
+    $which = "rfmonitor";
+}
 if (!isset($archived)) {
     $archived = 0;
 }
-if (!isset($baseline)) {
-    $baseline = 0;
+if (isset($endpoint)) {
+    if (!TBvalid_node_id($endpoint)) {
+        SPITUSERERROR("Illegal characters in endoint");
+        exit();
+    }
+}
+if ($which != "rfmonitor") {
+    if (!$TBMAINSITE) {
+        SPITUSERERROR("Not supported here.");
+        exit();
+    }
+    $aggregate = Aggregate::ThisAggregate();
+    #
+    # Kill the cluster argument, this only makes sense at the Mothership
+    #
+    unset($cluster);
 }
 
 #
@@ -72,17 +102,22 @@ if (isset($cluster)) {
         SPITUSERERROR("No such cluster: $cluster");
         exit();
     }
-    $cluster = "'$cluster'";
+}
+elseif ($which == "rfmonitor") {
+    SPITUSERERROR("Missing cluster argument");
+    exit();
 }
 else {
-    if ($baseline) {
-        $cluster = "null";
-    }
-    else {
-        SPITUSERERROR("Missing cluster argument");
-        exit();
-    }
+    $cluster = null;
 }
+if ($which == "rfmonitor" ||
+    $which == "rfmonitor-mobile") {
+    $url = $aggregate->weburl();
+}
+else {
+    $url = "https://${USERNODE}";
+}
+
 if (isset($node_id)) {
     if (!TBvalid_node_id($node_id)) {
         SPITUSERERROR("Illegal characters in node_id");
@@ -119,12 +154,6 @@ if (isset($logid)) {
         exit();
     }
 }
-if ($baseline) {
-    $url = "https://${USERNODE}";
-}
-else {
-    $url = $aggregate->weburl();
-}
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
@@ -139,14 +168,17 @@ echo "<div id='oops_div'></div>
       <div id='waitwait_div'></div>\n";
 
 echo "<script type='text/javascript'>\n";
-echo "    window.CLUSTER     = $cluster;\n";
+echo "    window.CLUSTER     = " . ($cluster ? "'$cluster'" : "null") . ";\n";
 echo "    window.NODEID      = " . ($node_id ? $node_id : "null") . ";\n";
 echo "    window.IFACE       = " . ($iface ? $iface : "null") . ";\n";
 echo "    window.URL         = '$url';\n";
 echo "    window.ARCHIVED    = $archived;\n";
-echo "    window.BASELINE    = $baseline;\n";
+echo "    window.WHICH       = '$which';\n";
 if (isset($logid)) {
     echo "    window.LOGID       = '$logid';\n";
+}
+if (isset($endpoint)) {
+    echo "    window.ENDPOINT    = '$endpoint';\n";
 }
 echo "</script>\n";
 

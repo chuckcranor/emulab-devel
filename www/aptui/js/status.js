@@ -5258,7 +5258,8 @@ $(function ()
 		"iface"    : "rf0",
 		"logid"    : null,
 		"archived" : false,
-		"baseline" : false,
+		"which"    : "rfmonitor",
+		"endpoint" : null,
 	    }
 	    var html = monitorTemplate(options);
 
