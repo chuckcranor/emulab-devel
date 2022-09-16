@@ -10,13 +10,16 @@ $(function ()
     {
 	window.APT_OPTIONS.initialize(sup);
 	profiles = decodejson('#profiles-json');
+	console.info("profiles", profiles);
 
 	// Standard option
 	marked.setOptions({"sanitize" : true});
 
+	if (0) {
 	_.each(profiles, function(value, name) {
 	    value.desc = marked(value.desc)
 	});
+	}
 	$('#main-body').html(listTemplate({"profiles" : profiles}));
 
 	// Format dates with moment before table update
@@ -30,8 +33,11 @@ $(function ()
 	var table = $('#list-profiles-table')
 	    .tablesorter({
 		theme : 'bootstrap',
-		widgets: ["uitheme", "zebra", "filter", "resizable"],
+		widgets: ["uitheme", "zebra", "filter", "stickyHeaders"],
 		headerTemplate : '{content} {icon}',
+
+		// For stickyheaders
+		cssInfoBlock : "tablesorter-no-sort",
 
 		widgetOptions: {
 		    // include child row content while filtering, if true

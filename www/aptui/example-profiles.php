@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,6 +48,9 @@ echo "<script type='text/javascript'>\n";
 echo "</script>\n";
 
 $profiles = array();
+if ($ISPOWDER) {
+    $profiles["powder"] = array();
+}
 
 # Make sure the profile is public, no point in showing it if not.
 $query_result
@@ -63,6 +66,7 @@ $query_result
 
 while ($row = mysql_fetch_array($query_result)) {
     $blob = array();
+    $portals = $row["examples_portals"];
 
     $blob["uuid"]      = $row["uuid"];
     $blob["version"]   = $row["version"];
@@ -70,6 +74,7 @@ while ($row = mysql_fetch_array($query_result)) {
     $blob["pid"]       = $row["pid"];
     $blob["desc"]      = CleanString($row["description"]);
     $blob["created"]   = DateStringGMT($row["created"]);
+    $blob["portals"]   = $portals;
 
     $parsed_xml = simplexml_load_string($row["rspec"]);
     if ($parsed_xml &&
@@ -77,7 +82,15 @@ while ($row = mysql_fetch_array($query_result)) {
         $desc = $parsed_xml->rspec_tour->description;
         $blob["desc"] = CleanString($desc);
     }
-    $profiles[] = $blob;
+    if ($ISPOWDER && $portals == "powder") {
+        $profiles["powder"][] = $blob;
+    }
+    else {
+        if (!array_key_exists($portals, $profiles)) {
+            $profiles[$portals] = array();
+        }
+        $profiles[$portals][] = $blob;
+    }
 }
 
 echo "<script type='text/plain' id='profiles-json'>\n";
