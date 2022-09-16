@@ -51,6 +51,12 @@
 		    data-tooltip="Delete this type"
                     type='button' name='delete'>Delete
 	    </button>
+            <% if (!window.EDITING) { %>
+              <a href="show-nodetype.php?type=<%= window.TYPE %>&edit=1"
+		 class='btn btn-primary btn-xs'
+		 style='margin-right: 10px;'
+		 type='button'>Edit</a>
+            <% } %>
 	  <% } %>
 	</span>
       </div>
