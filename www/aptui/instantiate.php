@@ -101,6 +101,7 @@ if ((isset($rerun_instance) || isset($rerun_paramset)) && isset($refspec)) {
 }
 
 $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
+
 #
 # Cull out the nonlocal projects, we do not want to show those
 # since they are just the holding projects.
@@ -453,7 +454,7 @@ if ($ishashed) {
 if (count($projlist) == 1) {
     list($project, $grouplist) = each($projlist);
     $formfields["pid"] = $project;
-    $formfields["gid"] = $project;
+    $formfields["gid"] = $grouplist[0];
     reset($projlist);
 }
 else {

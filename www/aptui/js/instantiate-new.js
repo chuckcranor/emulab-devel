@@ -1329,7 +1329,10 @@ $(function ()
 	if (selected != "") {
 	    $("#group_selector ul li.selected a").click();
 	}
-	if (_.size(projlist[pid]) == 1) {
+	// If only one gid, no need to show.
+	// But beware of the case that the one gid is actually a subgroup cause
+	// the user has "user" privs in the project.
+	if (_.size(projlist[pid]) == 1 && projlist[pid][0] == pid) {
 	    $("#group_selector").addClass("hidden");
 	}
 	else {
