@@ -188,6 +188,7 @@ sub DoPrestageImages();
 sub DoPushExtension();
 sub DoPushManifest();
 sub DoTop();
+sub DoPortstats();
 sub DoDeleteReservations();
 sub DoConnectSharedLan();
 sub DoModify();
@@ -365,6 +366,9 @@ elsif ($action eq "pushmanifest") {
 }
 elsif ($action eq "top") {
     DoTop()
+}
+elsif ($action eq "portstats") {
+    DoPortstats()
 }
 elsif ($action eq "deletereservations") {
     DoDeleteReservations();
@@ -6445,6 +6449,79 @@ sub DoTop()
     }
     else {
 	print Dumper($response->value());
+    }
+    exit(0);
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($exitcode);
+}
+
+#
+# Grab portstats using the fast path. Maybe expand this later.
+#
+sub DoPortstats()
+{
+    my $errmsg;
+    my $errcode;
+    my $exitcode   = -1;
+    my $portstats  = {};
+    my @aggregates = ();
+    my $results;
+
+    foreach my $agg ($instance->ActiveAggregateList()) {
+	next
+	    if ($agg->status() ne "ready");
+
+	push(@aggregates, $agg);
+    }
+    if (!@aggregates) {
+	$errmsg   = "No aggregates are in the ready state";
+	$errcode  = GENIRESPONSE_BADARGS;
+	$exitcode = 1;
+	goto bad;
+    }
+
+    my $coderef = sub {
+	my ($sliver) = @_;
+
+	return $sliver->Portstats();
+    };
+
+    $errcode = CallMethodOnAggregates($coderef, 0, \$results, @aggregates);
+    if ($errcode) {
+	$errmsg = $results;
+	goto bad;
+    }
+
+    foreach my $aggregate (@aggregates) {
+	my $urn  = $aggregate->aggregate_urn();
+	my $response = shift(@{$results});
+	my $code = $response->code();
+
+	if ($code != GENIRESPONSE_SUCCESS) {
+	    my (undef, $msg) = ResponseErrorMessage($aggregate, $response);
+	    
+	    $portstats->{$urn} = {
+		"code"  => $code,
+		"error" => $msg,
+	    };
+	    next;
+	}
+	$portstats->{$urn} = {
+	    "code"      => $code,
+	    "portstats" => $response->value(),
+	};
+    }
+    if (defined($webtask)) {
+	$webtask->results($portstats);
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($portstats);
     }
     exit(0);
   bad:

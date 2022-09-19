@@ -311,7 +311,7 @@ echo "<script src='js/lib/filesize.min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
-REQUIRE_TABLESORTER();
+REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
 if (!$lazytopo) {
     REQUIRE_JACKS();
 }

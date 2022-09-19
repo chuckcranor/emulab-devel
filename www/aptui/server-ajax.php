@@ -246,6 +246,8 @@ $routing = array("geni-login" =>
 						     "Do_ConnectSharedLan",
 						 "ModifyExperiment" =>
 						     "Do_ModifyExperiment",
+						 "Portstats" =>
+						     "Do_Portstats",
                               )
                         ),
 		 "approveuser" =>

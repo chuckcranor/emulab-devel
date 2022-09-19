@@ -2481,6 +2481,46 @@ function Do_ModifyExperiment()
     SPITAJAX_RESPONSE("Success");
 }
 
+#
+# Get portstats
+#
+function Do_Portstats()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+    
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $instance->uuid();
+
+    #
+    # Call out to the backend.
+    #
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() .
+                     "  portstats $uuid",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error getting portstats");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $portstats = $webtask->TaskValue("results");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($portstats);
+}
+
 # Local Variables:
 # mode:php
 # End:

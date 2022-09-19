@@ -295,6 +295,7 @@ ProtoGeniDefs::AddModule("cluster",
 		  "GetImageCredential"   => \&GeniCluster::GetImageCredential,
 		  "AllSliceMaxExtensions"=> \&GeniCluster::AllSliceMaxExtensions,
 		  "NodeTop"              => \&GeniCluster::NodeTop,
+		  "Portstats"            => \&GeniCluster::Portstats,
 		  "PortalManifest"       => \&GeniCluster::PortalManifest,
 	      }},
 	  });

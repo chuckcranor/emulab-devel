@@ -103,7 +103,8 @@ my $TBADB          = "$TB/bin/tbadb";
 my $PUSHROOTKEY	   = "$TB/sbin/pushrootkey";
 my $TEVC	   = "$TB/bin/tevc";
 my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
-my $POKEFRONTEND     = "$TB/sbin/pokerffe";
+my $POKEFRONTEND   = "$TB/sbin/pokerffe";
+my $PORTSTATS      = "$TB/bin/portstats";
 
 # Cache of instances to avoid regenerating them.
 my %aggregates     = ();
@@ -1549,6 +1550,9 @@ sub ActionStart($$;$@)
 		    $msg .= "Failed to setup vlans";
 		    goto badsnmpit;
 		}
+		if ($pid ne "@TUTORIALPID@") {
+		    system("$PORTSTATS -z -a -q $pid $eid");
+		}
 	    }
 	    DebugTimeStamp("snmpit finished");
 	    # Avoid END block processing
@@ -2495,6 +2499,7 @@ sub Action($$$;$@)
 		$msg .= "Failed to setup vlans";
 		goto bad;
 	    }
+	    system("$PORTSTATS -z -a -q $pid $eid");
 	}
 	if ($experiment->SetupPortLans()) {
 	    $msg .= "Failed to setup shared vlan ports";

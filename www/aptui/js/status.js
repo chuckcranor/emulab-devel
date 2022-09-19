@@ -281,6 +281,13 @@ $(function ()
 		Modify();
 	    });
 	}
+	// Handler for the portstats button.
+	if (isadmin) {
+	    $('button#portstats-button').click(function (event) {
+		event.preventDefault();
+		Portstats();
+	    });
+	}
 
 	// Terminate an experiment.
 	$('button#terminate').click(function (event) {
@@ -695,7 +702,6 @@ $(function ()
 		}
 		else {
 		    // For Selenium.
-		    console.info("services done");
 		    if (! $('#execute-services-done').length) {
 			$('body').append("<div class='hidden' " +
 				 " id='execute-services-done'></div>");
@@ -796,6 +802,7 @@ $(function ()
 	var destroy;
 	var release = 0;
 	var modify  = 0;
+	var portstats = 0;
 
 	switch (status)
 	{
@@ -818,7 +825,7 @@ $(function ()
 	    
 	    case 'ready':
 	        terminate = refresh = reloadtopo = extend = snapshot = 1;
-	        destroy = modify = 1;
+	        destroy = modify = portstats = 1;
   	        break;
 
 	    case 'quarantined':
@@ -849,6 +856,7 @@ $(function ()
 	ButtonState('destroy', destroy);
 	ButtonState('release', release);
 	ButtonState('modify', modify);
+	ButtonState('portstats', portstats);
 	ToggleLinktestButtons(status);
     }
     function EnableButton(button)
@@ -888,6 +896,8 @@ $(function ()
 	    button = "#connect-sharedlan-button";
 	else if (button == "modify")
 	    button = "#modify_experiment_button";
+	else if (button == "portstats")
+	    button = "#portstats-button";
 	else
 	    return;
 
@@ -4253,6 +4263,73 @@ $(function ()
     }
 
     //
+    // Portstats 
+    //
+    function Portstats()
+    {
+	var callback = function(json) {
+	    console.info(json);
+	    if (json.code) {
+		sup.HideModal('#waitwait-modal', function () {
+		    sup.SpitOops("oops", json.value);
+		});
+		return;
+	    }
+	    sup.HideModal('#waitwait-modal', function () {
+		ShowPortstats(json.value);
+	    });
+	}
+
+	sup.ShowWaitWait("This will take a minute ... patience please");	
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "status", "Portstats",
+					    {"uuid" : uuid});
+	xmlthing.done(callback);
+    }
+    function ShowPortstats(portstats)
+    {
+	$('#portstats-modal .modal-body').html('');
+	_.each(portstats, function (details, urn) {
+	    var nickname = amlist[urn].nickname;
+	    var stats    = details.portstats;
+	    var id       = "portstats-table-nickname";
+	    var table    = $("<table class=tablesorter id=" + id + ">" +
+			     "  <thead><tr></tr></thead>" +
+			     "  <tbody></tbody>" +
+			     "   </table>");
+
+	    // Stats is an array. First row has the column headers.
+	    var first = stats.shift();
+	    var html  = "";
+	    _.each(first.split(","), function (token) {
+		html += "<td>" + token + "</td>";
+	    });
+	    $(table).find("thead tr").html(html);
+
+	    // Now the rows.
+	    _.each(stats, function(row) {
+		var html  = "";
+		_.each(row.split(","), function (token) {
+		    html += "<td>" + token + "</td>";
+		});
+		$(table).find("tbody").append("<tr>" + html + "</tr>");
+	    });
+	    if (portstats.length > 1) {
+		var wrapper = $("<center>" + nickname + "</center>");
+		$(wrapper).append(table);
+		table = wrapper;
+	    }
+	    $('#portstats-modal .modal-body').append(table);
+	    $('#' + id).tablesorter({
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
+	    });
+	});
+	sup.ShowModal('#portstats-modal');	
+    }
+
+    //
     // Show the powder map in a tab, inside an iframe.
     //
     function ShowPowderMapTab()
@@ -4555,7 +4632,9 @@ $(function ()
 	if (linktestsetup) {
 	    return ToggleLinktestButtons(status);
 	}
-
+	// Show portstats here, since we know there are links.
+	$('#portstats-button').removeClass("hidden");
+	
         linktestsetup = 1;
         var md = templates['linktest-md'];
         $('#linktest-help').html(marked(md));

@@ -6101,6 +6101,23 @@ sub Top($$)
 }
 
 #
+# Grab a "portstats"
+#
+sub Portstats($$)
+{
+    my ($self, $component_id) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $slice     = $self->instance()->GetGeniSlice();
+    return ContextError()
+	if (! (defined($authority) || defined($slice)));
+
+    my $args = {
+	"slice_urn" => $slice->urn(),
+    };
+    return APT_Geni::PortalRPC($authority, undef, "Portstats", $args);
+}
+
+#
 # Connect shared lans
 #
 sub ConnectSharedLan($$$;$)
