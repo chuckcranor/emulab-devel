@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,6 +48,11 @@ use libdb;
 use libtblog;
 use Interface;
 use Port;
+use WebTask;
+use Data::Dumper;
+
+# Webtask used from the Geni path.
+my $webtask;
 
 # Optional alternate version of libraries.
 use lib '@prefix@/lib/snmpit';
@@ -95,10 +100,16 @@ END
 #
 my %opt = ();
 Getopt::Long::Configure("no_ignore_case");
-GetOptions(\%opt,'h','a','e','p','b','z','q','c','s','C','r','l','H','i');
+GetOptions(\%opt,'h','a','e','p','b','z','q','c','s','C','r','l','H','i','t=s');
 
 if ($opt{h}) {
     exit &usage;
+}
+if ($opt{"t"}) {
+    $webtask = WebTask->Lookup($opt{"t"});
+    if (!defined($webtask)) {
+	tbdie("Could not lookup/create webtask!");
+    }
 }
 
 my @oids = (); # The set of OIDs we care about
@@ -560,10 +571,35 @@ if (! $opt{l}) {
 # Raw format.
 #
 if ($opt{r}) {
+    if (defined($webtask)) {
+	my @tokens = ("Node");
+	foreach my $line (@oids{@oids}) {
+	    my ($heading) = @$line;
+	    my $tok1 = $$heading[0];
+	    my $tok2 = $$heading[1];
+	    $tok1=~ s/^\s+|\s+$//g;
+	    $tok2=~ s/^\s+|\s+$//g;
+	    push(@tokens, "$tok1 $tok2");
+	}
+	my $header = join(",", @tokens);
+	$webtask->results([$header]);
+    }
     foreach my $port (@ports) {
 	my @numbers = @{$stats{$port}};
 	my $string  = join(",", @numbers);
-	print "$port,$string\n";
+	if (defined($webtask)) {
+	    my $tmp = $webtask->results();
+	    $tmp = [@$tmp, "$port,$string"];
+	    $webtask->results($tmp);
+	}
+	else {
+	    print "$port,$string\n";
+	}
+    }
+    if (defined($webtask)) {
+	print Dumper($webtask->results());
+	$webtask->Store();
+	$webtask->Exited(0);
     }
     exit(0);
 }
