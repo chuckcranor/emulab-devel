@@ -2190,7 +2190,7 @@ sub Portstats($)
 	if (!defined($webtask));
 
     my $command = "$WAP $PORTSTATS -t " . $webtask->task_id() . " " .
-	"-z -r -e -i -a -l $pid $eid";
+	"-z -r -S -i -a -l $pid $eid";
     print STDERR "Running '$command'\n";
     GeniUtil::FlipToElabMan();
     my $output = GeniUtil::ExecQuiet($command);

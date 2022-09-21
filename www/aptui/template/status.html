@@ -27,11 +27,6 @@ pre {
 .panel-heading-nopad {
     padding: 5px;
 }
-.scrollable-modal {
-    max-height: 80vh;
-    overflow-x: auto;
-    overflow-y: auto;
-}
 .table-condensed > thead > tr > th,
 .table-condensed > tbody > tr > th,
 .table-condensed > tfoot > tr > th,
@@ -301,14 +296,6 @@ pre {
 		      data-content="Connect to a shared lan in another
 				    experiment."> 
 		(Dis)Connect Shared Lan</button>
-	      <button class='btn btn-xs btn-primary hidden'
-		      style='margin-right: 10px;'
-		      id='portstats-button' type=button
-		      data-toggle='popover'
-	              data-delay='{"show":300}'
-		      data-html='true'
-		      data-content="Get switch packet counters"> 
-		Portstats</button>
 	      <button class='btn btn-primary btn-xs hidden' disabled
 		      id='modify_experiment_button'
 		      data-toggle='popover'
@@ -679,6 +666,15 @@ pre {
 		  <span class='glyphicon glyphicon-repeat'></span></button>
 	      </a>
             </li>
+	    <li class="hidden" id="show_portstats_li">
+              <a href='#Portstats' id='show_portstats_tab'
+		 data-toggle='tab'>Portstats
+		<button class='close hidden'
+			style="margin-top:0px;"
+			type='button' id="portstats-refresh-button">
+		  <span class='glyphicon glyphicon-repeat'></span></button>
+	      </a>
+            </li>
 	    <li class="hidden" id="show_openstack_li">
               <a href='#Openstack' id='show_openstack_tab'
 		 data-toggle='tab'>Openstack Data
@@ -944,6 +940,7 @@ pre {
 		</div>
 	      </div>
 	    </div>
+	    <div class='tab-pane hidden' id='Portstats'></div>
 	    <div class='tab-pane hidden' id='Openstack'>
 	      <div class="hidden" id="nodata">
 		<br>
@@ -2272,20 +2269,6 @@ pre {
 	    </center>
 	  </div>
 	</div>
-      </div>
-    </div>
-  </div>
-  <div id='portstats-modal' class='modal fade'>
-    <div class='modal-dialog modal-wide'>
-      <div class='modal-content'>
-	<div class='modal-header'>
-          <button type='button' class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
-	  <center>
-	    <h4>Switch Port Counters</h4>
-	  </center>
-	</div>
-	<div class='modal-body scrollable-modal'></div>
       </div>
     </div>
   </div>

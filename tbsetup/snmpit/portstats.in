@@ -80,6 +80,7 @@ Usage: $0 [-h] <-p | <pid> <eid> > [vname ...] [vname:port ...]
       No pid,eid should be given when using this option.
 -C    List control net, rather than experimental net, ports
 -H    Show high-capacity (64-bit) counters (implies -c, !-z right now)
+-S    With -a, sort columns in a more user useful order
 
 If only pid and eid are given, prints out information about all ports in the
 experiment. Otherwise, output is limited to the nodes and/or ports given.
@@ -100,7 +101,7 @@ END
 #
 my %opt = ();
 Getopt::Long::Configure("no_ignore_case");
-GetOptions(\%opt,'h','a','e','p','b','z','q','c','s','C','r','l','H','i','t=s');
+GetOptions(\%opt,'h','a','e','p','b','z','q','c','s','C','r','l','H','i','t=s','S');
 
 if ($opt{h}) {
     exit &usage;
@@ -115,9 +116,18 @@ if ($opt{"t"}) {
 my @oids = (); # The set of OIDs we care about
 
 if ($opt{a}) {
-    @oids = ('ifInOctets', 'ifInUcastPkts', 'ifInNUcastPkts', 'ifInDiscards',
-	     'ifInErrors', 'ifInUnknownProtos', 'ifOutOctets', 'ifOutUcastPkts',
-	     'ifOutNUcastPkts', 'ifOutDiscards', 'ifOutErrors', 'ifOutQLen');
+    if ($opt{S}) {
+	@oids = ('ifInOctets', 'ifInUcastPkts', 'ifInNUcastPkts',
+		 'ifInDiscards',
+		 'ifOutOctets', 'ifOutUcastPkts', 'ifOutNUcastPkts',
+		 'ifOutDiscards', 'ifOutQLen',
+		 'ifInErrors', 'ifOutErrors', 'ifInUnknownProtos');
+    }
+    else {
+	@oids = ('ifInOctets', 'ifInUcastPkts', 'ifInNUcastPkts', 'ifInDiscards',
+		 'ifInErrors', 'ifInUnknownProtos', 'ifOutOctets', 'ifOutUcastPkts',
+		 'ifOutNUcastPkts', 'ifOutDiscards', 'ifOutErrors', 'ifOutQLen');
+    }
 } elsif ($opt{e}) {
     @oids = ('ifInDiscards', 'ifInErrors', 'ifInUnknownProtos', 'ifOutDiscards',
 	     'ifOutErrors');

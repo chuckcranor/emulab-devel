@@ -281,13 +281,7 @@ $(function ()
 		Modify();
 	    });
 	}
-	// Handler for the portstats button.
-	if (isadmin) {
-	    $('button#portstats-button').click(function (event) {
-		event.preventDefault();
-		Portstats();
-	    });
-	}
+
 
 	// Terminate an experiment.
 	$('button#terminate').click(function (event) {
@@ -4265,8 +4259,29 @@ $(function ()
     //
     // Portstats 
     //
+    function ShowPortstatsTab()
+    {
+	if (isadmin) {
+	    $('#show_portstats_li').removeClass("hidden");
+	    $("#Portstats").removeClass("hidden");
+	    var phandler = function () {
+		$('#show_portstats_tab').off("shown.bs.tab", phandler);
+		$('#portstats-refresh-button')
+		    .removeClass("hidden")
+		    .click(Portstats);
+		Portstats();
+	    };
+	    $('#show_portstats_tab').on("shown.bs.tab", phandler);
+	}
+    }
+    
     function Portstats()
     {
+	if (instanceStatus != "ready" && instanceStatus != "quarantined") {
+	    alert("Experiment must be ready to gather switch port counters");
+	    return;
+	}
+	
 	var callback = function(json) {
 	    console.info(json);
 	    if (json.code) {
@@ -4288,7 +4303,8 @@ $(function ()
     }
     function ShowPortstats(portstats)
     {
-	$('#portstats-modal .modal-body').html('');
+	$('#Portstats').html('');
+	
 	_.each(portstats, function (details, urn) {
 	    var nickname = amlist[urn].nickname;
 	    var stats    = details.portstats;
@@ -4319,14 +4335,13 @@ $(function ()
 		$(wrapper).append(table);
 		table = wrapper;
 	    }
-	    $('#portstats-modal .modal-body').append(table);
+	    $('#Portstats').append(table);
 	    $('#' + id).tablesorter({
 		theme : 'bootstrap',
-		widgets : [ "uitheme", "zebra"],
+		widgets : [ "uitheme", "zebra", "stickyHeaders"],
 		headerTemplate : '{content} {icon}',
 	    });
 	});
-	sup.ShowModal('#portstats-modal');	
     }
 
     //
@@ -4633,7 +4648,7 @@ $(function ()
 	    return ToggleLinktestButtons(status);
 	}
 	// Show portstats here, since we know there are links.
-	$('#portstats-button').removeClass("hidden");
+	ShowPortstatsTab();
 	
         linktestsetup = 1;
         var md = templates['linktest-md'];
