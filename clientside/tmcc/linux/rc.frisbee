@@ -318,7 +318,15 @@ tweakmbr()
 	    echo "Unknown partition table in $mbrfile!"
 	fi
 
-	if [ -z "$pttype" ]; then
+	# Always means always...
+	if [ $always -ne 0 ]; then
+	    echo "Wiping any GPT/MBR on $disk and installing MBR version $new_mbr_ver"
+	    if [ -x "$BINDIR/zapdisk" ]; then
+		$BINDIR/zapdisk -BZ $disk
+	    else
+		dd if=/dev/zero of=$disk bs=512 count=16
+	    fi
+	elif [ -z "$pttype" ]; then
 	    echo "Found no MBR/GPT on $disk, installing version $new_mbr_ver ($newpttype/$newsize)"
 	elif [ -z "$size" ]; then
 	    echo "Found no $pttype partition 1 size on $disk, installing version $new_mbr_ver ($newpttype/$newsize)"
@@ -326,23 +334,17 @@ tweakmbr()
 	#elif [ ! "$pttype" = "$newpttype" ]; then
 	#    echo "New partition table type $newpttype does not match on-disk type $pttype, installing new version $new_mbr_ver"
 	elif [ -n "$newsize" -a $size -eq $newsize ]; then
-	    if [ $always -ne 0 ]; then
-		echo "WARNING: overwriting (always!=0) matching $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size)!"
-	    else
-		echo "On-disk partition 1 size $size and new version $new_mbr_ver match, not installing $newpttype over old $pttype"
-		return 0
-	    fi
+	    echo "On-disk partition 1 size $size and new version $new_mbr_ver match, not installing $newpttype over old $pttype"
+	    return 0
 	# NB: this is the one new case over the old version of these checks.
 	# Better make sure this code recognizes any mbr/gpt files in the MFS!
 	elif [ -z "$newpttype" -o -z "$newsize" ]; then
 	    echo "Unrecognizeable new partition table type $newpttype or size $newsize; installing anyway!"
 	elif [ ! $size -eq $newsize ]; then
-	    if [ $always -ne 0 ]; then
-		echo "WARNING: overwriting (always!=0) mismatched $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size)!"
-	    elif [ $is_known_size -eq 1 ]; then
+	    if [ $is_known_size -eq 1 ]; then
 		echo "Overwriting mismatched $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size) because the existing MBR appears to be ours"
 	    else
-		echo "WARNING: custom $pttype/$size on $disk, not always-installing version $new_mbr_ver ($newpttype/$newsize)"
+		echo "WARNING: custom $pttype/$size on $disk, NOT installing version $new_mbr_ver ($newpttype/$newsize)"
 		return 0
 	    fi
 	# Unreachable.
@@ -353,6 +355,7 @@ tweakmbr()
 
 	echo "Installing $newpttype version $new_mbr_ver ..."
 	dd if=$MBR_PATH/mbr${new_mbr_ver}.dd of=$disk
+
 	# Zero out the partition type bytes for FreeBSD and Linux partitions
 	# so that if the user tries to make a whole-disk image later it will
 	# work without imagezip complaining about filesystem-specific errors
@@ -360,11 +363,11 @@ tweakmbr()
 	# will write the correct type byte when it writes the image.
 	#
 	# The Linux swap partition is left alone because imagezip currently
-	# blindly includes just the first portion of the swap partition without
-	# checking to ensure it is valid.
+	# blindly includes just the first portion of the swap partition
+	# without checking to ensure it is valid.
 	#
 	# XXX: should probably do for GPT.
-	if [ $newpttype = "MBR" ]; then
+	if [ $always -eq 0 -a $newpttype = "MBR" ]; then
 	    for i in 0 1; do
 		dd if=/dev/zero of=$disk bs=1 count=1 seek=$(( $i * 16 + 450 )) > /dev/null 2>&1
 	    done
