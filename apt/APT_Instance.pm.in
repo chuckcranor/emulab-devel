@@ -1069,6 +1069,19 @@ sub RecordError($$$)
     my $uuid = $self->uuid();
     my $safe_message = DBQuoteSpecial($message);
 
+    #
+    # We know it failed so copy the webtask error info from the
+    # aggregate webtasks to the failure fields. This will go into
+    # the DB when RecordHistory() above is called later.
+    #
+    foreach my $agg ($self->AggregateList()) {
+	if ($agg->status() eq "failed") {
+	    $agg->Update({"failure_code"   => $agg->webtask()->exitcode(),
+			  "failure_reason" => $agg->webtask()->output(),
+			 });
+	}
+    }
+
     DBQueryWarn("replace into apt_instance_failures ".
 		"select uuid,name,profile_id,profile_version,slice_uuid, ".
 		"       creator,creator_idx,creator_uuid,pid,pid_idx, ".
