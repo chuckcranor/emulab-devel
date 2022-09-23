@@ -410,9 +410,6 @@ sub DoGroupReserve()
 		fatal("Invalid route uuid: " . $route->{"uuid"});
 	    }
 	}
-	# For now, force autoapprove off whenever a route is requested.
-	$autoapprove = 0
-	    if (!$this_user->IsAdmin());
     }
 
     #
