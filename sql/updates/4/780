@@ -1,0 +1,27 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instance_aggregates", "failure_code")) {
+	DBQueryFatal("alter table apt_instance_aggregates add ".
+		     " `failure_code` int(10) default '0' ".
+		     "     after last_retry");
+    }
+    if (!DBSlotExists("apt_instance_aggregate_history", "failure_code")) {
+	DBQueryFatal("alter table apt_instance_aggregate_history add ".
+		     " `failure_code` int(10) default '0' ".
+		     "     after last_retry");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
