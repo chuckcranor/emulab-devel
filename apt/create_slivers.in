@@ -1958,8 +1958,11 @@ sub RunStitcher()
 	$aggobj->Refresh();
 	my $code = shift(@return_codes);
 	if ($code) {
-	    $webtask->output($aggobj->webtask()->output())
-		if (0 && defined($aggobj->webtask()->output()));
+	    my $output   = $aggobj->webtask()->output();
+	    my $exitcode = $aggobj->webtask()->exitcode();
+
+	    $errcode = $exitcode;
+	    $webtask->output($output);
 	    goto bad;
 	}
     }
