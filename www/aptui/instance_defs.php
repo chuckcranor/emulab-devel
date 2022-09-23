@@ -379,7 +379,7 @@ class Instance
                 return null;
             }
             # Temp debugging.
-            if (1) {
+            if (0) {
                 SUEXECERROR(SUEXEC_ACTION_DEBUG);
             }
             # Error in the webtask for the caller.
