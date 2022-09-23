@@ -181,7 +181,7 @@ if (! isset($create)) {
     # Default to start
     if (!isset($joinproject)) {
         $joinproject = 0;
-        $defaults["startorjoin"] = "start";
+        $defaults["startorjoin"] = "join";
     }
     elseif ($joinproject) {
         $defaults["startorjoin"] = "join";
