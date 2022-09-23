@@ -542,6 +542,9 @@ if ($usestitcher) {
 	    AuditEnd($exitcode)
 		if (!($debug || $foreground));
 	}
+	# Stop trying to instantiate.
+	$instance->ResolveDefer();
+	$webtask->Exited($rval);
 	if (defined($logfile)) {
 	    $logfile->Close();
 	    $logfile->Store();
