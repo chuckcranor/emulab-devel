@@ -142,7 +142,6 @@ function Do_GetInfo()
     $blob["released"]     = $image->released() ? 1 : 0;
     $blob["isdataset"]    = $image->isdataset() ? 1 : 0;
     $blob["hash"]         = $image->hash();
-    $blob["taint_states"] = $osinfo->taint_states();
     $blob["version_url"]  = "show-image.php?imageid=${id}&version=${vers}";
     if ($embedded) {
         $blob["version_url"] .= "&embedded=1";
@@ -184,6 +183,7 @@ function Do_GetInfo()
         $blob["os_version"]       = $osinfo->version();
         $blob["os_features"]      = preg_split("/,/", $osinfo->osfeatures());
         $blob["xen_capable"]      = 0;
+        $blob["taint_states"]     = $osinfo->taint_states();
         if ($osinfo->def_parentosid()) {
 	    $n_image = Image::Lookup($osinfo->def_parentosid());
             if ($n_image) {
@@ -224,7 +224,7 @@ function Do_GetInfo()
             $blob["deprecated_message"] = $image->deprecated_message();
         }
     }
-
+        
     if ($image->parent_imageid()) {
         $p_imageid   = $image->parent_imageid();
         $p_version   = $image->parent_version();
