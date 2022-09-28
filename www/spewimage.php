@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2019 University of Utah and the Flux Group.
+# Copyright (c) 2003-2019, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,8 +58,7 @@ $optargs = OptionalPageArguments("stamp",       PAGEARG_INTEGER,
                                  "sigfile",     PAGEARG_BOOLEAN);
 
 #
-# A cleanup function to keep the child from becoming a zombie, since
-# the script is terminated, but the children are left to roam.
+# A cleanup function to keep the child from becoming a zombie.
 #
 $fp = 0;
 
@@ -67,10 +66,20 @@ function SPEWCLEANUP()
 {
     global $fp;
 
-    if (!$fp || !connection_aborted()) {
-	exit();
+    if (!$fp) {
+        exit(0);
+    }
+    # 
+    # Either we aborted or client aborted before we sent everything.
+    # Make sure we flush whatever is left since we cannot kill the
+    # process, no handle on it. I would use proc_open(), but then I
+    # would have to make sense of it. 
+    #
+    while (!feof($fp)) {
+        $string = fgets($fp);
     }
     pclose($fp);
+    $fp = 0;
     exit();
 }
 set_time_limit(0);
@@ -135,61 +144,73 @@ if ($fp = popen("$TBSUEXEC_PATH nobody $unix_pid,$unix_gid ".
     header("Cache-Control: no-cache, must-revalidate");
     header("Pragma: no-cache");
 
+    $headers = array();
+
     #
-    # If this is a head request, then the output needs to be sent as
-    # headers. Then exit.
+    # There are always headers.
     #
-    if ($ishead) {
-	while (!feof($fp) && connection_status() == 0) {
-	    $string = fgets($fp);
-	    if ($string) {
-		$string = rtrim($string);
-		header($string);
-	    }
-	}
+    while (!feof($fp)) {
+        $string = fgets($fp);
+        if ($string) {
+            if ($string == "\n") {
+                # Header terminator when sending the entire image.
+                break;
+            }
+            $headers[] = rtrim($string);
+        }
     }
-    else {
-        #
-        # The point of this is to allow the backend script to return status
-        # that the file has not been modified and does not need to be sent.
-        # The first read will come back with no output, which means nothing is
-        # going to be sent except the headers.
-        #
-	$string = fgets($fp);
-	if ($string) {
-            # We know the first line is a header.
-            $string = rtrim($string);
-            header($string);
 
-            # Look for end of headers.
-            $found_headers = false;
+    #
+    # If sending just the headers stop now and get status since it
+    # might be an error instead of headers.
+    #
+    # Getting EOF when $ishead is zero, means an error.
+    #
+    if ($ishead || feof($fp)) {
+        $retval = pclose($fp);
+        error_log("spewimage: $retval");
+        # For the shutdown handler above
+        $fp = 0;
+        if ($retval == 255 || $retval < 0) {
+            error_log("spewimage output:\n" . join("\n", $headers));
+            SPITERROR(404, "Could not verify file");
+        }
+    }
+    # Send the headers.
+    foreach ($headers as $header) {
+        header($header);
+    }
+    flush();
 
-            while (!$found_headers) {
-                $string = fgets($fp);
-                if ($string == "\n") {
-                    $found_headers = true;
-                }
-                else {
-                    $string = rtrim($string);
-                    header($string);
-                }
+    if ($ishead) {
+        if ($retval) {        
+            if ($retval == 2) {
+                SPITERROR(304, "File has not changed");
             }
-            while (!feof($fp) && connection_status() == 0) {
-                print(fread($fp, 1024*32));
-                flush();
+            else {
+                SPITERROR(404, "Could not verify file: $retval!");
             }
-	}
+        }
+        flush();
+        exit();
+    }
+
+    #
+    # And spew the rest of the file.
+    #
+    while (!feof($fp)) {
+        $stuff = fread($fp, 1024*32);
+        if ($stuff) {
+            print($stuff);
+            flush();
+        }
     }
     $retval = pclose($fp);
+    # For the shutdown handler above
     $fp = 0;
-
-    if ($retval) {
-	if ($retval == 2) {
-	    SPITERROR(304, "File has not changed");
-	}
-	else {
-	    SPITERROR(404, "Could not verify file: $retval!");
-	}
+    if ($retval == 255 || $retval < 0) {
+        error_log("spewimage: failed after sending the headers");
+        exit();
     }
     flush();
 }
