@@ -580,6 +580,7 @@ if (defined($base_image)) {
     $xmlfields{"loadpart"}        = $base_image->loadpart();
     $xmlfields{"noexport"}        = $base_image->noexport();
     $xmlfields{"noclone"}         = $base_image->noclone();
+    $xmlfields{"isbootimage"}     = $base_image->isbootimage();
     if ($base_image->format() ne 'ndz') {
 	$xmlfields{"format"} = $base_image->format();
     }
