@@ -63,6 +63,8 @@ boss-install:
 	$(INSTALL) -m 644 $(SRCDIR)/install-tarfile.1 \
 		$(INSTALL_DIR)/opsdir/man/man1/install-tarfile.1
 	$(INSTALL_PROGRAM) $(SRCDIR)/node_top.sh $(INSTALL_BINDIR)/node_top.sh
+	$(INSTALL_PROGRAM) $(SRCDIR)/node_servicelogs.sh \
+		$(INSTALL_BINDIR)/node_servicelogs.sh
 
 control: control-subdirs
 

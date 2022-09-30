@@ -202,6 +202,7 @@ $V2_METHODS = {
     "Flash"             => \&GeniCMV2::Flash,
     "PrestageImages"    => \&GeniCMV2::PrestageImages,
     "ConnectSharedLan"  => \&GeniCMV2::ConnectSharedLan,
+    "ServiceLogs"       => \&GeniCMV2::ServiceLogs,
 };
 
 ProtoGeniDefs::AddModule("cm",

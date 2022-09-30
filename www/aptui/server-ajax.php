@@ -248,6 +248,8 @@ $routing = array("geni-login" =>
 						     "Do_ModifyExperiment",
 						 "Portstats" =>
 						     "Do_Portstats",
+						 "ServiceLogs" =>
+						     "Do_ServiceLogs",
                               )
                         ),
 		 "approveuser" =>

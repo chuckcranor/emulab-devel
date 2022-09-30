@@ -6114,6 +6114,41 @@ sub Top($$)
 }
 
 #
+# Grab service logs.
+#
+sub ServiceLogs($$$)
+{
+    my ($self, $sliver_urn) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $geniuser  = $self->instance()->GetGeniUser();
+    my $slice     = $self->instance()->GetGeniSlice();
+    my $context   = APT_Geni::GeniContext();
+    return ContextError()
+	if (! (defined($geniuser) && defined($authority) &&
+	       defined($slice) && defined($context)));
+
+    my ($slice_credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($slice, $geniuser, undef, 1);
+    return CredentialError()
+	if (!defined($slice_credential));
+
+    my $credentials = [$slice_credential->asString()];
+    if (defined($speaksfor_credential)) {
+	$credentials = [@$credentials, $speaksfor_credential->asString()];
+    }
+    my $args = {
+	"slice_urn"   => $slice->urn(),
+	"sliver_urn"  => $sliver_urn,
+	"credentials" => $credentials,
+    };
+    my $cmurl = $authority->url();
+    $cmurl = devurl($cmurl) if ($usemydevtree);
+#    $cmurl =~ s/protogeni/protogeni\/stoller/;
+
+    return Genixmlrpc::CallMethod($cmurl, $context, "ServiceLogs", $args);
+}
+
+#
 # Grab a "portstats"
 #
 sub Portstats($$)

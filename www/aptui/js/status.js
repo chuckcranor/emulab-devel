@@ -2316,6 +2316,9 @@ $(function ()
 	else if (action == "nodetop") {
 	    DoTop(clientList[0]);
 	}
+	else if (action == "servicelogs") {
+	    DoServiceLogs(clientList[0]);
+	}
 	else if (action == "monitor") {
 	    NewMonitorTab(clientList[0]);
 	}
@@ -2427,6 +2430,7 @@ $(function ()
 		    this.getElementsByTagNameNS(EMULAB_NS, 'imageable');
 		var flashable =
 		    this.getElementsByTagNameNS(EMULAB_NS, 'flashable');
+		var services = $(this).find("execute");
 		var href   = "n/a";
 		var ssh    = "n/a";
 		var cons   = "n/a";
@@ -2713,6 +2717,19 @@ $(function ()
 		else {
 		    clone.find(' [name=vnc]')
 			.parent().addClass('disabled');
+		}
+
+		// Optional service execution logs.
+		if (services.length && isadmin) {
+		    clone.find(' [name=servicelogs]')
+			.click(function (e) {
+			    ActionHandler("servicelogs", [node]);
+			});
+		    clone.find(' [name=servicelogs]')
+			.parent().removeClass('hidden');
+		    // Context menu option
+		    CMclone.find("li[id=servicelogs]")
+			.removeClass("hidden");
 		}
 
 		// Node "top"
@@ -4251,6 +4268,76 @@ $(function ()
 	sup.ShowWaitWait("This will take a minute ... patience please");	
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status", "Top",
+					    {"uuid" : uuid,
+					     "node" : client_id});
+	xmlthing.done(callback);
+    }
+
+    //
+    // Node Service Logs. 
+    //
+    function DoServiceLogs(client_id)
+    {
+	sup.ShowModal('#waitwait-modal');
+
+	var callback = function(json) {
+	    sup.HideWaitWait();
+	    console.info("DoServiceLogs", json);
+	    
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    
+	    //
+	    // Create the tab, or else replace the contents.
+	    //
+	    var tabname = client_id + "logs";
+	    if (! $("#" + tabname).length) {
+		// The tab.
+		var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
+		    client_id + "-Logs" +
+		    "<button class='close' type='button' " +
+		    "        id='" + tabname + "_kill'>x</button>" +
+		    "</a>" +
+		    "</li>";	
+
+		// Append to end of tabs
+		$("#quicktabs_ul").append(html);
+
+		// Install a kill click handler for the X button.
+		$("#" + tabname + "_kill").click(function(e) {
+		    e.preventDefault();
+		    // remove the li from the ul. this=ul.li.a.button
+		    $(this).parent().parent().remove();
+		    // Activate the "profile" tab.
+		    $('#quicktabs_ul li a:first').tab('show');
+		    // Remove the content div. Have to delay this though.
+		    // See below.
+		    setTimeout(function(){
+			$("#" + tabname).remove() }, 3000);
+		});
+
+		// The content div.
+		html = "<div class='tab-pane' id='" + tabname + "'>" +
+		    "<pre><pre></div>";
+
+		$("#quicktabs_content").append(html);
+
+		// And make it active
+		$('#quicktabs_ul a:last').tab('show') // Select last tab
+	    }
+	    else {
+		// Switch back to it.
+		$('#quicktabs_ul a[href="#' + tabname + '"]').tab('show');
+		return;
+	    }
+	    $('#' + tabname).find("pre").text(json.value);
+	}
+	sup.ShowWaitWait("This will take a minute ... patience please");	
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "status",
+					    "ServiceLogs",
 					    {"uuid" : uuid,
 					     "node" : client_id});
 	xmlthing.done(callback);

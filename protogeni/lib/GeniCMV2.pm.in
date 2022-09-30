@@ -127,6 +127,7 @@ my $MODPORTVLAN    = "$TB/sbin/modportvlan";
 my $PRERENDER      = "$TB/libexec/vis/prerender";
 my $IMPORTER       = "$TB/sbin/image_import";
 my $POSTIMAGEDATA  = "$TB/sbin/protogeni/postimagedata";
+my $NODE_SLOGS     = "$TB/sbin/node_servicelogs";
 my $EMULAB_PEMFILE = "@prefix@/etc/genicm.pem";
 # Just one of these, at Utah.
 my $GENICH_PEMFILE = "@prefix@/etc/genich.pem";
@@ -6953,6 +6954,80 @@ sub Recovery($)
 				    "Failed to change recovery mode");
     }
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
+#
+# Another Emulab specific function grab service logs from a node
+#
+sub ServiceLogs($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    my $sliver_urn   = $argref->{'sliver_urn'};
+    
+    if (! (defined($credentials) && 
+	   defined($slice_urn) && defined($sliver_urn))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my ($slice, $aggregate) = Credential2SliceAggregate($credential);
+    return $slice
+	if (defined($slice) && GeniResponse::IsResponse($slice));
+
+    if (! (defined($slice) && defined($aggregate))) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    return $user
+	if (GeniResponse::IsResponse($user));
+
+    main::AddLogfileMetaDataFromSlice($slice);
+
+    if ($slice_urn ne $slice->urn()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
+				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+				    "Slice is marked for termination");
+    }
+    my $sliver = GeniSliver->Lookup($sliver_urn);
+    if (!defined($sliver)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    if ($sliver->slice_uuid() ne $slice->uuid()) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver is not in slice");
+    }
+    my $node_id = $sliver->resource_id();
+    my $node = Node->Lookup($node_id);
+    if (!defined($node)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "No node for sliver urn");
+    }
+    if (!defined(GeniCM::FlipToUser($slice, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+    my $output = GeniUtil::ExecQuiet("$NODE_SLOGS $node_id");
+    if ($?) {
+	print STDERR $output . "\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Failed to get service logs");
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $output);
 }
 
 #
