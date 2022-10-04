@@ -46,7 +46,19 @@ pre {
 #top-processes-modal .modal-body {
     height: 80vh;
     overflow-y: auto;
-} 
+}
+.servicelog-command {
+    margin-bottom: 0px;
+    border-bottom: 1px;
+    border-bottom-right-radius: 0px;
+    border-bottom-left-radius: 0px;
+}
+.servicelog-log {
+    border-top-left-radius:  0px;
+    border-top-right-radius: 0px;
+    background-color: inherit;
+    margin-bottom: 15px;
+}
 </style>
 <div id="main-template">
 <div class='row'>
@@ -1406,8 +1418,8 @@ pre {
       <li id="servicelogs" class="hidden">
 	<a name="servicelogs"
 	   data-toggle='tooltip'
-	   title='Execution Service Logs'
-	   data-trigger="hover">Execution Service Logs</a></li>
+	   title='Execute Service Logs'
+	   data-trigger="hover">Execute Service Logs</a></li>
       <li id="powercycle" class="hidden">
 	<a name="powercycle"
 	   data-toggle='tooltip'
@@ -2138,7 +2150,7 @@ pre {
             <li class='hidden'> 
               <a href='#' name='nodetop'>Top Processes</a></li> 
             <li class='hidden'> 
-              <a href='#' name='servicelogs'>Execution Service Logs</a></li> 
+              <a href='#' name='servicelogs'>Execute Service Logs</a></li> 
             <li class='hidden'> 
               <a href='#' name='powercycle'>Power Cycle</a></li> 
             <li> 

@@ -1,16 +1,14 @@
 #!/bin/sh
 
 DIR="/var/tmp"
-STARTLOG="$DIR/startup.log"
-START="$DIR/geni_startup.*"
-FILES="$START $STARTLOG $DIR/startup-*.txt"
+FILES="$DIR/startup-*.txt"
 
 for file in $FILES
 do
+    echo "----- Begin Execute Log --------------------------------"
     echo "$file"
-    echo "-----------------------------------------------------------"
     /bin/cat $file
-    echo "-----------------------------------------------------------"
+    echo "----- End Execute Log ----------------------------------"
     echo ""
 done
 

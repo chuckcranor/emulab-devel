@@ -6481,6 +6481,7 @@ sub DoServiceLogs()
 
     my $aggregate;
     my $sliver_urn;
+    my @services = ();
 
     foreach my $obj ($instance->ActiveAggregateList()) {
 	my $manifest = GeniXML::Parse($obj->manifest());
@@ -6502,6 +6503,24 @@ sub DoServiceLogs()
 			   defined($manager_urn) &&
 			   $manager_urn eq $obj->aggregate_urn()));
 
+		#
+		# We want the service entries so we can match the
+		# logs to the actual commands and split them up.
+		#
+		my @tmp = GeniXML::GetExecuteServices($node);
+		if (!@tmp) {
+		    $errmsg   = "No such node in the experiment";
+		    $errcode  = GENIRESPONSE_BADARGS;
+		    $exitcode = 1;
+		    goto bad;
+		}
+		foreach my $service (@tmp) {
+		    my $type = $service->{'type'};
+		    next
+			if ($type ne "execute");
+
+		    push(@services, $service);
+		}
 		$aggregate = $obj;
 		last;
 	    }
@@ -6522,12 +6541,53 @@ sub DoServiceLogs()
 	($exitcode, $errmsg) = ResponseErrorMessage($aggregate, $response);
 	goto bad;
     }
+    #
+    # Split up the logs.
+    #
+    my @results = ();
+    my @lines   = split("\n", $response->value());
+
+    while (@lines) {
+	my $log = "";
+
+	# Scan to the beginning
+	while (@lines) {
+	    my $line = shift(@lines);
+	    last
+		if ($line =~ /^----- Begin Execute Log -+$/);
+	}
+	last
+	    if (!@lines);
+	# Next line is the log file name, kill it.
+	shift(@lines);
+
+	# Then the log to the End.
+	while (@lines) {
+	    my $line = shift(@lines);
+	    last
+		if ($line =~ /^----- End Execute Log -+$/);
+	    $log .= $line . "\n";
+	}
+	if ($log ne "") {
+	    my $service = shift(@services);
+
+	    if (defined($webtask)) {
+		push(@results, {
+		    "command" => $service->{'cmd'},
+		    "log"     => $log,
+		     });
+	    }
+	    else {
+		print $service->{'cmd'} . "\n";
+		print "---------------------------------------------\n";
+		print $log;
+		print "---------------------------------------------\n";
+	    }
+	}
+    }    
     if (defined($webtask)) {
-	$webtask->results($response->value());
+	$webtask->results(\@results);
 	$webtask->Exited(0);
-    }
-    else {
-	print $response->value();
     }
     exit(0);
   bad:
@@ -6981,9 +7041,39 @@ sub DoStatus()
 	    "wbstore" => $slice_uuid,
 	    "url"     => $instance->webURL(),
 	    "expires" => TBDateStringGMT($instance->Expires()),
+	    "aggregate_status" => {},
 	};
 	if ($dokey) {
 	    $blob->{"certificate"} = $instance->cert() . $instance->privkey(); 
+	}
+	foreach my $agg ($instance->AggregateList()) {
+	    my $aggblob = {
+		"status"  => $agg->status(),
+		"nodes"   => {},
+	    };
+	    my $manifest = $agg->Manifest();
+	    if ($manifest) {
+		foreach my $ref (GeniXML::FindNodes("n:node",
+						    $manifest)->get_nodelist()){
+		    my $manager_urn = GetManagerId($ref);
+		    my $client_id   = GetVirtualId($ref);
+		    my $host        = GeniXML::GetHost($ref);
+		    my $nodeblob    = {};
+
+		    next
+			if ($manager_urn ne $agg->aggregate_urn());
+
+		    if ($host) {
+			my $hostname = GeniXML::GetText("name", $host);
+			my $ipv4     = GeniXML::GetText("ipv4", $host);
+
+			$nodeblob->{'hostname'} = $hostname;
+			$nodeblob->{'ipv4'} = $ipv4;
+		    }
+		    $aggblob->{'nodes'}->{$client_id} = $nodeblob;
+		}
+	    }
+	    $blob->{"aggregate_status"}->{$agg->aggregate_urn()} = $aggblob;
 	}
     }
     else {

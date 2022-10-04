@@ -4319,8 +4319,7 @@ $(function ()
 		});
 
 		// The content div.
-		html = "<div class='tab-pane' id='" + tabname + "'>" +
-		    "<pre><pre></div>";
+		html = "<div class='tab-pane' id='" + tabname + "'></div>";
 
 		$("#quicktabs_content").append(html);
 
@@ -4332,7 +4331,16 @@ $(function ()
 		$('#quicktabs_ul a[href="#' + tabname + '"]').tab('show');
 		return;
 	    }
-	    $('#' + tabname).find("pre").text(json.value);
+	    var html = "";
+	    _.each(json.value, function(details) {
+		var cmd = details.command;
+		var log = details.log;
+
+		html +=
+		    "<pre class='servicelog-command'>" + cmd + "\n" + "</pre>" +
+		    "<pre class='servicelog-log'>" + log + "</pre>";
+	    });
+	    $('#' + tabname).html(html);
 	}
 	sup.ShowWaitWait("This will take a minute ... patience please");	
 	var xmlthing = sup.CallServerMethod(ajaxurl,
