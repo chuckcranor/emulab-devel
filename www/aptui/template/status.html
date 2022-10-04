@@ -2291,6 +2291,32 @@ pre {
       </div>
     </div>
   </div>
+  <div id='services-running-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <div style="font-size: 18px;">
+	    <p>
+	      <b>Warning:</b> Startup services are still running on
+	      this node. Logging in now might not work, and/or software
+	      may not be fully installed and running. Are you sure you
+	      want to continue?
+	    </p>
+	    <center>
+	      <button type='button' class='btn btn-default btn-sm'
+		      data-dismiss='modal'
+		      style="margin-right: 10px;">
+		Cancel</button>
+	      <button id='services-continue-login' type='button'
+		      class='btn btn-primary btn-sm'>
+		Continue
+	      </button>
+	    </center>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
   <div id='waitwait_div'></div>
   <div id='terminate_div'></div>
   <div id='oops_div'></div>

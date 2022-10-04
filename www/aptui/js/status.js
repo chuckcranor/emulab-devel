@@ -381,7 +381,6 @@ $(function ()
         addTutorialNotifyTab('manifest');
         addTutorialNotifyTab('Idlegraphs');
 	StartCountdownClock(expinfo.expires);
-	//StartStatusWatch();
 	if (window.APT_OPTIONS.oneonly) {
 	    sup.ShowModal('#oneonly-modal');
 	}
@@ -1268,6 +1267,7 @@ $(function ()
 			    tag  = "Finished";
 			    icon = "check64.svg";
 			}
+			ClearServicesWarning(details.client_id);
 		    }
 		    else {
 			tag  = "Pending";
@@ -1598,21 +1598,31 @@ $(function ()
 	}
 	return 0;
     }
-    function hasExecutionServices(blob)
+    //
+    // Check if services are still executing on a node.
+    //
+    function servicesExecutingOnNode(client_id)
     {
-	if (_.has(blob, "sliverstatus")) {
-	    for (var urn in blob.sliverstatus) {
-		var nodes = blob.sliverstatus[urn].details;
-		for (var nodeid in nodes) {
-		    var status = nodes[nodeid];
-		    if (_.has(status, "execute_state")) {
-			return 1;
-		    }
+	//console.info("servicesExecutingOnNode", lastStatusBlob, client_id);
+	
+	if (!lastStatusBlob || !_.has(lastStatusBlob, "sliverstatus")) {
+	    return 0;
+	}
+	for (var urn in lastStatusBlob.sliverstatus) {
+	    var nodes = lastStatusBlob.sliverstatus[urn].details;
+	    if (_.has(nodes, client_id)) {
+		var status = nodes[client_id];
+		if (_.has(status, "execute_state")) {
+		    return status.execute_state == "exited" ? 0 : 1;
 		}
+		// No execution services
+		return 0;
 	    }
 	}
+	// Do not know.
 	return 0;
     }
+
     //
     // Check the status blob to see if any aggregates are in the
     // the deferred state.
@@ -1856,7 +1866,7 @@ $(function ()
      * reason and try to get the user to accept a certificate from the ops
      * node.
      */
-    function StartSSH(tabname, authobject)
+    function StartSSH(tabname, client_id, authobject)
     {
 	var jsonauth = $.parseJSON(authobject);
 	
@@ -1921,13 +1931,19 @@ $(function ()
 	xmlthing.fail(callback_error);
     }
 
-    function StartSSHWebSSH(tabname, authobject)
+    function StartSSHWebSSH(tabname, client_id, authobject)
     {
 	var jsonauth = $.parseJSON(authobject);
 
         var url     = jsonauth.baseurl;
 	var iwidth  = "100%";
         var iheight = 400;
+	// For the execution service warning toggle.
+	var cclass  = client_id + "-sshtab";
+
+	if (!servicesExecutingOnNode(client_id)) {
+	    cclass = "hidden " + cclass;
+	}
 
 	// Backwards compat for a while.
 	if (!url.includes("webssh")) {
@@ -1947,11 +1963,17 @@ $(function ()
             'src=\'' + url + '\'>';
 
 	var html =
+	    '<div>' +
+	    '<center class="text-warning ' + cclass + '" ' +
+	    '        style="font-size: 120%;">' +
+            ' Startup services are still running; ' +
+	    ' Software may not be fully installed and running!</center>' +
 	    '<div style="height:400px; width:100%; ' +
 	    '            resize:vertical;overflow-y:auto;padding-bottom:10px"> ' +
 	    '  <iframe id="' + tabname + '_iframe" ' +
 	    '     width="100%" height="100%"' + 
             '     src=\'' + url + '\'>' +
+	    '</div>' +
 	    '</div>';
 	
         $('#' + tabname).html(html);
@@ -1971,14 +1993,48 @@ $(function ()
 	    });
     }
 
+    // Helper to clear the services executing warning on ssh tabs.
+    function ClearServicesWarning(client_id)
+    {
+	// For the execution service warning toggle.
+	var cclass  = client_id + "-sshtab";
+
+	$('.' + cclass).addClass("hidden");
+    }
+
     //
     // User clicked on a node, so we want to create a tab to hold
     // the ssh tab with a panel in it, and then call StartSSH above
     // to get things going.
     //
     var sshtabcounter = 0;
-    
+
+    // Check for services executing and throw up a warning.
     function NewSSHTab(hostport, client_id)
+    {
+	var node_id = clientid2nodeid[client_id];
+
+	// Keeping this bullet in reserve
+	if (1 || !servicesExecutingOnNode(client_id)) {
+	    return NewSSHTabContinue(hostport, client_id);
+	}
+
+	// Handler for hide modal to unbind the click handler.
+	$('#services-running-modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#services-continue-login').unbind("click.sshtab");
+	});
+
+	// Throw up a confirmation modal, with handler bound to confirm.
+	$('#services-continue-login').bind("click.sshtab", function (event) {
+	    sup.HideModal('#services-running-modal', function () {
+		NewSSHTabContinue(hostport, client_id);
+	    });
+	});
+	console.info("foo");
+	sup.ShowModal('#services-running-modal');
+    }
+    function NewSSHTabContinue(hostport, client_id)
     {
 	var pair = hostport.split(":");
 	var host = pair[0];
@@ -2054,10 +2110,10 @@ $(function ()
 		
 		if (APT_OPTIONS.webssh &&
 		    _.has(jsonauth, "webssh") && jsonauth.webssh != 0) {
-		    StartSSHWebSSH(tabname, json.value);
+		    StartSSHWebSSH(tabname, client_id, json.value);
 		}
 		else {
-		    StartSSH(tabname, json.value);
+		    StartSSH(tabname, client_id, json.value);
 		}
 	    }
 	}
