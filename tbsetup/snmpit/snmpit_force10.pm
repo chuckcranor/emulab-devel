@@ -1547,13 +1547,29 @@ sub setPortVlan($$@) {
 	return scalar(@ports);
     }
 
+    # Make sure we found an ifindex for all ports. convertPortFormat will return a
+    # NULL value if it could not find it.
+    my $i = 0;
+    my $bad = 0;
+    foreach my $pobj (@portobjs) {
+	if (!defined($portlist[$i])) {
+	    my $pstr = $pobj->toString();
+	    warn "$id: ERROR: $pstr switch port does not have an ifindex; DB state wrong?\n";
+	    $bad++;
+	}
+	$i++;
+    }
+    if ($bad) {
+	return scalar(@ports);
+    }
+
     # Create a bitmask from this ifIndex list
     my $portmask = $self->convertIfindexesToBitmask(\@portlist);
 
     # Look at DB state (via Port objects) to determine which ports are
     # in trunk mode.  Create the "untagged" bitmask from those that
     # are not.
-    my $i = 0;
+    $i = 0;
     my @uportlist = ();
     my @upobjs = ();
     foreach my $pobj (@portobjs) {
