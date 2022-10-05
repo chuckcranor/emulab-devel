@@ -352,7 +352,7 @@ $(function ()
 		    .addClass("glyphicon-chevron-right");
 
 	    });
-	if (instanceStatus == "ready") {
+	if (0 && instanceStatus == "ready") {
 	    $('#profile_status_collapse').collapse("hide");
  	    $('#profile_status_collapse').trigger('hide.bs.collapse');
 	}
@@ -583,17 +583,22 @@ $(function ()
 	    }
 	    else if (instanceStatus == 'ready') {
 		bgtype = "panel-success";
-		status_message = "Your experiment is ready!";
+		status_message = "Your experiment is ready";
+		var qualifier = null;
 
 		if (servicesExecuting(json.value)) {
 		    status_html = "<font color=green>booted</font>";
-		    status_html += " (startup services are still running)";
+		    qualifier = " (startup services are still running)";
 		}		
 		else {
 		    status_html = "<font color=green>ready</font>";
 		    if (aggregatesDeferred(json.value)) {
-			status_html += " (but some aggregates deferred)";
+			qualifier += " (but some aggregates deferred)";
 		    }
+		}
+		if (qualifier) {
+		    status_html    += qualifier;
+		    status_message += qualifier;
 		}
 		UpdateGeneralError(null);
 		$('.ignore-failure').addClass("hidden");
@@ -1255,8 +1260,9 @@ $(function ()
 		    var icon;
 			
 		    if (details.execute_state == "running") {
-			tag  = "Running";
+			tag  = "<span class=text-warning>Running</span>";
 			icon = "record8.svg";
+			MarkServicesWarning(details.client_id);
 		    }
 		    else if (details.execute_state == "exited") {
 			if (details.execute_status != 0) {
@@ -1993,13 +1999,31 @@ $(function ()
 	    });
     }
 
-    // Helper to clear the services executing warning on ssh tabs.
+    // Helper to set/clear the services executing warning on ssh tabs.
     function ClearServicesWarning(client_id)
     {
 	// For the execution service warning toggle.
 	var cclass  = client_id + "-sshtab";
 
 	$('.' + cclass).addClass("hidden");
+
+	// And the listview row sshurl warning tooltip
+	var id = "#listview-row-" + client_id + ' [name="sshurl"]';
+
+	$(id).tooltip("hide");
+	$(id).tooltip("disable");
+    }
+    function MarkServicesWarning(client_id)
+    {
+	// For the execution service warning toggle.
+	var cclass  = client_id + "-sshtab";
+
+	$('.' + cclass).removeClass("hidden");
+
+	// And the listview row sshurl warning tooltip
+	var id = "#listview-row-" + client_id + ' [name="sshurl"]';
+
+	$(id).tooltip("enable");
     }
 
     //
@@ -2617,7 +2641,19 @@ $(function ()
 
 		    // Update the row.
 		    clone.find(' [name=sshurl]').html(href);
-		    
+
+		    // Add a tooltip for services running warning. Leave disabled
+		    // since we do not know until we get the sliver status. 
+		    clone.find('[name="sshurl"]')
+			.tooltip({"trigger"   : "hover",
+				  "title"     : "<span class=text-warning>" +
+				  "Execute services are still running, " +
+				  "software may not be fully installed and running.</span>",
+				  "html"      : true,
+				  "container" : "body",
+				  "placement" : "auto top"})
+			.tooltip("disable");
+
 		    // Attach handler to the menu button.
 		    clone.find(' [name=shell]')
 			.click(function (e) {
