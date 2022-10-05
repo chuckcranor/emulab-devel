@@ -206,7 +206,7 @@ if (defined($name)) {
 }
 if (defined($options{"a"})) {
     if (!GeniHRN::IsValid($options{"a"})) {
-	fatal("Ivalid aggregate URN");
+	fatal("Invalid aggregate URN");
     }
 }
 if (defined($start_at)) {
@@ -587,6 +587,7 @@ unlink($xmlfile);
 
 # This should not happen!
 if (!defined($instance)) {
+    $webtask->Delete();
     fatal("Could not lookup new instance $uuid");
 }
 
@@ -628,6 +629,7 @@ while (1) {
 if ($instance->status() eq "pending" ||
     $instance->status() eq "deferred") {
     unlink($logfile) if (defined($logfile));
+    $webtask->Delete();
     exit(0);
 }
 
@@ -657,6 +659,7 @@ if (!$noemail) {
 			$project->OpsEmailAddress());
 }
 unlink($logfile) if (defined($logfile));
+$webtask->Delete();
 exit(0);
 
 sub fatal($)
