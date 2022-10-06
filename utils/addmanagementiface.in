@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# Copyright (c) 2003-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -143,7 +143,7 @@ if (defined($options{'t'})) {
     $type = $options{'t'};
     usage()
 	if ($type !~ /^(ilo|ilo2|ilo3|drac|ipmi15|ipmi20|esi)$/);
-}}
+}
 if (defined($options{'a'})) {
     $authtype = $options{'a'};
     usage()
