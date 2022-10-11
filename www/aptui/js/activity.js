@@ -76,14 +76,16 @@ $(function () {
 	if (window.CLUSTER) {
 	    args["cluster"] = window.CLUSTER;
 	}
-	var ip = $.trim($('#search-ip input').val());
-	if (ip != "") {
-	    var rx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-	    if (rx.test(ip)) {
-		args["IP"] = ip;
+	var token = $.trim($('#search-ip input').val());
+	if (token != "") {
+	    var ipx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+	    var pnx = /^\w[-\w]*$/;
+	    if (ipx.test(token) || pnx.test(token)) {
+		args["IP"] = token;
 	    }
 	    else {
-		alert("Invalid IP address");
+		alert("Invalid IP address or physical node ID");
+		return;
 	    }
 	}
 	console.info(args);
