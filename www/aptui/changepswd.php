@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,10 +69,9 @@ if (isset($key) || isset($reset)) {
 
         # If the browser part is missing, direct user to answer
         if ((isset($keyB) && $keyB != "") && (!isset($keyA) || $keyA == "")) {
-            SPITUSERERROR("Oops, not able to proceed!<br>".
-                          "Please read this ".
-                          "<a href='https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/I-Forgot-My-Password'>FAQ Entry</a>".
-                          "to see what the likely cause is.", 1);
+            SPITUSERERROR("Please copy the link from your email, and then ".
+                          "paste it into the same browser window/tab that ".
+                          "you used to request the reset link.", 1);
             return;
         }
         if (!isset($keyA) || $keyA == "" || !preg_match("/^[\w]+$/", $keyA) ||
@@ -89,8 +88,10 @@ if (isset($key) || isset($reset)) {
 	return;
     }
     if ($user->chpasswd_key() != $key) {
-	SPITUSERERROR("Invalid key in request.");
-	return;
+        SPITUSERERROR("Please copy the link from your email, and then paste ".
+                      "it into the same browser window/tab that you used ".
+                      "to request the reset link.", 1);
+        return;
     }
     if (time() > $user->chpasswd_expires()) {
 	SPITUSERERROR("Your key has expired. Please request a
