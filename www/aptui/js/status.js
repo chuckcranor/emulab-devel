@@ -2663,14 +2663,9 @@ $(function ()
 			    return false;
 			});
 		    // For selenium
-		    if ($('#selenium-shell-button').length) {
-			$('#selenium-shell-button')
-			.click(function (e) {
-			    window.APT_OPTIONS.gaButtonEvent(e);
-			    ActionHandler("shell", [node]);
-			    return false;
-			});
-		    }
+		    window.StartShell = function() {
+			ActionHandler("shell", [node]);
+		    };
 		}
 		else {
 		    // Need to do this on the context menu too, but painful.
@@ -2812,7 +2807,7 @@ $(function ()
 		}
 
 		// Optional service execution logs.
-		if (services.length && isadmin) {
+		if (services.length) {
 		    clone.find(' [name=servicelogs]')
 			.click(function (e) {
 			    ActionHandler("servicelogs", [node]);
