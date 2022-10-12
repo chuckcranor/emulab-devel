@@ -841,7 +841,7 @@ if ($retval) {
 #
 if (!$debug) {
     AddAuditInfo("cc", $project->LogsEmailAddress());
-    if ($MAINSITE) {
+    if (0 && $MAINSITE) {
 	AddAuditInfo("cc", "stoller\@flux.utah.edu");
 	# AddAuditInfo("cc", "mike\@flux.utah.edu");
     }
