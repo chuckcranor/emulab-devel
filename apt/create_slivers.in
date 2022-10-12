@@ -508,7 +508,7 @@ foreach my $aggregate (@aggregate_list) {
     # We want to tell CreateSlivers() if the CreateSliver() call reached
     # the point of allocating resources. Hack. 
     #
-    $aggregate->webtask()->committed(0);
+    $aggregate->_committed(0);
 }
 
 if ($usestitcher) {
@@ -722,7 +722,7 @@ else {
 	#
 	# In other words, just a single aggregate and it failed before commit.
 	#
-	$updateAbort = !$agg->committed();
+	$updateAbort = !$agg->_committed();
     }
     #
     # If all the aggregates are resolved, then we can resolve the instance.
@@ -1270,7 +1270,7 @@ sub CreateSliver($)
 		    # CreateSliver() instead of Allocate/Provision/Start
 		    # seperate phases.
 		    #
-		    $aggobj->committed(1);
+		    $aggobj->_committed(1);
 		    last;
 		}
 	    }
@@ -1319,7 +1319,7 @@ sub CreateSliver($)
 		# finished, without async we really have no idea what has
 		# happened so treat it as provisioned (committed).
 		#
-		$aggobj->committed(1);
+		$aggobj->_committed(1);
 	    }
 	}
 	if ($code) {
