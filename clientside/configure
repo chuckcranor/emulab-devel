@@ -4697,7 +4697,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd12/GNUmakefile tmcc/freebsd12/netif_emulab \
 	  tmcc/freebsd13/GNUmakefile tmcc/freebsd13/netif_emulab \
 	  tmcc/freenas8/GNUmakefile tmcc/freenas9/GNUmakefile \
-	  tmcc/freenas11/GNUmakefile \
+	  tmcc/freenas11/GNUmakefile tmcc/truenas13/GNUmakefile \
 	  tmcc/cygwinxp/GNUmakefile tmcc/dp/GNUmakefile \
 	  tmcc/openbsd/GNUmakefile tmcc/ron/GNUmakefile \
 	  tmcc/plab/GNUmakefile tmcc/cygwinseven/GNUmakefile \
