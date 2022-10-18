@@ -162,8 +162,8 @@ cnet_start()
 		;;
 	# XXX skip Intel 10Gb for now; they require huge numbers of mbufs
 	# XXX this should no longer be a problem as of FreeBSD 10.1 and we
-	#     relax to allow ixl0 for certain Powder nodes.
-	ix[1-9]|ixl[1-9])
+	#     relax to allow ixl[01] for certain Powder nodes.
+	ix[1-9]|ixl[2-9])
 		;;
 	ath*)
 		;;

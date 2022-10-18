@@ -501,7 +501,14 @@ dofreebsd() {
 		# complain to himself if this breaks.
 		#
 		if [ "$rootdev" = /dev/ ]; then
-		    rootdev="/dev/$disk$part"
+			case $disk in
+			nvme*)
+			    rootdev="/dev/${disk}p${part}"
+			    ;;
+			*)
+			    rootdev="/dev/${disk}${part}"
+			    ;;
+			esac
 		fi
 		fstype=ufs
 		fsopts="ro,ufstype=44bsd"
