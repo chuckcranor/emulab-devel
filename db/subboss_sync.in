@@ -30,7 +30,7 @@ my $RSYNC = 'rsync';
 
 my $RSYNC_OPTS = "-W -u -av --delete --force";
 
-my @excludes=qw#cisco-config/ cisco-config. hp-config/ OLD/ tmp/ proj/ switch-backup#;
+my @excludes=qw#cisco-config/ cisco-config. dell/ hp-config/ OLD/ tmp/ proj/ switch-backup#;
 my @includes=qw##;
 
 #
