@@ -50,9 +50,9 @@ endif
 ifeq ($(RFMON),1)
 SBIN_SCRIPTS   += pokerffe
 endif
-ifeq ($(TARGETSYS),POWDER-BUS)
-SBIN_SCRIPTS   += mobile-update
-endif
+#ifeq ($(TARGETSYS),POWDER-BUS)
+#SBIN_SCRIPTS   += mobile-update
+#endif
 
 #
 # Force dependencies on the scripts so that they will be rerun through
