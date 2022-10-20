@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -144,7 +144,7 @@ my $mountpoint  = $ARGV[0];
 
 if (! -d $mountpoint) {
     die("*** $0:\n".
-	"    $mountpoint does not exist!\n");
+	"    Mount point $mountpoint does not exist!\n");
 }
 
 #
@@ -156,9 +156,17 @@ if (defined($diskopt)) {
 }
 else {
     my $rootdev = `df | egrep '/\$'`;
-    if ($rootdev =~ /^\/dev\/([a-z]+\d+)s[1-4][a-h]/) {
+    if ($rootdev =~ /^\/dev\/([a-z]+\d+)[sp][1-4]([a-h])?/) {
 	$disk = $1;
     }
+}
+
+#
+# Disk device should exist
+#
+if (! -e "/dev/$disk") {
+    die("*** $0:\n".
+	"    /dev/$disk does not exist!\n");
 }
 
 my $slicedev   = "${disk}s${slice}";
@@ -169,13 +177,35 @@ my $fsdevice   = "/dev/${slicedev}${partition}";
 # Note: we will create the BSD 'e' partition later.
 #
 if ($slice == 0) {
-    if ($FBSDVERS >= 10) {
-	$slicedev = "${disk}p1";
-	$fsdevice = "/dev/$slicedev";
-    } else {
-	$slicedev = "${disk}s1";
-	$fsdevice = "/dev/${slicedev}e";
+    $slicedev = "${disk}s1";
+    $fsdevice = "/dev/${slicedev}e";
+}
+
+#
+# Everything changes if we are GPT.
+#
+# XXX We assume that any image we have installed this version of the script
+# on has the "gpart" command.
+#
+my $format = "UNKNOWN";
+my @out = `gpart show $disk 2>&1`;
+if ($? == 0) {
+    # first line should tell us how the drive is partitioned
+    if ($out[0] =~ /^=>\s*\d+\s+\d+\s+$disk\s+(\S+)\s+/) {
+	$format = $1;
     }
+} elsif ($slice == 0 && $out[0] =~ /gpart: No such geom/) {
+    # No MBR or GPT. That is okay for a whole disk device.
+    $slicedev = "${disk}p1";
+    $fsdevice = "/dev/$slicedev";
+}
+if ($format eq "GPT") {
+    if ($slice == 0) {
+	$slicedev = "${disk}p1";
+    } else {
+	$slicedev = "${disk}p${slice}";
+    }
+    $fsdevice = "/dev/$slicedev";
 }
 
 #
@@ -203,35 +233,46 @@ if ($mounted =~ /^${fsdevice} on (\S*)/) {
 }
 
 #
-# As of FreeBSD 10, I am tired of fighting the old MBR tools.
-# So for whole disks (slice == 0) we are going to use GPT so that we
+# For whole disks (slice == 0) we are going to use GPT so that we
 # can get good (1M) alignment and potentially big-ass partitions with
 # a minimum of fuss.
 #
-# This means that you cannot image those partitions since imagezip
-# does not yet (as of 05/2014) understand GPT. But we have no mechanism
-# for capturing an image from anything but the system disk anyway.
-#
-if ($FBSDVERS >= 10 && $slice == 0) {
-    my @out = `gpart show $disk 2>/dev/null`;
-    if ($? == 0) {
-	# first line should tell us how the drive is partitioned
-	my $format = "UNKNOWN";
-	if ($out[0] =~ /^=>\s*\d+\s+\d+\s+$disk\s+(\S+)\s+/) {
-	    $format = $1;
-	}
-	if ($forceit) {
-	    mysystem("gpart destroy -F $disk");
-	} else {
+if ($slice == 0) {
+    if ($format ne "UNKNOWN") {
+	if (!$forceit) {
 	    die("*** $0:\n".
 		"    $disk is already partitioned (type $format), ".
 		"use -f to override\n");
 	}
+	mysystem("gpart destroy -F $disk");
     }
     mysystem("gpart create -s gpt $disk");
-    mysystem("gpart add -i 1 -t freebsd-ufs -a 1m $disk");
+    $format = "GPT";
+    $slice = 1;
+}
 
+#
+# If disk is formated for GPT use the gdisk commands. Otherwise, fall
+# back on the legacy code.
+#
+if ($format eq "GPT") {
+    my $out = `gpart add -i $slice -t freebsd-ufs -a 1m $disk 2>&1`;
+    if ($? != 0) {
+	if ($out !~ /gpart: .*File exists/) {
+	    die("*** $0:\n".
+		"    gpart add failed:\n".
+		"    $out");
+	}
+
+	if (!$forceit) {
+	    die("*** $0:\n".
+		"    $disk partition $slice already exists, ".
+		"use -f to override\n");
+	}
+	mysystem("gpart delete -i $slice $disk");
+    }
     mysystem("newfs -U $fsdevice");
+    mysystem("echo \"# the following extra FS device added by $0\" >> /etc/fstab");
     mysystem("echo \"$fsdevice $mountpoint ufs rw 0 2\" >> /etc/fstab");
 
     if (!$nomount) {
