@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -473,14 +473,22 @@ sub get_disktype($)
 
 #
 # Return the name (e.g., "da0") of the boot disk, aka the "system volume".
+# XXX a bit of hackary to the name matching. Our boot images are either
+# MBR (...s1a) or GPT (...p3).
 #
 sub get_bootdisk()
 {
     my $disk = undef;
+    my $ptype = undef;
     my $line = `$MOUNT | grep ' on / '`;
 
-    if ($line && $line =~ /^\/dev\/(\S+)s1a on \//) {
+    if ($line && $line =~ /^\/dev\/(\S+)(s1a|p3) on \//) {
 	$disk = $1;
+	if ($2 eq "p3") {
+	    $ptype = "GPT";
+	} else {
+	    $ptype = "MBR";
+	}
 	#
 	# FreeBSD 9+ changed the naming convention.
 	# But there will be a symlink to the real device.
@@ -492,7 +500,7 @@ sub get_bootdisk()
 	    }
 	}
     }
-    return $disk;
+    return ($disk, $ptype);
 }
 
 #
@@ -823,7 +831,7 @@ sub get_diskinfo($)
 	    $geominfo{$dev}{'inuse'} = -1;
 	}
 	elsif ($type eq "PART" && $geominfo{$dev}{'level'} == 1 &&
-	    $dev =~ /^(.*)s\d+$/) {
+	    $dev =~ /^(.*)[sp]\d+$/) {
 	    if (exists($geominfo{$1})) {
 		$geominfo{$1}{'inuse'} = 1;
 	    }
@@ -1111,13 +1119,14 @@ sub os_init_storage($)
 	#
 	# Grab the bootdisk and current GEOM state
 	#
-	my $bdisk = get_bootdisk();
+	my ($bdisk, $bdtype) = get_bootdisk();
 	my $dinfo = get_diskinfo($usezfs);
 	if (!exists($dinfo->{$bdisk}) || $dinfo->{$bdisk}->{'inuse'} == 0) {
 	    warn("*** storage: bootdisk '$bdisk' marked as not in use!?\n");
 	    return undef;
 	}
 	$so{'BOOTDISK'} = $bdisk;
+	$so{'BOOTDISKTYPE'} = $bdtype;
 	$so{'DISKINFO'} = $dinfo;
     }
 
@@ -1187,9 +1196,10 @@ sub os_show_storage($)
     my ($so) = @_;
 
     my $bdisk = $so->{'BOOTDISK'};
+    my $bdtype = $so->{'BOOTDISKTYPE'};
     my $usezfs = $so->{'USEZFS'};
     print STDERR "OS Dep info:\n";
-    print STDERR "  BOOTDISK=$bdisk\n" if ($bdisk);
+    print STDERR "  BOOTDISK=$bdisk ($bdtype)\n" if ($bdisk);
     print STDERR "  USEZFS=$usezfs\n" if ($usezfs);
 
     my $dinfo = get_diskinfo($usezfs);
@@ -1456,11 +1466,16 @@ sub os_check_storage_slice($$)
 
 	my $dinfo = $so->{'DISKINFO'};
 	my $bdisk = $so->{'BOOTDISK'};
+	my $bdtype = $so->{'BOOTDISKTYPE'};
 
 	# figure out the device of interest
 	if ($bsid eq "SYSVOL") {
-	    $dev = "${bdisk}s4";
-	    $mdev = "${dev}a";
+	    if ($bdtype eq "MBR") {
+		$dev = "${bdisk}s4";
+		$mdev = "${dev}a";
+	    } else {
+		$dev = $mdev = "${bdisk}p4";
+	    }
 	    $devtype = "PART";
 	} else {
 	    if ($so->{'USEZFS'}) {
@@ -1866,6 +1881,9 @@ sub os_create_storage_slice($$$)
 	my $bdisk = $so->{'BOOTDISK'};
 	my $dinfo = $so->{'DISKINFO'};
 
+	# use MBR for all disks only if the boot disk is MBR
+	my $usembr = ($so->{'BOOTDISKTYPE'} eq "MBR" ? 1 : 0);
+
 	# record all the output for debugging
 	my $redir = "";
 	my $logmsg = "";
@@ -1884,20 +1902,30 @@ sub os_create_storage_slice($$$)
 	#
 	# System volume:
 	#
-	# gpart add -i 4 -a 2048 -t freebsd da0
-	# gpart create -s BSD da0s4
-	# gpart add -t freebsd-ufs da0s4
+	# MBR:
+	#   gpart add -i 4 -a 2048 -t freebsd da0
+	#   gpart create -s BSD da0s4
+	#   gpart add -t freebsd-ufs da0s4
+	# GPT:
+	#   gpart add -i 4 -a 2048 -t freebsd-ufs da0
 	#
 	if ($bsid eq "SYSVOL") {
-	    my $slice = "$bdisk" . "s4";
-	    my $part = "$slice" . "a";
-
-	    if (mysystem("$GPART add -i 4 -a 2048 -t freebsd $bdisk $redir")) {
+	    my ($slice, $part, $ptype);
+	    if ($usembr) {
+		$slice = "$bdisk" . "s4";
+		$part = "$slice" . "a";
+		$ptype = "freebsd";
+	    } else {
+		$slice = $part = "$bdisk" . "p4";
+		$ptype = "freebsd-ufs";
+	    }
+	    if (mysystem("$GPART add -i 4 -a 2048 -t $ptype $bdisk $redir")) {
 		warn("*** $lv: could not create $slice$logmsg\n");
 		return 0;
 	    }
-	    if (mysystem("$GPART create -s BSD $slice $redir") ||
-		mysystem("$GPART add -t freebsd-ufs $slice $redir")) {
+	    if ($usembr &&
+		(mysystem("$GPART create -s BSD $slice $redir") ||
+		 mysystem("$GPART add -t freebsd-ufs $slice $redir"))) {
 		warn("*** $lv: could not create $part$logmsg\n");
 		return 0;
 	    }
@@ -1911,9 +1939,14 @@ sub os_create_storage_slice($$$)
 	    #
 	    # If partitions have not yet been initialized handle that:
 	    #
-	    # gpart add -i 4 -a 2048 -t freebsd da0	(ANY only)
-	    # gpart create -s mbr da1
-	    # gpart add -i 1 -a 2048 -t freebsd da1
+	    # MBR (ZFS or vinum):
+	    #   gpart add -i 4 -a 2048 -t freebsd da0	  (ANY only)
+	    #   gpart create -s mbr da1
+	    #   gpart add -i 1 -a 2048 -t freebsd da1
+	    # GPT (ZFS only):
+	    #   gpart add -i 4 -a 2048 -t freebsd-ufs da0 (ANY only)
+	    #   gpart create -s gpt da1
+	    #   gpart add -i 1 -a 2048 -t freebsd-ufs da1
 	    #
 	    if (!exists($so->{'SPACEMAP'})) {
 		my %spacemap = ();
@@ -1941,7 +1974,7 @@ sub os_create_storage_slice($$$)
 		    if ($bsid eq "ANY") {
 			if (!$disktype ||
 			    $dinfo->{$bdisk}->{'disktype'} eq $disktype) {
-			    $spacemap{$bdisk}{'pchr'} = "s";
+			    $spacemap{$bdisk}{'pchr'} = ($usembr ? "s" : "p");
 			    $spacemap{$bdisk}{'pnum'} = 4;
 			}
 		    }
@@ -1963,7 +1996,7 @@ sub os_create_storage_slice($$$)
 		    #
 		    foreach my $disk (keys %spacemap) {
 			my $pnum = $spacemap{$disk}{'pnum'};
-			my $ptype = "freebsd";
+			my $ptype = ($usembr ? "freebsd" : "freebsd-zfs");
 
 			#
 			# If pnum==0, we need a GPT first
@@ -2371,11 +2404,12 @@ sub os_remove_storage_slice($$$)
 
 	my $dinfo = $so->{'DISKINFO'};
 	my $bdisk = $so->{'BOOTDISK'};
+	my $bdtype = $so->{'BOOTDISKTYPE'};
 
 	# figure out the device of interest
 	my ($dev, $devtype);
 	if ($bsid eq "SYSVOL") {
-	    $dev = "${bdisk}s4a";
+	    $dev = $bdisk . ($bdtype eq "MBR" ? "s4a" : "p4");
 	    $devtype = "PART";
 	} else {
 	    if ($so->{'USEZFS'}) {
@@ -2489,10 +2523,15 @@ sub os_remove_storage_slice($$$)
 	    # gpart delete -i 4 da0
 	    #
 	    if ($bsid eq "SYSVOL") {
-		my $slice = "$bdisk" . "s4";
+		my $slice;
 
-		if (mysystem("$GPART destroy -F $slice $redir")) {
-		    warn("*** $lv: could not destroy ${slice}a$logmsg\n");
+		if ($bdtype eq "MBR") {
+		    $slice = "${bdisk}s4";
+		    if (mysystem("$GPART destroy -F $slice $redir")) {
+			warn("*** $lv: could not destroy ${slice}a$logmsg\n");
+		    }
+		} else {
+		    $slice = "${bdisk}p4";
 		}
 		if (mysystem("$GPART delete -i 4 $bdisk $redir")) {
 		    warn("*** $lv: could not destroy $slice$logmsg\n");
@@ -2542,7 +2581,7 @@ sub os_remove_storage_slice($$$)
 		# And de-partition the disks
 		#
 		foreach my $slice (@slices) {
-		    if ($slice eq "${bdisk}s4") {
+		    if ($slice =~ /^${bdisk}[sp]4$/) {
 			if (mysystem("$GPART delete -i 4 $bdisk $redir")) {
 			    warn("*** $lv: could not destroy $slice$logmsg\n");
 			}
