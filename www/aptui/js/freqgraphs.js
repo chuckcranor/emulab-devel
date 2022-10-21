@@ -764,6 +764,8 @@ window.ShowFrequencyGraph = (function ()
     // Link to the graph page for a specific graph.
     function GraphURL(args, info)
     {
+	console.info("GraphURL", info);
+	
 	if (_.has(info, "graphurl")) {
 	    return info.graphurl;
 	}
@@ -774,15 +776,30 @@ window.ShowFrequencyGraph = (function ()
 	    "&node_id=" + info.node_id +
 	    "&iface=" + info.iface;
 
-	if (args.cluster) {
-	    url = url + "&cluster=" + args.cluster;
+	if (args.which == "rfmonitor") {
+	    if (args.cluster) {
+		url = url + "&cluster=" + args.cluster;
+	    }
 	}
-	if (args.endpoint) {
-	    url = url + "&endpoint=" + args.endpoint;
+	else {
+	    var endpoint;
+	    if (args.endpoint) {
+		endpoint = args.endpoint;
+	    }
+	    else {
+		// Get it from the path. Do not like this.
+		var dirs = info.path.split('/').reverse();
+		
+		if (info.archived) {
+		    endpoint = dirs[1];
+		}
+		else {
+		    endpoint = dirs[0];
+		}
+	    }
+	    url = url + "&endpoint=" + endpoint;
 	}
-	if (args.which) {
-	    url = url + "&which=" + args.which;
-	}
+	url = url + "&which=" + args.which;
 	if (dirname == "archive") {
 	    url = url + "&archived=1";
 	}

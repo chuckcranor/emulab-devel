@@ -66,7 +66,8 @@ foreach ($aggregates as $aggregate) {
               "isFE"         => $aggregate->isFE());
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
+echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|
+                 JSON_HEX_AMP|JSON_NUMERIC_CHECK);
 echo "</script>\n";
 
 $radioinfo = Aggregate::RadioInfoNew();

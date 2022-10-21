@@ -53,11 +53,7 @@
 	    <td data-field="rx_freq"><%- frontend.receive_frequencies %></td>
 	    <td class="text-center">
 	      <% if (frontend.monitored) { %>
-		<% var url = "frequency-graph.php?cluster=" +
-		amlist[urn].nickname + "&node_id=" +
-		node_id + "&iface=" + iface;
-		%>
-		<a href='<%- url %>' target="_blank">
+		<a href='<%- frontend.monitor_url %>' target="_blank">
 		  <span class="glyphicon glyphicon-stats"
 			style="margin-right: 5px;"></span></a>
 	      <% } else { %>

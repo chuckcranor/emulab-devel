@@ -118,6 +118,17 @@ else {
     $url = "https://${USERNODE}";
 }
 
+#
+# Gack, convert mobile endpoint nickname to bus-xxxx since that is how
+# synthing is uploading things. 
+#
+if ($which == "rfmonitor-mobile" && isset($endpoint)) {
+    $aggregate = Aggregate::LookupByNickname($endpoint);
+    if ($aggregate) {
+        $endpoint = str_replace("Bus", "bus-", $endpoint);
+    }
+}
+
 if (isset($node_id)) {
     if (!TBvalid_node_id($node_id)) {
         SPITUSERERROR("Illegal characters in node_id");
