@@ -895,11 +895,10 @@ sub WriteRawData($$$)
 	}
 
 	#
-	# Prune historical data older then 24 hours.
-	# Prune archived data older then 1 week.
+	# Prune historical data older then 14 days.
 	#
 	system("$FIND -E $RAWDATADIR -regex '^.*\-[0-9]+\.csv\.gz\$' ".
-	       "-mtime +7 -depth 1 -print " . ($impotent ? "" : "-delete"));
+	       "-mtime +14 -depth 1 -print " . ($impotent ? "" : "-delete"));
 	system("$FIND $RAWDATADIR/archive -type f -mtime +14 -print ".
 	       ($impotent ? "" : "-delete"));
 
