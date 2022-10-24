@@ -14,10 +14,16 @@
       </tr>
     </thead>
     <tbody>
+      <% var prevuuid = null; %>
       <% _.each(ranges, function(range) { %>
 	<tr>
-	  <td><a href="memlane.php?uuid=<%- range.uuid %>">
-	    <%- range.name %></a></td>
+	  <% if (prevuuid && range.uuid == prevuuid) { %>
+	    <td><%- range.name %></td>
+	  <% } else { %>
+	    <td><a href="memlane.php?uuid=<%- range.uuid %>">
+	      <%- range.name %></a></td>
+	  <% } %>
+	  <% prevuuid = range.uuid; %>
 	  <td><a href="user-dashboard.php?user=<%- range.uid %>#myprofile">
 	    <%- range.uid %></a></td>
 	  <td><a href="show-project.php?project=<%- range.pid %>">
