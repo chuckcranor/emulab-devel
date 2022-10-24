@@ -849,6 +849,16 @@ window.ShowFrequencyGraph = (function ()
 		if (!match) {
 		    return;
 		}
+		var logid = parseInt(match[3]);
+
+		// Prune to range.
+		if (_.has(args, "rangestart") && logid < args.rangestart) {
+		    return;
+		}
+		if (_.has(args, "rangeend") && logid > args.rangeend) {
+		    return;
+		}
+		
 		// Prune out other radios and interfaces unless browsing
 		if (args.which == "rfbaseline") {
 		    info["node_id"] = node_id = match[1];
@@ -863,7 +873,7 @@ window.ShowFrequencyGraph = (function ()
 		    info["iface"]   = match[2];
 		}
 		info["path"]      = path;
-		info["logid"]     = parseInt(match[3]);
+		info["logid"]     = logid;
 		info["id"]        = getRandomInt();
 		info["lastmod"]   = parseInt(info["lastmod"]);
 		info["archived"]  = dirname == "archive" ? 1 : 0;

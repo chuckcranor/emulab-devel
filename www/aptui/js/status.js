@@ -5526,17 +5526,39 @@ $(function ()
 		// Remove the content div. Have to delay this though.
 		$("#" + tabname).remove();
 	    });
+	    var which    = "rfmonitor";
+	    var cluster  = amlist[info.aggregate_urn].nickname;
+	    var url      = amlist[info.aggregate_urn].weburl;
+	    var endpoint = null;
+	    if (info.itype == "ME") {
+		which = "rfmonitor-mobile";
+		endpoint = cluster.replace("Bus", "bus-");
+		url = "https://www.emulab.net";
+	    }
 	    var options = {
-		"url"      : amlist[info.aggregate_urn].weburl,
+		"url"      : url,
 		"selector" : "#" + tabname + " .frequency-graph-div",
-		"cluster"  : amlist[info.aggregate_urn].nickname,
+		"cluster"  : cluster,
 		"node_id"  : info.node_id,
 		"iface"    : "rf0",
 		"logid"    : null,
 		"archived" : false,
-		"which"    : "rfmonitor",
-		"endpoint" : null,
+		"which"    : which,
+		"endpoint" : endpoint,
 	    }
+	    // Narrow the range to the actual start/end of the aggregate.
+	    var blob = lastStatusBlob.sliverstatus[info.aggregate_urn];
+	    if (blob.started) {
+		options["rangestart"] = moment(blob.started).unix();
+	    }
+	    else {
+		options["rangestart"] = moment(expinfo.started).unix();
+	    }
+	    if (blob.destroyed) {
+		options["rangeend"] = moment(blob.destroyed).unix();
+	    }
+	    console.info("monitor tab options", options);
+	    
 	    var html = monitorTemplate(options);
 
 	    // The content div.

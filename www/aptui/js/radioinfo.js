@@ -30,26 +30,6 @@ $(function ()
 	amlist    = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 	console.info("amlist", amlist);
 
-	_.each(radioInfo, function(aggregate, urn) {
-	    _.each(aggregate, function(node, node_id) {
-		_.each(node.frontends, function(frontend, iface) {
-		    if (!frontend.monitored) {
-			return;
-		    }
-		    var url = "frequency-graph.php";
-		    if (amlist[urn].isME) {
-			url += "?which=rfmonitor-mobile";
-			url += "&endpoint=" + amlist[urn].nickname;
-		    }
-		    else {
-			url += "?cluster=" + amlist[urn].nickname;
-		    }
-		    url += "&node_id=" + node_id + "&iface=" + iface;
-		    frontend["monitor_url"] = url;
-		});
-	    });
-	});
-		
 	var options = {
 	    "amlist"    : amlist,
 	    "radioinfo" : radioInfo,

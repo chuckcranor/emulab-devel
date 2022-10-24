@@ -669,6 +669,23 @@ class Aggregate
                         $frow["notes"] = $row["notes"];
                     }
                     $iface = $frow["iface"];
+                    
+                    #
+                    # Form a link to the monitor graph.
+                    #
+                    if ($frow["monitored"] != 0) {
+                        $url = "frequency-graph.php";
+
+                        if ($aggregate->ismobile()) {
+                            $url .= "?which=rfmonitor-mobile";
+                            $url .= "&endpoint=" . $aggregate->nickname();
+                        }
+                        else {
+                            $url .= "?cluster=" . $aggregate->nickname();
+                        }
+                        $url .= "&node_id=" . $node_id . "&iface=" . $iface;
+                        $frow["monitor_url"] = $url;
+                    }
                     $row["frontends"][$iface] = $frow;
                 }
                 $blob[$urn][$node_id] = $row;

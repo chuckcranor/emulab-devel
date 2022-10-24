@@ -1225,6 +1225,8 @@ class InstanceSliver
     function deferred_reason(){ return $this->field('deferred_reason'); }
     function last_retry()   { return $this->field('last_retry'); }
     function retry_count()  { return $this->field('retry_count'); }
+    function started()      { return $this->field('started'); }
+    function destroyed()    { return $this->field('destroyed'); }
     function manifest()	    { return $this->field('manifest'); }
     function physnode_count() { return $this->field('physnode_count'); }
     function virtnode_count() { return $this->field('virtnode_count'); }

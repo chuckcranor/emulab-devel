@@ -3,6 +3,7 @@
     <thead>
       <tr>
 	<th>Experiment</th>
+	<th>User</th>
 	<th>Project</th>
 	<th data-placeholder="low - high">Lower (MHz)</th>
 	<th data-placeholder="low - high">Upper (MHz)</th>
@@ -17,6 +18,8 @@
 	<tr>
 	  <td><a href="memlane.php?uuid=<%- range.uuid %>">
 	    <%- range.name %></a></td>
+	  <td><a href="user-dashboard.php?user=<%- range.uid %>#myprofile">
+	    <%- range.uid %></a></td>
 	  <td><a href="show-project.php?project=<%- range.pid %>">
 	    <%- range.pid %></a></td>
 	  <td><%- range.freq_low %></td>

@@ -187,6 +187,8 @@ function Do_GetInstanceStatus()
             array("aggregate_urn"   => $sliver->aggregate_urn(),
                   "status"          => $sliver->status(),
                   "deferred"        => $sliver->deferred(),
+                  "started"         => DateStringGMT($sliver->started()),
+                  "destroyed"       => DateStringGMT($sliver->destroyed()),
                   "havemanifest"    => 0,
                   "offline"         => false);
 

@@ -104,7 +104,7 @@ $(function ()
 
 			filter_formatter : {
 			    // Date (two inputs)
-			    6 : function($cell, indx) {
+			    7 : function($cell, indx) {
 				return $.tablesorter.filterFormatter
 				    .uiDatepicker( $cell, indx, {
 					textFrom : "",
@@ -116,7 +116,7 @@ $(function ()
 				    });
 			    },
 			    // Date (two inputs)
-			    7 : function($cell, indx) {
+			    8 : function($cell, indx) {
 				return $.tablesorter.filterFormatter
 				    .uiDatepicker( $cell, indx, {
 					textFrom : "",

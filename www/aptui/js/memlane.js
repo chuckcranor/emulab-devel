@@ -8,12 +8,18 @@ $(function ()
     var mainTemplate = _.template(templates['memlane']);
     var EMULAB_NS    = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var amlist       = null;
+    var radioinfo    = null;
     var record       = null;
     
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
 	amlist = decodejson('#amlist-json');
+	console.info("amlist", amlist);
+	if (window.ISPOWDER) {
+	    radioinfo = decodejson('#radioinfo-json');
+	    console.info("radioinfo", radioinfo);
+	}
 
 	var xmlthing = sup.CallServerMethod(null, "memlane",
 					    "HistoryRecord",
@@ -96,8 +102,33 @@ $(function ()
 	" <td name='client_id'>n/a</td>" +
 	" <td name='node_id'>n/a</td>" +
 	" <td name='type'>n/a</td>" +
+	" <td name='monitor' class='hidden monitor-links'>n/a</td>" +
 	" <td name='image'>n/a</td>" +
 	"</tr>";
+
+    var monitor_url = "<a href='#' target=_blank>" +
+	"<span class='glyphicon glyphicon-signal'></span></a>";
+
+    function monitorUrl(urn, node_id)
+    {
+	var start = moment(record.started).unix();
+	var end   = moment(record.destroyed).unix();
+	
+	if (_.has(radioinfo, urn) &&
+	    _.has(radioinfo[urn], node_id) &&
+	    _.has(radioinfo[urn][node_id], "frontends") &&
+	    _.has(radioinfo[urn][node_id]["frontends"], "rf0")) {
+	    var fe = radioinfo[urn][node_id]["frontends"]["rf0"];
+			    
+	    if (fe.monitored && _.has(fe, "monitor_url")) {
+		var url = $(monitor_url);
+		var href = fe.monitor_url + "&range=" + start + "," + end;
+		url.attr("href", href);
+		return url;
+	    }
+	}
+	return null;
+    }
 
     //
     // Show the topology inside the topo container. Called from the status
@@ -105,6 +136,8 @@ $(function ()
     //    
     function ShowTopo(record)
     {
+	var showmonitorlinks = 0;
+	
 	//
 	// Process the nodes in a single manifest.
 	//
@@ -144,6 +177,16 @@ $(function ()
 		    clone.find(" [name=node_id]").html(html);
 		    clone.find(" [name=type]")
 			.html($(vnode).attr("hardware_type"));
+
+		    // Radio monitor graph
+		    if (radioinfo) {
+			var url = monitorUrl(aggregate_urn, node_id);
+
+			if (url) {
+			    clone.find(" [name=monitor]").html(url);
+			    showmonitorlinks = 1;
+			}
+		    }
 		}
 		// Convenience.
 		clone.find(" [name=select]").attr("id", node);
@@ -203,6 +246,15 @@ $(function ()
 	    var xmlDoc = $.parseXML(manifest);
 	    ProcessNodes(aggregate_urn, $(xmlDoc));
 	});
+	if (showmonitorlinks) {
+	    $('#listview_table .monitor-links').removeClass("hidden");
+	}
+	$('#listview_table')
+	    .tablesorter({
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
+	    });
 
 	$("#showtopo_container").removeClass("invisible");
 	$('#quicktabs_ul a[href="#topology"]').tab('show');

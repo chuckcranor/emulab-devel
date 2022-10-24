@@ -198,7 +198,7 @@ function Do_AllInuseRanges()
 
     $query_result =
         DBQueryFatal("select i.uuid,i.pid,i.name,r.freq_low,r.freq_high, ".
-                     "     r.type,r.target,s.expires,i.started ".
+                     "     r.type,r.target,s.expires,i.started,i.creator ".
                      "   from apt_instance_rfranges as r ".
                      "left join apt_instances as i on i.uuid=r.uuid ".
                      "left join geni.geni_slices as s on ".
@@ -218,6 +218,7 @@ function Do_AllInuseRanges()
         # Anonymous if not admin.
         if (ISADMIN()) {
             $range["pid"]  = $row["pid"];
+            $range["uid"]  = $row["creator"];
             $range["uuid"] = $row["uuid"];
             $range["name"] = $row["name"];
         }
@@ -261,10 +262,10 @@ function Do_RangeHistory()
 
     $query_result =
         DBQueryFatal("select h.uuid,h.pid,h.name,r.freq_low,r.freq_high, ".
-                     "     r.type,r.target,h.started,h.destroyed ".
+                     "     r.type,r.target,h.started,h.destroyed,h.creator ".
                      "   from apt_instance_rfrange_history as r ".
                      "join apt_instance_history as h on h.uuid=r.uuid ".
-                     "where h.started > DATE_SUB(now(),interval 1 year) ".
+                     "where h.started > DATE_SUB(now(),interval 4 month) ".
                      $pidclause . " " .
                      "order by h.started desc");
 
@@ -277,6 +278,7 @@ function Do_RangeHistory()
             "started"   => DateStringGMT($row["started"]),
             "destroyed" => DateStringGMT($row["destroyed"]),
             "pid"       => $row["pid"],
+            "uid"       => $row["creator"],
             "uuid"      => $row["uuid"],
             "name"      => $row["name"],
         );

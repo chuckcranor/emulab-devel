@@ -52,7 +52,8 @@ $optargs = OptionalPageArguments("cluster",   PAGEARG_STRING,
                                  "archived",  PAGEARG_BOOLEAN,
                                  "baseline",  PAGEARG_BOOLEAN,
                                  "which",     PAGEARG_STRING,
-                                 "endpoint",  PAGEARG_STRING);
+                                 "endpoint",  PAGEARG_STRING,
+                                 "range",     PAGEARG_STRING);
 
 if (isset($which)) {
     if (! ($which == "rfmonitor" || $which == "rfbaseline" ||
@@ -116,6 +117,22 @@ if ($which == "rfmonitor" ||
 }
 else {
     $url = "https://${USERNODE}";
+}
+
+if (isset($range)) {
+    if (! (preg_match("/^\d+,\d+$/", $range) ||
+           preg_match("/^\d+$/", $range))) {
+        SPITUSERERROR("Illegal characters in range");
+        exit();
+    }
+    $tokens = preg_split("/,/", $range);
+    if (count($tokens) == 1) {
+        $rangestart = $tokens[0];
+    }
+    else {
+        $rangestart = $tokens[0];
+        $rangeend   = $tokens[1];
+    }
 }
 
 #
@@ -190,6 +207,12 @@ if (isset($logid)) {
 }
 if (isset($endpoint)) {
     echo "    window.ENDPOINT    = '$endpoint';\n";
+}
+if (isset($range)) {
+    echo "    window.RANGESTART  = $rangestart;\n";
+    if (isset($rangeend)) {
+        echo "    window.RANGEEND    = $rangeend;\n";
+    }
 }
 echo "</script>\n";
 

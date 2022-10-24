@@ -141,6 +141,13 @@ echo "<script type='text/plain' id='amlist-json'>\n";
 echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 
+if ($ISPOWDER) {
+    $radioinfo = Aggregate::RadioInfoNew();
+    echo "<script type='text/plain' id='radioinfo-json'>\n";
+    echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+}
+
 echo "<script type='text/javascript'>\n";
 echo "  window.uuid = '" . $uuid . "';\n";
 echo "  window.isadmin = $isadmin;\n";
@@ -152,6 +159,7 @@ echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
+REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
 REQUIRE_SUP();
 REQUIRE_JACKS();
 REQUIRE_MOMENT();

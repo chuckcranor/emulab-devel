@@ -20,6 +20,12 @@ $(function ()
 	    "which"     : window.WHICH,
 	    "endpoint"  : window.ENDPOINT,
 	};
+	if (window.RANGESTART !== undefined) {
+	    options["rangestart"] = window.RANGESTART;
+	}
+	if (window.RANGEEND !== undefined) {
+	    options["rangeend"]   = window.RANGEEND;
+	}
 	$('#main-body').html(mainTemplate(options));
 	// Its a little too big by itself
 	//$(".frequency-graph-div").addClass("col-sm-10 col-sm-offset-1");
