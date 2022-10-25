@@ -1,8 +1,8 @@
 /**** Filter Formatter Elements ****/
 .tablesorter .tablesorter-filter-row td {
 	text-align: center;
-	font-size: 0.9em;
 	font-weight: normal;
+	white-space: nowrap;
 }
 
 /**** Sliders ****/
