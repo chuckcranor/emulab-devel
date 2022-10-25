@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -111,9 +111,9 @@ endif
 ifeq ($(WEBSSH),1)
 OPS_SCRIPTS += webssh.sh
 endif
-ifeq ($(TARGETSYS),POWDER-BUS)
-RC_SCRIPTS   += mobile-update.sh
-endif
+#ifeq ($(TARGETSYS),POWDER-BUS)
+#RC_SCRIPTS   += mobile-update.sh
+#endif
 
 #
 # Force dependencies to make sure configure regenerates if the .in file
