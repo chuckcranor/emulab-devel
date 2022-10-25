@@ -43,8 +43,14 @@
 	</tr>
 	<tr>
 	  <td>EID</td>
-	  <td><a href="../showexp.php3?pid=<%- info.pid %>&eid=<%- info.eid %>"
+	  <td>
+	    <% if (_.has(info, "instance_uuid")) { %>
+	      <a href="status.php?uuid=<%- info.instance_uuid %>"
 		 target="_blank"><%- info.eid %></a>
+	    <% } else { %>
+	      <a href="<%- window.CLASSIC %>/showexp.php3?pid=<%- info.pid %>&eid=<%- info.eid %>"
+		 target="_blank"><%- info.eid %></a>
+	    <% } %>
 	  </td>
 	</tr>
       </table>

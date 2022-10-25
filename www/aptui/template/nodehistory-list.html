@@ -38,10 +38,10 @@
 	      <% } %>
 	    <% } else { %>
 	      <% if (entry.running) { %>
-		<a href="../showexp.php3?experiment=<%- entry.eid_idx %>"
+		<a href="<%- window.CLASSIC %>/showexp.php3?experiment=<%- entry.eid_idx %>"
 		   target="_blank"><%- entry.eid %></a>
 	      <% } else { %>
-		<a href="../showexpstats.php3?record=<%- entry.eid_idx %>"
+		<a href="<%- window.CLASSIC %>/showexpstats.php3?record=<%- entry.eid_idx %>"
 		   target="_blank"><%- entry.eid %></a>
 	      <% } %>
 	    <% } %>

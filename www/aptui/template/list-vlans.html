@@ -48,8 +48,15 @@
 		       target="_blank"><%- info.id %></a></td>
 		<td><a href="show-project.php?pid=<%- info.pid %>"
 		       target="_blank"><%- info.pid %></a></td>
-		<td><a href="../showexp.php3?pid=<%- info.pid %>&eid=<%- info.eid %>"
-		       target="_blank"><%- info.eid %></a></td>
+		<td>
+		  <% if (_.has(info, "instance_uuid")) { %>
+		    <a href="status.php?uuid=<%- info.instance_uuid %>"
+		       target="_blank"><%- info.eid %></a>
+		  <% } else { %>
+		    <a href="<%- window.CLASSIC %>/showexp.php3?pid=<%- info.pid %>&eid=<%- info.eid %>"
+		       target="_blank"><%- info.eid %></a>
+		  <% } %>
+		</td>
 		<td><%- info.virtual %></td>
 		<td><%- info.tag %></td>
 		<td><%- info.stack %></td>

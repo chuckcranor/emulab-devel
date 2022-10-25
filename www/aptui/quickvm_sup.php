@@ -55,7 +55,7 @@ if (isset($_SERVER['SERVER_NAME'])) {
 $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $ISPOWDER;
     global $spatrequired, $TBMAINSITE, $PORTAL_HELPFORUM, $APTBASE;
-    global $APTMAIL, $APTMAILTO, $PROTOGENI_GENIWEBLOGIN;
+    global $APTMAIL, $APTMAILTO, $PROTOGENI_GENIWEBLOGIN, $TBBASE;
 
     if (! $drewheader) {
 	SPITHEADER();
@@ -78,6 +78,7 @@ $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
     echo "</script>\n";
+    echo "    window.CLASSIC  = '$TBBASE';\n";
     if (!$spatrequired) {
 	echo "<script src='$APTBASE/js/lib/jquery.min.js'></script>\n";
 	SPITNULLREQUIRE();
@@ -238,6 +239,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "    window.LOGINUID  = " .
         ($login_user ? "'$login_uid'" : "null") . ";\n";
     echo "    window.PORTAL_NAME = \"$PORTAL_NAME\"\n";
+    echo "    window.CLASSIC = '$TBBASE';\n";
     # For TUTORIALPID
     echo "    window.NOANNOUNCEMENTS = $noannouncements\n";
     echo "</script>\n";
