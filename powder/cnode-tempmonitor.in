@@ -88,32 +88,32 @@ my %frontends = (
     "cnode-guesthouse" => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-guesthouse",
-	"switch"       => "powder-mgmt-guesthouse",
+	"switch"       => "powder-mgmt-dbs6",
     },
     "cnode-mario"      => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-mario",
-	"switch"       => "powder-mgmt-mario",
+	"switch"       => "powder-mgmt-dbs2",
     },
     "cnode-ustar"      => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-ustar",
-	"switch"       => "powder-mgmt-ustar",
+	"switch"       => "powder-mgmt-dbs8",
     },
     "cnode-wasatch"    => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-wasatch",
-	"switch"       => "powder-mgmt-wasatch",
+	"switch"       => "powder-mgmt-dbs1",
     },
     "cnode-moran"      => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-moran",
-	"switch"       => "powder-mgmt-moran",
+	"switch"       => "powder-mgmt-dbs5",
     },
     "cnode-ebc"        => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-ebc",
-	"switch"       => "powder-mgmt-ebc",
+	"switch"       => "powder-mgmt-dbs7",
     },
 );
 
