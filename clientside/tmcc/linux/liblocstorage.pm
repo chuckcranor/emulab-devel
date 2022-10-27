@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -191,7 +191,7 @@ sub is_iscsi_dev($)
 	my $line = `ls -l /sys/block/$dev 2>/dev/null`;
 	if ($line =~ m#/sys/block/$dev -> ../devices/platform/host\d+/session\d+#) {
 	    return 1;
-	    }
+	}
     }
     return 0;
 }
@@ -260,6 +260,7 @@ sub init_serial_map()
 	# XXX for moonshots (arm64), it is different
 	if (m#/sys/block/(sd[a-z][a-z]?) -> ../devices/pci\d+# ||
 	    m#/sys/block/(nvme\d+n\d+) -> ../devices/pci\d+# ||
+	    m#/sys/block/(nvme\d+n\d+) -> ../devices/virtual/nvme-subsystem/# ||
 	    m#/sys/block/(sd[a-z][a-z]?) -> ../devices/soc.\d+#) {
 	    my $dev = $1;
 	    $sn = find_serial($dev);
