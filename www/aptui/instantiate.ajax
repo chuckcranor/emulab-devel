@@ -151,7 +151,8 @@ function Do_GetProfile()
     
                 if (CheckScript($profile, $script, null, 
                                 $warningsfatal, $usenewgenilib,
-                                $refspec, $getparams, null, $blob) != 0) {
+                                $ajax_args["refhash"],
+                                $getparams, null, $blob) != 0) {
                     # Error already spit.
                     return;
                 }
