@@ -2966,7 +2966,7 @@ $(function ()
 	/*
 	 * Process one manifest at a time, then finish with above function.
 	 */
-	var gotonemanifest = function(aggregate_urn, manifest) {
+	var gotonemanifest = async function(aggregate_urn, manifest, defer) {
 	    console.info("gotonemanifest", aggregate_urn);
 
 	    TimeStamp("Proccessing manifest");
@@ -3054,7 +3054,7 @@ $(function ()
 			LazyTopoTab(multisite, manifest);
 		    }
 		    else {
-			ShowTopologyTab(multisite, manifest);
+			await ShowTopologyTab(multisite, manifest);
 		    }
 		}
 		else if (changingtopo) {
@@ -3115,6 +3115,7 @@ $(function ()
 	    // Mark that we have this manifest;
 	    manifests[aggregate_urn] = manifest;
 	    onlyfirst = false;
+	    defer.resolve();
 	}
 	/*
 	 * If there are any manifests available that we have not asked for,
@@ -3127,22 +3128,23 @@ $(function ()
 		if (! (_.has(manifests, urn) ||
 		       statusblob[urn] == null ||
 		       !statusblob[urn].havemanifest)) {
-		    var promise =
-			sup.CallServerMethod(null, "status",
-					     "GetInstanceManifest",
-					     {"uuid" : uuid,
-					      "aggregate_urn" : urn},
-			     function (json) {
-				 if (json.code) {
-				     console.info("GetInstanceManifest:" +
-						  json.value);
-				     donefunc();
-				     return -1;
-				 }
-				 gotonemanifest(urn, json.value);
-				 return 0;
-			     });
-		    promises.push(promise);
+		    var defer = $.Deferred();
+		    promises.push(defer);
+		    
+		    sup.CallServerMethod(null, "status",
+					 "GetInstanceManifest",
+					 {"uuid" : uuid,
+					  "aggregate_urn" : urn},
+			function (json) {
+			    if (json.code) {
+				console.info("GetInstanceManifest:" +
+					     json.value);
+				defer.resolve();
+				return -1;
+			    }
+			    gotonemanifest(urn, json.value, defer);
+			    return 0;
+			});
 		}
 	    });
 	if (_.size(promises)) {
@@ -4575,7 +4577,9 @@ $(function ()
 
     function ShowViewer(divname, multisite, manifest)
     {
+	//console.info("ShowViewer");
 	var aggregates = [];
+	var defer = $.Deferred();
 	
 	_.each(amlist, function(details, aggregate_urn) {
 	    aggregates.push({"id" : aggregate_urn,
@@ -4608,6 +4612,7 @@ $(function ()
 			ShowManifest(object.rspec);
 			window.jacksIDS = jacksIDs;
 			window.jacksSites = jacksSites;
+			defer.resolve();
 		    });
 
 		    jacksInput.trigger('change-topology',
@@ -4631,6 +4636,10 @@ $(function ()
 		}
             });
 	}
+	else {
+	    defer.resolve();
+	}
+	return defer;
     }
     // Clear the Jacks view to get ready for topo change.
     function ClearViewer(manifest)
@@ -5164,6 +5173,7 @@ $(function ()
 
     function ShowTopologyTab(multisite, manifest)
     {
+	// console.info("ShowTopologyTab");
 	if (! $('#quicktabs_content #topology').hasClass("hidden")) {
 	    return;
 	}
@@ -5173,7 +5183,7 @@ $(function ()
 	$('#quicktabs_content #topology').removeClass("hidden");
 	$('#quicktabs_ul a[href="#topology"]').tab('show');
 
-	ShowViewer('#showtopo_statuspage', multisite, manifest);
+	return ShowViewer('#showtopo_statuspage', multisite, manifest);
     }
 
     /*
