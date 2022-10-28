@@ -57,6 +57,7 @@ my $HOST      = "@POWDER_RFMONITOR_HOST@";
 my $usemax    = 1;
 my $MAXPOWER  = 0; # I like that zero power does not mean zero. 
 my $NOISEFLOOR= -110.0;
+my $POWEROFF  = -90.0;
 
 #
 # Configure variables
@@ -77,7 +78,6 @@ my $GZIP             = "/usr/bin/gzip";
 my $FIND             = "/usr/bin/find";
 my $FORMAT1          = "portid,timestamp,frequency,power";
 my $FORMAT2          = $FORMAT1 . ",center_freq";
-my $FORMAT3          = $FORMAT2 . ",incident";
 my $CSVHEADER        = "frequency,power";
 my $MAILDELAY        = 3600;
 
@@ -355,7 +355,7 @@ sub HandleChild($)
 	return undef
 	    if ($line =~ /^0,/);
 
-	my ($portid,$timestamp,$frequency,$power,$center,$incident)
+	my ($portid,$timestamp,$frequency,$power,$center)
 	    = split(",", $line);
 	if (!(defined($portid) && defined($frequency) &&
 	      defined($power) && defined($timestamp))) {
@@ -365,8 +365,7 @@ sub HandleChild($)
 	if ($timestamp !~ /^[\.\d]+$/ ||
 	    $frequency !~ /^[\.\d]+$/ ||
 	    $power !~ /^[-\.\d]+$/ ||
-	    (defined($center) && $center !~ /^[-\.\d]+$/) ||
-	    (defined($incident) && $incident !~ /^[-\.\d]+$/)) {
+	    (defined($center) && $center !~ /^[-\.\d]+$/)) {
 	    print STDERR "Improper float(s) from $address:$port:\n";
 	    print STDERR "   $line\n";
 	    return undef;
@@ -391,7 +390,6 @@ sub HandleChild($)
 	    "frequency"  => $frequency,
 	    "power"      => $power,
 	    "center"     => $center,
-	    "incident"   => $incident,
    	    "timestamp"  => int($timestamp),
 	    "repeatcount"=> 0,
 	};
@@ -418,7 +416,7 @@ sub HandleChild($)
     #
     my $header = shift(@lines);
     chomp($header);
-    if ($header ne $FORMAT1 && $header ne $FORMAT2 && $header ne $FORMAT3) {
+    if ($header ne $FORMAT1 && $header ne $FORMAT2) {
 	print STDERR "Improper format from $address:$port: '$header'\n";
 	exit(1);
     }
@@ -439,7 +437,6 @@ sub HandleChild($)
 	my $power     = $measurement->{"power"} + 0.0;
 	my $timestamp = $measurement->{"timestamp"};
 	my $center    = $measurement->{"center"};
-	my $incident  = $measurement->{"incident"};
 	my $key       = "${nodeid}:${iface}:${frequency}";
 
 	my $node = Node->Lookup($nodeid);
@@ -688,6 +685,7 @@ sub HandleViolations($$$)
     foreach my $nodeid (keys(%{$violations})) {
 	my ($TO, $subject, $body, $portalurl, $rfurl, $graphurl);
 	my $forcemail = 0;
+	my $shutdown  = 0;
 	my $headers;
 
 	my $node = Node->Lookup($nodeid);
@@ -769,6 +767,9 @@ sub HandleViolations($$$)
 		# We always send email when it is a new frequency.
 		$forcemail = 1
 		    if ($measurement->{'repeatcount'} == 1);
+
+		$shutdown = 1
+		    if ($power > $POWEROFF);
 	    }
 	    $body .= "\n";
 	    #
@@ -779,7 +780,7 @@ sub HandleViolations($$$)
 		"/frequency-graph.php?node_id=$nodeid&iface=$iface" .
 		"&cluster=${POWDER_NICKNAME}&logid=$filestamp&archived=1";
 	}
-	if (!$mailonly) {
+	if (!$mailonly || $shutdown) {
 	    $body .= "\n" . "This node will be immediately powered off!\n";
 	}
 	# Link to the violation history page.
@@ -805,7 +806,10 @@ sub HandleViolations($$$)
 	    libtestbed::SENDMAIL($TO, $subject, $body, $TBOPS, $headers);
 	    NodeNotified($nodeid, "user", $body);
 	}
-	if (!($impotent || $mailonly)) {
+	next
+	    if ($impotent);
+
+	if (!$mailonly || $shutdown) {
 	    #
 	    # We are allowed to run the power command as root.
 	    #
@@ -813,6 +817,13 @@ sub HandleViolations($$$)
 	    if ($?) {
 		NodeNotify($nodeid, "system",
 			   "Failed to power of $nodeid!\n\n". $output);
+	    }
+	    if ($shutdown) {
+		print STDERR "Shutting down slice since over $POWEROFF\n";
+		my $slice = GeniSlice->LookupByNode($node);
+		if ($slice) {
+		    $slice->SetShutdown(1);
+		}
 	    }
 	}
     }
@@ -908,17 +919,13 @@ sub WriteRawData($$$$)
 	    
 	    foreach my $ref (@samples) {
 		my $center      = "";
-		my $incident    = "";
 		
 		my $freq  = sprintf("%.3f", $ref->{"frequency"});
 		my $power = sprintf("%.3f", $ref->{"power"});
 		if (defined($ref->{"center"})) {
 		    $center = sprintf(",%.4f", $ref->{"center"});
 		}
-		if (defined($ref->{"incident"})) {
-		    $incident = sprintf(",%.4f", $ref->{"incident"});
-		}
-		print CSV "$freq,$power${center}${incident}";
+		print CSV "$freq,$power${center}";
 		if ($abovefloor) {
 		    if (exists($ref->{"abovefloor"})) {
 			print CSV sprintf(",%.3f", $ref->{"abovefloor"});
