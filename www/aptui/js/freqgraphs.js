@@ -18,6 +18,8 @@ window.ShowFrequencyGraph = (function ()
 	var parentHeight = $(selector).height();
 	// Not all data files have the incident value.
 	var hasIncident  = (_.has(data[0], "incident") ? true : false);
+	// Ditto the above noise floor values
+	var hasAboveFloor= (_.has(data[0], "abovefloor") ? true : false);
 	var lineI;
 
 	// force disable for now.
@@ -142,6 +144,19 @@ window.ShowFrequencyGraph = (function ()
 	    .attr("class", "line line-power")
 	    .attr("d", line);
 
+	if (hasAboveFloor) {
+	    Line_chart.selectAll("myCircles")
+		.data(data.filter(function(d) { return d.abovefloor != 0; } ))
+		.enter()
+		.append("circle")
+		.attr("class", "abovefloor-circles")
+		.attr("fill", "red")
+		.attr("stroke", "none")
+		.attr("cx", function(d) { return x(d.frequency) })
+		.attr("cy", function(d) { return y(d.power) })
+		.attr("r", 4);
+	}
+
 	if (hasIncident) {
 	    Line_chart.append("path")
 		.datum(data)
@@ -163,7 +178,7 @@ window.ShowFrequencyGraph = (function ()
 
 	toolbox.append("rect")
 	    .attr("class", "tooltip-rect")
-	    .attr("width", 130)
+	    .attr("width", 165)
 	    .attr("height", 95)
             .attr("y", -22)
 	    .attr("rx", 4)
@@ -172,11 +187,11 @@ window.ShowFrequencyGraph = (function ()
 	toolbox.append("text")
 	    .attr("x", 5)
 	    .attr("y", -2)
-	    .text("Freq:");
+	    .text("Frequency:");
 
 	toolbox.append("text")
 	    .attr("class", "tooltip-freq")
-	    .attr("x", 65)
+	    .attr("x", 95)
 	    .attr("y", -2);
 
 	toolbox.append("text")
@@ -186,7 +201,7 @@ window.ShowFrequencyGraph = (function ()
 
 	toolbox.append("text")
 	    .attr("class", "tooltip-power")
-	    .attr("x", 65)
+	    .attr("x", 95)
 	    .attr("y", 18);
 
 	toolbox.append("text")
@@ -196,7 +211,7 @@ window.ShowFrequencyGraph = (function ()
 
 	toolbox.append("text")
 	    .attr("class", "tooltip-center")
-	    .attr("x", 65)
+	    .attr("x", 95)
 	    .attr("y", 38);
 
 	if (hasIncident) {
@@ -208,7 +223,19 @@ window.ShowFrequencyGraph = (function ()
 
 	    toolbox.append("text")
 		.attr("class", "tooltip-incident")
-		.attr("x", 65)
+		.attr("x", 95)
+		.attr("y", 58);
+	}
+	else if (hasAboveFloor) {
+	    toolbox.append("text")
+		.attr("x", 5)
+		.attr("y", 58)
+		.attr("class", "line-abovefloor")
+		.text("Above Floor:");
+
+	    toolbox.append("text")
+		.attr("class", "tooltip-abovefloor")
+		.attr("x", 95)
 		.attr("y", 58);
 	}
 
@@ -277,6 +304,16 @@ window.ShowFrequencyGraph = (function ()
 		    tooltip.select(".tooltip-incident").text("n/a");
 		}
 	    }
+	    if (hasAboveFloor) {
+		if (d.abovefloor) {
+		    tooltip.select(".tooltip-abovefloor")
+			.text(formatter(d.abovefloor) + " dB");
+		}
+		else {
+		    tooltip.select(".tooltip-abovefloor")
+			.text("0");
+		}
+	    }
 	}
 
 	function brushed() {
@@ -287,6 +324,10 @@ window.ShowFrequencyGraph = (function ()
 	    Line_chart.select(".line-power").attr("d", line);
 	    if (hasIncident) {
 		Line_chart.select(".line-incident").attr("d", lineI);
+	    }
+	    if (hasAboveFloor) {
+		Line_chart.selectAll(".abovefloor-circles")
+		    .attr("cx", function(d) { return x(d.frequency) });
 	    }
 	    focus.select(".axis--x").call(xAxis);
 	    svg.select(".zoom").call(zoom.transform, d3.zoomIdentity
@@ -303,6 +344,10 @@ window.ShowFrequencyGraph = (function ()
 	    if (hasIncident) {
 		Line_chart.select(".line-incident").attr("d", lineI);
 	    }
+	    if (hasAboveFloor) {
+		Line_chart.selectAll(".abovefloor-circles")
+		    .attr("cx", function(d) { return x(d.frequency) });
+	    }
 	    focus.select(".axis--x").call(xAxis);
 	    context.select(".brush")
 		.call(brush.move, x.range().map(t.invertX, t));
@@ -315,6 +360,7 @@ window.ShowFrequencyGraph = (function ()
 	var bins   = [];
 	// Not all data files have the incident value.
 	var hasIncident  = (_.has(data[0], "incident") ? true : false);
+	var hasAboveFloor= (_.has(data[0], "abovefloor") ? true : false);
 	console.info("CreateBins: ", data);
 
 	// force disable for now.
@@ -336,6 +382,9 @@ window.ShowFrequencyGraph = (function ()
 		if (hasIncident) {
 		    bin["imax"] = +d.incident;
 		}
+		if (hasAboveFloor) {
+		    bin["abovefloor"] = d.abovefloor;
+		}
 		bins[x] = bin;
 		result.push(bin);
 		return;
@@ -351,6 +400,11 @@ window.ShowFrequencyGraph = (function ()
 		var inci = +d.incident;
 		if (inci > bin.imax) {
 		    bin.imax = inci;
+		}
+	    }
+	    if (hasAboveFloor) {
+		if (d.abovefloor > bin.abovefloor) {
+		    bin.abovefloor = d.abovefloor;
 		}
 	    }
 	    bin.samples.push(d);
@@ -389,6 +443,11 @@ window.ShowFrequencyGraph = (function ()
 	'        <td class="border-none incident"></td>' +
 	'      </tr>' +
 	'    </tbody>' +
+	'      <tr class="hidden tooltip-abovefloor">' +
+	'        <td class="border-none">Above Floor:</td>' +
+	'        <td class="border-none abovefloor"></td>' +
+	'      </tr>' +
+	'    </tbody>' +
 	'  </table>';
     
     function CreateBinGraph(args, data) {
@@ -399,6 +458,7 @@ window.ShowFrequencyGraph = (function ()
 	var ParentTop    = $(selector).parent().position().top;
 	var ParentLeft   = $(selector).parent().position().left;
 	var hasIncident  = (_.has(data[0], "incident") ? true : false);
+	var hasAboveFloor= (_.has(data[0], "abovefloor") ? true : false);
 	var lineI;
 
 	// force disable for now.
@@ -486,7 +546,7 @@ window.ShowFrequencyGraph = (function ()
 		  "translate(" + margin2.left + "," + margin2.top + ")");
 
 	x.domain(d3.extent(bins, function(d) { return d.frequency; }));
-	y.domain(d3.extent(bins, function(d) { return d.max; }));
+	y.domain(d3.extent(bins, function(d) { return d.max + 1; }));
 	x2.domain(x.domain());
 	y2.domain(y.domain());
 
@@ -519,6 +579,19 @@ window.ShowFrequencyGraph = (function ()
 	    .datum(bins)
 	    .attr("class", "line line-power")
 	    .attr("d", line);
+
+	if (hasAboveFloor) {
+	    Line_chart.selectAll("myCircles")
+		.data(bins.filter(function(d) { return d.abovefloor != 0; } ))
+		.enter()
+		.append("circle")
+		.attr("class", "abovefloor-circles")
+		.attr("fill", "red")
+		.attr("stroke", "none")
+		.attr("cx", function(d) { return x(d.frequency) })
+		.attr("cy", function(d) { return y(d.max) })
+		.attr("r", 4);
+	}
 
 	if (hasIncident) {
 	    Line_chart.append("path")
@@ -639,6 +712,18 @@ window.ShowFrequencyGraph = (function ()
 		    $(content).find(".tooltip-incident")
 			.removeClass("hidden");
 		}
+		if (hasAboveFloor) {
+		    if (d.abovefloor) {
+			$(content).find(".tooltip-abovefloor .abovefloor")
+			    .html(formatter(d.abovefloor) + " dB");
+			$(content).find(".tooltip-abovefloor")
+			    .removeClass("hidden");
+		    }
+		    else {
+			$(content).find(".tooltip-abovefloor")
+			    .addClass("hidden");
+		    }
+		}
 	    };
 	    if (isVisible) {
 		updater();
@@ -664,6 +749,10 @@ window.ShowFrequencyGraph = (function ()
 	    if (hasIncident) {
 		Line_chart.select(".line-incident").attr("d", lineI);
 	    }
+	    if (hasAboveFloor) {
+		Line_chart.selectAll(".abovefloor-circles")
+		    .attr("cx", function(d) { return x(d.frequency) });
+	    }
 	    focus.select(".axis--x").call(xAxis);
 	    svg.select(".zoom").call(zoom.transform, d3.zoomIdentity
 				     .scale(width / (s[1] - s[0]))
@@ -678,6 +767,10 @@ window.ShowFrequencyGraph = (function ()
 	    Line_chart.select(".line-power").attr("d", line);
 	    if (hasIncident) {
 		Line_chart.select(".line-incident").attr("d", lineI);
+	    }
+	    if (hasAboveFloor) {
+		Line_chart.selectAll(".abovefloor-circles")
+		    .attr("cx", function(d) { return x(d.frequency) });
 	    }
 	    focus.select(".axis--x").call(xAxis);
 	    context.select(".brush")
@@ -734,6 +827,15 @@ window.ShowFrequencyGraph = (function ()
 	d.power     = +d.power;
 	if (_.has(d, "incident")) {
 	    d.incident = +d.incident;
+	}
+	if (_.has(d, "center_freq")) {
+	    d.center_freq = +d.center_freq;
+	}
+	if (_.has(d, "abovefloor") && d.abovefloor != "") {
+	    d.abovefloor = +d.abovefloor;
+	}
+	else {
+	    d.abovefloor = 0;
 	}
 	return d;
     }

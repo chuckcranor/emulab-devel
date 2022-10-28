@@ -78,6 +78,7 @@ my $FIND             = "/usr/bin/find";
 my $FORMAT1          = "portid,timestamp,frequency,power";
 my $FORMAT2          = $FORMAT1 . ",center_freq";
 my $FORMAT3          = $FORMAT2 . ",incident";
+my $CSVHEADER        = "frequency,power";
 my $MAILDELAY        = 3600;
 
 # un-taint path
@@ -93,7 +94,7 @@ sub NodeNotified($$$);
 sub HandleChild($);
 sub LoadNodeData($);
 sub HandleViolations($$$);
-sub WriteRawData($$$);
+sub WriteRawData($$$$);
 
 #
 # Explanatory text.
@@ -301,6 +302,7 @@ sub HandleChild($)
     my @dbinserts  = ();
     my %csvdata    = ();
     my $filestamp  = time();
+    my @abovefloor = ();
 
     # Add a DB insert to the list of violations to store in the DB.
     my $addInsert = sub {
@@ -420,6 +422,9 @@ sub HandleChild($)
 	print STDERR "Improper format from $address:$port: '$header'\n";
 	exit(1);
     }
+    # Set the CSV header; strip first two tokens. 
+    my @tokens = split(",", $header);
+    $CSVHEADER = join(",", splice(@tokens, 2));
 
     for (my $i = 0; $i < scalar(@lines); $i++) {
 	my $line = $lines[$i];
@@ -451,10 +456,7 @@ sub HandleChild($)
 	if (!exists($csvdata{"${nodeid}:${iface}"})) {
 	    $csvdata{"${nodeid}:${iface}"} = [];
 	}
-	my @csv = ($frequency, $power);
-	push(@csv, $center + 0.0) if (defined($center));
-	push(@csv, $incident + 0.0) if (defined($incident));
-	push(@{ $csvdata{"${nodeid}:${iface}"} }, \@csv);
+	push(@{ $csvdata{"${nodeid}:${iface}"} }, $measurement);
 	
 	#
 	# This is bogus, I was expecting the monitor to only send me
@@ -474,6 +476,12 @@ sub HandleChild($)
 	#
 	next
 	    if ($nodeid !~ /^cbrs/ && $frequency < 1000.0);
+
+	#
+	# We will adjust CSV data when there are any violations.
+	#
+	$measurement->{"abovefloor"} = $power - $floor;
+	push(@abovefloor, $measurement);
 	
 	#
 	# Check for a report that comes in after we have powered off the
@@ -593,7 +601,8 @@ sub HandleChild($)
     #
     # Write the raw data file(s)
     #
-    WriteRawData(\%csvdata, $filestamp, scalar(keys(%violaters)));
+    WriteRawData(\%csvdata, $filestamp,
+		 scalar(keys(%violaters)), scalar(@abovefloor));
 
     #
     # We send links to the data and the graph page in the email.
@@ -872,9 +881,11 @@ sub NodeNotify($$$)
 #
 # Write RAW data to CSV files in /usr/testbed/www
 #
-sub WriteRawData($$$)
+sub WriteRawData($$$$)
 {
-    my ($data, $filestamp, $violations) = @_;
+    my ($data, $filestamp, $violations, $abovefloor) = @_;
+    my $header = $CSVHEADER;
+    $header .= ",abovefloor" if ($abovefloor);
 
     foreach my $portid (keys(%{$data})) {
 	my @samples   = @{$data->{$portid}};
@@ -882,46 +893,41 @@ sub WriteRawData($$$)
 	my $tmpname   = "$RAWDATADIR/${portid}.tmp";
 	my $csvname   = "$RAWDATADIR/${portid}.csv";
 	my $gzsymlink = "$RAWDATADIR/${portid}.csv.gz";
-	my ($gzipname);
-	#
-	# When there are violations, we archive the raw data for longer
-	# in the archive directory, and the symlink points there instead.
-	#
-	if ($violations) {
-	    $gzipname  = "$RAWDATADIR/archive/${filename}.gz";
-	}
-	else {
-	    $gzipname  = "$RAWDATADIR/${filename}.gz";
-	}
+	my $gzipname  = "$RAWDATADIR/${filename}.gz";
 
 	#
 	# Prune historical data older then 14 days.
 	#
 	system("$FIND -E $RAWDATADIR -regex '^.*\-[0-9]+\.csv\.gz\$' ".
 	       "-mtime +14 -depth 1 -print " . ($impotent ? "" : "-delete"));
-	system("$FIND $RAWDATADIR/archive -type f -mtime +14 -print ".
+	system("$FIND $RAWDATADIR/archive -mtime +14 -print ".
 	       ($impotent ? "" : "-delete"));
 
 	if (open(CSV, "> $tmpname")) {
-	    my $first = $samples[0];
-
-	    print CSV "frequency,power";
-	    if (scalar(@$first) > 2) {
-		print CSV ",center_freq";
-	    }
-	    if (scalar(@$first) > 3) {
-		print CSV ",incident";
-	    }
-	    print CSV "\n";
+	    print CSV "$header\n";
 	    
 	    foreach my $ref (@samples) {
-		my ($freq, $power, $cfreq, $inci) = @$ref;
-		$freq  = sprintf("%.3f", $freq);
-		$power = sprintf("%.3f", $power);
-		$cfreq = (defined($cfreq) ? sprintf(",%.4f", $cfreq) : "");
-		$inci  = (defined($inci)  ? sprintf(",%.4f", $inci)  : "");
+		my $center      = "";
+		my $incident    = "";
 		
-		print CSV "$freq,$power${cfreq}${inci}\n";
+		my $freq  = sprintf("%.3f", $ref->{"frequency"});
+		my $power = sprintf("%.3f", $ref->{"power"});
+		if (defined($ref->{"center"})) {
+		    $center = sprintf(",%.4f", $ref->{"center"});
+		}
+		if (defined($ref->{"incident"})) {
+		    $incident = sprintf(",%.4f", $ref->{"incident"});
+		}
+		print CSV "$freq,$power${center}${incident}";
+		if ($abovefloor) {
+		    if (exists($ref->{"abovefloor"})) {
+			print CSV sprintf(",%.3f", $ref->{"abovefloor"});
+		    }
+		    else {
+			print CSV ",";
+		    }
+		}
+		print CSV "\n";
 	    }
 	    if (close(CSV)) {
 		system("$GZIP -c $tmpname > $gzipname");
@@ -933,10 +939,10 @@ sub WriteRawData($$$)
 		    print STDERR "Could not rename new CSV file: $!\n";
 		    return -1;
 		}
-		# A violation, symlink into the
-		if ($violations &&
-		    system("/bin/ln -sf archive/${filename}.gz ".
-			   "                  $RAWDATADIR/${filename}.gz")) {
+		# Above the noise floor, symlink into the main directory
+		if ($abovefloor &&
+		    system("/bin/ln -sf ../${filename}.gz ".
+			   "    $RAWDATADIR/archive/${filename}.gz")) {
 		    print STDERR "Could not create archive symlink\n";
 		    return -1;
 		}
