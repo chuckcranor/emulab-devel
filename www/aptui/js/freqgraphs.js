@@ -139,7 +139,8 @@ window.ShowFrequencyGraph = (function ()
 		.enter()
 		.append("circle")
 		.attr("class", "abovefloor-circles")
-		.attr("fill", "red")
+		.attr("fill", function(d) {
+		    return d.violation ? "red" : "blue"; })
 		.attr("stroke", "none")
 		.attr("cx", function(d) { return x(d.frequency) })
 		.attr("cy", function(d) { return y(d.power) })
@@ -331,6 +332,10 @@ window.ShowFrequencyGraph = (function ()
 		};
 		if (hasAboveFloor) {
 		    bin["abovefloor"] = d.abovefloor;
+		    bin["violation"]  = d.violation;
+		    if (d.abovefloor) {
+			console.info(bin);
+		    }
 		}
 		bins[x] = bin;
 		result.push(bin);
@@ -346,6 +351,12 @@ window.ShowFrequencyGraph = (function ()
 	    if (hasAboveFloor) {
 		if (d.abovefloor > bin.abovefloor) {
 		    bin.abovefloor = d.abovefloor;
+		}
+		if (d.violation) {
+		    bin.violation = 1;
+		}
+		if (d.abovefloor) {
+		    console.info(bin);
 		}
 	    }
 	    bin.samples.push(d);
@@ -512,7 +523,7 @@ window.ShowFrequencyGraph = (function ()
 		.enter()
 		.append("circle")
 		.attr("class", "abovefloor-circles")
-		.attr("fill", "red")
+		.attr("fill", function(d) { return d.violation ? "red" : "blue";})
 		.attr("stroke", "none")
 		.attr("cx", function(d) { return x(d.frequency) })
 		.attr("cy", function(d) { return y(d.max) })
@@ -740,6 +751,12 @@ window.ShowFrequencyGraph = (function ()
 	}
 	else {
 	    d.abovefloor = 0;
+	}
+	if (_.has(d, "violation") && d.abovefloor != "") {
+	    d.violation = +d.violation;
+	}
+	else {
+	    d.violation = 0;
 	}
 	return d;
     }

@@ -478,6 +478,7 @@ sub HandleChild($)
 	# We will adjust CSV data when there are any violations.
 	#
 	$measurement->{"abovefloor"} = $power - $floor;
+	$measurement->{"violation"}  = 0;
 	push(@abovefloor, $measurement);
 	
 	#
@@ -548,6 +549,7 @@ sub HandleChild($)
 		    $violaters{$nodeid}->{$iface} = [];
 		}
 		&$addInsert($node, $iface, $measurement);
+		$measurement->{"violation"} = 1;
 		push(@{$violaters{$nodeid}->{$iface}}, $measurement);
 
 		# Bump repeat count.
@@ -587,6 +589,7 @@ sub HandleChild($)
 		}
 		&$addInsert($node, $iface, $measurement);
 		push(@{$violaters{$nodeid}->{$iface}}, $measurement);
+		$measurement->{"violation"} = 1;
 
 		# Bump repeat count.
 		$measurement->{'repeatcount'} = $previous->{'repeatcount'} + 1;
@@ -897,6 +900,7 @@ sub WriteRawData($$$$)
     my ($data, $filestamp, $violations, $abovefloor) = @_;
     my $header = $CSVHEADER;
     $header .= ",abovefloor" if ($abovefloor);
+    $header .= ",violation" if ($abovefloor && $violations);
 
     foreach my $portid (keys(%{$data})) {
 	my @samples   = @{$data->{$portid}};
@@ -932,6 +936,15 @@ sub WriteRawData($$$$)
 		    }
 		    else {
 			print CSV ",";
+		    }
+		    if ($violations) {
+			if (exists($ref->{"violation"}) &&
+			    $ref->{"violation"} == 1) {
+			    print CSV ",1"
+			}
+			else {
+			    print CSV ",";
+			}
 		    }
 		}
 		print CSV "\n";
