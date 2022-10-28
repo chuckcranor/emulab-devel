@@ -998,7 +998,7 @@ window.ShowFrequencyGraph = (function ()
 
 	    var menu = processDir("", "", listing);
 	    //console.info($(menu).html());
-	    $(args.selector + ' .multilevel-menu').append(menu);
+	    $(args.selector + ' .multilevel-menu').html(menu);
 
 	    $(menu).find(".multilevel-menu-parent")
 		.hover(
@@ -1237,6 +1237,15 @@ window.ShowFrequencyGraph = (function ()
 	    Share(args);
 	});
 	BuildMenu(args);
+	if (_.has(args, "enableReload") && args.enableReload) {
+	    $(args.selector + ' .reload-button').click(function (e) {
+		BuildMenu(args);
+	    });
+	    $(args.selector + ' .reload-button').removeClass("hidden");
+	}
+	$(args.selector + ' [data-toggle="tooltip"]').tooltip({
+	    placement: 'auto',
+	});
     };
 }
 )();
