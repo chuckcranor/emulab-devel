@@ -70,12 +70,25 @@
   </div>
   <a type='button' disabled
 	  style="margin-right: 10px"
-	  class='btn btn-default btn-xs download-button pull-right'>
+          class='btn btn-default btn-xs download-button pull-right'
+          data-toggle='tooltip'
+          title='Download raw data (CSV file) for the current graph'
+          data-trigger="hover">
     Download</a>
   <a type='button' disabled
      style="margin-right: 10px"
-     class='btn btn-default btn-xs share-button pull-right'>
+     class='btn btn-default btn-xs share-button pull-right'
+     data-toggle='tooltip'
+     title='Share a link to the current graph'
+     data-trigger="hover">
     Share</a>
+  <a type='button' hidden
+     style="margin-right: 10px"
+     class='btn btn-default btn-xs reload-button pull-right'
+     data-toggle='tooltip'
+     title='Refesh the graph data (adding newer graphs)'
+     data-trigger="hover">
+    Reload</a>
   <% if (window.WHICH === "rfmonitor-mobile") { %>
     <a type='button' disabled target="_blank"
        style="margin-right: 10px"
@@ -111,17 +124,71 @@
 	    <img src='images/spinner.gif' /></center>
 	</div>
       </div>
+      <div id="maingraph-tooltip-popover"></div>
     </div>
   </div>
   <div class="panel panel-default" style="margin-bottom: 0px;">
     <div class="panel-body" style="padding: 0px;">
       <div class="frequency-graph frequency-graph-subgraph"
 	   style="height: 600px;"></div>
-      <div id="tooltip-popover"></div>
+      <div id="subgraph-tooltip-popover"></div>
     </div>
   </div>
   <div class='spinner hidden'>
     <center>
       <img src='images/spinner.gif' /></center>
+  </div>
+</div>
+<div class="hidden">
+  <div id="maingraph-tooltipTemplate">
+    <table class="table table-condensed border-none"
+           style="font-size: 14px; margin: 5px;">
+      <tbody>
+	<tr>
+          <td class="border-none">Frequency:</td>
+          <td class="border-none tooltip-frequency"></td>
+	</tr>
+	<tr>
+          <td class="border-none">Avg Power:</td>
+          <td class="border-none tooltip-avg"></td>
+	</tr>
+	<tr>
+          <td class="border-none">Max Power:</td>
+          <td class="border-none tooltip-max"></td>
+	</tr>
+	<tr>
+          <td class="border-none">Min Power:</td>
+          <td class="border-none tooltip-min"></td>
+	</tr>
+	<tr class="hidden tooltip-abovefloor">
+          <td class="border-none">Above Floor:</td>
+          <td class="border-none abovefloor"></td>
+	</tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="subgraph-tooltipTemplate">
+    <table class="table table-condensed border-none"
+           style="font-size: 14px; margin: 5px;">
+      <tbody>
+	<tr>
+          <td class="border-none">Frequency:</td>
+          <td class="border-none tooltip-freq"></td>
+	</tr>
+	<tr>
+          <td class="border-none">Power:</td>
+          <td class="border-none tooltip-power"></td>
+	</tr>
+	<tr>
+          <td class="border-none">Center:</td>
+          <td class="border-none tooltip-center"></td>
+	</tr>
+	<tr>
+	<tr class="hidden tooltip-abovefloor">
+          <td class="border-none">Above Floor:</td>
+          <td class="border-none abovefloor"></td>
+	</tr>
+      </tbody>
+    </table>
   </div>
 </div>

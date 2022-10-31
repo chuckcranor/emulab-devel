@@ -5555,6 +5555,7 @@ $(function ()
 		"archived" : false,
 		"which"    : which,
 		"endpoint" : endpoint,
+		"enableReload" : true,
 	    }
 	    // Narrow the range to the actual start/end of the aggregate.
 	    var blob = lastStatusBlob.sliverstatus[info.aggregate_urn];

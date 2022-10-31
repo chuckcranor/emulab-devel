@@ -25,16 +25,9 @@
     stroke: #000;
 }
 
-.frequency-graph .tooltip-freq,
-.frequency-graph .tooltip-power,
-.frequency-graph .tooltip-center,
-.frequency-graph .tooltip-incident,
-.frequency-graph .tooltip-abovefloor {
-    font-weight: bold;
-}
 .frequency-graph .tooltip-popover
 {
-    min-width: 200px !important;
+    min-width: 180px !important;
 }
 .frequency-graph .tooltip-incident {
     stroke: green;
