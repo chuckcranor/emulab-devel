@@ -1706,6 +1706,12 @@ okay:
 	    $image{'kernel'}  = "/boot/fedora8/vmlinuz-xenU";
 	    $image{'ramdisk'} = "/boot/fedora8/initrd-xenU";
 	}
+	elsif ($imagemetadata->{'PARTOS'} =~ /linux/i &&
+	       $imagemetadata->{'OSVERSION'} eq "5.15.0") {
+	    $private->{'ishvm'} = $ishvm = 1;
+	    undef $image{'kernel'};
+	    undef $image{'ramdisk'};
+	}
 	elsif ($imagename ne $defaultImage{'name'}) {
 	    #
 	    # See if we can dig the kernel out from the image.
