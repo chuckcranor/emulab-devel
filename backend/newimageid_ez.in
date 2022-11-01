@@ -648,8 +648,8 @@ if (1 || $debug) {
 my $loadpart = 0;
 if (!$isdataset) {
     $loadpart = $newimageid_args{"loadpart"};
-    if ($loadpart < 1 || $loadpart > 4) {
-	UserError("DOS Partion: Out of range.");
+    if (!$newimageid_args{"wholedisk"} && $loadpart < 1 || $loadpart > 4) {
+	UserError("DOS Partition: Out of range.");
     }
 }
 

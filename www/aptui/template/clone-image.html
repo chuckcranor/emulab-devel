@@ -166,6 +166,10 @@
 			   <% } %>
 			   value="yep"
 			   name="wholedisk">Yes</label>
+		    <% if (formfields.wholedisk) { %>
+		      <!-- disabled checkboxes are not serialized, so add hidden field -->
+		      <input type="hidden" name="wholedisk" value="yep">
+		    <% } %>
 		</div>
 	      </div>
 	      <div class="form-group">

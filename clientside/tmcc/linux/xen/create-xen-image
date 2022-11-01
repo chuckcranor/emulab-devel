@@ -47,10 +47,11 @@ sub usage()
 	"<vnodeid> filename KEY=VALUE ...\n";
     exit(-1);
 }
-my $optlist   = "F:S:prs:";
+my $optlist   = "F:S:prs:B:";
 my $aspack    = 0;
 my $norestart = 0;
 my $slice     = 0;
+my $bootslice;
 my $filename;
 
 # Frisbee master server params
@@ -109,6 +110,15 @@ if (defined($options{"S"})) {
 	$iserver = $1;
     } else {
 	die("Bad -S hostname: '$iserver'");
+    }
+}
+if (defined($options{"B"})) {
+    # A bootimage, the slice is the argument.
+    $bootslice = $options{"B"};
+    if ($bootslice =~ /^(\d+)$/) {
+	$bootslice = $1;
+    } else {
+	die("Bad -B slice: '$bootslice'");
     }
 }
 if (defined($options{"F"})) {
@@ -210,7 +220,8 @@ else {
 	$cmd = "$VIMAGE -x $vnodeid @ARGV";
     }
     else {
-	$cmd = "$zipper " . ($slice ? "-s $slice " : "") . "$device $filename ";
+	$cmd = "$zipper " . (defined($bootslice) ? "-B $bootslice " :
+			     ($slice ? "-s $slice " : "")) . "$device $filename ";
 
 	#
 	# If imageid is defined, we use the frisbee uploader.
