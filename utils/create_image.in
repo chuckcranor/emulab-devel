@@ -1121,10 +1121,16 @@ else {
     if ($isxenhost && !$isdataset && !$srcsigfile && !$dstsigfile) {
 	$sopts = " -S $SERVER -F $id";
 
-	$startslice = $image->loadpart();
-	$loadlength = $image->loadlength();
-	if ($startslice || $loadlength == 1) {
-	    $sopts .= " -s $startslice";
+	if ($image->isbootimage()) {
+	    $startslice = getimagebootslice($image);
+	    $sopts .= " -B $startslice";
+	}
+	else {
+	    $startslice = $image->loadpart();
+	    $loadlength = $image->loadlength();
+	    if ($startslice || $loadlength == 1) {
+		$sopts .= " -s $startslice";
+	    }
 	}
     }
 
