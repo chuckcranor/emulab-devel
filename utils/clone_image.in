@@ -419,7 +419,9 @@ if (defined($image)) {
 	;
     }
     $image->Unlock();
-    
+    if (defined($webtask)) {
+	$webtask->imageid($image->imageid());
+    }
     if ($nosnapshot) {
 	print "Not taking a snapshot, as directed\n"
 	    if ($debug);
@@ -740,6 +742,9 @@ if ($image->pid() eq TBOPSPID()) {
 }
 if ($debug) {
     print "Created $image\n";
+}
+if (defined($webtask)) {
+    $webtask->imageid($image->imageid());
 }
 if ($nosnapshot) {
     print "Not taking a snapshot, as directed\n"

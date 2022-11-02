@@ -16,7 +16,7 @@
               col-xs-12'>
     <div class='panel panel-default'>
       <div class='panel-heading'>
-        <h3 class='panel-title'>Clone Image</h3>
+        <h3 class='panel-title'>Clone Image From Node</h3>
       </div>
       <div class='panel-body'>
 	<center>
@@ -28,58 +28,19 @@
               class='form-horizontal' role='form'>
 	  <div class='row'>
 	    <div class='col-sm-12'>
-	      <% if (projects.length == 1) { %>
-		<div class="form-group">
-		  <input name="image_pid" readonly
-			 id="image_pid"
-			 value="<%- projects[0][0] %>"
-			 class="form-control format-me"
-			 data-label="Project"
-			 data-key="image_pid">
-		</div>
-	      <% } else { %>
-		<div class="form-group">
-		  <select name="image_pid"
-			  id="image_pid"
-			  class='form-control format-me'
-			  data-key="image_pid"
-			  data-label="Project"
-			  placeholder='Please Select'>
-		    <option value=''>Please Select</option>
-		    <% _.each(projects, function(value, key) { %>
-		      <option 
-			  <% if (_.has(formfields, 'image_pid') &&
-			    formfields.image_pid == key) { %>
-			  selected
-			  <% } %>
-			  value='<%= key %>'> <%= key %>
-		      </option>
-		    <% }); %>
-		  </select>
-		</div>
-	      <% } %>
-	      <% if (projects.length == 1 && projects[0].length == 1) { %>
-		<div class="form-group">
-		  <input name="image_gid" readonly
-			 id="image_gid"
-			 value="<%- projects[0][0] %>"
-			 class="form-control format-me"
-			 data-label="Group"
-			 data-key="image_gid">
-		</div>
-	      <% } else { %>
-		<div class="form-group">
-		  <div class="format-me"
-		       id="image_gid"
-		       data-label="Group"
-		       data-key="image_gid">
-		    <input name="image_gid" readonly
-			   class="form-control"
-			   placeholder="Please select Project first"
-			   value="">
-		  </div>
-		</div>
-	      <% } %>
+	      <div class="form-group">
+		<input name="node_id"
+		       <% if (window.NODE !== undefined) { %>
+		       value="<%- window.NODE %>"
+		       <% } %>
+		       class="form-control format-me"
+		       data-key="node_id"
+		       data-label="Node ID"
+		       <% if (isadmin && window.NODE === undefined) { %>
+		       placeholder="node is optional for administrators"
+		       <% } %>
+		       type="text">
+	      </div>
 	      <div class="form-group">
 		<input name="imagename"
 		       value=""
@@ -171,19 +132,6 @@
 		      <input type="hidden" name="wholedisk" value="yep">
 		    <% } %>
 		</div>
-	      </div>
-	      <div class="form-group">
-		<input name="node_id"
-		       <% if (window.NODE !== undefined) { %>
-		       value="<%- window.NODE %>"
-		       <% } %>
-		       class="form-control format-me"
-		       data-key="node_id"
-		       data-label="Node ID"
-		       <% if (isadmin && window.NODE === undefined) { %>
-		       placeholder="node is optional for administrators"
-		       <% } %>
-		       type="text">
 	      </div>
 	      <div class="form-group">
 		<div class="format-me" 

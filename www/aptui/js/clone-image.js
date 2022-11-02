@@ -8,10 +8,6 @@ $(function ()
     var mainString     = templates['clone-image'];
     var mainTemplate   = _.template(mainString);
     var formfields     = {};
-    var projlist       = null;
-    var oslist         = null;
-    var osfeatures     = null;
-    var alltypes       = null;
     var isadmin        = false;
 
     function JsonParse(id)
@@ -24,10 +20,6 @@ $(function ()
 	window.APT_OPTIONS.initialize(sup);
 
 	isadmin     = window.ISADMIN;
-	projlist    = JsonParse('#projects-json');
-	oslist      = JsonParse('#oslist-json');
-	osfeatures  = JsonParse('#osfeatures-json');
-	alltypes    = JsonParse('#alltypes-json');
 
 	if (window.BASEIMAGE_UUID === undefined) {
 	    GeneratePageBody(formfields);
@@ -58,11 +50,7 @@ $(function ()
 	// Generate the template.
 	var html = mainTemplate({
 	    formfields:		formfields,
-	    projects:           projlist,
 	    isadmin:		isadmin,
-	    alltypes:           alltypes,
-	    oslist:		oslist,
-	    osfeatures:         osfeatures,
 	});
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
@@ -81,11 +69,6 @@ $(function ()
 	else {
 	    $("#shared-global-radio-neither").prop("checked", "checked");
 	}
-	// Project change handler, change group list
-	$('#image_pid').change(function (event) {
-	    UpdateGroupSelector();
-	});
-
 	// This activates the tooltip subsystem.
 	$('[data-toggle="tooltip"]').tooltip({
 	    trigger: 'hover',
@@ -107,40 +90,6 @@ $(function ()
 	});
     }
 
-    /*
-     * When the project is changed, change group selector.
-     */ 
-    function UpdateGroupSelector()
-    {
-	var pid = $('#image_pid').val();
-	var glist = projlist[pid];
-	console.info(pid, glist);
-
-	if (glist.length == 1) {
-	    var gid = glist[0];
-
-	    // Readonly form control.
-	    $('#image_gid').html(
-		"<input name=image_gid readonly " +
-		    "       class='form-control' value='" + gid + "'>");
-	    return;
-	}
-	var html = "";
-	_.each(glist, function(gid) {
-	    var selected = "";
-	    // Select the project group by default.
-	    if (gid == pid) {
-		selected = "selected";
-	    }
-	    html = html +
-		"<option " + selected + " value=" + gid + ">" +
-		gid + "</option>";
-	});
-	$('#image_gid').html(
-	    "<select name=image_gid class='form-control'>" +
-		html + "</select>");
-    }
-    
     //
     // Submit the form.
     //
