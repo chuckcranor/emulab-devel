@@ -874,8 +874,9 @@ if (defined($parentos)) {
     #
     # Temp hack until we put all mappings into XML file.
     #
+    my $pname = $parentos->pid() . "/" . $parentos->imagename();    
     if ($parentos->osname() =~ /^XEN4/) {
-        system("$RUNSONXEN $imagepid,$imagename");
+        system("$RUNSONXEN -p $pname $imagepid,$imagename");
     }
 }
 
