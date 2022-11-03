@@ -66,6 +66,7 @@ my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
 my $TBRFOPS          = "powder-rfmon\@flux.utah.edu";
 my $OURDOMAIN        = "@OURDOMAIN@";
+my $DEFAULT_URN      = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 my $TBBASE           = "@TBBASE@";
 my $MAINSITE         = @TBMAINSITE@;
 my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
@@ -603,6 +604,34 @@ sub HandleChild($)
     #
     WriteRawData(\%csvdata, $filestamp,
 		 scalar(keys(%violaters)), scalar(@abovefloor));
+
+    #
+    # Insert transmission data (new version).
+    #
+    foreach my $measurement (@abovefloor) {
+	my $nodeid    = $measurement->{"node_id"};
+	my $iface     = $measurement->{"iface"};
+	my $frequency = $measurement->{"frequency"} + 0.0;
+	my $power     = $measurement->{"power"} + 0.0;
+	my $timestamp = $measurement->{"timestamp"};
+	my $center    = $measurement->{"center"};
+	my $abovefloor= $measurement->{"abovefloor"};
+	my $violation = $measurement->{"violation"};
+
+	if (!$impotent) {
+	    DBQueryFatal("replace into apt_aggregate_radio_transmissions set ".
+			 "  aggregate_urn='$DEFAULT_URN', ".
+			 "  node_id='$nodeid', ".
+			 "  iface='$iface',frontend='none', ".
+			 "  tstamp=FROM_UNIXTIME($filestamp), ".
+			 "  frequency='$frequency', ".
+			 "  power='$power',center='$center', ".
+			 "  abovefloor='$abovefloor',violation='$violation'");
+	}
+	else {
+	    print "Would insert apt_aggregate_radio_transmission entry\n";
+	}
+    }
 
     #
     # We send links to the data and the graph page in the email.

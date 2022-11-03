@@ -220,6 +220,26 @@ CREATE TABLE `apt_aggregate_radio_frontends` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_aggregate_radio_transmissions
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_radio_transmissions`;
+CREATE TABLE `apt_aggregate_radio_transmissions` (
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `node_id` varchar(32) NOT NULL default '',
+  `iface` varchar(32) NOT NULL default '',
+  `frontend` enum('TDD','FDD','none') NOT NULL default 'none',
+  `tstamp` datetime NOT NULL default '0000-00-00 00:00:00',
+  `frequency` float(8,3) NOT NULL DEFAULT '0.000',
+  `power` float(8,3) NOT NULL DEFAULT '0.000',
+  `center` float(8,4) NOT NULL DEFAULT '0.0000',
+  `abovefloor` float(8,3) NOT NULL DEFAULT '0.000',
+  `violation` tinyint(1) NOT NULL default '0',  
+  KEY frontend (`aggregate_urn`,`node_id`,`iface`,`frontend`),
+  KEY stamp (`aggregate_urn`,`node_id`,`iface`,`frontend`,`tstamp`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregate_radioinfo`
 --
 
