@@ -1,0 +1,373 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+use File::Basename;
+use File::stat;
+use Fcntl ':mode';
+
+#
+# Process monitor CSV files and enter transmissions into the database.
+#
+sub usage()
+{
+    print "Usage: process-monitor-graphs [-d] [-n]\n";
+    exit(1);
+}
+my $optlist   = "dn";
+my $debug     = 0;
+my $impotent  = 0;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $OURDOMAIN        = "@OURDOMAIN@";
+my $MAINSITE         = @TBMAINSITE@;
+my $GUNZIP           = "/usr/bin/gunzip";
+my $CSVHEADER        = "frequency,power,center_freq";
+my $DEFAULT_URN      = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
+my $RFMONDIR	     = "$TB/www";
+my $RFMONDIR_MOBILE  = "$RFMONDIR/rfmonitor-mobile";
+my $RFMONDIR_FES     = "$RFMONDIR/rfmonitor-endpoint";
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub fatal($);
+
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use libaudit;
+use libtestbed;
+use emutil;
+use libEmulab;
+use APT_Aggregate;
+use GeniHRN;
+
+#
+# Do not run when the testbed is disabled.
+#
+exit(0)
+    if (NoLogins());
+
+# Record output in case of error.
+LogStart(0)
+    if (!$debug);
+
+#
+# Process a single CSV file. 
+#
+sub ProcessFile($$)
+{
+    my ($aggregate_urn, $filename) = @_;
+    my $index;
+    my ($node_id,$iface,$tstamp);
+
+    if (basename($filename) =~ /^([^:]+):([^\-]+)\-(\d+)\.csv\.gz$/) {
+	$node_id = $1;
+	$iface   = $2;
+	$tstamp  = $3;
+    }
+    else {
+	return 0;
+    }
+    print "Processing $filename\n";
+    
+    if (!open(CSV, "$GUNZIP -c -q $filename |")) {
+	print STDERR "Could not open $filename for reading\n";
+	return -1;
+    }
+    # First line of CSV file, check header to make sure we got
+    # a CSV with the abovefloor and violation columns,
+    my $header = <CSV>;
+    if ($header !~ /^${CSVHEADER}/) {
+	if ($debug) {
+	    print STDERR "Skipping $filename, does not have proper header\n";
+	}
+	close(CSV);
+	return 0;
+    }
+    chomp($header);
+    my @tokens = split(",", $header);
+    #
+    # Lets make sure we know which column is the abovefloor column.
+    # And assume violations is always next.
+    #
+    for (my $i = 0; $i < scalar(@tokens); $i++) {
+	my $token = $tokens[$i];
+
+	if ($token eq "abovefloor" && $i + 1 < scalar(@tokens) &&
+	    $tokens[$i + 1] eq "violation") {
+	    $index = $i;
+	    last;
+	}
+    }
+    if (!defined($index)) {
+	if ($debug > 1) {
+	    print STDERR "Skipping $filename, does not have abovefloor data\n";
+	}
+	close(CSV);
+	return 0;
+    }
+    while (<CSV>) {
+	my $line = $_;
+	chomp($line);
+	my @tokens = split(",", $line);
+	# If nothing in abovefloor, skip.
+	next
+	    if ($index >= scalar(@tokens));
+
+	my ($frequency,$power,$center_freq) = @tokens;
+	my $abovefloor = $tokens[$index];
+	my $violation  = ($tokens[$index + 1] ? 1 : 0);
+	
+	if ($frequency !~ /^[\.\d]+$/ ||
+	    $power !~ /^[-\.\d]+$/ ||
+	    $center_freq !~ /^[-\.\d]+$/ ||
+	    $abovefloor !~ /^[-\.\d]+$/) {
+	    print STDERR "Improper float(s):\n";
+	    print STDERR "   $line\n";
+	    next;
+	}
+	print "$tstamp: $frequency,$power,$center_freq,$abovefloor,$violation\n";
+	
+	if (!$impotent) {
+	    DBQueryFatal("replace into apt_aggregate_radio_transmissions set ".
+			 "  aggregate_urn='$aggregate_urn', ".
+			 "  node_id='$node_id', ".
+			 "  iface='$iface',frontend='none', ".
+			 "  tstamp=FROM_UNIXTIME($tstamp), ".
+			 "  frequency='$frequency', ".
+			 "  power='$power',center='$center_freq', ".
+			 "  abovefloor='$abovefloor',violation='$violation'");
+	}
+    }
+    close(CSV);
+    return 0;
+}
+
+sub ProcessDirectory($$$)
+{
+    my ($aggregate_urn, $directory, $lastrun) = @_;
+
+    print "Processing $directory\n";
+
+    opendir(DIR, $directory)
+	or fatal("Could not open $directory for reading: $!");
+    my @files  = readdir(DIR);
+    closedir(DIR);
+
+    foreach my $file (@files) {
+	my $stat = stat("$directory/$file");
+	if (!$stat) {
+	    fatal("Could not stat $directory/$file");
+	}
+	next
+	    if (S_ISDIR($stat->mode));
+	next
+	    if ($stat->mtime < $lastrun);
+	
+	if (ProcessFile($aggregate_urn, "$directory/$file")) {
+	    return -1;
+	}
+    }
+    return 0;
+}
+
+sub ProcessMobileEndpoints()
+{
+    my $stampfile = "$RFMONDIR_MOBILE/.lastrun";
+    my $now       = time();
+    my $lastrun   = 0;
+
+    if (-e $stampfile) {
+	$lastrun = `/bin/cat $stampfile`;
+	if ($?) {
+	    fatal("Could not read $stampfile");
+	}
+	chomp($lastrun);
+    }
+    #
+    # Process each subdir, using the name of the subdir to map
+    # to the aggregate_urn, which we need for the DB inserts.
+    #
+    opendir(DIR, $RFMONDIR_MOBILE)
+	or fatal("Could not open $RFMONDIR_MOBILE for reading: $!");
+    my @files  = readdir(DIR);
+    closedir(DIR);
+
+    foreach my $file (@files) {
+	next
+	    if ($file eq "." || $file eq "..");
+	my $stat = stat("$RFMONDIR_MOBILE/$file");
+	if (!$stat) {
+	    fatal("Could not stat $RFMONDIR_MOBILE/$file");
+	}
+	next
+	    if (!S_ISDIR($stat->mode));
+
+	my $busname = $file;
+	if ($busname eq "bus-test2") {
+	    $busname = "BusTest2";
+	}
+	else {
+	    $busname =~ s/bus\-/Bus/;
+	}
+	my $aggregate = APT_Aggregate->LookupByNickname($busname);
+	if (!defined($aggregate)) {
+	    fatal("No such aggregate $busname");
+	}
+
+	if (ProcessDirectory($aggregate->urn(),
+			     "$RFMONDIR_MOBILE/$file", $lastrun)) {
+	    fatal("Processing $RFMONDIR_MOBILE/$file");
+	}
+    }
+    #
+    # Update the lastrun to avoid repeats.
+    #
+    if (!$impotent) {
+	if (open(RUN, "> $stampfile")) {
+	    print RUN "$now\n";
+	    close(RUN);
+	}
+	else {
+	    fatal("Could not write new stampfile $stampfile");
+	}
+    }
+}
+
+sub ProcessFixedEndpoints()
+{
+    my $stampfile = "$RFMONDIR_FES/.lastrun";
+    my $now       = time();
+    my $lastrun   = 0;
+
+    if (-e $stampfile) {
+	$lastrun = `/bin/cat $stampfile`;
+	if ($?) {
+	    fatal("Could not read $stampfile");
+	}
+	chomp($lastrun);
+    }
+    #
+    # Process each subdir, using the name of the subdir to map
+    # to the aggregate_urn, which we need for the DB inserts.
+    #
+    opendir(DIR, $RFMONDIR_FES)
+	or fatal("Could not open $RFMONDIR_FES for reading: $!");
+    my @files  = readdir(DIR);
+    closedir(DIR);
+
+    foreach my $file (@files) {
+	next
+	    if ($file eq "." || $file eq "..");
+	my $stat = stat("$RFMONDIR_FES/$file");
+	if (!$stat) {
+	    fatal("Could not stat $RFMONDIR_FES/$file");
+	}
+	next
+	    if (!S_ISDIR($stat->mode));
+
+	my $domain = "$file" . ".powderwireless.net";
+	my $aggregate = APT_Aggregate->LookupByDomain($domain);
+	if (!defined($aggregate)) {
+	    fatal("No such aggregate $domain");
+	}
+
+	if (ProcessDirectory($aggregate->urn(),
+			     "$RFMONDIR_FES/$file", $lastrun)) {
+	    fatal("Processing $RFMONDIR_FES/$file");
+	}
+    }
+    #
+    # Update the lastrun to avoid repeats.
+    #
+    if (!$impotent) {
+	if (open(RUN, "> $stampfile")) {
+	    print RUN "$now\n";
+	    close(RUN);
+	}
+	else {
+	    fatal("Could not write new stampfile $stampfile");
+	}
+    }
+}
+#ProcessMobileEndpoints();
+ProcessFixedEndpoints();
+
+# No errors at this point, nothing to report.
+AuditEnd()
+    if (!$debug);
+exit(0);
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    if (! ($debug || $impotent)) {
+	#
+	# Send a message to the testbed list. 
+	#
+	SENDMAIL($TBOPS,
+		 "process-monitor-graphs died",
+		 $msg,
+		 $TBOPS);
+    }
+    die("*** $0:\n".
+	"    $msg\n");
+}

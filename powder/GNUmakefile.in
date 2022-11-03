@@ -39,7 +39,7 @@ LIBEXEC_SCRIPTS	= $(WEB_SBIN_SCRIPTS)
 
 ifeq ($(ISMAINSITE),1)
 SBIN_SCRIPTS   += powder_keepalive powder_shutdown powderstats powder_report \
-		  rfbaseline cnode-tempmonitor
+		  rfbaseline cnode-tempmonitor process-monitor-graphs
 WEB_SBIN_SCRIPTS= webpowder_shutdown
 INSTALLTARGET   = mainsite-install
 endif
