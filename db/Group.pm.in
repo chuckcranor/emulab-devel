@@ -778,6 +778,12 @@ sub AccessCheck($$$)
 	# 
 	$mintrust = PROJMEMBERTRUST_USER();
     }
+    elsif ($access_type == TB_PROJECT_CREATEPROFILE()) {
+	#
+	# Temporary until we can do per subgroup profiles.
+	# 
+	$mintrust = PROJMEMBERTRUST_USER();
+    }
     elsif ($access_type == TB_PROJECT_MAKEOSID() ||
 	   $access_type == TB_PROJECT_MAKEIMAGEID() ||
 	   $access_type == TB_PROJECT_CREATEEXPT() ||

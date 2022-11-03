@@ -299,7 +299,7 @@ sub CreateProfile()
     if (!defined($project)) {
 	UserError({"profile_pid" => "No such project exists"})
     }
-    elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
+    elsif (!$project->AccessCheck($this_user, TB_PROJECT_CREATEPROFILE())) {
 	UserError({"profile_pid" => "Not enough permission in this project"});
     }
     $usenewgenilib = UseNewGenilib($project);
@@ -674,7 +674,7 @@ sub DuplicateProfile()
     if (!defined($project)) {
 	UserErrorSane({"pid" => "No such project exists"})
     }
-    elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
+    elsif (!$project->AccessCheck($this_user, TB_PROJECT_CREATEPROFILE())) {
 	UserErrorSane({"pid" => "Not enough permission in this project"});
     }
     if (! TBcheck_dbslot($name, "apt_profiles",
@@ -1086,7 +1086,7 @@ sub UpdateProfileFromRepo()
     if (!defined($project)) {
 	fatal("No such project exists");
     }
-    elsif (!$project->AccessCheck($this_user, TB_PROJECT_MAKEIMAGEID())) {
+    elsif (!$project->AccessCheck($this_user, TB_PROJECT_CREATEPROFILE())) {
 	fatal("Not enough permission in this project");
     }
     if ($profile->WaitForLock(30)) {

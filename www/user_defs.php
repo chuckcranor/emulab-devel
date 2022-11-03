@@ -1519,6 +1519,7 @@ class User
     #
     function ProjectAccessList($access_type) {
     	global $TB_PROJECT_CREATEEXPT;
+    	global $TB_PROJECT_CREATEPROFILE;
 	global $TB_PROJECT_MAKEOSID;
 	global $TB_PROJECT_MAKEIMAGEID;
 	global $TB_PROJECT_MAKEGROUP;
@@ -1543,6 +1544,9 @@ class User
 	if ($access_type == $TB_PROJECT_READINFO) {
 	    $trust_clause = "trust!='$trust_none'";
             $pdisabled    = "";
+	}
+	elseif ($access_type == $TB_PROJECT_CREATEPROFILE) {
+	    $trust_clause = "trust!='$trust_none'";
 	}
 	elseif ($access_type == $TB_PROJECT_MAKEGROUP) {
 	    $trust_clause = "trust='$trust_group'";

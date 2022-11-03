@@ -260,7 +260,7 @@ function SPITFORM($formfields, $errors)
 #
 # See what projects the user can do this in.
 #
-$projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
+$projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEPROFILE);
 
 if (isset($action) && ($action == "edit" || $action == "copy")) {
     if (!isset($uuid)) {

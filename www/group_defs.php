@@ -328,6 +328,7 @@ class Group
 	global $TB_PROJECT_MAKEIMAGEID;
 	global $TB_PROJECT_DELIMAGEID;
 	global $TB_PROJECT_CREATEEXPT;
+	global $TB_PROJECT_CREATEPROFILE;
 	global $TB_PROJECT_MIN;
 	global $TB_PROJECT_MAX;
 	global $TBDB_TRUST_USER;
@@ -378,7 +379,14 @@ class Group
 	elseif ($access_type == $TB_PROJECT_MAKEGROUP ||
 		$access_type == $TB_PROJECT_DELGROUP) {
             if ($access_type == $TB_PROJECT_DELGROUP) {
-                $leader  = $this->GetLeader();
+                #
+                # If user is project_root, allowed to delete any group
+                #
+                if (TBMinTrust(TBGrpTrust($uid, $pid, $pid),
+                               $TBDB_TRUST_PROJROOT)) {
+                    return 1;
+                }
+                $leader = $this->GetLeader();
 		if ($user->SameUser($leader)) {
                     return 1;
                 }
@@ -395,6 +403,9 @@ class Group
 		$access_type == $TB_PROJECT_MAKEIMAGEID ||
 		$access_type == $TB_PROJECT_CREATEEXPT) {
 	    $mintrust = $TBDB_TRUST_LOCALROOT;
+	}
+	elseif ($access_type == $TB_PROJECT_CREATEPROFILE) {
+	    $mintrust = $TBDB_TRUST_USER;
 	}
 	elseif ($access_type == $TB_PROJECT_ADDUSER ||
 		$access_type == $TB_PROJECT_EDITGROUP) {
