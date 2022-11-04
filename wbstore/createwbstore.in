@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2020 University of Utah and the Flux Group.
+# Copyright (c) 2020-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -262,8 +262,12 @@ if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
     #
     my $ix = 0;
     do {
-	$portoffset = (TBGetUniqueIndex("syncthing_index", 0, 1) % 100);
-	if (++$ix >= 100) {
+	#
+	# XXX +1, to avoid portoffset of zero. Don't want to clash with a
+	# system-wide instance of syncthing on aggregates.
+	#
+	$portoffset = (TBGetUniqueIndex("syncthing_index", 0, 1) % 200) + 1;
+	if (++$ix >= 200) {
 	    fatal("createconfig: could not find available port!");
 	}
     } while (!portOK(8384 + int($portoffset)));
