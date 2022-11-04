@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2019, 2021 University of Utah and the Flux Group.
+# Copyright (c) 2019-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -1850,7 +1850,7 @@ sub setPortVlan($$@) {
 		# vlan1
 		#
 		if ($atag == 1) {
-		    warn "$id: ERROR: Trunk port $portobj[$i] has access vlan1, fix it!\n";
+		    warn "$id: WARNING: Trunk port $portobj[$i] has access vlan1, you should remove it.\n";
 		}
 	    }
 
@@ -1862,7 +1862,7 @@ sub setPortVlan($$@) {
 		push @enablelist, $swport;
 	    }
 	} else {
-	    warn "$id: ERROR: Unknown state for port $portobj[$i], fix it!\n";
+	    warn "$id: WARNING: Unknown mode for port $portobj[$i], not access or trunk, skipping.\n";
 	}
 	$i++;
     }
