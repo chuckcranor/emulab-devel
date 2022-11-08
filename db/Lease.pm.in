@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2020 University of Utah and the Flux Group.
+# Copyright (c) 2012-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -557,6 +557,27 @@ sub ClearExclusiveUse($) {
     my ($self) = @_;
 
     return $self->SetAttribute("exclusive_use", 0, "integer");
+}
+
+sub IsPermanent($) {
+    my ($self) = @_;
+
+    # No lease is permanent unless attribute is set non-zero
+    my $rv = $self->GetAttribute("permanent");
+    return $rv ? 1 : 0;
+}
+
+sub SetPermanent($) {
+    my ($self) = @_;
+
+    return $self->SetAttribute("permanent", 1, "integer");
+}
+
+sub ClearPermanent($) {
+    my ($self) = @_;
+
+    $self->DeleteAttribute("permanent");
+    return 0;
 }
 
 #
