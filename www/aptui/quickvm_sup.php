@@ -77,8 +77,8 @@ $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
-    echo "</script>\n";
     echo "    window.CLASSIC  = '$TBBASE';\n";
+    echo "</script>\n";
     if (!$spatrequired) {
 	echo "<script src='$APTBASE/js/lib/jquery.min.js'></script>\n";
 	SPITNULLREQUIRE();
