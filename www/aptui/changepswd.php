@@ -89,7 +89,7 @@ if (isset($key) || isset($reset)) {
     }
     if ($user->chpasswd_key() != $key) {
         SPITUSERERROR("Please copy the link from your email, and then paste ".
-                      "it into the same browser window/tab that you used ".
+                      "it into the same browser tab/window that you used ".
                       "to request the reset link.", 1);
         return;
     }
