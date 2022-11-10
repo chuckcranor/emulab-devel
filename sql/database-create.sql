@@ -235,6 +235,7 @@ CREATE TABLE `apt_aggregate_radio_transmissions` (
   `center` float(8,4) NOT NULL DEFAULT '0.0000',
   `abovefloor` float(8,3) NOT NULL DEFAULT '0.000',
   `violation` tinyint(1) NOT NULL default '0',  
+  `instance_uuid` varchar(40) default NULL,
   KEY frontend (`aggregate_urn`,`node_id`,`iface`,`frontend`),
   KEY stamp (`aggregate_urn`,`node_id`,`iface`,`frontend`,`tstamp`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
