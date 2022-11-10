@@ -171,6 +171,8 @@ use libtestbed;
 use emutil;
 use libEmulab;
 use Experiment;
+use APT_Instance;
+use Node;
 use Brand;
 if ($PGENISUPPORT) {
     require GeniSlice;
@@ -480,6 +482,7 @@ sub HandleChild($)
 	#
 	$measurement->{"abovefloor"} = $power - $floor;
 	$measurement->{"violation"}  = 0;
+	$measurement->{"instance"}   = undef;
 	push(@abovefloor, $measurement);
 	
 	#
@@ -606,6 +609,41 @@ sub HandleChild($)
 		 scalar(keys(%violaters)), scalar(@abovefloor));
 
     #
+    # On the mainsite, we can figure out the instance holding the
+    # resource and add it to the transmissions table.
+    #
+    if ($MAINSITE && @abovefloor) {
+	foreach my $measurement (@abovefloor) {
+	    my $node_id = $measurement->{"node_id"};
+	    my $node    = Node->Lookup($node_id);
+
+	    if (!$node) {
+		print STDERR "Could not lookup node: $node_id\n";
+		next;
+	    }
+	    next
+		if (!$node->IsReserved());
+
+	    my $experiment = $node->Reservation();
+	    if (!$experiment) {
+		print STDERR "Could not lookup experiment for $node_id\n";
+		next;
+	    }
+	    my $slice_uuid = $experiment->slice_uuid();
+	    if (!$slice_uuid) {
+		print STDERR "No slice for experiment $experiment\n";
+		next;
+	    }
+	    my $instance = APT_Instance->LookupBySlice($slice_uuid);
+	    if (!$instance) {
+		print STDERR "No APT instance for experiment $experiment\n";
+		next;
+	    }
+	    $measurement->{'instance'} = $instance->uuid();
+	}
+    }
+
+    #
     # Insert transmission data (new version).
     #
     foreach my $measurement (@abovefloor) {
@@ -617,6 +655,7 @@ sub HandleChild($)
 	my $center    = $measurement->{"center"};
 	my $abovefloor= $measurement->{"abovefloor"};
 	my $violation = $measurement->{"violation"};
+	my $instance  = $measurement->{"instance"};
 
 	if (!$impotent) {
 	    DBQueryFatal("replace into apt_aggregate_radio_transmissions set ".
@@ -625,6 +664,8 @@ sub HandleChild($)
 			 "  iface='$iface',frontend='none', ".
 			 "  tstamp=FROM_UNIXTIME($filestamp), ".
 			 "  frequency='$frequency', ".
+			 (defined($instance) ?
+			  "instance_uuid='$instance', " : "").
 			 "  power='$power',center='$center', ".
 			 "  abovefloor='$abovefloor',violation='$violation'");
 	}
