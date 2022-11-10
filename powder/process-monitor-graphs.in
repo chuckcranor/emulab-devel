@@ -212,12 +212,13 @@ sub ProcessDirectory($$$)
     closedir(DIR);
 
     foreach my $file (@files) {
+	next
+	    if ($file !~ /^([^:]+):([^\-]+)\-(\d+)\.csv\.gz$/);
+	
 	my $stat = stat("$directory/$file");
 	if (!$stat) {
 	    fatal("Could not stat $directory/$file");
 	}
-	next
-	    if (S_ISDIR($stat->mode));
 	next
 	    if ($stat->mtime < $lastrun);
 	
