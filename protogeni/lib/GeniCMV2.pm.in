@@ -6994,7 +6994,7 @@ sub ServiceLogs($)
     }
     # Terminated slices get nothing.
     if ($slice->termination_pending()) {
-	return GeniResponse->Create(GENIRESPONSE_INPROGRESS(), undef,
+	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
 				    "Slice is marked for termination");
     }
     my $sliver = GeniSliver->Lookup($sliver_urn);
@@ -7011,6 +7011,10 @@ sub ServiceLogs($)
     if (!defined($node)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				    "No node for sliver urn");
+    }
+    if (!$node->isup()) {
+	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
+				    "Node is not ready");
     }
     if (!defined(GeniCM::FlipToUser($slice, $user))) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
