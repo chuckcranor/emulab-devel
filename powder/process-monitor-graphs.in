@@ -96,7 +96,9 @@ use libtestbed;
 use emutil;
 use libEmulab;
 use APT_Aggregate;
+use APT_Instance;
 use GeniHRN;
+use GeniXML;
 
 #
 # Do not run when the testbed is disabled.
@@ -115,6 +117,7 @@ sub ProcessFile($$)
 {
     my ($aggregate_urn, $filename) = @_;
     my $index;
+    my $instance_uuid;
     my ($node_id,$iface,$tstamp);
 
     if (basename($filename) =~ /^([^:]+):([^\-]+)\-(\d+)\.csv\.gz$/) {
@@ -126,7 +129,12 @@ sub ProcessFile($$)
 	return 0;
     }
     print "Processing $filename\n";
-    
+
+    my $aggregate = APT_Aggregate->Lookup($aggregate_urn);
+    if (!defined($aggregate)) {
+	print STDERR "No such aggregate: $aggregate_urn\n";
+	return -1;
+    }
     if (!open(CSV, "$GUNZIP -c -q $filename |")) {
 	print STDERR "Could not open $filename for reading\n";
 	return -1;
@@ -163,6 +171,66 @@ sub ProcessFile($$)
 	close(CSV);
 	return 0;
     }
+    my @instances = APT_Instance->LookupForAggregate($aggregate);
+    if (@instances) {
+	# Find the current instance using this node.
+	foreach my $ref (@instances) {
+	    my $uuid = $ref->uuid();
+	    next
+		if (!$ref->started());
+	
+	    my $started = str2time($ref->started());
+	    next
+		if ($tstamp < $started);
+
+	    my $query_result =
+		DBQueryWarn("select uuid from apt_instance_sliver_status ".
+			    "where uuid='$uuid' and ".
+			    "      aggregate_urn='$aggregate_urn' and ".
+			    "      resource_id='$node_id'");
+	    if ($query_result && $query_result->numrows) {
+		$instance_uuid = $uuid;
+		last;
+	    }
+	}
+    }
+    else {
+	# Yuck, need to find the history record. Harder cause we have to
+	# look in the manifest.
+	@instances = APT_Instance::History->LookupForAggregate($aggregate);
+	foreach my $ref (@instances) {
+	    my $started = str2time($ref->started());
+	    my $ended   = str2time($ref->destroyed());
+	    
+	    next
+		if (! ($tstamp > $started && $tstamp < $ended));
+
+	    my $agg = $ref->AggregateHash()->{$aggregate_urn};
+	    my $manifest = $agg->Manifest();
+
+	    foreach my $n (GeniXML::FindNodes("n:node",
+					       $manifest)->get_nodelist()) {
+		my $manager_urn = GetManagerId($n);
+
+		next
+		    if (!defined($manager_urn) ||
+			$manager_urn ne $aggregate_urn);
+		
+		my $n_id = GetVnodeId($n);
+		if ($n_id eq $node_id) {
+		    $instance_uuid = $ref->uuid();
+		    last;
+		}
+	    }
+	    last
+		if (defined($instance_uuid));
+	}
+    }
+    if (!defined($instance_uuid)) {
+	print STDERR "Could not find the corresponding instance\n";
+	return -1;
+    }
+        
     while (<CSV>) {
 	my $line = $_;
 	chomp($line);
@@ -183,7 +251,11 @@ sub ProcessFile($$)
 	    print STDERR "   $line\n";
 	    next;
 	}
-	print "$tstamp: $frequency,$power,$center_freq,$abovefloor,$violation\n";
+	print "$tstamp: $frequency,$power,$center_freq,$abovefloor,$violation";
+	if (defined($instance_uuid)) {
+	    print ",$instance_uuid";
+	}
+	print "\n";
 	
 	if (!$impotent) {
 	    DBQueryFatal("replace into apt_aggregate_radio_transmissions set ".
@@ -193,6 +265,8 @@ sub ProcessFile($$)
 			 "  tstamp=FROM_UNIXTIME($tstamp), ".
 			 "  frequency='$frequency', ".
 			 "  power='$power',center='$center_freq', ".
+			 (defined($instance_uuid) ?
+			    "instance_uuid='$instance_uuid', " : "").
 			 "  abovefloor='$abovefloor',violation='$violation'");
 	}
     }

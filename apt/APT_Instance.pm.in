@@ -192,6 +192,30 @@ sub LookupForProject($$$)
     return 0;
 }
 
+#
+# Lookup all experiments running at a specific aggregate.
+#
+sub LookupForAggregate($$)
+{
+    my ($class, $aggregate) = @_;
+    my $urn = $aggregate->urn();
+    my @results = ();
+
+    my $query_result =
+	DBQueryWarn("select distinct uuid from apt_instance_aggregates ".
+		    "where aggregate_urn='$urn'");
+	
+    return ()
+	if (!$query_result || !$query_result->numrows);
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $foo = APT_Instance->Lookup($uuid);
+	push(@results, $foo)
+	    if (defined($foo));
+    }
+    return @results;
+}
+
 AUTOLOAD {
     my $self  = $_[0];
     my $type  = ref($self) or confess "$self is not an object";
@@ -3501,6 +3525,52 @@ sub LookupBySlice($$)
     my ($uuid) = $query_result->fetchrow_array();
     my $foo = APT_Instance::History->Lookup($uuid);
     return $foo;
+}
+
+sub LookupByName($$$)
+{
+    my ($class, $pid, $eid) = @_;
+    my $slice_uuid;
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instance_history ".
+		    "where pid='$pid' and name='$eid'");
+	
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($uuid) = $query_result->fetchrow_array();
+    my $foo = APT_Instance::History->Lookup($uuid);
+    return $foo;
+}
+
+#
+# Lookup most recent experiments running at a specific aggregate. Kinda
+# arbitrary, maybe change later.
+#
+sub LookupForAggregate($$)
+{
+    my ($class, $aggregate) = @_;
+    my $urn = $aggregate->urn();
+    my @results = ();
+
+    # This query is slow.
+    my $query_result =
+	DBQueryWarn("select uuid,started ".
+		    "     from apt_instance_aggregate_history ".
+		    "where aggregate_urn='$urn' ".
+		    "order by started desc ".
+		    "limit 50");
+	
+    return ()
+	if (!$query_result || !$query_result->numrows);
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $foo = APT_Instance::History->Lookup($uuid);
+	push(@results, $foo)
+	    if (defined($foo));
+    }
+    return @results;
 }
 
 #
