@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1187,12 +1187,26 @@ sub IsExpired($)
 sub CommonName($)
 {
     my ($self) = @_;
+    my $DN = $self->DN();
+    my @parts;
 
-    my @parts = split('/', $self->DN());
+    # Kill the subject=
+    if ($DN =~ /^subject=(.*)$/) {
+	$DN = $1;
+    }
+    if ($DN =~ /\//) {
+	@parts = split('/', $DN);
+    }
+    else {
+	@parts = split(',\s*', $DN);
+    }
     foreach my $part (@parts) {
-	my ($key,$val) = split('=', $part);
-	if ($key eq "CN") {
-	    return $val;
+	if ($part =~ /^(\w+)\s*\=\s*(.+)$/) {
+	    my $key = $1;
+	    my $val = $2;
+	    if ($key eq "CN") {
+		return $val;
+	    }
 	}
     }
     return undef;
