@@ -291,7 +291,8 @@ sub ProcessDirectory($$$)
 	
 	my $stat = stat("$directory/$file");
 	if (!$stat) {
-	    fatal("Could not stat $directory/$file");
+	    print STDERR "Could not stat $directory/$file\n";
+	    next;
 	}
 	next
 	    if ($stat->mtime < $lastrun);
