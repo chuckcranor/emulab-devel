@@ -95,7 +95,7 @@ sub NodeNotified($$$);
 sub HandleChild($);
 sub LoadNodeData($);
 sub HandleViolations($$$);
-sub WriteRawData($$$$);
+sub WriteRawData($$$);
 
 #
 # Explanatory text.
@@ -542,6 +542,9 @@ sub HandleChild($)
 	# If no RF limit for the interface, its a violation.
 	#
 	if (!defined($limits)) {
+	    # Mark immediately in the CSV file.
+	    $measurement->{"violation"} = 1;
+	    
 	    # Ignore sample first time we see it. 	    
 	    if (exists($prevdata->{$key})) {
 		my $previous = $prevdata->{$key};
@@ -553,7 +556,6 @@ sub HandleChild($)
 		    $violaters{$nodeid}->{$iface} = [];
 		}
 		&$addInsert($node, $iface, $measurement);
-		$measurement->{"violation"} = 1;
 		push(@{$violaters{$nodeid}->{$iface}}, $measurement);
 
 		# Bump repeat count.
@@ -581,6 +583,9 @@ sub HandleChild($)
 	    }
 	}
 	if (!$inrange) {
+	    # Mark immediately in the CSV file.
+	    $measurement->{"violation"} = 1;
+
 	    # Ignore sample first time we see it.
 	    if (exists($prevdata->{$key})) {
 		my $previous = $prevdata->{$key};
@@ -593,7 +598,6 @@ sub HandleChild($)
 		}
 		&$addInsert($node, $iface, $measurement);
 		push(@{$violaters{$nodeid}->{$iface}}, $measurement);
-		$measurement->{"violation"} = 1;
 
 		# Bump repeat count.
 		$measurement->{'repeatcount'} = $previous->{'repeatcount'} + 1;
@@ -605,8 +609,7 @@ sub HandleChild($)
     #
     # Write the raw data file(s)
     #
-    WriteRawData(\%csvdata, $filestamp,
-		 scalar(keys(%violaters)), scalar(@abovefloor));
+    WriteRawData(\%csvdata, $filestamp, \@abovefloor);
 
     #
     # On the mainsite, we can figure out the instance holding the
@@ -965,10 +968,18 @@ sub NodeNotify($$$)
 #
 # Write RAW data to CSV files in /usr/testbed/www
 #
-sub WriteRawData($$$$)
+sub WriteRawData($$$)
 {
-    my ($data, $filestamp, $violations, $abovefloor) = @_;
+    my ($data, $filestamp, $aboveref) = @_;
     my $header = $CSVHEADER;
+    my $abovefloor = scalar(@{$aboveref});
+    my $violations = 0;
+    foreach my $measurement (@{$aboveref}) {
+	if ($measurement->{"violation"} == 1) {
+	    $violations = 1;
+	    last;
+	}
+    }
     $header .= ",abovefloor" if ($abovefloor);
     $header .= ",violation" if ($abovefloor && $violations);
 
