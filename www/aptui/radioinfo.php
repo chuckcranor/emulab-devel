@@ -49,7 +49,8 @@ echo "<div id='main-body'></div>\n";
 
 # Place to hang the modals for now
 echo "<div id='oops_div'></div>
-      <div id='waitwait_div'></div>\n";
+      <div id='waitwait_div'></div>
+      <div id='txgraph_div'></div>\n";
 
 $aggregates = Aggregate::AllAggregatesList();
 
@@ -83,8 +84,12 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
+AddLibrary("js/txgraph.js");
 AddLibrary("js/lib/tablesorter/widgets/widget-editable.js");
-AddTemplateList(array("radioinfo", "waitwait-modal", "oops-modal"));
-SPITREQUIRE("js/radioinfo.js");
+AddTemplateList(array("radioinfo", "waitwait-modal", "oops-modal", "txgraph"));
+SPITREQUIRE("js/radioinfo.js",
+            "<script src='js/lib/d3.v5.js'></script>\n");
+echo "<link rel='stylesheet'
+            href='css/frequency-graph.css'>\n";
 SPITFOOTER();
 ?>

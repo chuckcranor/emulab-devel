@@ -8,7 +8,7 @@ $(function ()
 			    'oops-modal', 'register-modal', 'terminate-modal',
 			    'oneonly-modal', 'approval-modal', 'linktest-modal',
 			    'linktest-md', "destroy-experiment",
-			    "prestage-table", "frequency-graph"]);
+			    "prestage-table", "frequency-graph", 'txgraph']);
 
     var statusString = templates['status'];
     var waitwaitString = templates['waitwait-modal'];
@@ -117,6 +117,7 @@ $(function ()
 	console.info("amlist", amlist);
 	if (window.ISPOWDER) {
 	    radioinfo = decodejson('#radioinfo-json');
+	    console.info("radioinfo", radioinfo);
 	    monitorTemplate = _.template(templates['frequency-graph']);
 	}
 	prunetypes = decodejson('#prunelist-json');
@@ -164,6 +165,7 @@ $(function ()
 	$('#approval_div').html(approvalString);
 	$('#linktest_div').html(linktestString);
 	$('#destroy_div').html(destroyString);
+	$('#txgraph_div').html(templates["txgraph"]);
 	
 	// Not allowed to copy repobased profiles.
 	if (expinfo.repourl) {
@@ -2325,7 +2327,7 @@ $(function ()
 	//
 	// Do not show in the terminating or terminated state.
 	//
-	if (lastStatus == "terminated" || lastStatus == "terminating") {
+	if (lastStatus == "terminated") {
 	    alert("Your experiment is no longer active.");
 	    return;
 	}
@@ -2401,6 +2403,9 @@ $(function ()
 	}
 	else if (action == "monitor") {
 	    NewMonitorTab(clientList[0]);
+	}
+	else if (action == "txhistory") {
+	    ShowTXGraph(clientList[0]);
 	}
 	else if (action == "flash") {
 	    DoFlash(clientList[0]);
@@ -2752,8 +2757,28 @@ $(function ()
 			// Context menu option
 			CMclone.find("li[id=monitor]").removeClass("hidden");
 
+			// TX History
+			clone.find(' [name=txhistory]')
+			    .click(function (e) {
+				ActionHandler("txhistory", [node]);
+			    });
+			clone.find(' [name=txhistory]')
+			    .parent().removeClass('hidden');
+
+			// Context menu option
+			CMclone.find("li[id=txhistory]").removeClass("hidden");
+
 			// Mark it as a radio with its info. 
 			radios[node] = info;
+
+			// Show the experiment wide TX button.
+			if ($('#txgraph_button').hasClass("hidden")) {
+			    $('#txgraph_button').click(function (event) {
+				event.preventDefault();
+				ShowTXGraph();
+			    });
+			    $('#txgraph_button').removeClass("hidden");
+			}
 		    }
 
 		    if (flashable.length) {
@@ -5542,7 +5567,7 @@ $(function ()
 	    var endpoint = null;
 	    if (info.itype == "ME") {
 		which = "rfmonitor-mobile";
-		endpoint = cluster.replace("Bus", "bus-");
+		endpoint = cluster.replace("Bus", "bus-").toLowerCase();
 		url = "https://www.emulab.net";
 	    }
 	    var options = {
@@ -5589,6 +5614,61 @@ $(function ()
 	    $('#quicktabs_ul a[href="#' + tabname + '"]').tab('show');
 	    return;
 	}
+    }
+
+    /*
+     * Show a TX graph. 
+     */
+    function ShowTXGraph(client_id)
+    {
+	var route;
+	var args;
+	var defer = $.Deferred();
+
+	var callback = function (json) {
+	    console.info(json);
+	    if (json.code) {
+		defer.resolve(json.value);
+		return;
+	    }
+	    var txlist = json.value.txlist;
+	    if (!_.size(txlist)) {
+		defer.reject(null);
+		return;
+	    }
+	    var args = {
+		"selector"  : "#txgraph-modal",
+		"txlist"    : txlist,
+		"instances" : null,
+		"instance"  : expinfo,
+	    }
+	    defer.resolve(args);
+	};
+	if (client_id) {
+	    var fe       = radios[client_id].frontends["rf0"];
+	    var urn      = fe.aggregate_urn;
+	    var node_id  = fe.node_id;
+	    var frontend = fe.frontend;
+	    var iface    = fe.iface;
+	    console.info(urn, node_id, frontend, iface);
+
+	    args = {
+		"instance"      : uuid,
+		"aggregate_urn" : urn,
+		"node_id"       : node_id,
+		"iface"         : iface,
+		"frontend"      : frontend,
+	    };
+	    route = "rfrange";
+	}
+	else {
+	    args = {
+		"uuid" : uuid,
+	    };
+	    route = "status";
+	}
+	window.ShowTXGraph("#txgraph-modal", defer);
+	sup.CallServerMethod(null, route, "Transmissions", args, callback);
     }
 
     var modified    = 0;

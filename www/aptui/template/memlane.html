@@ -40,7 +40,7 @@
 	      <td class='border-none'>RefSpec:</td>
 	      <td class='border-none'>
 		<span><%= record.reporef %></span>
-		(<%= record.repohash %>)
+		(<%= record.repohash.substring(0,8) %>)
 	      </td>
 	    </tr>
 	  <% } %>
@@ -111,6 +111,15 @@
 		    type='button'>Save Parameters</button>
 	  </div>
 	<% } %>
+	<button class='btn btn-sm btn-info pull-right hidden'
+		id='txgraph_button' type=button
+		style='margin-right: 10px;'
+		data-toggle='popover'
+	        data-delay='{"show":300}'
+		data-html='true'
+		data-content="Transmission history for this experiment."> 
+	  <span class="glyphicon glyphicon-align-left"
+		style="margin-right: 5px;"></span></button>
 	<div class='pull-left'>
 	  <a class='btn btn-info btn-xs pull-left hidden'
              style='margin-right: 10px;'
@@ -160,6 +169,51 @@
     </div>
   </div>
 </div>
+<div class='row hidden' id='error-panel-new'>
+  <div class='col-lg-8  col-lg-offset-2
+	      col-md-8  col-md-offset-2
+	      col-sm-10 col-sm-offset-1
+	      col-xs-12 col-xs-offset-0'>
+    <div class="panel panel-danger">
+      <div class="panel-heading">
+        <center><h4 class="panel-title">Error Information</h4></center>
+      </div>
+      <div class="panel-body">
+	<div class="multisite-errors hidden">
+	  <div class="panel-group" style="margin-bottom: 5px; "
+	       role="tablist">
+	    <div class="panel panel-danger error-template hidden">
+	      <div class="panel-heading" role="tab">
+		<h4 class="panel-title">
+		  <a role="button" data-toggle="collapse"
+		     style="text-decoration: underline;"
+		     data-parent="#error-panel-new .panel-group"
+		     href="#fooey"></a>
+		</h4>
+	      </div>
+	      <div id="fooey" class="panel-collapse collapse" role="tabpanel">
+		<div class="panel-body">
+		  <div class="error-message hidden"
+		       style="margin-bottom:10px;"></div>
+		  <div style="padding-left: 20px;">
+		    <code class="error-cause"
+			  style="white-space: pre-wrap; padding:0px;"></code>
+		  </div>
+		</div>
+	      </div>
+	    </div>	  
+	  </div>
+	</div>
+	<div class="singlesite-errors hidden">
+	  <div class="error-message" style="margin-bottom:10px;"></div>
+	  <div style="padding-left: 20px;">
+	    <code class="error-cause"
+		  style="white-space: pre-wrap; padding:0px;"></code></div>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
 <div class='row'>
   <div class='col-lg-12  col-lg-offset-0
 	      col-md-12  col-md-offset-0
@@ -194,7 +248,7 @@
 	    </div>
             <div class='tab-pane hidden' id='listview'>
 	      <div id='showtopo_listview'>
-		<table class='tablesorter' id='listview_table'>
+		<table class='tablesorter table-hover' id='listview_table'>
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -239,4 +293,5 @@
   <div id='waitwait_div'></div>
   <div id='oops_div'></div>
   <div id='save_paramset_div'></div>
+  <div id='txgraph_div'></div>
 </div>

@@ -4,7 +4,8 @@ $(function ()
 
     var templates = APT_OPTIONS.fetchTemplateList(['memlane',
 						   'waitwait-modal',
-						   'oops-modal']);
+						   'oops-modal',
+						   'txgraph']);
     var mainTemplate = _.template(templates['memlane']);
     var EMULAB_NS    = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var amlist       = null;
@@ -71,6 +72,7 @@ $(function ()
 	}
 	$('#waitwait_div').html(templates['waitwait-model']);
 	$('#oops_div').html(templates['oops-model']);
+	$('#txgraph_div').html(templates['txgraph']);
 	if (json.value.exitcode) {
 	    ShowError(json.value);
 	}
@@ -106,8 +108,14 @@ $(function ()
 	" <td name='image'>n/a</td>" +
 	"</tr>";
 
-    var monitor_url = "<a href='#' target=_blank>" +
-	"<span class='glyphicon glyphicon-signal'></span></a>";
+    var monitor_url =
+	"<span>" +
+	"<a href='#' target=_blank class='monitor-button'>" +
+	"   <span class='glyphicon glyphicon-signal' " +
+	"         style='margin-right: 5px;'></span></a>" +
+	"<a href='#' class='txgraph-button'> " +
+	"  <span class='glyphicon glyphicon-align-left'</span></a>" +
+	"</span>";
 
     function monitorUrl(urn, node_id)
     {
@@ -123,7 +131,11 @@ $(function ()
 	    if (fe.monitored && _.has(fe, "monitor_url")) {
 		var url = $(monitor_url);
 		var href = fe.monitor_url + "&range=" + start + "," + end;
-		url.attr("href", href);
+		url.find(".monitor-button").attr("href", href);
+		url.find(".txgraph-button").click(function (event) {
+		    event.preventDefault();
+		    ShowTXGraph(fe);
+		});
 		return url;
 	    }
 	}
@@ -248,6 +260,11 @@ $(function ()
 	});
 	if (showmonitorlinks) {
 	    $('#listview_table .monitor-links').removeClass("hidden");
+	    $('#txgraph_button').click(function (event) {
+		event.preventDefault();
+		ShowTXGraph();
+	    });
+	    $('#txgraph_button').removeClass("hidden");
 	}
 	$('#listview_table')
 	    .tablesorter({
@@ -474,6 +491,60 @@ $(function ()
 
 	$('#error_panel_text').text(record.exitmessage);
 	$('#error_panel').removeClass("hidden");
+    }
+
+    /*
+     * Show a TX graph.
+     */
+    function ShowTXGraph(fe)
+    {
+	var route;
+	var args;
+	var defer = $.Deferred();
+
+	var callback = function (json) {
+	    console.info(json);
+	    if (json.code) {
+		defer.resolve(json.value);
+		return;
+	    }
+	    var txlist = json.value.txlist;
+	    if (!_.size(txlist)) {
+		defer.reject(null);
+		return;
+	    }
+	    var args = {
+		"selector"  : "#txgraph-modal",
+		"txlist"    : txlist,
+		"instances" : null,
+		"instance"  : record,
+	    }
+	    defer.resolve(args);
+	};
+	if (fe) {
+	    var urn      = fe.aggregate_urn;
+	    var node_id  = fe.node_id;
+	    var frontend = fe.frontend;
+	    var iface    = fe.iface;
+	    console.info(urn, node_id, frontend, iface);
+
+	    args = {
+		"instance"      : window.uuid,
+		"aggregate_urn" : urn,
+		"node_id"       : node_id,
+		"iface"         : iface,
+		"frontend"      : frontend,
+	    };
+	    route = "rfrange";
+	}
+	else {
+	    args = {
+		"uuid" : window.uuid,
+	    };
+	    route = "memlane";
+	}
+	window.ShowTXGraph("#txgraph-modal", defer);
+	sup.CallServerMethod(null, route, "Transmissions", args, callback);
     }
 
     //

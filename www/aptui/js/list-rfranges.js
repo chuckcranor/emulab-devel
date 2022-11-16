@@ -2,7 +2,8 @@ $(function ()
 {
     'use strict';
     var templates      = APT_OPTIONS.fetchTemplateList(['list-rfranges',
- 			   "rfrange-history", 'waitwait-modal', 'oops-modal']);
+ 			   "rfrange-history", 'waitwait-modal', 
+			   'oops-modal', 'txgraph']);
     var template       = _.template(templates['list-rfranges']);
     var waitwait       = templates['waitwait-modal'];
     var oops           = templates['oops-modal'];
@@ -30,6 +31,7 @@ $(function ()
 		    "inuse_ranges"   : result3.value,
 		};
 		$('#main-body').html(template(args));
+		$('#main-body').append(templates['txgraph']);
 
 		if (_.size(result1.value)) {
 		    $('#global-ranges').removeClass("hidden");
@@ -54,11 +56,31 @@ $(function ()
 		if (_.size(result3.value)) {
 		    $('#inuse-ranges').removeClass("hidden");
 
+		    var rfhash = [];
+		    _.each(result3.value, function (range) {
+			rfhash[range.key] = range;
+		    });
+
 		    $('#inuse-ranges .tablesorter')
 			.tablesorter({
 			    theme : 'bootstrap',
 			    widgets: ["uitheme", "zebra"],
 			    headerTemplate : '{content} {icon}',
+			});
+		    $('#inuse-ranges .txgraph-button')
+			.click(function (event) {
+			    event.preventDefault();
+			    var key = $(this).data("key");
+			    var record = rfhash[key];
+
+			    console.info(record);
+			    var args = {
+				"selector" : "#txgraph-modal",
+				"txlist"   : record.txlist,
+				"instances": null,
+				"instance" : record,
+			    }
+			    ShowTXGraph(args);
 			});
 		}
 	    });
@@ -72,6 +94,11 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
+	    var rfhash = [];
+	    _.each(json.value, function (range) {
+		rfhash[range.key] = range;
+	    });
+	    
 	    var template = _.template(templates['rfrange-history']);
 	    $('#history-ranges .waiting')
 		.html(template({"ranges" : json.value}));
@@ -134,8 +161,29 @@ $(function ()
 			},
 		    }
 		});
+	    $('#history-ranges .txgraph-button').click(function (event) {
+		event.preventDefault();
+		var key = $(this).data("key");
+		var record = rfhash[key];
+
+		console.info(record);
+		var args = {
+		    "selector" : "#txgraph-modal",
+		    "txlist"   : record.txlist,
+		    "instances": null,
+		    "instance" : record,
+		}
+		ShowTXGraph(args);
+	    });
 	};
 	sup.CallServerMethod(null, "rfrange", "RangeHistory", null, callback);
+    }
+
+    // Wrapper to handle the defer
+    function ShowTXGraph(args) {
+	var defer = $.Deferred();
+	window.ShowTXGraph("#txgraph-modal", defer);
+	defer.resolve(args);
     }
     $(document).ready(initialize);
 });

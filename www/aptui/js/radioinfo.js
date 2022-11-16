@@ -2,7 +2,8 @@ $(function ()
 {
     'use strict';
 
-    var template_list = ['radioinfo', "waitwait-modal", "oops-modal"];
+    var template_list = ['radioinfo', "waitwait-modal", "oops-modal",
+			 "txgraph"];
     var templates     = APT_OPTIONS.fetchTemplateList(template_list);    
     var mainTemplate  = _.template(templates['radioinfo']);
     var amlist        = null;
@@ -39,7 +40,8 @@ $(function ()
 	// Now we can do this. 
 	$('#oops_div').html(templates["oops-modal"]);
 	$('#waitwait_div').html(templates["waitwait-modal"]);
-
+	$('#txgraph_div').html(templates['txgraph']);
+	
 	var widgets = [ "uitheme", "zebra"];
 	if (window.ISADMIN) {
 	    widgets.push("editable");
@@ -92,6 +94,11 @@ $(function ()
 	    mobile = window.open('mobile-endpoints.php', 'Mobile Endpoints');
 	});
 
+	$(".txgraph-button").click(function (event) {
+	    event.preventDefault();
+	    ShowTXGraph($(this).closest('tr'));
+	});
+
 	$(".location").click(function (event) {
 	    event.preventDefault();
 	    var args = {
@@ -109,6 +116,48 @@ $(function ()
 		foo.postMessage(args);
 	    });
 	});
+    }
+
+    /*
+     * Show a TX graph.
+     */
+    function ShowTXGraph(row)
+    {
+	var urn      = $(row).data("urn");
+	var node_id  = $(row).data("node_id");
+	var frontend = $(row).data("frontend");
+	var iface    = $(row).data("iface");
+	var defer    = $.Deferred();
+	console.info(urn, node_id, frontend, iface);
+
+	var callback = function (json) {
+	    console.info(json);
+	    if (json.code) {
+		defer.resolve(json.value);
+		return;
+	    }
+	    var txlist = json.value.txlist;
+	    var instances = json.value.instances;
+	    if (!_.size(txlist)) {
+		defer.reject(null);
+		return;
+	    }
+	    var args = {
+		"selector"  : "#txgraph-modal",
+		"txlist"    : txlist,
+		"instances" : instances,
+		"instance"  : null,
+	    }
+	    defer.resolve(args);
+	};
+    	var args = {
+	    "aggregate_urn" : urn,
+	    "node_id"       : node_id,
+	    "iface"         : iface,
+	    "frontend"      : frontend,
+	};
+	window.ShowTXGraph("#txgraph-modal", defer);
+	sup.CallServerMethod(null, "rfrange", "Transmissions", args, callback);
     }
 
     /*

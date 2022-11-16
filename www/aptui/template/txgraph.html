@@ -1,0 +1,73 @@
+
+<div class='modal fade' id="txgraph-modal">
+  <div class='modal-dialog modal-wide'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	<div class='panel panel-default'>
+	  <div class="panel-body" style="padding: 0px;">
+	    <div style="height: 600px;">
+	      <center class="txgraph-spinner hidden">Loading
+		<div>
+		  <img src='images/spinner.gif' />
+		</div>
+	      </center>
+	      <center class="txgraph-nodata hidden">
+		<br>
+		<span class="text-danger">
+		  No recorded transmissions from this device</span>
+	      </center>
+	      <div class="frequency-graph tx-graph"
+		<div style="height: inherit;"></div>
+	    </div>
+	    <div class="txgraph-tooltip-popovers"></div>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="hidden">
+  <div id="txgraph-tooltipTemplate">
+    <table class="table table-condensed border-none"
+           style="font-size: 14px; margin: 5px;">
+      <tbody>
+	<tr>
+          <td class="border-none">Node ID:</td>
+          <td class="border-none tooltip-nodeid"></td>
+	</tr>
+	<tr>
+          <td class="border-none">Cluster:</td>
+          <td class="border-none tooltip-cluster"></td>
+	</tr>
+	<tr>
+          <td class="border-none">Frequency:</td>
+          <td class="border-none tooltip-freq"></td>
+	</tr>
+	<tr>
+          <td class="border-none">Power:</td>
+          <td class="border-none tooltip-power"></td>
+	</tr>
+	<tr>
+          <td class="border-none">Above Floor:</td>
+          <td class="border-none abovefloor"></td>
+	</tr>
+	<tr>
+          <td class="border-none">Time:</td>
+          <td class="border-none tooltip-time"></td>
+	</tr>
+	<tr class="hidden tooltip-admin">
+          <td class="border-none">User:</td>
+          <td class="border-none tooltip-uid"></td>
+	</tr>
+	<tr class="hidden tooltip-admin">
+          <td class="border-none">Project:</td>
+          <td class="border-none tooltip-pid"></td>
+	</tr>
+	<tr class="hidden tooltip-admin">
+          <td class="border-none">Experiment:</td>
+          <td class="border-none tooltip-eid"></td>
+	</tr>
+      </tbody>
+    </table>
+  </div>
+</div>

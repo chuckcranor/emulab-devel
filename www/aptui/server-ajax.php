@@ -250,6 +250,8 @@ $routing = array("geni-login" =>
 						     "Do_Portstats",
 						 "ServiceLogs" =>
 						     "Do_ServiceLogs",
+                                                 "Transmissions" =>
+                                                     "Do_Transmissions",
                               )
                         ),
 		 "approveuser" =>
@@ -504,7 +506,9 @@ $routing = array("geni-login" =>
                                                  "ReservationInfo" =>
                                                      "Do_ReservationInfo",
                                                  "ReservationHistory" =>
-                                                     "Do_ReservationHistory")),
+                                                     "Do_ReservationHistory",
+                              )
+                        ),
 		 "images" =>
 			array("file"    => "images.ajax",
 			      "guest"   => false,
@@ -655,7 +659,11 @@ $routing = array("geni-login" =>
 			array("file"    => "memlane.ajax",
 			      "guest"   => false,
 			      "methods" => array("HistoryRecord" =>
-						    "Do_HistoryRecord")),
+                                                     "Do_HistoryRecord",
+                                                 "Transmissions" =>
+                                                     "Do_Transmissions",
+                              )
+                        ),
 		 "aggregate-status" =>
 			array("file"    => "aggregate-status.ajax",
 			      "guest"   => false,
@@ -739,6 +747,8 @@ $routing = array("geni-login" =>
                                                      "Do_AllInuseRanges",
                                                  "RangeHistory" =>
                                                      "Do_RangeHistory",
+                                                 "Transmissions" =>
+                                                     "Do_Transmissions",
                               )
                         ),
 		 "ota-agreement" =>

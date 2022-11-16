@@ -35,7 +35,8 @@
 	  <% _.each(node.frontends, function(frontend, iface) { %>
 	    <tr data-urn="<%- urn %>"
 		data-node_id="<%- node_id %>"
-		data-iface="<%- iface %>">
+		data-iface="<%- iface %>"
+		data-frontend="<%- frontend.frontend %>">
 	    <td><a href="powder-map.php?location=<%- node.location %>"
 		   class="location"
 		   data-urn="<%- urn %>"
@@ -56,6 +57,8 @@
 		<a href='<%- frontend.monitor_url %>' target="_blank">
 		  <span class="glyphicon glyphicon-stats"
 			style="margin-right: 5px;"></span></a>
+		<a href='#' class="txgraph-button">
+		  <span class="glyphicon glyphicon-align-left"</span></a>
 	      <% } else { %>
 		  n/a
 	      <% } %>

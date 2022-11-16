@@ -49,11 +49,15 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER(
     array("js/lib/tablesorter/widgets/widget-filter-formatter-jui.js"));
-AddTemplateList(array("list-rfranges", "rfrange-history",
+AddTemplateList(array("list-rfranges", "rfrange-history", "txgraph",
                       "oops-modal", "waitwait-modal"));
+AddLibrary("js/txgraph.js");
 SPITREQUIRE("js/list-rfranges.js",
+            "<script src='js/lib/d3.v5.js'></script>\n".
             "<script src='js/lib/jquery-ui.js'></script>");
 
+echo "<link rel='stylesheet'
+            href='css/frequency-graph.css'>\n";
 echo "<link rel='stylesheet'
             href='css/jquery-ui.min.css'>\n";
 echo "<link rel='stylesheet'

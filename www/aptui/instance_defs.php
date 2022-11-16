@@ -1179,6 +1179,13 @@ class InstanceHistory
         }
         return $result;
     }
+    
+    # URL to the memory page
+    function StatusURL() {
+        global $APTBASE;
+
+        return $APTBASE . "/memlane.php?uuid=" . $this->uuid();
+    }
 }
 
 class InstanceSliver

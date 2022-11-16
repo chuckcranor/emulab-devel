@@ -335,6 +335,7 @@ AddLibrary("js/bindings.js");
 AddLibrary("js/paramsets.js");
 if ($ISPOWDER) {
     AddLibrary("js/freqgraphs.js");
+    AddLibrary("js/txgraph.js");
     AddLibrary("js/lib/pako/pako.min.js");
 }
 SPITREQUIRE("js/status.js");
@@ -409,7 +410,7 @@ AddTemplateList(array("status", "waitwait-modal", "oops-modal",
                       "register-modal", "terminate-modal", "oneonly-modal",
                       "approval-modal", "linktest-modal",
                       "destroy-experiment", "save-paramset-modal",
-                      "prestage-table", "frequency-graph",
+                      "prestage-table", "frequency-graph", "txgraph",
                       "picker-template", "instantiate-templates"));
 
 AddTemplateKey("linktest-md", "template/linktest.md");

@@ -167,14 +167,18 @@ REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
 AddLibrary("js/bindings.js");
 AddLibrary("js/paramsets.js");
-SPITREQUIRE("js/memlane.js");
+AddLibrary("js/txgraph.js");
+SPITREQUIRE("js/memlane.js",
+            "<script src='js/lib/d3.v5.js'></script>\n");
 
+echo "<link rel='stylesheet'
+            href='css/frequency-graph.css'>\n";
 echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
 
 AddTemplateList(array("memlane", "waitwait-modal", "oops-modal",
-                      "save-paramset-modal"));
+                      "save-paramset-modal", "txgraph"));
 
 SPITFOOTER();
 ?>

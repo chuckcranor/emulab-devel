@@ -2564,6 +2564,38 @@ function Do_Portstats()
     SPITAJAX_RESPONSE($portstats);
 }
 
+#
+# All transmissions for this experiment.
+#
+function Do_Transmissions()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+    $blob = array();
+    
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $instance->uuid();
+    
+    $query =
+           "select tx.*,a.nickname as cluster ".
+           "   from apt_aggregate_radio_transmissions as tx ".
+           "join apt_aggregates as a on ".
+           "   a.urn=tx.aggregate_urn ".
+           "where tx.instance_uuid='$uuid'";
+
+    $tx_result = DBQueryFatal($query);
+
+    while ($txrow = mysql_fetch_array($tx_result, MYSQLI_ASSOC)) {
+        unset($txrow["aggregate_urn"]);
+        $txrow["tstamp"] = DateStringGMT($txrow["tstamp"]);
+        $blob[] = $txrow;
+    }
+    SPITAJAX_RESPONSE(array("txlist" => $blob, "instances" => null));
+}
+
 # Local Variables:
 # mode:php
 # End:

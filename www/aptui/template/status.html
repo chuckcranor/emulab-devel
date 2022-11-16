@@ -273,6 +273,15 @@ pre {
 			     hardware used in this experiment.'>
  	      Performance History</a>
 	    <% if (registered && !isfadmin) { %>
+	      <button class='btn btn-sm btn-info hidden'
+		      id='txgraph_button' type=button
+		      style='margin-right: 10px;'
+		      data-toggle='popover'
+	              data-delay='{"show":300}'
+		      data-html='true'
+		      data-content="Transmission history for this experiment."> 
+		<span class="glyphicon glyphicon-align-left"
+		      style="margin-right: 5px;"></span></button>
 	      <button class='btn btn-xs btn-info hidden'
 		      id='rerun_button' type=button
 		      data-toggle='popover'
@@ -743,7 +752,7 @@ pre {
 	    </div>
             <div class='tab-pane hidden' id='listview'>
 	      <div id='showtopo_listview'>
-		<table class='tablesorter' id='listview_table'>
+		<table class='tablesorter table-hover' id='listview_table'>
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -1410,6 +1419,11 @@ pre {
 	   data-toggle='tooltip'
 	   title='Radio monitoring graph'
 	   data-trigger="hover">Monitor Graph</a></li>
+      <li id="txhistory" class="hidden">
+	<a name="txhistory"
+	   data-toggle='tooltip'
+	   title='Radio transmission history'
+	   data-trigger="hover">Transmission History</a></li>
       <li id="nodetop" class="hidden">
 	<a name="nodetop"
 	   data-toggle='tooltip'
@@ -2148,6 +2162,8 @@ pre {
             <li class='hidden'> 
               <a href='#' name='monitor'>Monitor Graph</a></li> 
             <li class='hidden'> 
+              <a href='#' name='txhistory'>Transmission History</a></li> 
+            <li class='hidden'> 
               <a href='#' name='nodetop'>Top Processes</a></li> 
             <li class='hidden'> 
               <a href='#' name='servicelogs'>Execute Service Logs</a></li> 
@@ -2328,6 +2344,7 @@ pre {
   <div id='linktest_div'></div>
   <div id='destroy_div'></div>
   <div id='save_paramset_div'></div>
+  <div id='txgraph_div'></div>
 </div>
 
 

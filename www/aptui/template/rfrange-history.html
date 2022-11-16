@@ -20,13 +20,23 @@
 	  <% if (prevuuid && range.uuid == prevuuid) { %>
 	    <td><%- range.name %></td>
 	  <% } else { %>
-	    <td><a href="memlane.php?uuid=<%- range.uuid %>">
-	      <%- range.name %></a></td>
+	    <td><a href="memlane.php?uuid=<%- range.uuid %>"
+		   target="_blank">
+	      <%- range.name %></a>
+	      <% if (range.txlist) { %>
+		<a href="#" class="pull-right txgraph-button"
+		   data-key="<%- range.key %>">
+		  <span class="glyphicon glyphicon-align-left"
+			style="margin-right: 5px;"></span></a>
+	      <% } %>
+	    </td>
 	  <% } %>
 	  <% prevuuid = range.uuid; %>
-	  <td><a href="user-dashboard.php?user=<%- range.uid %>#myprofile">
+	  <td><a href="user-dashboard.php?user=<%- range.uid %>#myprofile"
+		 target="_blank">
 	    <%- range.uid %></a></td>
-	  <td><a href="show-project.php?project=<%- range.pid %>">
+	  <td><a href="show-project.php?project=<%- range.pid %>"
+		 target="_blank">
 	    <%- range.pid %></a></td>
 	  <td><%- range.freq_low %></td>
 	  <td><%- range.freq_high %></td>

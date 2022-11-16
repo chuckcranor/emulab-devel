@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -183,6 +183,47 @@ function GetRepoParamdefs($profile, $record, &$paramdefs)
     unlink($scriptname);
     unlink($paramsname);
     return 0;
+}
+
+#
+# All transmissions for this experiment.
+#
+function Do_Transmissions()
+{
+    global $this_user;
+    global $ajax_args;
+    $blob = array();
+
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(1, "Missing uuid");
+	return;
+    }
+    $uuid = $ajax_args["uuid"];
+    if (!IsValidUUID($uuid)) {
+	SPITAJAX_ERROR(1, "Not a valid UUID: $uuid");
+	return;
+    }
+    $record = InstanceHistory::Lookup($uuid);
+    if (!$record) {
+	SPITAJAX_ERROR(1, "No such record: $uuid");
+	return;
+    }
+    
+    $query =
+           "select tx.*,a.nickname as cluster ".
+           "   from apt_aggregate_radio_transmissions as tx ".
+           "join apt_aggregates as a on ".
+           "   a.urn=tx.aggregate_urn ".
+           "where tx.instance_uuid='$uuid'";
+
+    $tx_result = DBQueryFatal($query);
+
+    while ($txrow = mysql_fetch_array($tx_result, MYSQLI_ASSOC)) {
+        unset($txrow["aggregate_urn"]);
+        $txrow["tstamp"] = DateStringGMT($txrow["tstamp"]);
+        $blob[] = $txrow;
+    }
+    SPITAJAX_RESPONSE(array("txlist" => $blob, "instances" => null));
 }
 
 # Local Variables:
