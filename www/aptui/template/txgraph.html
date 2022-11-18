@@ -2,9 +2,12 @@
 <div class='modal fade' id="txgraph-modal">
   <div class='modal-dialog modal-wide'>
     <div class='modal-content'>
-      <div class='modal-body'>
-	<div class='panel panel-default'>
-	  <div class="panel-body" style="padding: 0px;">
+      <div class='modal-body'
+	   style="padding-bottom: 0px;">
+	<div class='panel panel-default'
+	     style="margin-bottom: 0px;">
+	  <div class="panel-body"
+	       style="padding: 0px; margin-bottom: 5px;">
 	    <div style="height: 600px;">
 	      <center class="txgraph-spinner hidden">Loading
 		<div>
@@ -18,10 +21,17 @@
 	      </center>
 	      <div class="frequency-graph tx-graph"
 		<div style="height: inherit;"></div>
+	      </div>
+	      <div class="txgraph-tooltip-popovers"></div>
 	    </div>
-	    <div class="txgraph-tooltip-popovers"></div>
 	  </div>
 	</div>
+	<center>
+	  <button class='btn btn-default btn-sm' 
+		  style="margin-bottom: 10px; margin-top: 10px;"
+		  data-dismiss='modal' aria-hidden='true'>
+	    Dismiss</button>
+	</center>
       </div>
     </div>
   </div>

@@ -226,6 +226,7 @@ function Do_AllInuseRanges()
             $range["pid"]  = $row["pid"];
             $range["uid"]  = $row["creator"];
             $range["name"] = $row["name"];
+            $range["eid"]  = $row["name"];
             $range["uuid"] = $row["uuid"];
             $range["key"]  = $uuid . ":" . $idx;
 
@@ -320,6 +321,7 @@ function Do_RangeHistory()
             "uid"       => $row["creator"],
             "uuid"      => $uuid,
             "name"      => $row["name"],
+            "eid"       => $row["name"],
             "txlist"    => null,
             "key"       => $uuid . ":" . $idx,
         );

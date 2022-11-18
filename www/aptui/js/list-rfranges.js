@@ -33,6 +33,11 @@ $(function ()
 		$('#main-body').html(template(args));
 		$('#main-body').append(templates['txgraph']);
 
+		$('[data-toggle="tooltip"]').tooltip({
+		    placement: 'auto',
+		    delay: { "show": 100, "hide": 100 },
+		});
+
 		if (_.size(result1.value)) {
 		    $('#global-ranges').removeClass("hidden");
 
@@ -57,8 +62,10 @@ $(function ()
 		    $('#inuse-ranges').removeClass("hidden");
 
 		    var rfhash = [];
+		    var instances = {};
 		    _.each(result3.value, function (range) {
 			rfhash[range.key] = range;
+			instances[range.uuid] = range;
 		    });
 
 		    $('#inuse-ranges .tablesorter')
@@ -82,6 +89,26 @@ $(function ()
 			    }
 			    ShowTXGraph(args);
 			});
+
+		    $('#global-inuse-button').click(function (event) {
+			event.preventDefault();
+			var txlist = [];
+		
+			$('#inuse-ranges tbody > tr').not(".filtered")
+			    .find(".txgraph-button").each(function () {
+				var key = $(this).data("key");
+				var record = rfhash[key];
+
+				txlist = txlist.concat(record.txlist);
+			    });
+			console.info(txlist);
+			ShowTXGraph({
+			    "selector" : "#txgraph-modal",
+			    "txlist"   : txlist,
+			    "instances": instances,
+			    "instance" : null,
+			});
+		    });
 		}
 	    });
     }
@@ -94,9 +121,11 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
+	    var instances = {};
 	    var rfhash = [];
 	    _.each(json.value, function (range) {
 		rfhash[range.key] = range;
+		instances[range.uuid] = range;
 	    });
 	    
 	    var template = _.template(templates['rfrange-history']);
@@ -174,6 +203,26 @@ $(function ()
 		    "instance" : record,
 		}
 		ShowTXGraph(args);
+	    });
+
+	    $('#global-history-button').click(function (event) {
+		event.preventDefault();
+		var txlist = [];
+		
+		$('#history-ranges tbody > tr').not(".filtered")
+		    .find(".txgraph-button").each(function () {
+			var key = $(this).data("key");
+			var record = rfhash[key];
+
+			txlist = txlist.concat(record.txlist);
+		    });
+		console.info(txlist);
+		ShowTXGraph({
+		    "selector" : "#txgraph-modal",
+		    "txlist"   : txlist,
+		    "instances": instances,
+		    "instance" : null,
+		});
 	    });
 	};
 	sup.CallServerMethod(null, "rfrange", "RangeHistory", null, callback);
