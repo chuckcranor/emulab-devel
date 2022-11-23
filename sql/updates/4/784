@@ -1,0 +1,22 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_datasets", "permanent")) {
+	DBQueryFatal("alter table apt_datasets add ".
+		     " `permanent` tinyint(1) NOT NULL default '0' ".
+		     "     after shared");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

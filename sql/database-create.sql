@@ -424,6 +424,7 @@ CREATE TABLE `apt_datasets` (
   `write_access` enum('creator','project') NOT NULL default 'creator',
   `public` tinyint(1) NOT NULL default '0',
   `shared` tinyint(1) NOT NULL default '0',
+  `permanent` tinyint(1) NOT NULL default '0',
   `locked` datetime default NULL, 
   `locker_pid` int(11) default '0',
   `webtask_id` varchar(128) default NULL,
