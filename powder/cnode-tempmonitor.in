@@ -432,7 +432,7 @@ sub GrabTemp($)
     }
     $sock->shutdown(SHUT_RDWR);
     $sock->close();
-    if ($buffer =~ /^([\d\.]+)$/) {
+    if ($buffer =~ /^(\-?[\d\.]+)$/) {
 	$celcius = $1;
     }
     else {
@@ -456,7 +456,7 @@ sub GrabSwitchTemp($)
 	logit("Could not get transceiver temp from $switch");
 	return undef;
     }
-    if ($celcius =~ /^([\d\.]+)$/) {
+    if ($celcius =~ /^(\-?[\d\.]+)$/) {
 	$celcius = $1;
     }
     else {
