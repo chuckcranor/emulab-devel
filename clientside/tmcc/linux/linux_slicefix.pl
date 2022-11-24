@@ -1537,7 +1537,13 @@ sub main
 	my $lilo_commandline = 0;
 
 	my $old_uuid = get_uuid($root);
-	set_random_rootfs_uuid($root);
+	#
+	# Currently this break our UEFI images where the UUID is embedded
+	# in /EFI/boot/ubuntu/grub.cfg. Until we start fixing up there,
+	# don't change the UUID. Note that the FreeBSD slicefix doesn't
+	# generate a random UUID either.
+	#
+	#set_random_rootfs_uuid($root);
 	disable_time_dependent_fsck($root);
 	my $fstype = mount_image($root, $imageroot);
 	my $uuid = get_uuid($root);
