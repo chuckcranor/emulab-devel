@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018, 2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -454,7 +454,38 @@ function Do_ModifyDataSet()
 	return;
     }
     $leaseid = $dataset->pid() . "/" . $dataset->id();
-    $opt     = "";
+    $popt = "";
+
+    #
+    # Deal with the permanent bit first. Local datasets use a different
+    # command so do it separately. Remote can be rolled in below.
+    #
+    if (ISADMIN()) {
+        $permanent = (isset($formfields["dataset_permanent"]) &&
+                      $formfields["dataset_permanent"] == "checked" ? 1 : 0);
+        if ($permanent != $dataset->permanent()) {
+            $popt = $permanent ? "-p on" : "-p off";
+            
+            if ($dataset->islocal()) {
+                $command = $dataset->modifyCommand(null) . " ";
+                $retval = SUEXEC($this_uid, $project,
+                                 "$command $popt $leaseid",
+                                 SUEXEC_ACTION_CONTINUE);
+                if ($retval) {
+                    SPITAJAX_ERROR(1, $suexec_output);
+                    return;
+                }
+                # See below.
+                $popt = "";
+            }
+            # Remote handled below
+        }
+    }
+
+    #
+    # Then the read/write access.
+    #
+    $opt = "";
 
     if (isset($formfields["dataset_read"])) {
         $perm = $formfields["dataset_read"];
@@ -468,9 +499,9 @@ function Do_ModifyDataSet()
             $opt .= "-W $perm ";
         }
     }
-    if ($opt != "") {
-        if ($dataset->islocal()) {
-            $command = $dataset->grantCommand() . " ";
+    if ($opt != "" || $popt != "") {
+        if ($dataset->islocal() && $opt != "") {
+            $command = $dataset->grantCommand(null) . " ";
             $retval = SUEXEC($this_uid, $project,
                              "$command $opt $leaseid",
                              SUEXEC_ACTION_CONTINUE);
@@ -479,21 +510,21 @@ function Do_ModifyDataSet()
                 return;
             }
         }
-        else {
+        elseif (!$dataset->islocal()) {
             $webtask = WebTask::CreateAnonymous();
-            $command = $dataset->grantCommand($webtask);
+            $command = $dataset->modifyCommand($webtask);
             $retval = SUEXEC($this_uid, $project,
-                             "$command $opt $leaseid",
+                             "$command $opt $popt $leaseid",
                              SUEXEC_ACTION_IGNORE);
             if ($retval) {
                 $webtask->Refresh();
                 if (!$webtask->exited() || $retval < 0) {
                     SUEXECERROR(SUEXEC_ACTION_CONTINUE);
                     SPITAJAX_ERROR(-1, "Internal error modifying ".
-                                   "dataset permissions");
+                                   "dataset");
                 }
                 else {
-                    SPITAJAX_ERROR(1, "Cannot modify dataset permissions: " .
+                    SPITAJAX_ERROR(1, "Cannot modify dataset: " .
                                    $webtask->output());
                 }
                 $webtask->Delete();

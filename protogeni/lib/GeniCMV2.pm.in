@@ -112,6 +112,7 @@ my $DELETEIMAGE    = "$TB/sbin/delete_image";
 my $CREATEDATASET  = "$TB/bin/createdataset";
 my $DELETEDATASET  = "$TB/bin/deletelease";
 my $EXTENDDATASET  = "$TB/bin/extendlease";
+my $MODIFYDATASET  = "$TB/bin/modlease";
 my $GRANTDATASET   = "$TB/bin/grantlease";
 my $APPROVEDATASET = "$TB/bin/approvelease";
 my $GRANTIMAGE     = "$TB/sbin/grantimage";
@@ -5963,8 +5964,42 @@ sub ModifyDataset($)
     }
     my $cmd;
     #
-    # All we can handle is extend and modify permission bits.
+    # All we can handle is extend,modify permission bits, and permanent flag
     #
+    if (exists($argref->{'permanent'})) {
+	return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED, undef,
+				    "IM datasets cannot made permanent")
+	    if (!$islease);
+	if ($lease->IsPermanent() != $argref->{'permanent'}) {
+	    my $onoff = ($argref->{'permanent'} == 1 ? "on" : "off");
+	    my $cmd = "$MODIFYDATASET -p $onoff " .
+		$lease->pid() . "/" . $lease->gid() . "/" .
+		$lease->lease_id();
+
+	    if ($PROTOGENI_LOCALUSER) {
+		$cmd = "$WAP $cmd";
+		#
+		# We do this as admin to avoid permission problems; caller has
+		# permission to do it via credential.
+		#
+		GeniUtil::FlipToElabMan();
+	    }
+	    my $output = GeniUtil::ExecQuiet($cmd);
+	    # Not a typical op, so always print debugging info;
+	    print STDERR $output;
+	    if ($?) {
+		my $val = $? >> 8;
+		if ($val == 255 || $val < 0) {
+		    $val = GENIRESPONSE_ERROR;
+		}
+		else {
+		    $val = GENIRESPONSE_REFUSED;
+		}
+		return GeniResponse->Create($val, undef, $output);
+	    }
+	    GeniUtil::FlipToGeniUser();
+	}
+    }
     if (exists($argref->{'extend'})) {
 	return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED, undef,
 				    "IM datasets cannot be extended")
@@ -5988,6 +6023,9 @@ sub ModifyDataset($)
 		       $write_access eq "creator"));
 	    $cmd .= " -W " . $write_access;
 	}
+    }
+    elsif (exists($argref->{'permanent'})) {
+	goto done;
     }
     else {
 	return GeniResponse->MalformedArgsResponse("unknown operation");

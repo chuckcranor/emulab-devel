@@ -304,20 +304,20 @@
                       <div class='radio'>
 			<label>
 			  <input type='radio' name='dataset_modify'
-			       id='dataset_modify_registered'
-		               <% if (formfields.dataset_modify == "creator") {
-				  %>checked<% } %>
-			       value='creator'>
+				 id='dataset_modify_registered'
+				 <% if (formfields.dataset_modify == "creator") {
+				 %>checked<% } %>
+				 value='creator'>
 			  Only you
     			</label>
                       </div>
                       <div class='radio'>
 			<label>
 			  <input type='radio' name='dataset_modify'
-			       id='dataset_modify_private'
-		               <% if (formfields.dataset_modify == "project") {
-				  %>checked<% } %>
-			       value='project'>
+				 id='dataset_modify_private'
+				 <% if (formfields.dataset_modify == "project") {
+				 %>checked<% } %>
+				 value='project'>
 			  You and members of
 			  <span name="project_name">your project</span>
     			</label>
@@ -326,7 +326,23 @@
 		  </div>
 		</div>
               </div>
-	      
+	      <% if (isadmin && editing &&
+		     formfields.dataset_type == "ltdataset") { %>
+		<div class='row'>
+		  <div class='col-sm-9 col-sm-offset-3'>
+		    <div class='checkbox format-me' data-key='dataset_permanent'
+			 data-compact='yep'>
+                      <label>
+			<input type='checkbox' name='dataset_permanent'
+			       id='dataset_modify_permanent'
+			       <% if (formfields.dataset_permanent) {
+			       %>checked<% } %>
+			       value='checked'>Permanent (never delete).
+		      </label>
+                    </div>
+		  </div>
+		</div>
+              <% } %>
 	      <% if (editing) { %>
 	      <input type='hidden' name='dataset_uuid'
 		     value='<%= formfields.dataset_uuid %>'>

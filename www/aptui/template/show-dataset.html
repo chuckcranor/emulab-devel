@@ -42,6 +42,14 @@
 		<td>Type</td>
 		<td><%- formfields.dataset_type_string %></td>
 	      </tr>
+	      <% if (formfields.dataset_type == "ltdataset") { %>
+		<tr>
+		  <td>Permanent</td>
+		  <td>
+		    <% if (formfields.dataset_permanent) { %>Yes<% } else { %>No<% } %>
+		  </td>
+		</tr>
+	      <% } %>
 	      <tr>
 		<td>Created</td>
 		<td class='format-date'><%- formfields.dataset_created %></td>

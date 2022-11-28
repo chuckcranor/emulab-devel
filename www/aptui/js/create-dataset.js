@@ -25,6 +25,8 @@ $(function ()
 	isadmin  = window.ISADMIN;
 	editing  = window.EDITING;
 	fields   = JSON.parse(_.unescape($('#form-json')[0].textContent));
+	console.info("dataset", fields);
+	
 	if (! editing) {
 	    fstypes = JSON.parse(_.unescape($('#fstypes-json')[0].textContent));
 	    projlist =

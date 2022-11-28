@@ -27,6 +27,7 @@ $(function ()
 	cansnapshot  = window.CANSNAPSHOT;
 
 	var fields = JSON.parse(_.unescape($('#fields-json')[0].textContent));
+	console.info("fields", fields);
 	if (!embedded && cansnapshot) {
 	    instances =
 		JSON.parse(_.unescape($('#instances-json')[0].textContent));

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -156,6 +156,7 @@ class Lease
     }
     function size()	{ return $this->attribute("size"); }
     function fstype()	{ return $this->attribute("fstype"); }
+    function permanent(){ return $this->attribute("permanent") ? 1 : 0; }
     function islocal()  { return 1; }
 
     #
@@ -280,6 +281,9 @@ class Lease
     function grantCommand($webtask) {
 	return  "webgrantlease ";
     }
+    function modifyCommand($webtask) {
+	return  "webmodlease ";
+    }
 
     function Project() {
 	$pid = $this->pid();
@@ -359,6 +363,7 @@ class ImageDataset
     function locked()	     { return $this->image->locked(); }
     function locker_pid()    { return $this->image->locker_pid(); }
     function islocal()       { return 1; }
+    function permanent()     { return 0; }
     function updated()       { return $this->image->updated(); }
 
     #

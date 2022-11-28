@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -111,6 +111,7 @@ $fields["dataset_uuid"]     = $uuid;
 $fields["dataset_urn"]      = $dataset->URN();
 $fields["dataset_read"]     = $dataset->read_access();
 $fields["dataset_write"]    = $dataset->write_access();
+$fields["dataset_permanent"]= $dataset->permanent();
 if (ISADMIN()) {
     $fields["dataset_idx"]  = $dataset->idx();
 }
@@ -137,7 +138,7 @@ SPITHEADER(1);
 echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/plain' id='fields-json'>\n";
-echo htmlentities(json_encode($fields)) . "\n";
+echo htmlentities(json_encode($fields, JSON_NUMERIC_CHECK)) . "\n";
 echo "</script>\n";
 
 #

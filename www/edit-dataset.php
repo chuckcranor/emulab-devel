@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,6 +42,7 @@ $optargs = RequiredPageArguments("uuid",        PAGEARG_UUID);
 PAGEHEADER("Edit Dataset");
 
 echo "<iframe src='apt/edit-dataset.php?embedded=1&uuid=$uuid'
+              style='margin-top: 10px;'
               id='embedded' class='embedded'></iframe>";
 
 $bodyclosestring =

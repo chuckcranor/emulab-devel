@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -113,6 +113,7 @@ class Dataset
     function write_access()  { return $this->field("write_access"); }
     function ispublic()      { return $this->field("public"); }
     function shared()        { return $this->field("shared"); }
+    function permanent()     { return $this->field("permanent"); }
     function webtask_id()    { return $this->field('webtask_id'); }
     function islocal()       { return 0; }
 
@@ -203,6 +204,9 @@ class Dataset
         $command = " webmanage_dataset " .
                  "-t " . $webtask->task_id() . " modify ";
         return $command;
+    }
+    function modifyCommand($webtask) {
+        return Dataset::grantCommand($webtask);
     }
 
     # Grab the webtask. Backwards compat mode, see if there is one associated
