@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,9 +39,12 @@ $ishashed= 0;
 #
 RedirectSecure();
 $this_user = CheckLogin($check_status);
+# Operate as a guest user if not logged in,
+if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
+    $this_user = null;
+}
 if (isset($this_user)) {
-    CheckLoginOrDie(CHECKLOGIN_NONLOCAL|CHECKLOGIN_WEBONLY);
-    $isadmin  = (ISADMIN() ? 1 : 0);
+    $isadmin = (ISADMIN() ? 1 : 0);
 }
 else {
     $isguest = 1;
