@@ -32,7 +32,7 @@ $(function ()
     var allroutes    = [];
     var fakeroutes   = true;
     var JACKS_NS     = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
-    var IDEAL_STARTHOUR = 7;	// 7am start time preferred.
+    var IDEAL_STARTHOUR = 6;	// 6am start time preferred.
     var IDEAL_ENDHOUR   = 18;	// 6pm end time preferred.
 
     // Helper function, can existing reservation be added to.
@@ -2455,7 +2455,7 @@ $(function ()
 	var ranges   = _.values(GetRangeRows());
 	var routes   = _.values(GetRouteRows());
 
-	if (!_.size(clusters)) {
+	if (!_.size(clusters) && !_.size(routes)) {
 	    alert("Need at least one complete cluster definition");
 	    return;
 	}
@@ -2463,6 +2463,14 @@ $(function ()
 	    alert("Please provide the number of days");
 	    return;
 	}
+	if (_.size(routes) && days > 1) {
+	    sup.SpitOops("oops", "Experiments that include mobile endpoints "+
+			 "(routes) must be "+
+			 "finished on the same day the experiment starts. "+
+			 "Please limit your search to one day.");
+	    return;
+	}
+	
 	// Remove old sanity check errors.
 	$('#reserve-request-form .form-control-div .form-group-sm')
 	    .addClass("hidden");
@@ -2680,7 +2688,8 @@ $(function ()
 	    console.info("findfirst return", results);
 	    return results;
 	};
-	var lower = (window.BISONLY ? NextBusinessDay().unix() : null);
+	var lower = (window.BISONLY || _.size(routes) ?
+		     NextBusinessDay().unix() : null);
 	var fit   = null;
 	var loops = 100;  // Avoid infinite loop.
 	
@@ -2690,6 +2699,32 @@ $(function ()
 	    if (!fit.starttime) {
 		break;
 	    }
+	    /*
+	     * Oh, ugly special case for routes.
+	     */
+	    if (_.size(routes)) {
+		var s  = moment.unix(fit["starttime"]);
+		var e  = moment.unix(fit["endtime"]);
+		var ok = true;
+
+		if (s.isoWeekday() == 6 || s.isoWeekday() == 7) {
+		    s.isoWeekday(1);
+		    s.isoWeek(s.isoWeek() + 1);
+		    ok = false;
+		}
+		else if (s.hours() > IDEAL_STARTHOUR) {
+		    s.isoWeekday(s.isoWeekday() + 1);
+		    ok = false;
+		}
+		if (!ok) {
+		    s.hours(IDEAL_STARTHOUR);
+		    lower = s.unix();
+		    fit   = null;
+		    console.info("Route adjustment(1) to " + s.format());
+		    continue;
+		}
+	    }
+	    
 	    for (index = 1; index < clusters.length; index++) {
 		var results = findfirst(clusters[index],
 					fit["starttime"], null);
@@ -2699,7 +2734,7 @@ $(function ()
 		console.info("fit:" + index,
 			     fit.starttime, fit.endtime,
 			     fit.startdata, fit.enddata);
-		
+
 		/*
 		 * If the first avail is beyond the current fit, need
 		 * to start over.
@@ -2728,55 +2763,81 @@ $(function ()
 		    break;
 		}
 	    }
-	    if (!fit || _.size(ranges) == 0) {
-		continue;
-	    }
-	    // Set lower in case we have to go around again, we bump it below.
-	    lower = fit["starttime"];
+	    if (fit && _.size(ranges)) {
+		// Set lower in case we have to go around again, we bump
+		// it below.
+		lower = fit["starttime"];
 	    
-	    /*
-	     * Ok, we have something that works for the clusters, lets look
-	     * at the ranges. This is a bit easier since current ranges
-	     * include both a start and end time. So if the current fit
-	     * above conflicts with a range we want, start over at the end
-	     * of the conflicting range. 
-	     */
-	    for (index = 0; index < ranges.length; index++) {
-		var range     = ranges[index];
-		var freq_low  = parseFloat(range.freq_low);
-		var freq_high = parseFloat(range.freq_high);
+		/*
+		 * Ok, we have something that works for the clusters, lets look
+		 * at the ranges. This is a bit easier since current ranges
+		 * include both a start and end time. So if the current fit
+		 * above conflicts with a range we want, start over at the end
+		 * of the conflicting range. 
+		 */
+		for (index = 0; index < ranges.length; index++) {
+		    var range     = ranges[index];
+		    var freq_low  = parseFloat(range.freq_low);
+		    var freq_high = parseFloat(range.freq_high);
 
-		console.info("Range:" + index, freq_low, freq_high);
+		    console.info("Range:" + index, freq_low, freq_high);
 
-		for (var r = 0; r < allranges.length; r++) {
-		    var existing = allranges[r];
-		    var low      = parseFloat(existing.freq_low);
-		    var high     = parseFloat(existing.freq_high);
-		    var starts   = moment(existing.start).unix();
-		    var ends     = moment(existing.end).unix();
-		    var fitend   = fit.starttime + (3600 * 24 * days) + 3600;
+		    for (var r = 0; r < allranges.length; r++) {
+			var existing = allranges[r];
+			var low      = parseFloat(existing.freq_low);
+			var high     = parseFloat(existing.freq_high);
+			var starts   = moment(existing.start).unix();
+			var ends     = moment(existing.end).unix();
+			var fitend   = fit.starttime + (3600 * 24 * days) + 3600;
 
-		    console.info("Existing:" + r, low,high,starts,ends);
+			console.info("Existing:" + r, low,high,starts,ends);
 
-		    // If this range does not overlap in time, keep going
-		    if ((fit.starttime < starts && fitend < starts) ||
-			(fit.starttime > ends)) {
-			continue;
+			// If this range does not overlap in time, keep going
+			if ((fit.starttime < starts && fitend < starts) ||
+			    (fit.starttime > ends)) {
+			    continue;
+			}
+			// If this range does not overlap in frequency,
+			// keep going
+			if ((freq_low < low && freq_high < low) ||
+			    (freq_low > high)) {
+			    continue;
+			}
+			// Does not fit!
+			console.info("Range does not fit");
+			fit   = null;
+			break;
 		    }
-		    // If this range does not overlap in frequency, keep going
-		    if ((freq_low < low && freq_high < low) ||
-			(freq_low > high)) {
-			continue;
+		    // No point in continuing, start over.
+		    if (!fit) {
+			lower = lower + (3600 * 1);
+			break;
 		    }
-		    // Does not fit!
-		    console.info("Range does not fit");
-		    fit   = null;
-		    break;
 		}
-		// No point in continuing, start over.
-		if (!fit) {
-		    lower = lower + (3600 * 4);
-		    break;
+	    }
+	    /*
+	     * Oh, ugly special case for routes.
+	     */
+	    if (fit && _.size(routes)) {
+		var s  = moment.unix(fit["starttime"]);
+		var e  = moment.unix(fit["endtime"]);
+		var ok = true;
+
+		if (s.isoWeekday() == 6 || s.isoWeekday() == 7) {
+		    s.isoWeekday(1);
+		    s.isoWeek(s.isoWeek() + 1);
+		    ok = false;
+		}
+		else if (s.hours() > IDEAL_STARTHOUR) {
+		    s.isoWeekday(s.isoWeekday() + 1);
+		    ok = false;
+		}
+		if (!ok) {
+		    s.hours(IDEAL_STARTHOUR);
+		    lower = s.unix();
+		    fit   = null;
+		    console.info("Route adjustment(2) to " + s.format());
+		    continue;
 		}
 	    }
 	}
@@ -2794,7 +2855,7 @@ $(function ()
 	var starttime = fit.starttime;
 	var endtime   = fit.endtime;
 
-	var start = moment(starttime * 1000);
+	var start = moment.unix(starttime);
 	/*
 	 * Need to push out the start to the top of hour.
 	 */
@@ -2817,6 +2878,15 @@ $(function ()
 	    }
 	}
 	var end = moment(start.valueOf() + ((3600 * 24 * days) * 1000));
+
+	/*
+	 * With routes, limit to 11pm on the same day as start.
+	 */
+	if (_.size(routes) && start.dayOfYear() != end.dayOfYear()) {
+	    console.info("Trimming to earlier end time cause of routes");
+	    end.dayOfYear(start.dayOfYear());
+	    end.hour(23);
+	}
 
 	var start_day  = $('#reserve-request-form [name=start_day]').val();
 	var start_hour = $('#reserve-request-form [name=start_hour]').val();
