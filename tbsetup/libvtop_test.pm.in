@@ -4019,6 +4019,13 @@ sub GenVirtLans($)
 		my $bandwidth  = $self->getbandwidth($member,$vlan,$bw);
 		my $rbandwidth = $self->getbandwidth($member,$vlan,$rbw);
 
+		# Rob says not supported
+		if (($trivial_ok || $emulated) &&
+		    ($bandwidth == 0 || $rbandwidth == 0)) {
+		    tberror("Cannot mix trivial_ok|emulated with * bw\n");
+		    $errors++;
+		}
+		
 		#
 		# Lets see how many <=1Gb and >1Gb links we have. HACK!
 		#
