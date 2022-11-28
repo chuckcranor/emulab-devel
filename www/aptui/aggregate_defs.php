@@ -600,7 +600,6 @@ class Aggregate
                          "  i.itype=l.itype ".
                          "left join apt_aggregate_reservable_nodes as r on ".
                          "  r.urn=i.aggregate_urn and r.node_id=i.node_id ".
-                         "where i.node_id not like 'cellsdr%' ".
                          "order by l.itype desc, l.location asc");
 
         while ($row = mysql_fetch_array($query_result)) {
@@ -626,6 +625,9 @@ class Aggregate
             # aggregate is alive (reachable).
             #
             if ($aggregate = Aggregate::Lookup($urn)) {
+                if ($aggregate->adminonly() && !ISADMIN()) {
+                    continue;
+                }
                 if (!array_key_exists($urn, $blob)) {
                     $blob[$urn] = array();
                 }
