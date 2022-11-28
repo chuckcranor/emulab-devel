@@ -218,7 +218,7 @@ class Paramset
         $runurl .= "&rerun_paramset=" . $this->uuid();
         $blob["run_url"] = $runurl;
         
-        if ($profile->creator_idx() == $user->uid_idx()) {
+        if ($profile->ispublic()) {
             #
             # Try and figure out a share URL. To make this simple, not going
             # to provide a share link if the paramset is for a non-public
