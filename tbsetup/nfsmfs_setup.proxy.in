@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,6 +46,7 @@ my $force = 0;
 # Configure variables
 #
 my $TBOPS       = "@TBOPSEMAIL@";
+my $WITHZFS     = @WITHZFS@;
 my $ZFSROOT	= "@ZFS_ROOT@";
 my $ZFSNOEXPORT	= "@ZFS_NOEXPORT@";
 
@@ -86,7 +87,7 @@ if ($UID != 0) {
     die("Must be root!");
 }
 
-if (! -x "$ZFS") {
+if (! $WITHZFS || ! -x "$ZFS") {
     fatal("Can only be used with ZFS right now!");
 }
 

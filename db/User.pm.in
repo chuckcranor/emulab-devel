@@ -2397,7 +2397,7 @@ sub UpdateExports($)
 	
     if (!defined($last_activity) ||
 	time() - $last_activity > ((($exports_limit * 24) - 12) * 3600)) {
-	if ($ZFS_NOEXPORT) {
+	if ($WITHZFS && $ZFS_NOEXPORT) {
 	    mysystem($EXPORTS_SETUP);
 	}
 	elsif (!$WITHAMD) {
