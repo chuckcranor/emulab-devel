@@ -7050,7 +7050,7 @@ sub ServiceLogs($)
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				    "No node for sliver urn");
     }
-    if (!$node->isup()) {
+    if (!$node->IsUp()) {
 	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
 				    "Node is not ready");
     }
