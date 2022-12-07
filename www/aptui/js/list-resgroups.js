@@ -188,6 +188,7 @@ $(function ()
 			return $(node).find("> span:not(.hidden) .status-value").text();
 		    },
 		},
+		sortAppend: [[4, 0]],
 	    });
 	$(selector + ' .tablesorter .tablesorter-childRow>td').hide();	
 	$(selector + ' .tablesorter .show-childrow .expando')
@@ -372,8 +373,21 @@ $(function ()
 	if (routes) {
 	    $("#groups-byroute-div").removeClass("hidden");
 	}
-	$('#groups-bytype .tablesorter, #groups-byrange .tablesorter,' +
-	  '#groups-byroute .tablesorter')
+	$('#groups-bytype .tablesorter')
+	    .tablesorter({
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
+
+		textExtraction: {
+		    '.status-extractor': function(node, table, cellIndex) {
+			return $(node).find("> span:not(.hidden) .status-value").text();
+		    },
+		},
+		sortAppend: [[8, 0]],
+	    });
+
+	$('#groups-byrange .tablesorter, #groups-byroute .tablesorter')
 	    .tablesorter({
 		theme : 'bootstrap',
 		widgets : [ "uitheme", "zebra"],
