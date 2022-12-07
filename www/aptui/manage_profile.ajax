@@ -1757,6 +1757,7 @@ function Do_SearchProfiles()
                        "     v.version=p.version ".
                        "where (v.creator like '$safe_text' or ".
                        "       p.pid like '$safe_text' or ".
+                       "       v.uuid like '$safe_text' or ".
                        "       v.rspec like ".
                        "        '%<description%>$safe_text</description>%' or ".
                        "       p.name like '$safe_text') ".
