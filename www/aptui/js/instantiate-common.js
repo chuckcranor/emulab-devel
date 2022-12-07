@@ -203,6 +203,7 @@ window.instantiateCommon = (function () {
 	var ammap  = {};
 	var siteIdToSiteNum = {};
 	var sites  = {};
+	var siteIdToAM = {};
 
 	var nodecount  = $(xmlDoc).find("node").length;
 	if (nodecount > 3000) {
@@ -214,7 +215,7 @@ window.instantiateCommon = (function () {
 	/*
 	 * Find the sites. Might not be any if not a multisite topology
 	 */
-	$(xml).find("node").each(function() {
+	$(xml).find("node, emulab\\:routable_pool").each(function() {
 	    var node_id = $(this).attr("client_id");
 	    var site    = this.getElementsByTagNameNS(JACKS_NS, 'site');
 	    var manager = $(this).attr("component_manager_id");
@@ -232,6 +233,15 @@ window.instantiateCommon = (function () {
 		// nodes, and if all nodes are bound, no dropdown at all.
 		bound++;
 		ammap[manager] = manager;
+
+		if (site.length) {
+		    var siteid = $(site).attr("id");
+		    if (siteid === undefined) {
+			console.error("No site ID in " + site);
+			return;
+		    }
+		    siteIdToAM[siteid] = manager;
+		}
 	    }
 	    else if (site.length) {
 		var siteid = $(site).attr("id");
@@ -383,7 +393,12 @@ window.instantiateCommon = (function () {
 		 * selection if the user has already made one. 
 		 */
 		var selected;
-		if ($(divID).length) {
+		var hidden = false;
+		if (_.has(siteIdToAM, siteid)) {
+		    selected = amlist[siteIdToAM[siteid]].name;
+		    hidden = true;
+		}
+		else if ($(divID).length) {
 		    selected = $(divID + ' .select_where').val();
 		}
 		var picker = $(siteTemplate({
@@ -392,6 +407,9 @@ window.instantiateCommon = (function () {
 		    "multisite" : true,
 		    "clusters"  : createDropdowns(selected),
 		}));
+		if (hidden) {
+		    picker.addClass("hidden");
+		}
 		pickers.push(picker);
 		sitenum++;
 	    });
