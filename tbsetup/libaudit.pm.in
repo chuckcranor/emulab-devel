@@ -551,6 +551,7 @@ sub SendAuditMail($)
 	# then no point in sending to tblogs, obviously.
 	#
 	my $TO;
+	my $CC;
 	my $HDRS  = "Reply-To: $TBOPS";
 	my @FILES = ();
 	
@@ -566,28 +567,37 @@ sub SendAuditMail($)
 		}
 		elsif ($logtblogs) {
 		    $TO    = $TBLOGS;
-		    $HDRS .= "\nCC: $TBOPS" if ($exitstatus);
+		    $CC    = $TBOPS if ($exitstatus);
 		}
 		else {
 		    $TO    = $FROM;
-		    $HDRS .= "\nCC: ". ($exitstatus ? $TBOPS : $TBLOGS);
+		    $CC    = ($exitstatus ? $TBOPS : $TBLOGS);
 		}
 	    }
 	    else {
 		$TO    = $TBLOGS;
-		$HDRS .= "\nCC: $TBOPS" if ($exitstatus);
+		$CC    = $TBOPS if ($exitstatus);
 	    }
 	}
 	elsif ($logtblogs) {
 	    $TO    = $TBLOGS;
-	    $HDRS .= "\nCC: $TBOPS" if ($exitstatus);
+	    $CC    = $TBOPS if ($exitstatus);
 	}
 	else {
 	    $TO    = $TBOPS;
 	}
 	if (defined($AUDIT_INFO{'cc'})) {
+	    my $cc = join(', ', @{ $AUDIT_INFO{'cc'} });
+	    if (defined($CC)) {
+		$CC .= ", $cc";
+	    }
+	    else {
+		$CC = $cc
+	    }
+	}
+	if (defined($CC)) {
 	    $HDRS .= "\n";
-	    $HDRS .= "CC: " . join(', ', @{ $AUDIT_INFO{'cc'} });
+	    $HDRS .= "CC: $CC";
 	}
 
 	# This always succeeds, stop leaving file in /tmp
