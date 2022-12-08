@@ -67,9 +67,6 @@ window.ShowTXGraph = (function ()
 	    .domain([minDate, maxDate])
 	    .range([0, width]);
 
-	// Needed for zooming/rescale
-	var xCopy = x.copy();
-
 	// Need a little padding on the Y axis
 	var minFreq = d3.min(args.txlist, function(d) { return d.frequency; })
 	var maxFreq = d3.max(args.txlist, function(d) { return d.frequency; })
@@ -96,6 +93,10 @@ window.ShowTXGraph = (function ()
 	var xAxis = d3.axisBottom(x),
 	    yAxis = d3.axisLeft(y);
 
+	// Needed for zooming/rescale
+	var xCopy = x.copy();
+	var yCopy = y.copy();
+
 	// The data has 3 decimal places.
 	yAxis.tickFormat(d3.format('.3f'));
 
@@ -114,6 +115,12 @@ window.ShowTXGraph = (function ()
 	    .translateExtent([[0, 0], [width, height]])
 	    .extent([[0, 0], [width, height]])
 	    .on("zoom", zoomed);
+
+	var zoomy = d3.zoom()
+	    .scaleExtent([1, Infinity])
+	    .translateExtent([[0, 0], [width, height]])
+	    .extent([[0, 0], [width, height]])
+	    .on("zoom", zoomedy);
 
 	var svg = d3.select(selector)
 	    .append('svg')
@@ -209,6 +216,13 @@ window.ShowTXGraph = (function ()
 	    .attr("height", height)
 	    .lower()
 	    .call(zoom);
+
+	svg.append("rect")
+	    .attr("class", "zoom zoom-y")
+            .attr("width", margin.left)
+            .attr("height", height)
+	    .attr("transform", "translate(-80,0)")
+	    .call(zoomy);
 	
 	function zoomed() {
 	    var t = d3.event.transform;
@@ -217,6 +231,15 @@ window.ShowTXGraph = (function ()
 		.attr("x", function(d) { return x(d.date) });
 	    svg.select(".axis--x").call(xAxis);
 	    svg.select(".xaxis-date-range").text(currentDateRange());
+	}
+
+	function zoomedy() {
+	    var t = d3.event.transform;
+	    console.info(t);
+	    y.range([height, 0].map(d => t.applyY(d)));
+	    scatter.selectAll(".abovefloor-circles")
+		.attr("y", function(d) { return y(d.frequency) });
+	    svg.select(".axis--y").call(yAxis);
 	}
 
 	// Bootstrap tooltips
