@@ -62,6 +62,11 @@ window.APT_OPTIONS.configObject = {
 window.APT_OPTIONS.initialize = function (sup)
 {
     var embedded = window.EMBEDDED;
+    var version  =
+	typeof bootstrap === 'undefined' ?
+	$().tooltip.Constructor.VERSION : bootstrap.Tooltip.VERSION;
+
+    window.BOOSTRAP_VERSION = parseInt(version.substr(0, 1));
 
     // Eventually make this download without having to follow a link.
     // Just need to figure out how to do that!
