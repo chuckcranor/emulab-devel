@@ -4995,6 +4995,7 @@ sub BindNonLocalUser($$$$$$;$$)
     }
     else {
 	my @insert_data = ();
+	my $unix_uid;
 
 	#
 	# Find existing user in the same project and use that unix_uid.
@@ -5011,14 +5012,32 @@ sub BindNonLocalUser($$$$$$;$$)
 	    if (!$query_result);
     
 	if ($query_result->numrows) {
-	    my (undef, $unix_uid) = $query_result->fetchrow_array();
+	    (undef, $unix_uid) = $query_result->fetchrow_array();
 
+	    #
+	    # For backwards compatability need to watch for a pre
+	    # existing conflict. 
+	    #
+	    $query_result = 
+		DBQueryWarn("select uid,unix_uid ".
+			    "   from nonlocal_user_accounts as a ".
+			    "where exptidx='$exptidx' and ".
+			    "      unix_uid='$unix_uid'");
+
+	    return -1
+		if (!$query_result);
+    
+	    if ($query_result->numrows) {
+		$unix_uid = undef;
+	    }
+	}
+	if (defined($unix_uid)) {
 	    push(@insert_data, "unix_uid='$unix_uid'");
 	}
 	else {
 	    push(@insert_data, "unix_uid=NULL");
 	}
-	
+
 	$uid_idx = User->NextIDX();
 	push(@insert_data, "created=now()");
 	push(@insert_data, "updated=now()");
