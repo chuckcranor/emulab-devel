@@ -553,11 +553,7 @@ blockquote #selected_profile_description {
 
 /* Update for better cross browser compat */
 .fade {
-    opacity: 0;
-    -webkit-transition: opacity 0.15s linear;
     -moz-transition: opacity 0.15s linear;
-    -o-transition: opacity 0.15s linear;
-    transition: opacity 0.15s linear;
 }
 
 /* Update Successful flasher on the manage profile page. */
