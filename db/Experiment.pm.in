@@ -4968,6 +4968,7 @@ sub BindNonLocalUser($$$$$$;$$)
 	if (! ref($self));
 
     my $exptidx    = $self->idx();
+    my $pid_idx    = $self->pid_idx();
     my $safe_urn   = DBQuoteSpecial($urn)
 	if (defined($urn));
     my $safe_uid   = DBQuoteSpecial($uid);
@@ -4994,12 +4995,34 @@ sub BindNonLocalUser($$$$$$;$$)
     }
     else {
 	my @insert_data = ();
+
+	#
+	# Find existing user in the same project and use that unix_uid.
+	#
+	$query_result =
+	    DBQueryWarn("select distinct uid,unix_uid ".
+			"   from nonlocal_user_accounts as a ".
+			"left join experiments as e on ".
+			"   e.idx=a.exptidx ".
+			"where e.pid_idx='$pid_idx' and uid=$safe_uid ".
+			"order by uid,unix_uid limit 1");
+
+	return -1
+	    if (!$query_result);
+    
+	if ($query_result->numrows) {
+	    my (undef, $unix_uid) = $query_result->fetchrow_array();
+
+	    push(@insert_data, "unix_uid='$unix_uid'");
+	}
+	else {
+	    push(@insert_data, "unix_uid=NULL");
+	}
 	
 	$uid_idx = User->NextIDX();
 	push(@insert_data, "created=now()");
 	push(@insert_data, "updated=now()");
 	push(@insert_data, "uid_idx='$uid_idx'");
-	push(@insert_data, "unix_uid=NULL");
 	push(@insert_data, "exptidx='$exptidx'");
 	push(@insert_data, "urn=$safe_urn")
 	    if (defined($urn));
