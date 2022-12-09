@@ -82,16 +82,40 @@ window.ShowTXGraph = (function ()
 		bandDomain[d.frequency] = d.frequency;
 	    }
 	});
+	// Convert to sorted array.
+	bandDomain = _.keys(bandDomain).sort(function (a, b) {return a - b;});
 	console.info(bandDomain);
+	
+	function bandTickValues(scale)
+	{
+	    if (_.size(bandDomain) < 50) {
+		return bandDomain;
+	    }
+	    var scaled = [];
+	    var mod    = Math.round(_.size(bandDomain) / (50 * scale));
+	    if (mod == 0) {
+		return bandDomain;
+	    }
 	    
-	var y = d3.scaleBand()
-	    .domain(_.keys(bandDomain).sort(function (a, b) {return a - b;}))
-	    .paddingInner(0.1)
-	    .align(1)
+	    scaled[0] = minFreq;
+	    for (var i = 1; i < _.size(bandDomain); i++) {
+		if (i % mod == 0) {
+		    var frequency = bandDomain[i];
+		    scaled.push(frequency);
+		}
+	    }
+	    scaled.push(maxFreq)
+	    //console.info("scaleBandRange", scaled);
+	    return scaled;
+	}
+	    
+	var y = d3.scalePoint()
+	    .domain(bandDomain)
 	    .range([height, 0]);
 
-	var xAxis = d3.axisBottom(x),
-	    yAxis = d3.axisLeft(y);
+	var xAxis = d3.axisBottom(x);
+	var yAxis = d3.axisLeft(y)
+	    .tickValues(bandTickValues(1));
 
 	// Needed for zooming/rescale
 	var xCopy = x.copy();
@@ -197,8 +221,8 @@ window.ShowTXGraph = (function ()
 	    .attr("class", function (d) {
 		return "abovefloor-circles " + d.tooltip;
 	    })
-            .attr("width", 4)
-	    .attr("height", y.bandwidth())
+	    .attr("width", 4)
+	    .attr("height", 3)
             .attr("x", function (d) { return x(d.date); } )
             .attr("y", function (d) { return y(d.frequency); } )
 	    .style("fill", function(d) { return d.violation ? "red" : "blue"; })
@@ -238,7 +262,9 @@ window.ShowTXGraph = (function ()
 	    console.info(t);
 	    y.range([height, 0].map(d => t.applyY(d)));
 	    scatter.selectAll(".abovefloor-circles")
-		.attr("y", function(d) { return y(d.frequency) });
+		.attr("y", function(d) { return y(d.frequency) })
+	    	.attr("height", Math.round(3 * t.k));
+	    yAxis.tickValues(bandTickValues(t.k));
 	    svg.select(".axis--y").call(yAxis);
 	}
 
