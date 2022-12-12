@@ -172,6 +172,7 @@ window.ShowTXGraph = (function ()
 
 	svg.append("g")
 	    .attr("class", "axis axis--y")
+	    .attr("clip-path", "url(#clip-yaxis)")
 	    .call(yAxis);
 
 	// text label for the y axis
@@ -183,13 +184,23 @@ window.ShowTXGraph = (function ()
 	    .style("text-anchor", "middle")
 	    .text("Frequency (MHz)");
 
-	var clip = svg.append("defs").append("clipPath")
+	var defs = svg.append("defs");
+
+	defs.append("clipPath")
             .attr("id", "clip")
             .append("rect")
             .attr("width", width)
             .attr("height", height)
             .attr("x", 0)
             .attr("y", 0); 
+
+	defs.append("clipPath")
+            .attr("id", "clip-yaxis")
+            .append("rect")
+            .attr("width", margin.left + 10)
+            .attr("height", height + 10)
+            .attr("x", 0 - margin.left)
+            .attr("y", -5); 
 
 	var scatter = svg.append("g")
             .attr("class", "focus")
@@ -259,7 +270,7 @@ window.ShowTXGraph = (function ()
 
 	function zoomedy() {
 	    var t = d3.event.transform;
-	    console.info(t);
+	    //console.info(t);
 	    y.range([height, 0].map(d => t.applyY(d)));
 	    scatter.selectAll(".abovefloor-circles")
 		.attr("y", function(d) { return y(d.frequency) })
