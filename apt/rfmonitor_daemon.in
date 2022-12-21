@@ -995,7 +995,7 @@ sub WriteRawData($$$)
 	# Prune historical data older then 10 days.
 	#
 	system("$FIND -E $RAWDATADIR -regex '^.*\-[0-9]+\.csv\.gz\$' ".
-	       "-mtime +10 -depth 2 -print " . ($impotent ? "" : "-delete"));
+	       "-mtime +14 -print " . ($impotent ? "" : "-delete"));
 
 	if (open(CSV, "> $tmpname")) {
 	    print CSV "$header\n";
