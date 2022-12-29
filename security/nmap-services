@@ -7,13 +7,14 @@
 #  * Docker
 #  * ELK stack (Elasticsearch, Logstash, Kibana)
 #  * VNC
+#  * MooseFS
 #
 # XXX need to add UDP ports where appropriate, though scanning those
 # is slow.
 #
 # There are of course many other ports for many other apps.
 #
-# Updated 04/22/2022
+# Updated 12/29/2022
 #
 zookeeper	2181/tcp	0.000000	# ZooKeeper master
 docker		2375/tcp	0.000076	# docker.com | Docker REST API (plain text)
@@ -60,6 +61,11 @@ hdfs-4		8485/tcp	0.000076	# HDFS 3 JournalNode RPC server
 yarn-18		8788/tcp	0.000076	# YARN Shared cache manager HTTP Web interface
 elastic-1	9200/tcp	0.000076	# Elasticsearch server requests
 elastic-2	9300/tcp	0.000076	# Elasticsearch server internode
+moosefs-ctrl	9419/tcp	0.000076	# MooseFS master control port
+moosefs-cmd	9420/tcp	0.000076	# MooseFS master command port
+moosefs-client	9421/tcp	0.000076	# MooseFS master client port
+moosefs-chunk	9422/tcp	0.000076	# MooseFS Chunkservers
+moosefs-cgi	9425/tcp	0.000076	# MooseFS CGI server
 logstash	9600/tcp	0.000076	# Logstash server or KMS REST API
 hdfs-5		9864/tcp	0.000076	# HDFS 3 datanode http server
 hdfs-6		9865/tcp	0.000076	# HDFS 3 datanode secure http server
