@@ -569,7 +569,7 @@ $(function ()
 	var $xmlthing = sup.CallServerMethod(null,
 					     "show-profile",
 					     "GetProfile",
-				     	     {"uuid" : profile});
+				     	     {"profile" : profile});
 	$xmlthing.done(callback);
     }
 
