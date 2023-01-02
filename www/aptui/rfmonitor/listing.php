@@ -21,8 +21,16 @@
 # 
 # }}}
 #
+$node_id = null;
+if (isset($_REQUEST["node_id"]) && $_REQUEST["node_id"] != "" &&
+    preg_match("/^[-\w]+$/", $_REQUEST["node_id"])) {
+    $node_id = $_REQUEST["node_id"];
+}
+
 function getFileList($dir)
 {
+    global $node_id;
+    $now = time();
     $listing = array();
     chdir($dir);
 
@@ -45,8 +53,21 @@ function getFileList($dir)
         #
         # Only time stamped .gz files
         #
-        if (!preg_match("/\-\d+\.csv\.gz$/", $entry)) {
+        $match = null;
+        if (!preg_match("/\-(\d+)\.csv\.gz$/", $entry, $match)) {
             continue;
+        }
+        #
+        # Lets limit to previous few days.
+        #
+        $timestamp = $match[1];
+        if ($now - $timestamp > (3600 * 24 * 3)) {
+            continue;
+        }
+        if ($node_id) {
+            if (!preg_match("/^${node_id}/", $entry)) {
+                continue;
+            }
         }
         $listing[] = [
             'name'     => $entry,

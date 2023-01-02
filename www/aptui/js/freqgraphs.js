@@ -1061,6 +1061,9 @@ window.ShowFrequencyGraph = (function ()
 	    }
 	}
 	url = url + "listing.php";
+	if (args.which == "rfmonitor" && args.node_id) {
+	    url = url + "?node_id=" + args.node_id;
+	}
 	console.info("BuildMenu", url);
 	
 	$.get(url, callback);
