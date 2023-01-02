@@ -766,7 +766,7 @@ sub AccessCheck($$$)
 	#
 	if ($access_type == TB_PROJECT_DELGROUP()) {
 	    my $project = $self->GetProject();
-	    my $leader  = $self->GetLeader();
+	    my $leader  = $project->GetLeader();
 	    return 1
 		if ($user->SameUser($leader));
 	}
