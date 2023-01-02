@@ -248,12 +248,11 @@ function addPopoverClip (id, contentfunction)
 
 	// If clicking on the button when the popover is
 	// showing, hide it and return.
-	if ($(button).data("bs.popover") !== undefined) {
+	if ($(button).data("bs.popover") !== undefined ||
+	    $(button).attr("aria-describedby") !== undefined) {
 	    $(button).popover('destroy');
 	    return;
 	}
-	var urn = $(button).data("urn");
-
 	$(button).popover({
 	    html:     true,
 	    content:  contentfunction(this),
@@ -261,32 +260,21 @@ function addPopoverClip (id, contentfunction)
 	    placement:'auto',
 	    container:'body',
 	});
-	if (0) {
+
 	// If the user clicks somewhere else, kill this popover.
 	var hide = function (event) {
 	    console.info("hide");
 	    $(button).popover('destroy');
-	    $('body').off("click", hide);
 	};
 	// Cannot bind it till the popover is shown.
 	$(button).on("shown.bs.popover", function() {
-	    $('body').on("click", hide);
+	    $('body').one("click.popoverclip", hide);
 	});
-	}
 	$(button).popover('show');
-
-	// Timeout to hide the popover. I tried the body click event
-	// above but it did not work consistently. Will revisit if
-	// I hear enough whining.
-	var mytimout = setTimeout(function f() {
-	    $(button).popover('destroy');
-	}, 5000);
-	$(button).on("hide.bs.popover", function() {
-	    clearTimeout(mytimout);
-	});
 
 	// DOM of the popover content.
 	var content = $(button).data("bs.popover").tip();
+	console.info(content);
 
 	// Bind the copy-to-clipboard button.
 	$(content).find("a").click(function (e) {
