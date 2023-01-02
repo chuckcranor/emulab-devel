@@ -94,6 +94,12 @@ $(function ()
 	    mobile = window.open('mobile-endpoints.php', 'Mobile Endpoints');
 	});
 
+	sup.addPopoverClip('#radioinfo-table .urn-button',
+			   function (target) {
+			       var urn = $(target).data("urn");
+			       return sup.popoverClipContent(urn);
+			   });
+
 	$(".txgraph-button").click(function (event) {
 	    event.preventDefault();
 	    ShowTXGraph($(this).closest('tr'));

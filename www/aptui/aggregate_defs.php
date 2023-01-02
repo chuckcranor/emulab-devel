@@ -620,6 +620,10 @@ class Aggregate
             # Sigh
             $row["available"] = intval($row["available"]);
 
+            # URN for node
+            list ($auth,$type,$id) = Instance::ParseURN($urn);
+            $row["component_urn"] = "urn:publicid:IDN+${auth}+node+${node_id}";
+
             #
             # Grab the aggregate. We use the status info to determine if the
             # aggregate is alive (reachable).

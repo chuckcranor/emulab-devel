@@ -43,9 +43,16 @@
 		   data-location="<%- node.location %>"
 		   data-type="<%- node.itype %>">
 	      <%- node.location %></a>
+	      <a href="#" data-urn="<%- urn %>" class="urn-button pull-right">
+		<span class="glyphicon glyphicon-link"></span>
+	      </a>
 	    </td>
 	    <td><a href="<%- url %>" target="_blank">
 	      <%- node_id %></a>
+	      <a href="#" data-urn="<%- node.component_urn %>"
+		 class="urn-button pull-right">
+		<span class="glyphicon glyphicon-link"></span>
+	      </a>
 	    </td>
 	    <td class="nowrap"><%- siteTypes[node.itype] %></td>
 	    <td data-field="radio_type"><%- node.radio_type %></td>
