@@ -57,9 +57,9 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 # No configure vars.
 #
 my $sudo = "";
-my $zipper = "/usr/local/bin/imagezip";
-my $uploader = "/usr/local/bin/frisupload";
-my $xenscript = "/usr/local/bin/create-xen-image";
+my $zipper = "$LBINDIR/imagezip";
+my $uploader = "$LBINDIR/frisupload";
+my $xenscript = "$LBINDIR/create-xen-image";
 my $slice  = "";
 my $slicenum = 0;
 my $bootpart = 0;

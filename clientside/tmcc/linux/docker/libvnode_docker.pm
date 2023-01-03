@@ -120,14 +120,14 @@ my $VLANCONFIG = "/sbin/vconfig";
 my $MODPROBE = "/sbin/modprobe";
 my $IPTABLES	= "/sbin/iptables";
 my $NETSTAT     = "/bin/netstat";
-my $IMAGEZIP    = "/usr/local/bin/imagezip";
-my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
-my $IMAGEDUMP   = "/usr/local/bin/imagedump";
+my $IMAGEZIP    = "$LBINDIR/imagezip";
+my $IMAGEUNZIP  = "$LBINDIR/imageunzip";
+my $IMAGEDUMP   = "$LBINDIR/imagedump";
 
 ##
 ## Runtime configuration options.
 ##
-my $debug  = 0;
+my $debug  = 2;
 my $apidebug = 5;
 my $lockdebug = 0;
 my $sleepdebug = 0;

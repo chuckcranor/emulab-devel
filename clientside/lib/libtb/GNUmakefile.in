@@ -44,6 +44,14 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 
 OBJS		= log.o tbdefs.o popenf.o systemf.o be_user.o tmcc.o
 CFLAGS	       += -O -g -Wall -I${OBJDIR} -I/usr/local/include
+CFLAGS	       += -DCLIENT_BINDIR='"$(CLIENT_BINDIR)"'
+
+ifeq ($(CC),gcc)
+GCCVERS = $(shell $(CC) -v 2>&1 | grep '^gcc version' | cut -d' ' -f3 | cut -d. -f1)
+ifeq ($(shell expr $(GCCVERS) \>= 10),1)
+CFLAGS  += -fcommon
+endif
+endif
 
 libtb.a:	$(OBJS) tbdb.o
 	$(AR) crv $@ $(OBJS) tbdb.o

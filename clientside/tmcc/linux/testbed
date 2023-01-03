@@ -58,6 +58,18 @@ fi
 
 RETVAL=0
 
+#
+# Discover process kill function.  Older systems with sysv rc inits or
+# upstart will provide /etc/rc.d/init.d/functions with killproc, but if
+# not, fall back to pkill.
+#
+type killproc >/dev/null 2>&1
+if [ $? -eq 0 ]; then
+    KILLPROC=killproc
+else
+    KILLPROC=pkill
+fi
+
 # See how we were called.
 case "$1" in
   start)
@@ -66,10 +78,10 @@ case "$1" in
 	# Note, /var/lock/subsys/testbed will be created at that time.
 	# BUT: if systemd is our init, rc.local DOES NOT kick this off; it gets
 	# done here!
-	if [ -f /etc/emulab/uses-systemd -a -f /usr/local/etc/emulab/rc/rc.testbed ] ; then
+	if [ -f /etc/emulab/uses-systemd -a -f $BINDIR/rc/rc.testbed ] ; then
 	    mkdir -p /var/lock/subsys
 	    echo -n 'testbed config: '
-            /usr/local/etc/emulab/rc/rc.testbed
+            $BINDIR/rc/rc.testbed
 	    touch /var/lock/subsys/testbed
 	fi
 	;;
@@ -77,34 +89,34 @@ case "$1" in
   	rm -f /var/lock/subsys/testbed /var/emulab/boot/controlif
 	echo "Shutting down testbed daemons (some may fail)..."
 	echo -n "  trafgen: "
-	killproc trafgen
+	$KILLPROC trafgen
 	echo
 	echo -n "  program-agent: "
-	killproc program-agent
+	$KILLPROC program-agent
 	echo
 	echo -n "  slothd: "
-	killproc slothd
+	$KILLPROC slothd
 	echo
 	echo -n "  healthd: "
-	killproc healthd
+	$KILLPROC healthd
 	echo
 	echo -n "  watchdog: "
-	killproc watchdog
+	$KILLPROC watchdog
 	echo
 	echo -n "  evproxy: "
-	killproc evproxy
+	$KILLPROC evproxy
 	echo
 	echo -n "  linktest: "
-	killproc linktest
+	$KILLPROC linktest
 	echo
 	echo -n "  emulab-syncd: "
-	killproc emulab-syncd
+	$KILLPROC emulab-syncd
 	echo
 	echo -n "  tippty: "
-	killproc tippty
+	$KILLPROC tippty
 	echo
 	echo -n "  capture-nossl: "
-	killproc capture-nossl
+	$KILLPROC capture-nossl
 	echo
 	if [ -e $ETCDIR/genvmtype -a -x $BINDIR/bootvnodes ]; then
 	    echo "  bootvnodes: halting vnodes..."

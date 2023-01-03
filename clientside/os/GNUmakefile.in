@@ -20,14 +20,15 @@
 # 
 # }}}
 #
+PREFIX		= @prefix@
 SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= @top_builddir@
 SUBDIR		= $(subst $(TESTBED_SRCDIR)/,,$(SRCDIR))
 SYSTEM	       := $(shell uname -s)
 CBINDIR		= $(DESTDIR)$(CLIENT_BINDIR)
-LBINDIR		= $(DESTDIR)/usr/local/bin
-LSBINDIR	= $(DESTDIR)/usr/local/sbin
+LBINDIR		= $(DESTDIR)$(PREFIX)/bin
+LSBINDIR	= $(DESTDIR)$(PREFIX)/sbin
 SYSTEM	       := $(shell uname -s)
 
 include $(OBJDIR)/Makeconf

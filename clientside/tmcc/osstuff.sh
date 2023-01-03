@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2020, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,11 +24,12 @@
 
 #
 # Figure out which OS, distro. etc.
-# Output: TAG=<string> OS=<string> DIST=<string> REL=<string>
+# Output: TAG=<string> OS=<string> DIST=<string> REL=<string> PKG=<string>
 #  where OS is 'FreeBSD', 'Linux', 'Cygwin', etc.
 #        DIST for Linux only, is 'Redhat', 'Fedora', 'Ubuntu', etc.
 #        REL is the release like '6.2', '9.0', '5.1', etc.
 #        TAG is a unique combo of the above like 'freebsd6', 'fedora4', etc.
+#        PKG is one of pkg, rpm, deb, apk, etc.
 #
 
 if [ $# -ne 1 ]; then
@@ -43,7 +44,7 @@ if [ -n "$OSSTUFF" ]; then
 	_k=${_kv%%=*}
 	_v=${_kv##*=}
 	case $_k in
-	TAG|OS|DIST|REL)
+	TAG|OS|DIST|REL|PKG)
 	    eval $_k=\"$_v\"
 	    ;;
 	esac
@@ -60,7 +61,7 @@ if [ -n "$OSSTUFF" ]; then
 
     case $arg in
     -a)
-	echo "TAG=$TAG OS=$OS DIST=$DIST REL=$REL"
+	echo "TAG=$TAG OS=$OS DIST=$DIST REL=$REL PKG=$PKG"
 	;;
     -t)
 	echo "$TAG"
@@ -73,6 +74,9 @@ if [ -n "$OSSTUFF" ]; then
 	;;
     -r)
 	echo "$REL"
+	;;
+    -p)
+	echo "$PKG"
 	;;
     esac
 
@@ -87,6 +91,7 @@ case $os in
 FreeBSD)
     dist="FreeBSD"
     rel=`uname -v | sed -e 's/FreeBSD \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/'`
+    pkg=bsd
     ;;
 Linux)
     if [ -r /etc/lsb-release ]; then
@@ -107,7 +112,14 @@ Linux)
 		    tag=debianS
 		fi
 	    fi
+	elif [ "$dist" = "rocky" ]; then
+	    dist=CentOS
+	    rel=`(. /etc/os-release ; echo $VERSION_ID)`
+	    pkg=rpm
 	fi
+    fi
+    if [ -n "$dist" -a \( "$dist" = "Ubuntu" -o "$dist" = "Debian" \) ]; then
+	pkg=deb
     fi
     if [ -z "$dist" -a -r /etc/redhat-release ]; then
         trel=`grep 'Red Hat' /etc/redhat-release | sed -e 's/Red Hat Linux release \([0-9]\(\.[0-9]\)\?\).*/\1/'`
@@ -125,11 +137,13 @@ Linux)
 	    dist="CentOS"
 	    rel=$trel
 	fi
+	pkg=rpm
     fi
     if [ -r /etc/centos-release ]; then
 	trel=`grep 'CentOS' /etc/centos-release | sed -e 's/CentOS .*release \([0-9.]\+\).*/\1/'` 	
 	dist="CentOS"
 	rel=$trel
+	pkg=rpm
     fi
     # XXX hack check for stargate
     if [ -z "$dist" -a `uname -m` = "armv5tel" ]; then
@@ -137,7 +151,9 @@ Linux)
         rel=1.0  # XXX probably wrong
     fi
     if [ "$dist" = "Ubuntu" -a `uname -m` = "aarch64" ]; then
-	if [ "$rel" = "20.04" ]; then
+	if [ "$rel" = "22.04" ]; then
+	    tag=MoonshotUbuntu22
+	elif [ "$rel" = "20.04" ]; then
 	    tag=MoonshotUbuntu20
 	elif [ "$rel" = "18.04" ]; then
 	    tag=MoonshotUbuntu18
@@ -147,7 +163,9 @@ Linux)
 	    tag=Moonshot
 	fi
     elif [ "$dist" = "Ubuntu" -a `uname -m` = "ppc64le" ]; then
-	if [ "$rel" = "20.04" ]; then
+	if [ "$rel" = "22.04" ]; then
+	    tag=PPC64leUbuntu22
+	elif [ "$rel" = "20.04" ]; then
 	    tag=PPC64leUbuntu20
 	elif [ "$rel" = "18.04" ]; then
 	    tag=PPC64leUbuntu18
@@ -159,10 +177,12 @@ CYGWIN_NT-*)	# aka Windows XP/7
     os="Cygwin"
     dist="NT"
     rel=`echo $tag | sed -e 's/^CYGWIN_NT-\(.*\)/\1/'`
+    pkg=win
     ;;
 *)
     dist="Unknown"
     rel="0.0"
+    pkg="Unknown"
     ;;
 esac
 
@@ -174,7 +194,7 @@ fi
 
 case $arg in
 -a)
-    echo "TAG=$tag OS=$os DIST=$dist REL=$rel"
+    echo "TAG=$tag OS=$os DIST=$dist REL=$rel PKG=$pkg"
     ;;
 -t)
     echo "$tag"
@@ -187,6 +207,9 @@ case $arg in
     ;;
 -r)
     echo "$rel"
+    ;;
+-p)
+    echo "$pkg"
     ;;
 esac
 exit 0

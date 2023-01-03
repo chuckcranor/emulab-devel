@@ -1,0 +1,15 @@
+[Unit]
+Description=Force udev to settle before NetworkManager starts
+DefaultDependencies=no
+After=local-fs.target
+Before=NetworkManager.service
+
+[Install]
+RequiredBy=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c ". /etc/emulab/paths.sh ; exec $BINDIR/emulab-udev-settle-NetworkManager.sh"
+Restart=on-failure
+RemainAfterExit=false
+TimeoutStartSec=2min

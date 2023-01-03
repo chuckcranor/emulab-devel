@@ -332,10 +332,10 @@ subboss-install: subboss
 
 client: all
 client-install: client
-	$(INSTALL) -m 755 -o root -d $(DESTDIR)/usr/local/bin
-	$(INSTALL_PROGRAM) -s imagezip$(EXE) $(DESTDIR)/usr/local/bin/imagezip$(EXE)
-	$(INSTALL_PROGRAM) -s imageunzip$(EXE) $(DESTDIR)/usr/local/bin/imageunzip$(EXE)
-	$(INSTALL_PROGRAM) -s imagedump$(EXE) $(DESTDIR)/usr/local/bin/imagedump$(EXE)
+	$(INSTALL) -m 755 -o root -d $(DESTDIR)$(INSTALL_BINDIR)
+	$(INSTALL_PROGRAM) -s imagezip$(EXE) $(DESTDIR)$(INSTALL_BINDIR)/imagezip$(EXE)
+	$(INSTALL_PROGRAM) -s imageunzip$(EXE) $(DESTDIR)$(INSTALL_BINDIR)/imageunzip$(EXE)
+	$(INSTALL_PROGRAM) -s imagedump$(EXE) $(DESTDIR)$(INSTALL_BINDIR)/imagedump$(EXE)
 
 clean: subdir-clean
 	rm -f *.o imagezip imageunzip imagedump imagehash version.c

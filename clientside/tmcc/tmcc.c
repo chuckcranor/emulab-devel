@@ -83,6 +83,15 @@ static char *bossnodedirs[] = {
 	"/usr/local/etc/emulab",
 	0
 };
+/*
+ * The dynamic bossip files are a last-ditch fallback.
+ */
+static char *bossip_files[] = {
+	"/run/emulab/bossip",
+	"/var/run/emulab/bossip",
+	BOOTDIR "/bossip",
+	0
+};
 
 /*
  * Need to try several ports cause of firewalling. 
@@ -633,11 +642,40 @@ getbossnode(char **bossnode, int *portp)
 		res_init();
 		he = gethostbyaddr((char *)&_res.nsaddr.sin_addr,
 				   sizeof(struct in_addr), AF_INET);
-		if (he && he->h_name) 
+		if (he && he->h_name
+		    && strncmp(he->h_name, "localhost", strlen("localhost")) != 0) {
 			*bossnode = strdup(he->h_name);
-		else
-			*bossnode = strdup("UNKNOWN");
-		return 0;
+			return 0;
+		}
+
+		/*
+		 * If BOOTDIR/bossip exists, attempt to resolve and use it.
+		 */
+		cp = bossip_files;
+		while (*cp) {
+			if (access(*cp, R_OK) != 0) {
+				cp++;
+				continue;
+			}
+			if ((fp = fopen(*cp, "r")) != NULL) {
+				if (fgets(buf, sizeof(buf), fp)) {
+					struct in_addr bossip_addr;
+					if ((bp = strchr(buf, '\n')))
+						*bp = '\0';
+					fclose(fp);
+					if (inet_aton(buf, &bossip_addr) != 0
+					    && (he = gethostbyaddr(&bossip_addr, sizeof(struct in_addr), AF_INET))
+					    && he && he->h_name
+					    && strncmp(he->h_name, "localhost", strlen("localhost")) != 0) {
+						*bossnode = strdup(he->h_name);
+						return 0;
+					}
+				}
+				else
+					fclose(fp);
+			}
+			cp++;
+		}
 	}
 #endif /* __CYGWIN__ */
 	*bossnode = strdup("UNKNOWN");

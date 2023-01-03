@@ -137,9 +137,9 @@ use liblocsetup;
 # No configure vars.
 #
 my $sudo = "";
-my $zipper = "/usr/local/bin/imagezip";
-my $uploader = "/usr/local/bin/frisupload";
-my $frisbee = "/usr/local/bin/frisbee";
+my $zipper = "$LBINDIR/imagezip";
+my $uploader = "$LBINDIR/frisupload";
+my $frisbee = "$LBINDIR/frisbee";
 my $localdir = "/local";
 my $impotent = 0;
 my $verbose = 0;

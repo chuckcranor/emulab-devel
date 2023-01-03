@@ -24,7 +24,7 @@
 package emulabpaths;
 use Exporter;
 @ISA = qw(Exporter);
-@EXPORT = qw( $BINDIR $ETCDIR $VARDIR $BOOTDIR $DBDIR $LOGDIR $LOCKDIR $BLOBDIR
+@EXPORT = qw( $BINDIR $LBINDIR $ETCDIR $VARDIR $BOOTDIR $DBDIR $LOGDIR $LOCKDIR $BLOBDIR
               $DYNRUNDIR $STATICRUNDIR
             );
 
@@ -34,6 +34,7 @@ use Exporter;
 # I know, what a mess.
 #
 $BINDIR  = "";
+$LBINDIR  = "";
 $ETCDIR  = "";
 $VARDIR  = "";
 $BOOTDIR = "";
@@ -41,8 +42,9 @@ $DBDIR   = "";
 $LOGDIR  = "/var/tmp";
 $LOCKDIR = "/var/tmp";
 
-if (-d "/usr/local/etc/emulab") {
+if (-d "/usr/local/etc/emulab" && ! -l "/usr/local/etc/emulab") {
     $BINDIR = "/usr/local/etc/emulab";
+    $LBINDIR = "/usr/local/bin";
     unshift(@INC, "/usr/local/etc/emulab");
     if (-d "/etc/emulab") {
 	$ETCDIR = "/etc/emulab";
@@ -61,6 +63,7 @@ elsif (-d "/etc/testbed") {
     unshift(@INC, "/etc/testbed");
     $ETCDIR  = "/etc/testbed";
     $BINDIR  = "/etc/testbed";
+    $LBINDIR  = "/etc/testbed";
     $VARDIR  = "/etc/testbed";
     $BOOTDIR = "/etc/testbed";
     $DBDIR   = "/etc/testbed";
@@ -70,10 +73,23 @@ elsif (-d "/etc/rc.d/testbed") {
     unshift(@INC, "/etc/rc.d/testbed");
     $ETCDIR  = "/etc/rc.d/testbed";
     $BINDIR  = "/etc/rc.d/testbed";
+    $LBINDIR  = "/etc/rc.d/testbed";
     $VARDIR  = "/etc/rc.d/testbed";
     $BOOTDIR = "/etc/rc.d/testbed";
     $DBDIR   = "/etc/rc.d/testbed";
     $STATICRUNDIR = "/etc/rc.d/testbed/run";
+}
+elsif (-d "/usr/libexec/emulab") {
+    $BINDIR = "/usr/libexec/emulab";
+    $LBINDIR = "/usr/bin";
+    unshift(@INC, "/usr/libexec/emulab");
+    $ETCDIR = "/etc/emulab";
+    $STATICRUNDIR = "/etc/emulab/run";
+    $VARDIR  = "/var/emulab";
+    $BOOTDIR = "/var/emulab/boot";
+    $LOGDIR  = "/var/emulab/logs";
+    $LOCKDIR = "/var/emulab/lock";
+    $DBDIR   = "/var/emulab/db";
 }
 else {
     print "$0: Cannot find proper emulab paths!\n";
@@ -86,7 +102,7 @@ $DYNRUNDIR = "/var/run/emulab";
 #
 # Untaint path
 #
-$ENV{'PATH'} = "$BINDIR:/bin:/sbin:/usr/bin:/usr/sbin:".
+$ENV{'PATH'} = "$BINDIR:$LBINDIR:/bin:/sbin:/usr/bin:/usr/sbin:".
     "/usr/local/bin:/usr/local/sbin:/usr/site/bin:/usr/site/sbin";
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 

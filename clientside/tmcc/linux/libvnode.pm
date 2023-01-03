@@ -46,9 +46,9 @@ use libtestbed;
 #
 # Magic control network config parameters.
 #
-my $PCNET_IP_FILE   = "/var/emulab/boot/myip";
-my $PCNET_MASK_FILE = "/var/emulab/boot/mynetmask";
-my $PCNET_GW_FILE   = "/var/emulab/boot/routerip";
+my $PCNET_IP_FILE   = "$VARDIR/boot/myip";
+my $PCNET_MASK_FILE = "$VARDIR/boot/mynetmask";
+my $PCNET_GW_FILE   = "$VARDIR/boot/routerip";
 my $VIFROUTING      = ((-e "$ETCDIR/xenvifrouting") ? 1 : 0);
 
 # Other local constants
@@ -757,12 +757,12 @@ sub downloadImage($$$$) {
 	if (!defined($imagepath) || !defined($reload_args_ref));
 
     my $addr = $reload_args_ref->{"ADDR"};
-    my $FRISBEE = "/usr/local/bin/frisbee";
-    my $IMAGEUNZIP = "/usr/local/bin/imageunzip";
+    my $FRISBEE = "$LBINDIR/frisbee";
+    my $IMAGEUNZIP = "$LBINDIR/imageunzip";
     my $command = "";
     # Backwards compat.
     if (! -e $FRISBEE) {
-	$FRISBEE = "/usr/local/etc/emulab/frisbee";
+	$FRISBEE = "$BINDIR/frisbee";
     }
 
     if (!defined($addr) || $addr eq "") {

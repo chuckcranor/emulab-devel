@@ -46,7 +46,7 @@ if ($EUID != 0) {
 }
 
 # Script specific goo
-my $TARINSTALL  = "/usr/local/bin/install-tarfile %s %s %s";
+my $TARINSTALL  = "$LBINDIR/install-tarfile %s %s %s";
 my $TARDBFILE   = "$DBDIR/testbed.tarfiles";
 
 #
