@@ -3374,7 +3374,7 @@ sub GetResources($$$)
 	$aggregate = APT_Aggregate->Lookup($manager_urn);
 	if (!$aggregate) {
 	    $$pmsg = "No such aggregate: $manager_urn";
-	    return -1;
+	    return 1;
 	}
 	# Ignoring reservable nodes for now.
 	if (!$aggregate->IsReservableType($hard_type)) {
