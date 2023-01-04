@@ -76,6 +76,11 @@ $(function ()
 	});
 	$(selector).html(html);
 
+	if (window.ISADMIN && !window.EMBEDDED_RESGROUPS) {
+	    $('#resgroups-count span').html(_.size(groups));
+	    $('#resgroups-count').removeClass("hidden");
+	}
+
 	// Format dates with moment before display.
 	$(selector + ' .format-date').each(function() {
 	    var date = $.trim($(this).html());
