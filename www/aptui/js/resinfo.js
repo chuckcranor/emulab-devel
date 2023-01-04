@@ -615,7 +615,7 @@ $(function ()
 	    .find(".panel-heading .zoom-control .zoom-out");
 
 	// Do not show more then 60 days, the graphs are hard to read.
-	limit.setDate(limit.getDate() + 60);
+	limit.setDate(limit.getDate() + 30);
 	
 	Object.keys(forecasts)
 	    .sort()
