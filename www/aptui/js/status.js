@@ -377,6 +377,50 @@ $(function ()
 	    event.preventDefault();
 	    sup.ShowModal('#prestage-info-modal');
 	});
+	/*
+	 * The listview table header initialization, only once. 
+	 */
+	$('#listview_table')
+	    .tablesorter({
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
+	    });
+		
+	// Handler for select/deselect all rows in the list view.
+	$('#select-all')
+	    .change(function () {
+		if ($(this).prop("checked")) {
+		    $('#listview_table [name=select]')
+			.prop("checked", true);
+		}
+		else {
+		    $('#listview_table [name=select]')
+			.prop("checked", false);
+		}
+	    });
+	// Handler for the action menu next to the select-all checkbox:
+	// Foreign admins do not get a menu, but easier to just hide it.
+	if (isfadmin) {
+	    $('#listview-action-menu').addClass("invisible");
+	}
+	else {
+	    $('#listview-action-menu li a')
+		.click(function (e) {
+		    window.APT_OPTIONS.gaButtonEvent(e);
+		    var checked = [];
+
+		    // Get the list of checked nodes.
+		    $('#listview_table [name=select]').each(function() {
+			if ($(this).prop("checked")) {
+			    checked.push($(this).attr("id"));
+			}
+		    });
+		    if (checked.length) {
+			ActionHandler($(e.target).attr("name"), checked);
+		    }
+		});
+	}
 	
         addTutorialNotifyTab('profile');
         addTutorialNotifyTab('listview');
@@ -3027,48 +3071,6 @@ $(function ()
 	   	$('#quicktabs_ul a[href="#listview"]')
 		    .parent().removeClass("hidden");
 		$('#quicktabs_content #listview').removeClass("hidden");
-
-		$('#listview_table')
-		    .tablesorter({
-			theme : 'bootstrap',
-			widgets : [ "uitheme", "zebra"],
-			headerTemplate : '{content} {icon}',
-		    });
-
-		// Handler for select/deselect all rows in the list view.
-		$('#select-all').change(function () {
-		    if ($(this).prop("checked")) {
-			$('#listview_table [name=select]')
-			    .prop("checked", true);
-		    }
-		    else {
-			$('#listview_table [name=select]')
-			    .prop("checked", false);
-		    }
-		});
-		// Handler for the action menu next to the select-all checkbox:
-		// Foreign admins do not get a menu, but easier to just hide it.
-		if (isfadmin) {
-		    $('#listview-action-menu').addClass("invisible");
-		}
-		else {
-		    $('#listview-action-menu li a')
-			.click(function (e) {
-			    window.APT_OPTIONS.gaButtonEvent(e);
-			    var checked = [];
-
-			    // Get the list of checked nodes.
-			    $('#listview_table [name=select]').each(function() {
-				if ($(this).prop("checked")) {
-				    checked.push($(this).attr("id"));
-				}
-			    });
-			    if (checked.length) {
-				ActionHandler($(e.target).attr("name"),
-					      checked);
-			    }
-			});
-		}
 	    }
 	    multisite = Object.keys(statusblob).length > 1;
 	    console.info("foo", multisite, nodecount, lazytopo, jacksInstance);
@@ -5231,21 +5233,25 @@ $(function ()
 	    //console.info("Max extension date:", maxdate);
 		    
 	    /*
-	     * See if the difference is less then two days
+	     * Show warning if close to max. 
 	     */
 	    var now   = new Date();
 	    var hours = Math.floor((maxdate.getTime() -
 				    now.getTime()) / (1000 * 3600.0));
-	    if (hours > (7 * 24)) {
+
+	    console.info("Max allowed extension hours: ", hours);
+
+	    // Locked down experiments can go negative.
+	    if (hours > (14 * 24) || hours < 0) {
+		$('#maximum-extension').addClass("hidden");
 		return;
 	    }
-	    //console.info("Max allowed extension hours: ", hours);
 	    
 	    var when    = moment(maxdate).format('lll');
 	    var fromnow = moment(maxdate).fromNow(true) + " from now";
 	
 	    $('#maximum-extension-string').html(when + " (" + fromnow + ")");
-	    if (hours < 48) {
+	    if (hours < (7 * 24)) {
 		$('#maximum-extension-string').removeClass("text-warning");
 		$('#maximum-extension-string').addClass("text-danger");
 	    }
