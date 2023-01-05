@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1605,21 +1605,13 @@ sub cleanup()
 	#
 	# Send a message to the testbed list. Append the logfile.
 	#
-	
-	#
-	# also try to send mail to robocops if it was a robot/mote exp
-	#
-	my $rcops = '';
-	if ($robotexp) {
-	    $rcops = "\nCc:  $TBROBOCOPS";
-	}
+	my $CC = "$expt_head_name <$expt_head_email>, $TBOPS";
 	
 	tblog_email_error($error_data,
 			  "$user_name <$user_email>",
 			  "Swap ${inout} Failure", "$pid/$eid",
 			  ($idleswap ? $TBOPS : "$user_name <$user_email>"),
-			  "Cc:  $expt_head_name <$expt_head_email> $rcops",
-			  "Cc:  $TBOPS $rcops",
+			  "Cc: $CC", "",
 			  $modifyError,
 			  (($logname), (defined($modnsfile) ? ($modnsfile) : ())))
 	    unless $noemail;
