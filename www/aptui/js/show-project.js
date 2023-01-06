@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal', "rfrange-history"]);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal', "rfrange-history", "showtopo-modal"]);
     var mainString = templates['show-project'];
     var experimentString = templates['experiment-list'];
     var profileString = templates['profile-list'];
@@ -35,6 +35,7 @@ $(function ()
 	$('#waitwait_div').html(waitString);
 	$('#oops_div').html(oopsString);
 	$('#conversion_help_div').html(converterHelpTemplate({}));
+	$('#showtopo-modal-div').html(templates["showtopo-modal"]);
 
 	// Focus on the search box when switching to these tabs.
         $('.nav-tabs a[href="#profiles"]')
@@ -403,28 +404,6 @@ $(function ()
 					    "show-project", "ClassicProfileList",
 					    {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
-    }
-
-    function ShowTopology(profile)
-    {
-	var index;
-
-	var callback = function(json) {
-	    if (json.code) {
-		alert("Failed to get rspec for topology viewer: " + json.value);
-		return;
-	    }
-	    sup.ShowModal("#quickvm_topomodal");
-	    $("#quickvm_topomodal").one("shown.bs.modal", function () {
-		sup.maketopmap('#showtopo_nopicker',
-			       json.value.profile_rspec, false, !window.ISADMIN);
-	    });
-	};
-	var $xmlthing = sup.CallServerMethod(null,
-					     "show-profile",
-					     "GetProfile",
-				     	     {"uuid" : profile});
-	$xmlthing.done(callback);
     }
 
     // Warn only once for page load.
@@ -863,6 +842,29 @@ $(function ()
 	    });
 
 	LoadRangeHistory();
+    }
+    
+    var showTopoIframe = null;
+
+    function ShowTopology(profile)
+    {
+	var callback = function(json) {
+	    console.info("ShowTopology profile", json);
+	    if (json.code) {
+		alert("Failed to get rspec for topology viewer: " + json.value);
+		return;
+	    }
+	    if (showTopoIframe) {
+		showTopoIframe(json.value.profile_rspec);
+	    }
+	    else {
+		showTopoIframe = ShowTopoIframe($('#showtopology-modal'),
+						'.showtopology-bare',
+						json.value.profile_rspec);
+	    }
+	};
+	sup.CallServerMethod(null, "show-profile", "GetProfile",
+			     {"profile" : profile}, callback);
     }
     
     //

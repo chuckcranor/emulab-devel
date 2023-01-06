@@ -13,6 +13,7 @@ window.ProfilePicker = (function ()
     var projlist      = null;
     var multisite     = 0;
     var changeProfile = null;
+    var viewer        = null;
     
     function initialize(args)
     {
@@ -80,6 +81,15 @@ window.ProfilePicker = (function ()
 		showpopular:        showPopular,
 		recents:            recentlist,
 	    }));
+
+	// Get the viewer initialized now.
+	viewer = JacksViewer.create({
+	    "root"       : $('#showtopo_div'),
+	    "selector"   : '.showtopology-picker',
+	    "showinfo"   : false,
+	    "multisite"  : multisite,
+	    "ifclass"    : "showtopology-picker",
+	});	
 
 	// We are told which profile to start with when the user opens
 	// the picker for the first time.
@@ -342,11 +352,11 @@ window.ProfilePicker = (function ()
 		$('.showtopo_repoinfo').removeClass("hidden");
 	    }
 	    else {
-		$('.showtopo_repoinfo').addClass("hidden");
+		$('.ashowtopo_repoinfo').addClass("hidden");
 	    }
 
-	    sup.maketopmap('#showtopo_div',
-			   profile_blob.rspec, false, !multisite);
+	    viewer.clear();
+	    viewer.add(profile_blob.rspec);
 
 	    // Set favorite toggle click event
 	    $('#favorite_button').click(function() {

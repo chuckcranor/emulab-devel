@@ -175,3 +175,7 @@
   bottom: 0;
   right: 10px;
 }
+
+.showtopology-picker {
+    border: 0px;
+}

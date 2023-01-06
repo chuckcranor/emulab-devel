@@ -239,13 +239,15 @@ function SPITFORM($formfields, $errors)
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
     REQUIRE_FILESIZE();
-    REQUIRE_JACKS_EDITOR();
     REQUIRE_IMAGE();
     REQUIRE_MOMENT();
     REQUIRE_APTFORMS();
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
     REQUIRE_GENILIB_EDITOR();
+    REQUIRE_TOPOLOGY_EDITOR();
+    REQUIRE_TOPOLOGY_VIEWER();
+    
     AddLibrary("js/copy-profile.js");
     AddLibrary("js/gitrepo.js");
     AddLibrary("js/paramhelp.js");

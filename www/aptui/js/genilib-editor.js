@@ -396,44 +396,19 @@ $(function ()
       editor.setShowInvisibles(shouldShowSpace);
     }
   }
-  
+
+  var showTopoIframe = null;
+
   function jacksUpdate()
   {
-    if (jacks)
-    {
-      if (jacksInput)
-      {
-	jacksInput.trigger('change-topology',
-			   [{ rspec: rspec }]);
+      if (showTopoIframe) {
+	  showTopoIframe(rspec);
       }
-    }
-    else
-    {
-      jacks = new window.Jacks({
-        mode: 'viewer',
-        source: 'rspec',
-        root: '#jacks-container',
-        readyCallback: jacksReady,
-	show:
-	{
-	  rspec: true,
-	  tour: false,
-	  version: false,
-	  menu: true,
-	  selectInfo: true,
-	  clear: false
-	}
-      });
-    }
+      else {
+	  showTopoIframe = ShowTopoIframe($('#jacks-container'),
+					  '.showtopology-bare', rspec,
+					  null, true);
+      }
   }
-
-  function jacksReady(input, output)
-  {
-    jacksInput = input;
-    jacksOutput = output;
-    jacksInput.trigger('change-topology',
-		       [{ rspec: rspec }]);
-  }
-
   $(document).ready(initialize);
 });

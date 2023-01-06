@@ -59,6 +59,9 @@ pre {
     background-color: inherit;
     margin-bottom: 15px;
 }
+.CodeMirror {
+    height: auto !important;
+}
 </style>
 <div id="main-template">
 <div class='row'>
@@ -227,7 +230,7 @@ pre {
 	      <select style='margin-right: 0px;'>
 		<option value='selectme'>Logs</option>
 	      </select>
-	      <a class='btn btn-info btn-tiny'
+	      <a class='btn btn-info btn-tiny' disabled
 		 style='margin-right: 10px;'
 		 href='#'
 		 target='_blank'
@@ -712,7 +715,9 @@ pre {
 	  </ul>
 	  <div id='quicktabs_content' class='tab-content'>
             <div class='tab-pane hidden' id='topology'>
-	      <div id='showtopo_statuspage' class='jacks'></div>
+	      <div id='showtopo_statuspage'>	      
+		<div class='showtopology-bare'></div>
+	      </div>
 	      <% if (registered) { %>
 		<button class='btn btn-xs btn-success pull-right' disabled
 			id='refresh_button' type=button

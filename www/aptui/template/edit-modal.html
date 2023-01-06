@@ -1,4 +1,31 @@
 <!-- This is the topology edit modal -->
+<div id='edit-modal' class='modal fade'>
+  <div class='modal-dialog modal-wide'>
+    <div class='modal-content'>
+      <div class='modal-header'>
+        <button type='button' id='edit-dismiss'
+		class='close' data-dismiss='modal'
+                aria-hidden='true'>
+          &times;</button>
+        <h3>Topology Editor</h3>
+      </div>
+      <div class='modal-body'>
+	<div>
+          <!-- This topo diagram goes inside this div -->
+          <div class='edittopology-bare'></div>
+	  <div class='edit_buttons readwrite' style="margin-bottom: 10px;">
+	    <button id='edit-save' class='btn btn-primary'>Accept</button>
+	    <button id='edit-cancel' class='btn btn-default'>Cancel</button>
+	  </div>
+	  <div class='edit_buttons readonly'" style="margin-bottom: 10px;">
+	    <button id='edit-dismiss' class='btn btn-default'>Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- This is the OLD topology edit modal -->
 <div id='quickvm_editmodal' class='modal fade'>
   <div class='modal-dialog' id='edit_dialog'>
     <div class='modal-content'>

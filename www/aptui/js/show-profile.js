@@ -2,11 +2,10 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'oops-modal', 'share-modal', 'copy-repobased-profile']);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'rspectextview-modal', 'oops-modal', 'share-modal', 'copy-repobased-profile', "showtopo-modal"]);
     var showString = templates['show-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
-    var showtopoString = templates['showtopo-modal'];
     var rspectextviewString = templates['rspectextview-modal'];
     var oopsString = templates['oops-modal'];
     var shareString = templates['share-modal'];
@@ -106,13 +105,13 @@ $(function ()
 							{"wide" : true});
 	$('#page-body').html(show_html);
 
-	$('#showtopomodal_div').html(showtopoString);
 	$('#rspectext_div').html(rspectextviewString);
 	$('#copy_repobased_profile_div').html(copyrepoString);
 	$('#share_div').html(shareTemplate({
 	    formfields: fields,
 	    fromrepo:   fromrepo,
 	}));
+	$('#showtopo-modal-div').html(templates["showtopo-modal"]);
 
 	if (window.CANCOPY && !fromrepo) {
 	    var plist = JSON.parse(_.unescape(
@@ -162,72 +161,54 @@ $(function ()
 	//
 	$('#edit_topo_modal_button').click(function (event) {
 	    event.preventDefault();
-	    sup.ShowModal('#quickvm_topomodal');
+	    ShowTopology($('#profile_rspec_textarea').val());
 	});
-        $('#quickvm_topomodal').on('shown.bs.modal', function() {
-	    sup.maketopmap("#showtopo_nopicker",
-			   $('#profile_rspec_textarea').val(),
-			   true, !window.ISADMIN);
-        });
 	
 	// The Show Source button.
 	$('#show_source_modal_button, #show_xml_modal_button')
 	    .click(function (event) {
-	        var source = null;
-	        var isScript = true;
-		var href   = "show-profile.php?uuid=" + profile_uuid;
+		var source;
+		var filename;
+		var id = $(this).attr("id");
 
-	        source = $.trim($('#profile_script_textarea').val());
+		if (id == "show_source_modal_button" && gotscript) {
+	            source   = $.trim($('#profile_script_textarea').val());
+		    filename = "profile.py";
+		}
+		else {
+		    source   = $.trim($('#profile_rspec_textarea').val());
+		    filename = "profile.xml";
+		}
 	        sup.DownloadOnClick($('#rspec_modal_download_button'),
-				    function () { return source; },
-				    'profile.py');
-/*	        $('#rspec_modal_download_button')
-		  .attr("href", href + "&source=true");*/
-	        if (! source || ! source.length) {
-		    isScript = false;
-		}
-	        if (isScript == false ||
-		    $(this).attr("id") != "show_source_modal_button") {
-		  
-		    source = $.trim($('#profile_rspec_textarea').val());
-	            sup.DownloadOnClick($('#rspec_modal_download_button'),
-				        function () { return source; },
-				        'profile.xml');
-//		    $('#rspec_modal_download_button')
-//		      .attr("href", href + "&rspec=true");
-		}
-	        if ($(this).attr("id") == "show_source_modal_button" &&
-		    isScript && !fromrepo) {
-		    openEditor(source);
-		}
-	        else
-	        {
-		    if (!source || !source.length) {
-		    }
-		    $('#rspec_modal_editbuttons').addClass("hidden");
-		    $('#rspec_modal_viewbuttons').removeClass("hidden");
-		    $('#modal_profile_rspec_textarea').prop("readonly", true);
-		    $('#modal_profile_rspec_textarea').val(source);
-		    $('#rspec_modal').modal({'backdrop':'static','keyboard':false});
-		    $('#rspec_modal').modal('show');
-		}
+				    function () { return source; }, filename);
+
+		$('#rspec_modal_editbuttons').addClass("hidden");
+		$('#rspec_modal_viewbuttons').removeClass("hidden");
+		$('#modal_profile_rspec_textarea').prop("readonly", true);
+		$('#rspec_modal').modal({'backdrop':'static','keyboard':false});
+		$('#modal_profile_rspec_textarea').val(source);
+		$('#rspec_modal').modal('show');
 	    });
         $('#rspec_modal').on('shown.bs.modal', function() {
 	    var source = $('#modal_profile_rspec_textarea').val();
 	    var mode   = "text/xml";
+	    var wrap   = true;
 
 	    // Need to determine the mode.
 	    if (pythonRe.test(source)) {
 		mode = "text/x-python";
+		var wrap = false;
 	    }
 	    else if (tclRe.test(source)) {
 		mode = "text/x-tcl";
+		var wrap = false;
 	    }
 	    myCodeMirror = CodeMirror(function(elt) {
 		$('#modal_profile_rspec_div').prepend(elt);
 	    }, {
 		value: source,
                 lineNumbers: true,
+		lineWrapping: wrap,
 		smartIndent: true,
 		autofocus: false,
 		readOnly: true,
@@ -333,9 +314,10 @@ $(function ()
 			     "</code></pre>");
 		return;
 	    }
-	    if (json.value.rspec != "") {
-		$('#profile_rspec_textarea').val(json.value.rspec);
-		ExtractFromRspec();
+	    $('#profile_rspec_textarea').val(json.value.rspec);
+	    ExtractFromRspec();
+	    if (_.has(json.value, "script")) {
+		$('#profile_script_textarea').val(json.value.script);
 	    }
 	    if (_.has(json.value, "paramdefs")) {
 		paramHelp.ShowParameterHelp(JSON.parse(json.value.paramdefs));
@@ -355,6 +337,19 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    var showTopoIframe = null;
+
+    function ShowTopology(rspec)
+    {
+	if (showTopoIframe) {
+	    showTopoIframe(rspec);
+	}
+	else {
+	    showTopoIframe = ShowTopoIframe($('#showtopology-modal'),
+					    '.showtopology-bare', rspec);
+	}
+    }
+    
     /*
      * Update the instantiate button when we switch repo targets.
      */

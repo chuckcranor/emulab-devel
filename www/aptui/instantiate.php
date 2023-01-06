@@ -684,6 +684,7 @@ if (isset($profile)) {
 }
 echo "    window.USENEWSCHEDULE = $usenewschedule;\n";
 echo "    window.NOPREDICTION = $noprediction;\n";
+echo "    window.USENEWINSTANTIATE = $usenewinstantiate;\n";
 echo "    window.STRESSTEST = $stresstest;\n";
 echo "    window.EMBEDDED_RESGROUPS = true;\n";
 echo "    window.EMBEDDED_RESGROUPS_SELECT = true;\n";
@@ -700,8 +701,15 @@ REQUIRE_MARKED();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
 REQUIRE_JQUERY_STEPS();
-# This includes SUP (JACKS (JACKSMOD)), UNDERSCORE, and JACKS_EDITOR
+REQUIRE_SUP();
+REQUIRE_UNDERSCORE();
 REQUIRE_PPWIZARDSTART();
+if ($usenewinstantiate) {
+    REQUIRE_TOPOLOGY_VIEWER();
+}
+else {
+    REQUIRE_JACKS_EDITOR_OLD();
+}
 # For the new ppwizardstart and Powder
 AddLibrary("js/powder-types.js");
 AddLibrary("js/resgraphs.js");

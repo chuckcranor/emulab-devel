@@ -222,11 +222,6 @@ fieldset[disabled] .nav > li > a.btn-success.active {
     height: 1.0em;
 }
 
-/* So that containers have some top room */
-.container {
-    margin-top: 15px !important;
-}
-
 
 #quickvm_topomodal #profile_name {
   height: 402px;
@@ -273,14 +268,6 @@ fieldset[disabled] .nav > li > a.btn-success.active {
 #edit_nopicker {
   height: 500px;
   width: 100%;
-}
-
-#showtopo_div {
-    height: 300px;
-}
-
-#showtopo_statuspage {
-    height: 300px;
 }
 
 @media (min-width: 970px) {
@@ -437,24 +424,47 @@ fieldset[disabled] .nav > li > a.btn-success.active {
   margin-top: 15px;
 }
 
-#quickvm_topomodal #showtopo_container {
-  overflow: hidden;
-  margin-bottom: 10px;
-}
-
-#quickvm_topomodal .modal-header h3 {
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
 #showtopo_buttons {
   margin-bottom: 10px;
 }
+
 /*
-#showtopo_div {
-  border: 1px solid #000;
+ * New set of definitions for showing the topology in a modal.
+ * Hopefully a cleanup.
+ */
+.showtopology-bare {
+    height: 450px;
+    width: 100%;
 }
-*/
+.edittopology-bare {
+    height: 550px;
+    width: 100%;
+}
+@media (min-width: 770px) {
+    .showtopology-modal .modal-dialog, .modal-wide {
+	width: 650px;
+
+	/* Bootstrap V5 */
+	--bs-modal-width: 650px;
+    }
+}
+@media (min-width: 970px) {
+    .showtopology-modal .modal-dialog, .modal-wide {
+	width: 850px;
+
+	/* Bootstrap V5 */
+	--bs-modal-width: 850px;
+    }
+}
+@media (min-width: 1370px) {
+    .showtopology-modal .modal-dialog, .modal-wide {
+	width: 1200px;
+
+	/* Bootstrap V5 */
+	--bs-modal-width: 1200px;
+    }
+}
+
 .nospaceafter {
   margin-bottom: 5px;
 }

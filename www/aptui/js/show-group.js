@@ -139,28 +139,6 @@ $(function ()
 	xmlthing.done(callback);
     }
 
-    function ShowTopology(profile)
-    {
-	var index;
-
-	var callback = function(json) {
-	    if (json.code) {
-		alert("Failed to get rspec for topology viewer: " + json.value);
-		return;
-	    }
-	    sup.ShowModal("#quickvm_topomodal");
-	    $("#quickvm_topomodal").one("shown.bs.modal", function () {
-		sup.maketopmap('#showtopo_nopicker',
-			       json.value.profile_rspec, false, !window.ISADMIN);
-	    });
-	};
-	var $xmlthing = sup.CallServerMethod(null,
-					     "show-profile",
-					     "GetProfile",
-				     	     {"uuid" : profile});
-	$xmlthing.done(callback);
-    }
-
     // We want to warn just once.
     var WarnedAboutUserPrivs = false;
 

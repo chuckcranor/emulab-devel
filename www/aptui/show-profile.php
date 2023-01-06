@@ -190,11 +190,10 @@ echo "<script src='js/lib/codemirror-min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
-REQUIRE_JACKS();
 REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 REQUIRE_MARKED();
-REQUIRE_GENILIB_EDITOR();
+REQUIRE_TOPOLOGY_VIEWER();
 AddLibrary("js/copy-profile.js");
 AddLibrary("js/gitrepo.js");
 AddLibrary("js/paramhelp.js");
@@ -202,7 +201,7 @@ SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
             "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>");
 
-AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "oops-modal", "share-modal", "gitrepo-picker", "copy-repobased-profile", "copy-profile-modal"));
+AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "rspectextview-modal", "oops-modal", "share-modal", "gitrepo-picker", "copy-repobased-profile", "copy-profile-modal", "showtopo-modal"));
 SPITFOOTER();
 
 ?>

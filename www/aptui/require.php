@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -189,13 +189,37 @@ function REQUIRE_JACKSMOD()
   AddLibrary($root . "common/loadcomplete.js");
 }
 
-function REQUIRE_JACKS_EDITOR()
+function REQUIRE_JACKS_EDITOR_OLD()
 {
   REQUIRE_UNDERSCORE();
   REQUIRE_JACKS();
   AddTemplate("edit-modal");
   AddTemplate("edit-inline");
+  AddLibrary("js/JacksEditorOld.js");
+}
+function REQUIRE_JACKS_EDITOR()
+{
+  REQUIRE_UNDERSCORE();
+  REQUIRE_JACKS();
   AddLibrary("js/JacksEditor.js");
+}
+function REQUIRE_JACKS_VIEWER()
+{
+  REQUIRE_UNDERSCORE();
+  REQUIRE_JACKS();
+  AddLibrary("js/JacksViewer.js");
+}
+function REQUIRE_TOPOLOGY_VIEWER()
+{
+  REQUIRE_SUP();
+  AddLibrary("js/showtopoiframe.js");
+}
+function REQUIRE_TOPOLOGY_EDITOR()
+{
+  REQUIRE_SUP();
+  AddLibrary("js/showtopoiframe.js");
+  AddTemplate("edit-modal");
+  AddTemplate("edit-inline");
 }
 
 function REQUIRE_JQUERY_STEPS()
@@ -251,8 +275,6 @@ function REQUIRE_OPENSTACKGRAPHS()
 function REQUIRE_PPWIZARDSTART()
 {
   REQUIRE_UNDERSCORE();
-  REQUIRE_SUP();
-  REQUIRE_JACKS_EDITOR();
   AddTemplate("choose-am");
   AddTemplate("image-picker-modal");
   AddTemplate("ppform-wizard");

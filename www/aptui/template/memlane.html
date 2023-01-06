@@ -13,6 +13,9 @@
  tr.group-header td {
      background: #eee;
  } 
+ .CodeMirror {
+     height: auto !important;
+ }
 </style>
 <div class="row">
   <div class='col-lg-8  col-lg-offset-2
@@ -221,7 +224,7 @@
 	      col-xs-12  col-xs-offset-0'>
     <div class='panel panel-default invisible' id='showtopo_container'>
       <div class='panel-body'>
-	<div id='quicktabs_div'>
+	<div id='quicktabs_div'v>
 	  <ul id='quicktabs_ul' class='nav nav-tabs'>
 	    <li class='hidden'>
               <a href='#topology' data-toggle='tab'>Topology View</a>
@@ -244,7 +247,7 @@
 	  </ul>
 	  <div id='quicktabs_content' class='tab-content'>
             <div class='tab-pane hidden' id='topology'>
-	      <div id='showtopo_statuspage' class='jacks'></div>
+	      <div class='showtopology-bare'></div>
 	    </div>
             <div class='tab-pane hidden' id='listview'>
 	      <div id='showtopo_listview'>

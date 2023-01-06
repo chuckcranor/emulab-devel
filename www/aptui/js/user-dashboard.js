@@ -5,7 +5,7 @@ $(function ()
     var templates = APT_OPTIONS.fetchTemplateList(['user-dashboard',
 	   'experiment-list', 'profile-list', 'project-list', 'dataset-list', 
 	   'user-profile', 'oops-modal', 'waitwait-modal', 'classic-explist',
-	   'conversion-help-modal','paramsets-list']);
+	   'conversion-help-modal','paramsets-list', "showtopo-modal"]);
     var mainString = templates['user-dashboard'];
     var experimentString = templates['experiment-list'];
     var profileListString = templates['profile-list'];
@@ -20,6 +20,8 @@ $(function ()
 
     function initialize()
     {
+	console.info("JS initialize");
+	
 	window.APT_OPTIONS.initialize(sup);
 
 	// Generate the main template.
@@ -34,7 +36,8 @@ $(function ()
 	$('#oops_div').html(oopsString);
 	$('#waitwait_div').html(waitwaitString);
 	$('#conversion_help_div').html(converterHelpTemplate({}));
-
+	$('#showtopo-modal-div').html(templates["showtopo-modal"]);
+	
 	// Focus on the search box when switching to these tabs.
         $('.nav-tabs a[href="#profiles"], ' +
 	  '.nav-tabs a[href="#projectprofiles"]')
@@ -336,7 +339,7 @@ $(function ()
 		}
 	    });
 	    // This activates the tooltip subsystem.
-	    $('[data-toggle="tooltip"]').tooltip({
+	    $('#profiles_content [data-toggle="tooltip"]').tooltip({
 		delay: {"hide" : 100, "show" : 300},
 		placement: 'auto',
 	    });
@@ -439,7 +442,7 @@ $(function ()
 		}
 	    });
 	    // This activates the tooltip subsystem.
-	    $('[data-toggle="tooltip"]').tooltip({
+	    $('#projectprofiles_content [data-toggle="tooltip"]').tooltip({
 		delay: {"hide" : 100, "show" : 300},
 		placement: 'auto',
 	    });
@@ -551,26 +554,27 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    var showTopoIframe = null;
+
     function ShowTopology(profile)
     {
-	var index;
-    
 	var callback = function(json) {
+	    console.info("ShowTopology profile", json);
 	    if (json.code) {
 		alert("Failed to get rspec for topology viewer: " + json.value);
 		return;
 	    }
-	    sup.ShowModal("#quickvm_topomodal");
-	    $("#quickvm_topomodal").one("shown.bs.modal", function () {
-		sup.maketopmap('#showtopo_nopicker',
-			       json.value.profile_rspec, false, !window.ISADMIN);
-	    });
+	    if (showTopoIframe) {
+		showTopoIframe(json.value.profile_rspec);
+	    }
+	    else {
+		showTopoIframe = ShowTopoIframe($('#showtopology-modal'),
+						'.showtopology-bare',
+						json.value.profile_rspec);
+	    }
 	};
-	var $xmlthing = sup.CallServerMethod(null,
-					     "show-profile",
-					     "GetProfile",
-				     	     {"profile" : profile});
-	$xmlthing.done(callback);
+	sup.CallServerMethod(null, "show-profile", "GetProfile",
+			     {"profile" : profile}, callback);
     }
 
     function LoadProjectsTab()

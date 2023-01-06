@@ -132,105 +132,6 @@ function ClearDownloadOnClick(button)
   button.off('click');
 }
   
-var jacksInstance;
-var jacksInput;
-var jacksOutput;
-
-function maketopmap(divname, xml, showinfo, withoutMultiSite)
-{
-    var xmlDoc = $.parseXML(xml);
-    var xmlXML = $(xmlDoc);
-
-    /*
-     * See how many sites. Do not use multiSite if no sites or
-     * only one site. Overrides the withoutMultiSite argument if set.
-     */
-    var sites  = {};
-
-    $(xmlXML).find("node").each(function() {
-	var JACKS_NS = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
-	var node_id  = $(this).attr("client_id");
-	var site     = this.getElementsByTagNameNS(JACKS_NS, 'site');
-	if (! site.length) {
-	    return;
-	}
-	var siteid = $(site).attr("id");
-	if (siteid === undefined) {
-	    console.log("No site ID in " + site);
-	    return;
-	}
-	sites[siteid] = siteid;
-    });
-    if (Object.keys(sites) <= 1) {
-	withoutMultiSite = true;
-    }
-    
-    if (! jacksInstance)
-    {
-	jacksInstance = new window.Jacks({
-	    mode: 'viewer',
-	    source: 'rspec',
-	    multiSite: (withoutMultiSite ? false : true),
-	    root: divname,
-	    nodeSelect: showinfo,
-	    readyCallback: function (input, output) {
-		jacksInput = input;
-		jacksOutput = output;
-		jacksInput.trigger('change-topology',
-				   [{ rspec: xml }]);
-	    },
-	    show: {
-		rspec: false,
-		tour: false,
-		version: false,
-		selectInfo: showinfo,
-		menu: false
-	    },
-	  canvasOptions: {
-	    "aggregates": [
-	      {
-		"id": "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
-		"name": "Cloudlab Utah"
-	      },
-	      {
-		"id": "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
-		"name": "Cloudlab Wisconsin"
-	      },
-	      {
-		"id": "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
-		"name": "Cloudlab Clemson"
-	      },
-	      {
-		"id": "urn:publicid:IDN+utahddc.geniracks.net+authority+cm",
-		"name": "IG UtahDDC"
-	      },
-	      {
-		"id": "urn:publicid:IDN+apt.emulab.net+authority+cm",
-		"name": "Apt Utah"
-	      },
-	      {
-		"id": "urn:publicid:IDN+emulab.net+authority+cm",
-		"name": "Emulab"
-	      },
-	      {
-		"id": "urn:publicid:IDN+wall2.ilabt.iminds.be+authority+cm",
-		"name": "iMinds Virt Wall 2"
-	      },
-	      {
-		"id": "urn:publicid:IDN+uky.emulab.net+authority+cm",
-		"name": "UKY Emulab"
-	      }
-	    ]
-	  }
-	});
-    }
-    else if (jacksInput)
-    {
-	jacksInput.trigger('change-topology',
-			   [{ rspec: xml }]);
-    }
-}
-
 // Spit out the oops modal.
 function SpitOops(id, msg)
 {
@@ -513,7 +414,6 @@ return {
     CallServerMethodURL: CallServerMethodURL,
     DownloadOnClick: DownloadOnClick,
     ClearDownloadOnClick: ClearDownloadOnClick,
-    maketopmap: maketopmap,
     SpitOops: SpitOops,
     StartGeniLogin: StartGeniLogin,
     InitGeniLogin: InitGeniLogin,

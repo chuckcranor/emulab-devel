@@ -3014,10 +3014,16 @@ $(function () {
 		    addMessage("warning", ht);
 		}
 	    }
-	    
-	    imagePicker = new jacksmod.ImagePicker();
-	    $('#image-picker-body').html(imagePickerString);
-	    $('#imagepicker-modal .modal-body > div').append(imagePicker.el);
+
+	    if (0) {
+		/*
+		 * I will restore this if requested.
+		 */
+		imagePicker = new jacksmod.ImagePicker();
+		$('#image-picker-body').html(imagePickerString);
+		$('#imagepicker-modal .modal-body > div').
+		    append(imagePicker.el);
+	    }
 	    
 	    //
 	    // Handle the toggle-all help panels link.  Bootstrap

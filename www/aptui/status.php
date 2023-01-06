@@ -312,10 +312,6 @@ echo "<script src='js/lib/filesize.min.js'></script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
-if (!$lazytopo) {
-    REQUIRE_JACKS();
-}
-REQUIRE_JACKS_EDITOR();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
 REQUIRE_IMAGE();
@@ -324,6 +320,7 @@ REQUIRE_IDLEGRAPHS();
 REQUIRE_OPENSTACKGRAPHS();
 REQUIRE_CONTEXTMENU();
 REQUIRE_SUP();
+REQUIRE_TOPOLOGY_VIEWER();
 
 AddTemplate("image-picker-modal");
 AddTemplate("ppform-wizard");

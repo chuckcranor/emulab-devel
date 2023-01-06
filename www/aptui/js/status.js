@@ -1339,31 +1339,88 @@ $(function ()
 	});
     }
 
+    function jacksNodeBox(jacksID)
+    {
+	return $('#' + jacksID, jacksInstance.iframe());
+    }
+
     // Update the popover the node icon box
     function UpdateNodePopover(node_id, jacksID, html)
     {
 	//console.info("UpdateNodePopover", node_id, jacksID, html);
-	
-	if ($('#' + jacksID).data("bs.popover")) {
-	    $('#' + jacksID).data("bs.popover").options.content = html;
+	var jacksbox = jacksNodeBox(jacksID);
+	var popid    = '#popover-' + jacksID;
+	var popover  = $(popid);
 
-	    var isVisible = $('#' + jacksID)
+	if ($(popover).data("bs.popover")) {
+	    $(popover).data("bs.popover").options.content = html;
+
+	    var isVisible = $(popover)
 		.data('bs.popover').tip().hasClass('in');
 	    
 	    if (isVisible) {
-		$('#' + jacksID)
+		$(popover)
 		    .data('bs.popover').tip()
 		    .find('.popover-content').html(html);
 	    }
 	}
 	else {
-	    $('#' + jacksID)
+	    $(jacksbox).on("mouseenter", function (event) {
+		$(popid).popover('show');
+	    });
+	    $(jacksbox).on("mouseleave", function (event) {
+		$(popid).popover('hide');
+	    });
+
+	    $("body").append("<div id=popover-" + jacksID + "></div>");
+	    $(popid)
 		.popover({"content"   : html,
-			  "trigger"   : "hover",
+			  "trigger"   : "manual",
+			  "animation" : false,
 			  "html"      : true,
-			  "container" : "body",
 			  "placement" : "auto",
-			 });
+			 })
+		.on("inserted.bs.popover", function (event) {
+		    var popover = $(popid).popover();
+		    var tip     = popover.data("bs.popover").tip();
+		    var ipos    = $('#showtopo_statuspage').offset();
+		    var iwidth  = $('#showtopo_statuspage').width();
+		    var boxpos  = $(jacksbox).offset();
+		    var ptop    = Math.floor(boxpos.top + ipos.top);
+		    var pleft   = Math.floor(boxpos.left + ipos.left);
+		    var pwidth  = tip.width();
+		    var arrow   = 50;
+
+		    // Move to above the node box. That will always be fine.
+		    ptop -= tip.height();
+
+		    // Horizontal is harder.
+		    if (pleft < pwidth / 2) {
+			// Left edge of popover at left edge of the node box.
+			// Arrow shifts to the left;
+			arrow = 5;
+		    }
+		    else if (pleft > iwidth - pwidth) {
+			// Right edge of popover at right edge of the node box.
+			// Arrow shifts to the right;
+			pleft = (pleft + 65) - pwidth;
+			arrow = 95;
+		    }
+		    else {
+			// Move horizontal center to middle of node box
+			pleft -= (pwidth / 2) - 35;
+		    }
+		    
+		    tip.data("top", ptop + "px");
+		    tip.data("left", pleft + "px");
+		    tip.data("arrow", arrow + "%");
+		})
+		.on("shown.bs.popover", function () {
+		    var tip = $(popid).data("bs.popover").tip();
+		    tip.css("top", tip.data("top"));
+		    tip.css("left", tip.data("left"))
+		    tip.find(".arrow").css("left", tip.data("arrow"));
+		});
 	}
 	// And a popover on the listview page, using the same html.
 	var id = '#listview-row-' + node_id + ' td[name="status"]';
@@ -1394,28 +1451,31 @@ $(function ()
     // Update the node icon and color
     function UpdateNodeIcon(node_id, jacksID, icon, color)
     {
-	$('#' + jacksID + ' .node .node-status')
+	var jacksbox = jacksNodeBox(jacksID);
+
+	$(jacksbox).find('.node .node-status')
 	    .css("visibility", "visible");
 
 	if (color !== undefined) {
 	    UpdateNodeColor(node_id, jacksID, color);
 	}
-	if (!$('#' + jacksID +
-	       ' .node .node-status-icon').length) {
-	    $('#' + jacksID + ' .node .node-status')
+	if (!$(jacksbox).find('.node .node-status-icon').length) {
+	    $(jacksbox).find('.node .node-status')
 		.append(svgimg.cloneNode());
 	}
-	$('#' + jacksID + ' .node .node-status-icon')
+	$(jacksbox).find('.node .node-status-icon')
 	    .attr("href", "fonts/" + icon);
     }
 
     // Update the node color
     function UpdateNodeColor(node_id, jacksID, color)
     {
-	$('#' + jacksID + ' .node .node-status')
+	var jacksbox = jacksNodeBox(jacksID);
+	
+	$(jacksbox).find('.node .node-status')
 	    .css("visibility", "visible");
 
-	$('#' + jacksID + ' .node .nodebox')
+	$(jacksbox).find('.node .nodebox')
 	    .css("fill", color);
     }
 
@@ -2313,10 +2373,21 @@ $(function ()
 		}
 		ActionHandler($(e.target).attr("name"), [client_id]);
 	    }
-	})
+	});
 	currentContextMenu = cid;
 	$('#' + cid).one('hidden.bs.context', function (event) {
 	    currentContextMenu = null;
+	});
+	$('#' + cid).one('shown.bs.context', function (event) {
+	    /*
+	     * Since the topology is in an iframe, need to move the
+	     * context menu relative to that.
+	     */
+	    var fpos = $('#showtopo_statuspage').offset();
+	    var mpos = $(this).offset();
+
+	    $(this).css("left", (fpos.left + mpos.left) + "px");
+	    $(this).css("top", (fpos.top + mpos.top) + "px");
 	});
 	$('#context').contextmenu('show', event);
     }
@@ -3385,29 +3456,21 @@ $(function ()
     function SetupSiteContextMenus()
     {
 	// We do not have Jacks support, so find the site blob labels.
-	var sitetags = {};
 
 	$('g.sitelabelgroup text.sitetext').each(function () {
-	    var tag = $(this).text();
-	    if (tag != "") {
-		sitetags[tag] = $(this);
+	    var sitetag  = this;
+	    var nickname = $(this).text();
+	    if (nickname == "") {
+		return;
 	    }
-	});
-	console.info("SetupSiteContextMenus", sitetags);
-	if (!_.size(sitetags)) {
-	    return;
-	}
-	
-	_.each(manifests, function (manifest, urn) {
-	    var nickname = amlist[urn].nickname;
-
-	    if (_.has(sitetags, nickname)) {
-		var sitetag  = sitetags[nickname];
-
-		$(sitetag).click(function (event) {
-		    SiteContextMenuShow(event, sitetag, urn);
-		});
-	    }
+	    // Gotta find the URN.
+	    _.each(amlist, function (info, urn) {
+		if (info.nickname == nickname) {
+		    $(sitetag).click(function (event) {
+			SiteContextMenuShow(event, nickname, urn);
+		    });
+		}
+	    });
 	});
     }
 
@@ -4598,10 +4661,6 @@ $(function ()
 	$('#powder-map_iframe')[0].contentWindow.PowderMapUpdate();
     }
 
-    var jacksInput;
-    var jacksOutput;
-    var jacksRspecs;
-
     function ShowViewer(divname, multisite, manifest)
     {
 	//console.info("ShowViewer");
@@ -4615,53 +4674,39 @@ $(function ()
 	
 	if (! jacksInstance)
 	{
-	    jacksInstance = new window.Jacks({
-		mode: 'viewer',
-		source: 'rspec',
-		multiSite: multisite,
-		root: divname,
-		nodeSelect: false,
-		readyCallback: function (input, output) {
-		    jacksInput = input;
-		    jacksOutput = output;
-		    window.jacksInput = input;
-
-		    jacksOutput.on('modified-topology', function (object) {
-			_.each(object.nodes, function (node) {
-			    jacksIDs[node.client_id] = node.id;
-			    if (!_.has(jacksSites, node.aggregate_id)) {
-				jacksSites[node.aggregate_id] = {};
-			    }
-			    jacksSites[node.aggregate_id][node.client_id] =
-				node.id;
-			});
-			console.log("jacksIDs", object, jacksIDs, jacksSites);
-			ShowManifest(object.rspec);
-			window.jacksIDS = jacksIDs;
-			window.jacksSites = jacksSites;
-			defer.resolve();
-		    });
-
-		    jacksInput.trigger('change-topology',
-				       [{ rspec: manifest }]);
-
-		    jacksOutput.on('click-event', function (jacksevent) {
-			if (jacksevent.type === 'node' ||
-			    jacksevent.type === 'host') {
-			    //console.log(jacksevent);
-			    ContextMenuShow(jacksevent);
-			}
-		    });
-		},
-	        canvasOptions: { "aggregates" : aggregates },
-		show: {
-		    rspec: false,
-		    tour: false,
-		    version: false,
-		    selectInfo: false,
-		    menu: false
+	    var modified_callback = function (object) {
+		_.each(object.nodes, function (node) {
+		    jacksIDs[node.client_id] = node.id;
+		    if (!_.has(jacksSites, node.aggregate_id)) {
+			jacksSites[node.aggregate_id] = {};
+		    }
+		    jacksSites[node.aggregate_id][node.client_id] =
+			node.id;
+		});
+		console.log("jacksIDs", object, jacksIDs, jacksSites);
+		ShowManifest(object.rspec);
+		window.jacksIDS = jacksIDs;
+		window.jacksSites = jacksSites;
+		defer.resolve();
+	    };
+	    var click_callback = function (jacksevent) {
+		if (jacksevent.type === 'node' ||
+		    jacksevent.type === 'host') {
+		    //console.log(jacksevent);
+		    ContextMenuShow(jacksevent);
 		}
-            });
+	    };
+
+	    jacksInstance = JacksViewer.create({
+		"root"       : divname,
+		"selector"   : '.showtopology-bare',
+		"xml"        : manifest,
+		"showinfo"   : false,
+		"multisite"  : multisite,
+		"aggregates" : aggregates,
+		"modified_callback" : modified_callback,
+		"click_callback"    : click_callback,
+	    });
 	}
 	else {
 	    defer.resolve();
@@ -4671,18 +4716,18 @@ $(function ()
     // Clear the Jacks view to get ready for topo change.
     function ClearViewer(manifest)
     {
-	if (jacksInput) {
-	    jacksInput.trigger('change-topology',
-			       [{ rspec: manifest }], {});
-
+	if (jacksInstance) {
+	    jacksInstance.clear();
+	    if (manifest) {
+		jacksInstance.add(manifest);
+	    }
 	}
     }
     // Add manifest to viewer.
     function AddToViewer(manifest)
     {
-	if (jacksInput) {
-	    jacksInput.trigger('add-topology', 
-			       [{ rspec: manifest }]);
+	if (jacksInstance) {
+	    jacksInstance.add(manifest);
 	}
     }
 

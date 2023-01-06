@@ -188,6 +188,9 @@ $(function ()
 	}));
 	$('#copy_repobased_profile_div').html(copyrepoString);
 
+	// Fire this off now to load all the goo. 
+	CreateJacksEditor();
+	
 	// Fireoff repo stuff now.
 	if (fromrepo) {
 	    SetupRepo();
@@ -311,7 +314,6 @@ $(function ()
 	    // Do this now instead of on page load, since user might switch
 	    // between geni-lib and rspec, and that changes whether the
 	    // editor is read-only or writable.
-	    CreateJacksEditor();
 	    editor.show($('#profile_rspec_textarea').val(),
 			function (newrspec) {
 			    // Only for a new profile or profile converted
@@ -1744,17 +1746,19 @@ $(function ()
 	
         var isViewer = window.ISPOWDER || (gotscript && !portal_converted);
 	if (editor) {
-	    $('#editmodal_div').empty();
-	}
-	editor = new JacksEditor($('#editmodal_div'),
-				 isViewer, false, false, false, !multisite);
-	if (isViewer) {
-	    $('#edit_container .edit_buttons.readwrite').addClass("hidden");
-	    $('#edit_container .edit_buttons.readonly').removeClass("hidden");
+	    editor.clear();
 	}
 	else {
-	    $('#edit_container .edit_buttons.readwrite').removeClass("hidden");
-	    $('#edit_container .edit_buttons.readonly').addClass("hidden");
+	    editor = JacksEditor.create($('#editmodal_div'),
+					isViewer, false, false, false, !multisite);
+	}
+	if (isViewer) {
+	    $('#edit-modal .edit_buttons.readwrite').addClass("hidden");
+	    $('#edit-modal .edit_buttons.readonly').removeClass("hidden");
+	}
+	else {
+	    $('#edit-modal .edit_buttons.readwrite').removeClass("hidden");
+	    $('#edit-modal .edit_buttons.readonly').addClass("hidden");
 	}
     }
 
@@ -1854,7 +1858,6 @@ $(function ()
 		    sup.HideModal('#edit-genilib-warning-modal',
 				  function () {
 				      MarkPortalConverted(false);
-				      CreateJacksEditor();
 				      checkScript(script);
 				  });
 		});
