@@ -89,7 +89,7 @@ static char *bossnodedirs[] = {
 static char *bossip_files[] = {
 	"/run/emulab/bossip",
 	"/var/run/emulab/bossip",
-	BOOTDIR "/bossip",
+	"/var/emulab/boot/bossip",
 	0
 };
 
