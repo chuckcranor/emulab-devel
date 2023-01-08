@@ -4781,7 +4781,7 @@ $(function ()
 						   "authority", "cm");
 		    }
 		}
-		else if (_.size(cluster_selections) == 1) {
+		else if (!manager_id && _.size(cluster_selections) == 1) {
 		    // Might be a site of one.
 		    var tag;
 
