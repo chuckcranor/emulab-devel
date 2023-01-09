@@ -16,6 +16,10 @@
 </style>
 <div>
   <% if (window.ISPOWDER) { %>
+    <% if (window.ISPOWDER) { %>
+      <div class='row col-xs-9 col-xs-offset-3 hidden'
+	   id='range-info-div'></div>
+    <% } %>
     <div class='row' id='powder-radios'>
       <div class='col-sm-3 counts-panel'>
 	<!-- Template goes here -->	    
@@ -111,9 +115,6 @@
       </div>
     </div>
   <% }); %>
-  <% if (window.ISPOWDER) { %>
-    <div class='row col-xs-9 col-xs-offset-3 hidden' id='range-info-div'></div>
-  <% } %>
   <div id='waitwait_div'></div>
   <div id='oops_div'></div>
 </div>

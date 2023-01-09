@@ -4300,7 +4300,7 @@ $(function ()
 	if (which == "routes") {
 	    graphid = "route-graph-div";
 	}
-	else if (which == "ranges") {
+	else if (0 && which == "ranges") {
 	    graphid = "range-info-div";
 	}
 	else {
