@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2022 University of Utah and the Flux Group.
+# Copyright (c) 2007-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,7 @@ package APT_Reservation;
 
 use strict;
 use Carp;
+use POSIX qw(floor);
 use Exporter;
 use vars qw(@ISA @EXPORT);
 
@@ -1466,6 +1467,180 @@ sub MaxDuration($$$$$$)
 	    }
 	    elsif (!defined($newend) || $next->{"t"} < $newend) {
 		$newend = $next->{"t"};
+	    }
+	}
+	last
+	    if (defined($newend) && $newend == 0);
+    }
+    $$pend = $newend;
+    return 0;
+}
+
+#
+# A variation of above for no powder portals; we want the maximum possible
+# extension at this moment in time. This is not subject to MAXDURATION.
+#
+sub MaxExtension($$$$$$)
+{
+    my ($project, $start, $pend, $resources, $forecasts, $pmsg) = @_;
+    my $newend;
+
+    foreach my $urn (keys(%{$resources})) {
+	my $aggregate = APT_Aggregate->Lookup($urn);
+	my $limit;
+	
+	foreach my $type (keys(%{ $resources->{$urn} })) {
+	    my $count = $resources->{$urn}->{$type};
+	    print "$urn, $type, $count\n";
+
+	    #
+	    # If no forecast, it is impossible to determine anything.
+	    #
+	    if (! exists($forecasts->{$urn}->{'forecast'}->{$type})) {
+		print STDERR "No forecast info for $type at $urn\n";
+		return undef;
+	    }
+
+	    #
+	    # Process the forecast info so we can use it.
+	    #
+	    my @forecast = @{ $forecasts->{$urn}->{'forecast'}->{$type} };
+
+	    #
+	    # For debugging, add human readable time stamps.
+	    #
+	    foreach my $ref (@forecast) {
+		$ref->{"date"} = POSIX::strftime("%m/%d/20%y %H:%M",
+						 localtime($ref->{"t"}));
+	    }
+	    print Dumper(\@forecast);
+
+	    if (scalar(@forecast) > 1) {
+		my @temp = ();
+
+		#
+		# Hmm, Gary says there can be duplicate entries for the same
+		# time stamp, and we want the last one. So have to splice those
+		# out before we process. 
+		#
+		for (my $i = 0; $i < scalar(@forecast) - 1; $i++) {
+		    my $data     = $forecast[$i];
+		    my $nextdata = $forecast[$i + 1];
+		    
+		    if ($data->{"t"} == $nextdata->{"t"}) {
+			print "toss1\n";
+			next;
+		    }
+		    #
+		    # Oh, turns out two consecutive timestamps can have the
+		    # same free/held values. Cull those out too.  We want
+		    # the first one, eating up the subsequent timestamps
+		    # with the same values.
+		    #
+		    if ($data->{"free"} == $nextdata->{"free"} &&
+			$data->{"held"} == $nextdata->{"held"}) {
+			print "toss2\n";
+			push(@temp, $data);
+			for ($i = $i + 1; $i < scalar(@forecast) - 1; $i++) {
+			    $nextdata = $forecast[$i];
+			    if (! ($data->{"free"} == $nextdata->{"free"} &&
+				   $data->{"held"} == $nextdata->{"held"})) {
+				$i--;
+				last;
+			    }
+			    print "toss2-B\n";
+			}
+			next;
+		    }
+		    push(@temp, $data);
+		}
+		# Tack on last one.
+		push(@temp, $forecast[-1]);
+		
+		@forecast = @temp;
+	    }
+	    print Dumper(\@forecast);
+
+	    #
+	    # Scan until we find the entry just prior to the start time,
+	    # This entry is what is available at the start time.  One
+	    # (first) entry is what is available right now.
+	    #
+	    my $prev = shift(@forecast);
+	    
+	    if (@forecast) {
+		while (@forecast) {
+		    my $data = $forecast[0];
+		    if ($data->{"t"} > $start) {
+			last;
+		    }
+		    $prev = shift(@forecast);
+		}
+	    }
+	    print Dumper($prev);
+	    print Dumper($forecast[0]);
+
+	    #
+	    # Easy is that the prev entry free count is too small, so
+	    # user cannot start at the desired time.
+	    #
+	    if ($prev->{'free'} + $prev->{'held'}  < $count) {
+		print "Not enough nodes in the first entry\n";
+		$limit = 0;
+		last;
+	    }
+	    
+	    #
+	    # If this is the last entry, there are no future changes.
+	    # Which probably means there is no reservation since if there
+	    # was, there would be a future entry for the end of the
+	    # reservation. Move on.
+	    #
+	    if (!@forecast) {
+		print "Only one entry in the forecast\n";
+		next;
+	    }
+	    my $next = $forecast[0];
+
+	    #
+	    # Simple case which is actually a typical case; the next
+	    # datapoint says there are not enough free+held. Since
+	    # the previous datapoint had enough, the timestamp of 
+	    # next is the new limit (if less then current limit).
+	    #
+	    if ($next->{'free'} + $next->{'held'} < $count) {
+		if (!defined($limit) || $next->{"t"} < $limit) {
+		    $limit = $next->{"t"} - 60;
+		}
+		print "Not enough nodes in the second entry: $limit\n";
+		next;
+	    }
+
+	    #
+	    # At the time the user wants to start, there have to be enough
+	    # free+held nodes. Held nodes are unused reserved nodes. If so
+	    # the user can start the experiment.
+	    # 
+	    # The experiment can be extended for as long as the held+free
+	    # count is greater then the requested count.
+	    #
+	    while (@forecast) {
+		$next = shift(@forecast);
+
+		if ($count > $next->{"free"} + $next->{"held"}) {
+
+		    last;
+		}
+	    }
+	    if ($count > $next->{"free"} + $next->{"held"}) {
+		if (!defined($limit) || $next->{"t"} < $limit) {
+		    $limit = $next->{"t"} - 60;
+		}
+	    }
+	}
+	if (defined($limit)) {
+	    if (!defined($newend) || $limit < $newend) {
+		$newend = $limit;
 	    }
 	}
 	last

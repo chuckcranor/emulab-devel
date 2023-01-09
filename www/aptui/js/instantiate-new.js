@@ -184,7 +184,7 @@ $(function ()
 	    minDate: 0,		/* earliest date is today */
 	    disabled: false,
 	    showButtonPanel: true,
-	    onSelect: function (dateString, dateobject) {
+	    onClose: function (dateString, dateobject) {
 		DateChange("#start_day");
 	    }
 	});
@@ -192,7 +192,7 @@ $(function ()
 	    minDate: 0,		/* earliest date is today */
 	    maxDate: "+1d",
 	    showButtonPanel: true,
-	    onSelect: function (dateString, dateobject) {
+	    onClose: function (dateString, dateobject) {
 		DateChange("#end_day");
 	    }
 	});
@@ -1438,20 +1438,25 @@ $(function ()
 		}
 	    }
 	}
-	if (1) {
-	if (window.ISPOWDER &&
-	    (which == "#start_day" || which == "#start_hour")) {
+	if (which == "#start_day" || which == "#start_hour") {
 	    if (isadmin || window.USENEWSCHEDULE) {
 		/*
-		 * The powder portal gets a termination datepicker. Whenever
-		 * the start time is changed, recalc the maximum allowed
-		 * duration and modify the termination accordingly. Also need
-		 * to do this when the project changes.
+		 * Recalc the maximum allowed duration. As long as we have
+		 * the resinfo, this is quick. 
+		 *
+		 * See below; the POWDER portal has a termination datepicker
+		 * which needs to be updated. Other portals just get a warning
+		 * about the current maximum extension.
 		 */
 		UpdateMaxDuration();
 	    }
-	    else if ($("#start_day").datepicker("getDate") &&
+	    else if (window.ISPOWDER &&
+		     $("#start_day").datepicker("getDate") &&
 		     $('#start_hour').val()) {
+		/*
+		 * Old way; just update the end pickers according to
+		 * fixed MAXDURATION. 
+		 */
 		var mindate = $("#start_day").datepicker("getDate");
 		mindate.setHours($('#start_hour').val());
 		var maxdate = new Date(mindate.getTime());
@@ -1464,7 +1469,6 @@ $(function ()
 		$("#end_day").datepicker("refresh");
 		$("#end_hour").val(maxdate.getHours());
 	    }
-	}
 	}
     }
 
@@ -1480,7 +1484,13 @@ $(function ()
 	var start_hour = $('#step3-form [name=start_hour]').val();
 
 	console.info("UpdateMaxDuration", start_day, start_hour);
-	$('#doesnotfit-warning').addClass("hidden");
+	if (window.ISPOWDER) {
+	    $('#doesnotfit-warning').addClass("hidden");
+	}
+	else {
+	    $('#maxduration-limited').addClass("hidden");
+	    $('#maxduration-doesnotfit').addClass("hidden");
+	}
 
 	// Only if start time properly set.
 	if (! ((start_day && start_hour) || (!start_day && !start_hour))) {
@@ -1491,7 +1501,7 @@ $(function ()
 
 	// Update pickers.
 	var callback = function (json) {
-	    console.info(json);
+	    console.info("MaxDuration result:", json);
 	    if (json.code) {
 		console.info("UpdateMaxDuration: " . json.value);
 		return;
@@ -1499,7 +1509,51 @@ $(function ()
 	    // Saved globally for above
 	    var maxdate = json.value;
 	    var mindate = $("#start_day").datepicker("getDate");
+	    if (!mindate) {
+		mindate = new Date();
+	    }
 
+	    if (!window.ISPOWDER) {
+		/*
+		 * The other portals get an advisory message. We also adjust
+		 * max duration if under window.MAXDURATION.
+		 */
+		if (maxdate != null) {
+		    if (maxdate) {
+			var rounded = new Date(maxdate);
+			rounded.setMinutes(0, 0, 0);
+
+			// Number of hours.
+			mindate.setHours($('#start_hour').val());
+			var hours = (rounded - mindate) / (3600 * 1000);
+			console.info(rounded, mindate, hours);
+
+			if (hours == 0) {
+			    $('#maxduration-doesnotfit').removeClass("hidden");
+			    return;
+			}
+			$('#maxduration-limited span')
+			    .html(moment(rounded).format('lll'));
+			$('#maxduration-limited').removeClass("hidden");
+
+			/*
+			 * Adjust if #hours is less then window.MAXDURATION.
+			 */
+			if (hours < window.MAXDURATION) {
+			    $('#experiment_duration')
+				.val(Math.floor(hours));
+			}
+			else {
+			    $('#experiment_duration')
+				.val(window.MAXDURATION);
+			}
+		    }
+		    else {
+			$('#maxduration-doesnotfit').removeClass("hidden");
+		    }
+		}
+		return;
+	    }
 	    if (!maxdate) {
 		if (start_day) {
 		    $('#doesnotfit-warning-now').addClass("hidden");
@@ -1516,9 +1570,6 @@ $(function ()
 	    else {
 		$('#doesnotfit-warning').addClass("hidden");
 		$('#bestguess-info').removeClass("hidden");
-	    }
-	    if (!mindate) {
-		mindate = new Date();
 	    }
 	    maxdate = maxEndDate = new Date(maxdate);
 	    console.info("UpdateMaxDuration: ", mindate, maxdate);
