@@ -315,7 +315,6 @@ function REQUIRE_GENILIB_EDITOR()
   REQUIRE_UNDERSCORE();
   REQUIRE_SUP();
   REQUIRE_APTFORMS();
-  REQUIRE_JACKS();
   AddTemplate("genilib-editor");
   AddLibrary("js/genilib-editor.js");
 }
