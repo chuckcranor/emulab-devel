@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -106,6 +106,7 @@ sub DoIdleDetection();
 sub DoConvertReservationsToGroups();
 sub DoCheckReserved();
 sub DoMaxDuration();
+sub DoMaxExtension();
 sub DoRouteForecast();
 sub CallMethodOnReservations($$@);
 
@@ -169,6 +170,9 @@ elsif ($action eq "checkreserved") {
 }
 elsif ($action eq "maxduration") {
     DoMaxDuration();
+}
+elsif ($action eq "maxextension") {
+    DoMaxExtension();
 }
 elsif ($action eq "routeforecast") {
     DoRouteForecast();
@@ -2877,8 +2881,9 @@ sub DoCheckReserved()
 #
 sub DoMaxDuration()
 {
-    my @optlist = ('f=s', 's=s', 'p=s', 'P=s');
+    my @optlist = ('f=s', 's=s', 'p=s', 'P=s', 'a=s');
     my ($start, $end, $rspec, $project, $errmsg, $sitemap, $portal);
+    my $where = $MYURN;
     my $prediction_info;
 
     Getopt::Long::Configure("no_ignore_case");
@@ -2887,6 +2892,9 @@ sub DoMaxDuration()
 		     "site=s%"  => \$sitemap,
 		     "portal=s" => \$portal)) {
 	usage();
+    }
+    if (defined($options{"a"})) {
+	$where = $options{"a"};
     }
     if (defined($options{"f"})) {
 	fatal("Cannot read rspec file")
@@ -2931,7 +2939,7 @@ sub DoMaxDuration()
     #
     # Update rspec with site aggregate urns so it is fully bound.
     #
-    my $tmp = APT_Profile::SetSites(\$rspec, $sitemap, $MYURN,
+    my $tmp = APT_Profile::SetSites(\$rspec, $sitemap, $where,
 				    undef, undef, \$errmsg);
     if ($tmp) {
 	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
@@ -3022,6 +3030,147 @@ sub DoMaxDuration()
 	    POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . ")\n";
     }
     
+    if (defined($webtask)) {
+	$webtask->maxend($end);
+	$webtask->Exited(0);
+    }
+    exit(0);
+}
+
+#
+# Given an rspec determine a max extension. Slightly different then above
+# since we are ignoring MAXDURATION and is only used on non POWDER portals.
+#
+sub DoMaxExtension()
+{
+    my @optlist = ('f=s', 's=s', 'p=s', 'P=s', "a=s");
+    my ($start, $end, $rspec, $project, $errmsg, $sitemap, $portal);
+    my $where = $MYURN;
+    my $prediction_info;
+
+    Getopt::Long::Configure("no_ignore_case");
+    my %options = ();
+    if (! GetOptions(\%options, @optlist,
+		     "site=s%"  => \$sitemap,
+		     "portal=s" => \$portal)) {
+	usage();
+    }
+    if (defined($options{"a"})) {
+	$where = $options{"a"};
+    }
+    if (defined($options{"f"})) {
+	fatal("Cannot read rspec file")
+	    if (! -e $options{"f"});
+	$rspec = emutil::ReadFile($options{"f"});
+	print $rspec . "\n";
+	
+    }
+    if (defined($options{"P"})) {
+	fatal("Cannot read prediction file")
+	    if (! -e $options{"P"});
+	my $tmp = emutil::ReadFile($options{"P"});
+	$prediction_info = eval { decode_json($tmp) };
+	if ($@) {
+	    fatal("Could not decode json prediction data: $@\n");
+	}
+	if (ref($prediction_info) ne "HASH") {
+	    fatal("prediction data is not a HASH");
+	}
+    }
+    if (defined($options{"p"})) {
+	$project = Project->Lookup($options{"p"});
+
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+    }
+    if (defined($options{"s"})) {
+	$start = $options{"s"};
+	if ($start !~ /^\d+$/) {
+	    $start = str2time($start);
+	    if (!$start) {
+		fatal("Start is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    else {
+	$start = time();
+    }
+    usage()
+	if (!(defined($rspec) && defined($project)));
+    my $pid = $project->pid();
+
+    #
+    # Update rspec with site aggregate urns so it is fully bound.
+    #
+    my $tmp = APT_Profile::SetSites(\$rspec, $sitemap, $where,
+				    undef, undef, \$errmsg);
+    if ($tmp) {
+	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
+    $rspec = GeniXML::Parse($rspec);
+    if (!defined($rspec)) {
+	fatal("Could not parse rspec");
+    }
+    print GeniXML::Serialize($rspec);
+
+    #
+    # Use this to get the type counts
+    #
+    my $resources = {};
+    if (APT_Profile::GetResources($rspec, \$errmsg, \$resources)) {
+	fatal($errmsg);
+    }
+    my $typeCounts = $resources->{"typeCounts"};
+
+    #
+    # If no nodes are typed, we cannot determine anything.
+    #
+    if (keys(%{$typeCounts})) {
+	#
+	# Ask for prediction info from the clusters referenced in the rspec.
+	#
+	if (!defined($prediction_info) && keys(%{$typeCounts})) {
+	    my $urns = join(",", keys(%{$typeCounts}));
+	    my $local_webtask = WebTask->CreateAnonymous();
+	    my $local_task_id = $local_webtask->task_id();
+	    system("$RESCOMMAND -t $local_task_id prediction -a '$urns' $pid");
+	    if ($?) {
+		$local_webtask->Delete();
+		fatal("Could not get prediction info");
+	    }
+	    $local_webtask->Refresh();
+	    $prediction_info = $local_webtask->value();
+	    $local_webtask->Delete();
+	    #print Dumper($prediction_info);
+	}
+	if (APT_Reservation::Group::Reservation::MaxExtension(
+		$project, $start, \$end, $typeCounts,
+		$prediction_info, \$errmsg)) {
+	    fatal($errmsg);
+	}
+	if (defined($end)) {
+	    print POSIX::strftime("R %m/%d/20%y %H:%M", localtime($end)) . "\n";
+	}
+	else {
+	    print "undef\n";
+	}
+    }
+    if (!defined($end)) {
+	print "Cannot determine a max duration\n";
+    }
+    else {
+	if ($end < $start) {
+	    $end = 0;
+	}
+	if ($end == 0) {
+	    print "Some or all resources unavailable\n";
+	}
+	else {
+	    print "Max duration is $end (" .
+		POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . ")\n";
+	}
+    }
     if (defined($webtask)) {
 	$webtask->maxend($end);
 	$webtask->Exited(0);
