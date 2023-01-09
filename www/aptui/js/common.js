@@ -64,7 +64,7 @@ window.APT_OPTIONS.initialize = function (sup)
     var embedded = window.EMBEDDED;
     var version  =
 	typeof bootstrap === 'undefined' ?
-	$().tooltip.Constructor.VERSION : bootstrap.Tooltip.VERSION;
+	$().modal.Constructor.VERSION : bootstrap.Modal.VERSION;
 
     window.BOOSTRAP_VERSION = parseInt(version.substr(0, 1));
 
