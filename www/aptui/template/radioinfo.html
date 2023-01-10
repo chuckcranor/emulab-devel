@@ -9,21 +9,25 @@
 	<th>Location</th>
 	<th>Node</th>
 	<th class="nowrap">Site Type</th>
-	<th>Radio Type 
-	  <span class="glyphicon glyphicon-edit"
-		style="margin-left: 5px;"></span></th>
+	<th>Radio Type
+	  <span class="glyphicon glyphicon-edit hidden"
+		  style="margin-left: 5px;"></span></th>
 	<th>Frontend (iface)</th>
 	<th class="sorter-false">TX Ranges
-	  <span class="glyphicon glyphicon-edit"
-		style="margin-left: 5px;"></span></th>	  
+	  <span class="glyphicon glyphicon-edit hidden"
+		style="margin-left: 5px;"></span>
+	</th>	  
 	<th class="sorter-false">RX Ranges
-	  <span class="glyphicon glyphicon-edit"
+	  <span class="glyphicon glyphicon-edit hidden"
+		style="margin-left: 5px;"></span></th>	  
+	<th class="sorter-false">Sync
+	  <span class="glyphicon glyphicon-edit hidden"
 		style="margin-left: 5px;"></span></th>	  
 	<th class="sorter-false">Monitor</th>
 	<th class="sorter-false">RF Scans</th>
 	<th class="sorter-false">Free?</th>
 	<th class="sorter-false">Notes
-	  <span class="glyphicon glyphicon-edit"
+	  <span class="glyphicon glyphicon-edit hidden"
 		style="margin-left: 5px;"></span></th>	  
       </tr>
     </thead>
@@ -65,6 +69,7 @@
 	    <td><%- frontend.frontend %> (<%- iface %>)</td>
 	    <td data-field="tx_freq"><%- frontend.transmit_frequencies %></td>
 	    <td data-field="rx_freq"><%- frontend.receive_frequencies %></td>
+	    <td data-field="sync"><%- node.synchronization %></td>
 	    <td class="text-center">
 	      <% if (frontend.monitored) { %>
 		<a href='<%- frontend.monitor_url %>' target="_blank">
