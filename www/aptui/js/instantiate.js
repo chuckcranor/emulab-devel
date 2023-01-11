@@ -1605,7 +1605,7 @@ $(function ()
 		return;
 	    }
 	    // Saved globally for above
-	    var maxdate = json.value;
+	    var maxdate = json.value["maxend"];
 	    var mindate = $("#start_day").datepicker("getDate");
 
 	    if (!maxdate) {
