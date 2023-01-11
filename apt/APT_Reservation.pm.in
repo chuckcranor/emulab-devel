@@ -1261,9 +1261,9 @@ sub ReservedByType($$$$$$)
 #
 # Determine a max duration for an experiment.
 #
-sub MaxDuration($$$$$$)
+sub MaxDuration($$$$$$$)
 {
-    my ($project, $start, $pend, $resources, $forecasts, $pmsg) = @_;
+    my ($project, $start, $pend, $resources, $forecasts, $pmsg, $pbad) = @_;
     my $counts   = undef;
     my $newend   = undef;
 
@@ -1379,6 +1379,8 @@ sub MaxDuration($$$$$$)
 	    #
 	    if ($prev->{'free'} + $prev->{'held'}  < $count) {
 		$newend = 0;
+		print "$type is unavailable\n";
+		$$pbad = $type;
 		last;
 	    }
 	    my $maxend = $start + ($MAXDURATION * 3600);
@@ -1468,6 +1470,10 @@ sub MaxDuration($$$$$$)
 	    elsif (!defined($newend) || $next->{"t"} < $newend) {
 		$newend = $next->{"t"};
 	    }
+	    if (defined($newend) && $newend == 0) {
+		print "$type is unavailable\n";
+		$$pbad = $type;
+	    }
 	}
 	last
 	    if (defined($newend) && $newend == 0);
@@ -1477,7 +1483,7 @@ sub MaxDuration($$$$$$)
 }
 
 #
-# A variation of above for no powder portals; we want the maximum possible
+# A variation of above for non powder portals; we want the maximum possible
 # extension at this moment in time. This is not subject to MAXDURATION.
 #
 sub MaxExtension($$$$$$)
@@ -2307,9 +2313,9 @@ sub MaxExtension($$)
 #
 # Determine a max duration for an experiment.
 #
-sub MaxDuration($$$$$)
+sub MaxDuration($$$$$$)
 {
-    my ($project, $start, $pend, $spectrum, $pmsg) = @_;
+    my ($project, $start, $pend, $spectrum, $pmsg, $pbad) = @_;
     my @spectrum = @{$spectrum};
     my $newend   = undef;
 
@@ -2384,6 +2390,8 @@ sub MaxDuration($$$$$)
 		    # Reservation in another project, experiment must stop
 		    # before the other one starts
 		    if ($start >= $res_start && $start < $res_end) {
+			print "$freq_low,$freq_high is reserved\n";
+			$$pbad = "$freq_low,$freq_high";
 			$newend = 0;
 		    }
 		    elsif ($start < $res_start &&
@@ -2984,9 +2992,9 @@ sub MaxExtension($)
 #
 # Determine a max duration for an experiment.
 #
-sub MaxDuration($$$$$)
+sub MaxDuration($$$$$$)
 {
-    my ($project, $start, $pend, $routes, $pmsg) = @_;
+    my ($project, $start, $pend, $routes, $pmsg, $pbad) = @_;
     my @routes  = @{$routes};
     my $newend  = ($$pend ? $$pend : undef);
 
@@ -3056,6 +3064,8 @@ sub MaxDuration($$$$$)
 		    # Reservation in another project, experiment must stop
 		    # before the other one starts,
 		    if ($start >= $res_start && $start < $res_end) {
+			print "$routename is reserved\n";
+			$$pbad = $routename;
 			$newend = 0;
 		    }
 		    elsif ($start < $res_start &&

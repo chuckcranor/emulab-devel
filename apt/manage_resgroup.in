@@ -2883,6 +2883,7 @@ sub DoMaxDuration()
 {
     my @optlist = ('f=s', 's=s', 'p=s', 'P=s', 'a=s');
     my ($start, $end, $rspec, $project, $errmsg, $sitemap, $portal);
+    my ($baddog, $badtype);
     my $where = $MYURN;
     my $prediction_info;
 
@@ -2977,9 +2978,11 @@ sub DoMaxDuration()
     }
     
     if (keys(%{$typeCounts})) {
+	my $loser;
+	
 	if (APT_Reservation::Group::Reservation::MaxDuration(
 		$project, $start, \$end, $typeCounts,
-		$prediction_info, \$errmsg)) {
+		$prediction_info, \$errmsg, \$loser)) {
 	    fatal($errmsg);
 	}
 	if (defined($end)) {
@@ -2988,31 +2991,87 @@ sub DoMaxDuration()
 	else {
 	    print "undef\n";
 	}
+	if (defined($loser)) {
+	    $baddog  = $loser;
+	    $badtype = "type";
+	}
     }
     my $spectrum = [];
     if (APT_Profile::GetSpectrum($rspec, \$spectrum, \$errmsg)) {
 	fatal($errmsg);
     }
-    if (@{$spectrum}) {
-	if (APT_Reservation::Group::RFReservation::MaxDuration(
-		$project, $start, \$end, $spectrum, \$errmsg)) {
-	    fatal($errmsg);
+    if (@{$spectrum} && !defined($baddog)) {
+	my $loser;
+
+	#
+	# Because we now allow some experiments to start without having
+	# reserved the ranges it is using, we have to check current experiments
+	# too.
+	#
+	foreach my $ref (@{$spectrum}) {
+	    my $freq_low  = $ref->{'frequency_low'};
+	    my $freq_high = $ref->{'frequency_high'};
+
+	    if (APT_Instance::RFRanges->InUse($project, $freq_low,
+					      $freq_high, $start, $end)) {
+		print "$freq_low,$freq_high is currently in use\n";
+		$loser = "$freq_low,$freq_high";
+		$end = 0;
+		last;
+	    }
 	}
-	if (defined($end)) {
-	    print POSIX::strftime("S %m/%d/20%y %H:%M", localtime($end)) . "\n";
+	if (!defined($loser)) {
+	    if (APT_Reservation::Group::RFReservation::MaxDuration(
+		    $project, $start, \$end, $spectrum, \$errmsg, \$loser)) {
+		fatal($errmsg);
+	    }
+	    if (defined($end)) {
+		print POSIX::strftime("S %m/%d/20%y %H:%M",
+				      localtime($end)) . "\n";
+	    }
+	    else {
+		print "undef\n";
+	    }
 	}
-	else {
-	    print "undef\n";
+	if (defined($loser)) {
+	    $baddog  = $loser;
+	    $badtype = "range";
 	}
     }
     my $routes = [];
     if (APT_Profile::GetRoutes($rspec, \$routes, \$errmsg)) {
 	fatal($errmsg);
     }
-    if (@{$routes}) {
-	if (APT_Reservation::Group::RouteReservation::MaxDuration(
-		$project, $start, \$end, $routes, \$errmsg)) {
-	    fatal($errmsg);
+    if (@{$routes} && !defined($baddog)) {
+	my $loser;
+
+	#
+	# Because we now allow some experiments to start without having
+	# reserved the routes it is using, we have to check current experiments
+	# too.
+	#
+	foreach my $request (@{$routes}) {
+	    my $routename = $request->{"name"};
+	    my $routeid   =
+		APT_Instance::Aggregate::BusRoute::RouteID($routename);
+
+	    if (APT_Instance::Aggregate::BusRoute->InUse($project, $routeid,
+							 $start, $end)) {
+		print "$routename is currently in use\n";
+		$loser = $routename;
+		$end = 0;
+		last;
+	    }
+	}
+	if (!defined($loser)) {
+	    if (APT_Reservation::Group::RouteReservation::MaxDuration(
+		    $project, $start, \$end, $routes, \$errmsg, \$loser)) {
+		fatal($errmsg);
+	    }
+	}
+	if (defined($loser)) {
+	    $baddog  = $loser;
+	    $badtype = "route";
 	}
     }
     if (!defined($end)) {
@@ -3032,6 +3091,10 @@ sub DoMaxDuration()
     
     if (defined($webtask)) {
 	$webtask->maxend($end);
+	if (defined($baddog)) {
+	    $webtask->baddog($baddog);
+	    $webtask->badtype($badtype);
+	}
 	$webtask->Exited(0);
     }
     exit(0);

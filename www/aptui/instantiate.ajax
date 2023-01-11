@@ -1435,8 +1435,14 @@ function Do_MaxDuration()
     if ($maxend != null && $maxend != 0) {
         $maxend = DateStringGMT(intval($maxend));
     }
+    $blob = array("maxend" => $maxend);
+    $loser = $webtask->TaskValue("baddog");
+    if ($loser) {
+        $blob["loser"] = $loser;
+        $blob["which"] = $webtask->TaskValue("badtype");
+    }
     $webtask->Delete();
-    SPITAJAX_RESPONSE($maxend);
+    SPITAJAX_RESPONSE($blob);
     return;
 }
 

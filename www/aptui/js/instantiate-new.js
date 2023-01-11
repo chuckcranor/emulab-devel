@@ -1507,7 +1507,7 @@ $(function ()
 		return;
 	    }
 	    // Saved globally for above
-	    var maxdate = json.value;
+	    var maxdate = json.value["maxend"];
 	    var mindate = $("#start_day").datepicker("getDate");
 	    if (!mindate) {
 		mindate = new Date();
@@ -1563,6 +1563,29 @@ $(function ()
 		    $('#doesnotfit-warning-now').removeClass("hidden");
 		    $('#doesnotfit-warning-datetime').addClass("hidden");
 		}
+		if (_.has(json.value, "loser")) {
+		    var loser = json.value["loser"];
+		    var which = json.value["which"];
+		    var phrase;
+
+		    if (which == "type") {
+			phrase = "node/type " + loser;
+		    }
+		    else if (which == "range") {
+			phrase = "range " + loser;
+		    }
+		    else {
+			phrase = "route " + loser;
+		    }
+		    $('#doesnotfit-warning-loser').html(phrase + ".");
+		    $('#doesnotfit-warning-loser').removeClass("hidden");
+		    $('#doesnotfit-warning-noloser').addClass("hidden");
+		}
+		else {
+		    $('#doesnotfit-warning-loser').addClass("hidden");
+		    $('#doesnotfit-warning-noloser').removeClass("hidden");
+		}
+			  
 		$('#bestguess-info').addClass("hidden");
 		$('#doesnotfit-warning').removeClass("hidden");
 		return;
