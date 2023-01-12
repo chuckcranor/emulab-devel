@@ -31,7 +31,15 @@
 LOGDIR=/var/tmp
 LOCKDIR=/var/tmp
 
-if [ -d /usr/local/etc/emulab -a ! -L /usr/local/etc/emulab ]; then
+BINDIRISPKGLEGACYLINK=0
+if [ -L "/usr/local/etc/emulab" ]; then
+    ldest=`readlink -f /usr/local/etc/emulab`
+    if [ "$ldest" = "/usr/libexec/emulab" ]; then
+	BINDIRISPKGLEGACYLINK=1
+    fi
+fi
+
+if [ -d /usr/local/etc/emulab -a $BINDIRISPKGLEGACYLINK -eq 0 ]; then
 	BINDIR=/usr/local/etc/emulab
 	LBINDIR=/usr/local/bin
 	if [ -e /etc/emulab/client.pem ]; then

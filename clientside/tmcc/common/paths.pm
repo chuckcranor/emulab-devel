@@ -42,7 +42,16 @@ $DBDIR   = "";
 $LOGDIR  = "/var/tmp";
 $LOCKDIR = "/var/tmp";
 
-if (-d "/usr/local/etc/emulab" && ! -l "/usr/local/etc/emulab") {
+$BINDIRISPKGLEGACYLINK = 0;
+if (-l "/usr/local/etc/emulab") {
+    my $ldest = readlink("/usr/local/etc/emulab");
+    if ($ldest eq "../../libexec/emulab"
+	|| $ldest eq "/usr/libexec/emulab") {
+	$BINDIRISPKGLEGACYLINK = 1;
+    }
+}
+
+if (-d "/usr/local/etc/emulab" && ! $BINDIRISPKGLEGACYLINK) {
     $BINDIR = "/usr/local/etc/emulab";
     $LBINDIR = "/usr/local/bin";
     unshift(@INC, "/usr/local/etc/emulab");
