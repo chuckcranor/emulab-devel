@@ -1318,8 +1318,8 @@ sub fix_grub_console
 sub get_cnet_mac_addr
 {
 	my $cnetmacaddr;
-	if (-s "/var/emulab/boot/controlmac") {
-		$cnetmacaddr = `cat /var/emulab/boot/controlmac`;
+	if (-s "$BOOTDIR/controlmac") {
+		$cnetmacaddr = `cat $BOOTDIR/controlmac`;
 		chomp($cnetmacaddr);
 		if ($cnetmacaddr =~ /^([a-fA-F0-9:]+)$/) {
 			$cnetmacaddr = "$1";
