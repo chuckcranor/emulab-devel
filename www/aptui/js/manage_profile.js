@@ -1429,7 +1429,10 @@ $(function ()
 
 	    if (json.code) {
 		sup.HideWaitWait();
-		sup.SpitOops("oops", json.value);
+		sup.SpitOops("oops",
+			     "<pre><code>" +
+			     $('<div/>').text(json.value).html() +
+			     "</code></pre>");
 		return;
 	    }
 	    fromrepo = 1;
