@@ -1573,6 +1573,9 @@ $(function ()
 	var callback = function (source, hash) {
 	    if (source) {
 		changeRspec(source);
+		// Top left panel.
+		$('#current-refspec').html(which);
+		$('#current-refhash').html(hash.substring(0, 8));
 	    }
 	};
 	gitrepo.GetRepoSource({

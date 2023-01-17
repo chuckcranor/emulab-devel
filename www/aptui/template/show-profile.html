@@ -56,7 +56,7 @@
 	    <% } %>
 	  <% } %>
 	  <tr>
-	    <% if (fields.profile_version == 0) { %>
+	    <% if (fields.profile_version == 0 || fromrepo) { %>
 	      <td>Created:</td>
 	    <% } else { %>
 	      <td>Updated:</td>
@@ -68,6 +68,16 @@
 	    <td>Public?:</td>
 	    <td><% if (fields.profile_public) { %>Yes<% } else { %>No<% } %></td>
 	  </tr>
+	  <% if (fromrepo) { %>
+	    <tr>
+	      <td>Refspec:</td>
+	      <td id="current-refspec"><%- fields.profile_refspec %></td>
+	    </tr>
+	    <tr>
+	      <td>Commit:</td>
+	      <td id="current-refhash"><%- fields.profile_refhash.substring(0,8) %></td>
+	    </tr>
+	  <% } %>
 	  <% if (withpublishing) { %>
 	  <tr>
 	    <td>Published:</td>

@@ -171,6 +171,15 @@ echo "    window.PARAMSETS    = $paramsets;\n";
 echo "    window.ISPPPROFILE  = $ispp;\n";
 echo "    window.WITHPUBLISHING = $WITHPUBLISHING;\n";
 echo "    window.EDITOR_READONLY = true;\n";
+if ($profile->repourl()) {
+    # Head of default branch
+    $phash    = $profile->repohash();
+    $prefspec = $profile->reporef();
+
+    echo "    window.FROMREPO = true;\n";
+    echo "    window.PROFILE_REFHASH = '$phash';\n";
+    echo "    window.PROFILE_REFSPEC = '$prefspec';\n";
+}
 echo "</script>\n";
 
 # See what projects the user can make copies in.

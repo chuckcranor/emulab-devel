@@ -325,6 +325,9 @@ $(function ()
 	    else {
 		paramHelp.HideParameterHelp();
 	    }
+	    // Top left panel.
+	    $('#current-refspec').html(reporefspec);
+	    $('#current-refhash').html(json.value.hash.substring(0, 8));
 	}
 	sup.ShowWaitWait("We are getting the source code from the " +
 			 "repository and converting it to XML ... " +

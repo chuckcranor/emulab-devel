@@ -435,6 +435,7 @@ if (! isset($create)) {
 		$defaults["profile_repourl"]  = $profile->repourl();
                 # Need this so JS code knows when HEAD changes.
 		$defaults["profile_repohash"]  = $profile->repohash();
+		$defaults["profile_reporef"]  = $profile->reporef();
 		$defaults["profile_repopushurl"]
                     = "https://www.emulab.net:51369/githook/" .
                     $profile->repokey();

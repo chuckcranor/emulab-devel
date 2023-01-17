@@ -96,6 +96,8 @@ function Do_GetProfile()
     }
     if ($profile->repourl() && $profile->repourl() != "") {
         $blob["profile_repourl"] = $profile->repourl();
+        $blob["profile_refhash"] = $profile->repohash();
+        $blob["profile_refspec"] = $profile->reporef();
     }
     else {
         $blob["profile_repourl"] = null;
