@@ -2970,7 +2970,9 @@ $(function ()
 		CMclone.find("li[id=nodetop]").removeClass("hidden");
 
 		// Insert into the table, we will attach the handlers below.
-		$('#listview_table > tbody:last').append(clone);
+		$('#listview_table')
+		    .find('tbody').append(clone)
+		    .trigger('addRows', [clone, true, undefined]);
 
 		// Change the ID of the clone so its unique.
 		CMclone.attr('id', "context-menu-" + node);
