@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2021 University of Utah and the Flux Group.
+# Copyright (c) 2004-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,11 +27,12 @@ use POSIX qw(setsid);
 
 sub usage()
 {
-    print STDERR "Usage: daemon_wrapper [-i interval] [-p pidfile] [-l logfile] [-n name] command args ...\n";
+    print STDERR "Usage: daemon_wrapper [-t] [-i interval] [-p pidfile] [-l logfile] [-n name] command args ...\n";
     exit(1);
 }
-my $optlist  = "di:p:l:n:";
+my $optlist  = "di:p:l:n:t";
 my $debug    = 0;
+my $stamps   = 0;
 my $mininterval = 1;
 my $maxinterval = (24 * 60 * 60);
 my $interval = $mininterval;
@@ -43,6 +44,7 @@ my $daemon;
 my $cmd;
 my $cmdargs;
 my $childpid;
+my $stamppid;
 
 # Turn off line buffering on output
 $| = 1;
@@ -69,6 +71,9 @@ if (defined($options{"p"})) {
 }
 if (defined($options{"l"})) {
     $logfile = $options{"l"};
+}
+if (defined($options{"t"})) {
+    $stamps = 1;
 }
 if (defined($options{"n"})) {
     if ($options{"n"} =~ /^([-\w]+)$/) {
@@ -120,6 +125,10 @@ sub Pcleanup($)
 	system("kill $childpid");
 	waitpid($childpid, 0);
     }
+    if (defined($stamppid)) {
+	system("kill $stamppid");
+	waitpid($stamppid, 0);
+    }
     unlink $pidfile;
     print TBTimeStampWithDate(),
           " [$PID]: wrapper exiting\n";
@@ -156,6 +165,28 @@ setsid();
 print TBTimeStampWithDate(),
       " [$PID]: wrapper starting '$cmd",
       $cmdargs ? " $cmdargs" : "", "'\n";
+
+#
+# Looper to periodically write a time stamp into the file. 
+#
+if ($stamps) {
+    $stamppid = fork();
+
+    die("*** $0:\n".
+	"    Could not fork!\n")
+	if ($stamppid < 0);
+
+    if ($stamppid == 0) {
+	$SIG{TERM} = 'DEFAULT';
+	$SIG{HUP}  = 'DEFAULT';
+	
+	while (1) {
+	    print "STAMP: " . TBTimeStampWithDate() . "\n";
+	    sleep(60);
+	}
+	exit(0);
+    }
+}
 
 # Loop forever, restarting the daemon if it ever dies.
 while (1) {
