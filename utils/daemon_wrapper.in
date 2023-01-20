@@ -139,6 +139,17 @@ sub Loghandler()
 {
     ReOpenLog($logfile);
 }
+# Force the daemon child to exit.
+sub KillChild()
+{
+    print TBTimeStampWithDate(),
+          " [$PID]: Forcing daemon child ($childpid) to exit with kill(HUP)\n";
+
+    if (kill('HUP', $childpid) == 0) {
+	print TBTimeStampWithDate(),
+	    "Could not kill(HUP) process $childpid: $!\n";
+    }
+}
 
 # Daemonize;
 if (!$debug && TBBackGround($logfile)) {
@@ -158,6 +169,8 @@ $SIG{TERM} = \&Pcleanup;
 # And reopen logfile for newsyslog.
 $SIG{HUP} = \&Loghandler
     if (! $debug);
+# Force the child to exit (and get restarted)
+$SIG{USR1} = \&KillChild;
 
 # Fully disconnect from bootup. 
 setsid();
