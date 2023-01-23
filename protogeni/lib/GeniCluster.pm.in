@@ -1483,6 +1483,7 @@ sub Reservations($)
 	$blob->{"end"}         = TBDateStringGMT($row->{'end'});
 	$blob->{"notes"}       = $row->{'notes'} || "";
 	$blob->{"approved"}    = "";
+	$blob->{"idledetection"} = $row->{'override_unused'} ? 0 : 1;
 	if (defined($row->{'approved'})) {
 	    $blob->{"approved"} = TBDateStringGMT($row->{'approved'});
 	}
