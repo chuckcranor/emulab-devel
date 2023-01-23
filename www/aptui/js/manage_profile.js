@@ -772,57 +772,33 @@ $(function ()
     }
     
     // Handler for all paths to rspec change (file upload, jacks, edit).
-    function changeRspec(newRspec, repoupdate_callback)
+    function changeRspec(newRspec)
     {
+	console.info("changeRspec");
+	
 	if (pythonRe.test(newRspec) || tclRe.test(newRspec)) {
 	    //
-	    // A geni-lib script. We are going to pass the script to
-	    // the server to be "run", which returns XML.
+	    // Need to normalize the newline characters for this
+	    // comparison to be meaningful, else we think the
+	    // source has changed when it really has not.
 	    //
-	    if (repoupdate_callback) {
-		/*
-		 * For repo based profiles always run the script.
-		 * Might be in a submodule or import, etc. So looking
-		 * at just profile.py is not an indicator. checkScript()
-		 * is what causes the profile to be "saved". 
-		 *
-		 * This is silly, and is a hold over from when I
-		 * thought we would give the user the option of
-		 * "saving" the change. But that makes no sense for a
-		 * repo backed profile, and when the user clicks
-		 * "Update" we should just update in the backend and
-		 * not go through all this jumping around.
-		 */
-		gotscript = 1;
-		checkScript(newRspec, repoupdate_callback);
-	    }
-	    else {
-		//
-		// Need to normalize the newline characters for this
-		// comparison to be meaningful, else we think the
-		// source has changed when it really has not.
-		//
-		var newr = $.trim(newRspec);
-		var oldr = $.trim($('#profile_script_textarea').val());
-		newr = newr.replace(new RegExp(/\r?\n|\r/g), " ");
-		oldr = oldr.replace(new RegExp(/\r?\n|\r/g), " ");
+	    var newr = $.trim(newRspec);
+	    var oldr = $.trim($('#profile_script_textarea').val());
+	    newr = newr.replace(new RegExp(/\r?\n|\r/g), " ");
+	    oldr = oldr.replace(new RegExp(/\r?\n|\r/g), " ");
 	    
-		if (oldr != newr || goodscript == 0) {
-		    console.info("geni-lib code has changed");
-		    if (portal_converted) {
-			/*
-			 * User might not want to proceed down this path,
-			 * will not be able to use Jacks. 
-			 */
-			rteCheckScript(newRspec);
-		    }
-	            else {
-			gotscript = 1;
-			checkScript(newRspec, repoupdate_callback);
-		    }
+	    if (oldr != newr || goodscript == 0) {
+		console.info("geni-lib code has changed");
+		if (portal_converted) {
+		    /*
+		     * User might not want to proceed down this path,
+		     * will not be able to use Jacks. 
+		     */
+		    rteCheckScript(newRspec);
 		}
-		else if (repoupdate_callback !== undefined) {
-		    repoupdate_callback(false /* unmodified. */);
+	        else {
+		    gotscript = 1;
+		    checkScript(newRspec);
 		}
 	    }
 	}
@@ -1326,8 +1302,10 @@ $(function ()
     //
     // Pass a geni-lib script to the server to run (convert to XML).
     //
-    function checkScript(script, repoupdate_callback)
+    function checkScript(script)
     {
+	console.info("checkScript");
+	
 	// Save for later.
 	$('#profile_script_textarea').val(script);
 
@@ -1353,9 +1331,6 @@ $(function ()
 		}
 		else {
 		    paramHelp.HideParameterHelp();
-		}
-		if (repoupdate_callback !== undefined) {
-		    repoupdate_callback(true /* modified */);
 		}
 		// Force this; the script is obviously different, but the
 		// the XML might be exactly same. Still want to save it.
@@ -1384,15 +1359,9 @@ $(function ()
 	    args["profile_uuid"] = profile_uuid;
 	}
 	if (fromrepo) {
-	    if (repoupdate_callback !== undefined) {
-		// Pass along flag to update repo (if allowed).
-		args["updaterepo"] = true;
-	    }
-	    else {
-		// Pass along refspec for running genilib
-		// Will be null on initial profile creation.
-		args["refspec"] = reporefspec;
-	    }
+	    // Pass along refspec for running genilib
+	    // Will be null on initial profile creation.
+	    args["refspec"] = reporefspec;
 	}
 	WaitWait("We are converting your geni-lib script to XML");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -1483,34 +1452,27 @@ $(function ()
 	    }
 	    else {
 		// Mark as HEAD in the page.
-		repohash = blob.hash;
+		repohash = blob.repohash;
+		reporefspec = blob.refspec;
 
-		/*
-		 * If the source was an rspec, we updated the profile
-		 * to match the current repo right away. But to make things
-		 * nicer for script based profiles, we wait until the
-		 * script is converted to an rspec. Cause of workflow, we
-		 * end up doing this later so that the user sees a short
-		 * delay when hitting the update button for a script based
-		 * profile. 
-		 */
-		if (!pythonRe.test(blob.source)) {
-		    NewRspecHandler(blob.source);
-		    // Reset the list of tags and branches whenever we
-		    // successfully update our clone.
+		NewRspecHandler(blob.rspec);
+		if (blob.script) {	
+		    $('#profile_script_textarea').val(blob.script);
+		    gotscript = 1;
+		    // Need to do this again to get new commit info (tags and branches).
 		    SetupRepo(function () { repobusy = false; });
-		    return;
+
+		    // In case the user had switched branches earlier.
+		    UpdateInstantiateButton();
+		    
+		    // Top left panel.
+		    $('#current-refspec').html(reporefspec);
+		    $('#current-refhash').html(repohash.substring(0, 8));
 		}
-		/*
-		 * Else we wait till the script converted, the call back is
-		 * invoked after CheckScript() finishes. The server side
-		 * has done the profile update, so we can finish things up.
-		 */
-		changeRspec(blob.source, function(modified) {
-		    // Reset the list of tags and branches whenever we
-		    // successfully update our clone.
-		    SetupRepo(function () { repobusy = false; });
-		});
+		else {
+		    $('#profile_script_textarea').val("");
+		    gotscript = 0;
+		}
 	    }
 	};
 	/*
@@ -1546,9 +1508,7 @@ $(function ()
 		"share_url" : profile.profile_profile_url,
 		"refspec"   : reporefspec,
 		"callback"  : function(which) {
-		    // So we remember what the user selected.
-		    reporefspec = which;
-		    UpdateInstantiateButton();
+		    console.info("SetupRepo initrepopicker", which);
 		    SelectRepoTarget(which);
 		}
 	    });
@@ -1570,8 +1530,13 @@ $(function ()
     {
 	console.info("SelectRepoTarget: ", which);
 
+	// So we remember what the user selected.
+	reporefspec = which;
+	UpdateInstantiateButton();
+
 	var callback = function (source, hash) {
 	    if (source) {
+		console.info("SelectRepoTarget: ", which, hash);
 		changeRspec(source);
 		// Top left panel.
 		$('#current-refspec').html(which);
@@ -1887,6 +1852,8 @@ $(function ()
      */
     function UpdateInstantiateButton()
     {
+	console.info("UpdateInstantiateButton", reporefspec);
+	
 	var url = "instantiate.php?profile=" +
 	    version_uuid + "&from=manage-profile";
 
