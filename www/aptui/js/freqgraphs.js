@@ -925,7 +925,7 @@ window.ShowFrequencyGraph = (function ()
 		    return btime - atime;
 		});
 		_.each(list, function(info) {
-		    // Remeber this for generating graph url.
+		    // Remember this for generating graph url.
 		    info["dirname"] = dirname;
 		    
 		    var html =
