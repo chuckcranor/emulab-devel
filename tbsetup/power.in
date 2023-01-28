@@ -323,6 +323,7 @@ foreach my $nodeid (@machines) {
     my $forcecycle  = 0;
     if (defined($node)) {
 	$power_delay = $node->NodeTypeInfo()->power_delay();
+	$power_delay = 0 if (!defined($power_delay));
 
 	if ($node->NodeAttribute("wakeonlan_afterpower", \$postwol) != 0) {
 	    warn "Could not get wakeonlan_afterpower attr for $nodeid.\n";
@@ -716,6 +717,7 @@ foreach my $power_id (keys %outlets) {
 		    }
 		}
 		my $oldstate = $node->eventstate();
+		$oldstate = "" if (!defined($oldstate));
 		my $newstate;
 
 		if ($op eq "off") {
