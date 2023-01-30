@@ -291,6 +291,9 @@ sub DoGroupReserve()
 	    print STDERR "Missing start time\n";
 	    usage();
 	}
+	if ($resgroup->noidledetection()) {
+	    $forclass = 1;
+	}
     }
     #
     # No start time means user wants the reservation right now.
