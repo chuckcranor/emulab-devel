@@ -6,12 +6,14 @@
 
 case "$1" in
     start|faststart|quietstart|onestart|forcestart)
-	/usr/testbed/sbin/daemon_wrapper -t -i 10 \
+	/usr/testbed/sbin/daemon_wrapper -t -w 10 -i 10 \
 	   -l /usr/testbed/log/frontend-dense-ebc.log \
+           -n dense-ebc-netcat \
 	   -p /var/run/frontend-dense-ebc.pid nc -d 10.11.13.192 111
   
-	/usr/testbed/sbin/daemon_wrapper -t -i 10 \
+	/usr/testbed/sbin/daemon_wrapper -t -w 10 -i 10 \
 	   -l /usr/testbed/log/frontend-dense-ustar.log \
+           -n dense-ustar-netcat \
 	   -p /var/run/frontend-dense-ustar.pid nc -d 10.11.13.193 111
 
 	    echo -n "dense-debugging"
