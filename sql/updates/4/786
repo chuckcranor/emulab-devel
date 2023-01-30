@@ -1,0 +1,30 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBTableExists("apt_reservation_group_reservation_data")) {
+	DBQueryFatal("CREATE TABLE `apt_reservation_group_reservation_data` ( ".
+		     " `uuid` varchar(40) NOT NULL default '', ".
+		     " `aggregate_urn` varchar(128) NOT NULL default '', ".
+		     " `type` varchar(30) NOT NULL DEFAULT '', ".
+		     " `jsondata` mediumtext, ".
+		     " PRIMARY KEY (`uuid`,`aggregate_urn`,`type`) ".
+		     ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
+
+	DBQueryFatal("replace into apt_reservation_group_reservation_data ".
+		     " select uuid,aggregate_urn,type,jsondata ".
+		     "  from apt_reservation_group_reservations");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

@@ -492,7 +492,6 @@ class ReservationGroupReservation
     function approved()     { return $this->field('approved'); }
     function deleted()	    { return $this->field('deleted'); }
     function canceled()     { return $this->field('canceled'); }
-    function jsondata()     { return $this->field('jsondata'); }
     function approved_pushed()     { return $this->field('approved_pushed'); }
     function canceled_pushed()     { return $this->field('canceled_pushed'); }
     function cancel_canceled()     { return $this->field('cancel_canceled'); }
@@ -510,6 +509,25 @@ class ReservationGroupReservation
             return $foo;
         }
         return null;
+    }
+
+    function jsondata() {
+	$uuid = $this->uuid();
+        $safe_urn  = addslashes($this->aggregate_urn());
+        $safe_type = addslashes($this->type());
+
+	$query_result =
+	    DBQueryWarn("select jsondata ".
+                        "    from apt_reservation_group_reservation_data ".
+			"where uuid='$uuid' and ".
+                        "      aggregate_urn='$safe_urn' and ".
+                        "      type='$safe_type'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    return null;
+	}
+        $row = mysql_fetch_array($query_result);
+        return $row["jsondata"];
     }
 
     #

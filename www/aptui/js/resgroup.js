@@ -3463,7 +3463,8 @@ $(function ()
 	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
-			     {"uuid"    : window.UUID},
+			     {"uuid"    : window.UUID,
+			      "history" : true},
 			     callback);
     }
 
@@ -3816,7 +3817,9 @@ $(function ()
 	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
-			     {"uuid"    : window.UUID}, callback);
+			     {"uuid"    : window.UUID,
+			      "history" : true},
+			     callback);
     }
 
     /*

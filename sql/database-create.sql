@@ -985,6 +985,19 @@ CREATE TABLE `apt_reservation_group_reservations` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_reservation_group_reservation_data`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_reservation_data`;
+CREATE TABLE `apt_reservation_group_reservation_data` (
+  `uuid` varchar(40) NOT NULL default '',
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `type` varchar(30) NOT NULL DEFAULT '',
+  `jsondata` mediumtext,
+  PRIMARY KEY (`uuid`,`aggregate_urn`,`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_reservation_group_rf_reservations`
 --
 

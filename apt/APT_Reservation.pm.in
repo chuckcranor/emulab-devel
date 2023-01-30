@@ -871,13 +871,17 @@ sub Create($$$$$$)
     my ($class, $group, $aggregate_urn, $remote_uuid, $type, $count) = @_;
     my $group_uuid = $group->uuid();
 
-    DBQueryWarn("insert into apt_reservation_group_reservations set ".
-		"  uuid='$group_uuid', ".
-		"  remote_uuid='$remote_uuid', ".
-		"  aggregate_urn='$aggregate_urn', ".
-		"  type='$type', count='$count'")
-	or return undef;
-    
+    if (DBQueryWarn("insert into apt_reservation_group_reservations set ".
+		    "  uuid='$group_uuid', ".
+		    "  remote_uuid='$remote_uuid', ".
+		    "  aggregate_urn='$aggregate_urn', ".
+		    "  type='$type', count='$count'")) {
+	
+	DBQueryWarn("insert into apt_reservation_group_reservation_data ".
+		    "  set uuid='$group_uuid', ".
+		    "  aggregate_urn='$aggregate_urn', ".
+		    "  type='$type'");
+    }
     if (1) {
 	DBQueryWarn("insert into apt_reservation_group_reservation_history ".
 		    "  set uuid='$group_uuid', ".
@@ -907,6 +911,29 @@ sub domain($)		{ return $_[0]->{'AGGURN'}->domain(); }
 sub IsCluster($)        { return 1; }
 sub IsRange($)          { return 0; }
 sub IsRoute($)          { return 0; }
+
+#
+# This is stored in a separate table. Huge json strings.
+#
+sub jsondata($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+    my $type = $self->type();
+    
+    my $query_result =
+	DBQueryWarn("select jsondata from ".
+		    "   apt_reservation_group_reservation_data ".
+		    "where uuid='$uuid' and aggregate_urn='$urn' and ".
+		    "      type='$type'");
+
+    return undef
+	if (! (defined($query_result) && $query_result->numrows));
+
+    my ($jsondata) = $query_result->fetchrow_array();
+    return $jsondata;
+}
 
 sub DESTROY {
     my $self = shift;
@@ -950,6 +977,11 @@ sub Delete($;$)
     my $urn  = $self->aggregate_urn();
     my $type = $self->type();
     
+    DBQueryWarn("delete from apt_reservation_group_reservation_data ".
+		"where uuid='$uuid' and aggregate_urn='$urn' and ".
+		"      type='$type'")
+	or return -1;
+
     DBQueryWarn("delete from apt_reservation_group_reservations ".
 		"where uuid='$uuid' and aggregate_urn='$urn' and ".
 		"      type='$type'")
@@ -1182,8 +1214,11 @@ sub Update($$$)
     my $urn  = $self->aggregate_urn();
     my $type = $self->type();
     my $safe = DBQuoteSpecial($what);
-    
-    DBQueryWarn("update apt_reservation_group_reservations set ".
+    my $table = ($which eq "jsondata" ? 
+		 "apt_reservation_group_reservation_data" : 
+		 "apt_reservation_group_reservations");
+
+    DBQueryWarn("update $table set ".
 		" `$which`=$safe ".
 		"where uuid='$uuid' and aggregate_urn='$urn' and ".
 		"      type='$type'")
