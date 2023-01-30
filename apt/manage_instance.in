@@ -1598,6 +1598,24 @@ sub DoTerminate()
 	    $agg->SetStatus("terminated");
 	    $agg->ResolveDefer();
 	}
+	if ($agg->status() eq "canceled" || $agg->status() eq "failed") {
+	    #
+	    # If it is a bus and the experiment has either expired, or
+	    # ended on a previous day, there is no reason to hang onto
+	    # it. We can just terminate here at the Portal and the next
+	    # time the bus comes up, the first thing it will do is
+	    # terminate the expired experiment.  So right after midnight at
+	    # the Portal, the experiment will get cleared out. This only
+	    # makes sense cause we know the experiment has expired.
+	    #
+	    # Note that we re-enabled 
+	    #
+	    my $aptagg = $agg->GetAptAggregate();
+	    if ($aptagg->ismobile() && $instance->IsExpired()) {
+		$agg->SetStatus("terminated");
+		$agg->ResolveDefer();
+	    }
+	}	
 	if ($agg->status() ne "terminated") {
 	    $agg->ResolveDefer();
 	    push(@agglist, $agg);
