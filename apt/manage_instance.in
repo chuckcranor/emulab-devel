@@ -1589,7 +1589,8 @@ sub DoTerminate()
 	#
 	# Messy here; there is no experiment record at the remote
 	# cluster until we get out of image staging, but there are
-	# several states that mean we are staging images.
+	# several states that mean we are staging images. Otherwise
+	# harmless to call out to the cluster if its not there. 
 	#
 	if ($agg->status() eq "prestage" ||
 	    $agg->status() eq "staging" ||
