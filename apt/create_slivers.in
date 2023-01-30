@@ -1426,6 +1426,7 @@ sub CreateSlivers()
 	    }
 	    if (($exitcode == GENIRESPONSE_NO_MAPPING() ||
 		 $exitcode == GENIRESPONSE_INSUFFICIENT_NODES()) &&
+		$instance->pid() ne "@TUTORIALPID@" &&
 		$instance->AllResourcesReserved($aggobj)) {
 		print STDERR "$cluster says not able to map experiment yet; ".
 		    "deferring till later since project has it reserved\n";
