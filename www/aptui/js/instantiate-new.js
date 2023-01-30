@@ -820,9 +820,8 @@ $(function ()
 	    // The selected profile in the submitted form.
 	    // Might be a secret hash.
 	    $('#selected_profile').attr('value', selected);
-	    $('#selected_profile_text').html("" + profile_name);
+	    $('.selected_profile_text').html(profile_name + ":" + blob.version);
 	    $('#selected_profile_description').html(blob.description);
-	    $('#finalize_profile_name').text(profile_name + ":" + blob.version);
 
 	    ispprofile       = blob.ispprofile;
 	    isscript         = blob.isscript;
@@ -880,7 +879,7 @@ $(function ()
 		    blob.repohash.substr(0, 8) + ", " +
 		    blob.reporef + ")";
 		
-		$('#selected_profile_text').html(text);
+		$('.selected_profile_text').html(text);
 
 		// See ppwizard, it will run the script again if
 		// the params change and need to know what to

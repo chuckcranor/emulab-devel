@@ -3827,6 +3827,10 @@ $(function () {
 		SetupPPButtons(json.value.hasactivity,
 			       json.value.paramsets, json.value.recents);
 
+		// Copy over the profile name/version
+		$('#' + ppdivname + ' .selected_profile_text')
+		    .html($('#step0-form .selected_profile_text').html());
+
 		if (window.EXPMODIFY) {
 		    // Switch the message at the top of the panel.
 		    $('#' + ppdivname + ' .ppform-instantiate')
