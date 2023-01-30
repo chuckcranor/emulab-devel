@@ -7140,6 +7140,9 @@ sub DoStatus()
 	}
     }
     if ($asjson) {
+	if ($debug) {
+	    print Dumper($blob);
+	}
 	my $json = eval { encode_json($blob); };
 	if ($@) {
 	    fatal($@);
