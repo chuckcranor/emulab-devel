@@ -6986,6 +6986,7 @@ sub DoStatus()
     my $status     = $instance->status();
     my $slice      = $instance->GetGeniSlice();
     my $slice_uuid = $instance->slice_uuid();
+    my $project    = $instance->GetProject();
     my $blob;
 
     my $optlist = "jrXk";
@@ -7019,7 +7020,8 @@ sub DoStatus()
 	if (!defined($creator)) {
 	    fatal("Cannot lookup creator");
 	}
-	if (!$this_user->SameUser($creator->emulab_user())) {
+	if (! ($this_user->SameUser($creator->emulab_user()) ||
+	       $project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT()))) {
 	    UserError("Not enough permission to get experiment status");
 	}
     }
