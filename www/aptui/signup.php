@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -534,7 +534,7 @@ if ($this_user && $promoting) {
     $args["city"]          = $formfields["city"];
     $args["state"]         = $formfields["state"];
     $args["country"]       = $formfields["country"];
-    $args["shell"]         = 'tcsh';
+    $args["shell"]         = 'bash';
     $args["affiliation"]   = htmlentities($formfields["affiliation"]);
     $args["address1"]      = $formfields["address1"];
     $args["address2"]      = $formfields["address2"];
@@ -561,7 +561,7 @@ if (!$this_user) {
     $args["city"]          = $formfields["city"];
     $args["state"]         = $formfields["state"];
     $args["country"]       = $formfields["country"];
-    $args["shell"]         = 'tcsh';
+    $args["shell"]         = 'bash';
     $args["affiliation"]   = htmlentities($formfields["affiliation"]);
     $args["password"]      = $formfields["password1"];
     # Force initial SSL cert generation.
