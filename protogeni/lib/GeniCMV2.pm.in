@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -7064,6 +7064,7 @@ sub ServiceLogs($)
 				    "No local experiment for slice");
     }
     my $output = GeniUtil::ExecQuiet("$NODE_SLOGS $node_id");
+    $output =~ s/[^[:ascii:]]/ /g;
     if ($?) {
 	print STDERR $output . "\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
