@@ -2752,7 +2752,8 @@ $(function ()
 		    var host   = $(login).attr("hostname");
 		    var port   = $(login).attr("port");
 		    var url    = "ssh://" + user + "@" + host + ":" + port +"/";
-		    var sshcmd = "ssh -p " + port + " " + user + "@" + host;
+		    var sshcmd = "ssh" + (port == 22 ? "" : " -p " + port) + 
+			" " + user + "@" + host;
 		    href       = "<a href='" + url + "'><kbd>" + sshcmd +
 			"</kbd></a>";
 		
@@ -2760,7 +2761,14 @@ $(function ()
 		    hostportList[node] = hostport;
 
 		    // Update the row.
-		    clone.find(' [name=sshurl]').html(href);
+		    clone.find(' [name=sshurl] .sshurl-url').html(href);
+
+		    // Add a clipper
+		    clone.find(' [name=sshurl] .sshurl-copy a').click(function (event) {
+			event.preventDefault();
+			navigator.clipboard.writeText(sshcmd);
+		    });
+		    clone.find(' [name=sshurl] .sshurl-copy').removeClass("hidden");
 
 		    // Add a tooltip for services running warning. Leave disabled
 		    // since we do not know until we get the sliver status. 
