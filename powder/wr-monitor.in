@@ -1,0 +1,1181 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2023 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+use IO::Socket::INET;
+use JSON;
+use POSIX qw(strftime ceil);
+
+#
+# Monitor the functioning of the White Rabbit gear.
+#
+sub usage()
+{
+    print "Usage: wr-monitor [-d level] [-snV] [-I IP]\n";
+    exit(1);
+}
+my $optlist   = "d:nsVI:";
+my $debug     = 0;
+my $impotent  = 0;
+my $oneshot   = 0;
+my $killed    = 0;
+my $getvers   = 0;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $OURDOMAIN        = "@OURDOMAIN@";
+
+my $DAEMONTAG        = "wr-monitor";
+my $LOGFILE          = "$TB/log/$DAEMONTAG.log";
+my $PASSWORD         = "$TB/etc/telegraf.pswd";
+my $CURL             = "/usr/local/bin/curl";
+my $SLEEP_INTERVAL   = (15 * 60);
+
+my $VUARTHOST	    = "control";
+my $VUARTSCRIPT	    = "/home/mike/WR/wr-len-do";
+my $LDPATH	    = "/lib:/usr/lib:/usr/local/lib:/wr/lib";
+my $WRMON	    = "env LD_LIBRARY_PATH=$LDPATH /wr/bin/wr_mon";
+my $GPACTRL	    = "env LD_LIBRARY_PATH=$LDPATH /wr/bin/gpa_ctrl";
+my $SSHOPTS	    = "-n -o ConnectTimeout=2 -o Protocol=2 -o BatchMode=yes -o StrictHostKeyChecking=no";
+
+my %WRNODES = (
+    "10.11.12.197"	=> {
+	"enabled"	=> 1,
+	"type"		=> "zen",
+	"name"		=> "wr-zen",
+	"location"	=> "MEB BS ZEN",
+    },
+    "10.11.12.198"	=> {
+	"enabled"	=> 1,
+	"type"		=> "switch",
+	"name"		=> "wr-switch",
+	"location"	=> "Fort DC SWITCH",
+    },
+    "10.11.13.200"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-0",
+	"alias"		=> "wr-len-dbs5",
+	"location"	=> "Moran DBS LEN",
+    },
+    "10.11.13.201"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-1",
+	"alias"		=> "wr-len-hospital",
+	"location"	=> "Hospital BS LEN",
+    },
+    "10.11.13.202"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-2",
+	"alias"		=> "wr-len-browning",
+	"location"	=> "Browning BS LEN",
+    },
+    "10.11.13.203"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-3",
+	"alias"		=> "wr-len-bes",
+	"location"	=> "SBS BS LEN",
+    },
+    "10.11.13.204"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-4",
+	"alias"		=> "wr-len-smt",
+	"location"	=> "SMT BS LEN",
+    },
+    "10.11.13.205"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-5",
+	"alias"		=> "wr-len-fm",
+	"location"	=> "FM BS LEN",
+    },
+    "10.11.13.206"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-6",
+	"alias"		=> "wr-len-honors",
+	"location"	=> "Honors BS LEN",
+    },
+    "10.11.13.207"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-7",
+	"location"	=> "Dentistry BS LEN",
+    },
+    "10.11.13.242"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-14",
+	"alias"		=> "wr-len-meb",
+	"location"	=> "MEB BS LEN",
+    },
+    "10.11.13.243"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-8",
+	"alias"		=> "wr-len-dbs1",
+	"location"	=> "Wasatch DBS LEN",
+    },
+    "10.11.13.244"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-9",
+	"alias"		=> "wr-len-dbs8",
+	"location"	=> "Ustar BS LEN",
+    },
+    "10.11.13.245"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-10",
+	"alias"		=> "wr-len-dbs7",
+	"location"	=> "EBC DBS LEN",
+    },
+    "10.11.13.246"	=> {
+	"enabled"	=> 0,
+	"type"		=> "len",
+	"name"		=> "wr-len-11",
+	"alias"		=> "wr-len-dbs6",
+	"location"	=> "Guesthouse DBS LEN",
+    },
+    "10.11.13.248"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-13",
+	"alias"		=> "wr-len-dbs8",
+	"location"	=> "Ustar DBS LEN",
+    },
+);
+
+my (%WRZEN, %WRSWITCH, %WRLENS);
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub wrzen_alive();
+sub wrzen_getstatus();
+sub wrzen_report();
+sub wrzen_alert();
+sub wrswitch_alive();
+sub wrswitch_getstatus();
+sub wrswitch_report();
+sub wrswitch_alert();
+sub wrlen_alive(@);
+sub wrlen_getstatus(@);
+sub wrlen_getversion(@);
+sub wrlen_report();
+sub wrlen_alert();
+sub wrlen_upload();
+
+sub NotifyTBOPS($$);
+sub Notify($$$);
+sub fatal($);
+sub logit($);
+sub logitnnl($);
+	  
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if ($UID != 0) {
+    fatal("Must be root to run this script\n");
+}
+if (!$MAINSITE) {
+    exit(0);
+}
+
+my @iplist = ();
+
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = int($options{"d"});
+}
+if (defined($options{"s"})) {
+    $oneshot = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"V"})) {
+    $getvers = 1;
+}
+if (defined($options{"I"})) {
+    my $ip = $options{"I"};
+    if (exists($WRNODES{$ip}) && $WRNODES{$ip}{'type'} eq "len") {
+	@iplist = ($ip);
+	$oneshot = 1;
+    } else {
+	print STDERR "$ip: Not a valid WR-LEN IP\n";
+	usage();
+    }
+}
+
+my $TELEGRAF = `/bin/cat $PASSWORD`;
+if ($?) {
+    fatal("Could not read $PASSWORD");
+}
+chomp($TELEGRAF);
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use libtestbed;
+use emutil;
+use libEmulab;
+use APT_Aggregate;
+use Node;
+
+my @liveips = ();
+
+foreach my $ip (keys %WRNODES) {
+    if ($WRNODES{$ip}{'type'} eq "zen") {
+	if (%WRZEN) {
+	    fatal("Multiple WR-ZEN nodes!");
+	}
+	%WRZEN = %{$WRNODES{$ip}};
+	$WRZEN{'ip'} = $ip;
+	next;
+    }
+    if ($WRNODES{$ip}{'type'} eq "switch") {
+	if (%WRSWITCH) {
+	    fatal("Multiple WR switches!");
+	}
+	%WRSWITCH = %{$WRNODES{$ip}};
+	$WRSWITCH{'ip'} = $ip;
+	next;
+    }
+    if ($WRNODES{$ip}{'type'} ne "len") {
+	fatal("Unrecognized WR node type: ". $WRNODES{$ip}{'type'});
+    }
+    $WRLENS{$ip} = $WRNODES{$ip};
+    $WRLENS{$ip}{'ip'} = $ip;
+}
+if (@iplist == 0) {
+    @iplist = keys %WRLENS;
+}
+
+# XXX just return the version info from each WR-LEN
+if ($getvers) {
+    @liveips = wrlen_alive(@iplist);
+    wrlen_getversion(@liveips);
+    exit(0);
+}
+
+if (! ($oneshot || $impotent)) {
+    if (CheckDaemonRunning("${DAEMONTAG}.log")) {
+	fatal("Not starting another $DAEMONTAG daemon!");
+    }
+    # Go to ground.
+    if (! $debug) {
+	if (TBBackGround($LOGFILE)) {
+	    exit(0);
+	}
+    }
+    if (MarkDaemonRunning("$DAEMONTAG")) {
+	fatal("Could not mark daemon as running!");
+    }
+}
+
+#
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    ReOpenLog($LOGFILE);
+}
+$SIG{HUP} = \&handler
+    if (! ($debug || $oneshot));
+
+# TERM while connected to a frontend makes the frontend very unhappy.
+sub killme()
+{
+    $killed = 1;
+}
+$SIG{TERM} = \&killme;
+$SIG{INT}  = \&killme;
+
+
+while (1) {
+    my $alertstr = "";
+
+    if ($killed) {
+	exit(0);
+    }
+
+    # See if the WR-ZEN is alive
+    if (wrzen_alive()) {
+	# we might want to differentiate types of failure in the future
+	my $rv = wrzen_getstatus();
+    }
+    wrzen_report();
+    $alertstr .= wrzen_alert();
+
+    # See if the WR-SWITCH is alive
+    if (wrswitch_alive()) {
+	# we might want to differentiate types of failure in the future
+	my $rv = wrswitch_getstatus();
+    }
+    wrswitch_report();
+    $alertstr .= wrswitch_alert();
+
+    #
+    # No point in doing WR-LEN checks if WR switch is dead since we talk
+    # to the devices via the switch.
+    #
+    if ($WRSWITCH{'state'} eq "connected") {
+	@liveips = wrlen_alive(@iplist);
+	wrlen_getstatus(@liveips);
+	wrlen_report();
+	$alertstr .= wrlen_alert();
+	wrlen_upload();
+    }
+
+    if ($alertstr) {
+	chomp $alertstr;
+	if ($oneshot || $debug) {
+	    print STDERR "ALERTS:\n$alertstr\nEND ALERTS\n";
+	} else {
+	    logit("ALERTS:\n${alertstr}\nEND ALERTS");
+	    # XXX send email
+	}
+    }
+
+    last
+	if ($oneshot);
+
+    print "\n";
+    sleep($SLEEP_INTERVAL);
+}
+
+exit(0);
+
+#
+# Return zero if device responds to a ping, non-zero otherwise
+#
+sub wr_ping($)
+{
+    my ($ip) = @_;
+
+    #
+    # Do a _quick_ ping test:
+    # 0.25 seconds between, wait 10ms for each, 5 sent, just need one back
+    # Takes a little over 1 second for an unresponsive device.
+    #
+    my $opts = "-i 0.25 -W 10 -c 5 -o";
+    print STDERR "Doing '/sbin/ping $opts $ip >/dev/null 2>&1'\n"
+	if ($debug > 1);
+    my $rv = system("/sbin/ping $opts $ip >/dev/null 2>&1");
+
+    return $rv;
+}
+
+sub wrzen_alive()
+{
+    my $ip = $WRZEN{'ip'};
+    my $isalive = 0;
+
+    if (exists($WRZEN{'state'})) {
+	$WRZEN{'laststate'} = $WRZEN{'state'};
+    }
+    my $rv = wr_ping($ip);
+    if ($rv) {
+	$WRZEN{'state'} = "notconnected";
+    } else {
+	$WRZEN{'state'} = "connected";
+	$isalive = 1;
+    }
+    if ($debug) {
+	my $name = $WRZEN{'name'};
+	my $loc = $WRZEN{'location'};
+	my $state = $WRZEN{'state'};
+	my $laststate = $WRZEN{'laststate'} ? $WRZEN{'laststate'} : "start";
+	print "$name ($loc): $laststate -> $state\n";
+    }
+
+    return $isalive;
+}
+
+sub wrswitch_alive()
+{
+    my $ip = $WRSWITCH{'ip'};
+    my $isalive = 0;
+
+    if (exists($WRSWITCH{'state'})) {
+	$WRSWITCH{'laststate'} = $WRSWITCH{'state'};
+    }
+    my $rv = wr_ping($ip);
+    if ($rv) {
+	$WRSWITCH{'state'} = "notconnected";
+    } else {
+	$WRSWITCH{'state'} = "connected";
+	$isalive = 1;
+    }
+    if ($debug) {
+	my $name = $WRSWITCH{'name'};
+	my $loc = $WRSWITCH{'location'};
+	my $state = $WRSWITCH{'state'};
+	my $laststate = $WRSWITCH{'laststate'} ? $WRSWITCH{'laststate'} : "start";
+	print "$name ($loc): $laststate -> $state\n";
+    }
+
+    return $isalive;
+}
+
+#
+# Ping all WRLENs to see which are alive. Sets the resulting state for
+# each unit and returns a list of IPs for the reachable ones.
+#
+sub wrlen_alive(@)
+{
+    my @allips = @_;
+    my @liveips = ();
+
+    foreach my $ip (@allips) {
+	my $laststate = "unknown";
+	if (exists($WRLENS{$ip}{'state'})) {
+	    $laststate = $WRLENS{$ip}{'state'};
+	}
+	$WRLENS{$ip}{'laststate'} = $laststate;
+	
+	my $name = $WRLENS{$ip}{'name'};
+	my $loc = $WRLENS{$ip}{'location'};
+
+	#
+	# Don't test units that are not enabled.
+	#
+	if (!$WRLENS{$ip}{'enabled'}) {
+	    $WRLENS{$ip}{'state'} = "disabled";
+	    print "$name ($loc): not enabled\n"
+		if ($debug);
+	    next;
+	}
+
+	my $rv = wr_ping($ip);
+	if ($rv) {
+	    $WRLENS{$ip}{'state'} = "disconnected";
+	    print "$name ($loc): dead ($rv)\n"
+		if ($debug);
+	} else {
+	    $WRLENS{$ip}{'state'} = "connected";
+	    push @liveips, $ip;
+	    print "$name ($loc): alive\n"
+		if ($debug);
+	}
+    }
+
+    return @liveips;
+}
+
+#
+# Call over to Linux node to gather status from all WR-LENs via the
+# "virtual uart" interface.
+#
+
+#
+# "vers" command
+#
+# There are multiple lines returned per WR-LEN. An entry looks like:
+#
+#   ==== 10.11.13.202 ====
+#   Output generated on 2023-01-06 14:33
+#   
+#   @ver
+#   WR Core build: d795903
+#   Built on Nov 13 2018, 13:13:43
+#   Built for 128 kB RAM, stack is 2048 bytes
+#   
+#   1-wire ROM ID (DS18B20U) : 0x6100000b 
+#   
+#   EEPROM FRU info is valid: 
+#    FRU VENDOR  : 7S 
+#    FRU DEVICE  : WRLEN 
+#    FRU SERIAL  : 7SWRLENv1.1-S04_762 
+#    FRU PARTNUM : 7SWRLENv1.1-S04 
+#    FRU FID     : 2020-05-21 10:45:36.617560 
+#    FRU CUSTOM  : <81> 
+#   
+#   Gateware info: 
+#    GW ID      : 0x751e41c0
+#    GW VERSION : 3.15.39
+#    GW DATE    : 18/11/15 10:48
+#
+# We prepend the line with the IP address.
+#
+sub wrlen_getversion(@)
+{
+    my @ips = @_;
+
+    my $ipstr = join(' ', @ips);
+    my @output = `sudo ssh $SSHOPTS $VUARTHOST $VUARTSCRIPT ver $ipstr`;
+    if ($?) {
+	my $stat = $?;
+	print STDERR "$VUARTSCRIPT failed ($stat) on one or more wr-lens.\n";
+	return $stat;
+    }
+    print ">>>>> OUTPUT\n", @output, "\n<<<<< OUTPUT END\n";
+
+    return 0;
+}
+
+#
+# Get general "healthing" info from ZEN.
+#  
+# Collect via SSH and the GPA (Generic Parameters Access) interface:
+#   ssh wr-zen env LD_LIBRARY_PATH=$LDPATH /wr/bin/gpa_ctrl healthingd
+# which returns output like:
+#
+#---       healthingd ---------------------------------------------------------|
+#   2.1000.0   cfg/screen_saver                     : Enabled                 
+#   2.1000.1   cfg/screen_saver_delay               : 60                   s  
+#   2.1000.2   cfg/screen_contrast                  : 255                     
+#   2.1000.4   cfg/lcd_disabled                     : No                      
+#   2.1001.10  sys/uptime                           : 2:20:07:17              
+#   2.1001.11  sys/local_time                       : 2023-01-15 13:13:59 (MST)    
+#   2.1001.20  sys/ram_total                        : 510496               KB 
+#   2.1001.21  sys/ram_free                         : 199268               KB 
+#   2.1001.30  sys/cpus                             : 2                       
+#   2.1001.31  sys/cpu_load1                        : 0.147949                
+#   2.1001.32  sys/cpu_load5                        : 0.372559                
+#   2.1001.33  sys/cpu_load15                       : 0.413086                
+#   2.1001.34  sys/cpu_usage                        : 7.397461             %  
+#   2.1001.40  sys/hdd1_size                        : 1046516              KB 
+#   2.1001.41  sys/hdd1_free                        : 961436               KB 
+#   2.1001.50  sys/hdd2_size                        : 13785168             KB 
+#   2.1001.51  sys/hdd2_free                        : 12901156             KB 
+#   2.1001.60  sys/fpga_temp                        : 50                   C  
+#   2.1002.1   alert/global_state                   : Ok                      
+#   2.1002.2   alert/timing_state                   : Ok                      
+#   2.1002.3   alert/system_state                   : Ok                      
+#
+sub wrzen_getstatus()
+{
+    my $ip = $WRZEN{'ip'};
+    my %status = ();
+
+    if (exists($WRZEN{'status'})) {
+	%{$WRZEN{'laststatus'}} = %{$WRZEN{'status'}};
+    } else {
+	delete $WRZEN{'laststatus'};
+    }
+    %{$WRZEN{'status'}} = ();
+
+    print STDERR "Doing 'ssh $SSHOPTS $ip $GPACTRL -w'\n"
+	if ($debug > 1);
+    my @output = `ssh $SSHOPTS $ip $GPACTRL healthingd`;
+    if ($? == 0) {
+	print ">>>>> SSH OUTPUT\n", @output, "\n<<<<< OUTPUT END\n"
+	    if ($debug > 1);
+
+	foreach my $line (@output) {
+	    chomp($line);
+	    if ($line =~ /sys\/fpga_temp\s+:\s+(\d+)\s+/) {
+		$status{'fpga-temp'} = $1;
+		next;
+	    }
+	    if ($line =~ /alert\/([^_]+)_state\s+:\s+(\S+)/) {
+		$status{$1} = $2;
+		next;
+	    }
+	}
+    }
+    %{$WRZEN{'status'}} = %status;
+    print STDERR "$ip: ", Dumper(\%WRZEN), "\n"
+	if ($debug > 1);
+
+    return 0;
+}
+
+#
+# Get port and device status from WR switch.
+#
+# New strategy, collect status via ssh. Avoids issues with a 10KB+ tmp file
+# getting left behind on the switch /tmp dir for every call. The catch is
+# that boss root's pubkey must be in the authorized keys file. We have done
+# this for the current install via the custom boot script. The call is:
+#   ssh -n wr-switch /wr/bin/wr_mon -w
+# which is what the web interface uses, but we get ascii lines and not
+# low-budget JSON that has to be parsed. Everything that is an array in
+# the web JSON output is just a line here.
+#
+# Collect status via switch web interface:
+#   curl 'http://10.11.12.198/getwrstatus.php'
+# will return JSON like:
+#  [["wri1  up Slave Locked Calibrated 64:fb:81:20:1e:11 ","wri2  up Non WR NoLock Calibrated 00:00:00:00:00:00 ","wri3  up Master NoLock Calibrated 08:00:30:ba:65:3a ","wri4  up Master NoLock Calibrated 08:00:30:2c:60:47 ","wri5  up Master NoLock Calibrated 08:00:30:b7:8a:92 ","wri6  up Master NoLock Calibrated 08:00:30:2b:fe:ee ","wri7  up Master NoLock Calibrated 08:00:30:b7:dd:1b ","wri8  up Master NoLock Calibrated 08:00:30:b7:34:60 ","wri9  up Master NoLock Calibrated 08:00:30:ba:a0:2a ","wri10 up Master NoLock Calibrated 08:00:30:7e:b9:b8 ","wri11 up Master NoLock Calibrated 08:00:30:7e:b9:bd ","wri12 up Master NoLock Calibrated 08:00:30:7f:08:73 ","wri13 down Master NoLock Uncalibrated ","wri14 down Master NoLock Uncalibrated ","wri15 down Master NoLock Uncalibrated ","wri16 up Master NoLock Calibrated 08:00:30:7e:a6:f0 ","wri17 down Master NoLock Uncalibrated ","wri18 down Non WR NoLock Uncalibrated ",""],["TEMP","fpga:46.06","pll:47.88","psl:35.81","psr:38.13\n"],["2022-12-21 02:37:20.126506000 TAI","2022-12-21 02:36:43.126506000 UTC",""],["SERVO","lock:1","sv:1","ss:'TRACK_PHASE'","mu:29285804","dms:14598744","dtxm:147070","drxm:245762","dtxs:223897","drxs:234273","asym:88316","ll:287466","crtt:28434802","cko:1","setp:6745","ucnt:134477","\n"]]
+#
+# Returns non-zero on error.
+#
+sub wrswitch_getstatus()
+{
+    my $ip = $WRSWITCH{'ip'};
+    my %status = ();
+
+    if (exists($WRSWITCH{'status'})) {
+	%{$WRSWITCH{'laststatus'}} = %{$WRSWITCH{'status'}};
+    } else {
+	delete $WRSWITCH{'laststatus'};
+    }
+    %{$WRSWITCH{'status'}} = ();
+
+    # Try ssh first. If that fails (times out) we fall back on the web.
+    print STDERR "Doing 'ssh $SSHOPTS $ip $WRMON -w'\n"
+	if ($debug > 1);
+    my @output = `ssh $SSHOPTS $ip $WRMON -w`;
+    if ($? == 0) {
+	print ">>>>> SSH OUTPUT\n", @output, "\n<<<<< OUTPUT END\n"
+	    if ($debug > 1);
+
+	foreach my $line (@output) {
+	    chomp($line);
+	    if ($line =~ /^TEMP (.*)$/) {
+		my @kvs = split('\s+', $1);
+		foreach my $elt (@kvs) {
+		    my ($k,$v) = split(':', $elt);
+		    if ($k && defined($v)) {
+			$status{"$k-temp"} = $v;
+		    }
+		}
+	    } elsif ($line =~ /^SERVO (.*)$/) {
+		my @kvs = split('\s+', $1);
+		foreach my $elt (@kvs) {
+		    my ($k,$v) = split(':', $elt);
+		    if ($k && defined($v)) {
+			$status{$k} = $v;
+		    }
+		}
+	    } else {
+		# ignore other info for now
+		;
+	    }
+	}
+    }
+
+    # Fall back on web
+    if (%status == 0) {
+	print STDERR "Doing '$CURL -k -s -S http://$ip/getwrstatus.php'\n"
+	    if ($debug > 1);
+	my $json = `$CURL -k -s -S 'http://$ip/getwrstatus.php'`;
+	if ($? != 0) {
+	    my $stat = $?;
+	    print STDERR "'$CURL http://$ip/getwrstatus.php' failed ($stat)!\n";
+	    return $stat;
+	}
+	print STDERR "curl returns: '$json'\n"
+	    if ($debug > 1);
+	
+	my $info = eval { from_json($json, {"relaxed" => 1}); };
+	if ($@) {
+	    print STDERR "$ip returns bad JSON: $@\n"
+		if ($debug);
+	    return 1;
+	}
+	if (!defined($info)) {
+	    print STDERR "$ip returns nothing!\n"
+		if ($debug);
+	    return 1;
+	}
+	foreach my $sect (@$info) {
+	    if ($sect->[0] eq "TEMP") {
+		shift @$sect;
+		foreach my $elt (@$sect) {
+		    chomp($elt);
+		    my ($k,$v) = split(':', $elt);
+		    if ($k && defined($v)) {
+			$status{"$k-temp"} = $v;
+		    }
+		}
+	    } elsif ($sect->[0] eq "SERVO") {
+		shift @$sect;
+		foreach my $elt (@$sect) {
+		    chomp($elt);
+		    my ($k,$v) = split(':', $elt);
+		    if ($k && defined($v)) {
+			$status{$k} = $v;
+		    }
+		}
+	    } else {
+		# ignore other info for now
+		;
+	    }
+	}
+    }
+
+    %{$WRSWITCH{'status'}} = %status;
+    print STDERR "$ip: ", Dumper(\%WRSWITCH), "\n"
+	if ($debug > 1);
+
+    return 0;
+}
+
+#
+# "stat" command.
+# There are multiple lines returned per WR-LEN. An entry looks like:
+#
+#   ==== 10.11.13.202 ====
+#   Output generated on 2023-01-05 15:55
+#   
+#   @stat
+#   WR mode : WRC_SLAVE_WR0 
+#   wr0 -> lnk:1 rx:6902525 tx:1372829 lock:1 syncs:wr0 sv:1 ss:'TRACK_PHASE' aux:0 sec:1672959355 nsec:686439872 mu:16411994 dms:8258811 dtxm:226393 drxm:244307 dtxs:46407 drxs:167843 asym:-105628 crtt:15727044 cko:-3 setp:1762 hd:54195 md:30599 ad:65000 ucnt:35787 
+#   wr1 -> lnk:0 rx:0 tx:3428851 lock:1 
+#   temp: 24.111518 C temp-FPGA: 32.29 C
+#
+# We prepend the line with the IP address.
+#
+sub wrlen_getstatus(@)
+{
+    my @ips = @_;
+
+    my $ipstr = join(' ', @ips);
+    my @output = `sudo ssh -n $VUARTHOST $VUARTSCRIPT stat $ipstr`;
+    if ($?) {
+	my $stat = $?;
+	print STDERR "$VUARTSCRIPT failed ($stat) on one or more wr-lens.\n";
+	return $stat;
+    }
+    print ">>>>> OUTPUT\n", @output, "\n<<<<< OUTPUT END\n"
+	if ($debug > 1);
+
+    my $ip;
+    my %status = ();
+    foreach my $line (@output) {
+	if ($line =~ /^==== (\S+) ====$/) {
+	    if ($ip) {
+		if (exists($WRLENS{$ip}{'status'})) {
+		    %{$WRLENS{$ip}{'laststatus'}} = %{$WRLENS{$ip}{'status'}};
+		} else {
+		    delete $WRLENS{$ip}{'laststatus'};
+		}
+		%{$WRLENS{$ip}{'status'}} = %status;
+		print STDERR "$ip: ", Dumper(\$WRLENS{$ip}), "\n"
+		    if ($debug > 1);
+		%status = ();
+	    }
+	    $ip = $1;
+	    next;
+	}
+	if ($ip && $line =~ /^WR mode : (\S+)/) {
+	    $status{'wrmode'} = $1;
+	    next;
+	}
+	if ($ip && $line =~ /^(wr\d) -> (.*)$/) {
+	    my $iface = $1;
+	    my %attrs = ();
+	    foreach my $token (split ' ', $2) {
+		if ($token =~ /^([^:]+):(.*)$/) {
+		    $attrs{$1} = $2;
+		}
+	    }
+	    # XXX right now we only care about the link that is up
+	    $status{'iface'} = $iface
+		if (exists($attrs{'lnk'}) && $attrs{'lnk'} == 1);
+	    %{$status{"${iface}_attrs"}} = %attrs;
+	    next;
+	}
+	if ($ip && $line =~ /^temp: (\S+) C temp-FPGA: (\S+) C/) {
+	    my ($temp, $ftmp) = ($1, $2);
+	    $status{'temp'} = sprintf("%.02f", $temp)
+		if (defined($temp));
+	    $status{'fpga-temp'} = sprintf("%.02f", $ftmp)
+		if (defined($ftmp));
+	    next;
+	}
+    }
+    if ($ip) {
+	%{$WRLENS{$ip}{'status'}} = %status;
+	print STDERR "$ip: ", Dumper(\$WRLENS{$ip}), "\n"
+	    if ($debug > 1);
+    }
+
+    return 0;
+}
+
+sub wrzen_report()
+{
+    my $state = $WRZEN{'state'};
+    if ($state eq "disabled") {
+	return;
+    }
+
+    my $ip = $WRZEN{'ip'};
+    my $loc = $WRZEN{'location'};
+    my $status = $WRZEN{'status'};
+
+    if (!$oneshot || $debug) {
+	logitnnl("");
+    }
+    printf "%-18s: IP=%s, state=%s", $loc, $ip, $state;
+    if ($status) {
+	print ", FPGAtemp=", $status->{'fpga-temp'},
+	    ", global=", $status->{'global'},
+	    ", system=", $status->{'system'},
+	    ", timing=", $status->{'timing'};
+    }
+
+    print "\n";
+}
+
+sub wrswitch_report()
+{
+    my $state = $WRSWITCH{'state'};
+    if ($state eq "disabled") {
+	return;
+    }
+
+    my $ip = $WRSWITCH{'ip'};
+    my $loc = $WRSWITCH{'location'};
+    my $status = $WRSWITCH{'status'};
+
+    if (!$oneshot || $debug) {
+	logitnnl("");
+    }
+    printf "%-18s: IP=%s, state=%s", $loc, $ip, $state;
+    if ($state eq "connected") {
+	my $temp = $status->{'psl-temp'} ?
+	    $status->{'psl-temp'} : $status->{'psr-temp'};
+	print ", PStemp=", sprintf("%.2f", $temp), "C"
+	    if (defined($temp));
+	$temp = $status->{'pll-temp'};
+	print ", PLLtemp=", sprintf("%.2f", $temp), "C"
+	    if (defined($temp));
+	$temp = $status->{'fpga-temp'};
+	print ", FPGAtemp=", sprintf("%.2f", $temp), "C"
+	    if (defined($temp));
+	my $locked = $status->{'lock'};
+	my $off = $status->{'cko'};
+	if (defined($locked)) {
+	    if (!$locked) {
+		print ", NOT LOCKED";
+	    } else {
+		print ", locked, clock-offset=${off}ps";
+	    }
+	}
+    }
+    print "\n";
+}
+
+sub wrlen_report()
+{
+    foreach my $ip (@iplist) {
+	my $wrlen = $WRLENS{$ip};
+	my $state = $wrlen->{'state'};
+	my $loc = $wrlen->{'location'};
+	my $status = $wrlen->{'status'};
+
+	if ($state eq "disabled") {
+	    next;
+	}
+
+	if (!$oneshot || $debug) {
+	    logitnnl("");
+	}
+	printf "%-18s: IP=%s, state=%s", $loc, $ip, $state;
+	if ($state eq "connected") {
+	    my $temp = $status->{'temp'};
+	    print ", temp=${temp}C"
+		if (defined($temp));
+	    $temp = $status->{'fpga-temp'};
+	    print ", FPGAtemp=${temp}C"
+		if (defined($temp));
+	    my $iface = $status->{'iface'};
+	    if (defined($iface) && exists($status->{"${iface}_attrs"})) {
+		my $attrs = $status->{"${iface}_attrs"};
+		my $locked = $attrs->{'lock'};
+		my $off = $attrs->{'cko'};
+		if (defined($locked)) {
+		    if (!$locked) {
+			print ", NOT LOCKED";
+		    } else {
+			print ", locked, clock-offset=${off}ps";
+		    }
+		}
+	    }
+
+	}
+	print "\n";
+    }
+}
+
+sub wrzen_alert()
+{
+    my $msg = "";
+    my $name = $WRZEN{'name'};
+    my $loc = $WRZEN{'location'};
+
+    my $state = $WRZEN{'state'};
+    my $laststate = $WRZEN{'laststate'};
+    if (!$state) {
+	$msg .= "$name ($loc): no state found!?\n";
+	return $msg;
+    }
+    if ($state eq "disconnected") {
+	if (!$laststate || $WRZEN{'laststate'} ne "disconnected") {
+	    $msg .= "$name ($loc): has gone missing!\n";
+	} else {
+	    # XXX alert again if it has been disconnected for a while
+	    ;
+	}
+	return $msg;
+    }
+
+    my $status = $WRZEN{'status'};
+    my $laststatus = $WRZEN{'laststatus'};
+    if (!$status) {
+	$msg .= "$name ($loc): no status found!?\n";
+	return $msg;
+    }
+
+    foreach my $stat ("global", "system", "timing") {
+	if ($status->{$stat} ne "Ok" &&
+	    (!$laststatus || $laststatus->{$stat} eq "Ok")) {
+	    my $st = $status->{$stat};
+	    $msg .= "$name ($loc): ZEN $stat state not Ok: $st\n";
+	}
+    }
+
+    return $msg;
+}
+
+sub wrswitch_alert()
+{
+    my $msg = "";
+    my $name = $WRSWITCH{'name'};
+    my $loc = $WRSWITCH{'location'};
+
+    my $state = $WRSWITCH{'state'};
+    my $laststate = $WRSWITCH{'laststate'};
+    if (!$state) {
+	$msg .= "$name ($loc): no state found!?\n";
+	return $msg;
+    }
+    if ($state eq "disconnected") {
+	if (!$laststate || $WRSWITCH{'laststate'} ne "disconnected") {
+	    $msg .= "$name ($loc): has gone missing!\n";
+	} else {
+	    # XXX alert again if it has been disconnected for a while
+	    ;
+	}
+	return $msg;
+    }
+
+    my $status = $WRSWITCH{'status'};
+    my $laststatus = $WRSWITCH{'laststatus'};
+    if (!$status) {
+	$msg .= "$name ($loc): no status found!?\n";
+	return $msg;
+    }
+
+    if ($status->{'lock'} == 0 &&
+	(!$laststatus || $laststatus->{'lock'} == 1)) {
+	$msg .= "$name ($loc): lost lock on WR-ZEN\n";
+    }
+    if ($status->{'ss'} ne "'TRACK_PHASE'" &&
+	(!$laststatus || $laststatus->{'ss'} eq "'TRACK_PHASE'")) {
+	$msg .= "$name ($loc): servo not in tracking phase\n";
+    }
+    if ($laststatus && $status->{'ucnt'} <= $laststatus->{'ucnt'}) {
+	$msg .= "$name ($loc): update counter reset (lost sync with ZEN?)\n";
+    }
+
+    return $msg;
+}
+
+#
+# state == disconnected
+# mode != WRC_SLAVE_WR0
+# no lock on wr0
+# servo state != TRACK_PHASE
+# ucnt < previous value (indicates unit has been reset)
+#
+sub wrlen_alert()
+{
+    my $msg = "";
+    foreach my $ip (@iplist) {
+	my $wrlen = $WRLENS{$ip};
+	my $name = $wrlen->{'name'};
+	my $loc = $wrlen->{'location'};
+
+	my $state = $wrlen->{'state'};
+	my $laststate = $wrlen->{'laststate'};
+	if (!$state) {
+	    $msg .= "$name ($loc): no state found!?\n";
+	    next;
+	}
+	if ($state eq "disabled") {
+	    next;
+	}
+	if ($state eq "disconnected") {
+	    if (!$laststate || $wrlen->{'laststate'} ne "disconnected") {
+		$msg .= "$name ($loc): has gone missing!\n";
+	    }
+	    next;
+	}
+
+	my $status = $wrlen->{'status'};
+	my $laststatus = $wrlen->{'laststatus'};
+	if (!$status) {
+	    $msg .= "$name ($loc): no status found!?\n";
+	    next;
+	}
+
+	my $mode = $status->{'wrmode'};
+	my $lastmode = $laststatus ? $laststatus->{'wrmode'} : "";
+	if ($mode ne "WRC_SLAVE_WR0" &&
+	    (!$lastmode || $lastmode eq "WRC_SLAVE_WR0")) {
+	    $msg .= "$name ($loc): mode != WRC_SLAVE_WR0\n";
+	}
+
+	my $attrs = $status->{'wr0_attrs'};
+	my $lastattrs = $laststatus ? $laststatus->{'wr0_attrs'} : "";
+	if ($attrs->{'lnk'} == 0 &&
+	    (!$lastattrs || $lastattrs->{'lnk'} == 1)) {
+	    $msg .= "$name ($loc): lost link on wr0\n";
+	}
+	if ($attrs->{'lock'} == 0 &&
+	    (!$lastattrs || $lastattrs->{'lock'} == 1)) {
+	    $msg .= "$name ($loc): lost lock on wr0\n";
+	}
+	if ($attrs->{'ss'} ne "'TRACK_PHASE'" &&
+	    (!$lastattrs || $lastattrs->{'ss'} eq "'TRACK_PHASE'")) {
+	    $msg .= "$name ($loc): servo not in tracking phase on wr0\n";
+	}
+	if ($lastattrs && $attrs->{'ucnt'} <= $lastattrs->{'ucnt'}) {
+	    $msg .= "$name ($loc): update counter reset (lost sync with switch?)\n";
+	}
+    }
+
+    return $msg;
+}
+
+#
+# Upload relevant data to influx DB.
+#
+sub wrlen_upload()
+{
+    foreach my $ip (@iplist) {
+	my $wrlen = $WRLENS{$ip};
+	my $node = $wrlen->{'alias'} ?
+	    $wrlen->{'alias'} : $wrlen->{'name'};
+
+	# Upload temp
+	my $temp = $wrlen->{'status'}->{'temp'};
+	if (defined($temp)) {
+	    my $chip  = "temp";
+	    my $url = "'https://overwatch.emulab.net:8086/write?db=telegraf' ".
+		"--data-binary 'sensors,host=${node},chip=${chip} ".
+		"temp_input=${temp}'";
+	    my $opts = ($debug > 1 ? "-S" : "");
+
+	    my $command = "$CURL -s $opts -XPOST -u '$TELEGRAF' $url";
+	    logit("$command")
+		if ($debug > 1);
+	    if (!$impotent) {
+		system($command);
+		if ($?) {
+		    logit("ERROR: Could not upload switch temp for $node");
+		}
+	    }
+	}
+    }
+}
+
+sub NotifyTBOPS($$)
+{
+    my ($subject, $message) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    
+    # Append a timestamp to the end of the body, helpful for debugging
+    # since email will probably be delayed during a disconnect.
+    $message .= "\n\n" . $stamp . "\n";
+    
+    if (0 && $impotent) {
+	print "$subject\n";
+	print "$message\n";
+	return;
+    }
+    SENDMAIL($TBOPS, "WR Monitor: $subject",
+	     $message, $TBOPS, "X-NetBed: wr-monitor");
+}
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    if (1) {
+	die("*** $0:\n".
+	    "    $msg\n");
+    }
+
+    if (! ($oneshot || $debug || $impotent)) {
+	#
+	# Send a message to the testbed list. 
+	#
+	SENDMAIL($TBOPS,
+		 "$DAEMONTAG died",
+		 $msg,
+		 $TBOPS);
+    }
+    MarkDaemonStopped("$DAEMONTAG")
+	if (! ($oneshot || $impotent));
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print "$stamp: $msg\n";
+}
+
+sub logitnnl($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print "$stamp: $msg";
+}
