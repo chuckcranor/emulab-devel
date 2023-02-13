@@ -216,6 +216,7 @@ CREATE TABLE `apt_aggregate_radio_frontends` (
   `transmit_frequencies` text,
   `receive_frequencies` text,
   `monitored` tinyint(1) NOT NULL default '0',
+  `scanned` tinyint(1) NOT NULL default '0',
   `notes` text,
   PRIMARY KEY  (`aggregate_urn`,`node_id`,`iface`,`frontend`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
