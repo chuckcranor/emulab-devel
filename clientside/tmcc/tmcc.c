@@ -72,6 +72,12 @@
 #  define KEYFILE		"/etc/emulab.pkey"
 #endif
 
+#ifndef WITHSSL
+int	isssl;
+int	nousessl;
+int	usetpm;
+#endif
+
 /*
  * We search a couple of dirs for the bossnode file.
  */
