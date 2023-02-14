@@ -2378,17 +2378,14 @@ $(function ()
 	$('#' + cid).one('hidden.bs.context', function (event) {
 	    currentContextMenu = null;
 	});
-	$('#' + cid).one('shown.bs.context', function (event) {
-	    /*
-	     * Since the topology is in an iframe, need to move the
-	     * context menu relative to that.
-	     */
-	    var fpos = $('#showtopo_statuspage').offset();
-	    var mpos = $(this).offset();
-
-	    $(this).css("left", (fpos.left + mpos.left) + "px");
-	    $(this).css("top", (fpos.top + mpos.top) + "px");
-	});
+	/*
+	 * Since the topology is in an iframe, need to move the
+	 * context menu relative to that.
+	 */
+	var offset = $('#showtopo_statuspage').offset();
+	event.clientX += parseInt(offset.left);
+	event.clientY += parseInt(offset.top);
+	
 	$('#context').contextmenu('show', event);
     }
     
