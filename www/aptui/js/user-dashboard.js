@@ -49,30 +49,8 @@ $(function ()
 		}
 	    });
 
-        // Javascript to enable link to tab
-        var hash = document.location.hash;
-        if (hash) {
-            $('.nav-tabs a[href="'+hash+'"]').tab('show');
-        }
-        // Change hash for page-reload
-        $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-	    history.replaceState('', '', e.target.hash);
-
-	    // GA reporting
-	    var ganame = e.target.hash;
-	    if (ganame == "") {
-		ganame = "#experiments";
-	    }
-	    window.APT_OPTIONS.gaTabEvent("show", ganame);
-        });
-	// Set the correct tab when a user uses their back/forward button
-        $(window).on('hashchange', function (e) {
-	    var hash = window.location.hash;
-	    if (hash == "") {
-		hash = "#experiments";
-	    }
-	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
-	});
+	// Setup nav tab document hash handling.
+	sup.hashSetup(".nav-tabs", "#experiments");
 
 	LoadUsage();
 	LoadExperimentTab();
@@ -338,11 +316,6 @@ $(function ()
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
-	    // This activates the tooltip subsystem.
-	    $('#profiles_content [data-toggle="tooltip"]').tooltip({
-		delay: {"hide" : 100, "show" : 300},
-		placement: 'auto',
-	    });
 	    // Display the topo.
 	    $('.showtopo_modal_button').click(function (event) {
 		event.preventDefault();
@@ -360,7 +333,7 @@ $(function ()
 			    $(row).remove();
 			});
 		});
-
+	    
 	    // If this is the active tab after loading, focus the searchbox
 	    if ($('#profiles').hasClass("active")) {
 		var searchbox = $('#profiles .profile-search')
@@ -393,6 +366,12 @@ $(function ()
 		});
 	    $.tablesorter.filter.bindSearch(table,
 					    $('#' + 'user-profiles-search'));
+
+	    // This activates the tooltip subsystem.
+	    $('#profiles_content [data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 100, "show" : 300},
+		placement: 'auto',
+	    });
 
 	    // Delete multiple profiles via the checkbox column.
 	    $('#profiles_content .delete-selected-profiles')

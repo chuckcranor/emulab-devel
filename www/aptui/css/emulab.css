@@ -1,11 +1,14 @@
-.navbar-nav > li > a,
-.navbar-nav > li > p {
-  margin-top: 15px;
+.navbar {
+    height: 50px;
 }
 
-.navbar-btn.btn-xs,
-.navbar-btn {
-  margin-top: 15px;
+.portal-navbar {
+    margin-bottom: 15px;
+    height: 60px;
+}
+
+.portal-navbar .navbar-header {
+  margin-top: 20px;
 }
 
 .navbar-brand {
@@ -17,7 +20,7 @@
 }
 
 .local-name {
-  margin-top: 22px;
+  margin-top: 6px;
   margin-left: -5px;
   padding-right: 10px;
   border-radius: 5px;

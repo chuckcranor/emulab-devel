@@ -63,8 +63,16 @@ a {
     --bs-btn-border-color:  #8c8c8c;
 }
 
-// The media entries in quickvm.css are a mess, should get rid of them.
+/*
+ * modal headers are flex boxes. But I cannot seem to center text in it.
+ * So the hell with it, just set it back to block like it used to be and
+ * modals all look the way they used to.
+ */
+div.modal-header {
+    display: block;
+}
 
+/* The media entries in quickvm.css are a mess, should get rid of them. */
 @media (min-width: 770px) {
     .modal {
 	--bs-modal-width: 650px;
@@ -86,12 +94,6 @@ a {
     .modal-wide {
 	--bs-modal-width: 1300px;
     }
-}
-
-// Modals are flex boxes, so the <center> no longer does the right thing.
-.modal-header center {
-    text-align: center !important;
-    width: 100%;
 }
 
 /*

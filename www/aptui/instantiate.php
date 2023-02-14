@@ -541,7 +541,6 @@ echo "<script type='text/plain' id='prunelist-json'>\n";
 echo htmlentities(json_encode($prunelist));
 echo "</script>\n";
 
-SpitOopsModal("oops");
 echo "<script type='text/javascript'>\n";
 echo "    window.DEFAULT_PROFILE = '$selected_profile';\n";
 if ($ishashed) {
@@ -731,7 +730,7 @@ else {
 echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
 
 AddTemplateList(array("aboutapt", "aboutcloudlab", "aboutpnet",
-                      "waitwait-modal", "rspectextview-modal",
+                      "waitwait-modal", "oops-modal", "rspectextview-modal",
                       "picker-template","reservation-graph",
                       "save-paramset-modal", "resgroup-list",
                       "copy-profile-modal", "ota-agreement", "ota-permission",

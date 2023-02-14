@@ -6,7 +6,9 @@
 	<th>Name
 	  <% if (typeof showconvert === 'undefined' || showconvert) { %>
 	    <a href='#' class='btn btn-xs pull-right'
-	       data-toggle='modal' data-target='#conversion-help-modal'>
+	       data-toggle='modal' data-bs-toggle='modal'
+	       data-target='#conversion-help-modal'
+	       data-bs-target='#conversion-help-modal'>
 	      <span class='glyphicon glyphicon-question-sign pull-right'></span>
 	    </a>
 	  <% } %>

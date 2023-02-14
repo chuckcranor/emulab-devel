@@ -174,7 +174,13 @@ function addPopoverClip (id, contentfunction)
 	$(button).popover('show');
 
 	// DOM of the popover content.
-	var content = $(button).data("bs.popover").tip();
+	var content;
+	if (window.BOOSTRAP_VERSION == 5) {
+	    content = $('#' + $(button).attr("aria-describedby"));
+	}
+	else {
+	    content = $(button).data("bs.popover").tip();
+	}
 	console.info(content);
 
 	// Bind the copy-to-clipboard button.
@@ -400,6 +406,38 @@ function newUUID()
     return uuid;
 }
 
+// Javascript to enable link to tab
+function hashSetup(target, defaultHash)
+{
+    var hash = document.location.hash;
+    if (!hash) {
+	hash = defaultHash;
+    }
+    if (hash) {
+	var element = $(target + ' a[href="'+hash+'"]');
+	if (element) {
+	    if (window.BOOSTRAP_VERSION == 5) {
+		element[0].click();
+	    }
+	    else {
+		$(element).tab('show');
+	    }
+	}
+    }
+    // Change hash for page-reload
+    $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
+	history.replaceState('', '', e.target.hash);
+    });
+    // Set the correct tab when a user uses their back/forward button
+    $(window).on('hashchange', function (e) {
+	var hash = window.location.hash;
+	if (hash == "") {
+	    hash = defaultHash;
+	}
+	$(target + ' a[href="'+hash+'"]').tab('show');
+    });
+}
+
 // Exports from this module for use elsewhere
 return {
     ParseURN: ParseURN,
@@ -421,6 +459,7 @@ return {
     ConfirmModal: ConfirmModal,
     addPopoverClip: addPopoverClip,
     popoverClipContent: popoverClipContent,
+    hashSetup: hashSetup,
 };
 })();
 });

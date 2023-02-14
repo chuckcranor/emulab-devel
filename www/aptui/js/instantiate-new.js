@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal', 'reservation-graph', 'resgroup-list', 'instantiate-templates']);
+    var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'oops-modal', 'rspectextview-modal', 'reservation-graph', 'resgroup-list', 'instantiate-templates']);
     var instantiateString = templates['instantiate-new'];
     var aboutaptString = templates['aboutapt'];
     var aboutcloudString = templates['aboutcloudlab'];
@@ -142,6 +142,7 @@ $(function ()
 	});
 	$('#main-body').html(html);
 	$('#waitwait_div').html(waitwaitString);
+	$('#oops_div').html(templates["oops-modal"]);
 	$('#rspecview_div').html(rspecviewString);
 	$('#rspec_modal_download_button').addClass("hidden");
 

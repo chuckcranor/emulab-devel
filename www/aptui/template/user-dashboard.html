@@ -1,124 +1,109 @@
-<style type="text/css">
-/* make sidebar nav vertical */ 
-@media (min-width: 768px) {
-	.sidebar-nav .navbar .navbar-collapse {
-		padding: 0;
-		max-height: none;
-	}
-	.sidebar-nav .navbar ul {
-		float: none;
-	}
-	.sidebar-nav .navbar ul:not {
-		display: block;
-
-	}
-	.sidebar-nav .navbar li {
-		float: none;
-		display: block;
-	}
-	.sidebar-nav .navbar li a {
-		padding-top: 0px;
-		padding-bottom: 0px;
-		margin-top: 5px;
-	}
-}
-.sidebar-nav .navbar-header{ float: none; }
-</style>
 <div class='row'>
-  <div class="col-sm-2 hidden-sm hidden-xs hidden">
-    <div class="sidebar-nav">
-      <div class="navbar navbar-default" role="navigation">
-          <ul class="nav navbar-nav">
-            <li><a href="#">Longer Menu Item 1</a></li>
-            <li><a href="#">Menu Item 2</a></li>
-            <li><a href="#">Menu Item 3</a></li>
-            <li><a href="#">Menu Item 4</a></li>
-          </ul>
-      </div>
-    </div>
-  </div>
   <div class='col-xs-12 col-sm-12 col-md-12'>
-    <div class='panel panel-default'>
-      <div class='panel-body'>
+    <div class='panel panel-default card'>
+      <div class='panel-body card-body'>
 	<div class='row'>
 	  <div class='col-sm-12'>
 	    <div>
 	      <!-- Nav tabs -->
 	      <ul class="nav nav-tabs" role="tablist">
-		<li role="presentation" class="active">
-		  <a href="#experiments" role="tab" data-toggle="tab">
+		<li role="presentation" class="nav-item">
+		  <a href="#experiments" role="tab" class="nav-link"
+		     data-bs-toggle="tab" data-toggle="tab">
 		    Experiments</a></li>
 		<li role="presentation">
-		  <a href="#profiles" role="tab" data-toggle="tab">
+		  <a href="#profiles" role="tab" class="nav-link"
+		     data-bs-toggle="tab" data-toggle="tab">
 		    Profiles</a></li>
 		<li role="presentation">
-		  <a href="#projectprofiles" role="tab" data-toggle="tab">
+		  <a href="#projectprofiles" role="tab" class="nav-link"
+		     data-bs-toggle="tab" data-toggle="tab">
 		    Project Profiles</a></li>
 		<% if (disabledset == 0 || (disabledset == 1 && isadmin) ) { %>
 		<li role="presentation">
-		  <a href="#datasets" role="tab" data-toggle="tab">
+		  <a href="#datasets" role="tab" class="nav-link"
+		     data-bs-toggle="tab" data-toggle="tab">
 		    Datasets</a></li>
 		<% } %>
 		<%  if (disabledres == 0 || (disabledres == 1 && isadmin) ) { %>
 		  <li role="presentation" class="hidden resgroups-hidden">
-		    <a href="#resgroups" role="tab"
-		       data-toggle="tab">
+		    <a href="#resgroups" role="tab" class="nav-link"
+		       data-bs-toggle="tab" data-toggle="tab">
 		      Reservations</a></li>
 		<% } %>
 		<li role="presentation" class="hidden paramsets-hidden">
-		  <a href="#paramsets" role="tab" data-toggle="tab">
+		  <a href="#paramsets" role="tab" class="nav-link"
+		     data-bs-toggle="tab" data-toggle="tab">
 		    Parameter Sets</a></li>
 		<li role="presentation">
-		  <a href="#membership" role="tab" data-toggle="tab">
+		  <a href="#membership" role="tab" class="nav-link"
+		     data-bs-toggle="tab" data-toggle="tab">
 		    Membership</a></li>
 		<li role="presentation">
-		  <a href="#usage" role="tab"
-		     data-toggle="tab">Usage</a></li>
+		  <a href="#usage" role="tab" class="nav-link"
+		     data-bs-toggle="tab" data-toggle="tab">Usage</a></li>
 		<li role="presentation">
-		  <a href="#myprofile" role="tab" data-toggle="tab">
+		  <a href="#myprofile" role="tab" class="nav-link"
+		     data-bs-toggle="tab" data-toggle="tab">
 		    Account</a></li>
 		<% if (isadmin) { %>
 		  <li role="presentation">
-		    <a href="#admin" role="tab" data-toggle="tab">
+		    <a href="#admin" role="tab" class="nav-link"
+		       data-bs-toggle="tab" data-toggle="tab">
 		      Admin</a></li>
 		  <li role="presentation"
-		      class="dropdown">
-		    <a class="dropdown-toggle" data-toggle="dropdown"
+		      class="nav-item dropdown">
+		    <a class="nav-link dropdown-toggle"
+		       data-bs-toggle="dropdown" data-toggle="dropdown"
 		       href="#" role="button">
 		      Admin Menu<span class="caret"></span></a>
 		    <ul class="dropdown-menu">
-		      <li><a href="activity.php?user=<%= target_user %>">
+		      <li><a href="activity.php?user=<%= target_user %>"
+			     class='dropdown-item'>
 			Experiment History</a></li>
 		      <% if (disabledres < 2) { %>
-		      <li><a href="reservation-history.php?user=<%= target_user %>">
+			<li><a href="reservation-history.php?user=<%= target_user %>"
+			       class='dropdown-item'>
 			Reservation History</a></li>
                       <% } %>
-		      <li><a href="ssh-keys.php?user=<%= target_user %>">
+		      <li><a href="ssh-keys.php?user=<%= target_user %>"
+			     class='dropdown-item'>
 			Manage SSH Keys</a></li>
-		      <li><a href="myaccount.php?user=<%= target_user %>">
+		      <li><a href="myaccount.php?user=<%= target_user %>"
+			     class='dropdown-item'>
 			Manage Account</a></li>
-		      <li><a href="changepswd.php?user=<%= target_user %>">
+		      <li><a href="changepswd.php?user=<%= target_user %>"
+			     class='dropdown-item'>
 			Change Password</a></li>
 		      <% if (disabledset < 2) { %>
-		      <li><a href="list-datasets.php?user=<%= target_user %>">
+			<li><a href="list-datasets.php?user=<%= target_user %>"
+			       class='dropdown-item'>
 			List Datasets</a></li>
 		      <% } %>
-		      <li><a href="list-images.php?user=<%= target_user %>">
+		      <li><a href="list-images.php?user=<%= target_user %>"
+			     class='dropdown-item'>
 			List Images</a></li>
                       <li class='divider'></li>
-		      <li><a role="button" id="sendtestmessage">
+		      <li><a role="button" id="sendtestmessage"
+			     class='dropdown-item'>
 			Verify Email Address</a></li>
-		      <li><a role="button" id="sendpasswordreset">
+		      <li><a role="button" id="sendpasswordreset"
+			     class='dropdown-item'>
 			Send Password Reset</a></li>
-		      <li><a role="button" id="sendmessage">
+		      <li><a role="button" id="sendmessage"
+			     class='dropdown-item'>
 			Send Email Message</a></li>
-		      <li><a href="suuser.php?user=<%= target_user %>">
+		      <li><a href="suuser.php?user=<%= target_user %>"
+			     class='dropdown-item'>
 			<span class="text-danger">SU as User</span></a></li>
-		      <li><a href="#" data-toggle='modal'
-			     data-target='#confirm-deleteuser-modal'>
+		      <li><a href="#" data-toggle='modal' data-bs-toggle='modal'
+			     data-target='#confirm-deleteuser-modal'
+			     data-bs-target='#confirm-deleteuser-modal'
+			     class='dropdown-item'>
 			<span class="text-danger">Delete User</span></a></li>
 		      <li role="presentation">
-			<a href='<%- emulablink %>'>
+			<a href='<%- emulablink %>'
+			   class='dropdown-item'>
 			  Emulab User Page</a></li>
 		    </ul>
 		  </li>
@@ -126,7 +111,7 @@
 	      </ul>
 	      <!-- Tab panes -->
 	      <div class="tab-content">
-		<div role="tabpanel" class="tab-pane active" id="experiments">
+		<div role="tabpanel" class="tab-pane" id="experiments">
 		  <div id="experiments_content">
 		    <div id="experiments_loading">
 		      <br>
@@ -237,28 +222,6 @@
     </div>
   </div>
 </div>
-<!-- This is the topology view modal -->
-<div id='quickvm_topomodal' class='modal fade'>
-  <div class='modal-dialog' id='showtopo_dialog'>
-    <div class='modal-content'>
-      <div class='modal-header'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>
-          &times;</button>
-        <h3>Topology Viewer</h3>
-      </div>
-      <div class='modal-body'>
-        <!-- This topo diagram goes inside this div -->
-        <div class='panel panel-default'
-             id='showtopo_container'>
-          <div class='panel-body'>
-            <div id='showtopo_nopicker' class='jacks'></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 <!-- Confirm Freeze or Thaw -->
 <div id='confirm-freezethaw-modal' class='modal fade'>
   <div class='modal-dialog'>
@@ -272,7 +235,7 @@
 	  </div>
 	  <br>
           <button class='btn btn-primary btn-sm'
-		  data-dismiss='modal'
+		  data-dismiss='modal' data-bs-dismiss='modal'
 		  style="margin-right: 10px;"
 		  id='cancel-freezethaw'>Cancel</button>
           <button class='btn btn-danger btn-sm'
@@ -299,7 +262,7 @@
 	  </div>
 	  <div>
             <button class='btn btn-primary btn-sm'
-		    data-dismiss='modal'
+		    data-dismiss='modal' data-bs-dismiss='modal'
 		    style="margin-right: 10px;">Cancel</button>
             <button class='btn btn-danger btn-sm' disabled
 		    id='confirm-deleteuser'>Confirm</button>
@@ -313,16 +276,16 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-header'>
-        <center><h4 class="prompt">Confirm to delete parameter set</h4></center>
+        <center><h4 class="modal-title">Confirm to delete parameter set</h4></center>
       </div>
       <div class='modal-body'>
 	<center>
-          <button class='btn btn-primary btn-sm'
-		  data-dismiss='modal'
-		  style="margin-right: 10px;"
-		  id='cancel-delete-paramset'>Cancel</button>
           <button class='btn btn-danger btn-sm'
 		  id='confirm-delete-paramset'>Confirm</button>
+          <button class='btn btn-default btn-sm'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+		  style="margin-right: 10px;"
+		  id='cancel-delete-paramset'>Cancel</button>
 	</center>
       </div>
     </div>
@@ -356,7 +319,7 @@
 	  </div>
 	  <br>
           <button class='btn btn-primary btn-sm'
-		  data-dismiss='modal'
+		  data-dismiss='modal' data-bs-dismiss='modal'
 		  style="margin-right: 10px;">Cancel</button>
           <button class='btn btn-danger btn-sm'
 		  id='confirm-sendemail'>Send</button>

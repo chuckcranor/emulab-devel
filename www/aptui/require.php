@@ -162,6 +162,7 @@ function REQUIRE_JACKS()
 {
   REQUIRE_JACKSMOD();
   AddLibrary("https://www.emulab.net/protogeni/jacks-utah/js/jacks.js");
+#  AddLibrary("https://www.emulab.net/dev/stoller/protogeni/jacks-utah/js/jacks.js");
 }
 
 function REQUIRE_JACKSMOD()
@@ -290,7 +291,7 @@ function REQUIRE_SUP()
 
 function REQUIRE_UNDERSCORE()
 {
-  AddLibrary("js/lib/underscore-min.js");
+  // AddLibrary("js/lib/underscore-min.js");
 }
 
 function REQUIRE_URITEMPLATE()
@@ -326,7 +327,14 @@ function SPITREQUIRE($main, $extras = "")
     global $spatrequired, $PORTAL_LIBRARIES, $APTBASE;
     
     echo $extras;
-    echo "<script src='$APTBASE/js/lib/bootstrap.js'></script>\n";
+
+    if (BOOTSTRAP5) {
+        echo "<script src='$APTBASE/js/lib/bootstrap-5/bootstrap.bundle.js'></script>\n";
+        echo "<script src='$APTBASE/js/lib/bootstrap-5/compat.js'></script>\n";
+    }
+    else {
+        echo "<script src='$APTBASE/js/lib/bootstrap.js'></script>\n";
+    }
     AddLibrary($main);
     EchoLibraryList($PORTAL_LIBRARIES);
     $spatrequired = 1;
