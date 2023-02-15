@@ -2383,8 +2383,12 @@ $(function ()
 	 * context menu relative to that.
 	 */
 	var offset = $('#showtopo_statuspage').offset();
+	//console.info(event.clientX, offset, $(window).scrollTop());
 	event.clientX += parseInt(offset.left);
 	event.clientY += parseInt(offset.top);
+
+	// And compensate for scroll.
+	event.clientY -= $(window).scrollTop();
 	
 	$('#context').contextmenu('show', event);
     }
