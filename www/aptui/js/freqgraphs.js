@@ -254,6 +254,12 @@ window.ShowFrequencyGraph = (function ()
 		else {
 		    $(content).find(".tooltip-center").text("n/a");
 		}
+		if (_.has(d, "incident")) {
+		    $(content).find(".tooltip-incident .incident")
+			.html(formatter(d.incident));
+		    $(content).find(".tooltip-incident")
+			.removeClass("hidden");
+		}
 		if (hasAboveFloor) {
 		    if (d.abovefloor) {
 			$(content).find(".tooltip-abovefloor .abovefloor")
@@ -728,6 +734,9 @@ window.ShowFrequencyGraph = (function ()
 	d.power     = +d.power;
 	if (_.has(d, "center_freq")) {
 	    d.center_freq = +d.center_freq;
+	}
+	if (_.has(d, "incident")) {
+	    d.incident = +d.incident;
 	}
 	if (_.has(d, "abovefloor") && d.abovefloor != "") {
 	    d.abovefloor = +d.abovefloor;
