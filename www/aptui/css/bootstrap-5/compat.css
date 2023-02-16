@@ -71,6 +71,12 @@ a {
 div.modal-header {
     display: block;
 }
+/*
+ * And now need this so that the close lands on the right side.
+ */
+.btn-close {
+  float: right;
+}
 
 /* The media entries in quickvm.css are a mess, should get rid of them. */
 @media (min-width: 770px) {

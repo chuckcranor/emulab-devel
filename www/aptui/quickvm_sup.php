@@ -257,6 +257,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     else {
         echo "<link rel='stylesheet' href='$APTBASE/css/bootstrap.css'>";
         echo "<link rel='stylesheet' href='$APTBASE/css/quickvm.css'>";
+        echo "<link rel='stylesheet'
+                    href='$APTBASE/css/bootstrap-5/backwards.css'>\n";
     }
     echo "<link rel='stylesheet' href='$APTBASE/css/multilevel.css'>\n";
     echo "<link rel='stylesheet' href='$APTBASE/css/$APTSTYLE'>\n";

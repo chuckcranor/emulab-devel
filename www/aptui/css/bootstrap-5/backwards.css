@@ -1,0 +1,6 @@
+/*
+ * For compat with Bootstrap 5 until all of the close buttons are updated.
+ */
+.btn-close:after {
+    content: "X";
+}

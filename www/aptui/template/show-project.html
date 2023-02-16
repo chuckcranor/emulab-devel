@@ -1,45 +1,7 @@
-<style type="text/css">
-/* make sidebar nav vertical */ 
-@media (min-width: 768px) {
-	.sidebar-nav .navbar .navbar-collapse {
-		padding: 0;
-		max-height: none;
-	}
-	.sidebar-nav .navbar ul {
-		float: none;
-	}
-	.sidebar-nav .navbar ul:not {
-		display: block;
-
-	}
-	.sidebar-nav .navbar li {
-		float: none;
-		display: block;
-	}
-	.sidebar-nav .navbar li a {
-		padding-top: 0px;
-		padding-bottom: 0px;
-		margin-top: 5px;
-	}
-}
-/*
-@media (min-width: 992px) {
-	.sidebar-nav .navbar {
-		width: 212px;
-	}
-}
-@media (min-width: 1200px) {
-	.sidebar-nav .navbar {
-		width: 262px;
-	}
-}
-*/
-.sidebar-nav .navbar-header{ float: none; }
-</style>
 <div class='row'>
   <div class='col-sm-12'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
+    <div class='panel card panel-default'>
+      <div class='panel-heading card-header'>
 	<h4 class="text-center">Project <%- target_project %>
 	  <% if (disabled) { %>
 	    <center>
@@ -48,85 +10,93 @@
 	  <% } %>
 	</h4>
       </div>
-	<div class='panel-body'>
+	<div class='panel-body card-body'>
 	<div class='row'>
 	  <div class='col-sm-12'>
 	    <div>
 	      <!-- Nav tabs -->
 	      <ul class="nav nav-tabs" role="tablist">
-		<li role="presentation" class="active">
-		  <a href="#experiments" role="tab"
-		     data-toggle="tab">Experiments</a></li>
-		<li role="presentation">
-		  <a href="#profiles" role="tab"
-		     data-toggle="tab">Profiles</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#experiments" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Experiments</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#profiles" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Profiles</a></li>
 		<%  if (disabledset == 0 || (disabledset == 1 && isadmin) ) { %>
-		  <li role="presentation">
-		    <a href="#datasets" role="tab"
-		       data-toggle="tab">Datasets</a></li>
+		  <li role="presentation" class="nav-item">
+		    <a href="#datasets" role="tab" class="nav-link"
+		       data-toggle="tab" data-bs-toggle="tab">Datasets</a></li>
 		<% } %>
 		<%  if (disabledres == 0 || (disabledres == 1 && isadmin) ) { %>
-		<li role="presentation" class="hidden resgroups-hidden">
-		  <a href="#resgroups" role="tab"
-		     data-toggle="tab">Reservations</a></li>
+		  <li role="presentation" class="hidden resgroups-hidden nav-item">
+		    <a href="#resgroups" role="tab" class="nav-link"
+		       data-toggle="tab" data-bs-toggle="tab">Reservations</a></li>
 		<% } %>
-		<li role="presentation">
-		  <a href="#members" role="tab"
-		     data-toggle="tab">Members</a></li>
-		<li role="presentation">
-		  <a href="#groups" role="tab"
-		     data-toggle="tab">Groups</a></li>
-		<li role="presentation">
-		  <a href="#usage" role="tab"
-		     data-toggle="tab">Usage</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#members" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Members</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#groups" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Groups</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#usage" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Usage</a></li>
 		<% if (window.ISPOWDER) { %>
-		  <li role="presentation" class="hidden rfranges-hidden">
-		    <a href="#rfranges" role="tab"
-		       data-toggle="tab">RF Ranges</a></li>
+		  <li role="presentation" class="hidden rfranges-hidden nav-item">
+		    <a href="#rfranges" role="tab" class="nav-link"
+		       data-toggle="tab" data-bs-toggle="tab">RF Ranges</a></li>
 		<% } %>
-		<li role="presentation">
-		  <a href="#project" role="tab" data-toggle="tab">
+		<li role="presentation" class="nav-item">
+		  <a href="#project" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">
 		    Project</a></li>
 		<% if (showmore) { %>
-		  <li role="presentation"
-		      class="dropdown">
-		    <a class="dropdown-toggle" data-toggle="dropdown"
+		  <li role="presentation" class="nav-item dropdown">
+		    <a class="dropdown-toggle nav-link"
+		       data-toggle="dropdown" data-bs-toggle="dropdown"
 		       href="#" role="button">
 		      More ...<span class="caret"></span></a>
 		    <ul class="dropdown-menu">
-		      <li><a href="activity.php?project=<%= target_project %>">
+		      <li><a href="activity.php?project=<%= target_project %>"
+			     class='dropdown-item'>
 			Experiment History</a></li>
-		      <li><a href=
-			     "list-images.php?project=<%= target_project %>">
+		      <li><a href="list-images.php?project=<%= target_project %>"
+			     class='dropdown-item'>
 			Project Disk Images</a></li>
 		    </ul>
 		  </li>
 		<% } %>
 		<% if (isadmin) { %>
-		  <li role="presentation"
-		      class="dropdown">
-		    <a class="dropdown-toggle" data-toggle="dropdown"
+		  <li role="presentation" class="dropdown nav-item">
+		    <a class="dropdown-toggle nav-link"
+		       data-toggle="dropdown" data-bs-toggle="dropdown"
 		       href="#" role="button">
 		      Admin Menu<span class="caret"></span></a>
 		    <ul class="dropdown-menu">
 		      <% if (disabledres < 2) { %>
-		      <li><a href="resgroup.php?project=<%= target_project %>">
-			Create Reservation</a></li>
+			<li><a href="resgroup.php?project=<%= target_project %>"
+			       class='dropdown-item'>
+			  Create Reservation</a></li>
 		      <% } %>
-		      <li><a href="activity.php?project=<%= target_project %>">
+		      <li><a href="activity.php?project=<%= target_project %>"
+			     class='dropdown-item'>
 			Experiment History</a></li>
-		      <li><a href="#" data-toggle='modal'
-			     data-target='#nsf-funding-modal'>
+		      <li><a href="#" data-toggle='modal' data-bs-toggle='modal'
+			     class='dropdown-item'
+			     data-target='#nsf-funding-modal' data-bs-target='#nsf-funding-modal'>
 			Add NSF Award</a></li>
 		      <% if (disabledres < 2) { %>
-		      <li><a href="reservation-history.php?project=<%= target_project %>">
-			Reservation History</a></li>
+			<li><a href="reservation-history.php?project=<%= target_project %>"
+			       class='dropdown-item'>
+			  Reservation History</a></li>
 		      <% } %>
-		      <li><a href="#" data-toggle='modal'
-			     data-target='#confirm-deleteproject-modal'>
+		      <li><a href="#" data-toggle='modal' data-bs-toggle='modal'
+			     class='dropdown-item'
+			     data-target='#confirm-deleteproject-modal'
+			     data-bs-target='#confirm-deleteproject-modal'>
 			<span class="text-danger">Delete Project</span></a></li>
-		      <li role="presentation">
-			<a href='<%- emulablink %>'>
+		      <li>
+			<a href='<%- emulablink %>' class='dropdown-item'>
 			  Emulab Project Page</a></li>
 		    </ul>
 		  </li>
@@ -134,7 +104,7 @@
 	      </ul>
 	      <!-- Tab panes -->
 	      <div class="tab-content">
-		<div role="tabpanel" class="tab-pane active" id="experiments">
+		<div role="tabpanel" class="tab-pane" id="experiments">
 		  <div id="experiments_content">
 		    <div id="experiments_loading">
 		      <br>
@@ -261,7 +231,7 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
+        <button type='button' class='close' data-dismiss='modal' data-bs-dismiss='modal'
                 aria-hidden='true'>&times;</button>
         <p>Are you sure you want to terminate this experiment? 
           Click on the button below if you are really sure.
@@ -290,7 +260,7 @@
 	  </div>
 	  <div>
             <button class='btn btn-primary btn-sm'
-		    data-dismiss='modal'
+		    data-dismiss='modal' data-bs-dismiss='modal'
 		    style="margin-right: 10px;">Cancel</button>
             <button class='btn btn-danger btn-sm' disabled
 		    id='confirm-deleteproject'>Confirm</button>
@@ -322,7 +292,7 @@
 	  </div>
 	  <div style="margin-top: 15px;">
             <button class='btn btn-primary btn-sm'
-		    data-dismiss='modal'
+		    data-dismiss='modal' data-bs-dismiss='modal'
 		    style="margin-right: 10px;">Cancel</button>
             <button class='btn btn-danger
 			   btn-sm save-button'>Save</button>
