@@ -1648,7 +1648,7 @@ $(function ()
 	    var pid = $('#profile_pid').val().toLowerCase();
 	    var forecasts = {};
 	    _.each(resinfo, function (info, urn) {
-		console.info(urn, info);
+		//console.info(urn, info);
 		// Ick.
 		if (!_.has(info, "pforecasts")) {
 		    return;
