@@ -414,7 +414,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "  window.APT_OPTIONS.drawMainHeader();\n";
     echo "</script>\n";
 
-    if (!$disable_accounts && !NOLOGINS && !$login_user) {
+    if (!$disable_accounts && !NOLOGINS() && !$login_user) {
         REQUIRE_GENI_AUTH();
     }
 
