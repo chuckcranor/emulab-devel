@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -297,7 +297,21 @@ sub GetLocationData()
 	
 	# Debugging
 	next
-	    if ($busid == 6969 || $busid == 6970 || $bus->disabled());
+	    if ($busid == 6969 || $busid == 6970);
+
+	if ($bus->disabled()) {
+	    if (exists($location{$busid})) {
+		my $ref      = $location{$busid};
+		$routeid     = $ref->{'RouteID'};
+		print "Disabled bus $busid is on the move: $routeid";
+		if (exists($routes{$routeid})) {
+		    my $description = $routes{$routeid};
+		    print " ($description)";
+		}
+		print "\n";
+	    }
+	    next;
+	}
 
 	# See below.
 	$pingchecks{$bus->busid()} = {
