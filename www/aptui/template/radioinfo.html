@@ -82,8 +82,8 @@
 	      <% } %>
 	    </td>
 	    <td class="text-center">
-	      <% if (node_id.startsWith("nuc") || node_id.startsWith("cell")) { %>
-		<% var url = "frequency-graph.php?baseline=1&cluster=" +
+	      <% if (frontend.scanned) { %>
+		<% var url = "frequency-graph.php?baseline=1&endpoint=" +
 		amlist[urn].nickname + "&node_id=" +
 		node_id + "&iface=" + iface;
 		%>
