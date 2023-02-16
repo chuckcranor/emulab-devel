@@ -3055,8 +3055,14 @@ sub DoMaxDuration()
 	#
 	foreach my $request (@{$routes}) {
 	    my $routename = $request->{"name"};
+
+	    # XXX
+	    if ($routename eq "allroutes") {
+		my $map = APT_Reservation::Group::RouteReservation::RouteMap();
+		$routename = (keys(%{$map}))[0];
+	    }
 	    my $routeid   =
-		APT_Instance::Aggregate::BusRoute::RouteID($routename);
+		APT_Reservation::Group::RouteReservation::RouteID($routename);
 
 	    if (APT_Instance::Aggregate::BusRoute->InUse($project, $routeid,
 							 $start, $end)) {
