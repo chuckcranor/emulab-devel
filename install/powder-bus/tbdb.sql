@@ -20,6 +20,8 @@ REPLACE INTO `outlets` set
 REPLACE into node_attributes
   VALUES ('ed1', 'reservation_autoapprove_limit', '0', '0');
 REPLACE into node_attributes
+  VALUES ('ed1', 'panicpoweroff', '1', '0');
+REPLACE into node_attributes
   VALUES ('n300-1', 'reservation_autoapprove_limit', '0', '0');
 
 replace INTO `node_type_attributes` VALUES ('e300-8d','powercycleafterreload','1','boolean');
