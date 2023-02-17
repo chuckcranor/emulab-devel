@@ -417,9 +417,9 @@ sub TBAdminMfsSelect($$@)
 			    print STDERR "$me: pxe_select $nodeid $gp failed!";
 			    next;
 			}
-		    } elsif ($node->next_pxe_boot_path()) {
+		    } elsif ($nodeobject->next_pxe_boot_path()) {
 			# make sure to clear next_pxe_boot_path if not used
-			if (!$node->Update({"next_pxe_boot_path" => "NULL"})) {
+			if (!$nodeobject->Update({"next_pxe_boot_path" => "NULL"})) {
 			    $node_pxechanged = 1;
 			}
 		    }
