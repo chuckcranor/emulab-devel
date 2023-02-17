@@ -28,23 +28,8 @@ $(function ()
 	$('#waitwait_div').html(waitString);
 	$('#oops_div').html(oopsString);
 
-        // Javascript to enable link to tab
-        var hash = document.location.hash;
-        if (hash) {
-            $('.nav-tabs a[href="'+hash+'"]').tab('show');
-        }
-        // Change hash for page-reload
-        $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-	    history.replaceState('', '', e.target.hash);
-        });
-	// Set the correct tab when a user uses their back/forward button
-        $(window).on('hashchange', function (e) {
-	    var hash = window.location.hash;
-	    if (hash == "") {
-		hash = "#experiments";
-	    }
-	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
-	});
+	// Setup nav tab document hash handling.
+	sup.hashSetup(".nav-tabs", "#info");
 
 	LoadExperimentTab();
 	LoadClassicExperiments();

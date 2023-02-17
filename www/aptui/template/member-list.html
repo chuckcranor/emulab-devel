@@ -28,7 +28,8 @@
           <th class="sorter-false">
 	    <button id='remove-users-button' type='button' disabled
 		    data-toggle='modal' data-bs-toggle='modal'
-		    data-target='#confirm-remove-users-modal' data-bs-target='#confirm-remove-users-modal'		    
+		    data-target='#confirm-remove-users-modal'
+		    data-bs-target='#confirm-remove-users-modal'		    
 		    class='btn btn-danger btn-xs'>Remove</button>
 	    <span data-toggle="tooltip" data-bs-toggle="tooltip"
 		  data-trigger="hover" data-bs-trigger="hover"
@@ -124,7 +125,8 @@
 	    <button id='add-users-button' type='button' disabled
 		    style="margin-left: 20px;"
 		    data-toggle='modal' data-bs-toggle='modal'
-		    data-target='#confirm-add-users-modal' data-bs-target='#confirm-add-users-modal'
+		    data-target='#confirm-add-users-modal'
+		    data-bs-target='#confirm-add-users-modal'
 		    class='btn btn-success btn-xs'>Update</button>
 	  </th>
 	</tr>
@@ -221,10 +223,10 @@
     <div class='modal-content'>
       <div class='modal-body'>
         <center><h4>Confirm to remove users</h4>
-          <button class='btn btn-danger btn-sm'
-		  style="margin-right: 20px;"
+	  <br>
+          <button class='btn btn-danger btn-sm confirm-button'
 		  id='confirm-remove-users'>Confirm</button>
-          <button class='btn btn-default btn-sm'
+          <button class='btn btn-default btn-sm cancel-button'
 		  data-dismiss='modal' data-bs-dismiss='modal'
 		  id='cancel-user-privs'>Cancel</button>
 	</center>
@@ -238,10 +240,10 @@
     <div class='modal-content'>
       <div class='modal-body'>
         <center><h4>Confirm to add users</h4>
-          <button class='btn btn-primary btn-sm'
-		  style="margin-right: 20px;"
+	  <br>
+          <button class='btn btn-primary btn-sm confirm-button'
 		  id='confirm-add-users'>Confirm</button>
-          <button class='btn btn-default btn-sm'
+          <button class='btn btn-default btn-sm cancel-button'
 		  data-dismiss='modal' data-bs-dismiss='modal'
 		  id='cancel-user-privs'>Cancel</button>
 	</center>
@@ -264,11 +266,10 @@
 	<div>
 	  <br>
 	  <center>
-            <button class='btn btn-primary btn-sm'
+            <button class='btn btn-primary btn-sm confirm-button'
 		    data-dismiss='modal' data-bs-dismiss='modal'
-		    style="margin-right: 20px;"
 		    id='confirm-user-privs'>Confirm</button>
-            <button class='btn btn-default btn-sm'
+            <button class='btn btn-default btn-sm cancel-button'
 		    data-dismiss='modal' data-bs-dismiss='modal'
 		    id='cancel-user-privs'>Cancel</button>
 	  </center>

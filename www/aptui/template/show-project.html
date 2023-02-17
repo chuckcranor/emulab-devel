@@ -231,14 +231,17 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close btn-close'
-                aria-hidden='true'></button>
         <p>Are you sure you want to terminate this experiment? 
           Click on the button below if you are really sure.
 	</p>
 	<br>
-        <button class='btn btn-danger align-center' id='terminate-confirm'
-                type='submit' name='terminate'>Terminate</button>
+	<center>
+          <button class='btn btn-danger btn-sm confirm-button'
+		  id='terminate-confirm'
+                  type='submit' name='terminate'>Terminate</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>Cancel</button>
+	</center>
       </div>
     </div>
   </div>
@@ -258,12 +261,11 @@
 	      </label>
 	    </div>
 	  </div>
-	  <div>
-            <button class='btn btn-primary btn-sm'
-		    data-dismiss='modal' data-bs-dismiss='modal'
-		    style="margin-right: 10px;">Cancel</button>
-            <button class='btn btn-danger btn-sm' disabled
+	  <div style="margin-top: 15px;">
+            <button class='btn btn-danger btn-sm confirm-button' disabled
 		    id='confirm-deleteproject'>Confirm</button>
+            <button class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'>Cancel</button>
 	  </div>
 	</center>
       </div>
@@ -291,11 +293,11 @@
 		     type="checkbox">Is this a supplement?</label>
 	  </div>
 	  <div style="margin-top: 15px;">
-            <button class='btn btn-primary btn-sm'
-		    data-dismiss='modal' data-bs-dismiss='modal'
-		    style="margin-right: 10px;">Cancel</button>
-            <button class='btn btn-danger
-			   btn-sm save-button'>Save</button>
+            <button class='btn btn-danger btn-sm confirm-button save-button'>
+	      Save</button>
+            <button class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'>
+	      Cancel</button>
 	  </div>
 	</center>
       </div>

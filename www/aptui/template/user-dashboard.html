@@ -234,12 +234,11 @@
 		      rows=5></textarea>
 	  </div>
 	  <br>
-          <button class='btn btn-primary btn-sm'
-		  data-dismiss='modal' data-bs-dismiss='modal'
-		  style="margin-right: 10px;"
-		  id='cancel-freezethaw'>Cancel</button>
-          <button class='btn btn-danger btn-sm'
+          <button class='btn btn-danger btn-sm confirm-button'
 		  id='confirm-freezethaw'>Confirm</button>
+          <button class='btn btn-primary btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+		  id='cancel-freezethaw'>Cancel</button>
 	</center>
       </div>
     </div>
@@ -260,13 +259,11 @@
 	      </label>
 	    </div>
 	  </div>
-	  <div>
-            <button class='btn btn-primary btn-sm'
-		    data-dismiss='modal' data-bs-dismiss='modal'
-		    style="margin-right: 10px;">Cancel</button>
-            <button class='btn btn-danger btn-sm' disabled
-		    id='confirm-deleteuser'>Confirm</button>
-	  </div>
+	  <br>
+          <button class='btn btn-danger btn-sm confirm-button' disabled
+		  id='confirm-deleteuser'>Confirm</button>
+          <button class='btn btn-primary btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>Cancel</button>
 	</center>
       </div>
     </div>
@@ -275,16 +272,14 @@
 <div id='delete-paramset-modal' class='modal fade'>
   <div class='modal-dialog'>
     <div class='modal-content'>
-      <div class='modal-header'>
-        <center><h4 class="modal-title">Confirm to delete parameter set</h4></center>
-      </div>
       <div class='modal-body'>
-	<center>
-          <button class='btn btn-danger btn-sm'
+        <center>
+	  <h4 class="modal-title">Confirm to delete parameter set</h4>
+	  <br>
+          <button class='btn btn-danger btn-sm confirm-button'
 		  id='confirm-delete-paramset'>Confirm</button>
-          <button class='btn btn-default btn-sm'
+          <button class='btn btn-default btn-sm cancel-button'
 		  data-dismiss='modal' data-bs-dismiss='modal'
-		  style="margin-right: 10px;"
 		  id='cancel-delete-paramset'>Cancel</button>
 	</center>
       </div>
@@ -296,14 +291,17 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close btn-close' data-dismiss='modal'
-                aria-hidden='true'></button>
         <p>Are you sure you want to terminate this experiment? 
           Click on the button below if you are really sure.
 	</p>
 	<br>
-        <button class='btn btn-danger align-center' id='terminate-confirm'
-                type='submit' name='terminate'>Terminate</button>
+	<center>
+          <button class='btn btn-danger btn-sm confirm-button'
+		  id='terminate-confirm'
+                  type='submit' name='terminate'>Terminate</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>Cancel</button>
+	</center>
       </div>
     </div>
   </div>
@@ -318,11 +316,10 @@
 		      rows=5></textarea>
 	  </div>
 	  <br>
-          <button class='btn btn-primary btn-sm'
-		  data-dismiss='modal' data-bs-dismiss='modal'
-		  style="margin-right: 10px;">Cancel</button>
-          <button class='btn btn-danger btn-sm'
+          <button class='btn btn-danger btn-sm confirm-button'
 		  id='confirm-sendemail'>Send</button>
+          <button class='btn btn-primary btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>Cancel</button>
 	</center>
       </div>
     </div>

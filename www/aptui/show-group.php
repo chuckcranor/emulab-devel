@@ -21,6 +21,8 @@
 # 
 # }}}
 #
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");

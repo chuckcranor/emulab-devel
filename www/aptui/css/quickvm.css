@@ -648,3 +648,7 @@ a.disabled, a[disabled] {
     text-align: right;
 }
 
+/* bit of padding between confirm and cancel buttons */
+.confirm-button {
+    margin-right: 10px;
+}
