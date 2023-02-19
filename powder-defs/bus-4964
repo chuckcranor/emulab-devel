@@ -24,7 +24,8 @@ DELAYCAPACITY=1
 BOSSNODE=boss.bus-4964.powderwireless.net
 USERNODE=ops.bus-4964.powderwireless.net
 FSNODE=boss.bus-4964.powderwireless.net
-MAILERNODE=boss
+# This would typically not change, is usually ops. But can be boss too.
+MAILERNODE="boss"
 OURDOMAIN=bus-4964.powderwireless.net
 FSDIR_GROUPS=/ops/groups
 FSDIR_PROJ=/ops/proj
@@ -48,14 +49,16 @@ SFSSUPPORT=0
 CVSSUPPORT=0
 NFSTRACESUPPORT=0
 ARCHIVESUPPORT=0
-NTPSERVER=boss
-EXTERNAL_NTPSERVER1=ntp1.emulab.net
-EXTERNAL_NTPSERVER2=ntp1.emulab.net
-EXTERNAL_NTPSERVER3=ntp1.emulab.net
-EXTERNAL_NTPSERVER4=ntp1.emulab.net
+NTPSERVER=ntp1.emulab.net
+#EXTERNAL_NTPSERVER1=ntp1.emulab.net
+#EXTERNAL_NTPSERVER2=ntp1.emulab.net
+#EXTERNAL_NTPSERVER3=ntp1.emulab.net
+#EXTERNAL_NTPSERVER4=ntp1.emulab.net
 DISABLE_NSE=1
 # This means it is an inner elab!
 #ELABINELAB=1
+# For getting initial email setup
+#ELABINELAB_MAILTARGET="stoller@emulab.net"
 # If we can run old images ... depends on whther elvind is installed.
 ELVIN_COMPAT=0
 # The name of the outer boss for inner boss to request services from.
@@ -115,7 +118,7 @@ MIN_UNIX_GID=2000
 WITHZFS=1
 ZFS_ROOT="emulab"
 ZFS_QUOTA_USER="none"
-ZFS_QUOTA_PROJECT="10G"
+ZFS_QUOTA_PROJECT="none"
 ZFS_QUOTA_GROUP="none"
 WITHAMD=1
 # This will default to /.amd_mnt/ops in configure
@@ -131,7 +134,6 @@ IMAGEDIRECTORIES=1
 
 # Fancy new browser in the console support
 BROWSER_CONSOLE_ENABLE=1
-BROWSER_CONSOLE_PROXIED=1
 
 # Do not expire passwords.
 EXPIRE_PASSWORDS=0
@@ -159,16 +161,24 @@ MANAGEMENT_NETWORK=10.10.11.0
 MANAGEMENT_NETMASK=255.255.255.0
 MANAGEMENT_ROUTER=10.10.11.2
 
-#PROTOGENI_NOPORTALEXPIRE=1
+PROTOGENI_NOPORTALEXPIRE=1
 PROTOGENI_PORTALONLY=1
 
 POWDER_RFMONITOR=1
 POWDER_RFMONITOR_HOST="10.10.10.2"
-POWDER_NICKNAME="Bus4964"
-
-POWDER_WBSTORE=1
-
-# End of Emulab added section
 
 DISABLE_RESERVATION_EMAIL=1
+
+BROWSER_CONSOLE_PROXIED=1
 POWDER_DEADMAN=1
+POWDER_WBSTORE=1
+
+ZFS_QUOTA_PROJECT="10G"
+
+POWDER_BUS_P0WER_VERSION=1
+
+# Image updates take a long time on buses, this makes it smoother since
+# updates will not prevent experiments starting.
+IMAGEPROVENANCE=1
+
+# End of Emulab added section
