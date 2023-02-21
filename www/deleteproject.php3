@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,7 +64,7 @@ if ($project->ExperimentList(0)) {
 	      "those experiments before you can remove the project!", 1);
 }
 # Ditto Leases.
-if (Lease::LookupAllByProject($project)) {
+if ((new Lease)->LookupAllByProject($project)) {
     USERERROR("Project '$pid' has active leases.<br>".
 	      "You must delete ".
 	      "those leases before you can remove the project!", 1);

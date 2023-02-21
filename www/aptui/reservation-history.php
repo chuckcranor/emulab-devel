@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -73,7 +73,7 @@ if (isset($cluster)) {
         PAGEARGERROR("Invalid cluster argument");
         exit();
     }
-    $aggregate = Aggregate::LookupByNickname($cluster);
+    $aggregate = (new Aggregate)->LookupByNickname($cluster);
     if (!$aggregate) {
         SPITUSERERROR("No such cluster");
         exit();
@@ -82,7 +82,7 @@ if (isset($cluster)) {
 }
 else {
     # List of clusters.
-    $ams     = Aggregate::SupportsReservations();
+    $ams     = (new Aggregate)->SupportsReservations();
     $amlist  = array();
     while (list($index, $aggregate) = each($ams)) {
         $amlist[$aggregate->nickname()] = $aggregate->urn();

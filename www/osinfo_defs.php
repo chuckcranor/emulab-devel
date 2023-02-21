@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ class OSinfo
     #
     # Constructor by lookup on unique ID
     #
-    function OSinfo($id, $version = NULL) {
+    function __construct($id = ":", $version = NULL) {
 	if (is_null($version)) {
 	    list($id,$version) = preg_split('/:/', $id);
 	}
@@ -91,7 +91,7 @@ class OSinfo
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return OSInfo::Lookup($row["osid"]);
+	return (new OSInfo)->Lookup($row["osid"]);
     }
 
     #
@@ -191,7 +191,7 @@ class OSinfo
 	    return null;
 	}
 	$osid = $matches[2];
-	$newosid = OSinfo::Lookup($osid);
+	$newosid = (new OSinfo)->Lookup($osid);
 	if (! $newosid) {
 	    $errors[] = "Transient error(6); please try again later.";
 	    TBERROR("Could not lookup new osid $osid", 0);
@@ -310,7 +310,7 @@ class OSinfo
 	#
 	# Need the project object to complete this test.
 	#
-	if (! ($project = Project::Lookup($pid))) {
+	if (! ($project = (new Project)->Lookup($pid))) {
 	    TBERROR("Could not map project $pid to its object", 1);
 	}
 	if (TBMinTrust($project->UserTrust($user), $mintrust)) {
@@ -410,7 +410,7 @@ class OSinfo
 	$ezid           = $this->ezid();
 	$mfs            = $this->mfs();
 
-	if (! ($creator_user = User::Lookup($creator))) {
+	if (! ($creator_user = (new User)->Lookup($creator))) {
 	    TBERROR("Error getting object for user $creator", 1);
 	}
 	$showuser_url = CreateURL("showuser", $creator_user);
@@ -524,7 +524,7 @@ class OSinfo
 			    Mapped via DB table: osid_map</td></tr>\n";
 	    }
 	    else {
-		$nextosinfo = OSinfo::Lookup($nextosid);
+		$nextosinfo = (new OSinfo)->Lookup($nextosid);
 	        $nextosname = $nextosinfo->osname();
 		echo "<tr>
                         <td>Next Osid: </td>
@@ -535,7 +535,7 @@ class OSinfo
 	    }
 	}
 	if ($def_parentosid) {
-	    $nextosinfo = OSinfo::Lookup($def_parentosid);
+	    $nextosinfo = (new OSinfo)->Lookup($def_parentosid);
 	    $nextosname = $nextosinfo->osname();
 	    echo "<tr>
                       <td>Parent Osid: </td>
@@ -661,7 +661,7 @@ class OSinfo
 	        # see this experiment - summarize all the experiments that
 	        # he/she cannot see at the bottom
 	        #
-		if (! ($experiment = Experiment::LookupByPidEid($pid, $eid))) {
+		if (! ($experiment = (new Experiment)->LookupByPidEid($pid, $eid))) {
 		    continue;
 		}
 		if (! $experiment->AccessCheck($user, $TB_EXPT_READINFO)) {
@@ -691,7 +691,7 @@ class OSinfo
 #
 function SpitOSIDLink($osid, $vers)
 {
-    $osinfo = OSInfo::Lookup($osid, $vers);
+    $osinfo = (new OSInfo)->Lookup($osid, $vers);
 
     if ($osinfo) {
 	$osname = $osinfo->osname();

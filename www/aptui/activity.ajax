@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,7 +50,7 @@ function Do_Search()
 
     if (!$isadmin) {
         if (isset($ajax_args["target_user"])) {
-            $target_user = User::LookupByUid($ajax_args["target_user"]);
+            $target_user = (new User)->LookupByUid($ajax_args["target_user"]);
             if (!$target_user) {
                 SPITAJAX_ERROR(1, "No such user");
                 return;
@@ -61,7 +61,7 @@ function Do_Search()
             }
         }
         elseif (isset($ajax_args["target_project"])) {
-            $target_project = Project::Lookup($ajax_args["target_project"]);
+            $target_project = (new Project)->Lookup($ajax_args["target_project"]);
             if (!$target_project) {
                 SPITAJAX_ERROR(1, "No such project");
                 return;
@@ -79,21 +79,21 @@ function Do_Search()
         }
     }
     elseif (isset($ajax_args["target_project"])) {
-        $target_project = Project::Lookup($ajax_args["target_project"]);
+        $target_project = (new Project)->Lookup($ajax_args["target_project"]);
         if (!$target_project) {
             SPITAJAX_ERROR(1, "No such project");
             return;
         }
     }  
     elseif (isset($ajax_args["target_user"])) {
-        $target_user = User::LookupByUid($ajax_args["target_user"]);
+        $target_user = (new User)->LookupByUid($ajax_args["target_user"]);
         if (!$target_user) {
             SPITAJAX_ERROR(1, "No such user");
             return;
         }
     }
     if ($isadmin && isset($ajax_args["cluster"])) {
-        $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
+        $aggregate = (new Aggregate)->LookupByNickname($ajax_args["cluster"]);
         if (!$aggregate) {
             SPITAJAX_ERROR(1, "No such cluster");
             return;
@@ -236,7 +236,7 @@ function SearchForIP($token, $min, $max)
         SPITAJAX_ERROR(1, "Invalid search token");
         return;
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC($this_uid, "nobody",
 		     "websearchip -t " . $webtask->task_id() .
                      " -s $min -e $max -b " . escapeshellarg($token),
@@ -263,7 +263,7 @@ function SearchForIP($token, $min, $max)
         # This is a bit hokey, but it lets us show a current experiment
         # in the activity list when searching for an IP, which is handy.
         #
-        $instance = Instance::Lookup($current);
+        $instance = (new Instance)->Lookup($current);
         if ($instance &&
             (strtotime($instance->started()) > $min &&
              strtotime($instance->started()) < $max)) {
@@ -282,7 +282,7 @@ function SearchForIP($token, $min, $max)
                                  strtotime($instance->created())) / 3600.0));
 
             # Profile Info.
-            $profile = Profile::Lookup($instance->profile_id(),
+            $profile = (new Profile)->Lookup($instance->profile_id(),
                                        $instance->profile_version());
             if ($profile) {
                 $pname = $profile->name();
@@ -314,7 +314,7 @@ function SearchForIP($token, $min, $max)
     }
 
     foreach ($history as $uuid) {
-        $instance = InstanceHistory::Lookup($uuid);
+        $instance = (new InstanceHistory)->Lookup($uuid);
         if (!$instance) {
             continue;
         }
@@ -332,7 +332,7 @@ function SearchForIP($token, $min, $max)
                              strtotime($instance->created())) / 3600.0));
 
         # Profile Info.
-        $profile = Profile::Lookup($instance->profile_id(),
+        $profile = (new Profile)->Lookup($instance->profile_id(),
                                    $instance->profile_version());
         if ($profile) {
             $pname = $profile->name();

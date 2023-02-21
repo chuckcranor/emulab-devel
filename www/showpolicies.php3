@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2005, 2006 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -144,7 +144,7 @@ if (mysql_num_rows($query_result)) {
         $count   = $row["count"];
         $auxdata = $row["auxdata"];
 
-	if (! ($user = User::Lookup($puid))) {
+	if (! ($user = (new User)->Lookup($puid))) {
 	    TBERROR("Could not lookup object for user $puid", 1);
 	}
 	$showuser_url = CreateURL("showuser", $user);

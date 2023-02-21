@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,7 +48,7 @@ function CheckPageArgs($write)
 	SPITAJAX_ERROR(-1, "Invalid image uuid");
 	return -1;
     }
-    $image = Image::LookupByUUID($uuid);
+    $image = (new Image)->LookupByUUID($uuid);
     if (!$image) {
 	SPITAJAX_ERROR(-1, "No such image");
 	return -1;
@@ -94,7 +94,7 @@ function Do_GetInfo()
     
     if ($image->metadata_url()) {
         if ($image->origin_urn() && $image->origin_name()) {
-            list ($auth,$type,$ignore) = Instance::ParseURN($image->origin_urn());
+            list ($auth,$type,$ignore) = (new Instance)->ParseURN($image->origin_urn());
             $urn = "urn:publicid:IDN+${auth}+";
             if ($image->isdataset()) {
                 $urn .= "imdataset+" . $image->origin_name();
@@ -146,7 +146,7 @@ function Do_GetInfo()
     if ($embedded) {
         $blob["version_url"] .= "&embedded=1";
     }
-    if (Image::UseImageTracker()) {
+    if ((new Image)->UseImageTracker()) {
         $blob["ims_noreport"]  = $image->ims_noreport() ? 1 : 0;
         $blob["ims_reported"]  = $image->ims_reported();
         $blob["ims_update"]    = $image->ims_update();
@@ -163,7 +163,7 @@ function Do_GetInfo()
         $blob["image_url"]     = "$TBBASE/image_metadata.php?uuid=$image_uuid";
     }
     if ($image->logfileid()) {
-        $logfile = Logfile::Lookup($image->logfileid());
+        $logfile = (new Logfile)->Lookup($image->logfileid());
         if ($logfile) {
             $blob["logfile_url"] = $logfile->URL();
         }
@@ -185,7 +185,7 @@ function Do_GetInfo()
         $blob["xen_capable"]      = 0;
         $blob["taint_states"]     = $osinfo->taint_states();
         if ($osinfo->def_parentosid()) {
-	    $n_image = Image::Lookup($osinfo->def_parentosid());
+	    $n_image = (new Image)->Lookup($osinfo->def_parentosid());
             if ($n_image) {
                 $n_imageid = $n_image->imageid();
                 $n_version = $n_image->version();
@@ -228,7 +228,7 @@ function Do_GetInfo()
     if ($image->parent_imageid()) {
         $p_imageid   = $image->parent_imageid();
         $p_version   = $image->parent_version();
-        $p_image     = Image::Lookup($p_imageid, $p_version);
+        $p_image     = (new Image)->Lookup($p_imageid, $p_version);
         # On an elabinelab we will not have the previous version.
         # if it came in at creation time.
         if ($p_image) {
@@ -490,7 +490,7 @@ function Do_SetTypes()
         $args["mtype_${type}"] = 1;
     }
     # Send to the backend for more checking, and eventually, to update the DB.
-    if (! Image::EditImageid($image, $args, $errors)) {
+    if (! (new Image)->EditImageid($image, $args, $errors)) {
         SUEXECERROR(SUEXEC_ACTION_CONTINUE);    
         SPITAJAX_ERROR(-1, $errors[0]);
         return;
@@ -614,7 +614,7 @@ function Do_Clone()
         $errors["error"] = "Invalid base image UUID";
     }
     elseif (! ($baseimage =
-               Image::LookupByUUID($formfields["baseimage_uuid"]))) {
+               (new Image)->LookupByUUID($formfields["baseimage_uuid"]))) {
         $errors["error"] = "No such base image";
     }
     elseif (! ($baseinfo = $baseimage->OSinfo())) {
@@ -639,7 +639,7 @@ function Do_Clone()
     # Make sure the node is running the image we are cloning.
     #
     if (TBvalid_node_id($formfields["node_id"])) {
-        $node = Node::Lookup($formfields["node_id"]);
+        $node = (new Node)->Lookup($formfields["node_id"]);
         if (!$node) {
             $errors["node_id"] = "No such node";
         }
@@ -684,7 +684,7 @@ function Do_Clone()
     if ($project->pid() != $node_pid) {
         $unix_groups = "$unix_groups,$node_pid";
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $webtask->SetTaskValue("node_id", $node->node_id());
     $webtask->Store();
 
@@ -715,7 +715,7 @@ function Do_Clone()
         $webtask->Delete();
         return;
     }
-    $newimage = Image::Lookup($webtask->TaskValue("imageid"));
+    $newimage = (new Image)->Lookup($webtask->TaskValue("imageid"));
 
     #
     # Bad place to do this ...
@@ -764,7 +764,7 @@ function Do_SnapshotStatus()
 	SPITAJAX_ERROR(2, "No snapshot status info available");
 	return;
     }
-    $webtask = WebTask::Lookup($webtask_id);
+    $webtask = (new WebTask)->Lookup($webtask_id);
     if (!$webtask)  {
 	SPITAJAX_ERROR(2, "No snapshot status info available");
 	return;
@@ -789,7 +789,7 @@ function Do_SnapshotStatus()
     # We stuck the node_id in above when we started the snapshot
     #
     $node_id = $taskdata["node_id"];
-    $node = Node::Lookup($node_id);
+    $node = (new Node)->Lookup($node_id);
     if ($node) {
         $blob["node_status"] = $node->eventstate();
     }
@@ -838,7 +838,7 @@ function Do_Snapshot()
 	SPITAJAX_ERROR(-1, "Invalid Node ID");
 	return -1;
     }
-    $node = Node::Lookup($node_id);
+    $node = (new Node)->Lookup($node_id);
     if (!$node) {
 	SPITAJAX_ERROR(-1, "No such node");
 	return;
@@ -880,7 +880,7 @@ function Do_Snapshot()
     # We pass a webtask through, so that Do_SnapshotStatus() above can pick up
     # the status for the imaging modal.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $webtask->SetTaskValue("node_id", $node->node_id());
     $webtask->Store();
         

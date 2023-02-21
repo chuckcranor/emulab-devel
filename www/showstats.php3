@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -139,8 +139,8 @@ elseif ($showby == "expt") {
     if (!TBvalid_integer($exptidx)) {
 	USERERROR("Invalid characters in $exptidx!", 1);
     }
-    if (! ($experiment = Experiment::Lookup($exptidx))) {
-	if (! ($stats = ExperimentStats::Lookup($exptidx))) {
+    if (! ($experiment = (new Experiment)->Lookup($exptidx))) {
+	if (! ($stats = (new ExperimentStats)->Lookup($exptidx))) {
 	    USERERROR("No such experiment index $exptidx!", 1);
 	}
 	if (!$isadmin) {

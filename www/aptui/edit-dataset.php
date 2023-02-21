@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,17 +51,17 @@ $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 # Either a local lease or a remote dataset. 
 #
 if ($embedded) {
-    $dataset = Lease::Lookup($uuid);
+    $dataset = (new Lease)->Lookup($uuid);
     if (!$dataset) {
-        $dataset = ImageDataset::Lookup($uuid);
+        $dataset = (new ImageDataset)->Lookup($uuid);
     }
 }
 else {
-    $dataset = Dataset::Lookup($uuid);
+    $dataset = (new Dataset)->Lookup($uuid);
     if (!$dataset) {
-        $dataset = Lease::Lookup($uuid);
+        $dataset = (new Lease)->Lookup($uuid);
         if (!$dataset) {
-            $dataset = ImageDataset::Lookup($uuid);
+            $dataset = (new ImageDataset)->Lookup($uuid);
         }
     }
 }
@@ -103,8 +103,8 @@ function SPITFORM($formfields, $dataset, $errors)
 
         while ($row = mysql_fetch_array($query_result)) {
             $uuid         = $row["uuid"];
-            $instance     = Instance::Lookup($uuid);
-            $profile      = Profile::Lookup($instance->profile_id(),
+            $instance     = (new Instance)->Lookup($uuid);
+            $profile      = (new Profile)->Lookup($instance->profile_id(),
                                             $instance->profile_version());
             $instance_array[] =
                 array("uuid" => $uuid, "name" => $profile->name());

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,11 +50,11 @@ class ReservationGroup
 	}
 	$this->resgroup     = mysql_fetch_array($query_result);
         $this->reservations =
-            ReservationGroupReservation::LookupForGroup($this);
+            (new ReservationGroupReservation)->LookupForGroup($this);
         $this->rfreservations =
-            ReservationGroupRFReservation::LookupForGroup($this);
+            (new ReservationGroupRFReservation)->LookupForGroup($this);
         $this->routereservations =
-            ReservationGroupRouteReservation::LookupForGroup($this);
+            (new ReservationGroupRouteReservation)->LookupForGroup($this);
     }
     # accessors
     function reservations()   { return $this->reservations; }
@@ -80,7 +80,7 @@ class ReservationGroup
 
     # Project of resgroup.
     function Project() {
-        return Project::Lookup($this->pid_idx());
+        return (new Project)->Lookup($this->pid_idx());
     }
 
     # Hmm, how does one cause an error in a php constructor?
@@ -107,7 +107,7 @@ class ReservationGroup
         $query_result = DBQueryFatal("select uuid from apt_reservation_groups ".
                                      "where creator_idx='$uid_idx'");
 	while ($row = mysql_fetch_array($query_result)) {
-            $reservation = ReservationGroup::Lookup($row["uuid"]);
+            $reservation = (new ReservationGroup)->Lookup($row["uuid"]);
             if ($reservation) {
                 $result[] = $reservation;
             }
@@ -124,7 +124,7 @@ class ReservationGroup
         $query_result = DBQueryFatal("select uuid from apt_reservation_groups ".
                                      "where pid_idx='$pid_idx'");
 	while ($row = mysql_fetch_array($query_result)) {
-            $reservation = ReservationGroup::Lookup($row["uuid"]);
+            $reservation = (new ReservationGroup)->Lookup($row["uuid"]);
             if ($reservation) {
                 $result[] = $reservation;
             }
@@ -139,7 +139,7 @@ class ReservationGroup
         
         $query_result = DBQueryFatal("select uuid from apt_reservation_groups");
 	while ($row = mysql_fetch_array($query_result)) {
-            $reservation = ReservationGroup::Lookup($row["uuid"]);
+            $reservation = (new ReservationGroup)->Lookup($row["uuid"]);
             if ($reservation) {
                 $result[] = $reservation;
             }
@@ -162,7 +162,7 @@ class ReservationGroup
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-        return ReservationGroup::Lookup($row["uuid"]);
+        return (new ReservationGroup)->Lookup($row["uuid"]);
     }
 
     #
@@ -178,7 +178,7 @@ class ReservationGroup
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $aggregate = Aggregate::Lookup($row["aggregate_urn"]);
+            $aggregate = (new Aggregate)->Lookup($row["aggregate_urn"]);
             if ($aggregate) {
                 $result[] = $aggregate;
             }
@@ -244,7 +244,7 @@ class ReservationGroup
         $details  = array();
         # Compute a status column based on reservations.
         $status   = "approved";
-        $project  = Project::Lookup($resgroup->pid_idx());
+        $project  = (new Project)->Lookup($resgroup->pid_idx());
         # We will use any one of the approval stamps below.
         $approval = null;
     
@@ -427,7 +427,7 @@ class ReservationGroup
                          "     g.pid in ($pidlist)");
         
 	while ($row = mysql_fetch_array($query_result)) {
-            $res = ReservationGroup::Lookup($row["uuid"]);
+            $res = (new ReservationGroup)->Lookup($row["uuid"]);
             $urn = $row["aggregate_urn"];
             $pid = $res->pid();
 
@@ -543,7 +543,7 @@ class ReservationGroupReservation
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $res = ReservationGroupReservation::Lookup($group,
+            $res = (new ReservationGroupReservation)->Lookup($group,
                                                         $row['aggregate_urn'],
                                                         $row['type']);
             if ($res) {
@@ -554,7 +554,7 @@ class ReservationGroupReservation
     }
 
     function Aggregate() {
-        return Aggregate::Lookup($this->aggregate_urn());
+        return (new Aggregate)->Lookup($this->aggregate_urn());
     }
 }
 class ReservationGroupRFReservation
@@ -618,7 +618,7 @@ class ReservationGroupRFReservation
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $res = ReservationGroupRFReservation::Lookup($group,
+            $res = (new ReservationGroupRFReservation)->Lookup($group,
                                                          $row['freq_uuid']);
             if ($res) {
                 $result[] = $res;
@@ -689,7 +689,7 @@ class ReservationGroupRouteReservation
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $res = ReservationGroupRouteReservation::Lookup($group,
+            $res = (new ReservationGroupRouteReservation)->Lookup($group,
                                                             $row['route_uuid']);
             if ($res) {
                 $result[] = $res;

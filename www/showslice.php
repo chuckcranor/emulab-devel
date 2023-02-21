@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,7 +56,7 @@ if (! ($showtype == "sa"|| $showtype == "cm" || $showtype == "ch")) {
     USERERROR("Improper argument: showtype=$showtype", 1);
 }
 
-$slice = GeniSlice::Lookup($showtype, $slice_idx);
+$slice = (new GeniSlice)->Lookup($showtype, $slice_idx);
 if (!$slice) {
     USERERROR("No such slice $slice_idx", 1);
 }
@@ -124,7 +124,7 @@ if (($manifest = $slice->GetManifest())) {
     $manifestidx++;
 }
 
-$experiment = Experiment::LookupByUUID($slice->uuid());
+$experiment = (new Experiment)->LookupByUUID($slice->uuid());
 if ($experiment) {
     $eid = $experiment->eid();
     $exptidx = $experiment->idx();
@@ -132,7 +132,7 @@ if ($experiment) {
     $rows[] = array("Experiment"  => "<a href='$url'>$eid ($exptidx)</a>");
 }
 
-$geniuser = GeniUser::Lookup($showtype, $slice->creator_uuid());
+$geniuser = (new GeniUser)->Lookup($showtype, $slice->creator_uuid());
 if ($geniuser) {
     $rows[] = array("Creator" => $geniuser->urn());
     if ($geniuser->email()) {
@@ -140,7 +140,7 @@ if ($geniuser) {
     }
 }
 else {
-    $user = User::LookupByUUID($slice->creator_uuid());
+    $user = (new User)->LookupByUUID($slice->creator_uuid());
     if ($user) {
 	$url = CreateURL("showuser", $user);
 	$rows[] = array("Creator" => "<a href='$url'>". $user->uid() ."</a>");
@@ -148,7 +148,7 @@ else {
 }
 
 if ($showtype != "sa") {
-    $saslice = GeniSlice::Lookup("sa", $slice->uuid());
+    $saslice = (new GeniSlice)->Lookup("sa", $slice->uuid());
     if ($saslice) {
 	$saidx = $saslice->idx();
 	$url   = CreateURL("showslice", "slice_idx", $saidx, "showtype", "sa");
@@ -157,7 +157,7 @@ if ($showtype != "sa") {
     }
 }
 if ($showtype != "cm") {
-    $cmslice = GeniSlice::Lookup("cm", $slice->uuid());
+    $cmslice = (new GeniSlice)->Lookup("cm", $slice->uuid());
     if ($cmslice) {
 	$cmidx = $cmslice->idx();
 	$url   = CreateURL("showslice", "slice_idx", $cmidx, "showtype", "cm");
@@ -169,7 +169,7 @@ if ($showtype != "cm") {
 list ($html, $button) = TableRender($table, $rows);
 echo $html;
 
-$clientslivers = ClientSliver::SliverList($slice);
+$clientslivers = (new ClientSliver)->SliverList($slice);
 if ($clientslivers && count($clientslivers)) {
     $table = array('#id'	   => 'clientslivers',
 		   '#title'        => "Client Slivers",

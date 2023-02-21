@@ -225,6 +225,15 @@ LoadModule access_compat_module libexec/apache24/mod_access_compat.so
 # which appeared in 2.4.34. Fortunately, we started using apache 2.4 at
 # version 35, so we can count on this directive being present.
 #
+<IfFile "/usr/local/libexec/apache24/libphp.so">
+    LoadModule php_module libexec/apache24/libphp.so
+    <FilesMatch "\.php3?$">
+        SetHandler application/x-httpd-php
+    </FilesMatch>
+    <FilesMatch "\.php3?s$">
+        SetHandler application/x-httpd-php-source
+    </FilesMatch>
+</IfFile>
 <IfFile "/usr/local/libexec/apache24/libphp7.so">
     LoadModule php7_module libexec/apache24/libphp7.so
     <FilesMatch "\.php3?$">

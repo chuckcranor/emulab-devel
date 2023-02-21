@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,13 +59,13 @@ $optargs = OptionalPageArguments("uuid",   PAGEARG_STRING,
                                  "source", PAGEARG_BOOLEAN,
                                  "rspec",  PAGEARG_BOOLEAN);
 if (isset($uuid))  {
-    $profile = Profile::Lookup($uuid);
+    $profile = (new Profile)->Lookup($uuid);
 }
 elseif (isset($project) && isset($profile)) {
-    $profile = Profile::LookupByName($project, $profile);
+    $profile = (new Profile)->LookupByName($project, $profile);
 }
 elseif (isset($profile) && (IsValidHash($profile) || IsValidUUID($profile))) {
-    $obj = Profile::Lookup($profile);
+    $obj = (new Profile)->Lookup($profile);
     if ($obj && IsValidHash($profile)) {
         $ishashed = 1;
     }

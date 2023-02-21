@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -170,7 +170,7 @@ class Aggregate
 	$row = mysql_fetch_array($query_result);
 	$urn = $row['urn'];
 
-        return Aggregate::Lookup($urn);
+        return (new Aggregate)->Lookup($urn);
     }
     #
     # Lookup using the short auth name (emulab.net).
@@ -188,7 +188,7 @@ class Aggregate
 	$row = mysql_fetch_array($query_result);
 	$urn = $row['urn'];
 
-        return Aggregate::Lookup($urn);
+        return (new Aggregate)->Lookup($urn);
     }
 
     #
@@ -207,7 +207,7 @@ class Aggregate
 	$row = mysql_fetch_array($query_result);
 	$urn = $row['urn'];
 
-        return Aggregate::Lookup($urn);
+        return (new Aggregate)->Lookup($urn);
     }
 
     #
@@ -232,7 +232,7 @@ class Aggregate
 	while ($row = mysql_fetch_array($query_result)) {
 	    $urn = $row["urn"];
 
-	    if (! ($aggregate = Aggregate::Lookup($urn))) {
+	    if (! ($aggregate = (new Aggregate)->Lookup($urn))) {
 		TBERROR("Aggregate::SupportsDatasetsList: ".
 			"Could not load aggregate $urn!", 1);
 	    }
@@ -267,7 +267,7 @@ class Aggregate
 	    $urn = $row["urn"];
             $allowed = 1;
 
-	    if (! ($aggregate = Aggregate::Lookup($urn))) {
+	    if (! ($aggregate = (new Aggregate)->Lookup($urn))) {
 		TBERROR("Aggregate::SupportsReservations: ".
 			"Could not load aggregate $urn!", 1);
 	    }
@@ -345,7 +345,7 @@ class Aggregate
             while ($row = mysql_fetch_array($query_result)) {
                 $urn = $row["urn"];
 
-                if (! ($aggregate = Aggregate::Lookup($urn))) {
+                if (! ($aggregate = (new Aggregate)->Lookup($urn))) {
                     TBERROR("Aggregate::DefaultAggregateList: ".
                             "Could not load aggregate $urn!", 1);
                 }
@@ -362,7 +362,7 @@ class Aggregate
             $urn       = $row["urn"];
             $allowed   = 1;
 
-	    if (! ($aggregate = Aggregate::Lookup($urn))) {
+	    if (! ($aggregate = (new Aggregate)->Lookup($urn))) {
 		TBERROR("Aggregate::DefaultAggregateList: ".
 			"Could not load aggregate $urn!", 1);
 	    }
@@ -405,7 +405,7 @@ class Aggregate
                 }
             }
             elseif ($user && $TBMAINSITE) {
-                $project = Project::Lookup("OCTatMGHPCC");
+                $project = (new Project)->Lookup("OCTatMGHPCC");
                 if ($project && $project->IsMember($user, $approved) &&
                     !$project->IsLeader($user)) {
                     if ($aggregate->nickname() == "Mass") {
@@ -434,7 +434,7 @@ class Aggregate
         
 	while ($row = mysql_fetch_array($query_result)) {
             $urn       = $row["urn"];
-	    if (! ($aggregate = Aggregate::Lookup($urn))) {
+	    if (! ($aggregate = (new Aggregate)->Lookup($urn))) {
 		TBERROR("Aggregate::SupportsReservations: ".
 			"Could not load aggregate $urn!", 1);
 	    }
@@ -447,7 +447,7 @@ class Aggregate
     {
         global $DEFAULT_AGGREGATE_URN;
 
-        if (! ($aggregate = Aggregate::Lookup($DEFAULT_AGGREGATE_URN))) {
+        if (! ($aggregate = (new Aggregate)->Lookup($DEFAULT_AGGREGATE_URN))) {
             TBERROR("Aggregate::SupportsReservations: ".
                     "Could not load aggregate $urn!", 1);
         }
@@ -564,7 +564,7 @@ class Aggregate
             # Grab the aggregate. We use the status info to determine if the
             # aggregate is alive (reachable).
             #
-            if ($aggregate = Aggregate::Lookup($urn)) {
+            if ($aggregate = (new Aggregate)->Lookup($urn)) {
                 if (!array_key_exists($urn, $blob)) {
                     $blob[$urn] = array();
                 }
@@ -572,7 +572,7 @@ class Aggregate
                     #
                     # The CNUC determines if a base station is alive.
                     #
-                    $cnuc = Node::Lookup($row["cnuc_id"]);
+                    $cnuc = (new Node)->Lookup($row["cnuc_id"]);
                     if ($cnuc && $cnuc->RealNodeStatus() != "up") {
                         $alive = false;
                     }
@@ -621,14 +621,14 @@ class Aggregate
             $row["available"] = intval($row["available"]);
 
             # URN for node
-            list ($auth,$type,$id) = Instance::ParseURN($urn);
+            list ($auth,$type,$id) = (new Instance)->ParseURN($urn);
             $row["component_urn"] = "urn:publicid:IDN+${auth}+node+${node_id}";
 
             #
             # Grab the aggregate. We use the status info to determine if the
             # aggregate is alive (reachable).
             #
-            if ($aggregate = Aggregate::Lookup($urn)) {
+            if ($aggregate = (new Aggregate)->Lookup($urn)) {
                 if ($aggregate->adminonly() && !ISADMIN()) {
                     continue;
                 }
@@ -642,7 +642,7 @@ class Aggregate
                     #
                     # The CNUC determines if a base station is alive.
                     #
-                    $cnuc = Node::Lookup($row["cnuc_id"]);
+                    $cnuc = (new Node)->Lookup($row["cnuc_id"]);
                     if ($cnuc && $cnuc->RealNodeStatus() != "up") {
                         $alive = false;
                     }
@@ -752,7 +752,7 @@ class Aggregate
         $clusters = preg_split("/,/", $project->allowed_clusters());
 
         foreach ($clusters as $domain) {
-            $cluster = Aggregate::LookupByDomain($domain);
+            $cluster = (new Aggregate)->LookupByDomain($domain);
             if ($cluster) {
                 $result[$cluster->urn()] = $cluster;
             }

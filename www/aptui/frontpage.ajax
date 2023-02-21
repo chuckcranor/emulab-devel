@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,8 +51,8 @@ function Do_GetHealthStatusExtended()
     $amlist     = array();
     $fedlist    = array();
     $status     = array();
-    $radioinfo  = Aggregate::RadioInfoNew();
-    $rfranges   = Instance::RFRangesUnUse();
+    $radioinfo  = (new Aggregate)->RadioInfoNew();
+    $rfranges   = (new Instance)->RFRangesUnUse();
     $PORTAL_HEALTH = 1;
     CalculateAggregateStatus($amlist, $fedlist, $status, true, null, true);
 

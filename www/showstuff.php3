@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -269,7 +269,7 @@ function SHOWNODES($pid, $eid, $sortby, $showclass) {
 	    $iswindowsnode = $row["OS"]=='Windows';
 	    $sharemode     = $row["sharing_mode"];
 
-	    if (! ($node = Node::Lookup($node_id))) {
+	    if (! ($node = (new Node)->Lookup($node_id))) {
 		TBERROR("SHOWNODES: Could not map $node_id to its object", 1);
 	    }
 	    $idlehours = $node->IdleTime();
@@ -409,7 +409,7 @@ function SHOWNODES($pid, $eid, $sortby, $showclass) {
 #
 function SPITOSINFOLINK($osid, $version)
 {
-    if (! ($osinfo = OSinfo::Lookup($osid, $version)))
+    if (! ($osinfo = (new OSinfo)->Lookup($osid, $version)))
 	return;
 
     $osname = $osinfo->osname();
@@ -423,7 +423,7 @@ function SPITOSINFOLINK($osid, $version)
 function SHOWWIDEAREAACCOUNTS($webid) {
     $none = TBDB_TRUSTSTRING_NONE;
 
-    if (! ($user = User::Lookup($webid))) {
+    if (! ($user = (new User)->Lookup($webid))) {
 	return;
     }
     $uid = $user->uid();

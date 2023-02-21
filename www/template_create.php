@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -335,7 +335,7 @@ if (!isset($formfields["pid"]) || $formfields["pid"] == "") {
 elseif (!TBvalid_pid($formfields["pid"])) {
     $errors["Project"] = TBFieldErrorString();
 }
-elseif (! ($project = Project::Lookup($formfields["pid"]))) {
+elseif (! ($project = (new Project)->Lookup($formfields["pid"]))) {
     $errors["Project"] = "No such project";
 }
 else {
@@ -346,7 +346,7 @@ else {
 	if (!TBvalid_gid($formfields["gid"])) {
 	    $errors["Group"] = TBFieldErrorString();
 	}
-	elseif (! ($group = Group::LookupByPidGid($formfields["pid"],
+	elseif (! ($group = (new Group)->LookupByPidGid($formfields["pid"],
 						  $formfields["gid"]))) {
 	    $errors["Group"] = "No such group in project'";
 	}
@@ -557,7 +557,7 @@ if (preg_match("/^Template\s+(\w+)\/(\w+)\s+is being/",
     $guid = $matches[1];
     $vers = $matches[2];
 
-    $template = Template::Lookup($guid, $vers);
+    $template = (new Template)->Lookup($guid, $vers);
     if (! $template) {
 	TBERROR("Could not lookup template object for $guid/$vers", 1);
 	return;

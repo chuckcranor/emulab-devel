@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -198,7 +198,7 @@ class Profile
         if ($this->project) {
             return $this->project;
         }
-        $this->project = Project::Lookup($this->pid_idx());
+        $this->project = (new Project)->Lookup($this->pid_idx());
         return $this->project;
     }
     # Private means only in the same project.
@@ -221,14 +221,14 @@ class Profile
     # with the object, use that. Otherwise create a new one.
     function WebTask() {
         if ($this->webtask_id()) {
-            $webtask = WebTask::Lookup($this->webtask_id());
+            $webtask = (new WebTask)->Lookup($this->webtask_id());
             if ($webtask) {
                 return $webtask;
             }
         }
-        $webtask = WebTask::LookupByObject($this->uuid());
+        $webtask = (new WebTask)->LookupByObject($this->uuid());
         if (!$webtask) {
-            $webtask = WebTask::CreateAnonymous();
+            $webtask = (new WebTask)->CreateAnonymous();
             if (!$webtask) {
                 return null;
             }
@@ -266,7 +266,7 @@ class Profile
 	$safe_name = addslashes($name);
         
 	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $name)) {
-	    return Profile::Lookup($name);
+	    return (new Profile)->Lookup($name);
 	}
 	elseif (is_null($version)) {
 	    $query_result =
@@ -291,7 +291,7 @@ class Profile
 	}
 	if ($query_result && mysql_num_rows($query_result)) {
 	    $row = mysql_fetch_row($query_result);
-	    return Profile::Lookup($row[0], $row[1]);
+	    return (new Profile)->Lookup($row[0], $row[1]);
 	}
 	return null;
     }
@@ -313,7 +313,7 @@ class Profile
 	    return null;
 	}
 	$row = mysql_fetch_row($query_result);
-	return Profile::Lookup($profileid, $row[0]);
+	return (new Profile)->Lookup($profileid, $row[0]);
     }
 
     #
@@ -448,7 +448,7 @@ class Profile
         if ($this->version() == $row[0]) {
             return $this;
         }
-        return Profile::Lookup($profileid, $row[0]);
+        return (new Profile)->Lookup($profileid, $row[0]);
     }
     
     #
@@ -565,7 +565,7 @@ class Profile
 	    return 1;
 	}
 	# Otherwise a project membership test.
-	$project = Project::Lookup($this->pid_idx());
+	$project = (new Project)->Lookup($this->pid_idx());
 	if (!$project) {
 	    return 0;
 	}
@@ -585,7 +585,7 @@ class Profile
         if ($this->creator_idx() == $user->uid_idx() || ISADMIN()) {
             return 1;
         }
-	$project = Project::Lookup($this->pid_idx());
+	$project = (new Project)->Lookup($this->pid_idx());
 	if (!$project) {
 	    return 0;
 	}
@@ -606,7 +606,7 @@ class Profile
         }
 	# Want to know if the project is APT or Cloud/Emulab. APT projects
         # may not delete profiles (yet).
-	$project = Project::Lookup($this->pid_idx());
+	$project = (new Project)->Lookup($this->pid_idx());
 	if (!$project) {
 	    return 0;
 	}
@@ -620,7 +620,7 @@ class Profile
         return 0;
     }
     function isLeader($user) {
-	$project = Project::Lookup($this->pid_idx());
+	$project = (new Project)->Lookup($this->pid_idx());
 	if (!$project) {
 	    return 0;
 	}
@@ -636,7 +636,7 @@ class Profile
         return 0;
     }
     function anonCreator() {
-        $creator = User::Lookup($this->creator_idx());
+        $creator = (new User)->Lookup($this->creator_idx());
         if (!$creator) {
             return "";
         }
@@ -893,7 +893,7 @@ class Profile
 
     function RecentExperiments($user)
     {
-        return Instance::RecentExperiments($user, $this);
+        return (new Instance)->RecentExperiments($user, $this);
     }
 
     function HasParamsets($user)
@@ -938,12 +938,12 @@ class Profile
         $global = array();
         
         while ($row = mysql_fetch_array($query_result)) {
-            $paramset = Paramset::Lookup($row["uuid"]);
+            $paramset = (new Paramset)->Lookup($row["uuid"]);
             if (!$paramset) {
                 continue;
             }
             if ($paramset->version_uuid()) {
-                $profile = Profile::Lookup($paramset->version_uuid());
+                $profile = (new Profile)->Lookup($paramset->version_uuid());
                 if (!$profile) {
                     continue;
                 }
@@ -974,7 +974,7 @@ class Profile
     function GitRepoCommand($user, $command, $args)
     {
         $reponame   = $this->reponame();
-        $webtask    = WebTask::CreateAnonymous();
+        $webtask    = (new WebTask)->CreateAnonymous();
         $webtask_id = $webtask->task_id();
         $command    = "webmanage_gitrepo -t $webtask_id $command ".
                     "-n $reponame $args";

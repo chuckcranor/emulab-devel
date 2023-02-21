@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,7 +70,7 @@ class WebTask {
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['task_id'];
 	
-	return WebTask::Lookup($idx);
+	return (new WebTask)->Lookup($idx);
     }
 
     #
@@ -79,7 +79,7 @@ class WebTask {
     # script.
     #
     function CreateAnonymous() {
-        $task_id = WebTask::GenerateID();
+        $task_id = (new WebTask)->GenerateID();
 
         $query_result = 
             DBQueryWarn("insert into web_tasks set task_id='$task_id', ".
@@ -88,13 +88,13 @@ class WebTask {
 	if (!$query_result) {
             return null;
         }
-        return WebTask::Lookup($task_id);
+        return (new WebTask)->Lookup($task_id);
     }
     #
     # And a normal webtask.
     #
     function Create($uuid) {
-        $task_id = WebTask::GenerateID();
+        $task_id = (new WebTask)->GenerateID();
 
         $query_result = 
             DBQueryWarn("insert into web_tasks set task_id='$task_id', ".
@@ -103,7 +103,7 @@ class WebTask {
 	if (!$query_result) {
             return null;
         }
-        return WebTask::Lookup($task_id);
+        return (new WebTask)->Lookup($task_id);
     }
 
     function Refresh() {

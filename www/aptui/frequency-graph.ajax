@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,7 +51,7 @@ function Do_GetFrequencyData()
         SPITAJAX_ERROR(-1, "Illegal characters in cluster");
         return 1;
     }
-    $aggregate = Aggregate::LookupByNickname($cluster);
+    $aggregate = (new Aggregate)->LookupByNickname($cluster);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster: $cluster");
         return 1;
@@ -128,7 +128,7 @@ function Do_GetListing()
         SPITAJAX_ERROR(-1, "Illegal characters in cluster");
         return 1;
     }
-    $aggregate = Aggregate::LookupByNickname($cluster);
+    $aggregate = (new Aggregate)->LookupByNickname($cluster);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster: $cluster");
         return 1;

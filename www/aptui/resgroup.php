@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -61,7 +61,7 @@ if ($edit) {
         SPITUSERERROR("Missing arguments for edit mode");
         exit();
     }
-    if (!($resgroup = ReservationGroup::Lookup($uuid))) {
+    if (!($resgroup = (new ReservationGroup)->Lookup($uuid))) {
         SPITUSERERROR("No such reservation group");
         exit();
     }
@@ -74,7 +74,7 @@ if ($edit) {
     }
 }
 if (isset($cluster)) {
-    $aggregate = Aggregate::LookupByNickname($cluster);
+    $aggregate = (new Aggregate)->LookupByNickname($cluster);
     if (!$aggregate) {
         SPITUSERERROR("No such cluster: $cluster");
         exit();
@@ -128,7 +128,7 @@ $mlist = array();
 $plist = array();
 while (list($p) = each($projlist)) {
     $plist[] = $p;
-    $ptmp = Project::LookupByPid($p);
+    $ptmp = (new Project)->LookupByPid($p);
     if ($ptmp) {
         if ($ptmp->expert_mode()) {
             $bisdaysonly = 0;
@@ -178,10 +178,10 @@ if (isset($aggregate)) {
     $ams = array($aggregate);
 }
 elseif (isset($debug) && $debug) {
-    $ams = array(Aggregate::ThisAggregate());
+    $ams = array((new Aggregate)->ThisAggregate());
 }
 else {
-    $ams = Aggregate::SupportsReservations($this_user);
+    $ams = (new Aggregate)->SupportsReservations($this_user);
 }
 if (!count($ams)) {
     SPITUSERERROR("No clusters support reservations.");
@@ -215,7 +215,7 @@ while (list($index, $aggregate) = each($ams)) {
     # on the Portal and the phases of the moon, but that is not what
     # we got. 
     #
-    $prunelist = Instance::NodeTypePruneList($aggregate);
+    $prunelist = (new Instance)->NodeTypePruneList($aggregate);
     
     $amlist[$urn] = array("urn"      => $urn,
                           "name"     => $am,
@@ -233,11 +233,11 @@ echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
 echo "</script>\n";
 if ($ISPOWDER) {
-    $radioinfo = Aggregate::RadioInfoNew();
+    $radioinfo = (new Aggregate)->RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
     echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
     echo "</script>\n";
-    $matrixinfo = Aggregate::MatrixInfo();
+    $matrixinfo = (new Aggregate)->MatrixInfo();
     echo "<script type='text/plain' id='matrixinfo-json'>\n";
     echo htmlentities(json_encode($matrixinfo, JSON_NUMERIC_CHECK));
     echo "</script>\n";

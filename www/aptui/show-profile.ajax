@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,7 +54,7 @@ function Do_GetProfile()
 	SPITAJAX_ERROR(1, "Not a valid profile target");
 	return;
     }
-    $profile = Profile::Lookup($target);
+    $profile = (new Profile)->Lookup($target);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "No such profile $target");
 	return;
@@ -105,7 +105,7 @@ function Do_GetProfile()
     if ($profile->isParameterized()) {
         $blob["paramdefs"] = json_decode($profile->paramdefs());
     }
-    $latest_profile = Profile::Lookup($profile->profile_uuid());
+    $latest_profile = (new Profile)->Lookup($profile->profile_uuid());
     $blob["latest_uuid"] = $latest_profile->uuid();
     $blob["latest_version"] = $latest_profile->version();
     if ($this_user && $profile->CanEdit($this_user)) {
@@ -130,7 +130,7 @@ function Do_GetParamsets()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
@@ -172,7 +172,7 @@ function Do_GetSource()
 	SPITAJAX_ERROR(1, "Missing profile");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Not a valid profile");
 	return;

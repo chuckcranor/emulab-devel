@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@ class Template
     var	$template;
     var $experiment;
     
-    function Template($guid, $vers) {
+    function __construct($guid = "", $vers = "") {
 	$guid = addslashes($guid);
 	$vers = addslashes($vers);
 	
@@ -50,7 +50,7 @@ class Template
 	$pid = $this->pid();
 	$eid = $this->eid();
 
-	if (($experiment = Experiment::LookupByPidEid($pid, $eid))) {
+	if (($experiment = (new Experiment)->LookupByPidEid($pid, $eid))) {
 	    $this->experiment = $experiment;
 	}
     }
@@ -186,7 +186,7 @@ class Template
 	    $pid = $self->pid();
 	    $eid = $self->eid();
 	    
-	    if (($experiment = Experiment::LookupByPidEid($pid, $eid))) {
+	    if (($experiment = (new Experiment)->LookupByPidEid($pid, $eid))) {
 		$this->experiment = $experiment;
 	    }
 	}
@@ -196,7 +196,7 @@ class Template
     function GetProject() {
 	$pid = $this->pid();
 
-	if (! ($project = Project::Lookup($pid))) {
+	if (! ($project = (new Project)->Lookup($pid))) {
 	    TBERROR("Could not lookup project $pid!", 1);
 	}
 	return $project;
@@ -206,7 +206,7 @@ class Template
 	$this->Refresh();
 	
 	if ($this->logfile()) 
-	    return Logfile::Lookup($this->logfile());
+	    return (new Logfile)->Lookup($this->logfile());
 	return null;
     }
 
@@ -275,7 +275,7 @@ class Template
 	$description = $this->description();
 	$path        = $this->path();
 
-	if (! ($user = User::Lookup($uid))) {
+	if (! ($user = (new User)->Lookup($uid))) {
 	    TBERROR("Could not lookup object for user $uid", 1);
 	}
 	$showuser_url = CreateURL("showuser", $user);
@@ -609,7 +609,7 @@ class Template
 	    $ignore    = $row['idle_ignore'];
 	    $name      = $row['expt_name'];
 
-	    if (! ($experiment = Experiment::LookupByPidEid($pid, $eid))) {
+	    if (! ($experiment = (new Experiment)->LookupByPidEid($pid, $eid))) {
 		TBERROR("Could not map $pid/$eid to its object", 1);
 	    }
 	    $idlehours = $experiment->IdleTime();
@@ -925,13 +925,13 @@ class Template
     # metadata. Returns a class instance (see below).
     #
     function LookupMetadataByGUID($metadata_guid, $metadata_vers) {
-	return TemplateMetadata::TemplateLookupByGUID($this,
+	return (new TemplateMetadata)->TemplateLookupByGUID($this,
 						      $metadata_guid,
 						      $metadata_vers);
     }
     # Ditto by name,
     function LookupMetadataByName($metadata_name) {
-	return TemplateMetadata::TemplateLookupByName($this, $metadata_name);
+	return (new TemplateMetadata)->TemplateLookupByName($this, $metadata_name);
     }
 
     # Grab the graph data.
@@ -1149,7 +1149,7 @@ class TemplateInstance
     #
     # Instances are found by their index. 
     #
-    function TemplateInstance($idx) {
+    function __construct($idx = "") {
 	$idx = addslashes($idx);
 
 	$query_result =
@@ -1168,7 +1168,7 @@ class TemplateInstance
 	$this->experiment = null;
 	
 	if ($this->instance['exptidx']) {
-	    $this->experiment = Experiment::Lookup($this->instance['exptidx']);
+	    $this->experiment = (new Experiment)->Lookup($this->instance['exptidx']);
 	}
     }
     
@@ -1273,12 +1273,12 @@ class TemplateInstance
 	    return $this->experiment;
 
 	if ($this->exptidx()) {
-	    $this->experiment = Experiment::Lookup($this->exptidx());
+	    $this->experiment = (new Experiment)->Lookup($this->exptidx());
 	}
 	return $this->experiment;
     }
     function GetLogfile() {
-	return Logfile::Lookup($this->logfileid());
+	return (new Logfile)->Lookup($this->logfileid());
     }
 
     #
@@ -1287,7 +1287,7 @@ class TemplateInstance
     function Project() {
 	$pid = $this->pid();
 
-	if (! ($project = Project::Lookup($pid))) {
+	if (! ($project = (new Project)->Lookup($pid))) {
 	    TBERROR("Could not lookup project $pid!", 1);
 	}
 	return $project;
@@ -1325,7 +1325,7 @@ class TemplateInstance
 	$desc_metaname = "__instance_description_$exptidx";
 	$desc_metadata = $template->LookupMetadataByName($desc_metaname);
 
-	if (! ($user = User::Lookup($uid))) {
+	if (! ($user = (new User)->Lookup($uid))) {
 	    TBERROR("Could not lookup object for user $uid", 1);
 	}
 	$showuser_url = CreateURL("showuser", $user);
@@ -2293,7 +2293,7 @@ class TemplateMetadata
     #
     # 
     #
-    function TemplateMetadata($guid, $vers) {
+    function __construct($guid = "", $vers = "") {
 	$guid = addslashes($guid);
 	$vers = addslashes($vers);
 

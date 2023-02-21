@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,7 +72,7 @@ function Do_CreateDataSet()
     if (!TBvalid_pid($formfields["dataset_pid"])) {
 	$errors["dataset_pid"] = $DBFieldErrstr;
     }
-    $project = Project::LookupByPid($formfields["dataset_pid"]);
+    $project = (new Project)->LookupByPid($formfields["dataset_pid"]);
     if (!$project) {
 	$errors["dataset_pid"] = "No such project";
     }
@@ -168,7 +168,7 @@ function Do_CreateDataSet()
             }
             if (!count($errors)) {
                 if ($embedded) {
-                    if ($node = Node::Lookup($nodeid)) {
+                    if ($node = (new Node)->Lookup($nodeid)) {
                         $reservation = $node->Reservation();
                         if (!$reservation ||
                             !$reservation->pid() == $pid) {
@@ -203,7 +203,7 @@ function Do_CreateDataSet()
                         $errors["dataset_instance"] = "Invalid instance uuid";
                     }
                     elseif ($instance =
-                            Instance::Lookup($formfields["dataset_instance"])){
+                            (new Instance)->Lookup($formfields["dataset_instance"])){
                         $options .= " -i " . $instance->uuid();
                     }
                     else {
@@ -241,7 +241,7 @@ function Do_CreateDataSet()
 				     $formfields["dataset_name"]);
 
     # Need a webtask for policy messages.
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     
     if ($embedded) {
         $wopt    = "-C -b -T " . $webtask->task_id();
@@ -267,16 +267,16 @@ function Do_CreateDataSet()
     }
     if ($embedded) {
         if ($formfields["dataset_type"] == "imdataset") {
-            $dataset = ImageDataset::LookupByName($project,
+            $dataset = (new ImageDataset)->LookupByName($project,
                                                   $formfields["dataset_name"]);
         }
         else {
-            $dataset = Lease::LookupByName($project,
+            $dataset = (new Lease)->LookupByName($project,
                                            $formfields["dataset_name"]);
         }
     }
     else {
-	$dataset = Dataset::LookupByName($project, $formfields["dataset_name"]);
+	$dataset = (new Dataset)->LookupByName($project, $formfields["dataset_name"]);
     }
     if (!$dataset) {
         $webtask->Delete();
@@ -336,11 +336,11 @@ function Do_ModifyDataSet()
     #
     # Either a local lease or a remote dataset. 
     #
-    $dataset = Lease::Lookup($dataset_uuid);
+    $dataset = (new Lease)->Lookup($dataset_uuid);
     if (!$dataset) {
-	$dataset = ImageDataset::Lookup($dataset_uuid);
+	$dataset = (new ImageDataset)->Lookup($dataset_uuid);
 	if (!$dataset) {
-            $dataset = Dataset::Lookup($dataset_uuid);
+            $dataset = (new Dataset)->Lookup($dataset_uuid);
         }
     }
     if (!$dataset) {
@@ -403,7 +403,7 @@ function Do_ModifyDataSet()
             }
             if (!count($errors)) {
                 if ($embedded || $dataset->islocal()) {
-                    if ($node = Node::Lookup($nodeid)) {
+                    if ($node = (new Node)->Lookup($nodeid)) {
                         $reservation = $node->Reservation();
                         if (!$reservation ||
                             $reservation->pid() != $dataset->pid()) {
@@ -435,7 +435,7 @@ function Do_ModifyDataSet()
                         $errors["dataset_instance"] = "Invalid instance uuid";
                     }
                     elseif ($instance =
-                            Instance::Lookup($formfields["dataset_instance"])){
+                            (new Instance)->Lookup($formfields["dataset_instance"])){
                         $instance_uuid = $instance->uuid();
                     }
                     else {
@@ -511,7 +511,7 @@ function Do_ModifyDataSet()
             }
         }
         elseif (!$dataset->islocal()) {
-            $webtask = WebTask::CreateAnonymous();
+            $webtask = (new WebTask)->CreateAnonymous();
             $command = $dataset->modifyCommand($webtask);
             $retval = SUEXEC($this_uid, $project,
                              "$command $opt $popt $leaseid",
@@ -553,7 +553,7 @@ function Do_ModifyDataSet()
             }
         }
         else {
-            $webtask = WebTask::CreateAnonymous();
+            $webtask = (new WebTask)->CreateAnonymous();
             $retval = SUEXEC($this_uid, $project,
                              "webmanage_dataset -t ". $webtask->task_id() .
                              " snapshot -i $instance_uuid ".
@@ -595,11 +595,11 @@ function Do_DeleteDataset()
     #
     # Either a local lease or a remote dataset. 
     #
-    $dataset = Lease::Lookup($ajax_args["uuid"]);
+    $dataset = (new Lease)->Lookup($ajax_args["uuid"]);
     if (!$dataset) {
-	$dataset = ImageDataset::Lookup($ajax_args["uuid"]);
+	$dataset = (new ImageDataset)->Lookup($ajax_args["uuid"]);
 	if (!$dataset) {
-            $dataset = Dataset::Lookup($ajax_args["uuid"]);
+            $dataset = (new Dataset)->Lookup($ajax_args["uuid"]);
             $islease = 0;
         }
     }
@@ -636,7 +636,7 @@ function Do_DeleteDataset()
         }
     }
     else {
-        $webtask = WebTask::CreateAnonymous();
+        $webtask = (new WebTask)->CreateAnonymous();
         $command = $dataset->deleteCommand($webtask);
         $retval = SUEXEC($this_uid, $project, $command,
                          SUEXEC_ACTION_IGNORE);
@@ -675,9 +675,9 @@ function Do_ApproveDataset()
     #
     # Either a local lease or a remote dataset. 
     #
-    $dataset = Lease::Lookup($dataset_uuid);
+    $dataset = (new Lease)->Lookup($dataset_uuid);
     if (!$dataset) {
-        $dataset = Dataset::Lookup($dataset_uuid);
+        $dataset = (new Dataset)->Lookup($dataset_uuid);
     }
     if (!$dataset) {
 	SPITAJAX_ERROR(1, "Unknown dataset");
@@ -708,7 +708,7 @@ function Do_ApproveDataset()
         }
     }
     else {
-        $webtask = WebTask::CreateAnonymous();
+        $webtask = (new WebTask)->CreateAnonymous();
     
         $retval = SUEXEC($this_uid, $dataset->Project(),
                          "webmanage_dataset -t ". $webtask->task_id() .
@@ -746,7 +746,7 @@ function Do_RefreshDataset()
 	return;
     }
     $uuid    = $ajax_args["uuid"];
-    $dataset = Dataset::Lookup($uuid);
+    $dataset = (new Dataset)->Lookup($uuid);
     if (!$dataset) {
 	SPITAJAX_ERROR(1, "Unknown dataset");
 	return;
@@ -760,7 +760,7 @@ function Do_RefreshDataset()
     #
     # Invoke backend.
     #
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
     
     $retval = SUEXEC($this_uid, $dataset->Project(),
 		     "webmanage_dataset -t ". $webtask->task_id() . 
@@ -800,9 +800,9 @@ function Do_ExtendDataset()
     #
     # Either a local lease or a remote dataset. 
     #
-    $dataset = Lease::Lookup($ajax_args["uuid"]);
+    $dataset = (new Lease)->Lookup($ajax_args["uuid"]);
     if (!$dataset) {
-	$dataset = Dataset::Lookup($ajax_args["uuid"]);
+	$dataset = (new Dataset)->Lookup($ajax_args["uuid"]);
 	$islease = 0;
     }
     if (!$dataset) {
@@ -839,7 +839,7 @@ function Do_ExtendDataset()
         }
     }
     else {
-        $webtask  = WebTask::CreateAnonymous();
+        $webtask  = (new WebTask)->CreateAnonymous();
         $retval = SUEXEC($this_uid, $dataset->Project(),
                          "webmanage_dataset -t ". $webtask->task_id() .
                          " extend ". $dataset->pid() . "/" . $dataset->id(),
@@ -879,9 +879,9 @@ function Do_GetInfo()
     #
     # Either a local lease or a remote dataset. 
     #
-    $dataset = Lease::Lookup($ajax_args["uuid"]);
+    $dataset = (new Lease)->Lookup($ajax_args["uuid"]);
     if (!$dataset) {
-	$dataset = Dataset::Lookup($ajax_args["uuid"]);
+	$dataset = (new Dataset)->Lookup($ajax_args["uuid"]);
 	$islease = 0;
     }
     if (!$dataset) {
@@ -955,12 +955,12 @@ function Do_GetInfo()
         if (isset($taskdata["instance"]) &&
             isset($taskdata["aggregate_urn"]) &&
             isset($taskdata["client_id"])) {
-            $instance = Instance::Lookup($taskdata["instance"]);
+            $instance = (new Instance)->Lookup($taskdata["instance"]);
             if (!$instance) {
                 SPITAJAX_ERROR(-1, "Instance is gone");
                 return;
             }
-            $sliver = InstanceSliver::Lookup($instance,
+            $sliver = (new InstanceSliver)->Lookup($instance,
                                              $taskdata["aggregate_urn"]);
             if (!$sliver) {
                 SPITAJAX_ERROR(-1, "Sliver is gone");

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2005-2014 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -66,7 +66,7 @@ function CHECKPAGEARGS($pid, $eid) {
     #
     # Check to make sure this is a valid PID/EID tuple.
     #
-    $experiment = Experiment::LookupByPidEid($pid, $eid);
+    $experiment = (new Experiment)->LookupByPidEid($pid, $eid);
     if (! $experiment) {
 	USERERROR("The experiment $pid/$eid is not a valid experiment!", 1);
     }

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,7 +72,7 @@ class Paramset
         if ($this->profile) {
             return $this->profile;
         }
-        $this->profile = Profile::Lookup($this->profileid());
+        $this->profile = (new Profile)->Lookup($this->profileid());
         return $this->profile;
     }
     # Project of paramset
@@ -84,7 +84,7 @@ class Paramset
         if (!$profile) {
             return null;
         }
-        $this->project = Project::Lookup($profile->pid_idx());
+        $this->project = (new Project)->Lookup($profile->pid_idx());
         return $this->project;
     }
     function IsBound() {
@@ -93,7 +93,7 @@ class Paramset
     # Bound version of the Profile.
     function BoundProfile() {
         if ($this->version_uuid()) {
-            return Profile::Lookup($this->version_uuid());
+            return (new Profile)->Lookup($this->version_uuid());
         }
         return null;
     }
@@ -175,10 +175,10 @@ class Paramset
     {
         if (!$profile) {
             if ($this->version_uuid()) {
-                $profile = Profile::Lookup($this->version_uuid());
+                $profile = (new Profile)->Lookup($this->version_uuid());
             }
             else {
-                $profile = Profile::Lookup($this->profileid());
+                $profile = (new Profile)->Lookup($this->profileid());
             }
             if (!$profile) {
                 return null;

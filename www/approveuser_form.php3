@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -148,7 +148,7 @@ echo "<tr>
 echo "<form action='approveuser.php3' method='post'>\n";
 
 while (list ($uid_idx, $grouplist) = each ($approvelist)) {
-  if (! ($user = User::Lookup($uid_idx))) {
+  if (! ($user = (new User)->Lookup($uid_idx))) {
     TBERROR("Could not lookup user $uid_idx", 1);
   }
 

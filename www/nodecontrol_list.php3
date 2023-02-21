@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -204,7 +204,7 @@ if (! strcmp($showtype, "summary")) {
 	    if ($bypid == "" || !TBvalid_pid($bypid)) {
 		PAGEARGERROR("Invalid characters in 'bypid' argument!");
 	    }
-	    if (! ($target_project = Project::Lookup($bypid))) {
+	    if (! ($target_project = (new Project)->Lookup($bypid))) {
 		PAGEARGERROR("No such project '$bypid'!");
 	    }
 	    if (!$target_project->AccessCheck($this_user,
@@ -601,7 +601,7 @@ while ($row = mysql_fetch_array($query_result)) {
    	          <td>--</td>\n";
 	}
 	if ($def_boot_osid &&
-	    ($osinfo = OSinfo::Lookup($def_boot_osid))) {
+	    ($osinfo = (new OSinfo)->Lookup($def_boot_osid))) {
 	    $osname = $osinfo->osname();
 	    echo "<td>$osname</td>\n";
 	}

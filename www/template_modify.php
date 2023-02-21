@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -268,7 +268,7 @@ if (preg_match("/^Template\s+(\w+)\/(\w+)\s+is being/",
     $guid = $matches[1];
     $vers = $matches[2];
 
-    $template = Template::Lookup($guid, $vers);
+    $template = (new Template)->Lookup($guid, $vers);
     if (! $template) {
 	TBERROR("Could not lookup template object for $guid/$vers", 1);
 	return;

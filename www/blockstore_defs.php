@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2014 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ class Blockstore
     #
     # Constructor by lookup on unique index.
     #
-    function Blockstore($bsidx) {
+    function __construct($bsidx = "") {
 	$safe_bsidx = addslashes($bsidx);
 
 	$query_result =
@@ -69,7 +69,7 @@ class Blockstore
 	}
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['bsidx'];
-	return Blockstore::Lookup($idx);
+	return (new Blockstore)->Lookup($idx);
     }
 
     # accessors

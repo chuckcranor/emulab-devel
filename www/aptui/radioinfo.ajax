@@ -45,7 +45,7 @@ function Do_EditTable()
             return;
 	}
     }
-    $aggregate = Aggregate::Lookup($ajax_args["aggregate"]);
+    $aggregate = (new Aggregate)->Lookup($ajax_args["aggregate"]);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "Bad aggregate: " . $ajax_args["aggregate"]);
         return;
@@ -55,7 +55,7 @@ function Do_EditTable()
     $iface   = $ajax_args["iface"];
     $field   = $ajax_args["field"];
 
-    $radioinfo = Aggregate::RadioInfoNew();
+    $radioinfo = (new Aggregate)->RadioInfoNew();
     if (!array_key_exists($urn, $radioinfo)) {
         SPITAJAX_ERROR(-1, "No radios at aggregate: " . $urn);
         return;

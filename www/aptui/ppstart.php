@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,14 +42,14 @@ $reqargs = RequiredPageArguments("uuid",        PAGEARG_UUID);
 $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 				 "formfields",  PAGEARG_ARRAY);
 
-$profile = Profile::Lookup($uuid);
+$profile = (new Profile)->Lookup($uuid);
 if (!$profile) {
     PAGEERROR("No such profile");
 }
 if (!$profile->CanInstantiate($this_user)) {
     PAGEERROR("Not enough permission to instantiate profile");
 }
-$am_array = Instance::DefaultAggregateList();
+$am_array = (new Instance)->DefaultAggregateList();
 
 #
 # Spit the form

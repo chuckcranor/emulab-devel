@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,7 +42,7 @@ class Experiment
     #
     # Constructor by lookup on unique index.
     #
-    function Experiment($exptidx) {
+    function __construct($exptidx = "") {
 	$safe_exptidx = addslashes($exptidx);
 
 	#
@@ -100,7 +100,7 @@ class Experiment
 	    $pid = array_shift($args);
 	    $eid = array_shift($args);
 
-	    $foo = Experiment::LookupByPidEid($pid, $eid);
+	    $foo = (new Experiment)->LookupByPidEid($pid, $eid);
 
 	    # Already in the cache from LookupByPidEid() so just return it.
 	    if ($foo && $foo->IsValid())
@@ -124,7 +124,7 @@ class Experiment
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['idx'];
 
-	return Experiment::Lookup($idx); 
+	return (new Experiment)->Lookup($idx); 
     }
     function LookupByUUID($uuid) {
 	$safe_uuid = addslashes($uuid);
@@ -139,7 +139,7 @@ class Experiment
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['idx'];
 
-	return Experiment::Lookup($idx); 
+	return (new Experiment)->Lookup($idx); 
     }
     
     #
@@ -265,7 +265,7 @@ class Experiment
 	if ($this->project)
 	    return $this->project;
 
-	$this->project = Project::Lookup($pid);
+	$this->project = (new Project)->Lookup($pid);
 	if (! $this->project) {
 	    TBERROR("Could not lookup project $pid!", 1);
 	}
@@ -281,7 +281,7 @@ class Experiment
 	if ($this->group)
 	    return $this->group;
 
-	$this->group = Group::LookupByPidGid($pid, $gid);
+	$this->group = (new Group)->LookupByPidGid($pid, $gid);
 	if (! $this->group) {
 	    TBERROR("Could not lookup group $pid/$gid!", 1);
 	}
@@ -292,17 +292,17 @@ class Experiment
     # Get the creator for a project.
     #
     function GetCreator() {
-	return User::Lookup($this->creator());
+	return (new User)->Lookup($this->creator());
     }
     function GetSwapper() {
-	return User::Lookup($this->swapper());
+	return (new User)->Lookup($this->swapper());
     }
     function GetStats() {
-	return ExperimentStats::Lookup($this->idx());
+	return (new ExperimentStats)->Lookup($this->idx());
     }
     function GetResources() {
 	$stats = $this->GetStats();
-	return ExperimentResources::Lookup($stats->rsrcidx());
+	return (new ExperimentResources)->Lookup($stats->rsrcidx());
     }
 
     # accessors
@@ -465,7 +465,7 @@ class Experiment
 	$this->Refresh();
 	
 	if ($this->logfile()) 
-	    return Logfile::Lookup($this->logfile());
+	    return (new Logfile)->Lookup($this->logfile());
 	return null;
     }
 
@@ -787,11 +787,11 @@ class Experiment
 	$autoswap_str= $autoswap_hrs." hour".($autoswap_hrs==1 ? "" : "s");
 	$idleswap_str= $idleswap_hrs." hour".($idleswap_hrs==1 ? "":"s");
 
-	if (! ($head_user = User::Lookup($exp_head))) {
+	if (! ($head_user = (new User)->Lookup($exp_head))) {
 	    TBERROR("Error getting object for user $exp_head", 1);
 	}
 	$showuser_url = CreateURL("showuser", $head_user);
-	if (! ($swapper = User::Lookup($exp_swapper))) {
+	if (! ($swapper = (new User)->Lookup($exp_swapper))) {
 	    TBERROR("Error getting object for user $exp_swapper", 1);
 	}
 	$swapper_uid = $swapper->uid();
@@ -897,7 +897,7 @@ class Experiment
 	}
 
 	if (!$short) {
-	    $instance = TemplateInstance::LookupByExptidx($exptidx);
+	    $instance = (new TemplateInstance)->LookupByExptidx($exptidx);
 
 	    if (! is_null($instance)) {
 		$guid   = $instance->guid();
@@ -1180,7 +1180,7 @@ class Experiment
 	}
 	if (!$short) {
 	    if ($this->geniflags()) {
-		$slice = GeniSlice::Lookup("geni-cm", $uuid);
+		$slice = (new GeniSlice)->Lookup("geni-cm", $uuid);
 
 		if ($slice) {
 		    $slice_hrn = $slice->hrn();
@@ -1204,7 +1204,7 @@ class Experiment
 		}
 	    }
 	    else {
-		$slice = GeniSlice::LookupByExperiment("geni-sa", $this);
+		$slice = (new GeniSlice)->LookupByExperiment("geni-sa", $this);
 		if ($slice) {
 		    $slice_hrn = $slice->hrn();
 		    $slice_urn = $slice->urn();
@@ -1224,7 +1224,7 @@ class Experiment
                                 <td class=\"left\">$slice_urn</td>
                               </tr>\n";
 		    }
-		    $slice = GeniSlice::Lookup("geni-cm", $slice_hrn);
+		    $slice = (new GeniSlice)->Lookup("geni-cm", $slice_hrn);
 		    if ($slice) {
 			if (ISADMIN()) {
 			    $url = CreateURL("showslice", "slice_idx",
@@ -1309,7 +1309,7 @@ class ExperimentStats
     #
     # Constructor by lookup on unique index.
     #
-    function ExperimentStats($exptidx) {
+    function __construct($exptidx = "") {
 	$safe_exptidx = addslashes($exptidx);
 
 	$query_result =
@@ -1376,7 +1376,7 @@ class ExperimentStats
     function swapin_last()  { return $this->field('swapin_last'); }
 
     function Project() {
-	return Project::Lookup($this->pid_idx());
+	return (new Project)->Lookup($this->pid_idx());
     }
 
     #
@@ -1399,7 +1399,7 @@ class ExperimentStats
 	global $TBDB_TRUST_USER;
 	$pid_idx = $this->pid_idx();
 	
-	if (! ($project = Project::Lookup($pid_idx))) {
+	if (! ($project = (new Project)->Lookup($pid_idx))) {
 	    TBERROR("ExperimentStats::AccessCheck: ".
 		    "Cannot map project $pid_idx to its object", 1);
 	}
@@ -1414,7 +1414,7 @@ class ExperimentResources
     #
     # Constructor by lookup on unique index for current resources
     #
-    function ExperimentResources($rsrcidx) {
+    function __construct($rsrcidx = "") {
 	$safe_rsrcidx = addslashes($rsrcidx);
 
 	$query_result =
@@ -1456,7 +1456,7 @@ class ExperimentResources
     function swapin_time()    { return $this->field('swapin_time'); }
 
     function GetStats() {
-	return ExperimentStats::Lookup($this->exptidx());
+	return (new ExperimentStats)->Lookup($this->exptidx());
     }
 
     #
@@ -1616,7 +1616,7 @@ function ShowExperimentList_internal($templates_only,
 	    $ignore = $row["idle_ignore"];
 	    $name = $row["expt_name"];
 
-	    if (! ($experiment = Experiment::LookupByPidEid($pid, $eid))) {
+	    if (! ($experiment = (new Experiment)->LookupByPidEid($pid, $eid))) {
 		TBERROR("Could not map $pid/$eid to its object", 1);
 	    }
             #

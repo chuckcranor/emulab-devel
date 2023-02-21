@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,7 +38,7 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 
 if (!$isadmin) {
     $approved = 0;
-    $project = Project::Lookup("PowderStop");
+    $project = (new Project)->Lookup("PowderStop");
     
     if (!$project ||
         !$project->IsMember($this_user, $approved) || !$approved) {

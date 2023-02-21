@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -240,7 +240,7 @@ $group_id = $formfields["group_id"];
 echo "<br>Creating project group $group_id.<br>\n";
 flush();
 
-if (! ($newgroup = Group::Create($project, $uid, $args, $errors))) {
+if (! ($newgroup = (new Group)->Create($project, $uid, $args, $errors))) {
     # Always respit the form so that the form fields are not lost.
     # I just hate it when that happens so lets not be guilty of it ourselves.
     SPITFORM($formfields, $errors);

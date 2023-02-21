@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,7 +54,7 @@ function CheckPageArgs()
 	SPITAJAX_ERROR(-1, "Invalid target uid");
         return -1;
     }
-    $target_user = User::LookupByUid($uid);
+    $target_user = (new User)->LookupByUid($uid);
     if (!$target_user) {
 	SPITAJAX_ERROR(-1, "Unknown target uid");
         return -1;
@@ -103,7 +103,7 @@ function CheckForm()
         $errors["email"] = TBFieldErrorString();
     }
     else {
-        $tmp = User::LookupByEmail($formfields["email"]);
+        $tmp = (new User)->LookupByEmail($formfields["email"]);
         #
         # Treat this error separate. Not allowed.
         #
@@ -294,7 +294,7 @@ function Do_Update()
         }
     }
     if (count($args) &&
-        !User::ModUserInfo($target_user,
+        !(new User)->ModUserInfo($target_user,
                            $target_user->uid(), $args, $errors)) {
 	SPITAJAX_ERROR(2, $errors);
         return;

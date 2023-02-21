@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -117,12 +117,12 @@ if ($ISCLOUD) {
         }
         
         # Need to map creator/project to local.
-        list ($auth,$type,$id) = Instance::ParseURN($row["creator_urn"]);
+        list ($auth,$type,$id) = (new Instance)->ParseURN($row["creator_urn"]);
         if ($auth == $domain) {
-            $user = User::LookupByUid($id);
+            $user = (new User)->LookupByUid($id);
         }
         else {
-            $user = User::LookupNonLocal($row["creator_urn"]);
+            $user = (new User)->LookupNonLocal($row["creator_urn"]);
         }
         if ($user) {
             $creator     = $user->uid();
@@ -132,10 +132,10 @@ if ($ISCLOUD) {
             $creator     = $id;
             $creator_idx = 0;
         }
-        list ($auth,$type,$id) = Instance::ParseURN($row["project_urn"]);
+        list ($auth,$type,$id) = (new Instance)->ParseURN($row["project_urn"]);
         # project urn is in domain:project format.
         if (preg_match("/^([^:]+)\:([^:]+)$/", $auth, $matches)) {
-            $project = Project::LookupByPid($matches[2]);
+            $project = (new Project)->LookupByPid($matches[2]);
             if ($project) {
                 $pid     = $project->pid();
                 $pid_idx = $project->pid_idx();
@@ -147,7 +147,7 @@ if ($ISCLOUD) {
         #
         # Lets try to get a url.
         #
-        list ($imagedomain,$type,$id) = Instance::ParseURN($row["urn"]);
+        list ($imagedomain,$type,$id) = (new Instance)->ParseURN($row["urn"]);
         if ($imagedomain == $domain) {
             $url = "$APTBASE/show-image.php?imageid=" . $row["image_uuid"];
         }
@@ -156,7 +156,7 @@ if ($ISCLOUD) {
                 $aggregate = $aggregates[$imagedomain];
             }
             else {
-                $aggregate = Aggregate::LookupByDomain($imagedomain);
+                $aggregate = (new Aggregate)->LookupByDomain($imagedomain);
                 if ($aggregate) {
                     $aggregates[$imagedomain] = $aggregate;
                 }

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,7 +35,7 @@ $this_user = CheckLogin($check_status);
 #
 $reqargs = RequiredPageArguments("publicid",  PAGEARG_STRING);
 
-$slice = GeniSlice::LookupByPublicID("cm", $publicid);
+$slice = (new GeniSlice)->LookupByPublicID("cm", $publicid);
 if (!$slice) {
     USERERROR("No such slice $publicid", 1);
 }
@@ -90,12 +90,12 @@ if (($manifest = $slice->GetManifest())) {
     $manifestidx++;
 }
 
-$geniuser = GeniUser::Lookup("cm", $slice->creator_uuid());
+$geniuser = (new GeniUser)->Lookup("cm", $slice->creator_uuid());
 if ($geniuser) {
     $rows[] = array("Creator" => $geniuser->urn());
 }
 else {
-    $user = User::LookupByUUID($slice->creator_uuid());
+    $user = (new User)->LookupByUUID($slice->creator_uuid());
     if ($user) {
 	$rows[] = array("Creator" => $user->uid());
     }

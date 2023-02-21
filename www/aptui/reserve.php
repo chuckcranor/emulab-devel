@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -62,7 +62,7 @@ if ($edit) {
     # users no longer get access to this interface.
     #
     if (!$force) {
-        $resgroup = ReservationGroup::LookupByMemberReservation($uuid);
+        $resgroup = (new ReservationGroup)->LookupByMemberReservation($uuid);
         if ($resgroup) {
             header("Location: resgroup.php?edit=1&uuid=" . $resgroup->uuid());
             exit();
@@ -74,7 +74,7 @@ if (!$force || !($isadmin || $this_user->admin() || $this_user->stud())) {
     exit();
 }
 if (isset($cluster)) {
-    $aggregate = Aggregate::LookupByNickname($cluster);
+    $aggregate = (new Aggregate)->LookupByNickname($cluster);
     if (!$aggregate) {
         SPITUSERERROR("No such cluster: $cluster");
         exit();
@@ -121,10 +121,10 @@ if ($edit || isset($aggregate)) {
     $ams = array($aggregate);
 }
 elseif (isset($debug) && $debug) {
-    $ams = array(Aggregate::ThisAggregate());
+    $ams = array((new Aggregate)->ThisAggregate());
 }
 else {
-    $ams = Aggregate::SupportsReservations($this_user);
+    $ams = (new Aggregate)->SupportsReservations($this_user);
 }
 if (!count($ams)) {
     SPITUSERERROR("No clusters support reservations.");

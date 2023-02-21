@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -275,7 +275,7 @@ if (!isset($formfields["pid"]) ||
 elseif (!TBvalid_pid($formfields["pid"])) {
     $errors["Project"] = "Invalid project name";
 }
-elseif (! ($project = Project::Lookup($formfields["pid"]))) {
+elseif (! ($project = (new Project)->Lookup($formfields["pid"]))) {
     $errors["Project"] = "Invalid project name";
 }
 elseif (! $project->AccessCheck($this_user, $TB_PROJECT_READINFO)) {

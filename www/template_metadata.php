@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012, 2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -212,7 +212,7 @@ if (!isset($submit)) {
         # Verify Permission. Need permission for the template, any version.
         #
 	if (! isset($template)) {
-	    $template = Template::Lookup($metadata->template_guid(), 1);
+	    $template = (new Template)->Lookup($metadata->template_guid(), 1);
 	}
 
 	if (!$template ||

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -443,7 +443,7 @@ function PUTSEARCHBOX($newsBase) {
 
 function WRITELOGINBOX($loginbox_content) {
     global $TBBASE, $TBDOCBASE, $BASEPATH;
-    global $login_status;
+    global $login_status, $login_user;
 
     #
     # Cons up a nice message.
@@ -871,7 +871,7 @@ function WRITESIDEBAR() {
 			  "$TBBASE/" . CreateURL("mychat", $login_user));
 	}
 	if ($TBMAINSITE && $TRACSUPPORT) {
-	    $geniproject = Project::Lookup("geni");
+	    $geniproject = (new Project)->Lookup("geni");
 	    $approved    = 0;
 	    
 	    if ($geniproject &&

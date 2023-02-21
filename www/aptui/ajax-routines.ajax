@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,7 +77,7 @@ function ClassicExperimentList($which, $target, $state = "active")
 
     while ($row = mysql_fetch_array($query_result)) {
         $idx = $row["idx"];
-        $experiment = Experiment::Lookup($idx);
+        $experiment = (new Experiment)->Lookup($idx);
         $resources  = $experiment->GetResources();
         $stats      = $experiment->GetStats();
 
@@ -219,7 +219,7 @@ function ExperimentList($which, $target)
         }
         $blob["status"] = $status;
         
-        $profile = Profile::Lookup($profile_id, $version);
+        $profile = (new Profile)->Lookup($profile_id, $version);
         if ($profile) {
             $blob["profile_name"] = $profile->name();
             $blob["profile_uuid"] = $profile->uuid();
@@ -323,7 +323,7 @@ function ProfileListAux($query_result)
         $privacy = ($public ? "Public" : "Project");
         $desc    = "";
 
-        $profile = Profile::Lookup($idx);
+        $profile = (new Profile)->Lookup($idx);
         if (!$profile) {
             continue;
         }
@@ -492,10 +492,10 @@ function ClassicDatasetList($which, $target)
         $type    = $row["type"];
 
         if ($type == "image") {
-            $dataset = ImageDataset::Lookup($uuid);
+            $dataset = (new ImageDataset)->Lookup($uuid);
         }
         elseif ($type == "lease") {
-            $dataset = Lease::Lookup($uuid);
+            $dataset = (new Lease)->Lookup($uuid);
         }     
 
         $blob = array();

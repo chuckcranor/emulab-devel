@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -625,7 +625,7 @@ if (! $returning) {
 	elseif (!TBvalid_uid($formfields["joining_uid"])) {
 	    $errors["UserName"] = TBFieldErrorString();
 	}
-	elseif (User::Lookup($formfields["joining_uid"]) ||
+	elseif ((new User)->Lookup($formfields["joining_uid"]) ||
 		posix_getpwnam($formfields["joining_uid"])) {
 	    $errors["UserName"] = "Already in use. Pick another";
 	}
@@ -651,7 +651,7 @@ if (! $returning) {
 	elseif (! TBvalid_wikiname($formfields["wikiname"])) {
 	    $errors["WikiName"] = TBFieldErrorString();
 	}
-	elseif (User::LookupByWikiName($formfields["wikiname"])) {
+	elseif ((new User)->LookupByWikiName($formfields["wikiname"])) {
 	    $errors["WikiName"] = "Already in use. Pick another";
 	}
     }
@@ -690,7 +690,7 @@ if (! $returning) {
             preg_match("/gavilan\.edu$/", $formfields["usr_email"])) {
         $errors["Email Address"] = "Not permitted";
     }
-    elseif (User::LookupByEmail($formfields["usr_email"])) {
+    elseif ((new User)->LookupByEmail($formfields["usr_email"])) {
 	$errors["Email Address"] =
 	    "Already in use. <b>Did you forget to login?</b>";
     }
@@ -823,10 +823,10 @@ if (!$forwikionly) {
 	    $gid = $pid;
 	}
 
-	if (!TBvalid_pid($pid) || !Project::Lookup($pid)) {
+	if (!TBvalid_pid($pid) || !(new Project)->Lookup($pid)) {
 	    $errors["Project Name"] = "Invalid Project Name";
 	}
-	elseif (!TBvalid_gid($gid) || !Group::LookupByPidGid($pid, $gid)) {
+	elseif (!TBvalid_gid($gid) || !(new Group)->LookupByPidGid($pid, $gid)) {
 	    $errors["Group Name"] = "Invalid Group Name";
 	}
     }
@@ -879,10 +879,10 @@ if ($nopidconfirm) {
 # Need the user, project and group objects for the rest of this.
 #
 if (!$forwikionly && isset($pid)) {
-    if (! ($project = Project::Lookup($pid))) {
+    if (! ($project = (new Project)->Lookup($pid))) {
 	TBERROR("Could not lookup object for $pid!", 1);
     }
-    if (! ($group = Group::LookupByPidGid($pid, $gid))) {
+    if (! ($group = (new Group)->LookupByPidGid($pid, $gid))) {
 	TBERROR("Could not lookup object for $pid/$gid!", 1);
     }
     if ($returning) {
@@ -963,7 +963,7 @@ if (! $returning) {
 	isset($formfields["passphrase1"]) && $formfields["passphrase1"] != "") {
 	$args["passphrase"] = $formfields["passphrase1"];
     }
-    if (! ($user = User::NewNewUser(($forwikionly ?
+    if (! ($user = (new User)->NewNewUser(($forwikionly ?
 				     TBDB_NEWACCOUNT_WIKIONLY : 0),
 				    $args,
 				    $error)) != 0) {

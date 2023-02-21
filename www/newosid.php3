@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,7 +50,7 @@ if (! count($projlist)) {
 	      "you have permission to create new OS Descriptors!", 1);
 }
 $projselection = array();
-while (list($project) = each($projlist)) {
+foreach ($projlist as $project => $group) {
     $projselection[$project] = $project;
 }
 
@@ -316,7 +316,7 @@ if (!isset($formfields["pid"]) ||
 elseif (!TBvalid_pid($formfields["pid"])) {
     $errors["Project"] = "Invalid project name";
 }
-elseif (!($project = Project::Lookup($formfields["pid"]))) {
+elseif (!($project = (new Project)->Lookup($formfields["pid"]))) {
     $errors["Project"] = "Invalid project name";
 }
 elseif (!$project->AccessCheck($this_user, $TB_PROJECT_MAKEOSID)) {
@@ -367,7 +367,7 @@ while (list ($feature, $userokay) = each($osid_featurelist)) {
 }
 $args["features"] = join(",", $os_features_array);
 
-if (! ($osinfo = OSinfo::NewOSID($this_user, $project,
+if (! ($osinfo = (new OSinfo)->NewOSID($this_user, $project,
 				 $formfields["osname"], $args, $errors))) {
     # Always respit the form so that the form fields are not lost.
     # I just hate it when that happens so lets not be guilty of it ourselves.

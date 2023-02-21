@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,7 +69,7 @@ elseif (isset($template)) {
     echo $template->PageHeader();
 }
 elseif (isset($index)) {
-    $experiment = Experiment::Lookup($index);
+    $experiment = (new Experiment)->Lookup($index);
     $urlarg     = "index";
     $urlval     = $index;
     echo $experiment->PageHeader();
@@ -99,7 +99,7 @@ if (isset($experiment) && $experiment) {
     }
 }
 elseif (isset($index)) {
-    $stats = ExperimentStats::Lookup($index);
+    $stats = (new ExperimentStats)->Lookup($index);
     if (!$stats) {
 	PAGEARGERROR("Invalid experiment index: $index");
     }

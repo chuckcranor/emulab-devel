@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,13 +43,13 @@ if (!isset($profile)) {
     SPITERROR(400, "Must provide profile!");
 }
 if (IsValidUUID($profile)) {
-    $profile = Profile::Lookup($profile);
+    $profile = (new Profile)->Lookup($profile);
 }
 elseif (isset($project)) {
     if (!isset($version)) {
         $version = null;
     }
-    $profile = Profile::LookupByName($project, $profile, $version);
+    $profile = (new Profile)->LookupByName($project, $profile, $version);
 }
 else {
     SPITERROR(401, "Must provide a project and profile name");

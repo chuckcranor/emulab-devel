@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,7 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 SPITHEADER(1);
 
 # List of clusters so we have info in the page
-$ams     = Aggregate::SupportsReservations();
+$ams     = (new Aggregate)->SupportsReservations();
 $amlist  = array();
 while (list($index, $aggregate) = each($ams)) {
     $amlist[$aggregate->nickname()] = $aggregate->urn();

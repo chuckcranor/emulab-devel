@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,7 @@ class Image
     #
     # Constructor by lookup on unique ID
     #
-    function Image($id, $version = NULL) {
+    function __construct($id = ":", $version = NULL) {
 	if (is_null($version)) {
 	    list($id,$version) = preg_split('/:/', $id);
 	}
@@ -106,7 +106,7 @@ class Image
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return Image::Lookup($row["imageid"]);
+	return (new Image)->Lookup($row["imageid"]);
     }
 
     # Look for most recent unreleased version.
@@ -129,7 +129,7 @@ class Image
 	    return $this;
 	}
 	$row = mysql_fetch_array($query_result);
-	return Image::Lookup($imageid, $row["version"]);
+	return (new Image)->Lookup($imageid, $row["version"]);
     }
 
     # Lookup next higher version of the image.
@@ -151,7 +151,7 @@ class Image
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return Image::Lookup($imageid, $row["version"]);
+	return (new Image)->Lookup($imageid, $row["version"]);
     }
 
     function LookupByUUID($uuid, $version = NULL) {
@@ -173,7 +173,7 @@ class Image
 		# Must have the version specific UUID.
 		#
 		$row = mysql_fetch_array($query_result);
-		return Image::Lookup($row["imageid"], $version);
+		return (new Image)->Lookup($row["imageid"], $version);
 	    }
 	}
 	else {
@@ -186,7 +186,7 @@ class Image
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return Image::Lookup($row["imageid"], $row["version"]);
+	return (new Image)->Lookup($row["imageid"], $row["version"]);
     }
     
     #
@@ -307,7 +307,7 @@ class Image
 	    return null;
 	}
 	$image = $matches[2];
-	$newimage = image::Lookup($image);
+	$newimage = (new image)->Lookup($image);
 	if (! $newimage) {
 	    $errors[] = "Transient error(6); please try again later.";
 	    TBERROR("Could not lookup new image $image", 0);
@@ -684,7 +684,7 @@ class Image
 	if ($this->project)
 	    return $this->project;
 
-	$this->project = Project::Lookup($pid_idx);
+	$this->project = (new Project)->Lookup($pid_idx);
 	if (! $this->project) {
 	    TBERROR("Could not lookup project $pid_idx!", 1);
 	}
@@ -699,7 +699,7 @@ class Image
 	if ($this->group)
 	    return $this->group;
 
-	$this->group = Group::Lookup($gid_idx);
+	$this->group = (new Group)->Lookup($gid_idx);
 	if (! $this->group) {
 	    TBERROR("Could not lookup group $gid_idx!", 1);
 	}
@@ -985,7 +985,7 @@ class Image
 	if ($this->parent_imageid()) {
 	    $p_imageid   = $this->parent_imageid();
 	    $p_version   = $this->parent_version();
-	    $p_image     = Image::Lookup($p_imageid, $p_version);
+	    $p_image     = (new Image)->Lookup($p_imageid, $p_version);
 	    # On an elabinelab we will not have the previous version.
 	    # if it came in at creation time.
 	    if ($p_image) {
@@ -1054,7 +1054,7 @@ class Image
 	    $doesxen = 0;
 	    $osinfo = $this->OSinfo();
 	    if ($osinfo && $osinfo->def_parentosid()) {
-		$parentosinfo = OSinfo::Lookup($osinfo->def_parentosid());
+		$parentosinfo = (new OSinfo)->Lookup($osinfo->def_parentosid());
 		if ($parentosinfo &&
 		    $parentosinfo->FeatureSupported("xen-host")) {
 		    $doesxen = 1;
@@ -1155,7 +1155,7 @@ class Image
 		    }
 
 		    if ($perm_type == "user") {
-			$user = User::Lookup($perm_idx);
+			$user = (new User)->Lookup($perm_idx);
 			if (isset($user)) {
 			    $uid = $user->uid();
 			    echo "<tr>
@@ -1165,7 +1165,7 @@ class Image
 			}
 		    }
 		    elseif ($perm_type == "group") {
-			$group = Group::Lookup($perm_idx);
+			$group = (new Group)->Lookup($perm_idx);
 			if (isset($group)) {
 			    $pid = $group->pid();
 			    $gid = $group->gid();
@@ -1239,7 +1239,7 @@ class Image
                              "   FIND_IN_SET(nt.architecture,i.architecture) ".
                              "where i.imageid='$imageid'");
 
-            $osinfo = OSinfo::Lookup($imageid, $version);
+            $osinfo = (new OSinfo)->Lookup($imageid, $version);
             if ($osinfo && $osinfo->def_parentosid()) {
                 $result[] = "pcvm";
             }
@@ -1260,7 +1260,7 @@ class Image
 	$this->Refresh();
 	
 	if ($this->logfileid()) 
-	    return Logfile::Lookup($this->logfileid());
+	    return (new Logfile)->Lookup($this->logfileid());
 	return null;
     }
 
@@ -1276,7 +1276,7 @@ class Image
                 $xenname = "emulab-ops,XEN43-64-STD";
             }
 	    list($pid,$osname) = preg_split('/,/', $xenname);
-	    $parentosinfo = OSinfo::LookupByName($pid,$osname);
+	    $parentosinfo = (new OSinfo)->LookupByName($pid,$osname);
 	    if (!$parentosinfo) {
                 return -1;
 	    }
@@ -1319,7 +1319,7 @@ class Image
 	return $html;
     }
     function OSinfo() {
-	return OSinfo::Lookup($this->imageid(), $this->version());
+	return (new OSinfo)->Lookup($this->imageid(), $this->version());
     }
 
     function URL() {

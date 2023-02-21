@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,7 +44,7 @@ $optargs = OptionalPageArguments("submit",     PAGEARG_STRING,
 # Need these below.
 $imageid = $image->imageid();
 if ($image->ezid()) {
-    $osinfo = OSinfo::Lookup($imageid);
+    $osinfo = (new OSinfo)->Lookup($imageid);
 }
 
 #
@@ -576,7 +576,7 @@ if (count($errors)) {
 }
 
 # Send to the backend for more checking, and eventually, to update the DB.
-if (! ($result = Image::EditImageid($image,
+if (! ($result = (new Image)->EditImageid($image,
 				 $args, $errors))) {
     # Always respit the form so that the form fields are not lost.
     # I just hate it when that happens so lets not be guilty of it ourselves.
@@ -592,7 +592,7 @@ if ($isadmin && $doespcvm && $image->ezid() &&
     isset($formfields["def_parentosid"]) &&
     $formfields["def_parentosid"] != "" &&
     TBvalid_osid($formfields["def_parentosid"]) &&
-    OSinfo::Lookup($formfields["def_parentosid"])) {
+    (new OSinfo)->Lookup($formfields["def_parentosid"])) {
     $osinfo->SetParent($formfields["def_parentosid"]);
 }
 

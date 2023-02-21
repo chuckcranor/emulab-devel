@@ -93,10 +93,10 @@ class Instance
 	    return;
 	}
 	$this->instance  = mysql_fetch_array($query_result);
-        $this->slivers   = InstanceSliver::LookupForInstance($this);
+        $this->slivers   = (new InstanceSliver)->LookupForInstance($this);
         if (!count($this->slivers) && $this->aggregate_urn()) {
             $this->slivers =
-                array(InstanceSliver::Lookup($this, $this->aggregate_urn()));
+		array((new InstanceSliver)->Lookup($this, $this->aggregate_urn()));
         }
     }
     # accessors
@@ -174,11 +174,11 @@ class Instance
     # with the object, use that. Otherwise create a new one.
     function WebTask() {
         if ($this->webtask_id()) {
-            return WebTask::Lookup($this->webtask_id());
+            return (new WebTask)->Lookup($this->webtask_id());
         }
-        $webtask = WebTask::LookupByObject($this->uuid());
+        $webtask = (new WebTask)->LookupByObject($this->uuid());
         if (!$webtask) {
-            $webtask = WebTask::CreateAnonymous();
+            $webtask = (new WebTask)->CreateAnonymous();
             if (!$webtask) {
                 return null;
             }
@@ -235,7 +235,7 @@ class Instance
 	}
 	$row = mysql_fetch_row($query_result);
 	$uuid = $row[0];
- 	return Instance::Lookup($uuid);
+ 	return (new Instance)->Lookup($uuid);
     }
 
     function LookupBySlice($token) {
@@ -250,7 +250,7 @@ class Instance
 	}
 	$row = mysql_fetch_row($query_result);
 	$uuid = $row[0];
- 	return Instance::Lookup($uuid);
+ 	return (new Instance)->Lookup($uuid);
     }
 
     function LookupByName($project, $token) {
@@ -266,7 +266,7 @@ class Instance
 	}
 	$row = mysql_fetch_row($query_result);
 	$uuid = $row[0];
- 	return Instance::Lookup($uuid);
+ 	return (new Instance)->Lookup($uuid);
     }
 
     #
@@ -291,15 +291,15 @@ class Instance
 
     # Project of instance.
     function Project() {
-        return Project::Lookup($this->pid_idx());
+        return (new Project)->Lookup($this->pid_idx());
     }
     # Group of instance.
     function Group() {
-        return Group::Lookup($this->gid_idx());
+        return (new Group)->Lookup($this->gid_idx());
     }
     # Profile version that was instantiated.
     function Profile() {
-        return Profile::Lookup($this->profile_id(), $this->profile_version());
+        return (new Profile)->Lookup($this->profile_id(), $this->profile_version());
     }
     
     #
@@ -385,7 +385,7 @@ class Instance
             # Error in the webtask for the caller.
             return null;
 	}
-	$instance = Instance::Lookup($uuid);
+	$instance = (new Instance)->Lookup($uuid);
 	if (!$instance) {
 	    TBERROR("Could not lookup instance after create: $uuid", 0);
             $webtask->output("Internal error creating experiment");
@@ -463,7 +463,7 @@ class Instance
     # Return aggregate based on the current user.
     #
     function DefaultAggregateList($user = null) {
-        return Aggregate::DefaultAggregateList($user);
+        return (new Aggregate)->DefaultAggregateList($user);
     }
 
     # helper
@@ -530,7 +530,7 @@ class Instance
 	    return 1;
 	}
 	# Otherwise a project membership test.
-	$project = Project::Lookup($this->pid_idx());
+	$project = (new Project)->Lookup($this->pid_idx());
 	if (!$project) {
 	    return 0;
 	}
@@ -553,7 +553,7 @@ class Instance
 	    return 1;
 	}
 	# Otherwise a project membership test.
-	$project = Project::Lookup($this->pid_idx());
+	$project = (new Project)->Lookup($this->pid_idx());
 	if (!$project) {
 	    return 0;
 	}
@@ -578,7 +578,7 @@ class Instance
         }
         
         # Otherwise a project membership test.
-        $project = Project::Lookup($this->pid_idx());
+        $project = (new Project)->Lookup($this->pid_idx());
         if (!$project) {
             return 0;
         }
@@ -598,7 +598,7 @@ class Instance
             return 0;
         }
         # For the tutorial project, just needs to be a member of the project.
-	$project = Project::Lookup($this->pid_idx());
+	$project = (new Project)->Lookup($this->pid_idx());
 	if (!$project) {
 	    return 0;
 	}
@@ -1057,10 +1057,10 @@ class InstanceHistory
 	    return;
 	}
 	$this->record  = mysql_fetch_array($query_result);
-        $this->slivers = InstanceSliver::LookupForInstance($this);
+        $this->slivers = (new InstanceSliver)->LookupForInstance($this);
         if (!count($this->slivers) && $this->aggregate_urn()) {
             $this->slivers =
-                array(InstanceSliver::Lookup($this, $this->aggregate_urn()));
+                array((new InstanceSliver)->Lookup($this, $this->aggregate_urn()));
         }
     }
     # accessors
@@ -1115,11 +1115,11 @@ class InstanceHistory
     }
     # Project of instance.
     function Project() {
-        return Project::Lookup($this->pid_idx());
+        return (new Project)->Lookup($this->pid_idx());
     }
     # Profile version that was instantiated.
     function Profile() {
-        return Profile::Lookup($this->profile_id(), $this->profile_version());
+        return (new Profile)->Lookup($this->profile_id(), $this->profile_version());
     }
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
@@ -1147,7 +1147,7 @@ class InstanceHistory
             return null;
 	}
         $row = mysql_fetch_array($query_result);
-        return InstanceHistory::Lookup($row[0]);
+        return (new InstanceHistory)->Lookup($row[0]);
     }
     function SliceToUUID($slice_uuid)
     {
@@ -1171,7 +1171,7 @@ class InstanceHistory
 	    return 1;
 	}
 	# Otherwise a project membership test.
-	$project = Project::Lookup($this->pid_idx());
+	$project = (new Project)->Lookup($this->pid_idx());
 	if (!$project) {
 	    return 0;
 	}
@@ -1270,7 +1270,7 @@ class InstanceSliver
         # Backwards compat for a while, create a fake one. 
         #
         $webtask_id = null;
-        $webtask = WebTask::LookupByObject($instance->uuid());
+        $webtask = (new WebTask)->LookupByObject($instance->uuid());
         if ($webtask) {
             $webtask_id = $webtask->task_id();
         }
@@ -1301,7 +1301,7 @@ class InstanceSliver
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $sliver = InstanceSliver::Lookup($instance, $row['aggregate_urn']);
+            $sliver = (new InstanceSliver)->Lookup($instance, $row['aggregate_urn']);
             if ($sliver) {
                 $result[] = $sliver;
             }
@@ -1338,7 +1338,7 @@ class InstanceSliver
     # Grab the webtask. 
     function WebTask() {
         if ($this->webtask_id()) {
-            return WebTask::Lookup($this->webtask_id());
+            return (new WebTask)->Lookup($this->webtask_id());
         }
         return null;
     }
@@ -1437,7 +1437,7 @@ class ExtensionInfo
                          "where uuid='$uuid' order by idx desc");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $info = ExtensionInfo::Lookup($instance, $row['idx']);
+            $info = (new ExtensionInfo)->Lookup($instance, $row['idx']);
             if ($info) {
                 $result[] = $info;
             }
@@ -1453,7 +1453,7 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
     global $TBMAINSITE, $DEFAULT_AGGREGATE_URN, $CHECKLOGIN_USER;
 
     if ($am_array == null) {
-        $am_array = Aggregate::DefaultAggregateList($user, $frontpage);
+        $am_array = (new Aggregate)->DefaultAggregateList($user, $frontpage);
     }
 
     #

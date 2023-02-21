@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007, 2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -129,7 +129,7 @@ if (!isset($formfields["exp_pid"]) || $formfields["exp_pid"] == "") {
 elseif (!TBvalid_pid($formfields["exp_pid"])) {
     $errors["Project"] = TBFieldErrorString();
 }
-elseif (! ($project = Project::Lookup($formfields["exp_pid"]))) {
+elseif (! ($project = (new Project)->Lookup($formfields["exp_pid"]))) {
     $errors["Project"] = "No such project";
 }
 else {
@@ -141,7 +141,7 @@ else {
 	if (!TBvalid_gid($formfields["exp_gid"])) {
 	    $errors["Group"] = TBFieldErrorString();
 	}
-	elseif (! ($group = Group::LookupByPidGid($formfields["exp_pid"],
+	elseif (! ($group = (new Group)->LookupByPidGid($formfields["exp_pid"],
 						  $formfields["exp_gid"]))) {
 	    $errors["Group"] = "Group '" . $formfields["exp_gid"] .
 		"' is not in project '" . $formfields["exp_pid"]. "'";
@@ -378,10 +378,10 @@ if ($nsfilelocale == "copyid") {
 	#
 	# Project level check if not a current experiment.
 	#
-	if (($experiment = Experiment::LookupByPidEid($copypid, $copyeid))) {
+	if (($experiment = (new Experiment)->LookupByPidEid($copypid, $copyeid))) {
 	    $okay = $experiment->AccessCheck($this_user, $TB_EXPT_READINFO);
 	}
-	elseif (($project = Project::Lookup($copypid))) {
+	elseif (($project = (new Project)->Lookup($copypid))) {
 	    $okay = $project->AccessCheck($this_user, $TB_PROJECT_READINFO);
 	}
 
@@ -554,7 +554,7 @@ else {
 }
 
 # Map to the actual experiment and show the log.
-if (($experiment = Experiment::LookupByPidEid($formfields["exp_pid"],
+if (($experiment = (new Experiment)->LookupByPidEid($formfields["exp_pid"],
 					      $formfields["exp_id"]))) {
     echo $experiment->PageHeader();
     echo "<br>\n";

@@ -50,7 +50,7 @@ function Do_GetProfile()
 	SPITAJAX_ERROR(1, "Not a valid profile target");
 	return;
     }
-    $profile = Profile::Lookup($target);
+    $profile = (new Profile)->Lookup($target);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "No such profile $target");
 	return;
@@ -103,7 +103,7 @@ function Do_GetProfile()
             #
             # Specific hash, need to get that source. 
             # 
-            $webtask = WebTask::CreateAnonymous();
+            $webtask = (new WebTask)->CreateAnonymous();
             if (!$webtask) {
                 SPITAJAX_ERROR(-1, "Internal webtask Error");
                 return;
@@ -183,7 +183,7 @@ function Do_GetParameters()
 	SPITAJAX_ERROR(1, "Not a valid profile target");
 	return;
     }
-    $profile = Profile::Lookup($target);
+    $profile = (new Profile)->Lookup($target);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "No such profile $target");
 	return;
@@ -227,9 +227,9 @@ function Do_GetParameters()
             return;
         }
         $rerun_uuid   = $ajax_args["rerun_instance"];
-        $record = Instance::Lookup($rerun_uuid);
+        $record = (new Instance)->Lookup($rerun_uuid);
         if (!$record) {
-            $record = InstanceHistory::Lookup($rerun_uuid);
+            $record = (new InstanceHistory)->Lookup($rerun_uuid);
             if (!$record) {
                 SPITAJAX_ERROR(1, "No such instance");
                 return;
@@ -243,7 +243,7 @@ function Do_GetParameters()
             $bindings = json_decode($record->params());
         }
         else {
-            $webtask      = WebTask::CreateAnonymous();
+            $webtask      = (new WebTask)->CreateAnonymous();
             $webtask_id   = $webtask->task_id();
 
             $retval = SUEXEC($this_user->uid(), "nobody",
@@ -289,7 +289,7 @@ function Do_GetParameters()
             return;
         }
         $rerun_uuid = $ajax_args["rerun_paramset"];
-        $paramset = Paramset::Lookup($rerun_uuid);
+        $paramset = (new Paramset)->Lookup($rerun_uuid);
         if (!$paramset) {
             SPITAJAX_ERROR(1, "No such parameter set");
             return;
@@ -323,7 +323,7 @@ function Do_GetPreviousBindings()
 	SPITAJAX_ERROR(1, "Not a valid profile target");
 	return;
     }
-    $profile = Profile::Lookup($target);
+    $profile = (new Profile)->Lookup($target);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "No such profile $target");
 	return;
@@ -344,9 +344,9 @@ function Do_GetPreviousBindings()
             SPITAJAX_ERROR(1, "Rerun UUID is not a valid UUID");
             return;
         }
-        $instance = Instance::Lookup($rerun_uuid);
+        $instance = (new Instance)->Lookup($rerun_uuid);
         if (!$instance) {
-            $instance = InstanceHistory::Lookup($rerun_uuid);
+            $instance = (new InstanceHistory)->Lookup($rerun_uuid);
             if (!$instance) {
                 SPITAJAX_ERROR(1, "Rerun UUID does not exist");
                 return;
@@ -374,7 +374,7 @@ function Do_GetPreviousBindings()
         if ($query_result && mysql_num_rows($query_result)) {
             $row = mysql_fetch_array($query_result);
             $rerun_uuid = $row["uuid"];
-            $instance = Instance::Lookup($rerun_uuid);
+            $instance = (new Instance)->Lookup($rerun_uuid);
         }
         else {
             $query_result =
@@ -385,7 +385,7 @@ function Do_GetPreviousBindings()
             if ($query_result && mysql_num_rows($query_result)) {
                 $row = mysql_fetch_array($query_result);
                 $rerun_uuid = $row["uuid"];
-                $instance = InstanceHistory::Lookup($rerun_uuid);
+                $instance = (new InstanceHistory)->Lookup($rerun_uuid);
             }
             else {
                 SPITAJAX_ERROR(1, "No previous bindings");
@@ -404,7 +404,7 @@ function Do_GetPreviousBindings()
             $bindings = json_decode($instance->params());
         }
         else {
-            $webtask      = WebTask::CreateAnonymous();
+            $webtask      = (new WebTask)->CreateAnonymous();
             $webtask_id   = $webtask->task_id();
 
             $retval = SUEXEC($this_user->uid(), "nobody",
@@ -527,7 +527,7 @@ function Do_GetImageInfo()
             SPITAJAX_ERROR(1, "Illegal project name: $pid");
             return;
         }
-        $project = Project::Lookup($pid);
+        $project = (new Project)->Lookup($pid);
         if (!$project) {
             SPITAJAX_ERROR(1, "No such project: $pid");
             return;
@@ -549,11 +549,11 @@ function Do_GetImageInfo()
         $virts = array();
         $deprecated = 0;
         
-        if (Instance::ValidURN($urn)) {
+        if ((new Instance)->ValidURN($urn)) {
             # This // vs : thing is a pain.
             $urn = preg_replace('/\/\//', ":", $urn);
             # Need to see if there is a specific version.
-            list ($auth,$type,$id) = Instance::ParseURN($urn);
+            list ($auth,$type,$id) = (new Instance)->ParseURN($urn);
             list ($proj,$name,$version) = preg_split('/:/', $id);
 
             #
@@ -666,7 +666,7 @@ function Do_GetImageInfo()
                 # belongs too. If the user changes the project selection, we
                 # have to rerun the constraints.
                 #
-                list ($auth) = Instance::ParseURN($row["project_urn"]);
+                list ($auth) = (new Instance)->ParseURN($row["project_urn"]);
                 list ($domain,$impid) = preg_split('/:/', $auth);
                 if ($impid && strtolower($impid) == strtolower($pid)) {
                     goto allowed;
@@ -688,13 +688,13 @@ function Do_GetImageInfo()
                     $purn  = $prow["permission_urn"];
                     
                     if ($ptype == "user") {
-                        list ($ign1,$ign2,$id) = Instance::ParseURN($purn);
+                        list ($ign1,$ign2,$id) = (new Instance)->ParseURN($purn);
                         if ($id && $id == $this_user->uid()) {
                             goto allowed;
                         }
                     }
                     elseif ($ptype == "project") {
-                        list ($auth) = Instance::ParseURN($purn);
+                        list ($auth) = (new Instance)->ParseURN($purn);
                         list ($domain,$ppid) = preg_split('/:/', $auth);
                         if ($ppid && $ppid == $pid) {
                             goto allowed;
@@ -798,7 +798,7 @@ function CheckStep2()
 	return -1;
     }
     $formfields = $ajax_args["formfields"];
-    $amlist     = Instance::DefaultAggregateList();
+    $amlist     = (new Instance)->DefaultAggregateList();
     $am_array   = array();
     $errors     = array();
 
@@ -818,7 +818,7 @@ function CheckStep2()
     }
     else {
         $target  = $formfields["profile"];
-        $profile = Profile::Lookup($target);
+        $profile = (new Profile)->Lookup($target);
         if (!$profile) {
             $errors["error"] = "No such profile exists";
         }
@@ -854,7 +854,7 @@ function CheckStep2()
         if (!isset($formfields["pid"])) {
             $errors["pid"] = "Must select a project";
         }
-        elseif (! ($project = Project::LookupByPid($formfields["pid"]))) {
+        elseif (! ($project = (new Project)->LookupByPid($formfields["pid"]))) {
             $errors["pid"] = "No such project";
         }
         # User better be a member.
@@ -890,7 +890,7 @@ function CheckStep2()
                 $errors["name"] = TBFieldErrorString();
             }
             elseif ($project &&
-                    Instance::LookupByName($project, $formfields["name"])) {
+                    (new Instance)->LookupByName($project, $formfields["name"])) {
                 $errors["name"] = "Already in use by another experiment";
             }
         }
@@ -982,7 +982,7 @@ function Do_RunScript()
     $profile = null;
 
     if (isset($ajax_args["uuid"])) {
-        $profile = Profile::Lookup($ajax_args["uuid"]);
+        $profile = (new Profile)->Lookup($ajax_args["uuid"]);
         if (!$profile) {
 	    SPITAJAX_ERROR(1, "Unknown profile uuid");
 	    return;
@@ -1121,11 +1121,11 @@ function Do_Submit()
         return;
     }
     $formfields = $ajax_args["formfields"];
-    $amlist     = Instance::DefaultAggregateList();
+    $amlist     = (new Instance)->DefaultAggregateList();
     $am_array   = array();
     $errors     = array();
     $args       = array("portal" => $PORTAL_GENESIS);
-    $profile    = Profile::Lookup($formfields["profile"]);
+    $profile    = (new Profile)->Lookup($formfields["profile"]);
 
     while (list($index, $aggregate) = each($amlist)) {
         $urn  = $aggregate->urn();
@@ -1258,14 +1258,14 @@ function Do_Submit()
 
     # Create this here. If the instantiate fails, we delete it.
     # Otherwise, the instance owns it.
-    $webtask = WebTask::Create($uuid);
+    $webtask = (new WebTask)->Create($uuid);
     $webtask_id = $webtask->task_id();
 
     #
     # Invoke the backend.
     #
     list ($instance, $creator) =
-        Instance::Instantiate($uuid, $this_user, $options, $args, $webtask);
+        (new Instance)->Instantiate($uuid, $this_user, $options, $args, $webtask);
 
     if (!$instance) {
         if (isset($keyname)) {
@@ -1331,7 +1331,7 @@ function Do_MaxDuration()
         return;
     }
     $formfields = $ajax_args["formfields"];
-    $amlist     = Instance::DefaultAggregateList();
+    $amlist     = (new Instance)->DefaultAggregateList();
     $am_array   = array();
     $sitemap    = array();
     $options    = "-p " . $formfields["pid"];
@@ -1398,7 +1398,7 @@ function Do_MaxDuration()
         chmod($filename2, 0666);
         $options .= " -P $filename2";
     }
-    $webtask      = WebTask::CreateAnonymous();
+    $webtask      = (new WebTask)->CreateAnonymous();
     $webtask_id   = $webtask->task_id();
 
     $retval = SUEXEC($this_user->uid(), "nobody",
@@ -1485,7 +1485,7 @@ function Do_RequestLicenses()
         if (! (preg_match("/^[-\w]+$/", $lname) &&
                preg_match("/^[-\w]+$/", $type) &&
                (preg_match("/^[-\w]+$/", $target) ||
-                Instance::ValidURN($target)))) {
+                (new Instance)->ValidURN($target)))) {
             SPITAJAX_ERROR(-1, "Bad data in licenses");
             return;
         }
@@ -1527,7 +1527,7 @@ function Do_MarkFavorite()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
@@ -1548,7 +1548,7 @@ function Do_ClearFavorite()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;

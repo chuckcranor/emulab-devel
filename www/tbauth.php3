@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -104,6 +104,8 @@ if ($version[0] > 7 || ($version[0] == 7 && $version[1] >= 4)) {
 # microtime, combined with a random number.
 # 
 function GENHASH() {
+    global $HAVE_MHASH;
+
     $fp = fopen("/dev/urandom", "r");
     if (! $fp) {
         TBERROR("Error opening /dev/urandom", 1);
@@ -215,6 +217,7 @@ function LoginStatus() {
     global $EXPOSEARCHIVE, $EXPOSETEMPLATES;
     global $CHECKLOGIN_HASHKEY, $CHECKLOGIN_HASHHASH;
     global $CHECKLOGIN_IDX, $CHECKLOGIN_USER;
+    global $HAVE_MHASH;
     
     #
     # If we already figured this out, do not duplicate work!
@@ -452,7 +455,7 @@ function LoginStatus() {
     }
 
     # Cache this now; someone will eventually want it.
-    $CHECKLOGIN_USER = User::Lookup($uid_idx);
+    $CHECKLOGIN_USER = (new User)->Lookup($uid_idx);
     if (! $CHECKLOGIN_USER) {
 	$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
 	return $CHECKLOGIN_STATUS;
@@ -676,7 +679,7 @@ function CheckLoginConditions($status)
 #
 function CheckLoginOrDie($modifier = 0)
 {
-    global $CHECKLOGIN_USER;
+    global $CHECKLOGIN_USER, $login_url;
     
     LOGGEDINORDIE(GETUID(), $modifier, $login_url);
 
@@ -840,7 +843,7 @@ function ISPLABUSER() {
 	    return 0;
 	}
 	# Lookup sanitizes argument.
-	if (! ($user = User::Lookup($uid)))
+	if (! ($user = (new User)->Lookup($uid)))
 	    return 0;
 
 	if ($user->user_interface()) {
@@ -913,10 +916,10 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     }
 
     if (TBvalid_email($token)) {
-	$user = User::LookupByEmail($token);
+	$user = (new User)->LookupByEmail($token);
     }
     else {
-	$user = User::Lookup($token);
+	$user = (new User)->Lookup($token);
     }
 	    
     #
@@ -1104,6 +1107,7 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     global $TBLIBEXEC_DIR, $EXP_VIS, $TBMAINSITE;
     global $WITHZFS, $ZFS_NOEXPORT;
     global $PORTAL_GENESIS;
+    global $HAVE_MHASH;
 
     $flushtime = time() - 1000000;
     
@@ -1341,7 +1345,7 @@ function VERIFYPASSWD($uid, $password) {
 	return -1;
     }
 
-    if (! ($user = User::Lookup($uid)))
+    if (! ($user = (new User)->Lookup($uid)))
 	return -1;
 
     #
@@ -1476,7 +1480,7 @@ function LASTWEBLOGIN($uid_idx) {
 }
 
 function HASREALACCOUNT($uid) {
-    if (! ($user = User::Lookup($uid)))
+    if (! ($user = (new User)->Lookup($uid)))
 	return 0;
 
     $status   = $user->status();

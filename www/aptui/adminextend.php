@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,7 +52,7 @@ if (!isset($uuid)) {
     SPITFOOTER();
     return;
 }
-$instance = Instance::Lookup($uuid);
+$instance = (new Instance)->Lookup($uuid);
 if (!$instance) {
     SPITHEADER(1);
     echo "<div class='align-center'>
@@ -64,7 +64,7 @@ if (!$instance) {
     SPITFOOTER();
     return;
 }
-$extensions = ExtensionInfo::LookupForInstance($instance);
+$extensions = (new ExtensionInfo)->LookupForInstance($instance);
 
 #
 # If we have an outstanding extension, look to see how much more is left.

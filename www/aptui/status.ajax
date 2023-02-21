@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,15 +45,15 @@ function StatusSetupAjax($needmodify)
 	return 1;
     }
     $uuid = $ajax_args["uuid"];
-    $instance = Instance::Lookup($uuid);
+    $instance = (new Instance)->Lookup($uuid);
     if (!$instance) {
 	SPITAJAX_ERROR(GENIRESPONSE_SEARCHFAILED,
                        "no such instance uuid: $uuid");
 	return 1;
     }
-    $creator = GeniUser::Lookup("sa", $instance->creator_uuid());
+    $creator = (new GeniUser)->Lookup("sa", $instance->creator_uuid());
     if (! $creator) {
-	$creator = User::LookupByUUID($instance->creator_uuid());
+	$creator = (new User)->LookupByUUID($instance->creator_uuid());
     }
     if (!$creator) {
 	SPITAJAX_ERROR(1, "no such instance creator");
@@ -195,7 +195,7 @@ function Do_GetInstanceStatus()
         #
         # See if the aggregate is offline.
         #
-        $aggregate = Aggregate::Lookup($sliver->aggregate_urn());
+        $aggregate = (new Aggregate)->Lookup($sliver->aggregate_urn());
         if ($aggregate && ($aggregate->status() == "down" ||
                            $aggregate->status() == "offline")) {
             $sliverblob["offline"] = true;
@@ -277,7 +277,7 @@ function Do_GetInstanceStatus()
                  GENIRESPONSE_SETUPFAILURE_BOOTFAILED ? 1 : 0);
     }
     elseif ($instance->status() == "created") {
-        $delayed = Instance::DelayedCount();
+        $delayed = (new Instance)->DelayedCount();
         if ($delayed >= 5) {
             $blob["delayedCount"] = $delayed;
         }
@@ -314,7 +314,7 @@ function Do_TerminateInstance()
         return;
 
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
     if ($instance->user_lockdown()) {
@@ -387,11 +387,11 @@ function Do_GetInstanceManifest()
     }
     if (isset($ajax_args["aggregate_urn"])) {
         $urn = $ajax_args["aggregate_urn"];
-        if (!Instance::ValidURN($urn)) {
+        if (!(new Instance)->ValidURN($urn)) {
             SPITAJAX_ERROR(-1, "Illegal characters in aggregate urn");
             return;
         }
-        $sliver = InstanceSliver::Lookup($instance, $urn);
+        $sliver = (new InstanceSliver)->Lookup($instance, $urn);
         if (!$sliver) {
             SPITAJAX_ERROR(-1, "No sliver for aggregate urn");
             return;
@@ -488,7 +488,7 @@ function Do_RequestExtension()
 	goto bad;
     }
     if (isset($this_user)) {
-        $project = Project::Lookup($instance->pid_idx());
+        $project = (new Project)->Lookup($instance->pid_idx());
         if ($project) {
             $group = $project->DefaultGroup();
             if (!(ISADMINISTRATOR() ||
@@ -498,7 +498,7 @@ function Do_RequestExtension()
         }
     }
     $uuid = $instance->uuid();
-    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    $slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
     if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	goto bad;
@@ -557,7 +557,7 @@ function Do_RequestExtension()
         fwrite($fp, $reason);
         fclose($fp);
     }        
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
                      "  extend $uuid " .
@@ -584,7 +584,7 @@ function Do_RequestExtension()
         goto bad;
     }
     # Refresh. 
-    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    $slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
     $blob = array("expiration" => DateStringGMT($slice->expires()),
                   "granted"    => $webtask->TaskValue("granted"),
                   "message"    => $webtask->TaskValue("message"));
@@ -609,7 +609,7 @@ function Do_DenyOrMoreinfo($action)
 	goto bad;
     }
     $uuid = $instance->uuid();
-    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    $slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
     if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	goto bad;
@@ -661,7 +661,7 @@ function Do_DenyOrMoreinfo($action)
     }
     $action = ($action == "deny" ? "denyextension" :
                ($action == "terminate" ? "schedterminate": "moreinfo"));
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC($this_uid, "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
                      "  $action $uuid $extrargs " .
@@ -738,12 +738,12 @@ function Do_ConsoleURL()
     }
     $node = $ajax_args["node"];
     $uuid = $instance->uuid();
-    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    $slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
     if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " ".
                      "  consoleurl $uuid " .
@@ -850,7 +850,7 @@ function Do_Snapshot()
     # The profile also has to belong to the user, since it is
     # going to be modified to use the new image.
     #
-    $profile = Profile::Lookup($instance->profile_id(),
+    $profile = (new Profile)->Lookup($instance->profile_id(),
 			       $instance->profile_version());
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Cannot lookup profile for instance");
@@ -923,7 +923,7 @@ function Do_Snapshot()
     #
     # Call out to the backend.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC($this_user->uid(), $pid,
 		     "webmanage_instance -t " . $webtask->task_id() . " " .
                      "  snapshot $uuid $optargs",
@@ -994,7 +994,7 @@ function Do_SnapshotStatus()
     # the aggregate and node to track down the status.
     #
     if (isset($taskdata["aggregate_urn"]) && isset($taskdata["client_id"])) {
-        $sliver = InstanceSliver::Lookup($instance, $taskdata["aggregate_urn"]);
+        $sliver = (new InstanceSliver)->Lookup($instance, $taskdata["aggregate_urn"]);
         if ($sliver) {
             foreach ($sliver->StatusArray() as $status) {
                 if (isset($status["sliver_data"]) &&
@@ -1038,7 +1038,7 @@ function Do_Refresh()
     #
     # Call out to the backend.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
                      " refresh $uuid",
@@ -1076,7 +1076,7 @@ function Do_ReloadTopology()
     #
     # Call out to the backend.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
                      "  getmanifests $uuid",
@@ -1156,7 +1156,7 @@ function Do_RebootOrReload($which)
     #
     # Call out to the backend.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
                      "  $which $uuid $nodelist",
@@ -1236,7 +1236,7 @@ function Do_DeleteNodes()
     #
     # Call out to the backend.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
                      "  deletenodes $uuid $nodelist",
@@ -1349,7 +1349,7 @@ function Do_Lockout()
         $safe_reason = DBQuoteSpecial($reason);
     }
     $uuid = $ajax_args["uuid"];
-    $instance = Instance::Lookup($uuid);
+    $instance = (new Instance)->Lookup($uuid);
     if (!$instance) {
 	SPITAJAX_ERROR(1, "Unknown instance uuid");
 	return -1;
@@ -1457,7 +1457,7 @@ function Do_Lockdown()
         $force = "-f";
     }
     $uuid = $ajax_args["uuid"];
-    $instance = Instance::Lookup($uuid);
+    $instance = (new Instance)->Lookup($uuid);
     if (!$instance) {
 	SPITAJAX_ERROR(1, "Unknown instance uuid");
 	return;
@@ -1471,7 +1471,7 @@ function Do_Lockdown()
     #
     # Call out to the backend.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
                      "  lockdown $uuid $force $action $which ",
@@ -1556,12 +1556,12 @@ function Do_Quarantine()
     if (isset($ajax_args["poweroff"]) && $ajax_args["poweroff"]) {
         $opt = "-p";
     }
-    $instance = Instance::Lookup($uuid);
+    $instance = (new Instance)->Lookup($uuid);
     if (!$instance) {
 	SPITAJAX_ERROR(1, "Unknown instance uuid");
 	return;
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC($this_user->uid(), "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . 
                      "  panic $uuid $opt $which",
@@ -1616,7 +1616,7 @@ function Do_Linktest()
             SPITAJAX_ERROR(1, "Linktest already running");
             return;
         }
-        $webtask = WebTask::CreateAnonymous();
+        $webtask = (new WebTask)->CreateAnonymous();
         $retval = SUEXEC("nobody", "nobody",
                          "webmanage_instance -t " . $webtask->task_id() .
                          " linktest $uuid $level",
@@ -1640,7 +1640,7 @@ function Do_Linktest()
         # Look at per sliver.
         foreach ($instance->slivers() as $sliver) {
             if ($sliver->webtask_id() &&
-                $webtask = WebTask::Lookup($sliver->webtask_id())) {
+                $webtask = (new WebTask)->Lookup($sliver->webtask_id())) {
 
                 if (!($sliver->physnode_count() || $sliver->virtnode_count())) {
                     continue;
@@ -1663,7 +1663,7 @@ function Do_Linktest()
             SPITAJAX_RESPONSE(0);
             return;
         }
-        $webtask = WebTask::CreateAnonymous();
+        $webtask = (new WebTask)->CreateAnonymous();
         $retval = SUEXEC("nobody", "nobody",
                          "webmanage_instance -t " . $webtask->task_id() .
                          "  linktest $uuid -k",
@@ -1709,7 +1709,7 @@ function Do_DismissExtensionDenied()
 	return;
     }
     $uuid = $ajax_args["uuid"];
-    $instance = Instance::Lookup($uuid);
+    $instance = (new Instance)->Lookup($uuid);
     if (!$instance) {
 	SPITAJAX_ERROR(1, "Unknown instance uuid");
 	return;
@@ -1732,12 +1732,12 @@ function Do_ExpInfo()
     if (StatusSetupAjax(0)) {
 	return;
     }
-    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    $slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
     if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
     }
-    $profile = Profile::Lookup($instance->profile_id(),
+    $profile = (new Profile)->Lookup($instance->profile_id(),
 			       $instance->profile_version());
     
     $blob = array();
@@ -1813,7 +1813,7 @@ function Do_ExpInfo()
         ($instance->extension_disabled_reason() ?
          $instance->extension_disabled_reason() : "");
 
-    $extensions      = ExtensionInfo::LookupForInstance($instance);
+    $extensions      = (new ExtensionInfo)->LookupForInstance($instance);
     if (count($extensions)) {
         $foo = array();
         foreach ($extensions as $extension) {
@@ -1838,12 +1838,12 @@ function Do_Utilization()
 	return;
     }
     $uuid = $instance->uuid();
-    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    $slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
     if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     # XXX Need to do this as elabman cause of emulab.key. Pondering.
     $retval = SUEXEC("elabman", $TBADMINGROUP,
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
@@ -1888,7 +1888,7 @@ function Do_IdleData()
 	return;
     }
     $uuid = $instance->uuid();
-    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    $slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
     if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
@@ -1902,7 +1902,7 @@ function Do_IdleData()
     $fp = fopen($filename, "w+");
     chmod($filename, 0666);        
     
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     # XXX Need to do this as elabman cause of emulab.key. Pondering.
     $retval = SUEXEC("elabman", $TBADMINGROUP,
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
@@ -1965,7 +1965,7 @@ function Do_OpenstackStats()
 	return;
     }
     $uuid = $instance->uuid();
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     # XXX Need to do this as elabman cause of emulab.key. Pondering.
     $retval = SUEXEC("elabman", $TBADMINGROUP,
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
@@ -2010,7 +2010,7 @@ function Do_MaxExtension()
 	return;
     }
     $uuid = $instance->uuid();
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     # XXX Need to do this as elabman cause of emulab.key. Pondering.
     $retval = SUEXEC("elabman", $TBADMINGROUP,
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
@@ -2076,7 +2076,7 @@ function Do_WarnExperiment()
 	goto bad;
     }
     $uuid = $instance->uuid();
-    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    $slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
     if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	goto bad;
@@ -2113,7 +2113,7 @@ function Do_WarnExperiment()
     if (isset($ajax_args["freeze"]) && $ajax_args["freeze"]) {
         $options .= "-F ";
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC($this_uid, "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
                      "  warn $uuid $options ",
@@ -2163,7 +2163,7 @@ function Do_Recovery()
     }
     $node = $ajax_args["node"];
     $uuid = $instance->uuid();
-    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    $slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
     if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
@@ -2171,7 +2171,7 @@ function Do_Recovery()
     if (isset($ajax_args["clear"]) && $ajax_args["clear"]) {
         $opt = "-c";
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " ".
                      "  recovery $uuid $opt " . escapeshellarg($node),
@@ -2214,12 +2214,12 @@ function Do_Flash()
     }
     $node = $ajax_args["node"];
     $uuid = $instance->uuid();
-    $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
+    $slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
     if (!$slice) {
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " ".
                      "  flash $uuid $opt " . escapeshellarg($node),
@@ -2261,7 +2261,7 @@ function Do_Top()
     }
     $node = $ajax_args["node"];
     $uuid = $instance->uuid();
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " ".
                      "  top $uuid " . escapeshellarg($node),
@@ -2301,7 +2301,7 @@ function Do_ServiceLogs()
     }
     $node = $ajax_args["node"];
     $uuid = $instance->uuid();
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " ".
                      "  servicelogs $uuid " . escapeshellarg($node),
@@ -2361,12 +2361,12 @@ function Do_DeleteSite()
 	SPITAJAX_ERROR(1, "Experiment is currently busy");
 	return;
     }
-    $aggregate = Aggregate::LookupByNickname($cluster);
+    $aggregate = (new Aggregate)->LookupByNickname($cluster);
     if (!$aggregate) {
 	SPITAJAX_ERROR(1, "No such cluster");
 	return;
     }
-    $sliver = InstanceSliver::Lookup($instance, $aggregate->urn());
+    $sliver = (new InstanceSliver)->Lookup($instance, $aggregate->urn());
     if (!$sliver) {
 	SPITAJAX_ERROR(1, "Not a cluster in this instance");
 	return;
@@ -2375,7 +2375,7 @@ function Do_DeleteSite()
     #
     # Call out to the backend.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
                      "  deleteaggregates $uuid '$urn'",
@@ -2448,7 +2448,7 @@ function Do_ConnectSharedLan()
     #
     # Call out to the backend.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
                      "  connectsharedlan $uuid $args",
@@ -2501,7 +2501,7 @@ function Do_ModifyExperiment()
     #
     # Call out to the backend.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
                      "  modify $uuid $filename",
@@ -2541,7 +2541,7 @@ function Do_Portstats()
     #
     # Call out to the backend.
     #
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
                      "  portstats $uuid",

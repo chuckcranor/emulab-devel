@@ -36,7 +36,7 @@ function Do_GetBranchList()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
@@ -55,7 +55,7 @@ function Do_GetBranchList()
 	SPITAJAX_ERROR(1, "Not a repo-based profile");
 	return;
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return;
@@ -104,7 +104,7 @@ function Do_GetCommitInfo()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
@@ -120,7 +120,7 @@ function Do_GetCommitInfo()
         $this_uid = "nobody";
     }
     
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return;
@@ -171,7 +171,7 @@ function Do_GetRepoSource()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
@@ -197,7 +197,7 @@ function GetRepoSource($profile, $refspec, &$blob)
         }
         $this_uid = "nobody";
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return -1;

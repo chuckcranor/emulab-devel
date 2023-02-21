@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -166,13 +166,13 @@ if (isset($privkey)) {
 
     $row = mysql_fetch_array($qres);
     $node_id = $row["node_id"];
-    $node = Node::Lookup($node_id);
+    $node = (new Node)->Lookup($node_id);
 }
 else {
     if (!IsControlNetIP($ip)) {
 	SPITERROR("notlocal");
     }
-    $node = Node::LookupByIP($ip);
+    $node = (new Node)->LookupByIP($ip);
     if ($node) {
 	$node_id = $node->node_id();
     }

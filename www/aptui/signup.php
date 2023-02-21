@@ -262,7 +262,7 @@ if (!$this_user || $promoting) {
 	$errors["uid"] = TBFieldErrorString();
     }
     elseif (!$promoting &&
-            (User::Lookup($formfields["uid"]) ||
+            ((new User)->Lookup($formfields["uid"]) ||
              posix_getpwnam($formfields["uid"]))) {
 	$errors["uid"] = "Already in use. Pick another";
     }
@@ -306,7 +306,7 @@ if (!$this_user || $promoting) {
         $errors["email"] = "Not permitted";
     }
     elseif (!$promoting &&
-            User::LookupByEmail($formfields["email"])) {
+            (new User)->LookupByEmail($formfields["email"])) {
         #
         # Treat this error separate. Not allowed.
         #
@@ -396,7 +396,7 @@ else {
     elseif (!TBvalid_newpid($formfields["pid"])) {
 	$errors["pid"] = TBFieldErrorString();
     }
-    $project = Project::LookupByPid($formfields["pid"]);
+    $project = (new Project)->LookupByPid($formfields["pid"]);
     if ($joinproject) {
 	if (!$project) {
 	    $errors["pid"] = "No such project. Did you spell it properly?";
@@ -540,7 +540,7 @@ if ($this_user && $promoting) {
     $args["address2"]      = $formfields["address2"];
     $args["zip"]           = $formfields["zip"];
 
-    if (! User::ModUserInfo($this_user, $this_user->uid(), $args, $errors)) {
+    if (! (new User)->ModUserInfo($this_user, $this_user->uid(), $args, $errors)) {
         # Always respit the form so that the form fields are not lost.
         SPITFORM($formfields, 0, $errors);
         PAGEFOOTER();
@@ -587,7 +587,7 @@ if (!$this_user) {
     # Joining a project is a different path.
     #
     if ($joinproject) {
-	if (! ($user = User::NewNewUser(0, $args, $error)) != 0) {
+	if (! ($user = (new User)->NewNewUser(0, $args, $error)) != 0) {
 	    $errors["error"] = $error;
 	    SPITFORM($formfields, 0, $errors);
 	    return;
@@ -611,7 +611,7 @@ if (!$this_user) {
     # on NewNewUser would block and then unblock and get done; meanwhile the
     # PHP thread went away so we never returned here to call NewNewProject.
     #
-    if (! ($newuser_xml = User::NewNewUserXML($args, $error)) != 0) {
+    if (! ($newuser_xml = (new User)->NewNewUserXML($args, $error)) != 0) {
 	$errors["error"] = $error;
 	TBERROR("Error Creating new APT user XML:\n${error}\n\n" .
 		print_r($args, TRUE), 0);
@@ -681,7 +681,7 @@ if (isset($formfields["proj_nsf"])) {
     }
 }
 
-if (! ($project = Project::NewNewProject($args, $error))) {
+if (! ($project = (new Project)->NewNewProject($args, $error))) {
     $errors["error"] = $error;
     if ($suexec_retval < 0) {
 	TBERROR("Error Creating New Project\n${error}\n\n" .

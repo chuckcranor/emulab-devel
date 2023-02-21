@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2009-2019 University of Utah and the Flux Group.
+# Copyright (c) 2009-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,9 +43,9 @@ if (!isset($sortby)) {
 
 PAGEHEADER("Shared Pool");
 
-$experiment = Experiment::LookupByPidEid("emulab-ops", "shared-nodes");
+$experiment = (new Experiment)->LookupByPidEid("emulab-ops", "shared-nodes");
 if (!$experiment) {
-    $experiment = Experiment::LookupByPidEid("emulab-ops", "shared-node");
+    $experiment = (new Experiment)->LookupByPidEid("emulab-ops", "shared-node");
 }
 if (!$experiment) {
     USERERROR("No shared pool experiment!", 1);
@@ -177,7 +177,7 @@ if ($isadmin) {
     $rows = array();
     
     foreach ($nodes as $node_id) {
-	$node = Node::Lookup($node_id);
+	$node = (new Node)->Lookup($node_id);
 	if (! $node)
 	    continue;
 

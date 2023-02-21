@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,11 +69,11 @@ if (!isset($node_class)) { $node_class = "pc"; }
 if (!isset($attributes)) { $attributes = array(); }
 if (!isset($deletes)) { $deletes = array(); }
 
-$emulab_ops = Project::LookupByPid("emulab-ops");
-$freebsd_mfs = OSinfo::LookupByName($emulab_ops,"FREEBSD-MFS");
-$rhl_std = OSinfo::LookupByName($emulab_ops, "RHL-STD");
-$fbsd_std = OSinfo::LookupByName($emulab_ops,"FBSD-STD");
-$frisbee_mfs = OSinfo::LookupByName($emulab_ops,"FRISBEE-MFS");
+$emulab_ops = (new Project)->LookupByPid("emulab-ops");
+$freebsd_mfs = (new OSinfo)->LookupByName($emulab_ops,"FREEBSD-MFS");
+$rhl_std = (new OSinfo)->LookupByName($emulab_ops, "RHL-STD");
+$fbsd_std = (new OSinfo)->LookupByName($emulab_ops,"FBSD-STD");
+$frisbee_mfs = (new OSinfo)->LookupByName($emulab_ops,"FRISBEE-MFS");
 
 # The default image comes from a site variable to avoid hardwiring here.
 $default_imagename = TBGetSiteVar("general/default_imagename");
@@ -82,7 +82,7 @@ $default_imagename = TBGetSiteVar("general/default_imagename");
 $default_imageids = preg_split('/,/', $default_imagename);
 
 for ($i = 0; $i != count($default_imageids); $i++) {
-    $image = Image::LookupByName($emulab_ops, $default_imageids[$i]);
+    $image = (new Image)->LookupByName($emulab_ops, $default_imageids[$i]);
     if ($image == null) {
 	PAGEERROR("You must add images from Utah into your database" .
 		  " before adding a nodetype. ".

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -404,7 +404,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep = 1;
 
 		if (ValidateArgument($name, PAGEARG_EXPERIMENT, $idx)) {
-		    $object = Experiment::Lookup($idx);
+		    $object = (new Experiment)->Lookup($idx);
 		}
 	    }
 	    elseif (isset($_REQUEST[URL_EXPTIDX])) {
@@ -412,7 +412,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep = 1;
 
 		if (ValidateArgument($name, PAGEARG_EXPERIMENT, $idx)) {
-		    $object = Experiment::Lookup($idx);
+		    $object = (new Experiment)->Lookup($idx);
 		}
 	    }
 	    elseif (isset($_REQUEST[URL_PID]) &&
@@ -423,7 +423,7 @@ function VerifyPageArguments($argspec, $required)
 
 		if (ValidateArgument($name, PAGEARG_PID, $pid) &&
 		    ValidateArgument($name, PAGEARG_EID, $eid)) {
-		    $object = Experiment::LookupByPidEid($pid, $eid);
+		    $object = (new Experiment)->LookupByPidEid($pid, $eid);
 		}
 	    }
 	    break;
@@ -437,7 +437,7 @@ function VerifyPageArguments($argspec, $required)
 
 		if (ValidateArgument($name, PAGEARG_GUID, $guid) &&
 		    ValidateArgument($name, PAGEARG_VERS, $vers)) {
-		    $object = Template::Lookup($guid, $vers);
+		    $object = (new Template)->Lookup($guid, $vers);
 		}
 	    }
 	    elseif (isset($_REQUEST[URL_TEMPLATE])) {
@@ -447,7 +447,7 @@ function VerifyPageArguments($argspec, $required)
 		if (preg_match("/^([\d]+)\/([\d]+)$/", $guidvers, $matches)) {
 		    $guid = $matches[1];
 		    $vers = $matches[2];
-		    $object = Template::Lookup($guid, $vers);
+		    $object = (new Template)->Lookup($guid, $vers);
 		}
 		else {
 		    PAGEARGERROR("Invalid argument for '$type': $guidvers");
@@ -461,7 +461,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep = 1;
 
 		if (ValidateArgument($name, PAGEARG_INSTANCE, $idx)) {
-		    $object = TemplateInstance::LookupByExptidx($idx);
+		    $object = (new TemplateInstance)->LookupByExptidx($idx);
 		}
 	    }
 	    break;
@@ -474,7 +474,7 @@ function VerifyPageArguments($argspec, $required)
 		if (preg_match("/^([\d]+)\/([\d]+)$/", $guidvers, $matches)) {
 		    $guid = $matches[1];
 		    $vers = $matches[2];
-		    $object = TemplateMetadata::Lookup($guid, $vers);
+		    $object = (new TemplateMetadata)->Lookup($guid, $vers);
 		}
 		else {
 		    PAGEARGERROR("Invalid argument for '$type': $guidvers");
@@ -488,7 +488,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep = 1;
 
 		if (ValidateArgument($name, PAGEARG_PROJECT, $idx)) {
-		    $object = Project::Lookup($idx);
+		    $object = (new Project)->Lookup($idx);
 		}
 	    }
 	    elseif (isset($_REQUEST[URL_PID])) {
@@ -496,7 +496,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep = 1;
 
 		if (ValidateArgument($name, PAGEARG_PID, $pid)) {
-		    $object = Project::Lookup($pid);
+		    $object = (new Project)->Lookup($pid);
 		}
 	    }
 	    break;
@@ -507,7 +507,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep = 1;
 
 		if (ValidateArgument($name, PAGEARG_GROUP, $idx)) {
-		    $object = Group::Lookup($idx);
+		    $object = (new Group)->Lookup($idx);
 		}
 	    }
 	    elseif (isset($_REQUEST[URL_PID]) &&
@@ -518,7 +518,7 @@ function VerifyPageArguments($argspec, $required)
 
 		if (ValidateArgument($name, PAGEARG_PID, $pid) &&
 		    ValidateArgument($name, PAGEARG_GID, $gid)) {
-		    $object = Group::LookupByPidGid($pid, $gid);
+		    $object = (new Group)->LookupByPidGid($pid, $gid);
 		}
 	    }
 	    break;
@@ -529,7 +529,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep = 1;
 
 		if (ValidateArgument($name, PAGEARG_NODE, $idx)) {
-		    $object = Node::Lookup($idx);
+		    $object = (new Node)->Lookup($idx);
 		}
 	    }
 	    elseif (isset($_REQUEST[URL_NODEID])) {
@@ -537,7 +537,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep    = 1;
 
 		if (ValidateArgument($name, PAGEARG_NODEID, $nodeid)) {
-		    $object = Node::Lookup($nodeid);
+		    $object = (new Node)->Lookup($nodeid);
 		}
 	    }
 	    elseif (isset($_REQUEST[URL_NODEID_ALT])) {
@@ -545,7 +545,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep    = 1;
 
 		if (ValidateArgument($name, PAGEARG_NODEID, $nodeid)) {
-		    $object = Node::Lookup($nodeid);
+		    $object = (new Node)->Lookup($nodeid);
 		}
 	    }
 	    break;
@@ -557,10 +557,10 @@ function VerifyPageArguments($argspec, $required)
 
 		if (ValidateArgument($name, PAGEARG_USER, $idx)) {
                     if (preg_match("/^\d+$/", $idx)) {
-                        $object = User::Lookup($idx);
+                        $object = (new User)->Lookup($idx);
                     }
                     else {
-                        $object = User::LookupByUid($idx);
+                        $object = (new User)->LookupByUid($idx);
                     }
 		}
 	    }
@@ -569,7 +569,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep    = 1;
 
 		if (ValidateArgument($name, PAGEARG_UID, $uid)) {
-		    $object = User::Lookup($uid);
+		    $object = (new User)->Lookup($uid);
 		}
 	    }
 	    break;
@@ -585,10 +585,10 @@ function VerifyPageArguments($argspec, $required)
 		$yep    = 1;
 
 		if (ValidateArgument($name, PAGEARG_UUID, $imageid, 0)) {
-		    $object = Image::LookupByUUID($imageid, $version);
+		    $object = (new Image)->LookupByUUID($imageid, $version);
 		}
 		elseif (ValidateArgument($name, PAGEARG_IMAGE, $imageid)) {
-		    $object = Image::Lookup($imageid, $version);
+		    $object = (new Image)->Lookup($imageid, $version);
 		}
 	    }
 	    elseif (isset($_REQUEST[$name]) && $_REQUEST[$name] != "") {
@@ -596,7 +596,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep = 1;
 
 		if (ValidateArgument($name, PAGEARG_IMAGE, $imageid)) {
-		    $object = Image::Lookup($imageid, $version);
+		    $object = (new Image)->Lookup($imageid, $version);
 		}
 	    }
 	    break;
@@ -612,7 +612,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep  = 1;
 
 		if (ValidateArgument($name, PAGEARG_OSINFO, $osid)) {
-		    $object = OSinfo::Lookup($osid, $version);
+		    $object = (new OSinfo)->Lookup($osid, $version);
 		}
 	    }
 	    break;
@@ -733,7 +733,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep   = 1;
 
 		if (ValidateArgument($name, PAGEARG_LOGFILE, $logid)) {
-		    $object = Logfile::Lookup($logid);
+		    $object = (new Logfile)->Lookup($logid);
 		}
 	    }
 	    break;

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -148,7 +148,7 @@ if (count($errors)) {
     SPITFORM($username, $email, $errors);
     return;
 }
-if ($user = User::Lookup($username)) {
+if ($user = (new User)->Lookup($username)) {
     if ($user->weblogin_frozen()) {
 	$errors["username"] = "This account is frozen";
     }

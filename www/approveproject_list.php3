@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007, 2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,7 +59,7 @@ PAGEHEADER("New Project Approval List");
 # implies denying the project leader account, when there is just a single
 # project pending for that project leader. 
 #
-$projlist = Project::PendingProjectList();
+$projlist = (new Project)->PendingProjectList();
 
 if (count($projlist) == 0) {
     USERERROR("There are no projects to approve!", 1);

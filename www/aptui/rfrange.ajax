@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,7 @@ function ProjectBlob($project, $global = false)
 {
     global $this_user;
     $pid_idx = $project->pid_idx();
-    $rfanges = ProjectRFRanges::Lookup($project);
+    $rfanges = (new ProjectRFRanges)->Lookup($project);
     $blob    = array();
     if (!FeatureEnabled("OTA-allowed", $this_user, $project, null)) {
         return $blob;
@@ -51,7 +51,7 @@ function ProjectBlob($project, $global = false)
         );
     }
     if ($global) {
-        $rfanges = GlobalRFRanges::Lookup();
+        $rfanges = (new GlobalRFRanges)->Lookup();
         
         foreach ($rfanges->Ranges() as $range) {
             $range_id = $range->range_id() ? $range->range_id() : "";
@@ -84,7 +84,7 @@ function Do_ProjectRanges()
 	SPITAJAX_ERROR(-1, "Invalid target pid");
         return -1;
     }
-    $target_project = Project::Lookup($pid);
+    $target_project = (new Project)->Lookup($pid);
     if (!$target_project) {
         sleep(2);
 	SPITAJAX_ERROR(-1, "Unknown target pid");
@@ -115,7 +115,7 @@ function Do_ProjectInuseRanges()
 	SPITAJAX_ERROR(-1, "Invalid target pid");
         return -1;
     }
-    $target_project = Project::Lookup($pid);
+    $target_project = (new Project)->Lookup($pid);
     if (!$target_project) {
         sleep(2);
 	SPITAJAX_ERROR(-1, "Unknown target pid");
@@ -159,7 +159,7 @@ function Do_ProjectInuseRanges()
 
 function Do_GlobalRanges()
 {
-    $rfanges = GlobalRFRanges::Lookup();
+    $rfanges = (new GlobalRFRanges)->Lookup();
     $blob    = array();
 
     foreach ($rfanges->Ranges() as $range) {
@@ -182,7 +182,7 @@ function Do_AllProjectRanges()
 
     while ($row = mysql_fetch_array($query_result)) {
         $pid = $row["pid"];
-        $project = Project::Lookup($pid);
+        $project = (new Project)->Lookup($pid);
         if (!$project) {
             continue;
         }
@@ -230,7 +230,7 @@ function Do_AllInuseRanges()
             $range["uuid"] = $row["uuid"];
             $range["key"]  = $uuid . ":" . $idx;
 
-            $instance = Instance::Lookup($uuid);
+            $instance = (new Instance)->Lookup($uuid);
             if ($instance) {
                 $range["url"] = $instance->StatusURL();
             }
@@ -276,7 +276,7 @@ function Do_RangeHistory()
             SPITAJAX_ERROR(-1, "Invalid target pid");
             return -1;
         }
-        $target_project = Project::Lookup($pid);
+        $target_project = (new Project)->Lookup($pid);
         if (!$target_project) {
             SPITAJAX_ERROR(-1, "Unknown target pid");
             return -1;
@@ -325,7 +325,7 @@ function Do_RangeHistory()
             "txlist"    => null,
             "key"       => $uuid . ":" . $idx,
         );
-        $instance = InstanceHistory::Lookup($uuid);
+        $instance = (new InstanceHistory)->Lookup($uuid);
         if ($instance) {
             $range["url"] = $instance->StatusURL();
         }
@@ -393,9 +393,9 @@ function Do_Transmissions()
             SPITAJAX_ERROR(-1, "Invalid uuid");
             return -1;
         }
-        $instance = Instance::Lookup($instance_uuid);
+        $instance = (new Instance)->Lookup($instance_uuid);
         if (!$instance) {
-            $instance = InstanceHistory::Lookup($instance_uuid);
+            $instance = (new InstanceHistory)->Lookup($instance_uuid);
         }
         if (! ($instance->CanView($this_user) || ISADMIN())) {
             SPITAJAX_ERROR(-1, "Not enough permission");
@@ -431,9 +431,9 @@ function Do_Transmissions()
     # Fill in the instance info.
     if (ISADMIN()) {
         foreach ($instances as $uuid => &$details) {
-            $instance = Instance::Lookup($uuid);
+            $instance = (new Instance)->Lookup($uuid);
             if (!$instance) {
-                $instance = InstanceHistory::Lookup($uuid);
+                $instance = (new InstanceHistory)->Lookup($uuid);
             }
             $details["uid"]   = $instance->creator();
             $details["pid"]   = $instance->pid();

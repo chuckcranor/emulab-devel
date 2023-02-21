@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -122,7 +122,7 @@ if (isset($mac)) {
     if (! preg_match('/^[\w\:]+$/', $mac)) {    
 	USERERROR("Does not look like a valid mac address.", 1);
     }
-    $node = Node::LookupByMac($mac);
+    $node = (new Node)->LookupByMac($mac);
 
     #
     # Switch to a node_id if its a physical node. Otherwise, 

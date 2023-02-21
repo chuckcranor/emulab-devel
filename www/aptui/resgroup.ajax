@@ -82,14 +82,14 @@ function Do_Reserve()
             $errors["error"] = "Bad uuid for reservation update";
         }
         else {
-            $resgroup = ReservationGroup::Lookup($uuid);
+            $resgroup = (new ReservationGroup)->Lookup($uuid);
             if (!$resgroup) {
                 $errors["error"] = "No such reservation group";
                 SPITAJAX_ERROR(2, $errors);
                 return;
             }
         }
-        $project = Project::Lookup($resgroup->pid());
+        $project = (new Project)->Lookup($resgroup->pid());
 
         if (! (ISADMIN() ||
                $this_idx == $resgroup->creator_idx() ||
@@ -105,7 +105,7 @@ function Do_Reserve()
         $errors["pid"] = "Invalid project name";
     }
     else {
-        $project = Project::Lookup($formfields["pid"]);
+        $project = (new Project)->Lookup($formfields["pid"]);
 
         if (!ISADMIN() &&
             !$project->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
@@ -230,10 +230,10 @@ function Do_Reserve()
                 if (!TBvalid_node_type($type)) {
                     $clerrors["type"] = TBFieldErrorString();
                 }
-                if (!Instance::ValidURN($urn)) {
+                if (!(new Instance)->ValidURN($urn)) {
                     $clerrors["cluster"] = TBFieldErrorString();
                 }
-                $aggregate = Aggregate::Lookup($urn);
+                $aggregate = (new Aggregate)->Lookup($urn);
                 if (!$aggregate) {
                     $clerrors["cluster"] = "No such cluster";
                 }
@@ -436,7 +436,7 @@ function Do_Reserve()
     # Next we check the validity of the reservation.
     $this_uid = $this_user->uid();
     $pid      = $project->pid();
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
 
     #
     # OK, we are going to to run a precheck on the reservation to
@@ -554,12 +554,12 @@ function Do_Delete()
         SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
-    $resgroup = ReservationGroup::Lookup($uuid);
+    $resgroup = (new ReservationGroup)->Lookup($uuid);
     if (!$resgroup) {
         SPITAJAX_ERROR(-1, "No such reservation group");
         return;
     }
-    $project = Project::Lookup($resgroup->pid());
+    $project = (new Project)->Lookup($resgroup->pid());
     if (!$project) {
 	SPITAJAX_ERROR(-1, "No such project");
 	return;
@@ -604,7 +604,7 @@ function Do_Delete()
             $opt .= "-N $reasonfile";
         }
     }
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
     $this_uid = $this_user->uid();
     $pid = $project->pid();
 
@@ -635,7 +635,7 @@ function Do_Delete()
     #
     # Look to see if the reservation is gone.
     #
-    if (!ReservationGroup::Lookup($uuid)) {
+    if (!(new ReservationGroup)->Lookup($uuid)) {
         $webtask->Delete();
         SPITAJAX_RESPONSE(array("redirect" => "user-dashboard.php"));
         return;
@@ -670,12 +670,12 @@ function Do_Refresh()
         SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
-    $resgroup = ReservationGroup::Lookup($uuid);
+    $resgroup = (new ReservationGroup)->Lookup($uuid);
     if (!$resgroup) {
         SPITAJAX_ERROR(-1, "No such reservation group");
         return;
     }
-    $project = Project::Lookup($resgroup->pid());
+    $project = (new Project)->Lookup($resgroup->pid());
     if (!$project) {
 	SPITAJAX_ERROR(-1, "No such project");
 	return;
@@ -687,7 +687,7 @@ function Do_Refresh()
 	return;
     }
     
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
     $this_uid = $this_user->uid();
     $pid = $project->pid();
 
@@ -741,18 +741,18 @@ function Do_InfoOrWarn($warning = false)
         SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
-    $resgroup = ReservationGroup::Lookup($uuid);
+    $resgroup = (new ReservationGroup)->Lookup($uuid);
     if (!$resgroup) {
         SPITAJAX_ERROR(-1, "No such reservation group");
         return;
     }
-    $project = Project::Lookup($resgroup->pid_idx());
+    $project = (new Project)->Lookup($resgroup->pid_idx());
     if (!$project) {
 	SPITAJAX_ERROR(-1, "No such project");
 	return;
     }
     $pid = $project->pid();
-    $user = User::Lookup($resgroup->creator_idx());
+    $user = (new User)->Lookup($resgroup->creator_idx());
     if (!$user) {
 	SPITAJAX_ERROR(-1, "No such user");
 	return;
@@ -789,7 +789,7 @@ function Do_InfoOrWarn($warning = false)
         chmod($reasonfile, 0666);
         $opts .= "-N $reasonfile";
     }
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
     $this_uid = $this_user->uid();
 
     $retval = SUEXEC($this_uid, "nobody",
@@ -852,12 +852,12 @@ function Do_Approve()
         SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
-    $resgroup = ReservationGroup::Lookup($uuid);
+    $resgroup = (new ReservationGroup)->Lookup($uuid);
     if (!$resgroup) {
         SPITAJAX_ERROR(-1, "No such reservation group");
         return;
     }
-    $project = Project::Lookup($resgroup->pid());
+    $project = (new Project)->Lookup($resgroup->pid());
     if (!$project) {
 	SPITAJAX_ERROR(-1, "No such project");
 	return;
@@ -885,7 +885,7 @@ function Do_Approve()
         $opt .= " -O ";
     }
     
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
     $this_uid = $this_user->uid();
     $pid = $project->pid();
 
@@ -939,7 +939,7 @@ function Do_Cancel()
         SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
-    $resgroup = ReservationGroup::Lookup($uuid);
+    $resgroup = (new ReservationGroup)->Lookup($uuid);
     if (!$resgroup) {
         SPITAJAX_ERROR(-1, "No such reservation group");
         return;
@@ -948,7 +948,7 @@ function Do_Cancel()
 	SPITAJAX_ERROR(-1, "Only clear supported on this path.");
 	return;
     }
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
     $this_uid = $this_user->uid();
     $uuid     = $resgroup->uuid();
 
@@ -1003,13 +1003,13 @@ function Do_IdleDetection()
         SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
-    $resgroup = ReservationGroup::Lookup($uuid);
+    $resgroup = (new ReservationGroup)->Lookup($uuid);
     if (!$resgroup) {
         SPITAJAX_ERROR(-1, "No such reservation group");
         return;
     }
     $opts = ($ajax_args["value"] == 1 ? "" : "-c");
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
     $this_uid = $this_user->uid();
     $uuid     = $resgroup->uuid();
 
@@ -1051,7 +1051,7 @@ function Do_ListReservationGroups()
             SPITAJAX_ERROR(-1, "Invalid project name");
             return;
         }
-        $project = Project::Lookup($ajax_args["project"]);
+        $project = (new Project)->Lookup($ajax_args["project"]);
         if (!$project) {
             SPITAJAX_ERROR(-1, "No such project");
             return;
@@ -1060,13 +1060,13 @@ function Do_ListReservationGroups()
             SPITAJAX_ERROR(-1, "Not enough permission in project");
             return;
         }
-        $resgroups = ReservationGroup::LookupForProject($project);
+        $resgroups = (new ReservationGroup)->LookupForProject($project);
     }
     elseif (ISADMIN() && !isset($ajax_args["useronly"])) {
-        $resgroups = ReservationGroup::LookupAll();
+        $resgroups = (new ReservationGroup)->LookupAll();
     }
     else {
-        $resgroups = ReservationGroup::LookupForUser($this_user);
+        $resgroups = (new ReservationGroup)->LookupForUser($this_user);
     }
     foreach ($resgroups as $resgroup) {
         $reservations[$resgroup->uuid()] = $resgroup->Blob(false);
@@ -1091,7 +1091,7 @@ function Do_GetReservationGroup()
         SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
-    $resgroup = ReservationGroup::Lookup($uuid);
+    $resgroup = (new ReservationGroup)->Lookup($uuid);
     if (!$resgroup) {
         SPITAJAX_ERROR(-1, "No such reservation group");
 	return;
@@ -1111,7 +1111,7 @@ function Do_RangeReservations()
     global $this_user;
     global $ajax_args;
     $info = array();
-    $allgroups = ReservationGroup::LookupAll();
+    $allgroups = (new ReservationGroup)->LookupAll();
     foreach ($allgroups as $reservation) {
         $rf = $reservation->rfreservations();
         if (!count($rf)) {
@@ -1140,7 +1140,7 @@ function Do_RouteReservations()
     global $this_user;
     global $ajax_args;
     $info = array();
-    $allgroups = ReservationGroup::LookupAll();
+    $allgroups = (new ReservationGroup)->LookupAll();
     foreach ($allgroups as $reservation) {
         $routes = $reservation->routereservations();
         if (!count($routes)) {
@@ -1158,7 +1158,7 @@ function Do_RouteReservations()
             $info[] = $blob;
         }
     }
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
 
     $retval = SUEXEC("elabman", "nobody",
                      "webmanage_resgroup ".

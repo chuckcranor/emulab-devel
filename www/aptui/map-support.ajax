@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,8 +33,8 @@ function Do_GetFixedEndpoints()
 {
     global $this_user, $ajax_args;
     $blob = array();
-    $aggregates = Aggregate::AllAggregatesList();
-    $radioinfo  = Aggregate::RadioInfoNew();
+    $aggregates = (new Aggregate)->AllAggregatesList();
+    $radioinfo  = (new Aggregate)->RadioInfoNew();
     
     foreach ($aggregates as $urn => $aggregate) {
         if (! $aggregate->isFE() || $aggregate->disabled()) {
@@ -61,14 +61,14 @@ function Do_GetFixedEndpoints()
 function Do_GetBaseStations()
 {
     global $this_user, $ajax_args;
-    $aggregate = Aggregate::ThisAggregate();
+    $aggregate = (new Aggregate)->ThisAggregate();
     if (!$aggregate) {
 	SPITAJAX_ERROR(-1, "No aggregate info");
 	return -1;
     }
     $urn = $aggregate->urn();
     $reservable_nodes = $aggregate->ReservableNodes(true);
-    $radioinfo        = Aggregate::RadioInfoNew();
+    $radioinfo        = (new Aggregate)->RadioInfoNew();
     $locationRadios   = array();
     # Split up radios by location
     foreach ($radioinfo[$urn] as $node_id => &$info) {
@@ -126,13 +126,13 @@ function Do_GetDenseDeployment()
 {
     global $this_user, $ajax_args;
     global $this_user, $ajax_args;
-    $aggregate = Aggregate::ThisAggregate();
+    $aggregate = (new Aggregate)->ThisAggregate();
     if (!$aggregate) {
 	SPITAJAX_ERROR(-1, "No aggregate info");
 	return -1;
     }
     $urn = $aggregate->urn();
-    $radioinfo        = Aggregate::RadioInfoNew();
+    $radioinfo        = (new Aggregate)->RadioInfoNew();
     $locationRadios   = array();
     # Split up radios by location
     foreach ($radioinfo[$urn] as $node_id => &$info) {

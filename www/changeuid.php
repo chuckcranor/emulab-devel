@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007, 2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -124,7 +124,7 @@ if (! isset($new_uid) || $new_uid == "") {
 elseif (!TBvalid_uid($new_uid)) {
     $error = "UID: " . TBFieldErrorString();
 }
-elseif (User::Lookup($new_uid) || posix_getpwnam($new_uid)) {
+elseif ((new User)->Lookup($new_uid) || posix_getpwnam($new_uid)) {
     $error = "UID: Already in use. Pick another";
 }
 

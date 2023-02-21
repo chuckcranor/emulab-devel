@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -354,7 +354,7 @@ if (count($errors)) {
 #
 # The trust args are in the formfields array by keyword/value.
 #
-if (! ($result = Group::EditGroup($group, $uid, $formfields, $errors))) {
+if (! ($result = (new Group)->EditGroup($group, $uid, $formfields, $errors))) {
     # Always respit the form so that the form fields are not lost.
     # I just hate it when that happens so lets not be guilty of it ourselves.
     SPITFORM($formfields, $errors);

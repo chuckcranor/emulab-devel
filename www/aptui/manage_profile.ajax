@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,7 +72,7 @@ function Do_Create()
             $errors["errors"] = "Missing profile uuid";
             goto bad;
         }
-	$profile = Profile::Lookup($formfields["uuid"]);
+	$profile = (new Profile)->Lookup($formfields["uuid"]);
 	if (!$profile) {
             $errors["errors"] = "Cannot find profile";
             goto bad;
@@ -110,7 +110,7 @@ function Do_Create()
     if (isset($formfields["copy-profile"]) &&
         $formfields["copy-profile"] != "") {
         // We get here via image creation on the status page.
-	$profile = Profile::Lookup($formfields["copy-profile"]);
+	$profile = (new Profile)->Lookup($formfields["copy-profile"]);
 	if (!$profile) {
             $errors["errors"] = "Cannot find source profile";
             goto bad;
@@ -156,7 +156,7 @@ function Do_Create()
     # Project has to exist. We need to know it for the SUEXEC call
     # below. 
     #
-    $project = Project::LookupByPid($formfields["profile_pid"]);
+    $project = (new Project)->LookupByPid($formfields["profile_pid"]);
     if (!$project) {
         $errors["profile_pid"] = "No such project";
     }
@@ -165,7 +165,7 @@ function Do_Create()
         $errors["profile_pid"] = "Not enough permission in project";
     }
     elseif (($action == "create" || $action == "clone") && 
-            Profile::LookupByName($project, $formfields{"profile_name"})) {
+            (new Profile)->LookupByName($project, $formfields{"profile_name"})) {
         $errors["profile_name"] = "Already in use";
     }
     
@@ -195,14 +195,14 @@ function Do_Create()
         if (!isset($snapuuid) || $snapuuid == "" || !IsValidUUID($snapuuid)) {
             $errors["error"] = "Invalid experiment specified for clone!";
         }
-        $instance = Instance::Lookup($snapuuid);
+        $instance = (new Instance)->Lookup($snapuuid);
         if (!$instance) {
             $errors["error"] = "No such experiment to clone!";
         }
         else if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
             $errors["error"] = "Not enough permission!";
         }
-        else if (! Profile::Lookup($instance->profile_id(),
+        else if (! (new Profile)->Lookup($instance->profile_id(),
                                    $instance->profile_version())) {
             $errors["error"] = "Cannot load profile for instance!";
         }
@@ -374,7 +374,7 @@ function Do_Create()
     #
     # Call out to the backend.
     #
-    $webtask    = WebTask::CreateAnonymous();
+    $webtask    = (new WebTask)->CreateAnonymous();
     $webtask_id = $webtask->task_id();
     $command    = "webmanage_profile -t $webtask_id ";
 
@@ -435,11 +435,11 @@ function Do_Create()
     if ($action == "edit") {
         $webtask->Refresh();
         if ($webtask->TaskValue("newProfile")) {
-            $profile = Profile::Lookup($webtask->TaskValue("newProfile"));
+            $profile = (new Profile)->Lookup($webtask->TaskValue("newProfile"));
         }
     }
     else {
-        $profile = Profile::LookupByName($project, $formfields["profile_name"]);
+        $profile = (new Profile)->LookupByName($project, $formfields["profile_name"]);
     }
     if ($profile) {
         $uuid = $profile->uuid();
@@ -475,7 +475,7 @@ function Do_Duplicate()
 	SPITAJAX_ERROR(1, "Not a valid profile target");
 	return;
     }
-    $profile = Profile::Lookup($target);
+    $profile = (new Profile)->Lookup($target);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "No such profile $target");
 	return;
@@ -494,7 +494,7 @@ function Do_Duplicate()
                          TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
         $errors["pid"] = TBFieldErrorString();
     }
-    elseif (! ($project = Project::Lookup($ajax_args["pid"]))) {
+    elseif (! ($project = (new Project)->Lookup($ajax_args["pid"]))) {
         $errors["pid"] = "No such project";
     }
     elseif (! $project->AccessCheck($this_user, $TB_PROJECT_CREATEPROFILE)) {
@@ -510,7 +510,7 @@ function Do_Duplicate()
     #
     # Call out to the backend.
     #
-    $webtask    = WebTask::CreateAnonymous();
+    $webtask    = (new WebTask)->CreateAnonymous();
     $webtask_id = $webtask->task_id();
     $command    = "webmanage_profile -t $webtask_id duplicate ";
     $command   .= $profile->uuid() . " $pid $name";
@@ -555,7 +555,7 @@ function Do_CloneStatus()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Clone operation failed, ".
                        "could not create disk image");
@@ -574,7 +574,7 @@ function Do_CloneStatus()
 	SPITAJAX_ERROR(1, "The cloned experiment is gone");
 	return;
     }
-    $instance = Instance::Lookup($webtask->TaskValue("cloning_instance"));
+    $instance = (new Instance)->Lookup($webtask->TaskValue("cloning_instance"));
     if (!$instance) {
 	SPITAJAX_ERROR(1, "The cloned experiment is not here anymore");
 	return 1;
@@ -606,7 +606,7 @@ function Do_CloneStatus()
     # the aggregate and node to track down the status.
     #
     if (isset($taskdata["aggregate_urn"]) && isset($taskdata["client_id"])) {
-        $sliver = InstanceSliver::Lookup($instance, $taskdata["aggregate_urn"]);
+        $sliver = (new InstanceSliver)->Lookup($instance, $taskdata["aggregate_urn"]);
         if ($sliver) {
             foreach ($sliver->StatusArray() as $status) {
                 if (isset($status["sliver_data"]) &&
@@ -646,7 +646,7 @@ function Do_DeleteProfile()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
@@ -672,7 +672,7 @@ function Do_DeleteProfile()
     if (isset($ajax_args["impotent"]) && $ajax_args["impotent"]) {
         $opt .= "-n ";
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return;
@@ -698,7 +698,7 @@ function Do_DeleteProfile()
                 $profilelist = array();
                 
                 foreach ($plist as $uuid) {
-                    $tmp = Profile::Lookup($uuid);
+                    $tmp = (new Profile)->Lookup($uuid);
                     if ($tmp) {
                         $plob = array();
                         $plob["uuid"]    = $uuid;
@@ -725,7 +725,7 @@ function Do_DeleteProfile()
     }
     $webtask->Delete();
     # Lookup next most recent version
-    $profile = Profile::Lookup($profile->profileid());
+    $profile = (new Profile)->Lookup($profile->profileid());
     if (!$profile) {
 	#
 	# Go back to profiles page instead. Happens when last version
@@ -756,7 +756,7 @@ function Do_PublishProfile()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
@@ -773,7 +773,7 @@ function Do_PublishProfile()
 	SPITAJAX_ERROR(1, "Not allowed to publish non-head version");
 	return;
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return;
@@ -822,7 +822,7 @@ function Do_CheckScript()
     $updaterepo    = false;
 
     if (isset($ajax_args["profile_uuid"])) {
-        $profile = Profile::Lookup($ajax_args["profile_uuid"]);
+        $profile = (new Profile)->Lookup($ajax_args["profile_uuid"]);
         if (!$profile) {
             SPITAJAX_ERROR(1, "Unknown profile uuid");
             return;
@@ -836,7 +836,7 @@ function Do_CheckScript()
 
     // XXX We might get this when creating a new profile. 
     if (isset($ajax_args["pid"]) && $ajax_args["pid"] != "") {
-        $project = Project::LookupByPid($ajax_args["pid"]);
+        $project = (new Project)->LookupByPid($ajax_args["pid"]);
         if (!$project) {
             SPITAJAX_ERROR(1, "No such project");
             return;
@@ -936,7 +936,7 @@ function Do_BindParameters()
 	SPITAJAX_ERROR(1, "Not a valid profile target");
 	return;
     }
-    $profile = Profile::Lookup($target);
+    $profile = (new Profile)->Lookup($target);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "No such profile $target");
 	return;
@@ -1250,7 +1250,7 @@ function Do_ConvertClassic()
 	SPITAJAX_ERROR(1, "Missing experiment uuid");
 	return;
     }
-    $experiment = Experiment::LookupByUUID($ajax_args["uuid"]);
+    $experiment = (new Experiment)->LookupByUUID($ajax_args["uuid"]);
     if (!$experiment) {
 	SPITAJAX_ERROR(1, "No such experiment.");
 	return;
@@ -1419,7 +1419,7 @@ function Do_GetRepository()
 
     // XXX We might get this when creating a new profile. 
     if (isset($ajax_args["pid"]) && $ajax_args["pid"] != "") {
-        $project = Project::LookupByPid($ajax_args["pid"]);
+        $project = (new Project)->LookupByPid($ajax_args["pid"]);
         if (!$project) {
             SPITAJAX_ERROR(1, "No such project");
             return;
@@ -1437,7 +1437,7 @@ function Do_GetRepository()
         $nameopt = "-S " . escapeshellarg($ajax_args["profile_name"]);
     }
 
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return;
@@ -1540,7 +1540,7 @@ function Do_UpdateRepository()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
@@ -1549,7 +1549,7 @@ function Do_UpdateRepository()
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return;
@@ -1596,7 +1596,7 @@ function UpdateMaster($profile, $script, $rspec)
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
 
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return -1;
@@ -1664,7 +1664,7 @@ function Do_GetRepoHash()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
@@ -1694,7 +1694,7 @@ function Do_GetProfile()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
+    $profile = (new Profile)->Lookup($ajax_args["uuid"]);
     if (!$profile) {
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;

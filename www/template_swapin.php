@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -395,7 +395,7 @@ if (!isset($swapin)) {
 	}
     
 	$replay_instance =
-	    TemplateInstance::LookupByExptidx($replay_instance_idx);
+	    (new TemplateInstance)->LookupByExptidx($replay_instance_idx);
 	if (!$replay_instance) {
 	    USERERROR("No such instance $replay_instance_idx in template!", 1);
 	}
@@ -451,7 +451,7 @@ if (!isset($formfields["eid"]) || $formfields["eid"] == "") {
 elseif (!TBvalid_eid($formfields["eid"])) {
     $errors["ID"] = TBFieldErrorString();
 }
-elseif (Experiment::Lookup($pid, $formfields["eid"])) {
+elseif ((new Experiment)->Lookup($pid, $formfields["eid"])) {
     $errors["ID"] = "Already in use";
 }
 else {
@@ -754,7 +754,7 @@ if (!preg_match("/^Instance\s+[-\w]+\/[-\w]+\s+\((\d*)\)/",
 		$matches)) {
     TBERROR("Could not locate instance object for $pid/$eid", 1);
 }
-$instance = TemplateInstance::LookupByIdx($matches[1]);
+$instance = (new TemplateInstance)->LookupByIdx($matches[1]);
 if (!$instance) {
     TBERROR("Could not map instance idx " . $matches[1] . " to its object!",1);
 }

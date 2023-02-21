@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,9 +44,9 @@ if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
 #
 # If only one aggregate, skip the summary page.
 #
-$am_array = Aggregate::AllAggregatesList();
+$am_array = (new Aggregate)->AllAggregatesList();
 if (count($am_array) == 1) {
-    $us = Aggregate::ThisAggregate();
+    $us = (new Aggregate)->ThisAggregate();
     $nickname = $us->nickname();
     header("Location: cluster-status.php?cluster=$nickname");
     return;

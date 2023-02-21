@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -80,7 +80,7 @@ class Dataset
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return Dataset::Lookup($row["idx"]);
+	return (new Dataset)->Lookup($row["idx"]);
     }
 
     # accessors
@@ -206,18 +206,18 @@ class Dataset
         return $command;
     }
     function modifyCommand($webtask) {
-        return Dataset::grantCommand($webtask);
+        return (new Dataset)->grantCommand($webtask);
     }
 
     # Grab the webtask. Backwards compat mode, see if there is one associated
     # with the object, use that. Otherwise create a new one.
     function WebTask() {
         if ($this->webtask_id()) {
-            return WebTask::Lookup($this->webtask_id());
+            return (new WebTask)->Lookup($this->webtask_id());
         }
-        $webtask = WebTask::LookupByObject($this->uuid());
+        $webtask = (new WebTask)->LookupByObject($this->uuid());
         if (!$webtask) {
-            $webtask = WebTask::CreateAnonymous();
+            $webtask = (new WebTask)->CreateAnonymous();
             if (!$webtask) {
                 return null;
             }
@@ -236,7 +236,7 @@ class Dataset
 	if ($this->project)
 	    return $this->project;
 
-	$this->project = Project::Lookup($pid);
+	$this->project = (new Project)->Lookup($pid);
 	if (! $this->project) {
 	    TBERROR("Could not lookup project $pid!", 1);
 	}

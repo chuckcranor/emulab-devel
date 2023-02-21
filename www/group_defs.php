@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,7 @@ class Group
     #
     # Constructor by lookup on unique index.
     #
-    function Group($gid_idx) {
+    function __construct($gid_idx = "") {
 	$safe_gid_idx = addslashes($gid_idx);
 
 	$query_result =
@@ -87,7 +87,7 @@ class Group
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['gid_idx'];
 
-	return Group::Lookup($idx);	
+	return (new Group)->Lookup($idx);	
     }
     
     #
@@ -186,7 +186,7 @@ class Group
 	    return null;
 	}
 	$group = $matches[2];
-	$newgroup = Group::Lookup($group);
+	$newgroup = (new Group)->Lookup($group);
 	if (! $newgroup) {
 	    $errors[] = "Transient error(6); please try again later.";
 	    TBERROR("Could not lookup new group $group", 0);
@@ -275,7 +275,7 @@ class Group
     function LoadProject() {
 	$pid_idx = $this->pid_idx();
 
-	if (! ($project = Project::Lookup($pid_idx))) {
+	if (! ($project = (new Project)->Lookup($pid_idx))) {
 	    TBERROR("Group::LoadProject: Could not load project $pid_idx!", 1);
 	}
 	$this->project = $project;
@@ -294,7 +294,7 @@ class Group
     function GetLeader() {
 	$leader_idx = $this->leader_idx();
 
-	if (! ($leader = User::Lookup($leader_idx))) {
+	if (! ($leader = (new User)->Lookup($leader_idx))) {
 	    TBERROR("Could not find user object for $leader_idx", 1);
 	}
 	return $leader;
@@ -623,7 +623,7 @@ class Group
 	    DBQueryFatal("delete from groups where gid_idx='$gid_idx'");
 	    return null;
 	}
-	$newgroup = Group::Lookup($gid_idx);
+	$newgroup = (new Group)->Lookup($gid_idx);
 	if (! $newgroup)
 	    return null;
 
@@ -647,13 +647,13 @@ class Group
     function Initialize($uid) {
 	global $TBOPSPID;
 	
-	$emulabgroup = Group::LookupByPidGid($TBOPSPID, $TBOPSPID);
+	$emulabgroup = (new Group)->LookupByPidGid($TBOPSPID, $TBOPSPID);
 
 	if (! $emulabgroup) {
 	    TBERROR("Group::Initialize: Could not find $TBOPSPID!", 1);
 	}
 
-	$user = User::Lookup($uid);
+	$user = (new User)->Lookup($uid);
 
 	if (! $user) {
 	    TBERROR("Group::Initialize: Could not find user $uid!", 1);
@@ -907,7 +907,7 @@ class Group
 	    if ($exclude_leader && $leader->uid_idx() == $uid_idx)
 		continue;
 
-	    if (! ($user = User::Lookup($uid_idx))) {
+	    if (! ($user = (new User)->Lookup($uid_idx))) {
 		TBERROR("Group::MemberList: ".
 			"Could not load user $uid_idx!", 1);
 	    }
@@ -944,7 +944,7 @@ class Group
 	while ($row = mysql_fetch_array($query_result)) {
 	    $uid_idx = $row["uid_idx"];
 
-	    if (! ($user = User::Lookup($uid_idx))) {
+	    if (! ($user = (new User)->Lookup($uid_idx))) {
 		TBERROR("Group::NonMemberList: ".
 			"Could not load user $uid_idx!", 1);
 	    }
@@ -1303,7 +1303,7 @@ class Group
 	    $uid_idx = $row["uid_idx"];
 	    $trust   = $row["trust"];
 
-	    if (! ($target_user = User::Lookup($uid_idx))) {
+	    if (! ($target_user = (new User)->Lookup($uid_idx))) {
 		TBERROR("Could not lookup object for user $uid_idx", 1);
 	    }
 	    $usr_name     = $target_user->name();
@@ -1395,7 +1395,7 @@ class Group
 	while ($row = mysql_fetch_array($query_result)) {
 	    $idx = $row["idx"];
 
-	    if (! ($experiment = Experiment::Lookup($idx))) {
+	    if (! ($experiment = (new Experiment)->Lookup($idx))) {
 		TBERROR("Group::ExperimentList: ".
 			"Could not load experiment $idx!", 1);
 	    }
@@ -1422,11 +1422,11 @@ function TBGrpTrust($uid, $pid, $gid)
 	$gid = $pid;
     }
 
-    if (! ($group = Group::LookupByPidGid($pid, $gid))) {
+    if (! ($group = (new Group)->LookupByPidGid($pid, $gid))) {
         TBERROR("TBGrpTrust: Could not look up group object for $pid/$eid!",1);
     }
     
-    if (! ($user = User::Lookup($uid))) {
+    if (! ($user = (new User)->Lookup($uid))) {
         TBERROR("TBGrpTrust: Could not look up user object for $uid!", 1);
     }
     return $group->UserTrust($user);

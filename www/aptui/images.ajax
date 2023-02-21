@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,7 +47,7 @@ function CheckPageArgs()
             SPITAJAX_ERROR(-1, "Invalid target uid");
             return -1;
         }
-        $target_user = User::Lookup($uid);
+        $target_user = (new User)->Lookup($uid);
         if (!$target_user) {
             sleep(2);
             SPITAJAX_ERROR(-1, "Unknown target uid");
@@ -68,7 +68,7 @@ function CheckPageArgs()
             SPITAJAX_ERROR(-1, "Invalid target pid");
             return -1;
         }
-        $target_project = Project::Lookup($pid);
+        $target_project = (new Project)->Lookup($pid);
         if (!$target_project) {
             sleep(2);
             SPITAJAX_ERROR(-1, "Unknown target pid");
@@ -109,7 +109,7 @@ function Do_ListImages()
         SPITAJAX_ERROR(-1, "Invalid cluster name");
         return;
     }
-    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
+    $aggregate = (new Aggregate)->LookupByNickname($ajax_args["cluster"]);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
@@ -123,7 +123,7 @@ function Do_ListImages()
         $uid = $target_user->uid();
     }
     $urn = $aggregate->urn();
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
     $retval = SUEXEC($uid, "nobody",
@@ -175,7 +175,7 @@ function Do_DeleteImage()
         SPITAJAX_ERROR(-1, "Invalid cluster name");
         return;
     }
-    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
+    $aggregate = (new Aggregate)->LookupByNickname($ajax_args["cluster"]);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
@@ -188,7 +188,7 @@ function Do_DeleteImage()
 	SPITAJAX_ERROR(-1, "Invalid project");
 	return;
     }
-    $project = Project::Lookup($ajax_args["pid"]);
+    $project = (new Project)->Lookup($ajax_args["pid"]);
     if (!$project) {
 	SPITAJAX_ERROR(-1, "No such project");
 	return;
@@ -222,7 +222,7 @@ function Do_DeleteImage()
     }
     
     $aggurn = $aggregate->urn();
-    $webtask = WebTask::CreateAnonymous();
+    $webtask = (new WebTask)->CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
     $retval = SUEXEC($this_user->uid(), "nobody",

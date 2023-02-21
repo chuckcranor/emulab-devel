@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,7 +44,7 @@ class GeniSlice
     #
     # Constructor lookup.
     #
-    function GeniSlice($authority, $token) {
+    function __construct($authority = "", $token = "") {
 	$safe_token = addslashes($token);
 	$dblink     = GetDBLink($authority);
 	$idx        = null;
@@ -154,7 +154,7 @@ class GeniSlice
 	while ($row = mysql_fetch_array($query_result)) {
 	    $idx = $row["idx"];
 
-	    if (! ($slice = GeniSlice::Lookup($authority, $idx))) {
+	    if (! ($slice = (new GeniSlice)->Lookup($authority, $idx))) {
 		TBERROR("GeniSlice::AllSlices: ".
 			"Could not load slice $idx!", 1);
 	    }
@@ -180,7 +180,7 @@ class GeniSlice
 	}
 	$row = mysql_fetch_row($query_result);
 	$idx = $row[0];
- 	return GeniSlice::Lookup($authority, $idx);
+ 	return (new GeniSlice)->Lookup($authority, $idx);
     }
 
     function LookupByPublicID($authority, $publicid) {
@@ -200,7 +200,7 @@ class GeniSlice
 	}
 	$row = mysql_fetch_row($query_result);
 	$idx = $row[0];
- 	return GeniSlice::Lookup($authority, $idx);
+ 	return (new GeniSlice)->Lookup($authority, $idx);
     }
 
     function GetManifest() {
@@ -244,7 +244,7 @@ class GeniUser
     #
     # Constructor lookup.
     #
-    function GeniUser($authority, $token) {
+    function __construct($authority = "", $token = "") {
 	$safe_token = addslashes($token);
 	$dblink     = GetDBLink($authority);
 	$idx        = null;
@@ -340,7 +340,7 @@ class GeniUser
 	}
 	$row = mysql_fetch_row($query_result);
 	$idx = $row[0];
- 	return GeniUser::Lookup($authority, $idx);
+ 	return (new GeniUser)->Lookup($authority, $idx);
     }
     
     # accessors
@@ -387,7 +387,7 @@ class ClientSliver
     #
     # Constructor lookup.
     #
-    function ClientSliver($token) {
+    function __construct($token = "") {
 	$safe_token = addslashes($token);
 	$dblink     = GetDBLink("sa");
 	$idx        = null;
@@ -468,7 +468,7 @@ class ClientSliver
 	while ($row = mysql_fetch_array($query_result)) {
 	    $idx = $row["idx"];
 
-	    if (! ($sliver = ClientSliver::Lookup($idx))) {
+	    if (! ($sliver = (new ClientSliver)->Lookup($idx))) {
 		TBERROR("ClientSliver::SliverList: ".
 			"Could not load client sliver $idx!", 1);
 	    }
@@ -486,7 +486,7 @@ class QuickVM
     #
     # Constructor lookup.
     #
-    function QuickVM($uuid) {
+    function __construct($uuid = "") {
 	$safe_uuid  = addslashes($uuid);
 	$dblink     = GetDBLink("sa");
 	$idx        = null;
@@ -556,7 +556,7 @@ class QuickVM
 	}
 	$row = mysql_fetch_row($query_result);
 	$uuid = $row[0];
- 	return QuickVM::Lookup($uuid);
+ 	return (new QuickVM)->Lookup($uuid);
     }
     function LookupByCreator($token) {
 	$dblink     = GetDBLink("sa");
@@ -575,7 +575,7 @@ class QuickVM
 	}
 	$row = mysql_fetch_row($query_result);
 	$uuid = $row[0];
- 	return QuickVM::Lookup($uuid);
+ 	return (new QuickVM)->Lookup($uuid);
     }
 }
 

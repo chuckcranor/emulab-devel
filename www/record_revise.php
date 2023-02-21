@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,7 +46,7 @@ $eid = $instance->eid();
 $gid = $instance->gid();
 $project = $instance->Project();
 $unix_pid = $project->unix_gid();
-$group    = Group::LookupByPidGid($pid, $gid);
+$group    = (new Group)->LookupByPidGid($pid, $gid);
 $unix_gid = $group->unix_gid();
 
 # Permission

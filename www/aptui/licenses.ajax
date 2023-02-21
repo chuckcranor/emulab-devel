@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -73,7 +73,7 @@ function Do_Accept()
     }
     if ($license["license_level"] == "project") {
         $target = $license["pid"];
-        $project = Project::Lookup($target);
+        $project = (new Project)->Lookup($target);
         if (!$project) {
             SPITAJAX_ERROR(1, "No such project");
             return 1;
@@ -87,7 +87,7 @@ function Do_Accept()
         $target = $license["uid"];
     }
     $this_uid = $this_user->uid();
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
     
     $retval = SUEXEC($this_uid, "nobody",
 		     "webmanage_licenses -t " . $webtask->task_id() . " -- ".
@@ -139,7 +139,7 @@ function Do_Reject()
     }
     if ($license["license_level"] == "project") {
         $target = $license["pid"];
-        $project = Project::Lookup($target);
+        $project = (new Project)->Lookup($target);
         if (!$project) {
             SPITAJAX_ERROR(1, "No such project");
             return 1;
@@ -153,7 +153,7 @@ function Do_Reject()
         $target = $license["uid"];
     }
     $this_uid = $this_user->uid();
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
     
     $retval = SUEXEC($this_uid, "nobody",
 		     "webmanage_licenses -t " . $webtask->task_id() . " -- ".
@@ -194,7 +194,7 @@ function Do_Request()
 	SPITAJAX_ERROR(1, "Missing project");
 	return 1;
     }
-    $project = Project::Lookup($ajax_args["pid"]);
+    $project = (new Project)->Lookup($ajax_args["pid"]);
     if (!$project) {
 	SPITAJAX_ERROR(1, "No such project");
 	return 1;
@@ -205,7 +205,7 @@ function Do_Request()
     }
     $pid      = $project->pid();
     $this_uid = $this_user->uid();
-    $webtask  = WebTask::CreateAnonymous();
+    $webtask  = (new WebTask)->CreateAnonymous();
     
     $retval = SUEXEC($this_uid, "nobody",
 		     "webmanage_licenses -t " . $webtask->task_id() . " -- ".
