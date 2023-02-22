@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -313,7 +313,6 @@ function ProfileListAux($query_result)
         $version = $row["version"];
         $name    = $row["name"];
         $pid     = $row["pid"];
-        $desc    = $row["description"];
         $created = DateStringGMT($row["created"]);
         $last_use= DateStringGMT($row["last_use"]);
         $public  = $row["public"];
