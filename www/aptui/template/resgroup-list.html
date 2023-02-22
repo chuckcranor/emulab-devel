@@ -221,8 +221,10 @@
 		    <th>Cluster</th>
 		    <th>Type</th>
 		    <th>Count</th>
-		    <th>Using</th>
-		    <th>Utilization</th>
+		    <% if (!value.ishistory) { %>
+		      <th>Using</th>
+		      <th>Utilization</th>
+		    <% } %>
 		    <th>Status</th>
 		    <% if (isadmin) { %>
 		      <th class="sorter-false"></th>
@@ -234,26 +236,28 @@
 			  <td><%- info.cluster_id %></td>
 			  <td><%- info.type %></td>
 			  <td><%- info.count %></td>
-			  <td>
-			    <% if (info.active && info.using != null) { %>
-			      <% if (info.using < info.count) { %>
-				<span class="text-danger">
+			  <% if (!value.ishistory) { %>
+			    <td>
+			      <% if (info.active && info.using != null) { %>
+				<% if (info.using < info.count) { %>
+				  <span class="text-danger">
+				    <%- info.using %>
+				  </span>
+				<% } else { %>
 				  <%- info.using %>
-				</span>
+				<% } %>
 			      <% } else { %>
-				<%- info.using %>
+				&nbsp;
 			      <% } %>
-			    <% } else { %>
-			      &nbsp;
-			    <% } %>
-			  </td>
-			  <td>
-			    <% if (info.utilization != null) { %>
-			      <%- info.utilization %>%
-			    <% } else { %>
-			      &nbsp;
-			    <% } %>
-			  </td>
+			    </td>
+			    <td>
+			      <% if (info.utilization != null) { %>
+				<%- info.utilization %>%
+			      <% } else { %>
+				&nbsp;
+			      <% } %>
+			    </td>
+			  <% } %>
 			  <td class="reservation-status-column">
 			    <span class="status-approved hidden">
 			      Approved</span>
