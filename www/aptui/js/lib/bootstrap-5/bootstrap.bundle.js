@@ -252,8 +252,6 @@
         $.fn[name] = plugin.jQueryInterface;
         $.fn[name].Constructor = plugin;
 
-	  console.info(name);
-
         $.fn[name].noConflict = () => {
           $.fn[name] = JQUERY_NO_CONFLICT;
           return plugin.jQueryInterface;
@@ -7070,7 +7068,6 @@
     Tooltip
   };
 
-  console.info("FOO");
   return index_umd;
 
 }));
