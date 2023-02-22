@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,28 +33,36 @@ class ReservationGroup
     var $reservations;
     var $rfreservations;
     var $routereservations;
+    var $ishistory;
     
     #
     # Constructor by lookup by urn
     #
-    function ReservationGroup($uuid) {
+    function ReservationGroup($uuid, $history = 0) {
 	$safe_uuid = addslashes($uuid);
 
 	$query_result =
-	    DBQueryWarn("select * from apt_reservation_groups ".
-                        "where uuid='$safe_uuid'");
+	    DBQueryWarn("select * from " .
+                        ($history ?
+                         "apt_reservation_group_history " :
+                         "apt_reservation_groups ") .
+                        "where uuid='$safe_uuid' ".
+                        (!$history ? "" :
+                         "and created>DATE_SUB(curdate(), INTERVAL 1 YEAR) ".
+                         "order by created desc"));
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->resgroup = null;
 	    return;
 	}
+        $this->ishistory    = $history;
 	$this->resgroup     = mysql_fetch_array($query_result);
         $this->reservations =
-            ReservationGroupReservation::LookupForGroup($this);
+            ReservationGroupReservation::LookupForGroup($this, $history);
         $this->rfreservations =
-            ReservationGroupRFReservation::LookupForGroup($this);
+            ReservationGroupRFReservation::LookupForGroup($this, $history);
         $this->routereservations =
-            ReservationGroupRouteReservation::LookupForGroup($this);
+            ReservationGroupRouteReservation::LookupForGroup($this, $history);
     }
     # accessors
     function reservations()   { return $this->reservations; }
@@ -77,7 +85,8 @@ class ReservationGroup
     function reason()       { return $this->field('reason'); }
     function forclass()     { return $this->field('forclass'); }
     function noidledetection() { return $this->field('noidledetection'); }
-
+    function isHistory()    { return $this->ishistory; }
+    
     # Project of resgroup.
     function Project() {
         return Project::Lookup($this->pid_idx());
@@ -89,8 +98,8 @@ class ReservationGroup
     }
 
     # Lookup up by uuid,
-    function Lookup($uuid) {
-	$foo = new ReservationGroup($uuid);
+    function Lookup($uuid, $history = 0) {
+	$foo = new ReservationGroup($uuid, $history);
 
 	if ($foo->IsValid()) {
 	    return $foo;
@@ -99,15 +108,18 @@ class ReservationGroup
     }
 
     # Lookup for a user.
-    function LookupForUser($user)
+    function LookupForUser($user, $history = 0)
     {
         $uid_idx = $user->uid_idx();
         $result = array();
         
-        $query_result = DBQueryFatal("select uuid from apt_reservation_groups ".
+        $query_result = DBQueryFatal("select uuid from ".
+                                     ($history ?
+                                      "apt_reservation_group_history " :
+                                      "apt_reservation_groups ") .
                                      "where creator_idx='$uid_idx'");
 	while ($row = mysql_fetch_array($query_result)) {
-            $reservation = ReservationGroup::Lookup($row["uuid"]);
+            $reservation = ReservationGroup::Lookup($row["uuid"], $history);
             if ($reservation) {
                 $result[] = $reservation;
             }
@@ -116,15 +128,18 @@ class ReservationGroup
     }
 
     # Lookup for a project.
-    function LookupForProject($project)
+    function LookupForProject($project, $history = 0)
     {
         $pid_idx = $project->pid_idx();
         $result = array();
         
-        $query_result = DBQueryFatal("select uuid from apt_reservation_groups ".
+        $query_result = DBQueryFatal("select uuid from ".
+                                     ($history ?
+                                      "apt_reservation_group_history " :
+                                      "apt_reservation_groups ") .
                                      "where pid_idx='$pid_idx'");
 	while ($row = mysql_fetch_array($query_result)) {
-            $reservation = ReservationGroup::Lookup($row["uuid"]);
+            $reservation = ReservationGroup::Lookup($row["uuid"], $history);
             if ($reservation) {
                 $result[] = $reservation;
             }
@@ -251,7 +266,6 @@ class ReservationGroup
         $details["uuid"]       = $resgroup->uuid();
         $details["pid"]        = $resgroup->pid();
         $details["pid_idx"]    = $resgroup->pid_idx();
-        $details["notes"]      = $resgroup->reason();
         $details["created"]    = DateStringGMT($resgroup->created());
         $details["start"]      = DateStringGMT($resgroup->start());
         $details["end"]        = DateStringGMT($resgroup->end());
@@ -260,55 +274,69 @@ class ReservationGroup
         $details["canceled"]   = 0;
         $details["uid"]        = $resgroup->creator_uid();
         $details["uid_idx"]    = $resgroup->creator_idx();
-        $details["idledetection"] = $resgroup->noidledetection() ? false : true;
         $details["forclass"]   = $resgroup->forclass() ? true : false;
         $details["portal"]     = ($project->portal() ?
                                   $project->portal() : "emulab");
+        $details["notes"]      = $resgroup->reason();
+        $details["ishistory"]  = $resgroup->isHistory();
+        if (!$resgroup->isHistory()) {
+            $details["idledetection"] = ($resgroup->noidledetection() ?
+                                         false : true);
+        }
+        
         $clusters = array();
         foreach ($resgroup->reservations() as $reservation) {
+            $aggregate = $reservation->Aggregate();
+            
             $blob = array(
                 "type"        => $reservation->type(),
                 "count"       => intval($reservation->count()),
-                "cluster_id"  => $reservation->Aggregate()->nickname(),
-                "cluster_urn" => $reservation->Aggregate()->urn(),
+                "cluster_id"  => ($aggregate ?
+                                  $aggregate->nickname() : "unknown"),
+                "cluster_urn" => ($aggregate ?
+                                  $aggregate->urn() : "unknown"),
                 "remote_uuid" => $reservation->remote_uuid(),
                 "submitted"   => DateStringGMT($reservation->submitted()),
                 "approved"    => DateStringGMT($reservation->approved()),
                 "canceled"    => DateStringGMT($reservation->canceled()),
                 "deleted"     => DateStringGMT($reservation->deleted()),
                 "using"       => null,
-                "utilization" => null,
-                "approved_pushed" => DateStringGMT(
-                    $reservation->approved_pushed()),
-                "canceled_pushed" => DateStringGMT(
-                    $reservation->canceled_pushed()),
-                "cancel_canceled" => DateStringGMT(
-                    $reservation->cancel_canceled()),
-                "deleted_pushed"  => DateStringGMT(
-                    $reservation->deleted_pushed())
+                "utilization" => null
             );
-            if (!$approval) {
-                $approval = DateStringGMT($reservation->approved());
-            }
-            # Too much data for the list page.
-            if ($alldata) {
-                $blob["jsondata"] = $reservation->jsondata();
-            }
-            if (!is_null($reservation->using())) {
-                $blob["using"] = intval($reservation->using());
-            }
-            if (!is_null($reservation->utilization())) {
-                $blob["utilization"] = intval($reservation->utilization());
-            }
-            if (time() > strtotime($resgroup->start()) &&
-                $reservation->approved()) {
-                $blob["active"] = true;
+            if (!$resgroup->isHistory()) {
+                $blob["approved_pushed"] = DateStringGMT(
+                    $reservation->approved_pushed());
+                $blob["canceled_pushed"] = DateStringGMT(
+                    $reservation->canceled_pushed());
+                $blob["cancel_canceled"] = DateStringGMT(
+                    $reservation->cancel_canceled());
+                $blob["deleted_pushed"]  = DateStringGMT(
+                    $reservation->deleted_pushed());
+
+                if (!$approval) {
+                    $approval = DateStringGMT($reservation->approved());
+                }
+                # Too much data for the list page.
+                if ($alldata) {
+                    $blob["jsondata"] = $reservation->jsondata();
+                }
+                if (!is_null($reservation->using())) {
+                    $blob["using"] = intval($reservation->using());
+                }
+                if (!is_null($reservation->utilization())) {
+                    $blob["utilization"] = intval($reservation->utilization());
+                }
+                if (time() > strtotime($resgroup->start()) &&
+                    $reservation->approved()) {
+                    $blob["active"] = true;
+                }
+                else {
+                    $blob["active"] = false;
+                }
             }
             else {
                 $blob["active"] = false;
             }
-            $clusters[$reservation->remote_uuid()] = $blob;
-
             if ($reservation->deleted()) {
                 # Does not count.
             }
@@ -324,6 +352,7 @@ class ReservationGroup
             elseif ($reservation->approved()) {
                 $details["approved"] += 1;
             }
+            $clusters[$reservation->remote_uuid()] = $blob;
         }
         $ranges = array();
         foreach ($resgroup->rfreservations() as $reservation) {
@@ -335,25 +364,29 @@ class ReservationGroup
                 "approved"    => DateStringGMT($reservation->approved()),
                 "canceled"    => DateStringGMT($reservation->canceled()));
             
-            if (!$approval) {
-                $approval = DateStringGMT($reservation->approved());
-            }
-            if (time() > strtotime($resgroup->start()) &&
-                $reservation->approved()) {
-                $blob["active"] = true;
+            if (!$resgroup->isHistory()) {
+                if (!$approval) {
+                    $approval = DateStringGMT($reservation->approved());
+                }
+                if (time() > strtotime($resgroup->start()) &&
+                    $reservation->approved()) {
+                    $blob["active"] = true;
+                }
+                else {
+                    $blob["active"] = false;
+                }
+                if (! $reservation->approved()) {
+                    $status = "pending";
+                    $details["pending"] += 1;
+                }
+                else {
+                    $details["approved"] += 1;
+                }
             }
             else {
                 $blob["active"] = false;
             }
             $ranges[$reservation->freq_uuid()] = $blob;
-
-            if (! $reservation->approved()) {
-                $status = "pending";
-                $details["pending"] += 1;
-            }
-            else {
-                $details["approved"] += 1;
-            }
         }
         $routes = array();
         foreach ($resgroup->routereservations() as $reservation) {
@@ -365,36 +398,46 @@ class ReservationGroup
                 "approved"    => DateStringGMT($reservation->approved()),
                 "canceled"    => DateStringGMT($reservation->canceled()));
             
-            if (!$approval) {
-                $approval = DateStringGMT($reservation->approved());
-            }
-            if (time() > strtotime($resgroup->start()) &&
-                $reservation->approved()) {
-                $blob["active"] = true;
+            if (!$resgroup->isHistory()) {
+                if (!$approval) {
+                    $approval = DateStringGMT($reservation->approved());
+                }
+                if (time() > strtotime($resgroup->start()) &&
+                    $reservation->approved()) {
+                    $blob["active"] = true;
+                }
+                else {
+                    $blob["active"] = false;
+                }
+                if (! $reservation->approved()) {
+                    $status = "pending";
+                    $details["pending"] += 1;
+                }
+                else {
+                    $details["approved"] += 1;
+                }
             }
             else {
                 $blob["active"] = false;
             }
             $routes[$reservation->route_uuid()] = $blob;
-
-            if (! $reservation->approved()) {
-                $status = "pending";
-                $details["pending"] += 1;
-            }
-            else {
-                $details["approved"] += 1;
-            }
         }
-        $details["status"] = $status;
-        if (time() > strtotime($resgroup->start()) &&
-            ($status == "approved" || $details["pending"] > 0) ||
-            ($status == "canceled" && $details["approved"] > 0)) {
-            $details["active"] = true;
+        if ($resgroup->isHistory()) {
+            $details["active"] = false;
+            $details["approval"] = $details["approved"];
         }
         else {
-            $details["active"] = false;
+            if (time() > strtotime($resgroup->start()) &&
+                ($status == "approved" || $details["pending"] > 0) ||
+                ($status == "canceled" && $details["approved"] > 0)) {
+                $details["active"] = true;
+            }
+            else {
+                $details["active"] = false;
+            }
+            $details["approval"] = $approval;
         }
-        $details["approval"] = $approval;
+        $details["status"]   = $status;
         $details["clusters"] = $clusters;
         $details["ranges"]   = $ranges;
         $details["routes"]   = $routes;
@@ -456,17 +499,21 @@ class ReservationGroup
 class ReservationGroupReservation
 {
     var $reservation;
+    var $ishistory;
     
     #
     # Constructor to lookup a single reservation in a group.
     #
-    function ReservationGroupReservation($group, $urn, $type) {
+    function ReservationGroupReservation($group, $urn, $type, $history = 0) {
 	$uuid = $group->uuid();
         $safe_urn  = addslashes($urn);
         $safe_type = addslashes($type);
 
 	$query_result =
-	    DBQueryWarn("select * from apt_reservation_group_reservations ".
+	    DBQueryWarn("select * from ".
+                        ($history ?
+                         "apt_reservation_group_reservation_history " :
+                         "apt_reservation_group_reservations ") .
 			"where uuid='$uuid' and ".
                         "      aggregate_urn='$safe_urn' and ".
                         "      type='$safe_type'");
@@ -476,6 +523,7 @@ class ReservationGroupReservation
 	    return;
 	}
 	$this->reservation = mysql_fetch_array($query_result);
+        $this->ishistory   = $history;
     }
     # accessors
     function field($name) {
@@ -496,14 +544,15 @@ class ReservationGroupReservation
     function canceled_pushed()     { return $this->field('canceled_pushed'); }
     function cancel_canceled()     { return $this->field('cancel_canceled'); }
     function deleted_pushed()      { return $this->field('deleted_pushed'); }
+    function isHistory()    { return $this->ishistory; }
     
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->reservation);
     }
 
-    function Lookup($group, $urn, $type) {
-	$foo = new ReservationGroupReservation($group, $urn, $type);
+    function Lookup($group, $urn, $type, $history = 0) {
+	$foo = new ReservationGroupReservation($group, $urn, $type, $history);
 
 	if ($foo->IsValid()) {
             return $foo;
@@ -533,19 +582,21 @@ class ReservationGroupReservation
     #
     # Lookup all reservations for a group
     #
-    function LookupForGroup($group) {
+    function LookupForGroup($group, $history = 0) {
         $result = array();
         $uuid   = $group->uuid();
 
         $query_result =
-            DBQueryFatal("select type,aggregate_urn ".
-                         "  from apt_reservation_group_reservations ".
+            DBQueryFatal("select type,aggregate_urn from ".
+                        ($history ?
+                         "apt_reservation_group_reservation_history " :
+                         "apt_reservation_group_reservations ") .
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
             $res = ReservationGroupReservation::Lookup($group,
                                                         $row['aggregate_urn'],
-                                                        $row['type']);
+                                                        $row['type'], $history);
             if ($res) {
                 $result[] = $res;
             }
@@ -560,16 +611,20 @@ class ReservationGroupReservation
 class ReservationGroupRFReservation
 {
     var $reservation;
+    var $ishistory;
     
     #
     # Constructor to lookup a single reservation in a group.
     #
-    function ReservationGroupRFReservation($group, $freq_uuid) {
+    function ReservationGroupRFReservation($group, $freq_uuid, $history = 0) {
 	$uuid = $group->uuid();
         $safe_uuid  = addslashes($freq_uuid);
 
 	$query_result =
-	    DBQueryWarn("select * from apt_reservation_group_rf_reservations ".
+	    DBQueryWarn("select * from  ".
+                        ($history ?
+                         "apt_reservation_group_rf_reservation_history " :
+                         "apt_reservation_group_rf_reservations ") .
 			"where uuid='$uuid' and ".
                         "      freq_uuid='$safe_uuid'");
 
@@ -577,6 +632,7 @@ class ReservationGroupRFReservation
 	    $this->reservation = null;
 	    return;
 	}
+        $this->ishistory   = $history;
 	$this->reservation = mysql_fetch_array($query_result);
     }
     # accessors
@@ -590,14 +646,15 @@ class ReservationGroupRFReservation
     function submitted()    { return $this->field('submitted'); }
     function approved()     { return $this->field('approved'); }
     function canceled()     { return $this->field('canceled'); }
+    function isHistory()    { return $this->ishistory; }
     
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->reservation);
     }
 
-    function Lookup($group, $uuid) {
-	$foo = new ReservationGroupRFReservation($group, $uuid);
+    function Lookup($group, $uuid, $history = 0) {
+	$foo = new ReservationGroupRFReservation($group, $uuid, $history);
 
 	if ($foo->IsValid()) {
             return $foo;
@@ -608,18 +665,21 @@ class ReservationGroupRFReservation
     #
     # Lookup all reservations for a group
     #
-    function LookupForGroup($group) {
+    function LookupForGroup($group, $history = 0) {
         $result = array();
         $uuid   = $group->uuid();
 
         $query_result =
-            DBQueryFatal("select freq_uuid ".
-                         "  from apt_reservation_group_rf_reservations ".
+            DBQueryFatal("select freq_uuid from ".
+                         ($history ?
+                          "apt_reservation_group_rf_reservation_history " :
+                          "apt_reservation_group_rf_reservations ") .
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
             $res = ReservationGroupRFReservation::Lookup($group,
-                                                         $row['freq_uuid']);
+                                                         $row['freq_uuid'],
+                                                         $history);
             if ($res) {
                 $result[] = $res;
             }
@@ -630,17 +690,21 @@ class ReservationGroupRFReservation
 class ReservationGroupRouteReservation
 {
     var $reservation;
+    var $ishistory;
     
     #
     # Constructor to lookup a single reservation in a group.
     #
-    function ReservationGroupRouteReservation($group, $route_uuid) {
+    function ReservationGroupRouteReservation($group, $route_uuid,
+                                              $history = 0) {
 	$uuid = $group->uuid();
         $safe_uuid  = addslashes($route_uuid);
 
 	$query_result =
 	    DBQueryWarn("select * from ".
-                        "   apt_reservation_group_route_reservations ".
+                        ($history ?
+                         "apt_reservation_group_route_reservation_history " :
+                         "apt_reservation_group_route_reservations ") .
 			"where uuid='$uuid' and ".
                         "      route_uuid='$safe_uuid'");
 
@@ -649,6 +713,7 @@ class ReservationGroupRouteReservation
 	    return;
 	}
 	$this->reservation = mysql_fetch_array($query_result);
+        $this->ishistory   = $history;
     }
     # accessors
     function field($name) {
@@ -661,14 +726,15 @@ class ReservationGroupRouteReservation
     function submitted()    { return $this->field('submitted'); }
     function approved()     { return $this->field('approved'); }
     function canceled()     { return $this->field('canceled'); }
+    function isHistory()    { return $this->ishistory; }
     
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->reservation);
     }
 
-    function Lookup($group, $uuid) {
-	$foo = new ReservationGroupRouteReservation($group, $uuid);
+    function Lookup($group, $uuid, $history = 0) {
+	$foo = new ReservationGroupRouteReservation($group, $uuid, $history);
 
 	if ($foo->IsValid()) {
             return $foo;
@@ -679,18 +745,21 @@ class ReservationGroupRouteReservation
     #
     # Lookup all reservations for a group
     #
-    function LookupForGroup($group) {
+    function LookupForGroup($group, $history = 0) {
         $result = array();
         $uuid   = $group->uuid();
 
         $query_result =
-            DBQueryFatal("select route_uuid ".
-                         "  from apt_reservation_group_route_reservations ".
+            DBQueryFatal("select route_uuid from ".
+                         ($history ?
+                          "apt_reservation_group_route_reservation_history " :
+                          "apt_reservation_group_route_reservations ") .
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
             $res = ReservationGroupRouteReservation::Lookup($group,
-                                                            $row['route_uuid']);
+                                                            $row['route_uuid'],
+                                                            $history);
             if ($res) {
                 $result[] = $res;
             }

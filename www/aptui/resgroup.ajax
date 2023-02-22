@@ -1044,6 +1044,7 @@ function Do_ListReservationGroups()
     global $this_user;
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT;
+    $history = isset($ajax_args["history"]) && $ajax_args["history"] ? 1 : 0;
     $reservations = array();
 
     if (isset($ajax_args["project"])) {
@@ -1060,13 +1061,31 @@ function Do_ListReservationGroups()
             SPITAJAX_ERROR(-1, "Not enough permission in project");
             return;
         }
-        $resgroups = ReservationGroup::LookupForProject($project);
+        $resgroups = ReservationGroup::LookupForProject($project, $history);
     }
-    elseif (ISADMIN() && !isset($ajax_args["useronly"])) {
+    elseif (isset($ajax_args["uid"]) || isset($ajax_args["useronly"])) {
+        if (isset($ajax_args["uid"])) {
+            if (!ISADMIN()) {
+                SPITAJAX_ERROR(-1, "Not enough permission");
+                return;
+            }
+            $target_user = User::Lookup($ajax_args["uid"]);
+            if (!$target_user) {
+                SPITAJAX_ERROR(-1, "No such user");
+                return;
+            }
+        }
+        else {
+            $target_user = $this_user;
+        }
+        $resgroups = ReservationGroup::LookupForUser($this_user, $history);
+    }
+    elseif (ISADMIN()) {
+        if ($history) {
+            SPITAJAX_ERROR(-1, "History for projects and users only");
+            return;
+        }
         $resgroups = ReservationGroup::LookupAll();
-    }
-    else {
-        $resgroups = ReservationGroup::LookupForUser($this_user);
     }
     foreach ($resgroups as $resgroup) {
         $reservations[$resgroup->uuid()] = $resgroup->Blob(false);
@@ -1081,6 +1100,7 @@ function Do_GetReservationGroup()
 {
     global $this_user;
     global $ajax_args;
+    $this_idx = $this_user->uid_idx();
 
     if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(-1, "Missing uuid");
@@ -1096,8 +1116,21 @@ function Do_GetReservationGroup()
         SPITAJAX_ERROR(-1, "No such reservation group");
 	return;
     }
+    $project = Project::Lookup($resgroup->pid());
+    if (!$project) {
+	SPITAJAX_ERROR(-1, "No such project");
+	return;
+    }
+    
+    if (! (ISADMIN() ||
+           $this_idx == $resgroup->creator_idx() ||
+           $project->UserTrust($this_user) >= $TBDB_TRUST_GROUPROOT)) {
+        SPITAJAX_ERROR(-1, "Not enough permission");
+	return;
+    }
+    
     $jsondata = 0;
-    if (isset($ajax_args["history"]) && $ajax_args["history"]) {
+    if (isset($ajax_args["withhistory"]) && $ajax_args["withhistory"]) {
         $jsondata = 1;
     }
     SPITAJAX_RESPONSE($resgroup->Blob($jsondata));
