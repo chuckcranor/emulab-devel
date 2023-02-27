@@ -324,7 +324,7 @@ $(function ()
       'theme': 'chrome',
       'fontsize': '12px',
       'codefolding': 'manual',
-      'keybinding': 'ace',
+      'keybinding': 'emacs',
       'showspace': 'disabled'
     };
     try

@@ -77,7 +77,7 @@ $(function () {
 		     */
 		    var wrapper = $("<div id='form-wrapper-" + key + "' " +
 				    "style='margin-bottom: " + margin +
-				    "px;'></div>");
+				    "px;' class=row></div>");
 		    
 		    /*
 		     * A normal placeholder can be used, but sometimes
@@ -85,9 +85,17 @@ $(function () {
 		     * label outside of other text.
 		     */
 		    if (_.has(item.dataset, "label")) {
+			var labelsize = 3;
+			
+			// Label column size per row,
+			if (_.has(item.dataset, "labelsize")) {
+			    labelsize = item.dataset['labelsize'];;
+			}
+			
 			var label_text =
 			    "<label for='" + key + "' " +
-			    " class='col-sm-3 control-label' ";
+			    " class='col-sm-" + labelsize +
+			    "        control-label col-form-label' ";
 			if (_.has(item.dataset, "optional")) {
 			    label_text = label_text +
 				"style='padding-top: 0px;'";
@@ -115,7 +123,7 @@ $(function () {
 			label_text = label_text + "</label>";
 			wrapper.append($(label_text));
 			if (!colsize) {
-			    colsize = (wide ? 9 : 6);
+			    colsize = (wide ? 12 : 9) - labelsize;
 			}
 		    }
 		    var innerdiv =

@@ -652,3 +652,23 @@ a.disabled, a[disabled] {
 .confirm-button {
     margin-right: 10px;
 }
+
+/* The copy-to-clipboard icon is not veru obvious in default font size */
+.glyphicon-copy {
+    font-size: 16px;
+}
+
+/*
+ * The form-control class is width: 100%, which makes it annoying to
+ * make narrow input text boxes.
+ */
+.form-control-variable-size-hack {
+    width: auto;
+}
+
+/*
+ * Too much padding on popovers.
+ */
+.popover-content {
+    padding: 8px 10px;
+}

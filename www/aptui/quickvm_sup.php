@@ -506,9 +506,9 @@ function GET_ANNOUNCEMENTS($user, $update = true)
           "     padding-top: 10px; padding-bottom: 10px;'>\n";
       $html .=
           "  <button onclick='window.APT_OPTIONS.announceDismiss($aid)' " .
-          "     type='button' class='close' ".
+          "     type='button' class='close btn-close' ".
           "     data-dismiss='alert' data-bs-dismiss='alert' aria-label='Close'>".
-          "    <span aria-hidden='true'>&times;</span></button>".
+          "    <span aria-hidden='true'></span></button>".
           "      <span>$text</span>";
 
       if ($url) {

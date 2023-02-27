@@ -3,6 +3,11 @@
     --bs-dropdown-padding-y: 0;
     --bs-modal-width: 850px;
     --bs-modal-margin: 30px;
+    --bs-font-sans-serif: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+.popover {
+    --bs-popover-body-padding-x: 0.75rem;
+    --bs-popover-body-padding-y: 0.6rem;
 }
 
 .hidden {
@@ -20,6 +25,27 @@
 
 .navbar-header {
     margin-top: 50px;
+}
+
+.card-title {
+    font-size: 16px;
+}
+
+.card {
+    margin-bottom: 20px;
+}
+
+/*
+ * I do not like the contextual color schemes
+ * Or the annoying way they are specified now.
+ */
+.card-danger {
+  border-color: #ebccd1;
+}
+.card-danger > .card-header {
+  color: #a94442;
+  background-color: #f2dede;
+  border-color: #ebccd1;
 }
 
 html,body {
@@ -56,11 +82,28 @@ a {
 .btn-xs, .btn-group-xs > .btn {
     --bs-btn-padding-y: 0.1rem;
     --bs-btn-padding-x: 0.25rem;
+    /* Small buttons look weird with the default radius */
+    --bs-btn-border-radius: 0.25rem;    
     font-size: 0.1rem;
 }
 
 .btn-default {
     --bs-btn-border-color:  #8c8c8c;
+}
+
+.btn-info {
+  --bs-btn-color: #FFF;
+}
+
+/* See manage_profile.html, the labels on right hand panel */
+.form-horizontal .control-label {
+    text-align: right;
+}
+.control-label {
+    font-weight: bold;
+}
+.form-check {
+    margin-bottom: 0.2rem;
 }
 
 /*

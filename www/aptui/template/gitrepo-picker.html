@@ -2,12 +2,14 @@
   <div class='col-xs-12'>
     <!-- Nav tabs -->
     <ul class="nav nav-tabs" role="tablist">
-      <li role="presentation" class="active">
-	<a href="#branches" role="tab" data-toggle="tab">
+      <li role="presentation" class="active nav-item">
+	<a href="#branches" role="tab" class="active nav-link"
+	   data-toggle="tab" data-bs-toggle="tab">
 	  Branches</a></li>
       <% if (_.size(tags)) { %>
-	<li role="presentation">
-	  <a href="#tags" role="tab" data-toggle="tab">
+	<li role="presentation" class="nav-item">
+	  <a href="#tags" role="tab" class="nav-link"
+	     data-toggle="tab" data-bs-toggle="tab">
 	    Tags</a></li>
       <% } %>
     </ul>
@@ -21,13 +23,20 @@
 		<% if (branch.default) { %>
 		  <span class="badge badge-primary">default</span>
 		<% } %>
+		<div><%= branch.log %></div>
 	      </td>
-	      <td rowspan="2" style="width: 250px; vertical-align:middle">
+	      <td style="width: 280px; vertical-align:middle">
 		<a href="#"
 		   class="branch-button"
 		   data-which="<%= branch.ref %>">
-		  <span style="width: 70px; display: inline-block;">
-		    <%= branch.hash %></span></a>
+		  <span style="width: 100px; display: inline-block;"
+			data-toggle='popover' data-bs-toggle='popover'
+			data-delay='{"show":250}' data-bs-delay='{"show":250}'
+			data-html='false' data-bs-html='false'
+			data-content="Switch to this branch, updating the profile
+				      shown above.">
+		    <%= branch.hash %>
+		  </span></a>
 		<% if (!window.ISGUEST) { %>
 		  <% var url = "instantiate.php?profile=" + uuid +
 		  "&refspec=" + branch.ref;
@@ -38,9 +47,9 @@
 		     style='margin-left: 10px; margin-bottom: 4px;'
 		     data-which="<%= branch.ref %>">Instantiate</a>
 		  <% if (window.CANEDIT) { %>
-		    <span data-toggle='popover'
-			  data-delay='{"show":250}'
-			  data-html='false'
+		    <span data-toggle='popover' data-bs-toggle='popover'
+			  data-delay='{"show":250}' data-bs-delay='{"show":250}'
+			  data-html='false' data-bs-html='false'
 			  data-content="Share this profile with other users by
 			      sending them a link to instantiate it.">
 		      <button class="btn btn-primary btn-xs
@@ -51,11 +60,6 @@
 		    </span>
 		  <% } %>
 		<% } %>
-	      </td>
-	    </tr>
-	    <tr>
-	      <td style="border: 0px; padding-top: 2px">
-		  <%= branch.log %>
 	      </td>
 	    </tr>
 	  <% }); %>

@@ -315,13 +315,27 @@ window.APT_OPTIONS.Announcements = function () {
 }
 
 window.APT_OPTIONS.SetupCopyToClipboard = function (id) {
-    $(id).find(".copy-to-clipboard a").click(function (e) {
-	e.preventDefault();
-	var input = $(this).parent().find("input");
-	$(input).select();
-	document.execCommand("copy");
-	window.getSelection().removeAllRanges();	
-	$(input)[0].blur();
+    /*
+     * Lets start using input groups to avoid PITA formatting issues. 
+     */
+    $(id).find(".copy-to-clipboard").each(function () {
+	console.info($(this))
+	var input = $(this).find("input");
+
+	$(input).click(function (e) {
+	    e.preventDefault();
+	    console.info(e);
+	    $(input).select();
+	});
+
+	$(this).find("a").click(function (e) {
+	    e.preventDefault();
+	    console.info(e);
+	    $(input).select();
+	    document.execCommand("copy");
+	    window.getSelection().removeAllRanges();	
+	    $(input)[0].blur();
+	});
     });
 }
 

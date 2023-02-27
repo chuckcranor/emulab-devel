@@ -147,13 +147,30 @@ function addPopoverClip (id, contentfunction)
 	event.preventDefault();
 	var button = this;
 
-	// If clicking on the button when the popover is
-	// showing, hide it and return.
-	if ($(button).data("bs.popover") !== undefined ||
-	    $(button).attr("aria-describedby") !== undefined) {
-	    $(button).popover('destroy');
+	console.info("addPopoverClip", $(button));
+
+	// If clicking on the button when the popover is showing,
+	// just return since the body click event will kill it off.
+	var showing = false;
+
+	if (window.BOOSTRAP_VERSION == 5) {
+	    var actual = $(button).attr("aria-describedby");
+
+	    //console.info("actual", actual);
+	    if (actual && $("#" + actual).length) {
+		showing = true;
+	    }
+	}
+	else {
+	    if ($(button).data("bs.popover") !== undefined) {
+		showing = true;
+	    }
+	}
+	if (showing) {
+	    //console.info("showing");
 	    return;
 	}
+
 	$(button).popover({
 	    html:     true,
 	    content:  contentfunction(this),
@@ -164,11 +181,12 @@ function addPopoverClip (id, contentfunction)
 
 	// If the user clicks somewhere else, kill this popover.
 	var hide = function (event) {
-	    console.info("hide");
+	    console.info("hide", $(button));
 	    $(button).popover('destroy');
 	};
 	// Cannot bind it till the popover is shown.
-	$(button).on("shown.bs.popover", function() {
+	$(button).one("shown.bs.popover", function() {
+	    //console.info("popover shown");
 	    $('body').one("click.popoverclip", hide);
 	});
 	$(button).popover('show');
@@ -181,34 +199,30 @@ function addPopoverClip (id, contentfunction)
 	else {
 	    content = $(button).data("bs.popover").tip();
 	}
-	console.info(content);
+	//console.info(content);
 
 	// Bind the copy-to-clipboard button.
 	$(content).find("a").click(function (e) {
 	    e.preventDefault();
+	    //console.info("copying");
 	    $(content).find("input").select();
 	    document.execCommand("copy");
-	    $(button).popover('destroy');
-	});
-	// If user clicks in the input, kill the popover.
-	$(content).find("input").click(function (e) {
-	    e.preventDefault();
-	    $(button).popover('destroy');
 	});
     });
 }
 
 function popoverClipContent(url) {
     var string =
-	"<div style='width 100%'> "+
+	"<div class='input-group' style='width 100%'> "+
 	"  <input readonly type=text " +
-	"       style='display:inline; width: 93%; padding: 2px;'" +
-	"       class='form-control input-sm' "+
+	"       class='form-control' "+
 	"       value='" + url + "'>" +
-	"  <a href='#' class='btn urn-copy-button' " +
-	"     style='padding: 0px'>" +
-	"    <span class='glyphicon glyphicon-copy'></span>" +
-	"  </a>" +
+	"  <span class='input-group-text'> " +
+	"    <a href='#' class='btn urn-copy-button' " +
+	"       style='padding: 0px'>" +
+	"      <span class='glyphicon glyphicon-copy'></span>" +
+	"    </a>" +
+	"  </span>" +
 	"</div>";
     return string;
 }

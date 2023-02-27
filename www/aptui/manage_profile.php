@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 include_once("webtask.php");
@@ -157,9 +160,9 @@ function SPITFORM($formfields, $errors)
     echo "</script>\n";
 
     # Needed for genilib-editor
-    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/ace.js'></script>\n";
-    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-vim.js'></script>\n";
-    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
+    echo "<script src='https://cdn.jsdelivr.net/npm/ace-builds@1.15.2/src-noconflict/ace.js'></script>\n";
+    echo "<script src='https://cdn.jsdelivr.net/npm/ace-builds@1.15.2/src-noconflict/keybinding-vim.js'></script>\n";
+    echo "<script src='https://cdn.jsdelivr.net/npm/ace-builds@1.15.2/src-noconflict/keybinding-emacs.js'></script>\n";    
 
     # Pass project list through. Need to convert to list without groups.
     $plist = array();
@@ -175,7 +178,9 @@ function SPITFORM($formfields, $errors)
         echo json_encode($version_array);
         echo "</script>\n";
     }
-    
+
+    echo "<link rel='stylesheet'
+            href='https://cdn.jsdelivr.net/npm/ace-builds@1.15.2/css/ace.min.css'>\n";
     echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
     echo "<link rel='stylesheet'
