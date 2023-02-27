@@ -927,8 +927,8 @@ function WRITESIMPLESIDEBAR($menudefs) {
     echo "<h3 class='menuheader'>$menutitle</h3>
           <ul class='navmenu'>";
 
-    each($menudefs);    
-    while (list($key, $val) = each($menudefs)) {
+    next($menudefs);    
+    foreach ($menudefs as $key => $val) {
 	WRITESIDEBARBUTTON("$key", null, "$val");
     }
     echo "</ul>\n";

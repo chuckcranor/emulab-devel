@@ -1070,7 +1070,7 @@ class Template
 	$vers = $this->vers();
 	$sets = array();
 	
-	while (list ($key, $value) = each ($changes)) {
+	foreach ($changes as $key => $value) {
 	    $value  = addslashes($value);
 	    $sets[] = "$key='$value'";
 	}

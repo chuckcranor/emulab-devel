@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,7 +69,8 @@ function INITFORM($formfields, $projlist)
     # to be in the clueless portion of our users, give them some help.
     #
     if (count($projlist) == 1) {
-	list($project, $grouplist) = each($projlist);
+	$project = key($projlist);
+	$grouplist = current($projlist);
 
 	if (count($grouplist) <= 2) {
 	    $defaults["exp_pid"] = $project;
@@ -99,7 +100,7 @@ function INITFORM($formfields, $projlist)
     # Allow formfields that are already set to override defaults
     #
     if (isset($formfields)) {
-	while (list ($field, $value) = each ($formfields)) {
+	foreach ($formfields as $field => $value) {
 	    $defaults[$field] = $formfields[$field];
 	}
     }
@@ -156,7 +157,7 @@ function SPITFORM($formfields, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
             # XSS prevention.
 	    $message = CleanString($message);
 	    echo "<tr>
@@ -213,7 +214,7 @@ function SPITFORM($formfields, $errors)
        }
     }
     # XSS prevention.
-    while (list ($key, $val) = each ($formfields)) {
+    foreach ($formfields as $key => $val) {
 	$formfields[$key] = CleanString($val);
     }
 
@@ -239,7 +240,7 @@ function SPITFORM($formfields, $errors)
 	# Just include the project as a hidden field - since the user has
 	# only a single project, grab that project, which is the first thing
 	# in $projlist
-	list($project) = each($projlist);
+	$project = key($projlist);
 	echo "<input type='hidden' name=\"formfields[exp_pid]\"
                      value='$project'>\n";
     } else {
@@ -252,7 +253,7 @@ function SPITFORM($formfields, $errors)
 	    echo "<option value=''>Please Select &nbsp</option>\n";
 	}
 
-	while (list($project) = each($projlist)) {
+	foreach ($projlist as $project => $unused) {
 	    $selected = "";
 
 	    if (strcmp($formfields["exp_pid"], $project) == 0)
@@ -284,7 +285,7 @@ function SPITFORM($formfields, $errors)
 			<option value=''>Default Group </option>\n";
 
 	reset($projlist);
-	    while (list($project, $grouplist) = each($projlist)) {
+	    foreach ($projlist as $project => $grouplist) {
 		for ($i = 0; $i < count($grouplist); $i++) {
 		$group    = $grouplist[$i];
 
@@ -444,7 +445,7 @@ function SPITFORM($formfields, $errors)
 	$idlevars = array('exp_idleswap','exp_noidleswap_reason',
 			  'exp_idleswap_timeout',
 	                  'exp_autoswap','exp_autoswap_timeout');
-	while (list($index,$value) = each($idlevars)) {
+	foreach ($idlevars as $index => $value) {
 	    if (isset($formfields[$value])) {
 		echo "<input type='hidden' name='formfields[$value]'
                              value='$formfields[$value]'>\n";

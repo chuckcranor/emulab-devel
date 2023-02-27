@@ -313,7 +313,7 @@ function ProfileListAux($query_result)
         $version = $row["version"];
         $name    = $row["name"];
         $pid     = $row["pid"];
-        $desc    = $row["description"];
+        $desc    = "";
         $created = DateStringGMT($row["created"]);
         $last_use= DateStringGMT($row["last_use"]);
         $public  = $row["public"];

@@ -412,7 +412,7 @@ class ReservationGroup
         $future  = array();
         $pidlist = array();
 
-        while (list($pid) = each($projlist)) {
+	foreach ($projlist as $pid => $unused) {
             $pidlist[] = "'" . $pid . "'";
         }
         $pidlist = join(",", $pidlist);

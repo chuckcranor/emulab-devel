@@ -186,7 +186,7 @@ elseif ($showby == "all") {
 	    USERERROR("You do not have permission to view stats for any ".
 		      "project!", 1);
 	}
-	while (list($project, $grouplist) = each($projlist)) {
+	foreach ($projlist as $project => $grouplist) {
 	    $orclause .= "s.pid='$project' or ";
 	}
 	$wclause = "where ($wclause 0)";

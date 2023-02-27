@@ -1018,7 +1018,7 @@ class Experiment
 	    echo "<tr>
                  <td>Reserved Nodes: </td>
                  <td class=\"left\">\n";
-	    while (list ($class, $count) = each($nodecounts)) {
+	    foreach ($nodecounts as $class => $count) {
 		echo "$count ($class) &nbsp; ";
 	    }
 	    echo "   </td>

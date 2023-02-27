@@ -74,7 +74,7 @@ function SPITFORM($formfields, $errors)
     # a single value as a read-only field.
     #
     $plist = array();
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $unused) {
 	$plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";
@@ -154,7 +154,8 @@ if (! isset($create)) {
     $defaults["dataset_am"]     = '';
     # Default project.
     if (count($projlist) == 1) {
-	list($project, $grouplist) = each($projlist);
+	$project = key($projlist);
+	$grouplist = current($projlist);
 	$defaults["dataset_pid"] = $project;
         reset($projlist);
     }

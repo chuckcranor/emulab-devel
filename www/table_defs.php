@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -86,7 +86,7 @@ function TableRender($attributes, $rows)
     if (array_key_exists('#headings', $attributes)) {
 	$html .= "<thead $sortable'>";
 	$html .= "<tr>";
-	while (list($key, $heading) = each($attributes['#headings'])) {
+	foreach ($attributes['#headings'] as $key => $heading) {
 	    $html .= "<th>$heading</th>";
 	}
 	$html .= "</tr>\n";
@@ -98,11 +98,12 @@ function TableRender($attributes, $rows)
 	#$key = $row[$attributes['#key']];
 	#$html .= "<td>$key</td>";
 	if (!array_key_exists('#headings', $attributes) && count($row) == 1) {
-	    list($key, $text) = each($row);
+	    $key = key($row);
+	    $text = current($row);
 	    $html .= "<td>${key}:</td><td>$text</td>";
 	}
 	else {
-	    while (list($key, $text) = each($row)) {
+	    foreach ($row as $key => $text) {
 		$html .= "<td>$text</td>";
 	    }
 	}

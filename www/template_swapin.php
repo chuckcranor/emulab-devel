@@ -97,7 +97,7 @@ function SPITFORM($template, $formfields, $parameters, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
 	    echo "<tr>
                      <td align=right>
                        <font color=red>$name:&nbsp;</font></td>
@@ -163,7 +163,7 @@ function SPITFORM($template, $formfields, $parameters, $errors)
 	$idlevars = array('exp_idleswap','exp_noidleswap_reason',
 			  'exp_idleswap_timeout',
 	                  'exp_autoswap','exp_autoswap_timeout');
-	while (list($index,$value) = each($idlevars)) {
+	foreach ($idlevars as $index => $value) {
 	    if (isset($formfields[$value])) {
 		echo "<input type='hidden' name='formfields[$value]'
                              value='$formfields[$value]'>\n";
@@ -248,7 +248,7 @@ function SPITFORM($template, $formfields, $parameters, $errors)
 		  <td>
  		    <table cellpadding=0 cellspacing=0 border=0>\n";
 	
-	while (list ($name, $value) = each ($parameters)) {
+	foreach ($parameters as $name => $value) {
 	    if (!isset($value))
 		$value = "&nbsp";
 	    $mouseover = (isset($mouseovers[$name]) ? $mouseovers[$name] : "");
@@ -423,7 +423,7 @@ if (!isset($swapin)) {
     # Allow formfields that are already set to override defaults
     #
     if (isset($formfields)) {
-	while (list ($field, $value) = each ($formfields)) {
+	foreach ($formfields as $field => $value) {
 	    $defaults[$field] = $formfields[$field];
 	}
     }
@@ -587,7 +587,7 @@ if (count($parameter_masterlist)) {
 	# Lets confirm that the user did not forget to set at least one value. 
 	#
 	$gotone = 0;
-	while (list ($name, $default_value) = each ($parameter_masterlist)) {
+	foreach ($parameter_masterlist as $name => $default_value) {
 	    if (isset($parameters[$name]) && $parameters[$name] != "") {
 		$gotone = 1;
 	    }
@@ -613,7 +613,7 @@ if (count($parameter_masterlist)) {
 	    fwrite($fp, "<template_parameters>\n");
 
 	    reset($parameter_masterlist);
-	    while (list ($name,$default_value) = each($parameter_masterlist)) {
+	    foreach ($parameter_masterlist as $name => $default_value) {
 		if (isset($parameters[$name])) {
 		    $value = $parameters[$name];
 		}

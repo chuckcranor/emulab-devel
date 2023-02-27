@@ -119,7 +119,7 @@ $doOtaCheck = 0;
 
 $tmp = array();
 
-while (list($pid) = each($projlist)) {
+foreach ($projlist as $pid => $unused) {
     # Watch out for killing page variable called "project"
     $proj = (new Project)->Lookup($pid);
     if ($proj && !$proj->IsNonLocal()) {
@@ -452,7 +452,8 @@ if ($ishashed) {
 
 # Default project if only one, otherwise user must select,
 if (count($projlist) == 1) {
-    list($project, $grouplist) = each($projlist);
+    $project = key($projlist);
+    $grouplist = current($projlist);
     $formfields["pid"] = $project;
     $formfields["gid"] = $grouplist[0];
     reset($projlist);

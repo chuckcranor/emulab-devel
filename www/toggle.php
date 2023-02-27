@@ -92,7 +92,6 @@ if (! in_array($value, $values[$type])) {
 }
 
 # Check optional args and bind locally.
-# was: "while (list ($arg, $required) = each ($optargs[$type]))"
 foreach ($optargs[$type] as $arg => $required) {
     if (!isset($_GET[$arg])) {
 	if ($required)

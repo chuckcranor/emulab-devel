@@ -495,7 +495,7 @@ if ($thumb && !$idle) {
 	    $pcs     = 0;
 	    reset($perexp_usage);
 	    if (isset($perexp_usage["$pid:$eid"])) {
-		while (list ($class, $count) = each($perexp_usage["$pid:$eid"])) {
+		foreach ($perexp_usage["$pid:$eid"] as $class => $count) {
 		    if (strcmp($class, "pc")) {
 			$special += $count;
 		    } else {
@@ -693,7 +693,7 @@ if ($thumb && !$idle) {
 	$special = 0;
 	reset($perexp_usage);
 	if (isset($perexp_usage["$pid:$eid"])) {
-	    while (list ($class, $count) = each($perexp_usage["$pid:$eid"])) {
+	    foreach ($perexp_usage["$pid:$eid"] as $class => $count) {
 		$nodes += $count;
 		if (strcmp($class, "pc")) {
 		    $special = 1;
@@ -717,7 +717,7 @@ if ($thumb && !$idle) {
 	    $mouseover .= " cellpadding=2 cellspacing=2 border=2> ";
 	    $mouseover .= "<tr><th>Node Type</th><th>Count</th></tr> ";
 
-	    while (list ($type, $count) = each($perexp_types["$pid:$eid"])) {
+	    foreach ($perexp_types["$pid:$eid"] as $type => $count) {
 		$mouseover .= "<tr><td class=pad4>$type</td>";
 		$mouseover .= "    <td class=pad4>$count</td></tr> ";
 
@@ -810,7 +810,7 @@ if ($thumb && !$idle) {
                  cellpadding=1 cellspacing=1 align=center>\n";
     $total = 0;
     ksort($total_usage);
-    while (list($type, $count) = each($total_usage)) {
+    foreach ($total_usage as $type => $count) {
 	    $total += $count;
 	    echo "<tr>
                     <td align=right>${type}:</td>

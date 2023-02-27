@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2004-2012 University of Utah and the Flux Group.
+# Copyright (c) 2004-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -244,7 +244,7 @@ function SPITDATA($table, $title, $formfields)
 #
 function SPITFORM($formfields) {
     # XSS prevention.
-    while (list ($key, $val) = each ($formfields)) {
+    foreach ($formfields as $key => $val) {
 	$formfields[$key] = CleanString($val);
     }
 

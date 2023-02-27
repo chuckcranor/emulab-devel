@@ -83,7 +83,7 @@ function SPITFORM($formfields, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
             # XSS prevention.
 	    $message = CleanString($message);
 	    echo "<tr>
@@ -96,7 +96,7 @@ function SPITFORM($formfields, $errors)
 	echo "</table><br>\n";
     }
     # XSS prevention.
-    while (list ($key, $val) = each ($formfields)) {
+    foreach ($formfields as $key => $val) {
 	$formfields[$key] = CleanString($val);
     }
 

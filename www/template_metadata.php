@@ -89,7 +89,7 @@ function SPITFORM($action, $formfields, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
 	    echo "<tr>
                      <td align=right>
                        <font color=red>$name:&nbsp;</font></td>
@@ -278,7 +278,7 @@ if (!isset($submit)) {
     # Allow formfields that are already set to override defaults
     #
     if (isset($formfields)) {
-	while (list ($field, $value) = each ($formfields)) {
+	foreach ($formfields as $field => $value) {
 	    $defaults[$field] = $formfields[$field];
 	}
     }

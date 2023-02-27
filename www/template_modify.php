@@ -77,7 +77,7 @@ function SPITFORM($template, $formfields, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
 	    echo "<tr>
                      <td align=right>
                        <font color=red>$name:&nbsp;</font></td>

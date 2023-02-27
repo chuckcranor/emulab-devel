@@ -218,7 +218,7 @@ function SPITFORM($node_type, $formfields, $attributes, $deletes, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
 	    echo "<tr>
                      <td align=right>
                        <font color=red>$name:&nbsp;</font></td>
@@ -403,7 +403,7 @@ function SPITFORM($node_type, $formfields, $attributes, $deletes, $errors)
            <td align=center><font size=-1>Delete?</font></td>
            <td align=center colspan=2><b>Node Attributes</b></td></tr>\n";
 
-    while (list ($key, $val) = each ($attributes)) {
+    foreach ($attributes as $key => $val) {
 	if (!isset($deletes[$key])) {
 	    # Somehow this doesn't get initialized in the Create Node case.
 	    $deletes[$key] = "";
@@ -628,7 +628,7 @@ if (count($default_imagesids) > 0) {
 }
 
 # Check the attributes.
-while (list ($key, $val) = each ($attributes)) {
+foreach ($attributes as $key => $val) {
     # Skip checks if scheduled for deletion
     if (isset($deletes[$key]) && $deletes[$key] == "checked") 
 	continue;

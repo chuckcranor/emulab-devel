@@ -290,7 +290,7 @@ if (! strcmp($showtype, "summary")) {
     $projlist = $target_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
     if (count($projlist) > 1) {
 	echo "<b>By Project Permission: ";
-	while (list($project) = each($projlist)) {
+	foreach ($projlist as $project => $unused) {
 	    echo "<a href='nodecontrol_list.php3?".
 		"showtype=summary&bypid=$project'>$project</a>,\n";
 	}

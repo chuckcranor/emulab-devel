@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2005, 2006, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -88,7 +88,7 @@ echo "<tr>
         <th>CvsWeb Link</th>
       </tr>\n";
 
-while (list($pid) = each($projlist)) {
+foreach ($projlist as $pid => $unused) {
     $cvsdir = "$TBCVSREPO_DIR/$pid";
     $cvsurl = "cvsweb/cvswebwrap.php3?pid=$pid";
 	

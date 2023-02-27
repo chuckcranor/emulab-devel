@@ -67,7 +67,7 @@ ignore_user_abort(1);
 #
 $POST_VARS_COPY = array();
  
-while (list ($header, $value) = each ($_POST)) {
+foreach ($_POST as $header => $value) {
     #echo "$header: $value<br>\n";
     $POST_VARS_COPY[$header] = $value; 
 
@@ -254,12 +254,12 @@ while (list ($header, $value) = each ($_POST)) {
 #
 # Sanity check. I hate this stuff.
 # 
-while (list ($user, $value) = each ($projectchecks)) {
+foreach ($projectchecks as $user => $value) {
     $projtrust   = array();
     $grouptrust  = array();
     $pidlist     = array();
     
-    while (list ($a, $b) = each ($value)) {
+    foreach ($value as $a => $b) {
 	$pid   = $b[0];
 	$gid   = $b[1];
 	$trust = $b[2];
@@ -310,7 +310,7 @@ STARTBUSY("Approving Users");
 #
 # Okay, all sanity tests passed for all post vars. Now do the actual work.
 # 
-while (list ($header, $value) = each ($POST_VARS_COPY)) {
+foreach ($POST_VARS_COPY as $header => $value) {
     #echo "$header: $value<br>\n";
     flush();
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -85,7 +85,7 @@ function SPITFORM($template, $formfields, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
             # XSS prevention.
 	    $message = CleanString($message);
 	    echo "<tr>
@@ -98,7 +98,7 @@ function SPITFORM($template, $formfields, $errors)
 	echo "</table><br>\n";
     }
     # XSS prevention.
-    while (list ($key, $val) = each ($formfields)) {
+    foreach ($formfields as $key => $val) {
 	$formfields[$key] = CleanString($val);
     }
 
@@ -118,7 +118,7 @@ function SPITFORM($template, $formfields, $errors)
     #
     # Show a table of events with a delete button named by the event.
     #
-    while (list ($index, $dbrow) = each ($eventlist)) {
+    foreach ($eventlist as $index => $dbrow) {
 	$vname       = $dbrow["vname"];
 	$vnode       = $dbrow["vnode"];
 	$delete_name = "delete_${vname}";
@@ -172,7 +172,7 @@ if ($template->EventList($eventlist) != 0) {
 if (!isset($save)) {
     $defaults = array();
 
-    while (list ($index, $dbrow) = each ($eventlist)) {
+    foreach ($eventlist as $index => $dbrow) {
 	$vname       = $dbrow["vname"];
 	$time        = $dbrow["time"];
 	$arguments   = $dbrow["arguments"];
@@ -203,7 +203,7 @@ $changes = array();
 #
 # Use the master event list from the template to validate.
 #
-while (list ($index, $dbrow) = each ($eventlist)) {
+foreach ($eventlist as $index => $dbrow) {
     $vname       = $dbrow["vname"];
     $time        = $dbrow["time"];
     $args        = $dbrow["args"];
@@ -265,7 +265,7 @@ if (count($errors)) {
 #
 reset($eventlist);
 
-while (list ($index, $dbrow) = each ($eventlist)) {
+foreach ($eventlist as $index => $dbrow) {
     $vname       = $dbrow["vname"];
 
     if (isset($deletes[$vname])) {

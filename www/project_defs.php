@@ -61,7 +61,7 @@ class Project
 	global $project_cache;
 
         # Look in cache first
-	if (array_key_exists("$pid_idx", $project_cache))
+	if (isset($project_cache["$pid_idx"]))
 	    return $project_cache["$pid_idx"];
 	
 	$foo = new Project($pid_idx);

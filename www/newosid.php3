@@ -99,7 +99,7 @@ $fields['description'] =
 # Select an OS
 #
 $OSselection = array();
-while (list ($os, $userokay) = each($osid_oslist)) {
+foreach ($osid_oslist as $os => $userokay) {
     if (!$userokay && !$isadmin)
 	continue;
     $OSselection[$os] = $os;
@@ -144,7 +144,7 @@ $fields['magic'] =
 # OS Features
 #
 $FeatureBoxes = array();
-while (list ($feature, $userokay) = each($osid_featurelist)) {
+foreach ($osid_featurelist as $feature => $userokay) {
     if (!$userokay && !$isadmin)
 	continue;
     $FeatureBoxes["os_feature_$feature"] = array('#return_value'=> "checked",
@@ -159,7 +159,7 @@ $fields['features'] =
 # Op Mode
 #
 $OpmodeSelection = array();
-while (list ($mode, $userokay) = each($osid_opmodes)) {
+foreach ($osid_opmodes as $mode => $userokay) {
     if (!$userokay && !$isadmin)
 	continue;
     $OpmodeSelection[$mode] = $mode;
@@ -283,7 +283,8 @@ if (!isset($submit)) {
     # to be in the clueless portion of our users, give them some help.
     # 
     if (count($projlist) == 1) {
-	list($project, $grouplist) = each($projlist);
+	$project = key($projlist);
+	$grouplist = current($projlist);
 	
 	if (count($grouplist) <= 2) {
 	    $defaults["pid"] = $project;
@@ -341,7 +342,7 @@ if (count($errors)) {
 #
 $args = array();
 
-while (list ($name, $attributes) = each ($fields)) {
+foreach ($fields as $name => $attributes) {
     # features special. see below
     if ($name == "features")
 	continue;
@@ -359,7 +360,7 @@ while (list ($name, $attributes) = each ($fields)) {
 $os_features_array = array();
 
 reset($osid_featurelist);
-while (list ($feature, $userokay) = each($osid_featurelist)) {
+foreach ($osid_featurelist as $feature => $userokay) {
     if (isset($formfields["os_feature_$feature"]) &&
 	$formfields["os_feature_$feature"] == "checked") {
 	$os_features_array[] = $feature;

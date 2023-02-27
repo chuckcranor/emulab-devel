@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -239,7 +239,7 @@ while ($row = mysql_fetch_array($query_result)) {
 	reset($projmemb_array[$thisuid]);
 	
 	echo "<td> ";
-	while (list ($idx, $foo) = each($projmemb_array[$thisuid])) {
+	foreach ($projmemb_array[$thisuid] as $idx => $foo) {
 	    $pid   = $foo["pid"];
 	    $trust = $foo["trust"];
 	    

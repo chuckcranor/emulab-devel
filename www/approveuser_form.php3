@@ -147,7 +147,7 @@ echo "<tr>
 
 echo "<form action='approveuser.php3' method='post'>\n";
 
-while (list ($uid_idx, $grouplist) = each ($approvelist)) {
+foreach ($approvelist as $uid_idx => $grouplist) {
   if (! ($user = (new User)->Lookup($uid_idx))) {
     TBERROR("Could not lookup user $uid_idx", 1);
   }

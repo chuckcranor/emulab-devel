@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2004-2012 University of Utah and the Flux Group.
+# Copyright (c) 2004-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -101,7 +101,7 @@ function SPITFORM($errors, $node_id, $isnewid, $building, $floor,
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
             # XSS prevention.
 	    $message = CleanString($message);
 	    echo "<tr>

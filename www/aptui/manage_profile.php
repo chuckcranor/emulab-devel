@@ -163,7 +163,7 @@ function SPITFORM($formfields, $errors)
 
     # Pass project list through. Need to convert to list without groups.
     $plist = array();
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $unused) {
         $plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";

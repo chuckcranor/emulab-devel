@@ -37,7 +37,7 @@ function Do_AggregateStatus()
     }
     $ams = (new Aggregate)->AllAggregatesList();
 
-    while (list($index, $aggregate) = each($ams)) {
+    foreach ($ams as $index => $aggregate) {
         $urn = $aggregate->urn();
 
         $blob[$urn] =
