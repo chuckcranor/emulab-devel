@@ -203,9 +203,12 @@ $(function ()
 	    // Bind the copy to clipbload button in the share modal
 	    window.APT_OPTIONS.
 		SetupCopyToClipboard("#copy-repobased-profile-modal");
+
+	    // Bind the copy to clipboard button for the push URL.
+	    window.APT_OPTIONS.
+		SetupCopyToClipboard("#copy-push-url");
 	}
-	// Copy profile.
-	if (!fromrepo) {
+	else {
 	    CopyProfile.InitCopyProfile('#copy-profile-button',
 					version_uuid, projlist);
 	}
@@ -227,44 +230,7 @@ $(function ()
 	    placement: 'auto',
 	    container: 'body',
 	});
-	// But the repo push URL is handled differently.
-	var urlstring = 
-	    "<div style='width 100%'> "+
-	    "  <input readonly type=text id='push-url-input' " +
-	    "       style='display:inline; width: 93%; padding: 2px;' " +
-	    "       class='form-control input-sm' "+
-	    "       value='" + fields.profile_repopushurl + "'>" +
-	    "  <a href='#' class='btn' id='push-url-copy' " +
-	    "     style='padding: 0px'>" +
-	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
-	
-	$('#push-url').click(function (e) {
-	    console.info("push-url click");
-	    if ($('#push-url-input').length == 0) {
-		$('#push-url').popover({
-		    html:     true,
-		    content:  urlstring,
-		    trigger:  'manual',
-		    placement:'auto',
-		    container:'body',
-		});
-		$('#push-url').popover('show');
-		$('#push-url-copy').click(function (e) {
-		    e.preventDefault();
-		    $('#push-url-input').select();
-		    document.execCommand("copy");
-		    $('#push-url').popover('destroy');
-		});
-		$('#push-url-input').click(function (e) {
-		    e.preventDefault();
-		    $('#push-url').popover('destroy');
-		});
-	    }
-	    else {
-		$('#push-url').popover('destroy');
-	    }
-	});
-	
+
 	// Format dates with moment before display.
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
