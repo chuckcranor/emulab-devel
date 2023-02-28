@@ -1081,11 +1081,7 @@ function Do_ListReservationGroups()
         $resgroups = ReservationGroup::LookupForUser($this_user, $history);
     }
     elseif (ISADMIN()) {
-        if ($history) {
-            SPITAJAX_ERROR(-1, "History for projects and users only");
-            return;
-        }
-        $resgroups = ReservationGroup::LookupAll();
+         $resgroups = ReservationGroup::LookupAll($history);
     }
     foreach ($resgroups as $resgroup) {
         $reservations[$resgroup->uuid()] = $resgroup->Blob(false);

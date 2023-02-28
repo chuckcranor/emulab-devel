@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -47,6 +47,7 @@ $isstud    = (STUDLY() ? 1 : 0);
 # Verify page arguments. Cluster is a domain that we turn into a URN.
 #
 $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
+                                 "history",  PAGEARG_BOOLEAN,
                                  "debug",    PAGEARG_BOOLEAN,
                                  "cluster",  PAGEARG_STRING,
                                  "project",  PAGEARG_PROJECT,
@@ -56,12 +57,12 @@ if (!isset($fromrspec)) {
     $fromrspec = 0;
 }
 
-if ($edit) {
+if ($edit || $history) {
     if (!isset($uuid)) {
         SPITUSERERROR("Missing arguments for edit mode");
         exit();
     }
-    if (!($resgroup = ReservationGroup::Lookup($uuid))) {
+    if (!($resgroup = ReservationGroup::Lookup($uuid, $history))) {
         SPITUSERERROR("No such reservation group");
         exit();
     }
@@ -277,8 +278,15 @@ if ($ISPOWDER) {
 }
 
 echo "<script type='text/javascript'>\n";
-if ($edit) {
-    echo "   window.EDITING  = true;\n";
+if ($edit || $history) {
+    if ($edit) {
+        echo "   window.EDITING  = true;\n";
+        echo "   window.HISTORY  = false;\n";
+    }
+    else {
+        echo "   window.EDITING  = false;\n";
+        echo "   window.HISTORY  = true;\n";
+    }
     echo "   window.UUID     = '$uuid';\n";
     echo "   window.ISGROUP  = true;\n";
 }

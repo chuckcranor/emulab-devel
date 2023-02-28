@@ -148,13 +148,18 @@ class ReservationGroup
     }
 
     # Lookup all (admin)
-    function LookupAll()
+    function LookupAll($history = 0)
     {
         $result = array();
         
-        $query_result = DBQueryFatal("select uuid from apt_reservation_groups");
+        $query_result =
+            DBQueryFatal("select uuid from " .
+                         ($history ?
+                          "apt_reservation_group_history " .
+                          "where created>DATE_SUB(curdate(), INTERVAL 1 MONTH) " :
+                          "apt_reservation_groups"));
 	while ($row = mysql_fetch_array($query_result)) {
-            $reservation = ReservationGroup::Lookup($row["uuid"]);
+            $reservation = ReservationGroup::Lookup($row["uuid"], $history);
             if ($reservation) {
                 $result[] = $reservation;
             }

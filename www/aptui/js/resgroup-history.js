@@ -83,22 +83,28 @@ $(function ()
 
 	    // Disable sorting if only one row.
 	    if (_.size(group.clusters) == 1) {
-		crow.find(".tablesorter.clusters-table thead th")
-		    .addClass("sorter-false");
+		crow.find(".tablesorter.clusters-table thead tr")
+		    .addClass("tablesorter-ignoreRow");
 	    }
 	    if (_.size(group.ranges) == 1) {
-		crow.find(".tablesorter.ranges-table thead th")
-		    .addClass("sorter-false");
+		crow.find(".tablesorter.ranges-table thead tr")
+		    .addClass("tablesorter-ignoreRow");
 	    }
 	    if (_.size(group.routes) == 1) {
-		crow.find(".tablesorter.routes-table thead th")
-		    .addClass("sorter-false");
+		crow.find(".tablesorter.routes-table thead tr")
+		    .addClass("tablesorter-ignoreRow");
 	    }
+	    if (1) {
+		crow.find(".tablesorter")
+		    .addClass("table table-condensed table-sm");
+	    }
+	    else {
 	    crow.find(".tablesorter").tablesorter({
 		theme : 'bootstrap',
 		widgets : [ "uitheme", "zebra"],
 		headerTemplate : '{content} {icon}',
 	    });
+	    }
 
 	    if (group.status == "approved") {
 		$(groupid + " .group-status-column .status-approved")
