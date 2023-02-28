@@ -185,7 +185,7 @@ $(function ()
 			return $(node).find("> span:not(.hidden) .status-value").text();
 		    },
 		},
-		sortAppend: [[4, 0]],
+		sortList: [[5, 1]],
 	    });
 	$(selector + ' .tablesorter .tablesorter-childRow>td').hide();	
 	$(selector + ' .tablesorter .show-childrow .expando')
