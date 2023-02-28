@@ -378,6 +378,7 @@ $(function ()
 	$('#quicktabs_ul li a').on('shown.bs.tab', function (event) {
 	    window.APT_OPTIONS.gaTabEvent("show",
 					  $(event.target).attr('href'));
+	    GatherTabStats($(event.target).attr('href'));
 	});
 	$('#prestage-panel .info-button').click(function (event) {
 	    event.preventDefault();
@@ -5922,6 +5923,26 @@ $(function ()
     // Helper.
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));
+    }
+
+    // Temporary
+    var justloaded = 1;
+    
+    function GatherTabStats(id) {
+	console.info("GatherTabStats", id);
+
+	sup.CallServerMethod(null, "status", "GatherTabStats",
+			     {"tab" : id.substr(1), "justloaded" : justloaded},
+			     function (json) {
+				 if (json.code) {
+				     console.info(json);
+				     console.info("GatherTabStats error");
+				     return;
+				 }
+				 console.info("Tab stats gathered");
+			     });
+
+	justloaded = 0;
     }
     
     $(document).ready(initialize);

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2594,6 +2594,34 @@ function Do_Transmissions()
         $blob[] = $txrow;
     }
     SPITAJAX_RESPONSE(array("txlist" => $blob, "instances" => null));
+}
+
+function Do_GatherTabStats()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+
+    if (!isset($ajax_args["tab"]) || $ajax_args["tab"] == "") {
+        SPITAJAX_ERROR(1, "Missing tab id");
+        return;
+    }
+    $tab = $ajax_args["tab"];
+    if (!isset($ajax_args["justloaded"]) || $ajax_args["justloaded"] == "") {
+        SPITAJAX_ERROR(1, "Missing tab id");
+        return;
+    }
+    $justloaded = $ajax_args["justloaded"];
+                
+    if ($tab != "topology" && $tab != "listview" &&
+        $tab != "manifest" && $tab != "IdleGraphs") {
+        SPITAJAX_RESPONSE(0);
+        return;
+    }
+    if ($justloaded == 1) {
+        TBGetUniqueIndex("status_justloaded");
+    }
+    TBGetUniqueIndex("status_" . $tab);
+    SPITAJAX_RESPONSE(0);
 }
 
 # Local Variables:
