@@ -20,6 +20,12 @@ $(function ()
     var linktestString = templates['linktest-modal'];
     var destroyString  = templates['destroy-experiment'];
 
+    // Node/listview colors
+    var READY_COLOR    = "#91E388";
+    var BOOTING_COLOR  = "#fcf8e3";
+    var FAILED_COLOR   = "#e67795";
+    var PENDING_COLOR  = "#75c4e6";
+
     var expinfo     = null;
     var nodecount   = 0;
     var ajaxurl     = null;
@@ -1242,32 +1248,20 @@ $(function ()
 
 		if (details.status == "ready") {
 		    // Greenish.
-		    var color = "#91E388";
+		    var color = READY_COLOR;
 		    if (recovery) {
 			// warning
-			color = "#fcf8e3";
+			color = BOOTING_COLOR;
 		    }
 		    UpdateNodeColor(node_id, jacksID, color)
-		    
-		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
-		      '#listview-row-' + node_id + ' td[name="client_id"]')
-			.css("color", "#3c763d;");
 		}
 		else if (details.status == "failed") {
 		    // Bootstrap bg-danger color
-		    UpdateNodeColor(node_id, jacksID, "#e67795");
-
-		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
-		      '#listview-row-' + node_id + ' td[name="client_id"]')
-			.css("color", "#a94442");
+		    UpdateNodeColor(node_id, jacksID, FAILED_COLOR);
 		}
 		else {
 		    // Bootstrap bg-warning color
-		    UpdateNodeColor(node_id, jacksID, "#fcf8e3");
-
-		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
-		      '#listview-row-' + node_id + ' td[name="client_id"]')
-			.css("color", "");
+		    UpdateNodeColor(node_id, jacksID, BOOTING_COLOR);
 		}
 		var cluster_id = amlist[urn].nickname;
 		
@@ -1304,26 +1298,31 @@ $(function ()
 		if (_.has(details, "execute_state")) {
 		    var tag;
 		    var icon;
+		    var color;
 			
 		    if (details.execute_state == "running") {
-			tag  = "<span class=text-warning>Running</span>";
+			tag  = "Running";
 			icon = "record8.svg";
+			color= BOOTING_COLOR;
 			MarkServicesWarning(details.client_id);
 		    }
 		    else if (details.execute_state == "exited") {
 			if (details.execute_status != 0) {
 			    tag  = "Exited (" + details.execute_status + ")";
 			    icon = "cancel22.svg";
+			    color= FAILED_COLOR;
 			}
 			else {
 			    tag  = "Finished";
 			    icon = "check64.svg";
+			    color= READY_COLOR;
 			}
 			ClearServicesWarning(details.client_id);
 		    }
 		    else {
 			tag  = "Pending";
 			icon = "button14.svg"
+			color= PENDING_COLOR;
 		    }
 		    html += "<tr><td class='border-none'>Startup Service:</td>" +
 			"<td class='border-none'>" + tag + "</td></tr>";
@@ -1331,7 +1330,8 @@ $(function ()
 		    UpdateNodeIcon(node_id, jacksID, icon);
 
 		    $('#listview-row-' + node_id + ' td[name="startup"]')
-			.html(tag);
+			.html(tag)
+			.css("background", color);
 		}
 		html += "</tbody></table>";
 		UpdateNodePopover(node_id, jacksID, html);
@@ -1477,6 +1477,9 @@ $(function ()
 
 	$(jacksbox).find('.node .nodebox')
 	    .css("fill", color);
+	
+	$('#listview-row-' + node_id + ' td[name="status"]')
+	    .css("background", color);
     }
 
     function deferAggregate(sliver)
