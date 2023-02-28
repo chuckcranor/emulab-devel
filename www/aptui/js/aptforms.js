@@ -77,7 +77,12 @@ $(function () {
 		     */
 		    var wrapper = $("<div id='form-wrapper-" + key + "' " +
 				    "style='margin-bottom: " + margin +
-				    "px;' class=row></div>");
+				    "px;'></div>");
+		    
+		    // Temporary
+		    if (window.BOOSTRAP_VERSION == 5) {
+			$(wrapper).addClass("row");
+		    }
 		    
 		    /*
 		     * A normal placeholder can be used, but sometimes
