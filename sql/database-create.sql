@@ -1270,14 +1270,12 @@ CREATE TABLE `apt_announcements` (
 
 DROP TABLE IF EXISTS `apt_announcement_info`;
 CREATE TABLE `apt_announcement_info` (
-  `idx` int(10) unsigned NOT NULL auto_increment,
   `aid` int(10) NOT NULL default '0',
   `uid_idx` int(10) default NULL,
   `dismissed` tinyint(1) NOT NULL default '0',
   `clicked` tinyint(1) NOT NULL default '0',
   `seen_count` int(8) NOT NULL default '0',
-  PRIMARY KEY (`idx`),
-  KEY `uid_idx` (`uid_idx`),
+  PRIMARY KEY (`aid`,`uid_idx`),
   KEY `aid` (`aid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
