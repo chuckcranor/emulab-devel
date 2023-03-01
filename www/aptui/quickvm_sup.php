@@ -502,7 +502,6 @@ function GET_ANNOUNCEMENTS($user, $update = true)
       $html =
           "<div class='alert $style alert-dismissible' ".
           "     role='alert' style='margin-top: -10px; margin-bottom: 12px; ".
-          "     margin-left: 40px; margin-right: 40px; ".
           "     padding-top: 10px; padding-bottom: 10px;'>\n";
       $html .=
           "  <button onclick='window.APT_OPTIONS.announceDismiss($aid)' " .
