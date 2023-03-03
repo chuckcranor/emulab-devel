@@ -39,7 +39,6 @@ $(function ()
     var isscript    = 0;
     var dossh       = 1;
     var dovnc       = 0;
-    var lazytopo    = 0;
     var jacksIDs    = {};
     var jacksSites  = {};
     var publicURLs  = null;
@@ -81,6 +80,8 @@ $(function ()
     var GENIRESPONSE_INSUFFICIENT_NODES = 26;
     var GENIRESPONSE_NO_MAPPING = 28;
     var MAXJACKSNODES = 300;
+    var PORTALTABCOOKIE = "PortalLastTab";
+    var initialTab = "topology";
 
     // CONFIRM Hack. Fix later.
     var CONFIRMTYPES = [ "c6320", "c8220", "m400", "m510",
@@ -109,7 +110,6 @@ $(function ()
 	dovnc         = window.APT_OPTIONS.dovnc;
 	isscript      = window.APT_OPTIONS.isscript;
 	hidelinktest  = window.APT_OPTIONS.hidelinktest;
-	lazytopo      = window.APT_OPTIONS.lazytopo;
 	lockdown_code = uuid.substr(2, 5);
 
 	// Standard option
@@ -130,6 +130,10 @@ $(function ()
 	console.info("prunetypes", prunetypes);
 	resgroups = decodejson('#resgroup-json');
 	console.info("resgroups", resgroups);
+
+	if (window.APT_OPTIONS.lastknowntab && LastKnownUserTab() == "listview") {
+	    initialTab = "listview";
+	}
 	
 	/*
 	 * Need to grab the experiment info so we can draw the page.
@@ -378,6 +382,7 @@ $(function ()
 	$('#quicktabs_ul li a').on('shown.bs.tab', function (event) {
 	    window.APT_OPTIONS.gaTabEvent("show",
 					  $(event.target).attr('href'));
+	    RememberUserTab($(event.target).attr('href'));
 	    GatherTabStats($(event.target).attr('href'));
 	});
 	$('#prestage-panel .info-button').click(function (event) {
@@ -2211,8 +2216,8 @@ $(function ()
 		$(this).parent().parent().remove();
 		// Remove the content div.
 		$("#" + tabname).remove();
-		// Activate the first visible tab.
-		$('#quicktabs_ul a:visible:first').tab('show');
+		// Activate the initialtab
+		SwitchToLastKnownTab();
 	    });
 
 	    // The content div.
@@ -3159,16 +3164,11 @@ $(function ()
 		$('#quicktabs_content #listview').removeClass("hidden");
 	    }
 	    multisite = Object.keys(statusblob).length > 1;
-	    console.info("foo", multisite, nodecount, lazytopo, jacksInstance);
+	    console.info("foo", multisite, nodecount, jacksInstance);
 
 	    if (multisite || nodecount < MAXJACKSNODES) {
 		if (!jacksInstance) {
-		    if (lazytopo) {
-			LazyTopoTab(multisite, manifest);
-		    }
-		    else {
-			await ShowTopologyTab(multisite, manifest);
-		    }
+		    await ShowTopologyTab(multisite, manifest);
 		}
 		else if (changingtopo) {
 		    // When we get first new manifest, clear the viewer palette.
@@ -3212,9 +3212,7 @@ $(function ()
 		if (managers.length == 1)
 		    showlinktest = true;
 	    });
-	    if (!lazytopo) {
-		SetupLinktest(instanceStatus);
-	    }
+	    SetupLinktest(instanceStatus);
 
 	    // If there is a shared lan, show the connect-sharedlan button
 	    $(xml).find("link").each(function() {
@@ -4248,8 +4246,8 @@ $(function ()
 		    e.preventDefault();
 		    // remove the li from the ul. this=ul.li.a.button
 		    $(this).parent().parent().remove();
-		    // Activate the "profile" tab.
-		    $('#quicktabs_ul li a:first').tab('show');
+		    // Activate the initialtab
+		    SwitchToLastKnownTab();
 		    // Trigger the custom event.
 		    $("#" + tabname).trigger("killconsole");
 		    // Remove the content div. Have to delay this though.
@@ -4504,8 +4502,8 @@ $(function ()
 		    e.preventDefault();
 		    // remove the li from the ul. this=ul.li.a.button
 		    $(this).parent().parent().remove();
-		    // Activate the "profile" tab.
-		    $('#quicktabs_ul li a:first').tab('show');
+		    // Activate the initialtab
+		    SwitchToLastKnownTab();
 		    // Remove the content div. Have to delay this though.
 		    // See below.
 		    setTimeout(function(){
@@ -4872,8 +4870,8 @@ $(function ()
 		$(this).parent().parent().remove();
 		// Remove the content div.
 		$("#" + tabname).remove();
-		// Activate the first visible tab
-		$('#quicktabs_ul a:visible:first').tab('show');
+		// Activate the initialtab
+		SwitchToLastKnownTab();
 	    });
 
 	    // The content div.
@@ -5223,53 +5221,15 @@ $(function ()
 			"callback" : callback});
     }
 
-    function LazyTopoTab(multisite, manifest)
-    {
-	if (! $('#show_topology_tab').parent().hasClass("hidden")) {
-	    return;
-	}
-	$('#show_topology_tab').parent().removeClass("hidden");
-	
-	// Helper function.
-	var loadScript = function (url, callback) {
-	    jQuery.ajax({
-		url: url,
-		dataType: 'html',
-		success: callback,
-		async: true
-	    });
-	};
-	var waitForJacks = function () {
-	    if (window.JACKS_LOADER.isReady) {
-		console.info("loaded");
-		ShowTopologyTab(multisite, manifest);
-		SetupLinktest(instanceStatus);
-		return;
-	    }
-	    console.info("waiting");
-	    setTimeout(function f() { waitForJacks() }, 500);	    
-	};
-	loadScript("jacksload.php", function (data) {
-	    console.info(data);
-
-	    $(document.body).append("<div>" + data + "</div>");
-	    waitForJacks();
-	});
-	lazytopo = 0;
-    }
-
     function ShowTopologyTab(multisite, manifest)
     {
 	// console.info("ShowTopologyTab");
 	if (! $('#quicktabs_content #topology').hasClass("hidden")) {
 	    return;
 	}
-	
-	// Show the tab.
 	$('#quicktabs_ul a[href="#topology"]').parent().removeClass("hidden");
 	$('#quicktabs_content #topology').removeClass("hidden");
-	$('#quicktabs_ul a[href="#topology"]').tab('show');
-
+	SwitchToLastKnownTab();
 	return ShowViewer('#showtopo_statuspage', multisite, manifest);
     }
 
@@ -5622,8 +5582,8 @@ $(function ()
 		e.preventDefault();
 		// remove the li from the ul. this=ul.li.a.button
 		$(this).parent().parent().remove();
-		// Activate the "profile" tab.
-		$('#quicktabs_ul li a:first').tab('show');
+		// Activate the initialtab
+		SwitchToLastKnownTab();
 		// Remove the content div. Have to delay this though.
 		$("#" + tabname).remove();
 	    });
@@ -5888,41 +5848,70 @@ $(function ()
 
     function ShowModifyViewer(which, rspec)
     {
-	var divname    = '#ppwizard-body .topo-' + which;
+	var divname    = '#ppwizard-body .topo-compare';
 	var aggregates = [];
 	
 	_.each(amlist, function(details, aggregate_urn) {
 	    aggregates.push({"id" : aggregate_urn,
 			     "name" : details.name});
 	});
+	$(divname + ' .topo-' + which).html("");
 
-	$(divname).html("");
-	
-	var jacks = new window.Jacks({
-	    mode: 'viewer',
-	    source: 'rspec',
-	    multiSite: multisite,
-	    root: divname,
-	    nodeSelect: false,
-	    
-	    readyCallback: function (input, output) {
-		input.trigger('change-topology',
-			      [{ "rspec": rspec }]);
-	    },
-	    canvasOptions: { "aggregates" : aggregates },
-	    show: {
-		rspec: false,
-		tour: false,
-		version: false,
-		selectInfo: false,
-		menu: false
-	    }
+	var jacks = JacksViewer.create({
+	    "root"       : divname,
+	    "selector"   : '.topo-' + which,
+	    "xml"        : rspec,
+	    "showinfo"   : false,
+	    "multisite"  : multisite,
+	    "aggregates" : aggregates,
 	});
     }
 
     // Helper.
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));
+    }
+
+    // Switch to tab the user used in the last use of the status page.
+    function SwitchToLastKnownTab()
+    {
+	$('#quicktabs_ul a[href="#' + initialTab + '"]').tab('show');
+    }
+    // Remember for last time (only topology or listview of course).
+    function RememberUserTab(which)
+    {
+	which = which.substr(1);
+	if (which != "topology" && which != "listview") {
+	    return;
+	}
+	initialTab = which;
+	
+	// Delete existing cookies first
+	var expires = "expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+	document.cookie = PORTALTABCOOKIE + '=; ' + expires;
+
+	var date = new Date();
+	date.setTime(date.getTime()+(1000*24*60*60*1000))
+
+	var cookie = PORTALTABCOOKIE + '=' + which +
+	    '; expires=' + date.toGMTString() + '; path=/';
+
+	console.info("RememberUserTab: ", cookie);
+	document.cookie = cookie;
+    }
+    // Get last known tab (or null).
+    function LastKnownUserTab()
+    {
+	var which = null;
+	
+	document.cookie.split(';').forEach(function(el) {
+	    let [key,value] = el.split('=');
+	    if (key.trim() == PORTALTABCOOKIE) {
+		which = value;
+	    }
+	});
+	console.info("LastKnownUserTab:", which);
+	return which;
     }
 
     // Temporary
@@ -5939,7 +5928,6 @@ $(function ()
 				     console.info("GatherTabStats error");
 				     return;
 				 }
-				 console.info("Tab stats gathered");
 			     });
 
 	justloaded = 0;
