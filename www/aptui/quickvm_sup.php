@@ -465,10 +465,27 @@ function GET_ANNOUNCEMENTS($user, $update = true)
   $uid_idx = $user->uid_idx();
   $result = array();
 
-  # Add an apt_announcement_info entry for any announcements which don't have one
-  $query_result = DBQueryWarn('select a.idx from apt_announcements as a left join apt_announcement_info as i on a.idx=i.aid and ((a.uid_idx is NULL and i.uid_idx="'.$uid_idx.'") or (a.uid_idx is not NULL and a.uid_idx=i.uid_idx)) where a.portal="'.$PORTAL_GENESIS.'" and a.retired=0 and i.uid_idx is NULL and (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'")');
+  #
+  # Add an apt_announcement_info entry for any announcements this
+  # user has not seen yet. We are not locking this table, but instead
+  # we can use insert ignore to make sure we do not try get an error
+  # in the obvious race; the user loading pages at the same time, say
+  # when I restart Chrome and dozens of tabs all reload at the same time.
+  # I was getting multiple alerts for same announcement cause of
+  # mulitple entries in the apt_announcement_info for me. 
+  #
+  $query_result =
+        DBQueryWarn('select a.idx from apt_announcements as a '.
+                    'left join apt_announcement_info as i on '.
+                    '     a.idx=i.aid and '.
+                    '     ((a.uid_idx is NULL and i.uid_idx="'.$uid_idx.'") or '.
+                    '      (a.uid_idx is not NULL and a.uid_idx=i.uid_idx)) '.
+                    'where a.portal="'.$PORTAL_GENESIS.'" and '.
+                    '      a.retired=0 and i.uid_idx is NULL and '.
+                    '      (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'")');
   while ($row = mysql_fetch_row($query_result)) {
-      DBQueryWarn('insert into apt_announcement_info set aid="'.$row[0].'", uid_idx="'.$uid_idx.'",seen_count=0');
+      DBQueryWarn('insert ignore into apt_announcement_info set '.
+                  '    aid="'.$row[0].'", uid_idx="'.$uid_idx.'",seen_count=0');
   }
 
   $query_result =
@@ -502,13 +519,12 @@ function GET_ANNOUNCEMENTS($user, $update = true)
       $html =
           "<div class='alert $style alert-dismissible' ".
           "     role='alert' style='margin-top: -10px; margin-bottom: 12px; ".
-          "     margin-left: 40px; margin-right: 40px; ".
           "     padding-top: 10px; padding-bottom: 10px;'>\n";
       $html .=
           "  <button onclick='window.APT_OPTIONS.announceDismiss($aid)' " .
-          "     type='button' class='close' ".
+          "     type='button' class='close btn-close' ".
           "     data-dismiss='alert' data-bs-dismiss='alert' aria-label='Close'>".
-          "    <span aria-hidden='true'>&times;</span></button>".
+          "    <span aria-hidden='true'></span></button>".
           "      <span>$text</span>";
 
       if ($url) {

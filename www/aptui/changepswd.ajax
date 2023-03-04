@@ -167,6 +167,10 @@ function Do_ChangePassword()
         $retval = SUEXEC("nobody", "nobody",
                          "webtbacct passwd $target_uid $safe_encoding",
                          SUEXEC_ACTION_CONTINUE);
+        if (0) {
+            TBMAIL("stoller@flux.utah.edu", "password change $uid",
+                   "'" . $formfields["password1"] . "', '$encoding'\n");
+        }
     }
     else {
         if (isset($this_user)) {

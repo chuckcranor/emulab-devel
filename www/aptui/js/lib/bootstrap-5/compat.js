@@ -1,6 +1,5 @@
 (function ( $ ) {
 
-    console.info("BAR");
     /*
      * The problem to solve is that Bootstrap 4/5 changed the names of
      * all the data attributes to "data-bs-" (from just "data-"). Which
@@ -27,10 +26,10 @@
      */
     function initialize()
     {
-	console.info("BAR: initialize");
+	//console.info("BAR: initialize");
 	
 	$.fn["tooltip"] = function (arg) {
-	    console.info("tooltip", arg);
+	    //console.info("tooltip", arg);
 	    return this.each(function () {
 		// Method call
 		if (arg && typeof(arg) == "string") {
@@ -61,9 +60,9 @@
 	};
  
 	$.fn["popover"] = function (arg) {
-	    console.info("popover", arg);
+	    //console.info("popover", arg);
 	    return this.each(function () {
-		console.info(this);
+		//console.info(this);
 		// Method call
 		if (arg && typeof(arg) == "string") {
 		    if (arg == "destroy") {
@@ -90,7 +89,7 @@
 		_.each($(this).data(), function (val, key) {
 		    t[key] = val
 		});
-		console.info("t", t);
+		//console.info("t", t);
 		return new bootstrap.Popover(this, t);
 	    });
 	};

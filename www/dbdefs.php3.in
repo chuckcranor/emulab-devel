@@ -876,6 +876,13 @@ function TBGetUniqueIndex($name)
 	DBQueryFatal("select idx from emulab_indicies ".
 		     "where name='$name'");
 
+    if (!mysql_num_rows($query_result)) {
+        DBQueryFatal("replace into emulab_indicies (name, idx) ".
+                     "values ('$name', 1)");
+        DBQueryFatal("unlock tables");
+        return 0;
+    }
+
     $row = mysql_fetch_array($query_result);
     $curidx = $row["idx"];
     if (!isset($curidx)) {

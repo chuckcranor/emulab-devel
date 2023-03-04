@@ -143,7 +143,7 @@
                        class='dropdown-item'>All Experiments</a></li>
 		<li><a href='list-profiles.php'
                        class='dropdown-item'>All Profiles</a></li>
-                <li><a href='list-resgroups.php'
+                <li><a href='list-resgroups.php?all=1'
                        class='dropdown-item'>All ResGroups</a></li>
                 <li><a href='list-datasets.php'
                        class='dropdown-item'>All Datasets</a></li>
@@ -283,15 +283,23 @@
     <% } %>
   </div>
 </nav>
-<div id='portal-announcement-div'></div>
+<div class="container">
+<div class="row">
+  <div id='portal-announcement-div'>
+  </div>
+</div>
 <% if (vars.message && !vars.cleanmode) { %>
-  <div class='alert alert-warning alert-dismissible'
-       role='alert' style='margin-top: -10px; padding: 5px;'>
-    <center><%- vars.message %></center>
+  <div class="row">
+    <div id='portal-message-div'>
+      <div class='alert alert-warning alert-dismissible'
+	   role='alert' style='margin-top: -10px; padding: 5px;'>
+	<center><%- vars.message %></center>
+      </div>
+    </div>
   </div>
 <% } %>
 <% if (vars.NAGUS || vars.NAGPI) { %>
-  <div style='margin-bottom: 6px; margin-top: -10px'>
+  <div class="row" style='margin-bottom: 6px; margin-top: -10px'>
     <center>
       <span class="text-danger">
 	<% if (vars.NAGUS) { %>
@@ -314,6 +322,7 @@
 <% } %>
 <% if (vars.login_uid && !vars.cleanmode &&
        (vars.phours || vars.week || vars.month)) { %>
+  <div class="row">
   <center style='margin-bottom: 5px; margin-top: -8px'>
     <span class='text-info'>
       Current Usage: <%- vars.phours %> Node Hours,</span>
@@ -330,6 +339,8 @@
       <span class='glyphicon glyphicon-question-sign'
             style='margin-bottom: 4px;'></span></a>
   </center>
+  </div>
+</div>
 <% } %>
 <div id='myusage_modal' class='modal' style='z-index:1051;'>
   <div class='modal-dialog'>

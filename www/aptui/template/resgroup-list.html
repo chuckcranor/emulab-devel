@@ -113,16 +113,18 @@
 			      margin-left: 0px;'
 		       value="<%- value.uuid %>">
 	      <% } %>
-	      <a href="resgroup.php?edit=1&uuid=<%- value.uuid %>"
-		 target="_blank" 
-		 class="edit-button">
-		<span class='glyphicon glyphicon-eye-open text-primary'
-		      style='margin-bottom: 4px; margin-left: 10px;'
-		      data-toggle='tooltip'
-		      data-container="body"
-		      data-trigger="hover"
-		      title='View/Edit reservation details'></span>
-	      </a>
+	      <% if (!value.ishistory) { %>
+		<a href="resgroup.php?edit=1&uuid=<%- value.uuid %>"
+		  target="_blank" 
+		  class="edit-button">
+		  <span class='glyphicon glyphicon-eye-open text-primary'
+			style='margin-bottom: 4px; margin-left: 10px;'
+			data-toggle='tooltip'
+			data-container="body"
+			data-trigger="hover"
+			title='View/Edit reservation details'></span>
+		</a>
+	      <% } %>
 	    <% } %>
 	  </td>
 	  <% if (showuser) { %>
@@ -152,7 +154,8 @@
 	  <td>
 	    <% if (!value.start) { %>
 	      &nbsp
-	    <% } else if (new Date().getTime() >
+	    <% } else if (!value.ishistory &&
+	                  new Date().getTime() >
 	                  new Date(value.start).getTime()) { %>
 	      <span class="format-date"
 		    style="color: green;"><%- value.start %></span>
@@ -164,7 +167,7 @@
 	    <% if (!value.end) { %>
 	      &nbsp
 	    <% } else { %>
-	      <% if (!value.idledetection) { %>
+	      <% if (!value.ishistory && !value.idledetection) { %>
 		<span class="text-warning">
 	      <% } %>
 	      <span class="format-date"><%- value.end %></span>
@@ -218,8 +221,10 @@
 		    <th>Cluster</th>
 		    <th>Type</th>
 		    <th>Count</th>
-		    <th>Using</th>
-		    <th>Utilization</th>
+		    <% if (!value.ishistory) { %>
+		      <th>Using</th>
+		      <th>Utilization</th>
+		    <% } %>
 		    <th>Status</th>
 		    <% if (isadmin) { %>
 		      <th class="sorter-false"></th>
@@ -231,26 +236,28 @@
 			  <td><%- info.cluster_id %></td>
 			  <td><%- info.type %></td>
 			  <td><%- info.count %></td>
-			  <td>
-			    <% if (info.active && info.using != null) { %>
-			      <% if (info.using < info.count) { %>
-				<span class="text-danger">
+			  <% if (!value.ishistory) { %>
+			    <td>
+			      <% if (info.active && info.using != null) { %>
+				<% if (info.using < info.count) { %>
+				  <span class="text-danger">
+				    <%- info.using %>
+				  </span>
+				<% } else { %>
 				  <%- info.using %>
-				</span>
+				<% } %>
 			      <% } else { %>
-				<%- info.using %>
+				&nbsp;
 			      <% } %>
-			    <% } else { %>
-			      &nbsp;
-			    <% } %>
-			  </td>
-			  <td>
-			    <% if (info.utilization != null) { %>
-			      <%- info.utilization %>%
-			    <% } else { %>
-			      &nbsp;
-			    <% } %>
-			  </td>
+			    </td>
+			    <td>
+			      <% if (info.utilization != null) { %>
+				<%- info.utilization %>%
+			      <% } else { %>
+				&nbsp;
+			      <% } %>
+			    </td>
+			  <% } %>
 			  <td class="reservation-status-column">
 			    <span class="status-approved hidden">
 			      Approved</span>

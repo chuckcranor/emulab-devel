@@ -1405,26 +1405,25 @@ function Do_MaxDuration()
                      "webmanage_resgroup -t $webtask_id -- ".
                      ($ISPOWDER ? "maxduration" : "maxextension") .
                      " $options",
-                     SUEXEC_ACTION_CONTINUE);
+                     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
 
     if ($retval) {
-        SUEXECERROR(SUEXEC_ACTION_CONTINUE);    
-        
         if (!$webtask->exited() || $retval < 0) {
             SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         }
         else {
             SPITAJAX_ERROR(1, $webtask->output());
         }
-        unlink($filename);
-        if (isset($filename2)) {
-            unlink($filename2);
-        }
+        #unlink($filename);
+        #if (isset($filename2)) {
+        #    unlink($filename2);
+        #}
         $webtask->Delete();
         return;
     }
-    elseif (1 || $ISPOWDER) {
+    elseif ($ISPOWDER) {
         SUEXECERROR(SUEXEC_ACTION_DEBUG);
     }
     unlink($filename);

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -367,6 +367,7 @@ header("Pragma: no-cache");
 # Failed, then try again with an error message.
 # 
 if ($login_status == $STATUS_LOGINFAIL) {
+    #TBERROR("'${uid}', '${password}'", 0, 0);
     if ($ajax_request) {
 	SPITAJAX_ERROR(1, "login failed");
 	exit(0);

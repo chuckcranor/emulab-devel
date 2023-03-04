@@ -7,13 +7,14 @@
   <div class='col-lg-3
               col-md-3
               col-sm-3'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-        <h4 class='panel-title text-center'>Show Profile</h4>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+        <h4 class='panel-title card-title text-center'>Show Profile</h4>
       </div>
-      <div class='panel-body'
+      <div class='panel-body card-body'
 	   style='overflow: hidden; padding-left: 5px; padding-right: 5px'>
-	<table class='table-condensed nospaceafter'
+	<table class='table table-condensed table-sm
+		      table-borderless nospaceafter'
 	       style='font-size:12px;'>
 	  <tr>
 	    <td>Name:</td>
@@ -40,18 +41,39 @@
 	  <% if (!isguest) { %>
 	    <tr>
 	      <td>Project:</td>
-	      <td><%- fields.profile_pid %></td>
+	      <td>
+		<% if (isadmin) { %>
+		  <a href='show-project.php?pid=<%= fields.profile_pid %>'>
+		    <%- fields.profile_pid %></a>
+		<% } else { %>
+		  <%- fields.profile_pid %>
+		<% } %>
+	      </td>
 	    </tr>
 	  <% } %>
 	  <tr>
 	    <td>Creator:</td>
-	    <td><%- fields.profile_creator %></td>
+	    <td>
+	      <% if (isadmin) { %>
+		<a href='user-dashboard.php?user=<%= fields.profile_creator %>'>
+		  <%- fields.profile_creator %></a>
+	      <% } else { %>
+		<%- fields.profile_creator %>
+	      <% } %>
+	    </td>
 	  </tr>
 	  <% if (!isguest) { %>
 	    <% if (fields.profile_version != 0) { %>
 	      <tr>
 		<td>Updated by:</td>
-		<td><%- fields.profile_updater %></td>
+		<td>
+		  <% if (isadmin) { %>
+		    <a href='user-dashboard.php?user=<%= fields.profile_updater %>'>
+		      <%- fields.profile_updater %></a>
+		  <% } else { %>
+		    <%- fields.profile_updater %>
+		  <% } %>
+		</td>
 	      </tr>
 	    <% } %>
 	  <% } %>
@@ -89,9 +111,9 @@
 	    <tr>
 	      <td>Disabled:</td><td><span class="text-danger">Yes</span>
 		<a href='#' class='btn btn-xs'
-		   data-toggle='popover'
-		   data-html='true'
-		   data-delay='{"hide":500}'
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-html='true' data-bs-html='true'
+		   data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 		   data-content="This profile has been disabled by an
 				 administrator. You may be able to instantiate
 				 another version of this profile, see the
@@ -132,13 +154,14 @@
       </div>
     </div>
     <% if (fromrepo) { %>
-      <div class='panel panel-default hidden' id="repoinfo-panel">
-	<div class='panel-heading'>
-          <h4 class='panel-title text-center'>Repository Info</h4>
+      <div class='panel  card panel-default hidden' id="repoinfo-panel">
+	<div class='panel-heading card-header'>
+          <h4 class='panel-title card-title text-center'>Repository Info</h4>
 	</div>
-	<div class='panel-body'
+	<div class='panel-body card-body'
 	     style='overflow: hidden; padding-left: 5px; padding-right: 5px'>
-	  <table class='table-condensed nospaceafter'
+	  <table class='table table-condensed table-sm
+			table-borderless nospaceafter'
 		 style='font-size:12px;'>
 	    <tr>
 	      <td>Refspec:</td>
@@ -171,9 +194,10 @@
 	      <td class="commit-log">
 		<span class="commit-log-start"></span>
 		<button type="button" class="hidden log btn btn-xs"
-			data-toggle='popover'
-			data-html="true"
-			data-delay='{"hide":1000, "show":250}'>...</button>
+			data-toggle='popover' data-bs-toggle='popover'
+			data-html="true" data-bs-html="true"
+			data-delay='{"hide":1000, "show":250}'
+			data-bs-delay='{"hide":1000, "show":250}'>...</button>
 	      </td>
 	    </tr>
 	  </table>
@@ -183,15 +207,15 @@
     <% if (! isguest) { %>
       <div style="margin-top-foo: 10px;" class="text-center">
 	<% if (!disabled && (canedit || fields.profile_public != 0)) { %>
-	  <span data-toggle='popover'
-		data-delay='{"show":250}'
-		data-html='true'
+	  <span data-toggle='popover' data-bs-toggle='popover'
+		data-delay='{"show":250}' data-bs-delay='{"show":250}'
+		data-html='true' data-bs-html='true'
 		data-content="Share this profile with other users by
 			      sending them a link to instantiate it.
 			      Click for more info.">
 	    <button class='btn btn-primary btn-xs'
 		    id='profile_share_button'
-     		    data-toggle='modal' data-target='#share_profile_modal'
+     		    data-toggle='modal' data-bs-toggle='modal' data-target='#share_profile_modal' data-bs-target='#share_profile_modal'
 		    style='margin-right: 5px;'
 		    type='button'>
 	      Share
@@ -212,8 +236,8 @@
 		    class='btn btn-primary btn-xs'
 		    style='margin-right: 5px;'
 		    <% if (fromrepo) { %>
-     		    data-toggle='modal'
-		    data-target='#copy-repobased-profile-modal'
+     		    data-toggle='modal' data-bs-toggle='modal'
+		    data-target='#copy-repobased-profile-modal' data-bs-target='#copy-repobased-profile-modal'
 		    <% } %>
 		    type='button'>Copy</button>
 	  <% } %>
@@ -235,12 +259,12 @@
               col-md-9
               col-sm-9
               col-xs-12'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-        <h4 class='panel-title text-center'>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+        <h4 class='panel-title card-title text-center'>
 	  Profile <%- fields.profile_pid %>/<%- fields.profile_name %></h4>
       </div>
-      <div class='panel-body'>
+      <div class='panel-body card-body'>
 	<form id="profile-form" class='form-horizontal' role='form'
 	      data-format="wide">
 	  <fieldset>
@@ -316,12 +340,12 @@
   <div id='showtopo-modal-div'></div>
 </div>
 <div class='row hidden' id="gitpicker-div">
-  <div class='col-sm-9 col-sm-offset-3 col-xs-12'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-        <h4 class='panel-title text-center'>Repository Branches and Tags</h4>
+  <div class='col-sm-9 col-sm-offset-3 offset-sm-3 col-xs-12'>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+        <h4 class='panel-title card-title text-center'>Repository Branches and Tags</h4>
       </div>
-      <div id="gitrepo-picker" class='panel-body'>
+      <div id="gitrepo-picker" class='panel-body card-body'>
       </div>
     </div>
   </div>

@@ -4,8 +4,9 @@
     <div class='modal-content'>
       <div class='modal-header'>
         <button type='button'
-		class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+		class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<h4 class='modal-title text-center'>Share this Profile</h4>
       </div>
       <div class='modal-body'>
@@ -32,15 +33,16 @@
 	    <% if (!fromrepo) { %>
 	    Share this version:
 	    <div style="margin-top: 5px;">
-	      <div class="copy-to-clipboard form-inline">
-		<input readonly
-		       style="width: 90%"
-		       class="form-control"
-		       value='<%- formfields.profile_version_url %>'>
-		<a href='#' class='btn'>
-		  <span class='glyphicon glyphicon-copy'
-			style='margin-bottom: 4px;'></span>
-		</a>
+	      <div class="copy-to-clipboard">
+		<div class="input-group">
+		  <input readonly
+			 class="form-control"
+			 value='<%- formfields.profile_version_url %>'>
+		  <span class="input-group-text">
+		    <a href='#' class='btn'>
+		      <span class='glyphicon glyphicon-copy'></span></a>
+		  </span>
+		</div>
 	      </div>
 	    </div>
 	    <div style="margin-top: 15px;">
@@ -48,15 +50,16 @@
 	    </div>
 	    <% } %>
 	    <div style="margin-top: 5px;">
-	      <div class="copy-to-clipboard form-inline">
-		<input readonly
-		       style="width: 90%"
-		       class="form-control"
-		       value='<%- formfields.profile_profile_url %>'>
-		<a href='#' class='btn'>
-		  <span class='glyphicon glyphicon-copy'
-			style='margin-bottom: 4px;'></span>
-		</a>
+	      <div class="copy-to-clipboard">
+		<div class="input-group">
+		  <input readonly
+			 class="form-control"
+			 value='<%- formfields.profile_profile_url %>'>
+		  <span class="input-group-text">
+		    <a href='#' class='btn'>
+		      <span class='glyphicon glyphicon-copy'></span></a>
+		  </span>
+		</div>
 	      </div>
 	    </div>
 	  </form>

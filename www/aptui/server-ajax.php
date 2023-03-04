@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -252,6 +252,8 @@ $routing = array("geni-login" =>
 						     "Do_ServiceLogs",
                                                  "Transmissions" =>
                                                      "Do_Transmissions",
+                                                 "GatherTabStats" =>
+                                                     "Do_GatherTabStats",
                               )
                         ),
 		 "approveuser" =>
