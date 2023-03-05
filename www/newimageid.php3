@@ -588,7 +588,7 @@ $group   = null;
 if (!TBvalid_pid($formfields["pid"])) {
     $errors["Project"] = "Invalid project name";
 }
-elseif (! ($project = (new Project)->Lookup($formfields["pid"]))) {
+elseif (! ($project = Project::Lookup($formfields["pid"]))) {
     $errors["Project"] = "Invalid project name";
 }
 
@@ -803,7 +803,7 @@ if (mysql_num_rows($query_result)) {
 
 	while ($row = mysql_fetch_array($query_result)) {
 	    $osid      = $row["osid"];
-            $osinfo    = (new OSinfo)->Lookup($osid);
+            $osinfo    = OSinfo::Lookup($osid);
             $osname    = $osinfo->osname();
 	    $type      = $row["type"];
 	    $imageid   = $row['imageid'];
@@ -826,7 +826,7 @@ if (mysql_num_rows($query_result)) {
 
 # Send to the backend for more checking, and eventually, to update the DB.
 $imagename = $args["imagename"];
-if (! ($image = (new Image)->NewImageId(0, $imagename, $args, $this_user, $group,
+if (! ($image = Image::NewImageId(0, $imagename, $args, $this_user, $group,
 				  $node_id, $errors))) {
     # Always respit the form so that the form fields are not lost.
     # I just hate it when that happens so lets not be guilty of it ourselves.
@@ -873,7 +873,7 @@ if (isset($node_id)) {
     # awry. 
     #
 
-    $node = (new Node)->Lookup($node_id); # Already been checked.
+    $node = Node::Lookup($node_id); # Already been checked.
     $node_id = $node->node_id();    # XXX Why?
 
     #

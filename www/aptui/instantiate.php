@@ -86,6 +86,9 @@ $maxduration = 16;
 if (!isset($stresstest)) {
     $stresstest = 0;
 }
+if (!isset($skipfirststep)) {
+    $skipfirststep = 0;
+}
 
 if (isset($rerun_instance) || isset($rerun_paramset) ||
     (isset($from) && ($from == "manage-profile" || $from == "show-profile"))) {
@@ -121,7 +124,7 @@ $tmp = array();
 
 foreach ($projlist as $pid => $unused) {
     # Watch out for killing page variable called "project"
-    $proj = (new Project)->Lookup($pid);
+    $proj = Project::Lookup($pid);
     if ($proj && !$proj->IsNonLocal()) {
         $tmp[$pid] = $projlist[$pid];
         if (FeatureEnabled("NewScheduleStep", $this_user, $proj)) {
@@ -130,7 +133,7 @@ foreach ($projlist as $pid => $unused) {
         if (FeatureEnabled("UseNewInstantiate", $this_user, $proj)) {
             $usenewinstantiate = 1;
         }
-        $allowed_clusters = (new Aggregate)->AllowedAggregates($proj);
+        $allowed_clusters = Aggregate::AllowedAggregates($proj);
         if ($allowed_clusters) {
             $cluster_restrictions[$proj->pid()] = array_keys($allowed_clusters);
         }
@@ -198,9 +201,9 @@ $usageinfo      = UserUsageInfo($this_user);
 # Make sure rerun instance or paramset exists.
 #
 if (isset($rerun_instance)) {
-    $record = (new Instance)->Lookup($rerun_instance);
+    $record = Instance::Lookup($rerun_instance);
     if (!$record) {
-        $record = (new InstanceHistory)->Lookup($rerun_instance);
+        $record = InstanceHistory::Lookup($rerun_instance);
         if (!$record) {
             SPITUSERERROR("No such rerun instance");
             exit();
@@ -212,8 +215,8 @@ if (isset($rerun_instance)) {
     }
     $rerun_record = $record;
 }
-elseif ($rerun_paramset) {
-    $rerun_record = (new Paramset)->Lookup($rerun_paramset);
+elseif (isset($rerun_paramset) && $rerun_paramset) {
+    $rerun_record = Paramset::Lookup($rerun_paramset);
     if (!$rerun_record) {
         SPITUSERERROR("No such parameter set");
         exit();
@@ -237,10 +240,10 @@ if (isset($profile)) {
     # is /p/project/profilename, but only for public profiles.
     #
     if (isset($project) && isset($profile)) {
-	$obj = (new Profile)->LookupByName($project, $profile, $version);
+	$obj = Profile::LookupByName($project, $profile, $version);
     }
     elseif (IsValidUUID($profile) || IsValidHash($profile)) {
-	$obj = (new Profile)->Lookup($profile);
+	$obj = Profile::Lookup($profile);
     }
     else {
 	SPITUSERERROR("Illegal profile for guest user: $profile");
@@ -360,7 +363,7 @@ else {
     #
     if (isset($default)) {
         if (IsValidUUID($default)) {
-            $obj = (new Profile)->Lookup($default);
+            $obj = Profile::Lookup($default);
             if (!$obj) {
                 SPITUSERERROR("Unknown default profile: $default");
                 exit();
@@ -492,7 +495,7 @@ if ($this_user->IsNonLocal()) {
 }
 
 # Current and Future reservations for the cluster picker.
-$resinfo = (new ReservationGroup)->ReservationInfo($projlist);
+$resinfo = ReservationGroup::ReservationInfo($projlist);
 echo "<script type='text/plain' id='resinfo-json'>\n";
 echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
 echo "</script>\n";
@@ -512,7 +515,7 @@ SpitAggregateStatus(true, $this_user);
 
 if ($ISPOWDER) {
     # Powder Radio info.
-    $radioinfo = (new Aggregate)->RadioInfoNew();
+    $radioinfo = Aggregate::RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
     echo htmlentities(json_encode($radioinfo));
     echo "</script>\n";
@@ -534,7 +537,7 @@ if ($ISPOWDER) {
     echo "</script>\n";
 }
 
-$prunelist = (new Instance)->NodeTypePruneList(null, true);
+$prunelist = Instance::NodeTypePruneList(null, true);
 echo "<script type='text/plain' id='prunelist-json'>\n";
 echo htmlentities(json_encode($prunelist));
 echo "</script>\n";

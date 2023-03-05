@@ -29,7 +29,7 @@ class Paramset
     var $profile;
     var $project;
 
-    function Paramset($token) {
+    function __construct($token) {
         $query_result = null;
         
 	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $token)) {
@@ -72,7 +72,7 @@ class Paramset
         if ($this->profile) {
             return $this->profile;
         }
-        $this->profile = (new Profile)->Lookup($this->profileid());
+        $this->profile = Profile::Lookup($this->profileid());
         return $this->profile;
     }
     # Project of paramset
@@ -84,7 +84,7 @@ class Paramset
         if (!$profile) {
             return null;
         }
-        $this->project = (new Project)->Lookup($profile->pid_idx());
+        $this->project = Project::Lookup($profile->pid_idx());
         return $this->project;
     }
     function IsBound() {
@@ -93,7 +93,7 @@ class Paramset
     # Bound version of the Profile.
     function BoundProfile() {
         if ($this->version_uuid()) {
-            return (new Profile)->Lookup($this->version_uuid());
+            return Profile::Lookup($this->version_uuid());
         }
         return null;
     }
@@ -104,7 +104,7 @@ class Paramset
     }
 
     # Lookup up a single paramset
-    function Lookup($token) {
+    public static function Lookup($token) {
 	$foo = new Paramset($token);
 
 	if ($foo->IsValid()) {
@@ -175,10 +175,10 @@ class Paramset
     {
         if (!$profile) {
             if ($this->version_uuid()) {
-                $profile = (new Profile)->Lookup($this->version_uuid());
+                $profile = Profile::Lookup($this->version_uuid());
             }
             else {
-                $profile = (new Profile)->Lookup($this->profileid());
+                $profile = Profile::Lookup($this->profileid());
             }
             if (!$profile) {
                 return null;

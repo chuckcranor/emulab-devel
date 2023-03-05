@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,7 +57,7 @@ function CheckPageArgs($write)
 	SPITAJAX_ERROR(-1, "Invalid node ID");
 	return -1;
     }
-    $node = (new Node)->Lookup($node_id);
+    $node = Node::Lookup($node_id);
     if (!$node) {
 	SPITAJAX_ERROR(-1, "No such node");
 	return -1;
@@ -185,7 +185,7 @@ function Do_GetInfo()
     if (!$restricted && $node->next_boot_osid()) {
         $osid   = $node->next_boot_osid();
         $vers   = $node->next_boot_osid_vers();
-        $osinfo = (new OSInfo)->Lookup($osid, $vers);
+        $osinfo = OSInfo::Lookup($osid, $vers);
         if ($osinfo) {
             $url = "$TBBASE/showosinfo.php3?osid=${osid}&version=${vers}";
 
@@ -202,7 +202,7 @@ function Do_GetInfo()
     if (!$restricted && $this_user && $node->temp_boot_osid()) {
         $osid   = $node->temp_boot_osid();
         $vers   = $node->temp_boot_osid_vers();
-        $osinfo = (new OSInfo)->Lookup($osid, $vers);
+        $osinfo = OSInfo::Lookup($osid, $vers);
         if ($osinfo) {
             $url = "$TBBASE/showosinfo.php3?osid=${osid}&version=${vers}";
 
@@ -370,8 +370,8 @@ function GetExpInfo($node)
     # See if its a portal experiment, for the url.
     #
     if ($experiment->geniflags() &&
-        ($slice = (new GeniSlice)->Lookup("geni-cm", $experiment->uuid())) &&
-        ($instance = (new Instance)->LookupBySlice($slice->uuid()))) {
+        ($slice = GeniSlice::Lookup("geni-cm", $experiment->uuid())) &&
+        ($instance = Instance::LookupBySlice($slice->uuid()))) {
         $url = "status.php?uuid=" . $instance->uuid();
     }
     else {
@@ -476,7 +476,7 @@ function Do_GetLog()
 	SPITAJAX_ERROR(-1, "Invalid node ID");
 	return -1;
     }
-    $node = (new Node)->Lookup($node_id);
+    $node = Node::Lookup($node_id);
     if (!$node) {
 	SPITAJAX_ERROR(-1, "No such node");
 	return -1;
@@ -519,7 +519,7 @@ function Do_SaveLogEntry()
 	SPITAJAX_ERROR(-1, "Invalid node ID");
 	return -1;
     }
-    $node = (new Node)->Lookup($node_id);
+    $node = Node::Lookup($node_id);
     if (!$node) {
 	SPITAJAX_ERROR(-1, "No such node");
 	return -1;
@@ -566,7 +566,7 @@ function Do_DeleteLogEntry()
 	SPITAJAX_ERROR(-1, "Invalid node ID");
 	return -1;
     }
-    $node = (new Node)->Lookup($node_id);
+    $node = Node::Lookup($node_id);
     if (!$node) {
 	SPITAJAX_ERROR(-1, "No such node");
 	return -1;
@@ -678,14 +678,14 @@ function Do_GetHistory()
             #
             # See if a current or historical apt instance
             #
-            $instance = (new Instance)->LookupBySlice($info["slice_uuid"]);
+            $instance = Instance::LookupBySlice($info["slice_uuid"]);
             if ($instance) {
                 $info["isportal"]      = true;
                 $info["isrunning"]     = true;
                 $info["instance_uuid"] = $instance->uuid();
             }
             else {
-                $uuid = (new InstanceHistory)->SliceToUUID($info["slice_uuid"]);
+                $uuid = InstanceHistory::SliceToUUID($info["slice_uuid"]);
                 if ($uuid) {
                     $info["isportal"]      = true;
                     $info["isrunning"]     = false;

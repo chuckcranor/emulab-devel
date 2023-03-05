@@ -62,13 +62,13 @@ $optargs = OptionalPageArguments("uuid",   PAGEARG_STRING,
                                  "source", PAGEARG_BOOLEAN,
                                  "rspec",  PAGEARG_BOOLEAN);
 if (isset($uuid))  {
-    $profile = (new Profile)->Lookup($uuid);
+    $profile = Profile::Lookup($uuid);
 }
 elseif (isset($project) && isset($profile)) {
-    $profile = (new Profile)->LookupByName($project, $profile);
+    $profile = Profile::LookupByName($project, $profile);
 }
 elseif (isset($profile) && (IsValidHash($profile) || IsValidUUID($profile))) {
-    $obj = (new Profile)->Lookup($profile);
+    $obj = Profile::Lookup($profile);
     if ($obj && IsValidHash($profile)) {
         $ishashed = 1;
     }

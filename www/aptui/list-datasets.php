@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -117,13 +117,13 @@ function SPITTABLE($which, $results, $where) {
             $type    = $row["type"];
 
             if ($type == "image") {
-                $dataset = (new ImageDataset)->Lookup($uuid);
+                $dataset = ImageDataset::Lookup($uuid);
             }
             elseif ($type == "lease") {
-                $dataset = (new Lease)->Lookup($uuid);
+                $dataset = Lease::Lookup($uuid);
             }     
             elseif ($type == "dataset") {
-                $dataset = (new Dataset)->Lookup($uuid);
+                $dataset = Dataset::Lookup($uuid);
             }
             $idx     = $dataset->idx();
             $name    = $dataset->id();

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2002-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,7 +36,7 @@ function MayEditPub($user, $isadmin, $row) {
     $pid = $row['project'];
     if ($pid == '') 
         return false;
-    $proj = (new Project)->LookupByPid($pid);
+    $proj = Project::LookupByPid($pid);
     if (!$proj)
 	return false;
     return TBMinTrust($proj->UserTrust($user), $TBDB_TRUST_LOCALROOT);

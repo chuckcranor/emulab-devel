@@ -52,7 +52,7 @@ function CheckPageArgs()
 	SPITAJAX_ERROR(-1, "Invalid target pid");
         return -1;
     }
-    $target_project = (new Project)->Lookup($pid);
+    $target_project = Project::Lookup($pid);
     if (!$target_project) {
         sleep(2);
 	SPITAJAX_ERROR(-1, "Unknown target pid");
@@ -129,7 +129,7 @@ function Do_ResgroupList()
     if (CheckPageArgs()) {
         return;
     }
-    $resgroups = (new ReservationGroup)->LookupForProject($target_project);
+    $resgroups = ReservationGroup::LookupForProject($target_project);
     foreach ($resgroups as $resgroup) {
         $reservations[$resgroup->uuid()] = $resgroup->Blob(false);
     }
@@ -182,7 +182,7 @@ function Do_MemberList()
              $target_project->CanDeleteUser($this_user, $user) ? 1 : 0);
 
         if ($statsokay) {
-            list($pcount, $phours) = (new Instance)->MonthsUsage($user,
+            list($pcount, $phours) = Instance::MonthsUsage($user,
                                                            $target_group);
             if ($phours) {
                 $blob["usage"] = array("pcount" => $pcount,
@@ -282,10 +282,10 @@ function Do_UsageSummary()
     if (CheckPageArgs()) {
         return;
     }
-    list($pcount, $phours)           = (new Instance)->CurrentUsage($target_project);
-    list($weekpcount, $weekphours)   = (new Instance)->WeeksUsage($target_project);
-    list($monthpcount, $monthphours) = (new Instance)->MonthsUsage($target_project);
-    list($rank, $ranktotal)          = (new Instance)->Ranking($target_project, 30);
+    list($pcount, $phours)           = Instance::CurrentUsage($target_project);
+    list($weekpcount, $weekphours)   = Instance::WeeksUsage($target_project);
+    list($monthpcount, $monthphours) = Instance::MonthsUsage($target_project);
+    list($rank, $ranktotal)          = Instance::Ranking($target_project, 30);
 
     if ($phours < 2) {
         $phours = sprintf("%.1f", $phours);
@@ -314,7 +314,7 @@ function Do_UsageSummary()
                   "rankdays"    => 30,
                   "rank"        => $rank,
                   "ranktotal"   => $ranktotal,
-                  "expcount"    => (new Instance)->CurrentInstanceCount($target_project),
+                  "expcount"    => Instance::CurrentInstanceCount($target_project),
     );
     
     SPITAJAX_RESPONSE($blob);

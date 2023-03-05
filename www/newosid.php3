@@ -317,7 +317,7 @@ if (!isset($formfields["pid"]) ||
 elseif (!TBvalid_pid($formfields["pid"])) {
     $errors["Project"] = "Invalid project name";
 }
-elseif (!($project = (new Project)->Lookup($formfields["pid"]))) {
+elseif (!($project = Project::Lookup($formfields["pid"]))) {
     $errors["Project"] = "Invalid project name";
 }
 elseif (!$project->AccessCheck($this_user, $TB_PROJECT_MAKEOSID)) {
@@ -368,7 +368,7 @@ foreach ($osid_featurelist as $feature => $userokay) {
 }
 $args["features"] = join(",", $os_features_array);
 
-if (! ($osinfo = (new OSinfo)->NewOSID($this_user, $project,
+if (! ($osinfo = OSinfo::NewOSID($this_user, $project,
 				 $formfields["osname"], $args, $errors))) {
     # Always respit the form so that the form fields are not lost.
     # I just hate it when that happens so lets not be guilty of it ourselves.

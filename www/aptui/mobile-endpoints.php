@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -46,7 +46,7 @@ echo "<div id='main-body'></div>\n";
 echo "<div id='oops_div'></div>
       <div id='waitwait_div'></div>\n";
 
-$aggregates = (new Aggregate)->AllAggregatesList();
+$aggregates = Aggregate::AllAggregatesList();
 
 foreach ($aggregates as $aggregate) {
     $aggregate_urn = $aggregate->urn();
@@ -68,7 +68,7 @@ echo "<script type='text/plain' id='amlist-json'>\n";
 echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 
-$radioinfo = (new Aggregate)->RadioInfoNew();
+$radioinfo = Aggregate::RadioInfoNew();
 echo "<script type='text/plain' id='radioinfo-json'>\n";
 echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
 echo "</script>\n";

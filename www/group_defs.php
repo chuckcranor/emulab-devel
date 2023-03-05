@@ -34,7 +34,7 @@ class Group
     #
     # Constructor by lookup on unique index.
     #
-    function __construct($gid_idx = "") {
+    function __construct($gid_idx) {
 	$safe_gid_idx = addslashes($gid_idx);
 
 	$query_result =
@@ -55,7 +55,7 @@ class Group
     }
 
     # Lookup by gid_idx.
-    function Lookup($gid_idx) {
+    public static function Lookup($gid_idx) {
 	global $group_cache;
 
         # Look in cache first
@@ -73,7 +73,7 @@ class Group
     }
 
     # Backwards compatable lookup by pid,gid. Will eventually flush this.
-    function LookupByPidGid($pid, $gid) {
+    public static function LookupByPidGid($pid, $gid) {
 	$safe_pid = addslashes($pid);
 	$safe_gid = addslashes($gid);
 
@@ -87,7 +87,7 @@ class Group
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['gid_idx'];
 
-	return (new Group)->Lookup($idx);	
+	return Group::Lookup($idx);	
     }
     
     #
@@ -113,7 +113,7 @@ class Group
     #
     # Class function to create a new Project Group.
     #
-    function Create($project, $uid, $args, &$errors) {
+    public static function Create($project, $uid, $args, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -186,7 +186,7 @@ class Group
 	    return null;
 	}
 	$group = $matches[2];
-	$newgroup = (new Group)->Lookup($group);
+	$newgroup = Group::Lookup($group);
 	if (! $newgroup) {
 	    $errors[] = "Transient error(6); please try again later.";
 	    TBERROR("Could not lookup new group $group", 0);
@@ -201,7 +201,7 @@ class Group
     #
     # Class function to edit group membership.
     #
-    function EditGroup($group, $uid, $args, &$errors) {
+    public static function EditGroup($group, $uid, $args, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -272,10 +272,10 @@ class Group
     #
     # Load the project for a group lazily.
     #
-    function LoadProject() {
+    public static function LoadProject() {
 	$pid_idx = $this->pid_idx();
 
-	if (! ($project = (new Project)->Lookup($pid_idx))) {
+	if (! ($project = Project::Lookup($pid_idx))) {
 	    TBERROR("Group::LoadProject: Could not load project $pid_idx!", 1);
 	}
 	$this->project = $project;
@@ -294,7 +294,7 @@ class Group
     function GetLeader() {
 	$leader_idx = $this->leader_idx();
 
-	if (! ($leader = (new User)->Lookup($leader_idx))) {
+	if (! ($leader = User::Lookup($leader_idx))) {
 	    TBERROR("Could not find user object for $leader_idx", 1);
 	}
 	return $leader;
@@ -552,7 +552,8 @@ class Group
     #
     # Class function to create new group and return object.
     #
-    function NewGroup($project, $gid, $leader, $description, $unix_name) {
+    public static function NewGroup($project, $gid, $leader,
+    	   	  	   	    $description, $unix_name) {
 	global $TBBASE, $TBMAIL_APPROVAL, $TBMAIL_AUDIT, $TBMAIL_WWW;
 	global $MIN_UNIX_GID;
 
@@ -623,7 +624,7 @@ class Group
 	    DBQueryFatal("delete from groups where gid_idx='$gid_idx'");
 	    return null;
 	}
-	$newgroup = (new Group)->Lookup($gid_idx);
+	$newgroup = Group::Lookup($gid_idx);
 	if (! $newgroup)
 	    return null;
 
@@ -644,16 +645,16 @@ class Group
     #
     # This is strictly for initialization of a testbed.
     #
-    function Initialize($uid) {
+    public static function Initialize($uid) {
 	global $TBOPSPID;
 	
-	$emulabgroup = (new Group)->LookupByPidGid($TBOPSPID, $TBOPSPID);
+	$emulabgroup = Group::LookupByPidGid($TBOPSPID, $TBOPSPID);
 
 	if (! $emulabgroup) {
 	    TBERROR("Group::Initialize: Could not find $TBOPSPID!", 1);
 	}
 
-	$user = (new User)->Lookup($uid);
+	$user = User::Lookup($uid);
 
 	if (! $user) {
 	    TBERROR("Group::Initialize: Could not find user $uid!", 1);
@@ -907,7 +908,7 @@ class Group
 	    if ($exclude_leader && $leader->uid_idx() == $uid_idx)
 		continue;
 
-	    if (! ($user = (new User)->Lookup($uid_idx))) {
+	    if (! ($user = User::Lookup($uid_idx))) {
 		TBERROR("Group::MemberList: ".
 			"Could not load user $uid_idx!", 1);
 	    }
@@ -944,7 +945,7 @@ class Group
 	while ($row = mysql_fetch_array($query_result)) {
 	    $uid_idx = $row["uid_idx"];
 
-	    if (! ($user = (new User)->Lookup($uid_idx))) {
+	    if (! ($user = User::Lookup($uid_idx))) {
 		TBERROR("Group::NonMemberList: ".
 			"Could not load user $uid_idx!", 1);
 	    }
@@ -1303,7 +1304,7 @@ class Group
 	    $uid_idx = $row["uid_idx"];
 	    $trust   = $row["trust"];
 
-	    if (! ($target_user = (new User)->Lookup($uid_idx))) {
+	    if (! ($target_user = User::Lookup($uid_idx))) {
 		TBERROR("Could not lookup object for user $uid_idx", 1);
 	    }
 	    $usr_name     = $target_user->name();
@@ -1395,7 +1396,7 @@ class Group
 	while ($row = mysql_fetch_array($query_result)) {
 	    $idx = $row["idx"];
 
-	    if (! ($experiment = (new Experiment)->Lookup($idx))) {
+	    if (! ($experiment = Experiment::Lookup($idx))) {
 		TBERROR("Group::ExperimentList: ".
 			"Could not load experiment $idx!", 1);
 	    }
@@ -1422,11 +1423,11 @@ function TBGrpTrust($uid, $pid, $gid)
 	$gid = $pid;
     }
 
-    if (! ($group = (new Group)->LookupByPidGid($pid, $gid))) {
+    if (! ($group = Group::LookupByPidGid($pid, $gid))) {
         TBERROR("TBGrpTrust: Could not look up group object for $pid/$eid!",1);
     }
     
-    if (! ($user = (new User)->Lookup($uid))) {
+    if (! ($user = User::Lookup($uid))) {
         TBERROR("TBGrpTrust: Could not look up user object for $uid!", 1);
     }
     return $group->UserTrust($user);

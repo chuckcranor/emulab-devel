@@ -62,7 +62,7 @@ if ($edit || $history) {
         SPITUSERERROR("Missing arguments for edit mode");
         exit();
     }
-    if (!($resgroup = (new ReservationGroup)->Lookup($uuid, $history))) {
+    if (!($resgroup = ReservationGroup::Lookup($uuid, $history))) {
         SPITUSERERROR("No such reservation group");
         exit();
     }
@@ -75,7 +75,7 @@ if ($edit || $history) {
     }
 }
 if (isset($cluster)) {
-    $aggregate = (new Aggregate)->LookupByNickname($cluster);
+    $aggregate = Aggregate::LookupByNickname($cluster);
     if (!$aggregate) {
         SPITUSERERROR("No such cluster: $cluster");
         exit();
@@ -129,7 +129,7 @@ $mlist = array();
 $plist = array();
 while (list($p) = each($projlist)) {
     $plist[] = $p;
-    $ptmp = (new Project)->LookupByPid($p);
+    $ptmp = Project::LookupByPid($p);
     if ($ptmp) {
         if ($ptmp->expert_mode()) {
             $bisdaysonly = 0;
@@ -179,10 +179,10 @@ if (isset($aggregate)) {
     $ams = array($aggregate);
 }
 elseif (isset($debug) && $debug) {
-    $ams = array((new Aggregate)->ThisAggregate());
+    $ams = array(Aggregate::ThisAggregate());
 }
 else {
-    $ams = (new Aggregate)->SupportsReservations($this_user);
+    $ams = Aggregate::SupportsReservations($this_user);
 }
 if (!count($ams)) {
     SPITUSERERROR("No clusters support reservations.");
@@ -216,7 +216,7 @@ while (list($index, $aggregate) = each($ams)) {
     # on the Portal and the phases of the moon, but that is not what
     # we got. 
     #
-    $prunelist = (new Instance)->NodeTypePruneList($aggregate);
+    $prunelist = Instance::NodeTypePruneList($aggregate);
     
     $amlist[$urn] = array("urn"      => $urn,
                           "name"     => $am,
@@ -234,11 +234,11 @@ echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
 echo "</script>\n";
 if ($ISPOWDER) {
-    $radioinfo = (new Aggregate)->RadioInfoNew();
+    $radioinfo = Aggregate::RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
     echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
     echo "</script>\n";
-    $matrixinfo = (new Aggregate)->MatrixInfo();
+    $matrixinfo = Aggregate::MatrixInfo();
     echo "<script type='text/plain' id='matrixinfo-json'>\n";
     echo htmlentities(json_encode($matrixinfo, JSON_NUMERIC_CHECK));
     echo "</script>\n";

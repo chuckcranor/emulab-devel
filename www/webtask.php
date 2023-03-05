@@ -29,7 +29,7 @@ class WebTask {
     #
     # Constructor by lookup on unique ID
     #
-    function WebTask($task_id) {
+    function __construct($task_id) {
 	$safe_id = addslashes($task_id);
 
 	$query_result =
@@ -49,7 +49,7 @@ class WebTask {
     }
 
     # Lookup by imageid
-    function Lookup($id) {
+    public static function Lookup($id) {
 	$foo = new WebTask($id);
 
 	if (! $foo->IsValid())
@@ -59,7 +59,7 @@ class WebTask {
     }
 
     # Lookup by object.
-    function LookupByObject($uuid) {
+    public static function LookupByObject($uuid) {
 	$query_result =
 	    DBQueryWarn("select task_id from web_tasks ".
 			"where object_uuid='$uuid'");
@@ -70,7 +70,7 @@ class WebTask {
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['task_id'];
 	
-	return (new WebTask)->Lookup($idx);
+	return WebTask::Lookup($idx);
     }
 
     #
@@ -78,8 +78,8 @@ class WebTask {
     # is useful when using a webtask to create a new object via a backend
     # script.
     #
-    function CreateAnonymous() {
-        $task_id = (new WebTask)->GenerateID();
+    public static function CreateAnonymous() {
+        $task_id = WebTask::GenerateID();
 
         $query_result = 
             DBQueryWarn("insert into web_tasks set task_id='$task_id', ".
@@ -88,13 +88,13 @@ class WebTask {
 	if (!$query_result) {
             return null;
         }
-        return (new WebTask)->Lookup($task_id);
+        return WebTask::Lookup($task_id);
     }
     #
     # And a normal webtask.
     #
-    function Create($uuid) {
-        $task_id = (new WebTask)->GenerateID();
+    public static function Create($uuid) {
+        $task_id = WebTask::GenerateID();
 
         $query_result = 
             DBQueryWarn("insert into web_tasks set task_id='$task_id', ".
@@ -103,7 +103,7 @@ class WebTask {
 	if (!$query_result) {
             return null;
         }
-        return (new WebTask)->Lookup($task_id);
+        return WebTask::Lookup($task_id);
     }
 
     function Refresh() {
@@ -225,7 +225,7 @@ class WebTask {
 	return FALSE;
     }
 
-    function GenerateID() {
+    public static function GenerateID() {
 	return md5(uniqid(rand(),1));
     }
 

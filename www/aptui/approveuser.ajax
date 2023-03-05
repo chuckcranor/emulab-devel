@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,14 +36,14 @@ function CommonSetup()
 	return;
     }
     $user_uid    = $ajax_args["user_uid"];
-    $target_user = (new User)->Lookup($user_uid);
+    $target_user = User::Lookup($user_uid);
     
     if (!isset($ajax_args["pid"])) {
 	SPITAJAX_ERROR(1, "Missing project pid");
 	return;
     }
     $pid     = $ajax_args["pid"];
-    $project = (new Project)->Lookup($pid);
+    $project = Project::Lookup($pid);
     if (!$project) {
 	SPITAJAX_ERROR(1, "No such project");
 	return;

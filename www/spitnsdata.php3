@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2010 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,7 +51,7 @@ if (isset($copyid) && $copyid != "") {
 	#
 	# See if its a current experiment.
 	#
-	$experiment = (new Experiment)->Lookup($copyid);
+	$experiment = Experiment::Lookup($copyid);
 	if (!$experiment) {
 	    $record = $copyid;
 	}
@@ -65,7 +65,7 @@ if (isset($copyid) && $copyid != "") {
 # Spit back an NS file to the user. 
 #
 if (isset($record) && $record != "" && TBvalid_integer($record)) {
-    $experiment_resources = (new ExperimentResources)->Lookup($record);
+    $experiment_resources = ExperimentResources::Lookup($record);
     if (! $experiment_resources) {
 	USERERROR("No such experiment resources record $record!", 1);
     }

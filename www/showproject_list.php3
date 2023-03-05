@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2012, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -244,7 +244,7 @@ function GENPLIST ($query_result)
 	$ncount     = $ncounts[$pid];
 	$pcount     = $pcounts[$pid];
 
-	if (! ($head_user = (new User)->Lookup($headidx))) {
+	if (! ($head_user = User::Lookup($headidx))) {
 	    TBERROR("Could not lookup object for user $headidx", 1);
 	}
 	$showuser_url = CreateURL("showuser", $head_user);

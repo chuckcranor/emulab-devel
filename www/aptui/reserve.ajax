@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -106,7 +106,7 @@ function Do_Reserve()
 	SPITAJAX_ERROR(2, $errors);
 	return;
     }
-    $project = (new Project)->Lookup($formfields["pid"]);
+    $project = Project::Lookup($formfields["pid"]);
     if (!$project) {
         $errors["pid"] = "No such project";
     }
@@ -135,10 +135,10 @@ function Do_Reserve()
     if (!TBvalid_node_type($formfields["type"])) {
         $errors["type"] = TBFieldErrorString();
     }
-    if (!(new Instance)->ValidURN($formfields["cluster"])) {
+    if (!Instance::ValidURN($formfields["cluster"])) {
         $errors["cluster"] = TBFieldErrorString();
     }
-    $aggregate = (new Aggregate)->Lookup($formfields["cluster"]);
+    $aggregate = Aggregate::Lookup($formfields["cluster"]);
     if (!$aggregate) {
         $errors["cluster"] = "No such cluster";
     }
@@ -166,7 +166,7 @@ function Do_Reserve()
     # Next we check the validity of the reservation.
     $this_uid = $this_user->uid();
     $pid      = $project->pid();
-    $webtask  = (new WebTask)->CreateAnonymous();
+    $webtask  = WebTask::CreateAnonymous();
     $urn      = $aggregate->urn();
 
     #
@@ -297,7 +297,7 @@ function Do_Delete()
         SPITAJAX_ERROR(-1, "Invalid cluster name");
         return;
     }
-    $aggregate = (new Aggregate)->LookupByNickname($ajax_args["cluster"]);
+    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
@@ -306,7 +306,7 @@ function Do_Delete()
 	SPITAJAX_ERROR(-1, "Missing project");
 	return;
     }
-    $project = (new Project)->Lookup($ajax_args["pid"]);
+    $project = Project::Lookup($ajax_args["pid"]);
     if (!$project) {
 	SPITAJAX_ERROR(-1, "No such project");
 	return;
@@ -338,7 +338,7 @@ function Do_Delete()
             $opt .= "-N $reasonfile";
         }
     }
-    $webtask  = (new WebTask)->CreateAnonymous();
+    $webtask  = WebTask::CreateAnonymous();
     $this_uid = $this_user->uid();
     $pid = $project->pid();
     $urn = $aggregate->urn();
@@ -413,7 +413,7 @@ function Do_InfoOrWarn($warning = false)
         return;
     }
     $nickname  = $ajax_args["cluster"];
-    $aggregate = (new Aggregate)->LookupByNickname($nickname);
+    $aggregate = Aggregate::LookupByNickname($nickname);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
@@ -422,7 +422,7 @@ function Do_InfoOrWarn($warning = false)
 	SPITAJAX_ERROR(-1, "Missing project");
 	return;
     }
-    $project = (new Project)->Lookup($ajax_args["pid"]);
+    $project = Project::Lookup($ajax_args["pid"]);
     if (!$project) {
 	SPITAJAX_ERROR(-1, "No such project");
 	return;
@@ -432,7 +432,7 @@ function Do_InfoOrWarn($warning = false)
 	SPITAJAX_ERROR(-1, "Missing uid idx");
 	return;
     }
-    $user = (new User)->Lookup($ajax_args["uid_idx"]);
+    $user = User::Lookup($ajax_args["uid_idx"]);
     if (!$user) {
 	SPITAJAX_ERROR(-1, "No such user");
 	return;
@@ -537,7 +537,7 @@ function Do_Approve()
         SPITAJAX_ERROR(-1, "Invalid cluster name");
         return;
     }
-    $aggregate = (new Aggregate)->LookupByNickname($ajax_args["cluster"]);
+    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
@@ -562,7 +562,7 @@ function Do_Approve()
         chmod($messagefile, 0666);
         $opt .= "-F $messagefile";
     }
-    $webtask  = (new WebTask)->CreateAnonymous();
+    $webtask  = WebTask::CreateAnonymous();
     $this_uid = $this_user->uid();
     $urn = $aggregate->urn();
 
@@ -635,7 +635,7 @@ function Do_Cancel()
         SPITAJAX_ERROR(-1, "Invalid cluster name");
         return;
     }
-    $aggregate = (new Aggregate)->LookupByNickname($ajax_args["cluster"]);
+    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
@@ -651,7 +651,7 @@ function Do_CancelAux($type, $uuid, $aggregate, $clear, $when)
     global $this_user;
     global $TB_PROJECT_CREATEEXPT, $suexec_output, $PORTAL_GENESIS;
 
-    $webtask  = (new WebTask)->CreateAnonymous();
+    $webtask  = WebTask::CreateAnonymous();
     $this_uid = $this_user->uid();
     $urn = $aggregate->urn();
 
@@ -710,14 +710,14 @@ function Do_ListReservations()
         SPITAJAX_ERROR(-1, "Invalid cluster name");
         return;
     }
-    $aggregate = (new Aggregate)->LookupByNickname($ajax_args["cluster"]);
+    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
     }
     $this_uid = $this_user->uid();
     $urn = $aggregate->urn();
-    $webtask = (new WebTask)->CreateAnonymous();
+    $webtask = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
     $retval = SUEXEC($this_uid, "nobody",
@@ -785,14 +785,14 @@ function Do_GetReservation()
         SPITAJAX_ERROR(-1, "Invalid cluster name");
         return;
     }
-    $aggregate = (new Aggregate)->LookupByNickname($ajax_args["cluster"]);
+    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
     }
     $this_uid = $this_user->uid();
     $urn = $aggregate->urn();
-    $webtask = (new WebTask)->CreateAnonymous();
+    $webtask = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
     $retval = SUEXEC($this_uid, "nobody",
@@ -841,7 +841,7 @@ function Do_ReservationInfo()
             SPITAJAX_ERROR(-1, "Invalid cluster name");
             return;
         }
-        $aggregate = (new Aggregate)->LookupByNickname($ajax_args["cluster"]);
+        $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
         if (!$aggregate) {
             SPITAJAX_ERROR(-1, "No such cluster");
             return;
@@ -858,14 +858,14 @@ function Do_ReservationInfo()
         $popts = "";
     }
     if (isset($ajax_args["project"])) {
-        $project = (new Project)->Lookup($ajax_args["project"]);
+        $project = Project::Lookup($ajax_args["project"]);
         if (!$project) {
             SPITAJAX_ERROR(-1, "No such project");
             return;
         }
         $popts .= " " . $project->pid();
     }
-    $webtask = (new WebTask)->CreateAnonymous();
+    $webtask = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
     $retval = SUEXEC($this_user->uid(), "nobody",
@@ -891,10 +891,10 @@ function Do_ReservationInfo()
     # If requesting for a single cluster, return just that.
     if (isset($aggregate)) {
         $blob = $blob[$aggregate->urn()];
-        $blob["prunelist"] = (new Instance)->NodeTypePruneList($aggregate);
+        $blob["prunelist"] = Instance::NodeTypePruneList($aggregate);
     }
     else {
-        $blob["prunelist"] = (new Instance)->NodeTypePruneList();
+        $blob["prunelist"] = Instance::NodeTypePruneList();
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
@@ -920,7 +920,7 @@ function Do_ReservationHistory()
         SPITAJAX_ERROR(-1, "Invalid cluster name");
         return;
     }
-    $aggregate = (new Aggregate)->LookupByNickname($ajax_args["cluster"]);
+    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
     if (!$aggregate) {
         SPITAJAX_ERROR(-1, "No such cluster");
         return;
@@ -936,7 +936,7 @@ function Do_ReservationHistory()
             SPITAJAX_ERROR(-1, "Invalid target uid");
             return -1;
         }
-        $target_user = (new User)->Lookup($uid);
+        $target_user = User::Lookup($uid);
         if (!$target_user) {
             sleep(2);
             SPITAJAX_ERROR(-1, "Unknown target uid");
@@ -956,7 +956,7 @@ function Do_ReservationHistory()
             SPITAJAX_ERROR(-1, "Invalid target pid");
             return -1;
         }
-        $target_project = (new Project)->Lookup($pid);
+        $target_project = Project::Lookup($pid);
         if (!$target_project) {
             sleep(2);
             SPITAJAX_ERROR(-1, "Unknown target pid");
@@ -971,7 +971,7 @@ function Do_ReservationHistory()
     }
     $this_uid = $this_user->uid();
     $urn = $aggregate->urn();
-    $webtask = (new WebTask)->CreateAnonymous();
+    $webtask = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
     $retval = SUEXEC($this_uid, "nobody",

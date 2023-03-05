@@ -29,7 +29,7 @@ class Blockstore
     #
     # Constructor by lookup on unique index.
     #
-    function __construct($bsidx = "") {
+    function __construct($bsidx) {
 	$safe_bsidx = addslashes($bsidx);
 
 	$query_result =
@@ -49,7 +49,7 @@ class Blockstore
     }
 
     # Lookup by idx.
-    function Lookup($bsidx) {
+    public static function Lookup($bsidx) {
 	$foo = new Blockstore($bsidx);
 
 	if (! $foo->IsValid()) {
@@ -57,7 +57,7 @@ class Blockstore
 	}
 	return $foo;
     }
-    function LookupByLease($lease_idx) {
+    public static function LookupByLease($lease_idx) {
 	$safe_idx = addslashes($lease_idx);
 	
 	$query_result =
@@ -69,7 +69,7 @@ class Blockstore
 	}
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['bsidx'];
-	return (new Blockstore)->Lookup($idx);
+	return Blockstore::Lookup($idx);
     }
 
     # accessors

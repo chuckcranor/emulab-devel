@@ -46,7 +46,7 @@ class User
     #
     # Constructor by lookup on unique index.
     #
-    function __construct($uid_idx = "") {
+    function __construct($uid_idx) {
 	$safe_uid_idx = addslashes($uid_idx);
 
 	$query_result =
@@ -75,7 +75,7 @@ class User
     }
 
     # Lookup by uid_idx.
-    function Lookup($uid_idx) {
+    public static function Lookup($uid_idx) {
 	global $user_cache;
 
         # Look in cache first
@@ -86,8 +86,8 @@ class User
 
 	if (! $foo->IsValid()) {
 	    # Try lookup by plain uid.
-	    $foo = (new User)->LookupByUid($uid_idx);
-
+	    $foo = User::LookupByUid($uid_idx);
+	    
 	    if (!$foo || !$foo->IsValid())
 		return null;
 	    
@@ -101,7 +101,7 @@ class User
     }
 
     # Backwards compatable lookup by uid. Will eventually flush this.
-    function LookupByUid($uid) {
+    public static function LookupByUid($uid) {
 	global $user_cache;
 	$safe_uid = addslashes($uid);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
@@ -121,12 +121,12 @@ class User
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['uid_idx'];
 
-	return (new User)->Lookup($idx);
+	return User::Lookup($idx);
     }
 
     # Used in the change password code and to make sure that emails are
     # locally unique.
-    function LookupByEmail($email) {
+    public static function LookupByEmail($email) {
 	$safe_email = addslashes($email);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
 
@@ -141,12 +141,12 @@ class User
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['uid_idx'];
 
-	return (new User)->Lookup($idx);
+	return User::Lookup($idx);
     }
     
     # Used in new/join project code to make sure that wikinames are
     # locally unique.
-    function LookupByWikiName($wikiname) {
+    public static function LookupByWikiName($wikiname) {
 	$safe_wikiname = addslashes($wikiname);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
 
@@ -161,10 +161,10 @@ class User
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['uid_idx'];
 
-	return (new User)->Lookup($idx);
+	return User::Lookup($idx);
     }
     
-    function LookupByUUID($uuid) {
+    public static function LookupByUUID($uuid) {
 	$safe_uuid = addslashes($uuid);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
 
@@ -179,10 +179,10 @@ class User
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['uid_idx'];
 
-	return (new User)->Lookup($idx);
+	return User::Lookup($idx);
     }
     
-    function LookupNonLocal($urn) {
+    public static function LookupNonLocal($urn) {
 	$safe_urn = addslashes($urn);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
 
@@ -197,7 +197,7 @@ class User
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['uid_idx'];
 
-	return (new User)->Lookup($idx);
+	return User::Lookup($idx);
     }
     
     #
@@ -591,7 +591,7 @@ class User
 	    DBQueryFatal("delete from users where uid_idx='$uid_idx'");
 	    return null;
 	}
-	$newuser = (new User)->Lookup($uid_idx);
+	$newuser = User::Lookup($uid_idx);
 	if (! $newuser)
 	    return null;
 
@@ -647,7 +647,7 @@ class User
 	return $newuser;
     }
 
-    function NewNewUserXML($args, &$error) {
+    public static function NewNewUserXML($args, &$error) {
         #
         # Generate a temporary file and write in the XML goo.
         #
@@ -676,7 +676,7 @@ class User
 	return $xmlname;
     }
 
-    function NewNewUser($flags, $args, &$error) {
+    public static function NewNewUser($flags, $args, &$error) {
 	global $suexec_output, $suexec_output_array;
 	$typearg = "";
 
@@ -689,7 +689,7 @@ class User
 	elseif ($flags & TBDB_NEWACCOUNT_NONLOCAL)
 	    $typearg = "-t nonlocal";
 
-	if (! ($xmlname = (new User)->NewNewUserXML($args, $error))) {
+	if (! ($xmlname = User::NewNewUserXML($args, $error))) {
 	    return null;
 	}
 
@@ -720,7 +720,7 @@ class User
 	    return null;
 	}
 	$uid_idx = $matches[2];
-	$newuser = (new User)->Lookup($uid_idx);
+	$newuser = User::Lookup($uid_idx);
 	if (! $newuser) {
 	    $error = "Transient error(5); please try again later.";
 	    TBERROR("Could not lookup new user $uid_idx", 0);
@@ -1658,7 +1658,7 @@ class User
 	while ($row = mysql_fetch_array($query_result)) {
 	    $pid_idx = $row["pid_idx"];
 
-	    if (! ($project = (new Project)->Lookup($pid_idx))) {
+	    if (! ($project = Project::Lookup($pid_idx))) {
 		TBERROR("User::ProjectMembershipList: ".
 			"Could not load project $pid_idx!", 1);
 	    }
@@ -1709,7 +1709,7 @@ class User
 	$row = mysql_fetch_array($query_result);
 	$pid_idx = $row["pid_idx"];
 
-	if (! ($project = (new Project)->Lookup($pid_idx))) {
+	if (! ($project = Project::Lookup($pid_idx))) {
 	    TBERROR("User::FirstApprovedProject: ".
 		    "Could not load project $pid_idx!", 1);
 	}
@@ -1757,11 +1757,11 @@ class User
 	    $uid_idx = $row["uid_idx"];
 	    $gid_idx = $row["gid_idx"];
 
-	    if (! ($group = (new Group)->Lookup($gid_idx))) {
+	    if (! ($group = Group::Lookup($gid_idx))) {
 		TBERROR("User::ApprovalList: ".
 			"Could not load group $gid_idx!", 1);
 	    }
-	    if (! ($user = (new User)->Lookup($uid_idx))) {
+	    if (! ($user = User::Lookup($uid_idx))) {
 		TBERROR("User::ApprovalList: ".
 			"Could not load user $uid_idx!", 1);
 	    }
@@ -1807,7 +1807,7 @@ class User
 	while ($row = mysql_fetch_array($query_result)) {
 	    $idx = $row["idx"];
 
-	    if (! ($experiment = (new Experiment)->Lookup($idx))) {
+	    if (! ($experiment = Experiment::Lookup($idx))) {
 		TBERROR("Group::ExperimentList: ".
 			"Could not load experiment $idx!", 1);
 	    }

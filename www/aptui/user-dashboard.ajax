@@ -51,7 +51,7 @@ function CheckPageArgs()
 	SPITAJAX_ERROR(-1, "Invalid target uid");
         return -1;
     }
-    $target_user = (new User)->Lookup($uid);
+    $target_user = User::Lookup($uid);
     if (!$target_user) {
         sleep(2);
 	SPITAJAX_ERROR(-1, "Unknown target uid");
@@ -146,7 +146,7 @@ function Do_ResgroupList()
     if (CheckPageArgs()) {
         return;
     }
-    $resgroups = (new ReservationGroup)->LookupForUser($target_user);
+    $resgroups = ReservationGroup::LookupForUser($target_user);
     foreach ($resgroups as $resgroup) {
         $listing[$resgroup->uuid()] = $resgroup->Blob(false);
     }
@@ -159,7 +159,7 @@ function Do_ResgroupList()
     $listing   = array();
 
     foreach ($projlist as $project) {
-        $resgroups = (new ReservationGroup)->LookupForProject($project);
+        $resgroups = ReservationGroup::LookupForProject($project);
         foreach ($resgroups as $resgroup) {
             $listing[$resgroup->uuid()] = $resgroup->Blob(false);
         }
@@ -316,10 +316,10 @@ function Do_UsageSummary()
     if (CheckPageArgs()) {
         return;
     }
-    list($pcount, $phours)           = (new Instance)->CurrentUsage($target_user);
-    list($weekpcount, $weekphours)   = (new Instance)->WeeksUsage($target_user);
-    list($monthpcount, $monthphours) = (new Instance)->MonthsUsage($target_user);
-    list($rank, $ranktotal)          = (new Instance)->Ranking($target_user, 30);
+    list($pcount, $phours)           = Instance::CurrentUsage($target_user);
+    list($weekpcount, $weekphours)   = Instance::WeeksUsage($target_user);
+    list($monthpcount, $monthphours) = Instance::MonthsUsage($target_user);
+    list($rank, $ranktotal)          = Instance::Ranking($target_user, 30);
 
     if ($phours < 2) {
         $phours = sprintf("%.1f", $phours);
@@ -348,7 +348,7 @@ function Do_UsageSummary()
                   "rankdays"    => 30,
                   "rank"        => $rank,
                   "ranktotal"   => $ranktotal,
-                  "expcount"    => (new Instance)->CurrentInstanceCount($target_user),
+                  "expcount"    => Instance::CurrentInstanceCount($target_user),
     );
     
     SPITAJAX_RESPONSE($blob);
@@ -636,7 +636,7 @@ function Do_NagPI()
 	SPITAJAX_ERROR(-1, "Invalid project name");
 	return -1;
     }
-    $project = (new Project)->Lookup($ajax_args["pid"]);
+    $project = Project::Lookup($ajax_args["pid"]);
     if (!$project) {
 	SPITAJAX_ERROR(-1, "No such project");
 	return -1;
@@ -701,7 +701,7 @@ function Do_ListParameterSets()
     }
     $results = array();
     while ($row = mysql_fetch_array($query_result)) {
-        $paramset = (new Paramset)->Lookup($row["uuid"]);
+        $paramset = Paramset::Lookup($row["uuid"]);
         if (!$paramset) {
             continue;
         }

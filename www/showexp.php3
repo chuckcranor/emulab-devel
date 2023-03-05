@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,7 +70,7 @@ if (!$experiment->AccessCheck($this_user, $TB_EXPT_READINFO)) {
 # Template Instance Experiments get special treatment in this page.
 $instance = NULL;
 if ($EXPOSETEMPLATES) {
-     $instance = (new TemplateInstance)->LookupByExptidx($experiment->idx());
+     $instance = TemplateInstance::LookupByExptidx($experiment->idx());
 
      if (! is_null($instance)) {
 	 $tag = "Instance";
@@ -352,7 +352,7 @@ while ($row = mysql_fetch_array($query_result)) {
 
 if ($geniflags) {
     # We would not see this unless it was an active experiment.
-    $aptinstance = (new Instance)->LookupBySlice($experiment_stats->slice_uuid());
+    $aptinstance = Instance::LookupBySlice($experiment_stats->slice_uuid());
 }
 
 SUBPAGESTART();

@@ -72,10 +72,10 @@ if ($this_user) {
         header("Location: show-profile.php".
                "?project=${TUTORIALPID}&profile=${TUTORIALPROFILE}");
     }
-    elseif ((new Instance)->UserHasInstances($this_user)) {
+    elseif (Instance::UserHasInstances($this_user)) {
 	header("Location: $APTBASE/user-dashboard.php");
     }
-    elseif ((new Profile)->UserHasProfiles($this_user)) {
+    elseif (Profile::UserHasProfiles($this_user)) {
 	header("Location: $APTBASE/user-dashboard.php#profiles");
     }
     elseif ($ISEMULAB && $this_user->PCsInUse()) {

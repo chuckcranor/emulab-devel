@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,7 +44,7 @@ function Do_HistoryRecord()
 	SPITAJAX_ERROR(1, "Not a valid UUID: $uuid");
 	return;
     }
-    $record = (new InstanceHistory)->Lookup($uuid);
+    $record = InstanceHistory::Lookup($uuid);
     if (!$record) {
 	SPITAJAX_ERROR(1, "No such record: $uuid");
 	return;
@@ -69,7 +69,7 @@ function Do_HistoryRecord()
     $blob["profile_uuid"] = null;
     $blob["profile_name"] = null;
 
-    if ($profile = (new Profile)->Lookup($blob["profile_id"],
+    if ($profile = Profile::Lookup($blob["profile_id"],
                                    $blob["profile_version"])) {
         $blob["profile_name"] = $profile->name() . ":" . $profile->version();
         $blob["profile_uuid"] = $profile->uuid();
@@ -83,7 +83,7 @@ function Do_HistoryRecord()
         }
         if ($profile->isParameterized() || $paramdefs) {
             $profile_uuid = $profile->uuid();
-            $webtask      = (new WebTask)->CreateAnonymous();
+            $webtask      = WebTask::CreateAnonymous();
             $webtask_id   = $webtask->task_id();
 
             $retval = SUEXEC($this_user->uid(), "nobody",
@@ -203,7 +203,7 @@ function Do_Transmissions()
 	SPITAJAX_ERROR(1, "Not a valid UUID: $uuid");
 	return;
     }
-    $record = (new InstanceHistory)->Lookup($uuid);
+    $record = InstanceHistory::Lookup($uuid);
     if (!$record) {
 	SPITAJAX_ERROR(1, "No such record: $uuid");
 	return;

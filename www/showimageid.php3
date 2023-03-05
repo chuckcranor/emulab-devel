@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -119,7 +119,7 @@ echo "<br>\n";
 function SHOWIT($osid, $vers) {
     global $this_user;
     
-    if (! ($osinfo = (new OSinfo)->Lookup($osid, $vers))) {
+    if (! ($osinfo = OSinfo::Lookup($osid, $vers))) {
 	TBERROR("Could not map osid to its object: $osid", 1);
     }
     echo "<h3 align='center'>Experiments using OS ";

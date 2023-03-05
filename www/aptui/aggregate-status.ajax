@@ -35,7 +35,7 @@ function Do_AggregateStatus()
 	SPITAJAX_ERROR(-1, "Not enough permission");
 	return -1;
     }
-    $ams = (new Aggregate)->AllAggregatesList();
+    $ams = Aggregate::AllAggregatesList();
 
     foreach ($ams as $index => $aggregate) {
         $urn = $aggregate->urn();

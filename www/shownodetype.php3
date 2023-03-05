@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -130,7 +130,7 @@ if (mysql_num_rows($query_result)) {
 	$attrtype = $row["attrtype"];
 	
 	if (preg_match("/_osid$/", $key)) {
-	    if ($osinfo = (new OSinfo)->Lookup($val)) {
+	    if ($osinfo = OSinfo::Lookup($val)) {
 		$name = $osinfo->osname();
 		$val = "<a href=showosinfo.php3?osid=$val>$name</a>";
 	    }
@@ -138,7 +138,7 @@ if (mysql_num_rows($query_result)) {
 	elseif ($key == "default_imageid") {
 	    $inames = array();
 	    foreach (explode(',', $val) as $imageid) {
-		if ($image = (new Image)->Lookup($imageid)) {
+		if ($image = Image::Lookup($imageid)) {
 		    $name = $image->imagename();
 		    $inames[] = "<a href=showimageid.php3?imageid=$imageid>$name</a>";
 		}

@@ -501,7 +501,7 @@ if (isset($formfields["linktest_level"]) &&
 }
 
 $errors  = array();
-if (! ($result = (new Experiment)->EditExp($experiment, $args, $errors))) {
+if (! ($result = Experiment::EditExp($experiment, $args, $errors))) {
     # Always respit the form so that the form fields are not lost.
     # I just hate it when that happens so lets not be guilty of it ourselves.
     SPITFORM($experiment, $formfields, $errors);

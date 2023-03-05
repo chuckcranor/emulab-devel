@@ -76,13 +76,13 @@ if (! (isset($uuid) || isset($slice_uuid))) {
 # See if the instance exists. If not, redirect back to the create page
 #
 if (isset($uuid)) {
-    $instance = (new Instance)->Lookup($uuid);
+    $instance = Instance::Lookup($uuid);
 }
 else {
-    $instance = (new Instance)->LookupBySlice($slice_uuid);
+    $instance = Instance::LookupBySlice($slice_uuid);
 }
 if (!$instance) {
-    $instance = (new InstanceHistory)->Lookup($uuid);
+    $instance = InstanceHistory::Lookup($uuid);
     
     SPITHEADER(1);
     echo "<div class='align-center' style='margin-top: 15px;'>
@@ -134,9 +134,9 @@ if ($TBMAINSITE && isset($slice_uuid) &&
 }
 
 $uuid = $instance->uuid();
-$creator = (new GeniUser)->Lookup("sa", $instance->creator_uuid());
+$creator = GeniUser::Lookup("sa", $instance->creator_uuid());
 if (! $creator) {
-    $creator = (new User)->LookupByUUID($instance->creator_uuid());
+    $creator = User::LookupByUUID($instance->creator_uuid());
 }
 if (!$creator) {
     SPITHEADER(1);
@@ -170,7 +170,7 @@ if (! (isset($this_user) && ISADMIN())) {
         }
     }
 }
-$slice = (new GeniSlice)->Lookup("sa", $instance->slice_uuid());
+$slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
 
 $instance_status = $instance->status();
 $creator_uid     = $creator->uid();
@@ -189,7 +189,7 @@ $canclone_profile  = 0;
 $canupdate_profile = 0;
 $isscript          = 0;
 
-if ($profile = (new Profile)->Lookup($instance->profile_id(),
+if ($profile = Profile::Lookup($instance->profile_id(),
 			       $instance->profile_version())) {
     #
     # Not allowed to copy/clone/update a repo based profile. 
@@ -350,7 +350,7 @@ echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
 # Build up a blob of all aggregates for this portal. We need the entire
 # list in case new aggregates are added.
 #
-$aggregates = (new Aggregate)->DefaultAggregateList($this_user);
+$aggregates = Aggregate::DefaultAggregateList($this_user);
 #
 # Because of cross portal linking on the Mothership, make sure there
 # are no missing aggregates.
@@ -359,12 +359,12 @@ foreach ($instance->slivers() as $sliver) {
     $aggregate_urn = $sliver->aggregate_urn();
 
     if (!array_key_exists($aggregate_urn, $aggregates)) {
-        $aggregate = (new Aggregate)->Lookup($aggregate_urn);
+        $aggregate = Aggregate::Lookup($aggregate_urn);
         $aggregates[$aggregate_urn] = $aggregate;
     }
 }
 
-$prunelist = (new Instance)->NodeTypePruneList(null, true);
+$prunelist = Instance::NodeTypePruneList(null, true);
 echo "<script type='text/plain' id='prunelist-json'>\n";
 echo htmlentities(json_encode($prunelist));
 echo "</script>\n";
@@ -379,7 +379,7 @@ echo "</script>\n";
 # For Powder, send the radio info.
 #
 if ($ISPOWDER) {
-    $radioinfo = (new Aggregate)->RadioInfoNew();
+    $radioinfo = Aggregate::RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
     echo json_encode($radioinfo,
                      JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
@@ -400,7 +400,7 @@ if (isset($this_user)) {
 
 # Current and Future reservations for the cluster picker during modify
 $project = $instance->Project();
-$resinfo = (new ReservationGroup)->ReservationInfo(
+$resinfo = ReservationGroup::ReservationInfo(
     array($project->pid() => $project));
 echo "<script type='text/plain' id='resgroup-json'>\n";
 echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));

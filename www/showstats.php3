@@ -139,8 +139,8 @@ elseif ($showby == "expt") {
     if (!TBvalid_integer($exptidx)) {
 	USERERROR("Invalid characters in $exptidx!", 1);
     }
-    if (! ($experiment = (new Experiment)->Lookup($exptidx))) {
-	if (! ($stats = (new ExperimentStats)->Lookup($exptidx))) {
+    if (! ($experiment = Experiment::Lookup($exptidx))) {
+	if (! ($stats = ExperimentStats::Lookup($exptidx))) {
 	    USERERROR("No such experiment index $exptidx!", 1);
 	}
 	if (!$isadmin) {

@@ -42,7 +42,7 @@ class Aggregate
     #
     # Constructor by lookup by urn
     #
-    function Aggregate($urn) {
+    function __construct($urn) {
 	$safe_urn = addslashes($urn);
 
 	$query_result =
@@ -148,7 +148,7 @@ class Aggregate
     }
 
     # Lookup up by urn,
-    function Lookup($urn) {
+    public static function Lookup($urn) {
 	$foo = new Aggregate($urn);
 
 	if ($foo->IsValid()) {
@@ -157,7 +157,7 @@ class Aggregate
 	return null;
     }
 
-    function LookupByNickname($nickname) {
+    public static function LookupByNickname($nickname) {
 	$safe_nickname = addslashes($nickname);
 
 	$query_result =
@@ -170,12 +170,12 @@ class Aggregate
 	$row = mysql_fetch_array($query_result);
 	$urn = $row['urn'];
 
-        return (new Aggregate)->Lookup($urn);
+        return Aggregate::Lookup($urn);
     }
     #
     # Lookup using the short auth name (emulab.net).
     #
-    function LookupByDomain($domain) {
+    public static function LookupByDomain($domain) {
         if (! preg_match("/^[-\w\.]+$/", $domain)) {
             return null;
         }
@@ -188,13 +188,13 @@ class Aggregate
 	$row = mysql_fetch_array($query_result);
 	$urn = $row['urn'];
 
-        return (new Aggregate)->Lookup($urn);
+        return Aggregate::Lookup($urn);
     }
 
     #
     # Lookup using the name
     #
-    function LookupByName($name) {
+    public static function LookupByName($name) {
         if (! preg_match("/^[-\w\.]+$/", $name)) {
             return null;
         }
@@ -207,7 +207,7 @@ class Aggregate
 	$row = mysql_fetch_array($query_result);
 	$urn = $row['urn'];
 
-        return (new Aggregate)->Lookup($urn);
+        return Aggregate::Lookup($urn);
     }
 
     #
@@ -220,7 +220,7 @@ class Aggregate
     #
     # Return a list of aggregates supporting datasets.
     #
-    function SupportsDatasetsList() {
+    public static function SupportsDatasetsList() {
         global $PORTAL_GENESIS;
 	$result  = array();
 
@@ -232,7 +232,7 @@ class Aggregate
 	while ($row = mysql_fetch_array($query_result)) {
 	    $urn = $row["urn"];
 
-	    if (! ($aggregate = (new Aggregate)->Lookup($urn))) {
+	    if (! ($aggregate = Aggregate::Lookup($urn))) {
 		TBERROR("Aggregate::SupportsDatasetsList: ".
 			"Could not load aggregate $urn!", 1);
 	    }
@@ -251,7 +251,7 @@ class Aggregate
     #
     # Return a list of aggregates supporting reservations,
     #
-    function SupportsReservations($user = null) {
+    public static function SupportsReservations($user = null) {
 	$ordered   = array();
         $unordered = array();
         global $PORTAL_GENESIS;
@@ -267,7 +267,7 @@ class Aggregate
 	    $urn = $row["urn"];
             $allowed = 1;
 
-	    if (! ($aggregate = (new Aggregate)->Lookup($urn))) {
+	    if (! ($aggregate = Aggregate::Lookup($urn))) {
 		TBERROR("Aggregate::SupportsReservations: ".
 			"Could not load aggregate $urn!", 1);
 	    }
@@ -333,7 +333,7 @@ class Aggregate
     #
     # Return the list of allowed aggregates based on the portal in use.
     #
-    function DefaultAggregateList($user = null, $frontpage = false) {
+    public static function DefaultAggregateList($user = null, $frontpage = false) {
         global $PORTAL_GENESIS, $PORTAL_HEALTH, $TBMAINSITE;
 	$am_array = array();
 
@@ -345,7 +345,7 @@ class Aggregate
             while ($row = mysql_fetch_array($query_result)) {
                 $urn = $row["urn"];
 
-                if (! ($aggregate = (new Aggregate)->Lookup($urn))) {
+                if (! ($aggregate = Aggregate::Lookup($urn))) {
                     TBERROR("Aggregate::DefaultAggregateList: ".
                             "Could not load aggregate $urn!", 1);
                 }
@@ -362,7 +362,7 @@ class Aggregate
             $urn       = $row["urn"];
             $allowed   = 1;
 
-	    if (! ($aggregate = (new Aggregate)->Lookup($urn))) {
+	    if (! ($aggregate = Aggregate::Lookup($urn))) {
 		TBERROR("Aggregate::DefaultAggregateList: ".
 			"Could not load aggregate $urn!", 1);
 	    }
@@ -405,7 +405,7 @@ class Aggregate
                 }
             }
             elseif ($user && $TBMAINSITE) {
-                $project = (new Project)->Lookup("OCTatMGHPCC");
+                $project = Project::Lookup("OCTatMGHPCC");
                 if ($project && $project->IsMember($user, $approved) &&
                     !$project->IsLeader($user)) {
                     if ($aggregate->nickname() == "Mass") {
@@ -426,7 +426,7 @@ class Aggregate
     #
     # All aggregates
     #
-    function AllAggregatesList() {
+    public static function AllAggregatesList() {
         $am_array = array();
 
         $query_result =
@@ -434,7 +434,7 @@ class Aggregate
         
 	while ($row = mysql_fetch_array($query_result)) {
             $urn       = $row["urn"];
-	    if (! ($aggregate = (new Aggregate)->Lookup($urn))) {
+	    if (! ($aggregate = Aggregate::Lookup($urn))) {
 		TBERROR("Aggregate::SupportsReservations: ".
 			"Could not load aggregate $urn!", 1);
 	    }
@@ -443,11 +443,11 @@ class Aggregate
         return $am_array;
     }
 
-    function ThisAggregate()
+    public static function ThisAggregate()
     {
         global $DEFAULT_AGGREGATE_URN;
 
-        if (! ($aggregate = (new Aggregate)->Lookup($DEFAULT_AGGREGATE_URN))) {
+        if (! ($aggregate = Aggregate::Lookup($DEFAULT_AGGREGATE_URN))) {
             TBERROR("Aggregate::SupportsReservations: ".
                     "Could not load aggregate $urn!", 1);
         }
@@ -545,7 +545,7 @@ class Aggregate
     }
 
     # Class method.
-    function RadioInfo()
+    public static function RadioInfo()
     {
         $blob = array();
 
@@ -564,7 +564,7 @@ class Aggregate
             # Grab the aggregate. We use the status info to determine if the
             # aggregate is alive (reachable).
             #
-            if ($aggregate = (new Aggregate)->Lookup($urn)) {
+            if ($aggregate = Aggregate::Lookup($urn)) {
                 if (!array_key_exists($urn, $blob)) {
                     $blob[$urn] = array();
                 }
@@ -572,7 +572,7 @@ class Aggregate
                     #
                     # The CNUC determines if a base station is alive.
                     #
-                    $cnuc = (new Node)->Lookup($row["cnuc_id"]);
+                    $cnuc = Node::Lookup($row["cnuc_id"]);
                     if ($cnuc && $cnuc->RealNodeStatus() != "up") {
                         $alive = false;
                     }
@@ -587,7 +587,7 @@ class Aggregate
         }
         return $blob;
     }
-    function RadioInfoNew()
+    public static function RadioInfoNew()
     {
         $blob = array();
 
@@ -621,14 +621,14 @@ class Aggregate
             $row["available"] = intval($row["available"]);
 
             # URN for node
-            list ($auth,$type,$id) = (new Instance)->ParseURN($urn);
+            list ($auth,$type,$id) = Instance::ParseURN($urn);
             $row["component_urn"] = "urn:publicid:IDN+${auth}+node+${node_id}";
 
             #
             # Grab the aggregate. We use the status info to determine if the
             # aggregate is alive (reachable).
             #
-            if ($aggregate = (new Aggregate)->Lookup($urn)) {
+            if ($aggregate = Aggregate::Lookup($urn)) {
                 if ($aggregate->adminonly() && !ISADMIN()) {
                     continue;
                 }
@@ -642,7 +642,7 @@ class Aggregate
                     #
                     # The CNUC determines if a base station is alive.
                     #
-                    $cnuc = (new Node)->Lookup($row["cnuc_id"]);
+                    $cnuc = Node::Lookup($row["cnuc_id"]);
                     if ($cnuc && $cnuc->RealNodeStatus() != "up") {
                         $alive = false;
                     }
@@ -701,7 +701,7 @@ class Aggregate
     }
 
     # Class method to get info about Phantomnet matrix nodes. 
-    function MatrixInfo()
+    public static function MatrixInfo()
     {
         $blob = array();
 
@@ -743,7 +743,7 @@ class Aggregate
     #
     # Get list of allowed clusters for a project, or null if none.
     #
-    function AllowedAggregates($project)
+    public static function AllowedAggregates($project)
     {
         if (! $project->allowed_clusters()) {
             return null;
@@ -752,7 +752,7 @@ class Aggregate
         $clusters = preg_split("/,/", $project->allowed_clusters());
 
         foreach ($clusters as $domain) {
-            $cluster = (new Aggregate)->LookupByDomain($domain);
+            $cluster = Aggregate::LookupByDomain($domain);
             if ($cluster) {
                 $result[$cluster->urn()] = $cluster;
             }

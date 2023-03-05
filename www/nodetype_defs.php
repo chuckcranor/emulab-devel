@@ -30,7 +30,7 @@ class NodeType
     #
     # Constructor by lookup on unique index.
     #
-    function __construct($nodetype = "") {
+    function __construct($nodetype) {
 	$safe_nodetype = addslashes($nodetype);
 
 	$query_result =
@@ -50,7 +50,7 @@ class NodeType
     }
 
     # Lookup by type
-    function Lookup($nodetype) {
+    public static function Lookup($nodetype) {
         if (!TBvalid_node_type($nodetype)) {
 	    return null;
         }

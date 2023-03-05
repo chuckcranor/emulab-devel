@@ -117,7 +117,7 @@ function SPITFORM($formfields, $errors)
 	else {
 	    $title    = "View Profile";
 	}
-        $latest_profile = (new Profile)->Lookup($profile->profile_uuid());
+        $latest_profile = Profile::Lookup($profile->profile_uuid());
         $latest_uuid    = "'" . $latest_profile->uuid() . "'";
         $latest_version = $latest_profile->version();
     }
@@ -274,7 +274,7 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
 	SPITUSERERROR("Must provide uuid!");
     }
     else {
-	$profile = (new Profile)->Lookup($uuid);
+	$profile = Profile::Lookup($uuid);
 	if (!$profile) {
 	    SPITUSERERROR("No such profile!");
 	}
@@ -365,7 +365,7 @@ if (! isset($create)) {
             SPITUSERERROR("Not a valid UUID for clone");
         }
         else {
-            $instance = (new Instance)->Lookup($snapuuid);
+            $instance = Instance::Lookup($snapuuid);
             if (!$instance) {
                 SPITUSERERROR("No such instance to clone!");
             }
@@ -384,7 +384,7 @@ if (! isset($create)) {
 		if (! isset($instance)) {
 		    SPITUSERERROR("No experiment specified for clone!");
 		}
-		$profile = (new Profile)->Lookup($instance->profile_id(),
+		$profile = Profile::Lookup($instance->profile_id(),
 					   $instance->profile_version());
 		if (!$profile) {
 		    SPITUSERERROR("Cannot load profile!");
@@ -509,7 +509,7 @@ if (! isset($create)) {
         # and then use the NS file for the script. Also set the project.
         #
         if (isset($fromexp) && $fromexp != "") {
-            $experiment = (new Experiment)->LookupByUUID($fromexp);
+            $experiment = Experiment::LookupByUUID($fromexp);
             if (!$experiment) {
                 SPITUSERERROR("No such classic emulab experiment!");
             }

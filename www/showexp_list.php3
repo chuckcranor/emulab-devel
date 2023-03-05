@@ -57,7 +57,7 @@ $openlist_member = 0;
 $openlist_join   = "";
 $openlist_clause = "";
 if (!$isadmin && isset($openlist) && $openlist != "") {
-    if (! ($project = (new Project)->Lookup($openlist))) {
+    if (! ($project = Project::Lookup($openlist))) {
 	TBERROR("Could not map project $openlist to its object", 1);
     }
     $openlist_member =
@@ -414,12 +414,12 @@ if ($thumb && !$idle) {
 	$state= $row["state"];
 
 	if ($state == "active" && isset($sidx)) {
-	    if (! ($user = (new User)->Lookup($sidx))) {
+	    if (! ($user = User::Lookup($sidx))) {
 		TBERROR("Could not lookup object for user $sidx", 1);
 	    }
 	}
 	else {
-	    if (! ($user = (new User)->Lookup($huid))) {
+	    if (! ($user = User::Lookup($huid))) {
 		TBERROR("Could not lookup object for user $huid", 1);
 	    }
 	}
@@ -592,7 +592,7 @@ if ($thumb && !$idle) {
 	# reset pcs
 	$pcs=0;
 
-	if (! ($experiment = (new Experiment)->LookupByPidEid($pid, $eid))) {
+	if (! ($experiment = Experiment::LookupByPidEid($pid, $eid))) {
 	    TBERROR("Could not map $pid/$eid to its object", 1);
 	}
 	$stale = $experiment->IdleStale();
@@ -606,12 +606,12 @@ if ($thumb && !$idle) {
         }
 
 	if ($state == "active" && isset($sidx)) {
-	    if (! ($user = (new User)->Lookup($sidx))) {
+	    if (! ($user = User::Lookup($sidx))) {
 		TBERROR("Could not lookup object for user $sidx", 1);
 	    }
 	}
 	else {
-	    if (! ($user = (new User)->Lookup($huid))) {
+	    if (! ($user = User::Lookup($huid))) {
 		TBERROR("Could not lookup object for user $huid", 1);
 	    }
 	}

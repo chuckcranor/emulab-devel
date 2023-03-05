@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2012 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -62,7 +62,7 @@ elseif ($wiki == "emulab-priv") {
 }
 
 if ($wiki == "geni" || $wiki == "protogeni") {
-    $geniproject = (new Project)->Lookup("geni");
+    $geniproject = Project::Lookup("geni");
     if (!$geniproject) {
 	USERERROR("There is no such Trac wiki!", 1);
     }

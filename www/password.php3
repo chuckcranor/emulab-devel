@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -175,7 +175,7 @@ if (!isset($phone) || $phone == "" || !TBvalid_phone($phone) ||
     return;
 }
 
-if (! ($user = (new User)->LookupByEmail($email))) {
+if (! ($user = User::LookupByEmail($email))) {
     SPITFORM($email, $phone,
 	     "The email or phone does not match an existing user.",
 	     $simple, $view);

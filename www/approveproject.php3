@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -85,7 +85,7 @@ $headuid = $this_project->head_uid();
 # the head_uid and the leader of the default project)
 #
 if ($approval == "approve" && isset($head_uid) && $head_uid != "") {
-    if (! ($newleader = (new User)->Lookup($head_uid))) {
+    if (! ($newleader = User::Lookup($head_uid))) {
 	TBERROR("Unknown user $head_uid", 1);
     }
     if ($this_project->ChangeLeader($newleader) < 0) {

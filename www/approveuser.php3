@@ -118,18 +118,18 @@ foreach ($_POST as $header => $value) {
     #
     # Verify an actual user that is being approved.
     #
-    if (! ($target_user = (new User)->Lookup($user))) {
+    if (! ($target_user = User::Lookup($user))) {
 	TBERROR("Trying to approve unknown user $user.", 1);
     }
     $target_uid = $target_user->uid();
 
     # Ditto the project.
-    if (! ($target_project = (new Project)->Lookup($project))) {
+    if (! ($target_project = Project::Lookup($project))) {
 	TBERROR("Trying to approve user into unknown project $project.", 1);
     }
 
     # Ditto the group.
-    if (! ($target_group = (new Group)->LookupByPidGid($project, $group))) {
+    if (! ($target_group = Group::LookupByPidGid($project, $group))) {
 	TBERROR("Trying to approve user into unknown group $group", 1);
     }
     
@@ -266,11 +266,11 @@ foreach ($projectchecks as $user => $value) {
 
 	#echo "$user $pid $gid $trust<br>\n";
 
-	if (! ($target_group = (new Group)->LookupByPidGid($pid, $gid))) {
+	if (! ($target_group = Group::LookupByPidGid($pid, $gid))) {
 	    TBERROR("Could not find group object for $project/$group", 1);
 	}
 
-	if (! ($target_user = (new User)->Lookup($user))) {
+	if (! ($target_user = User::Lookup($user))) {
 	    TBERROR("Could not find user object for $user", 1);
 	}
 	$target_uid = $target_user->uid();
@@ -339,7 +339,7 @@ foreach ($POST_VARS_COPY as $header => $value) {
     # and we will change it to "unapproved" or "active", respectively.
     # If the status is "active", we leave it alone. 
     #
-    if (! ($target_user = (new User)->Lookup($user))) {
+    if (! ($target_user = User::Lookup($user))) {
 	TBERROR("Trying to approve unknown user $user.", 1);
     }
     $curstatus  = $target_user->status();
@@ -349,10 +349,10 @@ foreach ($POST_VARS_COPY as $header => $value) {
     #echo "Status = $curstatus, Email = $user_email<br>\n";
 
     # Ditto the project and group
-    if (! ($target_project = (new Project)->Lookup($project))) {
+    if (! ($target_project = Project::Lookup($project))) {
 	TBERROR("Trying to approve user into unknown project $project.", 1);
     }
-    if (! ($target_group = (new Group)->LookupByPidGid($project, $group))) {
+    if (! ($target_group = Group::LookupByPidGid($project, $group))) {
 	TBERROR("Trying to approve user into unknown group $group", 1);
     }
 

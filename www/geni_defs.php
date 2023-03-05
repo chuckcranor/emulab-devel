@@ -44,7 +44,7 @@ class GeniSlice
     #
     # Constructor lookup.
     #
-    function __construct($authority = "", $token = "") {
+    function __construct($authority, $token) {
 	$safe_token = addslashes($token);
 	$dblink     = GetDBLink($authority);
 	$idx        = null;
@@ -102,7 +102,7 @@ class GeniSlice
     }
 
     # Lookup.
-    function Lookup($authority, $token) {
+    public static function Lookup($authority, $token) {
 	$foo = new GeniSlice($authority, $token);
 
 	if ($foo->IsValid()) {
@@ -137,7 +137,7 @@ class GeniSlice
     #
     # Class function to return a list of all slices.
     #
-    function AllSlices($authority) {
+    public static function AllSlices($authority) {
 	$result     = array();
 	$dblink     = GetDBLink($authority);
 
@@ -154,7 +154,7 @@ class GeniSlice
 	while ($row = mysql_fetch_array($query_result)) {
 	    $idx = $row["idx"];
 
-	    if (! ($slice = (new GeniSlice)->Lookup($authority, $idx))) {
+	    if (! ($slice = GeniSlice::Lookup($authority, $idx))) {
 		TBERROR("GeniSlice::AllSlices: ".
 			"Could not load slice $idx!", 1);
 	    }
@@ -163,7 +163,7 @@ class GeniSlice
 	return $result;
     }
 
-    function LookupByExperiment($authority, $experiment) {
+    public static function LookupByExperiment($authority, $experiment) {
 	$dblink     = GetDBLink($authority);
 	$exptidx    = $experiment->idx();
 
@@ -180,10 +180,10 @@ class GeniSlice
 	}
 	$row = mysql_fetch_row($query_result);
 	$idx = $row[0];
- 	return (new GeniSlice)->Lookup($authority, $idx);
+ 	return GeniSlice::Lookup($authority, $idx);
     }
 
-    function LookupByPublicID($authority, $publicid) {
+    public static function LookupByPublicID($authority, $publicid) {
 	$dblink     = GetDBLink($authority);
 	$safeid     = addslashes($publicid);
 
@@ -200,7 +200,7 @@ class GeniSlice
 	}
 	$row = mysql_fetch_row($query_result);
 	$idx = $row[0];
- 	return (new GeniSlice)->Lookup($authority, $idx);
+ 	return GeniSlice::Lookup($authority, $idx);
     }
 
     function GetManifest() {
@@ -244,7 +244,7 @@ class GeniUser
     #
     # Constructor lookup.
     #
-    function __construct($authority = "", $token = "") {
+    function __construct($authority, $token) {
 	$safe_token = addslashes($token);
 	$dblink     = GetDBLink($authority);
 	$idx        = null;
@@ -315,7 +315,7 @@ class GeniUser
     }
 
     # Lookup.
-    function Lookup($authority, $token) {
+    public static function Lookup($authority, $token) {
 	$foo = new GeniUser($authority, $token);
 
 	if ($foo->IsValid()) {
@@ -323,7 +323,7 @@ class GeniUser
 	}
 	return null;
     }
-    function LookupByEmail($authority, $token) {
+    public static function LookupByEmail($authority, $token) {
 	$dblink     = GetDBLink($authority);
 	$safe_token = addslashes($token);
 
@@ -340,7 +340,7 @@ class GeniUser
 	}
 	$row = mysql_fetch_row($query_result);
 	$idx = $row[0];
- 	return (new GeniUser)->Lookup($authority, $idx);
+ 	return GeniUser::Lookup($authority, $idx);
     }
     
     # accessors
@@ -387,7 +387,7 @@ class ClientSliver
     #
     # Constructor lookup.
     #
-    function __construct($token = "") {
+    function __construct($token) {
 	$safe_token = addslashes($token);
 	$dblink     = GetDBLink("sa");
 	$idx        = null;
@@ -423,7 +423,7 @@ class ClientSliver
     }
 
     # Lookup.
-    function Lookup($token) {
+    public static function Lookup($token) {
 	$foo = new ClientSliver($token);
 
 	if ($foo->IsValid()) {
@@ -448,7 +448,7 @@ class ClientSliver
     #
     # Class function to return a list of all slivers for a slice
     #
-    function SliverList($slice) {
+    public static function SliverList($slice) {
 	$result     = array();
 	$dblink     = GetDBLink("sa");
 	$slice_idx  = $slice->idx();
@@ -468,7 +468,7 @@ class ClientSliver
 	while ($row = mysql_fetch_array($query_result)) {
 	    $idx = $row["idx"];
 
-	    if (! ($sliver = (new ClientSliver)->Lookup($idx))) {
+	    if (! ($sliver = ClientSliver::Lookup($idx))) {
 		TBERROR("ClientSliver::SliverList: ".
 			"Could not load client sliver $idx!", 1);
 	    }
@@ -486,7 +486,7 @@ class QuickVM
     #
     # Constructor lookup.
     #
-    function __construct($uuid = "") {
+    function __construct($uuid) {
 	$safe_uuid  = addslashes($uuid);
 	$dblink     = GetDBLink("sa");
 	$idx        = null;
@@ -518,7 +518,7 @@ class QuickVM
     }
 
     # Lookup.
-    function Lookup($token) {
+    public static function Lookup($token) {
 	$foo = new QuickVM($token);
 
 	if ($foo->IsValid()) {
@@ -539,7 +539,7 @@ class QuickVM
     function manifest()	    { return $this->field('manifest'); }
     function extension_code() { return $this->field('extension_code'); }
 
-    function LookupByName($token) {
+    public static function LookupByName($token) {
 	$dblink     = GetDBLink("sa");
 	$safe_token = addslashes($token);
 
@@ -556,9 +556,9 @@ class QuickVM
 	}
 	$row = mysql_fetch_row($query_result);
 	$uuid = $row[0];
- 	return (new QuickVM)->Lookup($uuid);
+ 	return QuickVM::Lookup($uuid);
     }
-    function LookupByCreator($token) {
+    public static function LookupByCreator($token) {
 	$dblink     = GetDBLink("sa");
 	$safe_token = addslashes($token);
 
@@ -575,7 +575,7 @@ class QuickVM
 	}
 	$row = mysql_fetch_row($query_result);
 	$uuid = $row[0];
- 	return (new QuickVM)->Lookup($uuid);
+ 	return QuickVM::Lookup($uuid);
     }
 }
 

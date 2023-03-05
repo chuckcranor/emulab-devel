@@ -275,7 +275,7 @@ if (!isset($formfields["pid"]) ||
 elseif (!TBvalid_pid($formfields["pid"])) {
     $errors["Project"] = "Invalid project name";
 }
-elseif (! ($project = (new Project)->Lookup($formfields["pid"]))) {
+elseif (! ($project = Project::Lookup($formfields["pid"]))) {
     $errors["Project"] = "Invalid project name";
 }
 elseif (! $project->AccessCheck($this_user, $TB_PROJECT_READINFO)) {

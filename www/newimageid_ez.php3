@@ -89,7 +89,7 @@ elseif ($ec2) {
     $imagetype = "xen";
 }
 if (isset($baseosinfo) && $baseosinfo->def_parentosid()) {
-    $def_parentosinfo = (new OSinfo)->Lookup($baseosinfo->def_parentosid());
+    $def_parentosinfo = OSinfo::Lookup($baseosinfo->def_parentosid());
     if (! $def_parentosinfo) {
 	TBERROR("Could not lookup osinfo object for parent " .
 		$baseosinfo->def_parentosid(), 1);
@@ -771,7 +771,7 @@ function SPITFORM($formfields, $errors)
 
     if (isset($formfields["def_parentosid"]) &&
 	$formfields["def_parentosid"] != "") {
-	$osinfo = (new OSInfo)->Lookup($formfields["def_parentosid"]);
+	$osinfo = OSInfo::Lookup($formfields["def_parentosid"]);
 	$osname = $osinfo->osname();
 	$url    = CreateURL("showosinfo", $osinfo);
 
@@ -997,7 +997,7 @@ if (!isset($submit)) {
 	$defaults["description"]     = "Copy of " . $baseosinfo->osname();
 
 	if ($baseosinfo->def_parentosid()) {
-	    $def_parentosinfo = (new OSinfo)->Lookup($baseosinfo->def_parentosid());
+	    $def_parentosinfo = OSinfo::Lookup($baseosinfo->def_parentosid());
 	    if (! $def_parentosinfo) {
 		TBERROR("Could not lookup osinfo object for parent " .
 			$baseosinfo->def_parentosid(), 1);
@@ -1017,7 +1017,7 @@ if (!isset($submit)) {
 	#
         # XXX Need to fix this.
         # 
-	$def_parentosinfo = (new OSinfo)->LookupByName("emulab-ops",
+	$def_parentosinfo = OSinfo::LookupByName("emulab-ops",
 						 "FEDORA15-OPENVZ-STD");
 	if (! $def_parentosinfo) {
 	    TBERROR("Could not lookup osinfo object for FEDORA15-OPENVZ-STD",1);
@@ -1028,9 +1028,9 @@ if (!isset($submit)) {
 	#
         # XXX Need to fix this.
         # 
-	$def_parentosinfo = (new OSinfo)->LookupByName("emulab-ops", "XEN43-64-STD");
+	$def_parentosinfo = OSinfo::LookupByName("emulab-ops", "XEN43-64-STD");
 	if (! $def_parentosinfo) {
-	    $def_parentosinfo = (new OSinfo)->LookupByName("emulab-ops",
+	    $def_parentosinfo = OSinfo::LookupByName("emulab-ops",
 						     "XEN41-64-STD");
 	    TBERROR("Could not lookup osinfo object for XEN image", 1);
 	}
@@ -1159,7 +1159,7 @@ if (!isset($formfields["pid"]) ||
 elseif (!TBvalid_pid($formfields["pid"])) {
     $errors["Project"] = "Invalid project name";
 }
-elseif (! ($project = (new Project)->Lookup($formfields["pid"]))) {
+elseif (! ($project = Project::Lookup($formfields["pid"]))) {
     $errors["Project"] = "Invalid project name";
 }
 
@@ -1206,7 +1206,7 @@ $args = array();
 # Ignore the form for this ...
 if (isset($formfields["def_parentosid"]) &&
     $formfields["def_parentosid"] != "") {
-    $osinfo = (new OSinfo)->Lookup($formfields["def_parentosid"]);
+    $osinfo = OSinfo::Lookup($formfields["def_parentosid"]);
     $args["def_parentosid"] = $osinfo->pid() . "," . $osinfo->osname();
 }
 
@@ -1310,7 +1310,7 @@ if (isset($formfields["node_id"]) &&
     if (!TBvalid_node_id($formfields["node_id"])) {
 	$errors["Node"] = "Invalid node name";
     }
-    elseif (! ($node = (new Node)->Lookup($formfields["node_id"]))) {
+    elseif (! ($node = Node::Lookup($formfields["node_id"]))) {
 	$errors["Node"] = "Invalid node name";
     }
     elseif (!$node->AccessCheck($this_user, $TB_NODEACCESS_LOADIMAGE)) {
@@ -1445,7 +1445,7 @@ else {
     $target = null;
 }
 $imagename = $args["imagename"];
-if (! ($image = (new Image)->NewImageId(1, $imagename, $args, $this_user, $group,
+if (! ($image = Image::NewImageId(1, $imagename, $args, $this_user, $group,
 				  $target, $errors))) {
     # Always respit the form so that the form fields are not lost.
     # I just hate it when that happens so lets not be guilty of it ourselves.

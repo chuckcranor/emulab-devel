@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -103,7 +103,7 @@ if (! isset($target) || isset($canceled)) {
 # A node to pass through?
 #
 if (preg_match("/^[-\w]+$/", "$target")) {
-    $node = (new Node)->Lookup($target);
+    $node = Node::Lookup($target);
     if (!$node) {
 	USERERROR("No such node $node_id!", 1);
 

@@ -46,7 +46,7 @@ $eid = $instance->eid();
 $gid = $instance->gid();
 $project = $instance->Project();
 $unix_pid = $project->unix_gid();
-$group    = (new Group)->LookupByPidGid($pid, $gid);
+$group    = Group::LookupByPidGid($pid, $gid);
 $unix_gid = $group->unix_gid();
 
 # Permission

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -68,10 +68,10 @@ if (! (isset($slice_uuid) || isset($uuid))) {
 # See if the record exists. 
 #
 if (isset($uuid)) {
-    $record = (new InstanceHistory)->Lookup($uuid);
+    $record = InstanceHistory::Lookup($uuid);
 }
 else {
-    $record = (new InstanceHistory)->LookupbySlice($slice_uuid);
+    $record = InstanceHistory::LookupbySlice($slice_uuid);
 }
 if (!$record) {
     SPITHEADER(1);
@@ -131,7 +131,7 @@ echo "<div id='page-body'>
 $blob = array();
 foreach ($record->slivers as $sliver) {
     $aggregate_urn = $sliver->aggregate_urn();
-    $aggregate     = (new Aggregate)->Lookup($aggregate_urn);
+    $aggregate     = Aggregate::Lookup($aggregate_urn);
     $weburl        = $aggregate->weburl();
 
     $blob[$aggregate_urn] = array("weburl" => $weburl,
@@ -142,7 +142,7 @@ echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 
 if ($ISPOWDER) {
-    $radioinfo = (new Aggregate)->RadioInfoNew();
+    $radioinfo = Aggregate::RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
     echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
     echo "</script>\n";

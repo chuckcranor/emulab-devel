@@ -34,7 +34,7 @@ class Lease
     #
     # Constructor by lookup on unique index.
     #
-    function __construct($token = "") {
+    function __construct($token) {
 	$safe_token = addslashes($token);
 	$query_result = null;
 
@@ -84,7 +84,7 @@ class Lease
     }
 
     # Lookup.
-    function Lookup($token) {
+    public static function Lookup($token) {
 	$foo = new Lease($token);
 
 	if (! $foo->IsValid()) {
@@ -93,7 +93,7 @@ class Lease
 	return $foo;
     }
     # Lookup by name in a project
-    function LookupByName($project, $name) {
+    public static function LookupByName($project, $name) {
 	$pid       = $project->pid();
 	$safe_name = addslashes($name);
 	
@@ -105,10 +105,10 @@ class Lease
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return (new Lease)->Lookup($row["lease_idx"]);
+	return Lease::Lookup($row["lease_idx"]);
     }
     # Lookup for project
-    function LookupAllByProject($project) {
+    public static function LookupAllByProject($project) {
 	$pid    = $project->pid();
         $result = array();
 	
@@ -116,7 +116,7 @@ class Lease
 	    DBQueryFatal("select lease_idx from project_leases ".
 			 "where pid='$pid'");
 	while ($row = mysql_fetch_array($query_result)) {
-            $lease = (new Lease)->Lookup($row["lease_idx"]);
+            $lease = Lease::Lookup($row["lease_idx"]);
             if ($lease) {
                 $result[] = $lease;
             }
@@ -291,7 +291,7 @@ class Lease
 	if ($this->project)
 	    return $this->project;
 
-	$this->project = (new Project)->Lookup($pid);
+	$this->project = Project::Lookup($pid);
 	if (! $this->project) {
 	    TBERROR("Could not lookup project $pid!", 1);
 	}
@@ -310,8 +310,8 @@ class ImageDataset
     #
     # Constructor by lookup on unique index.
     #
-    function __construct($token = "") {
-        $image = (new Image)->LookupByUUID($token);
+    function __construct($token) {
+        $image = Image::LookupByUUID($token);
         if (!$image || !$image->isdataset()) {
 	    $this->image = NULL;
 	    return;
@@ -327,20 +327,20 @@ class ImageDataset
     }
 
     # Lookup by uuid.
-    function Lookup($token) {
-        $image = (new Image)->LookupByUUID($token);
+    public static function Lookup($token) {
+        $image = Image::LookupByUUID($token);
         if (!$image || !$image->isdataset()) {
             return null;
         }
 	return new ImageDataset($token);
     }
     # Lookup by name in a project
-    function LookupByName($project, $name) {
-        $image = (new Image)->LookupByName($project, $name);
+    public static function LookupByName($project, $name) {
+        $image = Image::LookupByName($project, $name);
         If (!$image || !$image->isdataset()) {
             return null;
         }
-	return (new ImageDataset)->Lookup($image->image_uuid());
+	return ImageDataset::Lookup($image->image_uuid());
     }
 
     # accessors
@@ -378,7 +378,7 @@ class ImageDataset
 
     function state() {
         return ($this->image->locked() ? "imaging" :
-                ($this->image->size() ? "valid" : "allocated"));
+                $this->image->size() ? "valid" : "allocated");
     }
 
     #
@@ -506,7 +506,7 @@ class ImageDataset
 	if ($this->project)
 	    return $this->project;
 
-	$this->project = (new Project)->Lookup($pid);
+	$this->project = Project::Lookup($pid);
 	if (! $this->project) {
 	    TBERROR("Could not lookup project $pid!", 1);
 	}

@@ -56,7 +56,7 @@ function SPITFORM($username, $email, $errors)
     $email    = CleanString($email);
     # XSS prevention.
     if ($errors) {
-	while (list ($key, $val) = each ($errors)) {
+        foreach ($errors as $key => $val) {
 	    # Skip internal error, we want the html in those errors
 	    # and we know it is safe.
 	    if ($key == "error") {
@@ -148,7 +148,7 @@ if (count($errors)) {
     SPITFORM($username, $email, $errors);
     return;
 }
-if ($user = (new User)->Lookup($username)) {
+if ($user = User::Lookup($username)) {
     if ($user->weblogin_frozen()) {
 	$errors["username"] = "This account is frozen";
     }

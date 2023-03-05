@@ -625,7 +625,7 @@ if (! $returning) {
 	elseif (!TBvalid_uid($formfields["joining_uid"])) {
 	    $errors["UserName"] = TBFieldErrorString();
 	}
-	elseif ((new User)->Lookup($formfields["joining_uid"]) ||
+	elseif (User::Lookup($formfields["joining_uid"]) ||
 		posix_getpwnam($formfields["joining_uid"])) {
 	    $errors["UserName"] = "Already in use. Pick another";
 	}
@@ -651,7 +651,7 @@ if (! $returning) {
 	elseif (! TBvalid_wikiname($formfields["wikiname"])) {
 	    $errors["WikiName"] = TBFieldErrorString();
 	}
-	elseif ((new User)->LookupByWikiName($formfields["wikiname"])) {
+	elseif (User::LookupByWikiName($formfields["wikiname"])) {
 	    $errors["WikiName"] = "Already in use. Pick another";
 	}
     }
@@ -690,7 +690,7 @@ if (! $returning) {
             preg_match("/gavilan\.edu$/", $formfields["usr_email"])) {
         $errors["Email Address"] = "Not permitted";
     }
-    elseif ((new User)->LookupByEmail($formfields["usr_email"])) {
+    elseif (User::LookupByEmail($formfields["usr_email"])) {
 	$errors["Email Address"] =
 	    "Already in use. <b>Did you forget to login?</b>";
     }
@@ -823,10 +823,10 @@ if (!$forwikionly) {
 	    $gid = $pid;
 	}
 
-	if (!TBvalid_pid($pid) || !(new Project)->Lookup($pid)) {
+	if (!TBvalid_pid($pid) || !Project::Lookup($pid)) {
 	    $errors["Project Name"] = "Invalid Project Name";
 	}
-	elseif (!TBvalid_gid($gid) || !(new Group)->LookupByPidGid($pid, $gid)) {
+	elseif (!TBvalid_gid($gid) || !Group::LookupByPidGid($pid, $gid)) {
 	    $errors["Group Name"] = "Invalid Group Name";
 	}
     }
@@ -879,10 +879,10 @@ if ($nopidconfirm) {
 # Need the user, project and group objects for the rest of this.
 #
 if (!$forwikionly && isset($pid)) {
-    if (! ($project = (new Project)->Lookup($pid))) {
+    if (! ($project = Project::Lookup($pid))) {
 	TBERROR("Could not lookup object for $pid!", 1);
     }
-    if (! ($group = (new Group)->LookupByPidGid($pid, $gid))) {
+    if (! ($group = Group::LookupByPidGid($pid, $gid))) {
 	TBERROR("Could not lookup object for $pid/$gid!", 1);
     }
     if ($returning) {
@@ -963,7 +963,7 @@ if (! $returning) {
 	isset($formfields["passphrase1"]) && $formfields["passphrase1"] != "") {
 	$args["passphrase"] = $formfields["passphrase1"];
     }
-    if (! ($user = (new User)->NewNewUser(($forwikionly ?
+    if (! ($user = User::NewNewUser(($forwikionly ?
 				     TBDB_NEWACCOUNT_WIKIONLY : 0),
 				    $args,
 				    $error)) != 0) {

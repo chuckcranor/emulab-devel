@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2011 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -73,7 +73,7 @@ if (! $experiment->AccessCheck($this_user, $TB_EXPT_DESTROY)) {
 }
 
 # Template Instance Experiments get special treatment in this page.
-$instance = (new TemplateInstance)->LookupByExptidx($exptidx);
+$instance = TemplateInstance::LookupByExptidx($exptidx);
 if ($instance && ($experiment->state() != $TB_EXPTSTATE_SWAPPED)) {
     PAGEARGERROR("Invalid action for template instance");
 }

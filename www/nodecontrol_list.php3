@@ -204,7 +204,7 @@ if (! strcmp($showtype, "summary")) {
 	    if ($bypid == "" || !TBvalid_pid($bypid)) {
 		PAGEARGERROR("Invalid characters in 'bypid' argument!");
 	    }
-	    if (! ($target_project = (new Project)->Lookup($bypid))) {
+	    if (! ($target_project = Project::Lookup($bypid))) {
 		PAGEARGERROR("No such project '$bypid'!");
 	    }
 	    if (!$target_project->AccessCheck($this_user,
@@ -290,7 +290,7 @@ if (! strcmp($showtype, "summary")) {
     $projlist = $target_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
     if (count($projlist) > 1) {
 	echo "<b>By Project Permission: ";
-	foreach ($projlist as $project => $unused) {
+ 	foreach ($projlist as $project => $unused) {
 	    echo "<a href='nodecontrol_list.php3?".
 		"showtype=summary&bypid=$project'>$project</a>,\n";
 	}
@@ -601,7 +601,7 @@ while ($row = mysql_fetch_array($query_result)) {
    	          <td>--</td>\n";
 	}
 	if ($def_boot_osid &&
-	    ($osinfo = (new OSinfo)->Lookup($def_boot_osid))) {
+	    ($osinfo = OSinfo::Lookup($def_boot_osid))) {
 	    $osname = $osinfo->osname();
 	    echo "<td>$osname</td>\n";
 	}

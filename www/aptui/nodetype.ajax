@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,7 +58,7 @@ function CheckPageArgs($write)
 	SPITAJAX_ERROR(-1, "Invalid node type");
 	return -1;
     }
-    $nodetype = (new NodeType)->Lookup($type);
+    $nodetype = NodeType::Lookup($type);
     if (!$nodetype) {
 	SPITAJAX_ERROR(-1, "No such type");
 	return -1;
@@ -112,7 +112,7 @@ function Do_GetInfo()
 function ConvertOSID($osid)
 {
     global $TBBASE;
-    $osinfo = (new OSInfo)->Lookup($osid);
+    $osinfo = OSInfo::Lookup($osid);
 
     if ($osinfo) {
         $blob = array();
@@ -132,7 +132,7 @@ function ConvertOSID($osid)
 
 function ConvertImageID($imageid)
 {
-    $image = (new Image)->Lookup($imageid);
+    $image = Image::Lookup($imageid);
 
     if ($image) {
         $blob = array();

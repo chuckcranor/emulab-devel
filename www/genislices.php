@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -111,11 +111,11 @@ foreach ($showtypes as $type) {
 	    TBERROR("Could not run maptoslice: $safe_query", 1);
 	}
 	foreach ($uuidlist as $uuid) {
-	    $slicelist[] = (new GeniSlice)->Lookup($type, $uuid);
+	    $slicelist[] = GeniSlice::Lookup($type, $uuid);
 	}
     }
     else {
-	$slicelist = (new GeniSlice)->AllSlices($type);
+	$slicelist = GeniSlice::AllSlices($type);
     }
     $which = ($type == "cm" ? "Component Manager" :
 	      ($type == "sa" ? "Slice Authority" : "Clearing House"));
@@ -144,7 +144,7 @@ foreach ($showtypes as $type) {
 			 "slice_idx", $slice_idx);
 	$href = "<a href='$url'>$slice_hrn</a>";
 
-	$experiment = (new Experiment)->LookupByUUID($slice->uuid());
+	$experiment = Experiment::LookupByUUID($slice->uuid());
 	if ($experiment) {
 	    $eid     = $experiment->eid();
 	    $expurl  = CreateURL("showexp", $experiment);

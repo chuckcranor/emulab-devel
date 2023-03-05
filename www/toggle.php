@@ -121,7 +121,7 @@ elseif ($type == "webfreeze") {
     if (! $isadmin) {
 	USERERROR("You do not have permission to toggle $type!", 1);
     }
-    if (! ($target_user = (new User)->Lookup($user))) {
+    if (! ($target_user = User::Lookup($user))) {
 	PAGEARGERROR("Target user '$user' is not a valid user!");
     }
     $zapurl = CreateURL("showuser", $target_user);
@@ -132,7 +132,7 @@ elseif ($type == "adminflag") {
     if (! $isadmin) {
 	USERERROR("You do not have permission to toggle $type!", 1);
     }
-    if (! ($target_user = (new User)->Lookup($user))) {
+    if (! ($target_user = User::Lookup($user))) {
 	PAGEARGERROR("Target user '$user' is not a valid user!");
     }
     if ($value && $target_user->status() != TBDB_USERSTATUS_ACTIVE) {
@@ -160,7 +160,7 @@ elseif ($type == "cvsweb") {
     if (! $isadmin) {
 	USERERROR("You do not have permission to toggle $type!", 1);
     }
-    if (! ($target_user = (new User)->Lookup($user))) {
+    if (! ($target_user = User::Lookup($user))) {
 	PAGEARGERROR("Target user '$user' is not a valid user!");
     }
     $zapurl = CreateURL("showuser", $target_user);
@@ -171,7 +171,7 @@ elseif ($type == "stud") {
     if (! $isadmin) {
 	USERERROR("You do not have permission to toggle $type!", 1);
     }
-    if (! ($target_user = (new User)->Lookup($user))) {
+    if (! ($target_user = User::Lookup($user))) {
 	PAGEARGERROR("Target user '$user' is not a valid user!");
     }
     $zapurl = CreateURL("showuser", $target_user);
@@ -182,7 +182,7 @@ elseif ($type == "widearearoot") {
     if (! $isadmin) {
 	USERERROR("You do not have permission to toggle $type!", 1);
     }
-    if (! ($target_user = (new User)->Lookup($user))) {
+    if (! ($target_user = User::Lookup($user))) {
 	PAGEARGERROR("Target user '$user' is not a valid user!");
     }
     $zapurl = CreateURL("showuser", $target_user);
@@ -199,7 +199,7 @@ elseif ($type == "skipvlans") {
     if (! ($isadmin || STUDLY() || OPSGUY())) {
 	USERERROR("You do not have permission to toggle $type!", 1);
     }
-    if (! ($experiment = (new Experiment)->LookupByPidEid($pid, $eid))) {
+    if (! ($experiment = Experiment::LookupByPidEid($pid, $eid))) {
 	PAGEARGERROR("Experiment $pid/$eid is not a valid experiment!");
     }
     if (!$isadmin &&
@@ -216,7 +216,7 @@ elseif ($type == "imageglobal" || $type == "imagedoesxen") {
     if (! TBvalid_imageid($imageid)) {
 	PAGEARGERROR("Invalid characters in $imageid");
     }
-    if (! ($image = (new Image)->Lookup($imageid))) {
+    if (! ($image = Image::Lookup($imageid))) {
 	PAGEARGERROR("Image $image is not a valid image!");
     }
     if (!$isadmin &&
@@ -236,7 +236,7 @@ elseif ($type == "cvsrepo_public") {
     if (! TBvalid_pid($pid)) {
 	PAGEARGERROR("Invalid characters in $pid");
     }
-    if (! ($project = (new Project)->Lookup($pid))) {
+    if (! ($project = Project::Lookup($pid))) {
 	PAGEARGERROR("Project $pid is not a valid project!");
     }
     # Must be admin or project/group root.
@@ -254,7 +254,7 @@ elseif ($type == "workbench") {
     if (! TBvalid_pid($pid)) {
 	PAGEARGERROR("Invalid characters in $pid");
     }
-    if (! ($project = (new Project)->Lookup($pid))) {
+    if (! ($project = Project::Lookup($pid))) {
 	PAGEARGERROR("Project $pid is not a valid project!");
     }
     # Must be admin
@@ -269,7 +269,7 @@ elseif ($type == "project_disable") {
     if (!$isadmin) {
 	USERERROR("You do not have permission to toggle $type!", 1);
     }
-    if (! ($project = (new Project)->Lookup($pid))) {
+    if (! ($project = Project::Lookup($pid))) {
 	PAGEARGERROR("Project $pid is not a valid project!");
     }
     $project->SetDisabled($value);

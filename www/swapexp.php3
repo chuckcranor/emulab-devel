@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -129,7 +129,7 @@ $lockdown      = $experiment->lockdown();
 $isgeni        = $experiment->geniflags();
 
 # Template Instance Experiments get special treatment in this page.
-$instance = (new TemplateInstance)->LookupByExptidx($exptidx);
+$instance = TemplateInstance::LookupByExptidx($exptidx);
 
 # Convert inout to informative text.
 if (!strcmp($inout, "in")) {

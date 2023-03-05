@@ -212,7 +212,7 @@ if (!isset($submit)) {
         # Verify Permission. Need permission for the template, any version.
         #
 	if (! isset($template)) {
-	    $template = (new Template)->Lookup($metadata->template_guid(), 1);
+	    $template = Template::Lookup($metadata->template_guid(), 1);
 	}
 
 	if (!$template ||

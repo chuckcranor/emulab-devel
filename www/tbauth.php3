@@ -455,7 +455,7 @@ function LoginStatus() {
     }
 
     # Cache this now; someone will eventually want it.
-    $CHECKLOGIN_USER = (new User)->Lookup($uid_idx);
+    $CHECKLOGIN_USER = User::Lookup($uid_idx);
     if (! $CHECKLOGIN_USER) {
 	$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
 	return $CHECKLOGIN_STATUS;
@@ -843,7 +843,7 @@ function ISPLABUSER() {
 	    return 0;
 	}
 	# Lookup sanitizes argument.
-	if (! ($user = (new User)->Lookup($uid)))
+	if (! ($user = User::Lookup($uid)))
 	    return 0;
 
 	if ($user->user_interface()) {
@@ -916,10 +916,10 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     }
 
     if (TBvalid_email($token)) {
-	$user = (new User)->LookupByEmail($token);
+	$user = User::LookupByEmail($token);
     }
     else {
-	$user = (new User)->Lookup($token);
+	$user = User::Lookup($token);
     }
 	    
     #
@@ -1345,7 +1345,7 @@ function VERIFYPASSWD($uid, $password) {
 	return -1;
     }
 
-    if (! ($user = (new User)->Lookup($uid)))
+    if (! ($user = User::Lookup($uid)))
 	return -1;
 
     #
@@ -1480,7 +1480,7 @@ function LASTWEBLOGIN($uid_idx) {
 }
 
 function HASREALACCOUNT($uid) {
-    if (! ($user = (new User)->Lookup($uid)))
+    if (! ($user = User::Lookup($uid)))
 	return 0;
 
     $status   = $user->status();

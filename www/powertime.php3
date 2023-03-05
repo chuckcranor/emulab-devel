@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2005-2023 University of Utah and the Flux Group.
+# Copyright (c) 2005-2012 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,7 +57,7 @@ if (isset($confirmed)) {
 	    $ni = CleanString($ni);
 	    USERERROR("Invalid node ID: $ni", 1);
 	}
-	if (! ($node = (new Node)->Lookup($ni))) {
+	if (! ($node = Node::Lookup($ni))) {
 	    USERERROR("Invalid node ID: $ni", 1);
 	}
 
@@ -84,7 +84,7 @@ else {
 	    $ni = CleanString($ni);
 	    USERERROR("Invalid node ID: $ni", 1);
 	}
-	if (! ($node = (new Node)->Lookup($ni))) {
+	if (! ($node = Node::Lookup($ni))) {
 	    USERERROR("Invalid node ID: $ni", 1);
 	}
 	

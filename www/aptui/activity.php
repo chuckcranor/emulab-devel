@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,7 +64,7 @@ if (!$isadmin) {
 }
 else {
     if (isset($cluster)) {
-        $aggregate = (new Aggregate)->LookupByNickname($cluster);
+        $aggregate = Aggregate::LookupByNickname($cluster);
         if (!$aggregate) {
             SPITUSERERROR("No such cluster: $cluster");
             exit();

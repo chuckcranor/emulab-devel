@@ -871,7 +871,7 @@ function WRITESIDEBAR() {
 			  "$TBBASE/" . CreateURL("mychat", $login_user));
 	}
 	if ($TBMAINSITE && $TRACSUPPORT) {
-	    $geniproject = (new Project)->Lookup("geni");
+	    $geniproject = Project::Lookup("geni");
 	    $approved    = 0;
 	    
 	    if ($geniproject &&

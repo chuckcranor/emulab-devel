@@ -41,7 +41,7 @@ class Node
     #
     # Constructor by lookup on unique index.
     #
-    function __construct($node_id = "") {
+    function __construct($node_id) {
 	$safe_node_id = addslashes($node_id);
 
 	$query_result =
@@ -60,7 +60,7 @@ class Node
     }
 
     # Lookup by node_id
-    function Lookup($node_id) {
+    public static function Lookup($node_id) {
 	global $node_cache;
 
         if (!TBvalid_node_id($node_id)) {
@@ -81,7 +81,7 @@ class Node
     }
 
     # Lookup by IP
-    function LookupByIP($ip) {
+    public static function LookupByIP($ip) {
 	$safe_ip = addslashes($ip);
 	
 	$query_result =
@@ -93,11 +93,11 @@ class Node
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return (new Node)->Lookup($row["node_id"]);
+	return Node::Lookup($row["node_id"]);
     }
 
     # Lookup by Mac
-    function LookupByMac($mac) {
+    public static function LookupByMac($mac) {
 	$safe_mac = addslashes($mac);
 	
 	$query_result =
@@ -109,7 +109,7 @@ class Node
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return (new Node)->Lookup($row["node_id"]);
+	return Node::Lookup($row["node_id"]);
     }
 
     #
@@ -198,11 +198,11 @@ class Node
     function reservable() {return $this->field("reservable"); }
 
     function def_boot_image() {
-	return (new Image)->Lookup($this->def_boot_osid(),
+	return Image::Lookup($this->def_boot_osid(),
 			     $this->def_boot_osid_vers());
     }
     function def_boot_osinfo() {
-	return (new OSinfo)->Lookup($this->def_boot_osid(),
+	return OSinfo::Lookup($this->def_boot_osid(),
 			      $this->def_boot_osid_vers());
     }
 
@@ -363,7 +363,7 @@ class Node
 	$pid = $row["pid"];
 	$eid = $row["eid"];
 
-	return (new Experiment)->LookupByPidEid($pid, $eid);
+	return Experiment::LookupByPidEid($pid, $eid);
     }
 
     #
@@ -479,7 +479,7 @@ class Node
         # If the power_id is not an actual node, it is probably
         # ipmi, ilo, etc. 
         #
-        $node = (new Node)->Lookup($power_id);
+        $node = Node::Lookup($power_id);
         if (!$node) {
             unset($row["outlet"]);
         }
@@ -756,7 +756,7 @@ class Node
 	    $startupcmd = CleanString($startupcmd);
 
 	if ($node_id != $phys_nodeid) {
-	    if (! ($phys_this = (new Node)->Lookup($phys_nodeid))) {
+	    if (! ($phys_this = Node::Lookup($phys_nodeid))) {
 		TBERROR("Cannot map physical node $phys_nodeid to object", 1);
 	    }
 	}
@@ -1419,7 +1419,7 @@ class Node
 	$gateway        = $row["gateway"];
 	$dns            = $row["dns"];
 
-	if (! ($user = (new User)->Lookup($contact_uid))) {
+	if (! ($user = User::Lookup($contact_uid))) {
             # This is not an error since the field is set to "nobody" when
             # there is no contact info. Why is that?
 	    $showuser_url = CreateURL("showuser", URLARG_UID, $contact_uid);
@@ -1740,7 +1740,7 @@ class Node
                 $info["current_speed"] = $row["current_speed"];
 
                 $info["switch_isswitch"] = false;
-                if ($switch = (new Node)->Lookup($info["switch_id"])) {
+                if ($switch = Node::Lookup($info["switch_id"])) {
                     if ($switch->TypeClass() == "switch") {
                         $info["switch_isswitch"] = true;
                     }
@@ -2066,8 +2066,8 @@ function ShowNodeHistory($node_id = null, $record = null,
 		} else {
 		    $eid = $results[6];
 		    if ($results[7]) {
-			$experiment = (new Experiment)->Lookup($results[7]);
-			$experiment_stats = (new ExperimentStats)->Lookup($results[7]);
+			$experiment = Experiment::Lookup($results[7]);
+			$experiment_stats = ExperimentStats::Lookup($results[7]);
                         if ($asdata) {
                             $blob["pid"]     = $pid;
                             $blob["pid_idx"] = $experiment_stats->pid_idx();

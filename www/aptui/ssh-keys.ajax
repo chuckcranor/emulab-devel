@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -88,7 +88,7 @@ function Do_AddKey()
     }
     if (isset($ajax_args["target_uid"])) {
         $target_uid  = $ajax_args["target_uid"];
-        $target_user = (new User)->Lookup($target_uid);
+        $target_user = User::Lookup($target_uid);
         if (!$target_user) {
             SPITAJAX_ERROR(1, "No such user: $target_uid");
             return;
@@ -125,7 +125,7 @@ function Do_DeleteKey()
     }
     if (isset($ajax_args["target_uid"])) {
         $target_uid  = $ajax_args["target_uid"];
-        $target_user = (new User)->Lookup($target_uid);
+        $target_user = User::Lookup($target_uid);
         if (!$target_user) {
             SPITAJAX_ERROR(1, "No such user: $target_uid");
             return;

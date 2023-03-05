@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,12 +51,12 @@ $optargs = RequiredPageArguments("uuid", PAGEARG_UUID);
 # Either a local lease or a remote dataset. 
 #
 if (!$embedded) {
-    $dataset = (new Dataset)->Lookup($uuid);
+    $dataset = Dataset::Lookup($uuid);
 }
 if (!$dataset) {
-    $dataset = (new Lease)->Lookup($uuid);
+    $dataset = Lease::Lookup($uuid);
     if (!$dataset) {
-        $dataset = (new ImageDataset)->Lookup($uuid);
+        $dataset = ImageDataset::Lookup($uuid);
     }
 }
 if (!$dataset) {
@@ -151,8 +151,8 @@ if ($cansnapshot && !$embedded) {
     $instance_array = array();
 
     while ($row = mysql_fetch_array($query_result)) {
-        $instance     = (new Instance)->Lookup($row["uuid"]);
-        $profile      = (new Profile)->Lookup($instance->profile_id(),
+        $instance     = Instance::Lookup($row["uuid"]);
+        $profile      = Profile::Lookup($instance->profile_id(),
                                         $instance->profile_version());
         if ($instance && $profile) {
             $instance_array[] =

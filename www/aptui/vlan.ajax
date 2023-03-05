@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,7 +44,7 @@ function Do_List()
             SPITAJAX_ERROR(-1, "Invalid experiment UUID");
             return -1;
         }
-        $experiment = (new Experiment)->LookupByUUID($uuid);
+        $experiment = Experiment::LookupByUUID($uuid);
         if (!$experiment) {
             SPITAJAX_ERROR(-1, "No such experiment");
             return -1;
@@ -56,11 +56,11 @@ function Do_List()
         DBQueryFatal("select * from vlans $clause order by pid,eid");
 
     while ($row = mysql_fetch_array($query_result)) {
-        $experiment = (new Experiment)->Lookup($row['exptidx']);
+        $experiment = Experiment::Lookup($row['exptidx']);
         if ($experiment) {
             $expstats = $experiment->GetStats();
             if ($expstats->slice_uuid() &&
-                ($instance = (new Instance)->LookupBySlice($expstats->slice_uuid()))) {
+                ($instance = Instance::LookupBySlice($expstats->slice_uuid()))) {
                 $row["instance_uuid"] = $instance->uuid();
             }
         }
@@ -95,11 +95,11 @@ function Do_GetInfo()
 	return -1;
     }
     $row = mysql_fetch_array($query_result);
-    $experiment = (new Experiment)->Lookup($row['exptidx']);
+    $experiment = Experiment::Lookup($row['exptidx']);
     if ($experiment) {
         $expstats = $experiment->GetStats();
         if ($expstats->slice_uuid() &&
-            ($instance = (new Instance)->LookupBySlice($expstats->slice_uuid()))) {
+            ($instance = Instance::LookupBySlice($expstats->slice_uuid()))) {
             $row["instance_uuid"] = $instance->uuid();
         }
     }
@@ -110,7 +110,7 @@ function Do_GetInfo()
         foreach (preg_split("/\s/", $row["members"]) as $member) {
             list ($node_id,$iface) = preg_split('/:/', $member);
 
-            $node = (new Node)->Lookup($node_id);
+            $node = Node::Lookup($node_id);
             if ($node) {
                 $members[] = $node->GetInterfaceInfo($iface);
             }

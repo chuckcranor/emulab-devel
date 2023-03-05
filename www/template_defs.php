@@ -30,7 +30,7 @@ class Template
     var	$template;
     var $experiment;
     
-    function __construct($guid = "", $vers = "") {
+    function __construct($guid, $vers) {
 	$guid = addslashes($guid);
 	$vers = addslashes($vers);
 	
@@ -50,7 +50,7 @@ class Template
 	$pid = $this->pid();
 	$eid = $this->eid();
 
-	if (($experiment = (new Experiment)->LookupByPidEid($pid, $eid))) {
+	if (($experiment = Experiment::LookupByPidEid($pid, $eid))) {
 	    $this->experiment = $experiment;
 	}
     }
@@ -61,7 +61,7 @@ class Template
     }
 
     # Do class level lookup.
-    function Lookup($guid, $vers) {
+    public static function Lookup($guid, $vers) {
 	$foo = new Template($guid, $vers);
 
 	if ($foo->IsValid())
@@ -69,7 +69,7 @@ class Template
 	return null;
     }
     # Do class level lookup for the root template.
-    function LookupRoot($guid) {
+    public static function LookupRoot($guid) {
 	$foo = new Template($guid, 1); 
 
 	if ($foo->IsValid())
@@ -77,7 +77,7 @@ class Template
 	return null;
     }
     # Look up by pid,eid is which also unique across templates.
-    function LookupbyEid($pid, $eid) {
+    public static function LookupbyEid($pid, $eid) {
 	$query_result =
 	    DBQueryWarn("select guid,vers from experiment_templates  ".
 			"where pid='$pid' and eid='$eid'");
@@ -186,7 +186,7 @@ class Template
 	    $pid = $self->pid();
 	    $eid = $self->eid();
 	    
-	    if (($experiment = (new Experiment)->LookupByPidEid($pid, $eid))) {
+	    if (($experiment = Experiment::LookupByPidEid($pid, $eid))) {
 		$this->experiment = $experiment;
 	    }
 	}
@@ -196,7 +196,7 @@ class Template
     function GetProject() {
 	$pid = $this->pid();
 
-	if (! ($project = (new Project)->Lookup($pid))) {
+	if (! ($project = Project::Lookup($pid))) {
 	    TBERROR("Could not lookup project $pid!", 1);
 	}
 	return $project;
@@ -206,7 +206,7 @@ class Template
 	$this->Refresh();
 	
 	if ($this->logfile()) 
-	    return (new Logfile)->Lookup($this->logfile());
+	    return Logfile::Lookup($this->logfile());
 	return null;
     }
 
@@ -275,7 +275,7 @@ class Template
 	$description = $this->description();
 	$path        = $this->path();
 
-	if (! ($user = (new User)->Lookup($uid))) {
+	if (! ($user = User::Lookup($uid))) {
 	    TBERROR("Could not lookup object for user $uid", 1);
 	}
 	$showuser_url = CreateURL("showuser", $user);
@@ -609,7 +609,7 @@ class Template
 	    $ignore    = $row['idle_ignore'];
 	    $name      = $row['expt_name'];
 
-	    if (! ($experiment = (new Experiment)->LookupByPidEid($pid, $eid))) {
+	    if (! ($experiment = Experiment::LookupByPidEid($pid, $eid))) {
 		TBERROR("Could not map $pid/$eid to its object", 1);
 	    }
 	    $idlehours = $experiment->IdleTime();
@@ -925,13 +925,13 @@ class Template
     # metadata. Returns a class instance (see below).
     #
     function LookupMetadataByGUID($metadata_guid, $metadata_vers) {
-	return (new TemplateMetadata)->TemplateLookupByGUID($this,
+	return TemplateMetadata::TemplateLookupByGUID($this,
 						      $metadata_guid,
 						      $metadata_vers);
     }
     # Ditto by name,
     function LookupMetadataByName($metadata_name) {
-	return (new TemplateMetadata)->TemplateLookupByName($this, $metadata_name);
+	return TemplateMetadata::TemplateLookupByName($this, $metadata_name);
     }
 
     # Grab the graph data.
@@ -1070,7 +1070,7 @@ class Template
 	$vers = $this->vers();
 	$sets = array();
 	
-	foreach ($changes as $key => $value) {
+ 	foreach ($changes as $key => $value) {
 	    $value  = addslashes($value);
 	    $sets[] = "$key='$value'";
 	}
@@ -1149,7 +1149,7 @@ class TemplateInstance
     #
     # Instances are found by their index. 
     #
-    function __construct($idx = "") {
+    function __construct($idx) {
 	$idx = addslashes($idx);
 
 	$query_result =
@@ -1168,7 +1168,7 @@ class TemplateInstance
 	$this->experiment = null;
 	
 	if ($this->instance['exptidx']) {
-	    $this->experiment = (new Experiment)->Lookup($this->instance['exptidx']);
+	    $this->experiment = Experiment::Lookup($this->instance['exptidx']);
 	}
     }
     
@@ -1178,7 +1178,7 @@ class TemplateInstance
     }
 
     # Do class level lookup.
-    function LookupByExptidx($exptidx) {
+    public static function LookupByExptidx($exptidx) {
 	$exptidx = addslashes($exptidx);
 	
 	$query_result =
@@ -1197,7 +1197,7 @@ class TemplateInstance
     }
 
     # Do class level lookup.
-    function LookupByIdx($idx) {
+    public static function LookupByIdx($idx) {
 	$foo = new TemplateInstance($idx);
 
 	if ($foo->IsValid())
@@ -1273,12 +1273,12 @@ class TemplateInstance
 	    return $this->experiment;
 
 	if ($this->exptidx()) {
-	    $this->experiment = (new Experiment)->Lookup($this->exptidx());
+	    $this->experiment = Experiment::Lookup($this->exptidx());
 	}
 	return $this->experiment;
     }
     function GetLogfile() {
-	return (new Logfile)->Lookup($this->logfileid());
+	return Logfile::Lookup($this->logfileid());
     }
 
     #
@@ -1287,7 +1287,7 @@ class TemplateInstance
     function Project() {
 	$pid = $this->pid();
 
-	if (! ($project = (new Project)->Lookup($pid))) {
+	if (! ($project = Project::Lookup($pid))) {
 	    TBERROR("Could not lookup project $pid!", 1);
 	}
 	return $project;
@@ -1325,7 +1325,7 @@ class TemplateInstance
 	$desc_metaname = "__instance_description_$exptidx";
 	$desc_metadata = $template->LookupMetadataByName($desc_metaname);
 
-	if (! ($user = (new User)->Lookup($uid))) {
+	if (! ($user = User::Lookup($uid))) {
 	    TBERROR("Could not lookup object for user $uid", 1);
 	}
 	$showuser_url = CreateURL("showuser", $user);
@@ -2293,7 +2293,7 @@ class TemplateMetadata
     #
     # 
     #
-    function __construct($guid = "", $vers = "") {
+    function __construct($guid, $vers) {
 	$guid = addslashes($guid);
 	$vers = addslashes($vers);
 
@@ -2324,14 +2324,14 @@ class TemplateMetadata
     }
 
     # Do class level lookup.
-    function Lookup($guid, $vers) {
+    public static function Lookup($guid, $vers) {
 	$foo = new TemplateMetadata($guid, $vers);
 
 	if ($foo->IsValid())
 	    return $foo;
 	return null;
     }
-    function TemplateLookupByGUID($template, $guid, $vers) {
+    public static function TemplateLookupByGUID($template, $guid, $vers) {
 	$metadata_guid = addslashes($guid);
 	$metadata_vers = addslashes($vers);
 	$template_guid = $template->guid();
@@ -2356,7 +2356,7 @@ class TemplateMetadata
 	return $foo;
     }
 
-    function TemplateLookupByName($template, $name) {
+    public static function TemplateLookupByName($template, $name) {
 	$metadata_name = addslashes($name);
 	$template_guid = $template->guid();
 	$template_vers = $template->vers();

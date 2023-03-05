@@ -89,8 +89,8 @@ function SPITFORM($formfields, $errors)
 
         while ($row = mysql_fetch_array($query_result)) {
             $uuid         = $row["uuid"];
-            $instance     = (new Instance)->Lookup($uuid);
-            $profile      = (new Profile)->Lookup($instance->profile_id(),
+            $instance     = Instance::Lookup($uuid);
+            $profile      = Profile::Lookup($instance->profile_id(),
                                             $instance->profile_version());
             $instance_array[] =
                 array("uuid" => $uuid, "name" => $instance->name());
@@ -103,7 +103,7 @@ function SPITFORM($formfields, $errors)
         # Ask the DB for the list of aggregates that do datasets.
         #
         $amlist = array();
-        foreach ((new Aggregate)->SupportsDatasetsList() as $aggregate) {
+        foreach (Aggregate::SupportsDatasetsList() as $aggregate) {
             $amlist[$aggregate->urn()] = $aggregate->nickname();
         }
 	echo "<script type='text/plain' id='amlist-json'>\n";

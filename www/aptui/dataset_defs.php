@@ -30,7 +30,7 @@ class Dataset
     #
     # Constructor by lookup on unique index.
     #
-    function Dataset($token) {
+    function __construct($token) {
 	$safe_token = addslashes($token);
 	$query_result = null;
 
@@ -59,7 +59,7 @@ class Dataset
     }
 
     # Lookup by idx.
-    function Lookup($token) {
+    public static function Lookup($token) {
 	$foo = new Dataset($token);
 
 	if (! $foo->IsValid()) {
@@ -68,7 +68,7 @@ class Dataset
 	return $foo;
     }
     # Lookup by name in a project
-    function LookupByName($project, $name) {
+    public static function LookupByName($project, $name) {
 	$pid       = $project->pid();
 	$safe_name = addslashes($name);
 	
@@ -80,7 +80,7 @@ class Dataset
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return (new Dataset)->Lookup($row["idx"]);
+	return Dataset::Lookup($row["idx"]);
     }
 
     # accessors
@@ -206,18 +206,18 @@ class Dataset
         return $command;
     }
     function modifyCommand($webtask) {
-        return (new Dataset)->grantCommand($webtask);
+        return Dataset::grantCommand($webtask);
     }
 
     # Grab the webtask. Backwards compat mode, see if there is one associated
     # with the object, use that. Otherwise create a new one.
     function WebTask() {
         if ($this->webtask_id()) {
-            return (new WebTask)->Lookup($this->webtask_id());
+            return WebTask::Lookup($this->webtask_id());
         }
-        $webtask = (new WebTask)->LookupByObject($this->uuid());
+        $webtask = WebTask::LookupByObject($this->uuid());
         if (!$webtask) {
-            $webtask = (new WebTask)->CreateAnonymous();
+            $webtask = WebTask::CreateAnonymous();
             if (!$webtask) {
                 return null;
             }
@@ -236,7 +236,7 @@ class Dataset
 	if ($this->project)
 	    return $this->project;
 
-	$this->project = (new Project)->Lookup($pid);
+	$this->project = Project::Lookup($pid);
 	if (! $this->project) {
 	    TBERROR("Could not lookup project $pid!", 1);
 	}

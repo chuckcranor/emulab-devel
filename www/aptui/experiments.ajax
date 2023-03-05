@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -118,7 +118,7 @@ function Do_ExperimentList()
         }
         $blob["status"] = $status;
         
-        $profile = (new Profile)->Lookup($profile_id, $version);
+        $profile = Profile::Lookup($profile_id, $version);
         if ($profile) {
             $blob["profile_name"] = $profile->name();
             $blob["profile_uuid"] = $profile->uuid();
@@ -290,7 +290,7 @@ function Do_SearchIP()
         SPITAJAX_ERROR(-1, "Invalid search token");
         return;
     }
-    $webtask = (new WebTask)->CreateAnonymous();
+    $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC($this_uid, "nobody",
 		     "websearchip -t " .
                         $webtask->task_id() . " " . escapeshellarg($token),

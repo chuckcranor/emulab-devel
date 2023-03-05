@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -45,7 +45,7 @@ $optargs = OptionalPageArguments("debug",    PAGEARG_BOOLEAN,
                                  "cluster",  PAGEARG_STRING);
 
 if (isset($cluster)) {
-    $aggregate = (new Aggregate)->LookupByNickname($cluster);
+    $aggregate = Aggregate::LookupByNickname($cluster);
     if (!$aggregate) {
         SPITUSERERROR("No such cluster: $cluster");
         exit();
@@ -71,10 +71,10 @@ if (isset($aggregate)) {
     $ams = array($aggregate);
 }
 elseif (isset($debug) && $debug) {
-    $ams = array((new Aggregate)->ThisAggregate());
+    $ams = array(Aggregate::ThisAggregate());
 }
 else {
-    $ams = (new Aggregate)->SupportsReservations($this_user);
+    $ams = Aggregate::SupportsReservations($this_user);
 }
 if (!count($ams)) {
     SPITUSERERROR("No clusters support reservations.");
@@ -105,11 +105,11 @@ echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
 echo "</script>\n";
 if ($ISPOWDER) {
-    $radioinfo = (new Aggregate)->RadioInfoNew();
+    $radioinfo = Aggregate::RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
     echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
     echo "</script>\n";
-    $matrixinfo = (new Aggregate)->MatrixInfo();
+    $matrixinfo = Aggregate::MatrixInfo();
     echo "<script type='text/plain' id='matrixinfo-json'>\n";
     echo htmlentities(json_encode($matrixinfo, JSON_NUMERIC_CHECK));
     echo "</script>\n";

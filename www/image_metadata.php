@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2023 University of Utah and the Flux Group.
+# Copyright (c) 2003-2016, 2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,7 +46,7 @@ elseif ($clientversion < 0) {
     SPITERROR(404, "Bad client version argument!");
 }
 
-$image = (new Image)->LookupByUUID($uuid, $version);
+$image = Image::LookupByUUID($uuid, $version);
 if (! isset($image)) {
     SPITERROR(404, "Could not find $uuid!");
 }

@@ -39,7 +39,7 @@ class Image
     #
     # Constructor by lookup on unique ID
     #
-    function __construct($id = ":", $version = NULL) {
+    function __construct($id, $version = NULL) {
 	if (is_null($version)) {
 	    list($id,$version) = preg_split('/:/', $id);
 	}
@@ -84,7 +84,7 @@ class Image
     }
 
     # Lookup by imageid
-    function Lookup($id, $version = NULL) {
+    public static function Lookup($id, $version = NULL) {
 	$foo = new Image($id,$version);
 
 	if (! $foo->IsValid())
@@ -94,7 +94,7 @@ class Image
     }
 
     # Lookup by imagename in a project
-    function LookupByName($project, $name) {
+    public static function LookupByName($project, $name) {
 	$pid       = $project->pid();
 	$safe_name = addslashes($name);
 	
@@ -106,7 +106,7 @@ class Image
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return (new Image)->Lookup($row["imageid"]);
+	return Image::Lookup($row["imageid"]);
     }
 
     # Look for most recent unreleased version.
@@ -129,7 +129,7 @@ class Image
 	    return $this;
 	}
 	$row = mysql_fetch_array($query_result);
-	return (new Image)->Lookup($imageid, $row["version"]);
+	return Image::Lookup($imageid, $row["version"]);
     }
 
     # Lookup next higher version of the image.
@@ -151,10 +151,10 @@ class Image
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return (new Image)->Lookup($imageid, $row["version"]);
+	return Image::Lookup($imageid, $row["version"]);
     }
 
-    function LookupByUUID($uuid, $version = NULL) {
+    public static function LookupByUUID($uuid, $version = NULL) {
 	$safe_uuid = addslashes($uuid);
 
 	#
@@ -173,7 +173,7 @@ class Image
 		# Must have the version specific UUID.
 		#
 		$row = mysql_fetch_array($query_result);
-		return (new Image)->Lookup($row["imageid"], $version);
+		return Image::Lookup($row["imageid"], $version);
 	    }
 	}
 	else {
@@ -186,7 +186,7 @@ class Image
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-	return (new Image)->Lookup($row["imageid"], $row["version"]);
+	return Image::Lookup($row["imageid"], $row["version"]);
     }
     
     #
@@ -220,7 +220,7 @@ class Image
     #
     # Check for the image tracker.
     #
-    function UseImageTracker()
+    public static function UseImageTracker()
     {
         if (! TBSiteVarExists("protogeni/use_imagetracker")) {
             return 0;
@@ -231,8 +231,8 @@ class Image
     #
     # Class function to create a new image descriptor.
     #
-    function NewImageId($ez, $imagename, $args, $creator, $group,
-			$target, &$errors) {
+    public static function NewImageId($ez, $imagename, $args, $creator, $group,
+			   	      $target, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -307,7 +307,7 @@ class Image
 	    return null;
 	}
 	$image = $matches[2];
-	$newimage = (new image)->Lookup($image);
+	$newimage = image::Lookup($image);
 	if (! $newimage) {
 	    $errors[] = "Transient error(6); please try again later.";
 	    TBERROR("Could not lookup new image $image", 0);
@@ -415,7 +415,7 @@ class Image
     #
     # Class function to edit an image descriptor.
     #
-    function EditImageid($image, $args, &$errors) {
+    public static function EditImageid($image, $args, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -684,7 +684,7 @@ class Image
 	if ($this->project)
 	    return $this->project;
 
-	$this->project = (new Project)->Lookup($pid_idx);
+	$this->project = Project::Lookup($pid_idx);
 	if (! $this->project) {
 	    TBERROR("Could not lookup project $pid_idx!", 1);
 	}
@@ -699,7 +699,7 @@ class Image
 	if ($this->group)
 	    return $this->group;
 
-	$this->group = (new Group)->Lookup($gid_idx);
+	$this->group = Group::Lookup($gid_idx);
 	if (! $this->group) {
 	    TBERROR("Could not lookup group $gid_idx!", 1);
 	}
@@ -985,7 +985,7 @@ class Image
 	if ($this->parent_imageid()) {
 	    $p_imageid   = $this->parent_imageid();
 	    $p_version   = $this->parent_version();
-	    $p_image     = (new Image)->Lookup($p_imageid, $p_version);
+	    $p_image     = Image::Lookup($p_imageid, $p_version);
 	    # On an elabinelab we will not have the previous version.
 	    # if it came in at creation time.
 	    if ($p_image) {
@@ -1054,7 +1054,7 @@ class Image
 	    $doesxen = 0;
 	    $osinfo = $this->OSinfo();
 	    if ($osinfo && $osinfo->def_parentosid()) {
-		$parentosinfo = (new OSinfo)->Lookup($osinfo->def_parentosid());
+		$parentosinfo = OSinfo::Lookup($osinfo->def_parentosid());
 		if ($parentosinfo &&
 		    $parentosinfo->FeatureSupported("xen-host")) {
 		    $doesxen = 1;
@@ -1155,7 +1155,7 @@ class Image
 		    }
 
 		    if ($perm_type == "user") {
-			$user = (new User)->Lookup($perm_idx);
+			$user = User::Lookup($perm_idx);
 			if (isset($user)) {
 			    $uid = $user->uid();
 			    echo "<tr>
@@ -1165,7 +1165,7 @@ class Image
 			}
 		    }
 		    elseif ($perm_type == "group") {
-			$group = (new Group)->Lookup($perm_idx);
+			$group = Group::Lookup($perm_idx);
 			if (isset($group)) {
 			    $pid = $group->pid();
 			    $gid = $group->gid();
@@ -1239,7 +1239,7 @@ class Image
                              "   FIND_IN_SET(nt.architecture,i.architecture) ".
                              "where i.imageid='$imageid'");
 
-            $osinfo = (new OSinfo)->Lookup($imageid, $version);
+            $osinfo = OSinfo::Lookup($imageid, $version);
             if ($osinfo && $osinfo->def_parentosid()) {
                 $result[] = "pcvm";
             }
@@ -1260,7 +1260,7 @@ class Image
 	$this->Refresh();
 	
 	if ($this->logfileid()) 
-	    return (new Logfile)->Lookup($this->logfileid());
+	    return Logfile::Lookup($this->logfileid());
 	return null;
     }
 
@@ -1276,7 +1276,7 @@ class Image
                 $xenname = "emulab-ops,XEN43-64-STD";
             }
 	    list($pid,$osname) = preg_split('/,/', $xenname);
-	    $parentosinfo = (new OSinfo)->LookupByName($pid,$osname);
+	    $parentosinfo = OSinfo::LookupByName($pid,$osname);
 	    if (!$parentosinfo) {
                 return -1;
 	    }
@@ -1319,7 +1319,7 @@ class Image
 	return $html;
     }
     function OSinfo() {
-	return (new OSinfo)->Lookup($this->imageid(), $this->version());
+	return OSinfo::Lookup($this->imageid(), $this->version());
     }
 
     function URL() {
@@ -1337,3 +1337,4 @@ class Image
         return "$TBBASE/image_metadata.php?uuid=$uuid";
     }
 }
+?>

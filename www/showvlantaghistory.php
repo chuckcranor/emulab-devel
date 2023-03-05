@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -221,8 +221,8 @@ if (mysql_num_rows($query_result)) {
 	    $id = $row{"history_id"};
 	}
 
-	$experiment = (new Experiment)->Lookup($exptidx);
-	$experiment_stats = (new ExperimentStats)->Lookup($exptidx);
+	$experiment = Experiment::Lookup($exptidx);
+	$experiment_stats = ExperimentStats::Lookup($exptidx);
 	if ($experiment_stats &&
 	    $experiment_stats->slice_uuid()) {
 	    $url = CreateURL("genihistory",

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,17 +45,17 @@ $optargs = RequiredPageArguments("uuid", PAGEARG_UUID);
 #
 # No header, since we spit back a redirect if the user has permission.
 #
-$instance = (new InstanceHistory)->LookupBySlice($uuid);
+$instance = InstanceHistory::LookupBySlice($uuid);
 if (!$instance) {
-    $instance = (new InstanceHistory)->Lookup($uuid);
+    $instance = InstanceHistory::Lookup($uuid);
     if (!$instance) {
         #
         # Check the current experiments table, which can happen if we forced
         # the wbstore to complete while some aggregates are offline.
         #
-        $instance = (new Instance)->LookupBySlice($uuid);
+        $instance = Instance::LookupBySlice($uuid);
         if (!$instance) {
-            $instance = (new Instance)->Lookup($uuid);
+            $instance = Instance::Lookup($uuid);
             if (!$instance) {
                 SPITUSERERROR("No such instance");
                 return;
@@ -76,7 +76,7 @@ if (!$isadmin &&
 $baseurl    = "https://${USERNODE}/getfilebyurl";
 $pid        = $project->pid();
 $path       = "/proj/$pid/wbstore/${uuid}.tgz";
-$webtask    = (new WebTask)->CreateAnonymous();
+$webtask    = WebTask::CreateAnonymous();
 $webtask_id = $webtask->task_id();
 
 $retval = SUEXEC("nobody", "nobody",

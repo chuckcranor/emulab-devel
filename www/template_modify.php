@@ -268,7 +268,7 @@ if (preg_match("/^Template\s+(\w+)\/(\w+)\s+is being/",
     $guid = $matches[1];
     $vers = $matches[2];
 
-    $template = (new Template)->Lookup($guid, $vers);
+    $template = Template::Lookup($guid, $vers);
     if (! $template) {
 	TBERROR("Could not lookup template object for $guid/$vers", 1);
 	return;

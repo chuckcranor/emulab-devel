@@ -754,7 +754,7 @@ if (! $returning) {
 	elseif (!TBvalid_uid($formfields["proj_head_uid"])) {
 	    $errors["UserName"] = TBFieldErrorString();
 	}
-	elseif ((new User)->Lookup($formfields["proj_head_uid"]) ||
+	elseif (User::Lookup($formfields["proj_head_uid"]) ||
 		posix_getpwnam($formfields["proj_head_uid"])) {
 	    $errors["UserName"] = "Already in use. Pick another";
 	}
@@ -787,7 +787,7 @@ if (! $returning) {
 	elseif (! TBvalid_wikiname($formfields["wikiname"])) {
 	    $errors["WikiName"] = TBFieldErrorString();
 	}
-	elseif ((new User)->LookupByWikiName($formfields["wikiname"])) {
+	elseif (User::LookupByWikiName($formfields["wikiname"])) {
 	    $errors["WikiName"] = "Already in use. Pick another";
 	}
     }
@@ -817,7 +817,7 @@ if (! $returning) {
             preg_match("/gavilan\.edu$/", $formfields["usr_email"])) {
         $errors["Email Address"] = "Not permitted";
     }
-    elseif ((new User)->LookupByEmail($formfields["usr_email"])) {
+    elseif (User::LookupByEmail($formfields["usr_email"])) {
         #
         # Treat this error separate. Not allowed.
         #
@@ -935,7 +935,7 @@ else {
     elseif (!TBvalid_newpid($formfields["pid"])) {
 	$errors["Project Name"] = TBFieldErrorString();
     }
-    elseif ((new Project)->LookupByPid($formfields["pid"])) {
+    elseif (Project::LookupByPid($formfields["pid"])) {
 	$errors["Project Name"] =
 	    "Already in use. Select another";
     }
@@ -1072,7 +1072,7 @@ if (!$returning) {
     # on NewNewUser would block and then unblock and get done; meanwhile the
     # PHP thread went away so we never returned here to call NewNewProject.
     #
-    if (! ($newuser_xml = (new User)->NewNewUserXML($args, $error)) != 0) {
+    if (! ($newuser_xml = User::NewNewUserXML($args, $error)) != 0) {
 	$errors["Error Creating User XML"] = $error;
 	TBERROR("B\n${error}\n\n" . print_r($args, TRUE), 0);
 	SPITFORM($formfields, $returning, $errors);
@@ -1124,7 +1124,7 @@ if (isset($formfields["proj_ronpcs"]) &&
     $args["ron"] = 1;
 }
 
-if (! ($project = (new Project)->NewNewProject($args, $error))) {
+if (! ($project = Project::NewNewProject($args, $error))) {
     $errors["Error Creating Project"] = $error;
     TBERROR("C\n${error}\n\n" . print_r($args, TRUE), 0);
     SPITFORM($formfields, $returning, $errors);
@@ -1139,7 +1139,7 @@ if ($FirstInitState) {
     $leader = $project->GetLeader();
     $proj_head_uid = $leader->uid();
     # Set up the management group (emulab-ops).
-    (new Group)->Initialize($proj_head_uid);
+    Group::Initialize($proj_head_uid);
     
     #
     # Move to next phase. 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -315,7 +315,7 @@ function Do_VerifySpeaksfor()
             session_destroy();
             return;
         }
-        $this_user = (new User)->LookupByUid($matches[3]);
+        $this_user = User::LookupByUid($matches[3]);
         if (!$this_user) {
             SPITAJAX_ERROR(1, "No local account for URN");
             session_destroy();
@@ -328,7 +328,7 @@ function Do_VerifySpeaksfor()
         }
     }
     else {
-        $this_user = (new User)->LookupNonLocal($info["urn"]);
+        $this_user = User::LookupNonLocal($info["urn"]);
 
         #
         # Check project membership before we go any further. We do not
@@ -354,7 +354,7 @@ function Do_VerifySpeaksfor()
                 session_destroy();
                 return;
             }
-            $this_user = (new User)->LookupNonLocal($info["urn"]);
+            $this_user = User::LookupNonLocal($info["urn"]);
             if (!$this_user) {
                 SPITAJAX_ERROR(-1, "Internal error looking up new user");
                 session_destroy();
@@ -367,7 +367,7 @@ function Do_VerifySpeaksfor()
             # we have a user record but they might not be a member of the
             # Cloudlab holding project. 
             #
-            $project = (new Project)->Lookup($PROTOGENI_HOLDINGPROJECT);
+            $project = Project::Lookup($PROTOGENI_HOLDINGPROJECT);
             if (! $project->IsMember($this_user, $ignored)) {
                 $project->AddNewMember($this_user, TBDB_TRUSTSTRING_LOCALROOT);
             }

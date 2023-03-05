@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,7 +42,7 @@ $this_idx  = $this_user->uid_idx();
 
 SPITHEADER(1);
 
-$profile = (new Profile)->Lookup($uuid);
+$profile = Profile::Lookup($uuid);
 if (!$profile) {
     SPITUSERERROR("No such profile!");
 }

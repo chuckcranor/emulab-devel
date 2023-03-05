@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,7 +38,7 @@ function CheckPageArgs()
 
     if (!(ISADMIN())) {
         $approved = 0;
-        $project = (new Project)->Lookup("PowderStop");
+        $project = Project::Lookup("PowderStop");
     
         if (!$project ||
             !$project->IsMember($this_user, $approved) || !$approved) {
@@ -58,7 +58,7 @@ function Do_StartShutdown()
     if (CheckPageArgs()) {
         return;
     }
-    $webtask = (new WebTask)->CreateAnonymous();
+    $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC($this_user->uid(), "nobody",
 		     "webpowder_shutdown -t " . $webtask->task_id() . " -b -d -n",
 		     SUEXEC_ACTION_CONTINUE);
@@ -73,7 +73,7 @@ function Do_StartShutdown()
     if (count($instances)) {
         for($i = 0; $i < count($instances); $i++) {
             $uuid = $instances[$i];
-            $instance = (new Instance)->Lookup($uuid);
+            $instance = Instance::Lookup($uuid);
             if (!$instance) {
                 continue;
             }
@@ -112,7 +112,7 @@ function Do_ShutdownStatus()
     $instances = $ajax_args["instances"];
     for($i = 0; $i < count($instances); $i++) {
         $uuid = $instances[$i];
-        $instance = (new Instance)->Lookup($uuid);
+        $instance = Instance::Lookup($uuid);
         if (!$instance) {
             continue;
         }

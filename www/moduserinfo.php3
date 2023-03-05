@@ -592,7 +592,7 @@ if (isset($formfields["notes"]) &&
     $args["notes"]	= $formfields["notes"];
 }
 
-if (! ($result = (new User)->ModUserInfo($target_user, $uid, $args, $errors))) {
+if (! ($result = User::ModUserInfo($target_user, $uid, $args, $errors))) {
     # Always respit the form so that the form fields are not lost.
     # I just hate it when that happens so lets not be guilty of it ourselves.
     SPITFORM($formfields, $errors);

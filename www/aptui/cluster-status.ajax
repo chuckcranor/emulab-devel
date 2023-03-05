@@ -45,14 +45,14 @@ function Do_GetStatus()
         $isadmin = 1;
     }
 
-    if ((new Instance)->ValidURN($ajax_args["cluster"])) {
+    if (Instance::ValidURN($ajax_args["cluster"])) {
         $cluster = $ajax_args["cluster"];
     }
     else {
         SPITAJAX_ERROR(1, "Not a valid cluster URN");
         return;
     }
-    $aggregate = (new Aggregate)->Lookup($cluster);
+    $aggregate = Aggregate::Lookup($cluster);
     if (!$aggregate) {
         SPITAJAX_ERROR(1, "No such cluster");
         return;
@@ -63,7 +63,7 @@ function Do_GetStatus()
     }
     $isus = ($cluster == $DEFAULT_AGGREGATE_URN ? 1 : 0);
     $cluster = escapeshellarg($cluster);
-    $webtask = (new WebTask)->CreateAnonymous();
+    $webtask = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
     $retval = SUEXEC("elabman", $TBADMINGROUP,
@@ -151,14 +151,14 @@ function Do_GetStatus()
                 $maxttl   = $maxttls[$details->slice_uuid];
             }
             else {
-                $instance = (new Instance)->LookupBySlice($details->slice_uuid);
+                $instance = Instance::LookupBySlice($details->slice_uuid);
                 if (! $instance) {
                     # Avoid not finding more then once.
                     $instance = null;
                 }
                 $instances[$details->slice_uuid] = $instance;
                 # Need the slice for this.
-                $slice = (new GeniSlice)->Lookup("sa", $details->slice_uuid);
+                $slice = GeniSlice::Lookup("sa", $details->slice_uuid);
 
                 if ($instance && $slice) {
                     #
@@ -210,9 +210,9 @@ function Do_GetStatus()
         
         if (property_exists($details, "reserved_urn") &&
             $details->reserved_urn != "" && 
-            (new Instance)->ValidURN($details->reserved_urn)) {
+            Instance::ValidURN($details->reserved_urn)) {
             
-            list ($auth,$type,$id) = (new Instance)->ParseURN($details->reserved_urn);
+            list ($auth,$type,$id) = Instance::ParseURN($details->reserved_urn);
             #
             # Subdomain is project id.
             #
@@ -230,7 +230,7 @@ function Do_GetStatus()
                 $reserved_project = $projects[$lpid];
             }
             else {
-                $reserved_project = (new Project)->Lookup($lpid);
+                $reserved_project = Project::Lookup($lpid);
                 if ($reserved_project) {
                     $projects[$lpid] = $reserved_project;
                 }
@@ -316,14 +316,14 @@ function Do_GetPreReservations()
         SPITAJAX_ERROR(1, "Not enough permission");
         return;
     }
-    if ((new Instance)->ValidURN($ajax_args["cluster"])) {
+    if (Instance::ValidURN($ajax_args["cluster"])) {
         $cluster = $ajax_args["cluster"];
     }
     else {
         $cluster = $ajax_args["cluster"] . ".cm";
     }
     $inuse = array();
-    $webtask = (new WebTask)->CreateAnonymous();
+    $webtask = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
     $retval = SUEXEC("elabman", $TBADMINGROUP,

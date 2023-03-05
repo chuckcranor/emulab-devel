@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,7 +47,7 @@ function CheckPageArgs()
         SPITAJAX_ERROR(-1, "Must supply project");
         return -1;
     }
-    $project = (new Project)->LookupByPid($ajax_args["pid"]);
+    $project = Project::LookupByPid($ajax_args["pid"]);
     if (!$project) {
         SPITAJAX_ERROR(-1, "No such project");
         return -1;
@@ -69,7 +69,7 @@ function Do_ProjectList()
     #
     # Look in the projects table to see which projects have not been approved.
     #
-    $projlist = (new Project)->PendingProjectList();
+    $projlist = Project::PendingProjectList();
 
     foreach ($projlist as $project) {
         $blob = array();

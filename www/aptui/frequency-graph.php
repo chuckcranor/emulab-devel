@@ -83,7 +83,7 @@ if ($which != "rfmonitor") {
         SPITUSERERROR("Not supported here.");
         exit();
     }
-    $aggregate = (new Aggregate)->ThisAggregate();
+    $aggregate = Aggregate::ThisAggregate();
     #
     # Kill the cluster argument, this only makes sense at the Mothership
     #
@@ -100,7 +100,7 @@ if (isset($cluster)) {
         SPITUSERERROR("Illegal characters in cluster");
         exit();
     }
-    $aggregate = (new Aggregate)->LookupByNickname($cluster);
+    $aggregate = Aggregate::LookupByNickname($cluster);
     if (!$aggregate) {
         SPITUSERERROR("No such cluster: $cluster");
         exit();
@@ -142,7 +142,7 @@ if (isset($range)) {
 # synthing is uploading things. 
 #
 if ($which == "rfmonitor-mobile" && isset($endpoint)) {
-    $aggregate = (new Aggregate)->LookupByNickname($endpoint);
+    $aggregate = Aggregate::LookupByNickname($endpoint);
     if ($aggregate) {
         $endpoint = str_replace("Bus", "bus-", $endpoint);
     }

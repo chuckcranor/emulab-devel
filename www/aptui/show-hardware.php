@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -110,8 +110,8 @@ if (isset($summary) && $summary) {
 echo "</script>\n";
 
 if (isset($clusters)) {
-    $all = (new Aggregate)->DefaultAggregateList();
-    $skiptypes = (new Instance)->NodeTypePruneList();
+    $all = Aggregate::DefaultAggregateList();
+    $skiptypes = Instance::NodeTypePruneList();
     $amlist  = array();
     while (list($index, $aggregate) = each($all)) {
         $urn = $aggregate->urn();

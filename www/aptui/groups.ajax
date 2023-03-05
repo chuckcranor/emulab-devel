@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,7 +59,7 @@ function CheckPageArgs()
 	SPITAJAX_ERROR(-1, "Invalid target gid");
         return -1;
     }
-    $target_group = (new Group)->LookupByPidGid($pid, $gid);
+    $target_group = Group::LookupByPidGid($pid, $gid);
     
     if (!$target_group) {
         sleep(2);
@@ -111,7 +111,7 @@ function Do_CreateGroup()
     if (!TBvalid_pid($formfields["project"])) {
 	$errors["project"] = $DBFieldErrstr;
     }
-    $project = (new Project)->LookupByPid($formfields["project"]);
+    $project = Project::LookupByPid($formfields["project"]);
     if (!$project) {
 	$errors["project"] = "No such project";
     }
@@ -129,7 +129,7 @@ function Do_CreateGroup()
 	$errors["group_leader"] = $DBFieldErrstr;
     }
     else {
-        $leader = (new User)->Lookup($formfields["group_leader"]);
+        $leader = User::Lookup($formfields["group_leader"]);
         if (!$leader) {
             $errors["group_leader"] = "No such leader";
         }
@@ -143,7 +143,7 @@ function Do_CreateGroup()
 	$errors["group_id"] = $DBFieldErrstr;
     }
     else {
-        $group = (new Group)->LookupByPidGid($pid, $formfields["group_id"]);
+        $group = Group::LookupByPidGid($pid, $formfields["group_id"]);
         if ($group) {
             $errors["group_id"] = "Already in use";
         }
@@ -170,7 +170,7 @@ function Do_CreateGroup()
     $args["group_description"] = $formfields["group_description"];
     $args["group_leader"] = $leader->uid();
 
-    if (! ($newgroup = (new Group)->Create($project, $this_uid, $args, $errors))) {
+    if (! ($newgroup = Group::Create($project, $this_uid, $args, $errors))) {
 	SPITAJAX_ERROR(2, $errors);
         return;
     }
@@ -305,7 +305,7 @@ function Do_MemberList()
              $target_group->CanDeleteUser($this_user, $user) ? 1 : 0);
 
         if ($statsokay) {
-            list($pcount, $phours) = (new Instance)->MonthsUsage($user,$target_group);
+            list($pcount, $phours) = Instance::MonthsUsage($user,$target_group);
             if ($phours) {
                 $blob["usage"] = array("pcount" => $pcount,
                                        "phours" => intval($phours));
@@ -399,7 +399,7 @@ function Do_EditMembership()
             SPITAJAX_ERROR(-1, "Invalid target user uid: $uid");
             return -1;
         }
-        $target_user = (new User)->LookupByUid($uid);
+        $target_user = User::LookupByUid($uid);
         if (!$target_user) {
             SPITAJAX_ERROR(-1, "Unknown target user uid: $uid");
             return -1;
@@ -443,7 +443,7 @@ function Do_EditMembership()
     }
     reset($users);
     foreach ($users as $uid => $trust) {
-        $target_user = (new User)->LookupByUid($uid);
+        $target_user = User::LookupByUid($uid);
         if (!$target_user) {
             SPITAJAX_ERROR(-1, "Unknown target user uid: $uid");
             return -1;
@@ -502,7 +502,7 @@ function Do_EditPrivs()
 	SPITAJAX_ERROR(-1, "Invalid target user uid");
 	return -1;
     }
-    $target_user = (new User)->LookupByUid($ajax_args["user_uid"]);
+    $target_user = User::LookupByUid($ajax_args["user_uid"]);
     if (!$target_user) {
 	SPITAJAX_ERROR(-1, "Unknown target user uid");
 	return -1;

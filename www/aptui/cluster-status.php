@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,7 +44,7 @@ $isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
 $optargs = OptionalPageArguments("cluster",  PAGEARG_STRING);
 
 if (isset($cluster)) {
-    $aggregate = (new Aggregate)->LookupByNickname($cluster);
+    $aggregate = Aggregate::LookupByNickname($cluster);
     if (!$aggregate) {
         SPITUSERERROR("No such cluster: $cluster");
         exit();
@@ -72,14 +72,14 @@ elseif ($ISCLOUD) {
                  "urn:publicid:IDN+lab.onelab.eu+authority+cm");
     $agglist = array();
     foreach ($tmp as $urn) {
-        $agglist[] = (new Aggregate)->Lookup($urn);
+        $agglist[] = Aggregate::Lookup($urn);
     }
 }
 elseif ($ISPOWDER) {
-    $agglist = (new Aggregate)->DefaultAggregateList($this_user);
+    $agglist = Aggregate::DefaultAggregateList($this_user);
 }
 else {
-    $agglist = array((new Aggregate)->Lookup($DEFAULT_AGGREGATE_URN));
+    $agglist = array(Aggregate::Lookup($DEFAULT_AGGREGATE_URN));
 }
 
 $aggregates = array();

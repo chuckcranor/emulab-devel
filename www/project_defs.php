@@ -57,7 +57,7 @@ class Project
     }
 
     # Lookup by pid_idx.
-    function Lookup($pid_idx) {
+    public static function Lookup($pid_idx) {
 	global $project_cache;
 
         # Look in cache first
@@ -68,7 +68,7 @@ class Project
 
 	if (! $foo->IsValid()) {
 	    # Try lookup by plain uid.
-	    $foo = (new Project)->LookupByPid($pid_idx);
+	    $foo = Project::LookupByPid($pid_idx);
 	    
 	    if (!$foo || !$foo->IsValid())
 		return null;
@@ -82,7 +82,7 @@ class Project
     }
 
     # Backwards compatable lookup by pid. Will eventually flush this.
-    function LookupByPid($pid) {
+    public static function LookupByPid($pid) {
 	$safe_pid = addslashes($pid);
 	global $project_cache;
 
@@ -259,7 +259,7 @@ class Project
     #
     # Class function to create new project and return object.
     #
-    function NewProject($pid, $leader, $args) {
+    public static function NewProject($pid, $leader, $args) {
 	global $TBBASE, $TBMAIL_APPROVAL, $TBMAIL_AUDIT, $TBMAIL_WWW;
 	
 	#
@@ -273,7 +273,7 @@ class Project
 	}
 
 	# First create the underlying default group for the project.
-	if (! ($newgroup = (new Group)->NewGroup(null, $pid, $leader,
+	if (! ($newgroup = Group::NewGroup(null, $pid, $leader,
 					   'Default Group', $pid))) {
 	    return null;
 	}
@@ -301,7 +301,7 @@ class Project
 	    DBQueryFatal("delete from projects where pid_idx='$pid_idx'");
 	    return null;
 	}
-	$newproject = (new Project)->Lookup($pid_idx);
+	$newproject = Project::Lookup($pid_idx);
 	if (! $newproject)
 	    return null;
 
@@ -319,7 +319,7 @@ class Project
 	return $newproject;
     }
 
-    function NewNewProject($args, &$error) {
+    public static function NewNewProject($args, &$error) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -374,7 +374,7 @@ class Project
 	    return null;
 	}
 	$pid_idx = $matches[2];
-	$newproj = (new Project)->Lookup($pid_idx);
+	$newproj = Project::Lookup($pid_idx);
 	if (! $newproj) {
 	    $error = "Transient error(5); please try again later.";
 	    TBERROR("Could not lookup new project $pid_idx", 0);
@@ -389,7 +389,7 @@ class Project
     #
     # Class function to return a list of pending (unapproved) projects.
     #
-    function PendingProjectList() {
+    public static function PendingProjectList() {
 	$result     = array();
 
 	$query_result =
@@ -402,7 +402,7 @@ class Project
 	    $pid_idx = $row["pid_idx"];
 	    $created = $row["day_created"];
 
-	    if (! ($project = (new Project)->Lookup($pid_idx))) {
+	    if (! ($project = Project::Lookup($pid_idx))) {
 		TBERROR("Project::PendingProjectList: ".
 			"Could not load project $pid_idx!", 1);
 	    }
@@ -480,7 +480,7 @@ class Project
 	# Note: pid_idx=gid_idx for the default group
 	$gid_idx = $this->pid_idx();
 
-	if (! ($group = (new Group)->Lookup($gid_idx))) {
+	if (! ($group = Group::Lookup($gid_idx))) {
 	    TBERROR("Project::LoadDefaultGroup: ".
 		    "Could not load group $gid_idx!", 1);
 	}
@@ -496,7 +496,7 @@ class Project
     function LookupSubgroupByName($name) {
 	$pid = $this->pid();
 
-	return (new Group)->LookupByPidGid($pid, $name);
+	return Group::LookupByPidGid($pid, $name);
     }
 
     #
@@ -516,7 +516,7 @@ class Project
 	while ($row = mysql_fetch_array($query_result)) {
 	    $gid_idx = $row["gid_idx"];
 
-	    if (! ($group = (new Group)->Lookup($gid_idx))) {
+	    if (! ($group = Group::Lookup($gid_idx))) {
 		TBERROR("Project::LoadSubGroups: ".
 			"Could not load group $gid_idx!", 1);
 	    }
@@ -536,7 +536,7 @@ class Project
     function GetLeader() {
 	$head_idx = $this->head_idx();
 
-	if (! ($leader = (new User)->Lookup($head_idx))) {
+	if (! ($leader = User::Lookup($head_idx))) {
 	    TBERROR("Could not find user object for $head_idx", 1);
 	}
 	return $leader;
@@ -592,7 +592,7 @@ class Project
     # Lookup an experiment within a project.
     #
     function LookupExperiment($eid) {
-	return (new Experiment)->LookupByPidEid($this->pid(), $eid);
+	return Experiment::LookupByPidEid($this->pid(), $eid);
     }
 
     #
@@ -628,7 +628,7 @@ class Project
 	while ($row = mysql_fetch_array($query_result)) {
 	    $uid_idx = $row["uid_idx"];
 
-	    if (! ($user = (new User)->Lookup($uid_idx))) {
+	    if (! ($user = User::Lookup($uid_idx))) {
 		TBERROR("Project::MemberList: ".
 			"Could not load user $uid_idx!", 1);
 	    }
@@ -652,7 +652,7 @@ class Project
 	while ($row = mysql_fetch_array($query_result)) {
 	    $uid_idx = $row["uid_idx"];
 
-	    if (! ($user = (new User)->Lookup($uid_idx))) {
+	    if (! ($user = User::Lookup($uid_idx))) {
 		TBERROR("Project::GetAdmins: ".
 			"Could not load user $uid_idx!", 1);
 	    }
@@ -677,7 +677,7 @@ class Project
 	while ($row = mysql_fetch_array($query_result)) {
 	    $gid_idx = $row["gid_idx"];
 
-	    if (! ($group = (new Group)->Lookup($gid_idx))) {
+	    if (! ($group = Group::Lookup($gid_idx))) {
 		TBERROR("Project::GroupList: ".
 			"Could not load group $gid_idx!", 1);
 	    }
@@ -871,7 +871,7 @@ class Project
 	    $proj_plabpcs  = YesNo($this->num_pcplab());
 	}
 
-	if (! ($head_user = (new User)->Lookup($proj_head_idx))) {
+	if (! ($head_user = User::Lookup($proj_head_idx))) {
 	    TBERROR("Could not lookup object for user $proj_head_idx", 1);
 	}
 	$showuser_url  = CreateURL("showuser", $head_user);

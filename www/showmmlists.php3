@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2005-2023 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2006, 2007, 2010 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -186,7 +186,7 @@ if (mysql_num_rows($query_result)) {
 	$owner_uid = $row['owner_uid'];
 	$mmurl     = "gotommlist?listname=${listname}";
 
-	if (! ($owner_user = (new User)->Lookup($owner_uid))) {
+	if (! ($owner_user = User::Lookup($owner_uid))) {
 	    TBERROR("Could not lookup object for user $owner_uid", 1);
 	}
 	$showuser_url = CreateURL("showuser", $owner_user);

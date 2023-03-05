@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,7 +54,7 @@ function CheckPageArgs()
 	SPITAJAX_ERROR(-1, "Invalid target uid");
         return -1;
     }
-    $target_user = (new User)->LookupByUid($uid);
+    $target_user = User::LookupByUid($uid);
     if (!$target_user) {
 	SPITAJAX_ERROR(-1, "Unknown target uid");
         return -1;

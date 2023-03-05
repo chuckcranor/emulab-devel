@@ -280,7 +280,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         }
     }
     echo "<script src='$APTBASE/js/lib/jquery.min.js'></script>\n";
-    echo "<script>APT_CACHE_TOKEN='" . (new Instance)->CacheToken() . "';</script>";
+    echo "<script>APT_CACHE_TOKEN='" . Instance::CacheToken() . "';</script>";
     echo "<script src='$APTBASE/js/common.js?nocache=asdfasdf'></script>
         <link rel='stylesheet' href='$APTBASE/css/jquery-steps.css'>
         <script src='$TBBASE/emulab_sup.js'></script>
@@ -347,7 +347,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         }
     }
     if ($login_user)  {
-        $recents = (new Instance)->RecentExperiments($login_user);
+        $recents = Instance::RecentExperiments($login_user);
         if ($recents) {
             $addHeaderVariable("recents", $recents);
         }
@@ -379,10 +379,10 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
                 }                    
             }
         }
-        list($foo, $phours) = (new Instance)->CurrentUsage($login_user);
-        list($foo, $weeksusage) = (new Instance)->WeeksUsage($login_user);
-        list($foo, $monthsusage) = (new Instance)->MonthsUsage($login_user);
-        list($rank, $ranktotal) = (new Instance)->Ranking($login_user, 30);
+        list($foo, $phours) = Instance::CurrentUsage($login_user);
+        list($foo, $weeksusage) = Instance::WeeksUsage($login_user);
+        list($foo, $monthsusage) = Instance::MonthsUsage($login_user);
+        list($rank, $ranktotal) = Instance::Ranking($login_user, 30);
         if ($phours || $weeksusage || $monthsusage) {
             $addHeaderVariable("phours", sprintf("%.2f", $phours));
             $addHeaderVariable("week", sprintf("%.2f", $weeksusage));

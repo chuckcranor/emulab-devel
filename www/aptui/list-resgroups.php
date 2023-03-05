@@ -46,7 +46,7 @@ if ($all && !$isadmin) {
 }
 
 # List of clusters so we have info in the page
-$ams     = (new Aggregate)->SupportsReservations();
+$ams     = Aggregate::SupportsReservations();
 $amlist  = array();
 while (list($index, $aggregate) = each($ams)) {
     $amlist[$aggregate->nickname()] = $aggregate->urn();

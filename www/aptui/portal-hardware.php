@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,7 +58,7 @@ echo "<div id='main-body'>
  </div>
 </div>";
 
-$all = (new Aggregate)->AllAggregatesList();
+$all = Aggregate::AllAggregatesList();
 $amlist  = array();
 while (list($index, $aggregate) = each($all)) {
     $urn = $aggregate->urn();

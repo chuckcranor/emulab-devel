@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2011 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -134,7 +134,7 @@ function Show($which, $zoom, $detail)
 	    $html .= "<input id=showexp_recursive type=checkbox value=Yep> ";
 	    $html .= "Recursive? &nbsp &nbsp &nbsp &nbsp ";
 	}
-	$root = (new Template)->LookupRoot($template->guid());
+	$root = Template::LookupRoot($template->guid());
 
         # We overload the hidden bit on the root.
 	if ($root->IsHidden()) {

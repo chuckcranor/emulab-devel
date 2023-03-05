@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,7 +58,7 @@ if ((isset($keyB) && $keyB != "") && (!isset($keyA) || $keyA == "")) {
 	      "Knowledge Base Entry</a> to see what the likely cause is.", 1);
 }
 
-if (!isset($user) || $user == "" || !(new User)->ValidWebID($user) ||
+if (!isset($user) || $user == "" || !User::ValidWebID($user) ||
     !isset($keyA) || $keyA == "" || !preg_match("/^[\w]+$/", $keyA) ||
     !isset($keyB) || $keyB == "" || !preg_match("/^[\w]+$/", $keyB)) {
     PAGEARGERROR();
@@ -151,7 +151,7 @@ function SPITFORM($target_user, $key, $failed, $simple, $view)
 # Check to make sure that the key is valid and that the timeout has not
 # expired.
 #
-if (! ($target_user = (new User)->Lookup($user))) {
+if (! ($target_user = User::Lookup($user))) {
     # Silent error about invalid users.
     PAGEARGERROR();
 }

@@ -38,7 +38,7 @@ class ReservationGroup
     #
     # Constructor by lookup by urn
     #
-    function ReservationGroup($uuid, $history = 0) {
+    function __construct($uuid, $history = 0) {
 	$safe_uuid = addslashes($uuid);
 
 	$query_result =
@@ -58,11 +58,11 @@ class ReservationGroup
         $this->ishistory    = $history;
 	$this->resgroup     = mysql_fetch_array($query_result);
         $this->reservations =
-            (new ReservationGroupReservation)->LookupForGroup($this, $history);
+            ReservationGroupReservation::LookupForGroup($this, $history);
         $this->rfreservations =
-            (new ReservationGroupRFReservation)->LookupForGroup($this, $history);
+            ReservationGroupRFReservation::LookupForGroup($this, $history);
         $this->routereservations =
-            (new ReservationGroupRouteReservation)->LookupForGroup($this, $history);
+            ReservationGroupRouteReservation::LookupForGroup($this, $history);
     }
     # accessors
     function reservations()   { return $this->reservations; }
@@ -89,7 +89,7 @@ class ReservationGroup
     
     # Project of resgroup.
     function Project() {
-        return (new Project)->Lookup($this->pid_idx());
+        return Project::Lookup($this->pid_idx());
     }
 
     # Hmm, how does one cause an error in a php constructor?
@@ -98,7 +98,7 @@ class ReservationGroup
     }
 
     # Lookup up by uuid,
-    function Lookup($uuid, $history = 0) {
+    public static function Lookup($uuid, $history = 0) {
 	$foo = new ReservationGroup($uuid, $history);
 
 	if ($foo->IsValid()) {
@@ -108,7 +108,7 @@ class ReservationGroup
     }
 
     # Lookup for a user.
-    function LookupForUser($user, $history = 0)
+    public static function LookupForUser($user, $history = 0)
     {
         $uid_idx = $user->uid_idx();
         $result = array();
@@ -119,7 +119,7 @@ class ReservationGroup
                                       "apt_reservation_groups ") .
                                      "where creator_idx='$uid_idx'");
 	while ($row = mysql_fetch_array($query_result)) {
-            $reservation = (new ReservationGroup)->Lookup($row["uuid"], $history);
+            $reservation = ReservationGroup::Lookup($row["uuid"], $history);
             if ($reservation) {
                 $result[] = $reservation;
             }
@@ -128,7 +128,7 @@ class ReservationGroup
     }
 
     # Lookup for a project.
-    function LookupForProject($project, $history = 0)
+    public static function LookupForProject($project, $history = 0)
     {
         $pid_idx = $project->pid_idx();
         $result = array();
@@ -139,7 +139,7 @@ class ReservationGroup
                                       "apt_reservation_groups ") .
                                      "where pid_idx='$pid_idx'");
 	while ($row = mysql_fetch_array($query_result)) {
-            $reservation = (new ReservationGroup)->Lookup($row["uuid"], $history);
+            $reservation = ReservationGroup::Lookup($row["uuid"], $history);
             if ($reservation) {
                 $result[] = $reservation;
             }
@@ -148,7 +148,7 @@ class ReservationGroup
     }
 
     # Lookup all (admin)
-    function LookupAll($history = 0)
+    public static function LookupAll($history = 0)
     {
         $result = array();
         
@@ -159,7 +159,7 @@ class ReservationGroup
                           "where created>DATE_SUB(curdate(), INTERVAL 1 MONTH) " :
                           "apt_reservation_groups"));
 	while ($row = mysql_fetch_array($query_result)) {
-            $reservation = (new ReservationGroup)->Lookup($row["uuid"], $history);
+            $reservation = ReservationGroup::Lookup($row["uuid"], $history);
             if ($reservation) {
                 $result[] = $reservation;
             }
@@ -170,7 +170,7 @@ class ReservationGroup
     #
     # Lookup group by a member of the group
     #
-    function LookupByMemberReservation($remote_uuid)
+    public static function LookupByMemberReservation($remote_uuid)
     {
         $safe_uuid = addslashes($remote_uuid);
         
@@ -182,7 +182,7 @@ class ReservationGroup
 	    return null;
 	}
 	$row = mysql_fetch_array($query_result);
-        return (new ReservationGroup)->Lookup($row["uuid"]);
+        return ReservationGroup::Lookup($row["uuid"]);
     }
 
     #
@@ -198,7 +198,7 @@ class ReservationGroup
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $aggregate = (new Aggregate)->Lookup($row["aggregate_urn"]);
+            $aggregate = Aggregate::Lookup($row["aggregate_urn"]);
             if ($aggregate) {
                 $result[] = $aggregate;
             }
@@ -264,7 +264,7 @@ class ReservationGroup
         $details  = array();
         # Compute a status column based on reservations.
         $status   = "approved";
-        $project  = (new Project)->Lookup($resgroup->pid_idx());
+        $project  = Project::Lookup($resgroup->pid_idx());
         # We will use any one of the approval stamps below.
         $approval = null;
     
@@ -454,7 +454,7 @@ class ReservationGroup
     # reservations in all of the projects a user is a member of.
     # Only care about cluster reservations.
     #
-    function ReservationInfo($projlist)
+    public static function ReservationInfo($projlist)
     {
         $current = array();
         $future  = array();
@@ -475,7 +475,7 @@ class ReservationGroup
                          "     g.pid in ($pidlist)");
         
 	while ($row = mysql_fetch_array($query_result)) {
-            $res = (new ReservationGroup)->Lookup($row["uuid"]);
+            $res = ReservationGroup::Lookup($row["uuid"]);
             $urn = $row["aggregate_urn"];
             $pid = $res->pid();
 
@@ -509,7 +509,7 @@ class ReservationGroupReservation
     #
     # Constructor to lookup a single reservation in a group.
     #
-    function ReservationGroupReservation($group, $urn, $type, $history = 0) {
+    function __construct($group, $urn, $type, $history = 0) {
 	$uuid = $group->uuid();
         $safe_urn  = addslashes($urn);
         $safe_type = addslashes($type);
@@ -556,7 +556,7 @@ class ReservationGroupReservation
 	return !is_null($this->reservation);
     }
 
-    function Lookup($group, $urn, $type, $history = 0) {
+    public static function Lookup($group, $urn, $type, $history = 0) {
 	$foo = new ReservationGroupReservation($group, $urn, $type, $history);
 
 	if ($foo->IsValid()) {
@@ -587,7 +587,7 @@ class ReservationGroupReservation
     #
     # Lookup all reservations for a group
     #
-    function LookupForGroup($group, $history = 0) {
+    public static function LookupForGroup($group, $history = 0) {
         $result = array();
         $uuid   = $group->uuid();
 
@@ -599,7 +599,7 @@ class ReservationGroupReservation
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $res = (new ReservationGroupReservation)->Lookup($group,
+            $res = ReservationGroupReservation::Lookup($group,
                                                         $row['aggregate_urn'],
                                                         $row['type'], $history);
             if ($res) {
@@ -610,7 +610,7 @@ class ReservationGroupReservation
     }
 
     function Aggregate() {
-        return (new Aggregate)->Lookup($this->aggregate_urn());
+        return Aggregate::Lookup($this->aggregate_urn());
     }
 }
 class ReservationGroupRFReservation
@@ -621,7 +621,7 @@ class ReservationGroupRFReservation
     #
     # Constructor to lookup a single reservation in a group.
     #
-    function ReservationGroupRFReservation($group, $freq_uuid, $history = 0) {
+    function __construct($group, $freq_uuid, $history = 0) {
 	$uuid = $group->uuid();
         $safe_uuid  = addslashes($freq_uuid);
 
@@ -658,7 +658,7 @@ class ReservationGroupRFReservation
 	return !is_null($this->reservation);
     }
 
-    function Lookup($group, $uuid, $history = 0) {
+    public static function Lookup($group, $uuid, $history = 0) {
 	$foo = new ReservationGroupRFReservation($group, $uuid, $history);
 
 	if ($foo->IsValid()) {
@@ -670,7 +670,7 @@ class ReservationGroupRFReservation
     #
     # Lookup all reservations for a group
     #
-    function LookupForGroup($group, $history = 0) {
+    public static function LookupForGroup($group, $history = 0) {
         $result = array();
         $uuid   = $group->uuid();
 
@@ -682,9 +682,9 @@ class ReservationGroupRFReservation
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $res = (new ReservationGroupRFReservation)->Lookup($group,
+            $res = ReservationGroupRFReservation::Lookup($group,
                                                          $row['freq_uuid'],
-							 $history);
+                                                         $history);
             if ($res) {
                 $result[] = $res;
             }
@@ -700,8 +700,7 @@ class ReservationGroupRouteReservation
     #
     # Constructor to lookup a single reservation in a group.
     #
-    function ReservationGroupRouteReservation($group, $route_uuid,
-                                              $history = 0) {
+    function __construct($group, $route_uuid, $history = 0) {
 	$uuid = $group->uuid();
         $safe_uuid  = addslashes($route_uuid);
 
@@ -738,7 +737,7 @@ class ReservationGroupRouteReservation
 	return !is_null($this->reservation);
     }
 
-    function Lookup($group, $uuid, $history = 0) {
+    public static function Lookup($group, $uuid, $history = 0) {
 	$foo = new ReservationGroupRouteReservation($group, $uuid, $history);
 
 	if ($foo->IsValid()) {
@@ -750,7 +749,7 @@ class ReservationGroupRouteReservation
     #
     # Lookup all reservations for a group
     #
-    function LookupForGroup($group, $history = 0) {
+    public static function LookupForGroup($group, $history = 0) {
         $result = array();
         $uuid   = $group->uuid();
 
@@ -762,9 +761,9 @@ class ReservationGroupRouteReservation
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            $res = (new ReservationGroupRouteReservation)->Lookup($group,
+            $res = ReservationGroupRouteReservation::Lookup($group,
                                                             $row['route_uuid'],
-							    $history);
+                                                            $history);
             if ($res) {
                 $result[] = $res;
             }

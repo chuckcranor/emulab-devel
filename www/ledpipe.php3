@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,7 +38,7 @@ if (!TBvalid_node_id($node)) {
     USERERROR("Invalid node ID.", 1);
 }
 
-if (! ($target_node = (new Node)->Lookup($node))) {
+if (! ($target_node = Node::Lookup($node))) {
     USERERROR("Invalid node ID.", 1);
 }
 

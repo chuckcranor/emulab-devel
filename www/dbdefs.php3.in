@@ -1017,7 +1017,7 @@ function HaveStoragePool()
 {
     global $TBOPSPID;
     
-    $experiment = (new Experiment)->LookupByPidEid($TBOPSPID, "storage-pool");
+    $experiment = Experiment::LookupByPidEid($TBOPSPID, "storage-pool");
     if ($experiment) {
 	return $experiment->PCCount();
     }
