@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -165,7 +165,7 @@ function Do_Create()
         $errors["profile_pid"] = "Not enough permission in project";
     }
     elseif (($action == "create" || $action == "clone") && 
-            Profile::LookupByName($project, $formfields{"profile_name"})) {
+            Profile::LookupByName($project, $formfields["profile_name"])) {
         $errors["profile_name"] = "Already in use";
     }
     
@@ -919,7 +919,7 @@ function Do_BindParameters()
 {
     global $this_user;
     global $ajax_args;
-    global $DEFAULT_AGGREGATE;
+    global $DEFAULT_AGGREGATE, $ISCLOUD;
     global $suexec_output, $suexec_output_array;
     $runopts = "";
 
@@ -1113,7 +1113,7 @@ function CheckBindingType($value, $type, &$error)
 function CheckBinding($definition, &$binding, &$errors)
 {
     $type    = $definition["type"];
-    $mvalue  = $definition["multiValue"];
+    $mvalue  = (isset($definition["multiValue"]) ? $definition["multiValue"] : null);
     $error   = null;
     $count   = count($errors);
 
@@ -1154,7 +1154,7 @@ function Do_CheckForm($formfields, $paramdefs, &$rval)
         }
         $def     = $fields[$name];
         $type    = $def["type"];
-        $mvalue  = $def["multiValue"];
+        $mvalue  = isset($def["multiValue"]) ? $def["multiValue"] : 0;
         $error   = null;
 
         if ($type == "pubkey") {

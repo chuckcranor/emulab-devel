@@ -378,7 +378,7 @@ class ImageDataset
 
     function state() {
         return ($this->image->locked() ? "imaging" :
-                $this->image->size() ? "valid" : "allocated");
+	        ($this->image->size() ? "valid" : "allocated"));
     }
 
     #

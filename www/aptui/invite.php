@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,7 +60,7 @@ function SPITFORM($formfields, $errors)
     # When editing, pass through a single value. The template treats a
     # a single value as a read-only field.
     $plist = array();
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $ignore) {
 	$plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";

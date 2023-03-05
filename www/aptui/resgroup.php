@@ -53,9 +53,6 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "project",  PAGEARG_PROJECT,
                                  "fromrspec",PAGEARG_BOOLEAN,
                                  "uuid",     PAGEARG_UUID);
-if (!isset($fromrspec)) {
-    $fromrspec = 0;
-}
 
 if ($edit || $history) {
     if (!isset($uuid)) {
@@ -127,7 +124,7 @@ $doVerifySpectrum = 0;
 #
 $mlist = array();
 $plist = array();
-while (list($p) = each($projlist)) {
+foreach ($projlist as $p => $unused) {
     $plist[] = $p;
     $ptmp = Project::LookupByPid($p);
     if ($ptmp) {
@@ -189,7 +186,7 @@ if (!count($ams)) {
     exit();
 }
 $amlist  = array();
-while (list($index, $aggregate) = each($ams)) {
+foreach ($ams as $index => $aggregate) {
     $urn = $aggregate->urn();
     $am  = $aggregate->name();
     $reservable_nodes = $aggregate->ReservableNodes();

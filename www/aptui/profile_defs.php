@@ -664,18 +664,17 @@ class Profile
                          "  from apt_instances ".
                          "where profile_id='$profile_id' ".
                          $userclause);
-        $row = mysql_fetch_row($query_result);
-        if (!$row["started"]) {
-            $query_result =
-                DBQueryFatal("select max(UNIX_TIMESTAMP(started)) as started ".
-                             "  from apt_instance_history ".
+        if (mysql_num_rows($query_result) == 0) {
+	    $query_result =
+		DBQueryFatal("select max(UNIX_TIMESTAMP(started)) as started ".
+			     "  from apt_instance_history ".
                              "where profile_id='$profile_id' ".
                              $userclause);
-            $row = mysql_fetch_row($query_result);
         }
-        if (!$row["started"]) {
+        if (mysql_num_rows($query_result) == 0) {
             return array(0, 0);
-        }
+	}
+        $row = mysql_fetch_row($query_result);
         $lastused = $row[0];
 
         #
@@ -765,8 +764,8 @@ class Profile
 	    $options = $val->legalValues;
 	    $longhelp  = $val->longDescription;
 	    $advanced  = $val->advanced;
-	    $groupId   = $val->groupId;
-	    $groupName = $val->groupName;
+	    $groupId   = (isset($val->groupId) ? $val->groupId : null);
+	    $groupName = (isset($val->groupName) ? $val->groupName : null);
 	    $hasGroup = false;
 	    $data_help_string = "";
 	    $advanced_attr = "";

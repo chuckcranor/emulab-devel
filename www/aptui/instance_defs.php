@@ -1496,7 +1496,7 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
             "status"           => "SUCCESS");
         return;
     }
-    while (list($ignore, $aggregate) = each($am_array)) {
+    foreach ($am_array as $ignore => $aggregate) {
         $urn = $aggregate->urn();
         $am  = $aggregate->name();
         if ($extended) {

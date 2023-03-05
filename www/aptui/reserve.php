@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -51,6 +51,12 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "project",  PAGEARG_PROJECT,
                                  "uuid",     PAGEARG_UUID,
                                  "force",    PAGEARG_BOOLEAN);
+if (!isset($edit)) {
+   $edit = 0;
+}
+if (!isset($force)) {
+   $force = 0;
+}
 
 if ($edit) {
     if (! (isset($cluster) && isset($uuid))) {
@@ -106,7 +112,7 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 # a single value as a read-only field.
 #
 $plist = array();
-while (list($p) = each($projlist)) {
+foreach ($projlist as $p => $unused) {
     $plist[] = $p;
 }
 if (ISADMIN() && isset($project)) {
@@ -131,7 +137,7 @@ if (!count($ams)) {
     exit();
 }
 $amlist  = array();
-while (list($index, $aggregate) = each($ams)) {
+foreach ($ams as $index => $aggregate) {
     $urn = $aggregate->urn();
     $am  = $aggregate->name();
     $reservable_nodes = $aggregate->ReservableNodes();

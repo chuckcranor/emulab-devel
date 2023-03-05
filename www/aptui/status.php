@@ -390,7 +390,7 @@ if ($ISPOWDER) {
 if (isset($this_user)) {
     $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
     $plist = array();
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $unused) {
         $plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";

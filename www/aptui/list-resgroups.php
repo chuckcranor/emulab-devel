@@ -48,7 +48,7 @@ if ($all && !$isadmin) {
 # List of clusters so we have info in the page
 $ams     = Aggregate::SupportsReservations();
 $amlist  = array();
-while (list($index, $aggregate) = each($ams)) {
+foreach ($ams as $index => $aggregate) {
     $amlist[$aggregate->nickname()] = $aggregate->urn();
 }
 if (!count($amlist)) {

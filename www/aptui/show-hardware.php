@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -113,7 +113,7 @@ if (isset($clusters)) {
     $all = Aggregate::DefaultAggregateList();
     $skiptypes = Instance::NodeTypePruneList();
     $amlist  = array();
-    while (list($index, $aggregate) = each($all)) {
+    foreach ($all as $index => $aggregate) {
         $urn = $aggregate->urn();
         $am  = $aggregate->name();
         $url = $aggregate->weburl();

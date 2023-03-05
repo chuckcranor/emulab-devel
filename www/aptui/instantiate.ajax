@@ -802,7 +802,7 @@ function CheckStep2()
     $am_array   = array();
     $errors     = array();
 
-    while (list($index, $aggregate) = each($amlist)) {
+    foreach($amlist as $index => $aggregate) {
         $urn  = $aggregate->urn();
         $name = $aggregate->name();
         $am_array[$name] = $urn;
@@ -828,7 +828,7 @@ function CheckStep2()
     }
     if ($this_user) {
         if (isset($formfields["sites"]) && is_array($formfields["sites"])) {
-            while (list($siteid, $am) = each($formfields["sites"])) {
+	    foreach ($formfields["sites"] as $siteid => $am) {
                 if (!array_key_exists($am, $am_array)) {
                     $errors["sites[$siteid]"] = "Invalid Aggregate: $siteid";
                     break;
@@ -1127,7 +1127,7 @@ function Do_Submit()
     $args       = array("portal" => $PORTAL_GENESIS);
     $profile    = Profile::Lookup($formfields["profile"]);
 
-    while (list($index, $aggregate) = each($amlist)) {
+    foreach ($amlist as $index => $aggregate) {
         $urn  = $aggregate->urn();
         $name = $aggregate->name();
         $am_array[$name] = $urn;
@@ -1171,7 +1171,7 @@ function Do_Submit()
 
     if ($this_user) {
         if (isset($formfields["sites"]) && is_array($formfields["sites"])) {
-            while (list($siteid, $am) = each($formfields["sites"])) {
+	    foreach ($formfields["sites"] as $siteid => $am) {
                 if (array_key_exists($am, $am_array)) {
                     $sitemap[$siteid] = $am_array[$am];
                 }
@@ -1214,7 +1214,7 @@ function Do_Submit()
         $options = " -a '$aggregate_urn' ";
     }
     elseif (count($sitemap)) {
-        while (list($siteid, $urn) = each($sitemap)) {
+        foreach ($sitemap as $siteid => $urn) {
             $options .= "--site 'site:${siteid}=${urn}' ";
         }
     }
@@ -1336,7 +1336,7 @@ function Do_MaxDuration()
     $sitemap    = array();
     $options    = "-p " . $formfields["pid"];
 
-    while (list($index, $aggregate) = each($amlist)) {
+    foreach($amlist as $index => $aggregate) {
         $urn  = $aggregate->urn();
         $name = $aggregate->name();
         $am_array[$name] = $urn;
@@ -1349,13 +1349,13 @@ function Do_MaxDuration()
     $rspec = $ajax_args["rspec"];
 
     if (isset($formfields["sites"]) && is_array($formfields["sites"])) {
-        while (list($siteid, $am) = each($formfields["sites"])) {
+	foreach ($formfields["sites"] as $siteid => $am) {
             if (array_key_exists($am, $am_array)) {
                 $sitemap[$siteid] = $am_array[$am];
             }
         }
         if (count($sitemap)) {
-            while (list($siteid, $urn) = each($sitemap)) {
+	    foreach ($sitemap as $siteid => $urn) {
                 $options .= " --site 'site:${siteid}=${urn}' ";
             }
         }

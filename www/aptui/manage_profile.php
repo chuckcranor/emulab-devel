@@ -409,7 +409,7 @@ if (! isset($create)) {
             
             # Default the project if in only one project.
 	    if (count($projlist) == 1) {
-		list($project) = each($projlist);
+	        $project = key($projlist);
 		reset($projlist);
 		$defaults["profile_pid"] = $project;
 	    }
@@ -490,7 +490,7 @@ if (! isset($create)) {
     else {
 	# Default the project if in only one project.
 	if (count($projlist) == 1) {
-	    list($project) = each($projlist);
+	    $project = key($projlist);
 	    reset($projlist);
 	    $defaults["profile_pid"] = $project;
 	}

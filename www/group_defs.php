@@ -272,7 +272,7 @@ class Group
     #
     # Load the project for a group lazily.
     #
-    public static function LoadProject() {
+    function LoadProject() {
 	$pid_idx = $this->pid_idx();
 
 	if (! ($project = Project::Lookup($pid_idx))) {

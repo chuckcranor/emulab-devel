@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -78,7 +78,7 @@ else {
     # List of clusters.
     $ams     = Aggregate::DefaultAggregateList();
     $amlist  = array();
-    while (list($index, $aggregate) = each($ams)) {
+    foreach ($ams as $index => $aggregate) {
         $amlist[$aggregate->nickname()] = $aggregate->urn();
     }
 }

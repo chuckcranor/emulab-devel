@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -628,12 +628,13 @@ function VerifyPageArguments($argspec, $required)
 		    strcasecmp("$object", "on") == 0) {
 		    $object = True;
 		}
-		elseif (strcasecmp("$object", "no") == 0 ||
-			strcasecmp("$object", "0") == 0 ||
-			strcasecmp("$object", "false") == 0 ||
-			strcasecmp("$object", "off") == 0) {
+		# XXX wrong argument is considered False for boolean
+		else {
 		    $object = False;
 		}
+	    }
+	    else {
+		$object = False;
 	    }
 	    break;
 
