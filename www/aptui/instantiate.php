@@ -82,10 +82,6 @@ $optargs = OptionalPageArguments("profile",       PAGEARG_STRING,
 
 # Need to make non-hardcoded
 $maxduration = 16;
-# Selenium
-if (!isset($stresstest)) {
-    $stresstest = 0;
-}
 
 if (isset($rerun_instance) || isset($rerun_paramset) ||
     (isset($from) && ($from == "manage-profile" || $from == "show-profile"))) {
@@ -681,7 +677,7 @@ if (isset($profile)) {
 echo "    window.USENEWSCHEDULE = $usenewschedule;\n";
 echo "    window.NOPREDICTION = $noprediction;\n";
 echo "    window.USENEWINSTANTIATE = $usenewinstantiate;\n";
-echo "    window.STRESSTEST = $stresstest;\n";
+echo "    window.STRESSTEST = " . ($stresstest ? "1" : "0") . ";\n";
 echo "    window.EMBEDDED_RESGROUPS = true;\n";
 echo "    window.EMBEDDED_RESGROUPS_SELECT = true;\n";
 echo "</script>\n";
