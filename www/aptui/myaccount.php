@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -96,7 +96,7 @@ echo htmlentities(json_encode($defaults)) . "\n";
 echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";
-if ($referrer) {
+if (isset($referrer) && $referrer) {
     #$referrer = CleanString($referrer);
     echo "    window.REFERRER = '$referrer';\n";
 }

@@ -340,7 +340,7 @@ class Profile
 	return 0;
     }
 
-    function UserHasProfiles($user) {
+    public static function UserHasProfiles($user) {
 	$uid = $user->uid();
 
 	$query_result =

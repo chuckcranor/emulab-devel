@@ -196,7 +196,7 @@ if (! strcmp($showtype, "summary")) {
 	    DBQueryFatal("select type from nodetypeXpid_permissions");
 
 	while ($row = mysql_fetch_array($query_result)) {
-	    $perms{$row[0]} = 0;
+	    $perms[$row[0]] = 0;
 	}
 
 	$pidclause = "";
@@ -228,7 +228,7 @@ if (! strcmp($showtype, "summary")) {
 	}
 	
 	while ($row = mysql_fetch_array($query_result)) {
-	    $perms{$row[0]} = 1;
+	    $perms[$row[0]] = 1;
 	}
     }
     

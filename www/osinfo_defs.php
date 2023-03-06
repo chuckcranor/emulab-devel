@@ -30,7 +30,7 @@ class OSinfo
     # Constructor by lookup on unique ID
     #
     function __construct($id, $version = NULL) {
-	if (is_null($version)) {
+	if (is_null($version) && strpos($id, ":")) {
 	    list($id,$version) = preg_split('/:/', $id);
 	}
 	$safe_id = addslashes($id);

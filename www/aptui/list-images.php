@@ -109,7 +109,7 @@ echo "<div id='oops_div'></div>
       <div id='image-format-modal_div'></div>\n";
 
 echo "<script type='text/javascript'>\n";
-if ($target_project) {
+if (isset($target_project) && $target_project) {
     echo "  window.TARGET_PROJECT = '" . $target_project->pid() . "';\n";
 }
 else {
