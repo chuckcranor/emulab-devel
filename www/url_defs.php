@@ -626,16 +626,15 @@ function VerifyPageArguments($argspec, $required)
 		    strcasecmp("$object", "1") == 0 ||
 		    strcasecmp("$object", "true") == 0 ||
 		    strcasecmp("$object", "on") == 0) {
-		    $object = True;
+		    $object = true;
 		}
-		# XXX wrong argument is considered False for boolean
 		else {
-		    $object = False;
+		    $object = false;
 		}
 	    }
-	    else {
-		$object = False;
-	    }
+            else {
+                $object = false;
+            }
 	    break;
 
 	case PAGEARG_INTEGER:
