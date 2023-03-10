@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,8 +45,8 @@ $reqargs = RequiredPageArguments("image", PAGEARG_IMAGE);
 $optargs = OptionalPageArguments("showsnapstatus", PAGEARG_BOOLEAN,
                                  "autosnap",       PAGEARG_BOOLEAN,
                                  "node",           PAGEARG_NODE);
-$showsnapstatus = (isset($showsnapstatus) ? $showsnapstatus : 0);
-$autosnap = (isset($autosnap) ? $autosnap : 0);
+$showsnapstatus = ($showsnapstatus ? 1 : 0);
+$autosnap = ($autosnap ? 1 : 0);
 if (($autosnap || $showsnapstatus) && isset($node)) {
     $snapnode = $node->node_id();
 }

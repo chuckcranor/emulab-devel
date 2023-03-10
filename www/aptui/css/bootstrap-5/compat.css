@@ -84,7 +84,7 @@ a {
     --bs-btn-padding-x: 0.25rem;
     /* Small buttons look weird with the default radius */
     --bs-btn-border-radius: 0.25rem;    
-    font-size: 1rem;
+    font-size: 0.8rem;
 }
 
 .btn-default {
