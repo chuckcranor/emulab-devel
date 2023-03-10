@@ -491,7 +491,7 @@ function SPITFORM($formfields, $errors)
        # Note, we do not allow them to change lan nodes asymmetrically yet
        # since the backend script cannot handle that.
        #
-       if (0 && !strcmp($row{"type"}, "duplex")) {
+       if (0 && !strcmp($row["type"], "duplex")) {
 	   echo "<tr>\n";
 	   echo "  <td>&nbsp</td>\n";
 	   echo "  <td>&nbsp</td>\n";
@@ -594,7 +594,7 @@ foreach ($formfields as $header => $value) {
     #
     $qlimitarg = "";
     if (! strcmp($param, "limit")) {
-	$lastchr = $value{strlen($value)-1};
+	$lastchr = $value[strlen($value)-1];
 
 	if (ctype_alpha($lastchr)) {
 	    if ($lastchr == "s") {

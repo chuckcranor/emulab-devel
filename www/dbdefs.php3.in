@@ -908,7 +908,7 @@ class Logfile
     #
     # Constructor by lookup on unique index.
     #
-    function Logfile($logid) {
+    function __construct($logid) {
 	$safe_id = addslashes($logid);
 
 	$query_result =
@@ -928,7 +928,7 @@ class Logfile
     }
 
     # Lookup by ID
-    function Lookup($logid) {
+    public static function Lookup($logid) {
 	$foo = new Logfile($logid);
 
 	if (!$foo || !$foo->IsValid())

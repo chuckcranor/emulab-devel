@@ -1737,7 +1737,7 @@ class menuBar
     #
     # Constructor.
     #
-    function menuBar() {
+    function __construct() {
 	$this->jj = -1;
 	$this->kk = -1;
 	$this->mO = array();

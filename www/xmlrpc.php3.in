@@ -70,9 +70,9 @@ function ParseResponse($xmlgoo)
 
     if (array_key_exists("faultCode", $decoded) &&
 	array_key_exists("faultString", $decoded)) {
-	$code   = $decoded{"faultCode"};
+	$code   = $decoded["faultCode"];
 	$value  = $code;
-	$output = $decoded{"faultString"};
+	$output = $decoded["faultString"];
     }
     elseif (!(array_key_exists("code", $decoded) &&
 	      array_key_exists("value", $decoded) &&
@@ -83,13 +83,13 @@ function ParseResponse($xmlgoo)
 	return NULL;
     }
     else {
-	$code   = $decoded{"code"};
-	$value  = $decoded{"value"};
-	$output = $decoded{"output"};
+	$code   = $decoded["code"];
+	$value  = $decoded["value"];
+	$output = $decoded["output"];
     }
-    $rval{'code'}   = $code;
-    $rval{'value'}  = $value;
-    $rval{'output'} = $output;
+    $rval['code']   = $code;
+    $rval['value']  = $value;
+    $rval['output'] = $output;
 
     return $rval;
 }
@@ -148,7 +148,7 @@ function XMLRPC($uid, $gid, $method, $arghash)
     $return_value = proc_close($process);
 
     if ($return_value || $output == "" ||
-	(($decoded = ParseResponse($output)) == NULL) || $decoded{"code"}) {
+	(($decoded = ParseResponse($output)) == NULL) || $decoded["code"]) {
 	TBERROR("XMLRPC backend failure!\n".
 		"$uid $gid $method returned $return_value\n".
 		"Arg Hash:\n" .
@@ -159,6 +159,6 @@ function XMLRPC($uid, $gid, $method, $arghash)
 		"$output\n", 1);
     }
 #    TBERROR(print_r($decoded, true), 0);
-    return $decoded{'value'};
+    return $decoded['value'];
 }
 ?>

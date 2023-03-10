@@ -125,7 +125,7 @@ class Services_JSON
     *                           - SERVICES_JSON_LOOSE_TYPE:  loose typing.
     *                                                        "{...}" syntax creates associative arrays in decode().
     */
-    function Services_JSON($use = SERVICES_JSON_STRICT_TYPE)
+    function __construct($use = SERVICES_JSON_STRICT_TYPE)
     {
         $this->use = $use;
     }
@@ -328,7 +328,7 @@ class Services_JSON
     * @return   string  string value stripped of comments and whitespace
     * @access   private
     */
-    function reduce_string($str)
+    private static function reduce_string($str)
     {
         $str = preg_replace(array(
         
