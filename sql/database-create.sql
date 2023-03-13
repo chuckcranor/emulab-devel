@@ -1271,7 +1271,7 @@ CREATE TABLE `apt_announcements` (
 DROP TABLE IF EXISTS `apt_announcement_info`;
 CREATE TABLE `apt_announcement_info` (
   `aid` int(10) NOT NULL default '0',
-  `uid_idx` int(10) default NULL,
+  `uid_idx` int(10) NOT NULL default '0',
   `dismissed` tinyint(1) NOT NULL default '0',
   `clicked` tinyint(1) NOT NULL default '0',
   `seen_count` int(8) NOT NULL default '0',
