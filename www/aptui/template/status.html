@@ -1915,6 +1915,26 @@ pre {
       </div>
     </div>
   </div>
+  <div id='extension-warning-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <button type='button' class="close"
+                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+          <center><h4>WARNING!</h4></center>
+	</div>
+	<div class='modal-body'>
+	  <p class="reason"></p>
+	  <p>
+	    Please contact the
+	    <a href="mailto:<%- window.SUPPORT %>?subject=Experiment%20<%- expinfo.project %>/<%- expinfo.name %>"
+	       target="_blank">
+	      support staff</a> for more information.
+	  </p>
+	</div>
+      </div>
+    </div>
+  </div>
   <!-- Explain quarantine mode -->
   <div id='explain-quarantine-modal' class='modal fade'>
     <div class='modal-dialog'>

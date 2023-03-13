@@ -587,7 +587,8 @@ function Do_RequestExtension()
     $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
     $blob = array("expiration" => DateStringGMT($slice->expires()),
                   "granted"    => $webtask->TaskValue("granted"),
-                  "message"    => $webtask->TaskValue("message"));
+                  "message"    => $webtask->TaskValue("message"),
+                  "warning"    => $webtask->TaskValue("warning"));
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 bad:

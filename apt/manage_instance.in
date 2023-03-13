@@ -1796,6 +1796,8 @@ sub DoExtend()
     my $extensions    = $instance->Brand()->ExtensionsEmailAddress();
     my $granted       = 0;
     my $needapproval  = 0;
+    my $warning;
+    my $ttl;
     my $autoapprove_info;
     my $maxextension;
     my $message;
@@ -1946,17 +1948,24 @@ sub DoExtend()
     }
 
     #
-    # Always grant if < 24 hours, unless an extension limit.
+    # TTL of the experiment (diff between now and maxextension).  Might not
+    # have received a maxextension on the command line, and of course this
+    # was in the user browser so it could be faked. But the damage is that
+    # they get some extra time they should not, but it is harder to game.
     #
-    if ($wanted < 24 && !$instance->extension_limit()) {
-	$message = "Short extension granted for $wanted hours.";
-	$reason  = $message if (!defined($reason));
-	$granted = $wanted;
+    # We should store the most recent maxextension request in the DB, since
+    # most of the time, it was requested just a few minutes ago when the user
+    # clicked on the extend button. That would be good enough and make it a
+    # bit harder to game the system.
+    #
+    if (defined($maxextension)) {
+	$ttl = $maxextension - time();
     }
+
     #
     # Admin user, we do whatever it says to do.
     #
-    elsif ($this_user->IsAdmin()) {
+    if ($this_user->IsAdmin()) {
 	$message = "Your experiment was extended by the site administrator.";
 	$granted = $wanted;
     }
@@ -1964,6 +1973,25 @@ sub DoExtend()
 	$message = "because we are testing extension stuff";
 	$granted = 0;
 	$needapproval = 1;
+    }
+    #
+    # If admin lockout, we are refusing any more free time.
+    #
+    elsif ($instance->extension_disabled()) {
+	$message = "because you are not allowed any more extensions";
+	$granted = 0;
+    }
+    #
+    # Always grant if within 24 hours of the max extension to give user
+    # time to clear off. If there is an extension limit, it is handled
+    # below instead. The TTL check was already done in the WEB UI which is
+    # why we are here anyway.
+    #
+    elsif ($wanted < 24 && !$instance->extension_limit() &&
+	   defined($ttl) && $ttl < (24 * 3600)) {
+	$message = "Short extension granted for $wanted hours.";
+	$reason  = $message if (!defined($reason));
+	$granted = $wanted;
     }
     else {
 	my $diff  = $expires_time - time();
@@ -1976,16 +2004,9 @@ sub DoExtend()
 	}
 
 	#
-	# If admin lockout, we are refusing any more free time.
-	#
-	if ($instance->extension_disabled()) {
-	    $message = "because you are not allowed any more extensions";
-	    $granted = 0;
-	}
-	#
 	# Is there an extension limit.
 	#
-	elsif ($instance->extension_limit()) {
+	if ($instance->extension_limit()) {
 	    my $diff = $expires_time - $created_time;
 	    my $max  = 3600 * $instance->extension_limit();
 
@@ -2047,6 +2068,36 @@ sub DoExtend()
 	    
 	    if ($diff < $mindiff) {
 		$granted = int(($mindiff - $diff) / 3600);
+		$granted = 24 if ($granted > 24);
+		
+		#
+		# Watch for people gaming the system by repeatedly asking
+		# for extensions within 24 hours of expiration cause they
+		# figure out they get a free day every time. This check
+		# will return non-zero if the user has done that for that
+		# number of days and an admin has not granted time.
+		#
+		my $gaming = $instance->GamingExtensions();
+		if ($gaming) {
+		    if ($gaming < 0) {
+			$granted = 0;
+			$needapproval = 1;
+			$message = "because you have asked for too many last ".
+			    "minute extensions in a row";
+		    }
+		    else {
+			$message = "because it was started more then ".
+			    "$autoextend_maxage days ago and is going to ".
+			    "expire very soon";
+			
+			$warning = "This is the final, last minute extension, ".
+			    "that you will be allowed to submit. Please ".
+			    "submit your extension requests earlier and then ".
+			    "wait for them to be approved or denied before ".
+			    "submitting another one.";
+		    }
+		    goto grant;
+		}
 	    }
 	    else {
 		$granted = 0;
@@ -2229,6 +2280,9 @@ sub DoExtend()
 	else {
 	    $mailmessage = $pre . $grantstring . ". ";
 	}
+	if (defined($warning)) {
+	    $mailmessage .= "\n\n" . $warning;
+	}
 	$mailmessage .= "\n\n" . "The request was for ${wantstring}.";
 	$mailmessage .= "\n\nYour reason was:\n${reason}"
 	    if (defined($reason));
@@ -2243,7 +2297,7 @@ sub DoExtend()
                "It is running on $clusters\n\n".
                "$url\n",
 	       "$extensions",
-	       "BCC: $extensions");
+	       "BCC: $extensions, stoller@flux.utah.edu") if (1);
     
     if (!$this_user->IsAdmin()) {
 	#
@@ -2265,6 +2319,7 @@ sub DoExtend()
     if (defined($webtask)) {
 	$webtask->granted($granted);
 	$webtask->message(defined($message) ? $message : "");
+	$webtask->warning(defined($warning) ? $warning : "");
 	$webtask->Exited(0);
     }
     $slice->UnLock();

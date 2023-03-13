@@ -1100,6 +1100,11 @@ $(function ()
 	    }
 	    sup.ShowModal('#no-extension-granted-modal');
 	}
+	else if (json.value.warning != "") {
+	    $('#extension-warning-modal .reason')
+		.html(json.value.warning);
+	    sup.ShowModal('#extension-warning-modal');
+	}
     }
 
     //

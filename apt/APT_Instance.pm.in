@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2022 University of Utah and the Flux Group.
+# Copyright (c) 2007-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,6 +57,7 @@ use EmulabConstants;
 use emdb;
 use libtestbed;
 use Brand;
+use libEmulab;
 use APT_Profile;
 use APT_Aggregate;
 use APT_Geni;
@@ -3396,6 +3397,60 @@ sub GetResources($$$)
 	"typeCounts"  => \%typeCounts,
     };
     return 0;
+}
+
+sub GamingExtensions($)
+{
+    my ($self) = @_;
+    my $uuid   = $self->uuid();
+    my $cutoff = 36;
+    my $maxnum = 5;
+    my $maxage = GetSiteVar("aptui/autoextend_maxage");
+    my $i;
+
+    my $query_result =
+	DBQueryFatal("select info.* from apt_instances as i ".
+		     "join apt_instance_extension_info as info on ".
+		     "   info.uuid=i.uuid ".
+		     "where i.uuid='$uuid' and ".
+		     "      info.tstamp>DATE_ADD(i.started, ".
+		     "                           interval $maxage day) ".
+		     "order by tstamp desc");
+
+    #
+    # Scan backwards. If the user submitted the extension less then a day
+    # before expiration, $maxnum times in a row without an admin extension
+    # (meaning we have looked at it), the user was probably gaming the
+    # extension system.
+    #
+    for ($i = 1; $i < $maxnum && $i <= $query_result->numrows; $i++) {
+	my $row = $query_result->fetchrow_hashref();
+	my $tstamp    = str2time($row->{'tstamp'});
+	my $expires   = str2time($row->{'expiration'});
+	my $diff      = $expires - $tstamp;
+	my $diffhours = int($diff / 3600);
+	my $admin     = $row->{'admin'};
+
+	if ($diff > ($cutoff * 3600)) {
+	    print "ExtensionCheck: ".
+		"$diffhours hour extension greater $cutoff hour cutoff\n";
+	    return 0;
+	}
+	if ($admin != 0) {
+	    print "ExtensionCheck: admin extension granted on day $i\n";
+	    return 0;
+	}
+    }
+    if ($i < $maxnum - 1) {
+	print "ExtensionCheck: Not enough history: " . ($i - 1) . "\n";
+	return 0;
+    }
+    if ($i == $maxnum - 1) {
+	print "ExtensionCheck: Last free extension warning\n";
+	return 1;
+    }
+    print "ExtensionCheck: Too many last minute extensions\n";
+    return -1;
 }
 
 ###################################################################
