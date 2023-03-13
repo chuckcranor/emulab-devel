@@ -53,9 +53,8 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "project",  PAGEARG_PROJECT,
                                  "fromrspec",PAGEARG_BOOLEAN,
                                  "uuid",     PAGEARG_UUID);
-if (!isset($fromrspec)) {
-    $fromrspec = 0;
-}
+
+$fromrspec = ($fromrspec ? 1 : 0);
 
 if ($edit || $history) {
     if (!isset($uuid)) {
