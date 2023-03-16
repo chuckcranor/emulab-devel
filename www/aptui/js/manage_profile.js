@@ -694,7 +694,7 @@ $(function ()
 		}
 	    }
 	    else if (_.has(window, "EXPUUID")) {
-		ConvertFromExperiment();
+		setTimeout(function f() { ConvertFromExperiment(); }, 250);
 	    }
 	}
     }
