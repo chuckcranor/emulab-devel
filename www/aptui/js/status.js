@@ -1069,9 +1069,10 @@ $(function ()
     function RequestExtensionCallback(json)
     {
 	var message;
-	
+
 	if (json.code) {
 	    if (json.code == 2) {
+		ReloadExpiration();
 		$('#approval_text').html(json.value);
 		sup.ShowModal('#approval_modal');
 		return;
@@ -1079,11 +1080,8 @@ $(function ()
 	    sup.SpitOops("oops", json.value);
 	    return;
 	}
-	var expiration = json.value.expiration;
-	$("#quickvm_expires").html(moment(expiration).format('lll'));
-	// Reset the countdown clock.
-	StartCountdownClock.reset = expiration;
-
+	ReloadExpiration();
+	
 	// Warn the user if we granted nothing.
 	if (json.value.granted == 0) {
 	    if (json.value.message != "") {
@@ -1100,6 +1098,29 @@ $(function ()
 	    }
 	    sup.ShowModal('#no-extension-granted-modal');
 	}
+	else if (json.value.warning != "") {
+	    $('#extension-warning-modal .reason')
+		.html(json.value.warning);
+	    sup.ShowModal('#extension-warning-modal');
+	}
+    }
+
+    /*
+     * Reload the expiration by getting the latest expinfo and checking
+     * to see if it changed. If so, reset the countdown.
+     */
+    function ReloadExpiration()
+    {
+	var expiration = expinfo.expires;
+
+	LoadExperimentInfo(function () {
+	    if (expinfo.expires != expiration) {
+		$("#quickvm_expires")
+		    .html(moment(expinfo.expires).format('lll'));
+		// Reset the countdown clock.
+		StartCountdownClock.reset = expinfo.expires;
+	    }
+	});
     }
 
     //

@@ -63,14 +63,11 @@ if (isset($which)) {
         exit();
     }
 }
-elseif (isset($baseline)) {
+elseif ($baseline) {
     $which = "rfbaseline";    
 }
 else {
     $which = "rfmonitor";
-}
-if (!isset($archived)) {
-    $archived = 0;
 }
 if (isset($endpoint)) {
     if (!TBvalid_node_id($endpoint)) {
@@ -90,6 +87,7 @@ if ($which != "rfmonitor") {
     unset($cluster);
 }
 $incident = ($incident ? 1 : 0);
+$archived = ($archived ? 1 : 0);
 
 #
 # The monitor looks at only one iface, rf0. That may change later.

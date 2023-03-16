@@ -54,6 +54,8 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "fromrspec",PAGEARG_BOOLEAN,
                                  "uuid",     PAGEARG_UUID);
 
+$fromrspec = ($fromrspec ? 1 : 0);
+
 if ($edit || $history) {
     if (!isset($uuid)) {
         SPITUSERERROR("Missing arguments for edit mode");

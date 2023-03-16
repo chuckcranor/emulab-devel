@@ -593,8 +593,8 @@ sub HandleChild($)
 		    print "Appears to be a subharmonic for the range ".
 			$limit->{"freq_low"} . "," .
 			$limit->{"freq_high"} . "\n";
-		    #$inrange = 1;
-		    #last;
+		    $inrange = 1;
+		    last;
 		}
 	    }
 	}
@@ -1114,11 +1114,13 @@ sub measurement_consistent($$$$)
 
     my $consistent = $consistent_p || $consistent_m;
 
-    #print("Consistent: ${consistent}\n");
-    #print("Consistent 0,1 harmonic: ${consistent_p}\n");
-    #print("Consistent 2,3 harmonic: ${consistent_m}\n");
-
-    return $consistent ? 0 : 1;
+    if ($consistent) {
+	print("Consistent: ${consistent}\n");
+	print("Consistent 0,1 harmonic: ${consistent_p}\n");
+	print("Consistent 2,3 harmonic: ${consistent_m}\n");
+	return 1;
+    }
+    return 0;
 }
 
 sub fatal($)

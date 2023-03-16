@@ -1,0 +1,16 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    DBQueryFatal("alter table apt_announcement_info modify ".
+		 "  uid_idx int(10) NOT NULL default '0'");
+    
+    return 0;
+}
+
+# Local Variables:
+# mode:perl
+# End:

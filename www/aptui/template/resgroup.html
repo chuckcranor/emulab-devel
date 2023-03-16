@@ -583,18 +583,21 @@
 	  <div style="margin-top: 10px;">
 	    <% if (window.MAINSITE) { %>
 	      <em>Reservations that require administrative approval
-		take time to review and are processed the <b>next
-		business day at 9AM Mountain
-		time</b><span class="adjustedmorning hidden">
-		(<span></span> in your local timezone)</span>.
-		If you are
-		requesting a reservation that starts before the next
-		business day at 9AM, it is possible the reservation
-		will no longer be feasible (fit the schedule) by the
-		time it is processed.  Please plan accordingly, if you
-		start an experiment based on currently availability,
-		you might be forced to terminate that experiment, if
-		your reservation is not approved.</em>
+		take time to review and are processed
+		<% if (!window.ISPOWDER) { %>
+		  the <b>next business day</b>
+		<% } else { %>
+		  in <b>two business days</b>
+		<% } %>
+		at 9AM Mountain	time (<span class="adjustedNBD"></span>
+		in your local time zone).
+		If you are requesting a reservation that starts before
+		then it is possible the reservation will no longer be
+		feasible (fit the schedule) by the time it is
+		processed.  Please plan accordingly, if you start an
+		experiment based on currently availability, you might
+		be forced to terminate that experiment, if your
+		reservation is not approved.</em>
 	    <% } %>
 	  </div>	  
 	</div>
@@ -856,14 +859,17 @@
                 aria-hidden='true'>&times;</button>
 	<br>
 	<div>
-	  Please specify a start time no earlier than 9 AM Mountain
-	  Time
-	  <span class="adjustedmorning hidden">
-	    (<span></span> in your local timezone)</span>
-	  on the next business day. This allows administrators
+	  Reservations that need approval must start no earlier then
+	  <% if (!window.ISPOWDER) { %>
+	    the <b>next business day</b>
+	  <% } else { %>
+	    <b>two business days from now</b>
+	  <% } %>
+	  at 9AM Mountain time (<span class="adjustedNBD"></span>
+	  in your local time zone) so that administrators have
 	  sufficient time to review your request.
 	</div>
-	<center>
+	<center style="margin-top: 10px;">
           <button class='btn btn-default btn-xs'
 		  data-dismiss='modal'>Dismiss</button>
 	</center>
