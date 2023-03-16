@@ -290,7 +290,6 @@ echo "  window.APT_OPTIONS.dossh = $dossh;\n";
 echo "  window.APT_OPTIONS.dovnc = $dovnc;\n";
 echo "  window.APT_OPTIONS.isscript = $isscript;\n";
 echo "  window.APT_OPTIONS.lazytopo = $lazytopo;\n";
-echo "  window.APT_OPTIONS.initialTab = '$INITIALTAB';\n";
 echo "  window.APT_OPTIONS.AJAXURL = 'server-ajax.php';\n";
 if (isset($maxextend) && $maxextend != "") {
     # Assumed to be hours.
