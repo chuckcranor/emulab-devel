@@ -643,7 +643,7 @@ function CHECKPASSWORD($uid, $password, $name, $email, &$error)
     $password = escapeshellarg($password);
     $stuff    = escapeshellarg("$name:$email");
     
-    $mypipe = popen("$TBCHKPASS_PATH $password $uid $stuff", "w+");
+    $mypipe = popen("$TBCHKPASS_PATH $password $uid $stuff", "r");
     
     if ($mypipe) { 
         $retval=fgets($mypipe, 1024);
