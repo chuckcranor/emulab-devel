@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -211,7 +211,8 @@ function Do_Create()
         }
     }
     # Sanity check examples portals and public setting.
-    if ($formfields["examples_portals"] != "" &&
+    if (isset($formfields["examples_portals"]) &&
+        $formfields["examples_portals"] != "" &&
         $formfields["profile_who"] != "public") {
         $errors["examples_portals"] =
             "Profile must be public to list on the Examples page";
