@@ -1,0 +1,405 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2007-2022 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use Getopt::Std;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+# Drag in path stuff so we can find emulab stuff.
+BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
+
+#
+# Load the OS independent support library. It will load the OS dependent
+# library and initialize itself.
+#
+use libsetup;
+
+#
+# Move swap partition to end of root disk.
+#
+my $moveswap = 0;
+my $newssize = (GENVNODE() && GENVNODETYPE() eq "xen") ?
+    (1 * 1024 * 1024 * 1024 / 512) : (8 * 1024 * 1024 * 1024 / 512);
+
+#
+# Automatically grow the partition/filesystem as much as possible.
+# If $moveswap is zero, this will likely not do anything as the filesystem
+# is probably maxed out. But if $moveswap is set, this will grow the
+# partition and filesystem to fill the root disk.
+#
+my $maxoutfs = 0;
+
+my $FSTAB = "/etc/fstab";
+my $script = $0;
+
+#
+# Figure out if there is a swap device and add it to fstab.
+# We used to do this in slicefix as part of the post-frisbee customization,
+# but it is difficult to do a good job of it just using sh and sed given
+# that the swap partition might be in a different slice than the filesystems.
+#
+sub swapenable($$$$);
+sub gpartswapenable($$$$);
+sub addswap($$);
+sub growroot($$$$);
+sub getpartsize($$);
+
+# Turn off line buffering on output
+$| = 1;
+
+my $debug = 1;
+
+#
+# See if there is already a swap device. If so, our work is done.
+# Also find the root device while we are in the neighborhood.
+#
+if (!open(FD, "<$FSTAB")) {
+    print STDERR "*** WARNING: could not open $FSTAB for reading, ".
+	"no swap enabled\n";
+	exit(0);
+}
+my ($rootfs, $swapdev);
+while (<FD>) {
+    my ($fs,$mpt,$type,$opt) = split;
+    if ($mpt eq "/") {
+	$rootfs = $fs;
+	next;
+    }
+    if ($type eq "swap") {
+	$swapdev = $fs;
+	last;
+    }
+}
+close(FD);
+
+#
+# If swapdev is present in the fstab, assume we have done everything we
+# need to do. Effectively, we only do things on the first boot.
+#
+if ($swapdev) {
+    exit(0);
+}
+
+#
+# No swap device found, see if the disklabel of the root disk reveals one.
+#
+if (!$rootfs ||
+    ($rootfs !~ /([a-zA-Z]+)(\d+)s(\d+)([a-z])/ &&
+     $rootfs !~ /([a-zA-Z]+)(\d+)([a-z])/)) {
+	print STDERR "*** WARNING: could not find/parse root device $rootfs, ".
+	    "no swap enabled\n";
+	return;
+}
+my ($dtype,$dnum,$snum,$part) = ($1,$2,$3,$4);
+if (!defined($part)) {
+    $part = $snum;
+    $snum = "1";
+}
+print STDERR "rootfs=$rootfs, dtype=$dtype, dnum=$dnum, snum=$snum, part=$part\n"
+    if ($debug);
+# If gpart exists, we do this a little differently
+if (gpartswapenable($dtype, $dnum, $snum, $part)) {
+    swapenable($dtype, $dnum, $snum, $part);
+}
+# In the successful gpart case, we try to max out the root FS if desired 
+elsif ($maxoutfs) {
+    if (growroot($dtype, $dnum, $snum, $part)) {
+	print STDERR "*** WARNING: failed to grow root FS\n";
+    }
+}
+
+exit(0);
+
+#
+# Only look for an MBR Linux swap partition. If found we add it to fstab or,
+# if moveswap is set, move it to the end of the disk. If no partition is
+# found, we create one at the end of the disk.
+#
+# We could do this with GPT as well, but let's see how it works out here.
+#
+sub gpartswapenable($$$$)
+{
+    my ($dtype, $dnum, $snum, $part) = @_;
+    my ($dsize,$sstart,$ssize,$spart,$ostart,$osize,$opart);
+    my $disk = "${dtype}${dnum}";
+
+    if (! -e "/sbin/gpart") {
+	return 1;
+    }
+    @lines = `/sbin/gpart show $disk`;
+    if ($? != 0) {
+	print STDERR "*** WARNING: gpart on $disk failed, ".
+	    "trying old approach\n";
+	return 1;
+    }
+    chomp(@lines);
+    foreach $line (@lines) {
+	my @field = split('\s+', $line);
+	my ($pstart,$psize,$ppart,$ptype);
+
+	if (@field < 2) {
+	    next;
+	}
+
+	# first line has the total size and partition scheme
+	if ($field[0] eq "=>") {
+	    if ($field[4] ne "MBR") {
+		print STDERR "*** WARNING: boot disk $disk not MBR, ".
+		    "trying old approach\n";
+		return 1;
+	    }
+	    $dsize = int($field[1]) + int($field[2]);
+	    # where we want swap to be
+	    $ssize = $newssize;
+	    $sstart = $dsize - $ssize;
+	    $spart = 3;
+	    next;
+	}
+
+	# get rid of null field at start
+	shift @field;
+
+	# ignore free partitions
+	$ptype = $field[3];
+	if ($ptype eq "free") {
+	    next;
+	}
+
+	$pstart = int($field[0]);
+	$psize = int($field[1]);
+	$ppart = int($field[2]);
+
+	#
+	# Found a swap partition. If not moving the partition we just use it.
+	# If we want to move it just remember where it is, unless it overlaps
+	# with where we want to move it. In that case, we just use it as is.
+	#
+	if ($ptype eq "linux-swap") {
+	    if ($ppart != $spart) {
+		print STDERR "*** WARNING: non-standard swap partition $ppart, ".
+		    "leaving alone and not enabling\n";
+		return 0;
+	    }
+	    if (!$moveswap || $pstart >= $sstart) {
+		addswap("${disk}s${ppart}", $psize);
+		return 0;
+	    }
+	    # remember the currently location so we can remove it if needed
+	    $ostart = $pstart;
+	    $osize = $psize;
+	    $opart = $ppart;
+	    next;
+	}
+	# make sure our desired partition number is not already allocated
+	if ($ppart == $spart) {
+	    print STDERR "*** WARNING: desired swap partition $spart already in use, ".
+		"no swap enabled\n";
+	    return 0;
+	}
+	# and that no other non-free partition overlaps with our desired area
+	if ($ptype ne "free") {
+	    my $pend = $pstart + $psize;
+	    if ($pend > $sstart) {
+		# if we already found a swap partition, just use that
+		if ($opart) {
+		    addswap("${disk}s${opart}", $osize);
+		}
+		print STDERR "*** WARNING: existing partition $ppart overlaps with desired swap partition, ".
+		    ($opart ? "using the old one\n" : "no swap enabled\n");
+		return 0;
+	    }
+	}
+    }
+
+    #
+    # Everything checked out, add the new swap partition
+    #
+    if ($opart) {
+	# first remove old swap partition
+	if (system("/sbin/gpart delete -i $opart $disk")) {
+	    print STDERR "*** WARNING: could not remove old swap partition, ".
+		"using the old one\n";
+	    addswap("${disk}s${opart}", $osize);
+	    return 0;
+	}
+    }
+    # create new partition
+    if (system("/sbin/gpart add -i $spart -t linux-swap -b $sstart $disk")) {
+	print STDERR "*** WARNING: could not add new swap partition, ".
+	    "no swap enabled\n";
+    } else {
+	addswap("${disk}s${spart}", $ssize);
+    }
+    return 0;
+}
+
+sub swapenable($$$$)
+{
+    my ($dtype, $dnum, $snum, $part) = @_;
+    my $nextcheck = 0;
+
+    my $disk = "${dtype}${dnum}";
+    my $slice = "${disk}s${snum}";
+    if (-e "/dev/$slice") {
+	my @lines = `disklabel $slice 2>/dev/null`;
+	if ($? != 0) {
+	    print STDERR "*** WARNING: could not read disklabel of /dev/$slice, ".
+		"no swap enabled\n";
+	    return;
+	}
+
+	chomp(@lines);
+	foreach $line (@lines) {
+	    if ($line =~ /\s*([a-z]):\s+(\d+)\s+\d+\s+(\S+)/) {
+		my $part = $1;
+		my $size = $2;
+		my $fstype = $3;
+		if ($fstype eq "swap") {
+		    addswap("$slice$part", $size);
+		    return;
+		}
+	    }
+	}
+    }
+
+    #
+    # Still nothing, look at the MBR to see if there is a Linux swap partition
+    # we can use.
+    #
+    while (-e "/dev/$disk") {
+	@lines = `fdisk -s /dev/$disk 2>/dev/null`;
+	if ($? != 0) {
+	    print STDERR "*** WARNING: could not read MBR of /dev/$disk, ".
+		"no swap enabled\n";
+	    return;
+	}
+
+	chomp(@lines);
+	foreach $line (@lines) {
+	    if ($line =~ /\s*(\d):\s+\d+\s+(\d+)\s+(\S+)/) {
+		my $part = $1;
+		my $size = $2;
+		my $ptype = $3;
+		if ($ptype eq "0x82") {
+		    addswap("${disk}s${part}", $size);
+		    return;
+		}
+	    }
+	}
+	#
+	# Cycle through all disks looking for one with a linux swap partition.
+	#
+	$dnum++;
+	$disk = "${dtype}${dnum}";
+    }
+
+    print STDERR "*** WARNING: could not locate a suitable swap device, ".
+	"no swap enabled\n";
+}
+
+sub addswap($$)
+{
+    my ($dev,$size) = @_;
+
+    print "Using /dev/$dev ($size sectors) for swap\n";
+    if (system("swapon /dev/$dev")) {
+	print STDERR "*** WARNING: could not enable swap on /dev/$dev, ".
+	    "no swap enabled\n";
+	exit(0);
+    }
+    if (!open(FD, ">>$FSTAB")) {
+	print STDERR "*** WARNING: could not add /dev/$dev to $FSTAB, ".
+	    "swap enabled this boot only\n";
+    }
+    print FD "# the following swap devices added by $script\n";
+    print FD "/dev/$dev\t\tnone\tswap\tsw\t0\t0\n";
+    close(FD);
+    print "Swap enabled\n";
+}
+
+sub growroot($$$$)
+{
+    my ($dtype, $dnum, $snum, $part) = @_;
+    my $disk = "${dtype}${dnum}";
+
+    if (! -e "/sbin/gpart") {
+	return 1;
+    }
+
+    # First grow the MBR partition
+    print STDERR "Grow MBR partition1: '/sbin/gpart resize -i $snum $disk'\n"
+	if ($debug);
+    if (system("/sbin/gpart resize -i $snum $disk")) {
+	print STDERR "*** WARNING: grow of MBR partition failed, ".
+	    "not growing $rootfs\n";
+	return 1;
+    }
+
+    # See if there is a BSD disklabel that has to be expanded.
+    my $geom = "${disk}s${snum}";
+    if (-e "/dev/$geom$part") {
+	# XXX sanity checks
+	if ($rootfs ne "/dev/$geom$part" || $part ne "a") {
+	    print STDERR "*** WARNING: could not grok BSD device $geom$part, ".
+		"not growing $rootfs\n";
+	    return 1;
+	}
+	print STDERR "Grow BSD partition1: '/sbin/gpart resize -i 1 $geom'\n"
+	    if ($debug);
+	if (system("/sbin/gpart resize -i 1 $geom")) {
+	    print STDERR "*** WARNING: grow of BSD partition failed, ".
+		"not growing $rootfs\n";
+	    return 1;
+	}
+    } elsif ($debug) {
+	print STDERR "'/dev/$geom$part' does not exist?\n";
+    }
+
+    #
+    # Finally grow the filesystem itself.
+    #
+    # XXX ugh, growfs returns an error if the filesystem already fills
+    # the partition. We don't really want to report an error in that case
+    # so we filter out that one and return success.
+    #
+    print STDERR "Grow BSD filesystem: '/sbin/growfs -y / 2>&1'\n"
+	if ($debug);
+    my @output = `/sbin/growfs -y / 2>&1`;
+    if ($?) {
+	foreach (@output) {
+	    if (/is not larger than the current/) {
+		return 0;
+	    }
+	}
+	print STDERR @output;
+	print STDERR "*** WARNING: grow of BSD filesystem failed, ".
+	    "not growing $rootfs\n";
+	return 1;
+    }
+
+    return 0;
+}
