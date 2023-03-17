@@ -4687,16 +4687,11 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/linux-ms/GNUmakefile \
 	  tmcc/archlinux/GNUmakefile \
 	  tmcc/alpine/GNUmakefile \
-	  tmcc/freebsd5/GNUmakefile tmcc/freebsd5/supfile \
-	  tmcc/freebsd6/GNUmakefile tmcc/freebsd6/supfile \
-	  tmcc/freebsd6/netif-emulab \
-	  tmcc/freebsd7/GNUmakefile tmcc/freebsd7/netif-emulab \
-	  tmcc/freebsd9/GNUmakefile tmcc/freebsd9/netif-emulab \
 	  tmcc/freebsd10/GNUmakefile tmcc/freebsd10/netif-emulab \
 	  tmcc/freebsd11/GNUmakefile tmcc/freebsd11/netif-emulab \
 	  tmcc/freebsd12/GNUmakefile tmcc/freebsd12/netif_emulab \
 	  tmcc/freebsd13/GNUmakefile tmcc/freebsd13/netif_emulab \
-	  tmcc/freenas8/GNUmakefile tmcc/freenas9/GNUmakefile \
+	  tmcc/freebsd14/GNUmakefile tmcc/freebsd14/netif_emulab \
 	  tmcc/freenas11/GNUmakefile tmcc/truenas13/GNUmakefile \
 	  tmcc/cygwinxp/GNUmakefile tmcc/dp/GNUmakefile \
 	  tmcc/openbsd/GNUmakefile tmcc/ron/GNUmakefile \
