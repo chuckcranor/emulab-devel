@@ -265,6 +265,13 @@ function REQUIRE_TABLESORTER($extras = null)
   }
 }
 
+function REQUIRE_JQUERY_UI()
+{
+  echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
+    
+  AddLibrary("js/lib/jquery-ui.js");
+}
+
 function REQUIRE_OPENSTACKGRAPHS()
 {
   REQUIRE_UNDERSCORE();
