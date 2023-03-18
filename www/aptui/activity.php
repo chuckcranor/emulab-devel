@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -120,22 +123,11 @@ if (isset($portalonly) && $portalonly) {
     echo "    window.PORTALONLY = true;\n";
 }
 echo "</script>\n";
-echo "<link rel='stylesheet' href='css/jQRangeSlider.css'>\n";
-echo "<script src='js/lib/jquery-ui.js'></script>\n";
-echo "<script src='js/lib/jQRangeSlider/jQRangeSliderMouseTouch.js'></script>\n";
-echo "<script src='js/lib/jQRangeSlider/jQRangeSliderDraggable.js'></script>\n";
-echo "<script src='js/lib/jQRangeSlider/jQRangeSliderHandle.js'></script>\n";
-echo "<script src='js/lib/jQRangeSlider/jQRangeSliderBar.js'></script>\n";
-echo "<script src='js/lib/jQRangeSlider/jQRangeSliderLabel.js'></script>\n";
-echo "<script src='js/lib/jQRangeSlider/jQRangeSlider.js'></script>\n";
-echo "<script src='js/lib/jQRangeSlider/jQDateRangeSliderHandle.js'></script>\n";
-echo "<script src='js/lib/jQRangeSlider/jQDateRangeSlider.js'></script>\n";
-echo "<script src='js/lib/jQRangeSlider/jQRuler.js'></script>\n";
-
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
+REQUIRE_JQUERY_UI();
 SPITREQUIRE("js/activity.js");
 
 AddTemplateList(array("activity", "activity-table",

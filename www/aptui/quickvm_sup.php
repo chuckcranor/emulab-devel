@@ -27,6 +27,9 @@
 if (!isset($BOOTSTRAP5OK)) {
     $BOOTSTRAP5OK = false;
 }
+if (!isset($BOOTSTRAP5ONLY)) {
+    $BOOTSTRAP5ONLY = false;
+}
 # allow URL override
 if (isset($_REQUEST["bootstrap5"])) {
     if ($_REQUEST["bootstrap5"] == 1) {
@@ -36,7 +39,7 @@ if (isset($_REQUEST["bootstrap5"])) {
         $BOOTSTRAP5OK = false;
     }
 }
-define("BOOTSTRAP5", $BOOTSTRAP5OK);
+define("BOOTSTRAP5", $BOOTSTRAP5OK || $BOOTSTRAP5ONLY);
 
 include_once("portal_defs.php");
 include_once("instance_defs.php");

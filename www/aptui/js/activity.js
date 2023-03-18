@@ -15,7 +15,7 @@ $(function () {
     {
 	window.APT_OPTIONS.initialize(sup);
 
-	default_min = new Date(2014, 6, 1);
+	default_min = new Date(2022, 6, 1);
 	default_max = new Date();
 
 	if (window.MIN) {
@@ -28,15 +28,30 @@ $(function () {
 	$('#waitwait_div').html(templates['waitwait-modal']);
 	$('#oops_div').html(templates['oops-modal']);
 
-	// Date slider
-	$("#date-slider").dateRangeSlider({
-	    bounds: {min: new Date(2014, 6, 1),
-		     max: new Date()},
-	    defaultValues: {min: default_min, max: default_max},
-	    arrows: false,
+	$("#start_day").datepicker({
+	    yearRange: "2014:+1",
+	    changeYear: true,
+	    maxDate: 0,
+	    onClose: function (dateString, dateobject) {
+		default_min = new Date(dateString);
+		console.info("new min", default_min);
+	    },
 	});
+	$("#start_day").datepicker("setDate", default_min);
+	
+	$("#end_day").datepicker({
+	    yearRange: "2014:+0",
+	    changeYear: true,
+	    maxDate: 0,
+	    onClose: function (dateString, dateobject) {
+		default_max = new Date(dateString);
+		console.info("new max", default_max);
+	    },
+	});
+	$("#end_day").datepicker("setDate", default_max);
+	
 	// Handler for the date range search button.
-	$('#slider-go-button').click(function() {
+	$('#go-button').click(function() {
 	    SearchAgain();
 	});
 	// Bind search for IP.
@@ -98,6 +113,9 @@ $(function () {
 	var activity_html = tableTemplate({instances: instances});
 	$('#table-div').html(activity_html);
 
+	$('#experiment-count span').html(_.size(instances));
+	$('#experiment-count').removeClass("hidden");
+
 	// Format dates with moment before display.
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
@@ -149,6 +167,11 @@ $(function () {
 	// pressing escape to cancel the search
 	$.tablesorter.filter.bindSearch(table, $(searchname));
 
+	// Update the count of matched experiments
+	table.bind('filterEnd', function(e, filter) {
+	    $('#experiment-count span').html(filter.filteredRows);
+	});
+
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
@@ -158,31 +181,28 @@ $(function () {
 
     function SearchAgain()
     {
-    	var dateValues = $("#date-slider").dateRangeSlider("values");
-	
-	default_min = dateValues.min;
-	default_max = dateValues.max;
-
-	sup.ShowWaitWait("Patience please, this will take a few moments");
-	
-	LoadData(function(json) {
-	    console.info(json);
-	    if (json.code) {
-		sup.HideWaitWait(function () {
-		    sup.SpitOops("oops", json.value);
-		});
-		return;
-	    }
-	    var results = json.value;
-	    if (results.length == 0) {
-		sup.HideWaitWait(function () {
-		    sup.SpitOops("oops", "No matching results");
-		});
-		return;
-	    }
-	    sup.HideWaitWait();
-	    GenerateTable(json.value);
-	});
+	var doit = function () {
+	    LoadData(function(json) {
+		console.info(json);
+		if (json.code) {
+		    sup.HideWaitWait(function () {
+			sup.SpitOops("oops", json.value);
+		    });
+		    return;
+		}
+		var results = json.value;
+		if (results.length == 0) {
+		    sup.HideWaitWait(function () {
+			sup.SpitOops("oops", "No matching results");
+		    });
+		    return;
+		}
+		GenerateTable(results);
+		sup.HideWaitWait();
+	    });
+	};
+	sup.ShowWaitWait("Patience please, this will take a few moments",
+			 undefined, doit);
     }
 
     $(document).ready(initialize);
