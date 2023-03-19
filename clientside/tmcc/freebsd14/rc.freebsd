@@ -38,10 +38,17 @@ BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
 #
 use libsetup;
 
-#
 # Move swap partition to end of root disk.
-#
 my $moveswap = 0;
+
+# Partition number for swap partition.
+my $MBR_SWAPPART = 3;
+my $GPT_SWAPPART = 99;
+
+# Alignment for swap partition in sectors (1MB).
+my $PARTALIGN = 2048;
+
+# Size of swap partition. For FreeBSD this cannot be larger than 64GB.
 my $newssize = (GENVNODE() && GENVNODETYPE() eq "xen") ?
     (1 * 1024 * 1024 * 1024 / 512) : (8 * 1024 * 1024 * 1024 / 512);
 
@@ -107,23 +114,36 @@ if ($swapdev) {
 #
 # No swap device found, see if the disklabel of the root disk reveals one.
 #
+my $isgpt = 0;
 if (!$rootfs ||
     ($rootfs !~ /([a-zA-Z]+)(\d+)s(\d+)([a-z])/ &&
      $rootfs !~ /([a-zA-Z]+)(\d+)([a-z])/)) {
-	print STDERR "*** WARNING: could not find/parse root device $rootfs, ".
-	    "no swap enabled\n";
-	return;
+        if ($rootfs !~ /([a-zA-Z]+)(\d+)p(\d+)/) {
+	    print STDERR "*** WARNING: could not find/parse root device $rootfs, ".
+		"no swap enabled\n";
+	    return;
+	}
+	$isgpt = 1;
 }
 my ($dtype,$dnum,$snum,$part) = ($1,$2,$3,$4);
 if (!defined($part)) {
-    $part = $snum;
-    $snum = "1";
+    if ($isgpt) {
+	$part = 0;
+    } else {
+	$part = $snum;
+	$snum = "1";
+    }
 }
 print STDERR "rootfs=$rootfs, dtype=$dtype, dnum=$dnum, snum=$snum, part=$part\n"
     if ($debug);
 # If gpart exists, we do this a little differently
 if (gpartswapenable($dtype, $dnum, $snum, $part)) {
     swapenable($dtype, $dnum, $snum, $part);
+}
+# cannot do GPT without gpart
+elsif ($isgpt) {
+    print STDERR "*** WARNING: must have 'gpart' to modify GPT, no swap enabled\n";
+    return;
 }
 # In the successful gpart case, we try to max out the root FS if desired 
 elsif ($maxoutfs) {
@@ -144,7 +164,7 @@ exit(0);
 sub gpartswapenable($$$$)
 {
     my ($dtype, $dnum, $snum, $part) = @_;
-    my ($dsize,$sstart,$ssize,$spart,$ostart,$osize,$opart);
+    my ($dsize,$sstart,$ssize,$spart,$slet,$ostart,$osize,$opart);
     my $disk = "${dtype}${dnum}";
 
     if (! -e "/sbin/gpart") {
@@ -166,9 +186,18 @@ sub gpartswapenable($$$$)
 	}
 
 	# first line has the total size and partition scheme
+	my $isgpt;
 	if ($field[0] eq "=>") {
-	    if ($field[4] ne "MBR") {
-		print STDERR "*** WARNING: boot disk $disk not MBR, ".
+	    if ($field[4] eq "MBR") {
+		$isgpt = 0;
+		$spart = $MBR_SWAPPART;
+		$slet = 's';
+	    } elsif ($field[4] eq "GPT") {
+		$isgpt = 1;
+		$spart = $GPT_SWAPPART;
+		$slet = 'p';
+	    } else {
+		print STDERR "*** WARNING: boot disk $disk not MBR/GPT, ".
 		    "trying old approach\n";
 		return 1;
 	    }
@@ -176,7 +205,9 @@ sub gpartswapenable($$$$)
 	    # where we want swap to be
 	    $ssize = $newssize;
 	    $sstart = $dsize - $ssize;
-	    $spart = 3;
+	    # align the start
+	    $sstart = int($sstart / $PARTALIGN) * $PARTALIGN;
+	    $ssize = $dsize - $sstart;
 	    next;
 	}
 
@@ -205,7 +236,7 @@ sub gpartswapenable($$$$)
 		return 0;
 	    }
 	    if (!$moveswap || $pstart >= $sstart) {
-		addswap("${disk}s${ppart}", $psize);
+		addswap("${disk}${slet}${ppart}", $psize);
 		return 0;
 	    }
 	    # remember the currently location so we can remove it if needed
@@ -226,7 +257,7 @@ sub gpartswapenable($$$$)
 	    if ($pend > $sstart) {
 		# if we already found a swap partition, just use that
 		if ($opart) {
-		    addswap("${disk}s${opart}", $osize);
+		    addswap("${disk}${slet}${opart}", $osize);
 		}
 		print STDERR "*** WARNING: existing partition $ppart overlaps with desired swap partition, ".
 		    ($opart ? "using the old one\n" : "no swap enabled\n");
@@ -243,7 +274,7 @@ sub gpartswapenable($$$$)
 	if (system("/sbin/gpart delete -i $opart $disk")) {
 	    print STDERR "*** WARNING: could not remove old swap partition, ".
 		"using the old one\n";
-	    addswap("${disk}s${opart}", $osize);
+	    addswap("${disk}${slet}${opart}", $osize);
 	    return 0;
 	}
     }
@@ -252,7 +283,7 @@ sub gpartswapenable($$$$)
 	print STDERR "*** WARNING: could not add new swap partition, ".
 	    "no swap enabled\n";
     } else {
-	addswap("${disk}s${spart}", $ssize);
+	addswap("${disk}${slet}${spart}", $ssize);
     }
     return 0;
 }
@@ -351,10 +382,10 @@ sub growroot($$$$)
     }
 
     # First grow the MBR partition
-    print STDERR "Grow MBR partition1: '/sbin/gpart resize -i $snum $disk'\n"
+    print STDERR "Grow root partition$snum: '/sbin/gpart resize -i $snum $disk'\n"
 	if ($debug);
     if (system("/sbin/gpart resize -i $snum $disk")) {
-	print STDERR "*** WARNING: grow of MBR partition failed, ".
+	print STDERR "*** WARNING: grow of root partition $snum failed, ".
 	    "not growing $rootfs\n";
 	return 1;
     }
