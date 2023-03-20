@@ -140,12 +140,15 @@ $(function ()
 	    //
 	    var $this = $('#output_dropdown');
 
+	    // Not needed for bootstrap 5, using autoClose attribute instead.
+	    if (0) {
 	    $this.find('.dropdown-toggle').click(function(e){
 		// this is needed because clicking inside the dropdown will close
 		// the menu with only bootstrap controlling it.
 		$this.find('.dropdown-menu').toggle();
 		return false;
 	    });
+	    }
 	    // make separator & replace quotes buttons update the value
 	    $this.find('.output-separator').click(function(){
 		$this.find('.output-separator').removeClass('active');
