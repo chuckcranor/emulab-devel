@@ -74,7 +74,11 @@ $routing = array("geni-login" =>
 			array("file"    => "sumstats.ajax",
 			      "guest"   => false,
 			      "methods" => array("GetDurationInfo" =>
-						      "Do_GetDurationInfo")),
+                                                     "Do_GetDurationInfo",
+                                                 "GetStats" =>
+                                                     "Do_GetStats",
+                              )
+                        ),
 		 "instantiate" =>
 			array("file"    => "instantiate.ajax",
 			      "guest"   => false,

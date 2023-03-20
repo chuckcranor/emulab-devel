@@ -2,14 +2,22 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['output-dropdown']);
+    var templates = APT_OPTIONS.fetchTemplateList(['sumstats',
+						   'sumstats-table',
+						   'output-dropdown',
+						   "waitwait-modal",
+						   "oops-modal"]);
+    var mainTemplate   = _.template(templates['sumstats']);
+    var tableTemplate  = _.template(templates['sumstats-table']);
     var dropdownString = templates['output-dropdown'];
-  
+    var default_min;
+    var default_max;
+
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
-	var default_min = new Date(2014, 6, 1);
-	var default_max = new Date();
+	default_min = new Date(2014, 6, 1);
+	default_max = new Date();
 
 	if (window.MIN) {
 	    default_min = new Date(window.MIN * 1000);
@@ -17,38 +25,98 @@ $(function ()
 	if (window.MAX) {
 	    default_max = new Date(window.MAX * 1000);
 	}
+	$('#sumstats-body').html(mainTemplate({}));
+	$('#waitwait_div').html(templates['waitwait-modal']);
+	$('#oops_div').html(templates['oops-modal']);
 	$('#output_dropdown').html(dropdownString);
 
-	// Format dates with moment before display.
-	$('.format-date').each(function() {
-	    var date = $.trim($(this).html());
-	    if (date != "") {
-		$(this).html(moment($(this).html())
-			     .format("MMM Do, h:mm a"));
-	    }
+	$("#start_day").datepicker({
+	    yearRange: "2014:+1",
+	    changeYear: true,
+	    maxDate: 0,
+	    onClose: function (dateString, dateobject) {
+		default_min = new Date(dateString);
+		console.info("new min", default_min);
+	    },
 	});
-	$("#date-slider").dateRangeSlider({
-	    bounds: {min: new Date(2014, 6, 1),
-		     max: new Date()},
-	    defaultValues: {min: default_min, max: default_max},
-	    arrows: false,
+	$("#start_day").datepicker("setDate", default_min);
+	
+	$("#end_day").datepicker({
+	    yearRange: "2014:+0",
+	    changeYear: true,
+	    maxDate: 0,
+	    onClose: function (dateString, dateobject) {
+		default_max = new Date(dateString);
+		console.info("new max", default_max);
+	    },
 	});
-	InitTable("sumstats");
-
+	$("#end_day").datepicker("setDate", default_max);
+	
 	// Handler for the date range search button.
-	$('#slider-go-button').click(function() {
-	    var dateValues = $("#date-slider").dateRangeSlider("values");
-	    var min = Math.floor(dateValues.min.getTime()/1000);
-	    var max = Math.floor(dateValues.max.getTime()/1000);
-	    window.location.replace("sumstats.php?min=" + min +
-				    "&max=" + max);
+	$('#go-button').click(function() {
+	    SearchAgain();
+	});
+
+	// Do the initial search
+	LoadData(function(json) {
+	    console.info(json);
+	    $('#waiting').addClass("hidden");
+	    if (json.code) {
+		alert(json.value);
+		return;
+	    }
+	    GenerateTable(json.value);
 	});
     }
 
-    function InitTable(name)
+    function LoadData(callback)
     {
-	var tablename  = "#tablesorter_" + name;
-	var searchname = "#search_" + name;
+	var args = {
+	    "min"  : Math.floor(default_min.getTime() / 1000),
+	    "max"  : Math.floor(default_max.getTime() / 1000),
+	    "target" : window.SHOWBY,
+	};
+	console.info(args);
+	sup.CallServerMethod(null, "sumstats", "GetStats", args, callback);
+    }
+
+    function SearchAgain()
+    {
+	var doit = function () {
+	    LoadData(function(json) {
+		console.info(json);
+		if (json.code) {
+		    sup.HideWaitWait(function () {
+			sup.SpitOops("oops", json.value);
+		    });
+		    return;
+		}
+		var results = json.value;
+		if (results.length == 0) {
+		    sup.HideWaitWait(function () {
+			sup.SpitOops("oops", "No matching results");
+		    });
+		    return;
+		}
+		GenerateTable(results);
+		sup.HideWaitWait();
+	    });
+	};
+	sup.ShowWaitWait("Patience please, this will take a few moments",
+			 undefined, doit);
+    }
+
+    function GenerateTable(results)
+    {
+	$('#table-div').empty();
+	var sumstats_html = tableTemplate({results: results});
+	$('#table-div').html(sumstats_html);
+
+	$('#results-count span').html(_.size(results));
+	$('#results-count').removeClass("hidden");
+
+	var tablename  = "#sumstats_table";
+	var searchname = "#sumstats_table_search";
 	var $this      = $('#output_dropdown');
 	
 	var table = $(tablename)
@@ -135,15 +203,22 @@ $(function ()
 	// pressing escape to cancel the search
 	$.tablesorter.filter.bindSearch(table, $(searchname));
 
+	// Update the count of matched experiments
+	table.bind('filterEnd', function(e, filter) {
+	    $('#results-count span').html(filter.filteredRows);
+	});
+
 	//
 	// All this output stuff from the example page.
-	//
-	$this.find('.dropdown-toggle').click(function(e){
+	// Not needed for bootstrap 5, using autoClose attribute instead.
+	if (0) {
+	$this.find('.dropdown-toggle-foo').click(function(e){
 	    // this is needed because clicking inside the dropdown will close
 	    // the menu with only bootstrap controlling it.
 	    $this.find('.dropdown-menu').toggle();
 	    return false;
 	});
+	}
 	// make separator & replace quotes buttons update the value
 	$this.find('.output-separator').click(function(){
 	    $this.find('.output-separator').removeClass('active');
