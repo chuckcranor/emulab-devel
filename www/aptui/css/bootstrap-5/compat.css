@@ -57,6 +57,12 @@ html,body {
     font-size: 14px;
 }
 
+/*
+ * XXX
+ * btn-default is gone, renamed to btn-light. I ended up changing bootstrap.css
+ * cause I did not want to duplicate 20 lines of css.
+ */
+
 li.divider {
     height: 1px;
     margin: 9px 0;
