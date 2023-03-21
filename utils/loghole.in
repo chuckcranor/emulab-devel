@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 #
-# Copyright (c) 2004-2012 University of Utah and the Flux Group.
+# Copyright (c) 2004-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -935,6 +935,7 @@ def rsync(host, base, dlpath = None, paths = ["/"], port = None,
                "-rtgoDl",
                "-z", # rsync compression, ssh compression turned off below
                "-v", # XXX
+               "--stderr=all", # XXX
                "--copy-unsafe-links"]
         if dlpath != None:
             cmd.append("--include-from=" + dlpath)
