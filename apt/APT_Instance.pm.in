@@ -3422,10 +3422,15 @@ sub GamingExtensions($)
 	DBQueryFatal("select info.* from apt_instances as i ".
 		     "join apt_instance_extension_info as info on ".
 		     "   info.uuid=i.uuid ".
-		     "where i.uuid='$uuid' and ".
+		     "where i.uuid='$uuid' and info.action='request' and ".
 		     "      info.tstamp>DATE_ADD(i.started, ".
 		     "                           interval $maxage day) ".
 		     "order by tstamp desc");
+
+    if ($query_result->numrows == 0) {
+	print "ExtensionCheck: No history\n";
+	return 0;
+    }
 
     #
     # Scan backwards. If the user submitted the extension less then a day
