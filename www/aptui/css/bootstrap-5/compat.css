@@ -53,6 +53,26 @@ html,body {
     line-height: 1.42857143;
 }
 
+/*
+ * So h5 used to be 1rem (14px). Now h6 is 1rem. Which throws everything
+ * off and makes lots of things inconsistent until all pages are done.
+ */
+h6, .h6 { font-size: 0.857rem; }
+h5, .h5 { font-size: 1rem; }
+h4, .h4 { font-size: 1.25rem; }
+h3, .h3 { font-size: 1.7rem; }
+
+/*
+ * I prefer how small is done in bootstrap 3
+ */
+h5 .small,
+h4 .small,
+h3 .small {
+  font-weight: normal;
+  line-height: 1;
+  color: #777;
+}
+
 .btn {
     font-size: 14px;
 }
