@@ -90,9 +90,11 @@ li.divider {
     background-color: #e5e5e5;
 }
 
+/* Now called float-end */ 
 .pull-right {
     float: right !important;
 }
+/* Now called float-start */ 
 .pull-left {
     float: left !important;
 }
@@ -103,6 +105,9 @@ li.divider {
 
 a {
     text-decoration: none;
+}
+.a-nohref {
+    color: var(--bs-link-color);
 }
 
 .btn-xs, .btn-group-xs > .btn {
