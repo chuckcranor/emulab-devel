@@ -140,28 +140,29 @@
 	<div class="range-chart"></div>
       </div>
     </div>
+    <!-- Cause of Bootstrap 5 Flex containers, need to be inside the panel -->
+    <div class="range-chart-tooltip">
+      <table class="table table-condensed border-none" 
+             style="font-size: 14px; margin: 0px;">
+	<tbody>
+	  <tr>
+            <td class="border-none">Start:</td>
+            <td class="border-none tooltip-start"></td>
+	  </tr>
+	  <tr>
+            <td class="border-none">End:</td>
+            <td class="border-none tooltip-end"></td>
+	  </tr>
+	  <tr>
+            <td class="border-none">Range:</td>
+            <td class="border-none tooltip-range"></td>
+	  </tr>
+	  <tr>
+            <td class="border-none">Approved?:</td>
+            <td class="border-none tooltip-approved">Yes</td>
+	  </tr>
+	</tbody>
+      </table>
+    </div>
   </div>
-</div>
-<div class="range-chart-tooltip">
-  <table class="table table-condensed border-none" 
-         style="font-size: 14px; margin: 0px;">
-    <tbody>
-      <tr>
-        <td class="border-none">Start:</td>
-        <td class="border-none tooltip-start"></td>
-      </tr>
-      <tr>
-        <td class="border-none">End:</td>
-        <td class="border-none tooltip-end"></td>
-      </tr>
-      <tr>
-        <td class="border-none">Range:</td>
-        <td class="border-none tooltip-range"></td>
-      </tr>
-      <tr>
-        <td class="border-none">Approved?:</td>
-        <td class="border-none tooltip-approved">Yes</td>
-      </tr>
-    </tbody>
-  </table>
 </div>
