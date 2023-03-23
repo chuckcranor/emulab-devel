@@ -1,5 +1,5 @@
 <style>
- .panel-body {
+ .panel-body, .card-body {
      padding: 2px;
  }
 .table-dashboard {
@@ -11,14 +11,17 @@
  }
  .counts-size {
      max-height:475px;
-     overflow-y:scroll;
+     overflow-y:auto;
  }
 </style>
 <div>
   <% if (window.ISPOWDER) { %>
     <% if (window.ISPOWDER) { %>
-      <div class='row col-xs-9 col-xs-offset-3 hidden'
-	   id='range-info-div'></div>
+      <div class='row'>
+	<div class='col-sm-9 col-sm-offset-3 offset-sm-3 hidden'
+	     id='range-info-div'>
+	</div>
+      </div>
     <% } %>
     <div class='row' id='powder-radios'>
       <div class='col-sm-3 counts-panel'>
@@ -123,8 +126,8 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'></button>
 	<br>
 	<p>
 	  The graph tells you how many of each node type are available
@@ -162,8 +165,8 @@
   <div class='modal-dialog modal-sm'>
     <div class='modal-content'>
       <div class='modal-body'>
-	<button type="button" class="close" data-dismiss="modal"
-	  <span aria-hidden="true">&times;</span></button>	
+	<button type="button" class="close btn-close"
+		data-dismiss="modal" data-bs-dismiss="modal"></button>
 	<center>
 	  <small>
 	    <table class="table table-bordered table-condensed">

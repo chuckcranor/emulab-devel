@@ -191,6 +191,8 @@ $(function ()
 		.html("<span class=small> " +
 			" <a href='#' " +
 			"    data-target='#matrix-connections-modal' " +
+			"    data-bs-target='#matrix-connections-modal' " +
+			"    data-bs-toggle='modal' " +
 			"    data-toggle='modal'>" +
 			"  Matrix Connections</a></span>" +
 			"");

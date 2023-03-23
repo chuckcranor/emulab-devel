@@ -54,8 +54,8 @@
  }
  
 </style>
-<div class='panel panel-default'>
-  <div class='panel-heading'>
+<div class='panel  card panel-default'>
+  <div class='panel-heading card-header'>
     <div class="aligned-title-buttons">
       <span class="left-edge" style="font-size: 18px;">
 	<a href="#" class="zoom-in">
@@ -65,9 +65,9 @@
 	  <span class="glyphicon glyphicon-zoom-out"></span>
 	</a>
 	<a href='#'
-	   data-toggle='popover'
-	   data-html='true'
-	   data-delay='{"hide":500}'
+	   data-toggle='popover' data-bs-toggle='popover'
+	   data-html='true' data-bs-html='true'
+	   data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 	   data-content='In addition to the zoom in/out buttons to the left,
 			 you can double click in the graph to zoom/recenter.
 			 You can also click-drag to pan left or right after
@@ -79,39 +79,39 @@
 	</a>
       </span>
       <span class="middle">
-	<h4 class='panel-title'>Frequency Information</h4>
+	<h5 class="panel-title card-title"></h5>
       </span>
       <span class="right-edge"> </span>
     </div>
   </div>
-  <div class='panel-body' style="padding: 2px;">
+  <div class='panel-body card-body' style="padding: 2px;">
     <ul class="nav nav-tabs" role="tablist">
       <li role="presentation" class="allowed-ranges-hidden hidden">
 	<a href="#allowed-ranges" role="tab" 
-	   data-toggle="tab">Allowed Ranges</a>
+	   data-toggle="tab" data-bs-toggle="tab">Allowed Ranges</a>
       </li>
       <li role="presentation" class="lookright">
 	<a href="" role="tab" 
-	   data-toggle="tab">Reserved Ranges
+	   data-toggle="tab" data-bs-toggle="tab">Reserved Ranges
 	  <span class="glyphicon glyphicon-hand-right"
 		style="margin-left: 3px;"></span>
 	</a>
       </li>
       <li role="presentation" class="active">
 	<a href="#cbrs-ranges" role="tab" 
-	   data-toggle="tab">LCBAND/CBRS</a>
+	   data-toggle="tab" data-bs-toggle="tab">LCBAND/CBRS</a>
       </li>
       <li role="presentation">
 	<a href="#ism900-ranges" role="tab"
-	   data-toggle="tab">ISM 900</a>
+	   data-toggle="tab" data-bs-toggle="tab">ISM 900</a>
       </li>
       <li role="presentation">
 	<a href="#ism2400-ranges" role="tab"
-	   data-toggle="tab">ISM 2400</a>
+	   data-toggle="tab" data-bs-toggle="tab">ISM 2400</a>
       </li>
       <li role="presentation">
 	<a href="#ism5800-ranges" role="tab"
-	   data-toggle="tab">ISM 5800</a>
+	   data-toggle="tab" data-bs-toggle="tab">ISM 5800</a>
       </li>
     </ul>
     <div class="tab-content">

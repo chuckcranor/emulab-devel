@@ -18,7 +18,7 @@
 	padding: 2px;
 }
 .panel-heading {
-	padding: 5px;
+       padding: 10px 5px;
 }
 .inuse-panel {
 	height:350px;
@@ -60,8 +60,9 @@
 	<% } %> >
       <div class='panel card panel-default'>
 	<div class="panel-heading card-header"
-	     style="padding-top: 10px; padding-bottom: 8px;"
-	  <h5><center><%- name %> Totals</center></h5>
+	     style="padding-top: 10px; padding-bottom: 12px;">
+	  <h5 class="panel-title card-title card-title-small">
+	    <center><%- name %> Totals</center></h5>
 	</div>
 	<div class='panel-body card-body panel-body-dashboard'>
 	  <div class="counts-panel" id='counts-panel-<%- name %>'>
@@ -81,8 +82,11 @@
 	class='col-sm-5'
 	<% } %> >
       <div class='panel card panel-default'>
-	<div class="panel-heading card-header" id='inuse-click-<%- name %>'>
-	  <h5 style="margin-bottom: 0px;">
+	<!-- heading padding cause of the URN subtitle below -->
+	<div class="panel-heading card-header"
+	     style="padding: 5px;"
+	     id='inuse-click-<%- name %>'>
+	  <h5 class="panel-title card-title card-title-small">
 	    <a href="#inuse-panel-<%- name %>">
 	      <span id="inuse-collapse-button-<%- name %>"
 		    class="glyphicon glyphicon-chevron-right pull-left"></span>
@@ -141,7 +145,7 @@
       <div class='panel  card panel-default'>
 	<div class="panel-heading card-header"
 	     id='prereserve-click-<%- name %>'>
-	  <h5>
+	  <h5 class="panel-title card-title card-title-small">
 	    <a href="#prereserve-row-<%- name %>">
 	      <span id="prereserve-collapse-button-<%- name %>"
 		    class="glyphicon glyphicon-chevron-right pull-left">

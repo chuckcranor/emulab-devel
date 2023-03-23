@@ -432,11 +432,10 @@ fieldset[disabled] .nav > li > a.btn-success.active {
   border: none !important;
 }
 
-/*
-.panel-body {
-  background-color: #f5f5f5;
+/* Default panel headings are too big. */
+.panel-heading {
+  padding: 10px 5px;
 }
-*/
 
 /* Helper */
 .align-center {
