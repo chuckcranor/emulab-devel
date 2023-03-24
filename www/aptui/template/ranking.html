@@ -1,51 +1,59 @@
-<div class='row'>
-  <div class='col-sm-12'>
-    <center class="form-inline">
-      <div class="form-group">
-	<input value=<%= days %> id="days" size="3">
-	<label>day ranking;</label>
+<form>
+  <div class="row justify-content-center align-items-center mt-3">
+    <div class="col-sm-1">
+      <div class="input-group input-group-sm">
+	<span class="input-group-text">Days:</span>
+	<input type="text" class="form-control" id=days
+	       value="<%- days %>">
       </div>
-      <div class="form-group">
-	<input type="checkbox"
+    </div>
+    <div class="col-sm-1">
+      <div class="form-check-inline">
+	<input class="form-check-input"
 	       <% if (allusers) { %>checked<% } %>
-	       id="allusers">
-	<label>All Users</label>
-	</label>
+	       type="checkbox" id="allusers">
+	<label class="form-check-label" for="allusers">
+        All Users</label>
+	<button class='btn btn-primary btn-xs ms-2' 
+		id='update-results'
+		type='submit'>Go</button>
       </div>
-      <button class='btn btn-primary btn-xs' 
-	      id='update-results'
-              type='submit'>Go</button>
-    </center>
+    </div>
   </div>
-</div>
+</form>
 <div class='row'>
   <div class='col-sm-12'>
-    <div class='panel panel-default'>
-      <div class='panel-body'>
+    <div class='panel  card panel-default'>
+      <div class='panel-body card-body'>
 	<div class='row'>
 	  <div class='col-sm-12'>
 	    <div>
 	      <!-- Nav tabs -->
 	      <ul class="nav nav-tabs" role="tablist">
-		<li role="presentation" class="active">
-		  <a href="#users" role="tab"
-		     data-toggle="tab">Users</a></li>
-		<li role="presentation">
-		  <a href="#projects" role="tab"
-		     data-toggle="tab">Projects</a></li>
-		<li role="presentation">
-		  <a href="#profiles" role="tab"
-		     data-toggle="tab">Profiles</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#users" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Users</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#projects" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Projects</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#profiles" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Profiles</a></li>
 	      </ul>
 	      <!-- Tab panes -->
 	      <div class="tab-content">
-		<div role="tabpanel" class="tab-pane active" id="users">
+		<div role="tabpanel" class="tab-pane" id="users">
+		  <div class="row justify-content-start">
+		    <div class="col-sm-3">
+		      <input class='form-control form-control-md search'
+			     type='search' data-column='all'
+			     id='users_search' placeholder='Search Table'>
+		    </div>
+		    <div class="col-sm-3">
+		      <div class='output-dropdown-control'></div>
+		    </div>
+		  </div>
 		  <div class="table-responsive">
-		    <input class='form-control search'
-			   style="width: 300px; margin-right: 15px; display: inline;"
-			   type='search' data-column='all'
-			   id='users_search' placeholder='Search'>
-		    <span class="output-dropdown-control"></span>
 		    <table class='tablesorter' id='users_table'>
 		      <thead>
 			<tr>
@@ -76,11 +84,17 @@
 		  </div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="projects">
+		  <div class="row justify-content-start">
+		    <div class="col-sm-3">
+		      <input class='form-control form-control-md search'
+			     type='search' data-column='all'
+			     id='projects_search' placeholder='Search Table'>
+		    </div>
+		    <div class="col-sm-3">
+		      <div class='output-dropdown-control'></div>
+		    </div>
+		  </div>
 		  <div class="table-responsive">
-		    <input class='form-control search' type='search' data-column='all'
-			   style="width: 300px; margin-right: 15px; display: inline;"
-			   id='projects_search' placeholder='Search'>
-		    <span class="output-dropdown-control"></span>
 		    <table class='tablesorter' id='projects_table'>
 		      <thead>
 			<tr>
@@ -114,12 +128,18 @@
 		  </div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="profiles">
+		  <div class="row justify-content-start">
+		    <div class="col-sm-3">
+		      <input class='form-control form-control-md search'
+			     type='search' data-column='all'
+			     id='profiles_search'
+			     placeholder='Search Table'>
+		    </div>
+		    <div class="col-sm-3">
+		      <div class='output-dropdown-control'></div>
+		    </div>
+		  </div>
 		  <div class="table-responsive">
-		    <input class='form-control search'
-			   style="width: 300px; margin-right: 15px; display: inline;"
-			   type='search' data-column='all'
-			   id='profiles_search' placeholder='Search'>
-		    <span class="output-dropdown-control"></span>
 		    <table class='tablesorter' id='profiles_table'>
 		      <thead>
 			<tr>

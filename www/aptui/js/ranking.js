@@ -25,18 +25,13 @@ $(function ()
 	InitTable("projects");
 	InitTable("profiles");
 
-        // Javascript to enable link to tab
-        var hash = document.location.hash;
-        if (hash) {
-            $('.nav-tabs a[href="'+hash+'"]').tab('show');
-        }
-        // Change hash for page-reload
-        $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-            window.location.hash = e.target.hash;
-        });
+	// Setup nav tab document hash handling.
+	sup.hashSetup(".nav-tabs", "#users");
 
 	// Button to change the number of days.
 	$('#update-results').click(function () {
+	    event.preventDefault();
+	    
 	    var days = $('#days').val();
 	    var url  = "ranking.php?days=" + days;
 
@@ -132,12 +127,15 @@ $(function ()
 	// Minor adjustment.
 	$this.find('.btn-group').css("margin-top", "-2px");
 	
+	// Not needed for bootstrap 5, using autoClose attribute instead.
+	if (0) {
 	$this.find('.dropdown-toggle').click(function(e){
 	    // this is needed because clicking inside the dropdown will close
 	    // the menu with only bootstrap controlling it.
 	    $this.find('.dropdown-menu').toggle();
 	    return false;
 	});
+	}
 	// make separator & replace quotes buttons update the value
 	$this.find('.output-separator').click(function(){
 	    $this.find('.output-separator').removeClass('active');
