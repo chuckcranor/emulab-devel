@@ -189,6 +189,15 @@ div.modal-header {
 }
 
 /*
+ * I like readonly inputs to be obvious!
+ */
+.form-control[disabled],
+.form-control[readonly] {
+  background-color: #eee;
+  opacity: 1;
+}
+
+/*
  * Bootstrap got rid of glyphicons, but we use them in 100s of places.
  */
 @font-face {

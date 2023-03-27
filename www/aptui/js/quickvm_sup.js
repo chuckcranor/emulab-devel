@@ -153,7 +153,7 @@ function addPopoverClip (id, contentfunction)
 	// just return since the body click event will kill it off.
 	var showing = false;
 
-	if (window.BOOSTRAP_VERSION == 5) {
+	if (window.BOOTSTRAP_VERSION == 5) {
 	    var actual = $(button).attr("aria-describedby");
 
 	    //console.info("actual", actual);
@@ -193,7 +193,7 @@ function addPopoverClip (id, contentfunction)
 
 	// DOM of the popover content.
 	var content;
-	if (window.BOOSTRAP_VERSION == 5) {
+	if (window.BOOTSTRAP_VERSION == 5) {
 	    content = $('#' + $(button).attr("aria-describedby"));
 	}
 	else {
@@ -430,7 +430,7 @@ function hashSetup(target, defaultHash)
     if (hash) {
 	var element = $(target + ' a[href="'+hash+'"]');
 	if (element) {
-	    if (window.BOOSTRAP_VERSION == 5) {
+	    if (window.BOOTSTRAP_VERSION == 5) {
 		element[0].click();
 	    }
 	    else {

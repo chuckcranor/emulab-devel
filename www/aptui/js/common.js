@@ -66,7 +66,7 @@ window.APT_OPTIONS.initialize = function (sup)
 	typeof bootstrap === 'undefined' ?
 	$().modal.Constructor.VERSION : bootstrap.Modal.VERSION;
 
-    window.BOOSTRAP_VERSION = parseInt(version.substr(0, 1));
+    window.BOOTSTRAP_VERSION = parseInt(version.substr(0, 1));
 
     // Eventually make this download without having to follow a link.
     // Just need to figure out how to do that!

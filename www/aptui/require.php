@@ -361,8 +361,7 @@ function SPITREQUIRE_DATASET()
     REQUIRE_SUP();
     REQUIRE_MOMENT();
     REQUIRE_APTFORMS();
-    SPITREQUIRE("js/create-dataset.js",
-                "<script src='js/lib/jquery-ui.js'></script>");
+    REQUIRE_JQUERY_UI();
 }
 
 #########################################################################################

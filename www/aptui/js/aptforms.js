@@ -80,7 +80,7 @@ $(function () {
 				    "px;'></div>");
 		    
 		    // Temporary
-		    if (window.BOOSTRAP_VERSION == 5) {
+		    if (window.BOOTSTRAP_VERSION == 5) {
 			$(wrapper).addClass("row");
 		    }
 		    
@@ -113,8 +113,11 @@ $(function () {
 				"<a href='#' class='btn btn-xs' " +
 				" style='padding-right: 0px;' " +
 				" data-toggle='popover' " +
+				" data-bs-toggle='popover' " +
 				" data-html='true' " +
+				" data-bs-html='true' " +
 				" data-delay='{\"hide\":1000}' " +
+				" data-bs-delay='{\"hide\":1000}' " +
 				" data-content='" + item.dataset['help'] + "'>"+
 				"<span style='margin-bottom: 4px;' " +
 				"  class='glyphicon " +
@@ -123,7 +126,7 @@ $(function () {
 			}
 			if (_.has(item.dataset, "optional")) {
 			    label_text = label_text +
-				"<br><small>(Optional)</small>";
+				"<div><small>(Optional)</small></div>";
 			}
 			label_text = label_text + "</label>";
 			wrapper.append($(label_text));
@@ -150,17 +153,21 @@ $(function () {
 	    $(form).find(".format-me").each(function () {
 		if (this.dataset) {
   		    var key = this.dataset['key'];
+		    var label =
+			$('<label id="label-error-' + key + '" ' +
+			  '  for="inputError">' + _.escape(errors[key]) +
+			  '</label>');
 
 		    if (errors && _.has(errors, key)) {
-			$(this).parent().addClass("has-error");
-
-			var html =
-			    '<label class="control-label" ' +
-			    '  id="label-error-' + key + '" ' +
-			    '  for="inputError">' + _.escape(errors[key]) +
-			    '</label>';
-			    
-			$(this).parent().append(html);
+			if (window.BOOTSTRAP_VERSION == 5) {
+			    $('#' + key).addClass("is-invalid");
+			    $(label).addClass("invalid-feedback text-start");
+			}
+			else {
+			    $(this).parent().addClass("has-error");
+			    $(label).addClass("form-control");
+			}
+			$(this).parent().append(label);
 			delete errors[key];
 		    }
 		}
@@ -239,11 +246,19 @@ $(function () {
 		if (this.dataset) {
   		    var key = this.dataset['key'];
 
-		    // Remove the error label by id, that we added above.
-		    if ($(this).parent().hasClass("has-error")) {
-			$(this).parent()
-			    .find('#' + 'label-error-' + key).remove();
-			$(this).parent().removeClass("has-error");
+		    if (window.BOOTSTRAP_VERSION == 5) {
+			if ($('#' + key).hasClass("is-invalid")) {
+		    	    $('#' + key).removeClass("is-invalid");
+			    $('#label-error-' + key).remove();
+			}
+		    }
+		    else {
+			// Remove the error label by id, that we added above.
+			if ($(this).parent().hasClass("has-error")) {
+			    $(this).parent()
+				.find('#' + 'label-error-' + key).remove();
+			    $(this).parent().removeClass("has-error");
+			}
 		    }
 		}
 	    });
