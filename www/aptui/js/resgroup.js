@@ -1258,7 +1258,9 @@ $(function ()
 	    var start = moment(start_day, "MM/DD/YYYY");
 	    start.hour(start_hour);
 
-	    if (moment(start).isBefore(nbd)) {
+	    console.info(moment(start), nbd);
+
+	    if (start.isBefore(nbd)) {
 		toosoon = 1;
 	    }
 	}
@@ -1337,6 +1339,7 @@ $(function ()
 	now.hours(9);
 	now.minute(0);
 	now.second(0);
+	now.millisecond(0);
 	now.local();
 	console.info(now.format('lll'));
 	return now;
