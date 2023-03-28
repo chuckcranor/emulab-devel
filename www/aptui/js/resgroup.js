@@ -693,8 +693,9 @@ $(function ()
 			      sup.ShowModal('#reservation-faq-modal');
 			  });
 	});
-	// Set the manual link since the FAQ is not a template.
-	$('#reservation-manual').attr("href", window.MANUAL);
+	// Set the manual link, it is used in several places.
+	$('.reservation-manual').attr("href",
+				      window.MANUAL + "/reservations.html")
 
 	// Handler for the Reservation Graph Help button
 	$('.resgraph-help-button').click(function (event) {
