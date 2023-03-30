@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2011 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -32,6 +32,7 @@ use English;
 use Getopt::Std;
 use XML::LibXML;
 use Data::Dumper;
+use File::Temp qw(tempfile);
 
 #
 # Sign a GENI credential
@@ -79,7 +80,6 @@ my $OPENSSL     = "/usr/bin/openssl";
 my $XMLLINT     = "/usr/local/bin/xmllint";
 my $XMLSEC1     = "/usr/local/bin/xmlsec1";
 my $SAVEUID	= $UID;
-my $tmpfile     = "/tmp/signcred$$";
 my $certfile;
 my $keyfile;
 my $sigid;
@@ -306,12 +306,9 @@ $signatures_node->addChild($sigroot);
 # reference point. Must write this to a tmp file for xmlsec, and then
 # use xmlsec to add the signature. 
 #
-# Paranoia.
-unlink($tmpfile);
-open(TMP, ">$tmpfile") or
-    fatal("Could not open $tmpfile: $!");
-print TMP $doc->toString(1) . "\n";
-close(TMP);
+my ($fh, $tmpfile) = tempfile("/tmp/signXXXXXXX", UNLINK => 1);
+print $fh $doc->toString(1) . "\n";
+close($fh);
 
 # Fire up xmlsec and read back the results.
 my $signedcred = "";

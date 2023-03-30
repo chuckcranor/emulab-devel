@@ -772,6 +772,17 @@ $(function ()
 	    else {
 		$('#reserve-requestor').html(details.uid);
 	    }
+
+	    // Until pushed out to all clusters.
+	    if (_.has(details, "idledetection")) {
+		if (details.idledetection) {
+		    $('#idle-detection-checkbox').prop("checked", true);
+		}
+		else {
+		    $('#idle-detection-checkbox').prop("checked", false);
+		}
+		$('#idle-detection-checkbox-div').removeClass("hidden");
+	    }
 	    
 	    /*
 	     * If this is an admin looking at an unapproved reservation,

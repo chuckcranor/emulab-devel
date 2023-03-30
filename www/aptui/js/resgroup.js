@@ -693,8 +693,9 @@ $(function ()
 			      sup.ShowModal('#reservation-faq-modal');
 			  });
 	});
-	// Set the manual link since the FAQ is not a template.
-	$('#reservation-manual').attr("href", window.MANUAL);
+	// Set the manual link, it is used in several places.
+	$('.reservation-manual').attr("href",
+				      window.MANUAL + "/reservations.html")
 
 	// Handler for the Reservation Graph Help button
 	$('.resgraph-help-button').click(function (event) {
@@ -1223,8 +1224,6 @@ $(function ()
      */
     function StartTimeOkay()
     {
-	adjustMorning();
-
 	console.info("StartTimeOkay");
 
 	if (!window.MAINSITE || isadmin || !window.BISONLY) {
@@ -1255,61 +1254,22 @@ $(function ()
 	console.info("StartTimeOkay: ", start_day, start_hour);
 
 	if (start_day && start_hour) {
-	    var now   = moment();
+	    var nbd   = NextBusinessDay();
 	    var start = moment(start_day, "MM/DD/YYYY");
 	    start.hour(start_hour);
-	    
-	    if (now.isSame(start, 'day')) {
-		toosoon = 1;
-	    }
-	    else if (moment([start.year(), start.month(), start.date()])
-		     .diff(moment([now.year(), now.month(), now.date()]), 'day')
-		     == 1) {
-		// Next day, has to be after 9am on a weekday.
-		start.tz(window.HOMETZ);
-		console.info("next day");
-		
-		if (start.hours() < 9 || 
-		    start.isoWeekday() == 6 || start.isoWeekday() == 7) {
-		    toosoon = 1;
-		}
-	    }
-	    else {
-		console.info(now.format(), start.format());
-		start.tz(window.HOMETZ);
-		now.tz(window.HOMETZ);
 
-		// Advance, looking for a business day between now and start.
-		toosoon = 1;
-		var tmp = now.clone();
-		tmp.isoWeekday(tmp.isoWeekday() + 1);
-		tmp.hour(8);
-		tmp.minute(59);
-		tmp.second(0);
-		console.info("clone: " + tmp.format());
+	    console.info(moment(start), nbd);
 
-		while (tmp.isBefore(start)) {
-		    var dayofweek = tmp.isoWeekday();
-		    console.info("dayofweek: " + dayofweek);
-			
-		    if (dayofweek >= 1 && dayofweek <= 5) {
-			toosoon = 0;
-			break;
-		    }
-		    tmp.isoWeekday(tmp.isoWeekday() + 1);
-		}
+	    if (start.isBefore(nbd)) {
+		toosoon = 1;
 	    }
 	}
 	else {
-	    var now = moment();
-	    // Change the timezone to home base so we can check against
-	    // 9am and weekend in that timezone.
-	    now.tz(window.HOMETZ);
-
-	    if (now.hours() > 5 ||
-		now.isoWeekday() == 6 || now.isoWeekday() == 7) {
-		toosoon = 1;
-	    }
+	    /*
+	     * All reservations that need approval must start in two
+	     * business days, so "now" is definitely too soon.
+	     */
+	    toosoon = 1;
 	}
 	if (toosoon) {
 	    sup.ShowModal('#toosoon-modal');
@@ -1321,25 +1281,67 @@ $(function ()
     /*
      * Calculate the next business day after the current time.
      */
-    function NextBusinessDay()
+    function NextBusinessDay(now)
     {
-	var now = moment();
+	var pid = $('#pid').val();
+	
+	if (now === undefined) {
+	    now = moment();
+	}
 	// Change the timezone to home base so we can check against
 	// 9am and weekend in that timezone.
 	now.tz(window.HOMETZ);
 
-	if (now.isoWeekday() == 6 || now.isoWeekday() == 7 ||
-	    now.isoWeekday() == 5) {
-	    now.isoWeekday(1);
-	    now.isoWeek(now.isoWeek() + 1);
+	console.info("NextBusinessDay", now.isoWeekday());
+
+	if (window.ISPOWDER && pid != "PowderTeam") {
+	    // New: All reservations that need approval have to start
+	    // no earlier then two business days from now.
+	    switch (now.isoWeekday())
+	    {
+		case 1:
+		case 2:
+		case 3:
+	             now.isoWeekday(now.isoWeekday() + 2);
+	             break;
+
+		case 4:
+		case 5:
+	              now.isoWeekday(now.isoWeekday() + 4);
+    	              break;
+	    
+		case 6:
+		case 7:
+	              now.isoWeekday(2);
+	              now.isoWeek(now.isoWeek() + 1);
+	              break;
+	    }
 	}
 	else {
-	    now.isoWeekday(now.isoWeekday() + 1);
+	    switch (now.isoWeekday())
+	    {
+		case 1:
+		case 2:
+		case 3:
+		case 4:
+	             now.isoWeekday(now.isoWeekday() + 1);
+	             break;
+
+		case 5:
+		case 6:
+		case 7:
+	              now.isoWeekday(1);
+	              now.isoWeek(now.isoWeek() + 1);
+	              break;
+	    }
+
 	}
-	now.hours(8);
-	now.minute(59);
-	now.second(59);
+	now.hours(9);
+	now.minute(0);
+	now.second(0);
+	now.millisecond(0);
 	now.local();
+	console.info(now.format('lll'));
 	return now;
     }
     window.NextBusinessDay = NextBusinessDay;
@@ -2922,6 +2924,9 @@ $(function ()
     //
     function ValidateReservation(clusters, ranges, routes)
     {
+	// This updates a couple of modals. 
+	adjustNBD();
+	
 	var callback = function(json) {
 	    console.info(json);
 	    if (json.code) {
@@ -3463,7 +3468,8 @@ $(function ()
 	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
-			     {"uuid"    : window.UUID},
+			     {"uuid"    : window.UUID,
+			      "withhistory" : true},
 			     callback);
     }
 
@@ -3816,7 +3822,9 @@ $(function ()
 	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
-			     {"uuid"    : window.UUID}, callback);
+			     {"uuid"    : window.UUID,
+			      "withhistory" : true},
+			     callback);
     }
 
     /*
@@ -4300,7 +4308,7 @@ $(function ()
 	if (which == "routes") {
 	    graphid = "route-graph-div";
 	}
-	else if (which == "ranges") {
+	else if (0 && which == "ranges") {
 	    graphid = "range-info-div";
 	}
 	else {
@@ -4781,7 +4789,7 @@ $(function ()
 						   "authority", "cm");
 		    }
 		}
-		else if (_.size(cluster_selections) == 1) {
+		else if (!manager_id && _.size(cluster_selections) == 1) {
 		    // Might be a site of one.
 		    var tag;
 
@@ -4984,13 +4992,11 @@ $(function ()
 	now.local();
 	return now;
     }
-    function adjustMorning()
+    function adjustNBD()
     {
-	if (moment.tz.guess() != window.HOMETZ) {
-	    var adjusted = adjustedMorning();
-	    $('.adjustedmorning span').text(adjusted.format("h A"));
-	    $('.adjustedmorning').removeClass("hidden");
-	}
+	var nbd = NextBusinessDay();
+	
+	$('.adjustedNBD').text(nbd.format("ddd MMM Mo hA"));
     }
 
     /*

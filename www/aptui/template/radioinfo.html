@@ -9,21 +9,25 @@
 	<th>Location</th>
 	<th>Node</th>
 	<th class="nowrap">Site Type</th>
-	<th>Radio Type 
-	  <span class="glyphicon glyphicon-edit"
-		style="margin-left: 5px;"></span></th>
+	<th>Radio Type
+	  <span class="glyphicon glyphicon-edit hidden"
+		  style="margin-left: 5px;"></span></th>
 	<th>Frontend (iface)</th>
 	<th class="sorter-false">TX Ranges
-	  <span class="glyphicon glyphicon-edit"
-		style="margin-left: 5px;"></span></th>	  
+	  <span class="glyphicon glyphicon-edit hidden"
+		style="margin-left: 5px;"></span>
+	</th>	  
 	<th class="sorter-false">RX Ranges
-	  <span class="glyphicon glyphicon-edit"
+	  <span class="glyphicon glyphicon-edit hidden"
+		style="margin-left: 5px;"></span></th>	  
+	<th class="sorter-false">Sync
+	  <span class="glyphicon glyphicon-edit hidden"
 		style="margin-left: 5px;"></span></th>	  
 	<th class="sorter-false">Monitor</th>
 	<th class="sorter-false">RF Scans</th>
 	<th class="sorter-false">Free?</th>
 	<th class="sorter-false">Notes
-	  <span class="glyphicon glyphicon-edit"
+	  <span class="glyphicon glyphicon-edit hidden"
 		style="margin-left: 5px;"></span></th>	  
       </tr>
     </thead>
@@ -37,12 +41,18 @@
 		data-node_id="<%- node_id %>"
 		data-iface="<%- iface %>"
 		data-frontend="<%- frontend.frontend %>">
-	    <td><a href="powder-map.php?location=<%- node.location %>"
-		   class="location"
-		   data-urn="<%- urn %>"
-		   data-location="<%- node.location %>"
-		   data-type="<%- node.itype %>">
-	      <%- node.location %></a>
+	    <td>
+	      <a href="powder-map.php?location=<%- node.location %>"
+		 class="location"
+		 data-urn="<%- urn %>"
+		 data-location="<%- node.location %>"
+		 data-type="<%- node.itype %>">
+		<% if (node.itype == "FE") { %>
+		  <%- amlist[urn].nickname %>
+		<% } else { %>
+		  <%- node.location %>
+		<% } %>
+	      </a>
 	      <a href="#" data-urn="<%- urn %>" class="urn-button pull-right">
 		<span class="glyphicon glyphicon-link"></span>
 	      </a>
@@ -59,6 +69,7 @@
 	    <td><%- frontend.frontend %> (<%- iface %>)</td>
 	    <td data-field="tx_freq"><%- frontend.transmit_frequencies %></td>
 	    <td data-field="rx_freq"><%- frontend.receive_frequencies %></td>
+	    <td data-field="sync"><%- node.synchronization %></td>
 	    <td class="text-center">
 	      <% if (frontend.monitored) { %>
 		<a href='<%- frontend.monitor_url %>' target="_blank">
@@ -71,8 +82,8 @@
 	      <% } %>
 	    </td>
 	    <td class="text-center">
-	      <% if (node_id.startsWith("nuc") || node_id.startsWith("cell")) { %>
-		<% var url = "frequency-graph.php?baseline=1&cluster=" +
+	      <% if (frontend.scanned) { %>
+		<% var url = "frequency-graph.php?baseline=1&endpoint=" +
 		amlist[urn].nickname + "&node_id=" +
 		node_id + "&iface=" + iface;
 		%>

@@ -18,9 +18,16 @@ window.ShowFrequencyGraph = (function ()
 	var parentHeight = $(selector).height();
 	var ParentTop    = $(selector).parent().position().top;
 	var ParentLeft   = $(selector).parent().position().left;
+	// Not all data files have the incident value.
+	var hasIncident  = (_.has(data[0], "incident") ? true : false);
 	// Ditto the above noise floor values
 	var hasAboveFloor= (_.has(data[0], "abovefloor") ? true : false);
 	var lineI;
+
+	// incident reporting is by request
+	if (! args.incident) {
+	    hasIncident = false;
+	}
 
 	var margin  = {top: 20, right: 20, bottom: 130, left: 55};
 	var width   = parentWidth - margin.left - margin.right;
@@ -65,6 +72,12 @@ window.ShowFrequencyGraph = (function ()
             .x(function (d) { return x2(d.frequency); })
             .y(function (d) { return y2(d.power); });
 
+	if (hasIncident) {
+	    lineI = d3.line().curve(d3.curveStep)
+		.x(function (d) { return x(d.frequency); })
+		.y(function (d) { return y(d.incident); });
+	}
+	
 	var svg = d3.select(selector)
 	    .append('svg')
             .attr("width", $(selector).width())
@@ -97,7 +110,18 @@ window.ShowFrequencyGraph = (function ()
 	x.domain(d3.extent(data, function(d) { return d.frequency; }));
 	// I want a little more pad above and below
 	var power_extents = d3.extent(data, function(d) { return d.power; });
-	console.info(power_extents);
+	console.info("power extents", power_extents);
+	if (hasIncident) {
+	    var incident_extents = d3.extent(data, function(d) { return d.incident; });
+	    console.info("incident_extents", incident_extents);
+	    if (incident_extents[0] < power_extents[0]) {
+		power_extents[0] = incident_extents[0];
+	    }
+	    if (incident_extents[1] > power_extents[1]) {
+		power_extents[1] = incident_extents[1];
+	    }
+	}
+	console.info("power extents", power_extents);
 	power_extents[0] = power_extents[0] - 2;
 	power_extents[1] = power_extents[1] + 2;
 	console.info(power_extents);
@@ -147,6 +171,13 @@ window.ShowFrequencyGraph = (function ()
 		.attr("cx", function(d) { return x(d.frequency) })
 		.attr("cy", function(d) { return y(d.power) })
 		.attr("r", 4);
+	}
+
+	if (hasIncident) {
+	    Line_chart.append("path")
+		.datum(data)
+		.attr("class", "line line-incident")
+		.attr("d", lineI);
 	}
 
 	var tooltip = Line_chart.append("g")
@@ -254,6 +285,12 @@ window.ShowFrequencyGraph = (function ()
 		else {
 		    $(content).find(".tooltip-center").text("n/a");
 		}
+		if (hasIncident && _.has(d, "incident")) {
+		    $(content).find(".tooltip-incident .incident")
+			.html(formatter(d.incident));
+		    $(content).find(".tooltip-incident")
+			.removeClass("hidden");
+		}
 		if (hasAboveFloor) {
 		    if (d.abovefloor) {
 			$(content).find(".tooltip-abovefloor .abovefloor")
@@ -291,6 +328,9 @@ window.ShowFrequencyGraph = (function ()
 	    var s = d3.event.selection || x2.range();
 	    x.domain(s.map(x2.invert, x2));
 	    Line_chart.select(".line-power").attr("d", line);
+	    if (hasIncident) {
+		Line_chart.select(".line-incident").attr("d", lineI);
+	    }
 	    if (hasAboveFloor) {
 		Line_chart.selectAll(".abovefloor-circles")
 		    .attr("cx", function(d) { return x(d.frequency) });
@@ -307,6 +347,9 @@ window.ShowFrequencyGraph = (function ()
 	    var t = d3.event.transform;
 	    x.domain(t.rescaleX(x2).domain());
 	    Line_chart.select(".line-power").attr("d", line);
+	    if (hasIncident) {
+		Line_chart.select(".line-incident").attr("d", lineI);
+	    }
 	    if (hasAboveFloor) {
 		Line_chart.selectAll(".abovefloor-circles")
 		    .attr("cx", function(d) { return x(d.frequency) });
@@ -729,6 +772,9 @@ window.ShowFrequencyGraph = (function ()
 	if (_.has(d, "center_freq")) {
 	    d.center_freq = +d.center_freq;
 	}
+	if (_.has(d, "incident")) {
+	    d.incident = +d.incident;
+	}
 	if (_.has(d, "abovefloor") && d.abovefloor != "") {
 	    d.abovefloor = +d.abovefloor;
 	}
@@ -925,7 +971,7 @@ window.ShowFrequencyGraph = (function ()
 		    return btime - atime;
 		});
 		_.each(list, function(info) {
-		    // Remeber this for generating graph url.
+		    // Remember this for generating graph url.
 		    info["dirname"] = dirname;
 		    
 		    var html =
@@ -1061,7 +1107,8 @@ window.ShowFrequencyGraph = (function ()
 	    }
 	}
 	url = url + "listing.php";
-	if (args.which == "rfmonitor" && args.node_id) {
+	if ((args.which == "rfmonitor" ||
+	     args.which == "rfbaseline") && args.node_id) {
 	    url = url + "?node_id=" + args.node_id;
 	}
 	console.info("BuildMenu", url);

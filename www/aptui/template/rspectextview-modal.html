@@ -1,6 +1,11 @@
 <!-- This is the rspec text view modal -->
+<style>
+.CodeMirror {
+    height: auto !important;
+}
+</style>
 <div id='rspec_modal' class='modal fade'>
-  <div class='modal-dialog'>
+  <div class='modal-dialog modal-wide' style="height: ">
     <div class='modal-content'>
       <div class='modal-header'>
 	<div id='rspec_modal_editbuttons'>
@@ -14,16 +19,14 @@
             Accept</button>
 	</div>
 	<div id='rspec_modal_viewbuttons' class='hidden'>
-          <button type='button' class='btn btn-danger btn-xs pull-right'
-                  id='close_rspec_modal_button'
-                  style='margin-right: 10px;'>
-            Close</button>
+          <button type='button' class='close btn-close'
+		  id='close_rspec_modal_button'></button>
 	</div>
         <h3>Source</h3>
       </div>
       <div class='modal-body' id='modal_profile_rspec_body'>
         <div class='panel panel-default'>
-	  <div id='modal_profile_rspec_div' style='height:300px'></div>
+	  <div id='modal_profile_rspec_div' style='height:70vh'></div>
 	</div>
 	<div>
 	  <center>

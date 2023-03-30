@@ -19,6 +19,7 @@ $(function ()
 	    "archived"  : window.ARCHIVED,
 	    "which"     : window.WHICH,
 	    "endpoint"  : window.ENDPOINT,
+	    "incident"  : window.INCIDENT,
 	};
 	if (window.RANGESTART !== undefined) {
 	    options["rangestart"] = window.RANGESTART;

@@ -87,6 +87,9 @@
      border: 1px solid transparent;
      border-radius: 3px;
  } 
+ .alert {
+     padding: 10px;
+ } 
 </style>  
 <div>
   <div id='about_div'
@@ -113,7 +116,7 @@
 		    <div class='panel-heading'>
 		      <span class='panel-title'>
 			<strong>Selected Profile:</strong> 
-			<span id='selected_profile_text'></span>
+			<span class='selected_profile_text'></span>
 		      </span>
 		    </div>
 		    <div class='panel-body'>
@@ -175,29 +178,25 @@
 	       type='hidden'
 	       name='fully_bound' value="0">
 	<div id='finalize_container'
-	     class='col-lg-8 col-md-8 col-sm-8 col-xs-12'>
-	  <div class='panel panel-default' style="margin-bottom: 5px">
-	    <div class='panel-body'
-		 style="padding-top: 5px; padding-bottom: 5px;">
-	      <span class="pull-left">
-		<span style="font-weight: bolder;">Profile:</span>
-		<span id='finalize_profile_name'></span>
-	      </span>
-	      <span class="pull-right">
-		<button class='btn btn-info btn-xs'
-			type='button'
-			id="show_xml_modal_button">
-		  Source</button>
-	      </span>
-	    </div>
-	  </div>
+	     class='col-lg-12 col-md-12 col-sm-12 col-xs-12'>
 	  <% { %>
 	    <div class='panel panel-default'>
 	      <div class='panel-heading'>
-		<span style='text-align: center;'>
-		  Please review the selections below and then click Next.</span>
+		<span class='panel-title'>
+		  <strong>Selected Profile:</strong> 
+		  <span class='selected_profile_text'></span>
+		</span>
+		<span class="pull-right">
+		  <button class='btn btn-info btn-xs'
+			  type='button'
+			  id="show_xml_modal_button">
+		    Source</button>
+		</span>
 	      </div>
-	      <div class='panel-body'>
+	      <div class='panel-body' style="padding-top: 5px;">
+		<div class="text-center" style="margin-bottom: 25px;">
+		  Please review the selections below and then click Next.
+		</div>
 		<!-- Show non-specific errors here. -->
 		<div style='margin-bottom: 10px;'>
 		  <font color=red>
@@ -211,7 +210,7 @@
 		    <div class='form-group format-me'>
 		      <label class='col-sm-4 control-label'
 			     style='text-align: right;'>Name:</label>
-		      <div class='col-sm-6'
+		      <div class='col-sm-4'
 			   data-toggle='popover'
 			   data-delay='{hide:1500, show:500}'
 			   data-html='true'
@@ -330,13 +329,13 @@
 	    </div>
 	  <% } %>
 	</div>
-	<div id='inline_container' style="min-height: 150px;"
-	     class='col-lg-4 col-md-4 col-sm-4 col-xs-12'>
-	  <a id='inline_overlay' href='#'>
-	    <span class='glyphicon glyphicon-fullscreen'
-		  aria-hidden='true'></span>
-	  </a> 
-	  <div id='inline_jacks' style="min-height: 150px;"></div>
+	<div id="showtopology-container"
+	     style="min-height: 300px; padding-bottom: 10px;"
+	     class='col-lg-10 col-lg-offset-1
+		    col-md-10 col-md-offset-1"
+		    col-sm-10 col-sm-offset-1
+		    col-xs-12 col-xs-offset-0'>
+	  <div class='showtopology-bare'></div>
 	</div>
 	<!-- This is for a PP rspec or a repo-based profile -->
 	<textarea name='rspec'
@@ -510,19 +509,44 @@
 		      </a>
 		    </div>
 		  </div>
+		  <div id="maxduration-limited" class="hidden">
+		    <div class="align-center alert alert-warning" 
+			 role="alert"
+			 style="margin-top: 10px; margin-bottom: 0px;
+				width: 60%">
+		      At this moment, there are existing resource
+		      reservations that limit the maximum possible
+		      extension for this experiment to <span></span>. Note that
+		      this will typically change quickly as other other users
+		      start their own experiments or reserve resources. 
+		    </div>
+		  </div>
+		  <div id="maxduration-doesnotfit" class="hidden">
+		    <div class="align-center alert alert-danger" 
+			 role="alert"
+			 style="margin-top: 10px; margin-bottom: 0px;
+				width: 60%">
+		      At this moment, there are not enough resources to
+		      start this experiment, but you can still try if you
+		      want to. Or you can reconfigure your experiment and
+		      try again.
+		    </div>
+		  </div>
 		</div>
 		<div class="reserve-resources hidden">
 		  <div class="align-center alert alert-danger hidden" 
 		       id="doesnotfit-warning" role="alert"
-		       style="margin-top: 10px; margin-bottom: 0px; width: 70%">
+		       style="margin-top: 10px; margin-bottom: 0px; width: 60%">
 		    <b>Warning:</b>
 		    <span id="doesnotfit-warning-now">
 		      Unable to start at this time,</span>
 		    <span id="doesnotfit-warning-datetime" class="hidden">
 		      Unable to start at the date/time selected,</span>
 		    other projects are using, or have reservations for,
-		    some or all of the requested resources. Please
-		    select a different start time, and if it can be
+		    <span id="doesnotfit-warning-loser"></span>
+		    <span id="doesnotfit-warning-noloser">
+		      some or all of the requested resources.</span>
+		    Please  select a different start time, and if it can be
 		    started at that time, we will also set the maximum
 		    end time that can be accomodated. If you feel that
 		    the end time we present is incorrect, you are welcome
@@ -841,6 +865,7 @@
   </div>
 </div>
 <div id='waitwait_div'></div>
+<div id='oops_div'></div>
 <div id='rspecview_div'></div>
 <div id='ppviewmodal_div'></div>
 <div id='ppmodal_div'></div>

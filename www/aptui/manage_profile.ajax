@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -211,7 +211,8 @@ function Do_Create()
         }
     }
     # Sanity check examples portals and public setting.
-    if ($formfields["examples_portals"] != "" &&
+    if (isset($formfields["examples_portals"]) &&
+        $formfields["examples_portals"] != "" &&
         $formfields["profile_who"] != "public") {
         $errors["examples_portals"] =
             "Profile must be public to list on the Examples page";
@@ -1554,12 +1555,10 @@ function Do_UpdateRepository()
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return;
     }
-    $outfname = tempnam("/tmp", "repofile");
-    chmod($outfname, 0666);
     
     $retval = SUEXEC($this_uid, "tbadmin",
-		     "webmanage_gitrepo -t " . $webtask->task_id() . " " .
-                     "  update -o $outfname -p " . $profile->uuid(),
+		     "webmanage_profile -t " . $webtask->task_id() . " " .
+                     "  updatefromrepo -i " . $profile->uuid(),
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     
@@ -1576,27 +1575,14 @@ function Do_UpdateRepository()
 	SPITAJAX_ERROR(1, $error);
 	return;
     }
-    $blob = array("source"  => file_get_contents($outfname),
-                  "log"     => $webtask->TaskValue("log"),
-                  "hash"    => $webtask->TaskValue("hash"));
+    $profile->Refresh();
+    
+    $blob = array("script"    => $profile->script(),
+                  "paramdefs" => $profile->paramdefs(),
+                  "rspec"     => $profile->rspec(),
+                  "repohash"  => $profile->repohash(),
+                  "reporef"   => $profile->reporef());
     $webtask->Delete();
-    unlink($outfname);
-
-    #
-    # If the source is an rspec, update the profile now.
-    #
-    if (! preg_match("/^(import|from)/m", $blob["source"])) {
-        if (UpdateMaster($profile, null, $blob["source"])) {
-            return;
-        }
-    }
-    elseif ($profile->script() == $blob["source"]) {
-        # The repo changed for some other reason, we want to record
-        # the repo hash/branch in the profile metadata.
-        if (UpdateMaster($profile, null, null)) {
-            return;
-        }
-    }
     SPITAJAX_RESPONSE($blob);
 }
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -300,7 +300,7 @@ function Do_RangeHistory()
                      "     r.idx ".
                      "   from apt_instance_rfrange_history as r ".
                      "join apt_instance_history as h on h.uuid=r.uuid ".
-                     "where h.started > DATE_SUB(now(),interval 4 month) ".
+                     "where h.started > DATE_SUB(now(),interval 1 month) ".
                      $pidclause . " " .
                      "order by h.started desc");
 

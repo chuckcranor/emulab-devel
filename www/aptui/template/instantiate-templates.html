@@ -1,4 +1,7 @@
 <div>
+  <%
+  var _xwidthx_ = window.USENEWINSTANTIATE ? "col-sm-4" : "col-sm-6";
+  %>
   <script id="nosite-selector-template" type="text/template">
     <div id='nosite_selector' 
 	 class='form-horizontal experiment_option'>
@@ -6,7 +9,7 @@
 	<label class='col-sm-4 control-label' name='<%- siteid %>' 
                style='text-align: right;'>Cluster:</a>
 	</label> 
-	<div class='col-sm-6 site-selector'>
+	<div class='<%- _xwidthx_ %> site-selector'>
 	  <select id='site<%- sitenum %>_selector' name='where' 
 		  data-siteid='nosite_selector' 
 		  class='form-control select_where'>
@@ -39,6 +42,9 @@
   </script>
   
   <script id="site-selector-template" type="text/template">
+    <%
+    var _xwidthx_ = window.USENEWINSTANTIATE ? "col-sm-4" : "col-sm-6";
+    %>
     <div id='site<%- sitenum %>cluster'
 	 class='form-horizontal experiment_option'>
       <div class='form-group cluster-group'>
@@ -46,7 +52,7 @@
                style='text-align: right;'>
           Site <%- siteid %> Cluster:</a>
         </label>
-        <div class='col-sm-6 site-selector'>
+        <div class='<%- _xwidthx_ %> site-selector'>
           <select id='<%- selectID %>'
 		  data-siteid='<%- siteid %>'
 		  name="sites[<%- siteid %>]"
@@ -69,6 +75,9 @@
   </script>
 
   <script id="pickered-site-template" type="text/template">
+    <%
+    var _xwidthx_ = window.USENEWINSTANTIATE ? "col-sm-4" : "col-sm-6";
+    %>
     <div id='site<%- sitenum %>cluster'
 	 class='form-horizontal experiment_option'>
       <div class='form-group cluster-group pickered'>
@@ -79,13 +88,13 @@
 	  <% } %>
 	  Cluster:
         </label>
-        <div class='col-sm-6 site-selector'>
+        <div class='<%- _xwidthx_ %> site-selector'>
 	  <input type="hidden"
 		 data-siteid="<%- siteid %>"
 		 <% if (!multisite) { %>
-		   name="where"
+		 name="where"
 		 <% } else { %>
-  		   name="sites[<%- siteid %>]"
+  		 name="sites[<%- siteid %>]"
 		 <% } %>
 		 class="select_where">
 	  <div id='site<%- sitenum %>_selector_picker'
@@ -135,8 +144,8 @@
 	</div>
 	<div class='col-sm-12 collapse' id='nowhere-breakdown'></div>
       </div>
-      </div>
     </div>
+</div>
   </script>
   
   <script id="pickered-agg-template" type="text/template">
@@ -146,7 +155,7 @@
       </li>
     <% } %>
     <li class="enabled <% if (selected) { %>selected<% } %>"
-	urn="<%- urn %>">
+urn="<%- urn %>">
       <a href="#" value="<%- name  %>">
 	<%- name %>
 	<div class="cluster-tooltips">
@@ -192,6 +201,9 @@
   </script>
 
   <script id="pickered-proj-template" type="text/template">
+    <%
+    var _xwidthx_ = window.USENEWINSTANTIATE ? "col-sm-4" : "col-sm-6";
+    %>
     <div id='profile_pid_picker'
 	 class='form-horizontal experiment_option'>
       <div class='form-group pickered'>
@@ -199,7 +211,7 @@
                style='text-align: right;'>
 	  Project:
         </label>
-        <div class='col-sm-6 project-picker'>
+        <div class='<%- _xwidthx_ %> project-picker'>
 	  <input type="hidden"
 		 id="profile_pid"
 		 name="pid">
@@ -262,7 +274,7 @@
                style='text-align: right;'>
 	  Group:
         </label>
-        <div class='col-sm-6 group-picker'>
+        <div class='col-sm-4 group-picker'>
 	  <input type="hidden"
 		 id="profile_gid"
 		 name="gid">

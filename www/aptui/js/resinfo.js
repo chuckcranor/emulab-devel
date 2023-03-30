@@ -191,6 +191,8 @@ $(function ()
 		.html("<span class=small> " +
 			" <a href='#' " +
 			"    data-target='#matrix-connections-modal' " +
+			"    data-bs-target='#matrix-connections-modal' " +
+			"    data-bs-toggle='modal' " +
 			"    data-toggle='modal'>" +
 			"  Matrix Connections</a></span>" +
 			"");
@@ -614,8 +616,8 @@ $(function ()
 	var zoomout = $('#' + container).closest(".panel")
 	    .find(".panel-heading .zoom-control .zoom-out");
 
-	// Do not show more then 60 days, the graphs are hard to read.
-	limit.setDate(limit.getDate() + 60);
+	// Do not show too many days, the graphs are hard to read.
+	limit.setDate(limit.getDate() + 14);
 	
 	Object.keys(forecasts)
 	    .sort()

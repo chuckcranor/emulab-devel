@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -82,10 +82,6 @@ $optargs = OptionalPageArguments("profile",       PAGEARG_STRING,
 
 # Need to make non-hardcoded
 $maxduration = 16;
-# Selenium
-if (!isset($stresstest)) {
-    $stresstest = 0;
-}
 
 if (isset($rerun_instance) || isset($rerun_paramset) ||
     (isset($from) && ($from == "manage-profile" || $from == "show-profile"))) {
@@ -474,9 +470,6 @@ echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
 echo "<script type='text/plain' id='form-json'>\n";
 echo htmlentities(json_encode($formfields)) . "\n";
 echo "</script>\n";
-echo "<script type='text/plain' id='error-json'>\n";
-echo htmlentities(json_encode($errors));
-echo "</script>\n";
 echo "<script type='text/plain' id='profiles-json'>\n";
 echo htmlentities(json_encode($profile_array));
 echo "</script>\n";
@@ -541,7 +534,6 @@ echo "<script type='text/plain' id='prunelist-json'>\n";
 echo htmlentities(json_encode($prunelist));
 echo "</script>\n";
 
-SpitOopsModal("oops");
 echo "<script type='text/javascript'>\n";
 echo "    window.DEFAULT_PROFILE = '$selected_profile';\n";
 if ($ishashed) {
@@ -684,7 +676,8 @@ if (isset($profile)) {
 }
 echo "    window.USENEWSCHEDULE = $usenewschedule;\n";
 echo "    window.NOPREDICTION = $noprediction;\n";
-echo "    window.STRESSTEST = $stresstest;\n";
+echo "    window.USENEWINSTANTIATE = $usenewinstantiate;\n";
+echo "    window.STRESSTEST = " . ($stresstest ? "1" : "0") . ";\n";
 echo "    window.EMBEDDED_RESGROUPS = true;\n";
 echo "    window.EMBEDDED_RESGROUPS_SELECT = true;\n";
 echo "</script>\n";
@@ -700,8 +693,16 @@ REQUIRE_MARKED();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
 REQUIRE_JQUERY_STEPS();
-# This includes SUP (JACKS (JACKSMOD)), UNDERSCORE, and JACKS_EDITOR
+REQUIRE_SUP();
+REQUIRE_UNDERSCORE();
 REQUIRE_PPWIZARDSTART();
+if ($usenewinstantiate) {
+    REQUIRE_TOPOLOGY_VIEWER();
+}
+else {
+    REQUIRE_TOPOLOGY_VIEWER();
+    REQUIRE_JACKS_EDITOR_OLD();
+}
 # For the new ppwizardstart and Powder
 AddLibrary("js/powder-types.js");
 AddLibrary("js/resgraphs.js");
@@ -722,7 +723,7 @@ else {
 echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
 
 AddTemplateList(array("aboutapt", "aboutcloudlab", "aboutpnet",
-                      "waitwait-modal", "rspectextview-modal",
+                      "waitwait-modal", "oops-modal", "rspectextview-modal",
                       "picker-template","reservation-graph",
                       "save-paramset-modal", "resgroup-list",
                       "copy-profile-modal", "ota-agreement", "ota-permission",

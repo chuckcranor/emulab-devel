@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -98,6 +98,7 @@ my $TB		   = "@prefix@";
 my $TBOPS          = "@TBOPSEMAIL@";
 my $TBLOGS         = "@TBLOGSEMAIL@";
 my $OURDOMAIN      = "@OURDOMAIN@";
+my $MAINSITE       = @TBMAINSITE@;
 my $MYURN          = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $PROTOUSER      = "elabman";
 my $SUDO           = "/usr/local/bin/sudo";
@@ -146,6 +147,11 @@ use GeniImage;
 use GeniUser;
 use WebTask;
 use EmulabFeatures;
+if ($MAINSITE) {
+    # For POWDER NextBusinessDay
+    require DateTime;
+    require DateTime::Duration;
+}
 
 # Protos
 sub fatal($);
@@ -201,6 +207,7 @@ sub ExtendInternal($$$$$$);
 sub CallMethodOnAggregates($$$@);
 sub ResponseErrorMessage($$);
 sub RelocateImage($$$$);
+sub NextBusinessDay(;$);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -1589,7 +1596,8 @@ sub DoTerminate()
 	#
 	# Messy here; there is no experiment record at the remote
 	# cluster until we get out of image staging, but there are
-	# several states that mean we are staging images.
+	# several states that mean we are staging images. Otherwise
+	# harmless to call out to the cluster if its not there. 
 	#
 	if ($agg->status() eq "prestage" ||
 	    $agg->status() eq "staging" ||
@@ -1597,6 +1605,25 @@ sub DoTerminate()
 	    $agg->SetStatus("terminated");
 	    $agg->ResolveDefer();
 	}
+	if ($agg->status() eq "canceled" || $agg->status() eq "failed") {
+	    #
+	    # If it is a bus and the experiment has either expired, or
+	    # ended on a previous day, there is no reason to hang onto
+	    # it. We can just terminate here at the Portal and the next
+	    # time the bus comes up, the first thing it will do is
+	    # terminate the expired experiment.  So right after midnight at
+	    # the Portal, the experiment will get cleared out. This only
+	    # makes sense cause we know the experiment has expired.
+	    #
+	    # Note that we re-enabled local experiment expiration on buses.
+	    # Note that we re-enabled 
+	    #
+	    my $aptagg = $agg->GetAptAggregate();
+	    if ($aptagg->ismobile() && $instance->IsExpired()) {
+		$agg->SetStatus("terminated");
+		$agg->ResolveDefer();
+	    }
+	}	
 	if ($agg->status() ne "terminated") {
 	    $agg->ResolveDefer();
 	    push(@agglist, $agg);
@@ -1761,6 +1788,7 @@ sub DoExtend()
     my $force    = 0;
     my $doperms  = 0;
     my $errcode  = 1;
+    my $noemail  = 0;
     my $autoextend_maximum = GetSiteVar("aptui/autoextend_maximum");
     my $autoextend_maxage  = GetSiteVar("aptui/autoextend_maxage");
     my $autoextend_freedays= 2;
@@ -1777,6 +1805,8 @@ sub DoExtend()
     my $extensions    = $instance->Brand()->ExtensionsEmailAddress();
     my $granted       = 0;
     my $needapproval  = 0;
+    my $warning;
+    my $ttl;
     my $autoapprove_info;
     my $maxextension;
     my $message;
@@ -1784,6 +1814,7 @@ sub DoExtend()
     my $errmsg;
     my $wantstring;
     my $grantstring;
+    my $resources;
     
     usage()
 	if (!@ARGV);
@@ -1906,7 +1937,7 @@ sub DoExtend()
                 "Granting the request would set the expiration to $new_expires\n".
                 "It is running on $clusters\n".
                 "\n\n". $url . "\n\n",
-                $creator->email());
+                $creator->email()) if (!$noemail);
 
 	# Flag for the dashboard page. 
 	$instance->ExtensionRequested($reason, $granted);
@@ -1927,17 +1958,34 @@ sub DoExtend()
     }
 
     #
-    # Always grant if < 24 hours, unless an extension limit.
+    # TTL of the experiment (diff between now and maxextension).  Might not
+    # have received a maxextension on the command line, and of course this
+    # was in the user browser so it could be faked. But the damage is that
+    # they get some extra time they should not, but it is harder to game.
     #
-    if ($wanted < 24 && !$instance->extension_limit()) {
-	$message = "Short extension granted for $wanted hours.";
-	$reason  = $message if (!defined($reason));
-	$granted = $wanted;
+    # We should store the most recent maxextension request in the DB, since
+    # most of the time, it was requested just a few minutes ago when the user
+    # clicked on the extend button. That would be good enough and make it a
+    # bit harder to game the system.
+    #
+    if (defined($maxextension)) {
+	$ttl = $maxextension - time();
     }
+
+    #
+    # For Powder, we need to know if there any reservable nodes, since
+    # those are scarce and we apply different extension rules.
+    #
+    if ($instance->isPowder()) {
+	if ($instance->GetResources(\$errmsg, \$resources)) {
+	    fatal("Could not get resources: $errmsg");
+	}
+    }
+
     #
     # Admin user, we do whatever it says to do.
     #
-    elsif ($this_user->IsAdmin()) {
+    if ($this_user->IsAdmin()) {
 	$message = "Your experiment was extended by the site administrator.";
 	$granted = $wanted;
     }
@@ -1945,6 +1993,28 @@ sub DoExtend()
 	$message = "because we are testing extension stuff";
 	$granted = 0;
 	$needapproval = 1;
+    }
+    #
+    # If admin lockout, we are refusing any more free time.
+    #
+    elsif ($instance->extension_disabled()) {
+	$message = "because you are not allowed any more extensions";
+	$granted = 0;
+    }
+    #
+    # Always grant if within 24 hours of the max extension to give user
+    # time to clear off. If there is an extension limit, it is handled
+    # below instead. The TTL check was already done in the WEB UI which is
+    # why we are here anyway.
+    #
+    elsif ($wanted < 24 &&
+	   !$instance->extension_limit() &&
+	   !($instance->isPowder() && $instance->pid() ne "PowderTeam" &&
+	     exists($resources->{'reservableNodes'})) &&
+	   defined($ttl) && $ttl < (24 * 3600)) {
+	$message = "Short extension granted for $wanted hours.";
+	$reason  = $message if (!defined($reason));
+	$granted = $wanted;
     }
     else {
 	my $diff  = $expires_time - time();
@@ -1957,11 +2027,36 @@ sub DoExtend()
 	}
 
 	#
-	# If admin lockout, we are refusing any more free time.
+	# Powder has different rules when the experiment includes
+	# reservable nodes (scarce resources). Do not allow an
+	# extension past the NextBusinessDay. If the experiment
+	# expiration is already later then NextBusinessDay, then
+	# normal rules apply. 
 	#
-	if ($instance->extension_disabled()) {
-	    $message = "because you are not allowed any more extensions";
-	    $granted = 0;
+	if ($instance->isPowder() &&
+	    $instance->pid() eq "PowderTeam" &&	    
+	    exists($resources->{'reservableNodes'})) {
+	    my $nbd = NextBusinessDay();
+	    my $powdermessage = "because extensions for these resources are ".
+		"limited to the next business day at 9AM Mountain time";
+
+	    if ($expires_time + ($wanted * 3600) < $nbd - 3600) {
+		# Free grant
+		$granted = $wanted;
+	    }
+	    elsif ($expires_time > $nbd - 3600) {
+		$needapproval = 1;
+		$message = $powdermessage;
+	    }
+	    else {
+		$granted = int((($nbd - 3600) - $expires_time) / 3600);
+		if ($granted <= $wanted) {
+		    $needapproval = 1;
+		    $message = $powdermessage;
+		}
+	    }
+	    print "$granted, $needapproval\n";
+	    #$granted = 0;
 	}
 	#
 	# Is there an extension limit.
@@ -2026,8 +2121,40 @@ sub DoExtend()
 	    #
 	    my $mindiff = $autoextend_freedays * 3600 * 24;
 	    
-	    if ($diff < $mindiff) {
+	    if ($diff < $mindiff &&
+		!($instance->isPowder() &&
+		  exists($resources->{'reservableNodes'}))) {
 		$granted = int(($mindiff - $diff) / 3600);
+		$granted = 24 if ($granted > 24);
+		
+		#
+		# Watch for people gaming the system by repeatedly asking
+		# for extensions within 24 hours of expiration cause they
+		# figure out they get a free day every time. This check
+		# will return non-zero if the user has done that for that
+		# number of days and an admin has not granted time.
+		#
+		my $gaming = $instance->GamingExtensions();
+		if ($gaming) {
+		    if ($gaming < 0) {
+			$granted = 0;
+			$needapproval = 1;
+			$message = "because you have asked for too many last ".
+			    "minute extensions in a row";
+		    }
+		    else {
+			$message = "because it was started more then ".
+			    "$autoextend_maxage days ago and is going to ".
+			    "expire very soon";
+			
+			$warning = "This is the final, last minute extension, ".
+			    "that you will be allowed to submit. Please ".
+			    "submit your extension requests earlier and then ".
+			    "wait for them to be approved or denied before ".
+			    "submitting another one.";
+		    }
+		    goto grant;
+		}
 	    }
 	    else {
 		$granted = 0;
@@ -2210,6 +2337,9 @@ sub DoExtend()
 	else {
 	    $mailmessage = $pre . $grantstring . ". ";
 	}
+	if (defined($warning)) {
+	    $mailmessage .= "\n\n" . $warning;
+	}
 	$mailmessage .= "\n\n" . "The request was for ${wantstring}.";
 	$mailmessage .= "\n\nYour reason was:\n${reason}"
 	    if (defined($reason));
@@ -2224,7 +2354,7 @@ sub DoExtend()
                "It is running on $clusters\n\n".
                "$url\n",
 	       "$extensions",
-	       "BCC: $extensions");
+	       "BCC: $extensions, stoller\@flux.utah.edu") if (!$noemail);
     
     if (!$this_user->IsAdmin()) {
 	#
@@ -2246,6 +2376,7 @@ sub DoExtend()
     if (defined($webtask)) {
 	$webtask->granted($granted);
 	$webtask->message(defined($message) ? $message : "");
+	$webtask->warning(defined($warning) ? $warning : "");
 	$webtask->Exited(0);
     }
     $slice->UnLock();
@@ -6986,6 +7117,7 @@ sub DoStatus()
     my $status     = $instance->status();
     my $slice      = $instance->GetGeniSlice();
     my $slice_uuid = $instance->slice_uuid();
+    my $project    = $instance->GetProject();
     my $blob;
 
     my $optlist = "jrXk";
@@ -7019,7 +7151,8 @@ sub DoStatus()
 	if (!defined($creator)) {
 	    fatal("Cannot lookup creator");
 	}
-	if (!$this_user->SameUser($creator->emulab_user())) {
+	if (! ($this_user->SameUser($creator->emulab_user()) ||
+	       $project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT()))) {
 	    UserError("Not enough permission to get experiment status");
 	}
     }
@@ -7140,6 +7273,9 @@ sub DoStatus()
 	}
     }
     if ($asjson) {
+	if ($debug) {
+	    print Dumper($blob);
+	}
 	my $json = eval { encode_json($blob); };
 	if ($@) {
 	    fatal($@);
@@ -7905,4 +8041,41 @@ sub DoModify()
 	$webtask->Exited($errcode);
     }
     exit($exitcode);
+}
+
+#
+# Next Business Day. Only for Powder.
+#
+sub NextBusinessDay(;$)
+{
+    my ($now) = @_;
+
+    if (!defined($now)) {
+	$now = DateTime->now(time_zone => 'local');
+    }
+    else {
+	$now = DateTime->from_epoch(epoch => $now, time_zone => 'local');
+    }
+    my $wday = $now->day_of_week;
+    my $incr;
+
+    SWITCH: for ($wday) {
+	/^[71234]$/ && do {
+	    $incr = 1;
+	    last SWITCH;
+	};
+	/^[5]$/ && do {
+	    $incr = 3;
+	    last SWITCH;
+	};
+	/^[6]$/ && do {
+	    $incr = 2;
+	    last SWITCH;
+	};
+    };
+    my $nbd = $now->add_duration(DateTime::Duration->new(days => $incr));
+    $nbd->set_hour(9);
+    $nbd->set_minute(0);
+    $nbd->set_second(0);
+    return $nbd->epoch;
 }

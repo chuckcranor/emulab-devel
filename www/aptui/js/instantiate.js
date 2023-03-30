@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['instantiate', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal', 'reservation-graph', 'resgroup-list', 'instantiate-templates']);
+    var templates = APT_OPTIONS.fetchTemplateList(['instantiate', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', "oops-modal", 'rspectextview-modal', 'reservation-graph', 'resgroup-list', 'instantiate-templates']);
     var instantiateString = templates['instantiate'];
     var aboutaptString = templates['aboutapt'];
     var aboutcloudString = templates['aboutcloudlab'];
@@ -149,6 +149,7 @@ $(function ()
 	});
 	$('#main-body').html(html);
 	$('#waitwait_div').html(waitwaitString);
+	$('#oops_div').html(templates["oops-modal"]);
 	$('#rspecview_div').html(rspecviewString);
 	$('#rspec_modal_download_button').addClass("hidden");
 
@@ -1605,7 +1606,7 @@ $(function ()
 		return;
 	    }
 	    // Saved globally for above
-	    var maxdate = json.value;
+	    var maxdate = json.value["maxend"];
 	    var mindate = $("#start_day").datepicker("getDate");
 
 	    if (!maxdate) {

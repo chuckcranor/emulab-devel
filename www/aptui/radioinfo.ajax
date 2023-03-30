@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -80,16 +80,31 @@ function Do_EditTable()
         "tx_freq"    => "transmit_frequencies",
         "rx_freq"    => "receive_frequencies",
         "notes"      => "notes",
+        "sync"       => "synchronization",
     );
     if (!array_key_exists($field, $fields)) {
         SPITAJAX_ERROR(-1, "Bad field: " . $field);
         return;
     }
-    $dbfield = $fields[$field];
-    $content = addslashes($ajax_args["content"]);
+    $content = $ajax_args["content"];
     
-    if ($field == "notes" || $field == 'radio_type') {
-         if (!DBQueryWarn("update apt_aggregate_radio_info set ".
+    if ($field == "sync") {
+        # Gonna happen
+        if ($content == "") {
+            $content = "none";
+        }
+        if ($content != "none" && $content != "GPSDO" &&
+            $content != "White Rabbit") {
+            SPITAJAX_ERROR(-1, "Invalid synchronization type. Must be one of ".
+                           "none, GPSDO, or White Rabbit");
+            return;
+        }
+    }
+    $dbfield = $fields[$field];
+    $content = addslashes($content);
+
+    if ($field == "notes" || $field == 'radio_type' || $field == 'sync') {
+        if (!DBQueryWarn("update apt_aggregate_radio_info set ".
                           "     ${dbfield}='$content' ".
                           "where aggregate_urn='$urn' and ".
                           "      node_id='$node_id'")) {

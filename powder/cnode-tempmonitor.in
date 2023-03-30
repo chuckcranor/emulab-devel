@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -84,36 +84,43 @@ my %frontends = (
     "10.11.13.192"     => {
 	"enabled"      => 0,
 	"frontend"     => "10.11.13.192",
+	"autocyclefe"  => 1,
     },
     "cnode-guesthouse" => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-guesthouse",
 	"switch"       => "powder-mgmt-dbs6",
+	"autocyclefe"  => 1,
     },
     "cnode-mario"      => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-mario",
 	"switch"       => "powder-mgmt-dbs2",
+	"autocyclefe"  => 1,
     },
     "cnode-ustar"      => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-ustar",
 	"switch"       => "powder-mgmt-dbs8",
+	"autocyclefe"  => 1,
     },
     "cnode-wasatch"    => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-wasatch",
 	"switch"       => "powder-mgmt-dbs1",
+	"autocyclefe"  => 1,
     },
     "cnode-moran"      => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-moran",
 	"switch"       => "powder-mgmt-dbs5",
+	"autocyclefe"  => 1,
     },
     "cnode-ebc"        => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-ebc",
 	"switch"       => "powder-mgmt-dbs7",
+	"autocyclefe"  => 0,
     },
 );
 
@@ -257,7 +264,7 @@ while (1) {
 		my $message =
 		    "The temperature monitor for $cnode is no longer ".
 		    "responding.\n\n";
-		if (!$details->{'notified'}) {
+		if (!$details->{'notified'} && $details->{'autocyclefe'}) {
 		    # Power cycle on first notification.
 		    $message .= "Power cycling $frontend ... \n";
 		}
@@ -265,7 +272,7 @@ while (1) {
 		    $message .= "Manual intervention required!\n";
 		}
 		NotifyTBOPS("$cnode temperature monitor offline", $message);
-		if (!$details->{'notified'}) {
+		if (!$details->{'notified'} && $details->{'autocyclefe'}) {
 		    logit("Powering cycling $frontend");
 		    system("$POWER -a cycle $frontend");
 		    if ($?) {

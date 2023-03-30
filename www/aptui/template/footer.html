@@ -1,0 +1,51 @@
+<!--- Footer -->
+<div>
+  <div id='footer'>
+    <div class='pull-left'>
+      <a href='http://www.emulab.net' target='_blank'>
+        Powered by
+        <img src='images/emulab-whiteout.png'
+             id='elabpower'></a>
+    </div>
+    <span>Question or comment? Join the
+      <a href='<%- window.HELPFORUM %>'
+         target='_blank'>Help Forum</a></span>
+    <div class='pull-right'>
+      <% if (window.PORTAL_NSFNUMBER) { %>
+	<a data-toggle='modal' data-bs-toggle='modal'
+           style='margin-right: 10px; cursor: pointer; '
+	   data-target='#nsf_supported_modal'
+	   data-bs-target='#nsf_supported_modal'>
+	  Supported by NSF</a>
+      <% } %>
+      &copy; <% print(new Date().getFullYear()) %>
+      <a href='http://www.utah.edu' target='_blank'>
+        The University of Utah</a>
+    </div>
+  </div>
+</div>
+<!-- This is the NSF Supported modal -->
+<div id='nsf_supported_modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        This material is based upon work supported by the
+        National Science Foundation under Grant
+        No. <%- window.PORTAL_NSFNUMBER %>. Any opinions, findings, and
+        conclusions or recommendations expressed in this
+        material are those of the author(s) and do not
+        necessarily reflect the views of the National Science
+        Foundation.
+        <br><br>
+        <center>
+          <button type='button'
+                  class='btn btn-default btn-sm' 
+                  data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'>
+            Close</button>
+        </center>
+      </div>
+    </div>
+  </div>
+</div>
+

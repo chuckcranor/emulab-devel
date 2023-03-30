@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -213,6 +213,7 @@ $oneonly         = (isset($oneonly) && $oneonly ? 1 : 0);
 $isadmin         = (ISADMIN() ? 1 : 0);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
 $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
+$lastknowntab    = FeatureEnabled("LastKnownTab",$creator,$instance->Group());
 
 #
 # Temp hack, maybe generalize. These people should not be creaing
@@ -280,6 +281,7 @@ echo "  window.APT_OPTIONS.canupdate_profile = $canupdate_profile;\n";
 echo "  window.APT_OPTIONS.cancopy_profile = $cancopy_profile;\n";
 echo "  window.APT_OPTIONS.canterminate = $canterminate;\n";
 echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
+echo "  window.APT_OPTIONS.lastknowntab = $lastknowntab;\n";
 echo "  window.APT_OPTIONS.canmodify = $canmodify;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";
 echo "  window.APT_OPTIONS.hidelinktest = false;\n";
@@ -312,10 +314,6 @@ echo "<script src='js/lib/filesize.min.js'></script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
-if (!$lazytopo) {
-    REQUIRE_JACKS();
-}
-REQUIRE_JACKS_EDITOR();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
 REQUIRE_IMAGE();
@@ -324,6 +322,7 @@ REQUIRE_IDLEGRAPHS();
 REQUIRE_OPENSTACKGRAPHS();
 REQUIRE_CONTEXTMENU();
 REQUIRE_SUP();
+REQUIRE_TOPOLOGY_VIEWER();
 
 AddTemplate("image-picker-modal");
 AddTemplate("ppform-wizard");

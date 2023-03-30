@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1370,6 +1370,12 @@ class User
 	DBQueryFatal("update users set ".
 		     "   weblogin_frozen='$freeze' ".
 		     "where uid_idx='$idx'");
+        if ($freeze == 0) {
+            DBQueryFatal("update users set ".
+                         "   weblogin_failcount='0' ".
+                         "where uid_idx='$idx'");
+            $this->user["weblogin_failcount"] = 0;
+        }
 	$this->user["weblogin_frozen"] = $freeze;
 	return 0;
     }

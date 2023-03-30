@@ -11,6 +11,7 @@ $(function ()
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
+	var args = {};
 
 	var template_list   = ["list-resgroups", "resgroup-list",
 			       "resgroup-list-bytype", "resgroup-list-byrange",
@@ -28,7 +29,13 @@ $(function ()
 	$('#oops_div').html(templates["oops-modal"]);	
 	$('#waitwait_div').html(templates["waitwait-modal"]);
 
-	sup.CallServerMethod(null, "resgroup", "ListReservationGroups", null,
+	if (window.ALL) {
+	    args = {"all" : true};
+	}
+	else {
+	    args = {"useronly" : true};
+	}
+	sup.CallServerMethod(null, "resgroup", "ListReservationGroups", args,
 			     function (json) {
 				 if (json.code) {
 				     sup.SpitOops("oops", json.value);
@@ -75,6 +82,11 @@ $(function ()
 	    "isadmin"      : window.ISADMIN,
 	});
 	$(selector).html(html);
+
+	if (window.ISADMIN && !window.EMBEDDED_RESGROUPS) {
+	    $('#resgroups-count span').html(_.size(groups));
+	    $('#resgroups-count').removeClass("hidden");
+	}
 
 	// Format dates with moment before display.
 	$(selector + ' .format-date').each(function() {

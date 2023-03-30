@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -589,7 +589,21 @@ class Instance
         return 0;
     }
     function CanDoVNC($user) {
+        global $TUTORIALPID;
+        
 	if ($this->creator_idx() == $user->uid_idx()) {
+	    return 1;
+	}
+        if ($this->pid() != $TUTORIALPID) {
+            return 0;
+        }
+        # For the tutorial project, just needs to be a member of the project.
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+	$isapproved = 0;
+	if ($project->IsMember($user, $isapproved) && $isapproved) {
 	    return 1;
 	}
         return 0;
@@ -867,6 +881,8 @@ class Instance
         $skiptypes = array("dboxvm"    => true,
                            "d430k"     => true,
                            "d530"      => true,
+                           "cl-ap"     => true,
+                           "nuc11i9"   => true,
                            "pcivy"     => true,
                            "pc2830qx2" => true,
                            "pc2400hp"  => true,

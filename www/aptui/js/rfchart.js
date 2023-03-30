@@ -343,7 +343,7 @@ window.CreateRangeCharts = (function ()
 		xpos = xpos - (tipwidth + 30);
 	    }
 	    else {
-		xpos += 30;
+		xpos += 15;
 	    }
 	    return xpos;
 	}

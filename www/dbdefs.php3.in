@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -875,6 +875,13 @@ function TBGetUniqueIndex($name)
     $query_result =
 	DBQueryFatal("select idx from emulab_indicies ".
 		     "where name='$name'");
+
+    if (!mysql_num_rows($query_result)) {
+        DBQueryFatal("replace into emulab_indicies (name, idx) ".
+                     "values ('$name', 1)");
+        DBQueryFatal("unlock tables");
+        return 0;
+    }
 
     $row = mysql_fetch_array($query_result);
     $curidx = $row["idx"];

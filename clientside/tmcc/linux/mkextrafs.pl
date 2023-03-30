@@ -194,6 +194,11 @@ else {
     }
 }
 
+if ($slice == 0) {
+    print "Whole disk '$disk' specified, using partition 1\n";
+    $slice = 1;
+}
+
 my $diskdev    = "/dev/${disk}";
 my $fsdevice   = "${diskdev}${slice}";
 if ($NEEDSPFORMAT) {
@@ -257,15 +262,20 @@ if (system("parted -s $diskdev print >/dev/null 2>&1")) {
     }
     # Grab size (in sectors); DOS cannot handle our huge disks.
     # sfdisk can no longer handle units; must use sectors.
-    my $disksize = `fdisk -l $diskdev | sed -n -r -e "s/^.* ([0-9]+) sectors.*\$/\\1/p"`;
+    my $disksize = `fdisk -l $diskdev | sed -n -r -e 's/^.* ([0-9]+) sectors.*\$/\\1/p'`;
     if ($?) {
 	die("*** $0:\n".
 	    "    Could not get size of $diskdev!\n");
     }
     chomp($disksize);
+    # I am DOS
+    if ($disksize > 4000000000) {
+	$disksize = 4000000000;
+    }
+    $disksize -= 2048;
     # Must start at a sector offset; and sfdisk no longer tolerates -N <X>
     # if partition X is undefined.
-    system("echo '2048,$disksize' | sfdisk --force $diskdev");
+    system("echo '2048,$disksize,0x0' | sfdisk --force $diskdev");
     if ($?) {
 	die("*** $0:\n".
 	    "    Could not initialize primary partition on $diskdev!\n");

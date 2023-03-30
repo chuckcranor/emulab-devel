@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -307,10 +307,12 @@ foreach my $nodeid (@machines) {
 		     "where node_id='$nodeid'");
     if ($result->num_rows() == 0) {
 	warn "No outlets table entry found for $nodeid. Skipping...\n";
-	SENDMAIL($TBOPS,
-		 "No power outlet for $nodeid",
-		 "Unable to power '$op' $nodeid; no outlets table entry!",
-		 $TBOPS);
+	if (defined($node)) {
+	    SENDMAIL($TBOPS,
+		     "No power outlet for $nodeid",
+		     "Unable to power '$op' $nodeid; no outlets table entry!",
+		     $TBOPS);
+	}
 	next;
     }
     my ($power_id, $outlet, $last_power) = $result->fetchrow();
@@ -323,6 +325,7 @@ foreach my $nodeid (@machines) {
     my $forcecycle  = 0;
     if (defined($node)) {
 	$power_delay = $node->NodeTypeInfo()->power_delay();
+	$power_delay = 0 if (!defined($power_delay));
 
 	if ($node->NodeAttribute("wakeonlan_afterpower", \$postwol) != 0) {
 	    warn "Could not get wakeonlan_afterpower attr for $nodeid.\n";
@@ -716,6 +719,7 @@ foreach my $power_id (keys %outlets) {
 		    }
 		}
 		my $oldstate = $node->eventstate();
+		$oldstate = "" if (!defined($oldstate));
 		my $newstate;
 
 		if ($op eq "off") {

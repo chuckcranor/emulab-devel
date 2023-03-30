@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -41,9 +44,7 @@ $optargs = OptionalPageArguments("days",     PAGEARG_INTEGER,
 if (!isset($days)) {
     $days = 30;
 }
-if (!isset($allusers)) {
-    $allusers = 0;
-}
+$allusers = ($allusers ? 1 : 0);
 
 #
 # Verify page arguments.

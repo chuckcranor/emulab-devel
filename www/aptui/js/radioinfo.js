@@ -45,6 +45,7 @@ $(function ()
 	var widgets = [ "uitheme", "zebra"];
 	if (window.ISADMIN) {
 	    widgets.push("editable");
+	    $('#radioinfo-table thead .glyphicon-edit').removeClass("hidden");
 	}
 
 	$('#radioinfo-table')
@@ -53,7 +54,7 @@ $(function ()
 		widgets : widgets,
 		headerTemplate : '{content} {icon}',
 		widgetOptions: {
-		    editable_columns       : [3,5,6,10],
+		    editable_columns       : [3,5,6,7,11],
 		    editable_enterToAccept : true,   
 		    editable_autoAccept    : false,   
 		    editable_autoResort    : false,
@@ -67,15 +68,15 @@ $(function ()
 		var iface      = $(this).closest('tr').data('iface');
 		var field      = $(this).closest('td').data('field');
 
-		console.info(newContent, cellIndex, urn, node_id, iface, field);
-
 		var args = {
-		    "content"    : newContent,
+		    "content"    : $.trim(newContent),
 		    "aggregate"  : urn,
 		    "node_id"    : node_id,
 		    "iface"      : iface,
 		    "field"      : field,
 		};
+		console.info(args);
+		
 		var callback = function (json) {
 		    if (json.code) {
 			alert(json.value);

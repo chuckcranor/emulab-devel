@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2021 University of Utah and the Flux Group.
+# Copyright (c) 2016-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -723,7 +723,7 @@ while( 1 ) {
 	print "Approve: $approve\n";
 	
 	#
-	# Doing a check Check against pending reservations for overlap so
+	# Doing a second check against pending reservations for overlap so
 	# we can warn the user.
 	#
 	my $feasible = Reservation->IsFeasible($reservations_all, $error);

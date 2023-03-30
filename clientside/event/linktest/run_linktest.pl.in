@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,7 @@ my $TB            = "@prefix@";
 my $CLIENT_BINDIR = "@CLIENT_BINDIR@";
 my $EVENTSERVER   = "@EVENTSERVER@";
 my $PROJROOT      = "@PROJROOT_DIR@";
-my $NOSHAREDFS	  = "@NOSHAREDFS@";
+my $NOSHAREDFS	  = @NOSHAREDFS@;
 my $NODELOGDIR	  = "@CLIENT_VARDIR@/logs";
 #
 # Wrapper for running the linktest daemon. This script is currently

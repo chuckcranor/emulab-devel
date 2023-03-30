@@ -62,6 +62,11 @@ window.APT_OPTIONS.configObject = {
 window.APT_OPTIONS.initialize = function (sup)
 {
     var embedded = window.EMBEDDED;
+    var version  =
+	typeof bootstrap === 'undefined' ?
+	$().modal.Constructor.VERSION : bootstrap.Modal.VERSION;
+
+    window.BOOTSTRAP_VERSION = parseInt(version.substr(0, 1));
 
     // Eventually make this download without having to follow a link.
     // Just need to figure out how to do that!
@@ -86,7 +91,8 @@ window.APT_OPTIONS.initialize = function (sup)
      * Setup a timer to ask for announcements.
      */
     if (window.LOGINUID && !window.NOANNOUNCEMENTS) {
-	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
+	// First check for announcements very quickly
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 2000);
     }
     
     window.APT_OPTIONS.startPage();
@@ -309,12 +315,42 @@ window.APT_OPTIONS.Announcements = function () {
 }
 
 window.APT_OPTIONS.SetupCopyToClipboard = function (id) {
-    $(id).find(".copy-to-clipboard a").click(function (e) {
-	e.preventDefault();
-	var input = $(this).parent().find("input");
-	$(input).select();
-	document.execCommand("copy");
-	window.getSelection().removeAllRanges();	
-	$(input)[0].blur();
+    /*
+     * Lets start using input groups to avoid PITA formatting issues. 
+     */
+    $(id).find(".copy-to-clipboard").each(function () {
+	console.info($(this))
+	var input = $(this).find("input");
+
+	$(input).click(function (e) {
+	    e.preventDefault();
+	    console.info(e);
+	    $(input).select();
+	});
+
+	$(this).find("a").click(function (e) {
+	    e.preventDefault();
+	    console.info(e);
+	    $(input).select();
+	    document.execCommand("copy");
+	    window.getSelection().removeAllRanges();	
+	    $(input)[0].blur();
+	});
     });
+}
+
+window.APT_OPTIONS.decodeJSON = function (id) {
+    return JSON.parse(_.unescape($(id)[0].textContent));
+}
+
+window.APT_OPTIONS.drawMainHeader = function () {
+    var variables = JSON.parse(_.unescape($('#mainheader-json')[0].textContent));
+    var template  = _.template(window.APT_OPTIONS.fetchTemplate("mainHeader"));
+    console.info("variables", variables);
+    $('#mainheader-div').html(template({"vars" : variables}));
+}
+
+window.APT_OPTIONS.drawMainFooter = function () {
+    var template  = _.template(window.APT_OPTIONS.fetchTemplate("mainFooter"));
+    $('#mainfooter-div').html(template());
 }

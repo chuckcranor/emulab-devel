@@ -329,6 +329,20 @@
 			id='reserve-approve-button'
 			type='submit' name='submit'>Approve</button>
 	      <% } %>
+	      <div class="hidden checkbox pull-left"
+		   id="idle-detection-checkbox-div"
+		   style="margin-left: 5px; margin-top: 5px;">
+		<label data-toggle='popover'
+		       data-html='true'
+		       data-delay='{"hide":200}'
+		       data-content='When
+				     set, reservations will be
+				     automatically canceled if they are not
+				     used.'>
+		  <input type="checkbox" disabled
+			 id="idle-detection-checkbox"
+			 value="">Idle Detection</label>
+	      </div>
 	    </div>
 	  </div>
 	</form>

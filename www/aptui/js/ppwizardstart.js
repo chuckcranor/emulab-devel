@@ -86,7 +86,7 @@ $(function () {
 	    '         style="height: auto;">' +
 	    '      <div id="pp-param-group-subpanel-body-<%- name %>" ' +
 	    '           style="padding-top: 0px; padding-bottom: 0px" ' +
-	    '           class="panel-body">' +
+	    '           class="panel-body group-row-panel-body">' +
 	    '      </div>' +
 	    '    </div>' +
 	    '  </div>' +
@@ -169,6 +169,21 @@ $(function () {
 	    '    </div>' +
 	    '  </div>' +
 	    ' </div>' +
+	    '</div>';
+
+	var grpStructSetTemplateString =
+	    '<div class="row" data-fieldid="<%- fieldid %>"> ' +
+	    '  <div class="col-xs-offset-1">' +
+	    '    <div id="pp-param-structset-subpanel-<%- fieldid %>" ' +
+	    '        class=" ' +
+	    '               pp-param-structset-subpanel-collapse"' +
+	    '         style="height: auto;">' +
+	    '      <div id="pp-param-structset-subpanel-body-<%- fieldid %>" ' +
+	    '           style="padding-top: 0px; padding-bottom: 0px;" ' +
+	    '           class="structset-panel-body">' +
+	    '      </div>' +
+	    '    </div>' +
+	    '  </div>' +
 	    '</div>';
 
 	var structTemplateString =
@@ -451,6 +466,7 @@ $(function () {
 
 	var emptyStructTemplate  = _.template(emptyStructTemplateString);
 	var structSetTemplate    = _.template(structSetTemplateString);
+	var grpStructSetTemplate = _.template(grpStructSetTemplateString);
 	var emptyInputTemplate   = _.template(emptyInputTemplateString);
 	var structTemplate       = _.template(structTemplateString);
 	var groupTemplate        = _.template(groupTemplateString);
@@ -722,8 +738,6 @@ $(function () {
 		m = details.min;
 	    }
 
-	    console.info("ffoo2", details, i, m);
-			
 	    while (i < m) {
 		var tname = details.name;
 		if (i) {
@@ -812,6 +826,7 @@ $(function () {
 			    "type"    : details.type,
 			    "hashelp" : false,
 			    "visible" : details.hide ? false : true,
+			    "index"   : formFields.length,
 			};
 			formGroups[groupId] = {
 			    "id"         : groupId,
@@ -823,7 +838,7 @@ $(function () {
 			formFields.push(field);
 		    }
 		}
-		else if (details.type == "struct") {
+		if (details.type == "struct") {
 		    // Convenience to match above.
 		    details["isgroup"]     = false;
 		    details["values"]      = {};
@@ -895,22 +910,28 @@ $(function () {
 			    details.hashelp = true;
 			}
 		    });
+		    details["index"] = formFields.length;
 		    formFields.push(details);
 		}
-		else {
+		else if (!groupId) {
 		    // Convenience for later
 		    details.groupId = null;
 		    details.groupName = null;
 		}
 		if (groupId) {
-		    // Convenience to match above.
-		    details["isgroup"]    = false;
-		    details["values"]     = {};
-		    // Only for applying parameter sets
-		    details["ppwarnings"] = {};
+		    /*
+		     * Might be a struct embedded in a group.
+		     */
+		    if (details.type != "struct") {
+			// Convenience to match above.
+			details["isgroup"]    = false;
+			details["values"]     = {};
+			// Only for applying parameter sets
+			details["ppwarnings"] = {};
 
-		    // Setup the initial fields value.
-		    initFieldInitialValues(details);
+			// Setup the initial fields value.
+			initFieldInitialValues(details);
+		    }
 		    if (details.hide == false) {
 			formGroups[groupId].visible = true;
 		    }
@@ -940,6 +961,7 @@ $(function () {
 		    }
 
 		    // Add to list of fields in the form.
+		    details["index"] = formFields.length;
 		    formFields.push(details);
 		}
 		if (!details.description || details.description == "") {
@@ -1959,6 +1981,8 @@ $(function () {
 	    var hasWarning   = false;
 	    var hasChanges   = 0;
 
+	    console.info("GenerateGroup", groupId, field);
+
 	    var html = groupTemplate({
 		"fieldid"    : groupId,
 		"name"       : name,
@@ -1970,7 +1994,12 @@ $(function () {
 	    _.each(fields, function(details) {
 		var set;
 
-		if (details.multiValue) {
+		console.info("GenerateGroup field", details);
+
+		if (details.type == "struct") {
+		    set = GenerateStruct(details.index, bindings);
+		}
+		else if (details.multiValue) {
 		    set = GenerateMultiValueField(details.values,
 						  details, fieldIndex,
 						  bindings, null);
@@ -1991,7 +2020,7 @@ $(function () {
 		if (set.hasClass("has-changes")) {
 		    hasChanges = hasChanges + set.data("has-changes");
 		}
-		$(groupdiv).find(".panel-body").append(set);
+		$(groupdiv).find(".group-row-panel-body").append(set);
 	    });
 	    // Remember visibility for redraw after errors	
 	    $(groupdiv).find(".pp-param-group-subpanel-collapse")
@@ -2042,18 +2071,28 @@ $(function () {
 	    var hasChanges  = 0;
 	    var structdiv;
 
+	    console.info("GenerateStruct", details, values, multivalue);
+
 	    // Process all copies of the struct and append to div.
 	    // Multivalue structs look different.
 	    if (multivalue) {
+		var html;
+		
 		if (details.multiValueTitle) {
 		    prompt = details.multiValueTitle;
 		}
-		var html = structSetTemplate({
+		var args = {
 		    "fieldid"     : name,
 		    "longhelp"    : details.longDescription,
 		    "longhelp_id" : "help-" + details.name,
 		    "prompt"      : prompt,
-		});
+		};
+		if (!details.groupId) {
+		    html = structSetTemplate(args);		    
+		}
+		else {
+		    html = grpStructSetTemplate(args);
+		}
 		structdiv = $(html);
 
 		/*
@@ -2811,7 +2850,8 @@ $(function () {
 	    
 	    // Process each field/group.
 	    _.each(formFields, function(def, fieldIndex) {
-		if (def.type == "struct") {
+		// Watch for a struct embedded in a group
+		if (def.type == "struct" && !def.groupId) {
 		    var structdiv = GenerateStruct(fieldIndex, bindings);
 
 		    // Look for changes that need to be declared below.
@@ -2842,7 +2882,7 @@ $(function () {
 			hasHelp = true;
 		    }
 		}
-		else {
+		else if (def.type != "struct") {
 		    var details = def;
 		    var set;
 
@@ -3014,10 +3054,16 @@ $(function () {
 		    addMessage("warning", ht);
 		}
 	    }
-	    
-	    imagePicker = new jacksmod.ImagePicker();
-	    $('#image-picker-body').html(imagePickerString);
-	    $('#imagepicker-modal .modal-body > div').append(imagePicker.el);
+
+	    if (0) {
+		/*
+		 * I will restore this if requested.
+		 */
+		imagePicker = new jacksmod.ImagePicker();
+		$('#image-picker-body').html(imagePickerString);
+		$('#imagepicker-modal .modal-body > div').
+		    append(imagePicker.el);
+	    }
 	    
 	    //
 	    // Handle the toggle-all help panels link.  Bootstrap
@@ -3787,7 +3833,6 @@ $(function () {
 	     * the profile.
 	     */
 	    if (formFields.length && uuid == args.uuid) {
-		console.info("foo");
 		GenerateForm(null);
 		if (args.ready_callback) {
 		    args.ready_callback();
@@ -3820,6 +3865,10 @@ $(function () {
 		// Setup the parameter buttons for this profile.
 		SetupPPButtons(json.value.hasactivity,
 			       json.value.paramsets, json.value.recents);
+
+		// Copy over the profile name/version
+		$('#' + ppdivname + ' .selected_profile_text')
+		    .html($('#step0-form .selected_profile_text').html());
 
 		if (window.EXPMODIFY) {
 		    // Switch the message at the top of the panel.

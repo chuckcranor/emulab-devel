@@ -79,15 +79,28 @@ $(function () {
 				    "style='margin-bottom: " + margin +
 				    "px;'></div>");
 		    
+		    // Temporary
+		    if (window.BOOTSTRAP_VERSION == 5) {
+			$(wrapper).addClass("row");
+		    }
+		    
 		    /*
 		     * A normal placeholder can be used, but sometimes
 		     * we want both a placeholder in the input, and a
 		     * label outside of other text.
 		     */
 		    if (_.has(item.dataset, "label")) {
+			var labelsize = 3;
+			
+			// Label column size per row,
+			if (_.has(item.dataset, "labelsize")) {
+			    labelsize = item.dataset['labelsize'];;
+			}
+			
 			var label_text =
 			    "<label for='" + key + "' " +
-			    " class='col-sm-3 control-label' ";
+			    " class='col-sm-" + labelsize +
+			    "        control-label col-form-label' ";
 			if (_.has(item.dataset, "optional")) {
 			    label_text = label_text +
 				"style='padding-top: 0px;'";
@@ -100,8 +113,11 @@ $(function () {
 				"<a href='#' class='btn btn-xs' " +
 				" style='padding-right: 0px;' " +
 				" data-toggle='popover' " +
+				" data-bs-toggle='popover' " +
 				" data-html='true' " +
+				" data-bs-html='true' " +
 				" data-delay='{\"hide\":1000}' " +
+				" data-bs-delay='{\"hide\":1000}' " +
 				" data-content='" + item.dataset['help'] + "'>"+
 				"<span style='margin-bottom: 4px;' " +
 				"  class='glyphicon " +
@@ -110,12 +126,12 @@ $(function () {
 			}
 			if (_.has(item.dataset, "optional")) {
 			    label_text = label_text +
-				"<br><small>(Optional)</small>";
+				"<div><small>(Optional)</small></div>";
 			}
 			label_text = label_text + "</label>";
 			wrapper.append($(label_text));
 			if (!colsize) {
-			    colsize = (wide ? 9 : 6);
+			    colsize = (wide ? 12 : 9) - labelsize;
 			}
 		    }
 		    var innerdiv =
@@ -137,17 +153,21 @@ $(function () {
 	    $(form).find(".format-me").each(function () {
 		if (this.dataset) {
   		    var key = this.dataset['key'];
+		    var label =
+			$('<label id="label-error-' + key + '" ' +
+			  '  for="inputError">' + _.escape(errors[key]) +
+			  '</label>');
 
 		    if (errors && _.has(errors, key)) {
-			$(this).parent().addClass("has-error");
-
-			var html =
-			    '<label class="control-label" ' +
-			    '  id="label-error-' + key + '" ' +
-			    '  for="inputError">' + _.escape(errors[key]) +
-			    '</label>';
-			    
-			$(this).parent().append(html);
+			if (window.BOOTSTRAP_VERSION == 5) {
+			    $('#' + key).addClass("is-invalid");
+			    $(label).addClass("invalid-feedback text-start");
+			}
+			else {
+			    $(this).parent().addClass("has-error");
+			    $(label).addClass("form-control");
+			}
+			$(this).parent().append(label);
 			delete errors[key];
 		    }
 		}
@@ -226,11 +246,19 @@ $(function () {
 		if (this.dataset) {
   		    var key = this.dataset['key'];
 
-		    // Remove the error label by id, that we added above.
-		    if ($(this).parent().hasClass("has-error")) {
-			$(this).parent()
-			    .find('#' + 'label-error-' + key).remove();
-			$(this).parent().removeClass("has-error");
+		    if (window.BOOTSTRAP_VERSION == 5) {
+			if ($('#' + key).hasClass("is-invalid")) {
+		    	    $('#' + key).removeClass("is-invalid");
+			    $('#label-error-' + key).remove();
+			}
+		    }
+		    else {
+			// Remove the error label by id, that we added above.
+			if ($(this).parent().hasClass("has-error")) {
+			    $(this).parent()
+				.find('#' + 'label-error-' + key).remove();
+			    $(this).parent().removeClass("has-error");
+			}
 		    }
 		}
 	    });

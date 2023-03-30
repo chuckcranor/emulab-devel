@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include("lease_defs.php");
@@ -126,6 +129,7 @@ function SPITFORM($formfields, $dataset, $errors)
     echo "</script>\n";
 
     SPITREQUIRE_DATASET();
+    SPITREQUIRE("js/create-dataset.js");
     AddTemplateList(array("create-dataset", "dataset-help", "oops-modal", "waitwait-modal"));
     SPITFOOTER();
 }

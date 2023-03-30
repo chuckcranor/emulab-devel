@@ -214,9 +214,10 @@ $(function ()
 		 * Expand/collapse for each prereserve child (hidden) rows.
 		 */
 		$('.' + expando_class).click(function () {
+		    event.preventDefault();
 		    var rowname = $(this).data("target");
 
-		    if (! $(rowname).hasClass("in")) {
+		    if (! $(rowname).hasClass("show")) {
 			$(rowname).collapse('show');
 			$(this).removeClass("glyphicon-chevron-right");
 			$(this).addClass("glyphicon-chevron-down");
@@ -232,9 +233,10 @@ $(function ()
 		 * Expand/Collapse the extire prereserve table.
 		 */
 		$('#prereserve-collapse-button-' + name).click(function () {
+		    event.preventDefault();
 		    var panelname = '#prereserve-panel-' + name;
 
-		    if (! $(panelname).hasClass("in")) {
+		    if (! $(panelname).hasClass("show")) {
 			$(panelname).collapse('show');
 			$(this).removeClass("glyphicon-chevron-right");
 			$(this).addClass("glyphicon-chevron-down");

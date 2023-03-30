@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021, 2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -626,15 +626,15 @@ function VerifyPageArguments($argspec, $required)
 		    strcasecmp("$object", "1") == 0 ||
 		    strcasecmp("$object", "true") == 0 ||
 		    strcasecmp("$object", "on") == 0) {
-		    $object = True;
+		    $object = true;
 		}
-		elseif (strcasecmp("$object", "no") == 0 ||
-			strcasecmp("$object", "0") == 0 ||
-			strcasecmp("$object", "false") == 0 ||
-			strcasecmp("$object", "off") == 0) {
-		    $object = False;
+		else {
+		    $object = false;
 		}
 	    }
+            else {
+                $object = false;
+            }
 	    break;
 
 	case PAGEARG_INTEGER:

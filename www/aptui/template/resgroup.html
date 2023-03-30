@@ -512,10 +512,10 @@
     <div id="history-graphs"></div>
   </div>
   <div class='col-lg-5 col-md-5'>
+    <div id="range-info-div" class="hidden"
+	 style="margin-bottom: 20px; position: relative;">
+    </div>
     <div id="reservation-lists">
-      <div id="range-info-div" class="hidden"
-	   style="margin-bottom: 20px; position: relative;">
-      </div>
       <div id="powder-graph-div">
 	<div id='powder-radios' class='hidden'>
 	  <!-- Template goes here -->	    
@@ -554,12 +554,6 @@
                 aria-hidden='true'>&times;</button>
         <center>
 	  <h4>Would you like to submit this reservation request?</h4>
-          <button style='margin-right: 20px;'
-                  class='btn btn-primary btn-sm'
-                  data-dismiss='modal' aria-hidden='true'>Cancel</button>
-          <button class='btn btn-success btn-sm'
-		  id='commit-reservation'
-		  data-dismiss='modal' aria-hidden='true'>Submit</button>
 	</center>
 	<div style="margin-top: 5px;" class="needs-approval hidden">
 	  <div class="needs-approval-noconflict hidden">
@@ -583,21 +577,43 @@
 	  <div style="margin-top: 10px;">
 	    <% if (window.MAINSITE) { %>
 	      <em>Reservations that require administrative approval
-		take time to review and are processed the <b>next
-		business day at 9AM Mountain
-		time</b><span class="adjustedmorning hidden">
-		(<span></span> in your local timezone)</span>.
-		If you are
-		requesting a reservation that starts before the next
-		business day at 9AM, it is possible the reservation
-		will no longer be feasible (fit the schedule) by the
-		time it is processed.  Please plan accordingly, if you
-		start an experiment based on currently availability,
-		you might be forced to terminate that experiment, if
-		your reservation is not approved.</em>
+		take time to review and are processed
+		<% if (!window.ISPOWDER) { %>
+		  the <b>next business day</b>
+		<% } else { %>
+		  in <b>two business days</b>
+		<% } %>
+		at 9AM Mountain	time (<span class="adjustedNBD"></span>
+		in your local time zone).
+		If you are requesting a reservation that starts before
+		then it is possible the reservation will no longer be
+		feasible (fit the schedule) by the time it is
+		processed.  Please plan accordingly, if you start an
+		experiment based on currently availability, you might
+		be forced to terminate that experiment, if your
+		reservation is not approved.</em>
 	    <% } %>
-	  </div>	  
+	  </div>
 	</div>
+	<div style="margin-top: 10px;">
+	  <b>Reservations are per-project!</b> Any user in the
+	  project may use the nodes you have reserved. It is up to
+	  you to coordinate with other members of your project to
+	  ensure that the nodes are available when you want them. In
+	  addition to not being able to start an experiment, <em>you
+	  might not be able to an extend an existing experiment.</em>
+          More details are in the <a href="#" target="_blank"
+				     class="reservation-manual">manual</a>!
+
+	</div>
+	<center style="margin-top: 10px;">
+          <button style='margin-right: 20px;'
+                  class='btn btn-primary btn-sm'
+                  data-dismiss='modal' aria-hidden='true'>Cancel</button>
+          <button class='btn btn-success btn-sm'
+		  id='commit-reservation'
+		  data-dismiss='modal' aria-hidden='true'>Submit</button>
+	</center>
       </div>
     </div>
   </div>
@@ -856,14 +872,17 @@
                 aria-hidden='true'>&times;</button>
 	<br>
 	<div>
-	  Please specify a start time no earlier than 9 AM Mountain
-	  Time
-	  <span class="adjustedmorning hidden">
-	    (<span></span> in your local timezone)</span>
-	  on the next business day. This allows administrators
+	  Reservations that need approval must start no earlier then
+	  <% if (!window.ISPOWDER) { %>
+	    the <b>next business day</b>
+	  <% } else { %>
+	    <b>two business days from now</b>
+	  <% } %>
+	  at 9AM Mountain time (<span class="adjustedNBD"></span>
+	  in your local time zone) so that administrators have
 	  sufficient time to review your request.
 	</div>
-	<center>
+	<center style="margin-top: 10px;">
           <button class='btn btn-default btn-xs'
 		  data-dismiss='modal'>Dismiss</button>
 	</center>

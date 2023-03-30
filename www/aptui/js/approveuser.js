@@ -2,9 +2,15 @@ $(function ()
 {
     'use strict';
 
+    var templates = APT_OPTIONS.fetchTemplateList(['waitwait-modal',
+						   "oops-modal"]);
+
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
+
+	$('#waitwait_div').html(templates['waitwait-modal']);
+	$('#oops_div').html(templates['oops-modal']);
 
 	var callback = function(json) {
 	    sup.HideModal("#waitwait-modal");

@@ -30,13 +30,20 @@
 <div class='col-sm-12'>
   <div class='panel panel-default'>
     <div class='panel-heading panel-heading-list'>
-      <% if (window.ISADMIN) { %>
-	<a href="list-reservations.php?force=1"
-	   class='btn btn-primary btn-xs pull-right'
-           style='margin-right: 10px; margin-top: 5px;'
-           type='button'>Node Reservations</a>
-      <% } %>
-      <h4 class="text-center">Reservations</h4>
+      <div class="aligned-title-buttons">
+	<span class="left-edge"> </span>
+	<span class="middle">
+	  <h4>Reservations</h4>
+	</span>
+	<span class="right-edge">
+	  <% if (window.ISADMIN) { %>
+	    <a href="list-reservations.php?force=1"
+	       class='btn btn-primary btn-xs pull-right'
+               style='margin-right: 10px;'
+               type='button'>Node Reservations</a>
+	  <% } %>
+	</span>
+      </div>
     </div>
     <div class='panel-body'>
       <div id='nogroups' class=hidden>

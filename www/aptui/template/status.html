@@ -59,6 +59,9 @@ pre {
     background-color: inherit;
     margin-bottom: 15px;
 }
+.CodeMirror {
+    height: auto !important;
+}
 </style>
 <div id="main-template">
 <div class='row'>
@@ -712,7 +715,9 @@ pre {
 	  </ul>
 	  <div id='quicktabs_content' class='tab-content'>
             <div class='tab-pane hidden' id='topology'>
-	      <div id='showtopo_statuspage' class='jacks'></div>
+	      <div id='showtopo_statuspage'>	      
+		<div class='showtopology-bare'></div>
+	      </div>
 	      <% if (registered) { %>
 		<button class='btn btn-xs btn-success pull-right' disabled
 			id='refresh_button' type=button
@@ -777,7 +782,8 @@ pre {
 				  data-toggle='dropdown'>
 			    <span class='glyphicon glyphicon-cog'></span>
 			  </button>
-			  <ul class='dropdown-menu text-left' role='menu'>
+			  <ul class='dropdown-menu dropdown-menu-right
+				     text-left' role='menu'>
 			    <li><a href='#' name='reboot'>Reboot Selected</a>
 			    </li>
 			    <li><a href='#' name='reload'>Reload Selected</a>
@@ -1909,6 +1915,26 @@ pre {
       </div>
     </div>
   </div>
+  <div id='extension-warning-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <button type='button' class="close"
+                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+          <center><h4>WARNING!</h4></center>
+	</div>
+	<div class='modal-body'>
+	  <p class="reason"></p>
+	  <p>
+	    Please contact the
+	    <a href="mailto:<%- window.SUPPORT %>?subject=Experiment%20<%- expinfo.project %>/<%- expinfo.name %>"
+	       target="_blank">
+	      support staff</a> for more information.
+	  </p>
+	</div>
+      </div>
+    </div>
+  </div>
   <!-- Explain quarantine mode -->
   <div id='explain-quarantine-modal' class='modal fade'>
     <div class='modal-dialog'>
@@ -2147,7 +2173,13 @@ pre {
       <td name='status'>n/a</td>
       <td name='startup'>n/a</td>
       <td name='image'>n/a</td>
-      <td name='sshurl'>n/a</td>
+      <td name='sshurl'><span class="sshurl-url">n/a</span>
+	<span class="sshurl-copy hidden">
+	  <a href='#' class='btn'
+	     style='margin-bottom: 4px;
+		    padding-top: 0px;padding-bottom: 0px;'>
+	    <span style="font-size: 16px;"
+		  class="glyphicon glyphicon-copy"></span></a></span></td>
       <td align=left><input name='select' type=checkbox></td>
       <td name='menu' align=center> 
 	<div name='action-menu' class='dropdown'>

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -36,6 +36,7 @@ use IO::Socket::INET;
 use File::Temp qw(tempdir);
 use POSIX qw(strftime);
 use POSIX ":sys_wait_h";
+use POSIX qw(ceil floor);
 use JSON;
 
 #
@@ -79,6 +80,7 @@ my $GZIP             = "/usr/bin/gzip";
 my $FIND             = "/usr/bin/find";
 my $FORMAT1          = "portid,timestamp,frequency,power";
 my $FORMAT2          = $FORMAT1 . ",center_freq";
+my $FORMAT3          = $FORMAT2 . ",incident";
 my $CSVHEADER        = "frequency,power";
 my $MAILDELAY        = 3600;
 
@@ -96,6 +98,7 @@ sub HandleChild($);
 sub LoadNodeData($);
 sub HandleViolations($$$);
 sub WriteRawData($$$);
+sub measurement_consistent($$$$);
 
 #
 # Explanatory text.
@@ -358,7 +361,7 @@ sub HandleChild($)
 	return undef
 	    if ($line =~ /^0,/);
 
-	my ($portid,$timestamp,$frequency,$power,$center)
+	my ($portid,$timestamp,$frequency,$power,$center,$incident)
 	    = split(",", $line);
 	if (!(defined($portid) && defined($frequency) &&
 	      defined($power) && defined($timestamp))) {
@@ -368,7 +371,8 @@ sub HandleChild($)
 	if ($timestamp !~ /^[\.\d]+$/ ||
 	    $frequency !~ /^[\.\d]+$/ ||
 	    $power !~ /^[-\.\d]+$/ ||
-	    (defined($center) && $center !~ /^[-\.\d]+$/)) {
+	    (defined($center) && $center !~ /^[-\.\d]+$/) ||
+	    (defined($incident) && $incident !~ /^[-\.\d]+$/)) {
 	    print STDERR "Improper float(s) from $address:$port:\n";
 	    print STDERR "   $line\n";
 	    return undef;
@@ -393,6 +397,7 @@ sub HandleChild($)
 	    "frequency"  => $frequency,
 	    "power"      => $power,
 	    "center"     => $center,
+	    "incident"   => $incident,
    	    "timestamp"  => int($timestamp),
 	    "repeatcount"=> 0,
 	};
@@ -419,7 +424,7 @@ sub HandleChild($)
     #
     my $header = shift(@lines);
     chomp($header);
-    if ($header ne $FORMAT1 && $header ne $FORMAT2) {
+    if ($header ne $FORMAT1 && $header ne $FORMAT2 && $header ne $FORMAT3) {
 	print STDERR "Improper format from $address:$port: '$header'\n";
 	exit(1);
     }
@@ -467,7 +472,7 @@ sub HandleChild($)
 	next
 	    if ($power < $floor);
 
-	print "Above floor:$noisefloor $nodeid:$iface: $frequency,$power\n";
+	print "Above floor:$noisefloor $nodeid:$iface: $frequency,$power,$center\n";
 
 	#
 	# Temporary measure; lets ignore violations below 1Gz, Alex says
@@ -577,6 +582,17 @@ sub HandleChild($)
 		    $measurement->{"frequency"} <= $limit->{"freq_high"} &&
 		    (($usemax && $measurement->{"power"} <= $MAXPOWER) ||
 		     $measurement->{"power"} <= $limit->{"power"})) {
+		    $inrange = 1;
+		    last;
+		}
+		if ($measurement->{"center"} &&
+		    measurement_consistent($limit->{"freq_low"},
+					   $limit->{"freq_high"},
+					   $measurement->{"frequency"},
+					   $measurement->{"center"})) {
+		    print "Appears to be a subharmonic for the range ".
+			$limit->{"freq_low"} . "," .
+			$limit->{"freq_high"} . "\n";
 		    $inrange = 1;
 		    last;
 		}
@@ -1002,13 +1018,17 @@ sub WriteRawData($$$)
 	    
 	    foreach my $ref (@samples) {
 		my $center      = "";
-		
+		my $incident    = "";
+
 		my $freq  = sprintf("%.3f", $ref->{"frequency"});
 		my $power = sprintf("%.3f", $ref->{"power"});
 		if (defined($ref->{"center"})) {
-		    $center = sprintf(",%.4f", $ref->{"center"});
+		    $center = sprintf(",%.3f", $ref->{"center"});
 		}
-		print CSV "$freq,$power${center}";
+		if (defined($ref->{"incident"})) {
+		    $incident = sprintf(",%.3f", $ref->{"incident"});
+		}
+		print CSV "$freq,$power${center}${incident}";
 		if ($abovefloor) {
 		    if (exists($ref->{"abovefloor"})) {
 			print CSV sprintf(",%.3f", $ref->{"abovefloor"});
@@ -1058,6 +1078,49 @@ sub WriteRawData($$$)
 	    print STDERR "Could not open new CSV file $tmpname: $!\n";
 	}
     }
+}
+
+#
+# Math provided by Alex. 
+#
+sub measurement_consistent($$$$)
+{
+    my ($f_min, $f_max, $f_detected, $f_center) = @_;
+
+    # multiplier = [1, 1, -1, -1]
+    # f_true = n*f_center + multiplier[n%4] * (f_detected - f_center)
+
+    # n = (f_true + multiplier[n%4] * (f_center - f_detected)) / f_center
+    # multiplier = 1, n%4 in {0,1}
+    my $n1 = ($f_min + ($f_center - $f_detected)) / $f_center;
+    my $n2 = ($f_max + ($f_center - $f_detected)) / $f_center;
+    # multipler = -1, n%4 in {2,3}
+    my $n3 = ($f_min - ($f_center - $f_detected)) / $f_center;
+    my $n4 = ($f_max - ($f_center - $f_detected)) / $f_center;
+
+    #print("f_min: ${f_min}\n");
+    #print("f_max: ${f_max}\n");
+    #print("f_detected: ${f_detected}\n");
+    #print("f_center: ${f_center}\n");
+    #print("$n1, $n2, $n3, $n4\n");
+
+    my $n_p = int(ceil($n1));
+    my $consistent_p = (ceil($n1) <= floor($n2) &&
+			(($n_p % 4) == 0 || ($n_p % 4) == 1) ? 1 : 0);
+
+    my $n_m = int(ceil($n3));
+    my $consistent_m = (ceil($n3) <= floor($n4) &&
+			(($n_m % 4) == 2 || ($n_m % 4) == 3) ? 1 : 0);
+
+    my $consistent = $consistent_p || $consistent_m;
+
+    if ($consistent) {
+	print("Consistent: ${consistent}\n");
+	print("Consistent 0,1 harmonic: ${consistent_p}\n");
+	print("Consistent 2,3 harmonic: ${consistent_m}\n");
+	return 1;
+    }
+    return 0;
 }
 
 sub fatal($)

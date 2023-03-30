@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -368,13 +368,6 @@ function Do_ModifyDataSet()
     }
     $nodeid = null;
     if ($dataset->type() == "imdataset") {
-        if ($nodeid) {
-            if (!(ISADMIN() ||
-                  $dataset->AccessCheck($this_user, $LEASE_ACCESS_MODIFY))) {
-                SPITAJAX_ERROR(1, "Not enough permission");
-                return;
-            }
-        }
         #
         # Node and BS name are optional.
         #
@@ -400,7 +393,12 @@ function Do_ModifyDataSet()
                 elseif (!TBvalid_vnode_id($bsname)) {
                     $errors["dataset_bsname"] = TBFieldErrorString();
                 }
+                if (!(ISADMIN() ||
+                      $dataset->AccessCheck($this_user, $LEASE_ACCESS_MODIFY))){
+                    $errors["dataset_node"] = "Not enough permission";
+                }
             }
+            
             if (!count($errors)) {
                 if ($embedded || $dataset->islocal()) {
                     if ($node = Node::Lookup($nodeid)) {

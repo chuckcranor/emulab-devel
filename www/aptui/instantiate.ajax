@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1315,12 +1315,11 @@ function Do_Submit()
 #
 # Max Duration based on existing reservations.
 #
-#
 function Do_MaxDuration()
 {
     global $this_user;
     global $ajax_args;
-    global $PORTAL_GENESIS, $DEFAULT_AGGREGATE_URN;
+    global $PORTAL_GENESIS, $DEFAULT_AGGREGATE_URN, $am_array;
     global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $ISPOWDER;
 
     if (!isset($ajax_args["formfields"])) {
@@ -1365,6 +1364,12 @@ function Do_MaxDuration()
             return;
         }
     }
+    elseif (isset($formfields["where"]) &&
+            $formfields["where"] != "" &&
+            array_key_exists($formfields["where"], $am_array)) {
+
+        $options .= " -a " . $am_array[$formfields["where"]] . " ";
+    }
     # Scheduled start time if set.
     if (isset($formfields["start"]) && $formfields["start"] != "") {
         $start = strtotime($formfields["start"]);
@@ -1374,6 +1379,7 @@ function Do_MaxDuration()
         }
         $options .= " -s $start ";
     }
+    
     $filename = tempnam("/tmp", "rspec");
     $fp = fopen($filename, "w");
     fwrite($fp, $rspec);
@@ -1397,23 +1403,23 @@ function Do_MaxDuration()
 
     $retval = SUEXEC($this_user->uid(), "nobody",
                      "webmanage_resgroup -t $webtask_id -- ".
-                     "  maxduration $options",
-                     SUEXEC_ACTION_CONTINUE);
+                     ($ISPOWDER ? "maxduration" : "maxextension") .
+                     " $options",
+                     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
 
     if ($retval) {
-        SUEXECERROR(SUEXEC_ACTION_CONTINUE);    
-        
         if (!$webtask->exited() || $retval < 0) {
             SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         }
         else {
             SPITAJAX_ERROR(1, $webtask->output());
         }
-        unlink($filename);
-        if (isset($filename2)) {
-            unlink($filename2);
-        }
+        #unlink($filename);
+        #if (isset($filename2)) {
+        #    unlink($filename2);
+        #}
         $webtask->Delete();
         return;
     }
@@ -1424,9 +1430,18 @@ function Do_MaxDuration()
     if (isset($filename2)) {
         unlink($filename2);
     }
-    $maxend = DateStringGMT(intval($webtask->TaskValue("maxend")));
+    $maxend = $webtask->TaskValue("maxend");
+    if ($maxend != null && $maxend != 0) {
+        $maxend = DateStringGMT(intval($maxend));
+    }
+    $blob = array("maxend" => $maxend);
+    $loser = $webtask->TaskValue("baddog");
+    if ($loser) {
+        $blob["loser"] = $loser;
+        $blob["which"] = $webtask->TaskValue("badtype");
+    }
     $webtask->Delete();
-    SPITAJAX_RESPONSE($maxend);
+    SPITAJAX_RESPONSE($blob);
     return;
 }
 

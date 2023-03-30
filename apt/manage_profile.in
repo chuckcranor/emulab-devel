@@ -113,6 +113,7 @@ use EmulabFeatures;
 # Protos
 sub fatal($);
 sub UserError($);
+sub UserErrorSane($);
 sub CreateProfile();
 sub DuplicateProfile();
 sub ModifyProfile();
@@ -1064,7 +1065,17 @@ sub VerifyXML($$)
 #
 sub UpdateProfileFromRepo()
 {
+    my $optlist     = "i";
+    my $interactive = 0;
     my $errmsg;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"i"})) {
+	$interactive = 1;
+    }
     usage()
 	if (@ARGV != 1);
 
@@ -1089,7 +1100,12 @@ sub UpdateProfileFromRepo()
     elsif (!$project->AccessCheck($this_user, TB_PROJECT_CREATEPROFILE())) {
 	fatal("Not enough permission in this project");
     }
-    if ($profile->WaitForLock(30)) {
+    if ($interactive) {
+	if ($profile->Lock()) {
+	    UserErrorSane("Profile is busy, cannot lock it.");
+	}
+    }
+    elsif ($profile->WaitForLock(30)) {
 	print STDERR "Profile is busy, cannot lock it.\n";
 	exit(1);
     }
@@ -1108,6 +1124,10 @@ sub UpdateProfileFromRepo()
     if ($?) {
 	print STDERR $output;
 	$profile->Unlock();
+	if ($interactive) {
+	    UserErrorSane("There was an error updating from your repository. ".
+			  "Please contact us for more information");
+	}
 	$project->SendEmail($creator->email(),
 		    "Failure to update profile from Git repository",
 		    "Profile $profile_pid,$profile_name could not be pulled\n".
@@ -1144,7 +1164,9 @@ sub UpdateProfileFromRepo()
 	    my $exit_status = $? >> 8;
 	    print STDERR $output;
 	    $profile->Unlock();
-	    
+	    if ($interactive) {
+		UserErrorSane($output);
+	    }
 	    $project->SendEmail($creator->email(),
 		    "Failure to update profile from Git repository",
 		    "Profile $profile_pid,$profile_name could not be updated\n".
@@ -1172,17 +1194,23 @@ sub UpdateProfileFromRepo()
 	    fatal($errmsg);
 	}
 	else {
-	    print STDERR "$errmsg\n";
-	    exit(1);
+	    if ($interactive) {
+		UserErrorSane($errmsg);
+	    }
+	    else {
+		print STDERR "$errmsg\n";
+		exit(1);
+	    }
 	}
     }
-    $project->SendEmail($creator->email(),
-	"Profile updated from Git repository",
-	"Profile $profile_pid,$profile_name has been updated ".
-	"from its git repository\n".
-	"as the result of a push webhook.",
-	$project->Brand()->OpsEmailAddress());
-    
+    if (!$interactive) {
+	$project->SendEmail($creator->email(),
+		    "Profile updated from Git repository",
+		    "Profile $profile_pid,$profile_name has been updated ".
+		    "from its git repository\n".
+		    "as the result of a push webhook.",
+		    $project->Brand()->OpsEmailAddress());
+    }
     return 0;
 }
 

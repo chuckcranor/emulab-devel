@@ -1,0 +1,365 @@
+<nav class='navbar navbar-expand-md portal-navbar' role='navigation'>
+  <div class='navbar-header'>
+    <a class='navbar-brand' href='landing.php'>
+      <img src='<%- vars.APTLOGO %>'/></a>
+  </div>
+  <div class='collapse navbar-collapse navbar-inner'
+       id='main-navbar-collapse'>
+    <ul class='nav navbar-nav me-auto mb-2 mb-lg-0 navbar-left apt-left'>
+      <% if (!window.MAINSITE) { %>
+        <li class='local-name apt-left nav-item'>
+	  <%- vars.THISHOMEBASE %></li>
+      <% } %>
+      <% if (vars.login_uid && !vars.nonav && !vars.WEBONLY) { %>
+	<% if (vars.isactive) { %>
+	  <%
+ 	      var THEN = Math.floor(Date.now() / 1000) - (90 * 3600 * 24);
+	  %>
+	  <!-- Start of Experiments menu -->
+	  <li id='quickvm_actions_menu' class='dropdown nav-item'> 
+	    <a href='#' class='dropdown-toggle btn
+			       btn-quickvm-home navbar-btn'
+	       data-toggle='dropdown' data-bs-toggle='dropdown'>
+	      Experiments <b class='caret'></b></a>
+	    <ul class='dropdown-menu'>
+	      <li><a class='dropdown-item'
+		     href='instantiate.php'>Start Experiment</a></li>
+	      <% if (_.has(vars, "recents")) { %>
+		<li class='multilevel-submenu'>
+                  <a href='#' class='dropdown-item'>
+		    Rerun Recent Experiment </a>
+                  <ul class='dropdown-menu'>
+		    <% _.each(vars.recents, function (info) { %>
+		      <li><a href='<%- info.rerun_url %>'
+			     class='dropdown-item' target=_blank>
+			<% print(info.instance_name +
+		                 "(" + info.profile_name + ")") %></a>
+		      </li>
+		    <% }) %>
+		    <li class=text-center>
+		      <a target=_blank class='dropdown-item'
+			 href='<% print("activity.php?user=" + vars.login_uid + 
+				         "&min=" + THEN) %>'>
+			More <b class='caret'></b></a>
+		    </li>
+		  </ul>
+		</li>
+	      <% } %>
+	      <li><a href='manage_profile.php'
+		     class='dropdown-item'>Create Experiment Profile</a></li>
+	      <% if (vars.UI_DISABLE_RESERVATIONS == 0 || vars.isadmin) { %>
+		<li>
+		  <a href='reserve.php' class='dropdown-item'>Reserve
+		    <% print(window.ISPOWDER ? "Resources" : "Nodes") %>
+		  </a>
+		</li>
+	      <% } %>
+	      <li><a href='resinfo.php'
+                     class='dropdown-item'>Resource Availability</a></li>
+	      <li><a href='cluster-status.php'
+                     class='dropdown-item'>Cluster Status</a></li>
+	      <% if (window.ISPOWDER) { %>
+		<li><a href='radioinfo.php'
+		       class='dropdown-item'>Powder Radio Info</a></li>
+		<li><a href='mobile-endpoints.php'
+		       class='dropdown-item'>Mobile Endpoint Info</a></li>
+		<li><a href='powder-map.php'
+		       class='dropdown-item'>Powder Map</a></li>
+	      <% } %>
+
+              <li class='divider'></li>
+	      
+              <li><a href='user-dashboard.php#experiments'
+		     class='dropdown-item'>My Experiments</a></li>
+	      <li><a href='user-dashboard.php#profiles'
+		     class='dropdown-item'>My Profiles</a></li>
+
+	      <% if (vars.UI_DISABLE_RESERVATIONS == 0 || vars.isadmin) { %>
+		<li><a href='list-resgroups.php'
+		       class='dropdown-item'>My Reservations</a></li>
+	      <% } %>
+	      
+              <li>
+		<a target=_blank class='dropdown-item'
+		     href='<% print("activity.php?user=" + vars.login_uid + 
+			            "&min=" + THEN) %>'>
+		  My History</a>
+	      </li>
+
+	      <!-- Classic users, using the Portal, get a link back to it. -->
+	      <% if (vars.classic_user) { %>
+		<li class='divider'></li>
+		<li><a href='<%- window.CLASSIC %>/classic.php'
+                       class='dropdown-item'>Emulab Classic</a></li>
+	      <% } %>
+	    </ul>
+	  </li> <!-- End of Experiments menu -->
+
+	  <!-- Storage menu -->
+	  <li id='quickvm_actions_menu' class='dropdown nav-item'> 
+            <a href='#'
+	       class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+	       data-toggle='dropdown' data-bs-toggle='dropdown'>
+	      Storage <b class='caret'></b>
+	    </a>
+            <ul class='dropdown-menu'>
+	      <% if (vars.UI_DISABLE_DATASETS == 0 || vars.isadmin) { %>
+	        <li><a href='create-dataset.php'
+                       class='dropdown-item'>Create Dataset</a></li>
+	        <li><a href='user-dashboard.php#datasets'
+                       class='dropdown-item'>My Datasets</a></li>
+	      <% } %>
+	      <li><a href='list-images.php'
+                     class='dropdown-item'>My Disk Images</a></li>
+              <li><a href='images.php'
+                     class='dropdown-item'>Other Disk Images</a></li>
+	    </ul>
+	  </li> <!-- End of Storage menu --> 
+
+	  <!-- Admin menu -->
+	  <% if (vars.isadmin || vars.isforeign_admin) { %>
+	    <%
+ 	       var THEN = Math.floor(Date.now() / 1000) - (14 * 3600 * 24);
+	    %>
+            <li id='quickvm_actions_menu' class='dropdown nav-item'>
+              <a href='#'
+		 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+		 data-toggle='dropdown' data-bs-toggle='dropdown'>
+		Admin <b class='caret'></b></a>
+              <ul class='dropdown-menu'>
+		<li><a href='dashboard.php'
+                       class='dropdown-item'>DashBoard</a></li>
+		<li><a href='aggregate-status.php'
+                       class='dropdown-item'>Cluster Status</a></li>
+		<li><a href='activity.php?min=<%= THEN %>'
+                       class='dropdown-item'>History Data</a></li>
+		<li><a href='sumstats.php?min=<%= THEN %>'
+                       class='dropdown-item'>Summary Stats</a></li>
+		<li><a href='ranking.php'
+                       class='dropdown-item'>User/Proj Ranking</a></li>
+                <li><a href='experiments.php#extending'
+                       class='dropdown-item'>Extension Requests</a></li>
+		<li><a href='experiments.php#all'
+                       class='dropdown-item'>All Experiments</a></li>
+		<li><a href='list-profiles.php'
+                       class='dropdown-item'>All Profiles</a></li>
+                <li><a href='list-resgroups.php?all=1'
+                       class='dropdown-item'>All ResGroups</a></li>
+                <li><a href='list-datasets.php'
+                       class='dropdown-item'>All Datasets</a></li>
+		<li><a href='images.php?all=1'
+                       class='dropdown-item'>All Images</a></li>
+                <li><a href='list-vlans.php'
+                       class='dropdown-item'>All Vlans</a></li>
+		<% if (window.ISPOWDER) { %>
+                  <li><a href='list-rfranges.php'
+                         class='dropdown-item'>All RF Ranges</a></li>
+		<% } %>
+		<li><a href='instance-errors.php'
+                       class='dropdown-item'>Experiment Errors</a></li>
+                <li><a href='lists.php'
+                       class='dropdown-item'>Users/Projects</a></li>
+                <li><a href='approve-projects.php'
+                       class='dropdown-item'>Approve new projects</a></li>
+                <li><a href='sitevars.php'
+                       class='dropdown-item'>Edit Site Variables</a></li>
+                <li><a href='portal-news.php'
+                       class='dropdown-item'>Manage News</a></li>
+	      </ul>
+	    </li>
+	  <% } %> <!-- End of Admin menu --> 
+	<% } %> <!-- End of isactive user -->
+	<% if (vars.newNews) { %>
+          <li><a id='new-news-button' href='portal-news.php'
+                 target='_blank'
+                 class='btn btn-quickvm-news navbar-btn'>News!</a>
+	  </li>
+	<% } %>
+      <% } %>
+    </ul> <!-- End of the left side of the navbar. -->
+
+    <% if (vars.nonav < 2) { %>
+      <!-- Start of the right side of the navbar. -->
+      <ul class='nav navbar-nav navbar-right'>
+	<% if (!vars.disable_accounts) { %>
+	  <% if (vars.login_uid && vars.isadministrator && !vars.cleanmode) { %>
+	    <%
+	    var url = "toggle.php?type=adminon&user=" + vars.login_idx;
+	    %>
+	    <li class='apt-left admin-toggle-container'>
+	      <% if (vars.isadmin) { %>
+                <a href='<%- url %>&value=0'
+		   class='admin-toggle'>
+                  <img src='images/redball.gif'
+                       style='height: 10px;'
+                       border='0' alt='Admin On'></a>
+	      <% } else { %>
+                  <a href='<%- url %>&value=1'
+		     class='admin-toggle'>
+                    <img src='images/greenball.gif'
+			 style='height: 10px;'
+			 border='0' alt='Admin On'></a>
+	      <% } %>
+	    </li>
+	  <% } %>
+	  
+	  <% if (!vars.NOLOGINS && !vars.login_uid) { %>
+	    <%  if (vars.UI_EXTERNAL_ACCOUNTS == 0) { %>
+              <li id='signupitem' class='apt-left'>
+		<a class='btn btn-success navbar-btn apt-navbar-btn'
+                   id='signupbutton'
+                   href='signup.php'>Sign Up</a>
+	      </li>
+	    <% } %>
+	    <% if (vars.page_title != "Login") { %>
+              <li id='loginitem' class='apt-left'>
+		<a class='btn btn-quickvm-home navbar-btn apt-navbar-btn'
+                   href='login.php'
+                   id='loginbutton'>Login</a>
+	      </li>
+	    <% } %>
+	  <% } %>
+	<% } %>
+	
+	<!-- Docs Menu -->
+        <li id='quickvm_actions_menu' class='dropdown nav-item'>
+          <a href='#'
+	     class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+             data-bs-toggle='dropdown'
+	     data-toggle='dropdown'>Docs <b class='caret'></b></a>
+	  
+          <ul class='dropdown-menu'>
+            <li><a href='<%- window.MANUAL %>'
+                   class='dropdown-item' target='_blank'>Manual</a></li>
+
+	    <% if (window.WIKI) { %>
+              <li><a href='<%- window.WIKI %>'
+                     class='dropdown-item' target='_blank'>Wiki</a></li>
+            <% } %>
+	    
+            <li><a href='example-profiles.php' target='_blank'
+		   class='dropdown-item'>Example Profiles</a></li>
+
+	    <% if (vars.login_uid && vars.anyNews) { %>
+              <li><a href='portal-news.php'
+                     class='dropdown-item' target='_blank'>News</a></li>
+            <% } %>
+	  </ul>
+	</li> <!-- End of Docs menu -->
+
+	<% if (vars.login_uid) { %>
+	  <!-- Start of User menu -->
+          <li id='quickvm_actions_menu' class='dropdown nav-item'> 
+            <a href='#'
+	       class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+	       data-toggle='dropdown' data-bs-toggle='dropdown'>
+	      <%- vars.login_uid %> <b class='caret'></b></a>
+            <ul class='dropdown-menu dropdown-menu-end'>
+	      <% if (!vars.nonav && !vars.WEBONLY) { %>
+	        <li><a href='myaccount.php'
+                       class='dropdown-item'>Manage Account</a></li>
+		<li><a href='signup.php'
+                       class='dropdown-item'>Start/Join Project</a></li>
+		
+		<%  if (vars.UI_EXTERNAL_ACCOUNTS == 0) { %>
+                  <li><a href='changepswd.php'
+                         class='dropdown-item'>Change Password</a></li>
+		<% } %>
+
+                <% if (vars.isactive) { %>
+                  <li><a href='getcreds.php'
+			 class='dropdown-item'>Download Credentials</a></li>
+         	  <li><a href='ssh-keys.php'
+			 class='dropdown-item'>Manage SSH Keys</a></li>
+                  <li class='divider'></li>
+                <% } %>
+	      <% } %>
+              <li><a href='logout.php'
+                     class='dropdown-item'>Logout</a></li>
+	    </ul>
+	  </li> <!-- End of User menu -->
+	<% } %>
+      </ul> <!-- End of the right side of the navbar. -->
+    <% } %>
+  </div>
+</nav>
+<div class="container">
+<div class="row">
+  <div id='portal-announcement-div'>
+  </div>
+</div>
+<% if (vars.message && !vars.cleanmode) { %>
+  <div class="row">
+    <div id='portal-message-div'>
+      <div class='alert alert-warning alert-dismissible'
+	   role='alert' style='margin-top: -10px; padding: 5px;'>
+	<center><%- vars.message %></center>
+      </div>
+    </div>
+  </div>
+<% } %>
+<% if (vars.NAGUS || vars.NAGPI) { %>
+  <div class="row" style='margin-bottom: 6px; margin-top: -10px'>
+    <center>
+      <span class="text-danger">
+	<% if (vars.NAGUS) { %>
+	  Your project application is still under review.
+	  <a href='mailto:<%- vars.NAGUS %>' class=alert-link>
+	    Contact the Review Committee.</a>
+	<% } else { %>
+	  Your request for membership in project '<%- vars.NAGPI %>'
+	  has not yet been approved by the project leader.
+	  <% if (vars.NAGNOW) { %>
+	    <a href='#' class=alert-link
+	       onclick="APT_OPTIONS.nagPI('<%- vars.NAGPI %>');"
+	       style='text-decoration: underline'>
+	      Remind the Project Leader.</a>
+	  <% } %>
+	<% } %>
+      </span>
+    </center>
+  </div>
+<% } %>
+<% if (vars.login_uid && !vars.cleanmode &&
+       (vars.phours || vars.week || vars.month)) { %>
+  <div class="row">
+  <center style='margin-bottom: 5px; margin-top: -8px'>
+    <span class='text-info'>
+      Current Usage: <%- vars.phours %> Node Hours,</span>
+    <span class='text-warning'>
+      Prev Week: <%- vars.week %>,</span>    
+    <span class='text-danger'>
+      Prev Month: <%- vars.month %></span>    
+    <span class='text-info'>
+      (30 day rank: <%- vars.rank %> of
+      <%- vars.ranktotal %> users)</span>
+    <a href='#' class='btn btn-xs'
+       data-toggle='modal' data-bs-toggle='modal'
+       data-target='#myusage_modal' data-bs-target='#myusage_modal'>
+      <span class='glyphicon glyphicon-question-sign'
+            style='margin-bottom: 4px;'></span></a>
+  </center>
+  </div>
+</div>
+<% } %>
+<div id='myusage_modal' class='modal' style='z-index:1051;'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button'
+                class='btn btn-default btn-sm pull-right' 
+                data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<p>
+          Usage is tracked in terms of <em>node hours</em>: the number of nodes
+          multiplied by the number of hours they are allocated.
+	</p>
+	<p>
+	  You can find your current usage by selecting <b>My
+	  Experiments</b> from the <b>Actions</b> menu. You can view
+	  your historical usage by selecting <b>My History</b>.
+	</p>
+      </div>
+    </div>
+  </div>
+</div>

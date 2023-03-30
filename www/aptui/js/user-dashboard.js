@@ -5,7 +5,7 @@ $(function ()
     var templates = APT_OPTIONS.fetchTemplateList(['user-dashboard',
 	   'experiment-list', 'profile-list', 'project-list', 'dataset-list', 
 	   'user-profile', 'oops-modal', 'waitwait-modal', 'classic-explist',
-	   'conversion-help-modal','paramsets-list']);
+	   'conversion-help-modal','paramsets-list', "showtopo-modal"]);
     var mainString = templates['user-dashboard'];
     var experimentString = templates['experiment-list'];
     var profileListString = templates['profile-list'];
@@ -20,6 +20,8 @@ $(function ()
 
     function initialize()
     {
+	console.info("JS initialize");
+	
 	window.APT_OPTIONS.initialize(sup);
 
 	// Generate the main template.
@@ -34,7 +36,8 @@ $(function ()
 	$('#oops_div').html(oopsString);
 	$('#waitwait_div').html(waitwaitString);
 	$('#conversion_help_div').html(converterHelpTemplate({}));
-
+	$('#showtopo-modal-div').html(templates["showtopo-modal"]);
+	
 	// Focus on the search box when switching to these tabs.
         $('.nav-tabs a[href="#profiles"], ' +
 	  '.nav-tabs a[href="#projectprofiles"]')
@@ -46,30 +49,8 @@ $(function ()
 		}
 	    });
 
-        // Javascript to enable link to tab
-        var hash = document.location.hash;
-        if (hash) {
-            $('.nav-tabs a[href="'+hash+'"]').tab('show');
-        }
-        // Change hash for page-reload
-        $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-	    history.replaceState('', '', e.target.hash);
-
-	    // GA reporting
-	    var ganame = e.target.hash;
-	    if (ganame == "") {
-		ganame = "#experiments";
-	    }
-	    window.APT_OPTIONS.gaTabEvent("show", ganame);
-        });
-	// Set the correct tab when a user uses their back/forward button
-        $(window).on('hashchange', function (e) {
-	    var hash = window.location.hash;
-	    if (hash == "") {
-		hash = "#experiments";
-	    }
-	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
-	});
+	// Setup nav tab document hash handling.
+	sup.hashSetup(".nav-tabs", "#experiments");
 
 	LoadUsage();
 	LoadExperimentTab();
@@ -335,11 +316,6 @@ $(function ()
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
-	    // This activates the tooltip subsystem.
-	    $('[data-toggle="tooltip"]').tooltip({
-		delay: {"hide" : 100, "show" : 300},
-		placement: 'auto',
-	    });
 	    // Display the topo.
 	    $('.showtopo_modal_button').click(function (event) {
 		event.preventDefault();
@@ -357,7 +333,7 @@ $(function ()
 			    $(row).remove();
 			});
 		});
-
+	    
 	    // If this is the active tab after loading, focus the searchbox
 	    if ($('#profiles').hasClass("active")) {
 		var searchbox = $('#profiles .profile-search')
@@ -390,6 +366,12 @@ $(function ()
 		});
 	    $.tablesorter.filter.bindSearch(table,
 					    $('#' + 'user-profiles-search'));
+
+	    // This activates the tooltip subsystem.
+	    $('#profiles_content [data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 100, "show" : 300},
+		placement: 'auto',
+	    });
 
 	    // Delete multiple profiles via the checkbox column.
 	    $('#profiles_content .delete-selected-profiles')
@@ -439,7 +421,7 @@ $(function ()
 		}
 	    });
 	    // This activates the tooltip subsystem.
-	    $('[data-toggle="tooltip"]').tooltip({
+	    $('#projectprofiles_content [data-toggle="tooltip"]').tooltip({
 		delay: {"hide" : 100, "show" : 300},
 		placement: 'auto',
 	    });
@@ -551,26 +533,27 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    var showTopoIframe = null;
+
     function ShowTopology(profile)
     {
-	var index;
-    
 	var callback = function(json) {
+	    console.info("ShowTopology profile", json);
 	    if (json.code) {
 		alert("Failed to get rspec for topology viewer: " + json.value);
 		return;
 	    }
-	    sup.ShowModal("#quickvm_topomodal");
-	    $("#quickvm_topomodal").one("shown.bs.modal", function () {
-		sup.maketopmap('#showtopo_nopicker',
-			       json.value.profile_rspec, false, !window.ISADMIN);
-	    });
+	    if (showTopoIframe) {
+		showTopoIframe(json.value.profile_rspec);
+	    }
+	    else {
+		showTopoIframe = ShowTopoIframe($('#showtopology-modal'),
+						'.showtopology-bare',
+						json.value.profile_rspec);
+	    }
 	};
-	var $xmlthing = sup.CallServerMethod(null,
-					     "show-profile",
-					     "GetProfile",
-				     	     {"profile" : profile});
-	$xmlthing.done(callback);
+	sup.CallServerMethod(null, "show-profile", "GetProfile",
+			     {"profile" : profile}, callback);
     }
 
     function LoadProjectsTab()

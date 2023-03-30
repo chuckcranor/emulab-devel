@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2600,6 +2600,49 @@ sub New($$) {
     my ($class, $parent) = @_;
 
     my $self = $class->SUPER::New("iris", $parent);
+    bless($self, $class);
+    return $self;
+}
+
+sub AddNode($$)
+{
+    my ($self, $node) = @_;
+
+    $self->SUPER::AddNode($node);
+
+    # Need something, should be in ISUP by the time we get there
+    # but stated might be delayed.
+    $node->_maxwait(60);
+    return 0;
+}
+
+#############################################################################
+#
+# Stub for using stitch points directly.
+# Need this in the node_type_attributes table:
+#
+#  insert into node_type_attributes
+#    values ('interconnect-vm', 'ossetup_objtype', 'interconnect', 'string');
+#
+# And this in the os_submap table for the GENERICDEV,GENERICDEV-VM osids.
+#
+#  insert into os_submap values (10017, 10016);
+#
+package libossetup_interconnect;
+use base qw(libossetup_handler);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+sub New($$) {
+    my ($class, $parent) = @_;
+
+    my $self = $class->SUPER::New("interconnect", $parent);
     bless($self, $class);
     return $self;
 }

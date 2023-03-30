@@ -173,6 +173,9 @@ APTMAPS = $(wildcard $(SRCDIR)/aptui/usage-maps/*)
 APTNEWJSFILES   = $(wildcard $(SRCDIR)/aptui/js/new/*.js)
 APTNEWTEMPLATES = $(wildcard $(SRCDIR)/aptui/template/new/*.html)
 
+BS5CSSFILES = $(wildcard $(SRCDIR)/aptui/css/bootstrap-5/*.css)
+BS5JSFILES  = $(wildcard $(SRCDIR)/aptui/js/lib/bootstrap-5/*.js)
+
 # need to make it *.gz; with simply "*", 
 # we end up sucking over "CVS"
 DOWNLOADFILES = $(wildcard $(SRCDIR)/downloads/*.gz)
@@ -247,6 +250,9 @@ ALLAPTMAPS = $(notdir $(APTMAPS))
 ALLAPTNEWJS  = $(notdir $(APTNEWJSFILES))
 ALLAPTNEWTEMPLATES = $(notdir $(APTNEWTEMPLATES))
 
+ALLBS5CSSFILES = $(notdir $(BS5CSSFILES))
+ALLBS5JSFILES  = $(notdir $(BS5JSFILES))
+
 INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/, $(ALLFILES)) \
 	$(addprefix $(INSTALL_WWWDIR)/floormap/, $(ALLFLOORMAPS)) \
@@ -303,7 +309,9 @@ apt-install: 	$(addprefix $(INSTALL_WWWDIR)/apt/, $(ALLAPTUI)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/affiliations/, $(ALLAFFIL)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/usage-maps/, $(ALLAPTMAPS)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/js/new/, $(ALLAPTNEWJS)) \
-	$(addprefix $(INSTALL_WWWDIR)/apt/template/new/, $(ALLAPTNEWTEMPLATES))
+	$(addprefix $(INSTALL_WWWDIR)/apt/template/new/, $(ALLAPTNEWTEMPLATES))\
+	$(addprefix $(INSTALL_WWWDIR)/apt/css/bootstrap-5/, $(ALLBS5CSSFILES)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/js/lib/bootstrap-5/, $(ALLBS5JSFILES))
 	cd $(INSTALL_WWWDIR) && \
 		rm -f portal; \
 		ln -s apt portal;

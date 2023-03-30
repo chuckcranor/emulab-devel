@@ -1,7 +1,4 @@
 <style>
- .popover {
-     max-width: none !important;
- }
  .scrolly {
      overflow-y: auto;
      position: relative;
@@ -16,13 +13,14 @@
   <div class='col-lg-3
               col-md-3
               col-sm-3'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-        <h4 class='panel-title text-center'><%= title %></h4>
+    <div class='panel card panel-default'>
+      <div class='panel-heading card-header'>
+        <h4 class='panel-title card-title text-center'><%= title %></h4>
       </div>
-      <div class='panel-body'
+      <div class='panel-body card-body'
 	   style='overflow: hidden; padding-left: 5px; padding-right: 5px'>
-	<table class='table-condensed nospaceafter'
+	<table class='table table-condensed table-sm
+		      table-borderless nospaceafter'
 	       style='font-size:12px;'>
 	  <tr>
 	    <td>Name:</td>
@@ -63,7 +61,7 @@
 	    </tr>
 	  <% } %>
 	  <tr>
-	    <% if (formfields.profile_version == 0) { %>
+	    <% if (formfields.profile_version == 0 || fromrepo) { %>
 	      <td>Created:</td>
 	    <% } else { %>
 	      <td>Updated:</td>
@@ -75,6 +73,16 @@
 	    <td>Public?:</td>
 	    <td><% if (formfields.profile_who == "public") { %>Yes<% } else { %>No<% } %></td>
 	  </tr>
+	  <% if (fromrepo) { %>
+	    <tr>
+	      <td>Refspec:</td>
+	      <td id="current-refspec"><%- formfields.profile_reporef %></td>
+	    </tr>
+	    <tr>
+	      <td>Commit:</td>
+	      <td id="current-refhash"><%- formfields.profile_repohash.substring(0,8) %></td>
+	    </tr>
+	  <% } %>
 	  <% if (withpublishing) { %>
 	  <tr>
 	    <td>Published:</td>
@@ -90,9 +98,9 @@
 	    <tr>
 	      <td>Disabled:</td><td><span class="text-danger">Yes</span>
 		<a href='#' class='btn btn-xs'
-		   data-toggle='popover'
-		   data-html='true'
-		   data-delay='{"hide":500}'
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-html='true' data-bs-html='true'
+		   data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 		   data-content="This profile has been disabled by an
 				 administrator. You may be able to instantiate
 				 another version of this profile, see the
@@ -107,9 +115,9 @@
 	    <tr>
 	      <td>Lockdown:</td><td><span class="text-danger">Yes</span>
 		<a href='#' class='btn btn-xs'
-		   data-toggle='popover'
-		   data-html='true'
-		   data-delay='{"hide":500}'
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-html='true' data-bs-html='true'
+		   data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 		   data-content="This profile has been locked down, so it
 				 cannot be deleted.">
 		  <span class='glyphicon glyphicon-question-sign'
@@ -122,9 +130,10 @@
 	<% if (activity) { %>
 	  <a class='btn btn-info btn-xs pull-left'
              id='profile_activity_button'
-	     data-toggle='popover'
+	     data-toggle='popover' data-bs-toggle='popover'
 	     data-delay='{"hide":1500, "show":250}'
-	     data-html='true'
+	     data-bs-delay='{"hide":1500, "show":250}'
+	     data-html='true' data-bs-html='true'
 	     data-content="View a history of when your profile was
 			   instantiated."
              style='margin-right: 10px; font-size: 12px'
@@ -135,9 +144,10 @@
 	<% if (paramsets) { %>
 	  <a class='btn btn-info btn-xs pull-left'
              id='profile_activity_button'
-	     data-toggle='popover'
+	     data-toggle='popover' data-bs-toggle='popover'
 	     data-delay='{"hide":1500, "show":250}'
-	     data-html='true'
+	     data-bs-delay='{"hide":1500, "show":250}'
+	     data-html='true' data-bs-html='true'
 	     data-content="View parameter sets for your profile."
              style='margin-right: 10px; font-size: 12px'
              href='profile-paramsets.php?uuid=<%= profile_uuid %>'
@@ -147,13 +157,14 @@
       </div>
     </div>
     <% if (fromrepo) { %>
-      <div class='panel panel-default hidden' id="repoinfo-panel">
-	<div class='panel-heading'>
-          <h4 class='panel-title text-center'>Repository Info</h4>
+      <div class='panel card panel-default hidden' id="repoinfo-panel">
+	<div class='panel-heading card-header'>
+          <h4 class='panel-title card-title text-center'>Repository Info</h4>
 	</div>
-	<div class='panel-body'
+	<div class='panel-body card-body'
 	     style='overflow: hidden; padding-left: 5px; padding-right: 5px'>
-	  <table class='table-condensed nospaceafter'
+	  <table class='table table-condensed table-sm
+			table-borderless nospaceafter'
 		 style='font-size:12px;'>
 	    <tr>
 	      <td>Refspec:</td>
@@ -176,20 +187,33 @@
 	      <td class="commit-size"></td>
 	    </tr>
 	    <tr style="white-space: nowrap;">
-	      <td>Push URL:</td>
-	      <td style="white-space: nowrap;">
-		<input readonly type="text" class="form-control input-sm"
-		       id="push-url"
-		       style="display: inline;
-			      padding-left: 3px; padding-right: 3px;
-			      padding-bottom: 0px; padding-top: 0px;"
-		       value="<%- formfields.profile_repopushurl %>">
-		<a href='#' class='btn btn-xs'
-		   style="padding: 0px"
-		   data-toggle='modal'
-		   data-target="#webhook-help-modal">
-		  <span class='glyphicon glyphicon-question-sign'
-			style='margin-bottom: 4px;'></span></a></td>
+	      <td style="padding-top: 10px;">Push URL:</td>
+	      <td style="white-space: nowrap;" id="copy-push-url">
+		<div class="copy-to-clipboard">
+		  <div class="input-group">
+		    <input readonly
+			   class="form-control input-sm form-control-sm"
+			   id="push-url"
+			   value="<%- formfields.profile_repopushurl %>"
+			   style="padding-left: 3px; padding-right: 3px;
+				  padding-bottom: 0px; padding-top: 0px;">
+		    <span class="input-group-text"
+			  style="padding-left: 0px; padding-right: 0px;
+				 padding-bottom: 0px; padding-top: 0px;">
+		      <a href='#' class='btn'
+			 style="padding-left: 5px; padding-right: 5px;">
+			<span class='glyphicon glyphicon-copy'></span></a>
+		    </span>
+		    <button class="btn btn-outline-secondary"
+			    style="padding-left: 5px; padding-right: 5px;"
+			    data-toggle='modal' data-bs-toggle='modal'
+			    data-target="#webhook-help-modal"
+			    data-bs-target="#webhook-help-modal">
+		      <span class='glyphicon glyphicon-question-sign'></span></button>
+		  </div>
+		</div>
+	      </td>
+	    </tr>
 	    <% if (isadmin) { %>
 	      <tr>
 		<td>RepoName:</td>
@@ -201,9 +225,10 @@
 	      <td class="commit-log">
 		<span class="commit-log-start"></span>
 		<button type="button" class="hidden log btn btn-xs"
-		   data-toggle='popover'
-		   data-html="true"
-		   data-delay='{"hide":1000, "show":250}'>...</button>
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-html="true" data-bs-html="true"
+			data-delay='{"hide":1000, "show":250}'
+			data-bs-delay='{"hide":1000, "show":250}'>...</button>
 	      </td>
 	    </tr>
 	  </table>
@@ -215,8 +240,8 @@
 	      id='profile_share_button'
 	      style='margin-right: 5px;'
 	      type='button'
-	      data-toggle='popover'
-	      data-html='true'
+	      data-toggle='popover' data-bs-toggle='popover'
+	      data-html='true' data-bs-html='true'
 	      data-content="Share your profile with other users by
 			    sending them a link to instantiate it.
 			    Click for more info.">
@@ -226,8 +251,9 @@
 	      class='btn btn-primary btn-xs'
 	      style='margin-right: 5px;'
 	      <% if (fromrepo) { %>
-     	      data-toggle='modal'
+     	      data-toggle='modal' data-bs-toggle='modal'
 	      data-target='#copy-repobased-profile-modal'
+	      data-bs-target='#copy-repobased-profile-modal'
 	      <% } %>
 	      type='button'>Copy
       </button>
@@ -247,9 +273,9 @@
               col-md-9
               col-sm-9
               col-xs-12'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-        <h3 class='panel-title text-center'>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+        <h3 class='panel-title card-title text-center'>
 	  <% if (canmodify) { %>
 	    Modify
 	  <% } %>
@@ -257,16 +283,16 @@
 	</h3>
       </div>
  <% } else { %>
-  <div class='col-sm-10 col-sm-offset-1
-              col-xs-12'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-        <h3 class='panel-title'><%= title %></h3>
+    <div class='col-xxl-8 col-xxl-offset-2 offset-xxl-2
+		col-sm-10 col-sm-offset-1 offset-sm-1 col-xs-12'>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+        <h3 class='panel-title card-title'><%= title %></h3>
       </div>
  <% } %>
-      <div class='panel-body'>
+      <div class='panel-body card-body'>
 	<div class="row">
-	  <div class="col-sm-8 col-sm-offset-2">
+	  <div class="col-sm-8 col-sm-offset-2 offset-sm-2">
 	    <span id="general_error" style="color:red;"></span>
 	  </div>
 	</div>
@@ -318,78 +344,64 @@
 	  <% } %>
 	  <% if (!viewing) { %>
 	  <fieldset>
-	    <!-- First row has both name and project,
-		 which makes the layout odd. -->
-	    <div class='row'>
-	      <label for='profile_name'
-		     class='col-sm-3 control-label'>Name
-		<a href='#' class='btn btn-xs'
-		   data-toggle='popover'
-		   data-content='alphanumeric, dash, underscore, no whitespace'>
-		  <span style='margin-bottom: 4px;'
-			class='glyphicon glyphicon-question-sign'></span>
-		</a>
-	      </label>
-	      <div class='col-sm-3'>
-		<!-- In editing mode, pass through static values. -->
-	        <div class="form-group">
-	          <input name="profile_name"
-		       id='profile_name'
-		       <% if (viewing) { %>readonly<% } %>
-		       value="<%- formfields.profile_name %>"
-		       class="form-control format-me"
-		       data-key="profile_name">
-		</div>
-		<!-- End of first half of row -->
-	      </div>
-	      <!-- Second half of the row. Project Selection -->
-	      <label for='profile_pid'
-		     class='col-sm-2 control-label'>Project</label>
-	      <div class='col-sm-3'>
-	        <div class="form-group">
-		  <% if (projects.length == 1) { %>
-	            <input name="profile_pid" readonly
+	    <div class="form-group">
+	      <input name="profile_name"
+		     value="<%- formfields.profile_name %>"
+		     class="form-control format-me"
+		     data-key="profile_name"
+		     data-colsize="4"
+		     data-label="Profile Name"
+		     placeholder="alphanumeric, dash, no whitespace"
+		     type="text">
+	    </div>
+	    <div class="form-group">
+	      <% if (projects.length == 1) { %>
+	        <input name="profile_pid" readonly
 		       value="<%- formfields.profile_pid %>"
 		       class="form-control format-me"
+		       data-label="Project"
+		       data-colsize="4"
 		       id='profile_pid'
 		       data-key="profile_pid">
-		  <% } else { %>
-		    <select name="profile_pid"
-			   id='profile_pid' 
-			   class='form-control format-me'
-			   data-key="profile_pid"			
-			   placeholder='Please Select'>
-		     <% _.each(projects, function(name) { %>
-	                <option 
-			  <% if (_.has(formfields, 'profile_pid') &&
-			         formfields.profile_pid == name) { %>
-			     selected
-			  <% } %>
-			  value='<%= name %>'><%= name %>
-			</option>
-		     <% }); %>
-		    </select>
-	          <% } %>
-		</div>
-		<!--  End of first row. -->
-	      </div>
-            </div>
+	      <% } else { %>
+		<select name="profile_pid"
+			id='profile_pid' 
+			class='form-control form-select format-me'
+			data-key="profile_pid"
+			data-label="Project"
+			data-colsize="4"
+			placeholder='Please Select'>
+		  <option value="">Please Select</option> 
+		  <% _.each(projects, function(name) { %>
+	            <option 
+			<% if (_.has(formfields, 'profile_pid') &&
+			  formfields.profile_pid == name) { %>
+			selected
+			<% } %>
+			value='<%= name %>'><%= name %>
+		    </option>
+		  <% }); %>
+		</select>
+	      <% } %>
+	    </div>
 	  </fieldset>
 	  <% } %>
 	  <fieldset>
 	    <% if (! genilib_editor) { %>
 	    <div class="form-group">
 	      <div class='format-me'
-		   data-key='profile_rspec' data-label='Source code'
-		   data-html="true"
+		   data-key='profile_rspec'
+		   data-label='Source code'
+		   data-html="true" data-bs-html="true"
 		   data-help='You can supply either an
 			      <a href="<%- manual %>/advanced-topics.html">
 			      rspec or a geni-lib script</a> for your
 			      profile source code. <br>You can also create a
 			      topology with the topology editor, or you can
 			      use an existing git repository.'>
-		<div class='row'>
-                  <div class='col-xs-12'>
+		<!-- col-form-label has the correct padding to make it look good  -->
+		<div class='col-form-label'>
+                  <div class='col-xs-10'>
 		    <% if (! (fromrepo || window.CLONING)) { %>
 		      <span id="sourcefile-button-div"
 			    style='margin-right: 10px;'>
@@ -415,14 +427,16 @@
                       View XML</button>
  		    <% if ((viewing && canmodify) && gotrspec && !fromrepo && !gotscript){ %>
 		      <span id="profile_convert_button"
-			    data-toggle='popover'
+			    data-toggle='popover' data-bs-toggle='popover'
 			    data-delay='{"hide":500, "show":250}'
-			    data-html='true'
+			    data-bs-delay='{"hide":500, "show":250}'
+			    data-html='true' data-bs-html='true'
 			    data-content="Convert your profile to a geni-lib
 					  script. Click for more info.">
 			<button class='btn btn-primary btn-xs' 
-     				data-toggle='modal'
+     				data-toggle='modal' data-bs-toggle='modal'
 				data-target='#profile-convert-modal'
+				data-bs-target='#profile-convert-modal'
 				type='button' name='delete'>Convert to geni-lib
 			</button>
 			<img src="images/new.gif" style="margin-left: -5px;">
@@ -431,15 +445,17 @@
 		    <% if (! (viewing || window.CLONING)) { %>
 		      <span id="git-repo-button-div">
 			or
-			<span data-toggle='popover'
-			    data-delay='{"hide":500, "show":500}'
-			    data-html='true'
-			    data-content="Supply your profile source from a
-					  Git repository.
-					  Click for more info.">
+			<span data-toggle='popover' data-bs-toggle='popover'
+			      data-delay='{"hide":500, "show":500}'
+			      data-bs-delay='{"hide":500, "show":500}'
+			      data-html='true' data-bs-html='true'
+			      data-content="Supply your profile source from a
+					    Git repository.
+					    Click for more info.">
 			  <button class='btn btn-primary btn-xs'
-				  data-toggle='modal'
+				  data-toggle='modal' data-bs-toggle='modal'
 				  data-target='#git-repo-modal'
+				  data-bs-target='#git-repo-modal'
 				  type='button'
 				  style='margin-left: 10px;'
 				  id='git-repo-button'>Git Repo</button>
@@ -467,16 +483,16 @@
 			    style='margin-left: 10px;'>
 		      Update</button>
 		    <a href='#' class='btn btn-xs'
-		       data-toggle='popover'
-		       data-html='true'
-		       data-delay='{"hide":500}'
+		       data-toggle='popover' data-bs-toggle='popover'
+		       data-html='true' data-bs-html='true'
+		       data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 		       data-content='Fetch from your repository, updating
 				     your profile to reflect the current HEAD
 				     of your master branch. Branches and tags
 				     are updated as well (see below). You
 				     can also set up a <em>push webhook</em>
 				     to automate updates, see the <b>Push
-				     URL</b> help info in the Repository panel 
+				     URL</b> help info in the Repository panel  card 
 				     on your left.'>
 		      <span class='glyphicon glyphicon-question-sign'
 			    style='margin-bottom: 4px;'></span>
@@ -523,8 +539,8 @@
 		      <small class="pull-right">
 			Description set by geni-lib script
 			<a href='#' class='btn btn-xs'
-			   data-toggle='modal'
-			   data-target="#docstring-help-modal">
+			   data-toggle='modal' data-bs-toggle='modal'
+			   data-target="#docstring-help-modal" data-bs-target="#docstring-help-modal">
 			  <span style='margin-bottom: 4px; margin-left: 0px;'
 				class='glyphicon glyphicon-question-sign'>
 			  </span>
@@ -557,8 +573,8 @@
 		      <small class="pull-right">
 			Instructions set by geni-lib script
 			<a href='#' class='btn btn-xs'
-			   data-toggle='modal'
-			   data-target="#docstring-help-modal">
+			   data-toggle='modal' data-bs-toggle='modal'
+			   data-target="#docstring-help-modal" data-bs-target="#docstring-help-modal">
 			  <span style='margin-bottom: 4px; margin-left: 0px;'
 				class='glyphicon glyphicon-question-sign'>
 			  </span>
@@ -594,11 +610,11 @@
 	    <!-- Tour Table; hidden until the table is initialized
 	         from the rspec. -->
 	    <div class='row hidden' id='profile_steps_div'>
-	      <div class='col-sm-9 col-sm-offset-3'>
+	      <div class='col-sm-9 col-sm-offset-3 offset-sm-3'>
 		<div class="panel" style='margin-bottom: 10px; border: 0px;'>
-		  <div class="panel-heading"
+		  <div class="panel-heading card-header"
 		       style='border: 0px; padding: 5px; margin: 0px;'>
-		    <a data-toggle="collapse"
+		    <a data-toggle="collapse" data-bs-toggle="collapse"
 		       id='profile_steps_link'
 		       href="#profile_steps_collapse">
 		      Show/Edit Tour
@@ -606,7 +622,7 @@
 		  </div>
 		  <div id="profile_steps_collapse"
 		       class="panel-collapse collapse">
-		    <div class="panel-body" style='padding: 0px; border: 0px;'>
+		    <div class="panel-body card-body" style='padding: 0px; border: 0px;'>
 		      <table id='profile_steps' class='col-sm-12'></table>
 		    </div>
 		  </div>
@@ -619,73 +635,66 @@
 		    <% if (!viewing || !gotrspec) { %>class="hidden" <% } %> >
 	    <!-- Permission checkboxes. -->
 	    <div class='row'>
-	      <div class='col-sm-9 col-sm-offset-3' style="margin-top: 5px">
+	      <div class='col-sm-9 col-sm-offset-3 offset-sm-3' style="margin-top: 5px">
 		Who can instantiate your profile?
 	      </div>
 	    </div>
 
-	    <div class='row'>
-	      <div class='col-sm-8 col-sm-offset-4'>
+	    <div class='row' style="margin-bottom: 10px;">
+	      <div class='col-sm-8 col-sm-offset-4 offset-sm-4'>
 		<div class='format-me' data-key='profile_who'
 		     data-compact='yep'>
-		  <% if (1) { %>
-		    <div class='radio'>
-                      <label>
-			<input type='radio' name='profile_who'
-			       id='profile_who_public'
-		               <% if (formfields.profile_who == "public") {
-			       %>checked<% } %>
-			       value='public'>
-			<% if (isapt) { %>
-			  <em>Anyone</em> on the internet
-			<% } else { %>
-			  <em>Anyone</em>
-			<% } %>
-    	              </label>
-                    </div>
-		  <% } %>
-		  <% if (0) { %>
-                    <div class='radio'>
-                      <label>
-			<input type='radio' name='profile_who'
-			       id='profile_who_registered'
-		               <% if (formfields.profile_who == "shared") {
-			       %>checked<% } %>
-			       value='shared'>
-			Only registered users of the website
-    	              </label>
-                    </div>
-		  <% } %>
-                  <div class='radio'>
-                    <label>
-                      <input type='radio' name='profile_who'
-			     id='profile_who_private'
-		             <% if (formfields.profile_who == "private") {
-			     %>checked<% } %>
-			     value='private'>
-                      Only members of your project
+		  <div class="form-check">
+		    <input type='radio' name='profile_who'
+			   class="form-check-input"
+			   id='profile_who_public'
+		           <% if (formfields.profile_who == "public") {
+			   %>checked<% } %>
+			   value='public'>
+		    <label class="form-check-label"
+		      <% if (isapt) { %>
+			<em>Anyone</em> on the internet
+		      <% } else { %>
+			<em>Anyone</em>
+		      <% } %>
+    	            </label>
+                  </div>
+                  <div class='form-check'>
+                    <input type='radio' name='profile_who'
+			   class="form-check-input"
+			   id='profile_who_private'
+		           <% if (formfields.profile_who == "private") {
+			   %>checked<% } %>
+			   value='private'>
+                    <label class="form-check-label">
+		      Only members of your project
     	            </label>
                   </div>
                 </div>
               </div>
             </div>
+
 	    <% if (isadmin || iscreator || isleader) { %>
 	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
+		<div class='col-sm-9 col-sm-offset-3 offset-sm-3'>
 		  <div class='checkbox format-me'
 		       data-key='profile_project_write'
 		       data-compact='yep'>
 		    <input type="hidden"
 			   name='profile_project_write' value="unchecked">
-                    <label>
+
+		    <div class="form-check">
 		      <input name='profile_project_write'
+			     class="form-check-input"
 			     <%- formfields.profile_project_write %>
 			     data-key='profile_project_write'
 			     id='profile_project_write' value='checked'
-			     type='checkbox'>Allow members of your project to
-		      modify this profile.
-		      <a href='#' class='btn btn-xs'
-			 data-toggle='popover'
+			     type='checkbox'>
+		      <label class="form-check-label">
+			Allow members of your project to
+			modify this profile.
+			<a href='#' class='btn btn-xs'
+			 data-toggle='popover' data-bs-toggle='popover'
 			 data-content='Normally only you or your project leader
 				       can modify your profile. Setting this
 				       flag allows anyone in your project to
@@ -694,184 +703,215 @@
 				       of your project.'>
 			<span style='margin-bottom: 4px;'
 			      class='glyphicon glyphicon-question-sign'></span>
-		      </a>
-		    </label>
+			</a>
+		      </label>
+		    </div>
 		  </div>
 		</div>
 	      </div>
 	    <% } %>
 
 	    <% if (isadmin) { %>
-	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
-		  <hr style="margin-top: 5px; margin-bottom: 0px;"></div>
-	      </div>
-	      
 	      <!-- Public listing checkbox -->
 	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
+		<div class='col-sm-9 col-sm-offset-3 offset-sm-3'>
 		  <div class='checkbox format-me' data-compact='yep'>
-                    <label>
+		    <div class="form-check">
 		      <input name='profile_listed'
+			     class="form-check-input"
 			     <%- formfields.profile_listed %>
 			     data-key='profile_listed'
 			     id='profile_listed' value='checked'
-			     type='checkbox'>List on the home page for
-		      anyone to view.
-		    </label>
+			     type='checkbox'>
+		      <label class="form-check-anyone">
+			List on the home page for anyone to view.
+		      </label>
+		    </div>
 		  </div>
 		</div>
 	      </div>
 	      
 	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
+		<div class='col-sm-9 col-sm-offset-3 offset-sm-3'>
 		  <div class='checkbox format-me' data-key='profile_topdog'
 		       data-compact='yep'>
-                    <label>
+		    <div class="form-check">
 		      <input name='profile_topdog'
+			     class="form-check-input"
 			     <%- formfields.profile_topdog %>
 			     data-key='profile_topdog'
 			     id='profile_topdog' value='checked'
-			     type='checkbox'>Put this profile at the top of
-		      the list.
-		    </label>
+			     type='checkbox'>
+		      <label class="form-check-label">
+			Put this profile at the top of the list.
+		      </label>
+		    </div>
 		  </div>
 		</div>
 	      </div>
 	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
+		<div class='col-sm-9 col-sm-offset-3 offset-sm-3'>
 		  <div class='checkbox format-me' data-key='profile_disabled'
 		       data-compact='yep'>
-                    <label>
+		    <div class="form-check-inline">
 		      <input name='profile_disabled'
+			     class="form-check-input"
 			     <%- formfields.profile_disabled %>
 			     data-key='profile_disabled'
 			     id='profile_disabled' value='checked'
-			     type='checkbox'>Disable profile.
-		      <a href='#' class='btn btn-xs'
-			 style="padding-left: 0px"
-			 data-toggle='popover'
-			 data-html='true'
-			 data-delay='{"hide":500}'
-			 data-content="Disable profile so that it cannot be
-				       instantiated.">
-			<span class='glyphicon glyphicon-question-sign'
-			      style='margin-bottom: 4px;'></span>
-		      </a>
-		    </label>
-                    <label>
+			     type='checkbox'>
+		      <label class="form-check-label">
+			Disable profile.
+			<a href='#' class='btn btn-xs'
+			   style="padding-left: 0px"
+			   data-toggle='popover' data-bs-toggle='popover'
+			   data-html='true' data-bs-html='true'
+			   data-delay='{"hide":500}'
+			   data-bs-delay='{"hide":500}'
+			   data-content="Disable profile so that it cannot be
+					 instantiated.">
+			  <span class='glyphicon glyphicon-question-sign'
+				style='margin-bottom: 4px;'></span>
+			</a>
+		      </label>
 		      <input name='profile_disable_all'
+			     class="form-check-input"
 			     data-key='profile_disable_all'
 			     value='checked'
-			     type='checkbox'>Apply to all versions.
-		    </label>
+			     type='checkbox'>
+		      <label>
+			Apply to all versions.			
+		      </label>
+		    </div>
 		  </div>
 		</div>
 	      </div>
 	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
+		<div class='col-sm-9 col-sm-offset-3 offset-sm-3'>
 		  <div class='checkbox format-me' data-key='profile_nodelete'
 		       data-compact='yep'>
-                    <label>
+		    <div class="form-check-inline">
 		      <input name='profile_nodelete'
+			     class="form-check-input"
 			     <%- formfields.profile_nodelete %>
 			     data-key='profile_nodelete'
 			     id='profile_nodelete' value='checked'
-			     type='checkbox'>Lockdown profile.
-		      <a href='#' class='btn btn-xs'
-			 style="padding-left: 0px"
-			 data-toggle='popover'
-			 data-html='true'
-			 data-delay='{"hide":500}'
-			 data-content="Lockdown profile so that it cannot be
-				       deleted. This implies that images
-				       associated with this profile may not be
-				       deleted either.">
-			<span class='glyphicon glyphicon-question-sign'
-			      style='margin-bottom: 4px;'></span>
-		      </a>
-		    </label>
-                    <label>
+			     type='checkbox'>
+		      <label class="form-check-label">
+			Lockdown profile.
+			<a href='#' class='btn btn-xs'
+			   style="padding-left: 0px"
+			   data-toggle='popover' data-bs-toggle='popover'
+			   data-html='true' data-bs-html='true'
+			   data-delay='{"hide":500}'
+			   data-bs-delay='{"hide":500}'
+			   data-content="Lockdown profile so that it cannot be
+					 deleted. This implies that images
+					 associated with this profile may not be
+					 deleted either.">
+			  <span class='glyphicon glyphicon-question-sign'
+				style='margin-bottom: 4px;'></span>
+			</a>
+		      </label>
 		      <input name='profile_nodelete_all'
+			     class="form-check-input"
 			     data-key='profile_nodelete_all'
 			     value='checked'
-			     type='checkbox'>Apply to all versions.
-		    </label>
+			     type='checkbox'>
+		      <label class="form-check-label">
+			Apply to all versions.
+		      </label>
+		    </div>
 		  </div>
 		</div>
 	      </div>
 	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
+		<div class='col-sm-9 col-sm-offset-3 offset-sm-3'>
 		  <div class='checkbox format-me' data-key='examples_portals'
 		       data-compact='yep'>
 		    <% if (window.MAINSITE) { %>
 		      <span style="margin-right: 10px;">List in Examples:</span>
-                      <label>
+		      <div class="form-check-inline">
 			<input name='profile_example_emulab'
-			       class="examples_portals_checkbox"
+			       class="form-check-input
+				      examples_portals_checkbox"
 			       data-portal="emulab"
 			       <% if (_.has(formfields, "examples_portals") &&
 				      formfields.examples_portals
 				      .indexOf("emulab") >= 0) { %>
 			       checked
 			       <% } %>
-			       type='checkbox'>Emulab
-		      </label>
-                      <label>
+			       type='checkbox'>
+			<label class="form-check-label">
+			  Emulab
+			</label>
 			<input name='profile_example_cloudlab'
-			       class="examples_portals_checkbox"
+			       class="form-check-input
+			              examples_portals_checkbox"
 			       data-portal="cloudlab"
 			       <% if (_.has(formfields, "examples_portals") &&
 				      formfields.examples_portals
 				       .indexOf("cloudlab") >= 0) { %>
 			         checked
 			       <% } %>
-			       type='checkbox'>Cloudlab
-		      </label>
-                      <label>
+			       type='checkbox'>
+			<label class="form-check-label">
+			  Cloudlab
+			</label>
 			<input name='profile_example_phantomnet'
-			       class="examples_portals_checkbox"
+			       class="form-check-input
+				      examples_portals_checkbox"
 			       data-portal="phantomnet"
 			       <% if (_.has(formfields, "examples_portals") &&
 				 formfields.examples_portals
 				 .indexOf("phantomnet") >= 0) { %>
 			       checked
 			       <% } %>
-			       type='checkbox'>PhantomNet
-		      </label>
-                      <label>
+			       type='checkbox'>
+			<label class="form-check-label">
+			  PhantomNet
+			</label>
 			<input name='profile_example_powder'
-			       class="examples_portals_checkbox"
+			       class="form-check-input
+				      examples_portals_checkbox"
 			       data-portal="powder"
 			       <% if (_.has(formfields, "examples_portals") &&
 				 formfields.examples_portals
 				 .indexOf("powder") >= 0) { %>
 			       checked
 			       <% } %>
-			       type='checkbox'>Powder
-		      </label>
+			       type='checkbox'>
+			<label class="form-check-label">
+			  Powder
+			</label>
+		      </div>
 		    <% } else { %>
-                      <label>
+		      <div class="form-check-inline">
 			<input name='profile_example_emulab'
-			       class="examples_portals_checkbox"
+			       class="form-check-input
+				      examples_portals_checkbox"
 			       data-portal="emulab"
 			       <% if (_.has(formfields, "examples_portals") &&
 				 formfields.examples_portals
 				 .indexOf("emulab") >= 0) { %>
 			       checked
 			       <% } %>
-			       type='checkbox'>List in Examples
-			<a href='#' class='btn btn-xs'
-			   style="padding-left: 0px"
-			   data-toggle='popover'
-			   data-html='true'
-			   data-delay='{"hide":500}'
-			   data-content="List this profile on the
-					 Examples page">
-			  <span class='glyphicon glyphicon-question-sign'
-				style='margin-bottom: 4px;'></span>
-			</a>
-		      </label>
+			       type='checkbox'>
+			<label class="form-check-label">
+			  List in Examples
+			  <a href='#' class='btn btn-xs'
+			     style="padding-left: 0px"
+			     data-toggle='popover' data-bs-toggle='popover'
+			     data-html='true' data-bs-html='true'
+			     data-delay='{"hide":500}'
+			     data-bs-delay='{"hide":500}'
+			     data-content="List this profile on the
+					   Examples page">
+			    <span class='glyphicon glyphicon-question-sign'
+				  style='margin-bottom: 4px;'></span>
+			  </a>
+			</label>
+		      </div>
 		    <% } %>
 		    <input name='examples_portals'
 			   value="<%- formfields.examples_portals %>"
@@ -898,7 +938,7 @@
 	  <!-- Buttons -->
 	  <div style="margin-top: 10px;"></div>
 	  <div class='form-group'>
-            <div class='col-sm-offset-2 col-sm-10'>
+            <div class='col-sm-offset-2 offset-sm-2 col-sm-10'>
 	      <% if (viewing && canmodify) { %>
 		<button class='btn btn-danger btn-xs pull-right' disabled
 			id='cancel_edit_button'
@@ -934,9 +974,8 @@
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-body'>
-          <button type='button' class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
           <center><h4>Confirm to Discard Changes</h4>
+	    <br>
             <button class='btn btn-danger btn-sm'
 		    id='confirm_cancel_edit'>Confirm</a></center>
 	</div>
@@ -956,11 +995,11 @@
 	  </p>
 	  <br>
           <center>
-            <button class='btn btn-warning btn-sm'
+            <button class='btn btn-danger btn-sm'
 		    id='remove_tour_button'
                     style='margin-right: 10px;'
 		    type='button'>Continue with no Tour</button>
-            <button class='btn btn-primary btn-sm'
+            <button class='btn btn-default btn-sm'
 		    id='reuse_tour_button'
 		    type='button'>Reuse Tour</button>
 	  </center>
@@ -999,13 +1038,12 @@
 	    the converted profile.
 	  </p>
           <center>
-            <button class='btn btn-success btn-sm'
+            <button class='btn btn-success btn-sm confirm-button'
 		    id='profile-convert-confirm'
-		    style='margin-right: 10px;'
 		    type='button' name='confirm'>Continue
 	    </button>
-            <button class='btn btn-default btn-sm'
-		    data-dismiss='modal'
+            <button class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'
                     type='button'>Stop
 	    </button>
 	  </center>
@@ -1034,7 +1072,7 @@
 		    type='button' name='confirm'>View Script
 	    </button>
             <button class='btn btn-default btn-sm'
-		    data-dismiss='modal'
+		    data-dismiss='modal' data-bs-dismiss='modal'
                     type='button'>Close
 	    </button>
 	  </center>
@@ -1064,7 +1102,7 @@
 	  <br>
           <center>
             <button class='btn btn-default btn-sm'
-		    data-dismiss='modal'
+		    data-dismiss='modal' data-bs-dismiss='modal'
                     type='button'>Close
 	    </button>
 	  </center>
@@ -1101,13 +1139,12 @@
 	    click on <b>Edit Topology</b> to make changes.
 	  </p>
           <center>
-            <button class='btn btn-success btn-sm'
+            <button class='btn btn-success btn-sm confirm-button'
 		    id='edit-genilib-continue'
-		    style='margin-right: 10px;'
 		    type='button'>Continue
 	    </button>
-            <button class='btn btn-default btn-sm'
-		    data-dismiss='modal'
+            <button class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'
                     type='button'>Cancel
 	    </button>
 	  </center>
@@ -1131,9 +1168,10 @@
 	    profile from that repository. 
 	  </p>
 	  <div class="row">
-	    <div class='col-sm-8 col-sm-offset-2'>
+	    <div class='col-sm-8 col-sm-offset-2 offset-sm-2'>
 	      <div class="form-group">
 		<input id="git-repo-url" type="text" class="form-control"
+		       placeholder="https://"
 		       <% if (fromrepo) { %>
 		       value='<%- formfields.profile_repourl %>'
 		       <% } %> >
@@ -1142,14 +1180,14 @@
 	      </div>
 	    </div>
 	  </div>
+	  <br>
           <center>
-            <button class='btn btn-success btn-sm'
+            <button class='btn btn-success btn-sm confirm-button'
 		    id='git-repo-confirm'
-		    style='margin-right: 10px;'
 		    type='button' name='delete'>Confirm
 	    </button>
-            <button class='btn btn-default btn-sm'
-		    data-dismiss='modal'
+            <button class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'
                     type='button'>Cancel
 	    </button>
 	  </center>
@@ -1178,8 +1216,9 @@
       <div class='modal-dialog'>
 	<div class='modal-content'>
 	  <div class='modal-body'>
-            <button type='button' class='close' data-dismiss='modal'
-                    aria-hidden='true'>&times;</button>
+            <button type='button' class='close btn-close'
+		    data-dismiss='modal' data-bs-dismiss='modal'
+                    aria-hidden='true'></button>
 	    <div class='clearfix'></div>
 	    <p>
 	      The <em>push URL</em> is an example of a
@@ -1266,7 +1305,7 @@ Instructions are optional.
           <center>
             <button type='button'
                     class='btn btn-default btn-sm' 
-                    data-dismiss='modal'>
+                    data-dismiss='modal' data-bs-dismiss='modal'>
 	      Close</button>
 	  </center>
 	</div>
@@ -1292,7 +1331,7 @@ Instructions are optional.
           <center>
             <button type='button'
                     class='btn btn-default btn-sm' 
-                    data-dismiss='modal'>
+                    data-dismiss='modal' data-bs-dismiss='modal'>
 	      Close</button>
 	  </center>
 	</div>
@@ -1318,8 +1357,11 @@ Instructions are optional.
 	  </p>
 	  <br>
 	  <center>
-	    <button class='btn btn-success btn-sm'
-		    data-dismiss='modal' type='button'>Continue</button>
+	    <button type='button'
+		    class='btn btn-success btn-sm confirm-button'>Continue</button>
+            <button type='button'
+                    class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'>Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1330,8 +1372,6 @@ Instructions are optional.
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-body'>
-          <button type='button' class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
           <center>
 	    <h4>You are about to create or update a System Image!</h4>
 	  </center>
@@ -1345,11 +1385,12 @@ Instructions are optional.
 	  cluster (command line).
 	  </p>
 	  <center>
-            <button type='button' style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm'
-		    id='cancel-update-systemimage'>Cancel</button>
-            <button class='btn btn-danger btn-sm'
+            <button class='btn btn-danger btn-sm confirm-button'
 		    id='confirm-update-systemimage'>Confirm</button>
+            <button type='button'
+                    class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'		    
+		    id='cancel-update-systemimage'>Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1373,11 +1414,11 @@ Instructions are optional.
 <% if (viewing && Object.keys(versions).length > 1) { %>
 <div class='row'>
   <div class='col-sm-12'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-        <h4 class='panel-title text-center'>Version History</h4>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+        <h4 class='panel-title card-title text-center'>Version History</h4>
       </div>
-      <div class='panel-body'>
+      <div class='panel-body card-body'>
 	<table class='table table-striped table-condensed'>
 	  <thead>
 	    <tr>
@@ -1433,12 +1474,12 @@ Instructions are optional.
 </div>
 <% } %>
 <div class='row hidden' id="gitpicker-div">
-  <div class='col-sm-9 col-sm-offset-3 col-xs-12'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-        <h4 class='panel-title text-center'>Repository Brances and Tags</h4>
+  <div class='col-sm-9 col-sm-offset-3 offset-sm-3'>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+        <h4 class='panel-title card-title text-center'>Repository Brances and Tags</h4>
       </div>
-      <div id="gitrepo-picker" class='panel-body'>
+      <div id="gitrepo-picker" class='panel-body card-body'>
       </div>
     </div>
   </div>

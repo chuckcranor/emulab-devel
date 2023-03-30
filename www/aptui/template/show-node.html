@@ -215,6 +215,12 @@
 	    <td>Role</td>
 	    <td><%- fields.role %></td>
 	  </tr>
+	  <% if (fields.inception) { %>
+	    <tr>
+	      <td>Inception</td>
+	      <td class="format-date"><%- fields.inception %></td>
+	    </tr>
+	  <% } %>
 	  <% if (fields.reservable && isadmin) { %>
 	    <tr>
 	      <td>Reservable</td>

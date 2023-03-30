@@ -256,6 +256,16 @@ sub ProcessLoginFile($)
     #
     my $whitelist = GetList($WHITELIST);
 
+    # Yank anything new from the current ban list.
+    foreach my $ip (keys(%{$whitelist})) {
+	if (exists($banlist->{$ip})) {
+	    delete($banlist->{$ip});
+	    logit("Removing $ip from ban list cause its white listed");
+	    $outstandingCount++
+	}
+	delete($counts->{$ip}) if (exists($counts->{$ip}));
+    }
+
     while (<$IN>) {
 	my $ip;
 	my $date;

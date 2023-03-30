@@ -96,6 +96,8 @@ function Do_GetProfile()
     }
     if ($profile->repourl() && $profile->repourl() != "") {
         $blob["profile_repourl"] = $profile->repourl();
+        $blob["profile_refhash"] = $profile->repohash();
+        $blob["profile_refspec"] = $profile->reporef();
     }
     else {
         $blob["profile_repourl"] = null;
@@ -189,6 +191,16 @@ function Do_GetSource()
     if (GetRepoSource($profile, $refspec, $blob)) {
         return;
     }
+    # Badly named, need to fix GetRepoSource.
+    $script = $blob["script"];
+
+    if (! (preg_match("/^(import|from)/m", $script) ||
+           preg_match("/^source tb_compat/m", $script))) {
+        $blob["rspec"] = $script;
+        unset($blob["script"]);
+        SPITAJAX_RESPONSE($blob);
+        return;
+    }
 
     #
     # And run the script.
@@ -196,7 +208,6 @@ function Do_GetSource()
     $warningsfatal = false;
     $usenewgenilib = false;
     $getparams     = true;
-    $script        = $blob["script"];
     
     if (CheckScript($profile, $script, null, 
                     $warningsfatal, $usenewgenilib,

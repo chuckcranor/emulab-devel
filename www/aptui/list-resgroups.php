@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,7 +36,14 @@ $this_user = CheckLoginOrRedirect();
 $this_uid  = $this_user->uid();
 $isadmin   = (ISADMIN() ? 1 : 0);
 
+$optargs = OptionalPageArguments("all", PAGEARG_BOOLEAN);
+
 SPITHEADER(1);
+
+if ($all && !$isadmin) {
+    SPITUSERERROR("Not enough permission to view this page.");
+    exit();
+}
 
 # List of clusters so we have info in the page
 $ams     = Aggregate::SupportsReservations();
@@ -62,6 +69,7 @@ echo "<script type='text/javascript'>\n";
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.EMBEDDED_RESGROUPS = false;\n";
 echo "   window.EMBEDDED_RESGROUPS_SELECT = false;\n";
+echo "   window.ALL = " . ($all ? 1 : 0) . ";\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

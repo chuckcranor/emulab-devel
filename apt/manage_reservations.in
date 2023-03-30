@@ -568,6 +568,8 @@ sub DoList()
 	# We need numbers.
 	$details->{'nodes'} = int($details->{'nodes'});
 	$details->{'using'} = int($details->{'using'});
+	$details->{'idledetection'} = int($details->{'idledetection'})
+	    if (exists($details->{'idledetection'}));
 
 	# Backwards compat
 	if (!exists($details->{'nodes'})) {

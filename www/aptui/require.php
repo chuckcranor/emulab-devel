@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -162,6 +162,7 @@ function REQUIRE_JACKS()
 {
   REQUIRE_JACKSMOD();
   AddLibrary("https://www.emulab.net/protogeni/jacks-utah/js/jacks.js");
+#  AddLibrary("https://www.emulab.net/dev/stoller/protogeni/jacks-utah/js/jacks.js");
 }
 
 function REQUIRE_JACKSMOD()
@@ -189,13 +190,37 @@ function REQUIRE_JACKSMOD()
   AddLibrary($root . "common/loadcomplete.js");
 }
 
-function REQUIRE_JACKS_EDITOR()
+function REQUIRE_JACKS_EDITOR_OLD()
 {
   REQUIRE_UNDERSCORE();
   REQUIRE_JACKS();
   AddTemplate("edit-modal");
   AddTemplate("edit-inline");
+  AddLibrary("js/JacksEditorOld.js");
+}
+function REQUIRE_JACKS_EDITOR()
+{
+  REQUIRE_UNDERSCORE();
+  REQUIRE_JACKS();
   AddLibrary("js/JacksEditor.js");
+}
+function REQUIRE_JACKS_VIEWER()
+{
+  REQUIRE_UNDERSCORE();
+  REQUIRE_JACKS();
+  AddLibrary("js/JacksViewer.js");
+}
+function REQUIRE_TOPOLOGY_VIEWER()
+{
+  REQUIRE_SUP();
+  AddLibrary("js/showtopoiframe.js");
+}
+function REQUIRE_TOPOLOGY_EDITOR()
+{
+  REQUIRE_SUP();
+  AddLibrary("js/showtopoiframe.js");
+  AddTemplate("edit-modal");
+  AddTemplate("edit-inline");
 }
 
 function REQUIRE_JQUERY_STEPS()
@@ -240,6 +265,13 @@ function REQUIRE_TABLESORTER($extras = null)
   }
 }
 
+function REQUIRE_JQUERY_UI()
+{
+  echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
+    
+  AddLibrary("js/lib/jquery-ui.js");
+}
+
 function REQUIRE_OPENSTACKGRAPHS()
 {
   REQUIRE_UNDERSCORE();
@@ -251,8 +283,6 @@ function REQUIRE_OPENSTACKGRAPHS()
 function REQUIRE_PPWIZARDSTART()
 {
   REQUIRE_UNDERSCORE();
-  REQUIRE_SUP();
-  REQUIRE_JACKS_EDITOR();
   AddTemplate("choose-am");
   AddTemplate("image-picker-modal");
   AddTemplate("ppform-wizard");
@@ -268,7 +298,7 @@ function REQUIRE_SUP()
 
 function REQUIRE_UNDERSCORE()
 {
-  AddLibrary("js/lib/underscore-min.js");
+  // AddLibrary("js/lib/underscore-min.js");
 }
 
 function REQUIRE_URITEMPLATE()
@@ -293,7 +323,6 @@ function REQUIRE_GENILIB_EDITOR()
   REQUIRE_UNDERSCORE();
   REQUIRE_SUP();
   REQUIRE_APTFORMS();
-  REQUIRE_JACKS();
   AddTemplate("genilib-editor");
   AddLibrary("js/genilib-editor.js");
 }
@@ -305,7 +334,14 @@ function SPITREQUIRE($main, $extras = "")
     global $spatrequired, $PORTAL_LIBRARIES, $APTBASE;
     
     echo $extras;
-    echo "<script src='$APTBASE/js/lib/bootstrap.js'></script>\n";
+
+    if (BOOTSTRAP5) {
+        echo "<script src='$APTBASE/js/lib/bootstrap-5/bootstrap.bundle.js'></script>\n";
+        echo "<script src='$APTBASE/js/lib/bootstrap-5/compat.js'></script>\n";
+    }
+    else {
+        echo "<script src='$APTBASE/js/lib/bootstrap.js'></script>\n";
+    }
     AddLibrary($main);
     EchoLibraryList($PORTAL_LIBRARIES);
     $spatrequired = 1;
@@ -325,8 +361,7 @@ function SPITREQUIRE_DATASET()
     REQUIRE_SUP();
     REQUIRE_MOMENT();
     REQUIRE_APTFORMS();
-    SPITREQUIRE("js/create-dataset.js",
-                "<script src='js/lib/jquery-ui.js'></script>");
+    REQUIRE_JQUERY_UI();
 }
 
 #########################################################################################

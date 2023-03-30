@@ -3,9 +3,6 @@ $(function () {
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['edit-modal', 'edit-inline']);
-    var editModalString = templates['edit-modal'];
-    var editInlineString = templates['edit-inline'];
     var aptContext = {
 	canvasOptions: {
 	    "defaults": [
@@ -186,27 +183,11 @@ $(function () {
 
 	render: function ()
 	{
-		if (this.inline == 'inline')
-		{
-			this.root.html(editInlineString);
-		}
-		else
-		{
-	    	this.root.html(editModalString);
-	    	this.root.find('#quickvm_editmodal').on('shown.bs.modal', _.bind(this.handleShown, this));
-		}
-	    if (this.mode !== 'editor')
-	    {
-		this.root.find('.modal-header h3').html('Topology Viewer');
-	    }
-	    this.root.find('#edit-save').click(_.bind(this.fetchXml, this));
-	    this.root.find('#edit-cancel, #edit-dismiss')
-	      .click(_.bind(this.cancelEdit, this));
 	    var makeInstance = function () {
 	      this.instance = new window.Jacks({
 		mode: this.mode,
 		source: 'rspec',
-		root: '#edit_nopicker',
+		root: '.jacks',
 		multiSite: this.multisite,
 		nodeSelect: this.selectionPane,
 		readyCallback: _.bind(this.jacksReady, this),
@@ -234,36 +215,22 @@ $(function () {
 
 	// Show a modal that lets the user edit their rspec. Callback
 	// is called with a new rspec if they click ok.
-	show: function (newXml, callback, cancel_callback, button_label)
+	show: function (newXml)
 	{
 	    this.xml = newXml;
-	    this.callback = callback;
-	    if (cancel_callback === undefined) {
-		cancel_callback = null;
-	    }
-	    this.cancel_callback = cancel_callback;
-	    if (button_label === undefined || button_label == null) {
-		this.root.find('#edit-save').html("Accept");
-	    }
-	    else {
-		this.root.find('#edit-save').html(button_label);
-	    }
+
 	    if (this.input)
 	    {
-	    	if (this.inline == 'inline') {
-	    		this.handleShown();
-	    	}
-	    	else {
-			this.root.find('#quickvm_editmodal').modal('show');
-	    	}
+	    	this.handleShown();
 	    }
 	},
 
-	// Hide the modal.
-	hide: function ()
+	// Clear the topology.
+	clear: function ()
 	{
 	    this.xml = null;
-	    this.root.find('#quickvm_editmodal').modal('hide');
+
+	    this.input.trigger('change-topology', []);
 	},
 
 	handleShown: function ()
@@ -298,17 +265,16 @@ $(function () {
 	    this.output = output;
 	    if (this.xml)
 	    {
-		this.show(this.xml);
+		this.handleShown();
 	    }
 	},
 
-	fetchXml: function ()
+	fetchXml: function (callback)
 	{
 	    var that = this;
 	    var fetchDone = function (topology) {
 		that.output.off('fetch-topology', fetchDone);
-		that.callback(topology[0].rspec);
-		that.hide();
+		callback(topology[0].rspec);
 	    };
 
 	    this.output.on('fetch-topology', fetchDone);
@@ -317,11 +283,6 @@ $(function () {
 
 	cancelEdit: function ()
 	{
-	    this.root.find('#quickvm_editmodal').modal('hide');
-	    
-	    if (this.cancel_callback !== null) {
-		this.cancel_callback();
-	    }
 	}
     };
 

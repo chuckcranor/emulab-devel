@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -219,7 +219,8 @@ sub InUse()
 		    "   ((unix_timestamp(now()) - ".
 		    "     unix_timestamp(stats.swapin_last))/60)) as ttl, ".
 		    "  u.uid,stats.slice_uuid,cert.urn,e.swappable, ".
-		    "  s.lockdown,unix_timestamp(stats.swapin_last) ".
+		    "  s.lockdown,unix_timestamp(stats.swapin_last), ".
+		    "  n.eventstate ".
 		    "  from nodes as n ".
 		    "left join reserved as r on r.node_id=n.node_id ".
 		    "left join node_types as t on t.type=n.type ".
@@ -236,7 +237,7 @@ sub InUse()
 		    "order by n.node_id");
     while (my ($node_id,$type,$pid,$eid,$reserved_pid,$expires,
 	       $autoswap,$ttl,$uid,$slice_uuid,$slice_urn,
-	       $swappable,$slice_lockdown,$swapin_time) =
+	       $swappable,$slice_lockdown,$swapin_time,$eventstate) =
 	   $query_result->fetchrow_array()) {
 	my $maxttl;
 
@@ -295,8 +296,20 @@ sub InUse()
 		$reserved_urn = $project->nonlocalurn();
 	    }
 	}
+	#
+	# Available is free (no pid) and in an eventstate that ptopgen likes.
+	#
+	my $available = 0;
+	if (!defined($pid) && 
+	    ($eventstate eq TBDB_NODESTATE_ISUP() ||
+	     $eventstate eq TBDB_NODESTATE_PXEWAIT() ||
+	     $eventstate eq TBDB_NODESTATE_POWEROFF() ||
+	     $eventstate eq TBDB_NODESTATE_ALWAYSUP())) {
+	    $available = 1;
+	}
 	push(@blob, {"node_id"      => $node_id,
 		     "type"         => $type,
+		     "available"    => $available,
 		     "pid"          => $pid || "",
 		     "eid"          => $eid || "",
 		     "uid"          => $uid || "",
@@ -1470,6 +1483,7 @@ sub Reservations($)
 	$blob->{"end"}         = TBDateStringGMT($row->{'end'});
 	$blob->{"notes"}       = $row->{'notes'} || "";
 	$blob->{"approved"}    = "";
+	$blob->{"idledetection"} = $row->{'override_unused'} ? 0 : 1;
 	if (defined($row->{'approved'})) {
 	    $blob->{"approved"} = TBDateStringGMT($row->{'approved'});
 	}

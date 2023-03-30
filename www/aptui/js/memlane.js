@@ -279,7 +279,8 @@ $(function ()
 	    $('#quicktabs_ul li').removeClass('hidden');
 	    $('#quicktabs_content .tab-pane').removeClass('hidden');
 	    $('#quicktabs_ul a[href="#topology"]').tab('show');
-	    ShowViewer('#showtopo_statuspage', manifests);
+	    ShowTopoIframe($('#topology'), '.showtopology-bare',
+			   manifests, ShowManifest);
 	}
 	else {
 	    $('#quicktabs_ul a[href="#rspec"]').tab('show');
@@ -290,103 +291,6 @@ $(function ()
 	}
     }
 
-    var jacksInstance;
-    var jacksInput;
-    var jacksOutput;
-    var jacksRspecs;
-
-    function ShowViewer(divname, manifests)
-    {
-	var first_manifest  = _.first(manifests);
-	var rest            = _.rest(manifests);
-	var multisite       = rest.length ? true : false;
-	
-	if (! jacksInstance)
-	{
-	    jacksInstance = new window.Jacks({
-		mode: 'viewer',
-		source: 'rspec',
-		multiSite: multisite,
-		root: divname,
-		nodeSelect: true,
-		readyCallback: function (input, output) {
-		    jacksInput = input;
-		    jacksOutput = output;
-
-		    jacksOutput.on('modified-topology', function (object) {
-			//console.log("jacksIDs", object, jacksIDs);
-			ShowManifest(object.rspec);
-		    });
-		
-		    jacksInput.trigger('change-topology',
-				       [{ rspec: first_manifest }]);
-
-		    if (rest.length) {
-			_.each(rest, function(manifest) {
-			    jacksInput.trigger('add-topology',
-					       [{ rspec: manifest }]);
-			});
-		    }
-		},
-	        canvasOptions: {
-	    "aggregates": [
-	      {
-		"id": "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
-		"name": "Cloudlab Utah"
-	      },
-	      {
-		"id": "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
-		"name": "Cloudlab Wisconsin"
-	      },
-	      {
-		"id": "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
-		"name": "Cloudlab Clemson"
-	      },
-	      {
-		"id": "urn:publicid:IDN+utahddc.geniracks.net+authority+cm",
-		"name": "IG UtahDDC"
-	      },
-	      {
-		"id": "urn:publicid:IDN+apt.emulab.net+authority+cm",
-		"name": "APT Utah"
-	      },
-	      {
-		"id": "urn:publicid:IDN+emulab.net+authority+cm",
-		"name": "Emulab"
-	      },
-	      {
-		"id": "urn:publicid:IDN+wall2.ilabt.iminds.be+authority+cm",
-		"name": "iMinds Virt Wall 2"
-	      },
-	      {
-		"id": "urn:publicid:IDN+uky.emulab.net+authority+cm",
-		"name": "UKY Emulab"
-	      }
-	    ]
-		},
-		show: {
-		    rspec: false,
-		    tour: false,
-		    version: false,
-		    selectInfo: true,
-		    menu: false
-		}
-            });
-	}
-	else if (jacksInput)
-	{
-	    jacksInput.trigger('change-topology',
-			       [{ rspec: first_manifest }]);
-
-	    if (rest.length) {
-		_.each(rest, function(manifest) {
-		    jacksInput.trigger('add-topology',
-				       [{ rspec: manifest }]);
-		});
-	    }
-	}
-    }
-
     //
     // Show the manifest in the tab, using codemirror.
     //
@@ -394,7 +298,7 @@ $(function ()
     {
 	var mode   = "text/xml";
 
-	$("#manifest_textarea").css("height", "300");
+	$("#manifest_textarea").css("height", "500");
 	$('#manifest_textarea .CodeMirror').remove();
 
 	var myCodeMirror = CodeMirror(function(elt) {
@@ -419,7 +323,7 @@ $(function ()
     {
 	var mode   = "text/xml";
 
-	$("#rspec_textarea").css("height", "300");
+	$("#rspec_textarea").css("height", "500");
 	$('#rspec_textarea .CodeMirror').remove();
 
 	var myCodeMirror = CodeMirror(function(elt) {

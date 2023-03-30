@@ -132,105 +132,6 @@ function ClearDownloadOnClick(button)
   button.off('click');
 }
   
-var jacksInstance;
-var jacksInput;
-var jacksOutput;
-
-function maketopmap(divname, xml, showinfo, withoutMultiSite)
-{
-    var xmlDoc = $.parseXML(xml);
-    var xmlXML = $(xmlDoc);
-
-    /*
-     * See how many sites. Do not use multiSite if no sites or
-     * only one site. Overrides the withoutMultiSite argument if set.
-     */
-    var sites  = {};
-
-    $(xmlXML).find("node").each(function() {
-	var JACKS_NS = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
-	var node_id  = $(this).attr("client_id");
-	var site     = this.getElementsByTagNameNS(JACKS_NS, 'site');
-	if (! site.length) {
-	    return;
-	}
-	var siteid = $(site).attr("id");
-	if (siteid === undefined) {
-	    console.log("No site ID in " + site);
-	    return;
-	}
-	sites[siteid] = siteid;
-    });
-    if (Object.keys(sites) <= 1) {
-	withoutMultiSite = true;
-    }
-    
-    if (! jacksInstance)
-    {
-	jacksInstance = new window.Jacks({
-	    mode: 'viewer',
-	    source: 'rspec',
-	    multiSite: (withoutMultiSite ? false : true),
-	    root: divname,
-	    nodeSelect: showinfo,
-	    readyCallback: function (input, output) {
-		jacksInput = input;
-		jacksOutput = output;
-		jacksInput.trigger('change-topology',
-				   [{ rspec: xml }]);
-	    },
-	    show: {
-		rspec: false,
-		tour: false,
-		version: false,
-		selectInfo: showinfo,
-		menu: false
-	    },
-	  canvasOptions: {
-	    "aggregates": [
-	      {
-		"id": "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
-		"name": "Cloudlab Utah"
-	      },
-	      {
-		"id": "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
-		"name": "Cloudlab Wisconsin"
-	      },
-	      {
-		"id": "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
-		"name": "Cloudlab Clemson"
-	      },
-	      {
-		"id": "urn:publicid:IDN+utahddc.geniracks.net+authority+cm",
-		"name": "IG UtahDDC"
-	      },
-	      {
-		"id": "urn:publicid:IDN+apt.emulab.net+authority+cm",
-		"name": "Apt Utah"
-	      },
-	      {
-		"id": "urn:publicid:IDN+emulab.net+authority+cm",
-		"name": "Emulab"
-	      },
-	      {
-		"id": "urn:publicid:IDN+wall2.ilabt.iminds.be+authority+cm",
-		"name": "iMinds Virt Wall 2"
-	      },
-	      {
-		"id": "urn:publicid:IDN+uky.emulab.net+authority+cm",
-		"name": "UKY Emulab"
-	      }
-	    ]
-	  }
-	});
-    }
-    else if (jacksInput)
-    {
-	jacksInput.trigger('change-topology',
-			   [{ rspec: xml }]);
-    }
-}
-
 // Spit out the oops modal.
 function SpitOops(id, msg)
 {
@@ -246,13 +147,30 @@ function addPopoverClip (id, contentfunction)
 	event.preventDefault();
 	var button = this;
 
-	// If clicking on the button when the popover is
-	// showing, hide it and return.
-	if ($(button).data("bs.popover") !== undefined ||
-	    $(button).attr("aria-describedby") !== undefined) {
-	    $(button).popover('destroy');
+	console.info("addPopoverClip", $(button));
+
+	// If clicking on the button when the popover is showing,
+	// just return since the body click event will kill it off.
+	var showing = false;
+
+	if (window.BOOTSTRAP_VERSION == 5) {
+	    var actual = $(button).attr("aria-describedby");
+
+	    //console.info("actual", actual);
+	    if (actual && $("#" + actual).length) {
+		showing = true;
+	    }
+	}
+	else {
+	    if ($(button).data("bs.popover") !== undefined) {
+		showing = true;
+	    }
+	}
+	if (showing) {
+	    //console.info("showing");
 	    return;
 	}
+
 	$(button).popover({
 	    html:     true,
 	    content:  contentfunction(this),
@@ -263,45 +181,48 @@ function addPopoverClip (id, contentfunction)
 
 	// If the user clicks somewhere else, kill this popover.
 	var hide = function (event) {
-	    console.info("hide");
+	    console.info("hide", $(button));
 	    $(button).popover('destroy');
 	};
 	// Cannot bind it till the popover is shown.
-	$(button).on("shown.bs.popover", function() {
+	$(button).one("shown.bs.popover", function() {
+	    //console.info("popover shown");
 	    $('body').one("click.popoverclip", hide);
 	});
 	$(button).popover('show');
 
 	// DOM of the popover content.
-	var content = $(button).data("bs.popover").tip();
-	console.info(content);
+	var content;
+	if (window.BOOTSTRAP_VERSION == 5) {
+	    content = $('#' + $(button).attr("aria-describedby"));
+	}
+	else {
+	    content = $(button).data("bs.popover").tip();
+	}
+	//console.info(content);
 
 	// Bind the copy-to-clipboard button.
 	$(content).find("a").click(function (e) {
 	    e.preventDefault();
+	    //console.info("copying");
 	    $(content).find("input").select();
 	    document.execCommand("copy");
-	    $(button).popover('destroy');
-	});
-	// If user clicks in the input, kill the popover.
-	$(content).find("input").click(function (e) {
-	    e.preventDefault();
-	    $(button).popover('destroy');
 	});
     });
 }
 
 function popoverClipContent(url) {
     var string =
-	"<div style='width 100%'> "+
+	"<div class='input-group' style='width 100%'> "+
 	"  <input readonly type=text " +
-	"       style='display:inline; width: 93%; padding: 2px;'" +
-	"       class='form-control input-sm' "+
+	"       class='form-control' "+
 	"       value='" + url + "'>" +
-	"  <a href='#' class='btn urn-copy-button' " +
-	"     style='padding: 0px'>" +
-	"    <span class='glyphicon glyphicon-copy'></span>" +
-	"  </a>" +
+	"  <span class='input-group-text'> " +
+	"    <a href='#' class='btn urn-copy-button' " +
+	"       style='padding: 0px'>" +
+	"      <span class='glyphicon glyphicon-copy'></span>" +
+	"    </a>" +
+	"  </span>" +
 	"</div>";
     return string;
 }
@@ -499,6 +420,38 @@ function newUUID()
     return uuid;
 }
 
+// Javascript to enable link to tab
+function hashSetup(target, defaultHash)
+{
+    var hash = document.location.hash;
+    if (!hash) {
+	hash = defaultHash;
+    }
+    if (hash) {
+	var element = $(target + ' a[href="'+hash+'"]');
+	if (element) {
+	    if (window.BOOTSTRAP_VERSION == 5) {
+		element[0].click();
+	    }
+	    else {
+		$(element).tab('show');
+	    }
+	}
+    }
+    // Change hash for page-reload
+    $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
+	history.replaceState('', '', e.target.hash);
+    });
+    // Set the correct tab when a user uses their back/forward button
+    $(window).on('hashchange', function (e) {
+	var hash = window.location.hash;
+	if (hash == "") {
+	    hash = defaultHash;
+	}
+	$(target + ' a[href="'+hash+'"]').tab('show');
+    });
+}
+
 // Exports from this module for use elsewhere
 return {
     ParseURN: ParseURN,
@@ -513,7 +466,6 @@ return {
     CallServerMethodURL: CallServerMethodURL,
     DownloadOnClick: DownloadOnClick,
     ClearDownloadOnClick: ClearDownloadOnClick,
-    maketopmap: maketopmap,
     SpitOops: SpitOops,
     StartGeniLogin: StartGeniLogin,
     InitGeniLogin: InitGeniLogin,
@@ -521,6 +473,7 @@ return {
     ConfirmModal: ConfirmModal,
     addPopoverClip: addPopoverClip,
     popoverClipContent: popoverClipContent,
+    hashSetup: hashSetup,
 };
 })();
 });

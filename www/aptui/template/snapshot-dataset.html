@@ -18,7 +18,7 @@
 	  running that is accessing the data while we do the snapshot.
 	</p>
 	<form id='snapshot_dataset_form'
-	      class='form-horizontal' role='form'>
+	      class='form-horizontal mb-0' role='form'>
 	  <input type='hidden' name='dataset_uuid' value='<%- dataset_uuid %>'>
 	  <div class='row'>
 	    <div class='col-sm-12'>
@@ -26,7 +26,7 @@
 		<div class="form-group">
 		  <select name="dataset_instance"
 			  id="dataset_instance"
-			  class='form-control format-me'
+			  class='form-control form-select format-me'
 			  data-key="dataset_instance"
 			  data-label="Instance"
 			  placeholder='Please Select'>
@@ -44,7 +44,7 @@
 		<div class="form-group">
 		  <select name="dataset_node"
 			  id="dataset_node"
-			  class='form-control format-me'
+			  class='form-control form-select format-me'
 			  data-key="dataset_node"
 			  data-label="Node"
 			  placeholder='Please Select'>
@@ -53,7 +53,7 @@
 		<div class="form-group">
 		  <select name="dataset_bsname"
 			  id="dataset_bsname"
-			  class='form-control format-me'
+			  class='form-control form-select format-me'
 			  data-key="dataset_bsname"
 			  data-label="BS Name"
 			  placeholder='Please Select'>
@@ -80,18 +80,20 @@
 		</div>
 	      <% } %>
 	    </div>
-	    <br><br>
-	    <center>
-              <button type='button' style='margin-right: 20px;'
-                      class='btn btn-primary btn-sm' 
-                      data-dismiss='modal' aria-hidden='true'>
-		Cancel</button>
-	      <button type='button' class='btn btn-success btn-sm'
-		      id='snapshot_submit_button'>
-		Confirm</button>
-	    </center>
 	  </div>
 	</form>
+	<center class="mt-0">
+	  <span id="general_error" style="color:red;"></span>
+	</center>
+	<center class="mt-3">
+          <button class='btn btn-primary btn-sm confirm-button'
+		  id='snapshot_submit_button' 
+		  type='button' name='approve'>
+	    Confirm</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>
+	    Cancel</button>
+	</center>
       </div>
     </div>
   </div>

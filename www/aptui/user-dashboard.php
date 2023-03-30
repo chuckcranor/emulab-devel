@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -76,13 +79,13 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
-REQUIRE_JACKS();
+REQUIRE_TOPOLOGY_VIEWER();
 AddLibrary("js/paramsets.js");
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/profile-support.js");
 AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
 SPITREQUIRE("js/user-dashboard.js");
 
-AddTemplateList(array("user-dashboard", "experiment-list", "profile-list", "project-list", "dataset-list", "user-profile", "oops-modal", "waitwait-modal", "classic-explist", "conversion-help-modal", "paramsets-list", "resgroup-list"));
+AddTemplateList(array("user-dashboard", "experiment-list", "profile-list", "project-list", "dataset-list", "user-profile", "oops-modal", "waitwait-modal", "classic-explist", "conversion-help-modal", "paramsets-list", "resgroup-list", "showtopo-modal"));
 SPITFOOTER();
 ?>

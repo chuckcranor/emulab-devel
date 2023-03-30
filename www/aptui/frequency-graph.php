@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -51,6 +51,7 @@ $optargs = OptionalPageArguments("cluster",   PAGEARG_STRING,
                                  "logid",     PAGEARG_STRING,
                                  "archived",  PAGEARG_BOOLEAN,
                                  "baseline",  PAGEARG_BOOLEAN,
+                                 "incident",  PAGEARG_BOOLEAN,
                                  "which",     PAGEARG_STRING,
                                  "endpoint",  PAGEARG_STRING,
                                  "range",     PAGEARG_STRING);
@@ -62,14 +63,11 @@ if (isset($which)) {
         exit();
     }
 }
-elseif (isset($baseline)) {
+elseif ($baseline) {
     $which = "rfbaseline";    
 }
 else {
     $which = "rfmonitor";
-}
-if (!isset($archived)) {
-    $archived = 0;
 }
 if (isset($endpoint)) {
     if (!TBvalid_node_id($endpoint)) {
@@ -88,6 +86,8 @@ if ($which != "rfmonitor") {
     #
     unset($cluster);
 }
+$incident = ($incident ? 1 : 0);
+$archived = ($archived ? 1 : 0);
 
 #
 # The monitor looks at only one iface, rf0. That may change later.
@@ -202,6 +202,7 @@ echo "    window.IFACE       = " . ($iface ? $iface : "null") . ";\n";
 echo "    window.URL         = '$url';\n";
 echo "    window.ARCHIVED    = $archived;\n";
 echo "    window.WHICH       = '$which';\n";
+echo "    window.INCIDENT    = $incident;\n";
 if (isset($logid)) {
     echo "    window.LOGID       = '$logid';\n";
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2022 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2023 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -13787,7 +13787,7 @@ static char *getgenicert( tmcdreq_t *reqp ) {
     
 	MYSQL_RES	*res;
 	char		buf[ MAXTMCDPACKET ];
-	buf[0] = (char) NULL;  
+	buf[0] = '\0';
 
 	res = mydb_query( "SELECT c.cert FROM `geni-cm`.geni_slivers AS s, "
 			  "`geni-cm`.geni_slicecerts AS c WHERE "
@@ -13818,7 +13818,7 @@ static char *getgenikey( tmcdreq_t *reqp ) {
     
 	MYSQL_RES	*res;
 	char		buf[ MAXTMCDPACKET ];
-	buf[0] = (char) NULL;  
+	buf[0] = '\0';
 
 	res = mydb_query( "SELECT c.privkey FROM `geni-cm`.geni_slivers AS s, "
 			  "`geni-cm`.geni_slicecerts AS c WHERE "
@@ -14119,7 +14119,7 @@ static char *getgenirpccert(tmcdreq_t *reqp)
 	MYSQL_RES	*res;
 	MYSQL_ROW	row;
 	char		buf[MAXTMCDPACKET];
-	buf[0] = (char) NULL;
+	buf[0] = '\0';
 
 	if (!reqp->geniflags) {
 		return NULL;

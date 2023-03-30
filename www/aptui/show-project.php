@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -80,9 +83,9 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MARKED();
 REQUIRE_MOMENT();
+REQUIRE_TOPOLOGY_VIEWER();
 REQUIRE_TABLESORTER(
     array("js/lib/tablesorter/widgets/widget-filter-formatter-jui.js"));
-REQUIRE_JACKS();
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/profile-support.js");
 AddLibrary("js/lib/jquery-ui.js");
@@ -90,7 +93,7 @@ AddLibrary("js/lib/jquery-ui.js");
 AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
 SPITREQUIRE("js/show-project.js");
 
-AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal", "resgroup-list", "rfrange-history"));
+AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal", "resgroup-list", "rfrange-history", "showtopo-modal"));
 
 echo "<link rel='stylesheet'
             href='css/jquery-ui.min.css'>\n";

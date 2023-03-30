@@ -166,6 +166,7 @@ CREATE TABLE `apt_aggregate_radio_info` (
   `power_id` varchar(32) default NULL,
   `cnuc_id` varchar(32) default NULL,
   `grouping` varchar(32) default NULL,
+  `synchronization` enum('none','White Rabbit','GPSDO') default 'none',
   `notes` text,
   PRIMARY KEY  (`aggregate_urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -215,6 +216,7 @@ CREATE TABLE `apt_aggregate_radio_frontends` (
   `transmit_frequencies` text,
   `receive_frequencies` text,
   `monitored` tinyint(1) NOT NULL default '0',
+  `scanned` tinyint(1) NOT NULL default '0',
   `notes` text,
   PRIMARY KEY  (`aggregate_urn`,`node_id`,`iface`,`frontend`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -984,6 +986,19 @@ CREATE TABLE `apt_reservation_group_reservations` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_reservation_group_reservation_data`
+--
+
+DROP TABLE IF EXISTS `apt_reservation_group_reservation_data`;
+CREATE TABLE `apt_reservation_group_reservation_data` (
+  `uuid` varchar(40) NOT NULL default '',
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `type` varchar(30) NOT NULL DEFAULT '',
+  `jsondata` mediumtext,
+  PRIMARY KEY (`uuid`,`aggregate_urn`,`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_reservation_group_rf_reservations`
 --
 
@@ -1255,14 +1270,12 @@ CREATE TABLE `apt_announcements` (
 
 DROP TABLE IF EXISTS `apt_announcement_info`;
 CREATE TABLE `apt_announcement_info` (
-  `idx` int(10) unsigned NOT NULL auto_increment,
   `aid` int(10) NOT NULL default '0',
-  `uid_idx` int(10) default NULL,
+  `uid_idx` int(10) NOT NULL default '0',
   `dismissed` tinyint(1) NOT NULL default '0',
   `clicked` tinyint(1) NOT NULL default '0',
   `seen_count` int(8) NOT NULL default '0',
-  PRIMARY KEY (`idx`),
-  KEY `uid_idx` (`uid_idx`),
+  PRIMARY KEY (`aid`,`uid_idx`),
   KEY `aid` (`aid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
