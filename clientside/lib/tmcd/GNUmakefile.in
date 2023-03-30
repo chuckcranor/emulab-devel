@@ -54,13 +54,6 @@ CFLAGS   += `/usr/kerberos/bin/krb5-config --cflags`
 endif
 endif
 
-ifeq ($(CC),gcc)
-GCCVERS = $(shell $(CC) -v 2>&1 | grep '^gcc version' | cut -d' ' -f3 | cut -d. -f1)
-ifeq ($(shell expr $(GCCVERS) \>= 10),1)
-CFLAGS  += -fcommon
-endif
-endif
-
 libtmcc.a:	ssl.o tpm.o 
 	$(AR) crv $@ ssl.o tpm.o
 	$(RANLIB) $@
