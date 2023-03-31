@@ -326,7 +326,6 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd/init/11.2/GNUmakefile \
 	  tmcc/freebsd/init/11.4/GNUmakefile \
 	  tmcc/freebsd/init/12/GNUmakefile \
-	  tmcc/freebsd/init/13/GNUmakefile \
 	  tmcc/freebsd/supfile tmcc/freebsd/sethostname \
 	  tmcc/linux/GNUmakefile tmcc/linux/supfile \
 	  tmcc/linux/sethostname.dhclient \
