@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,7 +65,7 @@ foreach my $switch (@ARGV) {
     #
     # Is it a Cisco or maybe an HP
     my $type = getDeviceType($switch);
-    if ($type !~ /(cisco|catalyst|hp|force10)/) {
+    if ($type !~ /(arista|cisco|catalyst|hp|force10|dellrest)/) {
 	print STDERR
 	    " *** $0:\n" .
 	    "     ignoring unsupported switch type (type $type)\n";
@@ -101,6 +101,26 @@ foreach my $switch (@ARGV) {
 	    next;
 	}
 	unlink("$BACKUPDIR/$switch.in");
+    }
+    if ($type =~ /dellrest/) {
+	if (system("ssh admin\@$switch show running-config 2>/dev/null > $BACKUPDIR/$switch.in")) {
+	    if (($? >> 8) != 255) {
+		print STDERR "Unable to grab and save config for $switch ($?), ignored\n";
+		next;
+	    }
+	}
+	unlink("$BACKUPDIR/$switch-$datestr");
+	rename("$BACKUPDIR/$switch.in", "$BACKUPDIR/$switch-$datestr");
+    }
+    if ($type =~ /arista/) {
+	if (system("ssh toor\@$switch write terminal 2>/dev/null > $BACKUPDIR/$switch.in")) {
+	    if (($? >> 8) != 255) {
+		print STDERR "Unable to grab and save config for $switch ($?), ignored\n";
+		next;
+	    }
+	}
+	unlink("$BACKUPDIR/$switch-$datestr");
+	rename("$BACKUPDIR/$switch.in", "$BACKUPDIR/$switch-$datestr");
     }
 }
 
