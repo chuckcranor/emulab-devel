@@ -313,15 +313,6 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/GNUmakefile \
 	  tmcc/common/GNUmakefile tmcc/common/config/GNUmakefile \
 	  tmcc/freebsd/GNUmakefile tmcc/freebsd/init/GNUmakefile \
-	  tmcc/freebsd/init/4/GNUmakefile \
-	  tmcc/freebsd/init/5/GNUmakefile \
-	  tmcc/freebsd/init/6/GNUmakefile \
-	  tmcc/freebsd/init/7/GNUmakefile \
-	  tmcc/freebsd/init/8/GNUmakefile \
-	  tmcc/freebsd/init/9/GNUmakefile \
-	  tmcc/freebsd/init/10/GNUmakefile \
-	  tmcc/freebsd/init/10.3/GNUmakefile \
-	  tmcc/freebsd/init/10.4/GNUmakefile \
 	  tmcc/freebsd/init/11/GNUmakefile \
 	  tmcc/freebsd/init/11.2/GNUmakefile \
 	  tmcc/freebsd/init/11.4/GNUmakefile \
