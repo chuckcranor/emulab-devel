@@ -2,10 +2,13 @@ To add collection of RF monitoring data from buses and other endpoints.
 
 Mothership boss:
 
-0. Pick a bus, changing XXXX to the appropriate value:
+0. Pick a bus/endpoint, changing XXXX to the appropriate value:
 
-   tarball=/usr/testbed/tmp/syncthing/bus-XXXX.tar.gz
-   aggregate=bus-XXXX
+   # FE or bus-XXXX
+   aggregate=bookstore
+   tarball=/usr/testbed/tmp/syncthing/$aggregate.tar.gz
+   # endpoint or mobile
+   type=endpoint
 
 1. Copy over the appropriate tarball (TBD):
 
@@ -14,8 +17,8 @@ Mothership boss:
 2. Create the mirror directory where aggregate data goes, along with the
    marker:
 
-   sudo mkdir -p /usr/testbed/www/rfmonitor-mobile/$aggregate/.stfolder
-   sudo chown -R elabman:tbadmin /usr/testbed/www/rfmonitor-mobile/$aggregate
+   sudo mkdir -p /usr/testbed/www/rfmonitor-$type/$aggregate/.stfolder
+   sudo chown -R elabman:tbadmin /usr/testbed/www/rfmonitor-$type/$aggregate
 
 
 

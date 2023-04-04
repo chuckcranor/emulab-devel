@@ -43,14 +43,14 @@ use Data::Dumper;
 
 sub usage()
 {
-    print "Usage: genstconfig [-dn] [-D] [-m node,...] [-M node-list-file] [-T template-file]\n";
+    print "Usage: genstconfig [-dn] [-D] [-m node,...] [-M node-list-file,...] [-T template-file]\n";
     exit(1);
 }
 my $optlist      = "dnm:M:T:D:";
 my $debug        = 0;
 my $verbose      = 1;
 my $impotent     = 0;
-my $mnodefile	 = "";
+my @mnodefiles	 = ();
 my $tempfile	 = "";
 my $usedb	 = 0;
 my @mnodes	 = ();
@@ -65,6 +65,10 @@ my $DATADIR      = "$TB/www/rfmonitor";
 my $SERVER       = "@BOSSNODE@";
 my $EMULABNET	 = "155.98.32.0/20";
 
+# Version of syncthing running, set to "" if unknown.
+my $SERVERVERS	 = "33";
+my $CLIENTVERS	 = "30";
+
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
@@ -78,7 +82,7 @@ use APT_Instance;
 sub parsehostname($);
 sub createconfig($);
 sub customizeconfig($);
-sub expandconfig($$$$@);
+sub expandconfig($$$$$@);
 sub dumpinfo();
 sub fatal($);
 sub stampprint($);
@@ -112,7 +116,7 @@ if (defined($options{"D"})) {
     $usedb = 1;
 }
 if (defined($options{"M"})) {
-    $mnodefile = $options{"M"};
+    @mnodefiles = split(',',$options{"M"});
 }
 if (defined($options{"T"})) {
     $tempfile = $options{"T"};
@@ -125,7 +129,7 @@ if ($usedb) {
 }
 
 # read monitor nodes from a file
-if ($mnodefile) {
+foreach my $mnodefile (@mnodefiles) {
     if (open(FD, "<$mnodefile")) {
 	while (<FD>) {
 	    chomp;
@@ -259,7 +263,7 @@ sub customizeconfig($)
 
 	# Note that the server is different since it receives from all nodes
 	my @rhlist = sort grep { $_ ne $SERVER } keys %hosts;
-	expandconfig($cfile, $template, \%vars, $SERVER, @rhlist);
+	expandconfig($SERVERVERS, $cfile, $template, \%vars, $SERVER, @rhlist);
     } else {
 	my %vars = (
 	    APIKEY    => $hosts{$fqdn}{'apikey'},
@@ -279,7 +283,7 @@ sub customizeconfig($)
 	);
 	my $template = "$TEMPLATEDIR/send-template.xml";
 
-	expandconfig($cfile, $template, \%vars, $fqdn, $SERVER);
+	expandconfig($CLIENTVERS, $cfile, $template, \%vars, $fqdn, $SERVER);
     }
 }
 
@@ -303,9 +307,9 @@ sub customizeconfig($)
 #
 # We just do a simple textual find and replace rather than parsing XML.
 #
-sub expandconfig($$$$@)
+sub expandconfig($$$$$@)
 {
-    my ($cfile, $template, $vars, $fqdn, @rhosts) = @_;
+    my ($vers,$cfile, $template, $vars, $fqdn, @rhosts) = @_;
     my $port = 22000;
 
     print "Vars:\n", Dumper($vars), "\n"
@@ -324,15 +328,22 @@ sub expandconfig($$$$@)
 		if (@rhosts == 0) {
 		    fatal("Must have at least one remote device");
 		}
-		open(TF, "<$TEMPLATEDIR/recv-folder-template.xml") or
+		# XXX
+		if (! -e "$TEMPLATEDIR/recv-folder-template$vers.xml") {
+		    $vers = "";
+		}
+		open(TF, "<$TEMPLATEDIR/recv-folder-template$vers.xml") or
 		    fatal("Cannot open device template file");
 
 		foreach my $rh (@rhosts) {
 		    my $domain = $hosts{$rh}{'domain'};
 		    my $site = $hosts{$rh}{'site'};
 		    my $msdatadir = $DATADIR;
+		    # XXX
 		    if ($site =~ /^bus-/) {
 			$msdatadir .= "-mobile";
+		    } elsif ($site ne "boss.emulab.net") {
+			$msdatadir .= "-endpoint";
 		    }
 		    my %fvars = (
 			FID    => $rh,
@@ -367,7 +378,11 @@ sub expandconfig($$$$@)
 		if (@rhosts == 0) {
 		    fatal("Must have at least one remote device");
 		}
-		open(TF, "<$TEMPLATEDIR/recv-device-template.xml") or
+		# XXX
+		if (! -e "$TEMPLATEDIR/recv-device-template$vers.xml") {
+		    $vers = "";
+		}
+		open(TF, "<$TEMPLATEDIR/recv-device-template$vers.xml") or
 		    fatal("Cannot open device template file");
 		foreach my $rh (@rhosts) {
 		    my %ovars = (
