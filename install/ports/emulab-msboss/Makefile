@@ -56,6 +56,7 @@ RUN_DEPENDS+=	\
 
 # Unknown, but sound useful or important
 RUN_DEPENDS+=	\
+	p5-DateTime>=1.54:${PORTSDIR}/devel/p5-DateTime \
 	p5-Devel-Leak-Object>=1.01:${PORTSDIR}/devel/p5-Devel-Leak-Object \
 	p5-Devel-Size>=0.82:${PORTSDIR}/devel/p5-Devel-Size \
 	p5-HTTP-Daemon-SSL>=1.04:${PORTSDIR}/www/p5-HTTP-Daemon-SSL \
