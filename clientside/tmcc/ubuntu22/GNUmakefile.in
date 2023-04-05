@@ -75,6 +75,8 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/rsyslog.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/sudoers.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/default
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/ssh
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/ssh/sshd_config.d
 
 common-install:	dir-install
 	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)
@@ -83,6 +85,7 @@ bin-install:	dir-install
 	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) USES_SYSTEMD=1 bin-install)
 
 etc-install:	dir-install common-sysetc-install
+	$(INSTALL) -m 755 $(SRCDIR)/emulab-ssh.conf $(SYSETCDIR)/ssh/sshd_config.d/20-emulab.conf
 	if [ "$(NOHOSTS)" != "1" ]; then \
 		$(INSTALL) -m 644 $(SRCDIR)/hosts $(ETCDIR)/hosts ; \
 	fi
