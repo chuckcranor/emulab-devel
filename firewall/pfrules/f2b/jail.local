@@ -1,0 +1,5 @@
+[DEFAULT]
+banaction = pf-noanchor
+
+[sshd]
+enabled = true
