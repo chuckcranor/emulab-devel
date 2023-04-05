@@ -78,6 +78,7 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev/rules.d
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/ssh
 
 common-install:	dir-install
 	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)

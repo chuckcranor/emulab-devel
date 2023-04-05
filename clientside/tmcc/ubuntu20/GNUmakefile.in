@@ -77,6 +77,7 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/rsyslog.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/sudoers.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/default
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/ssh
 
 common-install:	dir-install
 	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)
