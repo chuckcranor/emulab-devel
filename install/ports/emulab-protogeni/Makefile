@@ -23,7 +23,7 @@ WANT_PHP_MOD=	yes
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
 www_apache24_SET=	SUEXEC
 .else
 .MAKEFLAGS+=	WITH_SUEXEC=yes

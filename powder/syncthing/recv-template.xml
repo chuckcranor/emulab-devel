@@ -1,4 +1,4 @@
-<configuration version="29">
+<configuration version="33">
     @FOLDERS@
     <device id="@MYDEVID@" name="@MYNAME@" compression="metadata" introducer="false" skipIntroductionRemovals="false" introducedBy="">
         <address>@MYADDR@</address>
@@ -8,6 +8,8 @@
         <maxSendKbps>0</maxSendKbps>
         <maxRecvKbps>0</maxRecvKbps>
         <maxRequestKiB>0</maxRequestKiB>
+        <untrusted>false</untrusted>
+        <remoteGUIPort>0</remoteGUIPort>
     </device>
     @DEVICES@
     <gui enabled="true" tls="false" debugging="false">
@@ -53,12 +55,17 @@
         <trafficClass>0</trafficClass>
         <defaultFolderPath></defaultFolderPath>
         <setLowPriority>true</setLowPriority>
-        <maxConcurrentScans>0</maxConcurrentScans>
+        <maxFolderConcurrency>0</maxFolderConcurrency>
         <crashReportingURL>https://crash.syncthing.net/newcrash</crashReportingURL>
         <crashReportingEnabled>false</crashReportingEnabled>
         <stunKeepaliveStartS>180</stunKeepaliveStartS>
         <stunKeepaliveMinS>0</stunKeepaliveMinS>
         <stunServer>default</stunServer>
         <databaseTuning>auto</databaseTuning>
+        <maxConcurrentIncomingRequestKiB>0</maxConcurrentIncomingRequestKiB>
+        <announceLANAddresses>true</announceLANAddresses>
+        <sendFullIndexOnUpgrade>false</sendFullIndexOnUpgrade>
+        <connectionLimitEnough>0</connectionLimitEnough>
+        <connectionLimitMax>0</connectionLimitMax>
     </options>
 </configuration>

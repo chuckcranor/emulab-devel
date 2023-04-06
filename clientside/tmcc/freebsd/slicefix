@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -223,6 +223,14 @@ esac
 
 # DOM0MEM is optional
 DOM0MEM=$SLICEFIX_DOM0MEM
+
+#
+# See if we have a cnet interface MAC address
+#
+CNETMAC=
+if [ -e "$BOOTDIR/controlmac" ]; then
+    CNETMAC=`cat $BOOTDIR/controlmac`
+fi
 
 #
 # Handle pseudo-arguments in the filesystem
@@ -1410,10 +1418,26 @@ dolinux() {
 		tgconf=gconf
 	    }
 
+	    #
+	    # Remove any emulabcnet=nn:nn:nn:nn:nn:nn clauses.
+	    # We will put them back with the correct value as needed.
+	    #
+	    if grep -q 'emulabcnet=' $tgconf 2>/dev/null; then
+		echo "    removing old emulabcnet lines"
+		sed -E -i '' -e 's; ?emulabcnet=[0-9a-fA-F:]+;;g' $tgconf
+	    fi
+
+	    # see if we need to add emulabcnet= Linux command line option
+	    cnetstr=""
+	    if [ -n "$CNETMAC" ]; then
+		cnetstr=" emulabcnet=$CNETMAC"
+		echo "    setting emulabcnet"
+	    fi
+
 	    # fix any (non-commented) boot=/root= lines
 	    if grep -q '^[^#].*[br]oot=/dev' $tgconf 2>/dev/null; then
 		echo "    fixing root (dev)"
-		sed -i '' -e "s;\([br]oot=/dev\)/[hs]d.[0-7];\1/${ldisk}${part};" $tgconf
+		sed -i '' -e "s;\([br]oot=/dev\)/[hs]d.[0-7];\1/${ldisk}${part}${cnetstr};" $tgconf
 	    fi
 
 	    # Ditto for UUID if we have one and grub conf uses it
@@ -1424,6 +1448,11 @@ dolinux() {
 		if [ -n "$OUUID" -a $RUUID != $OUUID ]; then
 		    echo "    fixing root (UUID)"
 		    sed -i '' -e "s;$OUUID;$RUUID;g" $tgconf
+		fi
+		# XXX need to make a second pass to put emulabcnet string on
+		# just the root=UUID= lines, not everywhere the UUID appears
+		if [ -n "$OUUID" -a -n "$cnetstr" ]; then
+		    sed -i '' -e "s;\(root=UUID=$RUUID\);\1$cnetstr;" $tgconf
 		fi
 	    fi
 
@@ -1648,13 +1677,13 @@ dolinux() {
 	    #
 	    # For vid or null we add:
 	    #
-	    # GRUB_CMDLINE_LINUX="console=tty0"
+	    # GRUB_CMDLINE_LINUX="console=tty0 emulabcnet=CNETMAC"
 	    # GRUB_TERMINAL=console
 	    # GRUB_SERIAL_COMMAND=""
 	    #
 	    # and for sio[1-3] we add:
 	    #
-	    # GRUB_CMDLINE_LINUX="console=ttySN,S"
+	    # GRUB_CMDLINE_LINUX="console=ttySN,S emulabcnet=CNETMAC"
 	    # GRUB_TERMINAL=serial
 	    # GRUB_SERIAL_COMMAND="serial --speed=S --unit=N"
 	    #
@@ -1680,7 +1709,7 @@ EOF5
 		case $CONSOLE in
 		null|vid)
 		    cat <<EOF6 >>$gdef
-GRUB_CMDLINE_LINUX="console=tty0"
+GRUB_CMDLINE_LINUX="console=tty0$cnetstr"
 GRUB_TERMINAL=console
 GRUB_SERIAL_COMMAND=""
 EOF6
@@ -1689,7 +1718,7 @@ EOF6
 		    u=`expr ${CONSOLE#sio} - 1`
 		    s=$SPEED
 		    cat <<EOF7 >>$gdef
-GRUB_CMDLINE_LINUX="console=ttyS$u,$s"
+GRUB_CMDLINE_LINUX="console=ttyS$u,$s$cnetstr"
 GRUB_TERMINAL=serial
 GRUB_SERIAL_COMMAND="serial --unit=$u $pstr --speed=$s"
 EOF7

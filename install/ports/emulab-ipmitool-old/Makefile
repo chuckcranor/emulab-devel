@@ -65,3 +65,9 @@ post-install:
 	${INSTALL_SCRIPT} ${WRKDIR}/status-ipmi.sh ${STAGEDIR}${PREFIX}/${PERIODIC_DIR}/400.status-ipmi
 
 .include <bsd.port.mk>
+
+vars:
+	@echo "PREFIX=${PREFIX}"
+	@echo "STAGEDIR=${STAGEDIR}"
+	@echo "WRKDIR=${WRKDIR}"
+	@echo "PERIODIC_DIR=${PERIODIC_DIR}"

@@ -539,6 +539,18 @@ $(function ()
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
 
+	// See if we can make users understand reservations are per-project.
+	$('#project-forewarned').change(function () {
+	    var ischecked =  $('#project-forewarned').is(":checked");
+
+	    if (ischecked) {
+		$('#commit-reservation').removeAttr("disabled");
+	    }
+	    else {
+		$('#commit-reservation').attr("disabled", "disabled");
+	    }
+	});
+
 	/*
 	 * In edit mode enable the controls.
 	 */

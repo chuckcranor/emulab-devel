@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,6 +69,10 @@ echo $new_subnet_mask > $BOOTDIR/mynetmask
 echo $new_domain_name > $BOOTDIR/mydomain
 if [ -n "$interface" ]; then
     echo $interface > $BOOTDIR/controlif
+    mac=`ifconfig $interface 2>/dev/null | grep ether | awk '{print $2}'`
+    if [ -n $mac ]; then
+	echo $mac > $BOOTDIR/controlmac
+    fi
 fi
 
 #

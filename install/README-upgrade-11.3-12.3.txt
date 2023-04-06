@@ -225,6 +225,7 @@ B. Updating the base FreeBSD system
    ops:
      sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
      sudo /usr/local/etc/rc.d/apache24 stop
+     sudo /usr/local/etc/rc.d/webssh.sh stop
 
      # The following may or may not be installed
      sudo /usr/local/etc/rc.d/capture stop
@@ -309,6 +310,7 @@ Other newer stuff:
 
    ops:
      sudo /usr/local/etc/rc.d/apache24 stop
+     sudo /usr/local/etc/rc.d/webssh.sh stop
 
      # The following may or may not be installed
      sudo /usr/local/etc/rc.d/capture stop
@@ -403,7 +405,11 @@ Other newer stuff:
      sudo patch -p1 < ~/testbed/patches/FreeBSD-12.3-pw-2.patch
      sudo make obj
      sudo make all install clean
-     # mountd patch is no longer needed, yea!
+     # mountd has been fixed, but we still have stats gathering and optims.
+     cd /usr/src/usr.sbin/mountd
+     sudo patch -p1 < ~/testbed/patches/FreeBSD-12.3-mountd.patch
+     sudo make obj
+     sudo make all install clean
      cd /usr/src/sbin/mount
      sudo patch -p1 < ~/testbed/patches/FreeBSD-12.3-mount.patch
      sudo make obj
@@ -529,8 +535,18 @@ C. Updating ports/packages
 
 4. Changes from python2.7 to python 3.8?
 
-   [ We will probably need to rebuild the event system stubs, but that
-     is not an install-time thing. ]
+   For Cloudlab clusters, the `wssh` install has to be updated by hand for python3
+   since it does not come from a package. See install/phases/webssh for details, but
+   I think this will do it:
+
+    # on boss
+    # nothing to do
+    
+    # on ops
+    cd /tmp
+    git clone https://gitlab.flux.utah.edu/emulab/webssh.git
+    cd webssh
+    sudo python setup.py install
 
 5. Updates to mysql server (boss only).
 

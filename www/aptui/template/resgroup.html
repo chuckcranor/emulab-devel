@@ -596,22 +596,43 @@
 	  </div>
 	</div>
 	<div style="margin-top: 10px;">
-	  <b>Reservations are per-project!</b> Any user in the
-	  project may use the nodes you have reserved. It is up to
-	  you to coordinate with other members of your project to
-	  ensure that the nodes are available when you want them. In
-	  addition to not being able to start an experiment, <em>you
-	  might not be able to an extend an existing experiment.</em>
-          More details are in the <a href="#" target="_blank"
-				     class="reservation-manual">manual</a>!
+	  <b>Reservations are per-project!</b>
+	  <div>
+	    <ul>
+	      <li>Any use of nodes matching the reservation by any
+		user in your project will be counted against the
+		reservation, including experiments that are already running</li>
+	      
+	      <li>It is up to you to coordinate with other members of
+		your project to ensure that the nodes are available
+		when you want them</li>
+	      
+	      <li>If another user in your project is using your reserved nodes,
+		you might not be able to extend your experiments</li>
 
+	      <li>You must use your reservation within three hours or it will
+		be automatically canceled</li>
+
+	      <li>More details are in the <a href="#" target="_blank"
+					     class="reservation-manual">manual</a></li>
+	      <li>
+		<div class="checkbox" style="margin-top: 0px;">
+		  I understand the above:
+		  <label style="margin-left: 5px;">
+		    <input type="checkbox"
+			   id="project-forewarned"><b style="margin-left: -5px;">Yes</b>
+		  </label>
+		</div>
+	      </li>
+	    </ul>
+	  </div>
 	</div>
 	<center style="margin-top: 10px;">
           <button style='margin-right: 20px;'
                   class='btn btn-primary btn-sm'
                   data-dismiss='modal' aria-hidden='true'>Cancel</button>
           <button class='btn btn-success btn-sm'
-		  id='commit-reservation'
+		  id='commit-reservation' disabled
 		  data-dismiss='modal' aria-hidden='true'>Submit</button>
 	</center>
       </div>
