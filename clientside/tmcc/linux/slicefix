@@ -67,7 +67,7 @@ isgpt=0
 freebsd_pchar=s
 if [ $OS = Linux ]; then
 	disk=$linux_disk
-	if fdisk -l /dev/$disk 2>/dev/null | grep -qi 'found valid gpt'; then
+	if fdisk -l /dev/$disk 2>/dev/null | grep -Eqi '(found valid|disklabel type:) gpt'; then
 		isgpt=1
 		freebsd_pchar=p
 	fi
@@ -1181,7 +1181,18 @@ fixone() {
 	    # gdisk output converts the gpt partition ID to, e.g., 8300.
 	    ptype=`gdisk -l /dev/$disk | awk "/^ *${part} / {print \\$6}"`
 	else
-    	    ptype=`fdisk -l /dev/$disk | awk /${fullpath}/'{sub(/\*/,""); print "0x"$8}'`
+	    # busybox fdisk and "real" fdisk have different output styles
+	    isrealfdisk=1
+	    fdiskpath=`which fdisk`
+	    if [ -L $fdiskpath ]; then
+		readlink $fdiskpath | grep -q busybox
+		isrealfdisk=$?
+	    fi
+	    if [ $isrealfdisk -eq 0 ]; then
+    		ptype=`fdisk -l /dev/$disk | awk /${fullpath}/'{sub(/\*/,""); print "0x"$8}'`
+	    else
+    		ptype=`fdisk -l /dev/$disk | awk /${fullpath}/'{sub(/\*/,""); print "0x"$6}'`
+	    fi
 	fi
     fi
     ptype=${ptype:-0}

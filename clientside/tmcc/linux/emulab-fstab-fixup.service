@@ -8,7 +8,7 @@ Conflicts=shutdown.target
 [Service]
 Type=oneshot
 RemainAfterExit=no
-ExecStart=/usr/local/etc/emulab/initscripts/fstab-generator-finish
+ExecStart=/bin/sh -c '. /etc/emulab/paths.sh ; $BINDIR/initscripts/fstab-generator-finish'
 Restart=no
 
 [Install]

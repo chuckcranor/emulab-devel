@@ -46,7 +46,7 @@ if ($EUID != 0) {
 }
 
 # Script specific goo
-my $RPMINSTALL  = "/usr/local/bin/install-rpm %s %s";
+my $RPMINSTALL  = "$LBINDIR/install-rpm %s %s";
 my $RPMDBFILE   = "$DBDIR/testbed.rpms";
 
 #

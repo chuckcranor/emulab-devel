@@ -6,4 +6,4 @@ Wants=systemd-networkd.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/etc/emulab/emulab-networkd.sh %i
+ExecStart=/bin/sh -c ". /etc/emulab/paths.sh ; exec $BINDIR/emulab-networkd.sh %i"

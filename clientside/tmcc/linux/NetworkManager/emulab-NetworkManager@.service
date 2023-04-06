@@ -1,0 +1,9 @@
+[Unit]
+Description=Emulab NetworkManager on %I
+DefaultDependencies=no
+Before=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c ". /etc/emulab/paths.sh ; $BINDIR/emulab-NetworkManager.sh %i"

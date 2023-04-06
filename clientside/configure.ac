@@ -103,9 +103,13 @@ AC_SUBST(CLIENT_BINDIR)
 AC_SUBST(CLIENT_VARDIR)
 AC_SUBST(CLIENT_MANDIR)
 CLIENT_ETCDIR="/etc/emulab"
-CLIENT_BINDIR="/usr/local/etc/emulab"
+if test "$prefix" = "/usr/local"; then
+    CLIENT_BINDIR="$prefix/etc/emulab"
+else
+    CLIENT_BINDIR="$libexecdir/emulab"
+fi
 CLIENT_VARDIR="/var/emulab"
-CLIENT_MANDIR="/usr/local/man"
+CLIENT_MANDIR="$prefix/man"
 
 # XXX compat. We have no business expanding these on the client side!
 AC_SUBST(PROJROOT_DIR)
@@ -336,6 +340,9 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/ubuntu20/GNUmakefile \
 	  tmcc/ubuntu20-ms/GNUmakefile \
 	  tmcc/ubuntu20-ppc64le/GNUmakefile \
+	  tmcc/ubuntu22/GNUmakefile \
+	  tmcc/ubuntu22-ms/GNUmakefile \
+	  tmcc/ubuntu22-ppc64le/GNUmakefile \
 	  tmcc/linux-ms/GNUmakefile \
 	  tmcc/archlinux/GNUmakefile \
 	  tmcc/alpine/GNUmakefile \
@@ -352,6 +359,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/centos6/GNUmakefile \
 	  tmcc/centos7/GNUmakefile \
 	  tmcc/centos8/GNUmakefile \
+	  tmcc/centos9/GNUmakefile \
 	  tmcc/onie/GNUmakefile \
 	  tip/GNUmakefile \
 	  xmlrpc/GNUmakefile xmlrpc/emulabclient.py \

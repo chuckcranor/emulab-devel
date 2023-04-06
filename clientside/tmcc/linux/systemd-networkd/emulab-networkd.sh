@@ -31,7 +31,7 @@ while [ ! $found -eq 1 ]; do
     # means we have to check *which* interface came up; this is how we
     # determine if it was our interface or not.
     #
-    /lib/systemd/systemd-networkd-wait-online --ignore=lo -q -i "$iface" --timeout 20 > /dev/null 2>&1
+    /lib/systemd/systemd-networkd-wait-online --ignore=lo -q --any --timeout 20 > /dev/null 2>&1
     #networkctl status | grep -qi 'state: *routable'
     if [ $? -eq 0 ]; then
 	networkctl status "$iface" | grep -qi configured
@@ -46,10 +46,6 @@ while [ ! $found -eq 1 ]; do
 	    #
 	    echo "CriticalConnection=yes" >> /run/systemd/network/${iface}.network
 	    found=1
-	    if [ -e $STATICRUNDIR/emulab-networkd/${iface}.network.tail ]; then
-		cat $STATICRUNDIR/emulab-networkd/${iface}.network.tail \
-		    >> /run/systemd/network/${iface}.network
-	    fi
 	fi
     fi
 done
@@ -65,43 +61,47 @@ done
 # leave it running; running `networkctl` will bring it right back.  It
 # is less invasive than networkmanager, so this should be fine.
 #
-if [ $found -eq 1 ]; then
-    echo "emulab-networkd[$$]: found $iface as control net"
-    controlif=`cat /run/cnet`
-    for file in `ls -1 /run/systemd/network/*.network | grep -v $controlif.network`; do
-	grep -q "Description=.*Emulab" $file
-	if [ ! $? -eq 0 ]; then
-	    echo "`date`: ${iface}: $file is not ours; ignoring" >>$LOGFILE 2>&1
-	    continue
-	fi
-	ifa=`echo $file | sed -ne 's|^.*/network/\([^\.]*\)\.network$|\1|p'`
-	rm -f $file
-	# Check to see if our file was being used to manage this iface,
-	# or if it got overridden.
-	networkctl status $ifa | grep -q "Network File: $file"
-	if [ $? -eq 0 ]; then
-	    ip link set $ifa down
-	    echo "`date`: ${iface}: downed $ifa" >>$LOGFILE 2>&1
-	else
-	    echo "`date`: ${iface}: our .network for $ifa was overridden; just removing our .network file" >>$LOGFILE 2>&1
-	fi
-    done
-    #
-    # Restart systemd-networkd so its management status as shown via
-    # networkctl is correct; we manage the other ifaces.
-    #
-    echo "`date`: ${iface}: restarting systemd-networkd" >>$LOGFILE 2>&1
-    systemctl restart systemd-networkd
-    # Sadly, this does not get the network-online.target back into the
-    # alive state, but we try; it was already hit, and restarting
-    # systemd-networkd inactivates it.  But this seems to cause no
-    # systemic harm.
-    systemctl restart systemd-networkd-wait-online
+if [ ! $found -eq 1 ]; then
+    echo "`date`: ${iface}: control net is not us, exiting" >>$LOGFILE 2>&1
+    exit 0
 fi
+
+# Possibly add user customization to the .network file
+if [ -e $STATICRUNDIR/emulab-networkd/${iface}.network.tail ]; then
+    cat $STATICRUNDIR/emulab-networkd/${iface}.network.tail \
+    	>> /run/systemd/network/${iface}.network
+fi
+
+echo "emulab-networkd[$$]: found $iface as control net"
+controlif=`cat /run/cnet`
+for file in `ls -1 /run/systemd/network/*.network | grep -v $controlif.network`; do
+    grep -q "Description=.*Emulab" $file
+    if [ ! $? -eq 0 ]; then
+	echo "`date`: ${iface}: $file is not ours; ignoring" >>$LOGFILE 2>&1
+	continue
+    fi
+    ifa=`echo $file | sed -ne 's|^.*/network/\([^\.]*\)\.network$|\1|p'`
+    rm -f $file
+    # Check to see if our file was being used to manage this iface,
+    # or if it got overridden.
+    networkctl status $ifa | grep -q "Network File: $file"
+    if [ $? -eq 0 ]; then
+	ip link set $ifa down
+	echo "`date`: ${iface}: downed $ifa" >>$LOGFILE 2>&1
+    else
+	echo "`date`: ${iface}: our .network for $ifa was overridden; just removing our .network file" >>$LOGFILE 2>&1
+    fi
+done
 
 #
 # Write some metadata in /var/emulab/boot.  The
 # /run/systemd/netif/leases/<ifindex> file has what we need.
+#
+# NB: do the metadata writes before restarting systemd-networkd below.  That
+# can introduce a race on some systems (e.g. Ubuntu 22 on m400) because
+# network-online.target will have been reached, and if systemd-networkd is
+# slow to restart, the testbed service might fire before we have written the
+# metadata.
 #
 mkdir -p $BOOTDIR
 mkdir -p /run/emulab
@@ -123,14 +123,30 @@ else
     exit 1
 fi
 
-# Actually do the metadata file writes.    
-echo $SERVER_ADDRESS > $BOOTDIR/bossip
+# Actually do the metadata file writes.
+#echo $SERVER_ADDRESS > $BOOTDIR/bossip
+BOSSIP=`echo $DNS | cut -d' ' -f1`
+echo $BOSSIP > $BOOTDIR/bossip
+echo $BOSSIP > /run/emulab/bossip
 echo $HOSTNAME > $BOOTDIR/realname
 echo $ROUTER > $BOOTDIR/routerip
 echo $ADDRESS > $BOOTDIR/myip
 echo $NETMASK > $BOOTDIR/mynetmask
 echo $DOMAINNAME > $BOOTDIR/mydomain
 echo $iface > $BOOTDIR/controlif
+
+#
+# Restart systemd-networkd so its management status as shown via
+# networkctl is correct; we manage the other ifaces.
+#
+echo "`date`: ${iface}: restarting systemd-networkd" >>$LOGFILE 2>&1
+systemctl restart systemd-networkd
+# Sadly, this does not get the network-online.target back into the
+# alive state, but we try; it was already hit, and restarting
+# systemd-networkd inactivates it.  But this seems to cause no
+# systemic harm.
+systemctl restart systemd-networkd-wait-online
+
 #
 # For Xen-based vnodes we record the vnode name where the scripts expect it.
 # XXX this works because only Xen-based vnodes DHCP.

@@ -62,7 +62,7 @@ my $me = "create-swapimage";
 # No configure vars.
 #
 my $sudo   = "/usr/local/bin/sudo";
-my $zipperdir = "/usr/local/bin";
+my $zipperdir = "$LBINDIR";
 my $zipperbin = "imagezip";
 my $zipper = "$zipperdir/$zipperbin";
 my $device;

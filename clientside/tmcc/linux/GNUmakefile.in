@@ -28,6 +28,7 @@
 # on a testbed node before cutting an image.
 #
 #
+PREFIX		= @prefix@
 SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= @top_builddir@
@@ -51,7 +52,7 @@ ETCDIR		?= $(DESTDIR)$(CLIENT_ETCDIR)
 BINDIR		?= $(DESTDIR)$(CLIENT_BINDIR)
 VARDIR		?= $(DESTDIR)$(CLIENT_VARDIR)
 VSDIR		?= $(BINDIR)/vserver
-LBINDIR		?= $(DESTDIR)/usr/local/bin
+LBINDIR		?= $(DESTDIR)$(PREFIX)/bin
 RCDIR		?= $(SYSETCDIR)/rc.d
 INSTALL		?= /usr/bin/install -c 
 COMMON		?= $(SRCDIR)/../common
@@ -182,7 +183,9 @@ dir-install:
 	-rm -rf $(DESTDIR)/etc/testbed
 	ln -s emulab $(DESTDIR)/etc/testbed
 	-rm -rf $(DESTDIR)/usr/local/etc/testbed
-	ln -s emulab $(DESTDIR)/usr/local/etc/testbed
+	@if [ -d $(DESTDIR)/usr/local/etc/emulab ]; then \
+		ln -s emulab $(DESTDIR)/usr/local/etc/testbed ; \
+	fi
 
 systemd-dir-install: dir-install
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
@@ -204,6 +207,7 @@ xen-dir-install: dir-install
 		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/network-online.target.wants ; \
 	fi
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSLIBDIR)/xen-$(XENVERS)/lib/python/grub
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/default/grub.d
 
 common-install:	dir-install
 	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)
@@ -223,11 +227,15 @@ bin-install:	dir-install
 	$(INSTALL) -m 755 ../dostype$(EXE) $(BINDIR)/dostype$(EXE)
 
 etc-install:	dir-install sysetc-remove sysetc-install
-	$(INSTALL) -m 644 $(SRCDIR)/group $(ETCDIR)/group
-	$(INSTALL) -m 644 $(SRCDIR)/passwd $(ETCDIR)/passwd
-	$(INSTALL) -m 600 $(SRCDIR)/shadow $(ETCDIR)/shadow
-	$(INSTALL) -m 600 $(SRCDIR)/gshadow $(ETCDIR)/gshadow
-	$(INSTALL) -m 644 $(SRCDIR)/hosts $(ETCDIR)/hosts
+	if [ "$(NOPASSWD)" != "1" ]; then \
+		$(INSTALL) -m 644 $(SRCDIR)/group $(ETCDIR)/group ; \
+		$(INSTALL) -m 644 $(SRCDIR)/passwd $(ETCDIR)/passwd ; \
+		$(INSTALL) -m 600 $(SRCDIR)/shadow $(ETCDIR)/shadow ; \
+		$(INSTALL) -m 600 $(SRCDIR)/gshadow $(ETCDIR)/gshadow ; \
+	fi
+	if [ "$(NOHOSTS)" != "1" ]; then \
+		$(INSTALL) -m 644 $(SRCDIR)/hosts $(ETCDIR)/hosts ; \
+	fi
 
 sysetc-install:	dir-install ifcfgs sysetc-install-$(INITTYPE)
 	$(INSTALL) -m 755 $(SRCDIR)/dhclient-enter-hooks $(SYSETCDIR)/dhclient-enter-hooks
@@ -553,3 +561,77 @@ docker-install:	dir-install
 
 docker-guest-install:
 	$(INSTALL) -m 755 $(SRCDIR)/docker/prepare $(BINDIR)/prepare
+
+systemd-networkd-install:
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/systemd-networkd.service.requires
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/systemd-networkd.socket.requires
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev/rules.d
+
+	$(INSTALL) -m 644 $(SRCDIR)/systemd-networkd/emulab-networkd@.service \
+		$(DESTDIR)/etc/systemd/system/emulab-networkd@.service
+	$(INSTALL) -m 644 $(SRCDIR)/systemd-networkd/emulab-udev-settle-networkd.service \
+		$(SYSETCDIR)/systemd/system/emulab-udev-settle-networkd.service
+	ln -sf ../emulab-udev-settle-networkd.service \
+		$(SYSETCDIR)/systemd/system/systemd-networkd.service.requires/emulab-udev-settle-networkd.service
+	ln -sf ../emulab-udev-settle-networkd.service \
+		$(SYSETCDIR)/systemd/system/systemd-networkd.socket.requires/emulab-udev-settle-networkd.service
+
+	$(INSTALL) -m 755 $(SRCDIR)/systemd-networkd/emulab-networkd.sh \
+		$(BINDIR)/emulab-networkd.sh
+	$(INSTALL) -m 755 $(SRCDIR)/systemd-networkd/emulab-networkd-udev-helper.sh \
+		$(BINDIR)/emulab-networkd-udev-helper.sh
+	$(INSTALL) -m 755 $(SRCDIR)/systemd-networkd/emulab-udev-settle-networkd.sh \
+		$(BINDIR)/emulab-udev-settle-networkd.sh
+
+	$(INSTALL) -m 644 $(SRCDIR)/systemd-networkd/99-emulab-networkd.rules \
+		$(SYSETCDIR)/udev/rules.d/99-emulab-networkd.rules
+	$(INSTALL) -m 644 $(SRCDIR)/systemd-networkd/01-disable-bluefield-nvme.rules \
+		$(SYSETCDIR)/udev/rules.d/01-disable-bluefield-nvme.rules
+
+	# Kick the init process to read our newly-installed unit files
+	# (i.e., so an immediate tbprepare will work...)
+	@if [ -z "$(DESTDIR)" ]; then \
+	    systemctl daemon-reload || /bin/true; \
+	fi
+
+NetworkManager-install:
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/NetworkManager
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/NetworkManager/conf.d
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/NetworkManager.service.requires
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev/rules.d
+
+	$(INSTALL) -m 644 $(SRCDIR)/NetworkManager/90-emulab.conf \
+		$(DESTDIR)/etc/NetworkManager/conf.d/90-emulab.conf
+
+	$(INSTALL) -m 644 $(SRCDIR)/NetworkManager/emulab-NetworkManager@.service \
+		$(DESTDIR)/etc/systemd/system/emulab-NetworkManager@.service
+	$(INSTALL) -m 644 $(SRCDIR)/NetworkManager/emulab-udev-settle-NetworkManager.service \
+		$(SYSETCDIR)/systemd/system/emulab-udev-settle-NetworkManager.service
+	ln -sf ../emulab-udev-settle-NetworkManager.service \
+		$(SYSETCDIR)/systemd/system/NetworkManager.service.requires/emulab-udev-settle-NetworkManager.service
+
+	$(INSTALL) -m 755 $(SRCDIR)/NetworkManager/emulab-NetworkManager.sh \
+		$(BINDIR)/emulab-NetworkManager.sh
+	$(INSTALL) -m 755 $(SRCDIR)/NetworkManager/emulab-NetworkManager-udev-helper.sh \
+		$(BINDIR)/emulab-NetworkManager-udev-helper.sh
+	$(INSTALL) -m 755 $(SRCDIR)/NetworkManager/emulab-udev-settle-NetworkManager.sh \
+		$(BINDIR)/emulab-udev-settle-NetworkManager.sh
+
+	$(INSTALL) -m 644 $(SRCDIR)/NetworkManager/99-emulab-NetworkManager.rules \
+		$(SYSETCDIR)/udev/rules.d/99-emulab-NetworkManager.rules
+	$(INSTALL) -m 644 $(SRCDIR)/NetworkManager/01-disable-bluefield-nvme.rules \
+		$(SYSETCDIR)/udev/rules.d/01-disable-bluefield-nvme.rules
+
+	# Kick the init process to read our newly-installed unit files
+	# (i.e., so an immediate tbprepare will work...)
+	@if [ -z "$(DESTDIR)" ]; then \
+	    systemctl daemon-reload || /bin/true; \
+	fi

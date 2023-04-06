@@ -45,7 +45,7 @@
 static char	*progname;
 static int	debug = 0;
 static int	verbose = 0;
-static char     *ifdynconfig = "/usr/local/etc/emulab/ifdynconfig";
+static char     *ifdynconfig = CLIENT_BINDIR "/ifdynconfig";
 
 static void	callback(event_handle_t handle,
 			 event_notification_t notification, void *data);

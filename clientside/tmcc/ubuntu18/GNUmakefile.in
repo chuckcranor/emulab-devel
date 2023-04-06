@@ -56,36 +56,37 @@ COMMON		= $(SRCDIR)/../common
 DEFRUNLVLDIR   ?= $(SYSETCDIR)/rc3.d
 # group to use for directories (dir-install)
 DIRGROUP	?= root
+ifeq ($(NETWORKTARGETS),)
+NETWORKTARGETS := systemd-networkd
+endif
+ifeq ($(NETWORKTARGETS),none)
+NETWORKTARGETS :=
+endif
 
 install client-install:	common-install etc-install \
 			script-install bin-install sysetc-fixup sysetc-install \
-			systemd-install
+			systemd-install network-install
 	@echo "Remember to install the PEM files if necessary"
 
 simple-install:	common-install script-install bin-install
 
 dir-install:
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/initramfs-tools
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/initramfs-tools/conf.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/network
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/rsyslog.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/sudoers.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system
-	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/systemd-networkd.service.requires
-	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/systemd-networkd.socket.requires
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
-	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev
-	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev/rules.d
-	$(INSTALL) -m 755 -o root -g root -d $(DESTDIR)/lib/systemd/system
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/default
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/ssh
 
 common-install:	dir-install
 	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)
 
 bin-install:	dir-install
 	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) USES_SYSTEMD=1 bin-install)
-	$(INSTALL) -m 755 $(SRCDIR)/emulab-networkd.sh \
-		$(BINDIR)/emulab-networkd.sh
-	$(INSTALL) -m 755 $(SRCDIR)/emulab-networkd-udev-helper.sh \
-		$(BINDIR)/emulab-networkd-udev-helper.sh
 
 etc-install:	dir-install common-sysetc-install
 	if [ "$(NOPASSWD)" != "1" ]; then \
@@ -113,46 +114,11 @@ sysetc-install:	dir-install
 	$(INSTALL) -m 644 $(SRCDIR)/rsyslog-emulab.conf $(SYSETCDIR)/rsyslog.d/40-emulab.conf
 	rm -f $(SYSETCDIR)/rsyslog.d/60-emulab.conf
 	$(INSTALL) -m 644 $(SRCDIR)/sudoers $(SYSETCDIR)/sudoers.d/99-emulab
+	$(INSTALL) -m 644 $(SRCDIR)/initramfs-emulab.conf $(SYSETCDIR)/initramfs-tools/conf.d/90-emulab
+	$(INSTALL) -m 644 $(SRCDIR)/grub-defaults $(SYSETCDIR)/default/grub
 	@if [ -z "$(NONTP)" ]; then \
 		$(INSTALL) -m 644 $(SRCDIR)/ntp.conf $(SYSETCDIR)/ntp.conf; \
 		$(INSTALL) -m 644 -o ntp -g ntp /dev/null /var/lib/ntp/ntp.drift ; \
-	fi
-	$(INSTALL) -m 644 $(SRCDIR)/99-emulab-networkd.rules \
-		$(SYSETCDIR)/udev/rules.d/99-emulab-networkd.rules
-
-systemd-install: dir-install
-	#$(INSTALL) -m 644 $(SRCDIR)/ifup-wait-emulab-cnet.service \
-	#	 $(SYSETCDIR)/systemd/system/ifup-wait-emulab-cnet.service
-	#$(INSTALL) -m 644 $(SRCDIR)/ifup-wait-emulab-cnet.service \
-	#	 $(ETCDIR)/ifup-wait-emulab-cnet.service
-	#rm -f $(SYSETCDIR)/systemd/system/network-online.target.wants/ifup-wait-all-auto.service
-	#ln -sf ../ifup-wait-emulab-cnet.service \
-	#	$(SYSETCDIR)/systemd/system/network-online.target.wants/ifup-wait-emulab-cnet.service
-	#$(INSTALL) -m 644 $(SRCDIR)/networking-emulab.service \
-	#	$(SYSETCDIR)/systemd/system/networking-emulab.service
-	#ln -sf ../networking-emulab.service \
-	#	$(SYSETCDIR)/systemd/system/networking.service.wants/networking-emulab.service
-	#ln -sf ../networking-emulab.service \
-	#	$(SYSETCDIR)/systemd/system/network-online.target.wants/networking-emulab.service
-	#@if [ -z "$(NONTP)" ]; then \
-	#	$(INSTALL) -m 644 $(SRCDIR)/ntp.service $(SYSETCDIR)/systemd/system ; \
-	#	ln -sf ../ntp.service \
-	#		$(SYSETCDIR)/systemd/system/multi-user.target.wants/ntp.service ; \
-	#fi
-	# NB: this *has* to go into /lib/systemd/system, not /etc -- it will
-	# not work if in /etc.
-	$(INSTALL) -m 644 $(SRCDIR)/emulab-networkd@.service \
-		$(DESTDIR)/lib/systemd/system/emulab-networkd@.service
-	$(INSTALL) -m 644 $(SRCDIR)/emulab-udev-settle.service \
-		$(SYSETCDIR)/systemd/system/emulab-udev-settle.service
-	ln -sf ../emulab-udev-settle.service \
-		$(SYSETCDIR)/systemd/system/systemd-networkd.service.requires/emulab-udev-settle.service
-	ln -sf ../emulab-udev-settle.service \
-		$(SYSETCDIR)/systemd/system/systemd-networkd.socket.requires/emulab-udev-settle.service
-	# Kick the init process to read our newly-installed unit files
-	# (i.e., so an immediate tbprepare will work...)
-	@if [ -z "$(DESTDIR)" ]; then \
-	    systemctl daemon-reload || /bin/true; \
 	fi
 
 script-install:	dir-install $(SCRIPTS)
@@ -161,3 +127,13 @@ script-install:	dir-install $(SCRIPTS)
 genirack-install:
 
 sfs-install:
+
+systemd-install: dir-install
+
+network-install: $(addsuffix -install,$(NETWORKTARGETS))
+
+systemd-networkd-install:
+	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) systemd-networkd-install)
+
+NetworkManager-install:
+	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) NetworkManager-install)

@@ -57,7 +57,7 @@ DEFRUNLVLDIR   ?= $(SYSETCDIR)/rc3.d
 
 install client-install:	common-install etc-install \
 			script-install bin-install sysetc-fixup sysetc-install \
-			systemd-install
+			systemd-install network-install
 	@echo "Remember to install the PEM files if necessary"
 
 simple-install:	common-install script-install bin-install
@@ -92,6 +92,9 @@ sysetc-install:	dir-install
 
 systemd-install: dir-install
 	(cd ../ubuntu20; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) systemd-install)
+
+network-install:
+	(cd ../ubuntu20; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) network-install)
 
 script-install:	dir-install $(SCRIPTS)
 	(cd ../ubuntu20; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) script-install)

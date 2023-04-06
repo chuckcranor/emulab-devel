@@ -101,20 +101,44 @@ fi
 # Discover the root device (and make sure to avoid multiple / entries on
 # Fedora with the final grep for a real /dev device, because Fedora
 # registers multiple mounts of /).
-rootdev=`cat /proc/mounts | cut -d ' ' -f 1,2 | grep ' \/$' | cut -d ' ' -f 1 | grep '\/dev'`
-# See if this is an NVME device (or any device with a pX style name).
-partdev=`echo $rootdev | sed -n -r -e 's/^.*[0-9]+(p)[0-9]+$/\1/p'`
-if [ "x$partdev" = "x" ]; then
-    # Strip its partition.
-    rootdisk=`echo $rootdev | sed -n -r -e 's/^(.*[^0-9])[0-9]*$/\1/p'`
-else
-    rootdisk=`echo $rootdev | sed -n -r -e 's/^(.*[0-9]+)p[0-9]+$/\1/p'`
+rootdev=`grep ' / ' /proc/mounts | cut -d' ' -f1 | sed -e 's|^/dev/||'`
+if [ -z "$rootdev" ]; then
+    echo "WARNING: could not find valid root device, aborting"
+    exit 0
 fi
+if [ -L /dev/$rootdev ]; then
+    rootdev=`readlink -f /dev/$rootdev | sed -e 's|^/dev/||'`
+fi
+rootdiskpath=`readlink -f /sys/class/block/$rootdev/../`
+rootdisk=`basename $rootdiskpath`
+if [ -z "$rootdiskpath" -o -z "$rootdisk" ]; then
+    echo "WARNING: could not find root device parent, aborting"
+    exit 0
+fi
+rootdevname=$rootdev
+rootdiskname=$rootdisk
+rootdev="/dev/$rootdev"
+rootdisk="/dev/$rootdisk"
+
 emulabswapdev=""
 if [ -n "$rootdisk" ]; then
     emulabswapdev=`fdisk -l $rootdisk | grep 'Linux swap' | cut -d ' ' -f 1`
 fi
 haveemulabswap=0
+
+#
+# If this is a GPT disk, dynamically add a swap device, unless NEVERMKSWAP.
+#
+fdisk -l $rootdisk | grep -qi "Disklabel type: gpt"
+if [ $? -eq 0 -a -z "$emulabswapdev" -a ! $NEVERMKSWAP -eq 1 ]; then
+    echo "Creating dynamic GPT swap partition..."
+
+    (/bin/echo -e 'n\n99\n-16777216\n\n8200\nw\ny\n' | gdisk $rootdisk ) \
+	&& partprobe \
+	|| ( echo "ERROR: failed to create dynamic GPT swap partition" )
+
+    emulabswapdev=`fdisk -l $rootdisk | grep 'Linux swap' | cut -d ' ' -f 1`
+fi
 
 logit() {
     echo "$PROG[$$]: $@" >/dev/kmsg

@@ -103,7 +103,7 @@ my $SFDISK	= "/sbin/sfdisk";
 my $SGDISK	= "/sbin/sgdisk";
 my $GDISK	= "/sbin/gdisk";
 my $PPROBE	= "/sbin/partprobe";
-my $FRISBEE     = "/usr/local/bin/frisbee";
+my $FRISBEE     = "$LBINDIR/frisbee";
 my $HDPARM	= "/sbin/hdparm";
 
 my $FSTAB	= "/etc/fstab";
