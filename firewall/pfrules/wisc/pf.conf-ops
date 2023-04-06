@@ -38,8 +38,7 @@ MOTHERSHIP      = "155.98.32.70"
 # Services. We do not actually have real variable substitution. 
 #
 DOCKER		= "5080"
-# Ops allows the ephemeral port range.
-TCP_SERVICES	= "{ ssh, domain, smtp, www, https, 49152:65535, 5080 }"
+TCP_SERVICES	= "{ ssh, domain, smtp, www, https, 5080 }"
 UDP_SERVICES	= "{ domain }"
 
 # I added traceroute.

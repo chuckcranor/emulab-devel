@@ -40,14 +40,13 @@ MOTHERSHIP      = "155.98.32.70"
 # so these definitions serve as documentation.
 #
 DOCKERREG	= "5080"
-SHELLINABOX	= "49152:65535"
 
-TCP_SERVICES	= "{ ssh, smtp, www, https, 49152:65535, 5080 }"
+TCP_SERVICES	= "{ ssh, smtp, www, https, 5080 }"
 UDP_SERVICES	= "{ domain }"
 
 # Externally visible (TCP) services. These are rate limited.
 # For Onelab, disallow SMTP access to keep the local secops happy
-EXTERNAL_SERVICES = "{ ssh, www, https, 49152:65535, 5080 }"
+EXTERNAL_SERVICES = "{ ssh, www, https, 5080 }"
 
 # I added traceroute.
 ICMP_TYPES	= "{ echoreq, trace }"
