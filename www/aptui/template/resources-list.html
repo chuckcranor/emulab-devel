@@ -1,0 +1,177 @@
+<style type="text/css">
+ .nowrap {  white-space: nowrap; }
+
+ .hidden-column {
+     display: none;
+ }
+</style>
+<div>
+  <table class='tablesorter' id='resources-table'>
+    <thead>
+      <% if (showReserved) { %>
+	<tr>
+	  <% if (showProject) { %>
+            <th class='sorter-false' colspan=6></th>
+	  <% } else { %>
+            <th class='sorter-false' colspan=5></th>
+	  <% } %>
+          <th class='sorter-false text-center' colspan=2>Reserved
+	    <a href='#' class='btn btn-xs' id="resources-help-button"
+	       data-toggle='tooltip' data-bs-toggle='tooltip'
+	       data-container="body" data-bs-container="body"
+	       data-trigger="hover" data-bs-trigger="hover"
+	       title='Click for more info'
+	       style="margin-bottom: 3px;
+		      padding-left: 0px;
+	              padding-right: 0px;">
+	      <span class='glyphicon glyphicon-question-sign'></span></a>
+	  </th>
+	  <% if (showPortal) { %>
+            <th class='sorter-false' colspan=3></th>
+	  <% } else { %>
+            <th class='sorter-false' colspan=2></th>
+	  <% } %>
+	</tr>
+      <% } %>
+      <tr>
+	<th>Experiment</th>
+	<th>Creator</th>
+	<% if (showProject) { %>
+	  <th>Project</th>
+	<% } %>
+	<th>Cluster</th>
+	<th>Type</th>
+	<th>Using</th>
+	<% if (showReserved) { %>
+	  <th>By User</th>
+	  <th>By Project</th>
+	<% } %>
+	<% if (showPortal) { %>
+	  <th>Portal</th>
+	<% } %>
+	<th class="sortInitialOrder-desc" data-filter="false">Created</th>
+	<th data-filter="false">Expires</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% _.each(resources, function(aggregates, uuid) { %>
+	<% _.each(aggregates, function(details, aggregate_urn) { %>
+	  <%
+	      var utotals = null;
+
+	      if (showReserved &&
+		  _.has(user_totals, aggregate_urn) &&
+		  _.has(user_totals[aggregate_urn], details.creator)) {
+		utotals = user_totals[aggregate_urn][details.creator];
+	      }
+	  %>
+	  <% _.each(details.typelist, function(count, type) { %>
+	    <% if (type == "blockstore" && !showBlockstores) { return; } %>
+	    <% if (type == "pcvm" && !showVMs) { return; } %>
+	    <tr>
+	      <td>
+		<a href="status.php?uuid=<%- uuid %>" target="_blank">
+		  <%- details.name %></a>
+	      </td>
+	      <td>
+		<a href="user-dashboard.php?user=<%- details.creator %>"
+		   target="_blank"><%- details.creator %></a>
+	      </td>
+	      <% if (showProject) { %>
+		<td>
+		  <a href="show-project.php?pid=<%- details.pid %>"
+		     target="_blank"><%- details.pid %></a>
+		</td>
+	      <% } %>
+	      <td><%- details.cluster %></td>
+	      <td><%- type %></td>
+	      <td>
+		<% if (showReserved && _.has(details.reslist_proj, type)) { %>
+		  <% if (!_.has(details.reslist_user, type) ||
+		         utotals[type] > details.reslist_user[type]) { %>
+		    <span class="text-danger"><b><%- count %></b></span>
+		  <% } else { %>
+		    <%- count %>
+		  <% } %>
+		<% } else { %>
+		  <%- count %>
+		<% } %>
+	      </td>
+	      <% if (showReserved) { %>
+		<td>
+		  <% if (_.has(details.reslist_user, type)) { %>
+		    <%- details.reslist_user[type] %>
+		  <% } else { %>
+		    0
+		  <% } %>
+		</td>
+		<td>
+		  <% if (_.has(details.reslist_proj, type)) { %>
+		    <%- details.reslist_proj[type] %>
+		  <% } else { %>
+		    0
+		  <% } %>
+		</td>
+	      <% } %>
+	      <% if (showPortal) { %>
+		<td><%- details.portal %></td>
+	      <% } %>
+	      <td class="format-date nowrap">
+		<%- details.started %></td>
+	      <td class="format-date nowrap">
+		<%- details.expires %></td>
+	    </tr>
+	  <% }); %>
+	<% }); %>
+      <% }); %>
+    </tbody>
+  </table>
+</div>
+<div id='resources-help-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
+
+	<div class="mt-3">
+	  This information is intended to help you determine who in
+	  your project has active reservations for node types that are
+	  being used in your project.
+	  Since reservations are per-project (anyone in your
+	  project can use the nodes), you will sometimes get into a
+	  situation where you have nodes reserved, but another member of
+	  the project is using them, and thus you are not able to start
+	  your experiments. This table can help you figure out who in
+	  your project to contact.
+	</div>
+
+	<div class="m-3">
+	  <div class="mt-3">
+	    <b>By User: </b>Total number of nodes of this type,
+	    reserved by the user who
+	    started this experiment (active reservations,
+	    not future reservations). Zero means the user does not
+	    have any active reservations for the node type.
+	  </div>
+
+	  <div class="mt-3">
+	    <b>By Project: </b>Total number of nodes of this type,
+	    reserved by the project (active reservations, not future
+	    reservations). This includes all reservations by all users
+	    in the project.  Zero means there are no active reservations
+	    in the project for nodes of this type.
+	  </div>
+	</div>
+	<div>
+	  <span class="text-danger">Numbers (in this color)</span>
+	  in the <b>Using</b>
+	  column indicate a user that has allocated more nodes than
+	  they have reserved (but only if other users in the project have
+	  reservations for them).
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
