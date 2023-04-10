@@ -1,0 +1,122 @@
+#
+# This is derived from the pf rules at Wisconsin that were created
+# by Mike Blodgett and Brian Kroth. 
+# 
+
+#
+# Configure variables eventually.
+#
+PUBLIC_IF	= "xn0"
+PUBLIC_NET	= $PUBLIC_IF:network
+VM_NET		= "172.16.0.0/12"
+
+#
+# Local network segments. Might be a flat network or one large net.
+# At wisconsin it is two non contigous networks. 
+#
+LOCALNETS	= "{ 130.127.132.0/22 }"
+CAMPUSNETS	= "{ }"
+#
+# Various NS servers we allow. 
+#
+NS_ADDRS	= "{ 130.127.132.51 \
+                     155.98.32.70, 155.98.60.2, 155.99.144.4 }"
+
+#
+# Various other network definitions that are allowed access.
+#
+FLUX		= "155.98.60.0/24"
+EMULAB		= "155.98.32.0/23"
+CLEMSON		= "130.127.132.0/22"
+MOONSHOT	= "{ 128.110.156.0/24, 128.110.216.0/21 }"
+APT		= "{ 128.110.100.0/24, 128.110.96.0/22 }"
+WISCONSIN	= "{ 128.104.222.0/23, 128.105.144.0/22 }"
+MOTHERSHIP      = "155.98.32.70"
+
+#
+# Services. We do not actually have real variable substitution. 
+#
+DOCKER		= "5080"
+TCP_SERVICES	= "{ ssh, domain, smtp, www, https, 5080 }"
+UDP_SERVICES	= "{ domain }"
+
+# Externally visible (TCP) services. These are rate limited.
+EXTERNAL_SERVICES = "{ ssh, smtp, www, https, 5080 }"
+
+# I added traceroute.
+ICMP_TYPES	= "{ echoreq, trace }"
+
+# For brute force attacks, see rules below.
+table <bruteforce> persist
+
+# For the fail2ban package.
+table <fail2ban> persist
+
+# Arbitrary limits. :-)
+set limit { states 40000, frags 20000, src-nodes 20000 }
+
+# Clears the dont-fragment bit from a matching IP packet.
+scrub in all no-df
+
+# Make sure that MOTHERSHIP boss does not get locked out.
+pass in quick inet proto tcp from $MOTHERSHIP to $PUBLIC_IF no state
+pass out quick inet proto tcp from $PUBLIC_IF to $MOTHERSHIP no state
+
+# Drop brute force attackers right away.
+block quick log from <bruteforce>
+block quick log from <fail2ban>
+
+# This is the rule that applies if nothing below passes it. 
+block return in all
+
+pass in quick on lo0
+pass in quick on lo0 proto ipv6
+
+# DNS traffic, no state.
+pass in quick inet proto udp from any to $LOCALNETS port domain no state
+pass out quick inet proto udp from any port domain to any no state
+
+# Pass everything around locally
+pass in quick from $LOCALNETS to $LOCALNETS
+pass in quick from $VM_NET to $LOCALNETS
+
+# ICMP from a limited set of networks.
+#pass in quick inet proto icmp from $CAMPUSNETS to any icmp-type $ICMP_TYPES
+pass in quick inet proto icmp from $FLUX to any icmp-type $ICMP_TYPES
+pass in quick inet proto icmp from $EMULAB to any icmp-type $ICMP_TYPES
+
+# In case more services are added to UDP_SERVICES above (besides domain)
+pass in quick inet proto udp from $LOCALNETS to $LOCALNETS port $UDP_SERVICES
+pass in quick inet proto udp from $VM_NET to $LOCALNETS port $UDP_SERVICES
+pass in quick inet proto udp from $FLUX to $LOCALNETS port $UDP_SERVICES
+pass in quick inet proto udp from $EMULAB to $LOCALNETS port $UDP_SERVICES
+pass in quick inet proto udp from $APT to $LOCALNETS port $UDP_SERVICES
+pass in quick inet proto udp from $CLEMSON to $LOCALNETS port $UDP_SERVICES
+pass in quick inet proto udp from $MOONSHOT to $LOCALNETS port $UDP_SERVICES
+pass out quick inet proto udp from any port $UDP_SERVICES to any 
+
+# Technically not needed, but matches boss rules.
+pass quick inet proto tcp from $LOCALNETS to $LOCALNETS port $TCP_SERVICES flags S/SA keep state
+pass quick inet proto tcp from $VM_NET to $LOCALNETS port $TCP_SERVICES flags S/SA keep state
+pass quick inet proto tcp from $FLUX to $LOCALNETS port $TCP_SERVICES flags S/SA keep state
+pass quick inet proto tcp from $EMULAB to $LOCALNETS port $TCP_SERVICES flags S/SA keep state
+pass quick inet proto tcp from $APT to $LOCALNETS port $TCP_SERVICES flags S/SA keep state
+pass quick inet proto tcp from $CLEMSON to $LOCALNETS port $TCP_SERVICES flags S/SA keep state
+pass quick inet proto tcp from $MOONSHOT to $LOCALNETS port $TCP_SERVICES flags S/SA keep state
+
+# No idea what this is about.
+pass inet proto udp from any to $LOCALNETS port 60000><61000
+
+# Limit simultaneous and connection rate. These limits seem too high.
+pass in quick inet proto tcp from any to $LOCALNETS port 22 \
+    flags S/SA keep state \
+    (max-src-conn 100, max-src-conn-rate 5/30, \
+    overload <bruteforce> flush global)
+
+# Ditto for all our exported services
+pass in quick inet proto tcp from any to $LOCALNETS port $EXTERNAL_SERVICES \
+    flags S/SA keep state \
+    (max-src-conn 100, max-src-conn-rate 15/30, \
+    overload <bruteforce> flush global)
+
+pass out all keep state
