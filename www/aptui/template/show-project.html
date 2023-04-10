@@ -33,6 +33,9 @@
 		    <a href="#resgroups" role="tab" class="nav-link"
 		       data-toggle="tab" data-bs-toggle="tab">Reservations</a></li>
 		<% } %>
+		<li role="presentation" class="nav-item hidden resources-hidden">
+		  <a href="#resources" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Resources</a></li>
 		<li role="presentation" class="nav-item">
 		  <a href="#members" role="tab" class="nav-link"
 		     data-toggle="tab" data-bs-toggle="tab">Members</a></li>
@@ -148,6 +151,10 @@
 		<div role="tabpanel" class="tab-pane hidden resgroups-hidden"
 		     id="resgroups">
 		  <div id="resgroups_content"></div>
+		</div>
+		<div role="tabpanel" class="tab-pane hidden resources-hidden"
+		     id="resources">
+		  <div id="resources_content"></div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="members">
 		  <div id="members_content"></div>

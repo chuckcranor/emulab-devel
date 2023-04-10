@@ -76,6 +76,8 @@ echo "  window.EMBEDDED_RESGROUPS = true;\n";
 echo "  window.EMBEDDED_RESGROUPS_SELECT = false;\n";
 echo "</script>\n";
 
+SpitAggregateStatus(true);
+
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
@@ -83,20 +85,18 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MARKED();
 REQUIRE_MOMENT();
+REQUIRE_JQUERY_UI();
 REQUIRE_TOPOLOGY_VIEWER();
 REQUIRE_TABLESORTER(
     array("js/lib/tablesorter/widgets/widget-filter-formatter-jui.js"));
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/profile-support.js");
-AddLibrary("js/lib/jquery-ui.js");
 
 AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
 SPITREQUIRE("js/show-project.js");
 
-AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal", "resgroup-list", "rfrange-history", "showtopo-modal"));
+AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal", "resgroup-list", "rfrange-history", "showtopo-modal", "resources-list"));
 
-echo "<link rel='stylesheet'
-            href='css/jquery-ui.min.css'>\n";
 echo "<link rel='stylesheet'
             href='css/tablesorter-filter.formatter.css'>\n";
 

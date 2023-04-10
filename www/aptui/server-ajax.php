@@ -397,6 +397,8 @@ $routing = array("geni-login" =>
                                                      "Do_NSF",
                                                  "SendotaAgreement" =>
                                                      "Do_SendotaAgreement",
+                                                 "ResourceList" =>
+                                                     "Do_ResourceList",
                               )
                         ),
 		 "groups" =>
@@ -771,6 +773,13 @@ $routing = array("geni-login" =>
 			      "guest"   => false,
 			      "methods" => array("EditTable" =>
                                                      "Do_EditTable",
+                              )
+                        ),
+		 "resources" =>
+			array("file"    => "resources.ajax",
+			      "guest"   => false,
+			      "methods" => array("ResourceList" =>
+                                                     "Do_ResourceList",
                               )
                         ),
 );

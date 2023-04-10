@@ -155,6 +155,7 @@ class Instance
     function isopenstack()  { return $this->field('isopenstack'); }
     function params()       { return $this->field('params'); }
     function paramdefs()    { return $this->field('paramdefs'); }
+    function portal()       { return $this->field('portal'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
     }
@@ -168,6 +169,17 @@ class Instance
     }
     function IsPNet() {
 	return preg_match('/phantomnet/', $this->servername());
+    }
+
+    function Slice() {
+        return GeniSlice::Lookup("sa", $this->slice_uuid());
+    }
+    function expires() {
+        $slice = $this->Slice();
+        if (!$slice) {
+            return null;
+        }
+        return $slice->expires();
     }
 
     # Grab the webtask. Backwards compat mode, see if there is one associated
@@ -1516,6 +1528,8 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                                   "isfederate"   => $aggregate->isfederate(),
                                   "abbreviation" => $aggregate->abbreviation(),
                                   "weburl"       => $aggregate->weburl(),
+                                  "reservable_nodes" =>
+                                           $aggregate->ReservableNodes(),
             );
         }
         else {

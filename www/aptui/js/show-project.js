@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal', "rfrange-history", "showtopo-modal"]);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal', "rfrange-history", "showtopo-modal", "resources-list"]);
     var mainString = templates['show-project'];
     var experimentString = templates['experiment-list'];
     var profileString = templates['profile-list'];
@@ -15,10 +15,14 @@ $(function ()
     var oopsString = templates['oops-modal'];
     var converterHelpTemplate = _.template(templates['conversion-help-modal']);
     var mainTemplate    = _.template(mainString);
+    var amlist = null;
     
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
+
+	amlist = decodejson("#amlist-json");
+	console.info("amlist", amlist);
 	
 	// Generate the main template.
 	var html = mainTemplate({
@@ -684,11 +688,15 @@ $(function ()
 
 	    if (json.code) {
 		console.info(json.value);
+		LoadResources(null);
 		return;
 	    }
+	    LoadResources(json.value);
+
 	    if (!_.size(json.value)) {
 		return;
 	    }
+	    
 	    $(".resgroups-hidden").removeClass("hidden");
 	    window.DrawResGroupList("#resgroups_content", json.value);
 	    $("#resgroups_content .expando").trigger("click");
@@ -827,6 +835,178 @@ $(function ()
 	    });
 
 	LoadRangeHistory();
+    }
+
+    function LoadResources(resgroups)
+    {
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+	
+	var callback = function(json) {
+	    console.info("resources", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (!_.size(json.value)) {
+		return;
+	    }
+	    var collated = {};
+	    var user_totals = {};
+	    
+	    _.each(json.value, function(details, uuid) {
+		_.each(details.slivers, function(sliver, aggregate_urn) {
+		    var resNodes = amlist[aggregate_urn].reservable_nodes;
+		    var typelist = {};
+		    var xml = $.parseXML(sliver.manifest);
+
+		    $(xml).find("node, emulab\\:vhost").each(function() {
+			// Only nodes that match the aggregate being processed,
+			// since we send the same rspec to every aggregate.
+			var manager_urn = $(this).attr("component_manager_id");
+			if (!manager_urn.length ||
+			    manager_urn != aggregate_urn) {
+			    return;
+			}
+			var tag     = $(this).prop("tagName");
+			var isvhost = (tag == "emulab:vhost" ? 1 : 0);
+			var vnode   = this.getElementsByTagNameNS(EMULAB_NS,
+								  'vnode');
+			if (vnode.length) {
+			    var hwtype = $(vnode).attr("hardware_type");
+			    var name   = $(vnode).attr("name");
+
+			    // Reservable nodes shown as themselves.
+			    if (resNodes && _.has(resNodes, name)) {
+				hwtype = name;
+			    }
+			    
+			    if (hwtype != "pcvm" && hwtype != "blockstore") {
+				if (!_.has(typelist, hwtype)) {
+				    typelist[hwtype] = 0;
+				}
+				typelist[hwtype]++;
+
+				if (!_.has(user_totals, aggregate_urn)) {
+				    user_totals[aggregate_urn] = {};
+				}
+				var aggtotals = user_totals[aggregate_urn];
+				if (!_.has(aggtotals, details.creator)) {
+				    aggtotals[details.creator] = {};
+				}
+				var utotals = aggtotals[details.creator];
+				if (!_.has(utotals, hwtype)) {
+				    utotals[hwtype] = 0;
+				}
+				utotals[hwtype]++;
+			    }
+			}
+		    });
+		    if (_.size(typelist)) {
+			if (!_.has(collated, uuid)) {
+			    collated[uuid] = {};
+			}
+			collated[uuid][aggregate_urn] = {
+			    "typelist"     : typelist,
+			    "cluster"      : sliver.name,
+			    "creator"      : details.creator,
+			    "name"         : details.name,
+			    "started"      : details.started,
+			    "expires"      : details.expires,
+			    "portal"       : details.portal,
+			    "reslist_user" : {},
+			    "reslist_proj" : {},
+			};
+		    }
+		});
+	    });
+	    if (!_.size(collated)) {
+		return;
+	    }
+	    /*
+	     * Find active reservations for types by the same user. 
+	     */
+	    _.each(collated, function(aggregates, uuid) {
+		_.each(aggregates, function(details, aggregate_urn) {
+		    var reslist_user = {};
+		    var reslist_proj = {};
+		    
+		    _.each(details.typelist, function(count, type) {
+			_.each(resgroups, function (group, group_uuid) {
+			    _.each(group.clusters, function (res) {
+				if (aggregate_urn == res.cluster_urn &&
+				    res.active && res.type == type) {
+				    /*
+				     * Active reservation for this type
+				     * at the same aggregate.
+				     */
+				    if (!_.has(reslist_proj, type)) {
+					reslist_proj[type] = 0;
+				    }
+				    reslist_proj[type] += res.count;
+
+				    if (group.uid == details.creator) {
+					// And by the same user
+					if (!_.has(reslist_user, type)) {
+					    reslist_user[type] = 0;
+					}
+					reslist_user[type] += res.count;
+				    }
+				    
+				}
+			    });
+			});
+		    });
+		    if (_.size(reslist_user)) {
+			details.reslist_user = reslist_user;
+		    }
+		    if (_.size(reslist_proj)) {
+		    	details.reslist_proj = reslist_proj;
+		    }
+		});
+	    });
+	    console.info("collated", collated);
+	    console.info("user_totals", user_totals);
+	    
+	    var template = _.template(templates["resources-list"]);
+	    var html = template({
+		"resources"       : collated,
+		"user_totals"     : user_totals,
+		"showProject"     : false,
+		"showPortal"      : window.MAINSITE && window.ISADMIN,
+		"showReserved"    : true,
+		"showBlockstores" : false,
+		"showVMs"         : false,
+	    });
+	    $('#resources_content').html(html);
+	    
+	    // Format dates with moment before display.
+	    $('#resources_content .format-date').each(function(){
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    var table = $('#resources_content .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		    sortList: [[3,0]],
+		});
+	    $(".resources-hidden").removeClass("hidden");
+
+	    // Handler for the Help button
+	    $('#resources-help-button').click(function (event) {
+		event.preventDefault();
+		sup.ShowModal('#resources-help-modal');
+	    });
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "show-project", "ResourceList",
+				 {"pid" : window.TARGET_PROJECT});
+	xmlthing.done(callback);
     }
     
     var showTopoIframe = null;
@@ -1041,6 +1221,10 @@ $(function ()
 			     {"pid" : window.TARGET_PROJECT}, callback);
     }
 
+    // Helper.
+    function decodejson(id) {
+	return JSON.parse(_.unescape($(id)[0].textContent));
+    }
     $(document).ready(initialize);
 });
 

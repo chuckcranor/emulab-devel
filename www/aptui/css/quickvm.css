@@ -555,10 +555,12 @@ blockquote #selected_profile_description {
   border-radius: 2px;
 }
 
+/*
 .form-horizontal .form-group .row .col-sm-2 input {
     height: 33px;
     margin: 1px 0 0 5px;
 }
+*/
 
 .resgraph {
     margin: 0px;
@@ -655,6 +657,10 @@ a.disabled, a[disabled] {
 /* The copy-to-clipboard icon is not veru obvious in default font size */
 .glyphicon-copy {
     font-size: 16px;
+}
+
+.tiny {
+    font-size: 10px;
 }
 
 /*
