@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2022 University of Utah and the Flux Group.
+# Copyright (c) 2004-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -814,7 +814,7 @@ class delay_config:
 
     def apply(self):
         try:
-            opts, req_args = getopt.getopt(self.argv, "s:me:", [ "help" ]);
+            opts, req_args = getopt.getopt(self.argv, "s:me:b", [ "help" ]);
             pass
         except getopt.error as e:
             print(e.args[0])
