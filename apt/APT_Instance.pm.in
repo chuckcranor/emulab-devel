@@ -1252,7 +1252,7 @@ sub ComputeNodeCounts($)
     }
     foreach my $sliver (@slivers) {
 	next
-	    if ($sliver->deferred());
+	    if ($sliver->deferred() || $sliver->IsTerminated());
 	
 	my $manifest = GeniXML::Parse($sliver->manifest());
 	if (! defined($manifest)) {
