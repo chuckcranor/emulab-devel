@@ -4002,6 +4002,7 @@ sub DoDeleteNodes()
     }
     $instance->SetStatus("provisioned") if (!$nostatus);
     $instance->ComputeNodeCounts();
+    $instance->MergeManifests();
     my @return_codes = ();
 
     if (ParRun({"maxwaittime" => 99999,
@@ -4234,6 +4235,7 @@ sub DoDeleteAggregates()
     }
     # If we made any changes, merge/push the manifests.
     if ($needpush && !$nostatus) {
+	$instance->ComputeNodeCounts();
 	if ($instance->MergeManifests()) {
 	    print STDERR "Could not merge manifests\n";
 	}
