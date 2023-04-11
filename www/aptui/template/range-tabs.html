@@ -54,8 +54,9 @@
  }
  
 </style>
-<div class='panel  card panel-default'>
-  <div class='panel-heading card-header'>
+<div class='panel card panel-default'>
+  <div class='panel-heading card-header'
+       style="padding-top: 6px; padding-bottom: 8px;">
     <div class="aligned-title-buttons">
       <span class="left-edge" style="font-size: 18px;">
 	<a href="#" class="zoom-in">
@@ -86,31 +87,31 @@
   </div>
   <div class='panel-body card-body' style="padding: 2px;">
     <ul class="nav nav-tabs" role="tablist">
-      <li role="presentation" class="allowed-ranges-hidden hidden">
-	<a href="#allowed-ranges" role="tab" 
+      <li role="presentation" class="allowed-ranges-hidden hidden nav-item">
+	<a href="#allowed-ranges" role="tab" class="nav-link"
 	   data-toggle="tab" data-bs-toggle="tab">Allowed Ranges</a>
       </li>
-      <li role="presentation" class="lookright">
-	<a href="" role="tab" 
+      <li role="presentation" class="lookright nav-item">
+	<a href="" role="tab" class="nav-link"
 	   data-toggle="tab" data-bs-toggle="tab">Reserved Ranges
 	  <span class="glyphicon glyphicon-hand-right"
 		style="margin-left: 3px;"></span>
 	</a>
       </li>
-      <li role="presentation" class="active">
-	<a href="#cbrs-ranges" role="tab" 
+      <li role="presentation" class="nav-item">
+	<a href="#cbrs-ranges" role="tab" class="nav-link"
 	   data-toggle="tab" data-bs-toggle="tab">LCBAND/CBRS</a>
       </li>
-      <li role="presentation">
-	<a href="#ism900-ranges" role="tab"
+      <li role="presentation" class="nav-item">
+	<a href="#ism900-ranges" role="tab" class="nav-link"
 	   data-toggle="tab" data-bs-toggle="tab">ISM 900</a>
       </li>
-      <li role="presentation">
-	<a href="#ism2400-ranges" role="tab"
+      <li role="presentation" class="nav-item">
+	<a href="#ism2400-ranges" role="tab" class="nav-link"
 	   data-toggle="tab" data-bs-toggle="tab">ISM 2400</a>
       </li>
-      <li role="presentation">
-	<a href="#ism5800-ranges" role="tab"
+      <li role="presentation" class="nav-item">
+	<a href="#ism5800-ranges" role="tab" class="nav-link"
 	   data-toggle="tab" data-bs-toggle="tab">ISM 5800</a>
       </li>
     </ul>
@@ -127,7 +128,7 @@
 	  </tbody>
 	</table>
       </div>
-      <div role="tabpanel" id="cbrs-ranges" class="tab-pane active">
+      <div role="tabpanel" id="cbrs-ranges" class="tab-pane">
 	<div class="range-chart"></div>
       </div>
       <div role="tabpanel" id="ism900-ranges" class="tab-pane">

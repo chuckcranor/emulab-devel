@@ -12,7 +12,6 @@ $(function ()
     var mainTemplate    = _.template(templates["resgroup"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var usageTemplate   = _.template(templates["resusage-graph"]);
-    var rangeTemplate   = _.template(templates["range-tabs"]);
     var visTemplate     = _.template(templates["visavail-graph"]);
     var current_pid  = null;
     var projlist     = null;
@@ -92,7 +91,7 @@ $(function ()
 	'    <tr>' +
 	'      <td>' +
 	'       <div class="cluster-select-div form-control-div"> ' +
-	'  	   <select class="form-control cluster-select"' +
+	'  	   <select class="form-control form-select cluster-select"' +
 	'	   	   placeholder="Please Select">' +
 	'	     <option value="">Select Cluster</option>' +
 	'	     <% _.each(amlist, function(details, urn) { %>' +
@@ -110,7 +109,7 @@ $(function ()
 	'      </td>' +
 	'      <td>' +
 	'       <div class="hardware-select-div form-control-div"> ' +
-	'	  <select class="form-control hardware-select"' +
+	'	  <select class="form-control form-select hardware-select"' +
 	'	  	placeholder="Select Hardware">' +
 	'	    <option value="">Select Hardware</option>' +
 	'	  </select>' +
@@ -374,7 +373,7 @@ $(function ()
 	'    <tr>' +
 	'      <td>' +
 	'        <div class="form-control-div"> ' +
-	'  	   <select class="form-control routename"' +
+	'  	   <select class="form-control form-select routename"' +
 	'	   	   placeholder="Please Select">' +
 	'	     <option value="">Select Route</option>' +
 	'	     <% _.each(routelist, function(details) { %>' +
@@ -620,6 +619,11 @@ $(function ()
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
 	$('.faq-contents').html(templates["reserve-faq"]);
+	if (window.BOOTSTRAP_VERSION == 5) {
+	    $('[data-bs-parent="#accordion"]').each(function () {
+		bootstrap.Collapse.getOrCreateInstance(this).toggle();
+	    });
+	}
 	if (window.ISPOWDER) {
 	    $('#range-info-div').html(templates["range-tabs"]);
 	}
@@ -745,7 +749,6 @@ $(function ()
 	// Insert datepickers after html inserted.
 	$("#reserve-request-form #start_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
-	    showButtonPanel: true,
 	    onClose: function (dateString, dateobject) {
 		DateChange("start");
 		modified_callback();
@@ -753,7 +756,6 @@ $(function ()
 	});
 	$("#reserve-request-form #end_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
-	    showButtonPanel: true,
 	    onClose: function (dateString, dateobject) {
 		DateChange("end");
 		modified_callback();
@@ -1087,7 +1089,7 @@ $(function ()
 	$('#route-table-div .route-help').popover({
 	    trigger: 'hover',
 	    container: 'body',
-	    delay: '{"hide":1000}',
+	    delay: {"hide":1000},
 	    content: 'Reservations that include mobile endpoints ' +
 		'must end on the same day by 11PM Mountain time ' +
 		'(' + now.format("h A") + ' in your local timezone).'

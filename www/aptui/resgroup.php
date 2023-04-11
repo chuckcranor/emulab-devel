@@ -21,6 +21,9 @@
 #
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include_once("geni_defs.php");
@@ -53,7 +56,6 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "project",  PAGEARG_PROJECT,
                                  "fromrspec",PAGEARG_BOOLEAN,
                                  "uuid",     PAGEARG_UUID);
-
 $fromrspec = ($fromrspec ? 1 : 0);
 
 if ($edit || $history) {
@@ -83,8 +85,6 @@ if (isset($cluster)) {
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/jquery-ui.min.css'>\n";
 echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
 echo "<link rel='stylesheet'
@@ -304,7 +304,7 @@ else {
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";
 echo "   window.HOMETZ   = '$OURTIMEZONE';\n";
-echo "   window.BISONLY  = $bisdaysonly;\n";
+echo "   window.BISONLY  = $ISPOWDER;\n";
 echo "   window.DOROUTES = $routesokay;\n";
 
 echo "</script>\n";
@@ -315,6 +315,7 @@ REQUIRE_MOMENT();
 REQUIRE_MOMENTTIMEZONE();
 REQUIRE_APTFORMS();
 REQUIRE_TABLESORTER();
+REQUIRE_JQUERY_UI();
 AddLibrary("js/resgraphs.js");
 AddLibrary("js/rfchart.js");
 AddLibrary("js/ota-permission.js");
@@ -328,7 +329,7 @@ SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".
-            "<script src='js/lib/visavail.js'></script>\n".
-            "<script src='js/lib/jquery-ui.js'></script>");
+            "<script src='js/lib/visavail.js'></script>\n");
+
 SPITFOOTER();
 ?>

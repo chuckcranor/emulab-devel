@@ -816,7 +816,8 @@ $(function ()
 	    $('#range-info-div .panel-title')
 		.html("All Frequency Usage");
 	    $('#range-info-div').removeClass("hidden");
-
+	    $('#range-info-div a[href="#cbrs-ranges"]').tab('show');
+	    
 	    // This activates the popover subsystem.
 	    $('#range-info-div [data-toggle="popover"]').popover({
 		trigger: 'hover',

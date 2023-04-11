@@ -49,17 +49,22 @@ $(function () {
 	    var root   = $(html);
 	    var list   = root.find('.format-me');
 	    var wide   = (options && _.has(options, "wide") ? true : false);
-
+	    
 	    list.each(function (index, item) {
 		if (item.dataset) {
   		    var key = item.dataset['key'];
-		    var margin  = 15;
+		    var margin  = 10;
 		    var colsize = null;
+		    var form = $(item).closest("form");
 
 		    // Squeeze vertical space for this field.
 		    if (_.has(item.dataset, "compact")) {
 			margin = 0;
 		    }
+		    else if (_.has(item.dataset, "margin")) {
+			margin = item.dataset['margin'];
+		    }
+		    
 		    // Column size per row,
 		    if (_.has(item.dataset, "colsize")) {
 			colsize = item.dataset['colsize'];;
