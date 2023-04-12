@@ -102,13 +102,16 @@ function Do_CreateDataSet()
 	    $formfields["dataset_expires_gmt"] == "") {
 	    $errors["dataset_expires"] = "Missing field";
 	}
-	elseif (!strtotime($formfields["dataset_expires_gmt"])) {
-	    $errors["dataset_expires"] = "Illegal value";
-	}
 	else {
-	    $options .= " -e " .
-		escapeshellarg($formfields["dataset_expires_gmt"]);
-	}
+            $expires = strtotime($formfields["dataset_expires_gmt"]);
+
+            if (!$expires) {
+                $errors["dataset_expires"] = "Illegal value";
+            }
+            else {
+                $options .= " -e " . escapeshellarg($expires);
+            }
+        }
     }
     if ($formfields["dataset_type"] != "imdataset") {
         if (! preg_match('/^(none|ext2|ext3|ext4|ufs|ufs2)$/',

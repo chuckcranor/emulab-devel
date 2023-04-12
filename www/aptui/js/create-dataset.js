@@ -95,7 +95,6 @@ $(function ()
 		// Insert datepicker after html inserted.
 		$(function() {
 		    $("#dataset_expires").datepicker({
-			showButtonPanel: true,
 			dateFormat: "M d yy 11:59 'PM'",
 			minDate: new Date(),
 		    });
