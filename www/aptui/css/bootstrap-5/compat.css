@@ -49,6 +49,10 @@
     margin-bottom: 20px;
 }
 
+.form-check-inline {
+    margin-bottom: 0 !important;
+}
+
 /*
  * I do not like the contextual color schemes
  * Or the annoying way they are specified now.
