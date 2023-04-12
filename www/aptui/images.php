@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -34,6 +37,7 @@ $page_title = "Image List";
 #
 $optargs = OptionalPageArguments("target_user", PAGEARG_USER,
                                  "all",         PAGEARG_BOOLEAN);
+$all = ($all ? 1 : 0);
 
 #
 # Get current user.
@@ -42,9 +46,6 @@ RedirectSecure();
 $this_user = CheckLoginOrRedirect();
 # Ignore all flag if not an admin
 if (!ISADMIN()) {
-    $all = 0;
-}
-elseif (!isset($all)) {
     $all = 0;
 }
 
