@@ -3187,7 +3187,7 @@ sub DeleteRoutes($)
 sub MergeManifests($)
 {
     my ($self) = @_;
-    my @aggregates = $self->ActiveAggregateList();
+    my @aggregates = $self->AggregateList();
 
     if (@aggregates <= 1) {
 	my $manifest;
@@ -3224,10 +3224,9 @@ sub MergeManifests($)
     foreach my $aggregate (@aggregates) {
 	my $aggregate_urn = $aggregate->aggregate_urn();
 	my $manifest      = $aggregate->manifest();
-
-	# Might not be a manifest if deferred.
 	next
-	    if (!$manifest);
+	    if ($aggregate->deferred() || $aggregate->IsTerminated());
+
 	push(@tmp, $aggregate);
 
 	$nodes{$aggregate_urn} = [];
