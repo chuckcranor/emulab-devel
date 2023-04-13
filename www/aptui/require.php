@@ -133,6 +133,9 @@ function REQUIRE_FILESTYLE()
 
 function REQUIRE_FORMHELPERS()
 {
+    echo "<link rel='stylesheet'
+           href='css/bootstrap-formhelpers.min.css'>\n";
+
   AddLibrary("js/lib/bootstrap-formhelpers.js");
 }
 

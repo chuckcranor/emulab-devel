@@ -23,6 +23,11 @@ $(function () {
 		    var wrapper = $("<div id='form-wrapper-" + key + "'>" +
 				    "</div>");
 
+		    // Temporary
+		    if (window.BOOTSTRAP_VERSION == 5) {
+			$(wrapper).addClass("mb-2");
+		    }
+
 		    // How do I just move the item into the wrapper?
 		    wrapper.append($(item).clone());
 		    $(item).after(wrapper);
@@ -37,7 +42,8 @@ $(function () {
 			var label = item.dataset['label'];
 			
 			wrapper.prepend("<label for='" + key + "' " +
-					"       class='control-label'> " +
+					"       class='control-label " +
+					"              col-form-label'> " +
 					_.escape(label) + '</label>');
 		    }
 		}
@@ -53,7 +59,7 @@ $(function () {
 	    list.each(function (index, item) {
 		if (item.dataset) {
   		    var key = item.dataset['key'];
-		    var margin  = 10;
+		    var margin  = 15;
 		    var colsize = null;
 		    var form = $(item).closest("form");
 
