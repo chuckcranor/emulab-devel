@@ -5,17 +5,15 @@ $(function ()
 
     var templates = APT_OPTIONS
 	.fetchTemplateList(['status', 'waitwait-modal',
-			    'oops-modal', 'register-modal', 'terminate-modal',
-			    'oneonly-modal', 'approval-modal', 'linktest-modal',
+			    'oops-modal', 'terminate-modal',
+			    'approval-modal', 'linktest-modal',
 			    'linktest-md', "destroy-experiment",
 			    "prestage-table", "frequency-graph", 'txgraph']);
 
     var statusString = templates['status'];
     var waitwaitString = templates['waitwait-modal'];
     var oopsString = templates['oops-modal'];
-    var registerString = templates['register-modal'];
     var terminateString = templates['terminate-modal'];
-    var oneonlyString = templates['oneonly-modal'];
     var approvalString = templates['approval-modal'];
     var linktestString = templates['linktest-modal'];
     var destroyString  = templates['destroy-experiment'];
@@ -30,10 +28,8 @@ $(function ()
     var nodecount   = 0;
     var ajaxurl     = null;
     var uuid        = null;
-    var oneonly     = 0;
     var isadmin     = 0;
     var isfadmin    = 0;
-    var isguest     = 0;
     var isstud      = 0;
     var wholedisk   = 0;
     var isscript    = 0;
@@ -100,11 +96,9 @@ $(function ()
 	window.APT_OPTIONS.initialize(sup);
 	ajaxurl       = window.APT_OPTIONS.AJAXURL;
 	uuid          = window.APT_OPTIONS.uuid;
-	oneonly       = window.APT_OPTIONS.oneonly;
 	isadmin       = window.APT_OPTIONS.isadmin;
 	isfadmin      = window.APT_OPTIONS.isfadmin;
 	isstud        = window.APT_OPTIONS.isstud;
-	isguest       = (window.APT_OPTIONS.registered ? false : true);
 	wholedisk     = window.APT_OPTIONS.wholedisk;
 	dossh         = window.APT_OPTIONS.dossh;
 	dovnc         = window.APT_OPTIONS.dovnc;
@@ -131,7 +125,7 @@ $(function ()
 	resgroups = decodejson('#resgroup-json');
 	console.info("resgroups", resgroups);
 
-	if (window.APT_OPTIONS.lastknowntab && LastKnownUserTab() == "listview") {
+	if (LastKnownUserTab() == "listview") {
 	    initialTab = "listview";
 	}
 	
@@ -157,7 +151,6 @@ $(function ()
 	var template_args = {
 	    uuid:		uuid,
 	    expinfo:            expinfo,
-	    registered:		window.APT_OPTIONS.registered,
 	    isadmin:            window.APT_OPTIONS.isadmin,
 	    isfadmin:           window.APT_OPTIONS.isfadmin,
 	    isstud:             window.APT_OPTIONS.isstud,
@@ -169,9 +162,7 @@ $(function ()
 	$('#status-body').html(html);
 	$('#waitwait_div').html(waitwaitString);
 	$('#oops_div').html(oopsString);
-	$('#register_div').html(registerString);
 	$('#terminate_div').html(terminateTemplate(template_args));
-	$('#oneonly_div').html(oneonlyString);
 	$('#approval_div').html(approvalString);
 	$('#linktest_div').html(linktestString);
 	$('#destroy_div').html(destroyString);
@@ -233,17 +224,6 @@ $(function ()
 			       return sup.popoverClipContent(url);
 			   });
 
-	// Take the user to the registration page.
-	$('button#register-account').click(function (event) {
-	    event.preventDefault();
-	    sup.HideModal('#register_modal');
-	    var uid   = expinfo.creator;
-	    var email = expinfo.creator_email;
-	    var url   = "signup.php?uid=" + uid + "&email=" + email + "";
-	    var win   = window.open(url, '_blank');
-	    win.focus();
-	});
-
 	// Setup the extend modal.
 	$('button#extend_button').click(function (event) {
 	    window.APT_OPTIONS.gaButtonEvent(event);
@@ -266,7 +246,7 @@ $(function ()
 		return;
 	    }
             ShowExtendModal(uuid,
-			    RequestExtensionCallback, isstud, isguest, expinfo);
+			    RequestExtensionCallback, isstud, false, expinfo);
 	});
 	
 	// Handler for the refresh button
@@ -383,7 +363,6 @@ $(function ()
 	    window.APT_OPTIONS.gaTabEvent("show",
 					  $(event.target).attr('href'));
 	    RememberUserTab($(event.target).attr('href'));
-	    GatherTabStats($(event.target).attr('href'));
 	});
 	$('#prestage-panel .info-button').click(function (event) {
 	    event.preventDefault();
@@ -439,9 +418,6 @@ $(function ()
         addTutorialNotifyTab('manifest');
         addTutorialNotifyTab('Idlegraphs');
 	StartCountdownClock(expinfo.expires);
-	if (window.APT_OPTIONS.oneonly) {
-	    sup.ShowModal('#oneonly-modal');
-	}
 	if (window.APT_OPTIONS.thisUid == expinfo.creator &&
 	    expinfo.extension_info.extension_denied) {
 	    ShowExtensionDeniedModal();
@@ -527,7 +503,7 @@ $(function ()
     {
 	window.EXPSTATUS = json;
 	
-	//console.info("StatusWatchCallBack: ", json);
+	console.info("StatusWatchCallBack: ", json);
 	if (json.code) {
 	    // GENIRESPONSE_SEARCHFAILED
 	    if (json.code == 12) {
@@ -2498,10 +2474,6 @@ $(function ()
 		    }, i * 1500);
 		})(i);
 	    }
-	    return;
-	}
-	if (isguest) {
-	    alert("Only registered users can use the " + action + " command.");
 	    return;
 	}
 	if (action == "console") {
@@ -5935,24 +5907,5 @@ $(function ()
 	return which;
     }
 
-    // Temporary
-    var justloaded = 1;
-    
-    function GatherTabStats(id) {
-	console.info("GatherTabStats", id);
-
-	sup.CallServerMethod(null, "status", "GatherTabStats",
-			     {"tab" : id.substr(1), "justloaded" : justloaded},
-			     function (json) {
-				 if (json.code) {
-				     console.info(json);
-				     console.info("GatherTabStats error");
-				     return;
-				 }
-			     });
-
-	justloaded = 0;
-    }
-    
     $(document).ready(initialize);
 });

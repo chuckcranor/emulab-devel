@@ -149,12 +149,8 @@ pre {
 	    <tr>
 	      <td class='border-none'>Creator:</td>
 	      <td class='border-none'>
-		<% if (registered) { %>
-		  <a href="user-dashboard.php?user=<%- expinfo.creator %>">
-		    <%- expinfo.creator %></a>
-		<% } else { %>
-	          <a href="mailto:<%- expinfo.creator_email %>"><%- expinfo.creator_email %></a>
-	        <% } %>
+		<a href="user-dashboard.php?user=<%- expinfo.creator %>">
+		  <%- expinfo.creator %></a>
 	      </td>
 	    </tr>
 	    <% if (expinfo.project) { %>
@@ -275,7 +271,7 @@ pre {
 			     low-level benchmarks characterizing the
 			     hardware used in this experiment.'>
  	      Performance History</a>
-	    <% if (registered && !isfadmin) { %>
+	    <% if (!isfadmin) { %>
 	      <button class='btn btn-sm btn-info hidden'
 		      id='txgraph_button' type=button
 		      style='margin-right: 10px;'
@@ -718,7 +714,6 @@ pre {
 	      <div id='showtopo_statuspage'>	      
 		<div class='showtopology-bare'></div>
 	      </div>
-	      <% if (registered) { %>
 		<button class='btn btn-xs btn-success pull-right' disabled
 			id='refresh_button' type=button
 			data-toggle='popover'
@@ -748,7 +743,6 @@ pre {
 		      Reload Topo</button>
 		  </span>
 		<% } %>
-	      <% } %>
               <small class="pull-left">Click on a node for more options. 
                 Click and drag to move things around.
 		<span id="multisite-context-menu-notice" class="hidden">
@@ -2370,10 +2364,8 @@ pre {
   <div id='waitwait_div'></div>
   <div id='terminate_div'></div>
   <div id='oops_div'></div>
-  <div id='register_div'></div>
   <div id='extend_div'></div>
   <div id='imaging_div'></div>
-  <div id='oneonly_div'></div>
   <div id='approval_div'></div>
   <div id='linktest_div'></div>
   <div id='destroy_div'></div>
