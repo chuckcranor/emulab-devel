@@ -2003,7 +2003,7 @@ sub os_create_storage_slice($$$)
 	    if ($lvsize == 0) {
 		my $sz = `vgs -o vg_size --units m --noheadings $VGNAME`;
 		if ($sz =~ /([\d\.]+)/) {
-		    $szarg = "-L {$1}m";
+		    $szarg = "-L ${1}m";
 		} else {
 		    warn("*** $lv: could not find size of VG\n");
 		}
