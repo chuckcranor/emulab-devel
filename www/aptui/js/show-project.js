@@ -282,7 +282,7 @@ $(function ()
 		}
 	    });
 	    // This activates the tooltip subsystem.
-	    $('[data-toggle="tooltip"]').tooltip({
+	    $('#profiles_content [data-toggle="tooltip"]').tooltip({
 		delay: {"hide" : 500, "show" : 500},
 		placement: 'auto',
 	    });
@@ -459,12 +459,12 @@ $(function ()
 		});
 
 	    // Do this after converting table.
-	    $('[data-toggle="tooltip"]').tooltip({
+	    $('#members_table [data-toggle="tooltip"]').tooltip({
 		trigger: 'hover',
 		placement: 'auto',
 	    });
 	    // Do this after converting table.
-	    $('[data-toggle="popover"]').popover({
+	    $('#members_table [data-toggle="popover"]').popover({
 		trigger: 'hover',
 		placement: 'auto',
 	    });
@@ -995,6 +995,14 @@ $(function ()
 		    sortList: [[3,0]],
 		});
 	    $(".resources-hidden").removeClass("hidden");
+
+	    // Do this after converting table.
+	    $('#resources_content [data-toggle="tooltip"]').each(function () {
+		$(this).tooltip({
+		    trigger: 'hover',
+		    placement: 'right',
+		});
+	    });
 
 	    // Handler for the Help button
 	    $('#resources-help-button').click(function (event) {

@@ -85,18 +85,22 @@
 	      <% } %>
 	      <td><%- details.cluster %></td>
 	      <td><%- type %></td>
-	      <td>
-		<% if (showReserved && _.has(details.reslist_proj, type)) { %>
-		  <% if (!_.has(details.reslist_user, type) ||
-		         utotals[type] > details.reslist_user[type]) { %>
+	      <% if (showReserved && _.has(details.reslist_proj, type)) { %>
+		<% if (!_.has(details.reslist_user, type) ||
+		       utotals[type] > details.reslist_user[type]) { %>
+		  <td data-toggle='tooltip' data-bs-toggle='tooltip'
+		      data-container="body" data-bs-container="body"
+		      data-trigger="hover" data-bs-trigger="hover"
+		      title='This user is using nodes he/she has not reserved!'>
 		    <span class="text-danger"><b><%- count %></b></span>
-		  <% } else { %>
-		    <%- count %>
-		  <% } %>
+		    <span class='glyphicon glyphicon-exclamation-sign'></span>
+		  </td>
 		<% } else { %>
-		  <%- count %>
+		  <td><%- count %></td>
 		<% } %>
-	      </td>
+	      <% } else { %>
+		<td><%- count %></td>
+	      <% } %>
 	      <% if (showReserved) { %>
 		<td>
 		  <% if (_.has(details.reslist_user, type)) { %>
