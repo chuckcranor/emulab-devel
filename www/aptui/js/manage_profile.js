@@ -690,10 +690,16 @@ $(function ()
 	    }
 	    else if (gotscript) {
 		if (window.CLONING && !portal_converted) {
-		    sup.ShowModal('#warn_pp_modal');
+		    /* Bootstrap 5 sillyness, have not figured out
+		       a better solution */
+		    setTimeout(function f() {
+			sup.ShowModal('#warn_pp_modal');
+		    }, 100);
 		}
 	    }
 	    else if (_.has(window, "EXPUUID")) {
+		/* Bootstrap 5 sillyness, have not figured
+		   out a better solution */
 		setTimeout(function f() { ConvertFromExperiment(); }, 250);
 	    }
 	}
