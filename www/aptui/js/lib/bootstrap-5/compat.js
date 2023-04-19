@@ -31,14 +31,24 @@
 	$.fn["tooltip"] = function (arg) {
 	    //console.info("tooltip", arg);
 	    return this.each(function () {
+		var tip = bootstrap.Tooltip.getInstance(this);
+		
 		// Method call
 		if (arg && typeof(arg) == "string") {
+		    // uninitialized tip. 
+		    if (!tip) {
+			console.info("Uninitialized tip", arg, this);
+			return null;
+		    }
 		    if (arg == "destroy") {
 			arg = "dispose";
 		    }
-		    return bootstrap.Tooltip.getInstance(this)[arg]();
+		    if (arg in tip === false) {
+			console.info("Unknown tip method", arg, tip);
+			return null;
+		    }
+		    return tip[arg]();
 		}
-		var tip = bootstrap.Tooltip.getInstance(this);
 		// Just return if already exists.
 		if (tip) {
 		    return tip;
