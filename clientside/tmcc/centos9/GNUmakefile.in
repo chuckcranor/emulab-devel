@@ -85,6 +85,7 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/chronyd.service.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/dracut.conf.d
 	$(INSTALL) -m 750 -o root -g root -d $(SYSETCDIR)/sudoers.d
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/selinux
@@ -114,8 +115,8 @@ sysetc-install:	dir-install
 	$(INSTALL) -m 644 $(SRCDIR)/logrotate-syslog $(SYSETCDIR)/logrotate.d/syslog
 	$(INSTALL) -m 644 $(SRCDIR)/rsyslog-emulab.conf $(SYSETCDIR)/rsyslog.d/40-emulab.conf
 	$(INSTALL) -m 644 $(SRCDIR)/chrony.conf $(SYSETCDIR)/chrony.conf
-	$(INSTALL) -m 644 $(SRCDIR)/chronyd.service \
-		$(SYSETCDIR)/systemd/system/chronyd.service
+	$(INSTALL) -m 644 $(SRCDIR)/10-emulab-chronystart.conf \
+		$(SYSETCDIR)/systemd/system/chronyd.service.d/10-emulab-chronystart.conf
 	ln -sf ../chronyd.service \
 		$(SYSETCDIR)/systemd/system/multi-user.target.wants/chronyd.service
 	-@if [ -z "$(DESTDIR)" ]; then \
