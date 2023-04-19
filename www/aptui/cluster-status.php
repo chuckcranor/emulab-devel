@@ -72,7 +72,7 @@ elseif ($ISCLOUD) {
                  "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
                  "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
                  "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
-                 "urn:publicid:IDN+lab.onelab.eu+authority+cm");
+                 "urn:publicid:IDN+cloudlab.umass.edu+authority+cm");
     $agglist = array();
     foreach ($tmp as $urn) {
         $agglist[] = Aggregate::Lookup($urn);
