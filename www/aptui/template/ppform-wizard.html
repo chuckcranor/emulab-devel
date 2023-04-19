@@ -1,17 +1,17 @@
 <div>
-  <div class='panel panel-default'>
-    <div class='panel-heading'>
+  <div class='panel  card panel-default'>
+    <div class='panel-heading card-header'>
       <div id="ppform-buttons" class="btn-group pull-right hidden">
 	<div class="btn-group">
 	  <button class="btn btn-default btn-xs dropdown-toggle"
-		  data-toggle='dropdown'>
+		  data-toggle='dropdown' data-bs-toggle='dropdown'>
 	    Save/Load Parameters <span class="caret"></span></button>
 	  <ul class="dropdown-menu">
 	    <li>
 	      <a href="#"
-		 class="p-save"
-		 data-toggle='popover'
-		 data-html='true'
+		 class="p-save dropdown-item"
+		 data-toggle='popover' data-bs-toggle='popover'
+		 data-html='true' data-bs-html='true'
 		 data-content='Save these parameters so you can quickly apply them
 			       when starting a new experiment using this
 			       profile. Click for more information.'>
@@ -20,27 +20,27 @@
 	    </li>
 	    <li>
 	      <a name="defaults" href="#"
-		 class="p-defaults"
-		 data-toggle='popover'
-		 data-html='true'
+		 class="p-defaults dropdown-item"
+		 data-toggle='popover' data-bs-toggle='popover'
+		 data-html='true' data-bs-html='true'
 		 data-content="Reset form back to parameter default values.">
 		Restore Default Values
 	      </a>
 	    </li>
 	    <li class="hidden">
 	      <a name="last" href="#"
-		 class="p-last"
-		 data-toggle='popover'
-		 data-html='true'
+		 class="p-last dropdown-item"
+		 data-toggle='popover' data-bs-toggle='popover'
+		 data-html='true' data-bs-html='true'
 		 data-content="Use the same parameters as your last experiment
 			       using this profile.">
 		Load Last Experiment
 	      </a>
 	    </li>
             <li class='multilevel-submenu hidden p-recent'>
-              <a href='#'
-		 data-toggle='popover'
-		 data-html='true'
+              <a href='#' class='dropdown-item'
+		 data-toggle='popover' data-bs-toggle='popover'
+		 data-html='true' data-bs-html='true'
 		 data-content='Use the same parameters as one of your last
 			       10 experiments using this profile.'>
 		Last 10 Experiments</a>
@@ -48,9 +48,9 @@
 	      </ul>
 	    </li>
             <li class='multilevel-submenu hidden p-choose'>
-              <a href='#'
-		 data-toggle='popover'
-		 data-html='true'
+              <a href='#' class='dropdown-item'
+		 data-toggle='popover' data-bs-toggle='popover'
+		 data-html='true' data-bs-html='true'
 		 data-content='Choose from a list of your
 			       <em>parameter sets</em>
 			       to fill out the form options. You can also save
@@ -61,9 +61,9 @@
 	      </ul>
 	    </li>
             <li class='multilevel-submenu hidden p-choose-public'>
-              <a href='#'
-		 data-toggle='popover'
-		 data-html='true'
+              <a href='#' class='dropdown-item'
+		 data-toggle='popover' data-bs-toggle='popover'
+		 data-html='true' data-bs-html='true'
 		 data-content='Choose from a list of <b>public</b>
 			       <em>parameter sets</em> that have been provided
 			       by system admininstrators.'>
@@ -72,9 +72,9 @@
 	      </ul>
 	    </li>
 	    <li class="hidden">
-              <a href="#" class="p-history"
-		 data-toggle='popover'
-		 data-html='true'
+              <a href="#" class="p-history dropdown-item"
+		 data-toggle='popover' data-bs-toggle='popover'
+		 data-html='true' data-bs-html='true'
 		 data-content="Open a new window with a list of all current and
 			       past experiments, to choose an experiment to run
 			       again."
@@ -86,23 +86,27 @@
 	</div>
 	<button class="p-powdermap btn btn-info btn-xs hidden"
 		style="margin-right: 5px; margin-left: 5px;"
-		data-toggle='popover'
-		data-html='true'
+		data-toggle='popover' data-bs-toggle='popover'
+		data-html='true' data-bs-html='true'
 		data-content="Click to popup the Powder radio map">
 	  Radio Map</button>
 	<button class="p-resources btn btn-info btn-xs"
 		style="margin-right: 5px;"
-		data-toggle='popover'
-		data-html='true'
+		data-toggle='popover' data-bs-toggle='popover'
+		data-html='true' data-bs-html='true'
 		data-content="Click to popup a resource availability window.">
 	  Resource Availability</button>
       </div>
-      <span class='panel-title'>
-	<strong>Selected Profile:</strong> 
-	<span class='selected_profile_text'></span>
-      </span>
+      <span class='panel-title card-title'>
+	<span class="instantiate-experiment">
+	  <strong>Selected Profile:</strong> 
+	  <span class='selected_profile_text'></span>
+	</span>
+	<span class="modify-experiment">
+	  <strong>Modify Experiment</strong> 
+	</span>
     </div>
-    <div class='panel-body' style="padding-top: 5px;">
+    <div class='panel-body card-body' style="padding-top: 5px;">
       <div class="text-center">
 	<span class="ppform-instantiate">
 	  This profile is parameterized; please make your selections below,

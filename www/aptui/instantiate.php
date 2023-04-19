@@ -462,6 +462,7 @@ $formfields["email"]    = $this_user->email();
 
 SPITHEADER(1);
 
+echo "<link rel='stylesheet' href='css/instantiate.css'>\n";
 echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
 echo "<link rel='stylesheet' href='css/profile-picker.css'>\n";
 echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";

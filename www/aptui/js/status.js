@@ -91,6 +91,23 @@ $(function ()
 	}
     }
 
+    function navTabLink(label, tabname)
+    {
+	var html =
+	    "<li class='nav-item'> "+
+	    "  <a class='nav-link' href='#" +
+	        tabname + "' data-toggle='tab' data-bs-toggle='tab'>" +
+	        label + "" +
+	    "<button class='btn btn-small navtab-icon' type='button' " +
+	    "        id='" + tabname + "_kill'>" +
+	    " <span class='glyphicon glyphicon-remove-circle'></span>" +
+	    "</button>" +
+	    "</a>" +
+	    "</li>";	
+	    
+	return html;
+    }
+
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
@@ -503,7 +520,7 @@ $(function ()
     {
 	window.EXPSTATUS = json;
 	
-	console.info("StatusWatchCallBack: ", json);
+	//console.info("StatusWatchCallBack: ", json);
 	if (json.code) {
 	    // GENIRESPONSE_SEARCHFAILED
 	    if (json.code == 12) {
@@ -549,7 +566,7 @@ $(function ()
 	
 	    status_html = json.value.status;
 
-	    var bgtype = "panel-info";
+	    var bgtype = "panel-info card-info";
 	    status_message = "Please wait while we get your experiment ready";
 
 	    // Ditto the logfile, which can change.
@@ -610,13 +627,13 @@ $(function ()
 	    else if (json.value.canceled &&
 		     !(instanceStatus == 'terminating' ||
 		       instanceStatus == 'terminated')) {
-		bgtype = "panel-warning";
+		bgtype = "panel-warning card-warning";
 		status_message = "Your experiment has been canceled!";
 		status_html = "<font color=red>canceled</font>";
 		ProgressBarUpdate();
 	    }
 	    else if (instanceStatus == 'ready') {
-		bgtype = "panel-success";
+		bgtype = "panel-success card-success";
 		status_message = "Your experiment is ready";
 		var qualifier = null;
 
@@ -649,11 +666,14 @@ $(function ()
 		}
 	    }
 	    else if (instanceStatus == 'failed') {
-		bgtype = "panel-danger";
+		bgtype = "panel-danger card-danger";
 		status_message = "Something went wrong!";
 		
 		if (_.has(json.value, "output")) {
 		    UpdateGeneralError(json.value.output);
+		}
+		else if (_.has(json.value, "message")) {
+		    UpdateGeneralError(json.value.message);
 		}
 		else {
 		    UpdateGeneralError(null);
@@ -665,33 +685,33 @@ $(function ()
 		ProgressBarUpdate();
 	    }
 	    else if (instanceStatus == 'quarantined') {
-		bgtype = "panel-warning";
+		bgtype = "panel-warning card-warning";
 		status_message = "Your experiment has been quarantined";
 		status_html = "<font color=red>quarantined</font>";
 		ProgressBarUpdate();
 		ShowIdleDataTab();
 	    }
 	    else if (instanceStatus == 'imaging') {
-		bgtype = "panel-warning";
+		bgtype = "panel-warning card-warning";
 		status_message = "Your experiment is busy while we  " +
 		    "copy your disk";
 		status_html = "<font color=red>imaging</font>";
 	    }
 	    else if (instanceStatus == 'linktest') {
-		bgtype = "panel-warning";
+		bgtype = "panel-warning card-warning";
 		status_message = "Your experiment is busy while we  " +
 		    "run linktest";
 		status_html = "<font color=red>linktest</font>";
 	    }
 	    else if (instanceStatus == 'imaging-failed') {
-		bgtype = "panel-danger";
+		bgtype = "panel-danger card-danger";
 		status_message = "Your disk image request failed!";
 		status_html = "<font color=red>imaging-failed</font>";
 	    }
 	    else if (instanceStatus == 'terminating' ||
 		     instanceStatus == 'terminated') {
 		status_html = "<font color=red>" + instanceStatus + "</font>";
-		bgtype = "panel-danger";
+		bgtype = "panel-danger card-danger";
 		status_message = "Your experiment has been terminated!";
 		StartCountdownClock.stop = 1;
 		if (lastStatus == "failed") {
@@ -700,7 +720,7 @@ $(function ()
 	    }
 	    else if (instanceStatus == "unknown") {
 		status_html = "<font color=red>" + instanceStatus + "</font>";
-		bgtype = "panel-warning";
+		bgtype = "panel-warning card-warning";
 		status_message = "The server is temporarily unavailable. " +
 		    "Please check back later.";
 	    }
@@ -718,7 +738,9 @@ $(function ()
 	    }
 	    $("#status_panel")
 		.removeClass('panel-success panel-danger ' +
-			     'panel-warning panel-default panel-info')
+			     'panel-warning panel-default panel-info ' +
+			     'card-success card-danger ' +
+			     'card-warning card-default card-info')
 		.addClass(bgtype);
 	    UpdateButtons(instanceStatus);
 	}
@@ -1267,36 +1289,31 @@ $(function ()
 		    UpdateNodeColor(node_id, jacksID, BOOTING_COLOR);
 		}
 		var cluster_id = amlist[urn].nickname;
-		
-		var html =
-		    "<table class='table table-condensed border-none'><tbody> " +
-		    "<tr><td class='border-none'>Node:</td><td class='border-none'>" +
-		        details.component_urn + "</td></tr>" +
-		    "<tr><td class='border-none'>ID:</td><td class='border-none'>" +
-		        details.client_id + "</td></tr>" +
-		    "<tr><td class='border-none'>Cluster:</td><td class='border-none'>" +
-		        cluster_id + "</td></tr>" +
-		    "<tr><td class='border-none'>Status:</td><td class='border-none'>" +
-   		    (recovery ? "<b>recovery</b>" : details.status) +
-		          "</td></tr>" +
-		    "<tr><td class='border-none'>State:</td>" +
-		        "<td class='border-none'>" +
-		    details.state + "</td></tr>" +
-		    
-		    "<tr><td class='border-none'>Raw State:</td>" +
-		        "<td class='border-none'>" +
-		    details.rawstate + "</td></tr>";
+		var popover = $('#node-popover-template').clone();
+
+		$(popover).find(".node-popover-node")
+		    .html(details.component_urn);
+		$(popover).find(".node-popover-id")
+		    .html(details.client_id);
+		$(popover).find(".node-popover-cluster")
+		    .html(cluster_id);
+		$(popover).find(".node-popover-status")
+		    .html(recovery ? "<b>recovery</b>" : details.status);
+		$(popover).find(".node-popover-state")
+		    .html(details.state);
+		$(popover).find(".node-popover-rawstate")
+		    .html(details.rawstate);
 
 		if (_.has(details, "frisbeestatus")) {
 		    var mb_written = details.frisbeestatus.MB_written;
 		    var imagename  = details.frisbeestatus.imagename;
-		    html = html +
-			"<tr><td class='border-none'>Image:</td>" +
-		        "    <td class='border-none'>" +
-		              imagename + "</td></tr>" +
-			"<tr><td class='border-none'>Written:</td>" +
-		        "    <td class='border-none'>" +
-		              mb_written + " MB</td></tr>";			
+
+		    $(popover).find(".node-popover-frisbee-status")
+			.removeClass("hidden");
+		    $(popover).find(".node-popover-frisbee-image")
+			.html(imagename);
+		    $(popover).find(".node-popover-frisbee-written")
+			.html(mb_written + " MB");
 		}
 		if (_.has(details, "execute_state")) {
 		    var tag;
@@ -1327,8 +1344,10 @@ $(function ()
 			icon = "button14.svg"
 			color= PENDING_COLOR;
 		    }
-		    html += "<tr><td class='border-none'>Startup Service:</td>" +
-			"<td class='border-none'>" + tag + "</td></tr>";
+		    $(popover).find(".node-popover-execute-service")
+			.removeClass("hidden");
+		    $(popover).find(".node-popover-execute-status")
+			.html(tag);
 		    
 		    UpdateNodeIcon(node_id, jacksID, icon);
 
@@ -1336,8 +1355,7 @@ $(function ()
 			.html(tag)
 			.css("background", color);
 		}
-		html += "</tbody></table>";
-		UpdateNodePopover(node_id, jacksID, html);
+		UpdateNodePopover(node_id, jacksID, $(popover).html());
 	    });
 	});
     }
@@ -1347,98 +1365,75 @@ $(function ()
 	return $('#' + jacksID, jacksInstance.iframe());
     }
 
-    // Update the popover the node icon box
     function UpdateNodePopover(node_id, jacksID, html)
     {
 	//console.info("UpdateNodePopover", node_id, jacksID, html);
 	var jacksbox = jacksNodeBox(jacksID);
 	var popid    = '#popover-' + jacksID;
-	var popover  = $(popid);
 
-	if ($(popover).data("bs.popover")) {
-	    $(popover).data("bs.popover").options.content = html;
+	// See https://popper.js.org/docs/v2/virtual-elements/ for an
+	// explaination of this stuff. 
+	var generateGetBoundingClientRect =
+	    function(x = 0, y = 0, w = 75, h = 85) {
+		return () => ({
+		    width: w,
+		    height: h,
+		    left: x,
+		    top: y,
+		    right: x + w,
+		    bottom: y + h,
+		});
+	    };
 
-	    var isVisible = $(popover)
-		.data('bs.popover').tip().hasClass('in');
-	    
-	    if (isVisible) {
-		$(popover)
-		    .data('bs.popover').tip()
-		    .find('.popover-content').html(html);
-	    }
+	const virtualElement = {
+	    getBoundingClientRect: generateGetBoundingClientRect(),
+	};
+
+	if ($(popid).length) {
+	    var popover = bootstrap.Popover.getInstance(popid);
+	    popover.setContent({'.popover-body': html});
 	}
 	else {
 	    $(jacksbox).on("mouseenter", function (event) {
+		var ipos    = $('#showtopo_statuspage').offset();
+		var boxpos  = $(jacksbox).offset();
+		var ptop    = Math.floor(boxpos.top + ipos.top);
+		var pleft   = Math.floor(boxpos.left + ipos.left);
+		var jwidth  = $(jacksbox).width();
+		var jheight = $(jacksbox).height();
+		//console.info(pleft, ptop, jwidth, jheight);
+		virtualElement.getBoundingClientRect =
+		    generateGetBoundingClientRect(pleft, ptop);
+		
+		$(popid).popover('update');
 		$(popid).popover('show');
 	    });
 	    $(jacksbox).on("mouseleave", function (event) {
 		$(popid).popover('hide');
 	    });
+	    $(jacksbox).on("click", function (event) {
+		$(popid).popover('hide');
+	    });
+	    
+	    $("body")
+		.append("<div id=popover-" + jacksID + "></div>");
 
-	    $("body").append("<div id=popover-" + jacksID + "></div>");
 	    $(popid)
 		.popover({"content"   : html,
 			  "trigger"   : "manual",
 			  "animation" : false,
 			  "html"      : true,
 			  "placement" : "auto",
-			 })
-		.on("inserted.bs.popover", function (event) {
-		    var popover = $(popid).popover();
-		    var tip     = popover.data("bs.popover").tip();
-		    var ipos    = $('#showtopo_statuspage').offset();
-		    var iwidth  = $('#showtopo_statuspage').width();
-		    var boxpos  = $(jacksbox).offset();
-		    var ptop    = Math.floor(boxpos.top + ipos.top);
-		    var pleft   = Math.floor(boxpos.left + ipos.left);
-		    var pwidth  = tip.width();
-		    var arrow   = 50;
-
-		    // Move to above the node box. That will always be fine.
-		    ptop -= tip.height();
-
-		    // Horizontal is harder.
-		    if (pleft < pwidth / 2) {
-			// Left edge of popover at left edge of the node box.
-			// Arrow shifts to the left;
-			arrow = 5;
-		    }
-		    else if (pleft > iwidth - pwidth) {
-			// Right edge of popover at right edge of the node box.
-			// Arrow shifts to the right;
-			pleft = (pleft + 65) - pwidth;
-			arrow = 95;
-		    }
-		    else {
-			// Move horizontal center to middle of node box
-			pleft -= (pwidth / 2) - 35;
-		    }
-		    
-		    tip.data("top", ptop + "px");
-		    tip.data("left", pleft + "px");
-		    tip.data("arrow", arrow + "%");
-		})
-		.on("shown.bs.popover", function () {
-		    var tip = $(popid).data("bs.popover").tip();
-		    tip.css("top", tip.data("top"));
-		    tip.css("left", tip.data("left"))
-		    tip.find(".arrow").css("left", tip.data("arrow"));
-		});
+			  "container" : 'body',
+			  "reference" : virtualElement,
+			 });
 	}
 	// And a popover on the listview page, using the same html.
-	var id = '#listview-row-' + node_id + ' td[name="status"]';
-	
-	if ($(id).data("bs.popover")) {
-	    $(id).data("bs.popover").options.content = html;
+	var id  = '#listview-row-' + node_id + ' td[name="status"]';
+	var pop = bootstrap.Popover.getInstance(id);
 
-	    var isVisible = $(id)
-		.data('bs.popover').tip().hasClass('in');
-	    
-	    if (isVisible) {
-		$(id)
-		    .data('bs.popover').tip()
-		    .find('.popover-content').html(html);
-	    }
+	if (pop) {
+	    pop.setContent({'.popover-body': html});
 	}
 	else {
 	    $(id).popover({"content"   : html,
@@ -1691,7 +1686,7 @@ $(function ()
 	    $('#general-error').addClass("hidden");
 	}
 	else {
-	    $('#general-error .alert').html(error);
+	    $('#general-error .error-cause').html(error);
 	    $('#general-error').removeClass("hidden");
 	}
     }
@@ -2185,12 +2180,7 @@ $(function ()
 	
 	if (! $("#" + tabname).length) {
 	    // The tab.
-	    var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
-		client_id + "" +
-		"<button class='close' type='button' " +
-		"        id='" + tabname + "_kill'>x</button>" +
-		"</a>" +
-		"</li>";	
+	    var html = navTabLink(client_id, tabname);
 
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);
@@ -2347,6 +2337,8 @@ $(function ()
     //
     function ContextMenuShow(jacksevent)
     {
+	//console.info("ContextMenuShow", jacksevent);
+	
 	// Foreign admins have no permission for anything.
 	if (isfadmin) {
 	    return;
@@ -2354,6 +2346,7 @@ $(function ()
 	var event = jacksevent.event;
 	var client_id = jacksevent.client_id;
 	var cid = "context-menu-" + client_id;
+	var toggle = "#" + cid + " .dropdown-toggle"
 
 	if (currentContextMenu) {
 	    $('#context').contextmenu('closemenu');
@@ -2363,27 +2356,20 @@ $(function ()
 	    return;
 	}
 
-	//
-	// We generate a new menu object each time causes it easier and
-	// not enough overhead to worry about.
-	//
-	$('#context').contextmenu({
-	    target: '#' + cid, 
-	    onItem: function(context,e) {
-		window.APT_OPTIONS.gaButtonEvent(e);
-		$('#context').contextmenu('closemenu');
-		$('#context').contextmenu('destroy');
-		// Disabled menu items, but we still want user to see them.
-		if ($(e.target).attr("disabled")) {
-		    return;
-		}
-		ActionHandler($(e.target).attr("name"), [client_id]);
-	    }
-	});
-	currentContextMenu = cid;
-	$('#' + cid).one('hidden.bs.context', function (event) {
-	    currentContextMenu = null;
-	});
+	// See https://popper.js.org/docs/v2/virtual-elements/ for an
+	// explaination of this stuff. 
+	var generateGetBoundingClientRect =
+	    function(x = 0, y = 0) {
+		return () => ({
+		    width: 0,
+		    height: 0,
+		    left: x,
+		    top: y,
+		    right: x,
+		    bottom: y,
+		});
+	    };
+
 	/*
 	 * Since the topology is in an iframe, need to move the
 	 * context menu relative to that.
@@ -2395,8 +2381,27 @@ $(function ()
 
 	// And compensate for scroll.
 	event.clientY -= $(window).scrollTop();
+
+	    
+	const virtualElement = {
+	    getBoundingClientRect :
+	        generateGetBoundingClientRect(event.clientX,event.clientY),
+	};
+	$(toggle).dropdown({
+	    "reference" : virtualElement,
+	    "autoClose" : true,
+	});
+
+	currentContextMenu = cid;
+	$(toggle).parent().one('hidden.bs.dropdown', function (event) {
+	    currentContextMenu = null;
+	});
 	
-	$('#context').contextmenu('show', event);
+	// More bootstrap 5 oddness, need to return from the Jacks event
+	// before we do this. 
+	setTimeout(function () {
+	    $(toggle).dropdown('show');
+	}, 10);
     }
     
     //
@@ -2988,15 +2993,16 @@ $(function ()
 		// Change the ID of the clone so its unique.
 		CMclone.attr('id', "context-menu-" + node);
 
-		// Activate tooltips in the menu.
-		CMclone.find('[data-toggle="tooltip"]')
-		    .tooltip({"trigger"   : "hover",
-			      "container" : "body",
-			      "placement" : "auto right",
-			     });
-	    
 		// Insert into the context-menus div.
 		$('#context-menus').append(CMclone);
+
+		// Activate tooltips in the menu.
+		$('#context-menu-' + node + ' [data-toggle="tooltip"]')
+		    .each(function () {
+			$(this).tooltip({"trigger"   : "hover",
+					 "placement" : "right",
+					});
+		    });
 
 		// If no console, then grey out the options.
 		if (!_.has(consolenodes, node)) {
@@ -3030,6 +3036,16 @@ $(function ()
 		    // For ActionHandler()
 		    $(CMclone).find("[name=delete]").attr("disabled", true);
 		}
+
+		// And now enable the menu items that are not disabled.
+		$(CMclone).find("li").each(function () {
+		    if ($(this).attr("disabled")) {
+			return;
+		    }
+		    $(this).find("a").click(function (e) {
+			ActionHandler($(this).attr("name"), [node]);
+		    });
+		});
 		contextMenus[node] = CMclone;
 		nodecount++;
 	    });
@@ -4215,12 +4231,7 @@ $(function ()
 	    var tabname = client_id + "console_tab";
 	    if (! $("#" + tabname).length) {
 		// The tab.
-		var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
-		    client_id + "-Cons" +
-		    "<button class='close' type='button' " +
-		    "        id='" + tabname + "_kill'>x</button>" +
-		    "</a>" +
-		    "</li>";	
+		var html = navTabLink(client_id + "-Cons", tabname);
 
 		// Append to end of tabs
 		$("#quicktabs_ul").append(html);
@@ -4237,10 +4248,10 @@ $(function ()
 		$("#" + tabname + "_kill").click(function(e) {
 		    window.APT_OPTIONS.gaTabEvent("kill", ganame);
 		    e.preventDefault();
-		    // remove the li from the ul. this=ul.li.a.button
-		    $(this).parent().parent().remove();
 		    // Activate the initialtab
 		    SwitchToLastKnownTab();
+		    // remove the li from the ul. this=ul.li.a.button
+		    $(this).parent().parent().remove();
 		    // Trigger the custom event.
 		    $("#" + tabname).trigger("killconsole");
 		    // Remove the content div. Have to delay this though.
@@ -4277,10 +4288,11 @@ $(function ()
 	    
 		    if (_.has(json.value, "password")) {
 			html =
-			    "<div class='col-sm-4 col-sm-offset-4 " +
+			    "<div class='col-sm-4 col-sm-offset-4 offset-sm-4" +
 			    "     text-center'>" +
 			    " <small> " +
 			    " <a data-toggle='collapse' " +
+			    "    data-bs-toggle='collapse' " +
 			    "    href='#password_" + tabname + "'>Password" +
 			    "   </a></small> " +
 			    " <div id='password_" + tabname + "' " +
@@ -4361,10 +4373,10 @@ $(function ()
 	
 	if (_.has(coninfo, "password")) {
 	    html =
-		"<div class='col-sm-4 col-sm-offset-4 " +
+		"<div class='col-sm-4 col-sm-offset-4 offset-sm-4 " +
 		"     text-center'>" +
 		" <small> " +
-		" <a data-toggle='collapse' " +
+		" <a data-toggle='collapse' data-bs-toggle='collapse' " +
 		"    href='#password_" + tabname + "'>Password" +
 		"   </a></small> " +
 		" <div id='password_" + tabname + "' " +
@@ -4480,12 +4492,7 @@ $(function ()
 	    var tabname = client_id + "logs";
 	    if (! $("#" + tabname).length) {
 		// The tab.
-		var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
-		    client_id + "-Logs" +
-		    "<button class='close' type='button' " +
-		    "        id='" + tabname + "_kill'>x</button>" +
-		    "</a>" +
-		    "</li>";	
+		var html = navTabLink(client_id + "-Logs", tabname);
 
 		// Append to end of tabs
 		$("#quicktabs_ul").append(html);
@@ -4698,7 +4705,7 @@ $(function ()
 	    var click_callback = function (jacksevent) {
 		if (jacksevent.type === 'node' ||
 		    jacksevent.type === 'host') {
-		    //console.log(jacksevent);
+		    console.log(jacksevent);
 		    ContextMenuShow(jacksevent);
 		}
 	    };
@@ -4837,12 +4844,7 @@ $(function ()
 	var tabname = site + "_linktest";
 	if (! $("#" + tabname).length) {
 	    // The tab.
-	    var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
-		name + "" +
-		"<button class='close' type='button' " +
-		"        id='" + tabname + "_kill'>x</button>" +
-		"</a>" +
-		"</li>";	
+	    var html = navTabLink(name, tabname);
 
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);
@@ -5081,20 +5083,20 @@ $(function ()
  	    $('#profile_status_collapse').trigger('show.bs.collapse');
 	    $('#status_progress_outerdiv').removeClass("hidden");
 	    $("#status_progress_bar").width(spinwidth + "%");	
-	    $("#status_progress_div").addClass("progress-striped");
-	    $("#status_progress_div").removeClass("progress-bar-success");
-	    $("#status_progress_div").removeClass("progress-bar-danger");
-	    $("#status_progress_div").addClass("active");
+	    $("#status_progress_bar").addClass("progress-bar-striped");
+	    $("#status_progress_bar").addClass("progress-bar-animated");
+	    $("#status_progress_bar").removeClass("bg-primary");
+	    $("#status_progress_bar").removeClass("bg-danger");
 	}
 	else {
 	    if (! $('#status_progress_outerdiv').hasClass("hidden")) {
-		$("#status_progress_div").removeClass("progress-striped");
-		$("#status_progress_div").removeClass("active");
+		$("#status_progress_bar").removeClass("progress-bar-striped");
+		$("#status_progress_bar").removeClass("progress-bar-animated");
 		if (instanceStatus == "ready") {
-		    $("#status_progress_div").addClass("progress-bar-success");
+		    $("#status_progress_bar").addClass("bg-primary");
 		}
 		else {
-		    $("#status_progress_div").addClass("progress-bar-danger");
+		    $("#status_progress_bar").addClass("bg-danger");
 		}
 		$("#status_progress_bar").width("100%");
 	    }
@@ -5560,12 +5562,7 @@ $(function ()
 	var tabname = client_id + "monitor_tab";
 	if (! $("#" + tabname).length) {
 	    // The tab.
-	    var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
-		client_id + "-Graph" +
-		"<button class='close' type='button' " +
-		"        id='" + tabname + "_kill'>x</button>" +
-		"</a>" +
-		"</li>";	
+	    var html = navTabLink(client_id + "-Graph", tabname);
 
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);

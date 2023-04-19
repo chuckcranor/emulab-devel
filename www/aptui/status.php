@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
@@ -57,8 +60,7 @@ $isfadmin = 0;
 #
 $reqargs = OptionalPageArguments("uuid",      PAGEARG_UUID,
                                  "slice_uuid",PAGEARG_UUID,
-                                 "maxextend", PAGEARG_INTEGER,
-				 "oneonly",   PAGEARG_BOOLEAN);
+                                 "maxextend", PAGEARG_INTEGER);
 
 if (! (isset($uuid) || isset($slice_uuid))) {
     SPITHEADER(1);
@@ -207,9 +209,7 @@ if ($profile = Profile::Lookup($instance->profile_id(),
     }
     $isscript = ($profile->script() && $profile->script() != "" ? 1 : 0);
 }
-$registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
-$oneonly         = (isset($oneonly) && $oneonly ? 1 : 0);
 $isadmin         = (ISADMIN() ? 1 : 0);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
 $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
@@ -253,11 +253,8 @@ if ($instance_status == "imaging") {
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/nv.d3.css'>\n";
-
-echo "<link rel='stylesheet'
-            href='css/frequency-graph.css'>\n";
+echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
+echo "<link rel='stylesheet' href='css/frequency-graph.css'>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='status-body'></div>\n";
@@ -315,7 +312,6 @@ REQUIRE_IMAGE();
 REQUIRE_EXTEND();
 REQUIRE_IDLEGRAPHS();
 REQUIRE_OPENSTACKGRAPHS();
-REQUIRE_CONTEXTMENU();
 REQUIRE_SUP();
 REQUIRE_TOPOLOGY_VIEWER();
 REQUIRE_JQUERY_UI();
@@ -338,6 +334,7 @@ SPITREQUIRE("js/status.js");
 # For progress bubbles in the imaging modal.
 echo "<link rel='stylesheet' href='css/progress.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
+echo "<link rel='stylesheet' href='css/instantiate.css'>\n";
 
 #
 # Build up a blob of all aggregates for this portal. We need the entire
