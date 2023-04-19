@@ -926,7 +926,6 @@ class Instance
                            "cellsdr1-dentistry" => true,
                            "cellsdr1-fm"        => true,
                            "cellsdr1-honors"    => true,
-                           "cellsdr1-meb"       => true,
                            "cellsdr1-ustar"     => true,
                            "mmimo-ac"           => true,
                            "irisclients-ac"     => true,
