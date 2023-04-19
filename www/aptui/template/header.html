@@ -167,6 +167,10 @@
                        class='dropdown-item'>Edit Site Variables</a></li>
                 <li><a href='portal-news.php'
                        class='dropdown-item'>Manage News</a></li>
+		<% if (window.MAINSITE) { %>
+                  <li><a href='portal-hardware.php'
+                         class='dropdown-item'>Portal Hardware</a></li>
+		<% } %>
 	      </ul>
 	    </li>
 	  <% } %> <!-- End of Admin menu --> 
