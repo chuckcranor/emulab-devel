@@ -5887,7 +5887,15 @@
     _createPopper(tip) {
       const placement = typeof this._config.placement === 'function' ? this._config.placement.call(this, tip, this._element) : this._config.placement;
       const attachment = AttachmentMap[placement.toUpperCase()];
-      return createPopper(this._element, tip, this._getPopperConfig(attachment));
+
+      let referenceElement = this._element;
+
+      if (this._config.reference === 'parent') {
+        referenceElement = this._parent;
+      } else if (typeof this._config.reference === 'object') {
+        referenceElement = this._config.reference;
+      }
+      return createPopper(referenceElement, tip, this._getPopperConfig(attachment));
     }
 
     _getOffset() {
