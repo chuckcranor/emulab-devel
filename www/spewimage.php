@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2019, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2003-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -191,6 +191,11 @@ if ($fp = popen("$TBSUEXEC_PATH nobody $unix_pid,$unix_gid ".
                 SPITERROR(404, "Could not verify file: $retval!");
             }
         }
+        flush();
+        exit();
+    }
+    if (!$fp) {
+        # Something unexpected happened.
         flush();
         exit();
     }
