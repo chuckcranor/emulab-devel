@@ -129,6 +129,8 @@ my $IMAGEDUMP   = "$LBINDIR/imagedump";
 my $XM          = "/usr/sbin/xm";
 my $FSCK	= "/sbin/e2fsck";
 my $FSCKUFS	= "/sbin/fsck.ufs";
+my $FDISK       = "/usr/sbin/fdisk";
+my $SGDISK      = "/usr/sbin/sgdisk";
 my $debug  = 0;
 my $lockdebug = 1;
 my $sleepdebug = 0;
@@ -3613,6 +3615,13 @@ sub CreatePrimaryDisk($$$$;$$)
     }
 
     #
+    # Add 64 sectors for backup GPT header and partitions.
+    #
+    if ($loadslice == 0) {
+	$lv_size += (64 * 512) / 1024;
+    }
+
+    #
     # What we actually load up here is the golden image.
     #
     # Note that if this fails, we fall back on creating the vnode
@@ -3803,6 +3812,14 @@ sub CreatePrimaryDisk($$$$;$$)
 
 	    goto fail
 		if ($?);
+	}
+
+	if (-x $FDISK
+	    && mysystem2("$FDISK -l $rootvndisk | grep -q 'Disklabel type: gpt'") == 0) {
+	    TBDebugTimeStamp("$rootvndisk: sanitizing backup GPT headers");
+	    mysystem2("$SGDISK -e $rootvndisk");
+	    print STDERR "libvnode_xen: failed to sanitize backup GPT headers for $rootvndisk\n"
+		if ($? != 0);
 	}
     }
     if ($dothinlv) {
