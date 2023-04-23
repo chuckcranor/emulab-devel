@@ -1706,12 +1706,6 @@ okay:
 	    $image{'kernel'}  = "/boot/fedora8/vmlinuz-xenU";
 	    $image{'ramdisk'} = "/boot/fedora8/initrd-xenU";
 	}
-	elsif ($imagemetadata->{'PARTOS'} =~ /linux/i &&
-	       $imagemetadata->{'OSVERSION'} eq "5.15.0") {
-	    $private->{'ishvm'} = $ishvm = 1;
-	    undef $image{'kernel'};
-	    undef $image{'ramdisk'};
-	}
 	elsif ($imagename ne $defaultImage{'name'}) {
 	    #
 	    # See if we can dig the kernel out from the image.
@@ -1748,7 +1742,6 @@ okay:
 		    $image{'ramdisk'} = $ramdisk;
 		}
 	    }
-	    # else... Use the booted kernel. Works sometimes. 
 
 	    # Some kernels (CentOS8) no longer support PV or PVH.  So,
 	    # attempt to handle that by falling back to HVM if PV is not
@@ -1766,6 +1759,17 @@ okay:
 		    undef $image{'ramdisk'};
 		    undef $image{'bootloader'};
 		}
+	    }
+
+	    # If we can't extract the kernel, fall back to HVM.  All modern
+	    # kernels support PVHVM, so this is the best default.
+	    if (!defined($kernel)) {
+		print "Warning: failed to extract kernel;".
+		    " falling back to HVM!\n";
+		$private->{'ishvm'} = $ishvm = 1;
+		undef $image{'kernel'};
+		undef $image{'ramdisk'};
+		undef $image{'bootloader'};
 	    }
 	}
     }
