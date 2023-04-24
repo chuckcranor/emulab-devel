@@ -537,9 +537,10 @@ blockquote #selected_profile_description {
     cursor: default;
 }
 
-/* The default margins leave no space at all! */
-.popover-content {
+/* The default margins leave no space at all. And too much padding. */
+.popover-content, .popover-body {
     margin: 0px 5px 5px 5px;
+    padding: 8px 10px;
 }
 
 .well-xs {
@@ -671,9 +672,3 @@ a.disabled, a[disabled] {
     width: auto;
 }
 
-/*
- * Too much padding on popovers.
- */
-.popover-content {
-    padding: 8px 10px;
-}

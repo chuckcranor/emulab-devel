@@ -50,51 +50,57 @@
      display: block;
  }
 </style>
-<div class="frequency-graph-div col-sm-12">
-  <div class="input-group input-group-sm col-sm-2 pull-left frequency-search">
-    <input type="text" class="form-control min-freq-input"
-	   style="width: 50%;" placeholder="Min MHz">
-    <input type="text" class="form-control max-freq-input"
-	   style="width: 50%;" placeholder="Max MHz">
-    <span class="input-group-btn">
-      <button class="btn btn-default" type="button">Find!</button>
-    </span>
-  </div>
-  <div class='pull-right moregraphs-dropdown'>
-    <button id='action-menu-button' type='button'
-	    class='btn btn-default btn-xs dropdown-toggle'
-	    data-toggle='dropdown' data-target=".multilevel-menu">
-      More/Older Graphs <span class="caret"></span>
-    </button>
-    <div class="multilevel-menu"></div>
-  </div>
-  <a type='button' disabled
-	  style="margin-right: 10px"
-          class='btn btn-default btn-xs download-button pull-right'
-          data-toggle='tooltip'
-          title='Download raw data (CSV file) for the current graph'
-          data-trigger="hover">
-    Download</a>
-  <a type='button' disabled
-     style="margin-right: 10px"
-     class='btn btn-default btn-xs share-button pull-right'
-     data-toggle='tooltip'
-     title='Share a link to the current graph'
-     data-trigger="hover">
-    Share</a>
-  <a type='button' hidden
-     style="margin-right: 10px"
-     class='btn btn-default btn-xs reload-button pull-right'
-     data-toggle='tooltip'
-     title='Refesh the graph data (adding newer graphs)'
-     data-trigger="hover">
-    Reload</a>
-  <% if (window.WHICH === "rfmonitor-mobile") { %>
-    <a type='button' disabled target="_blank"
-       style="margin-right: 10px"
-       class='btn btn-default btn-xs gps-button pull-right'>
-      GPS Map</a>
-  <% } %>
+<div class="frequency-graph-div">
+  <div class="row justify-content-between">
+    <div class="col-lg-3 col-md-3 col-sm-4">
+      <div class="input-group input-group-sm frequency-search">
+	<input type="text" class="form-control Xform-control-sm min-freq-input"
+	       placeholder="Min MHz">
+	<input type="text" class="form-control Xform-control-sm max-freq-input"
+	       placeholder="Max MHz">
+	<button class="btn btn-outline-secondary" type="button">Find!</button>
+      </div>
+    </div>
+    <div class="col-auto">
+      <% if (window.WHICH === "rfmonitor-mobile") { %>
+	<a type='button' disabled target="_blank"
+	   style="margin-right: 10px"
+	   class='btn btn-default btn-sm gps-button'>
+	  GPS Map</a>
+      <% } %>
+      <a type='button' hidden
+	 style="margin-right: 10px"
+	 class='btn btn-default btn-sm reload-button'
+	 data-toggle='tooltip' data-bs-toggle='tooltip'
+	 title='Refesh the graph data (adding newer graphs)'
+	 data-trigger="hover">
+	Reload</a>
+      <a type='button' disabled
+	 style="margin-right: 10px"
+	 class='btn btn-default btn-sm share-button'
+	 data-toggle='tooltip' data-bs-toggle='tooltip'
+	 title='Share a link to the current graph'
+	 data-trigger="hover">
+	Share</a>
+      <a type='button' disabled
+	 style="margin-right: 10px"
+         class='btn btn-default btn-sm download-button'
+         data-toggle='tooltip' data-bs-toggle='tooltip'
+         title='Download raw data (CSV file) for the current graph'
+         data-trigger="hover">
+	Download</a>
+      <span class='moregraphs-dropdown'>
+	<button id='action-menu-button' type='button'
+		class='btn btn-default btn-sm dropdown-toggle'
+		data-toggle='dropdown' data-bs-toggle='dropdown'
+		data-target=".multilevel-menu"
+		data-bs-target=".multilevel-menu">
+	  More/Older Graphs <span class="caret"></span>
+	</button>
+	<div class="multilevel-menu"></div>
+      </span>
+    </div>
+  </div>    
   <center>
     <h4>
       <% if (window.WHICH === "rfbaseline") { %>
@@ -115,8 +121,8 @@
 	<% } %>
     </h4>
   </center>
-  <div class="panel panel-default" style="margin-bottom: 0px;">
-    <div class="panel-body" style="padding: 0px;">
+  <div class="panel card panel-default" style="margin-bottom: 0px;">
+    <div class="panel-body card-body" style="padding: 0px;">
       <div class="frequency-graph frequency-graph-maingraph"
 	   style="height: 600px;">
 	<div class='spinner'>
@@ -127,8 +133,8 @@
       <div id="maingraph-tooltip-popover"></div>
     </div>
   </div>
-  <div class="panel panel-default" style="margin-bottom: 0px;">
-    <div class="panel-body" style="padding: 0px;">
+  <div class="panel card panel-default" style="margin-bottom: 0px;">
+    <div class="panel-body card-body" style="padding: 0px;">
       <div class="frequency-graph frequency-graph-subgraph"
 	   style="height: 600px;"></div>
       <div id="subgraph-tooltip-popover"></div>
@@ -142,56 +148,62 @@
 <div class="hidden">
   <div id="maingraph-tooltipTemplate">
     <table class="table table-condensed border-none"
-           style="font-size: 14px; margin: 5px;">
+           style="font-size: 14px; margin: 5px; padding 0px;">
       <tbody>
 	<tr>
-          <td class="border-none">Frequency:</td>
-          <td class="border-none tooltip-frequency"></td>
+          <td class="border-none p-1">Frequency:</td>
+          <td class="border-none p-1 tooltip-frequency"></td>
 	</tr>
 	<tr>
-          <td class="border-none">Avg Power:</td>
-          <td class="border-none tooltip-avg"></td>
+          <td class="border-none p-1">Avg Power:</td>
+          <td class="border-none p-1 tooltip-avg"></td>
 	</tr>
 	<tr>
-          <td class="border-none">Max Power:</td>
-          <td class="border-none tooltip-max"></td>
+          <td class="border-none p-1">Max Power:</td>
+          <td class="border-none p-1 tooltip-max"></td>
 	</tr>
 	<tr>
-          <td class="border-none">Min Power:</td>
-          <td class="border-none tooltip-min"></td>
+          <td class="border-none p-1">Min Power:</td>
+          <td class="border-none p-1 tooltip-min"></td>
 	</tr>
 	<tr class="hidden tooltip-abovefloor">
-          <td class="border-none">Above Floor:</td>
-          <td class="border-none abovefloor"></td>
+          <td class="border-none p-1">Above Floor:</td>
+          <td class="border-none p-1 abovefloor"></td>
 	</tr>
       </tbody>
     </table>
   </div>
   <div id="subgraph-tooltipTemplate">
     <table class="table table-condensed border-none"
-           style="font-size: 14px; margin: 5px;">
+           style="font-size: 14px; margin: 5px; padding: 0px;">
       <tbody>
 	<tr>
-          <td class="border-none">Frequency:</td>
-          <td class="border-none tooltip-freq"></td>
+          <td class="border-none p-1">Frequency:</td>
+          <td class="border-none p-1 tooltip-freq"></td>
 	</tr>
 	<tr>
-          <td class="border-none">Power:</td>
-          <td class="border-none tooltip-power"></td>
+          <td class="border-none p-1">Power:</td>
+          <td class="border-none p-1 tooltip-power"></td>
 	</tr>
 	<tr>
-          <td class="border-none">Center:</td>
-          <td class="border-none tooltip-center"></td>
+          <td class="border-none p-1">Center:</td>
+          <td class="border-none p-1 tooltip-center"></td>
 	</tr>
 	<tr class="hidden tooltip-incident">
-          <td class="border-none">Incident:</td>
-          <td class="border-none incident"></td>
+          <td class="border-none p-1">Incident:</td>
+          <td class="border-none p-1 incident"></td>
 	</tr>
 	<tr class="hidden tooltip-abovefloor">
-          <td class="border-none">Above Floor:</td>
-          <td class="border-none abovefloor"></td>
+          <td class="border-none p-1">Above Floor:</td>
+          <td class="border-none p-1 abovefloor"></td>
 	</tr>
       </tbody>
     </table>
   </div>
+  <div id="popover-template">
+    <div class="popover" style="min-width: 240px;" role="tooltip">
+      <div class="popover-body" style="padding: 0px;"></div>
+    </div>
+  </div>
 </div>
+
