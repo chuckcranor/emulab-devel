@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2022 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -172,7 +172,7 @@ sub PowerControl($@);
 sub DisableExperiments();
 sub EnableExperiments();
 sub InitInfluxCreds();
-sub UploadVoltage($$);
+sub UploadVoltage($$$);
 
 #
 # Turn off line buffering on output
@@ -653,7 +653,7 @@ sub CheckTempAndBattery($$)
     }
 
     if ($ONBUS) {
-	UploadVoltage($voltage, $onbattery);
+	UploadVoltage($voltage, $onbattery, $current);
 	if (! $onbattery) {
 	    if (defined($onBatteryTime)) {
 		#
@@ -963,15 +963,17 @@ sub InitInfluxCreds()
     }
 }
 
-sub UploadVoltage($$)
+sub UploadVoltage($$$)
 {
-    my ($voltage, $onbat) = @_;
+    my ($voltage, $onbat, $current) = @_;
 
     return
 	if (!defined($INFLUXCREDS));
 
     my $params = "battery=${onbat},accessory=0 value=${voltage}";
-    
+    if (defined($current)) {
+	$params .= ",current=${current}";
+    }
     my $url = "'https://overwatch.emulab.net:8086/write?db=telegraf' ".
 	"--data-binary 'exec_arduinovolt,host=${hostname},${params}'";
     my $opts = ($debug > 1 ? "-S" : "");
