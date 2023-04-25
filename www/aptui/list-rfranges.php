@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include("webtask.php");
@@ -47,19 +50,17 @@ echo "<div id='main-body'></div>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_JQUERY_UI();
 REQUIRE_TABLESORTER(
     array("js/lib/tablesorter/widgets/widget-filter-formatter-jui.js"));
 AddTemplateList(array("list-rfranges", "rfrange-history", "txgraph",
                       "oops-modal", "waitwait-modal"));
 AddLibrary("js/txgraph.js");
 SPITREQUIRE("js/list-rfranges.js",
-            "<script src='js/lib/d3.v5.js'></script>\n".
-            "<script src='js/lib/jquery-ui.js'></script>");
+            "<script src='js/lib/d3.v5.js'></script>\n");
 
 echo "<link rel='stylesheet'
             href='css/frequency-graph.css'>\n";
-echo "<link rel='stylesheet'
-            href='css/jquery-ui.min.css'>\n";
 echo "<link rel='stylesheet'
             href='css/tablesorter-filter.formatter.css'>\n";
 
