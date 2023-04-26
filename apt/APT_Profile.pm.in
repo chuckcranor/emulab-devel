@@ -1390,7 +1390,7 @@ sub SetSites($$$$$$)
 	    my $site_mid = "site:" . $site_id;
 	    if (!exists($sitemap->{$site_mid})) {
 		$$perrmsg = "No site mapping for node $client_id ($site_id)";
-		return -1;
+		return 1;
 	    }
 	    $manager_urn = $sitemap->{$site_mid};
 	    if (!GeniHRN::IsValid($manager_urn)) {
