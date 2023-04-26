@@ -38,42 +38,74 @@
 #include <net/net_namespace.h>
 #include <linux/version.h>
 #include <linux/limits.h>
+#include <linux/workqueue.h>
+#include <linux/efi.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Flux Research Group");
-MODULE_VERSION("3.3.0");
-
-#if defined(__aarch64__) || defined(__powerpc64__)
-#define IPOD_QUEUE_RESTART
-#endif
-
-#ifdef IPOD_QUEUE_RESTART
-#include <linux/workqueue.h>
-
-static struct workqueue_struct *restart_queue;
-
-static void restart_work_func(struct work_struct *work)
-{
-        printk(KERN_CRIT "IPOD: restarting (delayed)...\n");
-        emergency_restart();
-}
-
-DECLARE_WORK(restart_work,restart_work_func);
-#endif
+MODULE_VERSION("3.4.0");
 
 #define IPOD_ICMP_TYPE 6
 #define IPOD_ICMP_CODE 6
 
+int sysctl_ipod_wq = 0;
 int sysctl_ipod_version = 3;
 int sysctl_ipod_enabled = 0;
 u32 sysctl_ipod_host = 0xffffffff;
 u32 sysctl_ipod_mask = 0xffffffff;
 char sysctl_ipod_key[32+1] = { "SETMETOSOMETHINGTHIRTYTWOBYTES!!" };
 
+static struct workqueue_struct *restart_queue = NULL;
+
+static void restart_work_func(struct work_struct *work)
+{
+    printk(KERN_CRIT "IPOD: restarting (delayed)...\n");
+    emergency_restart();
+}
+DECLARE_WORK(restart_work,restart_work_func);
+
+static void ipod_start_wq(void) {
+    if (restart_queue)
+	return;
+
+    sysctl_ipod_wq = 1;
+    restart_queue = create_singlethread_workqueue("ipod_restart_queue");
+}
+
+static void ipod_stop_wq(void) {
+    sysctl_ipod_wq = 0;
+    if (restart_queue) {
+	cancel_work_sync(&restart_work);
+	destroy_workqueue(restart_queue);
+	restart_queue = NULL;
+    }
+}
+
+static void ipod_restart(void) {
+    if (sysctl_ipod_wq)
+	queue_work(restart_queue,&restart_work);
+    else
+	emergency_restart();
+}
+
 #define IPOD_CHECK_KEY() \
         (sysctl_ipod_key[0] != 0)
 #define IPOD_VALID_KEY(d) \
         (strncmp(sysctl_ipod_key,(char *)(d),sizeof(sysctl_ipod_key) - 1) == 0)
+
+static int ipod_wq_proc(struct ctl_table *table, int write,
+			 void __user *buffer, size_t *lenp, loff_t *ppos) {
+    int err = proc_dointvec(table, write, buffer, lenp, ppos);
+    if (err < 0)
+	return err;
+
+    if (sysctl_ipod_wq)
+	ipod_start_wq();
+    else
+	ipod_stop_wq();
+
+    return 0;
+}
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 #define __PHP &
@@ -118,6 +150,12 @@ static struct ctl_table ipod_table[] = {
       .maxlen = sizeof(sysctl_ipod_key),
       .mode = 0600,
       .proc_handler = __PHP proc_dostring,
+    },
+    { .procname = "icmp_ipod_wq",
+      .data = &sysctl_ipod_wq,
+      .maxlen = sizeof(int),
+      .mode = 0644,
+      .proc_handler = __PHP ipod_wq_proc,
     },
     { .procname = NULL,
       .data = NULL,
@@ -256,11 +294,7 @@ static unsigned int ipod_hook_fn(
     if (doit) {
 	sysctl_ipod_enabled = 0;
 	printk(KERN_CRIT "IPOD: reboot forced by %pI4...\n",&iph->saddr);
-#ifdef IPOD_QUEUE_RESTART
-	queue_work(restart_queue,&restart_work);
-#else
-	emergency_restart();
-#endif
+	ipod_restart();
 	return NF_DROP;
     }
     else {
@@ -303,8 +337,15 @@ static int __init ipod_init_module(void) {
 	return -1;
     }
 
-#ifdef IPOD_QUEUE_RESTART
-    restart_queue = create_singlethread_workqueue("ipod_restart_queue");
+    /*
+     * Automatically enable workqueue-based restart on aarch64, powerpc64,
+     * and if EFI is enabled.
+     */
+#if defined(__aarch64__) || defined(__powerpc64__)
+    ipod_start_wq();
+#elif defined(CONFIG_EFI) && LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0)
+    if (test_bit(EFI_BOOT, &efi.flags) != 0)
+	ipod_start_wq();
 #endif
 
     return 0;
@@ -313,10 +354,7 @@ static int __init ipod_init_module(void) {
 static void __exit ipod_cleanup_module(void) {
     printk(KERN_INFO "removing IPOD\n");
 
-#ifdef IPOD_QUEUE_RESTART
-    cancel_work_sync(&restart_work);
-    destroy_workqueue(restart_queue);
-#endif
+    ipod_stop_wq();
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
     nf_unregister_net_hooks(&init_net,&ipod_hook_ops,1);
