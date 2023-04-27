@@ -172,7 +172,7 @@ POWDER_WBSTORE=1
 
 DISABLE_RESERVATION_EMAIL=1
 
-BROWSER_CONSOLE_PROXIED=1
+BROWSER_CONSOLE_PROXIED=2
 POWDER_DEADMAN=1
 
 # Image updates take a long time on buses, this makes it smoother since
