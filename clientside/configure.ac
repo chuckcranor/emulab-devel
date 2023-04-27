@@ -103,13 +103,14 @@ AC_SUBST(CLIENT_BINDIR)
 AC_SUBST(CLIENT_VARDIR)
 AC_SUBST(CLIENT_MANDIR)
 CLIENT_ETCDIR="/etc/emulab"
-if test "$prefix" = "/usr/local"; then
-    CLIENT_BINDIR="$prefix/etc/emulab"
+if test "$prefix" = "/usr/local" -o "$prefix" = "NONE"; then
+    CLIENT_BINDIR="/usr/local/etc/emulab"
+    CLIENT_MANDIR="/usr/local/man"
 else
     CLIENT_BINDIR="$libexecdir/emulab"
+    CLIENT_MANDIR="$mandir"
 fi
 CLIENT_VARDIR="/var/emulab"
-CLIENT_MANDIR="$prefix/man"
 
 # XXX compat. We have no business expanding these on the client side!
 AC_SUBST(PROJROOT_DIR)
