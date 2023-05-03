@@ -486,7 +486,7 @@ xen-install:	xen-dir-install xen-udev-install xen-upstart-install
 	    $(INSTALL) -m 755 $(SRCDIR)/xen/topd-init $(SYSETCDIR)/init.d/topd; \
 	    /usr/bin/update-rc.d topd defaults; \
 	fi
-	$(INSTALL) -m 644 $(SRCDIR)/xen/grub-xen.cfg /etc/default/grub.d/xen.cfg
+	$(INSTALL) -m 644 $(SRCDIR)/xen/grub-xen.cfg $(SYSETCDIR)/default/grub.d/xen.cfg
 
 xen-install-pygrub:
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSLIBDIR)/xen-$(XENVERS)/lib/python/grub
