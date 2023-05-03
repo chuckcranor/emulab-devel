@@ -186,6 +186,7 @@ my $MAXIMAGEWAIT = 1800;
 my $CAPTURE     = "/usr/local/sbin/capture-nossl";
 if (! -x $CAPTURE && -x "/usr/sbin/capture-nossl") {
     $CAPTURE    = "/usr/sbin/capture-nossl";
+}
 my $CAPTUREOPTS	= "-i -C -L -T 10 -R 2000";
 
 #
