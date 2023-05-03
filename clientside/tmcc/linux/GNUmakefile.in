@@ -206,7 +206,6 @@ xen-dir-install: dir-install
 	@if [ "$(XENVERS)" = "4.9" -o "$(XENVERS)" = "4.11" ]; then \
 		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/network-online.target.wants ; \
 	fi
-	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSLIBDIR)/xen-$(XENVERS)/lib/python/grub
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/default/grub.d
 
 common-install:	dir-install
@@ -482,15 +481,19 @@ xen-install:	xen-dir-install xen-udev-install xen-upstart-install
 	$(INSTALL) -m 755 $(SRCDIR)/../../os/create-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/mkimagecache $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/gc-xen-images $(BINDIR)/
-	$(INSTALL) -m 755 $(SRCDIR)/xen/pygrub $(BINDIR)/
-	ln -sf xen-$(XENVERS) $(SYSLIBDIR)/xen-default
-	$(INSTALL) -m 755 $(SRCDIR)/xen/GrubConf.py \
-		$(SYSLIBDIR)/xen-default/lib/python/grub/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/topd $(BINDIR)/
 	@if [ -x "/usr/bin/update-rc.d" -a -d "$(SYSETCDIR)/init.d" ]; then \
 	    $(INSTALL) -m 755 $(SRCDIR)/xen/topd-init $(SYSETCDIR)/init.d/topd; \
 	    /usr/bin/update-rc.d topd defaults; \
 	fi
+	$(INSTALL) -m 644 $(SRCDIR)/xen/grub-xen.cfg /etc/default/grub.d/xen.cfg
+
+xen-install-pygrub:
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSLIBDIR)/xen-$(XENVERS)/lib/python/grub
+	$(INSTALL) -m 755 $(SRCDIR)/xen/pygrub $(BINDIR)/
+	ln -sf xen-$(XENVERS) $(SYSLIBDIR)/xen-default
+	$(INSTALL) -m 755 $(SRCDIR)/xen/GrubConf.py \
+		$(SYSLIBDIR)/xen-default/lib/python/grub/
 
 genirack-install:
 	$(INSTALL) -m 755 $(SRCDIR)/xen/restorevm.pl $(BINDIR)/restorevm.pl

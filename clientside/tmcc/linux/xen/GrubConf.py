@@ -1,7 +1,7 @@
 #
 # GrubConf.py - Simple grub.conf parsing
 #
-# Copyright 2009, 2013 Citrix Systems Inc.
+# Copyright 2009 Citrix Systems Inc.
 # Copyright 2005-2006 Red Hat, Inc.
 # Jeremy Katz <katzj@redhat.com>
 #
@@ -9,8 +9,7 @@
 # general public license.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+# along with this program; If not, see <http://www.gnu.org/licenses/>.
 #
 
 import os, sys
@@ -67,14 +66,16 @@ class GrubDiskPart(object):
         return self._disk
     def set_disk(self, val):
         val = val.replace("(", "").replace(")", "")
-        if val.startswith("/dev/"):
-            val = val[5:]
-            pass
-        val = val[2:]
-        if not str.isdigit(val):
-            val = ord(val) - ord('a');
-            pass
-        self._disk = int(val)
+        if val.startswith("/dev/xvd"):
+            disk = val[len("/dev/xvd")]
+            self._disk = ord(disk)-ord('a')
+        else:
+            if val.startswith("/dev/"):
+                val = val[5:]
+            val = val[2:]
+            if not str.isdigit(val):
+                val = ord(val) - ord('a');
+            self._disk = int(val)
     disk = property(get_disk, set_disk)
 
     def get_part(self):
@@ -452,9 +453,11 @@ class Grub2ConfigFile(_GrubConfigFile):
                 
             if self.commands.has_key(com):
                 if self.commands[com] is not None:
-                    if arg.strip() == "${saved_entry}":
-                        arg = "0"
-                    setattr(self, self.commands[com], arg.strip())
+                    arg_strip = arg.strip()
+                    if arg_strip == "${saved_entry}" or arg_strip == "${next_entry}":
+                        logging.warning("grub2's saved_entry/next_entry not supported")
+                        arg_strip = "0"
+                    setattr(self, self.commands[com], arg_strip)
                 else:
                     logging.info("Ignored directive %s" %(com,))
             elif com.startswith('set:'):

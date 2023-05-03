@@ -6063,8 +6063,15 @@ sub ExtractKernelFromLinuxImage($$$)
 {
     my ($lvname, $rootpartition, $outdir) = @_;
     my $lvmpath = lvmVolumePath($lvname);
-    my $PYGRUB  = "$BINDIR/pygrub";
     my $configfile = "$outdir/kernel-config";
+    my $PYGRUB;
+
+    for my $pgc ("$BINDIR/pygrub", "/lib/xen-default/bin/pygrub", "/usr/lib/xen-default/bin/pygrub") {
+	if (-e $pgc) {
+	    $PYGRUB = $pgc;
+	    last;
+	}
+    }
 
     # Must kill this in case we cannot extract it.
     unlink($configfile)
@@ -6121,7 +6128,7 @@ sub ExtractKernelFromLinuxImage($$$)
 	# Temporarily unblock and set to default so we die. 
 	#
 	local $SIG{TERM} = 'DEFAULT';
-	exec("$PYGRUB --quiet --output-format=simple ".
+	exec("$PYGRUB --quiet --no-output-tempfile --output-format=simple ".
 	      "--output-directory=$outdir $lvmpath");
 	exit(1);
     }
