@@ -78,6 +78,9 @@ endif
 ifneq ($(wildcard /usr/lib/xen-4.11),)
 XENVERS	= 4.11
 endif
+ifneq ($(wildcard /usr/lib/xen-4.16),)
+XENVERS	= 4.16
+endif
 
 #
 # If callers set the USES_SYSTEMD var to 1, we do the systemd sysetc-install and
@@ -192,7 +195,7 @@ systemd-dir-install: dir-install
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system-generators
 
 xen-dir-install: dir-install
-	@if [ "$(XENVERS)" = "4.9" -o "$(XENVERS)" = "4.11" ]; then \
+	@if [ "$(XENVERS)" = "4.9" -o "$(XENVERS)" = "4.11" -o "$(XENVERS)" = "4.16" ]; then \
 		rm -rf $(SYSETCDIR)/rc.d $(SYSETCDIR)/sysconfig; \
 		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/multi-user.target.wants; \
 		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system-generators; \
@@ -203,7 +206,7 @@ xen-dir-install: dir-install
 	@if [ "$(XENVERS)" = "4.4" ]; then \
 		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/init.d ; \
 	fi
-	@if [ "$(XENVERS)" = "4.9" -o "$(XENVERS)" = "4.11" ]; then \
+	@if [ "$(XENVERS)" = "4.9" -o "$(XENVERS)" = "4.11" -o "$(XENVERS)" = "4.16" ]; then \
 		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/network-online.target.wants ; \
 	fi
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/default/grub.d
@@ -440,7 +443,7 @@ xen-install:	xen-dir-install xen-udev-install xen-upstart-install
 	$(INSTALL) -m 755 $(SRCDIR)/xen/libvnode_xen.pm $(BINDIR)/
 	echo "xen" > $(ETCDIR)/genvmtype
 	$(INSTALL) -m 755 $(SRCDIR)/xen/xenbridge-setup $(BINDIR)/
-	@if [ "$(XENVERS)" = "4.9" -o "$(XENVERS)" = "4.11" ]; then \
+	@if [ "$(XENVERS)" = "4.9" -o "$(XENVERS)" = "4.11" -o "$(XENVERS)" = "4.16" ]; then \
 		$(INSTALL) -m 644 $(SRCDIR)/xen/emulab-xenbridge-setup.service $(SYSETCDIR)/systemd/system ; \
 		ln -sf ../emulab-xenbridge-setup.service \
 			$(SYSETCDIR)/systemd/system/network-online.target.wants/emulab-xenbridge-setup.service ; \
@@ -448,7 +451,7 @@ xen-install:	xen-dir-install xen-udev-install xen-upstart-install
 	# Tweak the testbed.service unit deps to require LVM/network/Xen.
 	@if [ -e "$(SYSETCDIR)/systemd/system/testbed.service" ]; then \
 		$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(SYSETCDIR)/systemd/system/testbed.service.d ; \
-		if [ "$(XENVERS)" = "4.11" ]; then \
+		if [ "$(XENVERS)" = "4.11" -o "$(XENVERS)" = "4.16" ]; then \
 			$(INSTALL) -m 644 $(SRCDIR)/xen/testbed.service-local.conf-no-xenstored $(SYSETCDIR)/systemd/system/testbed.service.d/local.conf ; \
 		else \
 			$(INSTALL) -m 644 $(SRCDIR)/xen/testbed.service-local.conf $(SYSETCDIR)/systemd/system/testbed.service.d/local.conf ; \
@@ -469,7 +472,7 @@ xen-install:	xen-dir-install xen-udev-install xen-upstart-install
 	@if [ "$(XENVERS)" = "4.4" ]; then \
 		$(INSTALL) -m 755 $(SRCDIR)/xen/xen $(SYSETCDIR)/init.d/; \
 	fi
-	@if [ "$(XENVERS)" != "4.9" -a "$(XENVERS)" != "4.11" ]; then \
+	@if [ "$(XENVERS)" != "4.9" -a "$(XENVERS)" != "4.11" -a "$(XENVERS)" != "4.16" ]; then \
 		$(INSTALL) -m 755 $(SRCDIR)/xen/interfaces $(SYSETCDIR)/network/; \
 	fi
 	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-cnet.pl $(SYSETCDIR)/xen/scripts/
