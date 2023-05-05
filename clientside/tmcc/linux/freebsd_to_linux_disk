@@ -27,7 +27,7 @@ case $disk in
 		dunit=`expr $dunit - 24`
 		;;
 	# SATA, new names
-	ada[0-9])
+	ada[0-9]|ada[0-9][0-9])
 		old_dtype="sd"
 		dtype="sd"
 		dunit=`echo $disk | sed -e 's/ada\([0-9][0-9]*\)$/\1/'`
@@ -72,6 +72,22 @@ if [ $dtype = "nvme" ]; then
 	ldisk="${dtype}${dunit}n1"
 	old_ldisk="$ldisk"
 else
+	# XXX hey, it works!
+	case $dunit in
+	    2[0-5])
+		dunit=`expr $dunit \- 20 | sed -e 'y/012345/uvwxyz/'`
+		;;
+	    1[0-9])
+		dunit=`expr $dunit \- 10 | sed -e 'y/0123456789/klmnopqrst/'`
+		;;
+	    [0-9])
+		dunit=`echo $dunit | sed -e 'y/0123456789/abcdefghij/'`
+		;;
+	    *)
+		echo "${0##*/}: cannot handle more than 26 disks" 1>&2
+		return 1
+		;;
+	esac
 	dunit=`echo $dunit | sed -e 'y/01234567/abcdefgh/'`;
 	ldisk=$dtype$dunit
 	old_ldisk=$old_dtype$dunit
