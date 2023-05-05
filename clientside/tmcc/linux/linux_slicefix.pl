@@ -34,6 +34,7 @@ my $CP = '/bin/cp';
 my $CPIO = 'cpio';
 my $GZIP = 'gzip';
 my $XZ = 'xz';
+my $ZSTD = 'zstd';
 my $MKSWAP = '/sbin/mkswap';
 my $UUIDGEN = 'uuidgen';
 my $LOSETUP = 'losetup';
@@ -47,6 +48,7 @@ use constant LARGEST_PAGE_SIZE => 0x4000;
 use constant UUID_OFFSET => 1036;
 use constant ELFHDR => 0x7f454c46;
 use constant XZHDRSTART => 0xfd377a58;
+use constant ZSTDHDRSTART => 0x28b52ffd;
 
 #
 # Turn off line buffering on output
@@ -672,12 +674,12 @@ sub udev_supports_label
 	my ($imageroot) = @_;
 	my ($handles_label, $handles_uuid) = (0, 0);
 
-	if (! -d "$imageroot/etc/udev/rules.d") {
+	if (! -d "$imageroot/etc/udev/rules.d" && ! -d "$imageroot/lib/udev/rules.d") {
 		return (0, 0);
 	}
 
 	my @files = glob "$imageroot/etc/udev/rules.d/*";
-	if (@files) {
+	if (!@files) {
 		@files = glob "$imageroot/lib/udev/rules.d/*";
 	}
 	for my $file (@files) {
@@ -899,10 +901,16 @@ sub check_initrd
 	elsif ($value == XZHDRSTART) {
 		$compression = 'lzma';
 	}
+	elsif ($value == ZSTDHDRSTART) {
+		$compression = 'zstd';
+	}
 	close INITRD;
 
 	if (defined($compression) && $compression eq 'lzma') {
 		`$XZ -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
+	}
+	elsif (defined($compression) && $compression eq 'zstd') {
+		`$ZSTD -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
 	}
 	else {
 		# Just bail to gzip no matter what.
@@ -933,9 +941,13 @@ sub check_initrd
 		last;
 	}
 
-	if (!$handles_label && !$handles_uuid) {
-		($handles_label, $handles_uuid) =
+	if (!$handles_label || !$handles_uuid) {
+		my ($udev_handles_label, $udev_handles_uuid) =
 		    udev_supports_label($initrd_dir);
+		$handles_label |= $udev_handles_label
+		    if (defined($udev_handles_label));
+		$handles_uuid |= $udev_handles_uuid
+		    if (defined($udev_handles_uuid));
 	}
 
 	#
