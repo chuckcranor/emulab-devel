@@ -1941,7 +1941,12 @@ okay:
     if ($ispvh) {
 	addConfig($vninfo, "type='pvh'", 2);
 	if ($os eq "FreeBSD") {
-	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:xbd0s1a'", 2);
+	    my $rfs = "xbd0s1a";
+	    # XXX GUFI image
+	    if ($loadslice == 0 && $bootslice == 3) {
+		$rfs = "xbd0p3";
+	    }
+	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:$rfs'", 2);
 	}
 	elsif (defined($extra)) {
 	    addConfig($vninfo, "extra='$extra'", 2);
