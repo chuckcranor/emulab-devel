@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -163,9 +163,10 @@ case $os in
 	save_e
 	set +e
 
-	# If dmidecode can give the info we need use it over /proc/cpuinfo
-	x=$(dmidecode -t processor | grep "Thread")
-	if [ -n "$x" ] ; then
+        # If dmidecode can give the info we need use it over /proc/cpuinfo
+	type dmidecode &>/dev/null && s='1' || s=''
+	if [ -n "$s" ] ; then 
+	    x=$(dmidecode -t processor | grep "Thread")
 	    ttf=/tmp/.$$ttf
 	    $(dmidecode -t processor > $ttf)
 
