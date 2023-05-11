@@ -1150,7 +1150,7 @@ $(function ()
 	// back to the XML. 
 	//
 	if (! stepsInitialized) {
-	    InitStepsTable(xml);
+	    //InitStepsTable(xml);
 	}
     }
 
