@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2013 University of Utah and the Flux Group.
+# Copyright (c) 2013-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,6 +29,18 @@ _1KGiB=1048576
 _16KGiB=16777216
 _32KGiB=33554432
 _64KGiB=67108864
+
+# these number are in MB
+_1Mib=1
+_1GiB=1024
+_2GiB=2024
+_4GiB=4096
+_8GiB=8192
+_32GiB=32768    # 2G close enough
+_64GiB=65536    # 4G close enough
+_128Gib=131072  # 8G close enough 
+_256Gib=262144  # 8G close enough 
+#_bigger        # ...
 
 echo -n ' Starting Memcheck..'
 
@@ -142,17 +154,28 @@ esac
 echo -n "Found phys memory $meminfo"
 } >> ${tmplog} 2>&1
 
-num=${meminfo//[a-z]*/}
-num=${meminfo//[A-Z]*/}
-base=${meminfo//[0-9]/}
-    #it is MiB or GiB
-if [ "$base" = "GiB" ] ; then
-    num=$(($num * 1024))
+# Is found memory 'close enough' to value from tmcc hwinfo
+tbinfo=$(getfromtb MEMINFO)
+
+if [ $tbinfo -eq $meminfo ] ; then : ; fi  # equal, great!
+slop=$(($tbinfo - $meminfo))
+if [ $tbinfo -ge $_128Gib ] ; then # guess DIMM size 8G
+    if [ $slop -lt $_8GiB ] ; then
+	meminfo=$tbinfo
+    fi
+elif [ $tbinfo -ge $_64Gib ] ; then # guess DIMM size 4G
+    if [ $slop -lt $_4GiB ] ; then
+	meminfo=$tbinfo
+    fi
+elif [ $tbinfo -ge $_34Gib ] ; then # guess DIMM size 2G
+    if [ $slop -lt $_2GiB ] ; then
+	meminfo=$tbinfo
+    fi
 fi
 
 # if saving data for testbed database
 if (( $collect_flag )) ; then
-    printf "MEMINFO SIZE=%s\n" ${num} >> ${logfile4tb}
+    printf "MEMINFO SIZE=%s\n" ${meminfo} >> ${logfile4tb}
 fi
 
 # we are done if in MFS mode
@@ -160,10 +183,9 @@ if (( $mfsmode )) ; then
     (( $memcheck_standalone )) && exit 0 || return 0
 fi
 
-tbinfo=$(getfromtb MEMINFO)
-
+# else running in experiment, output something for the user
 {
-if [ "$num" = "$tbinfo" ] ; then
+if [ "$meminfo" = "$tbinfo" ] ; then
     echo " Equals node inventory $tbinfo"
 else
     echo " Does not equals node inventory $tbinfo"    
@@ -172,7 +194,7 @@ fi
 } >> ${tmplog} 2>&1
 
 echo -n "Memcheck `date`: " >> ${logfile}
-cat ${tmplog} >> ${logfile} 
+cat ${tmplog} >> ${logfile}
 
 [[ -z ${failed} ]] && echo "$meminfo" || echo "TBmiss Have |$meminfo| Want |$tbinfo| FAILED"
 
