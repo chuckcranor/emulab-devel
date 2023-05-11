@@ -17,6 +17,7 @@
 	  <th>Speed</th>
 	  <th>Heading</th>
 	  <th>Free</th>
+	  <th>UE IMSI</th>
 	  <th>GPSD</th>
 	  <th class="sorter-mobiledates">GPSD Time</th>
 	</tr>
@@ -79,6 +80,13 @@
 		    No
 		  <% } %>
 		<% } %>
+	      <% } %>
+	    </td>
+	    <td>
+	      <% if (info.radioinfo["ed1"].ue_imsi) { %>
+		<%- info.radioinfo["ed1"].ue_imsi %>
+	      <% } else { %>
+		none
 	      <% } %>
 	    </td>
 	    <% if (info.gpsd_stamp &&
