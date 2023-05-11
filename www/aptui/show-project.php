@@ -76,7 +76,15 @@ echo "  window.EMBEDDED_RESGROUPS = true;\n";
 echo "  window.EMBEDDED_RESGROUPS_SELECT = false;\n";
 echo "</script>\n";
 
-SpitAggregateStatus(true);
+#
+# For admins, dump all aggregates so the resources tab works okay.
+#
+if ($isadmin) {
+    SpitAggregateStatus(true, null, Aggregate::AllAggregatesList());
+}
+else {
+    SpitAggregateStatus(true);
+}
 
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
