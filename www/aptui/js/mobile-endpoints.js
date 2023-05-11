@@ -5,18 +5,11 @@ $(function ()
     var template_list = ['mobile-endpoints', "waitwait-modal", "oops-modal"];
     var templates     = APT_OPTIONS.fetchTemplateList(template_list);    
     var mainTemplate  = _.template(templates['mobile-endpoints']);
-    var amlist        = null;
-    var radioInfo     = null;
     var map           = null;
 
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
-
-	radioInfo = JSON.parse(_.unescape($('#radioinfo-json')[0].textContent));
-	console.info("radioinfo", radioInfo);
-	amlist    = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
-	console.info("amlist", amlist);
 
 	$('#oops_div').html(templates["oops-modal"]);
 	$('#waitwait_div').html(templates["waitwait-modal"]);
@@ -39,8 +32,6 @@ $(function ()
 	var options = {
 	    "endpoints" : endpoints,
 	    "routes"    : routes,
-	    "amlist"    : amlist,
-	    "radioinfo" : radioInfo
 	};
 	$('#main-body').html(mainTemplate(options));
 

@@ -276,6 +276,12 @@ window.ShowPowderMap = (function()
 			else if (_.has(Options, "route")) {
 			    ShowRoute(Options.route);
 			}
+			else if (_.has(Options, "onlineonly")) {
+			    // Applies to buses only at this point.
+			    if (Options.onlineonly) {
+				ShowOnline();
+			    }
+			}
 			else if (Options.showmobile) {
 			    //ShowRoute(68);
 			}
@@ -1756,10 +1762,14 @@ window.ShowPowderMap = (function()
 	    });
 	    console.info("routelist", routeList);
 	};
+	var args = {};
+	if (_.has(Options, "onlineonly")) {
+	    args["onlineonly"] = Options.onlineonly ? 1 : 0;
+	}
 	var deferred = 
 	    $.when(getJSON(ROUTES_URL),
 		   sup.CallServerMethod(null, "map-support",
-					"GetMobileEndpoints", null));
+					"GetMobileEndpoints", args));
 	var chained =
 	    deferred.then(function(routedata, json) {
 		console.info("done2", routedata, json);
@@ -1865,6 +1875,22 @@ window.ShowPowderMap = (function()
     {
 	_.each(routeList, function (route) {
 	    route.layer.visible = false;
+	});
+    }
+    function ShowOnline()
+    {
+	var routes = [];
+
+	_.each(OurBuses, function (businfo, busid) {
+	    var routeid = businfo.routeid;
+	    
+	    if (routeid &&
+		_.has(routeList, routeid) && businfo.status == "up") {
+		routes.push(routeid);
+	    }
+	});
+	_.each(routes, function (id) {
+	    ShowRoute(id);
 	});
     }
 

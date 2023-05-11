@@ -21,6 +21,7 @@ $(function ()
 	    "showreserved"  : window.SHOWRESERVED,
 	    "showlegend"    : window.SHOWLEGEND,
 	    "showlinks"     : window.SHOWLINKS,
+	    "onlineonly"    : window.ONLINEONLY,
 	};
 	if (window.EXPERIMENT !== undefined) {
 	    options["experiment"] = window.EXPERIMENT;
