@@ -68,6 +68,7 @@ postprocessing()
 	printf "# KERNEL %s\n" "$(uname -svrm)" >> /tmp/nodecheck.log.tb.new
 	# add which mode we running as
 	printf "# ismfs=%s %s nodetype %s \n" "$mfsmode" "$(getfromtb TESTINFO)" "$nodetype"  >> /tmp/nodecheck.log.tb.new
+	printf "# Memory found is %s less then DB info of %s\n" "$slop" "$(getfromtb MEMINFO)" >> /tmp/nodecheck.log.tb.new
 
     # print the full listng of found inventory
 	{ printhwinv
@@ -75,6 +76,7 @@ postprocessing()
 	printf "# KERNEL %s\n" "$(uname -svrm)" >> /tmp/nodecheck.log.inv
 	# add which mode we running as
 	printf "# ismfs=%s %s nodetype %s \n"  "$mfsmode" "$(getfromtb TESTINFO)" "$nodetype" >> /tmp/nodecheck.log.inv
+	printf "# Memory found is %s less then DB info of %s\n" "$slop" "$(getfromtb MEMINFO)" >> /tmp/nodecheck.log.inv
 
     # make sure projdir is available
         if [ ! -d ${projdir} ] ; then
