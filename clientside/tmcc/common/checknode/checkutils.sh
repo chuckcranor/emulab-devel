@@ -115,7 +115,6 @@ initialize () {
     initlogs $@
     inittestinfo
 
-    #trap 'err_report $FUNCNAME:$LINENO' ERR
     trap 'err_report $LINENO' ERR
 
     initdone="done"
