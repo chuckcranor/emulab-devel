@@ -163,11 +163,11 @@ if [ $tbinfo -ge $_128Gib ] ; then # guess DIMM size 8G
     if [ $slop -lt $_8GiB ] ; then
 	meminfo=$tbinfo
     fi
-elif [ $tbinfo -ge $_64Gib ] ; then # guess DIMM size 4G
+elif [ $tbinfo -ge $_64GiB ] ; then # guess DIMM size 4G
     if [ $slop -lt $_4GiB ] ; then
 	meminfo=$tbinfo
     fi
-elif [ $tbinfo -ge $_34Gib ] ; then # guess DIMM size 2G
+elif [ $tbinfo -ge $_32GiB ] ; then # guess DIMM size 2G
     if [ $slop -lt $_2GiB ] ; then
 	meminfo=$tbinfo
     fi
