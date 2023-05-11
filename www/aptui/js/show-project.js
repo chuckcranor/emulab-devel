@@ -972,6 +972,7 @@ $(function ()
 	    var html = template({
 		"resources"       : collated,
 		"user_totals"     : user_totals,
+		"showCreator"     : true,
 		"showProject"     : false,
 		"showPortal"      : window.MAINSITE && window.ISADMIN,
 		"showReserved"    : true,

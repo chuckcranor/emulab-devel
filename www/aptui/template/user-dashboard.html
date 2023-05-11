@@ -31,6 +31,10 @@
 		       data-bs-toggle="tab" data-toggle="tab">
 		      Reservations</a></li>
 		<% } %>
+		<li role="presentation" class="hidden resources-hidden">
+		  <a href="#resources" role="tab" class="nav-link"
+		     data-bs-toggle="tab" data-toggle="tab">
+		    Resources</a></li>
 		<li role="presentation" class="hidden paramsets-hidden">
 		  <a href="#paramsets" role="tab" class="nav-link"
 		     data-bs-toggle="tab" data-toggle="tab">
@@ -167,6 +171,10 @@
 		    <div id="project_resgroups_content"></div>
 		  </div>
  		</div>
+		<div role="tabpanel" class="tab-pane hidden resources-hidden"
+		     id="resources">
+		  <div id="resources_content"></div>
+		</div>
 		<div role="tabpanel" class="tab-pane hidden paramsets-hidden"
 		     id="paramsets">
 		  <div id="paramsets_content">
