@@ -128,6 +128,9 @@ $TBSENDMAIL_PATH= "$TBLIBEXEC_DIR/tbsendmail";
 $TBCSLOGINS     = "$TBETC_DIR/cslogins";
 $UUIDGEN_PATH   = "@UUIDGEN@";
 
+# Google analytics ids.
+$GOOGLEGAIDS    = "/usr/testbed/etc/google-analytics.json";
+
 #
 # Hardcoded check against $WWWHOST, to prevent anyone from accidentally setting
 # $TBMAINSITE when it should not be
