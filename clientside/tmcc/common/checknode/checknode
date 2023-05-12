@@ -77,6 +77,7 @@ postprocessing()
 	# add which mode we running as
 	printf "# ismfs=%s %s nodetype %s \n"  "$mfsmode" "$(getfromtb TESTINFO)" "$nodetype" >> /tmp/nodecheck.log.inv
 	printf "# Memory found is %s less then DB info of %s method:%s\n" "$slop" "$(getfromtb MEMINFO)" "$memmethod" >> /tmp/nodecheck.log.inv
+	printf "# DIMMs: Size %s slots %s empty slots %s\n" "$DIMMsize" "$DIMMslots" "$DIMMsempty"  >> /tmp/nodecheck.log.inv
 
     # make sure projdir is available
         if [ ! -d ${projdir} ] ; then

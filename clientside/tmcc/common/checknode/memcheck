@@ -120,6 +120,15 @@ case $os in
 	    done < /tmp/dmi19.out
 	    # run it through our favorite routine
 	    meminfo=$(hbis "$size_total $size_unit")
+
+	    # use dmidecode to count and add up DIMMs, this is just infor for full file
+	    $DMIEXE -t 17 > /tmp/dmi17.out
+	    grep $'\t'Size: /tmp/dmi17.out > /tmp/dmi17x.out
+	    DIMMslots=$(wc -l < /tmp/dmi17x.out)
+	    DIMMsempty=$(grep "No Module" /tmp/dmi17x.out | wc -l)
+	    grep -v "No Module" /tmp/dmi17x.out > /tmp/dmi17.out
+	    x=$(head -1 /tmp/dmi17.out)
+	    DIMMsize=${x//Size: /}
 	else
 	    unset -v d ; declare -a d=($(cat /proc/meminfo | grep MemTotal))
 	    memmethod="/proc/meminfo"
@@ -177,7 +186,6 @@ esac
 
 echo -n "Found phys memory $meminfo"
 } >> ${tmplog} 2>&1
-cat ${tmplog}
 
 # Is found memory 'close enough' to value from tmcc hwinfo
 tbinfo=$(getfromtb MEMINFO)
