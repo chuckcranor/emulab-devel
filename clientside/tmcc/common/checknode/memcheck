@@ -94,11 +94,35 @@ if [ -n "$s" ] ; then
     (( $memcheck_standalone )) && exit 0 || return 0
 fi
 
-
 {
 case $os in
     Linux )
+	type dmidecode &>/dev/null && DMIEXE=$(which dmidecode) || DMIEXE=''
+	if [ -n "DMIEXE" ] ; then
+	    memmethod="dmidecode"  # save method using for later output
+	    # get the Memory Array Mapped Addresses
+	    $DMIEXE -t 19 > /tmp/dmi19.out
+	    grep "Range Size:" /tmp/dmi19.out > /tmp/dmi19x.out
+	    sed 's/Range Size: //g' /tmp/dmi19x.out > /tmp/dmi19.out
+	    # we assume that all sizes given in the same units
+	    size_unit=""
+	    while read  -r in ; do # get size unit
+		line=$in
+		size_unit=${line//[0-9]/} # remove numbers
+	    done < /tmp/dmi19.out
+	    # count the size
+	    size_total=0
+	    while read -r in ; do # add up the numbers in the file
+		line=$in
+		line=${in//[a-z]*/} # remove letters
+		line=${in//[A-Z]*/}
+		((size_total+=$line))
+	    done < /tmp/dmi19.out
+	    # run it through our favorite routine
+	    meminfo=$(hbis "$size_total $size_unit")
+	else
 	    unset -v d ; declare -a d=($(cat /proc/meminfo | grep MemTotal))
+	    memmethod="/proc/meminfo"
 	    # we don't have the use of bc in mfs/load boot
 	    if (( $collect_flag )) ; then
 		# punt punt punt
@@ -130,9 +154,9 @@ case $os in
 		    number=$(echo "scale=0; (${d[1]} * 1.0) / 1;" | bc)
 		fi
 	    fi
-	    
 	    mi=${number}${d[2]}
 	    meminfo=$(hbis $mi)
+	fi
 	    ;;
     FreeBSD )
 	    unset -v d ; declare -a d=($(grep memory /var/run/dmesg.boot | grep real))
@@ -153,6 +177,7 @@ esac
 
 echo -n "Found phys memory $meminfo"
 } >> ${tmplog} 2>&1
+cat ${tmplog}
 
 # Is found memory 'close enough' to value from tmcc hwinfo
 tbinfo=$(getfromtb MEMINFO)
