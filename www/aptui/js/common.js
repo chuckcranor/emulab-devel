@@ -130,7 +130,7 @@ window.APT_OPTIONS.gaButtonEvent = function (event)
 	id = label.trim();
     }
     //console.info("button", type, id);
-    gatag('event', 'button', {
+    gtag('event', 'button', {
 	"type" : type,
 	"id"   : id,
     });
