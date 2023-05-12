@@ -48,6 +48,7 @@ fi
 [[ -z "${USE_DD-}" ]] && declare USE_DD="tdd" # if set which dd for the tdd program to use
 [[ -z "${TDD_DD-}" ]] && declare TDD_DD="dd" # if set which dd for the tdd program to use
 [[ -z "${slop-}" ]] && declare -i slop=0  # to hold the memory size diff from found and tmcc
+[[ -z "${memmethod-}" ]] && declare memmethod="none"  # method used to find memory
 
 # PathNames
 [[ -z "${logfile-}" ]] && declare logfile # output log
