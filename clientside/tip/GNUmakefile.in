@@ -113,7 +113,9 @@ install:	all $(INSTALL_BINDIR)/tip \
 
 boss-install: install
 
-rack-control-install:	$(INSTALL_BINDIR)/console-nossl
+rack-control-install:	console-nossl
+	$(INSTALL) -m 755 -o root -d $(DESTDIR)$(INSTALL_BINDIR)
+	$(INSTALL_PROGRAM) -s console-nossl $(DESTDIR)$(INSTALL_BINDIR)/console-nossl
 
 # Tip not installed in these targets.
 subboss: 

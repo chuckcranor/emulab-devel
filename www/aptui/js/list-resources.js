@@ -122,6 +122,7 @@ $(function ()
 	var template = _.template(templates["resources-list"]);
 	var html = template({
 	    "resources"       : collated,
+	    "showCreator"     : true,
 	    "showProject"     : true,
 	    "showPortal"      : window.MAINSITE,
 	    "showReserved"    : false,

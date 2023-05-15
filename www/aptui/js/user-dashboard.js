@@ -5,7 +5,8 @@ $(function ()
     var templates = APT_OPTIONS.fetchTemplateList(['user-dashboard',
 	   'experiment-list', 'profile-list', 'project-list', 'dataset-list', 
 	   'user-profile', 'oops-modal', 'waitwait-modal', 'classic-explist',
-	   'conversion-help-modal','paramsets-list', "showtopo-modal"]);
+	   'conversion-help-modal','paramsets-list', "showtopo-modal",
+	   "resources-list"]);
     var mainString = templates['user-dashboard'];
     var experimentString = templates['experiment-list'];
     var profileListString = templates['profile-list'];
@@ -17,12 +18,14 @@ $(function ()
     var classicString = templates['classic-explist'];
     var converterHelpTemplate = _.template(templates['conversion-help-modal']);
     var mainTemplate = _.template(mainString);
+    var amlist = null;
 
     function initialize()
     {
-	console.info("JS initialize");
-	
 	window.APT_OPTIONS.initialize(sup);
+
+	amlist = decodejson("#amlist-json");
+	console.info("amlist", amlist);
 
 	// Generate the main template.
 	var html = mainTemplate({
@@ -63,6 +66,7 @@ $(function ()
 	LoadProfileTab();
 	LoadDatasetTab();
 	LoadResgroupTab();
+	LoadResourcesTab();
 	LoadParameterSetsTab();
 	LoadClassicDatasets();
 
@@ -736,6 +740,153 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    /*
+     * At the moment not making use of the resgroups we get, too confusing.
+     */
+    function LoadResourcesTab()
+    {
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+
+	var callback = function(json) {
+	    console.info("resources", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    var resources = json.value.resources;
+	    // resgroups for all projects user is a member of.
+	    var resgroups = json.value.resgroups;
+	    
+	    if (! (_.size(resources))) {
+		return;
+	    }
+	    var collated = {};
+	    var user_totals = {};
+	    
+	    _.each(resources, function(details, uuid) {
+		_.each(details.slivers, function(sliver, aggregate_urn) {
+		    var resNodes = amlist[aggregate_urn].reservable_nodes;
+		    var typelist = {};
+		    var xml = $.parseXML(sliver.manifest);
+
+		    $(xml).find("node, emulab\\:vhost").each(function() {
+			// Only nodes that match the aggregate being processed,
+			// since we send the same rspec to every aggregate.
+			var manager_urn = $(this).attr("component_manager_id");
+			if (!manager_urn.length ||
+			    manager_urn != aggregate_urn) {
+			    return;
+			}
+			var tag     = $(this).prop("tagName");
+			var isvhost = (tag == "emulab:vhost" ? 1 : 0);
+			var vnode   = this.getElementsByTagNameNS(EMULAB_NS,
+								  'vnode');
+			if (vnode.length) {
+			    var hwtype = $(vnode).attr("hardware_type");
+			    var name   = $(vnode).attr("name");
+
+			    // Reservable nodes shown as themselves.
+			    if (resNodes && _.has(resNodes, name)) {
+				hwtype = name;
+			    }
+			    
+			    if (hwtype != "pcvm" && hwtype != "blockstore") {
+				if (!_.has(typelist, hwtype)) {
+				    typelist[hwtype] = 0;
+				}
+				typelist[hwtype]++;
+
+				if (!_.has(user_totals, aggregate_urn)) {
+				    user_totals[aggregate_urn] = {};
+				}
+				var aggtotals = user_totals[aggregate_urn];
+				if (!_.has(aggtotals, details.creator)) {
+				    aggtotals[details.creator] = {};
+				}
+				var utotals = aggtotals[details.creator];
+				if (!_.has(utotals, hwtype)) {
+				    utotals[hwtype] = 0;
+				}
+				utotals[hwtype]++;
+			    }
+			}
+		    });
+		    if (_.size(typelist)) {
+			if (!_.has(collated, uuid)) {
+			    collated[uuid] = {};
+			}
+			collated[uuid][aggregate_urn] = {
+			    "typelist"     : typelist,
+			    "cluster"      : sliver.name,
+			    "creator"      : details.creator,
+			    "pid"          : details.pid,
+			    "name"         : details.name,
+			    "started"      : details.started,
+			    "expires"      : details.expires,
+			    "portal"       : details.portal,
+			    "reslist_user" : {},
+			    "reslist_proj" : {},
+			};
+		    }
+		});
+	    });
+	    if (!_.size(collated)) {
+		return;
+	    }
+	    console.info("collated", collated);
+	    console.info("user_totals", user_totals);
+	    
+	    var template = _.template(templates["resources-list"]);
+	    var html = template({
+		"resources"       : collated,
+		"user_totals"     : user_totals,
+		"showCreator"     : false,
+		"showProject"     : true,
+		"showPortal"      : window.MAINSITE && window.ISADMIN,
+		"showReserved"    : false,
+		"showBlockstores" : false,
+		"showVMs"         : false,
+	    });
+	    $('#resources_content').html(html);
+	    
+	    // Format dates with moment before display.
+	    $('#resources_content .format-date').each(function(){
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    var table = $('#resources_content .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		    sortList: [[3,0]],
+		});
+	    $(".resources-hidden").removeClass("hidden");
+
+	    // Do this after converting table.
+	    $('#resources_content [data-toggle="tooltip"]').each(function () {
+		$(this).tooltip({
+		    trigger: 'hover',
+		    placement: 'right',
+		});
+	    });
+
+	    // Handler for the Help button
+	    $('#resources-help-button').click(function (event) {
+		event.preventDefault();
+		sup.ShowModal('#resources-help-modal');
+	    });
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "user-dashboard", "ResourceList",
+				 {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
     function LoadParameterSetsTab()
     {
 	var paramsets_table;
@@ -1022,5 +1173,9 @@ $(function ()
 	});
     }
 
+    // Helper.
+    function decodejson(id) {
+	return JSON.parse(_.unescape($(id)[0].textContent));
+    }
     $(document).ready(initialize);
 });

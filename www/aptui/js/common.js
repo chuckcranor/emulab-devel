@@ -109,7 +109,12 @@ window.APT_OPTIONS.gaAjaxEvent = function (route, method, code)
     if (method == "GetInstanceStatus" || method == "SnapshotStatus") {
 	return;
     }
-    ga('send', 'event', 'ajax', route, method, code);
+    //console.info("ajax", route, method);
+    gtag('event', 'ajax', {
+	"route"  : route,
+	'method' : method,
+	"code"   : code,
+    });
 }
 
 window.APT_OPTIONS.gaButtonEvent = function (event)
@@ -125,7 +130,10 @@ window.APT_OPTIONS.gaButtonEvent = function (event)
 	id = label.trim();
     }
     //console.info("button", type, id);
-    ga('send', 'event', 'button', type, id);
+    gtag('event', 'button', {
+	"type" : type,
+	"id"   : id,
+    });
 }
 
 window.APT_OPTIONS.gaTabEvent = function (action, id)
@@ -134,7 +142,10 @@ window.APT_OPTIONS.gaTabEvent = function (action, id)
 	return;
     }
     //console.info("tab", action, id);
-    ga('send', 'event', 'tab', action, id);
+    gtag('event', 'tab', {
+	"action" : action,
+	"id"     : id,
+    });
 }
 
 APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)

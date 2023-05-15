@@ -81,6 +81,7 @@ function Do_EditTable()
         "rx_freq"    => "receive_frequencies",
         "notes"      => "notes",
         "sync"       => "synchronization",
+        "ue_imsi"    => "ue_imsi",
     );
     if (!array_key_exists($field, $fields)) {
         SPITAJAX_ERROR(-1, "Bad field: " . $field);
@@ -103,9 +104,16 @@ function Do_EditTable()
     $dbfield = $fields[$field];
     $content = addslashes($content);
 
-    if ($field == "notes" || $field == 'radio_type' || $field == 'sync') {
+    if ($field == "notes" || $field == 'radio_type' ||
+        $field == 'sync' || $field == 'ue_imsi') {
+        if ($field == "ue_imsi" && ($content == "" || $content == "none")) {
+            $content = "NULL";
+        }
+        else {
+            $content = "'" . $content . "'";
+        }
         if (!DBQueryWarn("update apt_aggregate_radio_info set ".
-                          "     ${dbfield}='$content' ".
+                          "     ${dbfield}=$content ".
                           "where aggregate_urn='$urn' and ".
                           "      node_id='$node_id'")) {
              SPITAJAX_ERROR(-1, "Internal DB error");

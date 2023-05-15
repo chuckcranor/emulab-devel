@@ -167,6 +167,7 @@ CREATE TABLE `apt_aggregate_radio_info` (
   `cnuc_id` varchar(32) default NULL,
   `grouping` varchar(32) default NULL,
   `synchronization` enum('none','White Rabbit','GPSDO') default 'none',
+  `ue_imsi` varchar(32) default NULL,
   `notes` text,
   PRIMARY KEY  (`aggregate_urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

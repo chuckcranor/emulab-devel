@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2020, 2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,7 +46,6 @@ if ($_SERVER["SERVER_NAME"] == "www.aptlab.net") {
     $FAVICON      = "aptlab.ico";
     $APTLOGO      = "aptlogo.png";
     $APTSTYLE     = "apt.css";
-    $GOOGLEUA     = 'UA-42844769-3';
     $TBMAILTAG    = "aptlab.net";
     $EXTENSIONS   = "portal-extensions@aptlab.net";
     $TBAUTHTIMEOUT= (24 * 3600 * 7);
@@ -80,7 +79,6 @@ elseif ($_SERVER["SERVER_NAME"] == "www.cloudlab.us") {
     $APTSTYLE     = "cloudlab.css";
     $ISEMULAB     = 0;
     $ISCLOUD      = 1;
-    $GOOGLEUA     = 'UA-42844769-2';
     $TBMAILTAG    = "cloudlab.us";
     $EXTENSIONS   = "portal-extensions@cloudlab.us";
     $TBAUTHTIMEOUT= (24 * 3600 * 14);
@@ -114,7 +112,6 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
     $APTSTYLE     = "phantomnet.css";
     $ISEMULAB     = 0;
     $ISPNET       = 1;
-    #$GOOGLEUA     = 'UA-42844769-2';
     $TBMAILTAG    = "phantomnet.org";
     $EXTENSIONS   = "portal-extensions@phantomnet.org";
     $TBAUTHTIMEOUT= (24 * 3600 * 14);
@@ -149,7 +146,6 @@ elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
     $APTSTYLE     = "powder.css";
     $ISEMULAB     = 0;
     $ISPOWDER     = 1;
-    $GOOGLEUA     = 'UA-42844769-7';
     $TBMAILTAG    = "powderwireless.net";
     $EXTENSIONS   = "portal-extensions@powderwireless.net";
     $TBAUTHTIMEOUT= (24 * 3600 * 14);

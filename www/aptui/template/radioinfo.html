@@ -22,6 +22,9 @@
 	<th class="sorter-false">Sync
 	  <span class="glyphicon glyphicon-edit hidden"
 		style="margin-left: 5px;"></span></th>	  
+	<th class="sorter-false">UE IMSI
+	  <span class="glyphicon glyphicon-edit hidden"
+		style="margin-left: 5px;"></span></th>	  
 	<th class="sorter-false">Monitor</th>
 	<th class="sorter-false">RF Scans</th>
 	<th class="sorter-false">Free?</th>
@@ -69,6 +72,13 @@
 	    <td data-field="tx_freq"><%- frontend.transmit_frequencies %></td>
 	    <td data-field="rx_freq"><%- frontend.receive_frequencies %></td>
 	    <td data-field="sync"><%- node.synchronization %></td>
+	    <td data-field="ue_imsi">
+	      <% if (node.ue_imsi) { %>
+		<%- node.ue_imsi %>
+	      <% } else { %>
+		none
+	      <% } %>
+	    </td>
 	    <td class="text-center">
 	      <% if (frontend.monitored) { %>
 		<a href='<%- frontend.monitor_url %>' target="_blank">

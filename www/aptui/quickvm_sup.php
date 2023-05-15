@@ -153,7 +153,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     global $login_user, $login_status, $SUPPORT, $FIRSTUSER, $PORTAL_NAME;
     global $disable_accounts, $page_title, $drewheader, $embedded;
     global $UI_EXTERNAL_ACCOUNTS, $BrandMapping, $page_allowframing;
-    global $PORTAL_WIKI, $PORTAL_NSFNUMBER;
+    global $PORTAL_WIKI, $PORTAL_NSFNUMBER, $GOOGLEGAIDS;
 
     
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
@@ -305,16 +305,28 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "</script>\n";
     SpitGlobals();
 
-    if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {
-	readfile("../google-analytics.php");
-	echo "<script type='text/javascript'>\n";
-        echo "  ga('create', '$GOOGLEUA', 'auto');\n";
-        if ($login_user) {
-            echo "  ga('set', 'userId', '$ga_userid');\n";
+    if ($TBMAINSITE && !$embedded && file_exists($GOOGLEGAIDS)) {
+        $json = file_get_contents($GOOGLEGAIDS);
+        $ids  = json_decode($json, true);
+
+        if (array_key_exists($PORTAL_GENESIS, $ids)) {
+            $gua = $ids[$PORTAL_GENESIS];
+            $gaurl = "https://www.googletagmanager.com/gtag/js?id=${gua}";
+
+            echo "<script async src='$gaurl'></script>
+                  <script>
+                     window.dataLayer = window.dataLayer || [];
+                     function gtag(){dataLayer.push(arguments);}
+                     gtag('js', new Date());\n";
+            if ($login_user) {
+                echo "gtag('config', '$gua', {'user_id' : '$ga_userid'});\n";
+            }
+            else {
+                echo "gtag('config', '$gua');\n";
+            }
+            echo "window.GOOGLEUA = '$gua';
+                  </script>\n";
         }
-        echo "  ga('send', 'pageview');\n";
-        echo "  window.GOOGLEUA  = '$GOOGLEUA';\n";
-        echo "</script>\n";
     }
 
     # HEADER variables

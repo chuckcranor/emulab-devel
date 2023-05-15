@@ -355,7 +355,9 @@ $routing = array("geni-login" =>
                                                  "VerifyScopusInfo" =>
                                                      "Do_VerifyScopusInfo",
                                                  "DeleteUser" =>
-                                                     "Do_DeleteUser"
+                                                     "Do_DeleteUser",
+                                                 "ResourceList" =>
+                                                     "Do_ResourceList",
                               )
                         ),
 		 "nag" =>

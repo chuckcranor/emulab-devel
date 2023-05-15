@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,6 +46,7 @@ $showlegend    = 1;
 $showavailable = ($this_user ? 1 : 0);
 $showreserved  = ($this_user ? 1 : 0);
 $showmobile    = ($this_user ? 1 : 0);
+$isadmin       = (ISADMIN() ? 1 : 0);
 
 # Optional views
 $optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
@@ -53,7 +54,8 @@ $optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
                                  "nomobile",   PAGEARG_BOOLEAN,
                                  "showlinks",  PAGEARG_STRING,
                                  "location",   PAGEARG_STRING,
-                                 "route",      PAGEARG_STRING);
+                                 "route",      PAGEARG_STRING,
+                                 "onlineonly", PAGEARG_BOOLEAN);
 
 if ($experiment) {
     $baseonly   = 0;
@@ -77,6 +79,7 @@ if (!isset($showlinks)) {
 else {
     $showlinks = "'$showlinks'";
 }
+$onlineonly = ($onlineonly ? 1 : 0);
 SPITHEADER(1);
 
 echo '<link rel="stylesheet"
@@ -93,6 +96,8 @@ echo "window.SHOWRESERVED  = $showreserved;\n";
 echo "window.SHOWMOBILE    = $showmobile;\n";
 echo "window.SHOWLINKS     = $showlinks;\n";
 echo "window.BASEONLY      = $baseonly;\n";
+echo "window.ONLINEONLY    = $onlineonly;\n";
+echo "window.ISADMIN       = $isadmin;\n";
 if ($experiment) {
     echo "window.EXPERIMENT = '$experiment';\n";
 }

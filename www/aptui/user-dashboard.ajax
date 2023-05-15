@@ -778,6 +778,67 @@ function Do_DeleteUser()
     SPITAJAX_RESPONSE(1);
 }
 
+function Do_ResourceList()
+{
+    global $this_user, $target_user, $ajax_args;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $target_uid = $target_user->uid();
+    $resources  = array();
+    $resgroups  = array();
+    $projects   = array();
+    
+    $query_result =
+        DBQueryFatal("select uuid from apt_instances as a ".
+                     "where a.creator='$target_uid'");
+    
+    while ($row = mysql_fetch_array($query_result)) {
+        $uuid      = $row["uuid"];
+        $instance  = Instance::Lookup($uuid);
+        $slivers   = array();
+        if (!$instance) {
+            continue;
+        }
+        foreach ($instance->slivers() as $sliver) {
+            if ($sliver->status != "terminated" && $sliver->manifest()) {
+                $slivers[$sliver->aggregate_urn()] = array(
+                    "name"     => $sliver->aggregate_name(),
+                    "manifest" => $sliver->manifest(),
+                );
+            }
+        }
+        if (!count($slivers)) {
+            continue;
+        }
+        $blob = array(
+            "name"      => $instance->name(),
+            "creator"   => $instance->creator(),
+            "portal"    => $instance->portal(),
+            "pid"       => $instance->pid(),
+            "started"   => DateStringGMT($instance->started()),
+            "expires"   => DateStringGMT($instance->expires()),
+            "slivers"   => $slivers,
+        );
+        $resources[$uuid] = $blob;
+
+        # Resgroups for this project
+        $projects[$instance->pid()] = $instance->Project();
+    }
+    # This is not currently being used, maybe later.
+    foreach ($projects as $project) {
+        $groups = ReservationGroup::LookupForProject($project);
+        $tmp    = array();
+        foreach ($groups as $group) {
+            $tmp[$group->uuid()] = $group->Blob(false);
+        }
+        $resgroups[$project->pid()] = $tmp;
+    }
+    SPITAJAX_RESPONSE(array("resources" => $resources,
+                            "resgroups" => $resgroups));
+}
+
 # Local Variables:
 # mode:php
 # End:

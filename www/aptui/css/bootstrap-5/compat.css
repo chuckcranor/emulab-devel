@@ -251,6 +251,29 @@ div.modal-header {
 }
 
 /*
+ * The control label sizing is gone too.
+ */
+.form-horizontal .form-group-sm .control-label {
+    padding-top: 6px;
+    font-size: 0.80rem;
+}
+
+/*
+ * All of the validation stuff for tables is gone. This should be enough.
+ */
+.has-warning,
+.has-warning .form-control {
+  color: #8a6d3b;
+  border-color: #8a6d3b;
+}
+
+.has-error,
+.has-error .form-control {
+  color: #a94442;
+  border-color: #a94442;
+}
+
+/*
  * Bootstrap got rid of glyphicons, but we use them in 100s of places.
  */
 @font-face {
