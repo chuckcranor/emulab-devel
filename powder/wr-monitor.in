@@ -41,15 +41,17 @@ use POSIX qw(strftime ceil);
 #
 sub usage()
 {
-    print "Usage: wr-monitor [-d level] [-snV] [-I IP]\n";
+    print "Usage: wr-monitor [-d level] [-snVDP] [-I IP]\n";
     exit(1);
 }
-my $optlist   = "d:nsVI:";
+my $optlist   = "d:nsVI:DP";
 my $debug     = 0;
 my $impotent  = 0;
 my $oneshot   = 0;
 my $killed    = 0;
 my $getvers   = 0;
+my $dumpmode  = 0;
+my $useparallel = 0;
 
 #
 # Configure variables
@@ -67,6 +69,7 @@ my $SLEEP_INTERVAL   = (15 * 60);
 
 my $VUARTHOST	    = "control";
 my $VUARTSCRIPT	    = "/home/mike/WR/wr-len-do";
+my $PVUARTSCRIPT    = "/home/mike/WR/par-wr-len-do";
 my $LDPATH	    = "/lib:/usr/lib:/usr/local/lib:/wr/lib";
 my $WRMON	    = "env LD_LIBRARY_PATH=$LDPATH /wr/bin/wr_mon";
 my $GPACTRL	    = "env LD_LIBRARY_PATH=$LDPATH /wr/bin/gpa_ctrl";
@@ -89,7 +92,7 @@ my %WRNODES = (
 	"enabled"	=> 1,
 	"type"		=> "len",
 	"name"		=> "wr-len-0",
-	"alias"		=> "wr-len-dbs5",
+	"alias"		=> "wr-len-moran-dbs",
 	"location"	=> "Moran DBS LEN",
     },
     "10.11.13.201"	=> {
@@ -151,35 +154,42 @@ my %WRNODES = (
 	"enabled"	=> 1,
 	"type"		=> "len",
 	"name"		=> "wr-len-8",
-	"alias"		=> "wr-len-dbs1",
+	"alias"		=> "wr-len-wasatch-dbs",
 	"location"	=> "Wasatch DBS LEN",
     },
     "10.11.13.244"	=> {
 	"enabled"	=> 1,
 	"type"		=> "len",
 	"name"		=> "wr-len-9",
-	"alias"		=> "wr-len-dbs8",
+	"alias"		=> "wr-len-ustar",
 	"location"	=> "Ustar BS LEN",
     },
     "10.11.13.245"	=> {
 	"enabled"	=> 1,
 	"type"		=> "len",
 	"name"		=> "wr-len-10",
-	"alias"		=> "wr-len-dbs7",
+	"alias"		=> "wr-len-ebc-dbs",
 	"location"	=> "EBC DBS LEN",
     },
     "10.11.13.246"	=> {
-	"enabled"	=> 0,
+	"enabled"	=> 1,
 	"type"		=> "len",
 	"name"		=> "wr-len-11",
-	"alias"		=> "wr-len-dbs6",
+	"alias"		=> "wr-len-mario-dbs",
+	"location"	=> "Mario DBS LEN",
+    },
+    "10.11.13.247"	=> {
+	"enabled"	=> 1,
+	"type"		=> "len",
+	"name"		=> "wr-len-12",
+	"alias"		=> "wr-len-guesthouse-dbs",
 	"location"	=> "Guesthouse DBS LEN",
     },
     "10.11.13.248"	=> {
 	"enabled"	=> 1,
 	"type"		=> "len",
 	"name"		=> "wr-len-13",
-	"alias"		=> "wr-len-dbs8",
+	"alias"		=> "wr-len-ustar-dbs",
 	"location"	=> "Ustar DBS LEN",
     },
 );
@@ -241,6 +251,12 @@ if (defined($options{"n"})) {
 }
 if (defined($options{"V"})) {
     $getvers = 1;
+}
+if (defined($options{"D"})) {
+    $dumpmode = $oneshot = 1;
+}
+if (defined($options{"P"})) {
+    $useparallel = 1;
 }
 if (defined($options{"I"})) {
     my $ip = $options{"I"};
@@ -547,13 +563,26 @@ sub wrlen_alive(@)
 sub wrlen_getversion(@)
 {
     my @ips = @_;
+    my @output = ();
 
     my $ipstr = join(' ', @ips);
-    my @output = `sudo ssh $SSHOPTS $VUARTHOST $VUARTSCRIPT ver $ipstr`;
-    if ($?) {
-	my $stat = $?;
-	print STDERR "$VUARTSCRIPT failed ($stat) on one or more wr-lens.\n";
-	return $stat;
+    if ($useparallel) {
+	@output = `sudo ssh $SSHOPTS $VUARTHOST $PVUARTSCRIPT ver $ipstr`;
+	if ($?) {
+	    my $stat = $?;
+	    print STDERR
+		"$PVUARTSCRIPT failed ($stat) on one or more wr-lens.\n";
+	    return $stat;
+
+	}
+    } else {
+	@output = `sudo ssh $SSHOPTS $VUARTHOST $VUARTSCRIPT ver $ipstr`;
+	if ($?) {
+	    my $stat = $?;
+	    print STDERR
+		"$VUARTSCRIPT failed ($stat) on one or more wr-lens.\n";
+	    return $stat;
+	}
     }
     print ">>>>> OUTPUT\n", @output, "\n<<<<< OUTPUT END\n";
 
@@ -602,9 +631,9 @@ sub wrzen_getstatus()
     }
     %{$WRZEN{'status'}} = ();
 
-    print STDERR "Doing 'ssh $SSHOPTS $ip $GPACTRL -w'\n"
+    print STDERR "Doing 'ssh $SSHOPTS $ip $GPACTRL healthingd'\n"
 	if ($debug > 1);
-    my @output = `ssh $SSHOPTS $ip $GPACTRL healthingd`;
+    my @output = `ssh $SSHOPTS $ip $GPACTRL healthingd 2>&1`;
     if ($? == 0) {
 	print ">>>>> SSH OUTPUT\n", @output, "\n<<<<< OUTPUT END\n"
 	    if ($debug > 1);
@@ -767,13 +796,25 @@ sub wrswitch_getstatus()
 sub wrlen_getstatus(@)
 {
     my @ips = @_;
+    my @output = ();
 
     my $ipstr = join(' ', @ips);
-    my @output = `sudo ssh -n $VUARTHOST $VUARTSCRIPT stat $ipstr`;
-    if ($?) {
-	my $stat = $?;
-	print STDERR "$VUARTSCRIPT failed ($stat) on one or more wr-lens.\n";
-	return $stat;
+    if ($useparallel) {
+	@output = `sudo ssh -n $VUARTHOST $PVUARTSCRIPT stat $ipstr`;
+	if ($?) {
+	    my $stat = $?;
+	    print STDERR
+		"$PVUARTSCRIPT failed ($stat) on one or more wr-lens.\n";
+	    return $stat;
+	}
+    } else {
+	@output = `sudo ssh -n $VUARTHOST $VUARTSCRIPT stat $ipstr`;
+	if ($?) {
+	    my $stat = $?;
+	    print STDERR
+		"$VUARTSCRIPT failed ($stat) on one or more wr-lens.\n";
+	    return $stat;
+	}
     }
     print ">>>>> OUTPUT\n", @output, "\n<<<<< OUTPUT END\n"
 	if ($debug > 1);
@@ -843,6 +884,12 @@ sub wrzen_report()
     my $loc = $WRZEN{'location'};
     my $status = $WRZEN{'status'};
 
+    if ($dumpmode) {
+	$Data::Dumper::Sortkeys = 1;
+	print "WR-ZEN:\n", Dumper(\%WRZEN), "\n";
+	return;
+    }
+
     if (!$oneshot || $debug) {
 	logitnnl("");
     }
@@ -860,6 +907,13 @@ sub wrzen_report()
 sub wrswitch_report()
 {
     my $state = $WRSWITCH{'state'};
+
+    if ($dumpmode) {
+	$Data::Dumper::Sortkeys = 1;
+	print "WR-SWITCH:\n", Dumper(\%WRSWITCH), "\n";
+	return;
+    }
+
     if ($state eq "disabled") {
 	return;
     }
@@ -884,12 +938,13 @@ sub wrswitch_report()
 	print ", FPGAtemp=", sprintf("%.2f", $temp), "C"
 	    if (defined($temp));
 	my $locked = $status->{'lock'};
+	my $rtt = $status->{'crtt'};
 	my $off = $status->{'cko'};
 	if (defined($locked)) {
 	    if (!$locked) {
 		print ", NOT LOCKED";
 	    } else {
-		print ", locked, clock-offset=${off}ps";
+		print ", locked, clock-rtt=${rtt}ps, clock-offset=${off}ps";
 	    }
 	}
     }
@@ -903,6 +958,12 @@ sub wrlen_report()
 	my $state = $wrlen->{'state'};
 	my $loc = $wrlen->{'location'};
 	my $status = $wrlen->{'status'};
+
+	if ($dumpmode) {
+	    $Data::Dumper::Sortkeys = 1;
+	    print "$ip:\n", Dumper($wrlen), "\n";
+	    next;
+	}
 
 	if ($state eq "disabled") {
 	    next;
@@ -922,14 +983,19 @@ sub wrlen_report()
 	    my $iface = $status->{'iface'};
 	    if (defined($iface) && exists($status->{"${iface}_attrs"})) {
 		my $attrs = $status->{"${iface}_attrs"};
-		my $locked = $attrs->{'lock'};
-		my $off = $attrs->{'cko'};
-		if (defined($locked)) {
-		    if (!$locked) {
-			print ", NOT LOCKED";
-		    } else {
-			print ", locked, clock-offset=${off}ps";
+		if (exists($attrs->{'sv'}) && $attrs->{'sv'}) {
+		    my $locked = $attrs->{'lock'};
+		    my $rtt = $attrs->{'crtt'};
+		    my $off = $attrs->{'cko'};
+		    if (defined($locked)) {
+			if (!$locked) {
+			    print ", NOT LOCKED";
+			} else {
+			    print ", locked, clock-rtt=${rtt}ps, clock-offset=${off}ps";
+			}
 		    }
+		} else {
+		    print ", SERVO NOT VALID";
 		}
 	    }
 
@@ -1077,12 +1143,17 @@ sub wrlen_alert()
 	    (!$lastattrs || $lastattrs->{'lock'} == 1)) {
 	    $msg .= "$name ($loc): lost lock on wr0\n";
 	}
-	if ($attrs->{'ss'} ne "'TRACK_PHASE'" &&
-	    (!$lastattrs || $lastattrs->{'ss'} eq "'TRACK_PHASE'")) {
-	    $msg .= "$name ($loc): servo not in tracking phase on wr0\n";
-	}
-	if ($lastattrs && $attrs->{'ucnt'} <= $lastattrs->{'ucnt'}) {
-	    $msg .= "$name ($loc): update counter reset (lost sync with switch?)\n";
+	if (!exists($attrs->{'sv'}) || !$attrs->{'sv'} &&
+	    (!$lastattrs || (exists($lastattrs->{'sv'}) && $lastattrs->{'sv'}))) {
+	    $msg .= "$name ($loc): servo not valid on wr0\n";
+	} else {
+	    if ($attrs->{'ss'} ne "'TRACK_PHASE'" &&
+		(!$lastattrs || $lastattrs->{'ss'} eq "'TRACK_PHASE'")) {
+		$msg .= "$name ($loc): servo not in tracking phase on wr0\n";
+	    }
+	    if ($lastattrs && $attrs->{'ucnt'} <= $lastattrs->{'ucnt'}) {
+		$msg .= "$name ($loc): update counter reset (lost sync with switch?)\n";
+	    }
 	}
     }
 
@@ -1094,6 +1165,8 @@ sub wrlen_alert()
 #
 sub wrlen_upload()
 {
+    return;
+
     foreach my $ip (@iplist) {
 	my $wrlen = $WRLENS{$ip};
 	my $node = $wrlen->{'alias'} ?
@@ -1114,10 +1187,31 @@ sub wrlen_upload()
 	    if (!$impotent) {
 		system($command);
 		if ($?) {
-		    logit("ERROR: Could not upload switch temp for $node");
+		    logit("ERROR: Could not upload WR-LEN temp for $node");
 		}
 	    }
 	}
+
+	# Upload timing stats
+	$temp = $wrlen->{'status'}->{'temp'};
+	if (defined($temp)) {
+	    my $chip  = "temp";
+	    my $url = "'https://overwatch.emulab.net:8086/write?db=telegraf' ".
+		"--data-binary 'wrlen,host=${node},chip=${chip} ".
+		"temp_input=${temp}'";
+	    my $opts = ($debug > 1 ? "-S" : "");
+
+	    my $command = "$CURL -s $opts -XPOST -u '$TELEGRAF' $url";
+	    logit("$command")
+		if ($debug > 1);
+	    if (!$impotent) {
+		system($command);
+		if ($?) {
+		    logit("ERROR: Could not upload WR-LEN temp for $node");
+		}
+	    }
+	}
+
     }
 }
 
