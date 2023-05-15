@@ -963,12 +963,15 @@ window.ShowFrequencyGraph = (function ()
 		});
 		_.each(dirs, function(info) {
 		    var item =
-			$("<li class='multilevel-menu-parent'>" +
-			  "  <a href='#'>" + info.name + "</a>" +
-			  "  <div class='multilevel-menu-wrapper dropdown'>" +
-			  "  </div> " +
+			$("<li class='dropdown dropstart " +
+			  "           multilevel-toggle'>" +
+			  "  <a href='#' " +
+			  "     class='dropdown-item dropdown-toggle' " +
+			  "     data-bs-auto-close='false' " +
+			  "     data-bs-toggle='dropdown'>" +
+			     info.name + "</a>" +
 			  "</li>");
-		    $(item).find("div").append(info.submenu);
+		    $(item).append(info.submenu);
 		    $(menu).append(item);
 		});
 	    }
@@ -997,6 +1000,7 @@ window.ShowFrequencyGraph = (function ()
 		    var item = $(html);
 		    $(item).click(function (event) {
 			event.preventDefault();
+			ClearDropdowns();
 			UpdateGraph(args, info);
 		    });
 		    // Lazily put in the href for the specific graph link.
@@ -1022,18 +1026,19 @@ window.ShowFrequencyGraph = (function ()
 		});
 		if (_.size(nodes) > 1) {
 		    var item =
-			$("<li class='multilevel-menu-parent'>" +
-			  "  <a href='#' class='dropdown-item'>" +
+			$("<li class='dropdown dropstart multilevel-toggle'>" +
+			  "  <a href='#' " +
+			  "     class='dropdown-item dropdown-toggle' " +
+			  "     data-bs-auto-close='false' " +
+			  "     data-bs-toggle='dropdown'> " +
 			        node_id + "</a>" +
-			  "  <div class='multilevel-menu-wrapper dropdown'>" +
-			  "   <ul class='dropdown-menu'>" +
+			  "  <ul class='dropdown-menu multilevel-scrollable'>" +
 			  "     <li class='disabled text-center'>" +
 			  "       <a href='#' class='dropdown-item'>" +
 			        node_id + "</a></li>" +
 			  "     <li class='divider' role='separator' " +
 			  "         style='margin-top: 0;'>" +
-			  "   </ul> " +
-			  "  </div> " +
+			  "  </ul> " +
 			  "</li>");
 		    
 		    $(item).find("ul").append(menuitems);
@@ -1047,6 +1052,13 @@ window.ShowFrequencyGraph = (function ()
 	    //console.info(dirname, $(menu).html());
 	    return menu;
 	}
+
+	/* Clear all open dropdowns when any graph is selected. */
+	function ClearDropdowns()
+	{
+	    $(args.selector + ' .moregraphs-dropdown .dropdown-toggle.show')
+		.dropdown('hide');
+	}
 	
 	var callback = function (value) {
 	    // XXX This will always be a string. Need to
@@ -1058,9 +1070,40 @@ window.ShowFrequencyGraph = (function ()
 	    var listing = JSON.parse(_.unescape(value));
 
 	    var menu = processDir("", "", listing);
+	    
 	    //console.info($(menu).html());
-	    $(args.selector + ' .multilevel-menu').html(menu);
+	    $(args.selector + ' .moregraphs-dropdown').append(menu);
 
+	    /*
+	     * Any click outside our multilevel dropdowns closes any
+	     * open menus.
+	     */
+	    $('body').click(function (event) {
+		var target = $(event.target);
+		var moregraphs = $(target).closest(".moregraphs-dropdown");
+		if (!moregraphs.length) {
+		    ClearDropdowns();
+		}
+	    });
+
+	    /*
+	     * Anytime we click on (show) a menu, we want to hide the
+	     * any sibling (and its children) that are showing. 
+	     */
+	    $(args.selector + ' .moregraphs-dropdown .multilevel-toggle')
+		.click(function(event) {
+		    console.info("multilevel-toggle", event);
+		    console.info($(this), $(this).siblings());
+
+		    _.each($(this).siblings(), function (sibling) {
+			$(sibling).find('.dropdown-toggle.show')
+			    .each(function () {
+				$(this).dropdown('hide');
+			    });
+		    });
+		    event.stopPropagation();
+		});
+	    
 	    $(menu).find(".multilevel-menu-parent")
 		.hover(
 		    function(event) {
@@ -1073,12 +1116,12 @@ window.ShowFrequencyGraph = (function ()
 			// Menu to be displayed
 			var menu    = $(wrapper).children(".dropdown-menu");
 		    
-			console.info(offset, poffset);
+			console.info("offsets", offset, poffset);
 
 			// Adjust the top of the menu.
 			var height = $(menu).height();
 			var top    = offset.top - poffset.top - 15;
-			console.info(height, top);
+			console.info("h/t", height, top);
 			$(wrapper).css("top", top + "px");
 
 			// Adjust the left offset of the menu. Oddly, it has to
@@ -1087,6 +1130,9 @@ window.ShowFrequencyGraph = (function ()
 			var thiswidth = $(this).width();
 			var menuwidth = $(menu).width();
 			var left;
+
+			console.info("widths", thiswidth, menuwidth,
+				     $(window).width());
 		    
 			// Clear it so calculation below works right.
 			$(wrapper).css("left", '')
@@ -1098,8 +1144,8 @@ window.ShowFrequencyGraph = (function ()
 			else {
 			    left = thiswidth;
 			}
-			console.info("left", poffset.left, thiswidth, menuwidth,
-				     $(window).width(), left);
+			left = poffset.left + left;
+			console.info("left", poffset.left, left);
 			$(wrapper).css("left", left + "px")
 		    },
 		    function(event) {

@@ -1,51 +1,10 @@
 <style>
- .pull-right>.multilevel-menu {
-     right: 0;
- }
- .multilevel-menu {
-     position: absolute;
- }
- .multilevel-menu .multilevel-menu-wrapper {
-     position: relative;
-     bottom: auto !important;
- }
-
- .multilevel-menu ul {
-     position: static;
+ .multilevel-scrollable {
      width: auto;
-     max-height: 400px;
+     max-height: 500px;
      overflow-x: hidden;
      overflow-y: auto;
  }
-
- .multilevel-menu li {
-     position: static;
- }
- .multilevel-menu li .multilevel-menu-wrapper {
-     position: absolute;
-     z-index: 10;
-     display: none;
- }
- .multilevel-menu li.multilevel-menu-parent .dropdown-menu {
-     display: block;
- }
- .multilevel-menu li:hover > .multilevel-menu-wrapper {
-     display: block;
- }
-
- .multilevel-menu .multilevel-menu-parent>a:after {
-     display: block;
-     content: " ";
-     float: right;
-     width: 0;
-     height: 0;
-     border-bottom: 4px solid transparent;
-     border-top: 4px solid transparent;
-     border-left: 4px solid;
-     margin-top: 5px;
-     margin-right: -10px;
- }
-
  svg {
      display: block;
  }
@@ -89,15 +48,12 @@
          title='Download raw data (CSV file) for the current graph'
          data-trigger="hover">
 	Download</a>
-      <span class='moregraphs-dropdown'>
+      <span class='moregraphs-dropdown dropdown'>
 	<button id='action-menu-button' type='button'
 		class='btn btn-default btn-sm dropdown-toggle'
-		data-toggle='dropdown' data-bs-toggle='dropdown'
-		data-target=".multilevel-menu"
-		data-bs-target=".multilevel-menu">
-	  More/Older Graphs <span class="caret"></span>
-	</button>
-	<div class="multilevel-menu"></div>
+		data-bs-auto-close='false'
+		data-toggle='dropdown' data-bs-toggle='dropdown'>
+	  More/Older Graphs</button>
       </span>
     </div>
   </div>    
