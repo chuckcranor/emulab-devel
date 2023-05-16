@@ -70,9 +70,10 @@ sub new($$;$) {
     $self->{NUMOUTLETS} = 2;
 
     # Fetch authentication credentials from the DB.
-    my $res = DBQueryFatal("select key_uid,mykey from outlets_remoteauth ". 
-			   "where node_id='$devicename' ".
-			   "and key_role='web-passwd'");
+    my $res = DBQueryFatal("select key_uid,mykey,key_role ".
+			   "from outlets_remoteauth ". 
+			   "where node_id='$devicename' and ".
+			   "(key_role='web-passwd' or key_role='url-passwd')");
     if (!defined($res) || !$res || $res->num_rows() == 0) {
 	warn "ERROR: No remote auth info for $devicename.\n";
 	return undef;
@@ -80,6 +81,7 @@ sub new($$;$) {
 	my $row = $res->fetchrow_hashref();
 	$self->{USERNAME} = $row->{'key_uid'};
 	$self->{PASSWORD} = $row->{'mykey'};
+	$self->{URLAUTH} = ($row->{'key_role'} eq "url-passwd" ? 1 : 0);
     }
 
     bless($self,$class);
@@ -189,15 +191,31 @@ sub Request($;$$)
     my ($self,$outlet,$action) = @_;
     my ($url, $cookie);
 
+    #
+    # Some versions of this device won't allow you to use a basic auth
+    # header and instead require that you put user/passwd in the URL.
+    #
+    # Note that some versions still might still need the form based auth.
+    #
+    my $urlauth = $self->{URLAUTH};
+
     my $server = $self->{DEVICENAME};
   again:
     if (!defined($outlet) || !defined($action)) {
 	$url = "http://$server/xml/outlet_status.xml";
     } else {
-	my $paramstr = "?target=${outlet}&control=${action}";
-	$url = "http://$server/cgi-bin/control.cgi$paramstr";
+	my $script = "control.cgi";
+	my $paramstr = "?";
+	if ($urlauth) {
+	    print STDERR "Using URL auth\n";
+	    $script = "control2.cgi";
+	    $paramstr .= "user=" . $self->{USERNAME} .
+		"&passwd=" . $self->{PASSWORD} . "&";
+	}
+	$paramstr .= "target=${outlet}&control=${action}";
+	$url = "http://$server/cgi-bin/$script$paramstr";
     }
-    print STDERR "URL: $url\n" if ($self->{DEBUG} > 2);
+    print STDERR "GET URL: $url\n" if ($self->{DEBUG} > 2);
 
     my %headers = (
 	"Keep-Alive" => 300,
@@ -205,19 +223,21 @@ sub Request($;$$)
     );
     if (defined($cookie)) {
 	$headers{'Cookie'} = $cookie;
-    } else {
+    } elsif (!$urlauth) {
 	$headers{'Authorization'} = $self->MakeAuthStr();
     }
     my $http = HTTP::Tiny->new("timeout" => 30);
     my %options = ("headers" => \%headers);
 
+    print STDERR "GET options: ", Dumper(\%options), "\n" if ($self->{DEBUG} > 2);
     my $res = $http->request("GET", $url, \%options);
-    print STDERR "RESPONSE: ", Dumper($res), "\n" if ($self->{DEBUG} > 2);
+    print STDERR "GET RESPONSE: ", Dumper($res), "\n" if ($self->{DEBUG} > 2);
     if ($res->{'success'} && $res->{'status'} == "200") {
 	if (exists($res->{'headers'}{'content-type'})) {
 	    # XXX clunky hack to deal with new firmware
 	    if (!$cookie && exists($res->{'headers'}{'location'}) &&
 		$res->{'headers'}{'location'} eq "/login.asp?error=1") {
+		print STDERR "Retrying with form...\n" if ($self->{DEBUG} > 2);
 		# XXX expecting a form with user/password info
 		my %form = (
 		    'login' => 1,
@@ -226,7 +246,7 @@ sub Request($;$$)
 		    );
 		$url = "http://$server/goform/login";
 		$res = $http->post_form($url, \%form);
-		print STDERR "RESPONSE: ", Dumper($res), "\n" if ($self->{DEBUG} > 2);
+		print STDERR "FORM RESPONSE: ", Dumper($res), "\n" if ($self->{DEBUG} > 2);
 		if ($res->{'success'} && $res->{'status'} == "200") {
 		    $cookie = $res->{'headers'}{'set-cookie'};
 		    goto again;
