@@ -7065,6 +7065,7 @@ sub ServiceLogs($)
     }
     my $output = GeniUtil::ExecQuiet("$NODE_SLOGS $node_id");
     $output =~ s/[^[:ascii:]]/ /g;
+    $output =~ tr/\x00-\x08\x0B\x0C\x0E-\x1F//d;    
     if ($?) {
 	print STDERR $output . "\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
