@@ -1319,10 +1319,9 @@ $(function () {
 		    var agghtml = 
 			"<li class='dropdown-submenu'> " +
 			"  <a href='#' class='dropdown-toggle' " +
-			"     data-toggle='dropdown' "
-		        "     data-bs-toggle='dropdown'>" +
-			        aggregate.name + "</a>"+
-			"    <ul class='dropdown-menu scrollable-submenu'>";
+			"     data-toggle='dropdown'>" +
+			     aggregate.name + "</a>" +
+			"  <ul class='dropdown-menu'>";
 		    
 		    _.each(aggregate.typelist, function(typeinfo, type) {
 			if (_.has(prunetypes, type)) {
@@ -1330,9 +1329,10 @@ $(function () {
 			}
 
 			var typehtml =
-			    "  <li style='position: relative;'>" +
-			    " <a href='#' name='" + type + "' " +
-			    "         class='type-select'>" + type + "</a>";
+			    "<li style='position: relative;'>" +
+			    "  <a href='#' name='" + type + "' " +
+			    "         class='type-select'>" +
+			    type + "</a>";
 
 			if (typeinfo) {
 			    /*
