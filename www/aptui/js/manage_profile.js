@@ -490,7 +490,7 @@ $(function ()
 		return false;
 	    }
 	    // Add steps to the tour.
-	    if (SyncSteps()) {
+	    if (0 && SyncSteps()) {
 		return false;
 	    }
 	    if (window.CLONING) {
@@ -795,7 +795,7 @@ $(function ()
     // We could probably do this as a continuation instead, which would
     // be cleaner. 
     //
-    var initialized = false;
+    var initialized = true;
     function StepsTableLoaded()
     {
 	if (!initialized) {
@@ -1056,7 +1056,7 @@ $(function ()
 	    }
 	    $('#profile_rspec_textarea').val(newrspec);
 	    ExtractFromRspec();
-	    SyncSteps();
+	    //SyncSteps();
 	    if (!fromrepo)
 		ProfileModified();
 	    UpdateButtons();
