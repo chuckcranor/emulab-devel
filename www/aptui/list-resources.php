@@ -38,7 +38,7 @@ RedirectSecure();
 $this_user = CheckLoginOrRedirect();
 $this_idx  = $this_user->uid_idx();
 
-if (!ISADMIN()) {
+if (!(ISADMIN() || isforeign_ADMIN())) {
     SPITUSERERROR("Not enough permission!");
 }
 

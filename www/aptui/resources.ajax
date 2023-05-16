@@ -31,7 +31,7 @@ function Do_ResourceList()
 {
     global $this_user, $ajax_args;
 
-    if (!ISADMIN()) {
+    if (!(ISADMIN() || isforeign_ADMIN())) {
 	SPITAJAX_ERROR(-1, "Not enough permission");
         return;
     }
