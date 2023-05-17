@@ -211,16 +211,16 @@ case $os in
 	    rm -f $ttf
 	else
 	    x=$(grep "model name" /proc/cpuinfo | head -1)
-	    x=${x##*: }
-	    #takeout all the spaces
-	    x=${x// /}
+	    x=${x##*: }  #remove first part of string upto colon
+	    x=${x// /} 	    #takeout all the spaces
 	    [[ "${x:0:16}" == "Intel(R)Core(TM)" ]] && arch="x86_64" || arch=$x
 	    [[ "${x:0:15}" == "Intel(R)Xeon(R)" ]] && arch="x86_64" || arch=$x
+	    [[ "${x:2:17}" == "thGenIntel(R)Core" ]] && arch="x86_64" || arch=$x
+	    [[ "${x:0:3}" == "AMD" ]] && arch="x86_64" || arch=$x
 
 	    # count sockets using the max 'physical id' string
 	    # need to find how many different ids there are, to bad on some 
 	    # it starts at zero and on other machines it starts at 1
-
 	    x=$(grep "physical id" /proc/cpuinfo)
 	    if [ -z "$x" ] ; then
 		sockets=1
@@ -340,7 +340,7 @@ case $os in
 	    ;;
 	    
 	  * )
-	    # can't recover for unknow os type 
+	    # can't recover for unknown os type 
 	    echo "internal error cpucheck"
 	    failed=FAIL
 	    exit 1
