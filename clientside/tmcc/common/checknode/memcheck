@@ -97,8 +97,8 @@ fi
 {
 case $os in
     Linux )
-	type dmidecode &>/dev/null && DMIEXE=$(which dmidecode) || DMIEXE=''
-	if [ -n "DMIEXE" ] ; then
+	type dmidecode &>/dev/null && DMIEXE=$(which dmidecode) || DMIEXE=""
+	if [ -n "$DMIEXE" ] ; then
 	    memmethod="dmidecode"  # save method using for later output
 	    # get the Memory Array Mapped Addresses
 	    $DMIEXE -t 19 > /tmp/dmi19.out
