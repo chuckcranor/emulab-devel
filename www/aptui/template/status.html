@@ -1331,13 +1331,13 @@ pre {
 	  </div>
 	  <br>
 	  <center>
-            <button style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' data-bs-dismiss='modal' aria-hidden='true'>
-	      Cancel</button>
-            <button class='btn btn-danger btn-sm'; type='button'
-		    id='snapshot_confirm'>
+            <button class='btn btn-danger btn-sm confirm-button'
+		    type='button' id='snapshot_confirm'>
 	      Confirm</button>
+            <button class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1354,16 +1354,16 @@ pre {
 	    Are you <b>sure</b> you want to delete nodes from your
             experiment?  This operation cannot be stopped once it is
             started!
-
 	  </p>
 	  <center>
-            <button style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' data-bs-dismiss='modal' aria-hidden='true'>
-	      Cancel</button>
-            <button class='btn btn-danger btn-sm'; type='button'
+            <button class='btn btn-danger btn-sm confirm-button'
+		    type='button'
 		    id='deletenode_confirm'>
 	      Confirm</button>
+            <button class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1382,13 +1382,13 @@ pre {
 	    stopped once it is started!
 	  </p>
 	  <center>
-            <button style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' data-bs-dismiss='modal' aria-hidden='true'>
-	      Cancel</button>
-            <button class='btn btn-danger btn-sm'; type='button'
-		    id='deletesite_confirm'>
+            <button class='btn btn-danger btn-sm confirm-button'
+		    type='button' id='deletesite_confirm'>
 	      Confirm</button>
+            <button class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1460,11 +1460,13 @@ pre {
 	   data-trigger="hover" data-bs-trigger="hover">Delete Node</a></li>
     </ul>
   </div>
-  <div id="site-context-menu">
+  <div id="site-context-menu" class="dropdown">
+    <button class="btn btn-sm dropdown-toggle hidden" type="button"
+	    data-bs-toggle="dropdown" aria-expanded="false"></button>
     <ul class="dropdown-menu" role="menu"
 	style='cursor: pointer; cursor: hand'>
       <li>
-	<a name="delete"
+	<a name="delete" class='dropdown-item'
 	   data-toggle='tooltip' data-bs-toggle='tooltip'
 	   title='Delete site from experiment, click for more info'
 	   data-trigger="hover" data-bs-trigger="hover">Delete Site</a></li>
@@ -1548,13 +1550,14 @@ pre {
       <div class='modal-content'>
 	<div class='modal-body'>
           <center><h3>Confirm Node <span id="confirm-which"></span></h3>
-            <button type='button' style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' data-bs-dismiss='modal' aria-hidden='true'>
-	      Cancel</button>
-            <button class='btn btn-danger btn-sm'
+            <button class='btn btn-danger btn-sm confirm-button'
 		    id='confirm_reload_button'>
 	      Confirm</button>
+            <button type='button'
+                    class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
 	  </center>
 	</div>
       </div>
