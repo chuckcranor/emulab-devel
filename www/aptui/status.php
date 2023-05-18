@@ -111,7 +111,7 @@ if (!$instance) {
 }
 
 #
-# When coming her via the slice_uuid, we want to flip over to the
+# When coming here via the slice_uuid, we want to flip over to the
 # correct portal. Hacky.
 #
 if ($TBMAINSITE && isset($slice_uuid) &&

@@ -184,6 +184,8 @@ $routing = array("geni-login" =>
 						    "Do_TerminateInstance",
 						 "GetInstanceManifest" =>
 						    "Do_GetInstanceManifest",
+						 "GetInstanceManifests" =>
+						    "Do_GetInstanceManifests",
 						 "GetSSHAuthObject" =>
 						    "Do_GetSSHAuthObject",
 						 "GetVNCAuthObject" =>

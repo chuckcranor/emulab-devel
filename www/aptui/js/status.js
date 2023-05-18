@@ -3242,38 +3242,62 @@ $(function ()
 	 * ask for those, waiting until they all return before calling
 	 * gotallmanifests(). 
 	 */
-	var promises = [];
-	Object.keys(statusblob)
-	    .forEach(function(urn) {
-		if (! (_.has(manifests, urn) ||
-		       statusblob[urn] == null ||
-		       !statusblob[urn].havemanifest)) {
-		    var defer = $.Deferred();
-		    promises.push(defer);
-		    
-		    sup.CallServerMethod(null, "status",
-					 "GetInstanceManifest",
-					 {"uuid" : uuid,
-					  "aggregate_urn" : urn},
-			function (json) {
-			    if (json.code) {
-				console.info("GetInstanceManifest:" +
-					     json.value);
-				defer.resolve();
-				return -1;
-			    }
-			    gotonemanifest(urn, json.value, defer);
-			    return 0;
-			});
-		}
-	    });
-	if (_.size(promises)) {
-	    Promise.all(promises).then(function(values) {
-		gotallmanifests();
-	    });
-	}
-	else {
+	var urns = [];
+	_.each(statusblob, function(info, urn) {
+	    if (!_.has(manifests, urn) && info.havemanifest) {
+		urns.push(urn);
+	    }
+	});
+	if (!_.size(urns)) {
 	    donefunc();
+	    return;
+	}
+
+	/*
+	 * The point of all this goo is to ensure that we process
+	 * one manifest at a time (since there are async calls made
+	 * during the processing). 
+	 */
+	var processManifests = async function (json) {
+	    console.info("processManifests", json);
+	    if (json.code) {
+		console.info("GetInstanceManifests:" + json.value);
+		// Still do this, it calls the donefunc.
+		gotallmanifests();
+		return -1;
+	    }
+	    var tasks = [];
+	    _.each(json.value, function(m, urn) {
+		tasks.push(async function () {
+		    var defer = $.Deferred();
+		    await gotonemanifest(urn, m, defer);
+		    return defer;
+		});
+	    });
+	    await resolvepromises(tasks);
+	    gotallmanifests();
+	};
+	console.info("Asking for manifests", urns);
+
+	/*
+	 * Need to wait for this to return so we can call the donefunc()
+	 * when all of the manifests are processed.
+	 */
+	var deferred = sup.CallServerMethod(null, "status",
+					   "GetInstanceManifests",
+					   {"uuid" : uuid,
+					    "aggregate_urns" : urns});
+	$.when(deferred).done(function (json) {
+	    processManifests(json);
+	});
+    }
+
+    // Just a helper function to process a list of promises serially.
+    async function resolvepromises(tasks)
+    {
+	for (var i = 0; i < _.size(tasks); i++) {
+	    var func = tasks[i];
+	    await func();
 	}
     }
 
