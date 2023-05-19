@@ -6671,7 +6671,18 @@ sub DoServiceLogs()
     my $response = $aggregate->ServiceLogs($sliver_urn);
     if ($response->code()) {
 	$errcode = $response->code();
-	($exitcode, $errmsg) = ResponseErrorMessage($aggregate, $response);
+	
+	if ($errcode == GENIRESPONSE_UNSUPPORTED) {
+	    $errmsg   = "Node does not support returning service logs";
+	    $exitcode = 1;
+	}
+	elsif ($errcode == GENIRESPONSE_REFUSED) {
+	    $errmsg   = "Node is not ready yet, try again later";
+	    $exitcode = 1;
+	}
+	else {
+	    ($exitcode, $errmsg) = ResponseErrorMessage($aggregate, $response);
+	}
 	goto bad;
     }
     #

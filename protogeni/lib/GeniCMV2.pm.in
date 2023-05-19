@@ -7050,6 +7050,10 @@ sub ServiceLogs($)
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				    "No node for sliver urn");
     }
+    if ($node->class() != "pc") {
+	return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED(), undef,
+				    "Node does not support service logs");
+    }
     if (!$node->IsUp()) {
 	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
 				    "Node is not ready");
@@ -7068,8 +7072,7 @@ sub ServiceLogs($)
     $output =~ tr/\x00-\x08\x0B\x0C\x0E-\x1F//d;    
     if ($?) {
 	print STDERR $output . "\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Failed to get service logs");
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
     }
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $output);
 }
