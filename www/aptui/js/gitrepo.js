@@ -164,7 +164,7 @@ $(function () {
 	    
 		if (json.code) {
 		    sup.HideWaitWait();
-		    sup.SpitOops("oops", json.value);
+		    sup.SpitOops("oops", "<pre>" + json.value + "</pre>");
 		    caller_callback(null);
 		    return;
 		}
