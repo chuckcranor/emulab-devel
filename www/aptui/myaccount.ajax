@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -117,6 +117,13 @@ function CheckForm()
     }
     elseif (! TBvalid_affiliation(htmlentities($formfields["affiliation"]))) {
         $errors["affiliation"] = TBFieldErrorString();
+    }
+    if (!isset($formfields["title"]) ||
+        trim($formfields["title"]) == "") {
+        $errors["title"] = "Missing Field";
+    }
+    elseif (! TBvalid_title(htmlentities($formfields["title"]))) {
+        $errors["title"] = TBFieldErrorString();
     }
     if (!isset($formfields["country"]) ||
         strcmp($formfields["country"], "") == 0) {
@@ -277,6 +284,9 @@ function Do_Update()
     }
     if ($needupdate || $formfields["affiliation"] != $target_user->affil()) {
         $args["affiliation"] = htmlentities(trim($formfields["affiliation"]));
+    }
+    if ($needupdate || $formfields["title"] != $target_user->title()) {
+        $args["title"] = $formfields["title"];
     }
     if ($formfields["shell"] != $target_user->shell()) {
         $args["shell"] = $formfields["shell"];

@@ -59,6 +59,18 @@
 		     data-label="Email"
 		     placeholder="Email" type="text">
 	    </div>
+	    <div class="form-group">
+	      <input name="title" value="<%- formfields.title %>"
+		     class="form-control format-me"
+		     data-key="title"
+		     data-label="Job Title"
+		     placeholder="Job Title (eg: Student|Faculty|PostDoc|Staff|etc)"
+		     type="text">
+	      <tiny>
+		<em>If you work at a company, please provide your
+		  professional title</em>
+	      </tiny>
+	    </div>
 	    <% if (window.ISPOWDER) { %>
 	      <div class="form-group">
 		<input name="address1" value="<%- formfields.address1 %>"

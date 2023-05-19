@@ -77,6 +77,7 @@ $defaults["city"]        = $target_user->city();
 $defaults["state"]       = $target_user->state();
 $defaults["country"]     = $target_user->country();
 $defaults["affiliation"] = $target_user->affil();
+$defaults["title"]       = $target_user->title();
 $defaults["address1"]    = $target_user->addr1();
 $defaults["address2"]    = $target_user->addr2();
 $defaults["zip"]         = $target_user->zip();

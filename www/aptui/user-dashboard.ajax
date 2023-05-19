@@ -252,6 +252,7 @@ function Do_AccountDetails()
     $results["name"]         = $target_user->name();
     $results["email"]        = $target_user->email();
     $results["affiliation"]  = $target_user->affil();
+    $results["title"]        = $target_user->title();
     $results["country"]      = $target_user->country();
     $results["address1"]     = $target_user->addr1();
     $results["address2"]     = $target_user->addr2();
