@@ -18,13 +18,11 @@
 	       target="_blank">
 	      <%- value.pid %></a>
 	    <br>
-	    <% if (!value.leader_notyet) { %>
-	      <a href="#" class="approve-button">
-		<span class="glyphicon
-			     glyphicon-thumbs-up"
-		      style='color: green; margin-left: 3px;
-			     margin-bottom: 4px;'></span></a>
-	    <% } %>
+	    <a href="#" class="approve-button">
+	      <span class="glyphicon
+			   glyphicon-thumbs-up"
+		    style='color: green; margin-left: 3px;
+			   margin-bottom: 4px;'></span></a>
 	    <a href="#" class="deny-button">
 	      <span class="glyphicon
 			   glyphicon-thumbs-down"
@@ -58,8 +56,8 @@
 	    <a href='user-dashboard.php?user=<%- value.leader_idx %>#admin'
 	       target="_blank">
 	      <%- value.leader_name %></a>
-	    <% if (value.leader_notyet) { %>
-	      <span class="text-danger">(Classic user, not verified!)</span>
+	    <% if (!value.leader_newuser) { %>
+	      <span>(returning user)</span>
 	    <% } %>
 	  </td>
 	  <td class="format-date" style='white-space: nowrap;'>
