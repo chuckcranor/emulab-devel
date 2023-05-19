@@ -357,7 +357,7 @@ $(function () {
 	    "      <% if (constraints) { %>Please Select" +
 	    "         <% } else { %>Any<% } %></span> "+
 	    "      <span class=right-caret></span></button>" +
-	    "   <ul class='dropdown-menu right-menu scrollable-menu'>" +
+	    "   <ul class='dropdown-menu right-menu scrollable-menuBADDOG'>" +
 	    "   <% if (!constraints) { %> " +
 	    "    <li><a href='#' class='clear-select'>" +
 	    "       <b>Clear Selection</b></a></li> " +
