@@ -22,25 +22,31 @@
 	      <a href="#" class="approve-button">
 		<span class="glyphicon
 			     glyphicon-thumbs-up"
-		      style='color: green; margin-left: 3px;'
-		      margin-bottom: 4px;'></span></a>
+		      style='color: green; margin-left: 3px;
+			     margin-bottom: 4px;'></span></a>
 	    <% } %>
 	    <a href="#" class="deny-button">
 	      <span class="glyphicon
 			   glyphicon-thumbs-down"
-		    style='color: red; margin-left: 3px;'
-		    margin-bottom: 4px;'></span></a>
+		    style='color: red; margin-left: 3px;
+			   margin-bottom: 4px;'></span></a>
 	    <a href="#" class="request-info-button">
 	      <span class="glyphicon
 			   glyphicon-info-sign text-info"
-		    style='margin-left: 3px;'
-		    margin-bottom: 4px;'></span></a>
+		    style='margin-left: 3px;
+			   margin-bottom: 4px;'></span></a>
+	    <% if (value.forClass) { %>
+	      <span class="glyphicon
+			   glyphicon-blackboard text-info"
+		    style='color: purple; margin-left: 3px;
+			   margin-bottom: 4px;'></span>
+	    <% } %>
 	    <% if (value.correspondence.length) { %>
 	      <a href="#" class="correspondence-button">
 		<span class="glyphicon
 			     glyphicon-envelope text-info"
-		      style='margin-left: 3px;'
-		      margin-bottom: 4px;'></span></a>
+		      style='margin-left: 3px;
+			     margin-bottom: 4px;'></span></a>
 	    <% } %>
 	    <div class="clearfix"></div>
 	    <a class='btn btn-danger btn-xs pull-right why-save-button hidden' 
