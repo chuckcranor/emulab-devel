@@ -669,15 +669,21 @@ $(function ()
 		bgtype = "panel-danger card-danger";
 		status_message = "Something went wrong!";
 		
-		if (_.has(json.value, "output")) {
-		    UpdateGeneralError(json.value.output);
-		}
-		else if (_.has(json.value, "message")) {
-		    UpdateGeneralError(json.value.message);
+		if (!_.has(json.value, "sliverstatus")) {
+		    if (_.has(json.value, "output")) {
+			UpdateGeneralError(json.value.output);
+		    }
+		    else if (_.has(json.value, "message")) {
+			UpdateGeneralError(json.value.message);
+		    }
+		    else {
+			UpdateGeneralError(null);
+		    }
 		}
 		else {
 		    UpdateGeneralError(null);
 		}
+		    
 		if (json.value.canclearerror) {
 		    $('.ignore-failure').removeClass("hidden");
 		}
@@ -1591,6 +1597,7 @@ $(function ()
 	    // Warning color and question mark icon to indicate a popover.
 	    UpdateNodeIcon(node_id, jacksID, "question.svg", "#ff4d4d");
 	    UpdateNodePopover(node_id, jacksID, html);
+	    SetupFailedNodeMenu(node_id, urn);
 	});
     }
 
@@ -1699,6 +1706,11 @@ $(function ()
     {
 	if (_.has(blob, "sliverstatus")) {
 	    for (var urn in blob.sliverstatus) {
+		var status = blob.sliverstatus[urn].status;
+		if (status == "canceled" ||
+		    status == "terminated" || status == "failed") {
+		    continue;
+		}
 		var nodes = blob.sliverstatus[urn].details;
 		for (var nodeid in nodes) {
 		    var status = nodes[nodeid];
@@ -2353,6 +2365,7 @@ $(function ()
 	    $('#context').contextmenu('destroy');
 	}
 	if (!_.has(contextMenus, client_id)) {
+	    console.info("ContextMenuShow no menu yet", client_id);
 	    return;
 	}
 
@@ -2556,7 +2569,7 @@ $(function ()
     //    
     function ShowTopo(statusblob, donefunc)
     {
-	//console.info("ShowTopo", changingtopo, statusblob);
+	//console.info("ShowTopo", changingtopo, statusBusy, statusblob);
 
 	// For Powder map redraw after topology change.
 	var redrawpowdermap = false;
@@ -2787,7 +2800,7 @@ $(function ()
 				  "software may not be fully installed and running.</span>",
 				  "html"      : true,
 				  "container" : "body",
-				  "placement" : "auto top"})
+				  "placement" : "top"})
 			.tooltip("disable");
 
 		    // Attach handler to the menu button.
@@ -2993,6 +3006,9 @@ $(function ()
 		// Change the ID of the clone so its unique.
 		CMclone.attr('id', "context-menu-" + node);
 
+		// Remove old one (modify)
+		$('#context-menu-' + node).remove();
+
 		// Insert into the context-menus div.
 		$('#context-menus').append(CMclone);
 
@@ -3058,11 +3074,16 @@ $(function ()
 	if (changingtopo) {
 	    // Clear the list view table before adding nodes again.
 	    $('#listview_table > tbody').html("");
+	    $('#listview_table').trigger('update');
 	    // Reload all manifests.
 	    manifests = {};
-	    // Need to redo the lists.
+	    // Need to redo all this stuff
 	    clientid2nodeid = {};
 	    imageablenodes  = {};
+	    jacksIDs = {};
+	    jacksSites = {};
+	    contextMenus = {};
+	    
 	    redrawpowdermap = true;
 
 	    // But might have deleted all the aggregates.
@@ -3498,6 +3519,10 @@ $(function ()
 
     /*
      * Add a context menu to the site tags
+     *
+     * XXX
+     * This does not work since moving Jacks into an iframe.
+     * Need a work around.
      */
     function SetupSiteContextMenus()
     {
@@ -3521,21 +3546,41 @@ $(function ()
     }
 
     /*
+     * Add a context menu to a node at a failed site that allows 
+     * it (the site) to be deleted.
+     */
+    function SetupFailedNodeMenu(client_id, urn)
+    {
+	// Called from UpdateSliverStatus so repeats.
+	if (_.has(contextMenus, client_id)) {
+	    return;
+	}
+	var clone = $("#site-context-menu").clone();
+
+	// Change the ID of the clone so its unique.
+	clone.attr('id', "context-menu-" + client_id);
+
+	// Handler
+	$(clone).find("[name=delete]").click(function (event) {
+	    event.preventDefault();
+	    DoDeleteSite(urn);
+	});
+
+	// Insert into the context-menus div.
+	$('#context-menus').append(clone);
+
+	// Remember for ActionHandler
+	contextMenus[client_id] = clone;
+    }
+
+    /*
      * Delete a site.
      */
     function DoDeleteSite(urn)
     {
 	var nickname = amlist[urn].nickname;
 
-	// Handler for hide modal to unbind the click handler.
-	$('#deletesite_modal').one('hidden.bs.modal', function (event) {
-	    $('#deletesite_confirm').unbind("click.deletesite");
-	});
-	
-	// Throw up a confirmation modal, with handler bound to confirm.
-	$('#deletesite_confirm').bind("click.deletesite", function (event) {
-	    sup.HideModal('#deletesite_modal');
-	
+	sup.ShowConfirmModal('#deletesite_confirm', function () {
 	    var callback = function(json) {
 		console.info(json);
 		sup.HideWaitWait(function () {		
@@ -3556,8 +3601,6 @@ $(function ()
 						 "cluster"  : nickname});
 	    xmlthing.done(callback);
 	});
-        $('#error_panel').addClass("hidden");
-	sup.ShowModal('#deletesite_modal');
     }
 
     function ShowProgressModal()
@@ -5720,6 +5763,7 @@ $(function ()
     {
 	// Need to fix this global.
 	window.EXPMODIFY = true;
+	newrspec = null;
 
 	if (!modifyready) {
 	    // Moved some stuff so it can be shared with status.js
@@ -5786,10 +5830,14 @@ $(function ()
 	    var args = {"uuid"  : uuid,
 			"rspec" : rspec};
 
+	    statusHold = 1;
 	    sup.ShowWaitWait("This will take a minute ... patience please");	
 	    sup.CallServerMethod(null, "status", "ModifyExperiment", args,
 		 function(json) {
 		     console.info("ModifyExperiment", json);
+		     statusHold = 0;
+		     GetStatus();
+		     
 		     if (json.code) {
 			 sup.HideWaitWait(function () {
 			     sup.SpitOops("oops",

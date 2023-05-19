@@ -1,0 +1,27 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instance_aggregates", "saved_manifest")) {
+	DBQueryFatal("alter table apt_instance_aggregates add ".
+		     " `saved_manifest` mediumtext ".
+		     "  after manifest");
+    }
+    if (!DBSlotExists("apt_instance_aggregate_history", "saved_manifest")) {
+	DBQueryFatal("alter table apt_instance_aggregate_history add ".
+		     " `saved_manifest` mediumtext ".
+		     "  after manifest");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

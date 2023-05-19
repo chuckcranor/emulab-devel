@@ -55,7 +55,6 @@ my $ignorefailures  = 0;
 my $usetracker      = 0;
 my $takelock        = 0;  # Use when called from create_instance.
 my $sendemail       = 0;
-my $sequence        = time();
 my $errmsg;
 my $sshkeys;
 my $retval;
@@ -229,10 +228,15 @@ my $curStatus   = $instance->status();
 my $uuid        = $instance->uuid();
 my $webtask     = $instance->webtask();
 my $webtask_id  = $webtask->task_id();
+my $sequence    = $instance->GetPortalSequence();
+my $update      = defined($instance->update_rspec()) ? 1 : 0;
+my $rspecstr    = ($update ? $instance->update_rspec() : $instance->rspec());
 my $genislice   = $instance->GetGeniSlice();
 if (!defined($genislice)) {
     fatal("Could not get genislice for $instance\n");
 }
+my $slice_urn   = $genislice->urn();
+
 if ($takelock) {
     $genislice->TakeLock();
 }
@@ -297,6 +301,16 @@ foreach my $agg ($instance->AggregateList()) {
 	       $agg->status() eq "staging" ||
 	       $agg->status() eq "interrupted"));
 
+    if ($update) {
+	#
+	# Initial update. Save off old manifests. This clears the current
+	# manifest.
+	#
+	if (defined($agg->manifest)) {
+	    $agg->BackupManifest();
+	}
+    }
+
     #
     # See if the aggregate is online, lets not go to a ton of trouble
     # if the aggregate is dead.
@@ -305,9 +319,11 @@ foreach my $agg ($instance->AggregateList()) {
 	print STDERR "$errmsg\n";
 	#
 	# If the cluster is not deferrable, then its an error and the
-	# instance has failed. 
+	# instance has failed.
 	#
-	if (!$aptagg->deferrable()) {
+	# For an update, lets treat everything as deferable.
+	#
+	if (!$aptagg->deferrable() && !$update) {
 	    $instance->SetStatus("failed");
 
 	    $webtask->output($errmsg);
@@ -329,6 +345,29 @@ foreach my $agg ($instance->AggregateList()) {
     push(@deferred_list, $agg)
 	if ($agg->deferred());
 }
+#
+# OK, commit to the update.
+#
+if ($update) {
+    $instance->Update({"rspec" => $rspecstr, "update_rspec" => undef});
+
+    #
+    # Need to stash the new bindings. But maybe we need to do
+    # this earlier, still thinking about it.
+    #
+    my $bindings;
+    if (APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg)) {
+	print STDERR "Could not get new bindings\n";
+    }
+    else {
+	$bindings = eval { encode_json($bindings); };
+	if ($@) {
+	    print STDERR "Could not json encode bindings: $@\n";
+	}
+    }
+    $instance->Update({"params" => $bindings});
+}
+
 if (!@aggregate_list) {
     print "No uncreated aggregates to process.\n";
 
@@ -345,21 +384,6 @@ if (!@aggregate_list) {
     }
     $genislice->UnLock();
     exit(0);
-}
-
-my $slice_urn   = $genislice->urn();
-my $update      = defined($instance->update_rspec()) ? 1 : 0;
-my $rspecstr    = ($update ? $instance->update_rspec() : $instance->rspec());
-
-#
-# If this is an update, we need the new sequence number from the
-# finalized rspec.
-#
-if ($update) {
-    $sequence = $instance->GetPortalSequence();
-    if (!$sequence) {
-	fatal("Could not get portal sequence number from rspec");
-    }
 }
 
 #
@@ -496,14 +520,19 @@ foreach my $aggregate (@aggregate_list) {
     if (!defined($aggregate->started())) {
 	$aggregate->MarkStarted();
     }
-    # Mark aggregates that are being updated vs adding for the first time.
-    if ($update && !defined($aggregate->manifest())) {
-	$aggregate->_isupdate(0);
-    }
-    else {
-	$aggregate->_isupdate($update);
-    }
     $aggregate->webtask()->Reset();
+
+    #
+    # Updates can be deferred, so need to always check to see if we are
+    # doing a create or an update.
+    #
+    $aggregate->_isupdate(defined($aggregate->saved_manifest()) ? 1 : 0);
+
+    #
+    # One wrinkle is that when updating, we never fail the entire instance.
+    #
+    $ignorefailures = 1 if ($aggregate->_isupdate());
+
     #
     # We want to tell CreateSlivers() if the CreateSliver() call reached
     # the point of allocating resources. Hack. 
@@ -579,9 +608,10 @@ else {
 	    $rval == GENIRESPONSE_NO_MAPPING) {
 	    AuditAbort()
 		if (!($debug || $foreground));
-	    if (defined($logfile)) {
+	    if (defined($logfile) && !$update) {
 		$logfile->Delete();
 		$logfile = undef;
+		$instance->ClearLogFile();
 	    }
 	    $exitcode = 1;
 	}
@@ -702,66 +732,17 @@ if ($failed) {
     $instance->ResolveDefer();
 }
 else {
-    my $updateAbort = 0;
-    
-    #
-    # Update of one aggregate vs multiple aggregates. Complicated by
-    # whether any of the aggregates got to the point where resources
-    # have been modified. Which is really hard to know since we use
-    # the monolithic CreateSlivers() instead of Allocate/Provision/Start
-    # But if we can prevent single aggregate experiments from getting
-    # into a confusing state, I will be happy.
-    #
-    # Another problem; we are calling CreateSliver() on all aggregate
-    # not just the ones that actually need a change. Need to fix that,
-    # but that means comparing the new rspec to the old rspec.
-    #
-    if ($update && $instance->ActiveAggregateList() == 0 && @failed_list == 1) {
-	my ($agg) = @failed_list;
-	
-	#
-	# In other words, just a single aggregate and it failed before commit.
-	#
-	$updateAbort = !$agg->_committed();
-    }
     #
     # If all the aggregates are resolved, then we can resolve the instance.
     #
     if (!$instance->DeferredAggregateList()) {
 	$instance->ResolveDefer();
-	if ($update) {
-	    if ($updateAbort) {
-		$instance->Update({"update_rspec" => undef});
-	    }
-	    else {
-		$instance->Update({"rspec" => $rspecstr,
-				   "update_rspec" => undef});
-	    }
-	}
     }
     else {
 	# This updates the record so we know when last retry was.
 	$instance->Defer();
     }
     $instance->SetStatus("ready");
-    if ($update && !$updateAbort) {
-	#
-	# Need to stash the new bindings. But maybe we need to do
-	# this earlier, still thinking about it.
-	#
-	my $bindings;
-	if (APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg)) {
-	    print STDERR "Could not get new bindings\n";
-	}
-	else {
-	    $bindings = eval { encode_json($bindings); };
-	    if ($@) {
-		print STDERR "Could not json encode bindings: $@\n";
-	    }
-	}
-	$instance->Update({"params" => $bindings});
-    }
-
     if ($sendemail) {
 	my $brand = $instance->Brand();
 	my $pid   = $project->pid();
@@ -1330,13 +1311,7 @@ sub CreateSliver($)
 	    return -1;
 	}
     }
-    # See below, this is hacky.
-    if ($aggobj->_isupdate()) {
-	$webtask->manifest($manifest);
-    }
-    else {
-	$aggobj->SetManifest($manifest);
-    }
+    $aggobj->SetManifest($manifest);    
     $aggobj->SetStatus("provisioned");
     return 0;
 }
@@ -1405,7 +1380,7 @@ sub CreateSlivers()
 	if ($code) {
 	    # Promote the log up to the instance so that so its easy to find.
 	    $instance->SetPublicURL($aggobj->public_url())
-		if (defined($aggobj->public_url()) && !$update);
+		if (defined($aggobj->public_url()) && !$aggobj->_isupdate());
 
 	    my $output   = $aggobj->webtask()->output();
 	    my $exitcode = $aggobj->webtask()->exitcode();
@@ -1443,7 +1418,7 @@ sub CreateSlivers()
 	    #
 	    # When updating, we just keep going. The web UI will say something.
 	    #
-	    if ($update) {
+	    if ($ignorefailures) {
 		next;
 	    }
 	    # With mulitple aggregates allow user to ignore errors and
@@ -1474,9 +1449,6 @@ sub CreateSlivers()
 	    # And the instance status at the end.
 	    $instance_status = "failed";
 	}
-	elsif ($aggobj->_isupdate()) {
-	    push(@updated, $aggobj);
-	}
 	#
 	# Resolve the defer now that it is starting up. 
 	#
@@ -1492,23 +1464,6 @@ sub CreateSlivers()
 	# Do this last so that the web interface does not see failed
 	# before the reason is in the webtask.
 	$instance->SetStatus($instance_status);
-    }
-    #
-    # Sucessful updates, we need to clear the manifest, wait, and then
-    # replace it. This is an awful temporary hack to get the web UI to notice.
-    #
-    # What we really need to do is save the old manifests above before
-    # calling createsliver, clear them all, then wait for failure or a new
-    # manifest, and then replace with the old or new.
-    #
-    if (@updated) {
-	foreach my $aggobj (@updated) {
-	    $aggobj->ClearManifest();
-	}
-	sleep(10);
-	foreach my $aggobj (@updated) {
-	    $aggobj->SetManifest($aggobj->webtask()->manifest());
-	}
     }
     return $return_code;
 }

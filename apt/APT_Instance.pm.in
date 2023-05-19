@@ -927,6 +927,15 @@ sub GetLogFile($$)
 
     return Logfile->Lookup($self->logfileid());
 }
+sub ClearLogFile($)
+{
+    my ($self) = @_;
+
+    return -1
+	if ($self->Update({'logfileid' => undef}));
+
+    return 0;
+}
 
 #
 # Set/Clear the lockdown bits.
@@ -4380,7 +4389,8 @@ sub SetManifest($$)
     }
     my $safe_manifest = DBQuoteSpecial($manifest_string);
 
-    DBQueryWarn("update apt_instance_aggregates set manifest=$safe_manifest ".
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  manifest=$safe_manifest,saved_manifest=null ".
 		"where uuid='$uuid' and aggregate_urn='$urn'") or
 	return -1;
 
@@ -4395,6 +4405,21 @@ sub ClearManifest($)
     my $urn  = $self->aggregate_urn();
 
     DBQueryWarn("update apt_instance_aggregates set manifest=null ".
+		"where uuid='$uuid' and aggregate_urn='$urn'") or
+	return -1;
+
+    $self->{'DBROW'}->{'manifest'} = undef;
+}
+
+sub BackupManifest($)
+{
+    my ($self) = @_;
+
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  saved_manifest=manifest, manifest=null ".
 		"where uuid='$uuid' and aggregate_urn='$urn'") or
 	return -1;
 
@@ -4456,6 +4481,16 @@ sub IsTerminated($)
     return 1
 	if ($self->status() eq "terminated" ||
 	    $self->status() eq "terminating");
+    
+    return 0;
+}
+
+sub IsCanceled($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->status() eq "canceled");
     
     return 0;
 }
@@ -5280,7 +5315,7 @@ sub GetManifest($)
     return GeniResponse->new($response->code(),
 			     {"manifest" => $response->value()})
 	if ($self->isAL2S());
-    return undef
+    return GeniResponse->new(GENIRESPONSE_UNAVAILABLE())
 	if (! exists($response->value()->{'manifest'}));
     return $response;
 }

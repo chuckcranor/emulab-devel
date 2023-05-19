@@ -192,6 +192,11 @@ function Do_GetInstanceStatus()
                   "havemanifest"    => 0,
                   "offline"         => false);
 
+        if ($sliver->status() == "terminated") {
+            $blob["sliverstatus"][$sliver->aggregate_urn()] = $sliverblob;
+            continue;
+        }
+
         #
         # See if the aggregate is offline.
         #
