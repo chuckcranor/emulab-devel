@@ -25,7 +25,7 @@ $(function () {
 
 		    // Temporary
 		    if (window.BOOTSTRAP_VERSION == 5) {
-			$(wrapper).addClass("mb-2");
+			$(wrapper).addClass("mb-1 mt-1");
 		    }
 
 		    // How do I just move the item into the wrapper?
@@ -176,7 +176,7 @@ $(function () {
 			}
 			else {
 			    $(this).parent().addClass("has-error");
-			    $(label).addClass("form-control");
+			    $(label).addClass("control-label");
 			}
 			$(this).parent().append(label);
 			delete errors[key];
@@ -352,14 +352,15 @@ $(function () {
 		    callback(json);
 		});
 	    };
-	    sup.ShowWaitWait(message);
-	    var xmlthing =
-		sup.CallServerMethod(null, route, method,
-				     {"formfields" : formfields,
-				      "checkonly"  : 0,
-				      "embedded"   : window.EMBEDDED,
-				     });
-	    xmlthing.done(submit_callback);
+	    sup.ShowWaitWait(message, undefined, function () {
+		var xmlthing =
+		    sup.CallServerMethod(null, route, method,
+					 {"formfields" : formfields,
+					  "checkonly"  : 0,
+					  "embedded"   : window.EMBEDDED,
+					 });
+		xmlthing.done(submit_callback);
+	    });
 	}
 
 	// Exports from this module.
