@@ -25,7 +25,7 @@ $(function () {
 
 		    // Temporary
 		    if (window.BOOTSTRAP_VERSION == 5) {
-			$(wrapper).addClass("mb-1 mt-1");
+			$(wrapper).addClass("mt-3");
 		    }
 
 		    // How do I just move the item into the wrapper?
@@ -172,6 +172,7 @@ $(function () {
 		    if (errors && _.has(errors, key)) {
 			if (window.BOOTSTRAP_VERSION == 5) {
 			    $('#' + key).addClass("is-invalid");
+			    $(this).addClass("is-invalid");
 			    $(label).addClass("invalid-feedback text-start");
 			}
 			else {
