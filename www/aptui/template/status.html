@@ -246,7 +246,7 @@ pre {
 		 target='_blank'
 		 type='button'>Portal Log</a>
 	      <% if (isadmin) { %>
-		<button class='btn btn-xs btn-danger' disabled hidden
+		<button class='btn btn-xs btn-danger hidden' disabled
 			style='margin-right: 10px;'
 			id='warnkill-experiment-button' type=button
 			data-delay='{"show":300}' data-bs-delay='{"show":300}'
@@ -255,7 +255,7 @@ pre {
 				      experiment with cause
 				      and optionally freeze the user account.'>
  		  Warn/Kill</button>
-		<button class='btn btn-xs btn-danger' disabled hidden
+		<button class='btn btn-xs btn-danger hidden' disabled
 			style='margin-right: 10px;'
 			id='release-quarantine-button' type=button
 			data-toggle='popover' data-bs-toggle='popover'
@@ -361,7 +361,7 @@ pre {
 		  Extend
 		<% } %>
 	      </button>
-	      <% if (!isfadmin) { %>
+	      <% if (window.APT_OPTIONS.canterminate) { %>
 		<button class='btn btn-xs btn-danger' disabled
 			id='terminate_button' type=button
 			data-toggle='modal' data-bs-toggle='modal'
