@@ -18,12 +18,12 @@
 </style>
 
 <div class='row'>
-  <div class='col-lg-10  col-lg-offset-1
-       col-md-10 col-md-offset-1
+  <div class='col-lg-10  col-lg-offset-1 offset-lg-1
+       col-md-10 col-md-offset-1 offset-md-1
        col-sm-12 
        col-xs-12'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
 	<% if (window.ISCLOUD) { %>
 	  <span class="pull-right">
 	    Please see our
@@ -31,11 +31,11 @@
 	      Acceptable Use Policy</a>
 	  </span>
 	<% } %>
-        <h3 class='panel-title' id='signup_panel_title'>
+        <h3 class='panel-title card-title' id='signup_panel_title'>
 	  <%- pagetitle %>
 	</h3>
       </div>
-      <div class='panel-body'>
+      <div class='panel-body card-body'>
 	<% if (general_error) { %>
 	  <font color=red><%- general_error %></font>
 	<% } %>
@@ -67,11 +67,9 @@
 	      </fieldset>
 	    </div>
 	  </div>
-          <div class='row sidebyside-form'>
-           <button class='btn btn-primary btn-sm pull-right'
-		   id='submit_button'
-                   type='submit' name='create'><%- button_label %></button>
-	 </div>
+          <button class='btn btn-primary btn-sm pull-right'
+		  id='submit_button'
+                  type='submit' name='create'><%- button_label %></button>
 	</form>
       </div>
     </div>
