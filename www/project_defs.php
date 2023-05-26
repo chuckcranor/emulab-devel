@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1227,6 +1227,14 @@ class Project
         $pid = $this->pid();
         
         return $APTBASE . "/show-project.php?pid=${pid}";
+    }
+
+    function SignupURL()
+    {
+        global $APTBASE;
+        $pid = $this->pid();
+        
+        return $APTBASE . "/signup.php?pid=${pid}";
     }
 }
 ?>

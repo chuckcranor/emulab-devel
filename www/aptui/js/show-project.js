@@ -612,6 +612,10 @@ $(function ()
 		trigger: 'hover',
 		placement: 'auto',
 	    });
+	    $('#project_table [data-toggle="tooltip"]').popover({
+		trigger: 'hover',
+		placement: 'auto',
+	    });
 	    $('#project_content .toggle').click(function() {
 		Toggle(this);
 	    });

@@ -254,6 +254,7 @@ function Do_ProjectProfile()
     $results["licenses"]    = array();
     $results["nsf_awards"]  = $target_project->nsf_awards();
     $results["allowed_clusters"] = $target_project->allowed_clusters();
+    $results["signup_url"]  = $target_project->SignupURL();
 
     if ($ISPOWDER) {
         $licenses = $target_project->LicenseStatus();

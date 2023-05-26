@@ -33,6 +33,17 @@
       </tr>
     <% } %>
     <tr>
+      <td>Signup URL
+	<a href='#' class='btn btn-xs'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
+	   title='Send this link to users who need to join your project'>
+	  <span class='glyphicon glyphicon-question-sign'
+		style='margin-bottom: 4px;'></span></a>
+      </td>
+      <td><a href="<%= fields.signup_url %>" target=_blank>
+	<%= fields.signup_url %></a></td>
+    </tr>
+    <tr>
       <td>Approved</td>
       <td><% if (fields.approved) { %>Yes<% } else { %>No<% } %></td>
     </tr>
