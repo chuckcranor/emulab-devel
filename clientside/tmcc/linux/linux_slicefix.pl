@@ -1359,7 +1359,7 @@ sub fix_grub_cnet_hint
 	my @buffer = ();
 	while (<FILE>) {
 		if (/emulabcnet=[\w:]+/) {
-			s#emulabcnet=[\w:]+#$cnetmacaddr#g;
+			s#emulabcnet=[\w:]+#emulabcnet=$cnetmacaddr#g;
 			push @buffer, $_;
 			print "Replaced emulabcnet=$cnetmacaddr in cmdline in $file\n";
 			next;
