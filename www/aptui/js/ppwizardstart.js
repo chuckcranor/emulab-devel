@@ -14,7 +14,7 @@ $(function () {
 						       'image-picker-modal']);
         var ppmodalString = templates['ppform-wizard'];
         var imagePickerString = templates['image-picker-modal'];
-	var debug         = 1;
+	var debug         = 0;
 	var paramdefs     = null;
 	var ppdivname     = null;
 	var uuid          = "";
@@ -58,6 +58,15 @@ $(function () {
 	    ppchanged = true;
 	    modified_callback();
 	    window.MODIFIED_PARAMS = true;
+	}
+	// Bootstrap 5 ...
+	function ShowPanel(target) {
+	    if (window.BOOTSTRAP_VERSION == 5) {
+		$(target).addClass("show");
+	    }
+	    else {
+		$(target).addClass("in");
+	    }
 	}
 
 	var groupTemplateString =
@@ -1188,7 +1197,7 @@ $(function () {
 		    help_panel_id = help_panel_id + "-" + structIndex;
 		}
 		longhelp = escapeHtml(longhelp);
-		
+
 		label_text = label_text +
 		    "<span class='pp-param-popover' " +
 		    " data-toggle='popover' data-bs-toggle='popover' " +
@@ -1208,7 +1217,7 @@ $(function () {
 		    "            margin-left: 0px; margin-right: 0px; " +
 		    "            margin-top: 5px; margin-bottom: 0px; " +
 		    "            padding: 5px;' " +
-		    "            data-toggle='collapse' "
+		    "            data-toggle='collapse' " +
 		    "            data-bs-toggle='collapse'>" +
 		        longhelp + "</div>";
 	    }
@@ -2056,8 +2065,8 @@ $(function () {
 	     * being drawn closed.
 	     */
 	    if (hasError || hasWarning || group.visible) {
-		$(groupdiv).find(".pp-param-group-subpanel-collapse")
-		    .addClass("in show");
+		ShowPanel($(groupdiv)
+			  .find(".pp-param-group-subpanel-collapse"));
 		$(groupdiv).find(".subpanel-collapse-chevron .glyphicon")
 		    .removeClass("glyphicon-chevron-right")
 		    .addClass("glyphicon-chevron-down");
@@ -2253,8 +2262,8 @@ $(function () {
 	    if (multivalue) {
 		if ($(structdiv)
 		    .find('.pp-param-group-subpanel-collapse.in').length) {
-		    $(structdiv).find(".pp-param-structset-subpanel-collapse")
-			.addClass("in show");
+		    ShowPanel($(structdiv)
+			      .find(".pp-param-structset-subpanel-collapse"));
 		    $(structdiv)
 			.find(".structset-subpanel-collapse-chevron .glyphicon")
 			.removeClass("glyphicon-chevron-right")
@@ -2454,8 +2463,8 @@ $(function () {
 		$(groupdiv).find(".panel-body").append(div);
 	    });
 	    if (details.visible[copyIndex]) {
-		$(groupdiv).find(".pp-param-group-subpanel-collapse")
-		    .addClass("in show")
+		ShowPanel($(groupdiv)
+			  .find(".pp-param-group-subpanel-collapse"));
 	    }
 	    // Remember visibility for redraw after errors
 	    $(groupdiv).find(".pp-param-group-subpanel-collapse")
@@ -2484,8 +2493,8 @@ $(function () {
 	     * being drawn closed.
 	     */
 	    if (hasError || details.visible[copyIndex] || isfirst) {
-		$(groupdiv).find(".pp-param-group-subpanel-collapse")
-		    .addClass("in show");
+		ShowPanel($(groupdiv)
+			  .find(".pp-param-group-subpanel-collapse"));
 		$(groupdiv).find(".subpanel-collapse-chevron .glyphicon")
 		    .removeClass("glyphicon-chevron-right")
 		    .addClass("glyphicon-chevron-down");
