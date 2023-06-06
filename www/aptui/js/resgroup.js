@@ -2153,7 +2153,7 @@ $(function ()
 		    }
 		    // Gross Hack
 		    if (group == "mmimo" &&
-			(key == "mmimo1-honors")) {
+			(key == "mmimo1-honors" || key == "mmimo1-ustar")) {
 			prunelist[key] = true;
 			return;
 		    }
