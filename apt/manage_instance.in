@@ -3742,11 +3742,13 @@ sub DoDumpManifests()
     # will suffice for anyone else.
     #
     if ($doperms) {
+	my $project = $instance->GetProject();
 	my $creator = $instance->GetGeniUser();
 	if (!defined($creator)) {
 	    fatal("Cannot lookup creator");
 	}
-	if (!$this_user->SameUser($creator->emulab_user())) {
+	if (! ($this_user->SameUser($creator->emulab_user()) ||
+	       $project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT()))) {
 	    UserError("Not enough permission to get experiment manifests");
 	}
     }
