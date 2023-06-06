@@ -26,7 +26,15 @@
       </div>
       <div class='modal-body' id='modal_profile_rspec_body'>
         <div class='border border-1'>
+	  <!-- For the manage/show  page -->
 	  <div id='modal_profile_rspec_div' style='height:70vh'></div>
+
+	  <!-- For the instantiate page -->
+	  <textarea name=\"formfields[profile_rspec_modal]\"
+		    id='modal_profile_rspec_textarea'
+		    rows=20
+		    class='form-control hidden'
+                    type='textarea'></textarea>
 	</div>
 	<center class="mt-1">
           <a type='button' id="rspec_modal_download_button"
@@ -40,11 +48,6 @@
 		   data-buttonText='Upload'></span>
 	</center>
       </div>
-      <textarea name=\"formfields[profile_rspec_modal]\"
-		id='modal_profile_rspec_textarea'
-		rows=20
-		class='form-control hidden'
-                type='textarea'></textarea>
     </div>
   </div>
 </div>
