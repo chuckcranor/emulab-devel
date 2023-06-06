@@ -286,7 +286,6 @@ function REQUIRE_OPENSTACKGRAPHS()
 function REQUIRE_PPWIZARDSTART()
 {
   REQUIRE_UNDERSCORE();
-  AddTemplate("choose-am");
   AddTemplate("image-picker-modal");
   AddTemplate("ppform-wizard");
   AddLibrary("js/ppwizardstart.js");

@@ -1,12 +1,13 @@
 <div>
   <%
-  var _xwidthx_ = window.USENEWINSTANTIATE ? "col-sm-4" : "col-sm-6";
+  var _xwidthx_ = window.USENEWINSTANTIATE || true ? "col-sm-4" : "col-sm-6";
   %>
   <script id="nosite-selector-template" type="text/template">
     <div id='nosite_selector' 
 	 class='form-horizontal experiment_option'>
-      <div class='form-group cluster-group'>
-	<label class='col-sm-4 control-label' name='<%- siteid %>' 
+      <div class='form-group cluster-group row mb-3'>
+	<label class='col-sm-4 control-label col-form-label'
+	       name='<%- siteid %>' 
                style='text-align: right;'>Cluster:</a>
 	</label> 
 	<div class='<%- _xwidthx_ %> site-selector'>
@@ -45,11 +46,11 @@
   
   <script id="site-selector-template" type="text/template">
     <%
-    var _xwidthx_ = window.USENEWINSTANTIATE ? "col-sm-4" : "col-sm-6";
+    var _xwidthx_ = window.USENEWINSTANTIATE || true ? "col-sm-4" : "col-sm-6";
     %>
     <div id='site<%- sitenum %>cluster'
 	 class='form-horizontal experiment_option'>
-      <div class='form-group cluster-group'>
+      <div class='form-group cluster-group row mb-3'>
 	<label class='col-sm-4 control-label' name='<%- siteid %>' 
                style='text-align: right;'>
           Site <%- siteid %> Cluster:</a>
@@ -78,11 +79,11 @@
 
   <script id="pickered-site-template" type="text/template">
     <%
-    var _xwidthx_ = window.USENEWINSTANTIATE ? "col-sm-4" : "col-sm-6";
+    var _xwidthx_ = window.USENEWINSTANTIATE || true ? "col-sm-4" : "col-sm-6";
     %>
     <div id='site<%- sitenum %>cluster'
 	 class='form-horizontal experiment_option'>
-      <div class='form-group cluster-group pickered'>
+      <div class='form-group cluster-group pickered row mb-3'>
 	<label class='col-sm-4 control-label' name='<%- siteid %>' 
                style='text-align: right;'>
 	  <% if (multisite) { %>
@@ -107,12 +108,11 @@
 		    data-bs-toggle="dropdown"
 		    aria-expanded="false">
 	      <span class="value">Please Select</span>
-	      <div class="cluster-tooltips"></div>
-	      <span class="caret"></span>
+	      <div class="cluster-tooltips" style="display: inline-block"></div>
 	    </button>
 	    <ul class="dropdown-menu" role="menu">
 	      <li class="initial enabled">
-		<a href="#" value="">
+		<a href="#" class="dropdown-item" value="">
 		  Please Select
 		</a>
 	      </li>
@@ -162,8 +162,10 @@
       </li>
     <% } %>
     <li class="enabled <% if (selected) { %>selected<% } %>"
-urn="<%- urn %>">
-      <a href="#" value="<%- name  %>">
+	urn="<%- urn %>">
+      <a href="#"
+	 class="dropdown-item enabled <% if (selected) { %>active<% } %>"
+	 value="<%- name  %>">
 	<%- name %>
 	<div class="cluster-tooltips">
 	  <% if (status) { %>
@@ -209,12 +211,12 @@ urn="<%- urn %>">
 
   <script id="pickered-proj-template" type="text/template">
     <%
-    var _xwidthx_ = window.USENEWINSTANTIATE ? "col-sm-4" : "col-sm-6";
+    var _xwidthx_ = window.USENEWINSTANTIATE || true ? "col-sm-4" : "col-sm-6";
     %>
     <div id='profile_pid_picker'
 	 class='form-horizontal experiment_option'>
-      <div class='form-group pickered'>
-	<label class='col-sm-4 control-label' 
+      <div class='form-group pickered row mb-3'>
+	<label class='col-sm-4 control-label col-form-label' 
                style='text-align: right;'>
 	  Project:
         </label>
@@ -222,18 +224,18 @@ urn="<%- urn %>">
 	  <input type="hidden"
 		 id="profile_pid"
 		 name="pid">
-	  <div class="picker btn-group">
+	  <div class="picker dropdown">
 	    <button type="button"
 		    class="form-control btn btn-default dropdown-toggle"
 		    data-toggle="dropdown" data-bs-toggle="dropdown"
 		    aria-expanded="false">
 	      <span class="value">Please Select</span>
-	      <div class="reservation-tooltips"></div>
-	      <span class="caret"></span>
+	      <div class="reservation-tooltips"
+		   style="display: inline-block"></div>
 	    </button>
 	    <ul class="dropdown-menu" role="menu">
 	      <li class="initial enabled" data-priority="0">
-		<a href="#" value="">
+		<a href="#" class="dropdown-item" value="">
 		  Please Select
 		</a>
 	      </li>
@@ -250,7 +252,8 @@ urn="<%- urn %>">
   <script id="pickered-pid-template" type="text/template">
     <li class="<% if (selected) { %>selected<% } %>"
 	data-priority="<%- priority %>">
-      <a href="#" value="<%- pid %>">
+      <a href="#" value="<%- pid %>"
+	 class="dropdown-item <% if (selected) { %>active<% } %>">
 	<%- pid %>
 	<div class="reservation-tooltips">
 	  <% if (resgroup) { %>
@@ -277,8 +280,8 @@ urn="<%- urn %>">
 
   <script id="pickered-group-template" type="text/template">
     <div class='form-horizontal experiment_option'>
-      <div class='form-group pickered'>
-	<label class='col-sm-4 control-label' 
+      <div class='form-group pickered row mb-3'>
+	<label class='col-sm-4 control-label col-form-label' 
                style='text-align: right;'>
 	  Group:
         </label>
@@ -286,17 +289,16 @@ urn="<%- urn %>">
 	  <input type="hidden"
 		 id="profile_gid"
 		 name="gid">
-	  <div class="picker btn-group">
+	  <div class="picker dropdown">
 	    <button type="button"
 		    class="form-control btn btn-default dropdown-toggle"
 		    data-toggle="dropdown" data-bs-toggle="dropdown"
 		    aria-expanded="false">
 	      <span class="value">Please Select</span>
-	      <span class="caret"></span>
 	    </button>
 	    <ul class="dropdown-menu" role="menu">
 	      <li class="initial enabled" data-priority="0">
-		<a href="#" value="">
+		<a href="#" class="dropdown-item" value="">
 		  Please Select
 		</a>
 	      </li>
@@ -312,7 +314,9 @@ urn="<%- urn %>">
   
   <script id="pickered-gid-template" type="text/template">
     <li class="<% if (selected) { %>selected<% } %>">
-      <a href="#" value="<%- gid %>"><%- gid %></a>
+      <a href="#"
+	 class="dropdown-item <% if (selected) { %>active<% } %>"	 
+	 value="<%- gid %>"><%- gid %></a>
     </li>
   </script>
 </div>

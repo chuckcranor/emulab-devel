@@ -177,8 +177,18 @@ $(function ()
 	setStepsMotion(false);
 
 	// Format the step labels across the top to match the panel widths.
-	$('#stepsContainer .steps').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
-	$('#stepsContainer .actions').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
+	$('#stepsContainer .steps, #stepsContainer .actions')
+	    .addClass('col-lg-8 col-lg-offset-2 offset-lg-2 ' +
+		      'col-md-8 col-md-offset-2 offset-md-2 ' +
+		      'col-sm-10 col-sm-offset-1 offset-sm-1 ' +
+		      'col-xs-12 col-xs-offset-0 offset-sm-0 ' +
+		      // Bootstrap 5 change
+		      'px-0');
+	// No point in looking inside the steps thing.
+	if (window.BOOTSTRAP_VERSION == 5) {
+	    $('#stepsContainer .steps ul li.first a').addClass('ms-0');
+	    $('#stepsContainer .steps ul li.last a').addClass('me-0');
+	}
 
 	// Insert datepicker on schedule tab,
 	$("#start_day").datepicker({
@@ -1146,9 +1156,14 @@ $(function ()
 		$(picker).find("button .value").html(value);
 		$(picker).find("button .reservation-tooltips").html(tooltips);
 		$(picker).find("#profile_pid").val(which);
-		$(picker).find("li").removeClass("selected");
-		$(this).closest("li").addClass("selected");
-
+		if (window.BOOTSTRAP_VERSION == 5) {
+		    $(picker).find("li a").removeClass("active");
+		    $(this).closest("li a").addClass("active");
+		}
+		else {
+		    $(picker).find("li").removeClass("selected");
+		    $(this).closest("li").addClass("selected");
+		}
 		UpdateGroupSelector();
 		// Need to update the reservation tooltips after pid select
 		CreateAggregateSelectors();
@@ -1227,8 +1242,14 @@ $(function ()
 		}
 		$(picker).find("button .value").html(value);
 		$(picker).find("#profile_gid").val(which);
-		$(picker).find("li").removeClass("selected");
-		$(this).closest("li").addClass("selected");
+		if (window.BOOTSTRAP_VERSION == 5) {
+		    $(picker).find("li a").removeClass("active");
+		    $(this).closest("li a").addClass("active");
+		}
+		else {
+		    $(picker).find("li").removeClass("selected");
+		    $(this).closest("li").addClass("selected");
+		}
 	    });
 
 	// Trigger selection
@@ -1912,7 +1933,7 @@ $(function ()
 	    var url  = "resgroup.php?fromrspec=1&embedded=1" +
 		"&project=" + $('#profile_pid').val();
 	
-	    var html = '<iframe id="reservation-iframe" class=col-xs-12 ' +
+	    var html = '<iframe id="reservation-iframe" class=col-sm-12 ' +
 		'style="padding-left: 0px; padding-right: 0px; border: 0px;" ' +
 		'height=1200 ' + 'src=\'' + url + '\'>';
 	

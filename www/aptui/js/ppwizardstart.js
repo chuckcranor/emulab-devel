@@ -338,7 +338,7 @@ $(function () {
 	    " <% if (multivalue) { %> "+
 	    "        style='display: inline-block; width: 75%' " +
 	    " <% } %>" +
-	    "        class='form-control format-me' " +
+	    "        class='form-control format-me form-select' " +
 	    "        data-label='<%- prompt %>' " +
 	    "        placeholder='Please Select'>" +
 	    " <% _.each(options, function(option, idx) { %> " +
@@ -365,10 +365,10 @@ $(function () {
 	    "    <span class='type-selected'>" +
 	    "      <% if (constraints) { %>Please Select" +
 	    "         <% } else { %>Any<% } %></span> "+
-	    "      <span class=right-caret></span></button>" +
+	    "      </button>" +
 	    "   <ul class='dropdown-menu right-menu scrollable-menuBADDOG'>" +
 	    "   <% if (!constraints) { %> " +
-	    "    <li><a href='#' class='clear-select'>" +
+	    "    <li><a href='#' class='clear-select dropdown-item'>" +
 	    "       <b>Clear Selection</b></a></li> " +
 	    "   <% } %> " +
 	    "   </ul>"+
@@ -1327,8 +1327,9 @@ $(function () {
 		    var count  = 0;
 		    var agghtml = 
 			"<li class='dropdown-submenu'> " +
-			"  <a href='#' class='dropdown-toggle' " +
-			"     data-toggle='dropdown'>" +
+			"  <a href='#' class='dropdown-toggle dropdown-item' " +
+			"     data-toggle='dropdown' " +
+			"     data-bs-toggle='dropdown'>" +
 			     aggregate.name + "</a>" +
 			"  <ul class='dropdown-menu'>";
 		    
@@ -1340,7 +1341,7 @@ $(function () {
 			var typehtml =
 			    "<li style='position: relative;'>" +
 			    "  <a href='#' name='" + type + "' " +
-			    "         class='type-select'>" +
+			    "         class='type-select dropdown-item'>" +
 			    type + "</a>";
 
 			if (typeinfo) {
@@ -1432,16 +1433,18 @@ $(function () {
 		// Need to use a click handler cause of popover problems
 		// with the submenus.
 		$(innerdiv).find(".glyphicon-info-sign").popover({
-		    trigger: 'manual',
+		    trigger: 'hover',
 		    placement: 'auto',
 		    container: 'body',
 		});
+		if (0) {
 		$(innerdiv).find(".glyphicon-info-sign").click(
 		    function (event) {
 			event.preventDefault();
 			event.stopPropagation();
 			$(this).popover('toggle');
 		    });
+		}
 
 		// Move the main menu to halfway up/down.
 		$(innerdiv).find(".dropdown")
@@ -2261,7 +2264,9 @@ $(function () {
 	     */
 	    if (multivalue) {
 		if ($(structdiv)
-		    .find('.pp-param-group-subpanel-collapse.in').length) {
+		    // Bootstrap 5 uses show instead on in.
+		    .find('.pp-param-group-subpanel-collapse.in, ' +
+			  '.pp-param-group-subpanel-collapse.show').length) {
 		    ShowPanel($(structdiv)
 			      .find(".pp-param-structset-subpanel-collapse"));
 		    $(structdiv)
@@ -2863,6 +2868,11 @@ $(function () {
 	    $('#ppmodal-body').empty();
 	    var root = $(formString);
 	    $('#ppmodal-body').append(root)
+
+	    if (window.EXPMODIFY) {
+		$("#ppmodal-body .instantiate-experiment").addClass("hidden");
+		$("#ppmodal-body .modify-experiment").removeClass("hidden");
+	    }
 	    
 	    // Process each field/group.
 	    _.each(formFields, function(def, fieldIndex) {
