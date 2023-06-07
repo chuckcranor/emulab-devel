@@ -3916,7 +3916,7 @@ sub DoDeleteNodes()
 	foreach my $id (@todelete) {
 	    my $sliver_urn;
 	
-	    foreach my $node (@nodes) {
+	    foreach my $node (@aggnodes) {
 		my $client_id   = GeniXML::GetVirtualId($node);
 
 		if ($id eq $client_id) {
