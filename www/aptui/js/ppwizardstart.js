@@ -356,8 +356,8 @@ $(function () {
 	    "</select>";
 
 	var nodeTypeTemplateString = 
-	    "<div> " +
-	    "  <div class='dropdown'> " +
+	    "<div class='nodetype-dropdown'> " +
+	    "  <div class='dropdown dropend'> " +
 	    "   <button class='btn btn-default dropdown-toggle' " +
 	    "           style='min-width: 150px; text-align: left' " +
 	    "           type=button data-toggle=dropdown " +
@@ -1465,7 +1465,17 @@ $(function () {
 			function(event) {
 			    var menu = $(event.target)
 				.parent().find(".dropdown-menu");
-		    
+
+			    /*
+			     * Hide siblings since we seem to sometimes
+			     * lose the hover out event.
+			     */
+			    var siblings = $(event.target).parent().siblings();
+			    _.each(siblings, function (sibling) {
+				$(sibling).find(".dropdown-menu")
+				    .css("display", "none");
+			    });
+
 			    $(menu).css("display", "inline-block");
 			    var height = $(menu).height();
 			    if (height > 26) {
@@ -1501,6 +1511,8 @@ $(function () {
 		    $(innerdiv).find("input").val($(this).attr("name"))
 		    // Make sure the popover is gone too.
 		    $(innerdiv).find(".glyphicon-info-sign").popover("hide");
+		    // And the menu itself.
+		    $(this).closest("ul").css("display", "none");
 		    Modified();
 		});
 		/*
