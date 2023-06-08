@@ -65,6 +65,7 @@ my $MAINSITE         = @TBMAINSITE@;
 my $DDCTRL           = "/usr/local/etc/rc.d/dense-debug.sh";
 my $DDPID            = "/var/run/frontend-dense-%s.pid";
 my $PORT             = 111;
+my $SAVEUID          = $UID;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -113,6 +114,15 @@ if (defined($options{"r"})) {
 usage()
     if (@ARGV != 1);
 
+my $arg = shift(@ARGV);
+# For Taint check
+if ($arg =~ /^([-\w]+)$/) {
+    $arg = $1;
+}
+else {
+    fatal("Illegal argument");
+}
+
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
 use emdb;
@@ -123,25 +133,25 @@ use Node;
 use APT_Aggregate;
 
 if ($zero) {
-    $location = shift(@ARGV);
+    $location = $arg;
     Switcher($location, 0);
     exit(0);
 }
 
 if ($set) {
-    $location = shift(@ARGV);
+    $location = $arg;
     my $port = $options{"s"};
     Switcher($location, $port);
     exit(0);
 }
 
 if ($read) {
-    $location = shift(@ARGV);
+    $location = $arg;
     GetSwitcher($location);
     exit(0);
 }
 
-my $node_id  = shift(@ARGV);
+my $node_id = $arg;
 my $node = Node->Lookup($node_id);
 if (!defined($node)) {
     fatal("No such node $node_id");
@@ -179,11 +189,14 @@ sub GetSocket($)
 
     if (-e $ddpid) {
 	print "Stopping the DD debugging process\n";
+	$UID = 0;
 	system("$DDCTRL stop $location");
 	if ($?) {
 	    fatal("Could not stop the debugging logger");
 	}
+	$UID = $SAVEUID;
 	$ddrunning = 1;
+	sleep(1);
     }
 
     my $sock = IO::Socket::INET->new(PeerAddr => $rfswitch,
@@ -336,6 +349,7 @@ sub fatal($)
 END {
     if ($ddrunning) {
 	print "Restarting the debbugging logger\n";
+	$UID = 0;
 	system("$DDCTRL start $location");
 	if ($?) {
 	    print STDERR "Could not restart the debugging logger\n";

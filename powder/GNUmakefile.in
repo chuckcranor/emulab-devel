@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,9 +39,11 @@ LIBEXEC_SCRIPTS	= $(WEB_SBIN_SCRIPTS)
 
 ifeq ($(ISMAINSITE),1)
 SBIN_SCRIPTS   += powder_keepalive powder_shutdown powderstats powder_report \
-		  rfbaseline cnode-tempmonitor process-monitor-graphs
+		  rfbaseline cnode-tempmonitor process-monitor-graphs \
+		  powder-rfswitcher
 WEB_SBIN_SCRIPTS= webpowder_shutdown
 INSTALLTARGET   = mainsite-install
+SETUID_SBIN_SCRIPTS  = powder-rfswitcher
 endif
 ifeq ($(DEADMAN),1)
 SBIN_SCRIPTS   += endpoint-monitor
