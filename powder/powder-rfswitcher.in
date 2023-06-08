@@ -1,0 +1,344 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+use IO::Socket::INET;
+use JSON;
+use POSIX qw(strftime ceil);
+
+#
+# Toggle the RF switches at a location, so the antenna is hooked to the node.
+#
+sub usage()
+{
+    print "Usage: powder-rfswitcher [-dn] <node_id>\n";
+    print "       powder-rfswitcher -r location\n";
+    print "       powder-rfswitcher -z location\n";
+    print "       powder-rfswitcher -s port location\n";
+    exit(1);
+}
+my $optlist   = "dnzs:r";
+my $debug     = 0;
+my $impotent  = 0;
+my $zero      = 0;
+my $set       = 0;
+my $read      = 0;
+my $ddrunning = 0;
+my $location;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $DDCTRL           = "/usr/local/etc/rc.d/dense-debug.sh";
+my $DDPID            = "/var/run/frontend-dense-%s.pid";
+my $PORT             = 111;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub fatal($);
+sub Switcher($$);
+sub GetSwitcher($);
+	  
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if ($EUID != 0) {
+    fatal("Must be root! Maybe its a development version?\n");
+}
+
+if (!$MAINSITE) {
+    exit(0);
+}
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"z"})) {
+    $zero = 1;
+}
+if (defined($options{"s"})) {
+    $set = 1;
+}
+if (defined($options{"r"})) {
+    $read = 1;
+}
+usage()
+    if (@ARGV != 1);
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use libtestbed;
+use emutil;
+use libEmulab;
+use Node;
+use APT_Aggregate;
+
+if ($zero) {
+    $location = shift(@ARGV);
+    Switcher($location, 0);
+    exit(0);
+}
+
+if ($set) {
+    $location = shift(@ARGV);
+    my $port = $options{"s"};
+    Switcher($location, $port);
+    exit(0);
+}
+
+if ($read) {
+    $location = shift(@ARGV);
+    GetSwitcher($location);
+    exit(0);
+}
+
+my $node_id  = shift(@ARGV);
+my $node = Node->Lookup($node_id);
+if (!defined($node)) {
+    fatal("No such node $node_id");
+}
+my $aggregate = APT_Aggregate->LookupLocalCluster();
+if (!defined($aggregate)) {
+    fatal("Could not lookup local aggregate");
+}
+my $radio = $aggregate->Radio($node_id);
+if (defined($radio)) {
+    $location = $radio->location();
+}
+elsif ($node->NodeAttribute("rfswitch_location", \$location) || !$location) {
+    fatal("$node_id is not in the radio info table, need a location");
+}
+
+#
+# The RF switch number is a node attribute.
+#
+my $rfswitch_port;
+if ($node->NodeAttribute("rfswitch_port", \$rfswitch_port) || !$rfswitch_port) {
+    fatal("No rfswitch_port for $node_id");
+}
+Switcher($location, $rfswitch_port);
+exit(0);
+
+#
+# Open the socket, need to do this a few times to get things to work.
+#
+sub GetSocket($)
+{
+    my ($location) = @_;
+    my $rfswitch = "powder-rffe-" . lc($location);
+    my $ddpid    = sprintf($DDPID, $location);
+
+    if (-e $ddpid) {
+	print "Stopping the DD debugging process\n";
+	system("$DDCTRL stop $location");
+	if ($?) {
+	    fatal("Could not stop the debugging logger");
+	}
+	$ddrunning = 1;
+    }
+
+    my $sock = IO::Socket::INET->new(PeerAddr => $rfswitch,
+				     PeerPort => $PORT,
+				     Proto    => 'tcp',
+				     Blocking => 1,
+				     Timeout  => 5);
+    if (!$sock) {
+	fatal("Could not connect to $rfswitch: $!");
+    }
+    # This does not work.
+    $sock->timeout(5);
+
+    # So have to do this instead,
+    $sock->setsockopt(SOL_SOCKET, SO_RCVTIMEO, pack('l!l!', 5, 0))
+	or fatal("setsockopt: $!");
+
+    return $sock;
+}
+
+#
+# Toggle the rfswitch 
+#
+sub Switcher($$)
+{
+    my ($location, $port) = @_;
+    my $worked = 0;
+    my $cmdA   = "SWA" . $port;
+    my $cmdB   = "SWB" . $port;
+    my $rfswitch = "powder-rffe-" . lc($location);
+
+    if ($impotent) {
+	print "Would send $cmdA/$cmdB to $rfswitch\n";
+	exit(0);
+    }
+    elsif ($debug) {
+	print "Sending $cmdA/$cmdB to $rfswitch\n";
+    }
+    my $sock = GetSocket($location);
+    
+    my $buffer = "";
+    for (my $i = 0; $i < 32; $i++) {
+	my $tmp;
+	
+	if (!defined($sock->recv($tmp, 128))) {
+	    $sock->shutdown(SHUT_RDWR);
+	    $sock->close();
+	    fatal("Failed to recv before from $rfswitch: $!");
+	}
+	$buffer .= $tmp;
+	if ($buffer =~ /(^SW A Chan: \d\r\nSW B Chan: \d\r\n)/ms) {
+	    print $1;
+	    last;
+	}
+	select(undef, undef, undef, 0.1);
+    }
+    
+    print "Sending the commands\n";
+
+    if (! ($sock->send("\n${cmdA}\n") && sleep(5) &&
+	   $sock->send("\n${cmdB}\n") && sleep(5))) {
+	$sock->shutdown(SHUT_RDWR);
+	$sock->close();
+	fatal("Failed to send cmds to $rfswitch: $!");
+    }
+
+    $sock->shutdown(SHUT_RDWR);
+    $sock->close();
+    sleep(1);
+
+    $sock = GetSocket($rfswitch);
+
+    print "Sending the commands again\n";
+    if (! ($sock->send("\n${cmdA}\n") && sleep(5) &&
+	   $sock->send("\n${cmdB}\n") && sleep(5))) {
+	$sock->shutdown(SHUT_RDWR);
+	$sock->close();
+	fatal("Failed to send cmds to $rfswitch: $!");
+    }
+    $sock->shutdown(SHUT_RDWR);
+    $sock->close();
+    sleep(1);
+
+    $sock = GetSocket($rfswitch);
+
+    $buffer = "";
+    for (my $i = 0; $i < 128; $i++) {
+	my $tmp;
+	if (!defined($sock->recv($tmp, 128))) {
+	    $sock->shutdown(SHUT_RDWR);
+	    $sock->close();
+	    fatal("Failed to recv before from $rfswitch: $!");
+	}
+	$buffer .= $tmp;
+	if ($buffer =~ /(^SW A Chan: ${port}\r\nSW B Chan: ${port}\r\n)/ms) {
+	    print $1;
+	    $worked = 1;
+	    last;
+	}
+	select(undef, undef, undef, 0.25);
+    }
+    $sock->shutdown(SHUT_RDWR);
+    $sock->close();
+    if (!$worked) {
+	fatal("Failed to get back the correct debugging output\n");
+    }
+    return 0;
+}
+
+#
+# Get the current setting of the rfswitch 
+#
+sub GetSwitcher($)
+{
+    my ($location) = @_;
+    my $sock     = GetSocket($location);
+    my $rfswitch = "powder-rffe-" . lc($location);
+    
+    my $buffer = "";
+    for (my $i = 0; $i < 32; $i++) {
+	my $tmp;
+	
+	if (!defined($sock->recv($tmp, 128))) {
+	    $sock->shutdown(SHUT_RDWR);
+	    $sock->close();
+	    fatal("Failed to recv from $rfswitch: $!");
+	}
+	$buffer .= $tmp;
+	if ($buffer =~ /(^SW A Chan: \d\r\nSW B Chan: \d\r\n)/ms) {
+	    print $1;
+	    last;
+	}
+	select(undef, undef, undef, 0.1);
+    }
+    $sock->shutdown(SHUT_RDWR);
+    $sock->close();
+    return 0;
+}
+
+exit(0);
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+
+END {
+    if ($ddrunning) {
+	print "Restarting the debbugging logger\n";
+	system("$DDCTRL start $location");
+	if ($?) {
+	    print STDERR "Could not restart the debugging logger\n";
+	}
+    }
+}

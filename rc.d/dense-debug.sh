@@ -6,6 +6,10 @@
 
 SITES="wasatch mario moran guesthouse ebc ustar"
 
+if [ -n "$2" ]; then
+    SITES=$2
+fi
+
 case "$1" in
     start|faststart|quietstart|onestart|forcestart)
 	for dbs in $SITES; do
