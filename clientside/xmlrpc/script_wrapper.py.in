@@ -31,7 +31,7 @@
 from __future__ import print_function
 import sys
 import pwd
-sys.path.append("@libdir@")
+sys.path.append("@prefix@/lib")
 import getopt
 import os
 import re
