@@ -6,7 +6,7 @@
 #
 # Configure variables eventually.
 #
-PUBLIC_IF	= "ix0"
+PUBLIC_IF	= "lagg0.211"
 PUBLIC_NET	= $PUBLIC_IF:network
 VM_NET		= "172.16.0.0/12"
 
