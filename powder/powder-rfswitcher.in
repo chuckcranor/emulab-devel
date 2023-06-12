@@ -267,7 +267,7 @@ sub Switcher($$)
     $sock->close();
     sleep(1);
 
-    $sock = GetSocket($rfswitch);
+    $sock = GetSocket($location);
 
     print "Sending the commands again\n";
     if (! ($sock->send("\n${cmdA}\n") && sleep(5) &&
@@ -280,7 +280,7 @@ sub Switcher($$)
     $sock->close();
     sleep(1);
 
-    $sock = GetSocket($rfswitch);
+    $sock = GetSocket($location);
 
     $buffer = "";
     for (my $i = 0; $i < 128; $i++) {
