@@ -54,6 +54,7 @@ my $zero      = 0;
 my $set       = 0;
 my $read      = 0;
 my $ddrunning = 0;
+my $locked    = 0;
 my $location;
 
 #
@@ -75,7 +76,8 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 sub fatal($);
 sub Switcher($$);
 sub GetSwitcher($);
-	  
+sub GetSwitcherLock();
+
 #
 # Turn off line buffering on output
 #
@@ -134,6 +136,7 @@ use APT_Aggregate;
 
 if ($zero) {
     $location = $arg;
+    GetSwitcherLock();
     Switcher($location, 0);
     exit(0);
 }
@@ -141,12 +144,14 @@ if ($zero) {
 if ($set) {
     $location = $arg;
     my $port = $options{"s"};
+    GetSwitcherLock();
     Switcher($location, $port);
     exit(0);
 }
 
 if ($read) {
     $location = $arg;
+    GetSwitcherLock();
     GetSwitcher($location);
     exit(0);
 }
@@ -175,6 +180,7 @@ my $rfswitch_port;
 if ($node->NodeAttribute("rfswitch_port", \$rfswitch_port) || !$rfswitch_port) {
     fatal("No rfswitch_port for $node_id");
 }
+GetSwitcherLock();
 Switcher($location, $rfswitch_port);
 exit(0);
 
@@ -336,6 +342,20 @@ sub GetSwitcher($)
     return 0;
 }
 
+#
+# Bad to let two of these run.
+#
+sub GetSwitcherLock()
+{
+    return
+	if ($locked);
+    
+    print "Trying to get the switcher lock ...\n";
+    TBScriptLock("powder-rfswitcher", 0, 15) == 0 or
+	fatal("Could not get the lock!");
+    $locked = 1;
+}    
+
 exit(0);
 
 sub fatal($)
@@ -355,4 +375,5 @@ END {
 	    print STDERR "Could not restart the debugging logger\n";
 	}
     }
+    TBScriptUnlock() if ($locked);
 }
