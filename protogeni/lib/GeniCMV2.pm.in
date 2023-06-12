@@ -1329,9 +1329,10 @@ sub DeleteSlice($)
 	# slice disappearing (if the daemon beats us to it).
 	#
 	$slice->UnLock();
-	$slice->Flush();
 	while (1) {
 	    sleep(10);
+	    $slice->Flush();
+
 	    $slice = GeniSlice->Lookup($slice_uuid);
 	    if (!defined($slice)) {
 		print STDERR "Slice is gone, quiting ...\n";
@@ -1353,7 +1354,6 @@ sub DeleteSlice($)
 		if (!$aggregate->Busy());
 	    
 	    $slice->UnLock();
-	    $slice->Flush();
 	}
 	# Make sure the cancel flag is cleared (checked in endexp).
 	$slice_experiment->SetCancelFlag(0);
