@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -196,9 +196,9 @@ my $endtime = Reservation->ExpectedEnd( $experiment );
 # low-level library routines; this is a horrible violation of abstraction;
 # and it's all MySQL's fault...
 if( $PGENISUPPORT ) {
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read");
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as nres read");
 } else {
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, project_reservations as pr read, reservation_version write, node_attributes as a read");
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as nres read");
 }
 TBDebugTimeStamp("nalloc locked tables");
 
@@ -216,7 +216,7 @@ foreach my $n (@node_names) {
     if ($reserved_experiment) {
 	# Someone has already reserved this node
 	if ($reserved_experiment == $experiment->idx()) {
-	    print "$node already reserved to $experiment.\n";
+	    print "$node already reserved to $experiment.\n"; 
 	    # Do not increment error code since that throws off caller.
 	    next;
 	}
@@ -233,7 +233,28 @@ foreach my $n (@node_names) {
 	    next;
 	}
     }
-
+    if ($node->conflicting_nodes()) {
+	foreach my $con_id (split(",", $node->conflicting_nodes())) {
+	    my $connode = Node->Lookup($con_id);
+	    
+	    if (!$connode) {
+		print STDERR "Conflict check: No such physical node $con_id\n";
+		next;
+	    }
+	    if ($connode->IsReserved() && $connode->pid() ne TBOPSPID()) {
+		print "Conflicting node $con_id is already reserved ".
+		    "to " . $connode->Reservation()->pideid() . "\n";
+		if ($force) {
+		    print "Forcing allocation anyway...\n";
+		}
+		else {
+		    $noalloc++;
+		    next;
+		}
+	    }
+	}
+    }
+    
     #
     # Add info the list of nodes to reserve; done in a single query below.
     # 
