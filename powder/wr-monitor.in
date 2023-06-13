@@ -146,9 +146,9 @@ my %WRNODES = (
     "10.11.13.242"	=> {
 	"enabled"	=> 1,
 	"type"		=> "len",
-	"name"		=> "wr-len-14",
-	"alias"		=> "wr-len-meb",
-	"location"	=> "MEB BS LEN",
+	"name"		=> "wr-len-13",
+	"alias"		=> "wr-len-ustar-dbs",
+	"location"	=> "Ustar DBS LEN",
     },
     "10.11.13.243"	=> {
 	"enabled"	=> 1,
@@ -186,11 +186,11 @@ my %WRNODES = (
 	"location"	=> "Guesthouse DBS LEN",
     },
     "10.11.13.248"	=> {
-	"enabled"	=> 1,
+	"enabled"	=> 0,
 	"type"		=> "len",
-	"name"		=> "wr-len-13",
-	"alias"		=> "wr-len-ustar-dbs",
-	"location"	=> "Ustar DBS LEN",
+	"name"		=> "wr-len-14",
+	"alias"		=> "wr-len-meb",
+	"location"	=> "MEB BS LEN",
     },
 );
 
