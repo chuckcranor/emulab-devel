@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2022 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1242,6 +1242,9 @@ sub LoadVirtNodes($)
 	$nodetype->GetAttribute("explicit_request", \$explict_type_request);
 	$vnode->_explicit_type_request($explict_type_request);
 
+	# Similar, for handling conflicting nodes. Set later
+	$vnode->_explicit_node_request(undef);
+
 	# For a list of interfaces on this node, as for rspec generation
 	$vnode->_virtifaces([]);
 
@@ -1686,6 +1689,52 @@ sub LoadVirtNodes($)
 	# See comment above.
 	#
 	delete($self->fixed()->{$fixnode})
+    }
+
+    #
+    # Deal with conflicting nodes. ptopgen forces nodes with conflicting nodes
+    # to be explictly requested by name. and so we can check here for the
+    # conflicts, which is easier and allows for a rational error message back
+    # to the user.
+    #
+    # Anyway, if a node has conflicting nodes, it cannot be allocated if any
+    # of the conflict nodes are allocated (except to hwdown/hwbroken).
+    #
+    foreach my $vname (sort(keys(%{ $self->fixednodes() }))) {
+	my $vnode = $self->vnodes()->{$vname};
+	my $fixed = $self->fixednodes()->{$vname};
+
+	next
+	    if (! $self->isatoponode($vname) || $vnode->_isvirtnode());
+
+	my $realnode = Node->Lookup($fixed);
+	if (!$realnode) {
+	    tberror("Conflict check: No such physical node $fixed\n");
+	    return -1;
+	}
+	my $conflicting_nodes = $realnode->conflicting_nodes();
+	next
+	    if (!defined($conflicting_nodes));
+
+	foreach my $con_id (split(",", $conflicting_nodes)) {
+	    my $connode = Node->Lookup($con_id);
+	    
+	    if (!$connode) {
+		tberror("Conflict check: No such physical node $con_id\n");
+		return -1;
+	    }
+	    if ($connode->IsReserved() && $connode->pid() ne TBOPSPID()) {
+		tberror("Conflicting node $con_id is already reserved\n");
+		return -1;
+	    }
+	}
+
+	#
+	# Set this to cause a desire that says the user properly has
+	# requested the specific node. ptopgen adds the equiv feature to
+	# nodes with conflicting_nodes.
+	#
+	$vnode->_explicit_node_request($fixed);
     }
 
     #
@@ -2653,6 +2702,10 @@ sub GenVirtNodes($)
 	}
 	if ($vnode->_explicit_type_request()) {
 	    $desires->{"$type" . "-explicit"} = ['', 1.0];
+	}
+	if ($vnode->_explicit_node_request()) {
+	    my $node_id = $vnode->_explicit_node_request();
+	    $desires->{"$node_id" . "-explicit"} = ['', 1.0];
 	}
 	$self->createNode($vname, $vnode->_cmurn(),
 			  $type, $nodeweight, $desires, $others, \@interfaces);

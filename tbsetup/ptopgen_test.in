@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1372,7 +1372,8 @@ $result =
 		 "  np.uuid,b.sharing_mode, ".
 		 "  t.isremotenode, b.erole, ".
 		 "  nat3.attrvalue as allowed_projects, ".
-		 "  nat4.attrvalue as explicit_request ".
+		 "  nat4.attrvalue as explicit_request, ".
+		 "  nat5.attrvalue as conflicting_nodes ".
 		 ($useshared ?
 		  "  ,so.osfeatures,nat2.attrvalue as shared_weight, " .
 		  "  ru.load_1min,ru.load_5min,ru.status_timestamp " : " ").
@@ -1398,6 +1399,9 @@ $result =
 		 "left join node_attributes as nat4 on ".
 		 "     nat4.node_id=a.node_id and ".
 		 "     nat4.attrkey='explicit_request' ".
+		 "left join node_attributes as nat5 on ".
+		 "     nat5.node_id=a.node_id and ".
+		 "     nat5.attrkey='conflicting_nodes' ".
 		 ($useshared ?  
 		  "left join node_rusage as ru on ru.node_id=a.node_id ".
 		  "left join os_info_versions as so on ".
@@ -1547,6 +1551,14 @@ foreach $node (@nodenames) {
     my @flags;
     my $needvirtgoo = 0;
 
+    #
+    # conflicting_nodes nodes is a list of nodes that cannot be allocated at
+    # the same time as this node. 
+    #
+    if (defined($current->conflicting_nodes())) {
+	
+    }
+
     @types = ("$type:1")
 	if (!$sharing_mode{$node} || $current->is_subnode());
 
@@ -1589,7 +1601,7 @@ foreach $node (@nodenames) {
 	push(@types, "$class:1");
     }
 
-    if ($typemap{$type}->{'EXPLICIT_REQUEST'} || $current->explicit_request()) {
+    if ($typemap{$type}->{'EXPLICIT_REQUEST'}) {
 	push(@features, "$type-explicit:1");
     }
 
@@ -1891,7 +1903,17 @@ foreach $node (@nodenames) {
 	push(@features,"already_reserved:0");
     }
 
-    if (exists($is_prereserved{$node})) {
+    #
+    # This effectively means that the user has to use fix-node and the
+    # mapper will add the corresponding desire. Without the fix-node,
+    # this will prevent the node from getting allocated, since we want
+    # the mapper to check that a conflict is not attempted, since it
+    # is easier to do there. 
+    #
+    if ($current->conflicting_nodes()) {
+	push(@features, "${node}-explicit:1");
+    }
+    elsif (exists($is_prereserved{$node})) {
 	push(@features,"prereserved:0");
 	#
 	# The idea here is that if the project has the node prereserved,
