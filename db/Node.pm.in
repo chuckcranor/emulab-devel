@@ -1506,7 +1506,7 @@ sub LoadNodeAttributes($)
 
     if (!defined($self->{"ATTRS"})) {
 	my $query_result =
-	    DBQueryWarn("select * from node_attributes ".
+	    DBQueryWarn("select * from node_attributes as a ".
 			"where node_id='$node_id'");
 
 	return -1
