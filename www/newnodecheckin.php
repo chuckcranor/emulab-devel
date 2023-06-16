@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -75,7 +75,7 @@ foreach ($_GET as $key => $value) {
 		continue;
 	    }
 	} else if ($vartype == "driver") {
-	    if (preg_match("/^([a-z][a-z_]+)$/i",$value,$matches)) {
+	    if (preg_match("/^([a-z][a-z0-9_]+)$/i",$value,$matches)) {
 		$interfaces[$ifacenum]["type"] = $matches[1];
 	    } else {
 		echo "Bad interface type ". CleanString($value). ", ignored!";
