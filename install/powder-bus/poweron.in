@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,6 +53,7 @@ my $WAP        = "$TB/sbin/wap";
 my $SUDO       = "/usr/local/bin/sudo";
 my $NODEREBOOT = "$TB/bin/node_reboot";
 my $POWER      = "$TB/bin/power";
+my $NFREE      = "$TB/bin/nfree";
 
 # Power Pins
 my $ED1_PIN       = "pin0";
@@ -236,6 +237,26 @@ if (defined($n300)) {
 	    }
 	    sleep(5);
 	}
+    }
+}
+
+#
+# If the experimental node is in hwdown or nfree-locked, kick it out.
+# But have to wait for the management interface to come alive. So delay
+# a bit more before moving into hwcheckup.
+#
+my $ed1 = Node->Lookup("ed1");
+if ($ed1->IsReserved() && $ed1->pid() eq TBOPSPID() &&
+    ($ed1->eid() eq NODEDEAD_EID() || $ed1->eid() eq NFREELOCKED_EID())) {
+    print "Waiting 60 seconds for management interface to come alive\n";
+    sleep(60);
+
+    my $pid = TBOPSPID();
+    my $eid = $ed1->eid();
+    
+    print "Releasing ed1 from $pid,$eid\n";
+    if (system("$SUDO -u $PROTOUSER $WAP $NFREE $pid $eid ed1")) {
+	fatal("Could not free ed1 from " . $ed1->eid());
     }
 }
 
