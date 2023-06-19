@@ -34,7 +34,7 @@ sub usage()
 my $optlist  = "di:p:l:n:tw:";
 my $debug    = 0;
 my $stamps   = 0;
-my $watch    = 0;
+my $watch    = 10;
 my $mininterval = 1;
 my $maxinterval = (24 * 60 * 60);
 my $interval = $mininterval;
@@ -246,7 +246,7 @@ if ($watch) {
 		    " [$PID]: daemon child is no longer updating the log\n";
 		
 		kill('USR1', $PPID);
-		sleep($watch + 10);
+		sleep($watch + 20);
 		#
 		# Lets avoid a restart loop.
 		#
@@ -326,9 +326,11 @@ while (1) {
     # and then exits.
     #
     if (! ($exitstat == 15 || $ecode == 15)) {
-	SENDMAIL($TBOPS, "$daemon died",
-		 "$daemon $msg after $runtime seconds; restarting it.",
-		 $TBOPS);
+	if ($runtime < 60) {
+	    SENDMAIL($TBOPS, "$daemon died",
+		     "$daemon $msg after $runtime seconds; restarting it.",
+		     $TBOPS);
+	}
     }
 
     #
