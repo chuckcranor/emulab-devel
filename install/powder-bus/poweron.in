@@ -48,7 +48,6 @@ my $logfile;
 #
 my $TB         = "@prefix@";
 my $TBOPS      = "@TBOPSEMAIL@";
-my $PROTOUSER  = "elabman";
 my $WAP        = "$TB/sbin/wap";
 my $SUDO       = "/usr/local/bin/sudo";
 my $NODEREBOOT = "$TB/bin/node_reboot";
@@ -68,6 +67,9 @@ use WebTask;
 use Node;
 use power_powduino;
 use libtestbed;
+
+# In EmulabConstants;
+my $PROTOUSER  = PROTOUSER();
 
 # Protos
 sub fatal($);
