@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2020 University of Utah and the Flux Group.
+# Copyright (c) 2004-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -497,10 +497,18 @@ sub doshutdown()
 #
 # Node Reconfig Action (without rebooting).
 #
+# XXX this function is currently not used. Experiment-wide reconfig is
+# handled in the overarching rc.config by doing a "shutdown" followed by
+# a "boot", which is effectively a non-destructive reconfiguration (the
+# "boot" call handles adding/removing blockstores; we do not support
+# modifying existing blockstores).  To be safe, let's keep the semantics
+# the same here. This used to do a destructive docleanup(1), but now we
+# do a regular shutdown.
+#
 sub doreconfig()
 {
-    # Tear down existing config
-    docleanup(1);
+    # Shutdown existing config
+    docleanup(0);
 
     # Setup new config
     doboot();
