@@ -53,6 +53,7 @@ my $SUDO       = "/usr/local/bin/sudo";
 my $NODEREBOOT = "$TB/bin/node_reboot";
 my $POWER      = "$TB/bin/power";
 my $NFREE      = "$TB/bin/nfree";
+my $EXPORTS_SETUP = "$TB/sbin/exports_setup";
 
 # Power Pins
 my $ED1_PIN       = "pin0";
@@ -106,6 +107,13 @@ if (!isatty(\*STDOUT)) {
 
     print "Delaying 15 seconds to lets things settle down\n";
     sleep(15);
+    #
+    # Force a HUP of mountd since mountd started before jails, and
+    # so the NFS mounts of the ZFS file systems in the ops jail might
+    # not be working.
+    #
+    print "Forcing HUP of mountd\n";
+    system("$EXPORTS_SETUP -f");
 }
 
 #
