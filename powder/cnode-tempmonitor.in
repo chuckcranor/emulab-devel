@@ -163,7 +163,7 @@ sub logit($);
 $| = 1; 
 
 if ($UID != 0) {
-    fatal("Must be root to run this script\n");
+    die("Must be root to run this script\n");
 }
 if (!$MAINSITE) {
     exit(0);
@@ -267,25 +267,25 @@ while (1) {
 		if (!$details->{'notified'} && $details->{'autocyclefe'}) {
 		    # Power cycle on first notification.
 		    $message .= "Power cycling $frontend ... \n";
-		}
-		else {
-		    $message .= "Manual intervention required!\n";
-		}
-		NotifyTBOPS("$cnode temperature monitor offline", $message);
-		if (!$details->{'notified'} && $details->{'autocyclefe'}) {
-		    logit("Powering cycling $frontend");
+		    logit($message);
 		    system("$POWER -a cycle $frontend");
 		    if ($?) {
 			NotifyTBOPS("power cycle $frontend failed",
 				    "Could not power cycle $frontend");
 		    }
 		}
+		else {
+		    $message .= "Manual intervention required!\n";
+		    NotifyTBOPS("$cnode temperature monitor offline", $message);
+		    logit($message);
+		}
 		$details->{'notified'} = time();
 	    }
 	    $details->{'temperature'} = undef;
 	    next;
 	}
-	if (! defined($details->{'temperature'})) {
+	if (!defined($details->{'temperature'}) &&
+	    defined($details->{'notified'})) {
 	    NotifyTBOPS("$cnode temperature monitor is back online",
 			"The temperature monitor for $cnode is online.");
 	    $details->{'notified'} = 0;
