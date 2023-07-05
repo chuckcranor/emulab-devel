@@ -192,7 +192,7 @@ $(function ()
 	'          placeholder="Value" ' +
 	'          class="form-control row-value"> ' +
 	'   <div> ' +
-	'     <select class="form-control row-type"> ' +
+	'     <select class="form-control form-select row-type"> ' +
 	'      <option value="">Select Type</option> ' +
 	'      <option value=integer>Integer</option> ' +
 	'      <option value=boolean>Boolean</option> ' +
@@ -232,7 +232,7 @@ $(function ()
 	'          class="form-control row-name"> ' +
 	' </td>' +
 	' <td>' +
-	'   <select class="form-control row-value"> ' +
+	'   <select class="form-control form-select row-value"> ' +
 	'    <option value="">Please Select</option> ' +
 	'   </select> ' +
 	' </td>' +
