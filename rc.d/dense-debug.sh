@@ -17,6 +17,7 @@ case "$1" in
 		-l /usr/testbed/log/frontend-dense-$dbs.log \
 		-n dense-$dbs-netcat \
 		-p /var/run/frontend-dense-$dbs.pid nc -d powder-rffe-$dbs 111
+	    sleep 1
 	done
 	echo -n "dense-debugging"
 	;;
