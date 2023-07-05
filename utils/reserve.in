@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2022 University of Utah and the Flux Group.
+# Copyright (c) 2016-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -685,6 +685,7 @@ while( 1 ) {
 
 		if( defined( $r->idx() ) && $r->idx() == $modify_idx ) {
 		    $$reservations_all[ $i ] = $res;
+		    $found = 1;
 		    last;
 		}
 	    }
@@ -718,6 +719,44 @@ while( 1 ) {
 	    exit( 1 );
 	}
     }
+    # Lets see if type is really a node ID and has conflicts.
+    my $node = Node->Lookup($type);
+    if (defined($node) && $node->conflicting_nodes()) {
+	foreach my $node_id (split(",", $node->conflicting_nodes())) {
+	    my $onode = Node->Lookup($node_id);
+	    next
+		if (!defined($onode));
+
+	    my $others = Reservation->LookupAll($node_id);
+	    my $other  = Reservation->Create($pid, $uid, $starttime,
+					     $endtime, $node_id, $count);
+	    push(@$others, $other);	    
+
+	    my $feasible = Reservation->IsFeasible($others, $error);
+	    if (!$feasible) {
+		print STDERR "Conflicting node $node_id already reserved at " .
+		    TBDateStringLocal($error->{'time'}) . "\n";
+
+		if ($force) {
+		    print STDERR "Continuing anyway!\n";
+		}
+		else {
+		    my $m = "Conflicting node $node_id already reserved";
+		    if (defined($webtask)) {
+			$webtask->conflict({
+			    "error"  => $m,
+			    "when"   => TBDateStringGMT($error->{'time'}),
+			    "needed" => $error->{'needed'},
+			    "conflicting_node" => $node_id});
+			$webtask->output("$m at " .
+					 TBDateStringLocal($error->{'time'}));
+			$webtask->Exited(1);
+		    }
+		    exit(1);
+		}
+	    }
+	}
+    }
     if ($impotent) {
 	my $exitval = $approve ? 0 : 2;
 	print "Approve: $approve\n";
@@ -729,16 +768,47 @@ while( 1 ) {
 	my $feasible = Reservation->IsFeasible($reservations_all, $error);
 	if (!$feasible) {
 	    print STDERR "Conflict with pending: " . $error->{'error'} . "\n";
+	    
+	    if (defined($webtask)) {
+		$webtask->conflict({
+		    "error"  => $error->{'error'},
+		    "when"   => TBDateStringGMT($error->{'time'}),
+		    "needed" => $error->{'needed'}});
+		$webtask->output($error->{'error'});
+		$webtask->Exited($exitval);
+	    }
+	    exit($exitval);
 	}
-	if (!$feasible && defined($webtask)) {
-	    $webtask->conflict({
-		"error"  => $error->{'error'},
-		"when"   => TBDateStringGMT($error->{'time'}),
-		"needed" => $error->{'needed'}});
-	    $webtask->output($error->{'error'});
-	}
-	if (defined($webtask)) {
-	    $webtask->Exited($exitval);
+	if (defined($node) && $node->conflicting_nodes()) {
+	    foreach my $node_id (split(",", $node->conflicting_nodes())) {
+		my $onode = Node->Lookup($node_id);
+		next
+		    if (!defined($onode));
+
+		my $others = Reservation->LookupAll($node_id, 1);
+		my $other  = Reservation->Create($pid, $uid, $starttime,
+						 $endtime, $node_id, $count);
+		push(@$others, $other);	    
+
+		my $feasible = Reservation->IsFeasible($others, $error);
+		if (!$feasible) {
+		    print STDERR "Conflicting node $node_id pending at " .
+			TBDateStringLocal($error->{'time'}) . "\n";
+
+		    my $m = "Conflict pending with node $node_id";
+		    if (defined($webtask)) {
+			$webtask->conflict({
+			    "error"  => $m,
+			    "when"   => TBDateStringGMT($error->{'time'}),
+			    "needed" => $error->{'needed'},
+			    "conflicting_node" => $node_id});
+			$webtask->output("$m at " .
+					 TBDateStringLocal($error->{'time'}));
+			$webtask->Exited($exitval);
+		    }
+		    exit($exitval);
+		}
+	    }
 	}
 	exit($exitval);
     }

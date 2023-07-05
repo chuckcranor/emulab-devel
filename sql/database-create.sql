@@ -275,6 +275,7 @@ CREATE TABLE `apt_aggregate_nodes` (
   `available` tinyint(1) NOT NULL default '0',
   `reservable` tinyint(1) NOT NULL default '0',
   `updated` datetime default NULL,
+  `conflicting_nodes` mediumtext default NULL,
   PRIMARY KEY  (`urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

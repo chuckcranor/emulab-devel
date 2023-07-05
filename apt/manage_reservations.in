@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -920,6 +920,11 @@ sub DoApprove()
     APT_Instance->ClearAllMaxExtension($aggregate->urn());
     
     if (defined($webtask)) {
+	# Need unblessed ref to store into webtask.
+	$response = GeniResponse->Create($response->code(),
+					 $response->value(),
+					 $response->output);
+	$webtask->response($response);
 	$webtask->Exited(0);
     }
     else {

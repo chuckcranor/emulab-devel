@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1277,7 +1277,8 @@ $result =
 		 "  ru.load_1min, ru.load_5min, ru.status_timestamp, ".
 		 "  a.def_boot_osid, nat2.attrvalue, wn.country, " .
                  "  wn.latitude, wn.longitude, t.isremotenode, b.erole, ".
-		 "  nat3.attrvalue, so.osfeatures ".
+		 "  nat3.attrvalue, so.osfeatures, ".
+		 "  nat5.attrvalue as conflicting_nodes ".
 		 "from nodes as a ".
 		 "left join reserved as b on a.node_id=b.node_id ".
 		 "left join reserved as m on a.phys_nodeid=m.node_id ".
@@ -1295,6 +1296,9 @@ $result =
 		 "left join node_attributes as nat3 on ".
 		 "     nat3.node_id=a.node_id and ".
 		 "     nat3.attrkey='allowed_projects' ".
+		 "left join node_attributes as nat5 on ".
+		 "     nat5.node_id=a.node_id and ".
+		 "     nat5.attrkey='conflicting_nodes' ".
 		 "left join node_rusage as ru on ru.node_id=a.node_id ".
 		 "left outer join ". 
 		 "  (select type,attrvalue ".
@@ -1322,13 +1326,14 @@ while (($node,$type,$physnode,$class,$issubnode,$def_boot_osid,$reserved,
 	$prereserved,$eventstate,$battery_perc,$uuid,$sharing_mode,
 	$load_1min,$load_5min,$load_tstamp,$osid,$weight,$country,$latitude,
         $longitude,$isremote,$erole,
-	$allowed_projects,$osfeatures) = $result->fetchrow_array) {
+	$allowed_projects,$osfeatures, $conflicting_nodes) = $result->fetchrow_array) {
     
     my $current = $top->CreateNode($node,
 				   {
 				       "phys_nodeid"  => $physnode,
 				       "issubnode"    => $issubnode,
 				       "isremotenode" => $isremote,
+				       "conflicting_nodes" => $conflicting_nodes,
 				   });
 
     #
@@ -2959,6 +2964,17 @@ sub print_node
 	print_node_flags(@$flags);
 	print_node_interfaces($name, @$interfaces);
 	print_node_features(@$features);
+	#
+	# This is a hint to the caller to avoid conflict early, rather then
+	# later when its more annoying (when nalloc or reserve fails).
+	#
+	if (exists($top->nodes()->{$name})) {
+	    my $node = $top->nodes()->{$name};
+	    if ($node->conflicting_nodes()) {
+		print "  <emulab:conflicting_nodes names=\"" .
+		    $node->conflicting_nodes() . "\" />\n";
+	    }
+	}
 	print "</node>\n";
     } else {
 	# ptop format

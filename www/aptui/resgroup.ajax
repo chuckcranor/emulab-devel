@@ -498,7 +498,6 @@ function Do_Reserve()
     if ($retval) {
         #
         # All reservation errors are reported in the blob inside the webtask.
-        # This will only be a fatal error.
         #
         SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         if (!$webtask->exited() || $retval < 0) {

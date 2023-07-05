@@ -1551,14 +1551,6 @@ foreach $node (@nodenames) {
     my @flags;
     my $needvirtgoo = 0;
 
-    #
-    # conflicting_nodes nodes is a list of nodes that cannot be allocated at
-    # the same time as this node. 
-    #
-    if (defined($current->conflicting_nodes())) {
-	
-    }
-
     @types = ("$type:1")
 	if (!$sharing_mode{$node} || $current->is_subnode());
 
@@ -3143,6 +3135,17 @@ sub print_node
 	print_node_flags(@$flags);
 	print_node_interfaces($name, @$interfaces);
 	print_node_features(@$features);
+	#
+	# This is a hint to the caller to avoid conflict early, rather then
+	# later when its more annoying (when nalloc or reserve fails).
+	#
+	if (exists($top->nodes()->{$name})) {
+	    my $node = $top->nodes()->{$name};
+	    if ($node->conflicting_nodes()) {
+		print "  <emulab:conflicting_nodes names=\"" .
+		    $node->conflicting_nodes() . "\" />\n";
+	    }
+	}
 	print "</node>\n";
     } else {
 	# ptop format

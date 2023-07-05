@@ -1549,10 +1549,19 @@ $(function ()
 
 	    if (_.has(reservation, "errcode")) {
 		if (_.has(reservation, "conflict")) {
+		    var conflict = reservation.conflict;
+		    
 		    // The string typically has the date in the wrong timezone,
-		    var when = moment(reservation.conflict.when).format("lll");
-		    html = "Insufficient free nodes at " + when + " " +
-			"(" + reservation.conflict.needed + " more needed)";
+		    var when = moment(conflict.when).format("lll");
+
+		    if (_.has(conflict, "conflicting_node")) {
+			html = "Conflict with node " + conflict.conflicting_node +
+			    " at " +  when;
+		    }
+		    else {
+			html = "Insufficient free nodes at " + when + " " +
+			    "(" + reservation.conflict.needed + " more needed)";
+		    }
 		}
 		else {
 		    html = reservation.output;
@@ -1565,9 +1574,19 @@ $(function ()
 	    }
 	    else {
 		if (_.has(reservation, "conflict")) {
+		    var conflict = reservation.conflict;
+		    var mesg;
+		    
 		    // The string typically has the date in the wrong timezone,
-		    var when = moment(reservation.conflict.when).format("lll");
-		    var mesg = "Conflicting reservation at " + when;
+		    var when = moment(conflict.when).format("lll");
+
+		    if (_.has(conflict, "conflicting_node")) {
+			mesg = "Conflicting reservation with node " + conflict.conflicting_node;
+		    }
+		    else {
+			mesg = "Conflicting reservation";
+		    }
+		    mesg = mesg + " at " + when;
 		    html = "Approval is required. (" + mesg + ")";
 		}
 		else if (_.has(reservation, "noautoapprove_reason")) {

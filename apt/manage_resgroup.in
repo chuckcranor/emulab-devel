@@ -368,6 +368,44 @@ sub DoGroupReserve()
 		fatal("Invalid cluster uuid: " . $cluster->{"uuid"});
 	    }
 	}
+	#
+	# Check for conflicting node usage within the resgroup.  This
+	# is enforced at the cluster, but better to catch it earlier
+	# since it happens late at the cluster (in nalloc).
+	#
+	foreach my $cluster_uuid (keys(%{$clusters})) {
+	    my $cluster   = $clusters->{$cluster_uuid};
+	    my $urn       = $cluster->{"cluster"};
+	    my $type      = $cluster->{"type"};
+	    my $aggregate = APT_Aggregate->Lookup($urn);
+
+	    next
+		if (!$aggregate->IsReservableNode($type));
+	    my $node = $aggregate->Node($type);
+
+	    next
+		if (! ($node && $node->{'conflicting_nodes'}));
+
+	    my @conflicting_nodes = split(",",  $node->{'conflicting_nodes'});
+
+	    foreach my $other_uuid (keys(%{$clusters})) {
+		next
+		    if ($other_uuid eq $cluster_uuid);
+
+		my $ocluster   = $clusters->{$other_uuid};
+		my $ourn       = $ocluster->{"cluster"};
+		my $otype      = $ocluster->{"type"};
+		my $oaggregate = APT_Aggregate->Lookup($ourn);
+		
+		next
+		    if (!$oaggregate->IsReservableNode($otype));
+
+		if (grep {$_ eq $otype} @conflicting_nodes) {
+		    UserError("Not allowed to reserve $type at the same ".
+			      "time as $otype");
+		}
+	    }
+	}
     }
     if (exists($blob->{'ranges'})) {
 	$ranges = $blob->{'ranges'};
@@ -1944,6 +1982,10 @@ sub DoApprove()
 		    }
 		}
 		next;
+	    }
+	    else {
+		my $response = $webtask->response();
+		print Dumper($response);
 	    }
 	    if (!$checkonlyflag) {
 		$res->MarkApprovedPushed();

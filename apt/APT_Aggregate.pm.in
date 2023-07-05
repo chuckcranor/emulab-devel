@@ -635,8 +635,7 @@ sub Nodes($)
 	return $self->{'NODES'};
     }
     my $query_result =
-	DBQueryWarn("select node_id,type,reservable,available ".
-		    "  from apt_aggregate_nodes ".
+	DBQueryWarn("select * from apt_aggregate_nodes ".
 		    "where urn='$urn'");
 
     while (my $row = $query_result->fetchrow_hashref()) {
@@ -646,6 +645,16 @@ sub Nodes($)
     }
     $self->{'NODES'} = $result;
     return $result;
+}
+sub Node($$)
+{
+    my ($self, $node_id) = @_;
+    my $nodes = $self->Nodes();
+
+    return undef
+	if (!exists($nodes->{$node_id}));
+
+    return $nodes->{$node_id};
 }
 
 sub IsReservableNode($$)
