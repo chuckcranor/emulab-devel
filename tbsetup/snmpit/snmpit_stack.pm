@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # Copyright (c) 2004-2009 Regents, University of California.
 # 
 # {{{EMULAB-LGPL
@@ -626,7 +626,13 @@ sub createVlan($$$$;$) {
 	    $device = $self->{DEVICES}{$devicename};
 	    $res = $device->createVlan($vlan_id, $vlan_number, $otherargs);
 	    if (!$res) {
-		goto failed;
+		#
+		# Ooops, failed. Don't try any more
+		#
+		print STDERR "$errortype VLAN $vlan_id as VLAN #$vlan_number ".
+		    "on stack $self->{STACKID} ... Failed\n";
+		$vlan_number = 0;
+		last LOCKBLOCK;
 	    }
 	}
 
@@ -637,7 +643,6 @@ sub createVlan($$$$;$) {
 	if (@ports) {
 	    if ($self->setPortVlan($vlan_id,@ports)) {
 		$errortype = "Adding Ports to";
-	    failed:
 		#
 		# Ooops, failed. Don't try any more
 		#
