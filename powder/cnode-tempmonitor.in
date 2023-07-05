@@ -260,7 +260,7 @@ while (1) {
 	    if ($details->{'failcount'} < 5) {
 		$details->{'failcount'}++;
 	    }
-	    elsif (time() - $details->{'notified'} > (3600 * 6)) {
+	    elsif (time() - $details->{'notified'} > (3600 * 24)) {
 		my $message =
 		    "The temperature monitor for $cnode is no longer ".
 		    "responding.\n\n";
