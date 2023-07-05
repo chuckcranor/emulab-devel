@@ -34,7 +34,7 @@ sub usage()
 my $optlist  = "di:p:l:n:tw:";
 my $debug    = 0;
 my $stamps   = 0;
-my $watch    = 10;
+my $watch    = 0;
 my $mininterval = 1;
 my $maxinterval = (24 * 60 * 60);
 my $interval = $mininterval;
