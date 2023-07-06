@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -177,6 +177,7 @@ my $TBISUP       = TBDB_NODESTATE_ISUP;
 my $PXEWAIT      = TBDB_NODESTATE_PXEWAIT;
 my $PXEWAKEUP    = TBDB_NODESTATE_PXEWAKEUP;
 my $PXEBOOTING   = TBDB_NODESTATE_PXEBOOTING;
+my $SHUTDOWN     = TBDB_NODESTATE_SHUTDOWN;
 my $TBRELOADDONEV1    = TBDB_TBCONTROL_RELOADDONE;
 my $TBRELOADDONEV2    = TBDB_TBCONTROL_RELOADDONE_V2;
 my $TBTIMEOUTREBOOT   = TBDB_STATED_TIMEOUT_REBOOT;
@@ -915,6 +916,12 @@ sub stateTransition($$) {
 		    opModeTransition($node, $nextmode, 1);
 		    $mode=$nextmode;
 		}
+		next;
+	    };
+	    /^$SHUTDOWN$/ && do {
+		my $nodeobj = Node->LookupSync($node);
+		$nodeobj->ResetStartStatus()
+		    if ($nodeobj);
 		next;
 	    };
 	    /^$BOOTING$/ && do {

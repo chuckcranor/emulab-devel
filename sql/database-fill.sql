@@ -762,6 +762,7 @@ REPLACE INTO state_triggers VALUES ('*','WIMRELOAD','BOOTING','REBOOT');
 REPLACE INTO state_triggers VALUES ('*','WIMRELOAD','ISUP','REBOOT');
 REPLACE INTO state_triggers VALUES ('*','RELOAD-UE','RELOADDONE','RELOADDONE');
 REPLACE INTO state_triggers VALUES ('*','NORMALv2','PXEWAIT','PXEBOOT');
+REPLACE INTO state_triggers VALUES ('*','NORMALv2','SHUTDOWN','SHUTDOWN');
 
 --
 -- Dumping data for table `table_regex`

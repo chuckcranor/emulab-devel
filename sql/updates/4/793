@@ -1,0 +1,13 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    DBQueryFatal("REPLACE INTO state_triggers VALUES ".
+		 "('*','NORMALv2','SHUTDOWN','SHUTDOWN')");
+
+    return 0;
+}
+1;
