@@ -38,6 +38,9 @@ option PXE.discovery-control code 6 = unsigned integer 8;
 option PXE.discovery-mcast-addr code 7 = ip-address;
 option PXE.emulab-bootinfo code 128 = ip-address;
 
+# XXX for Dell S4048-ON switch bootstrap
+option configfile code 209 = text;
+
 #
 # For PXE booting nodes we set the magic bits to tell the client that we are
 # PXE-saavy so they don't wait around for 12 seconds or so waiting for a

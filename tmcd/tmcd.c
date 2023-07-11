@@ -12315,14 +12315,18 @@ COMMAND_PROTOTYPE(dodhcpdconf)
 
 	res = mydb_query("select n.node_id,n.pxe_boot_path,i.IP,i.mac,n.type,"
 			 "r.eid,r.pid,r.inner_elab_role,r.inner_elab_boot,"
-			 "r.plab_role,r.plab_boot,n.next_pxe_boot_path "
+			 "r.plab_role,r.plab_boot,n.next_pxe_boot_path, "
+			 "nat.attrvalue "
 			 "from nodes as n "
 			 "left join subbosses as s on n.node_id=s.node_id "
 			 "left join interfaces as i on n.node_id=i.node_id "
 			 "left join reserved as r on n.node_id=r.node_id "
+			 "left join node_attributes as nat on "
+			 "     nat.node_id=n.node_id and "
+			 "     nat.attrkey='dhcpd_configfile' "
 			 "where s.subboss_id='%s' and "
 	                 "s.service='dhcp' and s.disabled=0 and i.role='ctrl' "
-			 "order by n.priority", 12, reqp->nodeid);
+			 "order by n.priority", 13, reqp->nodeid);
 	if (!res) {
 		error("dodhcpconf: %s: DB Error getting dhcpd configuration\n",
 		      reqp->nodeid);
@@ -12490,7 +12494,18 @@ COMMAND_PROTOTYPE(dodhcpdconf)
 			remain -= rc;
 		}
 
-		if (row[11] && row[11][0]) {
+		if (row[12] && row[12][0]) {
+			rc = snprintf(b, remain, " CONFIGFILE=\"%s\"", row[12]);
+
+			if (rc < 0) {
+				error("dodhcpdconf: error creating output\n");
+				mysql_free_result(res);
+				return 1;
+			}
+
+			b += rc;
+			remain -= rc;
+		} else if (row[11] && row[11][0]) {
 			rc = snprintf(b, remain, " FILENAME=\"%s\"", row[11]);
 
 			if (rc < 0) {
