@@ -1,0 +1,316 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use POSIX ":sys_wait_h";
+use POSIX qw(setsid close);
+use Date::Parse;
+use JSON;
+
+#
+# Back-end script to manage APT profiles.
+#
+sub usage()
+{
+    print STDERR "Usage: manage_dataset getconfig\n";
+    print STDERR "Usage: manage_dataset listslices\n";
+    print STDERR "Usage: manage_dataset sliceexists\n";
+    print STDERR "Usage: manage_dataset sliceinfo\n";
+    print STDERR "Usage: manage_dataset deleteslice\n";
+    print STDERR "Usage: manage_dataset refreshtoken\n";
+    exit(-1);
+}
+my $optlist     = "dt:n";
+my $debug       = 0;
+my $impotent    = 0;
+my $webtask_id;
+my $webtask;
+my $this_user;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $MAINSITE    = @TBMAINSITE@;
+my $OURDOMAIN	= "@OURDOMAIN@";
+
+#
+# Stitcher is in a python virtualenv. 
+#
+my $VIRTUALENV =
+    ". $TB/venv/fabric/bin/activate ; ".
+    ". $TB/fabric/fabric_rc ; ";
+my $GETCONFIG  = "$VIRTUALENV python $TB/fabric/getconfig.py ";
+my $SLICEINFO  = "$VIRTUALENV python $TB/fabric/getslice.py ";
+my $LISTSLICES = "$VIRTUALENV python $TB/fabric/listslices.py ";
+my $REFRESH    = "$VIRTUALENV fabric-cli tokens refresh ";
+my $DELETE     = "$VIRTUALENV fabric-cli slices delete ";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libtestbed;
+use emdb;
+use emutil;
+use libEmulab;
+use User;
+use Project;
+use APT_Instance;
+use WebTask;
+use GeniXML;
+
+# Protos
+sub fatal($);
+sub UserError($);
+sub DoRefreshToken();
+sub DoListSlices();
+sub DoSliceInfo();
+sub DoSliceExists();
+sub DoGetConfig();
+sub DoDeleteSlice();
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (grep {$_ eq "--"} @ARGV &&
+    ! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not get webtask object");
+    }
+    $webtask->AutoStore(1);
+}
+
+if (@ARGV < 1) {
+    usage();
+}
+my $action = shift(@ARGV);
+
+if (getpwuid($UID) eq "nobody") {
+    $this_user = User->ImpliedUser();
+}
+else  {
+    $this_user = User->ThisUser();
+}
+# No guests allowed.
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+if ($action eq "getconfig") {
+    exit(DoGetConfig());
+}
+elsif ($action eq "refreshtoken") {
+    exit(DoRefreshToken());
+}
+elsif ($action eq "sliceinfo") {
+    exit(DoSliceInfo());
+}
+elsif ($action eq "listslices") {
+    exit(DoListSlices());
+}
+elsif ($action eq "sliceexists") {
+    exit(DoSliceExists());
+}
+elsif ($action eq "deleteslice") {
+    exit(DoDeleteSlice());
+}
+else {
+    usage();
+}
+exit(1);
+
+#
+# Test function just make sure the environment is working okay.
+#
+sub DoGetConfig()
+{
+    system($GETCONFIG);
+    if ($?) {
+	fatal("DoGetConfig: failed");
+    }
+}
+
+#
+# Refresh the token that expires way too soon.
+#
+sub DoRefreshToken()
+{
+    system("$REFRESH > /dev/null");
+    if ($?) {
+	fatal("DoGetConfig: failed");
+    }
+}
+
+#
+# Print out basic FABRIC slice info. This throws a bad error if
+# the slice does not exist, so not useful as an existence test.
+#
+sub DoSliceInfo()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric sliceinfo <slicename>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 1);
+    my $name = $ARGV[0];
+
+    system("$SLICEINFO --name $name");
+    if ($?) {
+	fatal("DoSliceInfo: failed");
+    }
+}
+
+#
+# List Slices
+#
+sub DoListSlices()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric listslices\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV);
+
+    system("$LISTSLICES");
+    if ($?) {
+	fatal("DoListSlices: failed");
+    }
+}
+
+#
+# See if slice exists. Have to use list slices cause of the breakage
+# in sliceinfo.
+#
+sub DoSliceExists()
+{
+    my $exists = 0;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric sliceexists <slicename | sliceid>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 1);
+    my $slicename = $ARGV[0];
+
+    my $output = emutil::ExecQuiet("$LISTSLICES -j");
+    if ($?) {
+	print $output . "\n";
+	fatal("DoSliceExists: failed");
+    }
+    my $list = eval { decode_json($output); };
+    if ($@) {
+	fatal("Could not decode json data");
+    }
+    foreach my $ref (@{$list}) {
+	if ($ref->{'name'} eq $slicename || $ref->{'id'} eq $slicename) {
+	    $exists = 1;
+	    last;
+	}
+    }
+    if ($exists) {
+	print "Slice $slicename exists\n";
+    }
+    else {
+	print "Slice $slicename does not exist\n"
+    }
+    # Exit with zero status if slice exists.
+    exit($exists ? 0 : 1);
+}
+
+#
+# Delete a slice by slice ID
+#
+sub DoDeleteSlice()
+{
+    my $exists = 0;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric deleteslice <sliceid>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 1);
+    my $sliceid = $ARGV[0];
+
+    my $output = emutil::ExecQuiet("$DELETE --sliceid $sliceid");
+    if ($?) {
+	print $output . "\n";
+	fatal("DoDeleteSlice: failed");
+    }
+    exit(0);
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    # Exit with negative status so web interface treats it as system error.
+    exit(-1);
+}
+
+sub UserError($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(1);
+}

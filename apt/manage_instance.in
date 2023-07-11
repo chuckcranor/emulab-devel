@@ -110,6 +110,7 @@ my $IMPORTER       = "$TB/sbin/image_import";
 my $DESTROYWBSTORE = "$TB/sbin/destroywbstore";
 my $WAP            = "$TB/sbin/wap";
 my $TBACCT         = "$TB/sbin/tbacct";
+my $FABRICSTITCHER = "$TB/bin/fabric-stitcher";
 my @SAVEARGV       = @ARGV;
 
 #
@@ -1588,6 +1589,16 @@ sub DoTerminate()
 	
 	system("$DESTROYWBSTORE -d -B -s ".
 	       ($old_status eq "failed" ? "FAIL" : "DONE") . " $uuid");
+    #
+    # Special case for Fabric.
+    #
+    if ($instance->fabric_sliceid()) {
+	system("$FABRICSTITCHER -d -r " . $instance->uuid());
+	if ($?) {
+	    $exitcode = -1;
+	    $errmsg   = "Could not remove FABRIC links";
+	    goto bad;
+	}
     }
 
     # Skip terminated aggregates, since we retry later on failure.

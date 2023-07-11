@@ -777,6 +777,7 @@ CREATE TABLE `apt_instances` (
   `manifest` mediumtext,
   `openstack_utilization` mediumtext,
   `webinfo` mediumtext,
+  `fabric_sliceid` varchar(64) default NULL,
   PRIMARY KEY (`uuid`),
   KEY `creator` (`creator`),
   KEY `creator_idx` (`creator_idx`),

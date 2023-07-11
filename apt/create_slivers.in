@@ -84,6 +84,7 @@ if ($MAINSITE) {
 my $CREATEWBSTORE    = "$TB/sbin/createwbstore";
 my $DESTROYWBSTORE   = "$TB/sbin/destroywbstore";
 my $TEE              = "/usr/bin/tee";
+my $FABRICSTITCHER   = "$TB/bin/fabric-stitcher";
 
 #
 # Untaint the path
@@ -582,8 +583,6 @@ if ($usestitcher) {
 	}
 	exit($exitcode);
     }
-    $instance->SetStatus("provisioned");
-    $instance->ComputeNodeCounts();
 }
 else {
     my $rval = CreateSlivers();
@@ -1588,7 +1587,8 @@ sub WaitForSlivers()
 	if (defined($aggobj->public_url())) {
 	    print $aggobj->public_url() . "\n";
 	}
-	print "\n" . $aggobj->manifest() . "\n\n";
+	print "\n" . $aggobj->manifest() . "\n\n"
+	    if (defined($aggobj->manifest()));
 	print "-----------------------------------------------------------\n\n";
     }
     return $startuprunning;
@@ -1608,6 +1608,7 @@ sub RunStitcher()
     my $stdoutfile    = "$tmpdir/stitcher.stdout";
     my $stderrfile    = "$tmpdir/stitcher.stderr";
     my $failed        = 0;
+    my $needfabric    = 0;
     my $errcode       = GENIRESPONSE_STITCHER_ERROR();
 
     #
@@ -1652,7 +1653,9 @@ sub RunStitcher()
 	# We do not want these two files defaulting to user home dir.
 	"--GetVersionCacheName=$tmpdir/get_version_cache.json ".
 	"--AggNickCacheName=$tmpdir/agg_nick_cache ".
-	"--scsURL http://scs.scs.scs.emulab.net:8081/geni/xmlrpc  ".
+	($usefabric ?
+	 "--scsURL http://scs.scs.scs.emulab.net:8091/geni/xmlrpc --noAL2S " :
+	 "--scsURL http://scs.scs.scs.emulab.net:8081/geni/xmlrpc  ").
 	"--speaksfor $speaksfor_urn -V3 allocate $slice_urn $rspecfile";
 
     return -1
@@ -1777,6 +1780,11 @@ sub RunStitcher()
     foreach my $urn (@agglist) {
 	next
 	    if (exists($instance->AggregateHash()->{$urn}));
+
+	if ($urn =~ /fabric/) {
+	    $needfabric = 1;
+	    next;
+	}
 	
 	my $authority = GeniAuthority->Lookup($urn);
 	if (!defined($authority)) {
@@ -1926,6 +1934,21 @@ sub RunStitcher()
 	    goto bad;
 	}
     }
+
+    #
+    # Do this last for now. Eventually be good to do in parallel with the
+    # aggregates but we need the manifests for this to work
+    #
+    if ($needfabric) {
+	print "Starting the FABRIC stitcher ...\n";
+	system("$FABRICSTITCHER -d -l $tmpdir/fabric.log " . $instance->uuid());
+	if ($?) {
+	    $errcode = GENIRESPONSE_STITCHER_ERROR;
+	    $webtask->output("FABRIC stitcher failure");
+	    goto bad;
+	}
+    }
+    
 #    system("/bin/rm -rf $tmpdir")
 #	if (!$debug && defined($tmpdir) && -e $tmpdir);
     return 0;
@@ -2023,3 +2046,4 @@ sub CallMethodOnAggregate($$$)
     }
     return $response;
 }
+

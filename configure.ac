@@ -1556,7 +1556,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
         protogeni/rspec-emulab/0.1/GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
-        apt/GNUmakefile \
+        apt/GNUmakefile apt/fabric/GNUmakefile \
         powder/GNUmakefile powder/sasproxy/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \

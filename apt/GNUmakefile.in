@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,14 +28,14 @@ SUBDIR		= apt
 
 include $(OBJDIR)/Makeconf
 
-SUBDIRS		= 
+SUBDIRS		= fabric
 
 BIN_SCRIPTS	= manage_profile manage_instance manage_dataset \
                   create_instance rungenilib ns2rspec nsgenilib.py \
                   rspec2genilib ns2genilib manage_reservations manage_gitrepo \
                   manage_images rtecheck checkprofile manage_extensions \
 		  create_slivers searchip start-experiment manage_resgroup \
-		  modify-experiment
+		  modify-experiment fabric-stitcher manage_fabric
 SBIN_SCRIPTS	= apt_daemon aptevent_daemon portal_xmlrpc apt_checkup \
 		  portal_monitor apt_scheduler portal_resources \
 		  manage_licenses manage_aggregate \
@@ -92,17 +92,14 @@ post-install:
 #
 control-install:
 
-# This rule says what web* script depends on which installed binary directory.
-$(WEB_SBIN_SCRIPTS): $(INSTALL_SBINDIR)
-$(WEB_BIN_SCRIPTS):  $(INSTALL_BINDIR)
-
-# Just in case the dirs are not yet created,
-$(INSTALL_SBINDIR) $(INSTALL_BINDIR):
-
-# And then how to turn the template into the actual script. 
-$(WEB_SBIN_SCRIPTS) $(WEB_BIN_SCRIPTS): $(TESTBED_SRCDIR)/WEBtemplate.in
+# How to turn the template into the actual script. 
+$(WEB_SBIN_SCRIPTS): $(TESTBED_SRCDIR)/WEBtemplate.in
 	@echo "Generating $@"
-	cat $< | sed -e 's,@PROGTOINVOKE@,$(word 2,$^)/$(subst web,,$@),' > $@
+	cat $< | sed -e 's,@PROGTOINVOKE@,$(INSTALL_SBINDIR)/$(subst web,,$@),' > $@
+
+$(WEB_BIN_SCRIPTS): $(TESTBED_SRCDIR)/WEBtemplate.in
+	@echo "Generating $@"
+	cat $< | sed -e 's,@PROGTOINVOKE@,$(INSTALL_BINDIR)/$(subst web,,$@),' > $@
 
 clean:	clean-subdirs
 

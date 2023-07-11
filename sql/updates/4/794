@@ -1,0 +1,21 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instances", "fabric_sliceid")) {
+	DBQueryFatal("alter table apt_instances add ".
+		     " `fabric_sliceid` varchar(64) default NULL");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

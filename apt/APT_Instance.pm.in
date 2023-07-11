@@ -1262,6 +1262,8 @@ sub ComputeNodeCounts($)
     foreach my $sliver (@slivers) {
 	next
 	    if ($sliver->deferred() || $sliver->IsTerminated());
+	next
+	    if ($sliver->isAL2S() || $sliver->isStitch());
 	
 	my $manifest = GeniXML::Parse($sliver->manifest());
 	if (! defined($manifest)) {
@@ -3235,6 +3237,8 @@ sub MergeManifests($)
 	my $manifest      = $aggregate->manifest();
 	next
 	    if ($aggregate->deferred() || $aggregate->IsTerminated());
+	next
+	    if (!defined($manifest));
 
 	push(@tmp, $aggregate);
 
@@ -5850,6 +5854,12 @@ sub WaitForSliver($)
     my $failure_output;
     my $repblob;
     my $laststatus;
+
+    if ($aggobj->isAL2S()) {
+	$aggobj->SetStatus("ready");
+	$webtask->Exited(0);
+	return 0;
+    }
 
     while ($seconds > 0 && !$aggobj->instance()->IsCanceled()) {
 	sleep($interval);

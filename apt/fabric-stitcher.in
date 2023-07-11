@@ -1,0 +1,349 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use JSON;
+
+#
+# Stitch (or unstitch) the fabric connected links in an experiment.
+#
+sub usage()
+{
+    print "Usage: fabric-stitcher [-dn] [-l logfile] pid,eid\n";
+    print "       fabric-stitcher [-dn] -r pid,eid\n";
+    print "       fabric-stitcher [-dn] -u pid,eid\n";
+    exit(1);
+}
+my $optlist         = "dnl:ru";
+my $debug           = 0;
+my $impotent        = 0;
+my $remove          = 0;
+my $update          = 0;
+my $logfile         = "/tmp/fablog.$$";
+my $webtask;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $OURDOMAIN	     = "@OURDOMAIN@";
+my $SHELLENV         =
+    ". $TB/venv/fabric/bin/activate ; ".
+    ". $TB/fabric/fabric_rc ; ";
+my $STITCHER         = "$SHELLENV python $TB/fabric/stitch-links.py ";
+my $DELETE           = "$SHELLENV fabric-cli slices delete ";
+my $GETSLICE         = "$SHELLENV python $TB/fabric/getslice.py ";
+
+#
+# When invoked from the web interface, HOME will not be set, and FABRIC croaks.
+#
+if (!exists($ENV{"HOME"})) {
+    $ENV{"HOME"} = "$TB/fabric";
+}
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libtestbed;
+use emutil;
+use APT_Instance;
+use GeniXML;
+
+# Protos
+sub fatal($);
+sub UpdateSliceid();
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug++;
+}
+if (defined($options{"r"})) {
+    $remove++;
+}
+if (defined($options{"u"})) {
+    $update++;
+}
+if (defined($options{"n"})) {
+    $impotent++;
+}
+if (defined($options{"l"})) {
+    $logfile = $options{"l"};
+}
+if (@ARGV != 1) {
+    usage();
+}
+my $instance = APT_Instance->Lookup($ARGV[0]);
+if (!defined($instance)) {
+    fatal("No such instance");
+}
+
+#
+# Unstitch
+#
+if ($remove) {
+    my $sliceid = $instance->fabric_sliceid();
+    if (!defined($sliceid)) {
+	fatal("No fabric slice to delete");
+    }
+    emutil::ExecQuiet("$GETSLICE --asjson --name ".
+		      $instance->pid() . "-" . $instance->name());
+    if ($?) {
+	if ($? >> 8 == 1) {
+	    # Already gone.
+	    if ($debug) {
+		print "Slice is already gone\n";
+	    }
+	    $instance->Update({"fabric_sliceid" => undef});
+	    exit(0);
+	}
+	fatal("$GETSLICE failed");
+    }
+    my $command = "$DELETE --sliceid $sliceid";
+    if ($impotent) {
+	print "Command: '$command'\n";
+	exit(0);
+    }
+    system($command);
+    if ($?) {
+	fatal("Failed to delete fabric slice");
+    }
+    if ($debug) {
+	print "Slice has been deleted\n";
+    }
+    $instance->Update({"fabric_sliceid" => undef});
+    exit(0);
+}
+elsif ($update) {
+    UpdateSliceid();
+    exit(0);
+}
+elsif ($instance->fabric_sliceid()) {
+    fatal("Already have a fabric sliceid for this instance");
+}
+
+#
+# Map from our URNS to Fabric names
+#
+sub MapFabric($)
+{
+    my ($urn) = @_;
+
+    if ($urn =~ /clemson/) {
+	return "CLEM";
+    }
+    elsif ($urn =~ /wisc/) {
+	return "WISC";
+    }
+    elsif ($urn =~ /umass/) {
+	return "MASS";
+    }
+    else {
+	return "UTAH";
+    }
+}
+
+#
+# Scan rspec looking for links that span clusters. At the moment
+# these are links with more then one manager_urn and one of them
+# is Wisc or Clemson. 
+#
+my $rspec = $instance->RSPEC();
+if (!defined($rspec)) {
+    fatal("No rspec for instance");
+}
+my %stitched_links = ();
+
+foreach my $ref (GeniXML::FindNodes("n:link", $rspec)->get_nodelist()) {
+    my $client_id = GetVirtualId($ref);
+    my @managers  = GeniXML::FindNodes("n:component_manager",
+				       $ref)->get_nodelist();
+
+    next
+	if (scalar(@managers) <= 1);
+
+    foreach my $manager (@managers) {
+	my $urn = GetText("name", $manager);
+	#
+	# We do not need the fabric stitcher if the link is contained within
+	# the Utah topology (Emulab, APT, Moonshot).
+	#
+	if ($urn =~ /(wisc|clemson|umass)/) {
+	    $stitched_links{$client_id} = {
+		"client_id"  => $client_id,
+		"ref"        => $ref,
+		"managers"   => \@managers,
+		# vlan tag on each site.
+		"tags"       => {},
+	    };
+	    print "$client_id is a stitched link\n";
+	    last;
+	}
+    }
+}
+if (keys(%stitched_links) == 0) {
+    print "No links to stitch\n";
+    exit(0);
+}
+
+#
+# So now we have to look in the manifests to get the vlan tags
+# for the stitched links. There is only two to worry about right
+# now since stitched links are point to point between clusters.
+#
+foreach my $ref (values(%stitched_links)) {
+    my $client_id = $ref->{"client_id"};
+    my @managers  = @{ $ref->{"managers"} };
+    my $tags      = $ref->{'tags'};
+
+    foreach my $manager (@managers) {
+	my $urn = GetText("name", $manager);
+	
+	my $aggregate = $instance->GetAggregate($urn);
+	if (!defined($aggregate)) {
+	    fatal("No aggregate $urn in the instance");
+	}
+	
+	my $manifest = $aggregate->Manifest();
+	if (!defined($manifest)) {
+	    fatal("No manifest for aggregate $urn");
+	}
+
+	my $tag;
+	foreach my $link (GeniXML::FindNodes("n:link",
+					     $manifest)->get_nodelist()) {
+	    my $id = GetVirtualId($link);
+	    if ($id eq $client_id) {
+		$tag = GetText("vlantag", $link);
+		print "$id, $urn, $tag\n";
+		$tags->{$urn} = $tag;
+		last;
+	    }
+	}
+    }
+}
+
+#
+# Command line arguments to the python stitcher script. 
+#
+my $command = "$STITCHER --name " .
+    $instance->pid() . "-" . $instance->name() .
+    " --logfile $logfile --links ";
+
+foreach my $ref (values(%stitched_links)) {
+    my $client_id = $ref->{"client_id"};
+    my $tags      = $ref->{'tags'};
+    my ($urn1,$urn2) = keys(%{ $tags });
+    my ($tag1,$tag2) = values(%{ $tags });
+
+    $command .= $client_id . ",";
+    $command .= MapFabric($urn1) . ":${tag1}" . ",";
+    $command .= MapFabric($urn2) . ":${tag2}" . " ";
+}
+if ($debug) {
+    print "Command: '$command'\n";
+}
+if ($impotent) {
+    $command .= "--impotent";
+}
+system($command);
+if ($?) {
+    fatal("Stitcher failure. Debug log: $logfile");
+}
+unlink($logfile)
+    if (!$debug);
+exit(0)
+    if ($impotent);
+
+#
+# Need to store the sliceid. If this fails, human intervention required.
+#
+UpdateSliceid();
+exit(0);
+
+sub fatal($) {
+    my ($mesg) = $_[0];
+
+    print STDERR "$mesg\n";
+    exit(-1);
+}
+
+sub UpdateSliceid()
+{
+    my $json = emutil::ExecQuiet("$GETSLICE --asjson --name ".
+				 $instance->pid() . "-" . $instance->name());
+    if ($?) {
+	print $json . "\n";
+	fatal("Could not get the fabric slice ID");
+    }
+    chomp($json);
+    my $ref = eval { decode_json($json) };
+    if ($@) {
+	fatal("Could not decode json data: $json");
+    }
+    if (! (exists($ref->{'id'}) && $ref->{'id'})) {
+	print Dumper($ref);
+	fatal("No slice ID in getslice.py results");
+    }
+    my $id = $ref->{'id'};
+    if ($id !~ /^[-\w]+$/) {
+	fatal("Invalid slice ID in getslice.py results: $id");
+    }
+    if ($debug) {
+	print "Slice ID is $id\n";
+    }
+    if ($impotent) {
+	print Dumper($ref);
+	exit(0);
+    }
+    $instance->Update({"fabric_sliceid" => $id});
+}
