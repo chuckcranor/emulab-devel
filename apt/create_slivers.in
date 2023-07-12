@@ -51,6 +51,7 @@ my $debug           = 0;
 my $verbose         = 1;
 my $foreground      = 0;
 my $usestitcher     = 0;
+my $usefabric       = 1;
 my $ignorefailures  = 0;
 my $usetracker      = 0;
 my $takelock        = 0;  # Use when called from create_instance.
@@ -1727,6 +1728,16 @@ sub RunStitcher()
 	else {
 	    $webtask->output("Stitcher failed!");
 	}
+
+	#
+	# Dump the stitcher output. Ick.
+	#
+	if (defined($tmpdir) && -e "$tmpdir/stitcher.log") {
+	    print "------------- Stitcher Log ---------------\n";
+	    system("/bin/cat $tmpdir/stitcher.log");
+	    print "-----------------------------------------\n";
+	}
+	
 	#
 	# Even if we fail, want to pick up whatever aggregates the stitcher
 	# decided to use, so that we can ensure all slivers get cleaned up
@@ -1941,7 +1952,7 @@ sub RunStitcher()
     #
     if ($needfabric) {
 	print "Starting the FABRIC stitcher ...\n";
-	system("$FABRICSTITCHER -d -l $tmpdir/fabric.log " . $instance->uuid());
+	system("$FABRICSTITCHER -d -D $tmpdir " . $instance->uuid());
 	if ($?) {
 	    $errcode = GENIRESPONSE_STITCHER_ERROR;
 	    $webtask->output("FABRIC stitcher failure");
@@ -1954,14 +1965,6 @@ sub RunStitcher()
     return 0;
 
   bad:
-    #
-    # Dump the stitcher output. Ick.
-    #
-    if (defined($tmpdir) && -e "$tmpdir/stitcher.log") {
-	print "------------- Stitcher Log ---------------\n";
-	system("/bin/cat $tmpdir/stitcher.log");
-	print "-----------------------------------------\n";
-    }
 #    system("/bin/rm -rf $tmpdir")
 #	if (!$debug && defined($tmpdir) && -e $tmpdir);
     return $errcode;

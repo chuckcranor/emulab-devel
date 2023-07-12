@@ -26,7 +26,8 @@ use strict;
 use Getopt::Std;
 use Data::Dumper;
 use POSIX ":sys_wait_h";
-use POSIX qw(setsid close);
+use POSIX qw(setsid close strftime);
+use File::Temp qw(tempfile tempdir);
 use Date::Parse;
 use JSON;
 
@@ -41,12 +42,15 @@ sub usage()
     print STDERR "Usage: manage_dataset sliceinfo\n";
     print STDERR "Usage: manage_dataset deleteslice\n";
     print STDERR "Usage: manage_dataset refreshtoken\n";
+    print STDERR "Usage: manage_dataset renewslice\n";
     exit(-1);
 }
-my $optlist     = "dt:n";
+my $optlist     = "dt:nD:";
 my $debug       = 0;
 my $impotent    = 0;
 my $webtask_id;
+my $tmpdir;
+my $logfile;
 my $webtask;
 my $this_user;
 
@@ -69,6 +73,7 @@ my $SLICEINFO  = "$VIRTUALENV python $TB/fabric/getslice.py ";
 my $LISTSLICES = "$VIRTUALENV python $TB/fabric/listslices.py ";
 my $REFRESH    = "$VIRTUALENV fabric-cli tokens refresh ";
 my $DELETE     = "$VIRTUALENV fabric-cli slices delete ";
+my $RENEW      = "$VIRTUALENV python $TB/fabric/renewslice.py ";
 
 #
 # Untaint the path
@@ -93,7 +98,6 @@ use User;
 use Project;
 use APT_Instance;
 use WebTask;
-use GeniXML;
 
 # Protos
 sub fatal($);
@@ -104,6 +108,7 @@ sub DoSliceInfo();
 sub DoSliceExists();
 sub DoGetConfig();
 sub DoDeleteSlice();
+sub DoRenewSlice();
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -131,16 +136,49 @@ if (@ARGV < 1) {
 }
 my $action = shift(@ARGV);
 
-if (getpwuid($UID) eq "nobody") {
-    $this_user = User->ImpliedUser();
+#
+# Need to deal with fablib not being rentrant wrt logfiles and tmpfiles.
+# And cause it likes to overwrite the token file on every operation,
+# which is incredibly annoying. 
+#
+if (defined($options{"D"})) {
+    $tmpdir = $options{"D"};
 }
-else  {
-    $this_user = User->ThisUser();
+else {
+    # Create a temporary directory for the log file, token, etc.
+    $tmpdir = tempdir("/tmp/manage_fabric.XXXXXX");
+    system("/bin/chmod 775 $tmpdir");
 }
-# No guests allowed.
-if (! defined($this_user)) {
-    fatal("You ($UID) do not exist!");
+$logfile = "$tmpdir/fablib.$$";
+
+# Fablib uses the same logfile name.
+$ENV{"FABRIC_LOG_FILE"} = $logfile;
+# Must set this to avoid permission errors.
+$ENV{"TMPDIR"} = $tmpdir;
+# Make sure this gets deleted if no error.
+END {
+    if (0 && !defined($options{"D"})) {
+	if (!$?) {
+	    system("/bin/rm -rf $tmpdir")
+		if (-d $tmpdir);
+	}
+    }
 }
+#
+# When invoked from the web interface, HOME will not be set, and FABRIC croaks.
+#
+if (!exists($ENV{"HOME"})) {
+    $ENV{"HOME"} = "$tmpdir";
+}
+# Copy the token to the tmpdir. Force fablib to use the copy since it
+# wants very much to mess with the file.
+system("/bin/cp $TB/fabric/token.json $tmpdir");
+if ($?) {
+    fatal("Could not copy $TB/fabric/token.json to $tmpdir");
+}
+system("/bin/chmod 666 $tmpdir/token.json");
+$ENV{"FABRIC_TOKEN_LOCATION"} = "$tmpdir/token.json";
+
 if ($action eq "getconfig") {
     exit(DoGetConfig());
 }
@@ -158,6 +196,9 @@ elsif ($action eq "sliceexists") {
 }
 elsif ($action eq "deleteslice") {
     exit(DoDeleteSlice());
+}
+elsif ($action eq "renewslice") {
+    exit(DoRenewSlice());
 }
 else {
     usage();
@@ -284,6 +325,45 @@ sub DoDeleteSlice()
     if ($?) {
 	print $output . "\n";
 	fatal("DoDeleteSlice: failed");
+    }
+    exit(0);
+}
+
+#
+# Extend a slice by slice ID
+#
+sub DoRenewSlice()
+{
+    my $exists = 0;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric renewslice <experiment> <when>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 2);
+    my $instance = APT_Instance->Lookup($ARGV[0]);
+    if (!defined($instance)) {
+	fatal("No such experiment");
+    }
+    my $sliceid = $instance->fabric_sliceid();
+    if (!defined($sliceid)) {
+	fatal("Experiment does not have FABRIC links");
+    }
+
+    my $when = $ARGV[1];
+    if ($when !~ /^(\d+)$/) {
+	$when = str2time($when);
+	if (!defined($when)) {
+	    fatal("Could not parse date");
+	}
+    }
+    $when = POSIX::strftime("20%y-%m-%d %H:%M:00 +0000", gmtime($when));
+
+    my $output = emutil::ExecQuiet("$RENEW --sliceid '$sliceid' --when '$when'");
+    if ($?) {
+	print $output . "\n";
+	fatal("DoRenewSlice: failed");
     }
     exit(0);
 }

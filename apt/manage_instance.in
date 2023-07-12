@@ -111,6 +111,7 @@ my $DESTROYWBSTORE = "$TB/sbin/destroywbstore";
 my $WAP            = "$TB/sbin/wap";
 my $TBACCT         = "$TB/sbin/tbacct";
 my $FABRICSTITCHER = "$TB/bin/fabric-stitcher";
+my $MANAGEFABRIC   = "$TB/bin/manage_fabric";
 my @SAVEARGV       = @ARGV;
 
 #
@@ -2540,6 +2541,16 @@ sub ExtendInternal($$$$$$)
 	    }
 	}
     }
+    if ($instance->fabric_sliceid() && !$errcode) {
+	system("$MANAGEFABRIC renewslice " .
+	       $instance->uuid() . " '$new_expires'");
+	if ($?) {
+	    $errmsg = "The extension failed at FABRIC";
+	    $errcode= 1;
+	    goto bad;
+	}
+    }
+    
     # Success at all aggregates.
     return 0
 	if (! ($errcode || @delayed));

@@ -34,7 +34,7 @@ SUBDIRS		=
 INSTALL_FABDIR  = $(TBROOT)/fabric
 
 STUFF		= fabric_rc getconfig.py getads.py getslice.py listslices.py \
-		  stitch-test.py stitch-links.py
+		  stitch-test.py stitch-links.py renewslice.py
 
 #
 # Force dependencies on the scripts so that they will be rerun through

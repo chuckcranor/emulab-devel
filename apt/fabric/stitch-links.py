@@ -50,8 +50,6 @@ def usage():
     sys.exit(-1)
     pass
 
-fablib = FablibManager()
-
 #
 # The arguments are a slice name and a list of links.
 # Each link is linkname:site1:tag1,site2:tag2
@@ -71,9 +69,8 @@ def usage():
     pass
 
 args = parser.parse_args()
-if args.logfile:
-    fablib.set_log_file(args.logfile)
-    pass
+
+fablib = FablibManager(log_file=args.logfile)
 
 # Create a slice
 slice = fablib.new_slice(name=args.name)

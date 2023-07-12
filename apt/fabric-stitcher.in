@@ -31,6 +31,7 @@ use strict;
 use English;
 use Getopt::Std;
 use Data::Dumper;
+use File::Temp qw(tempfile tempdir);
 use JSON;
 
 #
@@ -38,17 +39,18 @@ use JSON;
 #
 sub usage()
 {
-    print "Usage: fabric-stitcher [-dn] [-l logfile] pid,eid\n";
+    print "Usage: fabric-stitcher [-dn] [-D tmpdir] pid,eid\n";
     print "       fabric-stitcher [-dn] -r pid,eid\n";
     print "       fabric-stitcher [-dn] -u pid,eid\n";
     exit(1);
 }
-my $optlist         = "dnl:ru";
+my $optlist         = "dnD:ru";
 my $debug           = 0;
 my $impotent        = 0;
 my $remove          = 0;
 my $update          = 0;
-my $logfile         = "/tmp/fablog.$$";
+my $tmpdir;
+my $logfile;
 my $webtask;
 
 #
@@ -64,13 +66,6 @@ my $SHELLENV         =
 my $STITCHER         = "$SHELLENV python $TB/fabric/stitch-links.py ";
 my $DELETE           = "$SHELLENV fabric-cli slices delete ";
 my $GETSLICE         = "$SHELLENV python $TB/fabric/getslice.py ";
-
-#
-# When invoked from the web interface, HOME will not be set, and FABRIC croaks.
-#
-if (!exists($ENV{"HOME"})) {
-    $ENV{"HOME"} = "$TB/fabric";
-}
 
 #
 # Untaint the path
@@ -116,9 +111,6 @@ if (defined($options{"u"})) {
 if (defined($options{"n"})) {
     $impotent++;
 }
-if (defined($options{"l"})) {
-    $logfile = $options{"l"};
-}
 if (@ARGV != 1) {
     usage();
 }
@@ -126,6 +118,49 @@ my $instance = APT_Instance->Lookup($ARGV[0]);
 if (!defined($instance)) {
     fatal("No such instance");
 }
+
+#
+# Need to deal with fablib not being rentrant wrt logfiles and tmpfiles.
+# And cause it likes to overwrite the token file on every operation,
+# which is incredibly annoying. 
+#
+if (defined($options{"D"})) {
+    $tmpdir = $options{"D"};
+}
+else {
+    # Create a temporary directory for the log file, token, etc.
+    $tmpdir = tempdir("/tmp/fabric-stitcher.XXXXXX");
+    system("/bin/chmod 775 $tmpdir");
+}
+$logfile = "$tmpdir/fablib.$$";
+
+# Fablib hardwires the same logfile name internally.
+$ENV{"FABRIC_LOG_FILE"} = $logfile;
+# Must set this to avoid permission errors.
+$ENV{"TMPDIR"} = $tmpdir;
+# Make sure this gets deleted if no error.
+END {
+    if (0 && !defined($options{"D"})) {
+	if (!$?) {
+	    system("/bin/rm -rf $tmpdir")
+		if (-d $tmpdir);
+	}
+    }
+}
+#
+# When invoked from the web interface, HOME will not be set, and FABRIC croaks.
+#
+if (!exists($ENV{"HOME"})) {
+    $ENV{"HOME"} = "$tmpdir";
+}
+# Copy the token to the tmpdir. Force fablib to use the copy since it
+# wants very much to mess with the file.
+system("/bin/cp $TB/fabric/token.json $tmpdir");
+if ($?) {
+    fatal("Could not copy $TB/fabric/token.json to $tmpdir");
+}
+system("/bin/chmod 666 $tmpdir/token.json");
+$ENV{"FABRIC_TOKEN_LOCATION"} = "$tmpdir/token.json";
 
 #
 # Unstitch
@@ -299,8 +334,6 @@ system($command);
 if ($?) {
     fatal("Stitcher failure. Debug log: $logfile");
 }
-unlink($logfile)
-    if (!$debug);
 exit(0)
     if ($impotent);
 
