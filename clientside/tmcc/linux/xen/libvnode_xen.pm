@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -661,14 +661,6 @@ sub rootPreConfig($;$)
 	    # This is for arping -A to work. See emulab-cnet.pl
 	    mysystem("echo 1 >/proc/sys/net/ipv4/ip_nonlocal_bind");
 	}
-
-	# Set up for metadata server for ec2 support
-	print "Setting up redirection for meta server...\n";
-	mysystem("$IPBIN addr add 169.254.169.254/32 ".
-		 "   scope global dev $cnet_iface");
-	mysystem("$IPTABLES -t nat -A PREROUTING -d 169.254.169.254/32 " .
-		 "   -p tcp -m tcp --dport 80 -j DNAT ".
-		 "   --to-destination ${bossip}:8787");
     }
     else {
 	if (!existsBridge($BRIDGENAME)) {
@@ -699,10 +691,10 @@ sub rootPreConfig($;$)
     mysystem("$OVSSTART --delete-bridges start");
 
     # For gre tunnels to work with iptables
-    if (system("modinfo nf_conntrack_proto_gre") == 0) {
+    if (system("modinfo nf_conntrack_proto_gre >/dev/null 2>&1") == 0) {
         mysystem("$MODPROBE nf_conntrack_proto_gre");
     }
-    if (system("modinfo nf_conntrack_pptp") == 0) {
+    if (system("modinfo nf_conntrack_pptp >/dev/null 2>&1") == 0) {
         mysystem("$MODPROBE nf_conntrack_pptp");
     }
 
@@ -3823,7 +3815,7 @@ sub CreatePrimaryDisk($$$$;$$)
 	}
 
 	if (-x $FDISK
-	    && mysystem2("$FDISK -l $rootvndisk | grep -q 'Disklabel type: gpt'") == 0) {
+	    && mysystem2("$FDISK -l $rootvndisk 2>/dev/null | grep -q 'Disklabel type: gpt'") == 0) {
 	    TBDebugTimeStamp("$rootvndisk: sanitizing backup GPT headers");
 	    mysystem2("$SGDISK -e $rootvndisk");
 	    print STDERR "libvnode_xen: failed to sanitize backup GPT headers for $rootvndisk\n"
@@ -5541,7 +5533,7 @@ sub createThinPool($)
     }
 
     # Try to make it
-    if (mysystem2("lvcreate -Zy -i$num -L ${poolsize}g ".
+    if (mysystem2("lvcreate --chunksize 128k -Zy -i$num -L ${poolsize}g ".
 		  "--type thin-pool --thinpool $POOL_NAME $VGNAME")) {
 	print STDERR "createThinPool: could not create ${poolsize}g ".
 	    "thin pool\n";

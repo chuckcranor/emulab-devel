@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -878,10 +878,10 @@ sub createExtraFS($$$)
     my $exists = `lvs --noheadings -o origin $lvpath > /dev/null 2>&1`;
     if ($?) {
 	my $ns = computeStripeSize($vgname);
-	system("lvcreate -n $lvname -L $size -i$ns $vgname") == 0
+	mysystem("lvcreate --yes -n $lvname -L $size -i$ns $vgname") == 0
 	    or return -1;
 
-	system("mke2fs -j -q $lvpath") == 0
+	mysystem("mke2fs -t ext4 -q $lvpath") == 0
 	    or return -1;
     }
     if (! -e "$path/.mounted") {
