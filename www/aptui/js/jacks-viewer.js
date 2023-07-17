@@ -56,11 +56,9 @@ $(function ()
 
     function Ready(viewer, message)
     {
-	if (message.xml == null) {
-	    return;
-	}
-	console.info("ready", viewer);
-	viewer.add(message.xml);
+	console.info("Ready", viewer);
+	// Parent set this.
+	window.JacksViewerReadyCallback();
     }
 
     function Add(message)

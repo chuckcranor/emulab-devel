@@ -286,7 +286,6 @@ window.JacksViewer = (function ()
 		args.click_callback(object);
 	    };
 	}
-
 	/*
 	 * Propogate to parent so menus close, etc.
 	 */
@@ -294,12 +293,22 @@ window.JacksViewer = (function ()
 	    $('html').trigger("click");
 	});
 
+	/*
+	 * We want to know when its ready to go before we send
+	 * it the first XML file.
+	 */
+	iframeWindow.JacksViewerReadyCallback = function () {
+	    console.info("ready");
+	    if (args.xml) {
+		add(args.xml);
+	    }
+	};
+
 	iframeWindow.addEventListener('load', function (event) {
 	    console.info("loaded");
 
 	    var message = {
 		action: "create",
-		xml: args.xml,
 		multisite: args.multisite,
 		showinfo: args.showinfo,
 		aggregates: args.aggregates,
