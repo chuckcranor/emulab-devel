@@ -1407,7 +1407,9 @@ $(function ()
 		var pleft   = Math.floor(boxpos.left + ipos.left);
 		var jwidth  = $(jacksbox).width();
 		var jheight = $(jacksbox).height();
-		//console.info(pleft, ptop, jwidth, jheight);
+		ptop -= $(window).scrollTop();
+		
+		//console.info(ipos, pleft, ptop, jwidth, jheight);
 		virtualElement.getBoundingClientRect =
 		    generateGetBoundingClientRect(pleft, ptop);
 		
