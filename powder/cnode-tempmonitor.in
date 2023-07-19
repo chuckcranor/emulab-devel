@@ -282,6 +282,16 @@ while (1) {
 		$details->{'notified'} = time();
 	    }
 	    $details->{'temperature'} = undef;
+
+	    #
+	    # XXX even if the FE is unreachable, we want to report
+	    # switch temps.
+	    #
+	    my $switchtemp = GrabSwitchTemp($details->{'switch'});
+	    if ($switchtemp) {
+		UploadSwitchTemp($cnode, $switchtemp);
+	    }
+
 	    next;
 	}
 	if (!defined($details->{'temperature'}) &&
