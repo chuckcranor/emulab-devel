@@ -1878,7 +1878,7 @@ sub snap($) {
  		require snmpit_dellrest;
 		$device = new snmpit_dellrest($devicename,$self->{DEBUG});
 		last;
-	        }; # /Dell RESTCONF switch.*/
+	        }; # /dellrest.*/
 	    (/force10/)
 		    && do {
  		require snmpit_force10;
@@ -1897,6 +1897,12 @@ sub snap($) {
 		$device = new snmpit_netscout($devicename,$self->{DEBUG});
 		last;
 	        }; # /comware.*/
+	    (/planet/)
+		    && do {
+		require snmpit_planet;
+		$device = new snmpit_planet($devicename,$self->{DEBUG});
+		last;
+	        }; # /planet.*/
 	    print "Device $devicename is not of a known type\n";
 	}
 	if (!$device) {
