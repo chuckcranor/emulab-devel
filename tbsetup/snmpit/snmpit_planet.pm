@@ -481,13 +481,11 @@ sub portControl ($$@) {
     $self->debug("portControl: $cmd -> (".Port->toStrings(@pcports).")\n");
 
     if ($cmd !~ /^(enable|disable)$/) {
-	warn "$id: ignoring '$cmd' for @pcports\n";
-	return 1;
+	warn "$id: WARNING: ignoring '$cmd' for @pcports\n";
+	return 0;
     }
 
     my @ports = $self->convertPortFormat($PORT_FORMAT_NATIVE, @pcports);
-
-    $self->lock();
 
     foreach my $pstr (@ports) {
 	if ($cmd eq "enable") {
@@ -502,7 +500,6 @@ sub portControl ($$@) {
 	$errors += $rv;
     }
 
-    $self->unlock();
     return $errors;
 }
 
@@ -829,8 +826,6 @@ sub setPortVlan($$@) {
     my @ports = $self->convertPortFormat($PORT_FORMAT_NATIVE, @pcports);
     $self->debug("converted ports: " . Port->toStrings(@ports). "\n");
 
-    $self->lock();
-
     my %pmap = $self->getPortInfo();
     foreach my $pstr (@ports) {
 	#
@@ -909,7 +904,6 @@ sub setPortVlan($$@) {
 	}
     }
 
-    $self->unlock();
     return $errors;
 }
 
@@ -949,8 +943,6 @@ sub delPortVlan($$@) {
     }
 
     my @ports = $self->convertPortFormat($PORT_FORMAT_NATIVE, @pcports);
-
-    $self->lock();
 
     my %pmap = $self->getPortInfo();
     foreach my $pstr (@ports) {
@@ -1014,7 +1006,6 @@ sub delPortVlan($$@) {
 	}
     }
 
-    $self->unlock();
     return $errors;
 }
 
@@ -1610,25 +1601,6 @@ sub debug($$;$) {
         print STDERR $string;
     }
 }
-
-my $lock_held = 0;
-
-sub lock($) {
-    my $self = shift;
-    my $token = "snmpit_" . $self->{NAME};
-    if ($lock_held == 0) {
-        my $old_umask = umask(0);
-        die if (TBScriptLock($token,0,1800) != TBSCRIPTLOCK_OKAY());
-        umask($old_umask);
-    }
-    $lock_held = 1;
-}
-
-sub unlock($) {
-    if ($lock_held == 1) { TBScriptUnlock();}
-    $lock_held = 0;
-}
-
 
 #
 # Enable Openflow
