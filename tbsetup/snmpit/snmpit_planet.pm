@@ -51,6 +51,14 @@ use Port;
 # CLI constants
 my $CLI_TIMEOUT = 30;
 
+# Most are defined in snmpit_lib, let's not repeat or change
+#my $PORT_FORMAT_IFINDEX   = 1;
+#my $PORT_FORMAT_MODPORT   = 2;
+#my $PORT_FORMAT_NODEPORT  = 3;
+#my $PORT_FORMAT_PORT      = 4;
+#my $PORT_FORMAT_PORTINDEX = 5;
+my $PORT_FORMAT_NATIVE     = 6;
+
 my %emptyVlans = ();
 
 #
@@ -189,41 +197,172 @@ sub createExpectObject($)
 }
 
 #
-# The ports look like "<XX>gigabit<Y>/<Z>" in the DB where XX is the
-# speed and Y/Z the card/port. We convert it back to what we need to feed
-# the switch CLI: "<XX>GigabitEthernet <Y>/<Z>".
+# Convert to and from made-up port indicies.
+# These are needed by snmpit_stack when dealing with interswitch links.
+# Simple mapping:
 #
-sub toPlanetPort($$)
+# 1Gb ports:   port number, 1-8+
+# 2.5Gb ports: 250 + port number, 251-252+
+# 10Gb ports:  1000 + port number, 1001-1002+
+#
+# Note that this mappping could be changed at will, it does not persist
+# anywhere outside of this snmpit instance.
+#
+sub Index2native($$)
 {
-        my ($self, $p) = @_;
-        
-        my $ntsport = $p->getEndByNode($self->{NAME});
-        if (defined($ntsport)) {
-	    my $iface = $ntsport->iface();
-	    if ($iface =~ /^(\S*)gigabit(\d+\/\d+)$/) {
-		return "${1}GigabitEthernet $2";
-	    }
-	}
+    my ($self, $ix) = @_;
 
-	return $p;
+    # XXX assumes all ports are 1/<something>.
+    if ($ix > 0 && $ix < 100) {
+	return "GigabitEthernet 1/$ix";
+    }
+    if ($ix > 250 && $ix < 350) {
+	$ix -= 250;
+	return "2.5GigabitEthernet 1/$ix";
+    }
+    if ($ix > 1000 && $ix < 1100) {
+	$ix -= 1000;
+	return "10GigabitEthernet 1/$ix";
+    }
+
+    return "??";
+}
+
+sub native2Index($$)
+{
+    my ($self, $iface) = @_;
+    my $ix = -1;
+
+    # XXX assumes all ports are 1/<something>.
+    if ($iface =~ /^(\S*)GigabitEthernet\s+1\/(\d+)$/) {
+	if (!defined($1) || $1 eq "") {
+	    $ix = int($2);
+	} elsif ($1 eq "2.5") {
+	    $ix = 250 + int($2);
+	} elsif ($1 eq "10") {
+	    $ix = 1000 + int($2);
+	}
+    }
+    return $ix;
+}
+
+sub PortInstance2native($$)
+{
+    my ($self, $port) = @_;
+
+    my $dbiface = $port->iface();
+    if ($dbiface =~ /^(\S*)gigabit(\d+\/\d+)$/) {
+	return "${1}GigabitEthernet $2";
+    }
+    return $dbiface;
+}
+
+sub native2PortInstance($$)
+{
+    my ($self, $iface) = @_;
+
+    if ($iface =~ /^(\S*)GigabitEthernet\s+(\d+\/\d+)$/) {
+	my $port = Port->LookupByIface($self->{NAME}, "${1}gigabit${2}");
+	if ($port) {
+	    return $port;
+	}
+    }
+    my $string = Port->Tokens2IfaceString($self->{NAME}, $iface);
+    return Port->LookupByStringForced($string);
 }
 
 #
-# Switch port names look like "<XX>GigabitEthernet <Y>/<Z>" which
-# we compress down to "<XX>gigabit<Y>/<Z>" for the DB.
+# Converting port formats.
+# XXX We need this as snmpit_stack wants to get/use ifindex's when dealing
+# with interswitch links.
 #
-sub fromPlanetPort($$)
+sub convertPortFormat($$@)
 {
-	my ($self, $pstr) = @_;
-	
-	if ($pstr =~ /^(\S*)GigabitEthernet\s+(\d+\/\d+)$/) {
-	    my $port = Port->LookupByIface($self->{NAME}, "${1}gigabit${2}");
-	    if ($port) {
-		return $port;
-	    }
-        }
-        
-        return $pstr;
+    my $self = shift;
+    my $output = shift;
+
+    my @ports = @_;
+
+    my $id = $self->{NAME} . "::convertPortFormat";
+
+    #
+    # Avoid warnings by exiting if no ports given
+    # 
+    if (!@ports) {
+	return ();
+    }
+
+    #
+    # We determine the type by sampling the first port given
+    #
+    my $sample = $ports[0];
+    if (!defined($sample)) {
+	warn "$id: Given a bad list of ports\n";
+	return undef;
+    }
+
+    my $input = undef;
+    if (Port->isPort($sample)) {
+	$input = $PORT_FORMAT_PORT;
+    }
+    elsif ($sample =~ /^(2\.5|10)?Gigabit/) {
+	$input = $PORT_FORMAT_NATIVE;
+    }
+    elsif ($sample =~ /^\d+$/) {
+        $input = $PORT_FORMAT_IFINDEX;
+    }
+    else {
+	warn "$id: do not support input port format of '$sample'\n";
+	return undef;
+    }
+    
+    #
+    # It's possible the ports are already in the right format
+    #
+    if ($input == $output) {
+	return @ports;
+    }
+
+    if ($input == $PORT_FORMAT_PORT) {
+	my @swports = map $_->getEndByNode($self->{NAME}), @ports;
+
+	if ($output == $PORT_FORMAT_NATIVE) {
+	    my @nports = map $self->PortInstance2native($_), @swports;
+	    return @nports;
+	}
+	elsif ($output == $PORT_FORMAT_IFINDEX) {
+	    my @nports = map $self->PortInstance2native($_), @swports;
+	    my @ix = map $self->native2Index($_), @nports;
+	    return @ix;
+	}
+    }
+    elsif ($input == $PORT_FORMAT_NATIVE) {
+	if ($output == $PORT_FORMAT_PORT) {
+	    my @swports = map $self->native2PortInstance($_), @ports;
+	    return @swports
+	}	
+	elsif ($output == $PORT_FORMAT_IFINDEX) {
+	    my @ix = map $self->native2Index($_), @ports;
+	    return @ix;
+	}
+    }
+    elsif ($input == $PORT_FORMAT_IFINDEX) {
+	if ($output == $PORT_FORMAT_PORT) {
+	    my @nports = map $self->Index2native($_), @ports;
+	    my @swports = map $self->native2PortInstance($_), @nports;
+	    return @swports
+	}	
+	elsif ($output == $PORT_FORMAT_NATIVE) {
+	    my @nports = map $self->Index2native($_), @ports;
+	    return @nports
+	}	
+    }
+
+    #
+    # Some combination we don't know how to handle
+    #
+    warn "$id: Bad input/output combination ($input/$output)\n";
+    return undef;    
 }
 
 
@@ -255,7 +394,7 @@ sub doCLICmd($$;$)
     }
 
     $exp->clear_accum(); # Clean the accumulated output, as a rule.
-    $self->debug("$id: issue command '$cmd'\n",4);
+    $self->debug("$id: issue command '$cmd'\n",2);
     $exp->send($cmd . "\n");
     my ($pos, $err) =
 	$exp->expect($CLI_TIMEOUT,
@@ -339,13 +478,14 @@ sub portControl ($$@) {
     my $errors = 0;
     my $scmd;
 
+    $self->debug("portControl: $cmd -> (".Port->toStrings(@pcports).")\n");
+
     if ($cmd !~ /^(enable|disable)$/) {
 	warn "$id: ignoring '$cmd' for @pcports\n";
 	return 1;
     }
 
-    my @ports = grep(!ref($_), map( $self->toPlanetPort($_->getSwitchPort()),
-				    @pcports));
+    my @ports = $self->convertPortFormat($PORT_FORMAT_NATIVE, @pcports);
 
     $self->lock();
 
@@ -506,7 +646,7 @@ sub createVlan($$$;$) {
 	return 0;
     }
 
-    print "  Creating VLAN $vlan_id as VLAN #$vlan_id on " .
+    print "Creating VLAN $vlan_id as VLAN #$vlan_number on " .
         "$self->{NAME} ...\n";
 
     my $cmd = "conf t\nvlan $vlan_number\nname $vlan_id\nexit\nexit";
@@ -631,7 +771,7 @@ sub getPortInfo($@)
 	}
     }
 
-    $self->debug("$id: map table:\n".Dumper(%map)."\n",1);
+    $self->debug("$id: map table:\n".Dumper(%map)."\n",3);
     return %map;
 }
 
@@ -686,8 +826,9 @@ sub setPortVlan($$@) {
 	return scalar(@pcports);
     }
 
-    my @ports = grep(!ref($_), map( $self->toPlanetPort($_->getSwitchPort()),
-				    @pcports));
+    my @ports = $self->convertPortFormat($PORT_FORMAT_NATIVE, @pcports);
+    $self->debug("converted ports: " . Port->toStrings(@ports). "\n");
+
     $self->lock();
 
     my %pmap = $self->getPortInfo();
@@ -722,7 +863,12 @@ sub setPortVlan($$@) {
 		warn "$id: Cannot change from VLAN $SACRED_VLAN on $pstr\n";
 		next;
 	    }
-	    my $cmd = "conf t\nint $pstr\nswitchport access vlan $vlan_number\nexit\nexit";
+	    my $cmd = "conf t\nint $pstr\nswitchport access vlan $vlan_number\n";
+	    # If taking out of vlan 1, we need to enable as well
+	    if ($vlans[0] == 1) {
+		$cmd .= "no shutdown\n";
+	    }
+	    $cmd .= "exit\nexit";
 	    my ($rv, $info) = $self->doCLICmd($cmd);
 	    if ($rv) {
 		warn "$id: Could not set VLAN on $pstr: $info\n";
@@ -750,9 +896,10 @@ sub setPortVlan($$@) {
 	    }
 
 	    # If vlan 1 is on the trunk as a placeholder, remove it now
+	    # This also indicates that we need to enable the port
 	    if (@vlans == 1 && $vlans[0] == 1) {
 		$self->debug("$id: remove VLAN 1 from trunk port $pstr\n",2);
-		my $cmd = "conf t\nint $pstr\nswitchport trunk allowed vlan remove 1\nexit\nexit";
+		my $cmd = "conf t\nint $pstr\nswitchport trunk allowed vlan remove 1\nno shutdown\nexit\nexit";
 		my ($rv, $info) = $self->doCLICmd($cmd);
 		if ($rv) {
 		    warn "$id: Could not set VLAN on $pstr: $info\n";
@@ -801,8 +948,8 @@ sub delPortVlan($$@) {
 	return scalar(@pcports);
     }
 
-    my @ports = grep(!ref($_), map($self->toPlanetPort($_->getSwitchPort()),
-				   @pcports));
+    my @ports = $self->convertPortFormat($PORT_FORMAT_NATIVE, @pcports);
+
     $self->lock();
 
     my %pmap = $self->getPortInfo();
@@ -826,14 +973,14 @@ sub delPortVlan($$@) {
 	}
 
 	#
-	# Port in access mode, change port back to vlan1 
+	# Port in access mode, change port back to vlan1 and disable port
 	#
 	if ($pmap{$pstr}{'trunk'} == 0) {
 	    $self->debug("$id: set access vlan to VLAN 1 for port $pstr\n",2);
-	    my $cmd = "conf t\nint $pstr\nswitchport access vlan 1\nexit\nexit";
+	    my $cmd = "conf t\nint $pstr\nswitchport access vlan 1\nshutdown\nexit\nexit";
 	    my ($rv, $info) = $self->doCLICmd($cmd);
 	    if ($rv) {
-		warn "$id: Could not remove VLAN $vlan_number (set VLAN 1) on $pstr: $info\n";
+		warn "$id: Could not disable or remove VLAN $vlan_number (set VLAN 1) on $pstr: $info\n";
 		next;
 	    }
 	}
@@ -904,11 +1051,11 @@ sub removePortsFromVlan($@) {
 	if ($pmap{$pstr}{'trunk'} == 0) {
 	    my $avlan = $vlans[0];
 	    if ($avlan != 1 && grep {$_ == $avlan} @vlan_numbers) {
-		$self->debug("$id: set access vlan to VLAN 1 for port $pstr\n",2);
-		my $cmd = "conf t\nint $pstr\nswitchport access vlan 1\nexit\nexit";
+		$self->debug("$id: disable and set access vlan to VLAN 1 for port $pstr\n",2);
+		my $cmd = "conf t\nint $pstr\nswitchport access vlan 1\nshutdown\nexit\nexit";
 		my ($rv, $info) = $self->doCLICmd($cmd);
 		if ($rv) {
-		    warn "$id: Could not set access VLAN to 1 on $pstr: $info\n";
+		    warn "$id: Could not disable and set access VLAN to 1 on $pstr: $info\n";
 		    $errors++;
 		    next;
 		}
@@ -1072,9 +1219,7 @@ sub listVlans($) {
 	if ($line =~ /^(\d+)\s+(\S+)(?:\s+(.+))?$/) {
 	    my ($tag, $id, $pstr) = ($1, $2, $3);
 	    my @swports = expandPortList($pstr);
-	    my @pcports =
-		map($_->getPCPort(),
-		    grep(ref($_), map($self->fromPlanetPort($_), @swports)));
+	    my @pcports = $self->convertPortFormat($PORT_FORMAT_PORT, @swports);
 	    push @list, [$id, $tag, \@pcports];
 	}
     }
@@ -1118,9 +1263,9 @@ sub listPorts($) {
 
 	# First/second token are the interface name
 	my $pstr = $token[0] . " " . $token[1];
-	$port = $self->fromPlanetPort($pstr);
+	($port) = $self->convertPortFormat($PORT_FORMAT_PORT, $pstr);
 	if (ref($port)) {
-	    $port = $port->getPCPort();
+	    $port = $port->getOtherEndPort();
 	} else {
 	    warn "$id: Could not map to DB Port: '$pstr'\n";
 	    next;
@@ -1198,8 +1343,7 @@ sub setVlansOnTrunk($$$$) {
     # Get complete Port/Vlan info
     my %pmap = $self->getPortInfo();
 
-    my $swport = $modport->getSwitchPort();
-    my $iface = $self->toPlanetPort($swport);
+    my ($iface) = $self->convertPortFormat($PORT_FORMAT_NATIVE, $modport);
     if (!$iface) {
 	warn "$id: WARNING: Could not get switch iface name for port $modport\n";
 	return 0;
@@ -1215,13 +1359,62 @@ sub setVlansOnTrunk($$$$) {
     foreach my $vlan (@vlan_numbers) {
 	next unless $self->vlanNumberExists($vlan);
 	if ($value == 1) {
-	    $errors += $self->setPortVlan($vlan, $swport);
+	    $errors += $self->setPortVlan($vlan, $iface);
 	} else {
-	    $errors += $self->delPortVlan($vlan, $swport);
+	    $errors += $self->delPortVlan($vlan, $iface);
 	}
     }
 
     return $errors ? 0 : 1;
+}
+
+#
+# Get the ifindex for an EtherChannel (trunk given as a list of ports)
+# where "trunk" here means interswitch link.
+#
+# usage: getChannelIfIndex(self, ports)
+#        Returns: undef if more than one port is given, and no channel is found
+#           an ifindex if a channel is found and/or only one port is given
+#
+sub getChannelIfIndex($@) {
+    my $self = shift;
+    my @ports = @_;
+    my $id = $self->{NAME}."::getChannelIfIndex";
+    my $chifindex = undef;
+
+    $self->debug("$id: entering\n",2);
+    $self->debug("ports: " . Port->toStrings(@ports). "\n",2);
+
+    #
+    # @ports should contain just port channel names (e.g., "port-channel1")
+    # so our job is easy.
+    #
+    my @swports = $self->convertPortFormat($PORT_FORMAT_NATIVE, @ports);
+    if (@swports > 1) {
+	warn "$id: ERROR did not expect more than one port: " .
+	    join(' ', @swports) . "\n";
+	return undef;
+    }
+
+    my $port = $swports[0];
+    my %pmap = $self->getPortInfo();
+
+    #
+    # Just return the port channel index.
+    #
+    # XXX this is old cisco-ish behavior that snmpit_stack seems to expect
+    # for interswitch links that are not port channels.
+    #
+    if ($pmap{$port}{'trunk'} == 1) {
+	$chifindex = $self->native2Index($port);
+	$self->debug("found regular port '$port', ifindex $chifindex\n",2);
+    }
+    else {
+	warn "$id: ERROR unexpected non-port-channel, non-trunk port '$port'\n";
+	return undef;
+    }
+
+    return $chifindex;
 }
 
 #
@@ -1257,8 +1450,7 @@ sub enablePortTrunking2($$$$) {
     # Get complete Port/Vlan info
     my %pmap = $self->getPortInfo();
 
-    my $swport = $port->getSwitchPort();
-    my $iface = $self->toPlanetPort($swport);
+    my ($iface) = $self->convertPortFormat($PORT_FORMAT_NATIVE, $port);
     if (!$iface) {
 	warn "$id: WARNING: Could not get name for port $port\n";
 	return 0;
@@ -1270,7 +1462,7 @@ sub enablePortTrunking2($$$$) {
     if (!$pmap{$iface}{'trunk'}) {
 	# XXX sanity: don't do this if the port is in the sacred vlan
 	if (grep {$_ == $SACRED_VLAN} @{$pmap{$iface}{'vlans'}}) {
-	    warn "$id: ERROR: refusing to trunk $swport with vlan $SACRED_VLAN\n";
+	    warn "$id: ERROR: refusing to trunk $iface with vlan $SACRED_VLAN\n";
 	    return 0;
 	}
 
@@ -1345,10 +1537,9 @@ sub disablePortTrunking($$) {
 
     $self->debug($id."\n");
 
-    my $swport = $port->getSwitchPort();
-    my $iface = $self->toPlanetPort($swport);
+    my ($iface) = $self->convertPortFormat($PORT_FORMAT_NATIVE, $port);
     if (!$iface) {
-	warn "$id: WARNING: Could not get iface for port $swport ($port)\n";
+	warn "$id: WARNING: Could not get iface for port $port\n";
 	return 0;
     }
 
@@ -1363,29 +1554,38 @@ sub disablePortTrunking($$) {
 
     # XXX sanity: don't do this if trunk includes the sacred VLAN
     if (grep {$_ == $SACRED_VLAN} @{$pmap{$iface}{'vlans'}}) {
-	warn "$id: ERROR: refusing to untrunk $swport with vlan $SACRED_VLAN\n";
+	warn "$id: ERROR: refusing to untrunk $iface with vlan $SACRED_VLAN\n";
 	return 0;
     }
 
-    #
-    # Remove from trunk mode, clear allowed access VLAN list, and set
-    # access vlan to 1.
-    #
+    # XXX for now revert it to vlan 1 for access vlan.
+    # This may change some day if we do non-equal trunking.
+    my $avlan = 1;
+
+    # Remove from trunk mode
     my $cmd = "conf t\nint $iface\nswitchport mode access\nexit\nexit";
     my ($rv, $output) = $self->doCLICmd($cmd);
     if ($rv) {
 	warn("$id: Could not remove iface $iface from trunk mode: $output\n");
 	return 0;
     }
+
+    # Clear allowed trunk vlans
     $cmd = "conf t\nint $iface\nswitchport trunk allowed vlan none\nexit\nexit";
     ($rv, $output) = $self->doCLICmd($cmd);
     if ($rv) {
 	warn("$id: WARNING: could not remove allowed vlans from iface $iface: $output\n");
     }
-    $cmd = "conf t\nint $iface\nswitchport access vlan 1\nexit\nexit";
+
+    # Revert to access mode, if vlan 1 then shutdown the port as well
+    $cmd = "conf t\nint $iface\nswitchport access vlan $avlan\n";
+    if ($avlan == 1) {
+	$cmd .= "shutdown\n";
+    }
+    $cmd .= "exit\nexit";
     ($rv, $output) = $self->doCLICmd($cmd);
     if ($rv) {
-	warn("$id: WARNING: could not set access vlan1 for iface $iface: $output\n");
+	warn("$id: WARNING: could not set access vlan to $avlan for iface $iface: $output\n");
     }
 
     return 1;
