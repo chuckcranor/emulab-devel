@@ -551,6 +551,11 @@ function Do_RequestExtension()
                        "contact us if you need to make special arrangements.");
 	goto bad;
     }
+    if ($instance->extension_disabled() && !ISADMIN()) {
+	SPITAJAX_ERROR(1, "Extensions are have been disabled on ".
+                       "this experiment.");
+        goto bad;
+    }
 
     if (!isset($ajax_args["howlong"]) || $ajax_args["howlong"] == "") {
 	SPITAJAX_ERROR(1, "Missing number of hours");
