@@ -309,8 +309,9 @@ my $wpswd       = $target_user->w_pswd();
 my $wikionly    = $target_user->wikionly();
 my $isnonlocal  = $target_user->IsNonLocal();
 my $nocollabtools = $target_user->nocollabtools();
+# Geni users should not get an account on ops. 
 $usr_shell = "nologin"
-    if (!defined($usr_shell));
+    if (!defined($usr_shell) || $isnonlocal);
 
 #
 # Get the users earliest project membership to use as the default group
