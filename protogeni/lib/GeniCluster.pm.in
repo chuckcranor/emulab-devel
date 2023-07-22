@@ -125,8 +125,9 @@ sub CheckPermission($)
 	       $OURDOMAIN eq "utah.cloudlab.us" ||
 	       $OURDOMAIN eq "wisc.cloudlab.us" ||
 	       $OURDOMAIN eq "clemson.cloudlab.us" ||
-	       $OURDOMAIN eq "utahddc.geniracks.net" ||
 	       $OURDOMAIN eq "lab.onelab.eu" ||
+	       $OURDOMAIN eq "cloudlab.umass.edu" ||
+	       $OURDOMAIN eq "stitch.geniracks.net" ||
 	       $CLOUDLAB_FEDERATED));
 
     return 0;
