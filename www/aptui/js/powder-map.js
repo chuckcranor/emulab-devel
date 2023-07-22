@@ -22,6 +22,7 @@ $(function ()
 	    "showlegend"    : window.SHOWLEGEND,
 	    "showlinks"     : window.SHOWLINKS,
 	    "onlineonly"    : window.ONLINEONLY,
+	    "imagerymap"    : window.IMAGERYMAP,
 	};
 	if (window.EXPERIMENT !== undefined) {
 	    options["experiment"] = window.EXPERIMENT;

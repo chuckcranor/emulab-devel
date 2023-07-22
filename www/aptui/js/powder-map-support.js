@@ -4,8 +4,10 @@ window.ShowPowderMap = (function()
     'use strict';
 
     var templates      = APT_OPTIONS.fetchTemplateList(['powder-filters']);
-    //var PowderMap      = "ede4026643ec40f7b73ab12d6c01b1da";
-    var PowderMap      = "bb4f35e5e5fe4246b8172236feb4df28";
+    var IMAGERY_MAP    = "8e964417102b46f784474b50c57fe1ee";
+    var GREY_MAP       = "bb4f35e5e5fe4246b8172236feb4df28";
+    var PowderMap      = GREY_MAP;
+    var PowderMapZoom  = 15;
     var Container      = null;
     var Options        = null;
     var View           = null;
@@ -110,6 +112,11 @@ window.ShowPowderMap = (function()
 				     "ListReservationGroups",
 				     {"useronly" : true}, callback);
 	    }
+
+	    if (Options.imagerymap) {
+		PowderMap     = IMAGERY_MAP;
+		PowderMapZoom = 16;
+	    }
 	    
 	    Map = new WebMap({
 		basemap: "gray",
@@ -120,7 +127,7 @@ window.ShowPowderMap = (function()
             });
             View = new MapView({
 		map: Map,
-		zoom: 15,
+		zoom: PowderMapZoom,
 		// Slightly shifted to the left to avoid being covered
 		// by the filter/layer widgets.
 		center: [LONGITUDE, LATITUDE],
@@ -252,6 +259,25 @@ window.ShowPowderMap = (function()
 		    ForceLocationData();
 		});
 
+		/*
+		 * Toggle between default view and terrain view.
+		 */
+		var button3 =
+		    $('<button class="action-button esri-icon-maps" '+
+		      '        id="toggleTerrainButton" '+
+		      '   title="Switch between terrain view and default view"'+
+		      '        type="button"></button>');
+		View.ui.add($(button3).get(0), "top-left");
+
+		$('#toggleTerrainButton').click(function (event) {
+		    console.info("toggle terrain view");
+		    var show = (Options.imagerymap ? 0 : 1);
+		    var url  = new URL(document.location.href);
+
+		    url.searchParams.set("imagerymap", show);
+		    document.location.replace(url.href);
+		});
+
 		// Base layers
 		DrawCoverageArea();
 		DrawDataCenters();
@@ -296,14 +322,16 @@ window.ShowPowderMap = (function()
 		    var wrapper = document.createElement("div");
 		    $(wrapper).html(templates['powder-filters']);
 		    $(wrapper).css("width", "230px");
+		    $(wrapper).css("margin-top", "-150px");
 
 		    var expand = new Expand({
 			expandIconClass: "esri-icon-filter",
 			view: View,
+			expandTooltip: "Click to show filtering options",
 			content: wrapper,
-			expanded: true
+			expanded: false
 		    });
-		    View.ui.add(expand, "bottom-right");
+		    View.ui.add(expand, "top-left");
 		}
 	    });
 
@@ -380,7 +408,7 @@ window.ShowPowderMap = (function()
     function SetupFilteringOptions()
     {
 	console.info("SetupFilteringOptions");
-	
+
 	var filter = function () {
 	    UnmarkFixedEndpoints();
 	    UnmarkBaseStations();
@@ -388,22 +416,12 @@ window.ShowPowderMap = (function()
 	    FilterFixedEndpoints();
 	    FilterBaseStations();
 	    FilterDenseDeployment();
+	    FilterRoutes();
 	};
-	$('.radio-type, .range-one input, .range-two input')
+	$('.radio-type')
 	    .change(function (event) {
 		filter();
 	    });
-
-	var keyup_timeout = null;
-	
-	$('.range-low, .range-high').on("keyup", function (event) {
-	    window.clearTimeout(keyup_timeout);
-
-	    keyup_timeout =
-		window.setTimeout(function() {
-		    filter();
-		}, 200);
-	});
 
 	if (Options.showreserved) {
 	    $('#show-reserved-checkbox').removeClass("hidden");
@@ -767,6 +785,8 @@ window.ShowPowderMap = (function()
 			 */
 			info["txRanges"] = [];
 			info["rxRanges"] = [];
+			info["txrx"]     = "";
+			info["antenna"]  = "";
 
 			/*
 			 * Each frontend has its own frequencies and notes.
@@ -803,25 +823,7 @@ window.ShowPowderMap = (function()
 			    attributes[fe_prefix + "notes"]   = notes;
 
 			    fieldInfos = fieldInfos.concat(fe_infos);
-
-			    _.each(tx.split(","),
-				   function (range) {
-				       var tokens = range.split("-");
-
-				       info.txRanges.push({
-					   "low"  : tokens[0],
-					   "high" : tokens[1]
-				       });
-				   });
-			    _.each(rx.split(","),
-				   function (range) {
-				       var tokens = range.split("-");
-
-				       info.rxRanges.push({
-					   "low"  : tokens[0],
-					   "high" : tokens[1]
-				       });
-				   });
+			    parseTXRX(info, tx, rx);
 			});
 			popupcontent.push({
 			    type: "fields",
@@ -899,7 +901,7 @@ window.ShowPowderMap = (function()
 	    size:       "31px",
             outline: {
 		// autocasts as new SimpleLineSymbol()
-		color: (partial ? "purple" : "green"),
+		color: (partial ? "green" : "green"),
 		width: 3,
             }
         };
@@ -1054,6 +1056,8 @@ window.ShowPowderMap = (function()
 			 */
 			info["txRanges"] = [];
 			info["rxRanges"] = [];
+			info["txrx"]     = "";
+			info["antenna"]  = "";
 
 			/*
 			 * Each frontend has its own frequencies and notes.
@@ -1090,25 +1094,7 @@ window.ShowPowderMap = (function()
 			    attributes[fe_prefix + "notes"]   = notes;
 
 			    fieldInfos = fieldInfos.concat(fe_infos);
-
-			    _.each(tx.split(","),
-				   function (range) {
-				       var tokens = range.split("-");
-
-				       info.txRanges.push({
-					   "low"  : tokens[0],
-					   "high" : tokens[1]
-				       });
-				   });
-			    _.each(rx.split(","),
-				   function (range) {
-				       var tokens = range.split("-");
-
-				       info.rxRanges.push({
-					   "low"  : tokens[0],
-					   "high" : tokens[1]
-				       });
-				   });
+			    parseTXRX(info, tx, rx);
 			});
 			popupcontent.push({
 			    type: "fields",
@@ -1188,7 +1174,7 @@ window.ShowPowderMap = (function()
             color:	[0, 0, 0, 0],
 	    size:       "34px",
             outline: {
-		color: (partial ? "purple" : "green"),
+		color: (partial ? "green" : "green"),
 		width: 3,
             }
         };
@@ -1245,30 +1231,38 @@ window.ShowPowderMap = (function()
 		    }
 		    if ($('.radio-type').is(":checked")) {
 			var found = false;
+
+			// console.info(info);
 			
 			$('.radio-type').each(function () {
-			    var type = $(this).data("radio-type");
+			    var itype   = $(this).data("radio-itype");
+			    var type    = $(this).data("radio-htype");
+			    var txrx    = $(this).data("radio-txrx");
+			    var antenna = $(this).data("radio-antenna");
 			    var checked = $(this).is(":checked");
 
-			    if (checked) {
-				var radio = info.radio_type;
-				if (radio.includes(type)) {
-				    found = true;
+			    // console.info(itype, type, txrx, antenna, checked);
+
+			    if (checked &&
+				itype == layer) {
+				// COTS UEs are a kludge.
+				if (type == "COTS-UE") {
+				    if (info.ue_imsi != null) {
+					found = true;
+				    }
+				}
+				else {
+				    if (info.radio_type.includes(type) &&
+					info.txrx == txrx &&
+					info.antenna == antenna) {
+					found = true;
+				    }
 				}
 			    }
 			});
 			update(found);
 		    }
-		    if ($('.range-one .range-checkbox').is(":checked") &&
-			$.trim($('.range-one .range-low').val()) != "" &&
-			$.trim($('.range-one .range-high').val()) != "") {
-			FilterRange(".range-one", info, update);
-		    }
-		    if ($('.range-two .range-checkbox').is(":checked") &&
-			$.trim($('.range-two .range-low').val()) != "" &&
-			$.trim($('.range-two .range-high').val()) != "") {
-			FilterRange(".range-two", info, update);
-		    }
+
 		    // Only one node has to pass all tests
 		    if (passed === true) {
 			showme++;
@@ -1281,45 +1275,6 @@ window.ShowPowderMap = (function()
 	});
     }
     
-    function FilterRange(which, info, updater)
-    {
-	var tx       = $(which + " .range-tx").is(":checked");
-	var rx       = $(which + " .range-rx").is(":checked");
-	var low      = parseInt($.trim($(which + " .range-low").val()));
-	var high     = parseInt($.trim($(which + " .range-high").val()));
-	var txRanges = info.txRanges;
-	var rxRanges = info.rxRanges;
-
-	if (low > high) {
-	    // silent ignore.
-	    return;
-	}
-
-	//console.info("FilterRange", info, tx, rx, low, high);
-
-	if (tx) {
-	    if (_.size(txRanges)) {
-		_.each(txRanges, function (range) {
-		    updater(low  >= range.low && low  <= range.high &&
-			    high >= range.low && high <= range.high);
-		});
-	    }
-	    else {
-		updater(false);
-	    }
-	}
-	if (rx) {
-	    if (_.size(rxRanges)) {
-		_.each(rxRanges, function (range) {
-		    updater(low  >= range.low && low  <= range.high &&
-			    high >= range.low && high <= range.high);
-		});
-	    }
-	    else {
-		updater(false);
-	    }
-	}
-    }
     // This could be optimized a bit. 
     function isReserved(urn, node_id)
     {
@@ -1471,6 +1426,8 @@ window.ShowPowderMap = (function()
 			 */
 			info["txRanges"] = [];
 			info["rxRanges"] = [];
+			info["txrx"]     = "";
+			info["antenna"]  = "";
 
 			/*
 			 * Each frontend has its own frequencies and notes.
@@ -1507,25 +1464,7 @@ window.ShowPowderMap = (function()
 			    attributes[fe_prefix + "notes"]   = notes;
 
 			    fieldInfos = fieldInfos.concat(fe_infos);
-
-			    _.each(tx.split(","),
-				   function (range) {
-				       var tokens = range.split("-");
-
-				       info.txRanges.push({
-					   "low"  : tokens[0],
-					   "high" : tokens[1]
-				       });
-				   });
-			    _.each(rx.split(","),
-				   function (range) {
-				       var tokens = range.split("-");
-
-				       info.rxRanges.push({
-					   "low"  : tokens[0],
-					   "high" : tokens[1]
-				       });
-				   });
+			    parseTXRX(info, tx, rx);
 			});
 			popupcontent.push({
 			    type: "fields",
@@ -1603,7 +1542,7 @@ window.ShowPowderMap = (function()
 	    size:       "34px",
             outline: {
 		// autocasts as new SimpleLineSymbol()
-		color: (partial ? "purple" : "green"),
+		color: (partial ? "green" : "green"),
 		width: 3,
             }
         };
@@ -1668,6 +1607,8 @@ window.ShowPowderMap = (function()
 		     */
 		    info["txRanges"] = [];
 		    info["rxRanges"] = [];
+		    info["txrx"]     = "";
+		    info["antenna"]  = "";
 
 		    /*
 		     * Each frontend has its own frequencies and notes.
@@ -1704,25 +1645,7 @@ window.ShowPowderMap = (function()
 			attributes[fe_prefix + "notes"]   = notes;
 
 			fieldInfos = fieldInfos.concat(fe_infos);
-
-			_.each(tx.split(","),
-			       function (range) {
-				   var tokens = range.split("-");
-			       
-				   info.txRanges.push({
-				       "low"  : tokens[0],
-				       "high" : tokens[1]
-				   });
-			       });
-			_.each(rx.split(","),
-			       function (range) {
-				   var tokens = range.split("-");
-			       
-				   info.rxRanges.push({
-				       "low"  : tokens[0],
-				       "high" : tokens[1]
-				   });
-			       });
+			parseTXRX(info, tx, rx);
 		    });
 		    popupcontent.push({
 			type: "fields",
@@ -1904,6 +1827,8 @@ window.ShowPowderMap = (function()
 	    url: LOCATION_URL,
 	    cache: false,
 	    success: function (data) {
+		var buscount= 0;
+		
 		_.each(data, function (bus) {
 		    var routeID = bus.RouteID;
 		    var busname = bus.Name;
@@ -1911,8 +1836,10 @@ window.ShowPowderMap = (function()
 		    if (_.has(routeList, routeID) &&
 			OurBuses && _.has(OurBuses, busname)) {
 			UpdateBusLocation(routeID, bus);
+			buscount++;
 		    }
 		});
+		EnableRouteFiltering(buscount);
 	    }
 	});
 	var defer = $.Deferred();
@@ -2082,6 +2009,50 @@ window.ShowPowderMap = (function()
 	    data.labelGraphic = labelGraphic;
 	    layer.add(labelGraphic);
 	}
+    }
+
+    /*
+     * Disable the filter options if there are no buses online.
+     */
+    function EnableRouteFiltering(enable)
+    {
+	if (enable) {
+	    $('.mobile-checkbox, .mobile-filter').removeClass("disabled");
+	    $('.mobile-filter').prop("disabled", false);
+	}
+	else {
+	    $('.mobile-checkbox, .mobile-filter').addClass("disabled");
+	    $('.mobile-filter').prop("disabled", true);
+	}
+    }
+
+    /*
+     * The filter for buses is really a filter on the routes.
+     */
+    function FilterRoutes()
+    {
+	HideAllRoutes();
+	
+	if (! $('.mobile-filter').is(":checked")) {
+	    return;
+	}
+	/*
+	 * All buses are same. Just find the routes with at least one of
+	 * our buses on it.
+	 */ 
+	_.each(routeList, function (route, routeID) {
+	    var markit = 0;
+		
+	    // Only if it has one of our buses on the route.
+	    _.each(route.buses, function(bus, busid) {
+		if (_.has(OurBuses, busid)) {
+		    markit = 1;
+		}
+	    });
+	    if (markit) {
+		ShowRoute(routeID);
+	    }
+	});
     }
 
     /*
@@ -2300,6 +2271,51 @@ window.ShowPowderMap = (function()
 	}
     }
 
+    function parseTXRX(info, tx, rx)
+    {
+	tx = $.trim(tx);
+	rx = $.trim(rx);
+	
+	if (tx && tx != "") {
+	    _.each(tx.split(","),
+		   function (range) {
+		       var tokens = range.split("-");
+		       info.txRanges.push({
+			   "low"  : tokens[0],
+			   "high" : tokens[1]
+		       });
+		   });
+	}
+	if (rx && rx != "") {
+	    _.each(rx.split(","),
+		   function (range) {
+		       var tokens = range.split("-");
+		       
+		       info.rxRanges.push({
+			   "low"  : tokens[0],
+			   "high" : tokens[1]
+		       });
+		   });
+	}
+	if (info.txRanges.length && info.rxRanges.length) {
+	    info.txrx = "TX/RX";
+	}
+	else if (info.rxRanges.length) {
+	    info.txrx = "RX";
+	}
+	if (info.rxRanges.length) {
+	    // XXX: Infer the antenna from RX frequency. 
+	    var range = info.rxRanges[0];
+	    if (range.low <= 700 && range.high >= 6000) {
+		info.antenna = "broadband";
+	    }
+	    else if (range.low >= 3300 &&
+		     range.high <= 3800) {
+		info.antenna = "cbrs";
+	    }
+	}
+    }
+    
     return function(id, options)
     {
 	Container = $(id).get(0);

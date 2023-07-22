@@ -55,6 +55,7 @@ $optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
                                  "showlinks",  PAGEARG_STRING,
                                  "location",   PAGEARG_STRING,
                                  "route",      PAGEARG_STRING,
+                                 "imagerymap", PAGEARG_BOOLEAN,
                                  "onlineonly", PAGEARG_BOOLEAN);
 
 if ($experiment) {
@@ -80,6 +81,7 @@ else {
     $showlinks = "'$showlinks'";
 }
 $onlineonly = ($onlineonly ? 1 : 0);
+$imagerymap = ($imagerymap ? 1 : 0);
 SPITHEADER(1);
 
 echo '<link rel="stylesheet"
@@ -95,6 +97,7 @@ echo "window.SHOWAVAILABLE = $showavailable;\n";
 echo "window.SHOWRESERVED  = $showreserved;\n";
 echo "window.SHOWMOBILE    = $showmobile;\n";
 echo "window.SHOWLINKS     = $showlinks;\n";
+echo "window.IMAGERYMAP    = $imagerymap;\n";
 echo "window.BASEONLY      = $baseonly;\n";
 echo "window.ONLINEONLY    = $onlineonly;\n";
 echo "window.ISADMIN       = $isadmin;\n";
