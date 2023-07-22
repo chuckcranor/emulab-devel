@@ -3232,8 +3232,14 @@ sub DoMaxExtension()
     # Use this to get the type counts
     #
     my $resources = {};
-    if (APT_Profile::GetResources($rspec, \$errmsg, \$resources)) {
-	fatal($errmsg);
+    my $err = APT_Profile::GetResources($rspec, \$errmsg, \$resources);
+    if ($err) {
+	if ($err < 0) {
+	    fatal($errmsg);
+	}
+	else {
+	    UserError($errmsg);
+	}
     }
     my $typeCounts = $resources->{"typeCounts"};
 
