@@ -222,7 +222,12 @@ function Do_GetMobileEndpoints()
         }
 
         # For the mobile endpoints page.
-        $tag   = $row["status"] == "up" ? "online" : "offline";
+        if ($row["status"] == "up" && ($row["routename"] || ISADMIN())) {
+            $tag = "online";
+        }
+        else {
+            $tag = "offline";
+        }
         $color = $tag == "online" ? "text-success" : "";
 
         if ($disabled) {
