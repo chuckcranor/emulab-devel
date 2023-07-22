@@ -87,7 +87,7 @@ function Do_EditTable()
         SPITAJAX_ERROR(-1, "Bad field: " . $field);
         return;
     }
-    $content = $ajax_args["content"];
+    $content = trim($ajax_args["content"]);
     
     if ($field == "sync") {
         # Gonna happen
