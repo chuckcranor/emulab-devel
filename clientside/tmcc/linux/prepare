@@ -455,11 +455,6 @@ for my $fp ("/var/lib/chrony/drift","/var/lib/chrony/chrony.drift") {
     }
 }
 
-if (-f "$GRUBDEF.preemulab") {
-    print "Restoring original $GRUBDEF file ...\n";
-    system("cp -p $GRUBDEF.preemulab $GRUBDEF");
-}
-
 print "Clearing out $RUNDIR ...\n";
 system("rm -rf $RUNDIR/*.pid $RUNDIR/sudo/* $RUNDIR/pump.sock");
 
