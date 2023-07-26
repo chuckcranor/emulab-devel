@@ -1,3 +1,11 @@
 #!/bin/sh
 
-exec systemctl restart pubsubd.service
+#
+# Even if the restart fails, we do not want this to fail testbed startup.
+# If name resolution is slow to complete setup at boot, pubsubd startup could
+# fail the first time if the server hostname is not an FQDN and the localdomain
+# has not yet been set.
+#
+systemctl restart pubsubd.service
+
+exit 0
