@@ -1597,6 +1597,7 @@ sub DoTerminate()
 	system("$FABRICSTITCHER -d -r " . $instance->uuid());
 	if ($?) {
 	    $exitcode = -1;
+	    $errcode  = GENIRESPONSE_ERROR;
 	    $errmsg   = "Could not remove FABRIC links";
 	    goto bad;
 	}
