@@ -37,7 +37,8 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 #
 FABRICNAMES = {
     "UTAH" : "Utah-Cloudlab-Powder",
-    "MASS" : "OCT-MGHPCC"
+    "MASS" : "OCT-MGHPCC",
+    "CLEM" : "Clemson-CloudLab"
 }
 
 #
@@ -109,7 +110,7 @@ for link in args.links:
     # Layer 2 network
     slice.add_l2network(name=linkname,
                         interfaces=[facility_port_iface_1,
-                                    facility_port_iface_2])
+                                    facility_port_iface_2], type='L2STS')
     pass
 
 fablib.show_config()
