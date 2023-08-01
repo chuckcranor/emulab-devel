@@ -10,6 +10,7 @@ $(function ()
     var mainTemplate   = _.template(templates['sumstats']);
     var tableTemplate  = _.template(templates['sumstats-table']);
     var dropdownString = templates['output-dropdown'];
+    var classonly      = false;
     var default_min;
     var default_max;
 
@@ -29,6 +30,31 @@ $(function ()
 	$('#waitwait_div').html(templates['waitwait-modal']);
 	$('#oops_div').html(templates['oops-modal']);
 	$('#output_dropdown').html(dropdownString);
+
+	var url = new URL(document.location.href);
+	if (window.SHOWBY == "creator") {
+	    $('#showby-button').html("Show by Project");
+	    url.searchParams.set("showby", "pid");
+	}
+	else {
+	    $('#showby-button').html("Show by Creator");
+	    url.searchParams.set("showby", "creator");
+	}
+	$('#showby-button').parent().removeClass("hidden");
+	$('#showby-button').attr("href", url);
+
+	// Class only toggle
+	if (window.SHOWBY == "pid") {
+	    $('#classonly-button').click(function (event) {
+		if ($('#classonly-button').is(":checked")) {
+		    classonly = true;
+		}
+		else {
+		    classonly = false;
+		}
+		SearchAgain();
+	    });
+	}
 
 	$("#start_day").datepicker({
 	    yearRange: "2014:+1",
@@ -75,6 +101,7 @@ $(function ()
 	    "min"  : Math.floor(default_min.getTime() / 1000),
 	    "max"  : Math.floor(default_max.getTime() / 1000),
 	    "target" : window.SHOWBY,
+	    "class"  : classonly ? 1 : 0,
 	};
 	console.info(args);
 	sup.CallServerMethod(null, "sumstats", "GetStats", args, callback);

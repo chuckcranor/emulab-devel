@@ -41,7 +41,18 @@
 	   type='search' data-column='all'
            id='sumstats_table_search' placeholder='Search Table'>
   </div>
-  <div class="col-sm-3">
+  <div class="col-auto hidden">
+    <a href="#" class='btn btn-default btn-md' id="showby-button"></a>
+  </div>
+  <% if (window.SHOWBY == "pid") { %>
+    <div class="col-auto">
+      <div class="form-check form-check-inline mt-2">
+	<input class="form-check-input" type="checkbox" id="classonly-button">
+	<label class="form-check-label">Class Only</label>
+      </div>
+    </div>
+  <% } %>
+  <div class="col-auto">
     <div id='output_dropdown'></div>
   </div>
 </div>

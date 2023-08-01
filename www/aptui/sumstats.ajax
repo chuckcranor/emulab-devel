@@ -34,6 +34,7 @@ function Do_GetStats()
     global $ajax_args;
     global $urn_mapping;
     $results     = array();
+    $forclass    = 0;
 
     if (!(ISADMIN() || ISFOREIGN_ADMIN())) {
         SPITAJAX_ERROR(1, "Not enough permission to view info!");
@@ -49,6 +50,11 @@ function Do_GetStats()
         return;
     }
     $whereclause = "";
+
+    if ($target == "pid" &&
+        isset($ajax_args["class"]) && $ajax_args["class"] == 1) {
+        $forclass = 1;
+    }
 
     if (!(isset($ajax_args["min"]) && isset($ajax_args["max"]))) {
         SPITAJAX_ERROR(1, "Must provide min and max");
@@ -66,25 +72,30 @@ function Do_GetStats()
     }
     $whereclause  = "where UNIX_TIMESTAMP(started) > $min ";
     $whereclause .= "and UNIX_TIMESTAMP(started) < $max ";
+    if ($forclass) {
+        $whereclause .= "and p.forClass=1 ";
+    }
 
     $query_result =
-        DBQueryFatal("(select $target,aggregate_urn,count(creator) as ecount, ".
+        DBQueryFatal("(select i.${target},aggregate_urn,count(i.creator) as ecount, ".
                      "   sum(physnode_count) as pcount, ".
                      "   truncate(sum(physnode_count * ".
-                     "     ((UNIX_TIMESTAMP(destroyed) - ".
-                     "       UNIX_TIMESTAMP(started)) / 3600.0)),2) as phours ".
-                     " from apt_instance_history ".
+                     "     ((UNIX_TIMESTAMP(i.destroyed) - ".
+                     "       UNIX_TIMESTAMP(i.started)) / 3600.0)),2) as phours ".
+                     " from apt_instance_history as i ".
+                     "left join projects as p on p.pid=i.pid ".
                        $whereclause .
-                     " group by $target,aggregate_urn) ".
+                     " group by i.${target},aggregate_urn) ".
                      "union ".
-                     "(select $target,aggregate_urn,count(creator) as ecount,".
+                     "(select i.${target},aggregate_urn,count(i.creator) as ecount,".
                      "   sum(physnode_count) as pcount, ".
                      "   truncate(sum(physnode_count * ".
                      "     ((UNIX_TIMESTAMP(now()) - ".
-                     "       UNIX_TIMESTAMP(started)) / 3600.0)),2) as phours ".
-                     " from apt_instances ".
+                     "       UNIX_TIMESTAMP(i.started)) / 3600.0)),2) as phours ".
+                     " from apt_instances as i ".
+                     "left join projects as p on p.pid=i.pid ".
                        $whereclause .
-                     " group by $target,aggregate_urn)");
+                     " group by i.${target},aggregate_urn)");
 
     while ($row = mysql_fetch_array($query_result)) {
         $key    = $row[$target];
