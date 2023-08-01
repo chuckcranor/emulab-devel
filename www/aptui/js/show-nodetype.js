@@ -68,7 +68,11 @@ $(function ()
 		return 0;
 	    });
 	}
-	console.info(args);
+	else {
+	    // List of nodes.
+	    args["nodelist"] = JsonParse("#nodes-json");
+	}
+	console.info("Template args:", args);
 	
 	// Generate the template.
 	var html = mainTemplate(args);

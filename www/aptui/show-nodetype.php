@@ -152,6 +152,23 @@ if ($edit) {
     echo htmlentities(json_encode($list));
     echo "</script>\n";
 }
+else {
+    #
+    # List of nodes for a table.
+    #
+    $nodes_result = DBQueryFatal("select node_id from nodes ".
+                                 "where type='$type' ".
+                                 "order by node_id");
+    
+    $list = array();
+    while ($row = mysql_fetch_array($nodes_result)) {
+        $node_id = $row["node_id"];
+        $list[] = $node_id;
+    }
+    echo "<script type='text/plain' id='nodes-json'>\n";
+    echo htmlentities(json_encode($list));
+    echo "</script>\n";
+}
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

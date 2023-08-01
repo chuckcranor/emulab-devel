@@ -408,6 +408,27 @@
     </div>
   </div>
 </div>
+<% if (! window.EDITING) { %>
+  <div class='col-sm-10 offset-sm-1'>
+    <div class='panel card panel-default'>
+      <div class='panel-heading card-header'>
+	<center>
+	  <h3 class='panel-title card-title'>Node List</h3>
+	</center>
+      </div>
+      <div class='panel-body card-body' style="padding-top: 10px;">
+	<div class="d-flex flex-wrap">
+	  <% _.each(nodelist, function(node_id) { %>
+	    <div class="p-2">
+	      <a href="show-node.php?node=<%= node_id %>"
+		 target="_blank"><%- node_id %></a>
+	    </div>
+	  <% }); %>
+	</div>
+      </div>
+    </div>
+  </div>
+<% } %>
 <div id='waitwait_div'></div>
 <div id='oops_div'></div>
 <!-- Confirm Delete -->
