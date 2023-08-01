@@ -337,7 +337,7 @@
 		 value='<%- formfields.profile_repourl %>'>
 	  <% if (viewing) { %>
 	    <input type='hidden' name='uuid' value='<%= version_uuid %>'>
-	    <input type='hidden' name='profile_name'
+	    <input type='hidden' name='profile_name' id="profile_name"
 		   value='<%- formfields.profile_name %>'>
 	    <input type='hidden' id="profile_pid" name='profile_pid'
 		   value='<%- formfields.profile_pid %>'>
@@ -346,6 +346,7 @@
 	  <fieldset>
 	    <div class="form-group">
 	      <input name="profile_name"
+		     id="profile_name"
 		     value="<%- formfields.profile_name %>"
 		     class="form-control format-me"
 		     data-key="profile_name"
