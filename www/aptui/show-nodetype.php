@@ -156,14 +156,28 @@ else {
     #
     # List of nodes for a table.
     #
-    $nodes_result = DBQueryFatal("select node_id from nodes ".
-                                 "where type='$type' ".
-                                 "order by node_id");
+    $nodes_result = DBQueryFatal("select n.node_id,r.pid,r.eid, ".
+                                 "    e.expt_head_uid as uid,e.expt_expires ".
+                                 "  from nodes as n ".
+                                 "left join reserved as r on ".
+                                 "     r.node_id=n.node_id ".
+                                 "left join experiments as e on ".
+                                 "     e.idx=r.exptidx ".
+                                 "where n.type='$type' ".
+                                 "order by n.node_id");
     
     $list = array();
     while ($row = mysql_fetch_array($nodes_result)) {
-        $node_id = $row["node_id"];
-        $list[] = $node_id;
+        $blob = array(
+            "node_id" => $row["node_id"],
+        );
+        if (ISADMIN()) {
+            $blob["pid"] = $row["pid"];
+            $blob["eid"] = $row["eid"];
+            $blob["uid"] = $row["uid"];
+            $blob["expires"] = DateStringGMT($row["expt_expires"]);
+        }
+        $list[] = $blob;
     }
     echo "<script type='text/plain' id='nodes-json'>\n";
     echo htmlentities(json_encode($list));
@@ -173,6 +187,7 @@ else {
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 SPITREQUIRE("js/show-nodetype.js");
 AddTemplateList(array("show-nodetype", "oops-modal", "waitwait-modal"));
 SPITFOOTER();

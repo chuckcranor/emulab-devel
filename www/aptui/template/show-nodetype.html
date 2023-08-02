@@ -417,14 +417,51 @@
 	</center>
       </div>
       <div class='panel-body card-body' style="padding-top: 10px;">
-	<div class="d-flex flex-wrap">
-	  <% _.each(nodelist, function(node_id) { %>
-	    <div class="p-2">
-	      <a href="show-node.php?node=<%= node_id %>"
-		 target="_blank"><%- node_id %></a>
-	    </div>
-	  <% }); %>
-	</div>
+	<% if (!window.ISADMIN) { %>
+	  <div class="d-flex flex-wrap">
+	    <% _.each(nodelist, function(blob) { %>
+	      <div class="p-2">
+		<a href="show-node.php?node=<%= blob.node_id %>"
+		   target="_blank"><%- blob.node_id %></a>
+	      </div>
+	    <% }); %>
+	  </div>
+	<% } else { %>
+	  <table class="tablesorter" id="nodelist">
+	    <thead>
+	      <tr>
+		<th>Node</th>
+		<th>Pid</th>
+		<th>Eid</th>
+		<th>User</th>
+		<th class="sorter-sugar" data-filter="false">Expires</th>
+	      </tr>
+	    </thead>
+	    <tbody>
+	      <% _.each(nodelist, function(blob) { %>
+		<tr>
+		  <td>
+		    <a href="show-node.php?node=<%- blob.node_id %>"
+		       target="_blank"><%- blob.node_id %></a>
+		  </td>
+		  <td>
+		    <a href="show-project.php?pid=<%- blob.pid %>"
+		       target="_blank"><%- blob.pid %></a>
+		  </td>
+		  <td>
+		    <a href="../showexp.php3?pid=<%- blob.pid %>&eid=<%- blob.eid %>"
+		       target="_blank"><%- blob.eid %></a>
+		  </td>
+		  <td>
+		    <a href="user-dashboard.php?user=<%- blob.uid %>"
+		       target="_blank"><%- blob.uid %></a>
+		  </td>
+		  <td class="format-date"><%- blob.expires %></td>
+		</tr>
+	      <% }); %>
+	    </tbody>
+	  </table>
+	<% } %>
       </div>
     </div>
   </div>

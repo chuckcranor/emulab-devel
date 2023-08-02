@@ -90,6 +90,14 @@ $(function ()
 	    }
 	});
 
+	if (!window.EDITING && window.ISADMIN) {
+	    $('#nodelist').tablesorter({
+		theme : 'bootstrap',
+		widgets: ["uitheme"],
+		headerTemplate : '{content} {icon}',
+	    });
+	}
+	
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
