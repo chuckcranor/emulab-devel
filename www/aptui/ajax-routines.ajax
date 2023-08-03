@@ -167,7 +167,7 @@ function ExperimentList($which, $target)
                      "  GROUP_CONCAT(aa.abbreviation) as clusters ".
                      " from apt_instances as a ".
                      "left join apt_instance_aggregates as agg ".
-                     "     on agg.uuid=a.uuid ".
+                     "     on agg.uuid=a.uuid and agg.status!='terminated' ".
                      "left join apt_aggregates as aa on ".
                      "     aa.urn=agg.aggregate_urn ".
                      "left join geni.geni_slices as s on ".
