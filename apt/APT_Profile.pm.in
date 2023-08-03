@@ -3258,9 +3258,9 @@ sub GetRepoCommand($)
 #
 # Encrypt blocks.
 #
-sub EncryptBlocks($$$)
+sub EncryptBlocks($$$;$)
 {
-    my ($rspec, $certificate, $pmsg) = @_;
+    my ($rspec, $certificate, $pmsg, $prevrspec) = @_;
     my @encrypt = ();
     
     foreach my $encref (GeniXML::FindNodesNS("n:encrypt", $rspec,
@@ -3275,7 +3275,33 @@ sub EncryptBlocks($$$)
 	push(@encrypt, $encref);
     }
     foreach my $encref (GeniXML::FindNodesNS("n:password", $rspec,
-				   $GeniXML::EMULAB_NS)->get_nodelist()) {
+					     $GeniXML::EMULAB_NS)->get_nodelist()) {
+	my $name      = GeniXML::GetText("name", $encref);
+	my $encrypted = GeniXML::GetText("encrypted", $encref);
+	next
+	    if ($encrypted);
+
+	# Watch for overwriting passwords during an update, transfer password.
+	# Update could also add a new password element.
+	if ($prevrspec) {
+	    my $previous;
+	    
+	    foreach my $pref (GeniXML::FindNodesNS("n:password", $prevrspec,
+					$GeniXML::EMULAB_NS)->get_nodelist()) {
+		my $pname      = GeniXML::GetText("name", $pref);
+		my $pencrypted = GeniXML::GetText("encrypted", $pref);
+
+		if ($name eq $pname && $pencrypted) {
+		    $previous = $pref->textContent();
+		    $encref->setAttribute("encrypted", "true");
+		    $encref->removeChildNodes();
+		    $encref->appendText($previous);
+		    last;
+		}
+	    }
+	    next
+		if (defined($previous));
+	}
 	my $plaintext = substr(TBGenSecretKey(), 0, 12);
 	$encref->appendText($plaintext);
 	push(@encrypt, $encref);

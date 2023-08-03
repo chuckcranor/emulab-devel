@@ -403,11 +403,21 @@ sub FinalizeRSpec($$;$)
     my $rspec    = $update_rspec || $self->RSPEC();
     my $cert     = GeniCertificate->LoadFromString($self->cert());
     my $geniuser = $self->GetGeniUser();
+    my $retval;
     
     #
     # Encrypt blocks.
+    # Update is a problem, we do not want to overwrite passwords that were
+    # in the original rspec, but rather transfer them to the update rspec.
     #
-    my $retval = APT_Profile::EncryptBlocks($rspec, $cert, $perrmsg);
+    if ($update_rspec) {
+	$retval = APT_Profile::EncryptBlocks($update_rspec, $cert, $perrmsg,
+					     $self->RSPEC());
+	$rspec = $update_rspec;
+    }
+    else {
+	$retval = APT_Profile::EncryptBlocks($rspec, $cert, $perrmsg);
+    }
     return $retval
 	if ($retval);
 
