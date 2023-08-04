@@ -711,12 +711,17 @@ $(function ()
 	    var projlist = json.value.project;
 	    
 	    if (! (_.size(userlist) || _.size(projlist))) {
+		$('#resgroups_noresgroups').removeClass("hidden");
 		return;
 	    }
-	    $(".resgroups-hidden").removeClass("hidden");
-	    window.DrawResGroupList("#resgroups_content", userlist);
-	    $("#resgroups_content .expando").trigger("click");
-
+	    if (_.size(userlist)) {
+		window.DrawResGroupList("#resgroups_content", userlist);
+		$("#resgroups_content .expando").trigger("click");
+	    }
+	    else {
+		$('#resgroups_noresgroups').removeClass("hidden");
+	    }		
+	    
 	    /*
 	     * Prune out project reservations in the table above,
 	     * and if any left, show those in another table below.
