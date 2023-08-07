@@ -88,6 +88,8 @@ sub CreateCommon($$$$$$$$)
     my $self               = {};
     $self->{'PID'}         = $pid;
     $self->{'PID_IDX'}     = defined( $pid ) ? $project->pid_idx() : undef;
+    $self->{'SHARED_RES'}  = defined( $pid ) ? $project->shared_reservation() :
+	undef;
     $self->{'EID'}         = $eid;
     $self->{'START'}       = $start;
     $self->{'END'}         = $end;
@@ -237,6 +239,7 @@ sub Lookup($$;$$$$)
 sub idx($)         { return $_[0]->{"IDX"}; }
 sub pid($)         { return $_[0]->{"PID"}; }
 sub pid_idx($)     { return $_[0]->{"PID_IDX"}; }
+sub shared_res($)  { return $_[0]->{"SHARED_RES"}; }
 sub eid($)         { return $_[0]->{"EID"}; }
 sub start($)       { return $_[0]->{"START"}; }
 sub end($)         { return $_[0]->{"END"}; }
@@ -327,6 +330,25 @@ sub SetAdminNotes($$)
     my ($self, $notes) = @_;
 
     $self->{'ADMIN_NOTES'} = $notes;
+}
+
+# The "target" of the reservation: the user(s) to whom the node(s) are
+# reserved.  Typically a pid/uid pair, but for projects where shared
+# reservations are enabled (classes, tutorials, etc.) it will be a
+# pid/* wildcard.
+sub Target($)
+{
+    my ($self) = @_;
+
+    my $pid = $self->pid();
+
+    if( !defined( $pid ) )
+	return undef;
+
+    if( $self->shared_res() )
+	return $pid . "/*";
+    else
+	return $pid . "/" . $self->uid();
 }
 
 # Mark the reservation as approved.  This DOES NOT update the database
@@ -639,8 +661,8 @@ sub LookupAll($$;$$)
 				"      (n.reservable=1 and n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
 				"GROUP BY " .
-				"e.pid, e.eid, n.reserved_pid, nr.pid, " .
-				"UNIX_TIMESTAMP( pr.end )" :
+				"e.pid, e.eid, e.expt_swap_uid, n.reserved_pid, " .
+	                        "nr.pid, UNIX_TIMESTAMP( pr.end )" :
 				"SELECT COUNT(*), e.pid, e.eid, " .
 				"e.expt_swap_uid, " .
 				"UNIX_TIMESTAMP( e.expt_expires ), " .
@@ -670,8 +692,9 @@ sub LookupAll($$;$$)
 				"WHERE ((n.reservable=0 and n.type='$type') or ".
 				"      (n.reservable=1 and n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
-				"GROUP BY e.pid, e.eid, n.reserved_pid, " .
-				"nr.pid, UNIX_TIMESTAMP( pr.end )";
+				"GROUP BY e.pid, e.eid, e.expt_swap_uid, " .
+				"n.reserved_pid, nr.pid, " .
+				"UNIX_TIMESTAMP( pr.end )";
     my $query_result = DBQueryWarn( $query );
 
     $$details = "--- Node usage:\n" if( ref( $details ) );
@@ -808,13 +831,14 @@ sub IsFeasible($$;$$$$$$)
     
     foreach my $reservation ( @$reservations ) {
 	my $pid = $reservation->pid();
+	my $target = $reservation->Target();
 	my $start;
 	my $end;
 
 	if( defined( $reservation->eid() ) ) {
 	    if( $reservation->start() ) {
 		# An unmapped experiment.  Not yet using physical nodes.
-		$start = { 'pid' => $reservation->pid(),
+		$start = { 'target' => $target,
 			   't' => $reservation->start(),
 			   'used' => $reservation->nodes(),
 			   'reserved' => 0,
@@ -822,15 +846,15 @@ sub IsFeasible($$;$$$$$$)
 		};
 	    } else {
 		# A mapped experiment.  Using physical nodes now.
-		if( defined( $used{ $pid } ) ) {
-		    $used{ $pid } += $reservation->nodes();
+		if( defined( $used{ $target } ) ) {
+		    $used{ $target } += $reservation->nodes();
 		} else {
-		    $used{ $pid } = $reservation->nodes();
+		    $used{ $target } = $reservation->nodes();
 		}
 	    }
 	    
 	    # Will later release real nodes.
-	    $end = { 'pid' => $reservation->pid(),
+	    $end = { 'target' => $reservation->target(),
 		     't' => $reservation->end(),
 		     'used' => -$reservation->nodes(),
 		     'reserved' => 0,
@@ -848,11 +872,11 @@ sub IsFeasible($$;$$$$$$)
 	    my $starttime = $reservation->start();
 	    $starttime = $now if( $starttime < $now );
 	    
-	    $start = { 'pid' => $reservation->pid(),
+	    $start = { 'target' => $target,
 		       't' => $starttime,
 		       'used' => 0,
 	    };
-	    $end = { 'pid' => $reservation->pid(),
+	    $end = { 'target' => $target,
 		     't' => $reservation->end(),
 		     'used' => 0,
 	    };
@@ -902,31 +926,31 @@ sub IsFeasible($$;$$$$$$)
     }
 
     foreach my $event ( @events ) {
-	my $pid = $event->{'pid'};
-
+	my $target = $event->{'target'};
+	
 	if ($debug) {
 	    print "-----\n";
 	    print Dumper($event);
 	}
 
-	$used{ $pid } = 0 if( !exists( $used{ $pid } ) );
-	$reserved{ $pid } = 0 if( !exists( $reserved{ $pid } ) );
-	$unapproved{ $pid } = 0 if( !exists( $unapproved{ $pid } ) );
+	$used{ $target } = 0 if( !exists( $used{ $target } ) );
+	$reserved{ $target } = 0 if( !exists( $reserved{ $target } ) );
+	$unapproved{ $target } = 0 if( !exists( $unapproved{ $target } ) );
 
-	my $oldsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
-	    $reserved{ $pid };
+	my $oldsum = $used{ $target } > $reserved{ $target } ? $used{ $target } :
+	    $reserved{ $target };
 
-	$used{ $pid } += $event->{ 'used' };
-	$reserved{ $pid } += $event->{ 'reserved' };
-	$unapproved{ $pid } += $event->{ 'unapproved' };
+	$used{ $target } += $event->{ 'used' };
+	$reserved{ $target } += $event->{ 'reserved' };
+	$unapproved{ $target } += $event->{ 'unapproved' };
 
-	my $newsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
-	    $reserved{ $pid };
+	my $newsum = $used{ $target } > $reserved{ $target } ? $used{ $target } :
+	    $reserved{ $target };
 
 	$free += $oldsum - $newsum;
 
 	if ($debug) {
-	    print $used{ $pid } . "," . $reserved{ $pid } . "\n";
+	    print $used{ $target } . "," . $reserved{ $target } . "\n";
 	    print "$oldsum,$newsum,$free\n";
 	}
 
