@@ -963,7 +963,7 @@ window.ShowFrequencyGraph = (function ()
 		});
 		_.each(dirs, function(info) {
 		    var item =
-			$("<li class='dropdown dropstart " +
+			$("<li class='dropstart " +
 			  "           multilevel-toggle'>" +
 			  "  <a href='#' " +
 			  "     class='dropdown-item dropdown-toggle' " +
@@ -1026,7 +1026,7 @@ window.ShowFrequencyGraph = (function ()
 		});
 		if (_.size(nodes) > 1) {
 		    var item =
-			$("<li class='dropdown dropstart multilevel-toggle'>" +
+			$("<li class='dropstart multilevel-toggle'>" +
 			  "  <a href='#' " +
 			  "     class='dropdown-item dropdown-toggle' " +
 			  "     data-bs-auto-close='false' " +
