@@ -342,13 +342,16 @@ sub Target($)
 
     my $pid = $self->pid();
 
-    if( !defined( $pid ) )
-	return undef;
+    if( !defined( $pid ) ) {
+		return undef;
+    }
 
-    if( $self->shared_res() )
-	return $pid . "/*";
-    else
-	return $pid . "/" . $self->uid();
+    if( $self->shared_res() ) {
+		return $pid . "/*";
+    }
+    else {
+		return $pid . "/" . $self->uid();
+    }
 }
 
 # Mark the reservation as approved.  This DOES NOT update the database
