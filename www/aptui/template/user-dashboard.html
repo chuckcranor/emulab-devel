@@ -8,51 +8,51 @@
 	      <!-- Nav tabs -->
 	      <ul class="nav nav-tabs" role="tablist">
 		<li role="presentation" class="nav-item">
-		  <a href="#experiments" role="tab" class="nav-link"
+		  <a href="#experiments" id="usertab-experiments" role="tab" class="nav-link"
 		     data-bs-toggle="tab" data-toggle="tab">
 		    Experiments</a></li>
 		<li role="presentation">
-		  <a href="#profiles" role="tab" class="nav-link"
+		  <a href="#profiles" id="usertab-profiles" role="tab" class="nav-link"
 		     data-bs-toggle="tab" data-toggle="tab">
 		    Profiles</a></li>
 		<li role="presentation">
-		  <a href="#projectprofiles" role="tab" class="nav-link"
+		  <a href="#projectprofiles" id="usertab-projectprofiles" role="tab" class="nav-link"
 		     data-bs-toggle="tab" data-toggle="tab">
 		    Project Profiles</a></li>
 		<% if (disabledset == 0 || (disabledset == 1 && isadmin) ) { %>
 		<li role="presentation">
-		  <a href="#datasets" role="tab" class="nav-link"
+		  <a href="#datasets" id="usertab-datasets" role="tab" class="nav-link"
 		     data-bs-toggle="tab" data-toggle="tab">
 		    Datasets</a></li>
 		<% } %>
 		<%  if (disabledres == 0 || (disabledres == 1 && isadmin) ) { %>
 		  <li role="presentation">
-		    <a href="#resgroups" role="tab" class="nav-link"
+		    <a href="#resgroups" id="usertab-resgroups" role="tab" class="nav-link"
 		       data-bs-toggle="tab" data-toggle="tab">
 		      Reservations</a></li>
 		<% } %>
 		<li role="presentation" class="hidden resources-hidden">
-		  <a href="#resources" role="tab" class="nav-link"
+		  <a href="#resources" id="usertab-resources" role="tab" class="nav-link"
 		     data-bs-toggle="tab" data-toggle="tab">
 		    Resources</a></li>
 		<li role="presentation" class="hidden paramsets-hidden">
-		  <a href="#paramsets" role="tab" class="nav-link"
+		  <a href="#paramsets" id="usertab-paramsets" role="tab" class="nav-link"
 		     data-bs-toggle="tab" data-toggle="tab">
 		    Parameter Sets</a></li>
 		<li role="presentation">
-		  <a href="#membership" role="tab" class="nav-link"
+		  <a href="#membership" id="usertab-membership" role="tab" class="nav-link"
 		     data-bs-toggle="tab" data-toggle="tab">
 		    Membership</a></li>
 		<li role="presentation">
-		  <a href="#usage" role="tab" class="nav-link"
+		  <a href="#usage" id="usertab-usage" role="tab" class="nav-link"
 		     data-bs-toggle="tab" data-toggle="tab">Usage</a></li>
 		<li role="presentation">
-		  <a href="#myprofile" role="tab" class="nav-link"
+		  <a href="#myprofile" id="usertab-myprofile" role="tab" class="nav-link"
 		     data-bs-toggle="tab" data-toggle="tab">
 		    Account</a></li>
 		<% if (isadmin) { %>
 		  <li role="presentation">
-		    <a href="#admin" role="tab" class="nav-link"
+		    <a href="#admin" id="usertab-admin" role="tab" class="nav-link"
 		       data-bs-toggle="tab" data-toggle="tab">
 		      Admin</a></li>
 		  <li role="presentation"
