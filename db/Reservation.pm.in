@@ -1082,6 +1082,7 @@ sub Forecast($$;$$$$$) {
     my @forecast = ();
     my @answer = ();
     my $t = time();
+    $uid = "" unless( defined( $uid ) );
 
     IsFeasible( $class, $reservations, undef, undef, undef, undef,
 		\@forecast, $dounapproved );
@@ -1141,10 +1142,11 @@ sub Forecast($$;$$$$$) {
 #
 # Find any future periods with smaller predicted availability than the
 # present.
-sub FuturePressure($$;$) {
-    my ($class, $typelist, $projlist) = @_;
+sub FuturePressure($$;$$) {
+    my ($class, $typelist, $projlist, $uid) = @_;
 
     my @reservations = ();
+    $uid = "" unless( defined( $uid ) );
     
     foreach my $type ( @$typelist ) {
 	my $typeres = LookupAll( $class, $type );
@@ -1167,16 +1169,17 @@ sub FuturePressure($$;$) {
 	my $held = 0;
 	my $free = $f->{'free'};
 
-	foreach my $pid ( keys( %{$f->{'used'}} ) ) {
-	    $unavailable += $f->{'used'}->{$pid};
+	foreach my $target ( keys( %{$f->{'used'}} ) ) {
+	    $unavailable += $f->{'used'}->{$target};
 	}
 	
-	foreach my $pid ( keys( %{$f->{'reserved'}} ) ) {
-	    my $r = $f->{'reserved'}->{$pid};
-	    my $u = $f->{'used'}->{$pid};
+	foreach my $target ( keys( %{$f->{'reserved'}} ) ) {
+	    my $r = $f->{'reserved'}->{$target};
+	    my $u = $f->{'used'}->{$target};
 
 	    if( $r > $u ) {
-		if( grep( $_ eq $pid, @$projlist ) ) {
+		if( grep( $_ . "/*" eq $target or $_ . "/" . $uid eq $target,
+			  @$projlist ) ) {
 		    $held += $r - $u;
 		} else {
 		    $unavailable += $r - $u;

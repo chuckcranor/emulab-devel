@@ -235,7 +235,7 @@ if( $timeseries ) {
 }
 
 if( $pressure ) {
-    foreach ( Reservation->FuturePressure( [ $type ], \@ARGV ) ) {
+    foreach ( Reservation->FuturePressure( [ $type ], \@ARGV, $uid ) ) {
         my ( $start, $end ) = @$_;
 
 	print strftime( "%Y-%m-%d %H:%M-", localtime( $start ) ) .
