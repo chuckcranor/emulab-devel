@@ -1542,6 +1542,15 @@ sub ExtendSlice($$$;$$$) {
 		return -1;
 	    }
 	}
+	# Check against prereserved nodes.
+	my $premax = $new_expire;
+	CheckPreReserved($expt, \$premax);
+	if (!$force && $premax < $new_expire) {
+	    if (ref($error)) {
+		$$error = "Could not extend because of a prereserve";
+	    }
+	    return -1;
+	}
 	return 0
 	    if( $impotent );
 	next if( !defined( BeginTransaction( $class, $version,
@@ -1634,6 +1643,15 @@ sub AutoSwapTimeout($$$;$$$) {
 		return -1;
 	    }
 	}
+	# Check against prereserved nodes.
+	my $premax = $expires;
+	CheckPreReserved($expt, \$premax);
+	if (!$force && $premax < $expires) {
+	    if (ref($error)) {
+		$$error = "Could not extend because of a prereserve";
+	    }
+	    return -1;
+	}
 	return 0
 	    if( $impotent );
 	next if( !defined( BeginTransaction( $class, $version, "experiments")));
@@ -1702,13 +1720,22 @@ sub MaxSliceExtension($$$;$$) {
 	}
 	IsFeasible( $class, $reservations, undef, \$max_expire );
     }
-
     if( $max_expire <= $cur_expire ) {
 	if( ref( $error ) ) {
 	    $$error = "No extension possible.";
 	}
 	return -1;
-    } else {
+    }
+    # Check against prereserved nodes.
+    CheckPreReserved($expt, \$max_expire);
+    
+    if( $max_expire <= $cur_expire ) {
+	if( ref( $error ) ) {
+	    $$error = "No extension possible because of a prereserve.";
+	}
+	return -1;
+    }
+    else {
 	$$max = $max_expire;
 
 	if( defined( $granularity ) && $granularity > 1 ) {
@@ -1717,6 +1744,45 @@ sub MaxSliceExtension($$$;$$) {
 	}
 	
 	return 0;
+    }
+}
+
+sub CheckPreReserved($$)
+{
+    my ($experiment, $pmax_expire) = @_;
+    my $pid = $experiment->pid();
+    my %presnodes = ();
+
+    my $query_result =
+	DBQueryFatal("select distinct node_id from node_reservations");
+    return 0
+	if (!$query_result->numrows);
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	$presnodes{$node_id} = $node_id;
+    }
+
+    my @localnodes = ();
+    $experiment->LocalNodeListNames(\@localnodes, 1);
+
+    foreach my $node_id (@localnodes) {
+	next
+	    if (!exists($presnodes{$node_id}));
+
+	# We want the earliest starting prereserve for this node,
+	# in a different project.
+	$query_result =
+	    DBQueryFatal("select UNIX_TIMESTAMP(min(start)) ".
+			 "   from node_reservations as nres ".
+			 "left join project_reservations as pr on ".
+			 "  pr.pid=nres.pid ".
+			 "where nres.node_id='$node_id' and pr.pid!='$pid'");
+	my ($max) = $query_result->fetchrow_array();
+	next
+	    if (!defined($max));
+
+	if ($max < $$pmax_expire) {
+	    $$pmax_expire = $max;
+	}
     }
 }
 
@@ -1837,6 +1903,15 @@ sub LockdownAux($$$$$$)
 		return -1;
 	    }
 	}
+	# Check against prereserved nodes.
+	my $premax = 0x7FFFFFFF;
+	CheckPreReserved($expt, \$premax);
+	if (!$force && $premax < 0x7FFFFFFF) {
+	    if (ref($error)) {
+		$$error = "Could not extend because of a prereserve";
+	    }
+	    return -1;
+	}
 	return 0
 	    if( $impotent );
 	next if (!defined(BeginTransaction($class, $version, "experiments")));
@@ -1906,7 +1981,7 @@ sub MaxSwapIn($$$) {
     my $error = {};
     my $details;
 
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read");        
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as nres read");        
     
     my $reservations = LookupAll( $class, $type, undef, \$details );
     #print $details . "\n" if ($type eq "d430");

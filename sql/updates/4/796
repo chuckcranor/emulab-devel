@@ -1,0 +1,22 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("projects", "shared_reservations")) {
+	DBQueryFatal("alter table projects add ".
+		     " `shared_reservations` tinyint(1) default '0'");
+	DBQueryFatal("update projects set shared_reservations=forClass");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
