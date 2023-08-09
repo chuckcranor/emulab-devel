@@ -1605,7 +1605,7 @@ sub WriteCredentials($$)
 sub GetSSHKeys($$;$)
 {
     my ($self, $pref, $target_user) = @_;
-    my $rval;
+    my $rval = [];
     my @keys;
 
     my $geniuser = $target_user || $self->GetGeniUser();
@@ -1635,13 +1635,14 @@ sub GetSSHKeys($$;$)
     #
     # CM format.
     #
-    $rval = [{'urn'   => $geniuser->urn(),
-	      'login' => $geniuser->uid(),
-	      # Creator clearly has root privs!
-	      'privs' => 'root',
-	      'shell' => $shell,
-	      'keys'  => [ @keys ]
-	     }];
+    my $target_key = {
+	'urn'   => $geniuser->urn(),
+	'login' => $geniuser->uid(),
+	# Creator clearly has root privs!
+	'privs' => 'root',
+	'shell' => $shell,
+	'keys'  => [ @keys ]
+    };
 
     # Want keys for single user.
     goto done
@@ -1663,15 +1664,18 @@ sub GetSSHKeys($$;$)
 	# the keys is wasted work 99% of the time. And clogs up the
 	# log files.
 	#
-	elsif (scalar(@members) <= 15) {
+	elsif (scalar(@members) <= 100 || $project->pid() eq "ASU-CSE-434") {
 	    foreach my $member (@members) {
-		next
-		    if ($member->SameUser($geniuser->emulab_user()));
-	    
 		# Skip frozen users.
 		next
 		    if ($member->frozen());
 
+		# Maintain consistent order
+		if ($member->SameUser($geniuser->emulab_user())) {
+		    push(@{$rval}, $target_key);
+		    next
+		}
+	    
 		my $guser = GeniUser->CreateFromLocal($member);
 		next
 		    if (!defined($guser));
@@ -1720,6 +1724,10 @@ sub GetSSHKeys($$;$)
 	}
     }
   done:
+    # Watch for only single user case
+    if (scalar(@{$rval}) == 0) {
+	$rval = [ $target_key ];
+    }
     $$pref = $rval;
     return 0;
 }
