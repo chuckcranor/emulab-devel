@@ -3761,8 +3761,7 @@ sub DoDumpManifests()
     }
     #
     # NOTE: This is called from legacy XMLRPC server, so do a permission
-    # check here for it. Only the creator on this path, the web interface
-    # will suffice for anyone else.
+    # check here for it.
     #
     if ($doperms) {
 	my $project = $instance->GetProject();
@@ -7959,10 +7958,6 @@ sub DoModify()
     if ($instance->canceled()) {
 	UserError("Not allowed to modify; this experiment has been canceled.");
     }
-    if ($instance->DeferredAggregateList()) {
-	UserError("Not allowed to modify; there " .
-		  "are currently deferred aggregates.");
-    }
     if ($instance->update_rspec()) {
 	UserError("Not allowed to modify; a modify " .
 		  "operation is already in progress and not complete.");
@@ -7989,6 +7984,7 @@ sub DoModify()
     if (!defined($slice)) {
 	fatal("No slice for instance");
     }
+    print "$rspecstr\n";
 
     my $default_aggregate_urn = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
     my $needstitcher = 0;
@@ -8042,9 +8038,21 @@ sub DoModify()
 	next
 	    if ($agg->IsTerminated());
 
-	next
-	    if (grep {$_ eq $agg->aggregate_urn()} @aggregate_urns);
-	
+	#
+	# It is okay to terminate defered aggregates, but if there is
+	# an remaining deferred aggregate, not sure I want to spark a
+	# a modify on it. Needs more thought.
+	#
+	if (grep {$_ eq $agg->aggregate_urn()} @aggregate_urns) {
+	    if ($agg->deferred()) {
+		$errmsg   = "Not allowed to modify; there " .
+		    "are currently deferred aggregates.";
+		$errcode  = GENIRESPONSE_REFUSED;
+		$exitcode = $errcode;
+		goto bad;
+	    }
+	    next;
+	}
 	push(@deleted_urns, $agg->aggregate_urn());
     }
 
@@ -8096,9 +8104,18 @@ sub DoModify()
 	    $errmsg   = "Could not delete all aggregates";
 	    $errcode  = GENIRESPONSE_ERROR;
 	    $exitcode = $errcode;
+	    #
+	    # Need to undo the update. 
+	    #
 	    goto bad;
 	}
 	$instance->RefreshAggregateStatus();
+    }
+    #
+    # If deleted deferred aggregates, might be able to resolve the defer.
+    #
+    if (!$instance->DeferredAggregateList()) {
+	$instance->ResolveDefer();
     }
 
     #
