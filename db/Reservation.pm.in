@@ -1073,7 +1073,7 @@ sub FreeCount($$;$) {
 #
 # * 'free' is the number of nodes not allocated and not needed
 # for reservations; available for general use subject to other constraints.
-sub Forecast($$;$$$$) {
+sub Forecast($$;$$$$$) {
     my ($class, $type, $projlist, $uid, $details,
 	$dounapproved, $reservations) = @_;
 
