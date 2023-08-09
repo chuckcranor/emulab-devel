@@ -1074,7 +1074,8 @@ sub FreeCount($$;$) {
 # * 'free' is the number of nodes not allocated and not needed
 # for reservations; available for general use subject to other constraints.
 sub Forecast($$;$$$$) {
-    my ($class, $type, $projlist, $details, $dounapproved, $reservations) = @_;
+    my ($class, $type, $projlist, $uid, $details,
+	$dounapproved, $reservations) = @_;
 
     $reservations = LookupAll( $class, $type, $dounapproved, $details )
 	if (!defined($reservations));
@@ -1095,19 +1096,20 @@ sub Forecast($$;$$$$) {
 	my $held = 0;
 	my $free = $f->{'free'};
 
-	foreach my $pid ( keys( %{$f->{'used'}} ) ) {
-	    $unavailable += $f->{'used'}->{$pid};
+	foreach my $target ( keys( %{$f->{'used'}} ) ) {
+	    $unavailable += $f->{'used'}->{$target};
 	}
-	foreach my $pid ( keys( %{$f->{'unapproved'}} ) ) {
-	    $unapproved += $f->{'unapproved'}->{$pid};
+	foreach my $target ( keys( %{$f->{'unapproved'}} ) ) {
+	    $unapproved += $f->{'unapproved'}->{$target};
 	}
 	
-	foreach my $pid ( keys( %{$f->{'reserved'}} ) ) {
-	    my $r = $f->{'reserved'}->{$pid};
-	    my $u = $f->{'used'}->{$pid};
+	foreach my $target ( keys( %{$f->{'reserved'}} ) ) {
+	    my $r = $f->{'reserved'}->{$target};
+	    my $u = $f->{'used'}->{$target};
 
-	    if( $r > $u ) {
-		if( grep( $_ eq $pid, @$projlist ) ) {
+	    if( $r > $u ) {		
+		if( grep( $_ . "/*" eq $target or $_ . "/" . $uid eq $target,
+			  @$projlist ) ) {
 		    $held += $r - $u;
 		} else {
 		    $unavailable += $r - $u;
