@@ -4668,15 +4668,13 @@ CREATE TABLE `nonlocal_user_pubkeys` (
 
 DROP TABLE IF EXISTS `nonlocal_users`;
 CREATE TABLE `nonlocal_users` (
-  `uid` varchar(8) NOT NULL default '',
+  `nonlocal_id` varchar(128) NOT NULL default '',
   `uid_idx` mediumint(8) unsigned NOT NULL default '0',
-  `uid_uuid` varchar(40) NOT NULL default '',
+  `unix_uid` int(10) unsigned NOT NULL default '0',
   `created` datetime default NULL,
-  `name` tinytext,
-  `email` tinytext,
-  PRIMARY KEY  (`uid_idx`),
-  UNIQUE KEY `uid_uuid` (`uid_uuid`),
-  KEY `uid` (`uid`)
+  PRIMARY KEY  (`nonlocal_id`),
+  UNIQUE KEY `uid_idx` (`uid_idx`),
+  UNIQUE KEY `unix_uid` (`unix_uid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
