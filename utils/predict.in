@@ -45,11 +45,11 @@ use Reservation;
 sub usage()
 {
     print STDERR "Usage: predict [-p] [-u] [-t time] [-v] type\n";
-    print STDERR "       predict -c type [pid...]\n";
-    print STDERR "       predict -l type [pid...]\n";
-    print STDERR "       predict -n [-t time] [-D duration] type [pid...]\n";
-    print STDERR "       predict -P type [pid...]\n";
-    print STDERR "       predict -x [-T type] pid...\n";
+    print STDERR "       predict -c type [-U uid] [pid...]\n";
+    print STDERR "       predict -l type [-U uid] [pid...]\n";
+    print STDERR "       predict -n [-t time] [-D duration] [-U uid] type [pid...]\n";
+    print STDERR "       predict -P type [-U uid] [pid...]\n";
+    print STDERR "       predict -x [-T type] [-U uid] pid...\n";
     print STDERR "   -h   This message\n";
     print STDERR "   -c   Give an oversimplified free node count\n";
     print STDERR "   -l   Give a list of node allocation status counts " .
@@ -61,6 +61,7 @@ sub usage()
     print STDERR "   -p   Identify by pid only, not pid/eid\n";
     print STDERR "   -t   Give time/date for prediction (defaults to now)\n";
     print STDERR "   -u   Interpret/display all times in UTC\n";
+    print STDERR "   -U   Specify user whose reservations are applicable\n";
     print STDERR "   -v   Verbose (debugging) output for node usage\n";
     
     exit( -1 );
@@ -77,6 +78,7 @@ my $pressure    = 0;
 my $timeseries  = 0;
 my $unfulfilled = 0;
 my $type;
+my $uid;
 
 sub fatal($)
 {
@@ -157,6 +159,9 @@ if (defined($options{"n"})) {
 if (defined($options{"x"})) {
     $unfulfilled = 1;
 }
+if (defined($options{"U"})) {
+    $uid = $options{U};
+}
 usage() if( ( $countonly || $timeseries || $pressure || $unfulfilled ||
 	      $minfree ) ?
 	    @ARGV < 1 : @ARGV != 1 );
@@ -175,7 +180,7 @@ if( $countonly ) {
 
 if( $minfree ) {
     my $min = 0xFFFF;
-    foreach my $rec ( Reservation->Forecast( $type, \@ARGV ) ) {
+    foreach my $rec ( Reservation->Forecast( $type, \@ARGV, $uid ) ) {
 	my $sample = $rec->{'held'} + $rec->{'free'}; 
 	if( $rec->{'t'} < $time ) {
 	    # record is before period of interest; retain only the
@@ -201,7 +206,7 @@ if( $timeseries ) {
     my $details;
     my $last;
 
-    my @records = Reservation->Forecast( $type, \@ARGV, 
+    my @records = Reservation->Forecast( $type, \@ARGV, $uid,
 					 $debug ? \$details : undef);
     if ($debug && $details) {
 	print $details;
