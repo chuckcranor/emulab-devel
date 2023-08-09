@@ -658,6 +658,7 @@ $(function ()
 		LoadExperimentInfo();
 		ProgressBarUpdate();
 		ShowIdleDataTab();
+		ShowRspec();
 		if (json.value.haveopenstackstats) {
 		    ShowOpenstackTab();
 		}
@@ -1633,7 +1634,7 @@ $(function ()
 
 	$.each(statusblob , function(urn, sblob) {
 	    if (!_.has(amlist, urn)) {
-		console.info("UpdateErrorPanel: Not in the amlist: " + urn);
+		//console.info("UpdateErrorPanel: Not in the amlist: " + urn);
 		return;
 	    }
 	    var cluster = amlist[urn].nickname;
@@ -2565,6 +2566,52 @@ $(function ()
 	}
     }
 
+    // Update the instruction templates from manifest info
+    function UpdateInstructions(xml)
+    {
+	var uridata = {};
+	MakeUriData(xml,uridata);
+	
+	console.info("UpdateInstructions", uridata);
+	
+	var instructionRenderer = new marked.Renderer();
+	instructionRenderer.defaultLink = instructionRenderer.link;
+	instructionRenderer.link = function (href, title, text) {
+	    var template = UriTemplate.parse(href);
+	    return this.defaultLink(template.expand(uridata), title, text);
+	};
+
+	// Suck the instructions out of the tour and put them into
+	// the Usage area.
+	$(xml).find("rspec_tour").each(function() {
+	    $(this).find("instructions").each(function() {
+		marked.setOptions({ "sanitize" : true,
+				    "renderer": instructionRenderer });
+		
+		var text = $(this).text();
+		// Search the instructions for {host-foo} pattern.
+		var regex   = /\{host-.*\}/gi;
+		var needed  = text.match(regex);
+		if (needed && needed.length) {
+		    _.each(uridata, function(host, key) {
+			regex = new RegExp("\{" + key + "\}", "gi");
+			text = text.replace(regex, host);
+		    });
+		}
+		// Stick the text in. 
+		try {
+		    $('#instructions_text').html(marked(text));
+		}
+		catch(err) {
+		    console.info(err);
+		}
+		// Make the div visible.
+		$('#instructions_panel').removeClass("hidden");
+		
+	    });
+	});
+    }
+
     //
     // Show the topology inside the topo container. Called from the status
     // watchdog and the resize wachdog. Replaces the current topo drawing.
@@ -2575,50 +2622,6 @@ $(function ()
 
 	// For Powder map redraw after topology change.
 	var redrawpowdermap = false;
-
-	//
-	// Maybe this should come from rspec? Anyway, we might have
-	// multiple manifests, but only need to do this once, on any
-	// one of the manifests.
-	//
-	var UpdateInstructions = function(xml,uridata) {
-	    var instructionRenderer = new marked.Renderer();
-	    instructionRenderer.defaultLink = instructionRenderer.link;
-	    instructionRenderer.link = function (href, title, text) {
-		var template = UriTemplate.parse(href);
-		return this.defaultLink(template.expand(uridata), title, text);
-	    };
-
-	    // Suck the instructions out of the tour and put them into
-	    // the Usage area.
-	    $(xml).find("rspec_tour").each(function() {
-		$(this).find("instructions").each(function() {
-		    marked.setOptions({ "sanitize" : true,
-					"renderer": instructionRenderer });
-		
-		    var text = $(this).text();
-		    // Search the instructions for {host-foo} pattern.
-		    var regex   = /\{host-.*\}/gi;
-		    var needed  = text.match(regex);
-		    if (needed && needed.length) {
-			_.each(uridata, function(host, key) {
-			    regex = new RegExp("\{" + key + "\}", "gi");
-			    text = text.replace(regex, host);
-			});
-		    }
-		    // Stick the text in. 
-		    try {
-			$('#instructions_text').html(marked(text));
-		    }
-		    catch(err) {
-			console.info(err);
-		    }
-		    // Make the div visible.
-		    $('#instructions_panel').removeClass("hidden");
-		    
-		});
-	    });
-	}
 
 	//
 	// Process the nodes in a single manifest.
@@ -3107,15 +3110,6 @@ $(function ()
 	    return;
 	}
 
-	// Save off some templatizing data as we process each manifest.
-	// Do not need to do this stuff on a topo change.
-	var uridata = {};
-	    
-	// Save off the last manifest xml blob so we process the
-	// possibly templated instructions quickly, without reparsing the
-	// manifest again needlessly.
-	var xml = null;
-
 	// Flag to mark first manifest (group). A bunch of stuff needs to be
 	// done on the first manifest but not after that that,
 	var onlyfirst = (!_.size(manifests) ? true : false);
@@ -3125,7 +3119,7 @@ $(function ()
 	 * manifests that are currently available.
 	 */
 	var gotallmanifests = function() {
-	    console.info("gotallmanifests", xml);
+	    console.info("gotallmanifests");
 	    
 	    // Update the snapshot modal with new nodes.
 	    UpdateSnapshotModal();
@@ -3161,23 +3155,11 @@ $(function ()
 	var gotonemanifest = async function(aggregate_urn, manifest, defer) {
 	    console.info("gotonemanifest", aggregate_urn);
 
-	    TimeStamp("Proccessing manifest");
-
 	    var xmlDoc = $.parseXML(manifest);
-	    xml = $(xmlDoc);
-	    MakeUriData(xml,uridata);
+	    var xml = $(xmlDoc);
+	    TimeStamp("Proccessing nodes");
 	    ProcessNodes(aggregate_urn, xml);
-	    TimeStamp("Done proccessing manifest");
-
-	    if (onlyfirst) {
-		UpdateInstructions(xml, uridata);
-
-		// Do not show secrets if viewing using foreign admin creds
-		if (!isfadmin) {
-		    // This will update the instructions.
-		    FindEncryptionBlocks(xml);
-		}
-	    }
+	    TimeStamp("Done proccessing nodes");
 
 	    /*
 	     * Wait until we have first manifest before initializing this,
@@ -3354,6 +3336,18 @@ $(function ()
 	// On a multisite topology, Jacks combines them as it gets them.
 	// We have to save the (final) combined manifest.
 	jacksManifest = manifest;
+
+	// And update instructions, since the updated manifest can
+	// innclude new info
+	var xmlDoc = $.parseXML(jacksManifest);
+	var xml    = $(xmlDoc);
+	    
+	UpdateInstructions(xml);
+	// Do not show secrets if viewing using foreign admin creds
+	if (!isfadmin) {
+	    // This will update the instructions.
+	    FindEncryptionBlocks(xml);
+	}
     }
 
     //
