@@ -726,7 +726,9 @@ TBDebugTimeStamp("Finished reading node features");
 # Augment the features table to discourage selection of node types other
 # than those the project has reserved (if any).
 if( defined( $pid ) ) {
-    my @reservations = Reservation->CurrentReservations( [ $pid ] );
+    my @reservations =
+	Reservation->CurrentReservations( [ $pid ],
+					  User->ThisUser()->uid());
     if( @reservations ) {
 	my @types = Reservation->ReservableTypes();
 	foreach my $type (@types) {

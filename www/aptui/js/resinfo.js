@@ -327,8 +327,7 @@ $(function ()
 	    };
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ReservationInfo",
-						{"cluster" : details.nickname,
-						 "anonymous" : 1});
+						{"cluster" : details.nickname});
 	    xmlthing.done(callback);
 	});
     }

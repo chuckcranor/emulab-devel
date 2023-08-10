@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2021 University of Utah and the Flux Group.
+# Copyright (c) 2016-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -246,7 +246,7 @@ if( $pressure ) {
 }
 
 if( $unfulfilled ) {
-    my $t = Reservation->OutstandingReservation( \@ARGV,
+    my $t = Reservation->OutstandingReservation( \@ARGV, $uid,
 						 defined( $type ) ? [ $type ] :
 						 undef );
 
