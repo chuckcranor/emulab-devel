@@ -1852,6 +1852,7 @@ sub ReservationSystemInfo($)
 sub ReservationPrediction($)
 {
     my ($argref)  = @_;
+    my $user;
 
     my $hasperm = CheckPermission(1);
     return $hasperm
@@ -1863,6 +1864,26 @@ sub ReservationPrediction($)
     if (ref($argref->{"projlist"}) ne "ARRAY") {
 	return GeniResponse->MalformedArgsResponse("Malformed project list")
     }
+
+    return GeniResponse->MalformedArgsResponse("Missing target user urn")
+	if (!(exists($argref->{"user"}) && defined($argref->{"user"})));
+    
+    my $user_hrn = GeniHRN->new($argref->{"user"});
+    if (!defined($user_hrn)) {
+	return GeniResponse->MalformedArgsResponse("Malformed user urn")
+    }
+    my ($user, $uid);
+    if ($user_hrn->domain() eq $OURDOMAIN) {
+	$user = User->Lookup($hrn->id());
+    }
+    else {
+	$user = User->LookupNonLocal($argref->{"user"});
+    }
+    # Clearly the user has no reservations here if not defined
+    if (defined($user)) {
+	$uid = $user->uid();
+    }
+    
     #
     # Convert to local projects, skip if we do not have one yet,
     # clearly no reservations for it.
@@ -1905,7 +1926,7 @@ sub ReservationPrediction($)
 	
 	$freecounts->{$type} = Reservation->FreeCount($type, \@projlist);
 	$forecast->{$type}   = [ Reservation->Forecast($type, \@projlist,
-						       undef, 1) ];
+						       $uid, undef, 1) ];
     }
     my @nodes = Reservation->ReservableNodes();
     foreach my $node (@nodes) {
@@ -1914,7 +1935,7 @@ sub ReservationPrediction($)
 	$freecounts->{$node_id} =
 	    Reservation->FreeCount($node_id, \@projlist);
 	$forecast->{$node_id}   =
-	    [ Reservation->Forecast($node_id, \@projlist, undef, 1) ];
+	    [ Reservation->Forecast($node_id, \@projlist, $uid, undef, 1) ];
     }
     
     goto nopids
@@ -1924,7 +1945,7 @@ sub ReservationPrediction($)
 	my $type = $type->type();
 	
 	foreach my $pid (@projlist) {
-	    my @pairs = Reservation->FuturePressure([$type],[$pid]);
+	    my @pairs = Reservation->FuturePressure([$type],[$pid], $uid);
 	    next
 		if (!@pairs);
 	    #print STDERR "P: $pid,$type,@pairs\n";
@@ -1944,7 +1965,7 @@ sub ReservationPrediction($)
 		$pforecasts->{$rpid} = {};
 	    }
 	    $pforecasts->{$rpid}->{$type} =
-		[ Reservation->Forecast($type, [$pid], undef, 1) ];
+		[ Reservation->Forecast($type, [$pid], $uid, undef, 1) ];
 	}
     }
     foreach my $node (@nodes) {
@@ -1957,7 +1978,7 @@ sub ReservationPrediction($)
 		$pforecasts->{$rpid} = {};
 	    }
 	    $pforecasts->{$rpid}->{$node_id} =
-		[ Reservation->Forecast($node_id, [$pid], undef, 1) ];
+		[ Reservation->Forecast($node_id, [$pid], $uid, undef, 1) ];
 	}
     }
     
@@ -1966,7 +1987,8 @@ sub ReservationPrediction($)
 	my $epid = $hrn->project();
 	foreach my $type (@types)  {
 	    my $type = $type->type();
-	    my $stamp = Reservation->OutstandingReservation([$pid],[$type]);
+	    my $stamp = Reservation->OutstandingReservation([$pid],
+							    [$type],$uid);
 	    next
 		if (!$stamp);
 	    #print STDERR "O: $pid,$type,$stamp\n";
@@ -1974,7 +1996,7 @@ sub ReservationPrediction($)
 	    $outstanding->{$epid}->{$type} = $stamp;
 	}
     }
-    my @current  = Reservation->CurrentReservations(\@projlist);
+    my @current  = Reservation->CurrentReservations(\@projlist, $uid);
     for my $ref (@current) {
 	my $pid  = $ref->{'pid'};
 	my $hrn  = $projlist{$pid};
@@ -1984,7 +2006,7 @@ sub ReservationPrediction($)
 	}
 	push(@{$current->{$epid}}, $ref)
     }
-    my @upcoming = Reservation->UpcomingReservations(\@projlist);
+    my @upcoming = Reservation->UpcomingReservations(\@projlist, $uid);
     for my $ref (@upcoming) {
 	my $pid  = $ref->{'pid'};
 	my $hrn  = $projlist{$pid};

@@ -2004,7 +2004,7 @@ $(function ()
      * Load anonymized reservations from each am in the list and
      * generate tables.
      */
-    function LoadReservations(project)
+    function LoadReservations(project, user)
     {
 	var deferred = [];
 	if (window.ISPOWDER) {
@@ -2084,6 +2084,7 @@ $(function ()
 	    var args = {"cluster" : details.nickname};
 	    if (project !== undefined) {
 		args["project"] = project;
+		args["user"]    = user;
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ReservationInfo", args,
@@ -3497,7 +3498,7 @@ $(function ()
 	    $('#reserve-refresh-button').removeAttr("disabled");
 
 	    // Now we can load the graph since we know the project.
-	    LoadReservations(details.pid);
+	    LoadReservations(details.pid, details.uid);
 	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",

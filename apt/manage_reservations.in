@@ -1084,9 +1084,10 @@ sub DoIdleDetection()
 #
 sub DoPrediction()
 {
-    my $optlist = "p:a:";
+    my $optlist = "p:a:u:";
     my $portal;
     my $errmsg;
+    my $target_user;
     my @aggregates  = ($aggregate);
     my @authorities = ($authority);
     my @webtasks   = ();
@@ -1100,6 +1101,15 @@ sub DoPrediction()
     if (defined($options{"p"})) {
 	$portal = $options{"p"}
     }
+    if (defined($options{"u"})) {
+	$target_user = User->Lookup($options{"u"});
+	if (!defined($target_user)) {
+	    fatal("No such user: " . $options{"u"});
+	}
+    }
+    else {
+	$target_user = $this_user;
+    }
     # Argument is a list of projects, else we generate one for user.
     if (@ARGV) {
 	foreach my $pid (@ARGV) {
@@ -1112,7 +1122,7 @@ sub DoPrediction()
     }
     else {
 	my @plist;
-	if ($this_user->ProjectMembershipList(\@plist)) {
+	if ($target_user->ProjectMembershipList(\@plist)) {
 	    fatal("Could not get project membership list");
 	}
 	# Do not need CREATE experiment permission, just membership.
@@ -1218,7 +1228,8 @@ sub DoPrediction()
 	my $response =
 	    APT_Geni::PortalRPC($authority, undef,
 				"ReservationPrediction",
-				{"projlist" => \@projlist});
+				{"projlist" => \@projlist,
+				 "user"     => $target_user->urn()});
 	# Need unblessed ref to store into webtask.
 	$response = GeniResponse->Create($response->code(),
 					 $response->value(),

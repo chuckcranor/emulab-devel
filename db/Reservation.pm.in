@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2022 University of Utah and the Flux Group.
+# Copyright (c) 2016-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1213,8 +1213,8 @@ sub FuturePressure($$;$$) {
 # reservations for any node type are returned.
 #
 # Returns a timestamp if any unfulfilled reservation exists, otherwise undef.
-sub OutstandingReservation($$;$) {
-    my ($class, $projlist, $typelist ) = @_;
+sub OutstandingReservation($$$;$) {
+    My ($class, $projlist, $uid, $typelist ) = @_;
     my $earliest = undef;
     
     foreach ( @$projlist ) {
@@ -1237,10 +1237,11 @@ sub OutstandingReservation($$;$) {
 		    \@forecast );
 
 	foreach my $f ( @forecast ) {
-	    foreach my $pid ( keys ( %{$f->{'reserved'}} ) ) {
-		if( grep( $_ eq $pid, @$projlist ) &&
-		    ( !exists( $f->{'used'}->{$pid} ) ||
-		      $f->{'used'}->{$pid} < $f->{'reserved'}->{$pid} ) ) {
+	    foreach my $target ( keys ( %{$f->{'reserved'}} ) ) {
+		if( grep( $_ . "/*" eq $target or $_ . "/" . $uid eq $target,
+			  @$projlist ) &&
+		    ( !exists( $f->{'used'}->{$$target} ) ||
+		      $f->{'used'}->{$target} < $f->{'reserved'}->{$target} )) {
 		    # Found an unfulfilled reservation.
 		    my $t = $f->{'t'};
 
@@ -1256,8 +1257,8 @@ sub OutstandingReservation($$;$) {
 
 # Return a list of (pid, nodetype, reserved, used) hashes for any currently
 # active reservations belonging to a listed project.
-sub CurrentReservations($;$$) {
-    my ($class, $projlist, $activeonly) = @_;
+sub CurrentReservations($;$$$) {
+    my ($class, $projlist, $uid, $activeonly) = @_;
     my @answer = ();
     my $pclause = "";
     $activeonly = 0 if (!defined($activeonly));
@@ -1288,9 +1289,13 @@ sub CurrentReservations($;$$) {
              "r.approved IS NOT NULL ".
 	     ($activeonly ? 
 	      "AND r.start < NOW() AND r.end > NOW() " : " ") .
+	(defined($uid) ?
+	 "JOIN projects as p on p.pid_idx=r.pid_idx ".
+	 "WHERE p.shared_reservations=1 or r.uid='$uid' " : " ") .
         "GROUP BY r.pid, r.type" );
 
-    while( my($pid, $type, $reserved, $used, $ready, $reloading) =
+    while( my($pid, $uid, $shared, $type,
+	      $reserved, $used, $ready, $reloading) =
 	   $query_result->fetchrow_array() ) {
 	push( @answer, { 'pid' => $pid, 'nodetype' => $type,
 			 'reserved' => $reserved, 'used' => $used,
@@ -1303,8 +1308,8 @@ sub CurrentReservations($;$$) {
 # Return a list of (pid, nodetype, nodecount, starttime, endtime) hashes
 # for any reservations belonging to a listed project starting within the
 # next 24 hours.
-sub UpcomingReservations($$) {
-    my ($class, $projlist) = @_;
+sub UpcomingReservations($$$) {
+    my ($class, $projlist, $uid) = @_;
     my @answer = ();
     
     foreach ( @$projlist ) {
@@ -1312,17 +1317,23 @@ sub UpcomingReservations($$) {
 	return undef unless /^[-\w]+$/;
     }
 
-    my $query_result = DBQueryFatal( "SELECT pid, type AS nodetype, " .
+    my $query_result = DBQueryFatal( "SELECT r.pid, r.type AS nodetype, " .
 				     "nodes AS nodecount, " .
-				     "UNIX_TIMESTAMP(start) AS starttime, " .
-				     "UNIX_TIMESTAMP(end) AS endtime FROM " .
-				     "future_reservations WHERE " .
-				     "approved IS NOT NULL AND " .
-				     "start > NOW() AND " .
-				     "start <= ADDDATE( NOW(), 1 ) AND " .
-				     "pid IN ('" .
-				     join( "','", @$projlist ) . "')" );
-
+				     "UNIX_TIMESTAMP(r.start) AS starttime, " .
+				     "UNIX_TIMESTAMP(r.end) AS endtime FROM " .
+				     "future_reservations as r ".
+				     "JOIN projects as p on ".
+				     "     p.pid_idx=r.pid_idx ".
+				     "WHERE ".
+				     "r.approved IS NOT NULL AND " .
+				     "r.start > NOW() AND " .
+				     "r.start <= ADDDATE( NOW(), 1 ) AND " .
+				     "r.pid IN ('" .
+				     join( "','", @$projlist ) . "') " .
+				     (defined($uid) ?
+				      "AND p.shared_reservations=1 or ".
+				      "    r.uid='$uid'" : "");
+				     
     while( my $record = $query_result->fetchrow_hashref() ) {
 	push( @answer, $record );
     }
