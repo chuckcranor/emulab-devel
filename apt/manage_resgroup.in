@@ -108,6 +108,7 @@ sub DoCheckReserved();
 sub DoMaxDuration();
 sub DoMaxExtension();
 sub DoRouteForecast();
+sub DoSetShareReservations();
 sub CallMethodOnReservations($$@);
 
 #
@@ -3478,6 +3479,122 @@ sub DoRouteForecast()
     }
     exit(0);
 
+}
+
+#
+# This is a bad place for this. But its the only project level thing
+# that needs to be communicated to remote clusters. 
+#
+sub DoSetShareReservations()
+{
+    my $optlist = "";
+    my $errmsg;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV != 2);
+
+    my $project = Project->Lookup($ARGV[0]);
+    my $shared  = $ARGV[1] ? 1 : 0;
+    
+    if (!defined($project)) {
+	fatal("No such project");
+    }
+
+    #
+    # If there are no current resgroups, we can be lazy about it, and
+    # let the change take effect whenever the next reservation is made.
+    #
+    my @resgroups = APT_Reservation->LookupForProject($project);
+    if (! @resgroups) {
+	$project->Update({"shared_reservations" => $shared});
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+
+    #
+    # Build a list of aggregates to contact and change. 
+    #
+    my %aggregates = ();
+
+    foreach my $group (@resgroups) {
+	foreach my $res ($group->ReservationList()) {
+	    my $agg = APT_Aggregate->Lookup($res->aggregate_urn());
+	    $aggregates{$res->aggregate_urn()} = $agg;
+	}
+    }
+    # This can happen.
+    if (! keys(%aggregates)) {
+	$project->Update({"shared_reservations" => $shared});
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+    my @aggregates = values(%aggregates);
+
+    my $coderef = sub {
+	my ($aggregate, $webtask) = @_;
+	my $webtask_id  = $webtask->task_id();
+	my $urn         = $aggregate->urn();
+	my $pid         = $project->pid();
+	
+	my $command = "$RESCOMMAND -t $webtask_id -a $urn setshared $shared";
+	print "Running: $command\n";
+	system($command);
+	if ($?) {
+	    return 1;
+	}
+	return 0;
+    };
+    my $responses;
+    my $errcode = CallMethodOnReservations($coderef, \$responses, @aggregates);
+    if ($errcode) {
+	$errmsg = $responses;
+	goto bad;
+    }
+    my %errors    = ();
+    my @responses = @{$responses};
+    foreach my $agg (@aggregates) {
+	my $webtask = shift(@responses);
+	my $urn     = $agg->urn();
+	my $blob    = {};
+
+	if (!$webtask->HasExited() || $webtask->exitcode()) {
+	    if (!$webtask->HasExited()) {
+		$blob->{'errcode'} = -1;
+		$blob->{'errmesg'} = "Internal error changing shared flag";
+	    }
+	    else {
+		$blob->{'errcode'} = $webtask->exitcode();
+		$blob->{'errmesg'} = $webtask->output();
+	    }
+	    $errors{$urn} = $blob;
+	    next;
+	}
+	my $result = $webtask->result();
+	# No messages to send?
+	next
+	    if (! keys(%{$result}));
+
+	#
+	# XXX Need to deal with this.
+	#
+	print Dumper($result);
+    }
+    exit(0);
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit(-1);
 }
 
 sub fatal($)
