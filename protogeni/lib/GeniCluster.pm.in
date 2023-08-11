@@ -1001,6 +1001,37 @@ sub Reserve($)
     my $pid = $project->pid();
     my $uid = $geniuser->emulab_user()->uid();
 
+    #
+    # Check consistency. See SetSharedReservations() in this file.
+    # This is going to happen when adding a new cluster (aggregate)
+    # for projects where shared_reservations=1 at the portal. Or if
+    # a cluster was down when calling SetSharedReservations(). 
+    #
+    if (exists($argref->{'shared_reservations'})) {
+	my $shared = $argref->{'shared_reservations'} ? 1 : 0;
+	if ($project->shared_reservations() != $shared) {
+	    #
+	    # We want to try to change it, and hope it does not cause
+	    # any grief. But if it does, we need to return the message
+	    # blob to the Portal so it can issue notifications.
+	    #
+	    my $blob;
+	    if ($project->SetSharedReservations($shared, \$blob)) {
+		print STDERR "SetSharedReservations failed\n";
+		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+			    "Could not toggle shared reservations flag");
+	    }
+	    #
+	    # XXX: Deal with this case later. 
+	    #
+	    if (defined($blob) && keys(%{$blob})) {
+		print STDERR Dumper($blob);
+		return GeniResponse->Create(GENIRESPONSE_ERROR, $blob,
+					    "Oops, not ready for this");
+	    }
+	}
+    }
+
     # Different rules for update.
     my $update = (exists($argref->{"update"}) ? $argref->{"update"} : undef);
     return GeniResponse->MalformedArgsResponse("Invalid update index")
@@ -2136,6 +2167,65 @@ sub ReservationHistory($)
 	"history" => \@history,
     };
     #print STDERR Dumper($blob);
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+#
+# Toggle project shared reservations
+#
+sub SetSharedReservations($)
+{
+    my ($argref) = @_;
+    my $project;
+
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    return GeniResponse->MalformedArgsResponse("Missing project or flag")
+	if (! (exists($argref->{'shared'}) &&
+	       exists($argref->{'project'})));
+
+    return GeniResponse->MalformedArgsResponse("Invalid project URN")
+	if (!GeniHRN::IsValid($argref->{'project'}));
+
+    my $shared = $argref->{'shared'} ? 1 : 0;
+    my $hrn    = GeniHRN->new($argref->{'project'});
+    if ($hrn->domain() eq $OURDOMAIN) {
+	$project = Project->Lookup($hrn->id());
+    }
+    else {
+	#
+	# We got a project URN but we need to lookup using the SA urn.
+	#
+	my $purn = GeniHRN::Generate($hrn->authority(), "authority", "sa");
+	$project = Project->LookupNonLocal($purn);
+    }
+    if (!defined($project) && !$shared) {
+	#
+	# It is okay if the project does not exist, since
+	# shared_reservations=0 is the default. The project will
+	# eventually get created with the default. 
+	#
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    }
+    elsif (!defined($project)) {
+	#
+	# Since shared_reservations=1 is the abnormal case, create the
+	# project so we can set it. 
+	#
+	my $group = GeniUtil::GetHoldingProject($argref->{'project'}, undef, 1);
+	return $group
+	    if (GeniResponse::IsResponse($group));
+	$project = $group->GetProject();
+    }
+    my $blob;
+    if ($project->SetSharedReservations($shared, \$blob)) {
+	print STDERR "SetSharedReservations failed\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+			    "Could not toggle shared reservations flag");
+    }
+    print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
