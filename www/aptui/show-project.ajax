@@ -22,6 +22,7 @@
 # }}}
 #
 chdir("..");
+include_once("webtask.php");
 include_once("geni_defs.php");
 chdir("apt");
 include_once("profile_defs.php");
@@ -251,6 +252,8 @@ function Do_ProjectProfile()
     $results["nfsmounts"]   = $target_project->nfsmounts();
     $results["reservations_disabled"] =
         $target_project->reservations_disabled() ? true : false;
+    $results["shared_reservations"] =
+        $target_project->shared_reservations() ? true : false;
     $results["licenses"]    = array();
     $results["nsf_awards"]  = $target_project->nsf_awards();
     $results["allowed_clusters"] = $target_project->allowed_clusters();
@@ -355,6 +358,29 @@ function Do_Toggle()
                "From: $TBMAIL_OPS\n".
                "Bcc: $TBMAIL_AUDIT\n".
                "Errors-To: $TBMAIL_WWW");
+    }
+    elseif ($toggle == "shared_reservations") {
+        $newvalue = $target_project->shared_reservations() ? 0 : 1;
+        $webtask  = WebTask::CreateAnonymous();
+        $retval = SUEXEC($this_uid, "tbadmin",
+                         "webmanage_resgroup -t " . $webtask->task_id() . " ".
+                         "setsharedreservations $target_pid $newvalue",
+                         SUEXEC_ACTION_IGNORE);
+        $webtask->Refresh();
+        if ($retval) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            if (!$webtask->exited() || $retval < 0) {
+                SPITAJAX_ERROR(-1,
+                               "Internal error toggling shared reservations");
+            }
+            else {
+                SPITAJAX_ERROR(1, "Could not toggle shared reservations: ".
+                               $webtask->output());
+            }
+            $webtask->Delete();
+            return;
+        }
+        $webtask->Delete();
     }
     elseif ($toggle == "project_resdisable") {
         $newvalue = $target_project->reservations_disabled() ? 0 : 1;

@@ -1100,10 +1100,11 @@ sub WaitForMount($)
 # Return usage records for experiments that have terminated (were running)
 # between two dates.
 #
-sub Usage($$$)
+sub Usage($$$$)
 {
-    my ($self, $start, $end) = @_;
+    my ($self, $user, $start, $end) = @_;
     my $pid_idx = $self->pid_idx();
+    my $uid_idx = $user->uid_idx() if (defined($user));
     my @results = ();
 
     my $query_result =
@@ -1136,6 +1137,8 @@ sub Usage($$$)
 		    "      h.stamp < r.swapout_time) ".
 		    "left join nodes as n on n.node_id=h.node_id ".
 		    "where s.pid_idx='$pid_idx' and ".
+		    (defined($user) ?
+		     "     e.swapper_idx='$uid_idx' and " : " ") .
 		    "     r.swapin_time!=0 and r.swapout_time!=0 and ".
 		    "    ((r.swapin_time >= $start and ".
 		    "      r.swapin_time <= $end) or ".

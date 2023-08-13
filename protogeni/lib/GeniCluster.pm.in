@@ -1422,20 +1422,28 @@ sub Reservations($)
 	    print STDERR "Reservations: No such project $pid\n";
 	    next;
 	}
+	my $target = $pid;
+	my $user;
+	if (!$project->shared_reservations()) {	
+	    $user = User->Lookup($row-{'uid'});
+	    $target .= ":" . $row-{'uid'};
+	}
+	# Save for loop below.
+	$row->{"target"} = $target;
 	$projects{$pid} = $project;
-	if (!exists($pidres{$pid})) {
-	    my @allres   = ResUtil::CollectReservations($project, undef, 0);
+	if (!exists($pidres{$$target})) {
+	    my @allres   = ResUtil::CollectReservations($project, $user, 0);
 	    my @timeline = ();
 	    # This does not return unapproved reservations, but we still
 	    # need to process them below.
 	    if (@allres) {
-		@timeline = ResUtil::CreateTimeline($project, @allres);
+		@timeline = ResUtil::CreateTimeline($project, $user. @allres);
 		if (!@timeline) {
 		    print STDERR "Reservations: No timeline for $pid\n";
 		}
 	    }
-	    $pidres{$pid} = \@allres;
-	    $timelines{$pid} = \@timeline;
+	    $pidres{$target} = \@allres;
+	    $timelines{$target} = \@timeline;
 	}
 	push(@rows, $row);
     }
@@ -1451,6 +1459,7 @@ sub Reservations($)
 	my $uid  = $row->{'uid'};
 	my $uuid = $row->{'uuid'};
 	my $type = $row->{'type'};
+	my $target = $row->{'target'};
 	my $using= 0;
 	my $project  = $projects{$pid};
 	my $projurn  = $project->nonlocalurn();
@@ -1469,7 +1478,7 @@ sub Reservations($)
 	$blob->{'utilization'} = {};	
 
 	if ($reservation->approved() && $reservation->start() < time()) {
-	    @timeline = @{$timelines{$pid}};
+	    @timeline = @{$timelines{$target}};
 	    if (@timeline) {
 		ResUtil::ReservationUtilizationNew($reservation, @timeline);
 		$blob->{'utilization'} = $reservation->data("utilization");

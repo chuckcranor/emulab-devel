@@ -178,6 +178,9 @@ elsif ($action eq "maxextension") {
 elsif ($action eq "routeforecast") {
     DoRouteForecast();
 }
+elsif ($action eq "setsharedreservations") {
+    DoSetShareReservations();
+}
 else {
     usage();
 }
@@ -3587,6 +3590,16 @@ sub DoSetShareReservations()
 	#
 	print Dumper($result);
     }
+    if (!keys(%errors)) {
+	$project->Update({"shared_reservations" => $shared});
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit();
+    }
+    #
+    # Need to deal with sending email to affected reservation holders.
+    #
     exit(0);
   bad:
     print STDERR $errmsg . "\n";
