@@ -1109,7 +1109,7 @@ sub Forecast($$;$$$$$) {
 	    my $u = $f->{'used'}->{$target};
 
 	    if( $r > $u ) {		
-		if( grep( $_ . "/*" eq $target or $_ . "/" . $uid eq $target,
+		if( grep( $_ . "/*" eq $target || $_ . "/" . $uid eq $target,
 			  @$projlist ) ) {
 		    $held += $r - $u;
 		} else {
@@ -1178,7 +1178,7 @@ sub FuturePressure($$;$$) {
 	    my $u = $f->{'used'}->{$target};
 
 	    if( $r > $u ) {
-		if( grep( $_ . "/*" eq $target or $_ . "/" . $uid eq $target,
+		if( grep( $_ . "/*" eq $target || $_ . "/" . $uid eq $target,
 			  @$projlist ) ) {
 		    $held += $r - $u;
 		} else {
@@ -1214,7 +1214,7 @@ sub FuturePressure($$;$$) {
 #
 # Returns a timestamp if any unfulfilled reservation exists, otherwise undef.
 sub OutstandingReservation($$$;$) {
-    My ($class, $projlist, $uid, $typelist ) = @_;
+    my ($class, $projlist, $uid, $typelist ) = @_;
     my $earliest = undef;
     
     foreach ( @$projlist ) {
@@ -1238,7 +1238,7 @@ sub OutstandingReservation($$$;$) {
 
 	foreach my $f ( @forecast ) {
 	    foreach my $target ( keys ( %{$f->{'reserved'}} ) ) {
-		if( grep( $_ . "/*" eq $target or $_ . "/" . $uid eq $target,
+		if( grep( $_ . "/*" eq $target || $_ . "/" . $uid eq $target,
 			  @$projlist ) &&
 		    ( !exists( $f->{'used'}->{$$target} ) ||
 		      $f->{'used'}->{$target} < $f->{'reserved'}->{$target} )) {
@@ -1332,7 +1332,7 @@ sub UpcomingReservations($$$) {
 				     join( "','", @$projlist ) . "') " .
 				     (defined($uid) ?
 				      "AND p.shared_reservations=1 or ".
-				      "    r.uid='$uid'" : "");
+				      "    r.uid='$uid'" : ""));
 				     
     while( my $record = $query_result->fetchrow_hashref() ) {
 	push( @answer, $record );
