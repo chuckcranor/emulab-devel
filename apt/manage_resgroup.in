@@ -3584,7 +3584,7 @@ sub DoSetShareReservations()
 	my $result = $webtask->result();
 	# No messages to send?
 	next
-	    if (! keys(%{$result}));
+	    if (! @{$result});
 
 	#
 	# XXX Need to deal with sending email to affected reservation holders.
