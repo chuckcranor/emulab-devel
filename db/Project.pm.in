@@ -1361,6 +1361,10 @@ sub SetSharedReservations($$;$)
 {
     my ($self, $shared, $details) = @_;
 
+    # Initialise the detailed results if the caller is interested
+    $details = []
+	if( ref( $details ) );
+    
     return 0
 	# well that was easy
 	if( $self->shared_reservations() == $shared );
