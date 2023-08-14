@@ -3547,7 +3547,8 @@ sub DoSetShareReservations()
 	my $urn         = $aggregate->urn();
 	my $pid         = $project->pid();
 	
-	my $command = "$RESCOMMAND -t $webtask_id -a $urn setshared $shared";
+	my $command = "$RESCOMMAND -t $webtask_id -a $urn ".
+	    "setsharedreservations $pid $shared";
 	print "Running: $command\n";
 	system($command);
 	if ($?) {
@@ -3586,7 +3587,7 @@ sub DoSetShareReservations()
 	    if (! keys(%{$result}));
 
 	#
-	# XXX Need to deal with this.
+	# XXX Need to deal with sending email to affected reservation holders.
 	#
 	print Dumper($result);
     }
@@ -3597,9 +3598,7 @@ sub DoSetShareReservations()
 	}
 	exit();
     }
-    #
-    # Need to deal with sending email to affected reservation holders.
-    #
+    print Dumper(\%errors);
     exit(0);
   bad:
     print STDERR $errmsg . "\n";
