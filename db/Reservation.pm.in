@@ -857,7 +857,7 @@ sub IsFeasible($$;$$$$$$)
 	    }
 	    
 	    # Will later release real nodes.
-	    $end = { 'target' => $reservation->target(),
+	    $end = { 'target' => $reservation->Target(),
 		     't' => $reservation->end(),
 		     'used' => -$reservation->nodes(),
 		     'reserved' => 0,
@@ -1285,16 +1285,17 @@ sub CurrentReservations($;$$$) {
 	    "(SELECT COUNT(*) FROM nodes AS n, reserved AS res " .
 	    "WHERE n.node_id=res.node_id AND res.pid='" . TBOPSPID() ."' AND " .
 	    "res.eid IN (" . join(",", map {"'$_'"} @$TRANSIENTS) . ")) " .
-	"FROM future_reservations AS r WHERE $pclause ".
+	"FROM future_reservations AS r ".
+	(defined($uid) ? "JOIN projects as p on p.pid_idx=r.pid_idx " : "") .	
+	"WHERE $pclause ".
              "r.approved IS NOT NULL ".
 	     ($activeonly ? 
 	      "AND r.start < NOW() AND r.end > NOW() " : " ") .
-	(defined($uid) ?
-	 "JOIN projects as p on p.pid_idx=r.pid_idx ".
-	 "WHERE p.shared_reservations=1 or r.uid='$uid' " : " ") .
+	     (defined($uid) ?
+	      "AND p.shared_reservations=1 or r.uid='$uid' " : " ") .
         "GROUP BY r.pid, r.type" );
 
-    while( my($pid, $uid, $shared, $type,
+    while( my($pid, $type,
 	      $reserved, $used, $ready, $reloading) =
 	   $query_result->fetchrow_array() ) {
 	push( @answer, { 'pid' => $pid, 'nodetype' => $type,

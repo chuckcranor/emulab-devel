@@ -3511,7 +3511,7 @@ sub DoSetShareReservations()
     # If there are no current resgroups, we can be lazy about it, and
     # let the change take effect whenever the next reservation is made.
     #
-    my @resgroups = APT_Reservation->LookupForProject($project);
+    my @resgroups = APT_Reservation::Group->LookupForProject($project);
     if (! @resgroups) {
 	$project->Update({"shared_reservations" => $shared});
 	if (defined($webtask)) {
