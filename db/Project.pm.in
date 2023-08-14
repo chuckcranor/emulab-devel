@@ -1309,7 +1309,8 @@ sub SetSharedReservationsOff($;$)
 
 	    foreach my $res ( @$reservations ) {
 		$res->{'SHARED_RES'} = 0
-		    if( $res->pid_idx() == $pid_idx );
+		    if( defined( $res->pid_idx() ) &&
+			$res->pid_idx() == $pid_idx );
 	    }
 	    
 	    my $error;
