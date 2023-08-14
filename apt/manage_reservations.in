@@ -201,7 +201,7 @@ elsif ($action eq "idledetection") {
 elsif ($action eq "allmaxextensions") {
     DoAllMaxExtensions();
 }
-elsif ($action eq "setshared") {
+elsif ($action eq "setsharedreservations") {
     DoSetSharedReservations();
 }
 else {

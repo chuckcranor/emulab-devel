@@ -2227,14 +2227,14 @@ sub SetSharedReservations($)
 	    if (GeniResponse::IsResponse($group));
 	$project = $group->GetProject();
     }
-    my $blob;
-    if ($project->SetSharedReservations($shared, \$blob)) {
+    my @results = ();
+    if ($project->SetSharedReservations($shared, \@results)) {
 	print STDERR "SetSharedReservations failed\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			    "Could not toggle shared reservations flag");
     }
-    print STDERR Dumper($blob);
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    print STDERR Dumper(\@results);
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, \@results);
 }
 
 #
