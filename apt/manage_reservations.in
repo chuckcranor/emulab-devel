@@ -1579,7 +1579,7 @@ sub DoSetSharedReservations()
 	ExitWithError($response);
     }
     if (defined($webtask)) {
-	$webtask->result($result->value());
+	$webtask->result($response->value());
 	$webtask->Exited(0);
     }
     else {

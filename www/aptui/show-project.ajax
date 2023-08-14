@@ -359,7 +359,7 @@ function Do_Toggle()
                "Bcc: $TBMAIL_AUDIT\n".
                "Errors-To: $TBMAIL_WWW");
     }
-    elseif ($toggle == "shared_reservations") {
+    elseif ($toggle == "project_shared_reservations") {
         $newvalue = $target_project->shared_reservations() ? 0 : 1;
         $webtask  = WebTask::CreateAnonymous();
         $retval = SUEXEC($this_uid, "tbadmin",

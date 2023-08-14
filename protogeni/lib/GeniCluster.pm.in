@@ -1431,13 +1431,13 @@ sub Reservations($)
 	# Save for loop below.
 	$row->{"target"} = $target;
 	$projects{$pid} = $project;
-	if (!exists($pidres{$$target})) {
+	if (!exists($pidres{$target})) {
 	    my @allres   = ResUtil::CollectReservations($project, $user, 0);
 	    my @timeline = ();
 	    # This does not return unapproved reservations, but we still
 	    # need to process them below.
 	    if (@allres) {
-		@timeline = ResUtil::CreateTimeline($project, $user. @allres);
+		@timeline = ResUtil::CreateTimeline($project, $user, @allres);
 		if (!@timeline) {
 		    print STDERR "Reservations: No timeline for $pid\n";
 		}
@@ -1892,7 +1892,6 @@ sub ReservationSystemInfo($)
 sub ReservationPrediction($)
 {
     my ($argref)  = @_;
-    my $user;
 
     my $hasperm = CheckPermission(1);
     return $hasperm
@@ -1914,7 +1913,7 @@ sub ReservationPrediction($)
     }
     my ($user, $uid);
     if ($user_hrn->domain() eq $OURDOMAIN) {
-	$user = User->Lookup($hrn->id());
+	$user = User->Lookup($user_hrn->id());
     }
     else {
 	$user = User->LookupNonLocal($argref->{"user"});

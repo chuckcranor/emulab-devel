@@ -1590,6 +1590,7 @@ sub DoTerminate()
 	
 	system("$DESTROYWBSTORE -d -B -s ".
 	       ($old_status eq "failed" ? "FAIL" : "DONE") . " $uuid");
+    }
     #
     # Special case for Fabric.
     #

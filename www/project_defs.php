@@ -185,6 +185,9 @@ class Project
     function nfsmounts()     { return $this->field("nfsmounts"); }
     function allowed_clusters() { return $this->field("allowed_clusters"); }
     function ota_notified()  { return $this->field("ota_notified"); }
+    function shared_reservations() {
+        return $this->field("shared_reservations");
+    }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
