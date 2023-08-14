@@ -1367,7 +1367,7 @@ sub SetSharedReservations($$;$)
     my ($self, $shared, $details) = @_;
 
     # Initialise the detailed results if the caller is interested
-    $details = []
+    @$details = ()
 	if( ref( $details ) );
     
     return 0
