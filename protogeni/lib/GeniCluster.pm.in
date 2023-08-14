@@ -2227,6 +2227,10 @@ sub SetSharedReservations($)
 	    if (GeniResponse::IsResponse($group));
 	$project = $group->GetProject();
     }
+    my $pid = $project->pid();
+    my $oldshared = $project->shared_reservations();
+    print STDERR "SetSharedReservations: $pid, $oldshared -> $shared\n";
+    
     my @results = ();
     if ($project->SetSharedReservations($shared, \@results)) {
 	print STDERR "SetSharedReservations failed\n";
