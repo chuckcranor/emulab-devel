@@ -384,8 +384,6 @@ foreach my $type ( keys( %types ) ) {
 	$unavail_types{ $type } = 1;
     }
 }
-exit(0)
-    if ($impotent);
 
 if( $admission_ctrl && !$force ) {
     my @goodnodes = ();
@@ -403,6 +401,8 @@ if( $admission_ctrl && !$force ) {
 
     @nodes = @goodnodes;
 }
+exit($error ? -1 : $noalloc)
+    if ($impotent);
 
 foreach my $node (@nodes) {
     # Freshly allocated nodes need a history entry.
