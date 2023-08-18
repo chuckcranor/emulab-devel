@@ -1050,7 +1050,44 @@ $(function ()
     //
     function Toggle(item) {
 	var name = item.dataset["name"];
+	var wait = false;
 
+	// This one needs special handling.
+	if (name == "project_shared_reservations") {
+	    wait = true;
+	}
+	var callback = function(json) {
+	    if (json.code) {
+		if (wait) {
+		    sup.HideWaitWait(function () {
+			sup.SpitOops("oops", json.value);
+		    });
+		}
+		else {
+		    sup.SpitOops("oops", json.value);
+		}
+		return;
+	    }
+	    if (wait) {
+		sup.HideWaitWait();
+	    }
+	    LoadProjectTab();
+	};
+	var dotoggle = function() {
+	    sup.CallServerMethod(null, "show-project", "Toggle",
+				 {"pid" : window.TARGET_PROJECT,
+				  "toggle" : name},
+				 callback);
+	};
+	if (wait) {
+	    sup.ShowWaitWait(undefined, undefined, dotoggle);
+	}
+	else {
+	    dotoggle();
+	}
+    }
+
+    function ToggleSharedReservations() {
 	var callback = function(json) {
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
