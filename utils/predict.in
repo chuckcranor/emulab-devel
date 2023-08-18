@@ -67,7 +67,7 @@ sub usage()
     exit( -1 );
 }
 
-my $optlist     = "cdD:hlnpPt:T:xv";
+my $optlist     = "cdD:hlnpPt:T:xvU:";
 my $debug       = 0;
 my $duration    = 365 * 24 * 60 * 60; # default to 1 year ~= infinity
 my $time        = time; # default to now
