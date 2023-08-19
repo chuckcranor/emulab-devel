@@ -32,6 +32,7 @@ use lib "@prefix@/lib";
 use libdb qw(TBGetSiteVar);
 use libadminctrl;
 use libptop;
+use Project;
 use EmulabFeatures;
 use OSImage;
 
@@ -690,6 +691,8 @@ while (my ($type, $feature, $weight) = $result->fetchrow()) {
 # Augment the features table to discourage selection of node types other
 # than those the project has reserved (if any).
 if( defined( $pid ) ) {
+    my $project = Project->Lookup($pid);
+
     my @reservations =
 	Reservation->CurrentReservations( [ $pid ],
 					  User->ThisUser()->uid());
@@ -717,16 +720,18 @@ if( defined( $pid ) ) {
 	my $node_id = $node->node_id();
 	foreach my $res (@activereservations) {
 	    if ($res->{'nodetype'} eq $node_id) {
-		if ($res->{'pid'} ne $pid) {
+		if ($res->{'pid'} eq $pid &&
+		    ($project->shared_reservations() ||
+		     ($this_user && $res->{'uid'} eq $this_user))) {
+		    $reserved_nodes{$node_id} = $node;
+		}
+		else {
 		    #
 		    # Node is currently reserved to another project. Mark it
 		    # to be pruned out below.
 		    #
 		    $pruned_nodes{$node_id} = $node;
 		    last;
-		}
-		else {
-		    $reserved_nodes{$node_id} = $node;
 		}
 	    }
 	}
