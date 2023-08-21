@@ -1265,11 +1265,13 @@ sub Experiments($)
 
 sub SetSharedReservationsOn($;$)
 {
-    my ($self, $details) = @_;
+    my ($self, $details, $impotent) = @_;
     my $pid_idx = $self->pid_idx();
 
     my @reservations = Reservation->ProjectReservations( $self, undef );
 
+    $impotent = 0 unless( defined( $impotent ) );
+    
     print Dumper(\@reservations);
 
     foreach my $res ( @reservations ) {
@@ -1282,6 +1284,8 @@ sub SetSharedReservationsOn($;$)
 	    if( ref( $details ) );
     }
 
+    return 0 if( $impotent );
+    
     my %args = ( "shared_reservations" => 1 );
     $self->Update( \%args );
 
@@ -1290,9 +1294,11 @@ sub SetSharedReservationsOn($;$)
 
 sub SetSharedReservationsOff($;$)
 {
-    my ($self, $details) = @_;
+    my ($self, $details, $impotent) = @_;
     my $pid_idx = $self->pid_idx();
 
+    $impotent = 0 unless( defined( $impotent ) );
+    
     while( 1 ) {    
 	my $version = Reservation->GetVersion();
 	my @types = ();
@@ -1332,6 +1338,8 @@ sub SetSharedReservationsOff($;$)
 	}
 
 	return -1 if( $reject );
+
+	return 0 if( $impotent );
 	
 	next if( !defined( Reservation->BeginTransaction( $version,
 			   "projects", "groups" ) ) );
@@ -1362,9 +1370,9 @@ sub SetSharedReservationsOff($;$)
 #    an admission control check on the schedule for the node type(s) in
 #    question, and make the check atomic w.r.t. the shared reservations
 #    flag update.  If the check fails, we refuse to touch the flag.
-sub SetSharedReservations($$;$)
+sub SetSharedReservations($$;$$)
 {
-    my ($self, $shared, $details) = @_;
+    my ($self, $shared, $details, $impotent) = @_;
 
     # Initialise the detailed results if the caller is interested
     @$details = ()
@@ -1374,8 +1382,8 @@ sub SetSharedReservations($$;$)
 	# well that was easy
 	if( $self->shared_reservations() == $shared );
     
-    return $shared ? SetSharedReservationsOn( $self, $details ) :
-	SetSharedReservationsOff( $self, $details );
+    return $shared ? SetSharedReservationsOn( $self, $details, $impotent ) :
+	SetSharedReservationsOff( $self, $details, $impotent );
 }
 
 sub Leases($)
