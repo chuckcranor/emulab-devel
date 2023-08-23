@@ -3490,12 +3490,16 @@ sub DoRouteForecast()
 #
 sub DoSetShareReservations()
 {
-    my $optlist = "";
+    my $optlist   = "n";
+    my $checkonly = 0;
     my $errmsg;
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
     }
     usage()
 	if (@ARGV != 2);
@@ -3513,7 +3517,9 @@ sub DoSetShareReservations()
     #
     my @resgroups = APT_Reservation::Group->LookupForProject($project);
     if (! @resgroups) {
-	$project->Update({"shared_reservations" => $shared});
+	if (!$checkonly) {
+	    $project->Update({"shared_reservations" => $shared});
+	}
 	if (defined($webtask)) {
 	    $webtask->Exited(0);
 	}
@@ -3533,7 +3539,9 @@ sub DoSetShareReservations()
     }
     # This can happen.
     if (! keys(%aggregates)) {
-	$project->Update({"shared_reservations" => $shared});
+	if (!$checkonly) {
+	    $project->Update({"shared_reservations" => $shared});
+	}
 	if (defined($webtask)) {
 	    $webtask->Exited(0);
 	}
@@ -3548,7 +3556,8 @@ sub DoSetShareReservations()
 	my $pid         = $project->pid();
 	
 	my $command = "$RESCOMMAND -t $webtask_id -a $urn ".
-	    "setsharedreservations $pid $shared";
+	    "setsharedreservations " . ($checkonly ? "-n " : " ") .
+	    "$pid $shared";
 	print "Running: $command\n";
 	system($command);
 	if ($?) {
@@ -3592,11 +3601,13 @@ sub DoSetShareReservations()
 	print Dumper($result);
     }
     if (!keys(%errors)) {
-	$project->Update({"shared_reservations" => $shared});
+	if (!$checkonly) {
+	    $project->Update({"shared_reservations" => $shared});
+	}
 	if (defined($webtask)) {
 	    $webtask->Exited(0);
 	}
-	exit();
+	exit(0);
     }
     print Dumper(\%errors);
     exit(0);

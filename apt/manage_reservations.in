@@ -1551,12 +1551,16 @@ sub DoAllMaxExtensions()
 #
 sub DoSetSharedReservations()
 {
-    my $optlist = "";
+    my $optlist   = "n";
+    my $checkonly = 0;
     my $errmsg;
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
     }
     usage()
 	if (@ARGV != 2);
@@ -1573,8 +1577,9 @@ sub DoSetSharedReservations()
     }
     my $response =
 	APT_Geni::PortalRPC($authority, undef, "SetSharedReservations",
-			    {"project" => $project->urn(),
-			     "shared"  => $shared});
+			    {"project"   => $project->urn(),
+			     "shared"    => $shared,
+			     "checkonly" => $checkonly});
     if (GeniResponse::IsError($response)) {
 	ExitWithError($response);
     }
