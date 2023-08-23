@@ -2184,6 +2184,8 @@ sub ReservationHistory($)
 sub SetSharedReservations($)
 {
     my ($argref) = @_;
+    my $checkonly= (exists($argref->{'checkonly'}) ?
+		    $argref->{'checkonly'} ? 0);
     my $project;
 
     my $hasperm = CheckPermission(1);
@@ -2197,6 +2199,7 @@ sub SetSharedReservations($)
     return GeniResponse->MalformedArgsResponse("Invalid project URN")
 	if (!GeniHRN::IsValid($argref->{'project'}));
 
+    
     my $shared = $argref->{'shared'} ? 1 : 0;
     my $hrn    = GeniHRN->new($argref->{'project'});
     if ($hrn->domain() eq $OURDOMAIN) {
@@ -2232,7 +2235,7 @@ sub SetSharedReservations($)
     print STDERR "SetSharedReservations: $pid, $oldshared -> $shared\n";
     
     my @results = ();
-    if ($project->SetSharedReservations($shared, \@results)) {
+    if ($project->SetSharedReservations($shared, \@results, $checkonly)) {
 	print STDERR "SetSharedReservations failed\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			    "Could not toggle shared reservations flag");
