@@ -2907,15 +2907,18 @@ sub DoCheckReserved()
 	fatal("Could not parse rspec");
     }
     my $noresokay = 0;
-    if (APT_Profile::CheckResourceReservations($rspec, $project, $start, $end,
+    if (APT_Profile::CheckResourceReservations($rspec, $project, $this_user,
+					       $start, $end,
 					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckSpectrumReservations($rspec, $project, $start, $end,
+    if (APT_Profile::CheckSpectrumReservations($rspec, $project, $this_user,
+					       $start, $end,
 					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckRoutesReservations($rspec, $project, $start, $end,
+    if (APT_Profile::CheckRoutesReservations($rspec, $project, $this_user,
+					     $start, $end,
 					     $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
@@ -3071,7 +3074,8 @@ sub DoMaxDuration()
 	}
 	if (!defined($loser)) {
 	    if (APT_Reservation::Group::RFReservation::MaxDuration(
-		    $project, $start, \$end, $spectrum, \$errmsg, \$loser)) {
+		    $project, $this_user,
+		    $start, \$end, $spectrum, \$errmsg, \$loser)) {
 		fatal($errmsg);
 	    }
 	    if (defined($end)) {
@@ -3120,7 +3124,8 @@ sub DoMaxDuration()
 	}
 	if (!defined($loser)) {
 	    if (APT_Reservation::Group::RouteReservation::MaxDuration(
-		    $project, $start, \$end, $routes, \$errmsg, \$loser)) {
+		    $project, $this_user,
+		    $start, \$end, $routes, \$errmsg, \$loser)) {
 		fatal($errmsg);
 	    }
 	}
@@ -3269,7 +3274,7 @@ sub DoMaxExtension()
 	    #print Dumper($prediction_info);
 	}
 	if (APT_Reservation::Group::Reservation::MaxExtension(
-		$project, $start, \$end, $typeCounts,
+		$project, $this_user, $start, \$end, $typeCounts,
 		$prediction_info, \$errmsg)) {
 	    fatal($errmsg);
 	}
@@ -3571,6 +3576,7 @@ sub DoSetShareReservations()
 	$errmsg = $responses;
 	goto bad;
     }
+    my %messages  = ();
     my %errors    = ();
     my @responses = @{$responses};
     foreach my $agg (@aggregates) {
