@@ -2948,6 +2948,7 @@ sub CheckResourceReservations($$$$)
 {
     my ($self, $end, $noresokay, $perrmsg) = @_;
     my $project  = $self->GetProject();
+    my $creator  = $self->GetCreator();
     my $rspec    = $self->RSPEC();
     if (!$rspec) {
 	$$perrmsg = "Could not parse rspec";
@@ -2959,7 +2960,7 @@ sub CheckResourceReservations($$$$)
 	return -1;
     }
     
-    if (APT_Profile::CheckResourceReservations($rspec, $project,
+    if (APT_Profile::CheckResourceReservations($rspec, $project, $creator,
 	       time(), $end, $noresokay, $perrmsg, $resources)) {
 	return -1;
     }
@@ -2976,7 +2977,7 @@ sub CheckResourceReservations($$$$)
 	}
     }
     # This check must always be done.
-    if (APT_Profile::CheckSpectrumReservations($rspec, $project,
+    if (APT_Profile::CheckSpectrumReservations($rspec, $project, $creator,
 	       time(), $end, $noresokay, $perrmsg, $spectrum, $resources)) {
 	return -1;
     }
@@ -2989,7 +2990,7 @@ sub CheckResourceReservations($$$$)
     if (@$routes &&
 	(APT_Profile::CheckRoutesPermission($rspec, $project,
 		      time(), $end, $perrmsg, $routes) ||
-	 APT_Profile::CheckRoutesReservations($rspec, $project,
+	 APT_Profile::CheckRoutesReservations($rspec, $project, $creator,
 		      time(), $end, $noresokay, $perrmsg))) {
 	return -1;
     }
@@ -3005,6 +3006,7 @@ sub AllResourcesReserved($$)
     my $errmsg;
     my $urn      = $aggregate->aggregate_urn();
     my $project  = $self->GetProject();
+    my $creator  = $self->GetCreator();
     my $expires  = str2time($self->Expires());
     my $rspec    = $self->RSPEC();
     if (!$rspec) {
@@ -3030,9 +3032,11 @@ sub AllResourcesReserved($$)
 
 	return 0
 	    if (!(APT_Reservation::Group::Reservation::Reserved(
-		      $project, time(), $expires, $urn, $type, $count) ||
+		      $project, $creator,
+		      time(), $expires, $urn, $type, $count) ||
 		  APT_Reservation::Group::Reservation::ReservedByType(
-		      $project, time(), $expires, $urn, $type, $count)));
+		      $project, $creator,
+		      time(), $expires, $urn, $type, $count)));
     }
     return 1;
 }

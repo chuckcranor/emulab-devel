@@ -1228,10 +1228,11 @@ sub Update($$$)
     return 0;
 }
 
-sub Reserved($$$$$$)
+sub Reserved($$$$$$$)
 {
-    my ($project, $start, $end, $urn, $type, $count) = @_;
+    my ($project, $start, $user, $end, $urn, $type, $count) = @_;
     my $pid_idx = $project->pid_idx();
+    my $uid_idx = $user->uid_idx();
 
     my $query_result =
 	DBQueryWarn("select g.uuid,r.type ".
@@ -1240,6 +1241,8 @@ sub Reserved($$$$$$)
 		    "   apt_reservation_group_reservations as r on ".
 		    "   r.uuid=g.uuid ".
 		    "where g.pid_idx='$pid_idx' and ".
+		    (!$project->shared_reservations() ?
+		     "g.uid_idx='$uid_idx' and " : " ") .
 		    "      r.type=" . DBQuoteSpecial($type) . " and ".
 		    "      r.aggregate_urn='$urn' and ".
 		    "      r.count>='$count' and ".
@@ -1257,10 +1260,11 @@ sub Reserved($$$$$$)
 # Well, we have a problem with reservable nodes. If the rspec is requesting
 # those nodes by type, we do not want to reject it. 
 #
-sub ReservedByType($$$$$$)
+sub ReservedByType($$$$$$$)
 {
-    my ($project, $start, $end, $urn, $type, $count) = @_;
+    my ($project, $start, $user, $end, $urn, $type, $count) = @_;
     my $pid_idx = $project->pid_idx();
+    my $uid_idx = $user->uid_idx();
     my $aggregate = APT_Aggregate->Lookup($urn);
     
     my $query_result =
@@ -1268,6 +1272,8 @@ sub ReservedByType($$$$$$)
 		    "left join apt_reservation_group_reservations as r on ".
 		    "   r.uuid=g.uuid ".
 		    "where g.pid_idx='$pid_idx' and ".
+		    (!$project->shared_reservations() ?
+		     "g.uid_idx='$uid_idx' and " : " ") .
 		    "      r.aggregate_urn='$urn' and ".
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
@@ -1521,9 +1527,9 @@ sub MaxDuration($$$$$$$)
 # A variation of above for non powder portals; we want the maximum possible
 # extension at this moment in time. This is not subject to MAXDURATION.
 #
-sub MaxExtension($$$$$$)
+sub MaxExtension($$$$$$$)
 {
-    my ($project, $start, $pend, $resources, $forecasts, $pmsg) = @_;
+    my ($project, $user, $start, $pend, $resources, $forecasts, $pmsg) = @_;
     my $newend;
 
     foreach my $urn (keys(%{$resources})) {
@@ -2217,10 +2223,11 @@ sub SetAutoApprove($$$@)
     return 0;
 }
 
-sub RangeReserved($$$$$$)
+sub RangeReserved($$$$$$$)
 {
-    my ($class, $project, $start, $end, $freq_low, $freq_high) = @_;
+    my ($class, $project, $user, $start, $end, $freq_low, $freq_high) = @_;
     my $pid_idx = $project->pid_idx();
+    my $uid_idx = $user->uid_idx();
 
     #
     # mysql floats are stupid.
@@ -2232,6 +2239,8 @@ sub RangeReserved($$$$$$)
 		    "left join apt_reservation_group_rf_reservations as rf on ".
 		    "   rf.uuid=g.uuid ".
 		    "where g.pid_idx='$pid_idx' and ".
+		    (!$project->shared_reservations() ?
+		     "g.uid_idx='$uid_idx' and " : " ") .
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
 		    "      rf.approved is not null");
@@ -2252,6 +2261,7 @@ sub MaxExtension($$)
     my ($instance, $pmsg) = @_;
     my $slice   = $instance->GetGeniSlice();
     my $project = $instance->GetProject();
+    my $creator = $instance->GetCreator();
     my $pid_idx = $project->pid_idx();
     my $expires = str2time($slice->expires());
     # This matches what MaxSliceExtension() does
@@ -2304,13 +2314,16 @@ sub MaxExtension($$)
 
 	foreach my $group (@groups) {
 	    my $res_project = $group->GetProject();
+	    my $res_creator = $group->GetCreator();
 	    
 	    next
 		if (! $group->RFReservationList());
 
 	    # Skip reservations in our own project, they do not conflict
 	    next
-		if ($project->SameProject($res_project));	    
+		if ($project->SameProject($res_project) &&
+		    ($project->shared_reservations() ||
+		     $creator->SameUser($res_creator)));
 
 	    my $res_start   = str2time($group->start());
 	    my $res_end     = str2time($group->end());
@@ -2348,9 +2361,9 @@ sub MaxExtension($$)
 #
 # Determine a max duration for an experiment.
 #
-sub MaxDuration($$$$$$)
+sub MaxDuration($$$$$$$)
 {
-    my ($project, $start, $pend, $spectrum, $pmsg, $pbad) = @_;
+    my ($project, $user, $start, $pend, $spectrum, $pmsg, $pbad) = @_;
     my @spectrum = @{$spectrum};
     my $newend   = undef;
 
@@ -2375,6 +2388,7 @@ sub MaxDuration($$$$$$)
 
 	foreach my $group (@groups) {
 	    my $res_project = $group->GetProject();
+	    my $res_creator = $group->GetCreator();
 
 	    next
 		if (! $group->RFReservationList());
@@ -2395,7 +2409,9 @@ sub MaxDuration($$$$$$)
 		    next;
 		}
 
-		if ($project->SameProject($res_project)) {
+		if ($project->SameProject($res_project) &&
+		    ($project->shared_reservations() ||
+		     $user->SameUser($res_creator))) {
 		    #
 		    # The two cases that matter here are:
 		    #
@@ -2810,10 +2826,11 @@ sub RouteAllowed($$$)
 #
 # Does the project hold a route reservation for the time. 
 #
-sub RouteReserved($$$$$)
+sub RouteReserved($$$$$$)
 {
-    my ($class, $project, $start, $end, $routename) = @_;
+    my ($class, $project, $user, $start, $end, $routename) = @_;
     my $pid_idx = $project->pid_idx();
+    my $uid_idx = $user->uid_idx();
 
     my $query_result =
 	DBQueryWarn("select g.uuid,r.routename ".
@@ -2822,6 +2839,8 @@ sub RouteReserved($$$$$)
 		    "   apt_reservation_group_route_reservations as r on ".
 		    "   r.uuid=g.uuid ".
 		    "where g.pid_idx='$pid_idx' and ".
+		    (!$project->shared_reservations() ?
+		     "g.uid_idx='$uid_idx' and " : " ") .
 		    "      r.routename='$routename' and ".
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
@@ -2837,9 +2856,9 @@ sub RouteReserved($$$$$)
 # routes reserved) can swap in (does not conflict with existing
 # reservations in other projects for the start/end duration. 
 #
-sub CanStart($$$$$)
+sub CanStart($$$$$$)
 {
-    my ($class, $target, $start, $end, $routes, $pmsg) = @_;
+    my ($class, $target, $user, $start, $end, $routes, $pmsg) = @_;
     my @routes  = @$routes;
     my @notreserved = ();
     my $project = (ref($target) eq "APT_Instance" ?
@@ -2867,7 +2886,7 @@ sub CanStart($$$$$)
 	my $routename = $request->{"name"};
 	my $routeid   = RouteID($routename);
 
-	if (!RouteReserved($class, $project, $start, $end, $routename)) {
+	if (!RouteReserved($class, $project, $user, $start, $end, $routename)) {
 	    push(@notreserved, $request);
 	}
     }
@@ -2951,6 +2970,7 @@ sub MaxExtension($)
     my ($instance) = @_;
     my $slice   = $instance->GetGeniSlice();
     my $project = $instance->GetProject();
+    my $creator = $instance->GetCreator();
     my $pid_idx = $project->pid_idx();
     my $started = str2time($instance->started());
     my $expires = str2time($slice->expires());
@@ -2987,13 +3007,16 @@ sub MaxExtension($)
 
 	foreach my $group (@groups) {
 	    my $res_project = $group->GetProject();
+	    my $res_creator = $group->GetCreator();
 	    
 	    next
 		if (! $group->RouteReservationList());
 
 	    # Skip reservations in our own project, they do not conflict
 	    next
-		if ($project->SameProject($res_project));	    
+		if ($project->SameProject($res_project) &&
+		    ($project->shared_reservations() ||
+		     $creator->SameUser($res_creator)));
 
 	    my $res_start   = str2time($group->start());
 	    my $res_end     = str2time($group->end());
@@ -3027,9 +3050,9 @@ sub MaxExtension($)
 #
 # Determine a max duration for an experiment.
 #
-sub MaxDuration($$$$$$)
+sub MaxDuration($$$$$$$)
 {
-    my ($project, $start, $pend, $routes, $pmsg, $pbad) = @_;
+    my ($project, $user, $start, $pend, $routes, $pmsg, $pbad) = @_;
     my @routes  = @{$routes};
     my $newend  = ($$pend ? $$pend : undef);
 
@@ -3046,6 +3069,7 @@ sub MaxDuration($$$$$$)
 
 	foreach my $group (@groups) {
 	    my $res_project = $group->GetProject();
+	    my $res_creator = $group->GetCreator();
 	    
 	    next
 		if (! $group->RouteReservationList());
@@ -3067,7 +3091,9 @@ sub MaxDuration($$$$$$)
 		    next;
 		}
 
-		if ($project->SameProject($res_project)) {
+		if ($project->SameProject($res_project) &&
+		    ($project->shared_reservations() ||
+		     $user->SameUser($res_creator))) {
 		    #
 		    # The two cases that matter here are:
 		    #
