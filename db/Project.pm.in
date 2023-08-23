@@ -1263,7 +1263,7 @@ sub Experiments($)
     return \@result;
 }
 
-sub SetSharedReservationsOn($;$)
+sub SetSharedReservationsOn($;$$)
 {
     my ($self, $details, $impotent) = @_;
     my $pid_idx = $self->pid_idx();
@@ -1292,7 +1292,7 @@ sub SetSharedReservationsOn($;$)
     return 0;
 }
 
-sub SetSharedReservationsOff($;$)
+sub SetSharedReservationsOff($;$$)
 {
     my ($self, $details, $impotent) = @_;
     my $pid_idx = $self->pid_idx();
