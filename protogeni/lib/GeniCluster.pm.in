@@ -2185,7 +2185,7 @@ sub SetSharedReservations($)
 {
     my ($argref) = @_;
     my $checkonly= (exists($argref->{'checkonly'}) ?
-		    $argref->{'checkonly'} ? 0);
+		    $argref->{'checkonly'} : 0);
     my $project;
 
     my $hasperm = CheckPermission(1);
@@ -2237,7 +2237,7 @@ sub SetSharedReservations($)
     my @results = ();
     if ($project->SetSharedReservations($shared, \@results, $checkonly)) {
 	print STDERR "SetSharedReservations failed\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+	return GeniResponse->Create(GENIRESPONSE_ERROR, \@results,
 			    "Could not toggle shared reservations flag");
     }
     print STDERR Dumper(\@results);

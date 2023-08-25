@@ -1554,6 +1554,7 @@ sub DoSetSharedReservations()
     my $optlist   = "n";
     my $checkonly = 0;
     my $errmsg;
+    my $exitval   = 0;
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -1580,17 +1581,17 @@ sub DoSetSharedReservations()
 			    {"project"   => $project->urn(),
 			     "shared"    => $shared,
 			     "checkonly" => $checkonly});
-    if (GeniResponse::IsError($response)) {
-	ExitWithError($response);
-    }
+    #
+    # Always return response value to caller.
+    #
     if (defined($webtask)) {
 	$webtask->result($response->value());
-	$webtask->Exited(0);
+	$webtask->Exited($response->code());
     }
     else {
 	print Dumper($response);
     }
-    exit(0);
+    exit($response->code());
 }
 
 sub fatal($)

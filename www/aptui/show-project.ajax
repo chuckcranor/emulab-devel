@@ -374,8 +374,7 @@ function Do_Toggle()
                                "Internal error toggling shared reservations");
             }
             else {
-                SPITAJAX_ERROR(1, "Could not toggle shared reservations: ".
-                               $webtask->output());
+                SPITAJAX_ERROR(1, $webtask->TaskValue("errors"));
             }
             $webtask->Delete();
             return;

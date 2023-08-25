@@ -3497,7 +3497,9 @@ sub DoSetShareReservations()
 {
     my $optlist   = "n";
     my $checkonly = 0;
+    my $precheck  = 1;
     my $errmsg;
+    my $errcode;
     
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -3505,6 +3507,11 @@ sub DoSetShareReservations()
     }
     if (defined($options{"n"})) {
 	$checkonly = 1;
+	$precheck  = 0;
+    }
+    else {
+	$checkonly = 1;
+	$precheck  = 1;
     }
     usage()
 	if (@ARGV != 2);
@@ -3570,52 +3577,91 @@ sub DoSetShareReservations()
 	}
 	return 0;
     };
-    my $responses;
-    my $errcode = CallMethodOnReservations($coderef, \$responses, @aggregates);
-    if ($errcode) {
-	$errmsg = $responses;
+
+    my $runit = sub {
+	my $responses;
+	$errcode = CallMethodOnReservations($coderef, \$responses, @aggregates);
+	if ($errcode) {
+	    $errmsg = $responses;
+	    return undef;
+	}
+	my %errors    = ();
+	my @responses = @{$responses};
+	foreach my $agg (@aggregates) {
+	    my $webtask = shift(@responses);
+	    my $urn     = $agg->urn();
+	    my $blob    = {};
+
+	    if (!$webtask->HasExited() || $webtask->exitcode()) {
+		if (!$webtask->HasExited()) {
+		    $blob->{'errcode'} = -1;
+		    $blob->{'errmesg'} = "Internal error changing shared flag";
+		    $blob->{'details'} = undef;
+		}
+		else {
+		    $blob->{'errcode'} = $webtask->exitcode();
+		    $blob->{'errmesg'} = "";
+		    $blob->{'details'} = $webtask->result();
+		}
+		$errors{$urn} = $blob;
+		next;
+	    }
+	    my $result = $webtask->result();
+	    # No messages to send?
+	    next
+		if (! @{$result});
+
+	    print Dumper($result);
+	}
+	return \%errors;
+    };
+    
+    if ($precheck) {
+	print "Running a precheck in checkonly mode first.\n";
+    }
+    my $errors = &$runit();
+    if (!ref($errors)) {
 	goto bad;
     }
-    my %messages  = ();
-    my %errors    = ();
-    my @responses = @{$responses};
-    foreach my $agg (@aggregates) {
-	my $webtask = shift(@responses);
-	my $urn     = $agg->urn();
-	my $blob    = {};
-
-	if (!$webtask->HasExited() || $webtask->exitcode()) {
-	    if (!$webtask->HasExited()) {
-		$blob->{'errcode'} = -1;
-		$blob->{'errmesg'} = "Internal error changing shared flag";
-	    }
-	    else {
-		$blob->{'errcode'} = $webtask->exitcode();
-		$blob->{'errmesg'} = $webtask->output();
-	    }
-	    $errors{$urn} = $blob;
-	    next;
+    if (keys(%{$errors})) {
+	print Dumper($errors);
+	if (defined($webtask)) {
+	    $webtask->errors($errors);
+	    $webtask->Exited(1);
 	}
-	my $result = $webtask->result();
-	# No messages to send?
-	next
-	    if (! @{$result});
-
-	#
-	# XXX Need to deal with sending email to affected reservation holders.
-	#
-	print Dumper($result);
+	exit(1);
     }
-    if (!keys(%errors)) {
-	if (!$checkonly) {
-	    $project->Update({"shared_reservations" => $shared});
-	}
+    if (!$precheck) {
 	if (defined($webtask)) {
 	    $webtask->Exited(0);
 	}
 	exit(0);
     }
-    print Dumper(\%errors);
+    print "No errors in precheck, running for real.\n";
+    $checkonly = 0;
+    $errors = &$runit();
+    if (!ref($errors)) {
+	goto bad;
+    }
+    if (keys(%{$errors})) {
+	print Dumper($errors);
+	if (defined($webtask)) {
+	    $webtask->errors($errors);
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+    #
+    # At this point, send email to all user. Ignore the stuff from the
+    # the remote clusters, I was not thinking clearly when I asked
+    # Gary for that. 
+    #
+    if (!$checkonly) {
+	$project->Update({"shared_reservations" => $shared});
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
     exit(0);
   bad:
     print STDERR $errmsg . "\n";

@@ -1326,9 +1326,8 @@ sub SetSharedReservationsOff($;$$)
 	    my $error;
 	    if( !Reservation->IsFeasible( $reservations, \$error ) ) {
 		my %conflict = (
-		    "uuid" => $self->uuid(),
 		    "severity" => "error",
-		    "message" => $error
+		    "message" => "$type: $error"
 		    );
 		push( @$details, \%conflict )
 		    if( ref( $details ) );
