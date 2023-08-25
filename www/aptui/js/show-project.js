@@ -1057,10 +1057,17 @@ $(function ()
 	    wait = true;
 	}
 	var callback = function(json) {
+	    console.info("Toggle callback:", json);
 	    if (json.code) {
 		if (wait) {
 		    sup.HideWaitWait(function () {
-			sup.SpitOops("oops", json.value);
+			if (name == "project_shared_reservations") {
+			    // This is all a bit cheesy.
+			    ShowSharedResErrors(json.value);
+			}
+			else {
+			    sup.SpitOops("oops", json.value);
+			}
 		    });
 		}
 		else {
@@ -1087,18 +1094,8 @@ $(function ()
 	}
     }
 
-    function ToggleSharedReservations() {
-	var callback = function(json) {
-	    if (json.code) {
-		sup.SpitOops("oops", json.value);
-		return;
-	    }
-	    LoadProjectTab();
-	};
-	sup.CallServerMethod(null, "show-project", "Toggle",
-			     {"pid" : window.TARGET_PROJECT,
-			      "toggle" : name},
-			     callback);
+    function ShowSharedResErrors(errors) {
+	console.info("ShowSharedResErrors:", errors);
     }
 
     /*
