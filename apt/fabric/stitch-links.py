@@ -38,7 +38,8 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 FABRICNAMES = {
     "UTAH" : "Utah-Cloudlab-Powder",
     "MASS" : "OCT-MGHPCC",
-    "CLEM" : "Clemson-CloudLab"
+    "CLEM" : "Clemson-CloudLab",
+    "STAR" : "CloudLab-UWisc-Madison"
 }
 
 #

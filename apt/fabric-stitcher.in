@@ -217,7 +217,8 @@ sub MapFabric($)
 	return "CLEM";
     }
     elsif ($urn =~ /wisc/) {
-	return "WISC";
+	# Wisconsin is attached to the Starlight node.
+	return "STAR";
     }
     elsif ($urn =~ /umass/) {
 	return "MASS";
