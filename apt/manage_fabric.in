@@ -223,7 +223,15 @@ sub DoRefreshToken()
 {
     system("$REFRESH > /dev/null");
     if ($?) {
-	fatal("DoGetConfig: failed");
+	fatal("DoRefreshToken: failed");
+    }
+    system("/bin/cp -f $tmpdir/token.json $TB/fabric");
+    if ($?) {
+	fatal("DoRefreshToken: could not copy new token into place");
+    }
+    system("/bin/chmod 666 $TB/fabric/token.json");
+    if ($?) {
+	fatal("DoRefreshToken: chmod failed");
     }
 }
 
