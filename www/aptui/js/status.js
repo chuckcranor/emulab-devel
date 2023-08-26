@@ -658,7 +658,6 @@ $(function ()
 		LoadExperimentInfo();
 		ProgressBarUpdate();
 		ShowIdleDataTab();
-		ShowRspec();
 		if (json.value.haveopenstackstats) {
 		    ShowOpenstackTab();
 		}
