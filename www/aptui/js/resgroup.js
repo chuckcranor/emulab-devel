@@ -5029,7 +5029,7 @@ $(function ()
     {
 	var nbd = NextBusinessDay();
 	
-	$('.adjustedNBD').text(nbd.format("ddd MMM Mo hA"));
+	$('.adjustedNBD').text(nbd.format("ddd MMM Do hA"));
     }
 
     /*
