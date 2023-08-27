@@ -1096,6 +1096,21 @@ $(function ()
 
     function ShowSharedResErrors(errors) {
 	console.info("ShowSharedResErrors:", errors);
+	
+	var html = "";
+	_.each(errors, function (details, name) {
+	    html +=
+		"<dt class='col-sm-2'>" + name + "</dt>" +
+		"<dd class='col-sm-10'>";
+	    _.each(details, function(detail) {
+		html +=
+		    "<p class='mb-0'>" + detail.message + "</p>";
+	    });
+	    html += "</dd>";
+	});
+	console.info(html);
+	$('#setshared-errors-modal .modal-body dl').html(html);
+	sup.ShowModal('#setshared-errors-modal');
     }
 
     /*
