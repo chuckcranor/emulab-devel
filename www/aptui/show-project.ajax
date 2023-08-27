@@ -332,6 +332,7 @@ function Do_Toggle()
 {
     global $this_user, $target_project, $ajax_args;
     global $TBMAIL_OPS, $TBMAIL_AUDIT, $TBMAIL_WWW;
+    global $urn_mapping;
 
     if (CheckPageArgs()) {
         return;
@@ -374,7 +375,14 @@ function Do_Toggle()
                                "Internal error toggling shared reservations");
             }
             else {
-                SPITAJAX_ERROR(1, $webtask->TaskValue("errors"));
+                #
+                # Convert URNs to names for displaying errors
+                #
+                $errors = array();
+                foreach($webtask->TaskValue("errors") as $urn => $val) {
+                    $errors[$urn_mapping[$urn]] = $val["details"];
+                }
+                SPITAJAX_ERROR(1, $errors);
             }
             $webtask->Delete();
             return;
