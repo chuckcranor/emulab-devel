@@ -5430,7 +5430,7 @@ CREATE TABLE `projects` (
   `expert_mode` tinyint(1) default '0',
   `allowed_clusters` text,
   `ota_notified` datetime default NULL,
-  `shared_reservations` tinyint(1) default '0',
+  `shared_reservations` tinyint(1) default '1',
   PRIMARY KEY  (`pid_idx`),
   UNIQUE KEY `pid` (`pid`),
   KEY `unix_gid` (`unix_gid`),

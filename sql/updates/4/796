@@ -10,8 +10,7 @@ sub DoUpdate($$$)
 
     if (!DBSlotExists("projects", "shared_reservations")) {
 	DBQueryFatal("alter table projects add ".
-		     " `shared_reservations` tinyint(1) default '0'");
-	DBQueryFatal("update projects set shared_reservations=forClass");
+		     " `shared_reservations` tinyint(1) default '1'");
     }
     return 0;
 }
