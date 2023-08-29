@@ -2026,8 +2026,8 @@ sub ReservationPrediction($)
 	my $epid = $hrn->project();
 	foreach my $type (@types)  {
 	    my $type = $type->type();
-	    my $stamp = Reservation->OutstandingReservation([$pid],
-							    [$type],$uid);
+	    my $stamp = Reservation->OutstandingReservation([$pid],$uid,
+							    [$type]);
 	    next
 		if (!$stamp);
 	    #print STDERR "O: $pid,$type,$stamp\n";
