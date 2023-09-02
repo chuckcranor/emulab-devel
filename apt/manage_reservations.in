@@ -41,6 +41,7 @@ sub usage()
     print("Usage: manage_reservations [-a <urn>] cancel [-c]\n");
     print("Usage: manage_reservations [-a <urn>] idledetection [-c]\n");
     print("Usage: manage_reservations [-a <urn>] history [user]\n");
+    print("Usage: manage_reservations [-a <urn>] setshared pid on/off\n");
     exit(-1);
 }
 my $optlist     = "dt:a:";
@@ -105,6 +106,7 @@ sub DoCancel();
 sub DoIdleDetection();
 sub DoHistory();
 sub DoAllMaxExtensions();
+sub DoSetSharedReservations();
 sub readfile($);
 sub RecordReservationRequest($$$$;$);
 sub UpdateReservationRequest($$$);
@@ -198,6 +200,9 @@ elsif ($action eq "idledetection") {
 }
 elsif ($action eq "allmaxextensions") {
     DoAllMaxExtensions();
+}
+elsif ($action eq "setsharedreservations") {
+    DoSetSharedReservations();
 }
 else {
     usage();
@@ -304,6 +309,9 @@ sub DoReserve()
     $rpcargs{"update"}= $update if (defined($update));
     $rpcargs{"noapprove"}= 1 if ($noapprove);
     $rpcargs{"noidledetection"}= 1 if ($noidledetection);
+    # Need this in case this is the first operation at the remote cluster
+    # for this project (which is when the shadow project is created).
+    $rpcargs{"shared_reservations"} = $project->shared_reservations();
     
     # We can check for disabled aggregate now, nothing below matters.
     if ($aggregate->CheckStatus(\$errmsg, 1)) {
@@ -1084,9 +1092,10 @@ sub DoIdleDetection()
 #
 sub DoPrediction()
 {
-    my $optlist = "p:a:";
+    my $optlist = "p:a:u:";
     my $portal;
     my $errmsg;
+    my $target_user;
     my @aggregates  = ($aggregate);
     my @authorities = ($authority);
     my @webtasks   = ();
@@ -1100,6 +1109,15 @@ sub DoPrediction()
     if (defined($options{"p"})) {
 	$portal = $options{"p"}
     }
+    if (defined($options{"u"})) {
+	$target_user = User->Lookup($options{"u"});
+	if (!defined($target_user)) {
+	    fatal("No such user: " . $options{"u"});
+	}
+    }
+    else {
+	$target_user = $this_user;
+    }
     # Argument is a list of projects, else we generate one for user.
     if (@ARGV) {
 	foreach my $pid (@ARGV) {
@@ -1112,7 +1130,7 @@ sub DoPrediction()
     }
     else {
 	my @plist;
-	if ($this_user->ProjectMembershipList(\@plist)) {
+	if ($target_user->ProjectMembershipList(\@plist)) {
 	    fatal("Could not get project membership list");
 	}
 	# Do not need CREATE experiment permission, just membership.
@@ -1218,7 +1236,8 @@ sub DoPrediction()
 	my $response =
 	    APT_Geni::PortalRPC($authority, undef,
 				"ReservationPrediction",
-				{"projlist" => \@projlist});
+				{"projlist" => \@projlist,
+				 "user"     => $target_user->urn()});
 	# Need unblessed ref to store into webtask.
 	$response = GeniResponse->Create($response->code(),
 					 $response->value(),
@@ -1521,6 +1540,58 @@ sub DoAllMaxExtensions()
 	print Dumper($response);
     }
     exit(0);
+}
+
+#
+# Set/Clear the project shared reservations flag. Note that the remote
+# aggregate might not have a local shadow project, so we have to pass the
+# flag over when creating reservation.
+#
+# XXX What happens if the cluster is unreachable? 
+#
+sub DoSetSharedReservations()
+{
+    my $optlist   = "n";
+    my $checkonly = 0;
+    my $errmsg;
+    my $exitval   = 0;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
+    }
+    usage()
+	if (@ARGV != 2);
+
+    my $project = Project->Lookup($ARGV[0]);
+    my $shared  = $ARGV[1] ? 1 : 0;
+    
+    if (!defined($project)) {
+	fatal("No such project");
+    }
+    # We can check for disabled aggregate now, nothing below matters.
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
+    my $response =
+	APT_Geni::PortalRPC($authority, undef, "SetSharedReservations",
+			    {"project"   => $project->urn(),
+			     "shared"    => $shared,
+			     "checkonly" => $checkonly});
+    #
+    # Always return response value to caller.
+    #
+    if (defined($webtask)) {
+	$webtask->result($response->value());
+	$webtask->Exited($response->code());
+    }
+    else {
+	print Dumper($response);
+    }
+    exit($response->code());
 }
 
 sub fatal($)

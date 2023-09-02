@@ -1050,18 +1050,67 @@ $(function ()
     //
     function Toggle(item) {
 	var name = item.dataset["name"];
+	var wait = false;
 
+	// This one needs special handling.
+	if (name == "project_shared_reservations") {
+	    wait = true;
+	}
 	var callback = function(json) {
+	    console.info("Toggle callback:", json);
 	    if (json.code) {
-		sup.SpitOops("oops", json.value);
+		if (wait) {
+		    sup.HideWaitWait(function () {
+			if (name == "project_shared_reservations") {
+			    // This is all a bit cheesy.
+			    ShowSharedResErrors(json.value);
+			}
+			else {
+			    sup.SpitOops("oops", json.value);
+			}
+		    });
+		}
+		else {
+		    sup.SpitOops("oops", json.value);
+		}
 		return;
+	    }
+	    if (wait) {
+		sup.HideWaitWait();
 	    }
 	    LoadProjectTab();
 	};
-	sup.CallServerMethod(null, "show-project", "Toggle",
-			     {"pid" : window.TARGET_PROJECT,
-			      "toggle" : name},
-			     callback);
+	var dotoggle = function() {
+	    sup.CallServerMethod(null, "show-project", "Toggle",
+				 {"pid" : window.TARGET_PROJECT,
+				  "toggle" : name},
+				 callback);
+	};
+	if (wait) {
+	    sup.ShowWaitWait(undefined, undefined, dotoggle);
+	}
+	else {
+	    dotoggle();
+	}
+    }
+
+    function ShowSharedResErrors(errors) {
+	console.info("ShowSharedResErrors:", errors);
+	
+	var html = "";
+	_.each(errors, function (details, name) {
+	    html +=
+		"<dt class='col-sm-2'>" + name + "</dt>" +
+		"<dd class='col-sm-10'>";
+	    _.each(details, function(detail) {
+		html +=
+		    "<p class='mb-0'>" + detail.message + "</p>";
+	    });
+	    html += "</dd>";
+	});
+	console.info(html);
+	$('#setshared-errors-modal .modal-body dl').html(html);
+	sup.ShowModal('#setshared-errors-modal');
     }
 
     /*

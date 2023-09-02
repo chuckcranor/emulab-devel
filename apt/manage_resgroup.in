@@ -108,6 +108,7 @@ sub DoCheckReserved();
 sub DoMaxDuration();
 sub DoMaxExtension();
 sub DoRouteForecast();
+sub DoSetShareReservations();
 sub CallMethodOnReservations($$@);
 
 #
@@ -176,6 +177,9 @@ elsif ($action eq "maxextension") {
 }
 elsif ($action eq "routeforecast") {
     DoRouteForecast();
+}
+elsif ($action eq "setsharedreservations") {
+    DoSetShareReservations();
 }
 else {
     usage();
@@ -2903,15 +2907,18 @@ sub DoCheckReserved()
 	fatal("Could not parse rspec");
     }
     my $noresokay = 0;
-    if (APT_Profile::CheckResourceReservations($rspec, $project, $start, $end,
+    if (APT_Profile::CheckResourceReservations($rspec, $project, $this_user,
+					       $start, $end,
 					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckSpectrumReservations($rspec, $project, $start, $end,
+    if (APT_Profile::CheckSpectrumReservations($rspec, $project, $this_user,
+					       $start, $end,
 					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckRoutesReservations($rspec, $project, $start, $end,
+    if (APT_Profile::CheckRoutesReservations($rspec, $project, $this_user,
+					     $start, $end,
 					     $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
@@ -3067,7 +3074,8 @@ sub DoMaxDuration()
 	}
 	if (!defined($loser)) {
 	    if (APT_Reservation::Group::RFReservation::MaxDuration(
-		    $project, $start, \$end, $spectrum, \$errmsg, \$loser)) {
+		    $project, $this_user,
+		    $start, \$end, $spectrum, \$errmsg, \$loser)) {
 		fatal($errmsg);
 	    }
 	    if (defined($end)) {
@@ -3116,7 +3124,8 @@ sub DoMaxDuration()
 	}
 	if (!defined($loser)) {
 	    if (APT_Reservation::Group::RouteReservation::MaxDuration(
-		    $project, $start, \$end, $routes, \$errmsg, \$loser)) {
+		    $project, $this_user,
+		    $start, \$end, $routes, \$errmsg, \$loser)) {
 		fatal($errmsg);
 	    }
 	}
@@ -3265,7 +3274,7 @@ sub DoMaxExtension()
 	    #print Dumper($prediction_info);
 	}
 	if (APT_Reservation::Group::Reservation::MaxExtension(
-		$project, $start, \$end, $typeCounts,
+		$project, $this_user, $start, \$end, $typeCounts,
 		$prediction_info, \$errmsg)) {
 	    fatal($errmsg);
 	}
@@ -3478,6 +3487,189 @@ sub DoRouteForecast()
     }
     exit(0);
 
+}
+
+#
+# This is a bad place for this. But its the only project level thing
+# that needs to be communicated to remote clusters. 
+#
+sub DoSetShareReservations()
+{
+    my $optlist   = "n";
+    my $checkonly = 0;
+    my $precheck  = 1;
+    my $errmsg;
+    my $errcode;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
+	$precheck  = 0;
+    }
+    else {
+	$checkonly = 1;
+	$precheck  = 1;
+    }
+    usage()
+	if (@ARGV != 2);
+
+    my $project = Project->Lookup($ARGV[0]);
+    my $shared  = $ARGV[1] ? 1 : 0;
+    
+    if (!defined($project)) {
+	fatal("No such project");
+    }
+
+    #
+    # If there are no current resgroups, we can be lazy about it, and
+    # let the change take effect whenever the next reservation is made.
+    #
+    my @resgroups = APT_Reservation::Group->LookupForProject($project);
+    if (! @resgroups) {
+	if (!$checkonly) {
+	    $project->Update({"shared_reservations" => $shared});
+	}
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+
+    #
+    # Build a list of aggregates to contact and change. 
+    #
+    my %aggregates = ();
+
+    foreach my $group (@resgroups) {
+	foreach my $res ($group->ReservationList()) {
+	    my $agg = APT_Aggregate->Lookup($res->aggregate_urn());
+	    $aggregates{$res->aggregate_urn()} = $agg;
+	}
+    }
+    # This can happen.
+    if (! keys(%aggregates)) {
+	if (!$checkonly) {
+	    $project->Update({"shared_reservations" => $shared});
+	}
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+    my @aggregates = values(%aggregates);
+
+    my $coderef = sub {
+	my ($aggregate, $webtask) = @_;
+	my $webtask_id  = $webtask->task_id();
+	my $urn         = $aggregate->urn();
+	my $pid         = $project->pid();
+	
+	my $command = "$RESCOMMAND -t $webtask_id -a $urn ".
+	    "setsharedreservations " . ($checkonly ? "-n " : " ") .
+	    "$pid $shared";
+	print "Running: $command\n";
+	system($command);
+	if ($?) {
+	    return 1;
+	}
+	return 0;
+    };
+
+    my $runit = sub {
+	my $responses;
+	$errcode = CallMethodOnReservations($coderef, \$responses, @aggregates);
+	if ($errcode) {
+	    $errmsg = $responses;
+	    return undef;
+	}
+	my %errors    = ();
+	my @responses = @{$responses};
+	foreach my $agg (@aggregates) {
+	    my $webtask = shift(@responses);
+	    my $urn     = $agg->urn();
+	    my $blob    = {};
+
+	    if (!$webtask->HasExited() || $webtask->exitcode()) {
+		if (!$webtask->HasExited()) {
+		    $blob->{'errcode'} = -1;
+		    $blob->{'errmesg'} = "Internal error changing shared flag";
+		    $blob->{'details'} = undef;
+		}
+		else {
+		    $blob->{'errcode'} = $webtask->exitcode();
+		    $blob->{'errmesg'} = "";
+		    $blob->{'details'} = $webtask->result();
+		}
+		$errors{$urn} = $blob;
+		next;
+	    }
+	    my $result = $webtask->result();
+	    # No messages to send?
+	    next
+		if (! @{$result});
+
+	    print Dumper($result);
+	}
+	return \%errors;
+    };
+    
+    if ($precheck) {
+	print "Running a precheck in checkonly mode first.\n";
+    }
+    my $errors = &$runit();
+    if (!ref($errors)) {
+	goto bad;
+    }
+    if (keys(%{$errors})) {
+	print Dumper($errors);
+	if (defined($webtask)) {
+	    $webtask->errors($errors);
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+    if (!$precheck) {
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+    print "No errors in precheck, running for real.\n";
+    $checkonly = 0;
+    $errors = &$runit();
+    if (!ref($errors)) {
+	goto bad;
+    }
+    if (keys(%{$errors})) {
+	print Dumper($errors);
+	if (defined($webtask)) {
+	    $webtask->errors($errors);
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+    #
+    # At this point, send email to all user. Ignore the stuff from the
+    # the remote clusters, I was not thinking clearly when I asked
+    # Gary for that. 
+    #
+    if (!$checkonly) {
+	$project->Update({"shared_reservations" => $shared});
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit(-1);
 }
 
 sub fatal($)

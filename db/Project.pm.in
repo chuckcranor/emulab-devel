@@ -39,6 +39,7 @@ use Group;
 use English;
 use Data::Dumper;
 use File::Basename;
+use Reservation;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -1100,10 +1101,11 @@ sub WaitForMount($)
 # Return usage records for experiments that have terminated (were running)
 # between two dates.
 #
-sub Usage($$$)
+sub Usage($$$$)
 {
-    my ($self, $start, $end) = @_;
+    my ($self, $user, $start, $end) = @_;
     my $pid_idx = $self->pid_idx();
+    my $uid_idx = $user->uid_idx() if (defined($user));
     my @results = ();
 
     my $query_result =
@@ -1136,6 +1138,8 @@ sub Usage($$$)
 		    "      h.stamp < r.swapout_time) ".
 		    "left join nodes as n on n.node_id=h.node_id ".
 		    "where s.pid_idx='$pid_idx' and ".
+		    (defined($user) ?
+		     "     e.swapper_idx='$uid_idx' and " : " ") .
 		    "     r.swapin_time!=0 and r.swapout_time!=0 and ".
 		    "    ((r.swapin_time >= $start and ".
 		    "      r.swapin_time <= $end) or ".
@@ -1257,6 +1261,128 @@ sub Experiments($)
 	}
     }
     return \@result;
+}
+
+sub SetSharedReservationsOn($;$$)
+{
+    my ($self, $details, $impotent) = @_;
+    my $pid_idx = $self->pid_idx();
+
+    my @reservations = Reservation->ProjectReservations( $self, undef );
+
+    $impotent = 0 unless( defined( $impotent ) );
+    
+    print Dumper(\@reservations);
+
+    foreach my $res ( @reservations ) {
+	my %notice = (
+	    "uuid" => $res->uuid(),
+	    "severity" => "warning",
+	    "message" => "reservation will no longer be user exclusive"
+	    );
+	push( @$details, \%notice )
+	    if( ref( $details ) );
+    }
+
+    return 0 if( $impotent );
+    
+    my %args = ( "shared_reservations" => 1 );
+    $self->Update( \%args );
+
+    return 0;
+}
+
+sub SetSharedReservationsOff($;$$)
+{
+    my ($self, $details, $impotent) = @_;
+    my $pid_idx = $self->pid_idx();
+
+    $impotent = 0 unless( defined( $impotent ) );
+    
+    while( 1 ) {    
+	my $version = Reservation->GetVersion();
+	my @types = ();
+	my $reject = 0;
+	
+	my $query_result = DBQueryWarn( "SELECT DISTINCT type FROM " .
+					"future_reservations " .
+					"WHERE approved IS NOT NULL " .
+					"AND pid_idx='$pid_idx'" );
+	while( my ($type) = $query_result->fetchrow_array() ) {
+	    push( @types, $type );
+	}
+
+	foreach my $type ( @types ) {
+	    my $reservations = Reservation->LookupAll( $type );
+
+	    print Dumper($reservations);
+
+	    foreach my $res ( @$reservations ) {
+		$res->{'SHARED_RES'} = 0
+		    if( defined( $res->pid_idx() ) &&
+			$res->pid_idx() == $pid_idx );
+	    }
+	    
+	    my $error;
+	    if( !Reservation->IsFeasible( $reservations, \$error ) ) {
+		my %conflict = (
+		    "severity" => "error",
+		    "message" => "$type: $error"
+		    );
+		push( @$details, \%conflict )
+		    if( ref( $details ) );
+		
+		$reject = 1;
+	    }
+	}
+
+	return -1 if( $reject );
+
+	return 0 if( $impotent );
+	
+	next if( !defined( Reservation->BeginTransaction( $version,
+			   "projects", "groups" ) ) );
+
+	my %args = ( "shared_reservations" => 0 );
+	$self->Update( \%args );
+	
+	Reservation->EndTransaction();
+
+	return 0;
+    }
+}
+
+#
+# Modify a project's shared_reservations flag.
+#
+# This is potentially problematic, because:
+#  - when turning ON shared reservations, the semantics change and users
+#    who have approved reservations might be surprised/confused to find
+#    that a reservation that was previously exclusive to them might now
+#    be consumed by another user in the same project.  It would be nice
+#    to warn them if this could happen.
+#  - when turning OFF shared reservations, if one user has an active
+#    reservation and another user in the same project has an active
+#    experiment using nodes of the same type, we will suddenly need
+#    additional spare nodes to accommodate both the experiment and the
+#    reservation simultaneously.  We resolve the problem by performing
+#    an admission control check on the schedule for the node type(s) in
+#    question, and make the check atomic w.r.t. the shared reservations
+#    flag update.  If the check fails, we refuse to touch the flag.
+sub SetSharedReservations($$;$$)
+{
+    my ($self, $shared, $details, $impotent) = @_;
+
+    # Initialise the detailed results if the caller is interested
+    @$details = ()
+	if( ref( $details ) );
+    
+    return 0
+	# well that was easy
+	if( $self->shared_reservations() == $shared );
+    
+    return $shared ? SetSharedReservationsOn( $self, $details, $impotent ) :
+	SetSharedReservationsOff( $self, $details, $impotent );
 }
 
 sub Leases($)

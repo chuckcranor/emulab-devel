@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2022 University of Utah and the Flux Group.
+# Copyright (c) 2016-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -88,6 +88,8 @@ sub CreateCommon($$$$$$$$)
     my $self               = {};
     $self->{'PID'}         = $pid;
     $self->{'PID_IDX'}     = defined( $pid ) ? $project->pid_idx() : undef;
+    $self->{'SHARED_RES'}  = defined( $pid ) ? $project->shared_reservation() :
+	undef;
     $self->{'EID'}         = $eid;
     $self->{'START'}       = $start;
     $self->{'END'}         = $end;
@@ -237,6 +239,7 @@ sub Lookup($$;$$$$)
 sub idx($)         { return $_[0]->{"IDX"}; }
 sub pid($)         { return $_[0]->{"PID"}; }
 sub pid_idx($)     { return $_[0]->{"PID_IDX"}; }
+sub shared_res($)  { return $_[0]->{"SHARED_RES"}; }
 sub eid($)         { return $_[0]->{"EID"}; }
 sub start($)       { return $_[0]->{"START"}; }
 sub end($)         { return $_[0]->{"END"}; }
@@ -327,6 +330,28 @@ sub SetAdminNotes($$)
     my ($self, $notes) = @_;
 
     $self->{'ADMIN_NOTES'} = $notes;
+}
+
+# The "target" of the reservation: the user(s) to whom the node(s) are
+# reserved.  Typically a pid/uid pair, but for projects where shared
+# reservations are enabled (classes, tutorials, etc.) it will be a
+# pid/* wildcard.
+sub Target($)
+{
+    my ($self) = @_;
+
+    my $pid = $self->pid();
+
+    if( !defined( $pid ) ) {
+		return undef;
+    }
+
+    if( $self->shared_res() ) {
+		return $pid . "/*";
+    }
+    else {
+		return $pid . "/" . $self->uid();
+    }
 }
 
 # Mark the reservation as approved.  This DOES NOT update the database
@@ -639,8 +664,8 @@ sub LookupAll($$;$$)
 				"      (n.reservable=1 and n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
 				"GROUP BY " .
-				"e.pid, e.eid, n.reserved_pid, nr.pid, " .
-				"UNIX_TIMESTAMP( pr.end )" :
+				"e.pid, e.eid, e.expt_swap_uid, n.reserved_pid, " .
+	                        "nr.pid, UNIX_TIMESTAMP( pr.end )" :
 				"SELECT COUNT(*), e.pid, e.eid, " .
 				"e.expt_swap_uid, " .
 				"UNIX_TIMESTAMP( e.expt_expires ), " .
@@ -670,8 +695,9 @@ sub LookupAll($$;$$)
 				"WHERE ((n.reservable=0 and n.type='$type') or ".
 				"      (n.reservable=1 and n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
-				"GROUP BY e.pid, e.eid, n.reserved_pid, " .
-				"nr.pid, UNIX_TIMESTAMP( pr.end )";
+				"GROUP BY e.pid, e.eid, e.expt_swap_uid, " .
+				"n.reserved_pid, nr.pid, " .
+				"UNIX_TIMESTAMP( pr.end )";
     my $query_result = DBQueryWarn( $query );
 
     $$details = "--- Node usage:\n" if( ref( $details ) );
@@ -808,13 +834,14 @@ sub IsFeasible($$;$$$$$$)
     
     foreach my $reservation ( @$reservations ) {
 	my $pid = $reservation->pid();
+	my $target = $reservation->Target();
 	my $start;
 	my $end;
 
 	if( defined( $reservation->eid() ) ) {
 	    if( $reservation->start() ) {
 		# An unmapped experiment.  Not yet using physical nodes.
-		$start = { 'pid' => $reservation->pid(),
+		$start = { 'target' => $target,
 			   't' => $reservation->start(),
 			   'used' => $reservation->nodes(),
 			   'reserved' => 0,
@@ -822,15 +849,15 @@ sub IsFeasible($$;$$$$$$)
 		};
 	    } else {
 		# A mapped experiment.  Using physical nodes now.
-		if( defined( $used{ $pid } ) ) {
-		    $used{ $pid } += $reservation->nodes();
+		if( defined( $used{ $target } ) ) {
+		    $used{ $target } += $reservation->nodes();
 		} else {
-		    $used{ $pid } = $reservation->nodes();
+		    $used{ $target } = $reservation->nodes();
 		}
 	    }
 	    
 	    # Will later release real nodes.
-	    $end = { 'pid' => $reservation->pid(),
+	    $end = { 'target' => $reservation->Target(),
 		     't' => $reservation->end(),
 		     'used' => -$reservation->nodes(),
 		     'reserved' => 0,
@@ -848,11 +875,11 @@ sub IsFeasible($$;$$$$$$)
 	    my $starttime = $reservation->start();
 	    $starttime = $now if( $starttime < $now );
 	    
-	    $start = { 'pid' => $reservation->pid(),
+	    $start = { 'target' => $target,
 		       't' => $starttime,
 		       'used' => 0,
 	    };
-	    $end = { 'pid' => $reservation->pid(),
+	    $end = { 'target' => $target,
 		     't' => $reservation->end(),
 		     'used' => 0,
 	    };
@@ -902,31 +929,31 @@ sub IsFeasible($$;$$$$$$)
     }
 
     foreach my $event ( @events ) {
-	my $pid = $event->{'pid'};
-
+	my $target = $event->{'target'};
+	
 	if ($debug) {
 	    print "-----\n";
 	    print Dumper($event);
 	}
 
-	$used{ $pid } = 0 if( !exists( $used{ $pid } ) );
-	$reserved{ $pid } = 0 if( !exists( $reserved{ $pid } ) );
-	$unapproved{ $pid } = 0 if( !exists( $unapproved{ $pid } ) );
+	$used{ $target } = 0 if( !exists( $used{ $target } ) );
+	$reserved{ $target } = 0 if( !exists( $reserved{ $target } ) );
+	$unapproved{ $target } = 0 if( !exists( $unapproved{ $target } ) );
 
-	my $oldsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
-	    $reserved{ $pid };
+	my $oldsum = $used{ $target } > $reserved{ $target } ? $used{ $target } :
+	    $reserved{ $target };
 
-	$used{ $pid } += $event->{ 'used' };
-	$reserved{ $pid } += $event->{ 'reserved' };
-	$unapproved{ $pid } += $event->{ 'unapproved' };
+	$used{ $target } += $event->{ 'used' };
+	$reserved{ $target } += $event->{ 'reserved' };
+	$unapproved{ $target } += $event->{ 'unapproved' };
 
-	my $newsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
-	    $reserved{ $pid };
+	my $newsum = $used{ $target } > $reserved{ $target } ? $used{ $target } :
+	    $reserved{ $target };
 
 	$free += $oldsum - $newsum;
 
 	if ($debug) {
-	    print $used{ $pid } . "," . $reserved{ $pid } . "\n";
+	    print $used{ $target } . "," . $reserved{ $target } . "\n";
 	    print "$oldsum,$newsum,$free\n";
 	}
 
@@ -1046,14 +1073,16 @@ sub FreeCount($$;$) {
 #
 # * 'free' is the number of nodes not allocated and not needed
 # for reservations; available for general use subject to other constraints.
-sub Forecast($$;$$$$) {
-    my ($class, $type, $projlist, $details, $dounapproved, $reservations) = @_;
+sub Forecast($$;$$$$$) {
+    my ($class, $type, $projlist, $uid, $details,
+	$dounapproved, $reservations) = @_;
 
     $reservations = LookupAll( $class, $type, $dounapproved, $details )
 	if (!defined($reservations));
     my @forecast = ();
     my @answer = ();
     my $t = time();
+    $uid = "" unless( defined( $uid ) );
 
     IsFeasible( $class, $reservations, undef, undef, undef, undef,
 		\@forecast, $dounapproved );
@@ -1068,19 +1097,20 @@ sub Forecast($$;$$$$) {
 	my $held = 0;
 	my $free = $f->{'free'};
 
-	foreach my $pid ( keys( %{$f->{'used'}} ) ) {
-	    $unavailable += $f->{'used'}->{$pid};
+	foreach my $target ( keys( %{$f->{'used'}} ) ) {
+	    $unavailable += $f->{'used'}->{$target};
 	}
-	foreach my $pid ( keys( %{$f->{'unapproved'}} ) ) {
-	    $unapproved += $f->{'unapproved'}->{$pid};
+	foreach my $target ( keys( %{$f->{'unapproved'}} ) ) {
+	    $unapproved += $f->{'unapproved'}->{$target};
 	}
 	
-	foreach my $pid ( keys( %{$f->{'reserved'}} ) ) {
-	    my $r = $f->{'reserved'}->{$pid};
-	    my $u = $f->{'used'}->{$pid};
+	foreach my $target ( keys( %{$f->{'reserved'}} ) ) {
+	    my $r = $f->{'reserved'}->{$target};
+	    my $u = $f->{'used'}->{$target};
 
-	    if( $r > $u ) {
-		if( grep( $_ eq $pid, @$projlist ) ) {
+	    if( $r > $u ) {		
+		if( grep( $_ . "/*" eq $target || $_ . "/" . $uid eq $target,
+			  @$projlist ) ) {
 		    $held += $r - $u;
 		} else {
 		    $unavailable += $r - $u;
@@ -1112,10 +1142,11 @@ sub Forecast($$;$$$$) {
 #
 # Find any future periods with smaller predicted availability than the
 # present.
-sub FuturePressure($$;$) {
-    my ($class, $typelist, $projlist) = @_;
+sub FuturePressure($$;$$) {
+    my ($class, $typelist, $projlist, $uid) = @_;
 
     my @reservations = ();
+    $uid = "" unless( defined( $uid ) );
     
     foreach my $type ( @$typelist ) {
 	my $typeres = LookupAll( $class, $type );
@@ -1138,16 +1169,17 @@ sub FuturePressure($$;$) {
 	my $held = 0;
 	my $free = $f->{'free'};
 
-	foreach my $pid ( keys( %{$f->{'used'}} ) ) {
-	    $unavailable += $f->{'used'}->{$pid};
+	foreach my $target ( keys( %{$f->{'used'}} ) ) {
+	    $unavailable += $f->{'used'}->{$target};
 	}
 	
-	foreach my $pid ( keys( %{$f->{'reserved'}} ) ) {
-	    my $r = $f->{'reserved'}->{$pid};
-	    my $u = $f->{'used'}->{$pid};
+	foreach my $target ( keys( %{$f->{'reserved'}} ) ) {
+	    my $r = $f->{'reserved'}->{$target};
+	    my $u = $f->{'used'}->{$target};
 
 	    if( $r > $u ) {
-		if( grep( $_ eq $pid, @$projlist ) ) {
+		if( grep( $_ . "/*" eq $target || $_ . "/" . $uid eq $target,
+			  @$projlist ) ) {
 		    $held += $r - $u;
 		} else {
 		    $unavailable += $r - $u;
@@ -1181,8 +1213,8 @@ sub FuturePressure($$;$) {
 # reservations for any node type are returned.
 #
 # Returns a timestamp if any unfulfilled reservation exists, otherwise undef.
-sub OutstandingReservation($$;$) {
-    my ($class, $projlist, $typelist ) = @_;
+sub OutstandingReservation($$$;$) {
+    my ($class, $projlist, $uid, $typelist ) = @_;
     my $earliest = undef;
     
     foreach ( @$projlist ) {
@@ -1205,10 +1237,11 @@ sub OutstandingReservation($$;$) {
 		    \@forecast );
 
 	foreach my $f ( @forecast ) {
-	    foreach my $pid ( keys ( %{$f->{'reserved'}} ) ) {
-		if( grep( $_ eq $pid, @$projlist ) &&
-		    ( !exists( $f->{'used'}->{$pid} ) ||
-		      $f->{'used'}->{$pid} < $f->{'reserved'}->{$pid} ) ) {
+	    foreach my $target ( keys ( %{$f->{'reserved'}} ) ) {
+		if( grep( $_ . "/*" eq $target || $_ . "/" . $uid eq $target,
+			  @$projlist ) &&
+		    ( !exists( $f->{'used'}->{$$target} ) ||
+		      $f->{'used'}->{$target} < $f->{'reserved'}->{$target} )) {
 		    # Found an unfulfilled reservation.
 		    my $t = $f->{'t'};
 
@@ -1224,8 +1257,8 @@ sub OutstandingReservation($$;$) {
 
 # Return a list of (pid, nodetype, reserved, used) hashes for any currently
 # active reservations belonging to a listed project.
-sub CurrentReservations($;$$) {
-    my ($class, $projlist, $activeonly) = @_;
+sub CurrentReservations($;$$$) {
+    my ($class, $projlist, $uid, $activeonly) = @_;
     my @answer = ();
     my $pclause = "";
     $activeonly = 0 if (!defined($activeonly));
@@ -1239,7 +1272,7 @@ sub CurrentReservations($;$$) {
     }
 
     my $query_result = DBQueryFatal(
-	"SELECT r.pid, r.type, SUM( r.nodes ), " .
+	"SELECT r.pid, r.uid, r.type, SUM( r.nodes ), " .
 	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n ".
             "WHERE res.pid=r.pid AND res.node_id=n.node_id AND ".
 	    "      ((n.reservable=0 and n.type=r.type) or ".
@@ -1252,15 +1285,20 @@ sub CurrentReservations($;$$) {
 	    "(SELECT COUNT(*) FROM nodes AS n, reserved AS res " .
 	    "WHERE n.node_id=res.node_id AND res.pid='" . TBOPSPID() ."' AND " .
 	    "res.eid IN (" . join(",", map {"'$_'"} @$TRANSIENTS) . ")) " .
-	"FROM future_reservations AS r WHERE $pclause ".
+	"FROM future_reservations AS r ".
+	(defined($uid) ? "JOIN projects as p on p.pid_idx=r.pid_idx " : "") .	
+	"WHERE $pclause ".
              "r.approved IS NOT NULL ".
 	     ($activeonly ? 
 	      "AND r.start < NOW() AND r.end > NOW() " : " ") .
-        "GROUP BY r.pid, r.type" );
+	     (defined($uid) ?
+	      "AND p.shared_reservations=1 or r.uid='$uid' " : " ") .
+        "GROUP BY r.pid, r.uid, r.type" );
 
-    while( my($pid, $type, $reserved, $used, $ready, $reloading) =
+    while( my($pid, $uid, $type,
+	      $reserved, $used, $ready, $reloading) =
 	   $query_result->fetchrow_array() ) {
-	push( @answer, { 'pid' => $pid, 'nodetype' => $type,
+	push( @answer, { 'pid' => $pid, 'uid' => $uid, 'nodetype' => $type,
 			 'reserved' => $reserved, 'used' => $used,
 			 'ready' => $ready, 'reloading' => $reloading } );
     }
@@ -1271,8 +1309,8 @@ sub CurrentReservations($;$$) {
 # Return a list of (pid, nodetype, nodecount, starttime, endtime) hashes
 # for any reservations belonging to a listed project starting within the
 # next 24 hours.
-sub UpcomingReservations($$) {
-    my ($class, $projlist) = @_;
+sub UpcomingReservations($$$) {
+    my ($class, $projlist, $uid) = @_;
     my @answer = ();
     
     foreach ( @$projlist ) {
@@ -1280,17 +1318,23 @@ sub UpcomingReservations($$) {
 	return undef unless /^[-\w]+$/;
     }
 
-    my $query_result = DBQueryFatal( "SELECT pid, type AS nodetype, " .
+    my $query_result = DBQueryFatal( "SELECT r.pid, r.type AS nodetype, " .
 				     "nodes AS nodecount, " .
-				     "UNIX_TIMESTAMP(start) AS starttime, " .
-				     "UNIX_TIMESTAMP(end) AS endtime FROM " .
-				     "future_reservations WHERE " .
-				     "approved IS NOT NULL AND " .
-				     "start > NOW() AND " .
-				     "start <= ADDDATE( NOW(), 1 ) AND " .
-				     "pid IN ('" .
-				     join( "','", @$projlist ) . "')" );
-
+				     "UNIX_TIMESTAMP(r.start) AS starttime, " .
+				     "UNIX_TIMESTAMP(r.end) AS endtime FROM " .
+				     "future_reservations as r ".
+				     "JOIN projects as p on ".
+				     "     p.pid_idx=r.pid_idx ".
+				     "WHERE ".
+				     "r.approved IS NOT NULL AND " .
+				     "r.start > NOW() AND " .
+				     "r.start <= ADDDATE( NOW(), 1 ) AND " .
+				     "r.pid IN ('" .
+				     join( "','", @$projlist ) . "') " .
+				     (defined($uid) ?
+				      "AND p.shared_reservations=1 or ".
+				      "    r.uid='$uid'" : ""));
+				     
     while( my $record = $query_result->fetchrow_hashref() ) {
 	push( @answer, $record );
     }
