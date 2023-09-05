@@ -2766,8 +2766,8 @@ sub CheckSpectrumReservations($$$$$$$;$$)
     # for the duration of the experiment (not reserved by others).
     #
     if (@$spectrum &&
-	!APT_Reservation::Group::RFReservation->CanStart($project, $start,
-						 $end, $spectrum, $pmsg)) {
+	!APT_Reservation::Group::RFReservation->CanStart($project, $user,
+					$start, $end, $spectrum, $pmsg)) {
 	return 1;
     }
     return 0;
