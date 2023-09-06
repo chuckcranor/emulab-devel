@@ -1308,7 +1308,7 @@ $(function ()
 
 	console.info("NextBusinessDay", now.isoWeekday());
 
-	if (window.ISPOWDER && pid != "PowderTeam") {
+	if (0) {
 	    // New: All reservations that need approval have to start
 	    // no earlier then two business days from now.
 	    switch (now.isoWeekday())

@@ -102,15 +102,6 @@ function CheckForm()
     elseif (! TBvalid_email($formfields["email"])) {
         $errors["email"] = TBFieldErrorString();
     }
-    else {
-        $tmp = User::LookupByEmail($formfields["email"]);
-        #
-        # Treat this error separate. Not allowed.
-        #
-        if ($tmp && $tmp->uid() != $target_user->uid()) {
-            $errors["email"] = "Already in use by another user";
-        }
-    }
     if (!isset($formfields["affiliation"]) ||
         trim($formfields["affiliation"]) == "") {
         $errors["affiliation"] = "Missing Field";

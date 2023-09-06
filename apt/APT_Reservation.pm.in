@@ -1230,7 +1230,7 @@ sub Update($$$)
 
 sub Reserved($$$$$$$)
 {
-    my ($project, $start, $user, $end, $urn, $type, $count) = @_;
+    my ($project, $user, $start, $end, $urn, $type, $count) = @_;
     my $pid_idx = $project->pid_idx();
     my $uid_idx = $user->uid_idx();
 
@@ -1242,7 +1242,7 @@ sub Reserved($$$$$$$)
 		    "   r.uuid=g.uuid ".
 		    "where g.pid_idx='$pid_idx' and ".
 		    (!$project->shared_reservations() ?
-		     "g.uid_idx='$uid_idx' and " : " ") .
+		     "g.creator_idx='$uid_idx' and " : " ") .
 		    "      r.type=" . DBQuoteSpecial($type) . " and ".
 		    "      r.aggregate_urn='$urn' and ".
 		    "      r.count>='$count' and ".
@@ -1262,7 +1262,7 @@ sub Reserved($$$$$$$)
 #
 sub ReservedByType($$$$$$$)
 {
-    my ($project, $start, $user, $end, $urn, $type, $count) = @_;
+    my ($project, $user, $start, $end, $urn, $type, $count) = @_;
     my $pid_idx = $project->pid_idx();
     my $uid_idx = $user->uid_idx();
     my $aggregate = APT_Aggregate->Lookup($urn);
@@ -1273,7 +1273,7 @@ sub ReservedByType($$$$$$$)
 		    "   r.uuid=g.uuid ".
 		    "where g.pid_idx='$pid_idx' and ".
 		    (!$project->shared_reservations() ?
-		     "g.uid_idx='$uid_idx' and " : " ") .
+		     "g.creator_idx='$uid_idx' and " : " ") .
 		    "      r.aggregate_urn='$urn' and ".
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
@@ -2048,9 +2048,9 @@ sub Fits($$$$$)
 # reservations in other projects for the start/end duration. There are
 # also the same auto approval rules.
 #
-sub CanStart($$$$$)
+sub CanStart($$$$$$)
 {
-    my ($class, $project, $start, $end, $spectrum, $pmsg) = @_;
+    my ($class, $project, $user, $start, $end, $spectrum, $pmsg) = @_;
     my @spectrum    = @$spectrum;
     my @notreserved = ();
 
@@ -2073,7 +2073,7 @@ sub CanStart($$$$$)
 	my $freq_low  = $ref->{'frequency_low'};
 	my $freq_high = $ref->{'frequency_high'};
 
-	if (!RangeReserved($class, $project, $start,
+	if (!RangeReserved($class, $project, $user, $start,
 			   $end, $freq_low, $freq_high)) {
 	    push(@notreserved, $ref);
 	}
@@ -2240,7 +2240,7 @@ sub RangeReserved($$$$$$$)
 		    "   rf.uuid=g.uuid ".
 		    "where g.pid_idx='$pid_idx' and ".
 		    (!$project->shared_reservations() ?
-		     "g.uid_idx='$uid_idx' and " : " ") .
+		     "g.creator_idx='$uid_idx' and " : " ") .
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
 		    "      rf.approved is not null");
@@ -2840,7 +2840,7 @@ sub RouteReserved($$$$$$)
 		    "   r.uuid=g.uuid ".
 		    "where g.pid_idx='$pid_idx' and ".
 		    (!$project->shared_reservations() ?
-		     "g.uid_idx='$uid_idx' and " : " ") .
+		     "g.creator_idx='$uid_idx' and " : " ") .
 		    "      r.routename='$routename' and ".
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".

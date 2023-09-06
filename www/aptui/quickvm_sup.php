@@ -246,8 +246,20 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     }
     
     echo "<html>
-      <head>
-        <title>$title</title>
+      <head>\n";
+    if ($TBMAINSITE && !$embedded && $ISCLOUD && file_exists($GOOGLEGAIDS)) {
+        echo "<!-- Google Tag Manager -->
+              <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+              new Date().getTime(),event:'gtm.js'});
+              var f=d.getElementsByTagName(s)[0],
+              j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+              j.async=true;j.src=
+              'https://www.googletagmanager.com/gtm.js?id='+i+dl;
+              f.parentNode.insertBefore(j,f);
+              })(window,document,'script','dataLayer','GTM-TSZK7GW');</script>
+              <!-- End Google Tag Manager --> \n";
+    }
+    echo "<title>$title</title>
         <link rel='shortcut icon' href='$APTBASE/$FAVICON'
               type='image/vnd.microsoft.icon'>";
     if (BOOTSTRAP5) {
@@ -305,7 +317,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "</script>\n";
     SpitGlobals();
 
-    if ($TBMAINSITE && !$embedded && file_exists($GOOGLEGAIDS)) {
+    if ($TBMAINSITE && !$embedded && !$ISCLOUD && file_exists($GOOGLEGAIDS)) {
         $json = file_get_contents($GOOGLEGAIDS);
         $ids  = json_decode($json, true);
 
