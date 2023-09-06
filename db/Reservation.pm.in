@@ -1240,7 +1240,7 @@ sub OutstandingReservation($$$;$) {
 	    foreach my $target ( keys ( %{$f->{'reserved'}} ) ) {
 		if( grep( $_ . "/*" eq $target || $_ . "/" . $uid eq $target,
 			  @$projlist ) &&
-		    ( !exists( $f->{'used'}->{$$target} ) ||
+		    ( !exists( $f->{'used'}->{$target} ) ||
 		      $f->{'used'}->{$target} < $f->{'reserved'}->{$target} )) {
 		    # Found an unfulfilled reservation.
 		    my $t = $f->{'t'};
