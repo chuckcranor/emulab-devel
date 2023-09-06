@@ -2110,13 +2110,16 @@ sub CanStart($$$$$$)
 
 	foreach my $group (@groups) {
 	    my $res_project = $group->GetProject();
+	    my $res_creator = $group->GetCreator();
 	    
 	    next
 		if (! $group->RFReservationList());
 
 	    # Skip reservations in our own project, they do not conflict
 	    next
-		if ($project->SameProject($res_project));	    
+		if ($project->SameProject($res_project) &&
+		    ($project->shared_reservations() ||
+		     $user->SameUser($res_creator)));
 
 	    my $res_start   = str2time($group->start());
 	    my $res_end     = str2time($group->end());
@@ -2923,13 +2926,16 @@ sub CanStart($$$$$$)
 
 	foreach my $group (@groups) {
 	    my $res_project = $group->GetProject();
+	    my $res_creator = $group->GetCreator();
 	    
 	    next
 		if (! $group->RouteReservationList());
 
 	    # Skip reservations in our own project, they do not conflict
 	    next
-		if ($project->SameProject($res_project));	    
+		if ($project->SameProject($res_project) &&
+		    ($project->shared_reservations() ||
+		     $user->SameUser($res_creator)));
 
 	    my $res_start   = str2time($group->start());
 	    my $res_end     = str2time($group->end());
