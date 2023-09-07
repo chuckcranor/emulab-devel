@@ -43,6 +43,7 @@ sub usage()
     print STDERR "Usage: manage_dataset deleteslice\n";
     print STDERR "Usage: manage_dataset refreshtoken\n";
     print STDERR "Usage: manage_dataset renewslice\n";
+    print STDERR "Usage: manage_dataset getad\n";
     exit(-1);
 }
 my $optlist     = "dt:nD:";
@@ -74,6 +75,7 @@ my $LISTSLICES = "$VIRTUALENV python $TB/fabric/listslices.py ";
 my $REFRESH    = "$VIRTUALENV fabric-cli tokens refresh ";
 my $DELETE     = "$VIRTUALENV fabric-cli slices delete ";
 my $RENEW      = "$VIRTUALENV python $TB/fabric/renewslice.py ";
+my $GETAD      = "$VIRTUALENV python $TB/fabric/getads.py ";
 
 #
 # Untaint the path
@@ -109,6 +111,7 @@ sub DoSliceExists();
 sub DoGetConfig();
 sub DoDeleteSlice();
 sub DoRenewSlice();
+sub DoGetAd();
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -199,6 +202,9 @@ elsif ($action eq "deleteslice") {
 }
 elsif ($action eq "renewslice") {
     exit(DoRenewSlice());
+}
+elsif ($action eq "getad") {
+    exit(DoGetAd());
 }
 else {
     usage();
@@ -354,8 +360,7 @@ sub DoRenewSlice()
     if (!defined($instance)) {
 	fatal("No such experiment");
     }
-    my $sliceid = $instance->fabric_sliceid();
-    if (!defined($sliceid)) {
+    if (!$instance->HasFabricSlices()) {
 	fatal("Experiment does not have FABRIC links");
     }
 
@@ -368,10 +373,40 @@ sub DoRenewSlice()
     }
     $when = POSIX::strftime("20%y-%m-%d %H:%M:00 +0000", gmtime($when));
 
-    my $output = emutil::ExecQuiet("$RENEW --sliceid '$sliceid' --when '$when'");
+    foreach my $ref (@{ $instance->FabricSlices() }) {
+	my $linkname  = $ref->{'linkname'};
+	my $sliceid   = $ref->{'sliceid'};
+
+	print "Renewing slice for $linkname: $sliceid\n";
+	my $output = emutil::ExecQuiet("$RENEW --sliceid '$sliceid' ".
+				       " --when '$when'");
+	if ($?) {
+	    print $output . "\n";
+	    fatal("DoRenewSlice: failed");
+	}
+    }
+    exit(0);
+}
+
+
+#
+# Get advertisement
+#
+sub DoGetAd()
+{
+    my $exists = 0;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric getad <site>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 1);
+    my $site = $ARGV[0];
+
+    system("$GETAD --site $site");
     if ($?) {
-	print $output . "\n";
-	fatal("DoRenewSlice: failed");
+	fatal("DoGetAd: failed");
     }
     exit(0);
 }

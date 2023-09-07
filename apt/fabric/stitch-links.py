@@ -38,7 +38,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 FABRICNAMES = {
     "UTAH" : "Utah-Cloudlab-Powder",
     "MASS" : "OCT-MGHPCC",
-    "CLEM" : "Clemson-CloudLab",
+    "CLEM" : "CloudLab-Clemson",
     "STAR" : "CloudLab-UWisc-Madison"
 }
 
@@ -97,13 +97,19 @@ for link in args.links:
     print("Adding link " + linkname)
 
     # Facility Port at site1
-    print("  Adding facility port 1: " + site1name + ":" + site1tag);
+    print("  Adding facility port 1: " +
+          "name=" + site1name + "," +
+          "site=" + site1site + "," +
+          "vlan=" + site1tag);
     facility_port_1 = slice.add_facility_port(name=site1name,
                                               site=site1site, vlan=site1tag)
     facility_port_iface_1 = facility_port_1.get_interfaces()[0]
 
     # Facility Port at site2
-    print("  Adding facility port 2: " + site2name + ":" + site2tag);
+    print("  Adding facility port 2: " +
+          "name=" + site2name + "," +
+          "site=" + site2site + "," +
+          "vlan=" + site2tag);
     facility_port_2 = slice.add_facility_port(name=site2name,
                                               site=site2site, vlan=site2tag)
     facility_port_iface_2 = facility_port_2.get_interfaces()[0]

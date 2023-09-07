@@ -153,6 +153,7 @@ sub Lookup($$)
     $self->{'HASH'}       = {};
     $self->{'AGGREGATES'} = {};
     $self->{'ROUTES'}     = {};
+    $self->{'FABRICIDS'}  = undef;
     $self->{'RPSEC'}      = undef;
     $self->{'WEBTASK'}    = undef;
     bless($self, $class);
@@ -343,6 +344,7 @@ sub DESTROY {
     $self->{'HASH'}       = undef;
     $self->{'WEBTASK'}    = undef;
     $self->{'ROUTES'}     = undef;
+    $self->{'FABRICIDS'}  = undef;
 }
 
 #
@@ -3500,6 +3502,74 @@ sub GamingExtensions($)
     }
     print "ExtensionCheck: Too many last minute extensions\n";
     return -1;
+}
+
+#
+# Lazy lookup for FABRIC slices.
+#
+sub FabricSlices($)
+{
+    my ($self) = @_;
+
+    if (defined($self->{'FABRICIDS'})) {
+	return [ values(%{ $self->{'FABRICIDS'} }) ];
+    }
+    my $uuid = $self->uuid();
+
+    my $query_result =
+	DBQueryWarn("select * from apt_instance_fabric_slices ".
+		    "where uuid='$uuid'");
+    return undef
+	if (!defined($query_result));
+
+    $self->{'FABRICIDS'} = {};
+    while (my $row = $query_result->fetchrow_hashref()) {
+	$self->{'FABRICIDS'}->{$row->{'sliceid'}} = $row;
+    }
+    return [ values(%{ $self->{'FABRICIDS'} }) ];
+}
+sub AddFabricSlice($$$)
+{
+    my ($self, $id, $linkname) = @_;
+    my $uuid = $self->uuid();
+
+    DBQueryWarn("replace into apt_instance_fabric_slices set ".
+		" uuid='$uuid',linkname='$linkname',sliceid='$id'")
+	or return -1;
+
+    # Reload
+    $self->{'FABRICIDS'} = undef;
+    return -1
+	if (!defined($self->FabricSlices()));
+
+    return 0;
+}
+sub DeleteFabricSlice($$)
+{
+    my ($self, $id) = @_;
+    my $uuid = $self->uuid();
+
+    DBQueryWarn("delete from apt_instance_fabric_slices ".
+		"where uuid='$uuid' and sliceid='$id'")
+	or return -1;
+
+    # Reload
+    $self->{'FABRICIDS'} = undef;
+    return -1
+	if (!defined($self->FabricSlices()));
+
+    return 0;
+}
+sub HasFabricSlices($)
+{
+    my ($self) = @_;
+    my $slices = $self->FabricSlices();
+
+    # XXX
+    return 0
+	if (!defined($slices));
+
+    return scalar(@{$slices});
 }
 
 ###################################################################

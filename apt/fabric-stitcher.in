@@ -44,11 +44,12 @@ sub usage()
     print "       fabric-stitcher [-dn] -u pid,eid\n";
     exit(1);
 }
-my $optlist         = "dnD:ru";
+my $optlist         = "dnD:urR";
 my $debug           = 0;
 my $impotent        = 0;
 my $remove          = 0;
 my $update          = 0;
+my $reload          = 0;
 my $tmpdir;
 my $logfile;
 my $webtask;
@@ -89,7 +90,7 @@ use GeniXML;
 
 # Protos
 sub fatal($);
-sub UpdateSliceid();
+sub UpdateSliceid($);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -107,6 +108,9 @@ if (defined($options{"r"})) {
 }
 if (defined($options{"u"})) {
     $update++;
+}
+if (defined($options{"R"})) {
+    $reload++;
 }
 if (defined($options{"n"})) {
     $impotent++;
@@ -166,44 +170,47 @@ $ENV{"FABRIC_TOKEN_LOCATION"} = "$tmpdir/token.json";
 # Unstitch
 #
 if ($remove) {
-    my $sliceid = $instance->fabric_sliceid();
-    if (!defined($sliceid)) {
+    if (!$instance->HasFabricSlices()) {
 	fatal("No fabric slice to delete");
     }
-    emutil::ExecQuiet("$GETSLICE --asjson --name ".
-		      $instance->pid() . "-" . $instance->name());
-    if ($?) {
-	if ($? >> 8 == 1) {
-	    # Already gone.
-	    if ($debug) {
-		print "Slice is already gone\n";
+    my $slices = $instance->FabricSlices();
+    
+    foreach my $ref (@{$slices}) {
+	my $linkname  = $ref->{'linkname'};
+	my $sliceid   = $ref->{'sliceid'};
+	my $slicename = $instance->pid() . "-" . $instance->name() .
+	    "-" . $linkname;
+
+	emutil::ExecQuiet("$GETSLICE --asjson --name $slicename");
+	if ($?) {
+	    if ($? >> 8 == 1) {
+		# Already gone.
+		if ($debug) {
+		    print "Slice is already gone\n";
+		}
+		$instance->DeleteFabricSlice($sliceid);
+		next;
 	    }
-	    $instance->Update({"fabric_sliceid" => undef});
-	    exit(0);
+	    fatal("$GETSLICE failed");
 	}
-	fatal("$GETSLICE failed");
+	my $command = "$DELETE --sliceid $sliceid";
+	if ($impotent) {
+	    print "Command: '$command'\n";
+	    next;
+	}
+	if ($debug) {
+	    print "Deleting slice $sliceid:$slicename\n";
+	}
+	system($command);
+	if ($?) {
+	    fatal("Failed to delete fabric slice $sliceid:$slicename");
+	}
+	if ($debug) {
+	    print "Slice has been deleted\n";
+	}
+	$instance->DeleteFabricSlice($sliceid);
     }
-    my $command = "$DELETE --sliceid $sliceid";
-    if ($impotent) {
-	print "Command: '$command'\n";
-	exit(0);
-    }
-    system($command);
-    if ($?) {
-	fatal("Failed to delete fabric slice");
-    }
-    if ($debug) {
-	print "Slice has been deleted\n";
-    }
-    $instance->Update({"fabric_sliceid" => undef});
     exit(0);
-}
-elsif ($update) {
-    UpdateSliceid();
-    exit(0);
-}
-elsif ($instance->fabric_sliceid()) {
-    fatal("Already have a fabric sliceid for this instance");
 }
 
 #
@@ -309,39 +316,50 @@ foreach my $ref (values(%stitched_links)) {
 }
 
 #
-# Command line arguments to the python stitcher script. 
+# OK, turns out that FABRIC does not support two links at a single
+# site. Maybe this is not common, but since it does happen, we create
+# a slice for each link. Yuck.
 #
-my $command = "$STITCHER --name " .
-    $instance->pid() . "-" . $instance->name() .
-    " --logfile $logfile --links ";
-
 foreach my $ref (values(%stitched_links)) {
     my $client_id = $ref->{"client_id"};
     my $tags      = $ref->{'tags'};
     my ($urn1,$urn2) = keys(%{ $tags });
     my ($tag1,$tag2) = values(%{ $tags });
 
+    #
+    # Reloading the info in the DB.
+    #
+    if ($reload) {
+	print "Reloading sliceid for link $client_id\n";
+	UpdateSliceid($client_id);
+	next;
+    }
+
+    my $command = "$STITCHER --name " .
+	$instance->pid() . "-" . $instance->name() . "-" . $client_id . 
+	" --logfile $logfile --links ";
+
     $command .= $client_id . ",";
     $command .= MapFabric($urn1) . ":${tag1}" . ",";
     $command .= MapFabric($urn2) . ":${tag2}" . " ";
-}
-if ($debug) {
-    print "Command: '$command'\n";
-}
-if ($impotent) {
-    $command .= "--impotent";
-}
-system($command);
-if ($?) {
-    fatal("Stitcher failure. Debug log: $logfile");
-}
-exit(0)
-    if ($impotent);
 
-#
-# Need to store the sliceid. If this fails, human intervention required.
-#
-UpdateSliceid();
+    if ($debug) {
+	print "Command: '$command'\n";
+    }
+    if ($impotent) {
+	$command .= "--impotent";
+    }
+    system($command);
+    if ($?) {
+	fatal("Stitcher failure. Debug log: $logfile");
+    }
+
+    #
+    # Need to store the sliceid. If this fails, human intervention required.
+    #
+    UpdateSliceid($client_id)
+	if (!$impotent);
+}
 exit(0);
 
 sub fatal($) {
@@ -351,13 +369,17 @@ sub fatal($) {
     exit(-1);
 }
 
-sub UpdateSliceid()
+sub UpdateSliceid($)
 {
-    my $json = emutil::ExecQuiet("$GETSLICE --asjson --name ".
-				 $instance->pid() . "-" . $instance->name());
+    my ($linkname) = @_;
+    my $slicename  = $instance->pid() . "-" . $instance->name() .
+	"-" . $linkname;
+
+    my $json = emutil::ExecQuiet("$GETSLICE --asjson --name $slicename");
+		
     if ($?) {
-	print $json . "\n";
-	fatal("Could not get the fabric slice ID");
+	print $json . "\n" if ($json);
+	fatal("Could not get the fabric slice ID for $linkname");
     }
     chomp($json);
     my $ref = eval { decode_json($json) };
@@ -379,5 +401,6 @@ sub UpdateSliceid()
 	print Dumper($ref);
 	exit(0);
     }
-    $instance->Update({"fabric_sliceid" => $id});
+    $instance->AddFabricSlice($id, $linkname) == 0
+	or fatal("Could not add fabric slice to DB");
 }

@@ -456,6 +456,20 @@ CREATE TABLE `apt_deferred_instances` (
 
 
 --
+-- Table structure for table `apt_instance_fabric_slices`
+--
+
+DROP TABLE IF EXISTS `apt_instance_fabric_slices`;
+CREATE TABLE `apt_instance_fabric_slices` (
+  `uuid` varchar(40) NOT NULL default '',
+  `linkname` varchar(32) NOT NULL default '',
+  `sliceid` varchar(64) NOT NULL default '',
+  PRIMARY KEY (`uuid`,`sliceid`),
+  UNIQUE KEY (`uuid`,`linkname`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+
+--
 -- Table structure for table `apt_extension_group_policies`
 --
 
