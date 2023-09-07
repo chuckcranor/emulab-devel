@@ -1,0 +1,37 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if( !DBSlotExists("future_reservations", "gid" ) ) {
+	DBQueryFatal( "ALTER TABLE future_reservations ADD ".
+		      " `gid` varchar(32) NOT NULL DEFAULT ''" );
+	DBQueryFatal( "UPDATE future_reservations SET gid=pid" );
+    }
+    if( !DBSlotExists("future_reservations", "gid_idx" ) ) {
+	DBQueryFatal( "ALTER TABLE future_reservations ADD ".
+		      " `gid_idx` mediumint(8) NOT NULL DEFAULT '0'" );
+	DBQueryFatal( "UPDATE future_reservations SET gid_idx=pid_idx" );
+    }
+    if( !DBSlotExists("reservation_history", "gid" ) ) {
+	DBQueryFatal( "ALTER TABLE reservation_history ADD ".
+		      " `gid` varchar(32) NOT NULL DEFAULT ''" );
+	DBQueryFatal( "UPDATE reservation_history SET gid=pid" );
+    }
+    if( !DBSlotExists("reservation_history", "gid_idx" ) ) {
+	DBQueryFatal( "ALTER TABLE future_reservations ADD ".
+		      " `gid_idx` mediumint(8) NOT NULL DEFAULT '0'" );
+	DBQueryFatal( "UPDATE reservation_history SET gid_idx=pid_idx" );
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

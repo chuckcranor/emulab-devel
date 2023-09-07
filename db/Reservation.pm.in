@@ -64,14 +64,32 @@ sub FlushAll($)
 
 sub CreateCommon($$$$$$$$)
 {
-    my ($class, $pid, $eid, $uid, $start, $end, $type, $nodes) = @_;
+    my ($class, $pid, $eid, $uid, $start, $end, $type, $nodes, $gid) = @_;
     my $uid_idx;
     my $project;
+    my $group;
     
     if( defined( $pid ) ) {
 	$project = Project->Lookup( $pid );
 	if( !defined( $project ) ) {
 	    print STDERR "Res->CreateCommon: no DB record for project: $pid\n";
+	    return undef;
+	}
+
+	if( !defined( $gid ) ) {
+	    # Project specified, but no group: use the default group.
+	    # Really it would be have been better for the caller to specify
+	    # this explicitly, but if we end up here then let's try to do
+	    # something sensible.
+	    $gid = $pid;
+	}
+    }
+
+    if( defined( $gid ) ) {
+	$group = Group->Lookup( $pid, $gid );
+	if( !defined( $group ) ) {
+	    print STDERR "Res->CreateCommon: no DB record for " .
+		"group: $pid/$gid\n";
 	    return undef;
 	}
     }
@@ -103,6 +121,8 @@ sub CreateCommon($$$$$$$$)
     $self->{'APPROVER'}    = undef;
     $self->{'UUID'}        = undef;
     $self->{'CANCEL'}      = undef;
+    $self->{'GID'}         = $gid;
+    $self->{'GID_IDX'}     = defined( $gid ) ? $group->gid_idx() : undef;
 	
     bless($self, $class);
     
@@ -117,10 +137,10 @@ sub CreateCommon($$$$$$$$)
 #
 sub Create($$$$$$$)
 {
-    my ($class, $pid, $uid, $start, $end, $type, $nodes) = @_;
+    my ($class, $pid, $uid, $start, $end, $type, $nodes, $gid) = @_;
 
     return CreateCommon( $class, $pid, undef, $uid, $start, $end, $type,
-			 $nodes );
+			 $nodes, $gid );
 }
 
 #
@@ -131,9 +151,10 @@ sub Create($$$$$$$)
 #
 sub CreateExisting($$$$$$$)
 {
-    my ($class, $pid, $eid, $uid, $end, $type, $nodes) = @_;
+    my ($class, $pid, $eid, $uid, $end, $type, $nodes, $gid) = @_;
 
-    return CreateCommon( $class, $pid, $eid, $uid, 0, $end, $type, $nodes );
+    return CreateCommon( $class, $pid, $eid, $uid, 0, $end, $type, $nodes,
+			 $gid );
 }
     
 #
@@ -144,10 +165,10 @@ sub CreateExisting($$$$$$$)
 #
 sub CreateImmediate($$$$$$$)
 {
-    my ($class, $pid, $eid, $uid, $end, $type, $nodes) = @_;
+    my ($class, $pid, $eid, $uid, $end, $type, $nodes, $gid) = @_;
 
     return CreateCommon( $class, $pid, $eid, $uid, time(), $end, $type,
-			 $nodes );
+			 $nodes, $gid );
 }
     
 sub Lookup($$;$$$$)
@@ -226,6 +247,8 @@ sub Lookup($$;$$$$)
     $self->{'NOTIFIED'}    = $record->{'notified'};
     $self->{'NOTIFIED_UNUSED'} = $record->{'notified_unused'};
     $self->{'OVERRIDE_UNUSED'} = $record->{'override_unused'};
+    $self->{'GID'}         = $record->{'gid'};
+    $self->{'GID_IDX'}     = $record->{'gid_idx'};
     # For compat with history entries.
     $self->{'DELETED'}     = undef;
     # Local temp datastore
@@ -257,6 +280,8 @@ sub uuid($)        { return $_[0]->{"UUID"}; }
 sub notified($)    { return $_[0]->{"NOTIFIED"}; }
 sub notified_unused($) { return $_[0]->{"NOTIFIED_UNUSED"}; }
 sub override_unused($) { return $_[0]->{"OVERRIDE_UNUSED"}; }
+sub gid($)         { return $_[0]->{"GID"}; }
+sub gid_idx($)     { return $_[0]->{"GID_IDX"}; }
 # For compat with history entries.
 sub deleted($)     { return $_[0]->{"DELETED"}; }
 # Get/Set some temporary extra data.
@@ -332,10 +357,13 @@ sub SetAdminNotes($$)
     $self->{'ADMIN_NOTES'} = $notes;
 }
 
-# The "target" of the reservation: the user(s) to whom the node(s) are
-# reserved.  Typically a pid/uid pair, but for projects where shared
-# reservations are enabled (classes, tutorials, etc.) it will be a
-# pid/* wildcard.
+# The "target" of the reservation: the user(s) to whom the node(s)
+# are reserved.  Typically a pid/*/uid triple, but for projects where
+# shared reservations are enabled (e.g., tutorials) it will be a
+# pid/*/* wildcard; for projects where reservations are per-group (classes?)
+# it will be pid/gid/*.  This notation is more verbose than strictly
+# necessary, but hopefully the tokens will be self-explanatory whenever
+# things all go pear-shaped and some poor admin has to look at the things.
 sub Target($)
 {
     my ($self) = @_;
@@ -343,15 +371,32 @@ sub Target($)
     my $pid = $self->pid();
 
     if( !defined( $pid ) ) {
-		return undef;
+	return undef;
     }
 
-    if( $self->shared_res() ) {
-		return $pid . "/*";
+    if( $self->shared_res() == $Project::RESERVATIONS_PERPROJECT ) {
+	return $pid . "/*/*";
+    } elsif( $self->shared_res() == $Project::RESERVATIONS_PERUSER ) {
+	return $pid . "/*/" . $self->uid();
+    } else {
+	return $pid . "/" . $self->gid() . "/*";
     }
-    else {
-		return $pid . "/" . $self->uid();
-    }
+}
+
+# Determine whether a user matches the target of a reservation, taking
+# the specified project/group memberships into consideration.
+#
+# $target should be a token in the style returned by Target() above.
+# @$projs should be a reference to a list of pid strings.
+# @$groups should be a reference to a list of pid/gid pair strings.
+# $uid should be a uid string.
+sub TargetMatch($$$$)
+{
+    my ($target, $projs, $groups, $uid) = @_;
+
+    return grep( $_ . "/*/*" eq $target || $_ . "/*/" . $uid eq $target,
+		 @$projs ) ||
+	grep( $_ . "/*" eq $target, @$groups );
 }
 
 # Mark the reservation as approved.  This DOES NOT update the database
@@ -462,6 +507,8 @@ sub Book($;$)
     my $admin_notes = DBQuoteSpecial( $self->admin_notes() );
     my $approved = $self->approved();
     my $approver = $self->approver();
+    my $gid = $self->gid();
+    my $gid_idx = $self->gid_idx();
 
     my $base_query = "SET pid='$pid', " .
 		     "pid_idx='$pid_idx', " .
@@ -477,7 +524,9 @@ sub Book($;$)
 		       ", admin_notes=$admin_notes" : "" ) .
 		     ( defined( $approved ) ?
 		       ", approved=FROM_UNIXTIME($approved)" : "" ) .
-		     ( defined( $approver ) ? ", approver='$approver'" : "" );
+	             ( defined( $approver ) ? ", approver='$approver'" : "" ) .
+		     "gid='$gid', " .
+		     "gid_idx='$gid_idx', ";
 
     my $query_result =
 	DBQueryWarn( defined( $idx ) ? "UPDATE future_reservations " .
@@ -507,10 +556,11 @@ sub Cancel($)
  	DBQueryFatal("INSERT INTO reservation_history ".
 		     "  (uuid, pid, pid_idx, nodes, type, deleted, canceled, " .
 		     "   created, start, end, uid, uid_idx, ".
-		     "   notes, admin_notes) " .
+		     "   notes, admin_notes, gid, gid_idx) " .
 		     "SELECT uuid, pid, pid_idx, nodes, type, now(), ".
 		     "  cancel, created,".
-		     "  start, end, uid, uid_idx, notes, admin_notes ".
+		     "  start, end, uid, uid_idx, notes, admin_notes, ".
+		     "  gid, gid_idx " .
 		     "FROM future_reservations WHERE idx='$idx'");
     }
     DBQueryWarn( "DELETE FROM future_reservation_attributes WHERE " . 
@@ -597,10 +647,12 @@ sub Tidy($)
 		  "future_reservations AS r READ" );
     DBQueryFatal( "INSERT INTO reservation_history( uuid, pid, pid_idx, ".
 		  "nodes, type, deleted, canceled, " .
-		  "created, start, end, uid, uid_idx, notes, admin_notes ) " .
+		  "created, start, end, uid, uid_idx, notes, admin_notes, " .
+ 		  "gid, gid_idx) " .
 		  "SELECT uuid, pid, pid_idx, nodes, type, null, ".
 		  "cancel, created, start, end, uid, uid_idx, " .
-		  "notes, admin_notes FROM future_reservations WHERE " .
+		  "notes, admin_notes, gid, gid_idx " .
+		  "FROM future_reservations WHERE " .
 		  "end < '$stamp' and approved is not null" );
     DBQueryFatal( "DELETE FROM future_reservations WHERE " .
 		  "end < '$stamp'" );
@@ -630,7 +682,7 @@ sub LookupAll($$;$$)
     
     my @reservations = ();
 
-    my $query = $PGENISUPPORT ? "SELECT COUNT(*), e.pid, e.eid, " .
+    my $query = $PGENISUPPORT ? "SELECT COUNT(*), e.pid, e.gid, e.eid, " .
 				"e.expt_swap_uid, " .
 				"UNIX_TIMESTAMP( e.expt_expires ), ".
 				"e.autoswap, " .
@@ -664,9 +716,9 @@ sub LookupAll($$;$$)
 				"      (n.reservable=1 and n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
 				"GROUP BY " .
-				"e.pid, e.eid, e.expt_swap_uid, n.reserved_pid, " .
+				"e.pid, e.gid, e.eid, e.expt_swap_uid, n.reserved_pid, " .
 	                        "nr.pid, UNIX_TIMESTAMP( pr.end )" :
-				"SELECT COUNT(*), e.pid, e.eid, " .
+				"SELECT COUNT(*), e.pid, e.gid, e.eid, " .
 				"e.expt_swap_uid, " .
 				"UNIX_TIMESTAMP( e.expt_expires ), " .
 				"e.autoswap, " .
@@ -695,14 +747,14 @@ sub LookupAll($$;$$)
 				"WHERE ((n.reservable=0 and n.type='$type') or ".
 				"      (n.reservable=1 and n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
-				"GROUP BY e.pid, e.eid, e.expt_swap_uid, " .
+				"GROUP BY e.pid, e.gid, e.eid, e.expt_swap_uid, " .
 				"n.reserved_pid, nr.pid, " .
 				"UNIX_TIMESTAMP( pr.end )";
     my $query_result = DBQueryWarn( $query );
 
     $$details = "--- Node usage:\n" if( ref( $details ) );
     
-    while( my($count, $pid, $eid, $uid, $end, $autoswap, $nr_pid,
+    while( my($count, $pid, $gid, $eid, $uid, $end, $autoswap, $nr_pid,
 	      $slice_expire, $slice_lockdown, $reserved_pid, $pr_end,
 	      $expt_lockdown, $swappable, $nr_eid) =
 	   $query_result->fetchrow_array() ) {
@@ -710,7 +762,7 @@ sub LookupAll($$;$$)
 
 	if( ref( $details ) ) {
 	    no warnings 'uninitialized';
-	    $$details = $$details . "$count, $pid, $eid, $uid, $end, " .
+	    $$details = $$details . "$count, $pid, $gid, $eid, $uid, $end, " .
 		"$autoswap, $nr_pid, $nr_eid, $slice_expire, $slice_lockdown, ".
 		"$reserved_pid, $pr_end, $expt_lockdown, $swappable\n";
 	}
@@ -773,13 +825,13 @@ sub LookupAll($$;$$)
 	    # nodes aren't free right now, but at some time in the
 	    # future they could become so.
 	    my $res = CreateExisting( $class, $pid, $eid, $uid, $endtime,
-				      $type, $count );
+				      $type, $count, $gid );
 	    push( @reservations, $res );
 	} elsif( !defined( $reserved_pid ) ) {
 	    # Physical nodes with no reservations whatsoever... treat
 	    # them as free since the beginning of time.
 	    my $res = CreateCommon( $class, undef, undef, undef, 0, undef,
-				    $type, $count );
+				    $type, $count, $gid );
 	    push( @reservations, $res );
 	} elsif( defined( $endtime ) ) {
 	    # The nodes have a reserved_pid, but there's a known	    
@@ -787,29 +839,30 @@ sub LookupAll($$;$$)
 	    # project_reservations end, whichever is later)... mark
 	    # them as available after that.
 	    my $res = CreateCommon( $class, $pid, $eid, $uid, 0, $endtime,
-				    $type, $count );
+				    $type, $count, $gid );
 	    push( @reservations, $res );	    
 	}
     }
 
     $$details = $$details . "\n--- Reservations:\n" if( ref( $details ) );
     
-    $query_result = DBQueryWarn( "SELECT pid, uid, UNIX_TIMESTAMP( start ), " .
+    $query_result = DBQueryWarn( "SELECT pid, gid, uid, UNIX_TIMESTAMP( start ), " .
 				 "UNIX_TIMESTAMP( end ), nodes, idx, approved ".
 				 "FROM future_reservations WHERE type='$type'" .
 				 ( $include_pending ? "" :
 				   " AND approved IS NOT NULL" ) );
 
-    while( my ($pid, $uid, $start, $end, $nodes, $idx, $approved) =
+    while( my ($pid, $gid, $uid, $start, $end, $nodes, $idx, $approved) =
 	   $query_result->fetchrow_array() ) {
-	my $res = Create( $class, $pid, $uid, $start, $end, $type, $nodes );
+	my $res = Create( $class, $pid, $uid, $start, $end, $type, $nodes,
+			  $gid );
 	$res->{'IDX'} = $idx;
 	$res->{'APPROVED'} = $approved;
 	push( @reservations, $res );
 	
 	if( ref( $details ) ) {
 	    no warnings 'uninitialized';
-	    $$details = $$details . "$pid, $uid, $start, $end, $nodes, $idx\n";
+	    $$details = $$details . "$pid/$gid, $uid, $start, $end, $nodes, $idx\n";
 	}
     }
 
@@ -1074,7 +1127,7 @@ sub FreeCount($$;$) {
 # * 'free' is the number of nodes not allocated and not needed
 # for reservations; available for general use subject to other constraints.
 sub Forecast($$;$$$$$) {
-    my ($class, $type, $projlist, $uid, $details,
+    my ($class, $type, $projlist, $grouplist, $uid, $details,
 	$dounapproved, $reservations) = @_;
 
     $reservations = LookupAll( $class, $type, $dounapproved, $details )
@@ -1108,9 +1161,8 @@ sub Forecast($$;$$$$$) {
 	    my $r = $f->{'reserved'}->{$target};
 	    my $u = $f->{'used'}->{$target};
 
-	    if( $r > $u ) {		
-		if( grep( $_ . "/*" eq $target || $_ . "/" . $uid eq $target,
-			  @$projlist ) ) {
+	    if( $r > $u ) {
+		if( TargetMatch( $target, $projlist, $grouplist, $uid ) ) {
 		    $held += $r - $u;
 		} else {
 		    $unavailable += $r - $u;
@@ -1143,7 +1195,7 @@ sub Forecast($$;$$$$$) {
 # Find any future periods with smaller predicted availability than the
 # present.
 sub FuturePressure($$;$$) {
-    my ($class, $typelist, $projlist, $uid) = @_;
+    my ($class, $typelist, $projlist, $grouplist, $uid) = @_;
 
     my @reservations = ();
     $uid = "" unless( defined( $uid ) );
@@ -1178,8 +1230,7 @@ sub FuturePressure($$;$$) {
 	    my $u = $f->{'used'}->{$target};
 
 	    if( $r > $u ) {
-		if( grep( $_ . "/*" eq $target || $_ . "/" . $uid eq $target,
-			  @$projlist ) ) {
+		if( TargetMatch( $target, $projlist, $grouplist, $uid ) ) {
 		    $held += $r - $u;
 		} else {
 		    $unavailable += $r - $u;
@@ -1214,7 +1265,7 @@ sub FuturePressure($$;$$) {
 #
 # Returns a timestamp if any unfulfilled reservation exists, otherwise undef.
 sub OutstandingReservation($$$;$) {
-    my ($class, $projlist, $uid, $typelist ) = @_;
+    my ($class, $projlist, $grouplist, $uid, $typelist ) = @_;
     my $earliest = undef;
     
     foreach ( @$projlist ) {
@@ -1238,8 +1289,7 @@ sub OutstandingReservation($$$;$) {
 
 	foreach my $f ( @forecast ) {
 	    foreach my $target ( keys ( %{$f->{'reserved'}} ) ) {
-		if( grep( $_ . "/*" eq $target || $_ . "/" . $uid eq $target,
-			  @$projlist ) &&
+		if( TargetMatch( $target, $projlist, $grouplist, $uid ) ) &&
 		    ( !exists( $f->{'used'}->{$target} ) ||
 		      $f->{'used'}->{$target} < $f->{'reserved'}->{$target} )) {
 		    # Found an unfulfilled reservation.
@@ -2021,7 +2071,7 @@ sub MaxSwapIn($$$) {
 				       $experiment->eid(),
 				       $experiment->swapper(),
 				       ExpectedEnd( $class, $experiment ),
-				       $type, $MAX );
+				       $type, $MAX, $experiment->gid() );
 
     push( @$reservations, $reservation );
 

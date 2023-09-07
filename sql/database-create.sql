@@ -2876,6 +2876,8 @@ CREATE TABLE `future_reservations` (
   `notified_unused` datetime DEFAULT NULL,
   `override_unused` tinyint(1) NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
+  `gid` varchar(32) NOT NULL DEFAULT '',
+  `gid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -5554,6 +5556,8 @@ CREATE TABLE `reservation_history` (
   `notes` mediumtext,
   `admin_notes` mediumtext,
   `uuid` varchar(40) NOT NULL default '',
+  `gid` varchar(32) NOT NULL DEFAULT '',
+  `gid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
   KEY `start` (`start`),
   KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

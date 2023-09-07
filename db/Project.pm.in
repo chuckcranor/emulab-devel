@@ -25,7 +25,9 @@ package Project;
 
 use strict;
 use Exporter;
-use vars qw(@ISA @EXPORT @PROJDIRECTORIES @GROUPDIRECTORIES);
+use vars qw(@ISA @EXPORT @PROJDIRECTORIES @GROUPDIRECTORIES
+            $RESERVATIONS_PERUSER $RESERVATIONS_PERPROJECT
+	    $RESERVATIONS_PERGROUP);
 
 @ISA    = "Exporter";
 @EXPORT = qw ();
@@ -66,6 +68,11 @@ my $EXPORTS_SETUP    = "$TB/sbin/exports_setup";
 @PROJDIRECTORIES  = ("exp", "images", "logs", "deltas", "tarfiles", "rpms",
 		     "groups", "tiplogs", "images/sigs", "templates");
 @GROUPDIRECTORIES = ("exp", "images", "logs", "tarfiles", "rpms", "tiplogs");
+
+# The interpretation of shared_reservations
+$RESERVATIONS_PERUSER = 0;
+$RESERVATIONS_PERPROJECT = 1;
+$RESERVATIONS_PERGROUP = 2;
 
 # Cache of instances to avoid regenerating them.
 my %projects   = ();
@@ -174,6 +181,7 @@ sub isPNet($)	        { return $_[0]->Brand()->isPNet() ? 1 : 0; }
 sub isPowder($)	        { return $_[0]->Brand()->isPowder() ? 1 : 0; }
 sub isEmulab($)         { return $_[0]->Brand()->isEmulab() ? 1 : 0; }
 
+# this value should match one of the RESERVATIONS_PER* definitions above
 sub shared_reservations($) { return field($_[0], "shared_reservations"); }
 # XXX
 sub shared_reservation($)  { return field($_[0], "shared_reservations"); }
@@ -1263,7 +1271,7 @@ sub Experiments($)
     return \@result;
 }
 
-sub SetSharedReservationsOn($;$$)
+sub SetReservationsPerProject($;$$)
 {
     my ($self, $details, $impotent) = @_;
     my $pid_idx = $self->pid_idx();
@@ -1278,7 +1286,7 @@ sub SetSharedReservationsOn($;$$)
 	my %notice = (
 	    "uuid" => $res->uuid(),
 	    "severity" => "warning",
-	    "message" => "reservation will no longer be user exclusive"
+	    "message" => "reservation will no longer be user/group exclusive"
 	    );
 	push( @$details, \%notice )
 	    if( ref( $details ) );
@@ -1286,13 +1294,13 @@ sub SetSharedReservationsOn($;$$)
 
     return 0 if( $impotent );
     
-    my %args = ( "shared_reservations" => 1 );
+    my %args = ( "shared_reservations" => $RESERVATIONS_PERPROJECT );
     $self->Update( \%args );
 
     return 0;
 }
 
-sub SetSharedReservationsOff($;$$)
+sub SetReservationsPerUser($;$$)
 {
     my ($self, $details, $impotent) = @_;
     my $pid_idx = $self->pid_idx();
@@ -1318,7 +1326,7 @@ sub SetSharedReservationsOff($;$$)
 	    print Dumper($reservations);
 
 	    foreach my $res ( @$reservations ) {
-		$res->{'SHARED_RES'} = 0
+		$res->{'SHARED_RES'} = $RESERVATIONS_PERUSER
 		    if( defined( $res->pid_idx() ) &&
 			$res->pid_idx() == $pid_idx );
 	    }
@@ -1343,7 +1351,7 @@ sub SetSharedReservationsOff($;$$)
 	next if( !defined( Reservation->BeginTransaction( $version,
 			   "projects", "groups" ) ) );
 
-	my %args = ( "shared_reservations" => 0 );
+	my %args = ( "shared_reservations" => $RESERVATIONS_PERUSER );
 	$self->Update( \%args );
 	
 	Reservation->EndTransaction();
@@ -1352,23 +1360,101 @@ sub SetSharedReservationsOff($;$$)
     }
 }
 
+sub SetReservationsPerGroup($;$$)
+{
+    my ($self, $details, $impotent) = @_;
+    my $pid_idx = $self->pid_idx();
+
+    $impotent = 0 unless( defined( $impotent ) );
+    
+    while( 1 ) {    
+	my $version = Reservation->GetVersion();
+	my @types = ();
+	my $reject = 0;
+	my $reservations;
+	
+	my $query_result = DBQueryWarn( "SELECT DISTINCT type FROM " .
+					"future_reservations " .
+					"WHERE approved IS NOT NULL " .
+					"AND pid_idx='$pid_idx'" );
+	while( my ($type) = $query_result->fetchrow_array() ) {
+	    push( @types, $type );
+	}
+
+	foreach my $type ( @types ) {
+	    $reservations = Reservation->LookupAll( $type );
+
+	    print Dumper($reservations);
+
+	    foreach my $res ( @$reservations ) {
+		$res->{'SHARED_RES'} = $RESERVATIONS_PERGROUP
+		    if( defined( $res->pid_idx() ) &&
+			$res->pid_idx() == $pid_idx );
+	    }
+	    
+	    my $error;
+	    if( !Reservation->IsFeasible( $reservations, \$error ) ) {
+		my %conflict = (
+		    "severity" => "error",
+		    "message" => "$type: $error"
+		    );
+		push( @$details, \%conflict )
+		    if( ref( $details ) );
+		
+		$reject = 1;
+	    }
+	}
+
+	return -1 if( $reject );
+
+	return 0 if( $impotent );
+	
+	next if( !defined( Reservation->BeginTransaction( $version,
+			   "projects", "groups" ) ) );
+
+	my $weakened = shared_reservations( $self ) == $RESERVATIONS_PERUSER;
+	
+	my %args = ( "shared_reservations" => $RESERVATIONS_PERGROUP );
+	$self->Update( \%args );
+
+	Reservation->EndTransaction();
+
+	if( $weakened ) {
+	    foreach my $res ( @reservations ) {
+		my %notice = (
+		    "uuid" => $res->uuid(),
+		    "severity" => "warning",
+		    "message" => "reservation will no longer be user exclusive"
+		    );
+		push( @$details, \%notice )
+		    if( ref( $details ) );
+	    }
+	}
+	
+	return 0;
+    }
+}
+
 #
-# Modify a project's shared_reservations flag.
+# Modify a project's shared_reservations semantics.
 #
 # This is potentially problematic, because:
-#  - when turning ON shared reservations, the semantics change and users
-#    who have approved reservations might be surprised/confused to find
-#    that a reservation that was previously exclusive to them might now
-#    be consumed by another user in the same project.  It would be nice
+#  - when turning shared reservations from per-user to per-group or
+#    per-project, the semantics change and users who have approved
+#    reservations might be surprised/confused to find that a
+#    reservation that was previously exclusive to them might now be
+#    consumed by another user in the same group/project.  It would be nice
 #    to warn them if this could happen.
-#  - when turning OFF shared reservations, if one user has an active
-#    reservation and another user in the same project has an active
-#    experiment using nodes of the same type, we will suddenly need
-#    additional spare nodes to accommodate both the experiment and the
-#    reservation simultaneously.  We resolve the problem by performing
-#    an admission control check on the schedule for the node type(s) in
-#    question, and make the check atomic w.r.t. the shared reservations
-#    flag update.  If the check fails, we refuse to touch the flag.
+#  - when turning shared reservations to a finer granularity (e.g.,
+#    shared per-project to per-group, or per-group to per-user), if
+#    one user has an active reservation and another user in the same
+#    project has an active experiment using nodes of the same type, we
+#    will suddenly need additional spare nodes to accommodate both the
+#    experiment and the reservation simultaneously.  We resolve the
+#    problem by performing an admission control check on the schedule
+#    for the node type(s) in question, and make the check atomic
+#    w.r.t. the shared reservations flag update.  If the check fails,
+#    we refuse to touch the flag.
 sub SetSharedReservations($$;$$)
 {
     my ($self, $shared, $details, $impotent) = @_;
@@ -1380,9 +1466,14 @@ sub SetSharedReservations($$;$$)
     return 0
 	# well that was easy
 	if( $self->shared_reservations() == $shared );
-    
-    return $shared ? SetSharedReservationsOn( $self, $details, $impotent ) :
-	SetSharedReservationsOff( $self, $details, $impotent );
+
+    if( $shared == $RESERVATIONS_PERUSER ) {
+	return SetReservationsPerUser( $self, $details, $impotent );
+    } elsif( $shared == $RESERVATIONS_PERPROJECT ) {
+	return SetReservationsPerProject( $self, $details, $impotent );
+    } else {
+	return SetReservationsPerGroup( $self, $details, $impotent );
+    }
 }
 
 sub Leases($)

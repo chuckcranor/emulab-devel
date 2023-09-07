@@ -45,11 +45,11 @@ use Reservation;
 sub usage()
 {
     print STDERR "Usage: predict [-p] [-u] [-t time] [-v] type\n";
-    print STDERR "       predict -c [-U uid] type [pid...]\n";
-    print STDERR "       predict -l [-U uid] type [pid...]\n";
-    print STDERR "       predict -n [-t time] [-D duration] [-U uid] type [pid...]\n";
-    print STDERR "       predict -P [-U uid] type [pid...]\n";
-    print STDERR "       predict -x [-T type] [-U uid] pid...\n";
+    print STDERR "       predict -c [-U uid] type [pid[/gid]...]\n";
+    print STDERR "       predict -l [-U uid] type [pid[/gid]...]\n";
+    print STDERR "       predict -n [-t time] [-D duration] [-U uid] type [pid[/gid]...]\n";
+    print STDERR "       predict -P [-U uid] type [pid[/gid]...]\n";
+    print STDERR "       predict -x [-T type] [-U uid] pid[/gid]...\n";
     print STDERR "   -h   This message\n";
     print STDERR "   -c   Give an oversimplified free node count\n";
     print STDERR "   -l   Give a list of node allocation status counts " .

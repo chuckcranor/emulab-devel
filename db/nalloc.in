@@ -135,7 +135,13 @@ if (!defined($project)) {
     die("*** $0:\n".
 	"    Could not get project for experiment $experiment!\n");
 }
-
+my $group = $experiment->GetGroup();
+if (!defined($group)) {
+    die("*** $0:\n".
+	"    Could not get group for experiment $experiment!\n");
+}
+my $gid = $group->gid();
+    
 #
 # User must have permission to modify the experiment.
 #
@@ -320,7 +326,7 @@ foreach my $node (@nodes) {
     print $resdetails if ($debug);
     my $res = Reservation->CreateImmediate($pid, $eid,
 					   $this_user->uid(),
-					   $endtime, $node_id, 1);
+					   $endtime, $node_id, 1, $gid);
     push(@$reservations, $res);
     
     if (!Reservation->IsFeasible($reservations, \$errormsg)) {
@@ -360,7 +366,7 @@ foreach my $type ( keys( %types ) ) {
     }
     my $res = Reservation->CreateImmediate( $pid, $eid,
 					    $this_user->uid(),
-					    $endtime, $type, $count );
+					    $endtime, $type, $count, $gid );
     if ($debug) {
 	print "$res\n";
     }
