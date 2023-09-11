@@ -1216,6 +1216,7 @@ sub FuturePressure($$;$$) {
 sub OutstandingReservation($$$;$) {
     my ($class, $projlist, $uid, $typelist ) = @_;
     my $earliest = undef;
+    $uid = "" unless( defined( $uid ) );
     
     foreach ( @$projlist ) {
 	# reject illegal PIDs
