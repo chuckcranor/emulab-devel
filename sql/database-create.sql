@@ -465,7 +465,7 @@ CREATE TABLE `apt_instance_fabric_slices` (
   `linkname` varchar(32) NOT NULL default '',
   `sliceid` varchar(64) NOT NULL default '',
   PRIMARY KEY (`uuid`,`sliceid`),
-  UNIQUE KEY (`uuid`,`linkname`)
+  UNIQUE KEY  `linkname` (`uuid`,`linkname`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 
