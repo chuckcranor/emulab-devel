@@ -1687,7 +1687,7 @@ sub CheckEverything($$$$$$$$$)
     if ($retval) {
 	return $retval;
     }
-    $retval = APT_Profile::CheckRoutesReservations($rspec, $project,
+    $retval = APT_Profile::CheckRoutesReservations($rspec, $project, $user,
 						   $start, $end, $noresokay,
 						   $perrmsg, $routes);
     if ($retval) {
