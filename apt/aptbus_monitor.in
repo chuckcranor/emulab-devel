@@ -68,9 +68,9 @@ my $OFFLINE_THRESHOLD= 2 * $SLEEP_INTERVAL;
 #
 # Bus URLS. No documentation available.
 #
-my $LOCATION_URL = "https://www.uofubus.com/Services/JSONPRelay.svc/".
+my $LOCATION_URL = "https://uofubus.com/Services/JSONPRelay.svc/".
     "GetMapVehiclePoints?ApiKey=ride1791";
-my $ROUTES_URL = "https://www.uofubus.com/Services/JSONPRelay.svc/".
+my $ROUTES_URL = "https://uofubus.com/Services/JSONPRelay.svc/".
     "GetRoutesForMapWithScheduleWithEncodedLine?ApiKey=ride1791";
 
 # Overwatch data (gpsd data).
