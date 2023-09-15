@@ -5471,8 +5471,44 @@ $(function ()
 	    
 	    $('#destroy-experiment-reason').val(msg);
 	});
+	$('#destroy-experiment-modal .compromised').click(function (e) {
+	    e.preventDefault();
+	    var msg =
+		"This experiment is being quarantined because we have determined\n"+
+		"that one ore more nodes in the experiment has been compromised\n"+
+		"and is engaged in improper activity. Here are guidelines for\n"+
+		"properly securing your nodes:\n\n" +
+                "If you are using Apache/Spark/Hadoop, it has has known\n" +
+		"vulnerabilities as described here:\n\n" +
+		"https://groups.google.com/forum/#!msg/cloudlab-users/qvGyZo8SIoE/vyiSgzRUDAAJ\n\n" +
+	        "Using weak passwords (especially those like 'hadoop',\n" +
+		"'root', 'linux', or 'admin') is strictly forbidden, even if\n"+
+		"online instructions tell you to do so.\n\n" +
+		"Starting web services on the public facing IP address, that\n"+
+		"are weakly protected (see note above about passwords) is\n" +
+		"also prohibited. Again, it does not matter what online\n" +
+		"instructions tell you to do, you must not enable weakly\n" +
+		"protected web services.\n\n" +
+		"Please note that you are fully responsible for the security\n"+
+		"of your nodes and any software you install on it.\n\n" +
+		"As soon as we know what you were doing and how you are\n" +
+		"going to prevent this from happening again, we can unfreeze\n"+
+		"your account.\n\n" +
+		"Once a node is compromised, the experiment must be terminated.\n" +
+		"If you have any data on the node you need, we can boot it into\n"+
+		"a memory based 'Recovery' system [1] where you can ssh into the\n"+
+		"experiment nodes, mount the filesystem [2], and copy that data off."+
+		"\n\n"+
+		"[1] https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/Using-the-Testbed/Using-the-Recovery-MFS\n"+
+		"[2] https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/Using-the-Testbed/Using-the-Recovery-MFS#mounting-the-root-filesystem\n"+
+		"-------------------------------------------------------\n" +
+		$('#destroy-experiment-reason').val();		
+	    
+	    $('#destroy-experiment-reason').val(msg);
+	});
 	if (isadmin) {
-	    $('#destroy-experiment-modal .traffic-violation')
+	    $('#destroy-experiment-modal .traffic-violation,' +
+	      '#destroy-experiment-modal .compromised')
 		.removeClass("hidden");
 	}
     }
