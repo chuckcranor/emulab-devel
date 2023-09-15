@@ -751,14 +751,17 @@ $(function ()
 	    UpdateButtons(instanceStatus);
 	}
 	else if (lastStatus == "ready" && instanceStatus == "ready") {
+	    status_message = "Your experiment is ready";
 	    if (servicesExecuting(json.value)) {
 		status_html = "<font color=green>booted</font>";
 		status_html += " (startup services are still running)";
+		status_message += " (startup services are still running)";
 	    }		
 	    else {
 		status_html = "<font color=green>ready</font>";
 		if (aggregatesDeferred(json.value)) {
 		    status_html += " (but some aggregates deferred)";
+		    status_message += " (but some aggregates deferred)";
 		}
 		else {
 		    // For Selenium.
