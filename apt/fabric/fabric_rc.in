@@ -9,7 +9,7 @@ export FABRIC_ORCHESTRATOR_HOST=orchestrator.fabric-testbed.net
 export FABRIC_BASTION_HOST=bastion.fabric-testbed.net
 
 # Find your real project ID from FABRIC portal: https://portal.fabric-testbed.net/.
-export FABRIC_PROJECT_ID=8429c3eb-91a0-458d-8a7e-56c140736bcc
+export FABRIC_PROJECT_ID=12a5a713-f87d-4ede-aa14-111f0993e7bc
 
 # Download FABRIC token from FABRIC credential manager: https://cm.fabric-testbed.net/.
 #export FABRIC_TOKEN_LOCATION=$TB/fabric/token.json

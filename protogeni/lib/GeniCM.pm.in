@@ -4403,7 +4403,8 @@ sub GetTicketAuxAux($)
 	    if (! defined($stitchpath)) {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					 "$linkname: No stitching path to ");
+					 "$linkname: No stitching path ".
+					 "for link $linkname");
 		    goto bad;
 	    }
 	    if (defined($stitchpath->error())) {

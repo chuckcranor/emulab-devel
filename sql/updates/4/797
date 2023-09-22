@@ -8,25 +8,14 @@ sub DoUpdate($$$)
 {
     my ($dbhandle, $dbname, $version) = @_;
 
-    if( !DBSlotExists("future_reservations", "gid" ) ) {
-	DBQueryFatal( "ALTER TABLE future_reservations ADD ".
-		      " `gid` varchar(32) NOT NULL DEFAULT ''" );
-	DBQueryFatal( "UPDATE future_reservations SET gid=pid" );
-    }
-    if( !DBSlotExists("future_reservations", "gid_idx" ) ) {
-	DBQueryFatal( "ALTER TABLE future_reservations ADD ".
-		      " `gid_idx` mediumint(8) NOT NULL DEFAULT '0'" );
-	DBQueryFatal( "UPDATE future_reservations SET gid_idx=pid_idx" );
-    }
-    if( !DBSlotExists("reservation_history", "gid" ) ) {
-	DBQueryFatal( "ALTER TABLE reservation_history ADD ".
-		      " `gid` varchar(32) NOT NULL DEFAULT ''" );
-	DBQueryFatal( "UPDATE reservation_history SET gid=pid" );
-    }
-    if( !DBSlotExists("reservation_history", "gid_idx" ) ) {
-	DBQueryFatal( "ALTER TABLE future_reservations ADD ".
-		      " `gid_idx` mediumint(8) NOT NULL DEFAULT '0'" );
-	DBQueryFatal( "UPDATE reservation_history SET gid_idx=pid_idx" );
+    if (!DBTableExists("apt_instance_fabric_slices")) {
+	DBQueryFatal("CREATE TABLE `apt_instance_fabric_slices` ( ".
+		     " `uuid` varchar(40) NOT NULL default '', ".
+		     " `linkname` varchar(32) NOT NULL default '', ".
+		     " `sliceid` varchar(64) NOT NULL default '', ".
+		     " PRIMARY KEY (`uuid`,`sliceid`), ".
+		     " UNIQUE KEY `linkname` (`uuid`,`linkname`) ".
+		     ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
     }
     return 0;
 }

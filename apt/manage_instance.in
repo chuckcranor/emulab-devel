@@ -1594,7 +1594,7 @@ sub DoTerminate()
     #
     # Special case for Fabric.
     #
-    if ($instance->fabric_sliceid()) {
+    if ($instance->HasFabricSlices()) {
 	system("$FABRICSTITCHER -d -r " . $instance->uuid());
 	if ($?) {
 	    $exitcode = -1;
@@ -2543,7 +2543,7 @@ sub ExtendInternal($$$$$$)
 	    }
 	}
     }
-    if ($instance->fabric_sliceid() && !$errcode) {
+    if ($instance->HasFabricSlices() && !$errcode) {
 	system("$MANAGEFABRIC renewslice " .
 	       $instance->uuid() . " '$new_expires'");
 	if ($?) {
