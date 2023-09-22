@@ -178,9 +178,21 @@ if( $countonly ) {
     exit( 0 );
 }
 
+my @projects = ();
+my @groups = ();
+
+foreach my $param ( @ARGV ) {
+    if( $param =~ m'/' ) {
+	push( @groups, $param );
+    } else {
+	push( @projects, $param );
+    }
+}
+
 if( $minfree ) {
     my $min = 0xFFFF;
-    foreach my $rec ( Reservation->Forecast( $type, \@ARGV, $uid ) ) {
+    foreach my $rec ( Reservation->Forecast( $type, \@projects, \@groups,
+					     $uid ) ) {
 	my $sample = $rec->{'held'} + $rec->{'free'}; 
 	if( $rec->{'t'} < $time ) {
 	    # record is before period of interest; retain only the
@@ -206,7 +218,7 @@ if( $timeseries ) {
     my $details;
     my $last;
 
-    my @records = Reservation->Forecast( $type, \@ARGV, $uid,
+    my @records = Reservation->Forecast( $type, \@projects, \@groups, $uid,
 					 $debug ? \$details : undef);
     if ($debug && $details) {
 	print $details;
@@ -235,7 +247,8 @@ if( $timeseries ) {
 }
 
 if( $pressure ) {
-    foreach ( Reservation->FuturePressure( [ $type ], \@ARGV, $uid ) ) {
+    foreach ( Reservation->FuturePressure( [ $type ], \@projects, \@groups,
+					   $uid ) ) {
         my ( $start, $end ) = @$_;
 
 	print strftime( "%Y-%m-%d %H:%M-", localtime( $start ) ) .
@@ -246,7 +259,7 @@ if( $pressure ) {
 }
 
 if( $unfulfilled ) {
-    my $t = Reservation->OutstandingReservation( \@ARGV, $uid,
+    my $t = Reservation->OutstandingReservation( \@projects, \@groups, $uid,
 						 defined( $type ) ? [ $type ] :
 						 undef );
 
