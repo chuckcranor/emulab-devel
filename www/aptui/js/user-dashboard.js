@@ -1143,8 +1143,9 @@ $(function ()
     function SendPasswordReset()
     {
 	var callback = function(json) {
+	    console.info(json);
 	    if (json.code) {
-		alert("Password reset could not be sent!");
+		alert("Password reset could not be sent!\n\n" + json.value);
 		return;
 	    }
 	    alert("Password reset has has been sent");

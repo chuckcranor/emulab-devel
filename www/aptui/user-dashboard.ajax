@@ -422,6 +422,17 @@ function Do_Toggle()
     elseif ($toggle == "bound_portal") {
         $target_user->SetBoundPortal($target_user->bound_portal() ? 0 : 1);
     }
+    elseif ($toggle == "nonlocal_id") {
+        $priv = TBDB_TRUSTSTRING_USER;
+        
+        $target_user->ClearNonlocalID();
+        if (SUEXEC($this_uid, $TBADMINGROUP,
+                   "webmodgroups -m CloudLab:CloudLab:$priv $target_uid",
+                   SUEXEC_ACTION_CONTINUE)) {
+            SPITAJAX_ERROR(-1, $suexec_output);
+            return -1;
+        }
+    }
     elseif ($toggle == "foreign_admin") {
         $target_user->SetForeignAdmin($target_user->foreign_admin() ? 0 : 1);
     }
@@ -523,7 +534,7 @@ function Do_SendPasswordReset()
     }
     if ($target_user->status() != TBDB_USERSTATUS_ACTIVE &&
         $target_user->status() != TBDB_USERSTATUS_FROZEN) {
-	SPITAJAX_ERROR(-1, "User is not active or frozen!");
+	SPITAJAX_ERROR(-1, "User is not active or is frozen!");
         return;
     }
     $target_idx  = $target_user->uid_idx();
