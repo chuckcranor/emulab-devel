@@ -689,6 +689,9 @@ sub DoGroupReserve()
     my $result = {
 	"hosed" => 0,
     };
+    if ($update) {
+	$result->{'uuid'} = $resgroup->uuid();
+    }
     
     if (defined($ranges)) {
 	$range_results = {"ranges"    => $ranges,

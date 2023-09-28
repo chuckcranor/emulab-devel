@@ -434,6 +434,9 @@ function Do_Transmissions()
             $instance = Instance::Lookup($uuid);
             if (!$instance) {
                 $instance = InstanceHistory::Lookup($uuid);
+                if (!$instance) {
+                    continue;
+                }
             }
             $details["uid"]   = $instance->creator();
             $details["pid"]   = $instance->pid();

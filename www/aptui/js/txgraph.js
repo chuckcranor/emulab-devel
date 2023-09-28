@@ -24,7 +24,7 @@ window.ShowTXGraph = (function ()
 	var ParentLeft   = $(parent).position().left;
 	var formatter    = d3.format(".3f");
 	
-	var margin  = {top: 20, right: 20, bottom: 50, left: 80};
+	var margin  = {top: 20, right: 20, bottom: 100, left: 80};
 	var width   = parentWidth - margin.left - margin.right;
 	var height  = parentHeight - margin.top - margin.bottom;
 	console.info(width, height);
