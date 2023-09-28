@@ -409,6 +409,25 @@ sub LookupByNickname($$)
     return Lookup($class, $aggregate_urn);
 }
 
+sub LookupByName($$)
+{
+    my ($class, $name) = @_;
+
+    if ($name !~ /^[-\w]+$/) {
+	return undef;
+    }
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where name='$name'");
+    return undef
+	if (!$query_result);
+    return undef
+	if (!$query_result->numrows);
+
+    my ($aggregate_urn) = $query_result->fetchrow_array();
+    return Lookup($class, $aggregate_urn);
+}
+
 sub LookupByAbbreviation($$)
 {
     my ($class, $abbreviation) = @_;
