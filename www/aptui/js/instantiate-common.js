@@ -148,12 +148,7 @@ window.instantiateCommon = (function () {
 	     * without a spectrum specification is bad news.
 	     */
 	    $(xmlDoc).find("node").each(function() {
-		// Gotta have a manager to know anything.
-		var manager_urn = $(this).attr("component_manager_id");
-		if (!manager_urn) {
-		    return;
-		}
-		// Ditto the component ID
+		// Gotta have a component ID to know anything
 		var component_id = $(this).attr("component_id");
 		if (!component_id) {
 		    return;
@@ -165,6 +160,25 @@ window.instantiateCommon = (function () {
 		}
 		if (component_id.startsWith("oai-wb")) {
 		    return;
+		}
+		
+		// Gotta have a manager to know anything.
+		var manager_urn = $(this).attr("component_manager_id");
+		if (!manager_urn) {
+		    /*
+		     * Well, we can tell from the radio names if its a radio
+		     * on the Mothership. 
+		     */
+		    if (!window.ISPOWDER) {
+			return;
+		    }
+		    var radios = radioinfo["urn:publicid:IDN+emulab.net+authority+cm"];
+		    if (_.has(radios, component_id) && !component_id.startsWith("nuc")) {
+			manager_urn = "urn:publicid:IDN+emulab.net+authority+cm";
+		    }
+		    else {
+			return;
+		    }
 		}
 		//console.info("CheckForRadioUsage", manager_urn, component_id);
 		
