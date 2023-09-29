@@ -166,9 +166,22 @@ int parse_top(tb_vgraph &vg, istream& input)
 		      top_error("Bad desire, bad weight.");
 		      gweight = 0;
 		  }
-		  tb_node_featuredesire node_fd(desirename, gweight);
-		  node_fd.add_desire_user(gweight);
-		  v->desires.push_front(node_fd);
+		  // Iterate through to see if desire already was added - right now we only
+		  // treat additive featuredesires specially
+		  bool found = false;
+                  for (node_desire_set::iterator it = v->desires.begin();
+                          it != v->desires.end(); it++) {
+                      if ((it->name() == desirename) && it->is_l_additive()) {
+                          it->add_weight(gweight);
+                          found = true;
+                      }
+                  }
+                  if (!found) {
+                      // If it wasn't there, just make a new one
+                      tb_node_featuredesire node_fd(desirename, gweight);
+                      node_fd.add_desire_user(gweight);
+                      v->desires.push_front(node_fd);
+                  }
 	      }
 	  }
 	}

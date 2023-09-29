@@ -162,8 +162,20 @@ int parse_ptop(tb_pgraph &pg, tb_sgraph &sg, istream& input)
 	    gcost = 0;
 	  }
 
-	  p->features.push_front(tb_node_featuredesire(feature,gcost));
-
+          // Iterate through to see if feature already was added - right now we only
+          // treat additive featuredesires specially
+          bool found = false;
+          for (node_feature_set::iterator it = p->features.begin();
+                          it != p->features.end(); it++) {
+              if ((it->name() == feature) && it->is_l_additive()) {
+                  it->add_weight(gcost);
+                  found = true;
+              }
+          }
+          if (!found) {
+              // If it wasn't there, just make a new one
+              p->features.push_front(tb_node_featuredesire(feature,gcost));
+          }
 	}
 	/*
 	 * Parse any other node options or flags
