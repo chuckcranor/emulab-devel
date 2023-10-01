@@ -1234,6 +1234,8 @@ sub LoadVirtNodes($)
 	$vnode->_sanhostname(undef);
 	$vnode->_forcedarchitecture(undef);
 	$vnode->_pnode(undef);
+	# Running summary of disk usage for the vtop file.
+	$vnode->_disk_any(0);
 
 	#
 	# Explicit type request desire to match feature.
@@ -1473,12 +1475,21 @@ sub LoadVirtNodes($)
 	    next
 		if ($desire->vname() ne $vname);
 	    
-	    $desires->{$desire->desire()} = $desire->weight();
-
 	    # User says a shared node is okay. We need this info later
 	    # when generating links/lans for the vtop.
 	    $vnode->_sharedokay(1)
 		if ($isvirt && $desire->desire() eq "pcshared");
+
+	    # Watch for a disk_any desire, we might need to adjust it
+	    if ($desire->desire() eq "?+disk_any") {
+		my $weight = $desire->weight();
+		
+		$self->printdb("Found a ?+disk_any desire: $weight\n");
+		$vnode->_disk_any($vnode->_disk_any() + $weight);
+	    }
+	    else {
+		$desires->{$desire->desire()} = $desire->weight();
+	    }
 	}
 	$vnode->_desires($desires);
 
@@ -1500,6 +1511,12 @@ sub LoadVirtNodes($)
 		$self->experiment()->SetVirtNodeAttribute($vname,
 							  "VM_VCPUS",
 							  $attr->attrvalue());
+	    }
+	    elsif ($attr->attrkey() eq "XEN_EXTRAFS") {
+		my $size = $attr->attrvalue();
+		# Convert DB to 512 byte sectors.
+		$size = ($size * 1024 * 1024 * 1024) / 512;
+		$vnode->_disk_any($vnode->_disk_any() + $size);
 	    }
 	}
 	$vnode->_atttributes($attrs);
@@ -2619,6 +2636,23 @@ sub GenVirtNodes($)
 	    my $osinfo = $vnode->_osinfo();
 
 	    #
+	    # A virtual node, add the size of requested disk image to the
+	    # disk_any desire. Note that the disk_any *feature* already
+	    # subtracts out the largest disk image, so we do not need to
+	    # account for the disk image on the physical node.
+	    #
+	    if ($vnode->_isvirtnode()) {
+		my $osize = $vnode->_disk_any();
+		my $psize = $osinfo->PartitionSize();
+
+		if (defined($osize) && defined($psize)) {
+		    $self->printdb("Adjusting disk_any for OS: ".
+				   "$osize + $psize\n");
+		    $vnode->_disk_any($osize + $psize);
+		}
+	    }
+
+	    #
 	    # Support subOSes with a multi-OS desire.  Since the pnodes
 	    # will have features like OS-parent and OS-parent-subos, we 
 	    # generate desire to match.  Parent is major since then this 
@@ -2677,6 +2711,9 @@ sub GenVirtNodes($)
 		}
 		push(@interfaces, $iface);
 	    }
+	}
+	if ($vnode->_disk_any()) {
+	    $desires->{"?+disk_any"} = ['', $vnode->_disk_any()];
 	}
 	
 	#

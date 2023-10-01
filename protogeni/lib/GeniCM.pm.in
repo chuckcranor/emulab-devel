@@ -9491,8 +9491,13 @@ sub HandleBlockstore($$$$$$@)
 	return GeniResponse->Create($errorcode, undef, $message);
     }
     #
-    # disk size desires for the node. 
+    # disk size desires for the node. Note that we have adjust disk_any
+    # to include SYSVOL and NONSYSVOL.
     #
+    $all_placements{'ANY'}->{'size'} +=
+	($all_placements{'SYSVOL'}->{'size'} +
+	 $all_placements{'NONSYSVOL'}->{'size'});
+    
     foreach my $which (keys(%all_placements)) {
 	my $size  = $all_placements{$which}->{"size"};
 	my $dname = "?+disk_" . lc($which);

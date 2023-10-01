@@ -1667,6 +1667,16 @@ sub GetNodeFeatures($)
     }
     return $self->{"FEATURES"};
 }
+sub GetNodeFeature($$)
+{
+    my ($self, $feature) = @_;
+    my $features = $self->GetNodeFeatures();
+
+    return undef
+	if (!exists($features->{$feature}));
+
+    return $features->{$feature};
+}
 
 #
 # Set a feature for a node, overwriting the same feature if it
