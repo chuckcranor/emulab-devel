@@ -298,9 +298,6 @@ class tb_node_featuredesire {
 	score_and_violations add_local(double amount);
 	score_and_violations subtract_local(double amount);
 
-	// Simple way to add more weight
-	void add_weight(double amount) { this->weight += amount; }
-
     protected:
 
 	double weight;
