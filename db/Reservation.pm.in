@@ -631,7 +631,7 @@ sub LookupAll($$;$$)
     my @reservations = ();
 
     my $query = $PGENISUPPORT ? "SELECT COUNT(*), e.pid, e.eid, " .
-				"e.expt_swap_uid, " .
+				"e.expt_swap_uid, e.expt_head_uid, " .
 				"UNIX_TIMESTAMP( e.expt_expires ), ".
 				"e.autoswap, " .
 				"nr.pid as nr_pid, ".
@@ -664,7 +664,8 @@ sub LookupAll($$;$$)
 				"      (n.reservable=1 and n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
 				"GROUP BY " .
-				"e.pid, e.eid, e.expt_swap_uid, n.reserved_pid, " .
+				"e.pid, e.eid, e.expt_swap_uid, ".
+				"e.expt_head_uid, n.reserved_pid, " .
 	                        "nr.pid, UNIX_TIMESTAMP( pr.end )" :
 				"SELECT COUNT(*), e.pid, e.eid, " .
 				"e.expt_swap_uid, " .
@@ -702,7 +703,7 @@ sub LookupAll($$;$$)
 
     $$details = "--- Node usage:\n" if( ref( $details ) );
     
-    while( my($count, $pid, $eid, $uid, $end, $autoswap, $nr_pid,
+    while( my($count, $pid, $eid, $uid, $head_uid, $end, $autoswap, $nr_pid,
 	      $slice_expire, $slice_lockdown, $reserved_pid, $pr_end,
 	      $expt_lockdown, $swappable, $nr_eid) =
 	   $query_result->fetchrow_array() ) {
@@ -720,6 +721,9 @@ sub LookupAll($$;$$)
 	    # if locked down, otherwise assume released at slice expiry
 	    # time.
 	    $endtime = $slice_lockdown ? undef : $slice_expire;
+	    # Use the experiment creator (not swapper) for GENI slices,
+	    # because it doesn't help us when the swapper is set to "geniuser".
+	    $uid = $head_uid;
 	} else {
 	    # A non-GENI slice.  Use the computed autoswap duration,
 	    # if autoswap is enabled.
