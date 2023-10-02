@@ -1015,8 +1015,8 @@ sub Reserve($)
 	    # any grief. But if it does, we need to return the message
 	    # blob to the Portal so it can issue notifications.
 	    #
-	    my $blob;
-	    if ($project->SetSharedReservations($shared, \$blob)) {
+	    my @results = ();
+	    if ($project->SetSharedReservations($shared, \@results)) {
 		print STDERR "SetSharedReservations failed\n";
 		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			    "Could not toggle shared reservations flag");
@@ -1024,9 +1024,9 @@ sub Reserve($)
 	    #
 	    # XXX: Deal with this case later. 
 	    #
-	    if (defined($blob) && keys(%{$blob})) {
-		print STDERR Dumper($blob);
-		return GeniResponse->Create(GENIRESPONSE_ERROR, $blob,
+	    if (@results) {
+		print STDERR Dumper(\@results);
+		return GeniResponse->Create(GENIRESPONSE_ERROR, \@results,
 					    "Oops, not ready for this");
 	    }
 	}
