@@ -1425,8 +1425,8 @@ sub Reservations($)
 	my $target = $pid;
 	my $user;
 	if (!$project->shared_reservations()) {	
-	    $user = User->Lookup($row-{'uid'});
-	    $target .= ":" . $row-{'uid'};
+	    $user = User->Lookup($row->{'uid'});
+	    $target .= ":" . $row->{'uid'};
 	}
 	# Save for loop below.
 	$row->{"target"} = $target;
