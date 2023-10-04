@@ -70,6 +70,7 @@ define("PAGEARG_ANYTHING",	"anything");
 define("PAGEARG_ALPHALIST",     "alphalist");
 define("PAGEARG_UUID",		"uuid");
 define("PAGEARG_URL",   	"url");
+define("PAGEARG_PARAMSET",   	"paramset");
 
 define("URL_USER",		"user");
 define("URL_PROJECT",		"project");
@@ -641,6 +642,7 @@ function VerifyPageArguments($argspec, $required)
 	case PAGEARG_NUMERIC:
 	case PAGEARG_ARRAY:
 	case PAGEARG_UUID:
+	case PAGEARG_PARAMSET:
 	    if (isset($_REQUEST[$name]) && $_REQUEST[$name] != "") {
 		$object = $_REQUEST[$name];
 		$yep = 1;
@@ -815,6 +817,12 @@ function ValidateArgument($name, $type, $arg, $isfatal = 1)
 
     case PAGEARG_UUID:
 	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", "$arg")) {
+	    return 1;
+	}
+	break;
+
+    case PAGEARG_PARAMSET:
+	if (IsValidUUID("$arg") || IsValidHash("$arg")) {
 	    return 1;
 	}
 	break;

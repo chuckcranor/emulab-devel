@@ -284,7 +284,8 @@ function Do_GetParameters()
         );
     }
     elseif (isset($ajax_args["rerun_paramset"])) {
-        if (!IsValidUUID($ajax_args["rerun_paramset"])) {
+        if (!(IsValidUUID($ajax_args["rerun_paramset"]) ||
+              IsValidHash($ajax_args["rerun_paramset"]))) {
             SPITAJAX_ERROR(1, "Rerun paramset UUID is not a valid UUID");
             return;
         }
