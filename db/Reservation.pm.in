@@ -2024,7 +2024,9 @@ sub MaxSwapIn($$$) {
 
     my $reservation = CreateImmediate( $class, $experiment->pid(),
 				       $experiment->eid(),
-				       $experiment->swapper(),
+				       ($experiment->geniflags() ?
+					$experiment->creator() :
+					$experiment->swapper()),
 				       ExpectedEnd( $class, $experiment ),
 				       $type, $MAX );
 
