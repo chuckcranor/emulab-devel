@@ -590,8 +590,6 @@ window.instantiateCommon = (function () {
 	    var urn   = $(this).find(".select_where").attr("urn");
 	    var types = {};
 	    
-	    console.info("GenerateReservationInfo", urn);
-	    
 	    if (urn == "" || !_.has(resgroups.current[urn], pid)) {
 		return;
 	    }
@@ -610,7 +608,7 @@ window.instantiateCommon = (function () {
 		types[type].total    += count;
 		types[type].rescount += 1;
 	    });
-	    console.info("GenerateReservationInfo", urn, types);
+	    console.info("GenerateReservationInfo", pid, urn, types);
 
 	    _.each(types, function (info, type) {
 		var nodecount = info.total;
@@ -636,8 +634,8 @@ window.instantiateCommon = (function () {
 		 */
 		if (resinfo &&
 		    _.has(resinfo, urn) &&
-		    _.has(resinfo[urn].current, pid)) {
-		    _.each(resinfo[urn].current[pid], function (cur) {
+		    _.has(resinfo[urn].current, pid.toLowerCase())) {
+		    _.each(resinfo[urn].current[pid.toLowerCase()], function (cur) {
 			if (cur.nodetype == type) {
 			    if (mode == null || mode == "project") {
 				text += " and is currently using " + cur.used;

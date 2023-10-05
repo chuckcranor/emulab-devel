@@ -1296,16 +1296,18 @@ sub CurrentReservations($;$$$) {
              "r.approved IS NOT NULL ".
 	     ($activeonly ? 
 	      "AND r.start < NOW() AND r.end > NOW() " : " ") .
-	     (defined($uid) ?
-	      "AND p.shared_reservations=1 or r.uid='$uid' " : " ") .
         "GROUP BY r.pid, p.shared_reservations, r.uid, r.type" );
 
-    while( my($pid, $shared_reservations, $uid, $type,
+    while( my($pid, $shared_reservations, $thisuid, $type,
 	      $reserved, $used, $ready, $reloading) =
 	   $query_result->fetchrow_array() ) {
 	my $restype = Project::SharedReservationsString($shared_reservations);
+
+	next
+	    if (! ($shared_reservations ||
+		   (defined($uid) && $uid eq $thisuid)));
 	
-	push( @answer, { 'pid' => $pid, 'uid' => $uid, 'nodetype' => $type,
+	push( @answer, { 'pid' => $pid, 'uid' => $thisuid, 'nodetype' => $type,
 			 'reserved' => $reserved, 'used' => $used,
 			 'ready' => $ready, 'reloading' => $reloading,
 			 'shared_reservations' => $restype } );
