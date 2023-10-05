@@ -256,17 +256,33 @@ if (defined($n300)) {
 # a bit more before moving into hwcheckup.
 #
 my $ed1 = Node->Lookup("ed1");
-if ($ed1->IsReserved() && $ed1->pid() eq TBOPSPID() &&
-    ($ed1->eid() eq NODEDEAD_EID() || $ed1->eid() eq NFREELOCKED_EID())) {
+if ($ed1->IsReserved()) {
+    print "ed1 is reserved\n";
     print "Waiting 60 seconds for management interface to come alive\n";
     sleep(60);
 
-    my $pid = TBOPSPID();
-    my $eid = $ed1->eid();
+    if (!$impotent) {
+	print "Powering on ed1\n";
+	if (!$impotent) {
+	    system("$SUDO $POWER on ed1");
+	    if ($?) {
+		fatal("Could not power on ed1");
+	    }
+	    sleep(10);
+	}
+    }
+    if ($ed1->pid() eq TBOPSPID() &&
+	($ed1->eid() eq NODEDEAD_EID() || $ed1->eid() eq NFREELOCKED_EID())) {
+
+	my $pid = TBOPSPID();
+	my $eid = $ed1->eid();
     
-    print "Releasing ed1 from $pid,$eid\n";
-    if (system("$SUDO -u $PROTOUSER $WAP $NFREE $pid $eid ed1")) {
-	fatal("Could not free ed1 from " . $ed1->eid());
+	print "Releasing ed1 from $pid,$eid\n";
+	if (!$impotent) {
+	    if (system("$SUDO -u $PROTOUSER $WAP $NFREE $pid $eid ed1")) {
+		fatal("Could not free ed1 from " . $ed1->eid());
+	    }
+	}
     }
 }
 

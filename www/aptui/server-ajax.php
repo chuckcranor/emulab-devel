@@ -47,12 +47,9 @@ $session_interactive  = 0;
 $routing = array("geni-login" =>
 			array("file"    => "geni-login.ajax",
 			      "guest"   => true,
-			      "methods" => array("GetSignerInfo" =>
-						      "Do_GetSignerInfo",
-						 "CreateSecret" =>
-						      "Do_CreateSecret",
-						 "VerifySpeaksfor" =>
-						      "Do_VerifySpeaksfor")),
+			      "methods" => array("NoMoreGeniLogin" =>
+                                                     "Do_NoMoreGeniLogin"),
+                        ),
 		 "dashboard" =>
 			array("file"    => "dashboard.ajax",
 			      "guest"   => false,

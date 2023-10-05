@@ -683,7 +683,7 @@ sub LookupAll($$;$$)
     my @reservations = ();
 
     my $query = $PGENISUPPORT ? "SELECT COUNT(*), e.pid, e.gid, e.eid, " .
-				"e.expt_swap_uid, " .
+				"e.expt_swap_uid, e.expt_head_uid, " .
 				"UNIX_TIMESTAMP( e.expt_expires ), ".
 				"e.autoswap, " .
 				"nr.pid as nr_pid, ".
@@ -716,7 +716,8 @@ sub LookupAll($$;$$)
 				"      (n.reservable=1 and n.node_id='$type')) ".
 	                        "  and a.attrvalue is null ".
 				"GROUP BY " .
-				"e.pid, e.gid, e.eid, e.expt_swap_uid, n.reserved_pid, " .
+				"e.pid, e.gid, e.eid, e.expt_swap_uid, " .
+				"e.expt_head_uid, n.reserved_pid, " .
 	                        "nr.pid, UNIX_TIMESTAMP( pr.end )" :
 				"SELECT COUNT(*), e.pid, e.gid, e.eid, " .
 				"e.expt_swap_uid, " .
@@ -754,8 +755,8 @@ sub LookupAll($$;$$)
 
     $$details = "--- Node usage:\n" if( ref( $details ) );
     
-    while( my($count, $pid, $gid, $eid, $uid, $end, $autoswap, $nr_pid,
-	      $slice_expire, $slice_lockdown, $reserved_pid, $pr_end,
+    while( my($count, $pid, $gid, $eid, $uid, $head_uid, $end, $autoswap,
+	      $nr_pid, $slice_expire, $slice_lockdown, $reserved_pid, $pr_end,
 	      $expt_lockdown, $swappable, $nr_eid) =
 	   $query_result->fetchrow_array() ) {
 	my $endtime;
@@ -772,6 +773,9 @@ sub LookupAll($$;$$)
 	    # if locked down, otherwise assume released at slice expiry
 	    # time.
 	    $endtime = $slice_lockdown ? undef : $slice_expire;
+	    # Use the experiment creator (not swapper) for GENI slices,
+	    # because it doesn't help us when the swapper is set to "geniuser".
+	    $uid = $head_uid;
 	} else {
 	    # A non-GENI slice.  Use the computed autoswap duration,
 	    # if autoswap is enabled.
@@ -1342,7 +1346,7 @@ sub CurrentReservations($;$$$) {
     }
 
     my $query_result = DBQueryFatal(
-	"SELECT r.pid, r.gid, r.uid, r.type, SUM( r.nodes ), " .
+	"SELECT r.pid, r.gid, p.shared_reservations, r.uid, r.type, SUM( r.nodes ), " .
 	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n ".
             "WHERE res.pid=r.pid AND res.node_id=n.node_id AND ".
 	    "      ((n.reservable=0 and n.type=r.type) or ".
@@ -1356,7 +1360,7 @@ sub CurrentReservations($;$$$) {
 	    "WHERE n.node_id=res.node_id AND res.pid='" . TBOPSPID() ."' AND " .
 	    "res.eid IN (" . join(",", map {"'$_'"} @$TRANSIENTS) . ")) " .
 	"FROM future_reservations AS r ".
-	(defined($uid) ? "JOIN projects as p on p.pid_idx=r.pid_idx " : "") .	
+	"JOIN projects as p on p.pid_idx=r.pid_idx ".
 	"WHERE $pclause ".
              "r.approved IS NOT NULL ".
 	     ($activeonly ? 
@@ -1367,13 +1371,14 @@ sub CurrentReservations($;$$$) {
 	      " ( p.shared_reservations=2 $gclause ) ) " .
         "GROUP BY r.pid, r.gid, r.uid, r.type" );
 
-    while( my($pid, $gid, $uid, $type,
+    while( my($pid, $gid, $shared_reservations, $uid, $type,
 	      $reserved, $used, $ready, $reloading) =
 	   $query_result->fetchrow_array() ) {
 	push( @answer, { 'pid' => $pid, 'gid' => $gid, 'uid' => $uid,
 			 'nodetype' => $type, 'reserved' => $reserved,
 			 'used' => $used, 'ready' => $ready,
-			 'reloading' => $reloading } );
+			     'reloading' => $reloading,
+			     'shared_reservations' => $shared_reservations } );
     }
     
     return @answer;
@@ -2092,7 +2097,9 @@ sub MaxSwapIn($$$) {
 
     my $reservation = CreateImmediate( $class, $experiment->pid(),
 				       $experiment->eid(),
-				       $experiment->swapper(),
+				       ($experiment->geniflags() ?
+					$experiment->creator() :
+					$experiment->swapper()),
 				       ExpectedEnd( $class, $experiment ),
 				       $type, $MAX, $experiment->gid() );
 

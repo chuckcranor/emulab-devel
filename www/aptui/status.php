@@ -391,7 +391,7 @@ if (isset($this_user)) {
 # Current and Future reservations for the cluster picker during modify
 $project = $instance->Project();
 $resinfo = ReservationGroup::ReservationInfo(
-    array($project->pid() => $project));
+    array($project->pid() => $project), $this_user);
 echo "<script type='text/plain' id='resgroup-json'>\n";
 echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
 echo "</script>\n";

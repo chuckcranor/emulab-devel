@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2022 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1233,6 +1233,7 @@ sub LoadVirtNodes($)
 	$vnode->_blockstore_attributes(undef);
 	$vnode->_sanhostname(undef);
 	$vnode->_forcedarchitecture(undef);
+	$vnode->_pnode(undef);
 
 	#
 	# Explicit type request desire to match feature.
@@ -1240,6 +1241,9 @@ sub LoadVirtNodes($)
 	my $explict_type_request;
 	$nodetype->GetAttribute("explicit_request", \$explict_type_request);
 	$vnode->_explicit_type_request($explict_type_request);
+
+	# Similar, for handling conflicting nodes. Set later
+	$vnode->_explicit_node_request(undef);
 
 	# For a list of interfaces on this node, as for rspec generation
 	$vnode->_virtifaces([]);
@@ -1511,9 +1515,9 @@ sub LoadVirtNodes($)
 	    !($vnode->type() eq "blockstore" ||
 	      $vnode->type() eq "interconnect" ||
 	      $vnode->type() eq "interconnect-vm")) {
-	    my $defmem = 128;
-	    my $minmem = 128;
-	    my $maxmem = 128;
+	    my $defmem = 1024;
+	    my $minmem = 1024;
+	    my $maxmem = 1024;
 
 	    if (defined($vnode->_parent_osinfo())
 		&& $vnode->_parent_osinfo()->FeatureSupported("xen-host")) {
@@ -1633,12 +1637,27 @@ sub LoadVirtNodes($)
 	if (!defined($fixnode) || $vnode->_fixedvm() eq $vname) {
 	    # Lets make sure its a real node.
 	    my $fixvname = $vnode->_fixedvm();
-	    
-	    if (!defined(Node->Lookup($fixvname))) {
+
+	    my $realnode = Node->Lookup($fixvname);
+	    if (!defined($realnode)) {
 		tberror("Cannot fix $vnode to $fixvname; No such phys node\n");
 		return -1;
 	    }
 	    $vnode->_fixedvm(undef);
+
+	    #
+	    # If fixed to a specific *shared* node, then we know the OS
+	    # that needs to be a parent of the VM's OS, which might not
+	    # be the default parent we set it to above.
+	    #
+	    if ($realnode->sharing_mode() && $vnode->type() ne "blockstore") {
+		my $realos = $realnode->RunningOsImage();
+		if (!defined($realos)) {
+		    tberror("No current OS for shared node $fixvname\n");
+		    return -1;
+		}
+		$vnode->_parent_osinfo($realos);
+	    }
 	    next;
 	}
 	my $osimage;
@@ -1670,6 +1689,52 @@ sub LoadVirtNodes($)
 	# See comment above.
 	#
 	delete($self->fixed()->{$fixnode})
+    }
+
+    #
+    # Deal with conflicting nodes. ptopgen forces nodes with conflicting nodes
+    # to be explictly requested by name. and so we can check here for the
+    # conflicts, which is easier and allows for a rational error message back
+    # to the user.
+    #
+    # Anyway, if a node has conflicting nodes, it cannot be allocated if any
+    # of the conflict nodes are allocated (except to hwdown/hwbroken).
+    #
+    foreach my $vname (sort(keys(%{ $self->fixednodes() }))) {
+	my $vnode = $self->vnodes()->{$vname};
+	my $fixed = $self->fixednodes()->{$vname};
+
+	next
+	    if (! $self->isatoponode($vname) || $vnode->_isvirtnode());
+
+	my $realnode = Node->Lookup($fixed);
+	if (!$realnode) {
+	    tberror("Conflict check: No such physical node $fixed\n");
+	    return -1;
+	}
+	my $conflicting_nodes = $realnode->conflicting_nodes();
+	next
+	    if (!defined($conflicting_nodes));
+
+	foreach my $con_id (split(",", $conflicting_nodes)) {
+	    my $connode = Node->Lookup($con_id);
+	    
+	    if (!$connode) {
+		tberror("Conflict check: No such physical node $con_id\n");
+		return -1;
+	    }
+	    if ($connode->IsReserved() && $connode->pid() ne TBOPSPID()) {
+		tberror("Conflicting node $con_id is already reserved\n");
+		return -1;
+	    }
+	}
+
+	#
+	# Set this to cause a desire that says the user properly has
+	# requested the specific node. ptopgen adds the equiv feature to
+	# nodes with conflicting_nodes.
+	#
+	$vnode->_explicit_node_request($fixed);
     }
 
     #
@@ -2181,6 +2246,12 @@ sub LoadVirtLans($)
 	my $porttoken = $virtlan->_portvlan();
 
 	#
+	# Unbound, connect later. 
+	#
+	next
+	    if ($porttoken eq "__placeholder__");
+
+	#
 	# Map the token.
 	#
 	my $rowref = Lan->LookupSharedVLanByToken($porttoken);
@@ -2631,6 +2702,10 @@ sub GenVirtNodes($)
 	}
 	if ($vnode->_explicit_type_request()) {
 	    $desires->{"$type" . "-explicit"} = ['', 1.0];
+	}
+	if ($vnode->_explicit_node_request()) {
+	    my $node_id = $vnode->_explicit_node_request();
+	    $desires->{"$node_id" . "-explicit"} = ['', 1.0];
 	}
 	$self->createNode($vname, $vnode->_cmurn(),
 			  $type, $nodeweight, $desires, $others, \@interfaces);
@@ -3997,6 +4072,13 @@ sub GenVirtLans($)
 		my $bandwidth  = $self->getbandwidth($member,$vlan,$bw);
 		my $rbandwidth = $self->getbandwidth($member,$vlan,$rbw);
 
+		# Rob says not supported
+		if (($trivial_ok || $emulated) &&
+		    ($bandwidth == 0 || $rbandwidth == 0)) {
+		    tberror("Cannot mix trivial_ok|emulated with * bw\n");
+		    $errors++;
+		}
+		
 		#
 		# Lets see how many <=1Gb and >1Gb links we have. HACK!
 		#
@@ -7453,7 +7535,13 @@ sub InterpLinksAux($)
 	    $protolan->SetType("portlan");
 	    $protolan->SetRole("port/lan");
 	    $protolan->SetAttribute("link/lan", $lan);
-	    $protolan->SetAttribute("target_lanid", $portvlan->lanid());
+	    # Watch for placeholder shared vlan.
+	    if (ref($portvlan)) {
+		$protolan->SetAttribute("target_lanid", $portvlan->lanid());
+	    }
+	    else {
+		$protolan->SetAttribute("target_lanid", "unbound");
+	    }
 
 	    if ($member0->usevirtiface()) {
 		$protolan->AddMember($nodeA, $portA);
@@ -7470,7 +7558,10 @@ sub InterpLinksAux($)
 		# so that tmcd can find the vlan tag. Do this here
 		# since we have what we need in hand. 
 		#
-		$virtiface->Update({"vlanid" => $portvlan->lanid()});
+		# Watch for placeholder shared vlan.
+		#
+		$virtiface->Update({"vlanid" =>
+				    ref($portvlan) ? $portvlan->lanid() : -1});
 	    }
 	    else {
 		$protolan->AddInterface($nodeA, $vnodeA, $vportA, $portA);
@@ -7963,6 +8054,35 @@ sub nodejailosinfo($$)
     my $osinfo    = $virtnode->_osinfo();
 
     $self->printdb("nodejailosid: $virtnode, $osinfo\n");
+    if ($osinfo->isImageAlias()) {
+	#
+	#  
+	#
+	my $posinfo;
+	
+	if ($virtnode->_pnode()) {
+	    my $vpnode  = $virtnode->_pnode();
+	    my $pnode   = $vpnode->GetPhysHost();
+	    $posinfo = $osinfo->MapToImage($pnode->type());
+	}
+	else {
+	    #
+	    # The problem on say, the Moonshot cluster, is that ARM
+	    # images do not do XEN, so we have to ata least find an image
+	    # that is jail capable. 
+	    #
+	    foreach my $image ($osinfo->imagelist()) {
+		if ($image->DefaultParent()) {
+		    $posinfo = $image;
+		    last
+		}
+	    }
+	}
+	if (defined($posinfo)) {
+	    $self->printdb("nodejailosid: Mapped image alias to $posinfo\n");
+	    $osinfo = $posinfo;
+	}
+    }
 
     #
     # The old method was to use nextosid, but the new method uses
@@ -10465,7 +10585,7 @@ sub GetWiretype($$$)
     if ($bandwidth == 0) {
 	$wiretype = "ethernet";
     }
-    elsif ($bandwidth <= 100000) {
+    elsif (0 && $bandwidth <= 100000) {
 	# 100 Mbit
 	$wiretype = "ethernet-100000";
     }

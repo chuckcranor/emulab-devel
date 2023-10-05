@@ -197,8 +197,13 @@
 			  <% } %>
 			  icon_position_2"
 		   data-toggle="tooltip"
-		   title="Project <%- resgroup.project %> has an
-			  <%- resgroup.which %> reservation on this cluster."
+		   <% if (resgroup.mode == "project") { %>
+		     title="Project <%- resgroup.project %> has an
+			    <%- resgroup.which %> reservation on this cluster."
+		   <% } else { %>
+		     title="You have a <%- resgroup.which %> cluster reservation 
+			  in project <%- resgroup.project %>."
+		   <% } %>
 		   data-placement="right">
 		<span class="glyphicon glyphicon-calendar pull-right"></span>
 	      </div>
@@ -266,8 +271,13 @@
 			  <% } %>
 			  icon_position_1"
 		   data-toggle="tooltip" data-bs-toggle="tooltip"
-		   title="Project <%- pid %> has an
-			  <%- resgroup.which %> cluster reservation."
+		   <% if (resgroup.mode == "project") { %>
+		     title="Project <%- pid %> has an
+		          <%- resgroup.which %> cluster reservation."
+		   <% } else { %>
+		     title="You have a <%- resgroup.which %> cluster reservation 
+			  in project <%- pid %>."
+		   <% } %>
 		   data-placement="right" data-bs-placement="right">
 		<span class="glyphicon glyphicon-calendar pull-right"></span>
 	      </div>

@@ -68,6 +68,12 @@ use User;
 use Node;
 use EmulabFeatures;
 use Reservation;
+if ($PGENISUPPORT) {
+    require GeniDB;
+    require GeniUser;
+    # talk to the right DB.
+    GeniDB::DBConnect(GeniDB::GENICM_DBNAME());
+}
 
 #
 # Turn off line buffering on output
@@ -154,6 +160,25 @@ if (!$experiment->AccessCheck($this_user, TB_EXPT_MODIFY)) {
     die("*** $0:\n".
 	"    You do not have permission to allocate nodes in $pid/$eid\n");
 }
+
+#
+# Ick. For reservation related stuff, the current user will not be the
+# correct user when coming in on the Geni path for a nonlocal project.
+# Poor design choice many years ago.
+#
+# See similar (bad) hack in nalloc. :-(
+#
+my $reservation_user = $this_user;
+if ($PGENISUPPORT &&
+    exists($ENV{'REALGENIURN'}) && $ENV{'REALGENIURN'} ne "") {
+    my $geniuser = GeniUser->Lookup($ENV{'REALGENIURN'}, 1);
+    if (!defined($geniuser)) {
+	fatal("Could not lookup geniuser for " . $ENV{'REALGENIURN'});
+    }
+    $reservation_user = $geniuser;
+}
+print "nalloc: reservation_user='$reservation_user'\n"
+    if (defined($reservation_user));
 
 $admission_ctrl = TBGetSiteVar( "general/admission_control" );
 $admission_ctrl = defined( $admission_ctrl ) && $admission_ctrl;
@@ -325,7 +350,7 @@ foreach my $node (@nodes) {
 					      $debug ? \$resdetails : undef);
     print $resdetails if ($debug);
     my $res = Reservation->CreateImmediate($pid, $eid,
-					   $this_user->uid(),
+					   $reservation_user->uid(),
 					   $endtime, $node_id, 1, $gid);
     push(@$reservations, $res);
     
@@ -365,7 +390,7 @@ foreach my $type ( keys( %types ) ) {
 		     !grep( $_ eq $node->node_id(), @trivial_nodes ) );
     }
     my $res = Reservation->CreateImmediate( $pid, $eid,
-					    $this_user->uid(),
+					    $reservation_user->uid(),
 					    $endtime, $type, $count, $gid );
     if ($debug) {
 	print "$res\n";

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,25 +33,5 @@ $page_title = "Login";
 # Get current user but make sure coming in on SSL.
 #
 RedirectSecure();
-$this_user = CheckLogin($check_status);
-if ($CHECKLOGIN_STATUS & CHECKLOGIN_LOGGEDIN) {
-    SPITUSERERROR("You are already logged in!");
-}
-$hash = GENHASH();
-
-SPITHEADER(1);
-
-# Place to hang the toplevel template.
-echo "<div id='page-body'></div>\n";
-echo "<div id='waitwait_div'></div>\n";
-echo "<script src='https://www.emulab.net/protogeni/speaks-for/geni-auth.js'>
-      </script>\n";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-
-REQUIRE_UNDERSCORE();
-REQUIRE_SUP();
-SPITREQUIRE("js/geni-login.js");
-
-AddTemplateList(array("geni-login", "waitwait-modal"));
-SPITFOOTER();
+SPITUSERERROR("Geni login is no longer supported.");
 ?>

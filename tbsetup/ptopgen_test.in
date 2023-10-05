@@ -125,6 +125,10 @@ my $cmuuid = TBGetSiteVar('protogeni/cm_uuid');
 my $cmurn = "";
 if ($PGENISUPPORT) {
     require GeniHRN;
+    require GeniDB;
+    require GeniUser;
+    # talk to the right DB.
+    GeniDB::DBConnect(GeniDB::GENICM_DBNAME());
     $cmurn = &GeniHRN::Generate($OURDOMAIN, "authority", "cm");
 }
 my $allow_firewall = TBGetSiteVar("general/cnet_firewalls");
@@ -413,8 +417,27 @@ sub MyQueryFatal($)
 # Figure out who is running this script, to be used in finding OSes
 # with per-user permissions.  We assume that the user we want
 # to look up is the one running this script (and hence the mapper
-# wrapper that calls it).
+# wrapper that calls it). 
 my $this_user = User->ThisUser()->uid() || "";
+
+#
+# Ick. For reservation related stuff, the current user will not be the
+# correct user when coming in on the Geni path for a nonlocal project.
+# Poor design choice many years ago.
+#
+# Note that we want this to be undef, not "". if we do not have a user.
+#
+my $reservation_user = User->ThisUser()->uid();
+if ($PGENISUPPORT &&
+    exists($ENV{'REALGENIURN'}) && $ENV{'REALGENIURN'} ne "") {
+    my $geniuser = GeniUser->Lookup($ENV{'REALGENIURN'}, 1);
+    if (!defined($geniuser)) {
+	fatal("Could not lookup geniuser for " . $ENV{'REALGENIURN'});
+    }
+    $reservation_user = $geniuser->uid();
+}
+print STDERR "ptopgen: reservation_user='$reservation_user'\n"
+    if (defined($reservation_user));
 
 $fake_inet_switch = "internet";
 $fake_inet_iface = "(null)";
@@ -736,8 +759,7 @@ if( defined( $pid ) ) {
     my $project = Project->Lookup($pid);
     
     my @reservations =
-	Reservation->CurrentReservations( [ "$pid/$gid" ],
-					  User->ThisUser()->uid());
+	Reservation->CurrentReservations( [ "$pid/$gid" ], $reservation_user);
     if( @reservations ) {
 	my @types = Reservation->ReservableTypes();
 	foreach my $type (@types) {
@@ -768,7 +790,8 @@ if( defined( $pid ) ) {
 	    if ($res->{'nodetype'} eq $node_id) {
 		if ($res->{'pid'} eq $pid &&
 		    ($project->shared_reservations() ||
-		     ($this_user && $res->{'uid'} eq $this_user))) {
+		     ($reservation_user &&
+		      $res->{'uid'} eq $reservation_user))) {
 		    $reserved_nodes{$node_id} = $node;
 		}
 		else {

@@ -1474,6 +1474,16 @@ class User
 
 	return $this->Refresh();
     }
+    function ClearNonlocalID() {
+	$idx   = $this->uid_idx();
+        
+	DBQueryFatal("update users set ".
+		     "   nonlocal_id=null ".
+		     "where uid_idx='$idx'");
+	$this->user["nonlocal_id"] = null;
+	return 0;
+    }
+    
     function HasEncryptedCert($expired_notokay) {
 	$query_result =
 	    $this->TableLookUp("user_sslcerts", "cert,privkey",

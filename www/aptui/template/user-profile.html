@@ -134,7 +134,15 @@
       <% if (fields.nonlocal_id != "") { %>
 	<tr>
 	  <td>Nonlocal ID</td>
-	  <td><%= fields.nonlocal_id %></td>
+	  <% if (fields.bound_portal) { %>
+	    <td></td>
+	  <% } else { %>
+	    <td><%= fields.nonlocal_id %>
+	      <% if (window.MAINSITE) { %>
+		(<a class="toggle" data-name="nonlocal_id">Convert to local user</a>)
+	      <% } %>
+	    </td>
+	  <% } %>
 	</tr>
       <% } %>
       <tr>

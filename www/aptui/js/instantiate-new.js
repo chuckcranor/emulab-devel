@@ -1103,15 +1103,23 @@ $(function ()
 	    // Look for current or upcoming resgroups.
 	    var resgroup = null;
 	    if (_.has(resgroups.current, pid)) {
+		var details = resgroups.current[pid][0];
+
 		resgroup = {
 		    "which"   : "active",
 		    "class"   : "has_reservation",
-		};
+		    "mode"    : details["mode"],
+		    "uid"     : details["uid"],
+		}
 	    }
 	    else if (_.has(resgroups.future, pid)) {
+		var details = resgroups.future[pid][0];
+		
 		resgroup = {
 		    "which"   : "upcoming",
 		    "class"   : "future_reservation",
+		    "mode"    : details["mode"],
+		    "uid"     : details["uid"],
 		};
 	    }
 	    options = options +

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -797,10 +797,6 @@ function WRITESIDEBAR() {
 		      "$TBDOCBASE/doc/docwrapper.php3?docname=users.html");
 	NavMenuButton("Emulab Sponsors",
 		      "$TBDOCBASE/docwrapper.php3?docname=sponsors.html");
-    }
-    else {
-	NavMenuButton("Projects on $THISHOMEBASE",
-                      "$TBDOCBASE/projectlist.php3");
     }
     if ($TBMAINSITE && !$ISALTDOMAIN) {
 	NavMenuButton("<font color=red>In Memoriam</font>",
