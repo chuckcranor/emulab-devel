@@ -1277,7 +1277,7 @@ sub CurrentReservations($;$$$) {
     }
 
     my $query_result = DBQueryFatal(
-	"SELECT r.pid, r.uid, r.type, SUM( r.nodes ), " .
+	"SELECT r.pid, p.shared_reservations, r.uid, r.type, SUM( r.nodes ), " .
 	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n ".
             "WHERE res.pid=r.pid AND res.node_id=n.node_id AND ".
 	    "      ((n.reservable=0 and n.type=r.type) or ".
@@ -1291,21 +1291,24 @@ sub CurrentReservations($;$$$) {
 	    "WHERE n.node_id=res.node_id AND res.pid='" . TBOPSPID() ."' AND " .
 	    "res.eid IN (" . join(",", map {"'$_'"} @$TRANSIENTS) . ")) " .
 	"FROM future_reservations AS r ".
-	(defined($uid) ? "JOIN projects as p on p.pid_idx=r.pid_idx " : "") .	
+	"JOIN projects as p on p.pid_idx=r.pid_idx ".
 	"WHERE $pclause ".
              "r.approved IS NOT NULL ".
 	     ($activeonly ? 
 	      "AND r.start < NOW() AND r.end > NOW() " : " ") .
 	     (defined($uid) ?
 	      "AND p.shared_reservations=1 or r.uid='$uid' " : " ") .
-        "GROUP BY r.pid, r.uid, r.type" );
+        "GROUP BY r.pid, p.shared_reservations, r.uid, r.type" );
 
-    while( my($pid, $uid, $type,
+    while( my($pid, $shared_reservations, $uid, $type,
 	      $reserved, $used, $ready, $reloading) =
 	   $query_result->fetchrow_array() ) {
+	my $restype = Project::SharedReservationsString($shared_reservations);
+	
 	push( @answer, { 'pid' => $pid, 'uid' => $uid, 'nodetype' => $type,
 			 'reserved' => $reserved, 'used' => $used,
-			 'ready' => $ready, 'reloading' => $reloading } );
+			 'ready' => $ready, 'reloading' => $reloading,
+			 'shared_reservations' => $restype } );
     }
     
     return @answer;

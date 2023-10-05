@@ -258,6 +258,19 @@ class ReservationGroup
         return 0;
     }
 
+    function SharingMode()
+    {
+        $mode = $this->Project()->shared_reservations();
+
+        # Convert sharing mode to a string
+        if ($mode) {
+            return "project";
+        }
+        else {
+            return "user";
+        }
+    }
+
     function Blob($alldata = true)
     {
         $resgroup = $this;
@@ -288,6 +301,7 @@ class ReservationGroup
             $details["idledetection"] = ($resgroup->noidledetection() ?
                                          false : true);
         }
+        $details["shared_reservations"] = $project->shared_reservations();
         
         $clusters = array();
         foreach ($resgroup->reservations() as $reservation) {
@@ -454,11 +468,12 @@ class ReservationGroup
     # reservations in all of the projects a user is a member of.
     # Only care about cluster reservations.
     #
-    function ReservationInfo($projlist)
+    function ReservationInfo($projlist, $user)
     {
         $current = array();
         $future  = array();
         $pidlist = array();
+        $thisuid = $user->uid();
 
         while (list($pid) = each($projlist)) {
             $pidlist[] = "'" . $pid . "'";
@@ -478,14 +493,24 @@ class ReservationGroup
             $res = ReservationGroup::Lookup($row["uuid"]);
             $urn = $row["aggregate_urn"];
             $pid = $res->pid();
+            $uid = $res->creator_uid();
+            $mode = $res->SharingMode();
 
+            # Skip since they are not relevant to the current user.
+            # Note that the sharing mode is for the project, so all reservations
+            # in the project will be the same.
+            if ($mode == "user" && $uid != $thisuid) {
+                continue;
+            }
             $info = array(
                 "pid"           => $pid,
+                "uid"           => $uid,
                 "starttime"     => $res->start(),
                 "endtime"       => $res->end(),
                 "nodetype"      => $row["type"],
                 "nodecount"     => $row["count"],
                 "aggregate_urn" => $urn,
+                "mode"          => $mode,
             );
 
             if ($res->Active()) {

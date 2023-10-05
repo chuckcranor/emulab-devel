@@ -491,7 +491,7 @@ if ($this_user->IsNonLocal()) {
 }
 
 # Current and Future reservations for the cluster picker.
-$resinfo = ReservationGroup::ReservationInfo($projlist);
+$resinfo = ReservationGroup::ReservationInfo($projlist, $this_user);
 echo "<script type='text/plain' id='resinfo-json'>\n";
 echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
 echo "</script>\n";

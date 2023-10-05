@@ -328,18 +328,26 @@ window.instantiateCommon = (function () {
 		var resgroup = null;
 		if (_.has(resgroups.current, urn) &&
 		    _.has(resgroups.current[urn], pid)) {
+		    var res = resgroups.current[urn][pid][0];
+
 		    resgroup = {
 			"which"   : "active",
 			"class"   : "has_reservation",
 			"project" : pid,
+			"mode"    : res["mode"],
+			"uid"     : res["uid"],
 		    };
 		}
 		else if (_.has(resgroups.future, urn) &&
 			 _.has(resgroups.future[urn], pid)) {
+		    var res = resgroups.future[urn][pid][0];
+		    
 		    resgroup = {
 			"which"   : "upcoming",
 			"class"   : "future_reservation",
 			"project" : pid,
+			"mode"    : res["mode"],
+			"uid"     : res["uid"],
 		    };
 		}
 
@@ -591,12 +599,13 @@ window.instantiateCommon = (function () {
 	     * Total up all reservations for each type reserved.
 	     */
 	    _.each(resgroups.current[urn][pid], function (group) {
-		console.info(group);
+		//console.info(group);
 		var type  = group.nodetype;
 		var count = group.nodecount;
+		var mode  = group.mode;
 
 		if (!_.has(types, type)) {
-		    types[type] = {"total" : 0, "rescount" : 0};
+		    types[type] = {"total" : 0, "rescount" : 0, "mode" : mode};
 		}
 		types[type].total    += count;
 		types[type].rescount += 1;
@@ -606,12 +615,21 @@ window.instantiateCommon = (function () {
 	    _.each(types, function (info, type) {
 		var nodecount = info.total;
 		var rescount  = info.rescount;
+		var mode      = info.mode;
 		var cluster   = amlist[urn].name;
-		
-		var text = "Project " + pid + " has " + rescount + " active " +
-		    "reservation(s) at the " + cluster + " cluster for " +
-		    nodecount + " " + type + " node(s)";
+		var text;
 
+		if (mode == null || mode == "project") {
+		    text = "Project " + pid + " has " + rescount + " active " +
+			"reservation(s) at the " + cluster + " cluster for " +
+			nodecount + " " + type + " node(s)";
+		}
+		else if (mode == "user") {
+		    text = "You have " + rescount + " active reservation(s) " +
+			"in project " + pid + " at the " + cluster + " cluster for " +
+			nodecount + " " + type + " node(s)";
+		}
+		
 		/*
 		 * If the reseservation info has come back, we also know
 		 * how many of the type are in use.
@@ -621,7 +639,12 @@ window.instantiateCommon = (function () {
 		    _.has(resinfo[urn].current, pid)) {
 		    _.each(resinfo[urn].current[pid], function (cur) {
 			if (cur.nodetype == type) {
-			    text += " and is currently using " + cur.used;
+			    if (mode == null || mode == "project") {
+				text += " and is currently using " + cur.used;
+			    }
+			    else if (mode == "user") {
+				text += " and are currently using " + cur.used;
+			    }
 			}
 		    });
 		}

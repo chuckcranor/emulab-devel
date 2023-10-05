@@ -1385,6 +1385,24 @@ sub SetSharedReservations($$;$$)
 	SetSharedReservationsOff( $self, $details, $impotent );
 }
 
+#
+# Map shared reservations flag to string.
+#
+sub SharedReservationsString($)
+{
+    my ($self) = @_;
+    my $flag   = ref($self) ? $self->shared_reservations() : $self;
+    my $val    = undef;
+    
+    if ($flag) {
+	$val = "project";
+    }
+    else {
+	$val = "user";
+    }
+    return $val;
+}
+
 sub Leases($)
 {
     my ($self) = @_;
