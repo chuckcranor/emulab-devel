@@ -1316,34 +1316,28 @@ sub CurrentReservations($;$$$) {
     my ($class, $pidgidlist, $uid, $activeonly) = @_;
     my @answer = ();
     my @projlist = ();
-    my @grouplist = ();
-    my $pclause = "";
-    my $gclause = "";
+    my @pglist = ();
+    my $filter = "";
     $activeonly = 0 if (!defined($activeonly));
 
     if (defined($pidgidlist) && @$pidgidlist) {
-	foreach ( @$projlist ) {
-	    if( /^[-\w]+$/ ) {
-		push( @projlist, $_ );
-	    } elsif( m'^([-w]+)/([-w]+)$' ) {
+	foreach ( @$pidgidlist ) {
+	    if( m'^([-\w]+)/([-\w]+)$' ) {
 		push( @projlist, $1 );
-		push( @grouplist, $2 );
+		push( @pglist, [ $1, $2 ] );
 	    } else {		
-		# reject illegal PIDs
+		# reject illegal PID/GIDs
 		return undef;
 	    }
 	}
-	# These clauses are flawed -- if @$pidgidlist is
-	# [ "pr1/gr1", "pr2/gr2" ], the $pclause and $gclause we generate will
-	# yield spurious matches if there happen to be reservations for
-	# (e.g.) "pr1/gr2".  However, this won't yet happen in practice
-	# because (as far as I know) nobody calls CurrentReservations()
-	# with more than one pid/gid pair.  If that ever changes, we
-	# should add more sophisticated constraints to the SQL query
-	# below.
-	$pclause = "r.pid IN ('" . join( "','", @projlist ) .	"') AND ";
-	$gclause = "AND r.gid IN ('" . join( "','", @grouplist ) . "') ";
-    }
+
+	$filter = "AND ( ( p.shared_reservations=0 AND r.uid='$uid' ) OR " .
+	    " ( p.shared_reservations=1 ) OR " .
+	    " ( p.shared_reservations=2 AND ( " .
+	    join( " OR ",
+		  map { "(r.pid='$$_[0]' AND r.gid='$$_[1]')" } @pglist ) .
+	    " ) ) ) ";
+    }    
 
     my $query_result = DBQueryFatal(
 	"SELECT r.pid, r.gid, p.shared_reservations, r.uid, r.type, SUM( r.nodes ), " .
@@ -1361,15 +1355,11 @@ sub CurrentReservations($;$$$) {
 	    "res.eid IN (" . join(",", map {"'$_'"} @$TRANSIENTS) . ")) " .
 	"FROM future_reservations AS r ".
 	"JOIN projects as p on p.pid_idx=r.pid_idx ".
-	"WHERE $pclause ".
-             "r.approved IS NOT NULL ".
+	"WHERE r.approved IS NOT NULL ".
 	     ($activeonly ? 
 	      "AND r.start < NOW() AND r.end > NOW() " : " ") .
-	     (defined($uid) ?
-	      "AND ( ( p.shared_reservations=0 AND r.uid='$uid' ) OR " .
-	      " ( p.shared_reservations=1 ) OR " .
-	      " ( p.shared_reservations=2 $gclause ) ) " .
-        "GROUP BY r.pid, r.gid, r.uid, r.type" );
+	$filter .
+	      "GROUP BY r.pid, r.gid, r.uid, r.type" );
 
     while( my($pid, $gid, $shared_reservations, $uid, $type,
 	      $reserved, $used, $ready, $reloading) =
