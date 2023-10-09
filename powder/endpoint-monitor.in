@@ -473,6 +473,8 @@ sub CheckDeadman($$)
 #
 my $onBatteryTime    = undef;
 my $onBusTime        = time();
+# We can get transient onbattery indicators.
+my $onBatteryCount   = 0;
 
 my $tempWarningTime  = undef;
 my $tempShutdownTime = undef;
@@ -580,6 +582,28 @@ sub CheckTempAndBattery($$)
 	}
 	$tmp .= "\n";
 	logit($tmp);
+    }
+    #
+    # Watch for transient onbattery signal. Did not know this could happen.
+    #
+    if ($ONBUS) {
+	if ($onbattery && !$onBatteryTime) {
+	    if (!$onBatteryCount) {
+		logit("Waiting to see if a transient onbattery indicator.\n");
+		$onbattery = 0;
+		$onBatteryCount++;
+	    }
+	    else {
+		logit("Got another onbattery indicator.\n");
+		$onBatteryCount = 0;
+	    }
+	}
+	elsif (!$onbattery) {
+	    if ($onBatteryCount) {
+		logit("Looks like a transient onbattery indicator after all.\n");
+		$onBatteryCount = 0;
+	    }
+	}
     }
 
     #
@@ -1025,7 +1049,12 @@ sub NotifyUsers($$)
 {
     my ($subject, $message) = @_;
     my %users = ();
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
 
+    # Append a timestamp to the end of the body, helpful for debugging
+    # since email will probably be delayed during a disconnect.
+    $message .= "\n\n" . $stamp . "\n";
+    
     if ($impotent || $mailonly) {
 	print "$subject\n";
 	print "$message";
