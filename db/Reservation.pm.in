@@ -1368,7 +1368,7 @@ sub CurrentReservations($;$$$) {
 	     ($activeonly ? 
 	      "AND r.start < NOW() AND r.end > NOW() " : " ") .
 	$filter .
-	      "GROUP BY r.pid, r.gid, r.uid, r.type" );
+	      "GROUP BY p.shared_reservations, r.pid, r.gid, r.uid, r.type" );
 
     while( my($pid, $gid, $shared_reservations, $thisuid, $type,
 	      $reserved, $pidused, $uidused, $ready, $reloading) =
