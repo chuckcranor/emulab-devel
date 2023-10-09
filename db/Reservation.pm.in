@@ -1281,7 +1281,16 @@ sub CurrentReservations($;$$$) {
 	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n ".
             "WHERE res.pid=r.pid AND res.node_id=n.node_id AND ".
 	    "      ((n.reservable=0 and n.type=r.type) or ".
-	    "       (n.reservable=1 and n.node_id=r.type))), ".
+	    "       (n.reservable=1 and n.node_id=r.type))) as pidnodes, ".
+	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n, ".
+	    "    experiments as e, projects as p ".
+  	    " WHERE res.pid=r.pid AND res.node_id=n.node_id AND ".
+	    "       res.exptidx=e.idx AND ".
+	    "       p.pid_idx=e.pid_idx AND ".
+	    "       ((e.geniflags=0 && r.uid=e.expt_swap_uid) OR ".
+	    "         (e.geniflags=1 && r.uid=e.expt_head_uid)) AND ".
+	    "       ((n.reservable=0 and n.type=r.type) or ".
+	    "        (n.reservable=1 and n.node_id=r.type))) as uidnodes, ".
 	    "(SELECT COUNT(*) FROM nodes AS n LEFT OUTER JOIN reserved " .
 	    "AS res ON n.node_id=res.node_id ".
 	    "WHERE ((n.reservable=0 and n.type=r.type) or ".
@@ -1296,19 +1305,19 @@ sub CurrentReservations($;$$$) {
              "r.approved IS NOT NULL ".
 	     ($activeonly ? 
 	      "AND r.start < NOW() AND r.end > NOW() " : " ") .
+	     (defined($uid) ?
+	      "AND (p.shared_reservations=1 or r.uid='$uid') " :
+	      "AND p.shared_reservations=1 ") .
         "GROUP BY r.pid, p.shared_reservations, r.uid, r.type" );
 
     while( my($pid, $shared_reservations, $thisuid, $type,
-	      $reserved, $used, $ready, $reloading) =
+	      $reserved, $pidused, $uidused, $ready, $reloading) =
 	   $query_result->fetchrow_array() ) {
 	my $restype = Project::SharedReservationsString($shared_reservations);
 
-	next
-	    if (! ($shared_reservations ||
-		   (defined($uid) && $uid eq $thisuid)));
-	
 	push( @answer, { 'pid' => $pid, 'uid' => $thisuid, 'nodetype' => $type,
-			 'reserved' => $reserved, 'used' => $used,
+			 'reserved' => $reserved, 'used' => $pidused,
+			 'pidused' => $pidused, 'uidused' => $uidused,
 			 'ready' => $ready, 'reloading' => $reloading,
 			 'shared_reservations' => $restype } );
     }

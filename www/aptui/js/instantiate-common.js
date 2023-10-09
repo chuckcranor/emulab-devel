@@ -609,6 +609,7 @@ window.instantiateCommon = (function () {
 		types[type].rescount += 1;
 	    });
 	    console.info("GenerateReservationInfo", pid, urn, types);
+	    console.info("GenerateReservationInfo", resinfo);
 
 	    _.each(types, function (info, type) {
 		var nodecount = info.total;
@@ -638,10 +639,10 @@ window.instantiateCommon = (function () {
 		    _.each(resinfo[urn].current[pid.toLowerCase()], function (cur) {
 			if (cur.nodetype == type) {
 			    if (mode == null || mode == "project") {
-				text += " and is currently using " + cur.used;
+				text += " and is currently using " + cur.pidused;
 			    }
 			    else if (mode == "user") {
-				text += " and are currently using " + cur.used;
+				text += " and are currently using " + cur.uidused;
 			    }
 			}
 		    });
