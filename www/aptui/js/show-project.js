@@ -943,12 +943,17 @@ $(function ()
 				    /*
 				     * Active reservation for this type
 				     * at the same aggregate.
+				     *
+				     * If the project/res is per-user, do not
+				     * increment this since there are no project
+				     * reservations for this project.
 				     */
-				    if (!_.has(reslist_proj, type)) {
-					reslist_proj[type] = 0;
+				    if (group.shared_reservations == "project") {
+					if (!_.has(reslist_proj, type)) {
+					    reslist_proj[type] = 0;
+					}
+					reslist_proj[type] += res.count;
 				    }
-				    reslist_proj[type] += res.count;
-
 				    if (group.uid == details.creator) {
 					// And by the same user
 					if (!_.has(reslist_user, type)) {
