@@ -259,6 +259,19 @@ class Project
 	return $this->pid();
     }
 
+    function ResSharingMode()
+    {
+        $mode = $this->shared_reservations();
+
+        # Convert sharing mode to a string
+        if ($mode) {
+            return "project";
+        }
+        else {
+            return "user";
+        }
+    }
+
     #
     # Class function to create new project and return object.
     #

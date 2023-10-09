@@ -301,7 +301,7 @@ class ReservationGroup
             $details["idledetection"] = ($resgroup->noidledetection() ?
                                          false : true);
         }
-        $details["shared_reservations"] = $project->shared_reservations();
+        $details["shared_reservations"] = $resgroup->SharingMode();
         
         $clusters = array();
         foreach ($resgroup->reservations() as $reservation) {

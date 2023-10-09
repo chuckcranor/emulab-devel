@@ -514,6 +514,7 @@ $(function ()
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 	managerlist = JSON.parse(_.unescape($('#manager-json')[0].textContent));
 	console.info("amlist", amlist);
+	console.info("projlist", projlist);
 	console.info("managerlist", managerlist);
 	
 	if (window.ISPOWDER) {
@@ -630,8 +631,10 @@ $(function ()
  	
 	// Add one unassigned row.
 	if (!editing) {
-	    if (isadmin || managerlist[window.PID]) {
-		$('#for-class-checkbox').removeClass("hidden");
+	    if (projlist[window.PID].resmode != "user") {
+		if (isadmin || managerlist[window.PID]) {
+		    $('#for-class-checkbox').removeClass("hidden");
+		}
 	    }
 	    $('#pid').change(function (event) {
 		HandleProjectChange();
@@ -4276,15 +4279,18 @@ $(function ()
     function HandleProjectChange()
     {
 	var pid = $('#pid').val();
-	
+
 	// Project managers can set the for class checkbox
-	if (!isadmin) {
-	    if (managerlist[pid]) {
+	if (projlist[pid].resmode != "user") {
+	    if (isadmin || managerlist[pid]) {
 		$('#for-class-checkbox').removeClass("hidden");
 	    }
 	    else {
 		$('#for-class-checkbox').addClass("hidden");
 	    }
+	}
+	else {
+	    $('#for-class-checkbox').addClass("hidden");
 	}
 
 	if (window.ISPOWDER) {

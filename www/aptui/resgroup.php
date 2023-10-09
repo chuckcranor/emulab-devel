@@ -127,9 +127,14 @@ $doVerifySpectrum = 0;
 $mlist = array();
 $plist = array();
 while (list($p) = each($projlist)) {
-    $plist[] = $p;
     $ptmp = Project::LookupByPid($p);
     if ($ptmp) {
+        $info = array (
+            "pid"     => $p,
+            "resmode" => $ptmp->ResSharingMode(),
+            "manager" => $ptmp->IsManager($this_user),
+        );
+        $plist[$p] = $info;
         if ($ptmp->expert_mode()) {
             $bisdaysonly = 0;
         }
@@ -295,7 +300,7 @@ else {
         $default_pid = $project->pid();
     }
     else {
-        $default_pid = $plist[0];
+        $default_pid = array_key_first($plist);
     }
     echo "   window.EDITING  = false;\n";
     echo "   window.PID      = '$default_pid';\n";
@@ -304,7 +309,7 @@ else {
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";
 echo "   window.HOMETZ   = '$OURTIMEZONE';\n";
-echo "   window.BISONLY  = $ISPOWDER;\n";
+echo "   window.BISONLY  = 0;\n";
 echo "   window.DOROUTES = $routesokay;\n";
 
 echo "</script>\n";

@@ -55,6 +55,7 @@ my $TB          = "@prefix@";
 my $consetup    = "$TB/libexec/console_setup";
 my $makeconf    = "$TB/sbin/dhcpd_makeconf";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
+my $power       = "$TB/bin/power";
 
 #
 # Testbed Support libraries
@@ -122,6 +123,7 @@ my $need_consetup  = 0;
 my @need_history   = ();
 my @need_clearbl   = ();
 my @need_pxeconfig = ();
+my %has_conflicts  = ();
 my $errormsg       = "";
 my $admission_ctrl = 0;
 
@@ -265,6 +267,8 @@ foreach my $n (@node_names) {
 	}
     }
     if ($node->conflicting_nodes()) {
+	my @conflicts = ();
+	
 	foreach my $con_id (split(",", $node->conflicting_nodes())) {
 	    my $connode = Node->Lookup($con_id);
 	    
@@ -283,7 +287,10 @@ foreach my $n (@node_names) {
 		    next;
 		}
 	    }
+	    print "$n: Conflicting node $con_id will be powered off\n";
+	    push(@conflicts, $connode);
 	}
+	$has_conflicts{$n} = \@conflicts;
     }
     
     #
@@ -528,6 +535,21 @@ if (!$error && (!$noalloc || $partial) && @nodes) {
     foreach my $node (@need_pxeconfig) {
 	if ($node->boot_method() eq "pxelinux") {
 	    TBPxelinuxConfig($node);
+	}
+    }
+
+    # Power off conflicting nodes.
+    foreach my $node_id (keys(%has_conflicts)) {
+	my @conflicts = @{ $has_conflicts{$node_id} };
+	my $conflict_ids = join(" ", @conflicts);
+
+	print "Powering off conflicting node(s) for $node_id: $conflict_ids\n";
+	system("$power -a off $conflict_ids");
+	if ($?) {
+	    #
+	    # If this happens, we probably need to whine more.
+	    #
+	    $error++;
 	}
     }
 }

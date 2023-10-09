@@ -127,11 +127,11 @@
 			 data-key="pid">
 		    </div>
 		  </div>
-	        <% } else if (projects.length == 1) { %>
+	        <% } else if (_.size(projects) == 1) { %>
 		  <div class="form-group">
 		    <input name="pid" readonly
 			 id="pid"
-			 value="<%- projects[0] %>"
+			 value="<% print(_.first(_.keys(projects))) %>"
 			 class="form-control format-me"
 			 data-label="Project"
 			 data-key="pid">
@@ -145,7 +145,7 @@
 			    data-key="pid"
 			    data-label="Project"
 			    placeholder='Please Select'>
-		      <% _.each(projects, function(name) { %>
+		      <% _.each(projects, function(details, name) { %>
 			<option 
 			    <% if (default_pid === name) { %>
 			    selected

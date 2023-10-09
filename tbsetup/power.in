@@ -40,7 +40,8 @@ my $RPCSERVER  = "@OUTERBOSS_NODENAME@";
 my $RPCPORT    = "@OUTERBOSS_XMLRPCPORT@";
 my $RPCCERT    = "@OUTERBOSS_SSLCERTNAME@";
 my $WOL        = "$TB/sbin/whol";
-my $TBLOG	= "@TBLOGFACIL@";
+my $POWER      = "$TB/bin/power";
+my $TBLOG      = "@TBLOGFACIL@";
 
 use lib "@prefix@/lib";
 use libdb;
@@ -323,6 +324,8 @@ foreach my $nodeid (@machines) {
     my $power_delay = 60;
     my $postwol     = 0;
     my $forcecycle  = 0;
+    my @powergroup  = ();
+    
     if (defined($node)) {
 	$power_delay = $node->NodeTypeInfo()->power_delay();
 	$power_delay = 0 if (!defined($power_delay));
@@ -330,6 +333,14 @@ foreach my $nodeid (@machines) {
 	if ($node->NodeAttribute("wakeonlan_afterpower", \$postwol) != 0) {
 	    warn "Could not get wakeonlan_afterpower attr for $nodeid.\n";
 	    $postwol = 0;
+	}
+
+	my $pg;
+	if ($node->NodeAttribute("powergroup", \$pg) != 0) {
+	    warn "Could not get powergroup attr for $nodeid.\n";
+	}
+	elsif ($pg && $pg ne "") {
+	    @powergroup = split(",", $pg);
 	}
 
 	#
@@ -378,7 +389,8 @@ foreach my $nodeid (@machines) {
     #
     # Associate this node with the power controller it is attached to
     #
-    push @{$outlets{$power_id}}, [$nodeid, $outlet, $postwol, $forcecycle];
+    push @{$outlets{$power_id}},
+	[$nodeid, $outlet, $postwol, $forcecycle, \@powergroup];
 }
 
 print "machines= ",join(" ",@machines),"\n" if $verbose;
@@ -400,8 +412,9 @@ foreach my $power_id (keys %outlets) {
     my @forcenodes = ();
     my @unforcenodes = ();
     my %postwol = ();
+    my @powergroup = ();
     foreach my $node (@{$outlets{$power_id}}) {
-	my ($node_id, $outlet, $wol, $force) = @$node;
+	my ($node_id, $outlet, $wol, $force, $pg) = @$node;
 	push @nodes, $node_id;
 	push @outlets, $outlet;
 	if ($force) {
@@ -412,6 +425,7 @@ foreach my $power_id (keys %outlets) {
 	    push @unforcenodes, $node_id;
 	}
 	$postwol{$node_id} = $wol;
+	push @powergroup, @{$pg};
     }
     my $nodestr = join(",",@nodes);
 
@@ -744,6 +758,26 @@ foreach my $power_id (keys %outlets) {
 	    }
 	    push(@wolnodes, $nodeid)
 		if ($postwol{$nodeid});
+	}
+	if (@powergroup && $op =~ /^(on|off)$/) {
+	    my $power_ids = join(" ", @powergroup);
+	    print "Powering $op nodes in the power group: $power_ids\n";
+
+	    if ($op eq "off") {
+		# This delay is needed for radios.
+		print "Delaying 10 seconds ... \n";
+		sleep(10);
+		system("$POWER -a off $power_ids");
+		if ($?) {
+		    $errors++;
+		}
+	    }
+	    elsif ($op eq "on") {
+		system("$POWER -a on $power_ids");
+		if ($?) {
+		    $errors++;
+		}
+	    }
 	}
     } else {
 	$exitval += $errors;

@@ -19,6 +19,7 @@
 	<th class="sorter-false">&nbsp</th>
 	<% if (showuser) { %><th>Creator</th><% } %>
 	<% if (showproject) { %><th>Project</th><% } %>
+	<% if (showproject && isadmin) { %><th>S</th><% } %>
 	<% if (showportal) { %><th>Portal</th><% } %>
 	<th>Created</th>
 	<th>Starts</th>
@@ -145,6 +146,11 @@
 	      <% } else { %>
 		<%- value.remote_pid %>
 	      <% } %>
+	    </td>
+	  <% } %>
+	  <% if (showproject && isadmin) { %>	  
+	    <td style='white-space: nowrap;'>
+	      <% if (value.shared_reservations == "project") { %>P<% } else { %>U<% } %>
 	    </td>
 	  <% } %>
 	  <% if (showportal) { %>	  

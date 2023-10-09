@@ -18,40 +18,50 @@
 	      <!-- Nav tabs -->
 	      <ul class="nav nav-tabs" role="tablist">
 		<li role="presentation" class="nav-item">
-		  <a href="#experiments" role="tab" class="nav-link"
+		  <a href="#experiments" id="usertab-experiments"
+		     role="tab" class="nav-link"
 		     data-toggle="tab" data-bs-toggle="tab">Experiments</a></li>
 		<li role="presentation" class="nav-item">
-		  <a href="#profiles" role="tab" class="nav-link"
+		  <a href="#profiles" id="usertab-profiles"
+		     role="tab" class="nav-link"
 		     data-toggle="tab" data-bs-toggle="tab">Profiles</a></li>
 		<%  if (disabledset == 0 || (disabledset == 1 && isadmin) ) { %>
 		  <li role="presentation" class="nav-item">
-		    <a href="#datasets" role="tab" class="nav-link"
+		    <a href="#datasets" id="usertab-datasets"
+		       role="tab" class="nav-link"
 		       data-toggle="tab" data-bs-toggle="tab">Datasets</a></li>
 		<% } %>
 		<%  if (disabledres == 0 || (disabledres == 1 && isadmin) ) { %>
 		  <li role="presentation" class="hidden resgroups-hidden nav-item">
-		    <a href="#resgroups" role="tab" class="nav-link"
+		    <a href="#resgroups" id="usertab-resgroups"
+		       role="tab" class="nav-link"
 		       data-toggle="tab" data-bs-toggle="tab">Reservations</a></li>
 		<% } %>
 		<li role="presentation" class="nav-item hidden resources-hidden">
-		  <a href="#resources" role="tab" class="nav-link"
+		  <a href="#resources" id="usertab-resources"
+		     role="tab" class="nav-link"
 		     data-toggle="tab" data-bs-toggle="tab">Resources</a></li>
 		<li role="presentation" class="nav-item">
-		  <a href="#members" role="tab" class="nav-link"
+		  <a href="#members" id="usertab-members"
+		     role="tab" class="nav-link"
 		     data-toggle="tab" data-bs-toggle="tab">Members</a></li>
 		<li role="presentation" class="nav-item">
-		  <a href="#groups" role="tab" class="nav-link"
+		  <a href="#groups" id="usertab-groups"
+		     role="tab" class="nav-link"
 		     data-toggle="tab" data-bs-toggle="tab">Groups</a></li>
 		<li role="presentation" class="nav-item">
-		  <a href="#usage" role="tab" class="nav-link"
+		  <a href="#usage" id="usertab-usage"
+		     role="tab" class="nav-link"
 		     data-toggle="tab" data-bs-toggle="tab">Usage</a></li>
 		<% if (window.ISPOWDER) { %>
 		  <li role="presentation" class="hidden rfranges-hidden nav-item">
-		    <a href="#rfranges" role="tab" class="nav-link"
+		    <a href="#rfranges" id="usertab-rfranges"
+		       role="tab" class="nav-link"
 		       data-toggle="tab" data-bs-toggle="tab">RF Ranges</a></li>
 		<% } %>
 		<li role="presentation" class="nav-item">
-		  <a href="#project" role="tab" class="nav-link"
+		  <a href="#project" id="usertab-project"
+		     role="tab" class="nav-link"
 		     data-toggle="tab" data-bs-toggle="tab">
 		    Project Info</a></li>
 		<% if (showmore) { %>
