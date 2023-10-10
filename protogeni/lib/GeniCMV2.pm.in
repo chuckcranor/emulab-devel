@@ -7319,11 +7319,26 @@ sub ConnectSharedLan($)
     my @vinterfaces = ();
 
     foreach my $member (@members) {
-	my $interface = $member->GetInterface();
-
-	# Need the node for next lookup, ick.
-	my $node = Node->Lookup($interface->node_id());
-
+	#
+	# We tag the member with a vnode_id if its a pcvm. We need that to
+	# find the correct vinterface.
+	#
+	my $node_id;
+	my $node;
+	if ($member->GetAttribute("vnode_id", \$node_id) == 0 ||
+	    $member->GetAttribute("node_id", \$node_id) == 0) {
+	    $node = Node->Lookup($node_id)
+	}
+	else {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Cannot get node_id for member");
+	}
+	if (!defined($node)) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Cannot get node $node_id");
+	}
 	#
 	# Need the vinterface so that we can set/unset the vlanid, which is
 	# how tmcd tracks down the vlan tag. For now, unset means setting
