@@ -7792,8 +7792,9 @@ sub DoConnectSharedLan()
     my $errmsg;
     my $errcode  = -1;
     my $exitcode = -1;
-    my $optlist  = "r";
+    my $optlist  = "rR";
     my $remove   = 0;
+    my $noreconfig = 0;
     my $sourcelan;
     my $targetuuid;
     my $targetlan;
@@ -7801,6 +7802,9 @@ sub DoConnectSharedLan()
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
+    }
+    if (defined($options{"R"})) {
+	$noreconfig = 1;
     }
     if (defined($options{"r"})) {
 	$remove = 1;
@@ -7885,8 +7889,8 @@ sub DoConnectSharedLan()
 	goto bad;
     }
     my $aggregate = $instance->GetAggregate($smanager);
-    my $response  = $aggregate->ConnectSharedLan($sourcelan,
-						 $targetlan, $remove);
+    my $response  = $aggregate->ConnectSharedLan($sourcelan, $targetlan,
+						 $remove, $noreconfig);
 
     if (!defined($response)) {
 	$errmsg   = "RPC Error calling ConnectSharedLan on $aggregate\n";

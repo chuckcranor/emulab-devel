@@ -7190,6 +7190,7 @@ sub ConnectSharedLan($)
     my $sourcelan    = $argref->{'source'};
     my $targetlan    = $argref->{'target'};
     my $disconnect   = $argref->{'disconnect'};
+    my $noreconfig   = 0;
     my $target_sharedlan;
     require Node;
     require Interface;
@@ -7201,6 +7202,9 @@ sub ConnectSharedLan($)
     if (! (defined($credentials) && 
 	   defined($slice_urn) && defined($sourcelan))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    if (exists($argref->{'noreconfig'}) && $argref->{'noreconfig'} == 1) {
+	$noreconfig = 1;
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
@@ -7383,11 +7387,13 @@ sub ConnectSharedLan($)
     #
     # And now reconfig the node.
     #
-    system("$NODEREBOOT -c " . join(" ", map { $_->node_id(); } @vinterfaces));
-    if ($?) {
-	$slice->UnLock();
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Could not reconfig all nodes");
+    if (!$noreconfig) {
+	system("$NODEREBOOT -c " . join(" ", map { $_->node_id(); } @vinterfaces));
+	if ($?) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Could not reconfig all nodes");
+	}
     }
     $slice->UnLock();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);

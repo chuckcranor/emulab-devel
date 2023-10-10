@@ -2492,6 +2492,11 @@ function Do_ConnectSharedLan()
         $args = $ajax_args["source-lan"] . " " .
               $ajax_args["target-uuid"] . " " . $ajax_args["target-lan"];
     }
+
+    # Optional no reconfigure.
+    if ($ajax_args["noreconfig"] == 1) {
+        $args = "-R " . $args;
+    }
     
     #
     # Call out to the backend.

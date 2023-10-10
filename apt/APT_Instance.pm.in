@@ -6444,9 +6444,9 @@ sub Portstats($$)
 #
 # Connect shared lans
 #
-sub ConnectSharedLan($$$;$)
+sub ConnectSharedLan($$$;$$)
 {
-    my ($self, $source, $target, $disconnect) = @_;
+    my ($self, $source, $target, $disconnect, $noreconfig) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
@@ -6474,6 +6474,9 @@ sub ConnectSharedLan($$$;$)
     }
     else {
 	$args->{"target"} = $target;
+    }
+    if ($noreconfig) {
+	$args->{"noreconfig"} = 1;
     }
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);

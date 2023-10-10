@@ -866,6 +866,7 @@ $(function ()
 	var release = 0;
 	var modify  = 0;
 	var portstats = 0;
+	var connectshared = 0;
 
 	switch (status)
 	{
@@ -888,7 +889,7 @@ $(function ()
 	    
 	    case 'ready':
 	        terminate = refresh = reloadtopo = extend = snapshot = 1;
-	        destroy = modify = portstats = 1;
+	        destroy = modify = portstats = connectshared = 1;
   	        break;
 
 	    case 'quarantined':
@@ -920,6 +921,7 @@ $(function ()
 	ButtonState('release', release);
 	ButtonState('modify', modify);
 	ButtonState('portstats', portstats);
+	ButtonState('connect-sharedlan', connectshared);
 	ToggleLinktestButtons(status);
     }
     function EnableButton(button)
@@ -4120,6 +4122,8 @@ $(function ()
 	var target_lan  = $('#connect-sharedlan-modal .target-lan').val();
 	var which       = $('#connect-sharedlan-modal ' +
 			    'input[name="sharedlanradio"]:checked').val();
+	var noreconfig  = $('#connect-sharedlan-modal ' +
+			    '.form-check-input').is(':checked') ? 1 : 0;
 
 	var args = {
 	    "uuid"        : uuid,
@@ -4127,6 +4131,7 @@ $(function ()
 	    "source-lan"  : $.trim(source_lan),
 	    "target-lan"  : $.trim(target_lan),
 	    "which"       : which,
+	    "noreconfig"  : noreconfig,
 	};
 
 	var callback = function (json) {
