@@ -492,6 +492,36 @@ sub showsitevars()
 	}
 	print ".\n";
     }
+    #
+    # Image-backed datasets ("imdataset") are not an official dataset type
+    # in the eyes of the DB, but it is handy to be able to find out something
+    # about them and others all in one place. They fall under the purview of
+    # the images/create sitevars:
+    #
+    # maxdata	Maximum amount of uncompressed allocated data (GB) in a
+    #		filesystem allowed for image creation. Default is 0 (no limit).
+    # maxsize	Max size (GB) of a created image
+    #
+    print "imdataset:\n";
+
+    print "  Maximum size: ";
+    my $maxidata = 0;
+    if (TBGetSiteVar("images/create/maxdata", \$maxidata)) {
+	print "$maxidata GiB of";
+    } else {
+	print "unlimited";
+    }
+    print " (uncompressed) filesystem data, ";
+    my $maxisize = 0;
+    if (TBGetSiteVar("images/create/maxsize", \$maxisize)) {
+	print "$maxisize GiB";
+    } else {
+	print "unlimited";
+    }
+    print " resulting image size.\n";
+    print "  Expiration: Never.\n";
+    print "  Disposition: N/A.\n";
+    print "  Extensions: N/A.\n";
 }
 
 sub datestr($)
