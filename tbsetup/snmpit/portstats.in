@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -426,6 +426,11 @@ foreach my $name (keys %portMap) {
 	/comware/ && do {
 	    require snmpit_h3c;
 	    $device = new snmpit_h3c($name);
+	    last;
+	};
+	/planet/ && do {
+	    require snmpit_planet;
+	    $device = new snmpit_planet($name);
 	    last;
 	};
 

@@ -1582,6 +1582,176 @@ sub disablePortTrunking($$) {
     return 1;
 }
 
+#
+# Parse the output of the "show interface iface ... statistics" command.
+# Return a hash of per-interface hashes with the following SNMP OID keys:
+#
+#	'ifInOctets'		=> Rx Octets
+#	'ifInUcastPkts'		=> Rx Unicast
+#	'ifInNUcastPkts'	=> Rx Multicast + Rx Broadcast
+#	'ifInDiscards'		=> Rx Drops
+#	'ifInErrors'		=> 0
+#	'ifInUnknownProtos'	=> 0
+#	'ifOutOctets'		=> Tx Octets
+#	'ifOutUcastPkts'	=> Tx Unicast
+#	'ifOutNUcastPkts'	=> Tx Multicast + Tx Broadcast
+#	'ifOutDiscards'		=> Tx Drops
+#	'ifOutErrors'		=> 0
+#	'ifOutQLen'		=> 0
+#	# 64-bit counter versions
+#	'ifHCInOctets'		=> Rx Octets
+#	'ifHCInUcastPkts'	=> Rx Unicast
+#	'ifHCInMulticastPkts'	=> Rx Multicast
+#	'ifHCInBroadcastPkts'	=> Rx Broadcast
+#	'ifHCOutOctets'		=> Tx Octets
+#	'ifHCOutUcastPkts'	=> Tx Unicast
+#	'ifHCOutMulticastPkts'	=> Tx Multicast
+#	'ifHCOutBroadcastPkts'	=> Tx Broadcast
+#
+sub parsePortStats($$)
+{
+    my ($output, $hashp) = @_;
+
+    my $curif = "";
+    my %stats = ();
+    foreach my $line ( split /\n/, $output ) {
+	if ($line eq "") {
+	    next;
+	}
+	if ($line =~ /^(\S*GigabitEthernet\s+\d+\/\d+) Statistics:$/) {
+	    $curif = $1;
+	    $stats{$curif} = ();
+	    # these do not map to anything right now
+	    $stats{$curif}{'ifInErrors'} = 0;
+	    $stats{$curif}{'ifInUnknownProtos'} = 0;
+	    $stats{$curif}{'ifOutErrors'} = 0;
+	    $stats{$curif}{'ifOutQLen'} = 0;
+	    # make sure these are initialized for += below
+	    $stats{$curif}{'ifInNUcastPkts'} = 0;
+	    $stats{$curif}{'ifOutNUcastPkts'} = 0;
+	    next;
+	}
+	if ($curif eq "") {
+	    next;
+	}
+	if ($line =~ /^Rx Packets:\s+(\d+)\s+Tx Packets:\s+(\d+)$/) {
+	    next;
+	}
+	if ($line =~ /^Rx Octets:\s+(\d+)\s+Tx Octets:\s+(\d+)$/) {
+	    $stats{$curif}{'ifInOctets'} = $1;
+	    $stats{$curif}{'ifHCInOctets'} = $1;
+	    $stats{$curif}{'ifOutOctets'} = $2;
+	    $stats{$curif}{'ifHCOutOctets'} = $2;
+	    next;
+	}
+	if ($line =~ /^Rx Unicast:\s+(\d+)\s+Tx Unicast:\s+(\d+)$/) {
+	    $stats{$curif}{'ifInUcastPkts'} = $1;
+	    $stats{$curif}{'ifHCInUcastPkts'} = $1;
+	    $stats{$curif}{'ifOutUcastPkts'} = $2;
+	    $stats{$curif}{'ifHCOutUcastPkts'} = $2;
+	    next;
+	}
+	if ($line =~ /^Rx Multicast:\s+(\d+)\s+Tx Multicast:\s+(\d+)$/) {
+	    $stats{$curif}{'ifInNUcastPkts'} += $1;
+	    $stats{$curif}{'ifHCInMulticastPkts'} = $1;
+	    $stats{$curif}{'ifOutNUcastPkts'} += $2;
+	    $stats{$curif}{'ifHCOutMulticastPkts'} = $2;
+	    next;
+	}
+	if ($line =~ /^Rx Broadcast:\s+(\d+)\s+Tx Broadcast:\s+(\d+)$/) {
+	    $stats{$curif}{'ifInNUcastPkts'} += $1;
+	    $stats{$curif}{'ifHCInBroadcastPkts'} = $1;
+	    $stats{$curif}{'ifOutNUcastPkts'} += $2;
+	    $stats{$curif}{'ifHCOutBroadcastPkts'} = $2;
+	    next;
+	}
+	if ($line =~ /^Rx Drops:\s+(\d+)\s+Tx Drops:\s+(\d+)$/) {
+	    $stats{$curif}{'ifInDiscards'} = $1;
+	    $stats{$curif}{'ifOutDiscards'} = $2;
+	    next;
+	}
+
+    }
+    if ($hashp) {
+	%{$hashp} = %stats;
+    }
+}
+
+#
+# Read a set of values for all given ports.
+#
+# XXX this is an SNMP specific call only used to get port counters.
+# We hack the bejesus out of it, mapping OIDs to values returned via the
+# CLI. This will fail dramatically if used for anything but portstats...	
+#
+# usage: getFields(self,ports,oids)
+#        ports: Reference to a list of ports, in any allowable port format
+#        oids: A list of OIDs to reteive values for
+#
+# On success, returns a two-dimensional list indexed by port,oid
+#
+sub getFields($$$) {
+    my $self = shift;
+    my $id = $self->{NAME}."::getFields";
+    my ($ports,$oids) = @_;
+
+    my @ifaces = $self->convertPortFormat($PORT_FORMAT_NATIVE, @$ports);
+    my @oids = @$oids;
+    my @results = ();
+
+    $self->debug($id."\n");
+
+    #
+    # XXX not sure how long a command line can be, so if they want more
+    # than 4 interfaces, just get info for all of them ("*").
+    #
+    my %swstats = ();
+    my $cmd = "";
+    if (@ifaces <= 4) {
+	my $ifacestr = join(' ', @ifaces);
+	$cmd = "show int " . $ifacestr . " statistics";
+    } else {
+	$cmd = "show int * statistics";
+    }
+    my ($rv, $output) = $self->doCLICmd($cmd);
+    if ($rv) {
+	warn("$id: Could not get port statistics from switch: $output\n");
+	return ();
+    }
+    parsePortStats($output, \%swstats);
+
+    my $i = 0;
+    foreach my $iface (@ifaces) {
+	my $sref;
+
+	# XXX same interface might appear more than once (link multiplexing)
+	if (!exists($swstats{$iface})) {
+	    warn "$id: no stats for $iface, ignoring\n";
+	    next;
+	} else {
+	    $sref = $swstats{$iface};
+	}
+	my $j = 0;
+	foreach my $oid (@oids) {
+	    my $val = 0;
+	    if (exists($sref->{$oid})) {
+		$val = $sref->{$oid};
+		#
+		# XXX all but the "HC" counters are stored as unsigned
+		# 32-bit in the DB, so let's be compatible.
+		#
+		if ($oid !~ /^ifHC/) {
+		    $val = int($val) & 0xFFFFFFFF;
+		}
+	    }
+	    $results[$i][$j] = $val;
+	    $j++;
+	}
+	$i++;
+    }
+
+    return @results;
+}
 
 #
 # Prints out a debugging message, but only if debugging is on. If a level is
