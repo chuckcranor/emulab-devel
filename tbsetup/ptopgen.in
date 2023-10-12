@@ -698,6 +698,7 @@ while (my ($type, $feature, $weight) = $result->fetchrow()) {
 # than those the project has reserved (if any).
 if( defined( $pid ) ) {
     my $project = Project->Lookup($pid);
+    $gid = $pid if (!defined($gid));
 
     my @reservations =
 	Reservation->CurrentReservations( [ "$pid/$gid" ],

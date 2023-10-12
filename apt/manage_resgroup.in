@@ -76,6 +76,7 @@ use emutil;
 use Brand;
 use User;
 use Project;
+use Group;
 use EmulabConstants;
 use EmulabFeatures;
 use Reservation;
@@ -202,6 +203,7 @@ sub DoGroupReserve()
     my $override   = 0;	# Only range reservations can be overridden. 
     my ($clusters, $ranges, $routes);
     my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
+    my ($project,$group);
     my $checkonly;
 
     my %options = ();
@@ -210,12 +212,34 @@ sub DoGroupReserve()
     }
     usage()
 	if (@ARGV < 2);
-    my $project = Project->Lookup($ARGV[0]);
-    my $file    = $ARGV[1];
 
-    if (!defined($project)) {
-	fatal("No such project");
+    if (defined($options{"u"})) {
+	$update = 1;
+	$resgroup = APT_Reservation::Group->Lookup($options{"u"});
+	if (!defined($resgroup)) {
+	    fatal("No such reservation group");
+	}
+	$project = $resgroup->GetProject();
+	$group   = $resgroup->GetGroup();
     }
+    else {
+	if ($ARGV[0] =~ /[,\/]+/) {
+	    $group = Group->Lookup($ARGV[0]);
+	    if (!defined($group)) {
+		fatal("No such group");
+	    }
+	    $project = $group->GetProject();
+	}
+	else {
+	    $project = Project->Lookup($ARGV[0]);
+	    if (!defined($project)) {
+		fatal("No such project");
+	    }
+	    $group = $project->GetProjectGroup();
+	}
+    }
+    my $file = $ARGV[1];
+
     if (! -e $file) {
 	fatal("No such file: $file");
     }
@@ -259,7 +283,7 @@ sub DoGroupReserve()
 	#
 	# Only leader and managers can set this.
 	#
-	if (! ($this_user->IsAdmin() || $project->IsManager($this_user))) {
+	if (! ($this_user->IsAdmin() || $group->IsManager($this_user))) {
 	    fatal("Not allowed to declare this reservation is for a class.");
 	}
 	$forclass = 1;
@@ -271,13 +295,6 @@ sub DoGroupReserve()
 	}
 	$override = 1;
 	@argvcopy = map { "$_" ne "-O" ? $_ : () } @argvcopy;
-    }
-    if (defined($options{"u"})) {
-	$update = 1;
-	$resgroup = APT_Reservation::Group->Lookup($options{"u"});
-	if (!defined($resgroup)) {
-	    fatal("No such reservation group");
-	}
     }
     if (defined($options{"n"})) {
 	$checkonly = 1;
@@ -1067,6 +1084,8 @@ sub DoGroupReserve()
 		my $args = {
 		    "pid"         => $project->pid(),
 		    "pid_idx"     => $project->pid_idx(),
+		    "gid"         => $group->gid(),
+		    "gid_idx"     => $group->gid_idx(),
 		    "creator_uid" => $this_user->uid(),
 		    "creator_idx" => $this_user->uid_idx(),
 		    "start"       => $start,
@@ -1175,11 +1194,12 @@ sub DoGroupReserve()
 		my $this_email = $this_user->email();
 		my $url        = $resgroup->WebURL();
 		my $pid        = $project->pid();
+		my $gid        = $group->pid();
     
 		$brand->SendEmail($brand->ReservationsEmailAddress(),
 			  "Pending reservation group request needs approval",
 			  "A reservation group request was made by $this_uid ".
-			  "in project $pid,\n".
+			  "in project $pid/$gid,\n".
 			  "but it needs approval.".
 			  "\n\n".
 			  $resgroup->InfoString() . "\n" .
@@ -1268,13 +1288,14 @@ sub DoDelete()
     if (!defined($resgroup)) {
 	fatal("No such reservation group");
     }
-    my $project = Project->Lookup($resgroup->pid());
-    fatal("Cannot lookup project")
-	if (!defined($project));
+    my $project = $resgroup->GetProject();
+    my $group   = $resgroup->GetGroup();
+    fatal("Cannot lookup project or group")
+	if (! (defined($project) && defined($group)));
     
     if (! ($this_user->IsAdmin() ||
 	   $this_user->uid_idx() == $resgroup->creator_idx() ||
-	   $project->IsManager())) {
+	   $group->IsManager())) {
 	fatal("No permission to delete this reservation")
     }
     if (!$nolock) {
@@ -1384,12 +1405,13 @@ sub DoDelete()
 		my $creator    = $resgroup->GetCreator();
 		my $email      = $creator->email();
 		my $pid        = $project->pid();
+		my $gid        = $group->gid();
 		my $string     = $resgroup->InfoString(\@cluster_reservations,
 						       \@range_reservations,
 						       \@route_reservations);
 		$brand->SendEmail($email,
 		  "Resources in reservation group have been removed",
-		  "Resources in your reservation group in project $pid ".
+		  "Resources in your reservation group in project $pid/$gid ".
 		  "have been removed from the group.\n".
 		  (defined($reason) ? "\n$reason\n" : "\n") . $string,
 		  $brand->ReservationsEmailAddress(),
@@ -1424,10 +1446,11 @@ sub DoDelete()
 		my $creator    = $resgroup->GetCreator();
 		my $email      = $creator->email();
 		my $pid        = $project->pid();
+		my $gid        = $group->gid();
 
 		$brand->SendEmail($email,
 			  "Reservation group has been deleted",
-			  "Your reservation group in project $pid ".
+			  "Your reservation group in project $pid/$gid ".
 			  "has been deleted.\n".
 			  (defined($reason) ? "\n$reason\n" : "\n"). 
 			  $resgroup->InfoString(),
@@ -1463,12 +1486,13 @@ sub DoDelete()
 	my $urn         = $reservation->aggregate_urn();
 	my $remote_uuid = $reservation->remote_uuid();
 	my $pid         = $project->pid();
+	my $gid         = $group->gid();
 	
 	my $command = "$RESCOMMAND -t $webtask_id -a $urn delete ";
 	if (defined($options{"N"})) {
 	    $command .= "-N " . $options{"N"} . " ";
 	}
-	$command .= "$pid $remote_uuid";
+	$command .= "$pid/$gid $remote_uuid";
 
 	print "Running: $command\n";
 	system($command);

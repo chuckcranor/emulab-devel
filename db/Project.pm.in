@@ -667,15 +667,10 @@ sub GetProjectGroup($)
 sub urn($)
 {
     my ($self) = @_;
-    my $pid  = $self->pid();
 
-    return undef
-	if (!$PGENISUPPORT);
-    require GeniHRN;
-
-    my $domain = "${OURDOMAIN}:${pid}";
-    return GeniHRN->new(GeniHRN::Generate($domain, "project", $pid));
+    return $self->GetProjectGroup()->urn();
 }
+
 sub nonlocalurn($)
 {
     my ($self) = @_;
@@ -1420,7 +1415,7 @@ sub SetReservationsPerGroup($;$$)
 	Reservation->EndTransaction();
 
 	if( $weakened ) {
-	    foreach my $res ( @reservations ) {
+	    foreach my $res ( @$reservations ) {
 		my %notice = (
 		    "uuid" => $res->uuid(),
 		    "severity" => "warning",

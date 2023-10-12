@@ -15,7 +15,7 @@ sub DoUpdate($$$)
     }
     if( !DBSlotExists("future_reservations", "gid_idx" ) ) {
 	DBQueryFatal( "ALTER TABLE future_reservations ADD ".
-		      " `gid_idx` mediumint(8) NOT NULL DEFAULT '0'" );
+		      " `gid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0'" );
 	DBQueryFatal( "UPDATE future_reservations SET gid_idx=pid_idx" );
     }
     if( !DBSlotExists("reservation_history", "gid" ) ) {
@@ -24,10 +24,47 @@ sub DoUpdate($$$)
 	DBQueryFatal( "UPDATE reservation_history SET gid=pid" );
     }
     if( !DBSlotExists("reservation_history", "gid_idx" ) ) {
-	DBQueryFatal( "ALTER TABLE future_reservations ADD ".
-		      " `gid_idx` mediumint(8) NOT NULL DEFAULT '0'" );
+	DBQueryFatal( "ALTER TABLE reservation_history ADD ".
+		      " `gid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0'" );
 	DBQueryFatal( "UPDATE reservation_history SET gid_idx=pid_idx" );
     }
+
+    if( !DBSlotExists("apt_reservation_groups", "gid" ) ) {
+	DBQueryFatal( "ALTER TABLE apt_reservation_groups ADD ".
+		      " `gid` varchar(32) default NULL after pid_idx" );
+	DBQueryFatal( "UPDATE apt_reservation_groups SET gid=pid" );
+    }
+    if( !DBSlotExists("apt_reservation_groups", "gid_idx" ) ) {
+	DBQueryFatal( "ALTER TABLE apt_reservation_groups ADD ".
+		      " `gid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0' ".
+		      " after gid" );
+	DBQueryFatal( "UPDATE apt_reservation_groups SET gid_idx=pid_idx" );
+    }
+    if( !DBSlotExists("apt_reservation_group_history", "gid" ) ) {
+	DBQueryFatal( "ALTER TABLE apt_reservation_group_history ADD ".
+		      " `gid` varchar(32) default NULL after pid_idx" );
+	DBQueryFatal( "UPDATE apt_reservation_group_history SET gid=pid" );
+    }
+    if( !DBSlotExists("apt_reservation_group_history", "gid_idx" ) ) {
+	DBQueryFatal( "ALTER TABLE apt_reservation_group_history ADD ".
+		      " `gid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0' ".
+		      " after gid" );
+	DBQueryFatal( "UPDATE apt_reservation_group_history ".
+		      "  SET gid_idx=pid_idx" );
+    }
+    if( !DBSlotExists("apt_reservation_history_details", "gid" ) ) {
+	DBQueryFatal( "ALTER TABLE apt_reservation_history_details ADD ".
+		      " `gid` varchar(32) default NULL after pid_idx" );
+	DBQueryFatal( "UPDATE apt_reservation_history_details SET gid=pid" );
+    }
+    if( !DBSlotExists("apt_reservation_history_details", "gid_idx" ) ) {
+	DBQueryFatal( "ALTER TABLE apt_reservation_history_details ADD ".
+		      " `gid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0' ".
+		      " after gid" );
+	DBQueryFatal( "UPDATE apt_reservation_history_details ".
+		      "  SET gid_idx=pid_idx" );
+    }
+    
     return 0;
 }
 1;

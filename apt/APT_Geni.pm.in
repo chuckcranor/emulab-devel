@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2019 University of Utah and the Flux Group.
+# Copyright (c) 2007-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -469,18 +469,22 @@ sub GenABACCredential($$)
 }
 
 #
-# Generate a project credential for a user. 
+# Generate a project (or group) credential for a user. 
 #
 sub GenProjectCredential($$)
 {
-    my ($project, $geniuser) = @_;
-    my $pid    = $project->pid();
-    my $urn    = $project->urn();
+    my ($group, $geniuser) = @_;
+    my $pid    = $group->pid();
+    my $gid    = $group->gid();
+    my $urn    = $group->urn();
+    my $hrn    = "${PGENIDOMAIN}.project.${pid}";
     my $error;
+
+    $hrn .= ".${gid}" if ($gid ne $pid);
 
     my $certificate =
 	GeniCertificate->Create({'urn'  => $urn,
-				 'hrn'  => "${PGENIDOMAIN}.project.${pid}",
+				 'hrn'  => $hrn,
 				 'email'=> $TBOPS,
 				 "nostore" => 1,
 				}, \$error);

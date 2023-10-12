@@ -312,6 +312,14 @@ sub GetProject($)
     return Project->Lookup($self->pid_idx());
 }
 
+sub GetGroup($)
+{
+    my ($self) = @_;
+    require Group;
+    
+    return Group->Lookup($self->gid_idx());
+}
+
 sub GetCreator($)
 {
     my ($self) = @_;

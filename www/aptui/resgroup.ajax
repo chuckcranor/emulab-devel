@@ -89,39 +89,64 @@ function Do_Reserve()
                 return;
             }
         }
-        $project = Project::Lookup($resgroup->pid());
+        $project = $resgroup->Project();
+        $group   = $resgroup->Group();
 
         if (! (ISADMIN() ||
                $this_idx == $resgroup->creator_idx() ||
-               $project->UserTrust($this_user) >= $TBDB_TRUST_GROUPROOT)) {
+               $group->UserTrust($this_user) >= $TBDB_TRUST_GROUPROOT)) {
             SPITAJAX_ERROR(-1, "Not enough permission to change reservation");
             return;
         }
     }
-    elseif (!isset($formfields["pid"]) || $formfields["pid"] == "") {
-        $errors["pid"] = "Missing field";
-    }
-    elseif (!TBvalid_pid($formfields["pid"])) {
-        $errors["pid"] = "Invalid project name";
-    }
     else {
-        $project = Project::Lookup($formfields["pid"]);
-
-        if (!ISADMIN() &&
-            !$project->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
-            $errors["error"] = "Not enough permission in project";
+        if (!isset($formfields["pid"]) || $formfields["pid"] == "") {
+            $errors["pid"] = "Missing field";
         }
-        # XXX
-        if ($project->reservations_disabled() ||
-            $project->pid() == "cord-testdrive" ||
-            $project->pid() == $PROTOGENI_HOLDINGPROJECT) {
-            $errors["pid"] = "Not allowed to reserve resources in this project";
+        elseif (!TBvalid_pid($formfields["pid"])) {
+            $errors["pid"] = "Invalid project name";
+        }
+        else {
+            $project = Project::Lookup($formfields["pid"]);
+        }
+        if (!$project) {
+            $errors["pid"] = "No such project";
+        }
+        elseif (!isset($formfields["gid"]) || $formfields["gid"] == "") {
+            $errors["gid"] = "Missing field";
+        }
+        elseif (!TBvalid_pid($formfields["gid"])) {
+            $errors["gid"] = "Invalid group name";
+        }
+        else {
+            $group = $project->LookupSubgroupByName($formfields["gid"]);
+        }
+        if (!$group) {
+            $errors["gid"] = "No such group";
+        }
+
+        if ($project && $group && !ISADMIN()) {
+            if ($group->IsProjectGroup()) {
+                if (!$group->AccessCheck($this_user,
+                                         $TB_PROJECT_CREATEEXPT)) {
+                    $errors["error"] = "Not enough permission in group";
+                }
+            }
+            else {
+                if (!$project->AccessCheck($this_user,
+                                           $TB_PROJECT_CREATEEXPT)) {
+                    $errors["error"] = "Not enough permission in project";
+                }
+            }
+            # XXX
+            if ($project->reservations_disabled() ||
+                $project->pid() == "cord-testdrive" ||
+                $project->pid() == $PROTOGENI_HOLDINGPROJECT) {
+                $errors["pid"] = "Not allowed to reserve resources ".
+                               "in this project";
+            }
         }
     }
-    if (!$project) {
-        $errors["pid"] = "No such project";
-    }
-
     if (isset($formfields["for-class"]) && $formfields["for-class"] == "yes") {
         if (ISADMIN() || $project->IsManager($this_user)) {
             $forclass = 1;
@@ -436,6 +461,7 @@ function Do_Reserve()
     # Next we check the validity of the reservation.
     $this_uid = $this_user->uid();
     $pid      = $project->pid();
+    $gid      = $group->gid();
     $webtask  = WebTask::CreateAnonymous();
 
     #
@@ -447,7 +473,7 @@ function Do_Reserve()
         (isset($start) ? "-s $start " : "") .
         ($override ? "-O " : "") .
         ($forclass ? "-C " : "") .
-        " -e $end $pid ";
+        " -e $end $pid/$gid ";
 
     #
     # If we have a reason, send it along too.

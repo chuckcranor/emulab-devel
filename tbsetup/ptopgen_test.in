@@ -757,6 +757,7 @@ TBDebugTimeStamp("Finished reading node features");
 # than those the project has reserved (if any).
 if( defined( $pid ) ) {
     my $project = Project->Lookup($pid);
+    $gid = $pid if (!defined($gid));
     
     my @reservations =
 	Reservation->CurrentReservations( [ "$pid/$gid" ], $reservation_user);
@@ -789,9 +790,14 @@ if( defined( $pid ) ) {
 	foreach my $res (@activereservations) {
 	    if ($res->{'nodetype'} eq $node_id) {
 		if ($res->{'pid'} eq $pid &&
-		    ($project->shared_reservations() ||
-		     ($reservation_user &&
-		      $res->{'uid'} eq $reservation_user))) {
+		    (($project->shared_reservations() ==
+		      $Project::RESERVATIONS_PERPROJECT) ||
+		     ($project->shared_reservations() ==
+		      $Project::RESERVATIONS_PERUSER &&
+		      $res->{'uid'} eq $reservation_user) ||
+		     ($project->shared_reservations() ==
+		      $Project::RESERVATIONS_PERGROUP &&
+		      $res->{'gid'} eq $gid))) {
 		    $reserved_nodes{$node_id} = $node;
 		}
 		else {

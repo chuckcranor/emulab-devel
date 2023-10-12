@@ -426,7 +426,10 @@ function TBFreePCs($target = null)
                 }
             }
         }
-        $clause = "p.pid is null or " . join(" or ", $clauses);
+        $clause = "p.pid is null";
+        if (isset($clauses)) {
+            $clause = $clause . " or " . join(" or ", $clauses);
+        }
         $findinset = "or FIND_IN_SET(a.reserved_pid, '" . join(",", $pids)."')";
     }
     $total = 0;

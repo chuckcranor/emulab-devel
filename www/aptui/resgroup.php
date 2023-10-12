@@ -126,15 +126,15 @@ $doVerifySpectrum = 0;
 #
 $mlist = array();
 $plist = array();
-while (list($p) = each($projlist)) {
+foreach ($projlist as $p => $grouplist) {
     $ptmp = Project::LookupByPid($p);
     if ($ptmp) {
         $info = array (
             "pid"     => $p,
+            "groups"  => $grouplist,
             "resmode" => $ptmp->ResSharingMode(),
             "manager" => $ptmp->IsManager($this_user),
         );
-        $plist[$p] = $info;
         if ($ptmp->expert_mode()) {
             $bisdaysonly = 0;
         }
@@ -157,7 +157,9 @@ while (list($p) = each($projlist)) {
                 "allowed"  => $ptmp->otaAllowed(),
                 "isleader" => $ptmp->IsLeader($this_user),
             );
+            $info["ota"] = $otaAllowed[$p];
         }
+        $plist[$p] = $info;
     }
 }
 #
@@ -166,6 +168,7 @@ while (list($p) = each($projlist)) {
 if (!$doOtaCheck) {
     foreach ($otaAllowed as $pid => &$details) {
         $details["allowed"] = 1;
+        $plist[$pid]["allowed"] = 1;
     }
     reset($otaAllowed);
 }

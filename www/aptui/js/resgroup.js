@@ -14,6 +14,7 @@ $(function ()
     var usageTemplate   = _.template(templates["resusage-graph"]);
     var visTemplate     = _.template(templates["visavail-graph"]);
     var current_pid  = null;
+    var current_gid  = null;
     var projlist     = null;
     var amlist       = null;
     var managerlist  = null;
@@ -1775,6 +1776,7 @@ $(function ()
 	var routes   = {};
 	var errors   = 0;
 	var pid      = (editing ? current_pid : $('#pid').val());
+	var gid      = (editing ? current_gid : $('#gid').val());
 
 	var checkonly_callback = function(json) {
 	    if (json.code) {
@@ -3434,6 +3436,19 @@ $(function ()
 		$('#pid').html(details.pid);
 	    }
 	    current_pid = details.pid;
+
+	    // And the group.
+	    if (_.has(details, 'gid_idx') &&
+		details.gid_idx != details.pid_idx) {
+		$('#gid').html(
+		    "<a target=_blank href='show-group.php?group=" +
+			details.gid_idx + "'>" +
+			details.gid + "</a>");
+	    }
+	    else {
+		$('#gid').html(details.gid);
+	    }
+	    current_gid = details.gid;
 	    
 	    if (isadmin) {
 		if (details.idledetection) {
@@ -3961,8 +3976,12 @@ $(function ()
 	    }
 	    $('#override-checkbox').prop("checked", false);	    
 	    RefreshTables(json.value);
-	    LoadRangeReservations();
-	    LoadRouteReservations();
+	    if (window.ISPOWDER) {
+		LoadRangeReservations();
+		if (window.DOROUTES) {
+		    LoadRouteReservations();
+		}
+	    }
 	};
 	var args = {
 	    "uuid"    : window.UUID,
@@ -4279,6 +4298,7 @@ $(function ()
     function HandleProjectChange()
     {
 	var pid = $('#pid').val();
+	var groups = projlist[pid].groups;
 
 	// Project managers can set the for class checkbox
 	if (projlist[pid].resmode != "user") {
@@ -4291,6 +4311,20 @@ $(function ()
 	}
 	else {
 	    $('#for-class-checkbox').addClass("hidden");
+	}
+
+	// Group selector, but hidden if no sub groups. 
+	var html = "";
+	_.each(groups, function(gid) {
+	    html += "<option value='" + gid + "'>" + gid + "</option>";
+	});
+	$('#group-div select').html(html);
+
+	if (groups.length == 1) {
+	    $('#group-div').addClass("hidden");
+	}
+	else {
+	    $('#group-div').removeClass("hidden");
 	}
 
 	if (window.ISPOWDER) {
