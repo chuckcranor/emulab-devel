@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2021, 2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -341,7 +341,7 @@ sub CheckDeadman($$)
     #
     # Wait with timeout for the ping. 
     #
-    my (@ready) = IO::Select->new($deadmanSocket)->can_read(5);
+    my (@ready) = IO::Select->new($deadmanSocket)->can_read(20);
     if (@ready) {
 	my $client = $deadmanSocket->recv($data, 2048);
 	if (! $client) {
