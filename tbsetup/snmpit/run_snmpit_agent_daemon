@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+# This script is part of the Arista snmpit startup event:
+#
+# event-handler snmpitd
+#    trigger onBoot
+#    action bash sudo /mnt/flash/snmpitdaemon/run_snmpit_agent_daemon
+#    delay 5
+#
+# Guessing here about what this script does based on an old wiki entry:
+#
+# https://wiki.emulab.net/wiki/AristaConfig
+#
+# The original version was lost when the supervisor module died, taking
+# the contents of this script with it.
+#
+/usr/bin/immortalize --log=/var/log/snmpit_agent.log --daemonize /mnt/flash/snmpitdaemon/snmpit_arista_switch_daemon.py
+exit 0
