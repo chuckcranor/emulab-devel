@@ -2584,35 +2584,35 @@ $(function ()
 	    var template = UriTemplate.parse(href);
 	    return this.defaultLink(template.expand(uridata), title, text);
 	};
+	var ref = $(xml).find("rspec_tour").find("instructions");
+	if (!ref.length) {
+	    return;
+	}
+	var itext = $(ref).text();
 
-	// Suck the instructions out of the tour and put them into
-	// the Usage area.
-	$(xml).find("rspec_tour").each(function() {
-	    $(this).find("instructions").each(function() {
-		marked.setOptions({ "sanitize" : true,
-				    "renderer": instructionRenderer });
-		
-		var text = $(this).text();
-		// Search the instructions for {host-foo} pattern.
-		var regex   = /\{host-.*\}/gi;
-		var needed  = text.match(regex);
-		if (needed && needed.length) {
-		    _.each(uridata, function(host, key) {
-			regex = new RegExp("\{" + key + "\}", "gi");
-			text = text.replace(regex, host);
-		    });
-		}
-		// Stick the text in. 
-		try {
-		    $('#instructions_text').html(marked(text));
-		}
-		catch(err) {
-		    console.info(err);
-		}
-		// Make the div visible.
-		$('#instructions_panel').removeClass("hidden");
-		
-	    });
+	marked.setOptions({ "sanitize" : true,
+			    "renderer": instructionRenderer });
+
+	FindEncryptionBlocks(xml, itext, function (text) {
+	    // Search the instructions for {host-foo} pattern.
+	    var regex   = /\{host-.*\}/gi;
+	    var needed  = text.match(regex);
+	    if (needed && needed.length) {
+		_.each(uridata, function(host, key) {
+		    regex = new RegExp("\{" + key + "\}", "gi");
+		    text = text.replace(regex, host);
+		});
+	    }
+	    // Stick the text in. 
+	    try {
+		text = marked(text);
+	    }
+	    catch(err) {
+		console.info(err);
+	    }
+	    $('#instructions_text').html(text);
+	    // Make the div visible.
+	    $('#instructions_panel').removeClass("hidden");
 	});
     }
 
@@ -3347,11 +3347,6 @@ $(function ()
 	var xml    = $(xmlDoc);
 	    
 	UpdateInstructions(xml);
-	// Do not show secrets if viewing using foreign admin creds
-	if (!isfadmin) {
-	    // This will update the instructions.
-	    FindEncryptionBlocks(xml);
-	}
     }
 
     //
@@ -3448,14 +3443,14 @@ $(function ()
 	});
     }
 
-    function FindEncryptionBlocks(xml)
+    function FindEncryptionBlocks(xml, itext, continuation)
     {
 	var blocks    = {};
 	var passwords = xml[0].getElementsByTagNameNS(EMULAB_NS, 'password');
 
 	// Search the instructions for the pattern.
 	var regex   = /\{password-.*\}/gi;
-	var needed  = $('#instructions_text').html().match(regex);
+	var needed  = itext.match(regex);
 	//console.log(needed);
 
 	// Look for all the encryption blocks in the manifest ...
@@ -3478,7 +3473,7 @@ $(function ()
 	    }
 	});
 	if (!_.size(blocks)) {
-	    return;
+	    continuation(itext);
 	}
 	console.info("blocks", blocks);
 	
@@ -3494,8 +3489,6 @@ $(function ()
 			     json.value);
 		return;
 	    }
-	    var itext = $('#instructions_text').html();
-
 	    _.each(json.value, function(plaintext, key) {
 		// XXX
 		if (key == "password-vncpasswd" || key == "password-vncpswd") {
@@ -3506,8 +3499,7 @@ $(function ()
 		// replace in the instructions text.
 		itext = itext.replace(key, plaintext);
 	    });
-	    // Write the instructions back after replacing patterns
-	    $('#instructions_text').html(itext);
+	    continuation(itext);
 	};
     	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
