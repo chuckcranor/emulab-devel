@@ -2611,6 +2611,7 @@ $(function ()
 		console.info(err);
 	    }
 	    $('#instructions_text').html(text);
+	    $('#instructions_text').find("a").prop("target", "_blank");
 	    // Make the div visible.
 	    $('#instructions_panel').removeClass("hidden");
 	});
