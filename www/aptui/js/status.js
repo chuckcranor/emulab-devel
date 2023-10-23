@@ -3475,6 +3475,7 @@ $(function ()
 	});
 	if (!_.size(blocks)) {
 	    continuation(itext);
+	    return;
 	}
 	console.info("blocks", blocks);
 	
@@ -4139,10 +4140,10 @@ $(function ()
 	};
 	sup.HideModal('#connect-sharedlan-modal', function () {
 	    sup.ShowWaitWait("This will take a minute or two. " +
-			     "Patience please.");
-	    var xmlthing = sup.CallServerMethod(null, "status",
-						"ConnectSharedLan", args);
-	    xmlthing.done(callback);
+			     "Patience please.", undefined, function () {
+				 sup.CallServerMethod(null, "status",
+						      "ConnectSharedLan", args, callback);
+			     });
 	});
     }
 
