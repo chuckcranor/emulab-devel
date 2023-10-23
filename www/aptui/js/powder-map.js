@@ -15,6 +15,7 @@ $(function ()
 	}
 	var options = {
 	    "showfilter"    : window.SHOWFILTER,
+	    "setfilter"     : undefined,
 	    "showavailable" : window.SHOWAVAILABLE,
 	    "showmobile"    : window.SHOWMOBILE,
 	    // What the user has reserved.
@@ -33,7 +34,22 @@ $(function ()
 	if (window.ROUTE !== undefined) {
 	    options["route"] = window.ROUTE;
 	}
-	ShowPowderMap(".powder-mapview", options);
+	if (window.SETFILTER !== undefined) {
+	    options["setfilter"] = window.SETFILTER;
+	}
+
+	WaitForRequire(options);
+    }
+
+    function WaitForRequire(options)
+    {
+	if (typeof require !== "undefined") {
+	    ShowPowderMap(".powder-mapview", options);
+	}
+	else {
+	    console.info("Require not defined yet")
+            setTimeout(WaitForRequire, 100);
+	}
     }
     $(document).ready(initialize);
 });

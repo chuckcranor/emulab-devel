@@ -54,6 +54,7 @@ $optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
                                  "nomobile",   PAGEARG_BOOLEAN,
                                  "showlinks",  PAGEARG_STRING,
                                  "location",   PAGEARG_STRING,
+                                 "filter",     PAGEARG_STRING,
                                  "route",      PAGEARG_STRING,
                                  "imagerymap", PAGEARG_BOOLEAN,
                                  "onlineonly", PAGEARG_BOOLEAN);
@@ -109,6 +110,10 @@ if ($location) {
 }
 if ($route) {
     echo "window.ROUTE   = '$route';\n";
+}
+if ($filter) {
+    echo "window.SETFILTER = '$filter';\n";
+
 }
 echo "</script>\n";
 

@@ -17,6 +17,7 @@ window.ShowPowderMap = (function()
     var WatchUtils     = null;
     var ResInfo        = null;
     var OurBuses       = null;
+    var FilterExpand   = null;
     var routeList      = {};
     var routeMap       = {};  // Map route name to route data structure
     var Aggregates     = {};
@@ -78,7 +79,6 @@ window.ShowPowderMap = (function()
     function DrawBaseMap(route)
     {
 	require([
-	    "dojo/number",
 	    "esri/WebMap",
 	    "esri/views/MapView",
 	    "esri/Graphic",
@@ -88,9 +88,8 @@ window.ShowPowderMap = (function()
 	    "esri/widgets/Expand",
             "esri/widgets/DistanceMeasurement2D",
             "esri/widgets/ScaleBar",
-	    "esri/core/watchUtils",
-  	    "dojo/domReady!"
-	], function (number, WebMap, MapView, graphic,
+	    "esri/core/watchUtils"
+	], function (WebMap, MapView, graphic,
 		     graphicslayer, LayerList,
 		     Home, Expand, Distance2D, ScaleBar, watchutils) {
 	    Graphic       = graphic;
@@ -278,6 +277,22 @@ window.ShowPowderMap = (function()
 		    document.location.replace(url.href);
 		});
 
+		if (Options.showfilter) {
+		    var wrapper = document.createElement("div");
+		    $(wrapper).html(templates['powder-filters']);
+		    $(wrapper).css("width", "230px");
+		    $(wrapper).css("margin-top", "-150px");
+
+		    FilterExpand = new Expand({
+			expandIconClass: "esri-icon-filter",
+			view: View,
+			expandTooltip: "Click to show/hide filtering options",
+			content: wrapper,
+			expanded: false,
+		    });
+		    View.ui.add(FilterExpand, "top-left");
+		}
+
 		// Base layers
 		DrawCoverageArea();
 		DrawDataCenters();
@@ -288,6 +303,9 @@ window.ShowPowderMap = (function()
 		    .done(function (r1, r2, r3, r4) {
 			console.info("done1", r1, r2, r3, r4);
 
+			if (Options.showfilter) {
+			    SetupFilteringOptions();
+			}
 			if (Options.showlinks) {
 			    DrawLinks(Options.showlinks);
 			}
@@ -308,31 +326,13 @@ window.ShowPowderMap = (function()
 				ShowOnline();
 			    }
 			}
-			else if (Options.showmobile) {
-			    //ShowRoute(68);
-			}
+			
 			if (window.opener) {
 			    window.addEventListener("message",
 						    receiveMessage, false);
 			    window.opener.postMessage("Ready Set Go");
 			}
 		    });
-
-		if (Options.showfilter) {
-		    var wrapper = document.createElement("div");
-		    $(wrapper).html(templates['powder-filters']);
-		    $(wrapper).css("width", "230px");
-		    $(wrapper).css("margin-top", "-150px");
-
-		    var expand = new Expand({
-			expandIconClass: "esri-icon-filter",
-			view: View,
-			expandTooltip: "Click to show filtering options",
-			content: wrapper,
-			expanded: false
-		    });
-		    View.ui.add(expand, "top-left");
-		}
 	    });
 
 	    if (Options.showmobile) {
@@ -425,6 +425,36 @@ window.ShowPowderMap = (function()
 
 	if (Options.showreserved) {
 	    $('#show-reserved-checkbox').removeClass("hidden");
+	}
+
+	if (Options.setfilter) {
+	    /*
+	     * Comma separated list of filters to set.
+	     */
+	    _.each(Options.setfilter.split(","), function (token) {
+		//console.info("Filter:", token);
+		/*
+		 * itype:htype:txrx:antenna
+		 */
+		var [itype,htype,txrx,ante]  = token.split(":");
+		//console.info("Filter criteria:", itype, htype, txrx, ante);
+
+		$('.radio-type').each(function () {
+		    var Ritype   = $(this).data("radio-itype").toLowerCase();
+		    var Rhtype   = $(this).data("radio-htype").toLowerCase();
+		    var Rtxrx    = $(this).data("radio-txrx").toLowerCase();
+		    var Rante    = $(this).data("radio-antenna").toLowerCase();
+
+		    if (itype.toLowerCase() === Ritype &&
+			(htype === undefined || htype.toLowerCase() == Rhtype) &&
+			(txrx  === undefined || txrx.toLowerCase()  == Rtxrx) &&
+			(ante  === undefined || ante.toLowerCase()  == Rante)) {
+			$(this).prop("checked", "checked");
+		    }
+		});
+	    });
+	    FilterExpand.expand();
+	    filter();
 	}
 
 	/*
@@ -951,11 +981,6 @@ window.ShowPowderMap = (function()
 	});
 
 	var callback = function (json) {
-	    // XXX
-	    if (Options.showfilter) {
-		SetupFilteringOptions();
-	    }
-	    
 	    console.info("DrawFixedEndpoints", json);
 	    if (json.code) {
 		console.info("Could not get fixed endpoints: " + json.value);
