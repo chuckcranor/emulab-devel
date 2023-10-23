@@ -282,7 +282,7 @@ foreach my $n (@node_names) {
 		}
 	    }
 	    print "$n: Conflicting node $con_id will be powered off\n";
-	    push(@conflicts, $connode);
+	    push(@conflicts, $con_id);
 	}
 	$has_conflicts{$n} = \@conflicts;
     }
