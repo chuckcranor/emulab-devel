@@ -1,0 +1,62 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instance_rfranges", "rdz_grantid")) {
+	DBQueryFatal("alter table apt_instance_rfranges add ".
+		     " `rdz_grantid` varchar(40) DEFAULT NULL");
+    }
+    if (!DBSlotExists("apt_instances", "rdz_status")) {
+	DBQueryFatal("alter table apt_instances add ".
+		     " `rdz_status` varchar(32) default NULL");
+    }
+    if (!DBSlotExists("apt_aggregate_radio_locations", "rdz_location_id")) {
+	DBQueryFatal("alter table apt_aggregate_radio_locations add ".
+		     " `rdz_location_id` varchar(40) DEFAULT NULL");
+    }
+    if (!DBSlotExists("apt_aggregate_radio_info", "rdz_radio_id")) {
+	DBQueryFatal("alter table apt_aggregate_radio_info add ".
+		     " `rdz_radio_id` varchar(40) DEFAULT NULL");
+    }
+    if (!DBSlotExists("apt_aggregate_radio_frontends", "rdz_radioport_id")) {
+	DBQueryFatal("alter table apt_aggregate_radio_frontends add ".
+		     " `rdz_radioport_id` varchar(40) DEFAULT NULL");
+    }
+    if (!DBSlotExists("apt_aggregate_radio_frontends", "rdz_monitor_id")) {
+	DBQueryFatal("alter table apt_aggregate_radio_frontends add ".
+		     " `rdz_monitor_id` varchar(40) DEFAULT NULL");
+    }
+    if (!DBSlotExists("apt_aggregate_radio_frontends", "rdz_monitor_radio_id")) {
+	DBQueryFatal("alter table apt_aggregate_radio_frontends add ".
+		     " `rdz_monitor_radio_id` varchar(40) DEFAULT NULL");
+    }
+    if (!DBSlotExists("apt_aggregate_radio_frontends", "rdz_monitor_radioport_id")) {
+	DBQueryFatal("alter table apt_aggregate_radio_frontends add ".
+		     " `rdz_monitor_radioport_id` varchar(40) DEFAULT NULL");
+    }
+    if (!DBSlotExists("apt_aggregate_radio_frontends", "rdz_monitor_monitor_id")) {
+	DBQueryFatal("alter table apt_aggregate_radio_frontends add ".
+		     " `rdz_monitor_monitor_id` varchar(40) DEFAULT NULL");
+    }
+    if (!DBSlotExists("apt_instance_rfranges", "power")) {
+	DBQueryFatal("alter table apt_instance_rfranges add ".
+		     " `power` float(8,2) NOT NULL DEFAULT '0.00' ".
+		     "    after freq_high");
+    }
+    if (!DBSlotExists("apt_instance_rfrange_history", "power")) {
+	DBQueryFatal("alter table apt_instance_rfrange_history add ".
+		     " `power` float(8,2) NOT NULL DEFAULT '0.00'");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

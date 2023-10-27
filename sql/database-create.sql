@@ -149,6 +149,7 @@ CREATE TABLE `apt_aggregate_radio_locations` (
   `mapurl` tinytext,
   `streeturl` tinytext,
   `notes` text,
+  `rdz_location_id` varchar(40) DEFAULT NULL,
   PRIMARY KEY  (`aggregate_urn`,`location`,`itype`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -169,6 +170,7 @@ CREATE TABLE `apt_aggregate_radio_info` (
   `synchronization` enum('none','White Rabbit','GPSDO') default 'none',
   `ue_imsi` varchar(32) default NULL,
   `notes` text,
+  `rdz_radio_id` varchar(40) DEFAULT NULL,
   PRIMARY KEY  (`aggregate_urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -219,6 +221,11 @@ CREATE TABLE `apt_aggregate_radio_frontends` (
   `monitored` tinyint(1) NOT NULL default '0',
   `scanned` tinyint(1) NOT NULL default '0',
   `notes` text,
+  `rdz_radioport_id` varchar(40) DEFAULT NULL,
+  `rdz_monitor_id` varchar(40) DEFAULT NULL,
+  `rdz_monitor_radio_id` varchar(40) DEFAULT NULL,
+  `rdz_monitor_radioport_id` varchar(40) DEFAULT NULL,
+  `rdz_monitor_monitor_id` varchar(40) DEFAULT NULL,
   PRIMARY KEY  (`aggregate_urn`,`node_id`,`iface`,`frontend`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -792,6 +799,7 @@ CREATE TABLE `apt_instances` (
   `openstack_utilization` mediumtext,
   `webinfo` mediumtext,
   `fabric_sliceid` varchar(64) default NULL,
+  `rdz_status` varchar(32) default NULL,
   PRIMARY KEY (`uuid`),
   KEY `creator` (`creator`),
   KEY `creator_idx` (`creator_idx`),
@@ -1103,6 +1111,8 @@ CREATE TABLE `apt_instance_rfranges` (
   `target` tinytext,
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
   `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
+  `power` float(8,2) NOT NULL DEFAULT '0.00',
+  `rdz_grantid` varchar(40) DEFAULT NULL,
   PRIMARY KEY (`uuid`,`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -1118,7 +1128,8 @@ CREATE TABLE `apt_instance_rfrange_history` (
   `target` tinytext,
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
   `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
-  PRIMARY KEY (`uuid`,`idx`)
+  `power` float(8,2) NOT NULL DEFAULT '0.00',	
+ PRIMARY KEY (`uuid`,`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
