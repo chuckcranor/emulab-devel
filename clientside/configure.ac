@@ -102,13 +102,16 @@ AC_SUBST(CLIENT_ETCDIR)
 AC_SUBST(CLIENT_BINDIR)
 AC_SUBST(CLIENT_VARDIR)
 AC_SUBST(CLIENT_MANDIR)
+AC_SUBST(CLIENT_LIBDIR)
 CLIENT_ETCDIR="/etc/emulab"
 if test "$prefix" = "/usr/local" -o "$prefix" = "NONE"; then
     CLIENT_BINDIR="/usr/local/etc/emulab"
     CLIENT_MANDIR="/usr/local/man"
+    CLIENT_LIBDIR="/usr/local/lib"
 else
     CLIENT_BINDIR="$libexecdir/emulab"
     CLIENT_MANDIR="$mandir"
+    CLIENT_LIBDIR="$libdir"
 fi
 CLIENT_VARDIR="/var/emulab"
 

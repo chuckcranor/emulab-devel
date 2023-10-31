@@ -3499,7 +3499,7 @@ sub DoRouteForecast()
     foreach my $routename (keys(%reservations)) {
 	my $reslist  = $reservations{$routename};
 	my @forecast = Reservation->Forecast($routename, \@projlist,
-					     undef, 1, $reslist);
+					     undef, undef, 1, $reslist);
 
 	$forecasts{$routename} = \@forecast;
     }

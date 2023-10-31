@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -213,12 +213,16 @@ while (<IF>) {
 		}
 	    }
 	    elsif ($2 eq "ntp_cname") {
+		my $server = ${NTPSERVER};
+		if ($server =~ /\./ && $server !~ /\.$/) {
+		    $server .= ".";
+		}
 		$internal_strings .=
-			"ntp1\t\tIN\tCNAME\t${NTPSERVER}\n".
-			"ntp2\t\tIN\tCNAME\t${NTPSERVER}\n";
+			"ntp1\t\tIN\tCNAME\t${server}\n".
+			"ntp2\t\tIN\tCNAME\t${server}\n";
 		$external_strings .=
-			"ntp1\t\tIN\tCNAME\t${NTPSERVER}\n".
-			"ntp2\t\tIN\tCNAME\t${NTPSERVER}\n";
+			"ntp1\t\tIN\tCNAME\t${server}\n".
+			"ntp2\t\tIN\tCNAME\t${server}\n";
 	    }
 	    elsif ($2 eq "private-router") {
                 my $foo = "private-router\tIN\tA\t${PRIVATE_ROUTER}\n";

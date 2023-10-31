@@ -1962,7 +1962,8 @@ sub GetResources($$$)
 	$aggregate = APT_Aggregate->Lookup($manager_urn);
 	if (!$aggregate) {
 	    $$pmsg = "No such aggregate: $manager_urn";
-	    return -1;
+	    # This should go back to the user, not an internal error.
+	    return 1;
 	}
 	$nodes{$client_id} = $ref;
 

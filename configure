@@ -872,6 +872,7 @@ CLIENT_MANDIR
 CLIENT_VARDIR
 CLIENT_BINDIR
 CLIENT_ETCDIR
+CLIENT_LIBDIR
 DISABLE_EVENT_SCHED
 DISABLE_FSNODE_CHFLAGS
 DISABLE_EXPORTS_SETUP
@@ -7332,6 +7333,16 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	node_usage/from_ptop node_usage/sanity \
 	node_usage/gather node_usage/mk-php-pages \
 	node_usage/get-start-date"
+
+#
+# Since we do not use clientside/configure, hack up one particular
+# variable that must be fully expanded, e.g. in source files.
+#
+if test "$prefix" = "/usr" -o test "$prefix" = "/usr/local" ; then
+    CLIENT_LIBDIR="$libdir"
+else
+    CLIENT_LIBDIR="$prefix/lib"
+fi
 
 #
 # While it would be nice to use the configure setup in the clientside subdir,

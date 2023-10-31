@@ -608,7 +608,8 @@ function Do_NoMoreGeniLogin()
            "profiles to the new project.\n".
            "\n".
            "Reference: $reference\n\n".
-           "Thank you very much!\n",
+           "Thank you very much!\n".
+           "$target_url\n",
            "From: $APTMAIL\n".
            "Bcc: $APTMAIL\n".
            "Errors-To: $TBMAIL_WWW");
