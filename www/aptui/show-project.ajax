@@ -252,8 +252,7 @@ function Do_ProjectProfile()
     $results["nfsmounts"]   = $target_project->nfsmounts();
     $results["reservations_disabled"] =
         $target_project->reservations_disabled() ? true : false;
-    $results["shared_reservations"] =
-        $target_project->shared_reservations() ? true : false;
+    $results["shared_reservations"] = $target_project->ResSharingMode();
     $results["licenses"]    = array();
     $results["nsf_awards"]  = $target_project->nsf_awards();
     $results["allowed_clusters"] = $target_project->allowed_clusters();

@@ -108,9 +108,26 @@
 	</td>
       </tr>
       <tr>
-	<td>Shared Reservations</td>
-	<td><% if (fields.shared_reservations) { %>Yes<% } else { %>No<% } %>
-	  (<a class="toggle" data-name="project_shared_reservations">Toggle</a>)
+	<td>Reservation Sharing</td>
+	<td>
+	  <div class="form-check form-check-inline">
+	    <input class="form-check-input" type="radio"
+		   name="sharedres-radio" id="sharedres-radio-project"
+		   value="project">
+	    <label class="form-check-label">Project</label>
+	  </div>
+	  <div class="form-check form-check-inline">
+	    <input class="form-check-input" type="radio"
+		   name="sharedres-radio" id="sharedres-radio-user"
+		   value="user">
+	    <label class="form-check-label">User</label>
+	  </div>
+	  <div class="form-check form-check-inline">
+	    <input class="form-check-input" type="radio"
+		   name="sharedres-radio" id="sharedres-radio-group"
+		   value="group">
+	    <label class="form-check-label">Group</label>
+	  </div>	  
 	</td>
       </tr>
       <tr>

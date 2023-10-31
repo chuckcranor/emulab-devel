@@ -264,11 +264,14 @@ class Project
         $mode = $this->shared_reservations();
 
         # Convert sharing mode to a string
-        if ($mode) {
+        if ($mode == 0) {
+            return "user";
+        }
+        elseif ($mode == 1) {
             return "project";
         }
         else {
-            return "user";
+            return "group";
         }
     }
 
