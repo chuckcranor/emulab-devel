@@ -2068,6 +2068,10 @@ window.ShowPowderMap = (function()
 	_.each(routeList, function (route, routeID) {
 	    var markit = 0;
 		
+	    // Kobus says to show only the Wasatch route.
+	    if (route.data.Description != "Wasatch Express") {
+		return;
+	    }
 	    // Only if it has one of our buses on the route.
 	    _.each(route.buses, function(bus, busid) {
 		if (_.has(OurBuses, busid)) {
