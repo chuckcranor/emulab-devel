@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -140,8 +140,8 @@ my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's',
 	       "portal=s"    => \$portal,
 	       "project=s"   => \$pid,
 	       "site=s%"     => \$sitemap,
-	       "start=i"     => \$start_at,
-	       "stop=i"      => \$stop_at,
+	       "start=s"     => \$start_at,
+	       "stop=s"      => \$stop_at,
 	       "paramset=s"  => \$paramset,
 	       "bindings=s"  => \$bindingfile,
 	       "sshpubkey=s" => \$sshpubkeyfile,
