@@ -1743,11 +1743,13 @@ sub DoTerminate()
     $instance->SetStatus($old_status);
     if (defined($logfile)) {
 	my $instance_name = $instance->name();
+	my $instance_url  = $instance->webURL();
 	my $slice_uuid    = $slice->uuid();
 	SENDMAIL($TBOPS,
 		 "Unable to terminate instance $uuid",
 		 "Name: $instance_name\n".
-		 "Slice: $slice_uuid\n\n".
+		 "Slice: $slice_uuid\n".
+		 "URL: $instance_url\n\n".
 		 "$errmsg\n",
 		 $TBOPS, undef, $logfile)
 	    if (!$silent);
@@ -2383,7 +2385,7 @@ sub DoExtend()
                "It is running on $clusters\n\n".
                "$url\n",
 	       "$extensions",
-	       "BCC: $extensions, stoller\@flux.utah.edu") if (!$noemail);
+	       "BCC: $extensions") if (!$noemail);
     
     if (!$this_user->IsAdmin()) {
 	#
