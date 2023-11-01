@@ -1575,6 +1575,7 @@ foreach $node (@nodenames) {
     my $ram = $typemap{$type}->{'RAM'};
     my $trivspeed = $typemap{$type}->{'TRIVSPEED'};
     my $uuid = $nodetouuid{$node};
+    my $typeinfo = $typemap{$type}->{'TYPEINFO'};
     my @types = ();
     my @sliver_types = ();
     my @features = ();
@@ -1855,6 +1856,10 @@ foreach $node (@nodenames) {
 	    # TODO: Un-hardcode this. Ugh.
 	    if ($feature =~ /highvlan/) {
 		push(@features, $feature);
+	    }
+	    elsif ($feature =~ /disk_any:([\d\.]+)$/) {
+		my $disk_any = $typeinfo->disksize_any();
+		push(@features, "?+disk_any:$disk_any");
 	    }
 	}
     }
