@@ -3591,7 +3591,7 @@ $(function ()
     {
 	var nickname = amlist[urn].nickname;
 
-	sup.ShowConfirmModal('#deletesite_confirm', function () {
+	sup.ShowConfirmModal('#deletesite_modal', function () {
 	    var callback = function(json) {
 		console.info(json);
 		sup.HideWaitWait(function () {		
