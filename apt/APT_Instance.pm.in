@@ -2876,7 +2876,7 @@ sub CheckResources($$)
     my $creator   = $self->GetCreator();
     my $noresokay = 1;
     my $duration  = $expires - time();
-    if ($duration > $DEFAULT_DURATION * 3600) {
+    if (!$project->expert_mode() && $duration > $DEFAULT_DURATION * 3600) {
 	$noresokay = 0;
     }
     my $rspec = $self->RSPEC();
@@ -2915,6 +2915,7 @@ sub CheckResources($$)
     foreach my $request (@{$spectrum}) {
 	my $frequency_low  = $request->{"frequency_low"};
 	my $frequency_high = $request->{"frequency_high"};
+	my $power          = $request->{"power"};
 	my $type           = $request->{"type"};
 	my $target         = $request->{"target"};
 	
@@ -2922,7 +2923,7 @@ sub CheckResources($$)
 					    $frequency_low, $frequency_high)) {
 	    if (!APT_Instance::RFRanges->Create($self,
 						$frequency_low, $frequency_high,
-						$type, $target)) {
+						$power, $type, $target)) {
 		$$perrmsg = "Could not create rfrange entry";
 		return -1;
 	    }
@@ -6800,7 +6801,7 @@ sub Lookup($$$;$)
 #
 sub Create($$$$$)
 {
-    my ($class, $instance, $freq_low, $freq_high, $type, $target) = @_;
+    my ($class, $instance, $freq_low, $freq_high, $power, $type, $target) = @_;
     my $instance_uuid = $instance->uuid();
     my $instance_name = $instance->name();
 
@@ -6811,14 +6812,16 @@ sub Create($$$$$)
     DBQueryWarn("insert into apt_instance_rfranges set ".
 		"  uuid='$instance_uuid', name='$instance_name', ".
 		"  `type`='$type', target='$target', ".
-		"  freq_low='$freq_low', freq_high='$freq_high'")
+		"  freq_low='$freq_low', freq_high='$freq_high', ".
+		"  power='$power'")
 	or return undef;
 
     # Add to the history table.
     DBQueryWarn("insert into apt_instance_rfrange_history set ".
 		"  uuid='$instance_uuid', ".
 		"  `type`='$type', target='$target', ".
-		"  freq_low='$freq_low', freq_high='$freq_high'")
+		"  freq_low='$freq_low', freq_high='$freq_high', ".
+		"  power='$power'")
 	or return undef;
 
     return Lookup($class, $instance, $freq_low, $freq_high);
@@ -6870,8 +6873,9 @@ sub Stringify($)
     my $uuid      = $self->uuid();
     my $freq_low  = $self->freq_low();
     my $freq_high = $self->freq_high();
+    my $power     = $self->power();
 
-    return "[APT_Instance::RFRanges: $uuid, $freq_low,$freq_high]";
+    return "[APT_Instance::RFRanges: $uuid, $freq_low,$freq_high,$power]";
 }
 
 #
@@ -6898,6 +6902,46 @@ sub LookupForInstance($$)
 	$result->{$idx} = $range;
     }
     return $result;
+}
+
+#
+# Update/Refresh current. 
+#
+sub Update($$)
+{
+    my ($self, $argref) = @_;
+
+    my $uuid = $self->uuid();
+    my $idx  = $self->idx();
+
+    my $query = "update apt_instance_rfranges set ".
+	join(",", map("$_=" .
+		      (defined($argref->{$_}) ?
+		       DBQuoteSpecial($argref->{$_}) : "NULL"),
+		      keys(%{$argref})));
+    $query .= " where uuid='$uuid' and idx='$idx'";
+
+    return -1
+	if (! DBQueryWarn($query));
+
+    return Refresh($self);
+}
+sub Refresh($)
+{
+    my ($self) = @_;
+
+    my $uuid = $self->uuid();
+    my $idx  = $self->idx();
+    
+    my $query_result =
+	DBQueryWarn("select * from apt_instance_rfranges ".
+		    "where uuid='$uuid' and idx='$idx'");
+
+    return -1
+	if (!$query_result || !$query_result->numrows);
+
+    $self->{'DBROW'} = $query_result->fetchrow_hashref();
+    return 0;
 }
 
 #

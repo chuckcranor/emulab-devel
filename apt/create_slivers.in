@@ -179,6 +179,9 @@ use GeniXML;
 use WebTask;
 use Logfile;
 use EmulabFeatures;
+if ($MAINSITE) {
+    require APT_RDZ;
+}
 
 # Connect to the SA DB.
 DBConnect(GENISA_DBNAME());
@@ -541,6 +544,33 @@ foreach my $aggregate (@aggregate_list) {
     # the point of allocating resources. Hack. 
     #
     $aggregate->_committed(0);
+}
+
+#
+# Probably not the right place for this. Certainly not the right way.
+#
+if ($project->pid() eq "RDZ-demo") {
+    my $spectrum = $instance->_spectrum();
+    if ($spectrum && @{$spectrum}) {
+	my $error;
+	
+	$instance->SetStatus("rdzwait");
+	if (APT_RDZ::RequestSpectrum($instance, \$error)) {
+	    $instance->ResolveDefer();
+	    $instance->SetStatus("failed");
+	    $instance->RecordError(GENIRESPONSE_ERROR, "RDZ failure: $error");
+	    $webtask->output("RDZ failure: $error");
+	    $webtask->Exited(GENIRESPONSE_ERROR);
+	    if (defined($logfile)) {
+		$logfile->Close();
+		$logfile->Store();
+		$logfile = undef;
+	    }
+	    $genislice->UnLock();
+	    exit(1);
+	}
+	$instance->Update({'rdz_status' => "ready"});
+    }
 }
 
 if ($usestitcher) {
@@ -1403,17 +1433,27 @@ sub CreateSlivers()
 	    if (($exitcode == GENIRESPONSE_NO_MAPPING() ||
 		 $exitcode == GENIRESPONSE_INSUFFICIENT_NODES()) &&
 		$instance->pid() ne "@TUTORIALPID@" &&
-		$instance->AllResourcesReserved($aggobj)) {
-		print STDERR "$cluster says not able to map experiment yet; ".
-		    "deferring till later since project has it reserved\n";
-		
-		$aggobj->Defer("Unable to map all resources, but since this ".
-			       "project has the resources reserved, we will ".
-			       "keep trying until you delete the resources ".
-			       "or terminate the experiment");
+		($instance->AllResourcesReserved($aggobj) ||
+		 $ismobile && $instance->RouteList())) {
+		my $message = "$cluster says not able to map experiment yet; ".
+		    "deferring till later since the ";
+		my $reason  = "Unable to map all resources, but since ";
+
+		if ($instance->AllResourcesReserved()) {
+		    $message .= "project has all of resources reserved";
+		    $reason  .= "the project has all of the resources ".
+			"reserved, ";
+		}
+		else {
+		    $message .= "experiment has all of resources reserved";
+		    $reason  .= "this experiment has the routes allocated, ";
+		}
+		$reason .= "we will keep trying until you delete the ".
+		    "resources or terminate the experiment";
+		print STDERR "$message\n";
+		$aggobj->Defer($reason);	    
 		# Reset status back to created since we have to try again.
 		$aggobj->SetStatus("created");
-		push(@deferred, $aggobj);
 		next;
 	    }
 	    #

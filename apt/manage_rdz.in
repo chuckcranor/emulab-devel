@@ -1,0 +1,1249 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use POSIX ":sys_wait_h";
+use POSIX qw(setsid close strftime);
+use File::Temp qw(tempfile tempdir);
+use Date::Parse;
+use File::Basename;
+use MIME::Base64;
+use JSON;
+
+#
+# Back-end script to manage RDZ stuff
+#
+sub usage()
+{
+    print STDERR "Usage: manage_rdz reset\n";
+    print STDERR "Usage: manage_rdz version\n";
+    print STDERR "Usage: manage_rdz health\n";
+    print STDERR "Usage: manage_rdz zones list\n";
+    print STDERR "Usage: manage_rdz spectrum list|create|show|delete\n";
+    print STDERR "Usage: manage_rdz antennas list|create\n";
+    print STDERR "Usage: manage_rdz locations list|create\n";
+    print STDERR "Usage: manage_rdz radios list|create|show|delete\n";
+    print STDERR "Usage: manage_rdz grants list|create|delete|show\n";
+    print STDERR "Usage: manage_rdz observations create\n";
+    exit(-1);
+}
+my $optlist     = "dt:n";
+my $debug       = 0;
+my $impotent    = 0;
+my $webtask_id;
+my $logfile;
+my $webtask;
+my $this_user;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $MAINSITE    = @TBMAINSITE@;
+my $OURDOMAIN	= "@OURDOMAIN@";
+my $MYURN       = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $ELEMENTID;
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libtestbed;
+use emdb;
+use emutil;
+use libEmulab;
+use Node;
+use User;
+use APT_Aggregate;
+use APT_Instance;
+use APT_RDZ;
+use WebTask;
+
+# Protos
+sub fatal($);
+sub UserError($);
+sub DoReset();
+sub DoGetVersion();
+sub DoGetHealth();
+sub DoLocations();
+sub DoAntennas();
+sub DoRadios();
+sub DoGrants();
+sub DoZones();
+sub DoSpectrum();
+sub DoObservations();
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (grep {$_ eq "--"} @ARGV &&
+    ! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not get webtask object");
+    }
+    $webtask->AutoStore(1);
+}
+
+if (@ARGV < 1) {
+    usage();
+}
+my $action = shift(@ARGV);
+
+#
+# XXX We need to use our token to get out current element ID.
+#
+$ELEMENTID = APT_RDZ::GetPowderElementID();
+if (!defined($ELEMENTID)) {
+    fatal("Could not get our element_id");
+    exit(0);
+}
+
+if ($action eq "reset") {
+    exit(DoReset());
+}
+if ($action eq "version") {
+    exit(DoGetVersion());
+}
+elsif ($action eq "health") {
+    exit(DoGetHealth());
+}
+elsif ($action eq "locations") {
+    exit(DoLocations());
+}
+elsif ($action eq "antennas") {
+    exit(DoAntennas());
+}
+elsif ($action eq "radios") {
+    exit(DoRadios());
+}
+elsif ($action eq "grants") {
+    exit(DoGrants());
+}
+elsif ($action eq "zones") {
+    exit(DoZones());
+}
+elsif ($action eq "spectrum") {
+    exit(DoSpectrum());
+}
+elsif ($action eq "observations") {
+    exit(DoObservations());
+}
+else {
+    usage();
+}
+exit(0);
+
+#
+# Reset all of the RDZ ids in our DB as for reloading the RDZ after
+# it does a DB reset
+#
+sub DoReset()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz reset radios|antennas|all\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+
+    my %options    = ();
+    if (! getopts("F", \%options)) {
+	usage();
+    }
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(all|radios|locations)$/);
+
+    if (!defined($options{"F"})) {
+	fatal("Must provide the -F option to do this!");
+    }
+    if ($which eq "all" || $which eq "locations") {
+	DBQueryFatal("update apt_aggregate_radio_locations ".
+		     "   set rdz_location_id=null");
+    }
+    if ($which eq "all" || $which eq "radios") {
+	DBQueryFatal("update apt_aggregate_radio_info ".
+		     "   set rdz_radio_id=null");
+	DBQueryFatal("update apt_aggregate_radio_frontends ".
+		     "  set rdz_radioport_id=null,rdz_monitor_id=null");
+	DBQueryFatal("update apt_aggregate_radio_frontends ".
+		     "  set rdz_monitor_radio_id=null,".
+		     "      rdz_monitor_radioport_id=null,".
+		     "      rdz_monitor_monitor_id=null");
+    }
+    exit(0);
+}
+
+sub DoGetVersion()
+{
+    my $response;
+    
+    if (APT_RDZ::GET("/version", \$response)) {
+	fatal("Could not get RDZ /version");
+    }
+    print Dumper($response);
+    exit(0);
+}
+
+sub DoGetHealth()
+{
+    if (APT_RDZ::GET("/health/alive", undef)) {
+	fatal("Could not get RDZ /health/alive");
+    }
+    print "RDZ is alive\n";
+
+    if (APT_RDZ::GET("/health/ready", undef)) {
+	fatal("Could not get RDZ /health/ready");
+    }
+    print "RDZ is ready\n";
+    
+    exit(0);
+}
+
+#
+# 
+#
+sub DoZones()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz zones list\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list)$/);
+
+    my $response;
+    if (APT_RDZ::GET("/zones", \$response)) {
+	fatal("Could not get RDZ /zones");
+    }
+    print Dumper($response);
+    exit(0);
+}
+
+#
+# 
+#
+sub DoSpectrum()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz spectrum list\n";
+	print STDERR "Usage: manage_rdz spectrum create <low> <high>\n";
+	print STDERR "Usage: manage_rdz spectrum show <spectrum_id>\n";
+	print STDERR "Usage: manage_rdz spectrum delete <spectrum_id>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create|delete|show)$/);
+
+    if ($which eq "list") {
+	my $response;
+	if (APT_RDZ::GET("/spectrum", \$response)) {
+	    fatal("Could not get RDZ /spectrum");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show" || $which eq "delete") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+
+	my $spectrum_id = shift(@ARGV);
+
+	if ($which eq "delete") {
+	    if (APT_RDZ::DELETE("/spectrum/$spectrum_id", \$response)) {
+		fatal("Could not delete /spectrum/$spectrum_id");
+	    }
+	}
+	else {
+	    if (APT_RDZ::GET("/spectrum/$spectrum_id", \$response)) {
+		fatal("Could not get /spectrum/$spectrum_id");
+	    }
+	    print Dumper($response);
+	}
+	exit(0);
+    }
+    &$usage()
+	if (@ARGV != 2);
+
+    my $freq_low  = shift(@ARGV);
+    $freq_low *= 1000000 if ($freq_low < 10000);
+    my $freq_high = shift(@ARGV);
+    $freq_high *= 1000000 if ($freq_high < 10000);
+
+    my $request = {
+	"description" => "Test Spectrum",
+	"element_id"  => $ELEMENTID,
+	"starts_at"   => TBDateStringGMT(time()),
+	"url"         => "http://www.powderwireless.net/",
+	"enabled"     => JSON::true,
+	"constraints" => [
+	    {
+		"constraint" => {
+		    "min_freq"  => $freq_low + 0,
+		    "max_freq"  => $freq_high + 0,
+		    "max_eirp"  => -70,
+		    "exclusive" => JSON::true,
+		},
+	    },
+	],
+	"policies" => [
+	    {
+		"element_id"    => $ELEMENTID,
+		"allowed"      => JSON::true,
+		"auto_approve" => JSON::true,
+		"priority"     => 500,
+	    },
+	],
+    };
+    print Dumper($request);
+
+    if ($impotent) {
+	exit(0);
+    }
+    my $response;
+    
+    if (APT_RDZ::POST("/spectrum", $request, \$response)) {
+	fatal("Could not add RDZ /spectrum");
+    }
+    print Dumper($response);
+    exit(0);
+}
+
+#
+# We have just a single Antenna for now, so this is brain-dead.
+#
+sub DoAntennas()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz antennas list|create\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create)$/);
+
+    my $response;
+    if (APT_RDZ::GET("/antennas", \$response)) {
+	fatal("Could not get RDZ /antennas");
+    }
+    if ($which eq "list") {
+	print Dumper($response);
+	exit(0);
+    }
+    my @antennas = @{$response->{'antennas'}};
+    if (@antennas) {
+	fatal("Only one antenna for now");
+    }
+    my $request = {
+	"element_id" => $ELEMENTID,
+	"name"       => "powder-omni",
+	"type"       => "omni",
+	"gain"       => 5.0,
+    };
+    if (APT_RDZ::POST("/antennas", $request, \$response)) {
+	fatal("Could not add RDZ /antennas");
+    }
+    print Dumper($response);
+    exit(0);
+}
+
+#
+# We operate from the DB radio locations info. For the demo, we are
+# going to create locations for all BS/FE/DD sites.
+#
+sub DoLocations()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz locations list\n";
+	print STDERR "Usage: manage_rdz locations create\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 1);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create)$/);
+
+    if ($which eq "list") {
+	my $response;
+
+	if (APT_RDZ::GET("/locations", \$response)) {
+	    fatal("Could not get RDZ /locations");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+
+    #
+    # Post all locations.
+    #
+    my $query_result =
+	DBQueryFatal("select * from apt_aggregate_radio_locations ".
+		     "where itype in ('BS', 'FE', 'DD')");
+
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $itype       = $row->{'itype'};
+	my $urn         = $row->{'aggregate_urn'};
+	my $location    = $row->{'location'};
+	my $location_id = $row->{'rdz_location_id'};
+	my $name        = $location . '-' . $itype;
+	my $latitude    = $row->{'latitude'};
+	my $longitude   = $row->{'longitude'};
+
+	if (!$longitude || !$latitude) {
+	    my $aggregate = APT_Aggregate->Lookup($urn);
+	    if ($aggregate && $aggregate->latitude()) {
+		$latitude  = $aggregate->latitude();
+		$longitude = $aggregate->longitude();
+	    }
+	    else {
+		fatal("No latitude/longitude for $urn");
+	    }
+	}
+	
+	my $request = {
+	    "element_id" => $ELEMENTID,
+	    "name"       => $name,
+	    "srid"       => 4326,
+	    "x"          => $latitude,
+	    "y"          => $longitude,
+	    "z"          => 0,
+	};
+	if ($location_id) {
+	    print "This is an update to location $name\n";
+	    $request->{"id"} = $location_id;
+	}
+	if ($debug || $impotent) {
+	    print Dumper($request);
+	}
+	next
+	    if ($impotent);
+	
+	my $response;
+	if ($location_id) {
+	    if (APT_RDZ::PUT("/locations/$location_id", $request, \$response)) {
+		fatal("Could not update RDZ /locations/$location_id");
+	    }
+	}
+	else {
+	    if (APT_RDZ::POST("/locations", $request, \$response)) {
+		fatal("Could not add RDZ /locations");
+	    }
+	}
+	print Dumper($response);
+	if (! $location_id) {
+	    $location_id = $response->{"id"};
+	    DBQueryFatal("update apt_aggregate_radio_locations set ".
+			 "  rdz_location_id='$location_id' ".
+			 "where aggregate_urn='$urn' and ".
+			 "      location='$location' and itype='$itype'");
+	}
+    }
+    exit(0);
+}
+
+#
+# We operate from the DB radio info. For the demo, we are going to create
+# radios for all BS/FE/DD sites.
+#
+sub DoRadios()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz radios list\n";
+	print STDERR "Usage: manage_rdz radios create\n";
+	print STDERR "Usage: manage_rdz radios delete|show <radio_id>\n";
+	print STDERR "Usage: manage_rdz radios delete|show [-a agg] <node_id>\n";
+	exit(-1);
+    };
+    my %options    = ();
+    if (! getopts("a:", \%options)) {
+	usage();
+    }
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create|show|delete)$/);
+
+    if ($which eq "list") {
+	my $response;
+
+	if (APT_RDZ::GET("/radios", \$response)) {
+	    fatal("Could not get RDZ /radios");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show" || $which eq "delete") {
+	my $response;
+	my ($radio, $frontend);
+
+	&$usage()
+	    if (@ARGV != 1);
+
+	my $radio_id = shift(@ARGV);
+	if ($radio_id !~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
+	    # Ignore -a argument for now.
+	    my $aggregate = APT_Aggregate->Lookup($MYURN);
+	    $radio = $aggregate->Radio($radio_id);
+	    if (!$radio) {
+		fatal("No such radio in the DB");
+	    }
+	    if (!$radio->rdz_radio_id()) {
+		fatal("Not registered with the RDZ");
+	    }
+	    $radio_id = $radio->rdz_radio_id();
+	    $frontend = $radio->FrontendInterface("rf0");
+	    if (!$frontend) {
+		fatal("No rf0 frontend for $radio");
+	    }
+	}
+	if ($which eq "delete") {
+	    if (APT_RDZ::DELETE("/radios/$radio_id", \$response)) {
+		fatal("Could not delete /radios/$radio_id");
+	    }
+	}
+	else {
+	    if (APT_RDZ::GET("/radios/$radio_id", \$response)) {
+		fatal("Could not get /radios/$radio_id");
+	    }
+	    print Dumper($response);
+	}
+	if ($frontend && $frontend->rdz_monitor_radio_id()) {
+	    my $monitor_radio_id = $frontend->rdz_monitor_radio_id();
+	    
+	    if ($which eq "delete") {
+		if (APT_RDZ::DELETE("/radios/$monitor_radio_id", \$response)) {
+		    fatal("Could not delete /radios/$monitor_radio_id");
+		}
+	    }
+	    else {
+		if (APT_RDZ::GET("/radios/$monitor_radio_id", \$response)) {
+		    fatal("Could not get /radios/$monitor_radio_id");
+		}
+		print Dumper($response);
+	    }
+	}
+	exit(0);
+    }
+
+    # Need our one antenna id. Not stored in the DB yet.
+    my $response;
+    if (APT_RDZ::GET("/antennas", \$response)) {
+	fatal("Could not get RDZ /antennas");
+    }
+    my @antennas = @{$response->{'antennas'}};
+    if (!@antennas) {
+	fatal("There is no antenna!");
+    }
+    my $antenna_id = $antennas[0]->{'id'};
+
+    my $query_result =
+	DBQueryFatal("select l.rdz_location_id,l.location,l.itype,".
+		     "       l.aggregate_urn, ".
+		     "       i.rdz_radio_id,i.node_id,i.radio_type, ".
+		     "       f.rdz_radioport_id,f.rdz_monitor_id,".
+		     "       f.monitored,f.iface, ".
+		     "       f.transmit_frequencies, ".
+		     "       f.receive_frequencies ".
+		     "  from apt_aggregate_radio_locations as l ".
+		     "join apt_aggregate_radio_info as i on ".
+		     "  i.aggregate_urn=l.aggregate_urn and ".
+		     "  i.location=l.location and ".
+		     "  i.itype=l.itype ".
+		     "join apt_aggregate_radio_frontends as f on ".
+		     "  f.aggregate_urn=i.aggregate_urn and ".
+		     "  f.node_id=i.node_id and ".
+		     "  f.iface='rf0' ".
+		     "where l.rdz_location_id is not null and ".
+		     "      l.itype in ('BS', 'FE', 'DD') and ".
+		     "      l.location in ('Behavioral','Friendship','EBC')");
+    
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $location     = $row->{'location'};
+	my $itype        = $row->{'itype'};
+	my $urn          = $row->{'aggregate_urn'};
+	my $node_id      = $row->{'node_id'};
+	my $iface        = $row->{'iface'};
+	my $radioname    = $node_id;
+	my $portname     = $node_id . '-' . $iface;
+	my $location_id  = $row->{'rdz_location_id'};
+	my $radio_id     = $row->{'rdz_radio_id'};
+	my $port_id      = $row->{'rdz_radioport_id'};
+	my $monitored    = $row->{'monitored'};
+	
+	if (!$location_id) {
+	    fatal("No RDZ location ID set for $location,$itype");
+	}
+
+	# Skip skylark stuff for now.
+	next
+	    if ($row->{'radio_type'} =~ /skylark/i);
+
+	# I think it will be confusing if I do not distinguish these names
+	if ($itype eq "FE" && $node_id =~ /^nuc/) {
+	    $radioname = "EBC FE " . $radioname;
+	    $portname  = "EBC FE " . $portname;
+	}
+	
+	my $radio_request = {
+	    "element_id"   => $ELEMENTID,
+	    "name"         => $radioname,
+	    "description"  => $row->{'radio_type'},
+	    "location_id"  => $location_id,
+	    "enabled"      => JSON::true,
+	};
+	if ($radio_id) {
+	    print "This is an update to radio $node_id\n";
+	    $radio_request->{"id"} = $radio_id;
+	}
+	if ($debug || $impotent) {
+	    print "Radio: $node_id\n";
+	    print Dumper($radio_request);
+	}
+	
+	if (!$impotent) {
+	    my $response;
+	    if ($radio_id) {
+		if (APT_RDZ::PUT("/radios/$radio_id",
+				 $radio_request, \$response)) {
+		    fatal("Could not update RDZ /radios/$radio_id");
+		}
+	    }
+	    else {
+		if (APT_RDZ::POST("/radios", $radio_request, \$response)) {
+		    fatal("Could not add RDZ /radios");
+		}
+	    }
+	    print Dumper($response);
+	    if (! $radio_id) {
+		$radio_id = $response->{"id"};
+		DBQueryFatal("update apt_aggregate_radio_info set ".
+			     "  rdz_radio_id='$radio_id' ".
+			     "where aggregate_urn='$urn' and ".
+			     "      node_id='$node_id'");
+	    }
+	}
+
+	my $min_freq  = 1;
+	my $max_freq  = 1;
+	my $max_power = 10;
+	if ($row->{'transmit_frequencies'} ne "") {
+	    ($min_freq,$max_freq) = split("-", $row->{'transmit_frequencies'});
+	}
+	elsif ($row->{'receive_frequencies'} ne "") {
+	    ($min_freq,$max_freq) = split("-", $row->{'receive_frequencies'});
+	}
+	$min_freq  *= 1000000 if ($min_freq < 10000);
+	$max_freq  *= 1000000 if ($max_freq < 10000);
+	
+	#
+	# We need to store power in the DB!
+	#
+	if ($row->{'radio_type'} =~ /X310/i) {
+	    $max_power = 22;
+	}
+	elsif ($row->{'radio_type'} =~ /N310/i) {
+	    $max_power = 21;
+	}
+	elsif ($row->{'radio_type'} =~ /B210/i) {
+	    $max_power = 19.5;
+	}
+	
+	my $port_request = {
+	    "element_id"          => $ELEMENTID,
+	    "radio_id"            => $radio_id,
+	    "name"                => $portname,
+	    "rx"                  => ($row->{'receive_frequencies'} eq "" ?
+				      JSON::false : JSON::true),
+	    "tx"                  => ($row->{'transmit_frequencies'} eq "" ?
+				      JSON::false : JSON::true),
+	    "min_freq"            => $min_freq + 0,
+	    "max_freq"            => $max_freq + 0,
+	    "max_power"           => $max_power + 0,
+	    "antenna_id"          => $antenna_id,
+	    "antenna_location_id" => $location_id,
+	};
+	if ($port_id) {
+	    print "This is an update to radioport $portname\n";
+	    $port_request->{"id"} = $port_id;
+	}
+	if ($debug || $impotent) {
+	    print "Radio Port: $portname\n";
+	    print Dumper($port_request);
+	}
+
+	if (!$impotent) {
+	    if ($port_id) {
+		if (APT_RDZ::PUT("/radios/$radio_id/ports/$port_id",
+				 $port_request, \$response)) {
+		    fatal("Could not update RDZ /radios/$radio_id/ports/$port_id");
+		}
+	    }
+	    else {
+		if (APT_RDZ::POST("/radios/$radio_id/ports",
+				  $port_request, \$response)) {
+		    fatal("Could not add RDZ /radios/$radio_id/ports");
+		}
+	    }
+	    print Dumper($response);
+	    if (! $port_id) {
+		$port_id = $response->{"id"};
+		DBQueryFatal("update apt_aggregate_radio_frontends set ".
+			     "  rdz_radioport_id='$port_id' ".
+			     "where aggregate_urn='$urn' and ".
+			     "      node_id='$node_id' and iface='$iface'");
+	    }
+	}
+
+	#
+	# OK, Powder inline monitors are different then I first thought.
+	# They need to be separate radios, with a radio port, and the
+	# monitor is attached to that. We then tell the ZMC that it is
+	# monitoring the radio port we created up above.
+	#
+	if ($monitored) {
+	    my $monitor_radio_id     = $row->{'rdz_monitor_radio_id'};
+	    my $monitor_port_id      = $row->{'rdz_monitor_radioport_id'};
+	    my $monitor_id           = $row->{'rdz_monitor_monitor_id'};
+
+	    my $radio_request = {
+		"element_id"   => $ELEMENTID,
+		"name"         => $node_id . " inline monitor",
+		"description"  => "NI/Ettus B210",
+		"location_id"  => $location_id,
+		"enabled"      => JSON::true,
+	    };
+	    
+	    if ($monitor_radio_id) {
+		print "This is an update to monitor radio $node_id\n";
+		$radio_request->{"id"} = $monitor_radio_id;
+	    }
+	    if ($debug || $impotent) {
+		print "Monitor Radio: " . $node_id . " inline monitor\n";
+		print Dumper($radio_request);
+	    }
+	
+	    if (!$impotent) {
+		my $response;
+		if ($monitor_radio_id) {
+		    if (APT_RDZ::PUT("/radios/$monitor_radio_id",
+				     $radio_request, \$response)) {
+			fatal("Could not update RDZ /radios/$monitor_radio_id");
+		    }
+		}
+		else {
+		    if (APT_RDZ::POST("/radios", $radio_request, \$response)) {
+			fatal("Could not add RDZ /radios");
+		    }
+		}
+		print Dumper($response);
+		if (! $monitor_radio_id) {
+		    $monitor_radio_id = $response->{"id"};
+		    DBQueryFatal("update apt_aggregate_radio_frontends set ".
+				 "  rdz_monitor_radio_id='$monitor_radio_id' ".
+				 "where aggregate_urn='$urn' and ".
+				 "      node_id='$node_id'");
+		}
+	    }
+
+	    my $port_request = {
+		"element_id"          => $ELEMENTID,
+		"radio_id"            => $monitor_radio_id,
+		"name"                => $portname . " inline monitor",
+		"rx"                  => JSON::true,
+		"tx"                  => JSON::false,
+		"min_freq"            => 10e6 + 0,
+		"max_freq"            => 6000e6 + 0,
+		"max_power"           => 19.5,
+	    };
+	    if ($monitor_port_id) {
+		print "This is an update to monitor radioport $portname\n";
+		$port_request->{"id"} = $monitor_port_id;
+	    }
+	    if ($debug || $impotent) {
+		print "Monitor Radio Port: " . $node_id . " inline monitor\n";
+		print Dumper($port_request);
+	    }
+
+	    if (!$impotent) {
+		if ($monitor_port_id) {
+		    if (APT_RDZ::PUT(
+			    "/radios/$monitor_radio_id/ports/$monitor_port_id",
+			    $port_request, \$response)) {
+			fatal("Could not update RDZ ".
+			      "/radios/$monitor_radio_id/ports/$monitor_port_id");
+		    }
+		}
+		else {
+		    if (APT_RDZ::POST("/radios/$radio_id/ports",
+				      $port_request, \$response)) {
+			fatal("Could not add RDZ /radios/$radio_id/ports");
+		    }
+		}
+		print Dumper($response);
+		if (! $monitor_port_id) {
+		    $monitor_port_id = $response->{"id"};
+		    DBQueryFatal("update apt_aggregate_radio_frontends set ".
+				 "  rdz_monitor_radioport_id='$monitor_port_id' ".
+				 "where aggregate_urn='$urn' and ".
+				 "      node_id='$node_id' and iface='$iface'");
+		}
+	    }
+	    
+	    my $monitor_request = {
+		"element_id"     => $ELEMENTID,
+	        "radio_port_id"  => $monitor_port_id,
+	        "monitored_radio_port_id"  => $port_id,
+	        "name"           => $portname . " inline monitor",
+	        "types"          => "inline",
+	        "formats"        => "psd",
+	    };
+	    if ($monitor_id) {
+		print "This is an update to the monitor for $portname\n";
+		$monitor_request->{"id"} = $monitor_id;
+	    }
+	    if ($debug || $impotent) {
+		print "Monitor Monitor: " . $node_id . " inline monitor\n";
+		print Dumper($monitor_request);
+	    }
+
+	    if (!$impotent) {
+		if ($monitor_id) {
+		    if (APT_RDZ::PUT("/monitors/$monitor_id",
+				     $monitor_request, \$response)) {
+			fatal("Could not update RDZ /monitors/$monitor_id");
+		    }
+		}
+		else {
+		    if (APT_RDZ::POST("/monitors",
+				      $monitor_request, \$response)) {
+			fatal("Could not add RDZ /monitors");
+		    }
+		}
+		print Dumper($response);
+		if (! $monitor_id) {
+		    $monitor_id = $response->{"id"};
+		    DBQueryFatal("update apt_aggregate_radio_frontends set ".
+				 "  rdz_monitor_monitor_id='$monitor_id' ".
+				 "where aggregate_urn='$urn' and ".
+				 "      node_id='$node_id' and iface='$iface'");
+		}
+	    }
+	}
+    }
+    exit(0);
+}
+
+sub DoGrants()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz grants list\n";
+	print STDERR "Usage: manage_rdz grants create <low> <high>\n";
+	print STDERR "Usage: manage_rdz grants create ".
+	    "<low> <high> <location> <radio>\n";
+	print STDERR "Usage: manage_rdz grants show <grant_id>\n";
+	print STDERR "Usage: manage_rdz grants delete <grant_id>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create|delete|show)$/);
+
+    if ($which eq "list") {
+	my $response;
+
+	if (APT_RDZ::GET("/grants?element_id=$ELEMENTID&revoked=false&deleted=false",
+			 \$response)) {
+	    fatal("Could not get RDZ /grants");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $grant_id = shift(@ARGV);
+	if (APT_RDZ::GET("/grants/$grant_id", \$response)) {
+	    fatal("Could not get /grants/$grant_id");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "delete") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $grant_id = shift(@ARGV);
+	if (APT_RDZ::DELETE("/grants/$grant_id", \$response)) {
+	    fatal("Could not delete /grants/$grant_id");
+	}
+	exit(0);
+    }
+    &$usage()
+	if (! (@ARGV == 2 || @ARGV == 4));
+
+    my $freq_low  = shift(@ARGV);
+    $freq_low *= 1000000 if ($freq_low < 10000);
+    my $freq_high = shift(@ARGV);
+    $freq_high *= 1000000 if ($freq_high < 10000);
+
+    my $request = {
+	"description" => "Test Grant",
+	"element_id"  => $ELEMENTID,
+	"starts_at"   => TBDateStringGMT(time()),
+	"constraints" => [
+	    {
+		"constraint" => {
+		    "min_freq"  => $freq_low + 0,
+		    "max_freq"  => $freq_high + 0,
+		    "max_eirp"  => -80,
+		    "exclusive" => (@ARGV ? JSON::false : JSON::true)
+		},
+	    },
+	],
+    };
+    if (@ARGV) {
+	my $location = shift(@ARGV);
+	my $radio    = shift(@ARGV);
+
+	my $query_result =
+	    DBQueryFatal("select l.rdz_location_id,".
+			 "       l.aggregate_urn, ".
+			 "       i.rdz_radio_id, ".
+			 "       f.rdz_radioport_id, ".
+			 "       f.rdz_monitor_id".
+			 "  from apt_aggregate_radio_locations as l ".
+			 "join apt_aggregate_radio_info as i on ".
+			 "  i.aggregate_urn=l.aggregate_urn and ".
+			 "  i.location=l.location and ".
+			 "  i.itype=l.itype ".
+			 "join apt_aggregate_radio_frontends as f on ".
+			 "  f.aggregate_urn=i.aggregate_urn and ".
+			 "  f.node_id=i.node_id and ".
+			 "  f.iface='rf0' ".
+			 "where l.rdz_location_id is not null and ".
+			 "      l.location='$location' and ".
+			 "      i.node_id='$radio'");
+	if (!$query_result->numrows) {
+	    fatal("No matching location/radio with RDZ info");
+	}
+	if ($query_result->numrows != 1) {
+	    fatal("Too many matching location/radio with RDZ info");
+	}
+	my $row = $query_result->fetchrow_hashref();
+ 	my $port_id  = $row->{'rdz_radioport_id'};
+	$request->{'radio_ports'} = [
+	    {
+		"radio_port_id" => $port_id,
+	    },
+	];
+    }
+    if ($debug || $impotent) {
+	print Dumper($request);
+    }
+    if ($impotent) {
+	exit(0);
+    }
+    my $response;
+    if (APT_RDZ::POST("/grants", $request, \$response)) {
+	fatal("Could not add RDZ /grants");
+    }
+    print Dumper($response);
+    exit(0);
+}
+
+#
+# Post an observation. For now, we take a file output by the rfmonitor
+# daemon, massage it a bit, and then send it to the rdz.
+#
+sub DoObservations()
+{
+    no strict 'subs';
+    local(*FOO);
+    my $aggregate;
+
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz observations create [-a urn] <file>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+
+    my %options    = ();
+    if (! getopts("fa:", \%options)) {
+	usage();
+    }
+    if (defined($options{"a"})) {
+	$aggregate = APT_Aggregate->Lookup($options{"a"});
+	if (!$aggregate) {
+	    $aggregate = APT_Aggregate->LookupByNickname($options{"a"});
+	}
+    }
+    else {
+	$aggregate = APT_Aggregate->Lookup($MYURN);	
+    }
+    if (!$aggregate) {
+	fatal("No such aggregate");
+    }
+    my $aggregate_urn = $aggregate->urn();
+    
+    my $force = defined($options{"f"}) ? 1 : 0;
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(create)$/);
+
+    &$usage()
+	if (@ARGV != 1);
+    
+    my $file = shift(@ARGV);
+    fatal("No such file: $file")
+	if (!-e $file);
+
+    my ($node_id,$iface,$stamp);
+    my $name = basename($file);
+    if ($name =~ /^([^:]+):([^-]+)-(\d+)/) {
+	$node_id = $1;
+	$iface   = $2;
+	$stamp   = $3;
+    }
+    else {
+	fatal("Bad file name, must be a monitor filename");
+    }
+    my $node = Node->Lookup($node_id);
+    if (!defined($node)) {
+	fatal("No such node: $node_id");
+    }
+    #
+    # Do not send up observations if the radio is not allocated and
+    # using RDZ spectrum.
+    #
+    if (!$force) {
+	exit(0)
+	    if (!$node->IsReserved());
+	my $experiment = $node->Reservation();
+
+	# Not likely to see any classic experiments, but make sure.
+	exit(0)
+	    if (! ($experiment && $experiment->slice_uuid()));
+
+	my $instance = APT_Instance->LookupBySlice($experiment->slice_uuid());
+
+	if (!$instance) {
+	    print STDERR "Could not lookup instance for $experiment\n";
+	    exit(0);
+	}
+	# This is hacky.
+	exit(0)
+	    if (!defined($instance->rdz_status()));
+    }
+    else {
+	$stamp = time();
+    }
+    
+    my $query_result =
+	DBQueryFatal("select rdz_monitor_monitor_id from ".
+		     "  apt_aggregate_radio_frontends ".
+		     "where aggregate_urn='$aggregate_urn' and ".
+		     "      node_id='$node_id' and ".
+		     "      iface='$iface'");
+    if (!$query_result->numrows) {
+	fatal("Cannot lookup frontend");
+    }
+    my ($monitor_id) = $query_result->fetchrow_array();
+    if (!$monitor_id) {
+	print "No rdz_monitor_id in DB for $node_id:iface. Skipping\n"
+	    if ($debug || -t STDOUT);
+	exit(0);
+    }
+
+    #
+    # It would be faster to do this with cut/awk. 
+    #
+    my $command = "/bin/cat $file | gunzip ";
+    my $data = "frequency,power,abovefloor,violation\n";
+
+    my $childpid = open(FOO, "-|");
+    if (!defined($childpid)) {
+	fatal("Could not fork");
+    }
+    if ($childpid == 0) {
+	open(STDERR, ">&STDOUT");
+	exec($command);
+    }
+    my $center     = 0;
+    my $incident   = 0;
+    my $violations = 0;
+    my $abovefloor = 0;
+    my ($min_freq,$max_freq);
+    
+    #
+    # First line tells us what to do.
+    #
+    my $header = <FOO>;
+    $abovefloor = 1
+	if ($header =~ /abovefloor/);
+    $violations = 1
+	if ($header =~ /violation/);
+    $center = 1
+	if ($header =~ /center/);
+    $incident = 1
+	if ($header =~ /incident/);
+
+    while (<FOO>) {
+	chomp($_);
+	my @tokens = split(",", $_);
+	my $freq   = shift(@tokens);
+	my $power  = shift(@tokens);
+
+	$min_freq = $freq
+	    if (!defined($min_freq));
+	$max_freq = $freq;
+
+	my $line = "${freq},${power},";
+	shift(@tokens) if ($center);
+	shift(@tokens) if ($incident);
+	
+	if ($violations) {
+	    my $abovevalue  = (@tokens ? shift(@tokens) : "0");
+	    my $violation   = (@tokens ? shift(@tokens) : "0");
+	    
+	    $line .= "$abovevalue,$violation";
+	}
+	elsif ($abovefloor) {
+	    my $abovevalue  = (@tokens ? shift(@tokens) : "0");
+
+	    $line .= "$abovevalue,0";
+	}
+	else {
+	    $line .= "0,0";
+	}
+	$line .= "\n";
+	$data .= $line;
+    }
+    # This throws an abscure perl error, I got no idea. Ignoring it.
+    #close(FOO);
+
+    my $request = {
+	"monitor_id"  => $monitor_id,
+	"types"       => "inline,sweep",
+	"format"      => "psd-csv-inline",
+	"description" => $aggregate->nickname() . " " . $node_id,
+	"min_freq"    => $min_freq * 1000000,
+	"max_freq"    => $max_freq * 1000000,
+	"starts_at"   => TBDateStringGMT($stamp),
+	"violation"   => ($violations ? JSON::true : JSON::false),
+    };
+    if ($debug || $impotent) {
+	$request->{'data'} = substr($data, 0, 200) . " ...";
+	print Dumper($request);
+    }
+    if ($impotent) {
+	exit(0);
+    }
+    $request->{'data'} = encode_base64($data);
+    my $response;
+    if (APT_RDZ::POST("/observations", $request, \$response)) {
+	fatal("Could not add RDZ /grants");
+    }
+    #print Dumper($response);
+    exit(0)
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    # Exit with negative status so web interface treats it as system error.
+    exit(-1);
+}
+
+sub UserError($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(1);
+}

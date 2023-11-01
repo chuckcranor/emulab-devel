@@ -117,6 +117,7 @@ class Instance
     function profile_id()   { return $this->field('profile_id'); }
     function profile_version() { return $this->field('profile_version'); }
     function status()	    { return $this->field('status'); }
+    function rdz_status()   { return $this->field('rdz_status'); }
     function canceled()	    { return $this->field('canceled'); }
     function paniced()	    { return $this->field('paniced'); }
     function pid()	    { return $this->field('pid'); }

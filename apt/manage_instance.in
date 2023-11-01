@@ -153,6 +153,8 @@ if ($MAINSITE) {
     # For POWDER NextBusinessDay
     require DateTime;
     require DateTime::Duration;
+    # And the RDZ code.
+    require APT_RDZ;
 }
 
 # Protos
@@ -1600,6 +1602,19 @@ sub DoTerminate()
 	    $exitcode = -1;
 	    $errcode  = GENIRESPONSE_ERROR;
 	    $errmsg   = "Could not remove FABRIC links";
+	    goto bad;
+	}
+    }
+
+    #
+    # Special case for the RDZ.
+    #
+    my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
+    if (keys(%{$rfranges})) {
+	if (APT_RDZ::DeleteGrants($instance)) {
+	    $exitcode = -1;
+	    $errcode  = GENIRESPONSE_ERROR;
+	    $errmsg   = "Could not delete RDZ grants";
 	    goto bad;
 	}
     }

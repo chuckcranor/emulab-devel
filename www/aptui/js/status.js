@@ -602,6 +602,16 @@ $(function ()
 		ProgressBarUpdate();
 		status_message = "Your experiment is scheduled to start later";
 	    }
+	    else if (instanceStatus == 'rdzwait') {
+		status_html = "RDZ Wait (<span class='text-info'>" +
+		    "requesting spectrum from the RDZ</span>" + ")";
+		ProgressBarUpdate();
+		ShowRspec();
+		ShowBindings();
+		status_message =
+		    "Your experiment is delayed while we request spectrum " +
+		    "from the RDZ";
+	    }
 	    else if (instanceStatus == 'prestaging') {
 		status_html = "prestaging";
 		status_message = "Copying images to target clusters";
@@ -722,6 +732,12 @@ $(function ()
 		StartCountdownClock.stop = 1;
 		if (lastStatus == "failed") {
 		    $('.ignore-failure').addClass("hidden");
+		}
+		if (json.value.rdz_status == "revoked" ||
+		    (lastStatusBlob && lastStatusBlob.rdz_status == "revoked")) {
+		    status_html +=
+			" <font color=red>" +
+			"(<b>The RDZ has revoked your spectrum</b>)</font>";
 		}
 	    }
 	    else if (instanceStatus == "unknown") {
@@ -883,6 +899,7 @@ $(function ()
 	    case 'provisioned':
 	    case 'scheduled':
 	    case 'pending':
+	    case 'rdzwait':
 	        refresh = reloadtopo = extend = snapshot = destroy = 0;
   	        terminate = 1;
   	        break;
@@ -5128,6 +5145,9 @@ $(function ()
 	
 	if (instanceStatus == "created") {
 	    spinwidth = "25";
+	}
+	else if (instanceStatus == "rdzwait") {
+	    spinwidth = "15";
 	}
 	else if (instanceStatus == "provisioning" ||
 		 instanceStatus == "stitching") {

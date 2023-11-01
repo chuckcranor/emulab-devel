@@ -1941,6 +1941,7 @@ sub GetResources($$$)
     my %nodes = ();
     my %links = ();
     my %aggregates = ();
+    my %radios = ();
     
     #
     # Build up counts for each reservable type (or reservable node).
@@ -1992,6 +1993,11 @@ sub GetResources($$$)
 	}
 	if ($component_id && $aggregate->IsReservableNode($component_id)) {
 	    $restoken = $component_id;
+
+	    my $radio = $aggregate->Radio($component_id);
+	    if ($radio) {
+		$radios{$client_id} = $radio;
+	    }
 	}
 	elsif ($hardtype) {
 	    my $type = GeniXML::GetText("name", $hardtype);
@@ -2033,6 +2039,7 @@ sub GetResources($$$)
 	"nodes"       => \%nodes,
 	"links"       => \%links,
 	"aggregates"  => \%aggregates,
+	"radios"      => \%radios,
     };
     return 0;
 }
