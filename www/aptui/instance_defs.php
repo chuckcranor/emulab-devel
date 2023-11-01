@@ -928,8 +928,22 @@ class Instance
                            "cellsdr1-fm"        => true,
                            "cellsdr1-honors"    => true,
                            "cellsdr1-ustar"     => true,
+                           "cellsdr1-meb"       => true,
                            "mmimo-ac"           => true,
-                           "irisclients-ac"     => true,
+                           "n310-ustar"         => true,
+                           "cap-ustar"          => true,
+                           "cap-wasatch"        => true,
+                           "cap-ebc"            => true,
+                           "ceg1"               => true,
+                           "cap1"               => true,
+                           # Wisconsin, not ready yet
+                           "d7525"              => true,
+                           "d8545"              => true,
+                           "sm110p"             => true,
+                           "sm220u"             => true,
+                           "c240g2-infra"       => true,
+                           "r7525s"             => true,
+                           "rflab-blackbox"     => true,
         );
 
         #
