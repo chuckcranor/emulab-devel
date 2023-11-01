@@ -250,11 +250,16 @@ $(function ()
 	// Load previous bindings if applicable.
 	if (window.PROFILE_UUID && window.RERUN_INSTANCE) {
 	    // We do not know yet if its parameterized. But that is okay.
-	    LoadPreviousInstance()
-		.done(ChangeProfileSelection(window.PROFILE_UUID))
+	    
+	    /* Bootstrap 5 sillyness, have not figured out a better solution */
+	    _.defer(function f() {
+		LoadPreviousInstance()
+		    .done(ChangeProfileSelection(window.PROFILE_UUID));
+	    });
 	}
 	else {
-	    ChangeProfileSelection(window.DEFAULT_PROFILE);
+	    /* Bootstrap 5 sillyness, have not figured out a better solution */
+	    _.defer(ChangeProfileSelection, window.DEFAULT_PROFILE);
 	}
 	_.delay(function () {
 	    $('.dropdown-toggle').dropdown();
