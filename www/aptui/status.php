@@ -37,6 +37,7 @@ include_once("resgroup_defs.php");
 $page_title = "Experiment Status";
 $ajax_request = 0;
 $lazytopo = 0;
+$slowdown = 0;
 
 #
 # Get current user.
@@ -223,8 +224,16 @@ $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
 #}
 #$cansnap = 0;
 
-if ($instance->pid() == $TUTORIALPID) {
+if ($instance->pid() == $TUTORIALPID && !$isadmin) {
     $lazytopo = 1;
+    $slowdown = 1;
+}
+#
+# Classes can really pound the web interface, so we slow the polling for
+# for those projects as well. 
+#
+if ($instance->Project()->forClass() && !$isadmin) {
+    $slowdown = 1;
 }
 
 #
@@ -283,6 +292,7 @@ echo "  window.APT_OPTIONS.dossh = $dossh;\n";
 echo "  window.APT_OPTIONS.dovnc = $dovnc;\n";
 echo "  window.APT_OPTIONS.isscript = $isscript;\n";
 echo "  window.APT_OPTIONS.lazytopo = $lazytopo;\n";
+echo "  window.APT_OPTIONS.slowdown = $slowdown;\n";
 echo "  window.APT_OPTIONS.AJAXURL = 'server-ajax.php';\n";
 if (isset($maxextend) && $maxextend != "") {
     # Assumed to be hours.

@@ -158,11 +158,6 @@ $(function ()
     {
 	instanceStatus  = expinfo.status;
 	extension_blob  = expinfo.extension_info;
-
-	// For tutorials
-	if (expinfo.istutorial) {
-	    slowdown = true;
-	}
 	
 	// Generate the templates.
 	var template_args = {
@@ -202,7 +197,7 @@ $(function ()
 	});
 	ProgressBarUpdate();
 
-	if (!slowdown) {
+	if (!expinfo.istutorial) {
 	    // Periodic check for max allowed extension
 	    LoadMaxExtension();
 	    setInterval(LoadMaxExtension, 3600 * 1000);
@@ -473,7 +468,7 @@ $(function ()
     function StartStatusWatch()
     {
 	GetStatus();
-	statusID = setInterval(GetStatus, (slowdown ? 20000 : 5000));
+	statusID = setInterval(GetStatus, (window.APT_OPTIONS.slowdown ? 30000 : 5000));
     }
     
     function GetStatus()
