@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2017-2020 University of Utah and the Flux Group.
+# Copyright (c) 2017-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -90,7 +90,7 @@ usage()
 # if the 24 hour one hasn't been sent for some reason (e.g., boss was
 # down for a long time or they scheduled a reservation starting almost
 # immediately), then we'll nag them only once.
-my $query_result = DBQueryFatal( "SELECT r.idx, r.pid, r.nodes, r.type, " .
+my $query_result = DBQueryFatal( "SELECT r.idx, r.pid,r.gid, r.nodes, r.type," .
 				 "r.end, u.usr_email FROM " .
 				 "future_reservations AS r, users AS u " .
 				 "WHERE r.uid_idx=u.uid_idx AND " .
@@ -99,7 +99,7 @@ my $query_result = DBQueryFatal( "SELECT r.idx, r.pid, r.nodes, r.type, " .
 				 "r.notified < r.start) AND " .
 				 "r.start <= NOW()" );
 
-while( my ($idx, $pid, $count, $type, $end, $email) =
+while( my ($idx, $pid, $gid, $count, $type, $end, $email) =
        $query_result->fetchrow_array() ) {
     print STDERR "Reservation $idx for project $pid, $count x $type " .
 	"now-$end <$email> (now active!)\n" if( $debug );
@@ -107,7 +107,7 @@ while( my ($idx, $pid, $count, $type, $end, $email) =
     next if( $impotent );
     SENDMAIL( $email, "Reservation at $SITE is active",
 	      "You have a current reservation at $SITE, with project\n" .
-	      "$pid.  $count $type nodes are now set aside for your\n" .
+	      "$pid/$gid.  $count $type nodes are now set aside for your\n" .
 	      "project, until $end.\n" .
 	      "\n" .
 	      "If you do not intend to use these resources, please\n" .
@@ -135,7 +135,7 @@ while( my ($idx, $pid, $count, $type, $end, $email) =
     DBQueryFatal( "UPDATE future_reservations SET notified=NOW() WHERE idx=$idx" );
 }
 
-$query_result = DBQueryFatal( "SELECT r.idx, r.pid, r.nodes, r.type, " .
+$query_result = DBQueryFatal( "SELECT r.idx, r.pid,r.gid, r.nodes, r.type, " .
 			      "r.start, r.end, u.usr_email FROM " .
 			      "future_reservations AS r, users AS u " .
 			      "WHERE r.uid_idx=u.uid_idx AND " .
@@ -143,7 +143,7 @@ $query_result = DBQueryFatal( "SELECT r.idx, r.pid, r.nodes, r.type, " .
 			      "r.notified IS NULL AND " .
 			      "r.start <= ADDDATE( NOW(), 1 )" );
 
-while( my ($idx, $pid, $count, $type, $start, $end, $email) =
+while( my ($idx, $pid, $gid, $count, $type, $start, $end, $email) =
        $query_result->fetchrow_array() ) {
     print STDERR "Reservation $idx for project $pid, $count x $type from " .
 	"$start-$end <$email>\n" if( $debug );
@@ -154,7 +154,7 @@ while( my ($idx, $pid, $count, $type, $start, $end, $email) =
     next if( $impotent );
     SENDMAIL( $email, "Upcoming $SITE reservation",
 	      "You have a reservation scheduled at $SITE, with project\n" .
-	      "$pid.  $count $type nodes will be set aside for your\n" .
+	      "$pid/$gid.  $count $type nodes will be set aside for your\n" .
 	      "project, starting at $start and ending at\n" .
 	      "$end.\n" .
 	      "\n" .
@@ -187,16 +187,16 @@ while( my ($idx, $pid, $count, $type, $start, $end, $email) =
 # Handle cancellations. 
 #
 
-$query_result = DBQueryFatal( "SELECT r.idx, r.pid, r.nodes, r.type, " .
+$query_result = DBQueryFatal( "SELECT r.idx, r.pid,r.gid, r.nodes, r.type, " .
 			      "r.start, r.end, u.usr_email, r.cancel FROM " .
 			      "future_reservations AS r, users AS u " .
 			      "WHERE r.uid_idx=u.uid_idx AND " .
 			      "r.cancel IS NOT NULL AND " .
 			      "r.cancel < NOW()" );
 
-while( my ($idx, $pid, $count, $type, $start, $end, $email, $cancel) =
+while( my ($idx, $pid, $gid, $count, $type, $start, $end, $email, $cancel) =
        $query_result->fetchrow_array() ) {
-    print STDERR "Reservation $idx for project $pid, $count x $type from " .
+    print STDERR "Reservation $idx for project $pid/$gid, $count x $type from ".
 	"$start-$end <$email> canceled\n" if( $debug );
 
     my $res = Reservation->Lookup($idx);
@@ -210,7 +210,7 @@ while( my ($idx, $pid, $count, $type, $start, $end, $email, $cancel) =
     $end   = TBDateStringUTC($end);
 
     SENDMAIL( $email, "$SITE reservation",
-	      "Your reservation for $count $type nodes in project $pid,\n" .
+	      "Your reservation for $count $type nodes in project $pid/$gid,\n".
 	      "starting at $start and ending at $end,\n".
 	      "was canceled at $cancel, and has now been removed.\n",
 	      $TBOPS);

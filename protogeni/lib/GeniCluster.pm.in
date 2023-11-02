@@ -1417,33 +1417,49 @@ sub Reservations($)
     my %timelines = ();
     my @rows      = ();
     my %pidres    = ();
-    my %projects  = ();
     
     while (my $row = $query_result->fetchrow_hashref()) {
-	my $pid = $row->{'pid'};
+   	my $idx = $row->{'idx'};
+	my $reservation = Reservation->Lookup($idx);
+	next
+	    if (!$reservation);
+	my $pid = $reservation->pid();
+	my $gid = $reservation->gid();
+	my $target  = $reservation->Target();
 	my $project = Project->Lookup($pid);
 	if (!defined($project)) {
 	    print STDERR "Reservations: No such project $pid\n";
 	    next;
 	}
-	my $target = $pid;
 	my $user;
-	if (!$project->shared_reservations()) {	
-	    $user = User->Lookup($row->{'uid'});
-	    $target .= ":" . $row->{'uid'};
+	my $group = $project;
+	
+	if ($reservation->shared_res() == $Project::RESERVATIONS_PERUSER) {
+	    $user = User->Lookup($reservation->uid());
+	    next
+		if (!$user);
+	}
+	elsif ($reservation->shared_res() == $Project::RESERVATIONS_PERGROUP) {
+	    $group = $project->LookupGroup($reservation->gid());
+	    next
+		if (!$group);
 	}
 	# Save for loop below.
-	$row->{"target"} = $target;
-	$projects{$pid} = $project;
+	$row->{"target"}  = $target;
+	$row->{"project"} = $project;
+	$row->{"group"}   = $group;
+	$row->{"user"}    = $user;
+	$row->{"reservation"} = $reservation;
+	
 	if (!exists($pidres{$target})) {
-	    my @allres   = ResUtil::CollectReservations($project, $user, 0);
+	    my @allres   = ResUtil::CollectReservations($group, $user, 0);
 	    my @timeline = ();
 	    # This does not return unapproved reservations, but we still
 	    # need to process them below.
 	    if (@allres) {
-		@timeline = ResUtil::CreateTimeline($project, $user, @allres);
+		@timeline = ResUtil::CreateTimeline($group, $user, @allres);
 		if (!@timeline) {
-		    print STDERR "Reservations: No timeline for $pid\n";
+		    print STDERR "Reservations: No timeline for $pid/$gid\n";
 		}
 	    }
 	    $pidres{$target} = \@allres;
@@ -1460,24 +1476,18 @@ sub Reservations($)
 	my $blob = {};
    	my $idx  = $row->{'idx'};
 	my $pid  = $row->{'pid'};
+	my $gid  = $row->{'gid'};
 	my $uid  = $row->{'uid'};
 	my $uuid = $row->{'uuid'};
 	my $type = $row->{'type'};
-	my $target = $row->{'target'};
-	my $using= 0;
-	my $project  = $projects{$pid};
-	my $projurn  = $project->nonlocalurn();
+	my $reservation = $row->{'reservation'};
+	my $target   = $row->{'target'};
+	my $project  = $row->{'project'};
+	my $group    = $row->{'group'};
+	my $user     = $row->{'user'};
 	my @timeline = ();
+	my $using = 0;
 	
-	my $user = User->Lookup($uid);
-	if (!defined($user)) {
-	    print STDERR "Reservations: No such user $uid\n";
-	    next;
-	}
-	my $reservation = Reservation->Lookup($idx);
-	next
-	    if (!defined($reservation));
-
 	# Backwards compatibility requires we always return something for this.
 	$blob->{'utilization'} = {};	
 
@@ -1493,13 +1503,13 @@ sub Reservations($)
 		my @tmp = ();
 		foreach my $ref (@timeline) {
 		    my $allocated = {
-			$pid => {
+			$gid => {
 			    $type =>
-				$ref->{'rescounts'}->{$uuid}->{"project"} || 0
+				$ref->{'rescounts'}->{$uuid}->{"group"} || 0
 			},
-			    $uid => {
-				$type =>
-				    $ref->{'rescounts'}->{$uuid}->{"user"} || 0
+			$uid => {
+			    $type =>
+				$ref->{'rescounts'}->{$uuid}->{"user"} || 0
 			},
 		    };
 		    push(@tmp, {
@@ -1510,14 +1520,15 @@ sub Reservations($)
 		@timeline = @tmp;
 		if (@timeline) {
 		    my $ref = $timeline[-1];
-		    $using = $ref->{'allocated'}->{$pid}->{$type};
+		    $using = $ref->{'allocated'}->{$gid}->{$type};
 		}
 	    }
 	}
 	$blob->{"idx"}         = $idx;
 	$blob->{"uuid"}        = $uuid;
-	$blob->{"project"}     = $projurn;
+	$blob->{"project"}     = $project->nonlocalurn();
 	$blob->{"pid"}         = $pid;
+	$blob->{"gid"}         = $gid;
 	$blob->{"user"}        = $user->nonlocalurn();
 	$blob->{"uid"}         = $user->uid();
 	$blob->{"nodes"}       = $row->{'nodes'};
@@ -1528,6 +1539,7 @@ sub Reservations($)
 	$blob->{"end"}         = TBDateStringGMT($row->{'end'});
 	$blob->{"notes"}       = $row->{'notes'} || "";
 	$blob->{"approved"}    = "";
+	$blob->{"restype"}     = $project->SharedReservationsString();
 	$blob->{"idledetection"} = $row->{'override_unused'} ? 0 : 1;
 	if (defined($row->{'approved'})) {
 	    $blob->{"approved"} = TBDateStringGMT($row->{'approved'});

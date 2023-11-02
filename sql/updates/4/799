@@ -31,7 +31,7 @@ sub DoUpdate($$$)
 
     if( !DBSlotExists("apt_reservation_groups", "gid" ) ) {
 	DBQueryFatal( "ALTER TABLE apt_reservation_groups ADD ".
-		      " `gid` varchar(32) default NULL after pid_idx" );
+		      " `gid` varchar(32) NOT NULL default '' after pid_idx" );
 	DBQueryFatal( "UPDATE apt_reservation_groups SET gid=pid" );
     }
     if( !DBSlotExists("apt_reservation_groups", "gid_idx" ) ) {
@@ -42,7 +42,7 @@ sub DoUpdate($$$)
     }
     if( !DBSlotExists("apt_reservation_group_history", "gid" ) ) {
 	DBQueryFatal( "ALTER TABLE apt_reservation_group_history ADD ".
-		      " `gid` varchar(32) default NULL after pid_idx" );
+		      " `gid` varchar(32) NOT NULL default '' after pid_idx" );
 	DBQueryFatal( "UPDATE apt_reservation_group_history SET gid=pid" );
     }
     if( !DBSlotExists("apt_reservation_group_history", "gid_idx" ) ) {

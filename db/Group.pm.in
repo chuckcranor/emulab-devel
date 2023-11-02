@@ -1439,6 +1439,18 @@ sub ValidGID($$)
 			  TBDB_CHECKDBSLOT_ERROR());
 }
 
+#
+# Return usage records for experiments that have terminated (were running)
+# between two dates.
+#
+sub Usage($$$$)
+{
+    my ($self, $user, $start, $end) = @_;
+    my $project = $self->GetProject();
+    
+    return $project->Usage($self, $user, $start, $end);
+}
+
 ############################################################################
 
 package Group::MemberShip;

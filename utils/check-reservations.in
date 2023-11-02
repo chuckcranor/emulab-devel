@@ -124,18 +124,25 @@ while (my ($idx) = $query_result->fetchrow_array()) {
 	if (!defined($project));
     
     my $user;
-    if (!$res->shared_res()) {
+    my $group = $project;
+
+    if ($res->shared_res() == $Project::RESERVATIONS_PERUSER) {
 	$user = User->Lookup($res->uid());
 	next
 	    if (!$user);
     }
-
+    elsif ($res->shared_res() == $Project::RESERVATIONS_PERGROUP) {
+	$group = $project->LookupGroup($res->gid());
+	next
+	    if (!$group);
+    }
     if (!exists($projRes{$target})) {
-	my @allres   = ResUtil::CollectReservations($project, $user, 0);
-	my @timeline = ResUtil::CreateTimeline($project, $user, @allres);
+	my @allres   = ResUtil::CollectReservations($group, $user, 0);
+	my @timeline = ResUtil::CreateTimeline($group, $user, @allres);
 	
 	$projRes{$target} = {
 	    "project"  => $project,
+	    "group"    => $group,
 	    "user"     => $user,
 	    "reslist"  => [],
 	    "timeline" => \@timeline,
@@ -198,13 +205,14 @@ foreach my $target (keys(%projRes)) {
 	    my $email = $user->email();
 	    my $count = $res->nodes();
 	    my $pid   = $res->pid();
+	    my $gid   = $res->gid();
 	    my $type  = $res->type();
 	    my $start = TBDateStringUTC($res->start());
 	    my $end   = TBDateStringUTC($res->end());
 	    $cancel   = TBDateStringUTC($cancel);
 	
 	    SENDMAIL($email, "$SITE reservation",
-	      "Your reservation for $count $type nodes in project $pid,\n" .
+	      "Your reservation for $count $type nodes in project $pid/$gid,\n".
 	      "starting at $start and ending at $end,\n".
 	      "has not been used since it started.\n".
 	      "\n".

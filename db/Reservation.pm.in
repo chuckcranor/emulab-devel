@@ -1437,7 +1437,7 @@ sub UpcomingReservations($$$) {
 # Type can be a single type or a list reference of types.
 #
 sub ProjectReservations($$$;$$) {
-    my ($class, $project, $user, $type, $activeonly) = @_;
+    my ($class, $group, $user, $type, $activeonly) = @_;
     my $typeclause   = "";
     my $activeclause = "";
     my $userclause   = "";
@@ -1460,9 +1460,10 @@ sub ProjectReservations($$$;$$) {
 	my $uid = $user->uid();
 	$userclause = "AND uid='$uid'";
     }
-    if (defined($project)) {
-	my $pid = ref($project) ? $project->pid() : $project;
-	$pidclause = "AND pid='$pid'";
+    if (defined($group)) {
+	my $pid = $group->pid();
+	my $gid = $group->gid();
+	$pidclause = "AND pid='$pid' AND gid='$gid'";
     }
     my $query_result =
 	DBQueryFatal("select idx from future_reservations ".
@@ -1501,6 +1502,8 @@ sub LookupHistorical($$) {
     $self->{'IDX'}         = undef;
     $self->{'PID'}         = $record->{'pid'};
     $self->{'PID_IDX'}     = $record->{'pid_idx'};
+    $self->{'GID'}         = $record->{'gid'};
+    $self->{'GID_IDX'}     = $record->{'gid_idx'};
     $self->{'EID'}         = undef;
     $self->{'START'}       = $record->{'s'};
     $self->{'END'}         = $record->{'e'};
@@ -1531,7 +1534,7 @@ sub LookupHistorical($$) {
 # Type can be a single type or a list reference of types.
 #
 sub HistoricalReservations($$$;$) {
-    my ($class, $project, $user, $type) = @_;
+    my ($class, $group, $user, $type) = @_;
     my $pid;
     my @clauses = ();
     my @answer  = ();
@@ -1550,9 +1553,11 @@ sub HistoricalReservations($$$;$) {
 	my $uid = $user->uid();
 	push(@clauses, "uid='$uid'");
     }
-    if (defined($project)) {
-	my $pid = $project->pid();
+    if (defined($group)) {
+	my $pid = $group->pid();
+	my $gid = $group->gid();
 	push(@clauses, "pid='$pid'");
+	push(@clauses, "gid='$gid'");
     }
     my $query_result =
 	DBQueryWarn("select uuid from reservation_history ".
