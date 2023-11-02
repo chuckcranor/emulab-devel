@@ -314,7 +314,7 @@ window.APT_OPTIONS.Announcements = function () {
 	    }
 	    $('#portal-announcement-div').html(newhtml);
 	}
-	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 60000);
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 90000);
     }
 
     var xmlthing =
