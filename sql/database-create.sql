@@ -3901,6 +3901,7 @@ CREATE TABLE `login` (
   `adminon` tinyint(1) NOT NULL default '0',
   `opskey` varchar(64) NOT NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') NOT NULL default 'emulab',
+  `IP` varchar(16) default NULL,
   PRIMARY KEY  (`uid_idx`,`hashkey`),
   UNIQUE KEY `hashhash` (`uid_idx`,`hashhash`),
   UNIQUE KEY `uidkey` (`uid`,`hashkey`)

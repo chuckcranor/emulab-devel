@@ -1528,6 +1528,21 @@ class User
 
         return mysql_num_rows($query_result);
     }
+    function LoggedInIPs() {
+	$idx    = $this->uid_idx();
+        $result = array();
+
+        $query_result = 
+            DBQueryFatal("select distinct IP from login where uid_idx='$idx'");
+
+        while ($row = mysql_fetch_array($query_result)) {
+            $ip = $row['IP'];
+            if ($ip) {
+                $result[] = $ip;
+            }
+        }
+        return $result;
+    }
 
     #
     # Return project access list for a user. This returns just pid,eid for

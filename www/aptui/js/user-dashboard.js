@@ -598,7 +598,7 @@ $(function ()
     function LoadProfileTab()
     {
 	var callback = function(json) {
-	    console.info(json.value);
+	    console.info("LoadProfileTab", json.value);
 
 	    if (json.code) {
 		console.info(json.value);
