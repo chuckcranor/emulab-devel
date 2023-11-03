@@ -261,6 +261,7 @@
 		     data-label="Reservation Start"
 		     data-optional="yep"
 		     data-colsize="9"
+		     data-margin="10"
 		     data-key="start">
 		  <div class="row">
 		    <div class="col-sm-4">
@@ -323,9 +324,19 @@
 		<div class="format-me"
 		     data-label="Reservation End"
 		     data-margin="20"
+		     data-wide="1"
 		     data-key="end">
-		  <div class="row">
-		    <div class="col-sm-6">
+		  <% if (window.ISCLOUD) { %>
+		    <div class="row">		  
+		      <div class="col-sm-12">
+			<em>When CloudLab is busy, we give preference to
+			  reservation requests that use few resources or are
+			  short in duration.</em>
+		      </div>
+		    </div>
+		  <% } %>
+		  <div class="row">		  
+		    <div class="col-sm-4">
 		      <input name="end_day"
 			     style='position: relative;'
 			     id='end_day'
@@ -334,7 +345,7 @@
 			     placeholder="MM/DD/YYYY"
 			     type="text">
 		    </div>
-		    <div class="col-sm-6">
+		    <div class="col-sm-4">
 		      <select name="end_hour"
 			      id='end_hour'
  			      value=""
@@ -342,7 +353,7 @@
  			      type="text">
 			<option value="">End Time</option>
 			<option value="0">12:00 AM</option>
-			<option value="1">1:00 AM</option>
+			<option valuae="1">1:00 AM</option>
 			<option value="2">2:00 AM</option>
 			<option value="3">3:00 AM</option>
 			<option value="4">4:00 AM</option>
