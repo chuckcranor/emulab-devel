@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -131,12 +131,12 @@ BEGIN {
 	}
 	print STDERR "Waiting for the create_instance_lock lock ...\n";
 	APT_Utility::TutorialStat("create_instance: waiting for lock");
-	sleep(2);
+	sleep(3);
     }
     while ((my $load = libEmulab::LoadAverage()) > 25) {
 	print STDERR "Load too high at $load, waiting ...\n";
 	APT_Utility::TutorialStat("create_instance: load too high at $load");
-	sleep(1);
+	sleep(3);
     }
     APT_Utility::TutorialStat("create_instance: done waiting, got serial lock");
 }

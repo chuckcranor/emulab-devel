@@ -590,7 +590,9 @@ $(function ()
         return function (event)
         {
 	    if (webonly != 0) {
-	        event.preventDefault();
+	        if (event) {
+		    event.preventDefault();
+		}
 	        sup.SpitOops("oops",
 			     "You do not belong to any projects at your Portal, " +
 			     "so you have have very limited capabilities. Please " +
@@ -600,15 +602,17 @@ $(function ()
 			     " to enable more capabilities. Thanks!")
 	        return false;
 	    }
-	    // Prevent double click.
-	    if (submitted === true) {
-	        // Previously submitted - don't submit again
-	        event.preventDefault();
-	        console.info("Ignoring double submit");
-	        return false;
-	    } else {
-	        // Mark it so that the next submit can be ignored
-	        submitted = true;
+	    if (event) {
+		// Prevent double click.
+		if (submitted === true) {
+	            // Previously submitted - don't submit again
+	            event.preventDefault();
+	            console.info("Ignoring double submit");
+	            return false;
+		} else {
+	            // Mark it so that the next submit can be ignored
+	            submitted = true;
+		}
 	    }
 
             // Submit with checkonly first, then for real
@@ -635,9 +639,16 @@ $(function ()
 		            submitted = false;
 			    sup.HideWaitWait(function () {
 				HandleLicenseRequirements(json.value);
-			    })
+			    });
 			    return;
 		        }
+			if (json.code == 65 || json.code == 66) {
+		            submitted = false;
+			    sup.HideWaitWait(function () {
+				HandleServerBusy(json.code);
+			    });
+			    return;
+			}
 		        submitted = false;
 			sup.HideWaitWait(function () {			
 		            sup.SpitOops("oops",
@@ -1740,6 +1751,31 @@ $(function ()
 	});
 	sup.ShowModal('#request-licenses-modal', function () {
 	    $('#request-license-button').off("click");
+	});
+    }
+
+    /*
+     * Server too busy, we will try again
+     */
+    function HandleServerBusy(code)
+    {
+	var counter = 30;
+	
+	var timer =
+	    window.setInterval(function() {
+		if (counter <= 1) {
+		    clearInterval(timer);
+		    sup.HideModal('#server-busy-modal', function () {
+			Instantiate();
+		    });
+		}
+		counter--;
+		$('#server-busy-modal .countdown-count').html(counter);
+	    }, 1000);
+	
+	$('#server-busy-modal .countdown-count').html(counter);
+	sup.ShowModal('#server-busy-modal', function () {
+	    clearInterval(timer);
 	});
     }
 

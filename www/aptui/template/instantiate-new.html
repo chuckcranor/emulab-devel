@@ -734,6 +734,30 @@
     </div>
   </div>
 </div>
+<div id='server-busy-modal' class='modal fade'
+     data-keyboard='false' data-backdrop='static'>     
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	<p class="fs-5">
+	  <b>Warning:</b> The server is currently experiencing a very
+	  high load. This typically clears up in a minute or two, so
+	  we will continue to try periodically for you. Or you can
+	  click on the Cancel button below and we will stop trying
+	  (you will need to resubmit later).
+	</p>
+	<center>
+	  <div class="mb-3">
+	    Trying again in <span class="countdown-count"></span> seconds.
+	  </div>
+	  <button type='button' class='btn btn-default btn-sm'
+		  data-dismiss='modal' data-bs-dismiss='modal'>
+	    Cancel Submit</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
 <div id='waitwait_div'></div>
 <div id='oops_div'></div>
 <div id='rspecview_div'></div>

@@ -1058,6 +1058,34 @@ class Instance
         }
         return $result;
     }
+
+    # Check the create_instance countdown lock, if too high, we return
+    # an indicator.
+    function tooManyWaiting()
+    {
+	$query_result =
+	    DBQueryFatal("select value from emulab_locks ".
+                         "where name='create_instance_lock'");
+        
+        if (!mysql_num_rows($query_result)) {
+            return 0;
+        }
+        $row = mysql_fetch_array($query_result);
+        $count = $row[0];
+        if ($count > 10) {
+            return 1;
+        }
+        return 0;
+    }
+
+    function loadTooHigh()
+    {
+        $load = sys_getloadavg();
+        if ($load[0] > 15) {
+            return 1;
+        }
+        return 0;
+    }
 }
 
 class InstanceHistory

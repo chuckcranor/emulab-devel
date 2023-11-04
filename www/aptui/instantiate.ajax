@@ -1103,6 +1103,17 @@ function Do_Submit()
     global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $ISPOWDER;
     global $TUTORIALSTATS;
 
+    if (Instance::loadTooHigh()) {
+        sleep(2);
+        SPITAJAX_ERROR(65, "Load is too high");        
+        return;
+    }
+    if (Instance::tooManyWaiting()) {
+        sleep(2);
+        SPITAJAX_ERROR(66, "Too many experiments are waiting to start");        
+        return;
+    }
+    
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(1, "Missing formfields");
 	return;
