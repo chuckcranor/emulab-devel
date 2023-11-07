@@ -3,19 +3,8 @@
 ## For debugging
 #exp_internal 1
 
-spawn /usr/local/sbin/console-nossl -l powduino
+spawn /usr/local/sbin/console-nossl -l powduino -
 set timeout 5
-expect {
-    timeout {
-	send_error "powduino capture unresponsive or busy.\n"
-	exit 1
-    }
-    eof {
-	send_error "powduino capture disconnected.\n"
-	exit 1
-    }
-    "Connected to localhost\."
-}
 send "\r"
 expect {
     timeout {
