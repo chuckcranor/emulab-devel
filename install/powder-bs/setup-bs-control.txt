@@ -38,6 +38,8 @@ the tarball of missing pieces and configure that:
 
 Full load.
 
+0. Clone the emulab-devel repo to /path/to/emulab-devel or /p/t/e-d
+
 1. Startup capture.
    The Emulab capture program should already be on the node since it is
    a regular Emulab image. Likewise, the systemd goo for starting up the
@@ -47,7 +49,8 @@ Full load.
 
    # on control nuc
    sudo mkdir -p /var/lib/tiplogs
-   sudo cp ~mike/testbed-clean/clientside/os/capture/capture-cnuc.service \
+   sudo cp \
+       /p/t/e-d/install/powder-bs/capture-powduino/capture-powduino.service \
        /etc/systemd/system/capture-powduino.service
    sudo systemctl daemon-reload
    sudo systemctl enable capture-powduino
@@ -57,10 +60,8 @@ Full load.
    a hack install on a Debian node and is thus...a hack.
 
    # on boss.emulab.net
-   sudo scp ~mike/powduino.tar.gz <control-nuc>:/tmp/
-
-   # on control nuc
-   cd / ; sudo tar xzf /tmp/powduino.tar.gz
+   sudo chown root:root -R /path/to/emulab-devel/install/powder-bs/powduino/
+   sudo rsync -a /path/to/emulab-devel/install/powder-bs/powduino/ /
 
 3. Install expect
 
