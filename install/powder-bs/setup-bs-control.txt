@@ -1,0 +1,89 @@
+How to setup the Arduino temperature monitoring on a control NUC
+(in the Xen dom0). If running the already configured custom XEN image
+for control nucs, there are only a couple of small tweaks needed:
+
+If instead you are running the standard Xen image, then you can download
+the tarball of missing pieces and configure that:
+
+1. Install missing packages.
+   You need telegraf and expect:
+
+   cd /tmp
+   wget https://dl.influxdata.com/telegraf/releases/telegraf_1.10.3-1_amd64.deb
+   sudo dpkg -i telegraf_1.10.3-1_amd64.deb
+   sudo rm -f telegraf_1.10.3-1_amd64.deb
+   sudo systemctl stop telegraf
+   
+   sudo apt-get update
+   sudo apt-get -y install expect
+
+2. Install the powduino tarball:
+
+   rsync -a /path/to/emulab-devel/install/powder-bs/powduino/ /
+
+3. Customize files and start services
+
+   setenv nname `cat /var/emulab/boot/realname`
+   setenv nname "$nname.powderwireless.net"
+   sudo -E sed -i.bak -e "s/@HOSTNAME@/$nname/" /etc/telegraf/telegraf.conf
+   sudo systemctl daemon-reload
+   sudo systemctl enable capture-powduino
+   sudo systemctl start capture-powduino
+   sudo systemctl start telegraf
+
+4. Test temp sensor
+
+   /etc/telegraf/powduino.out
+
+
+Full load.
+
+1. Startup capture.
+   The Emulab capture program should already be on the node since it is
+   a regular Emulab image. Likewise, the systemd goo for starting up the
+   capture should be in /etc/systemd/system/capture-powduino.service.
+
+   If not, you can do:
+
+   # on control nuc
+   sudo mkdir -p /var/lib/tiplogs
+   sudo cp ~mike/testbed-clean/clientside/os/capture/capture-cnuc.service \
+       /etc/systemd/system/capture-powduino.service
+   sudo systemctl daemon-reload
+   sudo systemctl enable capture-powduino
+   sudo systemctl start capture-powduino
+
+2. Install the tarball of standalone "powduino" support. This came from
+   a hack install on a Debian node and is thus...a hack.
+
+   # on boss.emulab.net
+   sudo scp ~mike/powduino.tar.gz <control-nuc>:/tmp/
+
+   # on control nuc
+   cd / ; sudo tar xzf /tmp/powduino.tar.gz
+
+3. Install expect
+
+   # on control nuc
+   sudo apt-get update
+   sudo apt-get install expect
+
+4. Test the expect script for getting the temperatures.
+   You may have to run the powduino script a second time to get the Arduino
+   in sync. It should spit out a dialog with a temperature at the end.
+
+   # on control nuc
+   sudo /etc/telegraf/powduino.exp
+
+5. Recompile the stub C wrapper and test it.
+   Accessing the powduino requires running as root, but telegraf does not
+   run as root, so there is a little setuid wrapper written in C to run it
+   as root and filter the result. It should spit out just a temperature.
+
+   # on control nuc
+   cd /etc/telegraf
+   sudo cc -o powduino.out powduino.c
+   sudo chmod 4750 powduino.out
+
+   # test it
+   /etc/telegraf/powduino.out
