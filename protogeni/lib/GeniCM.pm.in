@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -2088,7 +2088,10 @@ sub GetTicketAuxAux($)
 		    print STARTUP "date\n\n";
 		    print STARTUP "# Redirecting stdin/stdout to $log\n";
 		    print STARTUP "$shell -c \"$cmd\" >$log 2>&1\n";
-		    print STARTUP "status=\$?\n";
+		    print STARTUP "if [ \$? -ne 0 ]; then\n";
+		    print STARTUP "    status=\$?\n";
+		    print STARTUP "    exit \$status\n";
+		    print STARTUP "fi\n";
 		    print STARTUP "# Writing exit status to $stat\n";
 		    print STARTUP "echo \"\$status\" > $stat\n";
 		    print STARTUP "echo " .
