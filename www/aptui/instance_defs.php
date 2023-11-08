@@ -932,10 +932,9 @@ class Instance
                            "mmimo-ac"           => true,
                            "n310-ustar"         => true,
                            "cap-ustar"          => true,
-                           "cap-wasatch"        => true,
-                           "cap-ebc"            => true,
                            "ceg1"               => true,
                            "cap1"               => true,
+                           "cl-ap"              => true,
                            # Wisconsin, not ready yet
                            "d7525"              => true,
                            "d8545"              => true,
