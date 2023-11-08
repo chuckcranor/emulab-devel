@@ -1439,7 +1439,7 @@ sub CreateSlivers()
 		    "deferring till later since the ";
 		my $reason  = "Unable to map all resources, but since ";
 
-		if ($instance->AllResourcesReserved()) {
+		if ($instance->AllResourcesReserved($aggobj)) {
 		    $message .= "project has all of resources reserved";
 		    $reason  .= "the project has all of the resources ".
 			"reserved, ";
