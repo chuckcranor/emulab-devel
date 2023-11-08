@@ -2598,6 +2598,7 @@ $(function ()
 	};
 	var ref = $(xml).find("rspec_tour").find("instructions");
 	if (!ref.length) {
+	    FindEncryptionBlocks(xml, "");
 	    return;
 	}
 	var itext = $(ref).text();
@@ -3486,7 +3487,9 @@ $(function ()
 	    }
 	});
 	if (!_.size(blocks)) {
-	    continuation(itext);
+	    if (continuation) {
+		continuation(itext);
+	    }
 	    return;
 	}
 	console.info("blocks", blocks);
@@ -3513,7 +3516,9 @@ $(function ()
 		// replace in the instructions text.
 		itext = itext.replace(key, plaintext);
 	    });
-	    continuation(itext);
+	    if (continuation) {
+		continuation(itext);
+	    }
 	};
     	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
@@ -5492,7 +5497,7 @@ $(function ()
 	    e.preventDefault();
 	    var msg =
 		"This experiment is being quarantined because we have determined\n"+
-		"that one ore more nodes in the experiment has been compromised\n"+
+		"that one or more nodes in the experiment has been compromised\n"+
 		"and is engaged in improper activity. Here are guidelines for\n"+
 		"properly securing your nodes:\n\n" +
                 "If you are using Apache/Spark/Hadoop, it has has known\n" +
