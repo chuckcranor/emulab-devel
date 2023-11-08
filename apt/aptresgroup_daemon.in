@@ -180,14 +180,17 @@ sub NotifyUsers()
 		    "   time_to_sec(timediff(start,now())) as sdiff, ".
 		    "   time_to_sec(timediff(now(),created)) as cdiff ".
 		    "  from apt_reservation_groups ".
-		    "where start > now() and notified is null and ".
-		    "      approved is not null ".
+		    "where start > now() and notified is null ".
 		    "having sdiff < (3600 * 16) and cdiff > (3600 * 2)");
 
     while (my ($uuid,$sdiff,$cdiff) = $query_result->fetchrow_array()) {
 	my $resgroup = APT_Reservation::Group->Lookup($uuid);
 	next
 	    if (!$resgroup);
+
+	# If no part of the reservation has been approved, ignore.
+	next
+	    if (!$resgroup->PartiallyApproved());
 
 	my $brand      = $resgroup->Brand();
 	my $creator    = $resgroup->GetCreator();
