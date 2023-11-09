@@ -1112,6 +1112,7 @@ CREATE TABLE `apt_instance_rfranges` (
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
   `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
   `power` float(8,2) NOT NULL DEFAULT '0.00',
+  `width` float(8,2) DEFAULT NULL,
   `rdz_grantid` varchar(40) DEFAULT NULL,
   PRIMARY KEY (`uuid`,`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -1129,7 +1130,8 @@ CREATE TABLE `apt_instance_rfrange_history` (
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
   `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
   `power` float(8,2) NOT NULL DEFAULT '0.00',	
- PRIMARY KEY (`uuid`,`idx`)
+  `width` float(8,2) DEFAULT NULL,
+  PRIMARY KEY (`uuid`,`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
