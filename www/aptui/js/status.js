@@ -1390,7 +1390,7 @@ $(function ()
 
     function UpdateNodePopover(node_id, jacksID, html)
     {
-	//console.info("UpdateNodePopover", node_id, jacksID, html);
+	//console.info("UpdateNodePopover", node_id, jacksID);
 	var jacksbox = jacksNodeBox(jacksID);
 	var popid    = '#popover-' + jacksID;
 
@@ -1414,7 +1414,12 @@ $(function ()
 
 	if ($(popid).length) {
 	    var popover = bootstrap.Popover.getInstance(popid);
+	    var actual = $(popid).attr("aria-describedby");
+	    $(popid).popover('hide');
 	    popover.setContent({'.popover-body': html});
+	    if (actual) {
+		$(jacksbox).trigger("mouseenter");
+	    }
 	}
 	else {
 	    $(jacksbox).on("mouseenter", function (event) {
@@ -1441,7 +1446,8 @@ $(function ()
 	    });
 	    
 	    $("body")
-		.append("<div id=popover-" + jacksID + "></div>");
+		.append("<div id=popover-" + jacksID + " " +
+			"class='node-popover'></div>");
 
 	    $(popid)
 		.popover({"content"   : html,
@@ -5308,6 +5314,11 @@ $(function ()
 	}
 	$('#quicktabs_ul a[href="#topology"]').parent().removeClass("hidden");
 	$('#quicktabs_content #topology').removeClass("hidden");
+	// This avoids leaving the popovers visible when leaving the tab
+	// as when clicking on the shell/console button.
+	$('#quicktabs_ul a[href="#topology"]').on("hide.bs.tab", function (event) {
+	    $('.node-popover').popover('hide');	    
+	});
 	SwitchToLastKnownTab();
 	return ShowViewer('#showtopo_statuspage', multisite, manifest);
     }
