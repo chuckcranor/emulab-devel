@@ -2451,6 +2451,7 @@ sub CheckSpectrum($$;$$$)
 	    my $frequency_low  = $request->{"frequency_low"};
 	    my $frequency_high = $request->{"frequency_high"};
 	    my $power          = $request->{"power"};
+	    my $width          = $request->{"bandwidth"};
 
 	    if (!TBcheck_dbslot($frequency_low, "default", "float",
 				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
@@ -2465,6 +2466,12 @@ sub CheckSpectrum($$;$$$)
 	    if (!TBcheck_dbslot($power, "default", "float",
 				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
 		$$pmsg = "Invalid integer or float: $power";
+		return 1;
+	    }
+	    if (defined($width) &&
+		!TBcheck_dbslot($power, "default", "float",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+		$$pmsg = "Invalid integer or float: $width";
 		return 1;
 	    }
 	}

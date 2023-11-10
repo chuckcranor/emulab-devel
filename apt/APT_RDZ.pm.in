@@ -194,6 +194,7 @@ sub RequestSpectrum($$)
     my $failure_message = "Internal error";
     my @grants = ();
     my @radio_ports = ();
+    my %dynamic = ();
 
     print "RequestSpectrum: $instance\n";
 
@@ -241,6 +242,7 @@ sub RequestSpectrum($$)
 	my $frequency_low  = $rfrange->freq_low();
 	my $frequency_high = $rfrange->freq_high();
 	my $power          = $rfrange->power();
+	my $width          = $rfrange->width();
     
 	# As for Modify, although unlikely. 
 	next
@@ -264,6 +266,9 @@ sub RequestSpectrum($$)
 	    ],
 	    "radio_ports" => \@radio_ports,
 	};
+	if (defined($width) && $width != 0) {
+	    $request->{"constraints"}[0]->{"constraint"}->{'bandwidth'} = $width;
+	}
 	print Dumper($request);
 	my $grant;
 	if (APT_RDZ::POST("/grants", $request, \$grant)) {
@@ -289,6 +294,15 @@ sub RequestSpectrum($$)
 	$rfrange->Update({"rdz_grantid" => $grant_id});
 	
 	push(@grants, $grant);
+	# We have to update these below. 
+	if (defined($width) && $width != 0) {
+	    $dynamic{"$grant_id"} = $rfrange;
+	}
+	#
+	# XXX We want to do a poll below even though it was
+	# probably approved immediately.
+	#
+	$grant->{'approved_at'} = undef;
     }
     
     #
@@ -338,6 +352,25 @@ sub RequestSpectrum($$)
 		$grant->{'approved_at'} = $response->{'approved_at'};
 		$waiting--;
 		print "RequestSpectrum: Grant ID $grant_id approved\n";
+
+		#
+		# For dynamic requests, need to update the rfrange.
+		#
+		if (exists($dynamic{"$grant_id"})) {
+		    my $rfrange = $dynamic{"$grant_id"};
+		    my $details = $response->{"constraints"}[0]->{"constraint"};
+		    my $low     = $details->{"min_freq"} / 1000000.0;
+		    my $high    = $details->{"max_freq"} / 1000000.0;
+
+		    print "RequestSpectrum: rfrange for $grant_id updated ".
+			"to $low,$high\n";
+		    # Flag to update history too
+		    if ($rfrange->Update({"freq_low"  => $low,
+					  "freq_high" => $high}, 1)) {
+			$failure_message = "Internal DB error";
+			$failed++;
+		    }
+		}
 	    }
 	    elsif ($response->{'denied_at'}) {
 		$failure_message = "Grant $grant_id denied";

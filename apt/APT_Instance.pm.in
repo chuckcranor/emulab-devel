@@ -2916,6 +2916,7 @@ sub CheckResources($$)
 	my $frequency_low  = $request->{"frequency_low"};
 	my $frequency_high = $request->{"frequency_high"};
 	my $power          = $request->{"power"};
+	my $bandwidth      = $request->{"bandwidth"};
 	my $type           = $request->{"type"};
 	my $target         = $request->{"target"};
 	
@@ -2923,7 +2924,8 @@ sub CheckResources($$)
 					    $frequency_low, $frequency_high)) {
 	    if (!APT_Instance::RFRanges->Create($self,
 						$frequency_low, $frequency_high,
-						$power, $type, $target)) {
+						$power, $bandwidth,
+						$type, $target)) {
 		$$perrmsg = "Could not create rfrange entry";
 		return -1;
 	    }
@@ -6801,19 +6803,26 @@ sub Lookup($$$;$)
 #
 sub Create($$$$$)
 {
-    my ($class, $instance, $freq_low, $freq_high, $power, $type, $target) = @_;
+    my ($class, $instance, $freq_low, $freq_high,
+	$power, $bandwidth, $type, $target) = @_;
     my $instance_uuid = $instance->uuid();
     my $instance_name = $instance->name();
 
     if ($type eq "global") {
 	$target = "";
     }
+    if (defined($bandwidth) && $bandwidth != 0) {
+	$bandwidth = ", width='$bandwidth' ";
+    }
+    else {
+	$bandwidth = "";
+    }
 
     DBQueryWarn("insert into apt_instance_rfranges set ".
 		"  uuid='$instance_uuid', name='$instance_name', ".
 		"  `type`='$type', target='$target', ".
 		"  freq_low='$freq_low', freq_high='$freq_high', ".
-		"  power='$power'")
+		"  power='$power' $bandwidth")
 	or return undef;
 
     # Add to the history table.
@@ -6821,7 +6830,7 @@ sub Create($$$$$)
 		"  uuid='$instance_uuid', ".
 		"  `type`='$type', target='$target', ".
 		"  freq_low='$freq_low', freq_high='$freq_high', ".
-		"  power='$power'")
+		"  power='$power' $bandwidth")
 	or return undef;
 
     return Lookup($class, $instance, $freq_low, $freq_high);
@@ -6907,22 +6916,26 @@ sub LookupForInstance($$)
 #
 # Update/Refresh current. 
 #
-sub Update($$)
+sub Update($$;$)
 {
-    my ($self, $argref) = @_;
+    my ($self, $argref, $history) = @_;
+    $history = 0 if (!defined($history));
 
     my $uuid = $self->uuid();
     my $idx  = $self->idx();
 
-    my $query = "update apt_instance_rfranges set ".
+    my $clause =
 	join(",", map("$_=" .
 		      (defined($argref->{$_}) ?
 		       DBQuoteSpecial($argref->{$_}) : "NULL"),
 		      keys(%{$argref})));
-    $query .= " where uuid='$uuid' and idx='$idx'";
+    $clause .= " where uuid='$uuid' and idx='$idx'";
 
     return -1
-	if (! DBQueryWarn($query));
+	if (!DBQueryWarn("update apt_instance_rfranges set $clause"));
+    return -1 
+	if ($history &&
+	    !DBQueryWarn("update apt_instance_rfrange_history set $clause"));
 
     return Refresh($self);
 }
