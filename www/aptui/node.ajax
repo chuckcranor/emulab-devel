@@ -88,7 +88,7 @@ function CheckPageArgs($write)
 function Do_GetInfo()
 {
     global $this_user, $ajax_args, $node, $GuestUserOkay;
-    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN, $PROTOGENI;
     global $TB_NODEACCESS_READINFO, $TB_NODEACCESS_MODIFYINFO;
 
     # This function allows guest users.
@@ -218,6 +218,10 @@ function Do_GetInfo()
     }
     if ($node->next_pxe_boot_path() && $node->next_pxe_boot_path() != "") {
         $blob["next_pxe_boot_path"] = $node->next_pxe_boot_path();
+    }
+    if ($PROTOGENI) {
+        $node_id = $node->node_id();
+        $blob["urn"] = "urn:publicid:IDN+${OURDOMAIN}+node+${node_id}";
     }
     SPITAJAX_RESPONSE($blob);
 }
