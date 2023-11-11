@@ -179,7 +179,13 @@ $SIG{INT}  = \&TermHandler;
 # Start up FE watchers in the background. Not sure this is a good
 # place for this watcher.
 #
-$fewatchers{WatchEndpoint("EBC")} = "EBC";
+my $query_result =
+    DBQueryFatal("select location,aggregate_urn ".
+		 "   from apt_aggregate_radio_locations ".
+		 "where itype='FE'");
+while (my ($location, $urn) = $query_result->fetchrow_array()) {
+    $fewatchers{WatchEndpoint($urn)} = $location;
+}
 if ($fesonly) {
     while (1) {
 	sleep(5);
@@ -294,11 +300,13 @@ sub Watcher($)
 #
 sub WatchEndpoint($)
 {
-    my ($name) = @_;
-    my $aggregate = APT_Aggregate->LookupByName($name);
+    my ($urn) = @_;
+    my $aggregate = APT_Aggregate->Lookup($urn);
     if (!defined($aggregate)) {
-	fatal("WatchEndpoint: No such aggregate $name");
+	fatal("WatchEndpoint: No such aggregate $urn");
     }
+    my $name = $aggregate->name();
+    
     my $dir = $ENDPOINTDIR . "/" . lc($aggregate->nickname());
     if (! -d $dir) {
 	fatal("WatchEndpoint: $dir does not exist");
