@@ -286,6 +286,12 @@ while (my $rowref = $query_result->fetchrow_hashref()) {
     }
 
     #
+    # Do not send along info for RF links (PhantomNet).
+    #
+    next
+	if (defined($rowref->{"protocol"} && $rowref->{"protocol"} eq "P2PLTE"));
+
+    #
     # Create a row for this lan, if we have not seen it already.
     #
     if (!exists($raw_lans{$vname})) {
@@ -888,7 +894,7 @@ if ($query_result->numrows) {
     #
     $query_result =
 	DBQueryFatal("select v.member,v.vname,i.mac,vi.mac,vi.type,l.iface,".
-		     "       v.nobwshaping,lans.type,v.encap_style ".
+		     "       v.nobwshaping,lans.type,v.encap_style,i.interface_type ".
 		     " from reserved as r join virt_lans as v".
 		     " left join interfaces as i".
 		     "  on v.ip=i.IP and r.node_id=i.node_id".
@@ -908,13 +914,17 @@ if ($query_result->numrows) {
 		     "  r.pid='$pid' and r.eid='$eid'");
     if ($query_result->numrows) {
 	while (my ($memb,$vlan,$imac,$vmac,$vtype,$iface,$noshape,
-		   $lantype,$encap_style) =
+		   $lantype,$encap_style,$itype) =
 	       $query_result->fetchrow_array) {
 	    $vlan = getRoot($vlan);
 
 	    # Cull out skipped lans (see shared vlan join above).
 	    next
 		if (!exists($virt_lans{$vlan}));
+
+	    # Do not send along info for RF links (PhantomNet).
+	    next
+		if (defined($itype) && $itype eq "P2PLTE");
 	    
 	    if (exists($virt_lans{$vlan}->{"MEMBERS"}->{$memb})) {
 		my $member = $virt_lans{$vlan}->{"MEMBERS"}->{$memb};
