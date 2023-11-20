@@ -289,7 +289,7 @@ while (my $rowref = $query_result->fetchrow_hashref()) {
     # Do not send along info for RF links (PhantomNet).
     #
     next
-	if (defined($rowref->{"protocol"} && $rowref->{"protocol"} eq "P2PLTE"));
+	if (defined($rowref->{"protocol"}) && $rowref->{"protocol"} eq "P2PLTE");
 
     #
     # Create a row for this lan, if we have not seen it already.
