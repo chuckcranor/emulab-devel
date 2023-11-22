@@ -267,7 +267,7 @@ sub RequestSpectrum($$)
 	    "radio_ports" => \@radio_ports,
 	};
 	if (defined($width) && $width != 0) {
-	    $request->{"constraints"}[0]->{"constraint"}->{'bandwidth'} = $width;
+	    $request->{"constraints"}[0]->{"constraint"}->{'bandwidth'} = $width * 1000000;
 	}
 	print Dumper($request);
 	my $grant;
