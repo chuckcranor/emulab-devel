@@ -1062,9 +1062,13 @@ sub DoObservations()
     &$usage()
 	if (!@ARGV);
 
-    my %options    = ();
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(create)$/);
+
+    my %options = ();
     if (! getopts("fa:", \%options)) {
-	usage();
+	&$usage();
     }
     if (defined($options{"a"})) {
 	$aggregate = APT_Aggregate->Lookup($options{"a"});
@@ -1079,11 +1083,8 @@ sub DoObservations()
 	fatal("No such aggregate");
     }
     my $aggregate_urn = $aggregate->urn();
-    
+
     my $force = defined($options{"f"}) ? 1 : 0;
-    my $which = shift(@ARGV);
-    &$usage()
-	if ($which !~ /^(create)$/);
 
     &$usage()
 	if (@ARGV != 1);
@@ -1235,7 +1236,7 @@ sub DoObservations()
     }
     $request->{'data'} = encode_base64($data);
     my $response;
-    if (APT_RDZ::POST("/observations", $request, \$response)) {
+    if (APT_RDZ::POST("/observations", $request, \$response, APT_RDZ::ZMC())) {
 	fatal("Could not add RDZ /grants");
     }
     #print Dumper($response);
