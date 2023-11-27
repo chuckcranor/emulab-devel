@@ -1249,10 +1249,13 @@ sub DoObservations()
 sub DoMonitors()
 {
     my $aggregate;
+    my $isScos = 0;
     
     my $usage = sub {
 	print STDERR "Usage: manage_rdz monitors list\n";
-	print STDERR "Usage: manage_rdz monitors create [-a agg] radio_id ...\n";
+	print STDERR "Usage: manage_rdz monitors create [-a agg] radio_id\n";
+	print STDERR "Usage: manage_rdz monitors create ".
+	    "-S [-a agg] radio_id <cred> <url>\n";
 	print STDERR "Usage: manage_rdz monitors show <monitor_id>\n";
 	print STDERR "Usage: manage_rdz monitors show [-a agg] <radio_id>\n";
 	print STDERR "Usage: manage_rdz monitors delete <monitor_id>\n";
@@ -1264,7 +1267,7 @@ sub DoMonitors()
 	if ($which !~ /^(list|create|delete|show)$/);
 
     my %options    = ();
-    if (! getopts("a:", \%options)) {
+    if (! getopts("a:S", \%options)) {
 	usage();
     }
     if (defined($options{"a"})) {
@@ -1275,6 +1278,9 @@ sub DoMonitors()
     }
     if (!$aggregate) {
 	fatal("No such aggregate");
+    }
+    if (defined($options{"S"})) {
+	$isScos = 1;
     }
     
     if ($which eq "list") {
@@ -1335,23 +1341,9 @@ sub DoMonitors()
     # specific use case we need now.
     #
     &$usage()
-	if (@ARGV != 3);
+	if (($isScos && @ARGV != 3) || (!$isScos && @ARGV != 1));
 
     my $radio_id   = shift(@ARGV);
-    my $credential = shift(@ARGV);
-    my $url        = shift(@ARGV);
-    my ($response, $auth);
-    if ($credential =~ /^([-\w]+):(.*)$/) {
-	$auth = {
-	    "username" => $1,
-	    "password" => $2,
-	};
-    }
-    else {
-	$auth = {
-	    "token" => $credential,
-	};
-    }
 
     #
     # The radio and radio port have to exist.
@@ -1366,6 +1358,7 @@ sub DoMonitors()
 	fatal("Not registered with the RDZ");
     }
     my $rdz_radio_id = $radio->rdz_radio_id();
+    my $response;
     if (APT_RDZ::GET("/radios/$rdz_radio_id", \$response)) {
 	fatal("Could not get /radios/$rdz_radio_id");
     }
@@ -1384,17 +1377,39 @@ sub DoMonitors()
     my $monitor_request = {
 	"element_id"     => $ELEMENTID,
 	"radio_port_id"  => $frontend->rdz_radioport_id(),
-	"name"           => "$nickname $radio_id monitor",
-	"description"    => "SCOS-USRP monitor on $nickname $radio_id",
-	"types"          => "scos,scos-usrp",
-	"formats"        => "psd",
-	"config"         => {
+	"name"           => "$nickname $radio_id on-demand monitor",
+	"description"    => "$nickname $radio_id on-demand monitor",
+	"types"          => "inline,sweep",
+	"formats"        => "psd-csv-inline",
+    };
+
+    if ($isScos) {
+	my $credential = shift(@ARGV);
+	my $url        = shift(@ARGV);
+	my $auth;
+	if ($credential =~ /^([-\w]+):(.*)$/) {
+	    $auth = {
+		"username" => $1,
+		    "password" => $2,
+	    };
+	}
+	else {
+	    $auth = {
+		"token" => $credential,
+	    };
+	}
+	$monitor_request->{'description'} = $monitor_request->{'name'} = 
+	    "SCOS-USRP monitor on $nickname $radio_id";
+	$monitor_request->{'types'}   = "scos,scos-usrp";
+	$monitor_request->{'formats'} = "psd";
+	$monitor_request->{'config'}  = {
 	    "url"  => $url,
 	    "auth" => $auth,
-	},
-    };
+	};
+    }
+    
     if ($debug || $impotent) {
-	print "SCOS-USRP Monitor " . $radio_id . " monitor\n";
+	print $monitor_request->{'description'} . "\n";
 	print Dumper($monitor_request);
     }
     if (!$impotent) {
