@@ -7341,7 +7341,11 @@ outfiles="$outfiles Makeconf GNUmakefile \
 if test "$prefix" = "/usr" -o test "$prefix" = "/usr/local" ; then
     CLIENT_LIBDIR="$libdir"
 else
-    CLIENT_LIBDIR="$prefix/lib"
+    if test x"$prefix" = x"NONE"; then
+        CLIENT_LIBDIR="/usr/testbed/lib"
+    else
+        CLIENT_LIBDIR="$prefix/lib"
+    fi
 fi
 
 #
