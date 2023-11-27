@@ -364,10 +364,9 @@ sub RequestSpectrum($$)
 
 		    print "RequestSpectrum: rfrange for $grant_id updated ".
 			"to $low,$high\n";
-		    # Flag to update history too
-		    if ($rfrange->Update({"freq_low"  => $low,
-					  "freq_high" => $high}, 1)) {
-			$failure_message = "Internal DB error";
+
+		    if (UpdateSpectrum($instance, $rfrange, $low, $high)) {
+			$failure_message = "Failed to update range";
 			$failed++;
 		    }
 		}
@@ -399,6 +398,11 @@ sub RequestSpectrum($$)
     }
     goto failed
 	if ($failed);
+
+    # Write the rspec back with narrowed frequency ranges.
+    if (keys(%dynamic)) {
+	$instance->SetRSPEC($instance->RSPEC());
+    }
 
     print "RequestSpectrum: Got all grant requests\n";		
     return 0;
@@ -483,6 +487,43 @@ sub DeleteGrants($)
     }
     return $errors;
 }
+
+#
+# Update the rspec with the narrowed RDZ frequency range.
+#
+sub UpdateSpectrum($$$$)
+{
+    my ($instance, $rfrange, $new_low, $new_high) = @_;
+    my $rspec = $instance->RSPEC();
+
+    my $updateGlobal = sub () {
+	my $spectrum = GeniXML::GetSpectrum($rspec);
+
+	foreach my $request (@{$spectrum}) {
+	    if ($request->{"frequency_low"} == $rfrange->freq_low() &&
+		$request->{"frequency_high"} == $rfrange->freq_high()) {
+		my $xmlref = $request->{'element'};
+		GeniXML::SetText("frequency_low", $xmlref, $new_low);
+		GeniXML::SetText("frequency_high", $xmlref, $new_high);
+	    }
+	}
+    };
+
+    if ($rfrange->type() == "global") {
+	&$updateGlobal();
+    }
+    else {
+	print STDERR "UpdateSpectrum: Cannot update $rfrange\n";
+	return 1;
+    }
+
+    # Flag to update history too
+    if ($rfrange->Update({"freq_low"  => $new_low,
+			  "freq_high" => $new_high}, 1)) {
+	return 1;
+    }
+    return 0;
+}    
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;

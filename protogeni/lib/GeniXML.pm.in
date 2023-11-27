@@ -2025,7 +2025,8 @@ sub GetSpectrum($)
 	    "frequency_low"  => GetText("frequency_low", $element),
 	    "frequency_high" => GetText("frequency_high", $element),
 	    "power"          => GetText("power", $element),
-	    "bandwidth"      => GetText("bandwidth", $element)});
+	    "bandwidth"      => GetText("bandwidth", $element),
+	    "element"        => $element});
     }
     return \@result;
 }
