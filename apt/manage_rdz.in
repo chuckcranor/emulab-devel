@@ -1380,10 +1380,9 @@ sub DoMonitors()
 	"radio_port_id"  => $frontend->rdz_radioport_id(),
 	"name"           => "$nickname $radio_id on-demand monitor",
 	"description"    => "$nickname $radio_id on-demand monitor",
-	"types"          => "inline,sweep",
-	"formats"        => "psd-csv-inline",
+	"types"          => "ota,sweep",
+	"formats"        => "psd-csv-ota",
     };
-
     if ($isScos) {
 	my $credential = shift(@ARGV);
 	my $url        = shift(@ARGV);
