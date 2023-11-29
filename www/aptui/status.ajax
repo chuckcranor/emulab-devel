@@ -166,6 +166,7 @@ function Do_GetInstanceStatus()
     }
     $blob = array();
     $blob["status"] = $instance->status();
+    $blob["rdz_status"] = $instance->rdz_status();
     $blob["canceled"] = $instance->canceled() ? 1 : 0;
     $blob["paniced"] = $instance->paniced() ? 1 : 0;
     $blob["started"] = DateStringGMT($instance->started());

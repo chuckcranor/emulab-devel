@@ -287,6 +287,7 @@ function Do_AccountDetails()
         $results["affil_updated"] =
             DateStringGMT($target_user->affiliation_updated());
         $results["loggedin"]      = $target_user->LoggedIn();
+        $results["loggedinIPs"]   = $target_user->LoggedInIPs();
     }
     $scopus_info = array();
     $query_result =

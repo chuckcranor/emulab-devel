@@ -153,6 +153,8 @@ if ($MAINSITE) {
     # For POWDER NextBusinessDay
     require DateTime;
     require DateTime::Duration;
+    # And the RDZ code.
+    require APT_RDZ;
 }
 
 # Protos
@@ -1604,6 +1606,19 @@ sub DoTerminate()
 	}
     }
 
+    #
+    # Special case for the RDZ.
+    #
+    my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
+    if (keys(%{$rfranges})) {
+	if (APT_RDZ::DeleteGrants($instance)) {
+	    $exitcode = -1;
+	    $errcode  = GENIRESPONSE_ERROR;
+	    $errmsg   = "Could not delete RDZ grants";
+	    goto bad;
+	}
+    }
+
     # Skip terminated aggregates, since we retry later on failure.
     my @agglist;
     foreach my $agg ($instance->AggregateList()) {
@@ -1728,11 +1743,13 @@ sub DoTerminate()
     $instance->SetStatus($old_status);
     if (defined($logfile)) {
 	my $instance_name = $instance->name();
+	my $instance_url  = $instance->webURL();
 	my $slice_uuid    = $slice->uuid();
 	SENDMAIL($TBOPS,
 		 "Unable to terminate instance $uuid",
 		 "Name: $instance_name\n".
-		 "Slice: $slice_uuid\n\n".
+		 "Slice: $slice_uuid\n".
+		 "URL: $instance_url\n\n".
 		 "$errmsg\n",
 		 $TBOPS, undef, $logfile)
 	    if (!$silent);
@@ -2368,7 +2385,7 @@ sub DoExtend()
                "It is running on $clusters\n\n".
                "$url\n",
 	       "$extensions",
-	       "BCC: $extensions, stoller\@flux.utah.edu") if (!$noemail);
+	       "BCC: $extensions") if (!$noemail);
     
     if (!$this_user->IsAdmin()) {
 	#

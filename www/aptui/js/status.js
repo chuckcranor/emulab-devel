@@ -158,11 +158,6 @@ $(function ()
     {
 	instanceStatus  = expinfo.status;
 	extension_blob  = expinfo.extension_info;
-
-	// For tutorials
-	if (expinfo.istutorial) {
-	    slowdown = true;
-	}
 	
 	// Generate the templates.
 	var template_args = {
@@ -202,7 +197,7 @@ $(function ()
 	});
 	ProgressBarUpdate();
 
-	if (!slowdown) {
+	if (!expinfo.istutorial) {
 	    // Periodic check for max allowed extension
 	    LoadMaxExtension();
 	    setInterval(LoadMaxExtension, 3600 * 1000);
@@ -473,7 +468,7 @@ $(function ()
     function StartStatusWatch()
     {
 	GetStatus();
-	statusID = setInterval(GetStatus, (slowdown ? 20000 : 5000));
+	statusID = setInterval(GetStatus, (window.APT_OPTIONS.slowdown ? 30000 : 5000));
     }
     
     function GetStatus()
@@ -602,6 +597,16 @@ $(function ()
 		ProgressBarUpdate();
 		status_message = "Your experiment is scheduled to start later";
 	    }
+	    else if (instanceStatus == 'rdzwait') {
+		status_html = "RDZ Wait (<span class='text-info'>" +
+		    "requesting spectrum from the RDZ</span>" + ")";
+		ProgressBarUpdate();
+		ShowRspec();
+		ShowBindings();
+		status_message =
+		    "Your experiment is delayed while we request spectrum " +
+		    "from the RDZ";
+	    }
 	    else if (instanceStatus == 'prestaging') {
 		status_html = "prestaging";
 		status_message = "Copying images to target clusters";
@@ -722,6 +727,12 @@ $(function ()
 		StartCountdownClock.stop = 1;
 		if (lastStatus == "failed") {
 		    $('.ignore-failure').addClass("hidden");
+		}
+		if (json.value.rdz_status == "revoked" ||
+		    (lastStatusBlob && lastStatusBlob.rdz_status == "revoked")) {
+		    status_html +=
+			" <font color=red>" +
+			"(<b>The RDZ has revoked your spectrum</b>)</font>";
 		}
 	    }
 	    else if (instanceStatus == "unknown") {
@@ -883,6 +894,7 @@ $(function ()
 	    case 'provisioned':
 	    case 'scheduled':
 	    case 'pending':
+	    case 'rdzwait':
 	        refresh = reloadtopo = extend = snapshot = destroy = 0;
   	        terminate = 1;
   	        break;
@@ -1378,7 +1390,7 @@ $(function ()
 
     function UpdateNodePopover(node_id, jacksID, html)
     {
-	//console.info("UpdateNodePopover", node_id, jacksID, html);
+	//console.info("UpdateNodePopover", node_id, jacksID);
 	var jacksbox = jacksNodeBox(jacksID);
 	var popid    = '#popover-' + jacksID;
 
@@ -1402,7 +1414,12 @@ $(function ()
 
 	if ($(popid).length) {
 	    var popover = bootstrap.Popover.getInstance(popid);
+	    var actual = $(popid).attr("aria-describedby");
+	    $(popid).popover('hide');
 	    popover.setContent({'.popover-body': html});
+	    if (actual) {
+		$(jacksbox).trigger("mouseenter");
+	    }
 	}
 	else {
 	    $(jacksbox).on("mouseenter", function (event) {
@@ -1429,7 +1446,8 @@ $(function ()
 	    });
 	    
 	    $("body")
-		.append("<div id=popover-" + jacksID + "></div>");
+		.append("<div id=popover-" + jacksID + " " +
+			"class='node-popover'></div>");
 
 	    $(popid)
 		.popover({"content"   : html,
@@ -2586,6 +2604,7 @@ $(function ()
 	};
 	var ref = $(xml).find("rspec_tour").find("instructions");
 	if (!ref.length) {
+	    FindEncryptionBlocks(xml, "");
 	    return;
 	}
 	var itext = $(ref).text();
@@ -3474,7 +3493,9 @@ $(function ()
 	    }
 	});
 	if (!_.size(blocks)) {
-	    continuation(itext);
+	    if (continuation) {
+		continuation(itext);
+	    }
 	    return;
 	}
 	console.info("blocks", blocks);
@@ -3501,7 +3522,9 @@ $(function ()
 		// replace in the instructions text.
 		itext = itext.replace(key, plaintext);
 	    });
-	    continuation(itext);
+	    if (continuation) {
+		continuation(itext);
+	    }
 	};
     	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
@@ -3574,7 +3597,7 @@ $(function ()
     {
 	var nickname = amlist[urn].nickname;
 
-	sup.ShowConfirmModal('#deletesite_confirm', function () {
+	sup.ShowConfirmModal('#deletesite_modal', function () {
 	    var callback = function(json) {
 		console.info(json);
 		sup.HideWaitWait(function () {		
@@ -5129,6 +5152,9 @@ $(function ()
 	if (instanceStatus == "created") {
 	    spinwidth = "25";
 	}
+	else if (instanceStatus == "rdzwait") {
+	    spinwidth = "15";
+	}
 	else if (instanceStatus == "provisioning" ||
 		 instanceStatus == "stitching") {
 	    spinwidth = "33";
@@ -5288,6 +5314,11 @@ $(function ()
 	}
 	$('#quicktabs_ul a[href="#topology"]').parent().removeClass("hidden");
 	$('#quicktabs_content #topology').removeClass("hidden");
+	// This avoids leaving the popovers visible when leaving the tab
+	// as when clicking on the shell/console button.
+	$('#quicktabs_ul a[href="#topology"]').on("hide.bs.tab", function (event) {
+	    $('.node-popover').popover('hide');	    
+	});
 	SwitchToLastKnownTab();
 	return ShowViewer('#showtopo_statuspage', multisite, manifest);
     }
@@ -5477,7 +5508,7 @@ $(function ()
 	    e.preventDefault();
 	    var msg =
 		"This experiment is being quarantined because we have determined\n"+
-		"that one ore more nodes in the experiment has been compromised\n"+
+		"that one or more nodes in the experiment has been compromised\n"+
 		"and is engaged in improper activity. Here are guidelines for\n"+
 		"properly securing your nodes:\n\n" +
                 "If you are using Apache/Spark/Hadoop, it has has known\n" +

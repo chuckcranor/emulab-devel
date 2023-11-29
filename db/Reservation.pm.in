@@ -1422,8 +1422,8 @@ sub UpcomingReservations($$$) {
 				     "r.pid IN ('" .
 				     join( "','", @$projlist ) . "') " .
 				     (defined($uid) ?
-				      "AND p.shared_reservations=1 or ".
-				      "    r.uid='$uid'" : ""));
+				      "AND (p.shared_reservations=1 or ".
+				      "     r.uid='$uid')" : ""));
 				     
     while( my $record = $query_result->fetchrow_hashref() ) {
 	push( @answer, $record );

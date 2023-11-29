@@ -32,18 +32,18 @@ use Date::Parse;
 use JSON;
 
 #
-# Back-end script to manage APT profiles.
+# Back-end script to manage FABRIC stuff
 #
 sub usage()
 {
-    print STDERR "Usage: manage_dataset getconfig\n";
-    print STDERR "Usage: manage_dataset listslices\n";
-    print STDERR "Usage: manage_dataset sliceexists\n";
-    print STDERR "Usage: manage_dataset sliceinfo\n";
-    print STDERR "Usage: manage_dataset deleteslice\n";
-    print STDERR "Usage: manage_dataset refreshtoken\n";
-    print STDERR "Usage: manage_dataset renewslice\n";
-    print STDERR "Usage: manage_dataset getad\n";
+    print STDERR "Usage: manage_fabric getconfig\n";
+    print STDERR "Usage: manage_fabric listslices\n";
+    print STDERR "Usage: manage_fabric sliceexists\n";
+    print STDERR "Usage: manage_fabric sliceinfo\n";
+    print STDERR "Usage: manage_fabric deleteslice\n";
+    print STDERR "Usage: manage_fabric refreshtoken\n";
+    print STDERR "Usage: manage_fabric renewslice\n";
+    print STDERR "Usage: manage_fabric getad\n";
     exit(-1);
 }
 my $optlist     = "dt:nD:";

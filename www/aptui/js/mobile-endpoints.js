@@ -2,9 +2,11 @@ $(function ()
 {
     'use strict';
 
-    var template_list = ['mobile-endpoints', "waitwait-modal", "oops-modal"];
+    var template_list = ['mobile-endpoints', 'mobile-endpoints-table',
+			 "waitwait-modal", "oops-modal"];
     var templates     = APT_OPTIONS.fetchTemplateList(template_list);    
     var mainTemplate  = _.template(templates['mobile-endpoints']);
+    var tableTemplate = _.template(templates['mobile-endpoints-table']);
     var map           = null;
 
     function initialize()
@@ -13,7 +15,14 @@ $(function ()
 
 	$('#oops_div').html(templates["oops-modal"]);
 	$('#waitwait_div').html(templates["waitwait-modal"]);
-	
+	$('#main-body').html(mainTemplate());
+
+	DrawTable();
+	setInterval(DrawTable, 60000);
+    }
+
+    function DrawTable()
+    {
 	sup.CallServerMethod(null, "map-support", "GetMobileEndpoints",
 			     null, function (json) {
 				 console.info("mobile info", json);
@@ -22,18 +31,18 @@ $(function ()
 						  "endpoint info");
 				     return;
 				 }
-				 GeneratePage(json.value.buses,
-					      json.value.routes);
+				 GenerateTable(json.value.buses,
+					       json.value.routes);
 			     });
     }
 
-    function GeneratePage(endpoints, routes)
+    function GenerateTable(endpoints, routes)
     {
 	var options = {
 	    "endpoints" : endpoints,
 	    "routes"    : routes,
 	};
-	$('#main-body').html(mainTemplate(options));
+	$('#mobile-endpoints-table-div').html(tableTemplate(options));	
 
 	// Format dates with moment before display.
 	$('#mobile-endpoints-table .format-date').each(function(){

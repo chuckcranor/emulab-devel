@@ -64,7 +64,8 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
-AddTemplateList(array("mobile-endpoints", "waitwait-modal", "oops-modal"));
+AddTemplateList(array("mobile-endpoints", "mobile-endpoints-table",
+                      "waitwait-modal", "oops-modal"));
 SPITREQUIRE("js/mobile-endpoints.js");
 SPITFOOTER();
 ?>

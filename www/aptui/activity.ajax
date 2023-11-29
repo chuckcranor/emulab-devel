@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -277,7 +277,7 @@ function SearchForIP($token, $min, $max)
             $pcount    = $instance->physnode_count();
             $vcount    = $instance->virtnode_count();
             $portal    = $portals[$instance->servername()];
-            $phours    = round(pcount *
+            $phours    = round($pcount *
                                ((time() -
                                  strtotime($instance->created())) / 3600.0));
 
@@ -327,7 +327,7 @@ function SearchForIP($token, $min, $max)
         $pcount    = $instance->physnode_count();
         $vcount    = $instance->virtnode_count();
         $portal    = $portals[$instance->servername()];
-        $phours    = round(pcount *
+        $phours    = round($pcount *
                            ((strtotime($instance->destroyed()) -
                              strtotime($instance->created())) / 3600.0));
 

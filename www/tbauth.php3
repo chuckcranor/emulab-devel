@@ -1226,6 +1226,10 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
         DBQueryFatal("update login set portal='$PORTAL_GENESIS' ".
                      "where uid_idx='$uid_idx' and hashkey='$hashkey'");
     }
+    if (isset($IP)) {
+        DBQueryFatal("update login set IP='$IP' ".
+                     "where uid_idx='$uid_idx' and hashkey='$hashkey'");
+    }
 
     DBQueryFatal("update users set ".
 		 "       weblogin_failcount=0,weblogin_failstamp=0 ".
@@ -1511,9 +1515,11 @@ function BumpLogoutTime()
     if (! is_null($CHECKLOGIN_HASHKEY)) {
 	$timeout = time() + (ISADMINISTRATOR() ? 3600 * 24 : $TBAUTHTIMEOUT);
 
-            $TBAUTHTIMEOUT;
-
+        if (isset($_SERVER['REMOTE_ADDR'])) {
+            $IP = $_SERVER['REMOTE_ADDR'];
+        }
 	DBQueryFatal("UPDATE login set timeout='$timeout' ".
+                     (isset($IP) ? ", IP='$IP' " : "") .
 		     "where uid_idx='$CHECKLOGIN_IDX' and ".
 		     "      hashkey='$CHECKLOGIN_HASHKEY'");
     }

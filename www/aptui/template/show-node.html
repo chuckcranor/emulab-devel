@@ -260,6 +260,14 @@
 	      </td>
 	    </tr>
 	  <% } %>
+	  <% if (_.has(fields, "urn")) { %>
+	    <tr>
+	      <td>URN</td>
+	      <td>
+		<%- fields.urn %>
+	      </td>
+	    </tr>
+	  <% } %>
 	  <% if (fields.tipline && isadmin) { %>
 	    <tr>
 	      <td>Tipline</td>

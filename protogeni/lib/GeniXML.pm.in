@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2022 University of Utah and the Flux Group.
+# Copyright (c) 2010-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -2024,7 +2024,9 @@ sub GetSpectrum($)
 	push(@result, {
 	    "frequency_low"  => GetText("frequency_low", $element),
 	    "frequency_high" => GetText("frequency_high", $element),
-	    "power"          => GetText("power", $element)});
+	    "power"          => GetText("power", $element),
+	    "bandwidth"      => GetText("bandwidth", $element),
+	    "element"        => $element});
     }
     return \@result;
 }

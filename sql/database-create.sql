@@ -1114,6 +1114,7 @@ CREATE TABLE `apt_instance_rfranges` (
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
   `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
   `power` float(8,2) NOT NULL DEFAULT '0.00',
+  `width` float(8,2) DEFAULT NULL,
   `rdz_grantid` varchar(40) DEFAULT NULL,
   PRIMARY KEY (`uuid`,`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -1131,7 +1132,8 @@ CREATE TABLE `apt_instance_rfrange_history` (
   `freq_low` float(8,2) NOT NULL DEFAULT '0.00',
   `freq_high` float(8,2) NOT NULL DEFAULT '0.00',
   `power` float(8,2) NOT NULL DEFAULT '0.00',	
- PRIMARY KEY (`uuid`,`idx`)
+  `width` float(8,2) DEFAULT NULL,
+  PRIMARY KEY (`uuid`,`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -3909,6 +3911,7 @@ CREATE TABLE `login` (
   `adminon` tinyint(1) NOT NULL default '0',
   `opskey` varchar(64) NOT NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') NOT NULL default 'emulab',
+  `IP` varchar(16) default NULL,
   PRIMARY KEY  (`uid_idx`,`hashkey`),
   UNIQUE KEY `hashhash` (`uid_idx`,`hashhash`),
   UNIQUE KEY `uidkey` (`uid`,`hashkey`)

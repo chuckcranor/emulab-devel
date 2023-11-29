@@ -117,6 +117,7 @@ class Instance
     function profile_id()   { return $this->field('profile_id'); }
     function profile_version() { return $this->field('profile_version'); }
     function status()	    { return $this->field('status'); }
+    function rdz_status()   { return $this->field('rdz_status'); }
     function canceled()	    { return $this->field('canceled'); }
     function paniced()	    { return $this->field('paniced'); }
     function pid()	    { return $this->field('pid'); }
@@ -927,8 +928,21 @@ class Instance
                            "cellsdr1-fm"        => true,
                            "cellsdr1-honors"    => true,
                            "cellsdr1-ustar"     => true,
+                           "cellsdr1-meb"       => true,
                            "mmimo-ac"           => true,
-                           "irisclients-ac"     => true,
+                           "n310-ustar"         => true,
+                           "cap-ustar"          => true,
+                           "ceg1"               => true,
+                           "cap1"               => true,
+                           "cl-ap"              => true,
+                           # Wisconsin, not ready yet
+                           "d7525"              => true,
+                           "d8545"              => true,
+                           "sm110p"             => true,
+                           "sm220u"             => true,
+                           "c240g2-infra"       => true,
+                           "r7525s"             => true,
+                           "rflab-blackbox"     => true,
         );
 
         #
@@ -1042,6 +1056,34 @@ class Instance
             $result[] = $sliver->aggregate_urn();
         }
         return $result;
+    }
+
+    # Check the create_instance countdown lock, if too high, we return
+    # an indicator.
+    function tooManyWaiting()
+    {
+	$query_result =
+	    DBQueryFatal("select value from emulab_locks ".
+                         "where name='create_instance_lock'");
+        
+        if (!mysql_num_rows($query_result)) {
+            return 0;
+        }
+        $row = mysql_fetch_array($query_result);
+        $count = $row[0];
+        if ($count > 10) {
+            return 1;
+        }
+        return 0;
+    }
+
+    function loadTooHigh()
+    {
+        $load = sys_getloadavg();
+        if ($load[0] > 15) {
+            return 1;
+        }
+        return 0;
     }
 }
 

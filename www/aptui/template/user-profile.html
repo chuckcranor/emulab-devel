@@ -77,6 +77,12 @@
 	<td>Logged in now?</td>
 	<td><% if (fields.loggedin) { %>Yes<% } else { %>No<% } %></td>
       </tr>
+      <% if (_.size(fields.loggedinIPs)) { %>
+	<tr>
+	  <td>IP(s)</td>
+	  <td><% print(fields.loggedinIPs.join(", ")); %></td>
+	</tr>
+      <% } %>
       <% if (fields.portal) { %>
 	<tr>
 	  <td>Portal</td>

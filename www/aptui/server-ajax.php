@@ -927,7 +927,9 @@ if (! array_key_exists($ajax_method, $routing[$ajax_route]["methods"])) {
 CheckLoginForAjax($routing[$ajax_route]);
 if (!$this_user) {
     openlog("server-ajax", LOG_CONS, constant("${LOG_TESTBED}"));
-    syslog(LOG_INFO, $_SERVER['REMOTE_ADDR'] . " $ajax_route:$ajax_method " .
+    syslog(LOG_INFO, $_SERVER['REMOTE_ADDR'] . " " .
+           ($this_user ? "uid:" . $this_user->uid() . " " : "") .
+           "$ajax_route:$ajax_method " .
            json_encode($ajax_args));
     closelog();
 }
