@@ -360,7 +360,16 @@ function Do_Toggle()
                "Errors-To: $TBMAIL_WWW");
     }
     elseif ($toggle == "project_shared_reservations") {
-        $newvalue = $target_project->shared_reservations() ? 0 : 1;
+        $newvalue = Project::ReservationSharingMap($ajax_args["value"]);
+        if ($newvalue === null) {
+            SPITAJAX_ERROR(-1, "Bad sharing mode");
+            return;
+        }
+        if ($target_project->shared_reservations() == $newvalue) {
+            sleep(1);
+            SPITAJAX_RESPONSE(1);
+            return;
+        }
         $webtask  = WebTask::CreateAnonymous();
         $retval = SUEXEC($this_uid, "tbadmin",
                          "webmanage_resgroup -t " . $webtask->task_id() . " ".

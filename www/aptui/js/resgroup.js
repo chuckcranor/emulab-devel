@@ -3425,6 +3425,11 @@ $(function ()
 	    else {
 		$('#reserve-requestor').html(details.uid);
 	    }
+	    // Silly hint that reservation is per-user.
+	    if (details.shared_reservations == "user") {
+		$('#reserve-requestor').addClass("text-decoration-underline");
+	    }
+	    
 	    // Ditto the project.
 	    if (_.has(details, 'pid_idx')) {
 		$('#pid').html(
@@ -3438,15 +3443,17 @@ $(function ()
 	    current_pid = details.pid;
 
 	    // And the group.
-	    if (_.has(details, 'gid_idx') &&
-		details.gid_idx != details.pid_idx) {
-		$('#gid').html(
-		    "<a target=_blank href='show-group.php?group=" +
-			details.gid_idx + "'>" +
-			details.gid + "</a>");
-	    }
-	    else {
-		$('#gid').html(details.gid);
+	    if (details.shared_reservations == "group") {
+		if (details.gid_idx != details.pid_idx) {
+		    $('#gid').html(
+			"<a target=_blank href='show-group.php?group=" +
+			    details.gid_idx + "'>" +
+			    details.gid + "</a>");
+		}
+		else {
+		    $('#gid').html(details.gid);
+		}
+		$('#gid').removeClass("hidden");
 	    }
 	    current_gid = details.gid;
 	    

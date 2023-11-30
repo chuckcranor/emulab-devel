@@ -3543,11 +3543,25 @@ sub DoSetShareReservations()
     usage()
 	if (@ARGV != 2);
 
+    my $shared  = $ARGV[1];
     my $project = Project->Lookup($ARGV[0]);
-    my $shared  = $ARGV[1] ? 1 : 0;
-    
     if (!defined($project)) {
 	fatal("No such project");
+    }
+
+    if ($shared =~ /^\d$/) {
+	if (!defined(Project::SharedReservationsString($shared))) {
+	    $shared = undef;
+	}
+    }
+    elsif ($shared =~ /^\w+$/) {
+	$shared = Project::SharedReservationsValue($shared);
+    }
+    else {
+	$shared = undef;
+    }
+    if (!defined($shared)) {
+	fatal("Bad sharing flag");
     }
 
     #

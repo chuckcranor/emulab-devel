@@ -604,8 +604,8 @@ $(function ()
 	    // Shared reservation radio setting.
 	    $('#sharedres-radio-' + json.value.shared_reservations)
 		.prop("checked", true);
-	    $('input[name="sharedres-radio"]').changed(function (event) {
-		console.info($(this). $(this).val());
+	    $('input[name="sharedres-radio"]').change(function (event) {
+		console.info($(this), $(this).val());
 		ToggleSharedReservations($(this).val());
 	    });
 	    
@@ -1107,28 +1107,27 @@ $(function ()
 	}
     }
 
-    function ToggleSharedReservations(current, next)
+    function ToggleSharedReservations(value)
     {
-	// This one needs special handling.
-	if (name == "project_shared_reservations") {
-	    wait = true;
-	}
 	var callback = function(json) {
 	    console.info("Toggle callback:", json);
 	    if (json.code) {
 		sup.HideWaitWait(function () {
 		    ShowSharedResErrors(json.value);
 		});
+		// Reset the radio the long way.
 		LoadProjectTab();
 		return;
 	    }
+	    sup.HideWaitWait();
 	    // Reset the radio the long way.
 	    LoadProjectTab();
 	};
 
 	sup.ShowWaitWait(undefined, undefined, function () {
 	    sup.CallServerMethod(null, "show-project", "Toggle",
-				 {"pid" : window.TARGET_PROJECT,
+				 {"pid"    : window.TARGET_PROJECT,
+				  "value"  : value,
 				  "toggle" : "project_shared_reservations"},
 				 callback);
 	});

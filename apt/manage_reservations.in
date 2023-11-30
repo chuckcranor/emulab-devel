@@ -41,7 +41,7 @@ sub usage()
     print("Usage: manage_reservations [-a <urn>] cancel [-c]\n");
     print("Usage: manage_reservations [-a <urn>] idledetection [-c]\n");
     print("Usage: manage_reservations [-a <urn>] history [user]\n");
-    print("Usage: manage_reservations [-a <urn>] setshared pid on/off\n");
+    print("Usage: manage_reservations [-a <urn>] setshared pid which\n");
     exit(-1);
 }
 my $optlist     = "dt:a:";
@@ -1605,11 +1605,15 @@ sub DoSetSharedReservations()
 	if (@ARGV != 2);
 
     my $project = Project->Lookup($ARGV[0]);
-    my $shared  = $ARGV[1] ? 1 : 0;
-    
     if (!defined($project)) {
 	fatal("No such project");
     }
+    my $shared  = $ARGV[1];
+    if (! ($shared =~ /^\d$/ &&
+	   defined(Project::SharedReservationsString($shared)))) {
+	fatal("Bad reservation flag");
+    }
+    
     # We can check for disabled aggregate now, nothing below matters.
     if ($aggregate->CheckStatus(\$errmsg, 1)) {
 	UserError($errmsg);

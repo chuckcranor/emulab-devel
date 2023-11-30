@@ -267,14 +267,7 @@ class ReservationGroup
     function SharingMode()
     {
         $mode = $this->Project()->shared_reservations();
-
-        # Convert sharing mode to a string
-        if ($mode) {
-            return "project";
-        }
-        else {
-            return "user";
-        }
+        return Project::ReservationSharingMap($mode);
     }
 
     function Blob($alldata = true)

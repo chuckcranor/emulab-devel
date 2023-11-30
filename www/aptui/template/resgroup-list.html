@@ -150,7 +150,13 @@
 	  <% } %>
 	  <% if (showproject && isadmin) { %>	  
 	    <td style='white-space: nowrap;'>
-	      <% if (value.shared_reservations == "project") { %>P<% } else { %>U<% } %>
+	      <% if (value.shared_reservations == "project") { %>
+		P
+	      <% } else if (value.shared_reservations == "group") { %>
+		G
+	      <% } else { %>
+		U
+	      <% } %>
 	    </td>
 	  <% } %>
 	  <% if (showportal) { %>	  

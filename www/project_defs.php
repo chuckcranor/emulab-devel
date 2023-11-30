@@ -259,22 +259,6 @@ class Project
 	return $this->pid();
     }
 
-    function ResSharingMode()
-    {
-        $mode = $this->shared_reservations();
-
-        # Convert sharing mode to a string
-        if ($mode == 0) {
-            return "user";
-        }
-        elseif ($mode == 1) {
-            return "project";
-        }
-        else {
-            return "group";
-        }
-    }
-
     #
     # Class function to create new project and return object.
     #
@@ -1254,6 +1238,38 @@ class Project
         $pid = $this->pid();
         
         return $APTBASE . "/signup.php?pid=${pid}";
+    }
+
+    #
+    # Map Project Reservation values. Class method
+    #
+    function ReservationSharingMap($mode)
+    {
+        # Convert sharing mode to a string or value
+        if ($mode == "user") {
+            return TBDB_RESERVATIONS_PERUSER;
+        }
+        elseif ($mode == "group") {
+            return TBDB_RESERVATIONS_PERGROUP;
+        }
+        elseif ($mode == "project") {
+            return TBDB_RESERVATIONS_PERPROJECT;
+        }
+        elseif ($mode == TBDB_RESERVATIONS_PERUSER) {
+            return "user";
+        }
+        elseif ($mode == TBDB_RESERVATIONS_PERPROJECT) {
+            return "project";
+        }
+        elseif ($mode == TBDB_RESERVATIONS_PERGROUP) {
+            return "group";
+        }
+        return null;
+    }
+    function ResSharingMode()
+    {
+        $mode = $this->shared_reservations();
+        return Project::ReservationSharingMap($mode);
     }
 }
 ?>

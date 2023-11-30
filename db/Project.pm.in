@@ -1419,6 +1419,10 @@ sub SetReservationsPerGroup($;$$)
 
 	if( $weakened ) {
 	    foreach my $res ( @$reservations ) {
+		# Skip psuedo reservations (representing free nodes).
+		next
+		    if (!defined($res->uuid));
+		
 		my %notice = (
 		    "uuid" => $res->uuid(),
 		    "severity" => "warning",
@@ -1483,15 +1487,33 @@ sub SharedReservationsString($)
     my $shared = ref($self) ? $self->shared_reservations() : $self;
     my $val    = undef;
 
-
     if ($shared == $RESERVATIONS_PERUSER) {
 	$val = "user";
     }
     elsif ($shared == $RESERVATIONS_PERPROJECT) {
 	$val = "project";
     }
-    else {
+    elsif ($shared == $RESERVATIONS_PERGROUP) {
 	$val = "group";
+    }
+    return $val;
+}
+#
+# The reverse. Class method.
+#
+sub SharedReservationsValue($)
+{
+    my ($string) = @_;
+    my $val    = undef;
+
+    if ($string eq "user") {
+	$val = $RESERVATIONS_PERUSER;
+    }
+    elsif ($string eq "project") {
+	$val = $RESERVATIONS_PERPROJECT;
+    }
+    elsif ($string eq "group") {
+	$val = $RESERVATIONS_PERGROUP;
     }
     return $val;
 }

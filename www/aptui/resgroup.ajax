@@ -112,6 +112,9 @@ function Do_Reserve()
         if (!$project) {
             $errors["pid"] = "No such project";
         }
+        elseif ($project->ResSharingMode() != "group") {
+            $group = $project->DefaultGroup();
+        }
         elseif (!isset($formfields["gid"]) || $formfields["gid"] == "") {
             $errors["gid"] = "Missing field";
         }

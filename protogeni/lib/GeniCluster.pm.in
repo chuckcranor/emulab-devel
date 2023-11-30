@@ -1431,15 +1431,12 @@ sub Reservations($)
 	    print STDERR "Reservations: No such project $pid\n";
 	    next;
 	}
-	my $user;
 	my $group = $project;
+	my $user = User->Lookup($reservation->uid());
+	next
+	    if (!$user);
 	
-	if ($reservation->shared_res() == $Project::RESERVATIONS_PERUSER) {
-	    $user = User->Lookup($reservation->uid());
-	    next
-		if (!$user);
-	}
-	elsif ($reservation->shared_res() == $Project::RESERVATIONS_PERGROUP) {
+	if ($reservation->shared_res() == $Project::RESERVATIONS_PERGROUP) {
 	    $group = $project->LookupGroup($reservation->gid());
 	    next
 		if (!$group);
@@ -1452,12 +1449,18 @@ sub Reservations($)
 	$row->{"reservation"} = $reservation;
 	
 	if (!exists($pidres{$target})) {
-	    my @allres   = ResUtil::CollectReservations($group, $user, 0);
+	    #
+	    # Pass user only when res (project) is per-user reservations.
+	    #
+	    my $resuser = ($reservation->shared_res() ==
+			   $Project::RESERVATIONS_PERUSER ? $user : undef);
+	    
+	    my @allres   = ResUtil::CollectReservations($group, $resuser, 0);
 	    my @timeline = ();
 	    # This does not return unapproved reservations, but we still
 	    # need to process them below.
 	    if (@allres) {
-		@timeline = ResUtil::CreateTimeline($group, $user, @allres);
+		@timeline = ResUtil::CreateTimeline($group, $resuser, @allres);
 		if (!@timeline) {
 		    print STDERR "Reservations: No timeline for $pid/$gid\n";
 		}
@@ -2434,8 +2437,7 @@ sub SetSharedReservations($)
     return GeniResponse->MalformedArgsResponse("Invalid project URN")
 	if (!GeniHRN::IsValid($argref->{'project'}));
 
-    
-    my $shared = $argref->{'shared'} ? 1 : 0;
+    my $shared = $argref->{'shared'};
     my $hrn    = GeniHRN->new($argref->{'project'});
     if ($hrn->domain() eq $OURDOMAIN) {
 	$project = Project->Lookup($hrn->id());
@@ -2447,18 +2449,9 @@ sub SetSharedReservations($)
 	my $purn = GeniHRN::Generate($hrn->authority(), "authority", "sa");
 	$project = Project->LookupNonLocal($purn);
     }
-    if (!defined($project) && !$shared) {
+    if (!defined($project)) {
 	#
-	# It is okay if the project does not exist, since
-	# shared_reservations=0 is the default. The project will
-	# eventually get created with the default. 
-	#
-	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
-    }
-    elsif (!defined($project)) {
-	#
-	# Since shared_reservations=1 is the abnormal case, create the
-	# project so we can set it. 
+	# Create the project so we can set it. 
 	#
 	my $group = GeniUtil::GetHoldingProject($argref->{'project'}, undef, 1);
 	return $group

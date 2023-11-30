@@ -224,12 +224,14 @@ sub Lookup($$;$$$$)
 	    if (!$query_result || !$query_result->numrows);
     }
     
-    my $record = $query_result->fetchrow_hashref();
+    my $record  = $query_result->fetchrow_hashref();
+    my $project = Project->Lookup($record->{'pid_idx'});
     
     my $self               = {};
     $self->{'IDX'}         = $record->{'idx'};
     $self->{'PID'}         = $record->{'pid'};
     $self->{'PID_IDX'}     = $record->{'pid_idx'};
+    $self->{'SHARED_RES'}  = $project->shared_reservation();
     $self->{'EID'}         = undef;
     $self->{'START'}       = $record->{'s'};
     $self->{'END'}         = $record->{'e'};
@@ -852,23 +854,27 @@ sub LookupAll($$;$$)
 
     $$details = $$details . "\n--- Reservations:\n" if( ref( $details ) );
     
-    $query_result = DBQueryWarn( "SELECT pid, gid, uid, UNIX_TIMESTAMP( start ), " .
-				 "UNIX_TIMESTAMP( end ), nodes, idx, approved ".
-				 "FROM future_reservations WHERE type='$type'" .
+    $query_result = DBQueryWarn( "SELECT uuid FROM future_reservations ".
+				 "WHERE type='$type'" .
 				 ( $include_pending ? "" :
 				   " AND approved IS NOT NULL" ) );
 
-    while( my ($pid, $gid, $uid, $start, $end, $nodes, $idx, $approved) =
-	   $query_result->fetchrow_array() ) {
-	my $res = Create( $class, $pid, $uid, $start, $end, $type, $nodes,
-			  $gid );
-	$res->{'IDX'} = $idx;
-	$res->{'APPROVED'} = $approved;
+    while( my ($uuid) = $query_result->fetchrow_array() ) {
+	my $res = Reservation->Lookup($uuid);
 	push( @reservations, $res );
 	
 	if( ref( $details ) ) {
 	    no warnings 'uninitialized';
-	    $$details = $$details . "$pid/$gid, $uid, $start, $end, $nodes, $idx\n";
+	    my $pid   = $res->pid();
+	    my $gid   = $res->gid();
+	    my $uid   = $res->uid();
+	    my $start = $res->start();
+	    my $end   = $res->start();
+	    my $nodes = $res->nodes();
+	    my $idx   = $res->idx();
+	    
+	    $$details = $$details .
+		"$pid/$gid, $uid, $start, $end, $nodes, $idx\n";
 	}
     }
 
