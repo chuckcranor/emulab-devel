@@ -2326,14 +2326,18 @@ sub os_remove_storage_slice($$$)
 		if (mysystem("pvremove -f @devs $redir")) {
 		    warn("*** $lv: could not destroy PVs$logmsg\n");
 		} else {
-		    my $tdev = "/dev/${bdisk}4";
+		    my $pchr = "";
+		    if ($bdisk =~ /^nvme/) {
+			$pchr = "p";
+		    }
+		    my $tdev = "${bdisk}${pchr}4";
 		    if (grep(/\s*$tdev\s*/, @devs) != 0) {
 			if ($ginfo->{$bdisk}->{'ptabtype'} eq "GPT") {
 			    if (mysystem("$SGDISK -d 4 /dev/$bdisk $redir") ||
 				mysystem("$PPROBE /dev/$bdisk $redir")) {
 				warn("*** $lv: could not destroy $tdev$logmsg\n");
 			    } else {
-				delete $ginfo->{"${bdisk}4"};
+				delete $ginfo->{$tdev};
 			    }
 			}
 		    }
