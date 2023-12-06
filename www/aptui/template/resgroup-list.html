@@ -141,8 +141,13 @@
 	  <% if (showproject) { %>	  
 	    <td style='white-space: nowrap;'>
 	      <% if (value.pid_idx) { %>
-		<a href='show-project.php?project=<%- value.pid %>'>
+		<a href='show-project.php?project=<%- value.pid %>'
+		   target="_blank">
 		  <%- value.pid %></a>
+		<% if (value.pid != value.gid) { %>
+		  (<a href='show-group.php?group=<%- value.gid_idx %>'
+		      target="_blank"><%- value.gid %></a>)
+		<% } %>
 	      <% } else { %>
 		<%- value.remote_pid %>
 	      <% } %>

@@ -665,6 +665,7 @@ $(function ()
 		    }
 		}
 	    }
+	    HandleProjectChange();
 	}
 	// Graph list(s).
 	_.each(amlist, function(details, urn) {
@@ -3078,6 +3079,29 @@ $(function ()
 	    }
 	    // User can submit.
 	    ToggleSubmit(true, "submit");
+
+	    if (isadmin) {
+		$('#commit-reservation').removeAttr("disabled");
+		$('#confirm-reservation .res-warnings-div').addClass("hidden");
+	    }
+	    else {
+		// Various warnings based on sharing setting.
+		var pid = (editing ? current_pid : $('#pid').val());
+
+		$('#confirm-reservation .res-warnings').addClass("hidden");
+		if (projlist[pid].resmode == "project") {
+		    $('#confirm-reservation .per-project-reservations')
+			.removeClass("hidden");
+		}
+		else if (projlist[pid].resmode == "group") {
+		    $('#confirm-reservation .per-group-reservations')
+			.removeClass("hidden");
+		}
+		else if (projlist[pid].resmode == "user") {
+		    $('#confirm-reservation .per-user-reservations')
+			.removeClass("hidden");
+		}
+	    }
 	    sup.ShowModal('#confirm-reservation');
 	};
 	var args = {
@@ -3453,7 +3477,7 @@ $(function ()
 		else {
 		    $('#gid').html(details.gid);
 		}
-		$('#gid').removeClass("hidden");
+		$('#group-div').removeClass("hidden");
 	    }
 	    current_gid = details.gid;
 	    
@@ -4330,9 +4354,12 @@ $(function ()
 	if (groups.length == 1) {
 	    $('#group-div').addClass("hidden");
 	}
-	else {
+	else if (projlist[pid].resmode == "group") {
 	    $('#group-div').removeClass("hidden");
 	}
+	else {
+	    $('#group-div').addClass("hidden");
+	}	    
 
 	if (window.ISPOWDER) {
 	    // Clear/Set OTA warning. Messy.
@@ -4508,6 +4535,9 @@ $(function ()
 	    res["start"]      = details.start;
 	    res["end"]        = details.end;
 	    res["nodes"]      = res.count;
+	    res["pid"]        = details.pid;
+	    res["gid"]        = details.gid;
+	    res["mode"]       = details.shared_reservations;
 	    
 	    window.DrawResHistoryGraph({"details"  : res,
 					"graphid"  : '#' + graphid});

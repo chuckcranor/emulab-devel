@@ -807,6 +807,20 @@ CREATE TABLE `apt_instances` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_instance_prediction_info`
+--
+
+DROP TABLE IF EXISTS `apt_instance_prediction_info`;
+CREATE TABLE `apt_instance_prediction_info` (
+  `uid` varchar(8) NOT NULL default '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `updated` datetime default NULL,
+  `updating` datetime default NULL,
+  `json_data` mediumtext,
+  PRIMARY KEY  (`uid_idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_news`
 --
 

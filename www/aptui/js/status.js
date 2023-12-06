@@ -5866,7 +5866,8 @@ $(function ()
 			newrspec = instantiateCommon.mergeRSpecAndManifest(
 			    newrspec, jacksManifest);
 			instantiateCommon.createAggregateSelectors(newrspec,
-							   expinfo.project);
+							   expinfo.project,
+							   expinfo.group);
 			$('#ppwizard-accept').attr("disabled", true);
 			$('#ppwizard-finish').removeAttr("disabled");
 			$('#ppwizard-finish-message').removeClass("hidden");

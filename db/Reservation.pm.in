@@ -54,6 +54,7 @@ my %cache = ();
 BEGIN { use emutil; emutil::AddCache(\%cache); }
 
 my $debug = 0;
+sub debug($) { $debug = $_[0]; }
 
 sub FlushAll($)
 {
@@ -839,7 +840,7 @@ sub LookupAll($$;$$)
 	    # Physical nodes with no reservations whatsoever... treat
 	    # them as free since the beginning of time.
 	    my $res = CreateCommon( $class, undef, undef, undef, 0, undef,
-				    $type, $count, $gid );
+				    $type, $count, undef );
 	    push( @reservations, $res );
 	} elsif( defined( $endtime ) ) {
 	    # The nodes have a reserved_pid, but there's a known	    
@@ -1393,10 +1394,11 @@ sub CurrentReservations($;$$$) {
 	my $restype = Project::SharedReservationsString($shared_reservations);
 	push( @answer, { 'pid' => $pid, 'gid' => $gid, 'uid' => $thisuid,
 			 'nodetype' => $type, 'reserved' => $reserved,
-			     'used' => $pidused, 'pidused' => $pidused,
-			     'uidused' => $uidused, 'gidused' => $gidused,
-			     'ready' => $ready, 'reloading' => $reloading,
-			     'shared_reservations' => $restype } );
+			 'used' => $pidused, 'pidused' => $pidused,
+			 'uidused' => $uidused, 'gidused' => $gidused,
+			 'ready' => $ready, 'reloading' => $reloading,
+			 'mode' => $restype,
+			 'shared_reservations' => $restype } );
     }
     
     return @answer;
@@ -1406,35 +1408,54 @@ sub CurrentReservations($;$$$) {
 # for any reservations belonging to a listed project starting within the
 # next 24 hours.
 sub UpcomingReservations($$$) {
-    my ($class, $projlist, $uid) = @_;
+    my ($class, $pidgidlist, $uid) = @_;
     my @answer = ();
+    my @projlist = ();
+    my @pglist = ();
+    my $filter = "";
+
+    if (defined($pidgidlist) && @$pidgidlist) {
+	foreach ( @$pidgidlist ) {
+	    if( m'^([-\w]+)/([-\w]+)$' ) {
+		push( @projlist, $1 );
+		push( @pglist, [ $1, $2 ] );
+	    } else {		
+		# reject illegal PID/GIDs
+		return undef;
+	    }
+	}
+
+	$filter = "AND ( ( p.shared_reservations=0 AND r.uid='$uid' ) OR " .
+	    " ( p.shared_reservations=1 AND ( " .
+	    join( " OR ",
+		  map { "r.pid='$_'" } @projlist ) . " ) ) OR " .
+	    " ( p.shared_reservations=2 AND ( " .
+	    join( " OR ",
+		  map { "(r.pid='$$_[0]' AND r.gid='$$_[1]')" } @pglist ) .
+	    " ) ) ) ";
+    }    
+
+    my $query_result = DBQueryFatal(
+	"SELECT r.pid, r.gid, p.shared_reservations, r.uid, r.type, ".
+	"     UNIX_TIMESTAMP(r.start) AS starttime, " .
+	"     UNIX_TIMESTAMP(r.end) AS endtime, ".
+	"     r.nodes AS nodecount " .
+	"FROM future_reservations AS r ".
+	"JOIN projects as p on p.pid_idx=r.pid_idx ".
+	"WHERE r.approved IS NOT NULL AND " .
+	"      r.start > NOW() AND " .
+	"      r.start <= ADDDATE( NOW(), 1 ) $filter");
+
+    while( my($pid, $gid, $shared_reservations, $thisuid, $type,
+	      $start, $end, $count) = $query_result->fetchrow_array() ) {
+	my $restype = Project::SharedReservationsString($shared_reservations);
+	push( @answer, { 'pid' => $pid, 'gid' => $gid, 'uid' => $thisuid,
+			 'nodetype' => $type, 'nodecount' => $count,
+			 'start' => $start, 'end' => $end,
+			 'mode' => $restype,
+			 'shared_reservations' => $restype } );
+    }
     
-    foreach ( @$projlist ) {
-	# reject illegal PIDs
-	return undef unless /^[-\w]+$/;
-    }
-
-    my $query_result = DBQueryFatal( "SELECT r.pid, r.type AS nodetype, " .
-				     "nodes AS nodecount, " .
-				     "UNIX_TIMESTAMP(r.start) AS starttime, " .
-				     "UNIX_TIMESTAMP(r.end) AS endtime FROM " .
-				     "future_reservations as r ".
-				     "JOIN projects as p on ".
-				     "     p.pid_idx=r.pid_idx ".
-				     "WHERE ".
-				     "r.approved IS NOT NULL AND " .
-				     "r.start > NOW() AND " .
-				     "r.start <= ADDDATE( NOW(), 1 ) AND " .
-				     "r.pid IN ('" .
-				     join( "','", @$projlist ) . "') " .
-				     (defined($uid) ?
-				      "AND (p.shared_reservations=1 or ".
-				      "     r.uid='$uid')" : ""));
-				     
-    while( my $record = $query_result->fetchrow_hashref() ) {
-	push( @answer, $record );
-    }
-
     return @answer;
 }
 

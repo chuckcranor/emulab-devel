@@ -1146,7 +1146,15 @@ sub DoPrediction()
     else {
 	$target_user = $this_user;
     }
+    #
     # Argument is a list of projects, else we generate one for user.
+    #
+    # Regardless, the remote cluster will return the correct forecasts
+    # based on the shared reservation settings for each project.  So if we
+    # send subgroups but the project is per-project or per-user, the remote
+    # cluster will return forecasts for the project only.
+    # 
+    
     if (@ARGV) {
 	foreach my $token (@ARGV) {
 	    my ($project, $group);

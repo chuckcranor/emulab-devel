@@ -1346,8 +1346,13 @@ function Do_MaxDuration()
     $amlist     = Instance::DefaultAggregateList();
     $am_array   = array();
     $sitemap    = array();
-    $options    = "-p " . $formfields["pid"];
 
+    if ($formfields["pid"] == $formfields["gid"]) {
+        $options = "-p " . $formfields["pid"];
+    }
+    else {
+        $options = "-g " . $formfields["pid"] . "/" . $formfields["gid"];
+    }
     while (list($index, $aggregate) = each($amlist)) {
         $urn  = $aggregate->urn();
         $name = $aggregate->name();
@@ -1419,6 +1424,7 @@ function Do_MaxDuration()
                      " $options",
                      SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
+    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 
     if ($retval) {
         if (!$webtask->exited() || $retval < 0) {

@@ -1617,14 +1617,30 @@ class User
 	    return $result;
 	}
 
+        #
+        # Ick, we want the project first (if in fact the user has
+        # appropriate privs in the project group.
+        #
 	while ($row = mysql_fetch_array($query_result)) {
 	    $pid = $row['pid'];
 	    $gid = $row['gid'];
-	
-	    $result[$pid][] = $gid;
+
+            if (array_key_exists($pid, $result)) {
+                $tmp = $result[$pid];
+            }
+            else {
+                $tmp = array();
+            }
+            if ($pid == $gid) {
+                array_unshift($tmp, $pid);
+            }
+            else {
+                $tmp[] = $gid;
+            }
+            $result[$pid] = $tmp;
             $ordered[$pid]  = 0;
 	}
-
+        
         # We want to order by time of last usage.
         $query_result =
             DBQueryFatal("(select pid,max(UNIX_TIMESTAMP(s.last_activity)) ".

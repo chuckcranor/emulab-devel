@@ -208,7 +208,7 @@ window.instantiateCommon = (function () {
      * Build up a list of Aggregate selectors. Normally just one, but for
      * a multisite aggregate, need more then one.
      */
-    function createAggregateSelectors(rspec, pid)
+    function createAggregateSelectors(rspec, pid, gid)
     {
 	var xmlDoc = $.parseXML(rspec);
 	var xml    = $(xmlDoc);
@@ -618,7 +618,7 @@ window.instantiateCommon = (function () {
 		var cluster   = amlist[urn].name;
 		var text;
 
-		if (mode == null || mode == "project") {
+		if (mode == null || mode == "project" || mode == "group") {
 		    text = "Project " + pid + " has " + rescount + " active " +
 			"reservation(s) at the " + cluster + " cluster for " +
 			nodecount + " " + type + " node(s)";

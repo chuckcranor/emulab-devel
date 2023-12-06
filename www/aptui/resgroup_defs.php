@@ -475,6 +475,7 @@ class ReservationGroup
         $future  = array();
         $pidlist = array();
         $thisuid = $user->uid();
+        global $TB_PROJECT_CREATEEXPT;
 
         while (list($pid) = each($projlist)) {
             $pidlist[] = "'" . $pid . "'";
@@ -494,6 +495,7 @@ class ReservationGroup
             $res = ReservationGroup::Lookup($row["uuid"]);
             $urn = $row["aggregate_urn"];
             $pid = $res->pid();
+            $gid = $res->gid();
             $uid = $res->creator_uid();
             $mode = $res->SharingMode();
 
@@ -503,8 +505,15 @@ class ReservationGroup
             if ($mode == "user" && $uid != $thisuid) {
                 continue;
             }
+            elseif ($mode == "group") {
+                $group = $res->Group();
+                if (!$group->AccessCheck($user, $TB_PROJECT_CREATEEXPT)) {
+                    continue;
+                }
+            }
             $info = array(
                 "pid"           => $pid,
+                "gid"           => $gid,
                 "uid"           => $uid,
                 "starttime"     => $res->start(),
                 "endtime"       => $res->end(),

@@ -1073,12 +1073,13 @@ $(function ()
     function CreateAggregateSelectors()
     {
 	var pid    = $('#project_selector #profile_pid').val();	
+	var gid    = $('#group_selector #group_pid').val();	
 
 	// No need to do this if not showing selectors.
 	if (!window.CLUSTERSELECT) {
 	    return;
 	}
-	instantiateCommon.createAggregateSelectors(selected_rspec, pid);
+	instantiateCommon.createAggregateSelectors(selected_rspec, pid, gid);
     }
 
     /*
@@ -1381,6 +1382,9 @@ $(function ()
 	    console.info("resinfo", json.value);
 	    resinfo = json.value;
 	    var pid = $('#project_selector #profile_pid').val();
+	    /*
+	     * XXXXX Need to gid here.
+	     */
 	    instantiateCommon.generateReservationInfo(pid, resinfo);
 	};
 	var xmlthing =

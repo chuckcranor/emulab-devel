@@ -272,14 +272,33 @@
 			  icon_position_1"
 		   data-toggle="tooltip" data-bs-toggle="tooltip"
 		   <% if (resgroup.mode == "project") { %>
-		     title="Project <%- pid %> has an
-		          <%- resgroup.which %> cluster reservation."
+		     title="Project <%- pid %> has
+			    <% if (resgroup.which == "active") { %>
+			      an active
+			    <% } else { %>
+			      a future
+			    <% } %>
+		            cluster reservation."
+		   <% } else if (resgroup.mode == "group") { %>
+		     title="Project group <%- pid %>/<%- resgroup.gid %> has
+			  <% if (resgroup.which == "active") { %>
+			  an active
+			  <% } else { %>
+			  a future
+			  <% } %>
+		          cluster reservation."
 		   <% } else { %>
-		     title="You have a <%- resgroup.which %> cluster reservation 
-			  in project <%- pid %>."
+		     title="You have
+			    <% if (resgroup.which == "active") { %>
+			    an active
+			    <% } else { %>
+			    a future
+			    <% } %>
+			    cluster reservation in project <%- pid %>."
 		   <% } %>
 		   data-placement="right" data-bs-placement="right">
-		<span class="glyphicon glyphicon-calendar pull-right"></span>
+		<span class="glyphicon
+			     glyphicon-calendar pull-right"></span>
 	      </div>
 	    </div>
 	  <% } %>
@@ -305,6 +324,8 @@
 		    data-toggle="dropdown" data-bs-toggle="dropdown"
 		    aria-expanded="false">
 	      <span class="value">Please Select</span>
+	      <div class="reservation-tooltips"
+		   style="display: inline-block"></div>
 	    </button>
 	    <ul class="dropdown-menu" role="menu">
 	      <li class="initial enabled" data-priority="0">
@@ -326,7 +347,52 @@
     <li class="<% if (selected) { %>selected<% } %>">
       <a href="#"
 	 class="dropdown-item <% if (selected) { %>active<% } %>"	 
-	 value="<%- gid %>"><%- gid %></a>
+	 value="<%- gid %>">
+	<%- gid %>
+	<div class="reservation-tooltips">
+	  <% if (resgroup) { %>
+	    <div class="reservation_tooltip <%- resgroup.class %>">
+	      <div class="warning_icon
+			  <% if (resgroup.class == "has_reservation") { %>
+			  confirm
+			  <% } else { %>
+			  warn
+			  <% } %>
+			  icon_position_1"
+		   data-toggle="tooltip" data-bs-toggle="tooltip"
+		   <% if (resgroup.mode == "project") { %>
+		   title="Project <%- pid %> has
+			  <% if (resgroup.which == "active") { %>
+			  an active
+			  <% } else { %>
+			  a future
+			  <% } %>
+		          cluster reservation."
+		   <% } else if (resgroup.mode == "group") { %>
+		   title="Project group <%- pid %>/<%- resgroup.gid %> has
+			  <% if (resgroup.which == "active") { %>
+			  an active
+			  <% } else { %>
+			  a future
+			  <% } %>
+		          cluster reservation."
+		   <% } else { %>
+		   title="You have
+			  <% if (resgroup.which == "active") { %>
+			  an active
+			  <% } else { %>
+			  a future
+			  <% } %>
+			  cluster reservation in project <%- pid %>."
+		   <% } %>
+		   data-placement="right" data-bs-placement="right">
+		<span class="glyphicon
+			     glyphicon-calendar pull-right"></span>
+	      </div>
+	    </div>
+	  <% } %>
+	</div>
+      </a>
     </li>
   </script>
 </div>

@@ -86,7 +86,7 @@ sub usage()
     exit( -1 );
 }
 
-my $optlist    = "ac:de:fghilm:npqs:t:uA:CD:N:S:U:T:E:OyF:I:";
+my $optlist    = "ac:de:fg:hilm:npqs:t:uA:CD:N:S:U:T:E:OyF:I:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -398,11 +398,16 @@ my $pid_idx;
 if( defined( $clear_idx ) ) {
     my $res = Reservation->Lookup( $clear_idx );
     fatal( "could not find existing reservation" ) unless( defined( $res ) );
+    $pid = $res->pid();
+    $gid = $res->gid();
     $pid_idx = $res->pid_idx();
     $project = Project->Lookup( $pid_idx );
     if (!defined($project)) {
 	fatal("No such project $pid\n");
     }
+    $group = $project->LookupGroup($gid);
+    fatal( "No such group $pid/$gid\n" )
+	unless( defined( $group ) );
 } else {
     if ($pid =~ /^(.*):(.*)$/) {
 	require GeniHRN;
@@ -423,25 +428,24 @@ if( defined( $clear_idx ) ) {
 	}
     }
     $pid_idx = $project->pid_idx();
+    
+    if( defined( $options{ 'g' } ) ) {
+	$gid = $options{ 'g' };
+    } else {
+	# silently assume default GID (this will be the right thing
+	# the majority of the time when it's the only group anyway)
+	$gid = $pid;
+    }
+    $group = $project->LookupGroup($gid);
+
+    fatal( "No such group $pid/$gid\n" )
+	unless( defined( $group ) );
 }
 
 if( !$admin ) {
     fatal( "You are not a project member" )
 	unless( $project->LookupUser( $this_user ) );
 }
-
-if( defined( $options{ 'g' } ) ) {
-    $gid = $options{ 'g' };
-} else {
-    # silently assume default GID (this will be the right thing
-    # the majority of the time when it's the only group anyway)
-    $gid = $pid;
-}
-
-$group = Group->Lookup( $pid, $gid );
-
-fatal( "No such group $pid/$gid\n" )
-    unless( defined( $group ) );
 
 if( !$admin ) {
     fatal( "You are not a group member" )

@@ -563,14 +563,23 @@ window.DrawResHistoryGraph = (function ()
 	    var stamp     = parseInt(record.t) * 1000;
 	    var reserved  = record.reserved;
 	    var allocated = record.allocated;
+	    var pidkey    = details.remote_pid + "/" + details.gid;
+	    var pcount    = 0;
 
 	    // If this is before or after the reservation, reserved will
 	    // be empty. Skip it.
 	    if (Array.isArray(reserved)) {
 		continue;
 	    }
-	    
-	    var pcount = parseInt(allocated[details.remote_pid][details.type]);
+
+	    // Timeline uses local group names. So remote_pid/local_gid
+	    // For temporary backwards also check for remote_pid
+	    if (_.has(allocated, pidkey)) {
+		pcount = parseInt(allocated[pidkey][details.type]);
+	    }
+	    else if (_.has(allocated, details.remote_pid)) {
+		pcount = parseInt(allocated[details.remote_pid][details.type]);
+	    }
 	    // Watch for nothing allocated by the user at this time stamp
 	    var ucount = 0;
 	    if (_.has(allocated, details.remote_uid)) {
@@ -643,9 +652,15 @@ window.DrawResHistoryGraph = (function ()
 	
 	var minX = uvalues[0].x;
 	var maxX = uvalues[uvalues.length - 1].x;
-	var data = [{"key" : "Project", "values" : pvalues, "color" : "green"},
-		    {"key" : "User", "values" : uvalues, "color" : "blue"}
-		   ];
+
+	var data = [{"key" : "User", "values" : uvalues, "color" : "blue"}];
+	if (details.mode != "user") {
+	    var pgkey = details.mode[0].toUpperCase() + details.mode.substr(1);
+
+	    data.unshift({"key" : pgkey,
+			  "values" : pvalues, "color" : "green"});
+	}
+	
 	console.info("usage datums", data);
 
 	nv.addGraph(function() {

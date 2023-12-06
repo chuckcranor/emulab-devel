@@ -82,6 +82,7 @@ use EmulabFeatures;
 use Reservation;
 use libEmulab;
 use libtestbed;
+use libaudit;
 use WebTask;
 use APT_Profile;
 use APT_Instance;
@@ -110,6 +111,7 @@ sub DoMaxDuration();
 sub DoMaxExtension();
 sub DoRouteForecast();
 sub DoSetShareReservations();
+sub DoPredictionInfo();
 sub CallMethodOnReservations($$@);
 
 #
@@ -181,6 +183,9 @@ elsif ($action eq "routeforecast") {
 }
 elsif ($action eq "setsharedreservations") {
     DoSetShareReservations();
+}
+elsif ($action eq "predictioninfo") {
+    DoPredictionInfo();
 }
 else {
     usage();
@@ -2960,8 +2965,8 @@ sub DoCheckReserved()
 #
 sub DoMaxDuration()
 {
-    my @optlist = ('f=s', 's=s', 'p=s', 'P=s', 'a=s');
-    my ($start, $end, $rspec, $project, $errmsg, $sitemap, $portal);
+    my @optlist = ('f=s', 's=s', 'p=s', 'P=s', 'a=s', 'g=s');
+    my ($start, $end, $rspec, $project, $group, $errmsg, $sitemap, $portal);
     my ($baddog, $badtype);
     my $where = $MYURN;
     my $prediction_info;
@@ -2999,6 +3004,15 @@ sub DoMaxDuration()
 	if (!defined($project)) {
 	    fatal("No such project");
 	}
+	$group = $project->GetProjectGroup();
+    }
+    if (defined($options{"g"})) {
+	$group = Group->Lookup($options{"g"});
+
+	if (!defined($group)) {
+	    fatal("No such group");
+	}
+	$project = $group->GetProject();
     }
     if (defined($options{"s"})) {
 	$start = $options{"s"};
@@ -3193,10 +3207,9 @@ sub DoMaxDuration()
 #
 sub DoMaxExtension()
 {
-    my @optlist = ('f=s', 's=s', 'p=s', 'P=s', "a=s");
-    my ($start, $end, $rspec, $project, $errmsg, $sitemap, $portal);
+    my @optlist = ('f=s', 's=s', 'p=s', 'P=s', "a=s", "g=s");
+    my ($start, $end, $rspec, $project, $group, $errmsg, $sitemap, $portal);
     my $where = $MYURN;
-    my $prediction_info;
 
     Getopt::Long::Configure("no_ignore_case");
     my %options = ();
@@ -3215,24 +3228,21 @@ sub DoMaxExtension()
 	print $rspec . "\n";
 	
     }
-    if (defined($options{"P"})) {
-	fatal("Cannot read prediction file")
-	    if (! -e $options{"P"});
-	my $tmp = emutil::ReadFile($options{"P"});
-	$prediction_info = eval { decode_json($tmp) };
-	if ($@) {
-	    fatal("Could not decode json prediction data: $@\n");
-	}
-	if (ref($prediction_info) ne "HASH") {
-	    fatal("prediction data is not a HASH");
-	}
-    }
     if (defined($options{"p"})) {
 	$project = Project->Lookup($options{"p"});
 
 	if (!defined($project)) {
 	    fatal("No such project");
 	}
+	$group = $project->GetProjectGroup();
+    }
+    elsif (defined($options{"g"})) {
+	$group = Group->Lookup($options{"g"});
+
+	if (!defined($group)) {
+	    fatal("No such group");
+	}
+	$project = $group->GetProject();
     }
     if (defined($options{"s"})) {
 	$start = $options{"s"};
@@ -3249,6 +3259,7 @@ sub DoMaxExtension()
     usage()
 	if (!(defined($rspec) && defined($project)));
     my $pid = $project->pid();
+    my $gid = $group->gid();
 
     #
     # Update rspec with site aggregate urns so it is fully bound.
@@ -3284,25 +3295,62 @@ sub DoMaxExtension()
     #
     if (keys(%{$typeCounts})) {
 	#
-	# Ask for prediction info from the clusters referenced in the rspec.
+	# Prediction info is typically valid. If not, ask for just
+	# the URNS we need.
 	#
-	if (!defined($prediction_info) && keys(%{$typeCounts})) {
+	my $prediction_info = APT_Instance::PredictionInfo->Lookup($this_user);
+	my $pinfo;
+	my $forecasts = {};
+	if ($prediction_info->Stale()) {
+	    my $pidgid = "$pid/$gid";
 	    my $urns = join(",", keys(%{$typeCounts}));
 	    my $local_webtask = WebTask->CreateAnonymous();
 	    my $local_task_id = $local_webtask->task_id();
-	    system("$RESCOMMAND -t $local_task_id prediction -a '$urns' $pid");
+	    system("$RESCOMMAND -t $local_task_id ".
+		   "  prediction -a '$urns' $pidgid");
 	    if ($?) {
 		$local_webtask->Delete();
 		fatal("Could not get prediction info");
 	    }
 	    $local_webtask->Refresh();
-	    $prediction_info = $local_webtask->value();
+	    $pinfo = $local_webtask->value();
 	    $local_webtask->Delete();
-	    #print Dumper($prediction_info);
 	}
+	else {
+	    $pinfo = $prediction_info->PredictionInfo();
+	}
+	
+	#
+	# We want the per project (group) prediction info for each
+	# cluster. This is in the pforecast arrays. Note that we have
+	# to watch for projects with per-group reservations. 
+	#
+	foreach my $urn (keys(%{$typeCounts})) {
+	    next
+		if (!exists($pinfo->{$urn}));
+
+	    my $pidgid = "$pid/$gid";
+	    my $pforecasts = $pinfo->{$urn}->{'pforecasts'};
+
+	    if ($project->shared_reservations() ==
+		$Project::RESERVATIONS_PERGROUP) {
+		if (exists($pforecasts->{$pidgid})) {
+		    $forecasts->{$urn}->{'forecast'} =
+			$pforecasts->{$pidgid};
+		}
+	    }
+	    else {
+		if (exists($pforecasts->{$pid})) {
+		    $forecasts->{$urn}->{'forecast'} =
+			$pforecasts->{$pid};
+		}
+	    }
+	}
+	print Dumper($forecasts);
+	
 	if (APT_Reservation::Group::Reservation::MaxExtension(
 		$project, $this_user, $start, \$end, $typeCounts,
-		$prediction_info, \$errmsg)) {
+		$forecasts, \$errmsg)) {
 	    fatal($errmsg);
 	}
 	if (defined($end)) {
@@ -3711,6 +3759,66 @@ sub DoSetShareReservations()
 	$webtask->Exited($errcode);
     }
     exit(-1);
+}
+
+sub UpdatePredictionInfo($$$)
+{
+    my ($user, $portal, $perrmsg) = @_;
+
+    my $predictioninfo = APT_Instance::PredictionInfo->Lookup($user);
+    if (!defined($predictioninfo)) {
+	$$perrmsg = "Could not initialize predictioninfo for $user";
+	return -1;
+    }
+    if ($predictioninfo->Update($portal)) {
+	$$perrmsg = "Could not update predictioninfo for $user";
+	return -1;
+    }
+    return 0;
+}
+
+#
+# This is used only for the instantiate page Maxduration/MaxExtension
+# routines above. 
+#
+sub DoPredictionInfo()
+{
+    my $optlist   = "p:u:b";
+    my $portal;
+    my $target_user;
+    my $errmsg;
+    my $errcode;
+    my $background = 0;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"p"})) {
+	$portal = $options{"p"}
+    }
+    if (defined($options{"b"})) {
+	$background = 1;
+    }
+    if (defined($options{"u"})) {
+	$target_user = User->Lookup($options{"u"});
+	if (!defined($target_user)) {
+	    fatal("No such user: " . $options{"u"});
+	}
+    }
+    else {
+	$target_user = $this_user;
+    }
+    if ($background) {
+	my $pid = LogStart(1, undef, LIBAUDIT_LOGTBOPS);
+	if ($pid) {
+	    exit(0);
+	}
+    }
+    if (UpdatePredictionInfo($target_user, $portal, \$errmsg)) {
+	fatal($errmsg);
+    }
+    exit(0);
 }
 
 sub fatal($)

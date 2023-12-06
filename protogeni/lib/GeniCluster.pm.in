@@ -991,7 +991,7 @@ sub Reserve($)
 	return GeniResponse->MalformedArgsResponse("No such user")
 	    if (!defined($geniuser));
 
-	my $group = GeniUtil::GetHoldingProject($argref->{'project_urn'},
+	$group = GeniUtil::GetHoldingProject($argref->{'project_urn'},
 						undef, 1);
 	return $group
 	    if (GeniResponse::IsResponse($group));
@@ -1218,7 +1218,7 @@ sub Reserve($)
     
     if ($? && $? >> 8 != 2) {
 	GeniUtil::FlipToGeniUser();
-	#print STDERR "$args\n";
+	print STDERR "$command\n";
 	$webtask->Refresh();
 	my $code = $webtask->exitcode();
 	my $mesg = $webtask->output();
@@ -1431,7 +1431,7 @@ sub Reservations($)
 	    print STDERR "Reservations: No such project $pid\n";
 	    next;
 	}
-	my $group = $project;
+	my $group = $project->GetProjectGroup();
 	my $user = User->Lookup($reservation->uid());
 	next
 	    if (!$user);
@@ -1467,6 +1467,7 @@ sub Reservations($)
 	    }
 	    $pidres{$target} = \@allres;
 	    $timelines{$target} = \@timeline;
+	    #print STDERR Dumper(\@timeline);
 	}
 	push(@rows, $row);
     }
@@ -1497,8 +1498,16 @@ sub Reservations($)
 	if ($reservation->approved() && $reservation->start() < time()) {
 	    @timeline = @{$timelines{$target}};
 	    if (@timeline) {
+		print STDERR Dumper(\@timeline);
 		ResUtil::ReservationUtilizationNew($reservation, @timeline);
 		$blob->{'utilization'} = $reservation->data("utilization");
+
+		#
+		# Hmm, maybe this was not the best approach; using the pid
+		# from the remote cluster. The gid is always the same.
+		#
+		#my $rhrn = GeniHRN->new($project->nonlocalurn());
+		#my $rpid = $rhrn->id();
 	    
 		#
 		# Narrow the timeline to just the data needed by the caller.
@@ -1506,7 +1515,7 @@ sub Reservations($)
 		my @tmp = ();
 		foreach my $ref (@timeline) {
 		    my $allocated = {
-			$gid => {
+			"$pid/$gid" => {
 			    $type =>
 				$ref->{'rescounts'}->{$uuid}->{"group"} || 0
 			},
@@ -1523,7 +1532,7 @@ sub Reservations($)
 		@timeline = @tmp;
 		if (@timeline) {
 		    my $ref = $timeline[-1];
-		    $using = $ref->{'allocated'}->{$gid}->{$type};
+		    $using = $ref->{'allocated'}->{"$pid/$gid"}->{$type};
 		}
 	    }
 	}
@@ -1949,6 +1958,7 @@ sub ReservationPrediction($)
     # Convert to local projects, skip if we do not have one yet,
     # clearly no reservations for it.
     #
+    my %projects  = ();
     my @projlist  = ();
     my %projlist  = ();
     my @grouplist = ();
@@ -1970,6 +1980,7 @@ sub ReservationPrediction($)
 	    }
 	    else {
 		$group   = Group->Lookup($pid, $gid);
+		$project = $group->GetProject() if (defined($group));
 	    }
 	}
 	else {
@@ -1991,22 +2002,40 @@ sub ReservationPrediction($)
 	}
 	next
 	    if (!defined($group));
+	
+	$projects{$project->pid()} = $project;
 
 	#
 	# It is possible that we get a subgroup but not the project, as when
 	# it is for a class and the user has "user" privs in the project.
 	#
-	if ($group->IsProjectGroup()) {
-	    $projlist{$group->pid()} = $hrn;
-	    push(@projlist, $group->pid());
+	if ($project->shared_reservations == $Project::RESERVATIONS_PERGROUP) {
+	    #
+	    # Only groups matter, so convert pid to pid/gid.
+	    #
+	    if (! exists($grouplist{$group->pidgid()})) {
+		# Remote pid/gid. 
+		my $rpid = $hrn->project();
+		my $rgid = $hrn->group() ? $hrn->group() : $rpid;
+		
+		$grouplist{$group->pidgid()} = "$rpid/$rgid";
+		push(@grouplist, $group->pidgid());
+	    }
 	}
 	else {
-	    $grouplist{$group->pidgid()} = $hrn;
-	    push(@grouplist, $group->pidgid());
+	    #
+	    # All reservations are at the project level, so we ignore
+	    # subgroups. This applies to per-user project setting as well.
+	    #
+	    if (! exists($projlist{$project->pid()})) {
+		$projlist{$project->pid()} = $hrn->project();
+		push(@projlist, $project->pid());
+	    }
 	}
     }
     my $forecast    = {};
     my $current     = {};
+    my $upcoming    = {};
     my $pforecasts  = {};
 
     my @types = Reservation->ReservableTypes();
@@ -2034,7 +2063,7 @@ sub ReservationPrediction($)
 	
 	foreach my $pid (@projlist) {
 	    # rpid is the project name at the calling cluster
-	    my $rpid  = $projlist{$pid}->project();
+	    my $rpid  = $projlist{$pid};
 
 	    if (!exists($pforecasts->{$rpid})) {
 		$pforecasts->{$rpid} = {};
@@ -2044,9 +2073,7 @@ sub ReservationPrediction($)
 	}
 	foreach my $pidgid (@grouplist) {
 	    # rpidgid is the project name at the calling cluster
-	    my $rpidgid = $grouplist{$pidgid}->id();
-	    # Ick.
-	    $rpidgid =~ s/\/\//\//;
+	    my $rpidgid = $grouplist{$pidgid};
 
 	    if (!exists($pforecasts->{$rpidgid})) {
 		$pforecasts->{$rpidgid} = {};
@@ -2060,7 +2087,7 @@ sub ReservationPrediction($)
 	
 	foreach my $pid (@projlist) {
 	    # rpid is the project name at the calling cluster
-	    my $rpid  = $projlist{$pid}->project();
+	    my $rpid  = $projlist{$pid};
 	    
 	    if (!exists($pforecasts->{$rpid})) {
 		$pforecasts->{$rpid} = {};
@@ -2070,9 +2097,7 @@ sub ReservationPrediction($)
 	}
 	foreach my $pidgid (@grouplist) {
 	    # rpidgid is the project name at the calling cluster
-	    my $rpidgid = $grouplist{$pidgid}->id();
-	    # Ick.
-	    $rpidgid =~ s/\/\//\//;
+	    my $rpidgid = $grouplist{$pidgid};
 
 	    if (!exists($pforecasts->{$rpidgid})) {
 		$pforecasts->{$rpidgid} = {};
@@ -2088,37 +2113,68 @@ sub ReservationPrediction($)
     my @all = map { $_ . "/" . $_ } @projlist;
     @all = (@all, @grouplist);
 
-    print STDERR Dumper(\@all);
-    
     my @reservations  = Reservation->CurrentReservations(\@all, $uid);
 
-    print STDERR Dumper(\@reservations);
-    
     for my $ref (@reservations) {
 	my $pid  = $ref->{'pid'};
 	my $gid  = $ref->{'gid'};
 	my $rpidgid;
 
 	if ($pid eq $gid) {
-	    my $hrn  = $projlist{$pid};
-	    $rpidgid = $hrn->project();
+	    my $project = $projects{$pid};
+	    my $hrn;
+
+	    if ($project->shared_reservations ==
+		$Project::RESERVATIONS_PERGROUP) {
+		$rpidgid = $grouplist{"${pid}/${pid}"};
+	    }
+	    else {
+		$rpidgid = $projlist{$pid};
+	    }
 	}
 	else {
-	    my $hrn  = $grouplist{"${pid}/${gid}"};
-	    $rpidgid = $hrn->id();
-	    # Ick.
-	    $rpidgid =~ s/\/\//\//;
+	    $rpidgid = $grouplist{"${pid}/${gid}"};
 	}
 	if (!exists($current->{$rpidgid})) {
 	    $current->{$rpidgid} = [];
 	}
 	push(@{$current->{$rpidgid}}, $ref)
     }
+
+    @reservations  = Reservation->UpcomingReservations(\@all, $uid);
+
+    for my $ref (@reservations) {
+	my $pid  = $ref->{'pid'};
+	my $gid  = $ref->{'gid'};
+	my $rpidgid;
+
+	if ($pid eq $gid) {
+	    my $project = $projects{$pid};
+	    my $hrn;
+
+	    if ($project->shared_reservations ==
+		$Project::RESERVATIONS_PERGROUP) {
+		$rpidgid = $grouplist{"${pid}/${pid}"};
+	    }
+	    else {
+		$rpidgid = $projlist{$pid};
+	    }
+	}
+	else {
+	    $rpidgid = $grouplist{"${pid}/${gid}"};
+	}
+	if (!exists($upcoming->{$rpidgid})) {
+	    $upcoming->{$rpidgid} = [];
+	}
+	push(@{$upcoming->{$rpidgid}}, $ref)
+    }
+    
   nopids:
     my $blob = {
 	"forecast"     => $forecast,
 	"pforecasts"   => $pforecasts,
 	"current"      => $current,
+	"upcoming"     => $upcoming,
     };
     print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
@@ -2369,6 +2425,10 @@ sub ReservationHistory($)
 
     foreach my $res (@reservations) {
 	my $pid = $res->pid();
+	my $gid = $res->gid();
+	my $uid = $res->uid();
+	my $type = $res->type();
+	my $uuid = $res->uuid();
 	my $pid_idx = $res->pid_idx();
 	my $project = Project->Lookup($pid_idx);
 	if (!defined($project)) {
@@ -2383,10 +2443,24 @@ sub ReservationHistory($)
 	my @timeline = ResUtil::CreateTimeline($project, $res);
 	# We do not want to send back more then we need.
 	if (@timeline) {
-	    @timeline = map { {"t"         => $_->{'t'},
-			       "allocated" => $_->{'allocated'} || {},
-			       "reserved"  => $_->{'reserved'} || {},
-		} } @timeline;
+	    my @tmp = ();
+	    foreach my $ref (@timeline) {
+		my $allocated = {
+		    "$pid/$gid" => {
+			$type =>
+			    $ref->{'rescounts'}->{$uuid}->{"group"} || 0
+		    },
+		    $uid => {
+			$type =>
+			    $ref->{'rescounts'}->{$uuid}->{"user"} || 0
+		    },
+		};
+		push(@tmp, {
+		    "t"         => $ref->{'t'},
+		    "allocated" => $allocated,
+		    "reserved"  => $ref->{'reserved'} || {}});
+	    }
+	    @timeline = @tmp;
 	}
 
 	my $blob = {};

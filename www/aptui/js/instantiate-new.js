@@ -1099,12 +1099,13 @@ $(function ()
     function CreateAggregateSelectors()
     {
 	var pid    = $('#project_selector #profile_pid').val();	
+	var gid    = $('#group_selector #group_pid').val();	
 
 	// No need to do this if not showing selectors.
 	if (!window.CLUSTERSELECT) {
 	    return;
 	}
-	instantiateCommon.createAggregateSelectors(selected_rspec, pid);
+	instantiateCommon.createAggregateSelectors(selected_rspec, pid, gid);
     }
 
     /*
@@ -1126,6 +1127,7 @@ $(function ()
 		    "class"   : "has_reservation",
 		    "mode"    : details["mode"],
 		    "uid"     : details["uid"],
+		    "gid"     : details["gid"],
 		}
 	    }
 	    else if (_.has(resgroups.future, pid)) {
@@ -1136,6 +1138,7 @@ $(function ()
 		    "class"   : "future_reservation",
 		    "mode"    : details["mode"],
 		    "uid"     : details["uid"],
+		    "gid"     : details["gid"],
 		};
 	    }
 	    options = options +
@@ -1231,16 +1234,53 @@ $(function ()
 	console.info("CreateGroupSelector", pid, selected);
 	
 	_.each(projlist[pid], function(gid) {
+	    // Look for current or upcoming group resgroups.
+	    var resgroup = null;
+	    if (_.has(resgroups.current, pid)) {
+		_.each(resgroups.current[pid], function(details) {
+		    if (details.mode == "group" &&
+			details.gid == gid) {
+			resgroup = {
+			    "which"   : "active",
+			    "class"   : "has_reservation",
+			    "mode"    : details["mode"],
+			    "uid"     : details["uid"],
+			    "gid"     : details["gid"],
+			};
+			selected = gid;
+		    }
+		});
+	    }
+	    if (!resgroup && _.has(resgroups.future, pid)) {
+		_.each(resgroups.future[pid], function(details) {
+		    console.info("FF", gid, details);
+		    if (details.mode == "group" &&
+			details.gid == gid) {
+			resgroup = {
+			    "which"   : "upcoming",
+			    "class"   : "future_reservation",
+			    "mode"    : details["mode"],
+			    "uid"     : details["uid"],
+			    "gid"     : details["gid"],
+			};
+			selected = gid;
+			console.info("FFF", resgroup);
+		    }
+		});
+	    }
 	    options = options +
 		gidTemplate({
 		    "gid"      : gid,
+		    "pid"      : pid,
 		    "selected" : gid === selected,
+		    "resgroup" : resgroup,
 		});
 	});
 	var picker = groupTemplate({
 	    "groups"  : options,
 	});
 	$("#group_selector").html(picker);
+	$('#group_selector [data-toggle="tooltip"]').tooltip();
 
 	/* 
 	 * When a choice is made, need to update the button contents 
@@ -1251,6 +1291,7 @@ $(function ()
 		event.preventDefault();
 		var value    = $(this).attr("value");
 		var picker   = $(this).closest(".group-picker");
+		var tooltips = "";
 		var which    = "";
 
 		// Watch for reset back to "Please Select"
@@ -1258,6 +1299,7 @@ $(function ()
 		    value = "Please Select";
 		}
 		else {
+		    tooltips = $(this).find(".reservation-tooltips").html();
 		    which   = value;
 		}
 		if ($(picker).find("#profile_gid").val() == which) {
@@ -1265,6 +1307,7 @@ $(function ()
 		    return;
 		}
 		$(picker).find("button .value").html(value);
+		$(picker).find("button .reservation-tooltips").html(tooltips);
 		$(picker).find("#profile_gid").val(which);
 		if (window.BOOTSTRAP_VERSION == 5) {
 		    $(picker).find("li a").removeClass("active");
@@ -1565,20 +1608,21 @@ $(function ()
 		 */
 		if (maxdate != null) {
 		    if (maxdate) {
-			var rounded = new Date(maxdate);
-			rounded.setMinutes(0, 0, 0);
+			maxdate = new Date(maxdate);
+			//maxdate.setMinutes(0, 0, 0);
+			console.info("maxdate", maxdate);
+			console.info("mindate", mindate);
 
 			// Number of hours.
-			mindate.setHours($('#start_hour').val());
-			var hours = (rounded - mindate) / (3600 * 1000);
-			console.info(rounded, mindate, hours);
+			var hours = (maxdate - mindate) / (3600 * 1000);
+			console.info(hours);
 
 			if (hours == 0) {
 			    $('#maxduration-doesnotfit').removeClass("hidden");
 			    return;
 			}
 			$('#maxduration-limited span')
-			    .html(moment(rounded).format('lll'));
+			    .html(moment(maxdate).format('lll'));
 			$('#maxduration-limited').removeClass("hidden");
 
 			/*
