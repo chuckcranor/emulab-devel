@@ -106,7 +106,11 @@ $routing = array("geni-login" =>
 						 "ClearFavorite" =>
 						     "Do_ClearFavorite",
 						 "RequestLicenses" =>
-						     "Do_RequestLicenses")),
+                                                     "Do_RequestLicenses",
+                                                 "ReservationInfo" =>
+                                                     "Do_ReservationInfo",
+                              )
+                        ),
 		 "manage_profile" =>
 			array("file"    => "manage_profile.ajax",
 			      "guest"   => false,

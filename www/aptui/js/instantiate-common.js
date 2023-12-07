@@ -9,6 +9,7 @@ window.instantiateCommon = (function () {
     var multisite     = false;
     var siteTemplate  = null;
     var clusterTemplate = null;
+    var fullyBound    = false;
     var JACKS_NS      = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
 
     function initialize(args)
@@ -270,6 +271,7 @@ window.instantiateCommon = (function () {
 
 	// All nodes bound, no dropdown.
 	if (count == bound) {
+	    fullyBound = true;
 	    $("#cluster_selector").addClass("hidden");
 	    // Clear the form data.
 	    $("#cluster_selector").html("");
@@ -287,6 +289,9 @@ window.instantiateCommon = (function () {
 	    }
 	    return;
 	}
+	fullyBound = false;
+	// Tell the server to whine about no aggregate selection.
+	$("#fully_bound").val("0");
 
 	// Clear for new profile.
 	siteIdToSiteNum = {};
@@ -576,6 +581,7 @@ window.instantiateCommon = (function () {
      */
     function generateReservationInfo(pid, res)
     {
+	console.info("GenerateReservationInfo", pid, res);
 	var warnings = [];
 
 	if (res) {
@@ -586,13 +592,11 @@ window.instantiateCommon = (function () {
 	    return;
 	}
 
-	$('#cluster_selector .site-selector').each(function () {
-	    var urn   = $(this).find(".select_where").attr("urn");
+	function GenForCluster(urn)
+	{
+	    //console.info("GenForCluster", urn);
 	    var types = {};
-	    
-	    if (urn == "" || !_.has(resgroups.current[urn], pid)) {
-		return;
-	    }
+
 	    /*
 	     * Total up all reservations for each type reserved.
 	     */
@@ -608,8 +612,7 @@ window.instantiateCommon = (function () {
 		types[type].total    += count;
 		types[type].rescount += 1;
 	    });
-	    console.info("GenerateReservationInfo", pid, urn, types);
-	    console.info("GenerateReservationInfo", resinfo);
+	    //console.info("GenForCluster", types);
 
 	    _.each(types, function (info, type) {
 		var nodecount = info.total;
@@ -620,13 +623,17 @@ window.instantiateCommon = (function () {
 
 		if (mode == null || mode == "project" || mode == "group") {
 		    text = "Project " + pid + " has " + rescount + " active " +
-			"reservation(s) at the " + cluster + " cluster for " +
-			nodecount + " " + type + " node(s)";
+			"reservation(s) " +
+			(_.size(amlist) <= 1 ? "" :
+			 "at the " + cluster + " cluster ") +
+			"for " + nodecount + " " + type + " node(s)";
 		}
 		else if (mode == "user") {
 		    text = "You have " + rescount + " active reservation(s) " +
-			"in project " + pid + " at the " + cluster + " cluster for " +
-			nodecount + " " + type + " node(s)";
+			"in project " + pid +
+			(_.size(amlist) <= 1 ? "" :
+			 " at the " + cluster + " cluster ") +
+			"for " + nodecount + " " + type + " node(s)";
 		}
 		
 		/*
@@ -638,7 +645,8 @@ window.instantiateCommon = (function () {
 		    _.has(resinfo[urn].current, pid.toLowerCase())) {
 		    _.each(resinfo[urn].current[pid.toLowerCase()], function (cur) {
 			if (cur.nodetype == type) {
-			    if (mode == null || mode == "project") {
+			    if (mode == null ||
+				mode == "project" || mode == "group") {
 				text += " and is currently using " + cur.pidused;
 			    }
 			    else if (mode == "user") {
@@ -651,7 +659,26 @@ window.instantiateCommon = (function () {
 		warnings.push("<div class='alert alert-success alert-sm'>" +
 			      text + "</div>");
 	    });
-	});
+	}
+
+	if (window.CLUSTERSELECT) {
+	    $('#cluster_selector .site-selector').each(function () {
+		var urn = $(this).find(".select_where").attr("urn");
+	    
+		if (urn == "" || !_.has(resgroups.current[urn], pid)) {
+		    return;
+		}
+		GenForCluster(urn);
+	    });
+	}
+	else {
+	    _.each(amlist, function (details, urn) {
+		if (_.has(resgroups.current[urn], pid)) {
+		    GenForCluster(urn);
+		}
+	    });
+	}
+	
 	if (_.size(warnings)) {
 	    console.info("GenerateReservationInfo", warnings);
 	    $('#reservation-warnings')

@@ -7240,6 +7240,8 @@ sub Update($;$)
 	DBQueryWarn("unlock tables");
 	return -1;
     }
+    $self->Refresh();
+    DBQueryWarn("unlock tables");
     return 0;
 }
 

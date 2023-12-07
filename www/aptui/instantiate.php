@@ -152,7 +152,6 @@ $projlist = $tmp;
 if ($noprediction) {
     $usenewschedule = 0;
 }
-$noprediction = 1;
 
 if (count($projlist) == 0) {
     SPITUSERERROR("You do not belong to any projects with permission to ".
@@ -741,9 +740,4 @@ else {
     AddTemplate("instantiate");
 }
 SPITFOOTER();
-
-SUEXEC($this_user->uid(), "nobody",
-       "webmanage_resgroup predictioninfo -b -u " . $this_user->uid(),
-       SUEXEC_ACTION_CONTINUE);
-SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 ?>

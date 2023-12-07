@@ -1103,6 +1103,8 @@ $(function ()
 
 	// No need to do this if not showing selectors.
 	if (!window.CLUSTERSELECT) {
+	    // But still want to show reservation warnings.
+	    instantiateCommon.generateReservationInfo(pid, resinfo);
 	    return;
 	}
 	instantiateCommon.createAggregateSelectors(selected_rspec, pid, gid);
@@ -1472,7 +1474,7 @@ $(function ()
 	    instantiateCommon.generateReservationInfo(pid, resinfo);
 	};
 	var xmlthing =
-	    sup.CallServerMethod(null, "reserve", "ReservationInfo", null);
+	    sup.CallServerMethod(null, "instantiate", "ReservationInfo", null);
 	xmlthing.done(callback);
     }
 

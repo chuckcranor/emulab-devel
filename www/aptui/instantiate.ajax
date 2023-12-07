@@ -1578,6 +1578,45 @@ function Do_ClearFavorite()
     SPITAJAX_RESPONSE(0);
 }
 
+#
+# Ask for reservation system info, which is now cached for instantiate.
+#
+function Do_ReservationInfo()
+{
+    global $this_user;
+    global $ajax_args;
+    global $PORTAL_GENESIS;
+    $popts = "-p '$PORTAL_GENESIS' -u " . $this_user->uid();
+
+    $webtask = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+
+    $retval = SUEXEC($this_user->uid(), "nobody",
+                     "webmanage_resgroup ".
+                     "   -t $webtask_id predictioninfo $popts ",
+                     SUEXEC_ACTION_IGNORE);
+    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    
+    if ($retval) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error retrieving reservation info");
+        }
+        else {
+            SPITAJAX_ERROR($retval,
+                           "Could not get reservation data: " .
+                           $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Refresh();
+    $blob = $webtask->TaskValue("value");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($blob);
+}
+
 # Local Variables:
 # mode:php
 # End:

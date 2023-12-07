@@ -3809,14 +3809,25 @@ sub DoPredictionInfo()
     else {
 	$target_user = $this_user;
     }
-    if ($background) {
-	my $pid = LogStart(1, undef, LIBAUDIT_LOGTBOPS);
-	if ($pid) {
-	    exit(0);
+    my $predictioninfo = APT_Instance::PredictionInfo->Lookup($target_user);
+    if (!defined($predictioninfo)) {
+	fatal("Could not initialize predictioninfo");
+    }
+
+    if ($predictioninfo->Stale()) {
+	if ($background) {
+	    my $pid = LogStart(1, undef, LIBAUDIT_LOGTBOPS);
+	    if ($pid) {
+		exit(0);
+	    }
+	}
+	if ($predictioninfo->Update($portal)) {
+	    fatal("Could not update predictioninfo");
 	}
     }
-    if (UpdatePredictionInfo($target_user, $portal, \$errmsg)) {
-	fatal($errmsg);
+    if (defined($webtask)) {
+	$webtask->value($predictioninfo->PredictionInfo());
+	$webtask->Exited(0);
     }
     exit(0);
 }
