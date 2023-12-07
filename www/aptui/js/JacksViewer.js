@@ -105,6 +105,8 @@ window.JacksViewer = (function ()
 	    this.xml = null;
 
 	    this.input.trigger('change-topology', []);
+	    // This gets left behind on error.
+	    $('#errorModal').hide()
 	},
 
 	jacksReady: function (input, output)
