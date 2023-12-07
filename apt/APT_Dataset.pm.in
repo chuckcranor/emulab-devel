@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2022 University of Utah and the Flux Group.
+# Copyright (c) 2007-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -589,9 +589,9 @@ sub CredentialError()
 #
 # Create a dataset on the remote aggregate.
 #
-sub CreateDataset($)
+sub CreateDataset($;$)
 {
-    my ($self) = @_;
+    my ($self, $checkonly) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->GetGeniUser();
     my $context   = APT_Geni::GeniContext();
@@ -620,7 +620,9 @@ sub CreateDataset($)
 	if ($self->fstype() ne "none");
     $args->{"expires"} = emutil::TBDateStringGMT($self->expires())
 	if (defined($self->expires()));
-
+    $args->{"checkonly"} = $checkonly
+	if (defined($checkonly) && $checkonly);
+    
     my $cmurl = $authority->url();
     $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
 

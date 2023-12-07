@@ -361,6 +361,34 @@
       </div>
     </div>
   </div>
+  <div id="checkapproval-modal" class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <center><h4>Your dataset will need administrator approval</h4></center>
+	</div>
+	<div class='modal-body'>
+	  Your dataset will need administrator approval for the following reason:
+          <div class="mt-2 mb-2">
+	    <code style="white-space: pre-wrap" id="checkapproval-text"></code>
+	  </div>
+	  You can click Continue and wait for approval, which typically takes a
+	  day or two. Or you can click Cancel and modify the form as needed.
+	  Then Submit again.
+	  <center>
+	    <button type='button'
+		    class='btn btn-primary btn-sm confirm-button'>
+	      Continue
+	    </button>
+	    <button type='button'
+		    class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'>
+	      Cancel</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
   <div id="needapproval-modal" class='modal fade'>
     <div class='modal-dialog'>
       <div class='modal-content'>
