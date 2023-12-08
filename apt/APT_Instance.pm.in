@@ -3235,7 +3235,7 @@ sub MergeManifests($)
 	    # Promote the one manifest up to instance.
 	    $aggregate = $aggregates[0];
 	    $manifest  = $aggregate->manifest();
-	    $manifest  = "" if (!defined($aggregate));
+	    $manifest  = "" if (!defined($manifest));
 	}
 	else {
 	    # All buses go off route, and nothing left in the experiment.
