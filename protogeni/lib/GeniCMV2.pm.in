@@ -5610,6 +5610,7 @@ sub CreateDataset($)
     my ($argref) = @_;
     my $credentials  = $argref->{'credentials'};
     my $dataset_urn  = $argref->{'dataset_urn'};
+    my $checkonly    = 0;
     my $POLICY_FAIL  = 2;
     my $needapproval = 0;
     my $unapproved_reason;
@@ -5622,6 +5623,9 @@ sub CreateDataset($)
 
     if (! (defined($credentials) && defined($dataset_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    if (exists($argref->{'checkonly'}) && $argref->{'checkonly'} != 0) {
+	$checkonly = 1;
     }
     if (!GeniHRN::IsValid($dataset_urn)) {
 	return GeniResponse->MalformedArgsResponse("Invalid dataset urn");
@@ -5784,19 +5788,43 @@ sub CreateDataset($)
 	print STDERR "Could not create web task\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
-    $opts = " -C -T ". $webtask->task_id() . " $opts";
-	
+    $opts = " -T ". $webtask->task_id() . " $opts";
+    if ($checkonly) {
+	$opts = "-n $opts";
+    }
+    else {
+	$opts = "-C $opts";
+    }
     my $output = GeniUtil::ExecQuiet("$cmd $opts");
     # Not a typical op, so always print debugging info;
     print STDERR $output;
     if ($?) {
+	$webtask->Refresh();
+	if ($checkonly && $webtask->HasExited() &&
+	    $webtask->exitcode() == $POLICY_FAIL) {
+	    my $blob = {
+		"approved" => 0,
+		"unapproved_reason" => $webtask->output(),
+	    };
+	    $webtask->Delete();
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+	}
 	$webtask->Delete();
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
     }
+    $webtask->Refresh();
+
+    if ($checkonly) {
+	my $blob = {
+	    "approved" => 1,
+	};
+	$webtask->Delete();
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    }
+    
     GeniUtil::FlipToGeniUser()
 	if ($PROTOGENI_LOCALUSER && $isimdataset);
 
-    $webtask->Refresh();
     if ($webtask->needapproval()) {
 	$needapproval = 1;
 	$unapproved_reason = $webtask->unapproved_reason();

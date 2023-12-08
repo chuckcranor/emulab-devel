@@ -195,7 +195,7 @@ exit(1);
 sub DoCreate()
 {
     my $usage = sub {
-	print STDERR "Usage: manage_dataset create ".
+	print STDERR "Usage: manage_dataset create [-n] ".
 	    "[-t type] [-f fstype] [-e expiration] ".
 	    "[-R global|project] [-W creator|project] ".
 	    "-a am_urn -s size pid/name\n";
@@ -206,6 +206,7 @@ sub DoCreate()
     my $errmsg;
     my $pid;
     my $expires;
+    my $checkonly = 0;
     my $size = 0;
     my $type = "stdataset";
     my $fstype;
@@ -214,10 +215,13 @@ sub DoCreate()
     # imdataset snapshot info.
     my ($instance,$aggregate,$nodeid,$bsname);
     
-    my $optlist = "ds:t:e:f:w:p:R:W:I:i:a:";
+    my $optlist = "ds:t:e:f:w:p:R:W:I:i:a:n";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	&$usage();
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
     }
     if (defined($options{"d"})) {
 	$debug = 1;
@@ -235,6 +239,9 @@ sub DoCreate()
 	&$usage();
     }
     if ($type eq "imdataset") {
+	if ($checkonly) {
+	    fatal("Do not use -n (checkonly) with imdatasets");
+	}
 	if (!exists($options{"i"})) {
 	    print STDERR "Must provide -i opton for imdatasets\n";
 	    &$usage();
@@ -417,9 +424,37 @@ sub DoCreate()
     }
     # Before we go into polling, make sure changes are written back.
     $dataset->webtask()->AutoStore(1);
+
+    #
+    # Checkonly mode, for the web UI.
+    #
+    if ($checkonly) {
+	my $response = $dataset->CreateDataset($checkonly);
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $dataset->Delete();
+	    $instance->Unlock()
+		if (defined($instance));
+	    ExitWithError($response);
+	}
+	my $blob = $response->value();
+	my $approved = $blob->{'approved'};
+	my $message  = ($approved ? "Dataset would be approved" :
+			$blob->{'unapproved_reason'});
+	
+	if (defined($webtask)) {
+	    $webtask->output($message);
+	    $webtask->approved($approved);
+	    $webtask->Exited(0);
+	}
+	$dataset->Delete();
+	$instance->Unlock()
+	    if (defined($instance));
+	print STDERR "$message\n";
+	exit(0);
+    }
     
     #
-    # Ask the aggregate to create the dataset. 
+    # Ask the aggregate to create the dataset.
     #
     my $response = $dataset->CreateDataset();
     if ($response->code() != GENIRESPONSE_SUCCESS) {

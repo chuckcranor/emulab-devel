@@ -1148,8 +1148,6 @@ sub Usage($$$$$)
 		    "  from experiment_resources as r ".
 		    "left join experiment_stats as s on ".
 		    "     s.exptidx=r.exptidx  ".
-		    "left join experiments as e on ".
-		    "     e.idx=r.exptidx  ".
 		    "left join node_history as h on ".
 		    "     h.exptidx=r.exptidx and h.op='alloc' and ".
 		    "     h.stamp >= r.swapin_time - 120 and ".
@@ -1158,7 +1156,7 @@ sub Usage($$$$$)
 		    "left join nodes as n on n.node_id=h.node_id ".
 		    "where $history_clause and ".
 		    (defined($user) ?
-		     "     e.swapper_idx='$uid_idx' and " : " ") .
+		     "     r.uid_idx='$uid_idx' and " : " ") .
 		    "     r.swapin_time!=0 and r.swapout_time!=0 and ".
 		    "    ((r.swapin_time >= $start and ".
 		    "      r.swapin_time <= $end) or ".

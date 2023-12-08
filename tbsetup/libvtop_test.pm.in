@@ -2641,7 +2641,8 @@ sub GenVirtNodes($)
 	    # subtracts out the largest disk image, so we do not need to
 	    # account for the disk image on the physical node.
 	    #
-	    if ($vnode->_isvirtnode()) {
+	    if ($vnode->_isvirtnode() &&
+		($osinfo->isImage() || $osinfo->isImageAlias())) {
 		my $osize = $vnode->_disk_any();
 		my $psize = $osinfo->PartitionSize();
 

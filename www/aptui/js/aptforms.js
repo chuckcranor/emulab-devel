@@ -331,7 +331,7 @@ $(function () {
 	/*
 	 * Submit form.
 	 */
-	function SubmitForm(form, route, method, callback, message, formfields){
+	function SubmitForm(form, route, method, callback, message, formfields, ajax_args){
 	    /*
 	     * Convert form data into formfields array, like all our
 	     * form handler pages expect.
@@ -339,11 +339,13 @@ $(function () {
 	    if (formfields === undefined) {
 		formfields  = {};
 	    }
+	    if (ajax_args === undefined) {
+		ajax_args = {};
+	    }
 	    var fields = $(form).serializeArray();
 	    $.each(fields, function(i, field) {
 		formfields[field.name] = field.value;
 	    });
-	    console.info("Submitform", formfields);
 	    var submit_callback = function(json) {
 		console.info("SubmitForm", json);
 		if (!json.code) {
@@ -353,13 +355,14 @@ $(function () {
 		    callback(json);
 		});
 	    };
+	    ajax_args["formfields"] = formfields;
+	    ajax_args["checkonly"]  = 0;
+	    ajax_args["embedded"]   = window.EMBEDDED;
+	    console.info("Submitform args", ajax_args);	
+
 	    sup.ShowWaitWait(message, undefined, function () {
 		var xmlthing =
-		    sup.CallServerMethod(null, route, method,
-					 {"formfields" : formfields,
-					  "checkonly"  : 0,
-					  "embedded"   : window.EMBEDDED,
-					 });
+		    sup.CallServerMethod(null, route, method, ajax_args);
 		xmlthing.done(submit_callback);
 	    });
 	}

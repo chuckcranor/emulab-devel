@@ -230,6 +230,9 @@ sub RequestSpectrum($$)
     }
     foreach my $client_id (keys(%{$resources->{'radios'}})) {
 	my $radio = $resources->{'radios'}->{$client_id};
+	next
+	    if ($radio->node_id() =~ /^oai-w/);
+
 	my $frontend = $radio->FrontendInterface("rf0");
 	if ($frontend) {
 	    my $radio_port_id = $frontend->rdz_radioport_id();
@@ -515,7 +518,7 @@ sub UpdateSpectrum($$$$)
 	}
     };
 
-    if ($rfrange->type() == "global") {
+    if ($rfrange->type() eq "global") {
 	&$updateGlobal();
     }
     else {

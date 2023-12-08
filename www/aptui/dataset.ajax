@@ -46,6 +46,8 @@ function Do_CreateDataSet()
     $this_uid   = $this_user->uid();
     # Allow for form precheck only. So JS code knows it will be fast. 
     $checkonly  = isset($ajax_args["checkonly"]) && $ajax_args["checkonly"];
+    # Impotent mode to test at remote cluster.
+    $impotent   = isset($ajax_args["impotent"]) && $ajax_args["impotent"];
     $embedded   = isset($ajax_args["embedded"]) && $ajax_args["embedded"];
 
     if (!isset($ajax_args["formfields"])) {
@@ -240,6 +242,9 @@ function Do_CreateDataSet()
 	SPITAJAX_RESPONSE(0);
 	return;
     }
+    if ($impotent) {
+        $options .= " -n";
+    }
     $options .= " " . escapeshellarg($pid . "/" .
 				     $formfields["dataset_name"]);
 
@@ -254,10 +259,9 @@ function Do_CreateDataSet()
         $wopt     = "-t " . $webtask->task_id();
 	$command  = "webmanage_dataset $wopt -- create $options";
     }
-    
     $retval = SUEXEC($this_uid, $project, $command, SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
     if ($retval) {
-        $webtask->Refresh();
         if (!$webtask->exited() || $retval < 0) {
             SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             SPITAJAX_ERROR(-1, "Internal error creating dataset");
@@ -265,6 +269,19 @@ function Do_CreateDataSet()
         else {
             SPITAJAX_ERROR(1, "Cannot create dataset: " . $webtask->output());
         }
+        $webtask->Delete();
+        return;
+    }
+    if ($impotent) {
+        $approved = $webtask->TaskValue("approved");
+        $blob = array(
+            "approved" => intval($approved),
+        );
+        if ($approved == 0) {
+            $reason = $webtask->TaskValue("output");
+            $blob["unapproved_reason"] = $reason;
+        }
+	SPITAJAX_RESPONSE($blob);
         $webtask->Delete();
         return;
     }

@@ -1,0 +1,189 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2023 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+#
+# Test the IPBuddy allocator and understand how it works when allocating
+# addresses that don't require CIDR alignment (such as addresses on a shared
+# vlan. This test assumes that the "powder-ceph" IP range has been added to
+# the `address_ranges` table (192.168.152.0/21) and the preallocated ranges
+# have been added to the `reserved_addresses` table under the "cephlan" type
+# (192.168.152.0/28 for the fixed-IP servers, and 192.168.159.255/32 for the
+# broadcast address).
+#
+
+use strict;
+use English;
+use Getopt::Std;
+use Date::Parse;
+use POSIX;
+use Data::Dumper;
+
+#
+# Configure variables
+#
+my $TB		 = "@prefix@";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use emdb;
+use libtestbed;
+use Experiment;
+use IPBuddyWrapper;
+
+sub usage()
+{
+    print STDERR "Usage: test-buddy [-ho] [ -a | -D ] [nodes]\n";
+    print STDERR " -a   Add an address from the cephlan range for hwbroken (default action)\n";
+    print STDERR " -D   Remove all addresses from the cephlan range for hwbroken\n";
+    print STDERR " -h   This message.\n";
+    print STDERR " -o   Allocate IPs one at a time (as opposed to in a single CIDR-aligned block).\n";
+    print STDERR "nodes Number of nodes to alloc addresses for\n";
+    exit( -1 );
+}
+
+my $optlist    = "hoaD";
+my $op = "add";
+my $nodes = 1;
+my $oneatatime = 0;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{h})) {
+    usage();
+}
+if (defined($options{o})) {
+    $oneatatime = 1;
+}
+if (defined($options{a})) {
+    $op = "add";
+}
+if (defined($options{D})) {
+    $op = "del";
+}
+
+if (@ARGV) {
+    if ($ARGV[0] !~ /^(\d+)$/) {
+	print STDERR "Bad number of nodes '$ARGV[0]'\n";
+	usage();
+    }
+    $nodes = $1;
+}
+
+# use hwbroken for out exploits
+my $expt = Experiment->Lookup("emulab-ops/hwbroken");
+die ("Could not find emulab-ops/hwbroken\n")
+    unless defined($expt);
+
+my $buddy = IPBuddyWrapper->new("cephlan");
+die ("Could not get buddy object for cephlan\n")
+    unless defined($buddy);
+
+$buddy->lock() 
+    or die("Could not get buddy lock\n");
+
+#
+# There is no explicit method for deallocating addresses. The assumption
+# is that all of the addresses for an experiment will be cleared out when
+# the experiment terminates.
+#
+if ($op eq "del") {
+    DBQueryWarn("delete from reserved_addresses where pid='emulab-ops' and eid='hwbroken'");
+    $buddy->unlock();
+    exit(0);
+}
+
+if ($buddy->loadReservedRanges($expt)) {
+    $buddy->unlock();
+    die("Could not load reserved ranges\n");
+}
+
+if ($oneatatime) {
+    for (my $i = 0; $i < $nodes; $i++) {
+	my $range = $buddy->requestAddressRange($expt, 32);
+	if (!defined($range)) {
+	    $buddy->unlock();
+	    die("Could not get address\n");
+	}
+
+	#
+	# XXX getNextAddress skips the first address. See comment below.
+	#
+	(my $ip = $range) =~ s#([^/]+)/.*#$1#;
+	print "  $ip\n";
+    }
+} else {
+    my $prefix = 0;
+    while ($nodes > 2**$prefix) {
+	$prefix++;
+    }
+    $prefix = 32 - $prefix;
+    if ($prefix < 21) {
+	$buddy->unlock();
+	die("Too many nodes\n");
+    }
+
+    my $range = $buddy->requestAddressRange($expt, $prefix);
+    if (!defined($range)) {
+	$buddy->unlock();
+	die("Could not get address range\n");
+    }
+    print("Reserved shared address range: $range\n");
+
+    #
+    # XXX pull the first address of the N out of the returned range.
+    # getNextAddress skips the first address when returning values.
+    # Probably because it is oriented toward allocating CIDR subnets where
+    # the first address is (was) a broadcast address. In such a scenario
+    # (e.g., for remote blockstores), the allocation is for N+2 addresses
+    # so that the first and last are skipped.
+    #
+    (my $ip = $range) =~ s#([^/]+)/.*#$1#;
+
+    for (my $i = 0; $i < $nodes; $i++) {
+	print "  $ip\n";
+	$ip = $buddy->getNextAddress($range);
+    }
+}
+$buddy->commitReservations();
+$buddy->unlock();
+
+exit(0);

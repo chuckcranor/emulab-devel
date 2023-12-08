@@ -128,7 +128,7 @@ sub new($$$;$) {
     $self->{MAX_VLAN}         = $options->{'max_vlan'};
 
     if (!exists($options->{"username"}) || !exists($options->{"password"})) {
-	warn "ERROR: No credentials found for OS10 switch $self->{NAME}\n";
+	warn "ERROR: No credentials found for Planet switch $self->{NAME}\n";
 	return undef;
     }
     $self->{USER} = $options->{"username"};
@@ -160,8 +160,11 @@ sub new($$$;$) {
 }
 
 #
-# Create an Expect object that spawns the ssh process 
-# to switch.
+# Create an Expect object that spawns the ssh process to switch.
+#
+# Note that some versions of the Planet switch OS (on the "LAN" model
+# switches) will take your password and then re-prompt for Username and
+# Password. We accomodate that here as well.
 #
 sub createExpectObject($)
 {
@@ -189,6 +192,18 @@ sub createExpectObject($)
                                exp_continue;}],
          ["Permission denied, please try again." => sub { 
                                die "Password incorrect!\n";} ],
+	 ["Username: " => sub {
+			       # re-prompting
+			       my $e = shift;
+			       $e->send($self->{USER}."\n");
+			       exp_continue;}],
+	 ["Password: " => sub {
+			       # re-prompting
+			       my $e = shift;
+			       $e->send($self->{PASSWORD}."\n");
+			       exp_continue;}],
+         ["Wrong username or password!" => sub { 
+                               die "User/Password incorrect!\n";} ],
          [ timeout => sub { die "Timeout when connect to switch!\n";} ],
          $self->{CLI_PROMPT} );
 
