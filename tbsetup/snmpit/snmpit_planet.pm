@@ -70,16 +70,20 @@ my %emptyVlans = ();
 my $SACRED_VLAN	   = 10;
 
 #
-# All functions are based on snmpit_hp class.
+# Gack! we run snmpit as the user, which means the ssh command to create
+# the expect object will run as the user, and that means ssh will load the
+# user's ssh config file and the user's ssh private key. The former is easy
+# to deal with (via the -F command) but there is no way to convince ssh not
+# to load any keys unless we give it a -i command. Why does this matter?
+# Well, users are prone to messing with the keys we create for them in
+# their home dir, and if they mess those up or encrypt them, the ssh
+# command can hang up asking for a key passphrase. In general, we want to
+# remove all reference to the user's environment anyway, so we are going to
+# force ssh to use a well known unencrypted key. If that key does not
+# exist, throw back an error early.
 #
-# NOTES: This device is a layer 1 switch that has no idea
-# about VLAN. We use the port name on switch as VLAN name here. 
-# So in this module, vlan_id and vlan_number are the same 
-# thing. vlan_id acts as the port name.
-#
-# Another fact: the port name can't exist without naming
-# a port. So we can't find a VLAN if no ports are in it.
-#
+my $SSHKEY = libtestbed::TBPREFIX() . "/etc/switch_sshrsa";
+my $SSHARGS = "-F /dev/null -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -i $SSHKEY";
 
 #
 # Creates a new object.
@@ -170,7 +174,7 @@ sub createExpectObject($)
 {
     my $self = shift;
     
-    my $spawn_cmd = "ssh -l $self->{USER} $self->{NAME}";
+    my $spawn_cmd = "ssh $SSHARGS -l $self->{USER} $self->{NAME}";
     # Create Expect object and initialize it:
     my $exp = new Expect();
     if (!$exp) {
@@ -1312,6 +1316,9 @@ sub listPorts($) {
 #
 sub getStats() {
     my $self = shift;
+
+    # XXX we steal this to test some interfaces
+    my @ports = ();
 
     warn "Port statistics are unavaialble on our Planet switch.";
     return undef;

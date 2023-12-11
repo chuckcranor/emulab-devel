@@ -264,7 +264,11 @@ sub Create($$$)
     else {
 	$sets .= ",created=now()";
     }
-    
+    # XXX Temporary compat until per-group reservations merged
+    if (!exists($argref->{"gid"})) {
+	$argref->{"gid"} = $argref->{"pid"}; 
+	$argref->{"gid_idx"} = $argref->{"pid_idx"}; 
+    }
     my $query = "insert into apt_reservation_groups set ".
 	"locked=now(),locker_pid='$$',${sets}, ".
 	join(",", map("$_=" .
