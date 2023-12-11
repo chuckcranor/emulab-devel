@@ -1595,7 +1595,6 @@ function Do_ReservationInfo()
                      "webmanage_resgroup ".
                      "   -t $webtask_id predictioninfo $popts ",
                      SUEXEC_ACTION_IGNORE);
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     
     if ($retval) {
         $webtask->Refresh();

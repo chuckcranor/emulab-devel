@@ -3618,7 +3618,7 @@ sub DoSetShareReservations()
     #
     my @resgroups = APT_Reservation::Group->LookupForProject($project);
     if (! @resgroups) {
-	if (!$checkonly) {
+	if (!$checkonly || $precheck) {
 	    $project->Update({"shared_reservations" => $shared});
 	}
 	if (defined($webtask)) {

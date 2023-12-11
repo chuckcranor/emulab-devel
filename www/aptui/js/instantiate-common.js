@@ -480,7 +480,7 @@ window.instantiateCommon = (function () {
 		$(this).closest("li").addClass("selected");
 
 		// Say something useful about current reservations
-		generateReservationInfo(pid);
+		generateReservationInfo(pid, gid);
 	    });
 
 	/*
@@ -579,9 +579,9 @@ window.instantiateCommon = (function () {
      * The idea here is to tell the user about current/active reservations
      * in the project they have selected, on the clusters they select. 
      */
-    function generateReservationInfo(pid, res)
+    function generateReservationInfo(pid, gid, res)
     {
-	console.info("GenerateReservationInfo", pid, res);
+	console.info("GenerateReservationInfo", pid, gid, res);
 	var warnings = [];
 
 	if (res) {
@@ -622,7 +622,13 @@ window.instantiateCommon = (function () {
 		var text;
 
 		if (mode == null || mode == "project" || mode == "group") {
-		    text = "Project " + pid + " has " + rescount + " active " +
+		    if (mode == "group") {
+			text = "Group " + pid + "/" + gid;
+		    }
+		    else {
+			text = "Project " + pid;
+		    }
+		    text += " has " + rescount + " active " +
 			"reservation(s) " +
 			(_.size(amlist) <= 1 ? "" :
 			 "at the " + cluster + " cluster ") +
@@ -640,13 +646,16 @@ window.instantiateCommon = (function () {
 		 * If the reseservation info has come back, we also know
 		 * how many of the type are in use.
 		 */
+		var curkey = pid.toLowerCase();
+		if (mode == "group") {
+		    curkey += "/" + gid.toLowerCase();
+		}
 		if (resinfo &&
 		    _.has(resinfo, urn) &&
-		    _.has(resinfo[urn].current, pid.toLowerCase())) {
-		    _.each(resinfo[urn].current[pid.toLowerCase()], function (cur) {
+		    _.has(resinfo[urn].current, curkey)) {
+		    _.each(resinfo[urn].current[curkey], function (cur) {
 			if (cur.nodetype == type) {
-			    if (mode == null ||
-				mode == "project" || mode == "group") {
+			    if (mode == null || mode == "project" || mode == "group") {
 				text += " and is currently using " + cur.pidused;
 			    }
 			    else if (mode == "user") {

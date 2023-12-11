@@ -1099,12 +1099,12 @@ $(function ()
     function CreateAggregateSelectors()
     {
 	var pid    = $('#project_selector #profile_pid').val();	
-	var gid    = $('#group_selector #group_pid').val();	
+	var gid    = $('#group_selector #profile_gid').val();	
 
 	// No need to do this if not showing selectors.
 	if (!window.CLUSTERSELECT) {
 	    // But still want to show reservation warnings.
-	    instantiateCommon.generateReservationInfo(pid, resinfo);
+	    instantiateCommon.generateReservationInfo(pid, gid, resinfo);
 	    return;
 	}
 	instantiateCommon.createAggregateSelectors(selected_rspec, pid, gid);
@@ -1471,7 +1471,8 @@ $(function ()
 	    console.info("resinfo", json.value);
 	    resinfo = json.value;
 	    var pid = $('#project_selector #profile_pid').val();
-	    instantiateCommon.generateReservationInfo(pid, resinfo);
+	    var gid = $('#group_selector #profile_gid').val();	
+	    instantiateCommon.generateReservationInfo(pid, pid, resinfo);
 	};
 	var xmlthing =
 	    sup.CallServerMethod(null, "instantiate", "ReservationInfo", null);

@@ -4484,6 +4484,12 @@ $(function ()
 	    var using  = res.using;
 	    var util   = res.utilization;
 
+	    // No usage yet
+	    if (using == null) {
+		using = 0;
+		util  = 0;
+	    }
+
 	    html +=
 		'<tr>' +
 		' <td>' + name + '</td>' +
