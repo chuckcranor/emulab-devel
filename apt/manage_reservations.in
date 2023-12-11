@@ -1687,6 +1687,8 @@ sub RecordReservationRequest($$$$;$)
     push(@detail_sets, "uid_idx='$uid_idx'");
     push(@detail_sets, "pid='$pid'");
     push(@detail_sets, "pid_idx='$pid_idx'");
+    push(@detail_sets, "gid='$pid'");
+    push(@detail_sets, "gid_idx='$pid_idx'");
     push(@detail_sets, "nodes='$nodes'");
     push(@detail_sets, "type='$type'");
     push(@detail_sets, "end=FROM_UNIXTIME(" . str2time($end) . ")");    

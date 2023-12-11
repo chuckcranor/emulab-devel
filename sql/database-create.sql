@@ -807,6 +807,20 @@ CREATE TABLE `apt_instances` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_instance_prediction_info`
+--
+
+DROP TABLE IF EXISTS `apt_instance_prediction_info`;
+CREATE TABLE `apt_instance_prediction_info` (
+  `uid` varchar(8) NOT NULL default '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `updated` datetime default NULL,
+  `updating` datetime default NULL,
+  `json_data` mediumtext,
+  PRIMARY KEY  (`uid_idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_news`
 --
 
@@ -969,6 +983,8 @@ CREATE TABLE `apt_reservation_groups` (
   `uuid` varchar(40) NOT NULL default '',
   `pid` varchar(48) NOT NULL default '',
   `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid` varchar(32) NOT NULL default '',
+  `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `creator_uid` varchar(8) NOT NULL default '',
   `creator_idx` mediumint(8) unsigned NOT NULL default '0',
   `start` datetime DEFAULT NULL,
@@ -1159,6 +1175,8 @@ CREATE TABLE `apt_reservation_group_history` (
   `uuid` varchar(40) NOT NULL default '',
   `pid` varchar(48) NOT NULL default '',
   `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid` varchar(32) NOT NULL default '',
+  `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `creator_uid` varchar(8) NOT NULL default '',
   `creator_idx` mediumint(8) unsigned NOT NULL default '0',
   `start` datetime DEFAULT NULL,
@@ -1256,6 +1274,8 @@ CREATE TABLE `apt_reservation_history_details` (
   `reservation_uuid` varchar(40) default NULL,
   `pid` varchar(48) default NULL,
   `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid` varchar(32) default NULL,
+  `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `uid` varchar(8) default NULL,
   `uid_idx` mediumint(8) unsigned default NULL,
   `stamp` datetime default NULL,
@@ -2903,6 +2923,8 @@ CREATE TABLE `future_reservations` (
   `notified_unused` datetime DEFAULT NULL,
   `override_unused` tinyint(1) NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
+  `gid` varchar(32) NOT NULL DEFAULT '',
+  `gid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -5582,6 +5604,8 @@ CREATE TABLE `reservation_history` (
   `notes` mediumtext,
   `admin_notes` mediumtext,
   `uuid` varchar(40) NOT NULL default '',
+  `gid` varchar(32) NOT NULL DEFAULT '',
+  `gid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
   KEY `start` (`start`),
   KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

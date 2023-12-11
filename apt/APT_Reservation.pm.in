@@ -264,7 +264,11 @@ sub Create($$$)
     else {
 	$sets .= ",created=now()";
     }
-    
+    # XXX Temporary compat until per-group reservations merged
+    if (!exists($argref->{"gid"})) {
+	$argref->{"gid"} = $argref->{"pid"}; 
+	$argref->{"gid_idx"} = $argref->{"pid_idx"}; 
+    }
     my $query = "insert into apt_reservation_groups set ".
 	"locked=now(),locker_pid='$$',${sets}, ".
 	join(",", map("$_=" .
@@ -279,9 +283,11 @@ sub Create($$$)
     DBQueryWarn("unlock tables");
     if (1) {
 	DBQueryWarn("insert into apt_reservation_group_history ".
-		    " (uuid, pid, pid_idx, creator_uid, creator_idx, ".
+		    " (uuid, pid, pid_idx, gid, gid_idx, ".
+		    "  creator_uid, creator_idx, ".
 		    "  start, end, created, portal, forclass, reason) ".
-		    " select uuid, pid, pid_idx, creator_uid, creator_idx, ".
+		    " select uuid, pid, pid_idx, pid, pid_idx, ".
+		    "        creator_uid, creator_idx, ".
 		    "        start, end, created, portal, forclass, reason ".
 		    " from apt_reservation_groups ".
 		    " where uuid='$uuid'");
