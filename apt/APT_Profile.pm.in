@@ -2760,11 +2760,6 @@ sub CheckSpectrumReservations($$$$$$$;$$)
 	    }
 	}
     }
-    
-    #
-    # PEL expired, all ranges need admin approval until that is fixed
-    #
-    $noresokay = 0;
 
     foreach my $request (@{$spectrum}) {
 	my $frequency_low  = $request->{"frequency_low"};
