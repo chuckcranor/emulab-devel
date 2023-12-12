@@ -1339,10 +1339,17 @@ sub SetReservationsPerUser($;$$)
 
 	    print Dumper($reservations);
 
+	    #
+	    # per-user Reservations are at the project level
+	    # and need to be switched from the sub group for
+	    # everything to be consistent.
+	    #
 	    foreach my $res ( @$reservations ) {
-		$res->{'SHARED_RES'} = $RESERVATIONS_PERUSER
-		    if( defined( $res->pid_idx() ) &&
-			$res->pid_idx() == $pid_idx );
+		if( defined( $res->pid_idx() ) &&
+		    $res->pid_idx() == $pid_idx ) {
+		    $res->{'SHARED_RES'} = $RESERVATIONS_PERUSER;
+		    $res->{'GID'} = $res->{'PID'};
+		}
 	    }
 	    
 	    my $error;
@@ -1367,6 +1374,10 @@ sub SetReservationsPerUser($;$$)
 
 	my %args = ( "shared_reservations" => $RESERVATIONS_PERUSER );
 	$self->Update( \%args );
+	
+	DBQueryWarn("update future_reservations set ".
+		    "  gid=pid,gid_idx=pid_idx ".
+		    "WHERE pid_idx='$pid_idx'");
 	
 	Reservation->EndTransaction();
 
