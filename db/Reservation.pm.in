@@ -1340,7 +1340,11 @@ sub CurrentReservations($;$$$) {
 	    }
 	}
 
-	$filter = "AND ( ( p.shared_reservations=0 AND r.uid='$uid' ) OR " .
+	$filter = "AND ( ".
+	    # If the portal is asking and we are a remote cluster, the user
+	    # might not exist yet. So no need to check for that.
+	    (!defined($uid) ? "" :
+	     "( p.shared_reservations=0 AND r.uid='$uid' ) OR ") .
 	    " ( p.shared_reservations=1 AND ( " .
 	    join( " OR ",
 		  map { "r.pid='$_'" } @projlist ) . " ) ) OR " .
@@ -1425,7 +1429,11 @@ sub UpcomingReservations($$$) {
 	    }
 	}
 
-	$filter = "AND ( ( p.shared_reservations=0 AND r.uid='$uid' ) OR " .
+	$filter = "AND ( ".
+	    # If the portal is asking and we are a remote cluster, the user
+	    # might not exist yet. So no need to check for that.
+	    (!defined($uid) ? "" :
+	     "( p.shared_reservations=0 AND r.uid='$uid' ) OR ") .
 	    " ( p.shared_reservations=1 AND ( " .
 	    join( " OR ",
 		  map { "r.pid='$_'" } @projlist ) . " ) ) OR " .
