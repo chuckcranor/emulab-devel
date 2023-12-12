@@ -1304,9 +1304,9 @@ sub SetReservationsPerProject($;$$)
     return 0 if( $impotent );
 
     return -1
-	if (DBQueryWarn("update future_reservations set ".
-			"  gid=pid,gid_idx=pid_idx ".
-			"WHERE pid_idx='$pid_idx'"));
+	if (!DBQueryWarn("update future_reservations set ".
+			 "  gid=pid,gid_idx=pid_idx ".
+			 "WHERE pid_idx='$pid_idx'"));
     
     my %args = ( "shared_reservations" => $RESERVATIONS_PERPROJECT );
     $self->Update( \%args );
