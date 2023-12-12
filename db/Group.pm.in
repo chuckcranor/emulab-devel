@@ -377,6 +377,20 @@ sub Delete($)
 }
 
 #
+# Equality test for two projects. Not necessary in perl, but good form.
+#
+sub SameGroup($$)
+{
+    my ($self, $other) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! (ref($self) && ref($other)));
+
+    return $self->gid_idx() == $other->gid_idx();
+}
+
+#
 # Worker class method to edit group membership.
 # Makes two passes, first checking consistency, then updating the DB.
 #

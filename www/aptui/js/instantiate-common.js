@@ -224,7 +224,7 @@ window.instantiateCommon = (function () {
 	if (nodecount > 3000) {
 	    window.DOCONSTRAINTS = 0;
 	}
-	console.info("CreateAggregateSelectors: ",
+	console.info("CreateAggregateSelectors: ", pid, gid,
 		     nodecount, window.DOCONSTRAINTS);
 
 	/*
@@ -630,14 +630,14 @@ window.instantiateCommon = (function () {
 		    }
 		    text += " has " + rescount + " active " +
 			"reservation(s) " +
-			(_.size(amlist) <= 1 ? "" :
+			(_.size(amlist) <= 1 ? " " :
 			 "at the " + cluster + " cluster ") +
 			"for " + nodecount + " " + type + " node(s)";
 		}
 		else if (mode == "user") {
 		    text = "You have " + rescount + " active reservation(s) " +
 			"in project " + pid +
-			(_.size(amlist) <= 1 ? "" :
+			(_.size(amlist) <= 1 ? " " :
 			 " at the " + cluster + " cluster ") +
 			"for " + nodecount + " " + type + " node(s)";
 		}
@@ -646,10 +646,13 @@ window.instantiateCommon = (function () {
 		 * If the reseservation info has come back, we also know
 		 * how many of the type are in use.
 		 */
+		
+		// per-group reservations change
 		var curkey = pid.toLowerCase();
 		if (mode == "group") {
 		    curkey += "/" + gid.toLowerCase();
 		}
+
 		if (resinfo &&
 		    _.has(resinfo, urn) &&
 		    _.has(resinfo[urn].current, curkey)) {

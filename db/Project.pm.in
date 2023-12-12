@@ -1514,6 +1514,13 @@ sub SharedReservationsString($)
     }
     return $val;
 }
+sub ResModeProject($)	{ return ($_[0]->shared_reservations() ==
+				  $RESERVATIONS_PERPROJECT ? 1 : 0); }
+sub ResModeGroup($)	{ return ($_[0]->shared_reservations() ==
+				  $RESERVATIONS_PERGROUP ? 1 : 0); }
+sub ResModeUser($)	{ return ($_[0]->shared_reservations() ==
+				  $RESERVATIONS_PERUSER ? 1 : 0); }
+
 #
 # The reverse. Class method.
 #

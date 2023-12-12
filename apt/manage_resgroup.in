@@ -960,7 +960,7 @@ sub DoGroupReserve()
 		$range_results->{'errors'}++;
 	    }
 	    elsif (!$override &&
-		   APT_Instance::RFRanges->InUse($project, $freq_low,
+		   APT_Instance::RFRanges->InUse($group, $this_user, $freq_low,
 						 $freq_high, $start, $end)) {
 		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
 		$ref->{'output'}   = "Currently in use by another project";
@@ -2881,8 +2881,8 @@ sub DoConvertReservationsToGroups()
 #
 sub DoCheckReserved()
 {
-    my @optlist = ('f=s', 's=s', 'e=s', 'p=s');
-    my ($start, $end, $rspec, $project, $errmsg, $sitemap);
+    my @optlist = ('f=s', 's=s', 'e=s', 'g=s');
+    my ($start, $end, $rspec, $group, $errmsg, $sitemap);
 
     Getopt::Long::Configure("no_ignore_case");
     my %options = ();
@@ -2895,11 +2895,11 @@ sub DoCheckReserved()
 	    if (! -e $options{"f"});
 	$rspec = emutil::ReadFile($options{"f"});
     }
-    if (defined($options{"p"})) {
-	$project = Project->Lookup($options{"p"});
+    if (defined($options{"g"})) {
+	$group = Group->Lookup($options{"g"});
 
-	if (!defined($project)) {
-	    fatal("No such project");
+	if (!defined($group)) {
+	    fatal("No such project/group");
 	}
     }
     if (defined($options{"s"})) {
@@ -2924,7 +2924,7 @@ sub DoCheckReserved()
 	}
     }
     usage()
-	if (!(defined($rspec) && defined($end) && defined($project)));
+	if (!(defined($rspec) && defined($end) && defined($group)));
 
     #
     # Update rspec with site aggregate urns so it is fully bound.
@@ -2939,17 +2939,17 @@ sub DoCheckReserved()
 	fatal("Could not parse rspec");
     }
     my $noresokay = 0;
-    if (APT_Profile::CheckResourceReservations($rspec, $project, $this_user,
+    if (APT_Profile::CheckResourceReservations($rspec, $group, $this_user,
 					       $start, $end,
 					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckSpectrumReservations($rspec, $project, $this_user,
+    if (APT_Profile::CheckSpectrumReservations($rspec, $group, $this_user,
 					       $start, $end,
 					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckRoutesReservations($rspec, $project, $this_user,
+    if (APT_Profile::CheckRoutesReservations($rspec, $group, $this_user,
 					     $start, $end,
 					     $noresokay, \$errmsg)) {
 	UserError($errmsg);
@@ -2986,18 +2986,6 @@ sub DoMaxDuration()
 	    if (! -e $options{"f"});
 	$rspec = emutil::ReadFile($options{"f"});
     }
-    if (defined($options{"P"})) {
-	fatal("Cannot read prediction file")
-	    if (! -e $options{"P"});
-	my $tmp = emutil::ReadFile($options{"P"});
-	$prediction_info = eval { decode_json($tmp) };
-	if ($@) {
-	    fatal("Could not decode json prediction data: $@\n");
-	}
-	if (ref($prediction_info) ne "HASH") {
-	    fatal("prediction data is not a HASH");
-	}
-    }
     if (defined($options{"p"})) {
 	$project = Project->Lookup($options{"p"});
 
@@ -3029,6 +3017,7 @@ sub DoMaxDuration()
     usage()
 	if (!(defined($rspec) && defined($project)));
     my $pid = $project->pid();
+    my $gid = $group->gid();
 
     #
     # Update rspec with site aggregate urns so it is fully bound.
@@ -3052,30 +3041,68 @@ sub DoMaxDuration()
     }
     my $typeCounts = $resources->{"typeCounts"};
     
-    #
-    # Ask for prediction info from the clusters referenced in the rspec.
-    #
-    if (!defined($prediction_info) && keys(%{$typeCounts})) {
-	my $urns = join(",", keys(%{$typeCounts}));
-	my $local_webtask = WebTask->CreateAnonymous();
-	my $local_task_id = $local_webtask->task_id();
-	system("$RESCOMMAND -t $local_task_id prediction -a '$urns' $pid");
-	if ($?) {
-	    $local_webtask->Delete();
-	    fatal("Could not get prediction info");
-	}
-	$local_webtask->Refresh();
-	$prediction_info = $local_webtask->value();
-	$local_webtask->Delete();
-	#print Dumper($prediction_info);
-    }
-    
     if (keys(%{$typeCounts})) {
 	my $loser;
+
+	#
+	# Prediction info is typically valid. If not, ask for just
+	# the URNS we need.
+	#
+	my $prediction_info = APT_Instance::PredictionInfo->Lookup($this_user);
+	my $pinfo;
+	my $forecasts = {};
+	if ($prediction_info->Stale()) {
+	    my $pidgid = "$pid/$gid";
+	    my $urns = join(",", keys(%{$typeCounts}));
+	    my $local_webtask = WebTask->CreateAnonymous();
+	    my $local_task_id = $local_webtask->task_id();
+	    system("$RESCOMMAND -t $local_task_id ".
+		   "  prediction -a '$urns' $pidgid");
+	    if ($?) {
+		$local_webtask->Delete();
+		fatal("Could not get prediction info");
+	    }
+	    $local_webtask->Refresh();
+	    $pinfo = $local_webtask->value();
+	    $local_webtask->Delete();
+	}
+	else {
+	    $pinfo = $prediction_info->PredictionInfo();
+	}
+	#print Dumper($pinfo);
+	
+	#
+	# We want the per project (group) prediction info for each
+	# cluster. This is in the pforecast arrays. Note that we have
+	# to watch for projects with per-group reservations. 
+	#
+	foreach my $urn (keys(%{$typeCounts})) {
+	    next
+		if (!exists($pinfo->{$urn}));
+
+	    # Results from cluster are canonicalized by GeniHRN
+	    my $pidgid = lc("$pid/$gid");
+	    my $pforecasts = $pinfo->{$urn}->{'pforecasts'};
+
+	    if ($project->shared_reservations() ==
+		$Project::RESERVATIONS_PERGROUP) {
+		if (exists($pforecasts->{$pidgid})) {
+		    $forecasts->{$urn}->{'forecast'} =
+			$pforecasts->{$pidgid};
+		}
+	    }
+	    else {
+		if (exists($pforecasts->{lc($pid)})) {
+		    $forecasts->{$urn}->{'forecast'} =
+			$pforecasts->{lc($pid)};
+		}
+	    }
+	}
+	#print Dumper($forecasts);
 	
 	if (APT_Reservation::Group::Reservation::MaxDuration(
-		$project, $start, \$end, $typeCounts,
-		$prediction_info, \$errmsg, \$loser)) {
+		$group, $this_user, $start, \$end, $typeCounts,
+		$forecasts, \$errmsg, \$loser)) {
 	    fatal($errmsg);
 	}
 	if (defined($end)) {
@@ -3105,7 +3132,7 @@ sub DoMaxDuration()
 	    my $freq_low  = $ref->{'frequency_low'};
 	    my $freq_high = $ref->{'frequency_high'};
 
-	    if (APT_Instance::RFRanges->InUse($project, $freq_low,
+	    if (APT_Instance::RFRanges->InUse($group, $this_user, $freq_low,
 					      $freq_high, $start, $end)) {
 		print "$freq_low,$freq_high is currently in use\n";
 		$loser = "$freq_low,$freq_high";
@@ -3115,7 +3142,7 @@ sub DoMaxDuration()
 	}
 	if (!defined($loser)) {
 	    if (APT_Reservation::Group::RFReservation::MaxDuration(
-		    $project, $this_user,
+		    $group, $this_user,
 		    $start, \$end, $spectrum, \$errmsg, \$loser)) {
 		fatal($errmsg);
 	    }
@@ -3155,7 +3182,8 @@ sub DoMaxDuration()
 	    my $routeid   =
 		APT_Reservation::Group::RouteReservation::RouteID($routename);
 
-	    if (APT_Instance::Aggregate::BusRoute->InUse($project, $routeid,
+	    if (APT_Instance::Aggregate::BusRoute->InUse($group, $this_user,
+							 $routeid,
 							 $start, $end)) {
 		print "$routename is currently in use\n";
 		$loser = $routename;
@@ -3165,7 +3193,7 @@ sub DoMaxDuration()
 	}
 	if (!defined($loser)) {
 	    if (APT_Reservation::Group::RouteReservation::MaxDuration(
-		    $project, $this_user,
+		    $group, $this_user,
 		    $start, \$end, $routes, \$errmsg, \$loser)) {
 		fatal($errmsg);
 	    }
@@ -3329,7 +3357,8 @@ sub DoMaxExtension()
 	    next
 		if (!exists($pinfo->{$urn}));
 
-	    my $pidgid = "$pid/$gid";
+	    # Results from cluster are canonicalized by GeniHRN
+	    my $pidgid = lc("$pid/$gid");
 	    my $pforecasts = $pinfo->{$urn}->{'pforecasts'};
 
 	    if ($project->shared_reservations() ==
@@ -3340,13 +3369,13 @@ sub DoMaxExtension()
 		}
 	    }
 	    else {
-		if (exists($pforecasts->{$pid})) {
+		if (exists($pforecasts->{lc($pid)})) {
 		    $forecasts->{$urn}->{'forecast'} =
-			$pforecasts->{$pid};
+			$pforecasts->{lc($pid)};
 		}
 	    }
 	}
-	print Dumper($forecasts);
+	#print Dumper($forecasts);
 	
 	if (APT_Reservation::Group::Reservation::MaxExtension(
 		$project, $this_user, $start, \$end, $typeCounts,

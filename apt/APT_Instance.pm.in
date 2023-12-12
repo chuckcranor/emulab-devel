@@ -2872,6 +2872,7 @@ sub CheckResources($$)
 {
     my ($self, $perrmsg) = @_;
     my $project   = $self->GetProject();
+    my $group     = $self->GetGroup();
     my $expires   = str2time($self->Expires());
     my $creator   = $self->GetCreator();
     my $noresokay = 1;
@@ -2953,6 +2954,7 @@ sub CheckResourceReservations($$$$)
 {
     my ($self, $end, $noresokay, $perrmsg) = @_;
     my $project  = $self->GetProject();
+    my $group    = $self->GetGroup();
     my $creator  = $self->GetCreator();
     my $rspec    = $self->RSPEC();
     if (!$rspec) {
@@ -2965,7 +2967,7 @@ sub CheckResourceReservations($$$$)
 	return -1;
     }
     
-    if (APT_Profile::CheckResourceReservations($rspec, $project, $creator,
+    if (APT_Profile::CheckResourceReservations($rspec, $group, $creator,
 	       time(), $end, $noresokay, $perrmsg, $resources)) {
 	return -1;
     }
@@ -2976,13 +2978,13 @@ sub CheckResourceReservations($$$$)
 	return -1;
     }
     if (@$spectrum) {
-	if (APT_Profile::CheckSpectrumPermission($rspec, $project,
+	if (APT_Profile::CheckSpectrumPermission($rspec, $group,
 						 $perrmsg, $spectrum)) {
 	    return -1;
 	}
     }
     # This check must always be done.
-    if (APT_Profile::CheckSpectrumReservations($rspec, $project, $creator,
+    if (APT_Profile::CheckSpectrumReservations($rspec, $group, $creator,
 	       time(), $end, $noresokay, $perrmsg, $spectrum, $resources)) {
 	return -1;
     }
@@ -2995,7 +2997,7 @@ sub CheckResourceReservations($$$$)
     if (@$routes &&
 	(APT_Profile::CheckRoutesPermission($rspec, $project,
 		      time(), $end, $perrmsg, $routes) ||
-	 APT_Profile::CheckRoutesReservations($rspec, $project, $creator,
+	 APT_Profile::CheckRoutesReservations($rspec, $group, $creator,
 		      time(), $end, $noresokay, $perrmsg))) {
 	return -1;
     }
@@ -3011,6 +3013,7 @@ sub AllResourcesReserved($$)
     my $errmsg;
     my $urn      = $aggregate->aggregate_urn();
     my $project  = $self->GetProject();
+    my $group    = $self->GetGroup();
     my $creator  = $self->GetCreator();
     my $expires  = str2time($self->Expires());
     my $rspec    = $self->RSPEC();
@@ -3037,10 +3040,10 @@ sub AllResourcesReserved($$)
 
 	return 0
 	    if (!(APT_Reservation::Group::Reservation::Reserved(
-		      $project, $creator,
+		      $group, $creator,
 		      time(), $expires, $urn, $type, $count) ||
 		  APT_Reservation::Group::Reservation::ReservedByType(
-		      $project, $creator,
+		      $group, $creator,
 		      time(), $expires, $urn, $type, $count)));
     }
     return 1;
@@ -6711,32 +6714,34 @@ sub LookupActive($)
 
 #
 # Is a route currently in use by a running experiment, for the requested
-# start/end time.
+# start/end time, by another project/group/user.
 #
-# Bit of a problem here, routes are actually per-experiment at the moment.
-# So if the target is a project, we are making sure no one else is using
-# it, but if an instance, then only the supplied instance can be using it.
-#
-sub InUse($$$$$)
+sub InUse($$$$$$)
 {
-    my ($class, $target, $routeid, $start, $end) = @_;
+    my ($class, $group, $user, $routeid, $start, $end) = @_;
+    my $project = $group->GetProject();
+    my $pid_idx = $project->pid_idx();
+    my $gid_idx = $group->gid_idx();
+    my $uid_idx = $user->uid_idx();
     my $clause  = "";
 
-    if (ref($target) eq "APT_Instance") {
-	my $uuid = $target->uuid();
-	$clause = " i.uuid!='$uuid' and ";
+    if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
+	$clause = "i.gid_idx!='$gid_idx' ";
     }
-    elsif (ref($target) eq "Project") {
-	my $pid_idx = $target->pid_idx();
-	$clause = " i.pid_idx!='$pid_idx' and ";
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_USER) {
+	$clause = "i.creator_idx!='$uid_idx' ";
     }
+    else {
+	$clause = "i.pid_idx!='$pid_idx' ";
+    }
+
     my $query_result =
 	DBQueryWarn("select br.uuid from apt_instance_bus_routes as br ".
 		    "left join apt_instances as i on ".
 		    "   br.uuid=i.uuid ".
 		    "left join geni.geni_slices as s on ".
 		    "     s.uuid=i.slice_uuid ".
-		    "where br.routeid='$routeid' and $clause ".
+		    "where br.routeid='$routeid' and $clause and ".
 		    "      $start <= UNIX_TIMESTAMP(s.expires)");
     return 1
 	if ($query_result->numrows);
@@ -6961,11 +6966,25 @@ sub Refresh($)
 # Is a range currently in use by a running experiment, for the requested
 # start/end time, by a different project.
 #
-sub InUse($$$$$$)
+sub InUse($$$$$$$)
 {
-    my ($class, $project, $freq_low, $freq_high, $start, $end) = @_;
+    my ($class, $group, $user, $freq_low, $freq_high, $start, $end) = @_;
+    my $project = $group->GetProject();
     my $pid_idx = $project->pid_idx();
+    my $gid_idx = $group->gid_idx();
+    my $uid_idx = $user->uid_idx();
+    my $clause  = "";
 
+    if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
+	$clause = "i.gid_idx!='$gid_idx' ";
+    }
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_USER) {
+	$clause = "i.creator_idx!='$uid_idx' ";
+    }
+    else {
+	$clause = "i.pid_idx!='$pid_idx' ";
+    }
+    
     #
     # mysql floats are stupid.
     # https://dev.mysql.com/doc/refman/5.7/en/problems-with-float.html
@@ -6977,7 +6996,7 @@ sub InUse($$$$$$)
 		    "   rf.uuid=i.uuid ".
 		    "left join geni.geni_slices as s on ".
 		    "     s.uuid=i.slice_uuid ".
-		    "where i.pid_idx!='$pid_idx' and ".
+		    "where $clause and ".
 		    "      $start <= UNIX_TIMESTAMP(s.expires)");
     
     while (my ($uuid,$inuse_lower,$inuse_upper) =

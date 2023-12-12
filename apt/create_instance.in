@@ -829,7 +829,7 @@ my $end   = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
 # All checks in one place.
 #
 my $retval = APT_Profile::CheckEverything($rspec, $geniuser->emulab_user(),
-					  $project, $start, $end,
+					  $group, $start, $end,
 					  (defined($start_at) ? 0 : 1), 
 					  $noresokay, $webtask, \$errmsg);
 if ($retval) {

@@ -7985,6 +7985,7 @@ sub DoModify()
 		  "operation is already in progress and not complete.");
     }
     my $project   = $instance->GetProject();
+    my $group     = $instance->GetGroup();
     my $expires   = str2time($instance->Expires());
     my $noresokay = 1;
     
@@ -8024,7 +8025,7 @@ sub DoModify()
     # All checks in one place.
     #
     $errcode = APT_Profile::CheckEverything($rspec, $creator,
-					    $project, time(), $expires, 1,
+					    $group, time(), $expires, 1,
 					    $noresokay, $webtask, \$errmsg);
     if ($errcode) {
 	($errcode < 0 ? fatal($errmsg) : UserError($errmsg));

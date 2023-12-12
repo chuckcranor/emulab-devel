@@ -1581,8 +1581,9 @@ sub NeedStitcher($$)
 #
 sub CheckEverything($$$$$$$$$)
 {
-    my ($rspec, $user, $project,
+    my ($rspec, $user, $group,
 	$start, $end, $isnow, $noresokay, $webtask, $perrmsg) = @_;
+    my $project = $group->GetProject();
 
     my $resources;
     my $retval = APT_Profile::CheckResources($rspec, $project,
@@ -1591,7 +1592,7 @@ sub CheckEverything($$$$$$$$$)
 	return $retval;
     }
    
-    $retval = APT_Profile::CheckResourceReservations($rspec, $project, $user,
+    $retval = APT_Profile::CheckResourceReservations($rspec, $group, $user,
 						     $start, $end, $noresokay,
 						     $perrmsg, $resources);
     if ($retval) {
@@ -1644,7 +1645,7 @@ sub CheckEverything($$$$$$$$$)
     if ($retval) {
 	return $retval;
     }
-    $retval = APT_Profile::CheckSpectrumReservations($rspec, $project, $user,
+    $retval = APT_Profile::CheckSpectrumReservations($rspec, $group, $user,
 						     $start, $end,
 						     $noresokay, $perrmsg,
 						     $spectrum, $resources);
@@ -1687,7 +1688,7 @@ sub CheckEverything($$$$$$$$$)
     if ($retval) {
 	return $retval;
     }
-    $retval = APT_Profile::CheckRoutesReservations($rspec, $project, $user,
+    $retval = APT_Profile::CheckRoutesReservations($rspec, $group, $user,
 						   $start, $end, $noresokay,
 						   $perrmsg, $routes);
     if ($retval) {
@@ -2157,8 +2158,9 @@ sub CheckResources($$$;$)
 #
 sub CheckResourceReservations($$$$$$$;$)
 {
-    my ($rspec, $project, $user,
+    my ($rspec, $group, $user,
 	$start, $end, $noresokay, $pmsg, $resources) = @_;
+    my $project = $group->GetProject();
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -2212,9 +2214,9 @@ sub CheckResourceReservations($$$$$$$;$)
 
 	    if (!$noresokayXX &&
 		!APT_Reservation::Group::Reservation::Reserved(
-		     $project, $user, $start, $end, $urn, $type, $count) &&
+		     $group, $user, $start, $end, $urn, $type, $count) &&
 		!APT_Reservation::Group::Reservation::ReservedByType(
-		     $project, $user, $start, $end, $urn, $type, $count)) {
+		     $group, $user, $start, $end, $urn, $type, $count)) {
 		$$pmsg = "$count $type node(s) at $nickname are not reserved ".
 		    "for the duration of the experiment";
 		return 1;
@@ -2254,7 +2256,7 @@ sub CheckResourceReservations($$$$$$$;$)
 	    if ($project->expert_mode() || !$node->requires_reservation());
 
 	if (!APT_Reservation::Group::Reservation::Reserved(
-		 $project, $user, $start, $end, $MYURN, $component_id, 1)) {
+		 $group, $user, $start, $end, $MYURN, $component_id, 1)) {
 	    $$pmsg = "$client_id ($component_id) is not reserved ".
 		"for the duration of the experiment";
 	    return 1;
@@ -2711,8 +2713,9 @@ sub CheckSpectrumPermission($$$;$$)
 #
 sub CheckSpectrumReservations($$$$$$$;$$)
 {
-    my ($rspec, $project, $user, $start, $end, $noresokay, $pmsg,
+    my ($rspec, $group, $user, $start, $end, $noresokay, $pmsg,
 	$spectrum, $resources) = @_;
+    my $project = $group->GetProject();
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -2773,7 +2776,7 @@ sub CheckSpectrumReservations($$$$$$$;$$)
 
 	if (!$noresokay &&
 	    !APT_Reservation::Group::RFReservation->RangeReserved(
-		 $project, $user, $start, $end,
+		 $group, $user, $start, $end,
 		 $frequency_low, $frequency_high)) {
 	    $$pmsg = "Range $frequency_low,$frequency_high ".
 		"is not reserved by your project for the duration of your ".
@@ -2786,7 +2789,7 @@ sub CheckSpectrumReservations($$$$$$$;$$)
     # for the duration of the experiment (not reserved by others).
     #
     if (@$spectrum &&
-	!APT_Reservation::Group::RFReservation->CanStart($project, $user,
+	!APT_Reservation::Group::RFReservation->CanStart($group, $user,
 					$start, $end, $spectrum, $pmsg)) {
 	return 1;
     }
@@ -3123,7 +3126,7 @@ sub CheckRoutesPermission($$$$$;$)
 #
 sub CheckRoutesReservations($$$$$$$;$)
 {
-    my ($rspec, $project, $user, $start, $end, $noresokay, $pmsg, $routes) = @_;
+    my ($rspec, $group, $user, $start, $end, $noresokay, $pmsg, $routes) = @_;
 
     if (!ref($rspec)) {
 	my $rspec = GeniXML::Parse($rspec);
@@ -3140,7 +3143,7 @@ sub CheckRoutesReservations($$$$$$$;$)
     return 0
 	if (! @{$routes});
 
-    if (!APT_Reservation::Group::RouteReservation->CanStart($project, $user,
+    if (!APT_Reservation::Group::RouteReservation->CanStart($group, $user,
 			 $start, $end, $routes, $pmsg)) {
 	return 1;
     }

@@ -1472,7 +1472,7 @@ $(function ()
 	    resinfo = json.value;
 	    var pid = $('#project_selector #profile_pid').val();
 	    var gid = $('#group_selector #profile_gid').val();	
-	    instantiateCommon.generateReservationInfo(pid, pid, resinfo);
+	    instantiateCommon.generateReservationInfo(pid, gid, resinfo);
 	};
 	var xmlthing =
 	    sup.CallServerMethod(null, "instantiate", "ReservationInfo", null);
@@ -1734,7 +1734,7 @@ $(function ()
 	var args = {"formfields" : formfields,
 		    "rspec"      : selected_rspec};
 	// Hopefully the prediction info has returned in time.
-	if (resinfo) {
+	if (0 && resinfo) {
 	    // Prediction info comes back with pid lowercase cause of
 	    // HRN normalization rules.
 	    var pid = $('#profile_pid').val().toLowerCase();
