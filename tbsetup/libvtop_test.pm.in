@@ -2310,6 +2310,10 @@ sub LoadVirtLans($)
 	}
 	# Convert to actual object for later
 	$virtlan->_portvlan($portvlan);
+	# But remember that if it is the Ceph shared vlan
+	if ($porttoken eq "powder-ceph") {
+	    $virtlan->_iscephvlan(1);
+	}
     }
 
     #
@@ -8855,6 +8859,7 @@ sub CheckIPAddressReservations($) {
 
     # For stashing lans we need to take a closer look at.
     my @sharedlans = ();
+    my @cephlans = ();
 
     $self->printdb("Checking IP Address Reservations.\n");
 
@@ -8866,6 +8871,22 @@ sub CheckIPAddressReservations($) {
     foreach my $virtlan (values(%{ $self->vlans() })) {
 	next
 	    if ($virtlan->_layer() != 2);  # foo from the beyond.
+
+	# XXX this is just as ugly as the blockstore check below.
+	# If this is the Ceph front-end network, assign an address.
+	# We could probably do something more general for both of
+	# these cases...someday.
+	my $portvlan = $virtlan->_portvlan();
+	my $cephvlan = $virtlan->_iscephvlan();
+	if (defined($portvlan) && ref($portvlan) &&
+	    defined($cephvlan) && $cephvlan == 1) {
+	    # XXX only do this on the second pass, otherwise the changed
+	    # IPs get overwritten.
+	    if (!$self->alloconly()) {
+		push @cephlans, $virtlan;
+	    }
+	    next;
+	}
 
 	foreach my $member ($virtlan->memberlist()) {
 	    my $vnodename = $member->vnode();
@@ -8954,6 +8975,92 @@ sub CheckIPAddressReservations($) {
 		    $buddy->unlock();
 		    return -1;
 		}
+		$self->printdb("$vnodename: $ip -> $new_ip\n");
+		$vmember->ip($new_ip);
+		$vmember->mask($newmask);
+		# Replace the virt_lans row.  It already exists, so an insert
+		# would fail.
+		my $sflags = $VirtExperiment::STORE_FLAGS_REPLACE;
+		$sflags |= $self->verbose() ? 
+		    $VirtExperiment::STORE_FLAGS_DEBUG :
+		    0;
+		$sflags |= $self->impotent() ?
+		    $VirtExperiment::STORE_FLAGS_IMPOTENT :
+		    0;
+		if ($vmember->Store($sflags) != 0 && !$self->impotent()) {
+		    tberror("Could not store updated virt_lans row!\n");
+		    $buddy->unlock();
+		    return -1;
+		}
+	    }
+	}
+
+	# All done with reservations, so commit and unlock.
+	$buddy->commitReservations()
+	    unless $self->impotent();
+	$buddy->unlock();
+    }
+
+    #
+    # Round 2a: do the same thing for Ceph lan members. Note that we allocate
+    # the addresses one at a time since there are no CIDR alignment issues
+    # (these are not IP subnets, just random one-off IPs). We could allocate a
+    # whole block but that could cause needless fragmentation due to alignment.
+    #
+    # XXX this could likely be combined with the blockstore code above.
+    #
+    if (@cephlans) {
+	require IPBuddyWrapper;
+	require Socket;
+
+	$self->printdb("Modifying address allocations for: ".
+		       join(", ", map { $_->vname() } @cephlans) .
+		       "\n");
+
+	# Tie this buddy allocator to the "cephlan" global address range.
+	my $buddy = IPBuddyWrapper->new("cephlan");
+	return -1 
+	    unless defined($buddy);
+
+	# Grab the reserved addresses buddy allocator lock.
+	$buddy->lock() 
+	    or return -1;
+
+	# Now preload the reservations in the DB, including those associated
+	# with this experiment.  The buddy allocator will allocate around
+	# these.
+	if ($buddy->loadReservedRanges($self->experiment())) {
+	    $buddy->unlock();
+	    return -1;
+	}
+
+	foreach my $virtlan (@cephlans) {
+	    my $vlanname = $virtlan->vname();
+	    my @members = $virtlan->memberlist();
+	    my $prefix = $buddy->_getbuddy()->getprefix();
+	    my $newmask = Socket::inet_ntoa(pack("B32", "1" x $prefix));
+	    $virtlan->_mask($newmask);
+	    
+	    foreach my $member (@members) {
+		# Grab some info/objects for the current lan member.
+		my $vmember   = $member->virt_member();
+		my $ip        = $vmember->ip();
+		my $vnodename = $vmember->vnode();
+
+		# re-IP this member.  Push back into the virt_lans
+		# table; otherwise, things that expect the IP set
+		# there to match what is set in the
+		# interfaces/vinterfaces table will go wonky.
+		my $range =
+		    $buddy->requestAddressRange($self->experiment(), 32);
+		if (!defined($range)) {
+		    $buddy->unlock();
+		    return -1;
+		}
+		# XXX not designed for single-address use. getNextAddress
+		# skips the first address so we get it from the range instead.
+		(my $new_ip = $range) =~ s#([^/]+)/.*#$1#;
+
 		$self->printdb("$vnodename: $ip -> $new_ip\n");
 		$vmember->ip($new_ip);
 		$vmember->mask($newmask);

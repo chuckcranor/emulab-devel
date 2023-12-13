@@ -2320,17 +2320,6 @@ sub SetAutoApprove($$$@)
 {
     my ($class, $start, $end, @ranges) = @_;
     my $total       = 0;
-
-    #
-    # PEL expired, all ranges need admin approval until that is fixed
-    #
-    if (1) {
-	print "SetAutoApprove: PEL Expired, all ranges need admin approval\n";
-	# Send this back to the user.
-	my $message = "All RF ranges need admin approval";
-	map { $_->{"noautoapprove_reason"} = $message } @ranges;
-	return 0;
-    }
     
     if ($end - $start > $AUTOAPPROVE_MAXTIME) {
 	my $message = "Duration is greater than ".
