@@ -2978,7 +2978,7 @@ sub CheckResourceReservations($$$$)
 	return -1;
     }
     if (@$spectrum) {
-	if (APT_Profile::CheckSpectrumPermission($rspec, $group,
+	if (APT_Profile::CheckSpectrumPermission($rspec, $project,
 						 $perrmsg, $spectrum)) {
 	    return -1;
 	}
