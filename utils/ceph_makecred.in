@@ -1,0 +1,243 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2023 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+#
+# Create and install a Ceph credential for a project/user.
+# This will call over to a mon node to make the credential, enabling it
+# in the cluster, and then returning the private key that we put in the DB
+# to be used later to construct a Ceph keyring on nodes in the project or
+# when the user has an account.
+#
+# XXX right now we are just doing project credentials.
+#
+
+use strict;
+use English;
+use Getopt::Std;
+
+sub usage()
+{
+    print STDERR "Usage: ceph_makecred [-hdn] [-T type] name\n";
+    print STDERR "   -h       This message\n";
+    print STDERR "   -d       Print additional debug info\n";
+    print STDERR "   -n       Do not perform actions, just say what it would do.\n";
+    print STDERR "   -T type  Type of credential: 'proj'|'user'|'dataset'\n";
+    print STDERR "   name     A valid name of the proper type; i.e., a pid\n";
+    exit(-1);
+}
+my $optlist  = "hdnT:";
+my $debug = 0;
+my $impotent = 0;
+my $ntype = "proj";
+my $name;
+
+# Protos
+sub sendcmd($;$);
+sub createprojcred($);
+sub fatal($);
+
+#
+# Configure variables
+#
+my $TB		 = "@prefix@";
+
+my $SSH		 = "ssh -n -o ConnectTimeout=2 -o BatchMode=yes -o StrictHostKeyChecking=no";
+my $CEPHCMD	 = "/usr/bin/ceph";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use emutil;
+use Experiment;
+use User;
+use Project;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# We don't want to run this script unless its the real version.
+# That is, it must be setuid root. 
+#
+if ($EUID != 0) {
+    die("*** $0:\n".
+	"    Must be root! Maybe its a development version?\n");
+}
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{h})) {
+    usage();
+}
+if (defined($options{d})) {
+    $debug = 1;
+}
+if (defined($options{n})) {
+    $impotent = 1;
+}
+if (defined($options{T})) {
+    if ($options{T} =~ /^(proj|user|dataset)$/) {
+	my $ntype = $1;
+    } else {
+      print STDERR "Invalid type '$options{T}', must be one of: proj, user, dataset\n";
+      usage();
+    }
+}
+if (@ARGV < 1) {
+    usage();
+}
+
+$name = shift;
+if ($name !~ /^([-\w]+)$/) {
+    fatal("Invalid syntax for name");
+}
+$name = $1;
+
+if ($ntype eq "proj") {
+    my $pid = Project->Lookup($name);
+    if (!$pid) {
+	fatal("No such project '$name'");
+    }
+    # XXX check project for PowderCephfs feature
+    createprojcred($name);
+} else {
+    fatal("user and dataset credentials not yet implemented");
+}
+
+exit(0);
+
+sub createprojcred($)
+{
+    my ($proj) = @_;
+
+    my $CMD = <<"END_CMD";
+ceph auth get-or-create-key client.$proj mon \\'allow r\\' osd \\'allow rw pool=cephfs_data namespace=$proj\\' mds \\'allow rw fsname=cephfs path=/proj/$proj\\'
+END_CMD
+    if ($impotent) {
+	print STDERR "Would issue: $CMD\n";
+	return 0;
+    }
+    
+    my $output;
+    my $stat = sendcmd($CMD, \$output);
+    if ($stat != 0) {
+	fatal("Could not create project credential:\n" . @$output);
+    }
+    my ($key) = $$output[0];
+    chomp $key;
+    print STDERR "key: '$key'\n"
+	if ($debug);
+    if ($key !~ /^([a-zA-Z0-9\+\/]{38}==)$/) {
+	fatal("Invalid format for Ceph key!?");
+    }
+
+    # XXX til we have DB setup, we put this in a file
+    if ($writetofile) {
+	if (! -d "/proj/$proj/ceph" &&
+	    !mkdir("/proj/$proj/ceph", 0770) &&
+	    system("chown root:$proj /proj/$proj/ceph")) {
+	    fatal("Could not prepare /proj/$proj/ceph");
+	}
+	if (! -f "/proj/$proj/ceph/secret") {
+	    if (open(FD, ">/proj/$proj/ceph/secret")) {
+		print FD "$key\n";
+		close(FD);
+	    }
+	    chmod(0600, "/proj/$proj/ceph/secret");
+	}
+    }
+    # Put in the DB
+    else {
+	;
+    }
+}
+	 
+#
+# Send a command to a Ceph Monitor node.
+# We try sending to all nodes until we get a response.
+#
+sub sendcmd($;$)
+{
+    my ($cmdstr, $outref) = @_;
+    my @output = ();
+    my $stat = 0;
+
+    #
+    # N.B. these are the public control net IPs and *not* the Ceph
+    # data network IPs (192.168.x.x).
+    #
+    # XXX this should come from the DB
+    #
+    my @MONS = ("155.98.36.201", "155.98.36.202", "155.98.36.203");
+
+    foreach my $host (@MONS) {
+	my $sshcmd = $SSH;
+
+	print STDERR "Doing '$sshcmd $host $cmdstr'\n"
+	    if ($debug);
+
+	my $SAVEUID = $UID;
+	$UID = 0;
+	@output = `$sshcmd $host $cmdstr 2>&1`;
+	$UID = $SAVEUID;
+	if ($?) {
+	    $stat = ($? >> 8) & 0xff;
+	    next
+		if ($stat == 255);
+	    print STDERR "*** WARNING: command failed on $host ($stat)!\n";
+	}
+	last;
+    }
+
+    print STDERR "Got stat: $stat, output:\n", @output
+	if ($debug);
+    chomp(@output);
+    $$outref = \@output
+	if ($outref);
+    return $stat;
+}
+
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
