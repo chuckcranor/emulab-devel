@@ -6728,7 +6728,7 @@ sub InUse($$$$$$)
     if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
 	$clause = "i.gid_idx!='$gid_idx' ";
     }
-    elsif ($project->shared_reservations() == $Project::RESERVATIONS_USER) {
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
 	$clause = "i.creator_idx!='$uid_idx' ";
     }
     else {
@@ -6763,6 +6763,7 @@ use GeniHRN;
 use APT_Geni;
 use APT_Aggregate;
 use APT_Reservation;
+use APT_Instance;
 use Date::Parse;
 use Data::Dumper;
 use vars qw($AUTOLOAD);
@@ -6919,6 +6920,36 @@ sub LookupForInstance($$)
 }
 
 #
+# Lookup all rfranges in use.
+#
+sub LookupAll($)
+{
+    my ($class) = @_;
+    my $result = {};
+
+    my $query_result =
+	DBQueryWarn("select idx,uuid from apt_instance_rfranges ");
+
+    return $result
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($idx,$uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	if (!defined($instance)) {
+	    print STDERR "No apt_instance $uuid\n";
+	    next;
+	}
+	my $range = Lookup($class, $instance, $idx);
+	if (!defined($range)) {
+	    print STDERR "No apt_instance_rfrange $uuid/$idx\n";
+	    next;
+	}
+	$result->{$idx} = $range;
+    }
+    return $result;
+}
+
+#
 # Update/Refresh current. 
 #
 sub Update($$;$)
@@ -6978,7 +7009,7 @@ sub InUse($$$$$$$)
     if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
 	$clause = "i.gid_idx!='$gid_idx' ";
     }
-    elsif ($project->shared_reservations() == $Project::RESERVATIONS_USER) {
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
 	$clause = "i.creator_idx!='$uid_idx' ";
     }
     else {

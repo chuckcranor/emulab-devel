@@ -3657,6 +3657,40 @@ sub DoSetShareReservations()
     }
 
     #
+    # Initial check on ranges,
+    #
+    my $rval = APT_Reservation::Group::RFReservation::CheckSharingModeChange(
+	$project, $shared, \$errmsg);
+    if ($rval) {
+	my $blob    = {};
+
+	if ($rval < 0) {
+	    $blob->{'errcode'} = -1;
+	    $blob->{'errmesg'} = "Internal error checking ranges";
+	    $blob->{'details'} = undef;
+	}
+	else {
+	    $blob->{'errcode'} = 1;
+	    $blob->{'errmesg'} = "Conflict detected on RF ranges";
+	    $blob->{'details'} = [
+		{
+		    "severity" => "error",
+		    "message"  => $errmsg,
+		}
+	    ];
+	}
+	my $errors = {
+	    $MYURN => $blob
+	};
+	print Dumper($errors);
+	if (defined($webtask)) {
+	    $webtask->errors($errors);
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+
+    #
     # Build a list of aggregates to contact and change. 
     #
     my %aggregates = ();
@@ -3669,7 +3703,12 @@ sub DoSetShareReservations()
     }
     # This can happen.
     if (! keys(%aggregates)) {
-	if (!$checkonly) {
+	#
+	# Reservations without any aggregates; might reservations for
+	# routes or ranges. We can just make the change at the Portal.
+	# We checked Ranges above, it will push out to aggregates later.
+	#
+	if (!$checkonly || $precheck) {
 	    $project->Update({"shared_reservations" => $shared});
 	}
 	if (defined($webtask)) {

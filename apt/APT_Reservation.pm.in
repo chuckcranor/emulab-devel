@@ -1734,6 +1734,7 @@ use emdb;
 use EmulabConstants;
 use libtestbed;
 use EmulabFeatures;
+use Project;
 use Carp;
 use JSON;
 use English;
@@ -2071,6 +2072,109 @@ sub Fits($$$$$)
 	last if (!$fits);
     }
     return $fits;
+}
+
+#
+# Change the reservation sharing mode for a project. Class method.
+#
+sub CheckSharingModeChange($$$)
+{
+    my ($project, $newmode, $perrmsg) = @_;
+    my $pid_idx = $project->pid_idx();
+    my @pgroups = ();
+    my @pranges = ();
+
+    #
+    # Conflicts can arise only from existing experiments. Say if a project is
+    # going from project reservations to user (or group) reservations and the
+    # current experiment using a range was started by a different user or in
+    # a different group. When going from group/user to project, there would
+    # never be a conflict. When going from group to user, there can be a
+    # conflict if the current experiment holder (in the group) is different
+    # the person who created the reservation.
+    #
+    return 0
+	if ($newmode == $Project::RESERVATIONS_PERPROJECT &&
+	    ($project->ResModeGroup() || $project->ResModeUser()));
+
+    my @groups = APT_Reservation::Group->LookupAll();
+    return 0
+	if (!@groups);
+
+    # Find project reservations that include ranges.
+    foreach my $group (@groups) {
+	next
+	    if ($group->pid_idx() != $pid_idx);
+	next
+	    if (! $group->RFReservationList());
+
+	push(@pgroups, $group);
+    }
+    return 0
+	if (!@pgroups);
+
+    my $rfranges = APT_Instance::RFRanges->LookupAll();
+    return 0
+	if (!keys(%{$rfranges}));
+
+    # Find project rfranges currently in use
+    foreach my $range (values(%{$rfranges})) {
+	next
+	    if ($range->instance()->pid_idx() != $pid_idx);
+
+	push(@pranges, $range);
+    }
+    return 0
+	if (!@pranges);
+
+    foreach my $group (@groups) {
+	foreach my $res ($group->RFReservationList()) {
+	    next
+		if (!$res->approved());
+
+	    my $res_low   = $res->freq_low();
+	    my $res_high  = $res->freq_high();
+
+	    foreach my $range (@pranges) {
+		my $range_low   = $range->freq_low();
+		my $range_high  = $range->freq_high();
+
+		# If no overlap in freq, skip it.
+		if (($range_low < $res_low && $range_high < $res_low) ||
+		    ($range_low > $res_high)) {
+		    next;
+		}
+		if ($newmode == $Project::RESERVATIONS_PERUSER) {
+		    #
+		    # If coming from per-group, resgroup gid changes to pid. 
+		    # But experiment and resgroup user must be the same.
+		    #
+		    if ($group->creator_idx() !=
+			$range->instance()->creator_idx()) {
+			$$perrmsg = "User conflict with range ".
+			    "$range_low,$range_high: ".
+			    "in use by experiment with conflicting uid";
+			print STDERR $$perrmsg . "\n";
+			return 1;
+		    }
+		}
+		if ($newmode == $Project::RESERVATIONS_PERGROUP) {
+		    #
+		    # Coming from per-project or per-user, so the current
+		    # resgroups are all gid=pid. So the experiments must be too.
+		    #
+		    if ($range->instance()->gid_idx() != $pid_idx) {
+			$$perrmsg = "Group conflict with range ".
+			    "$range_low,$range_high: ".
+			    "in use by experiment with conflicting gid";
+			print STDERR $$perrmsg . "\n";
+			return 1;
+		    }
+		}
+	    }
+	}
+    }
+    return 0;
 }
 
 #
