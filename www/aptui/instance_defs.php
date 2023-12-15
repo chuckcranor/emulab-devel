@@ -943,6 +943,8 @@ class Instance
                            "c240g2-infra"       => true,
                            "r7525s"             => true,
                            "rflab-blackbox"     => true,
+                           "at-ru"              => true,
+                           "bt-ru550"           => true,
         );
 
         #
