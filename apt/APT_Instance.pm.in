@@ -2886,7 +2886,17 @@ sub CheckResources($$)
     my $creator   = $self->GetCreator();
     my $noresokay = 1;
     my $duration  = $expires - time();
-    if (!$project->expert_mode() && $duration > $DEFAULT_DURATION * 3600) {
+
+    #
+    # Modify changes things a bit. On the Powder portal we always do
+    # reservation checks when duration > $DEFAULT_DURATION unless
+    # the project has expert mode enabled. On other portals, initial
+    # duration is never > $DEFAULT_DURATION, but after Modify it
+    # might be, but we do not want to force reservations on those
+    # portals.
+    #
+    if ($self->isPowder() && !$project->expert_mode() && 
+	$duration > $DEFAULT_DURATION * 3600) {
 	$noresokay = 0;
     }
     my $rspec = $self->RSPEC();

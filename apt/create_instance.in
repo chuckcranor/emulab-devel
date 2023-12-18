@@ -172,6 +172,7 @@ use Experiment;
 use User;
 use Project;
 use Group;
+use Brand;
 use Image;
 use emutil;
 use libEmulab;
@@ -355,10 +356,11 @@ foreach my $key ("username", "email", "profile", "portal") {
 my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
     $userslice_id, $portal, $script, $paramdefs, $bindings, $start, $end,
-    $reporef, $repohash, $duration, $webinfo, $noresokay);
+    $reporef, $repohash, $duration, $webinfo, $noresokay, $brand);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
+$brand  = Brand->Create($portal);
 
 # Some info from the web UI, saving it as is for now.
 if (exists($xmlparse->{'attribute'}->{"webinfo"})) {
@@ -860,7 +862,7 @@ else {
     # max duration.
     #
     $noresokay = 1;
-    if (defined($stop_at)) {
+    if ($brand->isPowder() && defined($stop_at)) {
 	$duration = $stop_at - (defined($start_at) ? $start_at : time());
 	if ($duration > $DEFAULT_DURATION * 3600) {
 	    $noresokay = 0;

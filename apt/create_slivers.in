@@ -316,6 +316,10 @@ foreach my $agg ($instance->AggregateList()) {
 	    $agg->BackupManifest();
 	}
     }
+    #
+    # One wrinkle is that when updating, we never fail the entire instance.
+    #
+    $ignorefailures = 1 if ($agg->saved_manifest());
 
     #
     # See if the aggregate is online, lets not go to a ton of trouble
@@ -329,7 +333,7 @@ foreach my $agg ($instance->AggregateList()) {
 	#
 	# For an update, lets treat everything as deferable.
 	#
-	if (!$aptagg->deferrable() && !$update) {
+	if (!$aptagg->deferrable() && !$agg->saved_manifest()) {
 	    $instance->SetStatus("failed");
 
 	    $webtask->output($errmsg);
@@ -497,9 +501,11 @@ if (!($debug || $foreground)) {
     $logpid = $PID;
 }
 # After we start logging.
+print "Experiment: " . $instance->Printable() . "\n";
+print $instance->webURL() . "\n";
 if ($update) {
-    print "This is an experiment update ...\n\n";
-}    
+    print "This is an experiment update\n\n";
+}
 
 # Bind the process id.
 $webtask->SetProcessID($PID);
@@ -533,11 +539,6 @@ foreach my $aggregate (@aggregate_list) {
     # doing a create or an update.
     #
     $aggregate->_isupdate(defined($aggregate->saved_manifest()) ? 1 : 0);
-
-    #
-    # One wrinkle is that when updating, we never fail the entire instance.
-    #
-    $ignorefailures = 1 if ($aggregate->_isupdate());
 
     #
     # We want to tell CreateSlivers() if the CreateSliver() call reached
@@ -2014,11 +2015,14 @@ sub MyExit($$)
 {
     my ($code, $mesg) = @_;
 
-    $genislice->UnLock()
-	if (defined($genislice));
-    $instance->SetStatus("failed")
-	if (defined($instance));
-    
+    if (defined($instance)) {
+	if ($ignorefailures) {
+	    $instance->SetStatus("ready");
+	}
+	else {
+	    $instance->SetStatus("failed");
+	}
+    }
     if (defined($webtask)) {
 	$webtask->output($mesg);
 	$webtask->Exited($code);
@@ -2031,6 +2035,8 @@ sub MyExit($$)
 	$logfile->Store();
 	$logfile = undef;
     }
+    $genislice->UnLock()
+	if (defined($genislice));
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
     exit($code);
