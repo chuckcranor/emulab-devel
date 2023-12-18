@@ -8022,6 +8022,20 @@ sub DoModify()
     }
 
     #
+    # Modify changes things a bit. On the Powder portal we always do
+    # reservation checks when duration > $DEFAULT_DURATION unless
+    # the project has expert mode enabled. On other portals, initial
+    # duration is never > $DEFAULT_DURATION, but after Modify it
+    # might be, but we do not want to force reservations on those
+    # portals.
+    #
+    my $duration = $expires - time();
+    if ($instance->isPowder() && !$project->expert_mode() && 
+	$duration > $DEFAULT_DURATION * 3600) {
+	$noresokay = 0;
+    }
+
+    #
     # All checks in one place.
     #
     $errcode = APT_Profile::CheckEverything($rspec, $creator,
@@ -8158,10 +8172,23 @@ sub DoModify()
 	system("$CREATESLIVERS -L " .
 	       ($debug ? "-d " : "") .  $instance->uuid());
 	if ($?) {
+	    #
+	    # If we still have an update_rspec, something went wrong
+	    # early. Clear that so we are not in an inconsistent state.
+	    #
+	    $instance->Refresh();
+	    if ($instance->update_rspec()) {
+		$instance->Update({"update_rspec" => undef});
+	    }
+	    # Do not leave the experiment in a messed up state.
+	    $instance->SetStatus("ready") if (!$nostatus);
+	    
 	    my $code = $? >> 8;
 	    $code = -1
 		if ($code == 255);
 	    if (defined($webtask)) {
+		# Not sure what to tell users.
+		$webtask->output("Internal Error");
 		$webtask->Exited($code)
 	    }
 	    exit($code);

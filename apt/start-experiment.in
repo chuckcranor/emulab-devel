@@ -285,7 +285,7 @@ $ENV{"SERVER_NAME"} = $project->Brand()->Server();
 # Bindings can come from a paramset or as a json string on the command line.
 #
 if (defined($paramset)) {
-    my ($uid,$name) = @_;
+    my ($uid,$name);
     my $profileid   = $profile->profileid();
     
     if ($paramset =~ /^([-\w]*),([-\w]*)$/) {
