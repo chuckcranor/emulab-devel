@@ -6139,6 +6139,9 @@ class portal:
             elif opt == "nopending":
                 argstr += " -P "
                 pass
+            elif opt == "maxduration":
+                argstr += " -X "
+                pass
             elif opt == "noemail":
                 argstr += " -s "
                 pass

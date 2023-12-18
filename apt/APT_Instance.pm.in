@@ -1102,7 +1102,7 @@ sub RecordHistory($$)
 		"       extension_count,extension_days,extension_hours, ".
 		"       physnode_count,virtnode_count, ".
 		"       servername,portal,repourl,reponame,reporef,repohash, ".
-		"       rspec,script,params,manifest,webinfo ".
+		"       rspec,script,params,manifest,webinfo,modify_count ".
 		" from apt_instances where uuid='$uuid'")
 	or return -1;
 
@@ -1819,6 +1819,16 @@ sub BumpExtensionCount($$)
     return DBQueryWarn("update apt_instances set ".
 		       "  extension_count=extension_count+1, ".
 		       "  extension_hours=extension_hours+${granted} ".
+		       "where uuid='$uuid'");
+}
+
+sub BumpModifyCount($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+
+    return DBQueryWarn("update apt_instances set ".
+		       "  modify_count=modify_count+1 ".
 		       "where uuid='$uuid'");
 }
 

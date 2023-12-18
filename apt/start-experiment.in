@@ -112,6 +112,7 @@ my $waitmode       = 0;
 my $usestitcher    = 0;
 my $nopending      = 0;
 my $noemail        = 0;
+my $maxduration    = 0;
 my $portal;
 my $privkeyfile;
 my $start_at;
@@ -134,7 +135,7 @@ my $project;
 #
 # So many options ...
 #
-my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's',
+my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's', 'X',
 	       "name=s"      => \$name,
 	       "duration=i"  => \$duration,
 	       "portal=s"    => \$portal,
@@ -190,7 +191,10 @@ if (!defined($portal)) {
 	$portal = "emulab";
     }
 }
-if (defined($duration)) {
+if (defined($options{"X"})) {
+    $maxduration = 1;
+}
+elsif (defined($duration)) {
     if ($duration !~ /^\d+$/) {
 	fatal("Duration is not an integer");
     }
@@ -502,7 +506,10 @@ if (defined($options{"S"})) {
 if (defined($start_at)) {
     @args = (@args, "--start", $start_at);
 }
-if (defined($stop_at)) {
+if ($maxduration) {
+    @args = (@args, "-X");
+}
+elsif (defined($stop_at)) {
     @args = (@args, "--stop", $stop_at);
 }
 @args = (@args, $xmlfile);

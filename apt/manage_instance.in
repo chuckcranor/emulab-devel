@@ -8054,6 +8054,14 @@ sub DoModify()
     $gotlock = 1;
 
     #
+    # Flag instance as doing a modify. Good to know, and used in the
+    # apt_daemon to prevent terminating an instance that got thrown
+    # into a failed state cause a modify failed. We should not ever
+    # do that, need to watch for it and fix it.
+    # 
+    $instance->BumpModifyCount();
+    
+    #
     # See if any aggregates deleted from the rspec and call DeleteAggregate
     # on those first. 
     #

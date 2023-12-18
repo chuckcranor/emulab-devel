@@ -46,12 +46,13 @@ sub usage()
     print "Usage: quickvm [-u uuid] [--site site:1=aggregate ...] <xmlfile>\n";
     exit(1);
 }
-my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s', 'P');
+my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s', 'P', 'X');
 my $debug   = 0;
 my $verbose = 1;
 my $foreground     = 0;
 my $ignorefailures = 0;
 my $nopending      = 0;
+my $maxduration    = 0;
 my $xmlfile;
 my $webtask;
 my $webtask_id;
@@ -97,6 +98,7 @@ my $UPDATEGENIUSER= "$TB/sbin/protogeni/updategeniuser";
 my $OPENSSL       = "/usr/bin/openssl";
 my $MANAGEGITREPO = "$TB/bin/manage_gitrepo";
 my $MANAGEINSTANCE= "$TB/bin/manage_instance";
+my $MANAGERESGROUP= "$TB/bin/manage_resgroup";
 my $DEFAULT_URN   = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 my $GUEST_URN     = "urn:publicid:IDN+apt.emulab.net+authority+cm";
 my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
@@ -219,6 +221,9 @@ if (defined($options{"v"})) {
 }
 if (defined($options{"S"})) {
     $usestitcher = 1;
+}
+if (defined($options{"X"})) {
+    $maxduration = 1;
 }
 if (defined($options{"u"})) {
     $quickuuid = $options{"u"};
@@ -349,8 +354,8 @@ foreach my $key ("username", "email", "profile", "portal") {
 #
 my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
-    $userslice_id, $portal, $script, $paramdefs, $bindings,
-    $reporef, $repohash, $duration, $webinfo);
+    $userslice_id, $portal, $script, $paramdefs, $bindings, $start, $end,
+    $reporef, $repohash, $duration, $webinfo, $noresokay);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
@@ -808,22 +813,61 @@ if ($project->allowed_clusters()) {
     }
 }
 
-#
-# New approach; if less then max duration, no reservations are needed.  But
-# if more then max duration (powder portal only), then user must have valid
-# reservations for the resources and time frame specified. Note that only
-# the powder portal will get this far with duration greater than the default
-# max duration.
-#
-my $noresokay = 1;
-if (defined($stop_at)) {
-    $duration = $stop_at - (defined($start_at) ? $start_at : time());
-    if ($duration > $DEFAULT_DURATION * 3600) {
-	$noresokay = 0;
+# Can be scheduled for the future.
+$start = (defined($start_at) ? $start_at : time());
+
+if ($maxduration) {
+    #
+    # The -X option says to compute the max duration allowed based on approved
+    # reservations. Currently used on the XMLRPC path only. Note that on the
+    # Powder portal we already compute this and fill in the duration for the
+    # user. Not so on the Cloudlab or Emulab portal.
+    #
+    my $ttask = WebTask::CreateAnonymous();
+    if (!defined($ttask)) {
+	fatal("Could not create webtask");
     }
+    my $ttask_id = $ttask->task_id();
+    my ($fp, $filename) = tempfile(UNLINK => 0);
+    print $fp $rspec;
+    close($fp);
+    print "Computing max duration\n";
+    system("$MANAGERESGROUP -t $ttask_id maxduration --portal=$portal ".
+	   " -g '$pid/$gid' -s $start -f $filename ");
+    if ($?) {
+	# This should not fail!
+	$ttask->Delete();
+	fatal("Could not determine max duration");
+    }
+    $ttask->Refresh();
+    my $maxend = $ttask->maxend();
+    $ttask->Delete();
+    if ($maxend == 0) {
+	UserError("There are no reservations for the requested resources");
+    }
+    else {
+	# We end up checking reservations again, but that is okay.
+	$end = $stop_at = $maxend;
+    }
+    $noresokay = 0;
 }
-my $start = (defined($start_at) ? $start_at : time());
-my $end   = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
+else {
+    #
+    # Else if less then max duration, no reservations are needed.  But
+    # if more then max duration (powder portal only), then user must have valid
+    # reservations for the resources and time frame specified. Note that only
+    # the powder portal will get this far with duration greater than the default
+    # max duration.
+    #
+    $noresokay = 1;
+    if (defined($stop_at)) {
+	$duration = $stop_at - (defined($start_at) ? $start_at : time());
+	if ($duration > $DEFAULT_DURATION * 3600) {
+	    $noresokay = 0;
+	}
+    }
+    $end = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
+}
 
 #
 # All checks in one place.
