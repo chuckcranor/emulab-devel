@@ -875,7 +875,7 @@ else {
 # All checks in one place.
 #
 my $retval = APT_Profile::CheckEverything($rspec, $geniuser->emulab_user(),
-					  $group, $start, $end,
+					  $project, $start, $end,
 					  (defined($start_at) ? 0 : 1), 
 					  $noresokay, $webtask, \$errmsg);
 if ($retval) {
