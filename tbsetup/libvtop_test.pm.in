@@ -2257,6 +2257,9 @@ sub LoadVirtLans($)
     # Sanity check the shared lan requests.
     #
     foreach my $virtlan (values(%{ $self->vlans() })) {
+	# XXX make sure this exists for all vlans for later test
+	$virtlan->_iscephvlan(0);
+
 	next
 	    if (!defined($virtlan->_portvlan()));
 
@@ -8877,9 +8880,8 @@ sub CheckIPAddressReservations($) {
 	# We could probably do something more general for both of
 	# these cases...someday.
 	my $portvlan = $virtlan->_portvlan();
-	my $cephvlan = $virtlan->_iscephvlan();
 	if (defined($portvlan) && ref($portvlan) &&
-	    defined($cephvlan) && $cephvlan == 1) {
+	    $virtlan->_iscephvlan() == 1) {
 	    # XXX only do this on the second pass, otherwise the changed
 	    # IPs get overwritten.
 	    if (!$self->alloconly()) {
