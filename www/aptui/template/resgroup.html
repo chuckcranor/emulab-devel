@@ -622,20 +622,56 @@
 	  </div>
 	  <hr>
 	</div>
-	<div style="margin-top: 10px;">
-	  <b>Reservations are per-project!</b>
+	<div class="res-warnings-div" style="margin-top: 10px;">
+	  <b>
+	    <span class="per-project-reservations res-warnings hidden">
+	      Reservations in this project are shared:
+	    </span>
+	    <span class="per-group-reservations res-warnings hidden">
+	      Reservations in this group are shared:
+	    </span>
+	    <span class="per-user-reservations res-warnings hidden">
+	      Important information about this reservation:
+	    </span>
+	  </b>
 	  <div>
 	    <ul>
-	      <li>Any use of nodes matching the reservation by any
-		user in your project will be counted against the
-		reservation, including experiments that are already running</li>
+	      <li class="per-project-reservations res-warnings
+			 per-group-reservations hidden">
+		Any use of nodes matching the reservation by any
+		user in your
+		<span class="per-project-reservations res-warnings hidden">
+		  project</span>
+		<span class="per-group-reservations res-warnings hidden">
+		  group</span>
+		will be counted against the
+		reservation, including experiments that are already running
+	      </li>
 	      
-	      <li>It is up to you to coordinate with other members of
-		your project to ensure that the nodes are available
-		when you want them</li>
+	      <li class="per-project-reservations res-warnings
+			 per-group-reservations hidden">
+		It is up to you to coordinate with other members of your
+		<span class="per-project-reservations res-warnings hidden">
+		  project</span>
+		<span class="per-group-reservations res-warnings hidden">
+		  group</span>
+		to ensure that the nodes are available when you want them
+	      </li>
 	      
-	      <li>If another user in your project is using your reserved nodes,
-		you might not be able to extend your experiments</li>
+	      <li class="per-project-reservations res-warnings
+			 per-group-reservations hidden">
+		If another user in your
+		<span class="per-project-reservations res-warnings hidden">
+		  project</span>
+		<span class="per-group-reservations res-warnings hidden">
+		  group</span>
+		is using your reserved nodes,
+		you might not be able to extend your experiments
+	      </li>
+
+	      <li class="per-user-reservations res-warnings hidden">
+		Only <b>you</b> may start an experiment that uses these nodes
+	      </li>
 
 	      <li>You must use your reservation within three hours or it will
 		be automatically canceled</li>

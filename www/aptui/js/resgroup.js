@@ -3076,6 +3076,29 @@ $(function ()
 	    }
 	    // User can submit.
 	    ToggleSubmit(true, "submit");
+
+	    if (isadmin) {
+		$('#commit-reservation').removeAttr("disabled");
+		$('#confirm-reservation .res-warnings-div').addClass("hidden");
+	    }
+	    else {
+		// Various warnings based on sharing setting.
+		var pid = (editing ? current_pid : $('#pid').val());
+
+		$('#confirm-reservation .res-warnings').addClass("hidden");
+		if (projlist[pid].resmode == "project") {
+		    $('#confirm-reservation .per-project-reservations')
+			.removeClass("hidden");
+		}
+		else if (projlist[pid].resmode == "group") {
+		    $('#confirm-reservation .per-group-reservations')
+			.removeClass("hidden");
+		}
+		else if (projlist[pid].resmode == "user") {
+		    $('#confirm-reservation .per-user-reservations')
+			.removeClass("hidden");
+		}
+	    }
 	    sup.ShowModal('#confirm-reservation');
 	};
 	var args = {
