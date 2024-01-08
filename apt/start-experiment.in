@@ -672,8 +672,24 @@ exit(0);
 sub fatal($)
 {
     my ($mesg) = @_;
-    unlink($logfile) if (defined($logfile));
 
+    if (defined($logfile)) {
+	unlink($logfile);
+    }
+    elsif (defined($project) && !(isatty(\*STDOUT) || $debug)) {
+	my $url = (defined($this_user) ? $this_user->webURL() : "");
+	
+	#
+	# We failed early (since there is no log file). For debugging
+	# lets send the error info to logs.
+	#
+	$project->SendEmail($project->OpsEmailAddress(),
+			    "Failed to start XMLRPC experiment",
+			    "Failed to start XMLRPC experiment:\n\n ".
+			    "$mesg\n\n".
+			    "$PROGRAM_NAME @ARGV \n".
+			    "$url\n");
+    }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
     exit(-1);
