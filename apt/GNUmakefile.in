@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,7 +36,7 @@ BIN_SCRIPTS	= manage_profile manage_instance manage_dataset \
                   manage_images rtecheck checkprofile manage_extensions \
 		  create_slivers searchip start-experiment manage_resgroup \
 		  modify-experiment fabric-stitcher manage_fabric \
-		  manage_rdz rdz_celona rdz_watcher
+		  manage_rdz rdz_celona rdz_watcher create-reservation
 SBIN_SCRIPTS	= apt_daemon aptevent_daemon portal_xmlrpc apt_checkup \
 		  portal_monitor apt_scheduler portal_resources \
 		  manage_licenses manage_aggregate \
