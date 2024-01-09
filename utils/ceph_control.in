@@ -23,13 +23,30 @@
 #
 
 #
-# Create and install a Ceph credential for a project/user.
-# This will call over to a mon node to make the credential, enabling it
-# in the cluster, and then returning the private key that we put in the DB
-# to be used later to construct a Ceph keyring on nodes in the project or
-# when the user has an account.
+# Create, disable, or remove Ceph credentials and CephFS directory for
+# a project or user.
+#
+# * Create:
+#   This will call over to a mon node to create the credential, enabling
+#   it in the Ceph cluster, and then returning the private key that we put
+#   in the DB to be used later to construct a Ceph keyring on nodes in the
+#   project or when the user has an account. If the credential already exists,
+#   the mon node will return the existing one. Also creates the appropriate
+#   subdirectory in CephFS and assigns the correct pool and pool namespace
+#   to the root of the subdir.
+#
+# * Disable:
+#   Removes the Emulab-side DB state. The Ceph cluster credential and subdir
+#   are left alone. A future "create" will have the effect of reactivating
+#   access for the user.
+#
+# * Remove:
+#   Performs disable actions and also calls over to the mon node to destroy
+#   the project/user credential and remove the CephFS directory associated
+#   with that project/user.
 #
 # XXX right now we are just doing project credentials.
+# XXX right now we store the credentials in the filesystem instead of the DB.
 #
 
 use strict;
@@ -43,25 +60,20 @@ my $cephfeature = "CephEnabled";
 
 sub usage()
 {
-    print STDERR "Usage: ceph_makecred [-hdn] [-T type] name\n";
-    print STDERR " Create a credential for 'name' of the given type 'type'\n";
+    print STDERR "Usage: ceph_control [-hdn] [-T type] action name\n";
     print STDERR "   -h       This message\n";
     print STDERR "   -d       Print additional debug info\n";
-    print STDERR "   -n       Do not perform actions, just say what it would do.\n";
-    print STDERR "   -T type  Type of credential: 'proj'|'user'|'dataset'\n";
-    print STDERR "   name     A valid name of the proper type; i.e., a pid\n\n";
-    print STDERR "Usage: ceph_makecred [-hdn] [-T type] [-D|-R] name\n";
-    print STDERR " Disable or remove an existing credential\n";
-    print STDERR "   -D       Disable use of existing credential\n";
-    print STDERR "   -R       Remove credential from Ceph (implies -D)\n";
-
+    print STDERR "   -n       Do not perform actions, just talk about it.\n";
+    print STDERR "   -T type  Type of name: 'proj' | 'user' | 'dataset'\n";
+    print STDERR "   action   One of 'create' | 'disable' | 'remove'\n";
+    print STDERR "   name     A valid name of the proper type; i.e., a pid\n";
     exit(-1);
 }
-my $optlist  = "hdnDRT:";
+my $optlist  = "hdnT:";
 my $debug = 0;
 my $impotent = 0;
-my $removecred = 0;
 my $ntype = "proj";
+my $action;
 my $name;
 
 # Protos
@@ -127,12 +139,6 @@ if (defined($options{d})) {
 if (defined($options{n})) {
     $impotent = 1;
 }
-if (defined($options{D})) {
-    $removecred = 1;
-}
-if (defined($options{R})) {
-    $removecred = 2;
-}
 if (defined($options{T})) {
     if ($options{T} =~ /^(proj|user|dataset)$/) {
 	my $ntype = $1;
@@ -141,11 +147,17 @@ if (defined($options{T})) {
       usage();
     }
 }
-if (@ARGV < 1) {
+if (@ARGV < 2) {
     usage();
 }
 
+$action = shift;
 $name = shift;
+if ($action !~ /^(create|disable|remove)$/) {
+    print STDERR "Action must be one of create|disable|remove\n";
+    usage();
+}
+$action = $1;
 if ($name !~ /^([-\w]+)$/) {
     fatal("Invalid syntax for name");
 }
@@ -162,15 +174,7 @@ if ($ntype eq "proj") {
 	fatal("No such project '$name'");
     }
 
-    if ($removecred) {
-	if ($impotent) {
-	    print STDERR "Would disable feature $cephfeature on project $name\n";
-	} elsif ($feature->Disable($pid)) {
-	    fatal("Could not disable $cephfeature feature for project $name!");
-	}
-	removeprojcred($name, $pid);
-	removeprojfs($name, $pid);
-    } else {
+    if ($action eq "create") {
 	if ($impotent) {
 	    print STDERR "Would enable feature $cephfeature on project $name\n";
 	} elsif ($feature->Enable($pid)) {
@@ -178,6 +182,14 @@ if ($ntype eq "proj") {
 	}
 	createprojcred($name, $pid);
 	createprojfs($name, $pid);
+    } else {
+	if ($impotent) {
+	    print STDERR "Would disable feature $cephfeature on project $name\n";
+	} elsif ($feature->Disable($pid)) {
+	    fatal("Could not disable $cephfeature feature for project $name!");
+	}
+	removeprojcred($name, $pid);
+	removeprojfs($name, $pid);
     }
 } else {
     fatal("user and dataset credentials not yet implemented");
@@ -261,7 +273,7 @@ END_CMD
     }
 }
 	 
-sub creteprojfs($$)
+sub createprojfs($$)
 {
     my ($proj,$pobj) = @_;
 
@@ -311,7 +323,7 @@ sub removeprojcred($$)
     #
     # Also remove from Ceph
     #
-    if ($removecred > 1) {
+    if ($action eq "remove") {
 	my $CMD = "ceph auth del client.$proj";
 	if ($impotent) {
 	    print STDERR "Would issue: $CMD\n";
@@ -330,7 +342,7 @@ sub removeprojfs($$)
 {
     my ($proj,$pobj) = @_;
 
-    if ($removecred > 1) {
+    if ($action eq "remove") {
 	my $CMD = "sh /cephfs/proj/rmproj.sh $proj";
 	if ($impotent) {
 	    print STDERR "Would issue: $CMD\n";
