@@ -1254,7 +1254,7 @@ sub Reserved($$$$$$$)
     if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
 	$clause = "and g.gid_idx='$gid_idx' ";
     }
-    elsif ($project->shared_reservations() == $Project::RESERVATIONS_USER) {
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
 	$clause = "and g.creator_idx='$uid_idx' ";
     }
     my $query_result =
@@ -1294,7 +1294,7 @@ sub ReservedByType($$$$$$$)
     if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
 	$clause = "and g.gid_idx='$gid_idx'  ";
     }
-    elsif ($project->shared_reservations() == $Project::RESERVATIONS_USER) {
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
 	$clause = "and g.creator_idx='$uid_idx' ";
     }
     my $query_result =
@@ -2378,7 +2378,7 @@ sub RangeReserved($$$$$$$)
     if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
 	$clause = "and g.gid_idx='$gid_idx' ";
     }
-    elsif ($project->shared_reservations() == $Project::RESERVATIONS_USER) {
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
 	$clause = "and g.creator_idx='$uid_idx' ";
     }
     #
@@ -2998,7 +2998,7 @@ sub RouteReserved($$$$$$)
     if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
 	$clause = "and g.gid_idx='$gid_idx' ";
     }
-    elsif ($project->shared_reservations() == $Project::RESERVATIONS_USER) {
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
 	$clause = "and g.creator_idx='$uid_idx' ";
     }
     my $query_result =
