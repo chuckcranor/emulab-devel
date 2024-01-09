@@ -120,11 +120,13 @@
 	      <% if (projects) { %>
 	        <% if (editing) { %>
 		  <div class="form-group" style="margin-bottom: 0px;">
-		    <div id="pid"
-			 class="form-control-fake format-me"
+		    <div class="form-control-fake format-me"
 			 data-compact="true"
 			 data-label="Project"
 			 data-key="pid">
+		      <span id="pid"></span>
+		      <span class="ms-3">(reservations in this project are
+			<a href="<%- window.MANUAL %>/reservations.html#(part._reservations-shared)" target="_blank">per-<span id="pid-resmode"></span></a>)</span>
 		    </div>
 		  </div>
 		  <div class="form-group hidden" id="group-div"
@@ -138,31 +140,51 @@
 		  </div>
 	        <% } else if (_.size(projects) == 1) { %>
 		  <div class="form-group">
-		    <input name="pid" readonly
-			 id="pid"
-			 value="<% print(_.first(_.keys(projects))) %>"
-			 class="form-control format-me"
+		    <div class="format-me"
 			 data-label="Project"
 			 data-key="pid">
+		      <div class="row g-3">		      
+			<div class="col-sm-5">
+			  <input name="pid" readonly
+				 class="form-control"
+				 id="pid"
+				 value="<% print(_.first(_.keys(projects))) %>">
+			</div>
+			<div class="col-auto align-self-center">			
+			  <span>(reservations in this project are
+			    <a href="<%- window.MANUAL %>/reservations.html#(part._reservations-shared)" target="_blank">per-<span id="pid-resmode"></span></a>)</span>		      
+			</div>
+		      </div>
+		    </div>
 		  </div>
 		<% } else { %>
 		  <div class="form-group">
-		    <select name="pid"
-			    id="pid"
-			    class='form-control format-me form-select'
-			    data-colsize="4"
-			    data-key="pid"
-			    data-label="Project"
-			    placeholder='Please Select'>
-		      <% _.each(projects, function(details, name) { %>
-			<option 
-			    <% if (default_pid === name) { %>
-			    selected
-			    <% } %>
-			    value='<%= name %>'><%= name %>
-			</option>
-		      <% }); %>
-		    </select>
+		    <div class="format-me"
+			 data-label="Project"
+			 data-key="pid"
+			 data-colsize="9">
+		      <div class="row g-3">		      
+			<div class="col-sm-5">
+			  <select name="pid"
+				  id="pid"
+				  class='form-control form-select'
+				  placeholder='Please Select'>
+			    <% _.each(projects, function(details, name) { %>
+			      <option 
+				  <% if (default_pid === name) { %>
+				  selected
+				  <% } %>
+				  value='<%= name %>'><%= name %>
+			      </option>
+			    <% }); %>
+			  </select>
+			</div>
+			<div class="col-auto align-self-center">			
+			  <span>(reservations in this project are
+			    <a href="<%- window.MANUAL %>/reservations.html#(part._reservations-shared)" target="_blank">per-<span id="pid-resmode"></span></a>)</span>		      
+			</div>
+		      </div>
+		    </div>
 		  </div>
 	        <% } %>
 	        <% if (!editing) { %>

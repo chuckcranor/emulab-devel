@@ -3449,10 +3449,6 @@ $(function ()
 	    else {
 		$('#reserve-requestor').html(details.uid);
 	    }
-	    // Silly hint that reservation is per-user.
-	    if (details.shared_reservations == "user") {
-		$('#reserve-requestor').addClass("text-decoration-underline");
-	    }
 	    
 	    // Ditto the project.
 	    if (_.has(details, 'pid_idx')) {
@@ -3465,6 +3461,8 @@ $(function ()
 		$('#pid').html(details.pid);
 	    }
 	    current_pid = details.pid;
+	    // Indicate what the sharing mode for the project is.
+	    $('#pid-resmode').html(details.shared_reservations);
 
 	    // And the group.
 	    if (details.shared_reservations == "group") {
@@ -4343,6 +4341,8 @@ $(function ()
 	else {
 	    $('#for-class-checkbox').addClass("hidden");
 	}
+	// Indicate what the sharing mode for the project is.
+	$('#pid-resmode').html(projlist[pid].resmode);
 
 	// Group selector, but hidden if no sub groups. 
 	var html = "";
