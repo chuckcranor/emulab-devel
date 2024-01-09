@@ -94,17 +94,19 @@
 	</td>
       </tr>
     <% }); %>
+    <tr>
+      <td>For a Class?</td>
+      <td><% if (fields.forClass) { %>Yes<% } else { %>No<% } %>
+	<% if (isadmin) { %>
+	  (<a class="toggle" data-name="project_forClass">Toggle</a>)
+	<% } %>
+      </td>
+    </tr>
     <% if (isadmin) { %>
       <tr>
 	<td>Disabled</td>
 	<td><% if (fields.disabled) { %>Yes<% } else { %>No<% } %>
 	  (<a class="toggle" data-name="project_disable">Toggle</a>)
-	</td>
-      </tr>
-      <tr>
-	<td>For a Class?</td>
-	<td><% if (fields.forClass) { %>Yes<% } else { %>No<% } %>
-	  (<a class="toggle" data-name="project_forClass">Toggle</a>)
 	</td>
       </tr>
       <tr>
@@ -130,6 +132,13 @@
 	  </div>	  
 	</td>
       </tr>
+    <% } else {  %>
+      <tr>
+	<td>Reservation Sharing</td>
+	<td><%- fields.shared_reservations %></td>
+      </tr>
+    <% } %>
+    <% if (isadmin) { %>
       <tr>
 	<td>Reservations Disabled</td>
 	<td><% if (fields.reservations_disabled) { %>Yes<% } else { %>No<% } %>
