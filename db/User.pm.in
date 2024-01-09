@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2595,6 +2595,17 @@ sub DeleteTokenPasswordByIdx($$$$)
 	if (!DBQueryWarn($q));
 
     return 0;
+}
+
+# Return a URL for the user dashboard page.
+sub webURL($)
+{
+    my ($self) = @_;
+    my $link = $self->Brand()->wwwBase();
+    if ($self->Brand()->isClassic()) {
+	$link .= "/portal";
+    }
+    return $link . "/user-dashboard.php?uid=" . $self->uid();
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

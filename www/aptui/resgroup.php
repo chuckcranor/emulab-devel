@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -312,7 +312,7 @@ else {
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";
 echo "   window.HOMETZ   = '$OURTIMEZONE';\n";
-echo "   window.BISONLY  = 0;\n";
+echo "   window.BISONLY  = $bisdaysonly;\n";
 echo "   window.DOROUTES = $routesokay;\n";
 
 echo "</script>\n";

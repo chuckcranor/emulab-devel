@@ -523,6 +523,9 @@ if ($vars->{"usequotas"}) {
 }
 
 if ($checkonly) {
+    $quota->Unlock()
+	if (defined($quota));
+
     if ($needapproval) {
 	if (defined($webtask)) {
 	    $webtask->output($unapproved_reason);
@@ -546,6 +549,8 @@ if ($needapproval) {
 	    $webtask->output($unapproved_reason);
 	    $webtask->Exited($POLICY_FAIL);
 	}
+	$quota->Unlock()
+	    if (defined($quota));
 	exit($POLICY_FAIL);
     } else {
 	$approveme = 0;

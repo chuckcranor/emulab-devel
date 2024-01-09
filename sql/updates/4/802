@@ -1,0 +1,25 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instances", "modify_count")) {
+	DBQueryFatal("ALTER TABLE apt_instances ADD ".
+		     " `modify_count` int(11) unsigned NOT NULL default '0'");
+    }
+    if (!DBSlotExists("apt_instance_history", "modify_count")) {
+	DBQueryFatal("ALTER TABLE apt_instance_history ADD ".
+		     " `modify_count` int(11) unsigned NOT NULL default '0'");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

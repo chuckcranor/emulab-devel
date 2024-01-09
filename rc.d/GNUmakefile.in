@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -83,6 +83,7 @@ endif
 # Powder
 ifeq ($(TBMAINSITE),1)
 RC_SCRIPTS	+= powder_keepalive.sh
+OPS_SCRIPTS     += rfbaseline.sh
 endif
 ifeq ($(POWDER_DEADMAN),1)
 RC_SCRIPTS	+= endpoint-monitor.sh

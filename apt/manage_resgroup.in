@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,6 +29,7 @@ use Data::Dumper;
 use JSON;
 use POSIX ":sys_wait_h";
 use POSIX qw(:signal_h ceil);
+use File::Temp qw(tempfile);
 use Date::Parse;
 use Date::Format;
 
@@ -112,6 +113,8 @@ sub DoMaxExtension();
 sub DoRouteForecast();
 sub DoSetShareReservations();
 sub DoPredictionInfo();
+sub DoCreateFromRspec();
+sub DoStatus();
 sub CallMethodOnReservations($$@);
 
 #
@@ -186,6 +189,12 @@ elsif ($action eq "setsharedreservations") {
 }
 elsif ($action eq "predictioninfo") {
     DoPredictionInfo();
+}
+elsif ($action eq "createfromrspec") {
+    DoCreateFromRspec();
+}
+elsif ($action eq "status") {
+    DoStatus();
 }
 else {
     usage();
@@ -342,7 +351,7 @@ sub DoGroupReserve()
     if (ref($blob) ne "HASH") {
 	fatal("json data is not a HASH");
     }
-    print Dumper($blob);
+    print Dumper($blob) if ($debug);
 
     if (0 && !$update) {
     	#
@@ -771,6 +780,7 @@ sub DoGroupReserve()
 	    }
 	    @argvcopy = @tmp;
 	}
+	$command .= "-d " if ($debug);
 	$command .= "-a $urn reserve -S -t $type ";
 	$command .= "-n " if ($checkonly);
 	# Global autoapprove might have been turned off but in check mode
@@ -783,7 +793,7 @@ sub DoGroupReserve()
 	    $command .= "-I ";
 	}
 	$command .= " @argvcopy $count";
-	print "Running: $command\n";
+	print "Running: $command\n" if ($debug);
 	system($command);
 	if ($?) {
 	    return 1;
@@ -1222,7 +1232,7 @@ sub DoGroupReserve()
 	$webtask->results($result);
 	$webtask->Exited($exitcode);
     }
-    print Dumper($result);
+    print Dumper($result) if ($debug);
     exit($exitcode);
 
   bad:
@@ -3504,7 +3514,7 @@ sub DoRouteForecast()
     my %current      = ();
     my $routemap     = APT_Reservation::Group::RouteReservation::RouteMap();
     my $now          = time();
-    my @projlist;
+    my @projlist     = ();
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -3898,6 +3908,276 @@ sub DoPredictionInfo()
 	$webtask->Exited(0);
     }
     exit(0);
+}
+
+#
+# Create reservation from a fully bound rspec. 
+#
+sub DoCreateFromRspec()
+{
+    my $optlist    = "s:e:nN:p:";
+    my $exitcode   = 0;
+    my $autoapprove= 1; # This might be turned off below
+    my ($clusters, $ranges, $routes);
+    my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
+    my ($project,$group,$resources);
+    my $checkonly;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV != 2 || !defined($options{"e"}));
+
+    if ($ARGV[0] =~ /[,\/]+/) {
+	$group = Group->Lookup($ARGV[0]);
+	if (!defined($group)) {
+	    fatal("No such group");
+	}
+	$project = $group->GetProject();
+    }
+    else {
+	$project = Project->Lookup($ARGV[0]);
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	$group = $project->GetProjectGroup();
+    }
+    my $file = $ARGV[1];
+
+    if (! -e $file) {
+	fatal("No such file: $file");
+    }
+    if (defined($options{"p"})) {
+	$brand = Brand->Create($options{"p"});
+	if (!defined($brand)) {
+	    fatal("No such portal");
+	}
+    }
+    else {
+	$brand = $project->Brand();
+    }
+    if (defined($options{"s"})) {
+	$start = $options{"s"};
+	if ($start !~ /^\d+$/) {
+	    $start = str2time($start);
+	    if (!$start) {
+		fatal("Start is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    if (defined($options{"e"})) {
+	$end = $options{"e"};
+	if ($end !~ /^\d+$/) {
+	    $end = str2time($end);
+	    if (!$end) {
+		fatal("End is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    if (defined($options{"N"})) {
+	$reason = emutil::ReadFile($options{"N"});
+	chomp($reason);
+
+	if (!TBcheck_dbslot($reason, "default", "fulltext",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Invalid characters in reason string");
+	}
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
+    }
+    if (! defined($end)) {
+	print STDERR "Missing end time\n";
+	usage();
+    }
+    #
+    # No start time means user wants the reservation right now.
+    #
+    if (!defined($start)) {
+	$start = time();
+    }
+
+    my $rspec = GeniXML::ParseFile($file);
+    if (! defined($rspec)) {
+	fatal("Could not parse rspec");
+    }
+    # This will ensure that the rspec is fully bound.
+    if (APT_Profile::GetResources($rspec, \$errmsg, \$resources)) {
+	fatal("GetResources error: $errmsg");
+    }
+
+    my %clusters = ();
+    my %ranges   = ();
+    my %routes   = ();
+
+    foreach my $urn (keys(%{ $resources->{'typeCounts'} })) {
+	foreach my $type (keys(%{ $resources->{'typeCounts'}->{$urn} })) {
+	    my $count = $resources->{'typeCounts'}->{$urn}->{$type};
+	    my $uuid  = NewUUID();
+	    
+	    $clusters{$uuid} = {
+		"uuid"    => $uuid,
+		"cluster" => $urn,
+		"type"    => $type,
+		"count"   => $count,
+	    };
+	}
+    }
+
+    my $tmps = [];
+    if (APT_Profile::GetSpectrum($rspec, \$tmps, \$errmsg)) {
+	fatal("GetSpectrum error: $errmsg");
+    }
+    foreach my $request (@{$tmps}) {
+	my $frequency_low  = $request->{"frequency_low"};
+	my $frequency_high = $request->{"frequency_high"};
+	my $uuid  = NewUUID();
+
+	$ranges{$uuid} = {
+	    "uuid"      => $uuid,
+	    "freq_low"  => $frequency_low,
+	    "freq_high" => $frequency_high,
+	};
+    }
+
+    my $tmpr = [];
+    if (APT_Profile::GetRoutes($rspec, \$tmpr, \$errmsg)) {
+	fatal("GetRoutes error: $errmsg");
+    }
+    foreach my $route (@{$tmpr}) {
+	my $uuid  = NewUUID();
+	
+	$routes{$uuid} = {
+	    "uuid"      => $uuid,
+	    "routename" => $route->{'name'},
+	};
+    }
+
+    #
+    # DoGroupReserve() expects this json blob.
+    #
+    my $blob = {
+	"clusters" => \%clusters,
+	"ranges"   => \%ranges,
+	"routes"   => \%routes,
+    };
+    print Dumper($blob) if ($debug);
+
+    my $json = eval { encode_json($blob); };
+    if ($@) {
+	fatal("Could not json encode reservation request");
+    }
+    my ($fh, $filename) = tempfile(UNLINK => 1);
+    if (!defined($fh)) {
+	fatal("Could not open temporary file for reservation request");
+    }
+    print $fh $json;
+    close($fh);
+
+    my $local_webtask = WebTask->CreateAnonymous();
+    my $local_task_id = $local_webtask->task_id();
+    my $command = "$GROUPCOMMAND -t $local_task_id ";
+    $command   .= "-d " if ($debug);
+    $command   .= "reserve ";
+    my $options = "-p " . $options{"p"} . " " if (defined($options{"p"}));
+    $options   .= "-s $start " if (defined($options{"s"}));
+    $options   .= "-e $end " if (defined($options{"e"}));
+    $options   .= "-N " . $options{"N"} . " " if (defined($options{"N"}));
+    $options   .= $project->pid() . " " . $filename;
+
+    # Always do a precheck.
+    print "$command -n $options\n" if ($debug);
+    system("$command -n $options");
+    if ($?) {
+	$local_webtask->Delete();
+	unlink($filename);
+	fatal("Failed to reserve resources");
+    }
+    $local_webtask->Refresh();
+    my $results = $local_webtask->results();
+    print Dumper($results) if ($debug);
+
+    #
+    # Have to look inside the results to see if all of the reservations are
+    # going to be approved immediately. 
+    #
+    my $needsapproval = 0;
+    my $haserrors = 0;
+
+    foreach my $result ($results->{"cluster_results"}->{"clusters"},
+			$results->{"route_results"}->{"routes"},
+			$results->{"range_results"}->{"ranges"}) {
+	foreach my $ref (values(%{ $result })) {
+	    if (exists($ref->{'errcode'})) {
+		$haserrors++;
+	    }
+	    elsif ($ref->{'approved'} == 0) {
+		$needsapproval++;
+	    }
+	}
+    }
+    my $code = 0;
+    my $mesg;
+    if ($checkonly) {
+	$local_webtask->Delete();
+	my ($mesg);
+
+	if ($haserrors) {
+	    print Dumper($results) if (!$debug);
+	    $mesg = "Reservation request has errors";
+	    $code = 2;
+	}
+	elsif ($needsapproval) {
+	    $mesg = "Reservation request would need approval";
+	    $code = 1;
+	}
+	else {
+	    $mesg = "Reservation request would be auto-approved";
+	    $code = 0;
+	}
+	if (defined($webtask)) {
+	    $webtask->results($results);
+	    $webtask->output($mesg);
+	    $webtask->Exited($code);
+	}
+	print "$mesg\n";
+	exit($code);
+    }
+    if ($haserrors) {
+	print Dumper($results) if (!$debug);
+	print "Reservation request has errors, aborting\n";
+	$code = 2;
+    }
+    elsif ($needsapproval) {
+	print "Reservation request will need approval, but submitting anyway\n";
+    }
+    else {
+	print "Reservation request will be auto-approved, submitting\n";
+    }
+    
+    #
+    # Submit for real. 
+    #
+    if (!$haserrors) {
+	$local_webtask->Reset();
+	system("$command $options");
+	if ($?) {
+	    $local_webtask->Delete();
+	    unlink($filename);
+	    fatal("Failed to reserve resources");
+	}
+	$local_webtask->Refresh();
+	$results = $local_webtask->results();
+	print Dumper($results) if ($debug || !defined($webtask));
+    }
+
+    if (defined($webtask)) {
+	$webtask->results($results);
+	$webtask->Exited($code);
+    }
+    exit($code);
 }
 
 sub fatal($)

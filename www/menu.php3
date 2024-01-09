@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1214,6 +1214,7 @@ $PAGEHEADER_FUNCTION = function($title, $view = NULL, $extra_headers = NULL,
     else {
 	header("Expires: " . gmdate("D, d M Y H:i:s", time() + 300) . " GMT"); 
     }
+    header("X-Frame-Options: SAMEORIGIN");
 
     if (VIEWSET($view, 'hide_banner')) {
 	$nobanner = 1;

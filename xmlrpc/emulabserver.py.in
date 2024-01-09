@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2023 University of Utah and the Flux Group.
+# Copyright (c) 2004-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -6139,6 +6139,9 @@ class portal:
             elif opt == "nopending":
                 argstr += " -P "
                 pass
+            elif opt == "maxduration":
+                argstr += " -X "
+                pass
             elif opt == "noemail":
                 argstr += " -s "
                 pass
@@ -6607,6 +6610,181 @@ class portal:
             return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
         
         return EmulabResponse(RESPONSE_SUCCESS, output=output)
+
+    #
+    # Create a portal reservation
+    #
+    def createReservation(self, version, argdict):
+        if version != self.VERSION:
+            return EmulabResponse(RESPONSE_BADVERSION,
+                                  output="Client version mismatch!")
+
+        if self.readonly:
+            return EmulabResponse(RESPONSE_FORBIDDEN,
+                              output="Insufficient privledge to invoke method")
+        
+        try:
+            checknologins()
+            pass
+        except NoLoginsError as e:
+            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
+
+        argerror = CheckRequiredArgs(argdict, ("proj", "profile", "end"))
+        if (argerror):
+            return argerror
+
+        argstr     = ""
+        profile    = None
+        
+        for opt, val in argdict.items():
+            if opt == "proj":
+                argstr += " --project "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "start":
+                argstr += " --start "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "end":
+                argstr += " --end "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "paramset":
+                argstr += " --paramset "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "bindings":
+                argstr += " --bindings "
+                bindings = val
+            
+                if len(bindings) > (1024 * 16):
+                    return EmulabResponse(RESPONSE_TOOBIG,
+                                         output="Bindings way too big!");
+        
+                (fp, filename) = writensfile(bindings)
+                if not filename:
+                    return EmulabResponse(RESPONSE_SERVERERROR,
+                                         output="Server Error")
+
+                argstr += escapeshellarg(filename)
+                pass
+            elif opt == "refspec":
+                argstr += " --refspec "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "aggregate":
+                argstr += " -a "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "checkonly":
+                argstr += " -n "
+                pass
+            elif opt == "debug":
+                argstr += " -d "
+                pass
+            elif opt == "profile":
+                profile = val
+                pass
+            pass
+        
+        argstr += " "
+        argstr += escapeshellarg(profile)
+        
+        (exitval, output) = runcommand(TBDIR +
+                                       "/bin/create-reservation " + argstr)
+
+        if exitval:
+            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+        
+        return EmulabResponse(RESPONSE_SUCCESS, output=output)
+
+    #
+    # Portal reservation group status
+    #
+    def reservationStatus(self, version, argdict):
+        if version != self.VERSION:
+            return EmulabResponse(RESPONSE_BADVERSION,
+                                  output="Client version mismatch!")
+
+        if self.readonly:
+            return EmulabResponse(RESPONSE_FORBIDDEN,
+                              output="Insufficient privledge to invoke method")
+        
+        try:
+            checknologins()
+            pass
+        except NoLoginsError as e:
+            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
+
+        argerror = CheckRequiredArgs(argdict, ("resgroup",))
+        if (argerror):
+            return argerror
+
+        argstr   = ""
+        resgroup = None
+        
+        for opt, val in argdict.items():
+            if opt == "resgroup":
+                resgroup = val
+                pass
+            elif opt == "asjson":
+                argstr += " -j "
+                pass
+            pass
+        
+        argstr = "status " + argstr + escapeshellarg(resgroup)
+
+        # Slow down the polling.
+        time.sleep(3)
+        
+        (exitval, output) = runcommand(TBDIR +
+                                       "/bin/manage_resgroup " + argstr)
+
+        if exitval:
+            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+        
+        return EmulabResponse(RESPONSE_SUCCESS, output, output=output)
+
+    #
+    # Deleye a Portal reservation group
+    #
+    def deleteReservation(self, version, argdict):
+        if version != self.VERSION:
+            return EmulabResponse(RESPONSE_BADVERSION,
+                                  output="Client version mismatch!")
+
+        if self.readonly:
+            return EmulabResponse(RESPONSE_FORBIDDEN,
+                              output="Insufficient privledge to invoke method")
+        
+        try:
+            checknologins()
+            pass
+        except NoLoginsError as e:
+            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
+
+        argerror = CheckRequiredArgs(argdict, ("resgroup",))
+        if (argerror):
+            return argerror
+
+        argstr   = ""
+        resgroup = None
+        
+        for opt, val in argdict.items():
+            if opt == "resgroup":
+                resgroup = val
+                pass
+            pass
+        
+        argstr = "delete " + argstr + escapeshellarg(resgroup)
+
+        (exitval, output) = runcommand(TBDIR +
+                                       "/bin/manage_resgroup " + argstr)
+
+        if exitval:
+            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
+        
+        return EmulabResponse(RESPONSE_SUCCESS, output, output=output)
 
 
 #
