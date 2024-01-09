@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2023 University of Utah and the Flux Group.
+# Copyright (c) 2023-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,25 +36,40 @@ use strict;
 use English;
 use Getopt::Std;
 
+# XXX til we have DB setup, we put this in a file
+my $writetofile = 1;
+
+my $cephfeature = "CephEnabled";
+
 sub usage()
 {
     print STDERR "Usage: ceph_makecred [-hdn] [-T type] name\n";
+    print STDERR " Create a credential for 'name' of the given type 'type'\n";
     print STDERR "   -h       This message\n";
     print STDERR "   -d       Print additional debug info\n";
     print STDERR "   -n       Do not perform actions, just say what it would do.\n";
     print STDERR "   -T type  Type of credential: 'proj'|'user'|'dataset'\n";
-    print STDERR "   name     A valid name of the proper type; i.e., a pid\n";
+    print STDERR "   name     A valid name of the proper type; i.e., a pid\n\n";
+    print STDERR "Usage: ceph_makecred [-hdn] [-T type] [-D|-R] name\n";
+    print STDERR " Disable or remove an existing credential\n";
+    print STDERR "   -D       Disable use of existing credential\n";
+    print STDERR "   -R       Remove credential from Ceph (implies -D)\n";
+
     exit(-1);
 }
-my $optlist  = "hdnT:";
+my $optlist  = "hdnDRT:";
 my $debug = 0;
 my $impotent = 0;
+my $removecred = 0;
 my $ntype = "proj";
 my $name;
 
 # Protos
 sub sendcmd($;$);
-sub createprojcred($);
+sub createprojcred($$);
+sub removeprojcred($$);
+sub createprojfs($$);
+sub removeprojfs($$);
 sub fatal($);
 
 #
@@ -74,6 +89,7 @@ use emutil;
 use Experiment;
 use User;
 use Project;
+use EmulabFeatures;
 
 #
 # Turn off line buffering on output
@@ -111,6 +127,12 @@ if (defined($options{d})) {
 if (defined($options{n})) {
     $impotent = 1;
 }
+if (defined($options{D})) {
+    $removecred = 1;
+}
+if (defined($options{R})) {
+    $removecred = 2;
+}
 if (defined($options{T})) {
     if ($options{T} =~ /^(proj|user|dataset)$/) {
 	my $ntype = $1;
@@ -129,46 +151,78 @@ if ($name !~ /^([-\w]+)$/) {
 }
 $name = $1;
 
+my $feature = EmulabFeatures->Lookup($cephfeature);
+if (!$feature) {
+    fatal("$cephfeature feature does not exist!");
+}
+
 if ($ntype eq "proj") {
     my $pid = Project->Lookup($name);
     if (!$pid) {
 	fatal("No such project '$name'");
     }
-    # XXX check project for PowderCephfs feature
-    createprojcred($name);
+
+    if ($removecred) {
+	if ($impotent) {
+	    print STDERR "Would disable feature $cephfeature on project $name\n";
+	} elsif ($feature->Disable($pid)) {
+	    fatal("Could not disable $cephfeature feature for project $name!");
+	}
+	removeprojcred($name, $pid);
+	removeprojfs($name, $pid);
+    } else {
+	if ($impotent) {
+	    print STDERR "Would enable feature $cephfeature on project $name\n";
+	} elsif ($feature->Enable($pid)) {
+	    fatal("Could not enable $cephfeature feature for project $name!");
+	}
+	createprojcred($name, $pid);
+	createprojfs($name, $pid);
+    }
 } else {
     fatal("user and dataset credentials not yet implemented");
 }
 
 exit(0);
 
-sub createprojcred($)
+sub createprojcred($$)
 {
-    my ($proj) = @_;
+    my ($proj,$pobj) = @_;
 
+    my $key = "";
     my $CMD = <<"END_CMD";
 ceph auth get-or-create-key client.$proj mon \\'allow r\\' osd \\'allow rw pool=cephfs_data namespace=$proj\\' mds \\'allow rw fsname=cephfs path=/proj/$proj\\'
 END_CMD
+    chomp $CMD;
     if ($impotent) {
 	print STDERR "Would issue: $CMD\n";
-	return 0;
-    }
-    
-    my $output;
-    my $stat = sendcmd($CMD, \$output);
-    if ($stat != 0) {
-	fatal("Could not create project credential:\n" . @$output);
-    }
-    my ($key) = $$output[0];
-    chomp $key;
-    print STDERR "key: '$key'\n"
-	if ($debug);
-    if ($key !~ /^([a-zA-Z0-9\+\/]{38}==)$/) {
-	fatal("Invalid format for Ceph key!?");
+    } else {
+	my $output;
+	my $stat = sendcmd($CMD, \$output);
+	if ($stat != 0) {
+	    fatal("Could not create project credential:\n" . @$output);
+	}
+	($key) = $$output[0];
+	chomp $key;
+	print STDERR "$proj key: '$key'\n"
+	    if ($debug);
+	if ($key !~ /^([a-zA-Z0-9\+\/]{38}==)$/) {
+	    fatal("Invalid format for Ceph key!?");
+	}
     }
 
-    # XXX til we have DB setup, we put this in a file
     if ($writetofile) {
+	if ($impotent) {
+	    print STDERR "Would put key in /proj/$proj/ceph/secret\n";
+	    return;
+	}
+	#
+	# XXX if a known project dir does not exist,
+	# we might need to force mounting of the project filesystem.
+	#
+	if (! -d "/proj/$proj/exp" && $pobj->UpdateExports(1)) {
+	    fatal("Could not access the /proj/$proj filesystem.");
+	}
 	if (! -d "/proj/$proj/ceph" &&
 	    !mkdir("/proj/$proj/ceph", 0770) &&
 	    system("chown root:$proj /proj/$proj/ceph")) {
@@ -178,16 +232,119 @@ END_CMD
 	    if (open(FD, ">/proj/$proj/ceph/secret")) {
 		print FD "$key\n";
 		close(FD);
+	    } else {
+		fatal("Could not create secret file!?");
 	    }
 	    chmod(0600, "/proj/$proj/ceph/secret");
+	} else {
+	    if (open(FD, "</proj/$proj/ceph/secret")) {
+		my $okey = <FD>;
+		close(FD);
+		chomp($okey);
+		if ($okey && $key eq $okey) {
+		    print STDERR "Key already exists and matches";
+		} else {
+		    print STDERR "Key mismatch between Ceph and stored value";
+		}
+	    } else {
+		print STDERR "Could not open secret file";
+	    }
+	    print STDERR ", not changing\n";
 	}
     }
     # Put in the DB
     else {
-	;
+	if ($impotent) {
+	    print STDERR "Would put key in DB\n";
+	    return;
+	}
     }
 }
 	 
+sub creteprojfs($$)
+{
+    my ($proj,$pobj) = @_;
+
+    my $CMD = "sh /cephfs/proj/mkproj.sh $proj";
+    if ($impotent) {
+	print STDERR "Would issue: $CMD\n";
+	return;
+    }
+
+    my $output;
+    my $stat = sendcmd($CMD, \$output);
+    if ($stat != 0) {
+	fatal("Could not create project subdir:\n" . @$output);
+    }
+}
+
+sub removeprojcred($$)
+{
+    my ($proj,$pobj) = @_;
+
+    #
+    # Remove from Emulab
+    #
+    if ($writetofile) {
+	if ($impotent) {
+	    print STDERR "Would remove /proj/$proj/ceph/secret\n";
+	} else {
+	    #
+	    # XXX if a known project dir does not exist,
+	    # we might need to force mounting of the project filesystem.
+	    #
+	    if (! -d "/proj/$proj/exp" && $pobj->UpdateExports(1)) {
+		fatal("Could not access the /proj/$proj filesystem.");
+	    }
+	    if (-e "/proj/$proj/ceph/secret" &&
+		!unlink("/proj/$proj/ceph/secret")) {
+		print STDERR "Could not remove secret file for $proj, ".
+		    "remove by hand if it exists.\n";
+	    }
+	}
+    } else {
+	if ($impotent) {
+	    print STDERR "Would remove key from DB\n";
+	}
+    }
+
+    #
+    # Also remove from Ceph
+    #
+    if ($removecred > 1) {
+	my $CMD = "ceph auth del client.$proj";
+	if ($impotent) {
+	    print STDERR "Would issue: $CMD\n";
+	    return;
+	}
+
+	my $output;
+	my $stat = sendcmd($CMD, \$output);
+	if ($stat != 0) {
+	    fatal("Could not delete project credential:\n" . @$output);
+	}
+    }
+}
+    
+sub removeprojfs($$)
+{
+    my ($proj,$pobj) = @_;
+
+    if ($removecred > 1) {
+	my $CMD = "sh /cephfs/proj/rmproj.sh $proj";
+	if ($impotent) {
+	    print STDERR "Would issue: $CMD\n";
+	    return;
+	}
+
+	my $output;
+	my $stat = sendcmd($CMD, \$output);
+	if ($stat != 0) {
+	    fatal("Could not create remove subdir:\n" . @$output);
+	}
+    }
+}
+
 #
 # Send a command to a Ceph Monitor node.
 # We try sending to all nodes until we get a response.
