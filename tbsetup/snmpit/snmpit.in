@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -4357,6 +4357,11 @@ sub doPruneStaleVlans($)
 	if ($id !~ /^\d+$/) {
 	    if ($id =~ /^Vlan (\d+)$/ && $1 != 1) {
 		print "Orphan VLAN '$id' ($tag)\n";
+                if ($tag < $min_vlan) {
+                    print "  Tag $tag is less than min_vlan ($min_vlan) ".
+                        "so we will ignore it\n";
+                    next;
+                }
 		if (@$memberref) {
 		    print "  Ports: ";
 		    foreach my $member (@$memberref) {
