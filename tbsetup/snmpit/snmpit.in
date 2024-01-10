@@ -4362,6 +4362,11 @@ sub doPruneStaleVlans($)
                         "so we will ignore it\n";
                     next;
                 }
+                if ($tag > $max_vlan) {
+                    print "  Tag $tag is more than max_vlan ($max_vlan) ".
+                        "so we will ignore it\n";
+                    next;
+                }
 		if (@$memberref) {
 		    print "  Ports: ";
 		    foreach my $member (@$memberref) {
