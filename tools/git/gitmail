@@ -175,6 +175,11 @@ my $replyto = get_config("replyto",undef);
 my $mailfrom = get_config("mailfrom",undef);
 
 #
+# If set, set the 'Sender' header in the mail - useful for passing SPF checks
+#
+my $mailsender = get_config("mailsender",undef);
+
+#
 # If set to true, detach and run in background - the push doesn't return until
 # the hook finishes, so doing this means the pusher doesn't have to wait for
 # us to finish
@@ -1267,6 +1272,11 @@ sub send_mail($$$@) {
         # If requested, set the Reply-To header
         if (defined($replyto)) {
             print MAIL "Reply-To: $replyto\n"
+        }
+
+        # If requested, set the Sender header
+        if (defined($mailsender)) {
+            print MAIL "Sender: $mailsender\n"
         }
 
         #
