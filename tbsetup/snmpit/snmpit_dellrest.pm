@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2019-2022 University of Utah and the Flux Group.
+# Copyright (c) 2019-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -98,7 +98,15 @@ my $PORT_FORMAT_NATIVE     = 6;
 #
 # Additional targets: enablePortTrunking2, disablePortTrunking
 #
-my $OPTIMIZE       = 1;
+# OPTIMIZE == 2 optimizes the "snmpit -g" case which makes a interface-state
+# call that can return 1MB or more of data and take 10+ seconds.
+# This optimization reduces the "depth" of info returned in the hash to 4
+# which is sufficient to get the stats we need. This can reduce the data
+# returned by 1/3 to 1/2 and the time taken by 2-4 seconds. Still not great,
+# but I have not found a way to ask for just the fields we need ("statistics")
+# or to limit the interfaces for which we return info.
+#
+my $OPTIMIZE       = 2;
 
 #
 # XXX safety net: make sure we don't remove this vlan from any port.
@@ -378,9 +386,10 @@ sub getPortInfo($)
     }
 
     my $path = "interfaces";
-    my $json = $self->{ROBJ}->call("GET", $path);
+    my $error = "UNKNOWN";
+    my $json = $self->{ROBJ}->call("GET", $path, undef, undef, \$error, 0);
     if (!$json) {
-	warn "$id: ERROR: Could not read interface information.\n";
+	warn "$id: ERROR: Could not read interface information: $error\n";
 	return 0;
     }
     $self->debug("$id: '$path' call returns:\n" . Dumper($json), 4);
@@ -1221,6 +1230,16 @@ sub getAllStats($)
 
     $self->{CALLOTHER}++;
     my $path = "interfaces-state";
+
+    #
+    # XXX a depth of 4 is sufficient to get the stats we need without
+    # a lot of excess. The resulting output is 1/2 to 1/3 and we can
+    # save 2-4 seconds.
+    #
+    if ($OPTIMIZE > 1) {
+	$path .= "?depth=4";
+    }
+
     my $error = "UNKNOWN";
     my $json = $self->{ROBJ}->call("GET", $path, undef, undef, \$error, 0);
     if (!$json) {
@@ -2469,13 +2488,19 @@ sub getFields($$$) {
     # only do it once. Hence, if more than one port is specified, just get
     # info for all ports.
     #
+    # XXX we can actually do up to about 4 ports individually and still win. 
+    #
+    my $nifaces = ($OPTIMIZE > 1 && @ifaces <= 4) ? @ifaces : 1;
     my %swstats = ();
-    if (@ifaces == 1) {
-	$self->{CALLOTHER}++;
-	my $iface = $ifaces[0];
-	my $path = "interfaces-state/interface=". uri_escape($iface). "/statistics";
-	my $json = $self->{ROBJ}->call("GET", $path);
-	$swstats{$iface} = $json->{"statistics"};
+    if (@ifaces <= $nifaces) {
+	for (my $i = 0; $i < @ifaces; $i++) {
+	    $self->{CALLOTHER}++;
+	    my $iface = $ifaces[$i];
+	    my $path = "interfaces-state/interface=".
+		uri_escape($iface). "/statistics";
+	    my $json = $self->{ROBJ}->call("GET", $path);
+	    $swstats{$iface} = $json->{"ietf-interfaces:statistics"};
+	}
     } else {
 	if (!$self->getPortInfo()) {
 	    warn "$id: ERROR: could not get port info!\n";
