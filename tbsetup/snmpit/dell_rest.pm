@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2019-2021 University of Utah and the Flux Group.
+# Copyright (c) 2019-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -43,6 +43,7 @@ use MIME::Base64;
 use Data::Dumper;
 use Socket;
 use Time::HiRes qw(gettimeofday);
+use libtestbed;
 
 $| = 1; # Turn off line buffering on output
 
@@ -137,11 +138,40 @@ sub call($$$;$$$$)
     my $http = $self->{HTTP};
     if (!$http) {
 	$http = $self->{HTTP} = HTTP::Tiny->new("timeout" => 10);
+	if ($http) {
+	    print STDERR "$server: established new HTTP connection\n"
+		if ($self->{DEBUG} > 1);
+	} else {
+	    print STDERR "$server: could not open HTTP connection!\n";
+	    return undef;
+	}
+    } else {
+	print STDERR "$server: using existing HTTP connection\n"
+	    if ($self->{DEBUG} > 1);
     }
     my %options = ("headers" => \%headers, "content" => $datastr); 
 
     my $stamp = gettimeofday()
 	if ($self->{DEBUG} > 1);
+
+    # Serialize calls, see lock() comment.
+    if ($self->lock()) {
+	if ($self->{DEBUG} > 2) {
+	    my $st = sprintf "%.3f", gettimeofday() - $stamp;
+	    print STDERR "$server: REQUEST: could not acquire lock after ${st} sec.\n";
+	}
+	my $msg = "Switch too busy!";
+	if ($errorp) {
+	    $$errorp = $msg;
+	} else {
+	    warn("*** ERROR: dell_rest: $msg");
+	}
+	return undef;
+    }
+    if ($self->{DEBUG} > 2) {
+	my $st = sprintf "%.3f", gettimeofday() - $stamp;
+	print STDERR "$server: REQUEST: got lock after ${st} sec.\n";
+    }
     my $res = $http->request($method, $url, \%options);
     if ($self->{DEBUG} > 1) {
 	$stamp = sprintf "%.3f", gettimeofday() - $stamp;
@@ -370,3 +400,41 @@ sub enableMultiplePortsSpec($$@)
     };
     return $porthash;
 }
+
+#
+# Handle serialization of calls to a switch. The switch itself will queue
+# things, but it might cause a call to take a long time or a connection to
+# timeout, so we block here instead.
+#
+# Returns 0 if we get the lock, non-zero otherwise.
+#
+my $lock_held = 0;
+
+sub lock($) {
+    my $self = shift;
+    my $token = "dellrest_" . $self->{NAME};
+    # XXX longest single call is around 10s, most are about 2s.
+    my $timo = 60;
+    my $rv = 0;
+
+    if ($lock_held == 0) {
+	my $old_umask = umask(0);
+	$rv = TBScriptLock($token, 0, $timo);
+	umask($old_umask);
+    }
+    if ($rv == 0) {
+	$lock_held = 1;
+    }
+
+    return $rv;
+}
+
+sub unlock($) {
+    if ($lock_held == 1) {
+	TBScriptUnlock();
+    }
+    $lock_held = 0;
+}
+
+# End with true
+1;
