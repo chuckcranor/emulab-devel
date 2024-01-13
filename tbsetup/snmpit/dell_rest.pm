@@ -173,6 +173,7 @@ sub call($$$;$$$$)
 	print STDERR "$server: REQUEST: got lock after ${st} sec.\n";
     }
     my $res = $http->request($method, $url, \%options);
+    $self->unlock();
     if ($self->{DEBUG} > 1) {
 	$stamp = sprintf "%.3f", gettimeofday() - $stamp;
 	print STDERR "$server: RESTAPI ('$path') call done in ${stamp} sec.\n";
