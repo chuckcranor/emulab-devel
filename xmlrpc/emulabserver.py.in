@@ -6629,7 +6629,7 @@ class portal:
         except NoLoginsError as e:
             return EmulabResponse(RESPONSE_REFUSED, output=str(e))
 
-        argerror = CheckRequiredArgs(argdict, ("proj", "profile", "end"))
+        argerror = CheckRequiredArgs(argdict, ("proj", "profile"))
         if (argerror):
             return argerror
 
@@ -6647,6 +6647,10 @@ class portal:
                 pass
             elif opt == "end":
                 argstr += " --end "
+                argstr += escapeshellarg(val)
+                pass
+            elif opt == "duration":
+                argstr += " --duration "
                 argstr += escapeshellarg(val)
                 pass
             elif opt == "paramset":
