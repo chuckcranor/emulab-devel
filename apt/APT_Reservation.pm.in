@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2023 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2021,9 +2021,9 @@ sub Overlaps($$$)
 # Do not worry about efficiency, I doubt there will ever be enough
 # reservations to matter.
 #
-sub Fits($$$$$)
+sub Fits($$$$$;$)
 {
-    my ($class, $groups, $start, $end, $ref) = @_;
+    my ($class, $groups, $start, $end, $ref, $pconflict) = @_;
     my $freq_low  = $ref->{'freq_low'};
     my $freq_high = $ref->{'freq_high'};
     my $freq_uuid = $ref->{'uuid'}; # XXX bad naming
@@ -2067,6 +2067,7 @@ sub Fits($$$$$)
 	    }
 	    # Does not fit!
 	    $fits = 0;
+	    $$pconflict = $group if (defined($pconflict));
 	    last;
 	}
 	last if (!$fits);

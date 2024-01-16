@@ -32,6 +32,7 @@ use POSIX qw(:signal_h ceil);
 use File::Temp qw(tempfile);
 use Date::Parse;
 use Date::Format;
+use Time::Piece;
 
 #
 # Back-end script to manage APT profiles.
@@ -115,6 +116,8 @@ sub DoSetShareReservations();
 sub DoPredictionInfo();
 sub DoCreateFromRspec();
 sub DoStatus();
+sub DoFindFirstFit();
+sub FindFirstFit($$$$$$$);
 sub CallMethodOnReservations($$@);
 
 #
@@ -192,6 +195,9 @@ elsif ($action eq "predictioninfo") {
 }
 elsif ($action eq "createfromrspec") {
     DoCreateFromRspec();
+}
+elsif ($action eq "findfirstfit") {
+    DoFindFirstFit();
 }
 elsif ($action eq "status") {
     DoStatus();
@@ -3506,15 +3512,12 @@ sub CallMethodOnReservations($$@)
 # Construct a forecast for routes that looks like Reservation system
 # forecasts, including unapproved info for the web interface.
 #
+sub RouteForecastInternal($$);
 sub DoRouteForecast()
 {
     my $optlist      = "p:";
-    my %forecasts    = ();
-    my %reservations = ();
-    my %current      = ();
-    my $routemap     = APT_Reservation::Group::RouteReservation::RouteMap();
-    my $now          = time();
     my @projlist     = ();
+    my @grouplist    = ();
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -3523,8 +3526,30 @@ sub DoRouteForecast()
     if (defined($options{"p"})) {
 	@projlist = split(",", $options{"p"});
     }
+    my $forecasts = RouteForecastInternal(\@projlist, \@grouplist);
+
+    if (defined($webtask)) {
+	$webtask->forecast($forecasts);
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($forecasts);
+    }
+    exit(0);
+
+}
+
+sub RouteForecastInternal($$)
+{
+    my ($projlist,$grouplist) = @_;
+    my %forecasts    = ();
+    my %reservations = ();
+    my %current      = ();
+    my $routemap     = APT_Reservation::Group::RouteReservation::RouteMap();
+    my $now          = time();
+
     my @groups = APT_Reservation::Group->LookupAll();
-    goto done
+    return \%forecasts
 	if (!@groups);
 
     foreach my $routename (keys(%{$routemap})) {
@@ -3577,30 +3602,20 @@ sub DoRouteForecast()
 	else {
 	    # Need to push on a route free declaration.
 	    $res = Reservation->CreateCommon(undef, undef, undef, 0, undef,
-					     $routename, 1);
+					     $routename, 1, undef);
 	}
 	$reservations{$routename} = [$res, @{$reservations{$routename}}];
     }
     
-    #print Dumper(\%reservations);
+    print Dumper(\%reservations);
     foreach my $routename (keys(%reservations)) {
 	my $reslist  = $reservations{$routename};
-	my @forecast = Reservation->Forecast($routename, \@projlist,
+	my @forecast = Reservation->Forecast($routename, $projlist, $grouplist,
 					     undef, undef, 1, $reslist);
 
 	$forecasts{$routename} = \@forecast;
     }
-    
-  done:
-    if (defined($webtask)) {
-	$webtask->forecast(\%forecasts);
-	$webtask->Exited(0);
-    }
-    else {
-	print Dumper(\%forecasts);
-    }
-    exit(0);
-
+    return \%forecasts;
 }
 
 #
@@ -3915,20 +3930,21 @@ sub DoPredictionInfo()
 #
 sub DoCreateFromRspec()
 {
-    my $optlist    = "s:e:nN:p:";
+    my $optlist    = "s:e:nN:p:F:";
     my $exitcode   = 0;
     my $autoapprove= 1; # This might be turned off below
     my ($clusters, $ranges, $routes);
     my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
-    my ($project,$group,$resources);
+    my ($project,$group,$resources,$duration);
     my $checkonly;
+    my $bisdaysonly = 1;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
     }
     usage()
-	if (@ARGV != 2 || !defined($options{"e"}));
+	if (@ARGV != 2 || !(defined($options{"e"}) || defined($options{"F"})));
 
     if ($ARGV[0] =~ /[,\/]+/) {
 	$group = Group->Lookup($ARGV[0]);
@@ -3976,6 +3992,17 @@ sub DoCreateFromRspec()
 	    }
 	}
     }
+    elsif (defined($options{"F"})) {
+	# Lets say hours
+	if ($options{"F"} !~ /^\d+$/) {
+	    fatal("-F option requires an integer number of hours");
+	}
+	if ($options{"F"} < 1) {
+	    fatal("-F option requires an integer greater then zero");
+	}
+	$duration = (3600 * $options{"F"});
+    }
+
     if (defined($options{"N"})) {
 	$reason = emutil::ReadFile($options{"N"});
 	chomp($reason);
@@ -3988,16 +4015,24 @@ sub DoCreateFromRspec()
     if (defined($options{"n"})) {
 	$checkonly = 1;
     }
-    if (! defined($end)) {
-	print STDERR "Missing end time\n";
+    if (! (defined($end) || defined($duration))) {
+	print STDERR "Missing end time or duration\n";
 	usage();
     }
     #
-    # No start time means user wants the reservation right now.
+    # No start or duration time means user wants the reservation right now.
     #
-    if (!defined($start)) {
+    if (!defined($start) && !defined($duration)) {
 	$start = time();
     }
+
+    #
+    # Reservations  have to start next business day at 9am unless the
+    # the project or user is expert_mode. or an admin.
+    #
+    $bisdaysonly = 0
+	if ($this_user->expert_mode() || $project->expert_mode() ||
+	    $this_user->IsAdmin());
 
     my $rspec = GeniXML::ParseFile($file);
     if (! defined($rspec)) {
@@ -4046,13 +4081,49 @@ sub DoCreateFromRspec()
     if (APT_Profile::GetRoutes($rspec, \$tmpr, \$errmsg)) {
 	fatal("GetRoutes error: $errmsg");
     }
-    foreach my $route (@{$tmpr}) {
-	my $uuid  = NewUUID();
+    if (@{$tmpr}) {
+	if ($tmpr->[0]->{'name'} eq "allroutes") {
+	    my $map = APT_Reservation::Group::RouteReservation::RouteMap();
+	    foreach my $routename (keys(%{$map})) {
+		my $uuid  = NewUUID();
 	
-	$routes{$uuid} = {
-	    "uuid"      => $uuid,
-	    "routename" => $route->{'name'},
-	};
+		$routes{$uuid} = {
+		    "uuid"      => $uuid,
+		    "routename" => $routename,
+		};
+	    }
+	}
+	else {
+	    foreach my $route (@{$tmpr}) {
+		my $uuid  = NewUUID();
+	
+		$routes{$uuid} = {
+		    "uuid"      => $uuid,
+		    "routename" => $route->{'name'},
+		};
+	    }
+	}
+	print Dumper(\%routes) if ($debug);
+    }
+
+    #
+    # If duration, user wants first fit.
+    #
+    if (defined($duration)) {
+	$start = FindFirstFit($duration, $bisdaysonly,
+			      $group, \%clusters, \%ranges, \%routes, \$errmsg);
+	if (!defined($start)) {
+	    UserError("Could not fit this reservation into the schedule" .
+		      (defined($errmsg) ? ": $errmsg" : ""));
+	}
+	# Push out to top of next hour.
+	$start += 3600;
+	$start  = int($start / 3600);
+	$start *= 3600;
+	$end    = $start + $duration;
+	print "Start: $start, " . TBDateStringLocal($start) . "\n";
+	print "End:   $end, " . TBDateStringLocal($end) . "\n";
+	exit(0);
     }
 
     #
@@ -4178,6 +4249,556 @@ sub DoCreateFromRspec()
 	$webtask->Exited($code);
     }
     exit($code);
+}
+
+
+#
+# Determine start time for a set of reservation requests.
+#
+sub DoFindFirstFit()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_resgroup findfirstfit ".
+	    "-d <hours> pid[/gid] jsonfile\n";
+	exit(-1);
+    };
+
+    my $optlist    = "p:d:";
+    my $exitcode   = 0;
+    my ($clusters, $ranges, $routes);
+    my ($start, $end, $errmsg, $errcode, $portal, $brand);
+    my ($project,$group);
+    my $bisdaysonly = 1;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	&$usage();
+    }
+    &$usage()
+	if (@ARGV != 2 || !defined($options{"d"}));
+
+    # Lets say hours
+    if ($options{"d"} !~ /^\d+$/) {
+	fatal("-d option requires an integer number of hours");
+    }
+    if ($options{"d"} < 1) {
+	fatal("-d option requires an integer greater then zero");
+    }
+    my $duration = (3600 * $options{"d"});
+
+    # gid is optional
+    if ($ARGV[0] =~ /[,\/]+/) {
+	$group = Group->Lookup($ARGV[0]);
+	if (!defined($group)) {
+	    fatal("No such group");
+	}
+	$project = $group->GetProject();
+    }
+    else {
+	$project = Project->Lookup($ARGV[0]);
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	$group = $project->GetProjectGroup();
+    }
+    my $file = $ARGV[1];
+
+    if (! -e $file) {
+	fatal("No such file: $file");
+    }
+    system("/bin/cat $file | /usr/local/bin/json_pp") if ($debug);
+
+    #
+    # The file is a JSON array of cluster/range reservation info.
+    #
+    my $json = emutil::ReadFile($file);
+    if (!defined($json)) {
+	fatal("Could not read $file");
+    }
+    
+    my $blob = eval { decode_json($json) };
+    if ($@) {
+	fatal("Could not decode json data: $@\n");
+    }
+    if (ref($blob) ne "HASH") {
+	fatal("json data is not a HASH");
+    }
+    #print Dumper($blob) if ($debug);
+    
+    $clusters = $blob->{'clusters'} if (exists($blob->{'clusters'}));
+    $ranges   = $blob->{'ranges'} if (exists($blob->{'ranges'}));
+    $routes   = $blob->{'routes'} if (exists($blob->{'routes'}));
+    
+    #
+    # Reservations  have to start next business day at 9am unless the
+    # the project or user is expert_mode. or an admin.
+    #
+    $bisdaysonly = 0
+	if ($this_user->expert_mode() || $project->expert_mode() ||
+	    $this_user->IsAdmin());
+
+    #
+    # The web UI and create-reservation has made sure the input is valid.
+    # But we should do it again. Need to refactor code in DoGroupReserve.
+    #
+    $start = FindFirstFit($duration, $bisdaysonly,
+			  $group, $clusters, $ranges, $routes, \$errmsg);
+    if (!defined($start)) {
+	UserError("Could not fit this reservation request into the schedule" .
+		  (defined($errmsg) ? ": $errmsg" : ""));
+    }
+    # Push out to top of next hour.
+    $start += 3600;
+    $start  = int($start / 3600);
+    $start *= 3600;
+    $end    = $start + $duration;
+    print "Start: $start, " . TBDateStringLocal($start) . "\n";
+    print "End:   $end, " . TBDateStringLocal($end) . "\n";
+
+    if (defined($webtask)) {
+	$webtask->start(TBDateStringGMT($start));
+	$webtask->end(TBDateStringGMT($end));
+	$webtask->Exited(0);
+    }
+    exit(0);
+}
+
+#
+# 
+#
+sub FindFirstFit($$$$$$$)
+{
+    my ($duration, $bisdaysonly, $group,
+	$clusters, $ranges, $routes, $perrmsg) = @_;
+    my $project = $group->GetProject();
+    my $pid = $group->pid();
+    my $gid = $group->gid();
+    my $forecasts = {};
+    my @allgroups = ();
+
+    #
+    # Need prediction info for the cluster urns in the correct project.
+    #
+    if (keys(%{ $clusters })) {
+	my $prediction_info = APT_Instance::PredictionInfo->Lookup($this_user);
+	my @urns = map { $_->{'cluster'} } values(%{ $clusters });
+	my $pinfo;
+	if ($prediction_info->Stale()) {
+	    my $pidgid = "$pid/$gid";
+	    my $urns = join(",", @urns);
+	    my $local_webtask = WebTask->CreateAnonymous();
+	    my $local_task_id = $local_webtask->task_id();
+	    system("$RESCOMMAND -t $local_task_id ".
+		   "  prediction -a '$urns' $pidgid");
+	    if ($?) {
+		$local_webtask->Delete();
+		fatal("Could not get prediction info");
+	    }
+	    $local_webtask->Refresh();
+	    $pinfo = $local_webtask->value();
+	    $local_webtask->Delete();
+	}
+	else {
+	    $pinfo = $prediction_info->PredictionInfo();
+	}
+
+	#
+	# We want the per project (group) prediction info for each
+	# cluster. This is in the pforecast arrays. Note that we have
+	# to watch for projects with per-group reservations. 
+	#
+	foreach my $urn (@urns) {
+	    next
+		if (!exists($pinfo->{$urn}));
+
+	    # Results from cluster are canonicalized by GeniHRN
+	    my $pidgid = lc("$pid/$gid");
+	    my $pforecasts = $pinfo->{$urn}->{'pforecasts'};
+
+	    if ($project->shared_reservations() ==
+		$Project::RESERVATIONS_PERGROUP) {
+		if (exists($pforecasts->{$pidgid})) {
+		    $forecasts->{$urn} = $pforecasts->{$pidgid};
+		}
+	    }
+	    else {
+		if (exists($pforecasts->{lc($pid)})) {
+		    $forecasts->{$urn} = $pforecasts->{lc($pid)};
+		}
+	    }
+	}
+    }
+    my $dprint = sub {
+	my ($m) = @_;
+	if ($debug) {
+	    print $m;
+	}
+    };
+
+    #
+    # Shift start time to ideal start hour, if possible.
+    # Hmm, need the timezone the user is in for this to make sense.
+    # Finish later.
+    #
+    my $IDEAL_STARTHOUR = 7;
+    
+    my $idealStartHour = sub {
+	my ($when, $end) = @_;
+	my $twhen  = timelocal($when);
+	my $hour   = $twhen->hour;
+
+	return
+	    if (!$bisdaysonly || $hour >= $IDEAL_STARTHOUR);
+
+	$twhen = $twhen->truncate(to => 'day');
+	$twhen = $twhen + ($IDEAL_STARTHOUR * 3600);
+	
+	#
+	# If no end (free forever), then just return
+	#
+	if (!$end) {
+	    return $twhen->epoch();
+	}
+	if ($twhen->epoch() + $duration < $end) {
+	    return $twhen->epoch();
+	}
+	return $when;
+    };
+
+    #
+    # Find the first fit for a cluster reservation
+    #
+    my $findFirst = sub {
+	my ($cluster, $minstart) = @_;
+	my $starttime = 0;
+	my $startdata = undef;
+	my $enddata   = undef;
+	my $type      = $cluster->{'type'};
+	my $count     = $cluster->{'count'};
+	my $urn       = $cluster->{'cluster'};
+
+	&$dprint("findfirst: $type, $count, $minstart\n");
+
+	my @tmp = @{ $forecasts->{$urn}->{$type} };
+	foreach my $data (@tmp) {
+	    $data->{'stamp'} = TBDateStringLocal($data->{'t'});
+	}
+	while (@tmp && !$starttime) {
+	    my $data = shift(@tmp);
+	    my $free = $data->{'free'} - $data->{'unapproved'};
+	    if ($free < 0) {
+		$free = 0;
+	    }
+	    &$dprint("ff1: $free\n");
+	    
+	    if ($free >= $count) {
+		#
+		# The current timestamp has enough nodes.
+		#
+		$starttime = $data->{'t'};
+		$startdata = $data;
+		&$dprint("ff2: $starttime, $minstart\n");
+		#
+		# But if there is a min start time, have to scan ahead cause
+		# some other type in the cluster list did not fit.
+		#
+		if ($minstart) {
+		    if (@tmp) {
+			my $next     = $tmp[0];
+			my $nexttime = $next->{'t'};
+			my $nextfree = $next->{'free'} - $next->{'unapproved'};
+			if ($nextfree < 0) {
+			    $nextfree = 0;
+			}
+			&$dprint("ff3: $nexttime, $nextfree\n");
+
+			if ($nextfree >= $count &&
+			    $minstart >= $starttime &&
+			    $minstart <= $nexttime) {
+			    #
+			    # Still enough nodes and minstart falls between
+			    # the current and next timestamps. We can start
+			    # here.
+			    #
+			    $starttime = $minstart;
+			    &$dprint("ff4", $starttime);
+			}
+			elsif ($starttime < $minstart) {
+			    #
+			    # The current stamp has enough nodes, lets see if
+			    # its long enough.
+			    #
+			    if ($minstart <= $nexttime &&
+				$minstart + $duration < $nexttime) {
+				$starttime = $minstart;
+				&$dprint("ff5: $starttime\n");
+			    }
+			    else {
+				&$dprint("ff6\n");
+				$starttime = undef;
+				next;
+			    }
+			}
+		    }
+		    else {
+			#
+			# Last timestamp, has enough nodes. Bump lower bound
+			#
+			if ($starttime < $minstart) {
+			    $starttime = $minstart + 60;
+			}
+		    }
+		}
+		&$dprint("ff7: $starttime\n");
+
+		#
+		# OK, we have a starting timestamp. Now scan ahead to see if
+		# the entire duration fits (enough free nodes). We scan as
+		# far ahead as possible, since we want the widest range
+		# possible to give other clusters in the request the best
+		# chance of fitting (as soon as possible). 
+		#
+		for (my $i = 0; $i < scalar(@tmp); $i++) {
+		    my $next = $tmp[$i];
+		    my $nexttime = $next->{'t'};
+		    my $nextfree = $next->{'free'} - $next->{'unapproved'};
+		    if ($nextfree < 0) {
+			$nextfree = 0;
+		    }
+		    if ($nextfree >= $count) {
+			# The next time stamp still has enough nodes,
+			# keep checking until no longer true, so we
+			# have the biggest range possible.
+			next;
+		    }
+		    #
+		    # Okay, next range no longer has enough nodes, but
+		    # if the current range is long enough, we are good.
+		    #
+		    if ($starttime + $duration < $nexttime) {
+			# The next time stamp is beyond the days requested,
+			# so it fits.
+			$enddata = $next;
+			last;
+		    }
+		    # Otherwise, we no longer fit, need to start over.
+		    $starttime = undef;
+		    last;
+		}
+	    }
+	}
+	my $result = {
+	    "starttime" => $starttime,
+	    "startdata" => $startdata,
+	    "endtime"   => ($enddata ? $enddata->{'t'} : undef),
+	    "enddata"   => $enddata,
+	};
+	&$dprint("findfirst return:\n");
+	print Dumper($result) if ($debug);
+	return $result;
+    };
+
+    # Copy of the clusters cause ...
+    my @clusters = defined($clusters) ? values(%{ $clusters }) : ();
+
+    #
+    # ... if there are routes we are going to augment the clusters array
+    # and the forecast array such that the routes look like cluster reservations.
+    # Cheesy or do I get a cookie?
+    #
+    if (defined($routes) && keys(%{$routes})) {
+	my $routeforecast = RouteForecastInternal([],[]);
+
+	foreach my $route (values(%{$routes})) {
+	    push(@clusters, {
+		"cluster" => "busroutes",
+		"type"    => $route->{'routename'},
+		"count"   => 1,
+		 });
+	}
+	$forecasts->{"busroutes"} = $routeforecast;
+    }
+
+    #
+    # If there are ranges, we need the set of all reservations below.
+    #
+    my @ranges = ();
+    
+    if (defined($ranges) && keys(%{$ranges})) {
+	@allgroups = APT_Reservation::Group->LookupAll();
+	@ranges    = values(%{$ranges});
+
+	#
+	# Only ranges. It happens.
+	# 
+	if (!@clusters) {
+	    my $lower = $bisdaysonly ? APT_Utility::NextBusinessDay() : time();
+	    my $start = $lower;
+	    my $loop  = 0;
+	    my $max   = 100;
+	    
+	    while ($loop < $max) {
+		$loop++;
+		&$dprint("RR $loop: $lower\n");
+
+		foreach my $range (@ranges) {
+		    my $conflict;
+		    if (!APT_Reservation::Group::RFReservation->Fits(
+			     \@allgroups, $lower, $lower + $duration,
+			     $range, \$conflict)) {
+			$lower  = str2time($conflict->end());
+			&$dprint("RR skip: $lower, " .
+				 TBDateStringLocal($lower) . "\n");
+			last;
+		    }
+		}
+		last
+		    if ($start == $lower);
+		$start = $lower;
+	    }
+	    if ($loop >= $max) {
+		print "No range fit, exceeded loop maximum\n";
+		$$perrmsg = "could not fit the requested frequency range(s)";
+		return undef;
+	    }
+	    print "Range fit at $start, " . TBDateStringLocal($start) . "\n";
+	    return $start;
+	}
+    }
+
+    #
+    # This should obviously not happen.
+    #
+    return undef
+	if (!@clusters);
+
+    # Earliest start time, updated as we go through the forecasts.
+    my $lower = $bisdaysonly ? APT_Utility::NextBusinessDay() : time();
+    # Avoid infinite loop.	
+    my $loops = 100;
+    # Final fit.
+    my $fit   = undef;
+    # Offending cluster, for error reporting.
+    my $baddog;
+    
+    while (!$fit && $loops) {
+	$loops--;
+	$fit = &$findFirst($clusters[0], $lower);
+	if ($debug) {
+	    print "fit 0:\n";
+	    print Dumper($fit);
+	}
+	if (!$fit->{"starttime"}) {
+	    $fit = undef;
+	    $baddog = $clusters[0];
+	    last;
+	}
+	
+	for (my $index = 1; $index < scalar(@clusters); $index++) {
+	    $baddog = $clusters[$index];
+	    my $newfit = &$findFirst($clusters[$index], $fit->{"starttime"});
+	    if (!$newfit->{"starttime"}) {
+		$fit = undef;
+		last;
+	    }
+	    if ($debug) {
+		print "fit $index:\n";
+		print Dumper($newfit);
+	    }
+
+	    #
+	    # If the first available for the next cluster is beyond the
+	    # current fit, need to start over.
+	    #
+	    if ($fit->{"endtime"} &&
+		$newfit->{"starttime"} > $fit->{"endtime"}) {
+		&$dprint("skip1\n");
+		$fit   = undef;
+		$lower = $newfit->{"starttime"};
+		last;
+	    }
+	    # Narrow to newest fit.
+	    if ($newfit->{"starttime"} > $fit->{"starttime"}) {
+		$fit->{"starttime"} = $newfit->{"starttime"};
+	    }
+	    if ($newfit->{"endtime"} &&
+		(!$fit->{"endtime"} ||
+		 $newfit->{"endtime"} < $fit->{"endtime"})) {
+		$fit->{"endtime"} = $newfit->{"endtime"};
+	    }
+	    #
+	    # If too narrow now, have to keep going, starting at the
+	    # new lower bound.
+	    #
+	    if ($fit->{"endtime"} &&
+		($fit->{"endtime"} - $fit->{"starttime"} < $duration)) {
+		&$dprint("skip2\n");
+		$fit   = undef;
+		$lower = $newfit->{"starttime"};
+		last;
+	    }
+	}
+	$baddog = undef
+	    if ($fit || $fit->{'starttime'});
+	
+	if ($fit && @ranges) {
+	    #
+	    # Ok, we have something that works for the clusters, lets look
+	    # at the ranges. This is a bit easier since current ranges
+	    # include both a start and end time. So if the current fit
+	    # above conflicts with a range we want, start over at the end
+	    # of the conflicting range. 
+	    #
+	    # Set lower in case we have to go around again, we bump
+	    # it below.
+	    #
+	    $lower = $fit->{"starttime"};
+	    &$dprint("RR: $lower\n");
+
+	    foreach my $range (@ranges) {
+		my $conflict;
+		if (!APT_Reservation::Group::RFReservation->Fits(
+			 \@allgroups, $lower, $lower + $duration,
+			 $range, \$conflict)) {
+		    $fit    = undef;
+		    $lower  = str2time($conflict->end());
+		    &$dprint("RR range does not fit, skipping to $lower ".
+			     TBDateStringLocal($lower) . "\n");
+		    last;
+		}
+	    }
+	    # No point in continuing, start over.
+	    if (!$fit) {
+		$$perrmsg = "could not fit the requested frequency range(s)";
+	    }
+	    else {
+		$$perrmsg = undef;
+	    }
+	}
+    }
+    if (!defined($fit) || !$fit->{'starttime'}) {
+	if ($loops <= 0) {
+	    print "No fit, exceeded loop maximum\n";
+	}
+	else {
+	    print "No fit, could not find a start time\n";
+	}
+	if (defined($baddog)) {
+	    print Dumper($baddog);
+	    my $urn   = $baddog->{'cluster'};
+	    my $type  = $baddog->{'type'};
+	    my $count = $baddog->{'count'};
+	    my $agg   = APT_Aggregate->Lookup($urn);
+	    if (defined($agg)) {
+		my $nickname = $agg->nickname();
+		$$perrmsg = "could not fit $count $type at the $nickname cluster";
+	    }
+	} 
+	return undef;
+    }
+    print Dumper($fit) if ($debug);
+    my $starttime = $fit->{'starttime'};
+    return $starttime;
 }
 
 sub fatal($)

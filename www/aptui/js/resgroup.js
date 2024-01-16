@@ -2492,10 +2492,13 @@ $(function ()
 	var index = 0;
 	var bail  = 0;
 
+	if (PreCheckClusterRows() || PreCheckRangeRows()) {
+	    return;
+	}
 	// List of reservation requests.
-	var clusters = _.values(GetClusterRows());
-	var ranges   = _.values(GetRangeRows());
-	var routes   = _.values(GetRouteRows());
+	var clusters = GetClusterRows();
+	var ranges   = GetRangeRows();
+	var routes   = GetRouteRows();
 
 	if (!_.size(clusters) && !_.size(routes)) {
 	    alert("Need at least one complete cluster definition");
@@ -2505,13 +2508,12 @@ $(function ()
 	    alert("Please provide the number of days");
 	    return;
 	}
-	if (_.size(routes) && days > 1) {
-	    sup.SpitOops("oops", "Experiments that include mobile endpoints "+
-			 "(routes) must be "+
-			 "finished on the same day the experiment starts. "+
-			 "Please limit your search to one day.");
+	var pid = (editing ? current_pid : $('#pid').val());
+	if (pid == "") {
+	    alert("Please select a project first");
 	    return;
 	}
+	var gid = (editing ? current_gid : $('#gid').val());
 	
 	// Remove old sanity check errors.
 	$('#reserve-request-form .form-control-div .form-group-sm')
@@ -2523,440 +2525,61 @@ $(function ()
 	$("#reserve-request-form #end_day")
 	    .datepicker('setDate', null);
 	
-	// Sanity check.
-	for (var i = 0; i < clusters.length; i++) {
-	    var count = clusters[i].count;
-	    var urn   = clusters[i].cluster;
-	    var error;
-
-	    if (count == "") {
-		error = "Missing count";
-	    }
-	    else if (! (isNumber(count) && count > 0)) {
-		error = "Invalid count"
-	    }
-	    if (error) {
-		var uuid  = clusters[i].uuid;
-		var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
-		
-		tbody.find(".count-error label")
-		    .html(error);
-		tbody.find(".count-error")
-		    .removeClass("hidden");
-		bail = 1;
-	    }
-	}
-	for (var i = 0; i < ranges.length; i++) {
-	    var low   = ranges[i].freq_low;
-	    var high  = ranges[i].freq_high;
-	    var error;
-	    var classname;
-
-	    if (low == "") {
-		error = "Missing frequency";
-		classname = ".freq-low-error";
-	    }
-	    else if (! (isNumber(low) && low > 0)) {
-		error = "Invalid frequency"
-		classname = ".freq-low-error";
-	    }
-	    else if (high == "") {
-		error = "Missing frequency";
-		classname = ".freq-high-error";
-	    }
-	    else if (! (isNumber(high) && high > 0)) {
-		error = "Invalid frequency"
-		classname = ".freq-high-error";
-	    }
-	    if (error) {
-		var uuid  = ranges[i].uuid;
-		var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
-		
-		tbody.find(classname + " label")
-		    .html(error);
-		tbody.find(classname)
-		    .removeClass("hidden");
-		bail = 1;
-	    }
-	}
-	if (bail) {
-	    return;
-	}
 	console.info("FindFit: ", days, clusters, ranges, routes);
 
-	/*
-	 * Slightly cheesy way to wait for the cluster data to come in.
-	 */
-	var needwait = function () {
-	    var flag = 0;
-	    
-	    _.each(clusters, function (cluster) {
-		if (forecasts[cluster.cluster] === undefined) {
-		    flag = 1;
-		};
-	    });
-	    return flag;
+	var args = {
+	    "days"     : days,
+	    "pid"      : pid,
+	    "gid"      : gid,
+	    "clusters" : clusters,
+	    "ranges"   : ranges,
+	    "routes"   : routes
 	};
-	if (needwait()) {
-	    sup.ShowWaitWait("Waiting for cluster reservation data");
-	    var waitfordata = function() {
-		if (! needwait()) {
-		    sup.HideWaitWait();
-		    FindFit();
-		    return;
-		}
-		setTimeout(function() { waitfordata() }, 200);
-	    };
-	    setTimeout(function() { waitfordata() }, 200);
-	    return;
-	}
-	/*
-	 * Oh, major cheesiness going on here. Take the route rows and
-	 * make it look like a cluster and add to the cluster list so that
-	 * we process the forecasts in that loop. Do I get a cookie?
-	 */
-	if (routeforecast != null) {
-	    _.each(routes, function (route) {
-		clusters.push({"cluster" : "busroutes",
-			       "type"    : route.routename,
-			       "count"   : 1});
-	    });
-	    forecasts["busroutes"] = routeforecast;
-	    console.info("extend", clusters);
-	}
-	
-	
-	/*
-	 * Find the first fit for a cluster reservation
-	 */
-	var findfirst = function (cluster, lower, upper) {
-	    var starttime = null;
-	    var startdata = null;
-	    var enddata   = null;
-	    var type      = cluster.type;
-	    var count     = cluster.count;
+	console.info("FindFit args: ", args);
 
-	    console.info("findfirst", type, count, lower);
-
-	    var tmp = forecasts[cluster.cluster][cluster.type].slice(0);
-	    console.info("tmp", tmp);
-	    while (tmp.length && starttime == null) {
-		var data = tmp.shift();
-		var free = data.free - data.unapproved;
-		if (free < 0) {
-		    free = 0;
-		}
-		//console.info("baz", data, free);
-		
-		if (free >= cluster.count) {
-		    starttime = data.t;
-		    startdata = data;
-		    //console.info("baz2", startdata, starttime, lower);
-		    if (lower) {
-			if (tmp.length) {
-			    var next = tmp[0];
-			    var nextfree = next.free - next.unapproved;
-			    if (nextfree < 0) {
-				nextfree = 0;
-			    }
-			    //console.info("foo", lower, nextfree, data, next);
-
-			    if (nextfree >= cluster.count &&
-				lower >= data.t && lower <= next.t) {
-				starttime = lower;
-				//console.info("fee1", starttime);
-			    }
-			    else if (data.t < lower) {
-				/*
-				 * See if the current item is long enough that we
-				 * can start here. Otherwise need to jump to next.
-				 */
-				if (lower <= next.t &&
-				    lower + (3600 * 24 * days) + 3600 < next.t) {
-				    starttime = lower;
-				    //console.info("fee2", starttime);
-				}
-				else {
-				    //console.info("bar");
-				    starttime = null;
-				    continue;
-				}
-			    }
-			}
-			else {
-			    // Last one, has enough nodes, just move past
-			    // lower bound and be done.
-			    if (starttime < lower) {
-				starttime = lower + 60;
-			    }
-			}
-		    }
-		    //console.info("boop", data, starttime);
-		    
-		    for (var i = 0; i < tmp.length; i++) {
-			var next = tmp[i];
-			var nextfree = next.free - next.unapproved;
-			if (nextfree < 0) {
-			    nextfree = 0;
-			}
-			if (nextfree >= cluster.count) {
-			    // The next time stamp still has enough nodes,
-			    // keep checking until no longer true, so we
-			    // have the biggest range possible.
-			    continue;
-			}
-			/*
-			 * Okay, next range no longer has enough nodes, but
-			 * if the current range is long enough, we are good.
-			 */
-			if (starttime + (3600 * 24 * days) + 3600 < next.t) {
-			    // The next time stamp is beyond the days requested,
-			    // so it fits.
-			    enddata = next;
-			    break;
-			}
-			// Otherwise, we no longer fit, need to start over.
-			starttime = null;
-			break;
-		    }
-		}
+	var callback = function (json) {
+	    console.info("FindFit response", json);
+	    if (json.code) {
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", json.value);		    
+		});
+		return;
 	    }
-	    var results =
-		{"starttime" : starttime,
-		 "startdata" : startdata,
-		 "endtime"   : (enddata ? enddata.t : null),
-		 "enddata"   : enddata,
-		};
-	    console.info("findfirst return", results);
-	    return results;
+	    sup.HideWaitWait();
+	    var start = moment(json.value.start);
+	    var end   = moment(json.value.end);
+
+	    var start_day  = $('#reserve-request-form [name=start_day]').val();
+	    var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	    var end_day    = $('#reserve-request-form [name=end_day]').val();
+	    var end_hour   = $('#reserve-request-form [name=end_hour]').val();
+	    var new_start_day  = start.format("MM/DD/YYYY");
+	    var new_start_hour = start.format("H");
+	    var new_end_day    = end.format("MM/DD/YYYY");
+	    var new_end_hour   = end.format("H");
+
+	    $('#reserve-request-form [name=start_day]')
+		.datepicker("setDate", new_start_day);
+	    $('#reserve-request-form [name=start_hour]')
+		.val(new_start_hour);
+	    $('#reserve-request-form [name=end_day]')
+		.datepicker("setDate", new_end_day);
+	    $('#reserve-request-form [name=end_hour]')
+		.val(new_end_hour);
+
+	    // And if we actually changed anything.
+	    if (start_day != new_start_day || start_hour != new_start_hour) {
+		DateChange("start");
+		modified_callback();
+	    }
+	    if (end_day != new_end_day || end_hour != new_end_hour) {
+		DateChange("end")
+		modified_callback();
+	    }
 	};
-	var lower = (window.BISONLY || _.size(routes) ?
-		     NextBusinessDay().unix() : null);
-	var fit   = null;
-	var loops = 100;  // Avoid infinite loop.
-	
-	while (!fit && loops) {
-	    loops--;
-	    fit = findfirst(clusters[0], lower, null);
-	    if (!fit.starttime) {
-		break;
-	    }
-	    /*
-	     * Oh, ugly special case for routes.
-	     */
-	    if (_.size(routes)) {
-		var s  = moment.unix(fit["starttime"]);
-		var e  = moment.unix(fit["endtime"]);
-		var ok = true;
-
-		if (s.isoWeekday() == 6 || s.isoWeekday() == 7) {
-		    s.isoWeekday(1);
-		    s.isoWeek(s.isoWeek() + 1);
-		    ok = false;
-		}
-		else if (s.hours() > IDEAL_STARTHOUR) {
-		    s.isoWeekday(s.isoWeekday() + 1);
-		    ok = false;
-		}
-		if (!ok) {
-		    s.hours(IDEAL_STARTHOUR);
-		    lower = s.unix();
-		    fit   = null;
-		    console.info("Route adjustment(1) to " + s.format());
-		    continue;
-		}
-	    }
-	    
-	    for (index = 1; index < clusters.length; index++) {
-		var results = findfirst(clusters[index],
-					fit["starttime"], null);
-		if (!results.starttime) {
-		    break;
-		}
-		console.info("fit:" + index,
-			     fit.starttime, fit.endtime,
-			     fit.startdata, fit.enddata);
-
-		/*
-		 * If the first avail is beyond the current fit, need
-		 * to start over.
-		 */
-		if (fit["endtime"] && results["starttime"] > fit["endtime"]) {
-		    console.info("skip1");
-		    fit   = null;
-		    lower = results["starttime"];
-		    break;
-		}
-		// Narrow to newest fit.
-		if (results["starttime"] > fit["starttime"]) {
-		    fit["starttime"] = results["starttime"];
-		}
-		if (results["endtime"] &&
-		    (!fit["endtime"] || results["endtime"] < fit["endtime"])) {
-		    fit["endtime"] = results["endtime"];
-		}
-		// If too narrow, have to keep going.
-		if (fit["endtime"] &&
-		    (fit["endtime"] - fit["starttime"] < 
-		     (3600 * 24 * days) + 3600)) {
-		    console.info("skip2");
-		    fit   = null;
-		    lower = fit["starttime"];
-		    break;
-		}
-	    }
-	    if (fit && _.size(ranges)) {
-		// Set lower in case we have to go around again, we bump
-		// it below.
-		lower = fit["starttime"];
-	    
-		/*
-		 * Ok, we have something that works for the clusters, lets look
-		 * at the ranges. This is a bit easier since current ranges
-		 * include both a start and end time. So if the current fit
-		 * above conflicts with a range we want, start over at the end
-		 * of the conflicting range. 
-		 */
-		for (index = 0; index < ranges.length; index++) {
-		    var range     = ranges[index];
-		    var freq_low  = parseFloat(range.freq_low);
-		    var freq_high = parseFloat(range.freq_high);
-
-		    console.info("Range:" + index, freq_low, freq_high);
-
-		    for (var r = 0; r < allranges.length; r++) {
-			var existing = allranges[r];
-			var low      = parseFloat(existing.freq_low);
-			var high     = parseFloat(existing.freq_high);
-			var starts   = moment(existing.start).unix();
-			var ends     = moment(existing.end).unix();
-			var fitend   = fit.starttime + (3600 * 24 * days) + 3600;
-
-			console.info("Existing:" + r, low,high,starts,ends);
-
-			// If this range does not overlap in time, keep going
-			if ((fit.starttime < starts && fitend < starts) ||
-			    (fit.starttime > ends)) {
-			    continue;
-			}
-			// If this range does not overlap in frequency,
-			// keep going
-			if ((freq_low < low && freq_high < low) ||
-			    (freq_low > high)) {
-			    continue;
-			}
-			// Does not fit!
-			console.info("Range does not fit");
-			fit   = null;
-			break;
-		    }
-		    // No point in continuing, start over.
-		    if (!fit) {
-			lower = lower + (3600 * 1);
-			break;
-		    }
-		}
-	    }
-	    /*
-	     * Oh, ugly special case for routes.
-	     */
-	    if (fit && _.size(routes)) {
-		var s  = moment.unix(fit["starttime"]);
-		var e  = moment.unix(fit["endtime"]);
-		var ok = true;
-
-		if (s.isoWeekday() == 6 || s.isoWeekday() == 7) {
-		    s.isoWeekday(1);
-		    s.isoWeek(s.isoWeek() + 1);
-		    ok = false;
-		}
-		else if (s.hours() > IDEAL_STARTHOUR) {
-		    s.isoWeekday(s.isoWeekday() + 1);
-		    ok = false;
-		}
-		if (!ok) {
-		    s.hours(IDEAL_STARTHOUR);
-		    lower = s.unix();
-		    fit   = null;
-		    console.info("Route adjustment(2) to " + s.format());
-		    continue;
-		}
-	    }
-	}
-	// enddata can be null if we fit on the last timeline entry.
-	console.info("FindFit: ", fit);
-	if (!fit.starttime) {
-	    console.info("No fit");
-	    $("#reserve-request-form #start_day")
-		.datepicker('setDate', null);
-	    $("#reserve-request-form #end_day")
-		.datepicker('setDate', null);
-	    alert("Could not find a time that works!");
-	    return;
-	}
-	var starttime = fit.starttime;
-	var endtime   = fit.endtime;
-
-	var start = moment.unix(starttime);
-	/*
-	 * Need to push out the start to the top of hour.
-	 */
-	var minutes = (start.hours() * 60) + start.minutes();
-	start.hour(Math.ceil(minutes / 60));
-
-	/*
-	 * Try to shift the reservation from the middle of the night.
-	 * It is okay if we cannot do this, we still want to give the
-	 * user the earliest possible reservation.
-	 */
-	if (!window.BISONLY && start.hour() < IDEAL_STARTHOUR) {
-	    var tmp = moment(start);
-	    tmp.hour(IDEAL_STARTHOUR);
-
-	    // If no enddata then we can definitely shift it.
-	    if (!endtime || tmp.unix() + ((3600 * 24 * days)) < endtime) {
-		console.info("Shifting to later start time");
-		start = tmp;
-	    }
-	}
-	var end = moment(start.valueOf() + ((3600 * 24 * days) * 1000));
-
-	/*
-	 * With routes, limit to 11pm on the same day as start.
-	 */
-	if (_.size(routes) && start.dayOfYear() != end.dayOfYear()) {
-	    console.info("Trimming to earlier end time cause of routes");
-	    end.dayOfYear(start.dayOfYear());
-	    end.hour(23);
-	}
-
-	var start_day  = $('#reserve-request-form [name=start_day]').val();
-	var start_hour = $('#reserve-request-form [name=start_hour]').val();
-	var end_day    = $('#reserve-request-form [name=end_day]').val();
-	var end_hour   = $('#reserve-request-form [name=end_hour]').val();
-	var new_start_day  = start.format("MM/DD/YYYY");
-	var new_start_hour = start.format("H");
-	var new_end_day    = end.format("MM/DD/YYYY");
-	var new_end_hour   = end.format("H");
-
-	$('#reserve-request-form [name=start_day]')
-	    .datepicker("setDate", new_start_day);
-	$('#reserve-request-form [name=start_hour]')
-	    .val(new_start_hour);
-	$('#reserve-request-form [name=end_day]')
-	    .datepicker("setDate", new_end_day);
-	$('#reserve-request-form [name=end_hour]')
-	    .val(new_end_hour);
-
-	// And if we actually changed anything.
-	if (start_day != new_start_day || start_hour != new_start_hour) {
-	    DateChange("start");
-	    modified_callback();
-	}
-	if (end_day != new_end_day || end_hour != new_end_hour) {
-	    DateChange("end")
-	    modified_callback();
-	}
+	sup.ShowWaitWait(undefined, undefined, function () {
+	    sup.CallServerMethod(null, "resgroup", "FindFirstFit", args, callback);
+	});
     }
 
     //

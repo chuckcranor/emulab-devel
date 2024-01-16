@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -150,9 +150,6 @@ use GeniUser;
 use WebTask;
 use EmulabFeatures;
 if ($MAINSITE) {
-    # For POWDER NextBusinessDay
-    require DateTime;
-    require DateTime::Duration;
     # And the RDZ code.
     require APT_RDZ;
 }
@@ -211,7 +208,6 @@ sub ExtendInternal($$$$$$);
 sub CallMethodOnAggregates($$$@);
 sub ResponseErrorMessage($$);
 sub RelocateImage($$$$);
-sub NextBusinessDay(;$);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -2067,7 +2063,7 @@ sub DoExtend()
 	if ($instance->isPowder() &&
 	    $instance->pid() eq "PowderTeam" &&	    
 	    exists($resources->{'reservableNodes'})) {
-	    my $nbd = NextBusinessDay();
+	    my $nbd = APT_Utility::NextBusinessDay();
 	    my $powdermessage = "because extensions for these resources are ".
 		"limited to the next business day at 9AM Mountain time";
 
@@ -8219,39 +8215,3 @@ sub DoModify()
     exit($exitcode);
 }
 
-#
-# Next Business Day. Only for Powder.
-#
-sub NextBusinessDay(;$)
-{
-    my ($now) = @_;
-
-    if (!defined($now)) {
-	$now = DateTime->now(time_zone => 'local');
-    }
-    else {
-	$now = DateTime->from_epoch(epoch => $now, time_zone => 'local');
-    }
-    my $wday = $now->day_of_week;
-    my $incr;
-
-    SWITCH: for ($wday) {
-	/^[71234]$/ && do {
-	    $incr = 1;
-	    last SWITCH;
-	};
-	/^[5]$/ && do {
-	    $incr = 3;
-	    last SWITCH;
-	};
-	/^[6]$/ && do {
-	    $incr = 2;
-	    last SWITCH;
-	};
-    };
-    my $nbd = $now->add_duration(DateTime::Duration->new(days => $incr));
-    $nbd->set_hour(9);
-    $nbd->set_minute(0);
-    $nbd->set_second(0);
-    return $nbd->epoch;
-}

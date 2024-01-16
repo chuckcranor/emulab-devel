@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -494,7 +494,11 @@ $routing = array("geni-login" =>
                                                  "RouteReservations" =>
                                                      "Do_RouteReservations",
                                                  "ReservationHistory" =>
-                                                     "Do_ReservationHistory")),
+                                                     "Do_ReservationHistory",
+                                                 "FindFirstFit" =>
+                                                     "Do_FindFirstFit",
+                              )
+                        ),
 		 "rfresgroup" =>
 			array("file"    => "rfresgroup.ajax",
 			      "guest"   => false,
