@@ -93,6 +93,7 @@ sub usage()
     print " --project    - pid[,gid]: project[,group] for new reservation\n";
     print " --start      - Reservation start time (unix time or datetime).\n";
     print " --end        - Reservation end time (unix time or datetime).\n";
+    print " --duration   - HOURS instead of start/end, we will search for a slot.\n";
     print " --paramset   - uid,name of a parameter set to apply.\n";
     print " --bindings   - file containting json string of bindings to apply\n";
     print " --refspec    - refspec[:hash] of a repo based profile to use.\n";
@@ -107,6 +108,7 @@ my $checkonly      = 0;
 my $portal;
 my $start_at;
 my $stop_at;
+my $duration;
 my $sitemap;
 my $paramset;
 my $bindingfile;
@@ -125,6 +127,7 @@ my @optlist = ('d', 'a=s', 's', 'n',
 	       "site=s%"     => \$sitemap,
 	       "start=s"     => \$start_at,
 	       "end=s"       => \$stop_at,
+	       "duration=i"  => \$duration,
 	       "paramset=s"  => \$paramset,
 	       "bindings=s"  => \$bindingfile,
 	       "refspec=s"   => \$refspec,
@@ -148,7 +151,9 @@ if (defined($options{"s"})) {
     $noemail = 1;
 }
 usage()
-    if (@ARGV != 1 || !defined($stop_at) || !defined($pidgid));
+    if (@ARGV != 1 || !defined($pidgid) ||
+	!(defined($stop_at) || defined($duration)) ||
+	(defined($start_at) && defined($duration)));
 
 my $this_user = User->ThisUser();
 if (!defined($this_user)) {
@@ -184,19 +189,26 @@ if (defined($options{"a"})) {
 	fatal("Invalid aggregate URN");
     }
 }
-if (defined($start_at)) {
-    if ($start_at !~ /^\d+$/) {
-	$start_at = str2time($start_at);
-	if (!$start_at) {
-	    fatal("Could not parse the start time");
-	}
+if (defined($duration)) {
+    if ($duration !~ /^\d+$/) {
+	fatal("Duration must be an integer number of hours.");
     }
 }
-if (defined($stop_at)) {
-    if ($stop_at !~ /^\d+$/) {
-	$stop_at = str2time($stop_at);
-	if (!$stop_at) {
-	    fatal("Could not parse the stop time");
+else {
+    if (defined($start_at)) {
+	if ($start_at !~ /^\d+$/) {
+	    $start_at = str2time($start_at);
+	    if (!$start_at) {
+		fatal("Could not parse the start time");
+	    }
+	}
+    }
+    if (defined($stop_at)) {
+	if ($stop_at !~ /^\d+$/) {
+	    $stop_at = str2time($stop_at);
+	    if (!$stop_at) {
+		fatal("Could not parse the stop time");
+	    }
 	}
     }
 }
@@ -427,12 +439,13 @@ if (!defined($webtask)) {
 }
 my $webtask_id = $webtask->task_id();
 my $rspecfile  = emutil::WriteToFile($rspec);
-
 my $command = "$MANAGERESGROUP -t $webtask_id ";
 $command .= "-d " if ($debug);
-$command .= "createfromrspec -e $stop_at ";
+$command .= "createfromrspec ";
 $command .= "-n " if ($checkonly);
 $command .= "-s $start_at " if (defined($start_at));
+$command .= "-e $stop_at " if (defined($stop_at));
+$command .= "-F $duration " if (defined($duration));
 $command .= "$pid";
 $command .= "/$gid" if (!$group->IsProjectGroup());
 $command .= " $rspecfile";
