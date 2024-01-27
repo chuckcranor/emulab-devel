@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2022 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -1281,8 +1281,18 @@ read_image(int fd)
 		 * end metadata will be the same size as the beginning, which
 		 * is true for both MBR (0) and GPT (34-40ish) and is
 		 * reflected by the value of disk.lodata.
+		 *
+		 * XXX unfortunately, the last part is NOT true. On at least
+		 * Ubuntu22 we have seen lodata==40 but the GPT is actually
+		 * only 34 sectors. So adding lodata will trigger the assert
+		 * for a layout in which the boot partition uses all remaining
+		 * space on the disk. The proper value to add is the
+		 * difference between dsize and hidata.
+		 * 
+		 * Note also that "hisect" here is actually the highest
+		 * sector + 1.
 		 */
-		inputmaxsec = hisect + disk.lodata;
+		inputmaxsec = (hisect - 1) + (disk.dsize - disk.hidata);
 		assert(inputmaxsec <= disk.dsize);
 
 		if (gotbb == 1) {
