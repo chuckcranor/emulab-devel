@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -9399,11 +9399,11 @@ sub HandleBlockstore($$$$$$@)
 		#
 		# Only one read-write user at a time.
 		#
-		if ($readonly && $lease->InUseReadWrite()) {
+		if (!$readonly && $lease->InUseReadWrite()) {
 		    $message = "Dataset $dataset_id is already in use RW";
 		    $errorcode = GENIRESPONSE_BADARGS;
 		    last;
-	      }
+		}
 		# We need some stuff from the blockstore to fill out the
 		# virt tables below.
 		my $blockstore = Blockstore->LookupByLease($lease->lease_idx());
