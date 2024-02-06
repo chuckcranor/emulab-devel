@@ -3,6 +3,8 @@ import traceback
 import sys
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 
+FABRIC_RC = "./fabric_rc"
+
 #
 # The argument is a site name.
 #
@@ -18,7 +20,7 @@ def usage():
 args = parser.parse_args()
 
 try:
-  fablib = FablibManager()
+  fablib = FablibManager(fabric_rc=FABRIC_RC, auto_token_refresh=False)
   
   fablib.show_config()
   print(fablib.get_site_advertisement(args.site))

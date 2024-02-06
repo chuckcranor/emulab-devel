@@ -1,10 +1,10 @@
 from fabrictestbed_extensions.fablib.fablib import FablibManager
-
 import traceback
 
-try:
-  fablib = FablibManager()
+FABRIC_RC = "./fabric_rc"
 
+try:
+  fablib = FablibManager(fabric_rc=FABRIC_RC, auto_token_refresh=False)
   fablib.show_config()
 
   # Create a slice

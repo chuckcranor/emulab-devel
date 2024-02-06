@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -31,6 +31,9 @@ import traceback
 import sys
 
 from fabrictestbed_extensions.fablib.fablib import FablibManager
+import os
+
+FABRIC_RC = "./fabric_rc"
 
 #
 # Map the site name to the facility port name.
@@ -72,7 +75,8 @@ def usage():
 
 args = parser.parse_args()
 
-fablib = FablibManager(log_file=args.logfile)
+fablib = FablibManager(fabric_rc=FABRIC_RC, auto_token_refresh=False,
+                       log_file=args.logfile)
 
 # Create a slice
 slice = fablib.new_slice(name=args.name)

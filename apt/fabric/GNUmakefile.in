@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,7 @@ SUBDIRS		=
 INSTALL_FABDIR  = $(TBROOT)/fabric
 
 STUFF		= fabric_rc getconfig.py getads.py getslice.py listslices.py \
-		  stitch-test.py stitch-links.py renewslice.py
+		  stitch-test.py stitch-links.py renewslice.py deleteslice.py
 
 #
 # Force dependencies on the scripts so that they will be rerun through

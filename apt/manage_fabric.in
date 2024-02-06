@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -73,7 +73,7 @@ my $GETCONFIG  = "$VIRTUALENV python $TB/fabric/getconfig.py ";
 my $SLICEINFO  = "$VIRTUALENV python $TB/fabric/getslice.py ";
 my $LISTSLICES = "$VIRTUALENV python $TB/fabric/listslices.py ";
 my $REFRESH    = "$VIRTUALENV fabric-cli tokens refresh ";
-my $DELETE     = "$VIRTUALENV fabric-cli slices delete ";
+my $DELETE     = "$VIRTUALENV python $TB/fabric/deleteslice.py ";
 my $RENEW      = "$VIRTUALENV python $TB/fabric/renewslice.py ";
 my $GETAD      = "$VIRTUALENV python $TB/fabric/getads.py ";
 
@@ -151,6 +151,8 @@ else {
     # Create a temporary directory for the log file, token, etc.
     $tmpdir = tempdir("/tmp/manage_fabric.XXXXXX");
     system("/bin/chmod 775 $tmpdir");
+    print "TMPDIR=$tmpdir\n" if ($debug);
+    chdir($tmpdir);
 }
 $logfile = "$tmpdir/fablib.$$";
 
@@ -160,7 +162,7 @@ $ENV{"FABRIC_LOG_FILE"} = $logfile;
 $ENV{"TMPDIR"} = $tmpdir;
 # Make sure this gets deleted if no error.
 END {
-    if (0 && !defined($options{"D"})) {
+    if (!$debug && !defined($options{"D"})) {
 	if (!$?) {
 	    system("/bin/rm -rf $tmpdir")
 		if (-d $tmpdir);
@@ -181,6 +183,10 @@ if ($?) {
 }
 system("/bin/chmod 666 $tmpdir/token.json");
 $ENV{"FABRIC_TOKEN_LOCATION"} = "$tmpdir/token.json";
+system("/bin/cp $TB/fabric/fabric_rc $tmpdir");
+if ($?) {
+    fatal("Could not copy $TB/fabric/fabric_rc to $tmpdir");
+}
 
 if ($action eq "getconfig") {
     exit(DoGetConfig());
@@ -321,21 +327,22 @@ sub DoSliceExists()
 }
 
 #
-# Delete a slice by slice ID
+# Delete a slice by slice ID or slice name
 #
 sub DoDeleteSlice()
 {
     my $exists = 0;
     
     my $usage = sub {
-	print STDERR "Usage: manage_fabric deleteslice <sliceid>\n";
+	print STDERR "Usage: manage_fabric deleteslice.py".
+	    "<sliceid> | <slicename>\n";
 	exit(-1);
     };
     &$usage()
 	if (@ARGV != 1);
     my $sliceid = $ARGV[0];
 
-    my $output = emutil::ExecQuiet("$DELETE --sliceid $sliceid");
+    my $output = emutil::ExecQuiet("$DELETE --name $sliceid");
     if ($?) {
 	print $output . "\n";
 	fatal("DoDeleteSlice: failed");
@@ -377,7 +384,7 @@ sub DoRenewSlice()
 	my $linkname  = $ref->{'linkname'};
 	my $sliceid   = $ref->{'sliceid'};
 
-	print "Renewing slice for $linkname: $sliceid\n";
+	print "Renewing slice for $linkname: $sliceid to $when\n";
 	my $output = emutil::ExecQuiet("$RENEW --sliceid '$sliceid' ".
 				       " --when '$when'");
 	if ($?) {

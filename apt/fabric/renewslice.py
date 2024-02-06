@@ -3,6 +3,8 @@ import traceback
 import sys
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 
+FABRIC_RC = "./fabric_rc"
+
 #
 # The argument is a slice name.
 #
@@ -19,7 +21,7 @@ args = parser.parse_args()
 
 try:
     # Hardwired in the code.
-    fablib = FablibManager()
+    fablib = FablibManager(fabric_rc=FABRIC_RC, auto_token_refresh=False)
     fablib.show_config()
     slices = fablib.get_slices()
     for slice in slices:

@@ -3,6 +3,8 @@ import traceback
 import sys
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 
+FABRIC_RC = "./fabric_rc"
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-j', '--json', action='store_true')
 
@@ -19,7 +21,7 @@ else:
     pass
 
 try:
-    fablib = FablibManager()
+    fablib = FablibManager(fabric_rc=FABRIC_RC, auto_token_refresh=False)
     fablib.list_slices(output=output, fields=['id','name','state','lease_end'])
 
 except Exception as e:
