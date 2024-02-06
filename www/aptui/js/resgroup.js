@@ -2436,7 +2436,7 @@ $(function ()
 		    if (this_pid != $('#pid').val()) {
 			console.info("LoadRangeReservations: project changed " +
 				     "from " + current_pid +
-				     " to " + selected_pid);
+				     " to " + $('#pid').val());
 			LoadRangeReservations();
 			return;
 		    }
