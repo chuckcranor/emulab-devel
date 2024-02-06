@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -937,9 +937,6 @@ class Instance
                            "cl-ap"              => true,
                            # Wisconsin, not ready yet
                            "d7525"              => true,
-                           "d8545"              => true,
-                           "sm110p"             => true,
-                           "sm220u"             => true,
                            "c240g2-infra"       => true,
                            "r7525s"             => true,
                            "rflab-blackbox"     => true,
