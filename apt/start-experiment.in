@@ -575,7 +575,8 @@ if ($?) {
 			    "Failed to start portal experiment",
 			    "Failed to start portal experiment for profile ".
 			    $profile->pidversname() . "\n\n" .
-			    $body, $project->OpsEmailAddress());
+			    $body, $project->OpsEmailAddress(),
+			    "BCC: " . $project->OpsEmailAddress());
     }
     # Maybe delete the instance right away?
     
