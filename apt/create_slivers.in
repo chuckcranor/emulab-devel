@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1729,6 +1729,7 @@ sub RunStitcher()
     # so that we can pass the ssh keys more easily.
     #
     $instance->SetStatus("stitching");
+    print "cd $tmpdir; $command > $stdoutfile 2> $stderrfile\n";
     system("cd $tmpdir; $command > $stdoutfile 2> $stderrfile");
     if ($?) {
 	$errcode = $? >> 8;
@@ -1828,6 +1829,14 @@ sub RunStitcher()
 	    goto bad;
 	}
 	close(TXT);
+    }
+    elsif ($usefabric) {
+	#
+	# Something went wrong.
+	#
+	print STDERR "Stitcher failed on all aggregates!\n";
+	$webtask->output("Stitcher failed!");
+	goto bad;
     }
     foreach my $urn (@agglist) {
 	next
