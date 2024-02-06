@@ -4277,7 +4277,7 @@ sub DoFindFirstFit()
 	if (@ARGV != 2 || !defined($options{"d"}));
 
     # Lets say hours
-    if ($options{"d"} !~ /^\d+$/) {
+    if ($options{"d"} !~ /^[\.\d]+$/) {
 	fatal("-d option requires an integer number of hours");
     }
     if ($options{"d"} < 1) {
