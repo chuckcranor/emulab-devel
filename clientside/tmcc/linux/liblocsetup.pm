@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -748,16 +748,16 @@ sub os_ifconfig_line($$$$$$$$;$$$%)
 		    "  if $ethtool -s $iface autoneg off speed $speed duplex $duplex >/dev/null 2>&1 ; then\n    " .
 		    "    sleep 2 # needed due to likely bug in e100 driver on pc850s\n    " .
 		    "  else\n    " .
-		    "    echo ERROR: failed to set speed $speed on iface $iface; falling back to autonegotiation!\n    " .
+		    "    echo \"ERROR: failed to set speed $speed on iface $iface; falling back to autonegotiation!\"\n    " .
 		    "    if ! $ethtool -s $iface autoneg on ; then\n    " .
-		    "      echo ERROR: failed to fall back to autonegotiation on $iface!\n    " .
+		    "      echo \"ERROR: failed to fall back to autonegotiation on $iface!\"\n    " .
 		    "    fi\n    " .
 		    "  fi\n    ";
 	    }
 	    if ($media eq '') {
 		$uplines .= 
 		    "else\n    " .
-		    "  echo WARNING: cannot set speed $speed for $iface via mii-tool!\n    " .
+		    "  echo \"WARNING: cannot set speed $speed for $iface via mii-tool!\"\n    " .
 		    "fi\n    ";
 	    }
 	    elsif ($media eq $IFC_AUTO) {
