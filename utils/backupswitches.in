@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2005-2023 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,17 @@
 # }}}
 #
 
+#
+# WARNING: Somewhat Utah specific. We rely on certain users and config for
+# this to work:
+#
+# force10: uses the (root alias) "toor" user which is expected to have root's
+#          pubkey uploaded to allow password-less login.
+# dellrest: just uses root ssh to admin user on switch, needs to have root
+#           pubkey uploaded for admin user
+# comware: just uses root ssh to switch, needs to have root pubkey encoded(?)
+#          and uploaded (appears independent of user on switch).
+#
 my $BACKUPDIR = '@prefix@/backup/switch-config';
 my $TMPFILE = "/tftpboot/switch-backup";
 my $GRAB = "@prefix@/sbin/grabswitchconfig";
@@ -65,7 +76,7 @@ foreach my $switch (@ARGV) {
     #
     # Is it a Cisco or maybe an HP
     my $type = getDeviceType($switch);
-    if ($type !~ /(arista|cisco|catalyst|hp|force10|dellrest)/) {
+    if ($type !~ /(arista|cisco|catalyst|hp|force10|dellrest|comware)/) {
 	print STDERR
 	    " *** $0:\n" .
 	    "     ignoring unsupported switch type (type $type)\n";
@@ -84,6 +95,12 @@ foreach my $switch (@ARGV) {
     }
     if ($type =~ /hp/) {
 	if (system("scp $switch:/cfg/running-config $BACKUPDIR/$switch-$datestr")) {
+	    print STDERR "Unable to grab and save config for $switch, ignored\n";
+	    next;
+	}
+    }
+    if ($type =~ /comware/) {
+	if (system("scp $switch:startup.cfg $BACKUPDIR/$switch-$datestr")) {
 	    print STDERR "Unable to grab and save config for $switch, ignored\n";
 	    next;
 	}
