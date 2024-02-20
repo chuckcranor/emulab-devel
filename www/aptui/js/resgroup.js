@@ -50,13 +50,6 @@ $(function ()
 		console.info("Start time has past, no mods allowed");
 		return 0;
 	    }
-	    // Ug, not started yet, but subject to next business day rule.
-	    var nextbusinessday = NextBusinessDay();
-	    if (start < nextbusinessday) {
-		console.info("Start is before the next business day",
-			     nextbusinessday)
-		return 0;
-	    }
 	}
 	return 1;
     }
@@ -1187,8 +1180,7 @@ $(function ()
 	/*
 	 * Ok, init the hour if not set.
 	 */
-	var ideal_hour =
-	    (which == "start" ? adjustedMorning().hour() : IDEAL_ENDHOUR);
+	var ideal_hour = (which == "start" ? IDEAL_STARTHOUR : IDEAL_ENDHOUR);
 	
 	if (!hourset && !moment(date).isSame(Date.now(), "day")) {
 	    $(selecter + ' option[value=' + ideal_hour + ']')
@@ -1233,137 +1225,6 @@ $(function ()
 	    }
 	}
     }
-
-    /*
-     * If the start time of reservation is for today, then it must
-     * start before 9am (in the home timezone). Otherwise, the user
-     * has to push the start time out till the next business day. If
-     * today is a weekend, then the user must push the start time out
-     * till the next business day.
-     */
-    function StartTimeOkay()
-    {
-	console.info("StartTimeOkay");
-
-	if (!window.MAINSITE || isadmin || !window.BISONLY) {
-	    return 1;
-	}
-	if (editing) {
-	    /*
-	     * We want to prevent users from editing a submitted reservation
-	     * such that the start time violates the rules. But since the
-	     * form contains the start time, need to be careful we do not
-	     * try to check it, since it might even be in the past, if the
-	     * user has not changed it.
-	     */
-	    var formstart = $('#reserve-request-form [name=start]').val();
-	    var start     = moment(formstart);
-	    var resstart  = moment(resgroup.start);
-	    
-	    console.info(start, resstart);
-	    if (start.isSame(resstart)) {
-		console.info("submitted reservation, start unchanged");
-		return 1;
-	    }
-	}
-	var start_day  = $('#reserve-request-form [name=start_day]').val();
-	var start_hour = $('#reserve-request-form [name=start_hour]').val();
-	var toosoon    = false;
-
-	console.info("StartTimeOkay: ", start_day, start_hour);
-
-	if (start_day && start_hour) {
-	    var nbd   = NextBusinessDay();
-	    var start = moment(start_day, "MM/DD/YYYY");
-	    start.hour(start_hour);
-
-	    console.info(moment(start), nbd);
-
-	    if (start.isBefore(nbd)) {
-		toosoon = 1;
-	    }
-	}
-	else {
-	    /*
-	     * All reservations that need approval must start in two
-	     * business days, so "now" is definitely too soon.
-	     */
-	    toosoon = 1;
-	}
-	if (toosoon) {
-	    sup.ShowModal('#toosoon-modal');
-	    return 0;
-	}
-	return 1;
-    }
-
-    /*
-     * Calculate the next business day after the current time.
-     */
-    function NextBusinessDay(now)
-    {
-	var pid = $('#pid').val();
-	
-	if (now === undefined) {
-	    now = moment();
-	}
-	// Change the timezone to home base so we can check against
-	// 9am and weekend in that timezone.
-	now.tz(window.HOMETZ);
-
-	console.info("NextBusinessDay", now.isoWeekday());
-
-	if (0) {
-	    // New: All reservations that need approval have to start
-	    // no earlier then two business days from now.
-	    switch (now.isoWeekday())
-	    {
-		case 1:
-		case 2:
-		case 3:
-	             now.isoWeekday(now.isoWeekday() + 2);
-	             break;
-
-		case 4:
-		case 5:
-	              now.isoWeekday(now.isoWeekday() + 4);
-    	              break;
-	    
-		case 6:
-		case 7:
-	              now.isoWeekday(2);
-	              now.isoWeek(now.isoWeek() + 1);
-	              break;
-	    }
-	}
-	else {
-	    switch (now.isoWeekday())
-	    {
-		case 1:
-		case 2:
-		case 3:
-		case 4:
-	             now.isoWeekday(now.isoWeekday() + 1);
-	             break;
-
-		case 5:
-		case 6:
-		case 7:
-	              now.isoWeekday(1);
-	              now.isoWeek(now.isoWeek() + 1);
-	              break;
-	    }
-
-	}
-	now.hours(9);
-	now.minute(0);
-	now.second(0);
-	now.millisecond(0);
-	now.local();
-	console.info(now.format('lll'));
-	return now;
-    }
-    window.NextBusinessDay = NextBusinessDay;
 
     /*
      * Mark a cluster field with an error.
@@ -2587,9 +2448,6 @@ $(function ()
     //
     function ValidateReservation(clusters, ranges, routes)
     {
-	// This updates a couple of modals. 
-	adjustNBD();
-	
 	var callback = function(json) {
 	    console.info(json);
 	    if (json.code) {
@@ -2677,6 +2535,12 @@ $(function ()
 		    }
 		});
 	    }
+            // Update NBD in the modals.
+            if (_.has(results, "nbd")) {
+                var nbd = moment(results['nbd']);
+                $('.adjustedNBD').text(nbd.format("ddd MMM Do hA"));
+            }
+            
 	    if (needsApproval) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
@@ -2692,8 +2556,10 @@ $(function ()
 		    $('#confirm-reservation .needs-approval-noconflict')
 			.removeClass("hidden");
 		}
-		if (!StartTimeOkay()) {
-		    return;
+
+                if (_.has(results, 'toosoon') && results['toosoon'] != 0) {
+	            sup.ShowModal('#toosoon-modal');
+                    return;
 		}
 	    }
 	    else {
@@ -4718,25 +4584,6 @@ $(function ()
 	}
 	var x = parseFloat(value);
 	return isNaN(x) ? false : true;
-    }
-
-    function adjustedMorning()
-    {
-	/*
-	 * Create a moment object that converts 9am in the Portal timezone
-	 * to whatever it is in the local timezone.
-	 */
-	var now = moment();
-	now.tz(window.HOMETZ);
-	now.hours(9);
-	now.local();
-	return now;
-    }
-    function adjustNBD()
-    {
-	var nbd = NextBusinessDay();
-	
-	$('.adjustedNBD').text(nbd.format("ddd MMM Do hA"));
     }
 
     /*

@@ -102,8 +102,6 @@ echo "<div id='oops_div'></div>
       <div id='confirm_div'></div>
       <div id='waitwait_div'></div>\n";
 
-# Reservations now have to start next business day at 9am (unless expert).
-$bisdaysonly = $this_user->expert_mode() || $isadmin ? 0 : 1;
 # Ditto
 $routesokay  = $isadmin;
 
@@ -135,9 +133,6 @@ foreach ($projlist as $p => $grouplist) {
             "resmode" => $ptmp->ResSharingMode(),
             "manager" => $ptmp->IsManager($this_user),
         );
-        if ($ptmp->expert_mode()) {
-            $bisdaysonly = 0;
-        }
         $mlist[$p] = $ptmp->IsManager($this_user);
 
         if ($ISPOWDER) {
@@ -312,7 +307,6 @@ else {
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";
 echo "   window.HOMETZ   = '$OURTIMEZONE';\n";
-echo "   window.BISONLY  = $bisdaysonly;\n";
 echo "   window.DOROUTES = $routesokay;\n";
 
 echo "</script>\n";

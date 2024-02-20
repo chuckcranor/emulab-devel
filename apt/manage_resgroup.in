@@ -224,6 +224,7 @@ sub DoGroupReserve()
     my ($clusters, $ranges, $routes);
     my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
     my ($project,$group);
+    my $bisdaysonly = 1;
     my $checkonly;
 
     my %options = ();
@@ -342,6 +343,11 @@ sub DoGroupReserve()
     if (!defined($start)) {
 	$start = time();
     }
+
+    # All Portals get bisdaysonly now.
+    $bisdaysonly = 0
+	if ($this_user->expert_mode() || $project->expert_mode() ||
+	    $this_user->IsAdmin());
     
     #
     # The file is a JSON array of cluster/range reservation info.
@@ -724,12 +730,23 @@ sub DoGroupReserve()
     # version of what came in (clusters and ranges).
     my ($range_results, $cluster_results, $route_results);
     my $result = {
-	"hosed" => 0,
+	"hosed"   => 0,
+	"bisonly" => $bisdaysonly,
+	"nbd"     => TBDateStringGMT(APT_Utility::NextBusinessDay()),
     };
     if ($update) {
 	$result->{'uuid'} = $resgroup->uuid();
     }
-    
+
+    #
+    # Check for starting before NextBusinessDay.
+    #
+    if ($bisdaysonly) {
+	my $nbd = APT_Utility::NextBusinessDay();
+	if ($start < $nbd) {
+	    $result->{'toosoon'} = 1;
+	}
+    }
     if (defined($ranges)) {
 	$range_results = {"ranges"    => $ranges,
 			  "errors"    => 0,
