@@ -15063,8 +15063,9 @@ COMMAND_PROTOTYPE(doattenuator)
 			  "w.node_id2=r2.node_id AND r1.exptidx=%d AND "
 			  "r2.exptidx=%d AND ( w.external_wire=%d OR "
 			  "w.external_wire LIKE '%d,%%' OR "
-			  "w.external_wire LIKE '%%,%d' )", 1, reqp->exptidx,
-			  reqp->exptidx, atten, atten, atten );
+			  "w.external_wire LIKE '%%,%d' OR "
+			  "w.external_wire LIKE '%%,%d,%%' )", 1, reqp->exptidx,
+			  reqp->exptidx, atten, atten, atten, atten );
 
 	if( mysql_num_rows( res ) ) {
 		sin.sin_family = AF_INET;
