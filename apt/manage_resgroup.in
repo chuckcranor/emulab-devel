@@ -4404,6 +4404,9 @@ sub FindFirstFit($$$$$$$)
 	    my $urns = join(",", @urns);
 	    my $local_webtask = WebTask->CreateAnonymous();
 	    my $local_task_id = $local_webtask->task_id();
+	    print "$RESCOMMAND -t $local_task_id ".
+		"  prediction -a '$urns' $pidgid\n";
+
 	    system("$RESCOMMAND -t $local_task_id ".
 		   "  prediction -a '$urns' $pidgid");
 	    if ($?) {
