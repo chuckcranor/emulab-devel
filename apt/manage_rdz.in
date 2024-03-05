@@ -1103,35 +1103,38 @@ sub DoObservations()
     else {
 	fatal("Bad file name, must be a monitor filename");
     }
-    my $node = Node->Lookup($node_id);
-    if (!defined($node)) {
-	fatal("No such node: $node_id");
-    }
+    
     #
     # Do not send up observations if the radio is not allocated and
-    # using RDZ spectrum.
+    # using RDZ spectrum. Only or local radios of course.
     #
-    if (!$force) {
-	exit(0)
-	    if (!$node->IsReserved());
-	my $experiment = $node->Reservation();
-
-	# Not likely to see any classic experiments, but make sure.
-	exit(0)
-	    if (! ($experiment && $experiment->slice_uuid()));
-
-	my $instance = APT_Instance->LookupBySlice($experiment->slice_uuid());
-
-	if (!$instance) {
-	    print STDERR "Could not lookup instance for $experiment\n";
-	    exit(0);
+    if ($aggregate_urn eq $MYURN) {
+	my $node = Node->Lookup($node_id);
+	if (!defined($node)) {
+	    fatal("No such node: $node_id");
 	}
-	# This is hacky.
-	exit(0)
-	    if (!defined($instance->rdz_status()));
-    }
-    else {
-	$stamp = time();
+	if (!$force) {
+	    exit(0)
+		if (!$node->IsReserved());
+	    my $experiment = $node->Reservation();
+
+	    # Not likely to see any classic experiments, but make sure.
+	    if (! ($experiment && $experiment->slice_uuid())) {
+		print "Not a Portal experiment\n";
+		exit(0);
+	    }
+
+	    my $instance = APT_Instance->LookupBySlice(
+		$experiment->slice_uuid());
+
+	    if (!$instance) {
+		print STDERR "Could not lookup instance for $experiment\n";
+		exit(0);
+	    }
+	    # This is hacky.
+	    exit(0)
+		if (!defined($instance->rdz_status()));
+	}
     }
     
     my $query_result =
