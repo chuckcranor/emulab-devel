@@ -60,6 +60,7 @@
 			  <th>UID</th>
 			  <th>Rank</th>
 			  <th>Name</th>
+			  <th>Portal</th>
 			  <th>Affiliation</th>
 			  <th>Pnodes</th>
 			  <th>Phours</th>
@@ -74,6 +75,7 @@
 			    </td>
 			    <td><%= value.rank %></td>
 			    <td><%= value.usr_name %></td>
+			    <td><%= value.portal %></td>
 			    <td><%= value.usr_affil %></td>
 			    <td><%= value.pnodes %></td>
 			    <td><%= value.phours %></td>
@@ -101,6 +103,7 @@
 			  <th>PID</th>
 			  <th>Rank</th>
 			  <th>Leader</th>
+			  <th>Portal</th>
 			  <th>Affiliation</th>
 			  <th>Pnodes</th>
 			  <th>Phours</th>
@@ -114,10 +117,12 @@
 				<%= pid %></a>
 			    </td>
 			    <td><%= value.rank %></td>
+			    <td><%= value.portal %></td>
 			    <td>
 			      <a href='user-dashboard.php?user=<%= value.usr_uid %>'>
 				<%= value.usr_name %></a>
 			    </td>
+			    <td><%= value.portal %></td>
 			    <td><%= value.usr_affil %></td>
 			    <td><%= value.pnodes %></td>
 			    <td><%= value.phours %></td>
