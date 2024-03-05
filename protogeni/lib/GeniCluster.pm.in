@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1462,7 +1462,7 @@ sub Reservations($)
 	    if (@allres) {
 		@timeline = ResUtil::CreateTimeline($group, $resuser, @allres);
 		if (!@timeline) {
-		    print STDERR "Reservations: No timeline for $pid/$gid\n";
+		    #print STDERR "Reservations: No timeline for $pid/$gid\n";
 		}
 	    }
 	    $pidres{$target} = \@allres;
@@ -1498,7 +1498,7 @@ sub Reservations($)
 	if ($reservation->approved() && $reservation->start() < time()) {
 	    @timeline = @{$timelines{$target}};
 	    if (@timeline) {
-		print STDERR Dumper(\@timeline);
+		#print STDERR Dumper(\@timeline);
 		ResUtil::ReservationUtilizationNew($reservation, @timeline);
 		$blob->{'utilization'} = $reservation->data("utilization");
 
@@ -2176,7 +2176,7 @@ sub ReservationPrediction($)
 	"current"      => $current,
 	"upcoming"     => $upcoming,
     };
-    print STDERR Dumper($blob);
+    #print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
@@ -2542,7 +2542,7 @@ sub SetSharedReservations($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, \@results,
 			    "Could not toggle shared reservations flag");
     }
-    print STDERR Dumper(\@results);
+    #print STDERR Dumper(\@results);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, \@results);
 }
 
