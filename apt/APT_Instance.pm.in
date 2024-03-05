@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2023 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -5982,6 +5982,18 @@ sub WaitForSliver($)
     while ($seconds > 0 && !$aggobj->instance()->IsCanceled()) {
 	sleep($interval);
 	$seconds -= $interval;
+
+	#
+	# Failsafe; if the aggregate suddenly went "disabled" then something
+	# is really wrong, so bail. 
+	#
+	$aptagg->Refresh();
+	if ($aptagg->disabled()) {
+	    $failure_code   = GENIRESPONSE_NETWORK_ERROR();
+	    $failure_output = "SliverStatus failed: Aggregate not responding";
+	    $failed = 1;
+	    last;
+	}
 	my $response = $aggobj->SliceStatus();
 
 	print STDERR "WaitForSliver $urn : " . TBTimeStamp() . ": code:" .
@@ -6006,7 +6018,7 @@ sub WaitForSliver($)
 	    # If no contact for continuous minutes, give up.
 	    #
 	    $unavail = time() if (!defined($unavail));
-	    if ($aptagg->ismobile() && time() - $unavail > 180) {
+	    if ($aptagg->ismobile() && time() - $unavail > 60) {
 		$failed = 1;
 		$failure_code = GENIRESPONSE_SERVER_UNAVAILABLE();
 		$failure_output = "Experiment setup on the $aggname cluster ".
