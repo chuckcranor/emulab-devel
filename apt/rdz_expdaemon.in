@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -45,11 +45,12 @@ sub usage()
     print "Usage: rdz_expdaemon [-d] [-s] [-F] [-n]\n";
     exit(1);
 }
-my $optlist   = "dnsF";
+my $optlist   = "dnsFN";
 my $debug     = 0;
 my $impotent  = 0;
 my $oneshot   = 0;
 my $fesonly   = 0;
+my $nofes     = 0;
 # Processes that are running in the background, watching an RDZ experiment.
 my %watchers  = ();
 # The instances being watched.
@@ -108,6 +109,9 @@ if (defined($options{"n"})) {
 }
 if (defined($options{"F"})) {
     $fesonly = 1;
+}
+if (defined($options{"N"})) {
+    $nofes = 1;
 }
 
 # Load the Testbed support stuff.
@@ -179,12 +183,14 @@ $SIG{INT}  = \&TermHandler;
 # Start up FE watchers in the background. Not sure this is a good
 # place for this watcher.
 #
-my $query_result =
-    DBQueryFatal("select location,aggregate_urn ".
-		 "   from apt_aggregate_radio_locations ".
-		 "where itype='FE'");
-while (my ($location, $urn) = $query_result->fetchrow_array()) {
-    $fewatchers{WatchEndpoint($urn)} = $location;
+if (!$nofes) {
+    my $query_result =
+	DBQueryFatal("select location,aggregate_urn ".
+		     "   from apt_aggregate_radio_locations ".
+		     "where itype='FE'");
+    while (my ($location, $urn) = $query_result->fetchrow_array()) {
+	$fewatchers{WatchEndpoint($urn)} = $location;
+    }
 }
 if ($fesonly) {
     while (1) {
@@ -370,7 +376,7 @@ sub ReportObservation($$$)
     my $aggregate_urn = $aggregate->urn();
     my @instances = APT_Instance->LookupForAggregate($aggregate);
 
-    print "ReportObservation: $aggregate_urn $file\n";
+    print "ReportObservation: $aggregate_urn $file\n" if ($debug);
 
     return 0
 	if (!@instances);
@@ -387,6 +393,12 @@ sub ReportObservation($$$)
     }
 
     foreach my $instance (@instances) {
+	$instance->Refresh();
+	
+	# This is hacky.
+	next
+	    if (!defined($instance->rdz_status()));
+	
 	my $agg = $instance->GetAggregate($aggregate_urn);
 
 	#
@@ -403,8 +415,9 @@ sub ReportObservation($$$)
 		print "ReportObservation: $node_id in use, would report\n";
 	    }
 	    else {
+		print "$path\n";
 		system("$SUDO -u $PROTOUSER $MANAGERDZ ".
-		       "observations -f -a $aggregate_urn create $path");
+		       "observations create -a $aggregate_urn $path");
 	    }
 	    return 0;
 	}
