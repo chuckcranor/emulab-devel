@@ -8313,7 +8313,7 @@ sub FlipToUser($$)
     #
     # If creator is frozen we need to use the project leader instead.
     #
-    if ($creator->frozen()) {
+    if ($creator->frozen() || !$creator->HasValidEncryptedCert()) {
 	$creator = $project->GetLeader();
     }
     $creator = GeniUser::LocalUser->Create($creator);
