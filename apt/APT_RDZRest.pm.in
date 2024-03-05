@@ -1,0 +1,237 @@
+#!/usr/bin/perl -wT
+#
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+package APT_RDZRest;
+
+use strict;
+use Data::Dumper;
+use REST::Client;
+use JSON;
+use Scalar::Util qw(blessed);
+use Carp;
+use Exporter;
+use vars qw(@ISA @EXPORT);
+
+@ISA    = "Exporter";
+@EXPORT = qw ( );
+
+# Must come after package declaration
+use emdb;
+use emutil;
+
+# Configure variables
+my $TB		  = "@prefix@";
+my $OURDOMAIN     = "@OURDOMAIN@";
+my $IDENTITY      = "https://node-0.rdz-dev.powderteam.emulab.net:8000/v1";
+my $ZMC           = "https://node-0.rdz-dev.powderteam.emulab.net:8010/v1";
+my $DST           = "https://node-0.rdz-dev.powderteam.emulab.net:8020/v1";
+my $POWDERTOKEN   = "rpu_EQp0EKdSIR7LRiNfH0dUhdGo7kLXCbsJSbRe1OeUVr2G8u8RDH";
+my $CELONATOKEN   = "rpu_NQr447OzJIf7x6XguCWfZgsApwGsbvdQHzGz3D2m6fykO8paWI";
+my $TOKEN         = $POWDERTOKEN;
+my $CURL	  = "/usr/local/bin/curl";
+my $ELEMENTID;
+
+sub ZMCURL() { return $ZMC; }
+# Observations go to the DST.
+sub DSTURL() { return $DST; }
+
+# Tokens.
+sub POWDER() { return $POWDERTOKEN; }
+sub CELONA() { return $CELONATOKEN; }
+
+# This is a global instead of class.
+my $verbose       = 0;
+
+#
+# Simple wrapper.
+#
+sub Create($$$)
+{
+    my ($class, $token, $url) = @_;
+
+    my $elementid = GetElementID($token);
+    return undef
+	if (!defined($elementid));
+    
+    my $ref = {
+	"token"     => $token,
+	"elementid" => $elementid,
+	"url"       => $url,
+    };
+    bless($ref, $class);
+    return $ref;
+}
+sub token($)	{ return $_[0]->{'token'}; }
+sub elementid($){ return $_[0]->{'elementid'}; }
+sub url($)	{ return $_[0]->{'url'}; }
+
+#
+# This is all going to change. 
+#
+# GET/DELETE 
+#
+sub REST($$$$)
+{
+    my ($self, $endpoint, $prval, $op) = @_;
+    my $client = REST::Client->new();
+
+    $client->setHost($self->url());
+    $client->addHeader("X-Api-Token", $self->token());
+    $client->addHeader("X-Api-Elaborate", "true");
+
+    if ($op eq "GET") {
+	$client->GET($endpoint);
+    }
+    else {
+	$client->DELETE($endpoint);
+    }
+    if ($client->responseCode() ne "200") {
+	print Dumper($client);
+    }
+    if ($client->responseContent() && defined($prval)) {
+	my $rval = eval { decode_json($client->responseContent()); };
+	if ($@) {
+	    print STDERR "Could not decode json\n";
+	    return -1;
+	}
+	if ($client->responseCode() ne "200") {
+	    print Dumper($rval);
+	}
+	$$prval = $rval;
+    }
+    if ($client->responseCode() ne "200") {
+	return -1;
+    }
+    return 0;
+}
+
+sub DELETE($$$) { return REST($_[0], $_[1], $_[2], "DELETE"); }
+sub GET($$$)	{ return REST($_[0], $_[1], $_[2], "GET"); }
+
+sub RESTP($$$$$)
+{
+    my ($self, $endpoint, $ref, $prval, $op) = @_;
+    my $client = REST::Client->new();
+
+    $client->setHost($self->url());
+    $client->addHeader("X-Api-Token", $self->token());
+    $client->addHeader("X-Api-Elaborate", "true");
+    $client->addHeader("Content-Type", "application/json");
+
+    my $json = eval { encode_json($ref); };
+    if ($@) {
+	print STDERR "Could not encode object as json\n";
+	return -1;
+    }
+    if ($op eq "POST") {
+	$client->POST($endpoint, $json);
+    }
+    else {
+	$client->PUT($endpoint, $json);
+    }
+    if ($client->responseCode() !~ /^(200|201)$/) {
+	print Dumper($client);
+    }
+    if ($client->responseContent() && defined($prval)) {
+	my $rval = eval { decode_json($client->responseContent()); };
+	if ($@) {
+	    print STDERR "Could not decode json\n";
+	    return -1;
+	}
+	if ($client->responseCode() !~ /^(200|201)$/) {
+	    print Dumper($rval);
+	}
+	$$prval = $rval;
+    }
+    if ($client->responseCode() !~ /^(200|201)$/) {
+	return -1;
+    }
+    return 0;    
+}
+sub POST($$$$)	{ return RESTP($_[0], $_[1], $_[2], $_[3], "POST"); }
+sub PUT($$$$)	{ return RESTP($_[0], $_[1], $_[2], $_[3], "PUT"); }
+
+#
+# Use our token to get our element ID. This will change.
+#
+sub GetElementID($)
+{
+    my ($token) = @_;
+    my $client  = REST::Client->new();
+
+    $client->setHost($IDENTITY);
+    $client->addHeader("X-Api-Token", $token);
+    $client->addHeader("X-Api-Elaborate", "true");
+    $client->GET("/tokens/this");
+    if ($client->responseCode() ne "200") {
+	print Dumper($client);
+	return undef;
+    }
+    #print Dumper($client);
+    my $rval = eval { decode_json($client->responseContent()); };
+    if ($@) {
+	print STDERR "Could not decode json\n";
+	return undef;
+    }
+    #print Dumper($rval);
+
+    my $id;
+    foreach my $binding (@{ $rval->{"role_bindings"} }) {
+	my $role_binding = $binding->{'role_binding'};
+	my $role_name    = $role_binding->{'role'}->{'name'};
+
+	if ($role_name eq "owner") {
+	    $id = $role_binding->{"element_id"};
+	    last;
+	}
+    }
+    return $id;
+}
+
+#
+# Packages for the different APIs
+#
+package APT_RDZRest::ZMC;
+use base qw(APT_RDZRest);
+
+sub New($$) {
+    my ($class, $token) = @_;
+
+    my $self = $class->SUPER::Create($token, APT_RDZRest::ZMCURL());
+    bless($self, $class);
+    return $self;
+}
+
+package APT_RDZRest::DST;
+use base qw(APT_RDZRest);
+
+sub New($$) {
+    my ($class, $token) = @_;
+
+    my $self = $class->SUPER::Create($token, APT_RDZRest::DSTURL());
+    bless($self, $class);
+    return $self;
+}
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;

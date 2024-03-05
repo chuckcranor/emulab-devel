@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2023 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,7 +25,6 @@ package APT_RDZ;
 
 use strict;
 use Data::Dumper;
-use REST::Client;
 use JSON;
 use Scalar::Util qw(blessed);
 use Carp;
@@ -38,156 +37,13 @@ use vars qw(@ISA @EXPORT);
 # Must come after package declaration
 use emdb;
 use emutil;
+use APT_RDZRest;
 
 # Configure variables
 my $TB		  = "@prefix@";
 my $OURDOMAIN     = "@OURDOMAIN@";
-my $IDENTITY      = "https://node-0.rdz-dev.powderteam.emulab.net:8000/v1";
-my $RDZ           = "https://node-0.rdz-dev.powderteam.emulab.net:8010/v1";
-my $ZMC           = "https://node-0.rdz-dev.powderteam.emulab.net:8020/v1";
-my $POWDERTOKEN   = "rpu_EQp0EKdSIR7LRiNfH0dUhdGo7kLXCbsJSbRe1OeUVr2G8u8RDH";
-my $CELONATOKEN   = "rpu_NQr447OzJIf7x6XguCWfZgsApwGsbvdQHzGz3D2m6fykO8paWI";
-my $TOKEN         = $POWDERTOKEN;
-my $CURL	  = "/usr/local/bin/curl";
-my $ELEMENTID;
-
-# Observations go to the ZMC.
-sub ZMC() { return $ZMC; }
-
-# This is a global instead of class.
-my $verbose       = 0;
-
-#
-# This is all going to change. 
-#
-# GET/DELETE 
-#
-sub REST($$$;$)
-{
-    my ($endpoint, $prval, $op, $hosturl) = @_;
-    my $client = REST::Client->new();
-    $hosturl = $RDZ if (!defined($hosturl));
-
-    $client->setHost($hosturl);
-    $client->addHeader("X-Api-Token", $TOKEN);
-    $client->addHeader("X-Api-Elaborate", "true");
-
-    if ($op eq "GET") {
-	$client->GET($endpoint);
-    }
-    else {
-	$client->DELETE($endpoint);
-    }
-    if ($client->responseCode() ne "200") {
-	print Dumper($client);
-    }
-    if ($client->responseContent() && defined($prval)) {
-	my $rval = eval { decode_json($client->responseContent()); };
-	if ($@) {
-	    print STDERR "Could not decode json\n";
-	    return -1;
-	}
-	if ($client->responseCode() ne "200") {
-	    print Dumper($rval);
-	}
-	$$prval = $rval;
-    }
-    if ($client->responseCode() ne "200") {
-	return -1;
-    }
-    return 0;
-}
-
-sub DELETE($$;$){ return REST($_[0], $_[1], "DELETE", $_[2]); }
-sub GET($$;$)	{ return REST($_[0], $_[1], "GET", $_[2]); }
-
-sub RESTP($$$$;$)
-{
-    my ($endpoint, $ref, $prval, $op, $hosturl) = @_;
-    my $client = REST::Client->new();
-    $hosturl = $RDZ if (!defined($hosturl));
-
-    $client->setHost($hosturl);
-    $client->addHeader("X-Api-Token", $TOKEN);
-    $client->addHeader("X-Api-Elaborate", "true");
-    $client->addHeader("Content-Type", "application/json");
-
-    my $json = eval { encode_json($ref); };
-    if ($@) {
-	print STDERR "Could not encode object as json\n";
-	return -1;
-    }
-    if ($op eq "POST") {
-	$client->POST($endpoint, $json);
-    }
-    else {
-	$client->PUT($endpoint, $json);
-    }
-    if ($client->responseCode() !~ /^(200|201)$/) {
-	print Dumper($client);
-    }
-    if ($client->responseContent() && defined($prval)) {
-	my $rval = eval { decode_json($client->responseContent()); };
-	if ($@) {
-	    print STDERR "Could not decode json\n";
-	    return -1;
-	}
-	if ($client->responseCode() !~ /^(200|201)$/) {
-	    print Dumper($rval);
-	}
-	$$prval = $rval;
-    }
-    if ($client->responseCode() !~ /^(200|201)$/) {
-	return -1;
-    }
-    return 0;    
-}
-sub POST($$$;$)	{ return RESTP($_[0], $_[1], $_[2], "POST", $_[3]); }
-sub PUT($$$;$)	{ return RESTP($_[0], $_[1], $_[2], "PUT", $_[3]); }
-
-#
-# Use our token to get our element ID. This will change.
-#
-sub GetElementID()
-{
-    my $client = REST::Client->new();
-
-    $client->setHost($IDENTITY);
-    $client->addHeader("X-Api-Token", $TOKEN);
-    $client->addHeader("X-Api-Elaborate", "true");
-    $client->GET("/tokens/this");
-    if ($client->responseCode() ne "200") {
-	print Dumper($client);
-	return undef;
-    }
-    #print Dumper($client);
-    my $rval = eval { decode_json($client->responseContent()); };
-    if ($@) {
-	print STDERR "Could not decode json\n";
-	return -1;
-    }
-    #print Dumper($rval);
-
-    my $id;
-    foreach my $binding (@{ $rval->{"role_bindings"} }) {
-	my $role_binding = $binding->{'role_binding'};
-	my $role_name    = $role_binding->{'role'}->{'name'};
-
-	if ($role_name eq "owner") {
-	    $id = $role_binding->{"element_id"};
-	    last;
-	}
-    }
-    return $id;
-}
-sub GetPowderElementID() {
-    $TOKEN = $POWDERTOKEN;
-    return GetElementID();
-}
-sub GetCelonaElementID() {
-    $TOKEN = $CELONATOKEN;
-    return GetElementID();
-}
+# ZMC Rest insterface object
+my $ZMC;
 
 #
 # Block, waiting for RDZ to approve spectrum requests
@@ -209,14 +65,13 @@ sub RequestSpectrum($$)
 	print "RequestSpectrum: No rfranges for $instance\n";
 	return 0;
     }
-    if (!defined($ELEMENTID)) {
-	my $element_id = GetPowderElementID();
-	if (!defined($element_id)) {
-	    $$perrmsg = "Cannot get the Powder element ID";
+    if (!defined($ZMC)) {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+	if (defined($ZMC)) {
+	    $$perrmsg = "Cannot open the ZMC rest interface";
 	    print "RequestSpectrum: $$perrmsg\n";
 	    return -1;
 	}
-	$ELEMENTID = $element_id;
     }
     my $resources = $instance->_resources();
     if (!defined($resources)) {
@@ -261,7 +116,7 @@ sub RequestSpectrum($$)
 
 	my $request = {
 	    "description" => $instance->Printable(),
-	    "element_id"  => $ELEMENTID,
+	    "element_id"  => $ZMC->elementid(),
 	    "starts_at"   => TBDateStringGMT($instance->started()),
 	    "constraints" => [
 		{
@@ -280,7 +135,7 @@ sub RequestSpectrum($$)
 	}
 	print Dumper($request);
 	my $grant;
-	if (APT_RDZ::POST("/grants", $request, \$grant)) {
+	if ($ZMC->POST("/grants", $request, \$grant)) {
 	    $failure_message = "Internal error";
 	    $failed++;
 	    last;
@@ -344,7 +199,7 @@ sub RequestSpectrum($$)
 	    print "RequestSpectrum: Checking grant ID $grant_id for approval\n";
 	    
 	    my $response;
-	    if (APT_RDZ::GET("/grants/$grant_id", \$response)) {
+	    if ($ZMC->GET("/grants/$grant_id", \$response)) {
 		$failure_message = "Internal error";
 		$failed++;
 	    }
@@ -446,7 +301,7 @@ sub CheckRevocation($)
 	    next;
 	}
 	my $grant;
-	if (GET("/grants/$grant_id", \$grant)) {
+	if ($ZMC->GET("/grants/$grant_id", \$grant)) {
 	    print "CheckRevocation: No grant for $grant_id ($rfrange)\n";
 	    next;
 	}
@@ -487,7 +342,7 @@ sub DeleteGrants($)
 	print "DeleteGrants: Deleting grant ID $grant_id\n";
 	
 	my $response;
-	if (DELETE("/grants/$grant_id", \$response)) {
+	if ($ZMC->DELETE("/grants/$grant_id", \$response)) {
 	    print "DeleteGrants: Could not delete grant ID $grant_id\n";
 	    $errors++;
 	    next;

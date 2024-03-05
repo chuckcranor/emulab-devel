@@ -67,7 +67,6 @@ my $TBOPS       = "@TBOPSEMAIL@";
 my $MAINSITE    = @TBMAINSITE@;
 my $OURDOMAIN	= "@OURDOMAIN@";
 my $MYURN       = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
-my $ELEMENTID;
 
 #
 # Untaint the path
@@ -92,7 +91,7 @@ use Node;
 use User;
 use APT_Aggregate;
 use APT_Instance;
-use APT_RDZ;
+use APT_RDZRest;
 use WebTask;
 
 # Protos
@@ -109,6 +108,7 @@ sub DoZones();
 sub DoSpectrum();
 sub DoMonitors();
 sub DoObservations();
+sub UpdateMonitor($);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -140,13 +140,13 @@ if (@ARGV < 1) {
 my $action = shift(@ARGV);
 
 #
-# XXX We need to use our token to get out current element ID.
+# We get the element from the token.
 #
-$ELEMENTID = APT_RDZ::GetPowderElementID();
-if (!defined($ELEMENTID)) {
+my $ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+if (!defined($ZMC)) {
     fatal("Could not get our element_id");
-    exit(0);
 }
+my $ELEMENTID = $ZMC->elementid();
 
 if ($action eq "reset") {
     exit(DoReset());
@@ -231,7 +231,7 @@ sub DoGetVersion()
 {
     my $response;
     
-    if (APT_RDZ::GET("/version", \$response)) {
+    if ($ZMC->GET("/version", \$response)) {
 	fatal("Could not get RDZ /version");
     }
     print Dumper($response);
@@ -240,12 +240,12 @@ sub DoGetVersion()
 
 sub DoGetHealth()
 {
-    if (APT_RDZ::GET("/health/alive", undef)) {
+    if ($ZMC->GET("/health/alive", undef)) {
 	fatal("Could not get RDZ /health/alive");
     }
     print "RDZ is alive\n";
 
-    if (APT_RDZ::GET("/health/ready", undef)) {
+    if ($ZMC->GET("/health/ready", undef)) {
 	fatal("Could not get RDZ /health/ready");
     }
     print "RDZ is ready\n";
@@ -270,7 +270,7 @@ sub DoZones()
 	if ($which !~ /^(list)$/);
 
     my $response;
-    if (APT_RDZ::GET("/zones", \$response)) {
+    if ($ZMC->GET("/zones", \$response)) {
 	fatal("Could not get RDZ /zones");
     }
     print Dumper($response);
@@ -298,7 +298,7 @@ sub DoSpectrum()
 
     if ($which eq "list") {
 	my $response;
-	if (APT_RDZ::GET("/spectrum", \$response)) {
+	if ($ZMC->GET("/spectrum", \$response)) {
 	    fatal("Could not get RDZ /spectrum");
 	}
 	print Dumper($response);
@@ -313,12 +313,12 @@ sub DoSpectrum()
 	my $spectrum_id = shift(@ARGV);
 
 	if ($which eq "delete") {
-	    if (APT_RDZ::DELETE("/spectrum/$spectrum_id", \$response)) {
+	    if ($ZMC->DELETE("/spectrum/$spectrum_id", \$response)) {
 		fatal("Could not delete /spectrum/$spectrum_id");
 	    }
 	}
 	else {
-	    if (APT_RDZ::GET("/spectrum/$spectrum_id", \$response)) {
+	    if ($ZMC->GET("/spectrum/$spectrum_id", \$response)) {
 		fatal("Could not get /spectrum/$spectrum_id");
 	    }
 	    print Dumper($response);
@@ -365,7 +365,7 @@ sub DoSpectrum()
     }
     my $response;
     
-    if (APT_RDZ::POST("/spectrum", $request, \$response)) {
+    if ($ZMC->POST("/spectrum", $request, \$response)) {
 	fatal("Could not add RDZ /spectrum");
     }
     print Dumper($response);
@@ -389,7 +389,7 @@ sub DoAntennas()
 	if ($which !~ /^(list|create)$/);
 
     my $response;
-    if (APT_RDZ::GET("/antennas", \$response)) {
+    if ($ZMC->GET("/antennas", \$response)) {
 	fatal("Could not get RDZ /antennas");
     }
     if ($which eq "list") {
@@ -406,7 +406,7 @@ sub DoAntennas()
 	"type"       => "omni",
 	"gain"       => 5.0,
     };
-    if (APT_RDZ::POST("/antennas", $request, \$response)) {
+    if ($ZMC->POST("/antennas", $request, \$response)) {
 	fatal("Could not add RDZ /antennas");
     }
     print Dumper($response);
@@ -434,7 +434,7 @@ sub DoLocations()
     if ($which eq "list") {
 	my $response;
 
-	if (APT_RDZ::GET("/locations", \$response)) {
+	if ($ZMC->GET("/locations", \$response)) {
 	    fatal("Could not get RDZ /locations");
 	}
 	print Dumper($response);
@@ -446,7 +446,7 @@ sub DoLocations()
     #
     my $query_result =
 	DBQueryFatal("select * from apt_aggregate_radio_locations ".
-		     "where itype in ('BS', 'FE', 'DD')");
+		     "where itype in ('BS', 'FE', 'DD', 'OAI')");
 
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $itype       = $row->{'itype'};
@@ -488,12 +488,12 @@ sub DoLocations()
 	
 	my $response;
 	if ($location_id) {
-	    if (APT_RDZ::PUT("/locations/$location_id", $request, \$response)) {
+	    if ($ZMC->PUT("/locations/$location_id", $request, \$response)) {
 		fatal("Could not update RDZ /locations/$location_id");
 	    }
 	}
 	else {
-	    if (APT_RDZ::POST("/locations", $request, \$response)) {
+	    if ($ZMC->POST("/locations", $request, \$response)) {
 		fatal("Could not add RDZ /locations");
 	    }
 	}
@@ -547,7 +547,7 @@ sub DoRadios()
     if ($which eq "list") {
 	my $response;
 
-	if (APT_RDZ::GET("/radios", \$response)) {
+	if ($ZMC->GET("/radios", \$response)) {
 	    fatal("Could not get RDZ /radios");
 	}
 	print Dumper($response);
@@ -576,12 +576,12 @@ sub DoRadios()
 	    }
 	}
 	if ($which eq "delete") {
-	    if (APT_RDZ::DELETE("/radios/$radio_id", \$response)) {
+	    if ($ZMC->DELETE("/radios/$radio_id", \$response)) {
 		fatal("Could not delete /radios/$radio_id");
 	    }
 	}
 	else {
-	    if (APT_RDZ::GET("/radios/$radio_id", \$response)) {
+	    if ($ZMC->GET("/radios/$radio_id", \$response)) {
 		fatal("Could not get /radios/$radio_id");
 	    }
 	    print Dumper($response);
@@ -590,12 +590,12 @@ sub DoRadios()
 	    my $monitor_radio_id = $frontend->rdz_monitor_radio_id();
 	    
 	    if ($which eq "delete") {
-		if (APT_RDZ::DELETE("/radios/$monitor_radio_id", \$response)) {
+		if ($ZMC->DELETE("/radios/$monitor_radio_id", \$response)) {
 		    fatal("Could not delete /radios/$monitor_radio_id");
 		}
 	    }
 	    else {
-		if (APT_RDZ::GET("/radios/$monitor_radio_id", \$response)) {
+		if ($ZMC->GET("/radios/$monitor_radio_id", \$response)) {
 		    fatal("Could not get /radios/$monitor_radio_id");
 		}
 		print Dumper($response);
@@ -606,7 +606,7 @@ sub DoRadios()
 
     # Need our one antenna id. Not stored in the DB yet.
     my $response;
-    if (APT_RDZ::GET("/antennas", \$response)) {
+    if ($ZMC->GET("/antennas", \$response)) {
 	fatal("Could not get RDZ /antennas");
     }
     my @antennas = @{$response->{'antennas'}};
@@ -633,7 +633,7 @@ sub DoRadios()
 		     "  f.node_id=i.node_id and ".
 		     "  f.iface='rf0' ".
 		     "where l.rdz_location_id is not null and ".
-		     "      l.itype in ('BS', 'FE', 'DD')");
+		     "      l.itype in ('BS', 'FE', 'DD', 'OAI')");
     
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $location     = $row->{'location'};
@@ -681,13 +681,13 @@ sub DoRadios()
 	if (!$impotent) {
 	    my $response;
 	    if ($radio_id) {
-		if (APT_RDZ::PUT("/radios/$radio_id",
+		if ($ZMC->PUT("/radios/$radio_id",
 				 $radio_request, \$response)) {
 		    fatal("Could not update RDZ /radios/$radio_id");
 		}
 	    }
 	    else {
-		if (APT_RDZ::POST("/radios", $radio_request, \$response)) {
+		if ($ZMC->POST("/radios", $radio_request, \$response)) {
 		    fatal("Could not add RDZ /radios");
 		}
 	    }
@@ -751,13 +751,13 @@ sub DoRadios()
 
 	if (!$impotent) {
 	    if ($port_id) {
-		if (APT_RDZ::PUT("/radios/$radio_id/ports/$port_id",
+		if ($ZMC->PUT("/radios/$radio_id/ports/$port_id",
 				 $port_request, \$response)) {
 		    fatal("Could not update RDZ /radios/$radio_id/ports/$port_id");
 		}
 	    }
 	    else {
-		if (APT_RDZ::POST("/radios/$radio_id/ports",
+		if ($ZMC->POST("/radios/$radio_id/ports",
 				  $port_request, \$response)) {
 		    fatal("Could not add RDZ /radios/$radio_id/ports");
 		}
@@ -803,13 +803,13 @@ sub DoRadios()
 	    if (!$impotent) {
 		my $response;
 		if ($monitor_radio_id) {
-		    if (APT_RDZ::PUT("/radios/$monitor_radio_id",
+		    if ($ZMC->PUT("/radios/$monitor_radio_id",
 				     $radio_request, \$response)) {
 			fatal("Could not update RDZ /radios/$monitor_radio_id");
 		    }
 		}
 		else {
-		    if (APT_RDZ::POST("/radios", $radio_request, \$response)) {
+		    if ($ZMC->POST("/radios", $radio_request, \$response)) {
 			fatal("Could not add RDZ /radios");
 		    }
 		}
@@ -844,7 +844,7 @@ sub DoRadios()
 
 	    if (!$impotent) {
 		if ($monitor_port_id) {
-		    if (APT_RDZ::PUT(
+		    if ($ZMC->PUT(
 			    "/radios/$monitor_radio_id/ports/$monitor_port_id",
 			    $port_request, \$response)) {
 			fatal("Could not update RDZ ".
@@ -852,7 +852,7 @@ sub DoRadios()
 		    }
 		}
 		else {
-		    if (APT_RDZ::POST("/radios/$radio_id/ports",
+		    if ($ZMC->POST("/radios/$radio_id/ports",
 				      $port_request, \$response)) {
 			fatal("Could not add RDZ /radios/$radio_id/ports");
 		    }
@@ -874,6 +874,7 @@ sub DoRadios()
 	        "name"           => $portname . " inline monitor",
 	        "types"          => "inline",
 	        "formats"        => "psd",
+		"enabled"        => JSON::true,
 	    };
 	    if ($monitor_id) {
 		print "This is an update to the monitor for $portname\n";
@@ -886,13 +887,13 @@ sub DoRadios()
 
 	    if (!$impotent) {
 		if ($monitor_id) {
-		    if (APT_RDZ::PUT("/monitors/$monitor_id",
+		    if ($ZMC->PUT("/monitors/$monitor_id",
 				     $monitor_request, \$response)) {
 			fatal("Could not update RDZ /monitors/$monitor_id");
 		    }
 		}
 		else {
-		    if (APT_RDZ::POST("/monitors",
+		    if ($ZMC->POST("/monitors",
 				      $monitor_request, \$response)) {
 			fatal("Could not add RDZ /monitors");
 		    }
@@ -932,7 +933,7 @@ sub DoGrants()
     if ($which eq "list") {
 	my $response;
 
-	if (APT_RDZ::GET("/grants?element_id=$ELEMENTID&revoked=false&deleted=false",
+	if ($ZMC->GET("/grants?element_id=$ELEMENTID&revoked=false&deleted=false",
 			 \$response)) {
 	    fatal("Could not get RDZ /grants");
 	}
@@ -946,7 +947,7 @@ sub DoGrants()
 	    if (@ARGV != 1);
 	
 	my $grant_id = shift(@ARGV);
-	if (APT_RDZ::GET("/grants/$grant_id", \$response)) {
+	if ($ZMC->GET("/grants/$grant_id", \$response)) {
 	    fatal("Could not get /grants/$grant_id");
 	}
 	print Dumper($response);
@@ -959,7 +960,7 @@ sub DoGrants()
 	    if (@ARGV != 1);
 	
 	my $grant_id = shift(@ARGV);
-	if (APT_RDZ::DELETE("/grants/$grant_id", \$response)) {
+	if ($ZMC->DELETE("/grants/$grant_id", \$response)) {
 	    fatal("Could not delete /grants/$grant_id");
 	}
 	exit(0);
@@ -1038,7 +1039,7 @@ sub DoGrants()
 	exit(0);
     }
     my $response;
-    if (APT_RDZ::POST("/grants", $request, \$response)) {
+    if ($ZMC->POST("/grants", $request, \$response)) {
 	fatal("Could not add RDZ /grants");
     }
     print Dumper($response);
@@ -1153,6 +1154,11 @@ sub DoObservations()
 	exit(0);
     }
 
+    my $DST = APT_RDZRest::DST->New(APT_RDZRest::POWDER());
+    if (!defined($DST)) {
+	fatal("Could not get the DST API");
+    }
+
     #
     # It would be faster to do this with cut/awk. 
     #
@@ -1239,7 +1245,7 @@ sub DoObservations()
     }
     $request->{'data'} = encode_base64($data);
     my $response;
-    if (APT_RDZ::POST("/observations", $request, \$response, APT_RDZ::ZMC())) {
+    if ($DST->POST("/observations", $request, \$response)) {
 	fatal("Could not add RDZ /grants");
     }
     #print Dumper($response);
@@ -1248,7 +1254,7 @@ sub DoObservations()
 
 #
 # Inline monitors are created along with the radios above.
-# Here we handle stand alone monitors.
+# Here we handle stand alone (on demand) monitors.
 #
 sub DoMonitors()
 {
@@ -1257,6 +1263,7 @@ sub DoMonitors()
     
     my $usage = sub {
 	print STDERR "Usage: manage_rdz monitors list\n";
+	print STDERR "Usage: manage_rdz monitors create all\n";
 	print STDERR "Usage: manage_rdz monitors create [-a agg] radio_id\n";
 	print STDERR "Usage: manage_rdz monitors create ".
 	    "-S [-a agg] radio_id <cred> <url>\n";
@@ -1290,7 +1297,7 @@ sub DoMonitors()
     if ($which eq "list") {
 	my $response;
 
-	if (APT_RDZ::GET("/monitors?element_id=$ELEMENTID&deleted=false",
+	if ($ZMC->GET("/monitors?element_id=$ELEMENTID&deleted=false",
 			 \$response)) {
 	    fatal("Could not get RDZ /monitors");
 	}
@@ -1322,13 +1329,13 @@ sub DoMonitors()
 	    $monitor_id = $frontend->rdz_monitor_id();
 	}
 	if ($which eq "show") {
-	    if (APT_RDZ::GET("/monitors/$monitor_id", \$response)) {
+	    if ($ZMC->GET("/monitors/$monitor_id", \$response)) {
 		fatal("Could not get /monitors/$monitor_id");
 	    }
 	    print Dumper($response);
 	}
 	else {
-	    if (APT_RDZ::DELETE("/monitors/$monitor_id", \$response)) {
+	    if ($ZMC->DELETE("/monitors/$monitor_id", \$response)) {
 		fatal("Could not delete /monitors/$monitor_id");
 	    }
 	    my $urn = $aggregate->urn();
@@ -1339,6 +1346,56 @@ sub DoMonitors()
 	}
 	exit(0);
     }
+    if ($isScos) {
+	fatal("SCOS monitor creation is disabled at the moment");
+    }
+    usage()
+	if (@ARGV != 1);
+
+    if (1) {
+	my $radio_id = shift(@ARGV);
+	if ($radio_id ne "all") {
+	    my $radio = $aggregate->Radio($radio_id);
+	    if (!$radio) {
+		fatal("No such radio in the DB");
+	    }
+	    UpdateMonitor($radio);
+	    exit(0);
+	}
+	#
+	# Create/Update on-demand monitors for all OTA radios.
+	#
+	my $query_result =
+	    DBQueryFatal("select l.aggregate_urn,i.node_id ".
+			 "  from apt_aggregate_radio_locations as l ".
+			 "join apt_aggregate_radio_info as i on ".
+			 "  i.aggregate_urn=l.aggregate_urn and ".
+			 "  i.location=l.location and ".
+			 "  i.itype=l.itype ".
+			 "join apt_aggregate_radio_frontends as f on ".
+			 "  f.aggregate_urn=i.aggregate_urn and ".
+			 "  f.node_id=i.node_id and ".
+			 "  f.iface='rf0' ".
+			 "where l.rdz_location_id is not null and ".
+			 "      l.itype in ('BS', 'FE', 'DD')");
+
+	while (my ($urn, $node_id) = $query_result->fetchrow_array()) {
+	    my $aggregate = APT_Aggregate->Lookup($urn);
+	    if (!defined($aggregate)) {
+		fatal("Could not lookup aggregate $urn");
+	    }
+	    my $radio = $aggregate->Radio($node_id);
+	    if (!defined($radio)) {
+		fatal("Could not lookup radio $node_id on aggregate $urn");
+	    }
+	    next
+		if (!$radio->rdz_radio_id());
+	    UpdateMonitor($radio);
+	}
+	exit(0);
+    }
+    #
+    # This stuff below is not used at the moment. Maybe later
     #
     # We create a monitor on an existing radio (by name). We provide to the
     # DMZ a url and a credential. This is not generalized at all, just a
@@ -1363,7 +1420,7 @@ sub DoMonitors()
     }
     my $rdz_radio_id = $radio->rdz_radio_id();
     my $response;
-    if (APT_RDZ::GET("/radios/$rdz_radio_id", \$response)) {
+    if ($ZMC->GET("/radios/$rdz_radio_id", \$response)) {
 	fatal("Could not get /radios/$rdz_radio_id");
     }
     my $frontend = $radio->FrontendInterface("rf0");
@@ -1385,6 +1442,7 @@ sub DoMonitors()
 	"description"    => "$nickname $radio_id on-demand monitor",
 	"types"          => "ota,sweep",
 	"formats"        => "psd-csv-ota",
+	"enabled"        => JSON::true,
     };
     if ($isScos) {
 	my $credential = shift(@ARGV);
@@ -1416,7 +1474,7 @@ sub DoMonitors()
 	print Dumper($monitor_request);
     }
     if (!$impotent) {
-	if (APT_RDZ::POST("/monitors", $monitor_request, \$response)) {
+	if ($ZMC->POST("/monitors", $monitor_request, \$response)) {
 	    fatal("Could not add RDZ /monitors");
 	}
 	print Dumper($response);
@@ -1426,6 +1484,73 @@ sub DoMonitors()
 		     "  rdz_monitor_id='$monitor_id' ".
 		     "where aggregate_urn='$urn' and ".
 		     "      node_id='$radio_id' and iface='rf0'");
+    }
+}
+
+#
+# Well, update or create.
+#
+sub UpdateMonitor($)
+{
+    my ($radio) = @_;
+    my $response;
+
+    if (!$radio->rdz_radio_id()) {
+	fatal("Not registered with the RDZ");
+    }
+    my $radio_id  = $radio->node_id();
+    my $aggregate = $radio->aggregate();
+    
+    my $rdz_radio_id = $radio->rdz_radio_id();
+    if ($ZMC->GET("/radios/$rdz_radio_id", \$response)) {
+	fatal("Could not get /radios/$rdz_radio_id");
+    }
+    my $frontend = $radio->FrontendInterface("rf0");
+    if (!$frontend) {
+	fatal("No rf0 frontend for $radio");
+    }
+    if (!$frontend->rdz_radioport_id()) {
+	fatal("Frontend for $radio_id is not registered with the RDZ");
+    }
+    my $nickname = $aggregate->nickname();
+
+    my $monitor_request = {
+	"element_id"     => $ELEMENTID,
+	"radio_port_id"  => $frontend->rdz_radioport_id(),
+	"name"           => "$nickname $radio_id on-demand monitor",
+	"description"    => "$nickname $radio_id on-demand monitor",
+	"types"          => "ota,sweep",
+	"formats"        => "psd-csv-ota",
+	"enabled"        => JSON::true,
+    };
+    if ($debug || $impotent) {
+	print $monitor_request->{'description'} . "\n";
+	print Dumper($monitor_request);
+    }
+    if (!$impotent) {
+	if ($frontend->rdz_monitor_id()) {
+	    my $monitor_id = $frontend->rdz_monitor_id();
+	    
+	    if ($ZMC->PUT("/monitors/$monitor_id",
+			     $monitor_request, \$response)) {
+		fatal("Could not update RDZ /monitors/$monitor_id");
+	    }
+	}
+	else {
+	    if ($ZMC->POST("/monitors", $monitor_request, \$response)) {
+		fatal("Could not add RDZ /monitors");
+	    }
+	}
+	print Dumper($response);
+
+	if (! $frontend->rdz_monitor_id()) {
+	    my $monitor_id = $response->{"id"};
+	    my $urn = $aggregate->urn();
+	    DBQueryFatal("update apt_aggregate_radio_frontends set ".
+			 "  rdz_monitor_id='$monitor_id' ".
+			 "where aggregate_urn='$urn' and ".
+			 "      node_id='$radio_id' and iface='rf0'");
+	}
     }
 }
 
