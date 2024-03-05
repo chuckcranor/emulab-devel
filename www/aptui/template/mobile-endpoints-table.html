@@ -81,7 +81,8 @@
 	  <% } %>
 	</td>
 	<td>
-	  <% if (info.radioinfo["ed1"].ue_imsi) { %>
+	  <% if (_.has(info.radioinfo["ed1"], "ue_imsi") &&
+	         info.radioinfo["ed1"].ue_imsi) { %>
 	    <%- info.radioinfo["ed1"].ue_imsi %>
 	  <% } else { %>
 	    none
