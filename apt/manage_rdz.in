@@ -31,6 +31,7 @@ use File::Temp qw(tempfile tempdir);
 use Date::Parse;
 use File::Basename;
 use MIME::Base64;
+use URI;
 use JSON;
 
 #
@@ -49,6 +50,7 @@ sub usage()
     print STDERR "Usage: manage_rdz grants list|create|delete|show\n";
     print STDERR "Usage: manage_rdz monitors list|create|delete|show\n";
     print STDERR "Usage: manage_rdz observations create\n";
+    print STDERR "Usage: manage_rdz subscriptions create\n";
     exit(-1);
 }
 my $optlist     = "dt:n";
@@ -108,6 +110,7 @@ sub DoZones();
 sub DoSpectrum();
 sub DoMonitors();
 sub DoObservations();
+sub DoSubscriptions();
 sub UpdateMonitor($);
 
 #
@@ -180,6 +183,9 @@ elsif ($action eq "observations") {
 }
 elsif ($action eq "monitors") {
     exit(DoMonitors());
+}
+elsif ($action eq "subscriptions") {
+    exit(DoSubscriptions());
 }
 else {
     usage();
@@ -1552,6 +1558,178 @@ sub UpdateMonitor($)
 			 "      node_id='$radio_id' and iface='rf0'");
 	}
     }
+}
+
+#
+# For testing subscriptions; subscribe and then spew events.
+#
+sub DoSubscriptions()
+{
+    my $response;
+    require AnyEvent::WebSocket::Client;
+
+    # IO::Socket::SSL lets us open encrypted (wss) connections
+    require IO::Socket::SSL;
+    # IO::Select to "peek" IO::Sockets for activity
+    require IO::Select;
+    # Protocol handler for WebSocket HTTP protocol
+    require Protocol::WebSocket::Client;
+    require Protocol::WebSocket::Handshake::Client;
+    require Protocol::WebSocket::Request;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz subscriptions subscribe\n";
+	print STDERR "Usage: manage_rdz subscriptions delete [id]\n";
+	exit(-1);
+    };
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(subscribe|delete)$/);
+    
+    if ($which eq "delete") {
+	&usage()
+	    if (!@ARGV);
+	my $id = shift(@ARGV);
+
+	if (!$impotent) {
+	    if ($ZMC->DELETE("/subscriptions/$id", \$response)) {
+		fatal("Could not delete /subscriptions/$id");
+	    }
+	}
+	else {
+	    print "Would delete subscription $id\n";
+	}
+	exit(0);
+    }
+    
+    my $id   = NewUUID();
+    my $url  = URI->new($ZMC->url());
+    my $host = $url->host;
+    my $port = $url->port;
+    my $path = $url->path;
+    $url->scheme("wss");
+    if ($debug) {
+	print "$url\n";
+	print "$host,$port,$path\n";
+    }
+
+    #
+    # David says not to bother with filters.
+    #
+    my $subscription_request = {
+	"id"      => $id,
+	"filters" => [],
+    };
+    if ($debug || $impotent) {
+	print Dumper($subscription_request);
+    }
+    if (!$impotent) {
+	if (!$ZMC->POST("/subscriptions", $subscription_request, \$response)) {
+	    fatal("Could not add RDZ /subscriptions");
+	}
+	print Dumper($response);
+    }
+    $url->path("$path/subscriptions/$id/events");
+    print "$url\n";
+
+    #
+    # Thank you!
+    # https://greg-kennedy.com/wordpress/2019/03/11/writing-a-websocket-client-in-perl-5/
+    #
+    my $socket = IO::Socket::SSL->new(
+	PeerAddr => $host,
+	PeerPort => "wss($port)",
+	Proto => 'tcp',
+	SSL_startHandshake => 1,
+	Blocking => 1);
+    if (!$socket) {
+	fatal("Could not create socket for subscription events");
+    }
+    # This has no side effects.
+    my $client = Protocol::WebSocket::Client->new(
+	url => "$url",
+	#  On Write: take the buffer (WebSocket packet) and send it on the socket.
+	on_write => sub {
+	    my $client = shift;
+	    my ($buf) = @_;
+
+	    print "Writing to WebSocket: $buf\n";
+	    syswrite($socket, $buf);
+	},
+	# On Read: This method is called whenever a complete WebSocket "frame"
+	# is successfully parsed.
+	on_read => sub {
+	    my $client = shift;
+	    my ($buf) = @_;
+
+	    print "Received from WebSocket: '$buf'\n";
+	},
+	# On Connect: this is what happens after the handshake succeeds, and we
+	# are "connected" to the service.
+	on_connect => sub {
+	    my $client = shift;
+
+	    print "Successfully connected to service\n";
+	},
+	# On Error, print to console.  This can happen if the handshake
+	#  fails for whatever reason.
+	on_error => sub {
+	    my $client = shift;
+	    my ($buf) = @_;
+
+	    print "Error on websocket: $buf";
+	    $socket->close();
+	    exit;
+	},
+    );
+    if (!$client) {
+	fatal("Could not create WebSocket client");
+    }
+    print $client . "\n" if ($debug);
+    my $headers = [
+	"X-Api-Token" => $ZMC->token(),
+	];
+
+    #
+    # Reach inside to get the headers added to the request. Ugly.
+    #
+    my $req = Protocol::WebSocket::Request->new(headers => $headers);
+    my $handshake = Protocol::WebSocket::Handshake::Client->new(
+	url => "$url", req => $req);
+    $client->{hs} = $handshake;
+    
+    # Connect causes the Protocol object to create a handshake and write it
+    $client->connect;
+
+    # read until handshake is complete.
+    while ($socket->connected) {
+	my $data;
+	my $cc = sysread($socket, $data, 16384);
+
+	if (!defined($cc)) {
+	    fatal("sysread on socket failed: $!")
+	}
+	elsif ($cc == 0) {
+	    print "Connection terminated\n";
+	    exit(0);
+	}
+	$client->read($data);
+	sleep(1);
+    }
+
+    # Now read data.
+    while (0) {
+	my $data;
+	my $cc = sysread($socket, $data, 16384);
+	if (!$cc) {
+	    print "Connection closed by remote\n";
+	    exit(1);
+	}
+	print "$data\n";
+	$client->read($data);
+	sleep(1);
+    }
+    exit(0);
 }
 
 sub fatal($)
