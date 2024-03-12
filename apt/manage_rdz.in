@@ -1624,7 +1624,7 @@ sub DoSubscriptions()
 	print Dumper($subscription_request);
     }
     if (!$impotent) {
-	if (!$ZMC->POST("/subscriptions", $subscription_request, \$response)) {
+	if ($ZMC->POST("/subscriptions", $subscription_request, \$response)) {
 	    fatal("Could not add RDZ /subscriptions");
 	}
 	print Dumper($response);
