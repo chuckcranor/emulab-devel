@@ -571,6 +571,7 @@ if ($project->pid() eq "RDZ-demo") {
 	    exit(1);
 	}
 	$instance->Update({'rdz_status' => "ready"});
+	$rspecstr = ($update ? $instance->update_rspec() : $instance->rspec());
     }
 }
 
