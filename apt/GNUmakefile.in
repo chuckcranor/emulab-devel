@@ -46,7 +46,7 @@ SBIN_SCRIPTS	= apt_daemon aptevent_daemon portal_xmlrpc apt_checkup \
 		  rdz_expdaemon
 LIB_SCRIPTS     = APT_Profile.pm APT_Instance.pm APT_Dataset.pm APT_Geni.pm \
 		  APT_Aggregate.pm APT_Utility.pm APT_Rspec.pm \
-		  APT_Reservation.pm APT_RFRange.pm APT_RDZ.pm
+		  APT_Reservation.pm APT_RFRange.pm APT_RDZ.pm APT_RDZRest.pm
 WEB_BIN_SCRIPTS = webmanage_profile webmanage_instance webmanage_dataset \
                   webcreate_instance webrungenilib webns2rspec webns2genilib \
 		  webrspec2genilib webmanage_reservations webmanage_gitrepo \
