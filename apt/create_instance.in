@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -356,7 +356,7 @@ foreach my $key ("username", "email", "profile", "portal") {
 my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
     $userslice_id, $portal, $script, $paramdefs, $bindings, $start, $end,
-    $reporef, $repohash, $duration, $webinfo, $noresokay, $brand);
+    $reporef, $repohash, $duration, $webinfo, $noresokay, $brand, $errcode);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
@@ -949,10 +949,18 @@ my $slice_certificate =
     GeniCertificate->Create({'urn'  => $slice_urn,
 			     'hrn'  => $slice_hrn,
 			     'showuuid' => 1,
-			     'email'=> $user_email});
+			     'email'=> $user_email}, \$errcode);
 
 if (!defined($slice_certificate)) {
-    fatal("Could not generate certificate for $slice_urn");
+    if ($errcode == GENIRESPONSE_UNAVAILABLE()) {
+	UserError("Experiment name already in use, please use another. If you ".
+		  "just terminated an experiment with this name, it takes a ".
+		  "minute or two for the name to become available again.",
+		  GENIRESPONSE_ALREADYEXISTS());
+    }
+    else {
+	fatal("Could not generate certificate for $slice_urn");
+    }
 }
 # Slice is created as locked.
 $slice = GeniSlice->Create($slice_certificate,
