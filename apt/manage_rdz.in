@@ -112,6 +112,7 @@ sub DoMonitors();
 sub DoObservations();
 sub DoSubscriptions();
 sub UpdateMonitor($);
+sub DoRFSObservation($);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -662,6 +663,9 @@ sub DoRadios()
 	next
 	    if ($row->{'radio_type'} =~ /skylark/i);
 
+	next
+	    if (0 && $row->{'node_id'} ne "bru-650-2");
+	
 	# I think it will be confusing if I do not distinguish these names
 	if ($itype eq "FE" && $node_id =~ /^nuc/) {
 	    $radioname = "$location FE " . $radioname;
@@ -1048,7 +1052,7 @@ sub DoGrants()
     if ($ZMC->POST("/grants", $request, \$response)) {
 	fatal("Could not add RDZ /grants");
     }
-    print Dumper($response);
+    #print Dumper($response);
     exit(0);
 }
 
@@ -1061,9 +1065,11 @@ sub DoObservations()
     no strict 'subs';
     local(*FOO);
     my $aggregate;
+    my $rfs = 0;
 
     my $usage = sub {
 	print STDERR "Usage: manage_rdz observations create [-a urn] <file>\n";
+	print STDERR "Usage: manage_rdz observations create [-R] <file>\n";
 	exit(-1);
     };
     &$usage()
@@ -1074,7 +1080,7 @@ sub DoObservations()
 	if ($which !~ /^(create)$/);
 
     my %options = ();
-    if (! getopts("fa:", \%options)) {
+    if (! getopts("fa:R", \%options)) {
 	&$usage();
     }
     if (defined($options{"a"})) {
@@ -1085,6 +1091,9 @@ sub DoObservations()
     }
     else {
 	$aggregate = APT_Aggregate->Lookup($MYURN);	
+    }
+    if (defined($options{"R"})) {
+	$rfs = 1;
     }
     if (!$aggregate) {
 	fatal("No such aggregate");
@@ -1099,6 +1108,10 @@ sub DoObservations()
     my $file = shift(@ARGV);
     fatal("No such file: $file")
 	if (!-e $file);
+
+    if ($rfs) {
+	exit(DoRFSObservation($file));
+    }
 
     my ($node_id,$iface,$stamp);
     my $name = basename($file);
@@ -1252,10 +1265,52 @@ sub DoObservations()
     $request->{'data'} = encode_base64($data);
     my $response;
     if ($DST->POST("/observations", $request, \$response)) {
-	fatal("Could not add RDZ /grants");
+	fatal("Could not add RDZ /observations");
     }
     #print Dumper($response);
     exit(0)
+}
+
+#
+# Cheesy hack to enter RFS sensor observations
+#
+sub DoRFSObservation($)
+{
+    my ($file) = @_;
+
+    my $DST = APT_RDZRest::DST->New(APT_RDZRest::POWDER());
+    if (!defined($DST)) {
+	fatal("Could not get the DST API");
+    }
+
+    my $request = {
+	"monitor_id"  => "fb99063c-97fe-4e50-913b-37889347e424",
+	"types"       => "inline,sweep",
+	"format"      => "rfs-csv-inline",
+	"description" => "Virtual RFS Sensor",
+	"min_freq"    => 410000000,
+	"max_freq"    => 790000000,
+	"starts_at"   => TBDateStringGMT(time()),
+	"violation"   => JSON::false,
+    };
+    my $data = emutil::ReadFile($file);
+    if (!defined($data)) {
+	fatal("Could not read data from $file");
+    }
+    if ($debug || $impotent) {
+	$request->{'data'} = $data;
+	print Dumper($request);
+    }
+    exit(0)
+	if ($impotent);
+    
+    $request->{'data'} = encode_base64($data);
+    my $response;
+    if ($DST->POST("/observations", $request, \$response)) {
+	fatal("Could not add RDZ /observations");
+    }
+    #print Dumper($response);
+    exit(0);
 }
 
 #
