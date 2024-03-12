@@ -415,9 +415,11 @@ sub ReportObservation($$$)
 		print "ReportObservation: $node_id in use, would report\n";
 	    }
 	    else {
-		print "$path\n";
-		system("$SUDO -u $PROTOUSER $MANAGERDZ ".
-		       "observations create -a $aggregate_urn $path");
+		my $command = "$SUDO -u $PROTOUSER $MANAGERDZ ".
+		    "observations create -a $aggregate_urn $path";
+		
+		print "$command\n" if ($debug);
+		system($command);
 	    }
 	    return 0;
 	}
