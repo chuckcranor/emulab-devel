@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -95,9 +95,9 @@ function Do_EditTable()
             $content = "none";
         }
         if ($content != "none" && $content != "GPSDO" &&
-            $content != "White Rabbit") {
+            $content != "White Rabbit" && $content != "PTP") {
             SPITAJAX_ERROR(-1, "Invalid synchronization type. Must be one of ".
-                           "none, GPSDO, or White Rabbit");
+                           "none, GPSDO, PTP, or White Rabbit");
             return;
         }
     }

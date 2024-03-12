@@ -167,7 +167,7 @@ CREATE TABLE `apt_aggregate_radio_info` (
   `power_id` varchar(32) default NULL,
   `cnuc_id` varchar(32) default NULL,
   `grouping` varchar(32) default NULL,
-  `synchronization` enum('none','White Rabbit','GPSDO') default 'none',
+  `synchronization` enum('none','White Rabbit','GPSDO','PTP') default 'none',
   `ue_imsi` varchar(32) default NULL,
   `notes` text,
   `rdz_radio_id` varchar(40) DEFAULT NULL,
