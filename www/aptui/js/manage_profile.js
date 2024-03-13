@@ -490,7 +490,7 @@ $(function ()
 		return false;
 	    }
 	    // Add steps to the tour.
-	    if (SyncSteps()) {
+	    if (0 && SyncSteps()) {
 		return false;
 	    }
 	    if (window.CLONING) {
@@ -690,11 +690,17 @@ $(function ()
 	    }
 	    else if (gotscript) {
 		if (window.CLONING && !portal_converted) {
-		    sup.ShowModal('#warn_pp_modal');
+		    /* Bootstrap 5 sillyness, have not figured out
+		       a better solution */
+		    setTimeout(function f() {
+			sup.ShowModal('#warn_pp_modal');
+		    }, 100);
 		}
 	    }
 	    else if (_.has(window, "EXPUUID")) {
-		ConvertFromExperiment();
+		/* Bootstrap 5 sillyness, have not figured
+		   out a better solution */
+		setTimeout(function f() { ConvertFromExperiment(); }, 250);
 	    }
 	}
     }
@@ -789,7 +795,7 @@ $(function ()
     // We could probably do this as a continuation instead, which would
     // be cleaner. 
     //
-    var initialized = false;
+    var initialized = true;
     function StepsTableLoaded()
     {
 	if (!initialized) {
@@ -1050,7 +1056,7 @@ $(function ()
 	    }
 	    $('#profile_rspec_textarea').val(newrspec);
 	    ExtractFromRspec();
-	    SyncSteps();
+	    //SyncSteps();
 	    if (!fromrepo)
 		ProfileModified();
 	    UpdateButtons();
@@ -1144,7 +1150,7 @@ $(function ()
 	// back to the XML. 
 	//
 	if (! stepsInitialized) {
-	    InitStepsTable(xml);
+	    //InitStepsTable(xml);
 	}
     }
 

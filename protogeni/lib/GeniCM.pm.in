@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -2088,7 +2088,10 @@ sub GetTicketAuxAux($)
 		    print STARTUP "date\n\n";
 		    print STARTUP "# Redirecting stdin/stdout to $log\n";
 		    print STARTUP "$shell -c \"$cmd\" >$log 2>&1\n";
-		    print STARTUP "status=\$?\n";
+		    print STARTUP "if [ \$? -ne 0 ]; then\n";
+		    print STARTUP "    status=\$?\n";
+		    print STARTUP "    exit \$status\n";
+		    print STARTUP "fi\n";
 		    print STARTUP "# Writing exit status to $stat\n";
 		    print STARTUP "echo \"\$status\" > $stat\n";
 		    print STARTUP "echo " .
@@ -4403,7 +4406,8 @@ sub GetTicketAuxAux($)
 	    if (! defined($stitchpath)) {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					 "$linkname: No stitching path to ");
+					 "$linkname: No stitching path ".
+					 "for link $linkname");
 		    goto bad;
 	    }
 	    if (defined($stitchpath->error())) {
@@ -8309,7 +8313,7 @@ sub FlipToUser($$)
     #
     # If creator is frozen we need to use the project leader instead.
     #
-    if ($creator->frozen()) {
+    if ($creator->frozen() || !$creator->HasValidEncryptedCert()) {
 	$creator = $project->GetLeader();
     }
     $creator = GeniUser::LocalUser->Create($creator);
@@ -9395,11 +9399,11 @@ sub HandleBlockstore($$$$$$@)
 		#
 		# Only one read-write user at a time.
 		#
-		if ($readonly && $lease->InUseReadWrite()) {
+		if (!$readonly && $lease->InUseReadWrite()) {
 		    $message = "Dataset $dataset_id is already in use RW";
 		    $errorcode = GENIRESPONSE_BADARGS;
 		    last;
-	      }
+		}
 		# We need some stuff from the blockstore to fill out the
 		# virt tables below.
 		my $blockstore = Blockstore->LookupByLease($lease->lease_idx());
@@ -9490,8 +9494,13 @@ sub HandleBlockstore($$$$$$@)
 	return GeniResponse->Create($errorcode, undef, $message);
     }
     #
-    # disk size desires for the node. 
+    # disk size desires for the node. Note that we have adjust disk_any
+    # to include SYSVOL and NONSYSVOL.
     #
+    $all_placements{'ANY'}->{'size'} +=
+	($all_placements{'SYSVOL'}->{'size'} +
+	 $all_placements{'NONSYSVOL'}->{'size'});
+    
     foreach my $which (keys(%all_placements)) {
 	my $size  = $all_placements{$which}->{"size"};
 	my $dname = "?+disk_" . lc($which);

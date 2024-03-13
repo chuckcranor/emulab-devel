@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -127,6 +127,9 @@ $TBCHKPASS_PATH = "$TBLIBEXEC_DIR/checkpass";
 $TBSENDMAIL_PATH= "$TBLIBEXEC_DIR/tbsendmail";
 $TBCSLOGINS     = "$TBETC_DIR/cslogins";
 $UUIDGEN_PATH   = "@UUIDGEN@";
+
+# Google analytics ids.
+$GOOGLEGAIDS    = "/usr/testbed/etc/google-analytics.json";
 
 #
 # Hardcoded check against $WWWHOST, to prevent anyone from accidentally setting
@@ -330,6 +333,7 @@ function SendProjAdminMail($project, $from, $to,
 function TBERROR ($message, $death, $xmp = 0) {
     global $TBMAIL_WWW, $TBMAIL_OPS, $TBMAILADDR, $TBMAILADDR_OPS;
     global $session_interactive, $session_errorhandler;
+    global $TBMAINSITE, $CHECKLOGIN_USER, $APTBASE, $TBBASE;
     $script = urldecode($_SERVER['REQUEST_URI']);
 
     # print backtrace
@@ -339,6 +343,16 @@ function TBERROR ($message, $death, $xmp = 0) {
            "IP:   " . $_SERVER['REMOTE_ADDR'] . "\n" .
            "URI:  " . $_SERVER['REQUEST_URI'] . "\n" .
            "Time: " . date("d/M/Y:H:i:s T", time()) . "\n";
+    if ($CHECKLOGIN_USER) {
+        $uid = $CHECKLOGIN_USER->uid();
+        if ($APTBASE) {
+            $url = "$APTBASE/user-dashboard.php?user=$uid";
+        }
+        else {
+            $url = "$TBBASE/showuser.php3?user=$uid";
+        }
+        $trace .= "User: " . $url . "\n";
+    }
 
     if (function_exists("CLEARBUSY")) {
         CLEARBUSY();

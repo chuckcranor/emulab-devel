@@ -643,6 +643,7 @@ CLIENT_MANDIR
 CLIENT_VARDIR
 CLIENT_BINDIR
 CLIENT_ETCDIR
+CLIENT_LIBDIR
 DISABLE_NAMED_SETUP
 EVENTSYS
 ELVIN_COMPAT
@@ -4065,9 +4066,16 @@ DISABLE_NAMED_SETUP=0
 
 
 CLIENT_ETCDIR="/etc/emulab"
-CLIENT_BINDIR="/usr/local/etc/emulab"
+if test "$prefix" = "/usr/local" -o "$prefix" = "NONE"; then
+    CLIENT_BINDIR="/usr/local/etc/emulab"
+    CLIENT_MANDIR="/usr/local/man"
+    CLIENT_LIBDIR="/usr/local/lib"
+else
+    CLIENT_BINDIR="$libexecdir/emulab"
+    CLIENT_MANDIR="$mandir"
+    CLIENT_LIBDIR="$libdir"
+fi
 CLIENT_VARDIR="/var/emulab"
-CLIENT_MANDIR="/usr/local/man"
 
 # XXX compat. We have no business expanding these on the client side!
 
@@ -4651,20 +4659,10 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/GNUmakefile \
 	  tmcc/common/GNUmakefile tmcc/common/config/GNUmakefile \
 	  tmcc/freebsd/GNUmakefile tmcc/freebsd/init/GNUmakefile \
-	  tmcc/freebsd/init/4/GNUmakefile \
-	  tmcc/freebsd/init/5/GNUmakefile \
-	  tmcc/freebsd/init/6/GNUmakefile \
-	  tmcc/freebsd/init/7/GNUmakefile \
-	  tmcc/freebsd/init/8/GNUmakefile \
-	  tmcc/freebsd/init/9/GNUmakefile \
-	  tmcc/freebsd/init/10/GNUmakefile \
-	  tmcc/freebsd/init/10.3/GNUmakefile \
-	  tmcc/freebsd/init/10.4/GNUmakefile \
 	  tmcc/freebsd/init/11/GNUmakefile \
 	  tmcc/freebsd/init/11.2/GNUmakefile \
 	  tmcc/freebsd/init/11.4/GNUmakefile \
 	  tmcc/freebsd/init/12/GNUmakefile \
-	  tmcc/freebsd/init/13/GNUmakefile \
 	  tmcc/freebsd/supfile tmcc/freebsd/sethostname \
 	  tmcc/linux/GNUmakefile tmcc/linux/supfile \
 	  tmcc/linux/sethostname.dhclient \
@@ -4684,19 +4682,18 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/ubuntu20/GNUmakefile \
 	  tmcc/ubuntu20-ms/GNUmakefile \
 	  tmcc/ubuntu20-ppc64le/GNUmakefile \
+	  tmcc/ubuntu22/GNUmakefile \
+	  tmcc/ubuntu22-ms/GNUmakefile \
+	  tmcc/ubuntu22-ppc64le/GNUmakefile \
 	  tmcc/linux-ms/GNUmakefile \
 	  tmcc/archlinux/GNUmakefile \
 	  tmcc/alpine/GNUmakefile \
-	  tmcc/freebsd5/GNUmakefile tmcc/freebsd5/supfile \
-	  tmcc/freebsd6/GNUmakefile tmcc/freebsd6/supfile \
-	  tmcc/freebsd6/netif-emulab \
-	  tmcc/freebsd7/GNUmakefile tmcc/freebsd7/netif-emulab \
-	  tmcc/freebsd9/GNUmakefile tmcc/freebsd9/netif-emulab \
+	  tmcc/freebsd5/GNUmakefile \
 	  tmcc/freebsd10/GNUmakefile tmcc/freebsd10/netif-emulab \
 	  tmcc/freebsd11/GNUmakefile tmcc/freebsd11/netif-emulab \
 	  tmcc/freebsd12/GNUmakefile tmcc/freebsd12/netif_emulab \
 	  tmcc/freebsd13/GNUmakefile tmcc/freebsd13/netif_emulab \
-	  tmcc/freenas8/GNUmakefile tmcc/freenas9/GNUmakefile \
+	  tmcc/freebsd14/GNUmakefile tmcc/freebsd14/netif_emulab \
 	  tmcc/freenas11/GNUmakefile tmcc/truenas13/GNUmakefile \
 	  tmcc/cygwinxp/GNUmakefile tmcc/dp/GNUmakefile \
 	  tmcc/openbsd/GNUmakefile tmcc/ron/GNUmakefile \
@@ -4704,6 +4701,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/centos6/GNUmakefile \
 	  tmcc/centos7/GNUmakefile \
 	  tmcc/centos8/GNUmakefile \
+	  tmcc/centos9/GNUmakefile \
 	  tmcc/onie/GNUmakefile \
 	  tip/GNUmakefile \
 	  xmlrpc/GNUmakefile xmlrpc/emulabclient.py \

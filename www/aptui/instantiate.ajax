@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -284,7 +284,8 @@ function Do_GetParameters()
         );
     }
     elseif (isset($ajax_args["rerun_paramset"])) {
-        if (!IsValidUUID($ajax_args["rerun_paramset"])) {
+        if (!(IsValidUUID($ajax_args["rerun_paramset"]) ||
+              IsValidHash($ajax_args["rerun_paramset"]))) {
             SPITAJAX_ERROR(1, "Rerun paramset UUID is not a valid UUID");
             return;
         }
@@ -1102,6 +1103,17 @@ function Do_Submit()
     global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $ISPOWDER;
     global $TUTORIALSTATS;
 
+    if (Instance::loadTooHigh()) {
+        sleep(2);
+        SPITAJAX_ERROR(65, "Load is too high");        
+        return;
+    }
+    if (Instance::tooManyWaiting()) {
+        sleep(2);
+        SPITAJAX_ERROR(66, "Too many experiments are waiting to start");        
+        return;
+    }
+    
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(1, "Missing formfields");
 	return;
@@ -1334,8 +1346,13 @@ function Do_MaxDuration()
     $amlist     = Instance::DefaultAggregateList();
     $am_array   = array();
     $sitemap    = array();
-    $options    = "-p " . $formfields["pid"];
 
+    if ($formfields["pid"] == $formfields["gid"]) {
+        $options = "-p " . $formfields["pid"];
+    }
+    else {
+        $options = "-g " . $formfields["pid"] . "/" . $formfields["gid"];
+    }
     foreach($amlist as $index => $aggregate) {
         $urn  = $aggregate->urn();
         $name = $aggregate->name();
@@ -1407,6 +1424,7 @@ function Do_MaxDuration()
                      " $options",
                      SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
+    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 
     if ($retval) {
         if (!$webtask->exited() || $retval < 0) {
@@ -1558,6 +1576,44 @@ function Do_ClearFavorite()
     }
     $profile->ClearFavorite($this_user);
     SPITAJAX_RESPONSE(0);
+}
+
+#
+# Ask for reservation system info, which is now cached for instantiate.
+#
+function Do_ReservationInfo()
+{
+    global $this_user;
+    global $ajax_args;
+    global $PORTAL_GENESIS;
+    $popts = "-p '$PORTAL_GENESIS' -u " . $this_user->uid();
+
+    $webtask = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+
+    $retval = SUEXEC($this_user->uid(), "nobody",
+                     "webmanage_resgroup ".
+                     "   -t $webtask_id predictioninfo $popts ",
+                     SUEXEC_ACTION_IGNORE);
+    
+    if ($retval) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error retrieving reservation info");
+        }
+        else {
+            SPITAJAX_ERROR($retval,
+                           "Could not get reservation data: " .
+                           $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Refresh();
+    $blob = $webtask->TaskValue("value");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($blob);
 }
 
 # Local Variables:

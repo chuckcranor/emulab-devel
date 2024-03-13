@@ -12,9 +12,9 @@ $(function ()
     var mainTemplate    = _.template(templates["resgroup"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var usageTemplate   = _.template(templates["resusage-graph"]);
-    var rangeTemplate   = _.template(templates["range-tabs"]);
     var visTemplate     = _.template(templates["visavail-graph"]);
     var current_pid  = null;
+    var current_gid  = null;
     var projlist     = null;
     var amlist       = null;
     var managerlist  = null;
@@ -48,13 +48,6 @@ $(function ()
 	    // Once start time has past, no editing allowed.
 	    if (now > start) {
 		console.info("Start time has past, no mods allowed");
-		return 0;
-	    }
-	    // Ug, not started yet, but subject to next business day rule.
-	    var nextbusinessday = NextBusinessDay();
-	    if (start < nextbusinessday) {
-		console.info("Start is before the next business day",
-			     nextbusinessday)
 		return 0;
 	    }
 	}
@@ -92,7 +85,7 @@ $(function ()
 	'    <tr>' +
 	'      <td>' +
 	'       <div class="cluster-select-div form-control-div"> ' +
-	'  	   <select class="form-control cluster-select"' +
+	'  	   <select class="form-control form-select cluster-select"' +
 	'	   	   placeholder="Please Select">' +
 	'	     <option value="">Select Cluster</option>' +
 	'	     <% _.each(amlist, function(details, urn) { %>' +
@@ -110,7 +103,7 @@ $(function ()
 	'      </td>' +
 	'      <td>' +
 	'       <div class="hardware-select-div form-control-div"> ' +
-	'	  <select class="form-control hardware-select"' +
+	'	  <select class="form-control form-select hardware-select"' +
 	'	  	placeholder="Select Hardware">' +
 	'	    <option value="">Select Hardware</option>' +
 	'	  </select>' +
@@ -374,7 +367,7 @@ $(function ()
 	'    <tr>' +
 	'      <td>' +
 	'        <div class="form-control-div"> ' +
-	'  	   <select class="form-control routename"' +
+	'  	   <select class="form-control form-select routename"' +
 	'	   	   placeholder="Please Select">' +
 	'	     <option value="">Select Route</option>' +
 	'	     <% _.each(routelist, function(details) { %>' +
@@ -515,6 +508,7 @@ $(function ()
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 	managerlist = JSON.parse(_.unescape($('#manager-json')[0].textContent));
 	console.info("amlist", amlist);
+	console.info("projlist", projlist);
 	console.info("managerlist", managerlist);
 	
 	if (window.ISPOWDER) {
@@ -538,6 +532,18 @@ $(function ()
 	// Now we can do this. 
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
+
+	// See if we can make users understand reservations are per-project.
+	$('#project-forewarned').change(function () {
+	    var ischecked =  $('#project-forewarned').is(":checked");
+
+	    if (ischecked) {
+		$('#commit-reservation').removeAttr("disabled");
+	    }
+	    else {
+		$('#commit-reservation').attr("disabled", "disabled");
+	    }
+	});
 
 	/*
 	 * In edit mode enable the controls.
@@ -608,14 +614,21 @@ $(function ()
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
 	$('.faq-contents').html(templates["reserve-faq"]);
+	if (window.BOOTSTRAP_VERSION == 5) {
+	    $('[data-bs-parent="#accordion"]').each(function () {
+		bootstrap.Collapse.getOrCreateInstance(this).toggle();
+	    });
+	}
 	if (window.ISPOWDER) {
 	    $('#range-info-div').html(templates["range-tabs"]);
 	}
  	
 	// Add one unassigned row.
 	if (!editing) {
-	    if (isadmin || managerlist[window.PID]) {
-		$('#for-class-checkbox').removeClass("hidden");
+	    if (projlist[window.PID].resmode != "user") {
+		if (isadmin || managerlist[window.PID]) {
+		    $('#for-class-checkbox').removeClass("hidden");
+		}
 	    }
 	    $('#pid').change(function (event) {
 		HandleProjectChange();
@@ -645,6 +658,7 @@ $(function ()
 		    }
 		}
 	    }
+	    HandleProjectChange();
 	}
 	// Graph list(s).
 	_.each(amlist, function(details, urn) {
@@ -693,8 +707,9 @@ $(function ()
 			      sup.ShowModal('#reservation-faq-modal');
 			  });
 	});
-	// Set the manual link since the FAQ is not a template.
-	$('#reservation-manual').attr("href", window.MANUAL);
+	// Set the manual link, it is used in several places.
+	$('.reservation-manual').attr("href",
+				      window.MANUAL + "/reservations.html")
 
 	// Handler for the Reservation Graph Help button
 	$('.resgraph-help-button').click(function (event) {
@@ -732,7 +747,6 @@ $(function ()
 	// Insert datepickers after html inserted.
 	$("#reserve-request-form #start_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
-	    showButtonPanel: true,
 	    onClose: function (dateString, dateobject) {
 		DateChange("start");
 		modified_callback();
@@ -740,7 +754,6 @@ $(function ()
 	});
 	$("#reserve-request-form #end_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
-	    showButtonPanel: true,
 	    onClose: function (dateString, dateobject) {
 		DateChange("end");
 		modified_callback();
@@ -1074,7 +1087,7 @@ $(function ()
 	$('#route-table-div .route-help').popover({
 	    trigger: 'hover',
 	    container: 'body',
-	    delay: '{"hide":1000}',
+	    delay: {"hide":1000},
 	    content: 'Reservations that include mobile endpoints ' +
 		'must end on the same day by 11PM Mountain time ' +
 		'(' + now.format("h A") + ' in your local timezone).'
@@ -1167,8 +1180,7 @@ $(function ()
 	/*
 	 * Ok, init the hour if not set.
 	 */
-	var ideal_hour =
-	    (which == "start" ? adjustedMorning().hour() : IDEAL_ENDHOUR);
+	var ideal_hour = (which == "start" ? IDEAL_STARTHOUR : IDEAL_ENDHOUR);
 	
 	if (!hourset && !moment(date).isSame(Date.now(), "day")) {
 	    $(selecter + ' option[value=' + ideal_hour + ']')
@@ -1213,134 +1225,6 @@ $(function ()
 	    }
 	}
     }
-
-    /*
-     * If the start time of reservation is for today, then it must
-     * start before 9am (in the home timezone). Otherwise, the user
-     * has to push the start time out till the next business day. If
-     * today is a weekend, then the user must push the start time out
-     * till the next business day.
-     */
-    function StartTimeOkay()
-    {
-	console.info("StartTimeOkay");
-
-	if (!window.MAINSITE || isadmin || !window.BISONLY) {
-	    return 1;
-	}
-	if (editing) {
-	    /*
-	     * We want to prevent users from editing a submitted reservation
-	     * such that the start time violates the rules. But since the
-	     * form contains the start time, need to be careful we do not
-	     * try to check it, since it might even be in the past, if the
-	     * user has not changed it.
-	     */
-	    var formstart = $('#reserve-request-form [name=start]').val();
-	    var start     = moment(formstart);
-	    var resstart  = moment(resgroup.start);
-	    
-	    console.info(start, resstart);
-	    if (start.isSame(resstart)) {
-		console.info("submitted reservation, start unchanged");
-		return 1;
-	    }
-	}
-	var start_day  = $('#reserve-request-form [name=start_day]').val();
-	var start_hour = $('#reserve-request-form [name=start_hour]').val();
-	var toosoon    = false;
-
-	console.info("StartTimeOkay: ", start_day, start_hour);
-
-	if (start_day && start_hour) {
-	    var nbd   = NextBusinessDay();
-	    var start = moment(start_day, "MM/DD/YYYY");
-	    start.hour(start_hour);
-
-	    if (moment(start).isBefore(nbd)) {
-		toosoon = 1;
-	    }
-	}
-	else {
-	    /*
-	     * All reservations that need approval must start in two
-	     * business days, so "now" is definitely too soon.
-	     */
-	    toosoon = 1;
-	}
-	if (toosoon) {
-	    sup.ShowModal('#toosoon-modal');
-	    return 0;
-	}
-	return 1;
-    }
-
-    /*
-     * Calculate the next business day after the current time.
-     */
-    function NextBusinessDay(now)
-    {
-	var pid = $('#pid').val();
-	
-	if (now === undefined) {
-	    now = moment();
-	}
-	// Change the timezone to home base so we can check against
-	// 9am and weekend in that timezone.
-	now.tz(window.HOMETZ);
-
-	console.info("NextBusinessDay", now.isoWeekday());
-
-	if (window.ISPOWDER && pid != "PowderTeam") {
-	    // New: All reservations that need approval have to start
-	    // no earlier then two business days from now.
-	    switch (now.isoWeekday())
-	    {
-		case 1:
-		case 2:
-		case 3:
-	             now.isoWeekday(now.isoWeekday() + 2);
-	             break;
-
-		case 4:
-		case 5:
-	              now.isoWeekday(now.isoWeekday() + 4);
-    	              break;
-	    
-		case 6:
-		case 7:
-	              now.isoWeekday(2);
-	              now.isoWeek(now.isoWeek() + 1);
-	              break;
-	    }
-	}
-	else {
-	    switch (now.isoWeekday())
-	    {
-		case 1:
-		case 2:
-		case 3:
-		case 4:
-	             now.isoWeekday(now.isoWeekday() + 1);
-	             break;
-
-		case 5:
-		case 6:
-		case 7:
-	              now.isoWeekday(1);
-	              now.isoWeek(now.isoWeek() + 1);
-	              break;
-	    }
-
-	}
-	now.hours(9);
-	now.minute(0);
-	now.second(0);
-	now.local();
-	console.info(now.format('lll'));
-	return now;
-    }
-    window.NextBusinessDay = NextBusinessDay;
 
     /*
      * Mark a cluster field with an error.
@@ -1531,10 +1415,19 @@ $(function ()
 
 	    if (_.has(reservation, "errcode")) {
 		if (_.has(reservation, "conflict")) {
+		    var conflict = reservation.conflict;
+		    
 		    // The string typically has the date in the wrong timezone,
-		    var when = moment(reservation.conflict.when).format("lll");
-		    html = "Insufficient free nodes at " + when + " " +
-			"(" + reservation.conflict.needed + " more needed)";
+		    var when = moment(conflict.when).format("lll");
+
+		    if (_.has(conflict, "conflicting_node")) {
+			html = "Conflict with node " + conflict.conflicting_node +
+			    " at " +  when;
+		    }
+		    else {
+			html = "Insufficient free nodes at " + when + " " +
+			    "(" + reservation.conflict.needed + " more needed)";
+		    }
 		}
 		else {
 		    html = reservation.output;
@@ -1547,9 +1440,19 @@ $(function ()
 	    }
 	    else {
 		if (_.has(reservation, "conflict")) {
+		    var conflict = reservation.conflict;
+		    var mesg;
+		    
 		    // The string typically has the date in the wrong timezone,
-		    var when = moment(reservation.conflict.when).format("lll");
-		    var mesg = "Conflicting reservation at " + when;
+		    var when = moment(conflict.when).format("lll");
+
+		    if (_.has(conflict, "conflicting_node")) {
+			mesg = "Conflicting reservation with node " + conflict.conflicting_node;
+		    }
+		    else {
+			mesg = "Conflicting reservation";
+		    }
+		    mesg = mesg + " at " + when;
 		    html = "Approval is required. (" + mesg + ")";
 		}
 		else if (_.has(reservation, "noautoapprove_reason")) {
@@ -1735,6 +1638,7 @@ $(function ()
 	var routes   = {};
 	var errors   = 0;
 	var pid      = (editing ? current_pid : $('#pid').val());
+	var gid      = (editing ? current_gid : $('#gid').val());
 
 	var checkonly_callback = function(json) {
 	    if (json.code) {
@@ -1967,7 +1871,7 @@ $(function ()
      * Load anonymized reservations from each am in the list and
      * generate tables.
      */
-    function LoadReservations(project)
+    function LoadReservations(project, user)
     {
 	var deferred = [];
 	if (window.ISPOWDER) {
@@ -2047,6 +1951,7 @@ $(function ()
 	    var args = {"cluster" : details.nickname};
 	    if (project !== undefined) {
 		args["project"] = project;
+		args["user"]    = user;
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ReservationInfo", args,
@@ -2134,8 +2039,8 @@ $(function ()
 			groups[group] = {};
 		    }
 		    // Gross Hack
-		    if (group == "mmimo" &&
-			(key == "mmimo1-honors")) {
+		    if (0 && group == "mmimo" &&
+			(key == "mmimo1-honors" || key == "mmimo1-ustar")) {
 			prunelist[key] = true;
 			return;
 		    }
@@ -2392,7 +2297,7 @@ $(function ()
 		    if (this_pid != $('#pid').val()) {
 			console.info("LoadRangeReservations: project changed " +
 				     "from " + current_pid +
-				     " to " + selected_pid);
+				     " to " + $('#pid').val());
 			LoadRangeReservations();
 			return;
 		    }
@@ -2448,10 +2353,13 @@ $(function ()
 	var index = 0;
 	var bail  = 0;
 
+	if (PreCheckClusterRows() || PreCheckRangeRows()) {
+	    return;
+	}
 	// List of reservation requests.
-	var clusters = _.values(GetClusterRows());
-	var ranges   = _.values(GetRangeRows());
-	var routes   = _.values(GetRouteRows());
+	var clusters = GetClusterRows();
+	var ranges   = GetRangeRows();
+	var routes   = GetRouteRows();
 
 	if (!_.size(clusters) && !_.size(routes)) {
 	    alert("Need at least one complete cluster definition");
@@ -2461,13 +2369,12 @@ $(function ()
 	    alert("Please provide the number of days");
 	    return;
 	}
-	if (_.size(routes) && days > 1) {
-	    sup.SpitOops("oops", "Experiments that include mobile endpoints "+
-			 "(routes) must be "+
-			 "finished on the same day the experiment starts. "+
-			 "Please limit your search to one day.");
+	var pid = (editing ? current_pid : $('#pid').val());
+	if (pid == "") {
+	    alert("Please select a project first");
 	    return;
 	}
+	var gid = (editing ? current_gid : $('#gid').val());
 	
 	// Remove old sanity check errors.
 	$('#reserve-request-form .form-control-div .form-group-sm')
@@ -2479,440 +2386,61 @@ $(function ()
 	$("#reserve-request-form #end_day")
 	    .datepicker('setDate', null);
 	
-	// Sanity check.
-	for (var i = 0; i < clusters.length; i++) {
-	    var count = clusters[i].count;
-	    var urn   = clusters[i].cluster;
-	    var error;
-
-	    if (count == "") {
-		error = "Missing count";
-	    }
-	    else if (! (isNumber(count) && count > 0)) {
-		error = "Invalid count"
-	    }
-	    if (error) {
-		var uuid  = clusters[i].uuid;
-		var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
-		
-		tbody.find(".count-error label")
-		    .html(error);
-		tbody.find(".count-error")
-		    .removeClass("hidden");
-		bail = 1;
-	    }
-	}
-	for (var i = 0; i < ranges.length; i++) {
-	    var low   = ranges[i].freq_low;
-	    var high  = ranges[i].freq_high;
-	    var error;
-	    var classname;
-
-	    if (low == "") {
-		error = "Missing frequency";
-		classname = ".freq-low-error";
-	    }
-	    else if (! (isNumber(low) && low > 0)) {
-		error = "Invalid frequency"
-		classname = ".freq-low-error";
-	    }
-	    else if (high == "") {
-		error = "Missing frequency";
-		classname = ".freq-high-error";
-	    }
-	    else if (! (isNumber(high) && high > 0)) {
-		error = "Invalid frequency"
-		classname = ".freq-high-error";
-	    }
-	    if (error) {
-		var uuid  = ranges[i].uuid;
-		var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
-		
-		tbody.find(classname + " label")
-		    .html(error);
-		tbody.find(classname)
-		    .removeClass("hidden");
-		bail = 1;
-	    }
-	}
-	if (bail) {
-	    return;
-	}
 	console.info("FindFit: ", days, clusters, ranges, routes);
 
-	/*
-	 * Slightly cheesy way to wait for the cluster data to come in.
-	 */
-	var needwait = function () {
-	    var flag = 0;
-	    
-	    _.each(clusters, function (cluster) {
-		if (forecasts[cluster.cluster] === undefined) {
-		    flag = 1;
-		};
-	    });
-	    return flag;
+	var args = {
+	    "days"     : days,
+	    "pid"      : pid,
+	    "gid"      : gid,
+	    "clusters" : clusters,
+	    "ranges"   : ranges,
+	    "routes"   : routes
 	};
-	if (needwait()) {
-	    sup.ShowWaitWait("Waiting for cluster reservation data");
-	    var waitfordata = function() {
-		if (! needwait()) {
-		    sup.HideWaitWait();
-		    FindFit();
-		    return;
-		}
-		setTimeout(function() { waitfordata() }, 200);
-	    };
-	    setTimeout(function() { waitfordata() }, 200);
-	    return;
-	}
-	/*
-	 * Oh, major cheesiness going on here. Take the route rows and
-	 * make it look like a cluster and add to the cluster list so that
-	 * we process the forecasts in that loop. Do I get a cookie?
-	 */
-	if (routeforecast != null) {
-	    _.each(routes, function (route) {
-		clusters.push({"cluster" : "busroutes",
-			       "type"    : route.routename,
-			       "count"   : 1});
-	    });
-	    forecasts["busroutes"] = routeforecast;
-	    console.info("extend", clusters);
-	}
-	
-	
-	/*
-	 * Find the first fit for a cluster reservation
-	 */
-	var findfirst = function (cluster, lower, upper) {
-	    var starttime = null;
-	    var startdata = null;
-	    var enddata   = null;
-	    var type      = cluster.type;
-	    var count     = cluster.count;
+	console.info("FindFit args: ", args);
 
-	    console.info("findfirst", type, count, lower);
-
-	    var tmp = forecasts[cluster.cluster][cluster.type].slice(0);
-	    console.info("tmp", tmp);
-	    while (tmp.length && starttime == null) {
-		var data = tmp.shift();
-		var free = data.free - data.unapproved;
-		if (free < 0) {
-		    free = 0;
-		}
-		//console.info("baz", data, free);
-		
-		if (free >= cluster.count) {
-		    starttime = data.t;
-		    startdata = data;
-		    //console.info("baz2", startdata, starttime, lower);
-		    if (lower) {
-			if (tmp.length) {
-			    var next = tmp[0];
-			    var nextfree = next.free - next.unapproved;
-			    if (nextfree < 0) {
-				nextfree = 0;
-			    }
-			    //console.info("foo", lower, nextfree, data, next);
-
-			    if (nextfree >= cluster.count &&
-				lower >= data.t && lower <= next.t) {
-				starttime = lower;
-				//console.info("fee1", starttime);
-			    }
-			    else if (data.t < lower) {
-				/*
-				 * See if the current item is long enough that we
-				 * can start here. Otherwise need to jump to next.
-				 */
-				if (lower <= next.t &&
-				    lower + (3600 * 24 * days) + 3600 < next.t) {
-				    starttime = lower;
-				    //console.info("fee2", starttime);
-				}
-				else {
-				    //console.info("bar");
-				    starttime = null;
-				    continue;
-				}
-			    }
-			}
-			else {
-			    // Last one, has enough nodes, just move past
-			    // lower bound and be done.
-			    if (starttime < lower) {
-				starttime = lower + 60;
-			    }
-			}
-		    }
-		    //console.info("boop", data, starttime);
-		    
-		    for (var i = 0; i < tmp.length; i++) {
-			var next = tmp[i];
-			var nextfree = next.free - next.unapproved;
-			if (nextfree < 0) {
-			    nextfree = 0;
-			}
-			if (nextfree >= cluster.count) {
-			    // The next time stamp still has enough nodes,
-			    // keep checking until no longer true, so we
-			    // have the biggest range possible.
-			    continue;
-			}
-			/*
-			 * Okay, next range no longer has enough nodes, but
-			 * if the current range is long enough, we are good.
-			 */
-			if (starttime + (3600 * 24 * days) + 3600 < next.t) {
-			    // The next time stamp is beyond the days requested,
-			    // so it fits.
-			    enddata = next;
-			    break;
-			}
-			// Otherwise, we no longer fit, need to start over.
-			starttime = null;
-			break;
-		    }
-		}
+	var callback = function (json) {
+	    console.info("FindFit response", json);
+	    if (json.code) {
+		sup.HideWaitWait(function () {
+		    sup.SpitOops("oops", json.value);		    
+		});
+		return;
 	    }
-	    var results =
-		{"starttime" : starttime,
-		 "startdata" : startdata,
-		 "endtime"   : (enddata ? enddata.t : null),
-		 "enddata"   : enddata,
-		};
-	    console.info("findfirst return", results);
-	    return results;
+	    sup.HideWaitWait();
+	    var start = moment(json.value.start);
+	    var end   = moment(json.value.end);
+
+	    var start_day  = $('#reserve-request-form [name=start_day]').val();
+	    var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	    var end_day    = $('#reserve-request-form [name=end_day]').val();
+	    var end_hour   = $('#reserve-request-form [name=end_hour]').val();
+	    var new_start_day  = start.format("MM/DD/YYYY");
+	    var new_start_hour = start.format("H");
+	    var new_end_day    = end.format("MM/DD/YYYY");
+	    var new_end_hour   = end.format("H");
+
+	    $('#reserve-request-form [name=start_day]')
+		.datepicker("setDate", new_start_day);
+	    $('#reserve-request-form [name=start_hour]')
+		.val(new_start_hour);
+	    $('#reserve-request-form [name=end_day]')
+		.datepicker("setDate", new_end_day);
+	    $('#reserve-request-form [name=end_hour]')
+		.val(new_end_hour);
+
+	    // And if we actually changed anything.
+	    if (start_day != new_start_day || start_hour != new_start_hour) {
+		DateChange("start");
+		modified_callback();
+	    }
+	    if (end_day != new_end_day || end_hour != new_end_hour) {
+		DateChange("end")
+		modified_callback();
+	    }
 	};
-	var lower = (window.BISONLY || _.size(routes) ?
-		     NextBusinessDay().unix() : null);
-	var fit   = null;
-	var loops = 100;  // Avoid infinite loop.
-	
-	while (!fit && loops) {
-	    loops--;
-	    fit = findfirst(clusters[0], lower, null);
-	    if (!fit.starttime) {
-		break;
-	    }
-	    /*
-	     * Oh, ugly special case for routes.
-	     */
-	    if (_.size(routes)) {
-		var s  = moment.unix(fit["starttime"]);
-		var e  = moment.unix(fit["endtime"]);
-		var ok = true;
-
-		if (s.isoWeekday() == 6 || s.isoWeekday() == 7) {
-		    s.isoWeekday(1);
-		    s.isoWeek(s.isoWeek() + 1);
-		    ok = false;
-		}
-		else if (s.hours() > IDEAL_STARTHOUR) {
-		    s.isoWeekday(s.isoWeekday() + 1);
-		    ok = false;
-		}
-		if (!ok) {
-		    s.hours(IDEAL_STARTHOUR);
-		    lower = s.unix();
-		    fit   = null;
-		    console.info("Route adjustment(1) to " + s.format());
-		    continue;
-		}
-	    }
-	    
-	    for (index = 1; index < clusters.length; index++) {
-		var results = findfirst(clusters[index],
-					fit["starttime"], null);
-		if (!results.starttime) {
-		    break;
-		}
-		console.info("fit:" + index,
-			     fit.starttime, fit.endtime,
-			     fit.startdata, fit.enddata);
-
-		/*
-		 * If the first avail is beyond the current fit, need
-		 * to start over.
-		 */
-		if (fit["endtime"] && results["starttime"] > fit["endtime"]) {
-		    console.info("skip1");
-		    fit   = null;
-		    lower = results["starttime"];
-		    break;
-		}
-		// Narrow to newest fit.
-		if (results["starttime"] > fit["starttime"]) {
-		    fit["starttime"] = results["starttime"];
-		}
-		if (results["endtime"] &&
-		    (!fit["endtime"] || results["endtime"] < fit["endtime"])) {
-		    fit["endtime"] = results["endtime"];
-		}
-		// If too narrow, have to keep going.
-		if (fit["endtime"] &&
-		    (fit["endtime"] - fit["starttime"] < 
-		     (3600 * 24 * days) + 3600)) {
-		    console.info("skip2");
-		    fit   = null;
-		    lower = fit["starttime"];
-		    break;
-		}
-	    }
-	    if (fit && _.size(ranges)) {
-		// Set lower in case we have to go around again, we bump
-		// it below.
-		lower = fit["starttime"];
-	    
-		/*
-		 * Ok, we have something that works for the clusters, lets look
-		 * at the ranges. This is a bit easier since current ranges
-		 * include both a start and end time. So if the current fit
-		 * above conflicts with a range we want, start over at the end
-		 * of the conflicting range. 
-		 */
-		for (index = 0; index < ranges.length; index++) {
-		    var range     = ranges[index];
-		    var freq_low  = parseFloat(range.freq_low);
-		    var freq_high = parseFloat(range.freq_high);
-
-		    console.info("Range:" + index, freq_low, freq_high);
-
-		    for (var r = 0; r < allranges.length; r++) {
-			var existing = allranges[r];
-			var low      = parseFloat(existing.freq_low);
-			var high     = parseFloat(existing.freq_high);
-			var starts   = moment(existing.start).unix();
-			var ends     = moment(existing.end).unix();
-			var fitend   = fit.starttime + (3600 * 24 * days) + 3600;
-
-			console.info("Existing:" + r, low,high,starts,ends);
-
-			// If this range does not overlap in time, keep going
-			if ((fit.starttime < starts && fitend < starts) ||
-			    (fit.starttime > ends)) {
-			    continue;
-			}
-			// If this range does not overlap in frequency,
-			// keep going
-			if ((freq_low < low && freq_high < low) ||
-			    (freq_low > high)) {
-			    continue;
-			}
-			// Does not fit!
-			console.info("Range does not fit");
-			fit   = null;
-			break;
-		    }
-		    // No point in continuing, start over.
-		    if (!fit) {
-			lower = lower + (3600 * 1);
-			break;
-		    }
-		}
-	    }
-	    /*
-	     * Oh, ugly special case for routes.
-	     */
-	    if (fit && _.size(routes)) {
-		var s  = moment.unix(fit["starttime"]);
-		var e  = moment.unix(fit["endtime"]);
-		var ok = true;
-
-		if (s.isoWeekday() == 6 || s.isoWeekday() == 7) {
-		    s.isoWeekday(1);
-		    s.isoWeek(s.isoWeek() + 1);
-		    ok = false;
-		}
-		else if (s.hours() > IDEAL_STARTHOUR) {
-		    s.isoWeekday(s.isoWeekday() + 1);
-		    ok = false;
-		}
-		if (!ok) {
-		    s.hours(IDEAL_STARTHOUR);
-		    lower = s.unix();
-		    fit   = null;
-		    console.info("Route adjustment(2) to " + s.format());
-		    continue;
-		}
-	    }
-	}
-	// enddata can be null if we fit on the last timeline entry.
-	console.info("FindFit: ", fit);
-	if (!fit.starttime) {
-	    console.info("No fit");
-	    $("#reserve-request-form #start_day")
-		.datepicker('setDate', null);
-	    $("#reserve-request-form #end_day")
-		.datepicker('setDate', null);
-	    alert("Could not find a time that works!");
-	    return;
-	}
-	var starttime = fit.starttime;
-	var endtime   = fit.endtime;
-
-	var start = moment.unix(starttime);
-	/*
-	 * Need to push out the start to the top of hour.
-	 */
-	var minutes = (start.hours() * 60) + start.minutes();
-	start.hour(Math.ceil(minutes / 60));
-
-	/*
-	 * Try to shift the reservation from the middle of the night.
-	 * It is okay if we cannot do this, we still want to give the
-	 * user the earliest possible reservation.
-	 */
-	if (!window.BISONLY && start.hour() < IDEAL_STARTHOUR) {
-	    var tmp = moment(start);
-	    tmp.hour(IDEAL_STARTHOUR);
-
-	    // If no enddata then we can definitely shift it.
-	    if (!endtime || tmp.unix() + ((3600 * 24 * days)) < endtime) {
-		console.info("Shifting to later start time");
-		start = tmp;
-	    }
-	}
-	var end = moment(start.valueOf() + ((3600 * 24 * days) * 1000));
-
-	/*
-	 * With routes, limit to 11pm on the same day as start.
-	 */
-	if (_.size(routes) && start.dayOfYear() != end.dayOfYear()) {
-	    console.info("Trimming to earlier end time cause of routes");
-	    end.dayOfYear(start.dayOfYear());
-	    end.hour(23);
-	}
-
-	var start_day  = $('#reserve-request-form [name=start_day]').val();
-	var start_hour = $('#reserve-request-form [name=start_hour]').val();
-	var end_day    = $('#reserve-request-form [name=end_day]').val();
-	var end_hour   = $('#reserve-request-form [name=end_hour]').val();
-	var new_start_day  = start.format("MM/DD/YYYY");
-	var new_start_hour = start.format("H");
-	var new_end_day    = end.format("MM/DD/YYYY");
-	var new_end_hour   = end.format("H");
-
-	$('#reserve-request-form [name=start_day]')
-	    .datepicker("setDate", new_start_day);
-	$('#reserve-request-form [name=start_hour]')
-	    .val(new_start_hour);
-	$('#reserve-request-form [name=end_day]')
-	    .datepicker("setDate", new_end_day);
-	$('#reserve-request-form [name=end_hour]')
-	    .val(new_end_hour);
-
-	// And if we actually changed anything.
-	if (start_day != new_start_day || start_hour != new_start_hour) {
-	    DateChange("start");
-	    modified_callback();
-	}
-	if (end_day != new_end_day || end_hour != new_end_hour) {
-	    DateChange("end")
-	    modified_callback();
-	}
+	sup.ShowWaitWait(undefined, undefined, function () {
+	    sup.CallServerMethod(null, "resgroup", "FindFirstFit", args, callback);
+	});
     }
 
     //
@@ -2920,9 +2448,6 @@ $(function ()
     //
     function ValidateReservation(clusters, ranges, routes)
     {
-	// This updates a couple of modals. 
-	adjustNBD();
-	
 	var callback = function(json) {
 	    console.info(json);
 	    if (json.code) {
@@ -3010,6 +2535,12 @@ $(function ()
 		    }
 		});
 	    }
+            // Update NBD in the modals.
+            if (_.has(results, "nbd")) {
+                var nbd = moment(results['nbd']);
+                $('.adjustedNBD').text(nbd.format("ddd MMM Do hA"));
+            }
+            
 	    if (needsApproval) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
@@ -3025,8 +2556,10 @@ $(function ()
 		    $('#confirm-reservation .needs-approval-noconflict')
 			.removeClass("hidden");
 		}
-		if (!StartTimeOkay()) {
-		    return;
+
+                if (_.has(results, 'toosoon') && results['toosoon'] != 0) {
+	            sup.ShowModal('#toosoon-modal');
+                    return;
 		}
 	    }
 	    else {
@@ -3035,6 +2568,29 @@ $(function ()
 	    }
 	    // User can submit.
 	    ToggleSubmit(true, "submit");
+
+	    if (isadmin) {
+		$('#commit-reservation').removeAttr("disabled");
+		$('#confirm-reservation .res-warnings-div').addClass("hidden");
+	    }
+	    else {
+		// Various warnings based on sharing setting.
+		var pid = (editing ? current_pid : $('#pid').val());
+
+		$('#confirm-reservation .res-warnings').addClass("hidden");
+		if (projlist[pid].resmode == "project") {
+		    $('#confirm-reservation .per-project-reservations')
+			.removeClass("hidden");
+		}
+		else if (projlist[pid].resmode == "group") {
+		    $('#confirm-reservation .per-group-reservations')
+			.removeClass("hidden");
+		}
+		else if (projlist[pid].resmode == "user") {
+		    $('#confirm-reservation .per-user-reservations')
+			.removeClass("hidden");
+		}
+	    }
 	    sup.ShowModal('#confirm-reservation');
 	};
 	var args = {
@@ -3382,6 +2938,7 @@ $(function ()
 	    else {
 		$('#reserve-requestor').html(details.uid);
 	    }
+	    
 	    // Ditto the project.
 	    if (_.has(details, 'pid_idx')) {
 		$('#pid').html(
@@ -3393,6 +2950,23 @@ $(function ()
 		$('#pid').html(details.pid);
 	    }
 	    current_pid = details.pid;
+	    // Indicate what the sharing mode for the project is.
+	    $('#pid-resmode').html(details.shared_reservations);
+
+	    // And the group.
+	    if (details.shared_reservations == "group") {
+		if (details.gid_idx != details.pid_idx) {
+		    $('#gid').html(
+			"<a target=_blank href='show-group.php?group=" +
+			    details.gid_idx + "'>" +
+			    details.gid + "</a>");
+		}
+		else {
+		    $('#gid').html(details.gid);
+		}
+		$('#group-div').removeClass("hidden");
+	    }
+	    current_gid = details.gid;
 	    
 	    if (isadmin) {
 		if (details.idledetection) {
@@ -3460,7 +3034,7 @@ $(function ()
 	    $('#reserve-refresh-button').removeAttr("disabled");
 
 	    // Now we can load the graph since we know the project.
-	    LoadReservations(details.pid);
+	    LoadReservations(details.pid, details.uid);
 	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
@@ -3920,8 +3494,12 @@ $(function ()
 	    }
 	    $('#override-checkbox').prop("checked", false);	    
 	    RefreshTables(json.value);
-	    LoadRangeReservations();
-	    LoadRouteReservations();
+	    if (window.ISPOWDER) {
+		LoadRangeReservations();
+		if (window.DOROUTES) {
+		    LoadRouteReservations();
+		}
+	    }
 	};
 	var args = {
 	    "uuid"    : window.UUID,
@@ -4238,16 +3816,39 @@ $(function ()
     function HandleProjectChange()
     {
 	var pid = $('#pid').val();
-	
+	var groups = projlist[pid].groups;
+
 	// Project managers can set the for class checkbox
-	if (!isadmin) {
-	    if (managerlist[pid]) {
+	if (projlist[pid].resmode != "user") {
+	    if (isadmin || managerlist[pid]) {
 		$('#for-class-checkbox').removeClass("hidden");
 	    }
 	    else {
 		$('#for-class-checkbox').addClass("hidden");
 	    }
 	}
+	else {
+	    $('#for-class-checkbox').addClass("hidden");
+	}
+	// Indicate what the sharing mode for the project is.
+	$('#pid-resmode').html(projlist[pid].resmode);
+
+	// Group selector, but hidden if no sub groups. 
+	var html = "";
+	_.each(groups, function(gid) {
+	    html += "<option value='" + gid + "'>" + gid + "</option>";
+	});
+	$('#group-div select').html(html);
+
+	if (groups.length == 1) {
+	    $('#group-div').addClass("hidden");
+	}
+	else if (projlist[pid].resmode == "group") {
+	    $('#group-div').removeClass("hidden");
+	}
+	else {
+	    $('#group-div').addClass("hidden");
+	}	    
 
 	if (window.ISPOWDER) {
 	    // Clear/Set OTA warning. Messy.
@@ -4372,6 +3973,12 @@ $(function ()
 	    var using  = res.using;
 	    var util   = res.utilization;
 
+	    // No usage yet
+	    if (using == null) {
+		using = 0;
+		util  = 0;
+	    }
+
 	    html +=
 		'<tr>' +
 		' <td>' + name + '</td>' +
@@ -4423,6 +4030,9 @@ $(function ()
 	    res["start"]      = details.start;
 	    res["end"]        = details.end;
 	    res["nodes"]      = res.count;
+	    res["pid"]        = details.pid;
+	    res["gid"]        = details.gid;
+	    res["mode"]       = details.shared_reservations;
 	    
 	    window.DrawResHistoryGraph({"details"  : res,
 					"graphid"  : '#' + graphid});
@@ -4974,25 +4584,6 @@ $(function ()
 	}
 	var x = parseFloat(value);
 	return isNaN(x) ? false : true;
-    }
-
-    function adjustedMorning()
-    {
-	/*
-	 * Create a moment object that converts 9am in the Portal timezone
-	 * to whatever it is in the local timezone.
-	 */
-	var now = moment();
-	now.tz(window.HOMETZ);
-	now.hours(9);
-	now.local();
-	return now;
-    }
-    function adjustNBD()
-    {
-	var nbd = NextBusinessDay();
-	
-	$('.adjustedNBD').text(nbd.format("ddd MMM Mo hA"));
     }
 
     /*

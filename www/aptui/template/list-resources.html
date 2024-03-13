@@ -1,0 +1,30 @@
+<div class="row justify-content-start align-items-center mt-3">
+  <div class="col-sm-3">
+    <input class='form-control form-control-md search'
+	   type='search' data-column='all'
+           id='resources_table_search' placeholder='Search Table'>
+  </div>
+  <div class="col-sm-8 hidden" id="admin-controls">
+    <div class="form-check form-switch form-check-inline">
+      <input class="form-check-input" type="checkbox" role="switch"
+	     id="showVMs">
+      <label class="form-check-label">Show VMs</label>
+    </div>
+    <div class="form-check form-switch form-check-inline">
+      <input class="form-check-input" type="checkbox" role="switch"
+	     id="showBlockstores">
+      <label class="form-check-label">Show Blockstores</label>
+    </div>
+  </div>
+</div>
+<div class="row mt-3">
+  <center id="waiting">
+    <h5>Patience please, this will take a minute</h5>
+    <br>
+    <img src='images/spinner.gif' />
+  </center>
+  <center id="resources-count" class="hidden" style="margin-top: -10px;">
+    <small>There are <span></span> matching resources</small>
+  </center>
+  <div id="table-div"></div>
+</div>

@@ -568,11 +568,13 @@ genreport_main() {
 #	    cat /tmp/genreport >> /tmp/Report_CheckNode
 #	fi
 
-	checkdrift_main $node | grep -v '^$' > /tmp/driftreport
-	if [ -s /tmp/driftreport ] ; then
-	    ph4 $node
-	    echo "--------------------------- changes over time ---------------------------" >> /tmp/Report_CheckNode
-	    cat /tmp/driftreport >> /tmp/Report_CheckNode
+	if [ "${CHECKNODE_CRONJOB}" != "YES" ] ; then
+	    checkdrift_main $node | grep -v '^$' > /tmp/driftreport
+	    if [ -s /tmp/driftreport ] ; then
+	        ph4 $node
+	        echo "--------------------------- changes over time ---------------------------" >> /tmp/Report_CheckNode
+	        cat /tmp/driftreport >> /tmp/Report_CheckNode
+	    fi
 	fi
 
 	rm -f /tmp/genreport /tmp/driftreport

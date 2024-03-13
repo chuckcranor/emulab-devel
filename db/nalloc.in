@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,6 +55,7 @@ my $TB          = "@prefix@";
 my $consetup    = "$TB/libexec/console_setup";
 my $makeconf    = "$TB/sbin/dhcpd_makeconf";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
+my $power       = "$TB/bin/power";
 
 #
 # Testbed Support libraries
@@ -68,6 +69,12 @@ use User;
 use Node;
 use EmulabFeatures;
 use Reservation;
+if ($PGENISUPPORT) {
+    require GeniDB;
+    require GeniUser;
+    # talk to the right DB.
+    GeniDB::DBConnect(GeniDB::GENICM_DBNAME());
+}
 
 #
 # Turn off line buffering on output
@@ -116,6 +123,7 @@ my $need_consetup  = 0;
 my @need_history   = ();
 my @need_clearbl   = ();
 my @need_pxeconfig = ();
+my %has_conflicts  = ();
 my $errormsg       = "";
 my $admission_ctrl = 0;
 
@@ -135,7 +143,13 @@ if (!defined($project)) {
     die("*** $0:\n".
 	"    Could not get project for experiment $experiment!\n");
 }
-
+my $group = $experiment->GetGroup();
+if (!defined($group)) {
+    die("*** $0:\n".
+	"    Could not get group for experiment $experiment!\n");
+}
+my $gid = $group->gid();
+    
 #
 # User must have permission to modify the experiment.
 #
@@ -148,6 +162,25 @@ if (!$experiment->AccessCheck($this_user, TB_EXPT_MODIFY)) {
     die("*** $0:\n".
 	"    You do not have permission to allocate nodes in $pid/$eid\n");
 }
+
+#
+# Ick. For reservation related stuff, the current user will not be the
+# correct user when coming in on the Geni path for a nonlocal project.
+# Poor design choice many years ago.
+#
+# See similar (bad) hack in nalloc. :-(
+#
+my $reservation_user = $this_user;
+if ($PGENISUPPORT &&
+    exists($ENV{'REALGENIURN'}) && $ENV{'REALGENIURN'} ne "") {
+    my $geniuser = GeniUser->Lookup($ENV{'REALGENIURN'}, 1);
+    if (!defined($geniuser)) {
+	fatal("Could not lookup geniuser for " . $ENV{'REALGENIURN'});
+    }
+    $reservation_user = $geniuser;
+}
+print "nalloc: reservation_user='$reservation_user'\n"
+    if (defined($reservation_user));
 
 $admission_ctrl = TBGetSiteVar( "general/admission_control" );
 $admission_ctrl = defined( $admission_ctrl ) && $admission_ctrl;
@@ -196,9 +229,9 @@ my $endtime = Reservation->ExpectedEnd( $experiment );
 # low-level library routines; this is a horrible violation of abstraction;
 # and it's all MySQL's fault...
 if( $PGENISUPPORT ) {
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read");
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as nres read");
 } else {
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, project_reservations as pr read, reservation_version write, node_attributes as a read");
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as nres read");
 }
 TBDebugTimeStamp("nalloc locked tables");
 
@@ -216,7 +249,7 @@ foreach my $n (@node_names) {
     if ($reserved_experiment) {
 	# Someone has already reserved this node
 	if ($reserved_experiment == $experiment->idx()) {
-	    print "$node already reserved to $experiment.\n";
+	    print "$node already reserved to $experiment.\n"; 
 	    # Do not increment error code since that throws off caller.
 	    next;
 	}
@@ -233,7 +266,33 @@ foreach my $n (@node_names) {
 	    next;
 	}
     }
-
+    if ($node->conflicting_nodes()) {
+	my @conflicts = ();
+	
+	foreach my $con_id (split(",", $node->conflicting_nodes())) {
+	    my $connode = Node->Lookup($con_id);
+	    
+	    if (!$connode) {
+		print STDERR "Conflict check: No such physical node $con_id\n";
+		next;
+	    }
+	    if ($connode->IsReserved() && $connode->pid() ne TBOPSPID()) {
+		print "Conflicting node $con_id is already reserved ".
+		    "to " . $connode->Reservation()->pideid() . "\n";
+		if ($force) {
+		    print "Forcing allocation anyway...\n";
+		}
+		else {
+		    $noalloc++;
+		    next;
+		}
+	    }
+	    print "$n: Conflicting node $con_id will be powered off\n";
+	    push(@conflicts, $con_id);
+	}
+	$has_conflicts{$n} = \@conflicts;
+    }
+    
     #
     # Add info the list of nodes to reserve; done in a single query below.
     # 
@@ -298,8 +357,8 @@ foreach my $node (@nodes) {
 					      $debug ? \$resdetails : undef);
     print $resdetails if ($debug);
     my $res = Reservation->CreateImmediate($pid, $eid,
-					   $this_user->uid(),
-					   $endtime, $node_id, 1);
+					   $reservation_user->uid(),
+					   $endtime, $node_id, 1, $gid);
     push(@$reservations, $res);
     
     if (!Reservation->IsFeasible($reservations, \$errormsg)) {
@@ -338,8 +397,8 @@ foreach my $type ( keys( %types ) ) {
 		     !grep( $_ eq $node->node_id(), @trivial_nodes ) );
     }
     my $res = Reservation->CreateImmediate( $pid, $eid,
-					    $this_user->uid(),
-					    $endtime, $type, $count );
+					    $reservation_user->uid(),
+					    $endtime, $type, $count, $gid );
     if ($debug) {
 	print "$res\n";
     }
@@ -363,8 +422,6 @@ foreach my $type ( keys( %types ) ) {
 	$unavail_types{ $type } = 1;
     }
 }
-exit(0)
-    if ($impotent);
 
 if( $admission_ctrl && !$force ) {
     my @goodnodes = ();
@@ -382,6 +439,8 @@ if( $admission_ctrl && !$force ) {
 
     @nodes = @goodnodes;
 }
+exit($error ? -1 : $noalloc)
+    if ($impotent);
 
 foreach my $node (@nodes) {
     # Freshly allocated nodes need a history entry.
@@ -476,6 +535,21 @@ if (!$error && (!$noalloc || $partial) && @nodes) {
     foreach my $node (@need_pxeconfig) {
 	if ($node->boot_method() eq "pxelinux") {
 	    TBPxelinuxConfig($node);
+	}
+    }
+
+    # Power off conflicting nodes.
+    foreach my $node_id (keys(%has_conflicts)) {
+	my @conflicts = @{ $has_conflicts{$node_id} };
+	my $conflict_ids = join(" ", @conflicts);
+
+	print "Powering off conflicting node(s) for $node_id: $conflict_ids\n";
+	system("$power -a off $conflict_ids");
+	if ($?) {
+	    #
+	    # If this happens, we probably need to whine more.
+	    #
+	    $error++;
 	}
     }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -292,6 +292,8 @@ if (!defined($experiment)) {
     fatal("Could not lookup experiment object $pid,$eid!")
 }
 my $project = $experiment->GetProject();
+my $group   = $experiment->GetGroup();
+my $gid     = $group->gid();
 
 #
 # Verify that this person can muck with the experiment.
@@ -846,7 +848,7 @@ sub RunAssign($$)
 	}
 	else {
 	    $message .= "of existing resource reservations ".
-		"to other projects.\n";
+		"to other projects or users.\n";
 	}
 	tberror({type => 'primary', cause => 'temp',
 		 severity => SEV_ERROR,
@@ -924,7 +926,7 @@ sub RunAssign($$)
 			"*** Resource reservation violation: ".
 			"$wanted nodes of type $type requested, but only ".
 			"$bound available because of existing resource ".
-			"reservations to other projects.\n");
+			"reservations to other projects or users.\n");
 		# Unretriable error
 		return -1;
 	    }
@@ -949,7 +951,7 @@ sub RunAssign($$)
 		"*** Resource reservation violation: ".
 		"Node $node_id requested, but is not ".
 		"available because of existing resource reservations ".
-		"to other projects.\n");
+		"to other projects or users.\n");
 		# Unretriable error
 		return -1;
 	    }
@@ -1026,7 +1028,7 @@ sub RunAssign($$)
     # if updating (-u), include any resources that may already be
     # allocated to experiment in the PTOP results.
     #
-    my $ptopargs = "-p $pid ";
+    my $ptopargs = "-p $pid/$gid ";
     $ptopargs   .= "-e $eid "
 	if ($updating);
     $ptopargs   .= "-u "

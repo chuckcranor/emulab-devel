@@ -1,0 +1,22 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_aggregate_radio_info", "ue_imsi")) {
+	DBQueryFatal("alter table apt_aggregate_radio_info add ".
+		     " `ue_imsi` varchar(32) default NULL ".
+		     "  after synchronization");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

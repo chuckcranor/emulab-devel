@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -199,6 +199,7 @@ AC_SUBST(CLIENT_ETCDIR)
 AC_SUBST(CLIENT_BINDIR)
 AC_SUBST(CLIENT_VARDIR)
 AC_SUBST(CLIENT_MANDIR)
+AC_SUBST(CLIENT_LIBDIR)
 AC_SUBST(SNMP_RW_COMMUNITY)
 AC_SUBST(WWWHOST)
 AC_SUBST(WWW)
@@ -1556,7 +1557,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
         protogeni/rspec-emulab/0.1/GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
-        apt/GNUmakefile \
+        apt/GNUmakefile apt/fabric/GNUmakefile \
         powder/GNUmakefile powder/sasproxy/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \
@@ -1567,6 +1568,20 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	node_usage/from_ptop node_usage/sanity \
 	node_usage/gather node_usage/mk-php-pages \
 	node_usage/get-start-date"
+
+#
+# Since we do not use clientside/configure, hack up one particular
+# variable that must be fully expanded, e.g. in source files.
+#
+if test "$prefix" = "/usr" -o test "$prefix" = "/usr/local" ; then
+    CLIENT_LIBDIR="$libdir"
+else
+    if test x"$prefix" = x"NONE"; then
+        CLIENT_LIBDIR="/usr/testbed/lib"
+    else
+        CLIENT_LIBDIR="$prefix/lib"
+    fi
+fi
 
 #
 # While it would be nice to use the configure setup in the clientside subdir,
@@ -1602,20 +1617,10 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/GNUmakefile \
  clientside/tmcc/common/GNUmakefile clientside/tmcc/common/config/GNUmakefile \
  clientside/tmcc/freebsd/GNUmakefile clientside/tmcc/freebsd/init/GNUmakefile \
- clientside/tmcc/freebsd/init/4/GNUmakefile \
- clientside/tmcc/freebsd/init/5/GNUmakefile \
- clientside/tmcc/freebsd/init/6/GNUmakefile \
- clientside/tmcc/freebsd/init/7/GNUmakefile \
- clientside/tmcc/freebsd/init/8/GNUmakefile \
- clientside/tmcc/freebsd/init/9/GNUmakefile \
- clientside/tmcc/freebsd/init/10/GNUmakefile \
- clientside/tmcc/freebsd/init/10.3/GNUmakefile \
- clientside/tmcc/freebsd/init/10.4/GNUmakefile \
  clientside/tmcc/freebsd/init/11/GNUmakefile \
  clientside/tmcc/freebsd/init/11.2/GNUmakefile \
  clientside/tmcc/freebsd/init/11.4/GNUmakefile \
  clientside/tmcc/freebsd/init/12/GNUmakefile \
- clientside/tmcc/freebsd/init/13/GNUmakefile \
  clientside/tmcc/freebsd/supfile clientside/tmcc/freebsd/sethostname \
  clientside/tmcc/linux/GNUmakefile clientside/tmcc/linux/supfile \
  clientside/tmcc/linux/sethostname.dhclient \
@@ -1642,15 +1647,13 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/linux-ms/GNUmakefile \
  clientside/tmcc/archlinux/GNUmakefile \
  clientside/tmcc/alpine/GNUmakefile \
- clientside/tmcc/freebsd5/GNUmakefile clientside/tmcc/freebsd5/supfile \
- clientside/tmcc/freebsd6/GNUmakefile clientside/tmcc/freebsd6/supfile \
- clientside/tmcc/freebsd6/netif-emulab \
- clientside/tmcc/freebsd7/GNUmakefile clientside/tmcc/freebsd7/netif-emulab \
- clientside/tmcc/freebsd9/GNUmakefile clientside/tmcc/freebsd9/netif-emulab \
+ clientside/tmcc/freebsd5/GNUmakefile \
  clientside/tmcc/freebsd10/GNUmakefile clientside/tmcc/freebsd10/netif-emulab \
  clientside/tmcc/freebsd11/GNUmakefile clientside/tmcc/freebsd11/netif-emulab \
  clientside/tmcc/freebsd12/GNUmakefile clientside/tmcc/freebsd12/netif_emulab \
  clientside/tmcc/freebsd13/GNUmakefile clientside/tmcc/freebsd13/netif_emulab \
+ clientside/tmcc/freebsd14/GNUmakefile clientside/tmcc/freebsd14/netif_emulab \
+ clientside/tmcc/freenas11/GNUmakefile clientside/tmcc/truenas13/GNUmakefile \
  clientside/tmcc/cygwinxp/GNUmakefile clientside/tmcc/dp/GNUmakefile \
  clientside/tmcc/openbsd/GNUmakefile clientside/tmcc/ron/GNUmakefile \
  clientside/tmcc/plab/GNUmakefile clientside/tmcc/cygwinseven/GNUmakefile \

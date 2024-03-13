@@ -191,7 +191,12 @@ window.ShowImagingModal = (function()
 				    1 : 0),
 		    "nokeyboard" : nokeyboard});
 		$('#imaging_div').html(imaging_html);
-		
+
+		if (window.BOOTSTRAP_VERSION == 5) {
+		    $('#imaging_div .modal').each(function () {
+			new bootstrap.Modal('#' + $(this).attr('id'));
+		    });
+		}
 		imaging_modal_display = true;	    
 		ShowImagingModalSecret();
 	    };

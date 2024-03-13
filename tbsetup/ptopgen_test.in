@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,6 +33,7 @@ use lib "@prefix@/lib";
 use libdb qw(TBGetSiteVar);
 use libadminctrl;
 use libptop;
+use Project;
 use EmulabFeatures;
 use OSImage;
 use libtestbed;
@@ -61,10 +62,10 @@ $opurl = "http://www.geni.net/resources/rspec/ext/opstate/1/ad.xsd";
 
 sub usage()
 {
-    print("Usage: ptopgen [-v] [-s switch] [-p pid [-e eid]] [-m factor] " .
+    print("Usage: ptopgen [-v] [-s switch] [-p pid/gid [-e eid]] [-m factor] " .
 	  "[-n c/e] [-x] [-g (0.1 | 2)] [-c component-name]".
 	  "[-l type-limit-file] [-z]\n" .
-	  "       -p include nodes the project has permission to use\n".
+	  "       -p include nodes the project/group has permission to use\n".
 	  "       -e include given experiments resources\n" .
 	  "          in the ptopfile (as if they were free)\n" .
 	  "       -v Include stuff for topologies with virtual nodes\n".
@@ -124,6 +125,10 @@ my $cmuuid = TBGetSiteVar('protogeni/cm_uuid');
 my $cmurn = "";
 if ($PGENISUPPORT) {
     require GeniHRN;
+    require GeniDB;
+    require GeniUser;
+    # talk to the right DB.
+    GeniDB::DBConnect(GeniDB::GENICM_DBNAME());
     $cmurn = &GeniHRN::Generate($OURDOMAIN, "authority", "cm");
 }
 my $allow_firewall = TBGetSiteVar("general/cnet_firewalls");
@@ -262,6 +267,7 @@ my $DEADPID = NODEDEAD_PID();
 my $DEADEID = NODEDEAD_EID();
 
 my $pid;
+my $gid;
 my $exempt_eid;
 my $switchtouse;
 my $experiment;
@@ -308,7 +314,12 @@ if (defined($options{"R"})) {
     $regression = 1;
 }
 if (defined($options{"p"})) {
-    $pid = $options{"p"};
+    if( $options{"p"} =~ m"(.+)/(.+)" ) {
+	$pid = $1;
+	$gid = $2;
+    } else {
+	usage();
+    }
 }
 if (defined($options{"a"})) {
     $allnodes = 1;
@@ -334,7 +345,7 @@ if (defined($options{"n"})) {
 if (defined($options{"e"})) {
     $exempt_eid = $options{"e"};
     usage()
-	if (!defined($pid));
+	if (!defined($pid) || !defined( $gid ) );
     $experiment = Experiment->Lookup($pid, $exempt_eid);
     die("Could not look up experiment $pid,$exempt_eid\n")
 	if (!defined($experiment));
@@ -406,8 +417,27 @@ sub MyQueryFatal($)
 # Figure out who is running this script, to be used in finding OSes
 # with per-user permissions.  We assume that the user we want
 # to look up is the one running this script (and hence the mapper
-# wrapper that calls it).
+# wrapper that calls it). 
 my $this_user = User->ThisUser()->uid() || "";
+
+#
+# Ick. For reservation related stuff, the current user will not be the
+# correct user when coming in on the Geni path for a nonlocal project.
+# Poor design choice many years ago.
+#
+# Note that we want this to be undef, not "". if we do not have a user.
+#
+my $reservation_user = User->ThisUser()->uid();
+if ($PGENISUPPORT &&
+    exists($ENV{'REALGENIURN'}) && $ENV{'REALGENIURN'} ne "") {
+    my $geniuser = GeniUser->Lookup($ENV{'REALGENIURN'}, 1);
+    if (!defined($geniuser)) {
+	fatal("Could not lookup geniuser for " . $ENV{'REALGENIURN'});
+    }
+    $reservation_user = $geniuser->uid();
+}
+print STDERR "ptopgen: reservation_user='$reservation_user'\n"
+    if (defined($reservation_user));
 
 $fake_inet_switch = "internet";
 $fake_inet_iface = "(null)";
@@ -726,7 +756,11 @@ TBDebugTimeStamp("Finished reading node features");
 # Augment the features table to discourage selection of node types other
 # than those the project has reserved (if any).
 if( defined( $pid ) ) {
-    my @reservations = Reservation->CurrentReservations( [ $pid ] );
+    my $project = Project->Lookup($pid);
+    $gid = $pid if (!defined($gid));
+    
+    my @reservations =
+	Reservation->CurrentReservations( [ "$pid/$gid" ], $reservation_user);
     if( @reservations ) {
 	my @types = Reservation->ReservableTypes();
 	foreach my $type (@types) {
@@ -748,23 +782,31 @@ if( defined( $pid ) ) {
     #
     my @reservable_nodes   = Reservation->ReservableNodes();
     TBDebugTimeStamp("Finished reservations 2");
-    my @activereservations = Reservation->CurrentReservations(undef, 1);
+    my @activereservations = Reservation->CurrentReservations(undef, undef, 1);
     TBDebugTimeStamp("Finished reservations 3");
 
     foreach my $node (@reservable_nodes) {
 	my $node_id = $node->node_id();
 	foreach my $res (@activereservations) {
 	    if ($res->{'nodetype'} eq $node_id) {
-		if ($res->{'pid'} ne $pid) {
+		if ($res->{'pid'} eq $pid &&
+		    (($project->shared_reservations() ==
+		      $Project::RESERVATIONS_PERPROJECT) ||
+		     ($project->shared_reservations() ==
+		      $Project::RESERVATIONS_PERUSER &&
+		      $res->{'uid'} eq $reservation_user) ||
+		     ($project->shared_reservations() ==
+		      $Project::RESERVATIONS_PERGROUP &&
+		      $res->{'gid'} eq $gid))) {
+		    $reserved_nodes{$node_id} = $node;
+		}
+		else {
 		    #
 		    # Node is currently reserved to another project. Mark it
 		    # to be pruned out below.
 		    #
 		    $pruned_nodes{$node_id} = $node;
 		    last;
-		}
-		else {
-		    $reserved_nodes{$node_id} = $node;
 		}
 	    }
 	}
@@ -1372,7 +1414,8 @@ $result =
 		 "  np.uuid,b.sharing_mode, ".
 		 "  t.isremotenode, b.erole, ".
 		 "  nat3.attrvalue as allowed_projects, ".
-		 "  nat4.attrvalue as explicit_request ".
+		 "  nat4.attrvalue as explicit_request, ".
+		 "  nat5.attrvalue as conflicting_nodes ".
 		 ($useshared ?
 		  "  ,so.osfeatures,nat2.attrvalue as shared_weight, " .
 		  "  ru.load_1min,ru.load_5min,ru.status_timestamp " : " ").
@@ -1398,6 +1441,9 @@ $result =
 		 "left join node_attributes as nat4 on ".
 		 "     nat4.node_id=a.node_id and ".
 		 "     nat4.attrkey='explicit_request' ".
+		 "left join node_attributes as nat5 on ".
+		 "     nat5.node_id=a.node_id and ".
+		 "     nat5.attrkey='conflicting_nodes' ".
 		 ($useshared ?  
 		  "left join node_rusage as ru on ru.node_id=a.node_id ".
 		  "left join os_info_versions as so on ".
@@ -1541,6 +1587,7 @@ foreach $node (@nodenames) {
     my $ram = $typemap{$type}->{'RAM'};
     my $trivspeed = $typemap{$type}->{'TRIVSPEED'};
     my $uuid = $nodetouuid{$node};
+    my $typeinfo = $typemap{$type}->{'TYPEINFO'};
     my @types = ();
     my @sliver_types = ();
     my @features = ();
@@ -1589,7 +1636,7 @@ foreach $node (@nodenames) {
 	push(@types, "$class:1");
     }
 
-    if ($typemap{$type}->{'EXPLICIT_REQUEST'} || $current->explicit_request()) {
+    if ($typemap{$type}->{'EXPLICIT_REQUEST'}) {
 	push(@features, "$type-explicit:1");
     }
 
@@ -1822,6 +1869,10 @@ foreach $node (@nodenames) {
 	    if ($feature =~ /highvlan/) {
 		push(@features, $feature);
 	    }
+	    elsif ($feature =~ /disk_any:([\d\.]+)$/) {
+		my $disk_any = $typeinfo->disksize_any();
+		push(@features, "?+disk_any:$disk_any");
+	    }
 	}
     }
 
@@ -1891,7 +1942,17 @@ foreach $node (@nodenames) {
 	push(@features,"already_reserved:0");
     }
 
-    if (exists($is_prereserved{$node})) {
+    #
+    # This effectively means that the user has to use fix-node and the
+    # mapper will add the corresponding desire. Without the fix-node,
+    # this will prevent the node from getting allocated, since we want
+    # the mapper to check that a conflict is not attempted, since it
+    # is easier to do there. 
+    #
+    if ($current->conflicting_nodes()) {
+	push(@features, "${node}-explicit:1");
+    }
+    elsif (exists($is_prereserved{$node})) {
 	push(@features,"prereserved:0");
 	#
 	# The idea here is that if the project has the node prereserved,
@@ -3121,6 +3182,17 @@ sub print_node
 	print_node_flags(@$flags);
 	print_node_interfaces($name, @$interfaces);
 	print_node_features(@$features);
+	#
+	# This is a hint to the caller to avoid conflict early, rather then
+	# later when its more annoying (when nalloc or reserve fails).
+	#
+	if (exists($top->nodes()->{$name})) {
+	    my $node = $top->nodes()->{$name};
+	    if ($node->conflicting_nodes()) {
+		print "  <emulab:conflicting_nodes names=\"" .
+		    $node->conflicting_nodes() . "\" />\n";
+	    }
+	}
 	print "</node>\n";
     } else {
 	# ptop format

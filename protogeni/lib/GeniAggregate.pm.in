@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1591,6 +1591,20 @@ sub ActionStart($$;$@)
 	foreach my $node (values(%nodes)) {
 	    $node->_sliver()->SetStatus("canceled")
 		if (defined($node->_sliver()));
+	}
+	#
+	# Must wait for snmpit to finish before we can leave
+	#
+	if (defined($snmpit_child)) {
+	    print STDERR "Waiting for snmpit process to finish\n";
+	    
+	    my $kid = waitpid($snmpit_child, 0);
+	    if ($kid == $snmpit_child) {
+		print STDERR "Waiting for snmpit process done\n";
+	    }
+	    else {
+		print STDERR "Waiting for snmpit process went bad\n";
+	    }
 	}
 	# Reset before return; do not want it left.
 	$slice->LockTables();

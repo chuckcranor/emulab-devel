@@ -88,8 +88,10 @@ window.JacksViewer = (function ()
 	// Add a single manifest to the topology
 	add: function (xml)
 	{
+	    //console.info("JacksViewer: Add", this.xml);
+	    
 	    if (this.xml) {
-		this.input.trigger('modify-topology', [{ rspec: xml }]);
+		this.input.trigger('add-topology', [{ rspec: xml }]);
 	    }
 	    else {
 		this.input.trigger('change-topology', [{ rspec: xml }]);
@@ -103,6 +105,8 @@ window.JacksViewer = (function ()
 	    this.xml = null;
 
 	    this.input.trigger('change-topology', []);
+	    // This gets left behind on error.
+	    $('#errorModal').hide()
 	},
 
 	jacksReady: function (input, output)

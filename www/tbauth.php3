@@ -871,7 +871,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     global $TBMAIL_OPS, $TBMAIL_AUDIT, $TBMAIL_WWW;
     global $WIKISUPPORT, $WIKICOOKIENAME;
     global $BUGDBSUPPORT, $BUGDBCOOKIENAME, $CHECKLOGIN_USER;
-    global $TB_PROJECT_READINFO, $TUTORIALSTATS;
+    global $TB_PROJECT_READINFO, $TUTORIALSTATS, $APTBASE, $TBBASE;
     
     # Caller makes these checks too.
     if ((!TBvalid_uid($token) && !TBvalid_email($token)) ||
@@ -921,7 +921,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     else {
 	$user = User::Lookup($token);
     }
-	    
+    
     #
     # Check password in the database against provided. 
     #
@@ -939,6 +939,13 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	$usr_email   = $user->email();
         $ga_userid   = $user->ga_userid();
         $lastlogin   = $user->weblogin_last();
+
+        if ($APTBASE) {
+            $url = "$APTBASE/user-dashboard.php?user=$uid";
+        }
+        else {
+            $url = "$TBBASE/showuser.php3?user=$uid";
+        }
 
         #
         # Yuck.
@@ -977,8 +984,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 			   "Testbed Operations has been notified.\n".
                            (isset($PORTAL_GENESIS) ?
                             "Portal: $PORTAL_GENESIS" :
-                            "Classic Interface") . "\n",
-                           
+                            "Classic Interface") . "\n" . $url . "\n",
 			   "From: $TBMAIL_OPS\n".
 			   "Cc: $TBMAIL_OPS\n".
 			   "Bcc: $TBMAIL_AUDIT\n".
@@ -1006,7 +1012,8 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
                        "Web Login Inactivity Alert: '$uid'",
                        "Login attempt by $uid ($uid_idx) after extended ".
                        "period of inactivity!\n".
-                       "Login was denied, last activity was $lastlogin\n",
+                       "Login was denied, last activity was $lastlogin\n\n".
+                       "$url\n",
                        "From: $TBMAIL_OPS\n".
                        "Bcc: $TBMAIL_AUDIT\n".
                        "CC: $TBMAIL_OPS\n".
@@ -1221,6 +1228,10 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
                  "    $adminon, '$opskey')");
     if (isset($PORTAL_GENESIS)) {
         DBQueryFatal("update login set portal='$PORTAL_GENESIS' ".
+                     "where uid_idx='$uid_idx' and hashkey='$hashkey'");
+    }
+    if (isset($IP)) {
+        DBQueryFatal("update login set IP='$IP' ".
                      "where uid_idx='$uid_idx' and hashkey='$hashkey'");
     }
 
@@ -1508,9 +1519,11 @@ function BumpLogoutTime()
     if (! is_null($CHECKLOGIN_HASHKEY)) {
 	$timeout = time() + (ISADMINISTRATOR() ? 3600 * 24 : $TBAUTHTIMEOUT);
 
-            $TBAUTHTIMEOUT;
-
+        if (isset($_SERVER['REMOTE_ADDR'])) {
+            $IP = $_SERVER['REMOTE_ADDR'];
+        }
 	DBQueryFatal("UPDATE login set timeout='$timeout' ".
+                     (isset($IP) ? ", IP='$IP' " : "") .
 		     "where uid_idx='$CHECKLOGIN_IDX' and ".
 		     "      hashkey='$CHECKLOGIN_HASHKEY'");
     }

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -67,19 +67,22 @@ echo "</script>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='page-body'></div>\n";
+echo "<div id='oops_div'></div>\n";
+echo "<div id='waitwait_div'></div>\n";
+echo "<div id='confirm_div'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "    window.AJAXURL     = 'server-ajax.php';\n";
 echo "    window.TARGET_UID  = '$target_uid';\n";
 echo "    window.NONLOCAL    = $nonlocal;\n";
 echo "</script>\n";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_FILESTYLE();
 SPITREQUIRE("js/ssh-keys.js");
 
-AddTemplateList(array("ssh-keys", "oops-modal", "waitwait-modal"));
+AddTemplateList(array("ssh-keys", "confirm-something", 
+                      "oops-modal", "waitwait-modal"));
 SPITFOOTER();
 ?>

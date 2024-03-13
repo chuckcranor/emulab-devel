@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2018, 2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,6 +27,7 @@ use strict;
 use English;
 use Data::Dumper;
 use Expect;
+use File::Temp qw(tempfile);
 
 #
 # Configure stuff
@@ -38,6 +39,7 @@ use libosload_switch;
 use base qw(libosload_switch);
 use libdb;
 use libEmulab;
+use libtestbed;
 use Lan;
 use emutil;
 use EmulabConstants;
@@ -49,7 +51,9 @@ my $ADMIN_PSWD    = "admin";
 my $USER_PROMPT   = '[standalone: master] > ';
 my $ADMIN_PROMPT  = "[standalone: master] # ";
 my $CONFIG_PROMPT = "[standalone: master] (config) # ";
-my $CONN_TIMEOUT  = 20;
+my $IFACE_PROMPT  = "[standalone: master] (config interface ";
+my $CONN_TIMEOUT  = 30;
+my $CLI_TIMEOUT   = 10;
 my $EXPECT_DEBUG_LOG    = "/tmp/osload_switch.log";
 
 sub New($$$)
@@ -138,8 +142,9 @@ sub createExpectObjectAux($$$)
 	    if (!defined($admin_pswd));
     }
     # Host keys change every reload, do not want to save them.
-    my $spawn_cmd = "ssh -o userknownhostsfile=/dev/null ".
-	"-l $admin_user $node_id";
+    my $spawn_cmd = "ssh -F /dev/null -o UserKnownHostsFile=/dev/null ".
+	"-o IdentitiesOnly=yes -o StrictHostKeyChecking=no ".
+	"-o PubkeyAuthentication=no -l $admin_user $node_id";
 
     $self->dprint(0,"$self createExpectObject($node_id): $spawn_cmd\n");
     
@@ -323,21 +328,39 @@ sub writeConfig($$@)
 
     $self->dprint(0,"$self writeConfig($node_id): \n");
 
+    my ($fp, $filename) = tempfile("/tmp/mlnxXXXXX", UNLINK => 0);
+    if (defined($fp)) {
+	print STDERR "writeConfig: $node_id,$filename\n";
+
+	foreach my $line (@config) {
+	    print $fp $line . "\n";
+	}
+	close($fp);
+	system("/bin/chmod a+r $filename");
+    }
+    else {
+	print STDERR "Could not create temp file for config copy\n";
+    }
+
     #
     # Write each line, look for some that resembles an error.
     #
     foreach my $line (@config) {
 	my $output;
 	my $error;
+	print STDERR TBTimeStamp() . ": " . substr($line, 0, 20) . "\n";
 	
 	$exp->clear_accum(); # Clean the accumulated output, as a rule.
 	$exp->send($line . "\n");
 	
-	$exp->expect($CONN_TIMEOUT,
+	$exp->expect($CLI_TIMEOUT,
 		     [qr/% (.*)\n/,
 		      sub { my $e = shift;
 			    $error = ($e->matchlist)[0];}],
 		     ["-ex", "$node_id $CONFIG_PROMPT"  =>
+		      sub { my $e = shift;
+			    $output = $e->before();}],
+		     [qr/\[standalone: master\] \(config interface /,
 		      sub { my $e = shift;
 			    $output = $e->before();}],
 		     );

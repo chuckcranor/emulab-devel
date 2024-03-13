@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -100,6 +100,22 @@ tweakmbr() {
     }
 
     #
+    # Make sure new MBR exists before getting all destructive
+    #
+    if [ ! -r "/etc/emulab/mbr${_NEW}.dd" ]; then
+	echo "WARNING: cannot find MBR version $_NEW, not installed"
+	return
+    fi
+
+    #
+    # If the disk currently has GPT, we have to destroy it since we might
+    # get fooled by the protective MBR.
+    #
+    if gpart show $DISK 2>/dev/null | grep -q GPT; then
+	_ALWAYS=1
+    fi
+    
+    #
     # If _ALWAYS is set, then we need to just clear any partition metadata
     # on the boot disk. Otherwise we might be fooled by a protective MBR
     # (type 0xEE) in a GPT layout. If _ALWAYS is not set, we treat it like
@@ -108,9 +124,10 @@ tweakmbr() {
     if [ $_ALWAYS -ne 0 ]; then
 	echo "Wiping any GPT/MBR on $_DSK and installing MBR version $_NEW"
 	if [ -x "$BINDIR/zapdisk" ]; then
-	    $BINDIR/zapdisk -BZ /dev/$_DSK
+	    $BINDIR/zapdisk -v -BZ /dev/$_DSK
 	else
-	    dd if=/dev/zero of=/dev/$_DSK bs=512 count=16
+	    echo "WARNING: no zapdisk program, faking it"
+	    dd if=/dev/zero of=/dev/$_DSK bs=512 count=128
 	fi
 	_CUR=1000000
     else
@@ -143,16 +160,10 @@ tweakmbr() {
 		fi
     		;;
 	esac
-    fi
 
-    if [ $_ALWAYS -eq 0 -a $_CUR = $_NEW ]; then
-	return
-    fi
-
-    # now set it if we can
-    if [ ! -r "/etc/emulab/mbr${_NEW}.dd" ]; then
-	echo "WARNING: cannot find MBR version $_NEW, not installed"
-	return
+	if [ $_CUR = $_NEW ]; then
+	    return
+	fi
     fi
 
     echo "Installing MBR version $_NEW ..."

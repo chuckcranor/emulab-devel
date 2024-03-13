@@ -1,4 +1,4 @@
-<nav class='navbar navbar-expand-lg portal-navbar' role='navigation'>
+<nav class='navbar navbar-expand-md portal-navbar' role='navigation'>
   <div class='navbar-header'>
     <a class='navbar-brand' href='landing.php'>
       <img src='<%- vars.APTLOGO %>'/></a>
@@ -75,7 +75,7 @@
 		     class='dropdown-item'>My Profiles</a></li>
 
 	      <% if (vars.UI_DISABLE_RESERVATIONS == 0 || vars.isadmin) { %>
-		<li><a href='list-resgroups.php'
+		<li><a href='user-dashboard.php#resgroups'
 		       class='dropdown-item'>My Reservations</a></li>
 	      <% } %>
 	      
@@ -141,6 +141,8 @@
                        class='dropdown-item'>Extension Requests</a></li>
 		<li><a href='experiments.php#all'
                        class='dropdown-item'>All Experiments</a></li>
+		<li><a href='list-resources.php'
+                       class='dropdown-item'>All Resources</a></li>
 		<li><a href='list-profiles.php'
                        class='dropdown-item'>All Profiles</a></li>
                 <li><a href='list-resgroups.php?all=1'
@@ -165,6 +167,10 @@
                        class='dropdown-item'>Edit Site Variables</a></li>
                 <li><a href='portal-news.php'
                        class='dropdown-item'>Manage News</a></li>
+		<% if (window.MAINSITE) { %>
+                  <li><a href='portal-hardware.php'
+                         class='dropdown-item'>Portal Hardware</a></li>
+		<% } %>
 	      </ul>
 	    </li>
 	  <% } %> <!-- End of Admin menu --> 

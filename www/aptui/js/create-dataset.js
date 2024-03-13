@@ -95,7 +95,6 @@ $(function ()
 		// Insert datepicker after html inserted.
 		$(function() {
 		    $("#dataset_expires").datepicker({
-			showButtonPanel: true,
 			dateFormat: "M d yy 11:59 'PM'",
 			minDate: new Date(),
 		    });
@@ -194,7 +193,7 @@ $(function ()
     function SubmitForm()
     {
 	var submit_callback = function(json) {
-	    console.info(json);
+	    console.info("submit_callback", json);
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
@@ -226,22 +225,52 @@ $(function ()
 	    }
 	    reload();
 	};
-	var checkonly_callback = function(json) {
+	var realSubmit = function () {
+	    aptforms.SubmitForm('#create_dataset_form', "dataset",
+				(editing ? "modify" : "create"),
+				submit_callback,
+				(editing ? "Modifying " : "Creating ") +
+				"dataset, this will take a minute or two; " +
+				"please be patient!");
+	};
+	var checkpolicy_callback = function (json) {
+	    console.info("checkpolicy_callback", json);
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);		    
+		return;
+	    }
+	    // If dataset would be approved immediately, continue.
+	    if (json.value.approved) {
+		realSubmit();
+		return;
+	    }
+	    // Throw up a dialog asking user if they want to proceed or edit.
+	    $('#checkapproval-text').text(json.value.unapproved_reason);
+	    sup.ShowConfirmModal('#checkapproval-modal', realSubmit)
+	};
+
+	var checkform_callback = function(json) {
+	    console.info("checkform_callback", json);
 	    if (json.code) {
 		if (json.code != 2) {
 		    sup.SpitOops("oops", json.value);		    
 		}
 		return;
 	    }
+	    // Continue immediately when editing or if an imdataset.
+	    if (editing || $('#dataset_type_imagedataset').is(":checked")) {
+		realSubmit();
+		return;
+	    }
+	    // Run in Impotent mode to determine if the dataset would be approved.
 	    aptforms.SubmitForm('#create_dataset_form', "dataset",
-				(editing ? "modify" : "create"),
-				submit_callback,
-				"This will take a minute or two; " +
-				"please be patient!");
+				"create", checkpolicy_callback, 
+				"Doing an initial check, this will take a minute; " +
+				"please be patient!", undefined, {"impotent" : 1});
 	};
 	aptforms.CheckForm('#create_dataset_form', "dataset",
 			   (editing ? "modify" : "create"),
-			   checkonly_callback);
+			   checkform_callback);
     }
 
     /*

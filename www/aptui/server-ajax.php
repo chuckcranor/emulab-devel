@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,12 +47,9 @@ $session_interactive  = 0;
 $routing = array("geni-login" =>
 			array("file"    => "geni-login.ajax",
 			      "guest"   => true,
-			      "methods" => array("GetSignerInfo" =>
-						      "Do_GetSignerInfo",
-						 "CreateSecret" =>
-						      "Do_CreateSecret",
-						 "VerifySpeaksfor" =>
-						      "Do_VerifySpeaksfor")),
+			      "methods" => array("NoMoreGeniLogin" =>
+                                                     "Do_NoMoreGeniLogin"),
+                        ),
 		 "dashboard" =>
 			array("file"    => "dashboard.ajax",
 			      "guest"   => false,
@@ -74,7 +71,11 @@ $routing = array("geni-login" =>
 			array("file"    => "sumstats.ajax",
 			      "guest"   => false,
 			      "methods" => array("GetDurationInfo" =>
-						      "Do_GetDurationInfo")),
+                                                     "Do_GetDurationInfo",
+                                                 "GetStats" =>
+                                                     "Do_GetStats",
+                              )
+                        ),
 		 "instantiate" =>
 			array("file"    => "instantiate.ajax",
 			      "guest"   => false,
@@ -105,7 +106,11 @@ $routing = array("geni-login" =>
 						 "ClearFavorite" =>
 						     "Do_ClearFavorite",
 						 "RequestLicenses" =>
-						     "Do_RequestLicenses")),
+                                                     "Do_RequestLicenses",
+                                                 "ReservationInfo" =>
+                                                     "Do_ReservationInfo",
+                              )
+                        ),
 		 "manage_profile" =>
 			array("file"    => "manage_profile.ajax",
 			      "guest"   => false,
@@ -180,6 +185,8 @@ $routing = array("geni-login" =>
 						    "Do_TerminateInstance",
 						 "GetInstanceManifest" =>
 						    "Do_GetInstanceManifest",
+						 "GetInstanceManifests" =>
+						    "Do_GetInstanceManifests",
 						 "GetSSHAuthObject" =>
 						    "Do_GetSSHAuthObject",
 						 "GetVNCAuthObject" =>
@@ -351,7 +358,9 @@ $routing = array("geni-login" =>
                                                  "VerifyScopusInfo" =>
                                                      "Do_VerifyScopusInfo",
                                                  "DeleteUser" =>
-                                                     "Do_DeleteUser"
+                                                     "Do_DeleteUser",
+                                                 "ResourceList" =>
+                                                     "Do_ResourceList",
                               )
                         ),
 		 "nag" =>
@@ -393,6 +402,8 @@ $routing = array("geni-login" =>
                                                      "Do_NSF",
                                                  "SendotaAgreement" =>
                                                      "Do_SendotaAgreement",
+                                                 "ResourceList" =>
+                                                     "Do_ResourceList",
                               )
                         ),
 		 "groups" =>
@@ -483,7 +494,11 @@ $routing = array("geni-login" =>
                                                  "RouteReservations" =>
                                                      "Do_RouteReservations",
                                                  "ReservationHistory" =>
-                                                     "Do_ReservationHistory")),
+                                                     "Do_ReservationHistory",
+                                                 "FindFirstFit" =>
+                                                     "Do_FindFirstFit",
+                              )
+                        ),
 		 "rfresgroup" =>
 			array("file"    => "rfresgroup.ajax",
 			      "guest"   => false,
@@ -769,6 +784,13 @@ $routing = array("geni-login" =>
                                                      "Do_EditTable",
                               )
                         ),
+		 "resources" =>
+			array("file"    => "resources.ajax",
+			      "guest"   => false,
+			      "methods" => array("ResourceList" =>
+                                                     "Do_ResourceList",
+                              )
+                        ),
 );
 
 #
@@ -913,7 +935,9 @@ if (! array_key_exists($ajax_method, $routing[$ajax_route]["methods"])) {
 CheckLoginForAjax($routing[$ajax_route]);
 if (!$this_user) {
     openlog("server-ajax", LOG_CONS, constant("${LOG_TESTBED}"));
-    syslog(LOG_INFO, $_SERVER['REMOTE_ADDR'] . " $ajax_route:$ajax_method " .
+    syslog(LOG_INFO, $_SERVER['REMOTE_ADDR'] . " " .
+           ($this_user ? "uid:" . $this_user->uid() . " " : "") .
+           "$ajax_route:$ajax_method " .
            json_encode($ajax_args));
     closelog();
 }

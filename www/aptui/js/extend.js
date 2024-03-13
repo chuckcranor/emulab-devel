@@ -55,7 +55,7 @@ window.ShowExtendModal = (function()
 		    }
 		    var howlong = DateToHours($('#datepicker').val());
 		    $('#future_usage')
-			.val(Math.round(physnode_count * howlong));
+			.heml(Math.round(physnode_count * howlong));
 		});
 	    }
 
@@ -70,8 +70,8 @@ window.ShowExtendModal = (function()
 	    // Current usage.
 	    if (physnode_count) {
 		$("#extend_usage").removeClass("hidden");
-		$('#current_usage').val(Math.round(physnode_hours));
-		$('#future_usage').val(Math.round(physnode_count * 24));
+		$('#current_usage').html(Math.round(physnode_hours));
+		$('#future_usage').html(Math.round(physnode_count * 24));
 	    }
 	}
 
@@ -316,7 +316,7 @@ window.ShowExtendModal = (function()
 	    $('#label' + label + "_request").removeClass("hidden");
 
 	    if (howlong) {
-		$('#future_usage').val(Math.round(physnode_count * howlong));
+		$('#future_usage').html(Math.round(physnode_count * howlong));
 	    }
 
 	    // For the char countdown below.

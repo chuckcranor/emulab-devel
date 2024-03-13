@@ -10,14 +10,31 @@ window.ShowFrequencyGraph = (function ()
     'use strict';
     var d3 = d3v5;
 
+    // Needed for the floating popovers, see below.
+    // See https://popper.js.org/docs/v2/virtual-elements/ for an
+    // explaination of this stuff. 
+    var generateGetBoundingClientRect =
+	function(x1 = 0, y1 = 0, x2 = 0, y2 = 0) {
+	    return () => ({
+		width: 10,
+		height: 10,
+		left: x1 - 5,
+		top: y1 - 5,
+		right: x1 + 5,
+		bottom: y1 + 5,
+	    });
+	};
+
     function CreateGraph(args, data) {
 	//console.log(data);
 	
 	var selector     = args.selector + " .frequency-graph-subgraph";
-	var parentWidth  = $(selector).width();
-	var parentHeight = $(selector).height();
-	var ParentTop    = $(selector).parent().position().top;
-	var ParentLeft   = $(selector).parent().position().left;
+	// Closest positioned element.
+	var parent       = $(selector).closest(".panel");
+	var parentWidth  = $(parent).width();
+	var parentHeight = $(parent).height();
+	var ParentTop    = $(parent).position().top;
+	var ParentLeft   = $(parent).position().left;
 	// Not all data files have the incident value.
 	var hasIncident  = (_.has(data[0], "incident") ? true : false);
 	// Ditto the above noise floor values
@@ -188,12 +205,20 @@ window.ShowFrequencyGraph = (function ()
 	tooltip.append("circle")
 	    .attr("r", 5);
 
+	const virtualElement = {
+	    getBoundingClientRect: generateGetBoundingClientRect(),
+	};
+	
 	$('#subgraph-tooltip-popover')
 	    .popover({"content"   : $("#subgraph-tooltipTemplate").html(),
+		      "template"  : $("#popover-template").html(),
 		      "trigger"   : "manual",
 		      "html"      : true,
-		      "container" : selector,
-		      "placement" : "auto",
+		      "container" : $(parent)[0],
+		      "placement" : "left",
+		      // These are popper config variables.
+		      "fallbackPlacements" : ["right"],
+		      "reference" : virtualElement,
 		     });
 
 	function HideTooltip()
@@ -249,30 +274,16 @@ window.ShowFrequencyGraph = (function ()
 			 "translate(" + x(d.frequency) +
 			 "," + y(d.power) + ")");
 
-	    // Bootstrap popover based tooltip.	    
-	    var popover   = $('#subgraph-tooltip-popover').data("bs.popover");
-	    var isVisible = popover.tip().hasClass('in');
+	    // Bootstrap popover based tooltip.
+	    // Bootstrap popover based tooltip.
+	    var isVisible = false;
+	    var popoverid = $('#subgraph-tooltip-popover')
+		.attr("aria-describedby");
+	    if (popoverid && $("#" + popoverid).length) {
+		isVisible = true;
+	    }
 	    var updater   = function () {
-		var content = popover.tip().find('.popover-content');
-		var ptop    = Math.floor(ParentTop + y(d.power));
-		var pleft   = Math.floor(ParentLeft + x(d.frequency));
-
-		// Adjust ptop if its near the bottom or top.
-		if (height - y(d.power) > popover.tip().height()) {
-		    ptop = ptop + margin.top;
-		}
-		else {
-		    ptop = ptop - (popover.tip().height() / 2);
-		}
-		// And pleft if too close to right side.
-		if (x(d.frequency) > width - 150) {
-		    pleft = pleft - 175;
-		}
-		else {
-		    pleft = pleft + 70;
-		}
-		popover.tip().css("top", ptop + "px");
-		popover.tip().css("left", pleft + "px");
+		var content = $('#' + popoverid).find(".popover-body");
 
 		$(content).find(".tooltip-freq")
 		    .html(formatter(d.frequency));
@@ -303,20 +314,23 @@ window.ShowFrequencyGraph = (function ()
 			    .addClass("hidden");
 		    }
 		}
+		var ptop    = Math.floor(ParentTop + y(d.power));
+		var pleft   = Math.floor(ParentLeft + x(d.frequency)) + margin.left;
+		// And compensate for scroll.
+		ptop -= $(window).scrollTop();
+		
+		virtualElement.getBoundingClientRect =
+		    generateGetBoundingClientRect(pleft, ptop);
+		
+		$('#subgraph-tooltip-popover').popover('update');
 	    };
 	    if (isVisible) {
 		updater();
 	    }
 	    else {
 		$('#subgraph-tooltip-popover')
-		    .on("inserted.bs.popover", function (event) {
-			var content = popover.tip().find('.popover-content');
-			popover.tip().addClass("tooltip-popover")
-			popover.tip().find(".arrow").remove();
-			$(content).css("margin", "0px");
-			$(content).css("padding", "0px");
+		    .one("inserted.bs.popover", function (event) {
 			updater();
-			$('#tooltip-popover').off("inserted.bs.popover");
 		    });
 		$('#subgraph-tooltip-popover').popover('show');
 	    }
@@ -423,10 +437,12 @@ window.ShowFrequencyGraph = (function ()
     function CreateBinGraph(args, data) {
 	var bins         = CreateBins(data);
 	var selector     = args.selector + " .frequency-graph-maingraph";
-	var parentWidth  = $(selector).parent().width();
-	var parentHeight = $(selector).parent().height();
-	var ParentTop    = $(selector).parent().position().top;
-	var ParentLeft   = $(selector).parent().position().left;
+	// Closest positioned element.
+	var parent       = $(selector).closest(".panel");
+	var parentWidth  = $(parent).width();
+	var parentHeight = $(parent).height();
+	var ParentTop    = $(parent).position().top;
+	var ParentLeft   = $(parent).position().left;
 	var hasAboveFloor= (_.has(data[0], "abovefloor") ? true : false);
 	var lineI;
 
@@ -588,12 +604,20 @@ window.ShowFrequencyGraph = (function ()
 	    .on("mousemove", mousemove)
 	    .on("click", DrawSubGraph);
 
+	const virtualElement = {
+	    getBoundingClientRect: generateGetBoundingClientRect(),
+	};
+	
 	$('#maingraph-tooltip-popover')
 	    .popover({"content"   : $("#maingraph-tooltipTemplate").html(),
+		      "template"  : $("#popover-template").html(),
 		      "trigger"   : "manual",
 		      "html"      : true,
-		      "container" : selector,
-		      "placement" : "auto",
+		      "container" : $(parent)[0],
+		      "placement" : "left",
+		      // These are popper config variables.
+		      "fallbackPlacements" : ["right"],
+		      "reference" : virtualElement,
 		     });
 
 	function HideTooltip()
@@ -626,30 +650,16 @@ window.ShowFrequencyGraph = (function ()
 			 "translate(" + x(d.frequency) +
 			 "," + y(d.max) + ")");
 
-	    // Bootstrap popover based tooltip.	    
-	    var popover   = $('#maingraph-tooltip-popover').data("bs.popover");
-	    var isVisible = popover.tip().hasClass('in');
-	    var updater   = function () {
-		var content = popover.tip().find('.popover-content');
-		var ptop    = Math.floor(ParentTop + y(d.max));
-		var pleft   = Math.floor(ParentLeft + x(d.frequency));
+	    // Bootstrap popover based tooltip.
+	    var isVisible = false;
+	    var popoverid = $('#maingraph-tooltip-popover')
+		.attr("aria-describedby");
+	    if (popoverid && $("#" + popoverid).length) {
+		isVisible = true;
+	    }
 
-		// Adjust ptop if its near the bottom or top.
-		if (height - y(d.max) > popover.tip().height()) {
-		    ptop = ptop + margin.top;
-		}
-		else {
-		    ptop = ptop - (popover.tip().height() / 2);
-		}
-		// And pleft if too close to right side.
-		if (x(d.frequency) > width - 150) {
-		    pleft = pleft - 175;
-		}
-		else {
-		    pleft = pleft + 70;
-		}
-		popover.tip().css("top", ptop + "px");
-		popover.tip().css("left", pleft + "px");
+	    var updater   = function () {
+		var content = $('#' + popoverid).find(".popover-body");
 
 		$(content).find(".tooltip-frequency")
 		    .html(formatter(d.frequency));
@@ -671,20 +681,23 @@ window.ShowFrequencyGraph = (function ()
 			    .addClass("hidden");
 		    }
 		}
+		var ptop    = Math.floor(ParentTop + y(d.max));
+		var pleft   = Math.floor(ParentLeft + x(d.frequency)) + margin.left;
+		// And compensate for scroll.
+		ptop -= $(window).scrollTop();
+		
+		virtualElement.getBoundingClientRect =
+		    generateGetBoundingClientRect(pleft, ptop);
+		
+		$('#maingraph-tooltip-popover').popover('update');
 	    };
 	    if (isVisible) {
 		updater();
 	    }
 	    else {
 		$('#maingraph-tooltip-popover')
-		    .on("inserted.bs.popover", function (event) {
-			var content = popover.tip().find('.popover-content');
-			popover.tip().addClass("tooltip-popover")
-			popover.tip().find(".arrow").remove();
-			$(content).css("margin", "0px");
-			$(content).css("padding", "0px");
+		    .one("inserted.bs.popover", function (event) {
 			updater();
-			$('#maingraph-tooltip-popover').off("inserted.bs.popover");
 		    });
 		$('#maingraph-tooltip-popover').popover('show');
 	    }
@@ -950,12 +963,15 @@ window.ShowFrequencyGraph = (function ()
 		});
 		_.each(dirs, function(info) {
 		    var item =
-			$("<li class='multilevel-menu-parent'>" +
-			  "  <a href='#'>" + info.name + "</a>" +
-			  "  <div class='multilevel-menu-wrapper dropdown'>" +
-			  "  </div> " +
+			$("<li class='dropstart " +
+			  "           multilevel-toggle'>" +
+			  "  <a href='#' " +
+			  "     class='dropdown-item dropdown-toggle' " +
+			  "     data-bs-auto-close='false' " +
+			  "     data-bs-toggle='dropdown'>" +
+			     info.name + "</a>" +
 			  "</li>");
-		    $(item).find("div").append(info.submenu);
+		    $(item).append(info.submenu);
 		    $(menu).append(item);
 		});
 	    }
@@ -976,7 +992,7 @@ window.ShowFrequencyGraph = (function ()
 		    
 		    var html =
 			"<li class='fgraph-" + info.id  + "'>" +
-			" <a href='#'>" +
+			" <a href='#' class='dropdown-item'>" +
 			info.node_id + ":" + info.iface + " - " +
 			moment(info.logid ?
 			       info.logid : info.lastmod, "X").format("L LTS") +
@@ -984,6 +1000,7 @@ window.ShowFrequencyGraph = (function ()
 		    var item = $(html);
 		    $(item).click(function (event) {
 			event.preventDefault();
+			ClearDropdowns();
 			UpdateGraph(args, info);
 		    });
 		    // Lazily put in the href for the specific graph link.
@@ -1009,16 +1026,19 @@ window.ShowFrequencyGraph = (function ()
 		});
 		if (_.size(nodes) > 1) {
 		    var item =
-			$("<li class='multilevel-menu-parent'>" +
-			  "  <a href='#'>" + node_id + "</a>" +
-			  "  <div class='multilevel-menu-wrapper dropdown'>" +
-			  "   <ul class='dropdown-menu'>" +
+			$("<li class='dropstart multilevel-toggle'>" +
+			  "  <a href='#' " +
+			  "     class='dropdown-item dropdown-toggle' " +
+			  "     data-bs-auto-close='false' " +
+			  "     data-bs-toggle='dropdown'> " +
+			        node_id + "</a>" +
+			  "  <ul class='dropdown-menu multilevel-scrollable'>" +
 			  "     <li class='disabled text-center'>" +
-			  "       <a href='#'>" + node_id + "</a></li>" +
+			  "       <a href='#' class='dropdown-item'>" +
+			        node_id + "</a></li>" +
 			  "     <li class='divider' role='separator' " +
 			  "         style='margin-top: 0;'>" +
-			  "   </ul> " +
-			  "  </div> " +
+			  "  </ul> " +
 			  "</li>");
 		    
 		    $(item).find("ul").append(menuitems);
@@ -1032,6 +1052,13 @@ window.ShowFrequencyGraph = (function ()
 	    //console.info(dirname, $(menu).html());
 	    return menu;
 	}
+
+	/* Clear all open dropdowns when any graph is selected. */
+	function ClearDropdowns()
+	{
+	    $(args.selector + ' .moregraphs-dropdown .dropdown-toggle.show')
+		.dropdown('hide');
+	}
 	
 	var callback = function (value) {
 	    // XXX This will always be a string. Need to
@@ -1043,9 +1070,40 @@ window.ShowFrequencyGraph = (function ()
 	    var listing = JSON.parse(_.unescape(value));
 
 	    var menu = processDir("", "", listing);
+	    
 	    //console.info($(menu).html());
-	    $(args.selector + ' .multilevel-menu').html(menu);
+	    $(args.selector + ' .moregraphs-dropdown').append(menu);
 
+	    /*
+	     * Any click outside our multilevel dropdowns closes any
+	     * open menus.
+	     */
+	    $('body').click(function (event) {
+		var target = $(event.target);
+		var moregraphs = $(target).closest(".moregraphs-dropdown");
+		if (!moregraphs.length) {
+		    ClearDropdowns();
+		}
+	    });
+
+	    /*
+	     * Anytime we click on (show) a menu, we want to hide the
+	     * any sibling (and its children) that are showing. 
+	     */
+	    $(args.selector + ' .moregraphs-dropdown .multilevel-toggle')
+		.click(function(event) {
+		    console.info("multilevel-toggle", event);
+		    console.info($(this), $(this).siblings());
+
+		    _.each($(this).siblings(), function (sibling) {
+			$(sibling).find('.dropdown-toggle.show')
+			    .each(function () {
+				$(this).dropdown('hide');
+			    });
+		    });
+		    event.stopPropagation();
+		});
+	    
 	    $(menu).find(".multilevel-menu-parent")
 		.hover(
 		    function(event) {
@@ -1058,12 +1116,12 @@ window.ShowFrequencyGraph = (function ()
 			// Menu to be displayed
 			var menu    = $(wrapper).children(".dropdown-menu");
 		    
-			console.info(offset, poffset);
+			console.info("offsets", offset, poffset);
 
 			// Adjust the top of the menu.
 			var height = $(menu).height();
 			var top    = offset.top - poffset.top - 15;
-			console.info(height, top);
+			console.info("h/t", height, top);
 			$(wrapper).css("top", top + "px");
 
 			// Adjust the left offset of the menu. Oddly, it has to
@@ -1072,6 +1130,9 @@ window.ShowFrequencyGraph = (function ()
 			var thiswidth = $(this).width();
 			var menuwidth = $(menu).width();
 			var left;
+
+			console.info("widths", thiswidth, menuwidth,
+				     $(window).width());
 		    
 			// Clear it so calculation below works right.
 			$(wrapper).css("left", '')
@@ -1083,8 +1144,8 @@ window.ShowFrequencyGraph = (function ()
 			else {
 			    left = thiswidth;
 			}
-			console.info("left", poffset.left, thiswidth, menuwidth,
-				     $(window).width(), left);
+			left = poffset.left + left;
+			console.info("left", poffset.left, left);
 			$(wrapper).css("left", left + "px")
 		    },
 		    function(event) {
@@ -1170,7 +1231,7 @@ window.ShowFrequencyGraph = (function ()
 	$(args.selector + ' .moregraphs-dropdown')
 	    .find(".active").removeClass("active");
 	$(args.selector + ' .moregraphs-dropdown')
-	    .find(".fgraph-" + info.id).addClass("active");
+	    .find(".fgraph-" + info.id + " a").addClass("active");
 
 	// Link to graph.
 	var url = GraphURL(args, info);

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -167,7 +167,7 @@ sub powduinocurrent {
     }
     # Oh ick, the way syncandsend is implmenented, the current looks
     # like the temp.
-    if (exists($statusp->{"tempC"})) {
+    if (!exists($statusp->{"current"}) && exists($statusp->{"tempC"})) {
 	$statusp->{"current"} = $statusp->{"tempC"};
 	delete($statusp->{"tempC"});
     }
@@ -369,6 +369,11 @@ sub syncandsend($$$;$) {
 		$status{"tempC"} = $1;
 		$gotstatus = 1;
 		print STDERR "status 'temp' = ", $status{"tempC"}, "\n"
+		    if ($debug);
+	    } elsif ($line =~ /^Current:\s+(\-?\d+(\.\d+)?)/) {
+		$status{"current"} = $1;
+		$gotstatus = 1;
+		print STDERR "status 'current' = ", $status{"current"}, "\n"
 		    if ($debug);
 	    }
 	}

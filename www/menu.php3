@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -798,10 +798,6 @@ function WRITESIDEBAR() {
 	NavMenuButton("Emulab Sponsors",
 		      "$TBDOCBASE/docwrapper.php3?docname=sponsors.html");
     }
-    else {
-	NavMenuButton("Projects on $THISHOMEBASE",
-                      "$TBDOCBASE/projectlist.php3");
-    }
     if ($TBMAINSITE && !$ISALTDOMAIN) {
 	NavMenuButton("<font color=red>In Memoriam</font>",
 		      "$TBDOCBASE/jay.php");
@@ -1218,6 +1214,7 @@ $PAGEHEADER_FUNCTION = function($title, $view = NULL, $extra_headers = NULL,
     else {
 	header("Expires: " . gmdate("D, d M Y H:i:s", time() + 300) . " GMT"); 
     }
+    header("X-Frame-Options: SAMEORIGIN");
 
     if (VIEWSET($view, 'hide_banner')) {
 	$nobanner = 1;

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2023 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -153,6 +153,7 @@ sub Lookup($$)
     $self->{'HASH'}       = {};
     $self->{'AGGREGATES'} = {};
     $self->{'ROUTES'}     = {};
+    $self->{'FABRICIDS'}  = undef;
     $self->{'RPSEC'}      = undef;
     $self->{'WEBTASK'}    = undef;
     bless($self, $class);
@@ -343,6 +344,7 @@ sub DESTROY {
     $self->{'HASH'}       = undef;
     $self->{'WEBTASK'}    = undef;
     $self->{'ROUTES'}     = undef;
+    $self->{'FABRICIDS'}  = undef;
 }
 
 #
@@ -403,11 +405,21 @@ sub FinalizeRSpec($$;$)
     my $rspec    = $update_rspec || $self->RSPEC();
     my $cert     = GeniCertificate->LoadFromString($self->cert());
     my $geniuser = $self->GetGeniUser();
+    my $retval;
     
     #
     # Encrypt blocks.
+    # Update is a problem, we do not want to overwrite passwords that were
+    # in the original rspec, but rather transfer them to the update rspec.
     #
-    my $retval = APT_Profile::EncryptBlocks($rspec, $cert, $perrmsg);
+    if ($update_rspec) {
+	$retval = APT_Profile::EncryptBlocks($update_rspec, $cert, $perrmsg,
+					     $self->RSPEC());
+	$rspec = $update_rspec;
+    }
+    else {
+	$retval = APT_Profile::EncryptBlocks($rspec, $cert, $perrmsg);
+    }
     return $retval
 	if ($retval);
 
@@ -927,6 +939,15 @@ sub GetLogFile($$)
 
     return Logfile->Lookup($self->logfileid());
 }
+sub ClearLogFile($)
+{
+    my ($self) = @_;
+
+    return -1
+	if ($self->Update({'logfileid' => undef}));
+
+    return 0;
+}
 
 #
 # Set/Clear the lockdown bits.
@@ -1081,7 +1102,7 @@ sub RecordHistory($$)
 		"       extension_count,extension_days,extension_hours, ".
 		"       physnode_count,virtnode_count, ".
 		"       servername,portal,repourl,reponame,reporef,repohash, ".
-		"       rspec,script,params,manifest,webinfo ".
+		"       rspec,script,params,manifest,webinfo,modify_count ".
 		" from apt_instances where uuid='$uuid'")
 	or return -1;
 
@@ -1252,7 +1273,9 @@ sub ComputeNodeCounts($)
     }
     foreach my $sliver (@slivers) {
 	next
-	    if ($sliver->deferred());
+	    if ($sliver->deferred() || $sliver->IsTerminated());
+	next
+	    if ($sliver->isAL2S() || $sliver->isStitch());
 	
 	my $manifest = GeniXML::Parse($sliver->manifest());
 	if (! defined($manifest)) {
@@ -1584,7 +1607,7 @@ sub WriteCredentials($$)
 sub GetSSHKeys($$;$)
 {
     my ($self, $pref, $target_user) = @_;
-    my $rval;
+    my $rval = [];
     my @keys;
 
     my $geniuser = $target_user || $self->GetGeniUser();
@@ -1614,13 +1637,14 @@ sub GetSSHKeys($$;$)
     #
     # CM format.
     #
-    $rval = [{'urn'   => $geniuser->urn(),
-	      'login' => $geniuser->uid(),
-	      # Creator clearly has root privs!
-	      'privs' => 'root',
-	      'shell' => $shell,
-	      'keys'  => [ @keys ]
-	     }];
+    my $target_key = {
+	'urn'   => $geniuser->urn(),
+	'login' => $geniuser->uid(),
+	# Creator clearly has root privs!
+	'privs' => 'root',
+	'shell' => $shell,
+	'keys'  => [ @keys ]
+    };
 
     # Want keys for single user.
     goto done
@@ -1642,15 +1666,18 @@ sub GetSSHKeys($$;$)
 	# the keys is wasted work 99% of the time. And clogs up the
 	# log files.
 	#
-	elsif (scalar(@members) <= 15) {
+	elsif (scalar(@members) <= 100 || $project->pid() eq "ASU-CSE-434") {
 	    foreach my $member (@members) {
-		next
-		    if ($member->SameUser($geniuser->emulab_user()));
-	    
 		# Skip frozen users.
 		next
 		    if ($member->frozen());
 
+		# Maintain consistent order
+		if ($member->SameUser($geniuser->emulab_user())) {
+		    push(@{$rval}, $target_key);
+		    next
+		}
+	    
 		my $guser = GeniUser->CreateFromLocal($member);
 		next
 		    if (!defined($guser));
@@ -1699,6 +1726,10 @@ sub GetSSHKeys($$;$)
 	}
     }
   done:
+    # Watch for only single user case
+    if (scalar(@{$rval}) == 0) {
+	$rval = [ $target_key ];
+    }
     $$pref = $rval;
     return 0;
 }
@@ -1788,6 +1819,16 @@ sub BumpExtensionCount($$)
     return DBQueryWarn("update apt_instances set ".
 		       "  extension_count=extension_count+1, ".
 		       "  extension_hours=extension_hours+${granted} ".
+		       "where uuid='$uuid'");
+}
+
+sub BumpModifyCount($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+
+    return DBQueryWarn("update apt_instances set ".
+		       "  modify_count=modify_count+1 ".
 		       "where uuid='$uuid'");
 }
 
@@ -2841,11 +2882,22 @@ sub CheckResources($$)
 {
     my ($self, $perrmsg) = @_;
     my $project   = $self->GetProject();
+    my $group     = $self->GetGroup();
     my $expires   = str2time($self->Expires());
     my $creator   = $self->GetCreator();
     my $noresokay = 1;
     my $duration  = $expires - time();
-    if ($duration > $DEFAULT_DURATION * 3600) {
+
+    #
+    # Modify changes things a bit. On the Powder portal we always do
+    # reservation checks when duration > $DEFAULT_DURATION unless
+    # the project has expert mode enabled. On other portals, initial
+    # duration is never > $DEFAULT_DURATION, but after Modify it
+    # might be, but we do not want to force reservations on those
+    # portals.
+    #
+    if ($self->isPowder() && !$project->expert_mode() && 
+	$duration > $DEFAULT_DURATION * 3600) {
 	$noresokay = 0;
     }
     my $rspec = $self->RSPEC();
@@ -2884,6 +2936,8 @@ sub CheckResources($$)
     foreach my $request (@{$spectrum}) {
 	my $frequency_low  = $request->{"frequency_low"};
 	my $frequency_high = $request->{"frequency_high"};
+	my $power          = $request->{"power"};
+	my $bandwidth      = $request->{"bandwidth"};
 	my $type           = $request->{"type"};
 	my $target         = $request->{"target"};
 	
@@ -2891,6 +2945,7 @@ sub CheckResources($$)
 					    $frequency_low, $frequency_high)) {
 	    if (!APT_Instance::RFRanges->Create($self,
 						$frequency_low, $frequency_high,
+						$power, $bandwidth,
 						$type, $target)) {
 		$$perrmsg = "Could not create rfrange entry";
 		return -1;
@@ -2919,6 +2974,8 @@ sub CheckResourceReservations($$$$)
 {
     my ($self, $end, $noresokay, $perrmsg) = @_;
     my $project  = $self->GetProject();
+    my $group    = $self->GetGroup();
+    my $creator  = $self->GetCreator();
     my $rspec    = $self->RSPEC();
     if (!$rspec) {
 	$$perrmsg = "Could not parse rspec";
@@ -2930,7 +2987,7 @@ sub CheckResourceReservations($$$$)
 	return -1;
     }
     
-    if (APT_Profile::CheckResourceReservations($rspec, $project,
+    if (APT_Profile::CheckResourceReservations($rspec, $group, $creator,
 	       time(), $end, $noresokay, $perrmsg, $resources)) {
 	return -1;
     }
@@ -2947,7 +3004,7 @@ sub CheckResourceReservations($$$$)
 	}
     }
     # This check must always be done.
-    if (APT_Profile::CheckSpectrumReservations($rspec, $project,
+    if (APT_Profile::CheckSpectrumReservations($rspec, $group, $creator,
 	       time(), $end, $noresokay, $perrmsg, $spectrum, $resources)) {
 	return -1;
     }
@@ -2960,7 +3017,7 @@ sub CheckResourceReservations($$$$)
     if (@$routes &&
 	(APT_Profile::CheckRoutesPermission($rspec, $project,
 		      time(), $end, $perrmsg, $routes) ||
-	 APT_Profile::CheckRoutesReservations($rspec, $project,
+	 APT_Profile::CheckRoutesReservations($rspec, $group, $creator,
 		      time(), $end, $noresokay, $perrmsg))) {
 	return -1;
     }
@@ -2976,6 +3033,8 @@ sub AllResourcesReserved($$)
     my $errmsg;
     my $urn      = $aggregate->aggregate_urn();
     my $project  = $self->GetProject();
+    my $group    = $self->GetGroup();
+    my $creator  = $self->GetCreator();
     my $expires  = str2time($self->Expires());
     my $rspec    = $self->RSPEC();
     if (!$rspec) {
@@ -3001,9 +3060,11 @@ sub AllResourcesReserved($$)
 
 	return 0
 	    if (!(APT_Reservation::Group::Reservation::Reserved(
-		      $project, time(), $expires, $urn, $type, $count) ||
+		      $group, $creator,
+		      time(), $expires, $urn, $type, $count) ||
 		  APT_Reservation::Group::Reservation::ReservedByType(
-		      $project, time(), $expires, $urn, $type, $count)));
+		      $group, $creator,
+		      time(), $expires, $urn, $type, $count)));
     }
     return 1;
 }
@@ -3187,7 +3248,7 @@ sub DeleteRoutes($)
 sub MergeManifests($)
 {
     my ($self) = @_;
-    my @aggregates = $self->ActiveAggregateList();
+    my @aggregates = $self->AggregateList();
 
     if (@aggregates <= 1) {
 	my $manifest;
@@ -3197,7 +3258,7 @@ sub MergeManifests($)
 	    # Promote the one manifest up to instance.
 	    $aggregate = $aggregates[0];
 	    $manifest  = $aggregate->manifest();
-	    $manifest  = "" if (!defined($aggregate));
+	    $manifest  = "" if (!defined($manifest));
 	}
 	else {
 	    # All buses go off route, and nothing left in the experiment.
@@ -3224,10 +3285,11 @@ sub MergeManifests($)
     foreach my $aggregate (@aggregates) {
 	my $aggregate_urn = $aggregate->aggregate_urn();
 	my $manifest      = $aggregate->manifest();
-
-	# Might not be a manifest if deferred.
 	next
-	    if (!$manifest);
+	    if ($aggregate->deferred() || $aggregate->IsTerminated());
+	next
+	    if (!defined($manifest));
+
 	push(@tmp, $aggregate);
 
 	$nodes{$aggregate_urn} = [];
@@ -3422,10 +3484,15 @@ sub GamingExtensions($)
 	DBQueryFatal("select info.* from apt_instances as i ".
 		     "join apt_instance_extension_info as info on ".
 		     "   info.uuid=i.uuid ".
-		     "where i.uuid='$uuid' and ".
+		     "where i.uuid='$uuid' and info.action='request' and ".
 		     "      info.tstamp>DATE_ADD(i.started, ".
 		     "                           interval $maxage day) ".
 		     "order by tstamp desc");
+
+    if ($query_result->numrows == 0) {
+	print "ExtensionCheck: No history\n";
+	return 0;
+    }
 
     #
     # Scan backwards. If the user submitted the extension less then a day
@@ -3461,6 +3528,74 @@ sub GamingExtensions($)
     }
     print "ExtensionCheck: Too many last minute extensions\n";
     return -1;
+}
+
+#
+# Lazy lookup for FABRIC slices.
+#
+sub FabricSlices($)
+{
+    my ($self) = @_;
+
+    if (defined($self->{'FABRICIDS'})) {
+	return [ values(%{ $self->{'FABRICIDS'} }) ];
+    }
+    my $uuid = $self->uuid();
+
+    my $query_result =
+	DBQueryWarn("select * from apt_instance_fabric_slices ".
+		    "where uuid='$uuid'");
+    return undef
+	if (!defined($query_result));
+
+    $self->{'FABRICIDS'} = {};
+    while (my $row = $query_result->fetchrow_hashref()) {
+	$self->{'FABRICIDS'}->{$row->{'sliceid'}} = $row;
+    }
+    return [ values(%{ $self->{'FABRICIDS'} }) ];
+}
+sub AddFabricSlice($$$)
+{
+    my ($self, $id, $linkname) = @_;
+    my $uuid = $self->uuid();
+
+    DBQueryWarn("replace into apt_instance_fabric_slices set ".
+		" uuid='$uuid',linkname='$linkname',sliceid='$id'")
+	or return -1;
+
+    # Reload
+    $self->{'FABRICIDS'} = undef;
+    return -1
+	if (!defined($self->FabricSlices()));
+
+    return 0;
+}
+sub DeleteFabricSlice($$)
+{
+    my ($self, $id) = @_;
+    my $uuid = $self->uuid();
+
+    DBQueryWarn("delete from apt_instance_fabric_slices ".
+		"where uuid='$uuid' and sliceid='$id'")
+	or return -1;
+
+    # Reload
+    $self->{'FABRICIDS'} = undef;
+    return -1
+	if (!defined($self->FabricSlices()));
+
+    return 0;
+}
+sub HasFabricSlices($)
+{
+    my ($self) = @_;
+    my $slices = $self->FabricSlices();
+
+    # XXX
+    return 0
+	if (!defined($slices));
+
+    return scalar(@{$slices});
 }
 
 ###################################################################
@@ -4376,7 +4511,8 @@ sub SetManifest($$)
     }
     my $safe_manifest = DBQuoteSpecial($manifest_string);
 
-    DBQueryWarn("update apt_instance_aggregates set manifest=$safe_manifest ".
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  manifest=$safe_manifest,saved_manifest=null ".
 		"where uuid='$uuid' and aggregate_urn='$urn'") or
 	return -1;
 
@@ -4391,6 +4527,21 @@ sub ClearManifest($)
     my $urn  = $self->aggregate_urn();
 
     DBQueryWarn("update apt_instance_aggregates set manifest=null ".
+		"where uuid='$uuid' and aggregate_urn='$urn'") or
+	return -1;
+
+    $self->{'DBROW'}->{'manifest'} = undef;
+}
+
+sub BackupManifest($)
+{
+    my ($self) = @_;
+
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  saved_manifest=manifest, manifest=null ".
 		"where uuid='$uuid' and aggregate_urn='$urn'") or
 	return -1;
 
@@ -4452,6 +4603,16 @@ sub IsTerminated($)
     return 1
 	if ($self->status() eq "terminated" ||
 	    $self->status() eq "terminating");
+    
+    return 0;
+}
+
+sub IsCanceled($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->status() eq "canceled");
     
     return 0;
 }
@@ -5276,7 +5437,7 @@ sub GetManifest($)
     return GeniResponse->new($response->code(),
 			     {"manifest" => $response->value()})
 	if ($self->isAL2S());
-    return undef
+    return GeniResponse->new(GENIRESPONSE_UNAVAILABLE())
 	if (! exists($response->value()->{'manifest'}));
     return $response;
 }
@@ -5812,9 +5973,27 @@ sub WaitForSliver($)
     my $repblob;
     my $laststatus;
 
+    if ($aggobj->isAL2S()) {
+	$aggobj->SetStatus("ready");
+	$webtask->Exited(0);
+	return 0;
+    }
+
     while ($seconds > 0 && !$aggobj->instance()->IsCanceled()) {
 	sleep($interval);
 	$seconds -= $interval;
+
+	#
+	# Failsafe; if the aggregate suddenly went "disabled" then something
+	# is really wrong, so bail. 
+	#
+	$aptagg->Refresh();
+	if ($aptagg->disabled()) {
+	    $failure_code   = GENIRESPONSE_NETWORK_ERROR();
+	    $failure_output = "SliverStatus failed: Aggregate not responding";
+	    $failed = 1;
+	    last;
+	}
 	my $response = $aggobj->SliceStatus();
 
 	print STDERR "WaitForSliver $urn : " . TBTimeStamp() . ": code:" .
@@ -5839,7 +6018,7 @@ sub WaitForSliver($)
 	    # If no contact for continuous minutes, give up.
 	    #
 	    $unavail = time() if (!defined($unavail));
-	    if ($aptagg->ismobile() && time() - $unavail > 180) {
+	    if ($aptagg->ismobile() && time() - $unavail > 60) {
 		$failed = 1;
 		$failure_code = GENIRESPONSE_SERVER_UNAVAILABLE();
 		$failure_output = "Experiment setup on the $aggname cluster ".
@@ -6303,9 +6482,9 @@ sub Portstats($$)
 #
 # Connect shared lans
 #
-sub ConnectSharedLan($$$;$)
+sub ConnectSharedLan($$$;$$)
 {
-    my ($self, $source, $target, $disconnect) = @_;
+    my ($self, $source, $target, $disconnect, $noreconfig) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
@@ -6333,6 +6512,9 @@ sub ConnectSharedLan($$$;$)
     }
     else {
 	$args->{"target"} = $target;
+    }
+    if ($noreconfig) {
+	$args->{"noreconfig"} = 1;
     }
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
@@ -6564,32 +6746,34 @@ sub LookupActive($)
 
 #
 # Is a route currently in use by a running experiment, for the requested
-# start/end time.
+# start/end time, by another project/group/user.
 #
-# Bit of a problem here, routes are actually per-experiment at the moment.
-# So if the target is a project, we are making sure no one else is using
-# it, but if an instance, then only the supplied instance can be using it.
-#
-sub InUse($$$$$)
+sub InUse($$$$$$)
 {
-    my ($class, $target, $routeid, $start, $end) = @_;
+    my ($class, $group, $user, $routeid, $start, $end) = @_;
+    my $project = $group->GetProject();
+    my $pid_idx = $project->pid_idx();
+    my $gid_idx = $group->gid_idx();
+    my $uid_idx = $user->uid_idx();
     my $clause  = "";
 
-    if (ref($target) eq "APT_Instance") {
-	my $uuid = $target->uuid();
-	$clause = " i.uuid!='$uuid' and ";
+    if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
+	$clause = "i.gid_idx!='$gid_idx' ";
     }
-    elsif (ref($target) eq "Project") {
-	my $pid_idx = $target->pid_idx();
-	$clause = " i.pid_idx!='$pid_idx' and ";
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
+	$clause = "i.creator_idx!='$uid_idx' ";
     }
+    else {
+	$clause = "i.pid_idx!='$pid_idx' ";
+    }
+
     my $query_result =
 	DBQueryWarn("select br.uuid from apt_instance_bus_routes as br ".
 		    "left join apt_instances as i on ".
 		    "   br.uuid=i.uuid ".
 		    "left join geni.geni_slices as s on ".
 		    "     s.uuid=i.slice_uuid ".
-		    "where br.routeid='$routeid' and $clause ".
+		    "where br.routeid='$routeid' and $clause and ".
 		    "      $start <= UNIX_TIMESTAMP(s.expires)");
     return 1
 	if ($query_result->numrows);
@@ -6611,6 +6795,7 @@ use GeniHRN;
 use APT_Geni;
 use APT_Aggregate;
 use APT_Reservation;
+use APT_Instance;
 use Date::Parse;
 use Data::Dumper;
 use vars qw($AUTOLOAD);
@@ -6656,25 +6841,34 @@ sub Lookup($$$;$)
 #
 sub Create($$$$$)
 {
-    my ($class, $instance, $freq_low, $freq_high, $type, $target) = @_;
+    my ($class, $instance, $freq_low, $freq_high,
+	$power, $bandwidth, $type, $target) = @_;
     my $instance_uuid = $instance->uuid();
     my $instance_name = $instance->name();
 
     if ($type eq "global") {
 	$target = "";
     }
+    if (defined($bandwidth) && $bandwidth != 0) {
+	$bandwidth = ", width='$bandwidth' ";
+    }
+    else {
+	$bandwidth = "";
+    }
 
     DBQueryWarn("insert into apt_instance_rfranges set ".
 		"  uuid='$instance_uuid', name='$instance_name', ".
 		"  `type`='$type', target='$target', ".
-		"  freq_low='$freq_low', freq_high='$freq_high'")
+		"  freq_low='$freq_low', freq_high='$freq_high', ".
+		"  power='$power' $bandwidth")
 	or return undef;
 
     # Add to the history table.
     DBQueryWarn("insert into apt_instance_rfrange_history set ".
 		"  uuid='$instance_uuid', ".
 		"  `type`='$type', target='$target', ".
-		"  freq_low='$freq_low', freq_high='$freq_high'")
+		"  freq_low='$freq_low', freq_high='$freq_high', ".
+		"  power='$power' $bandwidth")
 	or return undef;
 
     return Lookup($class, $instance, $freq_low, $freq_high);
@@ -6726,8 +6920,9 @@ sub Stringify($)
     my $uuid      = $self->uuid();
     my $freq_low  = $self->freq_low();
     my $freq_high = $self->freq_high();
+    my $power     = $self->power();
 
-    return "[APT_Instance::RFRanges: $uuid, $freq_low,$freq_high]";
+    return "[APT_Instance::RFRanges: $uuid, $freq_low,$freq_high,$power]";
 }
 
 #
@@ -6757,14 +6952,102 @@ sub LookupForInstance($$)
 }
 
 #
+# Lookup all rfranges in use.
+#
+sub LookupAll($)
+{
+    my ($class) = @_;
+    my $result = {};
+
+    my $query_result =
+	DBQueryWarn("select idx,uuid from apt_instance_rfranges ");
+
+    return $result
+	if (! (defined($query_result) && $query_result->numrows));
+
+    while (my ($idx,$uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	if (!defined($instance)) {
+	    print STDERR "No apt_instance $uuid\n";
+	    next;
+	}
+	my $range = Lookup($class, $instance, $idx);
+	if (!defined($range)) {
+	    print STDERR "No apt_instance_rfrange $uuid/$idx\n";
+	    next;
+	}
+	$result->{$idx} = $range;
+    }
+    return $result;
+}
+
+#
+# Update/Refresh current. 
+#
+sub Update($$;$)
+{
+    my ($self, $argref, $history) = @_;
+    $history = 0 if (!defined($history));
+
+    my $uuid = $self->uuid();
+    my $idx  = $self->idx();
+
+    my $clause =
+	join(",", map("$_=" .
+		      (defined($argref->{$_}) ?
+		       DBQuoteSpecial($argref->{$_}) : "NULL"),
+		      keys(%{$argref})));
+    $clause .= " where uuid='$uuid' and idx='$idx'";
+
+    return -1
+	if (!DBQueryWarn("update apt_instance_rfranges set $clause"));
+    return -1 
+	if ($history &&
+	    !DBQueryWarn("update apt_instance_rfrange_history set $clause"));
+
+    return Refresh($self);
+}
+sub Refresh($)
+{
+    my ($self) = @_;
+
+    my $uuid = $self->uuid();
+    my $idx  = $self->idx();
+    
+    my $query_result =
+	DBQueryWarn("select * from apt_instance_rfranges ".
+		    "where uuid='$uuid' and idx='$idx'");
+
+    return -1
+	if (!$query_result || !$query_result->numrows);
+
+    $self->{'DBROW'} = $query_result->fetchrow_hashref();
+    return 0;
+}
+
+#
 # Is a range currently in use by a running experiment, for the requested
 # start/end time, by a different project.
 #
-sub InUse($$$$$$)
+sub InUse($$$$$$$)
 {
-    my ($class, $project, $freq_low, $freq_high, $start, $end) = @_;
+    my ($class, $group, $user, $freq_low, $freq_high, $start, $end) = @_;
+    my $project = $group->GetProject();
     my $pid_idx = $project->pid_idx();
+    my $gid_idx = $group->gid_idx();
+    my $uid_idx = $user->uid_idx();
+    my $clause  = "";
 
+    if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
+	$clause = "i.gid_idx!='$gid_idx' ";
+    }
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
+	$clause = "i.creator_idx!='$uid_idx' ";
+    }
+    else {
+	$clause = "i.pid_idx!='$pid_idx' ";
+    }
+    
     #
     # mysql floats are stupid.
     # https://dev.mysql.com/doc/refman/5.7/en/problems-with-float.html
@@ -6776,7 +7059,7 @@ sub InUse($$$$$$)
 		    "   rf.uuid=i.uuid ".
 		    "left join geni.geni_slices as s on ".
 		    "     s.uuid=i.slice_uuid ".
-		    "where i.pid_idx!='$pid_idx' and ".
+		    "where $clause and ".
 		    "      $start <= UNIX_TIMESTAMP(s.expires)");
     
     while (my ($uuid,$inuse_lower,$inuse_upper) =
@@ -6787,6 +7070,260 @@ sub InUse($$$$$$)
 	    return 1;
 	}
     }
+    return 0;
+}
+
+###################################################################
+#
+# Per user cached prediction info.
+#
+package APT_Instance::PredictionInfo;
+use emdb;
+use Carp;
+use WebTask;
+use libtestbed;
+use English;
+use GeniHRN;
+use APT_Geni;
+use APT_Aggregate;
+use APT_Reservation;
+use Date::Parse;
+use Data::Dumper;
+use JSON;
+use vars qw($AUTOLOAD);
+
+my $RESCOMMAND = "@prefix@/bin/manage_reservations";
+
+#
+# Lookup for user
+#
+sub Lookup($$)
+{
+    my ($class, $user) = @_;
+    my $uid_idx = $user->uid_idx();
+
+    my $query_result =
+	DBQueryWarn("select * from apt_instance_prediction_info ".
+		    "where uid_idx='$uid_idx'");
+
+    return undef
+	if (!$query_result);
+
+    #
+    # Just create one with empty data. 
+    #
+    if (!$query_result->numrows) {
+	my $uid = $user->uid();
+	DBQueryWarn("replace into apt_instance_prediction_info set ".
+		    "  uid='$uid',uid_idx='$uid_idx'")
+	    or return -1;
+	return APT_Instance::PredictionInfo->Lookup($user);
+    }
+      
+    my $self           = {};
+    $self->{'DBROW'}   = $query_result->fetchrow_hashref();
+    $self->{'INFO'}    = undef;
+    
+    if (defined($self->{'DBROW'}->{'json_data'})) {
+	my $ref = eval { decode_json($self->{'DBROW'}->{'json_data'}); };
+	if ($@) {
+	    print STDERR $@;
+	    return undef;
+	}
+	$self->{'INFO'} = $ref;
+    }
+    bless($self, $class);
+    return $self;
+}
+
+AUTOLOAD {
+    my $self  = $_[0];
+    my $type  = ref($self) or croak "$self is not an object";
+    my $name  = $AUTOLOAD;
+    $name =~ s/.*://;   # strip fully-qualified portion
+
+    # A DB row proxy method call.
+    if (exists($self->{'DBROW'}->{$name})) {
+	return $self->{'DBROW'}->{$name};
+    }
+    return undef;
+}
+sub PredictionInfo($)	{ return $_[0]->{'INFO'}; }
+
+#
+# Might have a lock on the table
+#
+sub Refresh($)
+{
+    my ($self) = @_;
+    my $uid_idx = $self->uid_idx();
+
+    my $query_result =
+	DBQueryWarn("select * from apt_instance_prediction_info ".
+		    "where uid_idx='$uid_idx'");
+
+    return -1
+	if (!$query_result || !$query_result->numrows);
+      
+    $self->{'DBROW'}   = $query_result->fetchrow_hashref();
+    $self->{'INFO'}    = undef;
+    
+    if (defined($self->{'DBROW'}->{'json_data'})) {
+	my $ref = eval { decode_json($self->{'DBROW'}->{'json_data'}); };
+	if ($@) {
+	    print STDERR $@;
+	    return -1;
+	}
+	$self->{'INFO'} = $ref;
+    }
+    return 0;
+}
+
+#
+# Is prediction info stale.
+#
+sub Stale($)
+{
+    my ($self) = @_;
+
+    if (!defined($self->updated())) {
+	print STDERR "No Prediction Info yet\n";
+	return 1;
+    }
+
+    my $updated = str2time($self->updated());    
+    if (time() - $updated > 120) {
+	print STDERR "Prediction Info is stale: " . $self->updated() . "\n";
+	return 1;
+    }
+    print STDERR "Prediction Info is recent enough: " . $self->updated() . "\n";
+    return 0;
+}
+
+#
+# Update the prediction info for a user, if needed. The updating
+# field serves as the lock.
+#
+# It is possible for a user to be operating in different portals
+# but I suspect it is mostly admins that do that.
+#
+sub Update($;$)
+{
+    my ($self, $portal) = @_;
+    my $uid_idx = $self->uid_idx();
+
+    DBQueryWarn("lock tables apt_instance_prediction_info write")
+	or return -1;
+
+    if ($self->Refresh()) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    if (defined($self->updating())) {
+	print STDERR "Already updating, started at " . $self->updating() . "\n";
+	
+	#
+	# Wait just a bit if one is in progress.
+	#
+	my $updating = str2time($self->updating());
+	my $version  = $updating;
+	
+	while (time() - $updating < 15) {
+	    DBQueryWarn("unlock tables")
+		or return -1;
+
+	    sleep(5);
+
+	    DBQueryWarn("lock tables apt_instance_prediction_info write")
+		or return -1;
+	    
+	    if ($self->Refresh()) {
+		DBQueryWarn("unlock tables");
+		return -1;
+	    }
+	    if (!defined(str2time($self->updating()))) {
+		print STDERR "Finished updating at " . $self->updating() . "\n";
+		#
+		# Other one finished.
+		#
+		DBQueryWarn("unlock tables") or return -1;
+		return 0;
+	    }
+	    $version = str2time($self->updating());
+	    if ($version != $updating) {
+		print STDERR "Updater changed at " . $self->updating() . "\n";
+		#
+		# Oh, someone else got in. Current info is good enough
+		#
+		DBQueryWarn("unlock tables") or return -1;
+		return 0;
+	    }
+	}
+	#
+	# Not sure giving up so quickly is the way to go. We shall see.
+	#
+    }
+    elsif (!$self->Stale()) {
+	DBQueryWarn("unlock tables") or return -1;
+	return 0;
+    }
+    print STDERR "Reloading prediction info\n";
+    my $version = time();
+    if (!DBQueryWarn("update apt_instance_prediction_info set " .
+		     " updating=FROM_UNIXTIME($version) ".
+		     "where uid_idx='$uid_idx'")) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    DBQueryWarn("unlock tables") or return -1;
+
+    my $webtask = WebTask->CreateAnonymous();
+    return -1
+	if (!defined($webtask));
+
+    my $command = "$RESCOMMAND -t " . $webtask->task_id() . " prediction " .
+	(defined($portal) ? "-p $portal " : "") . "-u " . $self->uid();
+
+    print STDERR "$command\n";
+    system($command);
+    if ($?) {
+	$webtask->Delete();
+	return -1;
+    }
+    $webtask->Refresh();
+    my $prediction = $webtask->value();
+    $webtask->Delete();
+    print Dumper($prediction);
+
+    DBQueryWarn("lock tables apt_instance_prediction_info write")
+	or return -1;
+
+    if ($self->Refresh()) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    my $updating = str2time($self->updating());
+    if ($updating != $version) {
+	print STDERR "Another process started updating before we finished\n";
+	#
+	# Hmm ...
+	#
+    }
+    my $json = eval { encode_json($prediction); };
+    if ($@) {
+	print STDERR "Could not json encode sliver data: $@\n";
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    my $safe_json = DBQuoteSpecial($json);
+    if (!DBQueryWarn("update apt_instance_prediction_info set " .
+		     " updating=null,updated=now(),json_data=$safe_json ".
+		     "where uid_idx='$uid_idx'")) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    $self->Refresh();
+    DBQueryWarn("unlock tables");
     return 0;
 }
 

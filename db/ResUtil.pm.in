@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,20 +56,20 @@ sub DebugOn() { $debug = 2; };
 #
 sub CollectReservations($$$)
 {
-    my ($project, $useronly, $allres) = @_;
+    my ($group, $useronly, $allres) = @_;
     
     #
     # By default we look at all current reservations for a specific project.
     # Optionally add all historical reservations for the project.
     # Optionally look at reservations for a specific user in the project.
     #
-    my @reservations = Reservation->ProjectReservations($project, $useronly,
+    my @reservations = Reservation->ProjectReservations($group, $useronly,
 							undef, 1);
     if ($allres) {
 	#
 	# Grab all of the historical reservations and append.
 	#
-	my @more = Reservation->HistoricalReservations($project,
+	my @more = Reservation->HistoricalReservations($group,
 						       $useronly, undef);
 	@reservations = (@reservations, @more);
     }
@@ -89,9 +89,9 @@ sub CollectReservations($$$)
 # since the earliest reservation.
 #
 
-sub CreateTimeline($@)
+sub CreateTimeline($$@)
 {
-    my ($project, @reservations) = @_;
+    my ($group, $user, @reservations) = @_;
 
     #
     # Remember all the types we care about; when computing the counts
@@ -135,7 +135,7 @@ sub CreateTimeline($@)
     }
     
     # Get the usage since the beginning of the earliest reservation.
-    my $usage = $project->Usage($earliest->start(), $end);
+    my $usage = $group->Usage($user, $earliest->start(), $end);
     if ($debug) {
 	print "There are " . scalar(@$usage) . " usage records\n";
     }
@@ -226,8 +226,8 @@ sub CreateTimeline($@)
 
 	# Count up number of node/types reserved by the project and
 	# by each user.
-	my $pid = $project->pid();
-	my $reserved = {$pid => {}};
+	my $gid = $group->gid();
+	my $reserved = {$gid => {}};
 	foreach my $res (@reslist) {
 	    my $type  = $res->type();
 	    my $nodes = $res->nodes();
@@ -237,10 +237,10 @@ sub CreateTimeline($@)
 	    # allocated counts.
 	    $typesinuse{$type} = $type;
 
-	    if (!exists($reserved->{$pid}->{$type})) {
-		$reserved->{$pid}->{$type} = 0;
+	    if (!exists($reserved->{$gid}->{$type})) {
+		$reserved->{$gid}->{$type} = 0;
 	    }
-	    $reserved->{$pid}->{$type} += $nodes;
+	    $reserved->{$gid}->{$type} += $nodes;
 	    
 	    if (!exists($reserved->{$uid})) {
 		$reserved->{$uid} = {};
@@ -259,7 +259,7 @@ sub CreateTimeline($@)
     #
     # Now compute the node counts for each entry in the timeline.
     #
-    my @counts = ComputeCounts($project, \%typesinuse, @timeline);
+    my @counts = ComputeCounts($group, \%typesinuse, @timeline);
 
     #
     # Now loop again and assign allocation counts to reservations.
@@ -277,9 +277,9 @@ sub CreateTimeline($@)
 	    my $uuid    = $res->uuid();
 	    my $type    = $res->type();
 	    my $count   = $res->nodes();
-	    my $pid     = $res->pid();
+	    my $gid     = $res->gid();
 	    my $uid     = $res->uid();
-	    my $apcount = $nowcounts->{$pid}->{$type};
+	    my $apcount = $nowcounts->{$gid}->{$type};
 	    my $aucount = $nowcounts->{$uid}->{$type};
 	    my $rpcount = 0;
 	    my $rucount = 0;
@@ -293,10 +293,10 @@ sub CreateTimeline($@)
 		if (defined($aucount));
 	    
 	    $rescounts{$uuid} = {
-		"project" => $rpcount,
+		"group"   => $rpcount,
 		"user"    => $rucount,
 	    };
-	    $nowcounts->{$pid}->{$type} -= $rpcount;
+	    $nowcounts->{$gid}->{$type} -= $rpcount;
 	    $nowcounts->{$uid}->{$type} -= $rucount;
 	}
 	$ref->{'rescounts'} = \%rescounts;
@@ -315,8 +315,8 @@ sub CreateTimeline($@)
 #
 sub ComputeCounts($$@)
 {
-    my ($project, $typelist, @timeline) = @_;
-    my $pid = $project->pid();
+    my ($group, $typelist, @timeline) = @_;
+    my $gid = $group->gid();
 
     #
     # This is the initial count, which is a copy of the type count array.
@@ -334,7 +334,7 @@ sub ComputeCounts($$@)
     }
     
     $timeline[0]->{'allocated'} = {
-	$pid => \%counts,
+	$gid => \%counts,
 	# Counts for the user in the first record.
 	$timeline[0]->{'details'}->{'user_uid'} => { %counts },
     };
@@ -349,7 +349,7 @@ sub ComputeCounts($$@)
 	# Copy (shallow) of previous counts.
 	my $allocated = { %{$timeline[$i - 1]->{'allocated'}} };
 	# Copy (shallow) of previous project counts.
-	my $pcounts = { %{$allocated->{$pid}} };
+	my $pcounts = { %{$allocated->{$gid}} };
 	# Copy (shallow) of previous user counts or new entry
 	# if this is the first allocation by the user.
 	my $ucounts = {};
@@ -381,15 +381,15 @@ sub ComputeCounts($$@)
 		$ucounts->{$type} = $count;
 	    }
 	}
-	$allocated->{$pid} = $pcounts;
+	$allocated->{$gid} = $pcounts;
 	$allocated->{$user_uid} = $ucounts;
 	$ref->{'allocated'} = $allocated;
     }
 
     #
-    # OK, now we have the project timeline
+    # OK, now we have the project (group) timeline
     #
-    my @bypid = map { {"t"         => $_->{'t'},
+    my @bygid = map { {"t"         => $_->{'t'},
 		       "allocated" => $_->{'allocated'},
 		       "reserved"  => $_->{'reserved'},
 		       "reslist"   => $_->{'reservations'},
@@ -397,7 +397,7 @@ sub ComputeCounts($$@)
 	} } @timeline;
 
     if ($debug) {
-	foreach my $ref (@bypid) {
+	foreach my $ref (@bygid) {
 	    my @counts = ();
 	
 	    print POSIX::strftime("%m/%d/20%y %H:%M:%S",
@@ -418,7 +418,7 @@ sub ComputeCounts($$@)
 	    }
 	}
     }
-    return @bypid;
+    return @bygid;
 }
 
 #
@@ -596,7 +596,7 @@ sub ReservationUtilizationNew($@)
 	last
 	    if ($stamp > $resend);
 
-	my $pcount  = $ref->{'rescounts'}->{$uuid}->{"project"} || 0;
+	my $pcount  = $ref->{'rescounts'}->{$uuid}->{"group"} || 0;
 	my $ucount  = $ref->{'rescounts'}->{$uuid}->{"user"} || 0;
 
 	if ($stamp < $resstart) {

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2022 University of Utah and the Flux Group.
+# Copyright (c) 2007-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -134,6 +134,7 @@ sub Lookup($$)
     
     return $self;
 }
+sub LookupLocalCluster($) { return Lookup($_[0], $MYURN); }
 
 AUTOLOAD {
     my $self  = $_[0];
@@ -408,6 +409,25 @@ sub LookupByNickname($$)
     return Lookup($class, $aggregate_urn);
 }
 
+sub LookupByName($$)
+{
+    my ($class, $name) = @_;
+
+    if ($name !~ /^[-\w]+$/) {
+	return undef;
+    }
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where name='$name'");
+    return undef
+	if (!$query_result);
+    return undef
+	if (!$query_result->numrows);
+
+    my ($aggregate_urn) = $query_result->fetchrow_array();
+    return Lookup($class, $aggregate_urn);
+}
+
 sub LookupByAbbreviation($$)
 {
     my ($class, $abbreviation) = @_;
@@ -634,8 +654,7 @@ sub Nodes($)
 	return $self->{'NODES'};
     }
     my $query_result =
-	DBQueryWarn("select node_id,type,reservable,available ".
-		    "  from apt_aggregate_nodes ".
+	DBQueryWarn("select * from apt_aggregate_nodes ".
 		    "where urn='$urn'");
 
     while (my $row = $query_result->fetchrow_hashref()) {
@@ -645,6 +664,16 @@ sub Nodes($)
     }
     $self->{'NODES'} = $result;
     return $result;
+}
+sub Node($$)
+{
+    my ($self, $node_id) = @_;
+    my $nodes = $self->Nodes();
+
+    return undef
+	if (!exists($nodes->{$node_id}));
+
+    return $nodes->{$node_id};
 }
 
 sub IsReservableNode($$)

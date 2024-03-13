@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,23 +28,25 @@ SUBDIR		= apt
 
 include $(OBJDIR)/Makeconf
 
-SUBDIRS		= 
+SUBDIRS		= fabric
 
 BIN_SCRIPTS	= manage_profile manage_instance manage_dataset \
                   create_instance rungenilib ns2rspec nsgenilib.py \
                   rspec2genilib ns2genilib manage_reservations manage_gitrepo \
                   manage_images rtecheck checkprofile manage_extensions \
 		  create_slivers searchip start-experiment manage_resgroup \
-		  modify-experiment
+		  modify-experiment fabric-stitcher manage_fabric \
+		  manage_rdz rdz_celona rdz_watcher create-reservation
 SBIN_SCRIPTS	= apt_daemon aptevent_daemon portal_xmlrpc apt_checkup \
 		  portal_monitor apt_scheduler portal_resources \
 		  manage_licenses manage_aggregate \
 		  rfmonitor_daemon aptimage_daemon aptexpire_daemon \
 		  recalcmaxext aptresgroup_daemon aptbus_monitor \
-		  aptroute_monitor manage_rfranges verifycredentials
+		  aptroute_monitor manage_rfranges verifycredentials \
+		  rdz_expdaemon
 LIB_SCRIPTS     = APT_Profile.pm APT_Instance.pm APT_Dataset.pm APT_Geni.pm \
 		  APT_Aggregate.pm APT_Utility.pm APT_Rspec.pm \
-		  APT_Reservation.pm APT_RFRange.pm
+		  APT_Reservation.pm APT_RFRange.pm APT_RDZ.pm APT_RDZRest.pm
 WEB_BIN_SCRIPTS = webmanage_profile webmanage_instance webmanage_dataset \
                   webcreate_instance webrungenilib webns2rspec webns2genilib \
 		  webrspec2genilib webmanage_reservations webmanage_gitrepo \
@@ -78,7 +80,8 @@ install: $(addprefix $(INSTALL_BINDIR)/, $(BIN_SCRIPTS)) \
 	$(addprefix $(INSTALL_DIR)/opsdir/libexec/, $(USERLIBEXEC)) \
 	$(addprefix $(INSTALL_DIR)/apt/, $(APACHEHOOKS)) \
 	$(INSTALL_ETCDIR)/cloudlab-fedonly.json \
-	$(INSTALL_ETCDIR)/cloudlab-nofed.json
+	$(INSTALL_ETCDIR)/cloudlab-nofed.json \
+	install-subdirs
 
 boss-install: install install-subdirs
 	-mkdir -p $(INSTALL_WWWDIR)/rfmonitor
@@ -92,17 +95,14 @@ post-install:
 #
 control-install:
 
-# This rule says what web* script depends on which installed binary directory.
-$(WEB_SBIN_SCRIPTS): $(INSTALL_SBINDIR)
-$(WEB_BIN_SCRIPTS):  $(INSTALL_BINDIR)
-
-# Just in case the dirs are not yet created,
-$(INSTALL_SBINDIR) $(INSTALL_BINDIR):
-
-# And then how to turn the template into the actual script. 
-$(WEB_SBIN_SCRIPTS) $(WEB_BIN_SCRIPTS): $(TESTBED_SRCDIR)/WEBtemplate.in
+# How to turn the template into the actual script. 
+$(WEB_SBIN_SCRIPTS): $(TESTBED_SRCDIR)/WEBtemplate.in
 	@echo "Generating $@"
-	cat $< | sed -e 's,@PROGTOINVOKE@,$(word 2,$^)/$(subst web,,$@),' > $@
+	cat $< | sed -e 's,@PROGTOINVOKE@,$(INSTALL_SBINDIR)/$(subst web,,$@),' > $@
+
+$(WEB_BIN_SCRIPTS): $(TESTBED_SRCDIR)/WEBtemplate.in
+	@echo "Generating $@"
+	cat $< | sed -e 's,@PROGTOINVOKE@,$(INSTALL_BINDIR)/$(subst web,,$@),' > $@
 
 clean:	clean-subdirs
 

@@ -1474,6 +1474,16 @@ class User
 
 	return $this->Refresh();
     }
+    function ClearNonlocalID() {
+	$idx   = $this->uid_idx();
+        
+	DBQueryFatal("update users set ".
+		     "   nonlocal_id=null ".
+		     "where uid_idx='$idx'");
+	$this->user["nonlocal_id"] = null;
+	return 0;
+    }
+    
     function HasEncryptedCert($expired_notokay) {
 	$query_result =
 	    $this->TableLookUp("user_sslcerts", "cert,privkey",
@@ -1517,6 +1527,21 @@ class User
             DBQueryFatal("select * from login where uid_idx='$idx'");
 
         return mysql_num_rows($query_result);
+    }
+    function LoggedInIPs() {
+	$idx    = $this->uid_idx();
+        $result = array();
+
+        $query_result = 
+            DBQueryFatal("select distinct IP from login where uid_idx='$idx'");
+
+        while ($row = mysql_fetch_array($query_result)) {
+            $ip = $row['IP'];
+            if ($ip) {
+                $result[] = $ip;
+            }
+        }
+        return $result;
     }
 
     #
@@ -1592,14 +1617,30 @@ class User
 	    return $result;
 	}
 
+        #
+        # Ick, we want the project first (if in fact the user has
+        # appropriate privs in the project group.
+        #
 	while ($row = mysql_fetch_array($query_result)) {
 	    $pid = $row['pid'];
 	    $gid = $row['gid'];
-	
-	    $result[$pid][] = $gid;
+
+            if (array_key_exists($pid, $result)) {
+                $tmp = $result[$pid];
+            }
+            else {
+                $tmp = array();
+            }
+            if ($pid == $gid) {
+                array_unshift($tmp, $pid);
+            }
+            else {
+                $tmp[] = $gid;
+            }
+            $result[$pid] = $tmp;
             $ordered[$pid]  = 0;
 	}
-
+        
         # We want to order by time of last usage.
         $query_result =
             DBQueryFatal("(select pid,max(UNIX_TIMESTAMP(s.last_activity)) ".

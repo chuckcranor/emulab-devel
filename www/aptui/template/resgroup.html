@@ -7,10 +7,10 @@
   font-size: 14px;
   line-height: 1.42857143;
  }
- .panel-heading-list {
+ .panel-heading-listXX {
      padding: 2px;
  }
- .panel-body-dashboard {
+ .panel-body-dashboardXX {
      padding: 2px;
  }
  .resgraph-size {
@@ -60,27 +60,27 @@
 <div class='row main-row'>
   <div class='col-lg-7
               col-md-7'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-        <h3 class='panel-title'>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+        <h5 class='panel-title card-title'>
 	  <% if (editing) { %>Modify <% } %>Reservation Request
 	  <a href='#' class='btn btn-xs' id="reservation-help-button"
-	     data-toggle='tooltip'
-	     data-container="body"
-	     data-trigger="hover"
+	     data-toggle='tooltip' data-bs-toggle='tooltip'
+	     data-container="body" data-bs-container="body"
+	     data-trigger="hover" data-bs-trigger="hover"
 	     title='Click for more info'>
 	    <span style='margin-bottom: 4px; margin-left: 0px;'
 		  class='glyphicon glyphicon-question-sign'></span></a>
-	</h3>
+	</h5>
       </div>
-      <div class='panel-body' style="padding-ttop: 0px;">
+      <div class='panel-body card-body' style="padding-ttop: 0px;">
 	<center id="unapproved-warning" class="hidden">
 	  <span class="text-danger">
 	    This reservation has been submitted but is unapproved!
 	    <a href='#' class='btn btn-xs'
 	       style="padding-left: 0px; margin-top: -3px; border-top: 0px;"
-	       data-toggle='popover'
-	       data-html='true'
+	       data-toggle='popover' data-bs-toggle='popover'
+	       data-html='true' data-bs-html='true'
 	       data-content='This reservation needs to be approved
 			     by an administrator.'>
 	      <span class='glyphicon glyphicon-question-sign'></span>
@@ -111,6 +111,7 @@
 		<div class="form-group" style="margin-bottom: 0px;">
 		  <div class="form-control-fake format-me"
 		       data-label="User"
+		       data-compact="true"
 		       id="reserve-requestor"
 		       data-key="uid">
 		  </div>
@@ -119,46 +120,91 @@
 	      <% if (projects) { %>
 	        <% if (editing) { %>
 		  <div class="form-group" style="margin-bottom: 0px;">
-		    <div id="pid"
-			 class="form-control-fake format-me"
+		    <div class="form-control-fake format-me"
+			 data-compact="true"
 			 data-label="Project"
 			 data-key="pid">
+		      <span id="pid"></span>
+		      <span class="ms-3">(reservations in this project are
+			<a href="<%- window.MANUAL %>/reservations.html#(part._reservations-shared)" target="_blank">per-<span id="pid-resmode"></span></a>)</span>
 		    </div>
 		  </div>
-	        <% } else if (projects.length == 1) { %>
+		  <div class="form-group hidden" id="group-div"
+		       style="margin-bottom: 0px;">
+		    <div id="gid"
+			 class="form-control-fake format-me"
+			 data-compact="true"
+			 data-label="Group"
+			 data-key="gid">
+		    </div>
+		  </div>
+	        <% } else if (_.size(projects) == 1) { %>
 		  <div class="form-group">
-		    <input name="pid" readonly
-			 id="pid"
-			 value="<%- projects[0] %>"
-			 class="form-control format-me"
+		    <div class="format-me"
 			 data-label="Project"
 			 data-key="pid">
+		      <div class="row g-3">		      
+			<div class="col-sm-5">
+			  <input name="pid" readonly
+				 class="form-control"
+				 id="pid"
+				 value="<% print(_.first(_.keys(projects))) %>">
+			</div>
+			<div class="col-auto align-self-center">			
+			  <span>(reservations in this project are
+			    <a href="<%- window.MANUAL %>/reservations.html#(part._reservations-shared)" target="_blank">per-<span id="pid-resmode"></span></a>)</span>		      
+			</div>
+		      </div>
+		    </div>
 		  </div>
 		<% } else { %>
 		  <div class="form-group">
-		    <select name="pid"
-			    id="pid"
-			    class='form-control format-me'
-			    data-colsize="4"
-			    data-key="pid"
-			    data-label="Project"
-			    placeholder='Please Select'>
-		      <% _.each(projects, function(name) { %>
-			<option 
-			    <% if (default_pid === name) { %>
-			    selected
-			    <% } %>
-			    value='<%= name %>'><%= name %>
-			</option>
-		      <% }); %>
-		    </select>
+		    <div class="format-me"
+			 data-label="Project"
+			 data-key="pid"
+			 data-colsize="9">
+		      <div class="row g-3">		      
+			<div class="col-sm-5">
+			  <select name="pid"
+				  id="pid"
+				  class='form-control form-select'
+				  placeholder='Please Select'>
+			    <% _.each(projects, function(details, name) { %>
+			      <option 
+				  <% if (default_pid === name) { %>
+				  selected
+				  <% } %>
+				  value='<%= name %>'><%= name %>
+			      </option>
+			    <% }); %>
+			  </select>
+			</div>
+			<div class="col-auto align-self-center">			
+			  <span>(reservations in this project are
+			    <a href="<%- window.MANUAL %>/reservations.html#(part._reservations-shared)" target="_blank">per-<span id="pid-resmode"></span></a>)</span>		      
+			</div>
+		      </div>
+		    </div>
 		  </div>
 	        <% } %>
+	        <% if (!editing) { %>
+		  <div class="form-group hidden" id="group-div">
+		    <select name="gid"
+			    id="gid"
+			    class='form-control format-me form-select'
+			    data-colsize="4"
+			    data-key="gid"
+			    data-label="Group"
+			    placeholder='Please Select'>
+		    </select>
+		  </div>
+		<% } %>
 	      <% } %>
 	      <% if (editing) { %>
 		<div class="form-group" style="margin-bottom: 0px;">
 		  <div class="form-control-fake format-me"
 		       data-label="Created"
+		       data-compact="true"
 		       id="reserve-created"
 		       data-key="created">
 		  </div>
@@ -167,6 +213,7 @@
 		  <div class="form-group" style="margin-bottom: 0px;">
 		    <div class="form-control-fake format-me"
 			 data-label="Approved"
+			 data-compact="true"
 			 id="reserve-approved"
 			 data-key="approved">
 		    </div>
@@ -177,7 +224,7 @@
 		<div class="format-me"
 		     data-label="Cluster(s)"
 		     data-colsize="9">
-		  <table class="table table-condensed"
+		  <table class="table table-condensed table-borderless"
 			 id="cluster-table">
 		  </table>
 		</div>
@@ -186,7 +233,7 @@
 		<div class="format-me"
 		     data-label="Frequency Range(s) (MHz)"
 		     data-colsize="9">
-		  <table class="table table-condensed"
+		  <table class="table table-condensed table-borderless"
 			 id="range-table">
 		  </table>
 		</div>
@@ -195,7 +242,7 @@
 		<div class="format-me"
 		     data-label="Bus Routes"
 		     data-colsize="9">
-		  <table class="table table-condensed"
+		  <table class="table table-condensed table-borderless"
 			 id="route-table">
 		  </table>
 		</div>
@@ -225,32 +272,43 @@
 	      </div>
 	      <% if (1) { %>
 		<div class="form-group">
-		  <input name="days"
-			 id="days"
-			 class="form-control format-me"
-			 data-key="days"
-			 data-label="Number of Days"
-			 data-optional="yep"
-			 data-compact="yep"
-			 data-colsize="2"
-			 type="text">
-		  <button class='btn btn-primary btn-xs findfit-button'
-			  style="display: inline-block; margin-top: -22px;"
-			  name='days-findfit'>Search</button>
-		  <span style="display: inline-block; margin-left: 10px">
-		    <small>If you tell us how many days, we will find<br>
-		           a slot and set the Start/End for you.
-		    </small></span>
+		  <div class="format-me"
+		       data-label="Number of Days"
+		       data-colsize="9"
+		       data-optional="yep"
+		       data-key="days">
+		    <div class="row">
+		      <div class="col-lg-3 col-sm-4">
+			<div class="input-group input-group-md">
+			  <input name="days"
+				 id="days"
+				 placeholder="#Days"
+				 class="form-control"
+				 type="text">
+			  <button class="btn btn-primary
+					 findfit-button"
+				  type="button">Search</button>
+			</div>
+		      </div>
+		      <div class="col-auto">
+			<small>If you tell us how many days and click the
+			  Search button,<br> we will find
+		          a slot and set the Start/End for you. 
+			</small>
+		      </div>
+		    </div>
+		  </div>
 		</div>
 	      <% } %>
-	      <div class="form-group">
+	      <div class="form-group" style="">
 		<div class="format-me"
 		     data-label="Reservation Start"
 		     data-optional="yep"
 		     data-colsize="9"
+		     data-margin="10"
 		     data-key="start">
 		  <div class="row">
-		    <div class="col-xs-4">
+		    <div class="col-sm-4">
 		      <input name="start_day"
 			     style='position: relative;'
 			     id='start_day'
@@ -259,11 +317,11 @@
 			     placeholder="MM/DD/YYYY"
 			     type="text">
 		    </div>
-		    <div class="col-xs-4">
+		    <div class="col-sm-4">
 		      <select name="start_hour"
 			      id='start_hour'
  			      value=""
-			      class="form-control"
+			      class="form-control form-select"
  			      type="text">
 			<option value="">Start Time</option>
 			<option value="0">12:00 AM</option>
@@ -292,11 +350,11 @@
 			<option value="23">11:00 PM</option>
 		      </select>
 		    </div>
-		    <div class="col-xs-1" style="padding:0px;">
+		    <div class="col-sm-1" style="padding:0px;">
 		      <a href='#' class='btn btn-xs'
-			 data-toggle='popover'
-			 data-html='true'
-			 data-delay='{"hide":1000}'
+			 data-toggle='popover' data-bs-toggle='popover'
+			 data-html='true' data-bs-html='true'
+			 data-delay='{"hide":1000}' data-bs-delay='{"hide":1000}'
 			 data-content='Times are in your local timezone.
 				       Start day/time is optional, defaults
 				       to the current day/time.'>
@@ -309,9 +367,20 @@
 	      <div class="form-group">
 		<div class="format-me"
 		     data-label="Reservation End"
+		     data-margin="20"
+		     data-wide="1"
 		     data-key="end">
-		  <div class="row">
-		    <div class="col-xs-6">
+		  <% if (window.ISCLOUD) { %>
+		    <div class="row">		  
+		      <div class="col-sm-12">
+			<em>When CloudLab is busy, we give preference to
+			  reservation requests that use few resources or are
+			  short in duration.</em>
+		      </div>
+		    </div>
+		  <% } %>
+		  <div class="row">		  
+		    <div class="col-sm-4">
 		      <input name="end_day"
 			     style='position: relative;'
 			     id='end_day'
@@ -320,15 +389,15 @@
 			     placeholder="MM/DD/YYYY"
 			     type="text">
 		    </div>
-		    <div class="col-xs-6">
+		    <div class="col-sm-4">
 		      <select name="end_hour"
 			      id='end_hour'
  			      value=""
-			      class="form-control"
+			      class="form-control form-select"
  			      type="text">
 			<option value="">End Time</option>
 			<option value="0">12:00 AM</option>
-			<option value="1">1:00 AM</option>
+			<option valuae="1">1:00 AM</option>
 			<option value="2">2:00 AM</option>
 			<option value="3">3:00 AM</option>
 			<option value="4">4:00 AM</option>
@@ -364,20 +433,20 @@
 			  data-label="Reason"
 			  rows="5"
 			  data-colsize="9"
+			  data-margin="20"
 			  placeholder='Please provide a description of why you would like to reserve these resources. The better the description the more likely the reservation will be approved.'></textarea>
 	      </div>
 	      <div class='row hidden' id="for-class-checkbox">
-		<div class='col-sm-9 col-sm-offset-3'
+		<div class='col-sm-9 col-sm-offset-3 offset-sm-3 offset-sm-3'
 		     style="margin-top: -10px;">
-		  <div class="checkbox">
+		  <div class="form-check-inline">
 		    Is this reservation for a class
 		    (used by more then just yourself)?
-		    <label style="margin-left: 10px;">
-		      <input type="checkbox"
-			     name="for-class"
-			     id="for-class"
-			     value="yes"><b style="margin-left: -5px;">Yes</b>
-		    </label>
+		    <input class="form-check-input" type="checkbox"
+			   name="for-class"
+			   id="for-class"
+			   value="yes">
+		    <label class="form-check-label"><b>Yes</b></label>
 		  </div>
 		</div>
 	      </div>
@@ -411,48 +480,50 @@
 		      id='reserve-approve-button'
 		      type='submit' name='submit'>Approve</button>
 	    <% } %>
-	    <div class="hidden checkbox pull-left"
+	    <div class="hidden checkbox form-check form-check-inline pull-left"
 		 id="idle-detection-checkbox-div"
 		 style="margin-left: 5px; margin-top: 5px;">
-	      <label data-toggle='popover'
-		     data-html='true'
-		     data-delay='{"hide":200}'
+	      <input type="checkbox" class="form-check-input"
+		     id="idle-detection-checkbox"
+		     value="">
+	      <label class="form-check-label"
+		     data-toggle='popover' data-bs-toggle='popover'
+		     data-html='true' data-bs-html='true'
+		     data-delay='{"hide":200}' data-bs-delay='{"hide":200}'
 		     data-content='Set/Clear reservation idle detection. When
 				   set, unused reservations will be
 				   automatically canceled if they are not
-				   used.'>
-		<input type="checkbox"
-		       id="idle-detection-checkbox"
-		       value="">Idle Detection</label>
+				   used.'>Idle Detection</label>
 	    </div>
-	    <div class="hidden checkbox pull-right" id="override-checkbox"
+	    <div class="hidden checkbox form-check form-check-inline pull-right"
+		 id="override-checkbox"
 		 style="margin-right: 15px; margin-top: 5px;">
-	      <label class="text-danger"
-		     data-toggle='popover'
-		     data-html='true'
-		     data-delay='{"hide":200}'
+	      <input type="checkbox" class="form-check-input"
+		     id="admin-override"
+		     value="">
+	      <label class="text-danger form-check-label"
+		     data-toggle='popover' data-bs-toggle='popover'
+		     data-html='true' data-bs-html='true'
+		     data-delay='{"hide":200}' data-bs-delay='{"hide":200}'
 		     data-content='Override frequency range conflicts when
 				   clicking Check/Submit/Approve. This
 				   will <b>not</b> override node shortages.
 				   You do not want to use this unless
-				   you really need to!'>
-		<input type="checkbox"
-		       id="admin-override"
-		       value="">Override</label>
+				   you really need to!'>Override</label>
 	    </div>
 	  </div>
 	</div>
       </div>
     </div>
-    <div class='panel panel-default hidden' id="combined-resgraph">
-      <div class='panel-heading'>
+    <div class='panel  card panel-default hidden' id="combined-resgraph">
+      <div class='panel-heading card-header'>
 	<center>
-          <h3 class='panel-title'>Selected Types Availability</h3>
+          <h3 class='panel-title card-title'>Selected Types Availability</h3>
 	  <div><span class=small style="color:blue;">
 	    <a href="#" onclick="event.preventDefault();"
-	       data-toggle='popover'
-	       data-html='true'
-	       data-delay='{"hide":500}'
+	       data-toggle='popover' data-bs-toggle='popover'
+	       data-html='true' data-bs-html='true'
+	       data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 	       data-content='Reservations are approved in the order they are
 			     submitted, so submitting
 			     a request for a time that already has a pending
@@ -471,7 +542,7 @@
 	  </div>
 	</center>
       </div>
-      <div class='panel-body' style="padding: 2px;">
+      <div class='panel-body card-body' style="padding: 2px;">
 	<!-- The col setting gives us a "relative" position div -->
 	<div class='col-xs-12 col-xs-offset-0'
 	     style="padding:0px;">
@@ -488,13 +559,13 @@
     <div style="padding-left: 15px; padding-right: 15px;">
       <div id="utilization-div"
 	   style="padding: 0px;"
-	   class='panel panel-default hidden col-xs-12 col-xs-offset-0'>
-	<div class='panel-heading'>
+	   class='panel  card panel-default hidden col-xs-12 col-xs-offset-0'>
+	<div class='panel-heading card-header'>
 	  <center>
-            <h3 class='panel-title'>Utilization</h3>
+            <h3 class='panel-title card-title'>Utilization</h3>
 	  </center>
 	</div>
-	<div class='panel-body'>
+	<div class='panel-body card-body'>
 	  <table class="table table-condensed" style="font-size: 16px;"
 		 id="utilization-table">
 	    <thead>
@@ -550,17 +621,10 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
         <center>
 	  <h4>Would you like to submit this reservation request?</h4>
-          <button style='margin-right: 20px;'
-                  class='btn btn-primary btn-sm'
-                  data-dismiss='modal' aria-hidden='true'>Cancel</button>
-          <button class='btn btn-success btn-sm'
-		  id='commit-reservation'
-		  data-dismiss='modal' aria-hidden='true'>Submit</button>
 	</center>
+	<hr>
 	<div style="margin-top: 5px;" class="needs-approval hidden">
 	  <div class="needs-approval-noconflict hidden">
 	    <b>
@@ -584,7 +648,7 @@
 	    <% if (window.MAINSITE) { %>
 	      <em>Reservations that require administrative approval
 		take time to review and are processed
-		<% if (!window.ISPOWDER) { %>
+		<% if (1) { %>
 		  the <b>next business day</b>
 		<% } else { %>
 		  in <b>two business days</b>
@@ -599,8 +663,86 @@
 		be forced to terminate that experiment, if your
 		reservation is not approved.</em>
 	    <% } %>
-	  </div>	  
+	  </div>
+	  <hr>
 	</div>
+	<div class="res-warnings-div" style="margin-top: 10px;">
+	  <b>
+	    <span class="per-project-reservations res-warnings hidden">
+	      Reservations in this project are shared:
+	    </span>
+	    <span class="per-group-reservations res-warnings hidden">
+	      Reservations in this group are shared:
+	    </span>
+	    <span class="per-user-reservations res-warnings hidden">
+	      Important information about this reservation:
+	    </span>
+	  </b>
+	  <div>
+	    <ul>
+	      <li class="per-project-reservations res-warnings
+			 per-group-reservations hidden">
+		Any use of nodes matching the reservation by any
+		user in your
+		<span class="per-project-reservations res-warnings hidden">
+		  project</span>
+		<span class="per-group-reservations res-warnings hidden">
+		  group</span>
+		will be counted against the
+		reservation, including experiments that are already running
+	      </li>
+	      
+	      <li class="per-project-reservations res-warnings
+			 per-group-reservations hidden">
+		It is up to you to coordinate with other members of your
+		<span class="per-project-reservations res-warnings hidden">
+		  project</span>
+		<span class="per-group-reservations res-warnings hidden">
+		  group</span>
+		to ensure that the nodes are available when you want them
+	      </li>
+	      
+	      <li class="per-project-reservations res-warnings
+			 per-group-reservations hidden">
+		If another user in your
+		<span class="per-project-reservations res-warnings hidden">
+		  project</span>
+		<span class="per-group-reservations res-warnings hidden">
+		  group</span>
+		is using your reserved nodes,
+		you might not be able to extend your experiments
+	      </li>
+
+	      <li class="per-user-reservations res-warnings hidden">
+		Only <b>you</b> may start an experiment that uses these nodes
+	      </li>
+
+	      <li>You must use your reservation within three hours or it will
+		be automatically canceled</li>
+
+	      <li>More details are in the <a href="#" target="_blank"
+					     class="reservation-manual">manual</a></li>
+	      <li>
+		<div class="checkbox form-check-inline" style="margin-top: 0px;">
+		  I understand the above:
+		  <input class="form-check-input" type="checkbox"
+			 id="project-forewarned">
+		  <label class="form-check-label"><b>Yes</b></label>
+		</div>
+	      </li>
+	    </ul>
+	  </div>
+	</div>
+	<center style="margin-top: 10px;">
+          <button class='btn btn-success btn-sm confirm-button'
+		  id='commit-reservation' disabled
+		  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'>Submit</button>
+          <button style='margin-right: 20px;'
+                  class='btn btn-default btn-sm cancel-button'
+                  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'>Cancel</button>
+	</center>
       </div>
     </div>
   </div>
@@ -610,8 +752,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<br>
 	<p>
 	  Use this form to request that resources be set aside for
@@ -671,8 +814,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<div class="clearfix"></div>
 	<center><h4>Reservation FAQ</h4></center>
 	<div class="faq-contents"></div>
@@ -685,8 +829,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<br>
 	<p>
 	  The reservation graphs tell you how many of each node type
@@ -730,18 +875,19 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-	<div class='panel panel-default'>
-	  <div class="panel-heading">
-            <button type='button' class='close' data-dismiss='modal'
-                    aria-hidden='true'>&times;</button>
+	<div class='panel  card panel-default'>
+	  <div class="panel-heading card-header">
+            <button type='button' class='close btn-close'
+		    data-dismiss='modal' data-bs-dismiss='modal'
+                    aria-hidden='true'></button>
 	    <center>
 	      <h5>
 		<span class="cluster-name"></span> Availability
 	      </h5>
 	    </center>
 	  </div>
-	  <div class='panel-body'>
-	    <svg style="height: 80%; padding: 0px;"></svg>
+	  <div class='panel-body card-body resgraph-modal-size'>
+	    <svg style="height: 100%; padding: 0px;"></svg>
 	  </div>
 	</div>
       </div>
@@ -752,8 +898,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
         <center><h4>Confirm to Delete Reservation</h4>
 	  <% if (window.ISADMIN) { %>
 	    Message to send to user
@@ -764,8 +911,12 @@
 	    </div>
 	  <% } %>
 	  <br>
-          <button class='btn btn-danger btn-sm'
-		  id='confirm-delete'>Confirm</a></button>
+          <button class='btn btn-danger btn-sm confirm-button'
+		  id='confirm-delete'>
+	    Confirm</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>
+	    Cancel</button>
 	</center>
 	<% if (window.ISADMIN) { %>
 	    <input type=checkbox class="nolongerfits" value=yes>
@@ -779,8 +930,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
         <center><h4>Confirm to Approve Reservation</h4>
 	  Additional text to send with approval (no text is okay):
 	  <div>
@@ -788,8 +940,11 @@
 		      rows=5></textarea>
 	  </div>
 	  <br>
-          <button class='btn btn-danger btn-sm'
-		  id='confirm-approve'>Confirm</a>
+          <button class='btn btn-success btn-sm confirm-button'
+		  id='confirm-approve'>Confirm</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>
+	    Cancel</button>
 	</center>
       </div>
     </div>
@@ -799,8 +954,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
         <center><h4>Confirm to Send Message</h4>
 	  <span class="hidden nomessage-error text-danger">Give me Text!</span>
 	  <div>
@@ -808,7 +964,11 @@
 		      rows=5></textarea>
 	  </div>
 	  <br>
-          <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
+          <button class='btn btn-success btn-sm confirm-button'>
+	    Confirm</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>
+	    Cancel</button>
 	</center>
       </div>
     </div>
@@ -818,8 +978,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
         <center><h4>Confirm to Send Warning Message</h4>
 	  Additional text to send with warning (no text is okay):
 	  <div>
@@ -829,7 +990,11 @@
 	  <input type=checkbox id='schedule-cancellation' value=yes>
 	  Cancel reservation in 24 hours?
 	  <div style="margin-top:10px;">
-            <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
+            <button class='btn btn-success btn-sm confirm-button'>
+	      Confirm</button>
+            <button class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'>
+	      Cancel</button>
 	  </div>
 	</center>
       </div>
@@ -840,12 +1005,16 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
         <center><h4>Confirm to Cancel Cancellation</h4>
 	  <br>
-          <button class='btn btn-danger btn-sm'
+          <button class='btn btn-success btn-sm confirm-button'
 		  id='confirm-uncancel'>Confirm</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>
+	    Cancel</button>
 	</center>
       </div>
     </div>
@@ -855,12 +1024,13 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<br>
 	<div>
 	  Reservations that need approval must start no earlier then
-	  <% if (!window.ISPOWDER) { %>
+	  <% if (1) { %>
 	    the <b>next business day</b>
 	  <% } else { %>
 	    <b>two business days from now</b>
@@ -871,7 +1041,7 @@
 	</div>
 	<center style="margin-top: 10px;">
           <button class='btn btn-default btn-xs'
-		  data-dismiss='modal'>Dismiss</button>
+		  data-dismiss='modal' data-bs-dismiss='modal'>Dismiss</button>
 	</center>
       </div>
     </div>
@@ -882,8 +1052,9 @@
   <div class='modal-dialog modal-sm'>
     <div class='modal-content'>
       <div class='modal-body'>
-	<button type="button" class="close" data-dismiss="modal"
-	  <span aria-hidden="true">&times;</span></button>	
+	<button type="button" class="close btn-close"
+		data-dismiss="modal" data-bs-dismiss="modal"
+	  <span aria-hidden="true"></span></button>	
 	<center>
 	  <small>
 	    <table class="table table-bordered table-condensed">

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -318,11 +318,19 @@ tweakmbr()
 	    echo "Unknown partition table in $mbrfile!"
 	fi
 
+	#
+	# If the disk currently has GPT, we have to destroy it since we might
+	# get fooled by the protective MBR.
+	#
+	if [ $pttype = "GPT" ]; then
+	    always=1
+	fi
+
 	# Always means always...
 	if [ $always -ne 0 ]; then
 	    echo "Wiping any GPT/MBR on $disk and installing MBR version $new_mbr_ver"
 	    if [ -x "$BINDIR/zapdisk" ]; then
-		$BINDIR/zapdisk -BZ $disk
+		$BINDIR/zapdisk -v -BZ $disk
 	    else
 		dd if=/dev/zero of=$disk bs=512 count=16
 	    fi

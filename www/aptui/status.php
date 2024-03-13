@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
@@ -34,6 +37,7 @@ include_once("resgroup_defs.php");
 $page_title = "Experiment Status";
 $ajax_request = 0;
 $lazytopo = 0;
+$slowdown = 0;
 
 #
 # Get current user.
@@ -57,8 +61,7 @@ $isfadmin = 0;
 #
 $reqargs = OptionalPageArguments("uuid",      PAGEARG_UUID,
                                  "slice_uuid",PAGEARG_UUID,
-                                 "maxextend", PAGEARG_INTEGER,
-				 "oneonly",   PAGEARG_BOOLEAN);
+                                 "maxextend", PAGEARG_INTEGER);
 
 if (! (isset($uuid) || isset($slice_uuid))) {
     SPITHEADER(1);
@@ -109,7 +112,7 @@ if (!$instance) {
 }
 
 #
-# When coming her via the slice_uuid, we want to flip over to the
+# When coming here via the slice_uuid, we want to flip over to the
 # correct portal. Hacky.
 #
 if ($TBMAINSITE && isset($slice_uuid) &&
@@ -207,13 +210,10 @@ if ($profile = Profile::Lookup($instance->profile_id(),
     }
     $isscript = ($profile->script() && $profile->script() != "" ? 1 : 0);
 }
-$registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
-$oneonly         = (isset($oneonly) && $oneonly ? 1 : 0);
 $isadmin         = (ISADMIN() ? 1 : 0);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
 $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
-$lastknowntab    = FeatureEnabled("LastKnownTab",$creator,$instance->Group());
 
 #
 # Temp hack, maybe generalize. These people should not be creaing
@@ -224,8 +224,16 @@ $lastknowntab    = FeatureEnabled("LastKnownTab",$creator,$instance->Group());
 #}
 #$cansnap = 0;
 
-if ($instance->pid() == $TUTORIALPID) {
+if ($instance->pid() == $TUTORIALPID && !$isadmin) {
     $lazytopo = 1;
+    $slowdown = 1;
+}
+#
+# Classes can really pound the web interface, so we slow the polling for
+# for those projects as well. 
+#
+if ($instance->Project()->forClass() && !$isadmin) {
+    $slowdown = 1;
 }
 
 #
@@ -254,11 +262,8 @@ if ($instance_status == "imaging") {
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/nv.d3.css'>\n";
-
-echo "<link rel='stylesheet'
-            href='css/frequency-graph.css'>\n";
+echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
+echo "<link rel='stylesheet' href='css/frequency-graph.css'>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='status-body'></div>\n";
@@ -271,7 +276,6 @@ if (isset($this_user)) {
 else {
     echo "  window.APT_OPTIONS.thisUid = '" . $creator_uid . "';\n";
 }
-echo "  window.APT_OPTIONS.registered = $registered;\n";
 echo "  window.APT_OPTIONS.isadmin = $isadmin;\n";
 echo "  window.APT_OPTIONS.isfadmin = $isfadmin;\n";
 echo "  window.APT_OPTIONS.isstud = $isstud;\n";
@@ -281,16 +285,14 @@ echo "  window.APT_OPTIONS.canupdate_profile = $canupdate_profile;\n";
 echo "  window.APT_OPTIONS.cancopy_profile = $cancopy_profile;\n";
 echo "  window.APT_OPTIONS.canterminate = $canterminate;\n";
 echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
-echo "  window.APT_OPTIONS.lastknowntab = $lastknowntab;\n";
 echo "  window.APT_OPTIONS.canmodify = $canmodify;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";
 echo "  window.APT_OPTIONS.hidelinktest = false;\n";
-echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
 echo "  window.APT_OPTIONS.dossh = $dossh;\n";
 echo "  window.APT_OPTIONS.dovnc = $dovnc;\n";
 echo "  window.APT_OPTIONS.isscript = $isscript;\n";
 echo "  window.APT_OPTIONS.lazytopo = $lazytopo;\n";
-echo "  window.APT_OPTIONS.initialTab = '$INITIALTAB';\n";
+echo "  window.APT_OPTIONS.slowdown = $slowdown;\n";
 echo "  window.APT_OPTIONS.AJAXURL = 'server-ajax.php';\n";
 if (isset($maxextend) && $maxextend != "") {
     # Assumed to be hours.
@@ -307,7 +309,6 @@ echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
 echo "<script src='js/lib/d3.v5.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";
-echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 echo "<script src='js/lib/filesize.min.js'></script>\n";
 
@@ -321,9 +322,9 @@ REQUIRE_IMAGE();
 REQUIRE_EXTEND();
 REQUIRE_IDLEGRAPHS();
 REQUIRE_OPENSTACKGRAPHS();
-REQUIRE_CONTEXTMENU();
 REQUIRE_SUP();
 REQUIRE_TOPOLOGY_VIEWER();
+REQUIRE_JQUERY_UI();
 
 AddTemplate("image-picker-modal");
 AddTemplate("ppform-wizard");
@@ -340,11 +341,10 @@ if ($ISPOWDER) {
 }
 SPITREQUIRE("js/status.js");
 
-echo "<link rel='stylesheet'
-            href='css/jquery-ui-1.10.4.custom.min.css'>\n";
 # For progress bubbles in the imaging modal.
 echo "<link rel='stylesheet' href='css/progress.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
+echo "<link rel='stylesheet' href='css/instantiate.css'>\n";
 
 #
 # Build up a blob of all aggregates for this portal. We need the entire
@@ -401,13 +401,13 @@ if (isset($this_user)) {
 # Current and Future reservations for the cluster picker during modify
 $project = $instance->Project();
 $resinfo = ReservationGroup::ReservationInfo(
-    array($project->pid() => $project));
+    array($project->pid() => $project), $this_user);
 echo "<script type='text/plain' id='resgroup-json'>\n";
 echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
 echo "</script>\n";
 
 AddTemplateList(array("status", "waitwait-modal", "oops-modal",
-                      "register-modal", "terminate-modal", "oneonly-modal",
+                      "terminate-modal",
                       "approval-modal", "linktest-modal",
                       "destroy-experiment", "save-paramset-modal",
                       "prestage-table", "frequency-graph", "txgraph",

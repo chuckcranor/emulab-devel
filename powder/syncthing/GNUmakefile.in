@@ -26,8 +26,6 @@ TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ../..
 SUBDIR		= powder/syncthing
 ISMAINSITE	= @TBMAINSITE@
-DEADMAN         = @POWDER_DEADMAN@
-RFMON           = @POWDER_RFMONITOR@
 TARGETSYS       = @TARGETSYS_TARGET@
 
 include $(OBJDIR)/Makeconf

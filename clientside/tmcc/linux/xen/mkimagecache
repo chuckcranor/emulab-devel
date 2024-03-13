@@ -28,8 +28,8 @@ use strict;
 # Drag in path stuff so we can find emulab stuff.
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
 
-my $IMAGEZIP    = "/usr/local/bin/imagezip";
-my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
+my $IMAGEZIP    = "$LBINDIR/imagezip";
+my $IMAGEUNZIP  = "$LBINDIR/imageunzip";
 
 #
 # Create a disk image cache.

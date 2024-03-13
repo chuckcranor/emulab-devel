@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,6 +59,7 @@ my $VNODESETUP  = "$TB/sbin/vnode_setup";
 my $ELABINELAB  = "$TB/sbin/elabinelab";
 my $IMAGEINFO   = "$TB/sbin/imageinfo";
 my $TBADB       = "$TB/bin/tbadb";
+my $RFSWITCHER  = "$TB/sbin/powder-rfswitcher";
 
 # Setup Operation Flags
 $NOSTATE    = 0x00;
@@ -2512,6 +2513,26 @@ sub LightUpNodes($@)
     my @cycles     = ();
     my @ons        = ();
 
+    #
+    # We want to this before powering on the radio to make sure it has an
+    # antenna load before it tries to transmit anything (says Alex).
+    #
+    foreach my $node (@nodelist) {
+	my $node_id = $node->node_id();
+	my $rfswitch_port = $node->rfswitch_port();
+	next
+	    if (!defined($rfswitch_port));
+
+	tbnotice("Setting the RF Switch for $node_id (to port $rfswitch_port)\n");
+	system("$RFSWITCHER $node_id");
+
+	if ($?) {
+	    # This is bad too.
+	    $parent->noretry(1);
+	    return -1;
+	}
+    }
+    
     foreach my $node (@nodelist) {
 	next
 	    if ($node->allocstate() eq TBDB_ALLOCSTATE_RES_READY());
@@ -2585,6 +2606,28 @@ use Node;
 use English;
 use Data::Dumper;
 
+package libossetup_n310;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+package libossetup_cl_ap;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
 package libossetup_iris;
 use base qw(libossetup_handler);
 
@@ -2600,6 +2643,49 @@ sub New($$) {
     my ($class, $parent) = @_;
 
     my $self = $class->SUPER::New("iris", $parent);
+    bless($self, $class);
+    return $self;
+}
+
+sub AddNode($$)
+{
+    my ($self, $node) = @_;
+
+    $self->SUPER::AddNode($node);
+
+    # Need something, should be in ISUP by the time we get there
+    # but stated might be delayed.
+    $node->_maxwait(60);
+    return 0;
+}
+
+#############################################################################
+#
+# Stub for using stitch points directly.
+# Need this in the node_type_attributes table:
+#
+#  insert into node_type_attributes
+#    values ('interconnect-vm', 'ossetup_objtype', 'interconnect', 'string');
+#
+# And this in the os_submap table for the GENERICDEV,GENERICDEV-VM osids.
+#
+#  insert into os_submap values (10017, 10016);
+#
+package libossetup_interconnect;
+use base qw(libossetup_handler);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+sub New($$) {
+    my ($class, $parent) = @_;
+
+    my $self = $class->SUPER::New("interconnect", $parent);
     bless($self, $class);
     return $self;
 }

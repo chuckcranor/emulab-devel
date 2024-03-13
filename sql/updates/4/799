@@ -1,0 +1,21 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("login", "IP")) {
+	DBQueryFatal("alter table login add ".
+		     " `IP` varchar(16) DEFAULT NULL");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

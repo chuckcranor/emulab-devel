@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -112,6 +112,7 @@ my $waitmode       = 0;
 my $usestitcher    = 0;
 my $nopending      = 0;
 my $noemail        = 0;
+my $maxduration    = 0;
 my $portal;
 my $privkeyfile;
 my $start_at;
@@ -134,14 +135,14 @@ my $project;
 #
 # So many options ...
 #
-my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's',
+my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's', 'X',
 	       "name=s"      => \$name,
 	       "duration=i"  => \$duration,
 	       "portal=s"    => \$portal,
 	       "project=s"   => \$pid,
 	       "site=s%"     => \$sitemap,
-	       "start=i"     => \$start_at,
-	       "stop=i"      => \$stop_at,
+	       "start=s"     => \$start_at,
+	       "stop=s"      => \$stop_at,
 	       "paramset=s"  => \$paramset,
 	       "bindings=s"  => \$bindingfile,
 	       "sshpubkey=s" => \$sshpubkeyfile,
@@ -190,7 +191,10 @@ if (!defined($portal)) {
 	$portal = "emulab";
     }
 }
-if (defined($duration)) {
+if (defined($options{"X"})) {
+    $maxduration = 1;
+}
+elsif (defined($duration)) {
     if ($duration !~ /^\d+$/) {
 	fatal("Duration is not an integer");
     }
@@ -281,7 +285,7 @@ $ENV{"SERVER_NAME"} = $project->Brand()->Server();
 # Bindings can come from a paramset or as a json string on the command line.
 #
 if (defined($paramset)) {
-    my ($uid,$name) = @_;
+    my ($uid,$name);
     my $profileid   = $profile->profileid();
     
     if ($paramset =~ /^([-\w]*),([-\w]*)$/) {
@@ -303,7 +307,7 @@ if (defined($paramset)) {
     #
     my $row = $query_result->fetchrow_hashref();
     my $creator_idx = $row->{"uid_idx"};
-    if ($creator_idx != $this_user->uid_idx() && $row->['public'] != 1) {
+    if ($creator_idx != $this_user->uid_idx() && $row->{'public'} != 1) {
 	my $creator = User->Lookup($creator_idx);
 	if (!$creator) {
 	    fatal("Could not look paramset creator");
@@ -502,7 +506,10 @@ if (defined($options{"S"})) {
 if (defined($start_at)) {
     @args = (@args, "--start", $start_at);
 }
-if (defined($stop_at)) {
+if ($maxduration) {
+    @args = (@args, "-X");
+}
+elsif (defined($stop_at)) {
     @args = (@args, "--stop", $stop_at);
 }
 @args = (@args, $xmlfile);
@@ -568,7 +575,8 @@ if ($?) {
 			    "Failed to start portal experiment",
 			    "Failed to start portal experiment for profile ".
 			    $profile->pidversname() . "\n\n" .
-			    $body, $project->OpsEmailAddress());
+			    $body, $project->OpsEmailAddress(),
+			    "BCC: " . $project->OpsEmailAddress());
     }
     # Maybe delete the instance right away?
     
@@ -665,8 +673,24 @@ exit(0);
 sub fatal($)
 {
     my ($mesg) = @_;
-    unlink($logfile) if (defined($logfile));
 
+    if (defined($logfile)) {
+	unlink($logfile);
+    }
+    elsif (defined($project) && !(isatty(\*STDOUT) || $debug)) {
+	my $url = (defined($this_user) ? $this_user->webURL() : "");
+	
+	#
+	# We failed early (since there is no log file). For debugging
+	# lets send the error info to logs.
+	#
+	$project->SendEmail($project->OpsEmailAddress(),
+			    "Failed to start XMLRPC experiment",
+			    "Failed to start XMLRPC experiment:\n\n ".
+			    "$mesg\n\n".
+			    "$PROGRAM_NAME @ARGV \n".
+			    "$url\n");
+    }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
     exit(-1);

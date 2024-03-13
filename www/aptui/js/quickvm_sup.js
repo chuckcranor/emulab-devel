@@ -85,6 +85,43 @@ function HideWaitWait(continuation)
     $('#waitwait-modal .waitwait-message').addClass("hidden");
     HideModal('#waitwait-modal', continuation);
 }
+
+function ShowConfirmModal(which, confirm, cancel)
+{
+    var canceled = function () {
+	console.info("canceled");
+	$(which).find(".confirm-button").off("click.confirm");
+	$(which).find(".cancel-button").off("click.confirm");
+	if (cancel) {
+	    cancel();
+	}
+    };
+    // If the modal is hidden without the confirm click, that is a cancel.
+    $(which).one('hidden.bs.modal', canceled);
+
+    // Watch for a cancel button without the dismiss modal.
+    if ($(which).find(".cancel-button").length) {
+	var button = $(which).find(".cancel-button");
+	if (! ($(button).data("dismiss") ||
+	       $(button).data("bs-dismiss"))) {
+	    $(button).one("click.confirm", function (event) {
+		event.preventDefault();
+		console.info("cancel click");
+		HideModal(which);
+	    });
+	}
+    }
+
+    // Handler for the confirm kills the cancel handler.
+    $(which).find(".confirm-button").one("click.confirm", function (event) {
+	event.preventDefault();
+	console.info("confirmed");
+	$(which).off('hidden.bs.modal', canceled);
+	$(which).find(".cancel-button").off("click.confirm");
+	HideModal(which, confirm);
+    });
+    ShowModal(which);
+}
     
 function CallServerMethod(url, route, method, args, callback)
 {
@@ -153,7 +190,7 @@ function addPopoverClip (id, contentfunction)
 	// just return since the body click event will kill it off.
 	var showing = false;
 
-	if (window.BOOSTRAP_VERSION == 5) {
+	if (window.BOOTSTRAP_VERSION == 5) {
 	    var actual = $(button).attr("aria-describedby");
 
 	    //console.info("actual", actual);
@@ -193,7 +230,7 @@ function addPopoverClip (id, contentfunction)
 
 	// DOM of the popover content.
 	var content;
-	if (window.BOOSTRAP_VERSION == 5) {
+	if (window.BOOTSTRAP_VERSION == 5) {
 	    content = $('#' + $(button).attr("aria-describedby"));
 	}
 	else {
@@ -430,7 +467,7 @@ function hashSetup(target, defaultHash)
     if (hash) {
 	var element = $(target + ' a[href="'+hash+'"]');
 	if (element) {
-	    if (window.BOOSTRAP_VERSION == 5) {
+	    if (window.BOOTSTRAP_VERSION == 5) {
 		element[0].click();
 	    }
 	    else {
@@ -459,6 +496,7 @@ return {
     IsUUID: IsUUID,
     newUUID: newUUID,
     ShowModal: ShowModal,
+    ShowConfirmModal: ShowConfirmModal,
     HideModal: HideModal,
     ShowWaitWait: ShowWaitWait,
     HideWaitWait: HideWaitWait,

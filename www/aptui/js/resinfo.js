@@ -191,6 +191,8 @@ $(function ()
 		.html("<span class=small> " +
 			" <a href='#' " +
 			"    data-target='#matrix-connections-modal' " +
+			"    data-bs-target='#matrix-connections-modal' " +
+			"    data-bs-toggle='modal' " +
 			"    data-toggle='modal'>" +
 			"  Matrix Connections</a></span>" +
 			"");
@@ -325,8 +327,7 @@ $(function ()
 	    };
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ReservationInfo",
-						{"cluster" : details.nickname,
-						 "anonymous" : 1});
+						{"cluster" : details.nickname});
 	    xmlthing.done(callback);
 	});
     }
@@ -368,8 +369,8 @@ $(function ()
 			groups[group] = {};
 		    }
 		    // Gross Hack
-		    if (group == "mmimo" &&
-			(key == "mmimo1-honors")) {
+		    if (0 && group == "mmimo" &&
+			(key == "mmimo1-honors" || key == "mmimo1-ustar")) {
 			return;
 		    }
 		    groups[group][key] = info;
@@ -814,7 +815,8 @@ $(function ()
 	    $('#range-info-div .panel-title')
 		.html("All Frequency Usage");
 	    $('#range-info-div').removeClass("hidden");
-
+	    $('#range-info-div a[href="#cbrs-ranges"]').tab('show');
+	    
 	    // This activates the popover subsystem.
 	    $('#range-info-div [data-toggle="popover"]').popover({
 		trigger: 'hover',

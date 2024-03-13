@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -362,6 +362,14 @@ sub CheckAggregates()
 	    my $available   = GeniXML::IsAvailable($ref);
 	    my $reservable  = 0;
 
+	    # For Powder radios at DD sites
+	    my $conflicting_nodes =
+		GeniXML::FindNodesNS("n:conflicting_nodes", $ref,
+				     $GeniXML::EMULAB_NS)->pop();
+	    if ($conflicting_nodes) {
+		$conflicting_nodes = GetText("names", $conflicting_nodes);
+	    }
+
 	    if (GeniHRN::IsValid($node_id)) {
 		my $hrn = GeniHRN->new($node_id);
 		$node_id = $hrn->id();
@@ -404,7 +412,7 @@ sub CheckAggregates()
 		#
 		# Look for the hardware type entry that matches either
 		#  * The type listed in reservable_nodes list, or
-		#  * The tupe list in the reservable_types list.
+		#  * The type list in the reservable_types list.
 		#
 		foreach my $tref (FindNodes("n:hardware_type",
 					     $ref)->get_nodelist()) {
@@ -427,6 +435,7 @@ sub CheckAggregates()
 			"type"       => $hname,
 			"available"  => $available,
 			"reservable" => $reservable,
+			"conflicting_nodes" => $conflicting_nodes,
 		    };
 		    if (exists($reservable_types->{$hname})) {
 			#
@@ -572,12 +581,15 @@ sub CheckAggregates()
 	    my $type       = $allnodes{$node_id}->{'type'};
 	    my $available  = $allnodes{$node_id}->{'available'};
 	    my $reservable = $allnodes{$node_id}->{'reservable'};
+	    my $conflicting_nodes = $allnodes{$node_id}->{'conflicting_nodes'};
 
 	    if (!$impotent) {
 		DBQueryWarn("replace into apt_aggregate_nodes set ".
 			    " urn='$urn',node_id='$node_id',type='$type', ".
 			    " available='$available', ".
 			    " reservable='$reservable',".
+			    (defined($conflicting_nodes) ?
+			     "conflicting_nodes='$conflicting_nodes'," : "") .
 			    " updated=now()");
 	    }
 	}

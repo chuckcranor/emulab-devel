@@ -13,52 +13,58 @@
 </style>
 
 <div class="faq">
-  <div class="panel-group" id="accordion">
-    <div class="panel panel-default">
+  <div class="panel-group accordion" id="accordion">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
-	     href="#faq1">
+        <h4 class="panel-title accordion-header">
+          <button data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
+	     href="#faq1" data-bs-target="#faq1">
 	    Can I request a specific node?
-	  </a>
+	  </button>
         </h4>
       </div>
-      <div id="faq1" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq1" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse show">
+        <div class="panel-body accordion-body faq-answer">
 	  No. Reservations are made by node type not by individual node.
 	  For example, you can request one "d430" node but you could not
 	  specifically request "pc701".
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq2">
 	    What if I need multiple node types?
 	  </a>
         </h4>
       </div>
-      <div id="faq2" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq2" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  Since reservations are for a specific node type, you will have
 	  to create multiple reservations, one per node type, covering the
 	  same time period.
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq3">
 	    What if I need nodes at multiple sites?
 	  </a>
         </h4>
       </div>
-      <div id="faq3" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq3" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  Since reservations are for a specific node type and node types
 	  are specific to individual clusters, you will have to create
 	  one or more reservations at each cluster covering the same time
@@ -66,48 +72,54 @@
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq4a">
 	    What is the time granularity of a reservation?
 	  </a>
         </h4>
       </div>
-      <div id="faq4a" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq4a" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  Reservations start at one hour boundaries and their duration
 	  is expressed in hours.
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq4">
 	    How many reservations can I have outstanding?
 	  </a>
         </h4>
       </div>
-      <div id="faq4" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq4" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  There is currently no limit. This will likely change in the future.
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq5">
 	    How far in the future can I make reservations?
 	  </a>
         </h4>
       </div>
-      <div id="faq5" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq5" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
           The reservation system will allow you to schedule up to
 	  three years in the future, In practice however, you should not
 	  reserve nodes out past a year or so, since CloudLab cluster
@@ -115,17 +127,19 @@
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq6">
 	    What if I don't use all the nodes during my reservation?
 	  </a>
         </h4>
       </div>
-      <div id="faq6" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq6" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  A reservation only ensures that at least the specified number of
 	  nodes of the indicated type are available for use at the given time.
 	  You must explicitly instantiate a profile to use the nodes. If you
@@ -135,18 +149,20 @@
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq7">
 	    What if I decide I need more/less nodes after I have
 	    scheduled my reservation?
 	  </a>
         </h4>
       </div>
-      <div id="faq7" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq7" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  You can edit your reservation as needed before the start
 	  time has been reached (see the <em>List Reservations</em> option
 	  in the experimentation menu). Be aware that if your
@@ -155,17 +171,19 @@
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq7b">
 	    Can I extend my reservation after it has began?
 	  </a>
         </h4>
       </div>
-      <div id="faq7b" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq7b" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  No. You will have to create a new reservation that abuts your
 	  current reservation. You may however be able to extend experiments
 	  started in your reservation window to run past the end of your
@@ -176,18 +194,20 @@
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq8">
 	    Can I automatically instantiate a profile when the
 	    reservation begins?
 	  </a>
         </h4>
       </div>
-      <div id="faq8" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq8" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  No. You must explicitly instantiate a profile within the reservation
 	  time period. A reservation only ensures that at least the specified
 	  number of nodes of the indicated type are available for use during
@@ -195,18 +215,20 @@
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq9">
 	    Will my experiment be automatically terminated at the end
 	    of the reservation?
 	  </a>
         </h4>
       </div>
-      <div id="faq9" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq9" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  No. Your experiment will only be forcibly terminated when the
 	  experiment duration time is reached. However, it is quite possible
 	  that you will not be able to extend an experiment past the reservation
@@ -217,17 +239,19 @@
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq10">
 	    Can I allocate nodes without creating a reservation first?
 	  </a>
         </h4>
       </div>
-      <div id="faq10" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq10" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  Yes. You do not need to create an explicit reservation in order
 	  to use node resources. Instantiating an experiment creates an
 	  implicit reservation starting at the current time and extending
@@ -237,18 +261,20 @@
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq11">
 	    My N-node reservation time has arrived but I cannot
 	    instantiate my N-node experiment. Why?
 	  </a>
         </h4>
       </div>
-      <div id="faq11" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faq11" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  There are a couple of possible reasons. The most common reason is
 	  that one or more of the desired node type has suffered hardware
 	  failure or was otherwise taken out of service unexpectedly after
@@ -258,21 +284,49 @@
         </div>
       </div>
     </div>
-    <div class="panel panel-default">
+    <div class="panel panel-default accordion-item">
       <div class="panel-heading faq-question">
-        <h4 class="panel-title">
-          <a data-toggle="collapse" data-parent="#accordion"
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
 	     href="#faq12">
+	    I cannot extend my experiment even though I have a
+	    reservation. Why?</a>
+        </h4>
+      </div>
+      <div id="faq12" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
+	  As noted in the <a href="#" target="_blank"
+			     class="reservation-manual">manual</a>,
+	  reservations are tied to a project: any experiment belonging
+	  to that project may use the reserved nodes. This makes it
+	  possible for another user in the same project to <em>use</em> the
+	  nodes you have reserved. This can result in not being to
+	  start your experiment or extend an existing experiment. See the
+	  manual for a more detailed explantion of "admission control."
+        </div>
+      </div>
+    </div>
+    <div class="panel panel-default accordion-item">
+      <div class="panel-heading faq-question">
+        <h4 class="panel-title accordion-header">
+          <a data-toggle="collapse" data-bs-toggle="collapse" data-parent="#accordion"
+	     type="button" class="accordion-button"
+	     href="#faqlast">
 	    Where can I get more information about reservations?
 	  </a>
         </h4>
       </div>
-      <div id="faq12" class="panel-collapse collapse">
-        <div class="panel-body faq-answer">
+      <div id="faqlast" data-bs-parent="#accordion"
+	   class="panel-collapse accordion-collapse collapse">
+        <div class="panel-body accordion-body faq-answer">
 	  In the <a href="#" target="_blank"
-		    id="reservation-manual">manual</a>!
+		    class="reservation-manual">manual</a>!
         </div>
       </div>
     </div>
   </div>
 </div>
+
+

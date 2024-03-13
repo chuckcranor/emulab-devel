@@ -2,15 +2,14 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['ssh-keys', 'oops-modal', 'waitwait-modal']);
-    var sshkeysString = templates['ssh-keys'];
-    var oopsString = templates['oops-modal'];
-    var waitwaitString = templates['waitwait-modal'];
-
+    var templates = APT_OPTIONS.fetchTemplateList(['ssh-keys',
+						   'confirm-something',
+						   'oops-modal',
+						   'waitwait-modal']);
     var embedded        = 0;
     var target_uid      = "";
     var nonlocal        = false;
-    var sshkeysTemplate = _.template(sshkeysString);
+    var sshkeysTemplate = _.template(templates['ssh-keys']);
 
     function initialize()
     {
@@ -25,8 +24,9 @@ $(function ()
 	    nonlocal:	nonlocal,
 	});
 	$('#page-body').html(html);
-	$('#oops_div').html(oopsString);
-	$('#waitwait_div').html(waitwaitString);
+	$('#oops_div').html(templates['oops-modal']);
+	$('#waitwait_div').html(templates['waitwait-modal']);
+	$('#confirm_div').html(templates['confirm-something']);
 
 	//
 	// Fix for filestyle problem; not a real class I guess, it
@@ -54,7 +54,7 @@ $(function ()
 	$('.delete_pubkey_button').click(function (event) {
 	    event.preventDefault();
 	    var index     = $(this)[0].dataset['key'];
-	    HandleDeleteKey(index);
+	    ConfirmDeleteKey(index);
 	});
 
 	// Form reset button.
@@ -102,6 +102,15 @@ $(function ()
 					    {"keydata"    : keydata,
 					     "target_uid" : target_uid});
 	xmlthing.done(callback);
+    }
+    
+    function ConfirmDeleteKey(index)
+    {
+	sup.ShowConfirmModal("#confirm-something",
+			     function () {
+				 HandleDeleteKey(index);
+			     });
+
     }
     
     function HandleDeleteKey(index)

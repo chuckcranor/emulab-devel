@@ -179,4 +179,6 @@ POWDER_DEADMAN=1
 # updates will not prevent experiments starting.
 IMAGEPROVENANCE=1
 
+POWDER_BUS_P0WER_VERSION=2
+
 # End of Emulab added section

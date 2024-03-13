@@ -1,7 +1,7 @@
 #!/usr/bin/perl -W
 
 #
-# Copyright (c) 2010-2018 University of Utah and the Flux Group.
+# Copyright (c) 2010-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -121,6 +121,22 @@ my %emptyVlans = ();
 #
 
 #
+# Gack! we run snmpit as the user, which means the ssh command to create
+# the expect object will run as the user, and that means ssh will load the
+# user's ssh config file and the user's ssh private key. The former is easy
+# to deal with (via the -F command) but there is no way to convince ssh not
+# to load any keys unless we give it a -i command. Why does this matter?
+# Well, users are prone to messing with the keys we create for them in
+# their home dir, and if they mess those up or encrypt them, the ssh
+# command can hang up asking for a key passphrase. In general, we want to
+# remove all reference to the user's environment anyway, so we are going to
+# force ssh to use a well known unencrypted key. If that key does not
+# exist, throw back an error early.
+#
+my $SSHKEY = libtestbed::TBPREFIX() . "/etc/switch_sshrsa";
+my $SSHARGS = "-F /dev/null -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -i $SSHKEY";
+
+#
 # Creates a new object.
 #
 # usage: new($classname,$devicename,$debuglevel,$community)
@@ -214,7 +230,7 @@ sub createExpectObject($)
 {
     my $self = shift;
     
-    my $spawn_cmd = "ssh -p 22022 -l administrator $self->{NAME}";
+    my $spawn_cmd = "ssh $SSHARGS -p 22022 -l administrator $self->{NAME}";
     # Create Expect object and initialize it:
     my $exp = new Expect();
     if (!$exp) {

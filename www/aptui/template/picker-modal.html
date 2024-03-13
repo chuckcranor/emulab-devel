@@ -3,9 +3,9 @@
   <div class='modal-dialog modal-wide' id='showtopo_dialog'>
     <div class='modal-content'>
       <div class='modal-header'>
-	<button type='button' class='close' data-dismiss='modal'
-		aria-hidden='true'>
-	  &times;</button>
+	<button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+		aria-hidden='true'></button>
 	<h3>Select a Profile</h3>
       </div>
       <div class='modal-body'>
@@ -118,31 +118,31 @@
 			class='glyphicon glyphicon-star'></span></button>
 	      </span>
 	      <div id='showtopo_details'>
-		<div class='clearfix'>
+		<div class='clearfix row mx-0'>
 		  <div class='col-md-3'>Created By:</div>
 		  <div id='showtopo_author' class='col-md-9'></div>
 		</div>
-		<div class='clearfix'>
+		<div class='clearfix row mx-0'>
 		  <div class='col-md-3'>Project:</div>
 		  <div id='showtopo_project' class='col-md-9'></div>
 		</div>
-		<div class='clearfix'>
+		<div class='clearfix row mx-0'>
 		  <div class='col-md-3'>Latest Version:</div>
 		  <div id='showtopo_version' class='col-md-9'></div>
 		</div>
-		<div class='clearfix hidden showtopo_repoinfo'>
+		<div class='clearfix row mx-0 hidden showtopo_repoinfo'>
 		  <div class='col-md-3'>Repo Based?:</div>
 		  <div id='showtopo_repobased' class='col-md-9'>Yes</div>
 		</div>
-		<div class='clearfix hidden showtopo_repoinfo'>
+		<div class='clearfix row mx-0 hidden showtopo_repoinfo'>
 		  <div class='col-md-3'>Repo Hash:</div>
 		  <div id='showtopo_repohash' class='col-md-9'></div>
 		</div>
-		<div class='clearfix'>
+		<div class='clearfix row mx-0'>
 		  <div class='col-md-3'>Last Updated:</div>
 		  <div id='showtopo_last_updated' class='col-md-9'></div>
 		</div>
-		<div class='clearfix'>
+		<div class='clearfix row mx-0'>
 		  <div class='col-md-3'>Description:</div>
 		  <div id='showtopo_description' class='col-md-9'></div>
 		</div>
@@ -160,7 +160,8 @@
 	    Select Profile</button>
 	  <button type='button' class='btn btn-default btn-sm'
 		  id='showtopo_cancel'		  
-		  data-dismiss='modal' aria-hidden='true'>
+		  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'>
 	    Cancel</button>
 	</div>
       </div>

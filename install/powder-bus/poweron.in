@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,11 +48,12 @@ my $logfile;
 #
 my $TB         = "@prefix@";
 my $TBOPS      = "@TBOPSEMAIL@";
-my $PROTOUSER  = "elabman";
 my $WAP        = "$TB/sbin/wap";
 my $SUDO       = "/usr/local/bin/sudo";
 my $NODEREBOOT = "$TB/bin/node_reboot";
 my $POWER      = "$TB/bin/power";
+my $NFREE      = "$TB/bin/nfree";
+my $EXPORTS_SETUP = "$TB/sbin/exports_setup";
 
 # Power Pins
 my $ED1_PIN       = "pin0";
@@ -67,6 +68,9 @@ use WebTask;
 use Node;
 use power_powduino;
 use libtestbed;
+
+# In EmulabConstants;
+my $PROTOUSER  = PROTOUSER();
 
 # Protos
 sub fatal($);
@@ -103,6 +107,13 @@ if (!isatty(\*STDOUT)) {
 
     print "Delaying 15 seconds to lets things settle down\n";
     sleep(15);
+    #
+    # Force a HUP of mountd since mountd started before jails, and
+    # so the NFS mounts of the ZFS file systems in the ops jail might
+    # not be working.
+    #
+    print "Forcing HUP of mountd\n";
+    system("$EXPORTS_SETUP -f");
 }
 
 #
@@ -235,6 +246,42 @@ if (defined($n300)) {
 		fatal("Could not power on n300-1");
 	    }
 	    sleep(5);
+	}
+    }
+}
+
+#
+# If the experimental node is in hwdown or nfree-locked, kick it out.
+# But have to wait for the management interface to come alive. So delay
+# a bit more before moving into hwcheckup.
+#
+my $ed1 = Node->Lookup("ed1");
+if ($ed1->IsReserved()) {
+    print "ed1 is reserved\n";
+    print "Waiting 60 seconds for management interface to come alive\n";
+    sleep(60);
+
+    if (!$impotent) {
+	print "Powering on ed1\n";
+	if (!$impotent) {
+	    system("$SUDO $POWER on ed1");
+	    if ($?) {
+		fatal("Could not power on ed1");
+	    }
+	    sleep(10);
+	}
+    }
+    if ($ed1->pid() eq TBOPSPID() &&
+	($ed1->eid() eq NODEDEAD_EID() || $ed1->eid() eq NFREELOCKED_EID())) {
+
+	my $pid = TBOPSPID();
+	my $eid = $ed1->eid();
+    
+	print "Releasing ed1 from $pid,$eid\n";
+	if (!$impotent) {
+	    if (system("$SUDO -u $PROTOUSER $WAP $NFREE $pid $eid ed1")) {
+		fatal("Could not free ed1 from " . $ed1->eid());
+	    }
 	}
     }
 }

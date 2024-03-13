@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -123,12 +123,14 @@ my $LOCALIZEIMG	= "$BINDIR/localize_image";
 my $IPTABLES	= "/sbin/iptables";
 my $IPBIN	= "/sbin/ip";
 my $NETSTAT     = "/bin/netstat";
-my $IMAGEZIP    = "/usr/local/bin/imagezip";
-my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
-my $IMAGEDUMP   = "/usr/local/bin/imagedump";
+my $IMAGEZIP    = "$LBINDIR/imagezip";
+my $IMAGEUNZIP  = "$LBINDIR/imageunzip";
+my $IMAGEDUMP   = "$LBINDIR/imagedump";
 my $XM          = "/usr/sbin/xm";
 my $FSCK	= "/sbin/e2fsck";
 my $FSCKUFS	= "/sbin/fsck.ufs";
+my $FDISK       = "/usr/sbin/fdisk";
+my $SGDISK      = "/usr/sbin/sgdisk";
 my $debug  = 0;
 my $lockdebug = 1;
 my $sleepdebug = 0;
@@ -182,6 +184,9 @@ my $MAXIMAGEWAIT = 1800;
 #	    long we wait between attempts to reconnect.
 #
 my $CAPTURE     = "/usr/local/sbin/capture-nossl";
+if (! -x $CAPTURE && -x "/usr/sbin/capture-nossl") {
+    $CAPTURE    = "/usr/sbin/capture-nossl";
+}
 my $CAPTUREOPTS	= "-i -C -L -T 10 -R 2000";
 
 #
@@ -656,14 +661,6 @@ sub rootPreConfig($;$)
 	    # This is for arping -A to work. See emulab-cnet.pl
 	    mysystem("echo 1 >/proc/sys/net/ipv4/ip_nonlocal_bind");
 	}
-
-	# Set up for metadata server for ec2 support
-	print "Setting up redirection for meta server...\n";
-	mysystem("$IPBIN addr add 169.254.169.254/32 ".
-		 "   scope global dev $cnet_iface");
-	mysystem("$IPTABLES -t nat -A PREROUTING -d 169.254.169.254/32 " .
-		 "   -p tcp -m tcp --dport 80 -j DNAT ".
-		 "   --to-destination ${bossip}:8787");
     }
     else {
 	if (!existsBridge($BRIDGENAME)) {
@@ -694,10 +691,10 @@ sub rootPreConfig($;$)
     mysystem("$OVSSTART --delete-bridges start");
 
     # For gre tunnels to work with iptables
-    if (system("modinfo nf_conntrack_proto_gre") == 0) {
+    if (system("modinfo nf_conntrack_proto_gre >/dev/null 2>&1") == 0) {
         mysystem("$MODPROBE nf_conntrack_proto_gre");
     }
-    if (system("modinfo nf_conntrack_pptp") == 0) {
+    if (system("modinfo nf_conntrack_pptp >/dev/null 2>&1") == 0) {
         mysystem("$MODPROBE nf_conntrack_pptp");
     }
 
@@ -1706,12 +1703,6 @@ okay:
 	    $image{'kernel'}  = "/boot/fedora8/vmlinuz-xenU";
 	    $image{'ramdisk'} = "/boot/fedora8/initrd-xenU";
 	}
-	elsif ($imagemetadata->{'PARTOS'} =~ /linux/i &&
-	       $imagemetadata->{'OSVERSION'} eq "5.15.0") {
-	    $private->{'ishvm'} = $ishvm = 1;
-	    undef $image{'kernel'};
-	    undef $image{'ramdisk'};
-	}
 	elsif ($imagename ne $defaultImage{'name'}) {
 	    #
 	    # See if we can dig the kernel out from the image.
@@ -1748,7 +1739,6 @@ okay:
 		    $image{'ramdisk'} = $ramdisk;
 		}
 	    }
-	    # else... Use the booted kernel. Works sometimes. 
 
 	    # Some kernels (CentOS8) no longer support PV or PVH.  So,
 	    # attempt to handle that by falling back to HVM if PV is not
@@ -1766,6 +1756,17 @@ okay:
 		    undef $image{'ramdisk'};
 		    undef $image{'bootloader'};
 		}
+	    }
+
+	    # If we can't extract the kernel, fall back to HVM.  All modern
+	    # kernels support PVHVM, so this is the best default.
+	    if (!defined($kernel)) {
+		print "Warning: failed to extract kernel;".
+		    " falling back to HVM!\n";
+		$private->{'ishvm'} = $ishvm = 1;
+		undef $image{'kernel'};
+		undef $image{'ramdisk'};
+		undef $image{'bootloader'};
 	    }
 	}
     }
@@ -1932,7 +1933,12 @@ okay:
     if ($ispvh) {
 	addConfig($vninfo, "type='pvh'", 2);
 	if ($os eq "FreeBSD") {
-	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:xbd0s1a'", 2);
+	    my $rfs = "xbd0s1a";
+	    # XXX GUFI image
+	    if ($loadslice == 0 && $bootslice == 3) {
+		$rfs = "xbd0p3";
+	    }
+	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:$rfs'", 2);
 	}
 	elsif (defined($extra)) {
 	    addConfig($vninfo, "extra='$extra'", 2);
@@ -3609,6 +3615,13 @@ sub CreatePrimaryDisk($$$$;$$)
     }
 
     #
+    # Add 64 sectors for backup GPT header and partitions.
+    #
+    if ($loadslice == 0) {
+	$lv_size += (64 * 512) / 1024;
+    }
+
+    #
     # What we actually load up here is the golden image.
     #
     # Note that if this fails, we fall back on creating the vnode
@@ -3799,6 +3812,14 @@ sub CreatePrimaryDisk($$$$;$$)
 
 	    goto fail
 		if ($?);
+	}
+
+	if (-x $FDISK
+	    && mysystem2("$FDISK -l $rootvndisk 2>/dev/null | grep -q 'Disklabel type: gpt'") == 0) {
+	    TBDebugTimeStamp("$rootvndisk: sanitizing backup GPT headers");
+	    mysystem2("$SGDISK -e $rootvndisk");
+	    print STDERR "libvnode_xen: failed to sanitize backup GPT headers for $rootvndisk\n"
+		if ($? != 0);
 	}
     }
     if ($dothinlv) {
@@ -5512,7 +5533,7 @@ sub createThinPool($)
     }
 
     # Try to make it
-    if (mysystem2("lvcreate -Zy -i$num -L ${poolsize}g ".
+    if (mysystem2("lvcreate --chunksize 128k -Zy -i$num -L ${poolsize}g ".
 		  "--type thin-pool --thinpool $POOL_NAME $VGNAME")) {
 	print STDERR "createThinPool: could not create ${poolsize}g ".
 	    "thin pool\n";
@@ -6042,8 +6063,15 @@ sub ExtractKernelFromLinuxImage($$$)
 {
     my ($lvname, $rootpartition, $outdir) = @_;
     my $lvmpath = lvmVolumePath($lvname);
-    my $PYGRUB  = "$BINDIR/pygrub";
     my $configfile = "$outdir/kernel-config";
+    my $PYGRUB;
+
+    for my $pgc ("$BINDIR/pygrub", "/lib/xen-default/bin/pygrub", "/usr/lib/xen-default/bin/pygrub") {
+	if (-e $pgc) {
+	    $PYGRUB = $pgc;
+	    last;
+	}
+    }
 
     # Must kill this in case we cannot extract it.
     unlink($configfile)
@@ -6100,7 +6128,7 @@ sub ExtractKernelFromLinuxImage($$$)
 	# Temporarily unblock and set to default so we die. 
 	#
 	local $SIG{TERM} = 'DEFAULT';
-	exec("$PYGRUB --quiet --output-format=simple ".
+	exec("$PYGRUB --quiet --no-output-tempfile --output-format=simple ".
 	      "--output-directory=$outdir $lvmpath");
 	exit(1);
     }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,6 +45,7 @@ use Date::Parse;
 use Time::Local;
 use Data::Dumper;
 use Socket;
+use File::Temp qw(tempfile);
 use POSIX qw(:signal_h);
 
 # Configure variables.
@@ -674,7 +675,7 @@ sub ExecQuiet($;$)
     my $pid = open(PIPE, "-|");
     if (!defined($pid)) {
 	print STDERR "ExecQuiet Failure; popen failed!\n";
-	return -1;
+	return undef;
     }
     
     if ($pid) {
@@ -747,6 +748,20 @@ sub PipeCommand($$$)
 	return undef;
     }
     return $output;
+}
+
+#
+# Write to a temporary file and return filename. 
+#
+sub WriteToFile($)
+{
+    my ($string) = @_;
+
+    # We want this file to be passed back but deleted on exit.
+    my ($tempfile, $filename) = tempfile(UNLINK => 1);
+    print $tempfile $string;
+    close($tempfile);
+    return $filename;
 }
 
 #

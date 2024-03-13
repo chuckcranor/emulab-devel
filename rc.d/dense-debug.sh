@@ -4,27 +4,29 @@
 # REQUIRE: testbed
 # KEYWORD: shutdown
 
+SITES="wasatch mario moran guesthouse ebc ustar"
+
+if [ -n "$2" ]; then
+    SITES=$2
+fi
+
 case "$1" in
     start|faststart|quietstart|onestart|forcestart)
-	/usr/testbed/sbin/daemon_wrapper -t -w 10 -i 10 \
-	   -l /usr/testbed/log/frontend-dense-ebc.log \
-           -n dense-ebc-netcat \
-	   -p /var/run/frontend-dense-ebc.pid nc -d 10.11.13.192 111
-  
-	/usr/testbed/sbin/daemon_wrapper -t -w 10 -i 10 \
-	   -l /usr/testbed/log/frontend-dense-ustar.log \
-           -n dense-ustar-netcat \
-	   -p /var/run/frontend-dense-ustar.pid nc -d 10.11.13.193 111
-
-	    echo -n "dense-debugging"
+	for dbs in $SITES; do
+	    /usr/testbed/sbin/daemon_wrapper -t -w 10 -i 10 \
+		-l /usr/testbed/log/frontend-dense-$dbs.log \
+		-n dense-$dbs-netcat \
+		-p /var/run/frontend-dense-$dbs.pid nc -d powder-rffe-$dbs 111
+	    sleep 1
+	done
+	echo -n "dense-debugging"
 	;;
     stop|faststop|quietstop|onestop|forcestop)
-	if [ -r /var/run/frontend-dense-ebc.pid ]; then
-	    kill `cat /var/run/frontend-dense-ebc.pid`
-	fi
-	if [ -r /var/run/frontend-dense-ustar.pid ]; then
-	    kill `cat /var/run/frontend-dense-ustar.pid`
-	fi
+	for dbs in $SITES; do
+	    if [ -r /var/run/frontend-dense-$dbs.pid ]; then
+		kill `cat /var/run/frontend-dense-$dbs.pid`
+	    fi
+	done
 	;;
     *)
 	echo ""

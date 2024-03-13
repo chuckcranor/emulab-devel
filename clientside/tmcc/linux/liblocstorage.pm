@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2022 University of Utah and the Flux Group.
+# Copyright (c) 2013-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,6 +51,9 @@ BEGIN
     if (-e "/etc/emulab/paths.pm") {
 	require "/etc/emulab/paths.pm";
 	import emulabpaths;
+	if (!defined($LBINDIR)) {
+	    $LBINDIR = "/usr/local/bin";
+	}
     }
     else {
 	$ETCDIR  = "/etc/rc.d/testbed";
@@ -102,8 +105,9 @@ my $BLKID	= "/sbin/blkid";
 my $SFDISK	= "/sbin/sfdisk";
 my $SGDISK	= "/sbin/sgdisk";
 my $GDISK	= "/sbin/gdisk";
+my $PARTED	= "/sbin/parted";
 my $PPROBE	= "/sbin/partprobe";
-my $FRISBEE     = "/usr/local/bin/frisbee";
+my $FRISBEE     = "$LBINDIR/frisbee";
 my $HDPARM	= "/sbin/hdparm";
 
 my $FSTAB	= "/etc/fstab";
@@ -246,6 +250,28 @@ sub find_serial($)
 }
 
 #
+# Determine if the device passed in is a real disk as opposed to a virtual
+# disk device like an iSCSI volume or a Xen virtual disk or not a disk at all.
+#
+sub is_real_dev($)
+{
+    my ($dev) = @_;
+    my $sl = "";
+
+    if (-l "/sys/block/$dev") {
+	my $line = `ls -l /sys/block/$dev 2>/dev/null`;
+	# XXX if a pci device, assume a local disk
+	if ($line =~ m# -> ../devices/pci\d+# ||
+	    $line =~ m# -> ../devices/virtual/nvme-subsystem/# ||
+	    $line =~ m# -> ../devices/soc\.\d+/[0-9a-f]+\.sata/# ||
+	    $line =~ m# -> ../devices/platform/soc/[0-9a-f]+\.sata/#) {
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+#
 # Do a one-time initialization of a serial number -> /dev/sd? map.
 #
 sub init_serial_map()
@@ -254,14 +280,10 @@ sub init_serial_map()
     # XXX this is a total hack and maybe distro dependent?
     #
     my %snmap = ();
-    my @lines = `ls -l /sys/block/sd[a-z] /sys/block/sd[a-z][a-z] /sys/block/nvme[0-9]* 2>&1`;
+    my @lines = `cd /sys/block; ls -d sd* nvme* 2>&1`;
     foreach (@lines) {
-	# XXX if a pci device, assume a local disk
-	# XXX for moonshots (arm64), it is different
-	if (m#/sys/block/(sd[a-z][a-z]?) -> ../devices/pci\d+# ||
-	    m#/sys/block/(nvme\d+n\d+) -> ../devices/pci\d+# ||
-	    m#/sys/block/(nvme\d+n\d+) -> ../devices/virtual/nvme-subsystem/# ||
-	    m#/sys/block/(sd[a-z][a-z]?) -> ../devices/soc.\d+#) {
+	# XXX just whole disk devices
+	if (m#^(sd[a-z][a-z]?)$# || m#^(nvme\d+n\d+)$#) {
 	    my $dev = $1;
 	    $sn = find_serial($dev);
 	    if ($sn) {
@@ -295,7 +317,15 @@ sub get_disktype($)
     my @lines;
 
     #
-    # Assume NVMe is SSSD.
+    # Virtual devices (Xen virtual disks, iSCSI volumes) are considered HDD.
+    # Perhaps we should return something else? "VDD"?
+    #
+    if (!is_real_dev($dev)) {
+	return "HDD";
+    }
+
+    #
+    # Assume NVMe is SSD.
     # Older hdparm and smartctl don't seem to handle NVMe
     #
     if ($dev =~ /^nvme\d+n\d+/) {
@@ -303,7 +333,28 @@ sub get_disktype($)
     }
 
     #
-    # Try hdparm first since it is a standard utility
+    # Try a short-cut. Must be done after the is_real_dev check as unreal
+    # devices will want to say they are an SSD.
+    #
+    if (open(HFD, "cat /sys/class/block/$dev/queue/rotational |")) {
+	my $line = <HFD>;
+	close(HFD);
+	chomp $line;
+	if ($line =~ /^(\d+)$/) {
+	    if (int($1) == 0) {
+		return "SSD";
+	    }
+	    return "HDD";
+	}
+    }
+
+    #
+    # Try hdparm first since it is a standard utility.
+    #
+    # XXX BEWARE in Ubuntu22 on the m400 nodes, "hdparm -I" would cause
+    # the following disk operation to timeout. These should be caught by
+    # the short-cut check above. We should probably go back to trying
+    # smartctl before hdparm...
     #
     if (-x "$HDPARM") {
 	if (open(HFD, "$HDPARM -I /dev/$dev 2>/dev/null |")) {
@@ -396,20 +447,46 @@ sub get_ptabtype($)
 	return "unknown";
     }
 
-    # if sfdisk fails, assume unknown
+    #
+    # parted is installed at least as far back as Ubuntu 14 and it
+    # gives an unambiguous answer about the type or lack thereof.
+    #
+    if (-x "$PARTED") {
+	my $pinfo = `$PARTED -s /dev/$dev print 2>&1`;
+	chomp($pinfo);
+	if ($? == 0) {
+	    if ($pinfo =~ /^partition table: (\S+)$/i) {
+		if ($1 eq "msdos") {
+		    return "MBR";
+		} elsif ($1 eq "gpt") {
+		    return "GPT";
+		} else {
+		    return "unknown";
+		}
+	    }
+	} else {
+	    if ($pinfo =~ /unrecognised disk label/) {
+		return "unknown";
+	    }
+	}
+    }
+    
+    #
+    # Just in case parted fails us, we fall back on the vagaries of sfdisk
+    #
     my $pinfo = `$SFDISK -l /dev/$dev 2>&1`;
-    if ($?) {
+
+    # if sfdisk fails or doesn't recognize it, assume unknown
+    if ($? != 0 || $pinfo =~ /unrecognized partition table type/) {
 	return "unknown";
     }
 
-    # if sfdisk doesn't recognize it, assume unknown
-    if ($pinfo =~ /unrecognized partition table type/) {
-	return "unknown";
-    }
-
-    # newer sfdisk recognizes GPT
+    # newer sfdisk recognizes GPT and MBR explicitly
     if ($pinfo =~ /Disklabel type: gpt/) {
 	return "GPT";
+    }
+    if ($pinfo =~ /Disklabel type: dos/) {
+	return "MBR";
     }
 
     # if sfdisk detects a GPT, go with it
@@ -1014,7 +1091,7 @@ sub os_show_storage($)
 	my $snmap = $so->{'LOCAL_SNMAP'};
 
 	print STDERR "  LOCAL_SNMAP:\n";
-	foreach my $sn (keys %$snmap) {
+	foreach my $sn (sort { $snmap->{$a} cmp $snmap->{$b} } keys %$snmap) {
 	    print STDERR "    $sn -> ", $snmap->{$sn}, "\n";
 	}
     }
@@ -1922,10 +1999,11 @@ sub os_create_storage_slice($$$)
 	    #   or
 	    # lvcreate -n h2d2 -L 100m emulab
 	    #
+	    my $szarg = "-L ${lvsize}m";
 	    if ($lvsize == 0) {
 		my $sz = `vgs -o vg_size --units m --noheadings $VGNAME`;
 		if ($sz =~ /([\d\.]+)/) {
-		    $lvsize = int($1);
+		    $szarg = "-L ${1}m";
 		} else {
 		    warn("*** $lv: could not find size of VG\n");
 		}
@@ -1944,16 +2022,24 @@ sub os_create_storage_slice($$$)
 	    # option as well!
 	    #
 	    my $wipeopts = "-Zy -y";
-	    if (defined($pvs) && $pvs > 1 &&
-		!mysystem("lvcreate $wipeopts -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
-		$href->{'LVDEV'} = "/dev/$VGNAME/$lv";
-		return 1;
-	    }
-	    if (mysystem("lvcreate $wipeopts -n $lv -L ${lvsize}m $VGNAME $redir")) {
-		warn("*** $lv: could not create LV$logmsg\n");
-		return 0;
+	    if (!defined($pvs) || $pvs < 2 ||
+		mysystem("lvcreate $wipeopts -i $pvs -n $lv $szarg $VGNAME $redir")) {
+		if (mysystem("lvcreate $wipeopts -n $lv $szarg $VGNAME $redir")) {
+		    warn("*** $lv: could not create LV$logmsg\n");
+		    return 0;
+		}
 	    }
 	    $mdev = "$VGNAME/$lv";
+	    # in case $lvsize == 0, record true size for our caller
+	    if ($lvsize == 0) {
+		my $sz = `lvs -o lv_size --units m --noheadings $mdev`;
+		if ($sz =~ /([\d\.]+)/) {
+		    $lvsize = int($1);
+		} else {
+		    warn("*** $lv: could not find size of LV\n");
+		}
+	    }
+	    $href->{'VOLSIZE'} = $lvsize;
 	}
 
 	$href->{'LVDEV'} = "/dev/$mdev";
@@ -2240,14 +2326,18 @@ sub os_remove_storage_slice($$$)
 		if (mysystem("pvremove -f @devs $redir")) {
 		    warn("*** $lv: could not destroy PVs$logmsg\n");
 		} else {
-		    my $tdev = "/dev/${bdisk}4";
+		    my $pchr = "";
+		    if ($bdisk =~ /^nvme/) {
+			$pchr = "p";
+		    }
+		    my $tdev = "${bdisk}${pchr}4";
 		    if (grep(/\s*$tdev\s*/, @devs) != 0) {
 			if ($ginfo->{$bdisk}->{'ptabtype'} eq "GPT") {
 			    if (mysystem("$SGDISK -d 4 /dev/$bdisk $redir") ||
 				mysystem("$PPROBE /dev/$bdisk $redir")) {
 				warn("*** $lv: could not destroy $tdev$logmsg\n");
 			    } else {
-				delete $ginfo->{"${bdisk}4"};
+				delete $ginfo->{$tdev};
 			    }
 			}
 		    }

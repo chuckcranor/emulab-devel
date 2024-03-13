@@ -1,0 +1,21 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_aggregate_nodes", "conflicting_nodes")) {
+	DBQueryFatal("alter table apt_aggregate_nodes add ".
+		     " `conflicting_nodes` mediumtext default NULL");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

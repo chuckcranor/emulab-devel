@@ -78,6 +78,7 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/udev/rules.d
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/ssh
 
 common-install:	dir-install
 	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)
@@ -89,11 +90,15 @@ bin-install:	dir-install
 		$(BINDIR)/emulab-udev-network-interfaces-handler
 
 etc-install:	dir-install common-sysetc-install
-	$(INSTALL) -m 644 $(SRCDIR)/group $(ETCDIR)/group
-	$(INSTALL) -m 644 $(SRCDIR)/passwd $(ETCDIR)/passwd
-	$(INSTALL) -m 600 $(SRCDIR)/shadow $(ETCDIR)/shadow
-	$(INSTALL) -m 600 $(SRCDIR)/gshadow $(ETCDIR)/gshadow
-	$(INSTALL) -m 644 $(SRCDIR)/hosts $(ETCDIR)/hosts
+	if [ "$(NOPASSWD)" != "1" ]; then \
+		$(INSTALL) -m 644 $(SRCDIR)/group $(ETCDIR)/group ; \
+		$(INSTALL) -m 644 $(SRCDIR)/passwd $(ETCDIR)/passwd ; \
+		$(INSTALL) -m 600 $(SRCDIR)/shadow $(ETCDIR)/shadow ; \
+		$(INSTALL) -m 600 $(SRCDIR)/gshadow $(ETCDIR)/gshadow ; \
+	fi
+	if [ "$(NOHOSTS)" != "1" ]; then \
+		$(INSTALL) -m 644 $(SRCDIR)/hosts $(ETCDIR)/hosts ; \
+	fi
 
 common-sysetc-install:	dir-install
 	# Tell ../linux/GNUMakefile.in that we want systemd files, not SYSV
@@ -118,8 +123,10 @@ sysetc-install:	dir-install
 	$(INSTALL) -m 755 $(SRCDIR)/rc.local $(SYSETCDIR)/rc.local
 	$(INSTALL) -m 644 $(SRCDIR)/interfaces $(SYSETCDIR)/network/interfaces
 	$(INSTALL) -m 644 $(SRCDIR)/sudoers $(SYSETCDIR)/sudoers.d/99-emulab
-	$(INSTALL) -m 644 $(SRCDIR)/ntp.conf $(SYSETCDIR)/ntp.conf
-	$(INSTALL) -m 644 -o ntp -g ntp /dev/null /var/lib/ntp/ntp.drift
+	@if [ -z "$(NONTP)" ]; then \
+		$(INSTALL) -m 644 $(SRCDIR)/ntp.conf $(SYSETCDIR)/ntp.conf; \
+		$(INSTALL) -m 644 -o ntp -g ntp /dev/null /var/lib/ntp/ntp.drift ; \
+	fi
 	$(INSTALL) -m 644 $(SRCDIR)/99-emulab-control-network.rules \
 		$(SYSETCDIR)/udev/rules.d/99-emulab-control-network.rules
 
@@ -137,9 +144,11 @@ systemd-install: dir-install
 		$(SYSETCDIR)/systemd/system/networking.service.wants/networking-emulab.service
 	ln -sf ../networking-emulab.service \
 		$(SYSETCDIR)/systemd/system/network-online.target.wants/networking-emulab.service
-	$(INSTALL) -m 644 $(SRCDIR)/ntp.service $(SYSETCDIR)/systemd/system
-	ln -sf $(SYSETCDIR)/systemd/system/ntp.service \
-		$(SYSETCDIR)/systemd/system/multi-user.target.wants/ntp.service
+	@if [ -z "$(NONTP)" ]; then \
+		$(INSTALL) -m 644 $(SRCDIR)/ntp.service $(SYSETCDIR)/systemd/system ; \
+		ln -sf ../ntp.service \
+			$(SYSETCDIR)/systemd/system/multi-user.target.wants/ntp.service ; \
+	fi
 	# Kick the init process to read our newly-installed unit files
 	# (i.e., so an immediate tbprepare will work...)
 	@if [ -z "$(DESTDIR)" ]; then \

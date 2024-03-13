@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -226,7 +226,7 @@ class WebTask {
     }
 
     public static function GenerateID() {
-	return md5(uniqid(rand(),1));
+	return sha1(random_bytes(128));
     }
 
     # convenience function

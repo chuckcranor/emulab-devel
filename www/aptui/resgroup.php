@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -21,6 +21,9 @@
 #
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include_once("geni_defs.php");
@@ -53,7 +56,6 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "project",  PAGEARG_PROJECT,
                                  "fromrspec",PAGEARG_BOOLEAN,
                                  "uuid",     PAGEARG_UUID);
-
 $fromrspec = ($fromrspec ? 1 : 0);
 
 if ($edit || $history) {
@@ -84,8 +86,6 @@ if (isset($cluster)) {
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
-            href='css/jquery-ui.min.css'>\n";
-echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
 echo "<link rel='stylesheet'
             href='https://fonts.googleapis.com/css?family=Muli'>\n";
@@ -102,8 +102,6 @@ echo "<div id='oops_div'></div>
       <div id='confirm_div'></div>
       <div id='waitwait_div'></div>\n";
 
-# Reservations now have to start next business day at 9am (unless expert).
-$bisdaysonly = $this_user->expert_mode() || $isadmin ? 0 : 1;
 # Ditto
 $routesokay  = $isadmin;
 
@@ -126,13 +124,15 @@ $doVerifySpectrum = 0;
 #
 $mlist = array();
 $plist = array();
-foreach ($projlist as $p => $unused) {
-    $plist[] = $p;
+foreach ($projlist as $p => $grouplist) {
     $ptmp = Project::LookupByPid($p);
     if ($ptmp) {
-        if ($ptmp->expert_mode()) {
-            $bisdaysonly = 0;
-        }
+        $info = array (
+            "pid"     => $p,
+            "groups"  => $grouplist,
+            "resmode" => $ptmp->ResSharingMode(),
+            "manager" => $ptmp->IsManager($this_user),
+        );
         $mlist[$p] = $ptmp->IsManager($this_user);
 
         if ($ISPOWDER) {
@@ -152,7 +152,9 @@ foreach ($projlist as $p => $unused) {
                 "allowed"  => $ptmp->otaAllowed(),
                 "isleader" => $ptmp->IsLeader($this_user),
             );
+            $info["ota"] = $otaAllowed[$p];
         }
+        $plist[$p] = $info;
     }
 }
 #
@@ -161,6 +163,7 @@ foreach ($projlist as $p => $unused) {
 if (!$doOtaCheck) {
     foreach ($otaAllowed as $pid => &$details) {
         $details["allowed"] = 1;
+        $plist[$pid]["allowed"] = 1;
     }
     reset($otaAllowed);
 }
@@ -295,7 +298,7 @@ else {
         $default_pid = $project->pid();
     }
     else {
-        $default_pid = $plist[0];
+        $default_pid = array_key_first($plist);
     }
     echo "   window.EDITING  = false;\n";
     echo "   window.PID      = '$default_pid';\n";
@@ -304,7 +307,6 @@ else {
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";
 echo "   window.HOMETZ   = '$OURTIMEZONE';\n";
-echo "   window.BISONLY  = $bisdaysonly;\n";
 echo "   window.DOROUTES = $routesokay;\n";
 
 echo "</script>\n";
@@ -315,6 +317,7 @@ REQUIRE_MOMENT();
 REQUIRE_MOMENTTIMEZONE();
 REQUIRE_APTFORMS();
 REQUIRE_TABLESORTER();
+REQUIRE_JQUERY_UI();
 AddLibrary("js/resgraphs.js");
 AddLibrary("js/rfchart.js");
 AddLibrary("js/ota-permission.js");
@@ -328,7 +331,7 @@ SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".
-            "<script src='js/lib/visavail.js'></script>\n".
-            "<script src='js/lib/jquery-ui.js'></script>");
+            "<script src='js/lib/visavail.js'></script>\n");
+
 SPITFOOTER();
 ?>

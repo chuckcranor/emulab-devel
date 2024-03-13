@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -117,6 +117,7 @@ class Instance
     function profile_id()   { return $this->field('profile_id'); }
     function profile_version() { return $this->field('profile_version'); }
     function status()	    { return $this->field('status'); }
+    function rdz_status()   { return $this->field('rdz_status'); }
     function canceled()	    { return $this->field('canceled'); }
     function paniced()	    { return $this->field('paniced'); }
     function pid()	    { return $this->field('pid'); }
@@ -155,6 +156,7 @@ class Instance
     function isopenstack()  { return $this->field('isopenstack'); }
     function params()       { return $this->field('params'); }
     function paramdefs()    { return $this->field('paramdefs'); }
+    function portal()       { return $this->field('portal'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
     }
@@ -168,6 +170,17 @@ class Instance
     }
     function IsPNet() {
 	return preg_match('/phantomnet/', $this->servername());
+    }
+
+    function Slice() {
+        return GeniSlice::Lookup("sa", $this->slice_uuid());
+    }
+    function expires() {
+        $slice = $this->Slice();
+        if (!$slice) {
+            return null;
+        }
+        return $slice->expires();
     }
 
     # Grab the webtask. Backwards compat mode, see if there is one associated
@@ -914,10 +927,21 @@ class Instance
                            "cellsdr1-dentistry" => true,
                            "cellsdr1-fm"        => true,
                            "cellsdr1-honors"    => true,
-                           "cellsdr1-meb"       => true,
                            "cellsdr1-ustar"     => true,
+                           "cellsdr1-meb"       => true,
                            "mmimo-ac"           => true,
-                           "irisclients-ac"     => true,
+                           "n310-ustar"         => true,
+                           "cap-ustar"          => true,
+                           "ceg1"               => true,
+                           "cap1"               => true,
+                           "cl-ap"              => true,
+                           # Wisconsin, not ready yet
+                           "d7525"              => true,
+                           "c240g2-infra"       => true,
+                           "r7525s"             => true,
+                           "rflab-blackbox"     => true,
+                           "at-ru"              => true,
+                           "bt-ru550"           => true,
         );
 
         #
@@ -1031,6 +1055,34 @@ class Instance
             $result[] = $sliver->aggregate_urn();
         }
         return $result;
+    }
+
+    # Check the create_instance countdown lock, if too high, we return
+    # an indicator.
+    function tooManyWaiting()
+    {
+	$query_result =
+	    DBQueryFatal("select value from emulab_locks ".
+                         "where name='create_instance_lock'");
+        
+        if (!mysql_num_rows($query_result)) {
+            return 0;
+        }
+        $row = mysql_fetch_array($query_result);
+        $count = $row[0];
+        if ($count > 10) {
+            return 1;
+        }
+        return 0;
+    }
+
+    function loadTooHigh()
+    {
+        $load = sys_getloadavg();
+        if ($load[0] > 15) {
+            return 1;
+        }
+        return 0;
     }
 }
 
@@ -1516,6 +1568,8 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                                   "isfederate"   => $aggregate->isfederate(),
                                   "abbreviation" => $aggregate->abbreviation(),
                                   "weburl"       => $aggregate->weburl(),
+                                  "reservable_nodes" =>
+                                           $aggregate->ReservableNodes(),
             );
         }
         else {

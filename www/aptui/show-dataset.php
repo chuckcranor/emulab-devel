@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include("lease_defs.php");
@@ -174,13 +177,9 @@ echo "    window.CANREFRESH = $canrefresh;\n";
 echo "    window.CANSNAPSHOT= $cansnapshot;\n";
 echo "</script>\n";
 
-REQUIRE_UNDERSCORE();
-REQUIRE_SUP();
-REQUIRE_MOMENT();
-REQUIRE_APTFORMS();
+SPITREQUIRE_DATASET();
 REQUIRE_IMAGE();
-SPITREQUIRE("js/show-dataset.js",
-            "<script src='js/lib/jquery-ui.js'></script>\n");            
+SPITREQUIRE("js/show-dataset.js");
 # For progress bubbles in the imaging modal.
 echo "<link rel='stylesheet' href='css/progress.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";

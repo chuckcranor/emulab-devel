@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -125,8 +125,9 @@ sub CheckPermission($)
 	       $OURDOMAIN eq "utah.cloudlab.us" ||
 	       $OURDOMAIN eq "wisc.cloudlab.us" ||
 	       $OURDOMAIN eq "clemson.cloudlab.us" ||
-	       $OURDOMAIN eq "utahddc.geniracks.net" ||
 	       $OURDOMAIN eq "lab.onelab.eu" ||
+	       $OURDOMAIN eq "cloudlab.umass.edu" ||
+	       $OURDOMAIN eq "stitch.geniracks.net" ||
 	       $CLOUDLAB_FEDERATED));
 
     return 0;
@@ -944,7 +945,7 @@ sub Reserve($)
     my $asadmin   = 0;
     my $noidledetection = 0;
     my $reservation;
-    my ($geniuser, $project);
+    my ($geniuser, $group);
 
     my $hasperm = CheckPermission(0);
     return $hasperm
@@ -960,7 +961,7 @@ sub Reserve($)
     # project.
     #
     if (exists($argref->{'credentials'})) {
-	($geniuser, $project) =
+	($geniuser, $group) =
 	    Credential2UserProject($argref->{'credentials'});
 
 	return $geniuser
@@ -990,15 +991,47 @@ sub Reserve($)
 	return GeniResponse->MalformedArgsResponse("No such user")
 	    if (!defined($geniuser));
 
-	my $group = GeniUtil::GetHoldingProject($argref->{'project_urn'},
+	$group = GeniUtil::GetHoldingProject($argref->{'project_urn'},
 						undef, 1);
 	return $group
 	    if (GeniResponse::IsResponse($group));
-	$project = $group->GetProject();
 	$asadmin = 1;
     }
-    my $pid = $project->pid();
-    my $uid = $geniuser->emulab_user()->uid();
+    my $project = $group->GetProject();
+    my $pid     = $group->pid();
+    my $gid     = $group->gid();
+    my $uid     = $geniuser->emulab_user()->uid();
+
+    #
+    # Check consistency. See SetSharedReservations() in this file.
+    # This is going to happen when adding a new cluster (aggregate)
+    # for projects where shared_reservations=1 at the portal. Or if
+    # a cluster was down when calling SetSharedReservations(). 
+    #
+    if (exists($argref->{'shared_reservations'})) {
+	my $shared = $argref->{'shared_reservations'};
+	if ($project->shared_reservations() != $shared) {
+	    #
+	    # We want to try to change it, and hope it does not cause
+	    # any grief. But if it does, we need to return the message
+	    # blob to the Portal so it can issue notifications.
+	    #
+	    my @results = ();
+	    if ($project->SetSharedReservations($shared, \@results)) {
+		print STDERR "SetSharedReservations failed\n";
+		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+			    "Could not toggle shared reservations flag");
+	    }
+	    #
+	    # XXX: Deal with this case later. 
+	    #
+	    if (@results) {
+		print STDERR Dumper(\@results);
+		return GeniResponse->Create(GENIRESPONSE_ERROR, \@results,
+					    "Oops, not ready for this");
+	    }
+	}
+    }
 
     # Different rules for update.
     my $update = (exists($argref->{"update"}) ? $argref->{"update"} : undef);
@@ -1090,7 +1123,8 @@ sub Reserve($)
 	    if (!defined($reservation));
 
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	    if ($reservation->pid() ne $project->pid());
+	    if ($reservation->pid() ne $group->pid() ||
+		$reservation->gid() ne $group->gid());
 
 	$type = $reservation->type();
     }
@@ -1126,6 +1160,7 @@ sub Reserve($)
 	(defined($end) ? "-e $end " : "") .
 	(defined($update) && defined($count) ? "-S $count " : "") .
 	($asadmin ? "-U $uid " : "") . 
+	($group->IsProjectGroup() ? "" : "-g $gid ") . 
 	(!defined($update) ? "$pid $count" : "");
 
     #
@@ -1177,13 +1212,13 @@ sub Reserve($)
     }
     else {
 	# We know this is a local user.
-	$geniuser->FlipTo($project->GetProjectGroup());
+	$geniuser->FlipTo($group);
     }
     my $output = GeniUtil::ExecQuiet($command);
     
     if ($? && $? >> 8 != 2) {
 	GeniUtil::FlipToGeniUser();
-	#print STDERR "$args\n";
+	print STDERR "$command\n";
 	$webtask->Refresh();
 	my $code = $webtask->exitcode();
 	my $mesg = $webtask->output();
@@ -1301,20 +1336,21 @@ sub Reservations($)
     }
     else {
 	my $credentials = $argref->{'credentials'};	
-	my ($geniuser,$project) = Credential2UserProject($credentials);
+	my ($geniuser,$group) = Credential2UserProject($credentials);
 
 	return $geniuser
 	    if (GeniResponse::IsResponse($geniuser));
 
-	if (defined($project)) {
-	    my $pid = $project->pid();
+	if (defined($group)) {
+	    my $pid = $group->pid();
+	    my $gid = $group->gid();
 	    $query_result =
 		DBQueryWarn("select *,UNIX_TIMESTAMP(start) as start, ".
 			    "   UNIX_TIMESTAMP(end) as end, ".
 			    "   UNIX_TIMESTAMP(created) as created, ".
 			    "   UNIX_TIMESTAMP(cancel) as cancel ".
 			    "  from future_reservations ".
-			    "where pid='$pid' ".
+			    "where pid='$pid' and gid='$gid' ".
 			    (defined($target) ? "and $target " : "").
 			    "order BY start");
 	    $prereservations = PreReservationList("project", $pid, $preresuuid);
@@ -1381,29 +1417,57 @@ sub Reservations($)
     my %timelines = ();
     my @rows      = ();
     my %pidres    = ();
-    my %projects  = ();
     
     while (my $row = $query_result->fetchrow_hashref()) {
-	my $pid = $row->{'pid'};
+   	my $idx = $row->{'idx'};
+	my $reservation = Reservation->Lookup($idx);
+	next
+	    if (!$reservation);
+	my $pid = $reservation->pid();
+	my $gid = $reservation->gid();
+	my $target  = $reservation->Target();
 	my $project = Project->Lookup($pid);
 	if (!defined($project)) {
 	    print STDERR "Reservations: No such project $pid\n";
 	    next;
 	}
-	$projects{$pid} = $project;
-	if (!exists($pidres{$pid})) {
-	    my @allres   = ResUtil::CollectReservations($project, undef, 0);
+	my $group = $project->GetProjectGroup();
+	my $user = User->Lookup($reservation->uid());
+	next
+	    if (!$user);
+	
+	if ($reservation->shared_res() == $Project::RESERVATIONS_PERGROUP) {
+	    $group = $project->LookupGroup($reservation->gid());
+	    next
+		if (!$group);
+	}
+	# Save for loop below.
+	$row->{"target"}  = $target;
+	$row->{"project"} = $project;
+	$row->{"group"}   = $group;
+	$row->{"user"}    = $user;
+	$row->{"reservation"} = $reservation;
+	
+	if (!exists($pidres{$target})) {
+	    #
+	    # Pass user only when res (project) is per-user reservations.
+	    #
+	    my $resuser = ($reservation->shared_res() ==
+			   $Project::RESERVATIONS_PERUSER ? $user : undef);
+	    
+	    my @allres   = ResUtil::CollectReservations($group, $resuser, 0);
 	    my @timeline = ();
 	    # This does not return unapproved reservations, but we still
 	    # need to process them below.
 	    if (@allres) {
-		@timeline = ResUtil::CreateTimeline($project, @allres);
+		@timeline = ResUtil::CreateTimeline($group, $resuser, @allres);
 		if (!@timeline) {
-		    print STDERR "Reservations: No timeline for $pid\n";
+		    #print STDERR "Reservations: No timeline for $pid/$gid\n";
 		}
 	    }
-	    $pidres{$pid} = \@allres;
-	    $timelines{$pid} = \@timeline;
+	    $pidres{$target} = \@allres;
+	    $timelines{$target} = \@timeline;
+	    #print STDERR Dumper(\@timeline);
 	}
 	push(@rows, $row);
     }
@@ -1416,31 +1480,34 @@ sub Reservations($)
 	my $blob = {};
    	my $idx  = $row->{'idx'};
 	my $pid  = $row->{'pid'};
+	my $gid  = $row->{'gid'};
 	my $uid  = $row->{'uid'};
 	my $uuid = $row->{'uuid'};
 	my $type = $row->{'type'};
-	my $using= 0;
-	my $project  = $projects{$pid};
-	my $projurn  = $project->nonlocalurn();
+	my $reservation = $row->{'reservation'};
+	my $target   = $row->{'target'};
+	my $project  = $row->{'project'};
+	my $group    = $row->{'group'};
+	my $user     = $row->{'user'};
 	my @timeline = ();
+	my $using = 0;
 	
-	my $user = User->Lookup($uid);
-	if (!defined($user)) {
-	    print STDERR "Reservations: No such user $uid\n";
-	    next;
-	}
-	my $reservation = Reservation->Lookup($idx);
-	next
-	    if (!defined($reservation));
-
 	# Backwards compatibility requires we always return something for this.
 	$blob->{'utilization'} = {};	
 
 	if ($reservation->approved() && $reservation->start() < time()) {
-	    @timeline = @{$timelines{$pid}};
+	    @timeline = @{$timelines{$target}};
 	    if (@timeline) {
+		#print STDERR Dumper(\@timeline);
 		ResUtil::ReservationUtilizationNew($reservation, @timeline);
 		$blob->{'utilization'} = $reservation->data("utilization");
+
+		#
+		# Hmm, maybe this was not the best approach; using the pid
+		# from the remote cluster. The gid is always the same.
+		#
+		#my $rhrn = GeniHRN->new($project->nonlocalurn());
+		#my $rpid = $rhrn->id();
 	    
 		#
 		# Narrow the timeline to just the data needed by the caller.
@@ -1448,13 +1515,13 @@ sub Reservations($)
 		my @tmp = ();
 		foreach my $ref (@timeline) {
 		    my $allocated = {
-			$pid => {
+			"$pid/$gid" => {
 			    $type =>
-				$ref->{'rescounts'}->{$uuid}->{"project"} || 0
+				$ref->{'rescounts'}->{$uuid}->{"group"} || 0
 			},
-			    $uid => {
-				$type =>
-				    $ref->{'rescounts'}->{$uuid}->{"user"} || 0
+			$uid => {
+			    $type =>
+				$ref->{'rescounts'}->{$uuid}->{"user"} || 0
 			},
 		    };
 		    push(@tmp, {
@@ -1465,14 +1532,15 @@ sub Reservations($)
 		@timeline = @tmp;
 		if (@timeline) {
 		    my $ref = $timeline[-1];
-		    $using = $ref->{'allocated'}->{$pid}->{$type};
+		    $using = $ref->{'allocated'}->{"$pid/$gid"}->{$type};
 		}
 	    }
 	}
 	$blob->{"idx"}         = $idx;
 	$blob->{"uuid"}        = $uuid;
-	$blob->{"project"}     = $projurn;
+	$blob->{"project"}     = $project->nonlocalurn();
 	$blob->{"pid"}         = $pid;
+	$blob->{"gid"}         = $gid;
 	$blob->{"user"}        = $user->nonlocalurn();
 	$blob->{"uid"}         = $user->uid();
 	$blob->{"nodes"}       = $row->{'nodes'};
@@ -1483,6 +1551,7 @@ sub Reservations($)
 	$blob->{"end"}         = TBDateStringGMT($row->{'end'});
 	$blob->{"notes"}       = $row->{'notes'} || "";
 	$blob->{"approved"}    = "";
+	$blob->{"restype"}     = $project->SharedReservationsString();
 	$blob->{"idledetection"} = $row->{'override_unused'} ? 0 : 1;
 	if (defined($row->{'approved'})) {
 	    $blob->{"approved"} = TBDateStringGMT($row->{'approved'});
@@ -1846,8 +1915,9 @@ sub ReservationSystemInfo($)
 }
 
 #
-# Get the Future Pressure and Outstanding Reservations.
-#
+# Stripped down version of the prediction info since we only ever
+# use the forecasts and the current.
+# 
 sub ReservationPrediction($)
 {
     my ($argref)  = @_;
@@ -1862,6 +1932,291 @@ sub ReservationPrediction($)
     if (ref($argref->{"projlist"}) ne "ARRAY") {
 	return GeniResponse->MalformedArgsResponse("Malformed project list")
     }
+
+    return GeniResponse->MalformedArgsResponse("Missing target user urn")
+	if (!(exists($argref->{"user"}) && defined($argref->{"user"})));
+    
+    my $user_hrn = GeniHRN->new($argref->{"user"});
+    if (!defined($user_hrn)) {
+	return GeniResponse->MalformedArgsResponse("Malformed user urn")
+    }
+    my ($user, $uid);
+    if ($user_hrn->domain() eq $OURDOMAIN) {
+	$user = User->Lookup($user_hrn->id());
+    }
+    else {
+	$user = User->LookupNonLocal($argref->{"user"});
+    }
+    # Clearly the user has no reservations here if not defined
+    if (defined($user)) {
+	$uid = $user->uid();
+    }
+
+    #
+    # We now get pid/gid urns.
+    #
+    # Convert to local projects, skip if we do not have one yet,
+    # clearly no reservations for it.
+    #
+    my %projects  = ();
+    my @projlist  = ();
+    my %projlist  = ();
+    my @grouplist = ();
+    my %grouplist = ();
+    foreach my $projurn (@{$argref->{"projlist"}}) {
+	my ($project, $group);
+	my $hrn = GeniHRN->new($projurn);
+	next
+	    if (!defined($hrn));
+
+	my $domain = $hrn->domain();
+	my $pid    = $hrn->project();
+	my $gid    = $hrn->group();
+	
+	if ($domain eq $OURDOMAIN) {
+	    if (!defined($gid)) {
+		$project = Project->Lookup($pid);
+		$group   = $project->GetProjectGroup() if (defined($project));
+	    }
+	    else {
+		$group   = Group->Lookup($pid, $gid);
+		$project = $group->GetProject() if (defined($group));
+	    }
+	}
+	else {
+	    #
+	    # We got a project URN but we need to lookup using the SA urn.
+	    # We can get group qualified urns here, but we need a straight
+	    # project urn to find the project.
+	    #
+	    my $purn = GeniHRN::Generate("${domain}:${pid}", "authority", "sa");
+	    $project = Project->LookupNonLocal($purn);
+	    if (defined($project)) {
+		if (defined($gid)) {
+		    $group = $project->LookupGroup($gid);
+		}
+		else {
+		    $group = $project->GetProjectGroup();
+		}
+	    }
+	}
+	next
+	    if (!defined($group));
+	
+	$projects{$project->pid()} = $project;
+
+	#
+	# It is possible that we get a subgroup but not the project, as when
+	# it is for a class and the user has "user" privs in the project.
+	#
+	if ($project->shared_reservations == $Project::RESERVATIONS_PERGROUP) {
+	    #
+	    # Only groups matter, so convert pid to pid/gid.
+	    #
+	    if (! exists($grouplist{$group->pidgid()})) {
+		# Remote pid/gid. 
+		my $rpid = $hrn->project();
+		my $rgid = $hrn->group() ? $hrn->group() : $rpid;
+		
+		$grouplist{$group->pidgid()} = "$rpid/$rgid";
+		push(@grouplist, $group->pidgid());
+	    }
+	}
+	else {
+	    #
+	    # All reservations are at the project level, so we ignore
+	    # subgroups. This applies to per-user project setting as well.
+	    #
+	    if (! exists($projlist{$project->pid()})) {
+		$projlist{$project->pid()} = $hrn->project();
+		push(@projlist, $project->pid());
+	    }
+	}
+    }
+    my $forecast    = {};
+    my $current     = {};
+    my $upcoming    = {};
+    my $pforecasts  = {};
+
+    my @types = Reservation->ReservableTypes();
+    foreach my $type (@types) {
+	my $type = $type->type();
+	
+	$forecast->{$type}   = [ Reservation->Forecast($type, \@projlist,
+						       \@grouplist,
+						       $uid, undef, 1) ];
+    }
+    my @nodes = Reservation->ReservableNodes();
+    foreach my $node (@nodes) {
+	my $node_id = $node->node_id();
+	
+	$forecast->{$node_id}   =
+	    [ Reservation->Forecast($node_id, \@projlist,
+				    \@grouplist, $uid, undef, 1) ];
+    }
+    
+    goto nopids
+	if (! (@projlist || @grouplist));
+    
+    foreach my $type (@types)  {
+	my $type = $type->type();
+	
+	foreach my $pid (@projlist) {
+	    # rpid is the project name at the calling cluster
+	    my $rpid  = $projlist{$pid};
+
+	    if (!exists($pforecasts->{$rpid})) {
+		$pforecasts->{$rpid} = {};
+	    }
+	    $pforecasts->{$rpid}->{$type} =
+		[ Reservation->Forecast($type, [$pid], [], $uid, undef, 1) ];
+	}
+	foreach my $pidgid (@grouplist) {
+	    # rpidgid is the project name at the calling cluster
+	    my $rpidgid = $grouplist{$pidgid};
+
+	    if (!exists($pforecasts->{$rpidgid})) {
+		$pforecasts->{$rpidgid} = {};
+	    }
+	    $pforecasts->{$rpidgid}->{$type} =
+		[ Reservation->Forecast($type, [], [$pidgid], $uid, undef, 1) ];
+	}
+    }
+    foreach my $node (@nodes) {
+	my $node_id = $node->node_id();
+	
+	foreach my $pid (@projlist) {
+	    # rpid is the project name at the calling cluster
+	    my $rpid  = $projlist{$pid};
+	    
+	    if (!exists($pforecasts->{$rpid})) {
+		$pforecasts->{$rpid} = {};
+	    }
+	    $pforecasts->{$rpid}->{$node_id} =
+		[ Reservation->Forecast($node_id, [$pid], [], $uid, undef, 1) ];
+	}
+	foreach my $pidgid (@grouplist) {
+	    # rpidgid is the project name at the calling cluster
+	    my $rpidgid = $grouplist{$pidgid};
+
+	    if (!exists($pforecasts->{$rpidgid})) {
+		$pforecasts->{$rpidgid} = {};
+	    }
+	    $pforecasts->{$rpidgid}->{$node_id} =
+		[ Reservation->Forecast($node_id, [], [$pidgid], $uid, undef, 1) ];
+	}
+    }
+
+    #
+    # This one takes a single list.
+    #
+    my @all = map { $_ . "/" . $_ } @projlist;
+    @all = (@all, @grouplist);
+
+    my @reservations  = Reservation->CurrentReservations(\@all, $uid);
+
+    for my $ref (@reservations) {
+	my $pid  = $ref->{'pid'};
+	my $gid  = $ref->{'gid'};
+	my $rpidgid;
+
+	if ($pid eq $gid) {
+	    my $project = $projects{$pid};
+	    my $hrn;
+
+	    if ($project->shared_reservations ==
+		$Project::RESERVATIONS_PERGROUP) {
+		$rpidgid = $grouplist{"${pid}/${pid}"};
+	    }
+	    else {
+		$rpidgid = $projlist{$pid};
+	    }
+	}
+	else {
+	    $rpidgid = $grouplist{"${pid}/${gid}"};
+	}
+	if (!exists($current->{$rpidgid})) {
+	    $current->{$rpidgid} = [];
+	}
+	push(@{$current->{$rpidgid}}, $ref)
+    }
+
+    @reservations  = Reservation->UpcomingReservations(\@all, $uid);
+
+    for my $ref (@reservations) {
+	my $pid  = $ref->{'pid'};
+	my $gid  = $ref->{'gid'};
+	my $rpidgid;
+
+	if ($pid eq $gid) {
+	    my $project = $projects{$pid};
+	    my $hrn;
+
+	    if ($project->shared_reservations ==
+		$Project::RESERVATIONS_PERGROUP) {
+		$rpidgid = $grouplist{"${pid}/${pid}"};
+	    }
+	    else {
+		$rpidgid = $projlist{$pid};
+	    }
+	}
+	else {
+	    $rpidgid = $grouplist{"${pid}/${gid}"};
+	}
+	if (!exists($upcoming->{$rpidgid})) {
+	    $upcoming->{$rpidgid} = [];
+	}
+	push(@{$upcoming->{$rpidgid}}, $ref)
+    }
+    
+  nopids:
+    my $blob = {
+	"forecast"     => $forecast,
+	"pforecasts"   => $pforecasts,
+	"current"      => $current,
+	"upcoming"     => $upcoming,
+    };
+    #print STDERR Dumper($blob);
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+#
+# Get the Future Pressure and Outstanding Reservations.
+#
+sub ReservationPredictionOld($)
+{
+    my ($argref)  = @_;
+
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+       if (GeniResponse::IsError($hasperm));
+
+    return GeniResponse->MalformedArgsResponse("Missing project list")
+	if (!(exists($argref->{"projlist"}) && defined($argref->{"projlist"})));
+    
+    if (ref($argref->{"projlist"}) ne "ARRAY") {
+	return GeniResponse->MalformedArgsResponse("Malformed project list")
+    }
+
+    return GeniResponse->MalformedArgsResponse("Missing target user urn")
+	if (!(exists($argref->{"user"}) && defined($argref->{"user"})));
+    
+    my $user_hrn = GeniHRN->new($argref->{"user"});
+    if (!defined($user_hrn)) {
+	return GeniResponse->MalformedArgsResponse("Malformed user urn")
+    }
+    my ($user, $uid);
+    if ($user_hrn->domain() eq $OURDOMAIN) {
+	$user = User->Lookup($user_hrn->id());
+    }
+    else {
+	$user = User->LookupNonLocal($argref->{"user"});
+    }
+    # Clearly the user has no reservations here if not defined
+    if (defined($user)) {
+	$uid = $user->uid();
+    }
+    
     #
     # Convert to local projects, skip if we do not have one yet,
     # clearly no reservations for it.
@@ -1904,7 +2259,7 @@ sub ReservationPrediction($)
 	
 	$freecounts->{$type} = Reservation->FreeCount($type, \@projlist);
 	$forecast->{$type}   = [ Reservation->Forecast($type, \@projlist,
-						       undef, 1) ];
+						       $uid, undef, 1) ];
     }
     my @nodes = Reservation->ReservableNodes();
     foreach my $node (@nodes) {
@@ -1913,7 +2268,7 @@ sub ReservationPrediction($)
 	$freecounts->{$node_id} =
 	    Reservation->FreeCount($node_id, \@projlist);
 	$forecast->{$node_id}   =
-	    [ Reservation->Forecast($node_id, \@projlist, undef, 1) ];
+	    [ Reservation->Forecast($node_id, \@projlist, $uid, undef, 1) ];
     }
     
     goto nopids
@@ -1923,7 +2278,7 @@ sub ReservationPrediction($)
 	my $type = $type->type();
 	
 	foreach my $pid (@projlist) {
-	    my @pairs = Reservation->FuturePressure([$type],[$pid]);
+	    my @pairs = Reservation->FuturePressure([$type],[$pid], $uid);
 	    next
 		if (!@pairs);
 	    #print STDERR "P: $pid,$type,@pairs\n";
@@ -1943,7 +2298,7 @@ sub ReservationPrediction($)
 		$pforecasts->{$rpid} = {};
 	    }
 	    $pforecasts->{$rpid}->{$type} =
-		[ Reservation->Forecast($type, [$pid], undef, 1) ];
+		[ Reservation->Forecast($type, [$pid], $uid, undef, 1) ];
 	}
     }
     foreach my $node (@nodes) {
@@ -1956,7 +2311,7 @@ sub ReservationPrediction($)
 		$pforecasts->{$rpid} = {};
 	    }
 	    $pforecasts->{$rpid}->{$node_id} =
-		[ Reservation->Forecast($node_id, [$pid], undef, 1) ];
+		[ Reservation->Forecast($node_id, [$pid], $uid, undef, 1) ];
 	}
     }
     
@@ -1965,7 +2320,8 @@ sub ReservationPrediction($)
 	my $epid = $hrn->project();
 	foreach my $type (@types)  {
 	    my $type = $type->type();
-	    my $stamp = Reservation->OutstandingReservation([$pid],[$type]);
+	    my $stamp = Reservation->OutstandingReservation([$pid],$uid,
+							    [$type]);
 	    next
 		if (!$stamp);
 	    #print STDERR "O: $pid,$type,$stamp\n";
@@ -1973,7 +2329,7 @@ sub ReservationPrediction($)
 	    $outstanding->{$epid}->{$type} = $stamp;
 	}
     }
-    my @current  = Reservation->CurrentReservations(\@projlist);
+    my @current  = Reservation->CurrentReservations(\@projlist, $uid);
     for my $ref (@current) {
 	my $pid  = $ref->{'pid'};
 	my $hrn  = $projlist{$pid};
@@ -1983,7 +2339,7 @@ sub ReservationPrediction($)
 	}
 	push(@{$current->{$epid}}, $ref)
     }
-    my @upcoming = Reservation->UpcomingReservations(\@projlist);
+    my @upcoming = Reservation->UpcomingReservations(\@projlist, $uid);
     for my $ref (@upcoming) {
 	my $pid  = $ref->{'pid'};
 	my $hrn  = $projlist{$pid};
@@ -2069,6 +2425,10 @@ sub ReservationHistory($)
 
     foreach my $res (@reservations) {
 	my $pid = $res->pid();
+	my $gid = $res->gid();
+	my $uid = $res->uid();
+	my $type = $res->type();
+	my $uuid = $res->uuid();
 	my $pid_idx = $res->pid_idx();
 	my $project = Project->Lookup($pid_idx);
 	if (!defined($project)) {
@@ -2083,10 +2443,24 @@ sub ReservationHistory($)
 	my @timeline = ResUtil::CreateTimeline($project, $res);
 	# We do not want to send back more then we need.
 	if (@timeline) {
-	    @timeline = map { {"t"         => $_->{'t'},
-			       "allocated" => $_->{'allocated'} || {},
-			       "reserved"  => $_->{'reserved'} || {},
-		} } @timeline;
+	    my @tmp = ();
+	    foreach my $ref (@timeline) {
+		my $allocated = {
+		    "$pid/$gid" => {
+			$type =>
+			    $ref->{'rescounts'}->{$uuid}->{"group"} || 0
+		    },
+		    $uid => {
+			$type =>
+			    $ref->{'rescounts'}->{$uuid}->{"user"} || 0
+		    },
+		};
+		push(@tmp, {
+		    "t"         => $ref->{'t'},
+		    "allocated" => $allocated,
+		    "reserved"  => $ref->{'reserved'} || {}});
+	    }
+	    @timeline = @tmp;
 	}
 
 	my $blob = {};
@@ -2114,6 +2488,62 @@ sub ReservationHistory($)
     };
     #print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+#
+# Toggle project shared reservations
+#
+sub SetSharedReservations($)
+{
+    my ($argref) = @_;
+    my $checkonly= (exists($argref->{'checkonly'}) ?
+		    $argref->{'checkonly'} : 0);
+    my $project;
+
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    return GeniResponse->MalformedArgsResponse("Missing project or flag")
+	if (! (exists($argref->{'shared'}) &&
+	       exists($argref->{'project'})));
+
+    return GeniResponse->MalformedArgsResponse("Invalid project URN")
+	if (!GeniHRN::IsValid($argref->{'project'}));
+
+    my $shared = $argref->{'shared'};
+    my $hrn    = GeniHRN->new($argref->{'project'});
+    if ($hrn->domain() eq $OURDOMAIN) {
+	$project = Project->Lookup($hrn->id());
+    }
+    else {
+	#
+	# We got a project URN but we need to lookup using the SA urn.
+	#
+	my $purn = GeniHRN::Generate($hrn->authority(), "authority", "sa");
+	$project = Project->LookupNonLocal($purn);
+    }
+    if (!defined($project)) {
+	#
+	# Create the project so we can set it. 
+	#
+	my $group = GeniUtil::GetHoldingProject($argref->{'project'}, undef, 1);
+	return $group
+	    if (GeniResponse::IsResponse($group));
+	$project = $group->GetProject();
+    }
+    my $pid = $project->pid();
+    my $oldshared = $project->shared_reservations();
+    print STDERR "SetSharedReservations: $pid, $oldshared -> $shared\n";
+    
+    my @results = ();
+    if ($project->SetSharedReservations($shared, \@results, $checkonly)) {
+	print STDERR "SetSharedReservations failed\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, \@results,
+			    "Could not toggle shared reservations flag");
+    }
+    #print STDERR Dumper(\@results);
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, \@results);
 }
 
 #
@@ -2256,7 +2686,7 @@ sub Credential2UserProject($)
     return $group
 	if (GeniResponse::IsResponse($group));
     
-    return ($geniuser, $group->GetProject());
+    return ($geniuser, $group);
 }
 
 #

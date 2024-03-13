@@ -3,73 +3,69 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
+        <button type='button' class='close btn-close mb-2'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
         <form id='extend_request_form' role='form'>
-          <button type='button' class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
-          <div class='clearfix'></div>
           <div class='row'>
-            <div class='col-xs-12'>
-                <center>
-                  <h4>Extend by:
-                    <span id='extend_value'>1 day</span></h4>
-                </center>
-              </div> <!-- /col -->
-            </div> <!-- /row -->
-          <div class='row'>
-            <div class='col-xs-12'>
-              <div class='well'>
-                <div class='col-xs-12'>
-                  <div id='extend_slider'></div>
-                </div> <!-- /col -->
-                <div class='col-sm-3' id='myusage-info'>
-                  <span style='font-weight: 500;'>Node-Hours&nbsp;<span>
-		    <a href='#' class='btn btn-xs' id='myusage-popover'
-		       data-toggle='popover'
-		       data-html='true'
-		       data-placement='auto'
-		       data-content='
-		       <p>
-			 Usage is tracked in terms of <em>node hours</em>:
-			 the number of nodes multiplied by the number of
-			 hours they are allocated.
-		       </p>
-		       <p> 
-			 You can find your current usage by selecting <b>My
-			   Experiments</b> from the <b>Actions</b> menu. You
-			 can view your historical usage by selecting <b>My
-			   History</b>.
-		       </p>'> 
-		      <span class='glyphicon glyphicon-question-sign' 
-			    style='margin-bottom: 4px;'></span> 
-		    </a></span>
-                </div>
-                <div class='col-xs-4 form-inline'>
-                  <div class="form-group">
-                    <div class="input-group">
-                      <span class="input-group-addon">Used</span>
-                      <input type="text" class="form-control" id='current_usage' size="6" readonly></input>
-                    </div> <!-- /input-group -->
-                  </div> <!-- /form-group -->
-                </div> <!-- /col -->
-                <div class='col-xs-5 form-inline'>
-                  <div class="form-group">
-                    <div class="input-group">
-                      <span class="input-group-addon">Requested</span>
-                      <input type="text" class="form-control" id='future_usage' size="6" readonly></input>
-                    </div> <!-- /input-group -->
-                  </div> <!-- /form-group -->
-                </div> <!-- /col -->
-                <div class='clearfix'></div>
-              </div> <!-- /well -->
+            <div class='col-sm-12'>
+              <center>
+                <h4>Extend by:
+                  <span id='extend_value'>1 day</span></h4>
+              </center>
             </div> <!-- /col -->
           </div> <!-- /row -->
-          <div class='row'>
+          <div class='well'>
+	    <div class="row">
+              <div class='col-sm-12'>
+                  <div id='extend_slider'></div>
+              </div> <!-- /col -->
+	    </div>
+	    <div class="row justify-content-center">
+	      <div class="col-sm-2">
+		<div class="input-group mb-3">
+		  <span class="input-group-text">Used</span>
+		  <span class="input-group-text" id='current_usage'>0000</span>
+		</div>
+	      </div>
+	      <div class="col-sm-3">
+		<div class="input-group mb-3">
+		  <span class="input-group-text">Requested</span>
+		  <span class="input-group-text" id='future_usage'>0000</span>
+		</div>
+	      </div>
+	    </div>
+	    <center>
+              <span style='font-weight: 500;'>Values in Node-Hours</span>
+		<a href='#' class='btn btn-xs' id='myusage-popover'
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-html='true' data-bs-html='true'
+		   data-placement='auto' data-bs-placement='auto'
+		   data-content='
+			 <p>
+			  Usage is tracked in terms of <em>node hours</em>:
+			  the number of nodes multiplied by the number of
+			  hours they are allocated.
+			 </p>
+			 <p> 
+			  You can find your current usage by selecting <b>My
+			  Experiments</b> from the <b>Actions</b> menu. You
+			  can view your historical usage by selecting <b>My
+			  History</b>.
+			 </p>'> 
+		  <span class='glyphicon glyphicon-question-sign' 
+			style='margin-bottom: 4px;'></span>
+		</a>
+	      </span>
+	    </center>
+	  </div>
+          <div class='row justify-content-center'>
             <div class='col-lg-10 col-lg-offset-1
                         col-md-10 col-md-offset-1
                         col-sm-12 col-sm-offset-0
                         col-xs-12 col-xs-offset-0'>
               <div id='label0_request' data-minchars='120'>
-                <p>
+                <p class="mb-1">
                 Please provide a short explanation (a few sentences)
                 of why you need more time.
                 </p>
@@ -115,14 +111,11 @@
               </div> <!-- #why_extend_div -->
             </div> <!-- /col -->
           </div> <!-- /row -->
-          <div class='row'>
-            <div class='col-xs-6 col-xs-offset-3'>
-              <button class='btn btn-primary btn-sm align-center' disabled
-                      id='request-extension'
-                      type='submit' name='request'>Request Extension</button>
-                
-            </div> <!-- /col -->
-          </div> <!-- /row -->
+	  <center>
+            <button class='btn btn-primary btn-sm align-center' disabled
+                    id='request-extension'
+                    type='submit' name='request'>Request Extension</button>
+          </center>
         </form> <!-- #extend_request_form -->
       </div> <!-- /modal-body -->
     </div> <!-- /modal-content -->

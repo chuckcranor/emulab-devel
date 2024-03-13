@@ -1,6 +1,6 @@
 #! /bin/bash
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -773,10 +773,13 @@ parsedd() {
 	    x="DDparseERR"
 	else
 	    y=$9
-	    if [ $y != ${y/MB} ] ; then
+	    if [ $y != ${y/GB} ] ; then
+		# bash only does int arithmetic
+		x=$(echo $8 | awk '{print int($1 * 1024)}')
+	    elif [ $y != ${y/MB} ] ; then
 		x=$8
 	    else
-		x="ParesddError"
+		x="ParseddError"
 	    fi
 	fi
     elif [ "$os" == "FreeBSD" ] ; then 

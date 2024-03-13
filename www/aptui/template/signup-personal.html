@@ -16,6 +16,15 @@
 	 <% if (promoting) { %>readonly<% } %>
 	 placeholder="Email" type="text">
 </div>
+<div class="form-group sidebyside-form" >
+  <input name="formfields[title]" value="<%- formfields.title %>"
+	 class="form-control format-me" data-key="title"
+	 placeholder="Job Title (eg: Student|Faculty|PostDoc|Staff|etc)"
+	 type="text">
+  <tiny>
+    <em>If you work at a company, please provide your professional title</em>
+  </tiny>
+</div>
 <% if (window.ISPOWDER) { %>
 <div class="form-group sidebyside-form" >
   <input name="formfields[address1]" value="<%- formfields.address1 %>"
@@ -30,14 +39,14 @@
 <% } %>
 <div class="form-group sidebyside-form" >
   <select id="signup_countries" name="formfields[country]"
-          class="form-control format-me bfh-countries"
+          class="form-control format-me bfh-countries form-select"
           data-country="<%- formfields.country %>"
           data-blank="false" data-ask="true" data-key="country">
   </select>
 </div>
 <div class="form-group sidebyside-form" >
   <select id="signup_states" name="formfields[state]"
-          class="form-control format-me bfh-states"
+          class="form-control format-me bfh-states form-select"
 	  data-state="<%- formfields.state %>"
 	  data-country="signup_countries" data-ask="true"
           placeholder="State" data-blank="false" data-key="state">
@@ -71,8 +80,8 @@
 	 class="form-control format-me" data-key="affiliation"
 	 placeholder="Institutional Affiliation; please provide the full name, not an abbreviation" type="text">
   <a href="#"
-     data-target='#institutional-why'
-     data-toggle='modal'><tiny>Why is this important?</tiny></a>
+     data-target='#institutional-why' data-bs-target='#institutional-why'
+     data-toggle='modal' data-bs-toggle='modal'><tiny>Why is this important?</tiny></a>
 </div>
 <% if (!promoting) { %>
   <div class="form-group sidebyside-form" style="margin-top: 15px;" >
@@ -104,8 +113,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<p style="font-size: 16px; margin-top: 15px;">
 	  Providing the complete (non-abbreviated) name of your affiliation
 	  allows us to provide better usage statistics to our funders.

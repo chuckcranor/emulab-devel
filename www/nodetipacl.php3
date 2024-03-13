@@ -35,6 +35,8 @@ $reqargs = RequiredPageArguments("node",       PAGEARG_NODE);
 $optargs = OptionalPageArguments("key",        PAGEARG_STRING,
 				 "closekills", PAGEARG_BOOLEAN,
 				 "noclose",    PAGEARG_BOOLEAN);
+$closekills = ($closekills ? 1 : 0);
+$noclose    = ($noclose ? 1 : 0);
 
 # Need these below
 $node_id = $node->node_id();
@@ -187,12 +189,6 @@ $console_auth = $node->ConsoleAuthObject($uid, $console);
 
 if (!isset($key)) {
     PAGEHEADER("$node_id Console");
-}
-if (!isset($closekills)) {
-    $closekills = 0;
-}
-if (!isset($noclose)) {
-    $noclose = 0;
 }
 
 echo "\n";

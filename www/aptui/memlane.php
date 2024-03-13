@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -153,7 +153,6 @@ echo "  window.uuid = '" . $uuid . "';\n";
 echo "  window.isadmin = $isadmin;\n";
 echo "  window.isfadmin = $isfadmin;\n";
 echo "</script>\n";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 

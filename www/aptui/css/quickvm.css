@@ -432,11 +432,10 @@ fieldset[disabled] .nav > li > a.btn-success.active {
   border: none !important;
 }
 
-/*
-.panel-body {
-  background-color: #f5f5f5;
+/* Default panel headings are too big. */
+.panel-heading {
+  padding: 10px 5px;
 }
-*/
 
 /* Helper */
 .align-center {
@@ -538,9 +537,10 @@ blockquote #selected_profile_description {
     cursor: default;
 }
 
-/* The default margins leave no space at all! */
-.popover-content {
+/* The default margins leave no space at all. And too much padding. */
+.popover-content, .popover-body {
     margin: 0px 5px 5px 5px;
+    padding: 8px 10px;
 }
 
 .well-xs {
@@ -556,10 +556,12 @@ blockquote #selected_profile_description {
   border-radius: 2px;
 }
 
+/*
 .form-horizontal .form-group .row .col-sm-2 input {
     height: 33px;
     margin: 1px 0 0 5px;
 }
+*/
 
 .resgraph {
     margin: 0px;
@@ -658,6 +660,10 @@ a.disabled, a[disabled] {
     font-size: 16px;
 }
 
+.tiny {
+    font-size: 10px;
+}
+
 /*
  * The form-control class is width: 100%, which makes it annoying to
  * make narrow input text boxes.
@@ -666,9 +672,3 @@ a.disabled, a[disabled] {
     width: auto;
 }
 
-/*
- * Too much padding on popovers.
- */
-.popover-content {
-    padding: 8px 10px;
-}

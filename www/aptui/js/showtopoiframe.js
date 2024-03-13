@@ -52,6 +52,33 @@ window.ShowTopoIframe = (function ()
 	    multisite = true;
 	}
 
+	/*
+	 * Once the viewer is ready, we can send it the rspec(s).
+	 */
+	var viewerReady = function (viewer) {
+	    if (first) {
+		if (ismodal) {
+		    $(target).one("shown.bs.modal", function () {
+			viewer.add(first);
+			if (rest) {
+			    _.each(rest, function(xml) {
+				viewer.add(xml);
+			    });
+			}
+		    });
+		    $(target).modal('show');
+		}
+		else {
+		    viewer.add(first);
+		    if (rest) {
+			_.each(rest, function(xml) {
+			    viewer.add(xml);
+			});
+		    }
+		}
+	    }
+	};
+
 	var viewer = window.JacksViewer.create({
 	    "root"       : target,
 	    "selector"   : selector,
@@ -63,37 +90,11 @@ window.ShowTopoIframe = (function ()
 		    callback(object.rspec);
 		}
 	    },
+	    "ready_callback" : function () { viewerReady(viewer); },
 	});
 	
 	console.info("ShowTopoIframe", ismodal, viewer, first);
 
-	if (first) {
-	    if (ismodal) {
-		$(target).one("shown.bs.modal", function () {
-		    // Kludge. Need to give the viewer time to create
-		    _.delay(function () {
-			viewer.add(first);
-			if (rest) {
-			    _.each(rest, function(xml) {
-				viewer.add(xml);
-			    });
-			}
-		    }, 500);
-		});
-		$(target).modal('show');
-	    }
-	    else {
-		// Kludge. Need to give the viewer time to create
-		_.delay(function () {
-		    viewer.add(first);
-		    if (rest) {
-			_.each(rest, function(xml) {
-			    viewer.add(xml);
-			});
-		    }
-		}, 1000);
-	    }
-	}
 	/*
 	 * This only adds a single rspec, it will not be a list.
 	 */
@@ -286,7 +287,6 @@ window.JacksViewer = (function ()
 		args.click_callback(object);
 	    };
 	}
-
 	/*
 	 * Propogate to parent so menus close, etc.
 	 */
@@ -294,12 +294,25 @@ window.JacksViewer = (function ()
 	    $('html').trigger("click");
 	});
 
+	/*
+	 * We want to know when its ready to go before we send
+	 * it the first XML file.
+	 */
+	iframeWindow.JacksViewerReadyCallback = function () {
+	    console.info("ready");
+	    if (args.xml) {
+		add(args.xml);
+	    }
+	    if (args.ready_callback) {
+		args.ready_callback();
+	    }
+	};
+
 	iframeWindow.addEventListener('load', function (event) {
 	    console.info("loaded");
 
 	    var message = {
 		action: "create",
-		xml: args.xml,
 		multisite: args.multisite,
 		showinfo: args.showinfo,
 		aggregates: args.aggregates,

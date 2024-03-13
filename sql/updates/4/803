@@ -1,0 +1,20 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    DBQueryFatal("alter table apt_aggregate_radio_info change synchronization ".
+		 " `synchronization` ".
+		 "   enum('none','White Rabbit','GPSDO','PTP') default 'none'");
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

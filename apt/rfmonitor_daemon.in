@@ -76,6 +76,7 @@ my $PGENISUPPORT     = @PROTOGENI_SUPPORT@;
 my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
 my $RAWDATADIR       = "$TB/www/rfmonitor";
 my $POWER            = "$TB/bin/power";
+my $MANAGERDZ        = "$TB/bin/manage_rdz";
 my $GZIP             = "/usr/bin/gzip";
 my $FIND             = "/usr/bin/find";
 my $FORMAT1          = "portid,timestamp,frequency,power";
@@ -1068,6 +1069,12 @@ sub WriteRawData($$$)
 		if (system("/bin/ln -sf ${filename}.gz $gzsymlink")) {
 		    print STDERR "Could not update $gzsymlink\n";
 		    return -1;
+		}
+		if ($MAINSITE) {
+		    if (-x $MANAGERDZ) {
+			print "RDZ: $gzipname\n";
+			system("$MANAGERDZ observations create $gzipname");
+		    }
 		}
 	    }
 	    else {

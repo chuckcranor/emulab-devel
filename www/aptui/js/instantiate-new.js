@@ -177,8 +177,18 @@ $(function ()
 	setStepsMotion(false);
 
 	// Format the step labels across the top to match the panel widths.
-	$('#stepsContainer .steps').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
-	$('#stepsContainer .actions').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
+	$('#stepsContainer .steps, #stepsContainer .actions')
+	    .addClass('col-lg-8 col-lg-offset-2 offset-lg-2 ' +
+		      'col-md-8 col-md-offset-2 offset-md-2 ' +
+		      'col-sm-10 col-sm-offset-1 offset-sm-1 ' +
+		      'col-xs-12 col-xs-offset-0 offset-sm-0 ' +
+		      // Bootstrap 5 change
+		      'px-0');
+	// No point in looking inside the steps thing.
+	if (window.BOOTSTRAP_VERSION == 5) {
+	    $('#stepsContainer .steps ul li.first a').addClass('ms-0');
+	    $('#stepsContainer .steps ul li.last a').addClass('me-0');
+	}
 
 	// Insert datepicker on schedule tab,
 	$("#start_day").datepicker({
@@ -240,11 +250,16 @@ $(function ()
 	// Load previous bindings if applicable.
 	if (window.PROFILE_UUID && window.RERUN_INSTANCE) {
 	    // We do not know yet if its parameterized. But that is okay.
-	    LoadPreviousInstance()
-		.done(ChangeProfileSelection(window.PROFILE_UUID))
+	    
+	    /* Bootstrap 5 sillyness, have not figured out a better solution */
+	    _.defer(function f() {
+		LoadPreviousInstance()
+		    .done(ChangeProfileSelection(window.PROFILE_UUID));
+	    });
 	}
 	else {
-	    ChangeProfileSelection(window.DEFAULT_PROFILE);
+	    /* Bootstrap 5 sillyness, have not figured out a better solution */
+	    _.defer(ChangeProfileSelection, window.DEFAULT_PROFILE);
 	}
 	_.delay(function () {
 	    $('.dropdown-toggle').dropdown();
@@ -575,7 +590,9 @@ $(function ()
         return function (event)
         {
 	    if (webonly != 0) {
-	        event.preventDefault();
+	        if (event) {
+		    event.preventDefault();
+		}
 	        sup.SpitOops("oops",
 			     "You do not belong to any projects at your Portal, " +
 			     "so you have have very limited capabilities. Please " +
@@ -585,15 +602,17 @@ $(function ()
 			     " to enable more capabilities. Thanks!")
 	        return false;
 	    }
-	    // Prevent double click.
-	    if (submitted === true) {
-	        // Previously submitted - don't submit again
-	        event.preventDefault();
-	        console.info("Ignoring double submit");
-	        return false;
-	    } else {
-	        // Mark it so that the next submit can be ignored
-	        submitted = true;
+	    if (event) {
+		// Prevent double click.
+		if (submitted === true) {
+	            // Previously submitted - don't submit again
+	            event.preventDefault();
+	            console.info("Ignoring double submit");
+	            return false;
+		} else {
+	            // Mark it so that the next submit can be ignored
+	            submitted = true;
+		}
 	    }
 
             // Submit with checkonly first, then for real
@@ -620,9 +639,16 @@ $(function ()
 		            submitted = false;
 			    sup.HideWaitWait(function () {
 				HandleLicenseRequirements(json.value);
-			    })
+			    });
 			    return;
 		        }
+			if (json.code == 65 || json.code == 66) {
+		            submitted = false;
+			    sup.HideWaitWait(function () {
+				HandleServerBusy(json.code);
+			    });
+			    return;
+			}
 		        submitted = false;
 			sup.HideWaitWait(function () {			
 		            sup.SpitOops("oops",
@@ -1073,12 +1099,15 @@ $(function ()
     function CreateAggregateSelectors()
     {
 	var pid    = $('#project_selector #profile_pid').val();	
+	var gid    = $('#group_selector #profile_gid').val();	
 
 	// No need to do this if not showing selectors.
 	if (!window.CLUSTERSELECT) {
+	    // But still want to show reservation warnings.
+	    instantiateCommon.generateReservationInfo(pid, gid, resinfo);
 	    return;
 	}
-	instantiateCommon.createAggregateSelectors(selected_rspec, pid);
+	instantiateCommon.createAggregateSelectors(selected_rspec, pid, gid);
     }
 
     /*
@@ -1093,15 +1122,25 @@ $(function ()
 	    // Look for current or upcoming resgroups.
 	    var resgroup = null;
 	    if (_.has(resgroups.current, pid)) {
+		var details = resgroups.current[pid][0];
+
 		resgroup = {
 		    "which"   : "active",
 		    "class"   : "has_reservation",
-		};
+		    "mode"    : details["mode"],
+		    "uid"     : details["uid"],
+		    "gid"     : details["gid"],
+		}
 	    }
 	    else if (_.has(resgroups.future, pid)) {
+		var details = resgroups.future[pid][0];
+		
 		resgroup = {
 		    "which"   : "upcoming",
 		    "class"   : "future_reservation",
+		    "mode"    : details["mode"],
+		    "uid"     : details["uid"],
+		    "gid"     : details["gid"],
 		};
 	    }
 	    options = options +
@@ -1146,9 +1185,14 @@ $(function ()
 		$(picker).find("button .value").html(value);
 		$(picker).find("button .reservation-tooltips").html(tooltips);
 		$(picker).find("#profile_pid").val(which);
-		$(picker).find("li").removeClass("selected");
-		$(this).closest("li").addClass("selected");
-
+		if (window.BOOTSTRAP_VERSION == 5) {
+		    $(picker).find("li a").removeClass("active");
+		    $(this).closest("li a").addClass("active");
+		}
+		else {
+		    $(picker).find("li").removeClass("selected");
+		    $(this).closest("li").addClass("selected");
+		}
 		UpdateGroupSelector();
 		// Need to update the reservation tooltips after pid select
 		CreateAggregateSelectors();
@@ -1192,16 +1236,53 @@ $(function ()
 	console.info("CreateGroupSelector", pid, selected);
 	
 	_.each(projlist[pid], function(gid) {
+	    // Look for current or upcoming group resgroups.
+	    var resgroup = null;
+	    if (_.has(resgroups.current, pid)) {
+		_.each(resgroups.current[pid], function(details) {
+		    if (details.mode == "group" &&
+			details.gid == gid) {
+			resgroup = {
+			    "which"   : "active",
+			    "class"   : "has_reservation",
+			    "mode"    : details["mode"],
+			    "uid"     : details["uid"],
+			    "gid"     : details["gid"],
+			};
+			selected = gid;
+		    }
+		});
+	    }
+	    if (!resgroup && _.has(resgroups.future, pid)) {
+		_.each(resgroups.future[pid], function(details) {
+		    console.info("FF", gid, details);
+		    if (details.mode == "group" &&
+			details.gid == gid) {
+			resgroup = {
+			    "which"   : "upcoming",
+			    "class"   : "future_reservation",
+			    "mode"    : details["mode"],
+			    "uid"     : details["uid"],
+			    "gid"     : details["gid"],
+			};
+			selected = gid;
+			console.info("FFF", resgroup);
+		    }
+		});
+	    }
 	    options = options +
 		gidTemplate({
 		    "gid"      : gid,
+		    "pid"      : pid,
 		    "selected" : gid === selected,
+		    "resgroup" : resgroup,
 		});
 	});
 	var picker = groupTemplate({
 	    "groups"  : options,
 	});
 	$("#group_selector").html(picker);
+	$('#group_selector [data-toggle="tooltip"]').tooltip();
 
 	/* 
 	 * When a choice is made, need to update the button contents 
@@ -1212,6 +1293,7 @@ $(function ()
 		event.preventDefault();
 		var value    = $(this).attr("value");
 		var picker   = $(this).closest(".group-picker");
+		var tooltips = "";
 		var which    = "";
 
 		// Watch for reset back to "Please Select"
@@ -1219,6 +1301,7 @@ $(function ()
 		    value = "Please Select";
 		}
 		else {
+		    tooltips = $(this).find(".reservation-tooltips").html();
 		    which   = value;
 		}
 		if ($(picker).find("#profile_gid").val() == which) {
@@ -1226,9 +1309,16 @@ $(function ()
 		    return;
 		}
 		$(picker).find("button .value").html(value);
+		$(picker).find("button .reservation-tooltips").html(tooltips);
 		$(picker).find("#profile_gid").val(which);
-		$(picker).find("li").removeClass("selected");
-		$(this).closest("li").addClass("selected");
+		if (window.BOOTSTRAP_VERSION == 5) {
+		    $(picker).find("li a").removeClass("active");
+		    $(this).closest("li a").addClass("active");
+		}
+		else {
+		    $(picker).find("li").removeClass("selected");
+		    $(this).closest("li").addClass("selected");
+		}
 	    });
 
 	// Trigger selection
@@ -1381,10 +1471,11 @@ $(function ()
 	    console.info("resinfo", json.value);
 	    resinfo = json.value;
 	    var pid = $('#project_selector #profile_pid').val();
-	    instantiateCommon.generateReservationInfo(pid, resinfo);
+	    var gid = $('#group_selector #profile_gid').val();	
+	    instantiateCommon.generateReservationInfo(pid, gid, resinfo);
 	};
 	var xmlthing =
-	    sup.CallServerMethod(null, "reserve", "ReservationInfo", null);
+	    sup.CallServerMethod(null, "instantiate", "ReservationInfo", null);
 	xmlthing.done(callback);
     }
 
@@ -1520,20 +1611,21 @@ $(function ()
 		 */
 		if (maxdate != null) {
 		    if (maxdate) {
-			var rounded = new Date(maxdate);
-			rounded.setMinutes(0, 0, 0);
+			maxdate = new Date(maxdate);
+			//maxdate.setMinutes(0, 0, 0);
+			console.info("maxdate", maxdate);
+			console.info("mindate", mindate);
 
 			// Number of hours.
-			mindate.setHours($('#start_hour').val());
-			var hours = (rounded - mindate) / (3600 * 1000);
-			console.info(rounded, mindate, hours);
+			var hours = (maxdate - mindate) / (3600 * 1000);
+			console.info(hours);
 
 			if (hours == 0) {
 			    $('#maxduration-doesnotfit').removeClass("hidden");
 			    return;
 			}
 			$('#maxduration-limited span')
-			    .html(moment(rounded).format('lll'));
+			    .html(moment(maxdate).format('lll'));
 			$('#maxduration-limited').removeClass("hidden");
 
 			/*
@@ -1642,7 +1734,7 @@ $(function ()
 	var args = {"formfields" : formfields,
 		    "rspec"      : selected_rspec};
 	// Hopefully the prediction info has returned in time.
-	if (resinfo) {
+	if (0 && resinfo) {
 	    // Prediction info comes back with pid lowercase cause of
 	    // HRN normalization rules.
 	    var pid = $('#profile_pid').val().toLowerCase();
@@ -1706,6 +1798,31 @@ $(function ()
 	});
 	sup.ShowModal('#request-licenses-modal', function () {
 	    $('#request-license-button').off("click");
+	});
+    }
+
+    /*
+     * Server too busy, we will try again
+     */
+    function HandleServerBusy(code)
+    {
+	var counter = 30;
+	
+	var timer =
+	    window.setInterval(function() {
+		if (counter <= 1) {
+		    clearInterval(timer);
+		    sup.HideModal('#server-busy-modal', function () {
+			Instantiate();
+		    });
+		}
+		counter--;
+		$('#server-busy-modal .countdown-count').html(counter);
+	    }, 1000);
+	
+	$('#server-busy-modal .countdown-count').html(counter);
+	sup.ShowModal('#server-busy-modal', function () {
+	    clearInterval(timer);
 	});
     }
 
@@ -1912,7 +2029,7 @@ $(function ()
 	    var url  = "resgroup.php?fromrspec=1&embedded=1" +
 		"&project=" + $('#profile_pid').val();
 	
-	    var html = '<iframe id="reservation-iframe" class=col-xs-12 ' +
+	    var html = '<iframe id="reservation-iframe" class=col-sm-12 ' +
 		'style="padding-left: 0px; padding-right: 0px; border: 0px;" ' +
 		'height=1200 ' + 'src=\'' + url + '\'>';
 	

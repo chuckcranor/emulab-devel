@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include_once("geni_defs.php");
@@ -69,7 +72,7 @@ elseif ($ISCLOUD) {
                  "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
                  "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
                  "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
-                 "urn:publicid:IDN+lab.onelab.eu+authority+cm");
+                 "urn:publicid:IDN+cloudlab.umass.edu+authority+cm");
     $agglist = array();
     foreach ($tmp as $urn) {
         $agglist[] = Aggregate::Lookup($urn);

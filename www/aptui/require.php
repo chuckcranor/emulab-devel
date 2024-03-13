@@ -133,6 +133,9 @@ function REQUIRE_FILESTYLE()
 
 function REQUIRE_FORMHELPERS()
 {
+    echo "<link rel='stylesheet'
+           href='css/bootstrap-formhelpers.min.css'>\n";
+
   AddLibrary("js/lib/bootstrap-formhelpers.js");
 }
 
@@ -265,6 +268,13 @@ function REQUIRE_TABLESORTER($extras = null)
   }
 }
 
+function REQUIRE_JQUERY_UI()
+{
+  echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
+    
+  AddLibrary("js/lib/jquery-ui.js");
+}
+
 function REQUIRE_OPENSTACKGRAPHS()
 {
   REQUIRE_UNDERSCORE();
@@ -276,7 +286,6 @@ function REQUIRE_OPENSTACKGRAPHS()
 function REQUIRE_PPWIZARDSTART()
 {
   REQUIRE_UNDERSCORE();
-  AddTemplate("choose-am");
   AddTemplate("image-picker-modal");
   AddTemplate("ppform-wizard");
   AddLibrary("js/ppwizardstart.js");
@@ -354,8 +363,7 @@ function SPITREQUIRE_DATASET()
     REQUIRE_SUP();
     REQUIRE_MOMENT();
     REQUIRE_APTFORMS();
-    SPITREQUIRE("js/create-dataset.js",
-                "<script src='js/lib/jquery-ui.js'></script>");
+    REQUIRE_JQUERY_UI();
 }
 
 #########################################################################################

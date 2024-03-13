@@ -36,8 +36,8 @@ svg {
     display: none;
 }    
 
-.frequency-graph .popover,
-.frequency-graph .tooltip-popover
+.frequency-graph-div .popover,
+.frequency-graph-div .tooltip-popover
 {
     min-width: 240px !important;
 }

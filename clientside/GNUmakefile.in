@@ -135,6 +135,7 @@ xen-client-tarball: tarball-check
 	echo "Building and installing client-side in $(TARBALLDESTDIR)..."
 	DESTDIR=$(TARBALLDESTDIR) $(MAKE) client-install
 	DESTDIR=$(TARBALLDESTDIR) $(MAKE) -C tmcc/linux xen-install
+	DESTDIR=$(TARBALLDESTDIR) $(MAKE) -C tmcc/linux xen-install-pygrub
 	echo "Creating tarball..."
 	tar czf emulab-client.tar.gz -C $(TARBALLDESTDIR) .
 

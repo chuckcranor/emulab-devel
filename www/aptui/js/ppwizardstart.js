@@ -14,7 +14,7 @@ $(function () {
 						       'image-picker-modal']);
         var ppmodalString = templates['ppform-wizard'];
         var imagePickerString = templates['image-picker-modal'];
-	var debug         = 1;
+	var debug         = 0;
 	var paramdefs     = null;
 	var ppdivname     = null;
 	var uuid          = "";
@@ -59,20 +59,29 @@ $(function () {
 	    modified_callback();
 	    window.MODIFIED_PARAMS = true;
 	}
+	// Bootstrap 5 ...
+	function ShowPanel(target) {
+	    if (window.BOOTSTRAP_VERSION == 5) {
+		$(target).addClass("show");
+	    }
+	    else {
+		$(target).addClass("in");
+	    }
+	}
 
 	var groupTemplateString =
 	    '<div class="row group-row" data-fieldid="<%- fieldid %>" ' +
 	    '     style="margin-bottom: 5px;">' +
 	    ' <div class="col-xs-offset-0">' +
-	    '  <div class="panel" ' +
+	    '  <div class="panel card" ' +
 	    '       style="border-width: 0px; border: none;' +
 	    '       box-shadow: none; margin-bottom: 0px; padding-top: 0px;">' +
-	    '    <div class="panel-heading" ' +
+	    '    <div class="panel-heading card-header border-none" ' +
 	    '         style="padding-top: 0px; padding-bottom: 0px;">' +
 	    '      <h5 style="display: inline-block;">' +
 	    '        <a href="#pp-param-group-subpanel-<%- name %>" ' +
 	    '           class="subpanel-collapse-chevron" ' +
-	    '           data-toggle="collapse">' +
+	    '           data-toggle="collapse" data-bs-toggle="collapse">' +
 	    '          <span class="glyphicon glyphicon-chevron-right pull-left"' +
 	    '                style="font-weight: bold;"></span>' +
 	    '             <span style="font-weight: bold;">&nbsp;&nbsp; ' +
@@ -84,9 +93,9 @@ $(function () {
 	    '         class="panel-collapse collapse ' +
 	    '                pp-param-group-subpanel-collapse"' +
 	    '         style="height: auto;">' +
-	    '      <div id="pp-param-group-subpanel-body-<%- name %>" ' +
+	    '      <div id="pp-param-group-subpanel-<%- name %>" ' +
 	    '           style="padding-top: 0px; padding-bottom: 0px" ' +
-	    '           class="panel-body group-row-panel-body">' +
+	    '           class="panel-body card-body group-row-panel-body">' +
 	    '      </div>' +
 	    '    </div>' +
 	    '  </div>' +
@@ -96,19 +105,19 @@ $(function () {
 	var emptyStructTemplateString =
 	    '<div class="struct-row" data-fieldid="<%- fieldid %>"> ' +
 	    ' <div class="col-xs-offset-0">' +
-	    '  <div class="panel" ' +
+	    '  <div class="panel card" ' +
 	    '       style="border-width: 0px; border: none;' +
 	    '       box-shadow: none; margin-bottom: 0px;">' +
-	    '    <div class="panel-heading" ' +
+	    '    <div class="panel-heading card-header border-none" ' +
 	    '         style="padding-top: 0px; padding-bottom: 0px;">' +
 	    '      <h5 style="display: inline-block;">' +
 	    '             <span style="font-weight: bold;">&nbsp;&nbsp; ' +
 	    '                <%- prompt %></span>' +
 	    '      </h5>' +
 	    '      <span class="multivalue-struct-button-plus" ' +
-	    '            data-toggle="tooltip" ' +
-	    '            data-container="body" ' +
-	    '            data-trigger="hover" ' +
+	    '            data-toggle="tooltip" data-bs-toggle="tooltip" ' +
+	    '            data-container="body" data-bs-container="body" ' +
+	    '            data-trigger="hover" data-bs-trigger="hover" ' +
 	    '            title="Add another copy"> ' +
 	    '        <button type="button" ' +
 	    '                class="btn btn-small btn-default" ' +
@@ -124,15 +133,15 @@ $(function () {
 	var structSetTemplateString =
 	    '<div class="row structset" data-fieldid="<%- fieldid %>"> ' +
 	    ' <div class="col-xs-offset-0">' +
-	    '  <div class="panel" ' +
+	    '  <div class="panel card" ' +
 	    '       style="border-width: 0px; border: none;' +
 	    '       box-shadow: none; margin-bottom: 0px;">' +
-	    '    <div class="panel-heading" ' +
+	    '    <div class="panel-heading card-header border-none" ' +
 	    '         style="padding-top: 0px; padding-bottom: 0px;">' +
 	    '      <h5 style="display: inline-block;">' +
 	    '        <a href="#pp-param-structset-subpanel-<%- fieldid %>" ' +
 	    '           class="structset-subpanel-collapse-chevron" ' +
-	    '           data-toggle="collapse">' +
+	    '           data-toggle="collapse" data-bs-toggle="collapse">' +
 	    '          <span class="glyphicon ' +
 	    '                       glyphicon-chevron-right pull-left"' +
 	    '                style="font-weight: bold;"></span>' +
@@ -143,20 +152,22 @@ $(function () {
 	    '      <% if (longhelp) { %> ' +
 	    '          <span class="pp-param-popover"> ' +
 	    '             <a href="#<%- longhelp_id %>" ' +
-	    '                data-toggle="collapse" ' +
-	    '                data-trigger="hover"> ' +
+	    '                data-toggle="collapse" data-bs-toggle="collapse" '+
+	    '                data-trigger="hover" data-bs-trigger="hover"> ' +
 	    '               <i class="glyphicon glyphicon-question-sign"></i>' +
 	    '             </a></span>' +
 	    '      <% } %> ' +
 	    '    </div>' +
 	    '    <% if (longhelp) { %> ' +
 	    '      <div id="<%- longhelp_id %>" ' +
-	    '           class="panel-collapse collapse panel panel-info ' +
+	    '           class="panel-collapse collapse ' +
+	    '                  panel card panel-info card-info ' +
 	    '                  col-xs-10 col-xs-offset-1 pp-param-help-panel" '+
 	    '                  style="background-color: #e6f6fa;height: auto;' +
 	    '                         margin-top: 5px; margin-bottom: 5px;' +
 	    '                         padding: 5px;" ' +
-	    '                  data-toggle=collapse><%- longhelp %></div> ' +
+	    '                  data-toggle=collapse data-bs-toggle=collapse> ' +
+	    '             <%- longhelp %></div> ' +
 	    '    <% } %> ' +
 	    '    <div id="pp-param-structset-subpanel-<%- fieldid %>" ' +
 	    '         class="panel-collapse collapse ' +
@@ -164,7 +175,7 @@ $(function () {
 	    '         style="height: auto;">' +
 	    '      <div id="pp-param-structset-subpanel-body-<%- fieldid %>" ' +
 	    '           style="padding-top: 0px; padding-bottom: 0px;" ' +
-	    '           class="panel-body structset-panel-body">' +
+	    '           class="panel-body card-body structset-panel-body">' +
 	    '      </div>' +
 	    '    </div>' +
 	    '  </div>' +
@@ -190,15 +201,15 @@ $(function () {
 	    '<div class="struct-row" data-fieldid="<%- fieldid %>" ' +
 	    '     data-copyindex="<%- index %>"> ' +
 	    ' <div class="col-xs-offset-0">' +
-	    '  <div class="panel" ' +
+	    '  <div class="panel card" ' +
 	    '       style="border-width: 0px; border: none;' +
 	    '       box-shadow: none; margin-bottom: 0px;">' +
-	    '    <div class="panel-heading" ' +
+	    '    <div class="panel-heading card-header border-none" ' +
 	    '         style="padding-top: 0px; padding-bottom: 0px;"> ' +
 	    '      <h5 style="display: inline-block;">' +
 	    '        <a href="#pp-param-group-subpanel-<%- name %>" ' +
 	    '           class="subpanel-collapse-chevron" ' +
-	    '           data-toggle="collapse">' +
+	    '           data-toggle="collapse" data-bs-toggle="collapse">' +
 	    '          <span class="glyphicon ' +
 	    '                       glyphicon-chevron-right pull-left"' +
 	    '                style="font-weight: bold;"></span>' +
@@ -209,15 +220,15 @@ $(function () {
 	    '      <% if (longhelp) { %> ' +
 	    '          <span class="pp-param-popover"> ' +
 	    '             <a href="#<%- longhelp_id %>" ' +
-	    '                data-toggle="collapse" ' +
-	    '                data-trigger="hover"> ' +
+	    '                data-toggle="collapse" data-bs-toggle="collapse" '+
+	    '                data-trigger="hover" data-bs-trigger="hover"> ' +
 	    '               <i class="glyphicon glyphicon-question-sign"></i>' +
 	    '             </a></span>' +
 	    '      <% } %> ' +
 	    '      <% if (multivalue) { %> ' +
-	    '        <span data-toggle="tooltip" ' +
-	    '              data-container="body" ' +
-	    '              data-trigger="hover" ' +
+	    '        <span data-toggle="tooltip" data-bs-toggle="tooltip" ' +
+	    '              data-container="body" data-bs-container="body" ' +
+	    '              data-trigger="hover" data-bs-trigger="hover" ' +
 	    '              title="Delete this copy" ' +
 	    '              class="multivalue-struct-button-minus"> ' +
             '          <button type="button" ' +
@@ -225,9 +236,9 @@ $(function () {
 	    '                  style="margin-left: 5px; padding: 2px;">' +
 	    '            <span class="glyphicon glyphicon-minus"></span>' +
 	    '          </button></span>' +
-	    '        <span data-toggle="tooltip" ' +
-	    '              data-container="body" ' +
-	    '              data-trigger="hover" ' +
+	    '        <span  data-toggle="tooltip"data-bs-toggle="tooltip" ' +
+	    '              data-container="body" data-bs-container="body" ' +
+	    '              data-trigger="hover" data-bs-trigger="hover" ' +
 	    '              title="Add another copy" ' +
 	    '              class="multivalue-struct-button-plus"> ' +
 	    '          <button type="button" ' +
@@ -235,9 +246,9 @@ $(function () {
 	    '                  style="margin-left: 0px; padding: 2px;">' +
  	    '            <span class="glyphicon glyphicon-plus"></span>' +
 	    '          </button></span>' +
-	    '        <span data-toggle="tooltip" ' +
-	    '              data-container="body" ' +
-	    '              data-trigger="hover" ' +
+	    '        <span data-toggle="tooltip" data-bs-toggle="tooltip" ' +
+	    '              data-container="body" data-bs-container="body" ' +
+	    '              data-trigger="hover" data-bs-trigger="hover" ' +
 	    '              title="Move up" ' +
 	    '              class="multivalue-struct-button-up"> ' +
 	    '          <button type="button" ' +
@@ -245,9 +256,9 @@ $(function () {
 	    '                  style="margin-left: 0px; padding: 2px;">' +
  	    '            <span class="glyphicon glyphicon-arrow-up"></span>' +
 	    '          </button></span>' +
-	    '        <span data-toggle="tooltip" ' +
-	    '              data-container="body" ' +
-	    '              data-trigger="hover" ' +
+	    '        <span data-toggle="tooltip" data-bs-toggle="tooltip" ' +
+	    '              data-container="body" data-bs-container="body" ' +
+	    '              data-trigger="hover" data-bs-trigger="hover" ' +
 	    '              title="Move down" ' +
 	    '              class="multivalue-struct-button-down"> ' +
 	    '          <button type="button" ' +
@@ -259,12 +270,13 @@ $(function () {
 	    '    </div>' +
 	    '    <% if (longhelp) { %> ' +
 	    '      <div id="<%- longhelp_id %>" ' +
-	    '           class="panel-collapse collapse panel panel-info ' +
+	    '           class="panel-collapse collapse panel card panel-info ' +
 	    '                  col-xs-10 col-xs-offset-1 pp-param-help-panel" '+
 	    '                  style="background-color: #e6f6fa;height: auto;' +
 	    '                         margin-top: 5px; margin-bottom: 5px;' +
 	    '                         padding: 5px;" ' +
-	    '                  data-toggle=collapse><%- longhelp %></div> ' +
+	    '                  data-toggle=collapse data-bs-toggle=collapse>' +
+	    '            <%- longhelp %></div> ' +
 	    '    <% } %> ' +
 	    '    <div id="pp-param-group-subpanel-<%- name %>" ' +
 	    '         class="panel-collapse collapse ' +
@@ -272,7 +284,7 @@ $(function () {
 	    '         style="height: auto;">' +
 	    '      <div id="pp-param-group-subpanel-body-<%- name %>" ' +
 	    '           style="padding-top: 0px; padding-bottom: 0px;" ' +
-	    '           class="panel-body">' +
+	    '           class="panel-body card-body">' +
 	    '      </div>' +
 	    '    </div>' +
 	    '  </div>' +
@@ -281,9 +293,9 @@ $(function () {
 
 	var emptyInputTemplateString =
 	    '  <span class="multivalue-button-plus" ' +
-	    '        data-toggle="tooltip" ' +
-	    '        data-container="body" ' +
-	    '        data-trigger="hover" ' +
+	    '        data-toggle="tooltip" data-bs-toggle="tooltip" ' +
+	    '        data-container="body" data-bs-container="body" ' +
+	    '        data-trigger="hover" data-bs-trigger="hover" ' +
 	    '        title="Add value">' +
 	    '    <button type="button" ' +
 	    '        data-fieldid="<%- fieldid %>" ' +
@@ -326,7 +338,7 @@ $(function () {
 	    " <% if (multivalue) { %> "+
 	    "        style='display: inline-block; width: 75%' " +
 	    " <% } %>" +
-	    "        class='form-control format-me' " +
+	    "        class='form-control format-me form-select' " +
 	    "        data-label='<%- prompt %>' " +
 	    "        placeholder='Please Select'>" +
 	    " <% _.each(options, function(option, idx) { %> " +
@@ -344,18 +356,19 @@ $(function () {
 	    "</select>";
 
 	var nodeTypeTemplateString = 
-	    "<div> " +
-	    "  <div class='dropdown'> " +
+	    "<div class='nodetype-dropdown'> " +
+	    "  <div class='dropdown dropend'> " +
 	    "   <button class='btn btn-default dropdown-toggle' " +
 	    "           style='min-width: 150px; text-align: left' " +
-	    "           type=button data-toggle=dropdown> " +
+	    "           type=button data-toggle=dropdown " +
+	    "           data-bs-toggle=dropdown> " +
 	    "    <span class='type-selected'>" +
 	    "      <% if (constraints) { %>Please Select" +
 	    "         <% } else { %>Any<% } %></span> "+
-	    "      <span class=right-caret></span></button>" +
-	    "   <ul class='dropdown-menu right-menu scrollable-menu'>" +
+	    "      </button>" +
+	    "   <ul class='dropdown-menu right-menu scrollable-menuBADDOG'>" +
 	    "   <% if (!constraints) { %> " +
-	    "    <li><a href='#' class='clear-select'>" +
+	    "    <li><a href='#' class='clear-select dropdown-item'>" +
 	    "       <b>Clear Selection</b></a></li> " +
 	    "   <% } %> " +
 	    "   </ul>"+
@@ -394,9 +407,9 @@ $(function () {
 	var multivalueControlString =
 	    "<div style='display: inline-block;'>" +
 	    " <span class='hidden multivalue-button-minus' " +
-	    "       data-toggle='tooltip' " +
-	    "       data-container='body' " +
-	    "       data-trigger='hover' " +
+	    "       data-toggle='tooltip' data-bs-toggle='tooltip' " +
+	    "       data-container='body' data-bs-container='body' " +
+	    "       data-trigger='hover' data-bs-trigger='hover' " +
 	    "       title='Delete this copy'> " +
 	    "  <button type='button' " +
 	    "          class='btn btn-small btn-default' " +
@@ -404,9 +417,9 @@ $(function () {
 	    "    <span class='glyphicon glyphicon-minus'></span>" +
 	    "</button></span>" +
 	    "<span class='multivalue-button-plus' " +
-	    "       data-toggle='tooltip' " +
-	    "       data-container='body' " +
-	    "       data-trigger='hover' " +
+	    "       data-toggle='tooltip' data-bs-toggle='tooltip' " +
+	    "       data-container='body' data-bs-container='body' " +
+	    "       data-trigger='hover' data-bs-trigger='hover' " +
 	    "       title='Add another copy'> " +
 	    "  <button type='button' " +
 	    "          class='btn btn-small btn-default' " +
@@ -414,9 +427,9 @@ $(function () {
 	    "    <span class='glyphicon glyphicon-plus'></span>" +
 	    "</button></span>" +
 	    "<span class='multivalue-button-up' " +
-	    "       data-toggle='tooltip' " +
-	    "       data-container='body' " +
-	    "       data-trigger='hover' " +
+	    "       data-toggle='tooltip' data-bs-toggle='tooltip' " +
+	    "       data-container='body' data-bs-container='body' " +
+	    "       data-trigger='hover' data-bs-trigger='hover' " +
 	    "       title='Move up'> " +
 	    "  <button type='button' " +
 	    "          class='btn btn-small btn-default' " +
@@ -424,9 +437,9 @@ $(function () {
 	    "    <span class='glyphicon glyphicon-arrow-up'></span>" +
 	    "</button></span>" +
 	    "<span class='multivalue-button-down' " +
-	    "       data-toggle='tooltip' " +
-	    "       data-container='body' " +
-	    "       data-trigger='hover' " +
+	    "       data-toggle='tooltip' data-bs-toggle='tooltip' " +
+	    "       data-container='body' data-bs-container='body' " +
+	    "       data-trigger='hover' data-bs-trigger='hover' " +
 	    "       title='Move down'> " +
 	    "  <button type='button' " +
 	    "          class='btn btn-small btn-default' " +
@@ -439,7 +452,7 @@ $(function () {
 	    '     style="display: none">closed</div>' +
 	    '<div class="row">' +
 	    ' <div class="col-sm-12">' +
-	    '  <div id="help_show_all_panel" class="panel" ' +
+	    '  <div id="help_show_all_panel" class="panel card" ' +
 	    '    style="border-width: 0px; border: none; box-shadow: none;">' +
 	    '   <h5>' +
 	    '     <a id="pp-param-help-panel-toggle-link" href="#">' +
@@ -458,7 +471,7 @@ $(function () {
 	var formString =
 	    "<form id='pp-form' " +
 	    "      class='form-horizontal' role='form' method='post'>" +
-	    "  <div class='row'>" +
+	    "  <div class='row-B3'>" +
 	    "    <div id='pp-form-body' class='col-sm-12'></div>" +
 	    "  </div>" +
 	    "</form>" +
@@ -1167,7 +1180,7 @@ $(function () {
 	    else {
 		html = GenerateInput(name, fieldIndex, details, value);
 	    }
-	    var outerdiv = $("<div class='form-group' " +
+	    var outerdiv = $("<div class='form-group row' " +
 			     "     style='margin-bottom: 15px;'></div>");
 	    var innerdiv = $("<div class='col-sm-8'></div>");
 	    var item     = $(html);
@@ -1175,7 +1188,7 @@ $(function () {
 	    // The field desription on the left.
 	    var label_text =
 		"<label for='" + name + "' " +
-		" class='col-sm-4 control-label'> " + prompt;
+		" class='col-sm-4 control-label col-form-label'> " + prompt;
 	    
 	    // Extra help is optional.
 	    if (longhelp) {
@@ -1184,26 +1197,28 @@ $(function () {
 		    help_panel_id = help_panel_id + "-" + structIndex;
 		}
 		longhelp = escapeHtml(longhelp);
-		
+
 		label_text = label_text +
 		    "<span class='pp-param-popover' " +
-		    " data-toggle='popover' " +
-		    " data-trigger='hover' " +
+		    " data-toggle='popover' data-bs-toggle='popover' " +
+		    " data-trigger='hover' data-bs-trigger='hover' " +
 		    //" data-delay='{\"hide\":1000}' " +
 		    " data-content='" + longhelp + "'>" +
 		    " <a href='#" + help_panel_id + "'" +
-		    " data-toggle='collapse'>" +
+		    " data-toggle='collapse' data-bs-toggle='collapse'>" +
 		    "<i class='glyphicon glyphicon-question-sign'></i>" +
 		    "</a></span>";
 		
 		help_panel = 
 		    "<div id='" + help_panel_id + "'" +
-		    "     class='panel-collapse collapse panel panel-info " +
+		    "     class='panel-collapse collapse panel card panel-info " +
 		    "            col-sm-12 pp-param-help-panel'" +
 		    "     style='background-color: #e6f6fa; height: auto; " +
 		    "            margin-left: 0px; margin-right: 0px; " +
 		    "            margin-top: 5px; margin-bottom: 0px; " +
-		    "            padding: 5px;' data-toggle='collapse'>" +
+		    "            padding: 5px;' " +
+		    "            data-toggle='collapse' " +
+		    "            data-bs-toggle='collapse'>" +
 		        longhelp + "</div>";
 	    }
 	    label_text = label_text + "</label>";
@@ -1312,9 +1327,11 @@ $(function () {
 		    var count  = 0;
 		    var agghtml = 
 			"<li class='dropdown-submenu'> " +
-			"  <a href='#' class='dropdown-toggle' " +
-			"     data-toggle='dropdown'>" + aggregate.name + "</a>"+
-			"    <ul class='dropdown-menu scrollable-submenu'>";
+			"  <a href='#' class='dropdown-toggle dropdown-item' " +
+			"     data-toggle='dropdown' " +
+			"     data-bs-toggle='dropdown'>" +
+			     aggregate.name + "</a>" +
+			"  <ul class='dropdown-menu'>";
 		    
 		    _.each(aggregate.typelist, function(typeinfo, type) {
 			if (_.has(prunetypes, type)) {
@@ -1322,9 +1339,10 @@ $(function () {
 			}
 
 			var typehtml =
-			    "  <li style='position: relative;'>" +
-			    " <a href='#' name='" + type + "' " +
-			    "         class='type-select'>" + type + "</a>";
+			    "<li style='position: relative;'>" +
+			    "  <a href='#' name='" + type + "' " +
+			    "         class='type-select dropdown-item'>" +
+			    type + "</a>";
 
 			if (typeinfo) {
 			    /*
@@ -1353,7 +1371,10 @@ $(function () {
 			    typehtml +=
 				"<span class='icon-info-right glyphicon " +
  				"  glyphicon-info-sign' " +
-				"  data-toggle='popover' data-html=true " +
+				"  data-toggle='popover' " +
+				"  data-bs-toggle='popover' " +
+				"  data-html=true " +
+				"  data-bs-html=true " +
 				"  data-content=\"" + pophtml + "\"></span>";
 			}
 			else if (constraints) {
@@ -1412,16 +1433,18 @@ $(function () {
 		// Need to use a click handler cause of popover problems
 		// with the submenus.
 		$(innerdiv).find(".glyphicon-info-sign").popover({
-		    trigger: 'manual',
+		    trigger: 'hover',
 		    placement: 'auto',
 		    container: 'body',
 		});
+		if (0) {
 		$(innerdiv).find(".glyphicon-info-sign").click(
 		    function (event) {
 			event.preventDefault();
 			event.stopPropagation();
 			$(this).popover('toggle');
 		    });
+		}
 
 		// Move the main menu to halfway up/down.
 		$(innerdiv).find(".dropdown")
@@ -1442,7 +1465,17 @@ $(function () {
 			function(event) {
 			    var menu = $(event.target)
 				.parent().find(".dropdown-menu");
-		    
+
+			    /*
+			     * Hide siblings since we seem to sometimes
+			     * lose the hover out event.
+			     */
+			    var siblings = $(event.target).parent().siblings();
+			    _.each(siblings, function (sibling) {
+				$(sibling).find(".dropdown-menu")
+				    .css("display", "none");
+			    });
+
 			    $(menu).css("display", "inline-block");
 			    var height = $(menu).height();
 			    if (height > 26) {
@@ -1478,6 +1511,8 @@ $(function () {
 		    $(innerdiv).find("input").val($(this).attr("name"))
 		    // Make sure the popover is gone too.
 		    $(innerdiv).find(".glyphicon-info-sign").popover("hide");
+		    // And the menu itself.
+		    $(this).closest("ul").css("display", "none");
 		    Modified();
 		});
 		/*
@@ -1599,8 +1634,7 @@ $(function () {
 		// Disable plus button if reached maximum number.
 		if (details.max && _.size(names) >= details.max) {
 		    outerdiv.find(".multivalue-button-plus")
-			.attr('title', 'Maximum values is ' + details.max)
-			.tooltip('setContent');
+			.attr('title', 'Maximum values is ' + details.max);
 		    // Disable the button, but not in a gross way.
 		    outerdiv.find(".multivalue-button-plus button")
 			.css("pointer-events", "none");
@@ -1623,8 +1657,7 @@ $(function () {
 		 */
 		if (details.min && _.size(names) <= details.min) {
 		    outerdiv.find(".multivalue-button-minus")
-			.attr('title', 'Minimum values is ' + details.min)
-			.tooltip('setContent');
+			.attr('title', 'Minimum values is ' + details.min);
 		    // Disable the button, but not in a gross way.
 		    outerdiv.find(".multivalue-button-minus button")
 			.css("pointer-events", "none");
@@ -2047,8 +2080,8 @@ $(function () {
 	     * being drawn closed.
 	     */
 	    if (hasError || hasWarning || group.visible) {
-		$(groupdiv).find(".pp-param-group-subpanel-collapse")
-		    .addClass("in");
+		ShowPanel($(groupdiv)
+			  .find(".pp-param-group-subpanel-collapse"));
 		$(groupdiv).find(".subpanel-collapse-chevron .glyphicon")
 		    .removeClass("glyphicon-chevron-right")
 		    .addClass("glyphicon-chevron-down");
@@ -2154,12 +2187,12 @@ $(function () {
 			structdiv.addClass('has-error');
 
 			var html = 
-			    '<div class="panel panel-danger ' +
+			    '<div class="panel card panel-danger ' +
 			    '            col-xs-10 col-xs-offset-1" ' +
 			    '    style="height: auto;' +
 			    '           margin-top: 5px; margin-bottom: 5px;' +
 			    '           padding: 0px;">' +
-			    ' <div class=panel-heading> ' +
+			    ' <div class=panel-heading card-header> ' +
 			    message + '</div></div>';
 			
 			structdiv.find(".structset-panel-body").append(html);
@@ -2182,12 +2215,12 @@ $(function () {
 			structdiv.addClass('has-warning');
 
 			var html = 
-			    '<div class="panel panel-warning ' +
+			    '<div class="panel card panel-warning ' +
 			    '            col-xs-10 col-xs-offset-1" ' +
 			    '    style="height: auto;' +
 			    '           margin-top: 5px; margin-bottom: 5px;' +
 			    '           padding: 0px;">' +
-			    ' <div class=panel-heading> ' +
+			    ' <div class=panel-heading card-header> ' +
 			    message + '</div></div>';
 
 			structdiv.find(".structset-panel-body").append(html);
@@ -2243,9 +2276,11 @@ $(function () {
 	     */
 	    if (multivalue) {
 		if ($(structdiv)
-		    .find('.pp-param-group-subpanel-collapse.in').length) {
-		    $(structdiv).find(".pp-param-structset-subpanel-collapse")
-			.addClass("in");
+		    // Bootstrap 5 uses show instead on in.
+		    .find('.pp-param-group-subpanel-collapse.in, ' +
+			  '.pp-param-group-subpanel-collapse.show').length) {
+		    ShowPanel($(structdiv)
+			      .find(".pp-param-structset-subpanel-collapse"));
 		    $(structdiv)
 			.find(".structset-subpanel-collapse-chevron .glyphicon")
 			.removeClass("glyphicon-chevron-right")
@@ -2334,12 +2369,12 @@ $(function () {
 		    groupdiv.addClass('has-error');
 
 		    var html = 
-			'<div class="panel panel-danger ' +
+			'<div class="panel card panel-danger ' +
 			'            col-xs-10 col-xs-offset-1" ' +
 			'    style="height: auto;' +
 			'           margin-top: 5px; margin-bottom: 5px;' +
 			'           padding: 0px;">' +
-			' <div class=panel-heading> ' +
+			' <div class=panel-heading card-header> ' +
 			message + '</div></div>';
 
 		    $(groupdiv).find(".panel-body").append(html);
@@ -2363,12 +2398,12 @@ $(function () {
 		    groupdiv.addClass('has-warning');
 
 		    var html = 
-			'<div class="panel panel-warning ' +
+			'<div class="panel card panel-warning ' +
 			'            col-xs-10 col-xs-offset-1" ' +
 			'    style="height: auto;' +
 			'           margin-top: 5px; margin-bottom: 5px;' +
 			'           padding: 0px;">' +
-			' <div class=panel-heading> ' +
+			' <div class=panel-heading card-header> ' +
 			message + '</div></div>';
 
 		    $(groupdiv).find(".panel-body").append(html);
@@ -2445,8 +2480,8 @@ $(function () {
 		$(groupdiv).find(".panel-body").append(div);
 	    });
 	    if (details.visible[copyIndex]) {
-		$(groupdiv).find(".pp-param-group-subpanel-collapse")
-		    .addClass("in")
+		ShowPanel($(groupdiv)
+			  .find(".pp-param-group-subpanel-collapse"));
 	    }
 	    // Remember visibility for redraw after errors
 	    $(groupdiv).find(".pp-param-group-subpanel-collapse")
@@ -2475,8 +2510,8 @@ $(function () {
 	     * being drawn closed.
 	     */
 	    if (hasError || details.visible[copyIndex] || isfirst) {
-		$(groupdiv).find(".pp-param-group-subpanel-collapse")
-		    .addClass("in");
+		ShowPanel($(groupdiv)
+			  .find(".pp-param-group-subpanel-collapse"));
 		$(groupdiv).find(".subpanel-collapse-chevron .glyphicon")
 		    .removeClass("glyphicon-chevron-right")
 		    .addClass("glyphicon-chevron-down");
@@ -2511,8 +2546,7 @@ $(function () {
 		if (details.max && 
 		    _.keys(details.values).length >= details.max) {
 		    groupdiv.find(".multivalue-struct-button-plus")
-			.attr('title', 'Maximum values is ' + details.max)
-			.tooltip('setContent');
+			.attr('title', 'Maximum values is ' + details.max);
 		    // Disable the button, but not in a gross way.
 		    groupdiv.find(".multivalue-struct-button-plus button")
 			.css("pointer-events", "none");
@@ -2526,8 +2560,7 @@ $(function () {
 		if (details.min && 
 		    _.keys(details.values).length <= details.min) {
 		    groupdiv.find(".multivalue-struct-button-minus")
-			.attr('title', 'Minimum values is ' + details.min)
-			.tooltip('setContent');
+			.attr('title', 'Minimum values is ' + details.min);
 		    // Disable the button, but not in a gross way.
 		    groupdiv.find(".multivalue-struct-button-minus button")
 			.css("pointer-events", "none");
@@ -2847,6 +2880,11 @@ $(function () {
 	    $('#ppmodal-body').empty();
 	    var root = $(formString);
 	    $('#ppmodal-body').append(root)
+
+	    if (window.EXPMODIFY) {
+		$("#ppmodal-body .instantiate-experiment").addClass("hidden");
+		$("#ppmodal-body .modify-experiment").removeClass("hidden");
+	    }
 	    
 	    // Process each field/group.
 	    _.each(formFields, function(def, fieldIndex) {
@@ -2934,9 +2972,9 @@ $(function () {
 		var ht =
 		    '<div class="row">' +
 		    ' <div class="col-sm-12">' +
-		    '  <div class="panel panel-' + style +'" ' +
+		    '  <div class="panel card panel-' + style +'" ' +
 		    '       style="margin-bottom: 10px;">' +
-		    '   <div class="panel-heading">' + message +
+		    '   <div class="panel-heading card-header">' + message +
 		    '</div></div></div></div>';
 		root.prepend(ht);
 	    };
@@ -3412,7 +3450,8 @@ $(function () {
 	    //
 	    var addpset = function (menu, set) {
 		var item = $("<li>" +
-			     " <a href='#'>" + set.name  + "</a>" +
+			     " <a href='#' class=dropdown-item>" +
+			        set.name  + "</a>" +
 			     "</li>");
 		// Add a popover to show the description.
 		$(item).popover({
@@ -3455,7 +3494,8 @@ $(function () {
 		    var iname  = info["instance_name"];
 		    var pname  = info["profile_name"];
 		    var item = $("<li>" +
-				 " <a href='#'>" + iname + "</a>" +
+				 " <a href='#' class=dropdown-item>" +
+				     iname + "</a>" +
 				 "</li>");
 
 		    // Handler to regenerate the form.

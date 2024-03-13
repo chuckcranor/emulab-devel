@@ -10,7 +10,7 @@
     font-size: small;
  //   font-height: 18px;
 }
-.panel-body > table {
+.panel-body card-body > table {
     margin-bottom: 0px;
 }
 @media (min-width: 768px) {
@@ -36,18 +36,17 @@
  }
 .table-fixed th { background:#eee; }
 </style>
-<div class='col-lg-8 col-lg-offset-2
-            col-md-8 col-md-offset-2
-            col-sm-8 col-sm-offset-2
-            col-xs-10 col-xs-offset-1'>
+<div class='col-lg-8 col-lg-offset-2 offset-lg-2
+            col-md-8 col-md-offset-2 offset-md-2
+            col-sm-8 col-sm-offset-2 offset-sm-2'>
   <div>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
  	<% if (isadmin && window.ISEMULAB) { %>
 	  <a href="../shownode.php3?node=<%= fields.node_id %>&classic=1"
 	     class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px; margin-top: -4px;'
-	     data-toggle='tooltip'
+	     data-toggle='tooltip' data-bs-toggle='tooltip'
 	     title="Classic show node page"
              type='button'>Classic</a>
 	<% } %>
@@ -55,7 +54,7 @@
 	  <a href="#" id="reboot-button"
 	     class='btn btn-danger btn-xs pull-right'
              style='margin-right: 10px; margin-top: -4px;'
-	     data-toggle='tooltip'
+	     data-toggle='tooltip' data-bs-toggle='tooltip'
 	     title="Reboot Node"
              type='button'>Reboot</a>
 	<% } %>
@@ -65,7 +64,7 @@
 	     class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px; margin-top: -4px;'
 	     target="_blank"
-	     data-toggle='tooltip'
+	     data-toggle='tooltip' data-bs-toggle='tooltip'
 	     title="Console Access"
              type='button'>Console</a>
 	<% } %>
@@ -73,7 +72,7 @@
 	  <a href="../bootlog.php3?node=<%= fields.node_id %>"
 	     class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px; margin-top: -4px;'
-	     data-toggle='tooltip'
+	     data-toggle='tooltip' data-bs-toggle='tooltip'
 	     title="Boot setup log"
              type='button'>Setup Log</a>
 	<% } %>
@@ -81,7 +80,7 @@
 	  <a href="../spewconlog.php3?node=<%= fields.node_id %>&linecount=1000"
 	     class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px; margin-top: -4px;'
-	     data-toggle='tooltip'
+	     data-toggle='tooltip' data-bs-toggle='tooltip'
 	     title="Console log tail"
              type='button'>Console Log</a>
 	<% } %>
@@ -89,13 +88,13 @@
 	  <a href="show-nodelog.php?node=<%= fields.node_id %>"
 	     class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px; margin-top: -4px;'
-	     data-toggle='tooltip'
+	     data-toggle='tooltip' data-bs-toggle='tooltip'
 	     title="Node message log"
              type='button'>Admin Log</a>
 	  <a href="show-nodehistory.php?node_id=<%= fields.node_id %>"
 	     class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px; margin-top: -4px;'
-	     data-toggle='tooltip'
+	     data-toggle='tooltip' data-bs-toggle='tooltip'
 	     title="Node History"
              type='button'>History</a>
 	<% } %>
@@ -103,13 +102,13 @@
 	  <a href="show-hardware.php?node_id=<%= fields.node_id %>"
 	     class='btn btn-info btn-xs pull-left'
              style='margin-right: 10px; margin-top: -4px;'
-	     data-toggle='tooltip'
+	     data-toggle='tooltip' data-bs-toggle='tooltip'
 	     title="Detailed hardware info"
              type='button'>Hardware Details</a>
 	<% } %>
-        <h3 class='panel-title'>Node <%- fields.node_id %></h3>
+        <h3 class='panel-title card-title'>Node <%- fields.node_id %></h3>
       </div>
-      <div class='panel-body'>
+      <div class='panel-body card-body'>
 	<table class='table table-condensed table-bordered'>
 	  <tr>
 	    <td>Node ID</td>
@@ -261,6 +260,14 @@
 	      </td>
 	    </tr>
 	  <% } %>
+	  <% if (_.has(fields, "urn")) { %>
+	    <tr>
+	      <td>URN</td>
+	      <td>
+		<%- fields.urn %>
+	      </td>
+	    </tr>
+	  <% } %>
 	  <% if (fields.tipline && isadmin) { %>
 	    <tr>
 	      <td>Tipline</td>
@@ -275,16 +282,15 @@
   </div>
 </div>
 <% if (_.has(fields, "expinfo") && fields.expinfo) { %>
-  <div class='col-lg-8 col-lg-offset-2
-              col-md-8 col-md-offset-2
-              col-sm-8 col-sm-offset-2
-              col-xs-10 col-xs-offset-1'>
+  <div class='col-lg-8 col-lg-offset-2 offset-lg-2
+              col-md-8 col-md-offset-2 offset-md-2
+              col-sm-8 col-sm-offset-2 offset-sm-2'>
     <div>
-      <div class='panel panel-default'>
-	<div class='panel-heading'>
-	  <h3 class="panel-title">Experiment Related Info</h3>
+      <div class='panel  card panel-default'>
+	<div class='panel-heading card-header'>
+	  <h3 class="panel-title card-title">Experiment Related Info</h3>
 	</div>
-	<div class="panel-body">
+	<div class="panel-body card-body">
 	  <table class='table table-condensed table-bordered'>
 	    <tr>
 	      <td class="col-sm-3">Project</td>
@@ -362,14 +368,13 @@
 <% } %>
 <% if (fields.attributes || fields.typeattributes ||
        fields.features || fields.typefeatures) { %>
-  <div class='col-lg-6 col-lg-offset-3
-              col-md-6 col-md-offset-3
-              col-sm-8 col-sm-offset-2
-              col-xs-10 col-xs-offset-1'>
+  <div class='col-lg-6 col-lg-offset-3 offset-lg-3
+              col-md-6 col-md-offset-3 offset-md-3
+              col-sm-8 col-sm-offset-2 offset-sm-2'>
     <div>
-      <div class='panel panel-default'>
-	<div class='panel-heading'>
-	  <h3 class="panel-title">Attributes and Features
+      <div class='panel  card panel-default'>
+	<div class='panel-heading card-header'>
+	  <h3 class="panel-title card-title">Attributes and Features
 	    <a href="#" type="button "class='btn btn-xs'
 		    data-toggle='modal'
 		    data-target="#info-modal"
@@ -379,7 +384,7 @@
 	    </a>
 	  </h3>
 	</div>
-	<div class="panel-body">
+	<div class="panel-body card-body">
 	  <table class='table table-condensed table-bordered'>
 	    <% if (fields.attributes || fields.typeattributes) { %>
 	      <thead>
@@ -433,12 +438,11 @@
 <% if (fields.interfaces) { %>
   <div class='col-lg-12 col-lg-offset-0
 	      col-md-12 col-md-offset-0
-	      col-sm-12 col-sm-offset-0
-	      col-xs-12 col-xs-offset-0'>
+	      col-sm-12 col-sm-offset-0'>
     <div>
-      <div class='panel panel-default'>
-	<div class='panel-heading'>
-	  <h3 class="panel-title align-center">
+      <div class='panel  card panel-default'>
+	<div class='panel-heading card-header'>
+	  <h3 class="panel-title card-title align-center">
 	    <% if (fields.role != "testswitch" &&
 	      fields.role != "ctrlswitch") { %>
 	      Interface/Switch Info
@@ -447,7 +451,7 @@
 	    <% } %>
 	  </h3>
 	</div>
-	<div class="panel-body">
+	<div class="panel-body card-body">
 	  <% if (fields.role != "testswitch" &&
 	    fields.role != "ctrlswitch") { %>
 	    <table class='table table-condensed table-bordered'>
@@ -583,14 +587,13 @@
 <% if (_.has(fields, "vinterfaces") && fields.vinterfaces) { %>
   <div class='col-lg-12 col-lg-offset-0
 	      col-md-12 col-md-offset-0
-	      col-sm-12 col-sm-offset-0
-	      col-xs-12 col-xs-offset-0'>
+	      col-sm-12 col-sm-offset-0'>
     <div>
-      <div class='panel panel-default'>
-	<div class='panel-heading'>
-	  <h3 class="panel-title">Virtual Interfaces</h3>
+      <div class='panel  card panel-default'>
+	<div class='panel-heading card-header'>
+	  <h3 class="panel-title card-title">Virtual Interfaces</h3>
 	</div>
-	<div class="panel-body">
+	<div class="panel-body card-body">
 	  <table class='table table-condensed table-bordered'>
 	    <thead>
 	      <th>Iface</th>
@@ -627,15 +630,14 @@
   </div>
 <% } %>
 <% if (fields.vlans) { %>
-  <div class='col-lg-8 col-lg-offset-2
-	      col-md-8 col-md-offset-2
-	      col-sm-10 col-sm-offset-0
-	      col-xs-10 col-xs-offset-0'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-	<h3 class="panel-title">Vlans</h3>
+  <div class='col-lg-8 col-lg-offset-2 offset-lg-2
+	      col-md-8 col-md-offset-2 offset-md-2
+	      col-sm-10 col-sm-offset-1 offset-sm-1'>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+	<h3 class="panel-title card-title">Vlans</h3>
       </div>
-      <div class='panel-body'>
+      <div class='panel-body card-body'>
 	<table class='table table-condensed table-bordered'>
 	  <thead>
 	    <tr>
@@ -666,15 +668,14 @@
   </div>
 <% } %>
 <% if (_.has(fields, "vnodes") && fields.vnodes) { %>
-  <div class='col-lg-6 col-lg-offset-3
-	      col-md-6 col-md-offset-3
-	      col-sm-8 col-sm-offset-2
-	      col-xs-10 col-xs-offset-1'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-	<h3 class="panel-title">Containers</h3>
+  <div class='col-lg-6 col-lg-offset-3 offset-lg-3
+	      col-md-6 col-md-offset-3 offset-md-3
+	      col-sm-8 col-sm-offset-2 offset-sm-2'>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+	<h3 class="panel-title card-title">Containers</h3>
       </div>
-      <div class='panel-body'>
+      <div class='panel-body card-body'>
 	<table class='table table-condensed table-bordered'>
 	  <thead>
 	    <tr>
@@ -705,11 +706,12 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
         <center><h4>Confirm to Reboot node</h4>
-          <button class='btn btn-danger btn-sm'
-		  id='confirm-reboot-button'>Confirm</a></center>
+          <button class='btn btn-danger btn-sm confirm-button'
+		  id='confirm-reboot-button'>Confirm</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>Cancel</button>
+	</center>
       </div>
     </div>
   </div>
@@ -718,8 +720,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<p>
 	  A note about features and attributes; in general, sizes (like
 	  disk and memory) are reported in megabytes (MB) and speed is

@@ -2,8 +2,8 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['instantiate', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', "oops-modal", 'rspectextview-modal', 'reservation-graph', 'resgroup-list', 'instantiate-templates']);
-    var instantiateString = templates['instantiate'];
+    var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'oops-modal', 'rspectextview-modal', 'reservation-graph', 'resgroup-list', 'instantiate-templates']);
+    var instantiateString = templates['instantiate-new'];
     var aboutaptString = templates['aboutapt'];
     var aboutcloudString = templates['aboutcloudlab'];
     var aboutpnetString = templates['aboutpnet'];
@@ -30,11 +30,7 @@ $(function ()
     var showpicker    = 0;
     var portal        = null;
     var JACKS_NS      = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
-    var jacks = {
-      instance: null,
-      input: null,
-      output: null
-    };
+    var EMULAB_NS     = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var editor        = null;
     var ppstart       = window.ppstart;
     var loaded_uuid   = null;
@@ -72,9 +68,6 @@ $(function ()
 	    LoadReservationInfo();
 	}
 	
-	// Get context for constraints
-	var contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
-	$.get(contextUrl).then(contextReady, contextFail);
 	// Standard view option
 	marked.setOptions({"sanitize" : true});
 
@@ -192,7 +185,7 @@ $(function ()
 	    minDate: 0,		/* earliest date is today */
 	    disabled: false,
 	    showButtonPanel: true,
-	    onSelect: function (dateString, dateobject) {
+	    onClose: function (dateString, dateobject) {
 		DateChange("#start_day");
 	    }
 	});
@@ -200,7 +193,7 @@ $(function ()
 	    minDate: 0,		/* earliest date is today */
 	    maxDate: "+1d",
 	    showButtonPanel: true,
-	    onSelect: function (dateString, dateobject) {
+	    onClose: function (dateString, dateobject) {
 		DateChange("#end_day");
 	    }
 	});
@@ -217,11 +210,6 @@ $(function ()
 	// button unless appropriate. 
 	CopyProfile.InitCopyProfile('#profile-copy-button',
 				    window.DEFAULT_PROFILE, _.keys(projlist));
-
-	// Set up jacks swap
-	$('#stepsContainer #inline_overlay').click(function() {
-	    SwitchJacks('large');
-	});
 
 	// Profile picker in its own module now.
 	if (showpicker) {
@@ -416,11 +404,6 @@ $(function ()
 		return false;
 	    } 
 	}
-	// Switch Jacks back to the little window when leaving
-	// the Finalize step.
-	if (currentIndex == 2) {
-	    SwitchJacks('small');
-	}
 	if (currentIndex == 0 && selected_uuid == null) {
 	    return false;
 	}
@@ -438,8 +421,8 @@ $(function ()
 	    // If the profile isn't parameterized, skip the second step
 	    if (!ispprofile) {
 		if (priorIndex < currentIndex) {
-		    // Generate the profile on the third tab
-		    ShowThumbnail(selected_rspec, updateJacksGraph);
+		    // Generate the topology on the third tab
+		    ShowTopology(selected_rspec);
 		    $(step).steps('next');
 		    $('#stepsContainer-t-1').parent().removeClass('done')
 			.addClass('disabled');
@@ -451,16 +434,6 @@ $(function ()
 	    }
 	}
 	else if (currentIndex == 2) {
-	    if (priorIndex == 1) {
-		// Keep the two panes the same height
-		$('#inline_container').css('height',
-			       $('#finalize_container').outerHeight() - 15);
-
-		// Chrome was having an issue where Jacks was not responding to
-		// the height change. Had to also add to Jacks root.
-		$('#inline_jacks').css('height',
-				   $('#finalize_container').outerHeight() - 15);
-	    }
 	    if (priorIndex < currentIndex) {
 		CheckForRadioUsage();
 		if (rerun_instance) {
@@ -837,73 +810,6 @@ $(function ()
 	});
     }
 
-    function SwitchJacks(which)
-    {
-      //console.info("SwitchJacks", which);
-      if (which == 'small')
-      {
-	$('#stepsContainer #finalize_container')
-	  .removeClass('col-lg-12 col-md-12 col-sm-12');
-	$('#stepsContainer #finalize_container')
-	  .addClass('col-lg-8 col-md-8 col-sm-8');
-	$('#stepsContainer #inline_large_jacks').html('');
-	$('#inline_large_container').addClass('hidden');
-	ShowThumbnail(selected_rspec, null);
-	$('#stepsContainer-p-2 #inline_container')
-	  .removeClass('hidden');
-      }
-      else if (which == 'large')
-      {
-	// Sometimes the steps library will clean up the added elements
-	if ($('#inline_large_container').length === 0)
-	{        
-	  $('<div id="inline_large_container" class="hidden"></div>')
-	    .insertAfter('#stepsContainer .content');
-	  $('#inline_large_container')
-	    .html(''
-		  +'<button id="closeLargeInline" type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>'
-		  +'<div id="inline_large_jacks"></div>');
-	  $('#stepsContainer #inline_large_container')
-	    .addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
-		
-	  $('#closeLargeInline').click(function() {
-	    SwitchJacks('small');
-	  });
-	}
-
-	$('#stepsContainer #finalize_container')
-	  .removeClass('col-lg-8 col-md-8 col-sm-8');
-	$('#stepsContainer #finalize_container')
-	  .addClass('col-lg-12 col-md-12 col-sm-12');
-	//$('#stepsContainer-p-2 #inline_jacks').html('');
-	$('#stepsContainer-p-2 #inline_container')
-	  .addClass('hidden');
-
-	if (ispprofile)
-	{
-	    ChangeJacksRoot();
-	}
-	else
-	{
-	    ShowProfileSelectionInline();
-	}
-	$('#inline_large_container').removeClass('hidden');
-      }
-    }
-
-    // Used to generate the topology on Tab 3 of the wizard for non-pp profiles
-    function ShowProfileSelectionInline()
-    {
-	console.info("ShowProfileSelectionInline");
-	var root = $('#stepsContainer #inline_large_jacks');
-
-	$('#stepsContainer #inline_overlay').removeClass("hidden");
-	$('#inline_jacks #edit_dialog #edit_container')
-	    .removeClass("hidden");
-	editor = new JacksEditor(root, true, true, false, true, !multisite);
-	editor.show(selected_rspec);
-    }
-
     // Called when the user selects a profile in the picker.
     function ChangeProfileSelection(selected) {
 	console.info("ChangeProfileSelection", selected);
@@ -915,9 +821,8 @@ $(function ()
 	    // The selected profile in the submitted form.
 	    // Might be a secret hash.
 	    $('#selected_profile').attr('value', selected);
-	    $('#selected_profile_text').html("" + profile_name);
+	    $('.selected_profile_text').html(profile_name + ":" + blob.version);
 	    $('#selected_profile_description').html(blob.description);
-	    $('#finalize_profile_name').text(profile_name + ":" + blob.version);
 
 	    ispprofile       = blob.ispprofile;
 	    isscript         = blob.isscript;
@@ -975,7 +880,7 @@ $(function ()
 		    blob.repohash.substr(0, 8) + ", " +
 		    blob.reporef + ")";
 		
-		$('#selected_profile_text').html(text);
+		$('.selected_profile_text').html(text);
 
 		// See ppwizard, it will run the script again if
 		// the params change and need to know what to
@@ -1157,7 +1062,7 @@ $(function ()
 	    selected_rspec = instantiateCommon.setClusters(newRspec);
 	    $('#rspec_textarea').val(selected_rspec);
 	    CreateAggregateSelectors();
-	    ShowThumbnail(selected_rspec, updateJacksGraph);
+	    ShowTopology(selected_rspec);
 	}
     }
 
@@ -1168,12 +1073,13 @@ $(function ()
     function CreateAggregateSelectors()
     {
 	var pid    = $('#project_selector #profile_pid').val();	
+	var gid    = $('#group_selector #group_pid').val();	
 
 	// No need to do this if not showing selectors.
 	if (!window.CLUSTERSELECT) {
 	    return;
 	}
-	instantiateCommon.createAggregateSelectors(selected_rspec, pid);
+	instantiateCommon.createAggregateSelectors(selected_rspec, pid, gid);
     }
 
     /*
@@ -1363,33 +1269,6 @@ $(function ()
 	return clusters;
     }
 
-    function contextReady(data)
-    {
-	var constraints;
-	var context = data;
-	
-	if (typeof(context) === 'string')
-	{
-	    context = JSON.parse(context);
-	}
-	if (context.canvasOptions.defaults.length === 0)
-	{
-	    delete context.canvasOptions.defaults;
-	}
-	
-	jacks.instance = new window.Jacks({
-	    mode: 'viewer',
-	    source: 'rspec',
-	    root: '#jacks-dummy',
-	    nodeSelect: true,
-	    readyCallback: function (input, output) {
-		constraints = new JACKS_LOADER.Constraints(context);
-	    },
-	    canvasOptions: context.canvasOptions,
-	    constraints: context.constraints
-	});
-    }
-
     // This has the Jacks parsed rspec that we use for some simple
     // constraint checking.
     var jacksGraph = null;
@@ -1409,16 +1288,37 @@ $(function ()
 	
 	console.info("UpdateImageConstraints", pid);
 
-	if (!doconstraints || pid == "" || jacksGraph == null) {
+	if (!doconstraints || pid == "") {
 	    //CreateAggregateSelectors();
 	    return;
 	}
 	var images = [];
-	_.each(jacksGraph.nodes, function (node) {
-	    if (node.image) {
-		images = _.union(images, [node.image]);
+	var xmlDoc = $.parseXML(selected_rspec);
+	
+	$(xmlDoc).find("node, emulab\\:vhost").each(function() {
+	    var stype  = $(this).find("sliver_type");
+	    var vnode  = this.getElementsByTagNameNS(EMULAB_NS, 'vnode');
+
+	    /*
+	     * Find the disk image (if any) for the node.
+	     */
+	    if (vnode.length && $(vnode).attr("disk_image")) {
+		images = _.union(images, [$(vnode).attr("disk_image")]);
+	    }
+	    else if (stype.length) {
+		var dimage = $(stype).find("disk_image");
+		if (dimage.length) {
+		    var name = $(dimage).attr("name");
+		    if (name) {
+			var hrn = sup.ParseURN(name);
+			if (hrn && hrn.type == "image") {
+			    images = _.union(images, [name]);
+			}
+		    }
+		}
 	    }
 	});
+	console.info("UpdateImageConstraints", images);
 	if (!images.length) {
 	    return;
 	}
@@ -1472,14 +1372,6 @@ $(function ()
 	}
     }
   
-    function contextFail(fail1, fail2)
-    {
-	console.log('Failed to fetch context', fail1, fail2);
-	alert('Failed to fetch context from ' + contextUrl + '\n\n' +
-	      'Check your network connection and try again or contact testbed support ' +
-	      'with this message and the URL of this webpage.');
-    }
-
     function LoadReservationInfo()
     {
 	var callback = function(json) {
@@ -1490,6 +1382,9 @@ $(function ()
 	    console.info("resinfo", json.value);
 	    resinfo = json.value;
 	    var pid = $('#project_selector #profile_pid').val();
+	    /*
+	     * XXXXX Need to gid here.
+	     */
 	    instantiateCommon.generateReservationInfo(pid, resinfo);
 	};
 	var xmlthing =
@@ -1547,20 +1442,25 @@ $(function ()
 		}
 	    }
 	}
-	if (1) {
-	if (window.ISPOWDER &&
-	    (which == "#start_day" || which == "#start_hour")) {
+	if (which == "#start_day" || which == "#start_hour") {
 	    if (isadmin || window.USENEWSCHEDULE) {
 		/*
-		 * The powder portal gets a termination datepicker. Whenever
-		 * the start time is changed, recalc the maximum allowed
-		 * duration and modify the termination accordingly. Also need
-		 * to do this when the project changes.
+		 * Recalc the maximum allowed duration. As long as we have
+		 * the resinfo, this is quick. 
+		 *
+		 * See below; the POWDER portal has a termination datepicker
+		 * which needs to be updated. Other portals just get a warning
+		 * about the current maximum extension.
 		 */
 		UpdateMaxDuration();
 	    }
-	    else if ($("#start_day").datepicker("getDate") &&
+	    else if (window.ISPOWDER &&
+		     $("#start_day").datepicker("getDate") &&
 		     $('#start_hour').val()) {
+		/*
+		 * Old way; just update the end pickers according to
+		 * fixed MAXDURATION. 
+		 */
 		var mindate = $("#start_day").datepicker("getDate");
 		mindate.setHours($('#start_hour').val());
 		var maxdate = new Date(mindate.getTime());
@@ -1573,7 +1473,6 @@ $(function ()
 		$("#end_day").datepicker("refresh");
 		$("#end_hour").val(maxdate.getHours());
 	    }
-	}
 	}
     }
 
@@ -1589,7 +1488,13 @@ $(function ()
 	var start_hour = $('#step3-form [name=start_hour]').val();
 
 	console.info("UpdateMaxDuration", start_day, start_hour);
-	$('#doesnotfit-warning').addClass("hidden");
+	if (window.ISPOWDER) {
+	    $('#doesnotfit-warning').addClass("hidden");
+	}
+	else {
+	    $('#maxduration-limited').addClass("hidden");
+	    $('#maxduration-doesnotfit').addClass("hidden");
+	}
 
 	// Only if start time properly set.
 	if (! ((start_day && start_hour) || (!start_day && !start_hour))) {
@@ -1600,7 +1505,7 @@ $(function ()
 
 	// Update pickers.
 	var callback = function (json) {
-	    console.info(json);
+	    console.info("MaxDuration result:", json);
 	    if (json.code) {
 		console.info("UpdateMaxDuration: " . json.value);
 		return;
@@ -1608,7 +1513,51 @@ $(function ()
 	    // Saved globally for above
 	    var maxdate = json.value["maxend"];
 	    var mindate = $("#start_day").datepicker("getDate");
+	    if (!mindate) {
+		mindate = new Date();
+	    }
 
+	    if (!window.ISPOWDER) {
+		/*
+		 * The other portals get an advisory message. We also adjust
+		 * max duration if under window.MAXDURATION.
+		 */
+		if (maxdate != null) {
+		    if (maxdate) {
+			var rounded = new Date(maxdate);
+			rounded.setMinutes(0, 0, 0);
+
+			// Number of hours.
+			mindate.setHours($('#start_hour').val());
+			var hours = (rounded - mindate) / (3600 * 1000);
+			console.info(rounded, mindate, hours);
+
+			if (hours == 0) {
+			    $('#maxduration-doesnotfit').removeClass("hidden");
+			    return;
+			}
+			$('#maxduration-limited span')
+			    .html(moment(rounded).format('lll'));
+			$('#maxduration-limited').removeClass("hidden");
+
+			/*
+			 * Adjust if #hours is less then window.MAXDURATION.
+			 */
+			if (hours < window.MAXDURATION) {
+			    $('#experiment_duration')
+				.val(Math.floor(hours));
+			}
+			else {
+			    $('#experiment_duration')
+				.val(window.MAXDURATION);
+			}
+		    }
+		    else {
+			$('#maxduration-doesnotfit').removeClass("hidden");
+		    }
+		}
+		return;
+	    }
 	    if (!maxdate) {
 		if (start_day) {
 		    $('#doesnotfit-warning-now').addClass("hidden");
@@ -1618,6 +1567,29 @@ $(function ()
 		    $('#doesnotfit-warning-now').removeClass("hidden");
 		    $('#doesnotfit-warning-datetime').addClass("hidden");
 		}
+		if (_.has(json.value, "loser")) {
+		    var loser = json.value["loser"];
+		    var which = json.value["which"];
+		    var phrase;
+
+		    if (which == "type") {
+			phrase = "node/type " + loser;
+		    }
+		    else if (which == "range") {
+			phrase = "range " + loser;
+		    }
+		    else {
+			phrase = "route " + loser;
+		    }
+		    $('#doesnotfit-warning-loser').html(phrase + ".");
+		    $('#doesnotfit-warning-loser').removeClass("hidden");
+		    $('#doesnotfit-warning-noloser').addClass("hidden");
+		}
+		else {
+		    $('#doesnotfit-warning-loser').addClass("hidden");
+		    $('#doesnotfit-warning-noloser').removeClass("hidden");
+		}
+			  
 		$('#bestguess-info').addClass("hidden");
 		$('#doesnotfit-warning').removeClass("hidden");
 		return;
@@ -1625,9 +1597,6 @@ $(function ()
 	    else {
 		$('#doesnotfit-warning').addClass("hidden");
 		$('#bestguess-info').removeClass("hidden");
-	    }
-	    if (!mindate) {
-		mindate = new Date();
 	    }
 	    maxdate = maxEndDate = new Date(maxdate);
 	    console.info("UpdateMaxDuration: ", mindate, maxdate);
@@ -1683,7 +1652,7 @@ $(function ()
 	    var pid = $('#profile_pid').val().toLowerCase();
 	    var forecasts = {};
 	    _.each(resinfo, function (info, urn) {
-		console.info(urn, info);
+		//console.info(urn, info);
 		// Ick.
 		if (!_.has(info, "pforecasts")) {
 		    return;
@@ -2111,13 +2080,6 @@ $(function ()
 	rerun_loaded = true;
     }
 
-    /*
-     * This stuff used to be in ppwizard but it currently makes no sense
-     * to have there. And it confuses the hell out of things.
-     */
-    var thumbnail = null;
-    var jacksGraphCallback = null;
-
     function countNodes(rspec)
     {
 	//console.info("countNodes");
@@ -2125,50 +2087,33 @@ $(function ()
 	var count  = $(xmlDoc).find("node").length;
 	return count;
     }
-    function setJacksGraph(newGraph)
-    {
-	if (jacksGraphCallback) {
-	    jacksGraphCallback(newGraph);
-	}
-    }
-    
-    function ShowThumbnail(rspec, jacks_callback)
-    {
-	console.info("ShowThumbnail", jacks_callback);
-	jacksGraphCallback = jacks_callback;
 
-	var root = $('#stepsContainer-p-2 #inline_jacks');
-	if (! thumbnail) {
-	    thumbnail = new jacksmod.Thumb(setJacksGraph);
-	    root.append(thumbnail.el);
-	}
-	thumbnail.replaceRspec(rspec);
-	if (countNodes(rspec) > 100) { 
-	    $('#stepsContainer #inline_overlay').addClass("hidden");
+    var jacksViewer = null;
+    
+    function ShowTopology(rspec)
+    {
+	console.info("ShowTopology");
+
+	if (!jacksViewer) {
+	    var aggregates = [];
+	
+	    _.each(amlist, function(details, aggregate_urn) {
+		aggregates.push({"id" : aggregate_urn,
+				 "name" : details.name});
+	    });
+	    
+	    jacksViewer = JacksViewer.create({
+		"root"       : "#showtopology-container",
+		"selector"   : '.showtopology-bare',
+		"xml"        : rspec,
+		"showinfo"   : true,
+		"multisite"  : multisite,
+		"aggregates" : aggregates,
+	    });
 	}
 	else {
-	  $('#stepsContainer #inline_overlay').removeClass("hidden");
-	}
-    }
-
-    function ChangeJacksRoot()
-    {
-	var root = $('#stepsContainer #inline_large_jacks');
-	
-	if (selected_rspec) {
-	    if (countNodes(selected_rspec) > 100) {
-		$('#stepsContainer #inline_overlay').addClass("hidden");
-		$('#inline_jacks #edit_dialog #edit_container')
-		    .addClass("hidden");
-		return;
-	    }
-	    else {
-		$('#stepsContainer #inline_overlay').removeClass("hidden");
-		$('#inline_jacks #edit_dialog #edit_container')
-		    .removeClass("hidden");
-	    }
-	    var editor = new JacksEditor(root, true, true, false, true);
-	    editor.show(selected_rspec);
+	    jacksViewer.clear();
+	    jacksViewer.add(rspec);
 	}
     }
     

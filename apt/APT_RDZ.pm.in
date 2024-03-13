@@ -1,0 +1,393 @@
+#!/usr/bin/perl -wT
+#
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+package APT_RDZ;
+
+use strict;
+use Data::Dumper;
+use JSON;
+use Scalar::Util qw(blessed);
+use Carp;
+use Exporter;
+use vars qw(@ISA @EXPORT);
+
+@ISA    = "Exporter";
+@EXPORT = qw ( );
+
+# Must come after package declaration
+use emdb;
+use emutil;
+use APT_RDZRest;
+
+# Configure variables
+my $TB		  = "@prefix@";
+my $OURDOMAIN     = "@OURDOMAIN@";
+# ZMC Rest insterface object
+my $ZMC;
+
+#
+# Block, waiting for RDZ to approve spectrum requests
+# Failure to get the spectrum throws the instance into a failed state.
+#
+sub RequestSpectrum($$)
+{
+    my ($instance, $perrmsg) = @_;
+    my $failed = 0;
+    my $failure_message = "Internal error";
+    my @grants = ();
+    my @radio_ports = ();
+    my %dynamic = ();
+
+    print "RequestSpectrum: $instance\n";
+
+    my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
+    if (!defined($rfranges) || !keys(%{$rfranges})) {
+	print "RequestSpectrum: No rfranges for $instance\n";
+	return 0;
+    }
+    if (!defined($ZMC)) {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+	if (defined($ZMC)) {
+	    $$perrmsg = "Cannot open the ZMC rest interface";
+	    print "RequestSpectrum: $$perrmsg\n";
+	    return -1;
+	}
+    }
+    my $resources = $instance->_resources();
+    if (!defined($resources)) {
+	my $perrmsg;
+	if (APT_Profile::GetResources($instance->RSPEC(),
+				      $perrmsg, \$resources)) {
+	    $$perrmsg = "Could not get resources for experiment";
+	    print "RequestSpectrum: $$perrmsg\n";
+	    return -1;
+	}
+    }
+    foreach my $client_id (keys(%{$resources->{'radios'}})) {
+	my $radio = $resources->{'radios'}->{$client_id};
+	next
+	    if ($radio->node_id() =~ /^oai-w/);
+
+	my $frontend = $radio->FrontendInterface("rf0");
+	if ($frontend) {
+	    my $radio_port_id = $frontend->rdz_radioport_id();
+	    if ($radio_port_id) {
+		push(@radio_ports, {"radio_port_id" => $radio_port_id});
+	    }
+	    else {
+		$$perrmsg = "$radio is not registered with the RDZ";
+		print "RequestSpectrum: $$perrmsg\n";
+		return -1;
+	    }
+	}
+    }
+    
+    foreach my $rfrange (values(%{$rfranges})) {
+	my $frequency_low  = $rfrange->freq_low();
+	my $frequency_high = $rfrange->freq_high();
+	my $power          = $rfrange->power();
+	my $width          = $rfrange->width();
+    
+	# As for Modify, although unlikely. 
+	next
+	    if ($rfrange->rdz_grantid());
+
+	print "RequestSpectrum: Requesting $frequency_low, $frequency_high\n";
+
+	my $request = {
+	    "description" => $instance->Printable(),
+	    "element_id"  => $ZMC->elementid(),
+	    "starts_at"   => TBDateStringGMT($instance->started()),
+	    "constraints" => [
+		{
+		    "constraint" => {
+			"min_freq"  => $frequency_low * 1000000,
+			"max_freq"  => $frequency_high * 1000000,
+			"max_eirp"  => $power,
+			"exclusive" => JSON::false,
+		    },
+		},
+	    ],
+	    "radio_ports" => \@radio_ports,
+	};
+	if (defined($width) && $width != 0) {
+	    $request->{"constraints"}[0]->{"constraint"}->{'bandwidth'} = $width * 1000000;
+	}
+	print Dumper($request);
+	my $grant;
+	if ($ZMC->POST("/grants", $request, \$grant)) {
+	    $failure_message = "Internal error";
+	    $failed++;
+	    last;
+	}
+	if (exists($grant->{'error'})) {
+	    $failure_message = $grant->{'error'};
+	    $failed++;
+	    last;
+	}
+	if (!exists($grant->{'id'})) {
+	    # Gack
+	    $failure_message = "No grant ID in response";
+	    $failed++;
+	    last;
+	}
+	my $grant_id = $grant->{'id'};
+	print "RequestSpectrum: Got grant ID $grant_id\n";
+	
+	# Update DB so we know we have a grant for this range.
+	$rfrange->Update({"rdz_grantid" => $grant_id});
+	
+	push(@grants, $grant);
+	# We have to update these below. 
+	if (defined($width) && $width != 0) {
+	    $dynamic{"$grant_id"} = $rfrange;
+	}
+	#
+	# XXX We want to do a poll below even though it was
+	# probably approved immediately.
+	#
+	$grant->{'approved_at'} = undef;
+    }
+    
+    #
+    # Failure to get the spectrum, throw the instance into failure
+    #
+    goto failed
+	if ($failed);
+
+    #
+    # Now poll for the grants to be approved or denied.
+    #
+    print "RequestSpectrum: Waiting for grants to be approved\n";
+
+    # Delay for the web UI.
+    my $sleep_delay = 10;
+    my $loops = 6;
+    sleep($sleep_delay);
+
+    while (1) {
+	my $waiting = scalar(@grants);
+	
+	foreach my $grant (@grants) {
+	    my $grant_id = $grant->{'id'};
+
+	    # Got our approval already, no need to ask.
+	    if ($grant->{'approved_at'}) {
+		$waiting--;
+		next;
+	    }
+	    print "RequestSpectrum: Checking grant ID $grant_id for approval\n";
+	    
+	    my $response;
+	    if ($ZMC->GET("/grants/$grant_id", \$response)) {
+		$failure_message = "Internal error";
+		$failed++;
+	    }
+	    elsif (exists($response->{'error'})) {
+		$failure_message = $response->{'error'};
+		$failed++;
+	    }
+	    elsif (!exists($response->{'id'})) {
+		# Gack
+		$failure_message = "No grant ID in response";
+		$failed++;
+	    }
+	    elsif ($response->{'approved_at'}) {
+		$grant->{'approved_at'} = $response->{'approved_at'};
+		$waiting--;
+		print "RequestSpectrum: Grant ID $grant_id approved\n";
+
+		#
+		# For dynamic requests, need to update the rfrange.
+		#
+		if (exists($dynamic{"$grant_id"})) {
+		    my $rfrange = $dynamic{"$grant_id"};
+		    my $details = $response->{"constraints"}[0]->{"constraint"};
+		    my $low     = $details->{"min_freq"} / 1000000.0;
+		    my $high    = $details->{"max_freq"} / 1000000.0;
+
+		    print "RequestSpectrum: rfrange for $grant_id updated ".
+			"to $low,$high\n";
+
+		    if (UpdateSpectrum($instance, $rfrange, $low, $high)) {
+			$failure_message = "Failed to update range";
+			$failed++;
+		    }
+		}
+	    }
+	    elsif ($response->{'denied_at'}) {
+		$failure_message = "Grant $grant_id denied";
+		$failed++;
+		print "RequestSpectrum: Grant ID $grant_id denied\n";
+	    }
+	    elsif ($response->{'revoked_at'}) {
+		$failure_message = "Grant $grant_id revoked";
+		$failed++;
+		print "RequestSpectrum: Grant ID $grant_id revoked\n";
+	    }
+	    last
+		if ($failed);
+	}
+	last
+	    if ($failed || $waiting == 0);
+
+	$loops--;
+	if ($loops < 0) {
+	    $failure_message = "Timed out waiting for the RDZ";
+	    $failed++;
+	    print "RequestSpectrum: Timed out waiting for RDZ\n";
+	    last;
+	}
+	sleep($sleep_delay);
+    }
+    goto failed
+	if ($failed);
+
+    # Write the rspec back with narrowed frequency ranges.
+    if (keys(%dynamic)) {
+	$instance->SetRSPEC($instance->RSPEC());
+    }
+
+    print "RequestSpectrum: Got all grant requests\n";		
+    return 0;
+
+  failed:
+    # Lets not keep anything that we did get.
+    if (@grants) {
+	#DeleteGrants($instance);
+    }
+    $$perrmsg = $failure_message;
+    return -1;
+}
+
+#
+# Check for spectrum revocation
+#
+sub CheckRevocation($)
+{
+    my ($instance) = @_;
+
+    print "CheckRevocation: $instance\n";
+
+    my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
+    if (!defined($rfranges) || !keys(%{$rfranges})) {
+	print "CheckRevocation: No rfranges for $instance\n";
+	return 0;
+    }
+    foreach my $rfrange (values(%{$rfranges})) {
+	my $grant_id = $rfrange->rdz_grantid();
+	if (!$grant_id) {
+	    print "CheckRevocation: No grant ID for $rfrange\n";
+	    next;
+	}
+	my $grant;
+	if ($ZMC->GET("/grants/$grant_id", \$grant)) {
+	    print "CheckRevocation: No grant for $grant_id ($rfrange)\n";
+	    next;
+	}
+	if (exists($grant->{'error'})) {
+	    print "CheckRevocation: Could not get grant $grant_id: " .
+		$grant->{'error'} . "\n";
+	    next;
+	}
+	if ($grant->{'revoked_at'}) {
+	    print "CheckRevocation: Grant $grant_id revoked at " .
+		$grant->{'revoked_at'} . "\n";
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+#
+# Delete grants, as when terminating an experiment.
+#
+sub DeleteGrants($)
+{
+    my ($instance) = @_;
+    my $errors = 0;
+
+    print "DeleteGrants: $instance\n";
+
+    my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
+    if (!defined($rfranges) || !keys(%{$rfranges})) {
+	print "DeleteGrants: No rfranges for $instance\n";
+	return 0;
+    }
+    foreach my $rfrange (values(%{$rfranges})) {
+	my $grant_id = $rfrange->rdz_grantid();
+	if (!$grant_id) {
+	    next;
+	}
+	print "DeleteGrants: Deleting grant ID $grant_id\n";
+	
+	my $response;
+	if ($ZMC->DELETE("/grants/$grant_id", \$response)) {
+	    print "DeleteGrants: Could not delete grant ID $grant_id\n";
+	    $errors++;
+	    next;
+	}
+	$rfrange->Update({"rdz_grantid" => undef});
+    }
+    return $errors;
+}
+
+#
+# Update the rspec with the narrowed RDZ frequency range.
+#
+sub UpdateSpectrum($$$$)
+{
+    my ($instance, $rfrange, $new_low, $new_high) = @_;
+    my $rspec = $instance->RSPEC();
+
+    my $updateGlobal = sub () {
+	my $spectrum = GeniXML::GetSpectrum($rspec);
+
+	foreach my $request (@{$spectrum}) {
+	    if ($request->{"frequency_low"} == $rfrange->freq_low() &&
+		$request->{"frequency_high"} == $rfrange->freq_high()) {
+		my $xmlref = $request->{'element'};
+		GeniXML::SetText("frequency_low", $xmlref, $new_low);
+		GeniXML::SetText("frequency_high", $xmlref, $new_high);
+	    }
+	}
+    };
+
+    if ($rfrange->type() eq "global") {
+	&$updateGlobal();
+    }
+    else {
+	print STDERR "UpdateSpectrum: Cannot update $rfrange\n";
+	return 1;
+    }
+
+    # Flag to update history too
+    if ($rfrange->Update({"freq_low"  => $new_low,
+			  "freq_high" => $new_high}, 1)) {
+	return 1;
+    }
+    return 0;
+}    
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;

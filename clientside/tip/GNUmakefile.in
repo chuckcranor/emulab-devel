@@ -20,10 +20,12 @@
 # 
 # }}}
 #
+PREFIX		= @prefix@
 SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= @top_builddir@
 SUBDIR		= $(subst $(TESTBED_SRCDIR)/,,$(SRCDIR))
+LBINDIR		= $(DESTDIR)$(PREFIX)/bin
 
 include $(OBJDIR)/Makeconf
 
@@ -93,8 +95,9 @@ tippty: tippty.o
 $(OBJS): tipconf.h tip.h
 
 client-install: client
-	$(INSTALL_PROGRAM) console.bin $(DESTDIR)/usr/local/bin/console.bin
-	$(INSTALL_PROGRAM) console $(DESTDIR)/usr/local/bin/console
+	-mkdir -p $(LBINDIR)
+	$(INSTALL_PROGRAM) console.bin $(LBINDIR)/console.bin
+	$(INSTALL_PROGRAM) console $(LBINDIR)/console
 
 control-install tipserv-install:	all $(INSTALL_BINDIR)/tip $(INSTALL_BINDIR)/tiptunnel $(INSTALL_BINDIR)/console.bin $(INSTALL_BINDIR)/console
 
@@ -110,7 +113,9 @@ install:	all $(INSTALL_BINDIR)/tip \
 
 boss-install: install
 
-rack-control-install:	$(INSTALL_BINDIR)/console-nossl
+rack-control-install:	console-nossl
+	$(INSTALL) -m 755 -o root -d $(DESTDIR)$(INSTALL_BINDIR)
+	$(INSTALL_PROGRAM) -s console-nossl $(DESTDIR)$(INSTALL_BINDIR)/console-nossl
 
 # Tip not installed in these targets.
 subboss: 

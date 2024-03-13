@@ -208,8 +208,9 @@ function SPITFORM($uid, $referrer, $error)
               </script>\n";
     }
     echo "<div id='waitwait_div'></div>\n";
-    echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+    echo "<div id='nomore_genilogin_div'></div>\n";
 
+    AddTemplate("nomore-genilogin-modal");
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
     SPITREQUIRE("js/login.js");

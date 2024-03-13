@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017, 2019, 2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -752,6 +752,18 @@ foreach my $node (@freed_nodes) {
 	    next;
 	}
     }
+    #
+    # Check for immediate power off instead of idlepower
+    #
+    if ($node->nfreepoweroff()) {
+	print "Powering off '$node_id' immediately\n";
+	system("$power -a off $node_id");
+	if ($?) {
+	    print STDERR "*** Failed to power off node '$node_id'!\n";
+	    $error++;
+	}
+    }
+    
     print "Releasing node '$node_id' ...\n"
 	if (!$quiet);
     if (DBQueryWarn("delete from reserved where node_id='$node_id'")) {

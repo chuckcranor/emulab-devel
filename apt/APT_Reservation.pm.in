@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2023 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -264,7 +264,11 @@ sub Create($$$)
     else {
 	$sets .= ",created=now()";
     }
-    
+    # XXX Temporary compat until per-group reservations merged
+    if (!exists($argref->{"gid"})) {
+	$argref->{"gid"} = $argref->{"pid"}; 
+	$argref->{"gid_idx"} = $argref->{"pid_idx"}; 
+    }
     my $query = "insert into apt_reservation_groups set ".
 	"locked=now(),locker_pid='$$',${sets}, ".
 	join(",", map("$_=" .
@@ -279,9 +283,11 @@ sub Create($$$)
     DBQueryWarn("unlock tables");
     if (1) {
 	DBQueryWarn("insert into apt_reservation_group_history ".
-		    " (uuid, pid, pid_idx, creator_uid, creator_idx, ".
+		    " (uuid, pid, pid_idx, gid, gid_idx, ".
+		    "  creator_uid, creator_idx, ".
 		    "  start, end, created, portal, forclass, reason) ".
-		    " select uuid, pid, pid_idx, creator_uid, creator_idx, ".
+		    " select uuid, pid, pid_idx, gid, gid_idx, ".
+		    "        creator_uid, creator_idx, ".
 		    "        start, end, created, portal, forclass, reason ".
 		    " from apt_reservation_groups ".
 		    " where uuid='$uuid'");
@@ -310,6 +316,14 @@ sub GetProject($)
     require Project;
     
     return Project->Lookup($self->pid_idx());
+}
+
+sub GetGroup($)
+{
+    my ($self) = @_;
+    require Group;
+    
+    return Group->Lookup($self->gid_idx());
 }
 
 sub GetCreator($)
@@ -1228,18 +1242,28 @@ sub Update($$$)
     return 0;
 }
 
-sub Reserved($$$$$$)
+sub Reserved($$$$$$$)
 {
-    my ($project, $start, $end, $urn, $type, $count) = @_;
+    my ($group, $user, $start, $end, $urn, $type, $count) = @_;
+    my $project = $group->GetProject();
     my $pid_idx = $project->pid_idx();
-
+    my $gid_idx = $group->gid_idx();
+    my $uid_idx = $user->uid_idx();
+    my $clause  = "";
+    
+    if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
+	$clause = "and g.gid_idx='$gid_idx' ";
+    }
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
+	$clause = "and g.creator_idx='$uid_idx' ";
+    }
     my $query_result =
 	DBQueryWarn("select g.uuid,r.type ".
 		    "   from apt_reservation_groups as g ".
 		    "left join ".
 		    "   apt_reservation_group_reservations as r on ".
 		    "   r.uuid=g.uuid ".
-		    "where g.pid_idx='$pid_idx' and ".
+		    "where g.pid_idx='$pid_idx' $clause and ".
 		    "      r.type=" . DBQuoteSpecial($type) . " and ".
 		    "      r.aggregate_urn='$urn' and ".
 		    "      r.count>='$count' and ".
@@ -1257,17 +1281,27 @@ sub Reserved($$$$$$)
 # Well, we have a problem with reservable nodes. If the rspec is requesting
 # those nodes by type, we do not want to reject it. 
 #
-sub ReservedByType($$$$$$)
+sub ReservedByType($$$$$$$)
 {
-    my ($project, $start, $end, $urn, $type, $count) = @_;
+    my ($group, $user, $start, $end, $urn, $type, $count) = @_;
+    my $project = $group->GetProject();
     my $pid_idx = $project->pid_idx();
+    my $gid_idx = $group->gid_idx();
+    my $uid_idx = $user->uid_idx();
+    my $clause  = "";
     my $aggregate = APT_Aggregate->Lookup($urn);
     
+    if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
+	$clause = "and g.gid_idx='$gid_idx'  ";
+    }
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
+	$clause = "and g.creator_idx='$uid_idx' ";
+    }
     my $query_result =
 	DBQueryWarn("select g.uuid,r.type from apt_reservation_groups as g ".
 		    "left join apt_reservation_group_reservations as r on ".
 		    "   r.uuid=g.uuid ".
-		    "where g.pid_idx='$pid_idx' and ".
+		    "where g.pid_idx='$pid_idx' $clause and ".
 		    "      r.aggregate_urn='$urn' and ".
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
@@ -1296,9 +1330,10 @@ sub ReservedByType($$$$$$)
 #
 # Determine a max duration for an experiment.
 #
-sub MaxDuration($$$$$$$)
+sub MaxDuration($$$$$$$$)
 {
-    my ($project, $start, $pend, $resources, $forecasts, $pmsg, $pbad) = @_;
+    my ($group, $user, $start,
+	$pend, $resources, $forecasts, $pmsg, $pbad) = @_;
     my $counts   = undef;
     my $newend   = undef;
 
@@ -1519,11 +1554,13 @@ sub MaxDuration($$$$$$$)
 
 #
 # A variation of above for non powder portals; we want the maximum possible
-# extension at this moment in time. This is not subject to MAXDURATION.
+# extension at this moment in time. This is not subject to MAXDURATION, but
+# is for the web UI on the instantiate page, to notify users if they will
+# not be able to get the resources they want for very long.
 #
-sub MaxExtension($$$$$$)
+sub MaxExtension($$$$$$$)
 {
-    my ($project, $start, $pend, $resources, $forecasts, $pmsg) = @_;
+    my ($project, $user, $start, $pend, $resources, $forecasts, $pmsg) = @_;
     my $newend;
 
     foreach my $urn (keys(%{$resources})) {
@@ -1697,6 +1734,7 @@ use emdb;
 use EmulabConstants;
 use libtestbed;
 use EmulabFeatures;
+use Project;
 use Carp;
 use JSON;
 use English;
@@ -1983,9 +2021,9 @@ sub Overlaps($$$)
 # Do not worry about efficiency, I doubt there will ever be enough
 # reservations to matter.
 #
-sub Fits($$$$$)
+sub Fits($$$$$;$)
 {
-    my ($class, $groups, $start, $end, $ref) = @_;
+    my ($class, $groups, $start, $end, $ref, $pconflict) = @_;
     my $freq_low  = $ref->{'freq_low'};
     my $freq_high = $ref->{'freq_high'};
     my $freq_uuid = $ref->{'uuid'}; # XXX bad naming
@@ -2029,6 +2067,7 @@ sub Fits($$$$$)
 	    }
 	    # Does not fit!
 	    $fits = 0;
+	    $$pconflict = $group if (defined($pconflict));
 	    last;
 	}
 	last if (!$fits);
@@ -2037,14 +2076,118 @@ sub Fits($$$$$)
 }
 
 #
+# Change the reservation sharing mode for a project. Class method.
+#
+sub CheckSharingModeChange($$$)
+{
+    my ($project, $newmode, $perrmsg) = @_;
+    my $pid_idx = $project->pid_idx();
+    my @pgroups = ();
+    my @pranges = ();
+
+    #
+    # Conflicts can arise only from existing experiments. Say if a project is
+    # going from project reservations to user (or group) reservations and the
+    # current experiment using a range was started by a different user or in
+    # a different group. When going from group/user to project, there would
+    # never be a conflict. When going from group to user, there can be a
+    # conflict if the current experiment holder (in the group) is different
+    # the person who created the reservation.
+    #
+    return 0
+	if ($newmode == $Project::RESERVATIONS_PERPROJECT &&
+	    ($project->ResModeGroup() || $project->ResModeUser()));
+
+    my @groups = APT_Reservation::Group->LookupAll();
+    return 0
+	if (!@groups);
+
+    # Find project reservations that include ranges.
+    foreach my $group (@groups) {
+	next
+	    if ($group->pid_idx() != $pid_idx);
+	next
+	    if (! $group->RFReservationList());
+
+	push(@pgroups, $group);
+    }
+    return 0
+	if (!@pgroups);
+
+    my $rfranges = APT_Instance::RFRanges->LookupAll();
+    return 0
+	if (!keys(%{$rfranges}));
+
+    # Find project rfranges currently in use
+    foreach my $range (values(%{$rfranges})) {
+	next
+	    if ($range->instance()->pid_idx() != $pid_idx);
+
+	push(@pranges, $range);
+    }
+    return 0
+	if (!@pranges);
+
+    foreach my $group (@groups) {
+	foreach my $res ($group->RFReservationList()) {
+	    next
+		if (!$res->approved());
+
+	    my $res_low   = $res->freq_low();
+	    my $res_high  = $res->freq_high();
+
+	    foreach my $range (@pranges) {
+		my $range_low   = $range->freq_low();
+		my $range_high  = $range->freq_high();
+
+		# If no overlap in freq, skip it.
+		if (($range_low < $res_low && $range_high < $res_low) ||
+		    ($range_low > $res_high)) {
+		    next;
+		}
+		if ($newmode == $Project::RESERVATIONS_PERUSER) {
+		    #
+		    # If coming from per-group, resgroup gid changes to pid. 
+		    # But experiment and resgroup user must be the same.
+		    #
+		    if ($group->creator_idx() !=
+			$range->instance()->creator_idx()) {
+			$$perrmsg = "User conflict with range ".
+			    "$range_low,$range_high: ".
+			    "in use by experiment with conflicting uid";
+			print STDERR $$perrmsg . "\n";
+			return 1;
+		    }
+		}
+		if ($newmode == $Project::RESERVATIONS_PERGROUP) {
+		    #
+		    # Coming from per-project or per-user, so the current
+		    # resgroups are all gid=pid. So the experiments must be too.
+		    #
+		    if ($range->instance()->gid_idx() != $pid_idx) {
+			$$perrmsg = "Group conflict with range ".
+			    "$range_low,$range_high: ".
+			    "in use by experiment with conflicting gid";
+			print STDERR $$perrmsg . "\n";
+			return 1;
+		    }
+		}
+	    }
+	}
+    }
+    return 0;
+}
+
+#
 # This variant is for checking that an experiment (possibly without
 # spectrum reserved) can swap in (does not conflict with existing
 # reservations in other projects for the start/end duration. There are
 # also the same auto approval rules.
 #
-sub CanStart($$$$$)
+sub CanStart($$$$$$)
 {
-    my ($class, $project, $start, $end, $spectrum, $pmsg) = @_;
+    my ($class, $group, $user, $start, $end, $spectrum, $pmsg) = @_;
+    my $project     = $group->GetProject();
     my @spectrum    = @$spectrum;
     my @notreserved = ();
 
@@ -2067,7 +2210,7 @@ sub CanStart($$$$$)
 	my $freq_low  = $ref->{'frequency_low'};
 	my $freq_high = $ref->{'frequency_high'};
 
-	if (!RangeReserved($class, $project, $start,
+	if (!RangeReserved($class, $group, $user, $start,
 			   $end, $freq_low, $freq_high)) {
 	    push(@notreserved, $ref);
 	}
@@ -2084,7 +2227,7 @@ sub CanStart($$$$$)
 	my $freq_low  = $ref->{'frequency_low'};
 	my $freq_high = $ref->{'frequency_high'};
 
-	if (APT_Instance::RFRanges->InUse($project, $freq_low,
+	if (APT_Instance::RFRanges->InUse($group, $user, $freq_low,
 					  $freq_high, $start, $end)) {
 	    $$pmsg = "Frequency range $freq_low,$freq_high is not ".
 		"available for the duration of your experiment because ".
@@ -2102,20 +2245,27 @@ sub CanStart($$$$$)
 	my $freq_low  = $ref->{'frequency_low'};
 	my $freq_high = $ref->{'frequency_high'};
 
-	foreach my $group (@groups) {
-	    my $res_project = $group->GetProject();
+	foreach my $resgroup (@groups) {
+	    my $res_project = $resgroup->GetProject();
+	    my $res_group   = $resgroup->GetGroup();
+	    my $res_creator = $resgroup->GetCreator();
 	    
 	    next
-		if (! $group->RFReservationList());
+		if (! $resgroup->RFReservationList());
 
 	    # Skip reservations in our own project, they do not conflict
 	    next
-		if ($project->SameProject($res_project));	    
+		if ($project->SameProject($res_project) &&
+		    ($project->ResModeProject() ||
+		     ($project->ResModeGroup() &&
+		      $group->SameGroup($res_group)) ||
+		     ($project->ResModeUser() &&
+		      $user->SameUser($res_creator))));
 
-	    my $res_start   = str2time($group->start());
-	    my $res_end     = str2time($group->end());
+	    my $res_start   = str2time($resgroup->start());
+	    my $res_end     = str2time($resgroup->end());
 
-	    foreach my $existing ($group->RFReservationList()) {
+	    foreach my $existing ($resgroup->RFReservationList()) {
 		next
 		    if (!$existing->approved());
 
@@ -2217,11 +2367,21 @@ sub SetAutoApprove($$$@)
     return 0;
 }
 
-sub RangeReserved($$$$$$)
+sub RangeReserved($$$$$$$)
 {
-    my ($class, $project, $start, $end, $freq_low, $freq_high) = @_;
+    my ($class, $group, $user, $start, $end, $freq_low, $freq_high) = @_;
+    my $project = $group->GetProject();
     my $pid_idx = $project->pid_idx();
-
+    my $gid_idx = $group->gid_idx();
+    my $uid_idx = $user->uid_idx();
+    my $clause  = "";
+    
+    if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
+	$clause = "and g.gid_idx='$gid_idx' ";
+    }
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
+	$clause = "and g.creator_idx='$uid_idx' ";
+    }
     #
     # mysql floats are stupid.
     # https://dev.mysql.com/doc/refman/5.7/en/problems-with-float.html
@@ -2231,7 +2391,7 @@ sub RangeReserved($$$$$$)
 		    "   from apt_reservation_groups as g ".
 		    "left join apt_reservation_group_rf_reservations as rf on ".
 		    "   rf.uuid=g.uuid ".
-		    "where g.pid_idx='$pid_idx' and ".
+		    "where g.pid_idx='$pid_idx' $clause and ".
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
 		    "      rf.approved is not null");
@@ -2252,6 +2412,8 @@ sub MaxExtension($$)
     my ($instance, $pmsg) = @_;
     my $slice   = $instance->GetGeniSlice();
     my $project = $instance->GetProject();
+    my $group   = $instance->GetGroup();
+    my $creator = $instance->GetCreator();
     my $pid_idx = $project->pid_idx();
     my $expires = str2time($slice->expires());
     # This matches what MaxSliceExtension() does
@@ -2282,7 +2444,7 @@ sub MaxExtension($$)
     
     foreach my $ref (@$spectrum) {
 	my $freq_low  = $ref->{'frequency_low'};
-	my $freq_high = $ref->{'frequency_low'};
+	my $freq_high = $ref->{'frequency_high'};
 
 	if (!$rfrange->Allowed($freq_low, $freq_high)) {
 	    $$pmsg = "Permission to use frequency range $freq_low,$freq_high ".
@@ -2300,22 +2462,29 @@ sub MaxExtension($$)
 
     foreach my $ref (@$spectrum) {
 	my $freq_low  = $ref->{'frequency_low'};
-	my $freq_high = $ref->{'frequency_low'};
+	my $freq_high = $ref->{'frequency_high'};
 
-	foreach my $group (@groups) {
-	    my $res_project = $group->GetProject();
+	foreach my $resgroup (@groups) {
+	    my $res_project = $resgroup->GetProject();
+	    my $res_group   = $resgroup->GetGroup();
+	    my $res_creator = $resgroup->GetCreator();
 	    
 	    next
-		if (! $group->RFReservationList());
+		if (! $resgroup->RFReservationList());
 
 	    # Skip reservations in our own project, they do not conflict
 	    next
-		if ($project->SameProject($res_project));	    
+		if ($project->SameProject($res_project) &&
+		    ($project->ResModeProject() ||
+		     ($project->ResModeGroup() &&
+		      $group->SameGroup($res_group)) ||
+		     ($project->ResModeUser() &&
+		      $creator->SameUser($res_creator))));
 
-	    my $res_start   = str2time($group->start());
-	    my $res_end     = str2time($group->end());
+	    my $res_start   = str2time($resgroup->start());
+	    my $res_end     = str2time($resgroup->end());
 
-	    foreach my $existing ($group->RFReservationList()) {
+	    foreach my $existing ($resgroup->RFReservationList()) {
 		next
 		    if (!$existing->approved());
 
@@ -2328,7 +2497,7 @@ sub MaxExtension($$)
 		    next;
 		}
 		$$pmsg = "Frequency range $freq_low,$freq_high overlaps ".
-		    "a range reservation in $group";
+		    "a range reservation in $resgroup";
 
 		if ($res_start < $newmax) {
 		    $newmax = $res_start;
@@ -2348,9 +2517,10 @@ sub MaxExtension($$)
 #
 # Determine a max duration for an experiment.
 #
-sub MaxDuration($$$$$$)
+sub MaxDuration($$$$$$$)
 {
-    my ($project, $start, $pend, $spectrum, $pmsg, $pbad) = @_;
+    my ($group, $user, $start, $pend, $spectrum, $pmsg, $pbad) = @_;
+    my $project  = $group->GetProject();
     my @spectrum = @{$spectrum};
     my $newend   = undef;
 
@@ -2371,18 +2541,20 @@ sub MaxDuration($$$$$$)
 
     foreach my $ref (@$spectrum) {
 	my $freq_low  = $ref->{'frequency_low'};
-	my $freq_high = $ref->{'frequency_low'};
+	my $freq_high = $ref->{'frequency_high'};
 
-	foreach my $group (@groups) {
-	    my $res_project = $group->GetProject();
+	foreach my $resgroup (@groups) {
+	    my $res_project = $resgroup->GetProject();
+	    my $res_group   = $resgroup->GetGroup();
+	    my $res_creator = $resgroup->GetCreator();
 
 	    next
-		if (! $group->RFReservationList());
+		if (! $resgroup->RFReservationList());
 
-	    my $res_start   = str2time($group->start());
-	    my $res_end     = str2time($group->end());
+	    my $res_start   = str2time($resgroup->start());
+	    my $res_end     = str2time($resgroup->end());
 
-	    foreach my $existing ($group->RFReservationList()) {
+	    foreach my $existing ($resgroup->RFReservationList()) {
 		next
 		    if (!$existing->approved());
 
@@ -2395,7 +2567,12 @@ sub MaxDuration($$$$$$)
 		    next;
 		}
 
-		if ($project->SameProject($res_project)) {
+		if ($project->SameProject($res_project) &&
+		    ($project->ResModeProject() ||
+		     ($project->ResModeGroup() &&
+		      $group->SameGroup($res_group)) ||
+		     ($project->ResModeUser() &&
+		      $user->SameUser($res_creator)))) {
 		    #
 		    # The two cases that matter here are:
 		    #
@@ -2810,18 +2987,28 @@ sub RouteAllowed($$$)
 #
 # Does the project hold a route reservation for the time. 
 #
-sub RouteReserved($$$$$)
+sub RouteReserved($$$$$$)
 {
-    my ($class, $project, $start, $end, $routename) = @_;
+    my ($class, $group, $user, $start, $end, $routename) = @_;
+    my $project = $group->GetProject();
     my $pid_idx = $project->pid_idx();
-
+    my $gid_idx = $group->gid_idx();
+    my $uid_idx = $user->uid_idx();
+    my $clause  = "";
+    
+    if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
+	$clause = "and g.gid_idx='$gid_idx' ";
+    }
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
+	$clause = "and g.creator_idx='$uid_idx' ";
+    }
     my $query_result =
 	DBQueryWarn("select g.uuid,r.routename ".
 		    "   from apt_reservation_groups as g ".
 		    "left join ".
 		    "   apt_reservation_group_route_reservations as r on ".
 		    "   r.uuid=g.uuid ".
-		    "where g.pid_idx='$pid_idx' and ".
+		    "where g.pid_idx='$pid_idx' $clause and ".
 		    "      r.routename='$routename' and ".
 		    "      $start >= UNIX_TIMESTAMP(g.start) and ".
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
@@ -2837,13 +3024,12 @@ sub RouteReserved($$$$$)
 # routes reserved) can swap in (does not conflict with existing
 # reservations in other projects for the start/end duration. 
 #
-sub CanStart($$$$$)
+sub CanStart($$$$$$)
 {
-    my ($class, $target, $start, $end, $routes, $pmsg) = @_;
+    my ($class, $group, $user, $start, $end, $routes, $pmsg) = @_;
+    my $project = $group->GetProject();
     my @routes  = @$routes;
     my @notreserved = ();
-    my $project = (ref($target) eq "APT_Instance" ?
-		   $target->GetProject() : $target);
 
     # Can start if not using routes, or there are no current reservations, 
     return 1
@@ -2867,7 +3053,7 @@ sub CanStart($$$$$)
 	my $routename = $request->{"name"};
 	my $routeid   = RouteID($routename);
 
-	if (!RouteReserved($class, $project, $start, $end, $routename)) {
+	if (!RouteReserved($class, $group, $user, $start, $end, $routename)) {
 	    push(@notreserved, $request);
 	}
     }
@@ -2884,7 +3070,7 @@ sub CanStart($$$$$)
 	my $routename = $request->{"name"};
 	my $routeid   = RouteID($routename);
 
-	if (APT_Instance::Aggregate::BusRoute->InUse($target, $routeid,
+	if (APT_Instance::Aggregate::BusRoute->InUse($group, $user, $routeid,
 						     $start, $end)) {
 	    $$pmsg = "Bus route $routename ($routeid) is not ".
 		"available for the duration of your experiment because ".
@@ -2902,18 +3088,25 @@ sub CanStart($$$$$)
 	my $routename = $request->{"name"};
 	my $routeid   = RouteID($routename);
 
-	foreach my $group (@groups) {
-	    my $res_project = $group->GetProject();
+	foreach my $resgroup (@groups) {
+	    my $res_project = $resgroup->GetProject();
+	    my $res_group   = $resgroup->GetGroup();
+	    my $res_creator = $resgroup->GetCreator();
 	    
 	    next
-		if (! $group->RouteReservationList());
+		if (! $resgroup->RouteReservationList());
 
 	    # Skip reservations in our own project, they do not conflict
 	    next
-		if ($project->SameProject($res_project));	    
+		if ($project->SameProject($res_project) &&
+		    ($project->ResModeProject() ||
+		     ($project->ResModeGroup() &&
+		      $group->SameGroup($res_group)) ||
+		     ($project->ResModeUser() &&
+		      $user->SameUser($res_creator))));
 
-	    my $res_start   = str2time($group->start());
-	    my $res_end     = str2time($group->end());
+	    my $res_start   = str2time($resgroup->start());
+	    my $res_end     = str2time($resgroup->end());
 
 	    # If this reservation does not overlap in time, skip it.
 	    if (($start < $res_start && $end < $res_start) ||
@@ -2921,7 +3114,7 @@ sub CanStart($$$$$)
 		next;
 	    }
 
-	    foreach my $existing ($group->RouteReservationList()) {
+	    foreach my $existing ($resgroup->RouteReservationList()) {
 		next
 		    if (!$existing->approved());
 
@@ -2951,6 +3144,8 @@ sub MaxExtension($)
     my ($instance) = @_;
     my $slice   = $instance->GetGeniSlice();
     my $project = $instance->GetProject();
+    my $group   = $instance->GetGroup();
+    my $creator = $instance->GetCreator();
     my $pid_idx = $project->pid_idx();
     my $started = str2time($instance->started());
     my $expires = str2time($slice->expires());
@@ -2985,20 +3180,27 @@ sub MaxExtension($)
     foreach my $ref (@$routes) {
 	my $routename  = $ref->{'name'};
 
-	foreach my $group (@groups) {
-	    my $res_project = $group->GetProject();
+	foreach my $resgroup (@groups) {
+	    my $res_project = $resgroup->GetProject();
+	    my $res_group   = $resgroup->GetGroup();
+	    my $res_creator = $resgroup->GetCreator();
 	    
 	    next
-		if (! $group->RouteReservationList());
+		if (! $resgroup->RouteReservationList());
 
 	    # Skip reservations in our own project, they do not conflict
 	    next
-		if ($project->SameProject($res_project));	    
+		if ($project->SameProject($res_project) &&
+		    ($project->ResModeProject() ||
+		     ($project->ResModeGroup() &&
+		      $group->SameGroup($res_group)) ||
+		     ($project->ResModeUser() &&
+		      $creator->SameUser($res_creator))));
 
-	    my $res_start   = str2time($group->start());
-	    my $res_end     = str2time($group->end());
+	    my $res_start   = str2time($resgroup->start());
+	    my $res_end     = str2time($resgroup->end());
 
-	    foreach my $existing ($group->RouteReservationList()) {
+	    foreach my $existing ($resgroup->RouteReservationList()) {
 		my $res_name = $existing->routename();
 
 		next
@@ -3027,9 +3229,10 @@ sub MaxExtension($)
 #
 # Determine a max duration for an experiment.
 #
-sub MaxDuration($$$$$$)
+sub MaxDuration($$$$$$$)
 {
-    my ($project, $start, $pend, $routes, $pmsg, $pbad) = @_;
+    my ($group, $user, $start, $pend, $routes, $pmsg, $pbad) = @_;
+    my $project = $group->GetProject();
     my @routes  = @{$routes};
     my $newend  = ($$pend ? $$pend : undef);
 
@@ -3044,16 +3247,18 @@ sub MaxDuration($$$$$$)
     foreach my $ref (@$routes) {
 	my $routename  = $ref->{'name'};
 
-	foreach my $group (@groups) {
-	    my $res_project = $group->GetProject();
+	foreach my $resgroup (@groups) {
+	    my $res_project = $resgroup->GetProject();
+	    my $res_group   = $resgroup->GetGroup();
+	    my $res_creator = $resgroup->GetCreator();
 	    
 	    next
-		if (! $group->RouteReservationList());
+		if (! $resgroup->RouteReservationList());
 
-	    my $res_start   = str2time($group->start());
-	    my $res_end     = str2time($group->end());
+	    my $res_start   = str2time($resgroup->start());
+	    my $res_end     = str2time($resgroup->end());
 
-	    foreach my $existing ($group->RouteReservationList()) {
+	    foreach my $existing ($resgroup->RouteReservationList()) {
 		my $res_name = $existing->routename();
 		next
 		    if (!$existing->approved());
@@ -3067,7 +3272,12 @@ sub MaxDuration($$$$$$)
 		    next;
 		}
 
-		if ($project->SameProject($res_project)) {
+		if ($project->SameProject($res_project) &&
+		    ($project->ResModeProject() ||
+		     ($project->ResModeGroup() &&
+		      $group->SameGroup($res_group)) ||
+		     ($project->ResModeUser() &&
+		      $user->SameUser($res_creator)))) {
 		    #
 		    # The two cases that matter here are:
 		    #

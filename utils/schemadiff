@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -282,9 +282,9 @@ sub read_schema($) {
 		debug("Found column $name with type $definition\n");
 
 		# Canonicalize. 
-		if ($definition eq "text") {
-		    debug("  Converting to 'text default NULL'\n");
-		    $definition = "text default NULL";
+		if ($definition eq "text" || $definition eq "mediumtext") {
+		    debug("  Converting to '[mediumtext]text default NULL'\n");
+		    $definition = "$definition default NULL";
 		}
 
 		# Case issues

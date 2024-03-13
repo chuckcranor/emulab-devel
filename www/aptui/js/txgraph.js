@@ -11,20 +11,24 @@ window.ShowTXGraph = (function ()
     var d3 = d3v5;
 
     function CreateGraph(args) {
-	//console.log(data);
+	console.log(args);
 	
 	var selector     = args.selector + " .tx-graph";
 	var popovers     = args.selector + " .txgraph-tooltip-popovers";
-	var parentWidth  = $(selector).width();
-	var parentHeight = $(selector).height();
-	var ParentTop    = $(selector).parent().position().top;
-	var ParentLeft   = $(selector).parent().position().left;
+	// Closest positioned element.
+	var parent       = $(selector).closest(".panel");
+	var parentWidth  = $(parent).width();
+	var parentHeight = $(parent).height();
+	
+	var ParentTop    = $(parent).position().top;
+	var ParentLeft   = $(parent).position().left;
 	var formatter    = d3.format(".3f");
 	
-	var margin  = {top: 20, right: 20, bottom: 50, left: 80};
+	var margin  = {top: 20, right: 20, bottom: 100, left: 80};
 	var width   = parentWidth - margin.left - margin.right;
 	var height  = parentHeight - margin.top - margin.bottom;
 	console.info(width, height);
+	console.info(parentWidth, parentHeight, ParentLeft, ParentTop);
 
 	// Clear old graph stuff
 	$(selector).html("");
@@ -49,6 +53,12 @@ window.ShowTXGraph = (function ()
 	    else {
 		maxDate = new Date();
 	    }
+	}
+	else if (!_.size(args.txlist)) {
+	    // No data.
+	    $(args.selector + " .txgraph-spinner").addClass("hidden");
+	    $(args.selector + " .txgraph-nodata").removeClass("hidden");
+	    return;
 	}
 	else {
 	    minDate = d3.min(args.txlist, function(d) { return d.date; });
@@ -279,11 +289,31 @@ window.ShowTXGraph = (function ()
 	    svg.select(".axis--y").call(yAxis);
 	}
 
+	// See https://popper.js.org/docs/v2/virtual-elements/ for an
+	// explaination of this stuff. 
+	var generateGetBoundingClientRect =
+	    function(x = 0, y = 0, w = 5, h = 5) {
+		return () => ({
+		    width: w,
+		    height: h,
+		    left: x,
+		    top: y,
+		    right: x + w,
+		    bottom: y + h,
+		});
+	    };
+
+	// Need to remember the virtualElement below for each popover
+	// Not sure how to find it later.
+	var virtualElements = {};
+
 	// Bootstrap tooltips
 	function ShowTooltip(d)
 	{
 	    //console.info("ShowTooltip", d, d3.event);
 	    var tooltipClass = "#" + d.tooltip;
+
+	    //console.info(tooltipClass, d3.event);
 	    
 	    if ($(tooltipClass).length == 0) {
 		$(popovers).append("<div id=" + d.tooltip + "></div>");
@@ -313,43 +343,27 @@ window.ShowTXGraph = (function ()
 		    clone.find(".tooltip-admin")
 			.removeClass("hidden");
 		}
-
+		virtualElements[d.tooltip] = {
+		    getBoundingClientRect: generateGetBoundingClientRect(0, 0),
+		};
 		$(tooltipClass).popover({
 		    "content"   : clone.html(),
+		    "template"  : $("#popover-template").html(),
 		    "trigger"   : "manual",
 		    "html"      : true,
-		    "container" : selector,
+		    "container" : $(parent)[0],
 		    "placement" : "auto",
 		    "animation" : false,
+		    "reference" : virtualElements[d.tooltip],
 		});
 	    }
-	    var popover = $(tooltipClass).data("bs.popover");
-	    var ptop    = Math.floor(ParentTop + y(d.frequency));
-	    var pleft   = Math.floor(ParentLeft + margin.left + x(d.date));
+	    var ptop  = d3.event.clientY;
+	    var pleft = d3.event.clientX;
+
+	    virtualElements[d.tooltip].getBoundingClientRect =
+		generateGetBoundingClientRect(pleft, ptop);
 	    
-	    $(tooltipClass)	    
-		.on("inserted.bs.popover", function (event) {
-		    // Adjust ptop if its near the bottom or top.
-		    if (height - y(d.frequency) > popover.tip().height()) {
-			ptop = ptop + margin.top;
-		    }
-		    else {
-			ptop = ptop - (popover.tip().height() / 2);
-		    }
-		    // And pleft if too close to right side.
-		    if (x(d.date) > width - popover.tip().width()) {
-			pleft = pleft - (popover.tip().width() + 20);
-		    }
-		    else {
-			pleft = pleft + 20;
-		    }
-		    $(tooltipClass).off("inserted.bs.popover");
-		})
-		.on("shown.bs.popover", function () {
-		    popover.tip().css("top", ptop + "px");
-		    popover.tip().css("left", pleft + "px");
-		    $(tooltipClass).off("shown.bs.popover");
-		});
+	    $(tooltipClass).popover('update');
 	    $(tooltipClass).popover('show');
 	}
 

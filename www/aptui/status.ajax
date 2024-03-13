@@ -166,6 +166,7 @@ function Do_GetInstanceStatus()
     }
     $blob = array();
     $blob["status"] = $instance->status();
+    $blob["rdz_status"] = $instance->rdz_status();
     $blob["canceled"] = $instance->canceled() ? 1 : 0;
     $blob["paniced"] = $instance->paniced() ? 1 : 0;
     $blob["started"] = DateStringGMT($instance->started());
@@ -191,6 +192,11 @@ function Do_GetInstanceStatus()
                   "destroyed"       => DateStringGMT($sliver->destroyed()),
                   "havemanifest"    => 0,
                   "offline"         => false);
+
+        if ($sliver->status() == "terminated") {
+            $blob["sliverstatus"][$sliver->aggregate_urn()] = $sliverblob;
+            continue;
+        }
 
         #
         # See if the aggregate is offline.
@@ -411,6 +417,43 @@ function Do_GetInstanceManifest()
 }
 
 #
+# Improvement (hopefully). Return multiple manifests as needed by
+# the status page.
+#
+function Do_GetInstanceManifests()
+{
+    global $instance, $creator, $ajax_args;
+
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    if (! isset($ajax_args["aggregate_urns"])) {
+        SPITAJAX_ERROR(-1, "Missing aggregate urn list");
+        return;
+    }
+    $urns = $ajax_args["aggregate_urns"];
+    if (!is_array($urns)) {
+        SPITAJAX_ERROR(-1, "aggregate urns must be a list");
+        return;
+    }
+    $blob = array();
+
+    foreach ($urns as $urn) {
+        if (!Instance::ValidURN($urn)) {
+            SPITAJAX_ERROR(-1, "Illegal characters in aggregate urn");
+            return;
+        }
+        $sliver = InstanceSliver::Lookup($instance, $urn);
+        if (!$sliver) {
+            SPITAJAX_ERROR(-1, "No sliver for aggregate urn");
+            return;
+        }
+        $blob[$urn] = $sliver->manifest();
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
+#
 # SSH Auth Object
 #
 function Do_GetSSHAuthObject()
@@ -508,6 +551,11 @@ function Do_RequestExtension()
 	SPITAJAX_ERROR(1, "Extensions are currenly disabled; please ".
                        "contact us if you need to make special arrangements.");
 	goto bad;
+    }
+    if ($instance->extension_disabled() && !ISADMIN()) {
+	SPITAJAX_ERROR(1, "Extensions are have been disabled on ".
+                       "this experiment.");
+        goto bad;
     }
 
     if (!isset($ajax_args["howlong"]) || $ajax_args["howlong"] == "") {
@@ -2444,6 +2492,11 @@ function Do_ConnectSharedLan()
     else {
         $args = $ajax_args["source-lan"] . " " .
               $ajax_args["target-uuid"] . " " . $ajax_args["target-lan"];
+    }
+
+    # Optional no reconfigure.
+    if ($ajax_args["noreconfig"] == 1) {
+        $args = "-R " . $args;
     }
     
     #

@@ -4,11 +4,11 @@
     <div class='modal-content'>
       <div class='modal-body'
 	   style="padding-bottom: 0px;">
-	<div class='panel panel-default'
+	<div class='panel card panel-default'
 	     style="margin-bottom: 0px;">
-	  <div class="panel-body"
+	  <div class="panel-body card-body"
 	       style="padding: 0px; margin-bottom: 5px;">
-	    <div style="height: 800px;">
+	    <div>
 	      <center class="txgraph-spinner hidden">Loading
 		<div>
 		  <img src='images/spinner.gif' />
@@ -20,7 +20,7 @@
 		  No recorded transmissions from this device</span>
 	      </center>
 	      <div class="frequency-graph tx-graph"
-		<div style="height: inherit;"></div>
+		<div style="height: 800px;"></div>
 	      </div>
 	      <div class="txgraph-tooltip-popovers"></div>
 	    </div>
@@ -29,7 +29,7 @@
 	<center>
 	  <button class='btn btn-default btn-sm' 
 		  style="margin-bottom: 10px; margin-top: 10px;"
-		  data-dismiss='modal' aria-hidden='true'>
+		  data-dismiss='modal' data-bs-dismiss='modal'>
 	    Dismiss</button>
 	</center>
       </div>
@@ -42,42 +42,48 @@
            style="font-size: 14px; margin: 5px;">
       <tbody>
 	<tr>
-          <td class="border-none">Node ID:</td>
-          <td class="border-none tooltip-nodeid"></td>
+          <td class="border-none p-1">Node ID:</td>
+          <td class="border-none p-1 tooltip-nodeid"></td>
 	</tr>
 	<tr>
-          <td class="border-none">Cluster:</td>
-          <td class="border-none tooltip-cluster"></td>
+          <td class="border-none p-1">Cluster:</td>
+          <td class="border-none p-1 tooltip-cluster"></td>
 	</tr>
 	<tr>
-          <td class="border-none">Frequency:</td>
-          <td class="border-none tooltip-freq"></td>
+          <td class="border-none p-1">Frequency:</td>
+          <td class="border-none p-1 tooltip-freq"></td>
 	</tr>
 	<tr>
-          <td class="border-none">Power:</td>
-          <td class="border-none tooltip-power"></td>
+          <td class="border-none p-1">Power:</td>
+          <td class="border-none p-1 tooltip-power"></td>
 	</tr>
 	<tr>
-          <td class="border-none">Above Floor:</td>
-          <td class="border-none abovefloor"></td>
+          <td class="border-none p-1">Above Floor:</td>
+          <td class="border-none p-1 abovefloor"></td>
 	</tr>
 	<tr>
-          <td class="border-none">Time:</td>
-          <td class="border-none tooltip-time"></td>
+          <td class="border-none p-1">Time:</td>
+          <td class="border-none p-1 tooltip-time"></td>
 	</tr>
 	<tr class="hidden tooltip-admin">
-          <td class="border-none">User:</td>
-          <td class="border-none tooltip-uid"></td>
+          <td class="border-none p-1">User:</td>
+          <td class="border-none p-1 tooltip-uid"></td>
 	</tr>
 	<tr class="hidden tooltip-admin">
-          <td class="border-none">Project:</td>
-          <td class="border-none tooltip-pid"></td>
+          <td class="border-none p-1">Project:</td>
+          <td class="border-none p-1 tooltip-pid"></td>
 	</tr>
 	<tr class="hidden tooltip-admin">
-          <td class="border-none">Experiment:</td>
-          <td class="border-none tooltip-eid"></td>
+          <td class="border-none p-1">Experiment:</td>
+          <td class="border-none p-1 tooltip-eid"></td>
 	</tr>
       </tbody>
     </table>
+  </div>
+  <div id="popover-template">
+    <div class="popover" style="min-width: 240px;" role="tooltip">
+      <div class="popover-arrow"></div>
+      <div class="popover-body" style="padding: 0px;"></div>
+    </div>
   </div>
 </div>

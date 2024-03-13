@@ -27,6 +27,9 @@
 if (!isset($BOOTSTRAP5OK)) {
     $BOOTSTRAP5OK = false;
 }
+if (!isset($BOOTSTRAP5ONLY)) {
+    $BOOTSTRAP5ONLY = false;
+}
 # allow URL override
 if (isset($_REQUEST["bootstrap5"])) {
     if ($_REQUEST["bootstrap5"] == 1) {
@@ -36,7 +39,7 @@ if (isset($_REQUEST["bootstrap5"])) {
         $BOOTSTRAP5OK = false;
     }
 }
-define("BOOTSTRAP5", $BOOTSTRAP5OK);
+define("BOOTSTRAP5", $BOOTSTRAP5OK || $BOOTSTRAP5ONLY);
 
 include_once("portal_defs.php");
 include_once("instance_defs.php");
@@ -150,7 +153,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     global $login_user, $login_status, $SUPPORT, $FIRSTUSER, $PORTAL_NAME;
     global $disable_accounts, $page_title, $drewheader, $embedded;
     global $UI_EXTERNAL_ACCOUNTS, $BrandMapping, $page_allowframing;
-    global $PORTAL_WIKI, $PORTAL_NSFNUMBER;
+    global $PORTAL_WIKI, $PORTAL_NSFNUMBER, $GOOGLEGAIDS;
 
     
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
@@ -243,8 +246,20 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     }
     
     echo "<html>
-      <head>
-        <title>$title</title>
+      <head>\n";
+    if ($TBMAINSITE && !$embedded && $ISCLOUD && file_exists($GOOGLEGAIDS)) {
+        echo "<!-- Google Tag Manager -->
+              <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+              new Date().getTime(),event:'gtm.js'});
+              var f=d.getElementsByTagName(s)[0],
+              j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+              j.async=true;j.src=
+              'https://www.googletagmanager.com/gtm.js?id='+i+dl;
+              f.parentNode.insertBefore(j,f);
+              })(window,document,'script','dataLayer','GTM-TSZK7GW');</script>
+              <!-- End Google Tag Manager --> \n";
+    }
+    echo "<title>$title</title>
         <link rel='shortcut icon' href='$APTBASE/$FAVICON'
               type='image/vnd.microsoft.icon'>";
     if (BOOTSTRAP5) {
@@ -302,16 +317,28 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "</script>\n";
     SpitGlobals();
 
-    if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {
-	readfile("../google-analytics.php");
-	echo "<script type='text/javascript'>\n";
-        echo "  ga('create', '$GOOGLEUA', 'auto');\n";
-        if ($login_user) {
-            echo "  ga('set', 'userId', '$ga_userid');\n";
+    if ($TBMAINSITE && !$embedded && !$ISCLOUD && file_exists($GOOGLEGAIDS)) {
+        $json = file_get_contents($GOOGLEGAIDS);
+        $ids  = json_decode($json, true);
+
+        if (array_key_exists($PORTAL_GENESIS, $ids)) {
+            $gua = $ids[$PORTAL_GENESIS];
+            $gaurl = "https://www.googletagmanager.com/gtag/js?id=${gua}";
+
+            echo "<script async src='$gaurl'></script>
+                  <script>
+                     window.dataLayer = window.dataLayer || [];
+                     function gtag(){dataLayer.push(arguments);}
+                     gtag('js', new Date());\n";
+            if ($login_user) {
+                echo "gtag('config', '$gua', {'user_id' : '$ga_userid'});\n";
+            }
+            else {
+                echo "gtag('config', '$gua');\n";
+            }
+            echo "window.GOOGLEUA = '$gua';
+                  </script>\n";
         }
-        echo "  ga('send', 'pageview');\n";
-        echo "  window.GOOGLEUA  = '$GOOGLEUA';\n";
-        echo "</script>\n";
     }
 
     # HEADER variables
@@ -331,6 +358,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     if ($login_user) {
         $addHeaderVariable("isadministrator", ISADMINISTRATOR() ? 1 : 0);
         $addHeaderVariable("isadmin", ISADMIN() ? 1 : 0);
+        $addHeaderVariable("isforeign_admin", ISFOREIGN_ADMIN() ? 1 : 0);
         $addHeaderVariable("WEBONLY", $login_status & CHECKLOGIN_WEBONLY ? 1 : 0);
         $addHeaderVariable("isactive", $login_user->IsActive() ? 1 : 0);
         $addHeaderVariable("classic_user", $login_user->portal() ? 0 : 1);

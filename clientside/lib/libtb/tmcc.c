@@ -26,7 +26,7 @@
 #include <assert.h>
 #include "popenf.h"
 
-#define TMCC "/usr/local/etc/emulab/tmcc"
+#define TMCC CLIENT_BINDIR "/tmcc"
 
 /*
  * Silly little helper function to run tmcc. 

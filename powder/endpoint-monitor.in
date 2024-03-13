@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2022 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -172,7 +172,7 @@ sub PowerControl($@);
 sub DisableExperiments();
 sub EnableExperiments();
 sub InitInfluxCreds();
-sub UploadVoltage($$);
+sub UploadVoltage($$$);
 
 #
 # Turn off line buffering on output
@@ -473,6 +473,8 @@ sub CheckDeadman($$)
 #
 my $onBatteryTime    = undef;
 my $onBusTime        = time();
+# We can get transient onbattery indicators.
+my $onBatteryCount   = 0;
 
 my $tempWarningTime  = undef;
 my $tempShutdownTime = undef;
@@ -581,6 +583,28 @@ sub CheckTempAndBattery($$)
 	$tmp .= "\n";
 	logit($tmp);
     }
+    #
+    # Watch for transient onbattery signal. Did not know this could happen.
+    #
+    if ($ONBUS) {
+	if ($onbattery && !$onBatteryTime) {
+	    if (!$onBatteryCount) {
+		logit("Waiting to see if a transient onbattery indicator.\n");
+		$onbattery = 0;
+		$onBatteryCount++;
+	    }
+	    else {
+		logit("Got another onbattery indicator.\n");
+		$onBatteryCount = 0;
+	    }
+	}
+	elsif (!$onbattery) {
+	    if ($onBatteryCount) {
+		logit("Looks like a transient onbattery indicator after all.\n");
+		$onBatteryCount = 0;
+	    }
+	}
+    }
 
     #
     # The temp can go wonky, so if tempF is undefined, skip the temp checks.
@@ -653,7 +677,7 @@ sub CheckTempAndBattery($$)
     }
 
     if ($ONBUS) {
-	UploadVoltage($voltage, $onbattery);
+	UploadVoltage($voltage, $onbattery, $current);
 	if (! $onbattery) {
 	    if (defined($onBatteryTime)) {
 		#
@@ -963,15 +987,17 @@ sub InitInfluxCreds()
     }
 }
 
-sub UploadVoltage($$)
+sub UploadVoltage($$$)
 {
-    my ($voltage, $onbat) = @_;
+    my ($voltage, $onbat, $current) = @_;
 
     return
 	if (!defined($INFLUXCREDS));
 
     my $params = "battery=${onbat},accessory=0 value=${voltage}";
-    
+    if (defined($current)) {
+	$params .= ",current=${current}";
+    }
     my $url = "'https://overwatch.emulab.net:8086/write?db=telegraf' ".
 	"--data-binary 'exec_arduinovolt,host=${hostname},${params}'";
     my $opts = ($debug > 1 ? "-S" : "");
@@ -1023,7 +1049,12 @@ sub NotifyUsers($$)
 {
     my ($subject, $message) = @_;
     my %users = ();
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
 
+    # Append a timestamp to the end of the body, helpful for debugging
+    # since email will probably be delayed during a disconnect.
+    $message .= "\n\n" . $stamp . "\n";
+    
     if ($impotent || $mailonly) {
 	print "$subject\n";
 	print "$message";

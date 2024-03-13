@@ -1,0 +1,497 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Long;
+use XML::Simple;
+use POSIX qw(isatty);
+use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
+use Date::Parse;
+use Data::Dumper;
+use JSON;
+use HTML::Entities;
+
+#
+# Configure variables
+#
+my $TB		    = "@prefix@";
+my $TBOPS           = "@TBOPSEMAIL@";
+my $TBLOGS          = "@TBLOGSEMAIL@";
+my $OURDOMAIN       = "@OURDOMAIN@";
+my $MAINSITE        = @TBMAINSITE@;
+my $MYURN           = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $MANAGEGITREPO   = "$TB/bin/manage_gitrepo";
+my $MANAGERESGROUP  = "$TB/bin/manage_resgroup";
+my $RUNGENILIB      = "$TB/bin/rungenilib";
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use libtestbed;
+use emdb;
+use libaudit;
+use APT_Profile;
+use APT_Instance;
+use User;
+use Project;
+use Group;
+use WebTask;
+use emutil;
+use GeniHRN;
+use EmulabConstants;
+
+# Protos
+sub fatal($);
+
+#
+# Front end to create_instance.
+# 
+sub usage()
+{
+    print "Usage: create-reservation <options> ".
+                "[--site sitemap] --end <when> --project pid[,gid] profile\n";
+    print "Options:\n";
+    print " -d           - Turn on debugging\n";
+    print " -n           - Checkonly, do not submit\n";
+    print " -s           - Do not send status email\n";
+    print " -a urn       - Override default aggregate URN.\n";
+    print " --project    - pid[,gid]: project[,group] for new reservation\n";
+    print " --start      - Reservation start time (unix time or datetime).\n";
+    print " --end        - Reservation end time (unix time or datetime).\n";
+    print " --duration   - HOURS instead of start/end, we will search for a slot.\n";
+    print " --paramset   - uid,name of a parameter set to apply.\n";
+    print " --bindings   - file containting json string of bindings to apply\n";
+    print " --refspec    - refspec[:hash] of a repo based profile to use.\n";
+    print "profile       - Profile to get rspec/script from\n";
+
+    exit(-1);
+}
+my $debug	   = 0;
+my $waitmode       = 0;
+my $noemail        = 0;
+my $checkonly      = 0;
+my $portal;
+my $start_at;
+my $stop_at;
+my $duration;
+my $sitemap;
+my $paramset;
+my $bindingfile;
+my $bindingstr;
+my ($refspec, $repohash, $reporef, $script, $rspec, $bindings);
+my $default_urn;
+my ($pidgid, $project, $group, $pid, $gid);
+my $errmsg;
+my $default_aggregate_urn = $MYURN;;
+
+#
+# So many options ...
+#
+my @optlist = ('d', 'a=s', 's', 'n',
+	       "project=s"   => \$pidgid,
+	       "site=s%"     => \$sitemap,
+	       "start=s"     => \$start_at,
+	       "end=s"       => \$stop_at,
+	       "duration=i"  => \$duration,
+	       "paramset=s"  => \$paramset,
+	       "bindings=s"  => \$bindingfile,
+	       "refspec=s"   => \$refspec,
+    );
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+Getopt::Long::Configure("no_ignore_case");
+my %options = ();
+if (! GetOptions(\%options, @optlist)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $checkonly = 1;
+}
+if (defined($options{"s"})) {
+    $noemail = 1;
+}
+usage()
+    if (@ARGV != 1 || !defined($pidgid) ||
+	!(defined($stop_at) || defined($duration)) ||
+	(defined($start_at) && defined($duration)));
+
+my $this_user = User->ThisUser();
+if (!defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+if ($pidgid =~ /^([-\w]*)(,|\/)([-\w]*)$/) {
+    $group = Group->Lookup($1, $2);
+    if (!defined($group)) {
+	fatal("No such group");
+    }
+    $project = $group->GetProject();
+}
+else {
+    $project = Project->Lookup($pidgid);
+    if (!defined($project)) {
+	fatal("No such project");
+    }
+    $group = $project->GetProjectGroup();
+}
+$pid = $project->pid();
+$gid = $group->gid();
+
+my $profile = APT_Profile->Lookup($ARGV[0]);
+if (!defined($profile)) {
+    fatal("Profile does not exist");
+}
+$portal = $project->Brand()->brand();
+if ($portal eq "classic") {
+    $portal = "emulab";
+}
+if (defined($options{"a"})) {
+    if (!GeniHRN::IsValid($options{"a"})) {
+	fatal("Invalid aggregate URN");
+    }
+}
+if (defined($duration)) {
+    if ($duration !~ /^\d+$/) {
+	fatal("Duration must be an integer number of hours.");
+    }
+}
+else {
+    if (defined($start_at)) {
+	if ($start_at !~ /^\d+$/) {
+	    $start_at = str2time($start_at);
+	    if (!$start_at) {
+		fatal("Could not parse the start time");
+	    }
+	}
+    }
+    if (defined($stop_at)) {
+	if ($stop_at !~ /^\d+$/) {
+	    $stop_at = str2time($stop_at);
+	    if (!$stop_at) {
+		fatal("Could not parse the stop time");
+	    }
+	}
+    }
+}
+if (defined($bindingfile)) {
+    if (! -e $bindingfile) {
+	fatal("Binding file does not exist");
+    }
+    $bindingstr = emutil::ReadFile($bindingfile);
+    if ($bindingstr eq "") {
+	fatal("Binding file could not be read or is empty");
+    }
+}
+
+#
+# Check permission and disabled early so we return reasonable error
+#
+if ($project->disabled()) {
+    print STDERR "Project is disabled\n";
+    exit(1);
+}
+if (!defined($gid) || $pid eq $gid) {
+    if (!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT)) {
+	print STDERR "No permission to create reservations in $pid\n";
+	exit(1);
+    }
+}
+else {
+    my $group = $project->LookupGroup($gid);
+    if (!defined($group)) {
+	fatal("Group $gid does not exist in project $pid");
+    }
+    if (!$group->AccessCheck($this_user, TB_PROJECT_CREATEEXPT)) {
+	print STDERR "No permission to create reservations in $pid/$gid\n";
+	exit(1);
+    }
+}
+
+#
+# Coming from the XMLRPC interface, so need logging.
+# Need to turn this off when writing data back to the RPC server
+#
+if (! $debug) {
+    my $opts = LIBAUDIT_LOGTBLOGS();
+    LogStart(0, undef, $opts);
+    AddAuditInfo("cc", $project->LogsEmailAddress());
+    if ($MAINSITE) {
+	AddAuditInfo("cc", "stoller\@flux.utah.edu");
+    }
+    AddAuditInfo("brand", $project->Brand());
+}
+
+# This was a dumb mistake, I need to convert from servername to portal.
+$ENV{"SERVER_NAME"} = $project->Brand()->Server();
+
+#
+# Bindings can come from a paramset or as a json string on the command line.
+#
+if (defined($paramset)) {
+    my ($uid,$name);
+    my $profileid   = $profile->profileid();
+    
+    if ($paramset =~ /^([-\w]*),([-\w]*)$/) {
+	$uid  = $1;
+	$name = $2;
+    }
+    else {
+	fatal("Invalid parameter set uid,name");
+    }
+    my $query_result =
+	DBQueryFatal("select * from apt_parameter_sets ".
+		     "where uid='$uid' and profileid='$profileid' and ".
+		     "      name='$name'");
+    if (!$query_result->numrows) {
+	fatal("No such parameter set for profile");
+    }
+    #
+    # Permission check on the parameter set.
+    #
+    my $row = $query_result->fetchrow_hashref();
+    my $creator_idx = $row->{"uid_idx"};
+    if ($creator_idx != $this_user->uid_idx() && $row->['public'] != 1) {
+	my $creator = User->Lookup($creator_idx);
+	if (!$creator) {
+	    fatal("Could not look paramset creator");
+	}
+	my $paramset_project = Project->Lookup($profile->pid_idx());
+	if (!$paramset_project) {
+	    fatal("Could not look paramset project");
+	}
+	if (!$project->IsMember($creator)) {
+	    fatal("Not allowed to use parameter set");
+	}
+    }
+    ($bindingstr) = $row->{'bindings'};
+}
+elsif (defined($bindingstr)) {
+    $bindings = eval { decode_json($bindingstr); };
+    if ($@) {
+	fatal("Could not json decode the bindings\n");
+    }
+
+    #
+    # Need to convert simple bindings to paramdefs. 
+    #
+    # print Dumper($bindings);
+    $bindings = APT_Profile::BindingsToParams($bindings);
+    # print Dumper($p);
+    
+    # This is how geni-lib wants it
+    $bindings = {"bindings" => $bindings};
+}
+
+#
+# If we have refspec, we need to grab the script/rspec out of the repository.
+#
+if (defined($refspec)) {
+    if (!$profile->IsRepoBased()) {
+	fatal("Not a repo based profile");
+    }
+    my $reponame = $profile->reponame();
+    my $which;
+    
+    #
+    # refspec[:hash]
+    # create_instance will sanity check these.
+    #
+    if ($refspec =~ /^(refs\/[^\:]+)\:([\w]+)$/) {
+	$reporef  = $1;
+	$repohash = $2;
+	$which    = $repohash;
+    }
+    elsif ($refspec =~ /^(refs\/.*)$/) {
+	$reporef  = $1;
+	$which    = $reporef;
+    }
+    else {
+	fatal("Invalid refspec");
+    }
+    #
+    # We need a webtask to talk to manage_gitrepo to get the hash
+    # (since we might not have it). We get the source on stdout.
+    #
+    my $webtask = WebTask::CreateAnonymous();
+    if (!defined($webtask)) {
+	fatal("Could not create webtask");
+    }
+    my $webtask_id = $webtask->task_id();
+    my $output = emutil::ExecQuiet("$MANAGEGITREPO -t $webtask_id getsource ".
+				   "  -n $reponame $which");
+    if ($?) {
+	print STDERR "Could not get source from repo\n";
+	$webtask->Delete();
+	fatal($output);
+    }
+    if ($output =~ /^import/m) {
+	$script = $output;
+    }
+    else {
+	$rspec = $output;
+    }
+    $webtask->Refresh();
+    $repohash = $webtask->hash() if (!defined($repohash));
+    $webtask->Delete();
+}
+else {
+    # This is okay for repo based profiles, since we want the default branch
+    # and that is what we store in the DB.
+    if ($profile->script()) {
+	$script = $profile->script();
+    }
+    else {
+	$rspec  = $profile->rspec();
+    }
+}
+
+#
+# Run the script, apply the bindings if we got them.
+#
+if (defined($script)) {
+    my ($sfp, $scriptfile) = tempfile(UNLINK => 0);
+    my ($pfp, $paramfile)  = tempfile(UNLINK => 0);
+    my $opts = "";
+
+    print $sfp $script;
+    close($sfp);
+    if (defined($bindings)) {    
+	eval { print $pfp encode_json($bindings); };
+	if ($@) {
+	    unlink($paramfile);
+	    unlink($scriptfile);
+	    fatal($@);
+	}
+	close($pfp);
+	$opts = "-b $paramfile";
+    }
+    my $output = emutil::ExecQuiet("$RUNGENILIB $opts $scriptfile");
+    if ($?) {
+	print STDERR "Could not convert geni-lib script\n";
+	print STDERR $output;
+	unlink($paramfile);
+	unlink($scriptfile);
+	fatal($output);
+    }
+    $rspec = $output;
+    unlink($paramfile);
+    unlink($scriptfile);
+}
+elsif (!defined($rspec)) {
+    fatal("No rspec for this profiled");
+}
+
+#
+# RSPEC must be bound before we send it to manage_resgroup.
+# Not sure if we want to enforce fully bound.
+#
+if (APT_Profile::SetSites(\$rspec, $sitemap, $default_aggregate_urn,
+			  undef, undef, \$errmsg)) {
+    fatal("Could not bind rspec: $errmsg");
+}
+print $rspec . "\n" if ($debug);
+
+#
+# manage_resgroup will blob that we turn into json to send back.
+#
+my $webtask = WebTask::CreateAnonymous();
+if (!defined($webtask)) {
+    fatal("Could not create webtask");
+}
+my $webtask_id = $webtask->task_id();
+my $rspecfile  = emutil::WriteToFile($rspec);
+my $command = "$MANAGERESGROUP -t $webtask_id ";
+$command .= "-d " if ($debug);
+$command .= "createfromrspec ";
+$command .= "-n " if ($checkonly);
+$command .= "-s $start_at " if (defined($start_at));
+$command .= "-e $stop_at " if (defined($stop_at));
+$command .= "-F $duration " if (defined($duration));
+$command .= "$pid";
+$command .= "/$gid" if (!$group->IsProjectGroup());
+$command .= " $rspecfile";
+print "$command\n" if ($debug);
+
+system($command);
+my $exitval = $? >> 8;
+unlink($rspecfile);
+$webtask->Refresh();
+if ($exitval == 255 || !$webtask->HasExited()) {
+    # XMLRPC server needs to see the output, end the logging.
+    if (!$debug) {
+	LogEnd();
+    }
+    $webtask->Delete();
+    fatal("Internal error creating reservation");
+}
+my $results = $webtask->results();
+print Dumper($results) if ($debug);
+
+#
+# We just pass the entire structure back.
+# But exit with appropriate status for the caller.
+#
+my $json = eval { encode_json($results); };
+if ($@) {
+    fatal($@);
+}
+
+# XMLRPC server needs to see the output, end the logging.
+if (!$debug) {
+    LogEnd();
+}
+$webtask->Delete();
+print $json;
+exit($exitval);
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    # XMLRPC server needs to see the error, end the logging (mail is sent).
+    if (!$debug) {
+	LogEnd(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(-1);
+}

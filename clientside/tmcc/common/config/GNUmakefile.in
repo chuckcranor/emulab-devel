@@ -63,8 +63,6 @@ DESTDIR		=
 ETCDIR		= $(DESTDIR)$(CLIENT_ETCDIR)
 BINDIR		= $(DESTDIR)$(CLIENT_BINDIR)
 VARDIR		= $(DESTDIR)$(CLIENT_VARDIR)
-TBBINDIR	= $(DESTDIR)/usr/testbed/bin
-TBLIBDIR	= $(DESTDIR)/usr/testbed/lib
 
 install:
 	@echo "You should probably not run this install directly!"

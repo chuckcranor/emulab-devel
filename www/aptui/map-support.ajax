@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -186,10 +186,16 @@ function Do_GetDenseDeployment()
 function Do_GetMobileEndpoints()
 {
     global $this_user, $ajax_args;
+    $onlineonly = 0;
+
+    if (isset($ajax_args["onlineonly"]) && $ajax_args["onlineonly"]) {
+        $onlineonly = 1;
+    }
 
     $query_result =
-        DBQueryFatal("select a.*,b.*,r.description as routename,aas.status ".
-                     "   from apt_mobile_aggregates as a ".
+        DBQueryFatal("select a.*,b.*,r.description as routename,aas.status, ".
+                     "       aa.adminonly,aa.disabled ".
+                     "  from apt_mobile_aggregates as a ".
                      "left join apt_mobile_buses as b on b.urn=a.urn ".
                      "left join apt_aggregates as aa on aa.urn=a.urn ".
                      "left join apt_aggregate_status as aas on aas.urn=a.urn ".
@@ -205,7 +211,31 @@ function Do_GetMobileEndpoints()
     $buses = array();
     
     while ($row = mysql_fetch_array($query_result)) {
-        $urn = $row["urn"];
+        $urn       = $row["urn"];
+        $disabled  = intval($row["disabled"]);
+        $adminonly = intval($row["adminonly"]);
+
+        if ($onlineonly &&
+            ($row["status"] != "up" ||
+             (($disabled || $adminonly) && !ISADMIN()))) {
+            continue;
+        }
+
+        # For the mobile endpoints page.
+        if ($row["status"] == "up" && ($row["routename"] || ISADMIN())) {
+            $tag = "online";
+        }
+        else {
+            $tag = "offline";
+        }
+        $color = $tag == "online" ? "text-success" : "";
+
+        if ($disabled) {
+            $tag   = "disabled";
+        }
+        elseif ($adminonly) {
+            $tag   = "adminonly";
+        }
         
         $blob = array(
             "urn"           => $urn,
@@ -220,7 +250,11 @@ function Do_GetMobileEndpoints()
             "longitude"     => $row["longitude"],
             "speed"         => $row["speed"],
             "heading"       => $row["heading"],
+            "adminonly"     => $adminonly,
+            "disabled"      => $disabled,
             "location_stamp"=> DateStringGMT($row["location_stamp"]),
+            "statusColor"   => $color,
+            "statusTag"     => $tag,
             # GPSD data
             "gpsd_stamp"    => DateStringGMT($row["gpsd_stamp"]),
             "gpsd_latitude" => $row["gpsd_latitude"],
@@ -235,11 +269,11 @@ function Do_GetMobileEndpoints()
         # a user wants to know (say, from the resource availability page).
         #
         $blob["free"] = 1;
-
+            
         $free_result =
-            DBQueryFatal("select status,uuid ".
-                         "    from apt_instance_aggregates as ia ".
-                         "where ia.aggregate_urn='$urn'");
+             DBQueryFatal("select status,uuid ".
+                          "    from apt_instance_aggregates as ia ".
+                          "where ia.aggregate_urn='$urn'");
         if (mysql_num_rows($free_result)) {
             while ($iarow = mysql_fetch_array($free_result)) {
                 if ($iarow["status"] != "terminated") {

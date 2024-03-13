@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -556,6 +556,65 @@ function VerifyLocalUser($user, $cert)
 	return -1;
 
     return 0;
+}
+
+function Do_NoMoreGeniLogin()
+{
+    global $ajax_args;
+    global $TBMAINSITE, $PROTOGENI_GENIWEBLOGIN;
+    global $ajax_args, $APTBASE, $APTMAIL, $TBMAIL_WWW, $TBMAIL_AUDIT;
+
+    if (! ($TBMAINSITE || $PROTOGENI_GENIWEBLOGIN)) {
+        SPITAJAX_ERROR(1, "Geni Users are not allowed to login to this site");
+	return;
+    }
+    if (!isset($ajax_args["email"])) {
+	SPITAJAX_ERROR(1, "Missing email address");
+	return;
+    }
+    if (! TBvalid_email($ajax_args["email"])) {
+        SPITAJAX_ERROR(1, TBFieldErrorString());
+        return;
+    }
+    $user = User::LookupByEmail($ajax_args["email"]);
+    if (!$user) {
+        SPITAJAX_ERROR(1, "No user found with this email");
+        return;
+    }
+    if (!$user->nonlocal_id()) {
+        SPITAJAX_ERROR(1, "Not a Geni user");
+        return;
+    }
+    $target_idx  = $user->uid_idx();
+    $target_uid  = $user->uid();
+    $target_name = $user->name();
+    $target_email= $user->email();
+    $reference   = GENHASH();
+    $target_url  = "$APTBASE/user-dashboard.php?user=$target_uid";
+
+    TBMAIL("$target_name <$target_email>",
+           "Request to convert account for '$target_uid'",
+           "To keep using Cloudlab and have READ ONLY access to your existing\n".
+           "profiles and experiments, please reply to this email and include\n".
+           "the entire message in the reply.\n".
+           "\n".
+           "We will then send you a password reset link so that you can login.\n".
+           "\n".
+           "However, you will not be able to create new experiments or profiles.\n".
+           "If you want to keep using Cloudlab, click on your name in the upper\n".
+           "right, and select Start or Join project.\n".
+           "\n".
+           "Once you are a member of another project, you can copy your old\n".
+           "profiles to the new project.\n".
+           "\n".
+           "Reference: $reference\n\n".
+           "Thank you very much!\n".
+           "$target_url\n",
+           "From: $APTMAIL\n".
+           "Bcc: $APTMAIL\n".
+           "Errors-To: $TBMAIL_WWW");
+
+    SPITAJAX_RESPONSE(1);
 }
 
 # Local Variables:

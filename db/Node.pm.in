@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2022 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1506,7 +1506,7 @@ sub LoadNodeAttributes($)
 
     if (!defined($self->{"ATTRS"})) {
 	my $query_result =
-	    DBQueryWarn("select * from node_attributes ".
+	    DBQueryWarn("select * from node_attributes as a ".
 			"where node_id='$node_id'");
 
 	return -1
@@ -1666,6 +1666,16 @@ sub GetNodeFeatures($)
 	}
     }
     return $self->{"FEATURES"};
+}
+sub GetNodeFeature($$)
+{
+    my ($self, $feature) = @_;
+    my $features = $self->GetNodeFeatures();
+
+    return undef
+	if (!exists($features->{$feature}));
+
+    return $features->{$feature};
 }
 
 #
@@ -1993,6 +2003,17 @@ sub rebootable($;$) {
     return NodeTypeInfo($self)->rebootable($stuff);
 }
 
+sub imageable($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "imageable", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->imageable($stuff);
+}
+
 sub delayreloadtillalloc($;$) {
     my ($self,$stuff) = @_;
     my $val = undef;
@@ -2017,6 +2038,18 @@ sub powercycleafterreload($;$) {
     return NodeTypeInfo($self)->powercycleafterreload($stuff);
 }
 
+sub nfreepoweroff($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "nfreepoweroff", \$val) == 0 &&
+	defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->nfreepoweroff($stuff);
+}
+
 sub requires_reservation($;$) {
     my ($self,$stuff) = @_;
     my $val = undef;
@@ -2037,6 +2070,22 @@ sub root_password($) {
     return $val;
 }
 
+sub conflicting_nodes($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "conflicting_nodes", \$val);
+    return $val;
+}
+
+sub rfswitch_port($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "rfswitch_port", \$val);
+    return $val;
+}
+
 #
 # And these are the less common attributes, but still common enough to
 # warrant shortcuts.
@@ -2046,9 +2095,6 @@ sub delay_osid($;$) {
 }
 sub jail_osid($;$) {
     return NodeTypeInfo($_[0])->jail_osid($_[1]);
-}
-sub imageable($;$) {
-    return NodeTypeInfo($_[0])->imageable($_[1]);
 }
 sub control_iface($;$) {
     return NodeTypeInfo($_[0])->control_iface($_[1]);

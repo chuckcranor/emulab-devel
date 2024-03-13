@@ -68,7 +68,11 @@ $(function ()
 		return 0;
 	    });
 	}
-	console.info(args);
+	else {
+	    // List of nodes.
+	    args["nodelist"] = JsonParse("#nodes-json");
+	}
+	console.info("Template args:", args);
 	
 	// Generate the template.
 	var html = mainTemplate(args);
@@ -86,6 +90,14 @@ $(function ()
 	    }
 	});
 
+	if (!window.EDITING && window.ISADMIN) {
+	    $('#nodelist').tablesorter({
+		theme : 'bootstrap',
+		widgets: ["uitheme"],
+		headerTemplate : '{content} {icon}',
+	    });
+	}
+	
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
@@ -192,7 +204,7 @@ $(function ()
 	'          placeholder="Value" ' +
 	'          class="form-control row-value"> ' +
 	'   <div> ' +
-	'     <select class="form-control row-type"> ' +
+	'     <select class="form-control form-select row-type"> ' +
 	'      <option value="">Select Type</option> ' +
 	'      <option value=integer>Integer</option> ' +
 	'      <option value=boolean>Boolean</option> ' +
@@ -232,7 +244,7 @@ $(function ()
 	'          class="form-control row-name"> ' +
 	' </td>' +
 	' <td>' +
-	'   <select class="form-control row-value"> ' +
+	'   <select class="form-control form-select row-value"> ' +
 	'    <option value="">Please Select</option> ' +
 	'   </select> ' +
 	' </td>' +

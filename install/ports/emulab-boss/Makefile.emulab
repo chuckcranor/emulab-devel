@@ -12,10 +12,14 @@ OSARCH != /usr/bin/uname -m
 EMULAB_PORTVERSION=	UNSUPPORTED
 
 .if ${OSMAJOR} >= 12
-.  if (${OSMAJOR} >= 13 || ${OSMINOR} > 2)
-EMULAB_PORTVERSION=	8.3
+.  if (${OSMAJOR} >= 13 || ${OSMINOR} > 3)
+EMULAB_PORTVERSION=	8.4
 .  else
+.     if (${OSMINOR} > 2)
+EMULAB_PORTVERSION=	8.3
+.     else
 EMULAB_PORTVERSION=	8.2
+.     endif
 .  endif
 .else
 .  if (${OSMAJOR} >= 11 && ${OSMINOR} >= 3)
@@ -32,7 +36,18 @@ EMULAB_PORTVERSION=	7.3
 PHP_MAJ=5
 PHP_VER=56
 PY_VER=2.7
-.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+.if (${EMULAB_PORTVERSION} == "8.4")
+PY_VER=3.9
+DEFAULT_VERSIONS= perl5=5.32 python=3.9 python3=3.9 tcltk=8.6 php=8.1 mysql=5.7 apache=2.4
+APACHE_PORT=www/apache24
+APACHEMODDIR=libexec/apache24
+MYSQL_VER=57
+SWIG_VER=
+SWIG_PORT=devel/swig
+PHP_MAJ=8
+PHP_VER=81
+.else
+.  if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
 PY_VER=3.8
 DEFAULT_VERSIONS= perl5=5.32 python=3.8 python3=3.8 tcltk=8.6 php=7.4 mysql=5.7 apache=2.4
 APACHE_PORT=www/apache24
@@ -43,8 +58,8 @@ SWIG_VER=
 SWIG_PORT=devel/swig
 PHP_MAJ=7
 PHP_VER=74
-.else
-.  if (${EMULAB_PORTVERSION} == "7.3")
+.  else
+.    if (${EMULAB_PORTVERSION} == "7.3")
 DEFAULT_VERSIONS= perl5=5.30 python=2.7 tcltk=8.6 php=7.2 mysql=5.7 apache=2.4
 APACHE_PORT=www/apache24
 APACHEMODDIR=libexec/apache24
@@ -53,5 +68,6 @@ SWIG_VER=3.0
 SWIG_PORT=devel/swig30
 PHP_MAJ=7
 PHP_VER=72
+.    endif
 .  endif
 .endif

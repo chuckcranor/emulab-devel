@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2017-2022 University of Utah and the Flux Group.
+# Copyright (c) 2017-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -117,31 +117,45 @@ while (my ($idx) = $query_result->fetchrow_array()) {
     my $res = Reservation->Lookup($idx);
     next
 	if (!defined($res));
+    my $target = $res->Target();
 
     my $project = Project->Lookup($res->pid());
     next
 	if (!defined($project));
+    
+    my $user;
+    my $group = $project;
 
-    my $pid = $project->pid();
-
-    if (!exists($projRes{$pid})) {
-	my @allres   = ResUtil::CollectReservations($project, undef, 0);
-	my @timeline = ResUtil::CreateTimeline($project, @allres);
+    if ($res->shared_res() == $Project::RESERVATIONS_PERUSER) {
+	$user = User->Lookup($res->uid());
+	next
+	    if (!$user);
+    }
+    elsif ($res->shared_res() == $Project::RESERVATIONS_PERGROUP) {
+	$group = $project->LookupGroup($res->gid());
+	next
+	    if (!$group);
+    }
+    if (!exists($projRes{$target})) {
+	my @allres   = ResUtil::CollectReservations($group, $user, 0);
+	my @timeline = ResUtil::CreateTimeline($group, $user, @allres);
 	
-	$projRes{$pid} = {
+	$projRes{$target} = {
 	    "project"  => $project,
+	    "group"    => $group,
+	    "user"     => $user,
 	    "reslist"  => [],
 	    "timeline" => \@timeline,
 	};
     }
-    push(@{$projRes{$pid}->{'reslist'}}, $res);
+    push(@{$projRes{$target}->{'reslist'}}, $res);
 }
 
 #
 # Loop again to get utilization for each res.
 #
-foreach my $pid (keys(%projRes)) {
-    my $ref = $projRes{$pid};
+foreach my $target (keys(%projRes)) {
+    my $ref = $projRes{$target};
     my @reslist  = @{$ref->{'reslist'}};
     my @timeline = @{$ref->{'timeline'}};
 
@@ -191,13 +205,14 @@ foreach my $pid (keys(%projRes)) {
 	    my $email = $user->email();
 	    my $count = $res->nodes();
 	    my $pid   = $res->pid();
+	    my $gid   = $res->gid();
 	    my $type  = $res->type();
 	    my $start = TBDateStringUTC($res->start());
 	    my $end   = TBDateStringUTC($res->end());
 	    $cancel   = TBDateStringUTC($cancel);
 	
 	    SENDMAIL($email, "$SITE reservation",
-	      "Your reservation for $count $type nodes in project $pid,\n" .
+	      "Your reservation for $count $type nodes in project $pid/$gid,\n".
 	      "starting at $start and ending at $end,\n".
 	      "has not been used since it started.\n".
 	      "\n".

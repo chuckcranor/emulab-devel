@@ -51,10 +51,20 @@ my $VARACCTSDIR = "/var/log/sa";
 my $IFTAB       = "/etc/iftab";
 my $ANACRON     = "/usr/sbin/anacron";
 my $GRUBDEF	= "/etc/default/grub";
-my $PUBSUBCONF  = "/usr/local/etc/pubsubd.conf";
-my $PUBSUBEXPR  = "/usr/local/etc/pubsubd.expr";
 my $ROOTSSHDIR	= "/root/.ssh";
 my $ROOTSSLDIR	= "/root/.ssl";
+my $PUBSUBD     = "/usr/local/libexec/pubsubd";
+my $PUBSUBCONF  = "/usr/local/etc/pubsubd.conf";
+my $PUBSUBEXPR  = "/usr/local/etc/pubsubd.expr";
+#
+# If $PUBSUBD is not in /usr/local and is in /usr, swap config file
+# locations.
+#
+if (! -e $PUBSUBD && -e "/usr/libexec/pubsubd") {
+    $PUBSUBD     = "/usr/libexec/pubsubd";
+    $PUBSUBCONF  = "/etc/pubsubd.conf";
+    $PUBSUBEXPR  = "/etc/pubsubd.expr";
+}
 
 #
 # Dead wood in $BINDIR
@@ -222,6 +232,14 @@ if (-x "$ANACRON") {
 if (-x "/usr/bin/mandb") {
     print "Updating man db ...\n";
     system("/usr/bin/mandb -q");
+}
+
+#
+# Update pci ids file.
+#
+if (-x "/usr/sbin/update-pciids") {
+    print "Updating PCI IDs file ...\n";
+    system("/usr/sbin/update-pciids");
 }
 
 #
@@ -435,11 +453,6 @@ for my $fp ("/var/lib/chrony/drift","/var/lib/chrony/chrony.drift") {
     if (-f $fp) {
 	unlink($fp);
     }
-}
-
-if (-f "$GRUBDEF.preemulab") {
-    print "Restoring original $GRUBDEF file ...\n";
-    system("cp -p $GRUBDEF.preemulab $GRUBDEF");
 }
 
 print "Clearing out $RUNDIR ...\n";

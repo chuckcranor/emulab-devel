@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2004-2022 University of Utah and the Flux Group.
+# Copyright (c) 2004-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,7 +50,7 @@ SYMLINKS        = node_admin node_reboot os_load create_image node_list \
 		  extendExperiment experimentManifests imageinfo \
 		  experimentReboot modifyExperiment
 
-LINKS		= cd $(INSTALL_BINDIR) && \
+LINKS		= cd $(DESTDIR)$(INSTALL_BINDIR) && \
 		  list='$(SYMLINKS)'; for file in $$list; do \
 			rm -f $$file; \
 			ln -s script_wrapper.py $$file; \
@@ -71,9 +71,21 @@ all:	$(BIN_SCRIPTS) $(LIB_STUFF) \
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-install: $(addprefix $(INSTALL_BINDIR)/, $(BIN_SCRIPTS)) \
+ifneq ($(DESTDIR),)
+$(DESTDIR)$(INSTALL_BINDIR)/%: %
+	@echo "Installing $<"
+	-mkdir -p $(DESTDIR)$(INSTALL_BINDIR)
+	$(INSTALL_PROGRAM) $< $@
+
+$(DESTDIR)$(INSTALL_LIBDIR)/%: %
+	@echo "Installing $<"
+	-mkdir -p $(DESTDIR)$(INSTALL_LIBDIR)
+	$(INSTALL_PROGRAM) $< $@
+endif
+
+install: $(addprefix $(DESTDIR)$(INSTALL_BINDIR)/, $(BIN_SCRIPTS)) \
 	$(addprefix $(INSTALL_WWWDIR)/downloads/xmlrpc/, $(DOWNLOAD_STUFF)) \
-	$(addprefix $(INSTALL_LIBDIR)/, $(LIB_STUFF)) \
+	$(addprefix $(DESTDIR)$(INSTALL_LIBDIR)/, $(LIB_STUFF)) \
 	$(addprefix $(INSTALL_DIR)/opsdir/lib/, $(USERLIBS)) \
 	$(addprefix $(INSTALL_DIR)/opsdir/bin/, $(CLIENTBINS))
 	$(OPSLINKS)
@@ -111,8 +123,8 @@ control-install:	$(CLIENTBINS) $(USERLIBS) \
 client:
 
 client-install: client $(CLIENTBINS) $(USERLIBS) \
-			$(addprefix $(INSTALL_LIBDIR)/, $(USERLIBS)) \
-			$(addprefix $(INSTALL_BINDIR)/, $(CLIENTBINS))
+			$(addprefix $(DESTDIR)$(INSTALL_LIBDIR)/, $(USERLIBS)) \
+			$(addprefix $(DESTDIR)$(INSTALL_BINDIR)/, $(CLIENTBINS))
 	$(LINKS)
 
 # Nothing installed in these targets.

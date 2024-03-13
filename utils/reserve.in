@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2022 University of Utah and the Flux Group.
+# Copyright (c) 2016-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,10 +52,10 @@ use libEmulab;
 sub usage()
 {
     print STDERR "Usage: reserve [-C] [-f] [-n] [-q] -t type [-s start] [-e end]\n" .
-	"            [-u] [-U uid] [-N file] [-A file] [-a|-p] pid count\n";
+	"            [-u] [-U uid] [-g gid] [-N file] [-A file] [-a|-p] pid count\n";
     print STDERR "       reserve [-D file] -c idx\n";
     print STDERR "       reserve [-f] [-n] [-s start] [-e end] [-u] [-I 0/1]\n".
-	"            [-U uid] [-N file] [-A file] [-S size] [-a] -m idx \n";
+	"            [-U uid] [-g gid] [-N file] [-A file] [-S size] [-a] -m idx \n";
     print STDERR "       reserve [-u] -i pid\n";
     print STDERR "       reserve [-u] -l\n";
     print STDERR "   -h   This message\n";
@@ -67,6 +67,7 @@ sub usage()
     print STDERR "   -n   Check feasibility only; don't actually reserve\n";
     print STDERR "   -q   Quiet operation; don't e-mail user\n";
     print STDERR "   -U   Mark reservation as being created by uid (admin-only)\n";
+    print STDERR "   -g   Specify group ID within project\n";
     print STDERR "   -t   Node type\n";
     print STDERR "   -i   Show existing reservation for project\n";
     print STDERR "   -l   List all existing reservations\n";
@@ -85,7 +86,7 @@ sub usage()
     exit( -1 );
 }
 
-my $optlist    = "ac:de:fhilm:npqs:t:uA:CD:N:S:U:T:E:OyF:I:";
+my $optlist    = "ac:de:fg:hilm:npqs:t:uA:CD:N:S:U:T:E:OyF:I:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -109,8 +110,10 @@ my $cancel;
 my $abortcancel= 0;
 my $type;
 my $pid;
+my $gid;
 my $count;
 my $project;
+my $group;
 my $webtask;
 my $admin;
 my $target_user;
@@ -353,6 +356,11 @@ else {
     }
 }
 
+if( !defined( $pid ) && defined( $options{ 'g' } ) ) {
+    print STDERR "warning: group ID specified without corresponding " .
+	"project, gid will be ignored\n";
+}
+
 #
 # List all pending reservations.
 #
@@ -390,11 +398,16 @@ my $pid_idx;
 if( defined( $clear_idx ) ) {
     my $res = Reservation->Lookup( $clear_idx );
     fatal( "could not find existing reservation" ) unless( defined( $res ) );
+    $pid = $res->pid();
+    $gid = $res->gid();
     $pid_idx = $res->pid_idx();
     $project = Project->Lookup( $pid_idx );
     if (!defined($project)) {
 	fatal("No such project $pid\n");
     }
+    $group = $project->LookupGroup($gid);
+    fatal( "No such group $pid/$gid\n" )
+	unless( defined( $group ) );
 } else {
     if ($pid =~ /^(.*):(.*)$/) {
 	require GeniHRN;
@@ -415,11 +428,28 @@ if( defined( $clear_idx ) ) {
 	}
     }
     $pid_idx = $project->pid_idx();
+    
+    if( defined( $options{ 'g' } ) ) {
+	$gid = $options{ 'g' };
+    } else {
+	# silently assume default GID (this will be the right thing
+	# the majority of the time when it's the only group anyway)
+	$gid = $pid;
+    }
+    $group = $project->LookupGroup($gid);
+
+    fatal( "No such group $pid/$gid\n" )
+	unless( defined( $group ) );
 }
 
 if( !$admin ) {
     fatal( "You are not a project member" )
 	unless( $project->LookupUser( $this_user ) );
+}
+
+if( !$admin ) {
+    fatal( "You are not a group member" )
+	unless( defined( $group ) && $group->LookupUser( $this_user ) );
 }
 
 #
@@ -647,7 +677,7 @@ if( defined( $modify_idx ) ) {
     $uid_idx = $res->uid();
 } else {
     $res = Reservation->Create( $pid, $uid, $starttime, $endtime, $type,
-				$count );
+				$count, $gid );
 }
 $res->SetNotes( $notes ) if( defined( $notes ) );
 $res->SetAdminNotes( $adminnotes ) if( defined( $adminnotes ) );
@@ -685,6 +715,7 @@ while( 1 ) {
 
 		if( defined( $r->idx() ) && $r->idx() == $modify_idx ) {
 		    $$reservations_all[ $i ] = $res;
+		    $found = 1;
 		    last;
 		}
 	    }
@@ -718,6 +749,44 @@ while( 1 ) {
 	    exit( 1 );
 	}
     }
+    # Lets see if type is really a node ID and has conflicts.
+    my $node = Node->Lookup($type);
+    if (defined($node) && $node->conflicting_nodes()) {
+	foreach my $node_id (split(",", $node->conflicting_nodes())) {
+	    my $onode = Node->Lookup($node_id);
+	    next
+		if (!defined($onode));
+
+	    my $others = Reservation->LookupAll($node_id);
+	    my $other  = Reservation->Create($pid, $uid, $starttime,
+					     $endtime, $node_id, $count, $gid);
+	    push(@$others, $other);	    
+
+	    my $feasible = Reservation->IsFeasible($others, $error);
+	    if (!$feasible) {
+		print STDERR "Conflicting node $node_id already reserved at " .
+		    TBDateStringLocal($error->{'time'}) . "\n";
+
+		if ($force) {
+		    print STDERR "Continuing anyway!\n";
+		}
+		else {
+		    my $m = "Conflicting node $node_id already reserved";
+		    if (defined($webtask)) {
+			$webtask->conflict({
+			    "error"  => $m,
+			    "when"   => TBDateStringGMT($error->{'time'}),
+			    "needed" => $error->{'needed'},
+			    "conflicting_node" => $node_id});
+			$webtask->output("$m at " .
+					 TBDateStringLocal($error->{'time'}));
+			$webtask->Exited(1);
+		    }
+		    exit(1);
+		}
+	    }
+	}
+    }
     if ($impotent) {
 	my $exitval = $approve ? 0 : 2;
 	print "Approve: $approve\n";
@@ -729,16 +798,47 @@ while( 1 ) {
 	my $feasible = Reservation->IsFeasible($reservations_all, $error);
 	if (!$feasible) {
 	    print STDERR "Conflict with pending: " . $error->{'error'} . "\n";
+	    
+	    if (defined($webtask)) {
+		$webtask->conflict({
+		    "error"  => $error->{'error'},
+		    "when"   => TBDateStringGMT($error->{'time'}),
+		    "needed" => $error->{'needed'}});
+		$webtask->output($error->{'error'});
+		$webtask->Exited($exitval);
+	    }
+	    exit($exitval);
 	}
-	if (!$feasible && defined($webtask)) {
-	    $webtask->conflict({
-		"error"  => $error->{'error'},
-		"when"   => TBDateStringGMT($error->{'time'}),
-		"needed" => $error->{'needed'}});
-	    $webtask->output($error->{'error'});
-	}
-	if (defined($webtask)) {
-	    $webtask->Exited($exitval);
+	if (defined($node) && $node->conflicting_nodes()) {
+	    foreach my $node_id (split(",", $node->conflicting_nodes())) {
+		my $onode = Node->Lookup($node_id);
+		next
+		    if (!defined($onode));
+
+		my $others = Reservation->LookupAll($node_id, 1);
+		my $other  = Reservation->Create($pid, $uid, $starttime,
+						 $endtime, $node_id, $count, $gid);
+		push(@$others, $other);	    
+
+		my $feasible = Reservation->IsFeasible($others, $error);
+		if (!$feasible) {
+		    print STDERR "Conflicting node $node_id pending at " .
+			TBDateStringLocal($error->{'time'}) . "\n";
+
+		    my $m = "Conflict pending with node $node_id";
+		    if (defined($webtask)) {
+			$webtask->conflict({
+			    "error"  => $m,
+			    "when"   => TBDateStringGMT($error->{'time'}),
+			    "needed" => $error->{'needed'},
+			    "conflicting_node" => $node_id});
+			$webtask->output("$m at " .
+					 TBDateStringLocal($error->{'time'}));
+			$webtask->Exited($exitval);
+		    }
+		    exit($exitval);
+		}
+	    }
 	}
 	exit($exitval);
     }

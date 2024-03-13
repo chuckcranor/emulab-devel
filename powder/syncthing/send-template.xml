@@ -1,4 +1,4 @@
-<configuration version="29">
+<configuration version="30">
     <folder id="@FID@" label="@FLABEL@" path="@FPATH@" type="sendonly" rescanIntervalS="3600" fsWatcherEnabled="true" fsWatcherDelayS="10" ignorePerms="false" autoNormalize="true">
         <filesystemType>basic</filesystemType>
         <device id="@MYDEVID@" introducedBy=""></device>
@@ -81,12 +81,13 @@
         <trafficClass>0</trafficClass>
         <defaultFolderPath></defaultFolderPath>
         <setLowPriority>true</setLowPriority>
-        <maxConcurrentScans>0</maxConcurrentScans>
+        <maxFolderConcurrency>0</maxFolderConcurrency>
         <crashReportingURL>https://crash.syncthing.net/newcrash</crashReportingURL>
         <crashReportingEnabled>false</crashReportingEnabled>
         <stunKeepaliveStartS>180</stunKeepaliveStartS>
         <stunKeepaliveMinS>0</stunKeepaliveMinS>
         <stunServer>default</stunServer>
         <databaseTuning>auto</databaseTuning>
+        <maxConcurrentIncomingRequestKiB>0</maxConcurrentIncomingRequestKiB>
     </options>
 </configuration>

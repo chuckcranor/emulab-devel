@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,6 +41,7 @@ sub usage()
     print("Usage: manage_reservations [-a <urn>] cancel [-c]\n");
     print("Usage: manage_reservations [-a <urn>] idledetection [-c]\n");
     print("Usage: manage_reservations [-a <urn>] history [user]\n");
+    print("Usage: manage_reservations [-a <urn>] setshared pid which\n");
     exit(-1);
 }
 my $optlist     = "dt:a:";
@@ -80,6 +81,7 @@ use emutil;
 use Brand;
 use User;
 use Project;
+use Group;
 use Reservation;
 use EmulabConstants;
 use libEmulab;
@@ -105,6 +107,7 @@ sub DoCancel();
 sub DoIdleDetection();
 sub DoHistory();
 sub DoAllMaxExtensions();
+sub DoSetSharedReservations();
 sub readfile($);
 sub RecordReservationRequest($$$$;$);
 sub UpdateReservationRequest($$$);
@@ -199,6 +202,9 @@ elsif ($action eq "idledetection") {
 elsif ($action eq "allmaxextensions") {
     DoAllMaxExtensions();
 }
+elsif ($action eq "setsharedreservations") {
+    DoSetSharedReservations();
+}
 else {
     usage();
 }
@@ -223,6 +229,7 @@ sub DoReserve()
     my %rpcargs = ();
     my $context;
     my ($credential,$speaksfor);
+    my ($project,$group);
     my $errmsg;
     
     my %options = ();
@@ -231,8 +238,25 @@ sub DoReserve()
     }
     usage()
 	if (@ARGV < 2);
-    my $project = Project->Lookup($ARGV[0]);
-    my $count   = $ARGV[1];
+
+    if ($ARGV[0] =~ /[,\/]+/) {
+	$group = Group->Lookup($ARGV[0]);
+	if (!defined($group)) {
+	    fatal("No such group");
+	}
+	$project = $group->GetProject();
+    }
+    else {
+	$project = Project->Lookup($ARGV[0]);
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	$group = $project->GetProjectGroup();
+    }
+    my $pid = $project->pid();
+    my $gid = $group->gid();
+    
+    my $count = $ARGV[1];
 
     if (defined($options{"s"})) {
 	$start = $options{"s"};
@@ -264,8 +288,6 @@ sub DoReserve()
     if (defined($options{"I"})) {
 	$noidledetection = 1;
     }
-    usage()
-	if (!defined($project));
     
     # Need brand for email. No portal argument means emulab brand.
     $brand = Brand->Create($portal);
@@ -304,6 +326,9 @@ sub DoReserve()
     $rpcargs{"update"}= $update if (defined($update));
     $rpcargs{"noapprove"}= 1 if ($noapprove);
     $rpcargs{"noidledetection"}= 1 if ($noidledetection);
+    # Need this in case this is the first operation at the remote cluster
+    # for this project (which is when the shadow project is created).
+    $rpcargs{"shared_reservations"} = $project->shared_reservations();
     
     # We can check for disabled aggregate now, nothing below matters.
     if ($aggregate->CheckStatus(\$errmsg, 1)) {
@@ -327,15 +352,15 @@ sub DoReserve()
 	if (APT_Geni::CreatePortalUser($authority, $geniuser)) {
 	    fatal("Could not create admin user at remote cluster");
 	}
-	$rpcargs{"project_urn"} = $project->urn()->asString();
+	$rpcargs{"project_urn"} = $group->urn()->asString();
 	$rpcargs{"user_urn"} = $geniuser->urn()->asString();
     }
     else {
-	if (!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
-	    fatal("No permission to access reservation list for $project")
+	if (!$group->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
+	    fatal("No permission to access reservation list for $pid/$gid")
 	}
 	($credential,$speaksfor) =
-	    APT_Geni::GenProjectCredential($project, $geniuser);
+	    APT_Geni::GenProjectCredential($group, $geniuser);
 
 	fatal("Could not generate credentials")
 	    if (!defined($credential));
@@ -352,7 +377,7 @@ sub DoReserve()
 	# Watch for a refused error, we want to record these.
 	if ($response->code() == GENIRESPONSE_REFUSED) {
 	    RecordReservationRequest($this_user,
-				     $project, $aggregate, \%rpcargs);
+				     $group, $aggregate, \%rpcargs);
 	    #
 	    # Put the conflict info in the webtask too.
 	    #
@@ -365,7 +390,8 @@ sub DoReserve()
 	}
 	ExitWithError($response);
     }
-    print Dumper($response);
+    print Dumper($response) if ($debug);
+    
     #
     # Exit with different status if the reservation is feasible but
     # needs to be approved. The value is a boolean indicating
@@ -393,7 +419,7 @@ sub DoReserve()
 	    fatal("Bad format for uuid from cluster");
 	}
 	RecordReservationRequest($this_user,
-				 $project, $aggregate, \%rpcargs, $blob);
+				 $group, $aggregate, \%rpcargs, $blob);
     }
     else {
 	# Backwards compat.
@@ -786,6 +812,7 @@ sub DoDelete()
     my $optlist = "N:t:";
     my $reason;
     my $errmsg;
+    my ($project, $group);
     my $type = "reservation";
     
     my %options = ();
@@ -804,24 +831,34 @@ sub DoDelete()
     }
     usage()
 	if (@ARGV != 2);
-    my $pid  = shift(@ARGV);
-    my $uuid = shift(@ARGV);
+
+    if ($ARGV[0] =~ /[,\/]+/) {
+	$group = Group->Lookup($ARGV[0]);
+	if (!defined($group)) {
+	    fatal("No such group");
+	}
+	$project = $group->GetProject();
+    }
+    else {
+	$project = Project->Lookup($ARGV[0]);
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	$group = $project->GetProjectGroup();
+    }
+    my $uuid = $ARGV[1];
     
     # Check this since Reservation->Lookup() does not validate.
     fatal("Invalid uuid")
 	if (!ValidUUID($uuid));
 
-    my $project = Project->Lookup($pid);
-    fatal("No such project")
-	if (!defined($project));
-    
     if (!$this_user->IsAdmin() &&
-	!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
+	!$group->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
 	fatal("No permission to delete reservations for $project")
     }
     my $blob = { "uuid"    => $uuid,
 		 "type"    => $type,
-		 "project" => $project->urn()->asString()
+		 "project" => $group->urn()->asString()
     };
     if ($this_user->IsAdmin() && defined($reason) && $reason ne "") {
 	$blob->{'reason'} = $reason;
@@ -920,6 +957,11 @@ sub DoApprove()
     APT_Instance->ClearAllMaxExtension($aggregate->urn());
     
     if (defined($webtask)) {
+	# Need unblessed ref to store into webtask.
+	$response = GeniResponse->Create($response->code(),
+					 $response->value(),
+					 $response->output);
+	$webtask->response($response);
 	$webtask->Exited(0);
     }
     else {
@@ -1079,9 +1121,10 @@ sub DoIdleDetection()
 #
 sub DoPrediction()
 {
-    my $optlist = "p:a:";
+    my $optlist = "p:a:u:";
     my $portal;
     my $errmsg;
+    my $target_user;
     my @aggregates  = ($aggregate);
     my @authorities = ($authority);
     my @webtasks   = ();
@@ -1095,26 +1138,53 @@ sub DoPrediction()
     if (defined($options{"p"})) {
 	$portal = $options{"p"}
     }
-    # Argument is a list of projects, else we generate one for user.
-    if (@ARGV) {
-	foreach my $pid (@ARGV) {
-	    my $project = Project->Lookup($pid);
-	    if (!defined($project)) {
-		fatal("No such project: $pid");
-	    }
-	    push(@projlist, $project->urn());
+    if (defined($options{"u"})) {
+	$target_user = User->Lookup($options{"u"});
+	if (!defined($target_user)) {
+	    fatal("No such user: " . $options{"u"});
 	}
     }
     else {
-	my @plist;
-	if ($this_user->ProjectMembershipList(\@plist)) {
-	    fatal("Could not get project membership list");
+	$target_user = $this_user;
+    }
+    #
+    # Argument is a list of projects, else we generate one for user.
+    #
+    # Regardless, the remote cluster will return the correct forecasts
+    # based on the shared reservation settings for each project.  So if we
+    # send subgroups but the project is per-project or per-user, the remote
+    # cluster will return forecasts for the project only.
+    # 
+    
+    if (@ARGV) {
+	foreach my $token (@ARGV) {
+	    my ($project, $group);
+	    
+	    if ($token =~ /[,\/]+/) {
+		$group = Group->Lookup($token);
+		fatal("No such group: $token")
+		    if (!defined($group));
+	    }
+	    else {
+		$project = Project->Lookup($token);
+		fatal("No such project: $token")
+		    if (!defined($project));
+		$group = $project->GetProjectGroup();
+	    }
+	    push(@projlist, $group->urn());
 	}
-	# Do not need CREATE experiment permission, just membership.
-	# This solves the problem of users having "user" privs in the
-	# project, but local_root in a subgroup.
-	foreach my $project (@plist) {
-	    push(@projlist, $project->urn());
+    }
+    else {
+	my @glist;
+	if ($target_user->GroupMembershipList(\@glist)) {
+	    fatal("Could not get group membership list");
+	}
+	foreach my $group (@glist) {
+	    next
+		if (!$group->AccessCheck($target_user,
+					 TB_PROJECT_CREATEEXPT()));
+	    
+	    push(@projlist, $group->urn());	    
 	}
 	# Okay not to be in any projects ... 
     }
@@ -1213,7 +1283,8 @@ sub DoPrediction()
 	my $response =
 	    APT_Geni::PortalRPC($authority, undef,
 				"ReservationPrediction",
-				{"projlist" => \@projlist});
+				{"projlist" => \@projlist,
+				 "user"     => $target_user->urn()});
 	# Need unblessed ref to store into webtask.
 	$response = GeniResponse->Create($response->code(),
 					 $response->value(),
@@ -1518,6 +1589,62 @@ sub DoAllMaxExtensions()
     exit(0);
 }
 
+#
+# Set/Clear the project shared reservations flag. Note that the remote
+# aggregate might not have a local shadow project, so we have to pass the
+# flag over when creating reservation.
+#
+# XXX What happens if the cluster is unreachable? 
+#
+sub DoSetSharedReservations()
+{
+    my $optlist   = "n";
+    my $checkonly = 0;
+    my $errmsg;
+    my $exitval   = 0;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
+    }
+    usage()
+	if (@ARGV != 2);
+
+    my $project = Project->Lookup($ARGV[0]);
+    if (!defined($project)) {
+	fatal("No such project");
+    }
+    my $shared  = $ARGV[1];
+    if (! ($shared =~ /^\d$/ &&
+	   defined(Project::SharedReservationsString($shared)))) {
+	fatal("Bad reservation flag");
+    }
+    
+    # We can check for disabled aggregate now, nothing below matters.
+    if ($aggregate->CheckStatus(\$errmsg, 1)) {
+	UserError($errmsg);
+    }
+    my $response =
+	APT_Geni::PortalRPC($authority, undef, "SetSharedReservations",
+			    {"project"   => $project->urn(),
+			     "shared"    => $shared,
+			     "checkonly" => $checkonly});
+    #
+    # Always return response value to caller.
+    #
+    if (defined($webtask)) {
+	$webtask->result($response->value());
+	$webtask->Exited($response->code());
+    }
+    else {
+	print Dumper($response);
+    }
+    exit($response->code());
+}
+
 sub fatal($)
 {
     my ($mesg) = @_;
@@ -1590,11 +1717,13 @@ sub readfile($) {
 #
 sub RecordReservationRequest($$$$;$)
 {
-    my ($user, $project, $aggregate, $details, $response) = @_;
+    my ($user, $group, $aggregate, $details, $response) = @_;
     my $uid        = $user->uid();
     my $uid_idx    = $user->uid_idx();
-    my $pid        = $project->pid();
-    my $pid_idx    = $project->pid_idx();
+    my $pid        = $group->pid();
+    my $pid_idx    = $group->pid_idx();
+    my $gid        = $group->gid();
+    my $gid_idx    = $group->gid_idx();
     my $urn        = $aggregate->urn();
     my $nodes      = $details->{'count'};
     my $type       = $details->{'type'};
@@ -1611,6 +1740,8 @@ sub RecordReservationRequest($$$$;$)
     push(@detail_sets, "uid_idx='$uid_idx'");
     push(@detail_sets, "pid='$pid'");
     push(@detail_sets, "pid_idx='$pid_idx'");
+    push(@detail_sets, "gid='$gid'");
+    push(@detail_sets, "gid_idx='$gid_idx'");
     push(@detail_sets, "nodes='$nodes'");
     push(@detail_sets, "type='$type'");
     push(@detail_sets, "end=FROM_UNIXTIME(" . str2time($end) . ")");    

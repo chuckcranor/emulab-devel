@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -110,6 +110,8 @@ my $IMPORTER       = "$TB/sbin/image_import";
 my $DESTROYWBSTORE = "$TB/sbin/destroywbstore";
 my $WAP            = "$TB/sbin/wap";
 my $TBACCT         = "$TB/sbin/tbacct";
+my $FABRICSTITCHER = "$TB/bin/fabric-stitcher";
+my $MANAGEFABRIC   = "$TB/bin/manage_fabric";
 my @SAVEARGV       = @ARGV;
 
 #
@@ -148,9 +150,8 @@ use GeniUser;
 use WebTask;
 use EmulabFeatures;
 if ($MAINSITE) {
-    # For POWDER NextBusinessDay
-    require DateTime;
-    require DateTime::Duration;
+    # And the RDZ code.
+    require APT_RDZ;
 }
 
 # Protos
@@ -207,7 +208,6 @@ sub ExtendInternal($$$$$$);
 sub CallMethodOnAggregates($$$@);
 sub ResponseErrorMessage($$);
 sub RelocateImage($$$$);
-sub NextBusinessDay(;$);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -1589,6 +1589,31 @@ sub DoTerminate()
 	system("$DESTROYWBSTORE -d -B -s ".
 	       ($old_status eq "failed" ? "FAIL" : "DONE") . " $uuid");
     }
+    #
+    # Special case for Fabric.
+    #
+    if ($instance->HasFabricSlices()) {
+	system("$FABRICSTITCHER -d -r " . $instance->uuid());
+	if ($?) {
+	    $exitcode = -1;
+	    $errcode  = GENIRESPONSE_ERROR;
+	    $errmsg   = "Could not remove FABRIC links";
+	    goto bad;
+	}
+    }
+
+    #
+    # Special case for the RDZ.
+    #
+    my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
+    if (keys(%{$rfranges})) {
+	if (APT_RDZ::DeleteGrants($instance)) {
+	    $exitcode = -1;
+	    $errcode  = GENIRESPONSE_ERROR;
+	    $errmsg   = "Could not delete RDZ grants";
+	    goto bad;
+	}
+    }
 
     # Skip terminated aggregates, since we retry later on failure.
     my @agglist;
@@ -1714,11 +1739,13 @@ sub DoTerminate()
     $instance->SetStatus($old_status);
     if (defined($logfile)) {
 	my $instance_name = $instance->name();
+	my $instance_url  = $instance->webURL();
 	my $slice_uuid    = $slice->uuid();
 	SENDMAIL($TBOPS,
 		 "Unable to terminate instance $uuid",
 		 "Name: $instance_name\n".
-		 "Slice: $slice_uuid\n\n".
+		 "Slice: $slice_uuid\n".
+		 "URL: $instance_url\n\n".
 		 "$errmsg\n",
 		 $TBOPS, undef, $logfile)
 	    if (!$silent);
@@ -2036,7 +2063,7 @@ sub DoExtend()
 	if ($instance->isPowder() &&
 	    $instance->pid() eq "PowderTeam" &&	    
 	    exists($resources->{'reservableNodes'})) {
-	    my $nbd = NextBusinessDay();
+	    my $nbd = APT_Utility::NextBusinessDay();
 	    my $powdermessage = "because extensions for these resources are ".
 		"limited to the next business day at 9AM Mountain time";
 
@@ -2354,7 +2381,7 @@ sub DoExtend()
                "It is running on $clusters\n\n".
                "$url\n",
 	       "$extensions",
-	       "BCC: $extensions, stoller\@flux.utah.edu") if (!$noemail);
+	       "BCC: $extensions") if (!$noemail);
     
     if (!$this_user->IsAdmin()) {
 	#
@@ -2529,6 +2556,16 @@ sub ExtendInternal($$$$$$)
 	    }
 	}
     }
+    if ($instance->HasFabricSlices() && !$errcode) {
+	system("$MANAGEFABRIC renewslice " .
+	       $instance->uuid() . " '$new_expires'");
+	if ($?) {
+	    $errmsg = "The extension failed at FABRIC";
+	    $errcode= 1;
+	    goto bad;
+	}
+    }
+    
     # Success at all aggregates.
     return 0
 	if (! ($errcode || @delayed));
@@ -3191,8 +3228,12 @@ sub DoRefresh()
     my @responses = @{$response};
     foreach my $agg ($instance->ActiveAggregateList()) {
 	my $response = shift(@responses);
-	
-	if ($response->code() != GENIRESPONSE_SUCCESS &&
+
+	if ($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE) {
+	    print STDERR $agg->AptAggregateName() . " is offline. Skipping\n";
+	    next;
+	}
+	elsif ($response->code() != GENIRESPONSE_SUCCESS &&
 	    $response->code() != GENIRESPONSE_SEARCHFAILED) {
 	    $errcode = $response->code();
 	    ($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
@@ -3683,7 +3724,11 @@ sub DoManifests()
 	my $response = shift(@{$response});
 	my $code = $response->code();
 
-	if ($code != GENIRESPONSE_SUCCESS) {
+	if ($code == GENIRESPONSE_UNAVAILABLE) {
+	    print STDERR "No manifest available from $agg\n";
+	    next;
+	}
+	elsif ($code != GENIRESPONSE_SUCCESS) {
 	    ($exitcode, $errmsg) = ResponseErrorMessage($agg, $response);
 	    $errcode = $code;
 	    next;
@@ -3730,15 +3775,16 @@ sub DoDumpManifests()
     }
     #
     # NOTE: This is called from legacy XMLRPC server, so do a permission
-    # check here for it. Only the creator on this path, the web interface
-    # will suffice for anyone else.
+    # check here for it.
     #
     if ($doperms) {
+	my $project = $instance->GetProject();
 	my $creator = $instance->GetGeniUser();
 	if (!defined($creator)) {
 	    fatal("Cannot lookup creator");
 	}
-	if (!$this_user->SameUser($creator->emulab_user())) {
+	if (! ($this_user->SameUser($creator->emulab_user()) ||
+	       $project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT()))) {
 	    UserError("Not enough permission to get experiment manifests");
 	}
     }
@@ -3800,78 +3846,138 @@ sub DoDeleteNodes()
     if (!defined($slice)) {
 	fatal("No slice for instance");
     }
-    my @aggregates  = ();
-    my @delaggs     = ();
-    my %allmap      = ();
-    my %aggmap      = ();
-    foreach my $obj ($instance->AggregateList()) {
-	next
-	    if (!$obj->manifest());
-	
-	my $manifest = GeniXML::Parse($obj->manifest());
-	if (! defined($manifest)) {
-	    fatal("Could not parse manifest");
-	}
-	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
-	# Not allowed to delete last node.
-	if (@nodes == 1) {
-	    $errmsg   = "Only one node left, not allowed to delete any more.";
+    my @modaggs  = ();
+    my @delaggs  = ();
+
+    foreach my $agg ($instance->AggregateList()) {
+	$agg->_todelete(undef);
+	$agg->_slivers(undef);
+    }
+
+    #
+    # Map all the nodes to their aggregates. In order to support deleting a
+    # node at a failed aggregate, we need to use the rspec instead of the
+    # manifests (since there might not be a manifest). This is okay since
+    # our rspecs are fully bound by this point.
+    #
+    my $rspec = $instance->RSPEC();
+    my @nodes = GeniXML::FindNodes("n:node", $rspec)->get_nodelist();
+    my $count = 0;
+
+    foreach my $node (@nodes) {
+	my $client_id   = GeniXML::GetVirtualId($node);
+	my $manager_urn = GetManagerId($node);
+	my $aggregate   = $instance->GetAggregate($manager_urn);
+
+	if (!defined($aggregate)) {
+	    $errmsg   = "No aggregate for $client_id";
 	    $errcode  = 1;
 	    $exitcode = 1;
 	    goto bad;
 	}
-	my $delcount = 0;
-	$allmap{$obj->aggregate_urn()} = [];	
-
-	foreach my $node (@nodes) {
-	    my $client_id   = GeniXML::GetVirtualId($node);
-	    my $sliver_urn  = GeniXML::GetSliverId($node);
-	    my $manager_urn = GetManagerId($node);
-	    
-	    # No sliver urn or a different aggregate.
-	    next
-		if (! (defined($sliver_urn) &&
-		       defined($manager_urn) &&
-		       $manager_urn eq $obj->aggregate_urn()));
-	    #
-	    # So we can make sure the user does not try to delete all nodes
-	    # at this aggregate.
-	    #
-	    push(@{ $allmap{$obj->aggregate_urn()} }, $client_id);
-	    
-	    if (grep {$_ eq $client_id} @ARGV) {
-		if (!exists($aggmap{$obj->aggregate_urn()})) {
-		    $aggmap{$obj->aggregate_urn()} = [];
-		}
-		push(@{ $aggmap{$obj->aggregate_urn()} }, $client_id);
-		$delcount++;
+	if (grep {$_ eq $client_id} @ARGV) {
+	    if (!defined($aggregate->_todelete())) {
+		$aggregate->_todelete([]);
 	    }
-	}
-	#
-	# Tell the user to Terminate instead.  When more then one
-	# aggregate, more complicated, since we need to delete the
-	# aggregate (at the cluster) and remove from the instance. Worry
-	# about this when it becomes a problem.
-	#
-	if ($delcount == scalar(@{ $allmap{$obj->aggregate_urn()} })) {
-	    if (scalar($instance->AggregateList()) == 1) {
-		$errmsg   = "Not allowed to delete all nodes, ".
-		    "please use Terminate instead";
-		print STDERR $errmsg . "\n";
-		if (defined($webtask)) {
-		    $webtask->output($errmsg);
-		    $webtask->Exited(1);
-		}
-		exit(1);
-	    }
-	    else {
-		push(@delaggs, $obj);
-	    }
-	}
-	elsif ($delcount) {
-	    push(@aggregates, $obj);
+	    push(@{ $aggregate->_todelete() }, $client_id);
+	    $count++;
 	}
     }
+    # May want to relax this and delete what we can.
+    if ($count != scalar(@ARGV)) {
+	$errmsg   = "Could not map all nodes to their aggregates";
+	$errcode  = 1;
+	$exitcode = 1;
+	goto bad;
+    }
+
+    foreach my $agg ($instance->AggregateList()) {
+	next
+	    if (!defined($agg->_todelete()));
+
+	#
+	# Need to think about offline aggregates and retry.
+	#
+	next
+	    if ($agg->IsTerminated() || $agg->IsCanceled());
+
+	my @todelete = @{ $agg->_todelete() };
+
+	#
+	# The only way to know what nodes are actually at the aggregate
+	# is to look in the manifest since on this path, the rspec is
+	# not changed to reflect node removals.
+	#
+	# Without a manifest we are stuck. But I bet the common case
+	# in this situation is deleting a failed aggregate. If so,
+	# then deleted the entire aggregate and move on.
+	#
+	if (!$agg->manifest()) {
+	    if ($agg->status() eq "failed") {
+		push(@delaggs, $agg);
+	    }
+	    next;
+	}
+	my $manifest = GeniXML::Parse($agg->manifest());
+	if (! defined($manifest)) {
+	    fatal("Could not parse manifest for " . $agg->aggregate_urn());
+	}
+
+	#
+	# Cull out the nodes for just this aggregate.
+	#
+	my @aggnodes = ();
+	foreach my $node (GeniXML::FindNodes("n:node",
+					     $manifest)->get_nodelist()) {
+	    my $manager_urn = GetManagerId($node);
+	    
+	    if (defined($manager_urn) &&
+		$manager_urn eq $agg->aggregate_urn()) {
+		push(@aggnodes, $node);
+	    }
+	}
+
+	#
+	# The easy case is deleting all nodes at an aggregate, so we
+	# delete the entire aggregate.
+	#
+	if (scalar(@todelete) == scalar(@aggnodes)) {
+	    push(@delaggs, $agg);
+	    next;
+	}
+
+	#
+	# This is just a sanity check, we do not need the sliver urns.
+	#
+	foreach my $id (@todelete) {
+	    my $sliver_urn;
+	
+	    foreach my $node (@aggnodes) {
+		my $client_id   = GeniXML::GetVirtualId($node);
+
+		if ($id eq $client_id) {
+		    $sliver_urn = GeniXML::GetSliverId($node);
+		    last;
+		}
+	    }
+	    if (!defined($sliver_urn)) {
+		$errmsg   = "Could not find sliver_urn for $id";
+		$errcode  = 1;
+		$exitcode = 1;
+		goto bad;
+	    }
+	    if (!defined($agg->_slivers())) {
+		$agg->_slivers([]);
+		push(@modaggs, $agg);
+	    }
+	    # We do not actually use these. 
+	    push(@{ $agg->_slivers() }, $sliver_urn);	    
+	}
+    }
+
+    #
+    # Do not allow deletion of everything, tell user to use terminate.
+    #
     if (scalar(@delaggs) == scalar($instance->ActiveAggregateList())) {
 	$errmsg   = "Not allowed to delete all nodes, ".
 	    "please use Terminate instead";
@@ -3882,8 +3988,8 @@ sub DoDeleteNodes()
 	}
 	exit(1);
     }
-    if (! (@aggregates || @delaggs)) {
-	$errmsg   = "Cannot find anything to delete!";
+    if (! (@modaggs || @delaggs)) {
+	$errmsg   = "Cannot find anything to delete";
 	print STDERR $errmsg . "\n";
 	if (defined($webtask)) {
 	    $webtask->output($errmsg);
@@ -3922,26 +4028,26 @@ sub DoDeleteNodes()
     # Helper callback to send the proper arguments.
     #
     my $coderef = sub {
-	my ($sliver) = @_;
-	my @nodes    = @{ $aggmap{$sliver->aggregate_urn()} };
-	my $creds    = $credentials->{$sliver->aggregate_urn()};
+	my ($agg) = @_;
+	my @nodes  = @{ $agg->_todelete() };
+	my $creds  = $credentials->{$agg->aggregate_urn()};
 
-	$sliver->SetStatus("provisioning");
-	my $response = $sliver->DeleteNodes($creds, @nodes);
+	$agg->SetStatus("provisioning");
+	my $response = $agg->DeleteNodes($creds, @nodes);
 	
 	# We get back a new manifest. Set it here and clear from the
 	# response structure so it does not copy through the webtask/db.
 	if ($response && $response->code() == GENIRESPONSE_SUCCESS) {
-	    $sliver->SetManifest($response->value());
+	    $agg->SetManifest($response->value());
 	
 	    # Delete sliver status rows.
 	    foreach my $node_id (@nodes) {
-		$sliver->DeleteSliverStatus($node_id);
+		$agg->DeleteSliverStatus($node_id);
 	    }
 	    $response->value(0);
 	}
 	else {
-	    $sliver->SetStatus("ready");
+	    $agg->SetStatus("ready");
 	}
 	return $response;
     };
@@ -3965,7 +4071,7 @@ sub DoDeleteNodes()
     }
 
     # Invoke on all clusters
-    $errcode = CallMethodOnAggregates($coderef, 0, \$response, @aggregates);
+    $errcode = CallMethodOnAggregates($coderef, 0, \$response, @modaggs);
     if ($errcode) {
 	$errmsg = $response;
 	goto bad;
@@ -3974,7 +4080,7 @@ sub DoDeleteNodes()
     #
     # Look at all the responses.
     #
-    foreach my $agg (@aggregates) {
+    foreach my $agg (@modaggs) {
 	my $response = shift(@{$response});
 	my $code = $response->code();
 
@@ -4002,11 +4108,12 @@ sub DoDeleteNodes()
     }
     $instance->SetStatus("provisioned") if (!$nostatus);
     $instance->ComputeNodeCounts();
+    $instance->MergeManifests();
     my @return_codes = ();
 
     if (ParRun({"maxwaittime" => 99999,
-		"maxchildren" => scalar(@aggregates)}, \@return_codes,
-	       \&APT_Instance::Aggregate::WaitForSliver, @aggregates)) {
+		"maxchildren" => scalar(@modaggs)}, \@return_codes,
+	       \&APT_Instance::Aggregate::WaitForSliver, @modaggs)) {
 	#
 	# The parent caught a signal. Leave things intact so that we can
 	# kill things cleanly later.
@@ -4017,7 +4124,7 @@ sub DoDeleteNodes()
     #
     # Check the exit codes. 
     #
-    foreach my $aggobj (@aggregates) {
+    foreach my $aggobj (@modaggs) {
 	my $code = shift(@return_codes);
 
 	# Updated in a forked child, must refresh. 
@@ -4234,6 +4341,7 @@ sub DoDeleteAggregates()
     }
     # If we made any changes, merge/push the manifests.
     if ($needpush && !$nostatus) {
+	$instance->ComputeNodeCounts();
 	if ($instance->MergeManifests()) {
 	    print STDERR "Could not merge manifests\n";
 	}
@@ -6669,7 +6777,18 @@ sub DoServiceLogs()
     my $response = $aggregate->ServiceLogs($sliver_urn);
     if ($response->code()) {
 	$errcode = $response->code();
-	($exitcode, $errmsg) = ResponseErrorMessage($aggregate, $response);
+	
+	if ($errcode == GENIRESPONSE_UNSUPPORTED) {
+	    $errmsg   = "Node does not support returning service logs";
+	    $exitcode = 1;
+	}
+	elsif ($errcode == GENIRESPONSE_REFUSED) {
+	    $errmsg   = "Node is not ready yet, try again later";
+	    $exitcode = 1;
+	}
+	else {
+	    ($exitcode, $errmsg) = ResponseErrorMessage($aggregate, $response);
+	}
 	goto bad;
     }
     #
@@ -7686,8 +7805,9 @@ sub DoConnectSharedLan()
     my $errmsg;
     my $errcode  = -1;
     my $exitcode = -1;
-    my $optlist  = "r";
+    my $optlist  = "rR";
     my $remove   = 0;
+    my $noreconfig = 0;
     my $sourcelan;
     my $targetuuid;
     my $targetlan;
@@ -7695,6 +7815,9 @@ sub DoConnectSharedLan()
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
+    }
+    if (defined($options{"R"})) {
+	$noreconfig = 1;
     }
     if (defined($options{"r"})) {
 	$remove = 1;
@@ -7779,8 +7902,8 @@ sub DoConnectSharedLan()
 	goto bad;
     }
     my $aggregate = $instance->GetAggregate($smanager);
-    my $response  = $aggregate->ConnectSharedLan($sourcelan,
-						 $targetlan, $remove);
+    my $response  = $aggregate->ConnectSharedLan($sourcelan, $targetlan,
+						 $remove, $noreconfig);
 
     if (!defined($response)) {
 	$errmsg   = "RPC Error calling ConnectSharedLan on $aggregate\n";
@@ -7853,21 +7976,14 @@ sub DoModify()
     if ($instance->canceled()) {
 	UserError("Not allowed to modify; this experiment has been canceled.");
     }
-    if ($instance->DeferredAggregateList()) {
-	UserError("Not allowed to modify; there " .
-		  "are currently deferred aggregates.");
-    }
     if ($instance->update_rspec()) {
 	UserError("Not allowed to modify; a modify " .
 		  "operation is already in progress and not complete.");
     }
     my $project   = $instance->GetProject();
+    my $group     = $instance->GetGroup();
     my $expires   = str2time($instance->Expires());
     my $noresokay = 1;
-    my $duration  = $expires - time();
-    if ($duration > $DEFAULT_DURATION * 3600) {
-	$noresokay = 0;
-    }
     
     my $rspecstr = emutil::ReadFile($ARGV[0]);
     if (!$rspecstr) {
@@ -7887,6 +8003,7 @@ sub DoModify()
     if (!defined($slice)) {
 	fatal("No slice for instance");
     }
+    print "$rspecstr\n";
 
     my $default_aggregate_urn = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
     my $needstitcher = 0;
@@ -7901,10 +8018,24 @@ sub DoModify()
     }
 
     #
+    # Modify changes things a bit. On the Powder portal we always do
+    # reservation checks when duration > $DEFAULT_DURATION unless
+    # the project has expert mode enabled. On other portals, initial
+    # duration is never > $DEFAULT_DURATION, but after Modify it
+    # might be, but we do not want to force reservations on those
+    # portals.
+    #
+    my $duration = $expires - time();
+    if ($instance->isPowder() && !$project->expert_mode() && 
+	$duration > $DEFAULT_DURATION * 3600) {
+	$noresokay = 0;
+    }
+
+    #
     # All checks in one place.
     #
     $errcode = APT_Profile::CheckEverything($rspec, $creator,
-					    $project, time(), $expires, 1,
+					    $group, time(), $expires, 1,
 					    $noresokay, $webtask, \$errmsg);
     if ($errcode) {
 	($errcode < 0 ? fatal($errmsg) : UserError($errmsg));
@@ -7933,6 +8064,14 @@ sub DoModify()
     $gotlock = 1;
 
     #
+    # Flag instance as doing a modify. Good to know, and used in the
+    # apt_daemon to prevent terminating an instance that got thrown
+    # into a failed state cause a modify failed. We should not ever
+    # do that, need to watch for it and fix it.
+    # 
+    $instance->BumpModifyCount();
+    
+    #
     # See if any aggregates deleted from the rspec and call DeleteAggregate
     # on those first. 
     #
@@ -7940,9 +8079,21 @@ sub DoModify()
 	next
 	    if ($agg->IsTerminated());
 
-	next
-	    if (grep {$_ eq $agg->aggregate_urn()} @aggregate_urns);
-	
+	#
+	# It is okay to terminate defered aggregates, but if there is
+	# an remaining deferred aggregate, not sure I want to spark a
+	# a modify on it. Needs more thought.
+	#
+	if (grep {$_ eq $agg->aggregate_urn()} @aggregate_urns) {
+	    if ($agg->deferred()) {
+		$errmsg   = "Not allowed to modify; there " .
+		    "are currently deferred aggregates.";
+		$errcode  = GENIRESPONSE_REFUSED;
+		$exitcode = $errcode;
+		goto bad;
+	    }
+	    next;
+	}
 	push(@deleted_urns, $agg->aggregate_urn());
     }
 
@@ -7994,14 +8145,22 @@ sub DoModify()
 	    $errmsg   = "Could not delete all aggregates";
 	    $errcode  = GENIRESPONSE_ERROR;
 	    $exitcode = $errcode;
+	    #
+	    # Need to undo the update. 
+	    #
 	    goto bad;
 	}
 	$instance->RefreshAggregateStatus();
     }
+    #
+    # If deleted deferred aggregates, might be able to resolve the defer.
+    #
+    if (!$instance->DeferredAggregateList()) {
+	$instance->ResolveDefer();
+    }
 
     #
-    # Need to compare the rspec, we really do not want to initiate a modify
-    # at every aggregate.
+    # Mark all aggregates in the instance as needing update.
     #
     $instance->SetAggregateStatus("created");
 
@@ -8009,10 +8168,23 @@ sub DoModify()
 	system("$CREATESLIVERS -L " .
 	       ($debug ? "-d " : "") .  $instance->uuid());
 	if ($?) {
+	    #
+	    # If we still have an update_rspec, something went wrong
+	    # early. Clear that so we are not in an inconsistent state.
+	    #
+	    $instance->Refresh();
+	    if ($instance->update_rspec()) {
+		$instance->Update({"update_rspec" => undef});
+	    }
+	    # Do not leave the experiment in a messed up state.
+	    $instance->SetStatus("ready") if (!$nostatus);
+	    
 	    my $code = $? >> 8;
 	    $code = -1
 		if ($code == 255);
 	    if (defined($webtask)) {
+		# Not sure what to tell users.
+		$webtask->output("Internal Error");
 		$webtask->Exited($code)
 	    }
 	    exit($code);
@@ -8043,39 +8215,3 @@ sub DoModify()
     exit($exitcode);
 }
 
-#
-# Next Business Day. Only for Powder.
-#
-sub NextBusinessDay(;$)
-{
-    my ($now) = @_;
-
-    if (!defined($now)) {
-	$now = DateTime->now(time_zone => 'local');
-    }
-    else {
-	$now = DateTime->from_epoch(epoch => $now, time_zone => 'local');
-    }
-    my $wday = $now->day_of_week;
-    my $incr;
-
-    SWITCH: for ($wday) {
-	/^[71234]$/ && do {
-	    $incr = 1;
-	    last SWITCH;
-	};
-	/^[5]$/ && do {
-	    $incr = 3;
-	    last SWITCH;
-	};
-	/^[6]$/ && do {
-	    $incr = 2;
-	    last SWITCH;
-	};
-    };
-    my $nbd = $now->add_duration(DateTime::Duration->new(days => $incr));
-    $nbd->set_hour(9);
-    $nbd->set_minute(0);
-    $nbd->set_second(0);
-    return $nbd->epoch;
-}

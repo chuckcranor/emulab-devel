@@ -74,6 +74,8 @@ class ReservationGroup
     function uuid()	    { return $this->field('uuid'); }
     function pid()	    { return $this->field('pid'); }
     function pid_idx()      { return $this->field('pid_idx'); }
+    function gid()	    { return $this->field('gid'); }
+    function gid_idx()      { return $this->field('gid_idx'); }
     function creator_uid()  { return $this->field('creator_uid'); }
     function creator_idx()  { return $this->field('creator_idx'); }
     function start()        { return $this->field('start'); }
@@ -90,6 +92,10 @@ class ReservationGroup
     # Project of resgroup.
     function Project() {
         return Project::Lookup($this->pid_idx());
+    }
+    # Group of resgroup.
+    function Group() {
+        return Group::Lookup($this->gid_idx());
     }
 
     # Hmm, how does one cause an error in a php constructor?
@@ -258,6 +264,12 @@ class ReservationGroup
         return 0;
     }
 
+    function SharingMode()
+    {
+        $mode = $this->Project()->shared_reservations();
+        return Project::ReservationSharingMap($mode);
+    }
+
     function Blob($alldata = true)
     {
         $resgroup = $this;
@@ -271,6 +283,8 @@ class ReservationGroup
         $details["uuid"]       = $resgroup->uuid();
         $details["pid"]        = $resgroup->pid();
         $details["pid_idx"]    = $resgroup->pid_idx();
+        $details["gid"]        = $resgroup->gid();
+        $details["gid_idx"]    = $resgroup->gid_idx();
         $details["created"]    = DateStringGMT($resgroup->created());
         $details["start"]      = DateStringGMT($resgroup->start());
         $details["end"]        = DateStringGMT($resgroup->end());
@@ -288,6 +302,7 @@ class ReservationGroup
             $details["idledetection"] = ($resgroup->noidledetection() ?
                                          false : true);
         }
+        $details["shared_reservations"] = $resgroup->SharingMode();
         
         $clusters = array();
         foreach ($resgroup->reservations() as $reservation) {
@@ -454,11 +469,13 @@ class ReservationGroup
     # reservations in all of the projects a user is a member of.
     # Only care about cluster reservations.
     #
-    public static function ReservationInfo($projlist)
+    public static function ReservationInfo($projlist, $user)
     {
         $current = array();
         $future  = array();
         $pidlist = array();
+        $thisuid = $user->uid();
+        global $TB_PROJECT_CREATEEXPT;
 
 	foreach ($projlist as $pid => $unused) {
             $pidlist[] = "'" . $pid . "'";
@@ -478,14 +495,32 @@ class ReservationGroup
             $res = ReservationGroup::Lookup($row["uuid"]);
             $urn = $row["aggregate_urn"];
             $pid = $res->pid();
+            $gid = $res->gid();
+            $uid = $res->creator_uid();
+            $mode = $res->SharingMode();
 
+            # Skip since they are not relevant to the current user.
+            # Note that the sharing mode is for the project, so all reservations
+            # in the project will be the same.
+            if ($mode == "user" && $uid != $thisuid) {
+                continue;
+            }
+            elseif ($mode == "group") {
+                $group = $res->Group();
+                if (!$group->AccessCheck($user, $TB_PROJECT_CREATEEXPT)) {
+                    continue;
+                }
+            }
             $info = array(
                 "pid"           => $pid,
+                "gid"           => $gid,
+                "uid"           => $uid,
                 "starttime"     => $res->start(),
                 "endtime"       => $res->end(),
                 "nodetype"      => $row["type"],
                 "nodecount"     => $row["count"],
                 "aggregate_urn" => $urn,
+                "mode"          => $mode,
             );
 
             if ($res->Active()) {

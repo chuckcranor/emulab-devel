@@ -211,7 +211,8 @@ function Do_Create()
         }
     }
     # Sanity check examples portals and public setting.
-    if ($formfields["examples_portals"] != "" &&
+    if (isset($formfields["examples_portals"]) &&
+        $formfields["examples_portals"] != "" &&
         $formfields["profile_who"] != "public") {
         $errors["examples_portals"] =
             "Profile must be public to list on the Examples page";
@@ -1570,7 +1571,6 @@ function Do_UpdateRepository()
             $error = $webtask->TaskValue("output");
         }
         $webtask->Delete();
-        unlink($outfname);
 	SPITAJAX_ERROR(1, $error);
 	return;
     }

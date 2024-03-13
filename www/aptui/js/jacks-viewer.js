@@ -28,8 +28,6 @@ $(function ()
     {
 	var message = event.data;
 	console.info("HandleMessage", message);
-	console.info("mod call", window.JacksViewerModifiedCallback);
-	console.info("click call", window.JacksViewerClickCallback);
 
 	if (message.action == "create") {
 	    CreateJacksViewer(message);
@@ -44,6 +42,9 @@ $(function ()
 
     function CreateJacksViewer(message)
     {
+	console.info("mod call", window.JacksViewerModifiedCallback);
+	console.info("click call", window.JacksViewerClickCallback);
+	
 	viewer = new JacksViewer(message.showinfo,
 				 message.multisite,
 				 message.aggregates,
@@ -56,11 +57,9 @@ $(function ()
 
     function Ready(viewer, message)
     {
-	if (message.xml == null) {
-	    return;
-	}
-	console.info("ready", viewer);
-	viewer.add(message.xml);
+	console.info("jacks-viewer: Ready", viewer);
+	// Parent set this.
+	window.JacksViewerReadyCallback();
     }
 
     function Add(message)

@@ -38,6 +38,7 @@ CFLAGS	 += -O -g -Wall
 CFLAGS   += -I. -I${OBJDIR}
 CFLAGS   += -I$(TESTBED_LIBSRCDIR)/event -I$(TESTBED_LIBSRCDIR)/libtb
 CFLAGS   += -I/usr/local/include
+CFLAGS	 += -DCLIENT_BINDIR='"$(CLIENT_BINDIR)"'
 
 LDFLAGS  += -L${TESTBED_LIBOBJDIR}/event -L${TESTBED_LIBOBJDIR}/libtb
 LIBS     += -levent -ltb

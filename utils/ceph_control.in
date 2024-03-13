@@ -1,0 +1,412 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2023-2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+#
+# Create, disable, or remove Ceph credentials and CephFS directory for
+# a project or user.
+#
+# * Create:
+#   This will call over to a mon node to create the credential, enabling
+#   it in the Ceph cluster, and then returning the private key that we put
+#   in the DB to be used later to construct a Ceph keyring on nodes in the
+#   project or when the user has an account. If the credential already exists,
+#   the mon node will return the existing one. Also creates the appropriate
+#   subdirectory in CephFS and assigns the correct pool and pool namespace
+#   to the root of the subdir.
+#
+# * Disable:
+#   Removes the Emulab-side DB state. The Ceph cluster credential and subdir
+#   are left alone. A future "create" will have the effect of reactivating
+#   access for the user.
+#
+# * Remove:
+#   Performs disable actions and also calls over to the mon node to destroy
+#   the project/user credential and remove the CephFS directory associated
+#   with that project/user.
+#
+# XXX right now we are just doing project credentials.
+# XXX right now we store the credentials in the filesystem instead of the DB.
+#
+
+use strict;
+use English;
+use Getopt::Std;
+
+# XXX til we have DB setup, we put this in a file
+my $writetofile = 1;
+
+my $cephfeature = "CephEnabled";
+
+sub usage()
+{
+    print STDERR "Usage: ceph_control [-hdn] [-T type] action name\n";
+    print STDERR "   -h       This message\n";
+    print STDERR "   -d       Print additional debug info\n";
+    print STDERR "   -n       Do not perform actions, just talk about it.\n";
+    print STDERR "   -T type  Type of name: 'proj' | 'user' | 'dataset'\n";
+    print STDERR "   action   One of 'create' | 'disable' | 'remove'\n";
+    print STDERR "   name     A valid name of the proper type; i.e., a pid\n";
+    exit(-1);
+}
+my $optlist  = "hdnT:";
+my $debug = 0;
+my $impotent = 0;
+my $ntype = "proj";
+my $action;
+my $name;
+
+# Protos
+sub sendcmd($;$);
+sub createprojcred($$);
+sub removeprojcred($$);
+sub createprojfs($$);
+sub removeprojfs($$);
+sub fatal($);
+
+#
+# Configure variables
+#
+my $TB		 = "@prefix@";
+
+my $SSH		 = "ssh -n -o ConnectTimeout=2 -o BatchMode=yes -o StrictHostKeyChecking=no";
+my $CEPHCMD	 = "/usr/bin/ceph";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use emutil;
+use Experiment;
+use User;
+use Project;
+use EmulabFeatures;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# We don't want to run this script unless its the real version.
+# That is, it must be setuid root. 
+#
+if ($EUID != 0) {
+    die("*** $0:\n".
+	"    Must be root! Maybe its a development version?\n");
+}
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{h})) {
+    usage();
+}
+if (defined($options{d})) {
+    $debug = 1;
+}
+if (defined($options{n})) {
+    $impotent = 1;
+}
+if (defined($options{T})) {
+    if ($options{T} =~ /^(proj|user|dataset)$/) {
+	my $ntype = $1;
+    } else {
+      print STDERR "Invalid type '$options{T}', must be one of: proj, user, dataset\n";
+      usage();
+    }
+}
+if (@ARGV < 2) {
+    usage();
+}
+
+$action = shift;
+$name = shift;
+if ($action !~ /^(create|disable|remove)$/) {
+    print STDERR "Action must be one of create|disable|remove\n";
+    usage();
+}
+$action = $1;
+if ($name !~ /^([-\w]+)$/) {
+    fatal("Invalid syntax for name");
+}
+$name = $1;
+
+my $feature = EmulabFeatures->Lookup($cephfeature);
+if (!$feature) {
+    fatal("$cephfeature feature does not exist!");
+}
+
+if ($ntype eq "proj") {
+    my $pid = Project->Lookup($name);
+    if (!$pid) {
+	fatal("No such project '$name'");
+    }
+
+    if ($action eq "create") {
+	if ($impotent) {
+	    print STDERR "Would enable feature $cephfeature on project $name\n";
+	} elsif ($feature->Enable($pid)) {
+	    fatal("Could not enable $cephfeature feature for project $name!");
+	}
+	createprojcred($name, $pid);
+	createprojfs($name, $pid);
+    } else {
+	if ($impotent) {
+	    print STDERR "Would disable feature $cephfeature on project $name\n";
+	} elsif ($feature->Disable($pid)) {
+	    fatal("Could not disable $cephfeature feature for project $name!");
+	}
+	removeprojcred($name, $pid);
+	removeprojfs($name, $pid);
+    }
+} else {
+    fatal("user and dataset credentials not yet implemented");
+}
+
+exit(0);
+
+sub createprojcred($$)
+{
+    my ($proj,$pobj) = @_;
+
+    my $key = "";
+    my $CMD = <<"END_CMD";
+ceph auth get-or-create-key client.$proj mon \\'allow r\\' osd \\'allow rw pool=cephfs_data namespace=$proj\\' mds \\'allow rw fsname=cephfs path=/proj/$proj\\'
+END_CMD
+    chomp $CMD;
+    if ($impotent) {
+	print STDERR "Would issue: $CMD\n";
+    } else {
+	my $output;
+	my $stat = sendcmd($CMD, \$output);
+	if ($stat != 0) {
+	    fatal("Could not create project credential:\n" . @$output);
+	}
+	($key) = $$output[0];
+	chomp $key;
+	print STDERR "$proj key: '$key'\n"
+	    if ($debug);
+	if ($key !~ /^([a-zA-Z0-9\+\/]{38}==)$/) {
+	    fatal("Invalid format for Ceph key!?");
+	}
+    }
+
+    if ($writetofile) {
+	if ($impotent) {
+	    print STDERR "Would put key in /proj/$proj/ceph/secret\n";
+	    return;
+	}
+	#
+	# XXX if a known project dir does not exist,
+	# we might need to force mounting of the project filesystem.
+	#
+	if (! -d "/proj/$proj/exp" && $pobj->UpdateExports(1)) {
+	    fatal("Could not access the /proj/$proj filesystem.");
+	}
+	if (! -d "/proj/$proj/ceph" &&
+	    !mkdir("/proj/$proj/ceph", 0770) &&
+	    system("chown root:$proj /proj/$proj/ceph")) {
+	    fatal("Could not prepare /proj/$proj/ceph");
+	}
+	if (! -f "/proj/$proj/ceph/secret") {
+	    if (open(FD, ">/proj/$proj/ceph/secret")) {
+		print FD "$key\n";
+		close(FD);
+	    } else {
+		fatal("Could not create secret file!?");
+	    }
+	    chmod(0600, "/proj/$proj/ceph/secret");
+	} else {
+	    if (open(FD, "</proj/$proj/ceph/secret")) {
+		my $okey = <FD>;
+		close(FD);
+		chomp($okey);
+		if ($okey && $key eq $okey) {
+		    print STDERR "Key already exists and matches";
+		} else {
+		    print STDERR "Key mismatch between Ceph and stored value";
+		}
+	    } else {
+		print STDERR "Could not open secret file";
+	    }
+	    print STDERR ", not changing\n";
+	}
+    }
+    # Put in the DB
+    else {
+	if ($impotent) {
+	    print STDERR "Would put key in DB\n";
+	    return;
+	}
+    }
+}
+	 
+sub createprojfs($$)
+{
+    my ($proj,$pobj) = @_;
+
+    my $CMD = "sh /cephfs/proj/mkproj.sh $proj";
+    if ($impotent) {
+	print STDERR "Would issue: $CMD\n";
+	return;
+    }
+
+    my $output;
+    my $stat = sendcmd($CMD, \$output);
+    if ($stat != 0) {
+	fatal("Could not create project subdir:\n" . @$output);
+    }
+}
+
+sub removeprojcred($$)
+{
+    my ($proj,$pobj) = @_;
+
+    #
+    # Remove from Emulab
+    #
+    if ($writetofile) {
+	if ($impotent) {
+	    print STDERR "Would remove /proj/$proj/ceph/secret\n";
+	} else {
+	    #
+	    # XXX if a known project dir does not exist,
+	    # we might need to force mounting of the project filesystem.
+	    #
+	    if (! -d "/proj/$proj/exp" && $pobj->UpdateExports(1)) {
+		fatal("Could not access the /proj/$proj filesystem.");
+	    }
+	    if (-e "/proj/$proj/ceph/secret" &&
+		!unlink("/proj/$proj/ceph/secret")) {
+		print STDERR "Could not remove secret file for $proj, ".
+		    "remove by hand if it exists.\n";
+	    }
+	}
+    } else {
+	if ($impotent) {
+	    print STDERR "Would remove key from DB\n";
+	}
+    }
+
+    #
+    # Also remove from Ceph
+    #
+    if ($action eq "remove") {
+	my $CMD = "ceph auth del client.$proj";
+	if ($impotent) {
+	    print STDERR "Would issue: $CMD\n";
+	    return;
+	}
+
+	my $output;
+	my $stat = sendcmd($CMD, \$output);
+	if ($stat != 0) {
+	    fatal("Could not delete project credential:\n" . @$output);
+	}
+    }
+}
+    
+sub removeprojfs($$)
+{
+    my ($proj,$pobj) = @_;
+
+    if ($action eq "remove") {
+	my $CMD = "sh /cephfs/proj/rmproj.sh $proj";
+	if ($impotent) {
+	    print STDERR "Would issue: $CMD\n";
+	    return;
+	}
+
+	my $output;
+	my $stat = sendcmd($CMD, \$output);
+	if ($stat != 0) {
+	    fatal("Could not create remove subdir:\n" . @$output);
+	}
+    }
+}
+
+#
+# Send a command to a Ceph Monitor node.
+# We try sending to all nodes until we get a response.
+#
+sub sendcmd($;$)
+{
+    my ($cmdstr, $outref) = @_;
+    my @output = ();
+    my $stat = 0;
+
+    #
+    # N.B. these are the public control net IPs and *not* the Ceph
+    # data network IPs (192.168.x.x).
+    #
+    # XXX this should come from the DB
+    #
+    my @MONS = ("155.98.36.201", "155.98.36.202", "155.98.36.203");
+
+    foreach my $host (@MONS) {
+	my $sshcmd = $SSH;
+
+	print STDERR "Doing '$sshcmd $host $cmdstr'\n"
+	    if ($debug);
+
+	my $SAVEUID = $UID;
+	$UID = 0;
+	@output = `$sshcmd $host $cmdstr 2>&1`;
+	$UID = $SAVEUID;
+	if ($?) {
+	    $stat = ($? >> 8) & 0xff;
+	    next
+		if ($stat == 255);
+	    print STDERR "*** WARNING: command failed on $host ($stat)!\n";
+	}
+	last;
+    }
+
+    print STDERR "Got stat: $stat, output:\n", @output
+	if ($debug);
+    chomp(@output);
+    $$outref = \@output
+	if ($outref);
+    return $stat;
+}
+
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}

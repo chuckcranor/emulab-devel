@@ -185,6 +185,9 @@ class Project
     function nfsmounts()     { return $this->field("nfsmounts"); }
     function allowed_clusters() { return $this->field("allowed_clusters"); }
     function ota_notified()  { return $this->field("ota_notified"); }
+    function shared_reservations() {
+        return $this->field("shared_reservations");
+    }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -1227,6 +1230,46 @@ class Project
         $pid = $this->pid();
         
         return $APTBASE . "/show-project.php?pid=${pid}";
+    }
+
+    function SignupURL()
+    {
+        global $APTBASE;
+        $pid = $this->pid();
+        
+        return $APTBASE . "/signup.php?pid=${pid}";
+    }
+
+    #
+    # Map Project Reservation values. Class method
+    #
+    function ReservationSharingMap($mode)
+    {
+        # Convert sharing mode to a string or value
+        if ($mode == "user") {
+            return TBDB_RESERVATIONS_PERUSER;
+        }
+        elseif ($mode == "group") {
+            return TBDB_RESERVATIONS_PERGROUP;
+        }
+        elseif ($mode == "project") {
+            return TBDB_RESERVATIONS_PERPROJECT;
+        }
+        elseif ($mode == TBDB_RESERVATIONS_PERUSER) {
+            return "user";
+        }
+        elseif ($mode == TBDB_RESERVATIONS_PERPROJECT) {
+            return "project";
+        }
+        elseif ($mode == TBDB_RESERVATIONS_PERGROUP) {
+            return "group";
+        }
+        return null;
+    }
+    function ResSharingMode()
+    {
+        $mode = $this->shared_reservations();
+        return Project::ReservationSharingMap($mode);
     }
 }
 ?>

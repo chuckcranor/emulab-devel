@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -79,7 +79,7 @@ Usage: $0 [-h] <-p | <pid> <eid> > [vname ...] [vname:port ...]
 -s    Ports are specified in switch.port syntax.
       No pid,eid should be given when using this option.
 -C    List control net, rather than experimental net, ports
--H    Show high-capacity (64-bit) counters (implies -c, !-z right now)
+-H    Show high-capacity (64-bit) counters (implies -c, !-S, !-z)
 -S    With -a, sort columns in a more user useful order
 
 If only pid and eid are given, prints out information about all ports in the
@@ -115,7 +115,15 @@ if ($opt{"t"}) {
 
 my @oids = (); # The set of OIDs we care about
 
-if ($opt{a}) {
+if ($opt{H}) {
+    @oids = ('ifHCInOctets', 'ifHCInUcastPkts', 'ifHCInMulticastPkts',
+	     'ifHCInBroadcastPkts',
+	     'ifHCOutOctets', 'ifHCOutUcastPkts', 'ifHCOutMulticastPkts',
+	     'ifHCOutBroadcastPkts');
+    # XXX database is only 32-bit counters - so don't do anything involving it
+    $opt{c} = 1;
+    $opt{z} = 0;
+} elsif ($opt{a}) {
     if ($opt{S}) {
 	@oids = ('ifInOctets', 'ifInUcastPkts', 'ifInNUcastPkts',
 		 'ifInDiscards',
@@ -131,14 +139,6 @@ if ($opt{a}) {
 } elsif ($opt{e}) {
     @oids = ('ifInDiscards', 'ifInErrors', 'ifInUnknownProtos', 'ifOutDiscards',
 	     'ifOutErrors');
-} elsif ($opt{H}) {
-    @oids = ('ifHCInOctets', 'ifHCInUcastPkts', 'ifHCInMulticastPkts',
-	     'ifHCInBroadcastPkts',
-	     'ifHCOutOctets', 'ifHCOutUcastPkts', 'ifHCOutMulticastPkts',
-	     'ifHCOutBroadcastPkts');
-    # XXX database is only 32-bit counters - so don't do anything involving it
-    $opt{c} = 1;
-    $opt{z} = 0;
 } else {
     @oids = ('ifInOctets', 'ifInUcastPkts', 'ifInNUcastPkts',
 	     'ifOutOctets', 'ifOutUcastPkts', 'ifOutNUcastPkts');
@@ -426,6 +426,11 @@ foreach my $name (keys %portMap) {
 	/comware/ && do {
 	    require snmpit_h3c;
 	    $device = new snmpit_h3c($name);
+	    last;
+	};
+	/planet/ && do {
+	    require snmpit_planet;
+	    $device = new snmpit_planet($name);
 	    last;
 	};
 

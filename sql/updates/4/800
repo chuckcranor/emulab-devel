@@ -1,0 +1,25 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instance_rfranges", "width")) {
+	DBQueryFatal("alter table apt_instance_rfranges add ".
+		     " `width` float(8,2) DEFAULT NULL after power");
+    }
+    if (!DBSlotExists("apt_instance_rfrange_history", "width")) {
+	DBQueryFatal("alter table apt_instance_rfrange_history add ".
+		     " `width` float(8,2) DEFAULT NULL after power");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

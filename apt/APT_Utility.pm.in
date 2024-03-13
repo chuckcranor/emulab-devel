@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2022 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -288,6 +288,45 @@ sub TutorialStat($)
     openlog("tutorial-stats", "pid", $LOG_TESTBED);
     syslog(LOG_INFO, "$msg (load $load)");
     closelog();
+}
+
+#
+# Next Business Day. 
+#
+sub NextBusinessDay(;$)
+{
+    my ($now) = @_;
+    require DateTime;
+    require DateTime::Duration;
+
+    if (!defined($now)) {
+	$now = DateTime->now(time_zone => 'local');
+    }
+    else {
+	$now = DateTime->from_epoch(epoch => $now, time_zone => 'local');
+    }
+    my $wday = $now->day_of_week;
+    my $incr;
+
+    SWITCH: for ($wday) {
+	/^[71234]$/ && do {
+	    $incr = 1;
+	    last SWITCH;
+	};
+	/^[5]$/ && do {
+	    $incr = 3;
+	    last SWITCH;
+	};
+	/^[6]$/ && do {
+	    $incr = 2;
+	    last SWITCH;
+	};
+    };
+    my $nbd = $now->add_duration(DateTime::Duration->new(days => $incr));
+    $nbd->set_hour(9);
+    $nbd->set_minute(0);
+    $nbd->set_second(0);
+    return $nbd->epoch;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

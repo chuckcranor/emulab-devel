@@ -75,6 +75,8 @@ echo "</script>\n";
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
+SpitAggregateStatus(true, null, Aggregate::AllAggregatesList());
+
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
@@ -86,6 +88,6 @@ AddLibrary("js/profile-support.js");
 AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
 SPITREQUIRE("js/user-dashboard.js");
 
-AddTemplateList(array("user-dashboard", "experiment-list", "profile-list", "project-list", "dataset-list", "user-profile", "oops-modal", "waitwait-modal", "classic-explist", "conversion-help-modal", "paramsets-list", "resgroup-list", "showtopo-modal"));
+AddTemplateList(array("user-dashboard", "experiment-list", "profile-list", "project-list", "dataset-list", "user-profile", "oops-modal", "waitwait-modal", "classic-explist", "conversion-help-modal", "paramsets-list", "resgroup-list", "showtopo-modal", "resources-list"));
 SPITFOOTER();
 ?>

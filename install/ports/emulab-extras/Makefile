@@ -51,7 +51,7 @@ RUN_DEPENDS+=	\
 	xterm:${PORTSDIR}/x11/xterm \
 	zsh:${PORTSDIR}/shells/zsh
 
-.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
 RUN_DEPENDS+=	\
 	gdb:${PORTSDIR}/devel/gdb \
 	vim:${PORTSDIR}/editors/vim

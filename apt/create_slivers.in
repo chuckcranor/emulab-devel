@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -51,11 +51,11 @@ my $debug           = 0;
 my $verbose         = 1;
 my $foreground      = 0;
 my $usestitcher     = 0;
+my $usefabric       = 1;
 my $ignorefailures  = 0;
 my $usetracker      = 0;
 my $takelock        = 0;  # Use when called from create_instance.
 my $sendemail       = 0;
-my $sequence        = time();
 my $errmsg;
 my $sshkeys;
 my $retval;
@@ -85,6 +85,7 @@ if ($MAINSITE) {
 my $CREATEWBSTORE    = "$TB/sbin/createwbstore";
 my $DESTROYWBSTORE   = "$TB/sbin/destroywbstore";
 my $TEE              = "/usr/bin/tee";
+my $FABRICSTITCHER   = "$TB/bin/fabric-stitcher";
 
 #
 # Untaint the path
@@ -178,6 +179,9 @@ use GeniXML;
 use WebTask;
 use Logfile;
 use EmulabFeatures;
+if ($MAINSITE) {
+    require APT_RDZ;
+}
 
 # Connect to the SA DB.
 DBConnect(GENISA_DBNAME());
@@ -229,10 +233,14 @@ my $curStatus   = $instance->status();
 my $uuid        = $instance->uuid();
 my $webtask     = $instance->webtask();
 my $webtask_id  = $webtask->task_id();
+my $sequence    = $instance->GetPortalSequence();
+my $update      = defined($instance->update_rspec()) ? 1 : 0;
 my $genislice   = $instance->GetGeniSlice();
 if (!defined($genislice)) {
     fatal("Could not get genislice for $instance\n");
 }
+my $slice_urn   = $genislice->urn();
+
 if ($takelock) {
     $genislice->TakeLock();
 }
@@ -271,7 +279,9 @@ $sendemail = 1
 if ($instance->CheckResources(\$errmsg)) {
     MyExit(1, $errmsg);
 }
-my $project = $instance->GetProject();
+# CheckResources can change the rspec if there are routes. 
+my $rspecstr = ($update ? $instance->update_rspec() : $instance->rspec());
+my $project  = $instance->GetProject();
 
 #
 # Anything to do?
@@ -297,6 +307,20 @@ foreach my $agg ($instance->AggregateList()) {
 	       $agg->status() eq "staging" ||
 	       $agg->status() eq "interrupted"));
 
+    if ($update) {
+	#
+	# Initial update. Save off old manifests. This clears the current
+	# manifest.
+	#
+	if (defined($agg->manifest)) {
+	    $agg->BackupManifest();
+	}
+    }
+    #
+    # One wrinkle is that when updating, we never fail the entire instance.
+    #
+    $ignorefailures = 1 if ($agg->saved_manifest());
+
     #
     # See if the aggregate is online, lets not go to a ton of trouble
     # if the aggregate is dead.
@@ -305,9 +329,11 @@ foreach my $agg ($instance->AggregateList()) {
 	print STDERR "$errmsg\n";
 	#
 	# If the cluster is not deferrable, then its an error and the
-	# instance has failed. 
+	# instance has failed.
 	#
-	if (!$aptagg->deferrable()) {
+	# For an update, lets treat everything as deferable.
+	#
+	if (!$aptagg->deferrable() && !$agg->saved_manifest()) {
 	    $instance->SetStatus("failed");
 
 	    $webtask->output($errmsg);
@@ -329,6 +355,29 @@ foreach my $agg ($instance->AggregateList()) {
     push(@deferred_list, $agg)
 	if ($agg->deferred());
 }
+#
+# OK, commit to the update.
+#
+if ($update) {
+    $instance->Update({"rspec" => $rspecstr, "update_rspec" => undef});
+
+    #
+    # Need to stash the new bindings. But maybe we need to do
+    # this earlier, still thinking about it.
+    #
+    my $bindings;
+    if (APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg)) {
+	print STDERR "Could not get new bindings\n";
+    }
+    else {
+	$bindings = eval { encode_json($bindings); };
+	if ($@) {
+	    print STDERR "Could not json encode bindings: $@\n";
+	}
+    }
+    $instance->Update({"params" => $bindings});
+}
+
 if (!@aggregate_list) {
     print "No uncreated aggregates to process.\n";
 
@@ -345,21 +394,6 @@ if (!@aggregate_list) {
     }
     $genislice->UnLock();
     exit(0);
-}
-
-my $slice_urn   = $genislice->urn();
-my $update      = defined($instance->update_rspec()) ? 1 : 0;
-my $rspecstr    = ($update ? $instance->update_rspec() : $instance->rspec());
-
-#
-# If this is an update, we need the new sequence number from the
-# finalized rspec.
-#
-if ($update) {
-    $sequence = $instance->GetPortalSequence();
-    if (!$sequence) {
-	fatal("Could not get portal sequence number from rspec");
-    }
 }
 
 #
@@ -467,9 +501,11 @@ if (!($debug || $foreground)) {
     $logpid = $PID;
 }
 # After we start logging.
+print "Experiment: " . $instance->Printable() . "\n";
+print $instance->webURL() . "\n";
 if ($update) {
-    print "This is an experiment update ...\n\n";
-}    
+    print "This is an experiment update\n\n";
+}
 
 # Bind the process id.
 $webtask->SetProcessID($PID);
@@ -496,19 +532,47 @@ foreach my $aggregate (@aggregate_list) {
     if (!defined($aggregate->started())) {
 	$aggregate->MarkStarted();
     }
-    # Mark aggregates that are being updated vs adding for the first time.
-    if ($update && !defined($aggregate->manifest())) {
-	$aggregate->_isupdate(0);
-    }
-    else {
-	$aggregate->_isupdate($update);
-    }
     $aggregate->webtask()->Reset();
+
+    #
+    # Updates can be deferred, so need to always check to see if we are
+    # doing a create or an update.
+    #
+    $aggregate->_isupdate(defined($aggregate->saved_manifest()) ? 1 : 0);
+
     #
     # We want to tell CreateSlivers() if the CreateSliver() call reached
     # the point of allocating resources. Hack. 
     #
     $aggregate->_committed(0);
+}
+
+#
+# Probably not the right place for this. Certainly not the right way.
+#
+if ($project->pid() eq "RDZ-demo") {
+    my $spectrum = $instance->_spectrum();
+    if ($spectrum && @{$spectrum}) {
+	my $error;
+	
+	$instance->SetStatus("rdzwait");
+	if (APT_RDZ::RequestSpectrum($instance, \$error)) {
+	    $instance->ResolveDefer();
+	    $instance->SetStatus("failed");
+	    $instance->RecordError(GENIRESPONSE_ERROR, "RDZ failure: $error");
+	    $webtask->output("RDZ failure: $error");
+	    $webtask->Exited(GENIRESPONSE_ERROR);
+	    if (defined($logfile)) {
+		$logfile->Close();
+		$logfile->Store();
+		$logfile = undef;
+	    }
+	    $genislice->UnLock();
+	    exit(1);
+	}
+	$instance->Update({'rdz_status' => "ready"});
+	$rspecstr = ($update ? $instance->update_rspec() : $instance->rspec());
+    }
 }
 
 if ($usestitcher) {
@@ -552,8 +616,6 @@ if ($usestitcher) {
 	}
 	exit($exitcode);
     }
-    $instance->SetStatus("provisioned");
-    $instance->ComputeNodeCounts();
 }
 else {
     my $rval = CreateSlivers();
@@ -579,9 +641,10 @@ else {
 	    $rval == GENIRESPONSE_NO_MAPPING) {
 	    AuditAbort()
 		if (!($debug || $foreground));
-	    if (defined($logfile)) {
+	    if (defined($logfile) && !$update) {
 		$logfile->Delete();
 		$logfile = undef;
+		$instance->ClearLogFile();
 	    }
 	    $exitcode = 1;
 	}
@@ -702,66 +765,17 @@ if ($failed) {
     $instance->ResolveDefer();
 }
 else {
-    my $updateAbort = 0;
-    
-    #
-    # Update of one aggregate vs multiple aggregates. Complicated by
-    # whether any of the aggregates got to the point where resources
-    # have been modified. Which is really hard to know since we use
-    # the monolithic CreateSlivers() instead of Allocate/Provision/Start
-    # But if we can prevent single aggregate experiments from getting
-    # into a confusing state, I will be happy.
-    #
-    # Another problem; we are calling CreateSliver() on all aggregate
-    # not just the ones that actually need a change. Need to fix that,
-    # but that means comparing the new rspec to the old rspec.
-    #
-    if ($update && $instance->ActiveAggregateList() == 0 && @failed_list == 1) {
-	my ($agg) = @failed_list;
-	
-	#
-	# In other words, just a single aggregate and it failed before commit.
-	#
-	$updateAbort = !$agg->_committed();
-    }
     #
     # If all the aggregates are resolved, then we can resolve the instance.
     #
     if (!$instance->DeferredAggregateList()) {
 	$instance->ResolveDefer();
-	if ($update) {
-	    if ($updateAbort) {
-		$instance->Update({"update_rspec" => undef});
-	    }
-	    else {
-		$instance->Update({"rspec" => $rspecstr,
-				   "update_rspec" => undef});
-	    }
-	}
     }
     else {
 	# This updates the record so we know when last retry was.
 	$instance->Defer();
     }
     $instance->SetStatus("ready");
-    if ($update && !$updateAbort) {
-	#
-	# Need to stash the new bindings. But maybe we need to do
-	# this earlier, still thinking about it.
-	#
-	my $bindings;
-	if (APT_Profile::GetBindings($rspecstr, \$bindings, \$errmsg)) {
-	    print STDERR "Could not get new bindings\n";
-	}
-	else {
-	    $bindings = eval { encode_json($bindings); };
-	    if ($@) {
-		print STDERR "Could not json encode bindings: $@\n";
-	    }
-	}
-	$instance->Update({"params" => $bindings});
-    }
-
     if ($sendemail) {
 	my $brand = $instance->Brand();
 	my $pid   = $project->pid();
@@ -1330,13 +1344,7 @@ sub CreateSliver($)
 	    return -1;
 	}
     }
-    # See below, this is hacky.
-    if ($aggobj->_isupdate()) {
-	$webtask->manifest($manifest);
-    }
-    else {
-	$aggobj->SetManifest($manifest);
-    }
+    $aggobj->SetManifest($manifest);    
     $aggobj->SetStatus("provisioned");
     return 0;
 }
@@ -1405,7 +1413,7 @@ sub CreateSlivers()
 	if ($code) {
 	    # Promote the log up to the instance so that so its easy to find.
 	    $instance->SetPublicURL($aggobj->public_url())
-		if (defined($aggobj->public_url()) && !$update);
+		if (defined($aggobj->public_url()) && !$aggobj->_isupdate());
 
 	    my $output   = $aggobj->webtask()->output();
 	    my $exitcode = $aggobj->webtask()->exitcode();
@@ -1427,23 +1435,33 @@ sub CreateSlivers()
 	    if (($exitcode == GENIRESPONSE_NO_MAPPING() ||
 		 $exitcode == GENIRESPONSE_INSUFFICIENT_NODES()) &&
 		$instance->pid() ne "@TUTORIALPID@" &&
-		$instance->AllResourcesReserved($aggobj)) {
-		print STDERR "$cluster says not able to map experiment yet; ".
-		    "deferring till later since project has it reserved\n";
-		
-		$aggobj->Defer("Unable to map all resources, but since this ".
-			       "project has the resources reserved, we will ".
-			       "keep trying until you delete the resources ".
-			       "or terminate the experiment");
+		($instance->AllResourcesReserved($aggobj) ||
+		 $ismobile && $instance->RouteList())) {
+		my $message = "$cluster says not able to map experiment yet; ".
+		    "deferring till later since the ";
+		my $reason  = "Unable to map all resources, but since ";
+
+		if ($instance->AllResourcesReserved($aggobj)) {
+		    $message .= "project has all of resources reserved";
+		    $reason  .= "the project has all of the resources ".
+			"reserved, ";
+		}
+		else {
+		    $message .= "experiment has all of resources reserved";
+		    $reason  .= "this experiment has the routes allocated, ";
+		}
+		$reason .= "we will keep trying until you delete the ".
+		    "resources or terminate the experiment";
+		print STDERR "$message\n";
+		$aggobj->Defer($reason);	    
 		# Reset status back to created since we have to try again.
 		$aggobj->SetStatus("created");
-		push(@deferred, $aggobj);
 		next;
 	    }
 	    #
 	    # When updating, we just keep going. The web UI will say something.
 	    #
-	    if ($update) {
+	    if ($ignorefailures) {
 		next;
 	    }
 	    # With mulitple aggregates allow user to ignore errors and
@@ -1474,9 +1492,6 @@ sub CreateSlivers()
 	    # And the instance status at the end.
 	    $instance_status = "failed";
 	}
-	elsif ($aggobj->_isupdate()) {
-	    push(@updated, $aggobj);
-	}
 	#
 	# Resolve the defer now that it is starting up. 
 	#
@@ -1492,23 +1507,6 @@ sub CreateSlivers()
 	# Do this last so that the web interface does not see failed
 	# before the reason is in the webtask.
 	$instance->SetStatus($instance_status);
-    }
-    #
-    # Sucessful updates, we need to clear the manifest, wait, and then
-    # replace it. This is an awful temporary hack to get the web UI to notice.
-    #
-    # What we really need to do is save the old manifests above before
-    # calling createsliver, clear them all, then wait for failure or a new
-    # manifest, and then replace with the old or new.
-    #
-    if (@updated) {
-	foreach my $aggobj (@updated) {
-	    $aggobj->ClearManifest();
-	}
-	sleep(10);
-	foreach my $aggobj (@updated) {
-	    $aggobj->SetManifest($aggobj->webtask()->manifest());
-	}
     }
     return $return_code;
 }
@@ -1632,7 +1630,8 @@ sub WaitForSlivers()
 	if (defined($aggobj->public_url())) {
 	    print $aggobj->public_url() . "\n";
 	}
-	print "\n" . $aggobj->manifest() . "\n\n";
+	print "\n" . $aggobj->manifest() . "\n\n"
+	    if (defined($aggobj->manifest()));
 	print "-----------------------------------------------------------\n\n";
     }
     return $startuprunning;
@@ -1652,6 +1651,7 @@ sub RunStitcher()
     my $stdoutfile    = "$tmpdir/stitcher.stdout";
     my $stderrfile    = "$tmpdir/stitcher.stderr";
     my $failed        = 0;
+    my $needfabric    = 0;
     my $errcode       = GENIRESPONSE_STITCHER_ERROR();
 
     #
@@ -1696,7 +1696,9 @@ sub RunStitcher()
 	# We do not want these two files defaulting to user home dir.
 	"--GetVersionCacheName=$tmpdir/get_version_cache.json ".
 	"--AggNickCacheName=$tmpdir/agg_nick_cache ".
-	"--scsURL http://scs.scs.scs.emulab.net:8081/geni/xmlrpc  ".
+	($usefabric ?
+	 "--scsURL http://scs.scs.scs.emulab.net:8091/geni/xmlrpc --noAL2S " :
+	 "--scsURL http://scs.scs.scs.emulab.net:8081/geni/xmlrpc  ").
 	"--speaksfor $speaksfor_urn -V3 allocate $slice_urn $rspecfile";
 
     return -1
@@ -1728,6 +1730,7 @@ sub RunStitcher()
     # so that we can pass the ssh keys more easily.
     #
     $instance->SetStatus("stitching");
+    print "cd $tmpdir; $command > $stdoutfile 2> $stderrfile\n";
     system("cd $tmpdir; $command > $stdoutfile 2> $stderrfile");
     if ($?) {
 	$errcode = $? >> 8;
@@ -1768,6 +1771,16 @@ sub RunStitcher()
 	else {
 	    $webtask->output("Stitcher failed!");
 	}
+
+	#
+	# Dump the stitcher output. Ick.
+	#
+	if (defined($tmpdir) && -e "$tmpdir/stitcher.log") {
+	    print "------------- Stitcher Log ---------------\n";
+	    system("/bin/cat $tmpdir/stitcher.log");
+	    print "-----------------------------------------\n";
+	}
+	
 	#
 	# Even if we fail, want to pick up whatever aggregates the stitcher
 	# decided to use, so that we can ensure all slivers get cleaned up
@@ -1818,9 +1831,22 @@ sub RunStitcher()
 	}
 	close(TXT);
     }
+    elsif ($usefabric) {
+	#
+	# Something went wrong.
+	#
+	print STDERR "Stitcher failed on all aggregates!\n";
+	$webtask->output("Stitcher failed!");
+	goto bad;
+    }
     foreach my $urn (@agglist) {
 	next
 	    if (exists($instance->AggregateHash()->{$urn}));
+
+	if ($urn =~ /fabric/) {
+	    $needfabric = 1;
+	    next;
+	}
 	
 	my $authority = GeniAuthority->Lookup($urn);
 	if (!defined($authority)) {
@@ -1970,19 +1996,26 @@ sub RunStitcher()
 	    goto bad;
 	}
     }
+
+    #
+    # Do this last for now. Eventually be good to do in parallel with the
+    # aggregates but we need the manifests for this to work
+    #
+    if ($needfabric) {
+	print "Starting the FABRIC stitcher ...\n";
+	system("$FABRICSTITCHER -d -D $tmpdir " . $instance->uuid());
+	if ($?) {
+	    $errcode = GENIRESPONSE_STITCHER_ERROR;
+	    $webtask->output("FABRIC stitcher failure");
+	    goto bad;
+	}
+    }
+    
 #    system("/bin/rm -rf $tmpdir")
 #	if (!$debug && defined($tmpdir) && -e $tmpdir);
     return 0;
 
   bad:
-    #
-    # Dump the stitcher output. Ick.
-    #
-    if (defined($tmpdir) && -e "$tmpdir/stitcher.log") {
-	print "------------- Stitcher Log ---------------\n";
-	system("/bin/cat $tmpdir/stitcher.log");
-	print "-----------------------------------------\n";
-    }
 #    system("/bin/rm -rf $tmpdir")
 #	if (!$debug && defined($tmpdir) && -e $tmpdir);
     return $errcode;
@@ -1992,11 +2025,14 @@ sub MyExit($$)
 {
     my ($code, $mesg) = @_;
 
-    $genislice->UnLock()
-	if (defined($genislice));
-    $instance->SetStatus("failed")
-	if (defined($instance));
-    
+    if (defined($instance)) {
+	if ($ignorefailures) {
+	    $instance->SetStatus("ready");
+	}
+	else {
+	    $instance->SetStatus("failed");
+	}
+    }
     if (defined($webtask)) {
 	$webtask->output($mesg);
 	$webtask->Exited($code);
@@ -2009,6 +2045,8 @@ sub MyExit($$)
 	$logfile->Store();
 	$logfile = undef;
     }
+    $genislice->UnLock()
+	if (defined($genislice));
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
     exit($code);
@@ -2067,3 +2105,4 @@ sub CallMethodOnAggregate($$$)
     }
     return $response;
 }
+

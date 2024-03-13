@@ -1,0 +1,453 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use File::Basename;
+use File::stat;
+use POSIX ":sys_wait_h";
+use JSON;
+
+#
+# RDZ experiment daemon; looks for experiments that need RDZ things.
+#
+sub usage()
+{
+    print "Usage: rdz_expdaemon [-d] [-s] [-F] [-n]\n";
+    exit(1);
+}
+my $optlist   = "dnsFN";
+my $debug     = 0;
+my $impotent  = 0;
+my $oneshot   = 0;
+my $fesonly   = 0;
+my $nofes     = 0;
+# Processes that are running in the background, watching an RDZ experiment.
+my %watchers  = ();
+# The instances being watched.
+my %watched   = ();
+# FE watchers
+my %fewatchers= ();
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $TBLOGS           = "@TBLOGSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $MANAGEINSTANCE   = "$TB/bin/manage_instance";
+my $MANAGERDZ        = "$TB/bin/manage_rdz";
+my $LOGFILE          = "$TB/log/rdz_expdaemon.log";
+my $SUDO	     = "/usr/local/bin/sudo";
+my $PROTOUSER	     = "elabman";
+my $ENDPOINTDIR	     = "/usr/testbed/www/rfmonitor-endpoint";
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub fatal($);
+sub Watcher($);
+sub WatchEndpoint($);
+sub ReportObservation($$$);
+
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if ($UID != 0) {
+    fatal("Must be root to run this script\n");
+}
+
+#
+# Check args early so we get the right DB.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"s"})) {
+    $oneshot = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"F"})) {
+    $fesonly = 1;
+}
+if (defined($options{"N"})) {
+    $nofes = 1;
+}
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use Experiment;
+use Node;
+use libtestbed;
+use emutil;
+use libEmulab;
+use APT_Aggregate;
+use APT_Instance;
+use APT_Profile;
+use APT_RDZ;
+
+if (! ($oneshot || $impotent)) {
+    if (CheckDaemonRunning("rdz_expdaemon")) {
+	fatal("Not starting another rdz_expdaemon daemon!");
+    }
+    # Go to ground.
+    if (! $debug) {
+	if (TBBackGround($LOGFILE)) {
+	    exit(0);
+	}
+    }
+    if (MarkDaemonRunning("rdz_expdaemon")) {
+	fatal("Could not mark daemon as running!");
+    }
+}
+my $PPID = $PID;
+
+#
+# Setup a signal handler for newsyslog.
+#
+sub LogHandler()
+{
+    my $SAVEEUID = $EUID;
+    
+    $EUID = 0;
+    ReOpenLog($LOGFILE);
+    $EUID = $SAVEEUID;
+}
+$SIG{HUP} = \&LogHandler
+    if (! ($debug || $oneshot));
+
+#
+# TERM handler to kill/wait for the Watchers
+#
+sub TermHandler()
+{
+    if ($PPID != $PID) {
+	exit(0);
+    }
+    my $SAVEEUID = $EUID;
+    
+    $EUID = 0;
+    foreach my $pid (keys(%watchers), keys(%fewatchers)) {
+	print "Killing Watcher($pid)\n";
+	kill('TERM', $pid);
+	waitpid($pid, 0);
+    }
+    $EUID = $SAVEEUID;
+    exit(0);
+}
+$SIG{TERM} = \&TermHandler;
+$SIG{INT}  = \&TermHandler;
+
+#
+# Start up FE watchers in the background. Not sure this is a good
+# place for this watcher.
+#
+if (!$nofes) {
+    my $query_result =
+	DBQueryFatal("select location,aggregate_urn ".
+		     "   from apt_aggregate_radio_locations ".
+		     "where itype='FE'");
+    while (my ($location, $urn) = $query_result->fetchrow_array()) {
+	$fewatchers{WatchEndpoint($urn)} = $location;
+    }
+}
+if ($fesonly) {
+    while (1) {
+	sleep(5);
+    }
+    exit(0);
+}
+
+while (1) {
+    if (NoLogins()) {
+	sleep(5);
+	next;
+    }
+    print "Running at ".
+	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
+
+    #
+    # Look to see if any Watchers have exited.
+    #
+    foreach my $pid (keys(%watchers)) {
+	my $instance = $watchers{"$pid"};
+	my $foo = waitpid($pid, &WNOHANG);
+	if ($foo) {
+	    print "Watcher($pid) exited\n";
+	    delete($watchers{"$pid"});	
+	    delete($watched{$instance->uuid()});	
+	}
+    }
+
+    #
+    # Look for experiments that are using RDZ spectrum.
+    #
+    my $query_result =
+	DBQueryWarn("select distinct i.uuid from apt_instances as i ".
+		    "join apt_instance_rfranges as rf on rf.uuid=i.uuid ".
+		    "where i.canceled=0 and ".
+		    "      i.status!='failed' and ".
+		    "      rf.rdz_grantid is not null");
+    
+    if (!$query_result) {
+	sleep(10);
+	next;
+    }
+    
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	# Already watching.
+	next
+	    if (exists($watched{$uuid}));
+	
+	my $instance = APT_Instance->Lookup($uuid);
+	next
+	    if (!defined($instance));
+
+	my $pid = Watcher($instance);
+	$watchers{"$pid"} = $instance;
+	$watched{$instance->uuid()} = $pid;
+    }
+    emutil::FlushCaches();
+    GeniUtil::FlushCaches();
+    sleep(10);
+}
+exit(0);
+
+
+#
+# Watch an experiment, checking for RDZ revocation
+#
+sub Watcher($)
+{
+    my ($instance) = @_;
+    my $uuid = $instance->uuid();
+
+    my $mypid = fork();
+    if ($mypid) {
+	return $mypid;
+    }
+    select(undef, undef, undef, 0.2);
+    print "Starting Watcher($PID) for $instance\n";
+
+    while (1) {
+	print "Watcher: Checking $instance\n";
+	
+	#
+	# Watch for the instance terminating. Grants deleted on that path.
+	#
+	$instance->Purge();
+	$instance = APT_Instance->Lookup($uuid);
+	if (!defined($instance)) {
+	    print "Watcher($PID): experiment is gone, exiting\n";
+	    last;
+	}
+	if (APT_RDZ::CheckRevocation($instance)) {
+	    print "Watcher: grants revoked for $instance\n";
+	    if (!$impotent) {
+		# Temporary way to get the web UI to tell the user.
+		$instance->Update({"rdz_status" => "revoked"});
+		system("$SUDO -u $PROTOUSER $MANAGEINSTANCE terminate $uuid");
+		#
+		# Send email?
+		#
+		last;
+	    }
+	}
+	sleep(10);
+    }
+    exit(0);
+}
+
+#
+# A separate Watcher for the endpoint directory.
+#
+# Watch a single endpoint.
+#
+sub WatchEndpoint($)
+{
+    my ($urn) = @_;
+    my $aggregate = APT_Aggregate->Lookup($urn);
+    if (!defined($aggregate)) {
+	fatal("WatchEndpoint: No such aggregate $urn");
+    }
+    my $name = $aggregate->name();
+    
+    my $dir = $ENDPOINTDIR . "/" . lc($aggregate->nickname());
+    if (! -d $dir) {
+	fatal("WatchEndpoint: $dir does not exist");
+    }
+    my $mypid = fork();
+    if ($mypid) {
+	return $mypid;
+    }
+    select(undef, undef, undef, 0.2);
+    print "Starting WatchEndpoint($PID,$name)\n";
+    
+    my %files = ();
+    my $laststat = stat($dir);
+
+    opendir(DIR,$dir)
+	or fatal("WatchEndpoint: opendir $dir: !$\n");
+
+    while (readdir DIR) {
+	my $file = $_;
+	if ($file =~ /\-(\d+)\.csv\.gz$/) {
+	    $files{"$1"} = $file;
+	}
+    }
+    close(DIR);
+
+    while (1) {
+	my $stat = stat($dir);
+	if ($stat->mtime != $laststat->mtime) {
+	    my %next = ();
+
+	    opendir(DIR,$dir)
+		or die("opendir $dir: !$\n");
+
+	    while (readdir DIR) {
+		my $file = $_;
+	    
+		if ($file =~ /\-(\d+)\.csv\.gz$/) {
+		    $next{"$1"} = $file;
+		    if (!exists($files{"$1"})) {
+			ReportObservation($aggregate, $dir, $file);
+		    }
+		}
+	    }
+	    close(DIR);
+	    %files = %next;
+	    $laststat = $stat;
+	    emutil::FlushCaches();
+	    GeniUtil::FlushCaches();
+	}
+	sleep(5);
+    }
+}
+
+#
+# Report an observation.
+#
+sub ReportObservation($$$)
+{
+    my ($aggregate, $dir, $file) = @_;
+    my $path = "$dir/$file";
+    my $aggregate_urn = $aggregate->urn();
+    my @instances = APT_Instance->LookupForAggregate($aggregate);
+
+    print "ReportObservation: $aggregate_urn $file\n" if ($debug);
+
+    return 0
+	if (!@instances);
+
+    my ($node_id,$iface,$stamp);
+    if ($file =~ /^([^:]+):([^-]+)-(\d+)/) {
+	$node_id = $1;
+	$iface   = $2;
+	$stamp   = $3;
+    }
+    else {
+	print "Bad file name, must be a monitor filename: $file\n";
+	return -1;
+    }
+
+    foreach my $instance (@instances) {
+	$instance->Refresh();
+	
+	# This is hacky.
+	next
+	    if (!defined($instance->rdz_status()));
+	
+	my $agg = $instance->GetAggregate($aggregate_urn);
+
+	#
+	# Does the instance have the node allocated. This is the easiest
+	# way to do this at the moment.
+	#
+	my $sliverstatus = $agg->SliverStatus();
+	foreach my $client_id (keys(%{ $sliverstatus })) {
+	    my $status = $sliverstatus->{$client_id};
+	    next
+		if ($status->{'resource_id'} ne $node_id);
+
+	    if ($impotent) {
+		print "ReportObservation: $node_id in use, would report\n";
+	    }
+	    else {
+		my $command = "$SUDO -u $PROTOUSER $MANAGERDZ ".
+		    "observations create -a $aggregate_urn $path";
+		
+		print "$command\n" if ($debug);
+		system($command);
+	    }
+	    return 0;
+	}
+    }
+    return 0;
+}
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    foreach my $pid (keys(%watchers), keys(%fewatchers)) {
+	print "Killing Watcher($pid)\n";
+	kill('TERM', $pid);
+	waitpid($pid, 0);
+    }
+    if (! ($oneshot)) {
+	#
+	# Send a message to the testbed list. 
+	#
+	SENDMAIL($TBOPS,
+		 "rdz_expdaemon died",
+		 $msg,
+		 $TBOPS);
+    }
+    MarkDaemonStopped("rdz_expdaemon")
+	if (! ($oneshot || $impotent));
+
+    die("*** $0:\n".
+	"    $msg\n");
+}

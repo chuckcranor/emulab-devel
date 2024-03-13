@@ -12,24 +12,12 @@ $(function ()
     /*
      * Add urn copy-to-clipboard popovers.
      */
-    var urnPopoverContent = function (urn) {
-	var string =
-	    "<div style='width 100%'> "+
-	    "  <input readonly type=text " +
-	    "       style='display:inline; width: 93%; padding: 2px;' " +
-	    "       class='form-control input-sm' "+
-	    "       value='" + urn + "'>" +
-	    "  <a href='#' class='btn urn-copy-button' " +
-	    "     style='padding: 0px'>" +
-	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
-	return string;
-    };
     function addUrnPopovers(id)
     {
 	sup.addPopoverClip('#' + id + ' .urn-button',
 			   function (target) {
 			       var urn = $(target).data("urn");
-			       return urnPopoverContent(urn);
+			       return sup.popoverClipContent(urn);
 			   });
     }
 
@@ -89,6 +77,15 @@ $(function ()
 		SetFilters();
 	    });
 
+	/*
+	 * Some kind of bad interaction between filtering and zebra and
+	 * bootstrap. This removes table-striped which causes the zebra
+	 * rows to get messed up after a filter is applied.
+	 */
+	$.extend($.tablesorter.themes.bootstrap, {
+	    table  : 'table table-bordered',
+	});
+	
 	var table = $("#images-table")
 	    .tablesorter({
 		theme : 'bootstrap',

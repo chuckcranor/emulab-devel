@@ -1329,9 +1329,10 @@ sub DeleteSlice($)
 	# slice disappearing (if the daemon beats us to it).
 	#
 	$slice->UnLock();
-	$slice->Flush();
 	while (1) {
 	    sleep(10);
+	    $slice->Flush();
+
 	    $slice = GeniSlice->Lookup($slice_uuid);
 	    if (!defined($slice)) {
 		print STDERR "Slice is gone, quiting ...\n";
@@ -1353,7 +1354,6 @@ sub DeleteSlice($)
 		if (!$aggregate->Busy());
 	    
 	    $slice->UnLock();
-	    $slice->Flush();
 	}
 	# Make sure the cancel flag is cleared (checked in endexp).
 	$slice_experiment->SetCancelFlag(0);
@@ -5610,6 +5610,7 @@ sub CreateDataset($)
     my ($argref) = @_;
     my $credentials  = $argref->{'credentials'};
     my $dataset_urn  = $argref->{'dataset_urn'};
+    my $checkonly    = 0;
     my $POLICY_FAIL  = 2;
     my $needapproval = 0;
     my $unapproved_reason;
@@ -5622,6 +5623,9 @@ sub CreateDataset($)
 
     if (! (defined($credentials) && defined($dataset_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    if (exists($argref->{'checkonly'}) && $argref->{'checkonly'} != 0) {
+	$checkonly = 1;
     }
     if (!GeniHRN::IsValid($dataset_urn)) {
 	return GeniResponse->MalformedArgsResponse("Invalid dataset urn");
@@ -5784,19 +5788,43 @@ sub CreateDataset($)
 	print STDERR "Could not create web task\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
-    $opts = " -C -T ". $webtask->task_id() . " $opts";
-	
+    $opts = " -T ". $webtask->task_id() . " $opts";
+    if ($checkonly) {
+	$opts = "-n $opts";
+    }
+    else {
+	$opts = "-C $opts";
+    }
     my $output = GeniUtil::ExecQuiet("$cmd $opts");
     # Not a typical op, so always print debugging info;
     print STDERR $output;
     if ($?) {
+	$webtask->Refresh();
+	if ($checkonly && $webtask->HasExited() &&
+	    $webtask->exitcode() == $POLICY_FAIL) {
+	    my $blob = {
+		"approved" => 0,
+		"unapproved_reason" => $webtask->output(),
+	    };
+	    $webtask->Delete();
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+	}
 	$webtask->Delete();
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
     }
+    $webtask->Refresh();
+
+    if ($checkonly) {
+	my $blob = {
+	    "approved" => 1,
+	};
+	$webtask->Delete();
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    }
+    
     GeniUtil::FlipToGeniUser()
 	if ($PROTOGENI_LOCALUSER && $isimdataset);
 
-    $webtask->Refresh();
     if ($webtask->needapproval()) {
 	$needapproval = 1;
 	$unapproved_reason = $webtask->unapproved_reason();
@@ -7050,6 +7078,10 @@ sub ServiceLogs($)
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				    "No node for sliver urn");
     }
+    if ($node->class() != "pc") {
+	return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED(), undef,
+				    "Node does not support service logs");
+    }
     if (!$node->IsUp()) {
 	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
 				    "Node is not ready");
@@ -7065,10 +7097,10 @@ sub ServiceLogs($)
     }
     my $output = GeniUtil::ExecQuiet("$NODE_SLOGS $node_id");
     $output =~ s/[^[:ascii:]]/ /g;
+    $output =~ tr/\x00-\x08\x0B\x0C\x0E-\x1F//d;    
     if ($?) {
 	print STDERR $output . "\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Failed to get service logs");
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
     }
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $output);
 }
@@ -7186,6 +7218,7 @@ sub ConnectSharedLan($)
     my $sourcelan    = $argref->{'source'};
     my $targetlan    = $argref->{'target'};
     my $disconnect   = $argref->{'disconnect'};
+    my $noreconfig   = 0;
     my $target_sharedlan;
     require Node;
     require Interface;
@@ -7197,6 +7230,9 @@ sub ConnectSharedLan($)
     if (! (defined($credentials) && 
 	   defined($slice_urn) && defined($sourcelan))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    if (exists($argref->{'noreconfig'}) && $argref->{'noreconfig'} == 1) {
+	$noreconfig = 1;
     }
     my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
     return $credential
@@ -7311,11 +7347,26 @@ sub ConnectSharedLan($)
     my @vinterfaces = ();
 
     foreach my $member (@members) {
-	my $interface = $member->GetInterface();
-
-	# Need the node for next lookup, ick.
-	my $node = Node->Lookup($interface->node_id());
-
+	#
+	# We tag the member with a vnode_id if its a pcvm. We need that to
+	# find the correct vinterface.
+	#
+	my $node_id;
+	my $node;
+	if ($member->GetAttribute("vnode_id", \$node_id) == 0 ||
+	    $member->GetAttribute("node_id", \$node_id) == 0) {
+	    $node = Node->Lookup($node_id)
+	}
+	else {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Cannot get node_id for member");
+	}
+	if (!defined($node)) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Cannot get node $node_id");
+	}
 	#
 	# Need the vinterface so that we can set/unset the vlanid, which is
 	# how tmcd tracks down the vlan tag. For now, unset means setting
@@ -7379,11 +7430,13 @@ sub ConnectSharedLan($)
     #
     # And now reconfig the node.
     #
-    system("$NODEREBOOT -c " . join(" ", map { $_->node_id(); } @vinterfaces));
-    if ($?) {
-	$slice->UnLock();
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Could not reconfig all nodes");
+    if (!$noreconfig) {
+	system("$NODEREBOOT -c " . join(" ", map { $_->node_id(); } @vinterfaces));
+	if ($?) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Could not reconfig all nodes");
+	}
     }
     $slice->UnLock();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);

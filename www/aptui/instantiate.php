@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
@@ -74,7 +77,7 @@ $optargs = OptionalPageArguments("profile",       PAGEARG_STRING,
 				 "from",          PAGEARG_STRING,
 				 "refspec",       PAGEARG_STRING,
                                  "rerun_instance",PAGEARG_UUID,
-                                 "rerun_paramset",PAGEARG_UUID,
+                                 "rerun_paramset",PAGEARG_PARAMSET,
                                  "rerun_branch",  PAGEARG_BOOLEAN,
                                  "skipfirststep", PAGEARG_BOOLEAN,
                                  "stresstest",    PAGEARG_BOOLEAN,
@@ -149,7 +152,7 @@ $projlist = $tmp;
 if ($noprediction) {
     $usenewschedule = 0;
 }
-    
+
 if (count($projlist) == 0) {
     SPITUSERERROR("You do not belong to any projects with permission to ".
                   "create new experiments. Please contact your project ".
@@ -463,6 +466,7 @@ $formfields["email"]    = $this_user->email();
 
 SPITHEADER(1);
 
+echo "<link rel='stylesheet' href='css/instantiate.css'>\n";
 echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
 echo "<link rel='stylesheet' href='css/profile-picker.css'>\n";
 echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
@@ -488,7 +492,7 @@ if ($this_user->IsNonLocal()) {
 }
 
 # Current and Future reservations for the cluster picker.
-$resinfo = ReservationGroup::ReservationInfo($projlist);
+$resinfo = ReservationGroup::ReservationInfo($projlist, $this_user);
 echo "<script type='text/plain' id='resinfo-json'>\n";
 echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
 echo "</script>\n";

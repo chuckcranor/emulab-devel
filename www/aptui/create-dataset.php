@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -134,6 +137,7 @@ function SPITFORM($formfields, $errors)
     echo "</script>\n";
 
     SPITREQUIRE_DATASET();
+    SPITREQUIRE("js/create-dataset.js");
     AddTemplateList(array("create-dataset", "dataset-help", "oops-modal", "waitwait-modal"));
     SPITFOOTER();
 }

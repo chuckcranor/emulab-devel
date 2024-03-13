@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+
+# PROVIDE: rfbaseline
+# REQUIRE: DAEMON tbdbcheck
+# BEFORE: testbed
+# KEYWORD: nojail shutdown
+
+TBROOT="@prefix@"
+MAINSITE="@TBMAINSITE@"
+rfbaseline=$TBROOT/sbin/rfbaseline
+
+if [ $MAINSITE == "0" ]; then
+    exit 0
+fi
+
+. /etc/rc.conf
+
+case "$1" in
+    start|faststart|quietstart|onestart|forcestart)
+	if [ -x $rfbaseline ]; then
+	    $rfbaseline
+	    echo -n "rfbaseline";
+	fi
+	;;
+    *)
+	echo ""
+	echo "Usage: `basename $0` { start }"
+	echo ""
+	exit 64
+	;;
+esac
+exit 0

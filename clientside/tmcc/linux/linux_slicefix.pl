@@ -34,6 +34,7 @@ my $CP = '/bin/cp';
 my $CPIO = 'cpio';
 my $GZIP = 'gzip';
 my $XZ = 'xz';
+my $ZSTD = 'zstd';
 my $MKSWAP = '/sbin/mkswap';
 my $UUIDGEN = 'uuidgen';
 my $LOSETUP = 'losetup';
@@ -47,6 +48,7 @@ use constant LARGEST_PAGE_SIZE => 0x4000;
 use constant UUID_OFFSET => 1036;
 use constant ELFHDR => 0x7f454c46;
 use constant XZHDRSTART => 0xfd377a58;
+use constant ZSTDHDRSTART => 0x28b52ffd;
 
 #
 # Turn off line buffering on output
@@ -672,12 +674,12 @@ sub udev_supports_label
 	my ($imageroot) = @_;
 	my ($handles_label, $handles_uuid) = (0, 0);
 
-	if (! -d "$imageroot/etc/udev/rules.d") {
+	if (! -d "$imageroot/etc/udev/rules.d" && ! -d "$imageroot/lib/udev/rules.d") {
 		return (0, 0);
 	}
 
 	my @files = glob "$imageroot/etc/udev/rules.d/*";
-	if (@files) {
+	if (!@files) {
 		@files = glob "$imageroot/lib/udev/rules.d/*";
 	}
 	for my $file (@files) {
@@ -899,10 +901,16 @@ sub check_initrd
 	elsif ($value == XZHDRSTART) {
 		$compression = 'lzma';
 	}
+	elsif ($value == ZSTDHDRSTART) {
+		$compression = 'zstd';
+	}
 	close INITRD;
 
 	if (defined($compression) && $compression eq 'lzma') {
 		`$XZ -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
+	}
+	elsif (defined($compression) && $compression eq 'zstd') {
+		`$ZSTD -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
 	}
 	else {
 		# Just bail to gzip no matter what.
@@ -933,9 +941,13 @@ sub check_initrd
 		last;
 	}
 
-	if (!$handles_label && !$handles_uuid) {
-		($handles_label, $handles_uuid) =
+	if (!$handles_label || !$handles_uuid) {
+		my ($udev_handles_label, $udev_handles_uuid) =
 		    udev_supports_label($initrd_dir);
+		$handles_label |= $udev_handles_label
+		    if (defined($udev_handles_label));
+		$handles_uuid |= $udev_handles_uuid
+		    if (defined($udev_handles_uuid));
 	}
 
 	#
@@ -1010,22 +1022,20 @@ sub update_random_seed
 	close SEED;
 }
 
-sub fix_console
+sub get_console_params
 {
-    my ($imageroot, $bloader, $file) = @_;
+    my ($imageroot, $bloader) = @_;
 
     my $console = $ENV{"SLICEFIX_CONSOLE"};
     if (!$console) {
 	print STDERR "no SLICEFIX_CONSOLE, leaving console as is\n";
-	return;
+	return (undef, undef, undef);
     }
 
     # XXX BSDism
     if ($console eq "vid") {
 	$console = "vga";
     }
-
-    print STDERR "Setting console device to $console\n";
 
     # parse off speed if present
     my $sspeed = 115200;
@@ -1045,8 +1055,16 @@ sub fix_console
 	}
     }
 
+    return ($console, $sunit, $sspeed, $sport);
+}
+
+sub fix_console
+{
+    my ($imageroot, $bloader, $file, $console, $sunit, $sspeed, $sport) = @_;
+
+    print STDERR "Setting console device to $console\n";
+
     fix_grub_console($imageroot, $file, $console, $sunit, $sspeed, $sport);
-    fix_grub_defaults($imageroot, $console, $sunit, $sspeed, $sport);
 
     # XXX we don't bother with /etc/inittab, only RHLnn-STD used it
 
@@ -1111,7 +1129,7 @@ sub fix_console
 #
 sub fix_grub_defaults
 {
-    my ($imageroot, $console, $sunit, $sspeed, $sport) = @_;
+    my ($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr) = @_;
     my $gdef = "$imageroot/etc/default/grub";
 
     if (! -e $gdef) {
@@ -1126,6 +1144,10 @@ sub fix_grub_defaults
     }
 
     my $esig = "# The remaining lines were added by Emulab slicefix";
+    my $cnetstr = "";
+    if (defined($cnetmacaddr) && $cnetmacaddr ne "") {
+	$cnetstr = " emulabcnet=$cnetmacaddr";
+    }
 
     my @buffer = ();
     while (<FILE>) {
@@ -1139,15 +1161,15 @@ sub fix_grub_defaults
     push @buffer, "$esig\n";
     push @buffer, "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
     if ($sunit < 0 && $console =~ /^hvc/) {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0 console=$console\"\n";
+	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0 console=$console$cnetstr\"\n";
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
     } elsif ($sunit < 0) {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0\"\n";
+	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0$cnetstr\"\n";
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
     } else {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyS$sunit,$sspeed\"\n";
+	push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyS$sunit,$sspeed$cnetstr\"\n";
 	push @buffer, "GRUB_TERMINAL=serial\n";
 	if ($sport) {
 	    push @buffer, "GRUB_SERIAL_COMMAND=\"serial --unit=$sunit --port=$sport --speed=$sspeed\"\n";
@@ -1293,6 +1315,67 @@ sub fix_grub_console
 	    # Otherwise, just copy
 	    #
 	    push @buffer, $_;
+	}
+
+	seek FILE, 0, 0;
+	truncate FILE, 0;
+
+	print FILE @buffer;
+
+	close FILE;
+
+	return;
+}
+
+sub get_cnet_mac_addr
+{
+	my $cnetmacaddr;
+	if (-s "$BOOTDIR/controlmac") {
+		$cnetmacaddr = `cat $BOOTDIR/controlmac`;
+		chomp($cnetmacaddr);
+		if ($cnetmacaddr =~ /^([a-fA-F0-9:]+)$/) {
+			$cnetmacaddr = "$1";
+		}
+		else {
+			$cnetmacaddr = undef;
+		}
+	}
+
+	return $cnetmacaddr;
+}
+
+sub fix_grub_cnet_hint
+{
+	my ($imageroot, $bootloader, $file, $cnetmacaddr) = @_;
+
+	if (!defined($cnetmacaddr) || $cnetmacaddr eq "") {
+		print STDERR "Cannot replace emulabcnet hint; no control interface mac address!\n";
+		return;
+	}
+
+	open FILE, "+<$imageroot/$file" ||
+		die "Couldn't open $imageroot/$file: $!\n";
+
+	my @buffer = ();
+	while (<FILE>) {
+		if (/emulabcnet=[\w:]+/) {
+			s#emulabcnet=[\w:]+#emulabcnet=$cnetmacaddr#g;
+			push @buffer, $_;
+			print "Replaced emulabcnet=$cnetmacaddr in cmdline in $file\n";
+			next;
+		}
+		# Most likely we need to add it; guess.
+		elsif (/root=/ && /console=/) {
+			chomp;
+			$_ .= " emulabcnet=$cnetmacaddr\n";
+			push @buffer, $_;
+			print "Added emulabcnet=$cnetmacaddr to cmdline in $file\n";
+			next;
+		}
+		#
+		# Otherwise, just copy
+		#
+		push @buffer, $_;
 	}
 
 	seek FILE, 0, 0;
@@ -1683,7 +1766,11 @@ sub main
 		set_grub2_root_device($imageroot, $grub_config, $root);
 	}
 	fix_grub_dom0mem($imageroot, $grub_config);
-	fix_console($imageroot, $bootloader, $grub_config);
+	my ($console, $sunit, $sspeed, $sport) = get_console_params($imageroot, $bootloader);
+	fix_console($imageroot, $bootloader, $grub_config, $console, $sunit, $sspeed, $sport);
+	my ($cnetmacaddr) = get_cnet_mac_addr();
+	fix_grub_cnet_hint($imageroot, $bootloader, $grub_config, $cnetmacaddr);
+	fix_grub_defaults($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr);
 
 	fix_swap_partitions($imageroot, $root,
 		$kernel_has_ide ? $old_root : undef );

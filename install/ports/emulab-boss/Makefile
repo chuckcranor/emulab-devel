@@ -27,7 +27,7 @@ WANT_PHP_MOD=	yes
 # PHP modules to build.
 # XXX based on current boss install.
 #
-.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
 # add opcache, get rid of modules that no longer exist
 USE_PHP=	bz2 ctype curl dom filter gd iconv json mysqli \
 		opcache openssl pdo phar posix session simplexml sockets \
@@ -48,7 +48,7 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysql \
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
 www_apache24_SET=	SUEXEC
 .else
 .MAKEFLAGS+=	WITH_SUEXEC=yes
@@ -154,7 +154,7 @@ RUN_DEPENDS+=	\
         p5-RRDTool-OO>=0.36:${PORTSDIR}/devel/p5-RRDTool-OO
 
 # python packages
-.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}mysqlclient>0:${PORTSDIR}/databases/py-mysqlclient
 .else
@@ -165,12 +165,19 @@ RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}dateutil>0:${PORTSDIR}/devel/py-dateutil \
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml \
-	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot
+	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot \
+	${PYTHON_PKGNAMEPREFIX}fail2ban>0:${PORTSDIR}/security/py-fail2ban
 
 # apache related ports
+.if (${EMULAB_PORTVERSION} == "8.4")
+RUN_DEPENDS+=	\
+	${LOCALBASE}/${APACHEMODDIR}/libphp.so:${PORTSDIR}/www/mod_php$(PHP_VER)
+.else
+RUN_DEPENDS+=	\
+	${LOCALBASE}/${APACHEMODDIR}/libphp$(PHP_MAJ).so:${PORTSDIR}/www/mod_php$(PHP_VER)
+.endif
 RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
-	${LOCALBASE}/${APACHEMODDIR}/libphp$(PHP_MAJ).so:${PORTSDIR}/www/mod_php$(PHP_VER) \
 	${LOCALBASE}/${APACHEMODDIR}/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid
 
 # Port versions of current or former "core" utilties

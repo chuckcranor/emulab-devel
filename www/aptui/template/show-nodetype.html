@@ -2,27 +2,27 @@
  .table {
      margin: 0px;
  }
- .panel-body {
+ .panel-body card-body {
      padding: 0px;
  }
 </style>
 
 <div class='col-sm-12'>
-  <div class='panel panel-default'>
-    <div class='panel-heading'>
+  <div class='panel  card panel-default'>
+    <div class='panel-heading card-header'>
       <div class="aligned-title-buttons">
 	<span class="left-edge">
 	  <% if (window.HASHWINFO) { %>
 	    <a href="show-hardware.php?type=<%= window.TYPE %>"
 	       class='btn btn-info btn-xs'
                style='margin-right: 10px;'
-	       data-toggle='tooltip'
+	       data-toggle='tooltip' data-bs-toggle='tooltip'
 	       title="Detailed hardware info from lshw"
                type='button'>Hardware Details</a>
 	  <% } %>
 	</span>
 	<span class="middle">
-	  <h3 class='panel-title'>Type info for <%- window.TYPE %></h3>
+	  <h3 class='panel-title card-title'>Type info for <%- window.TYPE %></h3>
 	</span>
 	<span class="right-edge">
 	  <% if (isadmin) { %>
@@ -31,14 +31,14 @@
 		<a href="../editnodetype.php3?node_type=<%= window.TYPE %>&classic=1"
 		   class='btn btn-primary btn-xs'
 		   style='margin-left: 10px;'
-		   data-toggle='tooltip'
+		   data-toggle='tooltip' data-bs-toggle='tooltip'
 		   title="Classic edit type page"
 		   type='button'>Classic</a>
 	      <% } else { %>
 		<a href="../shownodetype.php3?node_type=<%= window.TYPE %>&classic=1"
 		   class='btn btn-primary btn-xs'
 		   style='margin-left: 10px;'
-		   data-toggle='tooltip'
+		   data-toggle='tooltip' data-bs-toggle='tooltip'
 		   title="Classic show type page"
 		   type='button'>Classic</a>
 	      <% } %>
@@ -46,8 +46,8 @@
 	    <button class='btn btn-danger btn-xs hidden'
                     id='type-delete-button'
                     style='margin-left: 10px;'
-		    data-toggle='modal'
-		    data-target='#confirm-type-delete-modal'
+		    data-toggle='modal' data-bs-toggle='modal'
+		    data-target='#confirm-type-delete-modal' data-bs-target='#confirm-type-delete-modal'
 		    data-tooltip="Delete this type"
                     type='button' name='delete'>Delete
 	    </button>
@@ -61,14 +61,14 @@
 	</span>
       </div>
     </div>
-    <div class='panel-body' style="padding-top: 10px;">
+    <div class='panel-body card-body' style="padding-top: 10px;">
       <div class='row'>
 	<div class='col-sm-6'>
-	  <div class='panel panel-default'>
-	    <div class='panel-heading'>
-              <h3 class='panel-title'>Type</h3>
+	  <div class='panel  card panel-default'>
+	    <div class='panel-heading card-header'>
+              <h3 class='panel-title card-title'>Type</h3>
 	    </div>
-	    <div class='panel-body'>
+	    <div class='panel-body card-body'>
 	      <table id="flags-table"
 		     class='table table-condensed table-bordered'>
 		<tr>
@@ -94,9 +94,9 @@
 			  	  class="btn btn-xs btn-default save-row"
 				  style="color: green; height: 16px;">
  			    <span class="glyphicon glyphicon-ok"
-				  data-toggle="tooltip"
-				  data-container="body"
-				  data-trigger="hover"
+				  data-toggle="tooltip" data-bs-toggle="tooltip"
+				  data-container="body" data-bs-container="body"
+				  data-trigger="hover" data-bs-trigger="hover"
 				  title="Save change"></span>
 			  </button>
 		      </div>
@@ -124,9 +124,9 @@
 			  	  class="btn btn-xs btn-default save-row"
 				  style="color: green; height: 16px;">
  			    <span class="glyphicon glyphicon-ok"
-				  data-toggle="tooltip"
-				  data-container="body"
-				  data-trigger="hover"
+				  data-toggle="tooltip" data-bs-toggle="tooltip"
+				  data-container="body" data-bs-container="body"
+				  data-trigger="hover" data-bs-trigger="hover"
 				  title="Save change"></span>
 			  </button>
 		      </div>
@@ -161,28 +161,28 @@
 	    </div>
 	  </div>
 	  <% if (_.size(fields.features) || window.EDITING) { %>
-	    <div class='panel panel-default'>
-	      <div class='panel-heading'>
+	    <div class='panel  card panel-default'>
+	      <div class='panel-heading card-header'>
 		<% if (window.EDITING) { %>
 		  <button class='btn btn-primary btn-xs pull-right'
 			  id='add-feature-button'
 			  style='margin-right: 10px; margin-top: -4px;'
-			  data-toggle="tooltip"
+			  data-toggle="tooltip" data-bs-toggle="tooltip"
 			  title="Add a new feature"
 			  type='button'>Add
 		  </button>
 		<% } %>
-		<h3 class='panel-title'>Features
+		<h3 class='panel-title card-title'>Features
 		  <a href="#" type="button "class='btn btn-xs'
-		     data-toggle='modal'
-		     data-target="#info-modal"
-		     data-trigger="click">
+		     data-toggle='modal' data-bs-toggle='modal'
+		     data-target="#info-modal" data-bs-target="#info-modal"
+		     data-trigger="click" data-bs-trigger="click">
 		    <span style='margin-bottom: 4px; margin-left: 0px;'
 			  class='glyphicon glyphicon-question-sign'></span>
 		  </a>
 		</h3>
 	      </div>
-	      <div class='panel-body'>
+	      <div class='panel-body card-body'>
 		<table id="features-table"
 		       class='table table-condensed table-bordered'>
 		  <% _.each(fields.features, function(value, name) { %>
@@ -212,18 +212,18 @@
 				  class="btn btn-xs btn-default delete-row"
 				  style="color: red; margin-top;">
  			    <span class="glyphicon glyphicon-remove"
-				  data-toggle="tooltip"
-				  data-container="body"
-				  data-trigger="hover"
+				  data-toggle="tooltip" data-bs-toggle="tooltip"
+				  data-container="body" data-bs-container="body"
+				  data-trigger="hover" data-bs-trigger="hover"
 				  title="Delete this row"></span>
 			  </button>
 			  <button type="button" disabled
 				  class="btn btn-xs btn-default save-row"
 				  style="color: green;">
  			    <span class="glyphicon glyphicon-ok"
-				  data-toggle="tooltip"
-				  data-container="body"
-				  data-trigger="hover"
+				  data-toggle="tooltip" data-bs-toggle="tooltip"
+				  data-container="body" data-bs-container="body"
+				  data-trigger="hover" data-bs-trigger="hover"
 				  title="Save change"></span>
 			  </button>
 			</td>
@@ -235,20 +235,20 @@
 	    </div>
 	  <% } %>
 	  <% if (_.size(fields.osinfo)) { %>
-	    <div class='panel panel-default'>
-	      <div class='panel-heading'>
+	    <div class='panel  card panel-default'>
+	      <div class='panel-heading card-header'>
 		<% if (window.EDITING) { %>
 		  <button class='btn btn-primary btn-xs pull-right'
 			  id='add-osimage-button'
 			  style='margin-right: 10px; margin-top: -4px;'
-			  data-toggle="tooltip"
+			  data-toggle="tooltip" data-bs-toggle="tooltip"
 			  title="Add a new OS/Image"
 			  type='button'>Add
 		  </button>
 		<% } %>
-		<h3 class='panel-title'>Images and OSIDs</h3>
+		<h3 class='panel-title card-title'>Images and OSIDs</h3>
 	      </div>
-	      <div class='panel-body'>
+	      <div class='panel-body card-body'>
 		<table id="osinfo-table"
 		       class='table table-condensed table-bordered'>
 		  <% _.each(fields.osinfo, function(info, name) { %>
@@ -282,7 +282,7 @@
 			    }
 			  %>
 			  <select name="<%- name %>"
-				  class='form-control row-value'>
+				  class='form-control form-select row-value'>
 			    <% _.each(ilist, function(osinfo) { %>
 			      <option 
 				  <% if (osinfo.osid == info.osid) { %>
@@ -301,18 +301,18 @@
 				  class="btn btn-xs btn-default delete-row"
 				  style="color: red; margin-top;">
  			    <span class="glyphicon glyphicon-remove"
-				  data-toggle="tooltip"
-				  data-container="body"
-				  data-trigger="hover"
+				  data-toggle="tooltip" data-bs-toggle="tooltip"
+				  data-container="body" data-bs-container="body"
+				  data-trigger="hover" data-bs-trigger="hover"
 				  title="Delete this row"></span>
 			  </button>
 			  <button type="button" disabled
 				  class="btn btn-xs btn-default save-row"
 				  style="color: green;">
  			    <span class="glyphicon glyphicon-ok"
-				  data-toggle="tooltip"
-				  data-container="body"
-				  data-trigger="hover"
+				  data-toggle="tooltip" data-bs-toggle="tooltip"
+				  data-container="body" data-bs-container="body"
+				  data-trigger="hover" data-bs-trigger="hover"
 				  title="Save change"></span>
 			  </button>
 			</td>
@@ -325,28 +325,28 @@
 	  <% } %>
 	</div>
 	<div class='col-sm-6'>
-	  <div class='panel panel-default'>
-	    <div class='panel-heading'>
+	  <div class='panel  card panel-default'>
+	    <div class='panel-heading card-header'>
 	      <% if (window.EDITING) { %>
 		<button class='btn btn-primary btn-xs pull-right'
 			id='add-attribute-button'
 			style='margin-right: 10px; margin-top: -4px;'
-			data-toggle="tooltip"
+			data-toggle="tooltip" data-bs-toggle="tooltip"
 			title="Add a new attribute"
 			type='button'>Add
 		</button>
 	      <% } %>
-              <h3 class='panel-title'>Attributes
+              <h3 class='panel-title card-title'>Attributes
 		<a href="#" type="button "class='btn btn-xs'
-		   data-toggle='modal'
-		   data-target="#info-modal"
-		   data-trigger="click">
+		   data-toggle='modal' data-bs-toggle='modal'
+		   data-target="#info-modal" data-bs-target="#info-modal"
+		   data-trigger="click" data-bs-trigger="click">
 		  <span style='margin-bottom: 4px; margin-left: 0px;'
 			class='glyphicon glyphicon-question-sign'></span>
 		</a>
 	      </h3>
 	    </div>
-	    <div class='panel-body'>
+	    <div class='panel-body card-body'>
 	      <table id="attributes-table"
 		     class='table table-condensed table-bordered'>
 		<% _.each(fields.attributes, function(value, name) { %>
@@ -381,18 +381,18 @@
 				  class="btn btn-xs btn-default delete-row"
 				  style="color: red; margin-top;">
  			    <span class="glyphicon glyphicon-remove"
-				  data-toggle="tooltip"
-				  data-container="body"
-				  data-trigger="hover"
+				  data-toggle="tooltip" data-bs-toggle="tooltip"
+				  data-container="body" data-bs-container="body"
+				  data-trigger="hover" data-bs-trigger="hover"
 				  title="Delete this row"></span>
 			  </button>
 			  <button type="button" disabled
 				  class="btn btn-xs btn-default save-row"
 				  style="color: green;">
  			    <span class="glyphicon glyphicon-ok"
-				  data-toggle="tooltip"
-				  data-container="body"
-				  data-trigger="hover"
+				  data-toggle="tooltip" data-bs-toggle="tooltip"
+				  data-container="body" data-bs-container="body"
+				  data-trigger="hover" data-bs-trigger="hover"
 				  title="Save change"></span>
 			  </button>
 			</td>
@@ -408,6 +408,64 @@
     </div>
   </div>
 </div>
+<% if (! window.EDITING) { %>
+  <div class='col-sm-10 offset-sm-1'>
+    <div class='panel card panel-default'>
+      <div class='panel-heading card-header'>
+	<center>
+	  <h3 class='panel-title card-title'>Node List</h3>
+	</center>
+      </div>
+      <div class='panel-body card-body' style="padding-top: 10px;">
+	<% if (!window.ISADMIN) { %>
+	  <div class="d-flex flex-wrap">
+	    <% _.each(nodelist, function(blob) { %>
+	      <div class="p-2">
+		<a href="show-node.php?node=<%= blob.node_id %>"
+		   target="_blank"><%- blob.node_id %></a>
+	      </div>
+	    <% }); %>
+	  </div>
+	<% } else { %>
+	  <table class="tablesorter" id="nodelist">
+	    <thead>
+	      <tr>
+		<th>Node</th>
+		<th>Pid</th>
+		<th>Eid</th>
+		<th>User</th>
+		<th class="sorter-sugar" data-filter="false">Expires</th>
+	      </tr>
+	    </thead>
+	    <tbody>
+	      <% _.each(nodelist, function(blob) { %>
+		<tr>
+		  <td>
+		    <a href="show-node.php?node=<%- blob.node_id %>"
+		       target="_blank"><%- blob.node_id %></a>
+		  </td>
+		  <td>
+		    <a href="show-project.php?pid=<%- blob.pid %>"
+		       target="_blank"><%- blob.pid %></a>
+		  </td>
+		  <td>
+		    <a href="../showexp.php3?pid=<%- blob.pid %>&eid=<%- blob.eid %>"
+		       target="_blank"><%- blob.eid %></a>
+		  </td>
+		  <td>
+		    <a href="user-dashboard.php?user=<%- blob.uid %>"
+		       target="_blank"><%- blob.uid %></a>
+		  </td>
+		  <td class="format-date"><%- blob.expires %></td>
+		</tr>
+	      <% }); %>
+	    </tbody>
+	  </table>
+	<% } %>
+      </div>
+    </div>
+  </div>
+<% } %>
 <div id='waitwait_div'></div>
 <div id='oops_div'></div>
 <!-- Confirm Delete -->
@@ -415,21 +473,19 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
         <center>
 	  <h4>Are you sure you want to delete this type?</h4>
 	</center>
 	<center style="margin-top: 15px;">
-          <button class='btn btn-default btn-sm'
-		  data-dismiss='modal'
-                  type='button'>Cancel
-	  </button>
-          <button class='btn btn-danger btn-sm'
+          <button class='btn btn-danger btn-sm confirm-button'
 		  id='confirm-type-delete'
-		  style='margin-left: 10px;'
-		  type='button' name='delete'>Confirm
-	  </button>
+		  type='button' name='delete'>Confirm</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+                  type='button'>Cancel </button>
 	</center>
       </div>
     </div>
@@ -440,21 +496,19 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'>`</button>
         <center>
 	  <h4>Please confirm this change</h4>
 	</center>
 	<center style="margin-top: 15px;">
-          <button class='btn btn-default btn-sm'
-		  data-dismiss='modal'
-                  type='button'>Cancel
-	  </button>
-          <button class='btn btn-danger btn-sm'
+          <button class='btn btn-danger btn-sm confirm-button'
 		  id='confirm-change'
-		  style='margin-left: 10px;'
-		  type='button'>Confirm
-	  </button>
+		  type='button'>Confirm</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+                  type='button'>Cancel</button>
 	</center>
       </div>
     </div>
@@ -464,8 +518,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<p>
 	  A note about features and attributes; in general, sizes (like
 	  disk and memory) are reported in megabytes (MB) and speed is

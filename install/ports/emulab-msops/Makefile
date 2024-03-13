@@ -44,6 +44,7 @@ RUN_DEPENDS+=	\
 	iperf3:${PORTSDIR}/benchmarks/iperf3 \
 	nano:${PORTSDIR}/editors/nano \
 	nmap:${PORTSDIR}/security/nmap \
+	rcs:${PORTSDIR}/devel/rcs \
 	screen:${PORTSDIR}/sysutils/screen \
 	smartctl:${PORTSDIR}/sysutils/smartmontools
 

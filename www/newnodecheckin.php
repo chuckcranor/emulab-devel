@@ -75,7 +75,7 @@ foreach ($_GET as $key => $value) {
 		continue;
 	    }
 	} else if ($vartype == "driver") {
-	    if (preg_match("/^([a-z][a-z_]+)$/i",$value,$matches)) {
+	    if (preg_match("/^([a-z][a-z0-9_]+)$/i",$value,$matches)) {
 		$interfaces[$ifacenum]["type"] = $matches[1];
 	    } else {
 		echo "Bad interface type ". CleanString($value). ", ignored!";

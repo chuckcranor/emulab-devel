@@ -32,7 +32,10 @@ $(function ()
 	    event.preventDefault();
 	    Accept();
 	});
-	sup.ShowModal("#mustaccept-modal");
+	// Bootstrap 5 sillyness.
+	setTimeout(function f() {
+	    sup.ShowModal("#mustaccept-modal");	    
+	}, 100);	
     }
 
     function Accept()

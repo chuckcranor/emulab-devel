@@ -1,9 +1,9 @@
 <div>
-  <div class="panel panel-default">
-    <div class="panel-heading text-center">
+  <div class="panel card panel-default">
+    <div class="panel-heading card-header text-center">
       POWDER Over-The-Air (OTA) Use Agreement
     </div>
-    <div class="panel-body">
+    <div class="panel-body card-body">
       <p>
 	As the leader of the <strong id="powder-project"></strong>
 	project on POWDER, you are responsible
@@ -67,7 +67,7 @@
 	    I agree to the above terms and conditions
 	  </label>
 	</div>	
-        <button class='btn btn-primary btn-sm' disabled
+        <button class='btn btn-success btn-sm' disabled
 		id="ota-submit"
                 type='submit' name='submit'>Submit</button>
       </center>
@@ -85,11 +85,14 @@
 	    submittal. Thanks!
 	  </p>
 	  <div style="margin-top: 10px;">
-            <button class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' aria-hidden='true'>Dimiss</button>
+            <button class='btn btn-default btn-sm' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>Dimiss</button>
 	  </div>
 	</center>
       </div>
     </div>
   </div>
 </div>
+<div id='waitwait-div'></div>
+<div id='oops-div'></div>
