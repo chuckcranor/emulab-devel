@@ -3123,11 +3123,23 @@ sub DoMaxDuration()
 		    $forecasts->{$urn}->{'forecast'} =
 			$pforecasts->{$pidgid};
 		}
+		else {
+		    # The group did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn}->{'forecast'} =
+			$pinfo->{$urn}->{'forecast'};
+		}
 	    }
 	    else {
 		if (exists($pforecasts->{lc($pid)})) {
 		    $forecasts->{$urn}->{'forecast'} =
 			$pforecasts->{lc($pid)};
+		}
+		else {
+		    # The project did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn}->{'forecast'} =
+			$pinfo->{$urn}->{'forecast'};
 		}
 	    }
 	}
@@ -3400,11 +3412,23 @@ sub DoMaxExtension()
 		    $forecasts->{$urn}->{'forecast'} =
 			$pforecasts->{$pidgid};
 		}
+		else {
+		    # The group did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn}->{'forecast'} =
+			$pinfo->{$urn}->{'forecast'};
+		}
 	    }
 	    else {
 		if (exists($pforecasts->{lc($pid)})) {
 		    $forecasts->{$urn}->{'forecast'} =
 			$pforecasts->{lc($pid)};
+		}
+		else {
+		    # The project did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn}->{'forecast'} =
+			$pinfo->{$urn}->{'forecast'};
 		}
 	    }
 	}
@@ -4439,10 +4463,22 @@ sub FindFirstFit($$$$$$$)
 		if (exists($pforecasts->{$pidgid})) {
 		    $forecasts->{$urn} = $pforecasts->{$pidgid};
 		}
+		else {
+		    # The group did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn}->{'forecast'} =
+			$pinfo->{$urn}->{'forecast'};
+		}
 	    }
 	    else {
 		if (exists($pforecasts->{lc($pid)})) {
 		    $forecasts->{$urn} = $pforecasts->{lc($pid)};
+		}
+		else {
+		    # The project did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn}->{'forecast'} =
+			$pinfo->{$urn}->{'forecast'};
 		}
 	    }
 	}
