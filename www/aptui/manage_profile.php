@@ -153,10 +153,10 @@ function SPITFORM($formfields, $errors)
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
-    echo htmlentities(json_encode($formfields)) . "\n";
+    echo htmlentities(json_encode($formfields), ENT_COMPAT) . "\n";
     echo "</script>\n";
     echo "<script type='text/plain' id='error-json'>\n";
-    echo htmlentities(json_encode($errors));
+    echo htmlentities(json_encode($errors), ENT_COMPAT);
     echo "</script>\n";
 
     # Needed for genilib-editor
@@ -170,7 +170,7 @@ function SPITFORM($formfields, $errors)
         $plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";
-    echo htmlentities(json_encode($plist));
+    echo htmlentities(json_encode($plist), ENT_COMPAT);
     echo "</script>\n";
 
     if ($viewing) {
