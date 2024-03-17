@@ -28,6 +28,7 @@
 
 #include <utility>
 #include "fstring.h"
+#include <random>
 
 #include <boost/graph/adjacency_list.hpp>
 
@@ -120,5 +121,8 @@ template <class T> struct hashptr {
 
 // For use in functions that want to return a score/violations pair
 typedef pair<double,int> score_and_violations;
+
+// For use with shuffle()
+static mt19937 rand_mt;
 
 #endif

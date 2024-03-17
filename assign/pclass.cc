@@ -241,7 +241,7 @@ int generate_pclasses(tb_pgraph &pg, bool pclass_for_each_pnode,
   }
 
   if (randomize_order) {
-      random_shuffle(pvertexes.begin(), pvertexes.end());
+      shuffle(pvertexes.begin(), pvertexes.end(),rand_mt);
   }
 
   pvertex_vector::iterator pvit;
