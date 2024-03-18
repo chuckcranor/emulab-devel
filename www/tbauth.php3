@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1518,7 +1518,7 @@ function BumpLogoutTime()
         if (isset($_SERVER['REMOTE_ADDR'])) {
             $IP = $_SERVER['REMOTE_ADDR'];
         }
-	DBQueryFatal("UPDATE login set timeout='$timeout' ".
+	DBQueryFatal("UPDATE login set last_access=now(),timeout='$timeout' ".
                      (isset($IP) ? ", IP='$IP' " : "") .
 		     "where uid_idx='$CHECKLOGIN_IDX' and ".
 		     "      hashkey='$CHECKLOGIN_HASHKEY'");

@@ -618,7 +618,7 @@ $(function ()
 		$('#admin_content .format-date').each(function() {
 		    var date = $.trim($(this).html());
 		    if (date != "") {
-			$(this).html(moment($(this).html()).format("ll"));
+			$(this).html(moment($(this).html()).format("lll"));
 		    }
 		});
 		$('#admin_content .toggle').click(function() {
