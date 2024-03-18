@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -4800,7 +4800,7 @@ sub ImageInfo($)
     if ($image->hash()) {
 	$blob->{"hash"} = $image->hash();
     }
-    print STDERR Dumper($blob);
+    #print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 

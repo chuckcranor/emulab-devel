@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -797,7 +797,7 @@ sub GetImageInfo($)
 				    "Insufficient permission to getimageinfo");
 
     my $blob = GetImageBlob($urn, $url);
-    print STDERR Dumper($blob);
+    #print STDERR Dumper($blob);
     
     return $blob
 	if (GeniResponse::IsResponse($blob));

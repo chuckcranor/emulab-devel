@@ -3928,6 +3928,7 @@ CREATE TABLE `login` (
   `opskey` varchar(64) NOT NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') NOT NULL default 'emulab',
   `IP` varchar(16) default NULL,
+  `last_access` datetime NOT NULL default '0000-00-00 00:00:00',
   PRIMARY KEY  (`uid_idx`,`hashkey`),
   UNIQUE KEY `hashhash` (`uid_idx`,`hashhash`),
   UNIQUE KEY `uidkey` (`uid`,`hashkey`)
