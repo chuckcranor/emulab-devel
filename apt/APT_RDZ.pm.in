@@ -67,7 +67,7 @@ sub RequestSpectrum($$)
     }
     if (!defined($ZMC)) {
 	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
-	if (defined($ZMC)) {
+	if (!defined($ZMC)) {
 	    $$perrmsg = "Cannot open the ZMC rest interface";
 	    print "RequestSpectrum: $$perrmsg\n";
 	    return -1;
