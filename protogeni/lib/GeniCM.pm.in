@@ -3034,6 +3034,25 @@ sub GetTicketAuxAux($)
 					  "capkey"      => "jumboframes",
 					  "capval"      => 1});
 	}
+	if (GeniXML::HasDualModeSetting($linkref)) {
+	    my $native_vlan = GeniXML::GetDualModeNativeVlan($linkref);
+	    $virtexperiment->NewTableRow("virt_lan_settings",
+					 {"vname"       => $lanname,
+					  "capkey"      => "trunk_mode",
+					  "capval"      => "dual"});
+	    if ($native_vlan) {
+		$virtexperiment->NewTableRow("virt_lan_settings",
+					     {"vname"       => $lanname,
+					      "capkey"      => "native_vlan",
+					      "capval"      => $native_vlan});
+	    }
+	    else {
+		# The native vlan is untagged but needs emulated so the
+		# mapper will allow multiple links on the same interface.
+		$encap    = "none";
+		$emulated = 1;
+	    }
+	}
 	
 	# Ditto for new direct link option.
 	my $nointerswitch = GeniXML::NoInterSwitch($linkref);
@@ -3348,6 +3367,26 @@ sub GetTicketAuxAux($)
 
 		$ip = GeniXML::GetIp($ref, $nodemap{$node_nickname}->{'rspec'});
 		$mask = GeniXML::GetMask($ref, $nodemap{$node_nickname}->{'rspec'});
+
+		# Synchronization
+		if (GeniXML::HasPTPSetting($iface_ref)) {
+		    my $member = "$node_nickname:$iface_vport";
+		    
+		    $virtexperiment->NewTableRow("virt_lan_member_settings",
+						 {"vname"       => $lanname,
+						  "member"      => $member,
+						  "capkey"      => "ptpenable",
+						  "capval"      => "1"});
+		}
+		if (GeniXML::HasSyncESetting($iface_ref)) {
+		    my $member = "$node_nickname:$iface_vport";
+		    
+		    $virtexperiment->NewTableRow("virt_lan_member_settings",
+						 {"vname"       => $lanname,
+						  "member"      => $member,
+						  "capkey"      => "synceenable",
+						  "capval"      => "1"});
+		}
 	    }
 
 	    # XXX
