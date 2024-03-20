@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -794,6 +794,52 @@ sub IsPortTagged($) {
     my $query_result =
 	DBQueryFatal("select tagged from interface_state ".
 		     "where node_id='$node' and iface='$iface' and tagged!=0");
+    
+    return $query_result->numrows();
+}
+
+sub setPortPTP($$) { 
+    my ($port, $onoff) = @_;
+
+    my ($node, $iface) = ($port->node_id(), $port->iface());
+    $onoff = ($onoff ? 1 : 0);
+
+    DBQueryFatal("update interface_state set ptp=$onoff ".
+		 "where node_id='$node' and iface='$iface'");
+}
+
+# Ditto for trunked.
+sub IsPortPTPEnabled($) { 
+    my ($port) = @_;
+
+    my ($node, $iface) = ($port->node_id(), $port->iface());
+
+    my $query_result =
+	DBQueryFatal("select ptp from interface_state ".
+		     "where node_id='$node' and iface='$iface' and ptp!=0");
+    
+    return $query_result->numrows();
+}
+
+sub setPortSyncE($$) { 
+    my ($port, $onoff) = @_;
+
+    my ($node, $iface) = ($port->node_id(), $port->iface());
+    $onoff = ($onoff ? 1 : 0);
+
+    DBQueryFatal("update interface_state set synce=$onoff ".
+		 "where node_id='$node' and iface='$iface'");
+}
+
+# Ditto for trunked.
+sub IsPortSyncEEnabled($) { 
+    my ($port) = @_;
+
+    my ($node, $iface) = ($port->node_id(), $port->iface());
+
+    my $query_result =
+	DBQueryFatal("select synce from interface_state ".
+		     "where node_id='$node' and iface='$iface' and sync!=0");
     
     return $query_result->numrows();
 }
