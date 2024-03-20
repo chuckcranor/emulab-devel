@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2023 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2112,7 +2112,9 @@ sub LoadVirtLans($)
 	    $virtlan->_ofenabled(1);
 	    $virtlan->_ofcontroller($vlanmember->ofcontroller());
 	}
-	
+	$virtlan->_trunk_mode(undef);
+	$virtlan->_native_vlan(undef);
+
 	if (defined($encap) &&
 	    ($encap eq "vtun" || $encap eq "gre" || $encap eq "egre")) {
 	    $virtlan->_tunnel(1);
@@ -2187,6 +2189,31 @@ sub LoadVirtLans($)
 	    if ($capkey eq "sharedvlan" || $capkey eq "portvlan") {
 		$virtlan->_portvlan($capval);
 		last;
+	    }
+	    elsif ($capkey eq "trunk_mode") {
+		$virtlan->_trunk_mode($capval);
+	    }
+	    elsif ($capkey eq "native_vlan") {
+		$virtlan->_native_vlan($capval);
+	    }
+	}
+
+	# Misc member settings
+	$vlanmember->_ptp(0);
+	$vlanmember->_synce(0);
+	
+	foreach my $setting ($self->virt_lan_member_settings()->Rows()) {
+	    next
+		if ($vlanmember->member() ne $setting->member());
+
+	    my $capkey = $setting->capkey();
+	    my $capval = $setting->capval();
+
+	    if ($capkey eq "ptpenable") {
+		$vlanmember->_ptp($capval);
+	    }
+	    elsif ($capkey eq "synceenable") {
+		$vlanmember->_synce($capval);
 	    }
 	}
 	
@@ -3273,7 +3300,7 @@ sub GenVirtLans($)
 	    $errors++;
 	    next;
 	}
-	if (! ($linkencap =~ /^(default|veth-ne|vlan)$/)) {
+	if (! ($linkencap =~ /^(default|veth-ne|vlan|none)$/)) {
 	    tberror("$vname: unknown link encapsulation style '$linkencap'\n");
 	    $errors++;
 	    next;
@@ -8250,6 +8277,10 @@ sub NewVirtIface($$$$;$)
 	    $isvdev = 1;
 	}
     }
+    if ($type eq "none") {
+	print STDERR "NewVirtIface: Bad encapsulation for $virtlan\n";
+	return undef;
+    }
 
     #
     # Create new virtiface in the DB.
@@ -9283,16 +9314,18 @@ sub UploadVlans($)
 	# into lan instantiation.
 	#
 	foreach my $lan (@lans) {
-	    # Only care about encapsulated links.
-	    next
-		if (! ($lan->type() eq "emulated" ||
-		       $lan->GetRole() eq "emulated"));
-
 	    my $virtlan     = $self->vlans()->{$lan->vname()};
 	    if (!defined($virtlan)) {
 		tberror("Could not find lan $lan in local lan list!\n");
 		return -1;
 	    }
+	    $virtlan->_reallan($lan);
+	    
+	    # Only care about encapsulated links.
+	    next
+		if (! ($lan->type() eq "emulated" ||
+		       $lan->GetRole() eq "emulated"));
+
 	    my $virtlanidx  = $virtlan->idx();
 	    my $linkedlanid = $lan->lanid();
 
@@ -9423,6 +9456,31 @@ sub UploadVlans($)
     #
     foreach my $virtlan (values(%{ $self->vlans() })) {
 	my $vlanname = $virtlan->vname();
+	my $lan_trunk_mode;
+	my $lan_trunk_virtlan;
+	my $lan_trunk_vlan;
+
+	#
+	# User specific dual mode trunk request. 
+	#
+	if ($virtlan->_trunk_mode()) {
+	    if (! ($self->impotent() || $self->alloconly())) {
+		my $vlan = $virtlan->_reallan();
+		$vlan->SetAttribute("trunk_mode", $virtlan->_trunk_mode())
+	    }
+	    # Member setting for below.
+	    $lan_trunk_mode = $virtlan->_trunk_mode();
+	    
+	    if ($virtlan->_native_vlan()) {
+		$lan_trunk_virtlan = $self->vlans()->{$virtlan->_native_vlan()};
+		
+		if (! ($self->impotent() || $self->alloconly())) {
+		    my $vlan = $virtlan->_reallan();
+		    $lan_trunk_vlan = $lan_trunk_virtlan->_reallan();
+		    $vlan->SetAttribute("trunk_vlan", $lan_trunk_vlan->lanid());
+		}
+	    }
+	}	    
 
 	foreach my $member ($virtlan->memberlist()) {
 	    # Will this happen?
@@ -9438,8 +9496,9 @@ sub UploadVlans($)
 	    my $pnodename;
 	    my $interface;
 	    my $speed;
-	    my $trunk;
 	    my $trunk_vlan;
+	    my $trunk_mode;
+	    my $trunk;
 	    my $args = {};
 
 	    if (exists($self->solution_vifacemap()->{$member})) {
@@ -9471,6 +9530,7 @@ sub UploadVlans($)
 		# do.
 		#
 		if ($trunk && $interface->role() eq TBDB_IFACEROLE_CONTROL()) {
+		    $trunk_mode = "dual";
 		    $trunk_vlan = VLan->LookupInternal("Control");
 		    if (!defined($trunk_vlan)) {
 			tberror("Could not lookup control vlan\n");
@@ -9483,10 +9543,14 @@ sub UploadVlans($)
 			    tberror("Could not lookup vlan for $virtiface\n");
 			    return -1;
 			}
-			$vlan->SetAttribute("trunk_mode", "dual");
+			$vlan->SetAttribute("trunk_mode", $trunk_mode);
 			$vlan->SetAttribute("trunk_vlan", $trunk_vlan->lanid());
 		    }
 		}
+		elsif ($trunk && $lan_trunk_mode) {
+		    $trunk_mode = $lan_trunk_mode;
+		}
+		
 		#
 		# Do not mess with control interface speeds. 
 		#
@@ -9499,6 +9563,11 @@ sub UploadVlans($)
 		$pnodename = $self->solution_v2p()->{$member->vnode()};
 		$speed     = $self->portbw()->{$member};
 		$trunk     = 0;
+
+		if ($lan_trunk_mode) {
+		    $trunk      = 1;
+		    $trunk_mode = $lan_trunk_mode;
+		}
 
 		$interface = Interface->LookupByIface($pnodename, $iface);
 		if (!defined($interface)) {
@@ -9548,12 +9617,34 @@ sub UploadVlans($)
 		$dbgline .= " speed:$speed";
 		$args->{'current_speed'} = $speed;
 	    }
+	    if ($member->_ptp()) {
+		$dbgline .= " ptp:1";
+		#$args->{'ptp'} = 1;
+	    }
+	    if ($member->_synce()) {
+		$dbgline .= " synce:1";
+		#$args->{'synce'} = 1;
+	    }
+
 	    if ($trunk) {
-		$dbgline .= " trunk:$trunk";
+		$dbgline .= " trunk:1";
 		$args->{'trunk'} = 1;
-		if (defined($trunk_vlan)) {
-		    $args->{'trunk_mode'} = "dual";
-		    $dbgline .= ":dual(" . $trunk_vlan->lanid() . ")";
+
+		if (defined($trunk_vlan) || defined($lan_trunk_virtlan)) {
+		    $args->{'trunk_mode'} = $trunk_mode;
+
+		    # Messy debugging.
+		    my $token;
+		    if (defined($trunk_vlan)) {
+			$token = $trunk_vlan->lanid();
+		    }
+		    elsif (defined($lan_trunk_vlan)) {
+			$token = $lan_trunk_vlan->lanid();
+		    }
+		    else {
+			$token = $lan_trunk_virtlan->vname();
+		    }
+		    $dbgline .= ":${trunk_mode}($token)";
 		}
 	    }
 	    $dbgline .= "\n";

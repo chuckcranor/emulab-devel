@@ -2009,6 +2009,12 @@ sub doVlansFromTables($$@) {
     # not a general solution to this, but I have not found a solution I am
     # really happy with. 
     #
+    # New addition, going to do this in two passes, to support a single
+    # experiment defining a dual mode vlan (both the native and trunked
+    # vlans on the ports). So in the first loop look for dual with no
+    # native_vlan (trunk_vlanid) set; create these first. Note that
+    # trunk_vlanid is an internal setting, see libvtop.
+    #
     foreach my $ref (values(%vlans)) {
 	my $vlan   = $ref->{'vlan'};
 	my $stack  = $ref->{'stack'};
@@ -2020,67 +2026,86 @@ sub doVlansFromTables($$@) {
 	my $trunk_vlanid;
 	$vlan->GetAttribute("trunk_vlan", \$trunk_vlanid);
 
-	# This is set in libvtop.
-	if (defined($trunk_mode) && $trunk_mode eq "dual") {
-	    my @ports = getVlanPorts($vlanid);
+	next
+	    if (! (defined($trunk_mode) && $trunk_mode eq "dual"));
 
-	    #
-	    # If a specific vlan listed, it must already exist.
-	    #
-	    if (defined($trunk_vlanid)) {
-		my $trunk_vlan = VLan->Lookup($trunk_vlanid);
-		if (!defined($trunk_vlan)) {
-		    die("Trunk vlanid $trunk_vlanid does not exist\n");
-		}
-		if (!$trunk_vlan->CreatedOnSwitches()) {
-		    die("Trunk vlanid $trunk_vlan is not instantiated\n");
-		}
-		#
-		# To maintain backwards compatibility with how snmpit used
-		# to operate, "internal" vlans are sometimes named on the switch
-		# by the symbolic name instead of the lanid.
-		#
-		if ($trunk_vlan->IsInternal() &&
-		    !$stack->vlanExists($trunk_vlanid)) {
-		    $trunk_vlanid = $trunk_vlan->vname();
-		}
-		    
-		#
-		# For each port that has not yet been put into trunk
-		# mode, do that using the trunk_vlanid as the native.
-		#
-		foreach my $port (@ports) {
-		    if (!IsPortTagged($port) &&
-			doTrunkEnable([$stack],$port,0,$trunk_vlanid)) {
-			die("Could not put $port ($trunk_vlan) into ".
-			    "dual trunk mode\n");
-		    }
-		    delete($tports->{$port->toString()});
-		}
-		# Now we can create the actual vlan.
-		if (CreateOneVlan($experiment,$stack, $vlanid, @ports))  {
-		    die("Could not create dual trunked $vlan\n");
-		}
-	    }
-	    else {
-		# Create this vlan now.
-		if (CreateOneVlan($experiment,$stack, $vlanid, @ports))  {
-		    die("Could not create dual trunked $vlan\n");
-		}
-		# Trunk these ports, removing from list.
-		foreach my $port (@ports) {
-		    if (doTrunkEnable([$stack],$port,0,$vlanid)) {
-			die("Could not port $port ($vlan) into ".
-			    "dual trunk mode\n");
-		    }
-		    delete($tports->{$port->toString()});
-		}
-	    }
+	next
+	    if (defined($trunk_vlanid));
 
-	    # Delete this vlan from the list that will be created below.
-	    delete($vlans{"$vlanid"});
+	my @ports = getVlanPorts($vlanid);
+	# Create this vlan now.
+	if (CreateOneVlan($experiment,$stack, $vlanid, @ports))  {
+	    die("Could not create dual trunked $vlan\n");
 	}
+	# Trunk these ports, removing from list.
+	foreach my $port (@ports) {
+	    if (doTrunkEnable([$stack],$port,0,$vlanid)) {
+		die("Could not port $port ($vlan) into dual trunk mode\n");
+	    }
+	    delete($tports->{$port->toString()});
+	}
+	# Delete this vlan from the list that will be created below.
+	delete($vlans{"$vlanid"});
     }
+    # Second pass
+    foreach my $ref (values(%vlans)) {
+	my $vlan   = $ref->{'vlan'};
+	my $stack  = $ref->{'stack'};
+	my $tports = $ref->{'trunkports'};
+	my $vlanid = $vlan->id();
+	
+	my $trunk_mode;
+	$vlan->GetAttribute("trunk_mode", \$trunk_mode);
+	my $trunk_vlanid;
+	$vlan->GetAttribute("trunk_vlan", \$trunk_vlanid);
+
+	next
+	    if (! (defined($trunk_mode) && $trunk_mode eq "dual"));
+
+	next
+	    if (!defined($trunk_vlanid));
+
+	my @ports = getVlanPorts($vlanid);
+
+	#
+	# Must already exist, in most cases created above
+	#
+	my $trunk_vlan = VLan->Lookup($trunk_vlanid);
+	if (!defined($trunk_vlan)) {
+	    die("Trunk vlanid $trunk_vlanid does not exist\n");
+	}
+	if (!$trunk_vlan->CreatedOnSwitches()) {
+	    die("Trunk vlanid $trunk_vlan is not instantiated\n");
+	}
+	#
+	# To maintain backwards compatibility with how snmpit used
+	# to operate, "internal" vlans are sometimes named on the switch
+	# by the symbolic name instead of the lanid.
+	#
+	if ($trunk_vlan->IsInternal() &&
+	    !$stack->vlanExists($trunk_vlanid)) {
+	    $trunk_vlanid = $trunk_vlan->vname();
+	}
+	#
+	# For each port that has not yet been put into trunk
+	# mode, do that using the trunk_vlanid as the native.
+	#
+	foreach my $port (@ports) {
+	    if (!IsPortTagged($port) &&
+		doTrunkEnable([$stack],$port,0,$trunk_vlanid)) {
+		die("Could not put $port ($trunk_vlan) into ".
+		    "dual trunk mode\n");
+	    }
+	    delete($tports->{$port->toString()});
+	}
+	# Now we can create the actual vlan.
+	if (CreateOneVlan($experiment,$stack, $vlanid, @ports))  {
+	    die("Could not create dual trunked $vlan\n");
+	}
+	# Delete this vlan from the list that will be created below.
+	delete($vlans{"$vlanid"});
+    }
+
     #
     # Do the rest of the trunked ports in equalmode.
     #
