@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2002 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2002, 2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -83,6 +83,8 @@ void routing_calc();
 int  routing_lookup( int sid, int did, void ** etcReturn = NULL );
 
 // bet ya didnt know that 0x3fff == infinity...
+// math.h sure does not!
+#undef INFINITY
 #define INFINITY	0x3fff
 
 // for some bizarre reason, cost is a double, though it gets added to ints..
@@ -96,12 +98,12 @@ struct route_entry {
   void * etc;
 };
 
-static int size;
+static int gsize;
 static adj_entry * adj;
 static route_entry * route;
 
-static inline adj_entry   & ADJ_REF( int s, int d ) { return adj[ s * size + d ]; }
-static inline route_entry & ROUTE_REF( int s, int d ) { return route[ s * size + d ]; }
+static inline adj_entry   & ADJ_REF( int s, int d ) { return adj[ s * gsize + d ]; }
+static inline route_entry & ROUTE_REF( int s, int d ) { return route[ s * gsize + d ]; }
 
 #define ADJ(i, j) ADJ_REF( i, j ).cost
 #define ADJ_ENTRY(i, j) ADJ_REF( i, j ).etc
@@ -117,7 +119,7 @@ static list< queued_adj_entry > * queued_adj_entries;
 
 void routing_init()
 {
-  size  = 0;
+  gsize  = 0;
   adj   = NULL;
   route = NULL;
   queued_adj_entries = new list< queued_adj_entry >();
@@ -138,8 +140,8 @@ void routing_insert( int sid, int tid, double cost, void * etc )
   e.adj.cost = cost;
   e.adj.etc  = etc;
   queued_adj_entries->push_back( e );
-  if ((sid + 1) > size) { size = sid + 1; }
-  if ((tid + 1) > size) { size = tid + 1; }
+  if ((sid + 1) > gsize) { gsize = sid + 1; }
+  if ((tid + 1) > gsize) { gsize = tid + 1; }
 }
 
 static inline void add_to_adj( queued_adj_entry & qe )
@@ -153,8 +155,8 @@ static void compute_routes();
 void routing_calc()
 {
   if (adj) { delete[] adj; }
-  adj = new adj_entry[ size * size ];
-  for (int i = 0; i < (size * size); i++) {
+  adj = new adj_entry[ gsize * gsize ];
+  for (int i = 0; i < (gsize * gsize); i++) {
     adj[i].cost = INFINITY;
     adj[i].etc  = NULL;
   }
@@ -164,15 +166,15 @@ void routing_calc()
   queued_adj_entries = new list< queued_adj_entry >();
 
   if (route) { delete[] route; }
-  route = new route_entry[size * size];
-  memset((char *)route, 0, size * size * sizeof(route_entry));
+  route = new route_entry[gsize * gsize];
+  memset((char *)route, 0, gsize * gsize * sizeof(route_entry));
   compute_routes();
 }
 
 // The actual algorithm. Joy.
 static void compute_routes()
 {
-  int n = size;
+  int n = gsize;
   int* parent = new int[n];
   double* hopcnt = new double[n];
   
@@ -242,7 +244,7 @@ int routing_lookup(int sid, int did, void ** etcReturn) {
     printf("routes not yet computed\n");
     return (-1);
   }
-  if (src >= size || dst >= size) {
+  if (src >= gsize || dst >= gsize) {
     printf("node out of range\n");
     return (-2);
   }
@@ -259,9 +261,9 @@ void routing_printall()
     printf("routes not yet computed\n");
     return;
   }
-  for (s = 1; s < size; s++) {
+  for (s = 1; s < gsize; s++) {
     int d;
-    for (d = 1; d < size; d++) {
+    for (d = 1; d < gsize; d++) {
       // Do not print routes for adj or self.
       if ( s != d && 
 	   ROUTE( s, d ) > 0 ) {
