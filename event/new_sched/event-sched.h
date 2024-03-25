@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2011 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -29,8 +29,8 @@
  *
  */
 
-#ifndef __SCHED_H__
-#define __SCHED_H__
+#ifndef __EVENT_SCHED_H__
+#define __EVENT_SCHED_H__
 
 #include <stdio.h>
 #include <sys/time.h>
@@ -123,4 +123,4 @@ extern char build_info[];
 }
 #endif
 
-#endif /* __SCHED_H__ */
+#endif /* __EVENT_SCHED_H__ */
