@@ -1,0 +1,44 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    DBQueryFatal("ALTER TABLE virt_lans change encap_style ".
+		 " encap_style enum('alias','veth','veth-ne','vlan','vtun', ".
+		 "                  'egre','gre','default','none') ".
+		 "   NOT NULL default 'default'");
+
+    DBQueryFatal("REPLACE INTO table_regex VALUES ".
+		 " ('experiments','encap_style','text','regex', ".
+		 "  '^(alias|veth|veth-ne|vlan|vtun|egre|gre|default|none)\$',".
+		 "   0,0,NULL)");
+
+    if (!DBSlotExists("interfaces", "ptp")) {
+	DBQueryFatal("ALTER TABLE interfaces ADD ".
+		     " `ptp` tinyint(1) NOT NULL default '0'");
+    }
+    if (!DBSlotExists("interfaces", "synce")) {
+	DBQueryFatal("ALTER TABLE interfaces ADD ".
+		     " `synce` tinyint(1) NOT NULL default '0'");
+    }
+    if (!DBSlotExists("interface_state", "ptp")) {
+	DBQueryFatal("ALTER TABLE interface_state ADD ".
+		     " `ptp` tinyint(1) NOT NULL default '0' after tagged");
+    }
+    if (!DBSlotExists("interface_state", "synce")) {
+	DBQueryFatal("ALTER TABLE interface_state ADD ".
+		     " `synce` tinyint(1) NOT NULL default '0' after ptp");
+    }
+    
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
