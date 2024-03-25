@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1533,12 +1533,12 @@ class User
         $result = array();
 
         $query_result = 
-            DBQueryFatal("select distinct IP from login where uid_idx='$idx'");
+            DBQueryFatal("select IP,last_access from login where uid_idx='$idx'");
 
         while ($row = mysql_fetch_array($query_result)) {
             $ip = $row['IP'];
             if ($ip) {
-                $result[] = $ip;
+                $result[$ip] = DateStringGMT($row["last_access"]);
             }
         }
         return $result;

@@ -50,6 +50,7 @@ $(function ()
     var prestageTemplate  = _.template(templates['prestage-table']);
     var instanceStatus    = "";
     var lastStatus        = "";
+    var lastStatusStamp   = null;
     var lastStatusBlob    = null;
     var lockdown_code     = "";
     var consolenodes      = {};
@@ -468,19 +469,22 @@ $(function ()
     function StartStatusWatch()
     {
 	GetStatus();
-	statusID = setInterval(GetStatus, (window.APT_OPTIONS.slowdown ? 30000 : 5000));
+	statusID = setInterval(GetStatus,
+                               (window.APT_OPTIONS.slowdown ? 30000 : 5000));
     }
     
     function GetStatus()
     {
-	//console.info("GetStatus", statusBusy, statusHold);
+	console.info("GetStatus", statusBusy, statusHold,
+                     new Date().getTime() / 1000);
 	
 	// Clearly not thread safe, but its okay.
 	if (statusBusy || statusHold)
 	    return;
-	statusBusy = 1;
 	
 	var callback = function(json) {
+            lastStatusStamp = new Date();
+            
 	    // Watch for logged out, stop the loop. User will need to reload.
 	    if (json.code == 222) {
 		clearInterval(statusID);
@@ -499,6 +503,24 @@ $(function ()
 		});
 	    }
 	}
+        /*
+         * Watch for a buried tab/window. Slow down polling since it is hard
+         * on the server. But not completely, switch from every five seconds
+         * to every five minutes.
+         */
+        if (document.hidden !== undefined &&
+            document.hidden && lastStatusStamp) {
+            var diff = (new Date().getTime() - lastStatusStamp) / 1000;
+            if (0) {
+                console.info("we are hidden and have not updated status for " +
+                             diff + " seconds");
+            }
+            if (diff < 60) {
+                //console.info("Skipping this status call");
+                return;
+            }
+        }
+	statusBusy = 1;
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
 					    "GetInstanceStatus",

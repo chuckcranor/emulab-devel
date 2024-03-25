@@ -25,6 +25,7 @@
 #define __PCLASS_H
 
 #include<map>
+#include<algorithm>
 
 // Declared in assign.cc - indicated whether or not we should use pclasses
 extern bool use_pclasses;

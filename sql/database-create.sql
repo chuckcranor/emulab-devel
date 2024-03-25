@@ -3480,6 +3480,8 @@ CREATE TABLE `interface_state` (
   `iface` varchar(32) NOT NULL,
   `enabled` tinyint(1) default '1',
   `tagged` tinyint(1) default '0',
+  `ptp` tinyint(1) NOT NULL default '0',
+  `synce` tinyint(1) NOT NULL default '0',
   `remaining_bandwidth` int(11) NOT NULL default '0',
   PRIMARY KEY  (`node_id`,`iface`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -3529,6 +3531,8 @@ CREATE TABLE `interfaces` (
   `uuid` varchar(40) NOT NULL default '',
   `logical` tinyint(1) unsigned NOT NULL default '0',
   `autocreated` tinyint(1) unsigned NOT NULL default '0',
+  `ptp` tinyint(1) NOT NULL default '0',
+  `synce` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`node_id`,`iface`),
   KEY `mac` (`mac`),
   KEY `IP` (`IP`),
@@ -3928,6 +3932,7 @@ CREATE TABLE `login` (
   `opskey` varchar(64) NOT NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') NOT NULL default 'emulab',
   `IP` varchar(16) default NULL,
+  `last_access` datetime NOT NULL default '0000-00-00 00:00:00',
   PRIMARY KEY  (`uid_idx`,`hashkey`),
   UNIQUE KEY `hashhash` (`uid_idx`,`hashhash`),
   UNIQUE KEY `uidkey` (`uid`,`hashkey`)
@@ -6824,7 +6829,7 @@ CREATE TABLE `virt_lans` (
   `nointerswitch` tinyint(1) default '0',
   `mustdelay` tinyint(1) default '0',
   `usevethiface` tinyint(4) default '0',
-  `encap_style` enum('alias','veth','veth-ne','vlan','vtun','egre','gre','default') NOT NULL default 'default',
+  `encap_style` enum('alias','veth','veth-ne','vlan','vtun','egre','gre','default','none') NOT NULL default 'default',
   `trivial_ok` tinyint(4) default '1',
   `protocol` varchar(30) NOT NULL default 'ethernet',
   `is_accesspoint` tinyint(4) default '0',

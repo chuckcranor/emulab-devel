@@ -80,8 +80,14 @@
       <% if (_.size(fields.loggedinIPs)) { %>
 	<tr>
 	  <td>IP(s)</td>
-	  <td><% print(fields.loggedinIPs.join(", ")); %></td>
+	  <td><% print(_.keys(fields.loggedinIPs).join(", ")); %></td>
 	</tr>
+	<% _.each(fields.loggedinIPs, function (when, ip) { %>
+	  <tr>
+	    <td><%= ip %></td>
+	    <td class="format-date"><%= when %></td>
+	  </tr>
+	<% }) %>
       <% } %>
       <% if (fields.portal) { %>
 	<tr>
