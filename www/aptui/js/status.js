@@ -475,8 +475,7 @@ $(function ()
     
     function GetStatus()
     {
-	console.info("GetStatus", statusBusy, statusHold,
-                     new Date().getTime() / 1000);
+	//console.info("GetStatus", statusBusy, statusHold);
 	
 	// Clearly not thread safe, but its okay.
 	if (statusBusy || statusHold)
@@ -506,7 +505,7 @@ $(function ()
         /*
          * Watch for a buried tab/window. Slow down polling since it is hard
          * on the server. But not completely, switch from every five seconds
-         * to every five minutes.
+         * to every few minutes.
          */
         if (document.hidden !== undefined &&
             document.hidden && lastStatusStamp) {
@@ -515,7 +514,7 @@ $(function ()
                 console.info("we are hidden and have not updated status for " +
                              diff + " seconds");
             }
-            if (diff < 60) {
+            if (diff < 120) {
                 //console.info("Skipping this status call");
                 return;
             }
