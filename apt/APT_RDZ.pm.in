@@ -289,6 +289,12 @@ sub CheckRevocation($)
 
     print "CheckRevocation: $instance\n";
 
+    if (!defined($ZMC)) {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+	if (!defined($ZMC)) {
+	    return -1;
+	}
+    }
     my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
     if (!defined($rfranges) || !keys(%{$rfranges})) {
 	print "CheckRevocation: No rfranges for $instance\n";
@@ -329,6 +335,12 @@ sub DeleteGrants($)
 
     print "DeleteGrants: $instance\n";
 
+    if (!defined($ZMC)) {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+	if (!defined($ZMC)) {
+	    return -1;
+	}
+    }
     my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
     if (!defined($rfranges) || !keys(%{$rfranges})) {
 	print "DeleteGrants: No rfranges for $instance\n";
