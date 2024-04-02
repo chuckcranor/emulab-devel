@@ -5921,6 +5921,7 @@ $(function ()
 	    sup.CallServerMethod(null, "status", "ModifyExperiment", args,
 		 function(json) {
 		     console.info("ModifyExperiment", json);
+                     var currentStatus = lastStatus;
 		     statusHold = 0;
 		     GetStatus();
 		     
@@ -5936,10 +5937,20 @@ $(function ()
 		     $('#error_panel_text').text("");
 		     $('#error_panel').addClass("hidden");
 		     
-		     sup.HideWaitWait();
 		     // Set this for error display. 
 		     modifying = true;
 		     $('.ppwizard-cancel').trigger("click");
+
+                     var interval;
+                     function checkStatus() {
+                         console.info("checkStatus", currentStatus, lastStatus);
+                         if (currentStatus == lastStatus) {
+                             return;
+                         }
+                         clearInterval(interval);
+		         sup.HideWaitWait();
+                     }
+                     interval = setInterval(checkStatus, 2000);                     
 		 });
 	});
 

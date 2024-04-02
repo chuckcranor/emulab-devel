@@ -132,6 +132,7 @@ use lib "@prefix@/lib";
 use EmulabConstants;
 use emdb;
 use emutil;
+use libaudit;
 use libEmulab;
 use libtestbed;
 use User;
@@ -3743,6 +3744,7 @@ sub DoManifests()
     elsif (PushManifestInternal($instance->manifest())) {
 	print STDERR "Could not push manifests\n";
     }
+    $instance->ComputeNodeCounts();
     $slice->UnLock();
     exit(0);
   bad:
@@ -7937,7 +7939,8 @@ sub DoConnectSharedLan()
 #
 sub DoModify()
 {
-    my $logname;
+    my $logfile;
+    my $logfilename;
     my $errmsg;
     my $errcode;
     my $exitcode = -1;
@@ -8003,8 +8006,6 @@ sub DoModify()
     if (!defined($slice)) {
 	fatal("No slice for instance");
     }
-    print "$rspecstr\n";
-
     my $default_aggregate_urn = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
     my $needstitcher = 0;
     my @aggregate_urns;
@@ -8131,6 +8132,26 @@ sub DoModify()
 	goto bad;
     }
 
+    # Email record.
+    if (! $debug) {
+	$logfilename = TBMakeLogname("modify_instance");
+	my $opts = LIBAUDIT_LOGTBLOGS()|LIBAUDIT_LOGONLY()|LIBAUDIT_NODELETE();
+	AuditStart(0, $logfilename, $opts);
+	AddAuditInfo("cc", $project->LogsEmailAddress());
+	AddAuditInfo("brand", $project->Brand());
+
+	$logfile = Logfile->Create($group, $logfilename);
+	if (!defined($logfile)) {
+	    fatal("Could not create a new logfile from $logfilename");
+	}
+	$logfile->SetMetadata({"op" => "modify_instance"});
+	# For web spew.
+	$logfile->Open();
+	$instance->SetLogFile($logfile);
+	$logfile->SetMetadata({"uuid" => $instance->uuid()}, 0);
+    }
+    print "$rspecstr\n";
+
     #
     # First delete aggregates.
     #
@@ -8165,7 +8186,29 @@ sub DoModify()
     $instance->SetAggregateStatus("created");
 
     if ($docreate) {
-	system("$CREATESLIVERS -L " .
+	#
+	# Hand off to create slivers script, parent exits.
+	# We pass the lock along.
+	#
+	if (!$debug) {
+	    # Consume the webtask here instead of below.
+	    my $wt = $webtask;
+	    $webtask = undef;
+	    libaudit::AuditPrefork();
+	    my $child = fork();
+	    if ($child) {
+		$wt->Exited(0)
+		    if (defined($wt));
+		# Parent exits but avoid libaudit email.
+		AuditAbort();
+		# Sleep a few seconds to give the web interface time to react.
+		sleep(5);
+		exit(0);
+	    }
+	    # All of the logging magic happens in here.
+	    libaudit::AuditFork();
+	}
+	system("$CREATESLIVERS -L -f " .
 	       ($debug ? "-d " : "") .  $instance->uuid());
 	if ($?) {
 	    #
@@ -8189,10 +8232,13 @@ sub DoModify()
 	    }
 	    exit($code);
 	}
-	# Sleep a few seconds to give the web interface time to react.
-	sleep(5);
-	# We passed the lock to create_slivers.
-	exit(0);
+	if (!$debug) {
+	    # Need to do this before we close the log since it gets moved.
+	    AuditEnd(0);
+	    $logfile->Close();
+	    $logfile->Store();
+	    $logfile = undef;
+	}
     }
     else {
 	#

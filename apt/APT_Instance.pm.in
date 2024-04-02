@@ -4545,7 +4545,24 @@ sub BackupManifest($)
 		"where uuid='$uuid' and aggregate_urn='$urn'") or
 	return -1;
 
+    $self->{'DBROW'}->{'saved_manifest'} = $self->{'DBROW'}->{'manifest'};
     $self->{'DBROW'}->{'manifest'} = undef;
+}
+
+sub RestoreManifest($)
+{
+    my ($self) = @_;
+
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  manifest=saved_manifest, saved_manifest=null ".
+		"where uuid='$uuid' and aggregate_urn='$urn'") or
+	return -1;
+
+    $self->{'DBROW'}->{'manifest'} = $self->{'DBROW'}->{'saved_manifest'};
+    $self->{'DBROW'}->{'saved_manifest'} = undef;
 }
 
 sub Manifest($)
