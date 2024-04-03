@@ -620,8 +620,18 @@ sub DoList()
 	    
 	    $details->{'util'}        = $util;
 	    $details->{'reshours'}    = $util->{'reshours'} || 0;
-	    $details->{'usedhours'}   = $util->{'projectHours'} || 0;
-	    $details->{'utilization'} = $util->{'projectUtilization'} || 0;
+
+	    if (!defined($project) || $project->ResModeProject()) {
+		$details->{'usedhours'}   = $util->{'projectHours'} || 0;
+		$details->{'utilization'} = $util->{'projectUtilization'} || 0;
+	    }
+	    elsif ($project->ResModeUser()) {
+		$details->{'usedhours'}   = $util->{'userHours'} || 0;
+		$details->{'utilization'} = $util->{'userUtilization'} || 0;
+	    }
+	    else {
+		fatal("per-group reservations not being handled");
+	    }
 	}
 	else {
 	    #
@@ -1535,8 +1545,17 @@ sub DoHistory()
 	    
 	    $res->{'util'}        = $util;
 	    $res->{'reshours'}    = $util->{'reshours'} || 0;
-	    $res->{'usedhours'}   = $util->{'projectHours'} || 0;
-	    $res->{'utilization'} = $util->{'projectUtilization'} || 0;
+	    if (!defined($project) || $project->ResModeProject()) {
+		$res->{'usedhours'}   = $util->{'projectHours'} || 0;
+		$res->{'utilization'} = $util->{'projectUtilization'} || 0;
+	    }
+	    elsif ($project->ResModeUser()) {
+		$res->{'usedhours'}   = $util->{'userHours'} || 0;
+		$res->{'utilization'} = $util->{'userUtilization'} || 0;
+	    }
+	    else {
+		fatal("per-group reservations not being handled");
+	    }
 	}
 	else {
 	    #

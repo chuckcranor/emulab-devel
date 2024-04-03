@@ -1460,7 +1460,8 @@ sub Reservations($)
 	    # This does not return unapproved reservations, but we still
 	    # need to process them below.
 	    if (@allres) {
-		@timeline = ResUtil::CreateTimeline($group, $resuser, @allres);
+		@timeline = ResUtil::CreateTimeline($project, $group,
+						    $resuser, @allres);
 		if (!@timeline) {
 		    #print STDERR "Reservations: No timeline for $pid/$gid\n";
 		}
@@ -1532,7 +1533,12 @@ sub Reservations($)
 		@timeline = @tmp;
 		if (@timeline) {
 		    my $ref = $timeline[-1];
-		    $using = $ref->{'allocated'}->{"$pid/$gid"}->{$type};
+		    if ($project->ResModeUser()) {
+			$using = $ref->{'allocated'}->{"$uid"}->{$type};
+		    }
+		    else {
+			$using = $ref->{'allocated'}->{"$pid/$gid"}->{$type};
+		    }
 		}
 	    }
 	}
@@ -2430,7 +2436,9 @@ sub ReservationHistory($)
 	my $type = $res->type();
 	my $uuid = $res->uuid();
 	my $pid_idx = $res->pid_idx();
+	my $gid_idx = $res->pid_idx();
 	my $project = Project->Lookup($pid_idx);
+	my $group = Group->Lookup($gid_idx);
 	if (!defined($project)) {
 	    print STDERR "Reservations: No such project $pid\n";
 	    next;
@@ -2440,7 +2448,7 @@ sub ReservationHistory($)
 	# Need the user for each res.
 	my $user = User->Lookup($res->uid_idx());
 	
-	my @timeline = ResUtil::CreateTimeline($project, $res);
+	my @timeline = ResUtil::CreateTimeline($project, $group, $user, $res);
 	# We do not want to send back more then we need.
 	if (@timeline) {
 	    my @tmp = ();
