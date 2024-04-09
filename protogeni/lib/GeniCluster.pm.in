@@ -2126,7 +2126,12 @@ sub ReservationPrediction($)
 	my $gid  = $ref->{'gid'};
 	my $rpidgid;
 
-	if ($pid eq $gid) {
+	# Prune out projects that we did not ask about.
+	next
+            if (! (exists($projects{$pid}) ||
+                   exists($grouplist{"${pid}/${gid}"})));
+
+   	if ($pid eq $gid) {
 	    my $project = $projects{$pid};
 	    my $hrn;
 
@@ -2154,7 +2159,12 @@ sub ReservationPrediction($)
 	my $gid  = $ref->{'gid'};
 	my $rpidgid;
 
-	if ($pid eq $gid) {
+	# Prune out projects that we did not ask about.
+	next
+            if (! (exists($projects{$pid}) ||
+                   exists($grouplist{"${pid}/${gid}"})));
+
+   	if ($pid eq $gid) {
 	    my $project = $projects{$pid};
 	    my $hrn;
 
