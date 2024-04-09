@@ -247,7 +247,8 @@ CREATE TABLE `apt_aggregate_radio_transmissions` (
   `violation` tinyint(1) NOT NULL default '0',  
   `instance_uuid` varchar(40) default NULL,
   KEY frontend (`aggregate_urn`,`node_id`,`iface`,`frontend`),
-  KEY stamp (`aggregate_urn`,`node_id`,`iface`,`frontend`,`tstamp`)
+  KEY stamp (`aggregate_urn`,`node_id`,`iface`,`frontend`,`tstamp`),
+  KEY uuid (`instance_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
