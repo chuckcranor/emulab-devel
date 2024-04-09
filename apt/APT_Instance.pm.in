@@ -5700,8 +5700,9 @@ sub SliverAction($$;@)
     my ($self, $which, @slivers) = @_;
     my $method    = ($which eq "reboot" ? "RestartSliver" :
 		     ($which eq "start" ? "StartSliver" :
-		      ($which eq "powercycle" ? "PowerCycleSliver" :
-		       "ReloadSliver")));
+		      ($which eq "stop" ? "StopSliver" :
+		       ($which eq "powercycle" ? "PowerCycleSliver" :
+			"ReloadSliver"))));
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $urn       = $self->aggregate_urn();
@@ -6501,6 +6502,26 @@ sub Portstats($$)
 	"slice_urn" => $slice->urn(),
     };
     return APT_Geni::PortalRPC($authority, undef, "Portstats", $args);
+}
+
+#
+# Forced power control, as for controlling Powder radios.
+#
+sub PowerControl($$$)
+{
+    my ($self, $which, @slivers) = @_;
+    my $operation = ($which eq "start" ? "on" : "off");
+    my $authority = $self->GetGeniAuthority();
+    my $slice     = $self->instance()->GetGeniSlice();
+    return ContextError()
+	if (! (defined($authority) || defined($slice)));
+
+    my $args = {
+	"operation"   => $operation,
+	"slice_urn"   => $slice->urn(),
+	"sliver_urns" => \@slivers,
+    };
+    return APT_Geni::PortalRPC($authority, undef, "PowerControl", $args);
 }
 
 #

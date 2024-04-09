@@ -45,7 +45,9 @@ sub usage()
     print("Usage: manage_instance refresh instance\n");
     print("Usage: manage_instance reboot instance node_id ...\n");
     print("Usage: manage_instance powercycle instance node_id ...\n");
-    print("Usage: manage_instance reload instance node_id ...\n");
+    print("Usage: manage_instance reload stop instance node_id ...\n");
+    print("Usage: manage_instance stop instance node_id ...\n");
+    print("Usage: manage_instance start instance node_id ...\n");
     print("Usage: manage_instance recovery instance [-c] node_id\n");
     print("Usage: manage_instance flash instance [-c] node_id\n");
     print("Usage: manage_instance deletenodes instance node_id ...\n");
@@ -167,6 +169,7 @@ sub DoDenyOrMoreInfo($);
 sub DoRefresh();
 sub DoReboot();
 sub DoStart();
+sub DoStop();
 sub DoPowerCycle();
 sub DoReload();
 sub DoRecovery();
@@ -303,6 +306,9 @@ elsif ($action eq "reload") {
 }
 elsif ($action eq "start") {
     DoStart()
+}
+elsif ($action eq "stop") {
+    DoStop()
 }
 elsif ($action eq "recovery") {
     DoRecovery()
@@ -3298,16 +3304,31 @@ sub DoRebootOrReload($)
     my $errmsg;
     my $errcode;
     my $exitcode = -1;
-    my $doperms  = 0;
     my $locked   = 0;
 
-    my $optlist = "X";
+    my $optlist   = "XMPN";
+    my $doperms   = 0;
+    my $nomonitor = 0;
+    my $portalrpc = 0;
+    my $nolock    = 0;
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
     }
     if (defined($options{"X"})) {
 	$doperms = 1;
+    }
+    if (defined($options{"M"})) {
+	$nomonitor = 1;
+    }
+    if (defined($options{"N"})) {
+	$nolock = 1;
+    }
+    if (defined($options{"P"})) {
+	$portalrpc = 1;
+	if (! $this_user->IsAdmin()) {
+	    fatal("Only administrators can use the -P option");
+	}
     }
     usage()
 	if (!@ARGV);
@@ -3382,7 +3403,7 @@ sub DoRebootOrReload($)
 	# If we are doing all the nodes at an aggregate, we want to apply
 	# the operation to the slice instead of individual slivers.
 	#
-	if (scalar(@aggnodes) ==
+	if (0 && scalar(@aggnodes) ==
 	    scalar(@{ $sliver_urns{$obj->aggregate_urn()}})) {
 	    # This will cause the operation to apply to the entire aggregate.
 	    $sliver_urns{$obj->aggregate_urn()} = [];
@@ -3399,13 +3420,13 @@ sub DoRebootOrReload($)
     # Lock the slice in case it is doing something else, like taking
     # a disk image.
     #
-    if ($slice->Lock()) {
+    if (!$nolock && $slice->Lock()) {
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	$errcode  = GENIRESPONSE_BUSY;
 	$exitcode = 1;
 	goto bad;
     }
-    $locked = 1;
+    $locked = 1 if (!$nolock);
 
     #
     # Helper callback to send the proper arguments.
@@ -3414,7 +3435,12 @@ sub DoRebootOrReload($)
 	my ($sliver) = @_;
 	my @urns     = @{ $sliver_urns{$sliver->aggregate_urn()} };
 
-	return $sliver->SliverAction($which, @urns);
+	if ($portalrpc && ($which eq "stop" || $which eq "start")) {
+	    return $sliver->PowerControl($which, @urns);
+	}
+	else {
+	    return $sliver->SliverAction($which, @urns);
+	}
     };
 
     # Invoke on all clusters
@@ -3452,7 +3478,7 @@ sub DoRebootOrReload($)
     goto bad
 	if ($errcode);
 
-    $slice->UnLock();
+    $slice->UnLock() if ($locked);
     if (defined($webtask)) {
 	$webtask->Exited(0);
     }
@@ -3461,7 +3487,9 @@ sub DoRebootOrReload($)
     # has actually come back up.
     #
     # XXX This will not return unless a monitor is already running.
-    StartMonitorInternal();
+    if ($action ne "stop" && !$nomonitor) {
+	StartMonitorInternal();
+    }
     exit(0);
   killit:
     $instance->RecordHistory($RECORDHISTORY_TERMINATED);
@@ -3479,6 +3507,7 @@ sub DoRebootOrReload($)
 sub DoReboot()     { return DoRebootOrReload("reboot"); }
 sub DoReload()     { return DoRebootOrReload("reload"); }
 sub DoStart()      { return DoRebootOrReload("start"); }
+sub DoStop()       { return DoRebootOrReload("stop"); }
 sub DoPowerCycle() { return DoRebootOrReload("powercycle"); }
 
 #

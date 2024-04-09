@@ -24,9 +24,13 @@
 package APT_RDZ;
 
 use strict;
+use English;
 use Data::Dumper;
 use JSON;
 use Scalar::Util qw(blessed);
+use Socket;
+use Errno;
+use POSIX qw(:sys_wait_h);
 use Carp;
 use Exporter;
 use vars qw(@ISA @EXPORT);
@@ -37,11 +41,18 @@ use vars qw(@ISA @EXPORT);
 # Must come after package declaration
 use emdb;
 use emutil;
+use libtestbed;
 use APT_RDZRest;
 
 # Configure variables
 my $TB		  = "@prefix@";
+my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
+my $MANAGEINSTANCE= "$TB/bin/manage_instance";
+my $WAP           = "$TB/sbin/withadminprivs";
+my $SUDO	  = "/usr/local/bin/sudo";
+my $PROTOUSER	  = "elabman";
+
 # ZMC Rest insterface object
 my $ZMC;
 
@@ -155,7 +166,8 @@ sub RequestSpectrum($$)
 	print "RequestSpectrum: Got grant ID $grant_id\n";
 	
 	# Update DB so we know we have a grant for this range.
-	$rfrange->Update({"rdz_grantid" => $grant_id});
+	$rfrange->Update({"rdz_grantid" => $grant_id,
+			  "rdz_status"  => "new"});
 	
 	push(@grants, $grant);
 	# We have to update these below. 
@@ -247,6 +259,7 @@ sub RequestSpectrum($$)
 	    }
 	    last
 		if ($failed);
+	    
 	}
 	last
 	    if ($failed || $waiting == 0);
@@ -281,51 +294,6 @@ sub RequestSpectrum($$)
 }
 
 #
-# Check for spectrum revocation
-#
-sub CheckRevocation($)
-{
-    my ($instance) = @_;
-
-    print "CheckRevocation: $instance\n";
-
-    if (!defined($ZMC)) {
-	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
-	if (!defined($ZMC)) {
-	    return -1;
-	}
-    }
-    my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
-    if (!defined($rfranges) || !keys(%{$rfranges})) {
-	print "CheckRevocation: No rfranges for $instance\n";
-	return 0;
-    }
-    foreach my $rfrange (values(%{$rfranges})) {
-	my $grant_id = $rfrange->rdz_grantid();
-	if (!$grant_id) {
-	    print "CheckRevocation: No grant ID for $rfrange\n";
-	    next;
-	}
-	my $grant;
-	if ($ZMC->GET("/grants/$grant_id", \$grant)) {
-	    print "CheckRevocation: No grant for $grant_id ($rfrange)\n";
-	    next;
-	}
-	if (exists($grant->{'error'})) {
-	    print "CheckRevocation: Could not get grant $grant_id: " .
-		$grant->{'error'} . "\n";
-	    next;
-	}
-	if ($grant->{'revoked_at'}) {
-	    print "CheckRevocation: Grant $grant_id revoked at " .
-		$grant->{'revoked_at'} . "\n";
-	    return 1;
-	}
-    }
-    return 0;
-}
-
-#
 # Delete grants, as when terminating an experiment.
 #
 sub DeleteGrants($)
@@ -351,13 +319,16 @@ sub DeleteGrants($)
 	if (!$grant_id) {
 	    next;
 	}
-	print "DeleteGrants: Deleting grant ID $grant_id\n";
+	if ($rfrange->rdz_status() ne "deleted") {
+	    print "DeleteGrants: Deleting grant ID $grant_id\n";
 	
-	my $response;
-	if ($ZMC->DELETE("/grants/$grant_id", \$response)) {
-	    print "DeleteGrants: Could not delete grant ID $grant_id\n";
-	    $errors++;
-	    next;
+	    my $response;
+	    if ($ZMC->DELETE("/grants/$grant_id", \$response)) {
+		print "DeleteGrants: Could not delete grant ID $grant_id\n";
+		$errors++;
+		next;
+	    }
+	    $rfrange->Update({"rdz_status" => "deleted"});
 	}
 	$rfrange->Update({"rdz_grantid" => undef});
     }
@@ -399,7 +370,456 @@ sub UpdateSpectrum($$$$)
 	return 1;
     }
     return 0;
-}    
+}
+
+#
+# Event Type map.
+#
+my @EventTypeMap = [
+    "Unspecified",
+    "Other",
+    "Created",
+    "Updated",
+    "Deleted",
+    "Revoked",
+    "Enabled",
+    "Disabled",
+    "Approved",
+    "Denied",
+    "Scheduled",
+    "Running",
+    "Completed",
+    "Failed",
+    "Succeeded",
+    "Progress",
+    "Suspended",
+    "Resumed",
+    "Started",
+    "Stopped",
+    "Violation",
+    "Interference",
+    "Action",
+    "Pending",
+];
+
+#
+# Watch an experiment. 
+#
+sub WatchExperiment($)
+{
+    my ($instance) = @_;
+    my $uuid       = $instance->uuid();
+    my %grants     = ();
+
+    my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
+    if (!defined($rfranges) || !keys(%{$rfranges})) {
+	logit("WatchExperiment: No rfranges for $instance");
+	return 0;
+    }
+    foreach my $rfrange (values(%{$rfranges})) {
+	my $grant_id = $rfrange->rdz_grantid();
+	if (!$grant_id) {
+	    logit("WatchExperiment: No grant ID for $rfrange");
+	    next;
+	}
+	$grants{$grant_id} = {
+	    "rfrange"   => $rfrange,
+	    # To avoid email blizzard. 
+	    "lastop"    => "",
+	    "lastemail" => 0,
+	};
+    }
+
+    #
+    # Limit error email. Simple. 
+    #
+    my $notify = sub($$$) {
+	my ($grant, $op, $error) = @_;
+
+	if ($grant->{'lastop'} ne $op ||
+	    time() - $grant->{'lastemail'} > 3600) {
+
+	    SENDMAIL($TBOPS,
+		     "RDZ: Grant action error: ". $instance->Printable(),
+		     $error . "\n\n" . $instance->webURL() . "\n",
+		     $TBOPS);
+
+	    $grant->{'lastop'}    = $op;
+	    $grant->{'lastemail'} = time();
+	}
+    };
+
+    #
+    # Call back for events and polls. 
+    #
+    my $callback = sub ()
+    {
+	my ($type, $ref) = @_;
+	my $grant;
+	my $grant_id;
+	my $status;
+	my $errmsg;
+
+	if ($type eq "poll") {
+	    #
+	    # A poll of the grant.
+	    #
+	    $grant_id = $ref->{'id'};
+	    $grant    = $grants{$grant_id};
+
+	    if (!defined($grant)) {
+		logit("WatchExperiment: No grant for grant $grant_id!");
+		return;
+	    }
+	    $status = $ref->{'status'};
+	    # Fall through to below to handle change in grant status.
+	}
+	else {
+	    #
+	    # We should not get any other events, but be sure.
+	    #
+	    my $code   = $ref->{'header'}->{'code'};
+	    my $source = $ref->{'header'}->{'source_type'};
+	    if (! ($code == 2006 && $source == 2)) {
+		logit("WatchExperiment: Unknown event:");
+		logit(Dumper($ref));
+	    }
+	    $status   = $ref->{'object'}->{'status'};
+	    $grant_id = $ref->{'object'}->{'id'};
+	    $grant  = $grants{$grant_id};
+
+	    if (!defined($grant)) {
+		logit("WatchExperiment: No grant for grant $grant_id!");
+		return;
+	    }
+	    # Fall through to below to handle change in grant status.
+	}
+	my $rfrange = $grant->{'rfrange'};
+	$rfrange->Refresh();
+	my $rdz_status = $rfrange->rdz_status() || "";
+	if ($status eq $rdz_status) {
+	    return;
+	}
+	logit("WatchExperiment($PID): Grant $grant_id status change: ".
+	      "$rdz_status -> $status");
+	
+	if ($status eq "revoked") {
+	    logit("WatchExperiment: Grant $grant_id revoked");
+	    #
+	    # Sledge hammer for now. 
+	    #
+	    if ($instance->rdz_status() ne "revoked") {
+		$instance->Update({"rdz_status" => "revoked"});
+		system("$SUDO -u $PROTOUSER $MANAGEINSTANCE terminate $uuid");
+		#
+		# Send email on failure
+		#
+	    }
+	}
+	elsif ($status eq "paused" && $rdz_status eq "active") {
+	    # Do not change current status if this fails
+	    if (PowerControl($instance, "off", \$errmsg)) {
+		&$notify($grant, "off", $errmsg);
+		return;
+	    }
+	    $grant->{'lastop'}    = "";
+	    $grant->{'lastemail'} = 0;
+	}
+	elsif ($status eq "active" && $rdz_status eq "paused") {
+	    # Do not change current status if this fails
+	    if (PowerControl($instance, "on", \$errmsg)) {
+		&$notify($grant, "on", $errmsg);
+		return;
+	    }
+	    $grant->{'lastop'}    = "";
+	    $grant->{'lastemail'} = 0;
+	}
+	$rfrange->Update({"rdz_status" => $status});
+    };
+    
+    #
+    # Fork a child to handle the event stream. Parent watches the experiment.
+    #
+    my $childpid = fork();
+    if (!$childpid) {
+	#
+	# Keep going, parent will kill us.
+	#
+	while (1) {
+	    logit("WatchExperiment($PID): (re)starting event stream for $instance");
+	    if (WatchGrants($callback, keys(%grants)) < 0) {
+		exit(-1);
+	    }
+	    sleep(5);
+	}
+	exit(0);
+    }
+    logit("WatchExperiment($PID): starting looper for $instance");
+    while (1) {
+	#
+	# Watch for the instance terminating. Grants deleted on that path.
+	#
+	$instance->Purge();
+	$instance = APT_Instance->Lookup($uuid);
+	if (!defined($instance)) {
+	    logit("WatchExperiment($PID): experiment is gone, exiting");
+	    last;
+	}
+	if (defined($instance->rdz_status()) &&
+	    $instance->rdz_status() eq "revoked") {
+	    my $status = $instance->status();
+	    #
+	    # We did the terminate up above, but need to make sure it is
+	    # really terminating.
+	    #
+	    logit("WatchExperiment($PID): ".
+		  "$uuid is revoked but still exists ($status)");
+	}
+	sleep(5);
+    }
+    kill('TERM', $childpid);
+    waitpid($childpid, 0);
+    return 0;
+}
+
+#
+# Watch grants in an experiment.
+#
+sub WatchGrants($$)
+{
+    my ($callback, @ids) = @_;
+    my $grant_ids   = \@ids;
+    my $debug       = 0;
+    my $rval        = 0;
+    my $response;
+    
+    # IO::Socket::SSL lets us open encrypted (wss) connections
+    require IO::Socket::SSL;
+    # IO::Select to "peek" IO::Sockets for activity
+    require IO::Select;
+    # Protocol handler for WebSocket HTTP protocol
+    require Protocol::WebSocket::Client;
+    require Protocol::WebSocket::Handshake::Client;
+    require Protocol::WebSocket::Request;
+
+    if (!defined($ZMC)) {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+	if (!defined($ZMC)) {
+	    return -1;
+	}
+    }
+
+    my $id   = NewUUID();
+    my $url  = URI->new($ZMC->url());
+    my $host = $url->host;
+    my $port = $url->port;
+    my $path = $url->path;
+    $url->scheme("wss");
+    if ($debug) {
+	logit("$url");
+    }
+
+    my $subscription_request = {
+	"id"      => $id,
+	"filters" => [
+	    { "object_ids"  => $grant_ids,
+	      "element_ids" => [$ZMC->elementid()],
+	    },
+	 ],
+    };
+    if ($debug) {
+	print Dumper($subscription_request);
+    }
+    if ($ZMC->POST("/subscriptions", $subscription_request, \$response)) {
+	logit("WatchGrants: could not subscribe to events");
+	return -1;
+    }
+    $url->path("$path/subscriptions/$id/events");
+    logit("$url") if ($debug);
+    
+    #
+    # Thank you!
+    # https://greg-kennedy.com/wordpress/2019/03/11/writing-a-websocket-client-in-perl-5/
+    #
+    my $socket = IO::Socket::SSL->new(
+	PeerAddr => $host,
+	PeerPort => "wss($port)",
+	Proto => 'tcp',
+	SSL_startHandshake => 1,
+	Blocking => 1);
+    if (!$socket) {
+	logit("WatchGrants: Could not create socket");
+	return -1;
+    }
+    # This has no side effects.
+    my $client = Protocol::WebSocket::Client->new(
+	url => "$url",
+	#  On Write: take the buffer (WebSocket packet) and send it on the socket.
+	on_write => sub {
+	    my $client = shift;
+	    my ($buf) = @_;
+
+	    logit("Writing to WebSocket: $buf") if ($debug);
+	    syswrite($socket, $buf);
+	},
+	# On Read: This method is called whenever a complete WebSocket "frame"
+	# is successfully parsed.
+	on_read => sub {
+	    my $client = shift;
+	    my ($buf) = @_;
+
+	    logit("Received from WebSocket: '$buf'") if ($debug);
+
+	    my $ref = eval { decode_json($buf); };
+	    if ($@) {
+		logit("Could not decode json data:\n$buf");
+		return;
+	    }
+	    &$callback("event", $ref);
+	},
+	# On Connect: this is what happens after the handshake succeeds, and we
+	# are "connected" to the service.
+	on_connect => sub {
+	    my $client = shift;
+
+	    logit("Successfully connected to service") if ($debug);
+
+	    $socket->setsockopt(SOL_SOCKET, SO_KEEPALIVE, 1);
+	    $socket->setsockopt(SOL_SOCKET, SO_RCVTIMEO, pack('l!l!', 5, 0));
+	},
+	# This can happen if the handshake fails for whatever reason.
+	on_error => sub {
+	    my $client = shift;
+	    my ($buf) = @_;
+
+	    logit("Error on websocket, handshake failed: $buf");
+	    $socket->close();
+	    $rval = 1;
+	},
+    );
+    if (!$client) {
+	logit("WatchGrants: could not create WebSocket client");
+	return -1;
+    }
+    logit($client) if ($debug);
+    my $headers = [
+	"X-Api-Token" => $ZMC->token(),
+	];
+
+    #
+    # Reach inside to get the headers added to the request. Ugly.
+    #
+    my $req = Protocol::WebSocket::Request->new(headers => $headers);
+    my $handshake = Protocol::WebSocket::Handshake::Client->new(
+	url => "$url", req => $req);
+    $client->{hs} = $handshake;
+    
+    # Connect causes the Protocol object to create a handshake and write it
+    $client->connect;
+
+    # Poll the grants if we go too long without an event.
+    my $pollTimeout = 60; # seconds
+    my $lastPoll    = time();
+    my $pollGrants  = sub () {
+	foreach my $grant_id (@$grant_ids) {
+	    my $grant;
+	    if ($ZMC->GET("/grants/$grant_id", \$grant)) {
+		logit("WatchGrants: /grants/$grant_id failed");
+		next;
+	    }
+	    &$callback("poll", $grant);
+	}
+    };
+    &$pollGrants();
+
+    #
+    # Loop until we are killed by the parent or error.
+    #
+    while ($socket->connected) {
+	my $data;
+	my $cc = sysread($socket, $data, 16384);
+
+	if (!defined($cc)) {
+	    if ($!{EWOULDBLOCK}) {
+		logit("WatchGrants: read timeout") if ($debug);
+
+		if (time() - $lastPoll > $pollTimeout) {
+		    &$pollGrants();
+		    $lastPoll = time();
+		}
+		next;
+	    }
+	    logit("WatchGrants: sysread on socket failed: $!");
+	    $socket->close();
+	    return 1;
+	}
+	elsif ($cc == 0) {
+	    logit("WatchGrants: connection EOF");
+	    $socket->close();
+	    return 1;
+	}
+	$client->read($data);
+    }
+    if ($socket->connected) {
+	$socket->close();
+    }
+    return $rval;
+}
+
+#
+# Power on/off radios when a grant is paused/resumed.
+#
+# At the moment, all grants in an experiment use the same set of radio
+# ports, so cycle all of the radios in the experiment.
+#
+sub PowerControl($$$)
+{
+    my ($instance, $which, $perrmsg) = @_;
+    my $uuid     = $instance->uuid();
+    my @node_ids = ();
+    my $action   = ($which eq "off" ? "stop" : "start");
+    my $resources;
+
+    if (APT_Profile::GetResources($instance->RSPEC(),
+				  $perrmsg, \$resources)) {
+	$$perrmsg = "Could not get resources for experiment: $$perrmsg";
+	logit("PowerControl($PID): $$perrmsg");
+	return -1;
+    }
+    foreach my $client_id (keys(%{$resources->{'radios'}})) {
+	my $radio = $resources->{'radios'}->{$client_id};
+	
+	next
+	    if ($radio->node_id() =~ /^oai-w/);
+
+	push(@node_ids, $client_id);
+    }
+
+    #
+    # Options:
+    #   -N (no locking, just do it)
+    #   -P (portal rpc fast path which skips all the geni checks)
+    #   -M (do not start a monitor, we depend on the events).
+    #
+    my $command = "$SUDO -u $PROTOUSER $WAP $MANAGEINSTANCE ".
+	"$action $uuid -M -P -N @node_ids";
+    logit("PowerControl($PID): Powering $which @node_ids");
+    logit("$command");
+    # Verbose flag to duplicate output to stdout as it happens
+    my $output = emutil::ExecQuiet($command, 1);
+    if ($?) {
+	$$perrmsg = "Could not power $which @node_ids:\n" . $output;
+	return -1;
+    }
+    return 0;
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $now = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    print "$now: $msg\n";
+}
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;

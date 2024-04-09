@@ -35,6 +35,7 @@ use Data::Dumper;
 use File::Basename;
 use File::stat;
 use POSIX ":sys_wait_h";
+use POSIX qw(strftime);
 use JSON;
 
 #
@@ -78,6 +79,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Protos
 sub fatal($);
+sub logit($);
 sub Watcher($);
 sub WatchEndpoint($);
 sub ReportObservation($$$);
@@ -169,7 +171,7 @@ sub TermHandler()
     
     $EUID = 0;
     foreach my $pid (keys(%watchers), keys(%fewatchers)) {
-	print "Killing Watcher($pid)\n";
+	logit("Killing Watcher($pid)");
 	kill('TERM', $pid);
 	waitpid($pid, 0);
     }
@@ -204,8 +206,7 @@ while (1) {
 	sleep(5);
 	next;
     }
-    print "Running at ".
-	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
+    logit("Loop");
 
     #
     # Look to see if any Watchers have exited.
@@ -214,7 +215,7 @@ while (1) {
 	my $instance = $watchers{"$pid"};
 	my $foo = waitpid($pid, &WNOHANG);
 	if ($foo) {
-	    print "Watcher($pid) exited\n";
+	    logit("Watcher($pid) exited");
 	    delete($watchers{"$pid"});	
 	    delete($watched{$instance->uuid()});	
 	}
@@ -268,34 +269,8 @@ sub Watcher($)
 	return $mypid;
     }
     select(undef, undef, undef, 0.2);
-    print "Starting Watcher($PID) for $instance\n";
-
-    while (1) {
-	print "Watcher: Checking $instance\n";
-	
-	#
-	# Watch for the instance terminating. Grants deleted on that path.
-	#
-	$instance->Purge();
-	$instance = APT_Instance->Lookup($uuid);
-	if (!defined($instance)) {
-	    print "Watcher($PID): experiment is gone, exiting\n";
-	    last;
-	}
-	if (APT_RDZ::CheckRevocation($instance)) {
-	    print "Watcher: grants revoked for $instance\n";
-	    if (!$impotent) {
-		# Temporary way to get the web UI to tell the user.
-		$instance->Update({"rdz_status" => "revoked"});
-		system("$SUDO -u $PROTOUSER $MANAGEINSTANCE terminate $uuid");
-		#
-		# Send email?
-		#
-		last;
-	    }
-	}
-	sleep(10);
-    }
+    logit("Starting Watcher($PID) for $instance");
+    APT_RDZ::WatchExperiment($instance);
     exit(0);
 }
 
@@ -322,7 +297,7 @@ sub WatchEndpoint($)
 	return $mypid;
     }
     select(undef, undef, undef, 0.2);
-    print "Starting WatchEndpoint($PID,$name)\n";
+    logit("Starting WatchEndpoint($PID,$name)");
     
     my %files = ();
     my $laststat = stat($dir);
@@ -376,7 +351,7 @@ sub ReportObservation($$$)
     my $aggregate_urn = $aggregate->urn();
     my @instances = APT_Instance->LookupForAggregate($aggregate);
 
-    print "ReportObservation: $aggregate_urn $file\n" if ($debug);
+    logit("ReportObservation: $aggregate_urn $file") if ($debug);
 
     return 0
 	if (!@instances);
@@ -388,7 +363,7 @@ sub ReportObservation($$$)
 	$stamp   = $3;
     }
     else {
-	print "Bad file name, must be a monitor filename: $file\n";
+	logit("Bad file name, must be a monitor filename: $file");
 	return -1;
     }
 
@@ -412,13 +387,13 @@ sub ReportObservation($$$)
 		if ($status->{'resource_id'} ne $node_id);
 
 	    if ($impotent) {
-		print "ReportObservation: $node_id in use, would report\n";
+		logit("ReportObservation: $node_id in use, would report");
 	    }
 	    else {
 		my $command = "$SUDO -u $PROTOUSER $MANAGERDZ ".
 		    "observations create -a $aggregate_urn $path";
 		
-		print "$command\n" if ($debug);
+		logit("$command") if ($debug);
 		system($command);
 	    }
 	    return 0;
@@ -432,7 +407,7 @@ sub fatal($)
     my ($msg) = @_;
 
     foreach my $pid (keys(%watchers), keys(%fewatchers)) {
-	print "Killing Watcher($pid)\n";
+	logit("Killing Watcher($pid)");
 	kill('TERM', $pid);
 	waitpid($pid, 0);
     }
@@ -450,4 +425,11 @@ sub fatal($)
 
     die("*** $0:\n".
 	"    $msg\n");
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $now = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    print "$now: $msg\n";
 }

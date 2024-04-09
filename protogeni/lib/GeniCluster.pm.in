@@ -81,6 +81,7 @@ my $SSH            = "/usr/bin/ssh";
 my $WAP            = "$TB/sbin/withadminprivs";
 my $NODE_TOP       = "$TB/sbin/node_top";
 my $PORTSTATS      = "$TB/bin/portstats";
+my $POWER          = "$TB/bin/power";
 my $API_VERSION    = 1.0;
 my $CLOUDLAB_FEDERATED = @CLOUDLAB_FEDERATED@;
 my $POWDER_DEADMAN = @POWDER_DEADMAN@;
@@ -2670,6 +2671,79 @@ sub Portstats($)
     print Dumper($results);
     
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $results);
+}
+
+#
+# Admin power control (on/off/cycle) that bypasses all the checks in
+# SliverAction. 
+#
+sub PowerControl($)
+{
+    my ($argref)    = @_;
+    my $op          = $argref->{'operation'};
+    my $slice_urn   = $argref->{'slice_urn'};
+    my $sliver_urns = $argref->{'sliver_urns'} || $argref->{'component_urns'};
+    my $asyncmode   = (exists($argref->{'asyncmode'}) ?
+		       $argref->{'asyncmode'} : 0);
+
+    #
+    # The Portal decides the user has permission and then uses "admin" mode.
+    #
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    if (!defined($slice_urn)) {
+	return GeniResponse->BadArgsResponse("Missing slice URN");
+    }
+    if (!defined($op)) {
+	return GeniResponse->BadArgsResponse("Missing operation");
+    }
+    if ($op !~ /^(on|off|cycle)$/) {
+	return GeniResponse->BadArgsResponse("Illegal operation");
+    }
+    my $slice = GeniSlice->Lookup($slice_urn);    
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($slice));
+
+    #
+    # Only specific slivers.
+    #
+    if (!defined($sliver_urns)) {
+	return GeniResponse->BadArgsResponse("Missing sliver URNs");
+    }
+    my @slivers = ();
+
+    foreach my $urn (@{ $sliver_urns }) {
+	my $sliver = GeniSliver->Lookup($urn);
+	if (!defined($sliver)) {
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+					"No such sliver: $urn");
+	}
+	push(@slivers, $sliver);
+    }
+    #
+    # Do these individually so that we can return specific errors.
+    # Might have to change power to use a webtask instead.
+    #
+    GeniUtil::FlipToElabMan();
+    
+    my @failed = ();
+    foreach my $sliver (@slivers) {
+	my $node_id = $sliver->resource_id();
+	my $command = "$WAP $POWER -a $op $node_id";
+	my $output = GeniUtil::ExecQuiet($command);
+	if ($?) {
+	    print STDERR "$command\n\n";
+	    print STDERR "$output\n";
+	    push(@failed, $node_id);
+	}
+    }
+    if (@failed) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, \@failed,
+				    "Failed to power $op some nodes");
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
 #

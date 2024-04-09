@@ -27,6 +27,7 @@ use strict;
 use Data::Dumper;
 use REST::Client;
 use JSON;
+use URI;
 use Scalar::Util qw(blessed);
 use Carp;
 use Exporter;
