@@ -505,6 +505,7 @@ sub WatchExperiment($)
 	
 	if ($status eq "revoked") {
 	    logit("WatchExperiment: Grant $grant_id revoked");
+	    $instance->Refresh();
 	    #
 	    # Sledge hammer for now. 
 	    #
