@@ -1550,7 +1550,12 @@ sub portPTP ($$$@) {
 	    } else {
 		warn "$id: ERROR: Unrecognized PTP domain '$pdom'.\n";
 		$self->{PTPTRANSPORT} = "none";
+		return 1;
 	    }
+	} else {
+	    warn "$id: ERROR: PTP not enabled.\n";
+	    $self->{PTPTRANSPORT} = "none";
+	    return 1;
 	}
     }
     if ($self->{PTPTRANSPORT} ne "L2") {
