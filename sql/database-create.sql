@@ -1134,6 +1134,7 @@ CREATE TABLE `apt_instance_rfranges` (
   `power` float(8,2) NOT NULL DEFAULT '0.00',
   `width` float(8,2) DEFAULT NULL,
   `rdz_grantid` varchar(40) DEFAULT NULL,
+  `rdz_status` varchar(40) DEFAULT NULL,
   PRIMARY KEY (`uuid`,`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
