@@ -1102,7 +1102,8 @@ sub RecordHistory($$)
 		"       extension_count,extension_days,extension_hours, ".
 		"       physnode_count,virtnode_count, ".
 		"       servername,portal,repourl,reponame,reporef,repohash, ".
-		"       rspec,script,params,manifest,webinfo,modify_count ".
+		"       rspec,script,params,manifest,webinfo,modify_count, ".
+		"       fabric_stitched ".
 		" from apt_instances where uuid='$uuid'")
 	or return -1;
 
@@ -3561,6 +3562,12 @@ sub AddFabricSlice($$$)
 
     DBQueryWarn("replace into apt_instance_fabric_slices set ".
 		" uuid='$uuid',linkname='$linkname',sliceid='$id'")
+	or return -1;
+
+    # Bump this, for history
+    DBQueryWarn("update apt_instances ".
+		"  set fabric_stitched=fabric_stitched+1 ".
+		"where uuid='$uuid'")
 	or return -1;
 
     # Reload
