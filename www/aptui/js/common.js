@@ -92,7 +92,7 @@ window.APT_OPTIONS.initialize = function (sup)
      */
     if (window.LOGINUID && !window.NOANNOUNCEMENTS) {
 	// First check for announcements very quickly
-	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 2000);
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 5000);
     }
     
     window.APT_OPTIONS.startPage();
@@ -314,15 +314,10 @@ window.APT_OPTIONS.Announcements = function () {
 	    }
 	    $('#portal-announcement-div').html(newhtml);
 	}
-	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 90000);
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 300000);
     }
-
     var xmlthing =
 	APT_OPTIONS.CallServerMethod('', 'announcement', 'Announcements', null);
-    // We want the callback all the time. 
-    xmlthing.done(callback).fail(function () {
-	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 90000);
-    });
 }
 
 window.APT_OPTIONS.SetupCopyToClipboard = function (id) {

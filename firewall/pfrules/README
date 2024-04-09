@@ -1,0 +1,20 @@
+This directory contains FreeBSD "PF" packet filter rules that can be run
+on the boss, ops, and dbox (storage server) nodes in the event that these
+infrastructure nodes are not behind a firewall.
+
+DBOX NOTES:
+
+TrueNAS (that we run on storage servers) makes changes harder to persist.
+The contents of /etc (and other directories) is installed from scratch on
+every reboot. To persist the PF changes, they will need to be installed in
+the /conf/base/etc directory (along with other persistent Emulab-related
+changes). E.g.:
+
+    <site>/pf.conf-dbox goes in <site-dbox>:/conf/base/etc/emulab/pf.conf
+    <site>/rc.conf-dbox goes in <site-dbox>:/conf/base/etc/rc.conf.d/pf/rc.conf
+
+To test, manually copy those files to the running /etc on the <site-dbox>:
+
+   cp -p /conf/base/etc/emulab/pf.conf to /etc/emulab/pf.conf
+   mkdir -p /etc/rc.conf.d/pf
+   cp -p /conf/base/etc/rc.conf.d/pf/rc.conf to /etc/rc.conf.d/pf/rc.conf

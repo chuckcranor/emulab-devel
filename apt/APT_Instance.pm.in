@@ -1102,7 +1102,8 @@ sub RecordHistory($$)
 		"       extension_count,extension_days,extension_hours, ".
 		"       physnode_count,virtnode_count, ".
 		"       servername,portal,repourl,reponame,reporef,repohash, ".
-		"       rspec,script,params,manifest,webinfo,modify_count ".
+		"       rspec,script,params,manifest,webinfo,modify_count, ".
+		"       fabric_stitched ".
 		" from apt_instances where uuid='$uuid'")
 	or return -1;
 
@@ -3563,6 +3564,12 @@ sub AddFabricSlice($$$)
 		" uuid='$uuid',linkname='$linkname',sliceid='$id'")
 	or return -1;
 
+    # Bump this, for history
+    DBQueryWarn("update apt_instances ".
+		"  set fabric_stitched=fabric_stitched+1 ".
+		"where uuid='$uuid'")
+	or return -1;
+
     # Reload
     $self->{'FABRICIDS'} = undef;
     return -1
@@ -4545,7 +4552,24 @@ sub BackupManifest($)
 		"where uuid='$uuid' and aggregate_urn='$urn'") or
 	return -1;
 
+    $self->{'DBROW'}->{'saved_manifest'} = $self->{'DBROW'}->{'manifest'};
     $self->{'DBROW'}->{'manifest'} = undef;
+}
+
+sub RestoreManifest($)
+{
+    my ($self) = @_;
+
+    my $uuid = $self->uuid();
+    my $urn  = $self->aggregate_urn();
+
+    DBQueryWarn("update apt_instance_aggregates set ".
+		"  manifest=saved_manifest, saved_manifest=null ".
+		"where uuid='$uuid' and aggregate_urn='$urn'") or
+	return -1;
+
+    $self->{'DBROW'}->{'manifest'} = $self->{'DBROW'}->{'saved_manifest'};
+    $self->{'DBROW'}->{'saved_manifest'} = undef;
 }
 
 sub Manifest($)
@@ -5676,8 +5700,9 @@ sub SliverAction($$;@)
     my ($self, $which, @slivers) = @_;
     my $method    = ($which eq "reboot" ? "RestartSliver" :
 		     ($which eq "start" ? "StartSliver" :
-		      ($which eq "powercycle" ? "PowerCycleSliver" :
-		       "ReloadSliver")));
+		      ($which eq "stop" ? "StopSliver" :
+		       ($which eq "powercycle" ? "PowerCycleSliver" :
+			"ReloadSliver"))));
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $urn       = $self->aggregate_urn();
@@ -6477,6 +6502,26 @@ sub Portstats($$)
 	"slice_urn" => $slice->urn(),
     };
     return APT_Geni::PortalRPC($authority, undef, "Portstats", $args);
+}
+
+#
+# Forced power control, as for controlling Powder radios.
+#
+sub PowerControl($$$)
+{
+    my ($self, $which, @slivers) = @_;
+    my $operation = ($which eq "start" ? "on" : "off");
+    my $authority = $self->GetGeniAuthority();
+    my $slice     = $self->instance()->GetGeniSlice();
+    return ContextError()
+	if (! (defined($authority) || defined($slice)));
+
+    my $args = {
+	"operation"   => $operation,
+	"slice_urn"   => $slice->urn(),
+	"sliver_urns" => \@slivers,
+    };
+    return APT_Geni::PortalRPC($authority, undef, "PowerControl", $args);
 }
 
 #

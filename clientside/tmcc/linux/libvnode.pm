@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -961,13 +961,16 @@ sub reconfigDHCP()
     makeIfaceMaps();
     my ($cnet_iface) = findControlNet();
     my @ifaces = "$cnet_iface @vifs";
-
+    my $INTERFACES = "INTERFACES";
+    if (!system("egrep -q -s -i '^INTERFACESV4=' $defaults")) {
+	$INTERFACES .= "v4";
+    }
     if (! -e $defaults) {
-	mysystem2("echo 'INTERFACES=\"@ifaces\"' > $defaults");
+	mysystem2("echo '${INTERFACES}=\"@ifaces\"' > $defaults");
     }
     else {
 	mysystem2("/bin/sed -i.bak -e ".
-		 " 's,^INTERFACES=.*\$,INTERFACES=\"@ifaces\",i' $defaults");
+		 " 's,^${INTERFACES}=.*\$,${INTERFACES}=\"@ifaces\",i' $defaults");
     }
     return -1
 	if ($?);

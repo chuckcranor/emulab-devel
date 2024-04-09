@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # Copyright (c) 2004-2009 Regents, University of California.
 # 
 # {{{EMULAB-LGPL
@@ -1177,6 +1177,48 @@ sub portControl ($$@) {
     # XXX: each
     while (my ($devicename,$ports) = each %portDeviceMap) {
 	$errors += $self->{DEVICES}{$devicename}->portControl($cmd,@$ports);
+    }
+    return $errors;
+}
+
+sub portPTP ($$$@) { 
+    my $self = shift;
+    my $cmd = shift;
+    my $profile = shift;
+    my @ports = @_;
+    my %portDeviceMap = mapPortsToDevices(@ports);
+    my $errors = 0;
+    # XXX: each
+    while (my ($devicename,$ports) = each %portDeviceMap) {
+	# XXX: hack to avoid implementing a buttload of empty methods
+	my $swtype = getDeviceType($devicename);
+	if ($swtype !~ /^dellrest-/) {
+	    warn "ERROR: PTP not currently supported on $swtype switches.\n";
+	    $errors++;
+	} else {
+	    $errors += $self->{DEVICES}{$devicename}->portPTP($cmd,$profile,@$ports);
+	}
+    }
+    return $errors;
+}
+
+sub portSyncE ($$$@) { 
+    my $self = shift;
+    my $cmd = shift;
+    my $param = shift;
+    my @ports = @_;
+    my %portDeviceMap = mapPortsToDevices(@ports);
+    my $errors = 0;
+    # XXX: each
+    while (my ($devicename,$ports) = each %portDeviceMap) {
+	# XXX: hack to avoid implementing a buttload of empty methods
+	my $swtype = getDeviceType($devicename);
+	if ($swtype !~ /^dellrest-/) {
+	    warn "ERROR: SyncE not currently supported on $swtype switches.\n";
+	    $errors++;
+	} else {
+	    $errors += $self->{DEVICES}{$devicename}->portSyncE($cmd,$param,@$ports);
+	}
     }
     return $errors;
 }

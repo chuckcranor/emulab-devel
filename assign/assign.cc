@@ -1142,6 +1142,7 @@ int main(int argc,char **argv) {
 
   cout << "seed = " << seed << endl;
   srandom(seed);
+  rand_mt.seed(seed);
 
   // Print out information about how we were called
   if (dump_config) {

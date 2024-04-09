@@ -287,7 +287,6 @@ sub Resolve($)
 	if ($slice->async_code()) {
 	    $blob->{"async_code"}   = $slice->async_code();
 	    $blob->{"async_output"} = $slice->async_output();
-	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 	}
 
 	my $aggregate = GeniAggregate->SliceAggregate($slice);

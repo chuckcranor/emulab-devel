@@ -1,0 +1,27 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instances", "fabric_stitched")) {
+	DBQueryFatal("ALTER TABLE apt_instances ADD ".
+		     " `fabric_stitched` tinyint(1) NOT NULL default '0' ".
+		     "   after fabric_sliceid");
+    }
+    if (!DBSlotExists("apt_instance_history", "fabric_stitched")) {
+	DBQueryFatal("ALTER TABLE apt_instance_history ADD ".
+		     " `fabric_stitched` tinyint(1) NOT NULL default '0' ".
+		     "   after modify_count");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
