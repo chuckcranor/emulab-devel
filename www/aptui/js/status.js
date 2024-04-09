@@ -5197,6 +5197,7 @@ $(function ()
 	    $("#status_progress_bar").addClass("progress-bar-striped");
 	    $("#status_progress_bar").addClass("progress-bar-animated");
 	    $("#status_progress_bar").removeClass("bg-primary");
+	    $("#status_progress_bar").removeClass("bg-warning");
 	    $("#status_progress_bar").removeClass("bg-danger");
 	}
 	else {
@@ -5205,6 +5206,9 @@ $(function ()
 		$("#status_progress_bar").removeClass("progress-bar-animated");
 		if (instanceStatus == "ready") {
 		    $("#status_progress_bar").addClass("bg-primary");
+		}
+		else if (instanceStatus == "pending") {
+		    $("#status_progress_bar").addClass("bg-warning");
 		}
 		else {
 		    $("#status_progress_bar").addClass("bg-danger");
