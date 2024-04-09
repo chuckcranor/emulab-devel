@@ -126,7 +126,8 @@ sub RequestSpectrum($$)
 	print "RequestSpectrum: Requesting $frequency_low, $frequency_high\n";
 
 	my $request = {
-	    "description" => $instance->Printable(),
+	    "name"        => $instance->Printable(),
+	    "description" => $instance->webURL(),
 	    "element_id"  => $ZMC->elementid(),
 	    "starts_at"   => TBDateStringGMT($instance->started()),
 	    "constraints" => [
