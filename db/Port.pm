@@ -24,7 +24,7 @@
 # or merely parse tokens from string and vice-verse must
 # use the converters provided in this class.
 #
-# Copyright (c) 2011-2020 University of Utah and the Flux Group.
+# Copyright (c) 2011-2020, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -691,6 +691,8 @@ sub logical($) { return field($_[0], 'logical'); }
 # current view vs. the "mandated" (mapped) state from the interfaces table.
 sub tagged($)  { return field($_[0], 'tagged'); }
 sub enabled($) { return field($_[0], 'enabled'); }
+sub ptp($)     { return field($_[0], 'ptp'); }
+sub synce($)   { return field($_[0], 'synce'); }
 
 sub wire_end($) { return $_[0]->{'WIRE_END'}; }
 sub is_switch_side($) { return $_[0]->wire_end() eq $WIRE_END_SWITCH; }

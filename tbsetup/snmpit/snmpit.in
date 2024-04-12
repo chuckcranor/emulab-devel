@@ -2300,6 +2300,30 @@ sub CreateOneVlan($$$@)
 	    }
 	}
     }
+    # PTP/SyncE enable on ports.
+    my @ptpPorts = ();
+    my @syncePorts = ();
+    foreach my $port (@ports) {
+	if ($port->ptp()) {
+	    push(@ptpPorts, $port);
+	}
+	elsif ($port->synce()) {
+	    push(@syncePorts, $port);
+	}
+    }
+    if (@ptpPorts) {
+	my $rv = doPortPTP([$stack], "enable", @ptpPorts);
+	if ($rv > 0) {
+	    $errors += $rv;
+	}
+    }
+    if (@syncePorts) {
+	my $rv = doPortSyncE([$stack], "enable", @syncePorts);
+	if ($rv > 0) {
+	    $errors += $rv;
+	}
+    }
+    
     #
     # Look for a layer 1 link; There is a logical wire that needs to be
     # activated once it is created. 
@@ -2385,14 +2409,40 @@ sub doReset($@) {
 
     # Get a list of openflow enabled vlans we have to undo.
     my %ofenabled = ();
+
+    # And PTP/SyncE
+    my @ptpPorts = ();
+    my @syncePorts = ();
     
     foreach my $vlan_id (@vlans) {
 	my $vlan = VLan->Lookup($vlan_id);
+	my @ports = getVlanPorts($vlan_id);
 
 	my $flag;
 	$vlan->GetAttribute("ofenabled", \$flag);
 	if (defined($flag) && $flag == 1) {
 	    $ofenabled{"$vlan_id"} = 1;
+	}
+
+	foreach my $port (@ports) {
+	    if ($port->ptp()) {
+		push(@ptpPorts, $port);
+	    }
+	    elsif ($port->synce()) {
+		push(@syncePorts, $port);
+	    }
+	}
+    }
+    if (@ptpPorts) {
+	my $rv = doPortPTP($stacks, "disable", @ptpPorts);
+	if ($rv > 0) {
+	    $errors += $rv;
+	}
+    }
+    if (@syncePorts) {
+	my $rv = doPortSyncE($stacks, "disable", @syncePorts);
+	if ($rv > 0) {
+	    $errors += $rv;
 	}
     }
 
@@ -3987,6 +4037,11 @@ sub doPortPTP($$@) {
 	print "Port PTP command ";
 	print $errors? "failed":"succeeded",".\n";
     }
+    if (!$errors) {
+	foreach my $port (@ports) {
+	    setPortPTP($port, $command eq "enable" ? 1 : 0);
+	}
+    }
     return $errors;
 
 }
@@ -4014,6 +4069,11 @@ sub doPortSyncE($$@) {
     if (!$quiet) {
 	print "Port SyncE command ";
 	print $errors? "failed":"succeeded",".\n";
+    }
+    if (!$errors) {
+	foreach my $port (@ports) {
+	    setPortSyncE($port, $command eq "enable" ? 1 : 0);
+	}
     }
     return $errors;
 
