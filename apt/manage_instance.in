@@ -8168,6 +8168,7 @@ sub DoModify()
 	AuditStart(0, $logfilename, $opts);
 	AddAuditInfo("cc", $project->LogsEmailAddress());
 	AddAuditInfo("brand", $project->Brand());
+	AddAuditInfo("headers", "X-Portal: modify experiment");
 
 	$logfile = Logfile->Create($group, $logfilename);
 	if (!defined($logfile)) {
