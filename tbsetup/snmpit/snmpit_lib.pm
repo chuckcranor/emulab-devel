@@ -58,6 +58,7 @@ $PORT_FORMAT_PORTINDEX= 5;
 		snmpitSet snmpitSetWarn snmpitSetFatal 
                 snmpitBulkwalk snmpitBulkwalkWarn snmpitBulkwalkFatal
 	        setPortEnabled setPortTagged IsPortTagged
+	        setPortPTP IsPortPTPEnabled setPortSyncE IsPortSyncEEnabled
 		printVars tbsort getExperimentCurrentTrunks
 	        getExperimentVlanPorts
                 uniq isSwitchPort getPathVlanIfaces
@@ -808,7 +809,6 @@ sub setPortPTP($$) {
 		 "where node_id='$node' and iface='$iface'");
 }
 
-# Ditto for trunked.
 sub IsPortPTPEnabled($) { 
     my ($port) = @_;
 
@@ -831,7 +831,6 @@ sub setPortSyncE($$) {
 		 "where node_id='$node' and iface='$iface'");
 }
 
-# Ditto for trunked.
 sub IsPortSyncEEnabled($) { 
     my ($port) = @_;
 
@@ -844,10 +843,10 @@ sub IsPortSyncEEnabled($) {
     return $query_result->numrows();
 }
 
-#                                                                                    
-# If a port is on switch, some port ops in snmpit                                    
-# should be avoided.                                                                 
-#                                                                                    
+#
+# If a port is on switch, some port ops in snmpit
+# should be avoided.
+#
 sub isSwitchPort($) {
 	my $port = shift;
 
