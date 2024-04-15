@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -265,6 +265,8 @@ sub wire_unused($) { return $_[0]->wire_type() eq "Unused" ? 1 : 0; }
 sub state($)       { return $_[0]->{'STATE'}; }
 sub enabled($)     { return $_[0]->state()->{'enabled'}; }
 sub tagged($)      { return $_[0]->state()->{'tagged'}; }
+sub ptpenabled($)  { return $_[0]->state()->{'ptp'}; }
+sub synceenabled($){ return $_[0]->state()->{'synce'}; }
 sub remaining_bandwidth { return $_[0]->state()->{'remaining_bandwidth'}; }
 
 sub IsExperimental($)
@@ -644,6 +646,8 @@ sub MakeFake($$$)
 	"node_id"  => $nodeid,
 	"iface"    => $argref->{'iface'},
 	"tagged"   => 0,
+	"ptp"      => 0,
+	"synce"    => 0,
 	"enabled"  => 1,
     };
     bless($self, $class);

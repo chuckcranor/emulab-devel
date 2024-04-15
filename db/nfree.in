@@ -237,10 +237,12 @@ if (EmulabFeatures->FeatureEnabled("ExternalNodeManagement",
 #
 # Sanity check. Do not want to release nodes if they have ports that
 # are trunked or disabled. Means something went wrong elsewhere and
-# we should clean up the mess first. 
-#
+# we should clean up the mess first. Ditto for PTP and SyncE.
+# 
 if (! $moveToOldReserved) {
     my @untag = ();
+    my @unptp = ();
+    my @unsynce = ();
 
     foreach my $node (@nodes) {
 	my @interfaces;
@@ -264,6 +266,16 @@ if (! $moveToOldReserved) {
 		    "$interface is still tagged! But we will fix that.\n";
 		push(@untag, $interface);
 	    }
+	    if ($interface->ptpenabled()) {
+		print STDERR
+		    "$interface has PTP enabled! But we will fix that.\n";
+		push(@unptp, $interface);
+	    }
+	    if ($interface->synceenabled()) {
+		print STDERR
+		    "$interface has SyncE enabled! But we will fix that.\n";
+		push(@unsynce, $interface);
+	    }
 	    if (!$interface->enabled()) {
 		print STDERR "$interface is not enabled!\n";
 		$error++;
@@ -274,7 +286,35 @@ if (! $moveToOldReserved) {
 	die("*** $0:\n".
 	    "    Please cleanup the previous errors.\n");
     }
-    # Else if no errors, untag the interfaces left in tagged mode.
+
+    #
+    # If there were no errors, clean up some things:
+    # - if any ports were left tagged, untag them.
+    # - if any ports still have PTP or SyncE enabled, disable on those.
+    # We do the latter first since if it fails, it isn't worth dying over.
+    # If the ports don't untrunk, we fail because that will likely cause
+    # problems for the next use.
+    #
+    if (@unptp) {
+	my @ports = map($_->node_id() . ":" . $_->iface(), @unptp);
+
+	print "*** Turning off PTP for: @ports\n";
+	system("$snmpit --ptp-disable @ports");
+	if ($?) {
+	    print STDERR
+		"WARNING: could not disable PTP on one or more ports.\n";
+	}
+    }
+    if (@unsynce) {
+	my @ports = map($_->node_id() . ":" . $_->iface(), @unsynce);
+
+	print "*** Turning off SyncE for: @ports\n";
+	system("$snmpit --synce-disable @ports");
+	if ($?) {
+	    print STDERR
+		"WARNING: could not disable SyncE on one or more ports.\n";
+	}
+    }
     if (@untag) {
 	my @ports = map($_->node_id() . ":" . $_->iface(), @untag);
 
