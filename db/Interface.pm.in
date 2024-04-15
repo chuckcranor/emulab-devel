@@ -215,6 +215,8 @@ sub logical($) { return field($_[0], 'logical'); }
 sub speed($)   { return field($_[0], 'current_speed'); }
 sub trunk_mode($) { return field($_[0], 'trunk_mode'); }
 sub trunk($)   { return field($_[0], 'trunk'); }
+sub ptp($)     { return field($_[0], 'ptp'); }
+sub synce($)   { return field($_[0], 'synce'); }
 sub whol($)    { return field($_[0], 'whol'); }
 sub current_speed($) { return field($_[0], 'current_speed'); }
 sub mask($)    { return field($_[0], 'mask'); }
