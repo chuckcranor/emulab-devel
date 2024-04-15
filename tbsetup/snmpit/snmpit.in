@@ -4027,6 +4027,10 @@ sub doPortPTP($$@) {
     }
     my ($stack) = @$stacks;
 
+    # XXX not called via the command line
+    $ptp_profile = "L2"
+	if (!$ptp_profile);
+
     print "Applying PTP command '$command' " .
 	($command eq "enable" ? "for profile '$ptp_profile' " : "") .
 	"to ports " .
@@ -4061,6 +4065,10 @@ sub doPortSyncE($$@) {
 	    "Stacks are " . join(", ",map {$_->{STACKID}} @$stacks) . "\n";
     }
     my ($stack) = @$stacks;
+
+    # XXX not called via the command line
+    $synce_param = "default"
+	if (!$synce_param);
 
     print "Applying SyncE command '$command' to ports " .
 	Port->toStrings(@ports) . " ...\n"
