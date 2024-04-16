@@ -1589,10 +1589,10 @@ sub portPTP ($$$@) {
     my %gotport = ();
     foreach my $iface (@nports) {
 	my $isenabled = $self->{PORTS}{$iface}->{"ptp-enabled"};
-	print STDERR "$id: PTP is " . ($isenabled ? "enable" : "disable") . "d\n";
+	$self->debug("$id: PTP is " . ($isenabled ? "enable" : "disable") . "d\n");
 	if ($cmd eq "enable" && $isenabled ||
 	    $cmd eq "disable" && !$isenabled) {
-	    $self->debug("$id: PTP already ${cmd}d on $iface.\n");
+	    print STDERR $self->{NAME} . ": $iface: PTP already ${cmd}d\n";
 	    next;
 	}
 
@@ -1629,7 +1629,7 @@ sub portPTP ($$$@) {
 		    $errors++;
 		    next;
 		}
-		print STDERR $self->{NAME} . ": $iface: PTP ${cmd}ed\n";
+		print STDERR $self->{NAME} . ": $iface: PTP ${cmd}d\n";
 
 		# update cached info
 		if ($self->{GOTPORTINFO}) {
@@ -1658,7 +1658,7 @@ sub portPTP ($$$@) {
 		warn "$id: ERROR: PTP $cmd on ports '@cports' failed.\n";
 		return int(@cports);
 	    }
-	    print STDERR $self->{NAME} . ": @cports: PTP ${cmd}ed\n";
+	    print STDERR $self->{NAME} . ": @cports: PTP ${cmd}d\n";
 
 	    # update cached info
 	    if ($self->{GOTPORTINFO}) {
@@ -1751,10 +1751,10 @@ sub portSyncE($$$@)
     my %gotport = ();
     foreach my $iface (@nports) {
 	my $isenabled = $self->{PORTS}{$iface}->{"synce-enabled"};
-	print STDERR "$id: SyncE is " . ($isenabled ? "enable" : "disable") . "d\n";
+	$self->debug("$id: SyncE is " . ($isenabled ? "enable" : "disable") . "d\n");
 	if ($cmd eq "enable" && $isenabled ||
 	    $cmd eq "disable" && !$isenabled) {
-	    $self->debug("$id: SyncE already ${cmd}d on $iface.\n");
+	    print STDERR $self->{NAME} . ": $iface: SyncE already ${cmd}d\n";
 	    next;
 	}
 
@@ -1788,7 +1788,7 @@ sub portSyncE($$$@)
 		$errors++;
 		next;
 	    }
-	    print STDERR $self->{NAME} . ": $iface: SyncE ${cmd}ed\n";
+	    print STDERR $self->{NAME} . ": $iface: SyncE ${cmd}d\n";
 
 	    # update cached info
 	    if ($self->{GOTPORTINFO}) {
