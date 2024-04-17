@@ -247,7 +247,8 @@ CREATE TABLE `apt_aggregate_radio_transmissions` (
   `violation` tinyint(1) NOT NULL default '0',  
   `instance_uuid` varchar(40) default NULL,
   KEY frontend (`aggregate_urn`,`node_id`,`iface`,`frontend`),
-  KEY stamp (`aggregate_urn`,`node_id`,`iface`,`frontend`,`tstamp`)
+  KEY stamp (`aggregate_urn`,`node_id`,`iface`,`frontend`,`tstamp`),
+  KEY uuid (`instance_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -677,6 +678,7 @@ CREATE TABLE `apt_instance_history` (
   `manifest` mediumtext,
   `webinfo` mediumtext,
   `modify_count` int(11) unsigned NOT NULL default '0',
+  `fabric_stitched` tinyint(1) NOT NULL default '0',
   PRIMARY KEY (`uuid`),
   KEY `profile_id` (`profile_id`),
   KEY `creator` (`creator`),
@@ -800,6 +802,7 @@ CREATE TABLE `apt_instances` (
   `openstack_utilization` mediumtext,
   `webinfo` mediumtext,
   `fabric_sliceid` varchar(64) default NULL,
+  `fabric_stitched` tinyint(1) NOT NULL default '0',
   `rdz_status` varchar(32) default NULL,
   `modify_count` int(11) unsigned NOT NULL default '0',
   PRIMARY KEY (`uuid`),
@@ -1132,6 +1135,7 @@ CREATE TABLE `apt_instance_rfranges` (
   `power` float(8,2) NOT NULL DEFAULT '0.00',
   `width` float(8,2) DEFAULT NULL,
   `rdz_grantid` varchar(40) DEFAULT NULL,
+  `rdz_status` varchar(40) DEFAULT NULL,
   PRIMARY KEY (`uuid`,`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

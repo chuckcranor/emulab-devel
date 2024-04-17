@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -75,10 +75,11 @@ use Sys::Syslog;
 
 sub usage() {
     print << "END";
-Usage: $0 [-v n] [-e] [-a] <on|off|cycle|status> <node ...>
+Usage: $0 [-v n] [-e] [-a] [-W] <on|off|cycle|status> <node ...>
 -e     Surpress sending of event - for use by scripts that have already sent it
 -v n   Run with verbosity level n
 -a     Skip the access check, caller is knows what it is doing
+-W     Skip the timeout check, caller knows what it is doing.
 END
     1;
 }
@@ -129,6 +130,10 @@ if ($opt{e}) {
 my $nopermcheck = 0;
 if ($opt{"a"}) {
     $nopermcheck = 1;
+}
+my $notimecheck = 0;
+if ($opt{"W"}) {
+    $notimecheck = 1;
 }
 
 #
@@ -367,7 +372,8 @@ foreach my $nodeid (@machines) {
 	    $forcecycle = 1;
 	}
     }
-    my $time_ok = (time() - $power_delay > $last_power ? 1 : 0);
+    my $time_ok = ($notimecheck ? 1 :
+		   (time() - $power_delay > $last_power ? 1 : 0));
 
     #
     # Check for rate-limiting, and update the last power cycle time

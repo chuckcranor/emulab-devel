@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2023 University of Utah and the Flux Group.
+# Copyright (c) 2016-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -124,6 +124,8 @@ sub CreateCommon($$$$$$$$$)
     $self->{'CANCEL'}      = undef;
     $self->{'GID'}         = $gid;
     $self->{'GID_IDX'}     = defined( $gid ) ? $group->gid_idx() : undef;
+    $self->{'RESMODE'}     = defined( $pid ) ?
+	$project->SharedReservationsString() : undef;
 	
     bless($self, $class);
     
@@ -233,6 +235,7 @@ sub Lookup($$;$$$$)
     $self->{'PID'}         = $record->{'pid'};
     $self->{'PID_IDX'}     = $record->{'pid_idx'};
     $self->{'SHARED_RES'}  = $project->shared_reservation();
+    $self->{'RESMODE'}     = $project->SharedReservationsString();
     $self->{'EID'}         = undef;
     $self->{'START'}       = $record->{'s'};
     $self->{'END'}         = $record->{'e'};
@@ -281,6 +284,7 @@ sub approved($)    { return $_[0]->{"APPROVED"}; }
 sub approver($)    { return $_[0]->{"APPROVER"}; }
 sub uuid($)        { return $_[0]->{"UUID"}; }
 sub notified($)    { return $_[0]->{"NOTIFIED"}; }
+sub resmode($)     { return $_[0]->{"RESMODE"}; }
 sub notified_unused($) { return $_[0]->{"NOTIFIED_UNUSED"}; }
 sub override_unused($) { return $_[0]->{"OVERRIDE_UNUSED"}; }
 sub gid($)         { return $_[0]->{"GID"}; }
@@ -306,6 +310,7 @@ sub data($$;$)
 sub Stringify($)
 {
     my ($self) = @_;
+    my $mode = ($self->resmode() ? "/" . $self->resmode() : "");
 
     my $idx = $self->idx();
     $idx = "xxx" if (!defined($idx));
@@ -324,7 +329,7 @@ sub Stringify($)
     my $end = (defined( $self->end() ) ?
 		 POSIX::strftime("%m/%d/20%y %H:%M:%S",
 				 localtime($self->end())) : "forever");
-    return "[Reservation:$idx $pid/$uid, ${nodes}x${type}, ${start}-${end}]";
+    return "[Reservation:$idx $pid/$uid${mode}, ${nodes}x${type}, ${start}-${end}]";
 }
 
 sub SetStart($$)

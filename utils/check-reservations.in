@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2017-2023 University of Utah and the Flux Group.
+# Copyright (c) 2017-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,12 +36,14 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print STDERR "Usage: check-reservations [-d] [-n]\n";
+    print STDERR "Usage: check-reservations [-dv] [-n] [-a]\n";
     exit( 1 );
 }
-my $optlist  = "dn";
+my $optlist  = "dnav";
 my $debug    = 0;
 my $impotent = 0;
+my $checkall = 0;
+my $verbose  = 0;
 
 #
 # Configure variables
@@ -85,6 +87,12 @@ if (defined($options{"d"})) {
 if (defined($options{"n"})) {
     $impotent = 1;
 }
+if (defined($options{"a"})) {
+    $checkall = 1;
+}
+if (defined($options{"v"})) {
+    $verbose = 1;
+}
 usage()
     if (@ARGV);
 
@@ -103,9 +111,10 @@ my $query_result =
 		 "      r.start <= NOW() AND ".
 		 "      r.override_unused=0 AND ".
 		 "      (TIMESTAMPDIFF(MINUTE, r.start, now()) > ".
-		 "       (6 * 60)) AND ".
-		 "      (TIMESTAMPDIFF(MINUTE, r.start, now()) < ".
-		 "       (10 * 60))");
+		 "       (6 * 60)) ".
+		 ($checkall ? "" :
+		  " AND (TIMESTAMPDIFF(MINUTE, r.start, now()) < ".
+		  "       (24 * 60))"));
 
 #
 # Gather up all of the reservations for each project so we can generate
@@ -124,7 +133,7 @@ while (my ($idx) = $query_result->fetchrow_array()) {
 	if (!defined($project));
     
     my $user;
-    my $group = $project;
+    my $group = $project->GetProjectGroup();
 
     if ($res->shared_res() == $Project::RESERVATIONS_PERUSER) {
 	$user = User->Lookup($res->uid());
@@ -138,7 +147,7 @@ while (my ($idx) = $query_result->fetchrow_array()) {
     }
     if (!exists($projRes{$target})) {
 	my @allres   = ResUtil::CollectReservations($group, $user, 0);
-	my @timeline = ResUtil::CreateTimeline($group, $user, @allres);
+	my @timeline = ResUtil::CreateTimeline($project, $group, $user, @allres);
 	
 	$projRes{$target} = {
 	    "project"  => $project,
@@ -155,7 +164,8 @@ while (my ($idx) = $query_result->fetchrow_array()) {
 # Loop again to get utilization for each res.
 #
 foreach my $target (keys(%projRes)) {
-    my $ref = $projRes{$target};
+    my $ref      = $projRes{$target};
+    my $project  = $ref->{'project'};
     my @reslist  = @{$ref->{'reslist'}};
     my @timeline = @{$ref->{'timeline'}};
 
@@ -170,10 +180,15 @@ foreach my $target (keys(%projRes)) {
 	}
 
 	#
-	# We now use project utilization, not user. Too confusing for users.
+	# XXX: Need to handle per-group
 	#
-	my $utilization = $stats->{'projectUtilization'};
-
+	my $utilization;
+	if ($project->ResModeProject()) {
+	    $utilization = $stats->{'projectUtilization'};
+	}
+	elsif ($project->ResModeUser()) {
+	    $utilization = $stats->{'userUtilization'};
+	}
 	if ($utilization == 0.0) {
 	    # Skip if cancel already set; do not interfere with a command
 	    # line operation that set the cancel.
@@ -182,7 +197,11 @@ foreach my $target (keys(%projRes)) {
 	
 	    # Mark for cancelation.
 	    print "Marking unused reservation for cancellation.\n"
-		if ($debug);
+		if ($debug || $verbose);
+	    if ($verbose && !$debug) {
+		print "$res\n";
+		print Dumper($stats);
+	    }
 	    next
 		if ($impotent);
 	    my $cancel = time() + (3 * 3600);
@@ -230,7 +249,7 @@ foreach my $target (keys(%projRes)) {
 	    # that path, and override_unused is set).
 	    #
 	    print "Clearing unused reservation cancellation.\n"
-		if ($debug);
+		if ($debug || $verbose);
 	    next
 		if ($impotent);
 	    

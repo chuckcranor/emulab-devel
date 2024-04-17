@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -325,10 +325,6 @@ function Do_RangeHistory()
             "txlist"    => null,
             "key"       => $uuid . ":" . $idx,
         );
-        $instance = InstanceHistory::Lookup($uuid);
-        if ($instance) {
-            $range["url"] = $instance->StatusURL();
-        }
         
         #
         # Look for any transmissions in this range during that time.

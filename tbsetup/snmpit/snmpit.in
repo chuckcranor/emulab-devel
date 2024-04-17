@@ -75,6 +75,8 @@ sub doMakeVlan($$@);
 sub doDeleteVlan($@);
 sub doVlanNumber($$);
 sub doPortControl($$@);
+sub doPortPTP($$@);
+sub doPortSyncE($$@);
 sub doRecreateVlans($);
 sub doTrunkEnable($$$@);
 sub doTrunkDisable($$);
@@ -126,6 +128,10 @@ Usage: $0 [-h] [-v level] [-q] [-n] [-i device] [-S stack]
           [--of-enable name pid eid]
           [--of-controller name pid eid tcp:ip:port [fail-secure]]
           [--of-listener name pid eid]
+	  [--ptp-enable profile ports]
+	  [--ptp-disable ports]
+	  [--synce-enable ports]
+	  [--synce-disable ports]
 General:
   -h              Display this help message
   -v <level>      Verbose mode
@@ -198,6 +204,15 @@ Port Control:
   -B <statstring>        Pass in a stat string from -b to restore status
   -D <pid> <eid>         Disable all control net ports for an experiment
   -R <pid> <eid>         (Re)enable all control net ports for an experiment
+  --ptp-enable <profile> <ports>
+                         Enable PTP profile <profile> on the indicated ports.
+  --ptp-disable <ports>
+                         Disable PTP (any profile) on the indicated ports.
+  --synce-enable <param> <ports>
+                         Enable SyncE on the indicated ports. <param> is a
+		             placeholder and should always be 'default'.
+  --synce-disable <ports>
+                         Disable SyncE on the indicated ports.
 
 More than one operation can be specified - However, beware that the order in
 which operations will occur is undefined, and some combinations of operations
@@ -218,7 +233,8 @@ GetOptions(\%opt,
     'o=s@{1,1}', 'redirect-err', 'blockmode', 'syncvlans', 'impotent',
     'shadow', 'skip-supplied', 'whol-magic', 'backtraceonwarning',
     'prunestalevlans','setvlanontrunks','resetvlanontrunks',
-    'clearvlanontrunks','deletestalevlans');
+    'clearvlanontrunks','deletestalevlans',
+    'ptp-enable=s', 'ptp-disable', 'synce-enable=s', 'synce-disable');
 
 if ($opt{h}) {
     exit &usage;
@@ -272,6 +288,8 @@ our $next_vlan_tag; # XXX see doMakeVlan for explanation
 my %stack_ids = ();
 my $optdev; # when -i only specify a single device
 
+my $ptp_profile; # PTP profile to use
+my $synce_param; # Placeholder in case we need a SyncE option
 
 #
 # Move this initialization ahead from its previous location so that
@@ -306,7 +324,7 @@ if ($opt{m} || $opt{o}) {
 	($opt{m} && ($ARGV[0] =~ /:/ || $ARGV[1] =~ /:/)) ||
 	($opt{o} && ($ARGV[0] =~ /^\d+$/ || $ARGV[1] =~ /^\d+$/))) {
 	if (! $opt{f}) {
-	    tberror "pid/eid reqired!";
+	    tberror "pid/eid required!";
 	    exit(usage());
 	}
 	$pid = VLAN_PID();
@@ -329,7 +347,7 @@ if ($opt{t} || $opt{r} || $opt{D} || $opt{R} || $opt{X} ||
     #
     if (!defined($pid)) {
 	if (@ARGV < 2) {
-	    tberror "pid/eid reqired!";
+	    tberror "pid/eid required!";
 	    exit &usage;
 	} else {
 	    ($pid, $eid) = (shift @ARGV, shift @ARGV);
@@ -354,8 +372,8 @@ if ($opt{t} || $opt{r} || $opt{D} || $opt{R} || $opt{X} ||
 	    @optvlanids = @ARGV;
 	}
     }
-} elsif ($opt{d} || $opt{e} || $opt{a} || $opt{p} || $opt{u} || $opt{m}
-         || $opt{U} || $opt{b}) {
+} elsif ($opt{d} || $opt{e} || $opt{a} || $opt{p} || $opt{u} || $opt{m} ||
+         $opt{U} || $opt{b} || $opt{'ptp-disable'} || $opt{'synce-disable'}) {
     #
     # Options that take a list of ports
     #
@@ -389,13 +407,13 @@ if ($opt{t} || $opt{r} || $opt{D} || $opt{R} || $opt{X} ||
     # Options that take the pid eid and connection string
     #
     if (@ARGV < 2) {
-	tberror "pid/eid reqired!";
+	tberror "pid/eid required!";
 	exit &usage;
     } else {
 	($pid, $eid) = (shift @ARGV, shift @ARGV);
     }
     if (@ARGV < 0) {
-	tberror "Controller connection string reqired!";
+	tberror "Controller connection string required!";
 	exit &usage;
     } else {
 	$ofconnstr = shift @ARGV;
@@ -407,11 +425,25 @@ if ($opt{t} || $opt{r} || $opt{D} || $opt{R} || $opt{X} ||
     # Options that need pid eid
     #
     if (@ARGV < 1) {
-	tberror "pid/eid reqired!";
+	tberror "pid/eid required!";
 	exit &usage;
     } else {
 	($pid, $eid) = (shift @ARGV, shift @ARGV);
     }    
+} elsif ($opt{'ptp-enable'} || $opt{'synce-enable'}) {
+    #
+    # Options that need a parameter and a port list
+    #
+    if (@ARGV < 1) {
+	tberror "PTP/SyncE parameter and at least one port required!";
+	exit &usage;
+    }
+    if ($opt{'ptp-enable'}) {
+	$ptp_profile = $opt{'ptp-enable'};
+    } else {
+	$synce_param = $opt{'synce-enable'};
+    }
+    @ports = @ARGV;    
 } else {
     #
     # Everything else
@@ -474,6 +506,10 @@ if ($opt{'of-enable'}) { push @commands, ["ofenable", $opt{'of-enable'}]; }
 if ($opt{'of-disable'}) { push @commands, ["ofdisable", $opt{'of-disable'}]; }
 if ($opt{'of-controller'}) { push @commands, ["ofcontroller", $opt{'of-controller'}]; }
 if ($opt{'of-listener'}) { push @commands, ["oflistener", $opt{'of-listener'}]; }
+if ($opt{'ptp-enable'}) { push @commands, ["ptpcontrol","enable"]; }
+if ($opt{'ptp-disable'}) { push @commands, ["ptpcontrol","disable"]; }
+if ($opt{'synce-enable'}) { push @commands, ["syncecontrol","enable"]; }
+if ($opt{'synce-disable'}) { push @commands, ["syncecontrol","disable"]; }
 
 #
 # Commands that can occur more than once
@@ -979,7 +1015,7 @@ COMMAND: foreach my $command (@commands) {
             }
 	    last;
 	};
-	(/portcontrol/ || /trunkdisable/ || /portstatus/) && do {
+	(/portcontrol/ || /trunkdisable/ || /portstatus/ || /ptpcontrol/ || /syncecontrol/) && do {
 	    @devicenames = ($supplied_switches && !$skip_supplied)?
 	    		   @supplied_switches : getDeviceNames(@ports);
 	    last;
@@ -1292,6 +1328,16 @@ COMMAND: foreach my $command (@commands) {
 	/expcnetcontrol/ && do {
 	    my ($portcommand) = @args;
 	    $exitval += doPortControl(\@stacks,$portcommand,@ports);
+	    last;
+	};
+	/ptpcontrol/ && do {
+	    my ($cmd) = @args;
+	    $exitval += doPortPTP(\@stacks,$cmd,@ports);
+	    last;
+	};
+	/syncecontrol/ && do {
+	    my ($cmd) = @args;
+	    $exitval += doPortSyncE(\@stacks,$cmd,@ports);
 	    last;
 	};
 	/recreate/ && do {
@@ -3885,6 +3931,64 @@ sub doPortControl($$@) {
 	foreach my $port (@ports) {
 	    setPortEnabled($port, ($command eq "enable" ? 1 : 0));
 	}
+    }
+    return $errors;
+
+}
+
+sub doPortPTP($$@) {
+    my $stacks = shift;
+    my $command = shift;
+    my @ports = @_;
+    my $errors;
+
+    if ($ELABINELAB) {
+	die "Cannot do PTP configuration from ELABINELAB\n";
+    }
+
+    if (@$stacks > 1) {
+	die "Port PTP control accross multiple stacks is not supported\n" .
+	    "Stacks are " . join(", ",map {$_->{STACKID}} @$stacks) . "\n";
+    }
+    my ($stack) = @$stacks;
+
+    print "Applying PTP command '$command' " .
+	($command eq "enable" ? "for profile '$ptp_profile' " : "") .
+	"to ports " .
+	Port->toStrings(@ports) . " ...\n"
+	if (!$quiet);
+    $errors = $stack->portPTP($command,$ptp_profile,@ports);
+    if (!$quiet) {
+	print "Port PTP command ";
+	print $errors? "failed":"succeeded",".\n";
+    }
+    return $errors;
+
+}
+
+sub doPortSyncE($$@) {
+    my $stacks = shift;
+    my $command = shift;
+    my @ports = @_;
+    my $errors;
+
+    if ($ELABINELAB) {
+	die "Cannot do SyncE configuration from ELABINELAB\n";
+    }
+
+    if (@$stacks > 1) {
+	die "Port SyncE control accross multiple stacks is not supported\n" .
+	    "Stacks are " . join(", ",map {$_->{STACKID}} @$stacks) . "\n";
+    }
+    my ($stack) = @$stacks;
+
+    print "Applying SyncE command '$command' to ports " .
+	Port->toStrings(@ports) . " ...\n"
+	if (!$quiet);
+    $errors = $stack->portSyncE($command,$synce_param,@ports);
+    if (!$quiet) {
+	print "Port SyncE command ";
+	print $errors? "failed":"succeeded",".\n";
     }
     return $errors;
 

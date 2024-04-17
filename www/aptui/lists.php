@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -95,7 +95,7 @@ function SpitProjectList($days)
                      "   from apt_instance_history as i ".
                      " left join projects as p on p.pid_idx=i.pid_idx ".
                      " left join users as u on u.uid_idx=p.head_idx ".
-                     " where i.servername='$APTHOST' and ".
+                     " where i.portal='$PORTAL_GENESIS' and ".
                      "       i.started>DATE_SUB(curdate(), INTERVAL 2 MONTH))");
                      
     $results = array();

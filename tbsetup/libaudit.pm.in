@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -554,6 +554,12 @@ sub SendAuditMail($)
 	my $CC;
 	my $HDRS  = "Reply-To: $TBOPS";
 	my @FILES = ();
+
+	if (defined($AUDIT_INFO{'headers'})) {
+	    foreach my $h (@{ $AUDIT_INFO{'headers'} }) {
+		$HDRS .= "\n" . $h;
+	    }
+	}
 	
 	if (defined($logfile) && -s $logfile) {
 	    @FILES = ($logfile);
@@ -703,6 +709,7 @@ my %AUDIT_METAINFO =
       message      => 'string',
       to           => 'list',   # Send audit mail to these people
       cc           => 'list',   # Cc audit mail to these people
+      headers      => 'list',   # X- headers
       brand        => 'brand'); # Brand object for sendmail
 
 #
