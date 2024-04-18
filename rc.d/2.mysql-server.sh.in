@@ -55,7 +55,40 @@ fi
 
 logopt="--log-long-format --log=@prefix@/log/mysql/base --log-bin=@prefix@/log/mysql/update --log-slow-queries=@prefix@/log/mysql/slowqueries"
 
-if [ $major -eq 5 ]; then
+#
+# mysql 8 changes:
+# default for max_allowed packet is 64M
+# sql_mode no longer has NO_AUTO_CREATE_USER
+# no more query cache
+# innodb_file_format is no longer an option
+#
+if [ $major -eq 8 ]; then
+	safeprog=/usr/local/bin/mysqld_safe
+	logopt="--general_log=1 --general_log_file=@prefix@/log/mysql/base"
+	logopt="$logopt --log-bin=@prefix@/log/mysql/update"
+	logopt="$logopt --slow_query_log=1 --binlog-format=MIXED"
+	logopt="$logopt --slow_query_log_file=@prefix@/log/mysql/slowqueries"
+
+	opts="--character_set_server=latin1 --default-storage-engine=MyISAM --long_query_time=2"
+	if [ $MAINSITE == "0" -a $BIGDB == "0" ]; then
+	    opts="$opts --key_buffer_size=256M --table_open_cache=128"
+	    opts="$opts --sort_buffer_size=2M"
+	    opts="$opts --read_buffer_size=1M --max_connections=250"
+	else
+	    opts="$opts --key_buffer_size=256M --table_open_cache=256"
+	    opts="$opts --sort_buffer_size=4M"
+	    opts="$opts --read_buffer_size=1M"
+	    opts="$opts --join_buffer_size=1M --thread_cache_size=50"
+	    opts="$opts --tmp_table_size=256M --max_heap_table_size=256M"
+	    opts="$opts --max_connections=500"
+	fi
+	opts="$opts --secure-file-priv="
+	opts="$opts --innodb_file_per_table=1"
+	# Backwards compatibility.
+	opts="$opts --lower_case_table_names=0 --log_output=file"
+	# Strict mode is coming, but we can't handle it.
+	opts="$opts --sql_mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION"
+elif [ $major -eq 5 ]; then
 	safeprog=/usr/local/bin/mysqld_safe
 	if [ $minor -gt 1 ]; then
 	    logopt="--general_log=1 --general_log_file=@prefix@/log/mysql/base"
@@ -100,7 +133,7 @@ options="--pid-file=/var/db/mysql/mysqld.pid --skip-grant-tables --skip-networki
 case "$1" in
 	start|faststart|quietstart|onestart|forcestart)
 		if [ -x $safeprog ]; then
-			if [ "$fbsdvers" = "FreeBSD6" -o $major -eq 5 ]; then
+			if [ "$fbsdvers" = "FreeBSD6" -o $major -ge 5 ]; then
 			        #
 				# mysqld does not properly detach, and so it
 				# gets a SIGHUP, which causes it to reload
@@ -124,8 +157,3 @@ case "$1" in
 		exit 64
 		;;
 esac
-
-
-
-
-
