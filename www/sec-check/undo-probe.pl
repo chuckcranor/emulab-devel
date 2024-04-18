@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007,2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -141,7 +141,7 @@ sub present($$)
 	$q = "select count(*) from projects where pid='$id'";
     } 
     elsif ($type eq "group") {
-	$q = "select count(*) from groups where pid='$pid' and gid='$id'";
+	$q = "select count(*) from `groups` where pid='$pid' and gid='$id'";
     }
     elsif ($type eq "user") {
 	$q = "select count(*) from users where uid='$id'";

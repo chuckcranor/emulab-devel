@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2006, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2006-2007,2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,7 +51,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 my %gids = ();
 
 my $query_result =
-    DBQueryFatal("select pid,pid_idx,gid,gid_idx from groups");
+    DBQueryFatal("select pid,pid_idx,gid,gid_idx from `groups`");
 
 while (my ($pid,$pid_idx,$gid,$gid_idx) = $query_result->fetchrow_array()) {
     $gids{"$pid:$gid"} = $gid_idx;

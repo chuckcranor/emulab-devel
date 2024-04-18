@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016-2023 University of Utah and the Flux Group.
+# Copyright (c) 2016-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2128,7 +2128,7 @@ sub MaxSwapIn($$$) {
     my $error = {};
     my $details;
 
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as nres read");        
+    DBQueryFatal("lock tables reserved write, users read, `groups` read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, experiment_stats as stats read, next_reserve as nr read, `geni-cm`.geni_slices as s read, project_reservations as pr read, reservation_version write, node_attributes as a read, node_reservations as nres read");
     
     my $reservations = LookupAll( $class, $type, undef, \$details );
     #print $details . "\n" if ($type eq "d430");

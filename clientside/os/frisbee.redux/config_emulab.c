@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2010-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -1179,7 +1179,7 @@ emulab_imagegids(int imageidx, int *igids)
 
 	igids[0] = igids[1] = -1;
 
-	res = mydb_query("SELECT unix_gid FROM groups AS g, images AS i"
+	res = mydb_query("SELECT unix_gid FROM `groups` AS g, images AS i"
 			 " WHERE g.pid_idx=i.pid_idx"
 			 " AND (g.gid_idx=g.pid_idx OR g.gid_idx=i.gid_idx)"
 			 " AND imageid=%d", 1, imageidx);
@@ -1654,7 +1654,7 @@ emulab_get_host_authinfo(struct in_addr *req, struct in_addr *host,
 	 *     from unixgroup_membership.
 	 */
 	res = mydb_query("SELECT g.unix_gid"
-			 " FROM groups AS g,group_membership AS gm"
+			 " FROM `groups` AS g,group_membership AS gm"
 			 " WHERE g.gid_idx=gm.gid_idx AND gm.uid='%s'",
 			 1, ei->sname);
 	assert(res != NULL);

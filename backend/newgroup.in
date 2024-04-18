@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -347,7 +347,7 @@ my $maxtries	  = 99;
 my $count	  = 0;
 while ($count < $maxtries) {
     my $query_result =
-	DBQueryFatal("select gid from groups where unix_name='$unix_gname'");
+	DBQueryFatal("select gid from `groups` where unix_name='$unix_gname'");
     last
 	if (!$query_result->numrows);
 

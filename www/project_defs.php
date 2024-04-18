@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -513,7 +513,7 @@ class Project
 	$result  = array();
 
 	$query_result =
-	    DBQueryFatal("select gid_idx from groups ".
+	    DBQueryFatal("select gid_idx from `groups` ".
 			 "where pid_idx='$pid_idx'");
 
 	while ($row = mysql_fetch_array($query_result)) {
@@ -1042,7 +1042,7 @@ class Project
 	# "dp_projects" node_attributes are lists of group gid_idxs.
         $query_result =
 	    DBQueryFatal("select distinct g.gid_idx, a.node_id ".
-			 "  from groups as g, node_attributes as a ".
+			 "  from `groups` as g, node_attributes as a ".
 			 "where g.pid_idx='$proj_idx' ".
 			 "  and a.attrkey='dp_projects' ".
                          "  and FIND_IN_SET(g.gid_idx, a.attrvalue) ".

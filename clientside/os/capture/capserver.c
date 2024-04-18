@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016, 2019 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -373,7 +373,7 @@ main(int argc, char **argv)
 		res = mydb_query("select g.unix_gid from reserved as r "
 				 "left join experiments as e on "
 				 " r.pid=e.pid and r.eid=e.eid "
-				 "left join groups as g on "
+				 "left join `groups` as g on "
 				 " g.pid=e.pid and g.gid=e.gid "
 				 "where r.node_id='%s'",
 				 1, node_id);

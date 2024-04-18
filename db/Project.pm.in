@@ -336,7 +336,7 @@ sub Create($$$$)
 	my $count    = 0;
 	while ($count < $maxtries) {
 	    my $query_result =
-		DBQueryFatal("select gid from groups ".
+		DBQueryFatal("select gid from `groups` ".
 			     "where unix_name='$unix_gname'");
 	    last
 		if (!$query_result->numrows);
@@ -808,7 +808,7 @@ sub GroupList($$)
     my $pid_idx = $self->pid_idx();
 
     my $query_result =
-	DBQueryWarn("select gid_idx from groups ".
+	DBQueryWarn("select gid_idx from `groups` ".
 		    "where pid_idx=$pid_idx and pid_idx!=gid_idx");
     return -1
 	if (! $query_result);
@@ -853,7 +853,7 @@ sub LookupGroup($$)
     }
 
     my $query_result =
-	DBQueryWarn("select gid_idx from groups ".
+	DBQueryWarn("select gid_idx from `groups` ".
 		    "where pid_idx=$pid_idx and $clause");
     return undef
 	if (! $query_result);
@@ -1371,7 +1371,7 @@ sub SetReservationsPerUser($;$$)
 	return 0 if( $impotent );
 	
 	next if( !defined( Reservation->BeginTransaction( $version,
-			   "projects", "groups" ) ) );
+			   "projects", "`groups`" ) ) );
 
 	my %args = ( "shared_reservations" => $RESERVATIONS_PERUSER );
 	$self->Update( \%args );
@@ -1436,7 +1436,7 @@ sub SetReservationsPerGroup($;$$)
 	return 0 if( $impotent );
 	
 	next if( !defined( Reservation->BeginTransaction( $version,
-			   "projects", "groups" ) ) );
+			   "projects", "`groups`" ) ) );
 
 	my $weakened = shared_reservations( $self ) == $RESERVATIONS_PERUSER;
 	

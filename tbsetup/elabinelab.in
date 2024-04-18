@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2020 University of Utah and the Flux Group.
+# Copyright (c) 2004-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -742,7 +742,7 @@ sub DumpDBGoo()
     #
     # These tables are dumped by project ID.
     #
-    my @PROJTABLES = ("projects", "groups", "group_features");
+    my @PROJTABLES = ("projects", "`groups`", "group_features");
 
     #
     # These tables are dumped by user ID (for the project members).

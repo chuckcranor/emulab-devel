@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -296,7 +296,7 @@ if ($all || $projects || defined($user) || defined($pid)) {
     my $query_result;
     
     if ($all || $projects) {
-	$query = "select g.pid,g.gid from groups as g ".
+	$query = "select g.pid,g.gid from `groups` as g ".
 		 "left join projects as p on p.pid=g.pid ".
 		 "where p.approved=1 and p.nonlocal_id is null ".
 		 "order by g.pid,g.gid";
@@ -309,7 +309,7 @@ if ($all || $projects || defined($user) || defined($pid)) {
 		  "order by g.pid,g.gid";
     }
     else {
-	$query  = "select g.pid,g.gid from groups as g ".
+	$query  = "select g.pid,g.gid from `groups` as g ".
 	          "left join projects as p on p.pid=g.pid ".
 		  "where g.pid='$pid' and p.nonlocal_id is null " .
 		  "order by g.pid,g.gid";

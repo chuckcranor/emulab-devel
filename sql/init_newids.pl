@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2006 University of Utah and the Flux Group.
+# Copyright (c) 2006,2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -69,7 +69,7 @@ DBQueryFatal("alter table users add PRIMARY KEY (uid_idx)");
 
 DBQuery("alter table projects drop PRIMARY KEY");
 DBQuery("alter table project_stats drop PRIMARY KEY");
-DBQuery("alter table groups drop PRIMARY KEY");
+DBQuery("alter table `groups` drop PRIMARY KEY");
 DBQuery("alter table group_stats drop PRIMARY KEY");
 DBQuery("alter table group_membership drop PRIMARY KEY");
 
@@ -97,7 +97,7 @@ while (my ($pid) = $query_result->fetchrow_array()) {
 }
 
 $query_result =
-    DBQueryFatal("select pid,gid from groups order by pid,gid");
+    DBQueryFatal("select pid,gid from `groups` order by pid,gid");
 
 while (my ($pid,$gid) = $query_result->fetchrow_array()) {
     my $pid_idx = $gids{"$pid:$pid"};
@@ -111,7 +111,7 @@ while (my ($pid,$gid) = $query_result->fetchrow_array()) {
 	$next_gid++;
     }
     
-    DBQueryFatal("update groups set gid_idx=$gid_idx,pid_idx=$pid_idx ".
+    DBQueryFatal("update `groups` set gid_idx=$gid_idx,pid_idx=$pid_idx ".
 		 "where pid='$pid' and gid='$gid'");
     DBQueryFatal("update group_stats set gid_idx=$gid_idx ".
 		 "where pid='$pid' and gid='$gid'");
@@ -148,6 +148,6 @@ while (my ($uid, $pid, $gid) = $query_result->fetchrow_array()) {
 
 DBQueryFatal("alter table projects add PRIMARY KEY (pid_idx)");
 DBQueryFatal("alter table project_stats add PRIMARY KEY (pid_idx)");
-DBQueryFatal("alter table groups add PRIMARY KEY (gid_idx)");
+DBQueryFatal("alter table `groups` add PRIMARY KEY (gid_idx)");
 DBQueryFatal("alter table group_stats add PRIMARY KEY (gid_idx)");
 DBQueryFatal("alter table group_membership add PRIMARY KEY (uid_idx,gid_idx)");

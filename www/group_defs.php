@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,7 +38,7 @@ class Group
 	$safe_gid_idx = addslashes($gid_idx);
 
 	$query_result =
-	    DBQueryWarn("select * from groups ".
+	    DBQueryWarn("select * from `groups` ".
 			"where gid_idx='$safe_gid_idx'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
@@ -78,7 +78,7 @@ class Group
 	$safe_gid = addslashes($gid);
 
 	$query_result =
-	    DBQueryWarn("select gid_idx from groups ".
+	    DBQueryWarn("select gid_idx from `groups` ".
 			"where pid='$safe_pid' and gid='$safe_gid'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
@@ -100,7 +100,7 @@ class Group
 	$gid_idx = $this->gid_idx();
 
 	$query_result =
-	    DBQueryWarn("select * from groups where gid_idx='$gid_idx'");
+	    DBQueryWarn("select * from `groups` where gid_idx='$gid_idx'");
     
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->group = NULL;
@@ -564,7 +564,7 @@ class Group
         # Check that we can guarantee uniqueness of the unix group name.
         # 
 	$query_result =
-	    DBQueryFatal("select gid from groups ".
+	    DBQueryFatal("select gid from `groups` ".
 			 "where unix_name='$unix_name'");
 
 	if (mysql_num_rows($query_result)) {
@@ -589,8 +589,8 @@ class Group
 	# unused numbers by looking at existing numbers plus one, and check
 	# to see if that number is taken. 
 	$query_result =
-	    DBQueryWarn("select g.unix_gid + 1 as start from groups as g ".
-			"left outer join groups as r on ".
+	    DBQueryWarn("select g.unix_gid + 1 as start from `groups` as g ".
+			"left outer join `groups` as r on ".
 			"  g.unix_gid + 1 = r.unix_gid ".
 			"where g.unix_gid>=$starting_gid and ".
 			"      g.unix_gid<$ending_gid and ".
@@ -603,7 +603,7 @@ class Group
 	$row = mysql_fetch_row($query_result);
 	$unix_gid = $row[0];
 
-	if (!DBQueryWarn("insert into groups set ".
+	if (!DBQueryWarn("insert into `groups` set ".
 			 " pid='$pid', gid='$gid', ".
 			 " leader='" . $leader->uid() . "'," .
 			 " leader_idx='" . $leader->uid_idx() . "'," .
@@ -621,7 +621,7 @@ class Group
 			  "  (pid,gid,gid_idx,pid_idx,gid_uuid) ".
 			  "values ('$pid', '$gid', $gid_idx, ".
 			  "        $pid_idx, '$uuid')")) {
-	    DBQueryFatal("delete from groups where gid_idx='$gid_idx'");
+	    DBQueryFatal("delete from `groups` where gid_idx='$gid_idx'");
 	    return null;
 	}
 	$newgroup = Group::Lookup($gid_idx);
@@ -638,7 +638,7 @@ class Group
 	$gid_idx = $this->gid_idx();
 
 	DBQueryWarn("delete from group_stats where gid_idx='$gid_idx'");
-	DBQueryWarn("delete from groups where gid_idx='$gid_idx'");
+	DBQueryWarn("delete from `groups` where gid_idx='$gid_idx'");
 	return 0;
     }
 
@@ -893,7 +893,7 @@ class Group
 	$query_result =
 	    DBQueryFatal("select m.uid_idx,m.trust ".
 			 "   from group_membership as m ".
-			 "left join groups as g on ".
+			 "left join `groups` as g on ".
 			 "     g.pid=m.pid and g.gid=m.gid ".
 			 "where m.pid_idx='$pid_idx' and ".
 			 "      m.gid_idx='$gid_idx' ".
@@ -962,7 +962,7 @@ class Group
 	$uid     = $leader->uid();
 	$uid_idx = $leader->uid_idx();
 
-	DBQueryFatal("update groups set leader='$uid',leader_idx='$uid_idx' ".
+	DBQueryFatal("update `groups` set leader='$uid',leader_idx='$uid_idx' ".
 		     "where gid_idx='$idx'");
 
 	$this->group["leader"] = $uid;

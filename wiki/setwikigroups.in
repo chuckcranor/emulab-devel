@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005, 2006, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2005-2007, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -135,7 +135,7 @@ my $uid_idx = $target_user->uid_idx();
 #
 my $query_result =
     DBQueryFatal("select p.pid,g.wikiname,p.trust from group_membership as p ".
-		 "left join groups as g on g.pid=p.pid and g.gid=p.gid ".
+		 "left join `groups` as g on g.pid=p.pid and g.gid=p.gid ".
 		 "where uid_idx='$uid_idx' and p.pid=g.gid and trust!='none'");
 
 while (my ($pid,$wikiname,$trust) = $query_result->fetchrow_array()) {

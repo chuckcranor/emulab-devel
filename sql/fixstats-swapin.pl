@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -63,7 +63,7 @@ while (my $row = $query_result->fetchrow_hashref()) {
 	  "where uid='$uid';\n");
     print("update projects set expt_count=expt_count-1 ".
 	  "where pid='$pid';\n");
-    print("update groups set expt_count=expt_count-1 ".
+    print("update `groups` set expt_count=expt_count-1 ".
 	  "where pid='$pid' and gid='$gid';\n");
     print("update experiment_stats set swapin_count=swapin_count-1 ".
 	  "where pid='$pid' and eid='$eid' and exptidx=$exptidx;\n");

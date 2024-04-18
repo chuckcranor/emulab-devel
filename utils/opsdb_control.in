@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2011 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -866,7 +866,7 @@ sub Initialize()
     # Add project and group DBs.
     #
     my $projects_result =
-	DBQueryFatal("select g.pid,g.gid from groups as g ".
+	DBQueryFatal("select g.pid,g.gid from `groups` as g ".
 		     "left join projects as p on p.pid_idx=g.pid_idx ".
 		     "where p.approved=1 ".
 #		     "and (p.pid='testbed' or p.pid='emulab-ops' or ".
