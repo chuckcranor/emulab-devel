@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1338,6 +1338,8 @@ sub handleCtrlEvent($$) {
 	    foreach ($action) {
 		/^$TBTIMEOUTREBOOT/ && do {
 		    my $noreboot;
+		    # XXX reload the attributes so we get a current value
+		    $nodeobj->LoadNodeAttributes(1);
 		    if (!$nodeobj->NodeAttribute("stated_noreboot", \$noreboot)
 			&& $noreboot) {
 			info("Node $node: Ignoring timeout reboot as directed\n");
