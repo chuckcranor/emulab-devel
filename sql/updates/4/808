@@ -1,0 +1,22 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBKeyExists("apt_aggregate_radio_transmissions", "uuid")) {
+	DBQueryFatal("ALTER TABLE apt_aggregate_radio_transmissions add " .
+		     " KEY `uuid` (`instance_uuid`)");
+    }
+
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

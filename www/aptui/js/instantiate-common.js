@@ -851,6 +851,7 @@ window.instantiateCommon = (function () {
 	 * that need to be updates.
 	 */
 	var rspecDoc   = $.parseXML(rspec);
+	var modified   = false;
 
 	$(rspecDoc).find("node").each(function() {
 	    var manager_id   = $(this).attr("component_manager_id");

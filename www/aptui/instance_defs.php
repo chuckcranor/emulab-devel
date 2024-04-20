@@ -942,6 +942,8 @@ class Instance
                            "rflab-blackbox"     => true,
                            "at-ru"              => true,
                            "bt-ru550"           => true,
+                           "bt-ru650"           => true,
+                           "l3hpl2server"       => true,
         );
 
         #

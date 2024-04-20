@@ -1435,6 +1435,8 @@ sub CreateSlivers()
 	    if (($exitcode == GENIRESPONSE_NO_MAPPING() ||
 		 $exitcode == GENIRESPONSE_INSUFFICIENT_NODES()) &&
 		$instance->pid() ne "@TUTORIALPID@" &&
+		# For update, lets not try forever. 
+		!$aggobj->saved_manifest() &&
 		($instance->AllResourcesReserved($aggobj) ||
 		 $ismobile && $instance->RouteList())) {
 		my $message = "$cluster says not able to map experiment yet; ".
@@ -1462,6 +1464,20 @@ sub CreateSlivers()
 	    # When updating, we just keep going. The web UI will say something.
 	    #
 	    if ($ignorefailures) {
+		if ($aggobj->saved_manifest() &&
+		    ($exitcode == GENIRESPONSE_INSUFFICIENT_NODES ||
+		     $exitcode == GENIRESPONSE_INSUFFICIENT_MEMORY ||
+		     $exitcode == GENIRESPONSE_INSUFFICIENT_BANDWIDTH ||
+		     $exitcode == GENIRESPONSE_NOSPACE ||
+		     $exitcode == GENIRESPONSE_NO_CONNECT ||
+		     $exitcode == GENIRESPONSE_MAPPING_IMPOSSIBLE ||
+		     $exitcode == GENIRESPONSE_NO_MAPPING)) {
+		    #
+		    # An update failed cause of a resource problem.
+		    # Restore the manifest since we assume no actual changes. 
+		    #
+		    $aggobj->RestoreManifest();
+		}
 		next;
 	    }
 	    # With mulitple aggregates allow user to ignore errors and

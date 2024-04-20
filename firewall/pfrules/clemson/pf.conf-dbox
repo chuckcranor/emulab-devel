@@ -1,0 +1,35 @@
+#
+# PF configuration for a FreeNAS/TrueNAS storage server allowing access via
+# the control network interface from only the local boss and other allowed
+# hosts. (Be sure to include the Mothership!)
+#
+# All communication with clients is via the experiment interface(s) and
+# should be unaffected. XXX we should limit to whatever is needed for the
+# iSCSI connection and communication.
+# 
+
+# Control net interface
+PUBLIC_IF	= "bge0"
+# Make sure we never block out the local boss
+BOSS		= "130.127.132.51"
+# Hosts/nets allowed to access: we let the mothership boss in
+ALLOWEDHOSTS	= "{ 155.98.32.70 }"
+
+scrub in on $PUBLIC_IF all fragment reassemble
+
+# Don't accidentally lock out MS boss.
+pass in quick from $BOSS to $PUBLIC_IF no state
+pass out quick from $PUBLIC_IF to $BOSS no state
+
+# Pass all traffic for experiment nets (XXX should allow just iSCSI)
+pass quick on ! $PUBLIC_IF all no state
+
+# By default, block all incoming, allow all outgoing
+block log on $PUBLIC_IF all
+pass out on $PUBLIC_IF all
+
+# Allow from specified hosts/nets
+pass in on $PUBLIC_IF from $ALLOWEDHOSTS
+
+# Allow ping and traceroute
+pass on $PUBLIC_IF inet proto icmp icmp-type { echoreq, timex, unreach }

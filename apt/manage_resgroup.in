@@ -4466,8 +4466,7 @@ sub FindFirstFit($$$$$$$)
 		else {
 		    # The group did not exist at the cluster, so use
 		    # the general forecast.
-		    $forecasts->{$urn}->{'forecast'} =
-			$pinfo->{$urn}->{'forecast'};
+		    $forecasts->{$urn} = $pinfo->{$urn}->{'forecast'};
 		}
 	    }
 	    else {
@@ -4477,8 +4476,7 @@ sub FindFirstFit($$$$$$$)
 		else {
 		    # The project did not exist at the cluster, so use
 		    # the general forecast.
-		    $forecasts->{$urn}->{'forecast'} =
-			$pinfo->{$urn}->{'forecast'};
+		    $forecasts->{$urn} = $pinfo->{$urn}->{'forecast'};
 		}
 	    }
 	}

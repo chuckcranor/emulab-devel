@@ -6,35 +6,35 @@
 #
 TBDBNAME=tbdb
 TBADMINGROUP=tbadmin
-TBOPSEMAIL=testbed-ops@bus-6186.powderwireless.net
-TBLOGSEMAIL=testbed-logs@bus-6186.powderwireless.net
-TBWWWEMAIL=testbed-www@bus-6186.powderwireless.net
-TBAPPROVALEMAIL=testbed-approval@bus-6186.powderwireless.net
-TBAUDITEMAIL=testbed-audit@bus-6186.powderwireless.net
-TBSTATEDEMAIL=testbed-stated@bus-6186.powderwireless.net
-TBTESTSUITEEMAIL=testbed-testsuite@bus-6186.powderwireless.net
-TBAUTOMAILEMAIL=testbed-automail@bus-6186.powderwireless.net
-TBACTIVEARCHIVE=testbed-active-users-archive@bus-6186.powderwireless.net
-TBUSERSARCHIVE=testbed-users-archive@bus-6186.powderwireless.net
-TBERRORSEMAIL=testbed-errors@bus-6186.powderwireless.net
-TBCOOKIESUFFIX="POWDERBUS6186"
+TBOPSEMAIL=testbed-ops@bus-6365.powderwireless.net
+TBLOGSEMAIL=testbed-logs@bus-6365.powderwireless.net
+TBWWWEMAIL=testbed-www@bus-6365.powderwireless.net
+TBAPPROVALEMAIL=testbed-approval@bus-6365.powderwireless.net
+TBAUDITEMAIL=testbed-audit@bus-6365.powderwireless.net
+TBSTATEDEMAIL=testbed-stated@bus-6365.powderwireless.net
+TBTESTSUITEEMAIL=testbed-testsuite@bus-6365.powderwireless.net
+TBAUTOMAILEMAIL=testbed-automail@bus-6365.powderwireless.net
+TBACTIVEARCHIVE=testbed-active-users-archive@bus-6365.powderwireless.net
+TBUSERSARCHIVE=testbed-users-archive@bus-6365.powderwireless.net
+TBERRORSEMAIL=testbed-errors@bus-6365.powderwireless.net
+TBCOOKIESUFFIX="POWDERBUS6365"
 JAILIPBASE=172.17.0.0
 JAILIPMASK=255.240.0.0
 DELAYCAPACITY=1
-BOSSNODE=boss.bus-6186.powderwireless.net
-USERNODE=ops.bus-6186.powderwireless.net
-FSNODE=boss.bus-6186.powderwireless.net
+BOSSNODE=boss.bus-6365.powderwireless.net
+USERNODE=ops.bus-6365.powderwireless.net
+FSNODE=boss.bus-6365.powderwireless.net
 # This would typically not change, is usually ops. But can be boss too.
 MAILERNODE="boss"
-OURDOMAIN=bus-6186.powderwireless.net
+OURDOMAIN=bus-6365.powderwireless.net
 FSDIR_GROUPS=/ops/groups
 FSDIR_PROJ=/ops/proj
 FSDIR_USERS=/ops/users
 FSDIR_SHARE=/share
 FSDIR_SCRATCH=
-WWWHOST=www.bus-6186.powderwireless.net
+WWWHOST=www.bus-6365.powderwireless.net
 TBMAINSITE=0
-THISHOMEBASE=POWDERBUS6186
+THISHOMEBASE=POWDERBUS6365
 PLABSUPPORT=0
 PELABSUPPORT=0
 WIKISUPPORT=0
@@ -64,7 +64,7 @@ ELVIN_COMPAT=0
 # The name of the outer boss for inner boss to request services from.
 OUTERBOSS_NODENAME=boss.emulab.net
 OUTERBOSS_SSLCERTNAME=/usr/testbed/etc/outer_emulab.pem
-TBCOOKIESUFFIX="POWDERBUS6186"
+TBCOOKIESUFFIX="POWDERBUS6365"
 # XXX hack to work around perl bug
 # Start a multicast IGMP querier
 NEEDMCQUERIER=0
@@ -77,31 +77,31 @@ TBUSEDBI=1
 SSLCERT_COUNTRY="US"
 SSLCERT_STATE="Utah"
 SSLCERT_LOCALITY="Utah Powder BUS"
-SSLCERT_ORGNAME="Utah Powder BUS 6186"
+SSLCERT_ORGNAME="Utah Powder BUS 6365"
 #
 # Network config stuff. Used to generate initial named and dhcpd config files.
 #
-TESTBED_NETWORK=155.98.46.80
+TESTBED_NETWORK=155.98.46.200
 TESTBED_NETMASK=255.255.255.248
-BOSSNODE_IP=155.98.46.82
+BOSSNODE_IP=155.98.46.202
 USERNODE_IP=10.10.10.3
-FSNODE_IP=155.98.46.82
-CONTROL_ROUTER_IP=155.98.46.81
-CONTROL_NETWORK=155.98.46.80
+FSNODE_IP=155.98.46.202
+CONTROL_ROUTER_IP=155.98.46.201
+CONTROL_NETWORK=155.98.46.200
 CONTROL_NETMASK=255.255.255.248
-PRIVATE_NETWORK=155.98.46.80
-PRIVATE_ROUTER=155.98.46.81
+PRIVATE_NETWORK=155.98.46.200
+PRIVATE_ROUTER=155.98.46.201
 PRIVATE_NETMASK=255.255.255.248
-PUBLIC_NETWORK=155.98.46.80
-PUBLIC_ROUTER=155.98.46.81
+PUBLIC_NETWORK=155.98.46.200
+PUBLIC_ROUTER=155.98.46.201
 PUBLIC_NETMASK=255.255.255.248
-DHCPD_DYNRANGE="155.98.46.246 155.98.46.250"
+DHCPD_DYNRANGE="155.98.46.238 155.98.46.250"
 NAMED_FORWARDERS="155.98.32.70"
 NAMED_ALSONOTIFY="155.98.32.70"
 #
 # Must localize to avoid conflict with outer emulab frisbeed.
 #
-FRISEBEEMCASTADDR="239.82.46"
+FRISEBEEMCASTADDR="239.202.46"
 FRISEBEEMCASTPORT="6000"
 FRISEBEENUMPORTS="0"
 #
@@ -144,7 +144,7 @@ SDCOLLECTD_USE_RRDTOOL=1
 CONFIG_TARGETSYS=1
 TARGETSYS_TARGET="POWDER-BUS"
 PROTOGENI_SUPPORT=1
-PROTOGENI_DOMAIN="powderbus6186"
+PROTOGENI_DOMAIN="powderbus6365"
 FANCYBANNER=1
 ISOLATEADMINS=0
 PORTAL_ENABLE=1
@@ -163,7 +163,7 @@ MANAGEMENT_ROUTER=10.10.11.2
 
 #PROTOGENI_NOPORTALEXPIRE=1
 PROTOGENI_PORTALONLY=1
-POWDER_NICKNAME="Bus6186"
+POWDER_NICKNAME="Bus6365"
 
 POWDER_RFMONITOR=1
 POWDER_RFMONITOR_HOST="10.10.10.2"
@@ -174,9 +174,9 @@ BROWSER_CONSOLE_PROXIED=1
 POWDER_DEADMAN=1
 POWDER_WBSTORE=1
 
-POWDER_BUS_P0WER_VERSION=2
-
 ZFS_QUOTA_PROJECT="10G"
+
+POWDER_BUS_P0WER_VERSION=2
 
 # Image updates take a long time on buses, this makes it smoother since
 # updates will not prevent experiments starting.

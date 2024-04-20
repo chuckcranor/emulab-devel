@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016-2018, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2016-2018, 2022, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -52,6 +52,7 @@ use emdb;
 use libtestbed;
 use User;
 use Project;
+use Group;
 use Reservation;
 use WebTask;
 use emutil;
@@ -68,6 +69,7 @@ my $debug      = 0;
 my $webtask_id;
 my $webtask;
 my $project;
+my $group;
 my @timeline;
 my @reservations;
 
@@ -114,16 +116,24 @@ if (defined($options{"r"})) {
     if (!defined($project)) {
 	fatal("Could not lookup project for reservation");
     }
+    $group = Group->Lookup($res->gid());
+    if (!defined($project)) {
+	fatal("Could not lookup project for reservation");
+    }
     @reservations = ($res);
     my @allres = ResUtil::CollectReservations($project, undef, 0);
-    @timeline  = ResUtil::CreateTimeline($project, @allres);
+    @timeline  = ResUtil::CreateTimeline($project, $group, undef, @allres);
 }
 elsif (@ARGV) {
     $project = Project->Lookup($ARGV[0]);
     if (!defined($project)) {
 	fatal("No such project");
     }
-    @reservations = CollectReservations($project, undef, 0);
+    if (!defined($project)) {
+	fatal("Could not lookup project for reservation");
+    }
+    $group = $project->GetProjectGroup();
+    @reservations = CollectReservations($project, $group, undef, 0);
     if (!@reservations) {
 	print STDERR "No reservations to process\n";
 	if (defined($webtask)) {

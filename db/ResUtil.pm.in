@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -89,9 +89,9 @@ sub CollectReservations($$$)
 # since the earliest reservation.
 #
 
-sub CreateTimeline($$@)
+sub CreateTimeline($$$@)
 {
-    my ($group, $user, @reservations) = @_;
+    my ($project, $group, $user, @reservations) = @_;
 
     #
     # Remember all the types we care about; when computing the counts
@@ -135,7 +135,7 @@ sub CreateTimeline($$@)
     }
     
     # Get the usage since the beginning of the earliest reservation.
-    my $usage = $group->Usage($user, $earliest->start(), $end);
+    my $usage = $project->Usage($group, $user, $earliest->start(), $end);
     if ($debug) {
 	print "There are " . scalar(@$usage) . " usage records\n";
     }

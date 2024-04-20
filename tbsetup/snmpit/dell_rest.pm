@@ -106,7 +106,7 @@ sub call($$$;$$$$)
     my ($datastr,$paramstr);
     my %status = (
 	"GET"    => 200,
-	"PUT"    => 200,
+	"PUT"    => 201,
 	"POST"   => 201,
 	"DELETE" => 204,
 	"PATCH"  => 204
@@ -131,7 +131,7 @@ sub call($$$;$$$$)
 	"Accept"        => "application/json",
 	"Authorization" => "Basic " . MIME::Base64::encode_base64($auth, "")
     );
-    if ($method eq "POST" || $method eq "PATCH") {
+    if ($method eq "POST" || $method eq "PATCH" || $method eq "PUT") {
 	$headers{"Content-Type"} = "application/json";
     }
 
@@ -399,6 +399,144 @@ sub enableMultiplePortsSpec($$@)
 	    "interface" => \@pinfo
 	}
     };
+    return $porthash;
+}
+
+#
+# PTP support. Here are some potentially useful PTP REST queries as returned
+# by cli mode rest-translate:
+#
+# "show ptp":
+#   dell-ptp:ptp-ds/clock-ds
+#
+# "show running-configuration interface ethernet 1/1/1:1":
+#   ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1:1?content=config
+#
+# "show ptp interface ethernet 1/1/1:1":
+#   ietf-interfaces:interfaces-state/interface=ethernet1%2F1%2F1:1/dell-ptp:ptp-port-ds/dell-ptp:port-ds
+#
+# "ptp enable" on a port:
+#   -d '{"ietf-interfaces:interfaces":{"interface":[{"name":"ethernet1/1/1:1","dell-ptp:ptp-port-config":{"enable":true}}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+# "no ptp enable" on a port:
+#   DELETE https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1:1/dell-ptp:ptp-port-config/dell-ptp:enable
+#
+# "ptp transport layer2" on a port:
+#   -d '{"ietf-interfaces:interfaces":{"interface":[{"name":"ethernet1/1/1:1","dell-ptp:ptp-port-config":{"transport":{"layer2-mode":{"layer2":true}}}}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+# "no ptp transport":
+#   DELETE https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1:1/dell-ptp:ptp-port-config/dell-ptp:transport
+#
+# "ptp role master" on a port:
+#   -d '{"ietf-interfaces:interfaces":{"interface":[{"name":"ethernet1/1/1:1","dell-ptp:ptp-port-config":{"role":"master"}}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+# "no ptp role":
+#   DELETE https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1:1/dell-ptp:ptp-port-config/dell-ptp:role
+#
+# Set ptp state for multiple ports:
+#   curl -i -k -H "Accept: application/json" -H "Content-Type: application/json" -u $USER_NAME:$PASSWORD -d '{"ietf-interfaces:interfaces":{"interface":[{"name":"ethernet1/1/12","dell-ptp:ptp-port-config":{"enable":true,"role":"master","transport":{"layer2-mode":{"layer2":true}}}}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+# Clear most ptp state for multiple ports
+# (transport must be cleared seperately):
+#   curl -i -k -H "Accept: application/json" -H "Content-Type: application/json" -u $USER_NAME:$PASSWORD -d '{"ietf-interfaces:interfaces":{"interface":[{"name":"ethernet1/1/12","dell-ptp:ptp-port-config":{"enable":false,"role":"dynamic"}}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+# Set ptp state for single port:
+#   curl -s -k -H "Accept: application/json" -H "Content-Type: application/json" -u $USER_NAME:$PASSWORD -d '{"dell-ptp:ptp-port-config":{"enable":true,"role":"master","transport":{"layer2-mode":{"layer2":true}}}}' -X PUT https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1/dell-ptp:ptp-port-config
+#
+# Clear ptp state for single port:
+#   curl -s -k -H "Accept: application/json" -H "Content-Type: application/json" -u $USER_NAME:$PASSWORD -X DELETE https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1/dell-ptp:ptp-port-config
+#
+
+#
+# Enable/diable PTP on a single port
+# XXX role and transport ignored for now.
+#
+sub ptpPortSpec($$$$$)
+{
+    my ($self,$enable,$role,$transport,$iface) = @_;
+    my $porthash;
+
+    # This only makes sense for enable
+    if ($enable) {
+	$porthash = {
+	    "dell-ptp:ptp-port-config" => {
+		"enable" => JSON::PP::true,
+		"role" => "master",
+		"transport" => {
+		    "layer2-mode" => {
+			"layer2" => JSON::PP::true
+		    }
+		}
+	    }
+	};
+    }
+
+    return $porthash;
+}
+
+#
+# Enable/diable PTP on multiple ports
+# XXX role and transport ignored for now.
+#
+sub ptpMultiplePortSpec($$$$@)
+{
+    my ($self,$enable,$role,$transport,@ifaces) = @_;
+    my $pconfig;
+
+    if ($enable) {
+	$pconfig = {
+	    "enable" => JSON::PP::true,
+	    "role" => "master",
+	    "transport" => {
+		"layer2-mode" => {
+		    "layer2" => JSON::PP::true
+		}
+	    }
+	};
+    } else {
+	$pconfig = {
+	    "enable" => JSON::PP::false,
+	    "role" => "dynamic",
+	    "transport" => {}
+	}
+    }
+
+    my @pinfo = ();
+    foreach my $iface (uniqueList(@ifaces)) {
+	push @pinfo, {
+	    "name" => $iface,
+	    "dell-ptp:ptp-port-config" => $pconfig
+	};
+    }
+
+    my $porthash = {
+	"ietf-interfaces:interfaces" => {
+	    "interface" => \@pinfo
+	}
+    };
+
+    return $porthash;
+}
+
+#
+# Enable/diable SyncE on a single port
+# XXX param is ignored.
+#
+sub syncePortSpec($$$$)
+{
+    my ($self,$enable,$param,$iface) = @_;
+    my $porthash;
+
+    # This only makes sense for enable
+    if ($enable) {
+	$porthash = {
+	    "dell-synce:reference-config" => {
+		"enable" => JSON::PP::true,
+		"esmc-mode" => "tx-only"
+	    }
+	};
+    }
+
     return $porthash;
 }
 

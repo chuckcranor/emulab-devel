@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal', "rfrange-history", "showtopo-modal", "resources-list"]);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal', "rfrange-history", "showtopo-modal", "resources-list","txgraph"]);
     var mainString = templates['show-project'];
     var experimentString = templates['experiment-list'];
     var profileString = templates['profile-list'];
@@ -40,7 +40,8 @@ $(function ()
 	$('#oops_div').html(oopsString);
 	$('#conversion_help_div').html(converterHelpTemplate({}));
 	$('#showtopo-modal-div').html(templates["showtopo-modal"]);
-
+        $('#main-body').append(templates['txgraph']);
+        
 	// Focus on the search box when switching to these tabs.
         $('.nav-tabs a[href="#profiles"]')
 	    .on('shown.bs.tab', function (e) {
@@ -1253,6 +1254,11 @@ $(function ()
 	    if (json.value.length == 0) {
 		return;
 	    }
+	    var rfhash = [];
+	    _.each(json.value, function (range) {
+		rfhash[range.key] = range;
+	    });
+            
 	    var template = _.template(templates['rfrange-history']);
 	    $('#rfranges .history-rfranges .waiting')
 		.html(template({"ranges" : json.value}));
@@ -1287,7 +1293,7 @@ $(function ()
 
 			filter_formatter : {
 			    // Date (two inputs)
-			    6 : function($cell, indx) {
+			    7 : function($cell, indx) {
 				return $.tablesorter.filterFormatter
 				    .uiDatepicker( $cell, indx, {
 					textFrom : "",
@@ -1299,7 +1305,7 @@ $(function ()
 				    });
 			    },
 			    // Date (two inputs)
-			    7 : function($cell, indx) {
+			    8 : function($cell, indx) {
 				return $.tablesorter.filterFormatter
 				    .uiDatepicker( $cell, indx, {
 					textFrom : "",
@@ -1317,6 +1323,23 @@ $(function ()
 			},
 		    }
 		});
+	    
+            $('.history-rfranges .txgraph-button').click(function (event) {
+		event.preventDefault();
+		var key = $(this).data("key");
+		var record = rfhash[key];
+
+		console.info(record);
+		var args = {
+		    "selector" : "#txgraph-modal",
+		    "txlist"   : record.txlist,
+		    "instances": null,
+		    "instance" : record,
+		}
+	        var defer = $.Deferred();
+	        window.ShowTXGraph("#txgraph-modal", defer);
+	        defer.resolve(args);
+	    });
 	};
 	sup.CallServerMethod(null, "rfrange", "RangeHistory",
 			     {"pid" : window.TARGET_PROJECT}, callback);

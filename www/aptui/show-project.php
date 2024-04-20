@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -99,12 +99,16 @@ REQUIRE_TABLESORTER(
     array("js/lib/tablesorter/widgets/widget-filter-formatter-jui.js"));
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/profile-support.js");
+AddLibrary("js/txgraph.js");
+AddLibrary("js/lib/d3.v5.js");
 
-AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
+AddTemplateList(array('confirm-delete-profile', 'profile-list-modal', 'txgraph'));
 SPITREQUIRE("js/show-project.js");
 
 AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal", "resgroup-list", "rfrange-history", "showtopo-modal", "resources-list"));
 
+echo "<link rel='stylesheet'
+            href='css/frequency-graph.css'>\n";
 echo "<link rel='stylesheet'
             href='css/tablesorter-filter.formatter.css'>\n";
 

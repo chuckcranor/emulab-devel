@@ -475,8 +475,7 @@ $(function ()
     
     function GetStatus()
     {
-	console.info("GetStatus", statusBusy, statusHold,
-                     new Date().getTime() / 1000);
+	//console.info("GetStatus", statusBusy, statusHold);
 	
 	// Clearly not thread safe, but its okay.
 	if (statusBusy || statusHold)
@@ -506,7 +505,7 @@ $(function ()
         /*
          * Watch for a buried tab/window. Slow down polling since it is hard
          * on the server. But not completely, switch from every five seconds
-         * to every five minutes.
+         * to every few minutes.
          */
         if (document.hidden !== undefined &&
             document.hidden && lastStatusStamp) {
@@ -515,7 +514,7 @@ $(function ()
                 console.info("we are hidden and have not updated status for " +
                              diff + " seconds");
             }
-            if (diff < 60) {
+            if (diff < 120) {
                 //console.info("Skipping this status call");
                 return;
             }
@@ -5198,6 +5197,7 @@ $(function ()
 	    $("#status_progress_bar").addClass("progress-bar-striped");
 	    $("#status_progress_bar").addClass("progress-bar-animated");
 	    $("#status_progress_bar").removeClass("bg-primary");
+	    $("#status_progress_bar").removeClass("bg-warning");
 	    $("#status_progress_bar").removeClass("bg-danger");
 	}
 	else {
@@ -5206,6 +5206,9 @@ $(function ()
 		$("#status_progress_bar").removeClass("progress-bar-animated");
 		if (instanceStatus == "ready") {
 		    $("#status_progress_bar").addClass("bg-primary");
+		}
+		else if (instanceStatus == "pending") {
+		    $("#status_progress_bar").addClass("bg-warning");
 		}
 		else {
 		    $("#status_progress_bar").addClass("bg-danger");
@@ -5922,6 +5925,7 @@ $(function ()
 	    sup.CallServerMethod(null, "status", "ModifyExperiment", args,
 		 function(json) {
 		     console.info("ModifyExperiment", json);
+                     var currentStatus = lastStatus;
 		     statusHold = 0;
 		     GetStatus();
 		     
@@ -5937,10 +5941,20 @@ $(function ()
 		     $('#error_panel_text').text("");
 		     $('#error_panel').addClass("hidden");
 		     
-		     sup.HideWaitWait();
 		     // Set this for error display. 
 		     modifying = true;
 		     $('.ppwizard-cancel').trigger("click");
+
+                     var interval;
+                     function checkStatus() {
+                         console.info("checkStatus", currentStatus, lastStatus);
+                         if (currentStatus == lastStatus) {
+                             return;
+                         }
+                         clearInterval(interval);
+		         sup.HideWaitWait();
+                     }
+                     interval = setInterval(checkStatus, 2000);                     
 		 });
 	});
 
