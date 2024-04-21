@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,7 +42,7 @@ my $DBNAME = '@TBDBNAME@';
 
 my $extraopts  = "";
 my $mysqlvers = `mysql -V`;
-if ($mysqlvers =~ /Distrib (\d\.\d)/) {
+if ($mysqlvers =~ /Distrib (\d\.\d).\d+, for/) {
     my $vers = $1 + 0.0;
     if ($vers >= 5.0) {
 	$extraopts .= "--skip-opt ";
@@ -50,6 +50,13 @@ if ($mysqlvers =~ /Distrib (\d\.\d)/) {
     if ($vers >= 5.7) {
 	$extraopts .= "--set-gtid-purged=off ";
     }
+}
+elsif ($mysqlvers =~ /Ver (\d\.\d+).\d+ for/) {
+    my $vers = $1 + 0.0;
+    if ($vers < 8.0) {
+	fatal("Unexpected mysql version '$vers'");
+    }
+    $extraopts .= "--skip-opt --set-gtid-purged=off ";
 }
 else {
     fatal("Could not determine mysql version");

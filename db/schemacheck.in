@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,9 +46,10 @@ my $DBNAME         = "@TBDBNAME@";
 my $master_schema = "$testbed_srcdir/sql/database-create.sql";
 my $schemadiff = "$testbed_srcdir/utils/schemadiff";
 my $extraopts  = "";
+my $ignorecwidth = 0;
 
 my $mysqlvers = `mysql -V`;
-if ($mysqlvers =~ /Distrib (\d\.\d)/) {
+if ($mysqlvers =~ /Distrib (\d\.\d).\d+, for/) {
     my $vers = $1 + 0.0;
     if ($vers >= 5.0) {
 	$extraopts .= "--skip-quote-names ";
@@ -56,6 +57,14 @@ if ($mysqlvers =~ /Distrib (\d\.\d)/) {
     if ($vers >= 5.7) {
 	$extraopts .= "--set-gtid-purged=off ";
     }
+}
+elsif ($mysqlvers =~ /Ver (\d\.\d+).\d+ for/) {
+    my $vers = $1 + 0.0;
+    if ($vers < 8.0) {
+	fatal("Unexpected mysql version '$vers'");
+    }
+    $extraopts .= "--set-gtid-purged=off ";
+    $ignorecwidth = 1;
 }
 else {
     fatal("Could not determine mysql version");
@@ -83,7 +92,11 @@ system "$mysqldump 2> /dev/null > $db_schema";
 #
 # ... and compare it to the schema from the source
 #
-my $diff = (system("$schemadiff $db_schema $master_schema") >> 8);
+# Note that as of mysql8, column print widths are no longer generated
+# in the dump, so ignore them if we are running mysql8 or above.
+#
+my $arg = ($ignorecwidth ? "-w" : "");
+my $diff = (system("$schemadiff $arg $db_schema $master_schema") >> 8);
 unlink($db_schema);
 
 if ($diff) {

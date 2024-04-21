@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,6 +51,7 @@ my $debug = 0;
 my $sql = 1;
 my $quiet = 0;
 my $ignore_tables = 0;
+my $ignore_cwidth = 0;
 
 #
 # Return value - number of differences between the two files
@@ -61,7 +62,7 @@ my $diff = 0;
 # Process command-line args
 #
 my %opt;
-getopts('hdsqt', \%opt); 
+getopts('hdsqtw', \%opt); 
 if ($opt{h}) {
     exit &usage;
 }
@@ -78,6 +79,9 @@ if ($opt{q}) {
 }
 if ($opt{t}) {
     $ignore_tables = 1;
+}
+if ($opt{w}) {
+    $ignore_cwidth = 1;
 }
 
 if (@ARGV != 2) {
@@ -295,6 +299,12 @@ sub read_schema($) {
 		$definition =~ s/timestamp NOT NULL default.*/timestamp NOT NULL/g;
 		$definition =~ s/timestamp\(14\)/timestamp/g;
 		
+		# Display width is not relevant for comparison and mysql8 has
+		# dropped them from dumps.
+		if ($ignore_cwidth) {
+		    $definition =~ s/int\(\d+\)/int/g;
+		}
+
 		$tables{$table_name}{COLUMNS}{$name} = $definition;
 
 		push @{ $tables{$table_name}{ORDERED_COLUMNS} },

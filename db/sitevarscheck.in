@@ -46,8 +46,15 @@ my $DBNAME         = "@TBDBNAME@";
 my $master_sitevars = "$testbed_srcdir/sql/sitevars-create.sql";
 my $sitevarsdiff = "$testbed_srcdir/utils/sitevarsdiff";
 
-my $isvers5   = system("mysql -V | egrep -q -s 'Distrib 5.'") == 0;
-my $extraopts = ($isvers5 ? "--skip-opt" : "");
+my $version = 0;
+my $mysqlvers = `mysql -V`;
+if ($mysqlvers =~ /Distrib (\d\.\d).\d+, for/) {
+    $version = $1 + 0.0;
+}
+elsif ($mysqlvers =~ /Ver (\d\.\d+).\d+ for/) {
+    $version = $1 + 0.0;
+}
+my $extraopts = ($version >= 5.0 ? "--skip-opt" : "");
 
 #
 # XXX: Requires that mysqldump be in caller's $PATH - probably an OK
