@@ -118,12 +118,11 @@ OptimalIpTree::OptimalIpTree(OptimalIpTree const & right)
 }
 
 template<class T>
-void swap_modify(T & left, T & right)
+void swap_modify(auto_ptr<T> & left, auto_ptr<T> & right)
 {
-    T temp;
-    temp = left;
-    left = right;
-    right = temp;
+    T* temp = left.release();
+    left.reset(right.release());
+    right.reset(temp);
 }
 
 OptimalIpTree & OptimalIpTree::operator=(OptimalIpTree const & right)

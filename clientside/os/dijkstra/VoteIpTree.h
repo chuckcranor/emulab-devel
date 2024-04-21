@@ -1,7 +1,7 @@
 // VoteIpTree.h
 
 /*
- * Copyright (c) 2004 University of Utah and the Flux Group.
+ * Copyright (c) 2004, 2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -48,7 +48,7 @@ public:
     VoteIpTree();
     virtual ~VoteIpTree();
 
-    virtual std::auto_ptr<IpTree> exemplar(void) const;
+    virtual auto_ptr<IpTree> exemplar(void) const;
     virtual void reset(void);
     virtual void addRoute(IPAddress ip, int newFirstHop, int depth);
 
@@ -77,7 +77,7 @@ private:
     VoteIpTree(VoteIpTree const &);
     VoteIpTree & operator=(VoteIpTree const &) { return *this; }
 private:
-    std::auto_ptr<VoteIpTree> m_child[2];
+    auto_ptr<VoteIpTree> m_child[2];
     int m_firstHop;
     std::map<int, int> m_childHops;
     int m_depth;
