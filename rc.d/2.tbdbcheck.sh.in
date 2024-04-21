@@ -19,9 +19,13 @@ socket=/tmp/mysql.sock
 
 case "$1" in
 	start|faststart|quietstart|onestart|forcestart)
-		if [ ! -e "$socket" ]; then
-		    sleep 10
-		fi
+		for w in 5 5 5 5 5 5; do
+		    if [ -e "$socket" ]; then
+			break
+		    fi
+		    echo "waiting $w seconds for $socket..."
+		    sleep $w
+		done
 		rm -f $LOGFILE
 		if [ $MAINSITE == "0" ]; then
 		    echo "*** Checking $DBNAME ..." >> $LOGFILE

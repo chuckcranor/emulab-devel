@@ -5,7 +5,7 @@
 
 # PROVIDE: testbed
 # REQUIRE: tbdbcheck pubsub mfrisbeed
-# BEFORE: apache24
+# BEFORE: apache24 LOGIN
 # KEYWORD: shutdown
 
 MAINSITE="@TBMAINSITE@"

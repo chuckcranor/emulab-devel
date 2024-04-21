@@ -1,6 +1,7 @@
 #!/bin/sh
 #
 # Wrapper for DHCPD which has a habit of dying. 
+# Make sure dhcpd_enable is _not_ set to yes in /etc/rc.conf.
 #
 
 #
