@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -65,7 +65,7 @@ my $POWEROFF  = -90.0;
 #
 my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
-my $TBRFOPS          = "powder-rfmon\@flux.utah.edu";
+my $TBRFOPS          = "powder-rfmon\@emulab.net";
 my $OURDOMAIN        = "@OURDOMAIN@";
 my $DEFAULT_URN      = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 my $TBBASE           = "@TBBASE@";
