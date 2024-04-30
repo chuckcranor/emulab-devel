@@ -111,6 +111,9 @@ sub call($$$;$$$$)
 	"DELETE" => 204,
 	"PATCH"  => 204
     );
+    my %status2 = (
+	"PUT"    => 204
+    );
 
     my $auth = $self->{USERNAME} . ":" . $self->{PASSWORD};
     my $server = $self->{NAME};
@@ -182,8 +185,10 @@ sub call($$$;$$$$)
     }
     $exstat = $status{$method}
 	if (!defined($exstat));
+    my $exstat2 = exists($status2{$method}) ? $status2{$method} : $exstat;
 
-    if ($res->{'success'} && $res->{'status'} == $exstat) {
+    if ($res->{'success'} &&
+	($res->{'status'} == $exstat || $res->{'status'} == $exstat2)) {
 	if (exists($res->{'headers'}{'content-type'}) &&
 	    ($res->{'headers'}{'content-type'} eq "application/json" ||
 	     $res->{'headers'}{'content-type'} eq "application/yang-data+json")) {
