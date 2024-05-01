@@ -34,7 +34,7 @@ cvsup		IN	CNAME	boss
 
 ; DMARC records
 _dmarc		IN	TXT	"v=DMARC1; p=none; dmarc=never"
-_dmarc.bas      IN	TXT	"v=DMARC1; p=none; dmarc=never"
+_dmarc.boss     IN	TXT	"v=DMARC1; p=none; dmarc=never"
 
 ; SRV record pointing to emulab boss tmcd port. NixOS helper. 
 _emulab_boss    30 IN SRV 10 10 7777 boss
