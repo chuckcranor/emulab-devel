@@ -213,7 +213,7 @@ if test $TPM -eq 1; then
 fi
 
 # BEGIN Python detection. For the event library.
-AC_PATH_PROGS(PYTHON, python python2.7 python2.6 python2.5 python2.4 python2.3 python2.2 python3)
+AC_PATH_PROGS(PYTHON, python python2.7 python3 python3.9)
 
 if test x"$PYTHON" = x""; then
     AC_MSG_ERROR([python not detected])

@@ -5,7 +5,7 @@ use strict;
 use libinstall;
 use installvars;
 
-my $CRACKLIB_DICT   = "/usr/local/lib/pw_dict.pwd";
+my $CRACK_PORT   = "cracklib";
 
 sub Install($$$)
 {
@@ -16,14 +16,12 @@ sub Install($$$)
 	if ($isupdate);
 
     Phase "cracklib", "Installing cracklib", sub {
-	DoneIfExists("$CRACKLIB_DICT");
-	my $pwd = `$PWD`;
-	chomp $pwd;
-	chdir "$TOP_SRCDIR/tbsetup/checkpass/cracklib,2.7" or
-	    PhaseFail "Unable to change to " .
-	    "$TOP_SRCDIR/tbsetup/checkpass/cracklib,2.7: $!";
-	ExecQuietFatal("make install clean");
-	chdir $pwd;
+	DoneIfPackageInstalled($CRACK_PORT, 0);
+	if (!$packagedir) {
+	    PhaseSkip("No package directory provided");
+	}
+	my $pname = GetPackage($CRACK_PORT, $packagedir);
+	AddPackage($pname, $packagedir);
     };
     return 0;
 }
