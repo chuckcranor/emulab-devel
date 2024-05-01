@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -74,6 +74,7 @@ use lib "@prefix@/lib";
 #use libdb;
 
 sub isroutable($);
+sub NetMask2Slash($);
 
 # This is for the dotted and reverse dotted notation needed for the
 # reverse maps. This is probably all wrong ... 
@@ -81,6 +82,10 @@ my ($ia, $ib, $ic, $id) =
     ($TESTBED_NETWORK =~ /(\d+)\.(\d+)\.(\d+)\.(\d+)/);
 my ($ea, $eb, $ec, $ed) =
     ($EXTERNAL_TESTBED_NETWORK =~ /(\d+)\.(\d+)\.(\d+)\.(\d+)/);
+
+# BASIC SPF.
+my $SPFSTR = "v=spf1 mx ip4:${TESTBED_NETWORK}/" .
+    NetMask2Slash($TESTBED_NETMASK);
 
 my $internal_forwfile = "${ia}.${ib}.${ic}.db.head";
 my $external_forwfile = "${ea}.${eb}.${ec}.db.head";
@@ -106,15 +111,22 @@ while (<IF>) {
 		$internal_strings .= $1 . "$USERNODE_IP" . $3 . "\n";
 		$external_strings .= $1 . "$EXTERNAL_USERNODE_IP" . $3 . "\n";
 	    }
+	    elsif ($2 eq "spf") {
+		$internal_strings .= $1 . "\"${SPFSTR}\"" . $3 . "\n";
+		$external_strings .= $1 . "\"${SPFSTR}\"" . $3 . "\n";
+	    }
 	    elsif ($2 eq "usernode_ina") {
                 $internal_strings .=
-                    "${USERTOKEN}\t\tIN\tA\t\t${USERNODE_IP}\n";
+                    "${USERTOKEN}\t\tIN\tA\t\t${USERNODE_IP}\n" .
+                    "\t\tIN\tTXT\t\t\"${SPFSTR}\"\n";
+		    
 		if ($MXHOST ne "ops") {
 		    $internal_strings .= ${MXSTR};
 		}
 		if (isroutable($EXTERNAL_USERNODE_IP)) {
 		    $external_strings .=
-			"${USERTOKEN}\t\tIN\tA\t\t${EXTERNAL_USERNODE_IP}\n";
+			"${USERTOKEN}\t\tIN\tA\t\t${EXTERNAL_USERNODE_IP}\n".
+			"\t\tIN\tTXT\t\t\"${SPFSTR}\"\n";
 		    if ($MXHOST ne "ops") {
 			$external_strings .= ${MXSTR};
 		    }
@@ -320,3 +332,31 @@ sub isroutable($)
 
     return 1;
 }
+
+sub NetMask2Slash($)
+{
+    my ($netmask) = @_;
+
+    # Simple is good. I stole this out of a google search.
+    my @NETMASKS =
+	(0x10000000,                                             # 0
+	 0x80000000, 0xC0000000, 0xE0000000, 0xF0000000,         #  1 -  4
+	 0xF8000000, 0xFC000000, 0xFE000000, 0xFF000000,         #  5 -  8
+	 0xFF800000, 0xFFC00000, 0xFFE00000, 0xFFF00000,         #  9 - 12
+	 0xFFF80000, 0xFFFC0000, 0xFFFE0000, 0xFFFF0000,         # 13 - 16
+	 0xFFFF8000, 0xFFFFC000, 0xFFFFE000, 0xFFFFF000,         # 17 - 20
+	 0xFFFFF800, 0xFFFFFC00, 0xFFFFFE00, 0xFFFFFF00,         # 21 - 24
+	 0xFFFFFF80, 0xFFFFFFC0, 0xFFFFFFE0, 0xFFFFFFF0,         # 25 - 28
+	 0xFFFFFFF8, 0xFFFFFFFC, 0xFFFFFFFE, 0xFFFFFFFF          # 29 - 32
+	);
+
+    for (my $i = 0; $i < scalar(@NETMASKS); $i++) {
+	my $foo = pack("N", $NETMASKS[$i]);
+
+	if ($netmask eq inet_ntoa($foo)) {
+	    return "$i";
+	}
+    }
+    return undef;
+}
+
