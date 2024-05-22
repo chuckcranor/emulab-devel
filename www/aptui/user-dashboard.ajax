@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -688,6 +688,23 @@ function Do_AcceptAUP()
     $this_user->AcceptAUP($PORTAL_GENESIS);
 
     SPITAJAX_RESPONSE("accepted");
+}
+
+# Admin function log a user out
+function Do_Logout()
+{
+    global $this_user, $target_user;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    $target_user->Logout();
+
+    SPITAJAX_RESPONSE("logged out");
 }
 
 #
