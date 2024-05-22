@@ -3600,7 +3600,14 @@ sub GenVirtLans($)
 		my $wiretype   = $vlan->_wiretype();
 
 		if ($besteffort) {
-		    $wiretype = $BESTEFFORT_WIRETYPE;
+		    #
+		    # If the user specifies a fixed interface, then we do
+		    # not want to use the BESTEFFORT_WIRETYPE, since that
+		    # can conflict with what the user wants.
+		    #
+		    if (! $member->fixed_iface()) {
+			$wiretype = $BESTEFFORT_WIRETYPE;
+		    }
 		}
 		elsif ($bw0 != 0 && !$emulated) {
 		    $wiretype = $self->GetWiretype($wiretype, $bw0);
@@ -3805,6 +3812,23 @@ sub GenVirtLans($)
 		if ($self->virtlan_use_linkdelay($vlan, $shaped)) {
 		    my $plink = "linksimple/$vname/$member0,$member1";
 		    my $others = {};
+		    my $wiretype = $vlan->_wiretype();
+
+		    if ($besteffort) {
+			#
+			# If the user specifies a fixed interface, then we do
+			# not want to use the BESTEFFORT_WIRETYPE, since that
+			# can conflict with what the user wants.
+			#
+			if (! ($member0->fixed_iface() ||
+			       $member1->fixed_iface())) {
+			    $wiretype = $BESTEFFORT_WIRETYPE;
+			}
+		    }
+		    elsif (!$emulated) {
+			$wiretype = $self->GetWiretype($vlan->_wiretype(),
+						       max($top_bw, $top_rbw));
+		    }
 		    if ($emulated) {
 			$others->{'emulated'} = 1
 			    if ($member0->_emulated() && $member1->_emulated());
@@ -3843,12 +3867,7 @@ sub GenVirtLans($)
 				     'virtual_interface_id' => "$member1" },
 				    ($top_bw == 0 ? "*" : 
 				     max($top_bw, $top_rbw)),
-				    ($besteffort ? $BESTEFFORT_WIRETYPE :
-				     ($emulated ?
-				      $vlan->_wiretype() :
-				      $self->GetWiretype($vlan->_wiretype(),
-						 max($top_bw, $top_rbw)))),
-				    $others);
+				     $wiretype, $others);
 		    }
 		    my @delayinfo = ($delay,$bw,$backfill,$loss,
 				     $rdelay,$rbw,$rbackfill,$rloss, 0);
@@ -3934,7 +3953,15 @@ sub GenVirtLans($)
 						   max($top_bw, $top_rbw));
 		}
 		elsif ($besteffort) {
-		    $wiretype = $BESTEFFORT_WIRETYPE;
+		    #
+		    # If the user specifies a fixed interface, then we do
+		    # not want to use the BESTEFFORT_WIRETYPE, since that
+		    # can conflict with what the user wants.
+		    #
+		    if (! ($member0->fixed_iface() ||
+			   $member1->fixed_iface())) {
+			$wiretype = $BESTEFFORT_WIRETYPE;
+		    }
 		}
 		if ($emulated) {
 		    $others->{'emulated'} = 1
@@ -4197,7 +4224,14 @@ sub GenVirtLans($)
 						   max($top_bw, $top_rbw));
 			}
 			elsif ($besteffort) {
-			    $wiretype = $BESTEFFORT_WIRETYPE;
+			    #
+			    # If the user specifies a fixed interface, then
+			    # we do not want to use the BESTEFFORT_WIRETYPE,
+			    # since that can conflict with what the user wants.
+			    #
+			    if (! $member->fixed_iface()) {
+				$wiretype = $BESTEFFORT_WIRETYPE;
+			    }
 			}
 			if ($emulated) {
 			    $others->{'emulated'} = 1 if ($member->_emulated());
@@ -4313,7 +4347,14 @@ sub GenVirtLans($)
 			$wiretype = $self->GetWiretype($wiretype, $top_bw);
 		    }
 		    elsif ($besteffort) {
-			$wiretype = $BESTEFFORT_WIRETYPE;
+			#
+			# If the user specifies a fixed interface, then
+			# we do not want to use the BESTEFFORT_WIRETYPE,
+			# since that can conflict with what the user wants.
+			#
+			if (! $member->fixed_iface()) {
+			    $wiretype = $BESTEFFORT_WIRETYPE;
+			}
 		    }
 		    if ($emulated) {
 			$others->{'emulated'} = 1 if ($member->_emulated());
@@ -7616,7 +7657,15 @@ sub InterpLinksAux($)
 	    }
 
 	    if ($member0->usevirtiface()) {
-		$protolan->AddMember($nodeA, $portA);
+		my $attrs = {};
+		my $vnodename = $member0->vnode();
+		my $isvnode   = exists($self->solution_v2v()->{$vnodename});
+		
+		if ($isvnode) {
+		    my $vnode_id = $self->solution_v2v()->{$vnodename};
+		    $attrs->{"vnode_id"} = $vnode_id;
+		}
+		$protolan->AddMember($nodeA, $portA, $attrs);
 		
 		my $virtiface = $self->NewVirtIface($virtlan, $member0,
 						    $nodeA, $portA);
@@ -9619,11 +9668,11 @@ sub UploadVlans($)
 	    }
 	    if ($member->_ptp()) {
 		$dbgline .= " ptp:1";
-		#$args->{'ptp'} = 1;
+		$args->{'ptp'} = 1;
 	    }
 	    if ($member->_synce()) {
 		$dbgline .= " synce:1";
-		#$args->{'synce'} = 1;
+		$args->{'synce'} = 1;
 	    }
 
 	    if ($trunk) {

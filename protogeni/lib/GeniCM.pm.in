@@ -3052,6 +3052,7 @@ sub GetTicketAuxAux($)
 		$encap    = "none";
 		$emulated = 1;
 	    }
+	    $besteffort = 1;
 	}
 	
 	# Ditto for new direct link option.

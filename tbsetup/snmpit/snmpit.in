@@ -2118,10 +2118,10 @@ sub doVlansFromTables($$@) {
 	#
 	my $trunk_vlan = VLan->Lookup($trunk_vlanid);
 	if (!defined($trunk_vlan)) {
-	    die("Trunk vlanid $trunk_vlanid does not exist\n");
+	    die("Native vlanid $trunk_vlanid does not exist\n");
 	}
 	if (!$trunk_vlan->CreatedOnSwitches()) {
-	    die("Trunk vlanid $trunk_vlan is not instantiated\n");
+	    die("Native vlan $trunk_vlan for vlan $vlan is not instantiated\n");
 	}
 	#
 	# To maintain backwards compatibility with how snmpit used
@@ -2307,7 +2307,7 @@ sub CreateOneVlan($$$@)
 	if ($port->ptp()) {
 	    push(@ptpPorts, $port);
 	}
-	elsif ($port->synce()) {
+	if ($port->synce()) {
 	    push(@syncePorts, $port);
 	}
     }
@@ -2428,7 +2428,7 @@ sub doReset($@) {
 	    if ($port->ptp()) {
 		push(@ptpPorts, $port);
 	    }
-	    elsif ($port->synce()) {
+	    if ($port->synce()) {
 		push(@syncePorts, $port);
 	    }
 	}
