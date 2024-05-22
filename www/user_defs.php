@@ -1532,8 +1532,11 @@ class User
 	$idx    = $this->uid_idx();
         $result = array();
 
+        # Need to order by to get the most recent last_access in the table
         $query_result = 
-            DBQueryFatal("select IP,last_access from login where uid_idx='$idx'");
+            DBQueryFatal("select IP,last_access from login ".
+                         "where uid_idx='$idx' ".
+                         "order by IP,last_access asc");
 
         while ($row = mysql_fetch_array($query_result)) {
             $ip = $row['IP'];
