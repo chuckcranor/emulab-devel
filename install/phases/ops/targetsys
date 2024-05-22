@@ -125,7 +125,7 @@ sub Install($$$)
 	    my @lists = grep { $_ ne "." && $_ ne ".." } readdir(DIR);
 	    closedir(DIR);
 
-	    my @default = "genirack-ops\@flux.utah.edu";
+	    my @default = "genirack-ops\@emulab.net";
 	    if (exists($configvars{"TARGETSYS_TBOPS"})) {
 		@default = split(",", $configvars{"TARGETSYS_TBOPS"});
 	    }

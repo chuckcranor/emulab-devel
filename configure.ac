@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -500,13 +500,13 @@ PROTOGENI_SUPPORT=0
 PROTOGENI_NOPORTALEXPIRE=0
 PROTOGENI_PORTALONLY=0
 PROTOGENI_ISCLEARINGHOUSE=0
-PROTOGENI_EMAIL="geni-dev-utah@flux.utah.edu"
+PROTOGENI_EMAIL="geni-dev-utah@emulab.net"
 PROTOGENI_WEBSITE="www.emulab.net"
 PROTOGENI_DOMAIN="unknown"
 PROTOGENI_RPCPORT=12369
 PROTOGENI_RPCNAME=""
 PROTOGENI_LOCALUSER=0
-PROTOGENI_PGERRORS="protogeni-errors@flux.utah.edu"
+PROTOGENI_PGERRORS="protogeni-errors@emulab.net"
 PROTOGENI_GENIWEBLOGIN=0
 PROTOGENI_HOLDINGPROJECT=""
 PROTOGENI_MAXSERVERLOAD=12

@@ -18,17 +18,23 @@ $TTL	30
 
 ; '@OURDOMAIN@' is implied in the line below
 		IN	A		%bossnode_ip%
+		IN	TXT		%spf%
 %bossnode_mx%
 
 ; Apparently, CNAME NS records are a bad idea - so, ns.emulab.net
 ; and boss are both A records
 ns		IN	A		%bossnode_ip%
 %bossnode_ina%
+		IN	TXT		%spf%
 
 ; CNAMEs for boss
 www		IN	CNAME   boss
 db		IN	CNAME	boss
 cvsup		IN	CNAME	boss
+
+; DMARC records
+_dmarc		IN	TXT	"v=DMARC1; p=none; dmarc=never"
+_dmarc.boss     IN	TXT	"v=DMARC1; p=none; dmarc=never"
 
 ; SRV record pointing to emulab boss tmcd port. NixOS helper. 
 _emulab_boss    30 IN SRV 10 10 7777 boss

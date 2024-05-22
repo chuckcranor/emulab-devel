@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2023 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -251,7 +251,7 @@ sub Create($$)
 
     if ($query_result->numrows) {
 	DBQueryWarn("unlock tables");
-	tberror("Dataset uuid $uuid already exists!");
+	print "*** Dataset uuid $uuid already exists!\n";
 	return undef;
     }
 
@@ -261,7 +261,7 @@ sub Create($$)
 
     if ($query_result->numrows) {
 	DBQueryWarn("unlock tables");
-	tberror("Dataset $pid/$id already exists!");
+	print "*** Dataset $pid/$id already exists!\n";
 	return undef;
     }
 
@@ -273,7 +273,6 @@ sub Create($$)
 
     if (! DBQueryWarn($query)) {
 	DBQueryWarn("unlock tables");
-	tberror("Error inserting new apt_datasets record for $uuid!");
 	return undef;
     }
     DBQueryWarn("unlock tables");

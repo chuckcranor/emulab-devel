@@ -936,7 +936,6 @@ class Instance
                            "cap1"               => true,
                            "cl-ap"              => true,
                            # Wisconsin, not ready yet
-                           "d7525"              => true,
                            "c240g2-infra"       => true,
                            "r7525s"             => true,
                            "rflab-blackbox"     => true,

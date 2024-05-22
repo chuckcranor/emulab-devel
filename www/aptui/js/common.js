@@ -296,6 +296,7 @@ window.APT_OPTIONS.postTutorial = function (data) {
 
 window.APT_OPTIONS.Announcements = function () {
     var callback = function(json) {
+	console.info("announcements", json);
 	if (json.code) {
 	    console.info("announcements", json);
 	}
@@ -317,7 +318,8 @@ window.APT_OPTIONS.Announcements = function () {
 	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 300000);
     }
     var xmlthing =
-	APT_OPTIONS.CallServerMethod('', 'announcement', 'Announcements', null);
+	APT_OPTIONS.CallServerMethod('', 'announcement',
+                                     'Announcements', null, callback);
 }
 
 window.APT_OPTIONS.SetupCopyToClipboard = function (id) {

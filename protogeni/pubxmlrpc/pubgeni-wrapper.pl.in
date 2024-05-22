@@ -56,7 +56,7 @@ my $TBOPS            = "@TBOPSEMAIL@";
 my $TBLOGS           = "@TBLOGSEMAIL@";
 my $TBBASE           = "@TBBASE@";
 my $GENIGROUP        = "GeniSlices";
-my $PGERRORS	     = "protogeni-errors\@flux.utah.edu";
+my $PGERRORS	     = "protogeni-errors\@emulab.net";
 my $MODULE;
 
 # These are the modules we load for each service.

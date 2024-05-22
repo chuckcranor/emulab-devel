@@ -1093,7 +1093,7 @@ sub ModUserInfo($$$$)
 		 "User Information for '$target_uid' Modified",
 		 $msg, TBMAIL_OPS(),
 		 "Bcc: " . TBMAIL_AUDIT() . "\n" .
-		 "Bcc: stoller\@flux.utah.edu\n" .
+		 "Bcc: stoller\@emulab.net\n" .
 		 "Errors-To: " . TBMAIL_WWW());
 
 	#

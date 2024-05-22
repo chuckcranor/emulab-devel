@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -418,8 +418,8 @@ sub DoCreate()
     # that now, else its a failure.
     if ($type eq "imdataset" && defined($instance)) {
 	if ($instance->Lock()) {
-	    $errmsg = "Instance is busy, cannot snapshot data";
-	    goto failed;
+	    $dataset->Delete();
+	    UserError("Experiment is busy, cannot snapshot data");
 	}
     }
     # Before we go into polling, make sure changes are written back.

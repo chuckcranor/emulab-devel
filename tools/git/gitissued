@@ -51,8 +51,8 @@ my $LOGFILE = "/home/git/gitissued.log";
 
 # Map used to look up addresses based on labels on issues
 my %LABELADDRESSES = ( "GPL"      => 'ricci@cs.utah.edu',
-                       "apt"      => 'geni-dev-utah@flux.utah.edu',
-                       "cloudlab" => 'geni-dev-utah@flux.utah.edu');
+                       "apt"      => 'geni-dev-utah@emulab.net',
+                       "cloudlab" => 'geni-dev-utah@emulab.net');
 
 # From: address for mail
 my $MAILFROM = 'gitlab@flux.utah.edu';

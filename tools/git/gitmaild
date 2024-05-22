@@ -48,7 +48,7 @@ use strict;
 my $TOKEN = "";
 
 # Unless specified, send mail to this email address on all commits
-my $DEFAULT_ARCHIVEMAIL = 'commits@flux.utah.edu';
+my $DEFAULT_ARCHIVEMAIL = 'commits@emulab.net';
 
 # Unless specified, set the Sender header to this address; set to empty
 # to not set the header

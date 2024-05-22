@@ -361,6 +361,8 @@ $routing = array("geni-login" =>
                                                      "Do_DeleteUser",
                                                  "ResourceList" =>
                                                      "Do_ResourceList",
+                                                 "Logout" =>
+                                                     "Do_Logout",
                               )
                         ),
 		 "nag" =>
