@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2006-2015 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,9 +32,8 @@ sub usage()
     print(STDERR "Usage: changepid <oldpid> <newpid>\n");
     exit(-1);
 }
-my $optlist = "df";
+my $optlist = "d";
 my $debug   = 0;
-my $force   = 0;
 
 #
 # Configure variables
@@ -48,6 +47,8 @@ use lib "@prefix@/lib";
 use libaudit;
 use libdb;
 use libtestbed;
+use Project;
+use emutil;
 
 # Be careful not to exit on transient error
 $libdb::DBQUERY_MAXTRIES = 30;
@@ -89,14 +90,25 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
-if (defined($options{"f"})) {
-    $force = 1;
-}
 if (@ARGV != 2) {
     usage();
 }
 my $oldpid = shift(@ARGV);
 my $newpid = shift(@ARGV);
+
+if (!TBcheck_dbslot($newpid, "projects", "newpid")) {
+    die("*** $0:\n".
+	"    Pid '$newpid' is invalid: " . TBFieldErrorString() . "\n");
+}
+my $unix_gname = Project::UnixGroupName($newpid);
+if (!defined($unix_gname)) {
+    die("*** $0:\n".
+	"    Could not generate a unix group name\n");
+}
+print "$unix_gname\n";
+if (1) {
+    exit(0);
+}
 
 #
 # This script is always audited. Mail is sent automatically upon exit.
@@ -144,7 +156,7 @@ DBQueryFatal("update group_membership set pid='$newpid',gid='$newpid' ".
 	     "where pid='$oldpid'");
 
 print "Updating groups table ...\n";
-DBQueryFatal("update groups set pid='$newpid',gid=pid,unix_name='$newpid' ".
+DBQueryFatal("update groups set pid='$newpid',gid=pid,unix_name='$unix_gname' ".
 	     "where pid='$oldpid'");
 
 print "Updating group_stats table ...\n";

@@ -318,7 +318,12 @@ sub Update($$)
 sub Create($$$$)
 {
     my ($class, $pid, $leader, $argref) = @_;
-    my $unix_gname = $pid;
+    my $unix_gname = UnixGroupName($pid);
+    if (!defined($unix_gname)) {
+	print STDERR "Project->Create: ".
+	    "Could not form a unique Unix group name!";
+	return undef;
+    }
     my $nonlocal   = (exists($argref->{'nonlocal_id'}) ? 1 : 0);
 	
     #
@@ -328,28 +333,6 @@ sub Create($$$$)
     my @insert_data = (!defined($argref) ? () :
 		       map("$_=" . DBQuoteSpecial($argref->{$_}),
 			   keys(%{$argref})));
-
-    # Form a proper unix group name, which is limited to 16 chars.
-    if (length($pid) > 16) {
-	$unix_gname  = substr($pid, 0, 16);
-	my $maxtries = 9;
-	my $count    = 0;
-	while ($count < $maxtries) {
-	    my $query_result =
-		DBQueryFatal("select gid from groups ".
-			     "where unix_name='$unix_gname'");
-	    last
-		if (!$query_result->numrows);
-
-	    $count++;
-	    $unix_gname = substr($pid, 0, 15) . "$count";
-	}
-	if ($count == $maxtries) {
-	    print STDERR "Project->Create: ".
-		"Could not form a unique Unix group name!";
-	    return undef;
-	}
-    }
 
     # First create the underlying default group for the project.
     my $newgroup =
@@ -408,6 +391,35 @@ sub Create($$$$)
     }
 
     return $newproject;
+}
+
+#
+# Form a proper unix group name, which is limited to 16 chars.
+#
+sub UnixGroupName($)
+{
+    my ($pid) = @_;
+    my $unix_gname = $pid;
+ 
+    if (length($pid) > 16) {
+	$unix_gname  = substr($pid, 0, 16);
+	my $maxtries = 9;
+	my $count    = 0;
+	while ($count < $maxtries) {
+	    my $query_result =
+		DBQueryFatal("select gid from groups ".
+			     "where unix_name='$unix_gname'");
+	    last
+		if (!$query_result->numrows);
+
+	    $count++;
+	    $unix_gname = substr($pid, 0, 15) . "$count";
+	}
+	if ($count == $maxtries) {
+	    return undef;
+	}
+    }
+    return $unix_gname;
 }
 
 #
