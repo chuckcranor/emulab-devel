@@ -162,7 +162,7 @@ sub LogsEmailAddress($)
 {
     my ($self) = @_;
 
-    return ($self->isAPT() ? "apt-logs\@aptlab.net" :
+    return ($self->isAPT() ? "aptlab-logs\@aptlab.net" :
 	    $self->isCloud() ? "cloudlab-logs\@cloudlab.us" :
 	    $self->isPNet() ? "phantomnet-logs\@phantomnet.org" :
 	    $self->isPowder() ? "powder-portal-logs\@powderwireless.net" :

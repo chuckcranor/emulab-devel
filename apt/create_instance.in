@@ -888,7 +888,7 @@ if ($retval) {
 if (!$debug) {
     AddAuditInfo("cc", $project->LogsEmailAddress());
     if (0 && $MAINSITE) {
-	AddAuditInfo("cc", "stoller\@flux.utah.edu");
+	AddAuditInfo("cc", "stoller\@emulab.net");
 	# AddAuditInfo("cc", "mike\@flux.utah.edu");
     }
     AddAuditInfo("brand", $project->Brand());

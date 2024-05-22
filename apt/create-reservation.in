@@ -254,8 +254,8 @@ if (! $debug) {
     my $opts = LIBAUDIT_LOGTBLOGS();
     LogStart(0, undef, $opts);
     AddAuditInfo("cc", $project->LogsEmailAddress());
-    if ($MAINSITE) {
-	AddAuditInfo("cc", "stoller\@flux.utah.edu");
+    if (0 && $MAINSITE) {
+	AddAuditInfo("cc", "stoller\@emulab.net");
     }
     AddAuditInfo("brand", $project->Brand());
 }

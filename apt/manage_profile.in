@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -631,12 +631,7 @@ sub CreateProfile()
     else {
 	$profile->InsertImageRecords();
     }
-    my $portalLogs =
-	($project->isAPT() ? "aptnet-logs\@flux.utah.edu" :
-	 $project->isCloud() ? "cloudlab-logs\@flux.utah.edu" : 
-	 $project->isPNet() ? "phantomnet-logs\@flux.utah.edu" :
-	 $project->isPowder() ? "powder-logs\@flux.utah.edu" :
-	 $TBLOGS);
+    my $portalLogs = $project->LogsEmailAddress();
 
     $project->SendEmail($portalLogs, "New Profile Created",
 			"Name:     ". $profile->versname() . "\n".
@@ -707,12 +702,7 @@ sub DuplicateProfile()
 	}
 	fatal("Could not create new profile");
     }
-    my $portalLogs =
-	($project->isAPT() ? "aptnet-logs\@flux.utah.edu" :
-	 $project->isCloud() ? "cloudlab-logs\@flux.utah.edu" : 
-	 $project->isPNet() ? "phantomnet-logs\@flux.utah.edu" :
-	 $project->isPowder() ? "powder-logs\@flux.utah.edu" :
-	 $TBLOGS);
+    my $portalLogs = $project->LogsEmailAddress();
 
     $project->SendEmail($portalLogs, "New Profile Created",
 			"Name:     ". $profile->versname() . "\n".

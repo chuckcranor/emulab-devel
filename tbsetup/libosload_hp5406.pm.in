@@ -1624,7 +1624,7 @@ sub generateConfig($$) {
 	@keylines,
 	@passwdlines,
 	'snmp-server community "' . $community . '" Unrestricted',
-	'snmp-server contact "testbed-ops@flux.utah.edu"',
+	'snmp-server contact "testbed-ops@emulab.net"',
 	# try to cover our hind ends and eliminate loops!
 	"spanning-tree",
 	"no web-management",
