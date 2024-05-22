@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -390,6 +390,13 @@ if (exists($newproj_args{'nsf_funded'})) {
     delete($newproj_args{'nsf_funded'});
     delete($newproj_args{'nsf_awards'});
     delete($newproj_args{'nsf_supplement'});
+}
+
+if (exists($newproj_args{'forClass'}) && $newproj_args{'forClass'} == 1) {
+    $newproj_args{'shared_reservations'} = 1;
+}
+else {
+    $newproj_args{'shared_reservations'} = 0;
 }
 
 #
