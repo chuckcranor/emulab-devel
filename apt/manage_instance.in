@@ -4687,7 +4687,7 @@ sub StartMonitorInternal(;$)
     # Skip deferred aggregates for now.
     foreach my $ref ($instance->AggregateList()) {
 	push(@aggregates, $ref)
-	    if ($ref->deferred());
+	    if (!$ref->deferred());
     }
 
     while ($seconds > 0 && @aggregates) {
