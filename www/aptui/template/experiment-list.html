@@ -38,6 +38,7 @@
 	<tr>
 	  <td style='white-space: nowrap;'><%= value.name %>
 	    <% if (showterminate !== undefined && showterminate
+	           && (window.ISADMIN || value.creator == window.LOGINUID) 
 	           && value.status == "ready") { %>
 	      <a href="#" class="terminate-button"
 		 data-uuid="<%- value.uuid %>">
