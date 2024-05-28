@@ -93,6 +93,7 @@ sub usage()
     print " -s           - Do not send status email\n";
     print " -a urn       - Override default aggregate URN.\n";
     print " -k file      - Alternate CA private key file.\n";
+    print " --nofailures - Ignore sliver create failures\n";
     print " --project    - pid[,gid]: project[,group] for new experiment\n";
     print " --portal     - The Portal the experiment is started from.\n";
     print "                Defaults to the Emulab portal.\n";
@@ -113,6 +114,8 @@ my $usestitcher    = 0;
 my $nopending      = 0;
 my $noemail        = 0;
 my $maxduration    = 0;
+my $nofailures     = 0;
+my @SAVEARGV       = @ARGV;
 my $portal;
 my $privkeyfile;
 my $start_at;
@@ -147,6 +150,7 @@ my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's', 'X',
 	       "bindings=s"  => \$bindingfile,
 	       "sshpubkey=s" => \$sshpubkeyfile,
 	       "refspec=s"   => \$refspec,
+	       "nofailures"  => \$nofailures,
     );
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -173,10 +177,6 @@ my $this_user = User->ThisUser();
 if (!defined($this_user)) {
     fatal("You ($UID) do not exist!");
 }
-my $profile = APT_Profile->Lookup($ARGV[0]);
-if (!defined($profile)) {
-    fatal("Profile does not exist");
-}
 if ($pid =~ /^([-\w]*),([-\w]*)$/) {
     $pid = $1;
     $gid = $2;
@@ -184,6 +184,10 @@ if ($pid =~ /^([-\w]*),([-\w]*)$/) {
 $project = Project->Lookup($pid, $gid);
 if (!defined($project)) {
     fatal("No such project");
+}
+my $profile = APT_Profile->Lookup($ARGV[0]);
+if (!defined($profile)) {
+    fatal("Profile does not exist");
 }
 if (!defined($portal)) {
     $portal = $project->Brand()->brand();
@@ -326,7 +330,7 @@ if (defined($paramset)) {
 if (defined($bindingstr)) {
     $bindings = eval { decode_json($bindingstr); };
     if ($@) {
-	fatal("Could not json decode the bindings\n");
+	fatal("Could not json decode the bindings:\n$bindingstr");
     }
 
     #
@@ -493,6 +497,9 @@ my @args = ("-u $uuid -t " . $webtask->task_id());
 
 if (defined($options{"d"})) {
     @args = (@args, "-d");
+}
+if ($nofailures) {
+    @args = (@args, "-i");
 }
 if ($nopending) {
     @args = (@args, "-P");
@@ -684,12 +691,15 @@ sub fatal($)
 	# We failed early (since there is no log file). For debugging
 	# lets send the error info to logs.
 	#
-	$project->SendEmail($project->OpsEmailAddress(),
+	my $to = (defined($this_user) ?
+		  $this_user->email() : $project->OpsEmailAddress());
+	$project->SendEmail($to,
 			    "Failed to start XMLRPC experiment",
 			    "Failed to start XMLRPC experiment:\n\n ".
 			    "$mesg\n\n".
-			    "$PROGRAM_NAME @ARGV \n".
-			    "$url\n");
+			    "$PROGRAM_NAME @SAVEARGV \n".
+			    "$url\n",
+			    $project->OpsEmailAddress());
     }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
