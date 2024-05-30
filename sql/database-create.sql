@@ -4730,12 +4730,15 @@ CREATE TABLE `nonlocal_user_pubkeys` (
 DROP TABLE IF EXISTS `nonlocal_users`;
 CREATE TABLE `nonlocal_users` (
   `nonlocal_id` varchar(128) NOT NULL default '',
+  `uid` varchar(8) NOT NULL default '',
   `uid_idx` mediumint(8) unsigned NOT NULL default '0',
-  `unix_uid` int(10) unsigned NOT NULL default '0',
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `unix_uid` int(10) unsigned NOT NULL auto_increment,
   `created` datetime default NULL,
-  PRIMARY KEY  (`nonlocal_id`),
-  UNIQUE KEY `uid_idx` (`uid_idx`),
-  UNIQUE KEY `unix_uid` (`unix_uid`)
+  `lastuse` datetime default NULL,
+  PRIMARY KEY  (`pid_idx`,`unix_uid`),
+  UNIQUE KEY `piduid` (`pid_idx`,`uid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
