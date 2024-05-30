@@ -1,0 +1,272 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2005-2022 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use File::Temp qw(tempfile);
+use JSON;
+
+#
+# Ask https://ipinfo.io/ for IP info
+#
+# select cc.country,sum(t.count) as count from
+#   (select country,count(distinct(uid)) as count from login_history
+#    where IP is not null and location is not null and portal='cloudlab'
+#    group by country,uid) as t
+# left join ccodes.ccodes as cc on cc.code=t.country
+# group by cc.country order by count desc;
+#
+#select region,sum(t.count) as count from
+#  (select region,count(distinct(uid)) as count from login_history
+#   where IP is not null and location is not null and country='US' and
+#      portal='cloudlab'
+#   group by region,uid) as t
+#group by region order by count desc;
+#
+
+#
+sub usage()
+{
+    print "Usage: getipinfo [-n]\n";
+    print "       getipinfo [-n] -p portal\n";
+    exit(1);
+}
+my $optlist   = "ndp:";
+my $impotent  = 0;
+my $debug     = 0;
+my $limit     = 200;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $token            = "850749cc3b77dc";
+my $URL              = "http://ipinfo.io/batch?token=${token}";
+my $CURL	     = "/usr/local/bin/curl";
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use User;
+use emutil;
+
+# Protos
+sub fatal($);
+sub WriteResults($);
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"n"})) {
+    $impotent++;
+}
+if (defined($options{"d"})) {
+    $debug++;
+}
+if (defined($options{"p"})) {
+    my $portal = $options{"p"};
+    if ($portal ne "cloudlab" && $portal ne "powder") {
+	fatal("Only cloudlab or powder portal please");
+    }
+    exit(WriteResults($portal));
+}
+
+#
+# Find unmatched IPs in the login_history table and batch them up
+# for the request.
+#
+my $count = 0;
+
+while ($limit) {
+    $limit--;
+    
+    my $query_result =
+	DBQueryFatal("select distinct IP from login_history ".
+		     "where location is null and IP is not null ".
+		     "limit 100");
+
+    last
+	if ($query_result->numrows == 0);
+
+    my %IPs = ();
+
+    while (my ($IP) = $query_result->fetchrow_array()) {
+	$IPs{$IP} = $IP;
+    }
+    if (keys(%IPs)) {
+	# Create a temporary files for curl
+	my ($fpIn, $fnameIn) = tempfile("/tmp/iplistInXXXXX", UNLINK => 0);
+	if (!defined($fpIn)) {
+	    fatal("Could not create temp file for IPs");
+	}
+	my ($fpOut, $fnameOut) = tempfile("/tmp/iplistOutXXXXX", UNLINK => 0);
+	if (!defined($fpOut)) {
+	    fatal("Could not create temp file for IPs");
+	}
+	foreach my $IP (keys(%IPs)) {
+	    print $fpIn "$IP\n";
+	}
+	my $command =
+	    "$CURL -s -o $fnameOut -XPOST --data-binary \@${fnameIn} $URL";
+	if ($debug) {
+	    print "$command\n";
+	}
+	system($command);
+	if ($?) {
+	    fatal("curl failure: '$command'\n");
+	}
+	my $json = emutil::ReadFile($fnameOut);
+	if (!$json || $json eq "") {
+	    fatal("No json received");
+	}
+	my $results = eval { decode_json($json) };
+	if ($@) {
+	    fatal("Could not decode json data");
+	}
+	if ($debug) {
+	    print Dumper($results);
+	}
+	foreach my $IP (keys(%IPs)) {
+	    my $ref = $results->{$IP};
+	    if (!defined($ref)) {
+		print STDERR "No data for $IP\n";
+		next;
+	    }
+	    my $loc     = $ref->{'loc'};
+	    my $country = $ref->{'country'};
+	    my $region  = $ref->{'region'};
+	    
+	    if (!defined($loc)) {
+		print STDERR "No data for $IP\n";
+
+		DBQueryFatal("update login_history set ".
+			     " location='' ".
+			     "where IP='$IP'");
+		next;
+	    }
+	    $count++;
+	    if ($impotent) {
+		print "Would set $IP: $loc,$country,$region\n";
+		next;
+	    }
+	    else {
+		print "$IP: $loc,$country,$region\n";
+		
+		DBQueryFatal("update login_history set ".
+			     " location=" . DBQuoteSpecial($loc) . ", ".
+			     " country=" . DBQuoteSpecial($country) . ", ".
+			     " region=" . DBQuoteSpecial($region) . " ".
+			     "where IP='$IP'");
+	    }
+	}
+	unlink($fnameIn);
+	unlink($fnameOut);
+    }
+    print "$count IPs completed\n";
+    last
+	if (!$count);
+    
+    sleep(10);
+}
+
+exit(0);
+
+#
+# Write per portal results files. Queries take a while.
+#
+sub WriteResults($)
+{
+    my ($portal) = @_;
+
+    print "These queries take time, get a cup of coffee.\n";
+
+    my $query_result =
+	DBQueryFatal("select cc.country,sum(t.count) as count from ".
+		     " (select country,count(distinct(uid)) as count ".
+		     "    from login_history ".
+		     "  where IP is not null and location is not null and ".
+		     "        portal='$portal' ".
+		     "  group by country,uid) as t ".
+		     "left join ccodes.ccodes as cc on cc.code=t.country ".
+		     "group by cc.country order by count desc");
+
+    my $fname = "world-counts-${portal}.csv";
+    print "Writing $fname ... \n";
+    if (open(WORLD, ">$fname")) {
+	print WORLD "name,count\n";
+	while (my ($country,$count) = $query_result->fetchrow_array()) {
+	    next
+		if (!defined($country));
+
+	    $country = "USA"
+		if ($country eq "United States");
+
+	    print WORLD "$country,$count\n";
+	}
+	close(WORLD);
+    }
+    else {
+	fatal("Could not open $fname for writing: $!\n");
+    }
+
+    $query_result =
+	DBQueryFatal("select region,sum(t.count) as count from ".
+		     " (select region,count(distinct(uid)) as count ".
+		     "     from login_history ".
+		     "  where IP is not null and location is not null and ".
+		     "        country='US' and portal='$portal' ".
+		     "  group by region,uid) as t ".
+		     "group by region order by count desc");
+
+    $fname = "us-counts-${portal}.csv";
+    print "Writing $fname ... \n";
+    if (open(STATES, ">$fname")) {
+	print STATES "name,count\n";
+	while (my ($region,$count) = $query_result->fetchrow_array()) {
+	    next
+		if (!defined($region));
+
+	    print STATES "$region,$count\n";
+	}
+	close(STATES);
+    }
+    else {
+	fatal("Could not open $fname for writing: $!\n");
+    }
+    exit(0);
+}
+
+sub fatal($) {
+    my($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
