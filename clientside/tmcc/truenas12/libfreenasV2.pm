@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1865,6 +1865,7 @@ sub listPools() {
 	my ($pname, $prop, $val) = split(/\s+/, $line);
 	next if $pname =~ /\//;  	   # filter out zvols.
 	next if $pname =~ /^freenas-boot/; # and the system pool and snapshots.
+	next if $pname =~ /^boot-pool/;	   # and the TrueNAS system pool
 	if (exists($poolh->{$pname})) {
 	    my $pool = $poolh->{$pname};
 	    if ($prop eq "available") {

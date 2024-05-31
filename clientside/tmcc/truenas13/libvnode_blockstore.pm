@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -99,6 +99,8 @@ use libvnode;
 use libtestbed;
 use libsetup;
 use libfreenasV2;
+
+my $FORCE_LAGG_DEVICE	 = "";	# e.g., lagg0 at Wisc
 
 #
 # Constants
@@ -1156,6 +1158,10 @@ sub createVlanInterface($$) {
     my $pmac   = $ifc->{'PMAC'};
     my $piface = $ifc->{'IFACE'};
     my $lname  = $ifc->{'LAN'};
+
+    if ($FORCE_LAGG_DEVICE ne "") {
+	$piface = $FORCE_LAGG_DEVICE;
+    }
 
     my $viface = $VLAN_IFACE_PREFIX . $vtag;
 
