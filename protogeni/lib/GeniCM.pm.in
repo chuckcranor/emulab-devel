@@ -4921,6 +4921,7 @@ sub SliverWorkAux($)
     my %colomap  = ();
     my @allocated= ();
     my @freenodes= ();
+    my @killslivers = ();
     my @freelinks= ();
     my %iface2node = ();
     my $needplabslice = 0;
@@ -5112,10 +5113,11 @@ sub SliverWorkAux($)
 	    my $phys = $sliver->resource_urn();
 	    if (exists($phys2nickname{$phys})
 		&& $phys2nickname{$phys} ne $nickname) {
-		$message = "Cannot bind node " . $phys2nickname{$phys} .
+		print STDERR "rebinding node " . $phys2nickname{$phys} .
 		    " to the same physical node which was bound to " .
-		    $nickname;
-		goto bad;
+		    $nickname . "\n";
+		push(@killslivers, $sliver);
+		next;
 	    }
 	    push(@freenodes, $sliver);
 	}
@@ -6227,6 +6229,9 @@ sub SliverWorkAux($)
     foreach my $snode (@freenodes) {
 	$snode->UnProvision();
 	$snode->Delete(0);
+    }
+    foreach my $sliver (@killslivers) {
+	$sliver->Delete(0);
     }
     foreach my $svhost (@freevhosts) {
 	$svhost->UnProvision();
