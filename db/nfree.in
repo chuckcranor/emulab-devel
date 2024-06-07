@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -557,7 +557,7 @@ foreach my $node (@freed_nodes) {
 	
 	# And log phys nodes freed from hwdown
 	if ($pid eq NODEDEAD_PID() && $eid eq NODEDEAD_EID() && $user_uid) {
-	    $node->InsertNodeLogEntry($this_user, "misc",
+	    $node->InsertNodeLogEntry($this_user, TB_NODELOGTYPE_ADMIN(),
 				      "Moved from hwdown; nfree");
 	}
     }

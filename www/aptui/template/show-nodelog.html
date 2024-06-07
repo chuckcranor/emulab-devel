@@ -9,7 +9,10 @@
 }
 .panel-body > table {
     margin-bottom: 0px;
-}
+ }
+ .tablesorter, .tablesorter .tablesorter-filter {
+     width: auto;
+ } 
 </style>
 <div class='col-xs-12'>
   <div>
@@ -19,13 +22,14 @@
       </div>
       <div class='panel-body'>
 	<table id="log-table"
-	       class='table table-condensed table-bordered table-striped'>
+	       class='tablesorter'>
 	  <thead>
-	    <th></th>
-	    <th>ID</th>
-	    <th>Reported</th>
+	    <th class="sorter-false filter-false" style="width: 15px;"></th>
+	    <th class="sorter-false filter-false" style="width: 50px;">ID</th>
+	    <th style="width: 25px;">Type</th>
+	    <th class="sorter-sugar filter-false" style="width: 50px;">Reported</th>
 	    <th>Reporter</th>
-	    <th>Entry</th>
+	    <th class="sorter-false">Entry</th>
 	  </thead>
 	  <tbody>
 	    <% _.each(entries, function (entry) { %>
@@ -42,6 +46,7 @@
 		  </a>
 		</td>
 		<td><%- entry.log_id %></td>
+		<td><%- entry.type %></td>
 		<td style='white-space: nowrap;'
 		    class="format-date"><%- entry.reported %></td>
 		<td><%- entry.reporter %></td>
