@@ -543,8 +543,7 @@ CREATE TABLE `apt_instance_aggregate_history` (
   `prestage_data` mediumtext,  
   `manifest` mediumtext,
   `saved_manifest` mediumtext,
-  PRIMARY KEY (`uuid`,`aggregate_urn`),
-  KEY `started` (`uuid`,`started`)
+  PRIMARY KEY (`uuid`,`aggregate_urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -980,19 +979,6 @@ CREATE TABLE `apt_profiles` (
   KEY `hashkey` (`hashkey`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
-
---
--- Table structure for table `apt_profile_users`
---
-
-DROP TABLE IF EXISTS `apt_profile_users`;
-CREATE TABLE `apt_profile_users` (
-  `profileid` int(10) unsigned NOT NULL default '0',  
-  `uid` varchar(8) NOT NULL default '',
-  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
-  `created` datetime default NULL,
-  PRIMARY KEY (`profileid`,`uid_idx`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
 -- Table structure for table `apt_reservation_groups`
@@ -6280,21 +6266,6 @@ CREATE TABLE `user_sslcerts` (
   KEY `uid_idx` (`uid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
-
-DROP TABLE IF EXISTS `user_cilogon_info`;
-CREATE TABLE `user_cilogon_info` (
-  `uid` varchar(8) NOT NULL default '',
-  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
-  `idx` int(10) unsigned NOT NULL auto_increment,
-  `created` datetime default NULL,
-  `issuer` varchar(128) NOT NULL default '',
-  `subject` varchar(128) NOT NULL default '',
-  `json_data` text,
-  PRIMARY KEY  (`idx`),
-  UNIQUE KEY isssub (`issuer`,`subject`),
-  KEY `uid` (`uid`),
-  KEY `uid_idx` (`uid_idx`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
 -- Table structure for table `user_stats`
