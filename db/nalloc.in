@@ -36,7 +36,8 @@ use POSIX qw(isatty);
 #
 sub usage()
 {
-    print("Usage: nalloc [-d] [-f] [-p] <pid> <eid> <node> <node> <...>\n".
+    print("Usage: nalloc [-d] [-f] [-p] [-m comment]".
+	  "<pid> <eid> <node> <node> <...>\n".
 	  "		-p enables partial allocation mode\n".
 	  "		-f forces allocation, overriding admission control\n" .
 	  "		-i prechecks and Reservation system checks only\n" .

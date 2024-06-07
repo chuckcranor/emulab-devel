@@ -1,7 +1,7 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -23,7 +23,10 @@
 # }}}
 #
 
+use strict;
 use English;
+use Getopt::Std;
+use POSIX qw(isatty);
 
 # Schedule the reservation of a node. If the node is not currently in use,
 # nalloc will be called to reserve the node immediately. If the node is 
@@ -33,9 +36,12 @@ use English;
 # usage: sched_reserve <pid> <eid> <node> [<node> ...]
 
 sub usage() {
-  die("Usage: sched_reserve <pid> <eid> <node> [<node> ...]\n".
-      "Reserves nodes to eid when the are free.\n");
+  die("Usage: sched_reserve -m <comment> <pid> <eid> <node> [<node> ...]\n".
+      "Reserves nodes to eid when the are free.\n".
+      "   -m add pithy comment to node admin log; required\n");
 }
+my $optlist = "m:";
+my $comment;
 
 # Configure variables
 my $TB     = "@prefix@";
@@ -43,7 +49,10 @@ my $TB     = "@prefix@";
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
 use libdb;
+use emutil;
 use Experiment;
+use User;
+use Node;
 
 my $nalloc      = "$TB/bin/nalloc";
 my $debug       = 0;
@@ -55,7 +64,18 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 $| = 1;				#Turn off line buffering on output
 
-if (@ARGV < 3) {
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"m"})) {
+    $comment = $options{"m"};
+    if (!TBcheck_dbslot($comment, "default", "tinytext")) {
+	die("*** $0:\n".
+	    "    Illegal characters in comment, or too long\n");
+    }
+}
+if (@ARGV < 3 || !defined($comment)) {
   usage();
 }
 
@@ -83,10 +103,14 @@ foreach my $node ( @ARGV ) {
   push(@nodes, $node);
 }
 
-# Root and admin types can do whatever they want.
-# Mere users cannot schedule reservations (yet?)
-if ($UID && !TBAdmin($UID)) {
-  die("Only root or TB administrators can schedule reservations.\n");
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    die("*** $0:\n".
+	"    You ($UID) do not exist in the Emulab DB!\n");
+}
+if (!$this_user->IsAdmin()) {
+    die("*** $0:\n".
+	"    Must be an admin to schedule reservations.\n");
 }
 
 my $experiment = Experiment->Lookup($pid, $eid);
@@ -132,7 +156,7 @@ foreach my $node (@nodes) {
   if (!$nref->{'rt'}) {
     print "Available - Reserving...\n";
     #print STDERR "Using proj $pid, expt $eid, I am ",`whoami`;
-    my $cmd = "$nalloc $pid $eid $pc";
+    my $cmd = "$nalloc -m '$comment' $pid $eid $pc";
     if ( system($cmd) != 0 ) {
       print STDERR "WARNING: Could not reserve $pc!\n";
     }
@@ -142,6 +166,8 @@ foreach my $node (@nodes) {
       $sth = DBQueryFatal("REPLACE INTO next_reserve ".
 			  " (node_id,exptidx,pid,eid) ".
 			  "VALUES ('$pc','$exptidx','$pid','$eid')");
+      TBSetNodeLogEntry($pc, $this_user->uid(), TB_NODELOGTYPE_ADMIN(),
+			"Scheduling to $pid,$eid: $comment");
     } else {
       print "Reserved  - Already reserved to $pid/$eid\n";
     }
