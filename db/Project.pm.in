@@ -1138,6 +1138,24 @@ sub Usage($$$$$)
 	$current_clause = "e.pid_idx='$pid_idx' and e.gid_idx='$gid_idx'";
 	$history_clause = "s.pid_idx='$pid_idx' and s.gid_idx='$gid_idx'";
     }
+    #
+    # Limit to just the user when requested. 
+    #
+    if (defined($user)) {
+	#
+	# Nonlocal projects are created by the user but started by geniuser.
+	#
+	if ($self->IsNonLocal()) {
+	    my $nonlocal_urn = $user->nonlocal_id();
+	    # Bug in setting s.nonlocal_user_id, should be nonlocal_id?         
+	    my $local_urn = $user->urn();
+	    $history_clause .= " and (s.nonlocal_user_id='$nonlocal_urn' or ".
+		"s.nonlocal_user_id='$local_urn')";
+	}
+	else {
+	    $history_clause .= " and r.uid_idx='$uid_idx'";
+	}
+    }
 
     my $query_result =
 	DBQueryWarn("(select e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
@@ -1168,8 +1186,6 @@ sub Usage($$$$$)
 		    "      h.stamp < r.swapout_time) ".
 		    "left join nodes as n on n.node_id=h.node_id ".
 		    "where $history_clause and ".
-		    (defined($user) ?
-		     "     r.uid_idx='$uid_idx' and " : " ") .
 		    "     r.swapin_time!=0 and r.swapout_time!=0 and ".
 		    "    ((r.swapin_time >= $start and ".
 		    "      r.swapin_time <= $end) or ".

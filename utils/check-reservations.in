@@ -163,7 +163,7 @@ while (my ($idx) = $query_result->fetchrow_array()) {
 #
 # Loop again to get utilization for each res.
 #
-foreach my $target (keys(%projRes)) {
+foreach my $target (sort(keys(%projRes))) {
     my $ref      = $projRes{$target};
     my $project  = $ref->{'project'};
     my @reslist  = @{$ref->{'reslist'}};
