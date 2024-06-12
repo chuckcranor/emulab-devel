@@ -88,7 +88,14 @@
 	  </tr>
 	  <tr>
 	    <td>Public?:</td>
-	    <td><% if (fields.profile_public) { %>Yes<% } else { %>No<% } %></td>
+	    <td>
+	      <span id="profile-public">
+		<% if (fields.profile_public) { %>Yes<% } else { %>No<% } %>
+	      </span>
+	      <% if (canedit) { %>
+		(<a href="#" class="profile-share-button">change this setting</a>)
+	      <% } %>
+	    </td>
 	  </tr>
 	  <% if (fromrepo) { %>
 	    <tr>
@@ -210,12 +217,9 @@
 	  <span data-toggle='popover' data-bs-toggle='popover'
 		data-delay='{"show":250}' data-bs-delay='{"show":250}'
 		data-html='true' data-bs-html='true'
-		data-content="Share this profile with other users by
-			      sending them a link to instantiate it.
+		data-content="Share this profile with other users.
 			      Click for more info.">
-	    <button class='btn btn-primary btn-xs'
-		    id='profile_share_button'
-     		    data-toggle='modal' data-bs-toggle='modal' data-target='#share_profile_modal' data-bs-target='#share_profile_modal'
+	    <button class='btn btn-success btn-sm profile-share-button'
 		    style='margin-right: 5px;'
 		    type='button'>
 	      Share
@@ -223,7 +227,7 @@
 	  </span>
 	<% } %>
 	<% if (canedit) { %>
-	  <a class='btn btn-primary btn-xs'
+	  <a class='btn btn-primary btn-sm'
              style='margin-right: 5px;'
              type='button'
 	     href='manage_profile.php?action=edit&uuid=<%= version_uuid %>'>
@@ -233,7 +237,7 @@
 	<% if (! disabled) { %>
 	  <% if (window.CANCOPY) { %>
 	    <button id="copy-profile-button"
-		    class='btn btn-primary btn-xs'
+		    class='btn btn-primary btn-sm'
 		    style='margin-right: 5px;'
 		    <% if (fromrepo) { %>
      		    data-toggle='modal' data-bs-toggle='modal'
@@ -244,7 +248,7 @@
 	  <% if (gotrspec) { %>
 	    <% 	var url = "instantiate.php?profile=" + window.PROFILE +
 	    "&from=manage-profile"; %>
-	    <a class='btn btn-primary btn-xs'
+	    <a class='btn btn-primary btn-sm'
 	       href="<%- url %>"
 	       id='profile_instantiate_button'
 	       style='margin-right: 5"px;'
@@ -335,6 +339,7 @@
   <div id='publish_div'></div>
   <div id='rspectext_div'></div>
   <div id='share_div'></div>
+  <div id='share-profile-modal-div'></div>
   <div id='copy_repobased_profile_div'></div>
   <div id='copy-profile-modal-div'></div>
   <div id='showtopo-modal-div'></div>

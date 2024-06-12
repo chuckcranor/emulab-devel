@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -207,6 +207,8 @@ REQUIRE_APTFORMS();
 REQUIRE_MARKED();
 REQUIRE_TOPOLOGY_VIEWER();
 AddLibrary("js/copy-profile.js");
+AddLibrary("js/share-profile.js");
+AddTemplateList(array("share-profile-modal", "share-profile-body"));
 AddLibrary("js/gitrepo.js");
 AddLibrary("js/paramhelp.js");
 SPITREQUIRE("js/show-profile.js",

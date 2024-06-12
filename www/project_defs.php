@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -134,6 +134,13 @@ class Project
 	}
 	$this->_grouplist = null;
 	return 0;
+    }
+
+    #
+    # Equality test.
+    #
+    function SameProject($project) {
+	return $project->pid_idx() == $this->pid_idx();
     }
 
     # accessors

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -201,7 +201,7 @@ class Profile
         $this->project = Project::Lookup($this->pid_idx());
         return $this->project;
     }
-    # Private means only in the same project.
+    # Private means only in the same project. Note that "shared" is deprecated.
     function IsPrivate() {
 	return !($this->ispublic() || $this->shared());
     }
@@ -378,10 +378,10 @@ class Profile
 	}
 	else {
 	    if ($ISVSERVER) {
-		$url .= "/p/$hash";
+		$url .= "/p/$uuid";
             }
             else {
-                $url .= "/instantiate.php?profile=$hash";
+                $url .= "/instantiate.php?profile=$uuid";
             }
 	}
         return $url;
@@ -573,6 +573,10 @@ class Profile
 	if ($project->IsMember($user, $isapproved) && $isapproved) {
 	    return 1;
 	}
+        # Check for project sharing.
+        #if ($this->AllowedUser($user)) {
+        #    return 1;
+        #}
 	return 0;
     }
     function CanView($user) {
@@ -735,6 +739,16 @@ class Profile
         if (!DBQueryWarn("delete from apt_profile_favorites ".
                          "where uid_idx='$user_idx' and ".
                          "      profileid='$profile_id'")) {
+            return -1;
+        }
+        return 0;
+    }
+
+    function setPublic($ispublic) {
+        $profile_id  = $this->profileid();
+
+        if (!DBQueryWarn("update apt_profiles set public='$ispublic' ".
+                         "where profileid='$profile_id'")) {
             return -1;
         }
         return 0;
@@ -995,6 +1009,108 @@ class Profile
     function UseNewGeniLib()
     {
         return 1;
+    }
+
+    #
+    # 
+    #
+    function ProjectList()
+    {
+        $profile_id = $this->profileid();
+        $result = array();
+        
+        $query_result =
+            DBQueryFatal("select * from apt_profile_permissions ".
+                         "where profileid='$profile_id' and ".
+                         "      permission_type='group' and ".
+                         "      revoked is null ".
+                         "order by permission_id");
+        
+        if (mysql_num_rows($query_result)) {
+            while ($row = mysql_fetch_array($query_result)) {
+                $project = Project::LookupByPid($row["permission_id"]);
+                if ($project) {
+                    $result[$project->pid()] = $project->name();
+                }
+            }
+        }
+        return $result;
+    }
+    function AddProject($project)
+    {
+        $profile_id = $this->profileid();
+        $pid = $project->pid();
+        $pid_idx = $project->pid_idx();
+
+        if (!DBQueryWarn("replace into apt_profile_permissions set ".
+                         "   profileid='$profile_id', ".
+                         "   permission_type='group', ".
+                         "   permission_id='$pid', ".
+                         "   permission_idx='$pid_idx', ".
+                         "   created=now(),revoked=null")) {
+            return -1;
+        }
+        return 0;
+    }
+    function RemoveProject($project)
+    {
+        $profile_id = $this->profileid();
+        $pid_idx = $project->pid_idx();
+
+        DBQueryFatal("update apt_profile_permissions set revoked=now() ".
+                     "where profileid='$profile_id' and ".
+                     "      permission_type='group' and ".
+                     "      permission_idx='$pid_idx' and ".
+                     "      revoked is null");
+        
+        return 0;
+    }
+    function AllowedProject($project)
+    {
+        $profile_id = $this->profileid();
+        $pid_idx = $project->pid_idx();
+        
+        $query_result =
+            DBQueryFatal("select permission_idx from apt_profile_permissions ".
+                         "where profileid='$profile_id' and ".
+                         "      permission_type='group' and ".
+                         "      permission_idx='$pid_idx' and ".
+                         "      revoked is null");
+
+        return mysql_num_rows($query_result);
+    }
+
+    #
+    # The user has to belong to one of the projects that have been
+    # shared with the profile. 
+    #
+    function AllowedUser($user)
+    {
+        $profile_id = $this->profileid();
+        $uid = $user->uid();
+        $uid_idx = $user->uid_idx();
+        global $TBDB_TRUST_USER;
+
+        # 
+        # Common case is no sharing.
+        #
+        $query_result =
+            DBQueryFatal("select permission_id from apt_profile_permissions ".
+                         "where profileid='$profile_id' and ".
+                         "      permission_type='group' and ".
+                         "      revoked is null");
+        
+        if (! mysql_num_rows($query_result)) {
+            return 0;
+        }
+        while ($row = mysql_fetch_array($query_result)) {
+            $pid = $row["permission_id"];
+
+            if (TBMinTrust(TBGrpTrust($uid,$pid,$pid), $TBDB_TRUST_USER)) {
+                return 1;
+            }
+        }
+        return 0;
     }
 }
 ?>

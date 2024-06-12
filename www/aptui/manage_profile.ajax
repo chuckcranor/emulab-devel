@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -481,6 +481,10 @@ function Do_Duplicate()
 	SPITAJAX_ERROR(1, "No such profile $target");
 	return;
     }
+    if (!$profile->CanView($this_user) || IsValidHash($target)) {
+	SPITAJAX_ERROR(1, "Not enough permission to copy profile");
+	return;
+    }
     if (!isset($ajax_args["name"])) {
         $errors["name"] = "Missing profile name";
     }
@@ -499,7 +503,7 @@ function Do_Duplicate()
         $errors["pid"] = "No such project";
     }
     elseif (! $project->AccessCheck($this_user, $TB_PROJECT_CREATEPROFILE)) {
-        $errors["pid"] = "Not enough permission";
+        $errors["pid"] = "Not enough permission in project";
     }
     if (count($errors)) {
 	SPITAJAX_ERROR(2, $errors);
@@ -1800,6 +1804,135 @@ function Do_SearchProfiles()
     }
     SPITAJAX_RESPONSE($results);
     
+}
+
+#
+#
+#
+function Do_ModifySharing()
+{
+    global $this_user;
+    global $ajax_args;
+    global $PORTAL_NAME, $TBMAIL_AUDIT;
+    
+    $this_idx = $this_user->uid_idx();
+    $this_uid = $this_user->uid();
+
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(1, "Missing profile uuid");
+	return;
+    }
+    $profile = Profile::Lookup($ajax_args["uuid"]);
+    if (!$profile) {
+	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	return;
+    }
+    if (!$profile->CanEdit($this_user) && !ISADMIN()) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+	return;
+    }
+    if (isset($ajax_args["public"])) {
+        # Ignore no change
+        if ($profile->ispublic() && $ajax_args["public"] != 0) {
+            SPITAJAX_RESPONSE(1);
+            return;
+        }
+        #
+        # Easy is changing the public bit.
+        #
+        $pbit = $ajax_args["public"] == 0 ? 0 : 1;
+        if ($profile->ispublic() != $pbit) {
+            $profile->setPublic($pbit);
+            SPITAJAX_RESPONSE(1);
+            return;
+        }
+        return;
+    }
+    if (isset($ajax_args["addproject"])) {
+        $id = $ajax_args["addproject"];
+        if (! TBvalid_pid($id)) {
+            SPITAJAX_ERROR(1, "Invalid project name");
+            return;
+        }
+        $project = Project::LookupBypid($id);
+        if (!$project) {
+            SPITAJAX_ERROR(1, "There is no project with this name");
+            return;
+        }
+        if ($profile->AllowedProject($project)) {
+            SPITAJAX_ERROR(1, "This project already has access");
+            return;
+        }
+        if ($profile->AddProject($project)) {
+            SPITAJAX_ERROR(1, "Error granting project access");
+            return;
+        }
+        SPITAJAX_RESPONSE(1);
+        return;
+    }
+    if (isset($ajax_args["remproject"])) {
+        $id = $ajax_args["remproject"];
+        if (! TBvalid_pid($id)) {
+            SPITAJAX_ERROR(1, "Invalid project name");
+            return;
+        }
+        $project = Project::LookupByPid($id);
+        if (!$project) {
+            SPITAJAX_ERROR(1, "There is no project with this name");
+            return;
+        }
+        if ($profile->AllowedProject($project)) {
+            if ($profile->RemoveProject($project)) {
+                SPITAJAX_ERROR(1, "Error revoking project access");
+                return;
+            }
+        }
+        SPITAJAX_RESPONSE(1);
+        return;
+    }
+    SPITAJAX_ERROR(1, "Invalid operation");
+}
+
+function Do_GetSharingInfo()
+{
+    global $this_user;
+    global $ajax_args;
+    
+    $this_idx = $this_user->uid_idx();
+    $this_uid = $this_user->uid();
+
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(1, "Missing profile uuid");
+	return;
+    }
+    $profile = Profile::Lookup($ajax_args["uuid"]);
+    if (!$profile) {
+	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	return;
+    }
+    $blob = array(
+        "public"    => $profile->ispublic() ? true : false,
+        "url"       => $profile->ProfileURL(),
+        "canedit"   => $profile->CanEdit($this_user) ? true : false,
+        "projects"  => [],
+    );
+    if ($profile->ispublic()) {
+        SPITAJAX_RESPONSE($blob);
+        return;
+    }
+    if ($profile->CanView($this_user) && !$profile->CanEdit($this_user)) {
+        #
+        # Viewers of the profile can get the same info
+        #
+        SPITAJAX_RESPONSE($blob);
+        return;
+    }
+    if (!$profile->CanEdit($this_user)) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+	return;
+    }
+    $blob["projects"] = $profile->ProjectList();
+    SPITAJAX_RESPONSE($blob);
 }
 
 # Local Variables:

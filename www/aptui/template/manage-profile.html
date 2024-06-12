@@ -71,7 +71,12 @@
 	  </tr>
 	  <tr>
 	    <td>Public?:</td>
-	    <td><% if (formfields.profile_who == "public") { %>Yes<% } else { %>No<% } %></td>
+	    <td>
+	      <span id="profile-public">
+		<% if (formfields.profile_who == "public") { %>Yes<% } else { %>No<% } %>
+	      </span>
+	      (<a href="#" class="profile-share-button">change this setting</a>)
+	    </td>
 	  </tr>
 	  <% if (fromrepo) { %>
 	    <tr>
@@ -236,19 +241,17 @@
       </div>
     <% } %>
     <div style="margin-top-foo: 10px;" class="text-center">
-      <button class='btn btn-primary btn-xs'
-	      id='profile_share_button'
+      <button class='btn btn-success btn-sm profile-share-button'
 	      style='margin-right: 5px;'
 	      type='button'
 	      data-toggle='popover' data-bs-toggle='popover'
 	      data-html='true' data-bs-html='true'
-	      data-content="Share your profile with other users by
-			    sending them a link to instantiate it.
+	      data-content="Share this profile with other users.
 			    Click for more info.">
         Share
       </button>
       <button id="copy-profile-button"
-	      class='btn btn-primary btn-xs'
+	      class='btn btn-primary btn-sm'
 	      style='margin-right: 5px;'
 	      <% if (fromrepo) { %>
      	      data-toggle='modal' data-bs-toggle='modal'
@@ -260,7 +263,7 @@
       <% if (!disabled && gotrspec) { %>
 	<% 	var url = "instantiate.php?profile=" +
 	version_uuid + "&from=manage-profile"; %>
-	<a class='btn btn-primary btn-xs' disabled
+	<a class='btn btn-primary btn-sm' disabled
 	   href="<%- url %>"
            id='profile_instantiate_button'
            style='margin-right: 5px;'
@@ -635,6 +638,7 @@
 	  <fieldset id="metadata-fields"
 		    <% if (!viewing || !gotrspec) { %>class="hidden" <% } %> >
 	    <!-- Permission checkboxes. -->
+	    <% if (isadmin) { %>
 	    <div class='row'>
 	      <div class='col-sm-9 col-sm-offset-3 offset-sm-3' style="margin-top: 5px">
 		Who can instantiate your profile?
@@ -674,6 +678,7 @@
                 </div>
               </div>
             </div>
+	    <% } %>
 
 	    <% if (isadmin || iscreator || isleader) { %>
 	      <div class='row'>
@@ -1407,6 +1412,7 @@ Instructions are optional.
   <div id='instantiate_div'></div>
   <div id='ppmodal_div'></div>
   <div id='share_div'></div>
+  <div id='share-profile-modal-div'></div>
   <div id='copy_repobased_profile_div'></div>
   <div id='profile-imagelist-modal-div'></div>
   <div id='confirm-delete-profile-div'></div>
