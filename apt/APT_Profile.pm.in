@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2023 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2993,6 +2993,9 @@ sub CheckForBuses($$$)
 	# Buses are single use, two experiments cannot allocate the
 	# same bus at the same time. Head that off early.
 	#
+	# XXX This breaks with experiment modify, need to fix.
+	#
+	if (0) {
 	my @others = APT_Instance::Aggregate->LookupByURN($manager_urn);
 	foreach my $instance (@others) {
 	    next
@@ -3004,6 +3007,7 @@ sub CheckForBuses($$$)
 		    "experiment: " . $aggregate->nickname();
 		return 1;
 	    }
+	}
 	}
 	# Make sure this element is removed, we use it to mark nodes
 	# we add internally (to routes).
@@ -3942,6 +3946,56 @@ sub RSpecNodeFragment($$$$)
     GeniXML::AddElement("portal-added", $node, $GeniXML::EMULAB_NS);
     print "$node\n";
     return $node;
+}
+
+#
+# Permission check that mirrors the check made in the web UI.
+#
+sub CanInstantiate($$)
+{
+    my ($self, $user) = @_;
+
+    if ($self->public() ||
+	$self->creator_idx() == $user->uid_idx()) {
+	return 1;
+    }
+    # Otherwise a project membership test.
+    my $project = Project->Lookup($self->pid_idx());
+    return 1
+	if ($project->IsMember($user));
+
+    # Otherwise, shared with the user.
+    #return 1
+    #	if ($self->AllowedUser($user));
+
+    return 0;
+}
+sub CanView($$) { return CanInstantiate($_[0], $_[1]); }
+
+sub AllowedUser($$)
+{
+    my ($self, $user) = @_;
+    my $profile_id = $self->profileid();
+    my $uid = $user->uid();
+
+    my $query_result =
+	DBQueryWarn("select permission_id from apt_profile_permissions ".
+		    "where profileid='$profile_id' and ".
+		    "      permission_type='group' and ".
+		    "      revoked is null");
+        
+    if (! ($query_result && $query_result->numrows)) {
+	return 0;
+    }
+    while (my ($pid) = $query_result->fetchrow_array()) {
+	my $project = Project->LookupByPid($pid);
+	if ($project) {
+	    if ($project->IsMember($user)) {
+		return 1;
+	    }
+        }
+    }
+    return 0;
 }
 
 ###################################################################

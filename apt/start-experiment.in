@@ -189,6 +189,9 @@ my $profile = APT_Profile->Lookup($ARGV[0]);
 if (!defined($profile)) {
     fatal("Profile does not exist");
 }
+if (!$profile->CanInstantiate($this_user)) {
+    fatal("Not enough permission to use this profile");
+}
 if (!defined($portal)) {
     $portal = $project->Brand()->brand();
     if ($portal eq "classic") {
