@@ -41,12 +41,16 @@ sub usage()
     print STDERR "Usage: cacontrol [-a] [-n] [-d] <certfile>\n";
     print STDERR "       cacontrol [-n] [-d] -c <commonname>\n";
     print STDERR "       cacontrol [-n] [-d] -r <commonname>\n";
+    print STDERR "       cacontrol [-n] [-d] [-lEG]\n";
     print STDERR "Options\n";
     print STDERR "  -n     - Impotent mode; do not do anything for real\n";
     print STDERR "  -d     - Turn on debugging.\n";
     print STDERR "  -a     - Add certificate to approved list instead.\n";
     print STDERR "  -c     - Move certificate (commonname) to approved list.\n";
     print STDERR "  -r     - Remove certificate with given commonname.\n";
+    print STDERR "  -l     - List all certificates with their expiration\n";
+    print STDERR "  -E     - Remove all expired certificates\n";
+    print STDERR "  -G     - Regenerate the certificate bundle\n";
     print STDERR "  -R     - With -r, remove cm/sa/ses authorities.\n";
     exit(1);
 }
