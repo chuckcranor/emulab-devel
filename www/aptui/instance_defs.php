@@ -395,6 +395,11 @@ class Instance
             if (0) {
                 SUEXECERROR(SUEXEC_ACTION_DEBUG);
             }
+            # In case of error between creating the instance and forking off
+            $instance = Instance::Lookup($uuid);
+            if ($instance) {
+                return $instance;
+            }
             # Error in the webtask for the caller.
             return null;
 	}
