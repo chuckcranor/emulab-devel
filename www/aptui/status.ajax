@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1918,8 +1918,10 @@ function Do_Utilization()
         if (!($sliver->physnode_count() || $sliver->virtnode_count())) {
             continue;
         }
-        $blob[$urn_mapping[$sliver->aggregate_urn()]] = 
-            $results[$sliver->aggregate_urn()];
+        if (isset($results[$sliver->aggregate_urn()])) {
+            $blob[$urn_mapping[$sliver->aggregate_urn()]] = 
+                $results[$sliver->aggregate_urn()];
+        }
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
