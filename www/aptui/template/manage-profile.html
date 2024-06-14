@@ -704,6 +704,8 @@
                 </div>
               </div>
             </div>
+	    <% } else { %>
+	    <input type='hidden' name='profile_who' value="private">
 	    <% } %>
 
 	    <% if (0 && (isadmin || iscreator || isleader)) { %>
@@ -741,6 +743,8 @@
 		  </div>
 		</div>
 	      </div>
+	    <% } else { %>
+	      <input type='hidden' name='profile_project_write' value="unchecked">
 	    <% } %>
 
 	    <% if (isadmin) { %>
