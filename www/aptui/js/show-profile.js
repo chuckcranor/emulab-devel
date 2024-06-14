@@ -93,6 +93,8 @@ $(function ()
 	    isadmin:		window.ISADMIN,
 	    isguest:		window.ISGUEST,
 	    canedit:            window.CANEDIT,
+	    iscreator:		window.ISCREATOR,
+	    isleader:		window.ISLEADER,
 	    cancopy:            window.CANCOPY,
 	    disabled:           window.DISABLED,
 	    paramsets:          window.PARAMSETS,
@@ -121,8 +123,7 @@ $(function ()
 	        window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
             }
             else {
-                ShareProfile.InitShareProfile('.profile-share-button',
-                                              fields, window.CANEDIT);
+                ShareProfile.InitShareProfile();
             }
         }
 	$('#showtopo-modal-div').html(templates["showtopo-modal"]);

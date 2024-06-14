@@ -70,12 +70,38 @@
 	      <%- formfields.profile_created %></td>
 	  </tr>
 	  <tr>
-	    <td>Public?:</td>
+	    <td>Public:</td>
 	    <td>
 	      <span id="profile-public">
 		<% if (formfields.profile_who == "public") { %>Yes<% } else { %>No<% } %>
 	      </span>
-	      (<a href="#" class="profile-share-button">change this setting</a>)
+	      (<a href="#" class="profile-share-button"
+		  data-toggle='popover' data-bs-toggle='popover'
+		  data-content='Normally only project members can view and
+				instantiate your profile. You can change this
+				setting to allow others to access your profile.'
+	       >change this setting</a>)
+	    </td>
+	  </tr>
+	  <tr>
+	    <td>Writable:</td>
+	    <td>
+	      <span id="profile-project-write">
+		<% if (formfields.profile_project_write) { %>
+		  Project Members
+		<% } else { %>
+		  Profile Creator
+		<% } %>
+	      </span>
+	      <% if (isadmin || iscreator || isleader) { %>
+		(<a href="#" id="profile-project-write-button"
+		    data-toggle='popover' data-bs-toggle='popover'
+		    data-content='Normally only you or your project leader
+				  can modify your profile. You can change
+				  this setting to allow anyone in your project
+				  to modify this profile.'
+		 >change this setting</a>)
+	      <% } %>
 	    </td>
 	  </tr>
 	  <% if (fromrepo) { %>
@@ -680,7 +706,7 @@
             </div>
 	    <% } %>
 
-	    <% if (isadmin || iscreator || isleader) { %>
+	    <% if (0 && (isadmin || iscreator || isleader)) { %>
 	      <div class='row'>
 		<div class='col-sm-9 col-sm-offset-3 offset-sm-3'>
 		  <div class='checkbox format-me'

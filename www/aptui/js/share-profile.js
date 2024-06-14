@@ -1,5 +1,5 @@
 //
-// Share profile helper.
+// Share?Write profile helper.
 //
 $(function () {
 window.ShareProfile = (function ()
@@ -8,20 +8,32 @@ window.ShareProfile = (function ()
     var templates = APT_OPTIONS.fetchTemplateList(['share-profile-modal',
                                                    'share-profile-body']);
     var bodyTemplate = _.template(templates['share-profile-body']);
+    var shareButton  = '.profile-share-button';
+    var writeButton  = '#profile-project-write-button';
 
-    function InitShareProfile(button)
+    function InitShareProfile()
     {
-        console.info("InitShareProfile", button);
+        console.info("InitShareProfile");
         $('#share-profile-modal-div').html(templates['share-profile-modal']);
-        InitModal();
-	$(button).click(function (event) {
+        InitShareModal();
+	$(shareButton).click(function (event) {
 	    event.preventDefault();
-            console.info(event);
 	    sup.ShowModal('#share-profile-modal');
 	});
+	if (window.ISADMIN || window.ISCREATOR || window.ISLEADER) {
+	    $(writeButton).click(function (event) {
+	        event.preventDefault();
+	        sup.ShowModal('#profile-project-write-modal');
+	    });
+            // Watch for changes to project writable
+            $('#profile-project-write-modal input').change(function (event) {
+                event.preventDefault();
+                setWritable($(this).is(":checked"));
+            });
+        }
     }
 
-    function InitModal()
+    function InitShareModal()
     {
         GetSharingInfo(function (info) {
 	    $('#share-profile-modal .modal-body').html(bodyTemplate({
@@ -32,6 +44,10 @@ window.ShareProfile = (function ()
             }));
 	    // Bind the copy to clipboard button in the share modal
 	    window.APT_OPTIONS.SetupCopyToClipboard("#share-profile-modal");
+
+            // Update project writable flag in the project writable modal.
+            $('#profile-project-write-modal input')
+                .prop("checked", (info.writable ? true : false));
 
             // Watch for changes to access type.
             $('#share-profile-modal .select-access-type').change(function (event) {
@@ -59,7 +75,7 @@ window.ShareProfile = (function ()
                                 .addClass("is-invalid");
                             return;
                         }
-                        InitModal();
+                        InitShareModal();
                     });
                 });
                 $('#share-profile-modal .remove-sharing-project button').click(function (event) {
@@ -74,7 +90,7 @@ window.ShareProfile = (function ()
                                 .addClass("is-invalid");
                             return;
                         }
-                        InitModal();
+                        InitShareModal();
                     });
                 });
             }
@@ -106,11 +122,32 @@ window.ShareProfile = (function ()
 				     alert(json.value);
 				     return;
 				 }
-                                 InitModal();
+                                 InitShareModal();
                                  /*
                                   * Update the summary box
                                   */
                                  $('#profile-public').html(ispublic ? "Yes" : "No");
+                             });
+    }
+
+    function setWritable(writable)
+    {
+	sup.CallServerMethod(null, "manage_profile", "ModifySharing",
+			     {"uuid"     : window.PROFILE_UUID,
+                              "writable" : writable ? 1 : 0},
+                             function (json) {
+                                 console.info("setWritable", json);
+				 if (json.code) {
+				     alert(json.value);
+                                     $('#profile-project-write-modal input')
+                                         .prop("checked", (writable ? false : true));
+				     return;
+				 }
+                                 /*
+                                  * Update the summary box
+                                  */
+                                 $('#profile-project-write')
+                                     .html(writable ? "Project Members" : "Profile Creator");
                              });
     }
 

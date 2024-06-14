@@ -1827,7 +1827,8 @@ function Do_ModifySharing()
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
     }
-    if (!$profile->CanEdit($this_user) && !ISADMIN()) {
+    if (!($profile->isCreator($this_user) ||
+          $profile->isLeader($this_user) || ISADMIN())) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
@@ -1843,6 +1844,20 @@ function Do_ModifySharing()
         $pbit = $ajax_args["public"] == 0 ? 0 : 1;
         if ($profile->ispublic() != $pbit) {
             $profile->setPublic($pbit);
+            SPITAJAX_RESPONSE(1);
+            return;
+        }
+        return;
+    }
+    if (isset($ajax_args["writable"])) {
+        # Ignore no change
+        if ($profile->project_write() && $ajax_args["writable"] != 0) {
+            SPITAJAX_RESPONSE(1);
+            return;
+        }
+        $pbit = $ajax_args["writable"] == 0 ? 0 : 1;
+        if ($profile->project_write() != $pbit) {
+            $profile->setProjectWritable($pbit);
             SPITAJAX_RESPONSE(1);
             return;
         }
@@ -1914,6 +1929,7 @@ function Do_GetSharingInfo()
         "public"    => $profile->ispublic() ? true : false,
         "url"       => $profile->ProfileURL(),
         "canedit"   => $profile->CanEdit($this_user) ? true : false,
+        "writable"  => $profile->project_write() ? true : false,
         "projects"  => [],
     );
     if ($profile->ispublic()) {

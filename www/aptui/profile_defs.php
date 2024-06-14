@@ -754,6 +754,16 @@ class Profile
         return 0;
     }
 
+    function setProjectWritable($writable) {
+        $profile_id  = $this->profileid();
+
+        if (!DBQueryWarn("update apt_profiles set project_write='$writable' ".
+                         "where profileid='$profile_id'")) {
+            return -1;
+        }
+        return 0;
+    }
+
     function BestAggregate($rspec = null) {
         return null;
     }

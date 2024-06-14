@@ -202,8 +202,7 @@ $(function ()
 	        });
             }
             else {
-                ShareProfile.InitShareProfile('.profile-share-button',
-                                              fields, window.CANEDIT);
+                ShareProfile.InitShareProfile();
             }
         }
 	$('#copy_repobased_profile_div').html(copyrepoString);
