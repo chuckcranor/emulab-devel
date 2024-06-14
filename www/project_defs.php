@@ -343,7 +343,7 @@ class Project
 	fwrite($fp, "<project>\n");
 	foreach ($args as $name => $value) {
 	    fwrite($fp, "<attribute name=\"$name\">");
-	    fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	    fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	    fwrite($fp, "</attribute>\n");
 	}
 	fwrite($fp, "</project>\n");
@@ -964,12 +964,12 @@ class Project
 		echo "<tr>
                           <td>Public CVSWeb Address:</td>
                           <td><a href=$puburl>" .
-		                 htmlspecialchars($puburl) . "</a></td>
+		                 htmlspecialchars($puburl, ENT_COMPAT) . "</a></td>
                       </tr>\n";
 
 		echo "<tr>
                           <td>CVS pserver Address:</td>
-                          <td>" . htmlspecialchars($pserver) . "</td>
+                          <td>" . htmlspecialchars($pserver, ENT_COMPAT) . "</td>
                       </tr>\n";
 	    }
 	}
@@ -1243,7 +1243,7 @@ class Project
     #
     # Map Project Reservation values. Class method
     #
-    function ReservationSharingMap($mode)
+    public static function ReservationSharingMap($mode)
     {
         # Convert sharing mode to a string or value
         if ($mode == "user") {

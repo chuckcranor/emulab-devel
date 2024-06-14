@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,7 +72,7 @@ foreach ($all as $index => $aggregate) {
     );
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
+echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK), ENT_COMPAT);
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

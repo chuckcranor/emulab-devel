@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -707,7 +707,7 @@ function ChangeDelayConfig($uid, $pid, $unix_gid, $args, &$errors) {
     fwrite($fp, "<PubKey>\n");
     foreach ($args as $name => $value) {
 	fwrite($fp, "<attribute name=\"$name\">");
-	fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	fwrite($fp, "</attribute>\n");
     }
     fwrite($fp, "</PubKey>\n");

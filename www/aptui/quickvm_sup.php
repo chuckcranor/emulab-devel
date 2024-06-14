@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -437,7 +437,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "<div id='mainheader-div'></div>\n";
     
     echo "<script type='text/plain' id='mainheader-json'>\n";
-    echo htmlentities(json_encode($headervars, JSON_NUMERIC_CHECK)) . "\n";
+    echo htmlentities(json_encode($headervars, JSON_NUMERIC_CHECK), ENT_COMPAT) . "\n";
     echo "</script>\n";
     
     echo "<script type='text/javascript'>\n";

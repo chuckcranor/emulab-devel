@@ -1775,7 +1775,7 @@ class menuBar
 		    $mouseover = "";
                     $target    = "";
 		    if ($item['#mouseover']) {
-			$string = htmlentities($item['#mouseover']);
+			$string = htmlentities($item['#mouseover'], ENT_COMPAT);
 			$mouseover =
 			    "onmouseover=\"return escape('$string')\"";
 		    }

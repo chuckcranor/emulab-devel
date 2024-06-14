@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -433,7 +433,7 @@ function FORMERROR($field) {
 # 
 function PAGEARGERROR($msg = 0) {
     $default = "Invalid page arguments: " .
-          	htmlspecialchars($_SERVER['REQUEST_URI']);
+          	htmlspecialchars($_SERVER['REQUEST_URI'], ENT_COMPAT);
 
     if ($msg) {
 	$default = "$default<br><br>$msg";

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -261,7 +261,7 @@ function FormRenderTextArea($name, $attrs)
     }
     $html .= ">";
     if (isset($attrs['#value'])) {
-	$html .= htmlspecialchars($attrs['#value']);
+	$html .= htmlspecialchars($attrs['#value'], ENT_COMPAT);
     }
     $html .= "</textarea>\n";
     return $html;
@@ -519,7 +519,7 @@ function FormRenderMouseOver($string)
 {
     $string = str_replace("\n", "<br>", $string);
     $string = str_replace("\r", "", $string);
-    $string = htmlentities($string);
+    $string = htmlentities($string, ENT_COMPAT);
     $string = preg_replace("/\'/", "\&\#039;", $string);
 
     return "onmouseover=\"return escape('$string')\"";

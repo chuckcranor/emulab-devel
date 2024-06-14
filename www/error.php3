@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2013, 2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,7 +21,7 @@
 # 
 # }}}
 #
-echo "The URL you gave: <b>" . htmlentities( $_SERVER["REQUEST_URI"] ) . "</b>
+echo "The URL you gave: <b>" . htmlentities( $_SERVER["REQUEST_URI"], ENT_COMPAT ) . "</b>
            is not available or is broken.";
 ?>
 

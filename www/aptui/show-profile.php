@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -195,7 +195,7 @@ if ($cancopy) {
         $plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";
-    echo htmlentities(json_encode($plist));
+    echo htmlentities(json_encode($plist), ENT_COMPAT);
     echo "</script>\n";
 }
 echo "<script src='js/lib/codemirror-min.js'></script>\n";

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -119,7 +119,7 @@ if (ISADMIN() && isset($project)) {
     $plist[] = $project->pid();
 }
 echo "<script type='text/plain' id='projects-json'>\n";
-echo htmlentities(json_encode($plist));
+echo htmlentities(json_encode($plist), ENT_COMPAT);
 echo "</script>\n";
 
 # List of clusters.
@@ -163,7 +163,7 @@ foreach ($ams as $index => $aggregate) {
                           "reservable_nodes" => $reservable_nodes);
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($amlist));
+echo htmlentities(json_encode($amlist), ENT_COMPAT);
 echo "</script>\n";
 
 $defaults = array();
@@ -176,7 +176,7 @@ elseif (count($plist) == 1) {
     $defaults["pid"] = $plist[0];
 }
 echo "<script type='text/plain' id='form-json'>\n";
-echo htmlentities(json_encode($defaults)) . "\n";
+echo htmlentities(json_encode($defaults), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";

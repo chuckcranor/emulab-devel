@@ -169,10 +169,10 @@ if (!$doOtaCheck) {
 }
 
 echo "<script type='text/plain' id='projects-json'>\n";
-echo htmlentities(json_encode($plist));
+echo htmlentities(json_encode($plist), ENT_COMPAT);
 echo "</script>\n";
 echo "<script type='text/plain' id='manager-json'>\n";
-echo htmlentities(json_encode($mlist));
+echo htmlentities(json_encode($mlist), ENT_COMPAT);
 echo "</script>\n";
 
 # List of clusters.
@@ -233,16 +233,16 @@ foreach ($ams as $index => $aggregate) {
                           
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
+echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK), ENT_COMPAT);
 echo "</script>\n";
 if ($ISPOWDER) {
     $radioinfo = Aggregate::RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
-    echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
+    echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK), ENT_COMPAT);
     echo "</script>\n";
     $matrixinfo = Aggregate::MatrixInfo();
     echo "<script type='text/plain' id='matrixinfo-json'>\n";
-    echo htmlentities(json_encode($matrixinfo, JSON_NUMERIC_CHECK));
+    echo htmlentities(json_encode($matrixinfo, JSON_NUMERIC_CHECK), ENT_COMPAT);
     echo "</script>\n";
 
     # Spit out the route list.
@@ -258,11 +258,11 @@ if ($ISPOWDER) {
         );
     }
     echo "<script type='text/plain' id='routelist-json'>\n";
-    echo htmlentities(json_encode($routelist, JSON_NUMERIC_CHECK));
+    echo htmlentities(json_encode($routelist, JSON_NUMERIC_CHECK), ENT_COMPAT);
     echo "</script>\n";
 
     echo "<script type='text/plain' id='otaAllowed-json'>\n";
-    echo htmlentities(json_encode($otaAllowed));
+    echo htmlentities(json_encode($otaAllowed), ENT_COMPAT);
     echo "</script>\n";
 
     # User has seen and agreed to the OTA agreement.

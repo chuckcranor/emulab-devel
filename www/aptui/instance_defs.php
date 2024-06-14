@@ -341,7 +341,7 @@ class Instance
 	    fwrite($fp, "<quickvm>\n");
 	    foreach ($args as $name => $value) {
 		fwrite($fp, "<attribute name=\"$name\">");
-		fwrite($fp, "  <value>" . htmlspecialchars($value) .
+		fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) .
 		       "</value>");
 		fwrite($fp, "</attribute>\n");
 	    }
@@ -1652,10 +1652,10 @@ function SpitAggregateStatus($extended = false, $user = null, $agglist = null) {
     CalculateAggregateStatus($amlist, $fedlist,
                              $status, $extended, $user, false, $agglist);
     echo "<script type='text/plain' id='amlist-json'>\n";
-    echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
+    echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK), ENT_COMPAT);
     echo "</script>\n";
     echo "<script type='text/plain' id='amstatus-json'>\n";
-    echo htmlentities(json_encode($status));
+    echo htmlentities(json_encode($status), ENT_COMPAT);
     echo "</script>\n";
 }
 

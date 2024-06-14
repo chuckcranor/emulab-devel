@@ -210,7 +210,7 @@ function Do_GetParameters()
         $paramdefs = $profile->paramdefs();
     }
     list ($formfrag, $defaults) = $profile->GenerateFormFragment($paramdefs);
-    $blob = array("formfrag"    => htmlentities($formfrag),
+    $blob = array("formfrag"    => htmlentities($formfrag, ENT_COMPAT),
                   "defaults"    => $defaults,
                   "hasactivity" => $profile->HasActivity($this_user),
                   "paramdefs"   => json_decode($paramdefs),

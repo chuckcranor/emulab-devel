@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2011 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -168,7 +168,7 @@ function Show($which, $zoom, $detail)
 	$input_list = $template->InputFiles();
 
 	for ($i = 0; $i < count($input_list); $i++) {
-	    $nsdata .= htmlentities($input_list[$i]);
+	    $nsdata .= htmlentities($input_list[$i], ENT_COMPAT);
 	    $nsdata .= "\n\n";
 	}
 	$html = "<pre><div align=left class=\"showexp_codeblock\">".

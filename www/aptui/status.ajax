@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -221,7 +221,7 @@ function Do_GetInstanceStatus()
             if ($sliver->retry_count()) {
                 if ($wtask && $wtask->TaskValue("output")) {
                     $sliverblob["deferred_cause"] =
-                        htmlentities($wtask->TaskValue("output"));
+                        htmlentities($wtask->TaskValue("output"), ENT_COMPAT);
                 }
             }
         }
@@ -245,7 +245,7 @@ function Do_GetInstanceStatus()
                     $sliverblob["failure_code"] = $wtask->exitcode();
                     if ($wtask->TaskValue("output")) {
                         $sliverblob["failure_cause"] =
-                                htmlentities($wtask->TaskValue("output"));
+                                htmlentities($wtask->TaskValue("output"), ENT_COMPAT);
                         $sliverblob["failure_message"] =
                                 MapGeniResponse($wtask->exitcode());
                     }
@@ -275,7 +275,7 @@ function Do_GetInstanceStatus()
     if ($webtask && $webtask->exited()) {
         $blob["code"] = $webtask->exitcode();
         if ($webtask->TaskValue("output")) {
-            $blob["message"] = htmlentities($webtask->TaskValue("output"));
+            $blob["message"] = htmlentities($webtask->TaskValue("output"), ENT_COMPAT);
         }
         $blob["canclearerror"]
             = ($webtask->TaskValue("canignore") != 0 ||

@@ -121,7 +121,7 @@ if ($edit) {
                         "name" => $imagename);
     }
     echo "<script type='text/plain' id='images-json'>\n";
-    echo htmlentities(json_encode($list));
+    echo htmlentities(json_encode($list), ENT_COMPAT);
     echo "</script>\n";
 
     $list = array();
@@ -135,7 +135,7 @@ if ($edit) {
                         "name" => $osname);
     }
     echo "<script type='text/plain' id='osinfo-json'>\n";
-    echo htmlentities(json_encode($list));
+    echo htmlentities(json_encode($list), ENT_COMPAT);
     echo "</script>\n";
 
     $list = array();
@@ -149,7 +149,7 @@ if ($edit) {
                         "name" => $osname);
     }
     echo "<script type='text/plain' id='mfs-json'>\n";
-    echo htmlentities(json_encode($list));
+    echo htmlentities(json_encode($list), ENT_COMPAT);
     echo "</script>\n";
 }
 else {
@@ -180,7 +180,7 @@ else {
         $list[] = $blob;
     }
     echo "<script type='text/plain' id='nodes-json'>\n";
-    echo htmlentities(json_encode($list));
+    echo htmlentities(json_encode($list), ENT_COMPAT);
     echo "</script>\n";
 }
 

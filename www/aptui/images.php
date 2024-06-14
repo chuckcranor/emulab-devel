@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -313,7 +313,7 @@ echo "    window.ALL        = $all;\n";
 echo "</script>\n";
 
 echo "<script type='text/plain' id='images-json'>\n";
-echo htmlentities(json_encode($images)) . "\n";
+echo htmlentities(json_encode($images), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

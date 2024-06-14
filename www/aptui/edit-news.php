@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -75,7 +75,7 @@ if ($editing) {
 }
 
 echo "<script type='text/plain' id='form-json'>\n";
-echo htmlentities(json_encode($defaults)) . "\n";
+echo htmlentities(json_encode($defaults), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";

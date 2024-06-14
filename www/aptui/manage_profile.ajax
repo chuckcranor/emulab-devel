@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -250,17 +250,17 @@ function Do_Create()
         fwrite($fp, "</attribute>\n");
         fwrite($fp, "<attribute name='profile_name'>");
         fwrite($fp, "  <value>" .
-               htmlspecialchars($formfields["profile_name"]) . "</value>");
+               htmlspecialchars($formfields["profile_name"], ENT_COMPAT) . "</value>");
         fwrite($fp, "</attribute>\n");
         if (isset($rspec)) {
             fwrite($fp, "<attribute name='rspec'>");
-            fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
+            fwrite($fp, "  <value>" . htmlspecialchars($rspec, ENT_COMPAT) . "</value>");
             fwrite($fp, "</attribute>\n");
         }
         if (isset($script)) {
             fwrite($fp, "<attribute name='script'>");
             fwrite($fp, "  <value>" .
-                   htmlspecialchars($script) . "</value>");
+                   htmlspecialchars($script, ENT_COMPAT) . "</value>");
             fwrite($fp, "</attribute>\n");
             if (isset($portal_converted)) {
                 $pcon = ($portal_converted ? 1 : 0);
@@ -273,7 +273,7 @@ function Do_Create()
             $formfields["profile_repourl"] != "") {
             fwrite($fp, "<attribute name='repourl'>");
             fwrite($fp, "  <value>" .
-                   htmlspecialchars($formfields["profile_repourl"]) .
+                   htmlspecialchars($formfields["profile_repourl"], ENT_COMPAT) .
                    "</value>");
             fwrite($fp, "</attribute>\n");
         }
@@ -1609,16 +1609,16 @@ function UpdateMaster($profile, $script, $rspec)
     fwrite($fp, "</attribute>\n");
     fwrite($fp, "<attribute name='profile_name'>");
     fwrite($fp, "  <value>" .
-	   htmlspecialchars($profile->name()) . "</value>");
+	   htmlspecialchars($profile->name(), ENT_COMPAT) . "</value>");
     fwrite($fp, "</attribute>\n");
     if ($rspec) {
         fwrite($fp, "<attribute name='rspec'>");
-        fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
+        fwrite($fp, "  <value>" . htmlspecialchars($rspec, ENT_COMPAT) . "</value>");
         fwrite($fp, "</attribute>\n");
     }
     if ($script) {
 	fwrite($fp, "<attribute name='script'>");
-	fwrite($fp, "  <value>" . htmlspecialchars($script) . "</value>");
+	fwrite($fp, "  <value>" . htmlspecialchars($script, ENT_COMPAT) . "</value>");
 	fwrite($fp, "</attribute>\n");
     }
     fwrite($fp, "</profile>\n");

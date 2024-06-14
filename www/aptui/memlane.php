@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -144,7 +144,7 @@ echo "</script>\n";
 if ($ISPOWDER) {
     $radioinfo = Aggregate::RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
-    echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
+    echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK), ENT_COMPAT);
     echo "</script>\n";
 }
 

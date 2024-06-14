@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -111,13 +111,13 @@ function SPITFORM($formfields, $showverify, $errors)
     echo "<div id='signup-body'></div>\n";
     echo "<div id='toomany_div'></div>\n";
     echo "<script type='text/plain' id='form-json'>\n";
-    echo htmlentities(json_encode($formfields)) . "\n";
+    echo htmlentities(json_encode($formfields), ENT_COMPAT) . "\n";
     echo "</script>\n";
     echo "<script type='text/plain' id='error-json'>\n";
-    echo htmlentities(json_encode($errors));
+    echo htmlentities(json_encode($errors), ENT_COMPAT);
     echo "</script>\n";
     echo "<script type='text/plain' id='licenses-json'>\n";
-    echo htmlentities(json_encode($license_defs));
+    echo htmlentities(json_encode($license_defs), ENT_COMPAT);
     echo "</script>\n";
     echo "<script type='text/javascript'>\n";
 
@@ -321,14 +321,14 @@ if (!$this_user || $promoting) {
         trim($formfields["affiliation"]) == "") {
 	$errors["affiliation"] = "Missing Field";
     }
-    elseif (! TBvalid_affiliation(htmlentities($formfields["affiliation"]))) {
+    elseif (! TBvalid_affiliation(htmlentities($formfields["affiliation"], ENT_COMPAT))) {
 	$errors["affiliation"] = TBFieldErrorString();
     }
     if (!isset($formfields["title"]) ||
         trim($formfields["title"]) == "") {
 	$errors["title"] = "Missing Field";
     }
-    elseif (! TBvalid_title(htmlentities($formfields["title"]))) {
+    elseif (! TBvalid_title(htmlentities($formfields["title"], ENT_COMPAT))) {
 	$errors["title"] = TBFieldErrorString();
     }
     if (!isset($formfields["country"]) ||
@@ -546,7 +546,7 @@ if ($this_user && $promoting) {
     $args["state"]         = $formfields["state"];
     $args["country"]       = $formfields["country"];
     $args["shell"]         = 'bash';
-    $args["affiliation"]   = htmlentities($formfields["affiliation"]);
+    $args["affiliation"]   = htmlentities($formfields["affiliation"], ENT_COMPAT);
     $args["address1"]      = $formfields["address1"];
     $args["address2"]      = $formfields["address2"];
     $args["zip"]           = $formfields["zip"];
@@ -574,7 +574,7 @@ if (!$this_user) {
     $args["state"]         = $formfields["state"];
     $args["country"]       = $formfields["country"];
     $args["shell"]         = 'bash';
-    $args["affiliation"]   = htmlentities($formfields["affiliation"]);
+    $args["affiliation"]   = htmlentities($formfields["affiliation"], ENT_COMPAT);
     $args["title"]         = $formfields["title"];
     $args["password"]      = $formfields["password1"];
     # Force initial SSL cert generation.

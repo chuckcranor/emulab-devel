@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2672,7 +2672,7 @@ function MakeMouseOver($string)
 {
     $string = str_replace("\n", "<br>", $string);
     $string = str_replace("\r", "", $string);
-    $string = htmlentities($string);
+    $string = htmlentities($string, ENT_COMPAT);
     $string = preg_replace("/\'/", "\&\#039;", $string);
 
     return "onmouseover=\"return escape('$string')\"";
