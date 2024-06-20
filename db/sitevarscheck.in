@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2011, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,6 +54,10 @@ if ($mysqlvers =~ /Distrib (\d\.\d).\d+, for/) {
 elsif ($mysqlvers =~ /Ver (\d\.\d+).\d+ for/) {
     $version = $1 + 0.0;
 }
+elsif ($mysqlvers =~ /Distrib (\d+\.\d+).\d+-MariaDB, for/) {
+    $version = $1 + 0.0;
+}
+
 my $extraopts = ($version >= 5.0 ? "--skip-opt" : "");
 
 #

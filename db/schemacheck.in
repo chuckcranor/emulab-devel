@@ -66,6 +66,14 @@ elsif ($mysqlvers =~ /Ver (\d\.\d+).\d+ for/) {
     $extraopts .= "--set-gtid-purged=off ";
     $ignorecwidth = 1;
 }
+elsif ($mysqlvers =~ /Distrib (\d+\.\d+).\d+-MariaDB, for/) {
+    my $vers = $1 + 0.0;
+    if ($vers < 10.0) {
+	fatal("Unexpected mariadb version '$vers'");
+    }
+    $extraopts .= "--skip-quote-names ";
+    $ignorecwidth = 1;
+}
 else {
     fatal("Could not determine mysql version");
 }

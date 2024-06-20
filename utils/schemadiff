@@ -206,8 +206,8 @@ sub read_schema($) {
 	    # what this line is trying to do...
 	    #
 	    if (/^\) TYPE\s*=\s*(\w+);/i ||
-		/^\) ENGINE\s*=\s*(\w+)\s*DEFAULT\s*CHARSET=(\w+);/i ||
-		/^\) ENGINE\s*=\s*(\w+)\s*AUTO_INCREMENT=\d*\s*DEFAULT\s*CHARSET=(\w+);/i) {
+		/^\) ENGINE\s*=\s*(\w+)\s*DEFAULT\s*CHARSET=(\w+)(?:\s*COLLATE=(\w+))?;/i ||
+		/^\) ENGINE\s*=\s*(\w+)(?:\s*AUTO_INCREMENT=\d*)\s*DEFAULT\s*CHARSET=(\w+)(?:\s*COLLATE=(\w+))?;/i) {
 
 		# The end of the table definition
 		my $type = $1;
@@ -286,8 +286,9 @@ sub read_schema($) {
 		debug("Found column $name with type $definition\n");
 
 		# Canonicalize. 
-		if ($definition eq "text" || $definition eq "mediumtext") {
-		    debug("  Converting to '[mediumtext]text default NULL'\n");
+		if ($definition eq "text" || $definition eq "mediumtext" ||
+		    $definition eq "tinytext" || $definition eq "mediumblob") {
+		    debug("  Converting to '$definition default NULL'\n");
 		    $definition = "$definition default NULL";
 		}
 
@@ -303,6 +304,17 @@ sub read_schema($) {
 		# dropped them from dumps.
 		if ($ignore_cwidth) {
 		    $definition =~ s/int\(\d+\)/int/g;
+		}
+
+		# If it is an integer type with a default, remove quotes around
+		# default value.
+		if ($definition =~ /^((?:tiny|small|medium|big)?int.*default )'((?:\-)?\d+)'/) {
+		    $definition = "$1$2";
+		}
+
+		# ditto for floats
+		if ($definition =~ /^((?:decimal|float|double).*default )'([\d\.]+)'/) {
+		    $definition = "$1$2";
 		}
 
 		$tables{$table_name}{COLUMNS}{$name} = $definition;
