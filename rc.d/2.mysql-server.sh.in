@@ -55,14 +55,48 @@ fi
 
 logopt="--log-long-format --log=@prefix@/log/mysql/base --log-bin=@prefix@/log/mysql/update --log-slow-queries=@prefix@/log/mysql/slowqueries"
 
-#
-# mysql 8 changes:
-# default for max_allowed packet is 64M
-# sql_mode no longer has NO_AUTO_CREATE_USER
-# no more query cache
-# innodb_file_format is no longer an option
-#
-if [ $major -eq 8 ]; then
+if [ $major -eq 10 ]; then
+	#
+	# Version 10 is mariadb.
+	# Varients of the mysql5 options.
+	#
+	safeprog=/usr/local/bin/mariadbd-safe
+
+	logopt="--general_log=1 --general_log_file=@prefix@/log/mysql/base"
+	logopt="$logopt --log-bin=@prefix@/log/mysql/update"
+	logopt="$logopt --slow_query_log=1 --binlog-format=MIXED"
+	logopt="$logopt --slow_query_log_file=@prefix@/log/mysql/slowqueries"
+
+	opts="--default-storage-engine=MyISAM --long_query_time=2"
+	if [ $MAINSITE == "0" -a $BIGDB == "0" ]; then
+	    opts="$opts --key_buffer_size=256M --table_open_cache=128"
+	    opts="$opts --sort_buffer_size=2M"
+	    opts="$opts --read_buffer_size=1M --max_connections=250"
+	else
+	    opts="$opts --key_buffer_size=256M --table_open_cache=256"
+	    opts="$opts --sort_buffer_size=4M"
+	    opts="$opts --read_buffer_size=1M --query_cache_size=16M"
+	    opts="$opts --join_buffer_size=1M --thread_cache_size=50"
+	    opts="$opts --tmp_table_size=256M --max_heap_table_size=256M"
+	    opts="$opts --max_connections=1000"
+	    opts="$opts --max_allowed_packet=16M"
+	fi
+
+	# so that we can dump tables
+	opts="$opts --secure-file-priv="
+	opts="$opts --innodb_file_per_table=1 --innodb_file_format=Barracuda"
+	# Backwards compatibility.
+	opts="$opts --lower_case_table_names=0 --log_output=file"
+	# Strict mode is coming, but we can't handle it.
+	opts="$opts --sql_mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+elif [ $major -eq 8 ]; then
+	#
+	# mysql 8 changes:
+	# default for max_allowed packet is 64M
+	# sql_mode no longer has NO_AUTO_CREATE_USER
+	# no more query cache
+	# innodb_file_format is no longer an option
+	#
 	safeprog=/usr/local/bin/mysqld_safe
 	logopt="--general_log=1 --general_log_file=@prefix@/log/mysql/base"
 	logopt="$logopt --log-bin=@prefix@/log/mysql/update"
@@ -148,7 +182,11 @@ case "$1" in
 		fi
 		;;
 	stop|faststop|quietstop|onestop|forcestop)
-		/usr/bin/killall mysqld > /dev/null 2>&1 && echo -n ' mysqld'
+		echo -n ' mysqld'
+		if [ -r "/var/db/mysql/mysqld.pid" ]; then
+			kill `cat /var/db/mysql/mysqld.pid` > /dev/null 2>&1
+		fi
+		/usr/bin/killall mysqld > /dev/null 2>&1
 		;;
 	*)
 		echo ""
