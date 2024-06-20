@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2002 University of Utah and the Flux Group.
+# Copyright (c) 2000-2002, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,11 @@
 
 use POSIX;
 
+#
+# Configure variables
+#
+my $DBPACKAGE = "@DBPACKAGE@";
+
 package libtbsetup;
 use Exporter;
 @ISA = "Exporter";
@@ -46,7 +51,7 @@ my $dostamp = 0;
 
 sub tbs_initdbi {
     my($dbname) = $_[0];
-    return DBI->connect("DBI:mysql:database=$dbname;host=localhost") 
+    return DBI->connect("DBI:$DBPACKAGE:database=$dbname;host=localhost") 
 	|| die "Could not connect to DB.\n";
 };
 

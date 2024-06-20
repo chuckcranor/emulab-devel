@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019, 2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,6 +38,7 @@ my $SCRIPTNAME  = "Unknown";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $USEDBI	= @TBUSEDBI@;
 my $MAINSITE    = @TBMAINSITE@;
+my $DBPACKAGE = "@DBPACKAGE@";
 
 # Untainted scriptname for below.
 if ($PROGRAM_NAME =~ /^([-\w\.\/]+)$/) {
@@ -197,7 +198,7 @@ sub Connect($)
     return 0
         if (defined($self->{'DBH'}));
 
-    my $dbh = DBI->connect("DBI:mysql:database=$dbname;host=localhost",
+    my $dbh = DBI->connect("DBI:$DBPACKAGE:database=$dbname;host=localhost",
 			   $dbuser, "none",
 			   {'PrintError' => 0});
     return -1
@@ -217,9 +218,9 @@ sub DBExists($$)
     
     require DBI;
 
-    my @dbs = DBI->data_sources("mysql");
+    my @dbs = DBI->data_sources($DBPACKAGE);
     return 1
-	if (grep {$_ eq "DBI:mysql:$dbname"} @dbs);
+	if (grep {$_ eq "DBI:$DBPACKAGE:$dbname"} @dbs);
     return 0;
 }
 

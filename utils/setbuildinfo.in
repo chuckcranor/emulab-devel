@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2011, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,6 +32,7 @@ use POSIX qw(strftime);
 #
 my $DBNAME    = '@TBDBNAME@';
 my $SRCDIR    = "@top_srcdir@";
+my $DBPACKAGE = "@DBPACKAGE@";
 
 #
 # We use the bare module instead of the testbed libdb, so that this
@@ -43,7 +44,7 @@ use DBI;
 #
 # Build a list of tables to export
 #
-my $dbh = DBI->connect("DBI:mysql:database=$DBNAME;host=localhost",
+my $dbh = DBI->connect("DBI:$DBPACKAGE:database=$DBNAME;host=localhost",
 		       undef, "none",
 		       {'PrintError' => 0});
 if (!$dbh) {

@@ -39,6 +39,7 @@ if (@ARGV && $ARGV[0] eq "-i") {
 # Configure variables
 #
 my $DBNAME = '@TBDBNAME@';
+my $DBPACKAGE = "@DBPACKAGE@";
 
 my $extraopts  = "";
 my $mysqlvers = `mysql -V`;
@@ -80,7 +81,7 @@ use DBI;
 #
 # Build a list of tables to export
 #
-my $dbh = DBI->connect("DBI:mysql:database=$DBNAME;host=localhost",
+my $dbh = DBI->connect("DBI:$DBPACKAGE:database=$DBNAME;host=localhost",
 		       undef, "none",
 		       {'PrintError' => 0});
 if (!$dbh) {

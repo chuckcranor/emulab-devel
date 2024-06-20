@@ -99,6 +99,20 @@ AC_CHECK_HEADERS([Python.h],
 AC_SUBST(PYTHON_INCLUDE)
 # END Python detection.
 
+# BEGIN DB package detection.
+AC_PATH_PROGS(DBCLIENT, mariadb mysql)
+
+if test x"$DBCLIENT" = x""; then
+    AC_MSG_ERROR([No DB detected, should have MariaDB or Mysql installed])
+fi
+DBPACKAGE=`basename ${DBCLIENT}`
+
+# XXX seriously??
+if test "$DBPACKAGE" = "mariadb"; then
+    DBPACKAGE="MariaDB"
+fi
+# END DB package detection.
+
 # On Linux, rpc/rpc.h may be in another place, e.g. for tirpc,
 # /usr/include/tirpc .
 RPC_INCLUDE=""
@@ -158,6 +172,7 @@ AC_SUBST(optional_subdirs)
 # NB: See AC_DEFINE_UNQUOTED() calls below, if you want a variable
 # to appear in config.h.
 #
+AC_SUBST(DBPACKAGE)
 AC_SUBST(TBDBNAME)
 AC_SUBST(TBERRORLOGDBNAME)
 AC_SUBST(TBADMINGROUP)
@@ -1459,7 +1474,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	tbsetup/node_control tbsetup/node_attributes \
         tbsetup/mkgroup tbsetup/eventsys_start \
 	tbsetup/eventsys_control \
-	tbsetup/mkproj tbsetup/libtestbed.pm \
+	tbsetup/mkproj tbsetup/libtestbed.pm tbsetup/libtbsetup.pm \
 	tbsetup/vnode_setup tbsetup/staticroutes \
 	tbsetup/console_setup.proxy tbsetup/exports_setup.proxy \
 	tbsetup/smbpasswd_setup.proxy \
