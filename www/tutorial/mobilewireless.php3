@@ -287,7 +287,7 @@ limitations you should be aware of:
 <ul>
 <li>Before you can use the mobile testbed, your project must be granted the
 appropriate privileges.  You can request access by sending mail to <a
-href="mailto:testbed-ops@flux.utah.edu">Testbed Operations</a>.
+href="mailto:testbed-ops@emulab.net">Testbed Operations</a>.
 <li>The mobile testbed is currently open on non-holiday weekdays between
 8am and 6pm mountain time, so we have staff available to assist with problems.
 <li>There is no space sharing; only one mobile experiment can be swapped-in at

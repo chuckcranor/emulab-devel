@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014-2022 University of Utah and the Flux Group.
+# Copyright (c) 2014-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1522,7 +1522,12 @@ sub doimage($)
 		if ($isize > $mpsize) {
 		    print("$pidimage: range: DB MBR3 partition $lpart size ($mpsize) < file range size ($isize)\n")
 			if (!$update || !$quiet);
-		    if ($update) {
+		    #
+		    # XXX MBR4 never really became a thing. We moved to
+		    # the 64Gb root in the "gufi" image format, which is
+		    # sufficiently different that this hack will not work.
+		    #
+		    if (0 && $update) {
 			print("$pidimage: MBR3 -> MBR4: ")
 			    if (!$quiet);
 			my ($m4start, $m4size) =

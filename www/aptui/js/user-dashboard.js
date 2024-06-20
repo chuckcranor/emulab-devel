@@ -638,6 +638,19 @@ $(function ()
 			FreezeOrThaw(json.value.status);
 		    });
 		}
+                // Force Logout
+                $('#force-user-logout').click(function () {
+                    sup.CallServerMethod(null, "user-dashboard", "Logout",
+			                 {"uid" : window.TARGET_USER},
+                                         function (json) {
+	                                     if (json.code) {
+                                                 alert("logout failed")
+                                             }
+                                             else {
+	                                         LoadProfileTab();
+                                             }
+                                         });
+                });
 	    }
 	    $('#myprofile_content')
 		.html(template({"fields"  : json.value,

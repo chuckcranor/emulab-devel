@@ -144,6 +144,10 @@ $routing = array("geni-login" =>
                                                      "Do_GetProfile",
 						 "Duplicate" =>
                                                      "Do_Duplicate",
+						 "ModifySharing" =>
+                                                     "Do_ModifySharing",
+						 "GetSharingInfo" =>
+                                                     "Do_GetSharingInfo",
                               )
                         ),
 		 "gitrepo" =>
@@ -361,6 +365,8 @@ $routing = array("geni-login" =>
                                                      "Do_DeleteUser",
                                                  "ResourceList" =>
                                                      "Do_ResourceList",
+                                                 "Logout" =>
+                                                     "Do_Logout",
                               )
                         ),
 		 "nag" =>

@@ -25,6 +25,7 @@ use strict;
 use English;
 use Getopt::Std;
 use Data::Dumper;
+use POSIX qw(isatty);
 
 #
 # nalloc - allocate nodes to an experiment. Takes a pid, and eid, and
@@ -35,18 +36,21 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print("Usage: nalloc [-d] [-f] [-p] <pid> <eid> <node> <node> <...>\n".
+    print("Usage: nalloc [-d] [-f] [-p] [-m comment]".
+	  "<pid> <eid> <node> <node> <...>\n".
 	  "		-p enables partial allocation mode\n".
 	  "		-f forces allocation, overriding admission control\n" .
 	  "		-i prechecks and Reservation system checks only\n" .
-	  "		-d enables debugging output\n");
+	  "		-d enables debugging output\n".
+	  "		-m add pithy comment to node admin log\n");
     exit(-1);
 }
-my $optlist = "dfpi";
+my $optlist = "dfpim:";
 my $debug   = 0;
 my $force   = 0;
 my $partial = 0;
 my $impotent= 0;
+my $comment;
 
 #
 # Configure variables
@@ -69,6 +73,7 @@ use User;
 use Node;
 use EmulabFeatures;
 use Reservation;
+use emutil;
 if ($PGENISUPPORT) {
     require GeniDB;
     require GeniUser;
@@ -105,6 +110,13 @@ if (defined($options{"p"})) {
 if (defined($options{"i"})) {
     $impotent = 1;
 }
+if (defined($options{"m"})) {
+    $comment = $options{"m"};
+    if (!TBcheck_dbslot($comment, "default", "tinytext")) {
+	die("*** $0:\n".
+	    "    Illegal characters in comment, or too long\n");
+    }
+}
 if (@ARGV < 2) {
     usage();
 }
@@ -126,6 +138,7 @@ my @need_pxeconfig = ();
 my %has_conflicts  = ();
 my $errormsg       = "";
 my $admission_ctrl = 0;
+my $dolog          = 0;
 
 TBDebugTimeStamp("nalloc started");
 
@@ -161,6 +174,20 @@ if (! defined($this_user)) {
 if (!$experiment->AccessCheck($this_user, TB_EXPT_MODIFY)) {
     die("*** $0:\n".
 	"    You do not have permission to allocate nodes in $pid/$eid\n");
+}
+
+#
+# Require a comment when an admin is moving nodes on the command line.
+# Just hwdown or hwbroken for now ... being overly cautious.
+#
+if (isatty(\*STDOUT) && $pid eq NODEDEAD_PID() &&
+    ($eid eq NODEDEAD_EID() || $eid eq "hwbroken")) {
+    if (!defined($comment)) {
+	die("*** $0:\n".
+	    "    The -m option (comment) is required when moving nodes ".
+	    "from the command line");
+    }
+    $dolog = 1;
 }
 
 #
@@ -497,6 +524,16 @@ TBDebugTimeStamp("nalloc allocated all nodes");
 DBQueryFatal("unlock tables");
 
 # Okay, now safe to do this
+
+#
+# For any nodes moved on the command line, insert the comment.
+#
+if (isatty(\*STDOUT) && ($dolog || $comment)) {
+    foreach my $node (@nodes) {
+	$node->InsertNodeLogEntry($this_user, TB_NODELOGTYPE_ADMIN(),
+				  "Moved to $eid; nalloc: $comment");
+    }
+}
 
 # Update node_activity table; no need to do this with tables locked.
 if (!$error && (!$noalloc || $partial) && @nodes) {

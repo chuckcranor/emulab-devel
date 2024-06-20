@@ -75,7 +75,11 @@
     <% if (isadmin) { %>
       <tr>
 	<td>Logged in now?</td>
-	<td><% if (fields.loggedin) { %>Yes<% } else { %>No<% } %></td>
+	<td><% if (fields.loggedin) { %>
+	  Yes (<a href="#" id="force-user-logout">Force logout</a>)
+	<% } else { %>
+	  No
+	<% } %></td>
       </tr>
       <% if (_.size(fields.loggedinIPs)) { %>
 	<tr>

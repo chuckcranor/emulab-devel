@@ -318,7 +318,12 @@ sub Update($$)
 sub Create($$$$)
 {
     my ($class, $pid, $leader, $argref) = @_;
-    my $unix_gname = $pid;
+    my $unix_gname = UnixGroupName($pid);
+    if (!defined($unix_gname)) {
+	print STDERR "Project->Create: ".
+	    "Could not form a unique Unix group name!";
+	return undef;
+    }
     my $nonlocal   = (exists($argref->{'nonlocal_id'}) ? 1 : 0);
 	
     #
@@ -328,28 +333,6 @@ sub Create($$$$)
     my @insert_data = (!defined($argref) ? () :
 		       map("$_=" . DBQuoteSpecial($argref->{$_}),
 			   keys(%{$argref})));
-
-    # Form a proper unix group name, which is limited to 16 chars.
-    if (length($pid) > 16) {
-	$unix_gname  = substr($pid, 0, 16);
-	my $maxtries = 9;
-	my $count    = 0;
-	while ($count < $maxtries) {
-	    my $query_result =
-		DBQueryFatal("select gid from `groups` ".
-			     "where unix_name='$unix_gname'");
-	    last
-		if (!$query_result->numrows);
-
-	    $count++;
-	    $unix_gname = substr($pid, 0, 15) . "$count";
-	}
-	if ($count == $maxtries) {
-	    print STDERR "Project->Create: ".
-		"Could not form a unique Unix group name!";
-	    return undef;
-	}
-    }
 
     # First create the underlying default group for the project.
     my $newgroup =
@@ -408,6 +391,35 @@ sub Create($$$$)
     }
 
     return $newproject;
+}
+
+#
+# Form a proper unix group name, which is limited to 16 chars.
+#
+sub UnixGroupName($)
+{
+    my ($pid) = @_;
+    my $unix_gname = $pid;
+ 
+    if (length($pid) > 16) {
+	$unix_gname  = substr($pid, 0, 16);
+	my $maxtries = 9;
+	my $count    = 0;
+	while ($count < $maxtries) {
+	    my $query_result =
+		DBQueryFatal("select gid from groups ".
+			     "where unix_name='$unix_gname'");
+	    last
+		if (!$query_result->numrows);
+
+	    $count++;
+	    $unix_gname = substr($pid, 0, 15) . "$count";
+	}
+	if ($count == $maxtries) {
+	    return undef;
+	}
+    }
+    return $unix_gname;
 }
 
 #
@@ -1126,6 +1138,24 @@ sub Usage($$$$$)
 	$current_clause = "e.pid_idx='$pid_idx' and e.gid_idx='$gid_idx'";
 	$history_clause = "s.pid_idx='$pid_idx' and s.gid_idx='$gid_idx'";
     }
+    #
+    # Limit to just the user when requested. 
+    #
+    if (defined($user)) {
+	#
+	# Nonlocal projects are created by the user but started by geniuser.
+	#
+	if ($self->IsNonLocal()) {
+	    my $nonlocal_urn = $user->nonlocal_id();
+	    # Bug in setting s.nonlocal_user_id, should be nonlocal_id?         
+	    my $local_urn = $user->urn();
+	    $history_clause .= " and (s.nonlocal_user_id='$nonlocal_urn' or ".
+		"s.nonlocal_user_id='$local_urn')";
+	}
+	else {
+	    $history_clause .= " and r.uid_idx='$uid_idx'";
+	}
+    }
 
     my $query_result =
 	DBQueryWarn("(select e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
@@ -1156,8 +1186,6 @@ sub Usage($$$$$)
 		    "      h.stamp < r.swapout_time) ".
 		    "left join nodes as n on n.node_id=h.node_id ".
 		    "where $history_clause and ".
-		    (defined($user) ?
-		     "     r.uid_idx='$uid_idx' and " : " ") .
 		    "     r.swapin_time!=0 and r.swapout_time!=0 and ".
 		    "    ((r.swapin_time >= $start and ".
 		    "      r.swapin_time <= $end) or ".

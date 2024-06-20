@@ -59,6 +59,26 @@ $(function ()
 	    }
 	});
 
+	var table = $('#log-table')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets: ["uitheme", "filter"],
+		    headerTemplate : '{content} {icon}',
+
+		    widgetOptions: {
+			// include all columns in the search.
+			filter_anyMatch   : true,
+			// class name applied to filter row and each input
+			filter_cssFilter  : 'form-control input-sm',
+			// search from beginning
+			filter_startsWith : false,
+			// Set this option to false for case sensitive search
+			filter_ignoreCase : true,
+			// Only one search box.
+			//filter_columnFilters : true,
+			}
+		});
+
 	// Bind the new entry button.
 	$('#new-entry-button').click(function (event) {
 	    event.preventDefault();

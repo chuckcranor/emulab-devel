@@ -1,0 +1,31 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (DBSlotType("nodelog", "type") !~ /system/) {
+	DBQueryFatal("alter table nodelog change `type` `type` ".
+		     " enum('misc','admin','system') NOT NULL default 'system'");
+    }
+    DBQueryFatal("update nodelog set type='admin' ".
+		 "where type='misc' and entry like '%nfree'");
+
+    DBQueryFatal("update nodelog set type='system' ".
+		 "where type='misc' and ".
+		 "      (reporting_uid='elabman' or reporting_uid='root')");
+
+    DBQueryFatal("update nodelog set type='system' ".
+		 "where type='misc' and entry like '%Moved to%'");
+
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

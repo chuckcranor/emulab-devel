@@ -61,12 +61,23 @@
     <% _.each(instances, function(instance) { %>
       <tr>
 	<td>
-	  <% if (instance[7]) { %>
-	    <a href='memlane.php?uuid=<%- instance[10] %>' target="_blank">
-	  <% } else { %>
-	      <a href='status.php?uuid=<%- instance[10] %>' target="_blank">
-	  <% } %>
-	  <%- instance[9] %></a>
+	  <% var failed = instance[14];
+	     var url = (instance[7] ? "memlane.php" : "status.php");
+	     url += "?uuid=" + instance[10]; %>
+
+	  <a href="<%- url %>"
+	     <% if (failed) { %>class="link-danger"<% } %>
+	     target="_blank">
+	    <% if (failed) { %>
+	      <span style="text-decoration: underline;"
+		    data-toggle='popover'
+		    data-delay='{"hide":100, "show":100}'
+		    data-html='true'
+		    data-content="<%- instance[15] %>"><%- instance[9] %></span>
+	    <% } else { %>
+	      <%- instance[9] %>
+	    <% } %>
+	  </a>
 	</td>
 	<td>
 	  <a href='show-profile.php?action=edit&uuid=<%- instance[2] %>'>

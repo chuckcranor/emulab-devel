@@ -57,10 +57,16 @@ $(function ()
 	var searchname = "#experiments_search";
 
 	// Format dates with moment before display.
-	$('.format-date').each(function() {
+	$('.format-date:not(".format-date-expires")').each(function() {
 	    var date = $.trim($(this).html());
 	    if (date != "") {
 		$(this).html(moment(date).format("ll"));
+	    }
+	});
+	$('.format-date-expires').each(function() {
+	    var date = $.trim($(this).html());
+	    if (date != "") {
+		$(this).html(moment(date).format("lll"));
 	    }
 	});
 

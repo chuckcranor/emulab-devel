@@ -395,6 +395,11 @@ class Instance
             if (0) {
                 SUEXECERROR(SUEXEC_ACTION_DEBUG);
             }
+            # In case of error between creating the instance and forking off
+            $instance = Instance::Lookup($uuid);
+            if ($instance) {
+                return $instance;
+            }
             # Error in the webtask for the caller.
             return null;
 	}
@@ -936,7 +941,6 @@ class Instance
                            "cap1"               => true,
                            "cl-ap"              => true,
                            # Wisconsin, not ready yet
-                           "d7525"              => true,
                            "c240g2-infra"       => true,
                            "r7525s"             => true,
                            "rflab-blackbox"     => true,

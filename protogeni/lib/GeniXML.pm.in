@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2023 University of Utah and the Flux Group.
+# Copyright (c) 2010-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1510,6 +1510,41 @@ sub HasTrivialSetting($)
 {
     my ($link) = @_;
     my @tmp = FindNodesNS("n:trivial_ok", $link,
+			  $EMULAB_NS)->get_nodelist();
+    return scalar(@tmp);
+}
+
+sub HasDualModeSetting($)
+{
+    my ($link) = @_;
+    my @tmp = FindNodesNS("n:dualmodetrunking", $link,
+			  $EMULAB_NS)->get_nodelist();
+    return scalar(@tmp);
+}
+
+sub GetDualModeNativeVlan($)
+{
+    my ($link) = @_;
+    my $tmp = FindNodesNS("n:dualmodetrunking", $link, $EMULAB_NS)->pop();
+    
+    return undef
+	if (!defined($tmp));
+
+    return GetText("native_vlan", $tmp);
+}
+
+sub HasPTPSetting($)
+{
+    my ($iface) = @_;
+    my @tmp = FindNodesNS("n:ptp", $iface,
+			  $EMULAB_NS)->get_nodelist();
+    return scalar(@tmp);
+}
+
+sub HasSyncESetting($)
+{
+    my ($iface) = @_;
+    my @tmp = FindNodesNS("n:synce", $iface,
 			  $EMULAB_NS)->get_nodelist();
     return scalar(@tmp);
 }

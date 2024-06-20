@@ -3123,7 +3123,7 @@ sub CanStart($$$$$$)
 
 		# Different route, skip it.
 		next
-		    if ($routeid != $res_routename &&
+		    if ($routeid != $res_routeid &&
 			$routename ne $res_routename);
 
 		# Does not fit the schedule.

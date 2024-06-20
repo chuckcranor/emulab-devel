@@ -690,7 +690,6 @@ echo "<script src='js/lib/d3.v3.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
    
-REQUIRE_WIZARD_TEMPLATE();
 REQUIRE_PICKER();
 REQUIRE_FORMHELPERS();
 REQUIRE_FILESTYLE();

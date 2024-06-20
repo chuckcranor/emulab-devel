@@ -136,6 +136,13 @@ class Project
 	return 0;
     }
 
+    #
+    # Equality test.
+    #
+    function SameProject($project) {
+	return $project->pid_idx() == $this->pid_idx();
+    }
+
     # accessors
     function field($name) {
 	return (is_null($this->project) ? -1 : $this->project[$name]);

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -55,8 +55,7 @@ my $lastping;
 # Configure variables
 #
 my $TB		     = "@prefix@";
-#my $TBOPS            = "@TBOPSEMAIL@";
-my $TBOPS            = "stoller\@flux.utah.edu";
+my $TBOPS            = "@TBOPSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
 my $POWDER_DEADMAN   = @POWDER_DEADMAN@;
 my $LOGFILE          = "$TB/log/powder_deadman.log";

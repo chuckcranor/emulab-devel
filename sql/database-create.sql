@@ -979,6 +979,7 @@ CREATE TABLE `apt_profiles` (
   KEY `hashkey` (`hashkey`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+
 --
 -- Table structure for table `apt_reservation_groups`
 --
@@ -4530,7 +4531,7 @@ DROP TABLE IF EXISTS `nodelog`;
 CREATE TABLE `nodelog` (
   `node_id` varchar(32) NOT NULL default '',
   `log_id` int(10) unsigned NOT NULL auto_increment,
-  `type` enum('misc') NOT NULL default 'misc',
+  `type` enum('misc','admin','system') NOT NULL default 'system',
   `reporting_uid` varchar(8) NOT NULL default '',
   `reporting_idx` mediumint(8) unsigned NOT NULL default '0',
   `entry` tinytext NOT NULL,
@@ -4730,12 +4731,15 @@ CREATE TABLE `nonlocal_user_pubkeys` (
 DROP TABLE IF EXISTS `nonlocal_users`;
 CREATE TABLE `nonlocal_users` (
   `nonlocal_id` varchar(128) NOT NULL default '',
+  `uid` varchar(8) NOT NULL default '',
   `uid_idx` mediumint(8) unsigned NOT NULL default '0',
-  `unix_uid` int(10) unsigned NOT NULL default '0',
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `unix_uid` int(10) unsigned NOT NULL auto_increment,
   `created` datetime default NULL,
-  PRIMARY KEY  (`nonlocal_id`),
-  UNIQUE KEY `uid_idx` (`uid_idx`),
-  UNIQUE KEY `unix_uid` (`unix_uid`)
+  `lastuse` datetime default NULL,
+  PRIMARY KEY  (`pid_idx`,`unix_uid`),
+  UNIQUE KEY `piduid` (`pid_idx`,`uid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -6261,6 +6265,7 @@ CREATE TABLE `user_sslcerts` (
   KEY `uid` (`uid`),
   KEY `uid_idx` (`uid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 
 --
 -- Table structure for table `user_stats`

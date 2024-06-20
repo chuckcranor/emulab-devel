@@ -1918,8 +1918,10 @@ function Do_Utilization()
         if (!($sliver->physnode_count() || $sliver->virtnode_count())) {
             continue;
         }
-        $blob[$urn_mapping[$sliver->aggregate_urn()]] = 
-            $results[$sliver->aggregate_urn()];
+        if (isset($results[$sliver->aggregate_urn()])) {
+            $blob[$urn_mapping[$sliver->aggregate_urn()]] = 
+                $results[$sliver->aggregate_urn()];
+        }
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);

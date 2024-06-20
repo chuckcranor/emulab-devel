@@ -182,10 +182,29 @@ $(function ()
 	$('#publish_div').html(publishString);
     	var rspectext_html = rspectextTemplate({});
 	$('#rspectext_div').html(rspectext_html);
-	$('#share_div').html(shareTemplate({
-	    formfields: fields,
-	    fromrepo:   fromrepo
-	}));
+        if (window.ACTION !== 'create') {
+            if (0) {
+	        $('#share_div').html(shareTemplate({
+	            formfields: fields,
+	            fromrepo:   fromrepo
+	        }));
+	        // Bind the copy to clipboard button in the share modal
+	        window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
+
+	        // Handler for share modal; do not want to show it if the
+	        // the profile is not saved.
+	        $('.profile-share-button').click(function() {
+	            if (modified) {
+		        alert("Please save your profile before sharing it!");
+		        return false;
+	            }
+	            sup.ShowModal("#share_profile_modal");
+	        });
+            }
+            else {
+                ShareProfile.InitShareProfile();
+            }
+        }
 	$('#copy_repobased_profile_div').html(copyrepoString);
 
 	// Fire this off now to load all the goo. 
@@ -608,17 +627,6 @@ $(function ()
 	    event.preventDefault();
 	    PublishProfile();
 	});
-	// Handler for share modal; do not want to show it if the
-	// the profile is not saved.
-	$('#profile_share_button').click(function() {
-	    if (modified) {
-		alert("Please save your profile before sharing it!");
-		return false;
-	    }
-	    sup.ShowModal("#share_profile_modal");
-	});
-	// Bind the copy to clipbload button in the share modal
-	window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
 	
 	// Handler for updates to the example portals field, on the
 	// the Mothership, where we have multiple portals.

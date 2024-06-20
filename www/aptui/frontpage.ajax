@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -185,9 +185,17 @@ function Do_GetPaperList()
     header("Access-Control-Allow-Origin: *");
 
     $query_result =
-        DBQueryFatal("select p.* from scopus_paper_info as p ".
-                     "where p.cites='$PORTAL_GENESIS' and p.uses='yes' ".
-                     "order by p.pubdate desc limit 5");
+        DBQueryFatal("select * from ( ".
+                     " (select p.pubdate,p.url,p.title,p.authors,p.pubname ".
+                     "    from scopus_paper_info as p ".
+                     "  where p.cites='$PORTAL_GENESIS' and p.uses='yes' ".
+                     "  order by p.pubdate desc limit 10) ".
+                     " union all ".
+                     " (select p.pubdate,p.url,p.title,p.authors,p.pubname ".
+                     "    from other_paper_info as p ".
+                     "  where p.cites='$PORTAL_GENESIS' and p.uses='yes' ".
+                     "  order by p.pubdate desc limit 10) ".
+                     ") pp order by pp.pubdate desc limit 5");
 
     while ($row = mysql_fetch_array($query_result)) {
         $blob[] = $row;

@@ -1,6 +1,6 @@
 # -*- python -*-
 #
-# Copyright (c) 2000-2015, 2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,9 +56,11 @@ NODEDEAD_EID           = "hwdown"
 TB_NODEHISTORY_OP_MOVE = "move"
 
 # Node Log Types
-TB_NODELOGTYPE_MISC    = "misc"
-TB_NODELOGTYPES        = (TB_NODELOGTYPE_MISC, )
-TB_DEFAULT_NODELOGTYPE = TB_NODELOGTYPE_MISC
+TB_NODELOGTYPE_MISC      = "misc"
+TB_NODELOGTYPE_SYSTEM    = "system"
+TB_NODELOGTYPE_REPORT    = "report"
+TB_NODELOGTYPES        = (TB_NODELOGTYPE_MISC, TB_NODELOGTYPE_SYSTEM, TB_NODELOGTYPE_REPORT )
+TB_DEFAULT_NODELOGTYPE = TB_NODELOGTYPE_SYSTEM
 
 # Node History Stuff.
 TB_NODEHISTORY_OP_FREE  = "free"

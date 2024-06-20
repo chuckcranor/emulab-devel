@@ -1137,7 +1137,7 @@ function Do_ListReservationGroups()
         }
         $resgroups = ReservationGroup::LookupForUser($target_user, $history);
     }
-    elseif (ISADMIN()) {
+    elseif (ISADMIN() || ISFOREIGN_ADMIN()) {
          $resgroups = ReservationGroup::LookupAll($history);
     }
     foreach ($resgroups as $resgroup) {

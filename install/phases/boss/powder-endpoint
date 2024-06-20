@@ -729,8 +729,8 @@ sub Install($$$)
 	    my @lists = grep { $_ ne "." && $_ ne ".." } readdir(DIR);
 	    closedir(DIR);
 
-	    my $ops  = "powder-ops\@flux.utah.edu";
-	    my $logs = "powder-logs\@flux.utah.edu";
+	    my $ops  = "powder-aggregate-ops\@emulab.net";
+	    my $logs = "powder-aggregate-logs\@emulab.net";
 	    
 	    foreach my $list (@lists) {
 		my $where;
@@ -750,7 +750,7 @@ sub Install($$$)
 			  last SWITCH;
 		      };
 		      /audit$/ && do {
-			  $where = "powder-audit\@flux.utah.edu";
+			  $where = "powder-aggregate-audit\@emulab.net";
 			  last SWITCH;
 		      };
 		      /automail$/ && do {
@@ -758,7 +758,7 @@ sub Install($$$)
 			  last SWITCH;
 		      };
 		      /errors$/ && do {
-			  $where = "powder-errors\@flux.utah.edu";
+			  $where = "powder-aggregate-errors\@emulab.net";
 			  last SWITCH;
 		      };
 		      /logs$/ && do {
@@ -778,7 +778,7 @@ sub Install($$$)
 			  last SWITCH;
 		      };
 		      /www$/ && do {
-			  $where = "powder-www\@flux.utah.edu";;
+			  $where = "powder-aggregate-www\@emulab.net";;
 			  last SWITCH;
 		      };
 		  }

@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 #
-# Copyright (c) 2015-2022 University of Utah and the Flux Group.
+# Copyright (c) 2015-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -454,7 +454,7 @@ sub find_default_grub2_entry
 
 	open FILE, "$imageroot/$conf" || die "Couldn't read grub config: $!\n";
 	while (<FILE>) {
-		if (/^set\s+default\s*=\s*["']?(\d+)["']?$/) {
+		if (/^\s*set\s+default\s*=\s*["']?(\d+)["']?$/) {
 			$default = $1;
 			next;
 		}
@@ -1060,11 +1060,11 @@ sub get_console_params
 
 sub fix_console
 {
-    my ($imageroot, $bloader, $file, $console, $sunit, $sspeed, $sport) = @_;
+    my ($imageroot, $bloader, $file, $console, $sunit, $sspeed, $sport, $arch) = @_;
 
     print STDERR "Setting console device to $console\n";
 
-    fix_grub_console($imageroot, $file, $console, $sunit, $sspeed, $sport);
+    fix_grub_console($imageroot, $file, $console, $sunit, $sspeed, $sport, $arch);
 
     # XXX we don't bother with /etc/inittab, only RHLnn-STD used it
 
@@ -1129,7 +1129,7 @@ sub fix_console
 #
 sub fix_grub_defaults
 {
-    my ($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr) = @_;
+    my ($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr, $arch) = @_;
     my $gdef = "$imageroot/etc/default/grub";
 
     if (! -e $gdef) {
@@ -1165,7 +1165,12 @@ sub fix_grub_defaults
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
     } elsif ($sunit < 0) {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0$cnetstr\"\n";
+	if ($arch eq "aarch64") {
+	    # XXX hack for Nvidia Grace Hopper nodes
+	    push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyAMA0$cnetstr\"\n";
+	} else {
+	    push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0$cnetstr\"\n";
+	}
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
     } else {
@@ -1188,7 +1193,7 @@ sub fix_grub_defaults
 
 sub fix_grub_console
 {
-	my ($imageroot, $file, $console, $sunit, $sspeed, $sport) = @_;
+	my ($imageroot, $file, $console, $sunit, $sspeed, $sport, $arch) = @_;
 	my $comunit = $sunit + 1;
 
 	open FILE, "+<$imageroot/$file" ||
@@ -1264,6 +1269,19 @@ sub fix_grub_console
 		next;
 	    }
 	    #
+	    # XXX Kernel and initrd command lines with GH VGA (ttyAMA0)
+	    #
+	    if (/console=ttyAMA0\s/) {
+		# get rid of any existing serial console clauses
+		s#console=ttyS\S+##g;
+		if ($sunit >= 0) {
+		    # change ttyAMA0 to appropriate serial device
+		    s#console=ttyAMA0#console=ttyS$sunit,$sspeed#;
+		}
+		push @buffer, $_;
+		next;
+	    }
+	    #
 	    # Xen command lines with VGA (vga)
 	    #
 	    if (/console=vga\s/) {
@@ -1282,10 +1300,20 @@ sub fix_grub_console
 	    #
 	    if (/console=ttyS(\d+)/) {
 		# get rid of any existing VGA clause
-		s#console=tty0##g;
+		if ($arch eq "aarch64") {
+		    # XXX hack for Nvidia Grace Hopper nodes
+		    s#console=ttyAMA0##g;
+		} else {
+		    s#console=tty0##g;
+		}
 		if ($sunit < 0) {
 		    # replace serial with VGA
-		    s#console=ttyS\S+#console=tty0#g;
+		    if ($arch eq "aarch64") {
+			# XXX hack for Nvidia Grace Hopper nodes
+			s#console=ttyS\S+#console=ttyAMA0#g;
+		    } else {
+			s#console=ttyS\S+#console=tty0#g;
+		    }
 		} else {
 		    # fixup serial lines
 		    s#console=ttyS\S+#console=ttyS$sunit,$sspeed#g;
@@ -1692,6 +1720,10 @@ sub main
 
 	my ($initrd_does_label, $initrd_does_uuid) = 
 	    check_initrd("$imageroot/$initrd");
+	# XXX
+	if ($arch eq "aarch64") {
+	    $initrd_does_label = $initrd_does_uuid = 1;
+	}
 	my ($mount_does_label, $mount_does_uuid) = 
 	    binary_supports_blkid("$imageroot/bin/mount");
 
@@ -1767,10 +1799,10 @@ sub main
 	}
 	fix_grub_dom0mem($imageroot, $grub_config);
 	my ($console, $sunit, $sspeed, $sport) = get_console_params($imageroot, $bootloader);
-	fix_console($imageroot, $bootloader, $grub_config, $console, $sunit, $sspeed, $sport);
+	fix_console($imageroot, $bootloader, $grub_config, $console, $sunit, $sspeed, $sport, $arch);
 	my ($cnetmacaddr) = get_cnet_mac_addr();
 	fix_grub_cnet_hint($imageroot, $bootloader, $grub_config, $cnetmacaddr);
-	fix_grub_defaults($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr);
+	fix_grub_defaults($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr, $arch);
 
 	fix_swap_partitions($imageroot, $root,
 		$kernel_has_ide ? $old_root : undef );

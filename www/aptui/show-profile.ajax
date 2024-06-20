@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -83,6 +83,7 @@ function Do_GetProfile()
         $blob["hashkey"]         = $profile->hashkey();
     }
     $blob["profile_public"]      = $profile->ispublic() ? 1 : 0;
+    $blob["profile_project_write"] = $profile->project_write() ? 1 : 0;
     $blob["profile_pid"]         = $profile->pid();
     $blob["profile_created"]     = DateStringGMT($profile->created());
     $blob["profile_published"]   = DateStringGMT($profile->published());

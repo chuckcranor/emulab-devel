@@ -3034,6 +3034,26 @@ sub GetTicketAuxAux($)
 					  "capkey"      => "jumboframes",
 					  "capval"      => 1});
 	}
+	if (GeniXML::HasDualModeSetting($linkref)) {
+	    my $native_vlan = GeniXML::GetDualModeNativeVlan($linkref);
+	    $virtexperiment->NewTableRow("virt_lan_settings",
+					 {"vname"       => $lanname,
+					  "capkey"      => "trunk_mode",
+					  "capval"      => "dual"});
+	    if ($native_vlan) {
+		$virtexperiment->NewTableRow("virt_lan_settings",
+					     {"vname"       => $lanname,
+					      "capkey"      => "native_vlan",
+					      "capval"      => $native_vlan});
+	    }
+	    else {
+		# The native vlan is untagged but needs emulated so the
+		# mapper will allow multiple links on the same interface.
+		$encap    = "none";
+		$emulated = 1;
+	    }
+	    $besteffort = 1;
+	}
 	
 	# Ditto for new direct link option.
 	my $nointerswitch = GeniXML::NoInterSwitch($linkref);
@@ -3348,6 +3368,26 @@ sub GetTicketAuxAux($)
 
 		$ip = GeniXML::GetIp($ref, $nodemap{$node_nickname}->{'rspec'});
 		$mask = GeniXML::GetMask($ref, $nodemap{$node_nickname}->{'rspec'});
+
+		# Synchronization
+		if (GeniXML::HasPTPSetting($iface_ref)) {
+		    my $member = "$node_nickname:$iface_vport";
+		    
+		    $virtexperiment->NewTableRow("virt_lan_member_settings",
+						 {"vname"       => $lanname,
+						  "member"      => $member,
+						  "capkey"      => "ptpenable",
+						  "capval"      => "1"});
+		}
+		if (GeniXML::HasSyncESetting($iface_ref)) {
+		    my $member = "$node_nickname:$iface_vport";
+		    
+		    $virtexperiment->NewTableRow("virt_lan_member_settings",
+						 {"vname"       => $lanname,
+						  "member"      => $member,
+						  "capkey"      => "synceenable",
+						  "capval"      => "1"});
+		}
 	    }
 
 	    # XXX
@@ -4881,6 +4921,7 @@ sub SliverWorkAux($)
     my %colomap  = ();
     my @allocated= ();
     my @freenodes= ();
+    my @killslivers = ();
     my @freelinks= ();
     my %iface2node = ();
     my $needplabslice = 0;
@@ -5072,10 +5113,11 @@ sub SliverWorkAux($)
 	    my $phys = $sliver->resource_urn();
 	    if (exists($phys2nickname{$phys})
 		&& $phys2nickname{$phys} ne $nickname) {
-		$message = "Cannot bind node " . $phys2nickname{$phys} .
+		print STDERR "rebinding node " . $phys2nickname{$phys} .
 		    " to the same physical node which was bound to " .
-		    $nickname;
-		goto bad;
+		    $nickname . "\n";
+		push(@killslivers, $sliver);
+		next;
 	    }
 	    push(@freenodes, $sliver);
 	}
@@ -6187,6 +6229,9 @@ sub SliverWorkAux($)
     foreach my $snode (@freenodes) {
 	$snode->UnProvision();
 	$snode->Delete(0);
+    }
+    foreach my $sliver (@killslivers) {
+	$sliver->Delete(0);
     }
     foreach my $svhost (@freevhosts) {
 	$svhost->UnProvision();

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -119,8 +119,6 @@ function Do_Search()
     }
     $clauses = array();
 
-    # Do not show failures on this page.
-    $clauses[] = "fa.uuid is null";
     # And these are noise.
     $clauses[] = "h.pid != 'PMonitor'";
 
@@ -158,7 +156,8 @@ function Do_Search()
                  "      ((UNIX_TIMESTAMP(h.destroyed) - ".
                  "        UNIX_TIMESTAMP(h.started)) / 3600.0),2) as phours, ".
                  "    GROUP_CONCAT(aa.abbreviation) as clusters, ".
-                 "    GROUP_CONCAT(aa.nickname) as nicknames ".
+                 "    GROUP_CONCAT(aa.nickname) as nicknames, ".
+                 "    fa.uuid as failed,fa.exitmessage as failure_reason ".
 		 "  from apt_instance_history as h ".
                  "left join apt_instance_aggregate_history as ia ".
                  "     on ia.uuid=h.uuid ".
@@ -198,6 +197,9 @@ function Do_Search()
         $phours    = $row["phours"];
         $portal    = $portals[$row["servername"]];
         $clusters  = $row["clusters"];
+        $failed    = $row["failed"];
+        $errormsg  = $row["failure_reason"];
+        
         # Backwards compat.
         if (!isset($pproj)) {
             $pproj = "";
@@ -218,7 +220,7 @@ function Do_Search()
 	$instance =
             array($pname, $pproj, $puuid, $pcount, $vcount,
                   $creator, $started, $destroyed, $phours, $iname,
-                  $uuid, $created, $portal, $clusters);
+                  $uuid, $created, $portal, $clusters, $failed, $errormsg);
                           
 	$results[] = $instance;
     }

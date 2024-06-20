@@ -122,6 +122,8 @@ if ($isguest || $ishashed) {
     $cancopy      = 0;
     $disabled     = ($profile->isDisabled() ? 1 : 0);
     $paramsets    = 0;
+    $isleader     = 0;
+    $iscreator    = 0;
 }
 else {
     $history      = ($profile->HasHistory() ? 1 : 0);
@@ -130,6 +132,8 @@ else {
     $disabled     = ($profile->isDisabled() ? 1 : 0);
     $cancopy      = ($this_user->webonly() || $ishashed ? 0 : 1);
     $paramsets    = ($profile->HasParamsets($this_user) ? 1 : 0);
+    $isleader     = ($profile->isLeader($this_user) ? 1 : 0);
+    $iscreator    = ($profile->isCreator($this_user) ? 1 : 0);
 }
 
 # Place to hang the toplevel template.
@@ -167,6 +171,8 @@ echo "    window.ISGUEST      = $isguest;\n";
 echo "    window.ISADMIN      = $isadmin;\n";
 echo "    window.CANEDIT      = $canedit;\n";
 echo "    window.CANCOPY      = $cancopy;\n";
+echo "    window.ISCREATOR    = $iscreator;\n";
+echo "    window.ISLEADER     = $isleader;\n";
 echo "    window.DISABLED     = $disabled;\n";
 echo "    window.HISTORY      = $history;\n";
 echo "    window.ACTIVITY     = $activity;\n";
@@ -207,6 +213,8 @@ REQUIRE_APTFORMS();
 REQUIRE_MARKED();
 REQUIRE_TOPOLOGY_VIEWER();
 AddLibrary("js/copy-profile.js");
+AddLibrary("js/share-profile.js");
+AddTemplateList(array("share-profile-modal", "share-profile-body"));
 AddLibrary("js/gitrepo.js");
 AddLibrary("js/paramhelp.js");
 SPITREQUIRE("js/show-profile.js",

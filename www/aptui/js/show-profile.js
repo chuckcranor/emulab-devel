@@ -93,6 +93,8 @@ $(function ()
 	    isadmin:		window.ISADMIN,
 	    isguest:		window.ISGUEST,
 	    canedit:            window.CANEDIT,
+	    iscreator:		window.ISCREATOR,
+	    isleader:		window.ISLEADER,
 	    cancopy:            window.CANCOPY,
 	    disabled:           window.DISABLED,
 	    paramsets:          window.PARAMSETS,
@@ -107,10 +109,23 @@ $(function ()
 
 	$('#rspectext_div').html(rspectextviewString);
 	$('#copy_repobased_profile_div').html(copyrepoString);
-	$('#share_div').html(shareTemplate({
-	    formfields: fields,
-	    fromrepo:   fromrepo,
-	}));
+        if (!window.DISABLED && (window.CANEDIT || fields.profile_public != 0)) { 
+            if (0) {
+	        $('#share_div').html(shareTemplate({
+	            formfields: fields,
+	            fromrepo:   fromrepo,
+	        }));
+                $('.profile-share-button').click(function (event) {
+                    event.preventDefault();
+                    sup.ShowModal('#share_profile_modal');
+                });
+	        // Bind the copy to clipboard button in the share modal
+	        window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
+            }
+            else {
+                ShareProfile.InitShareProfile();
+            }
+        }
 	$('#showtopo-modal-div').html(templates["showtopo-modal"]);
 
 	if (window.CANCOPY && !fromrepo) {
@@ -121,9 +136,6 @@ $(function ()
 					window.PROFILE, plist);
 	}
 
-	// Bind the copy to clipbload button in the share modal
-	window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
-	
 	// Fireoff repo stuff now.
 	if (fromrepo) {
 	    SetupRepo();

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2022 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -4947,11 +4947,13 @@ sub UnBindNonLocalUsers($)
 	if (!$query_result);
 
     while (my ($uid, $uid_idx) = $query_result->fetchrow_array()) {
-	DBQueryWarn("delete from nonlocal_user_pubkeys  ".
-		    "where uid_idx='$uid_idx'")
-	    or return -1;
+	if (0) {
+	    DBQueryWarn("delete from nonlocal_user_pubkeys  ".
+			"where uid_idx='$uid_idx'")
+		or return -1;
+	}
 	DBQueryWarn("delete from nonlocal_user_accounts  ".
-		    "where uid_idx='$uid_idx'")
+		    "where uid_idx='$uid_idx' and exptidx='$idx'")
 	    or return -1;
     }
     return 0;
@@ -4968,6 +4970,7 @@ sub BindNonLocalUser($$$$$$;$$)
 	if (! ref($self));
 
     my $exptidx    = $self->idx();
+    my $pid        = $self->pid();
     my $pid_idx    = $self->pid_idx();
     my $safe_urn   = DBQuoteSpecial($urn)
 	if (defined($urn));
@@ -4975,70 +4978,68 @@ sub BindNonLocalUser($$$$$$;$$)
     my $safe_name  = DBQuoteSpecial($name);
     my $safe_email = DBQuoteSpecial($email);
     my $uid_idx;
+    my $unix_uid;
+
+    #
+    # Check global table to see if a unix_uid has been assigned to this
+    # nonlocal user in this experiment project.
+    #
+    DBQueryWarn("lock tables nonlocal_users write, emulab_indicies write") or
+	return undef;
+
+    my $query_result =
+	DBQueryWarn("select uid_idx,unix_uid from nonlocal_users ".
+		    "where nonlocal_id=$safe_urn and ".
+		    "      pid_idx='$pid_idx'");
+
+    if (!$query_result) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    if ($query_result->numrows) {
+	($uid_idx,$unix_uid) = $query_result->fetchrow_array();
+	DBQueryWarn("update nonlocal_users set lastuse=now() ".
+		    "where uid_idx='$uid_idx' and ".
+		    "      pid_idx='$pid_idx'");
+	
+    }
+    else {
+	# Pass nolock flag since we locked it above.
+	$uid_idx  = User->NextIDX(1);
+
+	my $q = 
+	    DBQueryWarn("insert into nonlocal_users set ".
+			"  created=now(),nonlocal_id=$safe_urn, ".
+			"  uid=$safe_uid,uid_idx='$uid_idx', ".
+			"  pid='$pid',pid_idx='$pid_idx', ".
+			"  unix_uid=NULL,lastuse=now()");
+	if (!$q) {
+	    DBQueryWarn("unlock tables");
+	    return -1;
+	}
+	$unix_uid = $q->insertid;
+    }
+    DBQueryWarn("unlock tables");
 
     #
     # User may already exist, as for updating keys.
     #
-    my $query_result =
+    $query_result =
 	DBQueryWarn("select uid_idx from nonlocal_user_accounts ".
 		    "where uid=$safe_uid and exptidx='$exptidx'");
     return -1
 	if (!$query_result);
     
     if ($query_result->numrows) {
-	($uid_idx) = $query_result->fetchrow_array();
-
-	# Mark for update.
+	# Mark for update (nodes pick up new keys).
 	DBQueryWarn("update nonlocal_user_accounts set updated=now()  ".
 		    "where uid_idx='$uid_idx'")
 	    or return -1;
     }
     else {
 	my @insert_data = ();
-	my $unix_uid;
 
-	#
-	# Find existing user in the same project and use that unix_uid.
-	#
-	$query_result =
-	    DBQueryWarn("select distinct uid,unix_uid ".
-			"   from nonlocal_user_accounts as a ".
-			"left join experiments as e on ".
-			"   e.idx=a.exptidx ".
-			"where e.pid_idx='$pid_idx' and uid=$safe_uid ".
-			"order by uid,unix_uid limit 1");
-
-	return -1
-	    if (!$query_result);
-    
-	if ($query_result->numrows) {
-	    (undef, $unix_uid) = $query_result->fetchrow_array();
-
-	    #
-	    # For backwards compatability need to watch for a pre
-	    # existing conflict. 
-	    #
-	    $query_result = 
-		DBQueryWarn("select uid,unix_uid ".
-			    "   from nonlocal_user_accounts as a ".
-			    "where exptidx='$exptidx' and ".
-			    "      unix_uid='$unix_uid'");
-
-	    return -1
-		if (!$query_result);
-    
-	    if ($query_result->numrows) {
-		$unix_uid = undef;
-	    }
-	}
-	if (defined($unix_uid)) {
-	    push(@insert_data, "unix_uid='$unix_uid'");
-	}
-	else {
-	    push(@insert_data, "unix_uid=NULL");
-	}
-
-	$uid_idx = User->NextIDX();
+	push(@insert_data, "unix_uid='$unix_uid'");
 	push(@insert_data, "created=now()");
 	push(@insert_data, "updated=now()");
 	push(@insert_data, "uid_idx='$uid_idx'");
