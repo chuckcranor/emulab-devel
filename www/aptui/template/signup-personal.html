@@ -11,7 +11,8 @@
 	 placeholder="Full Name" type="text">
 </div>
 <div class="form-group sidebyside-form" >
-  <input name="formfields[email]" value="<%- formfields.email %>"
+  <input id="signup_email" name="formfields[email]"
+	 value="<%- formfields.email %>"
 	 class="form-control format-me" data-key="email"
 	 <% if (promoting) { %>readonly<% } %>
 	 placeholder="Email" type="text">
@@ -123,6 +124,24 @@
 	<p style="font-size: 16px;">
 	  The input box is an autocomplete dropdown list. If you do not see your
 	  institution listed, please type it out fully. 
+	</p>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='email-warning' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
+	<p style="font-size: 16px; margin-top: 15px;">
+	  <b>WARNING:</b> Specifying a public email provider (like
+	  <span id="email-provider">gmail.com or 163.com</span>) slows down the
+	  approval process since we will ask you to verify your
+	  institutional affiliation before we can approve your account.
+	  <b>Please consider using your institutional email address instead.</b>
 	</p>
       </div>
     </div>
