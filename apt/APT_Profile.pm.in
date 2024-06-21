@@ -2313,6 +2313,10 @@ sub CheckForDeprecatedImages($$$$)
 	my $checkIMSdep = sub {
 	    my ($image_urn) = @_;
 	    
+	    if (! $MAINSITE) {
+		$deprecated{$image_urn} = {"deprecated" => 0};
+		return 0;
+	    }
 	    #
 	    # Talk to IMS database directly.
 	    #
