@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -115,8 +115,6 @@ sysetc-install:	dir-install
 	$(INSTALL) -m 644 $(SRCDIR)/grub-defaults $(SYSETCDIR)/default/grub
 	@if [ -z "$(NONTP)" ]; then \
 		$(INSTALL) -m 644 $(SRCDIR)/ntp.conf $(SYSETCDIR)/ntp.conf; \
-		$(INSTALL) -m 755 -o ntp -g ntp -d $(DESTDIR)/var/lib/ntp; \
-		$(INSTALL) -m 644 -o ntp -g ntp /dev/null $(DESTDIR)/var/lib/ntp/ntp.drift ; \
 	fi
 	$(INSTALL) -m 644 $(SRCDIR)/../ubuntu-common/10-emulab-chrony.conf $(SYSETCDIR)/chrony/conf.d/10-emulab-chrony.conf
 	$(INSTALL) -m 644 $(SRCDIR)/../ubuntu-common/10-emulab-chronystart.conf \

@@ -151,7 +151,9 @@ Linux)
         rel=1.0  # XXX probably wrong
     fi
     if [ "$dist" = "Ubuntu" -a `uname -m` = "aarch64" ]; then
-	if [ "$rel" = "22.04" ]; then
+	if [ "$rel" = "24.04" ]; then
+	    tag=MoonshotUbuntu24
+	elif [ "$rel" = "22.04" ]; then
 	    tag=MoonshotUbuntu22
 	elif [ "$rel" = "20.04" ]; then
 	    tag=MoonshotUbuntu20
