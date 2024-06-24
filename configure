@@ -4063,7 +4063,8 @@ done
 
 
 if test x"$DBCLIENT" = x""; then
-    as_fn_error $? "No DB detected, should have MariaDB or Mysql installed" "$LINENO" 5
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: No DB detected; this is okay on an ops build" >&5
+$as_echo "$as_me: WARNING: No DB detected; this is okay on an ops build" >&2;}
 fi
 DBPACKAGE=`basename ${DBCLIENT}`
 

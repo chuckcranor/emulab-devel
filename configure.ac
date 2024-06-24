@@ -103,7 +103,7 @@ AC_SUBST(PYTHON_INCLUDE)
 AC_PATH_PROGS(DBCLIENT, mariadb mysql)
 
 if test x"$DBCLIENT" = x""; then
-    AC_MSG_ERROR([No DB detected, should have MariaDB or Mysql installed])
+    AC_MSG_WARN([No DB detected; this is okay on an ops build])
 fi
 DBPACKAGE=`basename ${DBCLIENT}`
 
