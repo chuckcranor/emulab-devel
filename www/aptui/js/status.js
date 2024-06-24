@@ -694,8 +694,22 @@ $(function ()
 	    else if (instanceStatus == 'failed') {
 		bgtype = "panel-danger card-danger";
 		status_message = "Something went wrong!";
-		
-		if (!_.has(json.value, "sliverstatus")) {
+
+                console.info("status=failed", json);
+
+                /*
+                 * Sliver failures override the general error.
+                 */
+                var failed = 0;
+                
+		if (_.has(json.value, "sliverstatus")) {
+                    _.each(json.value.sliverstatus, function (info, urn) {
+                        if (info.status == "failed") {
+                            failed++;
+                        }
+                    });
+                }
+		if (!failed) {
 		    if (_.has(json.value, "output")) {
 			UpdateGeneralError(json.value.output);
 		    }

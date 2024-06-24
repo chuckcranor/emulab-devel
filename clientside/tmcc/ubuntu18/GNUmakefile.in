@@ -81,6 +81,11 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/multi-user.target.wants
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/default
 	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/ssh
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/chronyd.service.d
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/chrony
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/chrony/conf.d
 
 common-install:	dir-install
 	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)
@@ -102,6 +107,7 @@ etc-install:	dir-install common-sysetc-install
 common-sysetc-install:	dir-install
 	# Tell ../linux/GNUMakefile.in that we want systemd files, not SYSV
 	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) RRCDIR=$(RRCDIR) USES_SYSTEMD=1 sysetc-install)
+	$(INSTALL) -m 755 $(SRCDIR)/../ubuntu-common/chronystart $(BINDIR)/chronystart
 
 sysetc-fixup:
 	rm -rf $(SYSETCDIR)/modules.conf $(SYSETCDIR)/cron.pend \
@@ -120,6 +126,9 @@ sysetc-install:	dir-install
 		$(INSTALL) -m 644 $(SRCDIR)/ntp.conf $(SYSETCDIR)/ntp.conf; \
 		$(INSTALL) -m 644 -o ntp -g ntp /dev/null /var/lib/ntp/ntp.drift ; \
 	fi
+	$(INSTALL) -m 644 $(SRCDIR)/../ubuntu-common/10-emulab-chrony.conf $(SYSETCDIR)/chrony/conf.d/10-emulab-chrony.conf
+	$(INSTALL) -m 644 $(SRCDIR)/../ubuntu-common/10-emulab-chronystart.conf \
+		$(SYSETCDIR)/systemd/system/chronyd.service.d/10-emulab-chronystart.conf
 
 script-install:	dir-install $(SCRIPTS)
 	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) USES_SYSTEMD=1 script-install)

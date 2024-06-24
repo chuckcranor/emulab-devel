@@ -138,6 +138,28 @@ $(function ()
 		$('#nsf-awards-input').addClass("hidden");
 	    }
 	});
+
+        /*
+         * Handler for email addresses like gmail.com
+         */
+        var emailwarned = 0;
+        var publicEmail = [
+            "gmail.com",
+            "163.com",
+            "qq.com",
+        ];
+        
+	$("input[id='signup_email']").change(function(e) {
+            var email = $.trim($(this).val());
+            if (email == "") {
+                return;
+            }
+            var matches = email.match(/@(.*)$/);
+            if (_.contains(publicEmail, matches[1]) && !emailwarned) {
+                sup.ShowModal('#email-warning');
+                emailwarned = 1;
+            }
+        });
 	
 	aptforms.EnableUnsavedWarning('#quickvm_signup_form');
 	

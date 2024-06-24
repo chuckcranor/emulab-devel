@@ -9364,10 +9364,8 @@ sub UploadVlans($)
 	#
 	foreach my $lan (@lans) {
 	    my $virtlan     = $self->vlans()->{$lan->vname()};
-	    if (!defined($virtlan)) {
-		tberror("Could not find lan $lan in local lan list!\n");
-		return -1;
-	    }
+	    next
+		if (!defined($virtlan));
 	    $virtlan->_reallan($lan);
 	    
 	    # Only care about encapsulated links.

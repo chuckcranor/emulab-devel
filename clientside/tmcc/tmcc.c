@@ -649,6 +649,9 @@ getbossnode(char **bossnode, int *portp)
 		he = gethostbyaddr((char *)&_res.nsaddr.sin_addr,
 				   sizeof(struct in_addr), AF_INET);
 		if (he && he->h_name
+		    && (he->h_addr_list != NULL
+			&& he->h_addr_list[0] != NULL
+			&& (*he->h_addr_list[0] & 0xff) != 127)
 		    && strncmp(he->h_name, "localhost", strlen("localhost")) != 0) {
 			*bossnode = strdup(he->h_name);
 			return 0;

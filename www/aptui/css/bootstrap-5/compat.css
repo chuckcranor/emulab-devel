@@ -6,8 +6,9 @@
     --bs-font-sans-serif: "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 .popover {
-    --bs-popover-body-padding-x: 0.75rem;
-    --bs-popover-body-padding-y: 0.6rem;
+    --bs-popover-font-size: 1.0rem;
+    --bs-popover-body-padding-x: 0.5rem;
+    --bs-popover-body-padding-y: 0.5rem;
 }
 
 .hidden {

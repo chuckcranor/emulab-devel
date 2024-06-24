@@ -538,7 +538,7 @@ blockquote #selected_profile_description {
 }
 
 /* The default margins leave no space at all. And too much padding. */
-.popover-content, .popover-body {
+.popover-content {
     margin: 0px 5px 5px 5px;
     padding: 8px 10px;
 }
