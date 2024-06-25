@@ -129,6 +129,7 @@ RUN_DEPENDS+=	\
 	p5-Class-ISA>=0.36:${PORTSDIR}/devel/p5-Class-ISA \
 	p5-DBD-mysql>=4.025:${PORTSDIR}/databases/p5-DBD-mysql \
 	p5-DBI>=1.630:${PORTSDIR}/databases/p5-DBI \
+	p5-DateTime>=1.54:${PORTSDIR}/devel/p5-DateTime \
 	p5-Digest-SHA1>=2.13:${PORTSDIR}/security/p5-Digest-SHA1 \
 	p5-Expect>=1.21:${PORTSDIR}/lang/p5-Expect \
 	p5-GD>=2.50:${PORTSDIR}/graphics/p5-GD \

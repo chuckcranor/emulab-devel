@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2021 University of Utah and the Flux Group.
+# Copyright (c) 2004-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -415,7 +415,7 @@ sub doboot()
     if (!$opsjail &&
 	system("sysctl -n kern.vm_guest >/dev/null 2>&1") == 0) {
 	my $vm_guest = `sysctl -n kern.vm_guest`;
-	if ($vm_guest =~ /^xen$/) {
+	if ($vm_guest !~ /^none$/) {
 	    $XENVM = 1;
 	    print "Running inside a XEN VM\n";
 	}
@@ -753,12 +753,12 @@ sub doboot()
 	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
 	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
 	$emulabconfig{EXTRA_PKG_DIR}= $emulabconfig{FS_PKG_DIR};
-	$emulabconfig{FS_PKG}       = "emulab-fs-8.2";
-	$emulabconfig{OPS_PKG}      = "emulab-ops-8.2";
-	$emulabconfig{BOSS_PKG}     = "emulab-boss-8.2";
-	$emulabconfig{EXTRA_PKG}    = "emulab-extras-8.2";
+	$emulabconfig{FS_PKG}       = "emulab-fs-8.3";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-8.3";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-8.3";
+	$emulabconfig{EXTRA_PKG}    = "emulab-extras-8.3";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-12.3-packages${suf}.tar.gz";
-	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-8.2";
+	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-8.3";
     }
     #
     # If there is a package tarball, prefer that and grab it now.
@@ -2460,6 +2460,19 @@ sub SetupBossNode($)
     system("mv /root/.ssh /root/.ssh.old.$$");
     system("mv /root/.ssh.backup /root/.ssh");
     system("cp -p /boot/loader.conf.bak /boot/loader.conf");
+
+    #
+    # Remove all the script wrappers that are installed on clients so they
+    # can access boss services via XMLRPC.
+    #
+    my @scripts = ( "/usr/local/bin/script_wrapper.py" );
+    my @lines = `/bin/ls -l /usr/local/bin`;
+    foreach my $line (@lines) {
+	if ($line =~ /([-\w]+)\@? -> script_wrapper.py/) {
+	    push @scripts, "/usr/local/bin/$1";
+	}
+    }
+    unlink(@scripts);
 
     #
     # Remove the outer testbed startup script.
@@ -4399,10 +4412,14 @@ sub DelAllPackages($)
     #
     # XXX must also set SIGNATURE_TYPE=NONE to prevent a signature check.
     #
+    # XXX apparently also need to be in the package dir to prevent it from
+    # trying to fetch remotely. Probably something to do with the leading '/'.
+    #
     my $pkgpkg = GetPackage("pkg", $pkgdir);
     my $oenv = $ENV{"SIGNATURE_TYPE"};
     $ENV{"SIGNATURE_TYPE"} = "NONE";
-    if (system("pkg add -f $pkgpkg >/dev/null 2>&1")) {
+    $pkgpkg =~ s/.*\///;
+    if (system("cd $pkgdir; pkg add -f $pkgpkg >/dev/null 2>&1")) {
 	SetupFatal("Yargh!! Could not reinstall 'pkg'!");
     }
     $ENV{"SIGNATURE_TYPE"} = $oenv;

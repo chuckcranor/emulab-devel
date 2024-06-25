@@ -42,6 +42,15 @@ $(function ()
 	    SetupProjectWhy();
 	    $('#projects-loading').addClass("hidden");
 	    $('#projects-loaded').removeClass("hidden");
+	    $('#request-info-modal .public-provider-template').click(function (e) {
+	        e.preventDefault();
+                console.info(e);
+	        var msg =
+                    "Since you signed up with an account from a public email provider\n"+
+                    "rather than one from your institution, can you please provide us with\n"+
+                    "documentation of your affiliation?\n\n";
+	        $('#request-info-modal textarea').val(msg);
+	    });
 	};
 	sup.CallServerMethod(null, "approve-projects", "ProjectList",
 			     null, callback);
