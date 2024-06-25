@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -260,6 +260,21 @@ if ! test "x$ac_cv_header_rpc_rpc_h" = xyes ; then
 fi
 CPPFLAGS="$old_CPPFLAGS"
 AC_SUBST(RPC_CPPFLAGS)
+
+#
+# Are we building with Clang?
+# Taken from MesaLib configure via chromium.
+#
+AC_MSG_CHECKING([if compiling with clang])
+AC_COMPILE_IFELSE(
+[AC_LANG_PROGRAM([], [[
+#ifndef __clang__
+       not clang
+#endif
+]])],
+[USING_CLANG=yes], [USING_CLANG=no])
+AC_MSG_RESULT([$USING_CLANG])
+AC_SUBST(USING_CLANG)
 
 # Conditional files created for various versions of Windows
 # based on which variables are defined.

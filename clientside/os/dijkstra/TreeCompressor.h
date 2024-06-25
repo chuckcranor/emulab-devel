@@ -1,7 +1,7 @@
 // TreeCompressor.h
 
 /*
- * Copyright (c) 2004 University of Utah and the Flux Group.
+ * Copyright (c) 2004, 2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -58,7 +58,7 @@ private:
     TreeCompressor(TreeCompressor const &);
     TreeCompressor & operator=(TreeCompressor const &) { return *this; }
 private:
-    std::auto_ptr<IpTree> root[PRIVATE_SUBNET_COUNT];
+    auto_ptr<IpTree> root[PRIVATE_SUBNET_COUNT];
     SingleSource const * graph;
     HostHostToIpMap const * ipMap;
 };

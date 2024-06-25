@@ -623,6 +623,7 @@ ac_subst_vars='LTLIBOBJS
 LIBOBJS
 DISTCLEAN_FILES
 MOBILESUPPORT
+USING_CLANG
 RPC_CPPFLAGS
 PYTHON_INCLUDE
 EGREP
@@ -4590,6 +4591,37 @@ done
 
 fi
 CPPFLAGS="$old_CPPFLAGS"
+
+
+#
+# Are we building with Clang?
+# Taken from MesaLib configure via chromium.
+#
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking if compiling with clang" >&5
+$as_echo_n "checking if compiling with clang... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main ()
+{
+
+#ifndef __clang__
+       not clang
+#endif
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  USING_CLANG=yes
+else
+  USING_CLANG=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $USING_CLANG" >&5
+$as_echo "$USING_CLANG" >&6; }
 
 
 # Conditional files created for various versions of Windows
