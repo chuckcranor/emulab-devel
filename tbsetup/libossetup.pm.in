@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2524,7 +2524,7 @@ sub LightUpNodes($@)
 	    if (!defined($rfswitch_port));
 
 	tbnotice("Setting the RF Switch for $node_id (to port $rfswitch_port)\n");
-	system("$RFSWITCHER $node_id");
+	system("$RFSWITCHER -d $node_id");
 
 	if ($?) {
 	    # This is bad too.
