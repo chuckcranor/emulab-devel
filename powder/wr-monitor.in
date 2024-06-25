@@ -260,7 +260,7 @@ sub wrlen_alert();
 sub wrlen_upload();
 
 sub NotifyTBOPS($$);
-sub Powercycle($);
+sub Powercycle($$);
 sub fatal($);
 sub logit($);
 sub logitnnl($);
@@ -1142,6 +1142,9 @@ sub wrswitch_alert()
 #     servo state != TRACK_PHASE
 # Maybe when:
 #     ucnt < previous value (indicates unit has been reset)
+# Reboot when:
+#     state == disconnected (nothing else we can do)
+#     no lock on wr[01] (does not ever recover on its own)
 #
 sub wrlen_alert()
 {
@@ -1165,27 +1168,27 @@ sub wrlen_alert()
 		$msg .= "$name ($loc): not responding";
 		if ($dopowercycle && $wrlen->{'pcenabled'}) {
 		    $msg .= ", attempting power cycle!\n";
-		    $wrlen->{'pccount'} = 0;
-		    Powercycle($wrlen);
+		    $wrlen->{'notconn_pccount'} = 0;
+		    Powercycle($wrlen, "notconn");
 		} else {
 		    $msg .= "\n";
 		}
 	    } elsif ($dopowercycle && $wrlen->{'pcenabled'} &&
-		     $wrlen->{'pccount'} <= $numcycles) {
+		     $wrlen->{'notconn_pccount'} <= $numcycles) {
 		$msg .= "$name ($loc): still not responding after " .
-		    $wrlen->{'pccount'} . " power cycle(s)";
-		if ($wrlen->{'pccount'} < $numcycles) {
+		    $wrlen->{'notconn_pccount'} . " power cycle(s)";
+		if ($wrlen->{'notconn_pccount'} < $numcycles) {
 		    $msg .= ", trying again\n";
-		    Powercycle($wrlen);
-		} elsif ($wrlen->{'pccount'} == $numcycles) {
+		    Powercycle($wrlen, "notconn");
+		} elsif ($wrlen->{'notconn_pccount'} == $numcycles) {
 		    $msg .= ", giving up, SOMETHING IS WRONG!\n";
-		    $wrlen->{'pccount'}++;
+		    $wrlen->{'notconn_pccount'}++;
 		}
 	    }
 	    next;
 	} elsif ($laststate && $wrlen->{'laststate'} eq "disconnected") {
 	    $msg .= "$name ($loc): has come back to life\n";
-	    $wrlen->{'pccount'} = 0
+	    $wrlen->{'notconn_pccount'} = 0
 		if ($dopowercycle && $wrlen->{'pcenabled'});
 	}
 	my $status = $wrlen->{'status'};
@@ -1222,9 +1225,35 @@ sub wrlen_alert()
 	    (!$lastattrs || $lastattrs->{'lnk'} == 1)) {
 	    $msg .= "$name ($loc): lost link on $exif\n";
 	}
-	if ($attrs->{'lock'} == 0 &&
-	    (!$lastattrs || $lastattrs->{'lock'} == 1)) {
-	    $msg .= "$name ($loc): lost lock on $exif\n";
+	# XXX Experience has shown that lock does not come back on its
+	# own. Need to reboot when this happens.
+	if ($attrs->{'lock'} == 0) {
+	    if (!$lastattrs || $lastattrs->{'lock'} == 1) {
+		$msg .= "$name ($loc): lost lock on $exif";
+		if ($dopowercycle && $wrlen->{'pcenabled'}) {
+		    $msg .= ", attempting power cycle!\n";
+		    $wrlen->{'nolock_pccount'} = 0;
+		    Powercycle($wrlen, "nolock");
+		} else {
+		    $msg .= "\n";
+		}
+	    } elsif ($dopowercycle && $wrlen->{'pcenabled'} &&
+		     $wrlen->{'nolock_pccount'} <= $numcycles) {
+		$msg .= "$name ($loc): still not locked after " .
+		    $wrlen->{'nolock_pccount'} . " power cycle(s)";
+		if ($wrlen->{'nolock_pccount'} < $numcycles) {
+		    $msg .= ", trying again\n";
+		    Powercycle($wrlen, "nolock");
+		} elsif ($wrlen->{'nolock_pccount'} == $numcycles) {
+		    $msg .= ", giving up, SOMETHING IS WRONG!\n";
+		    $wrlen->{'nolock_pccount'}++;
+		}
+	    }
+	    next;
+	} elsif ($lastattrs && $lastattrs->{'lock'} == 0) {
+	    $msg .= "$name ($loc): regained lock on $exif\n";
+	    $wrlen->{'nolock_pccount'} = 0
+		if ($dopowercycle && $wrlen->{'pcenabled'});
 	}
 	if (!exists($attrs->{'sv'}) || !$attrs->{'sv'} &&
 	    (!$lastattrs || (exists($lastattrs->{'sv'}) && $lastattrs->{'sv'}))) {
@@ -1235,7 +1264,14 @@ sub wrlen_alert()
 		$msg .= "$name ($loc): servo not in tracking phase on $exif\n";
 	    }
 	    if ($lastattrs && $attrs->{'ucnt'} <= $lastattrs->{'ucnt'}) {
-		$msg .= "$name ($loc): update counter reset (lost sync with switch?)\n";
+		# XXX this happens quite a bit and doesn't seem to persist
+		# or cause any known problems. So stop reporting.
+		if (1) {
+		    print "$name ($loc): update counter reset (lost sync with switch?)\n"
+			if ($debug);
+		} else {
+		    $msg .= "$name ($loc): update counter reset (lost sync with switch?)\n";
+		}
 	    }
 	}
     }
@@ -1316,10 +1352,11 @@ sub NotifyTBOPS($$)
 	     $message, $TBOPS, "X-NetBed: wr-monitor");
 }
 
-sub Powercycle($)
+sub Powercycle($$)
 {
-    my ($wrdev) = @_;
+    my ($wrdev,$tag) = @_;
     my $name = $wrdev->{'pcname'};
+    $tag .= "_pccount";
 
     if (!$impotent) {
 	my $msg = `$POWER -a cycle $name 2>&1`;
@@ -1335,11 +1372,11 @@ sub Powercycle($)
 	    logit("power cycled failed:\n$msg\n")
 		if ($debug);
 	    # power command fails, set to max to prevent retries
-	    $wrdev->{'pccount'} = $numcycles;
+	    $wrdev->{$tag} = $numcycles;
 	    return 0;
 	}
     }
-    $wrdev->{'pccount'}++;
+    $wrdev->{$tag}++;
     return 1;
 }
 
