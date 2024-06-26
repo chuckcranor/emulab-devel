@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2011-2015 University of Utah and the Flux Group.
+# Copyright (c) 2011-2015, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,6 +59,14 @@ my %aliases = (
 );
 
 sub sumfile($);
+
+# do it the easy way if possible
+if (-e "/var/db/zoneinfo" && open(FD, "</var/db/zoneinfo")) {
+    $zone = <FD>;
+    chomp($zone);
+    print "$zone\n";
+    exit(0);
+}
 
 # no localtime file means UTC
 if (! -e "/etc/localtime") {
