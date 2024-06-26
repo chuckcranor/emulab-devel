@@ -13,9 +13,14 @@ PROTOGENI="@PROTOGENI_SUPPORT@"
 DBNAME="@TBDBNAME@"
 LOGFILE="/var/log/mysqlcheck.log"
 PROTOGENI_GENIRACK="@PROTOGENI_GENIRACK@";
+DBPACKAGE="@DBPACKAGE@"
 
 command=/usr/local/bin/mysqlcheck
-socket=/tmp/mysql.sock
+if [ $DBPACKAGE = "MariaDB" ]; then
+    socket=/var/run/mysql/mysql.sock
+else
+    socket=/tmp/mysql.sock
+fi
 
 case "$1" in
 	start|faststart|quietstart|onestart|forcestart)
