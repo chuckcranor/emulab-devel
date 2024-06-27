@@ -910,6 +910,7 @@ DELAYCAPACITY
 TBADMINGROUP
 TBERRORLOGDBNAME
 TBDBNAME
+DBSOCKET
 DBPACKAGE
 optional_subdirs
 SSH
@@ -4068,9 +4069,12 @@ $as_echo "$as_me: WARNING: No DB detected; this is okay on an ops build" >&2;}
 fi
 DBPACKAGE=`basename ${DBCLIENT}`
 
-# XXX seriously??
 if test "$DBPACKAGE" = "mariadb"; then
+    # XXX seriously??
     DBPACKAGE="MariaDB"
+    DBSOCKET="/var/run/mysql/mysql.sock"
+else
+    DBSOCKET="/tmp/mysql.sock"
 fi
 # END DB package detection.
 
@@ -5030,6 +5034,7 @@ done
 # NB: See AC_DEFINE_UNQUOTED() calls below, if you want a variable
 # to appear in config.h.
 #
+
 
 
 

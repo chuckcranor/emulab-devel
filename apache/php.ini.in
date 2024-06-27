@@ -37,3 +37,8 @@ date.timezone		=	@OURTIMEZONE@
 ; This is needed now to avoid SSL verify errors when talking to ourself.
 [openssl]
 openssl.cafile          =       @prefix@/etc/emulab.pem
+
+;
+; For mariadb
+;
+mysqli.default_socket	=	"@DBSOCKET@"

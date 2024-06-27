@@ -107,9 +107,12 @@ if test x"$DBCLIENT" = x""; then
 fi
 DBPACKAGE=`basename ${DBCLIENT}`
 
-# XXX seriously??
 if test "$DBPACKAGE" = "mariadb"; then
+    # XXX seriously??
     DBPACKAGE="MariaDB"
+    DBSOCKET="/var/run/mysql/mysql.sock"
+else
+    DBSOCKET="/tmp/mysql.sock"
 fi
 # END DB package detection.
 
@@ -173,6 +176,7 @@ AC_SUBST(optional_subdirs)
 # to appear in config.h.
 #
 AC_SUBST(DBPACKAGE)
+AC_SUBST(DBSOCKET)
 AC_SUBST(TBDBNAME)
 AC_SUBST(TBERRORLOGDBNAME)
 AC_SUBST(TBADMINGROUP)
