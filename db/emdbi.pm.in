@@ -273,7 +273,7 @@ use vars '@ISA';
 sub numrows($)		{ return $_[0]->rows(); };
 sub num_rows($)		{ return $_[0]->rows(); };
 sub affectedrows($)	{ return $_[0]->rows(); };
-sub insertid($)		{ return $_[0]->{'mysql_insertid'}; };
+sub insertid($)		{ return $_[0]->last_insert_id(); };
 sub fetchrow($)
 {
     my ($self) = @_;
@@ -364,7 +364,7 @@ sub colcount($)		{ return $_[0]->{'COLCOUNT'}; };
 sub numrows($)		{ return $_[0]->{'ROWS'}; };
 sub num_rows($)		{ return $_[0]->{'ROWS'}; };
 sub affectedrows($)	{ return $_[0]->{'ROWS'}; };
-sub insertid($)		{ return $_[0]->sth()->{'mysql_insertid'}; };
+sub insertid($)		{ return $_[0]->last_insert_id(); };
 sub dataseek($$)	{ $_[0]->{'IDX'} = $_[1]; };
 
 sub fetchrow_arrayref($)
