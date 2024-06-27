@@ -221,10 +221,14 @@ LoadModule access_compat_module libexec/apache24/mod_access_compat.so
 # PHP is an HTML-embedded scripting language which attempts to make it
 # easy for developers to write dynamically generated webpages.
 #
-# Starting with 11.3 server installs, we switched from php 5 to php7 so
+# Starting with 11.3 server installs, we switched from php5 to php7 so
 # we have to check for that here. We use the relatively new IfFile directive
 # which appeared in 2.4.34. Fortunately, we started using apache 2.4 at
 # version 35, so we can count on this directive being present.
+#
+# Starting with 13.3 server installs, we switched from php7 to php8 which
+# just uses "libphp.so" with no version number. So we have to check for
+# that first!
 #
 <IfFile "/usr/local/libexec/apache24/libphp.so">
     LoadModule php_module libexec/apache24/libphp.so
