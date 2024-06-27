@@ -85,7 +85,7 @@ sub dataseek($$)	{ return $_[0]->func($_[1], 'dataseek'); };
 sub numrows($)		{ return $_[0]->rows(); };
 sub num_rows($)		{ return $_[0]->rows(); };
 sub affectedrows($)	{ return $_[0]->rows(); };
-sub insertid($)		{ return $_[0]->{'mysql_insertid'}; };
+sub insertid($)		{ return $_[0]->last_insert_id(); };
 sub fetchrow($)
 {
     my ($self) = @_;
