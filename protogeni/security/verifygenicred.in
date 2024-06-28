@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2013 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -362,7 +362,8 @@ foreach my $sigid (keys(%credentials)) {
     #
     my $bad  = 0;
     my $line = <SEC>;
-    if (!defined($line) || !($line =~ /^OK$/)) {
+    if (!defined($line) ||
+	!($line =~ /^OK$/ || $line =~ /^Verification status: OK$/)) {
 	$bad = 1;
     }
     print STDERR $line

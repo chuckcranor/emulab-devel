@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -173,6 +173,17 @@ else {
 }
 
 #
+# Need the version below.
+#
+my $xmlsec1_version = `$XMLSEC1 --version`;
+if ($xmlsec1_version =~ /^\w+\s+(\d+\.\d+)\.\d+ /) {
+    $xmlsec1_version = $1;
+}
+else {
+    fatal("Could not determine XMLSEC1 version");
+}
+
+#
 # This script is always audited. Mail is sent automatically upon exit.
 #
 if (0 && AuditStart(0)) {
@@ -314,6 +325,7 @@ close($fh);
 my $signedcred = "";
 
 open(SEC, "$XMLSEC1 --sign --node-id $sigid ".
+     ($xmlsec1_version >= 1.3 ? " --lax-key-search " : "").
      "       --privkey-pem $keyfile,$certfile $tmpfile |")
     or fatal("Could not start $XMLSEC1 on $tmpfile");
 while (<SEC>) {
