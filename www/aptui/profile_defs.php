@@ -1028,6 +1028,10 @@ class Profile
     {
         $profile_id = $this->profileid();
         $result = array();
+
+        if (1) {
+            return $result;
+        }
         
         $query_result =
             DBQueryFatal("select * from apt_profile_permissions ".
