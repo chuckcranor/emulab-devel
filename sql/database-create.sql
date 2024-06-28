@@ -981,6 +981,21 @@ CREATE TABLE `apt_profiles` (
 
 
 --
+-- Table structure for table `apt_profile_permissions`
+--
+
+DROP TABLE IF EXISTS `apt_profile_permissions`;
+CREATE TABLE `apt_profile_permissions` (
+  `profileid` int(10) unsigned NOT NULL default '0',
+  `permission_type` enum('user','group') NOT NULL default 'group',
+  `permission_id` varchar(128) NOT NULL default '',
+  `permission_idx` mediumint(8) unsigned NOT NULL default '0',
+  `created` datetime default NULL,
+  `revoked` datetime default NULL,
+  PRIMARY KEY  (`profileid`,`permission_type`,`permission_idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_reservation_groups`
 --
 
