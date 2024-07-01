@@ -88,7 +88,7 @@ if [ $major -eq 10 ]; then
 	# Backwards compatibility.
 	opts="$opts --lower_case_table_names=0 --log_output=file"
 	# Strict mode is coming, but we can't handle it.
-	opts="$opts --sql_mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+	opts="$opts --sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
 elif [ $major -eq 8 ]; then
 	#
 	# mysql 8 changes:
