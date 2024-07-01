@@ -42,6 +42,7 @@ my $RPCCERT    = "@OUTERBOSS_SSLCERTNAME@";
 my $WOL        = "$TB/sbin/whol";
 my $POWER      = "$TB/bin/power";
 my $TBLOG      = "@TBLOGFACIL@";
+my $RFSWITCHER = "$TB/sbin/powder-rfswitcher";
 
 use lib "@prefix@/lib";
 use libdb;
@@ -300,6 +301,16 @@ foreach my $nodeid (@machines) {
 	    !$node->AccessCheck($this_user, TB_NODEACCESS_POWERCYCLE)) {
 	    warn "You are not authorized to control $nodeid. Skipping...\n";
 	    next;
+	}
+	#
+	# Powder radio sanity check.
+	#
+	if ($op eq "on" && $node->rfswitch_port()) {
+	    system("$RFSWITCHER -d -v $nodeid");
+	    if ($?) {
+		warn "Refusing to power on $nodeid until the RF switch is set.\n";
+		next;
+	    }
 	}
 	$nodes{$nodeid} = $node;
     }

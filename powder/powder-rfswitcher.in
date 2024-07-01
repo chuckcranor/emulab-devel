@@ -42,6 +42,7 @@ use POSIX qw(strftime ceil);
 sub usage()
 {
     print "Usage: powder-rfswitcher [-dn] [-o] <node_id>\n";
+    print "       powder-rfswitcher -v <node_id>\n";
     print "       powder-rfswitcher -r -t [rffe|rpi] location\n";
     print "       powder-rfswitcher -z -t [rffe|rpi] location\n";
     print "       powder-rfswitcher -s port -t [rffe|rpi] location\n";
@@ -50,6 +51,7 @@ sub usage()
     print "  -o  - Set the switch associated with the node, to off\n";
     print "      - This is preferred way to switch the antenna away from a node\n";
     print "  -r  - Get the status of the rfswitch at <location>\n";
+    print "  -v  - Verify (for the power on command) that the switch is set\n";
     print "Do not use these options unless the node is first powered on/off\n";
     print "  -z  - Set the current port of the rfswitch at <location> to zero\n";
     print "        In other words, nothing is connected to an antenna\n";
@@ -57,7 +59,7 @@ sub usage()
     print "  -t  - Required for -r,-s,-z. The rfswitch type.\n";
     exit(1);
 }
-my $optlist   = "dnzs:rt:o";
+my $optlist   = "dnzs:rt:ov";
 my $debug     = 0;
 my $impotent  = 0;
 my $zero      = 0;
@@ -65,6 +67,7 @@ my $set       = 0;
 my $read      = 0;
 my $ddrunning = 0;
 my $locked    = 0;
+my $verify    = 0;
 my $location;
 my $rfswtype;
 
@@ -125,6 +128,9 @@ if (defined($options{"s"})) {
 }
 if (defined($options{"r"})) {
     $read = 1;
+}
+if (defined($options{"v"})) {
+    $verify = 1;
 }
 if (defined($options{"t"})) {
     $rfswtype = $options{"t"};
@@ -191,23 +197,24 @@ my $aggregate = APT_Aggregate->LookupLocalCluster();
 if (!defined($aggregate)) {
     fatal("Could not lookup local aggregate");
 }
-if ($node->NodeAttribute("rfswitch_location", \$location) || !$location) {
-    fatal("$node_id is not in the radio info table, need a location");
+my $rfswitch_port;
+
+if ($node->rfswitchSettings(\$location, \$rfswitch_port, \$rfswtype)) {
+    fatal("Could not get the rfswitch settings");
 }
-if ($node->NodeAttribute("rfswitch_type", \$rfswtype) || !$rfswtype) {
-    fatal("There is not rfswitch_type in the DB for $node_id");
+if (!defined($location)) {
+    fatal("There is no rfswitch_location in the DB for $node_id");
+}
+if (!defined($rfswtype)) {
+    fatal("There is no rfswitch_type in the DB for $node_id");
+}
+if (!defined($rfswitch_port)) {
+    fatal("There is no rfswitch_port in the DB for $node_id");
 }
 if ($rfswtype ne "rffe" and $rfswtype ne "rpi") {
-    fatal("rfswitch_type must be one of rffe or rpi");
+    fatal("rfswitch_type must be one of rffe or rpi: $rfswtype");
 }
 
-#
-# The RF switch number is a node attribute.
-#
-my $rfswitch_port;
-if ($node->NodeAttribute("rfswitch_port", \$rfswitch_port) || !$rfswitch_port) {
-    fatal("No rfswitch_port for $node_id");
-}
 my $next_port;
 if (defined($options{"o"})) {
     $next_port = 0;
@@ -215,7 +222,7 @@ if (defined($options{"o"})) {
 else {
     $next_port = $rfswitch_port;
 }
-if ($debug) {
+if ($debug && !$verify) {
     print "Setting RF switch at $location to port $next_port\n";
 }
 GetSwitcherLock();
@@ -229,6 +236,12 @@ if (!defined($current_port)) {
 }
 if ($debug) {
     print "RF switch at $location is on port $current_port\n";
+}
+if ($verify) {
+    if ($current_port == $next_port) {
+	exit(0);
+    }
+    exit(1);
 }
 if ($current_port == $next_port) {
     print "RF switch at $location is already on the correct port: $next_port\n";
