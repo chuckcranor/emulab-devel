@@ -204,6 +204,9 @@ sub Connect($)
     return -1
 	if (!defined($dbh));
 
+    if ($DBPACKAGE eq "MariaDB") {
+	$dbh->{'AutoInactiveDestroy'} = 1
+    }
     $self->{'PID'} = $$;
     $self->{'DBH'} = $dbh;
     return 0;
@@ -251,6 +254,17 @@ sub query($$)
 sub DESTROY
 {
     my ($self) = @_;
+    #
+    # XXX this needs to be revisited. We were having problems with the
+    # child of a fork hanging on exit. We though setting AutoInactiveDestroy
+    # above would be sufficient but it wasn't.
+    #
+    if ($DBPACKAGE eq "MariaDB") {
+	$self->dbh()->disconnect()
+	    if (defined($self->dbh()));
+	return;
+    }
+
     # XXX Seems like a problem if parent gets here first.
     if (defined($self->pid()) && $self->pid() != $$) {
 	$self->dbh()->{'InactiveDestroy'} = 1;
@@ -567,8 +581,8 @@ sub TBDBReconnect($)
 	    if (!defined($DB[$i]));
 
 	my $dbname = $DB[$i]->dbname();
-	
 	undef($DB[$i]);
+
 	return -1
 	    if (TBDBConnect($i, $dbname) != 0);
     }
