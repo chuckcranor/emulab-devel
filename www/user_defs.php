@@ -1005,7 +1005,7 @@ class User
 	    $usr_zip = "&nbsp;";
 	if (!strcmp($usr_country, ""))
 	    $usr_country = "&nbsp;";
-	if (!strcmp($notes, ""))
+	if (!isset($notes) || !strcmp($notes, ""))
 	    $notes = "&nbsp;";
 
         #

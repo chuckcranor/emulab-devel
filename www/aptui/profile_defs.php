@@ -669,7 +669,7 @@ class Profile
                          "where profile_id='$profile_id' ".
                          $userclause);
         $row = mysql_fetch_row($query_result);
-        if (!$row["started"]) {
+        if (!isset($row["started"])) {
             $query_result =
                 DBQueryFatal("select max(UNIX_TIMESTAMP(started)) as started ".
                              "  from apt_instance_history ".
@@ -677,7 +677,7 @@ class Profile
                              $userclause);
             $row = mysql_fetch_row($query_result);
         }
-        if (!$row["started"]) {
+        if (!isset($row["started"])) {
             return array(0, 0);
         }
         $lastused = $row[0];
@@ -784,13 +784,13 @@ class Profile
 	foreach ($fields as $name => $val) {
 	    $form    = "";
 	    $type    = $val->type;
-	    $prompt  = $val->description;
+	    $prompt  = isset($val->description) ? $val->description : null;
 	    $defval  = $val->defaultValue;
-	    $options = $val->legalValues;
-	    $longhelp  = $val->longDescription;
-	    $advanced  = $val->advanced;
-	    $groupId   = $val->groupId;
-	    $groupName = $val->groupName;
+	    $options = isset($val->legalValues) ? $val->legalValues : null;
+	    $longhelp  = isset($val->longDescription) ? $val->longDescription : null;
+	    $advanced  = isset($val->advanced) ? $val->advanced : null;
+	    $groupId   = isset($val->groupId) ? $val->groupId : null;
+	    $groupName = isset($val->groupName) ? $val->groupName : null;
 	    $hasGroup = false;
 	    $data_help_string = "";
 	    $advanced_attr = "";

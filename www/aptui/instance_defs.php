@@ -1065,7 +1065,7 @@ class Instance
 
     # Check the create_instance countdown lock, if too high, we return
     # an indicator.
-    function tooManyWaiting()
+    public static function tooManyWaiting()
     {
 	$query_result =
 	    DBQueryFatal("select value from emulab_locks ".
@@ -1082,7 +1082,7 @@ class Instance
         return 0;
     }
 
-    function loadTooHigh()
+    public static function loadTooHigh()
     {
         $load = sys_getloadavg();
         if ($load[0] > 15) {
@@ -1419,9 +1419,12 @@ class ExtensionInfo
 	    return;
 	}
 	$this->info = mysql_fetch_assoc($query_result);
-        $this->info["reason"]  = trim($this->info["reason"]);
-        $this->info["message"] = trim($this->info["message"]);
-
+	if (isset($this->info["reason"])) {
+	    $this->info["reason"]  = trim($this->info["reason"]);
+	}
+	if (isset($this->info["message"])) {
+	    $this->info["message"] = trim($this->info["message"]);
+	}
         #
         # Convert wanted/granted hours to handy 5D14H string.
         #
