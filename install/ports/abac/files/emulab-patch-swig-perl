@@ -1,0 +1,10 @@
+--- swig/perl/abac_wrap.cxx.orig        2015-06-02 10:16:44.000000000 -0600
++++ swig/perl/abac_wrap.cxx     2024-03-13 21:58:00.208729000 -0600
+@@ -11,6 +11,7 @@
+ #define SWIGPERL
+ #define SWIG_CASTRANK_MODE
+ 
++#define register
+ 
+ #ifdef __cplusplus
+ /* SwigValueWrapper is described in swig.swg */

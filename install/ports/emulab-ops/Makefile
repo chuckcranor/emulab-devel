@@ -30,7 +30,7 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt \
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
 www_apache24_SET=	SUEXEC
 .else
 .MAKEFLAGS+=	WITH_SUEXEC=yes
@@ -102,7 +102,7 @@ RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}paramiko>0:${PORTSDIR}/security/py-paramiko
 
 # apache related ports
-.if (${EMULAB_PORTVERSION} == "8.4")
+.if (${EMULAB_PORTVERSION} == "9.3")
 RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/libphp.so:${PORTSDIR}/www/mod_php$(PHP_VER)
 .else
@@ -112,7 +112,7 @@ RUN_DEPENDS+=	\
 RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
 
-.if (${EMULAB_PORTVERSION} != "8.3" && ${EMULAB_PORTVERSION} != "8.4")
+.if (${EMULAB_PORTVERSION} != "8.3" && ${EMULAB_PORTVERSION} != "9.3")
 # PHP packages
 # XXX I don't think this has been used in forever and the port is gone
 RUN_DEPENDS+= \

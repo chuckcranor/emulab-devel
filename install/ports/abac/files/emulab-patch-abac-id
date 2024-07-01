@@ -1,0 +1,18 @@
+--- libabac/abac_id.c.orig      2024-03-13 22:19:33.690090000 -0600
++++ libabac/abac_id.c   2024-03-13 22:19:37.491466000 -0600
+@@ -74,7 +74,6 @@
+ in pem, zap the end with \0 and skip the spaces at the start*/
+ char *zap_spaces(char *string)
+ {
+-   int space=0;
+    int total=strlen(string);
+    int i=0;
+    char *ptr=string;
+@@ -84,7 +83,6 @@
+    }
+    for(;i<total; i++) {
+        if(string[i]==' ') {
+-         space++;
+          string[i]='\0';
+        } 
+    }

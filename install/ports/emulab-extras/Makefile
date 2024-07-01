@@ -43,7 +43,6 @@ RUN_DEPENDS+=	\
 	${LOCALBASE}/sbin/e2fsck:${PORTSDIR}/sysutils/e2fsprogs \
 	emacs:${PORTSDIR}/editors/emacs \
 	git:${PORTSDIR}/devel/git \
-	jove:${PORTSDIR}/editors/jove \
 	lsof:${PORTSDIR}/sysutils/lsof \
 	rsync:${PORTSDIR}/net/rsync \
 	sudo:${PORTSDIR}/security/sudo \
@@ -51,7 +50,13 @@ RUN_DEPENDS+=	\
 	xterm:${PORTSDIR}/x11/xterm \
 	zsh:${PORTSDIR}/shells/zsh
 
-.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
+.if (${EMULAB_PORTVERSION} == "9.3")
+.else
+RUN_DEPENDS+=	\
+	jove:${PORTSDIR}/editors/jove
+.endif
+
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
 RUN_DEPENDS+=	\
 	gdb:${PORTSDIR}/devel/gdb \
 	vim:${PORTSDIR}/editors/vim

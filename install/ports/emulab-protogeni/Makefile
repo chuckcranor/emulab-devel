@@ -23,7 +23,7 @@ WANT_PHP_MOD=	yes
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
 www_apache24_SET=	SUEXEC
 .else
 .MAKEFLAGS+=	WITH_SUEXEC=yes
@@ -58,8 +58,13 @@ RUN_DEPENDS+= \
 	p5-XML-SemanticDiff>=1.0002:${PORTSDIR}/textproc/p5-XML-SemanticDiff
 
 # python packages
+.if (${EMULAB_PORTVERSION} == "9.3")
+RUN_DEPENDS+=	\
+	${PYTHON_PKGNAMEPREFIX}flask>=3.0.0:${PORTSDIR}/www/py-flask
+.else
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}Flask>=0.10:${PORTSDIR}/www/py-flask
+.endif
 
 # apache related ports
 RUN_DEPENDS+=	\
