@@ -1,16 +1,16 @@
 Making boss/ops/fs/etc. packages. This is only for the latest FreeBSD
-(as of this writing, 12.4). If you need help with older packages, check out
+(as of this writing, 13.3). If you need help with older packages, check out
 an older version of this document.
 
 As of FreeBSD 10, I started using the quarterly ports release at the time
-of the OS release and then update the packages quarterly. For the 12.4 release,
-I am currently using 2023Q1.
+of the OS release and then update the packages quarterly. For the 13.3 release,
+I am currently using 2024Q2.
 
 ################ TL;DR ################
 
 This is a condensed version of the steps below.
 
-0. Updating the Emulab package repo (12.4 specific).
+0. Updating the Emulab package repo (13.3 specific).
 
    Occasionally you will want to make sure the ports are up to date.
    We track the "quarterly" branch of ports, so within a three month
@@ -23,32 +23,32 @@ This is a condensed version of the steps below.
    couple of mysterious updates of things that didn't change, but I
    can live with that...
 
-   a. Make sure the ports tree in /share/freebsd/12.4/ports on ops
+   a. Make sure the ports tree in /share/freebsd/13.3/ports on ops
       is up to date. [ Note that there is not actually an svn repo branch
       called "quarterly" so you have to make sure you are tracking the
       current quarter. ]
 
-      cd /share/freebsd/12.4/ports
+      cd /share/freebsd/13.3/ports
       sudo git pull
 
    b. Make sure the Emulab ports are up to date.
 
-      cd /share/freebsd/12.4/ports/misc
+      cd /share/freebsd/13.3/ports/misc
       diff -r ~mike/testbed-clean/install/ports .
       <update anything that is out of sync>
 
-   c. Swapin a FreeBSD 12.4 node (experiment emulab-ops/freebsd124-64).
+   c. Swapin a FreeBSD 13.3 node (experiment emulab-ops/freebsd133-64).
       This will give you a d740 which is the best thing to use.
 
    d. Mount the ports and source trees.
 
       cd /usr
-      sudo mount -o ro fs:/share/freebsd/12.4/ports /usr/ports
-      sudo mount -o ro fs:/share/freebsd/12.4/src /usr/src
+      sudo mount -o ro fs:/share/freebsd/13.3/ports /usr/ports
+      sudo mount -o ro fs:/share/freebsd/13.3/src /usr/src
       
    e. Make sure /etc/make.conf is up to date. It should have:
 
-DEFAULT_VERSIONS=perl5=5.32 python=3.9 python3=3.9 php=8.1 mysql=5.7 apache=2.4 tcltk=8.6
+DEFAULT_VERSIONS=perl5=5.36 python=3.9 python3=3.9 php=8.1 mysql=106m apache=2.4 tcltk=8.6
 DEFAULT_VERSIONS+=ssl=base
 
       We also add a bunch of custom port configurations to avoid needing to
@@ -64,8 +64,8 @@ devel_cmake_UNSET+=MANPAGES
 devel_doxygen_UNSET+=LATEX
 devel_protobuf-c_UNSET+=DOXYGEN
 security_py-certbot_UNSET+=MANPAGES
-lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
-			   MCRYPT MYSQLI OPCACHE OPENSSL PDO PHAR POSIX \
+lang_php81-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD ICONV JSON \
+			   MYSQLI OPCACHE OPENSSL PDO PHAR POSIX \
 			   SESSION SIMPLEXML SOCKETS TOKENIZER XML XMLREADER \
 			   XMLRPC XMLWRITER
 
@@ -75,7 +75,7 @@ lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
       - tcl86 (build error)
 
    f1.(NEW for 2022!) You do not need to do f2 below if you are running
-      on the newest 12.4 image which has a 64GB root partition.
+      on the newest 13.3 image which has a 64GB root partition.
 
    f2.(NEW for 2020!) Create a /usr/obj filesystem. There is not enough
       space in the root filesystem to hold all the build trees. You need
@@ -108,7 +108,7 @@ lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
       run up against certificate issues, the it won't reinstall it.
       In that case, I have found the easiest thing to do is:
 
-      pushd /share/freebsd/12.4/packages
+      pushd /share/freebsd/13.3/packages
       pkg add pkg-*
       pkg add ca_root*
       popd
@@ -144,7 +144,7 @@ lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
        date > /tmp/END2
 
    l. Check for vulnerabilities. If any are revealed, you can either try
-      to update /share/freebsd/12.4/ports with a newer version of the port
+      to update /share/freebsd/13.3/ports with a newer version of the port
       (e.g., from /share/freebsd/current/ports) or just live with the
       vulnerability for now.
 
@@ -165,7 +165,7 @@ lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
    o. Save packages and update tarball and repo. On boss:
 
        set www=/usr/testbed/www
-       cd /share/freebsd/12.4
+       cd /share/freebsd/13.3
        mkdir packages
        scp pcXXX:/usr/obj/ports/packages/All/\* packages/
        sudo chown -R root:wheel packages
@@ -173,22 +173,23 @@ lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
       For testing purposes (see next step), start with the ports in
       "Emulab-devel" repo.
 
-       sudo mv $www/FreeBSD/12.4-devel/{packages,Opackages}
-       sudo cp -rp packages $www/FreeBSD/12.4-devel/
-       sudo pkg repo $www/FreeBSD/12.4-devel/packages
+       sudo mv $www/FreeBSD/13.3-devel/{packages,Opackages}
+       sudo mkdir $www/FreeBSD/13.3-devel
+       sudo cp -rp packages $www/FreeBSD/13.3-devel/packages
+       sudo pkg repo $www/FreeBSD/13.3-devel/packages
 
       Do the following when you are sure everything is good.
       
-       set tball="FreeBSD-12.4-packages-64-`date +%Y%m%d`.tar.gz"
+       set tball="FreeBSD-13.3-packages-64-`date +%Y%m%d`.tar.gz"
        sudo tar czf $tball packages
        sudo cp $tball $www/downloads/
-       sudo ln -sfn $tball $www/downloads/FreeBSD-12.4-packages-64.tar.gz
-       sudo mv $www/FreeBSD/12.4/{packages,Opackages}
-       sudo cp -rp packages $www/FreeBSD/12.4/
-       sudo pkg repo $www/FreeBSD/12.4/packages
+       sudo ln -sfn $tball $www/downloads/FreeBSD-13.3-packages-64.tar.gz
+       sudo mv $www/FreeBSD/13.3/{packages,Opackages}
+       sudo cp -rp packages $www/FreeBSD/13.3/
+       sudo pkg repo $www/FreeBSD/13.3/packages
 
        # tar up the ports tree that corresponds to these packages
-       set tball="FreeBSD-12.4-ports.tar.gz"
+       set tball="FreeBSD-13.3-ports.tar.gz"
        sudo tar --exclude=ports/.svn --exclude=ports/.git -czf $tball ports
        sudo cp $tball $www/downloads/
 
@@ -197,7 +198,7 @@ lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
       /etc/pkg/Emulab-devel.conf:
       
 Emulab-devel: {
-  url: "https://www.emulab.net/FreeBSD/12.4-devel/packages",
+  url: "https://www.emulab.net/FreeBSD/13.3-devel/packages",
   mirror_type: NONE,
   enabled: yes
 }
@@ -414,7 +415,7 @@ b. Allocate a node on which to build everything and load the appropriate
    DEFAULT_VERSIONS=perl5=5.32 python=3.7 python3=3.7 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
-   # for 12.4
+   # for 13.3
    DEFAULT_VERSIONS=perl5=5.32 python=3.8 python3=3.8 php=7.4 mysql=5.7 apache=2.4 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
@@ -599,7 +600,7 @@ c. As part of the boss/ops/etc. install, we will need to start creating a file
    /etc/pkg/Emulab.conf with:
 
 Emulab: {
-  url: "https://www.emulab.net/FreeBSD/12.4/packages",
+  url: "https://www.emulab.net/FreeBSD/13.3/packages",
   mirror_type: NONE,
   enabled: yes
 }
@@ -782,3 +783,62 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
 
     By diffing 2.Deps.txt you will find all the packages that depend on
     those new packages/versions or ones that have new/different dependencies.
+
+12. Updating an obsolete package set.
+
+    If you add updated packages to a port set for which you may no longer
+    be able to build everything, then do the following:
+
+   a. Do the usual mount of src/ports, clean out existing ports, create
+      /usr/obj. However, don't change the DEFAULT_VERSIONS in /etc/make.conf,
+      just add the new settings:
+
+OPTIONS_UNSET=DOCS OPENGL DTRACE
+www_apache24_SET+=SUEXEC
+editors_emacs_UNSET+=DBUS GCONF GSETTINGS HARFBUZZ LCMS2 M17N OTF SCROLLBARS \
+                     XFT XIM CAIRO GIF MAGICK PNG SVG TIFF XPM OSS GTK3
+editors_emacs_SET+=XAW
+devel_subversion_UNSET+=GPG_AGENT
+devel_cmake_UNSET+=MANPAGES
+devel_doxygen_UNSET+=LATEX
+devel_protobuf-c_UNSET+=DOXYGEN
+security_py-certbot_UNSET+=MANPAGES
+lang_php74-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD HASH ICONV JSON \
+                           MCRYPT MYSQLI OPCACHE OPENSSL PDO PHAR POSIX \
+                           SESSION SIMPLEXML SOCKETS TOKENIZER XML XMLREADER \
+                           XMLRPC XMLWRITER
+
+      but leave the rest alone.
+
+   b. Cleanse the port environment:
+
+      sudo tcsh
+      setenv ASSUME_ALWAYS_YES true
+      pkg delete -af
+      rm -rf /usr/local/*
+      rm -rf /var/db/ports/*
+      rm -rf /usr/obj/ports/usr/ports/*
+
+   c. Install the existing ports:
+
+      pushd /share/freebsd/XX.Y/packages
+      pkg add pkg-*
+      pkg add ca_root*
+      foreach d (boss ops fs protogeni genilib tipserv extras)
+          pkg add emulab-${d}*
+      end
+      popd
+
+   d. Make new packages from source.
+
+      setenv PACKAGES /usr/obj/ports/packages
+      rm -f $PACKAGES/All/*
+
+      Then go into each port directory you want to update and:
+
+      make clean package
+
+   e. On ops, go to the directory with your current packages and:
+
+      cd <packagedir> 
+      scp pcXXX:/usr/obj/ports/packages/All/\* .

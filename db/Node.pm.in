@@ -2078,12 +2078,40 @@ sub conflicting_nodes($) {
     return $val;
 }
 
+sub rfswitch_location($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "rfswitch_location", \$val);
+    return $val;
+}
+
 sub rfswitch_port($) {
     my ($self) = @_;
     my $val = undef;
 
     NodeAttribute($self, "rfswitch_port", \$val);
     return $val;
+}
+
+sub rfswitch_type($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "rfswitch_type", \$val);
+    return $val;
+}
+
+sub rfswitchSettings($$$$)
+{
+    my ($self, $plocation, $pport, $ptype) = @_;
+
+    if ($self->NodeAttribute("rfswitch_location", $plocation) ||
+	$self->NodeAttribute("rfswitch_port", $pport) ||
+	$self->NodeAttribute("rfswitch_type", $ptype)) {
+	return -1;
+    }
+    return 0;
 }
 
 #

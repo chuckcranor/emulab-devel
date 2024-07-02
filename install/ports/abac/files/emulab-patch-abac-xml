@@ -1,0 +1,20 @@
+--- libabac/abac_xml.c.orig	2014-10-03 18:02:08.000000000 -0600
++++ libabac/abac_xml.c	2024-06-25 15:05:36.662073000 -0600
+@@ -234,7 +234,7 @@
+     if ( !(*buf = malloc(*len))) 
+ 	goto fail;
+ 
+-    if ( (*len = xmlSecBase64Decode(txt, *buf, *len)) < 0 ) 
++    if ( xmlSecBase64Decode_ex(txt, *buf, *len, (xmlSecSize *)len) < 0 )
+ 	goto fail;
+ 
+     return 1;
+@@ -1532,7 +1532,7 @@
+      * xmlsec-crypto library.
+      */
+ #ifdef XMLSEC_CRYPTO_DYNAMIC_LOADING
+-    if(xmlSecCryptoDLLoadLibrary(BAD_CAST XMLSEC_CRYPTO) < 0) {
++    if(xmlSecCryptoDLLoadLibrary(BAD_CAST (xmlSecGetDefaultCrypto())) < 0) {
+         fprintf(stderr, "Error: unable to load default xmlsec-crypto library. "
+ 		"Make sure\n" 
+ 		"that you have it installed and check shared libraries path\n"

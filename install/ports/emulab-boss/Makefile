@@ -27,7 +27,7 @@ WANT_PHP_MOD=	yes
 # PHP modules to build.
 # XXX based on current boss install.
 #
-.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
 # add opcache, get rid of modules that no longer exist
 USE_PHP=	bz2 ctype curl dom filter gd iconv json mysqli \
 		opcache openssl pdo phar posix session simplexml sockets \
@@ -48,7 +48,7 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt mysql \
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
 www_apache24_SET=	SUEXEC
 .else
 .MAKEFLAGS+=	WITH_SUEXEC=yes
@@ -62,11 +62,19 @@ BATCH=		yes
 
 LIB_DEPENDS= libgd.so:${PORTSDIR}/graphics/gd \
 	libmhash.so:${PORTSDIR}/security/mhash \
-	libmysqlclient.so:${PORTSDIR}/databases/mysql${MYSQL_VER}-client \
+	libcrack.so:${PORTSDIR}/security/cracklib \
 	libnetsnmp.so:${PORTSDIR}/net-mgmt/net-snmp \
 	libxerces-c.so:${PORTSDIR}/${XERCES_PORT} \
 	libxmlrpc.so:${PORTSDIR}/net/xmlrpc-c \
 	libpubsub.so:${PORTSDIR}/misc/emulab-pubsub
+
+.if (${EMULAB_PORTVERSION} == "9.3")
+LIB_DEPENDS+=	\
+	libmariadb.so:${PORTSDIR}/databases/mariadb${MYSQL_VER}-client
+.else
+LIB_DEPENDS+=	\
+	libmysqlclient.so:${PORTSDIR}/databases/mysql${MYSQL_VER}-client
+.endif
 
 # We need the BUILD_DEPENDS above to wind up in the dependency list
 RUN_DEPENDS:= ${BUILD_DEPENDS}
@@ -114,10 +122,16 @@ RUN_DEPENDS+=	\
 	nmap:${PORTSDIR}/security/nmap \
 	wget:${PORTSDIR}/ftp/wget \
 	xvcg:${PORTSDIR}/graphics/vcg \
-	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server \
 	${LOCALBASE}/include/boost/config.hpp:${PORTSDIR}/devel/boost-all \
 	gpmetis:${PORTSDIR}/math/metis
 
+.if (${EMULAB_PORTVERSION} == "9.3")
+RUN_DEPENDS+=	\
+	${LOCALBASE}/libexec/mariadbd:${PORTSDIR}/databases/mariadb${MYSQL_VER}-server
+.else
+RUN_DEPENDS+=	\
+	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server
+.endif
 
 # perl packages
 # XXX all the versions listed here are ones that are known to work
@@ -127,7 +141,6 @@ RUN_DEPENDS+=	\
 	p5-BSD-Resource>=1.2907:${PORTSDIR}/devel/p5-BSD-Resource \
 	p5-CGI>=4.13:${PORTSDIR}/www/p5-CGI \
 	p5-Class-ISA>=0.36:${PORTSDIR}/devel/p5-Class-ISA \
-	p5-DBD-mysql>=4.025:${PORTSDIR}/databases/p5-DBD-mysql \
 	p5-DBI>=1.630:${PORTSDIR}/databases/p5-DBI \
 	p5-DateTime>=1.54:${PORTSDIR}/devel/p5-DateTime \
 	p5-Digest-SHA1>=2.13:${PORTSDIR}/security/p5-Digest-SHA1 \
@@ -154,8 +167,16 @@ RUN_DEPENDS+=	\
 	p5-XML-Simple>=2.20:${PORTSDIR}/textproc/p5-XML-Simple \
         p5-RRDTool-OO>=0.36:${PORTSDIR}/devel/p5-RRDTool-OO
 
+.if (${EMULAB_PORTVERSION} == "9.3")
+RUN_DEPENDS+=	\
+	p5-DBD-MariaDB>0:${PORTSDIR}/databases/p5-DBD-MariaDB
+.else
+RUN_DEPENDS+=	\
+	p5-DBD-mysql>=4.025:${PORTSDIR}/databases/p5-DBD-mysql
+.endif
+
 # python packages
-.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "8.4")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}mysqlclient>0:${PORTSDIR}/databases/py-mysqlclient
 .else
@@ -170,7 +191,7 @@ RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}fail2ban>0:${PORTSDIR}/security/py-fail2ban
 
 # apache related ports
-.if (${EMULAB_PORTVERSION} == "8.4")
+.if (${EMULAB_PORTVERSION} == "9.3")
 RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/libphp.so:${PORTSDIR}/www/mod_php$(PHP_VER)
 .else
@@ -184,7 +205,7 @@ RUN_DEPENDS+=	\
 # Port versions of current or former "core" utilties
 RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp44-server \
-	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind916 \
+	named:${PORTSDIR}/dns/bind918 \
 	${LOCALBASE}/bin/dig:${PORTSDIR}/dns/bind-tools
 
 # XXX For building loghole doc from www/tutorial

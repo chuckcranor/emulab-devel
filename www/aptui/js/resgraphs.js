@@ -563,7 +563,8 @@ window.DrawResHistoryGraph = (function ()
 	    var stamp     = parseInt(record.t) * 1000;
 	    var reserved  = record.reserved;
 	    var allocated = record.allocated;
-	    var pidkey    = details.remote_pid + "/" + details.gid;
+	    var pidkey    = details.remote_pid + "/" + details.remote_pid;
+	    var gidkey    = details.remote_pid + "/" + details.gid;
 	    var pcount    = 0;
 
 	    // If this is before or after the reservation, reserved will
@@ -576,6 +577,9 @@ window.DrawResHistoryGraph = (function ()
 	    // For temporary backwards also check for remote_pid
 	    if (_.has(allocated, pidkey)) {
 		pcount = parseInt(allocated[pidkey][details.type]);
+	    }
+	    else if (_.has(allocated, gidkey)) {
+		pcount = parseInt(allocated[gidkey][details.type]);
 	    }
 	    else if (_.has(allocated, details.remote_pid)) {
 		pcount = parseInt(allocated[details.remote_pid][details.type]);

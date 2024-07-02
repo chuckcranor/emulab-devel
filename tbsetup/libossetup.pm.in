@@ -2463,6 +2463,50 @@ sub LightUpNodes($@) {
 
 #####################################################################
 #
+# Powder Dense nodes, which are PCs with B210s. Basically a regular
+# cluster node, but with rfswitcher addition.
+#
+package libossetup_nuvo7501;
+use base qw(libossetup_pc);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+use overload ('""' => 'Stringify');
+
+sub LightUpNodes($@) {
+    my ($self, @nodelist) = @_;
+    my $parent = $self->parent();
+    my $experiment = $parent->experiment();
+
+    #
+    # We want to this before powering on the radio to make sure it has an
+    # antenna load before it tries to transmit anything (says Alex).
+    #
+    foreach my $node (@nodelist) {
+	my $node_id = $node->node_id();
+	my $rfswitch_port = $node->rfswitch_port();
+	next
+	    if (!defined($rfswitch_port));
+
+	tbnotice("Setting the RF Switch for $node_id (to port $rfswitch_port)\n");
+	system("$RFSWITCHER -d $node_id");
+
+	if ($?) {
+	    # This is bad too.
+	    $parent->noretry(1);
+	    return -1;
+	}
+    }
+    return $self->SUPER::LightUpNodes(@nodelist);
+}
+
+#####################################################################
+#
 # sdr
 #
 package libossetup_sdr;
