@@ -18,7 +18,7 @@ COMMENT=	"Meta-port for an Emulab geni-lib jail"
 # This prevents any ports from trying to configure interactively.
 #
 BATCH=		yes
-.MAKEFLAGS+=	-DBATCH
+.MAKEFLAGS+=	BATCH=yes
 
 RUN_DEPENDS=	\
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \

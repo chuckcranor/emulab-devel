@@ -20,7 +20,7 @@ NO_BUILD=	yes
 # This prevents any ports from trying to configure interactively.
 #
 BATCH=		yes
-.MAKEFLAGS+=	-DBATCH
+.MAKEFLAGS+=	BATCH=yes
 
 #
 # XXX hackary to get around bugs in Makefiles:
