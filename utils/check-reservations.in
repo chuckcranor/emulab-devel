@@ -44,6 +44,7 @@ my $debug    = 0;
 my $impotent = 0;
 my $checkall = 0;
 my $verbose  = 0;
+my $residx;
 
 #
 # Configure variables
@@ -92,10 +93,14 @@ if (defined($options{"a"})) {
 }
 if (defined($options{"v"})) {
     $verbose = 1;
+    ResUtil::DebugOn();
 }
-usage()
-    if (@ARGV);
-
+if (@ARGV == 1) {
+    $residx = $ARGV[0];
+}
+elsif (@ARGV) {
+    usage();
+}
 
 #
 # Handle reservations that are unused within the first six hours. The
@@ -109,12 +114,13 @@ my $query_result =
     DBQueryFatal("SELECT r.idx from future_reservations as r ".
 		 "where r.approved IS NOT NULL AND " .
 		 "      r.start <= NOW() AND ".
-		 "      r.override_unused=0 AND ".
-		 "      (TIMESTAMPDIFF(MINUTE, r.start, now()) > ".
-		 "       (6 * 60)) ".
-		 ($checkall ? "" :
-		  " AND (TIMESTAMPDIFF(MINUTE, r.start, now()) < ".
-		  "       (24 * 60))"));
+		 ($residx ? "r.idx='$residx'" :
+		  "      r.override_unused=0 AND ".
+		  "      (TIMESTAMPDIFF(MINUTE, r.start, now()) > ".
+		  "       (6 * 60)) ".
+		  ($checkall ? "" :
+		   " AND (TIMESTAMPDIFF(MINUTE, r.start, now()) < ".
+		   "       (24 * 60))")));
 
 #
 # Gather up all of the reservations for each project so we can generate
