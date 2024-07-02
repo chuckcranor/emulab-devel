@@ -471,9 +471,9 @@ sub GenABACCredential($$)
 #
 # Generate a project (or group) credential for a user. 
 #
-sub GenProjectCredential($$)
+sub GenProjectCredential($$;$)
 {
-    my ($group, $geniuser) = @_;
+    my ($group, $geniuser, $privs) = @_;
     my $pid    = $group->pid();
     my $gid    = $group->gid();
     my $urn    = $group->urn();
@@ -492,7 +492,8 @@ sub GenProjectCredential($$)
 	print STDERR "Could not create new certificate for $urn\n";
 	return undef;
     }
-    my ($credential, $speaksfor) = GenCredentials($certificate, $geniuser);
+    my ($credential, $speaksfor) =
+	GenCredentials($certificate, $geniuser, $privs);
     return undef
 	if (!defined($credential));
 
