@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -687,6 +687,7 @@ sub MapToLocalImage($$$$@)
     if ($credential) {
 	my $credname = $credential->WriteToFile();
 	$command .= " -C $credname ";
+	chmod(0755, $credname);	
     }
     $command .= GeniUtil::escapeshellarg($url);
     print STDERR "Running: '$command'\n";
@@ -797,13 +798,10 @@ sub MapToLocalDataset($$$$@)
 	    if ($image->global());
 
 	#
-	# If the image is not global and local, and no credential was
-	# provided, then do local checks to see if the user should be
-	# able to access the image. We have to keep in mind that the
-	# user might have been granted permission via a credential in
-	# a previous slice, but no longer has permission, so this
-	# check only makes sense when the image is local and the user
-	# is local.
+	# If the image is local and the user is local, then normal
+	# permissions apply. Otherwise, there has to be a credential
+	# since permission might have been revoked at the cluster
+	# where the image resides. 
 	#
 	if ($image->IsLocal() && !defined($credential)) {
 	    if ($geniuser->IsLocal() &&
@@ -842,16 +840,6 @@ sub MapToLocalDataset($$$$@)
     };
 
     #
-    # Use the project from the URN for lookup, to make sure we get
-    # locally resident datasets regardless of the current slice
-    # project.  If it is not local we will import and grant permission
-    # to the the argument pid (the slice experiment project).
-    # 
-    my $image = Image->Lookup($urn->dsetpid(), $urn->dsetname());
-    return &$setPerms($image)
-	if (defined($image));
-
-    #
     # So, look to see if the user is trying to use an image that is
     # present in the current project. This will happen if after an import
     # the user takes a snapshot, then uses it again on the local cluster.
@@ -862,11 +850,28 @@ sub MapToLocalDataset($$$$@)
     # We are looking for an image with the same name, but we verify with
     # the hash that is stored at the image server. 
     #
-    $image = Image->Lookup($pid,$urn->dsetname());
+    my $image = Image->Lookup($pid,$urn->dsetname());
     if (defined($image) && 
 	$image->hash() eq $blob->{'sha1hash'}) {
 	print STDERR "MapToLocalDataset: Found local image $image\n";
 	return &$setPerms($image);
+    }
+
+    #
+    # Use the project from the URN for lookup, to make sure we get
+    # locally resident datasets regardless of the current slice
+    # project.  If it is not local we will import and grant permission
+    # to the the argument pid (the slice experiment project).
+    # 
+    $image = Image->Lookup($urn->dsetpid(), $urn->dsetname());
+    if (defined($image) && 
+	$image->hash() eq $blob->{'sha1hash'}) {
+	print STDERR "MapToLocalDataset: Found local image $image\n";
+	$image = &$setPerms($image);
+	return $image
+	    if (GeniResponse::IsError($image));
+	
+	print STDERR "MapToLocalDataset: But no permission to use it\n";
     }
 
     #
@@ -893,6 +898,7 @@ sub MapToLocalDataset($$$$@)
 	if ($credential) {
 	    my $credname = $credential->WriteToFile();
 	    $command .= " -C $credname ";
+	    chmod(0755, $credname);	
 	}
 	$command .= $image->imageid();
 	print STDERR "Running '$command'\n";
@@ -934,6 +940,7 @@ sub MapToLocalDataset($$$$@)
     if ($credential) {
 	my $credname = $credential->WriteToFile();
 	$command .= " -C $credname ";
+	chmod(0755, $credname);	
     }
     $command .= GeniUtil::escapeshellarg($url);
     print STDERR "Running '$command'\n";

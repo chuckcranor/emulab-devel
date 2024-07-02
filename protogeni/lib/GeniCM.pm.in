@@ -8255,7 +8255,7 @@ sub GeniExperiment($;$)
     # then the experiment is created as that user, since geniuser is not
     # a member. That means we have to run as the local user.
     #
-    if ($project->IsLocal()) {
+    if ($project->IsLocal() || $PROTOGENI_LOCALUSER) {
 	$creator->FlipTo($group);
     }
     elsif (defined($group)) {
@@ -8336,21 +8336,9 @@ sub FlipToUser($$)
 	$group   = $experiment->GetGroup();
 	$creator = $experiment->GetCreator();
     }
-    elsif (ref($object) eq "OSImage" || ref($object) eq "Image") {
-	$image   = $object;
-	$project = $object->GetProject();
-	$group   = $object->GetGroup();
-	$creator = $object->GetCreator();	
-    }
-    elsif (ref($object) eq "Project") {
-	#
-	# See CreateDataset() in the GeniCMV2. This is really intended to
-	# make sure we do the right thing for a nonlocal project when
-	# PROTOGENI_LOCALUSER=1
-	#
-	$project = $object;
-	$group   = $object->GetProjectGroup();
-	$creator = $object->GetLeader();	
+    else {
+	print STDERR "Bad object in GeniCM::FlipToUser: $object\n";
+	return undef;
     }
     return undef
 	if (! (defined($project) && defined($group) && defined($creator)));
@@ -8364,10 +8352,12 @@ sub FlipToUser($$)
     $creator = GeniUser::LocalUser->Create($creator);
 
     #
-    # Nonlocal projects, operate as creator (with added gid).
-    # XXX watch for Legacy GeniSlices project.
+    # XXX watch for Legacy GeniSlices project, and slices created before
+    # the switch to using the real local user.  Operate as geniuser (with
+    # added gid).
     #
-    if ($project->IsNonLocal() || $project->pid() eq "GeniSlices") {
+    if ($project->pid() eq "GeniSlices" ||
+	($project->IsNonLocal() && $experiment->swapper() eq "geniuser")) {
 	$creator = User->Lookup("geniuser");
 	return undef
 	    if (!defined($creator));
@@ -8390,26 +8380,19 @@ sub FlipToUser($$)
     # If not, then like above we have to operate as the experiment
     # creator since the user has no privs in the project. Generally,
     # this will happen if a credential is delegated or if the
-    # creator binds a user to a slice. 
+    # creator binds a user to a slice.
     #
-    if (defined($experiment)) {
-	if (!$experiment->AccessCheck($user->emulab_user(),
-				      $Experiment::EXPT_ACCESS_MODIFY)) {
-	    $user = $creator;
-	}
-    }
-    elsif (defined($image)) {
-	if (!$image->AccessCheck($user->emulab_user(),
-				 TB_IMAGEID_MODIFYINFO())) {
-	    $user = $creator;
-	}
-    }
-    elsif (defined($project)) {
-	# Does it make sense to do anything here? 
+    # This is a rare case, left over from the geni rack days.
+    #
+    if (!$experiment->AccessCheck($user->emulab_user(),
+				  $Experiment::EXPT_ACCESS_MODIFY)) {
+	$user = $creator;
     }
   flip:
+    print STDERR "FlipToUser: $user, $group\n";
     return undef
 	if ($user->FlipTo($group));
+    system("/usr/bin/id");
     return $user;
 }
 

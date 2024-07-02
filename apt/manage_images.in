@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -493,18 +493,18 @@ sub DoListImages()
 }
 
 #
-# Delete image at the specified cluster,
+# Delete image at the specified cluster.
 #
 sub DoDeleteImage()
 {
     my $usage = sub {
 	print STDERR "Usage: manage_images delete [-a am_urn] ".
-	    "[-d profile -v versions] <image_urn>\n";
+	    "[-d profile -v versions] -p <pid> <image_urn>\n";
 	exit(-1);
     };
     my $optlist = "a:d:v:np:";
-    my $aggregate_urn = $MYURN;
     my $impotent      = 0;
+    my $aggregate_urn;
     my $profile;
     my $errmsg;
     my $project;
@@ -528,8 +528,20 @@ sub DoDeleteImage()
 	$impotent = 1;
     }
     &$usage()
-	if (!@ARGV);
+	if (!(@ARGV && defined($project)));
     my $image_urn = shift(@ARGV);
+    my $image_hrn = GeniHRN->new($image_urn);
+    if (!defined($image_hrn)) {
+	fatal("Not a proper image URN");
+    }
+    # Not sure why we have the -a argument.
+    if (!defined($aggregate_urn)) {
+	my $aggregate = APT_Aggregate->LookupByDomain($image_hrn->domain());
+	if (!defined($aggregate)) {
+	    fatal("Could not lookup aggregate for $image_urn");
+	}
+	$aggregate_urn = $aggregate->urn();
+    }
     
     if (defined($options{"d"})) {
 	$profile = APT_Profile->Lookup($options{"d"});
@@ -658,18 +670,10 @@ sub DoDeleteImage()
     my $args = {
 	"image_urn"   => $image_urn,
     };
-    my ($credential, $speaksfor);
-    
-    if ($target_user->IsAdmin() ||
-	(defined($project) &&
-	 ($project->IsLeader($target_user) ||
-	  $project->IsManager($target_user)))) {
-	($credential, $speaksfor) = APT_Geni::GenProjectCredential($project,
-								   $geniuser);
-    }
-    else {
-	($credential, $speaksfor) = APT_Geni::GenUserCredential($geniuser);
-    }
+    my ($credential, $speaksfor) =
+	APT_Geni::GenProjectCredential($project, $geniuser,
+				       ($target_user->IsAdmin() ?
+					["admin"] : undef));
     fatal("Could not generate credentials for user")
 	if (!defined($credential));
     my $credentials = [$credential->asString()];
