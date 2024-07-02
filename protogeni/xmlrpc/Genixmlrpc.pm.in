@@ -45,6 +45,7 @@ use Data::Dumper;
 
 my $TB	   	  = "@prefix@";
 my $EMULAB_CACERT = "$TB/etc/emulab.pem";
+my $EMULAB_CACERTS= "$TB/etc/genica.bundle";
 
 my $debug   = 1;
 
@@ -287,7 +288,7 @@ sub CallMethodInternal($$$$@)
 	if ($FBSD_MAJOR >= 10) {
 	    IO::Socket::SSL::set_defaults('SSL_key_file' => $context->keyfile(),
 				'SSL_cert_file' => $context->certfile(),
-				'SSL_ca_file' => $EMULAB_CACERT,
+				'SSL_ca_file' => $EMULAB_CACERTS,
 				'SSL_use_cert' => 1);
 	}
 	else {
