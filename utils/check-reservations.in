@@ -126,13 +126,14 @@ my $query_result =
 # Gather up all of the reservations for each project so we can generate
 # the proper timeline.
 #
-my %projRes = ();
+my %resInfo = ();
 
 while (my ($idx) = $query_result->fetchrow_array()) {
     my $res = Reservation->Lookup($idx);
     next
 	if (!defined($res));
     my $target = $res->Target();
+    my $type   = $res->type();
 
     my $project = Project->Lookup($res->pid());
     next
@@ -151,31 +152,28 @@ while (my ($idx) = $query_result->fetchrow_array()) {
 	next
 	    if (!$group);
     }
-    if (!exists($projRes{$target})) {
-	my @allres   = ResUtil::CollectReservations($group, $user, 0);
-	my @timeline = ResUtil::CreateTimeline($project, $group, $user, @allres);
-	
-	$projRes{$target} = {
-	    "project"  => $project,
-	    "group"    => $group,
-	    "user"     => $user,
-	    "reslist"  => [],
-	    "timeline" => \@timeline,
-	};
-    }
-    push(@{$projRes{$target}->{'reslist'}}, $res);
+    my @allres   = ResUtil::CollectReservations($group, $user, 0, $type);
+    my @timeline = ResUtil::CreateTimeline($project, $group, $user, @allres);
+    
+    $resInfo{"$idx"} = {
+	"project"  => $project,
+	"group"    => $group,
+	"user"     => $user,
+	"res"      => $res,
+	"timeline" => \@timeline,
+    };
 }
 
 #
 # Loop again to get utilization for each res.
 #
-foreach my $target (sort(keys(%projRes))) {
-    my $ref      = $projRes{$target};
+foreach my $idx (sort(keys(%resInfo))) {
+    my $ref      = $resInfo{"$idx"};
     my $project  = $ref->{'project'};
-    my @reslist  = @{$ref->{'reslist'}};
     my @timeline = @{$ref->{'timeline'}};
 
-    foreach my $res (@reslist) {
+    # Did not want to reindent all this code yet.
+    foreach my $res ($ref->{'res'}) {
 	ResUtil::ReservationUtilizationNew($res, @timeline);
 
 	my $stats = $res->data("utilization");

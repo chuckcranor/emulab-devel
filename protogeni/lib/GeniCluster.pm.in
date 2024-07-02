@@ -1426,6 +1426,7 @@ sub Reservations($)
 	    if (!$reservation);
 	my $pid = $reservation->pid();
 	my $gid = $reservation->gid();
+	my $type    = $reservation->type();
 	my $target  = $reservation->Target();
 	my $project = Project->Lookup($pid);
 	if (!defined($project)) {
@@ -1456,7 +1457,8 @@ sub Reservations($)
 	    my $resuser = ($reservation->shared_res() ==
 			   $Project::RESERVATIONS_PERUSER ? $user : undef);
 	    
-	    my @allres   = ResUtil::CollectReservations($group, $resuser, 0);
+	    my @allres   = ResUtil::CollectReservations($group,
+							$resuser, 0, $type);
 	    my @timeline = ();
 	    # This does not return unapproved reservations, but we still
 	    # need to process them below.
@@ -1502,7 +1504,15 @@ sub Reservations($)
 	    if (@timeline) {
 		#print STDERR Dumper(\@timeline);
 		ResUtil::ReservationUtilizationNew($reservation, @timeline);
-		$blob->{'utilization'} = $reservation->data("utilization");
+		my $utilization = $reservation->data("utilization");
+		$blob->{'utilization'} = $utilization;
+
+		if ($project->ResModeUser()) {
+		    $using = $utilization->{'userInuse'};
+		}
+		else {
+		    $using = $utilization->{'projectInuse'};
+		}
 
 		#
 		# Hmm, maybe this was not the best approach; using the pid
@@ -1532,15 +1542,6 @@ sub Reservations($)
 			"reserved"  => $ref->{'reserved'} || {}});
 		}
 		@timeline = @tmp;
-		if (@timeline) {
-		    my $ref = $timeline[-1];
-		    if ($project->ResModeUser()) {
-			$using = $ref->{'allocated'}->{"$uid"}->{$type};
-		    }
-		    else {
-			$using = $ref->{'allocated'}->{"$pid/$gid"}->{$type};
-		    }
-		}
 	    }
 	}
 	$blob->{"idx"}         = $idx;
