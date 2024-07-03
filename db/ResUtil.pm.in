@@ -54,9 +54,9 @@ sub DebugOn() { $debug = 2; };
 #
 # Collect the reservations we are interested in.
 #
-sub CollectReservations($$$)
+sub CollectReservations($$$;$)
 {
-    my ($group, $useronly, $allres) = @_;
+    my ($group, $useronly, $allres, $type) = @_;
     
     #
     # By default we look at all current reservations for a specific project.
@@ -72,6 +72,20 @@ sub CollectReservations($$$)
 	my @more = Reservation->HistoricalReservations($group,
 						       $useronly, undef);
 	@reservations = (@reservations, @more);
+    }
+    #
+    # Turns out that mixing in reservations for other types can create
+    # grief in the timeline code below. This is basically a patch, after
+    # adding per-user and per-group reservations, which introduced problems
+    # in the code below. Needs a rexamination. 
+    #
+    if (defined($type)) {
+	my @tmp = ();
+	foreach my $res (@reservations) {
+	    push(@tmp, $res)
+		if ($res->type() eq $type);
+	}
+	@reservations = @tmp;
     }
     if (!@reservations) {
 	return ();
@@ -636,6 +650,8 @@ sub ReservationUtilizationNew($@)
 	'resstart' => TBDateStringGMT($resstart),
 	'resend' => TBDateStringGMT($resend),
 	'now' => TBDateStringGMT(time()),
+	'projectInuse' => $pInuse,
+	'userInuse' => $uInuse,
     };
     $res->data('utilization', $stats);
     return 0;

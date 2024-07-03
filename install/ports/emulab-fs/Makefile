@@ -23,7 +23,7 @@ COMMENT=	"Meta-port for an Emulab fs node"
 # This prevents any ports from trying to configure interactively.
 #
 BATCH=		yes
-.MAKEFLAGS+=	-DBATCH
+.MAKEFLAGS+=	BATCH=yes
 
 # We need the BUILD_DEPENDS above to wind up in the dependency list
 RUN_DEPENDS:= ${BUILD_DEPENDS}
