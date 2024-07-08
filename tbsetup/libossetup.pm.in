@@ -2484,8 +2484,8 @@ sub LightUpNodes($@) {
     my $experiment = $parent->experiment();
 
     #
-    # We want to this before powering on the radio to make sure it has an
-    # antenna load before it tries to transmit anything (says Alex).
+    # We want to do this before powering on the radio to make sure it has
+    # an antenna load before it tries to transmit anything (says Alex).
     #
     foreach my $node (@nodelist) {
 	my $node_id = $node->node_id();
@@ -2662,6 +2662,17 @@ use English;
 use Data::Dumper;
 
 package libossetup_cl_ap;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
+package libossetup_bt_ru650;
 use base qw(libossetup_sdr);
 
 use libdb;
