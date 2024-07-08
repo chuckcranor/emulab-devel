@@ -24,16 +24,16 @@ try:
 
     slices = fablib.get_slices()
     for slice in slices:
-        if slice.get_name() == args.name:
+        if slice.get_name().lower() == args.name.lower():
             if args.asjson:
                 print(slice.toJson())
             else:
                 slice.show()
                 slice.list_networks()
                 pass
+            # Found a slice
+            sys.exit(0)
             pass
-        # Found a slice
-        sys.exit(0)
         pass
     # Slice not found.
     sys.exit(1)
