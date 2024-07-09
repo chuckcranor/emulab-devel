@@ -55,16 +55,25 @@ RUN_DEPENDS+=	\
 	openvpn:${PORTSDIR}/security/openvpn
 
 # Still run mysqld on mothership ops (errorlog)
+.if (${EMULAB_PORTVERSION} == "9.3")
+LIB_DEPENDS=	\
+	libmariadb.so:${PORTSDIR}/databases/mariadb${MYSQL_VER}-client
+RUN_DEPENDS+=	\
+	${LOCALBASE}/libexec/mariadbd:${PORTSDIR}/databases/mariadb${MYSQL_VER}-server \
+	p5-DBD-MariaDB>0:${PORTSDIR}/databases/p5-DBD-MariaDB
+.else
 LIB_DEPENDS=	\
 	libmysqlclient.so:${PORTSDIR}/databases/mysql${MYSQL_VER}-client
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server \
 	p5-DBD-mysql>=4.025:${PORTSDIR}/databases/p5-DBD-mysql
+.endif
 
 # XXX compatibility
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libdata/ldconfig/compat10x-amd64:${PORTSDIR}/misc/compat10x \
 	${LOCALBASE}/libdata/ldconfig/compat11x-amd64:${PORTSDIR}/misc/compat11x \
+	${LOCALBASE}/libdata/ldconfig/compat12x-amd64:${PORTSDIR}/misc/compat12x \
 	/compat/linux/etc/os-release:${PORTSDIR}/emulators/linux_base-c7
 
 USES=		perl5 python:$(PY_VER) php

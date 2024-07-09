@@ -8,7 +8,10 @@ I am currently using 2024Q2.
 
 ################ TL;DR ################
 
-This is a condensed version of the steps below.
+This is a condensed version of the steps below. It is also the most up-to-date
+version as I tend not to update anything below the TL;DR. SO TREAT THIS SECTION
+AS THE DEFINITIVE TEXT! I leave the later stuff just as it might still contain
+some useful tidbit that I should extract at some point.
 
 0. Updating the Emulab package repo (13.3 specific).
 
@@ -162,7 +165,14 @@ lang_php81-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD ICONV JSON \
        cd /usr/ports/misc/emulab-ipmitool-old
        make BATCH=1 clean all install ; make BATCH=1 package clean
 
-   o. Save packages and update tarball and repo. On boss:
+   o. Make the collection a repo. It is best if you run `pkg repo` on the
+      node where you made the packages rather than on boss since the repo
+      metadata format has changed over time.
+
+       cd $PACKAGES/All
+       pkg repo .
+
+   p. Save packages and update tarball and repo. On boss:
 
        set www=/usr/testbed/www
        cd /share/freebsd/13.3
@@ -193,7 +203,7 @@ lang_php81-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD ICONV JSON \
        sudo tar --exclude=ports/.svn --exclude=ports/.git -czf $tball ports
        sudo cp $tball $www/downloads/
 
-   p. Assuming you have put out the new repo in Emulab-devel above, you
+   q. Assuming you have put out the new repo in Emulab-devel above, you
       can test it by creating a config file on your test node. Put this in
       /etc/pkg/Emulab-devel.conf:
       
@@ -280,7 +290,7 @@ Emulab-devel: {
         PC
 	PL
 
-   q. Random useful commands to run on the package files.
+   r. Random useful commands to run on the package files.
 
       To see what was installed (or not) by the Emulab repository:
 
@@ -304,6 +314,7 @@ Emulab-devel: {
         pkg info -F foo.pkg -r
 
 ################ End of TL;DR ################
+############## Everything after this is probably out of date! ##############
 
 0. Align your ducks.
 
