@@ -1,0 +1,30 @@
+<table id="utilization-table" class='tablesorter'>
+  <thead>
+    <th>Node ID</th>
+    <th>Type</th>
+    <th class="sorter-sugar" data-filter="false">Inception</th>
+    <th data-filter="false">Allocated (hours)</th>
+    <th data-filter="false">Free (hours)</th>
+    <th data-filter="false">Down (hours)</th>
+    <th data-filter="false">Allocated (%)</th>
+    <th data-filter="false">Free (%)</th>
+    <th data-filter="false">Down (%)</th>
+  </thead>
+  <tbody>
+    <% _.each(rows, function (info) { %>
+      <tr>
+	<td><a href="show-node.php?node_id=<%- info.node_id %>"
+	       target="_blank"><%- info.node_id %></a> </td>
+	<td><a href="show-nodetype.php?type=<%- info.type %>"
+	       target="_blank"><%- info.type %></a> </td>
+	<td class="format-date"><%- info.inception %></td>
+	<td><%- info.allocated %></td>
+	<td><%- info.free %></td>
+	<td><%- info.down %></td>
+	<td><%- info.percents.allocated %></td>
+	<td><%- info.percents.free %></td>
+	<td><%- info.percents.down %></td>
+      </tr>
+    <% }); %>
+  </tbody>
+</table>
