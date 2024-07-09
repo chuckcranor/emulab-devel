@@ -26,6 +26,9 @@ sub Install($$$)
 	if ($SCRATCHDIR) {
 	    push(@TESTBED_DIRS, [$SCRATCHROOT, "0755"]);
 	}
+	if ($ZFS_NONFS_DIR) {
+	    push(@TESTBED_DIRS, [$ZFS_NONFS_DIR, "0755"]);
+	}
     }
 
     Phase "etcdir", "Creating $PREFIX/etc", sub {
