@@ -13,3 +13,5 @@ TBSTATEDEMAIL=mike@flux.utah.edu
 TBTESTSUITEEMAIL=mike@flux.utah.edu
 WWW=www.emulab.net/dev/mike
 THISHOMEBASE=Mike.Emulab.Net
+
+PORTAL_ENABLE=1
