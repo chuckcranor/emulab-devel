@@ -72,6 +72,7 @@ my $BOSSNODE	= "@BOSSNODE@";
 my $WINSUPPORT  = @WINSUPPORT@;
 my $WITHZFS     = @WITHZFS@;
 my $ZFS_NOEXPORT= @ZFS_NOEXPORT@;
+my $ZFS_NONFS_DIR  = "@ZFS_NONFS_DIR@";
 my $WIKISUPPORT = @WIKISUPPORT@;
 my $TRACSUPPORT = @TRACSUPPORT@;
 my $BUGDBSUPPORT= @BUGDBSUPPORT@;
@@ -1160,6 +1161,26 @@ sub DeactivateUser()
 	    fatal("Could not deactivate $user on $CONTROL.");
 	}
     }
+
+    #
+    # For some ZFS configurations, we move the user's directory from a
+    # filesystem to a plain subdirectory to reduce the total number of
+    # ZFS filesystems and filesystem exports.
+    #
+    # We can do that safely now that the user has been disabled from login.
+    #
+    if ($ZFS_NONFS_DIR) {
+	my $lu = $isnonlocal ? 0 : 1;
+	my $su = ($usr_admin || $target_user->foreign_admin() ||
+		  $target_users->stud() ? 1 : 0);
+	my $arg = "$user,$status,$lu,$su";
+
+	if (system("echo $arg | $SSH -host $CONTROL '$MOVEDIR -D - $user'")) {
+	    print STDERR "WARNING: ".
+		"Could not move $user homedir to inactive status\n";
+	}
+    }
+
     $UID = $SAVEUID;
     return 0;
 }
@@ -1191,6 +1212,23 @@ sub ReactivateUser()
 	}
     }
     $UID = 0;
+
+    #
+    # If we have moved the user's directory from a filesystem to a plain
+    # subdirectory, move it back now before we change their password file
+    # entries on ops and boss.
+    #
+    if ($ZFS_NONFS_DIR) {
+	my $lu = $isnonlocal ? 0 : 1;
+	my $su = ($usr_admin || $target_user->foreign_admin() ||
+		  $target_users->stud() ? 1 : 0);
+
+	my $arg = "$user,$status,$lu,$su";
+	if (system("echo $arg | $SSH -host $CONTROL '$MOVEDIR -D - $user'")) {
+	    fatal("Could not restore $user homedir.");
+	}
+    }
+
     if ($CONTROL ne $BOSSNODE) {
 	print "Reactivating user $user ($user_number) on $CONTROL\n";
 

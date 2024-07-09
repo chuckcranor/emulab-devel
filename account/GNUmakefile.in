@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2011, 2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,10 +31,10 @@ include $(OBJDIR)/Makeconf
 
 SBIN_STUFF	= tbacct addsfskey addpubkey mkusercert quotamail genpubkeys \
 		  newuser newproj mksyscert spewcert dumpuser dumpproject \
-		  manageremote
+		  manageremote movehomedir
 LIBEXEC_STUFF	= webtbacct webaddsfskey webaddpubkey webmkusercert \
 		  webnewuser webnewproj webspewcert webmanageremote
-CTRLSBIN_STUFF  = adduserhook accountsetup
+CTRLSBIN_STUFF  = adduserhook accountsetup movehomedir
 
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = 

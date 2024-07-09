@@ -1,0 +1,442 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2021 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+
+#
+# Ensure that all user homedirs are properly located, either as a distinct
+# filesystem for active (status!=inactive), local users (nonlocal_id==NULL)
+# or as a subdirectory of /users/inactive otherwise. Note that this only has
+# meaning for ZFS-based user directories and when the ZFS_NONFS_DIR variable
+# is set non-empty in the defs file.
+#
+# When run on an ops node, you must provide a DBinfo file (-D).
+# Optionally (for debugging since zfs list with lots of filesystems is
+# slooooow) a cached list of homedir filesystems (-C) can be provided.
+#
+# When run on a boss node, you must provide a homedir cache file (-C)
+# and it MUST run in impotent (-n) or verify (-V) mode since boss cannot
+# manipulate the remote filesystems and not all filesystems are exported
+# to the boss node. This does not apply if boss is also the fileserver.
+#
+# To create a DBinfo cache file (-D), perform this query in tbdb on boss:
+#
+#   select uid,status,ISNULL(nonlocal_id) as local, \
+#     admin+foreign_admin+stud as special from users order by uid_idx \
+#     into outfile '/tmp/dbinfo' \
+#     FIELDS TERMINATED BY ',' ESCAPED by '' LINES TERMINATED BY '\n';
+#
+# To create a zfs filesystem cache file (-C) run this command on ops:
+#
+#   zfs list -Hro name z/users > /tmp/fsinfo
+#
+# where "z/users" should be replaced by the root of your ZFS /users FS.
+#
+sub usage()
+{
+    print("Usage: movehomedir -a [-dnV] [-C cachefile] [-D DBinfo]\n");
+    print "  or\n";
+    print("Usage: movehomedir [-dnV] [-C cachefile] [-D DBinfo] user ...\n");
+    print("  -a         Operatte on all users in the DB\n");
+    print("  -d         Enable debugging\n");
+    print("  -n         Impotent mode; report only, do not move anything\n");
+    print("  -V         Verify mode; look for and report inconsistencies\n");
+    print("  -C cfile   Specify a file with a list of ZFS filesystems\n");
+    print("             (rather than find them ourselves)\n");
+    print("  -D DBfile  Specify a file ('-' for STDIN) with a dump of DB user info\n");
+    print("             (rather than query DB ourselves)\n");
+    exit(-1);
+}
+my $optlist    = "adnVC:D:";
+my $allusers   = 0;
+my $debug      = 0;
+my $doit       = 1;
+my $cache      = "";
+my $DBinfo     = "";
+my $verify     = 0;
+
+#
+# Configure variables
+#
+my $TB		   = "@prefix@";
+my $TBOPS          = "@TBOPSEMAIL@";
+my $OURDOMAIN      = "@OURDOMAIN@";
+my $WITHZFS	   = @WITHZFS@;
+my $ZFS_ROOT       = "@ZFS_ROOT@";
+my $ZFS_NONFS_DIR  = "@ZFS_NONFS_DIR@";
+my $ACTIVE_ROOT    = "@FSDIR_USERS@";
+my $INACTIVE_ROOT  = "@FSDIR_USERS@/$ZFS_NONFS_DIR";
+#my $INACTIVE_ROOT  = "/tmp/inactive";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+#use libdb;
+use libtestbed;
+
+my %users = ();
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"a"})) {
+    $allusers = 1;
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $doit = 0;
+}
+if (defined($options{"V"})) {
+    $verify = 1;
+    $doit = 0;
+    # XXX allow verify when defs has not yet been modified
+    $ZFS_NONFS_DIR = "foo" if ($ZFS_NONFS_DIR eq "");
+    $INACTIVE_ROOT .= "foo";
+}
+if (defined($options{"C"})) {
+    $cache = $options{"C"};
+    if (! -r "$cache") {
+	print STDERR "Filesystem cache file '$cache' does not exist.\n";
+	exit(1);
+    }
+}
+if (defined($options{"D"})) {
+    $DBinfo = $options{"D"};
+    # Allow the DBinfo file to come from stdin so it can be fed from boss
+    if ($DBinfo ne "-") {
+	if (! -r "$DBinfo") {
+	    print STDERR "DB info cache file '$DBinfo' does not exist.\n";
+	    exit(1);
+	}
+    }
+}
+usage()
+    if (@ARGV && $allusers || !@ARGV && !$allusers);
+
+my %douser = ();
+foreach my $u (@ARGV) {
+    if ($u =~ /^([a-zA-Z][-\w\.]+)$/) {
+	$douser{$1} = 1;
+    } else {
+	print STDERR "Invalid chars in user name.\n";
+	exit(1);
+    }
+}
+
+if (!$WITHZFS || !$ZFS_NONFS_DIR) {
+    print STDERR "ZFS not enabled, nothing to do.\n";
+    exit(0);
+}
+if (! -d $ACTIVE_ROOT || (! -d $INACTIVE_ROOT && !$verify)) {
+    print STDERR "'$ACTIVE_ROOT' and '$INACTIVE_ROOT' must both exist.\n";
+    exit(1);
+}
+if ($UID && $doit) {
+    print STDERR "Must be root to do anything.\n";
+    exit(1);
+}
+
+# Find current non-filesystems
+my @list = ();
+if (!$verify || -d $INACTIVE_ROOT) {
+    @list = `/bin/ls $INACTIVE_ROOT/`;
+    if ($?) {
+	print STDERR "Could not get list of '$INACTIVE_ROOT' files.\n";
+	exit(1);
+    }
+}
+chomp @list;
+foreach my $f (@list) {
+    if (-d "$f" && $f =~ /^$INACTIVE_ROOT\/([a-zA-Z][-\w\.]+)$/) {
+	if ($allusers || $douser{$1}) {
+	    $users{$1} = 0;
+	    print STDERR "Found user $1 directory homedir.\n"
+		if ($debug && !$allusers);
+	}
+    }
+}
+
+# Find current filesystems
+if ($cache) {
+    if (open(FD, "<$cache")) {
+	@list = ();
+	while (<FD>) {
+	    chomp;
+	    # ignore root of FS
+	    next if ($_ eq "$ZFS_ROOT/users");
+
+	    if (/^($ZFS_ROOT\/users\/[a-zA-Z][-\w\.]+)$/) {
+		push @list, $1;
+	    } else {
+		print STDERR "bogus filesystem '$_' in cache file, aborting.\n";
+		exit(1);
+	    }
+	}
+	close(FD);
+    }
+} else {
+    print STDERR "Fetching /users filesystems, could take minutes...\n";
+    @list = `/sbin/zfs list -r -d 1 -Ho name $ZFS_ROOT/users`;
+    if ($?) {
+	print STDERR "Could not get filesystem list!\n";
+	exit(1);
+    }
+    chomp @list;
+}
+foreach my $f (@list) {
+    if ($f =~ /^$ZFS_ROOT\/users\/([a-zA-Z][-\w\.]+)$/) {
+	my $uid = $1;
+	if ($allusers || $douser{$uid}) {
+	    $users{$uid} = 1;
+	    print STDERR "Found user $uid filesystem homedir.\n"
+		if ($debug && !$allusers);
+	}
+    }
+}
+
+if (scalar(keys %users) == 0) {
+    print STDERR "No active or inactive users found?!\n";
+    exit(0);
+}
+
+print STDERR "Got ", scalar(keys %users) . " users homedirs\n" if ($debug);
+
+my %DBusers = ();
+if ($DBinfo) {
+    if ($DBinfo eq "-") {
+	*FD = *STDIN;
+    } elsif (!open(FD, "<$DBinfo")) {
+	print STDERR "*** Could not open DB cache file '$DBinfo'\n";
+	exit(1);
+    }
+    while (<FD>) {
+	chomp;
+	my ($uid,$status,$local,$special) = split(',');
+	if ($uid =~ /^[a-zA-Z][-\w\.]+$/ &&
+	    $status =~ /^(newuser|unapproved|unverified|active|frozen|archived|nonlocal|inactive|other)$/ &&
+	    defined($local) && defined($special)) {
+	    # Only users we care about
+	    if (!$allusers && !$douser{$uid}) {
+		next;
+	    }
+
+	    print STDERR "Found user $uid in DB, status=$status, local=$local.\n"
+		if ($debug && !$allusers);
+
+	    #
+	    # Archived users have homedirs, but they have been renamed.
+	    # XXX we could match them up with their homdir, but we don't
+	    # really need to since all of the foo-Dnnnnnnnnnn homedirs
+	    # are moved to the inactive space.
+	    #
+	    if ($status eq "archived") {
+		next;
+	    }
+	    if (!exists($DBusers{$uid})) {
+		$DBusers{$uid} = [ $status, $local, $special ];
+	    } else {
+		print STDERR "*** $uid: non-unique name in DB!\n";
+	    }
+	} else {
+	    print STDERR "bogus DB info '$_' in cache file, aborting.\n";
+	    exit(1);
+	}
+    }
+    close(FD)
+	if ($DBinfo ne "-");
+} else {
+    require libdb;
+    my $query_result =
+	DBQueryFatal("select uid,status,ISNULL(nonlocal_id) as local,".
+		     "admin+foreign_admin+stud as special from users ".
+		     "order by uid_idx");
+    while (my ($uid,$status,$local,$special) = $query_result->fetchrow_array()) {
+	# Only users we care about
+	if (!$allusers && !$douser{$uid}) {
+	    next;
+	}
+
+	print STDERR "Found user $uid in DB, status=$status, local=$local.\n"
+	    if ($debug && !$allusers);
+
+	# Ignore archived users
+	if ($status eq "archived") {
+	    next;
+	}
+	if (!exists($DBusers{$uid})) {
+	    $DBusers{$uid} = [ $status, $local, $special ];
+	} else {
+	    print STDERR "*** $uid: non-unique name in DB!\n";
+	}
+    }
+}
+
+if (scalar(keys %DBusers) == 0) {
+    print STDERR "No DB users found?!\n";
+    exit(0);
+}
+
+print STDERR "Got ", scalar(keys %DBusers) . " DB users\n" if ($debug);
+
+foreach my $uid (sort keys %DBusers) {
+    my $status = $DBusers{$uid}->[0];
+    my $local = $DBusers{$uid}->[1];
+    my $special = $DBusers{$uid}->[2];
+
+    my $luser = 0;
+    if ($special || ($status ne "inactive" && $local)) {
+	$luser = 1;
+    }
+
+    # unapproved users don't have homedir
+    if ($status =~ /^(archived|newuser|unapproved)$/) {
+	if (exists($users{$uid})) {
+	    print STDERR "*** $uid: $1 user has " .
+		($users{$uid} == 1 ? "FS" : "non-FS") . " homedir!\n";
+	}
+	$users{$uid} = -2;
+	next;
+    }
+
+    if (!exists($users{$uid})) {
+	# XXX see if homedir is in /users but not a filesystem
+	if (-d "$ACTIVE_ROOT/$uid") {
+	    if ($doit) {
+		;
+	    } elsif ($verify) {
+		if ($luser) {
+		    print "$uid: directory homedir ($ACTIVE_ROOT/$uid) should be a FS ($ZFS_ROOT/$uid)\n";
+		} else {
+		    print "$uid: ZFS homedir ($ACTIVE_ROOT/$uid) should be a directory ($INACTIVE_ROOT/$uid)\n";
+		}
+	    } else {
+		if ($luser) {
+		    print "Would move $ACTIVE_ROOT/$uid content to ZFS $ZFS_ROOT/$uid\n";
+		} else {
+		    print "Would move $ACTIVE_ROOT/$uid content to $INACTIVE_ROOT/$uid\n";
+		}
+	    }
+	    $users{$uid} = -2;
+	} else {
+	    $users{$uid} = -1;
+	}
+	next;
+    }
+
+    my $fshdir = $users{$uid};
+
+    # While we are here, check for zfs filesystems that are/are not mounted.
+    # For active users it should be mounted, for inactive not.
+    if ($fshdir) {
+	my $mp = `/sbin/zfs get -Ho value mountpoint $ZFS_ROOT/users/$uid`;
+	if ($?) {
+	    print STDERR "$uid: zfs get mountpoint failed!\n";
+	    exit(1);
+	}
+	chomp $mp;
+	if ($status eq "active" && $mp eq "none") {
+	    print STDERR "*** $uid: active user ZFS homedir not mounted!\n";
+	    # XXX we need to mount it.
+	} elsif ($status eq "inactive" && $mp ne "none") {
+	    print STDERR "*** $uid: inactive user ZFS homedir mounted ($mp)!\n";
+	}
+    }
+
+    # user is active and local, make sure they have an FS homedir
+    if ($luser && !$fshdir) {
+	print "$uid: local user with non-local homdir, moving ...\n" if ($debug);
+	if ($doit) {
+	    ;
+	} elsif ($verify) {
+	    print "$uid: directory homedir ($INACTIVE_ROOT/$uid) should be a ZFS ($ZFS_ROOT/$uid)\n";
+	} else {
+	    print "Would move $INACTIVE_ROOT/$uid content to ZFS $ZFS_ROOT/$uid\n";
+	}
+	$users{$uid} = -2;
+    }
+    # user is inactive or non-local, make sure homedir is not an FS
+    elsif (!$luser && $fshdir) {
+	if ($doit) {
+	    # XXX need to mount homedir
+	    ;
+	} elsif ($verify) {
+	    print "$uid: ZFS homedir ($ZFS_ROOT/$uid) should be a directory ($INACTIVE_ROOT/$uid)\n";
+	} else {
+	    print "Would move ZFS $ZFS_ROOT/$uid contents to $INACTIVE_ROOT/$uid\n";
+	}
+	$users{$uid} = -2;
+    }
+    # all is well
+    else {
+	$users{$uid} = -2;
+    }
+}
+
+# check for deleted user orphan FS homedirs 
+foreach my $uid (sort keys %users) {
+    if ($uid =~ /-D\d{10}$/ && $users{$uid} == 1) {
+	if ($doit) {
+	    ;
+	} elsif ($verify) {
+	    print "$uid: archived homedir ZFS ($ZFS_ROOT/$uid) should be a directory ($INACTIVE_ROOT/$uid)\n";
+	} else {
+	    print "Would move deleted user ZFS $ZFS_ROOT/$uid contents to $INACTIVE_ROOT/$uid\n";
+	}
+	$users{$uid} = -2;
+    }
+}
+
+# final sanity check
+foreach my $uid (sort keys %users) {
+    if ($users{$uid} == -1) {
+	print STDERR "*** $uid: in DB, but no homedir found!\n";
+    } elsif ($users{$uid} == 0) {
+	print STDERR "*** $uid: non-ZFS homedir, but not in DB!\n";
+    } elsif ($users{$uid} == 1) {
+	print STDERR "*** $uid: ZFS homedir, but not in DB!\n";
+    }
+}
+
+exit(0);

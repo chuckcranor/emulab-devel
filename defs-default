@@ -207,6 +207,10 @@ ZFS_QUOTA_USER_X="10.0"
 ZFS_QUOTA_PROJECT_X="2.0"
 ZFS_QUOTA_GROUP_X="2.0"
 
+# Homedirs for non-local and inactive users will be regular subdirs of this
+# directory rather than invididual filesystems if this is set non-null.
+ZFS_NONFS_DIR="nonfs"
+
 # XXX autofs still has some problems, stick with AMD for now
 # WITHZFS only: use AMD instead of autofs for /proj, /users mounts on boss
 WITHAMD=1

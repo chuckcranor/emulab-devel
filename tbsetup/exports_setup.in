@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,48 +28,22 @@ use Sys::Syslog;
 #
 # Create an /etc/exports.tail file based on current reserved table and project
 # members. Fire that tail over to the fileserver where it is concatenated with
-# the head file to become the new /etc/exports.
+# the head file to become the new /etc/exports
 #
-# This script will do the right thing, so it does not matter who calls it. 
-# But what exactly is "the right thing"?
-#
-# First, projects, experiments, and nodes all have a notion of what should
-# be NFS exported to them. The choices are (names are historical):
-# "emulabdefault" (all appropriate /users, /proj, and /groups filesystems),
-# "genidefault" (just /proj and /groups filesystem) and
-# "none" (no filesystems). Note that /share is universally exported via the
-# exports.head file on the fs node and falls outside of this logic. /scratch
-# filesystems (mirroring the /proj hierarchy) are an old Emulab thing, so
-# they will be exported only in the "emulabdefault" case.
-#
-# The general idea for precedence between (highest to lowest)
-# project -> experiment -> node is that lower levels should not be able
-# to acquire "more" mounts than what is allowed by the higher levels.
-# Since we are looking at things from the lowest level, the node, our
-# algorithm looks like: if one of project/experiment/node has "none", then
-# we export nothing. Else, if one of them has "genidefault", then we export
-# just the project (and subgroup if any). Otherwise, export everything.
-#
-# This logic applies only to exporting to nodes. For exporting to boss,
-# we "in theory" export all user/project/group directories. However, in
-# practice, in a ZFS world, every one of these directories is a filesystem
-# that would have to be exported individually. To reduce this number, we
-# perform a number of optimizations to not export "inactive" filesystems
-# where possible.
+# This script always does the right thing, so it does not matter who calls it. 
 #
 sub usage()
 {
     print(STDERR
-	  "Usage: exports_setup [-Bfindw]\n".
+	  "Usage: exports_setup [-B] [-i] [-n] [-d] [-w]\n".
 	  "switches and arguments:\n".
-	  "-B     just create the list of valid mounts for boss (does not affect the fs exports file or mountd)\n".
-	  "-f     force a HUP of mountd even if the exports are unchanged\n".
-	  "-i     incremental (differential) update (if mounted supports it)\n".
-	  "-w     wait mode; wait for mountd to finish before exiting\n".
-	  "-n     impotent; dump exports to stdout\n");
+	  "-B         - just create the list of valid mounts for boss (does not affect the fs exports file or mountd)\n".
+	  "-i         - incremental (differential) update (if mounted supports it)\n".
+	  "-w         - wait mode; wait for mountd to finish before exiting\n".
+	  "-n         - impotent; dump exports to stdout\n");
     exit(-1);
 }
-my $optlist    = "Bfindw";
+my $optlist    = "Bindw";
 my $bosslistonly = 0;
 my $impotent   = 0;
 my $debug      = 0;
@@ -104,6 +78,7 @@ my $LINUX_FSNODE= @LINUX_FSNODE@;
 my $NFSMAPTOUSER= "@NFSMAPTOUSER@";
 my $WITHZFS     = @WITHZFS@;
 my $ZFS_NOEXPORT= @ZFS_NOEXPORT@;
+my $ZFS_NONFS_DIR="@ZFS_NONFS_DIR@";
 my $OPSVM_ENABLE= @OPSVM_ENABLE@;
 my $WITHAMD     = @WITHAMD@;
 my $INC_MOUNTD  = @INCREMENTAL_MOUNTD@;
@@ -123,13 +98,12 @@ if ($TOSTDOUT) {
 
 # ZFS_NOEXPORT requires WITHZFS
 if ($ZFS_NOEXPORT && !$WITHZFS) {
-    $ZFS_NOEXPORT = 0;
+    fatal("ZFS_NOEXPORT requires WITHZFS, reconfigure\n");
 }
 
 # Note no -n option. We redirect stdin from the new exports file below.
 my $SSH		= "$TB/bin/sshtb -l root -host $FSNODE";
 my $PROG	= "$TB/sbin/exports_setup.proxy";
-my $PROGARGS    = "";
 my $exportstail = "/var/tmp/exports.tail";
 my $smbconftail = "/var/tmp/smbconf.tail";
 my $bossmountfile = "$TB/etc/validmounts.txt";
@@ -148,6 +122,9 @@ my $EXPORT_PAT	= q(on ([\S]+)\s\\\(.*NFS exported.*\\\));
 if ($ZFS_NOEXPORT || ($OPSVM_ENABLE && $WITHZFS)) {
     $EXPORT_PAT = q(on ([\S]+)\s\\\([uz]fs,.*\\\));
 }
+
+# Cache of dir to FS mappings already found
+my %fsofcache;
 
 #
 # Testbed doesn't support changing exports file
@@ -212,9 +189,6 @@ if (defined($options{"n"})) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
-if (defined($options{"f"})) {
-    $PROGARGS = "-f";
-}
 if (defined($options{"w"})) {
     $waittildone = 1;
 }
@@ -278,31 +252,53 @@ if (!$TESTMODE) {
 }
 
 #
-# Figure out the boss exports.
+# First gather up all the nodes that are reserved and the required info.
+# Order by pid,gid,admin first so that they're all grouped together and we
+# avoid extra db queries (see lastpid/lastgid/lastadmin).
 #
-# Conceptually, all user/project/group directories are exported to boss.
-# However in ZFS world, every one of these directories is a filesystem
-# that would have to be exported individually. On the Emulab mothership,
-# this would literally be 10,000+ exports. While you can set it up such
-# that ZFS automatically exports the filesystems via /etc/zfs/exports,
-# this is strenuously discouraged for installs with more than 100 or so
-# filesystems as it is enormously inefficient. For large installs,
-# where ZFS_NOEXPORT is defined, we reduce the number of exports with
-# a few optimizations.
+$nodes_result =
+    DBQueryFatal("select r.node_id,r.pid,r.eid,e.gid,".
+		 "       e.nonfsmounts as enonfs,n.nonfsmounts as nnonfs,".
+		 "       i.IP,u.admin,r.sharing_mode,r.erole,nt.isvirtnode, ".
+		 "       e.nfsmounts as e_nfsmounts, ".
+		 "       n.nfsmounts as n_nfsmounts, ".
+		 "       va.attrvalue as routable_ip, ".
+		 "       n.op_mode,n.next_op_mode ".
+		 "from reserved as r ".
+		 "left join experiments as e on r.pid=e.pid and r.eid=e.eid ".
+		 "left join nodes as n on r.node_id=n.node_id ".
+		 "left join node_types as nt on nt.type=n.type ".
+		 "left join interfaces as i on r.node_id=i.node_id ".
+		 "left join users as u on e.swapper_idx=u.uid_idx ".
+		 "left join virt_node_attributes as va on ".
+		 "  va.pid=r.pid and va.eid=r.eid and va.vname=r.vname ".
+		 "    and va.attrkey='routable_control_ip' ".
+		 " where i.IP!='NULL' and ".
+		 "       i.role='" . TBDB_IFACEROLE_CONTROL() . "' ".
+		 "       and (n.role='testnode' or n.role='virtnode')".
+		 "       and nt.isremotenode=0 ".
+		 "order by r.pid,e.gid,r.eid,u.admin,n.priority");
+
+#
+# ZFS, without automatic exports of all /users; need to explicitly export
+# user directories to boss. First get all web active and admins, and below
+# we will add all other user exports to the list.
+#
+# Note that with ZFS_NONFS_DIR, all non-local users are under a single
+# filesystem which is exported by default, so we do not include those users
+# in our list.
 #
 my $bossexports = ();
+
 if ($ZFS_NOEXPORT) {
-    # "recent" expressed in seconds; currently 7 days.
+    #
+    # Find all web active users within last seven days, plus all admins.
+    #
     my $limit = 3600 * 24 * 7;
 
-    #
-    # Export /users directories for users who:
-    #   - are admins
-    #   - have been active on the web or started experiments recently
-    # Also export the /proj and /group directories for those users.
-    #
     my $active_result =
-	DBQueryFatal("select distinct u.uid,m.pid from user_stats as s ".
+	DBQueryFatal("select distinct u.uid,ISNULL(u.nonlocal_id) as local,".
+		     "m.pid from user_stats as s ".
 		     "left join users as u on u.uid_idx=s.uid_idx ".
 		     "left join group_membership as m on ".
 		     "     m.uid_idx=u.uid_idx and m.pid_idx=m.gid_idx ".
@@ -314,8 +310,9 @@ if ($ZFS_NOEXPORT) {
 		     "       ((UNIX_TIMESTAMP(now()) - ".
 		     "        UNIX_TIMESTAMP(s.weblogin_last)) <= $limit) or ".
 		     "       admin=1)");
-    while (my ($uid,$pid) = $active_result->fetchrow_array()) {
-	$bossexports{"$usersdir/$uid"} = "$usersdir/$uid";
+    while (my ($uid,$islocal,$pid) = $active_result->fetchrow_array()) {
+	$bossexports{"$usersdir/$uid"} = "$usersdir/$uid"
+	    if (!$ZFS_NONFS_DIR || $islocal);
 	#
 	# XXX don't export a proj/group dir just because geniuser is in it.
 	# geniuser is in EVERY project.
@@ -325,7 +322,6 @@ if ($ZFS_NOEXPORT) {
 	    $bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
 	}
     }
-
     #
     # Similar to above, but look for active projects instead of users.
     # We often have to access project directories when there is
@@ -347,80 +343,41 @@ if ($ZFS_NOEXPORT) {
     # project last_activity field yet. So if this is the first experiment
     # in a while for that project, it would be missed. However new
     # experiments will be in the experiments table by now, so add projects
-    # for all new and current experiments just to be sure. We are careful
-    # to watchout for swapped out or in-transition classic experiments,
-    # no need to add those!
+    # for all current experiments just to be sure. However, we have to
+    # watchout for swapped out classic experiments, no need to add those!
     #
     $active_result =
 	DBQueryFatal("select distinct pid from experiments ".
-		     "where state in ('new','active') group by pid");
+		     "where not state in ('swapped','modify_parse','ended') ".
+		     "group by pid");
     while (my ($pid) = $active_result->fetchrow_array()) {
-	$bossexports{"$projdir/$pid"}  = "$projdir/$pid";
-	$bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
+	if (!exists($bossexports{"$projdir/$pid"})) {
+	    logit("Adding project $pid that would have been missed");
+	    $bossexports{"$projdir/$pid"}  = "$projdir/$pid";
+	    $bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
+	}
     }
 
     #
-    # This is to catch nonlocal users who are not members of a project yet. 
+    # Well, this is to catch nonlocal users who are not members of a
+    # project yet. Again, if ZFS_NONFS_DIR is set, we do not need to export
+    # these individually.
     #
-    $active_result =
-	DBQueryFatal("select u.uid from user_stats as s ".
-		     "left join users as u on u.uid_idx=s.uid_idx ".
-		     "where u.status='" . USERSTATUS_ACTIVE() . "' and ".
-		     "      u.nonlocal_id is not null and ".
-		     "      (((UNIX_TIMESTAMP(now()) - ".
-		     "        UNIX_TIMESTAMP(s.last_activity)) <= $limit) or ".
-		     "       ((UNIX_TIMESTAMP(now()) - ".
-		     "        UNIX_TIMESTAMP(s.weblogin_last)) <= $limit))");
-    while (my ($uid) = $active_result->fetchrow_array()) {
-	$bossexports{"$usersdir/$uid"} = "$usersdir/$uid";
-    }
-
-    #
-    # XXX ensure that GeniSlices is exported to boss as that is where we
-    # download remote images for caching. The image downloader does not
-    # consider such a download as "activity". It could/should, but it is
-    # easy to compensate for it here.
-    #
-    my $pid = "GeniSlices";
-    if (!exists($bossexports{"$projdir/$pid"})) {
-	$bossexports{"$projdir/$pid"} = "$projdir/$pid";
-    }
-    if (!exists($bossexports{"$groupdir/$pid"})) {
-	$bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
+    if (!$ZFS_NONFS_DIR) {
+	$active_result =
+	    DBQueryFatal("select u.uid from user_stats as s ".
+			 "left join users as u on u.uid_idx=s.uid_idx ".
+			 "where u.status='" . USERSTATUS_ACTIVE() . "' and ".
+			 "      u.nonlocal_id is not null and ".
+			 "      (((UNIX_TIMESTAMP(now()) - ".
+			 "       UNIX_TIMESTAMP(s.last_activity)) <= $limit) or ".
+			 "      ((UNIX_TIMESTAMP(now()) - ".
+			 "       UNIX_TIMESTAMP(s.weblogin_last)) <= $limit))");
+	while (my ($uid) = $active_result->fetchrow_array()) {
+	    $bossexports{"$usersdir/$uid"} = "$usersdir/$uid";
+	}
     }
 }
-
-#
-# Gather up all the nodes that are reserved and the required info.
-# Order by pid,gid,admin first so that they're all grouped together and we
-# avoid extra db queries (see lastpid/lastgid/lastadmin).
-#
-# Note that these users and corresponding project directories will be added
-# to the list of those exported to boss.
-#
-$nodes_result =
-    DBQueryFatal("select r.node_id,r.pid,r.eid,e.gid,".
-		 "       i.IP,u.admin,r.sharing_mode,r.erole,nt.isvirtnode, ".
-		 "       p.nfsmounts as p_nfsmounts, ".
-		 "       e.nfsmounts as e_nfsmounts, ".
-		 "       n.nfsmounts as n_nfsmounts, ".
-		 "       va.attrvalue as routable_ip, ".
-		 "       n.op_mode,n.next_op_mode ".
-		 "from reserved as r ".
-		 "left join projects as p on r.pid=p.pid ".
-		 "left join experiments as e on r.pid=e.pid and r.eid=e.eid ".
-		 "left join nodes as n on r.node_id=n.node_id ".
-		 "left join node_types as nt on nt.type=n.type ".
-		 "left join interfaces as i on r.node_id=i.node_id ".
-		 "left join users as u on e.swapper_idx=u.uid_idx ".
-		 "left join virt_node_attributes as va on ".
-		 "  va.pid=r.pid and va.eid=r.eid and va.vname=r.vname ".
-		 "    and va.attrkey='routable_control_ip' ".
-		 " where i.IP!='NULL' and ".
-		 "       i.role='" . TBDB_IFACEROLE_CONTROL() . "' ".
-		 "       and (n.role='testnode' or n.role='virtnode')".
-		 "       and nt.isremotenode=0 ".
-		 "order by r.pid,e.gid,r.eid,u.admin,n.priority");
 
 my %ipgroups    = ();
 my %globalsmbshares   = ();
@@ -430,7 +387,6 @@ my $lastpid     = "";
 my $lastgid     = "";
 my $lastadmin	= "";
 my $lasterole   = "";
-my $lastnfsexport=-1;
 my @nfsmfsnodes = ();
 
 my @mountpoints = fsinit();
@@ -453,7 +409,8 @@ while ($row = $nodes_result->fetchrow_hashref) {
     my $isvirt  = $row->{'isvirtnode'};
     my $shared  = (defined($row->{'sharing_mode'}) ? 1 : 0);
     my $erole   = $row->{'erole'};
-    my $pnfs    = $row->{'p_nfsmounts'};
+    my $enonfs  = $row->{'enonfs'};
+    my $nnonfs  = $row->{'nnonfs'};
     my $enfs    = $row->{'e_nfsmounts'};
     my $nnfs    = $row->{'n_nfsmounts'};
     my $routable= ((defined($row->{'routable_ip'}) &&
@@ -482,6 +439,11 @@ while ($row = $nodes_result->fetchrow_hashref) {
 	}
     }
 
+    # Skip nodes that belong to a "no nfs" experiment or are marked "no nfs".
+    next
+	if ($enonfs || $nnonfs || $enfs eq "none" ||
+	    (defined($nnfs) && $nnfs eq "none"));
+
     # Skip non-shared virtnode nodes; NFS mounts are handled differently.
     next
 	if ($isvirt && !$shared);
@@ -490,25 +452,8 @@ while ($row = $nodes_result->fetchrow_hashref) {
     next
 	if ($NOVNODENFS && $isvirt && $shared && !$routable);
 
-    #
-    # Figure out the types of directories exported to this node:
-    #	0 == none, 1 == proj-only, 2 == all
-    # Note that this does NOT apply to exports to boss.
-    #
-    my $nfsexports;
-    $nnfs = "emulabdefault" if (!$nnfs);
-    if ($pnfs eq "none" || $enfs eq "none" || $nnfs eq "none") {
-	$nfsexports = 0;
-    } elsif ($pnfs eq "genidefault" || $enfs eq "genidefault" ||
-	     $nnfs eq "genidefault") {
-	$nfsexports = 1;
-    } else {
-	$nfsexports = 2;
-    }
-
     if ($lastpid eq $pid && $lastgid eq $gid && $lasterole eq $erole &&
-	(!$ISOLATEADMIN || $lastadmin eq $admin) &&
-	$lastnfsexport == $nfsexports) {
+	(!$ISOLATEADMIN || $lastadmin eq $admin)) {
 	# If this is for the same proj and group again, don't requery the db 
 	# and don't recompute everything.
 	%fslist    = %lastfslist;
@@ -519,7 +464,6 @@ while ($row = $nodes_result->fetchrow_hashref) {
 	$lastgid=$gid;
 	$lastadmin=$admin;
 	$lasterole=$erole;
-	$lastnfsexport=$nfsexports;
 
 	if ($erole eq "sharedhost" && !$isvirt && !$WITHZFS) {
 	    #
@@ -537,20 +481,19 @@ while ($row = $nodes_result->fetchrow_hashref) {
 	    # Construct a list of directories accessible from this node.
 	    # First the project and group directories.
 	    # XXX needs to be fixed for shared experiments?
-	    if ($nfsexports != 0) {
-		push(@dirlist, "$projdir/$pid");
-		push(@smbshares, ["proj-$pid", "$projdir/$pid"]);
-		if ($gid ne $pid) {
-		    push(@dirlist, "$groupdir/$pid/$gid");
-		    push(@smbshares, ["${pid}-${gid}", "$groupdir/$pid/$gid"]);
-		}
+	    push(@dirlist, "$projdir/$pid");
+	    push(@smbshares, ["proj-$pid", "$projdir/$pid"]);
+	
+	    if ($gid ne $pid) {
+		push(@dirlist, "$groupdir/$pid/$gid");
+		push(@smbshares, ["${pid}-${gid}", "$groupdir/$pid/$gid"]);
 	    }
 	    if ($ZFS_NOEXPORT && $gid eq $pid) {
 		$bossexports{"$projdir/$pid"}  = "$projdir/$pid";
 		$bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
 	    }
 
-	    if ($nfsexports == 2 && $scratchdir) {
+	    if ($scratchdir) {
 		push(@dirlist, "$scratchdir/$pid");
 		push(@smbshares, ["scratch-$pid", "$scratchdir/$pid"]);
 	    }
@@ -590,7 +533,7 @@ while ($row = $nodes_result->fetchrow_hashref) {
 		# We do continue to export it to boss, just because I am
 		# not sure if it is needed there.
 		#
-		if ($nfsexports == 2 && $uid ne "geniuser") {
+		if ($uid ne "geniuser") {
 		    push(@dirlist, "$usersdir/$uid");
 		    push(@smbshares, [$uid, "$usersdir/$uid"]);
 		}
@@ -837,8 +780,8 @@ if (!$TESTMODE) {
   }
   elsif ($OPSVM_ENABLE) {
       logit("Invoking exports_setup.proxy on boss ...");
-      system("$PROG $PROGARGS < $exportstail") == 0 or
-	  fatal("Failed: $PROG $PROGARGS < $exportstail: $?");
+      system("$PROG < $exportstail") == 0 or
+	  fatal("Failed: $PROG < $exportstail: $?");
       logit("exports_setup.proxy done");
       unlink("$exportstail");
   }
@@ -847,16 +790,16 @@ if (!$TESTMODE) {
 
       # First do the NFS exports
       logit("Invoking exports_setup.proxy...");
-      system("$SSH $PROG $PROGARGS $arg < $exportstail") == 0 or
-	  fatal("Failed: $SSH $PROG $PROGARGS $arg < $exportstail: $?");
+      system("$SSH $PROG $arg < $exportstail") == 0 or
+	  fatal("Failed: $SSH $PROG < $exportstail: $?");
       logit("exports_setup.proxy done");
       unlink("$exportstail");
 
       # Next the SMB shares
       if ($WINSUPPORT) {
 	  logit("Invoking exports_setup.proxy (samba)...");
-	  system("$SSH $PROG $PROGARGS -S < $smbconftail") == 0 or
-	      fatal("Failed: $SSH $PROG $PROGARGS -S < $smbconftail: $?");
+	  system("$SSH $PROG -S < $smbconftail") == 0 or
+	      fatal("Failed: $SSH $PROG < $smbconftail: $?");
 	  logit("exports_setup.proxy (samba) done");
 	  unlink("$smbconftail");
       }
@@ -915,15 +858,8 @@ sub fatal {
 # points for exported filesystems.  We generate a list of mount points from
 # longest to shortest so that we will match the most specific one in fsof.
 #
-# We do not need to do this with ZFS since every /users, /proj, and /groups
-# directory is a filesystem.
-#
 sub fsinit() {
-    my @rawmounts = ();
-
-    if ($WITHZFS) {
-	return @rawmounts;
-    }
+    my @rawmounts;
 
     my $saveuid = $UID;
     $UID = 0;
@@ -940,27 +876,12 @@ sub fsinit() {
     return sort revlen @rawmounts;
 }
 
-# Cache of dir to FS mappings already found
-my %fsofcache;
-
 #
 # Return a unique (per-FS) string identifying the filesystem of
 # the given path.
 #
-# Again, for ZFS, every /users, /proj, and /groups directory is a filesystem.
-# We just return the path itself. We do add new paths to @mountpoints in the
-# case where it is used to create a valid mounts file for autofs.
-#
 sub fsof($) {
     my($path) = @_;
-
-    if ($WITHZFS) {
-	if ($bossdirlist && !$ZFS_NOEXPORT && !exists($fsofcache{$path})) {
-	    push @mountpoints, $path;
-	    $fsofcache{$path} = $path;
-	}
-	return $path;
-    }
 
     if (exists($fsofcache{$path})) {
 	return $fsofcache{$path};

@@ -44,6 +44,7 @@ sub usage()
     print "       accountsetup moduser ...\n";
     print "       accountsetup setgroups ...\n";
     print "       accountsetup chpass ...\n";
+    print "       accountsetup chhomedir ...\n";
     print "       accountsetup addproject ...\n";
     print "       accountsetup addgroup ...\n";
     print "       accountsetup delproject ...\n";
@@ -147,6 +148,7 @@ sub AddUser();
 sub DeleteUser();
 sub SetGroups();
 sub ModifyUser();
+sub ChangeHomeDir();
 sub ChangePassword();
 sub AddProject();
 sub AddGroup();
@@ -202,6 +204,10 @@ SWITCH: for ($cmd) {
     };
     /^moduser$/ && do {
 	ModifyUser();
+	last SWITCH;
+    };
+    /^chhomedir$/ && do {
+	ChangeHomeDir();
 	last SWITCH;
     };
     /^setgroups$/ && do {
@@ -366,6 +372,24 @@ sub ModifyUser()
 
     if (runBusyLoop("$USERMOD $user -c \"$name\" -s $shell")) {
 	fatal("$USERMOD: could not modify account");
+    }
+    return 0;
+}
+
+#
+# Usage: chhomedir username dir
+#
+sub ChangeHomeDir()
+{
+    if (@ARGV != 2) {
+	fatal("chhomedir: Wrong number of arguments");
+    }
+    
+    my $user  = shift(@ARGV);
+    my $dir  = shift(@ARGV);
+
+    if (runBusyLoop("$USERMOD $user -d $dir")) {
+	fatal("$USERMOD: could not modify homedir");
     }
     return 0;
 }

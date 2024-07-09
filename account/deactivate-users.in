@@ -1,0 +1,118 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+
+#
+# Deactivate users.
+#
+sub usage()
+{
+    print("Usage: deactivate-users [-dn] [-I interval]\n");
+    exit(-1);
+}
+my $optlist    = "dnI:";
+my $debug      = 0;
+my $doit       = 1;
+my $interval   = 18;	# months
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $OURDOMAIN   = "@OURDOMAIN@";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+use User;
+use Project;
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $doit = 0;
+}
+if (defined($options{"I"})) {
+    $interval = int($options{"I"});
+}
+usage()
+    if (@ARGV);
+
+if (!$interval || $interval < 12) {
+    print STDERR "Be reasonable, $interval months is too short!\n";
+    exit(1);
+}
+
+my $query_result =
+    DBQueryFatal("select u.uid,u.usr_created,u.genesis,weblogin_last,exptstart_last,s.last_activity from users as u ".
+		 "left join user_stats as s on s.uid_idx=u.uid_idx ".
+		 "where u.status='active' and ".
+		 "    u.usr_created<DATE_SUB(curdate(), INTERVAL $interval MONTH) and ".
+		 "    (weblogin_last is null or ".
+		 "     weblogin_last<DATE_SUB(curdate(), INTERVAL $interval MONTH)) and ".
+		 "    (exptstart_last is null or ".
+		 "     exptstart_last<DATE_SUB(curdate(), INTERVAL $interval MONTH)) and ".
+		 "    (s.last_activity is null or ".
+		 "     s.last_activity<DATE_SUB(curdate(), INTERVAL $interval MONTH)) and ".
+		 "    u.admin=0 and u.foreign_admin=0 and u.stud=0 ".
+                 "order by u.usr_created");
+
+while (my ($uid,$created,$gen,$web,$estart,$last) = $query_result->fetchrow_array()) {
+    if ($doit) {
+	system("$TB/sbin/tbacct -s -u deactivate $uid");
+    }
+    else {
+	$web = "NEVER" if (!$web);
+	$estart = "NEVER" if (!$estart);
+	$last = "NEVER" if (!$last);
+	print "$uid (gen: $gen, created: $created, web: $web, expt: $estart, last: $last)\n";
+    }
+}
