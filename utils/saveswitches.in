@@ -84,7 +84,7 @@ foreach my $switch (@ARGV) {
 	print STDERR "*** $switch: TBD for HP switches\n";
 	next;
     }
-    if ($type =~ /(force10|dellrest|arista)/) {
+    if ($type =~ /(force10|arista)/) {
 	if (system("ssh toor\@$switch write memory")) {
 	    if (($? >> 8) != 255) {
 		print STDERR "*** $switch: unable to write config for $switch ($?)\n";
@@ -94,6 +94,19 @@ foreach my $switch (@ARGV) {
 	} else {
 	    print "$switch: done\n";
 	}
+	next;
+    }
+    if ($type =~ /dellrest/) {
+	if (system("ssh admin\@$switch write memory")) {
+	    if (($? >> 8) != 255) {
+		print STDERR "*** $switch: unable to write config for $switch ($?)\n";
+	    } else {
+		print STDERR "*** $switch: could not SSH to $switch\n";
+	    }
+	} else {
+	    print "$switch: done\n";
+	}
+	next;
     }
 }
 
