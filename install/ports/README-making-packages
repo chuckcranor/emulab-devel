@@ -71,6 +71,9 @@ lang_php81-extensions_SET+=BZ2 CTYPE CURL DOM FILTER GD ICONV JSON \
 			   MYSQLI OPCACHE OPENSSL PDO PHAR POSIX \
 			   SESSION SIMPLEXML SOCKETS TOKENIZER XML XMLREADER \
 			   XMLRPC XMLWRITER
+mail_dovcot_UNSET+=LDAP
+mail_opendkim_SET+=STOCK_RESOLVER
+mail_opendkim_UNSET+=UNBOUND
 
       The DTRACE option seems to be new (as of 12/8/20) and broke a couple
       of ports:
