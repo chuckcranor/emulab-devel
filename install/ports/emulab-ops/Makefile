@@ -69,6 +69,7 @@ RUN_DEPENDS+=	\
 	rsync:${PORTSDIR}/net/rsync \
 	sudo:${PORTSDIR}/security/sudo \
 	wget:${PORTSDIR}/ftp/wget \
+	opendkim:${PORTSDIR}/mail/opendkim \
 	${LOCALBASE}/bin/flex:${PORTSDIR}/textproc/flex
 
 # perl packages

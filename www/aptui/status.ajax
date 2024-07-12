@@ -160,6 +160,7 @@ function MapGeniResponse($code)
 function Do_GetInstanceStatus()
 {
     global $instance, $creator, $APTBASE;
+    $failedslivers = 0;
 
     if (StatusSetupAjax(0)) {
 	return;
@@ -191,7 +192,8 @@ function Do_GetInstanceStatus()
                   "started"         => DateStringGMT($sliver->started()),
                   "destroyed"       => DateStringGMT($sliver->destroyed()),
                   "havemanifest"    => 0,
-                  "offline"         => false);
+                  "offline"         => false,
+            );
 
         if ($sliver->status() == "terminated") {
             $blob["sliverstatus"][$sliver->aggregate_urn()] = $sliverblob;
@@ -248,6 +250,7 @@ function Do_GetInstanceStatus()
                                 htmlentities($wtask->TaskValue("output"), ENT_COMPAT);
                         $sliverblob["failure_message"] =
                                 MapGeniResponse($wtask->exitcode());
+                        $failedslivers++;
                     }
                 }
             }
@@ -268,6 +271,7 @@ function Do_GetInstanceStatus()
     if (count($prestageStatus)) {
         $blob["prestageStatus"] = $prestageStatus;
     }
+    $blob["failedslivers"] = $failedslivers;
 
     $webtask = $instance->WebTask();
     
@@ -622,6 +626,7 @@ function Do_RequestExtension()
         #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     
         if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             SPITAJAX_ERROR(-1, "Internal error extending experiment");
         }
         else {
@@ -2571,6 +2576,7 @@ function Do_ModifyExperiment()
             SPITAJAX_ERROR(-1, "Internal error modifying experiment");
         }
         else {
+            SUEXECERROR(SUEXEC_ACTION_DEBUG);
             SPITAJAX_ERROR(1, $webtask->output());
         }
         $webtask->Delete();

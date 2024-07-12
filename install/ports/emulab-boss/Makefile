@@ -122,6 +122,7 @@ RUN_DEPENDS+=	\
 	nmap:${PORTSDIR}/security/nmap \
 	wget:${PORTSDIR}/ftp/wget \
 	xvcg:${PORTSDIR}/graphics/vcg \
+	opendkim:${PORTSDIR}/mail/opendkim \
 	${LOCALBASE}/include/boost/config.hpp:${PORTSDIR}/devel/boost-all \
 	gpmetis:${PORTSDIR}/math/metis
 

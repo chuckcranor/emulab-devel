@@ -721,7 +721,13 @@ $(function ()
 		    }
 		}
 		else {
-		    UpdateGeneralError(null);
+                    if (json.value.failedslivers == 0 &&
+		        _.has(json.value, "message")) {
+			UpdateGeneralError(json.value.message);
+                    }
+                    else {
+		        UpdateGeneralError(null);
+                    }
 		}
 		    
 		if (json.value.canclearerror) {

@@ -1634,6 +1634,59 @@ sub freenasSliceList() {
     return $sliceshash;
 }
 
+#
+# Create an iSCSI extent.
+# Returns the index if successful, 0 otherwise.
+#
+sub freenasExtentCreate($$$$;$)
+{
+    my ($pool, $volume, $iqn, $isro, $msgp) = @_;
+
+    my $msg = "create extent API call failed";
+    my $res = freenasRequest($FREENAS_API_RESOURCE_IST_EXTENT,
+			     "POST", undef,
+			     {"iscsi_target_extent_name" => $iqn,
+			      "iscsi_target_extent_serial" => genSerial(),
+			      "iscsi_target_extent_type" => "Disk",
+			      "iscsi_target_extent_disk" => "zvol/$pool/$volume",
+			      "iscsi_target_extent_ro" => $isro},
+			     undef, \$msg);
+    if (!$res) {
+	$$msgp = $msg if ($msgp);
+	return 0;
+    }
+
+    return $res->{'id'};
+}
+
+#
+# Create an authorized initiator.
+# Returns the index if successful, 0 otherwise.
+#
+sub freenasAuthInitCreate($$$$;$$)
+{
+    my ($tag, $network, $cmask, $comment, $msgp, $tagp) = @_;
+
+    my $msg = "create authorized initiator API call failed";
+    $res = freenasRequest($FREENAS_API_RESOURCE_IST_AUTHI,
+			  "POST", undef,
+			  {"iscsi_target_initiator_initiators" => "ALL",
+			   "iscsi_target_initiator_comment" => $comment,
+			   "iscsi_target_initiator_auth_network" => "$network/$cmask",
+			   "iscsi_target_initiator_tag" => $tag},
+			  undef, \$msg);
+    if (!$res) {
+	$$msgp = $msg
+	    if ($msgp);
+	return 0;
+    }
+
+    $$tagp = $res->{'iscsi_target_initiator_tag'}
+	if ($tagp && exists($res->{'iscsi_target_initiator_tag'}));
+    return $res->{'id'};
+}
+
+
 #######################################################################
 # package-local functions
 #

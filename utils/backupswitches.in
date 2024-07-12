@@ -100,6 +100,16 @@ foreach my $switch (@ARGV) {
 	}
     }
     if ($type =~ /comware/) {
+	#
+	# XXX you must make sure the switch is backing up to startup.cfg.
+	# Login to the switch and do "show startup" and make sure it is not
+	# set to something like "flash:/sa-ch7.cfg". If it is, reset it with
+	# "startup saved-configuration startup.cfg". This will change the
+	# "Next main startup saved-configuration file". (Note that the
+	# "Current startup saved-configuration file" will get changed on the
+	# next reboot). After doing this, do a "save force" to backup the
+	# current config to "startup.cfg".
+	#
 	if (system("scp $switch:startup.cfg $BACKUPDIR/$switch-$datestr")) {
 	    print STDERR "Unable to grab and save config for $switch, ignored\n";
 	    next;

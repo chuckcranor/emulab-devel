@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -374,7 +374,7 @@ class Aggregate
             elseif ($frontpage || $PORTAL_HEALTH) {
                 $allowed = 1;
             }
-            elseif ($aggregate->adminonly() && !ISADMIN()) {
+            elseif ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
                 $allowed = 0;
             }
             elseif ($user && $aggregate->canuse_feature()) {

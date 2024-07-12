@@ -1983,6 +1983,7 @@ sub RunStitcher()
 	}
 	return 0;
     };
+    $instance->SetStatus("provisioning");
     
     my @return_codes = ();
     if (ParRun({"maxwaittime" => 99999,

@@ -6,6 +6,10 @@
 # All communication with clients is via the experiment interface(s) and
 # should be unaffected. XXX we should limit to whatever is needed for the
 # iSCSI connection and communication.
+#
+# This file should be installed as /conf/base/etc/emulab/pf.conf and also
+# copied to /etc/emulab/pf.conf. The rc.conf fragment in /etc/rc.conf.d/pf
+# will set the rc variables as needed.
 # 
 
 # Control net interface
