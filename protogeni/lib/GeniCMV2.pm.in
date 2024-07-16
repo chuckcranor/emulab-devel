@@ -129,6 +129,7 @@ my $PRERENDER      = "$TB/libexec/vis/prerender";
 my $IMPORTER       = "$TB/sbin/image_import";
 my $POSTIMAGEDATA  = "$TB/sbin/protogeni/postimagedata";
 my $NODE_SLOGS     = "$TB/sbin/node_servicelogs";
+my $SPEWIMAGE      = "$TB/sbin/spewimage";
 my $EMULAB_PEMFILE = "@prefix@/etc/genicm.pem";
 # Just one of these, at Utah.
 my $GENICH_PEMFILE = "@prefix@/etc/genich.pem";
@@ -6405,6 +6406,8 @@ sub SecureImageDownload($)
     my ($argref)  = @_;
     my $credentials = $argref->{'credentials'};
     my $image_urn   = $argref->{'image_urn'};
+    my $usingwget   = $argref->{'usingwget'};
+
 
     if (! (defined($credentials))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -6456,76 +6459,159 @@ sub SecureImageDownload($)
     return GeniResponse->Create(GENIRESPONSE_ERROR)
 	if (!defined($group));
 
+    my $versid = $image->versid();
+    # spewimage always wants this.
+    my $access_key = $image->access_key();
+
     # Better make sure we have project mounted.
     $group->GetProject()->UpdateExports();
     my $file = $image->FullImageFile();
 
     # Need to set our groups so we can read the file.
-    GeniUtil::FlipToUser("root", $group->pid(), $group->unix_gid());
+    GeniUtil::FlipToUser("nobody", $group->pid(), $group->unix_gid());
     
     if (! -r $file) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			    "Image file does not exist or cannot be read");
     }
-    #
-    # Stat the file to get the bytelen for spewing.
-    #
-    my (undef,undef,undef,undef,undef,undef,undef,$bytelen) = stat($file);
+    if (!$usingwget) {
+	#
+	# Stat the file to get the bytelen for spewing.
+	#
+	my (undef,undef,undef,undef,undef,undef,undef,$bytelen) = stat($file);
 
-    open(FD, "< $file") or
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Could not open file for reading");
-    # Flip back now that we have it opened.
-    GeniUtil::FlipToGeniUser();
+	open(FD, "< $file") or
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Could not open file for reading");
+	# Flip back now that we have it opened.
+	GeniUtil::FlipToGeniUser();
 
-    # This sets STDOUT back to apache.
-    main::AbortLogging();
-    print "Content-Type: application/octet-stream\n";
-    print "Cache-Control: no-cache, must-revalidate\n";
-    print "Pragma: no-cache\n\n";
+	# This sets STDOUT back to apache.
+	main::AbortLogging();
+	print "Content-Type: application/octet-stream\n";
+	print "Cache-Control: no-cache, must-revalidate\n";
+	print "Pragma: no-cache\n\n";
     
-    #
-    # Deal with NFS read failures
-    #
-    my $foffset = 0;
-    my $retries = 5;
-    my $buf;
+	#
+	# Deal with NFS read failures
+	#
+	my $foffset = 0;
+	my $retries = 5;
+	my $buf;
 
-    while ($bytelen) {
-	my $rlen = sysread(FD, $buf, 8192);
+	while ($bytelen) {
+	    my $rlen = sysread(FD, $buf, 8192);
 
-	if (! defined($rlen)) {
-	    #
-	    # Retry a few times on error to avoid the
-	    # changing-exports-file server problem.
-	    #
-	    if ($retries > 0 && sysseek(FD, $foffset, 0)) {
-		$retries--;
-		sleep(1);
-		next;
+	    if (! defined($rlen)) {
+		#
+		# Retry a few times on error to avoid the
+		# changing-exports-file server problem.
+		#
+		if ($retries > 0 && sysseek(FD, $foffset, 0)) {
+		    $retries--;
+		    sleep(1);
+		    next;
+		}
+		print STDERR "Error reading $file: $!\n";
+		last;
 	    }
-	    print STDERR "Error reading $file: $!\n";
-	    last;
+	    if ($rlen == 0) {
+		last;
+	    }
+	    if (! syswrite(STDOUT, $buf, $rlen)) {
+		print STDERR "Error writing file to stdout: $!\n";
+		last;
+	    }
+	    $foffset += $rlen;
+	    $bytelen -= $rlen;
+	    $retries = 5;
 	}
-        if ($rlen == 0) {
-	    last;
+	close(FD);
+	if ($bytelen) {
+	    print STDERR "Did not get the entire file! $bytelen bytes left.\n";
+	    # Cannot return XML at this point.
+	    return -1;
 	}
-	if (! syswrite(STDOUT, $buf, $rlen)) {
-	    print STDERR "Error writing file to stdout: $!\n";
-	    last;
-	}
-	$foffset += $rlen;
-	$bytelen -= $rlen;
-	$retries = 5;
-    }
-    close(FD);
-    if ($bytelen) {
-	print STDERR "Did not get the entire file! $bytelen bytes left.\n";
 	# Cannot return XML at this point.
-	return -1;
+	return 0;
+    }
+    
+    my $ishead = 0;
+    if ($ENV{'REQUEST_METHOD'} eq "HEAD") {
+	$ishead  = 1;
+    }
+
+    #
+    # This sets STDOUT back to apache.
+    # NOTE: STDERR gets reset as well, it goes to the apache log file.
+    #
+    main::AbortLogging();
+
+    my $buf;
+    my $rval = 0;
+    my $opts = "-k $access_key ";
+    if ($ishead) {
+	$opts .= "-h ";
+    }
+    #
+    # Check for RANGE header. We support a singlw range, there is no
+    # reason for the client to ask for multiple ranges for an image.
+    #
+    if (exists($ENV{'HTTP_RANGE'})) {
+	my $http_range = $ENV{'HTTP_RANGE'};
+	
+	if ($http_range =~ /bytes=(\d*)\-$/i) {
+	    $opts .= "-r ${1} ";
+	}
+	elsif ($http_range =~ /bytes=(\d*)\-(\d*)$/i) {
+	    $opts .= "-r ${1}-${2} ";
+	}
+	else {
+	    syswrite(STDOUT, "HTTP/1.0 416 Client requested invalid Range\n");
+	    return -1;
+	}
+    }
+    my $command = "$SPEWIMAGE $opts $versid";
+    print STDERR "GeniCMV2::SecureImageDownload: '$command'\n";
+
+    if (open(SPEW, "$command |")) {
+	while (1) {
+	    my $rlen = sysread(SPEW, $buf, 1024 * 64);
+	    if (!defined($rlen)) {
+		print STDERR "GeniCMV2::SecureImageDownload: ".
+		    "Error reading $file: $!\n";
+		$rval = -1;
+		last;
+	    }
+	    last
+		if ($rlen == 0);
+
+	    if (! syswrite(STDOUT, $buf, $rlen)) {
+		print STDERR "GeniCMV2::SecureImageDownload: ".
+		    "Error writing file to stdout: $!\n";
+		$rval = -1;
+		last;
+	    }
+	}
+	close(SPEW);
+	if ($ishead && $| == 0) {
+	    my $exitval = $? >> 8;
+            if ($exitval == 2) {
+		syswrite(STDOUT, "HTTP/1.0 304 File has not changed\n");
+            }
+            else {
+                syswrite(STDOUT, "HTTP/1.0 404 Could not verify file\n");
+            }
+	}
+    }
+    else {
+	syswrite(STDOUT, "HTTP/1.0 404 Could not start spewimage\n");
+	print STDERR "GeniCMV2::SecureImageDownload: ".
+	    "Error starting spewimage\n";
+	$rval = -1;
     }
     # Cannot return XML at this point.
-    return 0;
+    return $rval;
 }
 
 #
