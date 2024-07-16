@@ -558,7 +558,7 @@ sub AddLogfileMetaDataFromSpeaksFor($)
 }
 sub AbortLogging()
 {
-    LogEnd(0);
+    LogAbort();
     $logaborted = 1;
 }
 
@@ -810,24 +810,24 @@ else {
 	    push(@metadata, ["Code", $result->{'code'}])
 	}
     }
-    if (!$logaborted) {
-	# Add first line of result output to metadata. Bigger stuff
-	# will land at the end of the file. 
-	if (ref($result) && defined($result->{'output'}) &&
-	    $result->{'output'} ne "") {
-	    my $line = (split(/\n/, $result->{'output'}))[0];
-	    if (length($line) > 128) {
-		$line = substr($line, 0, 128);
-	    }
-	    push(@metadata, ["Output", $line]);
+    # Add first line of result output to metadata. Bigger stuff
+    # will land at the end of the file. 
+    if (ref($result) && defined($result->{'output'}) &&
+	$result->{'output'} ne "") {
+	my $line = (split(/\n/, $result->{'output'}))[0];
+	if (length($line) > 128) {
+	    $line = substr($line, 0, 128);
 	}
-	# Purge old data; if we forked we want latest. 
-	$logfile->SetMetadata(\@metadata, 1);
+	push(@metadata, ["Output", $line]);
+    }
+    # Purge old data; if we forked we want latest. 
+    $logfile->SetMetadata(\@metadata, 1);
     
-	foreach my $foo (@metadata) {
-	    my ($key,$val) = @{$foo};
-	    $message .= sprintf("%-15s: %s\n", $key, $val);
-	}
+    foreach my $foo (@metadata) {
+	my ($key,$val) = @{$foo};
+	$message .= sprintf("%-15s: %s\n", $key, $val);
+    }
+    if (!$logaborted) {
 	AddAuditInfo("message", $message);
     }
 
@@ -842,12 +842,13 @@ else {
 	    $iserror = 1;
 	}
     }
-    elsif (! ref($result) && $result) {
+    elsif (!ref($result) && $result) {
 	#
 	# This could happen if the child forks. 
 	#
 	$iserror = 1;
-	print STDERR "Forked child returned an error\n";
+	print STDERR "Forked child returned an error\n"
+	    if (!$logaborted);
     }
     
     #
@@ -860,7 +861,7 @@ else {
     # Yep, the child side of the fork will append any new log info
     # after these prints. But thats okay. 
     #
-    if (ref($result) && ($iserror || $debug > 1)) {
+    if (ref($result) && !$logaborted && ($iserror || $debug > 1)) {
 	printf STDERR "\n";
 	if (defined($result->{'output'}) && $result->{'output'} ne "") {
 	    print STDERR "-------------- Output -----------------\n";
@@ -874,7 +875,7 @@ else {
 	}
 	print STDERR "----------------------------------------\n";
     }
-    if ($debug) {
+    if ($debug && !$logaborted) {
 	print STDERR "\nDebugging is on.\n";
     }
     # Last bit of detail. 
