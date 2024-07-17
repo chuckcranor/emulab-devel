@@ -223,7 +223,7 @@ while( my ($idx, $pid, $gid, $count, $type, $start, $end, $email, $cancel) =
 my $opts = ($impotent ? "-n " : "");
 $opts   .= ($debug ? "-d " : "");
 
-sytem("$RESCHECK $opts");
+system("$RESCHECK $opts");
 if ($?) {
     die("$RESCHECK failed!");
 }
