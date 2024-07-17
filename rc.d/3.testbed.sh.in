@@ -362,12 +362,6 @@ case "$1" in
 		if [ -r /var/run/attend.pid ]; then
 			kill `cat /var/run/attend.pid`
 		fi
-		if [ -r /var/run/mondbd.pid ]; then
-			kill `cat /var/run/mondbd.pid`			
-		fi
-		if [ -r /var/run/shared-node-listener.pid ]; then
-			kill `cat /var/run/shared-node-listener.pid`
-		fi
 		if [ -r /var/run/reportboot_daemon.pid ]; then
 			kill `cat /var/run/reportboot_daemon.pid`
 		fi

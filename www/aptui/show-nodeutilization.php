@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include("node_defs.php");
@@ -28,9 +31,6 @@ chdir("apt");
 include("quickvm_sup.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 $page_title = "Show Node Utilization";
-
-# Moving to bootstrap 5 slowly. 
-$BOOTSTRAP5ONLY = true;
 
 #
 # Get current user.
@@ -70,10 +70,10 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-REQUIRE_TABLESORTER();
+REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
 SPITREQUIRE("js/show-nodeutilization.js");
 AddTemplateList(array("show-nodeutilization", "nodeutilization-list",
-                      "oops-modal", "waitwait-modal"));
+                      "oops-modal", "waitwait-modal", "output-dropdown"));
 SPITFOOTER();
 
 ?>
