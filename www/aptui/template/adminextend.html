@@ -44,6 +44,9 @@ pre {
     display:block;
     width: 100px;
     margin: 0 auto;
+ }
+.canned-response {
+    white-space: normal !important;
 }
 </style>
 <div class="row" id="firstrow"></div>
@@ -54,8 +57,71 @@ pre {
 <div id="extension-controls" class='row hidden'>
   <div class='col-sm-8 col-sm-offset-2' style="margin-bottom: 10px;">
     <center>
-      Message to send to user
-      <br>
+      <div style="margin-bottom: 3px;">
+	Message to send to user
+	<div class="btn-group">
+	  <button class="btn btn-xs btn-info dropdown-toggle"
+	     type="button" data-toggle="dropdown">
+	    Canned Responses <span class="caret"></span></button>
+	  <ul class="dropdown-menu" style="width: 600px;">
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  This experiment has been idle for several
+		  days. CloudLab is extremely busy, and holding on to
+		  resources you are not actively using prevents others
+		  from getting their own work done.
+		</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  We have extended this for as long as we can, but
+		  further extensions will not be possible due to
+		  upcoming reservations.</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  This experiment has been idle for several
+		  days. These nodes are in high demand, and holding on
+		  to resources you are not actively using prevents
+		  others from getting their own work done.</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  CloudLab does not allocate resources for an entire
+		  semester or quarter. The expectation is that you will
+		  allocate nodes when you are ready to actively use
+		  them, and release them when they are idle so that
+		  others can get their own work done.</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  This experiment has been idle for several days. With
+		  academic semesters and quarters starting, CloudLab is
+		  getting busy.</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  Only one node in this experiment appears to be
+		  active; holding the entire experiment with several
+		  idle nodes prevents others from getting their own
+		  work done.
+		</p>
+	      </a>
+	    </li>
+	  </ul>
+	</div>
+      </div>
       <textarea id='reason'
 		class='form-control'
 		rows=3></textarea>

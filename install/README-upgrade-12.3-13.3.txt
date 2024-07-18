@@ -56,10 +56,10 @@ A. Things to do in advance of shutting down Emulab.
 
 1c. (boss only) Change your home directory temporarily to a local directory.
 
-   If you are currently using AMD and ZFS (WITHAMD=1, WITHZFS=1 in defs-* file),
-   you will need to make this temporary change to work around AMD being removed
-   in FreeBSD 13.3. If you are not using AMD or ZFS or you are already using
-   the automounter (autofs) then skip to step 2.
+   If you are currently using AMD and ZFS (WITHAMD=1, WITHZFS=1 in defs-*
+   file), you will need to make this temporary change to work around AMD
+   being removed in FreeBSD 13.3. If you are not using AMD or ZFS or you are
+   already using the automounter (autofs) then skip to step 2.
 
    Since I am lazy, I just copy my whole homedir to /usr/testbed/data or
    whatever local, none-root filesystem has GBs of space. At a minimum you
@@ -84,7 +84,7 @@ A. Things to do in advance of shutting down Emulab.
      git clone -b php81 \
          https://gitlab.flux.utah.edu/emulab/emulab-devel.git testbed-new
      cp <current-defs-file> testbed-new/defs-foo
-     mkdir obj obj/boss obs/ops
+     mkdir -p obj/boss obj/ops
 
    Build and install the ops node first:
 
@@ -93,7 +93,16 @@ A. Things to do in advance of shutting down Emulab.
      ../../testbed-new/configure --with-TBDEFS=../../testbed-new/defs-foo
      sudo gmake opsfs-install
 
-   Then on the boss node:
+   On the boss node it is a little more complicated because I had made a
+   non-backward compatible change in the main tree, and a boss build now
+   requires that the "cracklib" package be installed. So on the boss node
+   first do:
+
+     # on boss node
+     sudo pkg install -r Emulab cracklib
+
+   It may want to update the "pkg" package as well, and that is okay.
+   After installing cracklib:
 
      # on boss node
      cd obj/boss
@@ -108,14 +117,43 @@ A. Things to do in advance of shutting down Emulab.
       cd rc.d
       sudo gmake install
 
+   If your DB needs updating, then the make will fail and it will tell
+   you what do do:
+
+      sudo gmake update-testbed
+      
+   This will actually turn the testbed back on at the end so you will
+   not have to do #3 below. Note also that this command may take awhile
+   and provide no feedback.
+
    Something else that is not automatically installed every time are Apache
    config files. You will need an updated version of the main `httpd.conf`
    file for later when PHP 8.1 is installed. So diff the version in
    obj/boss/apache24 with the installed version(s) in /usr/local/etc/apache24.
-   You will need to merge in the
-   `<IfFile "/usr/local/libexec/apache24/libphp.so">` section to your
-   existing config because the php81 port has renamed the installed PHP
-   module.
+   NOTE CAREFULLY that the main httpd.conf file may be installed as
+   httpd-www.conf rather than httpd.conf. So check for the existence of the
+   former first:
+
+      # on boss node
+      cd ~/obj/boss/apache
+      # First check for httpd-www.conf:
+      diff httpd.conf /usr/local/etc/apache24/httpd-www.conf
+      # or, if that does not exist:
+      diff httpd.conf /usr/local/etc/apache24/httpd.conf
+
+      # on ops node
+      cd ~/obj/ops/apache
+      gmake
+      diff httpd.conf-ops /usr/local/etc/apache24/httpd.conf
+
+   You may need to do some manual merging of the two versions if local
+   changes have been made to the installed version.
+
+   The important parts are to make sure the SSLProtocols variable is set
+   correctly as in the committed version(s) of the config files and to add the
+   `<IfFile "/usr/local/libexec/apache24/libphp.so">` section before the
+   libphp7.so and libphp7.so sections, since the php81 port has renamed the
+   installed PHP module.
 
    If would probably be best at this point to at least reboot the boss node
    and make sure there are no issues with startup.
@@ -303,24 +341,33 @@ B. Updating the base FreeBSD system
      sudo /usr/local/etc/rc.d/apache24 stop
      sudo /usr/local/etc/rc.d/tftpd-hpa.sh stop
 
-     # The following may or may not be installed. If not, you will likely
-     # get an unexpected password prompt from sudo--obscure!
-     sudo /usr/local/etc/rc.d/capture stop
-     sudo /usr/local/etc/rc.d/telegraf stop
+     # The following may or may not be installed.
+     test -x /usr/local/etc/rc.d/capture && \
+         sudo /usr/local/etc/rc.d/capture stop
+     test -x /usr/local/etc/rc.d/capture.sh && \
+         sudo /usr/local/etc/rc.d/capture.sh stop
+     test -x /usr/local/etc/rc.d/telegraf && \
+         sudo /usr/local/etc/rc.d/telegraf stop
 
    ops:
      sudo /usr/local/etc/rc.d/apache24 stop
 
      # The following may or may not be installed
-     sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
-     sudo /usr/local/etc/rc.d/webssh.sh stop
-     sudo /usr/local/etc/rc.d/capture stop
-     sudo /usr/local/etc/rc.d/telegraf stop
-     sudo /usr/local/etc/rc.d/3.mfrisbeed-ops.sh stop
-
+     test -x /usr/local/etc/rc.d/1.mysql-server.sh && \
+         sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
+     test -x /usr/local/etc/rc.d/webssh.sh && \
+         sudo /usr/local/etc/rc.d/webssh.sh stop
+     test -x /usr/local/etc/rc.d/capture.sh && \
+         sudo /usr/local/etc/rc.d/capture.sh stop
+     test -x /usr/local/etc/rc.d/telegraf && \
+         sudo /usr/local/etc/rc.d/telegraf stop
+     test -x /usr/local/etc/rc.d/3.mfrisbeed-ops.sh && \
+         sudo /usr/local/etc/rc.d/3.mfrisbeed-ops.sh stop
+     
    On the Utah clusters you may need to also need to stop some additional
    services:
 
+     # boss and ops:
      sudo /usr/local/etc/rc.d/bareos-fd stop
 
 Other newer stuff:
@@ -390,7 +437,8 @@ Other newer stuff:
 
    I don't think this is strictly necessary as I have always been able to
    just naively shutdown and then just import the zpool(s) when I come
-   back up in 13.3.
+   back up in 13.3. Either way, you will need to re-import any pools after
+   reboot as directed below.
 
    NOTE: I have noticed a couple of times on VM-based elabinelab boss/ops
    upgrades that the root filesystem has some issues after the upgrade,
@@ -424,17 +472,27 @@ Other newer stuff:
      sudo /usr/local/etc/rc.d/2.mysql-server.sh stop
 
      # The following may or may not be installed
-     sudo /usr/local/etc/rc.d/capture stop
-     sudo /usr/local/etc/rc.d/telegraf stop
+     test -x /usr/local/etc/rc.d/capture && \
+         sudo /usr/local/etc/rc.d/capture stop
+     test -x /usr/local/etc/rc.d/capture.sh && \
+         sudo /usr/local/etc/rc.d/capture.sh stop
+     test -x /usr/local/etc/rc.d/telegraf && \
+         sudo /usr/local/etc/rc.d/telegraf stop
 
    ops:
      sudo /usr/local/etc/rc.d/apache24 stop
 
      # The following may or may not be installed
-     sudo /usr/local/etc/rc.d/webssh.sh stop
-     sudo /usr/local/etc/rc.d/capture stop
-     sudo /usr/local/etc/rc.d/telegraf stop
-     sudo /usr/local/etc/rc.d/3.mfrisbeed-ops.sh stop
+     test -x /usr/local/etc/rc.d/1.mysql-server.sh && \
+         sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
+     test -x /usr/local/etc/rc.d/webssh.sh && \
+         sudo /usr/local/etc/rc.d/webssh.sh stop
+     test -x /usr/local/etc/rc.d/capture.sh && \
+         sudo /usr/local/etc/rc.d/capture.sh stop
+     test -x /usr/local/etc/rc.d/telegraf && \
+         sudo /usr/local/etc/rc.d/telegraf stop
+     test -x /usr/local/etc/rc.d/3.mfrisbeed-ops.sh && \
+         sudo /usr/local/etc/rc.d/3.mfrisbeed-ops.sh stop
 
    Utah:
      sudo /usr/local/etc/rc.d/bareos-fd stop
@@ -442,8 +500,9 @@ Other newer stuff:
    Now you should re-import any ZFS zpools:
 
      # see what the pools are
-     zpool import -a
+     zpool import
      # import each one
+     # on ops there is probably only one, and it can take minutes to import
      zpool import <pool>
      ...
 
@@ -458,13 +517,14 @@ Other newer stuff:
 
    Now run freebsd-update to finish:
 
+     # this can take 10+ minutes
      sudo /usr/sbin/freebsd-update install
 
    NOTE that it will tell you to rebuild all third-party packages and
    run freebsd-update again to get rid of old libraries. We do this later
    below, so don't worry about it now.
 
-   NOTE also that I have found `sshd` to nee restarting after the upgrade
+   NOTE also that I have found `sshd` to need restarting after the upgrade
    of else you will not be able to connect:
 
      sudo /etc/rc.d/sshd restart
@@ -594,8 +654,8 @@ C. Updating ports/packages
    running the most recent set of 12.3 packages. Note that if you installed
    extra ports, upgrading will require a bit more work.
 
-   You also need to ensure that Apache is not running (see A3 above)
-   as PHP will be getting upgraded.
+   Before starting, make sure that mysqld and Apache are not running
+   (see A3 above) as both will be getting upgraded (PHP in the Apache case).
 
 0. If you forgot to save off your package info back in A4, or it has been
    awhile, then you might want to go back and do that now.
@@ -666,7 +726,8 @@ C. Updating ports/packages
 
      # re-add the old (right) ipmitool USING THE PACKAGE
      # (which you will need to copy over to /tmp)
-     sudo pkg add -M /tmp/emulab-ipmitool-old-1.8.15_1.txz
+     cd /tmp
+     sudo pkg add -M emulab-ipmitool-old-1.8.15_1.pkg
 
      # change the dependency
      sudo pkg set -n ipmitool:emulab-ipmitool-old
@@ -707,15 +768,12 @@ C. Updating ports/packages
 
    and then rerun the check.
 
-4. Reinstall wssh.
+4. Reinstall wssh (ops only).
 
    For Cloudlab clusters, the `wssh` install has to be updated by hand for
    python3 since it does not come from a package. See install/phases/webssh
    for details, but I think this will do it:
 
-    # on boss
-    # nothing to do
-    
     # on ops
     cd /tmp
     git clone https://gitlab.flux.utah.edu/emulab/webssh.git
@@ -801,7 +859,7 @@ C. Updating ports/packages
 
      diff php.ini /usr/local/etc/php.ini
 
-   The important fix you need is to add:
+   The important fix you need is to add on boss is (you don't need this on ops):
 
      ;
      ; For mariadb
@@ -840,12 +898,6 @@ C. Updating ports/packages
    re-update from Emulab again:
    
       sudo -E ASSUME_ALWAYS_YES=true pkg upgrade -r Emulab
-
-   IMPORTANT NOTE: at Utah, we have bareos installed and the upgrade seems
-   to remove the old bareos16-client so the command above will not pick up
-   that bareos-client needs to be updated. So you will need to manually:
-
-     sudo pkg install -r Emulab bareos18-client
 
    This is a point at which you might want to check for security problems:
 
@@ -940,7 +992,7 @@ E. Update Emulab software
       gmake
       sudo /usr/local/etc/rc.d/2.mysql-server.sh start
 
-      # XXX hack, need to install these by hand first
+      # XXX hack, need to install these by hand first because of DB change
       sudo install -c -m 755 tbsetup/libtbsetup.pm /usr/testbed/lib/
       sudo install -c -m 755 db/emdbi.pm /usr/testbed/lib/
 
@@ -949,7 +1001,6 @@ E. Update Emulab software
    If the boss install tells you that there are updates to install,
    run the command like it says:
 
-      sudo gmake boss-install-force
       sudo gmake update-testbed
       
    This will actually turn the testbed back on at the end so you will
@@ -967,29 +1018,29 @@ E. Update Emulab software
       /etc/rc.d/{automountd,autounmountd,automount} start
       # undo local homedir hack
 
-4. Re-enable the testbed on boss.
+5. Re-enable the testbed on boss.
 
-   # NOTE capture may not be installed
-   sudo /usr/local/etc/rc.d/capture start
    sudo /usr/local/etc/rc.d/apache24 start
    sudo /usr/local/etc/rc.d/tftpd-hpa.sh start
    sudo /usr/local/etc/rc.d/2.dhcpd.sh start
    sudo /usr/testbed/sbin/testbed-control boot
+   # NOTE capture may not be installed
+   sudo /usr/local/etc/rc.d/capture.sh start
 
-5. Re-run the freebsd-update again to remove old shared libraries.
+6. Re-run the freebsd-update again to remove old shared libraries.
 
    Now that everything has been rebuilt:
 
    sudo freebsd-update install
 
-6. Reboot boss and ops again!
+7. Reboot boss and ops again!
 
    NOTE: if you reboot ops after boss, you may need to restart all the
    event schedulers from boss:
 
    sudo /usr/testbed/sbin/eventsys_start
 
-7. (CloudLab clusters only) Reenable the cluster at the portal.
+8. (CloudLab clusters only) Reenable the cluster at the portal.
 
      # On mothership boss
      wap manage_aggregate <clustername> chflag disabled no
