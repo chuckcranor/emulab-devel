@@ -1833,8 +1833,9 @@ function Do_ExpInfo()
     $blob["physnode_count"]  = intval($instance->physnode_count());
     $blob["virtnode_count"]  = intval($instance->virtnode_count());
     $blob["physnode_hours"]  = 
-            ($instance->physnode_count() *
-             ((time() - strtotime($instance->started())) / 3600));
+            ($instance->started() ?
+             ($instance->physnode_count() *
+              ((time() - strtotime($instance->started())) / 3600)) : null);
     $blob["user_lockdown"]   = $instance->user_lockdown() ? true : false;
     $blob["admin_lockdown"]  = $instance->admin_lockdown() ? true : false;
     $blob["paniced"]         = $instance->paniced() ? true : false;

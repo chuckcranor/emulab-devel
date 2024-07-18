@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2016-2018 University of Utah and the Flux Group.
+# Copyright (c) 2016-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,6 +39,19 @@ SPITHEADER(1, true, true);
 SPITREQUIRE("");
 
 #
+# We get a file from ourselves which throws an SSL error.
+# Cannot find a solution, so just disable for the peer check
+# for this file.
+#
+$sslContextOptions = array(
+      "ssl" => array(
+        "verify_peer" => false,
+        "verify_peer_name" => false,
+      )
+);  
+$sslcontext = stream_context_create($sslContextOptions);
+
+#
 # Allow for a site specific front page
 #
 $sitefile = "frontpage-" . strtolower($THISHOMEBASE) . ".html";
@@ -49,7 +62,8 @@ if (file_exists($sitefile)) {
 } else {
     $matter    = file_get_contents("frontpage.html");
 }
-$stats     = json_decode(file_get_contents("$APTBASE/stats-ajax.php"), true);
+$stats     = json_decode(file_get_contents("$APTBASE/stats-ajax.php",
+					   false, $sslcontext), true);
 $whoarewe  = ($TBMAINSITE ? "" : $THISHOMEBASE);
 $counts    = "<tr><th>Type</th><th>Free</th><th>% Inuse</th></tr>";
 

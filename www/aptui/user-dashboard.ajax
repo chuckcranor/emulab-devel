@@ -834,7 +834,8 @@ function Do_ResourceList()
             continue;
         }
         foreach ($instance->slivers() as $sliver) {
-            if ($sliver->status != "terminated" && $sliver->manifest()) {
+            if ($sliver->status() != "terminated" &&
+                $sliver->manifest()) {
                 $slivers[$sliver->aggregate_urn()] = array(
                     "name"     => $sliver->aggregate_name(),
                     "manifest" => $sliver->manifest(),
