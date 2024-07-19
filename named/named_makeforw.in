@@ -84,8 +84,8 @@ my ($ea, $eb, $ec, $ed) =
     ($EXTERNAL_TESTBED_NETWORK =~ /(\d+)\.(\d+)\.(\d+)\.(\d+)/);
 
 # BASIC SPF.
-my $SPFSTR = "v=spf1 mx ip4:${TESTBED_NETWORK}/" .
-    NetMask2Slash($TESTBED_NETMASK);
+my $SPFSTR = "v=spf1 ip4:${TESTBED_NETWORK}/" .
+    NetMask2Slash($TESTBED_NETMASK) . " ~all";
 
 my $internal_forwfile = "${ia}.${ib}.${ic}.db.head";
 my $external_forwfile = "${ea}.${eb}.${ec}.db.head";
