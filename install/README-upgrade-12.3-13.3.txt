@@ -75,7 +75,7 @@ A. Things to do in advance of shutting down Emulab.
    before you start the OS upgrade. In particular, there are startup file
    changes related to MariaDB and Apache that will need to be in place after
    the new packages are installed. All SW changes should be backward
-   compatible, so there is no danger.
+   compatible, so there is no danger to doing this now.
 
    Right now you have to use the "php81" branch of emulab-devel. To be safe
    it is probably best just to clone a new tree and copy over the defs-*
@@ -110,13 +110,6 @@ A. Things to do in advance of shutting down Emulab.
       gmake
       sudo gmake boss-install
 
-   One thing that does not get installed every time is the rc.d (startup)
-   scripts. Unless you have changed something in your installed versions,
-   just do:
-
-      cd rc.d
-      sudo gmake install
-
    If your DB needs updating, then the make will fail and it will tell
    you what do do:
 
@@ -125,6 +118,23 @@ A. Things to do in advance of shutting down Emulab.
    This will actually turn the testbed back on at the end so you will
    not have to do #3 below. Note also that this command may take awhile
    and provide no feedback.
+
+   One thing that does not get installed every time is the rc.d (startup)
+   scripts. You can check for changes and install with:
+
+      # on boss node
+      cd ~/obj/boss/rc.d
+      # diff committed versions vs what is installed
+      gmake diff
+      # install all if diffs seem reasonable, otherwise hand merge
+      sudo gmake install
+   
+      # on ops node
+      cd ~/obj/ops/rc.d
+      # diff committed versions vs what is installed
+      gmake control-diff
+      # install all if diffs seem reasonable, otherwise hand merge
+      sudo gmake control-install
 
    Something else that is not automatically installed every time are Apache
    config files. You will need an updated version of the main `httpd.conf`
@@ -780,7 +790,18 @@ C. Updating ports/packages
     cd webssh
     sudo python setup.py install
 
-5. Convert to MariaDB (boss only)
+5. Reinstall geni-lib (Geni sites only, do from boss)
+
+   This is really a Python 2 to Python 3 change and could be done sooner
+   than now, but we do it here. Note that we do this from boss but it is
+   actually installed on ops (via NFS):
+
+     # on boss
+     cd /tmp
+     git clone https://gitlab.flux.utah.edu/emulab/geni-lib.git
+     sudo rsync -av --delete geni-lib/ /usr/testbed/opsdir/lib/geni-lib
+
+6. Convert to MariaDB (boss only)
 
    You will need to fix up /usr/local/etc/mysql/my.cnf:
 
@@ -852,7 +873,24 @@ C. Updating ports/packages
      # stop it again
      sudo /usr/local/etc/rc.d/2.mysql-server.sh stop
 
-6. Make changes for PHP 8.1
+7. Critical hack fix to Apache (boss only)
+
+   Any configuration of the latest Apache server that uses PHP needs to have
+   Address Space Layout Randomization (ASLR) turned off. See:
+   https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=268318
+   Otherwise, the server will crash whenever you do a "graceful" restart
+   which we do every morning from crontab in "getcacerts". This can also
+   happen when the Apache logfiles are rolled. So for now, turning off ASLR
+   works for us. Add this to boss's rc.conf file:
+
+     # XXX (hopefully) prevents crashs on "graceful" restart of apache
+     apache24_aslr_disable="YES"
+
+   and restart (not "graceful"!) the server:
+
+     sudo /usr/local/etc/rc.d/apache24 restart
+
+8. Make changes for PHP 8.1
 
    You will need to inform PHP about where the DB socket is now.
    Go into obj/boss/apache and
@@ -873,7 +911,7 @@ C. Updating ports/packages
      sudo touch /usr/testbed/log/php-errors.log
      sudo chmod 666 /usr/testbed/log/php-errors.log
 
-7. Reinstall local ports.
+9. Reinstall local ports.
 
    To find ports that are installed but that are not part of the Emulab
    repository:
@@ -906,7 +944,7 @@ C. Updating ports/packages
    It is possible that some packages will have vulnerabilities, so unless
    it sounds really serious, just live with it.
 
-8. Update your /etc/make.conf file in the event that you need to build a
+10. Update your /etc/make.conf file in the event that you need to build a
    port from source in the future. Make sure your DEFAULT_VERSION line(s)
    look like:
 

@@ -51,13 +51,30 @@ soruce tree:
 
    The new source tree includes a number of changes to components that
    are normally only installed when setting up the testbed. These include
-   startup scripts and configuration files. While these are not needed now,
-   they will be when upgrading the OS, so it is good to make the changes
-   now when it is easier.
+   startup scripts and configuration files. While these changes are *not*
+   needed when running the current FreeBSD 11.x or 12.x OSes on the servers,
+   they will be needed when the OS is updated to FreeBSD 13. So you can decide
+   whether you want to make the changes now, or as part of the OS upgrade.
 
-      # boss startup scripts
-      cd rc.d
+   To reinstall the startup scripts:
+
+   On boss:
+
+      cd <objdir>/rc.d
+      # diff committed versions vs what is installed
+      gmake diff
+
+      # install all if diffs seem reasonable, otherwise hand merge
       sudo gmake install
+   
+   On ops:
+
+      cd <objdir>/rc.d
+      # diff committed versions vs what is installed
+      gmake control-diff
+
+      # install all if diffs seem reasonable, otherwise hand merge
+      sudo gmake control-install
    
    Something else that is not automatically installed every time are Apache
    config files. You will need an updated version of the main `httpd.conf`
@@ -86,7 +103,7 @@ soruce tree:
    You may need to do some manual merging of the two versions if local
    changes have been made to the installed version.
 
-   For the current use, it is important to make sure the SSLProtocols
+   For the current use, it is important to make sure the "SSLProtocols"
    variable is set correctly as in the committed version(s) of the config
    files.
 
