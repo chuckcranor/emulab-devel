@@ -70,7 +70,8 @@ SBIN_STUFF	= resetvlans console_setup.proxy sched_reload named_setup \
 		  rmproj pool_daemon mkprojdirs \
 		  checknodes_daemon snmpit.proxyv3 image_setup tcpp \
 		  arplockdown bscontrol reportboot reportboot_daemon \
-		  nfsmfs_setup nfsmfs_setup.proxy manage_expsettings
+		  nfsmfs_setup nfsmfs_setup.proxy manage_expsettings \
+		  mkatten
 
 ifeq ($(ISMAINSITE),1)
 SBIN_STUFF     += repos_daemon
