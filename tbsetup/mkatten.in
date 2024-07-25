@@ -1,0 +1,522 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LGPL
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Lesser General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+#
+# mkatten - Configure RF attenuator database state
+#
+
+#
+# Configure variables
+#
+my $TB = '@prefix@';
+
+use lib '@prefix@/lib';
+use libdb;
+use libtblog;
+use Data::Dumper;
+use Experiment;
+use Interface;
+use Lan;
+use English;
+use Getopt::Std;
+use strict;
+
+my $impotent = 0;
+my $verbose = 0;
+
+sub usage {
+    print STDERR << "END";
+Usage: $0 [-n] [-o output] [-v] [matrix-description-file]
+Options:
+  -n            Impotent mode; do not change any database state
+  -o            Specify a file to store a (PostScript) matrix diagram
+                ("-o -" writes diagram to standard output)
+  -v            Verbose mode; write status to standard error
+END
+
+    exit( 1 );
+}
+
+sub path($$) {
+
+    my ($in, $out) = @_;
+
+    die( "invalid matrix connection" )
+	unless( $in % 4 == $out % 4 );
+
+    return ( ( $out - 1 ) << 3 ) + ( ( $in - 1 ) >> 2 ) + 1;
+}
+
+sub paths($$$$) {
+
+    my ($in, $insize, $out, $outsize) = @_;
+    my $p;
+
+    $p = path( $in, $out );
+
+    if( $insize > 1 ) {
+	$p = $p . "," . path( $in + 4, $out );
+    }
+    
+    if( $outsize > 1 ) {
+	$p = $p . "," . path( $in, $out + 4 );
+    }
+    
+    if( $insize > 1 && $outsize > 1 ) {
+	$p = $p . "," . path( $in + 4, $out + 4 );
+    }
+    
+    return $p;
+}
+
+my %ifaces = ();
+
+sub addwire($$$) {
+
+    my ($node_id1, $node_id2, $paths) = @_;
+
+    my $node1 = Node->Lookup( $node_id1 );
+    die( "mkatten: $node_id1 not found" )
+	unless( defined( $node1 ) );
+
+    my $node2 = Node->Lookup( $node_id2 );
+    die( "mkatten: $node_id2 not found" )
+	unless( defined( $node2 ) );
+
+    $ifaces{ $node_id1 } = 0
+	unless( exists( $ifaces{ $node_id1 } ) );
+    
+    $ifaces{ $node_id2 } = 0
+	unless( exists( $ifaces{ $node_id2 } ) );
+    
+    my $ifaceargs = {
+	"iface" => "rf" . $ifaces{ $node_id1 },
+	"role" => TBDB_IFACEROLE_EXPERIMENT(),
+	"type" => "P2PLTE",
+	"max_speed" => 100,
+	"trunk" => 0,
+	"mac" => "000000000000",
+    };
+
+    my $iface1;
+    my $iface2;
+    
+    print STDERR "Create $node_id1 interface:\n" . Dumper( $ifaceargs )
+	if( $verbose );
+    
+    if( !$impotent ) {
+	( $iface1 = Interface->LookupByIface( $node1, $ifaceargs->{'iface'} ) )
+	    or ( $iface1 = Interface->Create( $node1, $ifaceargs ) )
+	    or die( "mkatten: could not create rf${ifaces{$node_id1}} on " .
+		    "$node_id1" );
+    }
+
+    $ifaceargs->{'iface'} = "rf" . $ifaces{ $node_id2 };
+    
+    print STDERR "Create $node_id2 interface:\n" . Dumper( $ifaceargs )
+	if( $verbose );
+    
+    if( !$impotent ) {
+	( $iface2 = Interface->LookupByIface( $node2, $ifaceargs->{'iface'} ) )
+	    or ( $iface2 = Interface->Create( $node2, $ifaceargs ) )
+	    or die( "mkatten: could not create rf${ifaces{$node_id2}} on " .
+		    "$node_id2" );
+    }
+
+    my $wireargs = {
+	"card1" => 100 + $ifaces{ $node_id1 },
+	"port1" => 1,
+	"card2" => 100 + $ifaces{ $node_id2 },
+	"port2" => 1,
+	"external_wire" => $paths,
+    };
+    
+    print STDERR "Create wire:\n" . Dumper( $wireargs )
+	if( $verbose );
+    
+    if( !$impotent ) {
+	Interface::Wire->Create( $iface1, $iface2, 'Node', $wireargs )
+	    or die( "mkatten: could not create wire $node_id1 to $node_id2" );
+    }
+    
+    $ifaces{ $node_id1 }++;
+    $ifaces{ $node_id2 }++;
+}
+
+my $optlist   = "hno:v";
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{'h'})) {
+    usage();
+}
+if (defined($options{'n'})) {
+    $impotent = 1;
+}
+my $output = $options{'o'};
+if (defined($options{'v'})) {
+    $verbose = 1;
+}
+
+@ARGV = "$TB/etc/attenuator-matrix.conf" unless( @ARGV );
+usage() unless( @ARGV == 1 );
+my $deffile = $ARGV[ 0 ];
+my $line = 0;
+my @ins = ();
+my @outs = ();
+
+if( !TBAdmin() && !$impotent ) {
+    print STDERR "mkatten: must be administrator to modify attenuator matrix\n";
+    exit( 1 );
+}
+
+#
+# Parse configuration file.
+#
+while( <> ) {
+    $line++;
+    
+    s/#.*//; # comments
+
+    next if( /^\s*$/ ); # empty line
+
+    if( !/^\s*(in|out)\s+([0-9]+)\s+([-a-zA-Z0-9]+)\s+([0-9]+)\s+"([^"]+)"\s*$/ ) {
+	print STDERR "mkatten: invalid matrix definition " .
+	    "($deffile line $line)\n";
+	exit( 1 );
+    }
+
+    my ($dir, $port, $node, $group, $label) = ($1, $2, $3, $4, $5);
+
+    # node_id is already sanitised from regexp above
+    my $query_result = DBQueryFatal( "SELECT node_id FROM nodes WHERE " .
+        "node_id='$node'" );
+
+    if( $query_result->num_rows != 1 ) {
+	print STDERR "mkatten: warning: node '$node' does not exist " .
+	    "($deffile line $line), ignoring\n";	
+	next;
+    }
+    
+    if( $dir eq "in" ) {
+	if( $port < 1 || $port > 32 ) {
+	    print STDERR "mkatten: invalid in port definition " .
+		"($deffile line $line)\n";
+	    exit( 1 );
+	}
+	
+	$ins[ $port ] = [ $node, $group, $label ];
+    } else {
+	if( $port < 1 || $port > 16 ) {
+	    print STDERR "mkatten: invalid out port definition " .
+		"($deffile line $line)\n";
+	    exit( 1 );
+	}
+	
+	$outs[ $port ] = [ $node, $group, $label ];
+    }
+}
+
+#
+# Produce matrix diagram if desired.
+#
+if( defined( $output ) ) {
+    my $pic;
+    
+    if( $output eq "-" ) {
+	open( $pic, ">&STDOUT" );
+    } else {
+	open( $pic, ">", $output ) or die( "$output: $!" );
+    }
+    
+    print $pic <<"EOF";
+%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 0 0 595 842
+
+/Helvetica-Bold findfont 12 scalefont setfont
+
+160 750 moveto (Input port) show
+(Output port) dup stringwidth pop neg 470 add 750 moveto show
+
+% n intrans - y: translate input port number to vertical offset (0=top)
+/intrans {
+    3 add
+    dup
+    4 mod
+    /group exch def
+    4 div
+    group
+    8 mul
+    add
+} bind def
+
+% n outtrans - y: translate output port number to vertical offset (0=top)
+/outtrans {
+    3 add
+    dup
+    4 mod
+    /group exch def
+    4 div
+    group
+    4 mul
+    add
+} bind def
+
+/Helvetica-Bold findfont 10 scalefont setfont
+
+% label input port numbers
+1 1 32 {
+    dup
+    intrans
+    20 mul
+    160 exch
+    neg 730 add
+    moveto
+    2 string
+    cvs
+    show
+} for
+
+% label output port numbers
+1 1 16 {
+    dup
+    outtrans
+    40 mul
+    460 exch
+    neg 750 add
+    moveto
+    2 string
+    cvs
+    show
+} for
+
+0.5 setlinewidth
+
+% draw connections
+1 1 32 {
+    /input exch def
+    1 1 16 {
+        /output exch def
+        input 4 mod output 4 mod eq {
+            input dup
+            intrans
+            20 mul
+            180 exch
+            neg 735 add
+            moveto
+            output dup
+            outtrans
+            40 mul
+            440 exch
+            neg 755 add
+            lineto stroke
+        } if
+    } for
+} for
+
+% node index size inn -: label input nodes
+/inn {
+    exch intrans
+    20 mul
+    dup
+    /st exch def
+    exch
+    1 sub
+    10 mul
+    dup
+    2 mul
+    /len exch def
+    add
+    80 exch
+    neg 730 add
+    moveto
+    dup
+    stringwidth pop
+    neg 0 rmoveto
+    show
+    90 st neg 735 add moveto
+    0 len neg rlineto
+    stroke
+} bind def
+
+% node index size outn -: label output nodes
+/outn {
+    exch outtrans
+    40 mul
+    dup
+    /st exch def
+    exch
+    1 sub
+    20 mul
+    dup
+    2 mul
+    /len exch def
+    add
+    550 exch
+    neg 750 add
+    moveto
+    show
+    540 st neg 755 add moveto
+    0 len neg rlineto
+    stroke
+} bind def
+
+% node index inp -: label input ports
+/inp {
+    intrans
+    20 mul
+    140 exch
+    neg 730 add
+    moveto
+    dup
+    stringwidth pop
+    neg 0 rmoveto
+    show
+} bind def
+
+% node index outp -: label output ports
+/outp {
+    outtrans
+    40 mul
+    490 exch
+    neg 750 add
+    moveto
+    show
+} bind def
+
+/Helvetica findfont 10 scalefont setfont
+
+1 setlinewidth
+
+EOF
+
+    for( my $i = 1; $i <= 32; $i++ ) {
+	if( defined( $ins[ $i ] ) ) {
+	    my ($node, $group, $label) = @{ $ins[ $i ] };
+	    my $size = 1;
+	    my $j = $i + 4;
+	    while( $j <= 32 && defined( $ins[ $j ] ) &&
+		   $ins[ $i ]->[ 0 ] eq $ins[ $j ]->[ 0 ] ) {
+		$size++;
+		$j += 4;
+	    }
+	    print $pic "($node) $i $size inn\n"
+		unless( $i > 4 && $ins[ $i ]->[ 0 ] eq $ins[ $i - 4 ]->[ 0 ] );
+
+	    print $pic "($label) $i inp\n";
+	}
+    }
+    
+    for( my $i = 1; $i <= 16; $i++ ) {
+	if( defined( $outs[ $i ] ) ) {
+	    my ($node, $group, $label) = @{ $outs[ $i ] };
+	    my $size = 1;
+	    my $j = $i + 4;
+	    while( $j <= 16 && defined( $outs[ $j ] ) &&
+		   $outs[ $i ]->[ 0 ] eq $outs[ $j ]->[ 0 ] ) {
+		$size++;
+		$j += 4;
+	    }
+	    print $pic "($node) $i $size outn\n"
+		unless( $i > 4 && $outs[ $i ]->[ 0 ] eq $outs[ $i - 4 ]->[ 0 ] );
+	    print $pic "($label) $i outp\n";
+	}
+    }
+    
+    print $pic <<"EOF";    
+
+showpage
+%%EOF
+EOF
+
+    close( $pic );
+}
+
+if( !$impotent ) {
+    DBQueryFatal( "LOCK TABLES interfaces WRITE, interface_state WRITE, " .
+		  "wires WRITE, nodes AS n READ" );
+
+    DBQueryFatal( "DELETE FROM wires WHERE iface1 LIKE 'rf%' AND " .
+		  "iface2 LIKE 'rf%' AND external_wire IS NOT NULL" );
+}
+
+#
+# Compute all usable attenuator paths.
+#
+my %allpaths = ();
+for( my $i = 1; $i <= 32; $i++ ) {
+    if( defined( $ins[ $i ] ) ) {
+	for( my $o = $i % 4; $o < 16; $o += 4 ) {
+	    if( defined( $outs[ $o ] ) ) {			
+		my ($inode, $igroup, $ilabel) = @{ $ins[ $i ] };
+		my ($onode, $ogroup, $olabel) = @{ $outs[ $o ] };
+
+		print STDERR "IN $i $inode($igroup) <-> " .
+		    "OUT $o $onode($ogroup)\n"
+		    if( $verbose );
+		
+		my $link = "$inode $igroup $onode $ogroup";
+		    
+		$allpaths{ $link } = []
+		    unless( exists( $allpaths{ $link } ) );
+
+		push( @{ $allpaths{ $link } }, path( $i, $o ) );
+	    }
+	}
+    }
+}
+
+#
+# Construct all wires table entries (each composed of one or more paths).
+#
+while( my ($link, $paths) = each( %allpaths ) ) {
+    my $pathstr = join( ',', @$paths );
+    
+    print STDERR "$link -> $pathstr\n"
+	if( $verbose );
+
+    $link =~ /^([-a-zA-Z0-9]+) [0-9]+ ([-a-zA-Z0-9]+) [0-9]+$/;
+	
+    addwire( $1, $2, $pathstr );
+}
+
+DBQueryFatal( "UNLOCK TABLES" )
+    unless( $impotent );
+
+exit( 0 );

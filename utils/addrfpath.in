@@ -135,6 +135,11 @@ my $interface2 = Interface->LookupByIface($node2, $iface_id2);
 fatal( "Node already has an interface named $iface_id2" )
     if( defined( $interface2 ) && !defined( $force ) );
 
+fatal( "addrfpath is obsolete!!!\n\n" .
+       "Please edit $TB/etc/attenuator-matrix.conf and run mkatten instead.\n" .
+       "If you REALLY want addrfpath, use '-f'..." )
+    unless( defined( $force ) );
+
 #
 # Add the interfaces.
 #
