@@ -95,6 +95,7 @@ $(function ()
         var pidinfo = projects[pid];
 
         $(modal + " .project-info .project-name").html(pid);
+        $(modal + " .project-info .project-portal").html(pidinfo["portal"]);
         $(modal + " .user-info .user-name").html(pidinfo["leader_name"]);
         $(modal + " .user-info .user-email").html(pidinfo["leader_email"]);
     }
