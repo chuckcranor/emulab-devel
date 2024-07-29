@@ -947,6 +947,8 @@ class Instance
                            "at-ru"              => true,
                            "bt-ru550"           => true,
                            "bt-ru650"           => true,
+                           "mav-cpe"            => true,
+                           "mav-ru"             => true,
                            "l3hpl2server"       => true,
         );
 
