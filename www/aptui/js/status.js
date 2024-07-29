@@ -3480,8 +3480,7 @@ $(function ()
 	    window.APT_OPTIONS.SetupCopyToClipboard("#rerun_modal");
 
 	}
-	if (expinfo.params &&
-	    $('#quicktabs_content #bindings').hasClass("hidden")) {
+	if (expinfo.params) {
 	    var bindings  = expinfo.params;
 	    var paramdefs = expinfo.paramdefs;
 	    var html = GetBindingsTable(paramdefs, bindings);
