@@ -1686,7 +1686,7 @@ class Node
     #
     # Get interface/switch related info for the node. 
     #
-    function GetInterfaceInfo($iface = null)
+    function GetInterfaceInfo($iface = null, $restricted = false)
     {
         $node_id = $this->node_id();
         $blob = array();
@@ -1788,7 +1788,7 @@ class Node
             $info["card1"]         = $row["card1"];
             $info["port1"]         = $row["port1"];
             $info["isswitch1"]     = $row["isswitch1"] == 1 ? true : false;
-            if ($row["IP"]) {
+            if ($row["IP"] && !$restricted) {
                 $pid = $row["pid"];
                 $eid = $row["eid"];
                 $url = "$TBBASE/showexp.php3?pid=$pid&eid=$eid";
