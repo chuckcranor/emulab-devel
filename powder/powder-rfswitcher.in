@@ -362,7 +362,10 @@ sub SwitcherRPI($$)
 	print "Would run '$command'\n";
 	exit(0);
     }
+    $UID = 0;
     system($command);
+    $UID = $SAVEUID;
+    
     if ($?) {
 	fatal("Failed to set rfswitch $rfswitch to ".
 	      ($port == 0 ? "off" : "port $port"));
@@ -466,7 +469,11 @@ sub GetSwitcherRPI($)
     if ($debug) {
 	print "$command\n";
     }
+
+    $UID = 0;
     my $output = emutil::ExecQuiet($command);
+    $UID = $SAVEUID;
+    
     if ($?) {
 	print $output;
 	fatal("Failed to get the rfswitcher status");
