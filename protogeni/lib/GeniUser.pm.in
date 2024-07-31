@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017, 2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -845,6 +845,7 @@ sub DefaultProject($)   { return $_[0]->{'USER'}->DefaultProject(); }
 sub FlipTo($$)          { return $_[0]->{'USER'}->FlipTo($_[1]); }
 sub UpdateExports($)    { return $_[0]->{'USER'}->UpdateExports(); }
 sub SendEmail($$$;$)    { return $_[0]->{'USER'}->SendEmail($_[1],$_[2],$_[3]); }
+sub IsAdmin($)		{ return 0; }
 
 # Need to construct this since not in User structure.
 sub hrn($)		{ return "${PGENIDOMAIN}." . $_[0]->uid(); }

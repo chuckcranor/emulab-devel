@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -411,12 +411,8 @@ sub MapToLocalImage($$$$@)
 	my $permerror = GeniResponse->BadArgsResponse(
 	    "Not allowed to use restricted image $urn");
 
-	#
-	# If no geniuser then doing a prestage, do not need to set permissions
-	# just mkaing sure the image exists or is being imported.
-	#
-	return $image
-	    if (!defined($geniuser));
+	# For prestaging, caller might need a credential.
+	$image->_credential(undef);
 
 	#
 	# Check for existence of the image file, in case the user or us
@@ -435,6 +431,19 @@ sub MapToLocalImage($$$$@)
 	
 	return $image
 	    if ($image->global());
+
+	#
+	# If no geniuser then doing a prestage, do not need to set permissions
+	# just making sure the image exists or is being imported. But since it
+	# is not global, we have to have a credential.
+	#
+	if (!defined($geniuser)) {
+	    return $permerror
+		if (!defined($credential));
+	    # The caller is going to need this credential
+	    $image->_credential($credential);
+	    return $image;
+	}
 
 	#
 	# If the image is not global and local, and no credential was

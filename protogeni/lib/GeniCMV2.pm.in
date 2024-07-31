@@ -903,6 +903,7 @@ sub PrestageImages($)
 	while (@todo) {
 	    my $urn   = shift(@todo);
 	    my $image = $prestage{$urn};
+	    my $credential = $image->_credential();
 
 	    if ($image->Lock()) {
 		print STDERR "$image is currently locked. Waiting ...\n";
@@ -937,16 +938,17 @@ sub PrestageImages($)
 	    #
 	    my $pending = Image::PendingImport->Lookup($image->imageid());
 	    if (defined($pending)) {
-		# Already working on it elsewhere.
-		print STDERR "Pending already exists, moving on.\n";
-		$image->Unlock();
-		next;
+		if ($pending->failed()) {
+		    $pending->Delete();
+		}
+		else {
+		    # Already working on it elsewhere.
+		    print STDERR "Pending already exists, moving on.\n";
+		    $image->Unlock();
+		    next;
+		}
 	    }
-	    $pending = Image::PendingImport->Lookup($image->metadata_url());
-	    if (defined($pending)) {
-
-	    }
-	    $pending = Image::PendingImport->Create({
+	    my $pending_args = {
 		"uid"          => $image->creator(),
 		"uid_idx"      => $image->creator_idx(),
 		"pid"          => $image->pid(),
@@ -955,7 +957,11 @@ sub PrestageImages($)
 		"imagename"    => $image->imagename(),
 		"imageid"      => $image->imageid(),
 		"metadata_url" => $image->metadata_url(),
-	    });
+	    };
+	    if (defined($credential)) {
+		$pending_args->{"credential_string"} = $credential->asString();
+	    }
+	    $pending = Image::PendingImport->Create($pending_args);
 	    if (!defined($pending)) {
 		print STDERR "Could not pending import object\n";
 		$image->Unlock();
