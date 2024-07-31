@@ -640,6 +640,11 @@ function Do_Delete()
             return;
         }
     }
+    elseif (isset($ajax_args["allroutes"])) {
+        foreach ($resgroup->routereservations() as $res) {
+            $resuuid .= $res->route_uuid() . " ";
+        }
+    }
     
     #
     # Admins can add an optional cause when denying a reservation.

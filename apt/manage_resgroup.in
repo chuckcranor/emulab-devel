@@ -1351,7 +1351,7 @@ sub DoDelete()
     # until the experiments are terminated.
     #
     my $checkForRouteUsage = sub () {
-	if ($resgroup->RouteReservationList()) {
+	if ($resgroup->Active() && $resgroup->RouteReservationList()) {
 	    my $current;
 	    if (APT_Instance->LookupForProject($project, \$current)) {
 		$resgroup->Unlock() if (!$nolock);

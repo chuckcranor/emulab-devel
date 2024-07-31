@@ -95,6 +95,7 @@
 #define URN_LEN		128
 #define XSTRINGIFY(s)   STRINGIFY(s)
 #define STRINGIFY(s)	#s
+#define ATTENUATORCONF  "/usr/testbed/etc/attenuator-matrix.conf"
 
 /* XXX backward compat */
 #ifndef TBCOREDIR
@@ -410,6 +411,7 @@ COMMAND_PROTOTYPE(dohwcollect);
 COMMAND_PROTOTYPE(dowbstore);
 COMMAND_PROTOTYPE(doattenuatorlist);
 COMMAND_PROTOTYPE(doattenuator);
+COMMAND_PROTOTYPE(doattenuatorpaths);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -556,6 +558,7 @@ struct command {
 	{ "hwcollect",	  FULLCONFIG_NONE, 0, dohwcollect},
 	{ "wbstore",	  FULLCONFIG_NONE, 0, dowbstore},
 	{ "attenuatorlist", FULLCONFIG_NONE, F_ALLOCATED|F_REMREQSSL, doattenuatorlist },
+	{ "attenuatorpaths",   FULLCONFIG_NONE, F_ALLOCATED|F_REMREQSSL, doattenuatorpaths },
 	{ "attenuator",   FULLCONFIG_NONE, F_ALLOCATED|F_REMREQSSL, doattenuator },
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
@@ -15093,4 +15096,163 @@ COMMAND_PROTOTYPE(doattenuator)
 	mysql_free_result( res );
 		
 	return 0;	    
+}
+
+struct nodelist {
+    char *node;
+    struct nodelist *next;
+};
+
+static void free_nodelist( struct nodelist *l ) {
+
+	if( l ) {
+		struct nodelist *next = l->next;
+
+		free( l );
+		return free_nodelist( next );
+	}
+}
+
+static int node_in_list( char *node, struct nodelist *l ) {
+
+	if( !l )
+		return 0;
+
+	if( !strcmp( node, l->node ) )
+		return 1;
+
+	return node_in_list( node, l->next );
+}
+
+/*
+ * Attenuator per-path inventory.
+ */
+COMMAND_PROTOTYPE(doattenuatorpaths)
+{
+	MYSQL_RES   *res;
+	MYSQL_ROW   row;
+	int         nrows;
+	char	    buf[MYBUFSIZE];
+	FILE        *f;
+	char	    *innode[ 32 ], *inport[ 32 ],
+	    	    *outnode[ 16 ], *outport[ 16 ];
+	int	    in, out, c, n, portnum;
+	char        dir[ 2 ], node[ 512 ], port[ 512 ];
+	struct nodelist *l = NULL;
+
+	res = mydb_query( "SELECT DISTINCT( r.node_id ) FROM reserved AS r, "
+			  "interfaces AS i WHERE r.exptidx=%d AND "
+			  "i.iface LIKE 'rf%%' AND r.node_id=i.node_id", 1,
+			  reqp->exptidx );
+
+	if( !res ) {
+		error( "ATTENUATORPATHS: %s: query failed\n",
+		       reqp->nodeid );
+		
+		return 1;
+	}
+	
+	if( !mysql_num_rows( res ) ) {
+		/* no attenuated RF paths in experiment */
+		mysql_free_result( res );
+		return 0;
+	}
+
+	nrows = (int)mysql_num_rows(res);
+	while (nrows-- > 0) {
+		struct nodelist *new = malloc( sizeof (struct nodelist) );
+
+		if( !new ) {
+			error( "ATTENUATORPATHS: malloc failed\n" );
+
+			mysql_free_result( res );
+			free_nodelist( l );
+			
+			return 1;
+		}
+
+		row = mysql_fetch_row(res);
+		new->node = strdup( row[ 0 ] );
+		new->next = l;
+		l = new;
+	}
+	
+	mysql_free_result( res );
+
+	if( !( f = fopen( ATTENUATORCONF, "r" ) ) ) {
+		error( "ATTENUATORPATHS: " ATTENUATORCONF ": %s\n",
+		       strerror( errno ) );
+		free_nodelist( l );
+		
+		return 1;
+	}
+
+	for( in = 0; in < 32; in++ )
+		innode[ in ] = inport[ in ] = NULL;
+	
+	for( out = 0; out < 16; out++ )
+		outnode[ out ] = outport[ out ] = NULL;
+
+	while( ( n = fscanf( f, " %1[io]%*[nut] %d %511s %*d "
+			     "\"%511[^\"]\"", dir, &portnum, node,
+			     port ) ) != EOF ) {
+		if( n < 4 ) {
+			c = getc( f );
+			if( n || c != '#' ) {
+			    error( "ATTENUATORPATHS: " ATTENUATORCONF
+				   ": unexpected '%c'\n", c );
+			    break;
+			}
+			
+			/* comment */
+			while( ( c = getc( f ) ) != '\n' && c != EOF )
+				;
+
+			continue;
+		}
+
+		if( *dir == 'i' ) {
+			if( portnum >= 1 && portnum <= 32 ) {
+				innode[ portnum - 1 ] = strdup( node );
+				inport[ portnum - 1 ] = strdup( port );
+			}
+		} else {
+			if( portnum >= 1 && portnum <= 16 ) {
+				outnode[ portnum - 1 ] = strdup( node );
+				outport[ portnum - 1 ] = strdup( port );
+			}
+		}
+	}
+	
+	fclose( f );
+
+	for( in = 0; in < 32; in++ )
+		for( out = in & 3; out < 16; out += 4 )
+			if( innode[ in ] && outnode[ out ] &&
+			    node_in_list( innode[ in ], l ) &&
+			    node_in_list( outnode[ out ], l ) ) {
+			    sprintf( buf, "%d:%s \"%s\"/%s \"%s\"\n",
+				     ( out << 3 ) + ( in >> 2 ) + 1,
+				     innode[ in ], inport[ in ],
+				     outnode[ out ], outport[ out ] );
+				client_writeback( sock, buf, strlen( buf ), tcp );
+			}
+	
+	for( in = 0; in < 32; in++ ) {
+		if( innode[ in ] )
+			free( innode[ in ] );
+		if( inport[ in ] )
+			free( inport[ in ] );
+	}
+
+	for( out = 0; out < 16; out++ ) {
+		if( outnode[ out ] )
+			free( outnode[ out ] );
+		if( outport[ out ] )
+			free( outport[ out ] );
+	}
+
+	free_nodelist( l );
+	
+	return 0;
 }

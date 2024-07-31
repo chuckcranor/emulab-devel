@@ -6401,7 +6401,7 @@ sub Flash($$)
 #
 # Handle prestaging images at aggregates. 
 #
-sub PrestageImages($$$@)
+sub PrestageImages($$$$)
 {
     my ($self, $operation, $imagelist, $credlist) = @_;
     my $authority = $self->GetGeniAuthority();
@@ -6422,7 +6422,7 @@ sub PrestageImages($$$@)
 	$credentials = [@$credentials, $speaksfor_credential->asString()];
     }
     foreach my $cred (@$credlist) {
-	push(@$credentials, $cred->asString());
+	$credentials = [@$credentials, $cred];
     }
     my $args = {
 	"slice_urn"   => $slice->urn(),

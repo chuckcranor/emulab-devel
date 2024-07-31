@@ -28,6 +28,9 @@ $(function ()
 	$('#quickvm_login_modal_button').click(function () {
 	    sup.ShowWaitWait("We are logging you in, patience please");
 	});
+
+	// Move focus to username
+        $('#quickvm_login_form input[name="uid"]')[0].focus();
     }
 
     /*

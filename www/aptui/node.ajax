@@ -135,7 +135,7 @@ function Do_GetInfo()
     $blob["typeattributes"]  = GetTypeAttributes($node, $blob["attributes"]);
     $blob["features"]        = GetFeatures($node);
     $blob["typefeatures"]    = GetTypeFeatures($node, $blob["features"]);
-    $blob["interfaces"]      = $node->GetInterfaceInfo();
+    $blob["interfaces"]      = $node->GetInterfaceInfo(null, $restricted);
     $blob["op_mode"]         = $node->op_mode();
     $blob["control_ip"]      = $node->ControlIP();
     $blob["eventstate"]      = $node->eventstate();
