@@ -3992,6 +3992,9 @@ sub GetTicketAuxAux($)
 		}
 	    }
 	    elsif ($insolution) {
+		if ($line =~ /^unassigned:\s+([-\w]+)$/) {
+		    $errorstr = "No available physical resources for $1";
+		}
 		$solution .= $line;
 	    }
 	    elsif ($line =~ /^\*\*\*/) {
