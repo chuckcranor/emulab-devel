@@ -1383,7 +1383,7 @@ sub CurrentReservations($;$$$) {
 	    "       res.exptidx=e.idx AND ".
 	    "       p.pid_idx=e.pid_idx AND ".
 	    "       ((e.geniflags=0 && r.uid=e.expt_swap_uid) OR ".
-	    "         (e.geniflags=1 && r.uid=e.expt_head_uid)) AND ".
+	    "         (e.geniflags!=0 && r.uid=e.expt_head_uid)) AND ".
 	    "       ((n.reservable=0 and n.type=r.type) or ".
 	    "        (n.reservable=1 and n.node_id=r.type))) as uidnodes, ".
 	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n, ".
