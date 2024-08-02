@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,7 +56,7 @@ function ClassicExperimentList($which, $target, $state = "active")
         $joinclause  = "left join experiment_stats as s on s.exptidx=e.idx ".
         "left join apt_instances as i on i.slice_uuid=s.slice_uuid";
         $whereclause = "where ((e.pid!='emulab-ops' and e.geniflags=0) or ".
-        "(e.geniflags=1 and i.slice_uuid=s.slice_uuid is null))";
+        "(e.geniflags!=0 and i.slice_uuid=s.slice_uuid is null))";
     }
     else {
         $target_pid = $target->pid();
