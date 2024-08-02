@@ -1102,7 +1102,7 @@ class InstanceHistory
     #
     # Constructor by lookup on unique index.
     #
-    function _construct($uuid) {
+    function __construct($uuid) {
 	$safe_uuid = addslashes($uuid);
 
 	$query_result =
