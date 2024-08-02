@@ -7169,7 +7169,7 @@ sub ServiceLogs($)
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				    "No node for sliver urn");
     }
-    if ($node->class() != "pc") {
+    if ($node->class() ne "pc") {
 	return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED(), undef,
 				    "Node does not support service logs");
     }
