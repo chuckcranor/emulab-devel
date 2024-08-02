@@ -836,18 +836,6 @@ sub GetTicketAuxAux($)
     }
 
     #
-    # Mark the experiment locally as coming from the cooked interface.
-    # This changes what tmcd returns to the local nodes.
-    #
-    my $generated_by = GeniXML::GetText("generated_by", $rspec);
-    if (defined($generated_by) &&
-	$generated_by eq "libvtop") {
-	$slice_experiment->Update({"geniflags" =>
-				       $Experiment::EXPT_GENIFLAGS_EXPT|
-				       $Experiment::EXPT_GENIFLAGS_COOKED});
-    }
-    
-    #
     # Create a virt topology object. We are going to load this up as we
     # process the rspec.
     #
