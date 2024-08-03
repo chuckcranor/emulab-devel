@@ -8359,11 +8359,14 @@ sub FlipToUser($$)
     # XXX watch for Legacy GeniSlices project.
     #
     if ($project->IsNonLocal() || $project->pid() eq "GeniSlices") {
-	$creator = User->Lookup("geniuser");
-	return undef
-	    if (!defined($creator));
-	$user = GeniUser::LocalUser->Create($creator);
-	goto flip;
+	if (! (ref($object) eq "GeniSlice" &&
+	       $experiment->geniflags() & $Experiment::EXPT_GENIFLAGS_LOCAL)) {
+	    $creator = User->Lookup("geniuser");
+	    return undef
+		if (!defined($creator));
+	    $user = GeniUser::LocalUser->Create($creator);
+	    goto flip;
+	}
     }
 
     #

@@ -20,6 +20,12 @@ sub Install($$$)
     my ($server, $isupdate, $impotent) = @_;
 
     #
+    # Disable update, not sure its a good idea!
+    #
+    return 0
+	if ($isupdate);
+
+    #
     # Configure can override setting it here.
     #
     # XXX defaulting this based on the OS running on the boss node is sketchy.
