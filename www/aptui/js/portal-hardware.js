@@ -4,13 +4,19 @@ $(function ()
     var amlist;
     
     var URL = "https://docs.google.com/spreadsheets/d/" +
-	"1G212F80SZvu2yLzUkoeMpLIFmWnmpw7qRECNlqTqsQs/export?format=csv";
+	"1g212f80szvu2ylzukoemplifmwnmpw7qrecnlqtqsqs/export?format=csv";
+    if (true) {
+        // New version
+        URL = "https://docs.google.com/spreadsheets/d/" +
+            "1AVKGnqTBErsrfdlasV53afjnLOtiapKGD8aDtd-Yfcs/export?format=csv";
+    }
     var ignore = [
 	"Max blockstore avail (GB)",
 	"Control network speed",
 	"Notes",
 	"Processor Link",
 	"URN",
+	"GPU Link",
     ];
     var typeLinks = {
 	"Emulab" : "https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/Utah%20Cluster",
@@ -21,6 +27,16 @@ $(function ()
 	"Cloudlab Clemson" : "http://docs.cloudlab.us/hardware.html#(part._cloudlab-clemson)",
 	"Cloudlab UMass" : "http://docs.cloudlab.us/hardware.html#%28part._mass%29",
 	"Onelab" : "http://docs.cloudlab.us/hardware.html#(part._cloudlab-utah)",
+    };
+
+    var gpus = {
+        "K80"   : "https://www.techpowerup.com/gpu-specs/tesla-k80.c2616",
+        "K40m"  : "https://www.techpowerup.com/gpu-specs/tesla-k40m.c2529",
+        "A100"  : "https://www.techpowerup.com/gpu-specs/a100-pcie-40-gb.c3623",
+        "P100"  : "https://www.techpowerup.com/gpu-specs/tesla-p100-pcie-16-gb.c2888",
+        "V100"  : "https://www.techpowerup.com/gpu-specs/tesla-v100-pcie-32-gb.c3184",
+        "A30"   : "https://www.techpowerup.com/gpu-specs/a30-pcie.c3792",
+        "V100S" : "https://www.techpowerup.com/gpu-specs/tesla-v100s-pcie-32-gb.c3467",
     };
 
     function initialize()
@@ -89,6 +105,12 @@ $(function ()
 		}
 		else if (key == "Processor type") {
 		    var link = row["Processor Link"];
+		    link = link.replace("%23", "#");
+		    
+		    html += "<a href='" + link + "'>" + val + "</a>";
+		}
+		else if (key == "GPU model") {
+		    var link = row["GPU Link"];
 		    link = link.replace("%23", "#");
 		    
 		    html += "<a href='" + link + "'>" + val + "</a>";
