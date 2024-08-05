@@ -46,8 +46,8 @@ echo "<div id='main-body'>
         <th class='sorter-false text-center' colspan=6>CPU</th>
         <th class='sorter-false'></th>
         <th class='sorter-false text-center' colspan=4>Storage</th>
-        <th class='sorter-false text-center' colspan=7>Network</th>
-        <th class='sorter-false text-center'></th>
+        <th class='sorter-false text-center' colspan=8>Network</th>
+        <th class='sorter-false text-center' colspan=5>GPUs</th>
         <th class='sorter-false text-center'></th>
        </tr>
       </thead>
