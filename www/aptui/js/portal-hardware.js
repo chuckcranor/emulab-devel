@@ -17,6 +17,7 @@ $(function ()
 	"Processor Link",
 	"URN",
 	"GPU Link",
+        "Network Cards",
     ];
     var typeLinks = {
 	"Emulab" : "https://gitlab.flux.utah.edu/emulab/emulab-devel/wikis/Utah%20Cluster",
@@ -38,6 +39,67 @@ $(function ()
         "A30"   : "https://www.techpowerup.com/gpu-specs/a30-pcie.c3792",
         "V100S" : "https://www.techpowerup.com/gpu-specs/tesla-v100s-pcie-32-gb.c3467",
     };
+
+    // Yuck.
+    var groupings = [
+        5,  // CPU
+        11, // Storage
+        12, // Network
+        16, // GPUs
+        24, // Trailing type column
+    ];
+
+    /*
+      Clemson:
+      r6525:   1x25G Mellanox MT27800 [ConnectX-5]
+      r650:    1x25G Mellanox MT27800 [ConnectX-5]
+      r7525:   1x25G Mellanox MT27800 [ConnectX-5]
+               2x100G Mellanox MT42822 BlueField-2 [ConnectX-6 Dx]
+      ibm8335: 1x10G Broadcom NetXtreme II BCM57800
+      c6420:   1x10G Intel X710 SFP+
+      c4130:   1x10G Intel X710 SFP+
+      dss7500: 1x10G Intel 2P X520
+      c6320:   1x10G Intel 82599ES SFI/SFP+
+      c8220x:  1x10G Intel 82599ES SFI/SFP+
+      c8220:   1x10G Intel 82599ES SFI/SFP+
+
+      Wisconsin:
+      d8545:  1x200G Mellanox MT28908 [ConnectX-6]
+      d7525:  1x200G Mellanox MT28908 [ConnectX-6]
+      sm220u: 2x100G Mellanox MT2892 [ConnectX-6 Dx]
+      sm110p: 2x100G Mellanox MT2892 [ConnectX-6 Dx]
+      c4130:  2x10G Intel 82599ES SFI/SFP+
+      c240g5: 2x25G Mellanox MT2894 [ConnectX-6 Lx]
+      c220g5: 2x10G Intel X710 SFP+
+      c240g2: 2x10G Intel 82599ES SFI/SFP+
+      c220g2: 2x10G Intel 82599ES SFI/SFP+
+      c240g1: 2x10G Intel 82599ES SFI/SFP+
+      c220g1: 2x10G Intel 82599ES SFI/SFP+
+
+      Utah:
+      d750:       3x25G Broadcom BCM57504 NetXtreme-E
+      c6525-100g: 1x25G Mellanox MT27800 [ConnectX-5]
+                  1x100G Mellanox MT28800 [ConnectX-5 Ex]
+      c6525-25g:  2x25G Mellanox MT27800 [ConnectX-5]
+      d6515:      1x25G Broadcom BCM57414 NetXtreme-E (RDMA)
+                  2x100G Mellanox MT28800 [ConnectX-5 Ex]
+      xl170:      1x25G Mellanox MT27710 [ConnectX-4 Lx]
+      m510:       1x10G Mellanox MT27520 [ConnectX-3 Pro]
+      m400:       1x10G Mellanox MT27520 [ConnectX-3 Pro]
+
+      APT:
+      r320:       1x10G Mellanox MT27500 [ConnectX-3]
+      r6220:      1x10G Intel 2P X520
+
+      Emulab:
+      d840:   2x40G Intel XL710 QSFP+
+      D740:   2x10G Intel X710 SFP+
+      d820:   4x10G Intel 2P X520
+      d430:   2-4x1G Intel I350
+              2-4x10G Intel X710 SFP+
+      d710:   4-5x1G Broadcom NetXtreme II BCM5709
+
+     */
 
     function initialize()
     {
@@ -64,37 +126,70 @@ $(function ()
 		var data = $.csv.toObjects(rest);
 		PopulateTable(first, data);
 	    }   
-	});	
+	});
     }
 
     function PopulateTable(first, data)
     {
-	var html = "<tr>";
 	console.info("PopulateTable", data);
-
+	var html = "<tr>";
+        var index = 1;
+        
 	_.each(data[0], function (val, key) {
 	    if (_.contains(ignore, key)) {
 		return;
 	    }
-	    html += "<th>" + key + "</th>";
+            var border = "";
+            if (_.contains(groupings, index)) {
+                border = " class=group-border-left";
+            }
+            console.info(key, border, parseInt(index));
+	    html += "<th" + border + ">" + key + "</th>";
 	    if (key == "Circa") {
 		html += "<th>lshw</th>";
 	    }
+            index++;
 	});
 	// Duplicate first column
-	html += "<th>Type Name</th>";
+	html += "<th class=group-border-left>Type Name</th>";
 	html += "</tr>";
 	$('#portal-hardware-table thead').append(html);
 
 	_.each(data, function (row) {
 	    console.info(row);
+
+            /*
+             * Determine network cards for each resident speed.
+             */
+            var networkCards = {
+                "100 Mbps" : null,
+                "1 Gbps"   : null,
+                "10 Gbps"  : null,
+                "25 Gbps"  : null,
+                "40 Gbps"  : null,
+                "100 Gbps" : null,
+                "200 Gbps" : null,
+            };
+            var cards = row["Network Cards"].split(",");
+            _.each(_.keys(networkCards), function(speed, index) {
+                var card = cards[index];
+                if (card !== undefined && card != "") {
+                    networkCards[speed] = card;
+                }
+            });
+            
 	    var hwtype;
 	    var html = "<tr>";
+            index = 1;
 	    _.each(row, function (val, key) {
 		if (_.contains(ignore, key)) {
 		    return;
 		}
-		html += "<td class='text-nowrap'>";
+                var border = "";
+                if (_.contains(groupings, index)) {
+                    border = " group-border-left";
+                }
+		html += "<td class='text-nowrap" + border + "'>";
 		
 		if (key == "Type name") {
 		    var cluster = row["Cluster"]
@@ -115,6 +210,11 @@ $(function ()
 		    
 		    html += "<a href='" + link + "'>" + val + "</a>";
 		}
+                else if (_.has(networkCards, key) && networkCards[key]) {
+                    html += "<a data-toggle='tooltip' data-bs-toggle='tooltip' " +
+                        "data-bs-trigger=hover title='" + networkCards[key] + "'>" +
+                        val + "</a>";
+                }
 		else {
 		    html += val;
 		}
@@ -131,13 +231,13 @@ $(function ()
 		    html += link;
 		    html += "</td>";
 		}
+                index++;
 	    });
 	    // Duplicate first column
-	    html += "<td class='text-nowrap'>" + hwtype + "</td>";
+	    html += "<td class='text-nowrap group-border-left'>" + hwtype + "</td>";
 	    html += "</tr>";
 	    $('#portal-hardware-table tbody').append(html);
 	});
-
 	$('#portal-hardware-table').removeClass("hidden");
 
 	$('#portal-hardware-table')
@@ -145,6 +245,7 @@ $(function ()
 		theme : 'bootstrap',
 		widgets : [ "uitheme", "filter" ],
 		headerTemplate : '{content} {icon}',
+                tableClass: "table-hover",
 		widgetOptions: {
 		    // include child row content while filtering, if true
 		    filter_childRows  : true,
@@ -167,6 +268,10 @@ $(function ()
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
 	});
+	$('[data-toggle="tooltip"]').tooltip({
+	    placement: 'right',
+	});
+
     }
 
     $(document).ready(initialize);

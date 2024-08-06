@@ -36,6 +36,12 @@ echo "<div id='main-body'>
   i.tablesorter-icon {
      top: unset;
   }
+  .group-border-left {
+     border-left-width: 3px !important;
+  }
+  .tooltip-inner {
+     max-width: 250px;
+  }
  </style>
  <div class='row'>
   <div class='col-sm-12'>
@@ -43,12 +49,13 @@ echo "<div id='main-body'>
       <thead>
        <tr>
         <th class='sorter-false' colspan=5></th>
-        <th class='sorter-false text-center' colspan=6>CPU</th>
-        <th class='sorter-false'></th>
-        <th class='sorter-false text-center' colspan=4>Storage</th>
-        <th class='sorter-false text-center' colspan=8>Network</th>
-        <th class='sorter-false text-center' colspan=5>GPUs</th>
-        <th class='sorter-false text-center'></th>
+        <th class='sorter-false text-center
+            group-border-left' colspan=6>CPU</th>
+        <th class='sorter-false group-border-left'></th>
+        <th class='sorter-false text-center group-border-left' colspan=4>Storage</th>
+        <th class='sorter-false text-center group-border-left' colspan=8>Network</th>
+        <th class='sorter-false text-center group-border-left' colspan=5>GPUs</th>
+        <th class='sorter-false text-center group-border-left'></th>
        </tr>
       </thead>
       <tbody>
