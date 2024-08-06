@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -271,7 +271,8 @@ if (exists($ENV{'PATH_INFO'}) && $ENV{'PATH_INFO'} ne "") {
 if (($MODULE eq "cm" || $MODULE eq $AM_MODULE) &&
     GeniUtil::ExperimentsDisabled()) {
     XMLError(HTTP_SERVICE_UNAVAILABLE(),
-	     "Server temporarily offline; please try again later");
+	     "Server temporarily offline; ".
+	     "  experiments are disabled in the CM");
 }
 
 #
