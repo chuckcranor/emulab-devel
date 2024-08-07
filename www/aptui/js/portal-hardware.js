@@ -2,6 +2,10 @@ $(function ()
 {
     'use strict';
     var amlist;
+    var templates = APT_OPTIONS.fetchTemplateList(['portal-hardware']);
+
+    var GPUMATRIX = 
+        "https://docs.nvidia.com/datacenter/tesla/drivers/index.html#software-matrix";
     
     var URL = "https://docs.google.com/spreadsheets/d/" +
 	"1g212f80szvu2ylzukoemplifmwnmpw7qrecnlqtqsqs/export?format=csv";
@@ -42,6 +46,7 @@ $(function ()
 
     // Yuck.
     var groupings = [
+        4,  // Quantity
         5,  // CPU
         11, // Storage
         12, // Network
@@ -51,8 +56,8 @@ $(function ()
 
     /*
       Clemson:
-      r6525:   1x25G Mellanox MT27800 [ConnectX-5]
-      r650:    1x25G Mellanox MT27800 [ConnectX-5]
+      r6525:   1x100G Mellanox MT27800 [ConnectX-5]
+      r650:    1x100G Mellanox MT27800 [ConnectX-5]
       r7525:   1x25G Mellanox MT27800 [ConnectX-5]
                2x100G Mellanox MT42822 BlueField-2 [ConnectX-6 Dx]
       ibm8335: 1x10G Broadcom NetXtreme II BCM57800
@@ -107,6 +112,7 @@ $(function ()
 
 	amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 	console.info("amlist", amlist);
+	$('#main-body').html(templates["portal-hardware"]);
 	
 	$.ajax({
 	    type: "GET",  
@@ -139,15 +145,24 @@ $(function ()
 	    if (_.contains(ignore, key)) {
 		return;
 	    }
+            var style  = " style='padding-left: 2px !important; " +
+                "padding-right: 2px !important;'";
             var border = "";
             if (_.contains(groupings, index)) {
                 border = " class=group-border-left";
             }
             console.info(key, border, parseInt(index));
-	    html += "<th" + border + ">" + key + "</th>";
+            if (key == "Original Quantity") {
+                key = "Orig";
+            }
+	    html += "<th" + border + style + ">" + key + "</th>";
 	    if (key == "Circa") {
-		html += "<th>lshw</th>";
+		html += "<th" + style + ">lshw</th>";
 	    }
+            else if (key == "Orig") {
+		html += "<th" + style + ">Now</th>";
+		html += "<th" + style + ">Free</th>";
+            }
             index++;
 	});
 	// Duplicate first column
@@ -195,20 +210,23 @@ $(function ()
 		    var cluster = row["Cluster"]
 		    var link    = typeLinks[cluster];
 			
-		    html += "<a href='" + link + "'>" + val + "</a>";
+		    html += "<a href='" + link + "' target=_blank>" + val + "</a>";
 		    hwtype = val;
 		}
 		else if (key == "Processor type") {
 		    var link = row["Processor Link"];
 		    link = link.replace("%23", "#");
 		    
-		    html += "<a href='" + link + "'>" + val + "</a>";
+		    html += "<a href='" + link + "' target=_blank>" + val + "</a>";
 		}
 		else if (key == "GPU model") {
 		    var link = row["GPU Link"];
 		    link = link.replace("%23", "#");
 		    
-		    html += "<a href='" + link + "'>" + val + "</a>";
+		    html += "<a href='" + link + "' target=_blank>" + val + "</a>";
+		}
+		else if (key == "GPU arch") {
+		    html += "<a href='" + GPUMATRIX + "' target=_blank>" + val + "</a>";
 		}
                 else if (_.has(networkCards, key) && networkCards[key]) {
                     html += "<a data-toggle='tooltip' data-bs-toggle='tooltip' " +
@@ -231,6 +249,18 @@ $(function ()
 		    html += link;
 		    html += "</td>";
 		}
+                else if (key == "Original Quantity") {
+		    var urn  = row["URN"];
+                    var now  = amlist[urn].typeinfo[hwtype].count;
+                    var free = amlist[urn].typeinfo[hwtype].free;
+                    
+		    html += "<td>";
+		    html += now;
+		    html += "</td>";
+		    html += "<td>";
+		    html += free;
+		    html += "</td>";
+                }
                 index++;
 	    });
 	    // Duplicate first column
@@ -244,8 +274,8 @@ $(function ()
 	    .tablesorter({
 		theme : 'bootstrap',
 		widgets : [ "uitheme", "filter" ],
-		headerTemplate : '{content} {icon}',
                 tableClass: "table-hover",
+                cssHeader: "foobar",
 		widgetOptions: {
 		    // include child row content while filtering, if true
 		    filter_childRows  : true,
