@@ -31,39 +31,7 @@ $page_title = "Portal Hardware";
 SPITHEADER(1);
 
 # Place to hang the toplevel template.
-echo "<div id='main-body'>
- <style>
-  i.tablesorter-icon {
-     top: unset;
-  }
-  .group-border-left {
-     border-left-width: 3px !important;
-  }
-  .tooltip-inner {
-     max-width: 250px;
-  }
- </style>
- <div class='row'>
-  <div class='col-sm-12'>
-    <table id='portal-hardware-table' class='tablesorter hidden'>
-      <thead>
-       <tr>
-        <th class='sorter-false' colspan=5></th>
-        <th class='sorter-false text-center
-            group-border-left' colspan=6>CPU</th>
-        <th class='sorter-false group-border-left'></th>
-        <th class='sorter-false text-center group-border-left' colspan=4>Storage</th>
-        <th class='sorter-false text-center group-border-left' colspan=8>Network</th>
-        <th class='sorter-false text-center group-border-left' colspan=5>GPUs</th>
-        <th class='sorter-false text-center group-border-left'></th>
-       </tr>
-      </thead>
-      <tbody>
-      </tbody>
-    </table>
-  </div>
- </div>
-</div>";
+echo "<div id='main-body'></div>\n";
 
 $all = Aggregate::AllAggregatesList();
 $amlist  = array();
@@ -71,11 +39,23 @@ while (list($index, $aggregate) = each($all)) {
     $urn = $aggregate->urn();
     $am  = $aggregate->name();
     $url = $aggregate->weburl();
+    $typeinfo = $aggregate->typeinfo;
 
+    foreach ($aggregate->ReservableNodes(1) as $node => $info) {
+        $typename = $info["type"];
+        if (!array_key_exists($typename, $typeinfo)) {
+            $typeinfo[$typename] = array("count" => 0, "free" => 0);
+        }
+        $typeinfo[$typename]["count"]++;
+        if ($info["available"]) {
+            $typeinfo[$typename]["free"]++;
+        }
+    }
     $amlist[$urn] = array(
         "urn"   => $urn,
         "url"   => $url,
         "name"  => $am,
+        "typeinfo" => $typeinfo,
     );
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
@@ -88,11 +68,7 @@ REQUIRE_MOMENT();
 REQUIRE_MARKED();
 REQUIRE_TABLESORTER();
 AddLibrary("js/lib/jquery.csv.js");
-echo "<style>
-  .tablesorter-bootstrap .tablesorter-header i.tablesorter-icon {
-     top: unset;
-  }
- </style>\n";
 SPITREQUIRE("js/portal-hardware.js");
+AddTemplate("portal-hardware");
 SPITFOOTER();
 ?>
