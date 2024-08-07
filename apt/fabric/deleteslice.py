@@ -23,11 +23,12 @@ try:
 
     slices = fablib.get_slices()
     for slice in slices:
+        #print(str(slice))
         if slice.get_name() == args.name or slice.get_slice_id() == args.name:
             slice.delete()
+            # Found the slice
+            sys.exit(0)
             pass
-        # Found a slice
-        sys.exit(0)
         pass
     # Slice not found is okay
     sys.exit(0)
