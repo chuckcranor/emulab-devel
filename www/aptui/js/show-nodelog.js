@@ -62,7 +62,7 @@ $(function ()
 	var table = $('#log-table')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets: ["uitheme", "filter"],
+		    widgets: ["uitheme", "filter", "zebra"],
 		    headerTemplate : '{content} {icon}',
 
 		    widgetOptions: {

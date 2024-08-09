@@ -318,8 +318,8 @@ $(function ()
 	var table = $('#portal-hardware-table')
 	    .tablesorter({
 		theme : 'bootstrap',
-		widgets : [ "uitheme", "filter"],
-                tableClass: "table-hover",
+		widgets : [ "uitheme", "filter", "zebra"],
+
                 // hidden filter input/selects will resize the
                 // columns, so try to minimize the change
                 widthFixed : true,
