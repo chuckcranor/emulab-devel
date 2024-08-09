@@ -3039,7 +3039,7 @@
 
 	ts.themes = {
 		'bootstrap' : {
-			table        : 'table table-bordered table-striped',
+			table        : 'table table-bordered table-hover',
 			caption      : 'caption',
 			// header class names
 			header       : 'bootstrap-header', // give the header a gradient background (theme.bootstrap_2.css)

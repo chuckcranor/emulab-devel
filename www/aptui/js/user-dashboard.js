@@ -193,7 +193,7 @@ $(function ()
 		$('#experiments_content #experiments_table')
 		    .tablesorter({
 			theme : 'bootstrap',
-			widgets : [ "uitheme" ],
+			widgets : [ "uitheme", "zebra" ],
 			headerTemplate : '{content} {icon}',			
 		    });
 	    }
@@ -201,7 +201,7 @@ $(function ()
 		$('#project_experiments_content #experiments_table')
 		    .tablesorter({
 			theme : 'bootstrap',
-			widgets : [ "uitheme", ],
+			widgets : [ "uitheme", "zebra"],
 			headerTemplate : '{content} {icon}',
 		    });
 	    }
@@ -280,7 +280,7 @@ $(function ()
 	    var table = $('#classic_experiments_content .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme", ],
+		    widgets : [ "uitheme", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		});
 	};
@@ -349,7 +349,7 @@ $(function ()
 	    var table = $('#' + 'user-profiles-table')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme", "filter"],
+		    widgets : [ "uitheme", "filter", "zebra"],
 		    headerTemplate : '{content} {icon}',
 		    widgetOptions: {
 			// include child row content while filtering, if true
@@ -458,7 +458,7 @@ $(function ()
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme", "filter"],
+		    widgets : [ "uitheme", "filter", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		    widgetOptions: {
 			// include child row content while filtering, if true
@@ -527,7 +527,7 @@ $(function ()
 	    var table = $('#classic_profiles_content .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme"],
+		    widgets : [ "uitheme", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		});
 	};
@@ -580,7 +580,7 @@ $(function ()
 	    var table = $('#projects_table')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme"],
+		    widgets : [ "uitheme", "zebra"],
 		    headerTemplate : '{content} {icon}',
 		});
 	}
@@ -700,7 +700,7 @@ $(function ()
 	    var table = $('#datasets_content .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme"],
+		    widgets : [ "uitheme", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		});
 	}
@@ -972,7 +972,7 @@ $(function ()
 	    paramsets_table = $('#paramsets_content .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme"],
+		    widgets : [ "uitheme", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		});
 	}
@@ -1013,7 +1013,7 @@ $(function ()
 	    var table = $('#classic_datasets_content .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme" ],
+		    widgets : [ "uitheme", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		});
 	};

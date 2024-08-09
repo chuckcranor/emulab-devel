@@ -54,7 +54,7 @@ $(function ()
 	var table = $(".tablesorter")
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets: ["uitheme", "filter"],
+		    widgets: ["uitheme", "zebra", "filter"],
 		    headerTemplate : '{content} {icon}',
 
 		    widgetOptions: {
