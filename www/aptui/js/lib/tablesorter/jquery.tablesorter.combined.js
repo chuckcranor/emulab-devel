@@ -3795,7 +3795,7 @@
 			}
 			if ( wo.filter_functions ) {
 				for ( column = 0; column < c.columns; column++ ) {
-					fxn = ts.getColumnData( table, wo.filter_functions, column );
+				        fxn = ts.getColumnData( table, wo.filter_functions, column , true);
 					if ( fxn ) {
 						// remove 'filter-select' from header otherwise the options added here are replaced with
 						// all options
