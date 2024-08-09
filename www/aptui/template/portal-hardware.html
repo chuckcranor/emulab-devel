@@ -18,8 +18,119 @@
      padding-left: 4px !important;
      padding-right: 1px !important;
  }
+ .hide-impl {
+     display: none !important;
+ }
 </style>
-</style>
+<div class='row justify-content-center'>
+  <div class="col-auto">
+    <div class="card">
+      <div class="card-header text-center">
+	<h5 class="card-title">Filtering Options</h5>
+      </div>
+      <div class="card-body pb-1">
+	<div class="row">
+	  <div class="col">
+	    <div class="form-floating">
+	    <select class="form-select search-select" id="cluster-select"
+		    data-column="3">
+	      <option value="">--</option>
+	      <option value="1">Cloudlab Utah</option>
+	      <option value="2">Cloudlab Wisc</option>
+	      <option value="3">Cloudlab Clemson</option>
+	      <option value="4">Cloudlab UMass</option>
+	      <option value="5">Emulab</option>
+	      <option value="6">Powder</option>
+	      <option value="7">APT</option>
+	    </select>
+	    <label>Cluster</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	    <select class="form-select search-select" id="processor-select"
+		    data-column="6">
+	      <option value="">--</option>
+	      <option value="1">Intel</option>
+	      <option value="2">AMD</option>
+	      <option value="3">ARM</option>
+	      <option value="4">IBM</option>
+	    </select>
+	    <label>Processor</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	    <select class="form-select search-select" id="gpu-select"
+		    data-placeholder="GPU"
+		    data-column="26">
+	      <option value="">--</option>
+	      <option value="1">A30</option>
+	      <option value="2">K80</option>
+	      <option value="3">K40m</option>
+	      <option value="4">A100</option>
+	      <option value="5">P100</option>
+	      <option value="6">V100</option>
+	      <option value="7">V100s</option>
+	    </select>
+	    <label>GPU</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	    <select class="form-select search-select" id="network-select"
+		    data-column="31">
+	      <option value="">--</option>
+	    </select>
+	    <label>Network</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="dram-select"
+		      data-column="12">
+		<option value="">--</option>
+	      </select>
+	      <label>DRAM</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="cpus-select"
+		      data-column="9">
+		<option value="">--</option>
+	      </select>
+	      <label>CPUs</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="threads-select"
+		      data-column="7">
+		<option value="">--</option>
+	      </select>
+	      <label>Threads</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="threads-select"
+		      data-column="13">
+		<option value="">--</option>
+	      </select>
+	      <label>Disk Space (GB)</label>
+	    </div>
+	  </div>
+	</div>
+	<div class="row justify-content-center">
+	  <div class="col-auto">
+	    <a href="#" role="button" class="reset-filters">Reset Filters</a>
+	  </div>
+	</div>	
+      </div>
+    </div>
+  </div>
+</div>
 <div class='row'>
   <div class='col-sm-12 table-responsive'>
     <table id='portal-hardware-table' class='tablesorter hidden'>
@@ -27,7 +138,7 @@
 	<tr>
           <th class='sorter-false' colspan=4></th>
           <th class='sorter-false text-center
-		     group-border-left' colspan=3>Quantities</th>
+		     group-border-left' colspan=2>Quantities</th>
           <th class='sorter-false text-center
 		     group-border-left' colspan=6>CPU</th>
           <th class='sorter-false group-border-left'></th>
@@ -48,6 +159,7 @@
           <th class='sorter-false text-center group-border-left'
 	      colspan=5>GPUs</th>
           <th class='sorter-false text-center group-border-left'></th>
+	  <th class="hide-impl"></th>
 	</tr>
       </thead>
       <tbody>
