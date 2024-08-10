@@ -4,6 +4,7 @@ $(function ()
     var amlist;
     var networkCards = {};
     var templates = APT_OPTIONS.fetchTemplateList(['portal-hardware']);
+    var matchingNodes = 0;
 
     var GPUMATRIX = 
         "https://docs.nvidia.com/datacenter/tesla/drivers/index.html#software-matrix";
@@ -191,7 +192,8 @@ $(function ()
             if (key == "Number in service") {
                 key = "Total";
             }
-	    html += "<th " + classes + style + placeholder + ">" + key + "</th>";
+	    html += "<th " + classes + style + placeholder + ">" +
+                key + "</th>";
 	    if (key == "Circa") {
 		html += "<th class=filter-false " + style + ">lshw</th>";
 	    }
@@ -232,7 +234,8 @@ $(function ()
                         var val = _.size(networkCards);
                         networkCards[card] = val;
                         $('#network-select')
-                            .append("<option value='" + card + "'>" + card + "</option>");
+                            .append("<option value='" + card + "'>" +
+                                    card + "</option>");
                     }
                 }
             });
@@ -248,33 +251,42 @@ $(function ()
                 if (_.contains(groupings, index)) {
                     border = " group-border-left";
                 }
+                if (key == "Number in service") {
+                    border += " total-nodes";
+                }
 		html += "<td class='text-nowrap" + border + "'>";
 		
 		if (key == "Type name") {
 		    var cluster = row["Cluster"]
 		    var link    = typeLinks[cluster];
 			
-		    html += "<a href='" + link + "' target=_blank>" + val + "</a>";
+		    html += "<a href='" + link + "' target=_blank>" +
+                        val + "</a>";
 		    hwtype = val;
 		}
 		else if (key == "Processor type") {
 		    var link = row["Processor Link"];
 		    link = link.replace("%23", "#");
 		    
-		    html += "<a href='" + link + "' target=_blank>" + val + "</a>";
+		    html += "<a href='" + link + "' target=_blank>" +
+                        val + "</a>";
 		}
 		else if (key == "GPU model") {
 		    var link = row["GPU Link"];
 		    link = link.replace("%23", "#");
 		    
-		    html += "<a href='" + link + "' target=_blank>" + val + "</a>";
+		    html += "<a href='" + link + "' target=_blank>" +
+                        val + "</a>";
 		}
 		else if (key == "GPU arch") {
-		    html += "<a href='" + GPUMATRIX + "' target=_blank>" + val + "</a>";
+		    html += "<a href='" + GPUMATRIX + "' target=_blank>" +
+                        val + "</a>";
 		}
                 else if (_.has(networks, key) && networks[key]) {
-                    html += "<a href='' data-toggle='tooltip' data-bs-toggle='tooltip' " +
-                        "data-bs-trigger=hover title='" + networks[key] + "'>" +
+                    html += "<a href='' data-toggle='tooltip' " + 
+                        "data-bs-toggle='tooltip' " +
+                        "data-bs-trigger=hover title='" + networks[key]
+                        + "'>" +
                         val + "</a>";
                 }
 		else {
@@ -301,11 +313,13 @@ $(function ()
 		    html += "<td>";
 		    html += free;
 		    html += "</td>";
+                    matchingNodes += parseInt(now);
                 }
                 index++;
 	    });
 	    // Duplicate first column
-	    html += "<td class='text-nowrap group-border-left'>" + hwtype + "</td>";
+	    html += "<td class='text-nowrap group-border-left'>" +
+                hwtype + "</td>";
             // Network cards hidden column.
 	    html += "<td class='hide-impl'>";
             html += row["Network Cards"];
@@ -314,6 +328,7 @@ $(function ()
 	    $('#portal-hardware-table tbody').append(html);
 	});
 	$('#portal-hardware-table').removeClass("hidden");
+        $('#matching-nodes').html(matchingNodes);
 
 	var table = $('#portal-hardware-table')
 	    .tablesorter({
@@ -342,13 +357,13 @@ $(function ()
                             "< 480"      : function(e, n, f, i, $r, c, data) {
                                 console.info(n);
                                 return n < 480; },
-                            "480 - 1000"  : function(e, n, f, i, $r, c, data) {
+                            "480 - 1000" : function(e, n, f, i, $r, c, data) {
                                 console.info(n);
                                 return n >= 480 && n < 1000; },
-                            "1000 - 3000"    : function(e, n, f, i, $r, c, data) {
+                            "1000 - 3000" : function(e, n, f, i, $r, c, data) {
                                 console.info(n);
                                 return n >= 480 && n < 3000; },
-                            "> 3000"        : function(e, n, f, i, $r, c, data) {
+                            "> 3000"      : function(e, n, f, i, $r, c, data) {
                                 console.info(n);
                                 return n >= 3000; },
                         },
@@ -401,36 +416,21 @@ $(function ()
             var column     = $(event.target).data("column");
             var value      = $(event.target).val();
             var tsFilter   = $(".tablesorter-filter-row " +
-                               "td[data-column=" + column + "]").find("input, select");
+                               "td[data-column=" + column + "]")
+                .find("input, select");
+            
             console.info(column, value, tsFilter);
             $(tsFilter).val(value);
 
             $(table).one('filterEnd', function(event, config) {
                 /*
-                 * Now need to reflect changes in the *other* tablesorter selectors,
-                 * to the panel selectors.
+                 * Now need to reflect changes in the *other* tablesorter
+                 * selectors, to the panel selectors.
                  */
-                $('.tablesorter-filter-row select:not([data-column=' + column + '])')
-                    .each(function () {
-                        var column   = $(this).data("column");
-                        var selected = $(this).find("option:selected");
-                        var selector = $(".search-select[data-column=" + column + "]");
-                        console.info("other", column, selector, $(selected).val());
-                    
-                        // Remove all the options from panel selector
-                        $(selector).find('option:not([value=""])').remove();
-                        console.info($(selector));
-
-                        // Clone the options from the tablesorter option list.
-                        $(this).find('option:not([value=""])').each(function () {
-                            var clone = $(this).clone();
-                            if (selected.length && $(selected).val() == $(clone).val()) {
-                                $(clone).prop("selected", true);
-                            }
-                            $(selector).append(clone);
-                        });
-                    });
+                syncFilters(column);
+                updateMatched();
             });
+            
             if ($(tsFilter).prop('nodeName') == "SELECT") {
                 $(tsFilter).change();
             }
@@ -438,6 +438,70 @@ $(function ()
                 $(tsFilter).blur();
             }
         });
+
+        /*
+         * Sync tablesorter filters to the panel filters so that the panel
+         * reflect changes in the tablesorter filters after filtering. The
+         * optional argument is to avoid the filter that the user changed.
+         */
+        function syncFilters(skipColumn)
+        {
+            console.info("syncFilters", skipColumn);
+            
+            var skipper = "";
+            if (skipColumn !== undefined) {
+                skipper = ':not([data-column=' + skipColumn + '])';
+
+            }
+            $('.tablesorter-filter-row select' + skipper)
+                .each(function () {
+                    var column   = $(this).data("column");
+                    var selected = $(this).find("option:selected");
+                    var selector = $(".search-select[data-column=" +
+                                     column + "]");
+                    //console.info("other", column, selector,
+                    //$(selected).val());
+                    
+                    // Remove all the options from panel selector
+                    $(selector).find('option:not([value=""])').remove();
+                    //console.info($(selector));
+
+                    // Clone the options from the tablesorter option list.
+                    $(this).find('option:not([value=""])').each(function () {
+                        var clone = $(this).clone();
+                        if (selected.length &&
+                            $(selected).val() == $(clone).val()) {
+                            $(clone).prop("selected", true);
+                        }
+                        $(selector).append(clone);
+                    });
+                });
+        }
+
+        /*
+         * Count up total number of nodes on each 
+         */
+        $(table).on('filterEnd.counter', function(event, config) {
+            console.info("filterEnd.counter");
+            syncFilters();
+            updateMatched();
+        });
+    
+        /*
+         * Update the matched nodes counter by scanning non-filterered rows
+         */
+        function updateMatched()
+        {
+            matchingNodes = 0;
+            
+            $('#portal-hardware-table tbody tr:not(.filtered)')
+                .each(function () {
+                    var total = $(this).find(".total-nodes").html()
+                    matchingNodes += parseInt(total);
+                });
+            
+            $('#matching-nodes').html(matchingNodes);
+        }
 
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
