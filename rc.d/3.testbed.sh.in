@@ -186,6 +186,14 @@ case "$1" in
 				echo -n " aptroute_monitor"
 				@prefix@/sbin/aptroute_monitor
 			fi
+			if [ -x @prefix@/sbin/rdz_expdaemon ]; then
+				echo -n " rdz_expdaemon"
+				@prefix@/sbin/rdz_expdaemon
+			fi
+			if [ -x @prefix@/sbin/cnode-tempmonitor ]; then
+				echo -n " cnode-tempmonitor"
+				@prefix@/sbin/cnode-tempmonitor
+			fi
 		fi
 
 		if [ -x @prefix@/sbin/aptimage_daemon ]; then
@@ -374,6 +382,12 @@ case "$1" in
 		fi
 		if [ -r /var/run/reportboot_daemon.pid ]; then
 			kill `cat /var/run/reportboot_daemon.pid`
+		fi
+		if [ -r /var/run/cnode-tempmonitor.pid ]; then
+			kill `cat /var/run/cnode-tempmonitor.pid.pid`
+		fi
+		if [ -r /var/run/rdz_expdaemon.pid ]; then
+			kill `cat /var/run/rdz_expdaemon.pid`
 		fi
 
 		;;
