@@ -248,6 +248,11 @@
             <li><a href='example-profiles.php' target='_blank'
 		   class='dropdown-item'>Example Profiles</a></li>
 
+	    <% if (window.PORTAL_NAME == "CloudLab") { %>
+              <li><a href='portal-hardware.php' target='_blank'
+		     class='dropdown-item'>Hardware Info</a></li>
+	    <% } %>
+
 	    <% if (vars.login_uid && vars.anyNews) { %>
               <li><a href='portal-news.php'
                      class='dropdown-item' target='_blank'>News</a></li>
