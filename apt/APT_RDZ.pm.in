@@ -576,6 +576,14 @@ sub WatchExperiment($)
 	    #
 	    logit("WatchExperiment($PID): ".
 		  "$uuid is revoked but still exists ($status)");
+
+	    #
+	    # We might have missed it above, if the terminate failed
+	    # cause the instance was locked. 
+	    #
+	    if (! ($instance->IsTerminated() || $instance->IsCanceled())) {
+		system("$SUDO -u $PROTOUSER $MANAGEINSTANCE terminate $uuid");
+	    }
 	}
 	sleep(5);
     }
