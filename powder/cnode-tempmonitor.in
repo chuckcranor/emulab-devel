@@ -65,6 +65,7 @@ my $CURL             = "/usr/local/bin/curl";
 my $POWER            = "$TB/bin/power";
 my $PTECHEXPECT      = "/home/mike/ptech.exp";
 my $EXPECT	     = "/usr/local/bin/expect";
+my $SUDO	     = "/usr/local/bin/sudo";
 my $SLEEP_INTERVAL   = 30;
 my $PORT             = 451;
 my $TEMP_RESUME     = 115;
@@ -123,8 +124,9 @@ my %frontends = (
 	"alsocycle"    => [],
     },
     "cnode-ebc"        => {
-	"enabled"      => 0,
-	"frontend"     => "powder-rffe-ebc",
+	"enabled"      => 1,
+#	"frontend"     => "powder-rffe-ebc",
+	"rfsw"         => "powder-rfsw-ebc",
 	"switch"       => "powder-mgmt-dbs7",
 	"autocyclefe"  => 0,
 	"alsocycle"    => [],
@@ -154,6 +156,8 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Protos
 sub GrabTemp($);
+sub GrabRFFETemp($);
+sub GrabRFSWTemp($);
 sub GrabSwitchTemp($);
 sub UploadTemp($$);
 sub UploadSwitchTemp($$);
@@ -259,8 +263,7 @@ while (1) {
 	next
 	    if (!defined($node));
 	
-	my $frontend = $details->{"frontend"};
-	my $celcius  = GrabTemp($frontend);
+	my $celcius  = GrabTemp($details);
 	if ($killed) {
 	    exit(0);
 	}
@@ -273,6 +276,8 @@ while (1) {
 		    "The temperature monitor for $cnode is no longer ".
 		    "responding.\n\n";
 		if (!$details->{'notified'} && $details->{'autocyclefe'}) {
+		    my $frontend = $details->{"frontend"};
+
 		    # Power cycle on first notification.
 		    $message .= "Power cycling $frontend ... \n";
 		    logit($message);
@@ -422,23 +427,32 @@ sub TempConvert($)
 #
 sub GrabTemp($)
 {
-    my ($cnode) = @_;
+    my ($details) = @_;
+
+    if (exists($details->{'rfsw'})) {
+	return GrabRFSWTemp($details->{'rfsw'});
+    }
+    return GrabRFFETemp($details->{'frontend'});
+}
+
+sub GrabRFFETemp($)
+{
+    my ($rffe) = @_;
     my $celcius;
 
     if (0) {
 	my $tmp = shift(@faketemps);
 	return $tmp;
     }
-    
-    logit("Connecting to $cnode") if ($debug > 1);
+    logit("Connecting to $rffe") if ($debug > 1);
 	
-    my $sock = IO::Socket::INET->new(PeerAddr => $cnode,
+    my $sock = IO::Socket::INET->new(PeerAddr => $rffe,
 				     PeerPort => $PORT,
 				     Proto    => 'tcp',
 				     Blocking => 1,
 				     Timeout  => 5);
     if (!$sock) {
-	logit("Could not connect to $cnode: $!");
+	logit("Could not connect to $rffe: $!");
 	return undef;
     }
     # This does not work.
@@ -450,7 +464,7 @@ sub GrabTemp($)
     
     my $buffer = "";
     if (!defined($sock->recv($buffer, 16))) {
-	logit("Failed to recv from $cnode: $!");
+	logit("Failed to recv from $rffe: $!");
 	$sock->shutdown(SHUT_RDWR);
 	$sock->close();
 	return undef;
@@ -461,10 +475,39 @@ sub GrabTemp($)
 	$celcius = $1;
     }
     else {
-	logit("Bogus temperature from $cnode: $buffer");
+	logit("Bogus temperature from $rffe: $buffer");
 	return undef;
     }
     return $celcius;
+}
+
+sub GrabRFSWTemp($)
+{
+    my ($rfsw) = @_;
+    my $celcius;
+    my $command = "$SUDO ssh $rfsw /usr/local/bin/temper";
+
+    logit("Connecting to $rfsw") if ($debug > 1);
+
+    my $output = emutil::ExecQuiet($command);
+    if ($?) {
+	logit($output);
+	return undef;
+    }
+    if ($debug > 1) {
+	logit("$rfsw returns: $output");
+    }
+    chomp($output);
+    my @tokens = split('\s+', $output);
+    if (scalar(@tokens) < 7) {
+	logit("Bogus result from $rfsw: '$output'");
+	return undef;
+    }
+    if ($tokens[6] =~ /^(\-?[\d\.]+)C$/) {
+	return $1;
+    }
+    logit("Bogus temperature from $rfsw: " . $tokens[6]);
+    return undef;
 }
 
 #

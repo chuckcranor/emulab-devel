@@ -347,6 +347,9 @@ sub DoDeleteSlice()
 	print $output . "\n";
 	fatal("DoDeleteSlice: failed");
     }
+    if ($debug) {
+	print $output . "\n";
+    }
     exit(0);
 }
 
