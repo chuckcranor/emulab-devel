@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2021 University of Utah and the Flux Group.
+# Copyright (c) 2021-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,18 +42,20 @@ sub usage()
     print STDERR "   -h         This message\n";
     print STDERR "   -n num     Number of instances of logfiles to keep (default 7)\n";
     print STDERR "   -l len     Length (KB) at which to roll a logfile (default 10000)\n";
+    print STDERR "   -i hours   Use an interval instead of len (which is set to *)\n";
     print STDERR "   -q         Do not print warnings\n";
     print STDERR "   -H host    Generate entries for all nodes serviced by this host\n";
     print STDERR "   node ...   Generate entries for the specified nodes\n";
 }
 
-my $optlist = "hn:l:qH:";
+my $optlist = "hn:l:qH:i:";
 my $quiet = 0;
 my $chost = "";
 my @nodes;
 my $isboss = 0;
 my $lognum = 7;
 my $loglen = 10000;
+my $logint = "*";
 
 #
 # Configure variables
@@ -91,6 +93,14 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{'h'})) {
     usage();
     exit(0);
+}
+if (defined($options{'i'})) {
+    if ($options{'i'} !~ /^(\d+)$/ || $1 <= 0 || $1 > 10000) {
+	print STDERR "-i arg should be 0 < hours < 10000\n";
+	exit(1);
+    }
+    $logint = $1;
+    $loglen = "*";
 }
 if (defined($options{'n'})) {
     if ($options{'n'} !~ /^(\d+)$/ || $1 <= 0 || $1 > 99) {
@@ -147,7 +157,7 @@ foreach my $node (sort @nodes) {
 	    print STDERR "$node: capture not currently running?\n";
 	}
     }
-    print "$logdir/$node.log\t\t640\t$lognum\t$loglen\t*\tZ\t$logdir/$node.pid\n";
+    print "$logdir/$node.log\t\t640\t$lognum\t$loglen\t$logint\tZ\t$logdir/$node.pid\n";
 }
 
 exit(0);
