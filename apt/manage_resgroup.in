@@ -1439,21 +1439,32 @@ sub DoDelete()
 		#
 		# Notify the user that a resgroup has been deleted.
 		#
+		my $this_uid   = $this_user->uid();
 		my $brand      = $resgroup->Brand();
 		my $creator    = $resgroup->GetCreator();
 		my $email      = $creator->email();
 		my $pid        = $project->pid();
 		my $gid        = $group->gid();
+		my $url        = $resgroup->WebURL();
 		my $string     = $resgroup->InfoString(\@cluster_reservations,
 						       \@range_reservations,
 						       \@route_reservations);
-		$brand->SendEmail($email,
-		  "Resources in reservation group have been removed",
-		  "Resources in your reservation group in project $pid/$gid ".
-		  "have been removed from the group.\n".
-		  (defined($reason) ? "\n$reason\n" : "\n") . $string,
-		  $brand->ReservationsEmailAddress(),
-		  "BCC: " . $brand->ReservationsEmailAddress());
+
+		my $subj =
+		    "Resources in reservation group have been removed";
+		my $body  =
+		    "Resources in your reservation group in project $pid/$gid ".
+		    "have been removed from the group.\n".
+		    (defined($reason) ? "\n$reason\n" : "") . $string . "\n" .
+		    $url . "\n\n";
+
+		$brand->SendEmail($email, $subj, $body,
+				  $brand->ReservationsEmailAddress());
+
+		# This email is not intended to go to the user.
+		$body .= "Resources removed by $this_uid\n";
+		$brand->SendEmail($brand->ReservationsEmailAddress(),
+				  $subj, $body, $email);
 	    }
 	}
     }
@@ -1480,20 +1491,28 @@ sub DoDelete()
 		#
 		# Notify the user that a resgroup has been deleted.
 		#
+		my $this_uid   = $this_user->uid();
 		my $brand      = $resgroup->Brand();
 		my $creator    = $resgroup->GetCreator();
 		my $email      = $creator->email();
 		my $pid        = $project->pid();
 		my $gid        = $group->gid();
 
-		$brand->SendEmail($email,
-			  "Reservation group has been deleted",
-			  "Your reservation group in project $pid/$gid ".
-			  "has been deleted.\n".
-			  (defined($reason) ? "\n$reason\n" : "\n"). 
-			  $resgroup->InfoString(),
-			  $brand->ReservationsEmailAddress(),
-			  "BCC: " . $brand->ReservationsEmailAddress());
+		my $subj =
+		    "Reservation group has been deleted";
+		my $body = 
+		    "Your reservation group in project $pid/$gid ".
+		    "has been deleted.\n".
+		    (defined($reason) ? "\n$reason\n" : "") . "\n" .
+		    $resgroup->InfoString() . "\n";
+		
+		$brand->SendEmail($email, $subj, $body,
+				  $brand->ReservationsEmailAddress());
+		
+		# This email is not intended to go to the user.
+		$body .= "Reservation deleted by $this_uid\n";
+		$brand->SendEmail($brand->ReservationsEmailAddress(),
+				  $subj, $body, $email);
 	    }
 	}
     }
