@@ -2482,6 +2482,7 @@ sub LightUpNodes($@) {
     my ($self, @nodelist) = @_;
     my $parent = $self->parent();
     my $experiment = $parent->experiment();
+    my $count = 0;
 
     #
     # We want to do this before powering on the radio to make sure it has
@@ -2501,6 +2502,13 @@ sub LightUpNodes($@) {
 	    $parent->noretry(1);
 	    return -1;
 	}
+	$count++;
+    }
+    #
+    # Sam/Alex say we need a small delay after the rfswitcher runs.
+    #
+    if ($count) {
+	sleep(1);
     }
     return $self->SUPER::LightUpNodes(@nodelist);
 }
@@ -2556,6 +2564,7 @@ sub LightUpNodes($@)
     my $parent     = $self->parent();
     my @cycles     = ();
     my @ons        = ();
+    my $count      = 0;
 
     #
     # We want to this before powering on the radio to make sure it has an
@@ -2575,6 +2584,13 @@ sub LightUpNodes($@)
 	    $parent->noretry(1);
 	    return -1;
 	}
+	$count++;
+    }
+    #
+    # Sam/Alex say we need a small delay after the rfswitcher runs.
+    #
+    if ($count) {
+	sleep(1);
     }
     
     foreach my $node (@nodelist) {
