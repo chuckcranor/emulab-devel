@@ -1333,7 +1333,7 @@ sub DoDelete()
     
     if (! ($this_user->IsAdmin() ||
 	   $this_user->uid_idx() == $resgroup->creator_idx() ||
-	   $group->IsManager())) {
+	   $group->IsManager($this_user))) {
 	fatal("No permission to delete this reservation")
     }
     if (!$nolock) {
@@ -1659,7 +1659,7 @@ sub DoRefresh()
     
     if (! ($this_user->IsAdmin() ||
 	   $this_user->uid_idx() == $resgroup->creator_idx() ||
-	   $project->IsManager())) {
+	   $project->IsManager($this_user))) {
 	fatal("No permission to refresh this reservation")
     }
     if ($resgroup->Lock()) {
