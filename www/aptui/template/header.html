@@ -169,10 +169,6 @@
                        class='dropdown-item'>Edit Site Variables</a></li>
                 <li><a href='portal-news.php'
                        class='dropdown-item'>Manage News</a></li>
-		<% if (window.MAINSITE) { %>
-                  <li><a href='portal-hardware.php'
-                         class='dropdown-item'>Portal Hardware</a></li>
-		<% } %>
 	      </ul>
 	    </li>
 	  <% } %> <!-- End of Admin menu --> 
@@ -250,7 +246,7 @@
 
 	    <% if (window.PORTAL_NAME == "CloudLab") { %>
               <li><a href='portal-hardware.php' target='_blank'
-		     class='dropdown-item'>Hardware Info</a></li>
+		     class='dropdown-item'>Available Hardware</a></li>
 	    <% } %>
 
 	    <% if (vars.login_uid && vars.anyNews) { %>
