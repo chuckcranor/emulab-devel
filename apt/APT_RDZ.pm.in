@@ -304,12 +304,6 @@ sub DeleteGrants($)
 
     print "DeleteGrants: $instance\n";
 
-    if (!defined($ZMC)) {
-	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
-	if (!defined($ZMC)) {
-	    return -1;
-	}
-    }
     my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
     if (!defined($rfranges) || !keys(%{$rfranges})) {
 	print "DeleteGrants: No rfranges for $instance\n";
@@ -322,7 +316,13 @@ sub DeleteGrants($)
 	}
 	if ($rfrange->rdz_status() ne "deleted") {
 	    print "DeleteGrants: Deleting grant ID $grant_id\n";
-	
+
+	    if (!defined($ZMC)) {
+		$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+		if (!defined($ZMC)) {
+		    return -1;
+		}
+	    }
 	    my $response;
 	    if ($ZMC->DELETE("/grants/$grant_id", \$response)) {
 		print "DeleteGrants: Could not delete grant ID $grant_id\n";
