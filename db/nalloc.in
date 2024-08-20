@@ -305,8 +305,10 @@ foreach my $n (@node_names) {
 		next;
 	    }
 	    if ($connode->IsReserved() && $connode->pid() ne TBOPSPID()) {
+		# Avoid locking problem.
+		my $pideid = $connode->pid() . "/" . $connode->eid();
 		print "Conflicting node $con_id is already reserved ".
-		    "to " . $connode->Reservation()->pideid() . "\n";
+		    "to $pideid\n";
 		if ($force) {
 		    print "Forcing allocation anyway...\n";
 		}

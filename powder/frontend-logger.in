@@ -1,0 +1,224 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2004-2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use Getopt::Std;
+use File::stat;
+use POSIX qw(setsid :sys_wait_h);
+use IO::Select;
+use IO::Handle;
+
+sub usage()
+{
+    print STDERR "Usage: frontend-logger [-i interval] [-p pidfile] [-l logfile] rffe\n";
+    exit(1);
+}
+my $optlist     = "di:p:l:";
+my $debug       = 0;
+my $interval    = 10;
+my $port        = 111;
+my $TBOPS       = "@TBOPSEMAIL@";
+my $pidfile;
+my $logfile;
+my $childpid;
+sub logit($);
+
+# Turn off line buffering on output
+$| = 1;
+
+#
+# Parse arguments
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"i"})) {
+    $interval = int($options{"i"});
+}
+if (defined($options{"p"})) {
+    $pidfile = $options{"p"};
+}
+if (defined($options{"l"})) {
+    $logfile = $options{"l"};
+}
+
+if (@ARGV != 1) {
+    usage();
+}
+my $frontend = $ARGV[0];
+my $command  = "nc -w 10 powder-rffe-${frontend} $port";
+
+$pidfile = "/var/run/${frontend}_logger.pid"
+    if (!defined($pidfile));
+$logfile = "/var/log/${frontend}_logger.log"
+    if (!defined($logfile));
+
+# Only root.
+if ($UID != 0) {
+    die("*** $0:\n".
+	"    Must be root to run this script!\n");
+}
+
+#
+# Testbed support libs.
+# 
+use lib "@prefix@/lib";
+use libtestbed;
+
+# Signal handler to initiate cleanup in parent and the children.
+sub Pcleanup(;$)
+{
+    my ($signame) = @_;
+
+    $SIG{TERM} = 'IGNORE';
+
+    if (defined($childpid)) {
+	system("kill $childpid");
+	waitpid($childpid, 0);
+	undef $childpid;
+    }
+    unlink $pidfile if (-e $pidfile);
+
+    if ($signame) {
+	logit("[$PID]: logger exiting");
+    }
+    exit(0);
+}
+# Signal handler for newsyslog.
+sub Loghandler()
+{
+    logit("Loghandler: rolling the logfile");
+    ReOpenLog($logfile);
+}
+
+# Daemonize;
+if (!$debug && TBBackGround($logfile)) {
+    sleep(1);
+    exit(0);
+}
+
+$PPID = $PID;
+
+#
+# Write our pid into the pid file so we can be killed later. 
+#
+system("echo '$PID' > $pidfile") == 0 or
+    die("*** $0:\n".
+	"    Could not create $pidfile!");
+
+# Okay, cleanup function.
+$SIG{TERM} = \&Pcleanup;
+$SIG{INT}  = \&Pcleanup
+    if ($debug);
+# And reopen logfile for newsyslog.
+$SIG{HUP} = \&Loghandler
+    if (! $debug);
+
+logit("[$PID]: wrapper starting '$command'");
+
+# Loop forever, restarting the daemon if it ever dies.
+while (1) {
+    my $runtime   = time();
+    my $laststamp = $runtime;
+
+    $childpid = open(PIPE, "-|");
+    if (!defined($childpid)) {
+	fatal("popen failed");
+    }
+    if ($childpid == 0) {
+	$SIG{TERM} = 'DEFAULT';
+	$SIG{HUP}  = 'DEFAULT';
+	$SIG{INT}  = 'DEFAULT';
+	
+	open(STDERR, ">&STDOUT");
+	exec($command);
+	die("Could not exec $command");
+    }
+    
+    logit("[$PID]: logger (childpid:$childpid) started");
+
+    while (1) {
+	#
+	# Turns out the logger is sending one character at a time.
+	# So just use readline instead of sysread.
+	#
+	my $line;
+	while ($line = readline(PIPE)) {
+	    print $line;
+
+	    # Helpful, perhaps.
+	    if (time() - $laststamp > 300) {
+		print "\nSTAMP: " . TBTimeStampWithDate() . "\n\n";
+		$laststamp = time();
+	    }
+	}
+	my $waitkid = waitpid($childpid, 0);
+	my $exitstat = $?;
+	my $ecode = $exitstat >> 8;
+	my $esig = $exitstat & 0x3F;
+	undef $childpid;
+	close(PIPE);
+
+	logit("child exited: ecode:$ecode, esig:$esig");
+	if ($esig) {
+	    logit("Signaled, not restarting");
+	    exit(1);
+	}
+	if ($ecode) {
+	    #
+	    # Abnormal exit. This happens when netcat cannot connect, say
+	    # because the rffe is powered off or otherwise hosed.
+	    #
+	    logit("Non-zero exit. Delaying for a while and retrying ...");
+	    sleep(60);
+	    last;
+	}
+	last;
+    }
+    logit("restarting in $interval seconds");
+    sleep($interval);
+}
+exit(0);
+
+END {
+    # Save, since shell commands will alter it.
+    my $exitstatus = $?;
+
+    if (defined($PPID) && $PID == $PPID) {
+	Pcleanup();
+    }
+    
+    $? = $exitstatus;
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    print STDERR "$stamp: $msg\n";
+}
