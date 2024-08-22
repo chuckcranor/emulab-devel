@@ -351,17 +351,29 @@
 			<option value="23">11:00 PM</option>
 		      </select>
 		    </div>
-		    <div class="col-sm-1" style="padding:0px;">
-		      <a href='#' class='btn btn-xs'
-			 data-toggle='popover' data-bs-toggle='popover'
-			 data-html='true' data-bs-html='true'
-			 data-delay='{"hide":1000}' data-bs-delay='{"hide":1000}'
-			 data-content='Times are in your local timezone.
-				       Start day/time is optional, defaults
-				       to the current day/time.'>
-			<span class='glyphicon glyphicon-question-sign'></span>
-		      </a>
-		    </div>
+		    <% if (window.ISADMIN && editing) { %>
+		      <div class="col-sm-2" style="padding:0px;">
+			<button class='btn btn-xs btn-danger' id="clear-starttime"
+				data-toggle='tooltip' data-bs-toggle='tooltip'
+				data-container="body" data-bs-container="body"
+				data-trigger="hover" data-bs-trigger="hover"
+				title='Clear the start date/time so the reservation
+				       can be rescheduled to start immediately'>
+			  Clear</button>
+		      </div>
+		    <% } else { %>
+		      <div class="col-sm-1" style="padding:0px;">
+			<a href='#' class='btn btn-xs'
+			   data-toggle='popover' data-bs-toggle='popover'
+			   data-html='true' data-bs-html='true'
+			   data-delay='{"hide":1000}' data-bs-delay='{"hide":1000}'
+			   data-content='Times are in your local timezone.
+					 Start day/time is optional, defaults
+					 to the current day/time.'>
+			  <span class='glyphicon glyphicon-question-sign'></span>
+			</a>
+		      </div>
+		    <% } %>
 		  </div>
 		</div>
 	      </div>
