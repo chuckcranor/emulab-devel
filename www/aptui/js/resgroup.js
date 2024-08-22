@@ -3020,6 +3020,18 @@ $(function ()
 			$('#reserve-uncancel-button').removeClass("hidden");
 		    }
 		}
+
+                /*
+                 * Admins get a button to clear the start date/time so the
+                 * reservation can be rescheduled to start immediately.
+                 */
+                $("#clear-starttime").click(function (event) {
+                    event.preventDefault();
+		    $('#reserve-request-form [name=start_hour]').val("");
+		    $('#reserve-request-form [name=start_day]').val("");
+	            UpdateFormTime("start");
+		    modified_callback();
+                });
 	    }
 	    if (details.forclass) {
 		$('#for-class').prop("checked", true);
