@@ -539,9 +539,14 @@ Other newer stuff:
 
    Now patch, build, and install the Emulab versions:
 
-     # on boss you just need the "pw" patch
+     # on boss you just need the "pw" and "openssl" patches
      cd /usr/src/usr.sbin/pw
      sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-pw-2.patch
+     sudo make obj
+     sudo make all install clean
+     # this will take a long time to recompile, lots of files...
+     cd /usr/src/secure/lib/libcrypto
+     sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-openssl.patch
      sudo make obj
      sudo make all install clean
 
@@ -557,6 +562,11 @@ Other newer stuff:
      sudo make all install clean
      cd /usr/src/sbin/mount
      sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-mount.patch
+     sudo make obj
+     sudo make all install clean
+     # not needed, but it is a bug fix so install it
+     cd /usr/src/secure/lib/libcrypto
+     sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-openssl.patch
      sudo make obj
      sudo make all install clean
 
