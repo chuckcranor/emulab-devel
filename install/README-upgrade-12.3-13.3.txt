@@ -243,6 +243,13 @@ A. Things to do in advance of shutting down Emulab.
    pkg query -x "%n %v usedby=%#r" `cat ops.pkg.local` | \
        grep 'usedby=0' | awk '{ print $1; }' > ops.pkg.reinstall
 
+6. Install automounter files
+
+   change defs file to get rid of WITHAMD
+   cd obj/autofs; gmake all install
+   make symlinks from /usr/testbed/etc/autofs_boss.sh to /etc/auto_{users,proj,groups}
+
+
 B. Updating the base FreeBSD system
 
 1. (CloudLab clusters only) Shut the cluster down at the portal.
@@ -361,7 +368,11 @@ Other newer stuff:
    I don't think this is strictly necessary as I have always been able to
    just naively shutdown and then just import the zpool(s) when I come
    back up in 13.3. Either way, you will need to re-import any pools after
-   reboot as directed below.
+   reboot as directed below. Note that the re-import can take minutes if
+   you have lots of filesystems.
+
+   BE AWARE that you will need to make sure you can login as root after
+   reboot if you just "let it happen" because your homedir may not mount!
 
    NOTE: I have noticed a couple of times on VM-based elabinelab boss/ops
    upgrades that the root filesystem has some issues after the upgrade,
@@ -528,9 +539,14 @@ Other newer stuff:
 
    Now patch, build, and install the Emulab versions:
 
-     # on boss you just need the "pw" patch
+     # on boss you just need the "pw" and "openssl" patches
      cd /usr/src/usr.sbin/pw
      sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-pw-2.patch
+     sudo make obj
+     sudo make all install clean
+     # this will take a long time to recompile, lots of files...
+     cd /usr/src/secure/lib/libcrypto
+     sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-openssl.patch
      sudo make obj
      sudo make all install clean
 
@@ -546,6 +562,11 @@ Other newer stuff:
      sudo make all install clean
      cd /usr/src/sbin/mount
      sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-mount.patch
+     sudo make obj
+     sudo make all install clean
+     # not needed, but it is a bug fix so install it
+     cd /usr/src/secure/lib/libcrypto
+     sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-openssl.patch
      sudo make obj
      sudo make all install clean
 
@@ -757,6 +778,7 @@ C. Updating ports/packages
 
      sudo ln -sfn /usr/testbed/data/mysql /var/db/mysql
      sudo mkdir -p /usr/testbed/data/mysql_tmpdir
+     sudo chown mysql:mysql /usr/testbed/data/mysql_tmpdir
      sudo ln -sfn /usr/testbed/data/mysql_tmpdir /var/db/mysql_tmpdir
 
    Restart mysqld and see if it works. First make sure that you installed
@@ -794,14 +816,10 @@ C. Updating ports/packages
    Otherwise, the server will crash whenever you do a "graceful" restart
    which we do every morning from crontab in "getcacerts". This can also
    happen when the Apache logfiles are rolled. So for now, turning off ASLR
-   works for us. Add this to boss's rc.conf file:
+   works for us. Add this to boss's /etc/rc.conf file:
 
      # XXX (hopefully) prevents crashs on "graceful" restart of apache
      apache24_aslr_disable="YES"
-
-   and restart (not "graceful"!) the server:
-
-     sudo /usr/local/etc/rc.d/apache24 restart
 
 8. Make changes for PHP 8.1
 
@@ -965,7 +983,10 @@ E. Update Emulab software
 
 4. Switch to autofs (on boss, if needed):
 
+      # make sure /etc/auto_master is right
+      # make /etc/auto_{users,project,groups} symlinks
       # rerun exports setup
+      # make sure enable lines are in /etc/rc.conf
       /etc/rc.d/{automountd,autounmountd,automount} start
       # undo local homedir hack
 
@@ -998,3 +1019,14 @@ E. Update Emulab software
 
    Cluster name comes from running "wap manage_aggregate list" on
    the Mothership boss. Use the "Nickname".
+
+9. Things to watch out for
+
+   * The new version of OpenSSH will no longer accept older Ciphers and
+     Key exchange formats by default. If you have older switches/PDUs or
+     other devices that need those, then you will need to change root's
+     .ssh/config to have something like:
+
+        Host OldNode
+	Ciphers +3des-cbc
+	KexAlgorithms diffie-hellman-group1-sha1
