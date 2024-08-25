@@ -36,9 +36,9 @@ A. Things to do in advance of shutting down Emulab.
    sudo lvcreate -s -L 17g -n boss.backup xen-vg/boss
    sudo lvcreate -s -L 17g -n ops.backup xen-vg/ops
 
-   # wisconsin
-   sudo lvcreate -s -L 40g -n boss.backup xen-vg/boss
-   sudo lvcreate -s -L 40g -n ops.backup xen-vg/ops
+   # umass
+   sudo lvcreate -s -L 18g -n boss.backup xen-vg/boss.root
+   sudo lvcreate -s -L 18g -n ops.backup xen-vg/ops.root
 
    For regular LVM volumes, this will seriously degrade the performance of the
    upgrade process due to the inefficiencies of disk writes when shadows are
@@ -62,7 +62,7 @@ A. Things to do in advance of shutting down Emulab.
    already using the automounter (autofs) then skip to step 2.
 
    Since I am lazy, I just copy my whole homedir to /usr/testbed/data or
-   whatever local, none-root filesystem has GBs of space. At a minimum you
+   whatever local, non-root filesystem has GBs of space. At a minimum you
    will probably want your dotfiles and space for an Emulab source and build
    trees (for the next step).
 
@@ -77,96 +77,9 @@ A. Things to do in advance of shutting down Emulab.
    the new packages are installed. All SW changes should be backward
    compatible, so there is no danger to doing this now.
 
-   Right now you have to use the "php81" branch of emulab-devel. To be safe
-   it is probably best just to clone a new tree and copy over the defs-*
-   file from the original tree.
-
-     git clone -b php81 \
-         https://gitlab.flux.utah.edu/emulab/emulab-devel.git testbed-new
-     cp <current-defs-file> testbed-new/defs-foo
-     mkdir -p obj/boss obj/ops
-
-   Build and install the ops node first:
-
-     # on ops node
-     cd obj/ops
-     ../../testbed-new/configure --with-TBDEFS=../../testbed-new/defs-foo
-     sudo gmake opsfs-install
-
-   On the boss node it is a little more complicated because I had made a
-   non-backward compatible change in the main tree, and a boss build now
-   requires that the "cracklib" package be installed. So on the boss node
-   first do:
-
-     # on boss node
-     sudo pkg install -r Emulab cracklib
-
-   It may want to update the "pkg" package as well, and that is okay.
-   After installing cracklib:
-
-     # on boss node
-     cd obj/boss
-     ../../testbed-new/configure --with-TBDEFS=../../testbed-new/defs-foo
-      gmake
-      sudo gmake boss-install
-
-   If your DB needs updating, then the make will fail and it will tell
-   you what do do:
-
-      sudo gmake update-testbed
-      
-   This will actually turn the testbed back on at the end so you will
-   not have to do #3 below. Note also that this command may take awhile
-   and provide no feedback.
-
-   One thing that does not get installed every time is the rc.d (startup)
-   scripts. You can check for changes and install with:
-
-      # on boss node
-      cd ~/obj/boss/rc.d
-      # diff committed versions vs what is installed
-      gmake diff
-      # install all if diffs seem reasonable, otherwise hand merge
-      sudo gmake install
-   
-      # on ops node
-      cd ~/obj/ops/rc.d
-      # diff committed versions vs what is installed
-      gmake control-diff
-      # install all if diffs seem reasonable, otherwise hand merge
-      sudo gmake control-install
-
-   Something else that is not automatically installed every time are Apache
-   config files. You will need an updated version of the main `httpd.conf`
-   file for later when PHP 8.1 is installed. So diff the version in
-   obj/boss/apache24 with the installed version(s) in /usr/local/etc/apache24.
-   NOTE CAREFULLY that the main httpd.conf file may be installed as
-   httpd-www.conf rather than httpd.conf. So check for the existence of the
-   former first:
-
-      # on boss node
-      cd ~/obj/boss/apache
-      # First check for httpd-www.conf:
-      diff httpd.conf /usr/local/etc/apache24/httpd-www.conf
-      # or, if that does not exist:
-      diff httpd.conf /usr/local/etc/apache24/httpd.conf
-
-      # on ops node
-      cd ~/obj/ops/apache
-      gmake
-      diff httpd.conf-ops /usr/local/etc/apache24/httpd.conf
-
-   You may need to do some manual merging of the two versions if local
-   changes have been made to the installed version.
-
-   The important parts are to make sure the SSLProtocols variable is set
-   correctly as in the committed version(s) of the config files and to add the
-   `<IfFile "/usr/local/libexec/apache24/libphp.so">` section before the
-   libphp7.so and libphp7.so sections, since the php81 port has renamed the
-   installed PHP module.
-
-   If would probably be best at this point to at least reboot the boss node
-   and make sure there are no issues with startup.
+   Follow the instructions in "install/README-upgrade-php81-sw.txt" in the
+   Emulab source directory to do this. If possible, it would be good to at
+   least reboot the boss node and make sure there are no issues with startup.
 
 3. Fetch the new release with freebsd-update.
 

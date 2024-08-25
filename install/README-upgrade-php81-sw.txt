@@ -1,6 +1,7 @@
-Update Emulab software to the so-called "php81" branch on existing pre-FreeBSD
-13.3 system. This branch reflects changes to support not just PHP 8.1, but also
-MariaDB and other third-party packages that are current with FreeBSD 13.3.
+Update Emulab software to the so-called "php81" branch on an existing
+pre-FreeBSD 13.3 system. This branch reflects changes to support not just
+PHP 8.1, but also MariaDB and other third-party packages that are current
+with FreeBSD 13.3.
 
 Note that we do all these updates from the boss node. You should not need to
 login to the ops node. This is primarily for the benefit of our Powder fixed
@@ -56,6 +57,9 @@ soruce tree:
    they will be needed when the OS is updated to FreeBSD 13. So you can decide
    whether you want to make the changes now, or as part of the OS upgrade.
 
+   Note that here, you *will* need to login to the ops nodes to perform
+   the "On ops" step.
+
    To reinstall the startup scripts:
 
    On boss:
@@ -97,7 +101,7 @@ soruce tree:
 
    And the ops version:
    
-      # convoluted way to check ops httpd.conf:
+      # convoluted way to check ops httpd.conf without logging in to ops:
       ssh ops diff obj/apache/httpd.conf-ops /usr/local/etc/apache24/httpd.conf
 
    You may need to do some manual merging of the two versions if local
@@ -111,3 +115,12 @@ soruce tree:
    `<IfFile "/usr/local/libexec/apache24/libphp.so">` section to your
    existing config (*before* the libphp7.so and libphp5.so sections)
    because the php81 port has renamed the installed PHP module.
+
+5. Restart services
+
+   If you updated the Apache configs you should restart apache:
+
+      # boss
+      sudo /usr/local/etc/rc.d/apache24 restart
+      # ops
+      sudo ssh ops /usr/local/etc/rc.d/apache24 restart
