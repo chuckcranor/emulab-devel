@@ -11,6 +11,9 @@
  .tablesorter-bootstrap .tablesorter-header-inner {
      padding-right: 4px !important;
  }
+ .tablesorter-bootstrap tr:not(.header-grouping) .tablesorter-header {
+     cursor: ns-resize !important;
+ }
  .text-nowrap {
      padding-left: 4px !important;
      padding-right: 1px !important;
@@ -51,16 +54,50 @@
 	  <div class="col">
 	    <div class="form-floating">
 	    <select class="form-select search-select" id="processor-select"
-		    data-column="6">
+		    data-column="32">
 	      <option value="">--</option>
-	      <option value="1">Intel</option>
-	      <option value="2">AMD</option>
-	      <option value="3">ARM</option>
-	      <option value="4">IBM</option>
+	      <option value="Intel">Intel</option>
+	      <option value="AMD">AMD</option>
+	      <option value="NVIDIA">NVIDIA</option>
+	      <option value="IBM">IBM</option>
+	      <option value="ARM">ARM</option>
 	    </select>
-	    <label>Processor</label>
+	    <label>Architecture</label>
 	    </div>
 	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="processor-select"
+		      data-column="6">
+		<option value="">--</option>
+		<option value="1">Intel</option>
+		<option value="2">AMD</option>
+		<option value="3">ARM</option>
+		<option value="4">IBM</option>
+	      </select>
+	      <label>Processor</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="cpus-select"
+		      data-column="9">
+		<option value="">--</option>
+	      </select>
+	      <label>#CPUs</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="threads-select"
+		      data-column="7">
+		<option value="">--</option>
+	      </select>
+	      <label>#Threads</label>
+	    </div>
+	  </div>
+	</div>
+	<div class="row mt-2">
 	  <div class="col">
 	    <div class="form-floating">
 	    <select class="form-select search-select" id="gpu-select"
@@ -80,11 +117,27 @@
 	  </div>
 	  <div class="col">
 	    <div class="form-floating">
-	    <select class="form-select search-select" id="network-select"
-		    data-column="31">
-	      <option value="">--</option>
-	    </select>
-	    <label>Network</label>
+	      <select class="form-select search-select" id="network-speeds-select"
+		      data-column="33">
+		<option value="">--</option>
+		<option value="100Mb">100Mb</option>
+		<option value="1Gb">1Gb</option>
+		<option value="10Gb">10Gb</option>
+		<option value="25Gb">25Gb</option>
+		<option value="40Gb">40Gb</option>
+		<option value="100Gb">100Gb</option>
+		<option value="200Gb">200Gb</option>
+	      </select>
+	      <label>Network Speed</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="network-cards-select"
+		      data-column="31">
+		<option value="">--</option>
+	      </select>
+	      <label>Network Card</label>
 	    </div>
 	  </div>
 	  <div class="col">
@@ -94,24 +147,6 @@
 		<option value="">--</option>
 	      </select>
 	      <label>DRAM</label>
-	    </div>
-	  </div>
-	  <div class="col">
-	    <div class="form-floating">
-	      <select class="form-select search-select" id="cpus-select"
-		      data-column="9">
-		<option value="">--</option>
-	      </select>
-	      <label>CPUs</label>
-	    </div>
-	  </div>
-	  <div class="col">
-	    <div class="form-floating">
-	      <select class="form-select search-select" id="threads-select"
-		      data-column="7">
-		<option value="">--</option>
-	      </select>
-	      <label>Threads</label>
 	    </div>
 	  </div>
 	  <div class="col">
@@ -137,7 +172,7 @@
   <div class='col-sm-12 table-responsive'>
     <table id='portal-hardware-table' class='tablesorter hidden'>
       <thead>
-	<tr>
+	<tr class="header-grouping">
           <th class='sorter-false' colspan=4></th>
           <th class='sorter-false text-center
 		     group-border-left' colspan=2>Quantities</th>
@@ -161,7 +196,9 @@
           <th class='sorter-false text-center group-border-left'
 	      colspan=5>GPUs</th>
           <th class='sorter-false text-center group-border-left'></th>
-	  <th class="hide-impl"></th>
+	  <th class="hide-impl network-hidden"></th>
+	  <th class="hide-impl architecture-hidden"></th>
+	  <th class="hide-impl network-speeds-hidden"></th>
 	</tr>
       </thead>
       <tbody>

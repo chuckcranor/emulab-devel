@@ -2,25 +2,21 @@ $(function ()
 {
     'use strict';
     var amlist;
-    var networkCards = {};
-    var templates = APT_OPTIONS.fetchTemplateList(['portal-hardware']);
-    var matchingNodes = 0;
+    var networkCards        = {};
+    var networkSpeeds       = {};
+    var templates           = APT_OPTIONS.fetchTemplateList(['portal-hardware']);
+    var matchingNodes       = 0;
+    var lastNetCardOptions  = null;
+    var lastNetSpeedOptions = null;
+    var filterChanging      = null;
 
     var GPUMATRIX = 
         "https://docs.nvidia.com/datacenter/tesla/drivers/index.html#software-matrix";
     
+    // Mike
     var URL = "https://docs.google.com/spreadsheets/d/" +
-	"1g212f80szvu2ylzukoemplifmwnmpw7qrecnlqtqsqs/export?format=csv";
-    if (0) {
-        // New version
-        URL = "https://docs.google.com/spreadsheets/d/" +
-            "1AVKGnqTBErsrfdlasV53afjnLOtiapKGD8aDtd-Yfcs/export?format=csv";
-    }
-    else {
-        // Mike
-        URL = "https://docs.google.com/spreadsheets/d/" +
-            "1Jv27hFLqkmwtV3lCPkQSFNqWPy_dcA87NRytxihP7t4/export?format=csv";
-    }
+        "1Jv27hFLqkmwtV3lCPkQSFNqWPy_dcA87NRytxihP7t4/export?format=csv";
+
     var ignore = [
 	"Max blockstore avail (GB)",
 	"Control network speed",
@@ -71,61 +67,6 @@ $(function ()
         16, // GPUs
         24, // Trailing type column
     ];
-
-    // Silly chars.
-    var charArray = 'abcdefghijklmnopqrstuvwxyz'
-
-    /*
-      Clemson:
-      r6525:   1x100G Mellanox MT27800 [ConnectX-5]
-      r650:    1x100G Mellanox MT27800 [ConnectX-5]
-      r7525:   1x25G Mellanox MT27800 [ConnectX-5]
-               2x100G Mellanox MT42822 BlueField-2 [ConnectX-6 Dx]
-      ibm8335: 1x10G Broadcom NetXtreme II BCM57800
-      c6420:   1x10G Intel X710 SFP+
-      c4130:   1x10G Intel X710 SFP+
-      dss7500: 1x10G Intel 2P X520
-      c6320:   1x10G Intel 82599ES SFI/SFP+
-      c8220x:  1x10G Intel 82599ES SFI/SFP+
-      c8220:   1x10G Intel 82599ES SFI/SFP+
-
-      Wisconsin:
-      d8545:  1x200G Mellanox MT28908 [ConnectX-6]
-      d7525:  1x200G Mellanox MT28908 [ConnectX-6]
-      sm220u: 2x100G Mellanox MT2892 [ConnectX-6 Dx]
-      sm110p: 2x100G Mellanox MT2892 [ConnectX-6 Dx]
-      c4130:  2x10G Intel 82599ES SFI/SFP+
-      c240g5: 2x25G Mellanox MT2894 [ConnectX-6 Lx]
-      c220g5: 2x10G Intel X710 SFP+
-      c240g2: 2x10G Intel 82599ES SFI/SFP+
-      c220g2: 2x10G Intel 82599ES SFI/SFP+
-      c240g1: 2x10G Intel 82599ES SFI/SFP+
-      c220g1: 2x10G Intel 82599ES SFI/SFP+
-
-      Utah:
-      d750:       3x25G Broadcom BCM57504 NetXtreme-E
-      c6525-100g: 1x25G Mellanox MT27800 [ConnectX-5]
-                  1x100G Mellanox MT28800 [ConnectX-5 Ex]
-      c6525-25g:  2x25G Mellanox MT27800 [ConnectX-5]
-      d6515:      1x25G Broadcom BCM57414 NetXtreme-E (RDMA)
-                  2x100G Mellanox MT28800 [ConnectX-5 Ex]
-      xl170:      1x25G Mellanox MT27710 [ConnectX-4 Lx]
-      m510:       1x10G Mellanox MT27520 [ConnectX-3 Pro]
-      m400:       1x10G Mellanox MT27520 [ConnectX-3 Pro]
-
-      APT:
-      r320:       1x10G Mellanox MT27500 [ConnectX-3]
-      r6220:      1x10G Intel 2P X520
-
-      Emulab:
-      d840:   2x40G Intel XL710 QSFP+
-      D740:   2x10G Intel X710 SFP+
-      d820:   4x10G Intel 2P X520
-      d430:   2-4x1G Intel I350
-              2-4x10G Intel X710 SFP+
-      d710:   4-5x1G Broadcom NetXtreme II BCM5709
-
-     */
 
     function initialize()
     {
@@ -205,12 +146,19 @@ $(function ()
 	// Duplicate first column
 	html += "<th class='group-border-left filter-false'>Type Name</th>";
         // Network cards hidden column.
-	html += "<th class='hide-impl filter-onlyAvail'>Cards</th>";
+	html += "<th class='hide-impl filter-select filter-onlyAvail'>Cards</th>";
+        // Architecture hidden column.
+	html += "<th class='hide-impl filter-select filter-onlyAvail'>Arch</th>";
+        // Network speeds hidden column.
+	html += "<th class='hide-impl filter-select filter-onlyAvail'>Speeds</th>";
 	html += "</tr>";
 	$('#portal-hardware-table thead').append(html);
 
 	_.each(data, function (row) {
 	    //console.info(row);
+
+            // For the hidden speeds row.
+            var allspeeds = {};
 
             /*
              * Determine network cards for each resident speed.
@@ -229,17 +177,20 @@ $(function ()
                 var card = cards[index];
                 if (card !== undefined && card != "") {
                     networks[speed] = card;
+                    allspeeds[speed] = speed;
 
                     if (!_.has(networkCards, card)) {
                         var val = _.size(networkCards);
                         networkCards[card] = val;
-                        $('#network-select')
+                        $('#network-cards-select')
                             .append("<option value='" + card + "'>" +
                                     card + "</option>");
                     }
+                    networkSpeeds[speed] = speed;
                 }
             });
-            
+
+            var $arch;
 	    var hwtype;
 	    var html = "<tr>";
             index = 1;
@@ -270,6 +221,12 @@ $(function ()
 		    
 		    html += "<a href='" + link + "' target=_blank>" +
                         val + "</a>";
+
+                    // For the Architecture filter.
+	            var matches = val.match(/(intel|amd|arm|ibm|nvidia)/i);
+	            if (matches) {
+                        $arch = matches[1];
+	            }
 		}
 		else if (key == "GPU model") {
 		    var link = row["GPU Link"];
@@ -321,14 +278,26 @@ $(function ()
 	    html += "<td class='text-nowrap group-border-left'>" +
                 hwtype + "</td>";
             // Network cards hidden column.
-	    html += "<td class='hide-impl'>";
+	    html += "<td class='hide-impl network-cards-impl'>";
             html += row["Network Cards"];
             html += "</td>";
+            // Architecture hidden column.
+	    html += "<td class='hide-impl'>";
+            html += $arch;
+            html += "</td>";
+            // Network speeds hidden column.
+	    html += "<td class='hide-impl network-speeds-impl'>";
+            html += _.values(allspeeds).join(",");
+            html += "</td>";
+            
 	    html += "</tr>";
 	    $('#portal-hardware-table tbody').append(html);
 	});
 	$('#portal-hardware-table').removeClass("hidden");
         $('#matching-nodes').html(matchingNodes);
+
+        lastNetCardOptions  = _.keys(networkCards);
+        lastNetSpeedOptions = _.keys(networkSpeeds);
 
 	var table = $('#portal-hardware-table')
 	    .tablesorter({
@@ -338,6 +307,9 @@ $(function ()
                 // hidden filter input/selects will resize the
                 // columns, so try to minimize the change
                 widthFixed : true,
+
+                // tablesorter default is not what we want.
+                sortInitialOrder: "desc",
                 
 		widgetOptions: {
 		    // include child row content while filtering, if true
@@ -353,19 +325,78 @@ $(function ()
                     // Special cases.
                     filter_functions : {
                         // Add these options to the select dropdown
+                        7 : {
+                            "< 16"      : function(e, n, f, i, $r, c, data) {
+                                return n < 16; },
+                            "16 - 32" : function(e, n, f, i, $r, c, data) {
+                                return n >= 16 && n <= 32; },
+                            "33 - 72" : function(e, n, f, i, $r, c, data) {
+                                return n >= 33 && n <= 72; },
+                            "> 72"      : function(e, n, f, i, $r, c, data) {
+                                return n > 72; },
+                        },
                         13 : {
                             "< 480"      : function(e, n, f, i, $r, c, data) {
-                                console.info(n);
                                 return n < 480; },
                             "480 - 1000" : function(e, n, f, i, $r, c, data) {
-                                console.info(n);
                                 return n >= 480 && n < 1000; },
                             "1000 - 3000" : function(e, n, f, i, $r, c, data) {
-                                console.info(n);
                                 return n >= 480 && n < 3000; },
                             "> 3000"      : function(e, n, f, i, $r, c, data) {
-                                console.info(n);
                                 return n >= 3000; },
+                        },
+                        31 : function(e, n, f, i, $r, c, data) {
+                            return e.includes(f);
+                        },
+                        33 : function(e, n, f, i, $r, c, data) {
+                            return e.includes(f);
+                        },
+                    },
+                    filter_selectSource: {
+                        31 : function(table, column) {
+                            var selected = $('#network-cards-select').find("option:selected").val();
+                            //console.info("B 31", selected, filterChanging);
+
+                            if (filterChanging == 31 && selected != "") {
+                                filterChanging = null;
+                                return lastNetCardOptions;
+                            }
+                            var allcards = {};
+                            $('#portal-hardware-table tbody tr:not(.filtered) .network-cards-impl')
+                                .each(function () {
+                                    //console.info($(this), $(this).text());
+                                    _.each($(this).text().split(","), function (card) {
+                                        if (card != "") {
+                                            //console.info(card);
+                                            allcards[card] = card;
+                                        }
+                                    })
+                                });
+                            lastNetCardOptions = _.keys(allcards);
+                            return lastNetCardOptions;
+                        },
+                        33 : function(table, column) {
+                            var selected = $('#network-speeds-select').find("option:selected").val();
+                            //console.info("B 33", table, column, selected);
+
+                            if (filterChanging == 33 && selected != "") {
+                                filterChanging = null;
+                                return lastNetSpeedOptions;
+                            }
+
+                            var allspeeds = {};
+                            $('#portal-hardware-table tbody tr:not(.filtered) .network-speeds-impl')
+                                .each(function () {
+                                    //console.info($(this), $(this).text());
+                                    _.each($(this).text().split(","), function (speed) {
+                                        if (speed != "") {
+                                            //console.info(speed);
+                                            allspeeds[speed] = speed;
+                                        }
+                                    })
+                                });
+                            lastNetSpeedOptions = _.keys(allspeeds);
+                            return lastNetSpeedOptions;
                         },
                     },
 		},
@@ -396,12 +427,14 @@ $(function ()
          */
         $('.reset-filters').click(function (event) {
             event.preventDefault();
-            console.info("Reset Filters");
+            //console.info("Reset Filters");
             table.trigger('filterReset');
 
             $('.search-select').each(function () {
                 $(this).find('option[value=""]').prop("selected", true);
             });
+            lastNetCardOptions  = _.keys(networkCards);
+            lastNetSpeedOptions = _.keys(networkSpeeds);
         });
 
         /*
@@ -411,15 +444,16 @@ $(function ()
          */
         $('.search-select').change(function (event) {
             event.preventDefault();
-            console.info(event, event.target);
+            //console.info(event, event.target);
 
             var column     = $(event.target).data("column");
             var value      = $(event.target).val();
             var tsFilter   = $(".tablesorter-filter-row " +
                                "td[data-column=" + column + "]")
                 .find("input, select");
-            
-            console.info(column, value, tsFilter);
+
+            filterChanging = column;
+            console.info("search-select change", column, value, tsFilter);
             $(tsFilter).val(value);
 
             $(table).one('filterEnd', function(event, config) {
@@ -446,7 +480,7 @@ $(function ()
          */
         function syncFilters(skipColumn)
         {
-            console.info("syncFilters", skipColumn);
+            //console.info("syncFilters", skipColumn);
             
             var skipper = "";
             if (skipColumn !== undefined) {
@@ -482,7 +516,7 @@ $(function ()
          * Count up total number of nodes on each 
          */
         $(table).on('filterEnd.counter', function(event, config) {
-            console.info("filterEnd.counter");
+            //console.info("filterEnd.counter");
             syncFilters();
             updateMatched();
         });
