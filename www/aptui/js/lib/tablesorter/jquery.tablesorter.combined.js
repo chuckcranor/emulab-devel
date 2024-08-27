@@ -2418,6 +2418,11 @@
 			if ( typeof obj !== 'object' || obj === null ) {
 				return obj;
 			}
+
+                    if (0 && indx === 31) {
+                        console.info("getColumnData", obj, indx, getCell);
+                    }
+
 			table = $( table )[ 0 ];
 			var $header, key,
 				c = table.config,
@@ -3795,7 +3800,12 @@
 			}
 			if ( wo.filter_functions ) {
 				for ( column = 0; column < c.columns; column++ ) {
-				        fxn = ts.getColumnData( table, wo.filter_functions, column , true);
+				        fxn = ts.getColumnData( table, wo.filter_functions, column, true);
+
+                                    if (0 && column == 31) {
+                                        console.info("filter_functions", column, fxn);
+                                    }
+
 					if ( fxn ) {
 						// remove 'filter-select' from header otherwise the options added here are replaced with
 						// all options
@@ -3803,7 +3813,7 @@
 						// don't build select if 'filter-false' or 'parser-false' set
 						noSelect = !( $header.hasClass( 'filter-false' ) || $header.hasClass( 'parser-false' ) );
 						options = '';
-						if ( fxn === true && noSelect ) {
+					        if ( (fxn === true || typeof fxn === 'function') && noSelect ) {
 							tsf.buildSelect( table, column );
 						} else if ( typeof fxn === 'object' && noSelect ) {
 							// add custom drop down list
@@ -4674,12 +4684,16 @@
 					c.$headerIndexed[ columnIndex ].hasClass( 'filter-parsed' ) );
 
 				vars.functions[ columnIndex ] =
-					ts.getColumnData( table, wo.filter_functions, columnIndex ) ||
+				ts.getColumnData( table, wo.filter_functions, columnIndex, true ) ||
 					c.$headerIndexed[ columnIndex ].hasClass( 'filter-select' );
 				vars.defaultColFilter[ columnIndex ] =
 					ts.getColumnData( table, wo.filter_defaultFilter, columnIndex ) || '';
 				vars.excludeFilter[ columnIndex ] =
 					( ts.getColumnData( table, wo.filter_excludeFilter, columnIndex, true ) || '' ).split( /\s+/ );
+
+                            if (0 && columnIndex == 31) {
+                                console.info("vars", vars);
+                            }
 			}
 
 			if ( debug ) {
@@ -4903,7 +4917,11 @@
 				arry = false,
 				source = wo.filter_selectSource,
 				last = c.$table.data( 'lastSearch' ) || [],
-				fxn = typeof source === 'function' ? true : ts.getColumnData( table, source, column );
+			        fxn = typeof source === 'function' ? true : ts.getColumnData( table, source, column, true );
+
+                    if (0 && column == 31) {
+                        console.info("getOptionSource", column, fxn);
+                    }
 
 			if ( onlyAvail && last[column] !== '' ) {
 				onlyAvail = false;
@@ -5056,9 +5074,17 @@
 			return arry;
 		},
 		buildSelect: function( table, column, arry, updating, onlyAvail ) {
+
+                    if (0 && column == 31) {
+                        console.info("buildSelect", column, arry, onlyAvail);
+                    }
+
 			table = $( table )[0];
 			column = parseInt( column, 10 );
 			if ( !table.config.cache || $.isEmptyObject( table.config.cache ) ) {
+                            if (0 && column == 31) {
+                                console.info("buildSelect no cache");
+                            }
 				return;
 			}
 
@@ -5166,9 +5192,11 @@
 			for ( columnIndex = 0; columnIndex < columns; columnIndex++ ) {
 				$header = c.$headerIndexed[columnIndex];
 				noSelect = !( $header.hasClass( 'filter-false' ) || $header.hasClass( 'parser-false' ) );
+			        var fxn = ts.getColumnData( table, wo.filter_functions, columnIndex, true);
+
 				// look for the filter-select class; build/update it if found
 				if ( ( $header.hasClass( 'filter-select' ) ||
-					ts.getColumnData( table, wo.filter_functions, columnIndex ) === true ) && noSelect ) {
+                                       (fxn === true || typeof fxn === 'function') === true ) && noSelect ) {
 					tsf.buildSelect( table, columnIndex, '', updating, $header.hasClass( wo.filter_onlyAvail ) );
 				}
 			}
