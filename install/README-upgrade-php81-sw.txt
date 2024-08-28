@@ -17,6 +17,10 @@ soruce tree:
 
     git clone -b php81 \
         https://gitlab.flux.utah.edu/emulab/emulab-devel.git testbed-new
+    cd testbed-new
+    git submodule init
+    git submodule update
+    cd ..
     cp <current-defs-file> testbed-new/defs-foo
     mkdir -p obj
 
@@ -102,6 +106,8 @@ soruce tree:
    And the ops version:
    
       # convoluted way to check ops httpd.conf without logging in to ops:
+      ssh ops diff obj/apache/httpd.conf-ops /usr/local/etc/apache24/httpd-www.conf
+      # if the above does not exist
       ssh ops diff obj/apache/httpd.conf-ops /usr/local/etc/apache24/httpd.conf
 
    You may need to do some manual merging of the two versions if local
