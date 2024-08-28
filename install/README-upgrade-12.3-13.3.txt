@@ -54,6 +54,11 @@ A. Things to do in advance of shutting down Emulab.
    4GB free on the root filesystem, you should be fine. Otherwise, you
    might need to make some space.
 
+   Some things you might get rid of or move elsewhere: the existing /usr/src
+   and /usr/ports since we will be downloading new ones, /var/mail/root since
+   it accumulates very fast, old large tarballs and cruft in /tmp and /usr/tmp,
+   and /Oetc and /usr/local/Oetc from a previous upgrade.
+   
 1c. (boss only) Change your home directory temporarily to a local directory.
 
    If you are currently using AMD and ZFS (WITHAMD=1, WITHZFS=1 in defs-*
@@ -243,11 +248,12 @@ A. Things to do in advance of shutting down Emulab.
    pkg query -x "%n %v usedby=%#r" `cat ops.pkg.local` | \
        grep 'usedby=0' | awk '{ print $1; }' > ops.pkg.reinstall
 
-6. Install automounter files
+6. Install automounter files (boss only)
 
    change defs file to get rid of WITHAMD
-   cd obj/autofs; gmake all install
-   make symlinks from /usr/testbed/etc/autofs_boss.sh to /etc/auto_{users,proj,groups}
+   cd obj/autofs; sudo gmake all first-install
+
+   Do *not* enable autofs in /etc/rc.conf yet.
 
 
 B. Updating the base FreeBSD system
