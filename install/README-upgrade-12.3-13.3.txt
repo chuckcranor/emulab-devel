@@ -59,7 +59,21 @@ A. Things to do in advance of shutting down Emulab.
    it accumulates very fast, old large tarballs and cruft in /tmp and /usr/tmp,
    and /Oetc and /usr/local/Oetc from a previous upgrade.
    
-1c. (boss only) Change your home directory temporarily to a local directory.
+1c. Make sure you have a "clean" path to consoles and or VM control node!
+
+    For the boss/ops consoles, first make sure you have access to them at all.
+    In a perfect world, you will not need access to them, but if something
+    goes wrong, you may need to login via the consoles. A corollary of this
+    is: make sure you know the boss and ops root passwords. Finally, make
+    sure there is no cross dependency between the boss and ops consoles;
+    e.g., the consoles are cross connected (i.e., boss console capture or
+    IPMI access via ops, ops console capture/IPMI on boss).
+
+    Likewise, if you are running boss/ops VMs, make sure you can access the
+    control node without going through boss or ops. This would most likely
+    happen if you need to proxy through boss or ops to access the control node.
+
+1d. (boss only) Change your home directory temporarily to a local directory.
 
    If you are currently using AMD and ZFS (WITHAMD=1, WITHZFS=1 in defs-*
    file), you will need to make this temporary change to work around AMD
@@ -248,12 +262,6 @@ A. Things to do in advance of shutting down Emulab.
    pkg query -x "%n %v usedby=%#r" `cat ops.pkg.local` | \
        grep 'usedby=0' | awk '{ print $1; }' > ops.pkg.reinstall
 
-6. Install automounter files (boss only)
-
-   change defs file to get rid of WITHAMD
-   cd obj/autofs; sudo gmake all first-install
-
-   Do *not* enable autofs in /etc/rc.conf yet.
 
 
 B. Updating the base FreeBSD system
@@ -364,6 +372,7 @@ Other newer stuff:
    the kernel on the _physical_ host in /vminfo/vminfo/pcvmXXX-X/kernel
    for both boss and ops.
 
+   THIS IS PROBABLY NOT GOING TO WORK due to busy filesystems:
    If the node is using ZFS you should probably export any zpools at this
    point since the ZFS implementation has changed between 12.x and 13.x.
    You may be able to just login as root and then:
@@ -551,8 +560,9 @@ Other newer stuff:
      sudo make obj
      sudo make all install clean
      # this will take a long time to recompile, lots of files...
-     cd /usr/src/secure/lib/libcrypto
+     cd /usr/src
      sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-openssl.patch
+     cd secure/lib/libcrypto
      sudo make obj
      sudo make all install clean
 
@@ -571,8 +581,9 @@ Other newer stuff:
      sudo make obj
      sudo make all install clean
      # not needed, but it is a bug fix so install it
-     cd /usr/src/secure/lib/libcrypto
+     cd /usr/src
      sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-openssl.patch
+     cd secure/lib/libcrypto
      sudo make obj
      sudo make all install clean
 
@@ -675,8 +686,8 @@ C. Updating ports/packages
      sudo pkg delete -f ipmitool
 
      # re-add the old (right) ipmitool USING THE PACKAGE
-     # (which you will need to copy over to /tmp)
-     cd /tmp
+     sudo pkg fetch -r Emulab emulab-ipmitool-old
+     cd /var/cache/pkg
      sudo pkg add -M emulab-ipmitool-old-1.8.15_1.pkg
 
      # change the dependency
@@ -776,7 +787,7 @@ C. Updating ports/packages
    NOTE that I have also now added the log-error option setting. So make
    sure the file exists and is properly protected:
 
-     sudo cp /dev/null /usr/testbed/log/mysqld-error.log
+     sudo touch /usr/testbed/log/mysqld-error.log
      sudo chown mysql:mysql /usr/testbed/log/mysqld-error.log
      sudo chmod 640 /usr/testbed/log/mysqld-error.log
 
@@ -824,7 +835,7 @@ C. Updating ports/packages
    happen when the Apache logfiles are rolled. So for now, turning off ASLR
    works for us. Add this to boss's /etc/rc.conf file:
 
-     # XXX (hopefully) prevents crashs on "graceful" restart of apache
+     # XXX FreeBSD 13.3: prevent crash on "graceful" restart of apache
      apache24_aslr_disable="YES"
 
 8. Make changes for PHP 8.1
@@ -905,42 +916,22 @@ E. Update Emulab software
    Make sure to copy over your existing defs-* file to the new source
    tree.
 
-2. Switch from AMD to autofs (on boss, if needed).
+2. Update your defs-* file.
 
-   # Change defs file to set WITHAMD=0 (or comment out)
-   # Also need ZFS_NOEXPORT=1? Does autofs work without ZFS?
-   # install from autofs directory in Emulab tree
-   # add autofs enables in /etc/rc.conf
-     autofs_enable="YES"
-     automountd_flags="-v"
-     autounmountd_flags="-v"
+   As of FreeBSD 12, the standard mountd supports efficient updating of
+   kernel mounts. Check the defs-* file you use and set INCREMENTAL_MOUNTD=0
+   (or remove the line entirely) if it is currently non-zero.
+
+   As of FreeBSD 13, the AMD auto-mounter is no longer part of the base
+   system. You will need to switch to autofs instead. Check the defs-* file
+   you use and set WITHAMD=0 (or remove the line entirely) if it is currently
+   non-zero. [ Also need ZFS_NOEXPORT=1? Does autofs work without ZFS? ]
+   The other required autofs changes will be made later.
 
 3. Reconfigure, rebuild, and reinstall the software.
 
-   RANDOM NOTE: I had this failure when building event_proxy.cc on ops:
-
-      /usr/include/c++/v1/__fwd/get.h:18:10: fatal error: '__tuple/tuple_element.h' file not found
-         18 | #include <__tuple/tuple_element.h>
-	    |          ^~~~~~~~~~~~~~~~~~~~~~~~~
-         1 error generated.
-
-   Something about upgrading directly from 12.3 to 13.3 caused a couple of
-   directories (__tuple and __string) to wind up missing. If you do:
-
-      ls -la /usr/include/c++/v1/__tuple
-
-   and it fails to find the directory, apply the following hack (boss and ops):
-
-      cd /tmp
-      fetch https://www.emulab.net/downloads/FreeBSD-13.3-c++-v1-missing.tar.gz
-      sudo tar -C /usr/include/c++/v1 -xzf /tmp/FreeBSD-13.3-c++-v1-missing.tar.gz
-   
    You want everything to be built against the new ports and libraries
    anyway though, so just rebuild and install everything.
-
-   Check the defs-* file you use and make sure that INCREMENTAL_MOUNTD=0
-   (or remove the line entirely). The standard mountd now supports incremental
-   updates by default.
 
    It is very important that you reconfigure your build tree since we earlier
    compiled the new source in the old environment. So we completely remove
@@ -987,14 +978,22 @@ E. Update Emulab software
       # BUT ONLY DO THIS IF IT IS NOT AN ELABINELAB
       sudo rm /usr/local/etc/rc.d/ctrlnode.sh
 
-4. Switch to autofs (on boss, if needed):
+4. Switch to autofs (on boss, if boss was not already running it):
 
-      # make sure /etc/auto_master is right
-      # make /etc/auto_{users,project,groups} symlinks
-      # rerun exports setup
-      # make sure enable lines are in /etc/rc.conf
-      /etc/rc.d/{automountd,autounmountd,automount} start
-      # undo local homedir hack
+      # install the files
+      cd obj/autofs; sudo gmake all first-install
+
+      # create the /usr/testbed/etc/validmounts file
+      exports_setup
+
+      # add autofs enables in /etc/rc.conf
+      autofs_enable="YES"
+      automountd_flags="-v"
+      autounmountd_flags="-v"
+
+      sudo /etc/rc.d/automountd start
+      sudo /etc/rc.d/autounmountd start
+      sudo /etc/rc.d/automount start
 
 5. Re-enable the testbed on boss.
 
