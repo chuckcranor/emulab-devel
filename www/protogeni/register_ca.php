@@ -55,7 +55,7 @@ fclose($fp);
 chmod($fname, 0666);
 
 $retval = SUEXEC("geniuser", $TBADMINGROUP, "webcacontrol -w $fname",
-		 SUEXEC_ACTION_IGNORE);
+		 SUEXEC_ACTION_CONTINUE);
 unlink($fname);
 
 if ($retval) {
