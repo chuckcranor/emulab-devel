@@ -55,7 +55,9 @@
      font-size: 16px;
      font-weight: bold;
  }
- 
+ .canned-response {
+     white-space: normal !important;
+ }
 </style>  
 <div class='row main-row'>
   <div class='col-lg-7
@@ -932,8 +934,56 @@
 	    Cancel</button>
 	</center>
 	<% if (window.ISADMIN) { %>
-	    <input type=checkbox class="nolongerfits" value=yes>
-	    No longer fits the schedule
+	  <div class="dropdown canned-responses">
+	    <button class="btn btn-info dropdown-toggle"
+		    type="button" data-bs-toggle="dropdown">
+	      Canned Responses
+	    </button>
+	    <ul class="dropdown-menu">
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    This reservation request no longer fits the
+		    schedule. Until a reservation is approved, the
+		    resources are still available to other users, either
+		    in a new experiment or a smaller reservation that is
+		    automatically approved. Please login and create a
+		    new one, and we will get it approved
+		    as soon as possible.
+ 		  </p>
+		</a>
+	      </li>
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    CloudLab does not allocate or reserve resources
+ 		    for an entire semester or quarter. The expectation
+ 		    is that you will allocate nodes when you are ready
+ 		    to actively use them, and release them when they are
+ 		    idle so that others can get their own work done.
+		  </p>
+		</a>
+	      </li>
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    Please note the shortened reservation duration.
+		    Reservations for this node type are limited to two weeks since
+		    there are so few of them and they are in very high demand. You
+		    can submit an additional reservation once this reservation starts. 
+		  </p>
+		</a>
+	      </li>
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    Please note the modified start time for this reservation, there
+		    was a conflict that required shifting the start time slightly.
+		  </p>
+		</a>
+	      </li>
+	    </ul>
+	  </div>
 	<% } %>
       </div>
     </div>
