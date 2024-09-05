@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2013-2022 University of Utah and the Flux Group.
+# Copyright (c) 2013-2024 University of Utah and the Flux Group.
 # Copyright (c) 2006-2014 Universiteit Gent/iMinds, Belgium.
 # Copyright (c) 2004-2006 Regents, University of California.
 # 
@@ -121,6 +121,13 @@ sub new($$$$$) {
 	$self->{CIPHER} = undef;
     }
 
+    if (exists($options->{"kexalgo"})) {
+	$self->{KEXALGO} = $options->{"kexalgo"};
+    }
+    else {
+	$self->{KEXALGO} = undef;
+    }
+
     # Make it a class object
     bless($self, $class);
 
@@ -143,9 +150,10 @@ sub createExpectObject($)
     my $id = "$self->{NAME}::createExpectObject()";
     my $error = 0;
     my $cipher = (defined($self->{CIPHER}) ? "-c $self->{CIPHER}" : "");
+    my $kexalgo = (defined($self->{KEXALGO}) ? "-o KexAlgorithms=$self->{KEXALGO}" : "");
     my $spawn_cmd = "ssh -F /dev/null -o UserKnownHostsFile=/dev/null ".
 	"-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -i $SSHKEY ".
-	"$cipher -l $self->{USERNAME} $self->{NAME}";
+	"$cipher $kexalgo -l $self->{USERNAME} $self->{NAME}";
     # Create Expect object and initialize it:
     my $exp = new Expect();
     if (!$exp) {
