@@ -533,19 +533,35 @@ $(function ()
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
 
-	// Helper for common issue;
-	$('#delete-reservation-modal .nolongerfits').click(function (e) {
-	    e.preventDefault();
-	    $('#delete-reason')
-		.val("This reservation request no longer fits the " +
-		     "schedule. Until a reservation is approved, the " +
-		     "resources are still available to other users, either " +
-		     "in a new experiment or a smaller reservation that is " +
-		     "automatically approved. Please login and create a " +
-		     "new one, and we will get it approved " +
-		     "as soon as possible.\n\n");
-	});
-
+	if (window.ISADMIN) {
+            /*
+             * Handler for "canned responses" to fill in the message.
+             */
+            $("#delete-reservation-modal .canned-response").click(function (event) {
+                var message = $.trim($(this).find("p").text());
+                message = message.replace(/[\n\r]+/g, " ");
+                message = message.replace(/\s+/g, " ");
+                $('#delete-reason').text(message + "\n");
+                $('#delete-reason').focus();
+                $('#delete-reason')[0].setSelectionRange(message.length+1,
+                                                         message.length+1);
+            });
+            /*
+              * Crazy stuff to get a dropdown to work inside a modal. Seems
+              * to be a bug in bootstrap. Formatting still needs help.
+              * Needs to run after bootstrap initializes, hence the setTimeout().
+              */
+	    setTimeout(function () {
+                const element =
+                      document.querySelector('.canned-responses .dropdown-toggle')
+                new bootstrap.Dropdown(element, {
+                    popperConfig(defaultBsPopperConfig) {
+                        return { ...defaultBsPopperConfig, strategy: 'fixed' };
+                    }
+                });
+	    }, 100);
+        }
+        
 	// See if we can make users understand reservations are per-project.
 	$('#project-forewarned').change(function () {
 	    var ischecked =  $('#project-forewarned').is(":checked");
