@@ -921,7 +921,7 @@
 	    Message to send to user
 	    <div>
 	      <textarea id='delete-reason'
-			class='form-control'
+			class='form-control user-message'
 			rows=5></textarea>
 	    </div>
 	  <% } %>
@@ -967,25 +967,6 @@
 	      <li>
 		<a class="dropdown-item canned-response" href="#">
 		  <p>
-		    Please note the shortened reservation duration.
-		    Reservations for this node type are limited to two
-		    weeks since there are so few of them and they are
-		    in very high demand. You can submit an additional
-		    reservation once this reservation starts.
-		  </p>
-		</a>
-	      </li>
-	      <li>
-		<a class="dropdown-item canned-response" href="#">
-		  <p>
-		    Please note the modified start time for this
-		    reservation, there was a conflict that required
-		    shifting the start time slightly.
-		  </p>
-		</a>
-	      <li>
-		<a class="dropdown-item canned-response" href="#">
-		  <p>
 		    This reservation is not being utilized. 
 		  </p>
 		</a>
@@ -1017,6 +998,34 @@
 		  data-dismiss='modal' data-bs-dismiss='modal'>
 	    Cancel</button>
 	</center>
+	<% if (window.ISADMIN) { %>
+	  <div class="dropdown canned-responses">
+	    <button class="btn btn-info dropdown-toggle"
+		    type="button" data-bs-toggle="dropdown">
+	      Canned Responses
+	    </button>
+	    <ul class="dropdown-menu">
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    Please note the shortened reservation duration.
+		    Reservations for this node type are limited to two weeks since
+		    there are so few of them and they are in very high demand. You
+		    can submit an additional reservation once this reservation starts. 
+		  </p>
+		</a>
+	      </li>
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    Please note the modified start time for this reservation, there
+		    was a conflict that required shifting the start time slightly.
+		  </p>
+		</a>
+	      </li>
+	    </ul>
+	  </div>
+	<% } %>
       </div>
     </div>
   </div>
