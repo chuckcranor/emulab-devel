@@ -537,28 +537,32 @@ $(function ()
             /*
              * Handler for "canned responses" to fill in the message.
              */
-            $("#delete-reservation-modal .canned-response").click(function (event) {
-                var message = $.trim($(this).find("p").text());
-                message = message.replace(/[\n\r]+/g, " ");
-                message = message.replace(/\s+/g, " ");
-                $('#delete-reason').text(message + "\n");
-                $('#delete-reason').focus();
-                $('#delete-reason')[0].setSelectionRange(message.length+1,
-                                                         message.length+1);
-            });
+            $("#delete-reservation-modal .canned-response, "+
+              "#approve-modal .canned-response").click(function (event) {
+                  var message = $.trim($(this).find("p").text());
+                  message = message.replace(/[\n\r]+/g, " ");
+                  message = message.replace(/\s+/g, " ");
+
+                  var textarea = $(this).closest('.modal-body').find('.user-message');
+                  $(textarea).text(message + "\n");
+                  $(textarea).focus();
+                  $(textarea)[0].setSelectionRange(message.length+1, message.length+1);
+              })
             /*
-              * Crazy stuff to get a dropdown to work inside a modal. Seems
-              * to be a bug in bootstrap. Formatting still needs help.
-              * Needs to run after bootstrap initializes, hence the setTimeout().
-              */
+             * Crazy stuff to get a dropdown to work inside a modal. Seems
+             * to be a bug in bootstrap. Formatting still needs help.
+             * Needs to run after bootstrap initializes, hence the setTimeout().
+             */
 	    setTimeout(function () {
-                const element =
-                      document.querySelector('.canned-responses .dropdown-toggle')
-                new bootstrap.Dropdown(element, {
-                    popperConfig(defaultBsPopperConfig) {
-                        return { ...defaultBsPopperConfig, strategy: 'fixed' };
-                    }
-                });
+                const dropdowns = document.querySelectorAll('.canned-responses ' +
+                                                            '.dropdown-toggle');
+                
+                const dropdown = [...dropdowns].map((dropdownToggleEl) =>
+                    new bootstrap.Dropdown(dropdownToggleEl, {
+                        popperConfig(defaultBsPopperConfig) {
+                            return { ...defaultBsPopperConfig, strategy: 'fixed' };
+                        }
+                    }));
 	    }, 100);
         }
         
