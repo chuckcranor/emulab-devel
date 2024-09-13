@@ -865,7 +865,8 @@ else {
     if ($brand->isPowder() && defined($stop_at)) {
 	$duration = $stop_at - (defined($start_at) ? $start_at : time());
 	if ($duration > $DEFAULT_DURATION * 3600) {
-	    $noresokay = 0;
+	    $noresokay = 0
+		if ($pid ne "RDZ-demo");
 	}
     }
     $end = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
