@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,15 +43,18 @@ while (list($index, $aggregate) = each($all)) {
     $am  = $aggregate->name();
     $url = $aggregate->weburl();
     $typeinfo = $aggregate->typeinfo;
+    $resnodes = $aggregate->ReservableNodes(1);
 
-    foreach ($aggregate->ReservableNodes(1) as $node => $info) {
-        $typename = $info["type"];
-        if (!array_key_exists($typename, $typeinfo)) {
-            $typeinfo[$typename] = array("count" => 0, "free" => 0);
-        }
-        $typeinfo[$typename]["count"]++;
-        if ($info["available"]) {
-            $typeinfo[$typename]["free"]++;
+    if ($resnodes) {
+        foreach ($resnodes as $node => $info) {
+            $typename = $info["type"];
+            if (!array_key_exists($typename, $typeinfo)) {
+                $typeinfo[$typename] = array("count" => 0, "free" => 0);
+            }
+            $typeinfo[$typename]["count"]++;
+            if ($info["available"]) {
+                $typeinfo[$typename]["free"]++;
+            }
         }
     }
     $amlist[$urn] = array(
