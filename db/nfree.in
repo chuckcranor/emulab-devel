@@ -497,7 +497,7 @@ foreach my $node (@freed_nodes) {
     #
     # UMass addition.
     #
-    if (-e "$TB/sbin/run-fpga-reset.sh" &&
+    if (-e "$TB/sbin/run-fpga-reset.sh" && $pid ne TBOPSPID() &&
         $node->NodeTypeAttribute("reflash_on_nfree")) {
         print "Doing an FPGA reflash on $node_id, this will take a moment\n";
         my $output = emutil::ExecQuiet("$TB/sbin/run-fpga-reset.sh $node_id");
