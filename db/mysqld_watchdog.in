@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2019 University of Utah and the Flux Group.
+# Copyright (c) 2004-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -67,6 +67,14 @@ sub TryQuery();
 sub RestartMysqld();
 sub notify($);
 
+my %options = ();
+if (! getopts("d", \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+
 # Daemonize;
 if (!$debug) {
     if (TBBackGround($LOGFILE)) {
@@ -86,12 +94,11 @@ $libdb::DBQUERY_RECONNECT = 0;
 #
 # Write our pid into the pid file so we can be killed later. 
 #
-system("echo '$PID' > $PIDFILE") == 0 or
-    die("*** $0:\n".
-	"    Could not create $PIDFILE!");
-
-# Fully disconnect from bootup. 
-setsid();
+if (!$debug) {
+    system("echo '$PID' > $PIDFILE") == 0 or
+	die("*** $0:\n".
+	    "    Could not create $PIDFILE!");
+}
 
 # Loop forever ...
 while (1) {
@@ -189,6 +196,9 @@ sub TryQuery()
 #
 sub RestartMysqld()
 {
+    if ($debug) {
+	return;
+    }
     notify("Mysqld has gone catatonic at " . TBTimeStamp() . "; ".
 	   "attempting to restart ...");
     
