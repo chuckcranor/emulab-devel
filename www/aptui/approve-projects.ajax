@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -127,7 +127,7 @@ function Do_SaveDescription()
     }
     $description = $ajax_args["description"];
     if (!TBvalid_why($description)) {
-        SPITAJAX_ERROR(-1, "Not a valid description: " + TBFieldErrorString());
+        SPITAJAX_ERROR(-1, "Not a valid description: " . TBFieldErrorString());
         return;
     }
     $pid_idx  = $project->pid_idx();

@@ -106,9 +106,6 @@ if (!defined($unix_gname)) {
 	"    Could not generate a unix group name\n");
 }
 print "$unix_gname\n";
-if (1) {
-    exit(0);
-}
 
 #
 # This script is always audited. Mail is sent automatically upon exit.

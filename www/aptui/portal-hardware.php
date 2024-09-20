@@ -43,15 +43,18 @@ foreach ($all as $index => $aggregate) {
     $am  = $aggregate->name();
     $url = $aggregate->weburl();
     $typeinfo = $aggregate->typeinfo;
+    $resnodes = $aggregate->ReservableNodes(1);
 
-    foreach ($aggregate->ReservableNodes(1) as $node => $info) {
-        $typename = $info["type"];
-        if (!array_key_exists($typename, $typeinfo)) {
-            $typeinfo[$typename] = array("count" => 0, "free" => 0);
-        }
-        $typeinfo[$typename]["count"]++;
-        if ($info["available"]) {
-            $typeinfo[$typename]["free"]++;
+    if ($resnodes) {
+        foreach ($resnodes as $node => $info) {
+            $typename = $info["type"];
+            if (!array_key_exists($typename, $typeinfo)) {
+                $typeinfo[$typename] = array("count" => 0, "free" => 0);
+            }
+            $typeinfo[$typename]["count"]++;
+            if ($info["available"]) {
+                $typeinfo[$typename]["free"]++;
+            }
         }
     }
     $amlist[$urn] = array(

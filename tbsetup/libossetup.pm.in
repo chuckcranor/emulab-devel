@@ -2699,6 +2699,17 @@ use Node;
 use English;
 use Data::Dumper;
 
+package libossetup_iris030;
+use base qw(libossetup_sdr);
+
+use libdb;
+use libtestbed;
+use libossetup;
+use libtblog_simple;
+use Node;
+use English;
+use Data::Dumper;
+
 package libossetup_iris;
 use base qw(libossetup_handler);
 

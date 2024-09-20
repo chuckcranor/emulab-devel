@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,6 +87,9 @@ function Do_Deny()
     $this_uid = $this_user->uid();
 
     list ($target_user, $project) = CommonSetup();
+    if (!$project) {
+        return;
+    }
     $pid      = $project->pid();
     $user_uid = $target_user->uid();
     
@@ -120,6 +123,9 @@ function Do_Approve()
     $this_uid = $this_user->uid();
 
     list ($target_user, $project) = CommonSetup();
+    if (!$project) {
+        return;
+    }
     $pid      = $project->pid();
     $user_uid = $target_user->uid();
     $trust    = TBDB_TRUSTSTRING_LOCALROOT;
