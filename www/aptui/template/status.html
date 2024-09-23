@@ -1413,7 +1413,7 @@ pre {
       <li id="reload">
 	<a name="reload" class='dropdown-item'
 	   data-toggle='tooltip' data-bs-toggle='tooltip'
-	   title='Reload node, click to confirm'
+	   title='Reload the current OS image on your node, click to confirm'
 	   data-trigger="hover" data-bs-trigger="hover">Reload</a></li>
       <li id="recovery">
 	<a name="recovery" class='dropdown-item'
@@ -1549,7 +1549,18 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-body'>
-          <center><h3>Confirm Node <span id="confirm-which"></span></h3>
+          <center>
+	    <h3>Confirm Node <span id="confirm-which"></span></h3>
+	  </center>
+	  <div class="reload-warning mb-2 hidden">
+	    WARNING: When you reload a node, the primary OS partition
+	    is overwritten with a fresh copy of the OS image that is
+	    currently running on it. Any additional data you have put
+	    in that partition will be lost. Reloading is a last resort
+	    operation if you have messed up your node and it will no
+	    longer boot.
+	  </div>
+	  <center>
             <button class='btn btn-danger btn-sm confirm-button'
 		    id='confirm_reload_button'>
 	      Confirm</button>
