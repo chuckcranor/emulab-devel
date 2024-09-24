@@ -2,9 +2,6 @@
  .panel-body-dashboard {
      padding: 2px;
  }
- .table-dashboard {
-     margin: 1px;
- }
  .popover, .popover-content {
      width:auto !important;
      max-width: 700 !important;
@@ -18,17 +15,33 @@
  .table-condensed > tfoot > tr > td {
      padding: 2px;
  }
- .panel-heading-list {
-     padding: 2px;
- }
 </style>
-<div class='col-lg-10 col-lg-offset-1
-	    col-md-10 col-md-offset-1
-	    col-sm-12 col-sm-offset-0
-	    col-xs-12 col-xs-offset-0'>
-  <a href="vlan-history.php">Vlan History</a>
-  <div class='panel panel-default'>
-    <div class='panel-body panel-body-dashboard'>
+<div class='col-lg-10 col-lg-offset-1 offset-lg-1
+	    col-md-10 col-md-offset-1 offset-lg-1
+	    col-sm-12 col-sm-offset-0 offset-lg-0
+	    col-xs-12 col-xs-offset-0 offset-lg-0'> 
+  <div class="row justify-content-start mt-3 mb-1">
+    <div class="col-sm-1">
+      <a class='btn btn-info' href="vlan-history.php"
+	 type="button">Vlan History</a>
+    </div>
+    <div class="col-sm-3">
+      <div class="input-group input-group-md"
+	   id="search-mac">
+	<input class='form-control form-control-md search'
+	       type='search'
+	       placeholder='MAC Address'>
+	<button class="btn btn-outline-secondary"
+		type="button">Search</button>
+      </div>
+    </div>
+    <div class="col-sm-auto">
+      <a id="search-mac-link" href=""
+	 class="btn btn-success hidden" target="_blank" type="button"></a>
+    </div>
+  </div>
+  <div class='panel card panel-default'>
+    <div class='panel-body card-body panel-body-dashboard'>
       <div class="table-responsive">
 	<table class='tablesorter'>
 	  <thead>

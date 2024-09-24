@@ -585,6 +585,8 @@ $routing = array("geni-login" =>
                                                      "Do_GetRFViolations",
                                                  "GetUtilization" =>
                                                      "Do_GetUtilization",
+                                                 "IfaceSearch" =>
+                                                     "Do_IfaceSearch",
                               )
                         ),
 		 "nodetype" =>

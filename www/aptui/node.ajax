@@ -881,6 +881,51 @@ function Do_GetUtilization()
     SPITAJAX_RESPONSE($results);
 }
 
+function Do_IfaceSearch()
+{
+    global $this_user, $ajax_args;
+
+    if (! (ISADMIN() || OPSGUY())) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    if (!isset($ajax_args["mac"])) {
+	SPITAJAX_ERROR(-1, "Missing mac address");
+	return -1;
+    }
+    $mac = $ajax_args["mac"];
+    if (! preg_match("/^[\w:]+$/", $mac)) {
+	SPITAJAX_ERROR(-1, "Invalid mac address");
+	return -1;
+    }
+    $mac = str_replace(":", "", $mac);
+    $query_result =
+        DBQueryFatal("select node_id,null from interfaces ".
+                     "where mac='$mac'");
+    
+    if (!mysql_num_rows($query_result)) {
+        #
+        # Look in the vinterfaces table. This is unlikely.
+        #
+        $query_result =
+            DBQueryFatal("select node_id,vnode_id from vinterfaces ".
+                         "where mac='$mac'");
+
+        if (!mysql_num_rows($query_result)) {
+            SPITAJAX_RESPONSE(null);
+            return;
+        }
+    }
+    $row = mysql_fetch_array($query_result);
+    if ($row["vnode_id"]) {
+        $node_id = $row["vnode_id"];
+    }
+    else {
+        $node_id = $row["node_id"];
+    }
+    SPITAJAX_RESPONSE($node_id);
+}
+
 # Local Variables:
 # mode:php
 # End:
