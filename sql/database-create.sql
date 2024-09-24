@@ -804,6 +804,7 @@ CREATE TABLE `apt_instances` (
   `fabric_sliceid` varchar(64) default NULL,
   `fabric_stitched` tinyint(1) NOT NULL default '0',
   `rdz_status` varchar(32) default NULL,
+  `rdz_flags` set('heartbeats') NOT NULL default '',
   `modify_count` int(11) unsigned NOT NULL default '0',
   PRIMARY KEY (`uuid`),
   KEY `creator` (`creator`),
