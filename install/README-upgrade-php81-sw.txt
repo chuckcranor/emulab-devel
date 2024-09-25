@@ -3,17 +3,19 @@ pre-FreeBSD 13.3 system. This branch reflects changes to support not just
 PHP 8.1, but also MariaDB and other third-party packages that are current
 with FreeBSD 13.3.
 
-Note that we do all these updates from the boss node. You should not need to
-login to the ops node. This is primarily for the benefit of our Powder fixed
-and mobile endpoint aggregates where the "ops node" is just a jail running on
-the boss. Where necessary, you will just ssh over to the ops node/jail to
-perform things not done by the "boss-install" target on boss.
+Note that on Powder fixed and mobile endpoint aggregates, the "ops node" is
+just a jail running on the boss. But you should still be able to ssh into
+it as though it is a separate node.
+
+The following also assumes a shared homedir between boss and ops, which is
+true for most installations. Hence separate build trees are used (obj/boss
+and obj/ops).
 
 1. Checkout the source
 
 Right now, since this is all on a branch, you have to clone that branch of
 the repo into a new source tree and copy over the defs-* file from the original
-soruce tree:
+source tree:
 
     git clone -b php81 \
         https://gitlab.flux.utah.edu/emulab/emulab-devel.git testbed-new
@@ -22,7 +24,7 @@ soruce tree:
     git submodule update
     cd ..
     cp <current-defs-file> testbed-new/defs-foo
-    mkdir -p obj
+    mkdir -p obj/boss obj/ops
 
 2. Install a missing package to satisfy a non-backward compatible change:
 
@@ -38,7 +40,7 @@ soruce tree:
    This is because the ops "node" on our fixed and mobile endpoints is a
    minimal jail, not really capable of an opsfs-install.
 
-     cd obj/boss
+     cd ~/obj/boss
      ../../testbed-new/configure --with-TBDEFS=../../testbed-new/defs-foo
       gmake
       sudo gmake boss-install
@@ -61,14 +63,11 @@ soruce tree:
    they will be needed when the OS is updated to FreeBSD 13. So you can decide
    whether you want to make the changes now, or as part of the OS upgrade.
 
-   Note that here, you *will* need to login to the ops nodes to perform
-   the "On ops" step.
-
    To reinstall the startup scripts:
 
    On boss:
 
-      cd <objdir>/rc.d
+      cd ~/obj/boss/rc.d
       # diff committed versions vs what is installed
       gmake diff
 
@@ -77,7 +76,10 @@ soruce tree:
    
    On ops:
 
-      cd <objdir>/rc.d
+      cd ~/obj/ops
+      ../../testbed-new/configure --with-TBDEFS=../../testbed-new/defs-foo
+
+      cd rc.d
       # diff committed versions vs what is installed
       gmake control-diff
 
@@ -92,7 +94,7 @@ soruce tree:
    httpd-www.conf rather than httpd.conf. So check for the existence of the
    former first:
 
-      cd ~/obj/apache
+      cd ~/obj/boss/apache
       # boss config: check for httpd-www.conf:
       diff httpd.conf /usr/local/etc/apache24/httpd-www.conf
 
@@ -103,12 +105,14 @@ soruce tree:
 
       diff httpd-geni.conf /usr/local/etc/apache24/httpd-geni.conf
 
-   And the ops version:
+   And the ops version (do this from ops, it is easiest):
    
-      # convoluted way to check ops httpd.conf without logging in to ops:
-      ssh ops diff obj/apache/httpd.conf-ops /usr/local/etc/apache24/httpd-www.conf
+      cd ~/obj/ops/apache
+      gmake control-build
+
+      diff httpd.conf-ops /usr/local/etc/apache24/httpd-www.conf
       # if the above does not exist
-      ssh ops diff obj/apache/httpd.conf-ops /usr/local/etc/apache24/httpd.conf
+      diff httpd.conf-ops /usr/local/etc/apache24/httpd.conf
 
    You may need to do some manual merging of the two versions if local
    changes have been made to the installed version.
@@ -126,7 +130,8 @@ soruce tree:
 
    If you updated the Apache configs you should restart apache:
 
-      # boss
+      # on boss
       sudo /usr/local/etc/rc.d/apache24 restart
-      # ops
-      sudo ssh ops /usr/local/etc/rc.d/apache24 restart
+
+      # on ops
+      sudo /usr/local/etc/rc.d/apache24 restart
