@@ -475,7 +475,7 @@ $(function ()
      */
     function modified_callback()
     {
-	//console.info("modified_callback");
+	console.info("modified_callback");
 	ToggleSubmit(true, "check");
 	aptforms.MarkFormUnsaved();
 	if (editing) {
@@ -533,6 +533,39 @@ $(function ()
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
 
+	if (window.ISADMIN) {
+            /*
+             * Handler for "canned responses" to fill in the message.
+             */
+            $("#delete-reservation-modal .canned-response, "+
+              "#approve-modal .canned-response").click(function (event) {
+                  var message = $.trim($(this).find("p").text());
+                  message = message.replace(/[\n\r]+/g, " ");
+                  message = message.replace(/\s+/g, " ");
+
+                  var textarea = $(this).closest('.modal-body').find('.user-message');
+                  $(textarea).text(message + "\n");
+                  $(textarea).focus();
+                  $(textarea)[0].setSelectionRange(message.length+1, message.length+1);
+              })
+            /*
+             * Crazy stuff to get a dropdown to work inside a modal. Seems
+             * to be a bug in bootstrap. Formatting still needs help.
+             * Needs to run after bootstrap initializes, hence the setTimeout().
+             */
+	    setTimeout(function () {
+                const dropdowns = document.querySelectorAll('.canned-responses ' +
+                                                            '.dropdown-toggle');
+                
+                const dropdown = [...dropdowns].map((dropdownToggleEl) =>
+                    new bootstrap.Dropdown(dropdownToggleEl, {
+                        popperConfig(defaultBsPopperConfig) {
+                            return { ...defaultBsPopperConfig, strategy: 'fixed' };
+                        }
+                    }));
+	    }, 100);
+        }
+        
 	// See if we can make users understand reservations are per-project.
 	$('#project-forewarned').change(function () {
 	    var ischecked =  $('#project-forewarned').is(":checked");
@@ -1110,13 +1143,10 @@ $(function ()
 		    // OTA perm warning.
 		    $('#allroutes-ota-warning').removeClass("hidden");
 		}
+                modified_callback();
 	    }
 	    else {
-		$('#route-table tbody').each(function() {
-		    var routename = $(this).find(".routename").val();
-		    console.info(routename);
-		    $(this).find('.delete-route').trigger("click");
-		});
+                Delete(undefined, true /* allroutes */);
 		// OTA perm warning.
 		$('#allroutes-ota-warning').addClass("hidden");
 	    }
@@ -1126,7 +1156,7 @@ $(function ()
 	$('#allroutes-ota-warning .ota-request-permission')
 	    .click(requestOtaPermission);
     }
-    
+
     /*
      * When the date selected is today, need to disable the hours
      * before the current hour. Also set the initial hour to a
@@ -3010,6 +3040,18 @@ $(function ()
 			$('#reserve-uncancel-button').removeClass("hidden");
 		    }
 		}
+
+                /*
+                 * Admins get a button to clear the start date/time so the
+                 * reservation can be rescheduled to start immediately.
+                 */
+                $("#clear-starttime").click(function (event) {
+                    event.preventDefault();
+		    $('#reserve-request-form [name=start_hour]').val("");
+		    $('#reserve-request-form [name=start_day]').val("");
+	            UpdateFormTime("start");
+		    modified_callback();
+                });
 	    }
 	    if (details.forclass) {
 		$('#for-class').prop("checked", true);
@@ -3421,9 +3463,9 @@ $(function ()
     /*
      * Delete a reservation. Might be a group, or a single row in a group
      */
-    function Delete(row)
+    function Delete(row, allroutes)
     {
-	console.info("Delete", row);
+	console.info("Delete", row, allroutes);
 	
 	var callback = function(json) {
 	    sup.HideWaitWait();
@@ -3444,40 +3486,26 @@ $(function ()
 	if (row !== undefined) {
 	    args["reservation_uuid"] = $(row).attr('data-uuid');
 	}
+	else if (allroutes !== undefined) {
+	    args["allroutes"] = 1;
+	}
 	console.info("Delete", args);
-	
-	// Bind the confirm button in the modal. Do the deletion.
-	$('#delete-reservation-modal #confirm-delete').click(function (e) {
-	    e.preventDefault();
-	    sup.HideModal('#delete-reservation-modal', function () {
-		args["reason"] = $('#delete-reason').val();
-		sup.ShowWaitWait();
-		var xmlthing = sup.CallServerMethod(null, "resgroup",
-						    "Delete", args);
-		xmlthing.done(callback);
-	    });
-	});
-	// Helper for common issue;
-	$('#delete-reservation-modal .nolongerfits').click(function (e) {
-	    e.preventDefault();
-	    $('#delete-reason')
-		.val("This reservation request no longer fits the " +
-		     "schedule. Until a reservation is approved, the " +
-		     "resources are still available to other users, either " +
-		     "in a new experiment or a smaller reservation that is " +
-		     "automatically approved. Please login and create a " +
-		     "new one, and we will get it approved " +
-		     "as soon as possible.\n\n");
-	});
-	
-	// Handler so we know the user closed the modal. We need to
-	// clear the confirm button handler.
-	$('#delete-reservation-modal').on('hidden.bs.modal', function (e) {
-	    $('#delete-reservation-modal #confirm-delete').unbind("click");
-	    $('#delete-reservation-modal .nolongerfits').unbind("click");
-	    $('#delete-reservation-modal').off('hidden.bs.modal');
-	})
-	sup.ShowModal("#delete-reservation-modal");
+
+        sup.ShowConfirmModal('#delete-reservation-modal',
+                             // Confirm
+                             function () {
+		                 args["reason"] = $('#delete-reason').val();
+		                 sup.ShowWaitWait();
+                                 sup.CallServerMethod(null, "resgroup",
+						      "Delete", args, callback);
+                             },
+                             // Cancel
+                             function () {
+                                 // Reset this back to checked
+                                 if (allroutes !== undefined) {
+		                     $('#allroutes-checkbox').prop("checked", true);
+                                 }
+                             });
     }
 
     /*

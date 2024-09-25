@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -85,6 +85,7 @@ class ReservationGroup
     function locked()       { return $this->field('locked'); }
     function locker_pid()   { return $this->field('locker_pid'); }
     function reason()       { return $this->field('reason'); }
+    function portal()       { return $this->field('portal'); }
     function forclass()     { return $this->field('forclass'); }
     function noidledetection() { return $this->field('noidledetection'); }
     function isHistory()    { return $this->ishistory; }
@@ -294,8 +295,10 @@ class ReservationGroup
         $details["uid"]        = $resgroup->creator_uid();
         $details["uid_idx"]    = $resgroup->creator_idx();
         $details["forclass"]   = $resgroup->forclass() ? true : false;
-        $details["portal"]     = ($project->portal() ?
-                                  $project->portal() : "emulab");
+        $details["portal"]     = ($resgroup->portal() ?
+                                  $resgroup->portal() :
+                                  ($project->portal() ?
+                                   $project->portal() : "emulab"));
         $details["notes"]      = $resgroup->reason();
         $details["ishistory"]  = $resgroup->isHistory();
         if (!$resgroup->isHistory()) {

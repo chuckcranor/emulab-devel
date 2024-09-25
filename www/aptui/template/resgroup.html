@@ -55,7 +55,9 @@
      font-size: 16px;
      font-weight: bold;
  }
- 
+ .canned-response {
+     white-space: normal !important;
+ }
 </style>  
 <div class='row main-row'>
   <div class='col-lg-7
@@ -254,6 +256,7 @@
 		     data-key="allroutes">
 		  <input name="allroutes-checkbox" style="margin-top: 12px;"
 			 id="allroutes-checkbox"
+			 class="ignore-unsaved"
 			 type="checkbox">
 		  <a href='#' class='btn btn-xs route-help'>
 		    <span class='glyphicon glyphicon-question-sign'
@@ -350,17 +353,29 @@
 			<option value="23">11:00 PM</option>
 		      </select>
 		    </div>
-		    <div class="col-sm-1" style="padding:0px;">
-		      <a href='#' class='btn btn-xs'
-			 data-toggle='popover' data-bs-toggle='popover'
-			 data-html='true' data-bs-html='true'
-			 data-delay='{"hide":1000}' data-bs-delay='{"hide":1000}'
-			 data-content='Times are in your local timezone.
-				       Start day/time is optional, defaults
-				       to the current day/time.'>
-			<span class='glyphicon glyphicon-question-sign'></span>
-		      </a>
-		    </div>
+		    <% if (window.ISADMIN && editing) { %>
+		      <div class="col-sm-2" style="padding:0px;">
+			<button class='btn btn-xs btn-danger' id="clear-starttime"
+				data-toggle='tooltip' data-bs-toggle='tooltip'
+				data-container="body" data-bs-container="body"
+				data-trigger="hover" data-bs-trigger="hover"
+				title='Clear the start date/time so the reservation
+				       can be rescheduled to start immediately'>
+			  Clear</button>
+		      </div>
+		    <% } else { %>
+		      <div class="col-sm-1" style="padding:0px;">
+			<a href='#' class='btn btn-xs'
+			   data-toggle='popover' data-bs-toggle='popover'
+			   data-html='true' data-bs-html='true'
+			   data-delay='{"hide":1000}' data-bs-delay='{"hide":1000}'
+			   data-content='Times are in your local timezone.
+					 Start day/time is optional, defaults
+					 to the current day/time.'>
+			  <span class='glyphicon glyphicon-question-sign'></span>
+			</a>
+		      </div>
+		    <% } %>
 		  </div>
 		</div>
 	      </div>
@@ -906,7 +921,7 @@
 	    Message to send to user
 	    <div>
 	      <textarea id='delete-reason'
-			class='form-control'
+			class='form-control user-message'
 			rows=5></textarea>
 	    </div>
 	  <% } %>
@@ -919,8 +934,45 @@
 	    Cancel</button>
 	</center>
 	<% if (window.ISADMIN) { %>
-	    <input type=checkbox class="nolongerfits" value=yes>
-	    No longer fits the schedule
+	  <div class="dropdown canned-responses">
+	    <button class="btn btn-info dropdown-toggle"
+		    type="button" data-bs-toggle="dropdown">
+	      Canned Responses
+	    </button>
+	    <ul class="dropdown-menu">
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    This reservation request no longer fits the
+		    schedule. Until a reservation is approved, the
+		    resources are still available to other users, either
+		    in a new experiment or a smaller reservation that is
+		    automatically approved. Please login and create a
+		    new one, and we will get it approved
+		    as soon as possible.
+ 		  </p>
+		</a>
+	      </li>
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    CloudLab does not allocate or reserve resources
+ 		    for an entire semester or quarter. The expectation
+ 		    is that you will allocate nodes when you are ready
+ 		    to actively use them, and release them when they are
+ 		    idle so that others can get their own work done.
+		  </p>
+		</a>
+	      </li>
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    This reservation is not being utilized. 
+		  </p>
+		</a>
+	      </li>
+	    </ul>
+	  </div>
 	<% } %>
       </div>
     </div>
@@ -946,6 +998,34 @@
 		  data-dismiss='modal' data-bs-dismiss='modal'>
 	    Cancel</button>
 	</center>
+	<% if (window.ISADMIN) { %>
+	  <div class="dropdown canned-responses">
+	    <button class="btn btn-info dropdown-toggle"
+		    type="button" data-bs-toggle="dropdown">
+	      Canned Responses
+	    </button>
+	    <ul class="dropdown-menu">
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    Please note the shortened reservation duration.
+		    Reservations for this node type are limited to two weeks since
+		    there are so few of them and they are in very high demand. You
+		    can submit an additional reservation once this reservation starts. 
+		  </p>
+		</a>
+	      </li>
+	      <li>
+		<a class="dropdown-item canned-response" href="#">
+		  <p>
+		    Please note the modified start time for this reservation, there
+		    was a conflict that required shifting the start time slightly.
+		  </p>
+		</a>
+	      </li>
+	    </ul>
+	  </div>
+	<% } %>
       </div>
     </div>
   </div>

@@ -72,6 +72,7 @@ use OSImage;
 use Lan;
 use EmulabFeatures;
 use EmulabConstants;
+use emutil;
 
 # Local stuff
 my $consetup	    = "$TB/libexec/console_setup";
@@ -493,6 +494,27 @@ foreach my $node (@freed_nodes) {
     my $def_boot_vers = $node->def_boot_osid_vers();
     my $imageable     = $node->imageable();
 
+    #
+    # UMass addition.
+    #
+    if (-e "$TB/sbin/run-fpga-reset.sh" && $pid ne TBOPSPID() &&
+        $node->NodeTypeAttribute("reflash_on_nfree")) {
+        print "Doing an FPGA reflash on $node_id, this will take a moment\n";
+        my $output = emutil::ExecQuiet("$TB/sbin/run-fpga-reset.sh $node_id");
+        if (!defined($output)) {
+            print STDERR "FPGA reflash failed, no output was provided\n";
+            $error++
+        }
+        elsif ($?) {
+            print STDERR "FPGA reflash failed:\n";
+            print STDERR $output . "\n";
+            $error++;
+        }
+        else {
+            print "FPGA reflash completed okay\n";
+        }
+    }
+    
     # Clean out all delays
     DBQueryWarn("delete from delays where node_id='$node_id'") || $error++;
 

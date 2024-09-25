@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -294,7 +294,7 @@ sub VerifyImage()
 	    if ($timestamp >= $mtime);
     }
     my $length = $filelength;
-
+    
     if (defined($rangestart)) {
 	if ($rangeend) {
 	    $length = $rangeend - $rangestart;
@@ -313,6 +313,9 @@ sub VerifyImage()
     $foffset = ($rangestart ? $rangestart : 0);
 
     print "Content-Length: $length\n";
+    print "Content-Type: application/octet-stream\n";
+    print "Cache-Control: no-cache, must-revalidate\n";
+    print "Pragma: no-cache\n";
     print "Last-Modified: " .
 	strftime("%a, %d %b %Y %H:%M:%S GMT", gmtime($mtime)) . "\n";
 

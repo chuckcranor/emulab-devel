@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -45,15 +45,17 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print "Usage: secureimageget [-n] [-d] [-u user] ".
+    print "Usage: secureimageget [-n] [-d] [-W] [-u user] ".
 	"[-c credfile] -o outfile imageid\n";
     exit(1);
 }
-my $optlist  = "ndvc:u:o:D";
+my $optlist  = "ndvc:u:o:DrW";
 my $impotent = 0;
-my $debug    = 1;
+my $debug    = 0;
 my $verbose  = 0;
 my $devtree  = 0;
+my $resume   = 0;
+my $usewget  = 0;
 my $credfile;
 my $outfile;
 my $outfp;
@@ -134,6 +136,12 @@ if (defined($options{"o"})) {
 if (defined($options{"u"})) {
     $user = $options{"u"};
 }
+if (defined($options{"r"})) {
+    $resume = 1;
+}
+if (defined($options{"W"})) {
+    $usewget = 1;
+}
 usage()
     if (! (@ARGV && $outfile));
 
@@ -185,9 +193,12 @@ fatal("Could not load credential")
 
 fatal("Not allowed to write to output file")
     if (-e $outfile && !-w $outfile);
-open(FD, ">$outfile")
-    or fatal("Could not open output file for writing: $!");
-$outfp = *FD;
+
+if (!$usewget) {
+    open(FD, ">$outfile")
+	or fatal("Could not open output file for writing: $!");
+    $outfp = *FD;
+}
 
 #
 # Derive the authority where the image lives, from the credential.
@@ -231,33 +242,96 @@ if ($debug) {
 }
 
 #
-# Suck over some bits.
+# Download using the old RPC hack.
 #
-my $response =
-    Genixmlrpc::CallMethodStream($cmurl, undef, $outfp, "SecureImageDownload",
-				 {"credentials" => [$credential->asString()],
-				  "image_urn"   => $image_urn});
-if (!defined($response) || $response->code()) {
-    if ($debug && defined($response)) {
-	print Dumper $response . "\n";
-    }
-    my $msg = "SecureImageDownload failed for image " . $image->versname() . " :";
+sub GeniRPCDownload()
+{
+    my $response =
+	Genixmlrpc::CallMethodStream($cmurl, undef, $outfp, "SecureImageDownload",
+				     {"credentials" => [$credential->asString()],
+				      "image_urn"   => $image_urn});
+    if (!defined($response) || $response->code()) {
+	if ($debug && defined($response)) {
+	    print Dumper $response . "\n";
+	}
+	my $msg = "SecureImageDownload failed for image " . $image->versname() . " :";
     
-    if (!defined($response)) {
-	# Bail, we will try again later.
-	print STDERR "$msg RPC error\n";
-	exit(-1);
+	if (!defined($response)) {
+	    # Bail, we will try again later.
+	    print STDERR "$msg RPC error\n";
+	    exit(-1);
+	}
+	elsif (defined($response->output())) {
+	    print STDERR "$msg " . $response->output() . "\n";
+	    exit(-1);
+	}
+	else {
+	    print STDERR "$msg " . $response->code() . "\n";
+	    exit(-1);
+	}
     }
-    elsif (defined($response->output())) {
-	print STDERR "$msg " . $response->output() . "\n";
-	exit(-1);
+    close($outfp);
+}
+
+sub WgetDownload()
+{
+    my $command;
+    #
+    # POST arguments to send along with wget.
+    #
+    my @args = ({"credentials" => [$credential->asString()],
+		 "image_urn"   => $image_urn,
+		 "usingwget"   => 1});
+    my $encoder = Frontier::RPC2->new();
+    my $reqstr  = $encoder->encode_call("SecureImageDownload", @args);
+
+    #
+    # Wget requires that the post data be in a file, piping it in will not work.
+    #
+    my $filename = emutil::WriteToFile($reqstr);
+    chmod(0755, $filename);
+
+    if (1) {
+	my $retry_options = "--retry-connrefused --waitretry=30 " .
+	    "--dns-timeout=30 --connect-timeout=60 --read-timeout=600 ";
+    
+	if ($resume) {
+	    $retry_options .= " -c ";
+	}
+	$command = "nice -15 wget -O $outfile ".
+	    "--no-check-certificate $retry_options ".
+	    ($debug ? "-d -v " : "").
+	    "--show-progress --progress=dot:giga ".
+	    "--post-file=$filename ".
+	    "--certificate=/usr/testbed/etc/genicm.pem $cmurl";
     }
     else {
-	print STDERR "$msg " . $response->code() . "\n";
-	exit(-1);
+	my $retry_options = "--retry 10 --retry-connrefused --retry-delay 30 " .
+	    "--connect-timeout 60 ";
+	if ($resume) {
+	    $retry_options .= "-C - ";
+	}
+	$command = "nice -15 curl -o $outfile ".
+	    "-k $retry_options ".
+	    ($debug ? "-v " : "").
+	    "--progress-bar ".
+	    "--data-binary \@${filename} ".
+	    "-E /usr/testbed/etc/genicm.pem $cmurl";
     }
+    system("/bin/cat $filename > /tmp/post.txt");
+    print "$command\n";
+    system($command);
+    
+
+    unlink($filename);
 }
-close($outfp);
+
+if ($usewget) {
+    WgetDownload();
+}
+else {
+    GeniRPCDownload();
+}
 exit(0);
 
 sub fatal($)

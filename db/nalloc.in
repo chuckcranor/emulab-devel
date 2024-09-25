@@ -175,6 +175,7 @@ if (!$experiment->AccessCheck($this_user, TB_EXPT_MODIFY)) {
     die("*** $0:\n".
 	"    You do not have permission to allocate nodes in $pid/$eid\n");
 }
+my $expectedEnd = Reservation->ExpectedEnd($experiment);
 
 #
 # Require a comment when an admin is moving nodes on the command line.
@@ -304,8 +305,10 @@ foreach my $n (@node_names) {
 		next;
 	    }
 	    if ($connode->IsReserved() && $connode->pid() ne TBOPSPID()) {
+		# Avoid locking problem.
+		my $pideid = $connode->pid() . "/" . $connode->eid();
 		print "Conflicting node $con_id is already reserved ".
-		    "to " . $connode->Reservation()->pideid() . "\n";
+		    "to $pideid\n";
 		if ($force) {
 		    print "Forcing allocation anyway...\n";
 		}
@@ -354,7 +357,8 @@ foreach my $type ( keys( %types ) ) {
     my $reservations = Reservation->LookupAll( $type, 0,
 					       $debug ? \$resdetails : undef  );
     print $resdetails if ($debug);
-    if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
+    if( !Reservation->IsFeasible( $reservations, \$errormsg, undef, undef,
+				  undef, undef, undef, $expectedEnd ) ) {
 	print "*** Existing admission control violation for ".
 	    "type $type: $errormsg\n";
 	print "Omitting $type admission control verification.\n";
@@ -388,7 +392,8 @@ foreach my $node (@nodes) {
 					   $endtime, $node_id, 1, $gid);
     push(@$reservations, $res);
     
-    if (!Reservation->IsFeasible($reservations, \$errormsg)) {
+    if (!Reservation->IsFeasible($reservations, \$errormsg, undef, undef,
+				 undef, undef, undef, $expectedEnd)) {
 	print "*** Admission control violation for node $node_id: $errormsg\n";
 
 	if ($force) {
@@ -432,7 +437,8 @@ foreach my $type ( keys( %types ) ) {
     
     push( @$reservations, $res );
     
-    if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
+    if( !Reservation->IsFeasible( $reservations, \$errormsg, undef, undef,
+				  undef, undef, undef, $expectedEnd ) ) {
 	print "*** Admission control violation for type $type: $errormsg\n";
 
 	if( $debug ) {

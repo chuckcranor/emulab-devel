@@ -34,6 +34,12 @@ sub Install($$$)
 {
     my ($server, $isupdate, $impotent) = @_;
 
+    #
+    # Disable update, not sure its a good idea!
+    #
+    return 0
+	if ($isupdate);
+
     Phase "mfs", "Setting up MFSs", sub {
 	foreach my $ref (@TARBALLS) {
 	    my $name = $ref->{'name'};

@@ -285,6 +285,25 @@ pre {
   padding: 0.8rem;
 }
 
+/*
+ * Tablesorter and bootstrap 5 have some incompatibility wrt
+ * zebra and hover.
+ *
+ * Note that Tablesorter tables class table-hover for hover coloring.
+ * I added that to the bootstrap theme in the uitheme widget. So all
+ * tables are consistent.
+ */
+table.tablesorter tbody tr.odd:not(.filtered) td {
+  background: #f9f9f9;
+  background-color: #f9f9f9;
+}
+table.tablesorter tbody tr.even:not(.filtered) td {
+  background: #FFF;
+  background-color: #FFF;
+}
+.table {
+  --bs-table-striped-bg: transparent;
+}
 
 /*
  * Bootstrap got rid of glyphicons, but we use them in 100s of places.

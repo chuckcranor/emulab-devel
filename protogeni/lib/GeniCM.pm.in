@@ -836,18 +836,6 @@ sub GetTicketAuxAux($)
     }
 
     #
-    # Mark the experiment locally as coming from the cooked interface.
-    # This changes what tmcd returns to the local nodes.
-    #
-    my $generated_by = GeniXML::GetText("generated_by", $rspec);
-    if (defined($generated_by) &&
-	$generated_by eq "libvtop") {
-	$slice_experiment->Update({"geniflags" =>
-				       $Experiment::EXPT_GENIFLAGS_EXPT|
-				       $Experiment::EXPT_GENIFLAGS_COOKED});
-    }
-    
-    #
     # Create a virt topology object. We are going to load this up as we
     # process the rspec.
     #
@@ -3992,6 +3980,9 @@ sub GetTicketAuxAux($)
 		}
 	    }
 	    elsif ($insolution) {
+		if ($line =~ /^unassigned:\s+([-\w]+)$/) {
+		    $errorstr = "No available physical resources for $1";
+		}
 		$solution .= $line;
 	    }
 	    elsif ($line =~ /^\*\*\*/) {
@@ -8356,13 +8347,15 @@ sub FlipToUser($$)
     # the switch to using the real local user.  Operate as geniuser (with
     # added gid).
     #
-    if ($project->pid() eq "GeniSlices" ||
-	($project->IsNonLocal() && $experiment->swapper() eq "geniuser")) {
-	$creator = User->Lookup("geniuser");
-	return undef
-	    if (!defined($creator));
-	$user = GeniUser::LocalUser->Create($creator);
-	goto flip;
+    if ($project->IsNonLocal() || $project->pid() eq "GeniSlices") {
+	if (! (ref($object) eq "GeniSlice" &&
+	       $experiment->geniflags() & $Experiment::EXPT_GENIFLAGS_LOCAL)) {
+	    $creator = User->Lookup("geniuser");
+	    return undef
+		if (!defined($creator));
+	    $user = GeniUser::LocalUser->Create($creator);
+	    goto flip;
+	}
     }
 
     #

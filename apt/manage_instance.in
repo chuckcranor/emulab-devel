@@ -5437,6 +5437,7 @@ sub DoPrestageImages()
     my $response;
     my $logfile;
     my $imagelist;
+    my $credentials;
     my @aggregate_list = ();
     my $optlist     = "Nwb";
     my $waitmode    = 0; 
@@ -5566,6 +5567,14 @@ sub DoPrestageImages()
 	goto done;
     }
 
+    if ($op eq "prestage" &&
+	$instance->CreateImageCreds(\$errmsg, \$credentials)) {
+	$errcode  = GENIRESPONSE_ERROR;
+	$exitcode = 1;
+	$errmsg   = "Could not get image credentials: $errmsg";
+	goto bad;
+    }
+
     #
     # Exit and leave child to poll.
     #
@@ -5601,8 +5610,10 @@ sub DoPrestageImages()
 	my ($sliver) = @_;
 	my $urn = $sliver->aggregate_urn();
 	my $op  = $aggregateops{$urn};
+	my $creds = (exists($credentials->{$urn}) ?
+		     $credentials->{$urn} : []);
 
-	return $sliver->PrestageImages($op, $imagelist->{$urn});
+	return $sliver->PrestageImages($op, $imagelist->{$urn}, $creds);
     };
 
     #

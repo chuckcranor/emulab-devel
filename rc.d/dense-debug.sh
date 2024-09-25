@@ -13,10 +13,9 @@ fi
 case "$1" in
     start|faststart|quietstart|onestart|forcestart)
 	for dbs in $SITES; do
-	    /usr/testbed/sbin/daemon_wrapper -t -w 10 -i 10 \
-		-l /usr/testbed/log/frontend-dense-$dbs.log \
-		-n dense-$dbs-netcat \
-		-p /var/run/frontend-dense-$dbs.pid nc -d powder-rffe-$dbs 111
+	    /usr/testbed/sbin/frontend-logger -i 10 \
+		-l /usr/testbed/archive/log/frontend/frontend-dense-$dbs.log \
+		-p /var/run/frontend-dense-$dbs.pid $dbs
 	    sleep 1
 	done
 	echo -n "dense-debugging"

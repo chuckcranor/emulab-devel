@@ -223,15 +223,15 @@ $(function () {
 	var form_modified = false;
 	
 	function EnableUnsavedWarning(form, modified_callback) {
-	    $(form + ' :input').change(function () {
-		//console.info("changed");
+	    $(form + ' :input').not('.ignore-unsaved').change(function () {
+		console.info("changed");
 		if (modified_callback) {
 		    modified_callback();
 		}
 		form_modified = true;
 	    });
-	    $(form + ' :input').on("input", function () {
-		//console.info("changed");
+	    $(form + ' :input').not('.ignore-unsaved').on("input", function () {
+		console.info("on input");
 		if (modified_callback) {
 		    modified_callback();
 		}

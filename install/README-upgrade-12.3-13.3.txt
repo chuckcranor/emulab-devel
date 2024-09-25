@@ -28,17 +28,17 @@ A. Things to do in advance of shutting down Emulab.
    that you can roll back to. Really only need to backup the root disk which
    has all the FreeBSD stuff. Login to the control node and:
 
-   # for thinly provisioned VMs
+   # for thinly provisioned VMs (elabinelab)
    sudo lvcreate -s -n boss.backup xen-vg/boss
    sudo lvcreate -s -n ops.backup xen-vg/ops
    
-   # apt/cloudlab utah/clemson
+   # apt and cloudlab utah/clemson
    sudo lvcreate -s -L 17g -n boss.backup xen-vg/boss
    sudo lvcreate -s -L 17g -n ops.backup xen-vg/ops
 
-   # wisconsin
-   sudo lvcreate -s -L 40g -n boss.backup xen-vg/boss
-   sudo lvcreate -s -L 40g -n ops.backup xen-vg/ops
+   # umass
+   sudo lvcreate -s -L 18g -n boss.backup xen-vg/boss.root
+   sudo lvcreate -s -L 18g -n ops.backup xen-vg/ops.root
 
    For regular LVM volumes, this will seriously degrade the performance of the
    upgrade process due to the inefficiencies of disk writes when shadows are
@@ -54,71 +54,76 @@ A. Things to do in advance of shutting down Emulab.
    4GB free on the root filesystem, you should be fine. Otherwise, you
    might need to make some space.
 
-1c. (boss only) Change your home directory temporarily to a local directory.
+   Some things you might get rid of or move elsewhere: the existing /usr/src
+   and /usr/ports since we will be downloading new ones, /var/mail/root since
+   it accumulates very fast, old large tarballs and cruft in /tmp and /usr/tmp,
+   and /Oetc and /usr/local/Oetc from a previous upgrade.
+   
+1c. Make sure you have a "clean" path to consoles and or VM control node!
 
-   If you are currently using AMD and ZFS (WITHAMD=1, WITHZFS=1 in defs-* file),
-   you will need to make this temporary change to work around AMD being removed
-   in FreeBSD 13.3. If you are not using AMD or ZFS or you are already using
-   the automounter (autofs) then skip to step 2.
+    For the boss/ops consoles, first make sure you have access to them at all.
+    In a perfect world, you will not need access to them, but if something
+    goes wrong, you may need to login via the consoles. A corollary of this
+    is: make sure you know the boss and ops root passwords. Finally, make
+    sure there is no cross dependency between the boss and ops consoles;
+    e.g., the consoles are cross connected (i.e., boss console capture or
+    IPMI access via ops, ops console capture/IPMI on boss).
+
+    Likewise, if you are running boss/ops VMs, make sure you can access the
+    control node without going through boss or ops. This would most likely
+    happen if you need to proxy through boss or ops to access the control node.
+
+1d. Make sure you have the ability to power cycle the servers.
+
+    I have had many instances of the ops node hanging at shutdown, I think
+    because of ZFS. (I shutdown to single user once and did "zfs unmount -a"
+    and it hung for 15+ minutes before I power cycled.) If your boss and ops
+    are Xen VMs, then you can "power cycle" from the control node with the
+    "xl" command. If you have physical servers, then you either need access
+    to the power button or have a management interface that you can use to
+    power cycle them.
+
+1e. (boss only) Change your home directory temporarily to a local directory.
+
+   If you are currently using AMD and ZFS (WITHAMD=1, WITHZFS=1 in defs-*
+   file), you will need to make this temporary change to work around AMD
+   being removed in FreeBSD 13.3. If you are not using AMD or ZFS or you are
+   already using the automounter (autofs) then skip to step 2.
 
    Since I am lazy, I just copy my whole homedir to /usr/testbed/data or
-   whatever local, none-root filesystem has GBs of space. At a minimum you
+   whatever local, non-root filesystem has GBs of space. At a minimum you
    will probably want your dotfiles and space for an Emulab source and build
    trees (for the next step).
 
    Then use `vipw` to change your home directory to that place and logout
    and back in again.
 
+1f. Update your leapseconds file.
+
+    This is not particularly upgrade related, but this is as good a time
+    as any to make sure you have the latest version (since IETF no longer
+    hosts the file):
+
+      sudo sysrc ntp_leapfile_sources=https://hpiers.obspm.fr/iers/bul/bulc/ntp/leap-seconds.list
+      sudo service ntpd fetch
+      sudo service ntpd restart
+
+   (this is from: https://dan.langille.org/2023/12/20/ntpd66134-leapsecond-file-var-db-ntpd-leap-seconds-list-will-expire-in-less-than-9-days/)
+   
 2. Update Emulab software on existing system.
 
    To making things easier later, it is best to upgrade your Emulab software
    before you start the OS upgrade. In particular, there are startup file
    changes related to MariaDB and Apache that will need to be in place after
    the new packages are installed. All SW changes should be backward
-   compatible, so there is no danger.
+   compatible, so there is no danger to doing this now.
 
-   Right now you have to use the "php81" branch of emulab-devel. To be safe
-   it is probably best just to clone a new tree and copy over the defs-*
-   file from the original tree.
+   Follow the instructions in "install/README-upgrade-php81-sw.txt" in the
+   Emulab source directory to do this. If possible, it would be good to at
+   least reboot the boss node and make sure there are no issues with startup.
 
-     git clone -b php81 \
-         https://gitlab.flux.utah.edu/emulab/emulab-devel.git testbed-new
-     cp <current-defs-file> testbed-new/defs-foo
-     mkdir obj obj/boss obs/ops
-
-   Build and install the ops node first:
-
-     # on ops node
-     cd obj/ops
-     ../../testbed-new/configure --with-TBDEFS=../../testbed-new/defs-foo
-     sudo gmake opsfs-install
-
-   Then on the boss node:
-
-     # on boss node
-     cd obj/boss
-     ../../testbed-new/configure --with-TBDEFS=../../testbed-new/defs-foo
-      gmake
-      sudo gmake boss-install
-
-   One thing that does not get installed every time is the rc.d (startup)
-   scripts. Unless you have changed something in your installed versions,
-   just do:
-
-      cd rc.d
-      sudo gmake install
-
-   Something else that is not automatically installed every time are Apache
-   config files. You will need an updated version of the main `httpd.conf`
-   file for later when PHP 8.1 is installed. So diff the version in
-   obj/boss/apache24 with the installed version(s) in /usr/local/etc/apache24.
-   You will need to merge in the
-   `<IfFile "/usr/local/libexec/apache24/libphp.so">` section to your
-   existing config because the php81 port has renamed the installed PHP
-   module.
-
-   If would probably be best at this point to at least reboot the boss node
-   and make sure there are no issues with startup.
+   THIS IS NOT STRICTLY NECESSARY. But you will have to do the rc.d and
+   apache config files it 
 
 3. Fetch the new release with freebsd-update.
 
@@ -134,15 +139,8 @@ A. Things to do in advance of shutting down Emulab.
    in particular the "Components" line.
 
    By default it will want to update your kernel ("kernel") and source tree
-   ("src") as well as the binaries ("world"). Life will be much easier if you
-   go with the flow and just let it do that. The only reason we had for using
-   a non-GENERIC kernel was related to running in a VM with more that 4 "sda"
-   (emulated SCSI) devices. There, the standard FreeBSD NCR driver was causing
-   problems. The other reason might be if you had to add some non-standard
-   driver.
-
-   If you have a custom source tree (or update it yourself with svn or git)
-   then remove "src" from the line:
+   ("src") as well as the binaries ("world"). We will download an up-to-date
+   source tree in the next step, so take "src" out if it is in there:
 
      Components world kernel # don't update src
 
@@ -158,23 +156,18 @@ A. Things to do in advance of shutting down Emulab.
    for the default GENERIC kernel, make sure to leave "kernel" in the
    components above.
 
-   Once you have /etc/freebsd-update.conf squared away, do the "fetch"
-   part of the upgrade:
+   Once you have /etc/freebsd-update.conf squared away, do the "fetch" part
+   of the upgrade. Since this will ask you to merge a bunch of local changes
+   into various files and will want to fire up an editor, you might want to
+   make sure you get your preferred editor by using "EDITOR=":
 
-     sudo freebsd-update -r 13.3-RELEASE upgrade
-
-   Since this will ask you to merge a bunch of local changes into various
-   files and will want to fire up an editor, you might want to make sure
-   you get a *real* editor by doing:
-
+     # Emacs people:
      sudo -E EDITOR=emacs freebsd-update -r 13.3-RELEASE upgrade
 
-   instead. Otherwise you will probably wind up with vi. If you forget,
-   you can always temporarily (or permanently!) replace /usr/bin/vi with
-   /usr/local/bin/emacs when it first prompts you to manually handle
-   a merge.
+     # others:
+     sudo freebsd-update -r 13.3-RELEASE upgrade
 
-   It will crunch for a long time and then probably want you to merge
+   This will crunch for a long time and then probably want you to merge
    some conflicts. Many will just be removal of the old FreeBSD header,
    but some other possible diffs:
 
@@ -225,16 +218,10 @@ A. Things to do in advance of shutting down Emulab.
    DO NOT do the install as it suggested at the end. We will get there
    in step B3 below. There are some other things that might need doing first.
 
-4. (Optional) Upgrade your custom kernel.
+4. Clone the FreeBSD 13.3 source repo.
 
-   [ I have not tested this section as we have stopped using a custom kernel. ]
-
-   If you have a custom kernel config, then you should build and install
-   a new kernel first. As mentioned in the last step, this will take a long
-   time because you must build (but not install) the entire world before
-   building the kernel. You can again do this on boss and ops simultaneously.
-
-   Clone the FreeBSD 13.3 source repo:
+   Make sure you have the FreeBSD 13.3 source tree installed, you will need
+   this in one or more places below.
 
    Using "--depth=1" on the Git command line keeps it from downloading the
    entire history and goes much faster. Leave that part off if you want the
@@ -242,45 +229,70 @@ A. Things to do in advance of shutting down Emulab.
 
      cd /usr
      sudo mv src Osrc
-     git clone -b releng/13.3 --depth 1 https://git.freebsd.org/src.git
+     sudo git clone -b releng/13.3 --depth 1 https://git.freebsd.org/src.git
+
+     # optionally, you can download/unpack the validated ports tree too
+     sudo fetch https://www.emulab.net/downloads/FreeBSD-13.3-ports-git.tar.gz
+     sudo tar xzf FreeBSD-13.3-ports-git.tar.gz
+
+5. (Optional) Upgrade your custom kernel.
+
+   [ I have not tested this section as we have stopped using a custom kernel. ]
+
+   If you have a custom kernel config, then you should build and install
+   a new kernel first. As mentioned in an earlier step, this will take a long
+   time because you must build (but not install) the entire world before
+   building the kernel. You can again do this on boss and ops simultaneously.
+
+   Assuming you have updated your /usr/src tree above:
+
      <copy over your custom config file from Osrc/sys/amd64/conf/CUSTOM>
 
-     cd src
+     cd /usr/src
      sudo make -j 8 buildworld
      sudo make -j 8 buildkernel KERNCONF=CUSTOM
 
-5. Stash away the current set of packages you have installed.
+6. Stash away the current set of packages you have installed.
 
    This will allow you to figure out the extra ports you have installed so
    that you can update them later. First make a list of everything installed:
    Do this on boss and then on ops. For boss:
 
-   mkdir ~/upgrade
-   cd ~/upgrade
-   pkg query "%n-%v %R" > boss.pkg.list
+      mkdir ~/upgrade
+      cd ~/upgrade
+      pkg query "%n-%v %R" > boss.pkg.list
 
    This is mostly to keep track of any ports you may have installed locally.
    One way to determine local installs is to see which ports did NOT come
    from the Emulab repository:
 
-   grep -v 'Emulab$' boss.pkg.list | awk '{ print $1; }' > boss.pkg.local
+      grep -v 'Emulab$' boss.pkg.list | awk '{ print $1; }' > boss.pkg.local
 
    This will give you the list of packages that you may need to reinstall.
+   NOTE: if you use the Emulab-devel repo, then do:
+
+      grep -E -v 'Emulab(-devel)?$' boss.pkg.list | \
+          awk '{ print $1; }' > boss.pkg.local
+
+   to make sure you get everything. This is assuming that both Emulab and
+   Emulab-devel repos have the same packages (modulo versions).
 
    You may want to list the dependencies of each to see what the top-level
    packages are and just install those. NOTE: this command may fail ugly if
    there is nothing in the boss.pkg.local file.
 
-   pkg query -x "%n %v usedby=%#r" `cat boss.pkg.local` | \
-       grep 'usedby=0' | awk '{ print $1; }' > boss.pkg.reinstall
+      pkg query -x "%n %v usedby=%#r" `cat boss.pkg.local` | \
+          grep 'usedby=0' | awk '{ print $1; }' > boss.pkg.reinstall
 
    The corresponding commands when updating the ops node are:
 
-   cd ~/upgrade
-   pkg query "%n-%v %R" > ops.pkg.list
-   grep -v 'Emulab$' ops.pkg.list | awk '{ print $1; }' > ops.pkg.local
-   pkg query -x "%n %v usedby=%#r" `cat ops.pkg.local` | \
-       grep 'usedby=0' | awk '{ print $1; }' > ops.pkg.reinstall
+      cd ~/upgrade
+      pkg query "%n-%v %R" > ops.pkg.list
+      grep -v 'Emulab$' ops.pkg.list | awk '{ print $1; }' > ops.pkg.local
+      pkg query -x "%n %v usedby=%#r" `cat ops.pkg.local` | \
+          grep 'usedby=0' | awk '{ print $1; }' > ops.pkg.reinstall
+
+
 
 B. Updating the base FreeBSD system
 
@@ -303,29 +315,51 @@ B. Updating the base FreeBSD system
      sudo /usr/local/etc/rc.d/apache24 stop
      sudo /usr/local/etc/rc.d/tftpd-hpa.sh stop
 
-     # The following may or may not be installed. If not, you will likely
-     # get an unexpected password prompt from sudo--obscure!
-     sudo /usr/local/etc/rc.d/capture stop
-     sudo /usr/local/etc/rc.d/telegraf stop
+     # The following may or may not be installed.
+     test -x /usr/local/etc/rc.d/capture && \
+         sudo /usr/local/etc/rc.d/capture stop
+     test -x /usr/local/etc/rc.d/capture.sh && \
+         sudo /usr/local/etc/rc.d/capture.sh stop
+     test -x /usr/local/etc/rc.d/telegraf && \
+         sudo /usr/local/etc/rc.d/telegraf stop
+
+     XXX opendkim, dhcpd, named?
 
    ops:
      sudo /usr/local/etc/rc.d/apache24 stop
 
      # The following may or may not be installed
-     sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
-     sudo /usr/local/etc/rc.d/webssh.sh stop
-     sudo /usr/local/etc/rc.d/capture stop
-     sudo /usr/local/etc/rc.d/telegraf stop
-     sudo /usr/local/etc/rc.d/3.mfrisbeed-ops.sh stop
+     test -x /usr/local/etc/rc.d/1.mysql-server.sh && \
+         sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
+     test -x /usr/local/etc/rc.d/webssh.sh && \
+         sudo /usr/local/etc/rc.d/webssh.sh stop
+     test -x /usr/local/etc/rc.d/capture.sh && \
+         sudo /usr/local/etc/rc.d/capture.sh stop
+     test -x /usr/local/etc/rc.d/telegraf && \
+         sudo /usr/local/etc/rc.d/telegraf stop
+     test -x /usr/local/etc/rc.d/3.mfrisbeed-ops.sh && \
+         sudo /usr/local/etc/rc.d/3.mfrisbeed-ops.sh stop
+     
+     XXX what about eventsys proxies?
+
+   [ The following problem turned out to be an issue with the MTU of the
+   control net interface and had nothing to do with PF. But I leave it here
+   for now just int case. ]
+   On clusters with PF rule sets, it is best to disable PF for now. I had
+   a problem with boss.emulab.net getting blocked out once. Do this by:
+
+     sudo /etc/rc.d/pf stop
+     sudo /usr/local/etc/rc.d/fail2ban stop
+
+     sudo rm -f /etc/rc.conf.mybak
+     sudo sed -i .mybak -e '/pf_enable=/s/YES/NO/i' /etc/rc.conf
+     sudo sed -i '' -e '/fail2ban_enable=/s/YES/NO/i' /etc/rc.conf
 
    On the Utah clusters you may need to also need to stop some additional
    services:
 
+     # boss and ops:
      sudo /usr/local/etc/rc.d/bareos-fd stop
-
-Other newer stuff:
-
- * what about eventsys proxies?
 
 3. Before installing the new binaries/libraries/etc., you might want to back
    up the files that have Emulab changes just in case. The easiest thing to do
@@ -347,10 +381,15 @@ Other newer stuff:
 
     sudo /usr/sbin/freebsd-update install
 
-    After a while it will want you to reboot the new kernel.
+    After a while it will want you to reboot the new kernel...not yet!
 
-5. Reboot AFTER making some checks.
+5. Make some checks before rebooting.
 
+a. Make sure it uses the forth-based loader.
+
+   XXX is this really needed? On some clusters the old loader was the
+   LUA loader before the upgrade...
+   
    This step is called out because some extra action have to take place
    first. Most importantly, you need to make sure that the second-stage
    boot loader is the correct one:
@@ -359,10 +398,12 @@ Other newer stuff:
       sudo rm loader
       sudo ln loader_4th loader
 
-  If it is linked to the newer LUA boot loader, the node might NOT BOOT.
+   If it is linked to the newer LUA boot loader, the node might NOT BOOT.
 
-  If you built a custom kernel back in step A3, install it now before you
-  reboot:
+b. Install custom kernel
+
+   If you built a custom kernel back in step A3, install it now before you
+   reboot:
 
    cd /usr/src
    sudo make installkernel KERNCONF=CUSTOM
@@ -376,44 +417,92 @@ Other newer stuff:
 
    They did not seem to affect the following boot.
 
+c. Copy kernel for "pvh" based Xen VMs
+
    WEIRD SPECIAL CASE: if your boss and ops are in an Emulab elabinelab
    experiment using Xen "pvh" VMs, you will have to install a copy of
    the kernel on the _physical_ host in /vminfo/vminfo/pcvmXXX-X/kernel
    for both boss and ops.
 
+d. Export ZFS pools
+
    If the node is using ZFS you should probably export any zpools at this
    point since the ZFS implementation has changed between 12.x and 13.x.
+
    You may be able to just login as root and then:
 
+     sudo shutdown now
+
+     # you may be greeted by repeating "Limiting closed port..." messages, so
+     sysctl net.inet.icmp.icmplim=2500
+
+     # find the pools to export
+     zpool list
+
+     umount -at nfs
+
+     # can take a long time if you have lots of filesystems (5+ minutes!)
      zfs unmount -a
+
      zpool export <pool> ...
+     reboot
 
    I don't think this is strictly necessary as I have always been able to
    just naively shutdown and then just import the zpool(s) when I come
-   back up in 13.3.
+   back up in 13.3. Either way, you will need to re-import any pools after
+   reboot as directed below.
+
+   BE AWARE that you will need to make sure you can login as root after
+   reboot if you just "let it happen" because your homedir may not mount!
+
+e. Ancient filesystem issues, have not seen this in a long time
 
    NOTE: I have noticed a couple of times on VM-based elabinelab boss/ops
    upgrades that the root filesystem has some issues after the upgrade,
    so it is good to run an fsck. I prefer to do this while shutting down.
    Before you do this, make sure you first have access to the console!
 
-   sudo shutdown now
+     sudo shutdown now
 
-   umount -at nfs
-   umount -at ufs
-   accton	# turn off accounting that has a file open on /
-   mount -o ro -u /
-   fsck -y /
-   reboot
+     umount -at nfs
+     umount -at ufs
+     accton	# turn off accounting that has a file open on /
+     mount -o ro -u /
+     fsck -y /
+     reboot
 
-   NOTE: when rebooting boss, mysqlcheck might take awhile (5-10 minutes).
+f. Finally, reboot
+
+   If you have ZFS filesystems and also Mad FreeBSD skilz, you should boot
+   single-user when the node reaches the final boot loader stage after
+   rebooting, and re-import your zpools:
+
+     # see what the pools are
+     zpool import
+     # import each one
+     # on ops there is probably only one, and it can take 5+ minutes to import
+     zpool import <pool>
+     ...
+
+   Check for the existence of /etc/zfs/zpool.cache, if that file isn't there,
+   then you may wind up with no zpool when you reboot again (see
+   /etc/rc.d/zpool). I have not figured out the magic that creates this
+   cache file, other than rebooting a third time (from multi-user mode).
+
+   When rebooting boss, mysqlcheck might take awhile (5-10 minutes).
    During this time, it won't say much...^T is your friend. The ops reboot
    will also take awhile for the ZFS mounts, but it will talk to you while
    it is doing it.
 
 6. Finish the install
 
-   When it comes back up, you should login and shutdown services that
+   If you have ZFS filesystems and didn't do the single-user trick above,
+   you will have to login as root (since your homedir is most likely in
+   ZFS on ops) and import the zpool(s) as in step 5f above. At this point,
+   it is probably best just to reboot again as mounts will have failed
+   along with some services.
+
+   When the node comes back up, you should login and shutdown services that
    restarted, including some that won't work right.
 
    boss:
@@ -424,28 +513,30 @@ Other newer stuff:
      sudo /usr/local/etc/rc.d/2.mysql-server.sh stop
 
      # The following may or may not be installed
-     sudo /usr/local/etc/rc.d/capture stop
-     sudo /usr/local/etc/rc.d/telegraf stop
+     test -x /usr/local/etc/rc.d/capture && \
+         sudo /usr/local/etc/rc.d/capture stop
+     test -x /usr/local/etc/rc.d/capture.sh && \
+         sudo /usr/local/etc/rc.d/capture.sh stop
+     test -x /usr/local/etc/rc.d/telegraf && \
+         sudo /usr/local/etc/rc.d/telegraf stop
 
    ops:
      sudo /usr/local/etc/rc.d/apache24 stop
 
      # The following may or may not be installed
-     sudo /usr/local/etc/rc.d/webssh.sh stop
-     sudo /usr/local/etc/rc.d/capture stop
-     sudo /usr/local/etc/rc.d/telegraf stop
-     sudo /usr/local/etc/rc.d/3.mfrisbeed-ops.sh stop
+     test -x /usr/local/etc/rc.d/1.mysql-server.sh && \
+         sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
+     test -x /usr/local/etc/rc.d/webssh.sh && \
+         sudo /usr/local/etc/rc.d/webssh.sh stop
+     test -x /usr/local/etc/rc.d/capture.sh && \
+         sudo /usr/local/etc/rc.d/capture.sh stop
+     test -x /usr/local/etc/rc.d/telegraf && \
+         sudo /usr/local/etc/rc.d/telegraf stop
+     test -x /usr/local/etc/rc.d/3.mfrisbeed-ops.sh && \
+         sudo /usr/local/etc/rc.d/3.mfrisbeed-ops.sh stop
 
    Utah:
      sudo /usr/local/etc/rc.d/bareos-fd stop
-
-   Now you should re-import any ZFS zpools:
-
-     # see what the pools are
-     zpool import -a
-     # import each one
-     zpool import <pool>
-     ...
 
    NOTE: there is a goofiness when upgrading from 12.3 to 13.3. It is
    apparently not prepared for /usr/include/c++/v1/{__string,__tuple} to
@@ -458,13 +549,14 @@ Other newer stuff:
 
    Now run freebsd-update to finish:
 
+     # this can take 10+ minutes
      sudo /usr/sbin/freebsd-update install
 
    NOTE that it will tell you to rebuild all third-party packages and
    run freebsd-update again to get rid of old libraries. We do this later
    below, so don't worry about it now.
 
-   NOTE also that I have found `sshd` to nee restarting after the upgrade
+   NOTE also that I have found `sshd` to need restarting after the upgrade
    of else you will not be able to connect:
 
      sudo /etc/rc.d/sshd restart
@@ -518,6 +610,11 @@ Other newer stuff:
 
       sudo tzsetup -r
 
+   LESS IMPORTANT NOTE: FreeBSD 13 added a new file to syslog, so you
+   will need to create that:
+
+      sudo touch /var/log/daemon.log
+
 7. (Utah only) Apply Emulab patches to select system utilities.
 
    We have patched a couple of system utilities to better handle the
@@ -525,13 +622,11 @@ Other newer stuff:
    Mothership and assorted CloudLab clusters sport. Other sites really
    don't need to (and probably should not) do this.
 
-   Make sure you have the appropriate FreeBSD source tree installed.
+   Make sure you have the appropriate FreeBSD source tree checked out
+   as /usr/src (see step A4 above).
 
-     cd /usr
-     sudo git clone -b releng/13.3 --depth 1 https://git.freebsd.org/src.git
-
-   If you did not for some reason grab the `php81` branch of the Emulab
-   source tree, do that now:
+   If you have not cloned the `php81` branch of the Emulab source tree,
+   do that now:
 
      cd ~
      git clone -b php81 \
@@ -545,9 +640,15 @@ Other newer stuff:
 
    Now patch, build, and install the Emulab versions:
 
-     # on boss you just need the "pw" patch
+     # on boss you just need the "pw" and "openssl" patches
      cd /usr/src/usr.sbin/pw
      sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-pw-2.patch
+     sudo make obj
+     sudo make all install clean
+     # this will take a long time to recompile, lots of files...
+     cd /usr/src
+     sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-openssl.patch
+     cd secure/lib/libcrypto
      sudo make obj
      sudo make all install clean
 
@@ -563,6 +664,12 @@ Other newer stuff:
      sudo make all install clean
      cd /usr/src/sbin/mount
      sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-mount.patch
+     sudo make obj
+     sudo make all install clean
+     # not needed, but it is a bug fix so install it
+     cd /usr/src
+     sudo patch -p1 < ~/testbed-new/patches/FreeBSD-13.3-openssl.patch
+     cd secure/lib/libcrypto
      sudo make obj
      sudo make all install clean
 
@@ -594,8 +701,8 @@ C. Updating ports/packages
    running the most recent set of 12.3 packages. Note that if you installed
    extra ports, upgrading will require a bit more work.
 
-   You also need to ensure that Apache is not running (see A3 above)
-   as PHP will be getting upgraded.
+   Before starting, make sure that mysqld and Apache are not running
+   (see A3 above) as both will be getting upgraded (PHP in the Apache case).
 
 0. If you forgot to save off your package info back in A4, or it has been
    awhile, then you might want to go back and do that now.
@@ -609,6 +716,7 @@ C. Updating ports/packages
    the "url" line:
 
       sudo sed -i .bak -e 's;/12.3/;/13.3/;' /etc/pkg/Emulab.conf
+      sudo rm /etc/pkg/Emulab-devel*
 
 2. Update the pkg tool and install new packages:
 
@@ -619,6 +727,14 @@ C. Updating ports/packages
     sudo pkg update
     sudo -E ASSUME_ALWAYS_YES=true pkg install -f -r Emulab pkg
     sudo -E ASSUME_ALWAYS_YES=true pkg upgrade -r Emulab
+
+   If upgrading the linux_base package fails on ops, you probably need to
+   load the Linux compat modules:
+
+     sudo kldload linux.ko
+     sudo kldload linux64.ko
+
+   and try again.
 
 3. Tweak package installs:
 
@@ -635,10 +751,9 @@ C. Updating ports/packages
       # verify they resolve
       ls -laL /usr/bin/perl /usr/local/bin/python
 
-   REALLY, REALLY IMPORTANT PART 2: Because perl changed, you will need
-   to make sure that the event library SWIG-generated perl module is rebuilt,
-   and then all the event clients. Otherwise you will get bus errors when
-   they all try to start. So do not skip step E2 below!
+   REALLY, REALLY IMPORTANT PART 2: If you have not already updated to the
+   "php81" branch of Emulab software (see step A2), you need to update the
+   necessary startup and config files now.
 
    REALLY, REALLY IMPORTANT PART 3 (boss node only): For those with Moonshot
    chassis, you cannot use an ipmitool port *newer* than 1.8.15 due to issues
@@ -665,8 +780,9 @@ C. Updating ports/packages
      sudo pkg delete -f ipmitool
 
      # re-add the old (right) ipmitool USING THE PACKAGE
-     # (which you will need to copy over to /tmp)
-     sudo pkg add -M /tmp/emulab-ipmitool-old-1.8.15_1.txz
+     sudo pkg fetch -r Emulab emulab-ipmitool-old
+     cd /var/cache/pkg
+     sudo pkg add -M emulab-ipmitool-old-1.8.15_1.pkg
 
      # change the dependency
      sudo pkg set -n ipmitool:emulab-ipmitool-old
@@ -686,11 +802,7 @@ C. Updating ports/packages
 
    To be extra tidy, get rid of any abandoned ports on boss and ops.
    Look carefully at what the following wants to do (it will prompt you).
-   If there is any doubt, just say no. Note that `jove` is no longer
-   available as a package, so if you want it, lock it down first.
-
-     # keep jove around
-     sudo pkg lock jove
+   If there is any doubt, just say no.
 
      sudo pkg autoremove
    
@@ -707,22 +819,50 @@ C. Updating ports/packages
 
    and then rerun the check.
 
-4. Reinstall wssh.
+3c. Reinstall medusa from the source repo.
+
+    XXX the package still isn't getting configured correctly leading to
+    core dumps. I have to reinstall from my medusa-git directory.
+
+3d. Add anti-doofus measures to sudo.
+
+   Some admins with sudo powers (who shall remain nameless) have had a
+   habit in the past of typing "sudo reboot" in the wrong window and thus
+   taking out critical servers. So in either /usr/local/etc/sudoers.d/emulab
+   (if it exists) or /usr/local/etc/sudoers, replace the line:
+   
+     %wheel    ALL=(ALL) NOPASSWD: ALL
+
+   with:
+
+     %wheel    ALL=(ALL) NOPASSWD: ALL, !/sbin/reboot, !/sbin/shutdown
+
+   It should be in a section denoted as "Added by Emulab".
+
+4. Reinstall wssh (ops only).
 
    For Cloudlab clusters, the `wssh` install has to be updated by hand for
    python3 since it does not come from a package. See install/phases/webssh
    for details, but I think this will do it:
 
-    # on boss
-    # nothing to do
-    
     # on ops
     cd /tmp
     git clone https://gitlab.flux.utah.edu/emulab/webssh.git
     cd webssh
     sudo python setup.py install
 
-5. Convert to MariaDB (boss only)
+5. Reinstall geni-lib (Geni sites only, do from boss)
+
+   This is really a Python 2 to Python 3 change and could be done sooner
+   than now, but we do it here. Note that we do this from boss but it is
+   actually installed on ops (via NFS):
+
+     # on boss
+     cd /tmp
+     git clone https://gitlab.flux.utah.edu/emulab/geni-lib.git
+     sudo rsync -av --delete geni-lib/ /usr/testbed/opsdir/lib/geni-lib
+
+6. Convert to MariaDB (boss only)
 
    You will need to fix up /usr/local/etc/mysql/my.cnf:
 
@@ -757,7 +897,7 @@ C. Updating ports/packages
    NOTE that I have also now added the log-error option setting. So make
    sure the file exists and is properly protected:
 
-     sudo cp /dev/null /usr/testbed/log/mysqld-error.log
+     sudo touch /usr/testbed/log/mysqld-error.log
      sudo chown mysql:mysql /usr/testbed/log/mysqld-error.log
      sudo chmod 640 /usr/testbed/log/mysqld-error.log
 
@@ -765,6 +905,7 @@ C. Updating ports/packages
 
      sudo ln -sfn /usr/testbed/data/mysql /var/db/mysql
      sudo mkdir -p /usr/testbed/data/mysql_tmpdir
+     sudo chown mysql:mysql /usr/testbed/data/mysql_tmpdir
      sudo ln -sfn /usr/testbed/data/mysql_tmpdir /var/db/mysql_tmpdir
 
    Restart mysqld and see if it works. First make sure that you installed
@@ -794,14 +935,31 @@ C. Updating ports/packages
      # stop it again
      sudo /usr/local/etc/rc.d/2.mysql-server.sh stop
 
-6. Make changes for PHP 8.1
+7. Critical hack fix to Apache (boss only)
+
+   Any configuration of the latest Apache server that uses PHP needs to have
+   Address Space Layout Randomization (ASLR) turned off. See:
+   https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=268318
+   Otherwise, the server will crash whenever you do a "graceful" restart
+   which we do every morning from crontab in "getcacerts". This can also
+   happen when the Apache logfiles are rolled. So for now, turning off ASLR
+   works for us. Add this to boss's /etc/rc.conf file:
+
+     # XXX FreeBSD 13.3: prevent crash on "graceful" restart of apache
+     apache24_aslr_disable="YES"
+
+8. Make changes for PHP 8.1 (boss only)
 
    You will need to inform PHP about where the DB socket is now.
    Go into obj/boss/apache and
 
      diff php.ini /usr/local/etc/php.ini
 
-   The important fix you need is to add:
+   The important fix you need is to add on boss (you don't need this on ops)
+   is to make sure it is using the socket in /var/run/mysql. If your
+   obj/boss/apache/php.ini is set to use the socket in /tmp, then it is
+   because the obj tree has not been reconfigured. Make sure your installed
+   php.ini has:
 
      ;
      ; For mariadb
@@ -815,7 +973,7 @@ C. Updating ports/packages
      sudo touch /usr/testbed/log/php-errors.log
      sudo chmod 666 /usr/testbed/log/php-errors.log
 
-7. Reinstall local ports.
+9. Reinstall local ports.
 
    To find ports that are installed but that are not part of the Emulab
    repository:
@@ -830,6 +988,8 @@ C. Updating ports/packages
    pkg query "%t %n-%v %R" `cat ops.pkg.reinstall` |\
        grep -v Emulab | sort -n
 
+   XXX did not catch freeradius3 and openldap at Wisconsin.
+
    These will be sorted by install time. You can see ones that are old
    and attempt to reinstall them with "pkg install". Note that just because
    they are old that doesn't mean they need to be reinstalled.
@@ -841,12 +1001,6 @@ C. Updating ports/packages
    
       sudo -E ASSUME_ALWAYS_YES=true pkg upgrade -r Emulab
 
-   IMPORTANT NOTE: at Utah, we have bareos installed and the upgrade seems
-   to remove the old bareos16-client so the command above will not pick up
-   that bareos-client needs to be updated. So you will need to manually:
-
-     sudo pkg install -r Emulab bareos18-client
-
    This is a point at which you might want to check for security problems:
 
      sudo pkg audit -F
@@ -854,7 +1008,7 @@ C. Updating ports/packages
    It is possible that some packages will have vulnerabilities, so unless
    it sounds really serious, just live with it.
 
-8. Update your /etc/make.conf file in the event that you need to build a
+10. Update your /etc/make.conf file in the event that you need to build a
    port from source in the future. Make sure your DEFAULT_VERSION line(s)
    look like:
 
@@ -878,42 +1032,22 @@ E. Update Emulab software
    Make sure to copy over your existing defs-* file to the new source
    tree.
 
-2. Switch from AMD to autofs (on boss, if needed).
+2. Update your defs-* file.
 
-   # Change defs file to set WITHAMD=0 (or comment out)
-   # Also need ZFS_NOEXPORT=1? Does autofs work without ZFS?
-   # install from autofs directory in Emulab tree
-   # add autofs enables in /etc/rc.conf
-     autofs_enable="YES"
-     automountd_flags="-v"
-     autounmountd_flags="-v"
+   As of FreeBSD 12, the standard mountd supports efficient updating of
+   kernel mounts. Check the defs-* file you use and set INCREMENTAL_MOUNTD=0
+   (or remove the line entirely) if it is currently non-zero.
+
+   As of FreeBSD 13, the AMD auto-mounter is no longer part of the base
+   system. You will need to switch to autofs instead. Check the defs-* file
+   you use and set WITHAMD=0 (or remove the line entirely) if it is currently
+   non-zero. [ Also need ZFS_NOEXPORT=1? Does autofs work without ZFS? ]
+   The other required autofs changes will be made later.
 
 3. Reconfigure, rebuild, and reinstall the software.
 
-   RANDOM NOTE: I had this failure when building event_proxy.cc on ops:
-
-      /usr/include/c++/v1/__fwd/get.h:18:10: fatal error: '__tuple/tuple_element.h' file not found
-         18 | #include <__tuple/tuple_element.h>
-	    |          ^~~~~~~~~~~~~~~~~~~~~~~~~
-         1 error generated.
-
-   Something about upgrading directly from 12.3 to 13.3 caused a couple of
-   directories (__tuple and __string) to wind up missing. If you do:
-
-      ls -la /usr/include/c++/v1/__tuple
-
-   and it fails to find the directory, apply the following hack (boss and ops):
-
-      cd /tmp
-      fetch https://www.emulab.net/downloads/FreeBSD-13.3-c++-v1-missing.tar.gz
-      sudo tar -C /usr/include/c++/v1 -xzf /tmp/FreeBSD-13.3-c++-v1-missing.tar.gz
-   
    You want everything to be built against the new ports and libraries
    anyway though, so just rebuild and install everything.
-
-   Check the defs-* file you use and make sure that INCREMENTAL_MOUNTD=0
-   (or remove the line entirely). The standard mountd now supports incremental
-   updates by default.
 
    It is very important that you reconfigure your build tree since we earlier
    compiled the new source in the old environment. So we completely remove
@@ -926,21 +1060,21 @@ E. Update Emulab software
       sudo rm -rf *
       <run the configure line>
 
+   Then rebuild and reinstall. We do the ops install first because, while
+   boss-install updates most of the ops binaries/libraries via NFS, there
+   are some that it doesn't. So by doing a separate build/install on ops,
+   you are guaranteed to catch everything.
+
       # on ops -- do this first
       sudo gmake opsfs-install
       # mysql is no longer installed
       sudo rm /usr/local/etc/rc.d/1.mysql*
 
-   The reason for the ops install is that, while boss-install updates
-   most of the ops binaries/libraries via NFS, there are some that it
-   doesn't. So by doing a separate build/install on ops, you are
-   guaranteed to catch everything.
-
       # on boss -- do this after ops
       gmake
       sudo /usr/local/etc/rc.d/2.mysql-server.sh start
 
-      # XXX hack, need to install these by hand first
+      # XXX hack, need to install these by hand first because of DB change
       sudo install -c -m 755 tbsetup/libtbsetup.pm /usr/testbed/lib/
       sudo install -c -m 755 db/emdbi.pm /usr/testbed/lib/
 
@@ -949,7 +1083,6 @@ E. Update Emulab software
    If the boss install tells you that there are updates to install,
    run the command like it says:
 
-      sudo gmake boss-install-force
       sudo gmake update-testbed
       
    This will actually turn the testbed back on at the end so you will
@@ -961,38 +1094,76 @@ E. Update Emulab software
       # BUT ONLY DO THIS IF IT IS NOT AN ELABINELAB
       sudo rm /usr/local/etc/rc.d/ctrlnode.sh
 
-4. Switch to autofs (on boss, if needed):
+4. Switch to autofs (on boss, if boss was not already running it):
 
-      # rerun exports setup
-      /etc/rc.d/{automountd,autounmountd,automount} start
-      # undo local homedir hack
+      # install the files
+      cd obj/autofs; sudo gmake all first-install
 
-4. Re-enable the testbed on boss.
+      # create the /usr/testbed/etc/validmounts file
+      exports_setup
 
-   # NOTE capture may not be installed
-   sudo /usr/local/etc/rc.d/capture start
-   sudo /usr/local/etc/rc.d/apache24 start
-   sudo /usr/local/etc/rc.d/tftpd-hpa.sh start
-   sudo /usr/local/etc/rc.d/2.dhcpd.sh start
-   sudo /usr/testbed/sbin/testbed-control boot
+      # add autofs enables in /etc/rc.conf
+      # XXX remove AMD lines as well
+      autofs_enable="YES"
+      automountd_flags="-v"
+      autounmountd_flags="-v"
 
-5. Re-run the freebsd-update again to remove old shared libraries.
+      sudo /etc/rc.d/automountd start
+      sudo /etc/rc.d/autounmountd start
+      sudo /etc/rc.d/automount start
+
+5. Re-enable the testbed on boss.
+
+      sudo /usr/local/etc/rc.d/apache24 start
+      sudo /usr/local/etc/rc.d/tftpd-hpa.sh start
+      sudo /usr/local/etc/rc.d/2.dhcpd.sh start
+      sudo /usr/testbed/sbin/testbed-control boot
+      # NOTE capture may not be installed
+      sudo /usr/local/etc/rc.d/capture.sh start
+
+6. Re-run the freebsd-update again to remove old shared libraries.
 
    Now that everything has been rebuilt:
 
-   sudo freebsd-update install
+      sudo freebsd-update install
 
-6. Reboot boss and ops again!
+7. Reenable PF and fail2ban if they were previously enabled [ NOT NEEDED ]
+
+      # if PF was enabled
+      sudo sed -i '' -e '/pf_enable=/s/NO/YES/i' /etc/rc.conf
+      # if fail2ban was enabled
+      sudo sed -i '' -e '/fail2ban_enable=/s/NO/YES/i' /etc/rc.conf
+
+      sudo /usr/local/etc/rc.d/fail2ban start
+      sudo /etc/rc.d/pf start
+
+8. Reboot boss and ops again!
+
+   Pay particular attention to make sure all the services start correctly.
+   Also, if using ZFS, make sure that the zpool and zfs filesystems show up
+   correctly on reboot (it will be pretty obvious if they don't!)
 
    NOTE: if you reboot ops after boss, you may need to restart all the
    event schedulers from boss:
 
-   sudo /usr/testbed/sbin/eventsys_start
+      sudo /usr/testbed/sbin/eventsys_start
 
-7. (CloudLab clusters only) Reenable the cluster at the portal.
+9. (CloudLab clusters only) Reenable the cluster at the portal.
 
      # On mothership boss
      wap manage_aggregate <clustername> chflag disabled no
 
    Cluster name comes from running "wap manage_aggregate list" on
    the Mothership boss. Use the "Nickname".
+
+
+F. Things to watch out for
+
+   * The new version of OpenSSH will no longer accept older Ciphers and
+     Key exchange formats by default. If you have older switches/PDUs or
+     other devices that need those, then you will need to change root's
+     .ssh/config to have something like:
+
+        Host OldNode
+	Ciphers +3des-cbc
+	KexAlgorithms diffie-hellman-group1-sha1

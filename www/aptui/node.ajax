@@ -135,7 +135,7 @@ function Do_GetInfo()
     $blob["typeattributes"]  = GetTypeAttributes($node, $blob["attributes"]);
     $blob["features"]        = GetFeatures($node);
     $blob["typefeatures"]    = GetTypeFeatures($node, $blob["features"]);
-    $blob["interfaces"]      = $node->GetInterfaceInfo();
+    $blob["interfaces"]      = $node->GetInterfaceInfo(null, $restricted);
     $blob["op_mode"]         = $node->op_mode();
     $blob["control_ip"]      = $node->ControlIP();
     $blob["eventstate"]      = $node->eventstate();
@@ -801,6 +801,129 @@ function Do_GetRFViolations()
         $results[] = $blob;
     }
     SPITAJAX_RESPONSE($results);
+}
+
+#
+# Node Utilization tables
+#
+function Do_GetUtilization()
+{
+    global $this_user, $ajax_args;
+    $results = array();
+
+    if (! (ISADMIN() || OPSGUY())) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    if (isset($ajax_args["node_id"])) {
+        $node_id = $ajax_args["node_id"];
+        if (!TBvalid_node_id($node_id)) {
+            SPITAJAX_ERROR(-1, "Invalid node ID");
+            return -1;
+        }
+        $node = Node::Lookup($node_id);
+        if (!$node) {
+            SPITAJAX_ERROR(-1, "No such node");
+            return -1;
+        }
+    }
+    elseif (isset($ajax_args["type"])) {
+        $type = $ajax_args["type"];
+        if (!TBvalid_node_id($type)) {
+            SPITAJAX_ERROR(-1, "Invalid node type");
+            return -1;
+        }
+        $nodetype = NodeType::Lookup($type);
+        if (!$nodetype) {
+            SPITAJAX_ERROR(-1, "No such node type");
+            return -1;
+        }
+    }
+    $query_result =
+        DBQueryFatal("select n.inception,n.type,util.*, ".
+                     "  UNIX_TIMESTAMP(now())-UNIX_TIMESTAMP(n.inception) as age ".
+                     "  from node_utilization as util ".
+                     "left join nodes as n on n.node_id=util.node_id ".
+                     "left join node_types as t on t.type=n.type ".
+                     "where n.inception is not null and ".
+                     "      role='testnode'" .
+                     "order BY node_id");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $node_id            = $row["node_id"];
+        $type               = $row["type"];
+        $inception          = $row["inception"];
+        $age                = $row["age"];
+        $alloctime          = $row["allocated"];
+        $downtime           = $row["down"];
+        $freetime           = $age - ($alloctime + $downtime);
+
+        # Convert seconds to hours.
+        $alloctime = $alloctime / 3600;
+        $downtime  = $downtime / 3600;
+        $freetime  = $freetime / 3600;
+        $age       = $age / 3600;
+
+        $results[] = array(
+            "node_id"   => $node_id,
+            "type"      => $type,
+            "inception" => DateStringGMT($inception),
+            "allocated" => sprintf("%.1f", $alloctime),
+            "free"      => sprintf("%.1f", $freetime),
+            "down"      => sprintf("%.1f", $downtime),
+            "percents"  => array(
+                "allocated" => sprintf("%.1f", ($alloctime / $age) * 100),
+                "free"      => sprintf("%.1f", ($freetime / $age) * 100),
+                "down"      => sprintf("%.1f", ($downtime / $age) * 100),
+            ),
+        );
+    }
+    SPITAJAX_RESPONSE($results);
+}
+
+function Do_IfaceSearch()
+{
+    global $this_user, $ajax_args;
+
+    if (! (ISADMIN() || OPSGUY())) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    if (!isset($ajax_args["mac"])) {
+	SPITAJAX_ERROR(-1, "Missing mac address");
+	return -1;
+    }
+    $mac = $ajax_args["mac"];
+    if (! preg_match("/^[\w:]+$/", $mac)) {
+	SPITAJAX_ERROR(-1, "Invalid mac address");
+	return -1;
+    }
+    $mac = str_replace(":", "", $mac);
+    $query_result =
+        DBQueryFatal("select node_id,null from interfaces ".
+                     "where mac='$mac'");
+    
+    if (!mysql_num_rows($query_result)) {
+        #
+        # Look in the vinterfaces table. This is unlikely.
+        #
+        $query_result =
+            DBQueryFatal("select node_id,vnode_id from vinterfaces ".
+                         "where mac='$mac'");
+
+        if (!mysql_num_rows($query_result)) {
+            SPITAJAX_RESPONSE(null);
+            return;
+        }
+    }
+    $row = mysql_fetch_array($query_result);
+    if ($row["vnode_id"]) {
+        $node_id = $row["vnode_id"];
+    }
+    else {
+        $node_id = $row["node_id"];
+    }
+    SPITAJAX_RESPONSE($node_id);
 }
 
 # Local Variables:

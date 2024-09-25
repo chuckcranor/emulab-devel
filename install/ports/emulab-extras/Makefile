@@ -42,6 +42,7 @@ RUN_DEPENDS+=	\
 	bash:${PORTSDIR}/shells/bash \
 	${LOCALBASE}/sbin/e2fsck:${PORTSDIR}/sysutils/e2fsprogs \
 	emacs:${PORTSDIR}/editors/emacs \
+	jove:${PORTSDIR}/editors/jove \
 	git:${PORTSDIR}/devel/git \
 	lsof:${PORTSDIR}/sysutils/lsof \
 	rsync:${PORTSDIR}/net/rsync \
@@ -49,12 +50,6 @@ RUN_DEPENDS+=	\
 	xauth:${PORTSDIR}/x11/xauth \
 	xterm:${PORTSDIR}/x11/xterm \
 	zsh:${PORTSDIR}/shells/zsh
-
-.if (${EMULAB_PORTVERSION} == "9.3")
-.else
-RUN_DEPENDS+=	\
-	jove:${PORTSDIR}/editors/jove
-.endif
 
 .if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
 RUN_DEPENDS+=	\

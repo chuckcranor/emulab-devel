@@ -296,7 +296,7 @@ window.APT_OPTIONS.postTutorial = function (data) {
 
 window.APT_OPTIONS.Announcements = function () {
     var callback = function(json) {
-	console.info("announcements", json);
+	//console.info("announcements", json);
 	if (json.code) {
 	    console.info("announcements", json);
 	}

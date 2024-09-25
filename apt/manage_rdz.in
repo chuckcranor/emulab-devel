@@ -94,6 +94,7 @@ use User;
 use APT_Aggregate;
 use APT_Instance;
 use APT_RDZRest;
+use APT_RDZ;
 use WebTask;
 
 # Protos
@@ -112,7 +113,9 @@ sub DoMonitors();
 sub DoObservations();
 sub DoSubscriptions();
 sub UpdateMonitor($);
-sub DoRFSObservation($);
+sub DoRFSObservation($$);
+sub WatchGrant($);
+sub logit($);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -926,11 +929,14 @@ sub DoGrants()
 {
     my $usage = sub {
 	print STDERR "Usage: manage_rdz grants list\n";
-	print STDERR "Usage: manage_rdz grants create <low> <high> [<bandwidth>]\n";
 	print STDERR "Usage: manage_rdz grants create ".
-	    "<low> <high> [<bandwidth>] <location> <radio>\n";
+	    "[-H] [-w] <low> <high> [<bandwidth>]\n";
+	print STDERR "Usage: manage_rdz grants create ".
+	    "[-H] [-w] <low> <high> [<bandwidth>] <location> <radio>\n";
 	print STDERR "Usage: manage_rdz grants show <grant_id>\n";
 	print STDERR "Usage: manage_rdz grants delete <grant_id>\n";
+	print STDERR "Usage: manage_rdz grants beat <grant_id>\n";
+	print STDERR "Usage: manage_rdz grants watch <grant_id>\n";
 	exit(-1);
     };
     &$usage()
@@ -938,8 +944,20 @@ sub DoGrants()
     
     my $which = shift(@ARGV);
     &$usage()
-	if ($which !~ /^(list|create|delete|show)$/);
+	if ($which !~ /^(list|create|delete|show|beat|watch)$/);
 
+    my %options = ();
+    my $beats   = 0;
+    my $watch   = 0;
+    if (! getopts("Hw", \%options)) {
+	usage();
+    }
+    if (defined($options{"H"})) {
+	$beats = 1;
+    }
+    if (defined($options{"w"})) {
+	$watch = 1;
+    }
     if ($which eq "list") {
 	my $response;
 
@@ -950,7 +968,7 @@ sub DoGrants()
 	print Dumper($response);
 	exit(0);
     }
-    if ($which eq "show") {
+    if ($which eq "show" || $which eq "beat") {
 	my $response;
 
 	&$usage()
@@ -960,7 +978,43 @@ sub DoGrants()
 	if ($ZMC->GET("/grants/$grant_id", \$response)) {
 	    fatal("Could not get /grants/$grant_id");
 	}
-	print Dumper($response);
+	if ($debug) {
+	    print Dumper($response);
+	}
+	print "Grant status: ". $response->{'status'} . "\n";
+	if ($response->{'status'} eq "denied") {
+	    foreach my $log (@{$response->{'logs'}}) {
+		if ($log->{'status'} eq "denied") {
+		    print "Reason: " . $log->{'message'} . "\n";
+		    last;
+		}
+	    }
+	}
+	elsif ($response->{"allow_skip_acks"}) {
+	    print "Heartbeats are NOT required\n";
+	}
+	else {
+	    print "Heartbeats are required, next ack by ".
+		TBDateStringLocal($response->{'status_ack_by'}) . "\n";
+	}
+	exit(0)
+	    if ($which eq "show");
+
+	print "Sending a heartbeat\n";
+	
+	my $heartbeat = {
+	    "op_status" => $response->{'status'},
+	    "message"   => "The beat goes on and on",
+	};
+	if ($ZMC->PUT("/grants/$grant_id/opstatus", $heartbeat, \$response)) {
+	    fatal("Could not get /grants/$grant_id/opstatus");
+	}
+	if ($debug) {
+	    print Dumper($response);
+	}
+	print "Grant OP status: ". $response->{'op_status'} . "\n";
+	print "Grant next ack: " .
+	    TBDateStringLocal($response->{'status_ack_by'}) . "\n";
 	exit(0);
     }
     if ($which eq "delete") {
@@ -974,6 +1028,13 @@ sub DoGrants()
 	    fatal("Could not delete /grants/$grant_id");
 	}
 	exit(0);
+    }
+    if ($which eq "watch") {
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $grant_id = shift(@ARGV);
+	exit(WatchGrant($grant_id));
     }
     &$usage()
 	if (@ARGV < 2 || @ARGV > 5);
@@ -1004,6 +1065,9 @@ sub DoGrants()
 	    },
 	],
     };
+    if ($beats) {
+	$request->{"allow_skip_acks"} = JSON::false;
+    }
     if (@ARGV) {
 	my $location = shift(@ARGV);
 	my $radio    = shift(@ARGV);
@@ -1052,8 +1116,169 @@ sub DoGrants()
     if ($ZMC->POST("/grants", $request, \$response)) {
 	fatal("Could not add RDZ /grants");
     }
-    #print Dumper($response);
+    if ($debug) {
+	print Dumper($response);
+    }
+    print "Grant id: ". $response->{'id'} . "\n";
+    print "Grant status: ". $response->{'status'} . "\n";
+    if ($response->{'status'} eq "denied") {
+	foreach my $log (@{$response->{'logs'}}) {
+	    if ($log->{'status'} eq "denied") {
+		print "Reason: " . $log->{'message'} . "\n";
+		last;
+	    }
+	}
+    }
+
+    #
+    # Lets ack an approved grant immediately.
+    #
+    if ($beats) {
+	my $status = $response->{'status'};
+
+	if ($status eq "approved" || $status eq "active") {
+	    my $grant_id = $response->{'id'};
+	    my $reply = ($status eq "approved" ? "accepted" : "active");
+
+	    my $heartbeat = {
+		"op_status" => $reply,
+		"message"   => "The beat goes on",
+	    };
+	    if ($debug) {
+		print Dumper($heartbeat);
+	    }
+	    print "Sending initial heartbeat\n";
+	    if ($ZMC->PUT("/grants/$grant_id/opstatus", $heartbeat, \$response)) {
+		fatal("Could not put /grants/$grant_id/opstatus");
+	    }
+	    print "Grant OP status: ". $response->{'op_status'} . "\n";
+	    print "Grant next ack: " .
+		TBDateStringLocal($response->{'status_ack_by'}) . "\n";
+	}
+    }
+    if ($watch) {
+	WatchGrant($response->{'id'});
+    }
     exit(0);
+}
+
+#
+# Watch a single grant for testing
+#
+sub WatchGrant($)
+{
+    my ($grant_id) = @_;
+    my ($grant);
+
+    #
+    # Load to see if it needs heartbeats.
+    #
+    if ($ZMC->GET("/grants/$grant_id", \$grant)) {
+	fatal("Could not get /grants/$grant_id");
+    }
+    my %grants = ($grant_id => $grant);
+
+    #
+    # Issue required hearbeat.
+    #
+    my $heartBeat = sub ()
+    {
+	my ($grant) = @_;
+	my $grant_id = $grant->{'id'};
+	my $status   = $grant->{'status'};
+	my $response;
+
+	logit("");
+	logit("Heartbeat: $grant_id, $status");
+	my $reply;
+	if ($status eq "active" || $status eq "paused") {
+	    $reply = $status;
+	}
+	elsif ($status eq "revoked" || $status eq "replacing") {
+	    $reply = "paused";
+	}
+	my $heartbeat = {
+	    "op_status" => $reply,
+	    "message"   => "The beat goes on",
+	};
+	logit("Sending $reply heartbeat");
+	    
+	if ($ZMC->PUT("/grants/$grant_id/opstatus", $heartbeat, \$response)) {
+	    fatal("Could not put /grants/$grant_id/opstatus");
+	}
+	my $nextack = $response->{'status_ack_by'};
+	logit("Grant next ack: " . TBDateStringLocal($nextack));
+	# Update in the caller supplied grant object.
+	$grant->{'status_ack_by'} = $nextack;
+	return 0;
+    };
+
+    #
+    # Call back for events and polls. 
+    #
+    my $callback = sub ()
+    {
+	my ($type, $ref) = @_;
+	my ($grant_id, $status, $nextack);
+
+	#print Dumper($ref);
+
+	#
+	# Check to see if any grants need a heartbeat.
+	#
+	if ($type eq "heartbeat") {
+	    foreach my $grant (values(%grants)) {
+		next
+		    if ($grant->{"allow_skip_acks"});
+
+		my $nextack = str2time($grant->{'status_ack_by'});
+		next
+		    if ($nextack - time() > 10);
+
+		&$heartBeat($grant);
+	    }
+	    return 0;
+	}
+	logit("");
+	logit("WatchGrant callback: $type");
+	if ($type eq "event") {
+	    $grant_id = $ref->{'object'}->{'id'};
+	    $status   = $ref->{'object'}->{'status'};
+	    $nextack  = $ref->{'object'}->{'status_ack_by'};
+	}
+	elsif ($type eq "poll") {
+	    $grant_id = $ref->{'id'};
+	    $status   = $ref->{'status'};
+	    $nextack  = $ref->{'status_ack_by'};
+	}
+	logit("Grant id: $grant_id");
+	my $grant  = $grants{$grant_id};
+	my $beats  = $grant->{"allow_skip_acks"} ? 0 : 1;
+	my $dobeat = $type eq "event" && $beats;
+	
+	logit("Grant status: $status");
+	if ($beats) {
+	    logit("Grant next ack: " . TBDateStringLocal($nextack));
+	}
+	$grant->{'status'} = $status;
+	
+	if ($dobeat) {
+	    &$heartBeat($grant);
+	}
+	else {
+	    $grant->{'status_ack_by'} = $nextack;
+	}
+	if ($status eq "revoked" || $status eq "replacing") {
+	    exit(0);
+	}
+	return 0;
+    };
+    while (1) {
+	if (APT_RDZ::WatchGrants($callback, [$grant_id], $debug) < 0) {
+	    exit(-1);
+	}
+    	sleep(5);
+    }
 }
 
 #
@@ -1065,11 +1290,11 @@ sub DoObservations()
     no strict 'subs';
     local(*FOO);
     my $aggregate;
-    my $rfs = 0;
+    my $rfs;
 
     my $usage = sub {
 	print STDERR "Usage: manage_rdz observations create [-a urn] <file>\n";
-	print STDERR "Usage: manage_rdz observations create [-R] <file>\n";
+	print STDERR "Usage: manage_rdz observations create [-R id] <file>\n";
 	exit(-1);
     };
     &$usage()
@@ -1080,7 +1305,7 @@ sub DoObservations()
 	if ($which !~ /^(create)$/);
 
     my %options = ();
-    if (! getopts("fa:R", \%options)) {
+    if (! getopts("fa:R:", \%options)) {
 	&$usage();
     }
     if (defined($options{"a"})) {
@@ -1093,7 +1318,7 @@ sub DoObservations()
 	$aggregate = APT_Aggregate->Lookup($MYURN);	
     }
     if (defined($options{"R"})) {
-	$rfs = 1;
+	$rfs = $options{"R"};
     }
     if (!$aggregate) {
 	fatal("No such aggregate");
@@ -1109,8 +1334,8 @@ sub DoObservations()
     fatal("No such file: $file")
 	if (!-e $file);
 
-    if ($rfs) {
-	exit(DoRFSObservation($file));
+    if (defined($rfs)) {
+	exit(DoRFSObservation($rfs, $file));
     }
 
     my ($node_id,$iface,$stamp);
@@ -1274,9 +1499,9 @@ sub DoObservations()
 #
 # Cheesy hack to enter RFS sensor observations
 #
-sub DoRFSObservation($)
+sub DoRFSObservation($$)
 {
-    my ($file) = @_;
+    my ($id, $file) = @_;
 
     my $DST = APT_RDZRest::DST->New(APT_RDZRest::POWDER());
     if (!defined($DST)) {
@@ -1284,7 +1509,7 @@ sub DoRFSObservation($)
     }
 
     my $request = {
-	"monitor_id"  => "fb99063c-97fe-4e50-913b-37889347e424",
+	"monitor_id"  => $id,
 	"types"       => "inline,sweep",
 	"format"      => "rfs-csv-inline",
 	"description" => "Virtual RFS Sensor",
@@ -1292,6 +1517,7 @@ sub DoRFSObservation($)
 	"max_freq"    => 790000000,
 	"starts_at"   => TBDateStringGMT(time()),
 	"violation"   => JSON::false,
+	"interference"=> JSON::true,
     };
     my $data = emutil::ReadFile($file);
     if (!defined($data)) {
@@ -1812,4 +2038,11 @@ sub UserError($)
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
     exit(1);
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $now = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    print "$now: $msg\n";
 }

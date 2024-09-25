@@ -135,6 +135,8 @@
                        class='dropdown-item'>History Data</a></li>
 		<li><a href='sumstats.php?min=<%= THEN %>'
                        class='dropdown-item'>Summary Stats</a></li>
+		<li><a href='show-nodeutilization.php'
+                       class='dropdown-item'>Node Utilization</a></li>
 		<li><a href='ranking.php'
                        class='dropdown-item'>User/Proj Ranking</a></li>
                 <li><a href='experiments.php#extending'
@@ -167,10 +169,6 @@
                        class='dropdown-item'>Edit Site Variables</a></li>
                 <li><a href='portal-news.php'
                        class='dropdown-item'>Manage News</a></li>
-		<% if (window.MAINSITE) { %>
-                  <li><a href='portal-hardware.php'
-                         class='dropdown-item'>Portal Hardware</a></li>
-		<% } %>
 	      </ul>
 	    </li>
 	  <% } %> <!-- End of Admin menu --> 
@@ -220,7 +218,7 @@
 	    <% if (vars.page_title != "Login") { %>
               <li id='loginitem' class='apt-left'>
 		<a class='btn btn-quickvm-home navbar-btn apt-navbar-btn'
-                   href='login.php'
+                   href="login.php?referrer=<%- encodeURI(window.location.href) %>"
                    id='loginbutton'>Login</a>
 	      </li>
 	    <% } %>
@@ -245,6 +243,11 @@
 	    
             <li><a href='example-profiles.php' target='_blank'
 		   class='dropdown-item'>Example Profiles</a></li>
+
+	    <% if (window.PORTAL_NAME == "CloudLab") { %>
+              <li><a href='portal-hardware.php' target='_blank'
+		     class='dropdown-item'>Available Hardware</a></li>
+	    <% } %>
 
 	    <% if (vars.login_uid && vars.anyNews) { %>
               <li><a href='portal-news.php'

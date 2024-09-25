@@ -154,20 +154,6 @@ my $ZPOOLCMD = "/sbin/zpool";
 my $ZFSCMD =   "/sbin/zfs";
 my $ZFSPOOL =  "emulab";
 
-# Ick to deal with python differences
-my $PYBIN = "/usr/local/bin/python";
-if (! -x $PYBIN) {
-    if (-x "/usr/local/bin/python2") {
-	$PYBIN = "/usr/local/bin/python2";
-    } elsif (-x "/usr/local/bin/python3.7") {
-	$PYBIN = "/usr/local/bin/python3.7";
-    } elsif (-x "/usr/local/bin/python3.8") {
-	$PYBIN = "/usr/local/bin/python3.8";
-    } else {
-	$PYBIN = "NO-PYTHON-INSTALLED";
-    }
-}
-
 #
 # Support for Windows nodes.
 # XXX here for compat; replaced by emulabconfig option.
@@ -360,6 +346,7 @@ sub RecreateDir($$);
 sub CreateOpsJail($);
 sub SetupOpsJail();
 sub FindExtraFSConfig($);
+sub PythonVersion();
 sub AddPackage($$$);
 sub DelPackage($@);
 sub WriteOPSImage($$);
@@ -1141,6 +1128,7 @@ sub SetupFsNode()
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
+		my $PYBIN = PythonVersion();
 		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
@@ -1773,6 +1761,7 @@ sub SetupOpsNode($)
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
+		my $PYBIN = PythonVersion();
 		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
@@ -2574,6 +2563,7 @@ sub SetupBossNode($)
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
+		my $PYBIN = PythonVersion();
 		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
@@ -3402,6 +3392,7 @@ sub SetupOpsJail()
 	    }
 	    # hmm...python too?
 	    if (! -x "/usr/local/bin/python") {
+		my $PYBIN = PythonVersion();
 		system("ln -sfn $PYBIN /usr/local/bin/python");
 	    }
 
@@ -4241,6 +4232,27 @@ sub RecreateDir($$)
     if ($docreate) {
 	mysystem("mkdir -p $dir");
     }
+}
+
+#
+# Ick to deal with python differences
+#
+sub PythonVersion()
+{
+    my $PYBIN = "/usr/local/bin/python";
+    if (! -x $PYBIN) {
+	if (-x "/usr/local/bin/python2") {
+	    $PYBIN = "/usr/local/bin/python2";
+	} elsif (-x "/usr/local/bin/python3.7") {
+	    $PYBIN = "/usr/local/bin/python3.7";
+	} elsif (-x "/usr/local/bin/python3.8") {
+	    $PYBIN = "/usr/local/bin/python3.8";
+	} else {
+	    $PYBIN = "NO-PYTHON-INSTALLED";
+	}
+    }
+
+    return $PYBIN;
 }
 
 #

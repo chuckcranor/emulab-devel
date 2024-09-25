@@ -50,6 +50,13 @@ my $TB		= "@prefix@";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $TRANSIENTS  = [NODERELOADING_EID(), NODERELOADPENDING_EID(), NODEILL_EID()];
 
+#
+# New feature still in testing; allow experiments to start up (and nalloc)
+# even in overbook, as long as the start of overbook is past the expected
+# end of the experiment.
+#
+my $AllocateInOverbook = 1;
+
 my %cache = ();
 BEGIN { use emutil; emutil::AddCache(\%cache); }
 
@@ -889,10 +896,10 @@ sub LookupAll($$;$$)
     return $cache{$cachekey};
 }
 
-sub IsFeasible($$;$$$$$$)
+sub IsFeasible($$;$$$$$$$)
 {
     my ($class, $reservations, $error, $conflicttime, $conflictcount,
-	$projlist, $forecast, $dounapproved) = @_;
+	$projlist, $forecast, $dounapproved, $maxstarttime) = @_;
 
     my @timeline = ();
     my $free = 0;
@@ -945,6 +952,11 @@ sub IsFeasible($$;$$$$$$)
 	    
 	    my $starttime = $reservation->start();
 	    $starttime = $now if( $starttime < $now );
+
+	    # Ignore reservations that start after optional upper bound.
+	    next
+		if ($AllocateInOverbook &&
+		    defined($maxstarttime) && $starttime > $maxstarttime);
 	    
 	    $start = { 'target' => $target,
 		       't' => $starttime,
@@ -1371,7 +1383,7 @@ sub CurrentReservations($;$$$) {
 	    "       res.exptidx=e.idx AND ".
 	    "       p.pid_idx=e.pid_idx AND ".
 	    "       ((e.geniflags=0 && r.uid=e.expt_swap_uid) OR ".
-	    "         (e.geniflags=1 && r.uid=e.expt_head_uid)) AND ".
+	    "         (e.geniflags!=0 && r.uid=e.expt_head_uid)) AND ".
 	    "       ((n.reservable=0 and n.type=r.type) or ".
 	    "        (n.reservable=1 and n.node_id=r.type))) as uidnodes, ".
 	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n, ".
@@ -1743,12 +1755,16 @@ sub AutoSwapTimeout($$$;$$$) {
 	    if ($expt->state() eq EXPTSTATE_ACTIVATING()) {
 		$expires = $expt->tstamp();
 	    }
+	    elsif ($expt->state() eq EXPTSTATE_SWAPPED()) {
+		$expires = time();
+	    }
 	    else {
 		$expires = str2time($expt->swapin_last());
 	    }
 	    $expires += ($minutes * 60);
 	    
-	    if ($expt->SetExpiration($expires) ||
+	    if (($expt->state() ne EXPTSTATE_SWAPPED() &&
+		 $expt->SetExpiration($expires)) ||
 		$expt->SetAutoswapTimeout($minutes) ||
 		$expt->SetAutoswap(1)) {
 		if (ref($error)) {
@@ -2151,19 +2167,30 @@ sub MaxSwapIn($$$) {
 	    $res->SetEnd( undef );
 	}
     }
+    my $expectedend = ExpectedEnd( $class, $experiment );
+    if ($debug) {
+	print "MaxSwapIn ExpectedEnd: ".
+	    POSIX::strftime("%m/%d/20%y %H:%M:%S",
+			    localtime($expectedend)) . "\n";
+    }
+    my $max_expire  = $expectedend;
 
     my $reservation = CreateImmediate( $class, $experiment->pid(),
 				       $experiment->eid(),
 				       ($experiment->geniflags() ?
 					$experiment->creator() :
 					$experiment->swapper()),
-				       ExpectedEnd( $class, $experiment ),
+				       $expectedend,
 				       $type, $MAX, $experiment->gid() );
 
     push( @$reservations, $reservation );
 
     while( $reservation->nodes() > 0 &&
-	   !IsFeasible( $class, $reservations, $error, undef, \$overflow ) ) {
+	   !IsFeasible( $class, $reservations, $error, undef, \$overflow,
+	   undef, undef, undef, $max_expire) ) {
+	if ($debug) {
+	    print "MaxSwapIn: time:$max_expire, count:$overflow\n";
+	}
 	$reservation->SetNodes( $reservation->nodes() - $overflow );
     }
     DBQueryFatal("unlock tables");

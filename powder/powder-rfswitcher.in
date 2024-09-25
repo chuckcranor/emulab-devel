@@ -41,17 +41,22 @@ use POSIX qw(strftime ceil);
 #
 sub usage()
 {
-    print "Usage: powder-rfswitcher [-dn] [-o] <node_id>\n";
+    print "Usage: powder-rfswitcher [-dn] [-o [-O]] <node_id>\n";
     print "       powder-rfswitcher -v <node_id>\n";
     print "       powder-rfswitcher -r -t [rffe|rpi] location\n";
     print "       powder-rfswitcher -z -t [rffe|rpi] location\n";
     print "       powder-rfswitcher -s port -t [rffe|rpi] location\n";
+    print "       powder-rfswitcher -a\n";
     print "With no options, set the appropiate rfswitch for <node_id> to transmit\n";
     print "Options:\n";
     print "  -o  - Set the switch associated with the node, to off\n";
     print "      - This is preferred way to switch the antenna away from a node\n";
+    print "      - With -O, power off the node before switching away\n";
     print "  -r  - Get the status of the rfswitch at <location>\n";
     print "  -v  - Verify (for the power on command) that the switch is set\n";
+    print "  -a  - Check all RF switches, set to the correct switch port.\n";
+    print "  -d  - Turn on debugging output\n";
+    print "  -n  - Impotent mode, only show what would be done\n";
     print "Do not use these options unless the node is first powered on/off\n";
     print "  -z  - Set the current port of the rfswitch at <location> to zero\n";
     print "        In other words, nothing is connected to an antenna\n";
@@ -59,12 +64,13 @@ sub usage()
     print "  -t  - Required for -r,-s,-z. The rfswitch type.\n";
     exit(1);
 }
-my $optlist   = "dnzs:rt:ov";
+my $optlist   = "adnzs:rt:ovO";
 my $debug     = 0;
 my $impotent  = 0;
 my $zero      = 0;
 my $set       = 0;
 my $read      = 0;
+my $all       = 0;
 my $ddrunning = 0;
 my $locked    = 0;
 my $verify    = 0;
@@ -82,6 +88,7 @@ my $DDPID            = "/var/run/frontend-dense-%s.pid";
 my $PORT             = 111;
 my $SAVEUID          = $UID;
 my $SUDO	     = "/usr/local/bin/sudo";
+my $POWER            = "$TB/bin/power";
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -90,9 +97,12 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 # Protos
 sub fatal($);
 sub Switcher($$$);
+sub SetSwitchPort($);
 sub GetSwitcher($$);
 sub GetSwitcherPort($$);
 sub GetSwitcherLock();
+sub ReleaseSwitcherLock();
+sub CheckAllSwitches();
 
 #
 # Turn off line buffering on output
@@ -117,6 +127,9 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
+if (defined($options{"a"})) {
+    $all = 1;
+}
 if (defined($options{"n"})) {
     $impotent = 1;
 }
@@ -137,6 +150,9 @@ if (defined($options{"t"})) {
     if ($rfswtype ne "rffe" and $rfswtype ne "rpi") {
 	fatal("-t option is one of rffe or rpi");
     }
+}
+if ($all) {
+    exit(CheckAllSwitches());
 }
 usage()
     if (@ARGV != 1);
@@ -188,108 +204,15 @@ if ($zero || $set || $read) {
     }
 }
 
-my $node_id = $arg;
-my $node = Node->Lookup($node_id);
+my $node = Node->Lookup($arg);
 if (!defined($node)) {
-    fatal("No such node $node_id");
+    fatal("No such node $arg");
 }
-my $aggregate = APT_Aggregate->LookupLocalCluster();
-if (!defined($aggregate)) {
-    fatal("Could not lookup local aggregate");
-}
-my $rfswitch_port;
-
-if ($node->rfswitchSettings(\$location, \$rfswitch_port, \$rfswtype)) {
-    fatal("Could not get the rfswitch settings");
-}
-if (!defined($location)) {
-    fatal("There is no rfswitch_location in the DB for $node_id");
-}
-if (!defined($rfswtype)) {
-    fatal("There is no rfswitch_type in the DB for $node_id");
-}
-if (!defined($rfswitch_port)) {
-    fatal("There is no rfswitch_port in the DB for $node_id");
-}
-if ($rfswtype ne "rffe" and $rfswtype ne "rpi") {
-    fatal("rfswitch_type must be one of rffe or rpi: $rfswtype");
-}
-
-my $next_port;
-if (defined($options{"o"})) {
-    $next_port = 0;
-}
-else {
-    $next_port = $rfswitch_port;
-}
-if ($debug && !$verify) {
-    print "Setting RF switch at $location to port $next_port\n";
-}
-GetSwitcherLock();
-
-#
-# For sanity checks
-#
-my $current_port = GetSwitcherPort($location, $rfswtype);
-if (!defined($current_port)) {
-    fatal("Could not determine the current state of the RF switch");
-}
-if ($debug) {
-    print "RF switch at $location is on port $current_port\n";
-}
-if ($verify) {
-    if ($current_port == $next_port) {
-	exit(0);
-    }
+if (! $node->IsReserved()) {
+    print STDERR "$arg is not reserved, refusing to listen to you\n";
     exit(1);
 }
-if ($current_port == $next_port) {
-    print "RF switch at $location is already on the correct port: $next_port\n";
-    print "Exiting ...\n";
-    exit(0);
-}
-#
-# Find all other nodes on this switch for sanity checks.
-#
-my %other_nodes  = ();
-my $query_result =
-    DBQueryFatal("select node_id from node_attributes ".
-		 "where attrkey='rfswitch_location' and ".
-		 "      attrvalue='$location' and ".
-		 "      node_id!='$node_id'");
-
-while (my ($other_node_id) = $query_result->fetchrow_array()) {
-    my $other_node = Node->Lookup($other_node_id);
-    next
-	if (!defined($other_node));
-    $other_nodes{$other_node_id} = $other_node;
-}
-
-#
-# Switching away, radio must be powered off first.
-#
-if ($next_port != $rfswitch_port &&
-    $node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
-    fatal("$node_id must be powered off before switching away");
-}
-elsif ($next_port != 0) {
-    #
-    # Switching to the radio, confirm all other radios are powered off.
-    #
-    foreach my $other_node_id (keys(%other_nodes)) {
-	my $other_node = $other_nodes{$other_node_id};
-
-	if ($debug) {
-	    print "Confirming $other_node_id is powered off\n";
-	}
-	if ($other_node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
-	    fatal("$other_node_id must be powered off before switching away");
-	}
-    }
-}
-# Go ahead and do it even if no change.
-Switcher($location, $rfswtype, $next_port);
-exit(0);
+exit(SetSwitchPort($node));
 
 #
 # Open the socket, need to do this a few times to get things to work.
@@ -362,10 +285,14 @@ sub SwitcherRPI($$)
 	print "Would run '$command'\n";
 	exit(0);
     }
+    $UID = 0;
     system($command);
+    $UID = $SAVEUID;
+    
     if ($?) {
-	fatal("Failed to set rfswitch $rfswitch to ".
-	      ($port == 0 ? "off" : "port $port"));
+	print STDERR "Failed to set rfswitch $rfswitch to ".
+	    ($port == 0 ? "off" : "port $port") . "\n";
+	return -1;
     }
     return 0;
 }
@@ -466,7 +393,11 @@ sub GetSwitcherRPI($)
     if ($debug) {
 	print "$command\n";
     }
+
+    $UID = 0;
     my $output = emutil::ExecQuiet($command);
+    $UID = $SAVEUID;
+    
     if ($?) {
 	print $output;
 	fatal("Failed to get the rfswitcher status");
@@ -540,6 +471,195 @@ sub GetSwitcherPort($$)
 }
 
 #
+# Verify all switch locations set properly. After a power outage, the
+# RF switch will come up in an "off" state, so the allocated radion
+# will not be able to power on (if there is a power interlock) or receive.
+#
+# This is invoked from /etc/crontab
+#
+sub CheckAllSwitches()
+{
+    my $query_result =
+	DBQueryFatal("select node_id from node_attributes ".
+		     "where attrkey='rfswitch_location'");
+    exit(0)
+	if (!$query_result->numrows);
+
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	my $node = Node->Lookup($node_id);
+	if (!defined($node)) {
+	    print STDERR "$node_id no longer exists\n";
+	    next;
+	}
+	next
+	    if (! $node->IsReserved());
+
+	if ($debug) {
+	    print "Checking that rfswitch for $node_id is set properly\n";
+	}
+	SetSwitchPort($node);
+    }
+}
+
+sub SetSwitchPort($)
+{
+    my ($node) = @_;
+    my $node_id = $node->node_id();
+    my ($location, $rfswitch_port, $rfswtype);
+
+    if ($node->rfswitchSettings(\$location, \$rfswitch_port, \$rfswtype)) {
+	print STDERR "Could not get the rfswitch settings\n";
+	return -1;
+    }
+    if (!defined($location)) {
+	print STDERR "There is no rfswitch_location in the DB for $node_id\n";
+	return -1;
+    }
+    if (!defined($rfswtype)) {
+	print STDERR "There is no rfswitch_type in the DB for $node_id\n";
+	return -1;
+    }
+    if (!defined($rfswitch_port)) {
+	print STDERR "There is no rfswitch_port in the DB for $node_id\n";
+	return -1;
+    }
+    if ($rfswtype ne "rffe" and $rfswtype ne "rpi") {
+	print STDERR "rfswitch_type must be one of rffe or rpi: $rfswtype\n";
+    }
+    my $next_port;
+    if (defined($options{"o"})) {
+	$next_port = 0;
+    }
+    else {
+	$next_port = $rfswitch_port;
+    }
+    if ($debug && !($verify || $all)) {
+	print "Setting RF switch at $location to port $next_port\n";
+    }
+    if (GetSwitcherLock()) {
+	return 1;
+    }
+
+    #
+    # For sanity checks
+    #
+    my $current_port = GetSwitcherPort($location, $rfswtype);
+    if (!defined($current_port)) {
+	print STDERR "Could not determine the current state of the RF switch\n";
+	ReleaseSwitcherLock();
+	return -1;
+    }
+    if ($debug) {
+	print "RF switch at $location is on port $current_port. ";
+	if ($current_port != $next_port) {
+	    print "Should be port $next_port.";
+	}
+	print "\n";
+    }
+    if ($verify) {
+	if ($current_port == $next_port) {
+	    ReleaseSwitcherLock();
+	    return 0;
+	}
+	ReleaseSwitcherLock();
+	return 1;
+    }
+    if ($current_port == $next_port) {
+	if (!$all) {
+	    print "RF switch at $location is already on the correct ".
+		"port: $next_port\n";
+	}
+	ReleaseSwitcherLock();
+	return 0;
+    }
+    #
+    # Find all other nodes on this switch for sanity checks.
+    #
+    my %other_nodes  = ();
+    my $query_result =
+	DBQueryFatal("select node_id from node_attributes ".
+		     "where attrkey='rfswitch_location' and ".
+		     "      attrvalue='$location' and ".
+		     "      node_id!='$node_id'");
+
+    while (my ($other_node_id) = $query_result->fetchrow_array()) {
+	my $other_node = Node->Lookup($other_node_id);
+	next
+	    if (!defined($other_node));
+	$other_nodes{$other_node_id} = $other_node;
+    }
+
+    #
+    # Switching away, radio must be powered off first.
+    #
+    if ($next_port != $rfswitch_port &&
+	$node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
+	if (defined($options{"O"})) {
+	    if ($impotent) {
+		print "Would power off $node_id before switching away\n";
+	    }
+	    else {
+		print "Powering off $node_id before switching away\n";
+		$UID = 0;
+		system("$POWER off $node_id");
+		$UID = $SAVEUID;
+		if ($?) {
+		    print STDERR "Could not power off $node_id\n";
+		    ReleaseSwitcherLock();
+		    return -1;
+		}
+		sleep(1);
+	    }
+	}
+	else {
+	    print STDERR "$node_id must be powered off before switching away\n";
+	    ReleaseSwitcherLock();
+	    return -1;
+	}
+    }
+    if ($next_port != 0) {
+	#
+	# Switching to the radio, confirm all other radios are powered off.
+	#
+	foreach my $other_node_id (keys(%other_nodes)) {
+	    my $other_node = $other_nodes{$other_node_id};
+
+	    if ($debug) {
+		print "Confirming $other_node_id is powered off\n";
+	    }
+	    if ($other_node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
+		if ($all) {
+		    print "Powering off $node_id before switching away\n";
+		    if (!$impotent) {
+			$UID = 0;
+			system("$POWER off $node_id");
+			$UID = $SAVEUID;
+			if ($?) {
+			    print STDERR "Could not power off $node_id\n";
+			    ReleaseSwitcherLock();
+			    return -1;
+			}
+			sleep(1);
+		    }
+		}
+		else {
+		    print "$other_node_id must be powered off before ".
+			"switching away\n";
+		    ReleaseSwitcherLock();
+		    return -1;
+		}
+	    }
+	}
+    }
+    if (Switcher($location, $rfswtype, $next_port)) {
+	ReleaseSwitcherLock();
+	return -1;
+    }
+    ReleaseSwitcherLock();
+    return 0;
+}
+
+#
 # Bad to let two of these run.
 #
 sub GetSwitcherLock()
@@ -547,11 +667,20 @@ sub GetSwitcherLock()
     return
 	if ($locked);
     
-    print "Trying to get the switcher lock ...\n";
-    TBScriptLock("powder-rfswitcher", 0, 15) == 0 or
-	fatal("Could not get the lock!");
+    print "Trying to get the switcher lock ...\n" if ($debug);
+    if (TBScriptLock("powder-rfswitcher", 0, 15)) {
+	print STDERR "Could not get the lock!\n";
+	return -1;
+    }
     $locked = 1;
-}    
+    return 0;
+}
+sub ReleaseSwitcherLock()
+{
+    TBScriptUnlock() if ($locked);
+    $locked = 0;
+    return 0;
+}
 
 exit(0);
 

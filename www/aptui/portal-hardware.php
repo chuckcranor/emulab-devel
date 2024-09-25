@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -31,32 +34,7 @@ $page_title = "Portal Hardware";
 SPITHEADER(1);
 
 # Place to hang the toplevel template.
-echo "<div id='main-body'>
- <style>
-  i.tablesorter-icon {
-     top: unset;
-  }
- </style>
- <div class='row'>
-  <div class='col-sm-12'>
-    <table id='portal-hardware-table' class='tablesorter hidden'>
-      <thead>
-       <tr>
-        <th class='sorter-false' colspan=5></th>
-        <th class='sorter-false text-center' colspan=6>CPU</th>
-        <th class='sorter-false'></th>
-        <th class='sorter-false text-center' colspan=4>Storage</th>
-        <th class='sorter-false text-center' colspan=7>Network</th>
-        <th class='sorter-false text-center'></th>
-        <th class='sorter-false text-center'></th>
-       </tr>
-      </thead>
-      <tbody>
-      </tbody>
-    </table>
-  </div>
- </div>
-</div>";
+echo "<div id='main-body'></div>\n";
 
 $all = Aggregate::AllAggregatesList();
 $amlist  = array();
@@ -64,11 +42,26 @@ while (list($index, $aggregate) = each($all)) {
     $urn = $aggregate->urn();
     $am  = $aggregate->name();
     $url = $aggregate->weburl();
+    $typeinfo = $aggregate->typeinfo;
+    $resnodes = $aggregate->ReservableNodes(1);
 
+    if ($resnodes) {
+        foreach ($resnodes as $node => $info) {
+            $typename = $info["type"];
+            if (!array_key_exists($typename, $typeinfo)) {
+                $typeinfo[$typename] = array("count" => 0, "free" => 0);
+            }
+            $typeinfo[$typename]["count"]++;
+            if ($info["available"]) {
+                $typeinfo[$typename]["free"]++;
+            }
+        }
+    }
     $amlist[$urn] = array(
         "urn"   => $urn,
         "url"   => $url,
         "name"  => $am,
+        "typeinfo" => $typeinfo,
     );
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
@@ -81,11 +74,7 @@ REQUIRE_MOMENT();
 REQUIRE_MARKED();
 REQUIRE_TABLESORTER();
 AddLibrary("js/lib/jquery.csv.js");
-echo "<style>
-  .tablesorter-bootstrap .tablesorter-header i.tablesorter-icon {
-     top: unset;
-  }
- </style>\n";
 SPITREQUIRE("js/portal-hardware.js");
+AddTemplate("portal-hardware");
 SPITFOOTER();
 ?>

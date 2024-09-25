@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -65,6 +65,7 @@ my $CURL             = "/usr/local/bin/curl";
 my $POWER            = "$TB/bin/power";
 my $PTECHEXPECT      = "/home/mike/ptech.exp";
 my $EXPECT	     = "/usr/local/bin/expect";
+my $SUDO	     = "/usr/local/bin/sudo";
 my $SLEEP_INTERVAL   = 30;
 my $PORT             = 451;
 my $TEMP_RESUME     = 115;
@@ -85,42 +86,50 @@ my %frontends = (
 	"enabled"      => 0,
 	"frontend"     => "10.11.13.192",
 	"autocyclefe"  => 1,
+	"alsocycle"    => [],
     },
     "cnode-guesthouse" => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-guesthouse",
 	"switch"       => "powder-mgmt-dbs6",
 	"autocyclefe"  => 1,
+	"alsocycle"    => [ "bru-650-4" ],
     },
     "cnode-mario"      => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-mario",
 	"switch"       => "powder-mgmt-dbs2",
 	"autocyclefe"  => 1,
+	"alsocycle"    => [],
     },
     "cnode-ustar"      => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-ustar",
 	"switch"       => "powder-mgmt-dbs8",
 	"autocyclefe"  => 1,
+	"alsocycle"    => [ "n310-ustar" ],
     },
     "cnode-wasatch"    => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-wasatch",
 	"switch"       => "powder-mgmt-dbs1",
 	"autocyclefe"  => 1,
+	"alsocycle"    => [ "cap-wasatch, n310-wasatch" ],
     },
     "cnode-moran"      => {
 	"enabled"      => 1,
 	"frontend"     => "powder-rffe-moran",
 	"switch"       => "powder-mgmt-dbs5",
 	"autocyclefe"  => 1,
+	"alsocycle"    => [],
     },
     "cnode-ebc"        => {
 	"enabled"      => 1,
-	"frontend"     => "powder-rffe-ebc",
+#	"frontend"     => "powder-rffe-ebc",
+	"rfsw"         => "powder-rfsw-ebc",
 	"switch"       => "powder-mgmt-dbs7",
 	"autocyclefe"  => 0,
+	"alsocycle"    => [],
     },
 );
 
@@ -147,11 +156,13 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Protos
 sub GrabTemp($);
+sub GrabRFFETemp($);
+sub GrabRFSWTemp($);
 sub GrabSwitchTemp($);
 sub UploadTemp($$);
 sub UploadSwitchTemp($$);
 sub TempConvert($);
-sub Power($$);
+sub Power($$$);
 sub NotifyTBOPS($$);
 sub Notify($$$);
 sub fatal($);
@@ -244,6 +255,7 @@ while (1) {
     #
     foreach my $cnode (sort(keys(%frontends))) {
 	my $details = $frontends{$cnode};
+	
 	next
 	    if (! $details->{'enabled'});
 
@@ -251,8 +263,7 @@ while (1) {
 	next
 	    if (!defined($node));
 	
-	my $frontend = $details->{"frontend"};
-	my $celcius  = GrabTemp($frontend);
+	my $celcius  = GrabTemp($details);
 	if ($killed) {
 	    exit(0);
 	}
@@ -265,6 +276,8 @@ while (1) {
 		    "The temperature monitor for $cnode is no longer ".
 		    "responding.\n\n";
 		if (!$details->{'notified'} && $details->{'autocyclefe'}) {
+		    my $frontend = $details->{"frontend"};
+
 		    # Power cycle on first notification.
 		    $message .= "Power cycling $frontend ... \n";
 		    logit($message);
@@ -360,7 +373,7 @@ while (1) {
 	    
 	    if ($curstatus == $STATUS_SHUTDOWN) {
 		$body .= "Powering $cnode back on.";
-		Power($node, "on");
+		Power($node, "on", $details->{'alsocycle'});
 	    }
 	}
 	elsif ($newstatus == $STATUS_SHUTDOWN) {
@@ -368,7 +381,7 @@ while (1) {
 	    $body    = "The temperature in the $cnode enclosure is above\n".
 		"$TEMP_SHUTDOWN degrees. Powering off until the temperature\n".
 		"returns to normal.";
-	    Power($node, "off");
+	    Power($node, "off", $details->{'alsocycle'});
 	}
 	elsif ($newstatus == $STATUS_WARN) {
 	    if ($curstatus == $STATUS_OK) {
@@ -414,23 +427,32 @@ sub TempConvert($)
 #
 sub GrabTemp($)
 {
-    my ($cnode) = @_;
+    my ($details) = @_;
+
+    if (exists($details->{'rfsw'})) {
+	return GrabRFSWTemp($details->{'rfsw'});
+    }
+    return GrabRFFETemp($details->{'frontend'});
+}
+
+sub GrabRFFETemp($)
+{
+    my ($rffe) = @_;
     my $celcius;
 
     if (0) {
 	my $tmp = shift(@faketemps);
 	return $tmp;
     }
-    
-    logit("Connecting to $cnode") if ($debug > 1);
+    logit("Connecting to $rffe") if ($debug > 1);
 	
-    my $sock = IO::Socket::INET->new(PeerAddr => $cnode,
+    my $sock = IO::Socket::INET->new(PeerAddr => $rffe,
 				     PeerPort => $PORT,
 				     Proto    => 'tcp',
 				     Blocking => 1,
 				     Timeout  => 5);
     if (!$sock) {
-	logit("Could not connect to $cnode: $!");
+	logit("Could not connect to $rffe: $!");
 	return undef;
     }
     # This does not work.
@@ -442,7 +464,7 @@ sub GrabTemp($)
     
     my $buffer = "";
     if (!defined($sock->recv($buffer, 16))) {
-	logit("Failed to recv from $cnode: $!");
+	logit("Failed to recv from $rffe: $!");
 	$sock->shutdown(SHUT_RDWR);
 	$sock->close();
 	return undef;
@@ -453,10 +475,39 @@ sub GrabTemp($)
 	$celcius = $1;
     }
     else {
-	logit("Bogus temperature from $cnode: $buffer");
+	logit("Bogus temperature from $rffe: $buffer");
 	return undef;
     }
     return $celcius;
+}
+
+sub GrabRFSWTemp($)
+{
+    my ($rfsw) = @_;
+    my $celcius;
+    my $command = "$SUDO ssh $rfsw /usr/local/bin/temper";
+
+    logit("Connecting to $rfsw") if ($debug > 1);
+
+    my $output = emutil::ExecQuiet($command);
+    if ($?) {
+	logit($output);
+	return undef;
+    }
+    if ($debug > 1) {
+	logit("$rfsw returns: $output");
+    }
+    chomp($output);
+    my @tokens = split('\s+', $output);
+    if (scalar(@tokens) < 7) {
+	logit("Bogus result from $rfsw: '$output'");
+	return undef;
+    }
+    if ($tokens[6] =~ /^(\-?[\d\.]+)C$/) {
+	return $1;
+    }
+    logit("Bogus temperature from $rfsw: " . $tokens[6]);
+    return undef;
 }
 
 #
@@ -566,7 +617,7 @@ sub NotifyTBOPS($$)
     # since email will probably be delayed during a disconnect.
     $message .= "\n\n" . $stamp . "\n";
     
-    if (0 && $impotent) {
+    if ($impotent) {
 	print "$subject\n";
 	print "$message\n";
 	return;
@@ -587,7 +638,7 @@ sub Notify($$$)
     # since email will probably be delayed during a disconnect.
     $message .= "\n\n" . $stamp . "\n";
     
-    if (0 && $impotent) {
+    if ($impotent) {
 	print "$subject\n";
 	print "$message\n";
 	return;
@@ -607,29 +658,42 @@ sub Notify($$$)
 	     $message, $TBOPS, "X-NetBed: cnode-tempmonitor" . $BCC);
 }
 
-sub Power($$)
+sub Power($$$)
 {
-    my ($node, $onoff) = @_;
-    my $node_id = $node->node_id();
+    my ($node, $onoff, $alsocycle) = @_;
+    my @nodes = ($node);
 
-    #
-    # If the node is not reserved, leave it off.
-    # These nodes are idlepower_enabled, so they get turned off automatically.
-    #
-    if ($onoff eq "on" && !$node->IsReserved()) {
-	logit("Power($onoff, $node_id): Node is not reserved, leaving it off");
-	return;
+    foreach my $id (@{$alsocycle}) {
+	my $also = Node->Lookup($id);
+	if (!defined($also)) {
+	    print "Power: skipping unknown node $id\n";
+	    last;
+	}
+	push(@nodes, $also);
     }
 
-    if ($impotent) {
-	logit("Would power $onoff $node_id");
-    }
-    else {
-	logit("Powering $onoff $node_id");
-	system("$POWER -a $onoff $node");
-	if ($?) {
-	    NotifyTBOPS("power $onoff $node failed",
-			"Could not power $onoff $node");
+    foreach my $n (@nodes) {
+	my $node_id = $n->node_id();
+	
+	#
+	# If the node is not reserved, leave it off.
+	# These nodes are idlepower_enabled, so they get turned off automatically.
+	#
+	if ($onoff eq "on" && !$n->IsReserved()) {
+	    logit("Power($onoff, $node_id): Node is not reserved, leaving it off");
+	    return;
+	}
+
+	if ($impotent) {
+	    logit("Would power $onoff $node_id");
+	}
+	else {
+	    logit("Powering $onoff $node_id");
+	    system("$POWER -a $onoff $node");
+	    if ($?) {
+		NotifyTBOPS("power $onoff $node failed",
+			    "Could not power $onoff $node");
+	    }
 	}
     }
 }

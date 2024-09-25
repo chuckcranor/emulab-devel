@@ -176,9 +176,24 @@ case "$1" in
 			@prefix@/sbin/aptresgroup_daemon
 		fi
 
-		if [ $MAINSITE == "1" -a -x @prefix@/sbin/aptbus_monitor ]; then
-			echo -n " aptbus_monitor"
-			@prefix@/sbin/aptbus_monitor
+		if [ $MAINSITE == "1" ]; then
+			if [ -x @prefix@/sbin/aptbus_monitor ]; then
+				echo -n " aptbus_monitor"
+				@prefix@/sbin/aptbus_monitor
+			fi
+
+			if [ -x @prefix@/sbin/aptroute_monitor ]; then
+				echo -n " aptroute_monitor"
+				@prefix@/sbin/aptroute_monitor
+			fi
+			if [ -x @prefix@/sbin/rdz_expdaemon ]; then
+				echo -n " rdz_expdaemon"
+				@prefix@/sbin/rdz_expdaemon
+			fi
+			if [ -x @prefix@/sbin/cnode-tempmonitor ]; then
+				echo -n " cnode-tempmonitor"
+				@prefix@/sbin/cnode-tempmonitor
+			fi
 		fi
 
 		if [ -x @prefix@/sbin/aptimage_daemon ]; then
@@ -341,6 +356,9 @@ case "$1" in
 		if [ -r /var/run/aptbus_monitor.pid ]; then
 			kill `cat /var/run/aptbus_monitor.pid`
 		fi
+		if [ -r /var/run/aptroute_monitor.pid ]; then
+			kill `cat /var/run/aptroute_monitor.pid`
+		fi
 		if [ -r /var/run/aptimage_daemon.pid ]; then
 			kill `cat /var/run/aptimage_daemon.pid`
 		fi
@@ -362,14 +380,14 @@ case "$1" in
 		if [ -r /var/run/attend.pid ]; then
 			kill `cat /var/run/attend.pid`
 		fi
-		if [ -r /var/run/mondbd.pid ]; then
-			kill `cat /var/run/mondbd.pid`			
-		fi
-		if [ -r /var/run/shared-node-listener.pid ]; then
-			kill `cat /var/run/shared-node-listener.pid`
-		fi
 		if [ -r /var/run/reportboot_daemon.pid ]; then
 			kill `cat /var/run/reportboot_daemon.pid`
+		fi
+		if [ -r /var/run/cnode-tempmonitor.pid ]; then
+			kill `cat /var/run/cnode-tempmonitor.pid.pid`
+		fi
+		if [ -r /var/run/rdz_expdaemon.pid ]; then
+			kill `cat /var/run/rdz_expdaemon.pid`
 		fi
 
 		;;

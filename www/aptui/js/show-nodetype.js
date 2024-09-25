@@ -93,7 +93,7 @@ $(function ()
 	if (!window.EDITING && window.ISADMIN) {
 	    $('#nodelist').tablesorter({
 		theme : 'bootstrap',
-		widgets: ["uitheme"],
+		widgets: ["uitheme", "zebra"],
 		headerTemplate : '{content} {icon}',
 	    });
 	}

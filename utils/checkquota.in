@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -180,7 +180,7 @@ if ($WITHZFS) {
 	    
 	    if (! ($3 eq "M" || $3 eq "G" || $3 eq "T" ||
 		   ($3 eq "K" && $2 >= 1024) ||
-		   ($3 eq "B" && $2 < 1024*1024))) {
+		   ($3 eq "B" && $2 >= 1024*1024))) {
 		print STDOUT "*** Disk Quota exceeded on $1\n";
 		$overquota++;
 	    }

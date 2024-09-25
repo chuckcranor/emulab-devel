@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -242,6 +242,7 @@ use Node;
 use NodeType;
 use Lan;
 use BlockstoreType;
+use Blockstore;
 use User;
 use Reservation;
 
@@ -418,12 +419,15 @@ sub MyQueryFatal($)
 # with per-user permissions.  We assume that the user we want
 # to look up is the one running this script (and hence the mapper
 # wrapper that calls it). 
-my $this_user = User->ThisUser()->uid() || "";
+my $this_user = User->ThisUser();
+my $this_uid  = (defined($this_user) ? $this_user->uid() : "");
 
 #
 # Ick. For reservation related stuff, the current user will not be the
 # correct user when coming in on the Geni path for a nonlocal project.
 # Poor design choice many years ago.
+#
+# See similar (bad) hack in nalloc. :-(
 #
 # Note that we want this to be undef, not "". if we do not have a user.
 #
@@ -1112,14 +1116,14 @@ if ($pid) {
     $subosidquery1 .= " or i1.pid='$pid' or g1.pid='$pid'";
 }
 if ($this_user) {
-    $subosidquery1 .= " or u1.uid='$this_user'"
+    $subosidquery1 .= " or u1.uid='$this_uid'"
 }
 $subosidquery .= ") and (iv2.global = 1";
 if ($pid) {
     $subosidquery1 .= " or i2.pid='$pid' or g2.pid='$pid'";
 }
 if ($this_user) {
-    $subosidquery .= " or u2.uid='$this_user'"
+    $subosidquery .= " or u2.uid='$this_uid'"
 }
 $subosidquery1 .= ")";
 
@@ -1586,8 +1590,8 @@ foreach $node (@nodenames) {
     my $cpu_speed = $typemap{$type}->{'SPEED'};
     my $ram = $typemap{$type}->{'RAM'};
     my $trivspeed = $typemap{$type}->{'TRIVSPEED'};
-    my $uuid = $nodetouuid{$node};
     my $typeinfo = $typemap{$type}->{'TYPEINFO'};
+    my $uuid = $nodetouuid{$node};
     my @types = ();
     my @sliver_types = ();
     my @features = ();

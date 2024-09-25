@@ -510,6 +510,7 @@
 		<th>ID</th>
 		<th>Len</th>
 		<th>Node</th>
+		<th>Experiment</th>
 		<th>Iface</th>
 		<th>Role</th>
 		<th>Type</th>
@@ -539,6 +540,12 @@
 		      <% } else { %>
 		        <%- info.node_id1 %>
 		    <% } %>
+		    </td>
+		    <td>
+		      <% if (_.has(info, "exptidx")) { %>
+			<a href="<%- info.url %>"
+			   target="_blank"><%- info.pid %>/<%- info.eid %></a>
+		      <% } %>
 		    </td>
 		    <td><%- info.iface1 %>
 		      <% if (info.isswitch1) { %>

@@ -1910,6 +1910,12 @@ $(function ()
 						 "node_ids" : nodeList});
 	    xmlthing.done(callback);
 	});
+        if (which == "reload") {
+	    $('#confirm_reload_modal .reload-warning').removeClass("hidden");
+        }
+        else {
+	    $('#confirm_reload_modal .reload-warning').addClass("hidden");
+        }
 	$('#confirm_reload_modal #confirm-which').html(tag);
 	sup.ShowModal('#confirm_reload_modal');
     }
@@ -3480,8 +3486,7 @@ $(function ()
 	    window.APT_OPTIONS.SetupCopyToClipboard("#rerun_modal");
 
 	}
-	if (expinfo.params &&
-	    $('#quicktabs_content #bindings').hasClass("hidden")) {
+	if (expinfo.params) {
 	    var bindings  = expinfo.params;
 	    var paramdefs = expinfo.paramdefs;
 	    var html = GetBindingsTable(paramdefs, bindings);

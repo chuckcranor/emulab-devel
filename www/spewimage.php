@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2023 University of Utah and the Flux Group.
+# Copyright (c) 2003-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -140,10 +140,6 @@ if ($_SERVER['REQUEST_METHOD'] == "HEAD") {
 if ($fp = popen("$TBSUEXEC_PATH nobody $unix_pid,$unix_gid ".
 		"webspewimage $arg $headarg $rangearg -k $access_key $versid",
                 "r")) {
-    header("Content-Type: application/octet-stream");
-    header("Cache-Control: no-cache, must-revalidate");
-    header("Pragma: no-cache");
-
     $headers = array();
 
     #

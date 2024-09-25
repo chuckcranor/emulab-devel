@@ -28,6 +28,8 @@ BATCH=		yes
 RUN_DEPENDS+=	\
 	iocage:${PORTSDIR}/sysutils/iocage \
 	bulk_mailer:${PORTSDIR}/mail/bulk_mailer \
+	dovecot:${PORTSDIR}/mail/dovecot \
+	sievec:${PORTSDIR}/mail/dovecot-pigeonhole \
 	procmail:${PORTSDIR}/mail/procmail \
 	syncthing:${PORTSDIR}/net/syncthing \
 	telegraf:${PORTSDIR}/net-mgmt/telegraf \

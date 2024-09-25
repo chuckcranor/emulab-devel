@@ -43,9 +43,9 @@ use emutil;
 # Configure variables
 my $TB		  = "@prefix@";
 my $OURDOMAIN     = "@OURDOMAIN@";
-my $IDENTITY      = "https://node-0.rdz-dev.powderteam.emulab.net:8000/v1";
-my $ZMC           = "https://node-0.rdz-dev.powderteam.emulab.net:8010/v1";
-my $DST           = "https://node-0.rdz-dev.powderteam.emulab.net:8020/v1";
+my $IDENTITY      = "https://rdz.powderwireless.net:8000/v1";
+my $ZMC           = "https://rdz.powderwireless.net:8010/v1";
+my $DST           = "https://rdz.powderwireless.net:8020/v1";
 my $POWDERTOKEN   = "rpu_EQp0EKdSIR7LRiNfH0dUhdGo7kLXCbsJSbRe1OeUVr2G8u8RDH";
 my $CELONATOKEN   = "rpu_NQr447OzJIf7x6XguCWfZgsApwGsbvdQHzGz3D2m6fykO8paWI";
 my $TOKEN         = $POWDERTOKEN;

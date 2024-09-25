@@ -3583,9 +3583,9 @@ sub GenVirtLans($)
 
 	    #
 	    # We do not do link delays, but we do want to multiplex
-	    # these links. For now, use usevirtiface() as an indicator.
+	    # these links.
 	    #
-	    if ($vlan->usevirtiface()) {
+	    if ($emulated) {
 		$others->{'emulated'}   = 1;
 		# assign seems to require this, but it seems wrong.
 		$others->{'trivial_ok'} = 1;
