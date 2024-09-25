@@ -46,12 +46,14 @@ sub usage()
     print "Usage: rdz_expdaemon [-d] [-s] [-F] [-n]\n";
     exit(1);
 }
-my $optlist   = "dnsFN";
+my $optlist   = "dnsFNlL";
 my $debug     = 0;
 my $impotent  = 0;
 my $oneshot   = 0;
 my $fesonly   = 0;
 my $nofes     = 0;
+my $leebee    = 0;
+my $noleebee  = 0;
 # Processes that are running in the background, watching an RDZ experiment.
 my %watchers  = ();
 # The instances being watched.
@@ -115,6 +117,13 @@ if (defined($options{"F"})) {
 if (defined($options{"N"})) {
     $nofes = 1;
 }
+if (defined($options{"l"})) {
+    $leebee = 1;
+    $nofes  = 1;
+}
+if (defined($options{"L"})) {
+    $noleebee = 1;
+}
 
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
@@ -129,7 +138,7 @@ use APT_Instance;
 use APT_Profile;
 use APT_RDZ;
 
-if (! ($oneshot || $impotent)) {
+if (! ($oneshot || $impotent || $leebee)) {
     if (CheckDaemonRunning("rdz_expdaemon")) {
 	fatal("Not starting another rdz_expdaemon daemon!");
     }
@@ -206,7 +215,7 @@ while (1) {
 	sleep(5);
 	next;
     }
-    logit("Loop");
+    logit("Loop") if ($debug);
 
     #
     # Look to see if any Watchers have exited.
@@ -229,7 +238,10 @@ while (1) {
 		    "join apt_instance_rfranges as rf on rf.uuid=i.uuid ".
 		    "where i.canceled=0 and ".
 		    "      i.status!='failed' and ".
-		    "      rf.rdz_grantid is not null");
+		    "      rf.rdz_grantid is not null".
+		    ($leebee ? " and i.creator='leebee' " :
+		     ($noleebee ? " and i.creator!='leebee' " : "")));
+
     
     if (!$query_result) {
 	sleep(10);
@@ -270,7 +282,7 @@ sub Watcher($)
     }
     select(undef, undef, undef, 0.2);
     logit("Starting Watcher($PID) for $instance");
-    APT_RDZ::WatchExperiment($instance);
+    APT_RDZ::WatchExperiment($instance, $debug);
     exit(0);
 }
 
@@ -421,7 +433,7 @@ sub fatal($)
 		 $TBOPS);
     }
     MarkDaemonStopped("rdz_expdaemon")
-	if (! ($oneshot || $impotent));
+	if (! ($oneshot || $impotent || $leebee));
 
     die("*** $0:\n".
 	"    $msg\n");
