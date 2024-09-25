@@ -31,6 +31,7 @@ use Scalar::Util qw(blessed);
 use Socket;
 use Errno;
 use POSIX qw(:sys_wait_h);
+use Date::Parse;
 use Carp;
 use Exporter;
 use vars qw(@ISA @EXPORT);
@@ -43,6 +44,7 @@ use emdb;
 use emutil;
 use libtestbed;
 use APT_RDZRest;
+use GeniXML;
 
 # Configure variables
 my $TB		  = "@prefix@";
@@ -84,6 +86,18 @@ sub RequestSpectrum($$)
 	    return -1;
 	}
     }
+    #
+    # RDZ flags embedded in the rspec.
+    #
+    my $rdzflags   = GeniXML::GetRDZFlags($instance->RSPEC());
+    my $heartbeats = exists($rdzflags->{"heartbeats"});
+
+    # It is fine to do this now, it will not matter till the grants exist.
+    # Note that this needs to be a "set" update at some point
+    if ($heartbeats) {
+	$instance->Update({"rdz_flags" => "heartbeats"});
+    }
+    
     my $resources = $instance->_resources();
     if (!defined($resources)) {
 	my $perrmsg;
@@ -141,6 +155,7 @@ sub RequestSpectrum($$)
 		},
 	    ],
 	    "radio_ports" => \@radio_ports,
+	    "allow_skip_acks" => $heartbeats ? JSON::false : JSON::true,
 	};
 	if (defined($width) && $width != 0) {
 	    $request->{"constraints"}[0]->{"constraint"}->{'bandwidth'} = $width * 1000000;
@@ -406,9 +421,9 @@ my @EventTypeMap = [
 #
 # Watch an experiment. 
 #
-sub WatchExperiment($)
+sub WatchExperiment($$)
 {
-    my ($instance) = @_;
+    my ($instance, $debug) = @_;
     my $uuid       = $instance->uuid();
     my %grants     = ();
 
@@ -417,13 +432,27 @@ sub WatchExperiment($)
 	logit("WatchExperiment: No rfranges for $instance");
 	return 0;
     }
+    if (!defined($ZMC)) {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+	if (!defined($ZMC)) {
+	    logit("WatchExperiment: Cannot open the ZMC rest interface");
+	    return -1;
+	}
+    }
     foreach my $rfrange (values(%{$rfranges})) {
 	my $grant_id = $rfrange->rdz_grantid();
 	if (!$grant_id) {
 	    logit("WatchExperiment: No grant ID for $rfrange");
 	    next;
 	}
+	my $grant;
+	if ($ZMC->GET("/grants/$grant_id", \$grant)) {
+	    logit("WatchExperiment: Could not get grant ".
+		  "for $rfrange ($grant_id)");
+	    next;
+	}
 	$grants{$grant_id} = {
+	    "grant"     => $grant,
 	    "rfrange"   => $rfrange,
 	    # To avoid email blizzard. 
 	    "lastop"    => "",
@@ -451,28 +480,92 @@ sub WatchExperiment($)
     };
 
     #
+    # Send a heartbeat when required.
+    #
+    my $heartBeat = sub ()
+    {
+	my ($grant) = @_;
+	my $grant_id = $grant->{'id'};
+	my $status   = $grant->{'status'};
+	my $response;
+
+	logit("heartBeat: $grant_id, $status") if ($debug);
+
+	my $reply;
+	if ($status eq "active" || $status eq "paused") {
+	    $reply = $status;
+	}
+	elsif ($status eq "revoked" || $status eq "replacing") {
+	    $reply = "paused";
+	}
+	elsif ($status eq "deleted" || $status eq "denied") {
+	    $grant->{'status_ack_by'} = undef;
+	    return 0;
+	}
+	else {
+	    return 0;
+	}
+	my $heartbeat = {
+	    "op_status" => $reply,
+	    "message"   => "The beat goes on",
+	};
+	logit("Sending $reply heartbeat");
+	    
+	if ($ZMC->PUT("/grants/$grant_id/opstatus", $heartbeat, \$response)) {
+	    &$notify($grant, "heartbeat",
+		     "Could not put /grants/$grant_id/opstatus");
+	    return -1;
+	}
+	if ($response->{'status_ack_by'}) {
+	    my $nextack = $response->{'status_ack_by'};
+	    logit("Grant next heartbeat: " . TBDateStringLocal($nextack));
+	    # Update in the caller supplied grant object.
+	    $grant->{'status_ack_by'} = $nextack;
+	}
+	else {
+	    $grant->{'status_ack_by'} = undef;
+	}
+	return 0;
+    };
+
+    #
     # Call back for events and polls. 
     #
     my $callback = sub ()
     {
 	my ($type, $ref) = @_;
-	my $grant;
-	my $grant_id;
-	my $status;
+	my ($grant_id, $status, $nextack);
 	my $errmsg;
+
+	logit("Callback: $type") if ($debug);
+
+	#
+	# Check to see if any grants need a heartbeat.
+	#
+	if ($type eq "heartbeat") {
+	    foreach my $ref (values(%grants)) {
+		my $grant = $ref->{'grant'};
+		
+		next
+		    if ($grant->{"allow_skip_acks"} ||
+			!$grant->{'status_ack_by'});
+
+		my $nextack = str2time($grant->{'status_ack_by'});
+		next
+		    if ($nextack - time() > 10);
+
+		&$heartBeat($grant);
+	    }
+	    return 0;
+	}
 
 	if ($type eq "poll") {
 	    #
 	    # A poll of the grant.
 	    #
 	    $grant_id = $ref->{'id'};
-	    $grant    = $grants{$grant_id};
-
-	    if (!defined($grant)) {
-		logit("WatchExperiment: No grant for grant $grant_id!");
-		return;
-	    }
-	    $status = $ref->{'status'};
+	    $status   = $ref->{'status'};
+	    $nextack  = $ref->{'status_ack_by'};
 	    # Fall through to below to handle change in grant status.
 	}
 	else {
@@ -484,17 +577,19 @@ sub WatchExperiment($)
 	    if (! ($code == 2006 && $source == 2)) {
 		logit("WatchExperiment: Unknown event:");
 		logit(Dumper($ref));
+		return 0;
 	    }
-	    $status   = $ref->{'object'}->{'status'};
 	    $grant_id = $ref->{'object'}->{'id'};
-	    $grant  = $grants{$grant_id};
-
-	    if (!defined($grant)) {
-		logit("WatchExperiment: No grant for grant $grant_id!");
-		return;
-	    }
+	    $status   = $ref->{'object'}->{'status'};
+	    $nextack  = $ref->{'object'}->{'status_ack_by'};
 	    # Fall through to below to handle change in grant status.
 	}
+	my $grant = $grants{$grant_id};
+	if (!defined($grant)) {
+	    logit("WatchExperiment: No grant for grant $grant_id!");
+	    return 0;
+	}
+	
 	my $rfrange = $grant->{'rfrange'};
 	$rfrange->Refresh();
 	my $rdz_status = $rfrange->rdz_status() || "";
@@ -503,9 +598,22 @@ sub WatchExperiment($)
 	}
 	logit("WatchExperiment($PID): Grant $grant_id status change: ".
 	      "$rdz_status -> $status");
+
+	#
+	# Might need to send a heartbeat to ack a change in status.
+	#
+	my $beats  = $grant->{"grant"}->{"allow_skip_acks"} ? 0 : 1;
+	if ($beats && $nextack) {
+	    logit("WatchExperiment($PID): Grant $grant_id next heartbeat: ".
+		  TBDateStringLocal($nextack));
+	}
+	$rfrange->Update({"rdz_status" => $status});
+	$grant->{'grant'}->{'status'} = $status;
+	if ($beats && $nextack) {
+	    &$heartBeat($grant->{'grant'});
+	}
 	
 	if ($status eq "revoked") {
-	    logit("WatchExperiment: Grant $grant_id revoked");
 	    $instance->Refresh();
 	    #
 	    # Sledge hammer for now. 
@@ -536,7 +644,7 @@ sub WatchExperiment($)
 	    $grant->{'lastop'}    = "";
 	    $grant->{'lastemail'} = 0;
 	}
-	$rfrange->Update({"rdz_status" => $status});
+	return 0;
     };
     
     #
@@ -549,7 +657,7 @@ sub WatchExperiment($)
 	#
 	while (1) {
 	    logit("WatchExperiment($PID): (re)starting event stream for $instance");
-	    if (WatchGrants($callback, keys(%grants)) < 0) {
+	    if (WatchGrants($callback, [keys(%grants)]) < 0) {
 		exit(-1);
 	    }
 	    sleep(5);
@@ -595,13 +703,12 @@ sub WatchExperiment($)
 #
 # Watch grants in an experiment.
 #
-sub WatchGrants($$)
+sub WatchGrants($$;$)
 {
-    my ($callback, @ids) = @_;
-    my $grant_ids   = \@ids;
-    my $debug       = 0;
+    my ($callback, $grant_ids, $debug) = @_;
     my $rval        = 0;
     my $response;
+    $debug = 0 if (!defined($debug));
     
     # IO::Socket::SSL lets us open encrypted (wss) connections
     require IO::Socket::SSL;
@@ -678,7 +785,7 @@ sub WatchGrants($$)
 	    my $client = shift;
 	    my ($buf) = @_;
 
-	    logit("Received from WebSocket: '$buf'") if ($debug);
+	    logit("Received from WebSocket: '$buf'") if ($debug > 1);
 
 	    my $ref = eval { decode_json($buf); };
 	    if ($@) {
@@ -695,6 +802,7 @@ sub WatchGrants($$)
 	    logit("Successfully connected to service") if ($debug);
 
 	    $socket->setsockopt(SOL_SOCKET, SO_KEEPALIVE, 1);
+	    # This timeout needs to be short for heartbeats.
 	    $socket->setsockopt(SOL_SOCKET, SO_RCVTIMEO, pack('l!l!', 5, 0));
 	},
 	# This can happen if the handshake fails for whatever reason.
@@ -728,7 +836,7 @@ sub WatchGrants($$)
     $client->connect;
 
     # Poll the grants if we go too long without an event.
-    my $pollTimeout = 60; # seconds
+    my $pollTimeout = ($debug ? 10 : 60); # seconds
     my $lastPoll    = time();
     my $pollGrants  = sub () {
 	foreach my $grant_id (@$grant_ids) {
@@ -752,6 +860,11 @@ sub WatchGrants($$)
 	if (!defined($cc)) {
 	    if ($!{EWOULDBLOCK}) {
 		logit("WatchGrants: read timeout") if ($debug);
+
+		#
+		# Call up to handle hearbeats.
+		#
+		&$callback("heartbeat", undef);
 
 		if (time() - $lastPoll > $pollTimeout) {
 		    &$pollGrants();

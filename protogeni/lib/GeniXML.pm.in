@@ -2090,5 +2090,20 @@ sub GetBusRoutes($)
     return \@result;
 }
 
+sub GetRDZFlags($)
+{
+    my ($ref)  = @_;
+    my $result = {};
+    
+    foreach my $element (FindNodesNS("n:rdz-options", $ref,
+				     $EMULAB_NS)->get_nodelist()) {
+	my @attributes = $element->attributes();
+	foreach my $attribute (@attributes) {
+	    $result->{$attribute->name} = $attribute->value;
+	}
+    }
+    return $result;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;
