@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2004-2012 University of Utah and the Flux Group.
+# Copyright (c) 2004-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -473,7 +473,7 @@ if (count($channels)) {
     echo "<table align=center border=2 cellpadding=0 cellspacing=2>
  	  <tr><th>Floor</th><th>Channels in Use</th></tr>\n";
     
-    while (list($floor, $chanlist) = each($channels)) {
+    foreach ($channels as $floor => $chanlist) {
 	echo "<tr><td>$floor</td>\n";
 	echo "    <td>";
 

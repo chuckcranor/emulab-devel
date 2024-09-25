@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -218,7 +218,7 @@ function SPITFORM($node_type, $formfields, $attributes, $deletes, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
 	    echo "<tr>
                      <td align=right>
                        <font color=red>$name:&nbsp;</font></td>
@@ -403,7 +403,7 @@ function SPITFORM($node_type, $formfields, $attributes, $deletes, $errors)
            <td align=center><font size=-1>Delete?</font></td>
            <td align=center colspan=2><b>Node Attributes</b></td></tr>\n";
 
-    while (list ($key, $val) = each ($attributes)) {
+    foreach ($attributes as $key => $val) {
 	if (!isset($deletes[$key])) {
 	    # Somehow this doesn't get initialized in the Create Node case.
 	    $deletes[$key] = "";
@@ -628,7 +628,7 @@ if (count($default_imagesids) > 0) {
 }
 
 # Check the attributes.
-while (list ($key, $val) = each ($attributes)) {
+foreach ($attributes as $key => $val) {
     # Skip checks if scheduled for deletion
     if (isset($deletes[$key]) && $deletes[$key] == "checked") 
 	continue;
@@ -816,7 +816,7 @@ function SetNodeType($node_type, $restricted, $args, &$errors) {
     fwrite($fp, "<nodetype>\n");
     foreach ($args as $name => $value) {
 	fwrite($fp, "<attribute name=\"$name\">");
-	fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	fwrite($fp, "</attribute>\n");
     }
     fwrite($fp, "</nodetype>\n");

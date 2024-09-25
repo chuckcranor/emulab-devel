@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005, 2006, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2005-2007, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -137,7 +137,7 @@ my $user_dbid = $target_user->dbid();
 #
 my $query_result =
     DBQueryFatal("select p.pid,p.trust from group_membership as p ".
-		 "left join groups as g on g.pid=p.pid and g.gid=p.gid ".
+		 "left join `groups` as g on g.pid=p.pid and g.gid=p.gid ".
 		 "where uid_idx='$user_dbid' and p.pid=g.gid and ".
 		 "      trust!='none'");
 

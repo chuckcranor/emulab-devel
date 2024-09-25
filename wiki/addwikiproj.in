@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005, 2006 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2006, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -128,7 +128,7 @@ else {
 # we use that. Otherwise have to form one from the pid. Ick.
 #
 my $query_result =
-    DBQueryFatal("select wikiname from groups where pid='$pid' and pid=gid");
+    DBQueryFatal("select wikiname from `groups` where pid='$pid' and pid=gid");
 
 if (!$query_result->numrows) {
     fatal("No such pid $pid in the DB!");
@@ -169,7 +169,7 @@ if (!defined($wikiname)) {
     # anyway.
     #
     $query_result =
-	DBQueryFatal("select pid from groups ".
+	DBQueryFatal("select pid from `groups` ".
 		     "where wikiname='$wikiname'");
 
     if ($query_result->numrows) {
@@ -177,7 +177,7 @@ if (!defined($wikiname)) {
     }
     print "Selecting wikiname '$wikiname' for project $pid\n";
 
-    DBQueryFatal("update groups set wikiname='$wikiname' ".
+    DBQueryFatal("update `groups` set wikiname='$wikiname' ".
 		 "where pid='$pid' and pid=gid");
 }
 

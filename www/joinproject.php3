@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -145,7 +145,7 @@ function SPITFORM($formfields, $returning, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
             # XSS prevention.
 	    $message = CleanString($message);
 	    echo "<tr>
@@ -158,7 +158,7 @@ function SPITFORM($formfields, $returning, $errors)
 	echo "</table><br>\n";
     }
     # XSS prevention.
-    while (list ($key, $val) = each ($formfields)) {
+    foreach ($formfields as $key => $val) {
 	$formfields[$key] = CleanString($val);
     }
     if (isset($nopidokay)) {
@@ -859,7 +859,7 @@ if ($nopidconfirm) {
     # Send all of their stuff along.
     #
     reset($formfields);
-    while (list($key, $value) = each($formfields)) {
+    foreach ($formfields as $key => $value) {
 	if ($key != "nopidokay") {
 	    echo "<input type=hidden name=\"formfields[$key]\" ".
 		"value=\"$value\"></input>\n";

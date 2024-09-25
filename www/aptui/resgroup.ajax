@@ -394,7 +394,7 @@ function Do_Reserve()
 	return;
     }
     # If any part of the reservation is approved, not allowed to expand.
-    if ($resgroup && $resgroup->PartiallyApproved() && !ISADMIN()) {
+    if (isset($resgroup) && $resgroup->PartiallyApproved() && !ISADMIN()) {
         $current_start = strtotime($resgroup->start());
         $current_end   = strtotime($resgroup->end());
 
@@ -1428,7 +1428,6 @@ function Do_FindFirstFit()
     fwrite($fp, json_encode($blob));
     fclose($fp);
     chmod($resgroupfile, 0666);
-    $args .= " $resgroupfile";
 
     $retval = SUEXEC($this_uid, $pid,
                      "webmanage_resgroup -d -t " . $webtask->task_id() . " ".

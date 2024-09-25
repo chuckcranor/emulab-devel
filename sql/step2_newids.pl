@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2006-2008 University of Utah and the Flux Group.
+# Copyright (c) 2006-2008, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -158,12 +158,12 @@ if (! TableChanged("projects", "head_idx")) {
 UpdateTable("projects", "head_idx", "head_uid");
 
 # Groups table.
-if (! TableChanged("groups", "leader_idx")) {
-    DBQueryFatal("alter table groups add ".
+if (! TableChanged("`groups`", "leader_idx")) {
+    DBQueryFatal("alter table `groups` add ".
 		 "  leader_idx mediumint(8) unsigned NOT NULL default '0' ".
 		 "after leader");
 }
-UpdateTable("groups", "leader_idx", "leader");
+UpdateTable("`groups`", "leader_idx", "leader");
 
 # experiments table
 if (! TableChanged("experiments", "creator_idx")) {

@@ -197,11 +197,11 @@ if ($cancopy) {
 
     # Need to convert to list without groups.
     $plist = array();
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $unused) {
         $plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";
-    echo htmlentities(json_encode($plist));
+    echo htmlentities(json_encode($plist), ENT_COMPAT);
     echo "</script>\n";
 }
 echo "<script src='js/lib/codemirror-min.js'></script>\n";

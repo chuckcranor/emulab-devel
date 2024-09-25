@@ -38,7 +38,7 @@ class ReservationGroup
     #
     # Constructor by lookup by urn
     #
-    function ReservationGroup($uuid, $history = 0) {
+    function __construct($uuid, $history = 0) {
 	$safe_uuid = addslashes($uuid);
 
 	$query_result =
@@ -105,7 +105,7 @@ class ReservationGroup
     }
 
     # Lookup up by uuid,
-    function Lookup($uuid, $history = 0) {
+    public static function Lookup($uuid, $history = 0) {
 	$foo = new ReservationGroup($uuid, $history);
 
 	if ($foo->IsValid()) {
@@ -115,7 +115,7 @@ class ReservationGroup
     }
 
     # Lookup for a user.
-    function LookupForUser($user, $history = 0)
+    public static function LookupForUser($user, $history = 0)
     {
         $uid_idx = $user->uid_idx();
         $result = array();
@@ -135,7 +135,7 @@ class ReservationGroup
     }
 
     # Lookup for a project.
-    function LookupForProject($project, $history = 0)
+    public static function LookupForProject($project, $history = 0)
     {
         $pid_idx = $project->pid_idx();
         $result = array();
@@ -155,7 +155,7 @@ class ReservationGroup
     }
 
     # Lookup all (admin)
-    function LookupAll($history = 0)
+    public static function LookupAll($history = 0)
     {
         $result = array();
         
@@ -177,7 +177,7 @@ class ReservationGroup
     #
     # Lookup group by a member of the group
     #
-    function LookupByMemberReservation($remote_uuid)
+    public static function LookupByMemberReservation($remote_uuid)
     {
         $safe_uuid = addslashes($remote_uuid);
         
@@ -472,7 +472,7 @@ class ReservationGroup
     # reservations in all of the projects a user is a member of.
     # Only care about cluster reservations.
     #
-    function ReservationInfo($projlist, $user)
+    public static function ReservationInfo($projlist, $user)
     {
         $current = array();
         $future  = array();
@@ -480,7 +480,7 @@ class ReservationGroup
         $thisuid = $user->uid();
         global $TB_PROJECT_CREATEEXPT;
 
-        while (list($pid) = each($projlist)) {
+	foreach ($projlist as $pid => $unused) {
             $pidlist[] = "'" . $pid . "'";
         }
         $pidlist = join(",", $pidlist);
@@ -547,7 +547,7 @@ class ReservationGroupReservation
     #
     # Constructor to lookup a single reservation in a group.
     #
-    function ReservationGroupReservation($group, $urn, $type, $history = 0) {
+    function __construct($group, $urn, $type, $history = 0) {
 	$uuid = $group->uuid();
         $safe_urn  = addslashes($urn);
         $safe_type = addslashes($type);
@@ -594,7 +594,7 @@ class ReservationGroupReservation
 	return !is_null($this->reservation);
     }
 
-    function Lookup($group, $urn, $type, $history = 0) {
+    public static function Lookup($group, $urn, $type, $history = 0) {
 	$foo = new ReservationGroupReservation($group, $urn, $type, $history);
 
 	if ($foo->IsValid()) {
@@ -625,7 +625,7 @@ class ReservationGroupReservation
     #
     # Lookup all reservations for a group
     #
-    function LookupForGroup($group, $history = 0) {
+    public static function LookupForGroup($group, $history = 0) {
         $result = array();
         $uuid   = $group->uuid();
 
@@ -659,7 +659,7 @@ class ReservationGroupRFReservation
     #
     # Constructor to lookup a single reservation in a group.
     #
-    function ReservationGroupRFReservation($group, $freq_uuid, $history = 0) {
+    function __construct($group, $freq_uuid, $history = 0) {
 	$uuid = $group->uuid();
         $safe_uuid  = addslashes($freq_uuid);
 
@@ -696,7 +696,7 @@ class ReservationGroupRFReservation
 	return !is_null($this->reservation);
     }
 
-    function Lookup($group, $uuid, $history = 0) {
+    public static function Lookup($group, $uuid, $history = 0) {
 	$foo = new ReservationGroupRFReservation($group, $uuid, $history);
 
 	if ($foo->IsValid()) {
@@ -708,7 +708,7 @@ class ReservationGroupRFReservation
     #
     # Lookup all reservations for a group
     #
-    function LookupForGroup($group, $history = 0) {
+    public static function LookupForGroup($group, $history = 0) {
         $result = array();
         $uuid   = $group->uuid();
 
@@ -738,8 +738,7 @@ class ReservationGroupRouteReservation
     #
     # Constructor to lookup a single reservation in a group.
     #
-    function ReservationGroupRouteReservation($group, $route_uuid,
-                                              $history = 0) {
+    function __construct($group, $route_uuid, $history = 0) {
 	$uuid = $group->uuid();
         $safe_uuid  = addslashes($route_uuid);
 
@@ -776,7 +775,7 @@ class ReservationGroupRouteReservation
 	return !is_null($this->reservation);
     }
 
-    function Lookup($group, $uuid, $history = 0) {
+    public static function Lookup($group, $uuid, $history = 0) {
 	$foo = new ReservationGroupRouteReservation($group, $uuid, $history);
 
 	if ($foo->IsValid()) {
@@ -788,7 +787,7 @@ class ReservationGroupRouteReservation
     #
     # Lookup all reservations for a group
     #
-    function LookupForGroup($group, $history = 0) {
+    public static function LookupForGroup($group, $history = 0) {
         $result = array();
         $uuid   = $group->uuid();
 

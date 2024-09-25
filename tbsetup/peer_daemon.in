@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2019 University of Utah and the Flux Group.
+# Copyright (c) 2009-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -292,7 +292,7 @@ sub ExportGroups()
     #
     while (my ($pid,$pid_idx,$peer) = $projects_result->fetchrow_array()) {
 	my $groups_result =
-	    DBQueryWarn("select g.gid,g.gid_idx,g.leader_idx from groups as g ".
+	    DBQueryWarn("select g.gid,g.gid_idx,g.leader_idx from `groups` as g ".
 			"left join group_exports as e on ".
 			"     e.pid_idx=g.pid_idx and e.gid_idx=g.gid_idx ".
 			"where g.pid_idx='$pid_idx' and e.gid_idx is null");

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,8 +50,8 @@ $to_wiki = array(
 #
 $fh = @fopen("$docname", "r");
 if (!$fh) {
-    if (isset ($to_wiki{$docname})) {
-      $wikiname = $to_wiki{$docname};
+    if (isset ($to_wiki[$docname])) {
+      $wikiname = $to_wiki[$docname];
       header("Location: $WIKIDOCURL/$wikiname", TRUE, 301);
       return 0;
     } else {

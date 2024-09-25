@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -141,7 +141,7 @@ function FormRenderRadio($name, $attrs)
 {
     $html = "";
     
-    while (list ($subname, $subattrs) = each ($attrs['#radios'])) {
+    foreach ($attrs['#radios'] as $subname => $subattrs) {
 	$html .= "<input type=radio name=\"formfields[$name]\" ";
 	if (isset($attrs['#class'])) {
 	    $html .= "class=\"" . $attrs['#class'] . "\" ";
@@ -261,7 +261,7 @@ function FormRenderTextArea($name, $attrs)
     }
     $html .= ">";
     if (isset($attrs['#value'])) {
-	$html .= htmlspecialchars($attrs['#value']);
+	$html .= htmlspecialchars($attrs['#value'], ENT_COMPAT);
     }
     $html .= "</textarea>\n";
     return $html;
@@ -333,7 +333,7 @@ function FormRenderList($name, $attributes, $submitted)
 {
     $html = "";
     
-    while (list ($subname, $subattrs) = each ($attributes['#elements'])) {
+    foreach ($attributes['#elements'] as $subname => $subattrs) {
 	if ($submitted && array_key_exists($subname, $submitted)) {
 	    $subattrs['#value'] = $submitted[$subname];
 	}
@@ -350,7 +350,7 @@ function FormRenderVList($name, $attributes, $submitted)
 {
     $html = "";
     
-    while (list ($subname, $subattrs) = each ($attributes['#elements'])) {
+    foreach ($attributes['#elements'] as $subname => $subattrs) {
 	if ($submitted && array_key_exists($subname, $submitted)) {
 	    $subattrs['#value'] = $submitted[$subname];
 	}
@@ -401,7 +401,7 @@ function FormRenderElement($name, $attributes, $submitted)
 	$field_html = FormRenderFile($name, $attributes);
 	break;
     case "checkboxes":
-	while (list ($subname, $subattrs) = each ($attributes['#boxes'])) {
+	foreach ($attributes['#boxes'] as $subname => $subattrs) {
 	    if ($submitted && array_key_exists($subname, $submitted)) {
 		$subattrs['#value'] = $submitted[$subname];
 	    }
@@ -519,7 +519,7 @@ function FormRenderMouseOver($string)
 {
     $string = str_replace("\n", "<br>", $string);
     $string = str_replace("\r", "", $string);
-    $string = htmlentities($string);
+    $string = htmlentities($string, ENT_COMPAT);
     $string = preg_replace("/\'/", "\&\#039;", $string);
 
     return "onmouseover=\"return escape('$string')\"";
@@ -556,7 +556,7 @@ function FormRender($attributes, $errors, $fields, $submitted = null)
 	$html .= "&nbsp;Oops, please fix the following errors!&nbsp;";
 	$html .= "</font></td></tr>\n";
 	
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
 	    $html .= "<tr><td align=right>";
 	    $html .= "<font color=red>$name:&nbsp;</font></td>";
 	    $html .= "<td align=left><font color=red>$message</font></td>";
@@ -684,7 +684,7 @@ function FormValidate($form, &$errors, $fields, &$submitted, $parent_label = '')
 	    FormValidateElement($name, $errors, $attributes, $submitted, $parent_label);
 	    break;
 	case "checkboxes":
-	    while (list ($subname, $subattrs) = each ($attributes['#boxes'])) {
+	    foreach ($attributes['#boxes'] as $subname => $subattrs) {
 		FormValidateElement($subname, $errors, $subattrs, $submitted,
 		                    CombineLabels($parent_label, $attributes));
 	    }
@@ -695,8 +695,7 @@ function FormValidate($form, &$errors, $fields, &$submitted, $parent_label = '')
 	    break;
 	case "list":
         case "vlist":
-	    while (list ($subname, $subattrs) =
-		   each ($attributes['#elements'])) {
+	    foreach ($attributes['#elements'] as $subname => $subattrs) {
 		FormValidateElement($subname, $errors, $subattrs, $submitted,
                                     CombineLabels($parent_label, $attributes));
 	    }
@@ -756,7 +755,7 @@ function FormTextDump($form, $fields, $values, $label_width = 20, $parent_label 
                                         $label_width, $parent_label);
 	    break;
 	case "checkboxes":
-	    while (list ($subname, $subattrs) = each ($attributes['#boxes'])) {
+	    foreach ($attributes['#boxes'] as $subname => $subattrs) {
 		FormTextDumpElement($subname, $subattrs, $values, $label_width,
 		                    CombineLabels($parent_label, $attributes));
 	    }
@@ -767,8 +766,7 @@ function FormTextDump($form, $fields, $values, $label_width = 20, $parent_label 
 	    break;
 	case "list":
 	case "vlist":
-	    while (list ($subname, $subattrs) =
-		   each ($attributes['#elements'])) {
+	    foreach ($attributes['#elements'] as $subname => $subattrs) {
 		$res .= FormTextDumpElement($subname, $subattrs, $values, $label_width,
                                             CombineLabels($parent_label, $attributes));
 	    }

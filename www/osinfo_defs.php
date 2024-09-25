@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,8 +29,8 @@ class OSinfo
     #
     # Constructor by lookup on unique ID
     #
-    function OSinfo($id, $version = NULL) {
-	if (is_null($version)) {
+    function __construct($id, $version = NULL) {
+	if (is_null($version) && strpos($id, ":")) {
 	    list($id,$version) = preg_split('/:/', $id);
 	}
 	$safe_id = addslashes($id);
@@ -64,7 +64,7 @@ class OSinfo
     }
 
     # Lookup by osid
-    function Lookup($id, $version = NULL) {
+    public static function Lookup($id, $version = NULL) {
 	$foo = new OSinfo($id, $version);
 
 	if (! $foo->IsValid())
@@ -74,7 +74,7 @@ class OSinfo
     }
 
     # Lookup by osname in a project. This returns the newest version.
-    function LookupByName($project, $name) {
+    public static function LookupByName($project, $name) {
 	if (is_a($project, "Project")) {
 	    $pid = $project->pid();
 	}
@@ -119,7 +119,7 @@ class OSinfo
     #
     # Class function to create new osid and return object.
     #
-    function NewOSID($user, $project, $osname, $args, &$errors) {
+    public static function NewOSID($user, $project, $osname, $args, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -144,7 +144,7 @@ class OSinfo
 	fwrite($fp, "<osid>\n");
 	foreach ($args as $name => $value) {
 	    fwrite($fp, "<attribute name=\"$name\">");
-	    fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	    fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	    fwrite($fp, "</attribute>\n");
 	}
 	fwrite($fp, "</osid>\n");

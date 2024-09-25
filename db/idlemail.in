@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -181,6 +181,10 @@ my $eid = shift || "";
 # Set up syslog
 openlog("idlemail", "pid", $TBLOG)
     if (!($d || $i));
+
+# XXX lots of non-compliant "group by"s going on here...
+DBQueryWarn("SET SESSION sql_mode=(SELECT REPLACE(\@\@sql_mode,".
+	    "'ONLY_FULL_GROUP_BY',''))");
 
 if ($pid eq "" || $eid eq "") {
     # Normal mode

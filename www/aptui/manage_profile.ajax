@@ -165,7 +165,7 @@ function Do_Create()
         $errors["profile_pid"] = "Not enough permission in project";
     }
     elseif (($action == "create" || $action == "clone") && 
-            Profile::LookupByName($project, $formfields{"profile_name"})) {
+            Profile::LookupByName($project, $formfields["profile_name"])) {
         $errors["profile_name"] = "Already in use";
     }
     
@@ -250,17 +250,17 @@ function Do_Create()
         fwrite($fp, "</attribute>\n");
         fwrite($fp, "<attribute name='profile_name'>");
         fwrite($fp, "  <value>" .
-               htmlspecialchars($formfields["profile_name"]) . "</value>");
+               htmlspecialchars($formfields["profile_name"], ENT_COMPAT) . "</value>");
         fwrite($fp, "</attribute>\n");
         if (isset($rspec)) {
             fwrite($fp, "<attribute name='rspec'>");
-            fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
+            fwrite($fp, "  <value>" . htmlspecialchars($rspec, ENT_COMPAT) . "</value>");
             fwrite($fp, "</attribute>\n");
         }
         if (isset($script)) {
             fwrite($fp, "<attribute name='script'>");
             fwrite($fp, "  <value>" .
-                   htmlspecialchars($script) . "</value>");
+                   htmlspecialchars($script, ENT_COMPAT) . "</value>");
             fwrite($fp, "</attribute>\n");
             if (isset($portal_converted)) {
                 $pcon = ($portal_converted ? 1 : 0);
@@ -273,7 +273,7 @@ function Do_Create()
             $formfields["profile_repourl"] != "") {
             fwrite($fp, "<attribute name='repourl'>");
             fwrite($fp, "  <value>" .
-                   htmlspecialchars($formfields["profile_repourl"]) .
+                   htmlspecialchars($formfields["profile_repourl"], ENT_COMPAT) .
                    "</value>");
             fwrite($fp, "</attribute>\n");
         }
@@ -924,7 +924,7 @@ function Do_BindParameters()
 {
     global $this_user;
     global $ajax_args;
-    global $DEFAULT_AGGREGATE;
+    global $DEFAULT_AGGREGATE, $ISCLOUD;
     global $suexec_output, $suexec_output_array;
     $runopts = "";
 
@@ -1118,7 +1118,7 @@ function CheckBindingType($value, $type, &$error)
 function CheckBinding($definition, &$binding, &$errors)
 {
     $type    = $definition["type"];
-    $mvalue  = $definition["multiValue"];
+    $mvalue  = (isset($definition["multiValue"]) ? $definition["multiValue"] : null);
     $error   = null;
     $count   = count($errors);
 
@@ -1159,7 +1159,7 @@ function Do_CheckForm($formfields, $paramdefs, &$rval)
         }
         $def     = $fields[$name];
         $type    = $def["type"];
-        $mvalue  = $def["multiValue"];
+        $mvalue  = isset($def["multiValue"]) ? $def["multiValue"] : 0;
         $error   = null;
 
         if ($type == "pubkey") {
@@ -1613,16 +1613,16 @@ function UpdateMaster($profile, $script, $rspec)
     fwrite($fp, "</attribute>\n");
     fwrite($fp, "<attribute name='profile_name'>");
     fwrite($fp, "  <value>" .
-	   htmlspecialchars($profile->name()) . "</value>");
+	   htmlspecialchars($profile->name(), ENT_COMPAT) . "</value>");
     fwrite($fp, "</attribute>\n");
     if ($rspec) {
         fwrite($fp, "<attribute name='rspec'>");
-        fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
+        fwrite($fp, "  <value>" . htmlspecialchars($rspec, ENT_COMPAT) . "</value>");
         fwrite($fp, "</attribute>\n");
     }
     if ($script) {
 	fwrite($fp, "<attribute name='script'>");
-	fwrite($fp, "  <value>" . htmlspecialchars($script) . "</value>");
+	fwrite($fp, "  <value>" . htmlspecialchars($script, ENT_COMPAT) . "</value>");
 	fwrite($fp, "</attribute>\n");
     }
     fwrite($fp, "</profile>\n");

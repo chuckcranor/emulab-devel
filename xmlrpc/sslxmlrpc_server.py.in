@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2005-2023 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -383,7 +383,7 @@ class MyServer(ForkingTCPServer, SimpleXMLRPCDispatcher):
     def getusergroups(self, uid_idx):
         res = DBQueryFatal("select distinct g.pid,g.unix_gid,date_approved "
                            "  from group_membership as m "
-                           "left join groups as g on "
+                           "left join `groups` as g on "
                            "  g.pid_idx=m.pid_idx and g.gid_idx=m.gid_idx "
                            "where m.uid_idx=%s "
                            "order by date_approved asc ",

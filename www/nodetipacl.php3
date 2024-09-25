@@ -110,8 +110,8 @@ if ($ELABINELAB) {
     $results = XMLRPC($uid, "nobody", "elabinelab.console", $arghash);
 
     if (!$results ||
-	! (isset($results{'server'})  && isset($results{'portnum'}) &&
-	   isset($results{'keydata'}) && isset($results{'certsha'}))) {
+	! (isset($results['server'])  && isset($results['portnum']) &&
+	   isset($results['keydata']) && isset($results['certsha']))) {
 	TBERROR("Did not get everything we needed from RPC call", 1);
     }
 
@@ -119,7 +119,7 @@ if ($ELABINELAB) {
     $portnum = $results['portnum'];
     $keydata = $results['keydata'];
     $keylen  = strlen($keydata);
-    $certhash= strtolower($results{'certsha'});
+    $certhash= strtolower($results['certsha']);
 }
 else {
 

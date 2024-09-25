@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,7 +59,7 @@ if (mysql_num_rows($query_result) != 0) {
   $row = mysql_fetch_array($query_result);
   echo "<h2>$row[cause_desc]</h2>\n";
   echo "<pre>\n";
-  echo htmlspecialchars($row["mesg"])."\n";
+  echo htmlspecialchars($row["mesg"], ENT_COMPAT)."\n";
   echo "\n";
   echo "Cause: $row[cause]\n";
   echo "Confidence: $row[confidence]\n";

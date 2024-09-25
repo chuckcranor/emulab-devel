@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005, 2010 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2010, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -109,7 +109,7 @@ my %wikinames  = ();	# Indexed by wikiname.
 # First the projects. Only main group.
 #
 $query_result =
-    DBQueryFatal("select pid from groups where pid=gid ".
+    DBQueryFatal("select pid from `groups` where pid=gid ".
 #		 "and (pid='testbed' or pid='emulab-ops' or pid='tbres' or ".
 #		 "     pid='utahstud')" .
 		 "");
@@ -166,7 +166,7 @@ foreach my $pid (keys(%wikipids)) {
 	if ($debug);
 
     if (!$impotent) {
-	DBQueryFatal("update groups set wikiname='$wikiname' ".
+	DBQueryFatal("update `groups` set wikiname='$wikiname' ".
 		     "where pid='$pid' and pid=gid");
 
 	system("$ADDWIKIPROJ $pid") == 0

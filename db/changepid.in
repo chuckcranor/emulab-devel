@@ -153,7 +153,7 @@ DBQueryFatal("update group_membership set pid='$newpid',gid='$newpid' ".
 	     "where pid='$oldpid'");
 
 print "Updating groups table ...\n";
-DBQueryFatal("update groups set pid='$newpid',gid=pid,unix_name='$unix_gname' ".
+DBQueryFatal("update `groups` set pid='$newpid',gid=pid,unix_name='$unix_gname' ".
 	     "where pid='$oldpid'");
 
 print "Updating group_stats table ...\n";

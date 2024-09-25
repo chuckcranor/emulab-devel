@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -106,7 +106,7 @@ function SPITFORM($image, $formfields, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
             # XSS prevention.
 	    $message = CleanString($message);
 	    echo "<tr>
@@ -119,7 +119,7 @@ function SPITFORM($image, $formfields, $errors)
 	echo "</table><br>\n";
     }
     # XSS prevention.
-    while (list ($key, $val) = each ($formfields)) {
+    foreach ($formfields as $key => $val) {
 	$formfields[$key] = CleanString($val);
     }
 
@@ -576,8 +576,7 @@ if (count($errors)) {
 }
 
 # Send to the backend for more checking, and eventually, to update the DB.
-if (! ($result = Image::EditImageid($image,
-				 $args, $errors))) {
+if (! ($result = Image::EditImageid($image, $args, $errors))) {
     # Always respit the form so that the form fields are not lost.
     # I just hate it when that happens so lets not be guilty of it ourselves.
     SPITFORM($image, $formfields, $errors);

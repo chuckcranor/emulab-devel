@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2003 University of Utah and the Flux Group.
+# Copyright (c) 2000-2003,2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,7 @@ $ENV{'PATH'} = '/bin:/usr/bin:/usr/sbin';
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 $query_result =
-    DBQueryFatal("select pid,gid from groups");
+    DBQueryFatal("select pid,gid from `groups`");
 
 while (($pid,$gid) = $query_result->fetchrow_array()) {
     if ($pid eq $gid) {

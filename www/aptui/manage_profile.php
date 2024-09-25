@@ -153,10 +153,10 @@ function SPITFORM($formfields, $errors)
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
-    echo htmlentities(json_encode($formfields)) . "\n";
+    echo htmlentities(json_encode($formfields), ENT_COMPAT) . "\n";
     echo "</script>\n";
     echo "<script type='text/plain' id='error-json'>\n";
-    echo htmlentities(json_encode($errors));
+    echo htmlentities(json_encode($errors), ENT_COMPAT);
     echo "</script>\n";
 
     # Needed for genilib-editor
@@ -166,11 +166,11 @@ function SPITFORM($formfields, $errors)
 
     # Pass project list through. Need to convert to list without groups.
     $plist = array();
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $unused) {
         $plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";
-    echo htmlentities(json_encode($plist));
+    echo htmlentities(json_encode($plist), ENT_COMPAT);
     echo "</script>\n";
 
     if ($viewing) {
@@ -411,7 +411,7 @@ if (! isset($create)) {
             
             # Default the project if in only one project.
 	    if (count($projlist) == 1) {
-		list($project) = each($projlist);
+	        $project = key($projlist);
 		reset($projlist);
 		$defaults["profile_pid"] = $project;
 	    }
@@ -492,7 +492,7 @@ if (! isset($create)) {
     else {
 	# Default the project if in only one project.
 	if (count($projlist) == 1) {
-	    list($project) = each($projlist);
+	    $project = key($projlist);
 	    reset($projlist);
 	    $defaults["profile_pid"] = $project;
 	}

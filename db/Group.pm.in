@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2023 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -110,7 +110,7 @@ sub Lookup($$;$)
     #
     if (defined($arg2)) {
 	my $groups_result =
-	    DBQueryWarn("select gid_idx from groups ".
+	    DBQueryWarn("select gid_idx from `groups` ".
 			"where pid='$arg1' and gid='$arg2'");
 
 	return undef
@@ -124,7 +124,7 @@ sub Lookup($$;$)
         if (exists($groups{"$gid_idx"}));
     
     my $query_result =
-	DBQueryWarn("select * from groups where gid_idx='$gid_idx'");
+	DBQueryWarn("select * from `groups` where gid_idx='$gid_idx'");
 
     return undef
 	if (!$query_result || !$query_result->numrows);
@@ -180,7 +180,7 @@ sub Refresh($)
     my $gid_idx = $self->gid_idx();
     
     my $query_result =
-	DBQueryWarn("select * from groups where gid_idx=$gid_idx");
+	DBQueryWarn("select * from `groups` where gid_idx=$gid_idx");
 
     return -1
 	if (!$query_result || !$query_result->numrows);
@@ -219,7 +219,7 @@ sub Update($$)
 
     my $gid_idx = $self->gid_idx();
 
-    my $query = "update groups set ".
+    my $query = "update `groups` set ".
 	join(",", map("$_='" . $argref->{$_} . "'", keys(%{$argref})));
 
     $query .= " where gid_idx='$gid_idx'";
@@ -243,7 +243,7 @@ sub Create($$$$$$)
     # Check that we can guarantee uniqueness of the unix group name.
     # 
     my $query_result =
-	DBQueryFatal("select gid from groups ".
+	DBQueryFatal("select gid from `groups` ".
 		     "where unix_name='$unix_name'");
 
     if ($query_result->numrows) {
@@ -285,8 +285,8 @@ sub Create($$$$$$)
 	# but terrible for 1000s!
 	#
 	$query_result =
-	    DBQueryWarn("select g.unix_gid + 1 as start from groups as g ".
-			"left outer join groups as r on ".
+	    DBQueryWarn("select g.unix_gid + 1 as start from `groups` as g ".
+			"left outer join `groups` as r on ".
 			"  g.unix_gid + 1 = r.unix_gid ".
 			"where g.unix_gid>=$min_gid and ".
 			"      g.unix_gid<50000 and ".
@@ -325,7 +325,7 @@ sub Create($$$$$$)
 	return undef;
     }
 
-    if (!DBQueryWarn("insert into groups set ".
+    if (!DBQueryWarn("insert into `groups` set ".
 		     " pid='$pid', gid='$gid', ".
 		     " leader='" . $leader->uid() . "'," .
 		     " leader_idx='" . $leader->uid_idx() . "'," .
@@ -342,7 +342,7 @@ sub Create($$$$$$)
     if (! DBQueryWarn("insert into group_stats ".
 		      "  (pid, gid, gid_idx, pid_idx, gid_uuid) ".
 		      "values ('$pid','$gid',$gid_idx,$pid_idx,'$uuid')")) {
-	DBQueryFatal("delete from groups where gid_idx='$gid_idx'");
+	DBQueryFatal("delete from `groups` where gid_idx='$gid_idx'");
 	return undef;
     }
     my $newgroup = Group->Lookup($gid_idx);
@@ -366,7 +366,7 @@ sub Delete($)
     my $gid_idx = $self->gid_idx();
 
     # Order matters, groups table should be last so we can repeat if failure.
-    my @tables = ("group_policies", "group_stats", "groups");
+    my @tables = ("group_policies", "group_stats", "`groups`");
 
     foreach my $table (@tables) {
 	return -1
@@ -1413,7 +1413,7 @@ sub UpdateStats($$$$$)
 		"where gid_idx='$gid_idx'");
 
     if ($mode eq TBDB_STATS_SWAPIN() || $mode eq TBDB_STATS_START()) {
-	DBQueryWarn("update groups set ".
+	DBQueryWarn("update `groups` set ".
 		    " expt_last=now(),expt_count=expt_count+1 ".
 		    "where gid_idx='$gid_idx'");
     }

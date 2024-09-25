@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021, 2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -681,7 +681,7 @@ function VerifyPageArguments($argspec, $required)
 
                 # Pages never get arguments with special chars. Check.
 		if (preg_match("/[\'\"]/", $object)) {
-		    $object = htmlspecialchars($object);
+		    $object = htmlspecialchars($object, ENT_COMPAT);
 		    PAGEARGERROR("Invalid characters in '$name': $object");
 		}
 	    }
@@ -699,7 +699,7 @@ function VerifyPageArguments($argspec, $required)
                 #
                 if (!preg_match("/^[-\w\?\/\&\.=\+\:]+$/", $object)) {
                     error_log($object);
-		    $object = htmlspecialchars($object);
+		    $object = htmlspecialchars($object, ENT_COMPAT);
 		    PAGEARGERROR("Invalid characters in '$name': $object");
                 }
 	    }
@@ -711,7 +711,7 @@ function VerifyPageArguments($argspec, $required)
 		$yep = 1;
 
 		if (!ValidateArgument($name, PAGEARG_NODEID, $object)) {
-		    $object = htmlspecialchars($object);
+		    $object = htmlspecialchars($object, ENT_COMPAT);
 		    PAGEARGERROR("Invalid characters in '$name': $object");
 		}
 	    }

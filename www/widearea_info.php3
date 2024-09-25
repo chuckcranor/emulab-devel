@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2003, 2006, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -148,7 +148,7 @@ function SPITDATA($table, $title, $showtype, $plain)
                <tr>";
 	echo "   <td>&nbsp</td>\n";
 
-	while (list($n1, $ignore1) = each($nodenamescol)) {
+	foreach ($nodenamescol as $n1 => $ignore1) {
 	    echo "<td>$n1</td>\n";
 	}
 	reset($nodenamescol);
@@ -157,14 +157,14 @@ function SPITDATA($table, $title, $showtype, $plain)
     else {
 	printf("$title:\n");
 	printf("%10s ", " ");
-	while (list($n1, $ignore1) = each($nodenamescol)) {
+	foreach ($nodenamescol as $n1 => $ignore1) {
 	    printf("%10s ", $n1);
 	}
 	echo "\n";
 	reset($nodenamescol);
     }
 
-    while (list($n1, $ignore1) = each($nodenamesrow)) {
+    foreach ($nodenamesrow as $n1 => $ignore1) {
 	if (! $plain) {
 	    echo "<tr>";
 	    echo "  <td>$n1</td>";
@@ -173,7 +173,7 @@ function SPITDATA($table, $title, $showtype, $plain)
 	    printf("%10s ", "$n1");
 	}
     
-	while (list($n2, $ignore2) = each($nodenamescol)) {
+	foreach ($nodenamescol as $n2 => $ignore2) {
 	    if (strcmp($n1, $n2)) {
 		$s = -1;
 		$b = -1;

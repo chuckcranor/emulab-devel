@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -242,7 +242,7 @@ function SPITFORM($action, $instance, $formfields, $parameters, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
 	    echo "<tr>
                      <td align=right>
                        <font color=red>$name:&nbsp;</font></td>
@@ -276,18 +276,18 @@ function SPITFORM($action, $instance, $formfields, $parameters, $errors)
     echo "var instance_values = new Array();\n";
     echo "var lastrun_values  = new Array();\n";
     $i = 0;
-    while (list ($name, $value) = each ($formal_parameters)) {
+    foreach ($formal_parameters as $name => $value) {
 	echo "formal_names[$i] = '$name';\n";
 	echo "template_values[$i] = '$value';\n";
 	$i++;
     }
     $i = 0;
-    while (list ($name, $value) = each ($instance_parameters)) {
+    foreach ($instance_parameters as $name => $value) {
 	echo "instance_values[$i] = '$value';\n";
 	$i++;
     }
     $i = 0;
-    while (list ($name, $value) = each ($lastrun_parameters)) {
+    foreach ($lastrun_parameters as $name => $value) {
 	echo "lastrun_values[$i] = '$value';\n";
 	$i++;
     }
@@ -390,7 +390,7 @@ function SPITFORM($action, $instance, $formfields, $parameters, $errors)
 	echo "Previous Run</button>\n";
 	echo "</tr></table>\n";
 	
-	while (list ($name, $value) = each ($parameters)) {
+	foreach ($parameters as $name => $value) {
 	    if (!isset($value))
 		$value = "&nbsp";
 	    $mouseover = (isset($mouseovers[$name]) ? $mouseovers[$name] : "");
@@ -463,7 +463,7 @@ elseif (! isset($formfields)) {
     # Allow formfields that are already set to override defaults
     #
     if (isset($formfields)) {
-	while (list ($field, $value) = each ($formfields)) {
+	foreach ($formfields as $field => $value) {
 	    $defaults[$field] = $formfields[$field];
 	}
     }
@@ -551,7 +551,7 @@ if (count($parameter_masterlist)) {
 	# Lets confirm that the user did not forget to set at least one value. 
 	#
 	$gotone = 0;
-	while (list ($name, $default_value) = each ($parameter_masterlist)) {
+	foreach ($parameter_masterlist as $name => $default_value) {
 	    if (isset($parameters[$name]) && $parameters[$name] != "") {
 		$gotone = 1;
 	    }
@@ -577,7 +577,7 @@ if (count($parameter_masterlist)) {
 	    fwrite($fp, "<template_parameters>\n");
 
 	    reset($parameter_masterlist);
-	    while (list($name,$default_value) = each ($parameter_masterlist)) {
+	    foreach ($parameter_masterlist as $name => $default_value) {
 		if (isset($parameters[$name])) {
 		    $value = $parameters[$name];
 		}

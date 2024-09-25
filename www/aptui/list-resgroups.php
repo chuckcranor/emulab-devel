@@ -49,7 +49,7 @@ if ($all && !($isadmin || $isfadmin)) {
 # List of clusters so we have info in the page
 $ams     = Aggregate::SupportsReservations();
 $amlist  = array();
-while (list($index, $aggregate) = each($ams)) {
+foreach ($ams as $index => $aggregate) {
     $amlist[$aggregate->nickname()] = $aggregate->urn();
 }
 if (!count($amlist)) {
@@ -57,7 +57,7 @@ if (!count($amlist)) {
     exit();
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($amlist));
+echo htmlentities(json_encode($amlist), ENT_COMPAT);
 echo "</script>\n";
 
 echo "<link rel='stylesheet'

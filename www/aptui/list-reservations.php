@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -66,7 +66,7 @@ else {
     # List of clusters.
     $ams     = Aggregate::SupportsReservations();
     $amlist  = array();
-    while (list($index, $aggregate) = each($ams)) {
+    foreach ($ams as $index => $aggregate) {
         $amlist[$aggregate->nickname()] = $aggregate->urn();
     }
 }
@@ -75,7 +75,7 @@ if (!count($amlist)) {
     exit();
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($amlist));
+echo htmlentities(json_encode($amlist), ENT_COMPAT);
 echo "</script>\n";
 
 echo "<link rel='stylesheet'

@@ -47,7 +47,7 @@ class Profile
     #
     # Constructor by lookup on unique index.
     #
-    function Profile($token, $version = null) {
+    function __construct($token, $version = null) {
         $query_result = null;
         
 	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $token)) {
@@ -246,7 +246,7 @@ class Profile
     }
 
     # Lookup up a single profile by idx. 
-    function Lookup($token, $version = null) {
+    public static function Lookup($token, $version = null) {
 	$foo = new Profile($token, $version);
 
 	if ($foo->IsValid()) {
@@ -256,7 +256,7 @@ class Profile
 	return null;
     }
 
-    function LookupByName($project, $name, $version = null) {
+    public static function LookupByName($project, $name, $version = null) {
         if (is_object($project)) {
             $pid = $project->pid();
         }
@@ -340,7 +340,7 @@ class Profile
 	return 0;
     }
 
-    function UserHasProfiles($user) {
+    public static function UserHasProfiles($user) {
 	$uid = $user->uid();
 
 	$query_result =
@@ -669,7 +669,7 @@ class Profile
                          "where profile_id='$profile_id' ".
                          $userclause);
         $row = mysql_fetch_row($query_result);
-        if (!$row["started"]) {
+        if (!isset($row["started"])) {
             $query_result =
                 DBQueryFatal("select max(UNIX_TIMESTAMP(started)) as started ".
                              "  from apt_instance_history ".
@@ -677,7 +677,7 @@ class Profile
                              $userclause);
             $row = mysql_fetch_row($query_result);
         }
-        if (!$row["started"]) {
+        if (!isset($row["started"])) {
             return array(0, 0);
         }
         $lastused = $row[0];
@@ -781,16 +781,16 @@ class Profile
 	$formAdvanced = "";
 	$formGroups   = "";
 
-	while (list ($name, $val) = each ($fields)) {
+	foreach ($fields as $name => $val) {
 	    $form    = "";
 	    $type    = $val->type;
-	    $prompt  = $val->description;
+	    $prompt  = isset($val->description) ? $val->description : null;
 	    $defval  = $val->defaultValue;
-	    $options = $val->legalValues;
-	    $longhelp  = $val->longDescription;
-	    $advanced  = $val->advanced;
-	    $groupId   = $val->groupId;
-	    $groupName = $val->groupName;
+	    $options = isset($val->legalValues) ? $val->legalValues : null;
+	    $longhelp  = isset($val->longDescription) ? $val->longDescription : null;
+	    $advanced  = isset($val->advanced) ? $val->advanced : null;
+	    $groupId   = isset($val->groupId) ? $val->groupId : null;
+	    $groupName = isset($val->groupName) ? $val->groupName : null;
 	    $hasGroup = false;
 	    $data_help_string = "";
 	    $advanced_attr = "";

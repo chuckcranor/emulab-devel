@@ -42,7 +42,7 @@ class Aggregate
     #
     # Constructor by lookup by urn
     #
-    function Aggregate($urn) {
+    function __construct($urn) {
 	$safe_urn = addslashes($urn);
 
 	$query_result =
@@ -148,7 +148,7 @@ class Aggregate
     }
 
     # Lookup up by urn,
-    function Lookup($urn) {
+    public static function Lookup($urn) {
 	$foo = new Aggregate($urn);
 
 	if ($foo->IsValid()) {
@@ -157,7 +157,7 @@ class Aggregate
 	return null;
     }
 
-    function LookupByNickname($nickname) {
+    public static function LookupByNickname($nickname) {
 	$safe_nickname = addslashes($nickname);
 
 	$query_result =
@@ -175,7 +175,7 @@ class Aggregate
     #
     # Lookup using the short auth name (emulab.net).
     #
-    function LookupByDomain($domain) {
+    public static function LookupByDomain($domain) {
         if (! preg_match("/^[-\w\.]+$/", $domain)) {
             return null;
         }
@@ -194,7 +194,7 @@ class Aggregate
     #
     # Lookup using the name
     #
-    function LookupByName($name) {
+    public static function LookupByName($name) {
         if (! preg_match("/^[-\w\.]+$/", $name)) {
             return null;
         }
@@ -220,7 +220,7 @@ class Aggregate
     #
     # Return a list of aggregates supporting datasets.
     #
-    function SupportsDatasetsList() {
+    public static function SupportsDatasetsList() {
         global $PORTAL_GENESIS;
 	$result  = array();
 
@@ -251,7 +251,7 @@ class Aggregate
     #
     # Return a list of aggregates supporting reservations,
     #
-    function SupportsReservations($user = null) {
+    public static function SupportsReservations($user = null) {
 	$ordered   = array();
         $unordered = array();
         global $PORTAL_GENESIS;
@@ -333,7 +333,7 @@ class Aggregate
     #
     # Return the list of allowed aggregates based on the portal in use.
     #
-    function DefaultAggregateList($user = null, $frontpage = false) {
+    public static function DefaultAggregateList($user = null, $frontpage = false) {
         global $PORTAL_GENESIS, $PORTAL_HEALTH, $TBMAINSITE;
 	$am_array = array();
 
@@ -426,7 +426,7 @@ class Aggregate
     #
     # All aggregates
     #
-    function AllAggregatesList() {
+    public static function AllAggregatesList() {
         $am_array = array();
 
         $query_result =
@@ -443,7 +443,7 @@ class Aggregate
         return $am_array;
     }
 
-    function ThisAggregate()
+    public static function ThisAggregate()
     {
         global $DEFAULT_AGGREGATE_URN;
 
@@ -545,7 +545,7 @@ class Aggregate
     }
 
     # Class method.
-    function RadioInfo()
+    public static function RadioInfo()
     {
         $blob = array();
 
@@ -587,7 +587,7 @@ class Aggregate
         }
         return $blob;
     }
-    function RadioInfoNew()
+    public static function RadioInfoNew()
     {
         $blob = array();
 
@@ -701,7 +701,7 @@ class Aggregate
     }
 
     # Class method to get info about Phantomnet matrix nodes. 
-    function MatrixInfo()
+    public static function MatrixInfo()
     {
         $blob = array();
 
@@ -743,7 +743,7 @@ class Aggregate
     #
     # Get list of allowed clusters for a project, or null if none.
     #
-    function AllowedAggregates($project)
+    public static function AllowedAggregates($project)
     {
         if (! $project->allowed_clusters()) {
             return null;

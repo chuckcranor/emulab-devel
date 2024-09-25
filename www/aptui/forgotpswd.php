@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,7 +56,7 @@ function SPITFORM($username, $email, $errors)
     $email    = CleanString($email);
     # XSS prevention.
     if ($errors) {
-	while (list ($key, $val) = each ($errors)) {
+        foreach ($errors as $key => $val) {
 	    # Skip internal error, we want the html in those errors
 	    # and we know it is safe.
 	    if ($key == "error") {

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -88,7 +88,7 @@ while ($row = mysql_fetch_array($query_result)) {
 }
 
 echo "<script type='text/plain' id='most-used-json'>\n";
-echo htmlentities(json_encode($profiles)) . "\n";
+echo htmlentities(json_encode($profiles), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 $profiles = array();
@@ -138,7 +138,7 @@ while ($row = mysql_fetch_array($query_result)) {
 }
 
 echo "<script type='text/plain' id='recently-used-json'>\n";
-echo htmlentities(json_encode($profiles)) . "\n";
+echo htmlentities(json_encode($profiles), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 $profiles = array();
@@ -188,7 +188,7 @@ while ($row = mysql_fetch_array($query_result)) {
 }
 
 echo "<script type='text/plain' id='recently-created-json'>\n";
-echo htmlentities(json_encode($profiles)) . "\n";
+echo htmlentities(json_encode($profiles), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 $profiles = array();
@@ -239,7 +239,7 @@ while ($row = mysql_fetch_array($query_result)) {
 }
 
 echo "<script type='text/plain' id='examples-json'>\n";
-echo htmlentities(json_encode($profiles)) . "\n";
+echo htmlentities(json_encode($profiles), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

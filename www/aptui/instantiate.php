@@ -118,7 +118,7 @@ $doOtaCheck = 0;
 
 $tmp = array();
 
-while (list($pid) = each($projlist)) {
+foreach ($projlist as $pid => $unused) {
     # Watch out for killing page variable called "project"
     $proj = Project::Lookup($pid);
     if ($proj && !$proj->IsNonLocal()) {
@@ -211,7 +211,7 @@ if (isset($rerun_instance)) {
     }
     $rerun_record = $record;
 }
-elseif ($rerun_paramset) {
+elseif (isset($rerun_paramset) && $rerun_paramset) {
     $rerun_record = Paramset::Lookup($rerun_paramset);
     if (!$rerun_record) {
         SPITUSERERROR("No such parameter set");
@@ -451,7 +451,8 @@ if ($ishashed) {
 
 # Default project if only one, otherwise user must select,
 if (count($projlist) == 1) {
-    list($project, $grouplist) = each($projlist);
+    $project = key($projlist);
+    $grouplist = current($projlist);
     $formfields["pid"] = $project;
     $formfields["gid"] = $grouplist[0];
     reset($projlist);
@@ -472,13 +473,13 @@ echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
 
 # I think this will take care of XSS prevention?
 echo "<script type='text/plain' id='form-json'>\n";
-echo htmlentities(json_encode($formfields)) . "\n";
+echo htmlentities(json_encode($formfields), ENT_COMPAT) . "\n";
 echo "</script>\n";
 echo "<script type='text/plain' id='profiles-json'>\n";
-echo htmlentities(json_encode($profile_array));
+echo htmlentities(json_encode($profile_array), ENT_COMPAT);
 echo "</script>\n";
 echo "<script type='text/plain' id='restrictions-json'>\n";
-echo htmlentities(json_encode($cluster_restrictions));
+echo htmlentities(json_encode($cluster_restrictions), ENT_COMPAT);
 echo "</script>\n";
     
 # Gack.
@@ -493,7 +494,7 @@ if ($this_user->IsNonLocal()) {
 # Current and Future reservations for the cluster picker.
 $resinfo = ReservationGroup::ReservationInfo($projlist, $this_user);
 echo "<script type='text/plain' id='resinfo-json'>\n";
-echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
+echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK), ENT_COMPAT);
 echo "</script>\n";
 
 # Place to hang the toplevel template.
@@ -504,7 +505,7 @@ echo "<div id='main-body'></div>\n";
 #
 if (!$this_user->webonly()) {
     echo "<script type='text/plain' id='projects-json'>\n";
-    echo htmlentities(json_encode($projlist));
+    echo htmlentities(json_encode($projlist), ENT_COMPAT);
     echo "</script>\n";
 }
 SpitAggregateStatus(true, $this_user);
@@ -513,11 +514,11 @@ if ($ISPOWDER) {
     # Powder Radio info.
     $radioinfo = Aggregate::RadioInfoNew();
     echo "<script type='text/plain' id='radioinfo-json'>\n";
-    echo htmlentities(json_encode($radioinfo));
+    echo htmlentities(json_encode($radioinfo), ENT_COMPAT);
     echo "</script>\n";
     
     echo "<script type='text/plain' id='otaAllowed-json'>\n";
-    echo htmlentities(json_encode($otaAllowed));
+    echo htmlentities(json_encode($otaAllowed), ENT_COMPAT);
     echo "</script>\n";
 
     # User has seen and agreed to the OTA agreement.
@@ -535,7 +536,7 @@ if ($ISPOWDER) {
 
 $prunelist = Instance::NodeTypePruneList(null, true);
 echo "<script type='text/plain' id='prunelist-json'>\n";
-echo htmlentities(json_encode($prunelist));
+echo htmlentities(json_encode($prunelist), ENT_COMPAT);
 echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";

@@ -1,7 +1,8 @@
 #!/bin/sh
 
+# XXX dependency on pubsub is just to keep the historical ordering.
 # PROVIDE: mfrisbeed
-# REQUIRE: DAEMON tbdbcheck
+# REQUIRE: DAEMON pubsub tbdbcheck
 # BEFORE: testbed
 # KEYWORD: nojail shutdown
 

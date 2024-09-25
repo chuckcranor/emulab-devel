@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -247,7 +247,7 @@ function SPITFORM($formfields, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
             # XSS prevention.
 	    $message = CleanString($message);
 	    echo "<tr>
@@ -260,7 +260,7 @@ function SPITFORM($formfields, $errors)
 	echo "</table><br>\n";
     }
     # XSS prevention.
-    while (list ($key, $val) = each ($formfields)) {
+    foreach ($formfields as $key => $val) {
 	$formfields[$key] = CleanString($val);
     }
 
@@ -354,7 +354,7 @@ function SPITFORM($formfields, $errors)
                           onChange='SetPrefix(idform);'>
                       <option value=''>Please Select &nbsp</option>\n";
     
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $unused) {
 	$selected = "";
 
 	if ($formfields["pid"] == $project)
@@ -376,7 +376,7 @@ function SPITFORM($formfields, $errors)
                     <option value=''>Default Group </option>\n";
 
     reset($projlist);
-    while (list($project, $grouplist) = each($projlist)) {
+    foreach ($projlist as $project => $grouplist) {
 	for ($i = 0; $i < count($grouplist); $i++) {
 	    $group    = $grouplist[$i];
 
@@ -464,7 +464,7 @@ function SPITFORM($formfields, $errors)
 		 <td><select name=\"formfields[OS]\">
 		       <option value=none>Please Select </option>\n";
 
-	while (list ($os, $userokay) = each($osid_oslist)) {
+	foreach ($osid_oslist as $os => $userokay) {
 	    $selected = "";
 
 	    if (!$userokay && !$isadmin)
@@ -549,7 +549,7 @@ function SPITFORM($formfields, $errors)
     # 
     if (isset($view["hide_features"])) {
         reset($osid_featurelist);
-        while (list ($feature, $userokay) = each($osid_featurelist)) {
+	foreach ($osid_featurelist as $feature => $userokay) {
             spithidden($formfields, "os_feature_$feature");
         }
     } else {
@@ -558,7 +558,7 @@ function SPITFORM($formfields, $errors)
 		  <td>";
 
 	reset($osid_featurelist);
-	while (list ($feature, $userokay) = each($osid_featurelist)) {
+	foreach ($osid_featurelist as $feature => $userokay) {
 	    $checked = "";
 	    
 	    if (!$userokay && !$isadmin)
@@ -587,7 +587,7 @@ function SPITFORM($formfields, $errors)
 		 <td><select name=\"formfields[op_mode]\">
 		       <option value=none>Please Select </option>\n";
 
-	while (list ($mode, $userokay) = each($osid_opmodes)) {
+	foreach ($osid_opmodes as $mode => $userokay) {
 	    $selected = "";
 
 	    if (!$userokay && !$isadmin)
@@ -1066,7 +1066,8 @@ if (!isset($submit)) {
     # to be in the naive portion of our users, give them some help.
     # 
     if (count($projlist) == 1) {
-	list($project, $grouplist) = each($projlist);
+	$project = key($projlist);
+	$grouplist = current($projlist);
 
 	if (count($grouplist) <= 2) {
 	    $defaults["pid"] = $project;
@@ -1099,7 +1100,7 @@ if (!isset($submit)) {
     # Allow formfields that are already set to override defaults.
     #
     if (isset($formfields)) {
-	while (list ($field, $value) = each ($formfields)) {
+	foreach ($formfields as $field => $value) {
 	    $defaults[$field] = $formfields[$field];
 	}
     }
@@ -1290,7 +1291,7 @@ if (isset($formfields["reboot_waittime"]) &&
 #
 $os_features_array = array();
 
-while (list ($feature, $userokay) = each($osid_featurelist)) {
+foreach ($osid_featurelist as $feature => $userokay) {
     if (isset($formfields["os_feature_$feature"]) &&
 	$formfields["os_feature_$feature"] == "checked") {
 	$os_features_array[] = $feature;
@@ -1405,7 +1406,7 @@ if (!isset($confirmed) && 0 != strcmp($confirmationWarning,"")) {
     # tramp all of their settings along.
     #
     reset($formfields);
-    while (list($key, $value) = each($formfields)) {
+    foreach ($formfields as $key => $value) {
 	echo "<input type=hidden name=\"formfields[$key]\" value=\"$value\"></input>\n";
     }
     if (isset($node)) {

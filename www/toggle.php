@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -92,7 +92,7 @@ if (! in_array($value, $values[$type])) {
 }
 
 # Check optional args and bind locally.
-while (list ($arg, $required) = each ($optargs[$type])) {
+foreach ($optargs[$type] as $arg => $required) {
     if (!isset($_GET[$arg])) {
 	if ($required)
 	    PAGEARGERROR("Toggle '$type' requires argument '$arg'");

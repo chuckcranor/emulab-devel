@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2010 University of Utah and the Flux Group.
+# Copyright (c) 2010, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -112,7 +112,7 @@ else {
     exit( 1 );
 }
    
-my $result = DBQueryWarn( "SELECT groups.unix_gid FROM experiments, groups " .
+my $result = DBQueryWarn( "SELECT groups.unix_gid FROM experiments, `groups` " .
 			  "WHERE experiments.keyhash='$key' AND " .
 			  "experiments.gid_idx=groups.gid_idx;" );
 

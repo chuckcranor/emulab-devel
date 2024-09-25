@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -109,7 +109,7 @@ else {
 #
 if (isset($target_project)) {
     $query_result =
-	DBQueryFatal("select pid,gid from groups ".
+	DBQueryFatal("select pid,gid from `groups` ".
 		     "where leader='$target_uid' and pid='$target_pid'");
     
     if (mysql_num_rows($query_result)) {
@@ -119,7 +119,7 @@ if (isset($target_project)) {
 }
 else {
     $query_result =
-	DBQueryFatal("select pid,gid from groups where leader='$target_uid'");
+	DBQueryFatal("select pid,gid from `groups` where leader='$target_uid'");
 
     if (mysql_num_rows($query_result)) {
 	USERERROR("$target_uid is still heading up groups!", 1);

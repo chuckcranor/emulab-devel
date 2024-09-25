@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@ class Template
     var	$template;
     var $experiment;
     
-    function Template($guid, $vers) {
+    function __construct($guid, $vers) {
 	$guid = addslashes($guid);
 	$vers = addslashes($vers);
 	
@@ -61,7 +61,7 @@ class Template
     }
 
     # Do class level lookup.
-    function Lookup($guid, $vers) {
+    public static function Lookup($guid, $vers) {
 	$foo = new Template($guid, $vers);
 
 	if ($foo->IsValid())
@@ -69,7 +69,7 @@ class Template
 	return null;
     }
     # Do class level lookup for the root template.
-    function LookupRoot($guid) {
+    public static function LookupRoot($guid) {
 	$foo = new Template($guid, 1); 
 
 	if ($foo->IsValid())
@@ -77,7 +77,7 @@ class Template
 	return null;
     }
     # Look up by pid,eid is which also unique across templates.
-    function LookupbyEid($pid, $eid) {
+    public static function LookupbyEid($pid, $eid) {
 	$query_result =
 	    DBQueryWarn("select guid,vers from experiment_templates  ".
 			"where pid='$pid' and eid='$eid'");
@@ -1070,7 +1070,7 @@ class Template
 	$vers = $this->vers();
 	$sets = array();
 	
-	while (list ($key, $value) = each ($changes)) {
+ 	foreach ($changes as $key => $value) {
 	    $value  = addslashes($value);
 	    $sets[] = "$key='$value'";
 	}
@@ -1149,7 +1149,7 @@ class TemplateInstance
     #
     # Instances are found by their index. 
     #
-    function TemplateInstance($idx) {
+    function __construct($idx) {
 	$idx = addslashes($idx);
 
 	$query_result =
@@ -1178,7 +1178,7 @@ class TemplateInstance
     }
 
     # Do class level lookup.
-    function LookupByExptidx($exptidx) {
+    public static function LookupByExptidx($exptidx) {
 	$exptidx = addslashes($exptidx);
 	
 	$query_result =
@@ -1197,7 +1197,7 @@ class TemplateInstance
     }
 
     # Do class level lookup.
-    function LookupByIdx($idx) {
+    public static function LookupByIdx($idx) {
 	$foo = new TemplateInstance($idx);
 
 	if ($foo->IsValid())
@@ -2293,7 +2293,7 @@ class TemplateMetadata
     #
     # 
     #
-    function TemplateMetadata($guid, $vers) {
+    function __construct($guid, $vers) {
 	$guid = addslashes($guid);
 	$vers = addslashes($vers);
 
@@ -2324,14 +2324,14 @@ class TemplateMetadata
     }
 
     # Do class level lookup.
-    function Lookup($guid, $vers) {
+    public static function Lookup($guid, $vers) {
 	$foo = new TemplateMetadata($guid, $vers);
 
 	if ($foo->IsValid())
 	    return $foo;
 	return null;
     }
-    function TemplateLookupByGUID($template, $guid, $vers) {
+    public static function TemplateLookupByGUID($template, $guid, $vers) {
 	$metadata_guid = addslashes($guid);
 	$metadata_vers = addslashes($vers);
 	$template_guid = $template->guid();
@@ -2356,7 +2356,7 @@ class TemplateMetadata
 	return $foo;
     }
 
-    function TemplateLookupByName($template, $name) {
+    public static function TemplateLookupByName($template, $name) {
 	$metadata_name = addslashes($name);
 	$template_guid = $template->guid();
 	$template_vers = $template->vers();
@@ -2672,7 +2672,7 @@ function MakeMouseOver($string)
 {
     $string = str_replace("\n", "<br>", $string);
     $string = str_replace("\r", "", $string);
-    $string = htmlentities($string);
+    $string = htmlentities($string, ENT_COMPAT);
     $string = preg_replace("/\'/", "\&\#039;", $string);
 
     return "onmouseover=\"return escape('$string')\"";

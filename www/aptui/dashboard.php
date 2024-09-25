@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,12 +53,12 @@ echo "</script>\n";
 $am_list  = Aggregate::DefaultAggregateList();
 $am_array = array();
 
-while (list($index, $aggregate) = each($am_list)) {
+foreach ($am_list as $index => $aggregate) {
     $nick = $aggregate->nickname();
     $am_array[$nick] = $nick;
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($am_array));
+echo htmlentities(json_encode($am_array), ENT_COMPAT);
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

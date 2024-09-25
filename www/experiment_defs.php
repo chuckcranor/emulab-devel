@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,7 +42,7 @@ class Experiment
     #
     # Constructor by lookup on unique index.
     #
-    function Experiment($exptidx) {
+    function __construct($exptidx) {
 	$safe_exptidx = addslashes($exptidx);
 
 	#
@@ -78,7 +78,7 @@ class Experiment
     }
 
     # Lookup by exptidx, but allow for lookup by pid,eid with variable args.
-    function Lookup($exptidx) {
+    public static function Lookup($exptidx) {
 	global $experiment_cache;
 	
 	$args = func_get_args();
@@ -110,7 +110,7 @@ class Experiment
     }
 
     # Backwards compatable lookup by pid,eid. Will eventually flush this.
-    function LookupByPidEid($pid, $eid) {
+    public static function LookupByPidEid($pid, $eid) {
 	$safe_pid = addslashes($pid);
 	$safe_eid = addslashes($eid);
 
@@ -126,7 +126,7 @@ class Experiment
 
 	return Experiment::Lookup($idx); 
     }
-    function LookupByUUID($uuid) {
+    public static function LookupByUUID($uuid) {
 	$safe_uuid = addslashes($uuid);
 
 	$query_result =
@@ -171,7 +171,7 @@ class Experiment
     #
     # Class function to change experiment info via XML to a backend script.
     #
-    function EditExp($experiment, $args, &$errors) {
+    public static function EditExp($experiment, $args, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
 	if (!count($args)) {
@@ -200,7 +200,7 @@ class Experiment
 	fwrite($fp, "<experiment>\n");
 	foreach ($args as $name => $value) {
 	    fwrite($fp, "<attribute name=\"$name\">");
-	    fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	    fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	    fwrite($fp, "</attribute>\n");
 	}
 	fwrite($fp, "</experiment>\n");
@@ -1018,7 +1018,7 @@ class Experiment
 	    echo "<tr>
                  <td>Reserved Nodes: </td>
                  <td class=\"left\">\n";
-	    while (list ($class, $count) = each($nodecounts)) {
+	    foreach ($nodecounts as $class => $count) {
 		echo "$count ($class) &nbsp; ";
 	    }
 	    echo "   </td>
@@ -1309,7 +1309,7 @@ class ExperimentStats
     #
     # Constructor by lookup on unique index.
     #
-    function ExperimentStats($exptidx) {
+    function __construct($exptidx) {
 	$safe_exptidx = addslashes($exptidx);
 
 	$query_result =
@@ -1329,7 +1329,7 @@ class ExperimentStats
     }
 
     # Lookup by exptidx, but allow for lookup by pid,eid with variable args.
-    function Lookup($exptidx) {
+    public static function Lookup($exptidx) {
 	$foo = new ExperimentStats($exptidx);
 
 	if ($foo->IsValid())
@@ -1414,7 +1414,7 @@ class ExperimentResources
     #
     # Constructor by lookup on unique index for current resources
     #
-    function ExperimentResources($rsrcidx) {
+    function __construct($rsrcidx) {
 	$safe_rsrcidx = addslashes($rsrcidx);
 
 	$query_result =
@@ -1434,7 +1434,7 @@ class ExperimentResources
     }
 
     # Lookup by resource record number
-    function Lookup($rsrcidx) {
+    public static function Lookup($rsrcidx) {
 	$foo = new ExperimentResources($rsrcidx);
 
 	if ($foo->IsValid())

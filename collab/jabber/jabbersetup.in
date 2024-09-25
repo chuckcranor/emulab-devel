@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005, 2010 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2010, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -138,7 +138,7 @@ while (my ($uid) = $query_result->fetchrow_array()) {
 #
 if (0) {
 $query_result =
-    DBQueryFatal("select g.pid,g.gid from groups as g ".
+    DBQueryFatal("select g.pid,g.gid from `groups` as g ".
 		 "left join projects as p on p.pid=g.pid ".
 		 "where p.approved=1 ".
 		 "and (p.pid='testbed' or p.pid='emulab-ops' or ".
@@ -165,7 +165,7 @@ while (my ($pid,$gid) = $query_result->fetchrow_array()) {
 # Now add buddies for each user in each project.
 #
 $query_result =
-    DBQueryFatal("select g.pid,g.gid from groups as g ".
+    DBQueryFatal("select g.pid,g.gid from `groups` as g ".
 		 "left join projects as p on p.pid=g.pid ".
 		 "where p.approved=1 ".
 #		 "and (p.pid='testbed' or p.pid='emulab-ops' or ".

@@ -41,7 +41,7 @@ class Node
     #
     # Constructor by lookup on unique index.
     #
-    function Node($node_id) {
+    function __construct($node_id) {
 	$safe_node_id = addslashes($node_id);
 
 	$query_result =
@@ -60,7 +60,7 @@ class Node
     }
 
     # Lookup by node_id
-    function Lookup($node_id) {
+    public static function Lookup($node_id) {
 	global $node_cache;
 
         if (!TBvalid_node_id($node_id)) {
@@ -81,7 +81,7 @@ class Node
     }
 
     # Lookup by IP
-    function LookupByIP($ip) {
+    public static function LookupByIP($ip) {
 	$safe_ip = addslashes($ip);
 	
 	$query_result =
@@ -97,7 +97,7 @@ class Node
     }
 
     # Lookup by Mac
-    function LookupByMac($mac) {
+    public static function LookupByMac($mac) {
 	$safe_mac = addslashes($mac);
 	
 	$query_result =
