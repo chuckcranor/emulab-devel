@@ -1,0 +1,126 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use Getopt::Std;
+
+#
+# This script will generate new Emulab keys for all users who do not
+# already have them or if the cert is expired.
+#
+sub usage()
+{
+    print("Usage: regencerts [-n]\n");
+    exit(-1);
+}
+my $optlist   = "n";
+my $impotent  = 0;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $TBAUDIT     = "@TBAUDITEMAIL@";
+my $OURDOMAIN   = "@OURDOMAIN@";
+my $MKCERT	= "$TB/sbin/mkusercert";
+my $CHECKQUOTA  = "$TB/sbin/checkquota";
+my $SUDO	= "/usr/local/bin/sudo";
+my $PROTOUSER   = "elabman";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libaudit;
+use libdb;
+use libtestbed;
+use emutil;
+use libEmulab;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+
+#
+# Grab all active/frozen users.
+#
+my $query_result =
+    DBQueryFatal("select u.uid,u.uid_idx,encrypted,c.idx,s.last_activity ".
+		 "  from user_sslcerts as c ".
+		 "left join users as u on u.uid_idx=c.uid_idx ".
+		 "left join user_stats as s on s.uid_idx=u.uid_idx ".
+		 "where webonly=0 and wikionly=0 and ".
+		 "      (u.status='active' or u.status='frozen') and ".
+		 "      revoked is null ".
+		 "order by u.uid");
+
+while (my ($uid,$uid_idx,$encrypted) = $query_result->fetchrow_array()) {
+    system("$CHECKQUOTA $uid");
+    if ($?) {
+	print STDERR "User $uid over quota, not generating certificate!\n";
+	next;
+    }
+    if (!$encrypted) {
+	print "Regenerating unencrypted certificate for $uid.\n";
+
+	if (!$impotent) {
+	    system("$SUDO -u $PROTOUSER $MKCERT $uid_idx");
+	    if ($?) {
+		print STDERR "Could not regenerate unencrypted cert ".
+		    "for $uid ($uid_idx)\n";
+	    }
+	}
+    }
+    else {
+	print "Regenerating encrypted certificate for $uid.\n";
+
+	if (!$impotent) {
+	    system("$SUDO -u $PROTOUSER $MKCERT -P $uid_idx");
+	    if ($?) {
+		print STDERR "Could not regenerate encrypted cert ".
+		    "for $uid ($uid_idx)\n";
+	    }
+	}
+    }
+}
+exit(0);
