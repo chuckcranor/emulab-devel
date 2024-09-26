@@ -8240,14 +8240,19 @@ sub GeniExperiment($;$)
 	}
 	print STDERR "Converted $urn to unique eid $eid\n";
     }
+    my $geniflags = $Experiment::EXPT_GENIFLAGS_EXPT;
 
     #
     # If the creator is a local user, and the project is a local project,
     # then the experiment is created as that user, since geniuser is not
     # a member. That means we have to run as the local user.
     #
-    if ($project->IsLocal() || $PROTOGENI_LOCALUSER) {
+    if ($project->IsLocal() || GeniUser::PROTOGENI_LOCALUSER_ONLY()) {
 	$creator->FlipTo($group);
+	# Flag that this experiment needs special handling while
+	# developing these changes.
+	$geniflags |= $Experiment::EXPT_GENIFLAGS_LOCAL
+	    if (!$project->IsLocal());
     }
     elsif (defined($group)) {
 	GeniUtil::FlipToGeniUser($group->unix_gid());
@@ -8277,10 +8282,11 @@ sub GeniExperiment($;$)
     }
     $experiment = Experiment->Lookup($uuid);
     $experiment->SetState(EXPTSTATE_SWAPPED());
-    $experiment->Update({"geniflags"  => $Experiment::EXPT_GENIFLAGS_EXPT,
+    
+    $experiment->Update({"geniflags"  => $geniflags,
 			 "nfsmounts"  => "genidefault"});
     $experiment->TableUpdate("experiment_stats",
-			     "geniflags='$Experiment::EXPT_GENIFLAGS_EXPT', ".
+			     "geniflags='$geniflags', ".
 			     "slice_uuid='$uuid'");
     # XXX watch for "placeholder" slices. 
     $experiment->MarkNonlocal($urn,
@@ -8317,6 +8323,10 @@ sub FlipToUser($$)
     my ($object, $user) = @_;
     my ($project,$group,$creator, $experiment, $image);
     my $debug = 1;
+
+    if (GeniUser::PROTOGENI_LOCALUSER_ONLY()) {
+	return FlipToUserNew($object, $user);
+    }
 
     if (ref($object) eq "GeniSlice") {
 	$experiment = $object->GetExperiment();
@@ -8382,7 +8392,91 @@ sub FlipToUser($$)
 	$user = $creator;
     }
   flip:
-    print STDERR "FlipToUser: $user, $group\n";
+    print STDERR "GeniCM::FlipToUser done: $user, $group\n";
+    return undef
+	if ($user->FlipTo($group));
+    system("/usr/bin/id");
+    return $user;
+}
+
+sub FlipToUserNew($$)
+{
+    my ($slice, $user) = @_;
+    my $debug = 1;
+
+    if (!ref($slice) eq "GeniSlice") {
+	print STDERR "GeniCM::FlipToUser: Not a slice: $slice\n";
+	return undef;
+    }
+    print STDERR "GeniCM::FlipToUser: $slice " .
+	(defined($user) ? ", $user" : "") . "\n";
+    
+    my $experiment = $slice->GetExperiment();
+    # No experiment, no reason to flip.
+    return 0
+	if (!defined($experiment));
+    
+    my $project = $experiment->GetProject();
+    my $group   = $experiment->GetGroup();
+    my $creator = $experiment->GetCreator();
+
+    # This would be unusual.
+    if (! (defined($project) && defined($group) && defined($creator))) {
+	print STDERR "GeniCM::FlipToUser: Funky experiment $experiment\n";
+	return undef;
+    }
+
+    #
+    # If creator is frozen we need to use the project leader instead.
+    #
+    if ($creator->frozen() || !$creator->HasValidEncryptedCert()) {
+	print STDERR "GeniCM::FlipToUser: creator is frozen or has no cert\n";
+	$creator = $project->GetLeader();
+    }
+    $creator = GeniUser::LocalUser->Create($creator);
+
+    #
+    # XXX watch for Legacy GeniSlices project, and slices created before
+    # the switch to using the real local user.  Operate as geniuser (with
+    # added gid).
+    #
+    if ($project->pid() eq "GeniSlices" ||
+	($project->IsNonLocal() && $experiment->swapper() eq "geniuser")) {
+	$creator = User->Lookup("geniuser");
+	return undef
+	    if (!defined($creator));
+	$user = GeniUser::LocalUser->Create($creator);
+	print STDERR "GeniCM::FlipToUser: Legacy slice\n";
+	goto flip;
+    }
+
+    #
+    # Local project. If no user or if the user is nonlocal, then we need
+    # to operate as the slice (well, experiment) creator, since
+    # geniuser has no permissions in (not a member of) the project.
+    #
+    if (!defined($user) || !$user->IsLocal()) {
+	$user = $creator;
+	print STDERR "GeniCM::FlipToUser: No user or nonlocal user\n";
+	goto flip;
+    }
+    
+    #
+    # Local user, local project. Is the user a member of the project?
+    # If not, then like above we have to operate as the experiment
+    # creator since the user has no privs in the project. Generally,
+    # this will happen if a credential is delegated or if the
+    # creator binds a user to a slice.
+    #
+    # This is a rare case, left over from the geni rack days.
+    #
+    if (!$experiment->AccessCheck($user->emulab_user(),
+				  $Experiment::EXPT_ACCESS_MODIFY)) {
+	print STDERR "GeniCM::FlipToUser: $user does not have permission\n";
+	$user = $creator;
+    }
+  flip:
+    print STDERR "GeniCM::FlipToUser done: $user, $group\n";
     return undef
 	if ($user->FlipTo($group));
     system("/usr/bin/id");

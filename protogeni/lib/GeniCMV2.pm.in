@@ -4548,6 +4548,7 @@ sub DeleteImage($)
     }
     my $imageid     = $image->imageid();
     my $creator_urn = $image->creator_urn();
+    my $fliptouser  = $user;
 
     #
     # Need the project to compare the manager urn against the user SA.
@@ -4557,7 +4558,8 @@ sub DeleteImage($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "No project for image");
     }
-    my $group = $project->GetProjectGroup();
+    my $group   = $project->GetProjectGroup();
+    my $isadmin = 0;
 
     #
     # Check to make sure image is not in use by a node, it is bad to the
@@ -4567,27 +4569,68 @@ sub DeleteImage($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "Image is currently in use");
     }
-    my $isadmin = 0;
-    my $fliptouser = $user;
-
-    #
-    # The Portal always generates a project credential. In the case of an
-    # admin, we still get a project credential, but with an "admin" priv
-    # in the credential, which says to operate locally as admin.
-    #
-    if ($credential->target_urn()->IsProject()) {
-	if ($credential->target_urn()->authority() ne
-	    $project->nonlocalurn()->authority()) {
-	    return GeniResponse->BadArgsResponse(
+    if (GeniUser::PROTOGENI_LOCALUSER_ONLY()) {
+	if ($credential->target_urn()->IsProject()) {
+	    if ($credential->target_urn()->authority() ne
+		$project->nonlocalurn()->authority()) {
+		return GeniResponse->BadArgsResponse(
 		    "Project credential does not match image domain/project");
+	    }
+	    if ($credential->HasActualPrivilege("admin")) {
+		$isadmin = 1;
+	    }
 	}
-	if ($credential->HasActualPrivilege("admin")) {
-	    $isadmin = 1;
+	else {
+	    return GeniResponse->BadArgsResponse(
+		"Must supply a project credential signed by the SA");
 	}
     }
     else {
-	return GeniResponse->BadArgsResponse(
-	    "Must supply a project credential signed by the SA");
+	if (! ((defined($creator_urn) &&
+		($creator_urn eq $user->urn() ||
+		 $creator_urn eq $ENV{'REALGENIURN'})) ||
+	       GeniHRN::SameDomain($project->nonlocalurn(), $authority->urn()))) {
+	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+			"Not enough permission to delete image; wrong SA or user");
+	}
+
+	#
+	# New approach is a project credential which the Portal will grant
+	# to the project leader/managers. We leave the old checks in place.
+	#
+	if ($credential->target_urn()->IsProject()) {
+	    if ($credential->target_urn()->authority() ne
+		$project->nonlocalurn()->authority()) {
+		return GeniResponse->BadArgsResponse(
+		    "Project credential does not match image domain/project");
+	    }
+	    #
+	    # If not the creator, operate as project leader. This can result
+	    # in the email not providing the actual person doing the deletion
+	    # unless we move the email here instead of in delete_image.
+	    #
+	    if (! (defined($creator_urn) &&
+		   ($creator_urn eq $user->urn() ||
+		    $creator_urn eq $ENV{'REALGENIURN'}))) {
+		# fliptouser will flip to image project creator.
+		$fliptouser = undef;
+	    }
+	}
+	#
+	# If not the creator, then require override to prevent
+	# accidental removal of images not belonging to current user.
+	# Note that not all images have the creator_urn set (yet).
+	#
+	elsif (!((defined($creator_urn) &&
+		  !($creator_urn eq $user->urn() ||
+		    $creator_urn eq $ENV{'REALGENIURN'})) ||
+		 ($user->IsLocal() &&
+		  $image->AccessCheck($user->emulab_user(),
+				      EmulabConstants::TB_IMAGEID_DESTROY())))) {
+	    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+			"Not your image; please specify original creator urn")
+		if (!defined($overide_urn) || $overide_urn ne $creator_urn);
+	}
     }
     
     # Delete only the version if directed to.
@@ -4598,12 +4641,20 @@ sub DeleteImage($)
     $opt   .= (defined($imagevers) ? ":$imagevers" : "");
     my $cmd = "$DELETEIMAGE -p $opt";
 
-    if ($isadmin) {
-	$cmd = "$WAP $cmd";
-	GeniUtil::FlipToElabMan();
+    if (GeniUser::PROTOGENI_LOCALUSER_ONLY()) {
+	if ($isadmin) {
+	    $cmd = "$WAP $cmd";
+	    GeniUtil::FlipToElabMan();
+	}
+	else {
+	    $fliptouser->FlipTo($group);
+	}
     }
     else {
-	$fliptouser->FlipTo($group);
+	if (!defined(GeniCM::FlipToUser($image, $fliptouser))) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"FlipToUser failed");
+	}
     }
     system("/usr/bin/id");
     print "$cmd\n";
@@ -5745,15 +5796,21 @@ sub CreateDataset($)
 
     my $cmd = "$CREATEDATASET ";
     if ($PROTOGENI_LOCALUSER && $isimdataset) {
-	#
-	# For nonlocal projects, images are actually created as GeniUser.
-	# and we store the urn of the user in the descriptor. Lets be
-	# consistent with that, even if it makes no sense to have choosen
-	# to do it this way. If a local project/user, we are going to
-	# operate as the actual user. 
-	#
-	if (0 && $project->IsNonLocal()) {
-	    GeniUtil::FlipToGeniUser($group->unix_gid());
+	if (GeniUser::PROTOGENI_LOCALUSER_ONLY()) {
+	    $user->FlipTo($group);	    
+	}
+	else {
+	    #
+	    # For nonlocal projects, images are actually created as GeniUser.
+	    # and we store the urn of the user in the descriptor. Lets be
+	    # consistent with that, even if it makes no sense to have choosen
+	    # to do it this way. If a local project/user, we are going to
+	    # operate as the actual user. 
+	    #
+	    if (!defined(GeniCM::FlipToUser($group->GetProject(), $user))) {
+		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					    "FlipToUser failed");
+	    }
 	}
 	else {
 	    $user->FlipTo($group);
@@ -5785,6 +5842,9 @@ sub CreateDataset($)
     else {
 	$opts = "-C $opts";
     }
+    print STDERR "CreateDataset:\n";
+    system("/usr/bin/id");
+    
     my $output = GeniUtil::ExecQuiet("$cmd $opts");
     # Not a typical op, so always print debugging info;
     print STDERR $output;
@@ -6968,8 +7028,7 @@ sub RunLinktest($)
 	$command .= "$pid $eid";
 
 	print STDERR "$command\n";
-	my $foo = GeniUtil::ExecQuiet("/usr/bin/id");
-	print STDERR "$foo\n";
+	system("/usr/bin/id");
 	
 	$output = GeniUtil::ExecQuiet($command);
     }

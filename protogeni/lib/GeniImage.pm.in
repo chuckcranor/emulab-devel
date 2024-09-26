@@ -696,7 +696,7 @@ sub MapToLocalImage($$$$@)
     if ($credential) {
 	my $credname = $credential->WriteToFile();
 	$command .= " -C $credname ";
-	chmod(0755, $credname);	
+	chmod(0755, $credname);
     }
     $command .= GeniUtil::escapeshellarg($url);
     print STDERR "Running: '$command'\n";
@@ -810,7 +810,7 @@ sub MapToLocalDataset($$$$@)
 	# If the image is local and the user is local, then normal
 	# permissions apply. Otherwise, there has to be a credential
 	# since permission might have been revoked at the cluster
-	# where the image resides. 
+	# where the image resides.
 	#
 	if ($image->IsLocal() && !defined($credential)) {
 	    if ($geniuser->IsLocal() &&
