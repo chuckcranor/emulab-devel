@@ -8077,7 +8077,8 @@ sub DoModify()
     #
     $errcode = APT_Profile::CheckEverything($rspec, $creator,
 					    $group, time(), $expires, 1,
-					    $noresokay, $webtask, \$errmsg);
+					    $noresokay, $instance->rdz_status(),
+					    $webtask, \$errmsg);
     if ($errcode) {
 	($errcode < 0 ? fatal($errmsg) : UserError($errmsg));
     }

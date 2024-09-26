@@ -1579,10 +1579,10 @@ sub NeedStitcher($$)
 #
 # Check everything that needs to be checked. :-)
 #
-sub CheckEverything($$$$$$$$$)
+sub CheckEverything($$$$$$$$$$)
 {
     my ($rspec, $user, $group,
-	$start, $end, $isnow, $noresokay, $webtask, $perrmsg) = @_;
+	$start, $end, $isnow, $noresokay, $rdzenabled, $webtask, $perrmsg) = @_;
     my $project = $group->GetProject();
 
     my $resources;
@@ -1647,8 +1647,9 @@ sub CheckEverything($$$$$$$$$)
     }
     $retval = APT_Profile::CheckSpectrumReservations($rspec, $group, $user,
 						     $start, $end,
-						     $noresokay, $perrmsg,
-						     $spectrum, $resources);
+						     $noresokay, $rdzenabled,
+						     $perrmsg, $spectrum,
+						     $resources);
     if ($retval) {
 	if ($retval < 0) {
 	    return $retval;
@@ -2715,9 +2716,9 @@ sub CheckSpectrumPermission($$$;$$)
 #
 # Check spectrum reservations.
 #
-sub CheckSpectrumReservations($$$$$$$;$$)
+sub CheckSpectrumReservations($$$$$$$$;$$)
 {
-    my ($rspec, $group, $user, $start, $end, $noresokay, $pmsg,
+    my ($rspec, $group, $user, $start, $end, $noresokay, $rdzenabled, $pmsg,
 	$spectrum, $resources) = @_;
     my $project = $group->GetProject();
 
@@ -2787,7 +2788,7 @@ sub CheckSpectrumReservations($$$$$$$;$$)
     # Spectrum does not have to be reserved, but it does have to be available
     # for the duration of the experiment (not reserved by others).
     #
-    if (@$spectrum &&
+    if (@$spectrum && !$rdzenabled &&
 	!APT_Reservation::Group::RFReservation->CanStart($group, $user,
 					$start, $end, $spectrum, $pmsg)) {
 	return 1;

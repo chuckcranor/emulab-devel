@@ -2998,7 +2998,7 @@ sub DoCheckReserved()
     }
     if (APT_Profile::CheckSpectrumReservations($rspec, $group, $this_user,
 					       $start, $end,
-					       $noresokay, \$errmsg)) {
+					       $noresokay, 0, \$errmsg)) {
 	UserError($errmsg);
     }
     if (APT_Profile::CheckRoutesReservations($rspec, $group, $this_user,
@@ -3184,7 +3184,7 @@ sub DoMaxDuration()
     if (APT_Profile::GetSpectrum($rspec, \$spectrum, \$errmsg)) {
 	fatal($errmsg);
     }
-    if (@{$spectrum} && !defined($baddog) && $project->pid() ne "RDZ-demo") {
+    if (@{$spectrum} && !defined($baddog) && !GeniXML::RDZEnabled($rspec)) {
 	my $loser;
 
 	#

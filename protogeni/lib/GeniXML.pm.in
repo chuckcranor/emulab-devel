@@ -2090,6 +2090,16 @@ sub GetBusRoutes($)
     return \@result;
 }
 
+# This is a property of the rspec
+sub RDZEnabled($)
+{
+    my ($ref)  = @_;
+
+    my $enabled = FindNodesNS("n:rdz-request", $ref, $EMULAB_NS)->pop();
+    return defined($enabled) ? 1 : 0;
+}
+
+# This is a property of the rspec. There can be more then one.
 sub GetRDZFlags($)
 {
     my ($ref)  = @_;
