@@ -2195,9 +2195,6 @@ sub CanStart($$$$$$)
     return 1
 	if (!@spectrum);
 
-    return 1
-	if ($project->pid() eq "RDZ-demo");
-
     my @groups = APT_Reservation::Group->LookupAll();
 
     #

@@ -550,7 +550,7 @@ foreach my $aggregate (@aggregate_list) {
 #
 # Probably not the right place for this. Certainly not the right way.
 #
-if ($project->pid() eq "RDZ-demo") {
+if (defined($instance->rdz_status())) {
     my $spectrum = $instance->_spectrum();
     if ($spectrum && @{$spectrum}) {
 	my $error;
