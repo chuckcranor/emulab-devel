@@ -573,19 +573,9 @@ ZFS_ROOT=z
 ZFS_QUOTA_USER="1G"
 ZFS_QUOTA_PROJECT="100G"
 ZFS_QUOTA_GROUP="10G"
-# We prefer to use NFSv4 for now.  amd/autofs doesn't generally have ghosting
-# turned on, so it's hard to see what's available.
-# 2015-04-04
-# bpkroth
-# Nevermind, that caused issues with emulab's ability to detect whether or not
-# an export from ops was available (more specifically mounted) on boss since so
-# far as we could tell FreeBSD doesn't have an equivalent to Linux's "cat
-# /proc/mounts" in order to determine what NFSv4 submounts were currently
-# mounted.
-# 2015-04-13
-# bpkroth
-WITHAMD=1
-AMD_ROOT=/.amd_mnt/ops.wisc.cloudlab.us
+# AMD is gone as of FreeBSD 13
+#WITHAMD=1
+#AMD_ROOT=/.amd_mnt/ops.wisc.cloudlab.us
 # Break a dependency loop where exports_setup on boss only instructs ops to
 # generate exports for things that boss can see, but since those are mounted
 # from ops, without this we can't see them to instruct ops to export them to us.
