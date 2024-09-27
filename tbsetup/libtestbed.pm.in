@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,7 +77,7 @@ $SYSTEM_DEBUG = 0;
 # account for the AMD mount point (e.g., "/.amd_mnt") when determining
 # if a path is valid or not.
 #
-my $WITHAMD	 = "@WITHAMD@";
+my $WITHAMD	 = @WITHAMD@;
 my $AMDROOT	 = "@AMD_ROOT@";
 
 #
