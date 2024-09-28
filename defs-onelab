@@ -421,7 +421,7 @@ ZFS_QUOTA_USER="1G"
 ZFS_QUOTA_PROJECT="50G"
 ZFS_QUOTA_GROUP="10G"
 
-# Use autofs, AMD is deprecated -- added by hibler 04/23/21
+# AMD is gone as of FreeBSD 13
 #WITHAMD=1
 #AMD_ROOT=/.amd_mnt/ops
 

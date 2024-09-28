@@ -3006,7 +3006,10 @@ sub CheckResourceReservations($$$$)
     }
     # This check must always be done.
     if (APT_Profile::CheckSpectrumReservations($rspec, $group, $creator,
-	       time(), $end, $noresokay, $perrmsg, $spectrum, $resources)) {
+					       time(), $end, $noresokay,
+					       $self->rdz_status(),
+					       $perrmsg, $spectrum,
+					       $resources)) {
 	return -1;
     }
 
