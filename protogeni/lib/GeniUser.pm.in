@@ -70,6 +70,12 @@ my %users      = ();
 BEGIN { use GeniUtil; GeniUtil::AddCache(\%users); }
 my $debug      = 0;
 
+# Experimental code.
+sub PROTOGENI_LOCALUSER_ONLY()
+{
+    return 1;
+}
+
 # Little helper and debug function.
 sub mysystem($)
 {

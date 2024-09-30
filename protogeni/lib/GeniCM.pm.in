@@ -8247,6 +8247,10 @@ sub GeniExperiment($;$)
     # then the experiment is created as that user, since geniuser is not
     # a member. That means we have to run as the local user.
     #
+    # GeniUser::PROTOGENI_LOCALUSER_ONLY() means that we always create the
+    # experiment as the locally created user, even for nonlocal projects.
+    # And then operate as the locally created user (FlipToUserNew()).
+    #
     if ($project->IsLocal() || GeniUser::PROTOGENI_LOCALUSER_ONLY()) {
 	$creator->FlipTo($group);
 	# Flag that this experiment needs special handling while
