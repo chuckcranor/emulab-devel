@@ -1,0 +1,21 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_reservation_group_rf_reservations", "rdz_claimid")) {
+	DBQueryFatal("ALTER TABLE apt_reservation_group_rf_reservations ADD ".
+		     " `rdz_claimid` varchar(40) DEFAULT NULL");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
