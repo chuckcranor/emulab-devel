@@ -58,6 +58,9 @@ my $PROTOUSER	  = "elabman";
 # ZMC Rest insterface object
 my $ZMC;
 
+# Flag to indicate that we turn range reservations into RDZ grants.
+my $DOCLAIMS = 1;
+
 #
 # Block, waiting for RDZ to approve spectrum requests
 # Failure to get the spectrum throws the instance into a failed state.
@@ -385,6 +388,115 @@ sub UpdateSpectrum($$$$)
 			  "freq_high" => $new_high}, 1)) {
 	return 1;
     }
+    return 0;
+}
+
+#
+# Convert range reservations to RDZ claims.
+#
+sub CreateClaimFromReservation($$;$$)
+{
+    my ($range, $perrmsg, $debug, $impotent) = @_;
+    my $resgroup = $range->group();
+    my $start    = $resgroup->start();
+    my $end      = $resgroup->end();
+    my $claim_id = $range->rdz_claimid();
+    my $desc     = "Powder reservation in project ". $resgroup->pid();
+    my $name     = "Powder Reservation " . $resgroup->uuid();
+
+    return 0
+	if (!$DOCLAIMS);
+    
+    if (!defined($ZMC)) {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+	if (!defined($ZMC)) {
+	    $$perrmsg = "Cannot open the ZMC rest interface";
+	    print "CreateClaimFromReservation: $$perrmsg\n";
+	    return -1;
+	}
+    }
+    my $request = {
+	"description" => $desc,
+	"name"        => $name,
+	"element_id"  => $ZMC->elementid(),
+	"spectrum_id" => $ZMC->spectrumid(),
+	"starts_at"   => TBDateStringGMT($start),
+	"expires_at"  => TBDateStringGMT($end),
+	"priority"    => 1024,
+	"constraints" => [
+	    {
+		"constraint" => {
+		    "min_freq"  => $range->freq_low() * 1000000,
+		    "max_freq"  => $range->freq_high() * 1000000,
+		    "max_eirp"  => 30,
+		    "exclusive" => JSON::true,
+		},
+	    },
+	],
+	"grant_claim" => {
+	    "ext_id"      => $range->freq_uuid(),
+	    "type"        => "powder",
+	    "source"      => "powder-slc",
+	    "html_url"    => $resgroup->WebURL(),
+	    "name"        => $name,
+	    "description" => $desc,
+	},
+    };
+    if ($claim_id) {
+	$request->{'id'} = $claim_id;
+	$request->{'grant_claim_id'} = $claim_id;
+	$request->{'grant_claim'}->{'id'} = $claim_id;
+    }
+    if ($debug) {
+	print Dumper($request);
+    }
+    return 0
+	if ($impotent);
+    
+    my $response;
+    if ($claim_id) {
+	if ($ZMC->PUT("/grants/$claim_id", $request, \$response)) {
+	    $$perrmsg .= "\n" . "Could not update claim for $range";
+	    return -1;
+	}
+    }
+    else {
+	if ($ZMC->POST("/grants", $request, \$response)) {
+	    $$perrmsg .= "\n" . "Could not create claim for $range";
+	    return -1;
+	}
+    }
+    if ($debug) {
+	print Dumper($response);
+    }
+    $range->RDZMarkClaimed($response->{'id'});
+    return 0;
+}
+
+sub DeleteClaimFromReservation($$)
+{
+    my ($range, $perrmsg) = @_;
+    my $claim_id = $range->rdz_claimid();
+
+    return 0
+	if (!$DOCLAIMS);
+    return 0
+	if (!$claim_id);
+    
+    if (!defined($ZMC)) {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+	if (!defined($ZMC)) {
+	    $$perrmsg = "Cannot open the ZMC rest interface";
+	    print "DeleteClaimFromReservation: $$perrmsg\n";
+	    return -1;
+	}
+    }
+    my $response;
+    if ($ZMC->DELETE("/grants/$claim_id", \$response)) {
+	$$perrmsg = "\n" . "Could not delete claim for $range";
+	return -1;
+    }
+    $range->RDZMarkUnclaimed();
     return 0;
 }
 

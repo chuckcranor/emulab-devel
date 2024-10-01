@@ -51,6 +51,7 @@ sub usage()
     print STDERR "Usage: manage_rdz monitors list|create|delete|show\n";
     print STDERR "Usage: manage_rdz observations create\n";
     print STDERR "Usage: manage_rdz subscriptions create\n";
+    print STDERR "Usage: manage_rdz claims list|create|delete|show\n";
     exit(-1);
 }
 my $optlist     = "dt:n";
@@ -95,6 +96,7 @@ use APT_Aggregate;
 use APT_Instance;
 use APT_RDZRest;
 use APT_RDZ;
+use APT_Reservation;
 use WebTask;
 
 # Protos
@@ -112,6 +114,7 @@ sub DoSpectrum();
 sub DoMonitors();
 sub DoObservations();
 sub DoSubscriptions();
+sub DoClaims();
 sub UpdateMonitor($);
 sub DoRFSObservation($$);
 sub WatchGrant($);
@@ -190,6 +193,9 @@ elsif ($action eq "monitors") {
 }
 elsif ($action eq "subscriptions") {
     exit(DoSubscriptions());
+}
+elsif ($action eq "claims") {
+    exit(DoClaims());
 }
 else {
     usage();
@@ -2009,6 +2015,177 @@ sub DoSubscriptions()
 	print "$data\n";
 	$client->read($data);
 	sleep(1);
+    }
+    exit(0);
+}
+
+sub DoClaims()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz claims list\n";
+	print STDERR "Usage: manage_rdz claims create <low> <high>\n";
+	print STDERR "Usage: manage_rdz claims create -g <resgroup>\n";
+	print STDERR "Usage: manage_rdz claims show <claim_id>\n";
+	print STDERR "Usage: manage_rdz claims delete <claim_id>\n";
+	print STDERR "Usage: manage_rdz claims delete -g <resgroup>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create|delete|show)$/);
+
+    my $update  = 0;
+    my %options = ();
+    if (! getopts("g:u", \%options)) {
+	usage();
+    }
+    if (defined($options{"u"})) {
+	$update = 1;
+    }
+    if ($which eq "list") {
+	my $response;
+
+	if ($ZMC->GET("/grants?element_id=$ELEMENTID&revoked=false".
+		      "&deleted=false&is_claim=1",
+			 \$response)) {
+	    fatal("Could not get RDZ /claims");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $claim_id = shift(@ARGV);
+	if ($ZMC->GET("/grants/$claim_id", \$response)) {
+	    fatal("Could not get /grants/$claim_id");
+	}
+	if ($debug) {
+	    print Dumper($response);
+	}
+	exit(0);
+    }
+    if ($which eq "delete") {
+	my $response;
+
+	if (!defined($options{"g"})) {
+	    &$usage()
+		if (@ARGV != 1);
+	
+	    my $claim_id = shift(@ARGV);
+	    if ($ZMC->DELETE("/grants/$claim_id", \$response)) {
+		fatal("Could not delete /grants/$claim_id");
+	    }
+	    exit(0);
+	}
+	my $resgroup = APT_Reservation::Group->Lookup($options{"g"});
+	if (!defined($resgroup)) {
+	    fatal("No such reservation group exists");
+	}
+	my @rfranges = $resgroup->RFReservationList();
+	if (!@rfranges) {
+	    fatal("No RF ranges in this reservation group");
+	}
+	foreach my $rfrange (@rfranges) {
+	    if (!$rfrange->RDZClaimed()) {
+		print "$rfrange not marked as claimed in the DB\n";
+		next;
+	    }
+	    my $claim_id = $rfrange->rdz_claimid();
+	    if ($ZMC->DELETE("/grants/$claim_id", \$response)) {
+		fatal("Could not delete /grants/$claim_id");
+	    }
+	    $rfrange->RDZMarkUnclaimed();
+	}
+	exit(0);
+    }
+    if (!defined($options{"g"})) {
+	&$usage()
+	    if (@ARGV != 2);
+
+	my ($freq_low, $freq_high, $start, $end, $desc, $name);
+
+	$freq_low   = shift(@ARGV);
+	$freq_low  *= 1000000 if ($freq_low < 10000);
+	$freq_high  = shift(@ARGV);
+	$freq_high *= 1000000 if ($freq_high < 10000);
+	$start      = time();
+	$end        = time() + 3600;
+	$name       = "Test Grant Claim";
+	$desc       = "Test Grant Claim";
+	my $grantclaim = {
+	    "ext_id"      => NewUUID(),
+	    "type"        => "powder",
+	    "source"      => "powder-slc",
+	    "html_url"    => "https://www.powderwireless.net",
+	    "name"        => $name,
+	    "description" => $desc,
+	};
+	my $constraint = {
+	    "min_freq"  => $freq_low + 0,
+	    "max_freq"  => $freq_high + 0,
+	    "max_eirp"  => 30,
+	    "exclusive" => JSON::true,
+	};
+	my $request = {
+	    "description" => $grantclaim->{'description'},
+	    "element_id"  => $ELEMENTID,
+	    "name"        => $grantclaim->{'name'},
+	    "spectrum_id" => "534203ea-c252-4ef0-9eec-4e0a56275181",
+	    "starts_at"   => TBDateStringGMT($start),
+	    "expires_at"  => TBDateStringGMT($end),
+	    "priority"    => 1024,
+	    "constraints" => [
+		{
+		    "constraint" => $constraint,
+		},
+	    ],
+	    "grant_claim" => $grantclaim,
+	};
+	if ($debug || $impotent) {
+	    print Dumper($request);
+	}
+	if ($impotent) {
+	    exit(0);
+	}
+	my $response;
+	if ($ZMC->POST("/grants", $request, \$response)) {
+	    fatal("Could not add RDZ grant claim");
+	}
+	if ($debug) {
+	    print Dumper($response);
+	}
+	print "Claim id: ". $response->{'id'} . "\n";
+	exit(0);
+    }
+    my $resgroup = APT_Reservation::Group->Lookup($options{"g"});
+    if (!defined($resgroup)) {
+	fatal("No such reservation group exists");
+    }
+    my @rfranges = $resgroup->RFReservationList();
+    if (!@rfranges) {
+	fatal("No RF ranges in this reservation group");
+    }
+    foreach my $rfrange (@rfranges) {
+	if ($rfrange->RDZClaimed() && !$update) {
+	    print "$rfrange already marked as claimed in the DB: ".
+		$rfrange->rdz_claimid() . "\n";
+	    next;
+	}
+	my $errmsg;
+	if (APT_RDZ::CreateClaimFromReservation(
+		$rfrange, \$errmsg, $debug, $impotent)) {
+	    fatal($errmsg);
+	}
+	next
+	    if ($impotent);
+	print "Claim ID: " . $rfrange->rdz_claimid() . "\n";
     }
     exit(0);
 }

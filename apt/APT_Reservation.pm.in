@@ -2002,6 +2002,43 @@ sub ClearCanceled($)
     return $self->Mark("canceled", undef);
 }
 
+#
+# RDZ; RF approved reservations become RDZ claims
+#
+sub RDZSetStatus($$)
+{
+    my ($self, $claim_id) = @_;
+    my $uuid       = $self->uuid();
+    my $freq_uuid  = $self->freq_uuid();
+
+    my $query = 
+	"update apt_reservation_group_rf_reservations set ".
+	"  rdz_claimid=" . (defined($claim_id) ? "'$claim_id'" : "NULL") . " " .
+	"where uuid='$uuid' and freq_uuid='$freq_uuid'";
+
+    DBQueryWarn($query)
+	or return -1;
+
+    $self->{'DBROW'}->{"rdz_claimid"} = $claim_id;
+    return 0;
+}
+sub RDZMarkClaimed($$)
+{
+    my ($self, $claim_id) = @_;
+    return $self->RDZSetStatus($claim_id);
+}
+sub RDZMarkUnclaimed($)
+{
+    my ($self) = @_;
+    return $self->RDZSetStatus(undef);
+
+}
+sub RDZClaimed($)
+{
+    my ($self) = @_;
+    return defined($self->rdz_claimid()) ? 1 : 0;
+}
+
 sub Overlaps($$$)
 {
     my ($self, $freq_low, $freq_high) = @_;
