@@ -52,6 +52,7 @@ my $webtask;
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $OURDOMAIN	= "@OURDOMAIN@";
+my $DORDZ       = @TBMAINSITE@;
 my $RESCOMMAND  = "$TB/bin/manage_reservations";
 my $GROUPCOMMAND= "$TB/bin/manage_resgroup";
 my $MYURN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
@@ -95,6 +96,10 @@ use APT_Utility;
 use GeniResponse;
 use GeniHRN;
 use GeniXML;
+if ($DORDZ) {
+    # And the RDZ code.
+    require APT_RDZ;
+}
 
 # Protos
 sub fatal($);
@@ -1194,6 +1199,25 @@ sub DoGroupReserve()
 		}
 		# We do not trust the uuid from client, we return the new one
 		$res->{'freq_uuid'} = $reservation->freq_uuid();
+		
+		if ($res->{'approved'} && $DORDZ) {
+		    if (APT_RDZ::CreateClaimFromReservation(
+			    $reservation, \$errmsg, $debug)) {
+			my $brand      = $resgroup->Brand();
+			my $pid        = $project->pid();
+			my $url        = $resgroup->WebURL();
+
+			$brand->SendEmail($brand->OpsEmailAddress(),
+					  "Failed to submit RDZ claims",
+					  $errmsg . "\n" .
+					  $resgroup->InfoString() .
+					  "\n" .
+					  "$url",
+					  $brand->ReservationsEmailAddress());
+			# Clear the approval.
+			$res->{'approved'} = 0;
+		    }
+		}
 		$reservation->MarkSubmitted($res->{'approved'});
 	    }
 	    foreach my $res (@route_reservations) {
@@ -1518,6 +1542,24 @@ sub DoDelete()
     }
     if (@range_reservations) {
 	foreach my $res (@range_reservations) {
+	    if ($DORDZ) {
+		if (APT_RDZ::DeleteClaimFromReservation($res, \$errmsg)) {
+		    my $brand      = $resgroup->Brand();
+		    my $pid        = $project->pid();
+		    my $url        = $resgroup->WebURL();
+
+		    $brand->SendEmail($brand->OpsEmailAddress(),
+				      "Failed to delete RDZ claim",
+				      $errmsg . "\n" .
+				      $resgroup->InfoString() .
+				      "\n" .
+				      "$url",
+				      $brand->ReservationsEmailAddress());
+		}
+		#
+		# Need to do something here.
+		#
+	    }
 	    my $blob = {
 		"uuid"    => $res->freq_uuid(),
 		"errcode" => 0,
@@ -2159,6 +2201,34 @@ sub DoApprove()
 		    "errmesg" => "No longer fits the schedule",
 		};
 		$results->{$freq_uuid} = $blob;
+	    }
+	    elsif ($DORDZ) {
+		if (APT_RDZ::CreateClaimFromReservation(
+			$res, \$errmsg, $debug)) {
+		    my $brand      = $resgroup->Brand();
+		    my $pid        = $project->pid();
+		    my $url        = $resgroup->WebURL();
+
+		    $brand->SendEmail($brand->OpsEmailAddress(),
+				      "Failed to submit RDZ claims",
+				      $errmsg . "\n" .
+				      $resgroup->InfoString() .
+				      "\n" .
+				      "$url",
+				      $brand->ReservationsEmailAddress());
+
+		    my $freq_uuid = $res->freq_uuid();
+		    my $blob = {
+			"uuid"    => $freq_uuid,
+			"errcode" => 1,
+			"errmesg" => "Unable to claim this range at the RDZ",
+		    };
+		    $results->{$freq_uuid} = $blob;
+		}
+		else {
+		    $res->MarkApproved();
+		    push(@approved_reservations, $res);
+		}
 	    }
 	    else {
 		$res->MarkApproved();

@@ -1076,6 +1076,7 @@ CREATE TABLE `apt_reservation_group_rf_reservations` (
   `submitted` datetime DEFAULT NULL,
   `approved` datetime DEFAULT NULL,
   `canceled` datetime DEFAULT NULL,
+  `rdz_claimid` varchar(40) DEFAULT NULL,
   PRIMARY KEY (`uuid`,`freq_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

@@ -78,13 +78,27 @@ sub Create($$$)
 	"token"     => $token,
 	"elementid" => $elementid,
 	"url"       => $url,
+	"spectrumid"=> undef,
     };
     bless($ref, $class);
+
+    #
+    # XXX For now assume a single spectrum range.
+    #
+    my $response;
+    if ($ref->GET("/spectrum", \$response)) {
+	print STDERR "Could not get RDZ /spectrum\n";
+	return undef;
+    }
+    if (@{$response->{'spectrum'}}) {
+	$ref->{'spectrumid'} = $response->{'spectrum'}->[0]->{'id'};
+    }
     return $ref;
 }
-sub token($)	{ return $_[0]->{'token'}; }
-sub elementid($){ return $_[0]->{'elementid'}; }
-sub url($)	{ return $_[0]->{'url'}; }
+sub token($)	  { return $_[0]->{'token'}; }
+sub elementid($)  { return $_[0]->{'elementid'}; }
+sub spectrumid($) { return $_[0]->{'spectrumid'}; }
+sub url($)	  { return $_[0]->{'url'}; }
 
 #
 # This is all going to change. 
