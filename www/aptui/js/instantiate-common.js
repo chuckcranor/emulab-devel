@@ -219,6 +219,7 @@ window.instantiateCommon = (function () {
 	var siteIdToSiteNum = {};
 	var sites  = {};
 	var siteIdToAM = {};
+        var pools  = {};
 
 	var nodecount  = $(xmlDoc).find("node").length;
 	if (nodecount > 3000) {
@@ -266,7 +267,19 @@ window.instantiateCommon = (function () {
 		}
 		sites[siteid] = siteid;
 	    }
+            // Remember unbound pools.
+            else if ($(this).prop("tagName") == "emulab:routable_pool") {
+                if (! (manager && manager.length)) {
+                    pools[node_id] = this;
+                }
+            }
 	});
+        // Degenerate case of all nodes specified, but not the pool
+        if (_.size(pools) == 1 && _.size(ammap) == 1) {
+            if (bound = count - 1) {
+                bound++;
+            }
+        }
 	console.info("CreateAggregateSelectors2: ", count, bound, ammap);
 
 	// All nodes bound, no dropdown.
