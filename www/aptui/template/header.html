@@ -244,7 +244,7 @@
             <li><a href='example-profiles.php' target='_blank'
 		   class='dropdown-item'>Example Profiles</a></li>
 
-	    <% if (window.PORTAL_NAME == "CloudLab") { %>
+	    <% if (window.MAINSITE && (window.ISCLOUD || window.ISEMULAB || window.ISPOWDER)) { %>
               <li><a href='portal-hardware.php' target='_blank'
 		     class='dropdown-item'>Available Hardware</a></li>
 	    <% } %>
