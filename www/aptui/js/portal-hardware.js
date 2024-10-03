@@ -157,6 +157,19 @@ $(function ()
 	_.each(data, function (row) {
 	    //console.info(row);
 
+            if (window.ISPOWDER) {
+                if (row["Cluster"] != "Emulab" &&
+                    row["Cluster"] != "Powder" &&
+                    row["Cluster"] != "Cloudlab Utah") {
+                    return;
+                }
+            }
+            else if (window.ISEMULAB) {
+                if (row["Cluster"] != "Emulab") {
+                    return;
+                }
+            }
+
             // For the hidden speeds row.
             var allspeeds = {};
 
