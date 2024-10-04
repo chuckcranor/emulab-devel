@@ -742,7 +742,7 @@ sub DumpDBGoo()
     #
     # These tables are dumped by project ID.
     #
-    my @PROJTABLES = ("projects", "`groups`", "group_features");
+    my @PROJTABLES = ("projects", "groups", "group_features");
 
     #
     # These tables are dumped by user ID (for the project members).
@@ -852,7 +852,7 @@ sub DumpDBGoo()
 
     foreach my $table (@PROJTABLES) {
 	unlink("$statedir/$table");
-	DBQueryWarn("select * from $table ".
+	DBQueryWarn("select * from `$table` ".
 		    "where pid='$pid' ".
 		    "into outfile '$statedir/$table'")
 	    or die("*** $0:\n".
