@@ -211,7 +211,7 @@ ZFS_QUOTA_GROUP_X="2.0"
 
 # XXX autofs still has some problems, stick with AMD for now
 # WITHZFS only: use AMD instead of autofs for /proj, /users mounts on boss
-WITHAMD=1
+#WITHAMD=1
 AMD_ROOT=/.amd_mnt/ops
 
 # Utah-only hacked mountd
@@ -248,5 +248,8 @@ PROTOGENI_PORTALONLY=1
 DISABLE_RESERVATION_EMAIL=1
 
 # Do not set this unless you live in Utah.
+#
+# BE SURE TO SET UP AN EXPORTS IN ops:/etc/exports.head
+# 
 TUTORIALPID=""
 TUTORIALPROFILE=""

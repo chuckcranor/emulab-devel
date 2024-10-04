@@ -185,6 +185,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
         $showmenus = 1;
     }
+    if (!$embedded) {
     if ($TBMAINSITE && $login_user &&
         $login_user->bound_portal() && $login_user->portal() &&
         $login_user->portal() != $PORTAL_GENESIS) {
@@ -236,6 +237,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
                 return;
             }
         }
+    }
     }
 
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");

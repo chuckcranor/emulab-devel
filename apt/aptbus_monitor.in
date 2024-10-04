@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2023 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -537,7 +537,7 @@ sub GetOverWatchData()
 	print STDERR "Could not retrieve overwatch data\n";
 	return;
     }
-    #print "$json";
+    print "$json" if ($debug);
     my $hash = eval { decode_json($json) };
     if ($@) {
 	print STDERR "Could not decode overwatch json\n";
@@ -558,6 +558,11 @@ sub GetOverWatchData()
 		if ($@) {
 		    print STDERR "$@";
 		    return;
+		}
+		$stamp = int($stamp);
+		if ($stamp > 0x7fffffff) {
+		    $busid = undef;
+		    last;
 		}
 		push(@sets, "gpsd_stamp=FROM_UNIXTIME($stamp)");
 	    }

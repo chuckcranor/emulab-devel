@@ -2001,6 +2001,19 @@ class User
         }
 	$uid_idx = $this->uid_idx();
 
+        #
+        # Oh, if we go over the scopus quota in the middle of processing
+        # a user, not all the records for the user will be complete. Skip,
+        # it will finish up at a later time.
+        #
+        $notyet_result = 
+	    DBQueryFatal("select scopus_id from user_scopus_info ".
+			 "where uid_idx='$uid_idx' and ".
+                         "      latest_abstract_id=''");
+        if (mysql_num_rows($notyet_result)) {
+            return 0;
+        }
+
 	$query_result =
 	    DBQueryFatal("select scopus_id from user_scopus_info ".
 			 "where uid_idx='$uid_idx' and ".
@@ -2011,6 +2024,7 @@ class User
         if (mysql_num_rows($query_result) > 5) {
             return 0;
         }
+
         return mysql_num_rows($query_result);
     }
 

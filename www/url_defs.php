@@ -697,7 +697,7 @@ function VerifyPageArguments($argspec, $required)
                 # We use this strictly for internal URLs, so we can be
                 # very narrow in what we allow, to avoid XSS attacks.
                 #
-                if (!preg_match("/^[-\w\?\/\&\.=\+\:]+$/", $object)) {
+                if (!preg_match("/^[-\w\?\/\&\.=\+\:\*]+$/", $object)) {
                     error_log($object);
 		    $object = htmlspecialchars($object, ENT_COMPAT);
 		    PAGEARGERROR("Invalid characters in '$name': $object");

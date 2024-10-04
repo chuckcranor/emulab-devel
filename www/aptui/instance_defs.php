@@ -930,6 +930,7 @@ class Instance
                            "pnbase1"   => true,
                            "cellsdr1-browning"  => true,
                            "cellsdr1-dentistry" => true,
+                           "cbrssdr1-dentistry" => true,
                            "cellsdr1-fm"        => true,
                            "cellsdr1-honors"    => true,
                            "cellsdr1-ustar"     => true,
