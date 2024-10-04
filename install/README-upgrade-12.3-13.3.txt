@@ -218,7 +218,7 @@ A. Things to do in advance of shutting down Emulab.
    DO NOT do the install as it suggested at the end. We will get there
    in step B3 below. There are some other things that might need doing first.
 
-4. Clone the FreeBSD 13.3 source repo.
+a4. Clone the FreeBSD 13.3 source repo.
 
    Make sure you have the FreeBSD 13.3 source tree installed, you will need
    this in one or more places below.
@@ -235,7 +235,7 @@ A. Things to do in advance of shutting down Emulab.
      sudo fetch https://www.emulab.net/downloads/FreeBSD-13.3-ports-git.tar.gz
      sudo tar xzf FreeBSD-13.3-ports-git.tar.gz
 
-5. (Optional) Upgrade your custom kernel.
+5. Upgrade your custom kernel if you have one.
 
    [ I have not tested this section as we have stopped using a custom kernel. ]
 
@@ -296,6 +296,26 @@ A. Things to do in advance of shutting down Emulab.
 
 B. Updating the base FreeBSD system
 
+0. (Mothership only) DNS changes.
+
+   On boss, we need to point DNS to landing page machine. For each of
+   emulab.net, cloudlab.us, and powderwireless.net modify the
+   /etc/namedb/*.db files to change the A record for the domain ala:
+
+   22c22,24
+   <               IN      A               155.98.32.70
+   ---
+   > ;             IN      A               155.98.32.70
+   >               ; TMP downtime status ms1201
+   >               IN      A               128.110.217.206
+
+   For all but emulab.net and bump the serial number. Then run named_setup,
+   which will pick up all changes, and test that "www.whatever" hits the
+   landing page.
+
+   For boss and ops themselves, you might want to change /etc/resolv.conf
+   to go to the backup nameserver while the upgrade is in progress.
+
 1. (CloudLab clusters only) Shut the cluster down at the portal.
 
    Maybe 10-15 minutes before you plan on starting the upgrade, take
@@ -309,6 +329,26 @@ B. Updating the base FreeBSD system
    
 2. If you are on the boss node, shutdown the testbed and some other services
    right off the bat.
+
+   ms-boss:
+     sudo /usr/testbed/sbin/testbed-control shutdown
+     sudo /usr/local/etc/rc.d/apache24 stop
+     sudo /usr/local/etc/rc.d/tftpd-hpa.sh stop
+     sudo /usr/local/etc/rc.d/capture stop
+     sudo /usr/local/etc/rc.d/telegraf stop
+     sudo /usr/local/etc/rc.d/syncthing stop
+     sudo /usr/local/etc/rc.d/bareos-fd stop
+     sudo /usr/local/etc/rc.d/apcupsd stop
+     sudo /etc/rc.d/cron stop
+   
+   ms-ops:
+     sudo /usr/local/etc/rc.d/apache24 stop
+     sudo /usr/local/etc/rc.d/webssh.sh stop
+     sudo /usr/local/etc/rc.d/telegraf stop
+     sudo /usr/local/etc/rc.d/3.mfrisbeed-ops.sh stop
+     sudo /usr/local/etc/rc.d/wbstore.sh stop
+     sudo /usr/local/etc/rc.d/bareos-fd stop
+     sudo /usr/local/etc/rc.d/znapzend stop
 
    boss:
      sudo /usr/testbed/sbin/testbed-control shutdown
@@ -424,70 +464,37 @@ c. Copy kernel for "pvh" based Xen VMs
    the kernel on the _physical_ host in /vminfo/vminfo/pcvmXXX-X/kernel
    for both boss and ops.
 
-d. Export ZFS pools
+d. Ensure ZFS pools get reimported after boot
 
-   If the node is using ZFS you should probably export any zpools at this
-   point since the ZFS implementation has changed between 12.x and 13.x.
+   FreeBSD 13 no longer automatically imports zpools in the kernel, a new
+   startup script, /etc/rc.d/zpools, does this instead. Unfortunately, if
+   you are following the instructions from "freebsd-update", it has you boot
+   the new FreeBSD 13 kernel before it has installed the new scripts/binaries.
+   The result is that your pools will not get imported after this reboot.
 
-   You may be able to just login as root and then:
+   The easiest way to do this is to defy the freebsd-update instructions and
+   run the second pass *before* rebooting in order to ensure that the new
+   script is installed. This is what we do. However there is still one issue
+   that has to be addressed first.
 
-     sudo shutdown now
+   There is a goofiness when upgrading from 12.3 to 13.3. It is apparently not
+   prepared for /usr/include/c++/v1/{__string,__tuple} to exist but not be a
+   directory. You should remove those two files now or else the install below
+   will throw errors and not install the new versions. This will come back to
+   haunt you when you build Emulab SW later if you do not correct this now:
 
-     # you may be greeted by repeating "Limiting closed port..." messages, so
-     sysctl net.inet.icmp.icmplim=2500
+     sudo rm /usr/include/c++/v1/__string /usr/include/c++/v1/__tuple
 
-     # find the pools to export
-     zpool list
+   Now run the second pass of freebsd-update to install binaries/scripts:
 
-     umount -at nfs
+     # this can take 10+ minutes
+     sudo /usr/sbin/freebsd-update install
 
-     # can take a long time if you have lots of filesystems (5+ minutes!)
-     zfs unmount -a
+   NOTE that it will tell you to rebuild all third-party packages and
+   run freebsd-update again to get rid of old libraries. We do this later
+   below, so don't worry about it now.
 
-     zpool export <pool> ...
-     reboot
-
-   I don't think this is strictly necessary as I have always been able to
-   just naively shutdown and then just import the zpool(s) when I come
-   back up in 13.3. Either way, you will need to re-import any pools after
-   reboot as directed below.
-
-   BE AWARE that you will need to make sure you can login as root after
-   reboot if you just "let it happen" because your homedir may not mount!
-
-e. Ancient filesystem issues, have not seen this in a long time
-
-   NOTE: I have noticed a couple of times on VM-based elabinelab boss/ops
-   upgrades that the root filesystem has some issues after the upgrade,
-   so it is good to run an fsck. I prefer to do this while shutting down.
-   Before you do this, make sure you first have access to the console!
-
-     sudo shutdown now
-
-     umount -at nfs
-     umount -at ufs
-     accton	# turn off accounting that has a file open on /
-     mount -o ro -u /
-     fsck -y /
-     reboot
-
-f. Finally, reboot
-
-   If you have ZFS filesystems and also Mad FreeBSD skilz, you should boot
-   single-user when the node reaches the final boot loader stage after
-   rebooting, and re-import your zpools:
-
-     # see what the pools are
-     zpool import
-     # import each one
-     # on ops there is probably only one, and it can take 5+ minutes to import
-     zpool import <pool>
-     ...
-
-   Check for the existence of /etc/zfs/zpool.cache, if that file isn't there,
-   then you may wind up with no zpool when you reboot again (see
-   /etc/rc.d/zpool). I have not figured out the magic that creates this
-   cache file, other than rebooting a third time (from multi-user mode).
+e. Finally, reboot
 
    When rebooting boss, mysqlcheck might take awhile (5-10 minutes).
    During this time, it won't say much...^T is your friend. The ops reboot
@@ -495,12 +502,6 @@ f. Finally, reboot
    it is doing it.
 
 6. Finish the install
-
-   If you have ZFS filesystems and didn't do the single-user trick above,
-   you will have to login as root (since your homedir is most likely in
-   ZFS on ops) and import the zpool(s) as in step 5f above. At this point,
-   it is probably best just to reboot again as mounts will have failed
-   along with some services.
 
    When the node comes back up, you should login and shutdown services that
    restarted, including some that won't work right.
@@ -537,29 +538,6 @@ f. Finally, reboot
 
    Utah:
      sudo /usr/local/etc/rc.d/bareos-fd stop
-
-   NOTE: there is a goofiness when upgrading from 12.3 to 13.3. It is
-   apparently not prepared for /usr/include/c++/v1/{__string,__tuple} to
-   exist but not be a directory. You should remove those two files now
-   or else the install below will throw errors and not install the new
-   versions. This will come back to haunt you when you build Emulab SW
-   later if you do not correct this now:
-
-     sudo rm /usr/include/c++/v1/__string /usr/include/c++/v1/__tuple
-
-   Now run freebsd-update to finish:
-
-     # this can take 10+ minutes
-     sudo /usr/sbin/freebsd-update install
-
-   NOTE that it will tell you to rebuild all third-party packages and
-   run freebsd-update again to get rid of old libraries. We do this later
-   below, so don't worry about it now.
-
-   NOTE also that I have found `sshd` to need restarting after the upgrade
-   of else you will not be able to connect:
-
-     sudo /etc/rc.d/sshd restart
 
    If a long time (hours to days) passed between the time you did the
    freebsd-update "fetch" and when you do the "install", you should check
@@ -631,6 +609,12 @@ f. Finally, reboot
      cd ~
      git clone -b php81 \
          https://gitlab.flux.utah.edu/emulab/emulab-devel.git testbed-new
+
+   (Note that this URL will not allow you to push back to the repo, so if
+   you are an Emulab developer then you should do this instead:
+
+     git clone -b \
+         php81 git@gitlab.flux.utah.edu:emulab/emulab-devel testbed-new
 
    Since you probably don't have any of the FreeBSD "tests" infrastructure
    installed, you need to prevent it from attempting to install stuff there.
