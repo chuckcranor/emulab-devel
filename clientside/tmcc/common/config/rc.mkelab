@@ -1806,7 +1806,13 @@ sub SetupOpsNode($)
     RecreateDir("/share", 0);
 
     if ($usezfs) {
-	my $zo = "-o setuid=off -o sharenfs='boss -maproot=root'";
+	my $zo = "-o setuid=off";
+	# XXX since we force ZFS_NOEXPORT, make sure sharenfs is off
+	if (1) {
+	    $zo .= " -o sharenfs=off";
+	} else {
+	    $zo .= " -o sharenfs='boss -maproot=root'";
+	}
 
 	mysystem("$ZFSCMD create $zo -o mountpoint=/users $ZFSPOOL/users");
 	mysystem("$ZFSCMD create $zo -o mountpoint=/proj $ZFSPOOL/proj");
@@ -3922,6 +3928,8 @@ sub CreateDefsFile($)
 		/^WITHZFS$/ && do {
 		    if ($usezfs) {
 			print OUTDEFS "WITHZFS=1\n";
+			# XXX ZFS exporting is painfully inefficient
+			print OUTDEFS "ZFS_NOEXPORT=1\n";
 		    } else {
 			print OUTDEFS "WITHZFS=0\n";
 		    }
