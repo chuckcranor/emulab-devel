@@ -116,10 +116,29 @@ foreach my $switch (@ARGV) {
 	}
     }
     if ($type =~ /force10/) {
-	if (system("ssh toor\@$switch write terminal \> $BACKUPDIR/$switch.in")) {
-	    if (($? >> 8) != 255) {
+	my $args = "";
+      again:
+	if (system("ssh $args toor\@$switch write terminal 2>/tmp/$switch-$datestr.err > $BACKUPDIR/$switch.in")) {
+	    my $err = $?;
+	    my $errstr = `cat /tmp/$switch-$datestr.err`;
+	    unlink("/tmp/$switch-$datestr.err");
+	    if (($err >> 8) != 255) {
+		print STDERR "----\n$errstr\n----";
 		print STDERR "Unable to grab and save config for $switch ($?), ignored\n";
 		next;
+	    } elsif ($errstr =~ /Unable to negotiate/) {
+		if ($args eq "") {
+		    # try again once with old cipher/kexalgo
+		    $args = "-c 3des-cbc ".
+			    "-o KexAlgorithms=diffie-hellman-group1-sha1";
+		    goto again;
+		}
+		print STDERR "----\n$errstr\n----";
+		print STDERR "Negotiation error with $switch ($?), ignored\n";
+		next;
+	    } else {
+		# XXX the switch can disconnect abruptly after doing its thing
+		;
 	    }
 	}
         if (system("egrep -v \\#\\|Current\\|SupportAssist $BACKUPDIR/$switch.in \> $BACKUPDIR/$switch-$datestr")) {
