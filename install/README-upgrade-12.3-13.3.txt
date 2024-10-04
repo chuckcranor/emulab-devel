@@ -299,8 +299,9 @@ B. Updating the base FreeBSD system
 0. (Mothership only) DNS changes.
 
    On boss, we need to point DNS to landing page machine. For each of
-   emulab.net, cloudlab.us, and powderwireless.net modify the
-   /etc/namedb/*.db files to change the A record for the domain ala:
+   emulab.net, cloudlab.us, powderwireless.net, aptlab.net.db, and
+   phantomnet.org.db modify the /etc/namedb/*.db files to change the A
+   record for the domain ala:
 
    22c22,24
    <               IN      A               155.98.32.70
@@ -340,6 +341,7 @@ B. Updating the base FreeBSD system
      sudo /usr/local/etc/rc.d/bareos-fd stop
      sudo /usr/local/etc/rc.d/apcupsd stop
      sudo /etc/rc.d/cron stop
+     sudo /usr/local/etc/rc.d/dense-debug.sh stop
    
    ms-ops:
      sudo /usr/local/etc/rc.d/apache24 stop
@@ -505,6 +507,30 @@ e. Finally, reboot
 
    When the node comes back up, you should login and shutdown services that
    restarted, including some that won't work right.
+
+   ms-boss:
+     sudo /usr/testbed/sbin/testbed-control shutdown
+     sudo /usr/local/etc/rc.d/apache24 stop
+     sudo /usr/local/etc/rc.d/tftpd-hpa.sh stop
+     sudo /usr/local/etc/rc.d/2.dhcpd.sh stop
+     sudo /usr/local/etc/rc.d/2.mysql-server.sh stop
+     sudo /usr/local/etc/rc.d/capture stop
+     sudo /usr/local/etc/rc.d/telegraf stop
+     sudo /usr/local/etc/rc.d/syncthing stop
+     sudo /usr/local/etc/rc.d/bareos-fd stop
+     sudo /usr/local/etc/rc.d/apcupsd stop
+     sudo /etc/rc.d/cron stop
+     sudo /usr/local/etc/rc.d/dense-debug.sh stop
+   
+   ms-ops:
+     sudo /usr/local/etc/rc.d/apache24 stop
+     sudo /usr/local/etc/rc.d/webssh.sh stop
+     sudo /usr/local/etc/rc.d/telegraf stop
+     sudo /usr/local/etc/rc.d/3.mfrisbeed-ops.sh stop
+     sudo /usr/local/etc/rc.d/wbstore.sh stop
+     sudo /usr/local/etc/rc.d/1.mysql-server.sh stop
+     sudo /usr/local/etc/rc.d/bareos-fd stop
+     sudo /usr/local/etc/rc.d/znapzend stop
 
    boss:
      sudo /usr/testbed/sbin/testbed-control shutdown
@@ -702,6 +728,19 @@ C. Updating ports/packages
       sudo sed -i .bak -e 's;/12.3/;/13.3/;' /etc/pkg/Emulab.conf
       sudo rm /etc/pkg/Emulab-devel*
 
+1b. (Utah mothership only) Make a copy of the packages repo
+   Since boss is the source of the Emulab repo and our web server and
+   possibly DNS will be up and down, it is best to copy the Emulab
+   repo to another machine with a web server and change the .conf file
+   accordingly. We use the Utah Cloudlab boss.
+
+   Copy /usr/testbed/www/FreeBSD/13.3 over to boss.utah.cloudlab.us.
+
+   Change the Emulab.conf file above to use:
+      url: "http://www.utah.cloudlab.us/FreeBSD/13.3/packages"
+   Note the "http" instead of "https" as SSL authentication might be
+   screwed up due to DNS domain redirection in step 0 above.
+
 2. Update the pkg tool and install new packages:
 
    Since you changed major versions it will prompt you to run
@@ -846,7 +885,7 @@ C. Updating ports/packages
      git clone https://gitlab.flux.utah.edu/emulab/geni-lib.git
      sudo rsync -av --delete geni-lib/ /usr/testbed/opsdir/lib/geni-lib
 
-6. Convert to MariaDB (boss only)
+6. Convert to MariaDB (boss only, except MS where ops also runs a DB)
 
    You will need to fix up /usr/local/etc/mysql/my.cnf:
 
@@ -1051,7 +1090,7 @@ E. Update Emulab software
 
       # on ops -- do this first
       sudo gmake opsfs-install
-      # mysql is no longer installed
+      # mysql is no longer installed (except on the Emulab MS, leave it there)
       sudo rm /usr/local/etc/rc.d/1.mysql*
 
       # on boss -- do this after ops
@@ -1098,6 +1137,21 @@ E. Update Emulab software
 
 5. Re-enable the testbed on boss.
 
+      # Emulab ms boss
+      sudo /usr/local/etc/rc.d/apache24 start
+      sudo /usr/local/etc/rc.d/tftpd-hpa.sh start
+      sudo /usr/local/etc/rc.d/2.dhcpd.sh start
+      sudo /usr/local/etc/rc.d/2.mysql-server.sh start
+      sudo /usr/local/etc/rc.d/capture start
+      sudo /usr/local/etc/rc.d/telegraf start
+      sudo /usr/local/etc/rc.d/syncthing start
+      sudo /usr/local/etc/rc.d/bareos-fd start
+      sudo /usr/local/etc/rc.d/apcupsd start
+      sudo /etc/rc.d/cron start
+      sudo /usr/local/etc/rc.d/dense-debug.sh start
+      sudo /usr/testbed/sbin/testbed-control boot
+
+      # other bosses
       sudo /usr/local/etc/rc.d/apache24 start
       sudo /usr/local/etc/rc.d/tftpd-hpa.sh start
       sudo /usr/local/etc/rc.d/2.dhcpd.sh start
