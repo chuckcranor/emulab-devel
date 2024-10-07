@@ -2962,7 +2962,7 @@ sub SetupBossNode($)
 
     foreach my $table (@tables) {
 	mysystem("echo \"load data infile '/tmp/dbstate.$$/$table' ".
-		 "replace into table `$table`\" | mysql tbdb");
+		 "replace into table \\\`$table\\\`\" | mysql tbdb");
     }
 
     #
