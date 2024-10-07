@@ -326,9 +326,12 @@ my $signedcred = "";
 
 open(SEC, "$XMLSEC1 --sign --node-id $sigid ".
      ($xmlsec1_version >= 1.3 ? " --lax-key-search " : "").
-     "       --privkey-pem $keyfile,$certfile $tmpfile |")
+     "       --privkey-pem $keyfile,$certfile $tmpfile 2>&1 |")
     or fatal("Could not start $XMLSEC1 on $tmpfile");
 while (<SEC>) {
+    # Throw away this stupid line that goes to STDERR
+    next
+	if ($_ =~ /^Signature status: OK$/i);
     $signedcred .= $_;
 }
 if (!close(SEC)) {
@@ -350,7 +353,7 @@ exit(0);
 sub cleanup()
 {
     unlink($tmpfile)
-	if (-e $tmpfile && !$debug);
+	if (defined($tmpfile) && -e $tmpfile && !$debug);
 }
 
 sub fatal($)
