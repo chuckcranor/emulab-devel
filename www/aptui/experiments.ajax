@@ -164,7 +164,8 @@ function Do_ExperimentList()
         if ($portal == $PORTAL_GENESIS) {
             $filters[] = "portal";
         }
-        if (time() - strtotime($created) > (45 * 24 * 3600)) {
+        if ($created &&
+            time() - strtotime($created) > (45 * 24 * 3600)) {
             $filters[] = "old";
         }
         $blob["filter"] = implode(",", $filters);

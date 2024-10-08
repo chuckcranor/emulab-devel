@@ -221,14 +221,13 @@ function Do_AllInuseRanges()
         # Anonymous if not admin.
         if (ISADMIN()) {
             $uuid = $row["uuid"];
-            $idx  = $row["idx"];
             
             $range["pid"]  = $row["pid"];
             $range["uid"]  = $row["creator"];
             $range["name"] = $row["name"];
             $range["eid"]  = $row["name"];
             $range["uuid"] = $row["uuid"];
-            $range["key"]  = $uuid . ":" . $idx;
+            $range["key"]  = $uuid;
 
             $instance = Instance::Lookup($uuid);
             if ($instance) {

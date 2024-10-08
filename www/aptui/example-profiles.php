@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,15 +72,18 @@ while ($row = mysql_fetch_array($query_result)) {
     $blob["version"]   = $row["version"];
     $blob["name"]      = $row["name"];
     $blob["pid"]       = $row["pid"];
-    $blob["desc"]      = CleanString($row["description"]);
     $blob["created"]   = DateStringGMT($row["created"]);
     $blob["portals"]   = $portals;
+    $blob["desc"]      = "";
 
-    $parsed_xml = simplexml_load_string($row["rspec"]);
-    if ($parsed_xml &&
-        $parsed_xml->rspec_tour && $parsed_xml->rspec_tour->description) {
-        $desc = $parsed_xml->rspec_tour->description;
-        $blob["desc"] = CleanString($desc);
+    if ($row["rspec"]) {
+        $parsed_xml = simplexml_load_string($row["rspec"]);
+            if ($parsed_xml &&
+                $parsed_xml->rspec_tour &&
+                $parsed_xml->rspec_tour->description) {
+                $desc = $parsed_xml->rspec_tour->description;
+                $blob["desc"] = CleanString($desc);
+            }
     }
     if ($ISPOWDER && $portals == "powder") {
         $profiles["powder"][] = $blob;

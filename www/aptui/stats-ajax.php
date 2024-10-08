@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -68,6 +68,9 @@ if ($portal == "emulab") {
         DBQueryFatal("select count(*) from experiments ".
                      "where geniflags=0 && state='active'");
 }
+else {
+    $query_result = null;
+}
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
     $blob["active_experiments"] += $row[0];
@@ -100,6 +103,9 @@ if ($portal == "emulab") {
     $query_result =
         DBQueryFatal("select count(*) from experiment_stats ".
                      "where geniflags is null");
+}
+else {
+    $query_result = null;
 }
 if ($query_result) {
     $row = mysql_fetch_array($query_result);

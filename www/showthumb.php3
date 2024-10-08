@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,7 +41,7 @@ if ($query_result && mysql_num_rows($query_result)) {
     $row  = mysql_fetch_array($query_result);
     $data = $row["thumbnail"];
 
-    if (strlen($data)) {
+    if ($data && strlen($data)) {
 	# Gack, this is easiest way to tell them apart.
 	if (strncmp($data, "<svg", 4) == 0) {
 	    header("Content-type: image/svg+xml");

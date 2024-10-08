@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,7 +46,7 @@ function Do_GetFixedEndpoints()
                   "longitude" => $aggregate->longitude(),
                   "nickname"  => $aggregate->nickname(),
                   "name"      => $aggregate->name(),
-                  "typelist"  => $typelist,
+                  "typelist"  => null,
                   "radioinfo" => null);
         if (array_key_exists($urn, $radioinfo)) {
             $blob[$urn]["radioinfo"] = $radioinfo[$urn];
