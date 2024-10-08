@@ -236,7 +236,7 @@ if (isset($profile)) {
     # is /p/project/profilename, but only for public profiles.
     #
     if (isset($project) && isset($profile)) {
-	$obj = Profile::LookupByName($project, $profile, $version);
+	$obj = Profile::LookupByName($project, $profile);
     }
     elseif (IsValidUUID($profile) || IsValidHash($profile)) {
 	$obj = Profile::Lookup($profile);

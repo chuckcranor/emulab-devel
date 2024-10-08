@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -76,8 +76,10 @@ if ($printable) {
           <body>\n";
 }
 else {
-	echo "<b><a href=$REQUEST_URI&printable=1>
-                 Printable version of this document</a></b><br>\n";
+    $REQUEST_URI = $_SERVER['REQUEST_URI'];
+    
+    echo "<b><a href=$REQUEST_URI&printable=1>
+            Printable version of this document</a></b><br>\n";
 }
 
 if ($textfile) {

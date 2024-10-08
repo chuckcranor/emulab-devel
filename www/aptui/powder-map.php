@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,7 +59,7 @@ $optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
                                  "imagerymap", PAGEARG_BOOLEAN,
                                  "onlineonly", PAGEARG_BOOLEAN);
 
-if ($experiment) {
+if (isset($experiment)) {
     $baseonly   = 0;
     $showfilter = $showreserved = 0;
     $showlegend = 1;
@@ -102,16 +102,16 @@ echo "window.IMAGERYMAP    = $imagerymap;\n";
 echo "window.BASEONLY      = $baseonly;\n";
 echo "window.ONLINEONLY    = $onlineonly;\n";
 echo "window.ISADMIN       = $isadmin;\n";
-if ($experiment) {
+if (isset($experiment)) {
     echo "window.EXPERIMENT = '$experiment';\n";
 }
-if ($location) {
+if (isset($location)) {
     echo "window.LOCATION   = '$location';\n";
 }
-if ($route) {
+if (isset($route)) {
     echo "window.ROUTE   = '$route';\n";
 }
-if ($filter) {
+if (isset($filter)) {
     echo "window.SETFILTER = '$filter';\n";
 
 }

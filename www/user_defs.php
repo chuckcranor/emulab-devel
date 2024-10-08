@@ -223,7 +223,7 @@ class User
     #
     # Class function to change the user profile.
     #
-    function ModUserInfo($target_user, $uid, $args, &$errors) {
+    public static function ModUserInfo($target_user, $uid, $args, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -1971,7 +1971,7 @@ class User
         if (!$BROWSER_CONSOLE_WEBSSH) {
             return 0;
         }
-        if ($this->admin() || FeatureEnabled("webssh", $self, null, null)) {
+        if ($this->admin() || FeatureEnabled("webssh", $this, null, null)) {
             return 1;
         }
         # See if enabled in any of the users projects

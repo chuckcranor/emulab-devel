@@ -167,8 +167,13 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     $drewheader = 1;
     $nonav = 0;
     $noannouncements = 0;
-    $parsed_url = parse_url($_SERVER['REQUEST_URI']);
-    $script = basename($parsed_url["path"]);
+    $script = null;
+    if ($_SERVER['REQUEST_URI']) {
+        $parsed_url = parse_url($_SERVER['REQUEST_URI']);
+        if ($parsed_url && isset($parsed_url["path"])) {
+            $script = basename($parsed_url["path"]);
+        }
+    }
 
     #
     # Figure out who is logged in, if anyone.

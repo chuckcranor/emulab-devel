@@ -326,13 +326,16 @@ function ProfileListAux($query_result)
         if (!$profile) {
             continue;
         }
-        $parsed_xml = simplexml_load_string($rspec);
-        if ($parsed_xml &&
-            $parsed_xml->rspec_tour && $parsed_xml->rspec_tour->description) {
-            $desc = $parsed_xml->rspec_tour->description;
-            # Convert to array to get the one element. 
-            $desc = (array)$desc;
-            $desc = $desc[0];
+        if ($rspec) {
+            $parsed_xml = simplexml_load_string($rspec);
+            if ($parsed_xml &&
+                $parsed_xml->rspec_tour &&
+                $parsed_xml->rspec_tour->description) {
+                $desc = $parsed_xml->rspec_tour->description;
+                # Convert to array to get the one element. 
+                $desc = (array)$desc;
+                $desc = $desc[0];
+            }
         }
         $blob = array();
         $blob["profile_name"] = $name;

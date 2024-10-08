@@ -1,6 +1,5 @@
 <?php
-#
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,7 +45,7 @@ $show_sslcertbox = TBGetSiteVar("protogeni/show_sslcertbox");
 if ($UI_EXTERNAL_ACCOUNTS) {
     $this_user = CheckLoginOrDie();    # force login, newuser is disabled
 } else {
-    $this_user = CheckLogin($check_status);
+g    $this_user = CheckLogin($check_status);
 }
 
 #
@@ -74,6 +73,7 @@ if ($this_user) {
 }
 else {
     header("Location: portal/signup.php?joinproject=1");
+    exit(0);
 }
 
 if ($old_forwikionly == True) {

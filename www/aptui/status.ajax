@@ -1041,7 +1041,9 @@ function Do_SnapshotStatus()
     if (isset($taskdata["copyback_urn"])) {
         $blob["copyback_urn"] = $taskdata["copyback_urn"];
     }
-    $blob["image_status"] = $taskdata["image_status"];
+    if (isset($taskdata["image_status"])) {
+        $blob["image_status"] = $taskdata["image_status"];
+    }
     
     #
     # Lets put the node status in too. The backend has helpfully told us

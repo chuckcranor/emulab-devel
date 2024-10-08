@@ -859,7 +859,12 @@ class Project
 	$proj_pcs		= $this->num_pcs();
         # These are now booleans, not actual counts.
 	$proj_linked		= YesNo($this->linked_to_us());
-	$proj_why		= nl2br($this->why());
+        if ($this->why()) {
+            $proj_why = nl2br($this->why());
+        }
+        else {
+            $proj_why = "";
+        }
 	$approved		= YesNo($this->approved());
 	$expt_count		= $this->expt_count();
 	$expt_last		= $this->expt_last();

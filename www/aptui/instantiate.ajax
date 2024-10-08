@@ -555,7 +555,11 @@ function Do_GetImageInfo()
             $urn = preg_replace('/\/\//', ":", $urn);
             # Need to see if there is a specific version.
             list ($auth,$type,$id) = Instance::ParseURN($urn);
-            list ($proj,$name,$version) = preg_split('/:/', $id);
+
+            $parsed_id = preg_split('/:/', $id);
+            $proj = $parsed_id[0];
+            $name = $parsed_id[1];
+            $version = (count($parsed_id) == 3 ? $parsed_id[2] : null);
 
             #
             # Lookup is without the version number in the urn.

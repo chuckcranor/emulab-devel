@@ -600,6 +600,7 @@ class Aggregate
                          "  i.itype=l.itype ".
                          "left join apt_aggregate_reservable_nodes as r on ".
                          "  r.urn=i.aggregate_urn and r.node_id=i.node_id ".
+                         "where i.aggregate_urn is not null ".
                          "order by l.itype desc, l.location asc");
 
         while ($row = mysql_fetch_array($query_result)) {

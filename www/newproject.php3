@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,7 +71,7 @@ elseif ($FirstInitState) {
 }
 else {
     header("Location: portal/signup.php");
-    
+    exit(0);
 }
 unset($addpubkeyargs);
 
