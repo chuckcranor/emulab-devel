@@ -31,6 +31,7 @@ use URI;
 use Scalar::Util qw(blessed);
 use Carp;
 use Exporter;
+require IO::Socket::SSL;
 use vars qw(@ISA @EXPORT);
 
 @ISA    = "Exporter";
@@ -55,6 +56,8 @@ my $ELEMENTID;
 sub ZMCURL() { return $ZMC; }
 # Observations go to the DST.
 sub DSTURL() { return $DST; }
+# Need the Identity service for creating users
+sub IDENTITYURL() { return $IDENTITY; }
 
 # Tokens.
 sub POWDER() { return $POWDERTOKEN; }
@@ -69,6 +72,11 @@ my $verbose       = 0;
 sub Create($$$)
 {
     my ($class, $token, $url) = @_;
+
+    IO::Socket::SSL::set_defaults('SSL_key_file' => undef,
+			      'SSL_cert_file' => undef,
+			      'SSL_ca_file' => undef,
+			      'SSL_use_cert' => 0);
 
     my $elementid = GetElementID($token);
     return undef
@@ -85,13 +93,15 @@ sub Create($$$)
     #
     # XXX For now assume a single spectrum range.
     #
-    my $response;
-    if ($ref->GET("/spectrum", \$response)) {
-	print STDERR "Could not get RDZ /spectrum\n";
-	return undef;
-    }
-    if (@{$response->{'spectrum'}}) {
-	$ref->{'spectrumid'} = $response->{'spectrum'}->[0]->{'id'};
+    if ($class eq "APT_RDZRest::ZMC") {
+	my $response;
+	if ($ref->GET("/spectrum", \$response)) {
+	    print STDERR "Could not get RDZ /spectrum\n";
+	    return undef;
+	}
+	if (@{$response->{'spectrum'}}) {
+	    $ref->{'spectrumid'} = $response->{'spectrum'}->[0]->{'id'};
+	}
     }
     return $ref;
 }
@@ -109,6 +119,11 @@ sub REST($$$$)
 {
     my ($self, $endpoint, $prval, $op) = @_;
     my $client = REST::Client->new();
+
+    IO::Socket::SSL::set_defaults('SSL_key_file' => undef,
+			      'SSL_cert_file' => undef,
+			      'SSL_ca_file' => undef,
+			      'SSL_use_cert' => 0);
 
     $client->setHost($self->url());
     $client->addHeader("X-Api-Token", $self->token());
@@ -129,6 +144,9 @@ sub REST($$$$)
 	    print STDERR "Could not decode json\n";
 	    return -1;
 	}
+	if ($verbose) {
+	    print STDERR $client->responseContent() . "\n";
+	}
 	if ($client->responseCode() ne "200") {
 	    print Dumper($rval);
 	}
@@ -148,6 +166,11 @@ sub RESTP($$$$$)
     my ($self, $endpoint, $ref, $prval, $op) = @_;
     my $client = REST::Client->new();
 
+    IO::Socket::SSL::set_defaults('SSL_key_file' => undef,
+			      'SSL_cert_file' => undef,
+			      'SSL_ca_file' => undef,
+			      'SSL_use_cert' => 0);
+
     $client->setHost($self->url());
     $client->addHeader("X-Api-Token", $self->token());
     $client->addHeader("X-Api-Elaborate", "true");
@@ -157,6 +180,9 @@ sub RESTP($$$$$)
     if ($@) {
 	print STDERR "Could not encode object as json\n";
 	return -1;
+    }
+    if ($verbose) {
+	print STDERR $json . "\n";
     }
     if ($op eq "POST") {
 	$client->POST($endpoint, $json);
@@ -172,6 +198,9 @@ sub RESTP($$$$$)
 	if ($@) {
 	    print STDERR "Could not decode json\n";
 	    return -1;
+	}
+	if ($verbose) {
+	    print STDERR $client->responseContent() . "\n";
 	}
 	if ($client->responseCode() !~ /^(200|201)$/) {
 	    print Dumper($rval);
@@ -208,6 +237,7 @@ sub GetElementID($)
 	print STDERR "Could not decode json\n";
 	return undef;
     }
+    #print "FOOOO\n";
     #print Dumper($rval);
 
     my $id;
@@ -215,7 +245,10 @@ sub GetElementID($)
 	my $role_binding = $binding->{'role_binding'};
 	my $role_name    = $role_binding->{'role'}->{'name'};
 
-	if ($role_name eq "owner") {
+	next
+	    if (!defined($role_binding->{"element_id"}));
+
+	if ($role_name eq "owner" || $role_name eq "viewer") {
 	    $id = $role_binding->{"element_id"};
 	    last;
 	}
@@ -244,6 +277,17 @@ sub New($$) {
     my ($class, $token) = @_;
 
     my $self = $class->SUPER::Create($token, APT_RDZRest::DSTURL());
+    bless($self, $class);
+    return $self;
+}
+
+package APT_RDZRest::IDENTITY;
+use base qw(APT_RDZRest);
+
+sub New($$) {
+    my ($class, $token) = @_;
+
+    my $self = $class->SUPER::Create($token, APT_RDZRest::IDENTITYURL());
     bless($self, $class);
     return $self;
 }

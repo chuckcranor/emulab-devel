@@ -150,9 +150,9 @@ sub RequestSpectrum($$)
 	    "constraints" => [
 		{
 		    "constraint" => {
-			"min_freq"  => $frequency_low * 1000000,
-			"max_freq"  => $frequency_high * 1000000,
-			"max_eirp"  => $power,
+			"min_freq"  => ($frequency_low * 1000000) + 0,
+			"max_freq"  => ($frequency_high * 1000000) + 0,
+			"max_eirp"  => $power + 0,
 			"exclusive" => JSON::false,
 		    },
 		},
@@ -416,55 +416,52 @@ sub CreateClaimFromReservation($$;$$)
 	}
     }
     my $request = {
-	"description" => $desc,
-	"name"        => $name,
 	"element_id"  => $ZMC->elementid(),
-	"spectrum_id" => $ZMC->spectrumid(),
-	"starts_at"   => TBDateStringGMT($start),
-	"expires_at"  => TBDateStringGMT($end),
-	"priority"    => 1024,
-	"constraints" => [
-	    {
-		"constraint" => {
-		    "min_freq"  => $range->freq_low() * 1000000,
-		    "max_freq"  => $range->freq_high() * 1000000,
-		    "max_eirp"  => 30,
-		    "exclusive" => JSON::true,
-		},
-	    },
-	],
-	"grant_claim" => {
-	    "ext_id"      => $range->freq_uuid(),
-	    "type"        => "powder",
-	    "source"      => "powder-slc",
-	    "html_url"    => $resgroup->WebURL(),
+	"name"        => $name,
+	"description" => $desc,
+	"ext_id"      => $range->freq_uuid(),
+	"type"        => "powder",
+	"source"      => "powder-slc",
+	"grant"       => {
+	    "element_id"  => $ZMC->elementid(),
+	    "spectrum_id" => "534203ea-c252-4ef0-9eec-4e0a56275181",
+	    "starts_at"   => TBDateStringGMT($start),
+	    "expires_at"  => TBDateStringGMT($end),
 	    "name"        => $name,
 	    "description" => $desc,
+	    "priority"    => 1023,
+	    "constraints" => [
+		{
+		    "constraint" => {
+			"min_freq"  => $range->freq_low() * 1000000,
+			"max_freq"  => $range->freq_high() * 1000000,
+			"max_eirp"  => 30,
+			"exclusive" => JSON::true,
+		    },
+		},
+	    ],
 	},
     };
-    if ($claim_id) {
-	$request->{'id'} = $claim_id;
-	$request->{'grant_claim_id'} = $claim_id;
-	$request->{'grant_claim'}->{'id'} = $claim_id;
-    }
     if ($debug) {
 	print Dumper($request);
     }
     return 0
 	if ($impotent);
-    
+
     my $response;
+    #
+    # Short term, we will delete/re-create existing claims.
+    #
     if ($claim_id) {
-	if ($ZMC->PUT("/grants/$claim_id", $request, \$response)) {
-	    $$perrmsg .= "\n" . "Could not update claim for $range";
+	if ($ZMC->DELETE("/claims/$claim_id", \$response)) {
+	    $$perrmsg = "\n" . "Could not delete claim for $range";
 	    return -1;
 	}
+	$range->RDZMarkUnclaimed();
     }
-    else {
-	if ($ZMC->POST("/grants", $request, \$response)) {
-	    $$perrmsg .= "\n" . "Could not create claim for $range";
-	    return -1;
-	}
+    if ($ZMC->POST("/claims", $request, \$response)) {
+	$$perrmsg .= "\n" . "Could not create claim for $range";
+	return -1;
     }
     if ($debug) {
 	print Dumper($response);
@@ -492,11 +489,156 @@ sub DeleteClaimFromReservation($$)
 	}
     }
     my $response;
-    if ($ZMC->DELETE("/grants/$claim_id", \$response)) {
+    if ($ZMC->DELETE("/claims/$claim_id", \$response)) {
 	$$perrmsg = "\n" . "Could not delete claim for $range";
 	return -1;
     }
     $range->RDZMarkUnclaimed();
+    return 0;
+}
+
+#
+# Create a temporary user at the RDZ in the powder element. This is a
+# viewer only user for the purposes of pulling down data to seed an
+# RDZ-in-RDZ experiment.
+#
+sub CreateTemporaryUser($$$$;$)
+{
+    my ($pid, $eid, $email, $pref, $debug) = @_;
+    my $username = $pid . "-" . $eid;
+    my $password = substr(TBGenSecretKey(), 0, 12);
+    my $user_id;
+    my $response;
+    
+    my $IDENT = APT_RDZRest::IDENTITY->New(APT_RDZRest::POWDER());
+    if (!defined($IDENT)) {
+	$$pref = "CreateTemporaryUser: could not get the IDENTITY API";
+	return -1;
+    }
+    #
+    # Need to find the role we want, which is viewer
+    #
+    if ($IDENT->GET("/roles", \$response)) {
+	$$pref = "CreateTemporaryUser: could not get RDZ roles";
+	return -1;
+    }
+    my $role_id;
+    foreach my $role (@{$response->{'roles'}}) {
+	if ($role->{'name'} eq "viewer") {
+	    $role_id = $role->{'id'};
+	}
+    }
+    if (!defined($role_id)) {
+	$$pref = "CreateTemporaryUser: could not find the viewer role id";
+	return -1;
+    }
+    if ($debug) {
+	print "Role id: $role_id\n";
+    }
+    
+    my $user_request = {
+	"name"        => $username,
+	"given_name"  => $pid,
+	"family_name" => $eid,
+	"full_name"   => "$pid $eid",
+	"password"    => $password,
+	"primary_email_address" => $email,
+    };
+	
+    if ($debug) {
+	print Dumper($user_request);
+    }
+
+    if ($IDENT->POST("/users", $user_request, \$response)) {
+	$$pref = "CreateTemporaryUser: Could not add new user"; 
+	return -1;
+    }
+    $user_id = $response->{'id'};
+    
+    if ($debug) {
+	if ($debug > 1) {
+	    print Dumper($response);
+	}
+	else {
+	    print "User id: $user_id\n";
+	}
+    }
+
+    my $role_request = {
+	"user_id"      => $user_id,
+	"role_id"      => $role_id,
+	"element_id"   => $IDENT->elementid(),
+	"element_name" => "powder",
+	"approved"     => JSON::true,
+    };
+    if ($debug) {
+	print Dumper($role_request);
+    }
+    if ($IDENT->POST("/rolebindings", $role_request, \$response)) {
+	$$pref = "CreateTemporaryUser: could not create role binding";
+	goto bad;
+    }
+    my $role_binding_id = $response->{'id'};
+    
+    if ($debug) {
+	if ($debug > 1) {
+	    print Dumper($response);
+	}
+	else {
+	    print "Role Binding id: $role_binding_id\n";
+	}
+    }
+
+    my $token_request = {
+	"method"     => "password",
+	"token_type" => "pat",
+	"credential" => {
+	    "username" => $username,
+	    "password" => $password,
+	},
+	"role_binding_ids" => [
+	    $role_binding_id,
+	],
+    };
+    if ($debug) {
+	print Dumper($token_request);
+    }
+    if ($IDENT->POST("/tokens", $token_request, \$response)) {
+	$$pref = "CreateTemporaryUser: could not create new token";
+	goto bad;
+    }
+    my $token = $response->{'token'};
+    
+    if ($debug) {
+	if ($debug > 1) {
+	    print Dumper($response);
+	}
+	else {
+	    print "Token: $token\n";
+	}
+    }
+    $$pref = {
+	"username" => $username,
+	"user_id"  => $user_id,
+	"token"    => $token,
+    };
+    return 0;
+
+  bad:
+    # Do not leave the user partly created.
+    if (defined($user_id)) {
+	if ($IDENT->DELETE("/users/$user_id", \$response)) {
+	    print STDERR "CreateTemporaryUser: Could not delete ".
+		"$username ($user_id) after failure\n";
+	}
+    }
+    return -1;
+}
+
+sub DeleteTemporaryUser($$)
+{
+    my ($pid, $eid) = @_;
+
     return 0;
 }
 
