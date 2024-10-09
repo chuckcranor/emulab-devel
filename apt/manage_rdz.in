@@ -52,15 +52,19 @@ sub usage()
     print STDERR "Usage: manage_rdz observations create\n";
     print STDERR "Usage: manage_rdz subscriptions create\n";
     print STDERR "Usage: manage_rdz claims list|create|delete|show\n";
+    print STDERR "Usage: manage_rdz users list|create|delete|show\n";
     exit(-1);
 }
-my $optlist     = "dt:n";
+my $optlist     = "dt:nT:j";
 my $debug       = 0;
 my $impotent    = 0;
+my $asjson      = 0;
 my $webtask_id;
 my $logfile;
 my $webtask;
+my $token;
 my $this_user;
+my $JSON;
 
 #
 # Configure variables
@@ -115,6 +119,7 @@ sub DoMonitors();
 sub DoObservations();
 sub DoSubscriptions();
 sub DoClaims();
+sub DoUsers();
 sub UpdateMonitor($);
 sub DoRFSObservation($$);
 sub WatchGrant($);
@@ -135,6 +140,10 @@ if (defined($options{"d"})) {
 if (defined($options{"n"})) {
     $impotent = 1;
 }
+if (defined($options{"j"})) {
+    $asjson = 1;
+    $JSON = JSON->new->allow_nonref;
+}
 if (defined($options{"t"})) {
     $webtask_id = $options{"t"};
     $webtask = WebTask->Lookup($webtask_id);
@@ -143,7 +152,9 @@ if (defined($options{"t"})) {
     }
     $webtask->AutoStore(1);
 }
-
+if (defined($options{"T"})) {
+    $token = $options{"T"};
+}
 if (@ARGV < 1) {
     usage();
 }
@@ -152,11 +163,33 @@ my $action = shift(@ARGV);
 #
 # We get the element from the token.
 #
-my $ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+my $ZMC;
+
+if ($token) {
+    $ZMC = APT_RDZRest::ZMC->New($token);    
+}
+else {
+    $ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+}
 if (!defined($ZMC)) {
-    fatal("Could not get our element_id");
+    fatal("Could not create the ZMC client");
 }
 my $ELEMENTID = $ZMC->elementid();
+
+#
+# Debugging
+#
+sub DebugDump($)
+{
+    my ($ref) = @_;
+    
+    if ($asjson) {
+	print $JSON->pretty->encode($ref);
+    }
+    else {
+	print Dumper($ref);
+    }
+}
 
 if ($action eq "reset") {
     exit(DoReset());
@@ -196,6 +229,9 @@ elsif ($action eq "subscriptions") {
 }
 elsif ($action eq "claims") {
     exit(DoClaims());
+}
+elsif ($action eq "users") {
+    exit(DoUsers());
 }
 else {
     usage();
@@ -289,7 +325,12 @@ sub DoZones()
     if ($ZMC->GET("/zones", \$response)) {
 	fatal("Could not get RDZ /zones");
     }
-    print Dumper($response);
+    if ($asjson) {
+	print $JSON->pretty->encode($response);
+    }
+    else {
+	print Dumper($response);
+    }
     exit(0);
 }
 
@@ -2024,7 +2065,7 @@ sub DoClaims()
     my $usage = sub {
 	print STDERR "Usage: manage_rdz claims list\n";
 	print STDERR "Usage: manage_rdz claims create <low> <high>\n";
-	print STDERR "Usage: manage_rdz claims create -g <resgroup>\n";
+	print STDERR "Usage: manage_rdz claims create [-u] -g <resgroup>\n";
 	print STDERR "Usage: manage_rdz claims show <claim_id>\n";
 	print STDERR "Usage: manage_rdz claims delete <claim_id>\n";
 	print STDERR "Usage: manage_rdz claims delete -g <resgroup>\n";
@@ -2048,8 +2089,7 @@ sub DoClaims()
     if ($which eq "list") {
 	my $response;
 
-	if ($ZMC->GET("/grants?element_id=$ELEMENTID&revoked=false".
-		      "&deleted=false&is_claim=1",
+	if ($ZMC->GET("/claims?element_id=$ELEMENTID&deleted=false",
 			 \$response)) {
 	    fatal("Could not get RDZ /claims");
 	}
@@ -2063,8 +2103,8 @@ sub DoClaims()
 	    if (@ARGV != 1);
 	
 	my $claim_id = shift(@ARGV);
-	if ($ZMC->GET("/grants/$claim_id", \$response)) {
-	    fatal("Could not get /grants/$claim_id");
+	if ($ZMC->GET("/claims/$claim_id", \$response)) {
+	    fatal("Could not get /claims/$claim_id");
 	}
 	if ($debug) {
 	    print Dumper($response);
@@ -2079,8 +2119,8 @@ sub DoClaims()
 		if (@ARGV != 1);
 	
 	    my $claim_id = shift(@ARGV);
-	    if ($ZMC->DELETE("/grants/$claim_id", \$response)) {
-		fatal("Could not delete /grants/$claim_id");
+	    if ($ZMC->DELETE("/claims/$claim_id", \$response)) {
+		fatal("Could not delete /claims/$claim_id");
 	    }
 	    exit(0);
 	}
@@ -2098,8 +2138,8 @@ sub DoClaims()
 		next;
 	    }
 	    my $claim_id = $rfrange->rdz_claimid();
-	    if ($ZMC->DELETE("/grants/$claim_id", \$response)) {
-		fatal("Could not delete /grants/$claim_id");
+	    if ($ZMC->DELETE("/claims/$claim_id", \$response)) {
+		fatal("Could not delete /claims/$claim_id");
 	    }
 	    $rfrange->RDZMarkUnclaimed();
 	}
@@ -2119,14 +2159,6 @@ sub DoClaims()
 	$end        = time() + 3600;
 	$name       = "Test Grant Claim";
 	$desc       = "Test Grant Claim";
-	my $grantclaim = {
-	    "ext_id"      => NewUUID(),
-	    "type"        => "powder",
-	    "source"      => "powder-slc",
-	    "html_url"    => "https://www.powderwireless.net",
-	    "name"        => $name,
-	    "description" => $desc,
-	};
 	my $constraint = {
 	    "min_freq"  => $freq_low + 0,
 	    "max_freq"  => $freq_high + 0,
@@ -2134,32 +2166,40 @@ sub DoClaims()
 	    "exclusive" => JSON::true,
 	};
 	my $request = {
-	    "description" => $grantclaim->{'description'},
 	    "element_id"  => $ELEMENTID,
-	    "name"        => $grantclaim->{'name'},
-	    "spectrum_id" => "534203ea-c252-4ef0-9eec-4e0a56275181",
-	    "starts_at"   => TBDateStringGMT($start),
-	    "expires_at"  => TBDateStringGMT($end),
-	    "priority"    => 1024,
-	    "constraints" => [
-		{
-		    "constraint" => $constraint,
-		},
-	    ],
-	    "grant_claim" => $grantclaim,
+	    "name"        => $name,
+	    "description" => $desc,
+	    "ext_id"      => NewUUID(),
+	    "type"        => "powder",
+	    "source"      => "powder-slc",
+	    "priority"    => 1023,
+	    "grant"       => {
+		"element_id"  => $ELEMENTID,
+		"spectrum_id" => "534203ea-c252-4ef0-9eec-4e0a56275181",
+		"starts_at"   => TBDateStringGMT($start),
+		"expires_at"  => TBDateStringGMT($end),
+		"name"        => $name,
+		"description" => $desc,
+		"priority"    => 1023,
+		"constraints" => [
+		    {
+			"constraint" => $constraint,
+		    },
+		],
+	    },
 	};
 	if ($debug || $impotent) {
-	    print Dumper($request);
+	    print DebugDump($request);
 	}
 	if ($impotent) {
 	    exit(0);
 	}
 	my $response;
-	if ($ZMC->POST("/grants", $request, \$response)) {
+	if ($ZMC->POST("/claims", $request, \$response)) {
 	    fatal("Could not add RDZ grant claim");
 	}
 	if ($debug) {
-	    print Dumper($response);
+	    print DebugDump($response);
 	}
 	print "Claim id: ". $response->{'id'} . "\n";
 	exit(0);
@@ -2186,6 +2226,235 @@ sub DoClaims()
 	next
 	    if ($impotent);
 	print "Claim ID: " . $rfrange->rdz_claimid() . "\n";
+    }
+    exit(0);
+}
+
+sub DoUsers()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz users list\n";
+	print STDERR "Usage: manage_rdz users search <login>\n";
+	print STDERR "Usage: manage_rdz users show <user_id>\n";
+	print STDERR "Usage: manage_rdz users create <login> <first> <last> ".
+	    "<email> [<password>]\n";
+	print STDERR "Usage: manage_rdz users bindrole <user_id> <role>\n";
+	print STDERR "Usage: manage_rdz users token create <user_id> [<password>]\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(search|list|create|delete|show|bindrole|token)$/);
+
+    my %options = ();
+    if (! getopts("", \%options)) {
+	usage();
+    }
+    my $IDENT = APT_RDZRest::IDENTITY->New(APT_RDZRest::POWDER());
+    if (!defined($IDENT)) {
+	fatal("Could not get the IDENTITY API");
+    }
+    
+    if ($which eq "list") {
+	my $response;
+
+	if ($IDENT->GET("/users?element_id=$ELEMENTID&deleted=false",
+		      \$response)) {
+	    fatal("Could not get RDZ /users");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "search") {
+	usage()
+	    if (@ARGV != 1);
+
+	my $login = $ARGV[0];
+	my $response;
+	if ($IDENT->GET("/users?element_id=$ELEMENTID&deleted=false&user=$login",
+		      \$response)) {
+	    fatal("Could not get RDZ /users");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $user_id = shift(@ARGV);
+	if ($IDENT->GET("/users/$user_id", \$response)) {
+	    fatal("Could not get /users/$user_id");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "delete") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $user_id = shift(@ARGV);
+	if ($IDENT->DELETE("/users/$user_id", \$response)) {
+	    fatal("Could not delete /users/$user_id");
+	}
+	exit(0);
+    }
+    if ($which eq "create") {
+	usage()
+	    if (@ARGV < 4 || @ARGV > 5);
+	
+	my ($login, $firstname, $lastname, $email, $password) = @ARGV;
+	if (!defined($password)) {
+	    $password = substr(TBGenSecretKey(), 0, 12);
+	    print "Password: $password\n";
+	}
+
+	my $request = {
+	    "name"        => $login,
+	    "given_name"  => $firstname,
+	    "family_name" => $lastname,
+	    "full_name"   => "$firstname $lastname",
+	    "password"    => $password,
+	    "primary_email_address" => $email,
+	};
+    
+	if ($debug || $impotent) {
+	    print Dumper($request);
+	}
+	if ($impotent) {
+	    exit(0);
+	}
+	my $response;
+	if ($IDENT->POST("/users", $request, \$response)) {
+	    fatal("Could not add RDZ user");
+	}
+	if ($debug) {
+	    print Dumper($response);
+	}
+	print "User id: ". $response->{'id'} . "\n";
+	exit(0);
+    }
+    if ($which eq "bindrole") {
+	usage()
+	    if (@ARGV != 2);
+
+	my ($user_id, $rolename) = @ARGV;
+
+	#
+	# Need to find the role we want, which is viewer
+	#
+	my $response;
+	if ($IDENT->GET("/roles", \$response)) {
+	    fatal("Could not get RDZ roles");
+	}
+	my $role_id;
+	foreach my $role (@{$response->{'roles'}}) {
+	    if ($role->{'name'} eq $rolename) {
+		$role_id = $role->{'id'};
+	    }
+	}
+	if (!defined($role_id)) {
+	    fatal("Could not locate the role");
+	}
+	if ($debug) {
+	    print "Role id: $role_id\n";
+	}
+	my $request = {
+	    "user_id"      => $user_id,
+	    "role_id"      => $role_id,
+	    "element_id"   => $ELEMENTID,
+	    "element_name" => "powder",
+	    "approved"     => JSON::true,
+	};
+	if ($debug || $impotent) {
+	    print Dumper($request);
+	}
+	if ($impotent) {
+	    exit(0);
+	}
+	if ($IDENT->POST("/rolebindings", $request, \$response)) {
+	    fatal("Could not create role binding");
+	}
+	if ($debug) {
+	    print Dumper($response);
+	}
+	print "Role id: " . $response->{'id'} . "\n";
+	exit(0);
+    }
+    if ($which eq "token") {
+	usage()
+	    if (@ARGV < 1);
+	
+	my $op = shift(@ARGV);
+	if ($op eq "create") {
+	    usage()
+		if (@ARGV != 2);
+	    
+	    my ($user_id, $password) = @ARGV;
+
+	    #
+	    # Need to find the role binding id for viewer:powder
+	    #
+	    my $response;
+	    if ($IDENT->GET("/users/$user_id", \$response)) {
+		fatal("Could not get /users/$user_id");
+	    }
+	    if ($debug) {
+		print Dumper($response);
+	    }
+	    my $name = $response->{'name'};
+
+	    my $role_binding_id;
+	    foreach my $rb (@{$response->{'role_bindings'}}) {
+		next
+		    if (!defined($rb->{'element_id'}) ||
+			$rb->{'element_id'} ne $ELEMENTID);
+
+		if ($rb->{'role'}->{'name'} eq "viewer") {
+		    $role_binding_id = $rb->{'role_id'};
+		    last
+		}
+	    }
+	    if (!defined($role_binding_id)) {
+		fatal("Could not get view:powder role binding");
+	    }
+	    if ($debug) {
+		print "Role Binding id: $role_binding_id\n";
+	    }
+
+	    my $request = {
+		"method"     => "password",
+		"token_type" => "pat",
+		"credential" => {
+		    "username" => $name,
+		    "password" => $password,
+		},
+		"role_binding_ids" => [
+		    $role_binding_id,
+		],
+	    };
+	    
+	    if ($debug || $impotent) {
+		print Dumper($request);
+	    }
+	    if ($impotent) {
+		exit(0);
+	    }
+	    if ($IDENT->POST("/tokens", $request, \$response)) {
+		fatal("Could not create new token");
+	    }
+	    if ($debug) {
+		print Dumper($response);
+	    }
+	}
+	exit(0);
     }
     exit(0);
 }
