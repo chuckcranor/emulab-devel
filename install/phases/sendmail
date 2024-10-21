@@ -20,7 +20,7 @@ sub Install($$$)
 	push(@LOCAL_HOSTS, "foam.${OURDOMAIN}");
     }
     
-    # covert to list names and remove duplicates
+    # convert to list names and remove duplicates
     my @MAILING_LIST_NAMES = ();
     my %gotit = ();
     foreach my $name (@LOCAL_MAILING_LISTS) {
@@ -31,6 +31,12 @@ sub Install($$$)
 	}
     }
 
+    # Following installation, ensure your sendmail does not use <TLS1.2
+    # by adding the following config to /etc/mail/<sendmail>.mc:
+    # define(`confSERVER_SSL_OPTIONS', `+SSL_OP_NO_SSLv2 +SSL_OP_NO_SSLv3 +SSL_OP_NO_TLSv1 +SSL_OP_NO_TLSv1_1')dnl
+    # define(`confCLIENT_SSL_OPTIONS', `+SSL_OP_NO_SSLv2 +SSL_OP_NO_SSLv3 +SSL_OP_NO_TLSv1 +SSL_OP_NO_TLSv1_1')dnl
+    # define(`confCIPHER_LIST', `<LIST>')dnl
+    # Use https://ssl-config.mozilla.org or similar to generate a modern <LIST>.
     Phase "sendmail","Configuring sendmail", sub {
 	if ($isupdate) {
 	    Phase "localhosts", "Updating $LOCAL_HOSTNAMES", sub {
