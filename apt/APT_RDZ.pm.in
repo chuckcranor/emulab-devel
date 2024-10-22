@@ -33,6 +33,7 @@ use Errno;
 use POSIX qw(:sys_wait_h);
 use Date::Parse;
 use Carp;
+use MIME::Base64;
 use Exporter;
 use vars qw(@ISA @EXPORT);
 
@@ -43,6 +44,7 @@ use vars qw(@ISA @EXPORT);
 use emdb;
 use emutil;
 use libtestbed;
+use APT_Instance;
 use APT_RDZRest;
 use GeniXML;
 
@@ -406,6 +408,19 @@ sub CreateClaimFromReservation($$;$$)
 
     return 0
 	if (!$DOCLAIMS);
+
+    #
+    # We do not want to create a claim for resgroups that are using
+    # OTA/OAI radios. This is not an ideal approach, might have to
+    # change if users start mixing with outdoor radios.
+    #
+    foreach my $res ($resgroup->ReservationList()) {
+	if ($res->type() =~ /^(oai|ota)/) {
+	    print "CreateClaimFromReservation: Skipping claim since the ".
+		"reservation is using ota/oai radios\n";
+	    return 0;
+	}	    
+    }
     
     if (!defined($ZMC)) {
 	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
@@ -424,12 +439,12 @@ sub CreateClaimFromReservation($$;$$)
 	"source"      => "powder-slc",
 	"grant"       => {
 	    "element_id"  => $ZMC->elementid(),
-	    "spectrum_id" => "534203ea-c252-4ef0-9eec-4e0a56275181",
+	    "spectrum_id" => $ZMC->spectrumid(),
 	    "starts_at"   => TBDateStringGMT($start),
 	    "expires_at"  => TBDateStringGMT($end),
 	    "name"        => $name,
 	    "description" => $desc,
-	    "priority"    => 1023,
+	    "priority"    => 1020,
 	    "constraints" => [
 		{
 		    "constraint" => {
@@ -497,6 +512,147 @@ sub DeleteClaimFromReservation($$)
     return 0;
 }
 
+sub CreateClaimsFromInstance($$;$$)
+{
+    my ($instance, $perrmsg, $debug, $impotent) = @_;
+
+    return 0
+	if (!$DOCLAIMS);
+    # Only for experiments not using the RDZ, RDZ experiments become grants.
+    return 0
+	if ($instance->rdz_status());
+    return 0
+	if (!$instance->RangeList());
+
+    #
+    # Gack, the OTA lab does not fit into the RDZ. For now, just skip
+    # claiming experiments that use the OTA lab radios. Fortunately they
+    # are on the local cluster and all named accordingly. 
+    #
+    my $resources = $instance->_resources();
+    if (!defined($resources)) {
+	my $perrmsg;
+	if (APT_Profile::GetResources($instance->RSPEC(),
+				      $perrmsg, \$resources)) {
+	    $$perrmsg = "Could not get resources for experiment";
+	    return -1;
+	}
+    }
+    foreach my $client_id (keys(%{$resources->{'radios'}})) {
+	my $radio = $resources->{'radios'}->{$client_id};
+	if ($radio->node_id() =~ /^(oai-w|ota-)/) {
+	    print "CreateClaimsFromInstance: Skipping claim since the ".
+		"experiment is using ota/oai radios\n";
+	    return 0;
+	}
+    }
+
+    if (!defined($ZMC)) {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+	if (!defined($ZMC)) {
+	    $$perrmsg = "Cannot open the ZMC rest interface";
+	    print "CreateClaimFromReservation: $$perrmsg\n";
+	    return -1;
+	}
+    }
+    foreach my $range ($instance->RangeList()) {
+	my $desc     = "Powder experiment ". $instance->Printable();
+	my $name     = "Powder Experiment " . $instance->Printable();
+	my $claim_id = $range->rdz_claimid();
+	
+	my $request = {
+	    "element_id"  => $ZMC->elementid(),
+	    "name"        => $name,
+	    "description" => $desc,
+	    "ext_id"      => $instance->uuid(),
+	    "type"        => "powder",
+	    "source"      => "powder-slc",
+	    "html_url"    => $instance->webURL(),
+	    "grant"       => {
+		"element_id"  => $ZMC->elementid(),
+		"spectrum_id" => $ZMC->spectrumid(),
+		"starts_at"   => TBDateStringGMT(time()),
+		"expires_at"  => TBDateStringGMT($instance->Expires()),
+		"name"        => $name,
+		"description" => $desc,
+		"priority"    => 1022,
+		"constraints" => [
+		    {
+			"constraint" => {
+			    "min_freq"  => $range->freq_low() * 1000000,
+			    "max_freq"  => $range->freq_high() * 1000000,
+			    "max_eirp"  => 30,
+			    "exclusive" => JSON::true,
+			},
+		    },
+		],
+	    },
+	};
+	if ($debug) {
+	    print Dumper($request);
+	}
+	next
+	    if ($impotent);
+
+	my $response;
+	#
+	# Short term, we will delete/re-create existing claims.
+	#
+	if ($claim_id) {
+	    if ($ZMC->DELETE("/claims/$claim_id", \$response)) {
+		$$perrmsg = "\n" . "Could not delete claim for $range";
+		return -1;
+	    }
+	    $range->Update({"rdz_claimid" => undef});
+	}
+	if ($ZMC->POST("/claims", $request, \$response)) {
+	    $$perrmsg .= "\n" . "Could not create claim for $range";
+	    return -1;
+	}
+	if ($debug) {
+	    print Dumper($response);
+	}
+	$range->Update({"rdz_claimid" => $response->{'id'}});
+    }
+    return 0;
+}
+
+sub DeleteClaimsFromInstance($$)
+{
+    my ($instance, $perrmsg) = @_;
+
+    return 0
+	if (!$DOCLAIMS);
+    # Only for experiments not using the RDZ, RDZ experiments become grants.
+    return 0
+	if ($instance->rdz_status());
+    return 0
+	if (!$instance->RangeList());
+
+    if (!defined($ZMC)) {
+	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+	if (!defined($ZMC)) {
+	    $$perrmsg = "Cannot open the ZMC rest interface";
+	    print "CreateClaimFromReservation: $$perrmsg\n";
+	    return -1;
+	}
+    }
+    foreach my $range ($instance->RangeList()) {
+	my $claim_id = $range->rdz_claimid();
+
+	next
+	    if (!$claim_id);
+
+	my $response;
+	if ($ZMC->DELETE("/claims/$claim_id", \$response)) {
+	    $$perrmsg = "\n" . "Could not delete claim for $range";
+	    return -1;
+	}
+	$range->Update({"rdz_claimid" => undef});
+    }
+    return 0;
+}
+
 #
 # Create a temporary user at the RDZ in the powder element. This is a
 # viewer only user for the purposes of pulling down data to seed an
@@ -541,7 +697,7 @@ sub CreateTemporaryUser($$$$;$)
 	"given_name"  => $pid,
 	"family_name" => $eid,
 	"full_name"   => "$pid $eid",
-	"password"    => $password,
+	"password"    => encode_base64($password),
 	"primary_email_address" => $email,
     };
 	
@@ -594,11 +750,12 @@ sub CreateTemporaryUser($$$$;$)
 	"token_type" => "pat",
 	"credential" => {
 	    "username" => $username,
-	    "password" => $password,
+	    "password" => encode_base64($password),
 	},
 	"role_binding_ids" => [
 	    $role_binding_id,
 	],
+	"expires_at" => TBDateStringGMT(time() + (24 * 3600 * 365 * 2)),
     };
     if ($debug) {
 	print Dumper($token_request);

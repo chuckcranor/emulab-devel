@@ -63,6 +63,7 @@ use APT_Aggregate;
 use APT_Geni;
 use APT_Utility;
 use APT_Reservation;
+use APT_RDZ;
 use EmulabFeatures;
 use Genixmlrpc;
 use GeniResponse;
@@ -87,6 +88,7 @@ my $MANAGEDATASET = "$TB/bin/manage_dataset";
 my $MANAGEIMAGES  = "$TB/bin/manage_images";
 my $GENIUSER      = "geniuser";
 my $MAINSITE      = @TBMAINSITE@;
+my $DORDZ	  = $MAINSITE;
 my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
 
@@ -153,6 +155,7 @@ sub Lookup($$)
     $self->{'HASH'}       = {};
     $self->{'AGGREGATES'} = {};
     $self->{'ROUTES'}     = {};
+    $self->{'RANGES'}     = {};
     $self->{'FABRICIDS'}  = undef;
     $self->{'RPSEC'}      = undef;
     $self->{'WEBTASK'}    = undef;
@@ -161,11 +164,15 @@ sub Lookup($$)
     #
     # Lookup existing aggregates.
     #
-    $self->{'AGGREGATES'} = APT_Instance::Aggregate->LookupForInstance($self);
+    $self->{'AGGREGATES'} =
+	APT_Instance::Aggregate->LookupForInstance($self);
     # Ditto routes
     $self->{'ROUTES'} =
 	APT_Instance::Aggregate::BusRoute->LookupForInstance($self);
-    
+    # Ditto Ranges
+    $self->{'RANGES'} =
+	APT_Instance::RFRanges->LookupForInstance($self);
+
     # Add to cache. 
     $instances{$self->uuid()} = $self;
     
@@ -251,6 +258,8 @@ sub AggregateList($) { return values(%{ $_[0]->{'AGGREGATES'} }); }
 sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
 sub RouteList($) { return values(%{ $_[0]->{'ROUTES'} }); }
 sub RouteHash($) { return $_[0]->{'ROUTES'}; }
+sub RangeList($) { return values(%{ $_[0]->{'RANGES'} }); }
+sub RangeHash($) { return $_[0]->{'RANGES'}; }
 
 sub Expires($)
 {
@@ -2952,6 +2961,11 @@ sub CheckResources($$)
 		return -1;
 	    }
 	}
+    }
+    if ($DORDZ && @{$spectrum} &&
+	APT_RDZ::CreateClaimsFromInstance($self, $perrmsg)) {
+	print STDERR "Failed to add RDZ claims!\n";
+	return -1;
     }
     #
     # For routes, we need to see what buses are currently on the reserved
@@ -6919,7 +6933,10 @@ sub Create($$$$$)
 		"  power='$power' $bandwidth")
 	or return undef;
 
-    return Lookup($class, $instance, $freq_low, $freq_high);
+    my $range = Lookup($class, $instance, $freq_low, $freq_high);
+    return undef
+	if (!defined($range));
+    $instance->RangeHash()->{$range->idx()} = $range;
 }
 
 AUTOLOAD {

@@ -1026,7 +1026,7 @@ sub DoGrants()
 	    fatal("Could not get /grants/$grant_id");
 	}
 	if ($debug) {
-	    print Dumper($response);
+	    print DebugDump($response);
 	}
 	print "Grant status: ". $response->{'status'} . "\n";
 	if ($response->{'status'} eq "denied") {
@@ -1154,7 +1154,7 @@ sub DoGrants()
 	];
     }
     if ($debug || $impotent) {
-	print Dumper($request);
+	print DebugDump($request);
     }
     if ($impotent) {
 	exit(0);
@@ -1164,7 +1164,7 @@ sub DoGrants()
 	fatal("Could not add RDZ /grants");
     }
     if ($debug) {
-	print Dumper($response);
+	print DebugDump($response);
     }
     print "Grant id: ". $response->{'id'} . "\n";
     print "Grant status: ". $response->{'status'} . "\n";
@@ -2066,9 +2066,11 @@ sub DoClaims()
 	print STDERR "Usage: manage_rdz claims list\n";
 	print STDERR "Usage: manage_rdz claims create <low> <high>\n";
 	print STDERR "Usage: manage_rdz claims create [-u] -g <resgroup>\n";
+	print STDERR "Usage: manage_rdz claims create [-u] -i <instance>\n";
 	print STDERR "Usage: manage_rdz claims show <claim_id>\n";
 	print STDERR "Usage: manage_rdz claims delete <claim_id>\n";
 	print STDERR "Usage: manage_rdz claims delete -g <resgroup>\n";
+	print STDERR "Usage: manage_rdz claims delete -i <instance>\n";
 	exit(-1);
     };
     &$usage()
@@ -2080,7 +2082,7 @@ sub DoClaims()
 
     my $update  = 0;
     my %options = ();
-    if (! getopts("g:u", \%options)) {
+    if (! getopts("g:ui:", \%options)) {
 	usage();
     }
     if (defined($options{"u"})) {
@@ -2114,13 +2116,37 @@ sub DoClaims()
     if ($which eq "delete") {
 	my $response;
 
-	if (!defined($options{"g"})) {
+	if (! (defined($options{"g"}) || defined($options{"i"}))) {
 	    &$usage()
 		if (@ARGV != 1);
 	
 	    my $claim_id = shift(@ARGV);
 	    if ($ZMC->DELETE("/claims/$claim_id", \$response)) {
 		fatal("Could not delete /claims/$claim_id");
+	    }
+	    exit(0);
+	}
+	if (defined($options{"i"})) {
+	    my $instance = APT_Instance->Lookup($options{"i"});
+	    if (!defined($instance)) {
+		fatal("No such experiment exists");
+	    }
+	    my @rfranges = $instance->RangeList();
+	    if (!@rfranges) {
+		fatal("No RF ranges in this reservation group");
+	    }
+	    if ($debug) {
+		foreach my $rfrange (@rfranges) {
+		    print "Claim ID: " . $rfrange->rdz_claimid() . "\n"
+			if ($rfrange->rdz_claimid());
+		}
+	    }
+	    exit(0)
+		if ($impotent);
+	    
+	    my $errmsg;
+	    if (APT_RDZ::DeleteClaimsFromInstance($instance, \$errmsg)) {
+		fatal($errmsg);
 	    }
 	    exit(0);
 	}
@@ -2145,7 +2171,7 @@ sub DoClaims()
 	}
 	exit(0);
     }
-    if (!defined($options{"g"})) {
+    if (! (defined($options{"g"}) || defined($options{"i"}))) {
 	&$usage()
 	    if (@ARGV != 2);
 
@@ -2204,6 +2230,27 @@ sub DoClaims()
 	print "Claim id: ". $response->{'id'} . "\n";
 	exit(0);
     }
+    if (defined($options{"i"})) {
+	my $instance = APT_Instance->Lookup($options{"i"});
+	if (!defined($instance)) {
+	    fatal("No such experiment exists");
+	}
+	my @rfranges = $instance->RangeList();
+	if (!@rfranges) {
+	    fatal("No RF ranges in this reservation group");
+	}
+	my $errmsg;
+	if (APT_RDZ::CreateClaimsFromInstance(
+		$instance, \$errmsg, $debug, $impotent)) {
+	    fatal($errmsg);
+	}
+	if (!$impotent) {
+	    foreach my $rfrange (@rfranges) {
+		print "Claim ID: " . $rfrange->rdz_claimid() . "\n";
+	    }
+	}
+	exit(0);
+    }
     my $resgroup = APT_Reservation::Group->Lookup($options{"g"});
     if (!defined($resgroup)) {
 	fatal("No such reservation group exists");
@@ -2236,6 +2283,7 @@ sub DoUsers()
 	print STDERR "Usage: manage_rdz users list\n";
 	print STDERR "Usage: manage_rdz users search <login>\n";
 	print STDERR "Usage: manage_rdz users show <user_id>\n";
+	print STDERR "Usage: manage_rdz users delete <user_id>\n";
 	print STDERR "Usage: manage_rdz users create <login> <first> <last> ".
 	    "<email> [<password>]\n";
 	print STDERR "Usage: manage_rdz users bindrole <user_id> <role>\n";
@@ -2439,6 +2487,7 @@ sub DoUsers()
 		"role_binding_ids" => [
 		    $role_binding_id,
 		],
+		"expires_at" => TBDateStringGMT(time() + (24 * 3600 * 365 * 2)),
 	    };
 	    
 	    if ($debug || $impotent) {

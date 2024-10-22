@@ -114,6 +114,7 @@ my $WAP            = "$TB/sbin/wap";
 my $TBACCT         = "$TB/sbin/tbacct";
 my $FABRICSTITCHER = "$TB/bin/fabric-stitcher";
 my $MANAGEFABRIC   = "$TB/bin/manage_fabric";
+my $DORDZ	   = $MAINSITE;
 my @SAVEARGV       = @ARGV;
 
 #
@@ -152,10 +153,7 @@ use GeniImage;
 use GeniUser;
 use WebTask;
 use EmulabFeatures;
-if ($MAINSITE) {
-    # And the RDZ code.
-    require APT_RDZ;
-}
+use APT_RDZ;
 
 # Protos
 sub fatal($);
@@ -1614,12 +1612,19 @@ sub DoTerminate()
     #
     my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
     if (keys(%{$rfranges})) {
-	if (APT_RDZ::DeleteGrants($instance)) {
+	if ($DORDZ && APT_RDZ::DeleteGrants($instance)) {
 	    $exitcode = -1;
 	    $errcode  = GENIRESPONSE_ERROR;
 	    $errmsg   = "Could not delete RDZ grants";
 	    goto bad;
 	}
+	if ($DORDZ && APT_RDZ::DeleteClaimsFromInstance($instance, \$errmsg)) {
+	    $exitcode = -1;
+	    $errcode  = GENIRESPONSE_ERROR;
+	    $errmsg   = "Could not delete RDZ claims: $errmsg";
+	    goto bad;
+	}
+    }
     }
 
     # Skip terminated aggregates, since we retry later on failure.
@@ -2501,6 +2506,14 @@ sub ExtendInternal($$$$$$)
     my $new_expires = $slice->ExpirationGMT();
 
     #
+    # Notify the RDZ of extended experiments (claims).
+    # If this fails, easy to unroll before the slices are done.
+    #
+    if ($DORDZ && APT_RDZ::CreateClaimsFromInstance($instance, \$errmsg)) {
+	goto bad;
+    }
+
+    #
     # Helper callback to send the proper arguments.
     #
     my $coderef = sub {
@@ -2651,6 +2664,10 @@ sub ExtendInternal($$$$$$)
   bad:
     # Reset back to original expiration, sorry.
     $slice->SetExpiration($oldexpires);
+    # This will reset the expiration of the claims back to original.
+    if ($DORDZ && APT_RDZ::CreateClaimsFromInstance($instance, \$errmsg)) {
+	print STDERR "Failed to reset RDZ claims!\n";
+    }
     $$perrmsg = $errmsg;
     return $errcode;
 }
