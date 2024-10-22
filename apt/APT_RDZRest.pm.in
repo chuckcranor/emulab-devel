@@ -40,6 +40,7 @@ use vars qw(@ISA @EXPORT);
 # Must come after package declaration
 use emdb;
 use emutil;
+use overload ('""' => 'Stringify');
 
 # Configure variables
 my $TB		  = "@prefix@";
@@ -78,7 +79,7 @@ sub Create($$$)
 			      'SSL_ca_file' => undef,
 			      'SSL_use_cert' => 0);
 
-    my $elementid = GetElementID($token);
+    my $elementid = GetElementID($token, $url);
     return undef
 	if (!defined($elementid));
     
@@ -109,6 +110,16 @@ sub token($)	  { return $_[0]->{'token'}; }
 sub elementid($)  { return $_[0]->{'elementid'}; }
 sub spectrumid($) { return $_[0]->{'spectrumid'}; }
 sub url($)	  { return $_[0]->{'url'}; }
+
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $url     = $self->url();
+    my $element = $self->elementid();
+
+    return "[REST: $element:$url]";
+}
 
 #
 # This is all going to change. 
@@ -218,12 +229,16 @@ sub PUT($$$$)	{ return RESTP($_[0], $_[1], $_[2], $_[3], "PUT"); }
 #
 # Use our token to get our element ID. This will change.
 #
-sub GetElementID($)
+sub GetElementID($;$)
 {
-    my ($token) = @_;
+    my ($token, $url) = @_;
     my $client  = REST::Client->new();
+    $url = $IDENTITY if (!defined($url));
 
-    $client->setHost($IDENTITY);
+    # XXX Make sure the port is correct.
+    $url =~ s/80\d0/8000/;
+
+    $client->setHost($url);
     $client->addHeader("X-Api-Token", $token);
     $client->addHeader("X-Api-Elaborate", "true");
     $client->GET("/tokens/this");
@@ -262,10 +277,11 @@ sub GetElementID($)
 package APT_RDZRest::ZMC;
 use base qw(APT_RDZRest);
 
-sub New($$) {
-    my ($class, $token) = @_;
+sub New($$;$) {
+    my ($class, $token, $url) = @_;
+    $url = APT_RDZRest::ZMCURL() if (!defined($url));
 
-    my $self = $class->SUPER::Create($token, APT_RDZRest::ZMCURL());
+    my $self = $class->SUPER::Create($token, $url);
     bless($self, $class);
     return $self;
 }
@@ -273,10 +289,11 @@ sub New($$) {
 package APT_RDZRest::DST;
 use base qw(APT_RDZRest);
 
-sub New($$) {
-    my ($class, $token) = @_;
+sub New($$;$) {
+    my ($class, $token, $url) = @_;
+    $url = APT_RDZRest::DSTURL() if (!defined($url));
 
-    my $self = $class->SUPER::Create($token, APT_RDZRest::DSTURL());
+    my $self = $class->SUPER::Create($token, $url);
     bless($self, $class);
     return $self;
 }
@@ -284,10 +301,11 @@ sub New($$) {
 package APT_RDZRest::IDENTITY;
 use base qw(APT_RDZRest);
 
-sub New($$) {
-    my ($class, $token) = @_;
+sub New($$;$) {
+    my ($class, $token, $url) = @_;
+    $url = APT_RDZRest::IDENTITYURL() if (!defined($url));
 
-    my $self = $class->SUPER::Create($token, APT_RDZRest::IDENTITYURL());
+    my $self = $class->SUPER::Create($token, $url);
     bless($self, $class);
     return $self;
 }
