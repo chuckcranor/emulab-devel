@@ -45,6 +45,7 @@ RUN_DEPENDS+=	\
 	jove:${PORTSDIR}/editors/jove \
 	git:${PORTSDIR}/devel/git \
 	lsof:${PORTSDIR}/sysutils/lsof \
+	rcs:${PORTSDIR}/devel/rcs \
 	rsync:${PORTSDIR}/net/rsync \
 	sudo:${PORTSDIR}/security/sudo \
 	xauth:${PORTSDIR}/x11/xauth \
