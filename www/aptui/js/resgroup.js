@@ -3699,8 +3699,9 @@ $(function ()
 	var prunelist= amlist[selected_cluster].prunelist;
 	var id       = "resgraph-" + nickname;
 
-	_.each(typelist, function(details, type) {
-	    var count = details.count;
+	_.each(_.keys(typelist).sort(), function(type) {
+            var details = typelist[type];
+	    var count   = details.count;
 
 	    if (_.has(prunelist, type)) {
 		return;
@@ -3709,7 +3710,9 @@ $(function ()
 		"<option value='" + type + "' >" +
 		type + " (" + count + ")</option>";
 	});
-	_.each(nodelist, function(details, node_id) {
+	_.each(_.keys(nodelist).sort(), function(node_id) {
+            var details = nodelist[node_id];
+
 	    if (_.has(prunelist, node_id)) {
 		return;
 	    }
