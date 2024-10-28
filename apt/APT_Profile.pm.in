@@ -52,6 +52,7 @@ use APT_Dataset;
 use APT_Aggregate;
 use APT_Reservation;
 use APT_RFRange;
+use APT_RDZ;
 use GeniXML;
 use GeniHRN;
 use GeniIMS;
@@ -69,6 +70,7 @@ use Data::Dumper;
 use File::Basename;
 use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
 use URI::URL;
+use JSON;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -3331,8 +3333,10 @@ sub EncryptBlocks($$$;$)
 	    next
 		if (defined($previous));
 	}
-	my $plaintext = substr(TBGenSecretKey(), 0, 12);
-	$encref->appendText($plaintext);
+	if (!$encref->textContent()) {
+	    my $plaintext = substr(TBGenSecretKey(), 0, 12);
+	    $encref->appendText($plaintext);
+	}
 	push(@encrypt, $encref);
     }
     if (@encrypt) {

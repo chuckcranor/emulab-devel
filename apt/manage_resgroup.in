@@ -96,10 +96,7 @@ use APT_Utility;
 use GeniResponse;
 use GeniHRN;
 use GeniXML;
-if ($DORDZ) {
-    # And the RDZ code.
-    require APT_RDZ;
-}
+use APT_RDZ;
 
 # Protos
 sub fatal($);
@@ -3254,7 +3251,7 @@ sub DoMaxDuration()
     if (APT_Profile::GetSpectrum($rspec, \$spectrum, \$errmsg)) {
 	fatal($errmsg);
     }
-    if (@{$spectrum} && !defined($baddog) && !GeniXML::RDZEnabled($rspec)) {
+    if (@{$spectrum} && !defined($baddog) && !APT_RDZ::UseRDZ($rspec)) {
 	my $loser;
 
 	#
