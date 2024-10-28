@@ -55,7 +55,7 @@ sub usage()
     print STDERR "Usage: manage_rdz users list|create|delete|show\n";
     exit(-1);
 }
-my $optlist     = "dt:nT:j";
+my $optlist     = "dt:nT:jR:";
 my $debug       = 0;
 my $impotent    = 0;
 my $asjson      = 0;
@@ -63,6 +63,7 @@ my $webtask_id;
 my $logfile;
 my $webtask;
 my $token;
+my $rdzinrdz;
 my $this_user;
 my $JSON;
 
@@ -155,6 +156,10 @@ if (defined($options{"t"})) {
 if (defined($options{"T"})) {
     $token = $options{"T"};
 }
+elsif (defined($options{"R"})) {
+    $rdzinrdz = $options{"R"};
+}
+
 if (@ARGV < 1) {
     usage();
 }
@@ -167,6 +172,23 @@ my $ZMC;
 
 if ($token) {
     $ZMC = APT_RDZRest::ZMC->New($token);    
+}
+elsif ($rdzinrdz) {
+    my $errmsg;
+    
+    my $instance = APT_Instance->Lookup($rdzinrdz);
+    if (!defined($instance)) {
+	fatal("No such rdzinrdz experiment")
+    }
+    if (! exists($instance->RDZFLAGS()->{'rdzinrdz'})) {
+	fatal("Not an rdzinrdz experiment");
+    }
+    my $token = $instance->RDZINRDZINFO()->{'element_token'};
+    my $url = APT_RDZ::URLforRDZ($instance, \$errmsg);
+    if (!defined($url)) {
+	fatal($errmsg);
+    }
+    $ZMC = APT_RDZRest::ZMC->New($token, $url);
 }
 else {
     $ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
@@ -984,6 +1006,7 @@ sub DoGrants()
 	print STDERR "Usage: manage_rdz grants delete <grant_id>\n";
 	print STDERR "Usage: manage_rdz grants beat <grant_id>\n";
 	print STDERR "Usage: manage_rdz grants watch <grant_id>\n";
+	print STDERR "Usage: manage_rdz grants extend <grant_id> <hours>\n";
 	exit(-1);
     };
     &$usage()
@@ -991,7 +1014,7 @@ sub DoGrants()
     
     my $which = shift(@ARGV);
     &$usage()
-	if ($which !~ /^(list|create|delete|show|beat|watch)$/);
+	if ($which !~ /^(list|create|delete|show|beat|watch|extend)$/);
 
     my %options = ();
     my $beats   = 0;
@@ -1026,7 +1049,7 @@ sub DoGrants()
 	    fatal("Could not get /grants/$grant_id");
 	}
 	if ($debug) {
-	    print DebugDump($response);
+	    DebugDump($response);
 	}
 	print "Grant status: ". $response->{'status'} . "\n";
 	if ($response->{'status'} eq "denied") {
@@ -1076,6 +1099,53 @@ sub DoGrants()
 	}
 	exit(0);
     }
+    if ($which eq "extend") {
+	my ($response, $grant);
+
+	&$usage()
+	    if (@ARGV != 2);
+	
+	my $grant_id = shift(@ARGV);
+	my $hours    = shift(@ARGV);
+
+	if ($ZMC->GET("/grants/$grant_id", \$grant)) {
+	    fatal("Could not get /grants/$grant_id");
+	}
+	if ($debug) {
+	    DebugDump($grant);
+	}
+	$grant->{'expires_at'} =
+	    TBDateStringGMT(str2time($grant->{'expires_at'}) + (3600 * $hours));
+	if (0) {
+	    DebugDump($grant);
+	}	    
+	exit(0)
+	    if ($impotent);
+	
+	if ($ZMC->POST("/grants/$grant_id", $grant, \$response)) {
+	    fatal("Could not post /grants/$grant_id");
+	}
+
+	#
+	# This results in a grant replacement.
+	#
+	my $new_grant_id = $response->{'replacement'}->{'new_grant_id'};
+	my $status = $response->{'status'};
+	print "Grant status: $status\n";
+	print "Grant replacement ID: $new_grant_id\n";
+
+	#
+	# Delete the original grant unless we are watching the events.
+	#
+	if ($status eq "revoked" && !$watch) {
+	    print "Deleting original grant ID: $grant_id\n";
+	    
+	    if ($ZMC->DELETE("/grants/$grant_id", \$response)) {
+		fatal("Could not delete /grants/$grant_id");
+	    }
+	}
+	exit(0);
+    }
     if ($which eq "watch") {
 	&$usage()
 	    if (@ARGV != 1);
@@ -1095,7 +1165,7 @@ sub DoGrants()
 	"min_freq"  => $freq_low + 0,
 	"max_freq"  => $freq_high + 0,
 	"max_eirp"  => -80,
-	"exclusive" => (@ARGV ? JSON::false : JSON::true)
+	"exclusive" => (@ARGV == 3 ? JSON::false : JSON::true)
     };
     if (@ARGV == 1 || @ARGV == 3) {
 	my $bandwidth = shift(@ARGV);
@@ -1106,6 +1176,9 @@ sub DoGrants()
 	"description" => "Test Grant",
 	"element_id"  => $ELEMENTID,
 	"starts_at"   => TBDateStringGMT(time()),
+	"expires_at"  => TBDateStringGMT(time() + 3600),
+	"ext_id"      => NewUUID(),
+	"html_url"    => "https://www.powderwireless.net",
 	"constraints" => [
 	    {
 		"constraint" => $constraint,
@@ -1154,7 +1227,7 @@ sub DoGrants()
 	];
     }
     if ($debug || $impotent) {
-	print DebugDump($request);
+	DebugDump($request);
     }
     if ($impotent) {
 	exit(0);
@@ -1164,7 +1237,7 @@ sub DoGrants()
 	fatal("Could not add RDZ /grants");
     }
     if ($debug) {
-	print DebugDump($response);
+	DebugDump($response);
     }
     print "Grant id: ". $response->{'id'} . "\n";
     print "Grant status: ". $response->{'status'} . "\n";
@@ -1268,7 +1341,7 @@ sub WatchGrant($)
 	my ($type, $ref) = @_;
 	my ($grant_id, $status, $nextack);
 
-	#print Dumper($ref);
+	DebugDump($ref);
 
 	#
 	# Check to see if any grants need a heartbeat.
@@ -1315,13 +1388,13 @@ sub WatchGrant($)
 	else {
 	    $grant->{'status_ack_by'} = $nextack;
 	}
-	if ($status eq "revoked" || $status eq "replacing") {
-	    exit(0);
-	}
+
+	
+
 	return 0;
     };
     while (1) {
-	if (APT_RDZ::WatchGrants($callback, [$grant_id], $debug) < 0) {
+	if (APT_RDZ::WatchGrants($callback, [$grant_id], $ZMC, $debug) < 0) {
 	    exit(-1);
 	}
     	sleep(5);
@@ -2215,7 +2288,7 @@ sub DoClaims()
 	    },
 	};
 	if ($debug || $impotent) {
-	    print DebugDump($request);
+	    DebugDump($request);
 	}
 	if ($impotent) {
 	    exit(0);
@@ -2225,7 +2298,7 @@ sub DoClaims()
 	    fatal("Could not add RDZ grant claim");
 	}
 	if ($debug) {
-	    print DebugDump($response);
+	    DebugDump($response);
 	}
 	print "Claim id: ". $response->{'id'} . "\n";
 	exit(0);
@@ -2246,7 +2319,8 @@ sub DoClaims()
 	}
 	if (!$impotent) {
 	    foreach my $rfrange (@rfranges) {
-		print "Claim ID: " . $rfrange->rdz_claimid() . "\n";
+		print "Claim ID: " . $rfrange->rdz_claimid() . "\n"
+		    if ($rfrange->rdz_claimid());
 	    }
 	}
 	exit(0);
@@ -2272,7 +2346,8 @@ sub DoClaims()
 	}
 	next
 	    if ($impotent);
-	print "Claim ID: " . $rfrange->rdz_claimid() . "\n";
+	print "Claim ID: " . $rfrange->rdz_claimid() . "\n"
+	    if ($rfrange->rdz_claimid());
     }
     exit(0);
 }

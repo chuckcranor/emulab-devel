@@ -159,6 +159,8 @@ sub Lookup($$)
     $self->{'FABRICIDS'}  = undef;
     $self->{'RPSEC'}      = undef;
     $self->{'WEBTASK'}    = undef;
+    $self->{'RDZINFO'}    = undef;
+    $self->{'RDZFLAGS'}   = undef;
     bless($self, $class);
 
     #
@@ -3019,6 +3021,7 @@ sub CheckResourceReservations($$$$)
 	}
     }
     # This check must always be done.
+    # Not done for experiments asking the RDZ for spectrum, it decides.
     if (APT_Profile::CheckSpectrumReservations($rspec, $group, $creator,
 					       time(), $end, $noresokay,
 					       $self->rdz_status(),
@@ -3620,6 +3623,101 @@ sub HasFabricSlices($)
 	if (!defined($slices));
 
     return scalar(@{$slices});
+}
+
+#
+# And some RDZ specific items.
+#
+sub RDZFLAGS($)
+{
+    my ($self) = @_;
+
+    if (!defined($self->{'RDZFLAGS'})) {
+	$self->{'RDZFLAGS'} = {};
+	if ($self->rdz_flags()) {
+	    foreach my $flag (split(",", $self->rdz_flags())) {
+		$self->{'RDZFLAGS'}->{$flag} = $flag;
+	    }
+	}
+    }
+    return $self->{'RDZFLAGS'};
+}
+# For experiments using an inner RDZ
+sub RDZINFO($)
+{
+    my ($self) = @_;
+
+    if (!defined($self->{'RDZINFO'})) {
+	$self->{'RDZINFO'} = {};
+	if ($self->rdz_rdzinfo()) {
+	    my $hash = eval { decode_json($self->rdz_rdzinfo()) };
+	    if ($@) {
+		print STDERR "Could not decode rdz_rdzinfo json\n";
+		return undef;
+	    }
+	    $self->{'RDZINFO'} = $hash;
+	}
+    }
+    return $self->{'RDZINFO'};
+}
+# For experiments acting as an inner RDZ
+sub RDZINRDZINFO($)
+{
+    my ($self) = @_;
+
+    if (!defined($self->{'RDZINRDZINFO'})) {
+	$self->{'RDZINRDZINFO'} = {};
+	if ($self->rdz_rdzinrdzinfo()) {
+	    my $hash = eval { decode_json($self->rdz_rdzinrdzinfo()) };
+	    if ($@) {
+		print STDERR "Could not decode rdz_rdzinrdzinfo json\n";
+		return undef;
+	    }
+	    $self->{'RDZINRDZINFO'} = $hash;
+	}
+    }
+    return $self->{'RDZINRDZINFO'};
+}
+
+sub SetRDZFLAGS($$)
+{
+    my ($self, $value) = @_;
+
+    $self->{'RDZFLAGS'} = undef;
+    $self->Update({"rdz_flags" => join(",", @$value)}) == 0
+	or return undef;
+    
+    return $self->RDZFLAGS();
+}
+sub SetRDZINFO($$)
+{
+    my ($self, $value) = @_;
+
+    my $json = eval { encode_json($value); };
+    if ($@) {
+	print STDERR "Could not encode rdzinfo object as json\n";
+	return undef;
+    }
+    $self->{'RDZINFO'} = undef;
+    $self->Update({"rdz_rdzinfo" => $json}) == 0
+	or return undef;
+    
+    return $self->RDZINFO();
+}
+sub SetRDZINRDZINFO($$)
+{
+    my ($self, $value) = @_;
+
+    my $json = eval { encode_json($value); };
+    if ($@) {
+	print STDERR "Could not encode rdzinrdzinfo object as json\n";
+	return undef;
+    }
+    $self->{'RDZINRDZINFO'} = undef;
+    $self->Update({"rdz_rdzinrdzinfo" => $json}) == 0
+	or return undef;
+    
+    return $self->RDZINRDZINFO();
 }
 
 ###################################################################
@@ -6937,6 +7035,7 @@ sub Create($$$$$)
     return undef
 	if (!defined($range));
     $instance->RangeHash()->{$range->idx()} = $range;
+    return $range;
 }
 
 AUTOLOAD {

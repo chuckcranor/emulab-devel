@@ -189,7 +189,7 @@ sub RESTP($$$$$)
 
     my $json = eval { encode_json($ref); };
     if ($@) {
-	print STDERR "Could not encode object as json\n";
+	print STDERR "Could not encode object as json: $@\n";
 	return -1;
     }
     if ($verbose) {

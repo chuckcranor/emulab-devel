@@ -1625,6 +1625,15 @@ sub DoTerminate()
 	    goto bad;
 	}
     }
+
+    #
+    # Special case for RDZ-in-RDZ
+    #
+    if ($DORDZ && APT_RDZ::cleanupRDZinRDZ($instance)) {
+	$exitcode = -1;
+	$errcode  = GENIRESPONSE_ERROR;
+	$errmsg   = "Could not cleanup RDZ-in-RDZ";
+	goto bad;
     }
 
     # Skip terminated aggregates, since we retry later on failure.
@@ -2509,8 +2518,11 @@ sub ExtendInternal($$$$$$)
     # Notify the RDZ of extended experiments (claims).
     # If this fails, easy to unroll before the slices are done.
     #
-    if ($DORDZ && APT_RDZ::CreateClaimsFromInstance($instance, \$errmsg)) {
-	goto bad;
+    if ($DORDZ) {
+	if (APT_RDZ::CreateClaimsFromInstance($instance, \$errmsg) ||
+	    APT_RDZ::ExtendGrantsFromInstance($instance, \$errmsg)) {
+	    goto bad;
+	}
     }
 
     #
@@ -2665,8 +2677,13 @@ sub ExtendInternal($$$$$$)
     # Reset back to original expiration, sorry.
     $slice->SetExpiration($oldexpires);
     # This will reset the expiration of the claims back to original.
-    if ($DORDZ && APT_RDZ::CreateClaimsFromInstance($instance, \$errmsg)) {
-	print STDERR "Failed to reset RDZ claims!\n";
+    if ($DORDZ) {
+	if (APT_RDZ::CreateClaimsFromInstance($instance, \$errmsg)) {
+	    print STDERR "Failed to reset RDZ claims!\n";
+	}
+	if (APT_RDZ::ExtendGrantsFromInstance($instance, \$errmsg)) {
+	    print STDERR "Failed to reset RDZ grants!\n";
+	}
     }
     $$perrmsg = $errmsg;
     return $errcode;

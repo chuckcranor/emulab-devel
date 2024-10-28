@@ -63,7 +63,7 @@ use vars qw($RSPEC_0_1 $RSPEC_0_2 $RSPEC_2 $RSPEC_3
             $RSPEC_TOUR
             $REQUEST_2_URL $MANIFEST_2_URL
             $REQUEST_3_URL $MANIFEST_3_URL
-	    $PROFILE_PARAMETERS_NS);
+	    $PROFILE_PARAMETERS_NS $ANSIBLE_NS);
 $RSPEC_0_1 = "0.1";
 $RSPEC_0_2 = "0.2";
 $RSPEC_2 = "2";
@@ -82,6 +82,7 @@ our $SHAREDVLAN_NS = "http://www.geni.net/resources/rspec/ext/shared-vlan/1";
 our $SHAREDVLAN_PG_NS = "http://www.protogeni.net/resources/rspec/ext/shared-vlan/1";
 our $PROFILE_PARAMETERS_NS = "http://www.protogeni.net/resources/rspec/ext/profile-parameters/1";
 our $RSPEC_TOUR = "http://www.protogeni.net/resources/rspec/ext/apt-tour/1";
+our $ANSIBLE_NS = "http://www.protogeni.net/resources/rspec/ext/ansible/1";
 
 $REQUEST_2_URL = "http://www.protogeni.net/resources/rspec/2/request.xsd";
 $MANIFEST_2_URL = "http://www.protogeni.net/resources/rspec/2/manifest.xsd";
@@ -2088,31 +2089,6 @@ sub GetBusRoutes($)
 	    "dom"   => $element});
     }
     return \@result;
-}
-
-# This is a property of the rspec
-sub RDZEnabled($)
-{
-    my ($ref)  = @_;
-
-    my $enabled = FindNodesNS("n:rdz-request", $ref, $EMULAB_NS)->pop();
-    return defined($enabled) ? 1 : 0;
-}
-
-# This is a property of the rspec. There can be more then one.
-sub GetRDZFlags($)
-{
-    my ($ref)  = @_;
-    my $result = {};
-    
-    foreach my $element (FindNodesNS("n:rdz-options", $ref,
-				     $EMULAB_NS)->get_nodelist()) {
-	my @attributes = $element->attributes();
-	foreach my $attribute (@attributes) {
-	    $result->{$attribute->name} = $attribute->value;
-	}
-    }
-    return $result;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

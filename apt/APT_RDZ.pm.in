@@ -35,10 +35,13 @@ use Date::Parse;
 use Carp;
 use MIME::Base64;
 use Exporter;
-use vars qw(@ISA @EXPORT);
+use vars qw(@ISA @EXPORT
+	    $EVENTTYPE_REPLACED	$EVENTTYPE_UPDATED $EVENTTYPE_REVOKED
+	    $EVENTSOURCE_ZMC $EVENTSOURCE_DST $EVENTCODE_GRANT
+    );	    
 
 @ISA    = "Exporter";
-@EXPORT = qw ( );
+@EXPORT = qw ();
 
 # Must come after package declaration
 use emdb;
@@ -64,6 +67,367 @@ my $ZMC;
 my $DOCLAIMS = 1;
 
 #
+# Some rspec routines.
+#
+sub UseRDZ($)
+{
+    my ($rspec)  = @_;
+
+    return GeniXML::FindNodesNS("n:rdz-request", $rspec,
+				$GeniXML::EMULAB_NS)->pop();
+}
+
+sub IsRDZinRDZ($)
+{
+    my ($rspec)  = @_;
+
+    return GeniXML::FindNodesNS("n:rdz-in-rdz", $rspec,
+				$GeniXML::EMULAB_NS)->pop();
+}
+
+sub UseRDZinRDZ($)
+{
+    my ($rspec)  = @_;
+    my $element = UseRDZ($rspec);
+    return 0
+	if (!defined($element));
+
+    return 1
+	if (defined(GeniXML::GetText("url", $element)));
+    return 1
+	if (defined(GeniXML::GetText("instance", $element)));
+    
+    return 0;
+}
+
+# This is a property of the rspec. There can be more then one.
+sub GetRDZFlags($)
+{
+    my ($rspec)  = @_;
+    my $result = {};
+    
+    foreach my $element (GeniXML::FindNodesNS("n:rdz-options", $rspec,
+				      $GeniXML::EMULAB_NS)->get_nodelist()) {
+	my @attributes = $element->attributes();
+	foreach my $attribute (@attributes) {
+	    $result->{$attribute->name} = $attribute->value;
+	}
+    }
+    return $result;
+}
+
+# Helper to make sure the experiment is talking to the correct RDZ
+# Outer or Inner
+sub GetZMC($)
+{
+    my ($instance) = @_;
+
+    # Not using an inner RDZ
+    return APT_RDZRest::ZMC->New(APT_RDZRest::POWDER())
+	if (! $instance->rdz_rdzinfo());
+    
+    my $url = $instance->RDZINFO()->{'url'};
+    my $token = $instance->RDZINFO()->{'element_token'};
+    return APT_RDZRest::ZMC->New($token, $url);
+}
+
+#
+# Construct a URL for the inner rdz node.
+#
+sub URLforRDZ($$)
+{
+    my ($instance, $perrmsg) = @_;
+    my $manifest = GeniXML::Parse($instance->manifest());
+
+    my $nodeel = GeniXML::GetNodeByVirtualId("node-0", $manifest);
+    if (!$nodeel) {
+	$$perrmsg = "RDZ instance has no rdz node named node-0";
+	return undef;
+    }
+    my $hostel = GeniXML::GetHost($nodeel);
+    if (!$hostel) {
+	$$perrmsg = "RDZ instance rdz node has no host element";
+	return undef;
+    }
+    my $hostname = GeniXML::GetText("name", $hostel);
+    return "https://${hostname}:8010/v1";    
+}
+
+#
+# Init some DB state for experiments that are using the RDZ.
+# Might be an RDZ in RDZ, which is both using and an RDZ.
+#
+sub initRDZstate($$)
+{
+    my ($instance, $perrmsg) = @_;
+    my $rspec   = $instance->RSPEC();
+    my @dbflags = ();
+
+    return 0
+	if (!UseRDZ($rspec));
+
+    if (IsRDZinRDZ($rspec)) {
+	#
+	# Only one level of hierarchy :-)
+	# Outer RDZ is the Powder RDZ.
+	#
+	push(@dbflags, "rdzinrdz");
+    }
+    elsif (UseRDZinRDZ($rspec)) {
+	my $rdzinfo;
+	my $element = UseRDZ($rspec);
+
+	if (my $parent = GeniXML::GetText("instance", $element)) {
+	    my $parent_instance = APT_Instance->Lookup($parent);
+	    if (!$parent_instance) {
+		$$perrmsg = "RDZ instance does not exist";
+		return -1;
+	    }
+	    if ($parent_instance->rdz_flags() !~ /rdzinrdz/) {
+		$$perrmsg = "RDZ instance is not an RDZ in RDZ";
+		return -1;
+	    }
+	    my $parent_rspec = $parent_instance->RSPEC();
+
+	    #
+	    # Tokens are in the overrides of the rspec
+	    #
+	    foreach my $el (GeniXML::FindNodesNS(
+				"n:override", $parent_rspec,
+				$GeniXML::ANSIBLE_NS)->get_nodelist()) {
+		my $name = GeniXML::GetText("name", $el);
+	
+		if ($name eq "openzms_bootstrap_token") {
+		    $rdzinfo->{"admin_token"} = $el->textContent()
+		}
+		elsif ($name eq "openzms_element_token") {
+		    $rdzinfo->{"element_token"} = $el->textContent()
+		}
+	    }
+	    my $url = URLforRDZ($instance, $perrmsg);
+	    return -1
+		if (!defined($url));
+	    
+	    $rdzinfo->{"url"} = $url;
+	}
+	else {
+	    my $url   = GeniXML::GetText("url", $element);
+	    my $token = GeniXML::GetText("token", $element);
+
+	    if (! ($url && $token)) {
+		$$perrmsg = "Must provide both url and token of the RDZ";
+		return -1;
+	    }
+	    if (! TBcheck_dbslot($url, "default", "tinytext",
+				 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+		$$perrmsg = "Bad RDZ URL: " . TBFieldErrorString();
+		return -1;
+	    }
+	    if (! TBcheck_dbslot($token, "default", "tinytext",
+				 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+		$$perrmsg = "Bad RDZ Token: " . TBFieldErrorString();
+		return -1;
+	    }
+	    $rdzinfo = {
+		"url"   => $url,
+		"element_token" => $token,
+	    };
+	}
+	#
+	# Initial test to see if it is still on the air.
+	#
+	if (!APT_RDZRest::ZMC->New($rdzinfo->{'element_token'},
+				   $rdzinfo->{'url'})) {
+	    $$perrmsg = "Could not contact RDZ at " . $rdzinfo->{'url'};
+	    return -1;
+	}
+	$instance->SetRDZINFO($rdzinfo);
+    }
+
+    #
+    # RDZ flags embedded in the rspec.
+    #
+    my $rdzflags   = GetRDZFlags($instance->RSPEC());
+    push(@dbflags, "heartbeats")
+	if (exists($rdzflags->{"heartbeats"}));
+    if (@dbflags) {
+	$instance->SetRDZFLAGS(\@dbflags);
+    }
+    $instance->Update({'rdz_status' => "new"});
+}
+
+#
+# Special case for RDZ-in-RDZ experiments. 
+#
+sub setupRDZinRDZ($$$)
+{
+    my ($instance, $grant_ids, $perrmsg) = @_;
+    my $pid     = $instance->pid();
+    my $eid     = $instance->name();
+    my $email   = $instance->GetGeniUser()->email();
+    my $rspec   = $instance->RSPEC();
+    my $element = UseRDZ($rspec);
+
+    return 0
+	if (!defined($element));
+
+    # Do not overwrite, come back to this later.
+    return 0
+	if (GeniXML::GetText("user-id", $element));
+
+    my $user;
+    if (CreateTemporaryUser($pid, $eid, $email, \$user, 1)) {
+	# Error returned here.
+	$$perrmsg = $user;
+	return -1;
+    }
+    GeniXML::SetText("user-id", $element, $user->{"user_id"});
+    GeniXML::SetText("username", $element, $user->{"username"});
+
+    # Update DB, marking it as an rdzinrdz
+    my $rdzinrdzinfo = {
+	'user-id'  => $user->{"user_id"},
+        'username' => $user->{"username"},
+    };
+    # Must do this now in case of errors below.
+    $instance->SetRDZINRDZINFO($rdzinrdzinfo);
+    
+    # Use an encrypted password to store the outer token
+    my $pswdref = AddElement("password", $rspec, $GeniXML::EMULAB_NS);
+    SetText("name", $pswdref, "openzms_parent_element_token");
+    $pswdref->appendText($user->{'token'});
+
+    # And add it as an ansible fact.
+    my $override = AddElement("override", $rspec, $GeniXML::ANSIBLE_NS);
+    SetText("name", $override, "openzms_parent_element_token");
+    SetText("source", $override, "password");
+    SetText("source_name", $override, "openzms_parent_element_token");
+    SetText("on_empty", $override, "");
+
+    #
+    # Insert the grant list that provides spectrum to the inner RDZ
+    #
+    my $spectrum = AddElement("spectrum", $element, $GeniXML::EMULAB_NS);
+    foreach my $id (@$grant_ids) {
+	my $gref = AddElement("grant", $spectrum, $GeniXML::EMULAB_NS);
+	SetText("grant-id", $gref, $id);
+    }
+    # And add it as an ansible fact.
+    $override = AddElement("override", $rspec, $GeniXML::ANSIBLE_NS);
+    SetText("name", $override, "openzms_parent_grant_list");
+    SetText("source", $override, "");
+    SetText("source_name", $override, "");
+    SetText("on_empty", $override, "");
+    $override->appendText(join(",", @$grant_ids));
+
+    # Set a fact that points to the Portal experiment.
+    $override = AddElement("override", $rspec, $GeniXML::ANSIBLE_NS);
+    SetText("name", $override, "openzms_parent_portal_url");
+    SetText("source", $override, "");
+    SetText("source_name", $override, "");
+    SetText("on_empty", $override, "");
+    $override->appendText($instance->webURL());
+
+    #
+    # We need to supply the admin/element tokens so we can later talk to the
+    # inner RDZ
+    #
+    my $admin_token = `/usr/testbed/sbin/zms-identity-cli token-generate pat`;
+    if ($? || !defined($admin_token) || $admin_token eq "") {
+	$$perrmsg = "setupRDZinRDZ: Could not generate an admin token";
+	return -1;
+    }
+    chomp($admin_token);
+
+    my $element_token = `/usr/testbed/sbin/zms-identity-cli token-generate pat`;
+    if ($? || !defined($element_token) || $element_token eq "") {
+	$$perrmsg = "setupRDZinRDZ: Could not generate an element token";
+	return -1;
+    }
+    chomp($element_token);
+
+    foreach my $el (GeniXML::FindNodesNS("n:override", $rspec,
+					 $GeniXML::ANSIBLE_NS)->get_nodelist()) {
+	my $name = GeniXML::GetText("name", $el);
+	if ($name eq "openzms_bootstrap_token" || $name eq "openzms_element_token") {
+	    SetText("source", $el, "");
+	    SetText("source_name", $el, "");
+	    SetText("on_empty", $el, "");
+	    $el->appendText(($name eq "openzms_element_token" ?
+			     $element_token : $admin_token));
+	}
+    }
+    # Update
+    $rdzinrdzinfo->{'element_token'} = $element_token;
+    $rdzinrdzinfo->{'admin_token'} = $admin_token;
+    $instance->SetRDZINRDZINFO($rdzinrdzinfo);
+
+    # Must "Finalize" the rspec again since we added encrypted blocks.
+    my $retval = $instance->FinalizeRSpec($perrmsg);
+    return $retval
+	if ($retval);
+
+    return 0;
+}
+
+sub cleanupRDZinRDZ($)
+{
+    my ($instance) = @_;
+
+    # Not an rdzinrdz.
+    return 0
+	if (!$instance->rdz_rdzinrdzinfo());
+
+    # Might not have got this far.
+    return 0
+	if (!exists($instance->RDZINRDZINFO()->{'user-id'}));
+    
+    return DeleteTemporaryUser($instance->RDZINRDZINFO()->{'user-id'});
+}
+
+#
+# Given a list of radio IDs, map them to inner RDZ radios IDs.
+#
+sub MapOuterToInnerRadios($$$)
+{
+    my ($instance, $radios, $perrmsg) = @_;
+
+    #
+    # REST client for the inner ZMC
+    #
+    my $ZMC = GetZMC($instance);
+    if (!defined($ZMC)) {
+	$$perrmsg = "MapOuterToInnerRadios: ".
+	    "Cannot open the ZMC rest interface for inner RDZ";
+	return -1;
+    }
+    foreach my $id (keys(%{$radios})) {
+	my $response;
+	if ($ZMC->GET("/radios?radio=$id", \$response)) {
+	    $$perrmsg = "MapOuterToInnerRadios: ".
+		"Error trying to find inner radio id for $id";
+	    print Dumper($response);
+	    return -1;
+	}
+	if ($response->{'total'} != 1) {
+	    if ($response->{'total'} == 0) {
+		$$perrmsg = "MapOuterToInnerRadios: ".
+		    "No inner radio found for $id"
+	    }
+	    else {
+		$$perrmsg = "MapOuterToInnerRadios: ".
+		    "More than one inner radio found for $id"
+	    }
+	    return -1;
+	}
+	# XXX
+	my $inner_port_id = $response->{'radios'}[0]->{'ports'}[0]->{'id'};
+	$radios->{$id} = $inner_port_id;
+    }
+    return 0;
+}
+
+#
 # Block, waiting for RDZ to approve spectrum requests
 # Failure to get the spectrum throws the instance into a failed state.
 #
@@ -83,25 +447,20 @@ sub RequestSpectrum($$)
 	print "RequestSpectrum: No rfranges for $instance\n";
 	return 0;
     }
-    if (!defined($ZMC)) {
-	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
-	if (!defined($ZMC)) {
-	    $$perrmsg = "Cannot open the ZMC rest interface";
-	    print "RequestSpectrum: $$perrmsg\n";
-	    return -1;
-	}
-    }
-    #
-    # RDZ flags embedded in the rspec.
-    #
-    my $rdzflags   = GeniXML::GetRDZFlags($instance->RSPEC());
-    my $heartbeats = exists($rdzflags->{"heartbeats"});
 
-    # It is fine to do this now, it will not matter till the grants exist.
-    # Note that this needs to be a "set" update at some point
-    if ($heartbeats) {
-	$instance->Update({"rdz_flags" => "heartbeats"});
+    my $ZMC = GetZMC($instance);
+    if (!defined($ZMC)) {
+	$$perrmsg = "Cannot open the ZMC rest interface";
+	print "RequestSpectrum: $$perrmsg\n";
+	return -1;
     }
+    print $ZMC . "\n";
+    
+    my $heartbeats = exists($instance->RDZFLAGS()->{'heartbeats'});
+    # Is acting as an RDZinRDZ
+    my $rdzinrdz = exists($instance->RDZFLAGS()->{'rdzinrdz'});
+    # Is using an RDZinRDZ; null if using the root RDZ
+    my $userdzinrdz = $instance->rdz_rdzinfo();
     
     my $resources = $instance->_resources();
     if (!defined($resources)) {
@@ -113,6 +472,8 @@ sub RequestSpectrum($$)
 	    return -1;
 	}
     }
+    my %radios = ();
+    
     foreach my $client_id (keys(%{$resources->{'radios'}})) {
 	my $radio = $resources->{'radios'}->{$client_id};
 	next
@@ -123,12 +484,22 @@ sub RequestSpectrum($$)
 	    my $radio_port_id = $frontend->rdz_radioport_id();
 	    if ($radio_port_id) {
 		push(@radio_ports, {"radio_port_id" => $radio_port_id});
+		$radios{$radio->rdz_radio_id()} = undef;
 	    }
 	    else {
 		$$perrmsg = "$radio is not registered with the RDZ";
 		print "RequestSpectrum: $$perrmsg\n";
 		return -1;
 	    }
+	}
+    }
+    if ($userdzinrdz) {
+	if (MapOuterToInnerRadios($instance, \%radios, $perrmsg)){
+	    return -1;
+	}
+	@radio_ports = ();
+	foreach my $id (values(%radios)) {
+	    push(@radio_ports, {"radio_port_id" => $id});
 	}
     }
     
@@ -146,16 +517,19 @@ sub RequestSpectrum($$)
 
 	my $request = {
 	    "name"        => $instance->Printable(),
-	    "description" => $instance->webURL(),
+	    "description" => "Powder Experiment",
+	    "html_url"    => $instance->webURL(),
+	    "ext_id"	  => $instance->uuid(),
 	    "element_id"  => $ZMC->elementid(),
 	    "starts_at"   => TBDateStringGMT($instance->started()),
+	    "expires_at"  => TBDateStringGMT($instance->Expires()),
 	    "constraints" => [
 		{
 		    "constraint" => {
 			"min_freq"  => ($frequency_low * 1000000) + 0,
 			"max_freq"  => ($frequency_high * 1000000) + 0,
 			"max_eirp"  => $power + 0,
-			"exclusive" => JSON::false,
+			"exclusive" => (@radio_ports ? JSON::false : JSON::true),
 		    },
 		},
 	    ],
@@ -301,8 +675,14 @@ sub RequestSpectrum($$)
     if (keys(%dynamic)) {
 	$instance->SetRSPEC($instance->RSPEC());
     }
+    print "RequestSpectrum: Got all grant requests\n";
 
-    print "RequestSpectrum: Got all grant requests\n";		
+    if ($rdzinrdz) {
+	my @grant_ids = map { $_->{'id'} } @grants;
+	if (setupRDZinRDZ($instance, \@grant_ids, \$failure_message)) {
+	    goto failed;
+	}
+    }
     return 0;
 
   failed:
@@ -321,6 +701,7 @@ sub DeleteGrants($)
 {
     my ($instance) = @_;
     my $errors = 0;
+    my $ZMC;
 
     print "DeleteGrants: $instance\n";
 
@@ -338,8 +719,9 @@ sub DeleteGrants($)
 	    print "DeleteGrants: Deleting grant ID $grant_id\n";
 
 	    if (!defined($ZMC)) {
-		$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+		$ZMC = GetZMC($instance);
 		if (!defined($ZMC)) {
+		    print "DeleteGrants: Could not get the REST object\n";
 		    return -1;
 		}
 	    }
@@ -352,6 +734,62 @@ sub DeleteGrants($)
 	    $rfrange->Update({"rdz_status" => "deleted"});
 	}
 	$rfrange->Update({"rdz_grantid" => undef});
+    }
+    return $errors;
+}
+
+#
+# Extend grants when the experiment is extended. 
+#
+sub ExtendGrantsFromInstance($$)
+{
+    my ($instance, $perrmsg) = @_;
+    my $errors = 0;
+    my $ZMC;
+
+    return 0
+	if (!$instance->RangeList());
+
+    foreach my $rfrange ($instance->RangeList()) {
+	my $grant_id = $rfrange->rdz_grantid();
+	if (!$grant_id) {
+	    next;
+	}
+	if ($rfrange->rdz_status() ne "deleted") {
+	    print "Extending grant ID $grant_id\n";
+
+	    if (!defined($ZMC)) {
+		$ZMC = GetZMC($instance);
+		if (!defined($ZMC)) {
+		    print "ExtendGrants: Could not get the ZMC REST object\n";
+		    return -1;
+		}
+	    }
+	    my $grant;
+
+	    #
+	    # Get the current grant, change it, post it back.
+	    #
+	    if ($ZMC->GET("/grants/$grant_id", \$grant)) {
+		print "ExtendGrants: Could not GET grant $grant_id\n";
+		$errors++;
+		next;
+	    }
+	    my $current_expires = str2time($grant->{'expires_at'});
+	    my $future_expires  = str2time($instance->Expires());
+	    if ($current_expires == $future_expires) {
+		print "No change in grant expiration, ignoring\n";
+		next;
+	    }
+	    $grant->{'expires_at'} = TBDateStringGMT($future_expires);
+
+	    my $response;
+	    if ($ZMC->POST("/grants/$grant_id", $grant, \$response)) {
+		print "ExtendGrants: Could not POST grant $grant_id\n";
+		$errors++;
+		next;
+	    }
+	}
     }
     return $errors;
 }
@@ -434,7 +872,8 @@ sub CreateClaimFromReservation($$;$$)
 	"element_id"  => $ZMC->elementid(),
 	"name"        => $name,
 	"description" => $desc,
-	"ext_id"      => $range->freq_uuid(),
+	"ext_id"      => $resgroup->uuid(),
+	"html_url"    => $resgroup->WebURL(),
 	"type"        => "powder",
 	"source"      => "powder-slc",
 	"grant"       => {
@@ -654,6 +1093,23 @@ sub DeleteClaimsFromInstance($$)
 }
 
 #
+# Helper function for experiment extensions; either need to extend
+# a grant or a claim.
+#
+sub ExtendGrantsOrClaims($$)
+{
+    my ($instance, $perrmsg) = @_;
+
+    if ($instance->rdz_status()) {
+	return ExtendGrants($instance, $perrmsg);
+    }
+    else {
+	return CreateClaimsFromInstance($instance, $perrmsg);
+    }
+    return -1;
+}
+
+#
 # Create a temporary user at the RDZ in the powder element. This is a
 # viewer only user for the purposes of pulling down data to seed an
 # RDZ-in-RDZ experiment.
@@ -792,63 +1248,55 @@ sub CreateTemporaryUser($$$$;$)
     return -1;
 }
 
-sub DeleteTemporaryUser($$)
+sub DeleteTemporaryUser($)
 {
-    my ($pid, $eid) = @_;
+    my ($user_id) = @_;
 
+    my $IDENT = APT_RDZRest::IDENTITY->New(APT_RDZRest::POWDER());
+    if (!defined($IDENT)) {
+	print STDERR "DeleteTemporaryUser: could not get the IDENTITY API\n";
+	return -1;
+    }
+    print "DeleteTemporaryUser: Deleting user ID $user_id\n";
+    my $response;
+    if ($IDENT->DELETE("/users/$user_id", \$response)) {
+	print STDERR "DeleteTemporaryUser: could not delete user: $user_id\n";
+	return -1;
+    }
     return 0;
 }
 
 #
-# Event Type map.
+# ZMS Constants. There are many more.
 #
-my @EventTypeMap = [
-    "Unspecified",
-    "Other",
-    "Created",
-    "Updated",
-    "Deleted",
-    "Revoked",
-    "Enabled",
-    "Disabled",
-    "Approved",
-    "Denied",
-    "Scheduled",
-    "Running",
-    "Completed",
-    "Failed",
-    "Succeeded",
-    "Progress",
-    "Suspended",
-    "Resumed",
-    "Started",
-    "Stopped",
-    "Violation",
-    "Interference",
-    "Action",
-    "Pending",
-];
+our $EVENTTYPE_REPLACED	= 1;
+our $EVENTTYPE_UPDATED	= 3;
+our $EVENTTYPE_REVOKED	= 5;
+our $EVENTSOURCE_ZMC     = 2;
+our $EVENTSOURCE_DST     = 3;
+our $EVENTCODE_GRANT	= 2006;
 
 #
 # Watch an experiment. 
 #
-sub WatchExperiment($$)
+sub WatchExperiment($$;$)
 {
-    my ($instance, $debug) = @_;
+    my ($instance, $debug, $impotent) = @_;
+    $impotent      = 0 if (!defined($impotent));
     my $uuid       = $instance->uuid();
+    my $pideid     = $instance->Printable();
     my %grants     = ();
+    my $lastpoll   = time();
 
     my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
     if (!defined($rfranges) || !keys(%{$rfranges})) {
 	logit("WatchExperiment: No rfranges for $instance");
 	return 0;
     }
+    my $ZMC = GetZMC($instance);
     if (!defined($ZMC)) {
-	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
-	if (!defined($ZMC)) {
-	    logit("WatchExperiment: Cannot open the ZMC rest interface");
-	    return -1;
-	}
+	logit("WatchExperiment: Cannot open the ZMC rest interface");
+	return -1;
     }
     foreach my $rfrange (values(%{$rfranges})) {
 	my $grant_id = $rfrange->rdz_grantid();
@@ -900,7 +1348,7 @@ sub WatchExperiment($$)
 	my $status   = $grant->{'status'};
 	my $response;
 
-	logit("heartBeat: $grant_id, $status") if ($debug);
+	logit("heartBeat $pideid: $grant_id, $status") if ($debug);
 
 	my $reply;
 	if ($status eq "active" || $status eq "paused") {
@@ -925,7 +1373,7 @@ sub WatchExperiment($$)
 	if ($ZMC->PUT("/grants/$grant_id/opstatus", $heartbeat, \$response)) {
 	    &$notify($grant, "heartbeat",
 		     "Could not put /grants/$grant_id/opstatus");
-	    return -1;
+	    return 1;
 	}
 	if ($response->{'status_ack_by'}) {
 	    my $nextack = $response->{'status_ack_by'};
@@ -947,8 +1395,9 @@ sub WatchExperiment($$)
 	my ($type, $ref) = @_;
 	my ($grant_id, $status, $nextack);
 	my $errmsg;
+	my $errors = 0;
 
-	logit("Callback: $type") if ($debug);
+	logit("WatchExperiment Callback $PID ($pideid): $type") if ($debug);
 
 	#
 	# Check to see if any grants need a heartbeat.
@@ -965,9 +1414,11 @@ sub WatchExperiment($$)
 		next
 		    if ($nextack - time() > 10);
 
-		&$heartBeat($grant);
+		if (&$heartBeat($grant)) {
+		    $errors++;
+		}
 	    }
-	    return 0;
+	    return $errors;
 	}
 
 	if ($type eq "poll") {
@@ -977,27 +1428,91 @@ sub WatchExperiment($$)
 	    $grant_id = $ref->{'id'};
 	    $status   = $ref->{'status'};
 	    $nextack  = $ref->{'status_ack_by'};
+	    $lastpoll = time();
 	    # Fall through to below to handle change in grant status.
 	}
 	else {
-	    #
-	    # We should not get any other events, but be sure.
-	    #
 	    my $code   = $ref->{'header'}->{'code'};
+	    my $type   = $ref->{'header'}->{'type'};
 	    my $source = $ref->{'header'}->{'source_type'};
-	    if (! ($code == 2006 && $source == 2)) {
-		logit("WatchExperiment: Unknown event:");
+	    
+	    if ($code == $EVENTCODE_GRANT && $source == $EVENTSOURCE_ZMC) {
+		my $object = $ref->{'object'};
+		
+		$grant_id = $object->{'id'};
+		if ($type == $EVENTTYPE_REPLACED) {
+		    #
+		    # Grant has been replaced. Next event is going to be a
+		    # revoke on the old grant.
+		    #
+		    if (!exists($grants{$grant_id})) {
+			logit("WatchExperiment($PID) $pideid: ".
+			      "No grant for grant replacement of $grant_id!");
+			return 0;
+		    }
+		    my $new_grant_id = $object->{'replacement'}->{'new_grant_id'};
+		    my $grant = $grants{$grant_id};
+		    $grant->{"old_grant_id"} = $grant_id;
+		    $grant->{"new_grant_id"} = $new_grant_id;
+		    # I do not think we need to reload the grant here.
+		    $grant->{'grant'} = $object;
+		    $grants{$new_grant_id} = $grant;
+
+		    #
+		    # Update the rfrange DB record.
+		    # XXX if we lose the revoked event below, the old grant
+		    # will be left behind in the RDZ DB. But it will be in a
+		    # revoked state, no not harmful. 
+		    #
+		    $grant->{'rfrange'}->Update({"rdz_grantid" => $new_grant_id});
+		    
+		    logit("WatchExperiment($PID) $pideid: Grant $grant_id has been ".
+			  "replaced with $new_grant_id");
+		    return 0;
+		}
+		elsif ($type == $EVENTTYPE_REVOKED) {
+		    #
+		    # Check to see if this is the revoke of a replaced grant,
+		    #
+		    if (!exists($grants{$grant_id})) {
+			logit("WatchExperiment($PID) $pideid: ".
+			      "No grant for revoke of $grant_id!");
+			return 0;
+		    }
+		    my $grant = $grants{$grant_id};
+		    if (exists($grant->{"old_grant_id"})) {
+			my $old_grant_id = $grant->{"old_grant_id"};
+			my $new_grant_id = $grant->{"new_grant_id"};
+			    
+			delete($grant->{"old_grant_id"});
+			delete($grant->{"new_grant_id"});
+			delete($grants{$grant_id});
+			
+			logit("WatchExperiment($PID) $pideid: Removing revoked grant ".
+			      "$old_grant_id which was replaced by $new_grant_id");
+
+			my $response;
+			if ($ZMC->DELETE("/grants/$old_grant_id", \$response)) {
+			    logit("WatchExperiment($PID) $pideid: could not remove ".
+				  "revoked grant $old_grant_id from the ZMC");
+			}
+			# Flag non-fatal error, to force a restart of the stream.
+			return 1;
+		    }
+		}
+		$status   = $object->{'status'};
+		$nextack  = $object->{'status_ack_by'};
+		# Fall through to below to handle change in grant status.
+	    }
+	    else {
+		logit("WatchExperiment($PID) $pideid: Unknown event:");
 		logit(Dumper($ref));
 		return 0;
 	    }
-	    $grant_id = $ref->{'object'}->{'id'};
-	    $status   = $ref->{'object'}->{'status'};
-	    $nextack  = $ref->{'object'}->{'status_ack_by'};
-	    # Fall through to below to handle change in grant status.
 	}
 	my $grant = $grants{$grant_id};
 	if (!defined($grant)) {
-	    logit("WatchExperiment: No grant for grant $grant_id!");
+	    logit("WatchExperiment($PID) $pideid: No grant for grant $grant_id!");
 	    return 0;
 	}
 	
@@ -1005,9 +1520,9 @@ sub WatchExperiment($$)
 	$rfrange->Refresh();
 	my $rdz_status = $rfrange->rdz_status() || "";
 	if ($status eq $rdz_status) {
-	    return;
+	    return 0;
 	}
-	logit("WatchExperiment($PID): Grant $grant_id status change: ".
+	logit("WatchExperiment($PID) $pideid: Grant $grant_id status change: ".
 	      "$rdz_status -> $status");
 
 	#
@@ -1015,10 +1530,10 @@ sub WatchExperiment($$)
 	#
 	my $beats  = $grant->{"grant"}->{"allow_skip_acks"} ? 0 : 1;
 	if ($beats && $nextack) {
-	    logit("WatchExperiment($PID): Grant $grant_id next heartbeat: ".
+	    logit("WatchExperiment($PID) $pideid: Grant $grant_id next heartbeat: ".
 		  TBDateStringLocal($nextack));
 	}
-	$rfrange->Update({"rdz_status" => $status});
+	$rfrange->Update({"rdz_status" => $status}) if (!$impotent);
 	$grant->{'grant'}->{'status'} = $status;
 	if ($beats && $nextack) {
 	    &$heartBeat($grant->{'grant'});
@@ -1029,7 +1544,7 @@ sub WatchExperiment($$)
 	    #
 	    # Sledge hammer for now. 
 	    #
-	    if ($instance->rdz_status() ne "revoked") {
+	    if (!$impotent && $instance->rdz_status() ne "revoked") {
 		$instance->Update({"rdz_status" => "revoked"});
 		system("$SUDO -u $PROTOUSER $MANAGEINSTANCE terminate $uuid");
 		#
@@ -1039,18 +1554,18 @@ sub WatchExperiment($$)
 	}
 	elsif ($status eq "paused" && $rdz_status eq "active") {
 	    # Do not change current status if this fails
-	    if (PowerControl($instance, "off", \$errmsg)) {
+	    if (!$impotent && PowerControl($instance, "off", \$errmsg)) {
 		&$notify($grant, "off", $errmsg);
-		return;
+		return 0;
 	    }
 	    $grant->{'lastop'}    = "";
 	    $grant->{'lastemail'} = 0;
 	}
 	elsif ($status eq "active" && $rdz_status eq "paused") {
 	    # Do not change current status if this fails
-	    if (PowerControl($instance, "on", \$errmsg)) {
+	    if (!$impotent && PowerControl($instance, "on", \$errmsg)) {
 		&$notify($grant, "on", $errmsg);
-		return;
+		return 0;
 	    }
 	    $grant->{'lastop'}    = "";
 	    $grant->{'lastemail'} = 0;
@@ -1067,15 +1582,18 @@ sub WatchExperiment($$)
 	# Keep going, parent will kill us.
 	#
 	while (1) {
-	    logit("WatchExperiment($PID): (re)starting event stream for $instance");
-	    if (WatchGrants($callback, [keys(%grants)]) < 0) {
+	    logit("WatchExperiment($PID) $pideid: (re)starting event stream");
+	    my $rval = WatchGrants($callback, [keys(%grants)], $ZMC);
+	    logit("WatchExperiment($PID) $pideid: event stream exited($rval)");
+	    if ($rval < 0) {
+		# XXX Parent is still running below, need to fix this.
 		exit(-1);
 	    }
-	    sleep(5);
+	    sleep(2)
 	}
 	exit(0);
     }
-    logit("WatchExperiment($PID): starting looper for $instance");
+    logit("WatchExperiment($PID) $pideid: starting looper");
     while (1) {
 	#
 	# Watch for the instance terminating. Grants deleted on that path.
@@ -1083,7 +1601,7 @@ sub WatchExperiment($$)
 	$instance->Purge();
 	$instance = APT_Instance->Lookup($uuid);
 	if (!defined($instance)) {
-	    logit("WatchExperiment($PID): experiment is gone, exiting");
+	    logit("WatchExperiment($PID) $pideid: experiment is gone, exiting");
 	    last;
 	}
 	if (defined($instance->rdz_status()) &&
@@ -1093,7 +1611,7 @@ sub WatchExperiment($$)
 	    # We did the terminate up above, but need to make sure it is
 	    # really terminating.
 	    #
-	    logit("WatchExperiment($PID): ".
+	    logit("WatchExperiment($PID) $pideid: ".
 		  "$uuid is revoked but still exists ($status)");
 
 	    #
@@ -1101,10 +1619,17 @@ sub WatchExperiment($$)
 	    # cause the instance was locked. 
 	    #
 	    if (! ($instance->IsTerminated() || $instance->IsCanceled())) {
-		system("$SUDO -u $PROTOUSER $MANAGEINSTANCE terminate $uuid");
+		system("$SUDO -u $PROTOUSER $MANAGEINSTANCE terminate $uuid")
+		    if (!$impotent);
 	    }
 	}
 	sleep(5);
+	my $foo = waitpid($childpid, &WNOHANG);
+	if ($foo) {
+	    my $status = $? >> 8;
+	    logit("WatchExperiment($PID) $pideid: child ($childpid) exited($foo)");
+	    exit($status);
+	}
     }
     kill('TERM', $childpid);
     waitpid($childpid, 0);
@@ -1114,12 +1639,12 @@ sub WatchExperiment($$)
 #
 # Watch grants in an experiment.
 #
-sub WatchGrants($$;$)
+sub WatchGrants($$;$$)
 {
-    my ($callback, $grant_ids, $debug) = @_;
-    my $rval        = 0;
+    my ($callback, $grant_ids, $ZMC, $debug) = @_;
+    $debug    = 0 if (!defined($debug));
+    my $error = 0;
     my $response;
-    $debug = 0 if (!defined($debug));
     
     # IO::Socket::SSL lets us open encrypted (wss) connections
     require IO::Socket::SSL;
@@ -1203,7 +1728,7 @@ sub WatchGrants($$;$)
 		logit("Could not decode json data:\n$buf");
 		return;
 	    }
-	    &$callback("event", $ref);
+	    $error = &$callback("event", $ref);
 	},
 	# On Connect: this is what happens after the handshake succeeds, and we
 	# are "connected" to the service.
@@ -1222,8 +1747,7 @@ sub WatchGrants($$;$)
 	    my ($buf) = @_;
 
 	    logit("Error on websocket, handshake failed: $buf");
-	    $socket->close();
-	    $rval = 1;
+	    $error = -1;
 	},
     );
     if (!$client) {
@@ -1256,7 +1780,9 @@ sub WatchGrants($$;$)
 		logit("WatchGrants: /grants/$grant_id failed");
 		next;
 	    }
-	    &$callback("poll", $grant);
+	    $error = &$callback("poll", $grant);
+	    last
+		if ($error);
 	}
     };
     &$pollGrants();
@@ -1264,7 +1790,7 @@ sub WatchGrants($$;$)
     #
     # Loop until we are killed by the parent or error.
     #
-    while ($socket->connected) {
+    while ($socket->connected && !$error) {
 	my $data;
 	my $cc = sysread($socket, $data, 16384);
 
@@ -1275,7 +1801,9 @@ sub WatchGrants($$;$)
 		#
 		# Call up to handle hearbeats.
 		#
-		&$callback("heartbeat", undef);
+		$error = &$callback("heartbeat", undef);
+		last
+		    if ($error);
 
 		if (time() - $lastPoll > $pollTimeout) {
 		    &$pollGrants();
@@ -1284,20 +1812,18 @@ sub WatchGrants($$;$)
 		next;
 	    }
 	    logit("WatchGrants: sysread on socket failed: $!");
-	    $socket->close();
-	    return 1;
+	    $error = 1;
 	}
 	elsif ($cc == 0) {
 	    logit("WatchGrants: connection EOF");
-	    $socket->close();
-	    return 1;
+	    $error = 1;
 	}
 	$client->read($data);
     }
     if ($socket->connected) {
 	$socket->close();
     }
-    return $rval;
+    return $error;
 }
 
 #

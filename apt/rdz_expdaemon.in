@@ -36,6 +36,7 @@ use File::Basename;
 use File::stat;
 use POSIX ":sys_wait_h";
 use POSIX qw(strftime);
+use IO::Socket::SSL;
 use JSON;
 
 #
@@ -282,7 +283,7 @@ sub Watcher($)
     }
     select(undef, undef, undef, 0.2);
     logit("Starting Watcher($PID) for $instance");
-    APT_RDZ::WatchExperiment($instance, $debug);
+    APT_RDZ::WatchExperiment($instance, $debug, $impotent);
     exit(0);
 }
 

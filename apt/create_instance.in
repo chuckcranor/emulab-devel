@@ -168,6 +168,7 @@ use APT_Geni;
 use APT_Dataset;
 use APT_Aggregate;
 use APT_Utility;
+use APT_RDZ;
 use Experiment;
 use User;
 use Project;
@@ -287,6 +288,8 @@ $SIG{__WARN__} = sub {
     cluck($message);
     $warned = 0;
 };
+
+chdir("/tmp");
 
 #
 # Use a log file for the output, so we can spew it and save it
@@ -462,7 +465,7 @@ if (! defined($rspec)) {
 }
 # Flag for below, only in Utah
 if ($MAINSITE) {
-    $rdzenabled = GeniXML::RDZEnabled($rspec);
+    $rdzenabled = APT_RDZ::UseRDZ($rspec);
 }
 
 #
@@ -1062,9 +1065,6 @@ if (defined($sshkey)) {
 if (defined($webinfo)) {
     $blob->{"webinfo"} = $webinfo;
 }
-if ($rdzenabled) {
-    $blob->{"rdz_status"} = "new";
-}
 $errmsg = undef;
 $instance = APT_Instance->Create($blob, \$errmsg);
 if (!defined($instance)) {
@@ -1075,7 +1075,6 @@ if (!$debug) {
     $instance->SetLogFile($logfile);
     $logfile->SetMetadata({"uuid" => $instance->uuid()}, 0);
 }
-
 #
 # Now set the rspec to avoid reparse later.
 #
@@ -1086,6 +1085,11 @@ if ($instance->SetRSPEC($rspec)) {
 $retval = $instance->FinalizeRSpec(\$errmsg);
 if ($retval) {
     ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+if ($rdzenabled) {
+    if (APT_RDZ::initRDZstate($instance, \$errmsg)) {
+	UserError($errmsg);
+    }
 }
 
 #
