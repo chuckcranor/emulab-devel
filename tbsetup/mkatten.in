@@ -437,7 +437,8 @@ EOF
 		$j += 4;
 	    }
 	    print $pic "($node) $i $size inn\n"
-		unless( $i > 4 && $ins[ $i ]->[ 0 ] eq $ins[ $i - 4 ]->[ 0 ] );
+		unless( $i > 4 && defined( $ins[ $i - 4 ] ) &&
+			$ins[ $i ]->[ 0 ] eq $ins[ $i - 4 ]->[ 0 ] );
 
 	    print $pic "($label) $i inp\n";
 	}
@@ -454,7 +455,9 @@ EOF
 		$j += 4;
 	    }
 	    print $pic "($node) $i $size outn\n"
-		unless( $i > 4 && $outs[ $i ]->[ 0 ] eq $outs[ $i - 4 ]->[ 0 ] );
+		unless( $i > 4 && defined( $outs[ $i - 4 ] ) &&
+			$outs[ $i ]->[ 0 ] eq $outs[ $i - 4 ]->[ 0 ] );
+
 	    print $pic "($label) $i outp\n";
 	}
     }
