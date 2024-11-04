@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2023 University of Utah and the Flux Group.
+# Copyright (c) 2004-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -684,6 +684,13 @@ sub process($$$$)
     #
     if (exists($href->{'MOUNTPOINT'})) {
 	$href->{'MOUNTPOINT'} =~ s#/+$##;
+	#
+	# XXX hack: let os_check_storage know whether we expect
+	# the filesystem to be mounted (shutdown) or not (setup)
+	#
+	$href->{'EXPECTMOUNT'} = $dosetup ? 0 : 1;
+    } else {
+	$href->{'EXPECTMOUNT'} = 0;
     }
 
     #

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2023 University of Utah and the Flux Group.
+# Copyright (c) 2013-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -109,8 +109,10 @@ my $PARTED	= "/sbin/parted";
 my $PPROBE	= "/sbin/partprobe";
 my $FRISBEE     = "$LBINDIR/frisbee";
 my $HDPARM	= "/sbin/hdparm";
+my $LSOF	= "/usr/bin/lsof";
 
 my $FSTAB	= "/etc/fstab";
+my $EXPORTS	= "/etc/exports";
 
 #
 # Time to wait for a session to start.
@@ -913,6 +915,165 @@ sub set_iname($$)
 }
 
 #
+# Attempt to login to an iSCSI session.
+# Returns the session ID if successful, undef otherwise.
+#
+sub iscsi_login($$$$)
+{
+    my ($bsid,$hostip,$uuid,$log) = @_;
+
+    # record all the output for debugging
+    my $redir = ">/dev/null 2>&1";
+    if ($log) {
+	$redir = ">>$log 2>&1";
+    }
+
+    #
+    # XXX It may take some time for the server to respond on a first
+    # boot as it may be setting up many blockstores. So we retry the
+    # initial operation for awhile. The default iscsiadm timeout for
+    # connecting is 120 seconds, which we will retry 10 times for a
+    # total of 20 minutes. Note that the swapin node boot timeout will
+    # probably trigger before that, but rebooting the node will be
+    # okay here.
+    #
+    my $rv = 0;
+    for (my $tries = 0; $tries < int($SESSION_TIMEOUT/120); $tries++) {
+	$rv = mysystem("$ISCSI -m node -T $uuid -p $hostip -l $redir");
+	# exit code 8 indicates timeout
+	last
+	    if ($rv != 0x800);
+	warn("*** $bsid: could not connect to portal $hostip, retrying...\n");
+    }
+
+    #
+    # If the login succeeded, look up and return the session.
+    #
+    if (!$rv) {
+	my @lines = `$ISCSI -m session 2>&1`;
+	foreach (@lines) {
+	    chomp;
+	    if (/^tcp: \[(\d+)\].*$uuid\b/) {
+		return $1;
+	    }
+	}
+    }
+
+    return undef;
+}
+
+#
+# The filesystem being busy (i.e., a file open on it or being the working dir
+# of a process) is the only case we handle right now.
+#
+# The two scenarios we handle right now are: user-mode processes accessing the
+# filesystem and a kernel-mode NFS server exporting the filesystem. The former
+# we handle by identifying and killing the accessing processes and retrying
+# the unmount. The latter by determining if the filesystem is being exported
+# and the NFS server running, in which case we shutdown the server.
+#
+# Returns zero if successful, an non-zero otherwise.
+#
+sub force_unmount($)
+{
+    my ($href) = @_;
+    my $bsid = $href->{'VOLNAME'};
+    my ($mpoint) = $href->{'MOUNTPOINT'};
+    my $fail = "";
+    my %pids = ();
+    
+    #
+    # Use lsof to identify processes accessing the filesystem and kill them.
+    #
+    if (-e "$LSOF") {
+	my @output = `$LSOF -Pn | grep ' $mpoint' 2>&1`;
+	foreach my $line (@output) {
+	    chomp($line);
+	    if ($line =~ m#^\S+\s+(\d+).*\s$mpoint(/\S+)?\s*$#) {
+		$pids{$1} = 1 if ($1 > 1);
+	    }
+	}
+    }
+    #
+    # "lsof" does not exist, we try extracting the info by looking at the
+    # symlinks in /proc/*/cwd and /proc/*/fd/*. Since globbing will fail
+    # if there are lots of processes or open files, we use "find" and then
+    # filter the results to find processes.
+    #
+    # ala "find /proc -type l -ls | grep $mpoint" and then filter those in
+    # this script looking for /proc/\d+/cwd and /proc/\d+/fd/\d+ matches.
+    # This could be really slow, though maybe not any slower than running
+    # "lsof" in the same conditions.
+    #
+    else {
+	my @lines = `find /proc -type l -ls 2>/dev/null | grep $mpoint`;
+	foreach my $line (@lines) {
+	    if ($line =~ m#/proc/(\d+)/cwd -> $mpoint(/\S+)?$#) {
+		$pids{$1} = 1 if ($1 > 1);
+		$suf = defined($2) ? $2 : "";
+		print STDERR "Found pid $1 cwd is '$mpoint$suf'\n"
+		    if (0);
+		next;
+	    }
+	    if ($line =~ m#/proc/(\d+)/fd/(\d+) -> $mpoint(/\S+)?$#) {
+		$pids{$1} = 1 if ($1 > 1);
+		$suf = defined($3) ? $3 : "";
+		print STDERR "Found pid $1 FD $2 is '$mpoint$suf'\n"
+		    if (0);
+		next;
+	    }
+	}
+    }
+
+    #
+    # If we identified any processes, kill them.
+    # XXX maybe we should TERM and then KILL if that doesn't work?
+    #
+    if (keys(%pids) > 0) {
+	warn("*** $bsid: killing accessing processes: " .
+	     join(' ', keys(%pids)) . "\n");
+	kill('HUP', keys(%pids));
+	sleep(2);
+	kill('TERM', keys(%pids));
+	sleep(2);
+	$fail = `$UMOUNT $mpoint 2>&1`;
+	if ($? == 0) {
+	    return 0;
+	}
+    }
+
+    #
+    # See if the filesystem is exported and there is an NFS server running.
+    # If so, kill the server.
+    #
+    # XXX this is only intended to catch cases where NFS is setup by a
+    # profile derived from our nfs-server profile, which only works on
+    # Ubuntu and FreeBSD. So we assume the Ubuntu service name here.
+    #
+    if (-f "$EXPORTS" && mysystem("grep -q -w '^$mpoint' $EXPORTS") == 0) {
+	my @lines = `service --status-all | grep nfs- 2>&1`;
+	my $service = "";
+	foreach my $line (@lines) {
+	    if ($line =~ /^\s+\[ \+ \]\s+(nfs-kernel-server)/) {
+		$service = $1;
+	    }
+	}
+	if ($service) {
+	    warn("*** $bsid: stopping $service service\n");
+	    if (mysystem("service $service stop") == 0) {
+		sleep(2);
+		$fail = `$UMOUNT $mpoint 2>&1`;
+		if ($? == 0) {
+		    return 0;
+		}
+	    }
+	}
+    }
+    warn("*** $bsid: could not unmount $mpoint:\n    $fail");
+    return 1;
+}
+
+#
 # Handle one-time operations.
 # Return a cookie (object) with current state of storage subsystem.
 #
@@ -1193,12 +1354,39 @@ sub os_check_storage_element($$)
 		last;
 	    }
 	}
+
+	#
+	# Block store might exist, but we might just be logged out.
+	# Try to login and continue. Otherwise, an ephemeral blockstore
+	# will get recreated in os_create_storage_element after every
+	# shutdown (reboot). We don't want these blockstores to be *that*
+	# ephemeral!
+	#
 	if (!defined($session)) {
-	    return 0;
+	    #
+	    # XXX before we try to re-login, see if a mount exists on the
+	    # mountpoint when we are not expecting it. This can happen if we
+	    # did a shutdown and the unmount was unsuccessful, or if the user
+	    # mounted something else on the mount point. In this situation,
+	    # we attempt an unmount. If that is successful, we continue.
+	    # Otherwise we abort.
+	    #
+	    my $mpoint = $href->{'MOUNTPOINT'};
+	    if ($mpoint && !$href->{'EXPECTMOUNT'}) {
+		my $line = `$MOUNT | grep ' on $mpoint '`;
+		if ($line) {
+		    warn("*** $bsid: mount point occupied\n");
+		    return -1;
+		}
+	    }
+	    $session = iscsi_login($bsid, $hostip, $uuid, 0);
+	    if (!defined($session)) {
+		return 0;
+	    }
 	}
 
 	#
-	# If there is no session, we have a problem.
+	# If there is no device associated with the session, we have a problem.
 	#
 	my $dev = iscsi_to_dev($session);
 	if (!defined($dev)) {
@@ -1282,6 +1470,10 @@ sub os_check_storage_element($$)
 	    }
 	    elsif ($line !~ /^${mdev} on (\S+) / || $1 ne $mpoint) {
 		warn("*** $bsid: mounted on $1, should be on $mpoint\n");
+		return -1;
+	    }
+	    elsif ($line !~ /^(\/dev\/\S+) on $mpoint / || $1 ne $mdev) {
+		warn("*** $bsid: mounted from $1, should be from $mdev\n");
 		return -1;
 	    }
 	}
@@ -1725,50 +1917,20 @@ sub os_create_storage_element($$$)
 	# Perform one time iSCSI operations
 	#
 	if (mysystem("$ISCSI -m node -T $uuid -p $hostip -o new $redir")) {
-	    warn("*** $bsid: first-time init failed; Could not create DB record.\n");
+	    warn("*** $bsid: first-time init failed; ".
+		 "Could not create DB record$logmsg\n");
 	    return 0;
 	}
 	if (mysystem("$ISCSI -m node -T $uuid -p $hostip -o update -n node.startup -v manual $redir")) {
-	    warn("*** $bsid: first-time init failed; Could not update DB record.\n");
+	    warn("*** $bsid: first-time init failed; ".
+		 "Could not update DB record$logmsg\n");
 	    return 0;
 	}
 	    
-	#
-	# XXX It may take some time for the server to respond on a first
-	# boot as it may be setting up many blockstores. So we retry the
-	# initial operation for awhile. The default iscsiadm timeout for
-	# connecting is 120 seconds, which we will retry 10 times for a
-	# total of 20 minutes. Note that the swapin node boot timeout will
-	# probably trigger before that, but rebooting the node will be
-	# okay here.
-	#
-	my $rv = 0;
-	for (my $tries = 0; $tries < int($SESSION_TIMEOUT/120); $tries++) {
-	    $rv = mysystem("$ISCSI -m node -T $uuid -p $hostip -l $redir");
-	    # exit code 8 indicates timeout
-	    last
-		if ($rv != 0x800);
-	    warn("*** $bsid: could not connect to portal $hostip, retrying...\n");
-	}
-	if ($rv) {
-	    warn("*** $bsid: first-time init failed; Could not login session.\n");
-	    return 0;
-	}
-
-	#
-	# Make sure we are connected
-	#
-	my $session;
-	@lines = `$ISCSI -m session 2>&1`;
-	foreach (@lines) {
-	    chomp;
-	    if (/^tcp: \[(\d+)\].*$uuid\b/) {
-		$session = $1;
-		last;
-	    }
-	}
+	my $session = iscsi_login($bsid, $hostip, $uuid, $log);
 	if (!defined($session)) {
-	    warn("*** Could not locate session for block store $bsid (uuid=$uuid)\n");
+	    warn("*** Could not locate or login to iSCSI session for ".
+		 "block store $bsid (uuid=$uuid)$logmsg\n");
 	    return 0;
 	}
 
@@ -2084,8 +2246,22 @@ sub os_remove_storage_element($$$)
 		    _docker_get_ext_trans_mountpoint($mpoint);
 	    }
 
-	    if (mysystem("$UMOUNT $mpoint")) {
-		warn("*** $bsid: could not unmount $mpoint\n");
+	    #
+	    # If this is a persistent blockstore and the basic unmount fails,
+	    # we try extra hard to unmount it, otherwise it could be left in
+	    # an inconsistent state for the next use. Obviously, this does
+	    # not matter for ephemeral blockstores which will be destroyed
+	    # on termination anyway.
+	    #
+	    # The filesystem being busy (i.e., a file open on it or being the
+	    # working dir of a process) is the only case we handle right now.
+	    #
+	    my $fail = `$UMOUNT $mpoint 2>&1`;
+	    if ($? != 0) {
+		if ($fail !~ /is busy/ || !$href->{'PERSIST'} ||
+		force_unmount($href) != 0) {
+		    warn("*** $bsid: could not unmount $mpoint:\n    $fail");
+		}
 	    }
 	}
 
