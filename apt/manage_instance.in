@@ -1608,6 +1608,20 @@ sub DoTerminate()
     }
 
     #
+    # Special case for RDZ-in-RDZ; watch for experiments using it,
+    # they must be terminated first.
+    #
+    if ($DORDZ && $instance->rdz_rdzinrdzinfo()) {
+	if (APT_RDZ::TerminateRDZinRDZExperiments($instance, \$errmsg)) {
+	    $exitcode = -1;
+	    $errcode  = GENIRESPONSE_ERROR;
+	    $errmsg   = "Could not terminate experiments using ".
+		"RDZ-in-RDZ: $errmsg";
+	    goto bad;
+	}	
+    }
+
+    #
     # Special case for the RDZ.
     #
     my $rfranges = APT_Instance::RFRanges->LookupForInstance($instance);
@@ -1629,11 +1643,13 @@ sub DoTerminate()
     #
     # Special case for RDZ-in-RDZ
     #
-    if ($DORDZ && APT_RDZ::cleanupRDZinRDZ($instance)) {
-	$exitcode = -1;
-	$errcode  = GENIRESPONSE_ERROR;
-	$errmsg   = "Could not cleanup RDZ-in-RDZ";
-	goto bad;
+    if ($DORDZ && $instance->rdz_rdzinrdzinfo()) {
+	if (APT_RDZ::cleanupRDZinRDZ($instance)) {
+	    $exitcode = -1;
+	    $errcode  = GENIRESPONSE_ERROR;
+	    $errmsg   = "Could not cleanup RDZ-in-RDZ";
+	    goto bad;
+	}
     }
 
     # Skip terminated aggregates, since we retry later on failure.
