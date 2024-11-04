@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2022 University of Utah and the Flux Group.
+# Copyright (c) 2013-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -74,6 +74,9 @@ my $FRISBEE     = "/usr/local/bin/frisbee";
 
 my $TUNEFS	= "/sbin/tunefs";
 my $EXT_TUNEFS	= "/usr/local/sbin/tune2fs";
+
+my $LSOF	= "/usr/local/sbin/lsof";
+my $EXPORTS	= "/etc/exports";
 
 #
 # Force the use of GVINUM.
@@ -984,11 +987,122 @@ sub checkfs($$$)
 	$fopt .= " -t $fstype";
     }
 
-    if (mysystem("$FSCK $fopt $mdev $redir")) {
-	warn("*** $lv: fsck of $mdev failed\n");
+    my $rv = mysystem("$FSCK $fopt $mdev $redir");
+    if ($rv && ($fstype ne "ext2fs" || $rv != 256)) {
+	warn("*** $lv: fsck of $mdev failed: $?\n");
 	return 0;
     }
 
+    return 1;
+}
+
+#
+# The filesystem being busy (i.e., a file open on it or being the working dir
+# of a process) is the only case we handle right now.
+#
+# The two scenarios we handle right now are: user-mode processes accessing the
+# filesystem and a kernel-mode NFS server exporting the filesystem. The former
+# we handle by identifying and killing the accessing processes and retrying
+# the unmount. The latter by determining if the filesystem is being exported
+# and the NFS server running, in which case we shutdown the server.
+#
+# Returns zero if successful, an non-zero otherwise.
+#
+sub force_unmount($)
+{
+    my ($href) = @_;
+    my $bsid = $href->{'VOLNAME'};
+    my ($mpoint) = $href->{'MOUNTPOINT'};
+    my $fail = "";
+    my %pids = ();
+    
+    #
+    # Use lsof to identify processes accessing the filesystem and kill them.
+    #
+    if (-e "$LSOF") {
+	my @output = `$LSOF -Pn | grep ' $mpoint' 2>&1`;
+	foreach my $line (@output) {
+	    chomp($line);
+	    if ($line =~ m#^\S+\s+(\d+).*\s$mpoint(/\S+)?\s*#) {
+		$pids{$1} = 1 if ($1 > 1);
+	    }
+	}
+    }
+    #
+    # "lsof" does not exist, we try extracting the info using fstat.
+    # fstat seems to be a bit goofy and doesn't identify the mountpoint
+    # of a file symbolically, but does by device number. So we first find
+    # the device number of the mount point and look for matches on that.
+    #
+    else {
+	my $fsdev = "";
+	my @lines = ();
+	
+	my $line = `stat -f '%Xd %i' $mpoint`;
+	if ($line =~ /^([0-9a-f]+) (\d+)$/ && $2 == 2) {
+	    $fsdev = "0x$1";
+	    @lines = `fstat -n 2>/dev/null | grep ' $fsdev '`;
+	}
+	foreach my $line (@lines) {
+	    chomp $line;
+	    my @fields = split('\s+', $line);
+	    next
+		if (@fields < 5);
+	    if ($fields[4] eq $fsdev) {
+		my $pid = int($fields[2]);
+		if ($fields[3] eq "wd") {
+		    $pids{$pid} = 1 if ($pid > 1);
+		    print STDERR "Found pid $pid cwd is on '$mpoint'\n"
+			if (0);
+		    next;
+		}
+		if ($fields[3] =~ /^(\d+)$/) {
+		    $pids{$pid} = 1 if ($pid > 1);
+		    print STDERR "Found pid $pid FD $1 is on '$mpoint'\n"
+			if (0);
+		    next;
+		}
+	    }
+	}
+    }
+
+    #
+    # If we identified any processes, kill them.
+    # XXX maybe we should TERM and then KILL if that doesn't work?
+    #
+    if (keys(%pids) > 0) {
+	warn("*** $bsid: killing accessing processes: " .
+	     join(' ', keys(%pids)) . "\n");
+	kill('HUP', keys(%pids));
+	sleep(2);
+	kill('TERM', keys(%pids));
+	sleep(2);
+	$fail = `$UMOUNT $mpoint 2>&1`;
+	if ($? == 0) {
+	    return 0;
+	}
+    }
+
+    #
+    # See if the filesystem is exported and there is an NFS server running.
+    # If so, kill the server.
+    #
+    # XXX this is only intended to catch cases where NFS is setup by a
+    # profile derived from our nfs-server profile, which only works on
+    # Ubuntu and FreeBSD.
+    #
+    if (-f "$EXPORTS" && mysystem("grep -q -w '^$mpoint' $EXPORTS") == 0) {
+	foreach $service ("lockd", "statd", "nfsd", "mountd", "rpcbind") {
+	    warn("*** $bsid: stopping $service service\n");
+	    mysystem("/etc/rc.d/$service onestop");
+	}
+	sleep(2);
+	$fail = `$UMOUNT $mpoint 2>&1`;
+	if ($? == 0) {
+	    return 0;
+	}
+    }
+    warn("*** $bsid: could not unmount $mpoint:\n    $fail");
     return 1;
 }
 
@@ -2296,8 +2410,22 @@ sub os_remove_storage_element($$$)
 	if (exists($href->{'MOUNTPOINT'})) {
 	    my $mpoint = $href->{'MOUNTPOINT'};
 
-	    if (mysystem("$UMOUNT $mpoint")) {
-		warn("*** $bsid: could not unmount $mpoint\n");
+	    #
+	    # If this is a persistent blockstore and the basic unmount fails,
+	    # we try extra hard to unmount it, otherwise it could be left in
+	    # an inconsistent state for the next use. Obviously, this does
+	    # not matter for ephemeral blockstores which will be destroyed
+	    # on termination anyway.
+	    #
+	    # The filesystem being busy (i.e., a file open on it or being the
+	    # working dir of a process) is the only case we handle right now.
+	    #
+	    my $fail = `$UMOUNT $mpoint 2>&1`;
+	    if ($? != 0) {
+		if ($fail !~ /Device busy/ || !$href->{'PERSIST'} ||
+		force_unmount($href) != 0) {
+		    warn("*** $bsid: could not unmount $mpoint:\n    $fail");
+		}
 	    }
 	}
 
