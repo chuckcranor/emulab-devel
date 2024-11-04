@@ -370,6 +370,54 @@ sub setupRDZinRDZ($$$)
     return 0;
 }
 
+#
+# Terminate experiments using an RDZinRDZ, which we need to do when
+# terminating the RDZinRDZ experiment itself.
+#
+sub TerminateRDZinRDZExperiments($$)
+{
+    my ($rdz_instance, $perrmsg) = @_;
+
+    # Not an rdzinrdz.
+    return 0
+	if (!$rdz_instance->rdz_rdzinrdzinfo());
+
+    #
+    # Going to use the element_token as the search key. 
+    #
+    my $element_token = $rdz_instance->RDZINRDZINFO()->{'element_token'};
+    return 0
+	if (!defined($element_token));
+
+    #
+    # Find all experiments using an RDZ.
+    #
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instances ".
+		    "where rdz_rdzinfo is not null");
+    if (!$query_result) {
+	$$perrmsg = "Internal DB error";
+	return -1;
+    }
+
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	next
+	    if (!defined($instance));
+	next
+	    if (!exists($instance->RDZINFO()->{'element_token'}) ||
+		$element_token ne $instance->RDZINFO()->{'element_token'});
+
+	# Do this in foreground.
+	system("$MANAGEINSTANCE -d terminate $uuid");
+	if ($?) {
+	    $$perrmsg = "could not terminate " . $instance->Printable();
+	    return -1;
+	}
+    }
+    return 0;
+}
+
 sub cleanupRDZinRDZ($)
 {
     my ($instance) = @_;
