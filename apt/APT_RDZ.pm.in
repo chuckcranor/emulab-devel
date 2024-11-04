@@ -1429,6 +1429,36 @@ sub WatchExperiment($$;$)
 	    $status   = $ref->{'status'};
 	    $nextack  = $ref->{'status_ack_by'};
 	    $lastpoll = time();
+
+	    #
+	    # Check for a grant replacement that we did not get an event for.
+	    #
+	    if (defined($ref->{'replacement'}) &&
+		exists($ref->{'replacement'}->{'new_grant_id'})) {
+		my $new_grant_id = $ref->{'replacement'}->{'new_grant_id'};
+		my $old_grant_id = $grant_id;
+
+		logit("WatchExperiment($PID) $pideid: polled grant $old_grant_id ".
+		      "has been replaced by $new_grant_id");
+		
+		my $grant = $grants{$old_grant_id};
+		$grant->{'grant'} = $ref;
+		$grants{$new_grant_id} = $grant;
+		delete($grants{$old_grant_id});
+
+		#
+		# Update the rfrange DB record.
+		#
+		$grant->{'rfrange'}->Update({"rdz_grantid" => $new_grant_id});
+
+		my $response;
+		if ($ZMC->DELETE("/grants/$old_grant_id", \$response)) {
+		    logit("WatchExperiment($PID) $pideid: could not remove ".
+			  "revoked grant $old_grant_id from the ZMC");
+		}
+		# Flag non-fatal error, to force a restart of the stream.
+		return 1;
+	    }
 	    # Fall through to below to handle change in grant status.
 	}
 	else {
