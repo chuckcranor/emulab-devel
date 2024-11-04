@@ -204,7 +204,7 @@ sub initRDZstate($$)
 		    $rdzinfo->{"element_token"} = $el->textContent()
 		}
 	    }
-	    my $url = URLforRDZ($instance, $perrmsg);
+	    my $url = URLforRDZ($parent_instance, $perrmsg);
 	    return -1
 		if (!defined($url));
 	    
