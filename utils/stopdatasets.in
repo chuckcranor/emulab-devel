@@ -1,0 +1,593 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Date::Parse;
+use Data::Dumper;
+
+#
+# "Stop" activity to remote persistent datasets for an experiment instance
+# or a set of nodes from an experiment instance.
+#
+# This is called prior to termination of an experiment to make an effort
+# to ensure the dataset is in a consistent state.
+#
+# In the future, the actions of the force option should be incorporated into
+# the client-side rc.storageremote script, so that this script just has to do
+# an "rc.storageremote shutdown" and nothing else.
+#
+sub usage()
+{
+    print STDERR "Usage: stopdatasets [-hdfnvw] [-t timeout] -e pid/eid [ node ... ]\n";
+    print STDERR "   -h         This message\n";
+    print STDERR "   -d         Print additional debug info\n";
+    print STDERR "   -f         Do everything possible to ensure datasets are stopped\n";
+    print STDERR "   -n         Show what would be done but do not do it\n";
+    print STDERR "   -v         Print verbose info about what is happening\n";
+    print STDERR "   -w         Only operate on nodes with RW datasets\n";
+    print STDERR "   -U         (debug) Undo a stop (aka start) datasets on nodes\n";
+    print STDERR "   -P         (debug) Just parse the pssh logfile and dump the info\n";
+    print STDERR "   -t <sec>   Give up after <sec> seconds (default 30)\n";
+    print STDERR "   -e pid/eid Experiment to act on (must be specified)\n";
+    print STDERR "   [node ...] Optional subset of nodes from the experiment to act on; otherwise all nodes are acted upon\n";
+    exit(-1);
+}
+my $optlist  = "hdfnvwUPt:e:";
+my $verbose = 0;
+my $debug = 0;
+my $impotent = 0;
+my $force = 0;
+my $experiment;
+my @nodes = ();
+my $timeout = 30;
+my $rwonly = 0;
+my $startem = 0;
+my $parseonly = 0;
+
+# XXX for parallel command execution
+my $PSSH	= "/usr/local/bin/pssh";
+my $PSSHOPTS	= "-O BatchMode=yes -O StrictHostKeyChecking=no -O UserKnownHostsFile=/dev/null";
+my $PARALLEL	= 20;
+
+# Protos
+sub ParallelCommand($$@);
+sub RemoteDatasets($$;$);
+sub getstatus($$);
+sub stopnodes($$);
+sub startnodes($$);
+sub fatal($);
+
+#
+# Configure variables
+#
+my $TB		 = "@prefix@";
+my $CBINDIR	 = "/usr/local/etc/emulab";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use Lease;
+use Project;
+use Group;
+use User;
+use Experiment;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{h})) {
+    usage();
+}
+if (defined($options{d})) {
+    $debug = 1;
+}
+if (defined($options{v})) {
+    $verbose = 1;
+}
+if (defined($options{f})) {
+    $force = 1;
+}
+if (defined($options{n})) {
+    $impotent = 1;
+}
+if (defined($options{w})) {
+    $rwonly = 1;
+}
+if (defined($options{U})) {
+    $startem = 1;
+}
+if (defined($options{P})) {
+    $parseonly = 1;
+}
+if (defined($options{t})) {
+    if ($options{t} =~ /^(\d+)$/) {
+	$timeout = $1;
+    } else {
+	print STDERR "Invalid timeout value '$options{t}'\n";
+	usage();
+    }
+}
+if (defined($options{e})) {
+    if ($options{e} =~ /^([-\w\.\/]+)$/) {
+	$experiment = Experiment->Lookup($1);
+	if (!$experiment) {
+	    print STDERR "Invalid experiment '$options{e}'\n";
+	    usage();
+	}
+    }
+}
+
+if (!$impotent && $UID != 0) {
+    fatal("Must be root");
+}
+if (!$experiment) {
+    print STDERR "Must specify an experiment with '-e'\n";
+    usage();
+}
+
+#
+# Get the list of nodes either explicit or implicit
+#
+if (@ARGV > 0) {
+    while (@ARGV > 0) {
+	my $node_id = shift;
+	my $node = Node->Lookup($node_id);
+	if (!$node) {
+	    fatal("Invalid node '$node_id'");
+	}
+	if (!$experiment->SameExperiment($node->Reservation())) {
+	    fatal("Node '$node_id' not in the experiment");
+	}
+	push(@nodes, $node);
+    }
+} else {
+    @nodes = $experiment->NodeList(0, 1);
+}
+if (@nodes == 0) {
+    print STDERR "$experiment: No nodes to process, not swapped in?\n";
+}
+print "Processing experiment $experiment, nodes: ", join(', ', @nodes), "\n"
+    if ($verbose);
+
+#
+# Weed out nodes that don't have asssociated datasets:
+#
+my %nodeattrs = ();
+foreach my $node (@nodes) {
+    print STDERR "==== Found node '$node'",
+        ", vname=", $node->vname(),
+        ", type=", $node->type(),
+	", class=", $node->class(),
+	", blackbox=", ($node->isblackbox() ? "1" : "0"), "\n"
+	if ($debug);
+
+    my $attr;
+    if (RemoteDatasets($node, $rwonly, \$attr)) {
+	$nodeattrs{$node->node_id()} = $attr;
+    } else {
+	print "  Node $node has no " . ($rwonly ? "RW " : "") . "remote datasets\n"
+	    if ($verbose);
+	print STDERR "  No remote datasets\n"
+	    if ($debug);
+    }
+}
+
+if ($parseonly) {
+    my $log = "/proj/". $experiment->pid(). "/exp/". $experiment->eid().
+	"/logs/". ($startem ? "start" : "stop"). "datasets.log";
+    getstatus($log, \%nodeattrs);
+    print STDERR "status:\n", Dumper(\%nodeattrs), "\n";
+    exit(0);
+}
+
+#
+# Finally, try to shutdown the datasets.
+#
+my $rv;
+if ($startem) {
+    $rv = startnodes($experiment, \%nodeattrs);
+} else {
+    $rv = stopnodes($experiment, \%nodeattrs);
+}
+
+exit($rv);
+
+#
+# Use pssh to execute a command in parallel on the list of machines given and
+# logging to the indicated log file.
+#
+sub ParallelCommand($$@)
+{
+    my ($sshcmd,$logfile,@nodeids) = @_;
+
+    my $rv = 0;
+    if (@nodeids > 0) {
+	my $opts = "$PSSHOPTS -t $timeout -p $PARALLEL -i";
+	my $hostlist = join(' ', @nodeids);
+	my $cmd = "$PSSH $opts -H \"$hostlist\" $sshcmd";
+	if ($impotent) {
+	    print STDERR "Would do: $cmd >$logfile 2>&1\n";
+	} elsif (system("$cmd >$logfile 2>&1")) {
+	    $rv = $?;
+	}
+    }
+
+    return $rv;
+}
+
+#
+# Find all remote datasets exported to a node that are either writeable
+# (rwonly==1) or of any type (rwonly==0). Returns 1 if it has any, 0 if not.
+#
+# Optionally return a hash of info about any datasets found.
+#
+# XXX This could be a Node object method.
+#
+sub RemoteDatasets($$;$)
+{
+    my ($node,$rwonly,$rval) = @_;
+
+    if ($node->type() eq "blockstore" ||
+	($node->class() ne "pc" && $node->class() ne "pcvm") ||
+	$node->isblackbox()) {
+	return 0;
+    }
+
+    #
+    # We replicate what tmcd uses to do storageconfig
+    #
+    my $vname = $node->vname();
+    my $exptidx = $node->exptidx();
+
+    #
+    # Get the set of vlans this node is in
+    #
+    my $result =
+	DBQueryFatal("select vname from virt_lans ".
+		     "where exptidx=$exptidx and vnode='$vname'");
+    if (!$result || $result->numrows == 0) {
+	return 0;
+    }
+
+    my @vlnames = ();
+    while (my ($vlname) = $result->fetchrow_array()) {
+	push(@vlnames, "'$vlname'");
+    }
+    my $vnamelist = join(',', @vlnames);
+    
+    #
+    # With those vlan names, find any blockstores connected via those vlans
+    #
+    $result =
+	DBQueryFatal("select rb.bs_id,rb.vname from reserved_blockstores as rb ".
+		     "join reserved as r on ".
+		     "  r.node_id=rb.vnode_id and r.exptidx=rb.exptidx ".
+		     "join virt_lans as vl on ".
+		     "  r.vname=vl.vnode and r.exptidx=vl.exptidx ".
+		     "where vl.exptidx=$exptidx and vl.vname in ($vnamelist)");
+    if (!$result || $result->numrows == 0) {
+	return 0;
+    }
+
+    #
+    # Finally, for each of those extract the attributes we care about
+    #
+    my %attrs = ();
+    while (my ($bsid,$bsvname) = $result->fetchrow_array()) {
+	print STDERR "  Processing '$bsvname'\n"
+	    if ($debug);
+	my $result2 =
+	    DBQueryFatal("select attrkey,attrvalue from virt_blockstore_attributes ".
+			 "where exptidx=$exptidx and vname='$bsvname'");
+	if (!$result2 || $result2->numrows == 0) {
+	    next;
+	}
+	my ($class,$lease,$mpoint,$proto,$ro,$access);
+	while (my ($key,$val) = $result2->fetchrow_array()) {
+	    $class = $val if ($key eq "class");
+	    $lease = $val if ($key eq "lease");
+	    $mpoint = $val if ($key eq "mountpoint");
+	    $proto = $val if ($key eq "protocol");
+	    $access = "clone" if ($key eq "rwclone" && $val ne "0");
+	    $access = "RO" if ($key eq "readonly" && $val ne "0");
+	}
+	if (!$class || $class ne "SAN" || !$proto || $proto ne "iSCSI") {
+	    next;
+	}
+	$lease = "none" if (!$lease);
+	$mpoint = "none" if (!$mpoint);
+	$access = "RW" if (!$access);
+	if ($rwonly == 0 || $access eq "RW") {
+	    $attrs{$bsid}{'lease'} = $lease;
+	    $attrs{$bsid}{'mountpoint'} = $mpoint;
+	    $attrs{$bsid}{'access'} = $access;
+	}
+	print STDERR "  bsid=$bsid, lease=$lease, mountpoint=$mpoint, access=$access\n"
+	    if ($debug);
+    }
+    if (keys(%attrs) == 0) {
+	return 0;
+    }
+
+    if ($rval) {
+	$$rval = \%attrs;
+    }
+    return 1;
+}
+
+#
+# Parse the pssh logfile and extract success/failure info adding it to
+# the attribute hash. Return 0 on success, non-zero otherwise.
+#
+sub getstatus($$)
+{
+    my ($logfile, $attrs) = @_;
+
+    if ($impotent) {
+	print STDERR "No logfile to parse in impotent mode\n"
+	    if ($verbose);
+	return 0;
+    }
+    if (!open(FD, "<$logfile")) {
+	print STDERR "WARNING: Could not open '$logfile'\n";
+	return 1;
+    }
+    my $curnode = "";
+    my $curstatus = "";
+    while (<FD>) {
+	if (/^\[\d+\].*\[(SUCCESS|FAILURE)\]\s+(\S+)(?:\s+(.*))?$/) {
+	    $curstatus = $1;
+	    $curnode = $2;
+	    my $reason = $3;
+	    
+	    print STDERR "parselog: found node '$curnode', status=$curstatus\n"
+		if ($debug);
+	    if ($curstatus eq "FAILURE") {
+		my $status = "failed";
+		if ($reason =~ /Timed out/) {
+		    $status = "failed-timeout";
+		} elsif ($reason =~ /error code 255/) {
+		    $status = "failed-connect";
+		}
+
+		my $ref = $attrs->{$curnode};
+		foreach my $bsid (keys %$ref) {
+		    print STDERR "parselog: updating status of ".
+			"$curnode/$bsid to '$status'\n"
+			if ($debug);
+		    $ref->{$bsid}{'status'} = $status;
+		}
+	    }
+	    next;
+	}
+	if (/could not unmount (.*)$/) {
+	    my $mp = $1;
+	    print STDERR "parselog: $curnode: dataset unmount ($mp) failed\n"
+		if ($debug);
+
+	    my $status = "failed-unmount";
+	    my $ref = $attrs->{$curnode};
+	    foreach my $bsid (keys %$ref) {
+		if ($ref->{$bsid}{'mountpoint'} eq $mp) {
+		    print STDERR "parselog: updating status of ".
+			"$curnode/$bsid to '$status'\n"
+			if ($debug);
+		    $ref->{$bsid}{'status'} = $status;
+		}
+	    }
+	    next;
+	}
+    }
+    close(FD);
+
+    #
+    # Make a pass through the attributes and set status to "success"
+    # for all datasets that we have not otherwise set a status for.
+    #
+    for my $node (keys %$attrs) {
+	my $ref = $attrs->{$node};
+	my $status = "success";
+	foreach my $bsid (keys %$ref) {
+	    if (!exists($ref->{$bsid}{'status'})) {
+		print STDERR "parselog: updating status of ".
+		    "$node/$bsid to '$status'\n"
+		    if ($debug);
+		$ref->{$bsid}{'status'} = $status;
+	    }
+	}
+    }
+    
+    return 0;
+}
+
+#
+# Print a summary of the dataset states of nodes
+#
+sub printstatus($$)
+{
+    my ($expt,$attrs) = @_;
+
+    my %bsstatus = ();
+    my @statuses = ();
+    for my $node (keys %$attrs) {
+	my $ref = $attrs->{$node};
+	my $status;
+
+	foreach my $bsid (keys %$ref) {
+	    if (!exists($ref->{$bsid}{'status'})) {
+		$status = "no-status";
+	    } else {
+		$status = $ref->{$bsid}{'status'};
+	    }
+	    if (!exists($bsstatus{$status})) {
+		@{$bsstatus{$status}} = ();
+		push(@statuses, $status)
+		    if ($status ne "no-status" && $status ne "failed-connect");
+	    }
+
+	    # failed-connect is a node-wide failure
+	    if ($status eq "failed-connect") {
+		push(@{$bsstatus{$status}}, "$node");
+		next;
+	    }
+
+	    # otherwise it is per-dataset
+	    push(@{$bsstatus{$status}}, "$node/$bsid");
+	}
+    }
+    @statuses = sort(@statuses);
+    unshift(@statuses, "no-status", "failed-connect");
+
+    print "$expt stopdatasets results:\n";
+    foreach my $status (@statuses) {
+	if (exists($bsstatus{$status}) && @{$bsstatus{$status}} != 0) {
+	    print "  $status: ", join(' ', @{$bsstatus{$status}}), "\n";
+	}
+    }
+}
+
+#
+# Attempt to cleanly shutdown any remote RW datastores.
+#
+# Mostly this means making sure that any mount of a filesytem-bearing dataset
+# is unmounted. Unfortunately, it is quite possible that the unmount will fail
+# due to activity.
+#
+# XXX Note that as of 11/2024, the clientside scripts for Linux and FreeBSD
+# have been updated to "try harder". They will kill any process whose working
+# directory is under the mount point and any that have file descriptors open
+# for files under the mount point. They will also attempt to shutdown an NFS
+# server that is serving up the mount point.
+#
+sub stopnodes($$)
+{
+    my ($exp, $attrs) = @_;
+    
+    #
+    # Try the client shutdown script.
+    #
+    # This will in theory, shut everything down cleanly. The current version
+    # of the script does a better job than the older versions (see the
+    # comment above). A pre-2024 version of this script just does an unmount
+    # and a logout of the iSCSI session without checking errors on the unmount.
+    # Even if a unmount fails, it will still logout from the iSCSI session
+    # which may prevent us from doing anything else.
+    #
+    # The script, new or old, returns no errors so you have to look at the
+    # output to see if anything failed.
+    #
+    my $cmd = "$CBINDIR/rc/rc.storageremote shutdown";
+    my $logfile = "/proj/". $exp->pid(). "/exp/". $exp->eid().
+	"/logs/stopdatasets.log";
+
+    print "Issuing '$cmd' to all nodes...\n"
+	if ($verbose);
+    my $rv = ParallelCommand($cmd, $logfile, keys %$attrs);
+    if ($rv) {
+	print STDERR "WARNING: pssh command failed ($rv), see $logfile\n";
+    }
+    print "All nodes done\n"
+	if ($verbose);
+
+    getstatus($logfile, $attrs);
+    printstatus($exp, $attrs);
+
+    if ($rv == 0 || !$force) {
+	return $rv;
+    }
+
+    #
+    # Try unmount of all datasets:
+    #   * just nodes that have mounted datasets
+    #   * and nodes that did not timeout on previous ssh
+    #
+    # For ones that fail that, try running lsof to identify processes:
+    #   * just for ones that did not timeout on the unmounts
+    #   * make sure pid is "reasonable"
+    # and kill them.
+    #
+    # XXX The easiest way to do all of the above would be to copy over the
+    # latest version of the clientside script (11/2024) which does in fact
+    # try to kill troublesome processes. But this is fraught since we have no
+    # way of knowing that the script will work on older images.
+    #
+
+    print STDERR "WARNING: force mode not implemented yet.\n";
+    return 0;
+}
+
+#
+# Attempt to boot any remote RW datastores.
+# XXX this is a debug tool to quickly undo what stop does.
+# All it does is run the startup script for remote blockstores.
+#
+sub startnodes($$)
+{
+    my ($exp, $attrs) = @_;
+    
+    #
+    # Just run the client startup script.
+    #
+    my $cmd = "$CBINDIR/rc/rc.storageremote boot";
+    my $logfile = "/proj/". $exp->pid(). "/exp/". $exp->eid().
+	"/logs/startdatasets.log";
+
+    print "Issuing '$cmd' to all nodes...\n"
+	if ($verbose);
+    my $rv = ParallelCommand($cmd, $logfile, keys %$attrs);
+    if ($rv) {
+	print STDERR "WARNING: pssh command failed ($rv), see $logfile\n";
+    }
+    print "All nodes done\n"
+	if ($verbose);
+
+    return $rv;
+}
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
+
