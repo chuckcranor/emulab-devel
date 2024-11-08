@@ -113,6 +113,8 @@ window.CreateRangeCharts = (function ()
 			"high"     : high,
 			"isexp"    : range.isexp || 0,
 			"approved" : range.approved || 0,
+                        // This is a reservation or an instance
+                        "target"   : range,
 		    });
 		    return;
 		}
@@ -268,6 +270,13 @@ window.CreateRangeCharts = (function ()
 		return Math.max(1,(xScale(d.end) - xScale(d.start))); 
 	    });
 
+        // Admins can click on the rect to bring up the reservation or instance.
+        if (window.ISADMIN) {
+            var foo = d3.selectAll(selector + " .chart rect");
+            foo.style("cursor", "pointer");
+            foo.on("click", function (d) { ClickHandler(d) });
+        }
+
 	var gXaxis = svg.append("g")
 	    .attr("class", "x-axis")
 	    .attr("transform", "translate(0, " + height + ")")
@@ -384,6 +393,24 @@ window.CreateRangeCharts = (function ()
 	    //console.info("HideTooltip", d);
 	    $(".range-chart-tooltip").css("visibility", "hidden");
 	}
+
+        function ClickHandler(d)
+        {
+            console.info("ClickHandler", d);
+            var target = d.target;
+            var url;
+
+            if (_.has(target, "res_uuid")) {
+                url = "resgroup.php?edit=1&uuid=" + target.res_uuid;
+            }
+            else if (_.has(target, "instance_uuid")) {
+                url = "status.php?uuid=" + target.instance_uuid;
+            }
+            else {
+                return;
+            }
+            window.open(url, "");
+        }
 
 	// return a zoom function to the caller for the panel buttons.
 	return function (dir) {

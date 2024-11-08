@@ -227,6 +227,8 @@ function Do_AllInuseRanges()
             $range["name"] = $row["name"];
             $range["eid"]  = $row["name"];
             $range["uuid"] = $row["uuid"];
+            # Too many UUIds floating around.
+            $range["instance_uuid"] = $row["uuid"];
             $range["key"]  = $uuid;
 
             $instance = Instance::Lookup($uuid);

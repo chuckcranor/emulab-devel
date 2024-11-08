@@ -1210,7 +1210,8 @@ function Do_RangeReservations()
         }
         $rfarray = array();
         foreach ($rf as $rfres) {
-            $blob = array("freq_low"   => $rfres->freq_low(),
+            $blob = array("res_uuid"   => $reservation->uuid(),
+                          "freq_low"   => $rfres->freq_low(),
                           "freq_high"  => $rfres->freq_high(),
                           "start"      => DateStringGMT($reservation->start()),
                           "end"        => DateStringGMT($reservation->end()),
