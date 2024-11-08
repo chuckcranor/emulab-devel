@@ -2427,15 +2427,21 @@ $(function ()
 	    "routes"   : routes
 	};
 	console.info("FindFit args: ", args);
+	aptforms.ClearFormErrors('#reserve-request-form');        
 
 	var callback = function (json) {
 	    console.info("FindFit response", json);
 	    if (json.code) {
-		sup.HideWaitWait(function () {
-		    sup.SpitOops("oops", json.value);		    
-		});
-		return;
-	    }
+		if (json.code != 2) {
+		    sup.HideWaitWait(function () {
+		        sup.SpitOops("oops", json.value);		    
+		    });
+		    return;
+	        }
+	        sup.HideWaitWait();
+		aptforms.GenerateFormErrors('#reserve-request-form',
+					    json.value);
+            }
 	    sup.HideWaitWait();
 	    var start = moment(json.value.start);
 	    var end   = moment(json.value.end);
