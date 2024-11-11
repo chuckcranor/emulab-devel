@@ -70,7 +70,7 @@ if ($edit || $history) {
     if (! (ISADMIN() ||
            $this_user->idx() == $resgroup->creator_idx() ||
            $resgroup->Project()->UserTrust($this_user) >=
-           $TBDB_TRUST_GROUPROOT)) {
+           $TBDB_TRUST_LOCALROOT)) {
         SPITUSERERROR("Not enough permission");
         exit();
     }

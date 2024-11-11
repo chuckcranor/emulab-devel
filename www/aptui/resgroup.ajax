@@ -239,7 +239,7 @@ function Do_Reserve()
 {
     global $this_user;
     global $ajax_args;
-    global $suexec_output, $TB_PROJECT_CREATEEXPT;
+    global $suexec_output, $TB_PROJECT_CREATEEXPT, $TBDB_TRUST_GROUPROOT;
     global $PORTAL_GENESIS, $PROTOGENI_HOLDINGPROJECT;
     $this_idx = $this_user->uid_idx();
     $validate = 0;
@@ -718,7 +718,7 @@ function Do_Refresh()
 {
     global $this_user;
     global $ajax_args;
-    global $TBDB_TRUST_GROUPROOT;
+    global $TBDB_TRUST_LOCALROOT;
     $this_idx = $this_user->uid_idx();
     $opt = "";
     sleep(2);
@@ -744,7 +744,7 @@ function Do_Refresh()
     }
     if (! (ISADMIN() ||
            $this_idx == $resgroup->creator_idx() ||
-           $project->UserTrust($this_user) >= $TBDB_TRUST_GROUPROOT)) {
+           $project->UserTrust($this_user) >= $TBDB_TRUST_LOCALROOT)) {
         SPITAJAX_ERROR(-1, "Not enough permission");
 	return;
     }
@@ -1158,6 +1158,7 @@ function Do_GetReservationGroup()
 {
     global $this_user;
     global $ajax_args;
+    global $TBDB_TRUST_LOCALROOT;
     $this_idx = $this_user->uid_idx();
 
     if (!isset($ajax_args["uuid"])) {
@@ -1182,7 +1183,7 @@ function Do_GetReservationGroup()
     
     if (! (ISADMIN() ||
            $this_idx == $resgroup->creator_idx() ||
-           $project->UserTrust($this_user) >= $TBDB_TRUST_GROUPROOT)) {
+           $project->UserTrust($this_user) >= $TBDB_TRUST_LOCALROOT)) {
         SPITAJAX_ERROR(-1, "Not enough permission");
 	return;
     }
