@@ -203,7 +203,11 @@
 	<tr>
 	  <td>Scopus Profile (<%= info.scopus_id %>)
 	    <% if (info.validation_state == "valid") { %>
-	      <span class="glyphicon glyphicon-asterisk"></span>
+	      <span class="glyphicon glyphicon-thumbs-up"></span>
+	    <% } else if (info.validation_state == "unknown") { %>
+	      <span class="glyphicon glyphicon-question-sign"></span>
+	    <% } else if (info.validation_state == "invalid") { %>
+	      <span class="glyphicon glyphicon-thumbs-down"></span>
 	    <% } %>
 	  </td>
 	  <td><a href="<%= info.author_url %>" target="_blank">
