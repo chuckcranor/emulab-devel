@@ -198,7 +198,8 @@ function Do_AllInuseRanges()
 
     $query_result =
         DBQueryFatal("select i.uuid,i.pid,i.name,r.freq_low,r.freq_high, ".
-                     "     r.type,r.target,s.expires,i.started,i.creator ".
+                     "     r.type,r.target,s.expires,i.started,i.creator, ".
+                     "     i.powder_zones ".
                      "   from apt_instance_rfranges as r ".
                      "left join apt_instances as i on i.uuid=r.uuid ".
                      "left join geni.geni_slices as s on ".
@@ -215,6 +216,7 @@ function Do_AllInuseRanges()
             # Ick, for txgraph.js
             "started"   => DateStringGMT($row["started"]),
             "end"       => DateStringGMT($row["expires"]),
+            "powder_zones" => $row["powder_zones"],
             "isexp"     => 1,
             "txlist"    => null,
         );

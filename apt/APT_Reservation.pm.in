@@ -1776,7 +1776,7 @@ sub Lookup($$$)
 }
 
 #
-# Create a group reservation
+# Create a RF range reservation
 #
 sub Create($$$$)
 {
@@ -1854,7 +1854,7 @@ sub Pretty($)
 {
     my ($self) = @_;
     
-   my $pid    = $self->group()->pid();
+    my $pid    = $self->group()->pid();
     my $lower  = $self->freq_low();
     my $upper  = $self->freq_high();
 
@@ -2052,6 +2052,23 @@ sub Overlaps($$$)
     return 1;
 }
 
+sub ZonesOverlap($$)
+{
+    my ($z1, $z2) = @_;
+
+    return 0
+	if (! (defined($z1) && defined($z2)));
+
+    my %z1 = map { $_ => $_ } split(",", $z1);
+    my %z2 = map { $_ => $_ } split(",", $z2);
+
+    foreach my $key (keys(%z1)) {
+	return 1
+	    if (exists($z2{$key}));
+    }
+    return 0;
+}
+
 #
 # See if a request fits the schedule.
 # 
@@ -2064,6 +2081,7 @@ sub Fits($$$$$;$)
     my $freq_low  = $ref->{'freq_low'};
     my $freq_high = $ref->{'freq_high'};
     my $freq_uuid = $ref->{'uuid'}; # XXX bad naming
+    my $freq_zones= $ref->{'freq_zones'};
     my @groups    = @{$groups};
     my $fits      = 1;
 
@@ -2079,6 +2097,7 @@ sub Fits($$$$$;$)
 
 	my $res_start = str2time($group->start());
 	my $res_end   = str2time($group->end());
+	my $res_zones = $group->powder_zones();
 
 	foreach my $existing ($group->RFReservationList()) {
 	    next
@@ -2091,6 +2110,10 @@ sub Fits($$$$$;$)
 	    # Skip ourself.
 	    next
 		if ($res_uuid eq $freq_uuid);
+
+	    # Skip if zones do not overlap.
+	    next
+		if (! ZonesOverlap($res_zones, $freq_zones));
 
 	    # If this reservation does not overlap in time, skip it.
 	    if (($start < $res_start && $end < $res_start) ||
@@ -2172,10 +2195,16 @@ sub CheckSharingModeChange($$$)
 
 	    my $res_low   = $res->freq_low();
 	    my $res_high  = $res->freq_high();
+	    my $res_zones = $group->powder_zones();
 
 	    foreach my $range (@pranges) {
 		my $range_low   = $range->freq_low();
 		my $range_high  = $range->freq_high();
+		my $range_zones = $range->instance()->powder_zones();
+
+		# Skip if zones do not overlap.
+		next
+		    if (! ZonesOverlap($res_zones, $range_zones));
 
 		# If no overlap in freq, skip it.
 		if (($range_low < $res_low && $range_high < $res_low) ||
@@ -2221,7 +2250,7 @@ sub CheckSharingModeChange($$$)
 # reservations in other projects for the start/end duration. There are
 # also the same auto approval rules.
 #
-sub CanStart($$$$$$)
+sub CanStart($$$$$$$)
 {
     my ($class, $group, $user, $start, $end, $spectrum, $pmsg) = @_;
     my $project     = $group->GetProject();
@@ -2246,9 +2275,10 @@ sub CanStart($$$$$$)
     foreach my $ref (@spectrum) {
 	my $freq_low  = $ref->{'frequency_low'};
 	my $freq_high = $ref->{'frequency_high'};
+	my $freq_zones= $ref->{'frequency_zones'};
 
-	if (!RangeReserved($class, $group, $user, $start,
-			   $end, $freq_low, $freq_high)) {
+	if (!RangeReserved($class, $group, $user, $start, $end,
+			   $freq_low, $freq_high, $freq_zones)) {
 	    push(@notreserved, $ref);
 	}
     }
@@ -2263,11 +2293,14 @@ sub CanStart($$$$$$)
     foreach my $ref (@notreserved) {
 	my $freq_low  = $ref->{'frequency_low'};
 	my $freq_high = $ref->{'frequency_high'};
+	my $freq_zones= $ref->{'frequency_zones'};
 
-	if (APT_Instance::RFRanges->InUse($group, $user, $freq_low,
-					  $freq_high, $start, $end)) {
-	    $$pmsg = "Frequency range $freq_low,$freq_high is not ".
-		"available for the duration of your experiment because ".
+	if (APT_Instance::RFRanges->InUse($group, $user,
+					  $freq_low, $freq_high, $freq_zones,
+					  $start, $end)) {
+	    $$pmsg = "Frequency range $freq_low,$freq_high ".
+		(defined($freq_zones) ? "in the $freq_zones zones(s) " : "") .
+		"is not available for the duration of your experiment because ".
 		"another project is currently using it. Maybe you want ".
 		"to reserve the spectrum you want to use.";
 	    return 0;
@@ -2281,6 +2314,7 @@ sub CanStart($$$$$$)
     foreach my $ref (@notreserved) {
 	my $freq_low  = $ref->{'frequency_low'};
 	my $freq_high = $ref->{'frequency_high'};
+	my $freq_zones= $ref->{'frequency_zones'};
 
 	foreach my $resgroup (@groups) {
 	    my $res_project = $resgroup->GetProject();
@@ -2301,6 +2335,7 @@ sub CanStart($$$$$$)
 
 	    my $res_start   = str2time($resgroup->start());
 	    my $res_end     = str2time($resgroup->end());
+	    my $res_zones   = $resgroup->powder_zones();
 
 	    foreach my $existing ($resgroup->RFReservationList()) {
 		next
@@ -2308,6 +2343,10 @@ sub CanStart($$$$$$)
 
 		my $res_low   = $existing->freq_low();
 		my $res_high  = $existing->freq_high();
+
+		# Skip if zones do not overlap.
+		next
+		    if (! ZonesOverlap($res_zones, $freq_zones));
 
 		# If this reservation does not overlap in time, skip it.
 		if (($start < $res_start && $end < $res_start) ||
@@ -2408,9 +2447,9 @@ sub SetAutoApprove($$$@)
     return 0;
 }
 
-sub RangeReserved($$$$$$$)
+sub RangeReserved($$$$$$$$)
 {
-    my ($class, $group, $user, $start, $end, $freq_low, $freq_high) = @_;
+    my ($class, $group, $user, $start, $end, $freq_low, $freq_high, $freq_zones) = @_;
     my $project = $group->GetProject();
     my $pid_idx = $project->pid_idx();
     my $gid_idx = $group->gid_idx();
@@ -2428,7 +2467,7 @@ sub RangeReserved($$$$$$$)
     # https://dev.mysql.com/doc/refman/5.7/en/problems-with-float.html
     #
     my $query_result =
-	DBQueryWarn("select g.uuid,rf.freq_low,rf.freq_high ".
+	DBQueryWarn("select g.uuid,rf.freq_low,rf.freq_high,g.powder_zones ".
 		    "   from apt_reservation_groups as g ".
 		    "left join apt_reservation_group_rf_reservations as rf on ".
 		    "   rf.uuid=g.uuid ".
@@ -2437,10 +2476,12 @@ sub RangeReserved($$$$$$$)
 		    "      $end <= UNIX_TIMESTAMP(g.end) and ".
 		    "      rf.approved is not null");
     
-    while (my ($uuid,$lower,$upper) = $query_result->fetchrow_array()) {
+    while (my ($uuid,$lower,$upper,$powder_zones) =
+	   $query_result->fetchrow_array()) {
 	return 1
 	    if ($freq_low >= $lower && $freq_low <= $upper &&
-		$freq_high >= $lower && $freq_high <= $upper);
+		$freq_high >= $lower && $freq_high <= $upper &&
+		ZonesOverlap($freq_zones, $powder_zones));
     }
     return 0;
 }
@@ -2504,6 +2545,7 @@ sub MaxExtension($$)
     foreach my $ref (@$spectrum) {
 	my $freq_low  = $ref->{'frequency_low'};
 	my $freq_high = $ref->{'frequency_high'};
+	my $freq_zones= $ref->{'frequency_zones'};
 
 	foreach my $resgroup (@groups) {
 	    my $res_project = $resgroup->GetProject();
@@ -2524,13 +2566,18 @@ sub MaxExtension($$)
 
 	    my $res_start   = str2time($resgroup->start());
 	    my $res_end     = str2time($resgroup->end());
-
+	    my $res_zones   = $resgroup->powder_zones();
+	    
 	    foreach my $existing ($resgroup->RFReservationList()) {
 		next
 		    if (!$existing->approved());
 
 		my $res_low   = $existing->freq_low();
 		my $res_high  = $existing->freq_high();
+
+		# Skip if zones do not overlap.
+		next
+		    if (! ZonesOverlap($res_zones, $freq_zones));
 
 		# If this reservation does not overlap in freq, skip it.
 		if (($freq_low < $res_low && $freq_high < $res_low) ||
@@ -2558,9 +2605,9 @@ sub MaxExtension($$)
 #
 # Determine a max duration for an experiment.
 #
-sub MaxDuration($$$$$$$)
+sub MaxDuration($$$$$$$$)
 {
-    my ($group, $user, $start, $pend, $spectrum, $pmsg, $pbad) = @_;
+    my ($group, $user, $start, $pend, $zones, $spectrum, $pmsg, $pbad) = @_;
     my $project  = $group->GetProject();
     my @spectrum = @{$spectrum};
     my $newend   = undef;
@@ -2583,6 +2630,7 @@ sub MaxDuration($$$$$$$)
     foreach my $ref (@$spectrum) {
 	my $freq_low  = $ref->{'frequency_low'};
 	my $freq_high = $ref->{'frequency_high'};
+	my $freq_zones= $zones;
 
 	foreach my $resgroup (@groups) {
 	    my $res_project = $resgroup->GetProject();
@@ -2594,6 +2642,7 @@ sub MaxDuration($$$$$$$)
 
 	    my $res_start   = str2time($resgroup->start());
 	    my $res_end     = str2time($resgroup->end());
+	    my $res_zones   = $resgroup->powder_zones();
 
 	    foreach my $existing ($resgroup->RFReservationList()) {
 		next
@@ -2601,6 +2650,10 @@ sub MaxDuration($$$$$$$)
 
 		my $res_low   = $existing->freq_low();
 		my $res_high  = $existing->freq_high();
+
+		# Skip if zones do not overlap.
+		next
+		    if (! ZonesOverlap($res_zones, $freq_zones));
 
 		# If this reservation does not overlap in freq, skip it.
 		if (($freq_low < $res_low && $freq_high < $res_low) ||
@@ -2645,6 +2698,9 @@ sub MaxDuration($$$$$$$)
 		    if ($start >= $res_start && $start < $res_end) {
 			print "$freq_low,$freq_high is reserved\n";
 			$$pbad = "$freq_low,$freq_high";
+			if (defined($zones)) {
+			    $$pbad .= " in the $zones zone(s)";
+			}
 			$newend = 0;
 		    }
 		    elsif ($start < $res_start &&

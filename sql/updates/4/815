@@ -1,0 +1,30 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instances", "powder_zone")) {
+	DBQueryFatal("ALTER TABLE apt_instances ADD ".
+		     " `powder_zones` tinytext");
+    }
+    if (!DBSlotExists("apt_reservation_groups", "powder_zone")) {
+	DBQueryFatal("ALTER TABLE apt_reservation_groups ADD ".
+		     " `powder_zones` tinytext");
+    }
+    if (!DBSlotExists("apt_aggregate_radio_info", "powder_zone")) {
+	DBQueryFatal("ALTER TABLE apt_aggregate_radio_info ADD ".
+		     " `powder_zone` varchar(32) default NULL");
+    }
+
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

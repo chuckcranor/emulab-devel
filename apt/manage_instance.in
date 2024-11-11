@@ -8035,6 +8035,7 @@ sub DoModify()
     my $errcode;
     my $exitcode = -1;
     my $response;
+    my $resources;
     my $gotlock = 0;
 
     my $optlist    = "fNS";
@@ -8128,7 +8129,7 @@ sub DoModify()
     $errcode = APT_Profile::CheckEverything($rspec, $creator,
 					    $group, time(), $expires, 1,
 					    $noresokay, $instance->rdz_status(),
-					    $webtask, \$errmsg);
+					    $webtask, \$resources, \$errmsg);
     if ($errcode) {
 	($errcode < 0 ? fatal($errmsg) : UserError($errmsg));
     }
