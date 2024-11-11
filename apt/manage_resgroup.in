@@ -223,7 +223,7 @@ sub DoGroupReserve()
     my $autoapprove= 1; # This might be turned off below
     my $updateall  = 0;
     my $override   = 0;	# Only range reservations can be overridden. 
-    my ($clusters, $ranges, $routes);
+    my ($clusters, $ranges, $routes, $zones);
     my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
     my ($project,$group);
     my $bisdaysonly = 1;
@@ -417,11 +417,17 @@ sub DoGroupReserve()
 		fatal("Invalid cluster uuid: " . $cluster->{"uuid"});
 	    }
 	}
+
 	#
 	# Check for conflicting node usage within the resgroup.  This
 	# is enforced at the cluster, but better to catch it earlier
 	# since it happens late at the cluster (in nalloc).
 	#
+	# Also watch for OTA nodes (radios in specific zones).
+	#
+	my $radios = 0;
+	my %zones  = ();
+	
 	foreach my $cluster_uuid (keys(%{$clusters})) {
 	    my $cluster   = $clusters->{$cluster_uuid};
 	    my $urn       = $cluster->{"cluster"};
@@ -430,10 +436,31 @@ sub DoGroupReserve()
 
 	    next
 		if (!$aggregate->IsReservableNode($type));
-	    my $node = $aggregate->Node($type);
 
+	    my $node_id = $type;
+	    my $node    = $aggregate->Node($node_id);
 	    next
-		if (! ($node && $node->{'conflicting_nodes'}));
+		if (!defined($node));
+
+	    #
+	    # Watch for OTA lab, if the only radios reserved are for the OTA
+	    # lab, we are going to mark this resgroup with a zone to indicate
+	    # it does not conflict with radios in other zones (or outside).
+	    #
+	    # Using node name is dumb, of course.
+	    #
+	    if (my $radio = $aggregate->Radio($node_id)) {
+		my $zone = $radio->powder_zone() || "Outdoor";
+		
+		if (!exists($zones{$zone})) {
+		    $zones{$zone} = 0;
+		}
+		$zones{$zone} = $zones{$zone} + 1;
+		$radios++;
+	    }
+	    
+	    next
+		if (! $node->{'conflicting_nodes'});
 
 	    my @conflicting_nodes = split(",",  $node->{'conflicting_nodes'});
 
@@ -454,6 +481,10 @@ sub DoGroupReserve()
 			      "time as $otype");
 		}
 	    }
+	}
+	if (keys(%zones)) {
+	    $zones = join(",", sort(keys(%zones)));
+	    print "ZONES:$zones\n";
 	}
     }
     if (exists($blob->{'ranges'})) {
@@ -976,7 +1007,11 @@ sub DoGroupReserve()
 	foreach my $ref (@range_reservations) {
 	    my $freq_low  = $ref->{"freq_low"};
 	    my $freq_high = $ref->{"freq_high"};
-		
+	    my $conflict;
+
+	    # We determine this above.
+	    $ref->{'freq_zones'} = $zones;
+	    
 	    # These flags go back to the web interface.
 	    if (!($this_user->IsAdmin() ||
 		  $rfrange->Allowed($ref->{'freq_low'}, $ref->{'freq_high'}))) {
@@ -988,17 +1023,29 @@ sub DoGroupReserve()
 	    elsif (! ($override ||
 		      APT_Reservation::Group::RFReservation->Fits(\@allgroups,
 								  $start, $end,
-								  $ref))) {
+								  $ref,
+								  \$conflict))) {
 		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
 		$ref->{'output'}   = "Does not fit the schedule";
+		if ($conflict && $conflict->powder_zones()) {
+		    $ref->{'output'} .=
+			": conflicts with another reservation in the ".
+			$conflict->powder_zones() . " zone(s)";
+		}
 		$ref->{'valid'}    = 0;
 		$range_results->{'errors'}++;
 	    }
 	    elsif (!$override &&
 		   APT_Instance::RFRanges->InUse($group, $this_user, $freq_low,
-						 $freq_high, $start, $end)) {
+						 $freq_high, $zones, $start, $end,
+						 \$conflict)) {
 		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
 		$ref->{'output'}   = "Currently in use by another project";
+		if ($conflict && $conflict->powder_zones()) {
+		    $ref->{'output'} .=
+			": conflicts with an experiment running in the ".
+			$conflict->powder_zones() . " zone(s)";
+		}
 		$ref->{'valid'}    = 0;
 		$range_results->{'errors'}++;
 	    }
@@ -1134,6 +1181,9 @@ sub DoGroupReserve()
 		    "portal"      => $brand->brand(),
 		    "forclass"    => $forclass,
 		};
+		if ($zones) {
+		    $args->{'powder_zones'} = $zones;
+		}
 		$resgroup = APT_Reservation::Group->Create($args);
 		if (!defined($resgroup)) {
 		    fatal("Could not create a new reservation group");
@@ -1965,6 +2015,7 @@ sub DoApprove()
     if (@range_reservations) {
 	my @allgroups = APT_Reservation::Group->LookupAll();
 	my $nofits    = 0;
+	my $conflict;
     
 	foreach my $res (@range_reservations) {
 	    my $ref = {};
@@ -1974,13 +2025,19 @@ sub DoApprove()
 
 	    if (!($override ||
 		  APT_Reservation::Group::RFReservation->Fits(\@allgroups,
-							     $start, $end,
-							     $ref))) {
+							      $start, $end,
+							      $ref,
+							      \$conflict))) {
+		my $msg = "No longer fits the schedule";
+		if ($conflict && $conflict->powder_zones()) {
+		    $msg .= ": conflicts with another reservation in the ".
+			$conflict->powder_zones() . " zone(s)";
+		}
 		my $freq_uuid = $res->freq_uuid();
 		my $blob = {
 		    "uuid"    => $freq_uuid,
 		    "errcode" => 1,
-		    "errmesg" => "No longer fits the schedule",
+		    "errmesg" => $msg,
 		};
 		$results->{$freq_uuid} = $blob;
 		$nofits++;
@@ -2180,6 +2237,7 @@ sub DoApprove()
     }
     if (@range_reservations) {
 	my @allgroups = APT_Reservation::Group->LookupAll();
+	my $conflict;
     
 	foreach my $res (@range_reservations) {
 	    my $ref = {};
@@ -2190,12 +2248,18 @@ sub DoApprove()
 	    if (!($override ||
 		  APT_Reservation::Group::RFReservation->Fits(\@allgroups,
 							      $start, $end,
-							      $ref))) {
+							      $ref,
+							      \$conflict))) {
+		my $msg = "No longer fits the schedule";
+		if ($conflict && $conflict->powder_zones()) {
+		    $msg .= ": conflicts with another reservation in the ".
+			$conflict->powder_zones() . " zone(s)";
+		}
 		my $freq_uuid = $res->freq_uuid();
 		my $blob = {
 		    "uuid"    => $freq_uuid,
 		    "errcode" => 1,
-		    "errmesg" => "No longer fits the schedule",
+		    "errmesg" => $msg,
 		};
 		$results->{$freq_uuid} = $blob;
 	    }
@@ -3262,11 +3326,19 @@ sub DoMaxDuration()
 	foreach my $ref (@{$spectrum}) {
 	    my $freq_low  = $ref->{'frequency_low'};
 	    my $freq_high = $ref->{'frequency_high'};
+	    my $conflict;
+
+	    # This is not sourced from the user.
+	    my $zones = $ref->{'frequency_zones'} = $resources->{'zones'};
 
 	    if (APT_Instance::RFRanges->InUse($group, $this_user, $freq_low,
-					      $freq_high, $start, $end)) {
+					      $freq_high, $zones, $start, $end,
+					      \$conflict)) {
 		print "$freq_low,$freq_high is currently in use\n";
 		$loser = "$freq_low,$freq_high";
+		if (defined($zones)) {
+		    $loser .= " in the $zones zone(s)";
+		}
 		$end = 0;
 		last;
 	    }
@@ -3274,7 +3346,8 @@ sub DoMaxDuration()
 	if (!defined($loser)) {
 	    if (APT_Reservation::Group::RFReservation::MaxDuration(
 		    $group, $this_user,
-		    $start, \$end, $spectrum, \$errmsg, \$loser)) {
+		    $start, \$end, $resources->{'zones'},
+		    $spectrum, \$errmsg, \$loser)) {
 		fatal($errmsg);
 	    }
 	    if (defined($end)) {
@@ -4501,7 +4574,40 @@ sub FindFirstFit($$$$$$$)
     my $gid = $group->gid();
     my $forecasts = {};
     my @allgroups = ();
+    my $powder_zones;
 
+    #
+    # Need to determine the powder zones.
+    #
+    my %zones = ();
+    foreach my $cluster_uuid (keys(%{$clusters})) {
+	my $cluster   = $clusters->{$cluster_uuid};
+	my $urn       = $cluster->{"cluster"};
+	my $type      = $cluster->{"type"};
+	my $aggregate = APT_Aggregate->Lookup($urn);
+
+	next
+	    if (!$aggregate->IsReservableNode($type));
+
+	my $node_id = $type;
+	my $node    = $aggregate->Node($node_id);
+	next
+	    if (!defined($node));
+
+	if (my $radio = $aggregate->Radio($node_id)) {
+	    my $zone = $radio->powder_zone() || "Outdoor";
+		
+	    if (!exists($zones{$zone})) {
+		$zones{$zone} = 0;
+	    }
+	    $zones{$zone} = $zones{$zone} + 1;
+	}
+    }
+    if (keys(%zones)) {
+	$powder_zones = join(",", sort(keys(%zones)));
+	print "ZONES:$powder_zones\n";
+    }
+    
     #
     # Need prediction info for the cluster urns in the correct project.
     #
@@ -4782,11 +4888,25 @@ sub FindFirstFit($$$$$$$)
 
 		foreach my $range (@ranges) {
 		    my $conflict;
+
+		    # We determine this above.
+		    $range->{'freq_zones'} = $powder_zones;
+
 		    if (!APT_Reservation::Group::RFReservation->Fits(
 			     \@allgroups, $lower, $lower + $duration,
 			     $range, \$conflict)) {
 			$lower  = str2time($conflict->end());
-			&$dprint("RR skip: $lower, " .
+			&$dprint("RR1 skip: $lower, " .
+				 TBDateStringLocal($lower) . "\n");
+			last;
+		    }
+		    elsif (APT_Instance::RFRanges->InUse(
+			       $group, $this_user,
+			       $range->{'freq_low'}, $range->{'freq_high'},
+			       $powder_zones, $lower, $lower + $duration,
+			       \$conflict)) {
+			$lower  = str2time($conflict->Expires());
+			&$dprint("RR2 skip: $lower, " .
 				 TBDateStringLocal($lower) . "\n");
 			last;
 		    }
@@ -4896,12 +5016,27 @@ sub FindFirstFit($$$$$$$)
 
 	    foreach my $range (@ranges) {
 		my $conflict;
+		
+		# We determine this above.
+		$range->{'freq_zones'} = $powder_zones;
+
 		if (!APT_Reservation::Group::RFReservation->Fits(
 			 \@allgroups, $lower, $lower + $duration,
 			 $range, \$conflict)) {
 		    $fit    = undef;
 		    $lower  = str2time($conflict->end());
-		    &$dprint("RR range does not fit, skipping to $lower ".
+		    &$dprint("RR1 range does not fit, skipping to $lower ".
+			     TBDateStringLocal($lower) . "\n");
+		    last;
+		}
+		elsif (APT_Instance::RFRanges->InUse(
+			   $group, $this_user,
+			   $range->{'freq_low'}, $range->{'freq_high'},
+			   $powder_zones, $lower, $lower + $duration,
+			   \$conflict)) {
+		    $fit    = undef;
+		    $lower  = str2time($conflict->Expires());
+		    &$dprint("RR2 range does not fit, skipping to $lower ".
 			     TBDateStringLocal($lower) . "\n");
 		    last;
 		}

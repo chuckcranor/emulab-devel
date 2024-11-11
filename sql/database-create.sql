@@ -171,6 +171,7 @@ CREATE TABLE `apt_aggregate_radio_info` (
   `ue_imsi` varchar(32) default NULL,
   `notes` text,
   `rdz_radio_id` varchar(40) DEFAULT NULL,
+  `powder_zone` varchar(32) default NULL,
   PRIMARY KEY  (`aggregate_urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -808,6 +809,7 @@ CREATE TABLE `apt_instances` (
   `rdz_rdzinfo` mediumtext,
   `rdz_rdzinrdzinfo` mediumtext,
   `modify_count` int(11) unsigned NOT NULL default '0',
+  `powder_zones` tinytext,
   PRIMARY KEY (`uuid`),
   KEY `creator` (`creator`),
   KEY `creator_idx` (`creator_idx`),
@@ -1023,6 +1025,7 @@ CREATE TABLE `apt_reservation_groups` (
   `notified` datetime DEFAULT NULL,
   `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `reason` mediumtext,
+  `powder_zones` tinytext,
   PRIMARY KEY (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

@@ -86,6 +86,7 @@ class ReservationGroup
     function locker_pid()   { return $this->field('locker_pid'); }
     function reason()       { return $this->field('reason'); }
     function portal()       { return $this->field('portal'); }
+    function powder_zones() { return $this->field('powder_zones'); }
     function forclass()     { return $this->field('forclass'); }
     function noidledetection() { return $this->field('noidledetection'); }
     function isHistory()    { return $this->ishistory; }

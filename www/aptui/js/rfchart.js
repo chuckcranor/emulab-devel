@@ -113,6 +113,7 @@ window.CreateRangeCharts = (function ()
 			"high"     : high,
 			"isexp"    : range.isexp || 0,
 			"approved" : range.approved || 0,
+                        "powder_zones" : range.powder_zones,
                         // This is a reservation or an instance
                         "target"   : range,
 		    });
@@ -372,6 +373,8 @@ window.CreateRangeCharts = (function ()
 		.html(moment(d.end).format("lll"));
 	    $(".range-chart-tooltip .tooltip-approved")
 		.html(d.approved || d.isexp ? "Yes" : "No");
+	    $(".range-chart-tooltip .tooltip-zones")
+		.html(d.powder_zones ? d.powder_zones : "Outdoor");
 
 	    $(".range-chart-tooltip")
 		.css("top", d3.event.offsetY + "px");

@@ -360,7 +360,7 @@ my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
     $userslice_id, $portal, $script, $paramdefs, $bindings, $start, $end,
     $reporef, $repohash, $duration, $webinfo, $noresokay, $brand, $errcode,
-    $rdzenabled);
+    $rdzenabled, $resources);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
@@ -885,7 +885,8 @@ else {
 my $retval = APT_Profile::CheckEverything($rspec, $geniuser->emulab_user(),
 					  $group, $start, $end,
 					  (defined($start_at) ? 0 : 1), 
-					  $noresokay, $rdzenabled, $webtask, \$errmsg);
+					  $noresokay, $rdzenabled, $webtask,
+					  \$resources, \$errmsg);
 if ($retval) {
     ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
@@ -1064,6 +1065,9 @@ if (defined($sshkey)) {
 }
 if (defined($webinfo)) {
     $blob->{"webinfo"} = $webinfo;
+}
+if (defined($resources->{'zone'})) {
+    $blob->{"powder_zone"} = $resources->{'zone'};
 }
 $errmsg = undef;
 $instance = APT_Instance->Create($blob, \$errmsg);

@@ -6999,7 +6999,7 @@ sub Lookup($$$;$)
 #
 # Add an rfrange to an instance.
 #
-sub Create($$$$$)
+sub Create($$$$$$$$)
 {
     my ($class, $instance, $freq_low, $freq_high,
 	$power, $bandwidth, $type, $target) = @_;
@@ -7193,9 +7193,10 @@ sub Refresh($)
 # Is a range currently in use by a running experiment, for the requested
 # start/end time, by a different project.
 #
-sub InUse($$$$$$$)
+sub InUse($$$$$$$$$)
 {
-    my ($class, $group, $user, $freq_low, $freq_high, $start, $end) = @_;
+    my ($class, $group, $user, $freq_low, $freq_high,
+	$freq_zones, $start, $end, $pconflict) = @_;
     my $project = $group->GetProject();
     my $pid_idx = $project->pid_idx();
     my $gid_idx = $group->gid_idx();
@@ -7217,7 +7218,7 @@ sub InUse($$$$$$$)
     # https://dev.mysql.com/doc/refman/5.7/en/problems-with-float.html
     #
     my $query_result =
-	DBQueryWarn("select rf.uuid,rf.freq_low,rf.freq_high ".
+	DBQueryWarn("select rf.uuid,rf.freq_low,rf.freq_high,i.powder_zones ".
 		    "   from apt_instance_rfranges as rf ".
 		    "left join apt_instances as i on ".
 		    "   rf.uuid=i.uuid ".
@@ -7226,11 +7227,21 @@ sub InUse($$$$$$$)
 		    "where $clause and ".
 		    "      $start <= UNIX_TIMESTAMP(s.expires)");
     
-    while (my ($uuid,$inuse_lower,$inuse_upper) =
+    while (my ($uuid,$inuse_lower,$inuse_upper,$inuse_zones) =
 	   $query_result->fetchrow_array()) {
-	print "Inuse: $freq_low, $freq_high, $inuse_lower, $inuse_upper\n";
+	my $pzones = $inuse_zones || "";
+	print "Inuse: $freq_low, $freq_high, $inuse_lower, $inuse_upper, $pzones\n";
 	if ($freq_high > $inuse_lower &&
-	    $freq_low  <= $inuse_upper) {
+	    $freq_low  <= $inuse_upper &&
+	    APT_Reservation::Group::RFReservation::ZonesOverlap(
+		$freq_zones, $inuse_zones)) {
+	    #
+	    # Return conflict info.
+	    #
+	    if ($pconflict) {
+		my $instance = APT_Instance->Lookup($uuid);
+		$$pconflict = $instance if (defined($instance));
+	    }
 	    return 1;
 	}
     }

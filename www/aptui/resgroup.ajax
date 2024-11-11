@@ -1215,7 +1215,9 @@ function Do_RangeReservations()
                           "freq_high"  => $rfres->freq_high(),
                           "start"      => DateStringGMT($reservation->start()),
                           "end"        => DateStringGMT($reservation->end()),
-                          "approved"   => $rfres->approved());
+                          "approved"   => $rfres->approved(),
+                          "powder_zones"=> $reservation->powder_zones());
+                          
             $info[] = $blob;
         }
     }

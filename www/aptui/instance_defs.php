@@ -157,6 +157,7 @@ class Instance
     function params()       { return $this->field('params'); }
     function paramdefs()    { return $this->field('paramdefs'); }
     function portal()       { return $this->field('portal'); }
+    function powder_zones() { return $this->field('powder_zones'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
     }
