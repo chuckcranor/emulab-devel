@@ -811,7 +811,7 @@ my $osidquery_common =
     "left join image_versions as iv on ".
     "     iv.imageid=i.imageid and iv.version=i.version ".
     "left join image_permissions as p1 on p1.imageid=i.imageid ".
-    "left join groups as g on ".
+    "left join `groups` as g on ".
     "     p1.permission_type='group' and p1.permission_idx=g.gid_idx ".
     "left join users as u on ".
     "     p1.permission_type='user' and p1.permission_idx=u.uid_idx ";
@@ -907,9 +907,9 @@ my $subosidquery1 =
     "     iv2.imageid=i2.imageid and iv2.version=i2.version ".
     "left join image_permissions as ip1 on ip1.imageid=i1.imageid ".
     "left join image_permissions as ip2 on ip2.imageid=i2.imageid ".
-    "left join groups as g1 on ".
+    "left join `groups` as g1 on ".
     "     ip1.permission_type='group' and ip1.permission_idx=g1.gid_idx ".
-    "left join groups as g2 on ".
+    "left join `groups` as g2 on ".
     "     ip2.permission_type='group' and ip2.permission_idx=g2.gid_idx ".
     "left join users as u1 on ".
     "     ip1.permission_type='user' and ip1.permission_idx=u1.uid_idx ".

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -122,7 +122,7 @@ my @PIDONLYTABLES = ("os_info", "os_info_versions");
 my $q = DBQueryFatal("select pid_idx from projects ".
 		     "where pid='$TBOPSPID'");
 my ($npid) = $q->fetchrow_array();
-$q = DBQueryFatal("select gid_idx from groups ".
+$q = DBQueryFatal("select gid_idx from `groups` ".
 		  "where pid='$TBOPSPID' and gid=pid");
 my ($ngid) = $q->fetchrow_array();
 
@@ -187,7 +187,7 @@ while (my ($uid,$uid_idx,$admin,$status) = $users_result->fetchrow_array()) {
 # Get the list of subgroups in the project and create those groups.
 #
 my $query_result =
-    DBQueryFatal("select gid_idx from groups where pid='$pid' and pid!=gid");
+    DBQueryFatal("select gid_idx from `groups` where pid='$pid' and pid!=gid");
 while (my ($gid_idx) = $query_result->fetchrow_array()) {
     mysystem("$TB/sbin/mkgroup -s $gid_idx");
 }

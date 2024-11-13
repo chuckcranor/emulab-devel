@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2011 University of Utah and the Flux Group.
+# Copyright (c) 2005-2011, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,6 +45,7 @@ use vars qw($DBQUERY_MAXTRIES $DBCONN_MAXTRIES @EXPORT_OK);
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $SCRIPTNAME  = "Unknown";
+my $DBPACKAGE = "@DBPACKAGE@";
 
 # Untainted scriptname for email below.
 if ($PROGRAM_NAME =~ /^([-\w\.\/]+)$/) {
@@ -84,7 +85,7 @@ sub dataseek($$)	{ return $_[0]->func($_[1], 'dataseek'); };
 sub numrows($)		{ return $_[0]->rows(); };
 sub num_rows($)		{ return $_[0]->rows(); };
 sub affectedrows($)	{ return $_[0]->rows(); };
-sub insertid($)		{ return $_[0]->{'mysql_insertid'}; };
+sub insertid($)		{ return $_[0]->last_insert_id(); };
 sub fetchrow($)
 {
     my ($self) = @_;
@@ -130,7 +131,7 @@ sub TBDBConnect($;$$$$)
 	if (defined($dbhost));
 
     while ($maxtries) {
-	$DB = DBI->connect("DBI:mysql:database=$tbdbname;host=$tbdbhost",
+	$DB = DBI->connect("DBI:$DBPACKAGE:database=$tbdbname;host=$tbdbhost",
 			   $tbdbuser, $tbdbpasswd,
 			   {'PrintError' => 0});
 	if (defined($DB)) {

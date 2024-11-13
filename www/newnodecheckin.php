@@ -291,18 +291,18 @@ function find_free_id($prefix) {
 	$results = XMLRPC("nobody", $TBADMINGROUP,
 			  "elabinelab.newnode_info", $arghash);
 
-	if (!$results || ! isset($results{'nodeid'})) {
+	if (!$results || ! isset($results['nodeid'])) {
 	    echo "Could not get nodeid from XMLRPC server; quitting.\n";
 	    exit;
 	}
 	elseif (preg_match("/^(.*[^\d])(\d+)$/",
-			   $results{'nodeid'}, $matches)) {
+			   $results['nodeid'], $matches)) {
 	    $base   = $matches[1];
 	    $number = $matches[2];
 	    return array($base, intval($number));
 	}
 	else {
-	    $nodeid = $results{'nodeid'};
+	    $nodeid = $results['nodeid'];
 	    
 	    echo "Improper nodeid ($nodeid) from XMLRPC server; quitting.\n";
 	    exit;

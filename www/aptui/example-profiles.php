@@ -97,7 +97,7 @@ while ($row = mysql_fetch_array($query_result)) {
 }
 
 echo "<script type='text/plain' id='profiles-json'>\n";
-echo htmlentities(json_encode($profiles)) . "\n";
+echo htmlentities(json_encode($profiles), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -106,14 +106,14 @@ function CheckForm()
         trim($formfields["affiliation"]) == "") {
         $errors["affiliation"] = "Missing Field";
     }
-    elseif (! TBvalid_affiliation(htmlentities($formfields["affiliation"]))) {
+    elseif (! TBvalid_affiliation(htmlentities($formfields["affiliation"], ENT_COMPAT))) {
         $errors["affiliation"] = TBFieldErrorString();
     }
     if (!isset($formfields["title"]) ||
         trim($formfields["title"]) == "") {
         $errors["title"] = "Missing Field";
     }
-    elseif (! TBvalid_title(htmlentities($formfields["title"]))) {
+    elseif (! TBvalid_title(htmlentities($formfields["title"], ENT_COMPAT))) {
         $errors["title"] = TBFieldErrorString();
     }
     if (!isset($formfields["country"]) ||
@@ -274,7 +274,7 @@ function Do_Update()
         $args["country"] = $formfields["country"];
     }
     if ($needupdate || $formfields["affiliation"] != $target_user->affil()) {
-        $args["affiliation"] = htmlentities(trim($formfields["affiliation"]));
+        $args["affiliation"] = htmlentities(trim($formfields["affiliation"], ENT_COMPAT));
     }
     if ($needupdate || $formfields["title"] != $target_user->title()) {
         $args["title"] = $formfields["title"];

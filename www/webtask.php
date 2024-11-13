@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ class WebTask {
     #
     # Constructor by lookup on unique ID
     #
-    function WebTask($task_id) {
+    function __construct($task_id) {
 	$safe_id = addslashes($task_id);
 
 	$query_result =
@@ -49,7 +49,7 @@ class WebTask {
     }
 
     # Lookup by imageid
-    function Lookup($id) {
+    public static function Lookup($id) {
 	$foo = new WebTask($id);
 
 	if (! $foo->IsValid())
@@ -59,7 +59,7 @@ class WebTask {
     }
 
     # Lookup by object.
-    function LookupByObject($uuid) {
+    public static function LookupByObject($uuid) {
 	$query_result =
 	    DBQueryWarn("select task_id from web_tasks ".
 			"where object_uuid='$uuid'");
@@ -78,7 +78,7 @@ class WebTask {
     # is useful when using a webtask to create a new object via a backend
     # script.
     #
-    function CreateAnonymous() {
+    public static function CreateAnonymous() {
         $task_id = WebTask::GenerateID();
 
         $query_result = 
@@ -93,7 +93,7 @@ class WebTask {
     #
     # And a normal webtask.
     #
-    function Create($uuid) {
+    public static function Create($uuid) {
         $task_id = WebTask::GenerateID();
 
         $query_result = 
@@ -225,7 +225,7 @@ class WebTask {
 	return FALSE;
     }
 
-    function GenerateID() {
+    public static function GenerateID() {
 	return sha1(random_bytes(128));
     }
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,10 +65,10 @@ function SPITFORM($formfields, $errors)
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
-    echo htmlentities(json_encode($formfields)) . "\n";
+    echo htmlentities(json_encode($formfields), ENT_COMPAT) . "\n";
     echo "</script>\n";
     echo "<script type='text/plain' id='error-json'>\n";
-    echo htmlentities(json_encode($errors));
+    echo htmlentities(json_encode($errors), ENT_COMPAT);
     echo "</script>\n";
 
     #
@@ -77,11 +77,11 @@ function SPITFORM($formfields, $errors)
     # a single value as a read-only field.
     #
     $plist = array();
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $unused) {
 	$plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";
-    echo htmlentities(json_encode($plist));
+    echo htmlentities(json_encode($plist), ENT_COMPAT);
     echo "</script>\n";
 
     if (!$embedded) {
@@ -99,7 +99,7 @@ function SPITFORM($formfields, $errors)
                 array("uuid" => $uuid, "name" => $instance->name());
         }
         echo "<script type='text/plain' id='instances-json'>\n";
-        echo htmlentities(json_encode($instance_array));
+        echo htmlentities(json_encode($instance_array), ENT_COMPAT);
         echo "</script>\n";
 
         #
@@ -110,7 +110,7 @@ function SPITFORM($formfields, $errors)
             $amlist[$aggregate->urn()] = $aggregate->nickname();
         }
 	echo "<script type='text/plain' id='amlist-json'>\n";
-	echo htmlentities(json_encode($amlist));
+	echo htmlentities(json_encode($amlist), ENT_COMPAT);
 	echo "</script>\n";
     }
     
@@ -123,7 +123,7 @@ function SPITFORM($formfields, $errors)
     $fstypelist["ufs"]  = "ufs";
     $fstypelist["ufs2"] = "ufs2";
     echo "<script type='text/plain' id='fstypes-json'>\n";
-    echo htmlentities(json_encode($fstypelist));
+    echo htmlentities(json_encode($fstypelist), ENT_COMPAT);
     echo "</script>\n";
 
     echo "<link rel='stylesheet'
@@ -158,7 +158,8 @@ if (! isset($create)) {
     $defaults["dataset_am"]     = '';
     # Default project.
     if (count($projlist) == 1) {
-	list($project, $grouplist) = each($projlist);
+	$project = key($projlist);
+	$grouplist = current($projlist);
 	$defaults["dataset_pid"] = $project;
         reset($projlist);
     }

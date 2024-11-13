@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,7 +71,7 @@ function SPITFORM($formfields, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
             # XSS prevention.
 	    $message = CleanString($message);
 	    echo "<tr>
@@ -122,7 +122,7 @@ function SPITFORM($formfields, $errors)
           </SCRIPT>\n";
 
     # XSS prevention.
-    while (list ($key, $val) = each ($formfields)) {
+    foreach ($formfields as $key => $val) {
 	$formfields[$key] = CleanString($val);
     }
     echo "<br>
@@ -143,7 +143,7 @@ function SPITFORM($formfields, $errors)
                           onChange='Changed(myform);'>
                       <option value=''>Please Select &nbsp</option>\n";
     
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $unused) {
 	$selected = "";
 
 	if ($formfields["pid"] == $project)
@@ -249,7 +249,7 @@ if (!isset($submit)) {
     # Allow formfields that are already set to override defaults
     #
     if (isset($formfields)) {
-	while (list ($field, $value) = each ($formfields)) {
+	foreach ($formfields as $field => $value) {
 	    $defaults[$field] = $formfields[$field];
 	}
     }
@@ -405,7 +405,7 @@ function NewMmList($uid, $project, $args, &$errors) {
     fwrite($fp, "<MmList>\n");
     foreach ($args as $name => $value) {
 	fwrite($fp, "<attribute name=\"$name\">");
-	fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	fwrite($fp, "</attribute>\n");
     }
     fwrite($fp, "</MmList>\n");

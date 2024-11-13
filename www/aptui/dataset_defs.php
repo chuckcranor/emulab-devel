@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@ class Dataset
     #
     # Constructor by lookup on unique index.
     #
-    function Dataset($token) {
+    function __construct($token) {
 	$safe_token = addslashes($token);
 	$query_result = null;
 
@@ -59,7 +59,7 @@ class Dataset
     }
 
     # Lookup by idx.
-    function Lookup($token) {
+    public static function Lookup($token) {
 	$foo = new Dataset($token);
 
 	if (! $foo->IsValid()) {
@@ -68,7 +68,7 @@ class Dataset
 	return $foo;
     }
     # Lookup by name in a project
-    function LookupByName($project, $name) {
+    public static function LookupByName($project, $name) {
 	$pid       = $project->pid();
 	$safe_name = addslashes($name);
 	

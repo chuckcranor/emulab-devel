@@ -46,7 +46,7 @@ class User
     #
     # Constructor by lookup on unique index.
     #
-    function User($uid_idx) {
+    function __construct($uid_idx) {
 	$safe_uid_idx = addslashes($uid_idx);
 
 	$query_result =
@@ -75,7 +75,7 @@ class User
     }
 
     # Lookup by uid_idx.
-    function Lookup($uid_idx) {
+    public static function Lookup($uid_idx) {
 	global $user_cache;
 
         # Look in cache first
@@ -101,7 +101,7 @@ class User
     }
 
     # Backwards compatable lookup by uid. Will eventually flush this.
-    function LookupByUid($uid) {
+    public static function LookupByUid($uid) {
 	global $user_cache;
 	$safe_uid = addslashes($uid);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
@@ -126,7 +126,7 @@ class User
 
     # Used in the change password code and to make sure that emails are
     # locally unique.
-    function LookupByEmail($email) {
+    public static function LookupByEmail($email) {
 	$safe_email = addslashes($email);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
 
@@ -146,7 +146,7 @@ class User
     
     # Used in new/join project code to make sure that wikinames are
     # locally unique.
-    function LookupByWikiName($wikiname) {
+    public static function LookupByWikiName($wikiname) {
 	$safe_wikiname = addslashes($wikiname);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
 
@@ -164,7 +164,7 @@ class User
 	return User::Lookup($idx);
     }
     
-    function LookupByUUID($uuid) {
+    public static function LookupByUUID($uuid) {
 	$safe_uuid = addslashes($uuid);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
 
@@ -182,7 +182,7 @@ class User
 	return User::Lookup($idx);
     }
     
-    function LookupNonLocal($urn) {
+    public static function LookupNonLocal($urn) {
 	$safe_urn = addslashes($urn);
 	$status_archived = TBDB_USERSTATUS_ARCHIVED;
 
@@ -247,7 +247,7 @@ class User
 	fwrite($fp, "<userinfo>\n");
 	foreach ($args as $name => $value) {
 	    fwrite($fp, "<attribute name=\"$name\">");
-	    fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	    fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	    fwrite($fp, "</attribute>\n");
 	}
 	fwrite($fp, "</userinfo>\n");
@@ -647,7 +647,7 @@ class User
 	return $newuser;
     }
 
-    function NewNewUserXML($args, &$error) {
+    public static function NewNewUserXML($args, &$error) {
         #
         # Generate a temporary file and write in the XML goo.
         #
@@ -666,7 +666,7 @@ class User
 	fwrite($fp, "<user>\n");
 	foreach ($args as $name => $value) {
 	    fwrite($fp, "<attribute name=\"$name\">");
-	    fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	    fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	    fwrite($fp, "</attribute>\n");
 	}
 	fwrite($fp, "</user>\n");
@@ -676,7 +676,7 @@ class User
 	return $xmlname;
     }
 
-    function NewNewUser($flags, $args, &$error) {
+    public static function NewNewUser($flags, $args, &$error) {
 	global $suexec_output, $suexec_output_array;
 	$typearg = "";
 
@@ -1005,7 +1005,7 @@ class User
 	    $usr_zip = "&nbsp;";
 	if (!strcmp($usr_country, ""))
 	    $usr_country = "&nbsp;";
-	if (!strcmp($notes, ""))
+	if (!isset($notes) || !strcmp($notes, ""))
 	    $notes = "&nbsp;";
 
         #

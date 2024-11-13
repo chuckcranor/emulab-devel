@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -202,23 +202,23 @@ if (mysql_num_rows($query_result)) {
     $html = "";
 
     while ($row = mysql_fetch_array($query_result)) {
-	$thistag = $row{"tag"};
-	$exptidx = $row{"exptidx"};
-	$pid     = $row{"pid"};
-	$eid     = $row{"eid"};
-	$alloc   = $row{"allocated"};
-	$lanid   = $row{"lanid"};
+	$thistag = $row["tag"];
+	$exptidx = $row["exptidx"];
+	$pid     = $row["pid"];
+	$eid     = $row["eid"];
+	$alloc   = $row["allocated"];
+	$lanid   = $row["lanid"];
 	$id      = 0;
 	$slice   = "--";
 
-	if (isset($row{"released"})) {
-	    $free = $row{"released"};
+	if (isset($row["released"])) {
+	    $free = $row["released"];
 	}
 	else {
 	    $free = "&nbsp";
 	}
-	if (isset($row{"history_id"})) {
-	    $id = $row{"history_id"};
+	if (isset($row["history_id"])) {
+	    $id = $row["history_id"];
 	}
 
 	$experiment = Experiment::Lookup($exptidx);

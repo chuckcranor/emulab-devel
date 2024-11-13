@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,7 +72,7 @@ function SPIT_MSGS($message, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $text) = each ($errors)) {
+	foreach ($errors as $name => $text) {
 	    echo "<tr>
                      <td align=right>
                        <font color=red>$name:&nbsp;</font></td>

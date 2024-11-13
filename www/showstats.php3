@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -186,7 +186,7 @@ elseif ($showby == "all") {
 	    USERERROR("You do not have permission to view stats for any ".
 		      "project!", 1);
 	}
-	while (list($project, $grouplist) = each($projlist)) {
+	foreach ($projlist as $project => $grouplist) {
 	    $orclause .= "s.pid='$project' or ";
 	}
 	$wclause = "where ($wclause 0)";

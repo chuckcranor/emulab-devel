@@ -443,7 +443,7 @@ function PUTSEARCHBOX($newsBase) {
 
 function WRITELOGINBOX($loginbox_content) {
     global $TBBASE, $TBDOCBASE, $BASEPATH;
-    global $login_status;
+    global $login_status, $login_user;
 
     #
     # Cons up a nice message.
@@ -923,8 +923,8 @@ function WRITESIMPLESIDEBAR($menudefs) {
     echo "<h3 class='menuheader'>$menutitle</h3>
           <ul class='navmenu'>";
 
-    each($menudefs);    
-    while (list($key, $val) = each($menudefs)) {
+    next($menudefs);    
+    foreach ($menudefs as $key => $val) {
 	WRITESIDEBARBUTTON("$key", null, "$val");
     }
     echo "</ul>\n";
@@ -1734,7 +1734,7 @@ class menuBar
     #
     # Constructor.
     #
-    function menuBar() {
+    function __construct() {
 	$this->jj = -1;
 	$this->kk = -1;
 	$this->mO = array();
@@ -1775,7 +1775,7 @@ class menuBar
 		    $mouseover = "";
                     $target    = "";
 		    if ($item['#mouseover']) {
-			$string = htmlentities($item['#mouseover']);
+			$string = htmlentities($item['#mouseover'], ENT_COMPAT);
 			$mouseover =
 			    "onmouseover=\"return escape('$string')\"";
 		    }

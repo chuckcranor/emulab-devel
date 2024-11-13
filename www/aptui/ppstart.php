@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -68,16 +68,16 @@ function SPITFORM($formfrag, $formfields, $errors)
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
-    echo htmlentities(json_encode($formfields)) . "\n";
+    echo htmlentities(json_encode($formfields), ENT_COMPAT) . "\n";
     echo "</script>\n";
     echo "<script type='text/plain' id='error-json'>\n";
-    echo htmlentities(json_encode($errors));
+    echo htmlentities(json_encode($errors), ENT_COMPAT);
     echo "</script>\n";
 
     $amlist = array();
     $amdefault = "";
     if ($ISCLOUD || ISADMIN() || STUDLY()) {
-        while (list($index, $aggregate) = each($am_array)) {
+        foreach ($am_array as $index => $aggregate) {
             $urn = $aggregate->urn();
             $am  = $aggregate->name();
 	    $amlist[] = $am;
@@ -85,13 +85,13 @@ function SPITFORM($formfrag, $formfields, $errors)
 	$amdefault = $DEFAULT_AGGREGATE;
     }
     echo "<script type='text/plain' id='amlist-json'>\n";
-    echo htmlentities(json_encode($amlist));
+    echo htmlentities(json_encode($amlist), ENT_COMPAT);
     echo "</script>\n";
 
     echo "<script type='text/javascript'>\n";
     echo "    window.UUID      = '$profile_uuid';\n";
     echo "    window.AMDEFAULT = '$amdefault';\n";
-    echo "    window.FORMFRAG  = \"" . htmlentities($formfrag) . "\";\n";
+    echo "    window.FORMFRAG  = \"" . htmlentities($formfrag, ENT_COMPAT) . "\";\n";
     echo "</script>\n";
 
     SpitOopsModal("oops");

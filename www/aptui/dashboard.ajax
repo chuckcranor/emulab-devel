@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -73,7 +73,7 @@ function Do_GetStats()
                     " where $pclause ".
                     "       started > DATE_SUB(now(),interval $age second)");
         $row = mysql_fetch_array($query_result);
-        $errors[$key] = $row[0] + $row[1];
+        $errors[$key] = $row[0];
 
         $breakdown["timedout"][$key] = 0;
         $breakdown["mapping"][$key]  = 0;

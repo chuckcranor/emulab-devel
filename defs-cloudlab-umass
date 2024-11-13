@@ -114,7 +114,8 @@ ZFS_QUOTA_USER="10G"
 ZFS_QUOTA_PROJECT="100G"
 ZFS_QUOTA_GROUP="10G"
 ZFS_NOEXPORT=1
-WITHAMD=1
+# AMD is gone as of FreeBSD 13
+#WITHAMD=1
 # This will default to /.amd_mnt/ops in configure
 
 # Which console to use in the MFS. We need to set this for GeniRacks.

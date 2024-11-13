@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,8 +39,8 @@ class Image
     #
     # Constructor by lookup on unique ID
     #
-    function Image($id, $version = NULL) {
-	if (is_null($version)) {
+    function __construct($id, $version = NULL) {
+	if (is_null($version) && strpos($id, ":")) {
 	    list($id,$version) = preg_split('/:/', $id);
 	}
 	$safe_id = addslashes($id);
@@ -84,7 +84,7 @@ class Image
     }
 
     # Lookup by imageid
-    function Lookup($id, $version = NULL) {
+    public static function Lookup($id, $version = NULL) {
 	$foo = new Image($id,$version);
 
 	if (! $foo->IsValid())
@@ -94,7 +94,7 @@ class Image
     }
 
     # Lookup by imagename in a project
-    function LookupByName($project, $name) {
+    public static function LookupByName($project, $name) {
 	$pid       = $project->pid();
 	$safe_name = addslashes($name);
 	
@@ -154,7 +154,7 @@ class Image
 	return Image::Lookup($imageid, $row["version"]);
     }
 
-    function LookupByUUID($uuid, $version = NULL) {
+    public static function LookupByUUID($uuid, $version = NULL) {
 	$safe_uuid = addslashes($uuid);
 
 	#
@@ -220,7 +220,7 @@ class Image
     #
     # Check for the image tracker.
     #
-    function UseImageTracker()
+    public static function UseImageTracker()
     {
         if (! TBSiteVarExists("protogeni/use_imagetracker")) {
             return 0;
@@ -231,8 +231,8 @@ class Image
     #
     # Class function to create a new image descriptor.
     #
-    function NewImageId($ez, $imagename, $args, $creator, $group,
-			$target, &$errors) {
+    public static function NewImageId($ez, $imagename, $args, $creator, $group,
+			   	      $target, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -256,7 +256,7 @@ class Image
 	fwrite($fp, "<image>\n");
 	foreach ($args as $name => $value) {
 	    fwrite($fp, "<attribute name=\"$name\">");
-	    fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	    fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	    fwrite($fp, "</attribute>\n");
 	}
 	fwrite($fp, "</image>\n");
@@ -415,7 +415,7 @@ class Image
     #
     # Class function to edit an image descriptor.
     #
-    function EditImageid($image, $args, &$errors) {
+    public static function EditImageid($image, $args, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -440,7 +440,7 @@ class Image
 	fwrite($fp, "<image>\n");
 	foreach ($args as $name => $value) {
 	    fwrite($fp, "<attribute name=\"$name\">");
-	    fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	    fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	    fwrite($fp, "</attribute>\n");
 	}
 	fwrite($fp, "</image>\n");
@@ -1337,3 +1337,4 @@ class Image
         return "$TBBASE/image_metadata.php?uuid=$uuid";
     }
 }
+?>

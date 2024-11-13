@@ -900,12 +900,14 @@ sub CreateClaimFromReservation($$;$$)
     # OTA/OAI radios. This is not an ideal approach, might have to
     # change if users start mixing with outdoor radios.
     #
+    if (0) {
     foreach my $res ($resgroup->ReservationList()) {
 	if ($res->type() =~ /^(oai|ota)/) {
 	    print "CreateClaimFromReservation: Skipping claim since the ".
 		"reservation is using ota/oai radios\n";
 	    return 0;
 	}	    
+    }
     }
     
     if (!defined($ZMC)) {
@@ -1025,6 +1027,7 @@ sub CreateClaimsFromInstance($$;$$)
 	    return -1;
 	}
     }
+    if (0) {
     foreach my $client_id (keys(%{$resources->{'radios'}})) {
 	my $radio = $resources->{'radios'}->{$client_id};
 	if ($radio->node_id() =~ /^(oai-w|ota-)/) {
@@ -1032,6 +1035,7 @@ sub CreateClaimsFromInstance($$;$$)
 		"experiment is using ota/oai radios\n";
 	    return 0;
 	}
+    }
     }
 
     if (!defined($ZMC)) {
@@ -1768,6 +1772,11 @@ sub WatchGrants($$;$$)
     $url->path("$path/subscriptions/$id/events");
     logit("$url") if ($debug);
     
+    IO::Socket::SSL::set_defaults('SSL_key_file' => undef,
+			      'SSL_cert_file' => undef,
+			      'SSL_ca_file' => undef,
+			      'SSL_use_cert' => 0);
+
     #
     # Thank you!
     # https://greg-kennedy.com/wordpress/2019/03/11/writing-a-websocket-client-in-perl-5/

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,7 +35,7 @@ class RFRange
     #
     # Constructor.
     #
-    function RFRange($row) {
+    function __construct($row) {
         $this->rfrange = $row;
     }
     # accessors
@@ -60,7 +60,7 @@ class ProjectRFRanges
     #
     # Constructor
     #
-    function ProjectRFRanges($project) {
+    function __construct($project) {
         $pid_idx = $project->pid_idx();
 
         $query_result =
@@ -98,7 +98,7 @@ class ProjectRFRanges
 	return !is_null($this->ranges);
     }
     
-    function Lookup($project) {
+    public static function Lookup($project) {
 	$foo = new ProjectRFRanges($project);
         if (!is_null($foo->ranges)) {
             return $foo;
@@ -114,7 +114,7 @@ class GlobalRFRanges
     #
     # Constructor
     #
-    function GlobalRFRanges() {
+    function __construct() {
         $query_result =
             DBQueryFatal("select p.*,n.freq_low as named_low,".
                          "       n.freq_high as named_high ".
@@ -148,7 +148,7 @@ class GlobalRFRanges
 	return !is_null($this->ranges);
     }
     
-    function Lookup() {
+    public static function Lookup() {
 	$foo = new GlobalRFRanges();
         if (!is_null($foo->ranges)) {
             return $foo;

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -51,6 +51,12 @@ $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
                                  "project",  PAGEARG_PROJECT,
                                  "uuid",     PAGEARG_UUID,
                                  "force",    PAGEARG_BOOLEAN);
+if (!isset($edit)) {
+   $edit = 0;
+}
+if (!isset($force)) {
+   $force = 0;
+}
 
 if ($edit) {
     if (! (isset($cluster) && isset($uuid))) {
@@ -106,14 +112,14 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 # a single value as a read-only field.
 #
 $plist = array();
-while (list($p) = each($projlist)) {
+foreach ($projlist as $p => $unused) {
     $plist[] = $p;
 }
 if (ISADMIN() && isset($project)) {
     $plist[] = $project->pid();
 }
 echo "<script type='text/plain' id='projects-json'>\n";
-echo htmlentities(json_encode($plist));
+echo htmlentities(json_encode($plist), ENT_COMPAT);
 echo "</script>\n";
 
 # List of clusters.
@@ -131,7 +137,7 @@ if (!count($ams)) {
     exit();
 }
 $amlist  = array();
-while (list($index, $aggregate) = each($ams)) {
+foreach ($ams as $index => $aggregate) {
     $urn = $aggregate->urn();
     $am  = $aggregate->name();
     $reservable_nodes = $aggregate->ReservableNodes();
@@ -157,7 +163,7 @@ while (list($index, $aggregate) = each($ams)) {
                           "reservable_nodes" => $reservable_nodes);
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($amlist));
+echo htmlentities(json_encode($amlist), ENT_COMPAT);
 echo "</script>\n";
 
 $defaults = array();
@@ -170,7 +176,7 @@ elseif (count($plist) == 1) {
     $defaults["pid"] = $plist[0];
 }
 echo "<script type='text/plain' id='form-json'>\n";
-echo htmlentities(json_encode($defaults)) . "\n";
+echo htmlentities(json_encode($defaults), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";

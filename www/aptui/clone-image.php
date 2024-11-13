@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -84,7 +84,7 @@ echo "<div id='main-body'></div>\n";
 $projlist = $this_user->ProjectAccessList($TB_PROJECT_MAKEIMAGEID);
 
 echo "<script type='text/plain' id='projects-json'>\n";
-echo htmlentities(json_encode($projlist));
+echo htmlentities(json_encode($projlist), ENT_COMPAT);
 echo "</script>\n";
 
 #
@@ -102,15 +102,15 @@ while ($row = mysql_fetch_array($types_result)) {
     $alltypes[] = $row["type"];
 }
 echo "<script type='text/plain' id='alltypes-json'>\n";
-echo htmlentities(json_encode($alltypes));
+echo htmlentities(json_encode($alltypes), ENT_COMPAT);
 echo "</script>\n";
 
 echo "<script type='text/plain' id='oslist-json'>\n";
-echo htmlentities(json_encode($osid_oslist));
+echo htmlentities(json_encode($osid_oslist), ENT_COMPAT);
 echo "</script>\n";
 
 echo "<script type='text/plain' id='osfeatures-json'>\n";
-echo htmlentities(json_encode($osid_featurelist));
+echo htmlentities(json_encode($osid_featurelist), ENT_COMPAT);
 echo "</script>\n";
 
 echo "<link rel='stylesheet'

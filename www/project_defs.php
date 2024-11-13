@@ -35,7 +35,7 @@ class Project
     #
     # Constructor by lookup on unique index.
     #
-    function Project($pid_idx) {
+    function __construct($pid_idx = "") {
 	$safe_pid_idx = addslashes($pid_idx);
 
 	$query_result =
@@ -57,11 +57,11 @@ class Project
     }
 
     # Lookup by pid_idx.
-    function Lookup($pid_idx) {
+    public static function Lookup($pid_idx) {
 	global $project_cache;
 
         # Look in cache first
-	if (array_key_exists("$pid_idx", $project_cache))
+	if (isset($project_cache["$pid_idx"]))
 	    return $project_cache["$pid_idx"];
 	
 	$foo = new Project($pid_idx);
@@ -82,7 +82,7 @@ class Project
     }
 
     # Backwards compatable lookup by pid. Will eventually flush this.
-    function LookupByPid($pid) {
+    public static function LookupByPid($pid) {
 	$safe_pid = addslashes($pid);
 	global $project_cache;
 
@@ -269,7 +269,7 @@ class Project
     #
     # Class function to create new project and return object.
     #
-    function NewProject($pid, $leader, $args) {
+    public static function NewProject($pid, $leader, $args) {
 	global $TBBASE, $TBMAIL_APPROVAL, $TBMAIL_AUDIT, $TBMAIL_WWW;
 	
 	#
@@ -329,7 +329,7 @@ class Project
 	return $newproject;
     }
 
-    function NewNewProject($args, &$error) {
+    public static function NewNewProject($args, &$error) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -350,7 +350,7 @@ class Project
 	fwrite($fp, "<project>\n");
 	foreach ($args as $name => $value) {
 	    fwrite($fp, "<attribute name=\"$name\">");
-	    fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	    fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	    fwrite($fp, "</attribute>\n");
 	}
 	fwrite($fp, "</project>\n");
@@ -399,7 +399,7 @@ class Project
     #
     # Class function to return a list of pending (unapproved) projects.
     #
-    function PendingProjectList() {
+    public static function PendingProjectList() {
 	$result     = array();
 
 	$query_result =
@@ -520,7 +520,7 @@ class Project
 	$result  = array();
 
 	$query_result =
-	    DBQueryFatal("select gid_idx from groups ".
+	    DBQueryFatal("select gid_idx from `groups` ".
 			 "where pid_idx='$pid_idx'");
 
 	while ($row = mysql_fetch_array($query_result)) {
@@ -976,12 +976,12 @@ class Project
 		echo "<tr>
                           <td>Public CVSWeb Address:</td>
                           <td><a href=$puburl>" .
-		                 htmlspecialchars($puburl) . "</a></td>
+		                 htmlspecialchars($puburl, ENT_COMPAT) . "</a></td>
                       </tr>\n";
 
 		echo "<tr>
                           <td>CVS pserver Address:</td>
-                          <td>" . htmlspecialchars($pserver) . "</td>
+                          <td>" . htmlspecialchars($pserver, ENT_COMPAT) . "</td>
                       </tr>\n";
 	    }
 	}
@@ -1054,7 +1054,7 @@ class Project
 	# "dp_projects" node_attributes are lists of group gid_idxs.
         $query_result =
 	    DBQueryFatal("select distinct g.gid_idx, a.node_id ".
-			 "  from groups as g, node_attributes as a ".
+			 "  from `groups` as g, node_attributes as a ".
 			 "where g.pid_idx='$proj_idx' ".
 			 "  and a.attrkey='dp_projects' ".
                          "  and FIND_IN_SET(g.gid_idx, a.attrvalue) ".
@@ -1255,7 +1255,7 @@ class Project
     #
     # Map Project Reservation values. Class method
     #
-    function ReservationSharingMap($mode)
+    public static function ReservationSharingMap($mode)
     {
         # Convert sharing mode to a string or value
         if ($mode == "user") {

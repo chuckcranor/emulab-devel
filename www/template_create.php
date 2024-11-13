@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -67,7 +67,7 @@ function SPITFORM($formfields, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
             # XSS prevention.
 	    $message = CleanString($message);
 	    echo "<tr>
@@ -80,7 +80,7 @@ function SPITFORM($formfields, $errors)
 	echo "</table><br>\n";
     }
     # XSS prevention.
-    while (list ($key, $val) = each ($formfields)) {
+    foreach ($formfields as $key => $val) {
 	$formfields[$key] = CleanString($val);
     }
 
@@ -100,7 +100,7 @@ function SPITFORM($formfields, $errors)
 	echo "<option value=''>Please Select &nbsp</option>\n";
     }
 
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $unused) {
 	$selected = "";
 
 	if (strcmp($formfields["pid"], $project) == 0)
@@ -122,7 +122,7 @@ function SPITFORM($formfields, $errors)
 	          <option value=''>Default Group </option>\n";
 
     reset($projlist);
-    while (list($project, $grouplist) = each($projlist)) {
+    foreach ($projlist as $project => $grouplist) {
 	for ($i = 0; $i < count($grouplist); $i++) {
 	    $group    = $grouplist[$i];
 
@@ -285,7 +285,8 @@ if (!isset($create)) {
     # to be in the clueless portion of our users, give them some help.
     #
     if (count($projlist) == 1) {
-	list($project, $grouplist) = each($projlist);
+	$project = key($projlist);
+	$grouplist = current($projlist);
 
 	if (count($grouplist) <= 2) {
 	    $defaults['pid'] = $project;
@@ -301,7 +302,7 @@ if (!isset($create)) {
     # Allow formfields that are already set to override defaults
     #
     if (isset($formfields)) {
-	while (list ($field, $value) = each ($formfields)) {
+	foreach ($formfields as $field => $value) {
 	    $defaults[$field] = $formfields[$field];
 	}
     }

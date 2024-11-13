@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2023 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -2981,7 +2981,7 @@ COMMAND_PROTOTYPE(doaccounts)
 	/*
 	 * We need the group leader below.
 	 */
-	res = mydb_query("select leader from groups "
+	res = mydb_query("select leader from `groups` "
 			 "where pid='%s' and gid='%s'",
 			 1, reqp->pid, reqp->gid);
 	if (res) {
@@ -3044,7 +3044,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		/*
 		 * All groups!
 		 */
-		res = mydb_query("select unix_name,unix_gid from groups", 2);
+		res = mydb_query("select unix_name,unix_gid from `groups`", 2);
 	}
 	else if (nodetypeprojects) {
 		/*
@@ -3055,7 +3055,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		 */
 		res = mydb_query("select g.unix_name,g.unix_gid "
 				 " from projects as p "
-				 "left join groups as g on "
+				 "left join `groups` as g on "
 				 "     p.pid_idx=g.pid_idx "
 				 "where p.approved!=0 and "
 				 "  (FIND_IN_SET(g.gid_idx, "
@@ -3076,13 +3076,13 @@ COMMAND_PROTOTYPE(doaccounts)
 		 * a group for the admin people who get accounts outside
 		 * the jails.  Send back the "emulab-ops" group info.
 		 */
-		res = mydb_query("select unix_name,unix_gid from groups "
+		res = mydb_query("select unix_name,unix_gid from `groups` "
 				 "where pid='%s'",
 				 2, RELOADPID);
 	}
 	else if (reqp->isvnode || reqp->islocal ||
 		 (!reqp->islocal && reqp->isdedicatedwa)) {
-		res = mydb_query("select unix_name,unix_gid from groups "
+		res = mydb_query("select unix_name,unix_gid from `groups` "
 				 "where pid='%s'",
 				 2, reqp->pid);
 	}
@@ -3094,7 +3094,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		 */
 		res = mydb_query("select g.unix_name,g.unix_gid "
 				 " from projects as p "
-				 "left join groups as g on p.pid=g.pid "
+				 "left join `groups` as g on p.pid=g.pid "
 				 "where p.approved!=0 and "
 				 "  FIND_IN_SET(g.gid_idx, "
 				 "   (select attrvalue from node_attributes "
@@ -3113,7 +3113,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		  */
 		  res = mydb_query("select g.unix_name,g.unix_gid "
 				   "  from projects as p "
-				   "join groups as g on p.pid=g.pid "
+				   "join `groups` as g on p.pid=g.pid "
 				   "where p.approved!=0 and "
 				   "      FIND_IN_SET('%s',pcremote_ok)>0",
 				   2, reqp->type);
@@ -3229,7 +3229,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "  u.usr_email,u.usr_shell,u.uid_idx "
 				 "from group_membership as p "
 				 "join users as u on p.uid_idx=u.uid_idx "
-				 "join groups as g on p.pid=g.pid "
+				 "join `groups` as g on p.pid=g.pid "
 				 "where p.trust!='none' "
 				 "      and u.webonly=0 "
                                  "      and g.unix_id is not NULL "
@@ -3253,7 +3253,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "from projects as p "
 				 "join group_membership as m on "
 				 "     m.pid_idx=p.pid_idx "
-				 "join groups as g on "
+				 "join `groups` as g on "
 				 "     g.gid_idx=m.gid_idx "
 				 "join users as u on u.uid_idx=m.uid_idx "
 				 "where p.approved!=0 "
@@ -3291,7 +3291,7 @@ COMMAND_PROTOTYPE(doaccounts)
 			     "  u.usr_w_pswd,u.uid_idx "
 			     "from group_membership as p "
 			     "join users as u on p.uid_idx=u.uid_idx "
-			     "join groups as g on "
+			     "join `groups` as g on "
 			     "     p.pid=g.pid and p.gid=g.gid "
 			     "where (p.pid='%s') and p.trust!='none' "
 			     "      and u.status='active' and "
@@ -3325,14 +3325,14 @@ COMMAND_PROTOTYPE(doaccounts)
 
 		if (strcmp(reqp->pid, reqp->gid)) {
 			sprintf(subclause,
-				"join groups as g on "
+				"join `groups` as g on "
 				"     p.pid=g.pid "
 				"where (p.pid='%s' and p.gid='%s')",
 				reqp->pid, reqp->gid);
 		}
 		else {
 			sprintf(subclause,
-				"join groups as g on "
+				"join `groups` as g on "
 				"     p.pid=g.pid and p.gid=g.gid "
 				"where (p.pid='%s')", reqp->pid);
 		}
@@ -3409,7 +3409,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "from projects as p "
 				 "join group_membership as m "
 				 "  on m.pid=p.pid "
-				 "join groups as g on "
+				 "join `groups` as g on "
 				 "  g.pid=m.pid and g.gid=m.gid "
 				 "join users as u on u.uid_idx=m.uid_idx "
 				 "where p.approved!=0 "
@@ -3885,7 +3885,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "  0,0, "
 				 "  NULL,u.uid_idx "
 				 "from nonlocal_user_accounts as u "
-				 "join groups as g on "
+				 "join `groups` as g on "
 				 "     g.pid='%s' and "
 				 "     (g.pid=g.gid or g.gid='%s') "
 				 "where (u.exptidx='%d') "
@@ -6379,7 +6379,7 @@ COMMAND_PROTOTYPE(doloadinfo)
 			 "     ov.osid=iv.default_osid and "
 			 "     ov.vers=iv.default_vers "
 			 "left join projects as p on i.pid_idx=p.pid_idx "
-			 "left join groups as g on i.gid_idx=g.gid_idx "
+			 "left join `groups` as g on i.gid_idx=g.gid_idx "
 			 "left join `partitions` as pa on "
 			 "     pa.node_id=r.node_id and "
 			 "     pa.osid=iv.default_osid and loadpart=0 "
@@ -7604,7 +7604,7 @@ COMMAND_PROTOTYPE(doimagekey)
 			 "left join image_versions as iv on "
 			 "     iv.imageid=i.imageid and iv.version=i.version "
 			 "left join projects as p on i.pid_idx=p.pid_idx "
-			 "left join groups as g on i.gid_idx=g.gid_idx "
+			 "left join `groups` as g on i.gid_idx=g.gid_idx "
 			 "where node_id='%s' order by r.idx",
 			 6, reqp->nodeid);
 	if (!res) {
@@ -9157,7 +9157,7 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 			 "     iv.imageid=pa.imageid and "
 			 "     iv.version=pa.imageid_version "
 			 "left join projects as p on iv.pid_idx=p.pid_idx "
-			 "left join groups as g on iv.gid_idx=g.gid_idx "
+			 "left join `groups` as g on iv.gid_idx=g.gid_idx "
 			 "where n.node_id='%s'",
 			 6, reqp->nodeid);
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,11 +34,11 @@ class Group
     #
     # Constructor by lookup on unique index.
     #
-    function Group($gid_idx) {
+    function __construct($gid_idx) {
 	$safe_gid_idx = addslashes($gid_idx);
 
 	$query_result =
-	    DBQueryWarn("select * from groups ".
+	    DBQueryWarn("select * from `groups` ".
 			"where gid_idx='$safe_gid_idx'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
@@ -55,7 +55,7 @@ class Group
     }
 
     # Lookup by gid_idx.
-    function Lookup($gid_idx) {
+    public static function Lookup($gid_idx) {
 	global $group_cache;
 
         # Look in cache first
@@ -73,12 +73,12 @@ class Group
     }
 
     # Backwards compatable lookup by pid,gid. Will eventually flush this.
-    function LookupByPidGid($pid, $gid) {
+    public static function LookupByPidGid($pid, $gid) {
 	$safe_pid = addslashes($pid);
 	$safe_gid = addslashes($gid);
 
 	$query_result =
-	    DBQueryWarn("select gid_idx from groups ".
+	    DBQueryWarn("select gid_idx from `groups` ".
 			"where pid='$safe_pid' and gid='$safe_gid'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
@@ -100,7 +100,7 @@ class Group
 	$gid_idx = $this->gid_idx();
 
 	$query_result =
-	    DBQueryWarn("select * from groups where gid_idx='$gid_idx'");
+	    DBQueryWarn("select * from `groups` where gid_idx='$gid_idx'");
     
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->group = NULL;
@@ -113,7 +113,7 @@ class Group
     #
     # Class function to create a new Project Group.
     #
-    function Create($project, $uid, $args, &$errors) {
+    public static function Create($project, $uid, $args, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -137,7 +137,7 @@ class Group
 	fwrite($fp, "<group>\n");
 	foreach ($args as $name => $value) {
 	    fwrite($fp, "<attribute name=\"$name\">");
-	    fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	    fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	    fwrite($fp, "</attribute>\n");
 	}
 	fwrite($fp, "</group>\n");
@@ -201,7 +201,7 @@ class Group
     #
     # Class function to edit group membership.
     #
-    function EditGroup($group, $uid, $args, &$errors) {
+    public static function EditGroup($group, $uid, $args, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -225,7 +225,7 @@ class Group
 	fwrite($fp, "<group>\n");
 	foreach ($args as $name => $value) {
 	    fwrite($fp, "<attribute name=\"$name\">");
-	    fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	    fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	    fwrite($fp, "</attribute>\n");
 	}
 	fwrite($fp, "</group>\n");
@@ -552,7 +552,8 @@ class Group
     #
     # Class function to create new group and return object.
     #
-    function NewGroup($project, $gid, $leader, $description, $unix_name) {
+    public static function NewGroup($project, $gid, $leader,
+    	   	  	   	    $description, $unix_name) {
 	global $TBBASE, $TBMAIL_APPROVAL, $TBMAIL_AUDIT, $TBMAIL_WWW;
 	global $MIN_UNIX_GID;
 
@@ -563,7 +564,7 @@ class Group
         # Check that we can guarantee uniqueness of the unix group name.
         # 
 	$query_result =
-	    DBQueryFatal("select gid from groups ".
+	    DBQueryFatal("select gid from `groups` ".
 			 "where unix_name='$unix_name'");
 
 	if (mysql_num_rows($query_result)) {
@@ -588,8 +589,8 @@ class Group
 	# unused numbers by looking at existing numbers plus one, and check
 	# to see if that number is taken. 
 	$query_result =
-	    DBQueryWarn("select g.unix_gid + 1 as start from groups as g ".
-			"left outer join groups as r on ".
+	    DBQueryWarn("select g.unix_gid + 1 as start from `groups` as g ".
+			"left outer join `groups` as r on ".
 			"  g.unix_gid + 1 = r.unix_gid ".
 			"where g.unix_gid>=$starting_gid and ".
 			"      g.unix_gid<$ending_gid and ".
@@ -602,7 +603,7 @@ class Group
 	$row = mysql_fetch_row($query_result);
 	$unix_gid = $row[0];
 
-	if (!DBQueryWarn("insert into groups set ".
+	if (!DBQueryWarn("insert into `groups` set ".
 			 " pid='$pid', gid='$gid', ".
 			 " leader='" . $leader->uid() . "'," .
 			 " leader_idx='" . $leader->uid_idx() . "'," .
@@ -620,7 +621,7 @@ class Group
 			  "  (pid,gid,gid_idx,pid_idx,gid_uuid) ".
 			  "values ('$pid', '$gid', $gid_idx, ".
 			  "        $pid_idx, '$uuid')")) {
-	    DBQueryFatal("delete from groups where gid_idx='$gid_idx'");
+	    DBQueryFatal("delete from `groups` where gid_idx='$gid_idx'");
 	    return null;
 	}
 	$newgroup = Group::Lookup($gid_idx);
@@ -637,14 +638,14 @@ class Group
 	$gid_idx = $this->gid_idx();
 
 	DBQueryWarn("delete from group_stats where gid_idx='$gid_idx'");
-	DBQueryWarn("delete from groups where gid_idx='$gid_idx'");
+	DBQueryWarn("delete from `groups` where gid_idx='$gid_idx'");
 	return 0;
     }
 
     #
     # This is strictly for initialization of a testbed.
     #
-    function Initialize($uid) {
+    public static function Initialize($uid) {
 	global $TBOPSPID;
 	
 	$emulabgroup = Group::LookupByPidGid($TBOPSPID, $TBOPSPID);
@@ -892,7 +893,7 @@ class Group
 	$query_result =
 	    DBQueryFatal("select m.uid_idx,m.trust ".
 			 "   from group_membership as m ".
-			 "left join groups as g on ".
+			 "left join `groups` as g on ".
 			 "     g.pid=m.pid and g.gid=m.gid ".
 			 "where m.pid_idx='$pid_idx' and ".
 			 "      m.gid_idx='$gid_idx' ".
@@ -961,7 +962,7 @@ class Group
 	$uid     = $leader->uid();
 	$uid_idx = $leader->uid_idx();
 
-	DBQueryFatal("update groups set leader='$uid',leader_idx='$uid_idx' ".
+	DBQueryFatal("update `groups` set leader='$uid',leader_idx='$uid_idx' ".
 		     "where gid_idx='$idx'");
 
 	$this->group["leader"] = $uid;

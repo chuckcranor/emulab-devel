@@ -92,11 +92,11 @@ echo "<div id='page-body'></div>\n";
 echo "<div id='oops_div'></div>\n";
 echo "<div id='waitwait_div'></div>\n";
 echo "<script type='text/plain' id='form-json'>\n";
-echo htmlentities(json_encode($defaults)) . "\n";
+echo htmlentities(json_encode($defaults), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";
-if ($referrer) {
+if (isset($referrer) && $referrer) {
     #$referrer = CleanString($referrer);
     echo "    window.REFERRER = '$referrer';\n";
 }

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -113,7 +113,7 @@ if (isset($clusters)) {
     $all = Aggregate::DefaultAggregateList();
     $skiptypes = Instance::NodeTypePruneList();
     $amlist  = array();
-    while (list($index, $aggregate) = each($all)) {
+    foreach ($all as $index => $aggregate) {
         $urn = $aggregate->urn();
         $am  = $aggregate->name();
         $url = $aggregate->weburl();
@@ -138,7 +138,7 @@ if (isset($clusters)) {
         );
     }
     echo "<script type='text/plain' id='amlist-json'>\n";
-    echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
+    echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK), ENT_COMPAT);
     echo "</script>\n";
 }
 

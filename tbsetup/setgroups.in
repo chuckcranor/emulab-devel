@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -257,7 +257,7 @@ foreach my $token (@userlist) {
     #
     $query_result =
 	DBQueryFatal("select g.unix_name from group_membership as m ".
-		     "left join groups as g on m.pid=g.pid and m.gid=g.gid ".
+		     "left join `groups` as g on m.pid=g.pid and m.gid=g.gid ".
 		     "where m.uid_idx='$uid_idx' and m.pid=m.gid and ".
 		     "      m.trust!='none'");
 
@@ -291,7 +291,7 @@ foreach my $token (@userlist) {
     #
     $query_result =
 	DBQueryFatal("select g.unix_name from group_membership as m ".
-		     "left join groups as g on m.pid=g.pid and m.gid=g.gid ".
+		     "left join `groups` as g on m.pid=g.pid and m.gid=g.gid ".
 		     "where m.uid_idx='$uid_idx' and m.pid!=m.gid and ".
 		     "      m.trust!='none'");
 
@@ -323,7 +323,7 @@ foreach my $token (@userlist) {
 		     "     gn.pid=gp.pid and gn.pid!=gn.gid ".
 		     "left join group_membership as go on go.uid=gp.uid and ".
 		     "     go.pid=gn.pid and go.gid=gn.gid ".
-		     "left join groups as g on gn.pid=g.pid and gn.gid=g.gid ".
+		     "left join `groups` as g on gn.pid=g.pid and gn.gid=g.gid ".
 		     "where go.uid is null and gn.uid is not null and ".
 		     "      gp.uid='$uid' and gp.pid=gp.gid and ".
 		     "      (gp.trust='group_root' or ".

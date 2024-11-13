@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -224,7 +224,7 @@ else {
                      "g.uid_idx is not null) and i.listed!=0 ";
     }
     $query =
-           "select distinct i.imagename,iv.* from images as i ".
+           "select distinct i.imagename,i.listed,iv.* from images as i ".
            "left join image_versions as iv on ".
            "          iv.imageid=i.imageid and iv.version=i.version ".
            "left join os_info_versions as ov on ".
@@ -313,7 +313,7 @@ echo "    window.ALL        = $all;\n";
 echo "</script>\n";
 
 echo "<script type='text/plain' id='images-json'>\n";
-echo htmlentities(json_encode($images)) . "\n";
+echo htmlentities(json_encode($images), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

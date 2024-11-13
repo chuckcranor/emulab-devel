@@ -289,7 +289,7 @@ function viewData() {
 	    if( $field->primary_key == 1 ) {
 		$key .= "&" . "c_" . urlencode( $field->name ) . "=" . urlencode( $data );
 	    } 
-            $row .= _td( htmlspecialchars( $data ) );	       
+            $row .= _td( htmlspecialchars( $data, ENT_COMPAT ) );
           }
 
 	  if ( $key == "" ) {
@@ -372,7 +372,7 @@ function manageData( $cmd ) {
 			$fieldvalueraw = "NULL";
 		}
 
-		$fieldvalue = htmlspecialchars( $fieldvalueraw ); 
+		$fieldvalue = htmlspecialchars( $fieldvalueraw, ENT_COMPAT ); 
 	
 		$len = mysql_field_len( $pResultFields, $i );
 

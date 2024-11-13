@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -62,7 +62,7 @@ while ($row = mysql_fetch_array($query_result)) {
                        "comment" => $row["comment"]);
 }
 echo "<script type='text/plain' id='sshkey-list'>\n";
-echo htmlentities(json_encode($pubkeys));
+echo htmlentities(json_encode($pubkeys), ENT_COMPAT);
 echo "</script>\n";
 
 # Place to hang the toplevel template.

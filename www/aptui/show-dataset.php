@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -141,7 +141,7 @@ SPITHEADER(1);
 echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/plain' id='fields-json'>\n";
-echo htmlentities(json_encode($fields, JSON_NUMERIC_CHECK)) . "\n";
+echo htmlentities(json_encode($fields, JSON_NUMERIC_CHECK), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 #
@@ -164,7 +164,7 @@ if ($cansnapshot && !$embedded) {
         }
     }
     echo "<script type='text/plain' id='instances-json'>\n";
-    echo htmlentities(json_encode($instance_array));
+    echo htmlentities(json_encode($instance_array), ENT_COMPAT);
     echo "</script>\n";
 }
 

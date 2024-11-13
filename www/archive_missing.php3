@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,7 +56,7 @@ if (isset($movesome)) {
     #
     $fileargs = "";
     
-    while (list ($var, $value) = each ($_POST)) {
+    foreach ($_POST as $var => $value) {
 	if (preg_match('/^fn[\d]+$/', $var) &&
 	    preg_match('/^([-\w\/\.\+\@,~]+)$/', $value)) {
 	    $fileargs = "$fileargs " . escapeshellarg($value);

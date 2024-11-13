@@ -366,7 +366,7 @@ foreach ($instance->slivers() as $sliver) {
 
 $prunelist = Instance::NodeTypePruneList(null, true);
 echo "<script type='text/plain' id='prunelist-json'>\n";
-echo htmlentities(json_encode($prunelist));
+echo htmlentities(json_encode($prunelist), ENT_COMPAT);
 echo "</script>\n";
 
 SpitAggregateStatus(true, $this_user, $aggregates);
@@ -390,11 +390,11 @@ if ($ISPOWDER) {
 if (isset($this_user)) {
     $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
     $plist = array();
-    while (list($project) = each($projlist)) {
+    foreach ($projlist as $project => $unused) {
         $plist[] = $project;
     }
     echo "<script type='text/plain' id='projects-json'>\n";
-    echo htmlentities(json_encode($plist));
+    echo htmlentities(json_encode($plist), ENT_COMPAT);
     echo "</script>\n";
 }
 
@@ -403,7 +403,7 @@ $project = $instance->Project();
 $resinfo = ReservationGroup::ReservationInfo(
     array($project->pid() => $project), $this_user);
 echo "<script type='text/plain' id='resgroup-json'>\n";
-echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
+echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK), ENT_COMPAT);
 echo "</script>\n";
 
 AddTemplateList(array("status", "waitwait-modal", "oops-modal",

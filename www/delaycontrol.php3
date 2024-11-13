@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -111,7 +111,7 @@ function SPITFORM($formfields, $errors)
                  </td>
               </tr>\n";
 
-	while (list ($name, $message) = each ($errors)) {
+	foreach ($errors as $name => $message) {
             # XSS prevention.
 	    $message = CleanString($message);
 	    echo "<tr>
@@ -124,7 +124,7 @@ function SPITFORM($formfields, $errors)
 	echo "</table><br>\n";
     }
     # XSS prevention.
-    while (list ($key, $val) = each ($formfields)) {
+    foreach ($formfields as $key => $val) {
 	$formfields[$key] = CleanString($val);
     }
 
@@ -491,7 +491,7 @@ function SPITFORM($formfields, $errors)
        # Note, we do not allow them to change lan nodes asymmetrically yet
        # since the backend script cannot handle that.
        #
-       if (0 && !strcmp($row{"type"}, "duplex")) {
+       if (0 && !strcmp($row["type"], "duplex")) {
 	   echo "<tr>\n";
 	   echo "  <td>&nbsp</td>\n";
 	   echo "  <td>&nbsp</td>\n";
@@ -554,7 +554,7 @@ $errors = array();
 # Array of changes, indexed by [lan:node]
 # 
 $changes = array();
-while (list ($header, $value) = each ($formfields)) {
+foreach ($formfields as $header => $value) {
     $changestring = strstr($header, "DC::");
     if (! $changestring) {
 	continue;
@@ -594,7 +594,7 @@ while (list ($header, $value) = each ($formfields)) {
     #
     $qlimitarg = "";
     if (! strcmp($param, "limit")) {
-	$lastchr = $value{strlen($value)-1};
+	$lastchr = $value[strlen($value)-1];
 
 	if (ctype_alpha($lastchr)) {
 	    if ($lastchr == "s") {
@@ -707,7 +707,7 @@ function ChangeDelayConfig($uid, $pid, $unix_gid, $args, &$errors) {
     fwrite($fp, "<PubKey>\n");
     foreach ($args as $name => $value) {
 	fwrite($fp, "<attribute name=\"$name\">");
-	fwrite($fp, "  <value>" . htmlspecialchars($value) . "</value>");
+	fwrite($fp, "  <value>" . htmlspecialchars($value, ENT_COMPAT) . "</value>");
 	fwrite($fp, "</attribute>\n");
     }
     fwrite($fp, "</PubKey>\n");

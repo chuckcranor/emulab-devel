@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -196,7 +196,7 @@ if (! strcmp($showtype, "summary")) {
 	    DBQueryFatal("select type from nodetypeXpid_permissions");
 
 	while ($row = mysql_fetch_array($query_result)) {
-	    $perms{$row[0]} = 0;
+	    $perms[$row[0]] = 0;
 	}
 
 	$pidclause = "";
@@ -228,7 +228,7 @@ if (! strcmp($showtype, "summary")) {
 	}
 	
 	while ($row = mysql_fetch_array($query_result)) {
-	    $perms{$row[0]} = 1;
+	    $perms[$row[0]] = 1;
 	}
     }
     
@@ -290,7 +290,7 @@ if (! strcmp($showtype, "summary")) {
     $projlist = $target_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
     if (count($projlist) > 1) {
 	echo "<b>By Project Permission: ";
-	while (list($project) = each($projlist)) {
+ 	foreach ($projlist as $project => $unused) {
 	    echo "<a href='nodecontrol_list.php3?".
 		"showtype=summary&bypid=$project'>$project</a>,\n";
 	}

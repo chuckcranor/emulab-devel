@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -78,12 +78,12 @@ else {
     # List of clusters.
     $ams     = Aggregate::DefaultAggregateList();
     $amlist  = array();
-    while (list($index, $aggregate) = each($ams)) {
+    foreach ($ams as $index => $aggregate) {
         $amlist[$aggregate->nickname()] = $aggregate->urn();
     }
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($amlist));
+echo htmlentities(json_encode($amlist), ENT_COMPAT);
 echo "</script>\n";
 
 echo "<link rel='stylesheet'
@@ -109,7 +109,7 @@ echo "<div id='oops_div'></div>
       <div id='image-format-modal_div'></div>\n";
 
 echo "<script type='text/javascript'>\n";
-if ($target_project) {
+if (isset($target_project) && $target_project) {
     echo "  window.TARGET_PROJECT = '" . $target_project->pid() . "';\n";
 }
 else {

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -149,7 +149,7 @@ function Show($which, $arg1, $arg2)
 	$html = "<pre><div align=left id=\"showexp_details\" ".
 	    "class=\"showexp_codeblock\">";
 	for ($i = 0; $i < count($output); $i++) {
-	    $html .= htmlentities($output[$i]);
+	    $html .= htmlentities($output[$i], ENT_COMPAT);
 	    $html .= "\n";
 	}
 	$html .= "</div></pre>\n";

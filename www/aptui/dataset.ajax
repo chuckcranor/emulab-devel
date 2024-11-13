@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -333,6 +333,7 @@ function Do_ModifyDataSet()
     global $ajax_args;
     global $DBFieldErrstr, $TBDIR, $APTBASE, $embedded;
     global $suexec_output, $suexec_output_array;
+    global $LEASE_ACCESS_MODIFYINFO, $LEASE_ACCESS_MODIFY;
 
     $this_idx   = $this_user->uid_idx();
     $this_uid   = $this_user->uid();
@@ -885,6 +886,7 @@ function Do_GetInfo()
 {
     global $this_user;
     global $ajax_args;
+    global $LEASE_ACCESS_READINFO;
     
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
@@ -950,7 +952,12 @@ function Do_GetInfo()
         else {
             $blob["image_size"] = 0;
         }
-        $blob["image_status"] = $taskdata["image_status"];
+        if (isset($taskdata["image_status"])) {
+            $blob["image_status"] = $taskdata["image_status"];
+        }
+        else {
+            $blob["image_status"] = null;
+        }
         if (isset($taskdata["copyback_uuid"])) {
             $blob["copyback_uuid"] = $taskdata["copyback_uuid"];
         }

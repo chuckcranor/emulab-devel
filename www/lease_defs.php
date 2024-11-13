@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,7 @@ class Lease
     #
     # Constructor by lookup on unique index.
     #
-    function Lease($token) {
+    function __construct($token) {
 	$safe_token = addslashes($token);
 	$query_result = null;
 
@@ -84,7 +84,7 @@ class Lease
     }
 
     # Lookup.
-    function Lookup($token) {
+    public static function Lookup($token) {
 	$foo = new Lease($token);
 
 	if (! $foo->IsValid()) {
@@ -93,7 +93,7 @@ class Lease
 	return $foo;
     }
     # Lookup by name in a project
-    function LookupByName($project, $name) {
+    public static function LookupByName($project, $name) {
 	$pid       = $project->pid();
 	$safe_name = addslashes($name);
 	
@@ -108,7 +108,7 @@ class Lease
 	return Lease::Lookup($row["lease_idx"]);
     }
     # Lookup for project
-    function LookupAllByProject($project) {
+    public static function LookupAllByProject($project) {
 	$pid    = $project->pid();
         $result = array();
 	
@@ -310,7 +310,7 @@ class ImageDataset
     #
     # Constructor by lookup on unique index.
     #
-    function ImageDataset($token) {
+    function __construct($token) {
         $image = Image::LookupByUUID($token);
         if (!$image || !$image->isdataset()) {
 	    $this->image = NULL;
@@ -327,7 +327,7 @@ class ImageDataset
     }
 
     # Lookup by uuid.
-    function Lookup($token) {
+    public static function Lookup($token) {
         $image = Image::LookupByUUID($token);
         if (!$image || !$image->isdataset()) {
             return null;
@@ -335,7 +335,7 @@ class ImageDataset
 	return new ImageDataset($token);
     }
     # Lookup by name in a project
-    function LookupByName($project, $name) {
+    public static function LookupByName($project, $name) {
         $image = Image::LookupByName($project, $name);
         If (!$image || !$image->isdataset()) {
             return null;
@@ -378,7 +378,7 @@ class ImageDataset
 
     function state() {
         return ($this->image->locked() ? "imaging" :
-                $this->image->size() ? "valid" : "allocated");
+	        ($this->image->size() ? "valid" : "allocated"));
     }
 
     #

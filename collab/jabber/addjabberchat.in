@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005, 2006 University of Utah and the Flux Group.
+# Copyright (c) 2005-2006,2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -146,7 +146,7 @@ my $chatroom = (($pid eq $gid) ? "$pid" : "$pid/$gid");
 #
 my $query_result =
     DBQueryFatal("select leader,mailman_password ".
-		 "from groups where pid='$pid' and gid='$gid'");
+		 "from `groups` where pid='$pid' and gid='$gid'");
 
 if (!$query_result->numrows) {
     fatal("No such project/group $pid/$gid in the DB!");
@@ -162,7 +162,7 @@ if (!defined($password)) {
     else {
 	die("Bad data in password: $password.");
     }
-    DBQueryFatal("update groups set mailman_password='$password' ".
+    DBQueryFatal("update `groups` set mailman_password='$password' ".
 		 "where pid='$pid' and gid='$gid'");
 }
 

@@ -92,10 +92,10 @@ function SPITFORM($formfields, $dataset, $errors)
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
-    echo htmlentities(json_encode($formfields, JSON_NUMERIC_CHECK)) . "\n";
+    echo htmlentities(json_encode($formfields, JSON_NUMERIC_CHECK), ENT_COMPAT) . "\n";
     echo "</script>\n";
     echo "<script type='text/plain' id='error-json'>\n";
-    echo htmlentities(json_encode($errors));
+    echo htmlentities(json_encode($errors), ENT_COMPAT);
     echo "</script>\n";
 
     if (!$embedded || $dataset->islocal()) {
@@ -113,7 +113,7 @@ function SPITFORM($formfields, $dataset, $errors)
                 array("uuid" => $uuid, "name" => $profile->name());
         }
         echo "<script type='text/plain' id='instances-json'>\n";
-        echo htmlentities(json_encode($instance_array));
+        echo htmlentities(json_encode($instance_array), ENT_COMPAT);
         echo "</script>\n";
     }
     

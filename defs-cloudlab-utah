@@ -152,8 +152,8 @@ ZFS_ROOT=z
 ZFS_QUOTA_USER="1G"
 ZFS_QUOTA_PROJECT="100G"
 ZFS_QUOTA_GROUP="10G"
-# switched to autofs --mike
-WITHAMD=0
+# AMD is gone as of FreeBSD 13
+#WITHAMD=1
 AMD_ROOT=/.amd_mnt/ops
 
 #

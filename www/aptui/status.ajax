@@ -223,7 +223,7 @@ function Do_GetInstanceStatus()
             if ($sliver->retry_count()) {
                 if ($wtask && $wtask->TaskValue("output")) {
                     $sliverblob["deferred_cause"] =
-                        htmlentities($wtask->TaskValue("output"));
+                        htmlentities($wtask->TaskValue("output"), ENT_COMPAT);
                 }
             }
         }
@@ -247,7 +247,7 @@ function Do_GetInstanceStatus()
                     $sliverblob["failure_code"] = $wtask->exitcode();
                     if ($wtask->TaskValue("output")) {
                         $sliverblob["failure_cause"] =
-                                htmlentities($wtask->TaskValue("output"));
+                                htmlentities($wtask->TaskValue("output"), ENT_COMPAT);
                         $sliverblob["failure_message"] =
                                 MapGeniResponse($wtask->exitcode());
                         $failedslivers++;
@@ -279,7 +279,7 @@ function Do_GetInstanceStatus()
     if ($webtask && $webtask->exited()) {
         $blob["code"] = $webtask->exitcode();
         if ($webtask->TaskValue("output")) {
-            $blob["message"] = htmlentities($webtask->TaskValue("output"));
+            $blob["message"] = htmlentities($webtask->TaskValue("output"), ENT_COMPAT);
         }
         $blob["canclearerror"]
             = ($webtask->TaskValue("canignore") != 0 ||
@@ -1835,8 +1835,9 @@ function Do_ExpInfo()
     $blob["physnode_count"]  = intval($instance->physnode_count());
     $blob["virtnode_count"]  = intval($instance->virtnode_count());
     $blob["physnode_hours"]  = 
-            ($instance->physnode_count() *
-             ((time() - strtotime($instance->started())) / 3600));
+            ($instance->started() ?
+             ($instance->physnode_count() *
+              ((time() - strtotime($instance->started())) / 3600)) : null);
     $blob["user_lockdown"]   = $instance->user_lockdown() ? true : false;
     $blob["admin_lockdown"]  = $instance->admin_lockdown() ? true : false;
     $blob["paniced"]         = $instance->paniced() ? true : false;

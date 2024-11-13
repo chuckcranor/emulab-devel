@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2006, 2007, 2009 University of Utah and the Flux Group.
+# Copyright (c) 2006-2009,2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -88,9 +88,9 @@ while (my ($uid_idx) = $query_result->fetchrow_array()) {
 DBQueryFatal("unlock tables");
 
 # groups (no point in doing the project).
-DBQueryFatal("lock tables groups write, group_stats write");
-if (! TableChanged("groups", "gid_uuid")) {
-    DBQueryFatal("alter table groups ".
+DBQueryFatal("lock tables `groups` write, group_stats write");
+if (! TableChanged("`groups`", "gid_uuid")) {
+    DBQueryFatal("alter table `groups` ".
 	"add `gid_uuid` varchar(40) NOT NULL default '' after gid_idx, ".
 	"add KEY gid_uuid (`gid_uuid`)");
 }
@@ -99,7 +99,7 @@ if (! TableChanged("group_stats", "gid_uuid")) {
 	"add `gid_uuid` varchar(40) NOT NULL default '' after gid_idx, ".
 	"add KEY gid_uuid (`gid_uuid`)");
 }
-$query_result = DBQueryFatal("select gid_idx from groups ".
+$query_result = DBQueryFatal("select gid_idx from `groups` ".
 			     "where gid_uuid=''");
 while (my ($gid_idx) = $query_result->fetchrow_array()) {
     my $uuid = NewUUID();
@@ -108,7 +108,7 @@ while (my ($gid_idx) = $query_result->fetchrow_array()) {
 	die("*** $0:\n".
 	    "    Could not generate a UUID for group: $gid_idx\n");
     }
-    DBQueryFatal("update groups set gid_uuid='$uuid' ".
+    DBQueryFatal("update `groups` set gid_uuid='$uuid' ".
 		 "where gid_idx='$gid_idx'");
     DBQueryFatal("update group_stats set gid_uuid='$uuid' ".
 		 "where gid_idx='$gid_idx'");

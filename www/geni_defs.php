@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2018 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,7 +44,7 @@ class GeniSlice
     #
     # Constructor lookup.
     #
-    function GeniSlice($authority, $token) {
+    function __construct($authority, $token) {
 	$safe_token = addslashes($token);
 	$dblink     = GetDBLink($authority);
 	$idx        = null;
@@ -102,7 +102,7 @@ class GeniSlice
     }
 
     # Lookup.
-    function Lookup($authority, $token) {
+    public static function Lookup($authority, $token) {
 	$foo = new GeniSlice($authority, $token);
 
 	if ($foo->IsValid()) {
@@ -137,7 +137,7 @@ class GeniSlice
     #
     # Class function to return a list of all slices.
     #
-    function AllSlices($authority) {
+    public static function AllSlices($authority) {
 	$result     = array();
 	$dblink     = GetDBLink($authority);
 
@@ -163,7 +163,7 @@ class GeniSlice
 	return $result;
     }
 
-    function LookupByExperiment($authority, $experiment) {
+    public static function LookupByExperiment($authority, $experiment) {
 	$dblink     = GetDBLink($authority);
 	$exptidx    = $experiment->idx();
 
@@ -183,7 +183,7 @@ class GeniSlice
  	return GeniSlice::Lookup($authority, $idx);
     }
 
-    function LookupByPublicID($authority, $publicid) {
+    public static function LookupByPublicID($authority, $publicid) {
 	$dblink     = GetDBLink($authority);
 	$safeid     = addslashes($publicid);
 
@@ -244,7 +244,7 @@ class GeniUser
     #
     # Constructor lookup.
     #
-    function GeniUser($authority, $token) {
+    function __construct($authority, $token) {
 	$safe_token = addslashes($token);
 	$dblink     = GetDBLink($authority);
 	$idx        = null;
@@ -315,7 +315,7 @@ class GeniUser
     }
 
     # Lookup.
-    function Lookup($authority, $token) {
+    public static function Lookup($authority, $token) {
 	$foo = new GeniUser($authority, $token);
 
 	if ($foo->IsValid()) {
@@ -323,7 +323,7 @@ class GeniUser
 	}
 	return null;
     }
-    function LookupByEmail($authority, $token) {
+    public static function LookupByEmail($authority, $token) {
 	$dblink     = GetDBLink($authority);
 	$safe_token = addslashes($token);
 
@@ -387,7 +387,7 @@ class ClientSliver
     #
     # Constructor lookup.
     #
-    function ClientSliver($token) {
+    function __construct($token) {
 	$safe_token = addslashes($token);
 	$dblink     = GetDBLink("sa");
 	$idx        = null;
@@ -423,7 +423,7 @@ class ClientSliver
     }
 
     # Lookup.
-    function Lookup($token) {
+    public static function Lookup($token) {
 	$foo = new ClientSliver($token);
 
 	if ($foo->IsValid()) {
@@ -448,7 +448,7 @@ class ClientSliver
     #
     # Class function to return a list of all slivers for a slice
     #
-    function SliverList($slice) {
+    public static function SliverList($slice) {
 	$result     = array();
 	$dblink     = GetDBLink("sa");
 	$slice_idx  = $slice->idx();
@@ -486,7 +486,7 @@ class QuickVM
     #
     # Constructor lookup.
     #
-    function QuickVM($uuid) {
+    function __construct($uuid) {
 	$safe_uuid  = addslashes($uuid);
 	$dblink     = GetDBLink("sa");
 	$idx        = null;
@@ -518,7 +518,7 @@ class QuickVM
     }
 
     # Lookup.
-    function Lookup($token) {
+    public static function Lookup($token) {
 	$foo = new QuickVM($token);
 
 	if ($foo->IsValid()) {
@@ -539,7 +539,7 @@ class QuickVM
     function manifest()	    { return $this->field('manifest'); }
     function extension_code() { return $this->field('extension_code'); }
 
-    function LookupByName($token) {
+    public static function LookupByName($token) {
 	$dblink     = GetDBLink("sa");
 	$safe_token = addslashes($token);
 
@@ -558,7 +558,7 @@ class QuickVM
 	$uuid = $row[0];
  	return QuickVM::Lookup($uuid);
     }
-    function LookupByCreator($token) {
+    public static function LookupByCreator($token) {
 	$dblink     = GetDBLink("sa");
 	$safe_token = addslashes($token);
 

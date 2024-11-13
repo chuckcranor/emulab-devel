@@ -908,7 +908,7 @@ sub createVlan($$$;$) {
         my ($statusRow, $typeRow, $nameRow, $saidRow) = 
         ([$VlanRowStatus,"1.$vlan_number", "createAndGo","INTEGER"],
             [$VlanType,"1.$vlan_number","ethernet","INTEGER"],
-            [$VlanName,"1.$vlan_number",$vlan_id,"OCTETSTR"],
+            [$VlanName,"1.$vlan_number","$vlan_id","OCTETSTR"],
             [$VlanSAID,"1.$vlan_number",$SAID,"OCTETSTR"]);
 
 

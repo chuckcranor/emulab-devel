@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2019 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@ class NodeType
     #
     # Constructor by lookup on unique index.
     #
-    function NodeType($nodetype) {
+    function __construct($nodetype) {
 	$safe_nodetype = addslashes($nodetype);
 
 	$query_result =
@@ -50,7 +50,7 @@ class NodeType
     }
 
     # Lookup by type
-    function Lookup($nodetype) {
+    public static function Lookup($nodetype) {
         if (!TBvalid_node_type($nodetype)) {
 	    return null;
         }

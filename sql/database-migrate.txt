@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2003-2009 University of Utah and the Flux Group.
+# Copyright (c) 2003-2009, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -2544,7 +2544,7 @@ last_net_act,last_cpu_act,last_ext_act);
        display it (and a link).
 
         alter table users add wikiname tinytext;
-        alter table groups add wikiname tinytext;
+        alter table `groups` add wikiname tinytext;
 
 1.321: DB support for disk wipe-age.  If 'mustwipe' is set in the reserved
        table entry for a node, then when nfree'd, the disk must be reloaded
@@ -2742,7 +2742,7 @@ last_net_act,last_cpu_act,last_ext_act);
      interface on the Emulab side to change them. This is done in the
      mailman setup script though.
 
-          alter table groups add mailman_password tinytext;
+          alter table `groups` add mailman_password tinytext;
           alter table users add mailman_password tinytext;
 
 4.2: Add a table to track user created mailman lists.
@@ -3825,13 +3825,13 @@ last_net_act,last_cpu_act,last_ext_act);
        alter table project_stats drop primary key;
        alter table project_stats add UNIQUE KEY pid (pid);
 	   
-       alter table groups add 
+       alter table `groups` add 
            pid_idx mediumint(8) unsigned NOT NULL default '0' after gid;
-       alter table groups add 
+       alter table `groups` add 
            gid_idx mediumint(8) unsigned NOT NULL default '0' after pid_idx;
-       alter table groups drop primary key;
-       alter table groups add KEY pididx (pid_idx,gid_idx);
-       alter table groups add UNIQUE KEY pidgid (pid,gid);
+       alter table `groups` drop primary key;
+       alter table `groups` add KEY pididx (pid_idx,gid_idx);
+       alter table `groups` add UNIQUE KEY pidgid (pid,gid);
 
        alter table group_stats add 
            gid_idx mediumint(8) unsigned NOT NULL default '0' after gid;

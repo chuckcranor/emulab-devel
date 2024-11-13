@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -475,11 +475,11 @@ $formdump = FormTextDump($form, $fields, $formfields, 30);
 function ConfirmationCommon($deleted = false) {
     global $form, $fields, $formfields, $formdump, $idx;
 
-    echo "<pre>\n". htmlspecialchars($formdump). "\n</pre>\n";
+    echo "<pre>\n". htmlspecialchars($formdump, ENT_COMPAT). "\n</pre>\n";
 
     if (!$deleted) {
 	echo '<p>It will appear in the public <a href="expubs.php">Bibliography</a> ';
-	echo "under ". htmlspecialchars($formfields['category']) ." like this:</p>";
+	echo "under ". htmlspecialchars($formfields['category'], ENT_COMPAT) ." like this:</p>";
 
 	echo "<ul>\n<li>\n";
 	echo MakeBib(NULL, 0, $formfields);

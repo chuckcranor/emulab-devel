@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -111,7 +111,7 @@ echo "    window.ISFADMIN   = $isfadmin;\n";
 echo "</script>\n";
 
 echo "<script type='text/plain' id='agglist-json'>\n";
-echo htmlentities(json_encode($aggregates, JSON_NUMERIC_CHECK)) . "\n";
+echo htmlentities(json_encode($aggregates, JSON_NUMERIC_CHECK), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

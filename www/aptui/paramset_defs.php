@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,7 +29,7 @@ class Paramset
     var $profile;
     var $project;
 
-    function Paramset($token) {
+    function __construct($token) {
         $query_result = null;
         
 	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $token)) {
@@ -104,7 +104,7 @@ class Paramset
     }
 
     # Lookup up a single paramset
-    function Lookup($token) {
+    public static function Lookup($token) {
 	$foo = new Paramset($token);
 
 	if ($foo->IsValid()) {

@@ -104,6 +104,8 @@ if ($version[0] > 7 || ($version[0] == 7 && $version[1] >= 4)) {
 # microtime, combined with a random number.
 # 
 function GENHASH() {
+    global $HAVE_MHASH;
+
     $fp = fopen("/dev/urandom", "r");
     if (! $fp) {
         TBERROR("Error opening /dev/urandom", 1);
@@ -215,6 +217,7 @@ function LoginStatus() {
     global $EXPOSEARCHIVE, $EXPOSETEMPLATES;
     global $CHECKLOGIN_HASHKEY, $CHECKLOGIN_HASHHASH;
     global $CHECKLOGIN_IDX, $CHECKLOGIN_USER;
+    global $HAVE_MHASH;
     
     #
     # If we already figured this out, do not duplicate work!
@@ -676,7 +679,7 @@ function CheckLoginConditions($status)
 #
 function CheckLoginOrDie($modifier = 0)
 {
-    global $CHECKLOGIN_USER;
+    global $CHECKLOGIN_USER, $login_url;
     
     LOGGEDINORDIE(GETUID(), $modifier, $login_url);
 
@@ -1111,6 +1114,7 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     global $TBLIBEXEC_DIR, $EXP_VIS, $TBMAINSITE;
     global $WITHZFS, $ZFS_NOEXPORT;
     global $PORTAL_GENESIS;
+    global $HAVE_MHASH;
 
     $flushtime = time() - 1000000;
     

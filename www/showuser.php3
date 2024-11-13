@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -281,7 +281,7 @@ $query_result =
     		 "       count(distinct r.node_id) as ncount ".
 		 " from group_membership as g ".
 		 "left join projects as p on p.pid=g.pid ".
-		 "left join groups as gr on gr.pid=g.pid and gr.gid=g.gid ".
+		 "left join `groups` as gr on gr.pid=g.pid and gr.gid=g.gid ".
 		 "left join experiments as e on g.pid=e.pid and g.gid=e.gid ".
 		 "left join reserved as r on e.pid=r.pid and e.eid=r.eid ".
 		 "left join group_membership as g2 on g2.pid=g.pid and ".

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,7 +35,7 @@ echo "<div class=container>\n";
 echo "<div class=jumbotron>\n";
 echo "<p>\n";
 
-echo "<b>" . htmlentities( $_SERVER["REQUEST_URI"] ) . "</b>
+echo "<b>" . htmlentities( $_SERVER["REQUEST_URI"], ENT_COMPAT ) . "</b>
            is not available or is broken.";
 
 echo "</p>\n";

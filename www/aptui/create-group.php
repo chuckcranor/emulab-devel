@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -80,10 +80,10 @@ foreach ($project->MemberList() as $user) {
 }
 
 echo "<script type='text/plain' id='form-json'>\n";
-echo htmlentities(json_encode($formfields)) . "\n";
+echo htmlentities(json_encode($formfields), ENT_COMPAT) . "\n";
 echo "</script>\n";
 echo "<script type='text/plain' id='members-json'>\n";
-echo htmlentities(json_encode($members)) . "\n";
+echo htmlentities(json_encode($members), ENT_COMPAT) . "\n";
 echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";
