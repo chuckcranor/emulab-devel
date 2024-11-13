@@ -1,7 +1,7 @@
 // IpTree.h
 
 /*
- * Copyright (c) 2004 University of Utah and the Flux Group.
+ * Copyright (c) 2004, 2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -26,6 +26,16 @@
 #ifndef IP_TREE_H_DISTRIBUTED_DIJKSTRA_1
 #define IP_TREE_H_DISTRIBUTED_DIJKSTRA_1
 
+// Hack for dealing with deprecation of auto_ptr
+// Deprecated as of 201103L, removed as of 201703L
+// As long as it is just deprecated, we are cool.
+#if defined(USING_CLANG) && __cplusplus >= 201703L
+template <typename T>
+using auto_ptr = std::unique_ptr<T>;
+#else
+using std::auto_ptr;
+#endif
+
 class IpTree
 {
 public:
@@ -34,7 +44,7 @@ public:
 
     // return a new default-constructed IpTree of the same type as the
     // current object is.
-    virtual std::auto_ptr<IpTree> exemplar(void) const=0;
+    virtual auto_ptr<IpTree> exemplar(void) const=0;
 
     // Reset the state of the tree. Remove any state and put it back
     // to how it was just after construction.

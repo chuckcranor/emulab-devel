@@ -42,18 +42,18 @@
 	      <span class='glyphicon glyphicon-remove pull-right'
 		    style='color: red; margin-right: 4px;
 			   margin-bottom: 4px;'
-		    data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
+		    data-toggle='tooltip' data-bs-toggle='tooltip'
+		    data-container="body" data-bs-container="body"
+		    data-trigger="hover" data-bs-trigger="hover"
 		    title='Delete this parameter set'></span>
 	    </a>
 	    <a href="<%- info.run_url %>" class="run-paramset-button">
 	      <span class='glyphicon glyphicon-play-circle pull-right'
 		    style='color: green; margin-right: 5px;
 			   margin-bottom: 4px;'
-		    data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
+		    data-toggle='tooltip' data-bs-toggle='tooltip'
+		    data-container="body" data-bs-container="body"
+		    data-trigger="hover" data-bs-trigger="hover"
 		    title='Run this parameter set'></span>
 	    </a>
 	  </td>
@@ -65,10 +65,12 @@
 	    <%- info.created %></td>
 	  <td>
 	    <% if (_.has(info, "share_url")) { %>
-	      <span data-toggle='popover'
-		    data-delay='{"show":250}'
-		    data-html='false'
-		    data-trigger="hover"
+	      <span data-toggle='popover' data-bs-toggle='popover'
+		    data-delay='{"show":250}' data-bs-delay='{"show":250}'
+		    data-html='false' data-bs-html='false'
+		    data-trigger="hover" data-bs-trigger="hover"
+		    id="<%- info.uuid %>"
+		    
 		    data-content="Share this parameter set with other users by
 				  sending them a link to instantiate it.">
 		<a class="btn btn-primary btn-xs paramset-share-button"

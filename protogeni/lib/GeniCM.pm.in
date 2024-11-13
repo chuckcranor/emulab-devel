@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -835,18 +835,6 @@ sub GetTicketAuxAux($)
 	goto bad;
     }
 
-    #
-    # Mark the experiment locally as coming from the cooked interface.
-    # This changes what tmcd returns to the local nodes.
-    #
-    my $generated_by = GeniXML::GetText("generated_by", $rspec);
-    if (defined($generated_by) &&
-	$generated_by eq "libvtop") {
-	$slice_experiment->Update({"geniflags" =>
-				       $Experiment::EXPT_GENIFLAGS_EXPT|
-				       $Experiment::EXPT_GENIFLAGS_COOKED});
-    }
-    
     #
     # Create a virt topology object. We are going to load this up as we
     # process the rspec.
@@ -2088,7 +2076,10 @@ sub GetTicketAuxAux($)
 		    print STARTUP "date\n\n";
 		    print STARTUP "# Redirecting stdin/stdout to $log\n";
 		    print STARTUP "$shell -c \"$cmd\" >$log 2>&1\n";
-		    print STARTUP "status=\$?\n";
+		    print STARTUP "if [ \$? -ne 0 ]; then\n";
+		    print STARTUP "    status=\$?\n";
+		    print STARTUP "    exit \$status\n";
+		    print STARTUP "fi\n";
 		    print STARTUP "# Writing exit status to $stat\n";
 		    print STARTUP "echo \"\$status\" > $stat\n";
 		    print STARTUP "echo " .
@@ -2920,7 +2911,18 @@ sub GetTicketAuxAux($)
 	#
 	my $shared_vlan;
 	
-	if ($shared_vlan = GeniXML::GetSharedLanName($linkref)) {
+	if (GeniXML::IsSharedLanClient($linkref) &&
+	    GeniXML::IsSharedLanPlaceholder($linkref)) {
+
+	    # This is the magic for libvtop.
+	    $virtexperiment->NewTableRow("virt_lan_settings",
+					 {"vname"   => $lanname,
+					  "capkey"  => "sharedvlan",
+					  "capval"  => "__placeholder__"});
+	    $isshared = 1;
+	    $encap    = "vlan";
+	}
+	elsif ($shared_vlan = GeniXML::GetSharedLanName($linkref)) {
 	    if ($shared_vlan !~ /^[-\w]*$/) {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
@@ -3019,6 +3021,26 @@ sub GetTicketAuxAux($)
 					 {"vname"       => $lanname,
 					  "capkey"      => "jumboframes",
 					  "capval"      => 1});
+	}
+	if (GeniXML::HasDualModeSetting($linkref)) {
+	    my $native_vlan = GeniXML::GetDualModeNativeVlan($linkref);
+	    $virtexperiment->NewTableRow("virt_lan_settings",
+					 {"vname"       => $lanname,
+					  "capkey"      => "trunk_mode",
+					  "capval"      => "dual"});
+	    if ($native_vlan) {
+		$virtexperiment->NewTableRow("virt_lan_settings",
+					     {"vname"       => $lanname,
+					      "capkey"      => "native_vlan",
+					      "capval"      => $native_vlan});
+	    }
+	    else {
+		# The native vlan is untagged but needs emulated so the
+		# mapper will allow multiple links on the same interface.
+		$encap    = "none";
+		$emulated = 1;
+	    }
+	    $besteffort = 1;
 	}
 	
 	# Ditto for new direct link option.
@@ -3334,6 +3356,26 @@ sub GetTicketAuxAux($)
 
 		$ip = GeniXML::GetIp($ref, $nodemap{$node_nickname}->{'rspec'});
 		$mask = GeniXML::GetMask($ref, $nodemap{$node_nickname}->{'rspec'});
+
+		# Synchronization
+		if (GeniXML::HasPTPSetting($iface_ref)) {
+		    my $member = "$node_nickname:$iface_vport";
+		    
+		    $virtexperiment->NewTableRow("virt_lan_member_settings",
+						 {"vname"       => $lanname,
+						  "member"      => $member,
+						  "capkey"      => "ptpenable",
+						  "capval"      => "1"});
+		}
+		if (GeniXML::HasSyncESetting($iface_ref)) {
+		    my $member = "$node_nickname:$iface_vport";
+		    
+		    $virtexperiment->NewTableRow("virt_lan_member_settings",
+						 {"vname"       => $lanname,
+						  "member"      => $member,
+						  "capkey"      => "synceenable",
+						  "capval"      => "1"});
+		}
 	    }
 
 	    # XXX
@@ -3938,6 +3980,9 @@ sub GetTicketAuxAux($)
 		}
 	    }
 	    elsif ($insolution) {
+		if ($line =~ /^unassigned:\s+([-\w]+)$/) {
+		    $errorstr = "No available physical resources for $1";
+		}
 		$solution .= $line;
 	    }
 	    elsif ($line =~ /^\*\*\*/) {
@@ -4392,7 +4437,8 @@ sub GetTicketAuxAux($)
 	    if (! defined($stitchpath)) {
 		$response =
 		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					 "$linkname: No stitching path to ");
+					 "$linkname: No stitching path ".
+					 "for link $linkname");
 		    goto bad;
 	    }
 	    if (defined($stitchpath->error())) {
@@ -4866,6 +4912,7 @@ sub SliverWorkAux($)
     my %colomap  = ();
     my @allocated= ();
     my @freenodes= ();
+    my @killslivers = ();
     my @freelinks= ();
     my %iface2node = ();
     my $needplabslice = 0;
@@ -5057,10 +5104,11 @@ sub SliverWorkAux($)
 	    my $phys = $sliver->resource_urn();
 	    if (exists($phys2nickname{$phys})
 		&& $phys2nickname{$phys} ne $nickname) {
-		$message = "Cannot bind node " . $phys2nickname{$phys} .
+		print STDERR "rebinding node " . $phys2nickname{$phys} .
 		    " to the same physical node which was bound to " .
-		    $nickname;
-		goto bad;
+		    $nickname . "\n";
+		push(@killslivers, $sliver);
+		next;
 	    }
 	    push(@freenodes, $sliver);
 	}
@@ -6173,6 +6221,9 @@ sub SliverWorkAux($)
 	$snode->UnProvision();
 	$snode->Delete(0);
     }
+    foreach my $sliver (@killslivers) {
+	$sliver->Delete(0);
+    }
     foreach my $svhost (@freevhosts) {
 	$svhost->UnProvision();
 	$svhost->Delete(0);
@@ -6339,10 +6390,10 @@ sub RenewSliverAux($$$$)
 
     foreach my $pnode (@pnodes) {
 	my $pnodeid = $pnode->node_id();
+	my $respid  = $pnode->ActivePreReserve();
 	
-	if (defined($pnode->reserved_pid()) &&
-	    lc($pnode->reserved_pid()) ne lc($slice_experiment->pid())) {
-	    if ($credential->HasActualPrivilege("admin")) {
+	if (defined($respid) && lc($respid) ne lc($slice_experiment->pid())) {
+	    if (0 && $credential->HasActualPrivilege("admin")) {
 		SENDMAIL($TBOPS, "Admin override on pre-reserved node!",
 			 "Admin override on pre-reserved node $pnodeid\n".
 			 "while extending $slice\n",
@@ -7611,12 +7662,16 @@ sub CreateUserFromCertificate($)
 	$modify = 1;
     }
     if ($PROTOGENI_LOCALUSER) {
-	return GeniUtil::CreateLocalUser($urn, $email);
+	$user = GeniUtil::CreateLocalUser($urn, $email);
     }
-    $user = GeniUser->Create($certificate, $authority);
+    else {
+	$user = GeniUser->Create($certificate, $authority);
+    }
     return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				"Could not create user from your certificate")
 	if (!defined($user));
+    return $user
+	if ($PROTOGENI_LOCALUSER);
 
     if ($modify) {
 	if ($user->Modify($username, $email)) {
@@ -8278,13 +8333,23 @@ sub FlipToUser($$)
 	$group   = $object->GetGroup();
 	$creator = $object->GetCreator();	
     }
+    elsif (ref($object) eq "Project") {
+	#
+	# See CreateDataset() in the GeniCMV2. This is really intended to
+	# make sure we do the right thing for a nonlocal project when
+	# PROTOGENI_LOCALUSER=1
+	#
+	$project = $object;
+	$group   = $object->GetProjectGroup();
+	$creator = $object->GetLeader();	
+    }
     return undef
 	if (! (defined($project) && defined($group) && defined($creator)));
 
     #
     # If creator is frozen we need to use the project leader instead.
     #
-    if ($creator->frozen()) {
+    if ($creator->frozen() || !$creator->HasValidEncryptedCert()) {
 	$creator = $project->GetLeader();
     }
     $creator = GeniUser::LocalUser->Create($creator);
@@ -8294,11 +8359,14 @@ sub FlipToUser($$)
     # XXX watch for Legacy GeniSlices project.
     #
     if ($project->IsNonLocal() || $project->pid() eq "GeniSlices") {
-	$creator = User->Lookup("geniuser");
-	return undef
-	    if (!defined($creator));
-	$user = GeniUser::LocalUser->Create($creator);
-	goto flip;
+	if (! (ref($object) eq "GeniSlice" &&
+	       $experiment->geniflags() & $Experiment::EXPT_GENIFLAGS_LOCAL)) {
+	    $creator = User->Lookup("geniuser");
+	    return undef
+		if (!defined($creator));
+	    $user = GeniUser::LocalUser->Create($creator);
+	    goto flip;
+	}
     }
 
     #
@@ -8324,11 +8392,14 @@ sub FlipToUser($$)
 	    $user = $creator;
 	}
     }
-    else {
+    elsif (defined($image)) {
 	if (!$image->AccessCheck($user->emulab_user(),
 				 TB_IMAGEID_MODIFYINFO())) {
 	    $user = $creator;
 	}
+    }
+    elsif (defined($project)) {
+	# Does it make sense to do anything here? 
     }
   flip:
     return undef
@@ -9367,11 +9438,11 @@ sub HandleBlockstore($$$$$$@)
 		#
 		# Only one read-write user at a time.
 		#
-		if ($readonly && $lease->InUseReadWrite()) {
+		if (!$readonly && $lease->InUseReadWrite()) {
 		    $message = "Dataset $dataset_id is already in use RW";
 		    $errorcode = GENIRESPONSE_BADARGS;
 		    last;
-	      }
+		}
 		# We need some stuff from the blockstore to fill out the
 		# virt tables below.
 		my $blockstore = Blockstore->LookupByLease($lease->lease_idx());
@@ -9462,8 +9533,13 @@ sub HandleBlockstore($$$$$$@)
 	return GeniResponse->Create($errorcode, undef, $message);
     }
     #
-    # disk size desires for the node. 
+    # disk size desires for the node. Note that we have adjust disk_any
+    # to include SYSVOL and NONSYSVOL.
     #
+    $all_placements{'ANY'}->{'size'} +=
+	($all_placements{'SYSVOL'}->{'size'} +
+	 $all_placements{'NONSYSVOL'}->{'size'});
+    
     foreach my $which (keys(%all_placements)) {
 	my $size  = $all_placements{$which}->{"size"};
 	my $dname = "?+disk_" . lc($which);

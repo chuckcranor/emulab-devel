@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
@@ -30,6 +33,7 @@ chdir("apt");
 include("quickvm_sup.php");
 include_once("instance_defs.php");
 include_once("profile_defs.php");
+include_once("resgroup_defs.php");
 $page_title = "Instantiate a Profile";
 $dblink = GetDBLink("sa");
 # Did the user provide "secret" hash to use the profile?
@@ -40,6 +44,8 @@ $usenewschedule = 0;
 $selected_profile = null;
 # For tutorials skip prediction and maxduration.
 $noprediction = 0;
+# For testing new instantiate code.
+$usenewinstantiate = 0;
 
 #
 # Get current user but make sure coming in on SSL. 
@@ -50,6 +56,11 @@ if (isset($this_user)) {
     CheckLoginOrDie(CHECKLOGIN_NONLOCAL|CHECKLOGIN_WEBONLY);
     if (NOPROJECTMEMBERSHIP()) {
         return NoProjectMembershipError($this_user);
+    }
+    if ($TUTORIALSTATS) {
+        $loaduid = $this_user->uid();
+
+        TutorialStat("instantiate $loaduid");
     }
 }
 else {
@@ -66,7 +77,7 @@ $optargs = OptionalPageArguments("profile",       PAGEARG_STRING,
 				 "from",          PAGEARG_STRING,
 				 "refspec",       PAGEARG_STRING,
                                  "rerun_instance",PAGEARG_UUID,
-                                 "rerun_paramset",PAGEARG_UUID,
+                                 "rerun_paramset",PAGEARG_PARAMSET,
                                  "rerun_branch",  PAGEARG_BOOLEAN,
                                  "skipfirststep", PAGEARG_BOOLEAN,
                                  "stresstest",    PAGEARG_BOOLEAN,
@@ -74,10 +85,6 @@ $optargs = OptionalPageArguments("profile",       PAGEARG_STRING,
 
 # Need to make non-hardcoded
 $maxduration = 16;
-# Selenium
-if (!isset($stresstest)) {
-    $stresstest = 0;
-}
 
 if (isset($rerun_instance) || isset($rerun_paramset) ||
     (isset($from) && ($from == "manage-profile" || $from == "show-profile"))) {
@@ -93,6 +100,7 @@ if ((isset($rerun_instance) || isset($rerun_paramset)) && isset($refspec)) {
 }
 
 $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
+
 #
 # Cull out the nonlocal projects, we do not want to show those
 # since they are just the holding projects.
@@ -102,6 +110,12 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 # submits the experiment.
 #
 $cluster_restrictions = array();
+#
+# Powder, send OTA permission flag for the projects.
+#
+$otaAllowed = array();
+$doOtaCheck = 0;
+
 $tmp = array();
 
 while (list($pid) = each($projlist)) {
@@ -112,12 +126,25 @@ while (list($pid) = each($projlist)) {
         if (FeatureEnabled("NewScheduleStep", $this_user, $proj)) {
             $usenewschedule = 1;
         }
+        if (FeatureEnabled("UseNewInstantiate", $this_user, $proj)) {
+            $usenewinstantiate = 1;
+        }
         $allowed_clusters = Aggregate::AllowedAggregates($proj);
         if ($allowed_clusters) {
             $cluster_restrictions[$proj->pid()] = array_keys($allowed_clusters);
         }
+        if ($ISPOWDER) {
+            # Temporary for testing.
+            if (FeatureEnabled("powder-doota-check", null, $proj)) {
+                $doOtaCheck++;
+            }
+            $otaAllowed[$pid] = array(
+                "allowed"  => $proj->otaAllowed(),
+                "isleader" => $proj->IsLeader($this_user),
+            );
+        }
     }
-    if (0 && $pid == "OAI2021FallWS") {
+    if ($pid == $TUTORIALPID) {
         $noprediction   = 1;
     }
 }
@@ -125,13 +152,24 @@ $projlist = $tmp;
 if ($noprediction) {
     $usenewschedule = 0;
 }
-    
+
 if (count($projlist) == 0) {
     SPITUSERERROR("You do not belong to any projects with permission to ".
                   "create new experiments. Please contact your project ".
                   "leader to grant you the neccessary privilege.");
     exit();
 }
+
+#
+# Deal with OTA temporary enable.
+#
+if (!$doOtaCheck) {
+    foreach ($otaAllowed as $pid => &$details) {
+        $details["allowed"] = 1;
+    }
+    reset($otaAllowed);
+}
+
 if ($ISCLOUD) {
     $portal_default_profile = TBGetSiteVar("cloudlab/default_profile");
     list ($profile_default_pid,
@@ -198,7 +236,7 @@ if (isset($profile)) {
     # is /p/project/profilename, but only for public profiles.
     #
     if (isset($project) && isset($profile)) {
-	$obj = Profile::LookupByName($project, $profile, $version);
+	$obj = Profile::LookupByName($project, $profile);
     }
     elseif (IsValidUUID($profile) || IsValidHash($profile)) {
 	$obj = Profile::Lookup($profile);
@@ -388,8 +426,8 @@ $cancopy    = $this_user->webonly() || $ishashed ? 0 : 1;
 $nopprspec  = "false";  # Deprecated guest user stuff
 $portal     = "";
 $showpicker = isset($profile) || isset($rerun_record) ? 0 : 1;
-if (isset($profilename)) {
-    $profilename = "'$profilename'";
+if (isset($profile)) {
+    $profilename = "'" . $profilename . "'";
     $profilevers = $profile->version();
 }
 else {
@@ -402,7 +440,6 @@ $formfields["username"] = "";
 $formfields["email"]    = "";
 $formfields["sshkey"]   = "";
 $formfields["where"]    = $DEFAULT_AGGREGATE;
-$formfields["profile"]  = $selected_profile;
 
 #
 # If the user provided the key, pass it along for ajax calls
@@ -412,35 +449,30 @@ if ($ishashed) {
     $formfields["hashkey"] = $profile->hashkey();
 }
 
-#
-# If the user is in the same project as the profile, default to that
-# project, else use the first in the list (which is ordered by last
-# time the user instantiated in it).
-#
-if (isset($profile) && array_key_exists($profile->pid(), $projlist)) {
-    $project = $profile->pid();
-}
-else {
+# Default project if only one, otherwise user must select,
+if (count($projlist) == 1) {
     list($project, $grouplist) = each($projlist);
+    $formfields["pid"] = $project;
+    $formfields["gid"] = $grouplist[0];
     reset($projlist);
 }
-$formfields["pid"] = $project;
-$formfields["gid"] = $project;
+else {
+    $formfields["pid"] = "";
+    $formfields["gid"] = "";
+}
 $formfields["username"] = $this_user->uid();
 $formfields["email"]    = $this_user->email();
 
 SPITHEADER(1);
 
+echo "<link rel='stylesheet' href='css/instantiate.css'>\n";
 echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
-echo "<link rel='stylesheet' href='css/picker.css'>\n";
+echo "<link rel='stylesheet' href='css/profile-picker.css'>\n";
 echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
 
 # I think this will take care of XSS prevention?
 echo "<script type='text/plain' id='form-json'>\n";
 echo htmlentities(json_encode($formfields)) . "\n";
-echo "</script>\n";
-echo "<script type='text/plain' id='error-json'>\n";
-echo htmlentities(json_encode($errors));
 echo "</script>\n";
 echo "<script type='text/plain' id='profiles-json'>\n";
 echo htmlentities(json_encode($profile_array));
@@ -457,6 +489,12 @@ if ($this_user->IsNonLocal()) {
         $portal = "https://portal.geni.net/";
     }
 }
+
+# Current and Future reservations for the cluster picker.
+$resinfo = ReservationGroup::ReservationInfo($projlist, $this_user);
+echo "<script type='text/plain' id='resinfo-json'>\n";
+echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
+echo "</script>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
@@ -477,6 +515,22 @@ if ($ISPOWDER) {
     echo "<script type='text/plain' id='radioinfo-json'>\n";
     echo htmlentities(json_encode($radioinfo));
     echo "</script>\n";
+    
+    echo "<script type='text/plain' id='otaAllowed-json'>\n";
+    echo htmlentities(json_encode($otaAllowed));
+    echo "</script>\n";
+
+    # User has seen and agreed to the OTA agreement.
+    # Temporary for testing.
+    if ($doOtaCheck) {
+        $ota_agreed = $this_user->ota_agreed() ? "true" : "false";
+    }
+    else {
+        $ota_agreed = "true";
+    }
+    echo "<script type='text/javascript'>\n";
+    echo "    window.OTA_AGREED  = $ota_agreed;\n";
+    echo "</script>\n";
 }
 
 $prunelist = Instance::NodeTypePruneList(null, true);
@@ -484,11 +538,8 @@ echo "<script type='text/plain' id='prunelist-json'>\n";
 echo htmlentities(json_encode($prunelist));
 echo "</script>\n";
 
-SpitOopsModal("oops");
 echo "<script type='text/javascript'>\n";
-echo "    window.PROFILE    = '" . $formfields["profile"] . "';\n";
-echo "    window.PROFILENAME= $profilename;\n";
-echo "    window.PROFILEVERS= $profilevers;\n";
+echo "    window.DEFAULT_PROFILE = '$selected_profile';\n";
 if ($ishashed) {
     # For gitrepo-picker template
     echo "    window.HASHKEY= '" . $formfields["hashkey"] . "';\n";
@@ -513,20 +564,6 @@ echo "    window.DOCONSTRAINTS = $doconstraints;\n";
 echo "    window.SKIPFIRSTSTEP = " . ($skipfirststep ? "true" : "false") .";\n";
 echo "    window.PORTAL_NAME = '$PORTAL_NAME';\n";
 echo "    window.USERNAME = '" . $formfields["username"] . "';\n";
-if (isset($profile) && $profile->repourl()) {
-    echo "    window.FROMREPO = true;\n";
-    if (isset($refspec)) {
-        echo "    window.TARGET_REFSPEC = '$refspec';\n";
-        echo "    window.TARGET_REFHASH = null;\n";
-    }
-    $phash    = $profile->repohash();
-    $prefspec = $profile->reporef();
-    echo "    window.PROFILE_REFHASH = '$phash';\n";
-    echo "    window.PROFILE_REFSPEC = '$prefspec';\n";
-}
-else {
-    echo "    window.FROMREPO = false;\n";
-}
 # Do we show an aggregate selector?
 if (!$this_user->webonly() && !$ISAPT && !$ISPNET && !$ISEMULAB) {
     echo "    window.CLUSTERSELECT = true;\n";
@@ -534,36 +571,117 @@ if (!$this_user->webonly() && !$ISAPT && !$ISPNET && !$ISEMULAB) {
 else {
     echo "    window.CLUSTERSELECT = false;\n";
 }
-if (isset($rerun_instance) || isset($rerun_paramset)) {
-    if (isset($rerun_paramset)) {
-        # This might be the private hashkey, send it along. 
-        echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
-        if ($profile->repourl()) {
-            $phash    = $rerun_record->repohash();
-            $prefspec = $rerun_record->reporef();
-            
+if (isset($profile)) {
+    echo "    window.PROFILE_UUID = '" . $profile->uuid() . "';\n";
+    echo "    window.PROFILE_VERSION = '" . $profile->version() . "';\n";
+    
+    if ($profile->repourl()) {
+        # Head of default branch
+        $phash    = $profile->repohash();
+        $prefspec = $profile->reporef();
+        # What the user wants to instantiate (target);
+        $thash    = null;
+        $trefspec = null;
+
+        echo "    window.FROMREPO = true;\n";
+        echo "    window.PROFILE_REFHASH = '$phash';\n";
+        echo "    window.PROFILE_REFSPEC = '$prefspec';\n";
+
+        if (isset($refspec)) {
+            # A branch or a tag in refs format. We derive the hash below.
+            $trefspec = $refspec;
+        }
+        elseif (! (isset($rerun_instance) || isset($rerun_paramset))) {
+            # The target is the HEAD of the default branch.
+            $trefspec = $prefspec;
+            $thash    = $phash;
+        }
+        elseif (isset($rerun_paramset)) {
             if ($rerun_record->IsBound()) {
-                echo "    window.TARGET_REFHASH = '$phash';\n";
+                $thash = $rerun_record->repohash();
+                # The refspec might not exist any more. That would be bad
+                $trefspec = $rerun_record->reporef();
             }
             else {
-                echo "    window.TARGET_REFHASH = null;\n";
+                # The target is the HEAD of the default branch.
+                $trefspec = $prefspec;
+                $thash    = $phash;
             }
-            echo "    window.TARGET_REFSPEC = '$prefspec';\n";
+        }
+        elseif (isset($rerun_instance)) {
+            $thash    = $rerun_record->repohash();
+            $trefspec = $rerun_record->reporef();
+        }
+        if (!$thash) {
+            #
+            # Get the hash for the refspec the user wants to run.
+            #
+            $webtask = $profile->GitRepoCommand($this_user, "hash", $trefspec);
+            if (!$webtask) {
+                SPITUSERERROR("Repository error");
+            }
+            $thash = $webtask->TaskValue("hash");
+            $webtask->Delete();
+        }
+        echo "    window.TARGET_REFSPEC = '$trefspec';\n";
+        echo "    window.TARGET_REFHASH = '$thash';\n";
+
+        #
+        # For warning messages, the head of the target branch.
+        #
+        if ($thash != $phash) {
+            $webtask = $profile->GitRepoCommand($this_user, "hash", $trefspec);
+            if (!$webtask) {
+                SPITUSERERROR("Repository error");
+            }
+            $branchhash = $webtask->TaskValue("hash");
+            $webtask->Delete();
+            echo "    window.TARGET_HEADHASH = '$branchhash';\n";
+        }
+        else {
+            echo "    window.TARGET_HEADHASH = '$thash';\n";
         }
     }
     else {
-        echo "    window.RERUN_INSTANCE = '$rerun_instance';\n";
-        if ($profile->repourl()) {
-            $hash    = $rerun_record->repohash();
-            
-            echo "    window.TARGET_REFHASH = '$hash';\n";
-            echo "    window.TARGET_REFSPEC = null;\n";
+        $tvers = null;
+
+        if (isset($rerun_paramset)) {
+            if ($rerun_record->IsBound()) {
+                $tvers = $rerun_record->BoundProfile()->version();
+            }
+            else {
+                $tvers = $rerun_record->Profile()->version();
+            }
         }
+        elseif (isset($rerun_instance)) {
+            $tvers = $rerun_record->Profile()->version();
+        }
+        else {
+            $tvers = $profile->version();
+        } 
+        echo "    window.FROMREPO = false;\n";
+        echo "    window.TARGET_VERSION = '$tvers';\n";
+        if ($profile->IsHead()) {
+            $headvers = $profile->version();
+        }
+        else {
+            $head = $profile->HeadProfile();
+            $headvers = $head->version();
+        }
+        echo "    window.PROFILE_HEADVERS = '$headvers';\n";
+    }
+    if (isset($rerun_paramset)) {
+        # This might be the private hashkey, send it along. 
+        echo "    window.RERUN_PARAMSET = '$rerun_paramset';\n";
+    }
+    elseif (isset($rerun_instance)) {
+        echo "    window.RERUN_INSTANCE = '$rerun_instance';\n";
     }
 }
 echo "    window.USENEWSCHEDULE = $usenewschedule;\n";
 echo "    window.NOPREDICTION = $noprediction;\n";
-echo "    window.STRESSTEST = $stresstest;\n";
+echo "    window.USENEWINSTANTIATE = $usenewinstantiate;\n";
+echo "    window.STRESSTEST = " . ($stresstest ? "1" : "0") . ";\n";
 echo "    window.EMBEDDED_RESGROUPS = true;\n";
 echo "    window.EMBEDDED_RESGROUPS_SELECT = true;\n";
 echo "</script>\n";
@@ -571,7 +689,6 @@ echo "<script src='js/lib/d3.v3.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
    
-REQUIRE_WIZARD_TEMPLATE();
 REQUIRE_PICKER();
 REQUIRE_FORMHELPERS();
 REQUIRE_FILESTYLE();
@@ -579,24 +696,47 @@ REQUIRE_MARKED();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
 REQUIRE_JQUERY_STEPS();
-# This includes SUP (JACKS (JACKSMOD)), UNDERSCORE, and JACKS_EDITOR
+REQUIRE_SUP();
+REQUIRE_UNDERSCORE();
 REQUIRE_PPWIZARDSTART();
+if ($usenewinstantiate) {
+    REQUIRE_TOPOLOGY_VIEWER();
+}
+else {
+    REQUIRE_TOPOLOGY_VIEWER();
+    REQUIRE_JACKS_EDITOR_OLD();
+}
 # For the new ppwizardstart and Powder
 AddLibrary("js/powder-types.js");
 AddLibrary("js/resgraphs.js");
 AddLibrary("js/gitrepo.js");
 AddLibrary("js/paramsets.js");
+AddLibrary("js/ota-permission.js");
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/copy-profile.js");
-SPITREQUIRE("js/instantiate-new.js");
+AddLibrary("js/profile-picker.js");
+AddLibrary("js/instantiate-common.js");
+if ($usenewinstantiate) {
+    SPITREQUIRE("js/instantiate-new.js");
+}
+else {
+    SPITREQUIRE("js/instantiate.js");
+}
 
 echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
 
-AddTemplateList(array("instantiate-new",
-                      "aboutapt", "aboutcloudlab", "aboutpnet",
-                      "waitwait-modal", "rspectextview-modal",
+AddTemplateList(array("aboutapt", "aboutcloudlab", "aboutpnet",
+                      "waitwait-modal", "oops-modal", "rspectextview-modal",
                       "picker-template","reservation-graph",
                       "save-paramset-modal", "resgroup-list",
-                      "copy-profile-modal"));
+                      "copy-profile-modal", "ota-agreement", "ota-permission",
+                      "picker-modal", "instantiate-templates"));
+
+if ($usenewinstantiate) {
+    AddTemplate("instantiate-new");
+}
+else {
+    AddTemplate("instantiate");
+}
 SPITFOOTER();
 ?>

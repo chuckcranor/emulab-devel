@@ -1,0 +1,194 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+
+#
+# ssh in as root and run top once. 
+#
+sub usage()
+{
+    print STDOUT "Usage: node_servicelogs [-hd] node\n";
+    print STDOUT "-h     This message\n";
+    exit(-1);
+}
+my $optlist  = "hdt:";
+my $debug    = 0;
+my $webtask_id;
+my $webtask;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $SCP		= "/usr/bin/scp";
+my $NODESLOGS   = "$TB/bin/node_servicelogs.sh";
+my $SAVEUID	= $UID;
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use emdb;
+use emutil;
+use EmulabConstants;
+use WebTask;
+use libtestbed;
+use User;
+use Node;
+use Experiment;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Locals
+my @nodes       = ();
+
+# Protos
+sub fatal($);
+
+if ($EUID != 0) {
+    # We don't want to run this script unless its the real version.
+    fatal("Must be root! Maybe its a development version?");
+}
+#
+# Please do not run as root. Hard to track what has happened.
+#
+if ($UID == 0) {
+    fatal("Please do not run this as root!");
+}
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"h"})) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug++;
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup webtask $webtask_id");
+    }
+    # Convenient.
+    $webtask->AutoStore(1);
+}
+
+#
+# For perm checks.
+#
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+
+usage()
+    if (@ARGV != 1);
+
+my $node_id = $ARGV[0];
+my $node = Node->Lookup($node_id);
+if (!defined($node)) {
+    fatal("Node does not exist!");
+}
+if (!$node->IsReserved()) {
+    fatal("Node is not reserved; reserve it first!");
+}
+if (!$this_user->IsAdmin() &&
+    !$node->AccessCheck($this_user, TB_NODEACCESS_LOADIMAGE)) {
+    fatal("You are not allowed to do this on $node_id!");
+}
+
+#
+# Callback in case we get fancier later
+#
+sub GetLogs($$)
+{
+    my ($node, $pref) = @_;
+    my $node_id = $node->node_id();
+    my $arg = "";
+    
+    $UID = 0;
+
+    # We copy over the script, easier.
+    my $scp = "$SCP $NODESLOGS ${node_id}:/var/tmp";
+    my $output = emutil::ExecQuiet($scp);
+    if ($?) {
+	print STDERR "$node_id scp failed: $output\n";
+	$$pref = $output;
+	return -1;
+    }
+
+    my $cmd = "$TB/bin/sshtb -host $node_id /var/tmp/node_servicelogs.sh $arg";
+    $output = emutil::ExecQuiet($cmd);
+    if ($?) {
+	print STDERR "$node_id failed: $output\n";
+	$$pref = $output;
+	return -1;
+    }
+    $UID = $SAVEUID;
+    $$pref = $output;
+    return 0;
+}
+
+my $result;
+if (GetLogs($node, \$result)) {
+    fatal("Fail to get logs from $node_id: $result");
+}
+if (defined($webtask)) {
+    $webtask->output($result);
+    $webtask->Exited(0);
+}
+else {
+    print $result;
+}
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    die("*** $0:\n".
+	"    $mesg\n");
+}

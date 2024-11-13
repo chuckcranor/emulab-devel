@@ -1,4 +1,5 @@
 <style type="text/css">
+.nowrap {  white-space: nowrap; }
 .popover {
 	width:auto !important;
 	max-width: none !important;
@@ -10,97 +11,102 @@
 </style>
 <div class='row'>
   <div class='col-sm-12'>
-    <div class='panel panel-default'>
-      <div class='panel-body' id="images-div">
-	<div>
-	  <% if (all) { %>
-	    <label class="checkbox-inline">
-	      <input type="checkbox" id="my-images" checked>
-	      <span data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
-		    title='Images you have created'>
-		My Images
-	      </span>
-	    </label>
-	  <% } %>
-	  <label class="checkbox-inline">
-	    <input type="checkbox" id="project-images" checked>
-	    <span data-toggle='tooltip'
-		  data-container="body"
-		  data-trigger="hover"
-		  title='Images created in projects you are a member of'>
-	      Project Images
-	    </span>
-	  </label>
-	  <label class="checkbox-inline">
-	    <input type="checkbox" id="system-images" checked>
-	    <span data-toggle='tooltip'
-		  data-container="body"
-		  data-trigger="hover"
-		  title='Official images created by system adminstrators'>
-	      System Images
-	    </span>
-	  </label>
-	  <% if (all) { %>
-	    <label class="checkbox-inline">
-	      <input type="checkbox" id="public-images">
-	      <span data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
-		    title='Public images created by anyone'>
-		Public Images
-	      </span>
-	    </label>
-	    <label class="checkbox-inline">
-	      <input type="checkbox" id="admin-images">
-	      <span data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
-		    title='All other images (red-dot mode)'>
-		Red-Dot
-	      </span>
-	    </label>
-	  <% } %>
- 	  <% if (isadmin && window.ISEMULAB) { %>
- 	    <% if (all) { %>
-	      <a href="images.php"
-		 style='margin-top: -2px;'
-		 class='btn btn-primary btn-xs pull-right'
-		 data-toggle='tooltip'
-		 data-container="body"
-		 data-trigger="hover"
-		 title='Show normal (mere user) list.'
-		 type='button' name='some'>User View</a>
-	    <% } else { %>
-	      <a href="images.php?all=1"
-		 style='margin-top: -2px;'
-		 class='btn btn-danger btn-xs pull-right'
-		 data-toggle='tooltip'
-		 data-container="body"
-		 data-trigger="hover"
-		 title='Show every image (red-dot mode)'
-		 type='button' name='all'>ALL Images</a>
-	    <% } %>
-	    <a href="../showimageid_list.php3?classic=1"
-	       style='margin-top: -2px; margin-right: 10px;'
-	       class='btn btn-primary btn-xs pull-right'
-	       data-toggle='tooltip'
-	       data-container="body"
-	       data-trigger="hover"
-	       title='Emulab Classic version of this page'
-	       type='button' name='some'>Classic</a>
-	  <% } %>
-          <a href='#' class='btn btn-xs' data-toggle='modal'
-             data-target='#help-modal'>
-            <span class='glyphicon glyphicon-question-sign'
-		  style='margin-bottom: 4px;'>
-	    </span></a>
-	</div>
-	<div>
-	  <input class='form-control search' type='search'
-		 data-column='0,1,2,4'
-		 id='images-search' placeholder='Search'>
+    <div class='panel  card panel-default'>
+      <div class='panel-body card-body' id="images-div">
+	<div class="row justify-content-start align-items-center mb-1">
+	  <div class="col-sm-3">
+	    <input class='form-control form-control-md search'
+		   type='search' data-column='all'
+		   id='images-search' placeholder='Search Table'>
+	  </div>
+	  <div class="col-sm-9">
+	    <div class="row justify-content-between align-items-center">
+	      <div class="col-sm-8">
+		<div class="form-check form-switch form-check-inline">
+		  <input class="form-check-input" checked
+			 type="checkbox" role="switch"
+			 id="project-images">
+		  <label class="form-check-label"
+			 data-toggle='tooltip' data-bs-toggle='tooltip'
+			 data-container="body" data-bs-container="body"
+			 data-trigger="hover" data-bs-trigger="hover"
+			 title='Images created in projects you are a member of'>
+		    Project</label>
+		</div>
+		<div class="form-check form-switch form-check-inline">
+		  <input class="form-check-input" checked
+			 type="checkbox" role="switch"
+			 id="system-images">
+		  <label class="form-check-label"
+			 data-toggle='tooltip' data-bs-toggle='tooltip'
+			 data-container="body" data-bs-container="body"
+			 data-trigger="hover" data-bs-trigger="hover"
+			 title='Official images created
+				by system adminstrators'>
+		    System</label>
+		</div>
+		<% if (all) { %>
+		  <div class="form-check form-switch form-check-inline">
+		    <input class="form-check-input" checked
+			   type="checkbox" role="switch"
+			   id="public-images">
+		    <label class="form-check-label"
+			   data-toggle='tooltip' data-bs-toggle='tooltip'
+			   data-container="body" data-bs-container="body"
+			   data-trigger="hover" data-bs-trigger="hover"
+			   title='Public images created by anyone'>
+		      Public</label>
+		  </div>
+		  <div class="form-check form-switch form-check-inline">
+		    <input class="form-check-input" checked
+			   type="checkbox" role="switch"
+			   id="admin-images">
+		    <label class="form-check-label"
+			   data-toggle='tooltip' data-bs-toggle='tooltip'
+			   data-container="body" data-bs-container="body"
+			   data-trigger="hover" data-bs-trigger="hover"
+			   title='All other images (red-dot mode)'>
+		      Red-Dot</label>
+		  </div>
+		<% } %>
+		<a href='#' class='btn btn-xs'
+		   data-toggle='modal' data-bs-toggle='modal'
+		   data-target='#help-modal' data-bs-target='#help-modal'>
+		  <span class='glyphicon glyphicon-question-sign'
+			style='margin-bottom: 4px; margin-left: -5px'>
+		  </span></a>
+	      </div>
+	      <div class="col-sm-4">
+ 		<% if (isadmin && window.ISEMULAB) { %>
+ 		  <% if (all) { %>
+		    <a href="images.php"
+		       class='btn btn-primary btn-xs pull-right'
+		       data-toggle='tooltip' data-bs-toggle='tooltip'
+		       data-container="body" data-bs-container="body"
+		       data-trigger="hover" data-bs-trigger="hover"
+		       title='Show normal (mere user) list.'
+		       type='button' name='some'>User View</a>
+		  <% } else { %>
+		    <a href="images.php?all=1"
+		       class='btn btn-danger btn-xs pull-right'
+		       data-toggle='tooltip' data-bs-toggle='tooltip'
+		       data-container="body" data-bs-container="body"
+		       data-trigger="hover" data-bs-trigger="hover"
+		       title='Show every image (red-dot mode)'
+		       type='button' name='all'>ALL Images</a>
+		  <% } %>
+		  <a href="../showimageid_list.php3?classic=1"
+		     style='margin-right: 10px;'
+		     class='btn btn-primary btn-xs pull-right'
+		     data-toggle='tooltip' data-bs-toggle='tooltip'
+		     data-container="body" data-bs-container="body"
+		     data-trigger="hover" data-bs-trigger="hover"
+		     title='Emulab Classic version of this page'
+		     type='button' name='some'>Classic</a>
+		<% } %>
+	      </div>
+	    </div>
+	  </div>
 	</div>
 	<div class="table-responsive">
 	  <table class='tablesorter' id='images-table'>
@@ -109,12 +115,13 @@
 		<th>Name</th>
 		<th>Creator</th>
 		<th>Project</th>
-		<th>Updated</th>
+		<th class="nowrap">Updated</th>
 		<% if (showformat) { %>
-		  <th>Format
+		  <th class="nowrap">Format
 		    <a href='#' class='btn btn-xs tablesorter-noSort'
-		       data-toggle='modal'
-		       data-target='#image-format-modal'>
+		       data-toggle='modal' data-bs-toggle='modal'
+		       data-target='#image-format-modal'
+		       data-bs-target='#image-format-modal'>
 		      <span class='glyphicon glyphicon-question-sign'
 			    style='margin-bottom: 4px;'>
 		      </span></a>		    
@@ -148,7 +155,7 @@
 		  <% } else { %>
 		     <td><%= value.pid %></td>
                   <% } %>
-		  <td class="format-date"><%- value.updated %></td>
+		  <td class="format-date nowrap"><%- value.updated %></td>
 		  <% if (showformat) { %>
 		    <td>
 		      <%- value.format == "ndz" ? "standard" : value.format %>
@@ -174,8 +181,9 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-header'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<h4 class='modal-title text-center'>How to use an image?</h4>
       </div>
       <div class='modal-body'>

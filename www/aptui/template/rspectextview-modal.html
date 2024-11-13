@@ -1,6 +1,11 @@
 <!-- This is the rspec text view modal -->
+<style>
+.CodeMirror {
+    height: auto !important;
+}
+</style>
 <div id='rspec_modal' class='modal fade'>
-  <div class='modal-dialog'>
+  <div class='modal-dialog modal-wide' style="height: ">
     <div class='modal-content'>
       <div class='modal-header'>
 	<div id='rspec_modal_editbuttons'>
@@ -14,35 +19,34 @@
             Accept</button>
 	</div>
 	<div id='rspec_modal_viewbuttons' class='hidden'>
-          <button type='button' class='btn btn-danger btn-xs pull-right'
-                  id='close_rspec_modal_button'
-                  style='margin-right: 10px;'>
-            Close</button>
+          <button type='button' class='close btn-close'
+		  id='close_rspec_modal_button'></button>
 	</div>
         <h3>Source</h3>
       </div>
       <div class='modal-body' id='modal_profile_rspec_body'>
-        <div class='panel panel-default'>
-	  <div id='modal_profile_rspec_div' style='height:300px'></div>
+        <div class='border border-1'>
+	  <!-- For the manage/show  page -->
+	  <div id='modal_profile_rspec_div' style='height:70vh'></div>
+
+	  <!-- For the instantiate page -->
+	  <textarea name=\"formfields[profile_rspec_modal]\"
+		    id='modal_profile_rspec_textarea'
+		    rows=20
+		    class='form-control hidden'
+                    type='textarea'></textarea>
 	</div>
-	<div>
-	  <center>
-            <a type='button' id="rspec_modal_download_button"
-	       class='btn btn-info btn-xs'>Download</a>
-	    <span id="rspec_modal_upload_span" class="hidden">
-              <input class='filestyle hidden' type='file'
-		     id="rspec_modal_upload_button"
-		     data-classButton='btn btn-primary btn-xs'
-		     data-input='false'
-		     style='margin-left: 10px;'
-		     data-buttonText='Upload'></span>
-	  </center>
-	</div>
-	<textarea name=\"formfields[profile_rspec_modal]\"
-		  id='modal_profile_rspec_textarea'
-		  rows=20
-		  class='form-control hidden'
-                  type='textarea'></textarea>
+	<center class="mt-1">
+          <a type='button' id="rspec_modal_download_button"
+	     class='btn btn-info btn-xs'>Download</a>
+	  <span id="rspec_modal_upload_span" class="hidden">
+	    <input class='filestyle hidden' type='file'
+		   id="rspec_modal_upload_button"
+		   data-classButton='btn btn-primary btn-xs'
+		   data-input='false'
+		   style='margin-left: 10px;'
+		   data-buttonText='Upload'></span>
+	</center>
       </div>
     </div>
   </div>

@@ -9,6 +9,7 @@ window.ShowIdleGraphs = (function ()
 	var rawData    = {};
 	var nodeMap    = {};
 	var loadID     = null;
+	var gpuID      = null;
 	var ctrlID     = null;
 	var exptID     = null;
 	var refreshID  = null;
@@ -82,6 +83,47 @@ window.ShowIdleGraphs = (function ()
 			// Default to MAX;
 			datum["values"] = datum.arrays["MAX"];
 			result[index++] = datum;
+			continue;
+		    }
+		    if (which == "gpus") {
+			console.info("gpus", obj.gpus);
+			var datum = {
+			    "key"    : node_id,
+			    "area"   : 0,
+			    "arrays" : {},
+			};
+			// Multiple GPUs per node.
+			for (var gidx in obj.gpus) {
+			    for (var type in obj.gpus[gidx]) {
+				if (!_.has(datum.arrays, type)) {
+				    datum.arrays[type] = [];
+				}
+				var values = datum.arrays[type];
+				var data   = obj.gpus[gidx][type];
+				console.info(gidx, type, data);
+
+				for (var j = 1; j < data.length; j++) {
+				    var loads = data[j];
+
+				    if (values.length < j) {
+					values[j - 1] = {
+					    // convert seconds to milliseconds.
+					    "x" : loads[0] * 1000,
+					    "y" : 0,
+					};
+				    }
+				    if (loads[1] &&
+					loads[1] > values[j - 1].y) {
+					values[j - 1].y = loads[1];
+				    }
+				}
+			    }
+			}
+			// Default to MAX;
+			datum["values"] = datum.arrays["MAX"];
+			if (datum["values"] && datum.values.length) {
+			    result[index++] = datum;
+			}
 			continue;
 		    }
 		    if (which == "ctrl" || which == "expt") {
@@ -392,7 +434,7 @@ window.ShowIdleGraphs = (function ()
 		    }
 		    rawData[name] = JSON.parse(data);
 		});
-		//console.info("raw", rawData);
+		console.info("raw", rawData);
 		
 		// No data, tell caller and done.
 		if (Object.keys(rawData).length == 0) {
@@ -404,10 +446,12 @@ window.ShowIdleGraphs = (function ()
 		var load = ProcessData("load", "avg");
 		var ctrl = ProcessData("ctrl", "avg");
 		var expt = ProcessData("expt", "avg");
+		var gpus = ProcessData("gpus", "avg");
 		
-		console.info(load);
-		console.info(ctrl);
-		console.info(expt);
+		console.info("load", load);
+		console.info("ctrl", ctrl);
+		console.info("expt", expt);
+		console.info("gpus", gpus);
 
 		// We want to tell the caller if there is any actual data
 		if (C_callback) {
@@ -430,6 +474,33 @@ window.ShowIdleGraphs = (function ()
 				   {"ytype"  : "float",
 				    "ylabel" : "Unix Load Average"});
 		    $(loadID + ' .maxavg-toggles').popover({
+			trigger: 'hover',
+			placement: 'auto',
+			delay : {"hide": 500, "show": 500},
+			html: true,
+			content: "MAX is the maximum load average " +
+			    "during the interval, while AVG is the average "+
+			    "load during the interval. The " +
+			    "reported interval in the graph is five minutes "+
+			    "for the most recent 24 hours, and then every "+
+			    "hour after that. During the first 24 hours MAX "+
+			    "and AVG will be the same since the interval is "+
+			    "so short."
+		    });
+		}
+		if (gpus.length) {
+		    if (gpus.length > 60) {
+			var height = $(gpuID +" .idlegraph-div")
+			    .innerHeight();
+			
+			$(gpuID + " .idlegraph-div")
+			    .css("height", (height + 500) + "px")
+			    .css("max-height", (height + 500) + "px");
+		    }
+		    CreateOneGraph(gpuID, "gpu", gpus,
+				   {"ytype"  : "float",
+				    "ylabel" : "GPU Usage"});
+		    $(gpuID + ' .maxavg-toggles').popover({
 			trigger: 'hover',
 			placement: 'auto',
 			delay : {"hide": 500, "show": 500},
@@ -640,6 +711,7 @@ window.ShowIdleGraphs = (function ()
 	return function(args) {
 	    uuid       = args.uuid;
 	    loadID     = args.loadID;
+	    gpuID      = args.gpuID;
 	    ctrlID     = args.ctrlID;
 	    exptID     = args.exptID;
 	    C_callback = args.callback;
@@ -652,6 +724,7 @@ window.ShowIdleGraphs = (function ()
 		    d3.selectAll(loadID + " svg > *").remove();
 		    d3.selectAll(ctrlID + " svg > *").remove();
 		    d3.selectAll(exptID + " svg > *").remove();
+		    d3.selectAll(gpuID + " svg > *").remove();
 		    LoadIdleData();
 		});
 	    }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -63,7 +63,7 @@ my $tempdebug    = 0;
 my $last_isalive = 0;
 my $PORT         = 12487;
 my $SERVER       = "boss.emulab.net";
-my $TBOPS        = "testbed-logs\@flux.utah.edu";
+my $TBOPS        = "testbed-ops\@emulab.net";
 my $LOGFILE      = "$LOGDIR/bs-monitor.log";
 my $DATAFILE     = "/var/run/bs-monitor.data";
 my $POWERLOCAL   = "/usr/local/bin/powerlocal";
@@ -341,7 +341,7 @@ sub CheckDeadman($$)
     #
     # Wait with timeout for the ping. 
     #
-    my (@ready) = IO::Select->new($deadmanSocket)->can_read(5);
+    my (@ready) = IO::Select->new($deadmanSocket)->can_read(20);
     if (@ready) {
 	my $client = $deadmanSocket->recv($data, 2048);
 	if (! $client) {

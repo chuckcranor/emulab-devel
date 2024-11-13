@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,6 +87,7 @@ sub createExpectObject($$)
 
     # Host keys change every reload, do not want to save them.
     my $spawn_cmd = "ssh -o userknownhostsfile=/dev/null ".
+	"-o KexAlgorithms='+diffie-hellman-group1-sha1' ".
 	"-l $admin_user $node_id";
 
     $self->dprint(0,"$self createExpectObject($node_id): $spawn_cmd\n");

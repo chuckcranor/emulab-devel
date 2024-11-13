@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2020 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,6 +51,9 @@ my $TBAPPROVAL    = "@TBAPPROVALEMAIL@";
 my $TBAUDIT       = "@TBAUDITEMAIL@";
 my $TBBASE        = "@TBBASE@";
 my $TBWWW         = "@TBWWW@";
+my $OURDOMAIN     = "@OURDOMAIN@";
+my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
+
 my $MIN_UNIX_GID  = @MIN_UNIX_GID@;
 
 # Cache of instances to avoid regenerating them.
@@ -201,6 +204,7 @@ sub Stringify($)
 
     return "[Group: $pid/$gid, IDX: $pid_idx/$gid_idx]";
 }
+sub pidgid($)      { return $_[0]->pid() . "/" . $_[0]->gid(); }
 
 #
 # Perform some updates ...
@@ -370,6 +374,20 @@ sub Delete($)
     }
     
     return 0;
+}
+
+#
+# Equality test for two projects. Not necessary in perl, but good form.
+#
+sub SameGroup($$)
+{
+    my ($self, $other) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! (ref($self) && ref($other)));
+
+    return $self->gid_idx() == $other->gid_idx();
 }
 
 #
@@ -738,16 +756,35 @@ sub AccessCheck($$$)
 	if ($user->IsAdmin() && $access_type != TB_PROJECT_LEADGROUP());
 
     if ($access_type == TB_PROJECT_READINFO()) {
+	#
+	# Group root in the project can see any group.
+	#
+	if (TBMinTrust($self->Trust($user), PROJMEMBERTRUST_GROUPROOT())) {
+	    return 1;
+	}
+	my $project = $self->GetProject();
+	my $leader  = $self->GetLeader();
+	return 1
+	    if ($user->SameUser($leader));
+	
 	$mintrust = PROJMEMBERTRUST_USER();
+	return TBMinTrust($self->Trust($user), $mintrust);
     }
-    elsif ($access_type == TB_PROJECT_MAKEGROUP() ||
+    #
+    # Nothing else is allowed if the project is disabled
+    #
+    if ($self->GetProject()->disabled()) {
+	return 0;
+    }
+    
+    if ($access_type == TB_PROJECT_MAKEGROUP() ||
 	   $access_type == TB_PROJECT_DELGROUP()) {
 	#
 	# Project leader can always do this
 	#
 	if ($access_type == TB_PROJECT_DELGROUP()) {
 	    my $project = $self->GetProject();
-	    my $leader  = $self->GetLeader();
+	    my $leader  = $project->GetLeader();
 	    return 1
 		if ($user->SameUser($leader));
 	}
@@ -756,6 +793,12 @@ sub AccessCheck($$$)
     elsif ($access_type == TB_PROJECT_LEADGROUP()) {
 	#
 	# Allow mere user (in default group) to lead a subgroup.
+	# 
+	$mintrust = PROJMEMBERTRUST_USER();
+    }
+    elsif ($access_type == TB_PROJECT_CREATEPROFILE()) {
+	#
+	# Temporary until we can do per subgroup profiles.
 	# 
 	$mintrust = PROJMEMBERTRUST_USER();
     }
@@ -1121,6 +1164,31 @@ sub GetProject($)
 }
 
 #
+# Generate a URN.
+#
+sub urn($)
+{
+    my ($self) = @_;
+    my $pid  = $self->pid();
+    my $gid  = $self->gid();
+    my ($domain,$id);
+
+    return undef
+	if (!$PGENISUPPORT);
+    require GeniHRN;
+
+    if ($gid eq $pid) {
+	$domain = "${OURDOMAIN}:${pid}";
+	$id = $pid;
+    }
+    else {
+	$domain = "${OURDOMAIN}:${pid}:${gid}";
+	$id = "${pid}//${gid}";
+    }
+    return GeniHRN->new(GeniHRN::Generate($domain, "project", $id));
+}
+
+#
 # Is the user the group leader.
 #
 sub IsLeader($$)
@@ -1146,6 +1214,17 @@ sub GetLeader($)
 	if (! ref($self));
 
     return User->Lookup($self->leader_idx());
+}
+
+sub IsManager($$)
+{
+    my ($self, $user) = @_;
+
+    # Must be a real reference. 
+    return 0
+	if (! (ref($self) && ref($user)));
+
+    return TBMinTrust($self->Trust($user), PROJMEMBERTRUST_GROUPROOT());
 }
 
 #
@@ -1225,7 +1304,8 @@ sub MemberList($$;$$)
 	DBQueryWarn("select distinct m.uid_idx,m.uid,m.trust ".
 		    "   from group_membership as m ".
 		    "where m.pid_idx='$pid_idx' and ".
-		    "      m.gid_idx='$gid_idx' $trust_clause");
+		    "      m.gid_idx='$gid_idx' $trust_clause ".
+		    "order by m.uid_idx");
 
     return -1
 	if (!$query_result);
@@ -1371,6 +1451,18 @@ sub ValidGID($$)
     return TBcheck_dbslot($gid, "groups", "gid",
 			  TBDB_CHECKDBSLOT_WARN()|
 			  TBDB_CHECKDBSLOT_ERROR());
+}
+
+#
+# Return usage records for experiments that have terminated (were running)
+# between two dates.
+#
+sub Usage($$$$)
+{
+    my ($self, $user, $start, $end) = @_;
+    my $project = $self->GetProject();
+    
+    return $project->Usage($self, $user, $start, $end);
 }
 
 ############################################################################

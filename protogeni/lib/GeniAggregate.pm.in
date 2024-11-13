@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -103,7 +103,8 @@ my $TBADB          = "$TB/bin/tbadb";
 my $PUSHROOTKEY	   = "$TB/sbin/pushrootkey";
 my $TEVC	   = "$TB/bin/tevc";
 my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
-my $POKEFRONTEND     = "$TB/sbin/pokerffe";
+my $POKEFRONTEND   = "$TB/sbin/pokerffe";
+my $PORTSTATS      = "$TB/bin/portstats";
 
 # Cache of instances to avoid regenerating them.
 my %aggregates     = ();
@@ -668,9 +669,9 @@ sub SetStateStatus($$$)
     $self->{'AGGREGATE'}->{'status'} = $status;
 
     # Any change, send the event.
-    $self->SendStatusEvent()
-	if ($self->type() eq "Aggregate" && $query_result->affectedrows);
-
+    if ($self->type() eq "Aggregate" && $query_result->affectedrows) {    
+	return $self->SendStatusEvent();
+    }
     return 0;
 }
 
@@ -699,7 +700,7 @@ sub SendStatusEvent($)
     my ($self) = @_;
 
     my $slice = $self->GetSlice();
-    return -1
+    return 1
 	if (!defined($slice));
     
     my $blob = {
@@ -708,10 +709,11 @@ sub SendStatusEvent($)
 	# Fall back to current time if no timestamp yet.
 	"utc"     => $self->status_state_timestamp() || time(),
     };
-    GeniEvent->SendEvent({"type"    => "SLICESTATUS",
-			  "slice"   => $slice->urn(),
-			  "urn"     => $slice->urn(),
-			  "details" => $blob});
+    return -1
+	if (GeniEvent->SendEvent({"type"    => "SLICESTATUS",
+				  "slice"   => $slice->urn(),
+				  "urn"     => $slice->urn(),
+				  "details" => $blob}));
     return 0;
 }
 
@@ -1107,14 +1109,14 @@ sub UseOsSetup($)
 					  $user, $group, undef);
 }
 
-sub Start($$;$)
+sub Start($$;$@)
 {
-    my ($self, $version, $flags) = @_;
+    my ($self, $version, $flags, @slivers) = @_;
 
     if ($self->UseOsSetup()) {
-	return $self->ActionStart($version, $flags);
+	return $self->ActionStart($version, $flags, @slivers);
     }
-    return $self->Action($version, "start", $flags);
+    return $self->Action($version, "start", $flags, @slivers);
 }
 
 sub Restart($$;$)
@@ -1148,11 +1150,50 @@ sub PowerCycle($$;$)
 }
 
 #
+# Determine if SliverAction() can do what the user requested.
+# We need to this before the wrapperfork in the caller.
+#
+sub IsActionAllowed($$$)
+{
+    my ($self, $action, $perrmsg) = @_;
+    my $error;
+
+    if ($action eq "start") {
+	if ($self->state() !~ /^(stopped|new|mixed|interrupted)$/) {
+	    $error = "Sliver is not stopped (yet)";
+	}
+    }
+    elsif ($action =~ /^(stop)$/) {
+	if ($self->state() !~ /^(started|mixed)$/) {
+	    $error = "Sliver is not started (yet)";
+	}
+    }
+    elsif ($action =~ /^(restart|powercycle)$/) {
+	if ($self->state() !~ /^(started|mixed)$/) {
+	    $error = "Sliver is not started or stopped (yet)";
+	}
+    }
+    elsif ($action eq "reload") {
+	if ($self->InRecovery()) {
+	    $error = "Must clear recovery mode before reload";
+	}
+	elsif ($self->state() !~ /^(started|stopped)$/) {
+	    $error = "Sliver is not started or stopped (yet)";
+	}
+    }
+    if (defined($error)) {
+	$$perrmsg = $error;
+	return 0;
+    }
+    return 1;
+}
+
+#
 # New version of start that uses libossetup.
 #
-sub ActionStart($$;$)
+sub ActionStart($$;$@)
 {
-    my ($self, $version, $flags) = @_;
+    my ($self, $version, $flags, @slivers) = @_;
     my $msg = "SliverStart: ";
     my $bootfailure_code = GENIRESPONSE_SETUPFAILURE();
     $flags      = 0 if (!defined($flags));
@@ -1195,14 +1236,17 @@ sub ActionStart($$;$)
 	$msg = "Could not map $self to its creator";
 	goto bad;
     }
-    
-    my @slivers = ();
-    if ($self->SliverList(\@slivers) != 0) {
-	$msg .= "Could not get sliver list for $self";
-	goto bad;
+
+    #
+    # Allow for a list of slivers to come in.
+    #
+    if (!@slivers) {
+	if ($self->SliverList(\@slivers) != 0) {
+	    $msg .= "Could not get sliver list for $self";
+	    goto bad;
+	}
     }
     my %nodes    = ();
-    my @restarts = ();
     my @failed   = ();
     my %imports  = ();
     my $sliver;
@@ -1222,7 +1266,8 @@ sub ActionStart($$;$)
 	# in the started state. We skip those.
 	#
 	next
-	    if ($sliver->state() eq "started");
+	    if ($sliver->state() eq "started" &&
+		!($flags & $ACTION_FLAGS_SYNCVLANS));
 
 	#
 	# If the sliver is stopped, then we do not want to run it through
@@ -1230,10 +1275,8 @@ sub ActionStart($$;$)
 	# Instead we want to bring it back via Restart (which handles this
 	# case).
 	#
-	if ($sliver->state() eq "stopped") {
-	    push(@restarts, $sliver);
-	    next;
-	}
+	next
+	    if ($sliver->state() eq "stopped");
 	
 	my $node = Node->Lookup($sliver->resource_id());
 	if (!defined($node)) {
@@ -1258,6 +1301,22 @@ sub ActionStart($$;$)
 
 	# Back pointer, see below.
 	$node->_sliver($sliver);
+
+	#
+	# If the node is a previous failure, we want to change the
+	# the allocstate so that os_setup actually does something.
+	#
+	if ($sliver->status() eq "failed" && $sliver->state() eq "new") {
+	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_INIT_DIRTY());
+	}
+	elsif ($sliver->state() eq "started" &&
+	       $flags & $ACTION_FLAGS_SYNCVLANS) {
+	    # Tell os_setup to reconfig the nodes instead of reboot.
+	    $node->SetAllocState(TBDB_ALLOCSTATE_RES_RECONFIG());
+	}
+
+	# We do this so the slivers no longer say "ready" in the status.
+	$sliver->SetStatus("changing");
 
 	# Add pnodes for exclusive virtual nodes that are not explicitly
 	# part of the rspec. 
@@ -1368,7 +1427,7 @@ sub ActionStart($$;$)
 	    close(MAP);
 	}
 	
-	if ($pid ne "OAI2021FallWS") {
+	if ($pid ne "@TUTORIALPID@") {
 	    if (system("$GENELISTS -c")) {
 		$msg .= "$GENELISTS failed\n";
 		goto bad;
@@ -1379,7 +1438,7 @@ sub ActionStart($$;$)
 	    $msg .= "$GENTOPOFILE failed\n";
 	    goto bad;
 	}
-	if ($pid ne "OAI2021FallWS") {
+	if ($pid ne "@TUTORIALPID@") {
 	    DebugTimeStamp("exports_setup");
 	    if (system("$EXPORTS_SETUP")) {
 		$msg .= "$EXPORTS_SETUP failed\n";
@@ -1444,7 +1503,9 @@ sub ActionStart($$;$)
     #
     my $snmpit_child;
 
-    if (!$experiment->skipvlans() && VLan->ExperimentHasVLans($experiment)) {
+    if (!$experiment->skipvlans() &&
+	(VLan->ExperimentHasVLans($experiment) ||
+	 $flags & $ACTION_FLAGS_SYNCVLANS)) { 
 	$snmpit_child = fork();
 	if ($snmpit_child) {
 	    #
@@ -1489,6 +1550,9 @@ sub ActionStart($$;$)
 		    $msg .= "Failed to setup vlans";
 		    goto badsnmpit;
 		}
+		if ($pid ne "@TUTORIALPID@") {
+		    system("$PORTSTATS -z -a -q $pid $eid");
+		}
 	    }
 	    DebugTimeStamp("snmpit finished");
 	    # Avoid END block processing
@@ -1502,16 +1566,18 @@ sub ActionStart($$;$)
     }
     
     my @nodes = keys(%nodes);
-    my $rval  = 0;
+    my $os_setup_rval  = 0;
+    my $os_setup_output;
     if (@nodes) {
 	print STDERR "Calling os_setup @nodes\n";
-	$rval = system("$OSSETUP $pid $eid @nodes");
-	print STDERR "os_setup exited with status $rval\n";
+	$os_setup_output = emutil::ExecVerbose("$OSSETUP $pid $eid @nodes");
+	$os_setup_rval = $?;
+	print STDERR "os_setup exited with status $os_setup_rval\n";
 	# Update to get the disk images into the manifest.
 	GeniCM::UpdateManifest($slice);
-	$rval = $rval >> 8;
-	if ($rval == 255) {
-	    $rval = -1;
+	$os_setup_rval = $os_setup_rval >> 8;
+	if ($os_setup_rval == 255) {
+	    $os_setup_rval = -1;
 	}
     }
 
@@ -1525,6 +1591,20 @@ sub ActionStart($$;$)
 	foreach my $node (values(%nodes)) {
 	    $node->_sliver()->SetStatus("canceled")
 		if (defined($node->_sliver()));
+	}
+	#
+	# Must wait for snmpit to finish before we can leave
+	#
+	if (defined($snmpit_child)) {
+	    print STDERR "Waiting for snmpit process to finish\n";
+	    
+	    my $kid = waitpid($snmpit_child, 0);
+	    if ($kid == $snmpit_child) {
+		print STDERR "Waiting for snmpit process done\n";
+	    }
+	    else {
+		print STDERR "Waiting for snmpit process went bad\n";
+	    }
 	}
 	# Reset before return; do not want it left.
 	$slice->LockTables();
@@ -1544,12 +1624,27 @@ sub ActionStart($$;$)
     foreach my $node_id (keys(%nodes)) {
 	my $node = $nodes{$node_id};
 	$node->Refresh();
+	# igevent_daemon is updating the sliver as node events come in
+	$node->_sliver()->Refresh()
+	    if (defined($node->_sliver()));
+
+	#print STDERR "$node eventstate is " . $node->eventstate() . "\n";
 
 	# os_setup will set failed nodes to this state.
 	if ($node->allocstate() eq TBDB_ALLOCSTATE_DOWN()) {
 	    push(@failed, $node);
-	    $node->_sliver()->SetState("failed")
-		if (defined($node->_sliver()));
+
+	    if (defined($node->_sliver())) {
+		$node->_sliver()->SetStatus("failed");
+
+		#
+		# If we made it through reloading, we set the state
+		# so that the user can reload/restart
+		#
+		if ($node->eventstate() eq TBDB_NODESTATE_TBFAILED) {
+		    $node->_sliver()->SetState("started");
+		}
+	    }
 	}
 	else {
 	    $node->_sliver()->SetState("started")
@@ -1557,6 +1652,7 @@ sub ActionStart($$;$)
 	}
 	if (grep {$_ eq $node->eventstate()}
 	    (TBDB_NODESTATE_TBFAILED, TBDB_NODESTATE_RELOADFAILED)) {
+
 	    my $bootlog;
 	    if ($node->GetBootLog(\$bootlog) == 0 && $bootlog ne "") {
 		my $logfile = Logfile->CreateFromString($group, $bootlog);
@@ -1624,11 +1720,26 @@ sub ActionStart($$;$)
 	    goto bad;
 	}
     }
-    if ($rval < 0) {
+    if ($os_setup_rval < 0) {
 	# More serious error. Otherwise if its just that some nodes
 	# failed, we will catch that below.
 	$bootfailure_code = GENIRESPONSE_SETUPFAILURE_OSSETUP();
 	$msg .= "Unable to OS setup nodes\n";
+	#
+	# See if we can find some useful info in the output.
+	#
+	if ($os_setup_output) {
+	    my $oserr = "";
+	    
+	    foreach my $l (split(/\n/, $os_setup_output)) {
+		if ($l =~ /^\s*\*\*\*/) {
+		    $oserr .= $l . "\n";
+		}
+	    }
+	    if ($oserr ne "") {
+		$msg .= "\n" . $oserr;
+	    }
+	}
 	goto bad;
     }
 
@@ -1824,9 +1935,9 @@ sub ActionRestart($$;$)
 # XXX Is is assumed that there is a single toplevel aggregate for the
 # slice, so we can get all the nodes.
 #
-sub Action($$$;$)
+sub Action($$$;$@)
 {
-    my ($self, $version, $action, $flags) = @_;
+    my ($self, $version, $action, $flags, @slivers) = @_;
     my $msg = "Internal Error: ";
     my $bootfailure_code = GENIRESPONSE_SETUPFAILURE();
     my $restart = ($action eq "restart" || $action eq "powercycle" ? 1 : 0);
@@ -1889,10 +2000,11 @@ sub Action($$$;$)
 	goto bad;
     }    
 
-    my @slivers = ();
-    if ($self->SliverList(\@slivers) != 0) {
-	$msg .= "Could not get sliver list for $self";
-	goto bad;
+    if (!@slivers) {
+	if ($self->SliverList(\@slivers) != 0) {
+	    $msg .= "Could not get sliver list for $self";
+	    goto bad;
+	}
     }
     my %reboots  = ();
     my %vnodes   = ();
@@ -2401,6 +2513,7 @@ sub Action($$$;$)
 		$msg .= "Failed to setup vlans";
 		goto bad;
 	    }
+	    system("$PORTSTATS -z -a -q $pid $eid");
 	}
 	if ($experiment->SetupPortLans()) {
 	    $msg .= "Failed to setup shared vlan ports";
@@ -3757,6 +3870,7 @@ sub ComputeState($;$)
 {
     my ($self, $unmix) = @_;
     $unmix = 0 if (!defined($unmix));
+    my $new     = 0;
     my $started = 0;
     my $stopped = 0;
     my $updating= 0;
@@ -3798,7 +3912,10 @@ sub ComputeState($;$)
 	if ($state eq "started") {
 	    $started++;
 	}
-	elsif ($state eq "stopped" || $state eq "new") {
+	elsif ($state eq "new") {
+	    $new++;
+	}
+	elsif ($state eq "stopped") {
 	    $stopped++;
 	}
 	elsif ($state eq "updating_users") {
@@ -3829,9 +3946,6 @@ sub ComputeState($;$)
 	    $self->SetStatus("changing");
 	    return 0;
 	}
-	else {
-
-	}
     }
     my ($newstate,$newstatus);
 
@@ -3842,6 +3956,9 @@ sub ComputeState($;$)
     }
     elsif ($stopped == $count) {
 	$newstate = "stopped";
+    }
+    elsif ($new == $count) {
+	$newstate = "new";
     }
     elsif ($started == $count) {
 	$newstate = "started";
@@ -4669,7 +4786,7 @@ sub Start($$)
 	$self->SetErrorLog($msg);
 	print STDERR "$msg\n";
     }
-    $self->SetState("failed");
+    $self->SetStatus("failed");
     return -1;
 }
 

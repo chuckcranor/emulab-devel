@@ -24,6 +24,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use Data::Dumper;
 
 #
 # Proxy for the blockstore server control program on boss.
@@ -151,7 +152,11 @@ sub pools()
 sub volumes()
 {
     my $vref = freenasVolumeList(1,1);
-    foreach my $vol (keys %{$vref}) {
+    foreach my $vol (sort keys %{$vref}) {
+	if (!exists($vref->{$vol}->{'used'})) {
+	    print STDERR Dumper($vref->{$vol});
+	    exit(1);
+	}
 	my $pool = $vref->{$vol}->{'pool'};
 	my $iname = $vref->{$vol}->{'iname'};
 	my $size = int($vref->{$vol}->{'size'});

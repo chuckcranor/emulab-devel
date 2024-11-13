@@ -323,7 +323,7 @@
    <rect fill="none" stroke="none" x="13994" y="1347" width="3176" height="722"/>
    <g fill="rgb(0,0,0)" stroke="none" font-family="Arial embedded" font-size="423" font-style="normal" font-weight="700">
     <text x="14244" y="1853">
-     <tspan x="14244 14481 14714 14951 15184 15514">2x40Gb</tspan></text>
+     <tspan x="14244 14481 14714 14951 15184 15421 15751">2x100Gb</tspan></text>
    </g>
   </g>
   <g>
@@ -379,16 +379,16 @@
   </g>
   <g id="Drawing_42">
    <rect fill="none" stroke="none" x="20979" y="7148" width="1796" height="646"/>
-   <g fill="rgb(0,0,0)" stroke="none" font-family="Arial embedded" font-size="352" font-style="normal" font-weight="700">
+   <g fill="rgb(0,0,0)" stroke="none" font-family="Arial embedded" font-size="353" font-style="normal" font-weight="700">
     <text x="21229" y="7591">
-     <tspan x="21229 21424 21618 21817 22012 22287">2x10Gb</tspan></text>
+     <tspan x="21229 21424 21623 21817 22016 22287">2x10Gb</tspan></text>
    </g>
   </g>
   <g id="Drawing_43">
    <rect fill="none" stroke="none" x="20962" y="5868" width="1796" height="646"/>
-   <g fill="rgb(0,0,0)" stroke="none" font-family="Arial embedded" font-size="352" font-style="normal" font-weight="700">
+   <g fill="rgb(0,0,0)" stroke="none" font-family="Arial embedded" font-size="353" font-style="normal" font-weight="700">
     <text x="21212" y="6311">
-     <tspan x="21212 21407 21601 21800 21995 22270">2x10Gb</tspan></text>
+     <tspan x="21212 21407 21606 21800 21999 22270">2x10Gb</tspan></text>
    </g>
   </g>
   <g>
@@ -410,9 +410,9 @@
   </g>
   <g id="Drawing_47">
    <rect fill="none" stroke="none" x="5612" y="4598" width="1796" height="646"/>
-   <g fill="rgb(0,0,0)" stroke="none" font-family="Arial embedded" font-size="352" font-style="normal" font-weight="700">
+   <g fill="rgb(0,0,0)" stroke="none" font-family="Arial embedded" font-size="353" font-style="normal" font-weight="700">
     <text x="5862" y="5041">
-     <tspan x="5862 6057 6251 6450 6645 6920">2x10Gb</tspan></text>
+     <tspan x="5862 6057 6256 6450 6649 6920">2x10Gb</tspan></text>
    </g>
   </g>
   <g>

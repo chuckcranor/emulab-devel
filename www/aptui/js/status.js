@@ -5,40 +5,43 @@ $(function ()
 
     var templates = APT_OPTIONS
 	.fetchTemplateList(['status', 'waitwait-modal',
-			    'oops-modal', 'register-modal', 'terminate-modal',
-			    'oneonly-modal', 'approval-modal', 'linktest-modal',
+			    'oops-modal', 'terminate-modal',
+			    'approval-modal', 'linktest-modal',
 			    'linktest-md', "destroy-experiment",
-			    "prestage-table", "frequency-graph"]);
+			    "prestage-table", "frequency-graph", 'txgraph']);
 
     var statusString = templates['status'];
     var waitwaitString = templates['waitwait-modal'];
     var oopsString = templates['oops-modal'];
-    var registerString = templates['register-modal'];
     var terminateString = templates['terminate-modal'];
-    var oneonlyString = templates['oneonly-modal'];
     var approvalString = templates['approval-modal'];
     var linktestString = templates['linktest-modal'];
     var destroyString  = templates['destroy-experiment'];
+
+    // Node/listview colors
+    var READY_COLOR    = "#91E388";
+    var BOOTING_COLOR  = "#fcf8e3";
+    var FAILED_COLOR   = "#e67795";
+    var PENDING_COLOR  = "#75c4e6";
 
     var expinfo     = null;
     var nodecount   = 0;
     var ajaxurl     = null;
     var uuid        = null;
-    var oneonly     = 0;
     var isadmin     = 0;
     var isfadmin    = 0;
-    var isguest     = 0;
     var isstud      = 0;
     var wholedisk   = 0;
     var isscript    = 0;
     var dossh       = 1;
-    var lazytopo    = 0;
+    var dovnc       = 0;
     var jacksIDs    = {};
     var jacksSites  = {};
     var publicURLs  = null;
     var inrecovery  = {};
     var extension_blob    = null;
     var manifests         = {};
+    var jacksManifest     = null;
     var status_collapsed  = false;
     var status_message    = "";
     var status_html       = "";
@@ -47,26 +50,35 @@ $(function ()
     var prestageTemplate  = _.template(templates['prestage-table']);
     var instanceStatus    = "";
     var lastStatus        = "";
+    var lastStatusStamp   = null;
+    var lastStatusBlob    = null;
     var lockdown_code     = "";
     var consolenodes      = {};
     var showlinktest      = false;
     var hidelinktest      = false;
     var projlist          = null;
     var amlist            = null;
-    var lastSliverStatus  = null;
+    var prunetypes        = null;
     var jacksInstance     = null;
     var changingtopo      = false;
     var slowdown          = false;
+    var multisite         = false;
     var radioinfo         = null;
+    var resgroups         = null;
     var radios            = {};
     var monitorTemplate   = null;
     var vncpasswd         = null;
+    var modifying         = false;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+    var SVLAN_NS  = "http://www.geni.net/resources/rspec/ext/shared-vlan/1";
     var GENIRESPONSE_REFUSED = 7;
     var GENIRESPONSE_ALREADYEXISTS = 17;
     var GENIRESPONSE_INSUFFICIENT_NODES = 26;
+    var GENIRESPONSE_NO_MAPPING = 28;
     var MAXJACKSNODES = 300;
+    var PORTALTABCOOKIE = "PortalLastTab";
+    var initialTab = "topology";
 
     // CONFIRM Hack. Fix later.
     var CONFIRMTYPES = [ "c6320", "c8220", "m400", "m510",
@@ -80,21 +92,36 @@ $(function ()
 	}
     }
 
+    function navTabLink(label, tabname)
+    {
+	var html =
+	    "<li class='nav-item'> "+
+	    "  <a class='nav-link' href='#" +
+	        tabname + "' data-toggle='tab' data-bs-toggle='tab'>" +
+	        label + "" +
+	    "<button class='btn btn-small navtab-icon' type='button' " +
+	    "        id='" + tabname + "_kill'>" +
+	    " <span class='glyphicon glyphicon-remove-circle'></span>" +
+	    "</button>" +
+	    "</a>" +
+	    "</li>";	
+	    
+	return html;
+    }
+
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
 	ajaxurl       = window.APT_OPTIONS.AJAXURL;
 	uuid          = window.APT_OPTIONS.uuid;
-	oneonly       = window.APT_OPTIONS.oneonly;
 	isadmin       = window.APT_OPTIONS.isadmin;
 	isfadmin      = window.APT_OPTIONS.isfadmin;
 	isstud        = window.APT_OPTIONS.isstud;
-	isguest       = (window.APT_OPTIONS.registered ? false : true);
 	wholedisk     = window.APT_OPTIONS.wholedisk;
 	dossh         = window.APT_OPTIONS.dossh;
+	dovnc         = window.APT_OPTIONS.dovnc;
 	isscript      = window.APT_OPTIONS.isscript;
 	hidelinktest  = window.APT_OPTIONS.hidelinktest;
-	lazytopo      = window.APT_OPTIONS.lazytopo;
 	lockdown_code = uuid.substr(2, 5);
 
 	// Standard option
@@ -105,44 +132,38 @@ $(function ()
 	    // console.info(projlist);
 	}
 	amlist = decodejson('#amlist-json');
-	console.info(amlist);
+	console.info("amlist", amlist);
 	if (window.ISPOWDER) {
 	    radioinfo = decodejson('#radioinfo-json');
+	    console.info("radioinfo", radioinfo);
 	    monitorTemplate = _.template(templates['frequency-graph']);
 	}
+	prunetypes = decodejson('#prunelist-json');
+	console.info("prunetypes", prunetypes);
+	resgroups = decodejson('#resgroup-json');
+	console.info("resgroups", resgroups);
 
+	if (LastKnownUserTab() == "listview") {
+	    initialTab = "listview";
+	}
+	
 	/*
 	 * Need to grab the experiment info so we can draw the page.
 	 */
-	sup.CallServerMethod(null, "status", "ExpInfo",
-			     {"uuid" : uuid},
-			     function(json) {
-				 console.info("expinfo", json);
-				 if (json.code) {
-				     console.info("Could not get experiment "+
-						  "info: " + json.value);
-				     return;
-				 }
-				 expinfo = json.value;
-				 GeneratePageBody();
-			     });
+	LoadExperimentInfo(function () {
+	    GeneratePageBody();
+	});
     }
 
     function GeneratePageBody()
     {
 	instanceStatus  = expinfo.status;
 	extension_blob  = expinfo.extension_info;
-
-	// For tutorials
-	if (expinfo.project == "OAI2021FallWS") {
-	    slowdown = true;
-	}
 	
 	// Generate the templates.
 	var template_args = {
 	    uuid:		uuid,
 	    expinfo:            expinfo,
-	    registered:		window.APT_OPTIONS.registered,
 	    isadmin:            window.APT_OPTIONS.isadmin,
 	    isfadmin:           window.APT_OPTIONS.isfadmin,
 	    isstud:             window.APT_OPTIONS.isstud,
@@ -154,12 +175,11 @@ $(function ()
 	$('#status-body').html(html);
 	$('#waitwait_div').html(waitwaitString);
 	$('#oops_div').html(oopsString);
-	$('#register_div').html(registerString);
 	$('#terminate_div').html(terminateTemplate(template_args));
-	$('#oneonly_div').html(oneonlyString);
 	$('#approval_div').html(approvalString);
 	$('#linktest_div').html(linktestString);
 	$('#destroy_div').html(destroyString);
+	$('#txgraph_div').html(templates["txgraph"]);
 	
 	// Not allowed to copy repobased profiles.
 	if (expinfo.repourl) {
@@ -178,7 +198,7 @@ $(function ()
 	});
 	ProgressBarUpdate();
 
-	if (!slowdown) {
+	if (!expinfo.istutorial) {
 	    // Periodic check for max allowed extension
 	    LoadMaxExtension();
 	    setInterval(LoadMaxExtension, 3600 * 1000);
@@ -192,6 +212,7 @@ $(function ()
 	$('[data-toggle="tooltip"]').tooltip({
 	    placement: 'top',
 	});
+	StartStatusWatch();
 
 	// Use an unload event to terminate any shells.
 	$(window).bind("unload", function() {
@@ -210,16 +231,11 @@ $(function ()
 	    });
 	});
 
-	// Take the user to the registration page.
-	$('button#register-account').click(function (event) {
-	    event.preventDefault();
-	    sup.HideModal('#register_modal');
-	    var uid   = expinfo.creator;
-	    var email = expinfo.creator_email;
-	    var url   = "signup.php?uid=" + uid + "&email=" + email + "";
-	    var win   = window.open(url, '_blank');
-	    win.focus();
-	});
+	sup.addPopoverClip('.status-page-link',
+			   function (target) {
+			       var url = window.location.href;
+			       return sup.popoverClipContent(url);
+			   });
 
 	// Setup the extend modal.
 	$('button#extend_button').click(function (event) {
@@ -243,7 +259,7 @@ $(function ()
 		return;
 	    }
             ShowExtendModal(uuid,
-			    RequestExtensionCallback, isstud, isguest, expinfo);
+			    RequestExtensionCallback, isstud, false, expinfo);
 	});
 	
 	// Handler for the refresh button
@@ -263,6 +279,14 @@ $(function ()
 	    event.preventDefault();
 	    IgnoreFailure();
 	});
+	// Handler for the modify experiment button. Only parameterized profiles
+	if (expinfo.paramdefs && window.APT_OPTIONS.canmodify) {
+	    $('button#modify_experiment_button').click(function (event) {
+		event.preventDefault();
+		Modify();
+	    });
+	}
+
 
 	// Terminate an experiment.
 	$('button#terminate').click(function (event) {
@@ -333,7 +357,7 @@ $(function ()
 		    .addClass("glyphicon-chevron-right");
 
 	    });
-	if (instanceStatus == "ready") {
+	if (0 && instanceStatus == "ready") {
 	    $('#profile_status_collapse').collapse("hide");
  	    $('#profile_status_collapse').trigger('hide.bs.collapse');
 	}
@@ -351,21 +375,62 @@ $(function ()
 	$('#quicktabs_ul li a').on('shown.bs.tab', function (event) {
 	    window.APT_OPTIONS.gaTabEvent("show",
 					  $(event.target).attr('href'));
+	    RememberUserTab($(event.target).attr('href'));
 	});
 	$('#prestage-panel .info-button').click(function (event) {
 	    event.preventDefault();
 	    sup.ShowModal('#prestage-info-modal');
 	});
+	/*
+	 * The listview table header initialization, only once. 
+	 */
+	$('#listview_table')
+	    .tablesorter({
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
+	    });
+		
+	// Handler for select/deselect all rows in the list view.
+	$('#select-all')
+	    .change(function () {
+		if ($(this).prop("checked")) {
+		    $('#listview_table [name=select]')
+			.prop("checked", true);
+		}
+		else {
+		    $('#listview_table [name=select]')
+			.prop("checked", false);
+		}
+	    });
+	// Handler for the action menu next to the select-all checkbox:
+	// Foreign admins do not get a menu, but easier to just hide it.
+	if (isfadmin) {
+	    $('#listview-action-menu').addClass("invisible");
+	}
+	else {
+	    $('#listview-action-menu li a')
+		.click(function (e) {
+		    window.APT_OPTIONS.gaButtonEvent(e);
+		    var checked = [];
+
+		    // Get the list of checked nodes.
+		    $('#listview_table [name=select]').each(function() {
+			if ($(this).prop("checked")) {
+			    checked.push($(this).attr("id"));
+			}
+		    });
+		    if (checked.length) {
+			ActionHandler($(e.target).attr("name"), checked);
+		    }
+		});
+	}
 	
         addTutorialNotifyTab('profile');
         addTutorialNotifyTab('listview');
         addTutorialNotifyTab('manifest');
         addTutorialNotifyTab('Idlegraphs');
 	StartCountdownClock(expinfo.expires);
-	StartStatusWatch();
-	if (window.APT_OPTIONS.oneonly) {
-	    sup.ShowModal('#oneonly-modal');
-	}
 	if (window.APT_OPTIONS.thisUid == expinfo.creator &&
 	    expinfo.extension_info.extension_denied) {
 	    ShowExtensionDeniedModal();
@@ -404,7 +469,8 @@ $(function ()
     function StartStatusWatch()
     {
 	GetStatus();
-	statusID = setInterval(GetStatus, (slowdown ? 20000 : 5000));
+	statusID = setInterval(GetStatus,
+                               (window.APT_OPTIONS.slowdown ? 30000 : 5000));
     }
     
     function GetStatus()
@@ -414,9 +480,10 @@ $(function ()
 	// Clearly not thread safe, but its okay.
 	if (statusBusy || statusHold)
 	    return;
-	statusBusy = 1;
 	
 	var callback = function(json) {
+            lastStatusStamp = new Date();
+            
 	    // Watch for logged out, stop the loop. User will need to reload.
 	    if (json.code == 222) {
 		clearInterval(statusID);
@@ -435,6 +502,24 @@ $(function ()
 		});
 	    }
 	}
+        /*
+         * Watch for a buried tab/window. Slow down polling since it is hard
+         * on the server. But not completely, switch from every five seconds
+         * to every few minutes.
+         */
+        if (document.hidden !== undefined &&
+            document.hidden && lastStatusStamp) {
+            var diff = (new Date().getTime() - lastStatusStamp) / 1000;
+            if (0) {
+                console.info("we are hidden and have not updated status for " +
+                             diff + " seconds");
+            }
+            if (diff < 120) {
+                //console.info("Skipping this status call");
+                return;
+            }
+        }
+	statusBusy = 1;
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
 					    "GetInstanceStatus",
@@ -449,6 +534,8 @@ $(function ()
     // Call back for above.
     function StatusWatchCallBack(json, donefunc)
     {
+	window.EXPSTATUS = json;
+	
 	//console.info("StatusWatchCallBack: ", json);
 	if (json.code) {
 	    // GENIRESPONSE_SEARCHFAILED
@@ -462,6 +549,11 @@ $(function ()
 	else {
 	    instanceStatus = json.value.status;
 	}
+	// Clear this since it is transient.
+	if (instanceStatus != "pending") {
+	    $('#pending-panel').addClass("hidden");
+	}
+	
 	// The urls can show up at any time cause of async/early return.
 	if (_.has(json.value, "sliverstatus")) {
 	    ShowSliverURLs(json.value.sliverstatus);
@@ -483,16 +575,17 @@ $(function ()
 	    expinfo.paniced = 1;
 	    instanceStatus = "quarantined";
 	}
-	if (instanceStatus != lastStatus || instanceStatus == "created") {
+	if (instanceStatus != lastStatus || instanceStatus == "created" ||
+	    json.value.canceled) {
             APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
 	    //console.info("New Status: ", json);
 	
 	    status_html = json.value.status;
 
-	    var bgtype = "panel-info";
+	    var bgtype = "panel-info card-info";
 	    status_message = "Please wait while we get your experiment ready";
 
-	    // Ditto the logfile.
+	    // Ditto the logfile, which can change.
 	    if (_.has(json.value, "logfile_url")) {
 		ShowLogfile(json.value.logfile_url);
 	    }
@@ -503,14 +596,11 @@ $(function ()
 		     _.has(json.value, "delayedCount")) {
 		status_html = "waiting";
 		ProgressBarUpdate();
-		if (json.value.delayedCount > 1) {
+		if (json.value.delayedCount) {
 		    var count = json.value.delayedCount;
 
 		    status_message = "Portal is very busy, there are " +
 			count + " experiments waiting. ";
-		}
-		else {
-		    status_message = "Portal is very busy, waiting a moment. ";
 		}
 		status_message += "Patience please!";
 	    }
@@ -519,12 +609,24 @@ $(function ()
 		ProgressBarUpdate();
 		ShowRspec();
 		ShowBindings();
-		status_message = "Some or all aggregates currently unreachable";
+		status_message = "Your experiment cannot be instantiated " +
+		    "yet, trying again in a few minutes.";
+		ShowPendingInfo(json.value);
 	    }
 	    else if (instanceStatus == 'scheduled') {
 		status_html = "scheduled";
 		ProgressBarUpdate();
 		status_message = "Your experiment is scheduled to start later";
+	    }
+	    else if (instanceStatus == 'rdzwait') {
+		status_html = "RDZ Wait (<span class='text-info'>" +
+		    "requesting spectrum from the RDZ</span>" + ")";
+		ProgressBarUpdate();
+		ShowRspec();
+		ShowBindings();
+		status_message =
+		    "Your experiment is delayed while we request spectrum " +
+		    "from the RDZ";
 	    }
 	    else if (instanceStatus == 'prestaging') {
 		status_html = "prestaging";
@@ -533,6 +635,9 @@ $(function ()
 	    }
 	    else if (instanceStatus == 'provisioning') {
 		status_html = "provisioning";
+		if (json.value.canceled) {
+		    status_html += " (but canceled)";
+		}
 		ProgressBarUpdate();
 	    }
 	    else if (instanceStatus == 'provisioned') {
@@ -545,94 +650,135 @@ $(function ()
 		    status_html += " (but some aggregates deferred)";
 		}
 	    }
-	    else if (json.value.canceled) {
+	    else if (json.value.canceled &&
+		     !(instanceStatus == 'terminating' ||
+		       instanceStatus == 'terminated')) {
+		bgtype = "panel-warning card-warning";
 		status_message = "Your experiment has been canceled!";
 		status_html = "<font color=red>canceled</font>";
 		ProgressBarUpdate();
 	    }
 	    else if (instanceStatus == 'ready') {
-		bgtype = "panel-success";
-		status_message = "Your experiment is ready!";
+		bgtype = "panel-success card-success";
+		status_message = "Your experiment is ready";
+		var qualifier = null;
 
 		if (servicesExecuting(json.value)) {
 		    status_html = "<font color=green>booted</font>";
-		    status_html += " (startup services are still running)";
+		    qualifier = " (startup services are still running)";
 		}		
 		else {
 		    status_html = "<font color=green>ready</font>";
 		    if (aggregatesDeferred(json.value)) {
-			status_html += " (but some aggregates deferred)";
+			qualifier += " (but some aggregates deferred)";
 		    }
 		}
-		if (lastStatus == "failed") {
-		    $('#error_panel').addClass("hidden");
-		    $('#ignore-failure').addClass("hidden");
+		if (qualifier) {
+		    status_html    += qualifier;
+		    status_message += qualifier;
 		}
+		UpdateGeneralError(null);
+		$('.ignore-failure').addClass("hidden");
+
+		// Reload in case we are here cause of a modify.
+		LoadExperimentInfo();
 		ProgressBarUpdate();
 		ShowIdleDataTab();
 		if (json.value.haveopenstackstats) {
 		    ShowOpenstackTab();
 		}
+		if (expinfo.paramdefs && window.APT_OPTIONS.canmodify) {
+		    $('#modify_experiment_button').removeClass("hidden");
+		}
 	    }
 	    else if (instanceStatus == 'failed') {
-		bgtype = "panel-danger";
+		bgtype = "panel-danger card-danger";
+		status_message = "Something went wrong!";
 
-		if (_.has(json.value, "reason")) {
-		    status_message = "Something went wrong!";
-		    $('#error_panel_text').text(json.value.reason);
-		    $('#error_panel').removeClass("hidden");
+                console.info("status=failed", json);
+
+                /*
+                 * Sliver failures override the general error.
+                 */
+                var failed = 0;
+                
+		if (_.has(json.value, "sliverstatus")) {
+                    _.each(json.value.sliverstatus, function (info, urn) {
+                        if (info.status == "failed") {
+                            failed++;
+                        }
+                    });
+                }
+		if (!failed) {
+		    if (_.has(json.value, "output")) {
+			UpdateGeneralError(json.value.output);
+		    }
+		    else if (_.has(json.value, "message")) {
+			UpdateGeneralError(json.value.message);
+		    }
+		    else {
+			UpdateGeneralError(null);
+		    }
 		}
 		else {
-		    status_message = "Something went wrong, sorry! " +
-			"We've been notified.";
+                    if (json.value.failedslivers == 0 &&
+		        _.has(json.value, "message")) {
+			UpdateGeneralError(json.value.message);
+                    }
+                    else {
+		        UpdateGeneralError(null);
+                    }
 		}
-		if (_.has(json.value, "code") &&
-		    json.value.code == GENIRESPONSE_INSUFFICIENT_NODES) {
-		    $('#error_panel .resource-error').removeClass("hidden");
-		}
+		    
 		if (json.value.canclearerror) {
-		    $('#ignore-failure').removeClass("hidden");
+		    $('.ignore-failure').removeClass("hidden");
 		}
-		
 		status_html = "<font color=red>failed</font>";
 		ProgressBarUpdate();
 	    }
 	    else if (instanceStatus == 'quarantined') {
-		bgtype = "panel-warning";
+		bgtype = "panel-warning card-warning";
 		status_message = "Your experiment has been quarantined";
 		status_html = "<font color=red>quarantined</font>";
 		ProgressBarUpdate();
+		ShowIdleDataTab();
 	    }
 	    else if (instanceStatus == 'imaging') {
-		bgtype = "panel-warning";
+		bgtype = "panel-warning card-warning";
 		status_message = "Your experiment is busy while we  " +
 		    "copy your disk";
 		status_html = "<font color=red>imaging</font>";
 	    }
 	    else if (instanceStatus == 'linktest') {
-		bgtype = "panel-warning";
+		bgtype = "panel-warning card-warning";
 		status_message = "Your experiment is busy while we  " +
 		    "run linktest";
 		status_html = "<font color=red>linktest</font>";
 	    }
 	    else if (instanceStatus == 'imaging-failed') {
-		bgtype = "panel-danger";
+		bgtype = "panel-danger card-danger";
 		status_message = "Your disk image request failed!";
 		status_html = "<font color=red>imaging-failed</font>";
 	    }
 	    else if (instanceStatus == 'terminating' ||
 		     instanceStatus == 'terminated') {
 		status_html = "<font color=red>" + instanceStatus + "</font>";
-		bgtype = "panel-danger";
+		bgtype = "panel-danger card-danger";
 		status_message = "Your experiment has been terminated!";
 		StartCountdownClock.stop = 1;
 		if (lastStatus == "failed") {
-		    $('#ignore-failure').addClass("hidden");
+		    $('.ignore-failure').addClass("hidden");
+		}
+		if (json.value.rdz_status == "revoked" ||
+		    (lastStatusBlob && lastStatusBlob.rdz_status == "revoked")) {
+		    status_html +=
+			" <font color=red>" +
+			"(<b>The RDZ has revoked your spectrum</b>)</font>";
 		}
 	    }
 	    else if (instanceStatus == "unknown") {
 		status_html = "<font color=red>" + instanceStatus + "</font>";
-		bgtype = "panel-warning";
+		bgtype = "panel-warning card-warning";
 		status_message = "The server is temporarily unavailable. " +
 		    "Please check back later.";
 	    }
@@ -650,19 +796,31 @@ $(function ()
 	    }
 	    $("#status_panel")
 		.removeClass('panel-success panel-danger ' +
-			     'panel-warning panel-default panel-info')
+			     'panel-warning panel-default panel-info ' +
+			     'card-success card-danger ' +
+			     'card-warning card-default card-info')
 		.addClass(bgtype);
 	    UpdateButtons(instanceStatus);
 	}
 	else if (lastStatus == "ready" && instanceStatus == "ready") {
+	    status_message = "Your experiment is ready";
 	    if (servicesExecuting(json.value)) {
 		status_html = "<font color=green>booted</font>";
 		status_html += " (startup services are still running)";
+		status_message += " (startup services are still running)";
 	    }		
 	    else {
 		status_html = "<font color=green>ready</font>";
 		if (aggregatesDeferred(json.value)) {
 		    status_html += " (but some aggregates deferred)";
+		    status_message += " (but some aggregates deferred)";
+		}
+		else {
+		    // For Selenium.
+		    if (! $('#execute-services-done').length) {
+			$('body').append("<div class='hidden' " +
+				 " id='execute-services-done'></div>");
+		    }
 		}
 	    }
 	}
@@ -694,21 +852,37 @@ $(function ()
 	    /*
 	     * Watch for a change in the aggregates that requires that
 	     * we clean the topology/list tabs and draw new ones. Basically,
-	     * need to compare against last time, and look for deletions.
+	     * need to compare against last time and look for changes.
 	     */
-	    if (lastSliverStatus != null) {
+	    if (lastStatusBlob != null) {
+		var newSliverStatus  = json.value.sliverstatus;
+		var lastSliverStatus = lastStatusBlob.sliverstatus;
+		
 		$.each(lastSliverStatus , function(urn) {
-		    if (!_.has(json.value.sliverstatus, urn)) {
+		    if (!_.has(newSliverStatus, urn)) {
 			console.info("Topology has changed: " +
 				     urn + " removed");
 			changingtopo = true;
 		    }
+
 		});
-		$.each(json.value.sliverstatus, function (urn) {
+		$.each(newSliverStatus, function (urn) {
 		    if (!_.has(lastSliverStatus, urn)) {
 			console.info("Topology has changed: " +
 				     urn + " added");
 			changingtopo = true;
+		    }
+		});
+		_.each(lastSliverStatus, function(lastinfo, urn) {
+		    if (_.has(newSliverStatus, urn)) {
+			var hadmanifest = lastinfo.havemanifest;
+			var hasmanifest = newSliverStatus[urn].havemanifest;
+
+			if (hadmanifest && !hasmanifest) {
+			    console.info("Topology has changed: " +
+					 urn + " manifest has been removed");
+			    changingtopo = true;
+			}
 		    }
 		});
 	    }
@@ -717,7 +891,7 @@ $(function ()
 		// Do this after updates for manifest, which is async.
 		UpdateSliverStatus(json.value.sliverstatus);
 		// Also save the sliverstatus so we can detect changes
-		lastSliverStatus = json.value.sliverstatus;
+		lastStatusBlob = json.value;
 		// Async activity is now done, we can tell the caller.
 		// Be nice to use a promise, but have not figured them out yet
 		donefunc();
@@ -742,6 +916,9 @@ $(function ()
 	var snapshot;
 	var destroy;
 	var release = 0;
+	var modify  = 0;
+	var portstats = 0;
+	var connectshared = 0;
 
 	switch (status)
 	{
@@ -758,13 +935,14 @@ $(function ()
 	    case 'provisioned':
 	    case 'scheduled':
 	    case 'pending':
+	    case 'rdzwait':
 	        refresh = reloadtopo = extend = snapshot = destroy = 0;
   	        terminate = 1;
   	        break;
 	    
 	    case 'ready':
 	        terminate = refresh = reloadtopo = extend = snapshot = 1;
-	        destroy = 1;
+	        destroy = modify = portstats = connectshared = 1;
   	        break;
 
 	    case 'quarantined':
@@ -794,6 +972,9 @@ $(function ()
 	ButtonState('snapshot', snapshot);
 	ButtonState('destroy', destroy);
 	ButtonState('release', release);
+	ButtonState('modify', modify);
+	ButtonState('portstats', portstats);
+	ButtonState('connect-sharedlan', connectshared);
 	ToggleLinktestButtons(status);
     }
     function EnableButton(button)
@@ -829,6 +1010,12 @@ $(function ()
 	    button = "#linktest-modal-button";
 	else if (button == "stop-linktest")
 	    button = "#linktest-stop-button";
+	else if (button == "connect-sharedlan")
+	    button = "#connect-sharedlan-button";
+	else if (button == "modify")
+	    button = "#modify_experiment_button";
+	else if (button == "portstats")
+	    button = "#portstats-button";
 	else
 	    return;
 
@@ -944,9 +1131,10 @@ $(function ()
     function RequestExtensionCallback(json)
     {
 	var message;
-	
+
 	if (json.code) {
 	    if (json.code == 2) {
+		ReloadExpiration();
 		$('#approval_text').html(json.value);
 		sup.ShowModal('#approval_modal');
 		return;
@@ -954,11 +1142,8 @@ $(function ()
 	    sup.SpitOops("oops", json.value);
 	    return;
 	}
-	var expiration = json.value.expiration;
-	$("#quickvm_expires").html(moment(expiration).format('lll'));
-	// Reset the countdown clock.
-	StartCountdownClock.reset = expiration;
-
+	ReloadExpiration();
+	
 	// Warn the user if we granted nothing.
 	if (json.value.granted == 0) {
 	    if (json.value.message != "") {
@@ -975,6 +1160,29 @@ $(function ()
 	    }
 	    sup.ShowModal('#no-extension-granted-modal');
 	}
+	else if (json.value.warning != "") {
+	    $('#extension-warning-modal .reason')
+		.html(json.value.warning);
+	    sup.ShowModal('#extension-warning-modal');
+	}
+    }
+
+    /*
+     * Reload the expiration by getting the latest expinfo and checking
+     * to see if it changed. If so, reset the countdown.
+     */
+    function ReloadExpiration()
+    {
+	var expiration = expinfo.expires;
+
+	LoadExperimentInfo(function () {
+	    if (expinfo.expires != expiration) {
+		$("#quickvm_expires")
+		    .html(moment(expinfo.expires).format('lll'));
+		// Reset the countdown clock.
+		StartCountdownClock.reset = expinfo.expires;
+	    }
+	});
     }
 
     //
@@ -1047,14 +1255,27 @@ $(function ()
     // Helper for above and called from the status callback.
     function UpdateSliverStatus(statusblob)
     {
+	// Update the error information panel.
+	UpdateErrorPanel(statusblob);
+
 	if (nodecount > MAXJACKSNODES) {
 	    return;
 	}
+	//console.info("UpdateSliverStatus", statusblob);
+
 	$.each(statusblob , function(urn, iblob) {
 	    // Will not have node details until manifest is ready.
 	    if (!_.has(iblob, "details")) {
 		if (iblob.deferred != 0) {
 		    deferAggregate(iblob);
+		}
+		else if (iblob.status == "failed") {
+		    failedAggregate(iblob);
+		}
+		else if (iblob.status == "terminated" ||
+			 iblob.status == "canceled") {
+		    TerminatedAggregate(iblob.status, urn);
+		    return;
 		}
 		return;
 	    }
@@ -1067,8 +1288,13 @@ $(function ()
 		OfflineAggregate(urn);
 		return;
 	    }
+	    if (iblob.status == "failed") {
+		failedAggregate(iblob);
+	    }
 	    $.each(iblob.details, function(node_id, details) {
 		var jacksID  = jacksIDs[node_id];
+		//console.info("iblob", node_id, jacksID, details);
+		
 		// No manifest yet for this node.
 		if (jacksID === undefined) {
 		    return;
@@ -1095,7 +1321,7 @@ $(function ()
 		//console.info(node_id + " has changed", details, jacksID);
 		oldStatusDetails[node_id] = details;
 		
-		// Is the node in recovery. Panic mode does not count.
+		// Is the node ain recovery. Panic mode does not count.
 		var recovery = false;
 		if (!expinfo.paniced &&
 		    _.has(details, "recovery") && details.recovery != 0) {
@@ -1111,160 +1337,175 @@ $(function ()
 
 		if (details.status == "ready") {
 		    // Greenish.
-		    var color = "#91E388";
+		    var color = READY_COLOR;
 		    if (recovery) {
 			// warning
-			color = "#fcf8e3";
+			color = BOOTING_COLOR;
 		    }
-		    $('#' + jacksID + ' .node .nodebox')
-			.css("fill", color);
-		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
-		      '#listview-row-' + node_id + ' td[name="client_id"]')
-			.css("color", "#3c763d;");
+		    UpdateNodeColor(node_id, jacksID, color)
 		}
 		else if (details.status == "failed") {
 		    // Bootstrap bg-danger color
-		    $('#' + jacksID + ' .node .nodebox')
-			.css("fill", "#e67795");
-		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
-		      '#listview-row-' + node_id + ' td[name="client_id"]')
-			.css("color", "#a94442");
+		    UpdateNodeColor(node_id, jacksID, FAILED_COLOR);
 		}
 		else {
 		    // Bootstrap bg-warning color
-		    $('#' + jacksID + ' .node .nodebox')
-			.css("fill", "#fcf8e3");
-		    $('#listview-row-' + node_id + ' td[name="node_id"], ' +
-		      '#listview-row-' + node_id + ' td[name="client_id"]')
-			.css("color", "");
+		    UpdateNodeColor(node_id, jacksID, BOOTING_COLOR);
 		}
 		var cluster_id = amlist[urn].nickname;
-		
-		var html =
-		    "<table class='table table-condensed border-none'><tbody> " +
-		    "<tr><td class='border-none'>Node:</td><td class='border-none'>" +
-		        details.component_urn + "</td></tr>" +
-		    "<tr><td class='border-none'>ID:</td><td class='border-none'>" +
-		        details.client_id + "</td></tr>" +
-		    "<tr><td class='border-none'>Cluster:</td><td class='border-none'>" +
-		        cluster_id + "</td></tr>" +
-		    "<tr><td class='border-none'>Status:</td><td class='border-none'>" +
-   		    (recovery ? "<b>recovery</b>" : details.status) +
-		          "</td></tr>" +
-		    "<tr><td class='border-none'>Raw State:</td>" +
-		        "<td class='border-none'>" +
-		    details.rawstate + "</td></tr>";
+		var popover = $('#node-popover-template').clone();
+
+		$(popover).find(".node-popover-node")
+		    .html(details.component_urn);
+		$(popover).find(".node-popover-id")
+		    .html(details.client_id);
+		$(popover).find(".node-popover-cluster")
+		    .html(cluster_id);
+		$(popover).find(".node-popover-status")
+		    .html(recovery ? "<b>recovery</b>" : details.status);
+		$(popover).find(".node-popover-state")
+		    .html(details.state);
+		$(popover).find(".node-popover-rawstate")
+		    .html(details.rawstate);
 
 		if (_.has(details, "frisbeestatus")) {
 		    var mb_written = details.frisbeestatus.MB_written;
 		    var imagename  = details.frisbeestatus.imagename;
-		    html = html +
-			"<tr><td class='border-none'>Image:</td>" +
-		        "    <td class='border-none'>" +
-		              imagename + "</td></tr>" +
-			"<tr><td class='border-none'>Written:</td>" +
-		        "    <td class='border-none'>" +
-		              mb_written + " MB</td></tr>";			
+
+		    $(popover).find(".node-popover-frisbee-status")
+			.removeClass("hidden");
+		    $(popover).find(".node-popover-frisbee-image")
+			.html(imagename);
+		    $(popover).find(".node-popover-frisbee-written")
+			.html(mb_written + " MB");
 		}
 		if (_.has(details, "execute_state")) {
 		    var tag;
 		    var icon;
+		    var color;
 			
 		    if (details.execute_state == "running") {
 			tag  = "Running";
 			icon = "record8.svg";
+			color= BOOTING_COLOR;
+			MarkServicesWarning(details.client_id);
 		    }
 		    else if (details.execute_state == "exited") {
 			if (details.execute_status != 0) {
 			    tag  = "Exited (" + details.execute_status + ")";
 			    icon = "cancel22.svg";
+			    color= FAILED_COLOR;
 			}
 			else {
 			    tag  = "Finished";
 			    icon = "check64.svg";
+			    color= READY_COLOR;
 			}
+			ClearServicesWarning(details.client_id);
 		    }
 		    else {
 			tag  = "Pending";
 			icon = "button14.svg"
+			color= PENDING_COLOR;
 		    }
-		    html += "<tr><td class='border-none'>Startup Service:</td>" +
-			"<td class='border-none'>" + tag + "</td></tr>";
-		    
-		    $('#' + jacksID + ' .node .node-status')
-		        .css("visibility", "visible");
-
-		    if (!$('#' + jacksID +
-			   ' .node .node-status-icon').length) {
-			$('#' + jacksID + ' .node .node-status')
-		            .append(svgimg.cloneNode());
-		    }
-		    $('#' + jacksID + ' .node .node-status-icon')
-			.attr("href", "fonts/" + icon);
-		    
-		    if ($('#' + jacksID + ' .node .node-status-icon')
-			.data("bs.tooltip")) {
-			$('#' + jacksID + ' .node .node-status-icon')
-			    .data("bs.tooltip").options.title = tag;
-		    }
-		    else {
-			$('#' + jacksID + ' .node .node-status-icon')
-			    .tooltip({"title"     : tag,
-				      "trigger"   : "hover",
-				      "html"      : true,
-				      "container" : "body",
-				      "placement" : "auto right",
-				     });
-		    }
-		    $('#listview-row-' + node_id + ' td[name="startup"]')
+		    $(popover).find(".node-popover-execute-service")
+			.removeClass("hidden");
+		    $(popover).find(".node-popover-execute-status")
 			.html(tag);
+		    
+		    UpdateNodeIcon(node_id, jacksID, icon);
+
+		    $('#listview-row-' + node_id + ' td[name="startup"]')
+			.html(tag)
+			.css("background", color);
 		}
-		html += "</tbody></table>";
-		UpdateNodePopover(node_id, jacksID, html);
+		UpdateNodePopover(node_id, jacksID, $(popover).html());
 	    });
 	});
     }
 
-    // Update the popover the node icon box
+    function jacksNodeBox(jacksID)
+    {
+	return $('#' + jacksID, jacksInstance.iframe());
+    }
+
     function UpdateNodePopover(node_id, jacksID, html)
     {
-	//console.info("UpdateNodePopover", node_id, jacksID, html);
-	
-	if ($('#' + jacksID).data("bs.popover")) {
-	    $('#' + jacksID).data("bs.popover").options.content = html;
+	//console.info("UpdateNodePopover", node_id, jacksID);
+	var jacksbox = jacksNodeBox(jacksID);
+	var popid    = '#popover-' + jacksID;
 
-	    var isVisible = $('#' + jacksID)
-		.data('bs.popover').tip().hasClass('in');
-	    
-	    if (isVisible) {
-		$('#' + jacksID)
-		    .data('bs.popover').tip()
-		    .find('.popover-content').html(html);
+	// See https://popper.js.org/docs/v2/virtual-elements/ for an
+	// explaination of this stuff. 
+	var generateGetBoundingClientRect =
+	    function(x = 0, y = 0, w = 75, h = 85) {
+		return () => ({
+		    width: w,
+		    height: h,
+		    left: x,
+		    top: y,
+		    right: x + w,
+		    bottom: y + h,
+		});
+	    };
+
+	const virtualElement = {
+	    getBoundingClientRect: generateGetBoundingClientRect(),
+	};
+
+	if ($(popid).length) {
+	    var popover = bootstrap.Popover.getInstance(popid);
+	    var actual = $(popid).attr("aria-describedby");
+	    $(popid).popover('hide');
+	    popover.setContent({'.popover-body': html});
+	    if (actual) {
+		$(jacksbox).trigger("mouseenter");
 	    }
 	}
 	else {
-	    $('#' + jacksID)
+	    $(jacksbox).on("mouseenter", function (event) {
+		var ipos    = $('#showtopo_statuspage').offset();
+		var boxpos  = $(jacksbox).offset();
+		var ptop    = Math.floor(boxpos.top + ipos.top);
+		var pleft   = Math.floor(boxpos.left + ipos.left);
+		var jwidth  = $(jacksbox).width();
+		var jheight = $(jacksbox).height();
+		ptop -= $(window).scrollTop();
+		
+		//console.info(ipos, pleft, ptop, jwidth, jheight);
+		virtualElement.getBoundingClientRect =
+		    generateGetBoundingClientRect(pleft, ptop);
+		
+		$(popid).popover('update');
+		$(popid).popover('show');
+	    });
+	    $(jacksbox).on("mouseleave", function (event) {
+		$(popid).popover('hide');
+	    });
+	    $(jacksbox).on("click", function (event) {
+		$(popid).popover('hide');
+	    });
+	    
+	    $("body")
+		.append("<div id=popover-" + jacksID + " " +
+			"class='node-popover'></div>");
+
+	    $(popid)
 		.popover({"content"   : html,
-			  "trigger"   : "hover",
+			  "trigger"   : "manual",
+			  "animation" : false,
 			  "html"      : true,
-			  "container" : "body",
 			  "placement" : "auto",
+			  "container" : 'body',
+			  "reference" : virtualElement,
 			 });
 	}
 	// And a popover on the listview page, using the same html.
-	var id = '#listview-row-' + node_id + ' td[name="status"]';
-	
-	if ($(id).data("bs.popover")) {
-	    $(id).data("bs.popover").options.content = html;
+	var id  = '#listview-row-' + node_id + ' td[name="status"]';
+	var pop = bootstrap.Popover.getInstance(id);
 
-	    var isVisible = $(id)
-		.data('bs.popover').tip().hasClass('in');
-	    
-	    if (isVisible) {
-		$(id)
-		    .data('bs.popover').tip()
-		    .find('.popover-content').html(html);
-	    }
+	if (pop) {
+	    pop.setContent({'.popover-body': html});
 	}
 	else {
 	    $(id).popover({"content"   : html,
@@ -1275,6 +1516,40 @@ $(function ()
 			  });
 	    $(id).css('text-decoration', 'underline');
 	}
+    }
+
+    // Update the node icon and color
+    function UpdateNodeIcon(node_id, jacksID, icon, color)
+    {
+	var jacksbox = jacksNodeBox(jacksID);
+
+	$(jacksbox).find('.node .node-status')
+	    .css("visibility", "visible");
+
+	if (color !== undefined) {
+	    UpdateNodeColor(node_id, jacksID, color);
+	}
+	if (!$(jacksbox).find('.node .node-status-icon').length) {
+	    $(jacksbox).find('.node .node-status')
+		.append(svgimg.cloneNode());
+	}
+	$(jacksbox).find('.node .node-status-icon')
+	    .attr("href", "fonts/" + icon);
+    }
+
+    // Update the node color
+    function UpdateNodeColor(node_id, jacksID, color)
+    {
+	var jacksbox = jacksNodeBox(jacksID);
+	
+	$(jacksbox).find('.node .node-status')
+	    .css("visibility", "visible");
+
+	$(jacksbox).find('.node .nodebox')
+	    .css("fill", color);
+	
+	$('#listview-row-' + node_id + ' td[name="status"]')
+	    .css("background", color);
     }
 
     function deferAggregate(sliver)
@@ -1290,22 +1565,20 @@ $(function ()
 	$.each(jacksSites[urn], function(node_id, jacksID) {
 	    var html;
 	    
-	    //console.info("deferAggregate: ", urn, node_id, jacksID);
-	    $('#' + jacksID + ' .node .nodebox')
-		.css("fill", "#ff9248");
-
 	    if (reason) {
 		html = reason;
 	    }
 	    else {
 		html =
-		    "This node is currently unavailable and cannot be added " +
-		    "to your experiment. We will continue trying to contact " +
-		    "this node.";
+		    "This aggregate is currently unavailable so the node " +
+		    "cannot be added to your experiment. We will continue " +
+		    "trying to contact this aggregate.";
 	    }
 	    if (cause) {
 		html = html + "<br><pre>" + cause + "</pre>";
 	    }
+	    // Warning color and question mark icon to indicate a popover.
+	    UpdateNodeIcon(node_id, jacksID, "question.svg", "#ff9248");
 	    UpdateNodePopover(node_id, jacksID, html);
 	});
     }
@@ -1318,28 +1591,28 @@ $(function ()
 	}
 	$.each(jacksSites[urn], function(node_id, jacksID) {
 	    //console.info("deferAggregate: ", urn, node_id, jacksID);
-	    $('#' + jacksID + ' .node .nodebox')
-		.css("fill", "#fcf8e3");
 
 	    var html = "This node is currently unreachable, operations on " +
 		"this node will fail until it becomes reachable again.";
 
+	    // Warning color and question mark icon to indicate a popover.
+	    UpdateNodeIcon(node_id, jacksID, "question.svg", "#fcf8e3");
 	    UpdateNodePopover(node_id, jacksID, html);
 	});
     }
 
     function TerminatedAggregate(status, urn)
     {
+	//console.info("terminatedAggregate: ", urn, status);
+	
 	if (!_.has(jacksSites, urn)) {
 	    // Manifest not processed yet.
 	    return;
 	}
 	$.each(jacksSites[urn], function(node_id, jacksID) {
-	    //console.info("deferAggregate: ", urn, node_id, jacksID);
-	    $('#' + jacksID + ' .node .nodebox')
-		.css("fill", "red");
-
 	    var html;
+
+	    //console.info("terminatedAggregate: ", urn, node_id, jacksID);
 
 	    if (status == "terminated") {
 		html = "This node has been deallocated and is no longer " +
@@ -1349,10 +1622,146 @@ $(function ()
 		html = "This node has been marked for removal from your " +
 		    "experiment as soon as the aggregate comes back online.";
 	    }
+	    // Warning color and question mark icon to indicate a popover.
+	    UpdateNodeIcon(node_id, jacksID, "question.svg", "red");
 	    UpdateNodePopover(node_id, jacksID, html);
 	    $('#listview-row-' + node_id + ' td[name="status"]')
 		.html("terminated");
 	});
+    }
+
+    function failedAggregate(sliver)
+    {
+	//console.info("failedAggregate", sliver);
+	var cause = sliver.failure_cause;
+	var urn   = sliver.aggregate_urn;
+	
+	if (!_.has(jacksSites, urn)) {
+	    // Manifest not processed yet.
+	    return;
+	}
+	
+	$.each(jacksSites[urn], function(node_id, jacksID) {
+	    var html;
+	    
+	    //console.info("failedAggregate: ", urn, node_id, jacksID);
+	    /*
+	     * Skip if we have details for the node, handled up above.
+	     */
+	    if (_.has(sliver.details, node_id)) {
+		return
+	    }
+
+	    if (cause && cause != "") {
+		html = "<pre>" + cause + "</pre>";
+	    }
+	    else {
+		html =
+		    "This aggregate failed, please check the log file for "+
+		    "more information.";
+	    }
+	    // Warning color and question mark icon to indicate a popover.
+	    UpdateNodeIcon(node_id, jacksID, "question.svg", "#ff4d4d");
+	    UpdateNodePopover(node_id, jacksID, html);
+	    SetupFailedNodeMenu(node_id, urn);
+	});
+    }
+
+    function UpdateErrorPanel(statusblob)
+    {
+	var ePanel = $('#error-panel-new');
+	
+	if (!multisite) {
+	    var sblob = _.values(statusblob)[0];
+	    if (sblob.status != "failed") {
+		ePanel.addClass("hidden");
+		return;
+	    }
+	    var code    = sblob.failure_code;
+	    var cause   = sblob.failure_cause;
+	    var message = sblob.failure_message;
+
+	    ePanel.find(".singlesite-errors .error-cause").text(cause);
+	    ePanel.find(".singlesite-errors .error-message").text(message);
+	    ePanel.find(".multisite-errors").addClass("hidden");
+	    ePanel.find(".singlesite-errors").removeClass("hidden");
+	    if (code == GENIRESPONSE_INSUFFICIENT_NODES ||
+		code == GENIRESPONSE_NO_MAPPING) {
+		ePanel.find(".resource-error").removeClass("hidden");
+	    }
+	    ePanel.removeClass("hidden");
+	    return;
+	}
+	var errors   = 0;
+	var template = ePanel.find(".error-template");
+
+	$.each(statusblob , function(urn, sblob) {
+	    if (!_.has(amlist, urn)) {
+		//console.info("UpdateErrorPanel: Not in the amlist: " + urn);
+		return;
+	    }
+	    var cluster = amlist[urn].nickname;
+	    var gid = '[data-urn="' + urn + '"]';
+	    var current = ePanel.find(".panel-group " + gid);
+
+	    if (sblob.status != "failed") {
+		if (current.length) {
+		    current.find(".panel-collapse").removeClass("in");
+		    current.addClass("hidden");
+		}
+		return;
+	    }
+	    var code    = sblob.failure_code;
+	    var cause   = sblob.failure_cause;
+	    var message = sblob.failure_message;
+	    
+	    if (!current.length) {
+		current = template.clone();
+		current.removeClass("error-template");
+		current.attr("data-urn", urn);
+		current.find(".panel-title a").html(cluster);
+		current.find(".panel-title a").attr("href","#error-" + cluster);
+		current.find(".panel-collapse").attr("id", "error-" + cluster);
+		current.find(".panel-body .error-cause").text(cause);
+		if (message != "") {
+		    current.find(".panel-body .error-message")
+			.text(message)
+			.removeClass("hidden");
+		}
+		current.removeClass("hidden");
+		if ($("#error-panel-new .panel-group").children().length <= 1) {
+		    current.find(".panel-collapse").addClass("in");
+		}
+		$("#error-panel-new .panel-group").append(current);
+	    }
+	    current.find(".panel-body .error-message").text(message);
+	    current.find(".panel-body .error-cause").text(cause);
+	    current.removeClass("hidden");
+	    if (code == GENIRESPONSE_INSUFFICIENT_NODES ||
+		code == GENIRESPONSE_NO_MAPPING) {
+		ePanel.find(".resource-error").removeClass("hidden");
+	    }
+	    errors++;
+	});
+	if (errors) {
+	    ePanel.find(".multisite-errors").removeClass("hidden");
+	    ePanel.find(".singlesite-errors").addClass("hidden");
+	    ePanel.removeClass("hidden");
+	}
+	else {
+	    ePanel.addClass("hidden");
+	}
+    }
+
+    function UpdateGeneralError(error)
+    {
+	if (!error) {
+	    $('#general-error').addClass("hidden");
+	}
+	else {
+	    $('#general-error .error-cause').html(error);
+	    $('#general-error').removeClass("hidden");
+	}
     }
 
     //
@@ -1363,7 +1772,12 @@ $(function ()
     {
 	if (_.has(blob, "sliverstatus")) {
 	    for (var urn in blob.sliverstatus) {
-		var nodes = blob.sliverstatus[urn];
+		var status = blob.sliverstatus[urn].status;
+		if (status == "canceled" ||
+		    status == "terminated" || status == "failed") {
+		    continue;
+		}
+		var nodes = blob.sliverstatus[urn].details;
 		for (var nodeid in nodes) {
 		    var status = nodes[nodeid];
 		    if (_.has(status, "execute_state") &&
@@ -1375,21 +1789,31 @@ $(function ()
 	}
 	return 0;
     }
-    function hasExecutionServices(blob)
+    //
+    // Check if services are still executing on a node.
+    //
+    function servicesExecutingOnNode(client_id)
     {
-	if (_.has(blob, "sliverstatus")) {
-	    for (var urn in blob.sliverstatus) {
-		var nodes = blob.sliverstatus[urn];
-		for (var nodeid in nodes) {
-		    var status = nodes[nodeid];
-		    if (_.has(status, "execute_state")) {
-			return 1;
-		    }
+	//console.info("servicesExecutingOnNode", lastStatusBlob, client_id);
+	
+	if (!lastStatusBlob || !_.has(lastStatusBlob, "sliverstatus")) {
+	    return 0;
+	}
+	for (var urn in lastStatusBlob.sliverstatus) {
+	    var nodes = lastStatusBlob.sliverstatus[urn].details;
+	    if (_.has(nodes, client_id)) {
+		var status = nodes[client_id];
+		if (_.has(status, "execute_state")) {
+		    return status.execute_state == "exited" ? 0 : 1;
 		}
+		// No execution services
+		return 0;
 	    }
 	}
+	// Do not know.
 	return 0;
     }
+
     //
     // Check the status blob to see if any aggregates are in the
     // the deferred state.
@@ -1404,6 +1828,28 @@ $(function ()
 	    }
 	}
 	return 0;
+    }
+
+    //
+    // Show info when experiment is pending.
+    //
+    function ShowPendingInfo(blob)
+    {
+	if (_.has(blob, "sliverstatus")) {
+	    for (var urn in blob.sliverstatus) {
+		var details = blob.sliverstatus[urn];
+		if (details.deferred == "1") {
+		    $('#pending-panel .pending-reason')
+			.html(details.deferred_reason);
+		    if (_.has(details, "deferred_cause")) {
+			$('#pending-panel .pending-cause')
+			    .html(details.deferred_cause);
+		    }
+		    $('#pending-panel').removeClass("hidden");
+		    return;
+		}
+	    }
+	}
     }
 	
     //
@@ -1464,6 +1910,12 @@ $(function ()
 						 "node_ids" : nodeList});
 	    xmlthing.done(callback);
 	});
+        if (which == "reload") {
+	    $('#confirm_reload_modal .reload-warning').removeClass("hidden");
+        }
+        else {
+	    $('#confirm_reload_modal .reload-warning').addClass("hidden");
+        }
 	$('#confirm_reload_modal #confirm-which').html(tag);
 	sup.ShowModal('#confirm_reload_modal');
     }
@@ -1497,6 +1949,8 @@ $(function ()
 		changingtopo = true;
 		// Trigger status to change the nodes.
 		GetStatus();
+		// And max extension update
+		LoadMaxExtension();
 	    }
 	    sup.ShowWaitWait("This will take several minutes. " +
 			     "Patience please.");
@@ -1609,7 +2063,7 @@ $(function ()
      * reason and try to get the user to accept a certificate from the ops
      * node.
      */
-    function StartSSH(tabname, authobject)
+    function StartSSH(tabname, client_id, authobject)
     {
 	var jsonauth = $.parseJSON(authobject);
 	
@@ -1674,13 +2128,19 @@ $(function ()
 	xmlthing.fail(callback_error);
     }
 
-    function StartSSHWebSSH(tabname, authobject)
+    function StartSSHWebSSH(tabname, client_id, authobject)
     {
 	var jsonauth = $.parseJSON(authobject);
 
         var url     = jsonauth.baseurl;
 	var iwidth  = "100%";
         var iheight = 400;
+	// For the execution service warning toggle.
+	var cclass  = client_id + "-sshtab";
+
+	if (!servicesExecutingOnNode(client_id)) {
+	    cclass = "hidden " + cclass;
+	}
 
 	// Backwards compat for a while.
 	if (!url.includes("webssh")) {
@@ -1700,11 +2160,17 @@ $(function ()
             'src=\'' + url + '\'>';
 
 	var html =
+	    '<div>' +
+	    '<center class="text-warning ' + cclass + '" ' +
+	    '        style="font-size: 120%;">' +
+            ' Startup services are still running; ' +
+	    ' Software may not be fully installed and running!</center>' +
 	    '<div style="height:400px; width:100%; ' +
 	    '            resize:vertical;overflow-y:auto;padding-bottom:10px"> ' +
 	    '  <iframe id="' + tabname + '_iframe" ' +
 	    '     width="100%" height="100%"' + 
             '     src=\'' + url + '\'>' +
+	    '</div>' +
 	    '</div>';
 	
         $('#' + tabname).html(html);
@@ -1724,14 +2190,66 @@ $(function ()
 	    });
     }
 
+    // Helper to set/clear the services executing warning on ssh tabs.
+    function ClearServicesWarning(client_id)
+    {
+	// For the execution service warning toggle.
+	var cclass  = client_id + "-sshtab";
+
+	$('.' + cclass).addClass("hidden");
+
+	// And the listview row sshurl warning tooltip
+	var id = "#listview-row-" + client_id + ' [name="sshurl"]';
+
+	$(id).tooltip("hide");
+	$(id).tooltip("disable");
+    }
+    function MarkServicesWarning(client_id)
+    {
+	// For the execution service warning toggle.
+	var cclass  = client_id + "-sshtab";
+
+	$('.' + cclass).removeClass("hidden");
+
+	// And the listview row sshurl warning tooltip
+	var id = "#listview-row-" + client_id + ' [name="sshurl"]';
+
+	$(id).tooltip("enable");
+    }
+
     //
     // User clicked on a node, so we want to create a tab to hold
     // the ssh tab with a panel in it, and then call StartSSH above
     // to get things going.
     //
     var sshtabcounter = 0;
-    
+
+    // Check for services executing and throw up a warning.
     function NewSSHTab(hostport, client_id)
+    {
+	var node_id = clientid2nodeid[client_id];
+
+	// Keeping this bullet in reserve
+	if (1 || !servicesExecutingOnNode(client_id)) {
+	    return NewSSHTabContinue(hostport, client_id);
+	}
+
+	// Handler for hide modal to unbind the click handler.
+	$('#services-running-modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#services-continue-login').unbind("click.sshtab");
+	});
+
+	// Throw up a confirmation modal, with handler bound to confirm.
+	$('#services-continue-login').bind("click.sshtab", function (event) {
+	    sup.HideModal('#services-running-modal', function () {
+		NewSSHTabContinue(hostport, client_id);
+	    });
+	});
+	console.info("foo");
+	sup.ShowModal('#services-running-modal');
+    }
+    function NewSSHTabContinue(hostport, client_id)
     {
 	var pair = hostport.split(":");
 	var host = pair[0];
@@ -1746,12 +2264,7 @@ $(function ()
 	
 	if (! $("#" + tabname).length) {
 	    // The tab.
-	    var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
-		client_id + "" +
-		"<button class='close' type='button' " +
-		"        id='" + tabname + "_kill'>x</button>" +
-		"</a>" +
-		"</li>";	
+	    var html = navTabLink(client_id, tabname);
 
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);
@@ -1774,8 +2287,8 @@ $(function ()
 		$(this).parent().parent().remove();
 		// Remove the content div.
 		$("#" + tabname).remove();
-		// Activate the first visible tab.
-		$('#quicktabs_ul a:visible:first').tab('show');
+		// Activate the initialtab
+		SwitchToLastKnownTab();
 	    });
 
 	    // The content div.
@@ -1807,10 +2320,10 @@ $(function ()
 		
 		if (APT_OPTIONS.webssh &&
 		    _.has(jsonauth, "webssh") && jsonauth.webssh != 0) {
-		    StartSSHWebSSH(tabname, json.value);
+		    StartSSHWebSSH(tabname, client_id, json.value);
 		}
 		else {
-		    StartSSH(tabname, json.value);
+		    StartSSH(tabname, client_id, json.value);
 		}
 	    }
 	}
@@ -1825,7 +2338,7 @@ $(function ()
     function DoVNC(node)
     {
 	var hostport = hostportList[node].split(":");
-	var host     = hostport[0];
+	var host     = vnchost[node];
 
 	console.info("DoVNC", host);
 	
@@ -1848,6 +2361,9 @@ $(function ()
 					     "host" : host});
 	xmlthing.done(callback);
     }
+    // For Selenium testing
+    window.DoVNC = DoVNC;
+    
     function OpenVNCWindow(node, authobject)
     {
 	var vncwindow = null;
@@ -1881,6 +2397,9 @@ $(function ()
     // SSH info.
     var hostportList = {};
 
+    // VNC hostname
+    var vnchost = {};
+
     // Map client_id to node_id
     var clientid2nodeid = {};
 
@@ -1902,6 +2421,8 @@ $(function ()
     //
     function ContextMenuShow(jacksevent)
     {
+	//console.info("ContextMenuShow", jacksevent);
+	
 	// Foreign admins have no permission for anything.
 	if (isfadmin) {
 	    return;
@@ -1909,37 +2430,63 @@ $(function ()
 	var event = jacksevent.event;
 	var client_id = jacksevent.client_id;
 	var cid = "context-menu-" + client_id;
+	var toggle = "#" + cid + " .dropdown-toggle"
 
 	if (currentContextMenu) {
 	    $('#context').contextmenu('closemenu');
 	    $('#context').contextmenu('destroy');
 	}
 	if (!_.has(contextMenus, client_id)) {
+	    console.info("ContextMenuShow no menu yet", client_id);
 	    return;
 	}
 
-	//
-	// We generate a new menu object each time causes it easier and
-	// not enough overhead to worry about.
-	//
-	$('#context').contextmenu({
-	    target: '#' + cid, 
-	    onItem: function(context,e) {
-		window.APT_OPTIONS.gaButtonEvent(e);
-		$('#context').contextmenu('closemenu');
-		$('#context').contextmenu('destroy');
-		// Disabled menu items, but we still want user to see them.
-		if ($(e.target).attr("disabled")) {
-		    return;
-		}
-		ActionHandler($(e.target).attr("name"), [client_id]);
-	    }
-	})
+	// See https://popper.js.org/docs/v2/virtual-elements/ for an
+	// explaination of this stuff. 
+	var generateGetBoundingClientRect =
+	    function(x = 0, y = 0) {
+		return () => ({
+		    width: 0,
+		    height: 0,
+		    left: x,
+		    top: y,
+		    right: x,
+		    bottom: y,
+		});
+	    };
+
+	/*
+	 * Since the topology is in an iframe, need to move the
+	 * context menu relative to that.
+	 */
+	var offset = $('#showtopo_statuspage').offset();
+	//console.info(event.clientX, offset, $(window).scrollTop());
+	event.clientX += parseInt(offset.left);
+	event.clientY += parseInt(offset.top);
+
+	// And compensate for scroll.
+	event.clientY -= $(window).scrollTop();
+
+	    
+	const virtualElement = {
+	    getBoundingClientRect :
+	        generateGetBoundingClientRect(event.clientX,event.clientY),
+	};
+	$(toggle).dropdown({
+	    "reference" : virtualElement,
+	    "autoClose" : true,
+	});
+
 	currentContextMenu = cid;
-	$('#' + cid).one('hidden.bs.context', function (event) {
+	$(toggle).parent().one('hidden.bs.dropdown', function (event) {
 	    currentContextMenu = null;
 	});
-	$('#context').contextmenu('show', event);
+	
+	// More bootstrap 5 oddness, need to return from the Jacks event
+	// before we do this. 
+	setTimeout(function () {
+	    $(toggle).dropdown('show');
+	}, 10);
     }
     
     //
@@ -1953,7 +2500,7 @@ $(function ()
 	}
 	var nickname = $(sitetag).text();
 	var cid = "site-context-menu";
-
+	
 	if (currentContextMenu) {
 	    $('#context').contextmenu('closemenu');
 	    $('#context').contextmenu('destroy');
@@ -1992,7 +2539,7 @@ $(function ()
 	//
 	// Do not show in the terminating or terminated state.
 	//
-	if (lastStatus == "terminated" || lastStatus == "terminating") {
+	if (lastStatus == "terminated") {
 	    alert("Your experiment is no longer active.");
 	    return;
 	}
@@ -2017,10 +2564,6 @@ $(function ()
 		    }, i * 1500);
 		})(i);
 	    }
-	    return;
-	}
-	if (isguest) {
-	    alert("Only registered users can use the " + action + " command.");
 	    return;
 	}
 	if (action == "console") {
@@ -2063,8 +2606,14 @@ $(function ()
 	else if (action == "nodetop") {
 	    DoTop(clientList[0]);
 	}
+	else if (action == "servicelogs") {
+	    DoServiceLogs(clientList[0]);
+	}
 	else if (action == "monitor") {
 	    NewMonitorTab(clientList[0]);
+	}
+	else if (action == "txhistory") {
+	    ShowTXGraph(clientList[0]);
 	}
 	else if (action == "flash") {
 	    DoFlash(clientList[0]);
@@ -2086,60 +2635,64 @@ $(function ()
 	}
     }
 
+    // Update the instruction templates from manifest info
+    function UpdateInstructions(xml)
+    {
+	var uridata = {};
+	MakeUriData(xml,uridata);
+	
+	console.info("UpdateInstructions", uridata);
+	
+	var instructionRenderer = new marked.Renderer();
+	instructionRenderer.defaultLink = instructionRenderer.link;
+	instructionRenderer.link = function (href, title, text) {
+	    var template = UriTemplate.parse(href);
+	    return this.defaultLink(template.expand(uridata), title, text);
+	};
+	var ref = $(xml).find("rspec_tour").find("instructions");
+	if (!ref.length) {
+	    FindEncryptionBlocks(xml, "");
+	    return;
+	}
+	var itext = $(ref).text();
+
+	marked.setOptions({ "sanitize" : true,
+			    "renderer": instructionRenderer });
+
+	FindEncryptionBlocks(xml, itext, function (text) {
+	    // Search the instructions for {host-foo} pattern.
+	    var regex   = /\{host-.*\}/gi;
+	    var needed  = text.match(regex);
+	    if (needed && needed.length) {
+		_.each(uridata, function(host, key) {
+		    regex = new RegExp("\{" + key + "\}", "gi");
+		    text = text.replace(regex, host);
+		});
+	    }
+	    // Stick the text in. 
+	    try {
+		text = marked(text);
+	    }
+	    catch(err) {
+		console.info(err);
+	    }
+	    $('#instructions_text').html(text);
+	    $('#instructions_text').find("a").prop("target", "_blank");
+	    // Make the div visible.
+	    $('#instructions_panel').removeClass("hidden");
+	});
+    }
+
     //
     // Show the topology inside the topo container. Called from the status
     // watchdog and the resize wachdog. Replaces the current topo drawing.
     //    
     function ShowTopo(statusblob, donefunc)
     {
-	//console.info("ShowTopo", changingtopo, statusblob);
+	//console.info("ShowTopo", changingtopo, statusBusy, statusblob);
 
 	// For Powder map redraw after topology change.
 	var redrawpowdermap = false;
-
-	//
-	// Maybe this should come from rspec? Anyway, we might have
-	// multiple manifests, but only need to do this once, on any
-	// one of the manifests.
-	//
-	var UpdateInstructions = function(xml,uridata) {
-	    var instructionRenderer = new marked.Renderer();
-	    instructionRenderer.defaultLink = instructionRenderer.link;
-	    instructionRenderer.link = function (href, title, text) {
-		var template = UriTemplate.parse(href);
-		return this.defaultLink(template.expand(uridata), title, text);
-	    };
-
-	    // Suck the instructions out of the tour and put them into
-	    // the Usage area.
-	    $(xml).find("rspec_tour").each(function() {
-		$(this).find("instructions").each(function() {
-		    marked.setOptions({ "sanitize" : true,
-					"renderer": instructionRenderer });
-		
-		    var text = $(this).text();
-		    // Search the instructions for {host-foo} pattern.
-		    var regex   = /\{host-.*\}/gi;
-		    var needed  = text.match(regex);
-		    if (needed && needed.length) {
-			_.each(uridata, function(host, key) {
-			    regex = new RegExp("\{" + key + "\}", "gi");
-			    text = text.replace(regex, host);
-			});
-		    }
-		    // Stick the text in. 
-		    try {
-			$('#instructions_text').html(marked(text));
-		    }
-		    catch(err) {
-			console.info(err);
-		    }
-		    // Make the div visible.
-		    $('#instructions_panel').removeClass("hidden");
-		    
-		});
-	    });
-	}
 
 	//
 	// Process the nodes in a single manifest.
@@ -2174,6 +2727,7 @@ $(function ()
 		    this.getElementsByTagNameNS(EMULAB_NS, 'imageable');
 		var flashable =
 		    this.getElementsByTagNameNS(EMULAB_NS, 'flashable');
+		var services = $(this).find("execute");
 		var href   = "n/a";
 		var ssh    = "n/a";
 		var cons   = "n/a";
@@ -2210,7 +2764,13 @@ $(function ()
 		    var html   = "<a href='" + weburl + "' target=_blank>" +
 			node_id + "</a>";
 		    clone.find(" [name=node_id]").html(html);
-		    clone.find(" [name=type]").html(hwtype);
+
+		    // Ditto for the node type.
+		    weburl = amlist[aggregate_urn].weburl +
+			"/portal/show-nodetype.php?type=" + hwtype;
+		    html   = "<a href='" + weburl + "' target=_blank>" +
+			hwtype + "</a>";
+		    clone.find(" [name=type]").html(html);
 		    clientid2nodeid[node] = node_id;
 
 		    // Append to the CONFIRM button URL.
@@ -2289,7 +2849,8 @@ $(function ()
 		    var host   = $(login).attr("hostname");
 		    var port   = $(login).attr("port");
 		    var url    = "ssh://" + user + "@" + host + ":" + port +"/";
-		    var sshcmd = "ssh -p " + port + " " + user + "@" + host;
+		    var sshcmd = "ssh" + (port == 22 ? "" : " -p " + port) + 
+			" " + user + "@" + host;
 		    href       = "<a href='" + url + "'><kbd>" + sshcmd +
 			"</kbd></a>";
 		
@@ -2297,8 +2858,27 @@ $(function ()
 		    hostportList[node] = hostport;
 
 		    // Update the row.
-		    clone.find(' [name=sshurl]').html(href);
-		    
+		    clone.find(' [name=sshurl] .sshurl-url').html(href);
+
+		    // Add a clipper
+		    clone.find(' [name=sshurl] .sshurl-copy a').click(function (event) {
+			event.preventDefault();
+			navigator.clipboard.writeText(sshcmd);
+		    });
+		    clone.find(' [name=sshurl] .sshurl-copy').removeClass("hidden");
+
+		    // Add a tooltip for services running warning. Leave disabled
+		    // since we do not know until we get the sliver status. 
+		    clone.find('[name="sshurl"]')
+			.tooltip({"trigger"   : "hover",
+				  "title"     : "<span class=text-warning>" +
+				  "Execute services are still running, " +
+				  "software may not be fully installed and running.</span>",
+				  "html"      : true,
+				  "container" : "body",
+				  "placement" : "top"})
+			.tooltip("disable");
+
 		    // Attach handler to the menu button.
 		    clone.find(' [name=shell]')
 			.click(function (e) {
@@ -2308,14 +2888,9 @@ $(function ()
 			    return false;
 			});
 		    // For selenium
-		    if ($('#selenium-shell-button').length) {
-			$('#selenium-shell-button')
-			.click(function (e) {
-			    window.APT_OPTIONS.gaButtonEvent(e);
-			    ActionHandler("shell", [node]);
-			    return false;
-			});
-		    }
+		    window.StartShell = function() {
+			ActionHandler("shell", [node]);
+		    };
 		}
 		else {
 		    // Need to do this on the context menu too, but painful.
@@ -2402,8 +2977,28 @@ $(function ()
 			// Context menu option
 			CMclone.find("li[id=monitor]").removeClass("hidden");
 
+			// TX History
+			clone.find(' [name=txhistory]')
+			    .click(function (e) {
+				ActionHandler("txhistory", [node]);
+			    });
+			clone.find(' [name=txhistory]')
+			    .parent().removeClass('hidden');
+
+			// Context menu option
+			CMclone.find("li[id=txhistory]").removeClass("hidden");
+
 			// Mark it as a radio with its info. 
 			radios[node] = info;
+
+			// Show the experiment wide TX button.
+			if ($('#txgraph_button').hasClass("hidden")) {
+			    $('#txgraph_button').click(function (event) {
+				event.preventDefault();
+				ShowTXGraph();
+			    });
+			    $('#txgraph_button').removeClass("hidden");
+			}
 		    }
 
 		    if (flashable.length) {
@@ -2440,20 +3035,34 @@ $(function ()
 		}
 
 		// Optional X11 VNC
-		if (x11vnc.length) {
+		if (x11vnc.length && dovnc) {
+		    var host   = $(this).find("host");
+		    
 		    // Attach handler to the menu button.
 		    clone.find(' [name=vnc]')
 			.click(function (e) {
 			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("vnc", [node]);
 			});
-		    clone.find(' [name=vnc]')
-			.parent().removeClass('hidden');
-
-		    // Context menu option
-		    $(CMclone).find("li[id=vnc]").removeClass("hidden");
+		    vnchost[node] = $(host).attr("name");
 		}
-		
+		else {
+		    clone.find(' [name=vnc]')
+			.parent().addClass('disabled');
+		}
+
+		// Optional service execution logs.
+		if (services.length) {
+		    clone.find(' [name=servicelogs]')
+			.click(function (e) {
+			    ActionHandler("servicelogs", [node]);
+			});
+		    clone.find(' [name=servicelogs]')
+			.parent().removeClass('hidden');
+		    // Context menu option
+		    CMclone.find("li[id=servicelogs]")
+			.removeClass("hidden");
+		}
 
 		// Node "top"
 		clone.find(' [name=nodetop]')
@@ -2466,20 +3075,26 @@ $(function ()
 		CMclone.find("li[id=nodetop]").removeClass("hidden");
 
 		// Insert into the table, we will attach the handlers below.
-		$('#listview_table > tbody:last').append(clone);
+		$('#listview_table')
+		    .find('tbody').append(clone)
+		    .trigger('addRows', [clone, true, undefined]);
 
 		// Change the ID of the clone so its unique.
 		CMclone.attr('id', "context-menu-" + node);
 
-		// Activate tooltips in the menu.
-		CMclone.find('[data-toggle="tooltip"]')
-		    .tooltip({"trigger"   : "hover",
-			      "container" : "body",
-			      "placement" : "auto right",
-			     });
-	    
+		// Remove old one (modify)
+		$('#context-menu-' + node).remove();
+
 		// Insert into the context-menus div.
 		$('#context-menus').append(CMclone);
+
+		// Activate tooltips in the menu.
+		$('#context-menu-' + node + ' [data-toggle="tooltip"]')
+		    .each(function () {
+			$(this).tooltip({"trigger"   : "hover",
+					 "placement" : "right",
+					});
+		    });
 
 		// If no console, then grey out the options.
 		if (!_.has(consolenodes, node)) {
@@ -2497,6 +3112,13 @@ $(function ()
 		}
 		if (! (login.length && dossh)) {
 		    $(CMclone).find("li[id=shell]").addClass("disabled");
+		    // For ActionHandler()
+		    $(CMclone).find("[name=shell]").attr("disabled", true);
+		}
+		if (! (x11vnc.length && dovnc)) {
+		    $(CMclone).find("li[id=vnc]").addClass("disabled");
+		    // For ActionHandler()
+		    $(CMclone).find("[name=vnc]").attr("disabled", true);
 		}
 		
 		// If a vhost/firewall, then grey out options. Or if there
@@ -2506,6 +3128,16 @@ $(function ()
 		    // For ActionHandler()
 		    $(CMclone).find("[name=delete]").attr("disabled", true);
 		}
+
+		// And now enable the menu items that are not disabled.
+		$(CMclone).find("li").each(function () {
+		    if ($(this).attr("disabled")) {
+			return;
+		    }
+		    $(this).find("a").click(function (e) {
+			ActionHandler($(this).attr("name"), [node]);
+		    });
+		});
 		contextMenus[node] = CMclone;
 		nodecount++;
 	    });
@@ -2518,11 +3150,16 @@ $(function ()
 	if (changingtopo) {
 	    // Clear the list view table before adding nodes again.
 	    $('#listview_table > tbody').html("");
+	    $('#listview_table').trigger('update');
 	    // Reload all manifests.
 	    manifests = {};
-	    // Need to redo the lists.
+	    // Need to redo all this stuff
 	    clientid2nodeid = {};
 	    imageablenodes  = {};
+	    jacksIDs = {};
+	    jacksSites = {};
+	    contextMenus = {};
+	    
 	    redrawpowdermap = true;
 
 	    // But might have deleted all the aggregates.
@@ -2544,33 +3181,17 @@ $(function ()
 	    return;
 	}
 
-	// Save off some templatizing data as we process each manifest.
-	// Do not need to do this stuff on a topo change.
-	var uridata = {};
-	    
-	// Save off the last manifest xml blob so we quick process the
-	// possibly templatized instructions quickly, without reparsing the
-	// manifest again needlessly.
-	var xml = null;
-
+	// Flag to mark first manifest (group). A bunch of stuff needs to be
+	// done on the first manifest but not after that that,
+	var onlyfirst = (!_.size(manifests) ? true : false);
+	
 	/*
 	 * This is the continuation we run after we have all the
 	 * manifests that are currently available.
 	 */
 	var gotallmanifests = function() {
-	    //console.info("gotallmanifests");
+	    console.info("gotallmanifests");
 	    
-	    // Did we get any new manifests?
-	    if (!xml) {
-		// Signal GetStatus() looper that we are done, 
-		donefunc();
-		return;
-	    }
-	    // Do not show secrets if viewing using foreign admin creds
-	    if (!isfadmin) {
-		// This will update the instructions.
-		FindEncryptionBlocks(xml);
-	    }
 	    // Update the snapshot modal with new nodes.
 	    UpdateSnapshotModal();
 
@@ -2602,88 +3223,37 @@ $(function ()
 	/*
 	 * Process one manifest at a time, then finish with above function.
 	 */
-	var gotonemanifest = function(aggregate_urn, manifest) {
-	    //console.info("gotonemanifest", aggregate_urn);
-
-	    TimeStamp("Proccessing manifest");
+	var gotonemanifest = async function(aggregate_urn, manifest, defer) {
+	    console.info("gotonemanifest", aggregate_urn);
 
 	    var xmlDoc = $.parseXML(manifest);
-	    xml = $(xmlDoc);
-	    MakeUriData(xml,uridata);
+	    var xml = $(xmlDoc);
+	    TimeStamp("Proccessing nodes");
 	    ProcessNodes(aggregate_urn, xml);
-	    TimeStamp("Done proccessing manifest");
-
-	    UpdateInstructions(xml, uridata);
+	    TimeStamp("Done proccessing nodes");
 
 	    /*
 	     * Wait until we have first manifest before initializing this,
 	     * else the user sees a blank palette.
 	     */
-	    $("#showtopo_container").removeClass("invisible");
-	    $('#quicktabs_ul a[href="#manifest"]')
-		.parent().removeClass("hidden");
-	    $('#quicktabs_content #manifest').removeClass("hidden");
-	    /*
-	     * Cannot be hidden to initialize tablesorter
-	     */
-	    if ($('#quicktabs_content #listview').hasClass("hidden")) {
+	    if (onlyfirst) {
+		$("#showtopo_container").removeClass("hidden");
+		$('#quicktabs_ul a[href="#manifest"]')
+		    .parent().removeClass("hidden");
+		$('#quicktabs_content #manifest').removeClass("hidden");
+		/*
+		 * Cannot be hidden to initialize tablesorter
+		 */
 	   	$('#quicktabs_ul a[href="#listview"]')
 		    .parent().removeClass("hidden");
 		$('#quicktabs_content #listview').removeClass("hidden");
-
-		$('#listview_table')
-		    .tablesorter({
-			theme : 'bootstrap',
-			widgets : [ "uitheme", "zebra"],
-			headerTemplate : '{content} {icon}',
-		    });
-
-		// Handler for select/deselect all rows in the list view.
-		$('#select-all').change(function () {
-		    if ($(this).prop("checked")) {
-			$('#listview_table [name=select]')
-			    .prop("checked", true);
-		    }
-		    else {
-			$('#listview_table [name=select]')
-			    .prop("checked", false);
-		    }
-		});
-		// Handler for the action menu next to the select-all checkbox:
-		// Foreign admins do not get a menu, but easier to just hide it.
-		if (isfadmin) {
-		    $('#listview-action-menu').addClass("invisible");
-		}
-		else {
-		    $('#listview-action-menu li a')
-			.click(function (e) {
-			    window.APT_OPTIONS.gaButtonEvent(e);
-			    var checked = [];
-
-			    // Get the list of checked nodes.
-			    $('#listview_table [name=select]').each(function() {
-				if ($(this).prop("checked")) {
-				    checked.push($(this).attr("id"));
-				}
-			    });
-			    if (checked.length) {
-				ActionHandler($(e.target).attr("name"),
-					      checked);
-			    }
-			});
-		}
 	    }
-	    var multisite = Object.keys(statusblob).length > 1;
-	    console.info("foo", multisite, nodecount);
+	    multisite = Object.keys(statusblob).length > 1;
+	    console.info("foo", multisite, nodecount, jacksInstance);
 
 	    if (multisite || nodecount < MAXJACKSNODES) {
 		if (!jacksInstance) {
-		    if (lazytopo) {
-			LazyTopoTab(multisite, manifest);
-		    }
-		    else {
-			ShowTopologyTab(multisite, manifest);
-		    }
+		    await ShowTopologyTab(multisite, manifest);
 		}
 		else if (changingtopo) {
 		    // When we get first new manifest, clear the viewer palette.
@@ -2700,6 +3270,12 @@ $(function ()
 		// Without jacks, we show the manifest now, otherwise
 		// jacks combines them and hands it back.
 		ShowManifest(manifest);
+	    }
+	    if (multisite) {
+		$('#multisite-context-menu-notice').removeClass("hidden");
+	    }
+	    else {
+		$('#multisite-context-menu-notice').addClass("hidden");
 	    }
 
 	    // Clear changingtopo state on first new manifest.
@@ -2721,42 +3297,84 @@ $(function ()
 		if (managers.length == 1)
 		    showlinktest = true;
 	    });
-	    if (!lazytopo) {
-		SetupLinktest(instanceStatus);
-	    }
+	    SetupLinktest(instanceStatus);
+
+	    // If there is a shared lan, show the connect-sharedlan button
+	    $(xml).find("link").each(function() {
+		var shared = this.getElementsByTagNameNS(SVLAN_NS,
+							 'link_shared_vlan');
+		if (shared.length != 0) {
+		    SetupConnectLanModal($(this).attr('client_id'));
+		}
+	    });
 
 	    // Mark that we have this manifest;
 	    manifests[aggregate_urn] = manifest;
+	    onlyfirst = false;
+	    defer.resolve();
 	}
-	var p = $.when();
-	Object.keys(statusblob)
-	    .forEach(function(urn) {
-		if (_.has(manifests, urn) ||
-		    statusblob[urn] == null ||
-		    !statusblob[urn].havemanifest) {
-		    p = p.then(function () { return 0; });
-		}
-		else {
-		    p = p.then(function() {
-			return sup.CallServerMethod(null, "status",
-						    "GetInstanceManifest",
-						    {"uuid" : uuid,
-						     "aggregate_urn" : urn},
-			     function (json) {
-				 if (json.code) {
-				     console.info("GetInstanceManifest:" +
-						  json.value);
-				     donefunc();
-				     return -1;
-				 }
-				 gotonemanifest(urn, json.value);
-				 return 0;
-			     });
-		    });
-		}
+	/*
+	 * If there are any manifests available that we have not asked for,
+	 * ask for those, waiting until they all return before calling
+	 * gotallmanifests(). 
+	 */
+	var urns = [];
+	_.each(statusblob, function(info, urn) {
+	    if (!_.has(manifests, urn) && info.havemanifest) {
+		urns.push(urn);
+	    }
+	});
+	if (!_.size(urns)) {
+	    donefunc();
+	    return;
+	}
+
+	/*
+	 * The point of all this goo is to ensure that we process
+	 * one manifest at a time (since there are async calls made
+	 * during the processing). 
+	 */
+	var processManifests = async function (json) {
+	    console.info("processManifests", json);
+	    if (json.code) {
+		console.info("GetInstanceManifests:" + json.value);
+		// Still do this, it calls the donefunc.
+		gotallmanifests();
+		return -1;
+	    }
+	    var tasks = [];
+	    _.each(json.value, function(m, urn) {
+		tasks.push(async function () {
+		    var defer = $.Deferred();
+		    await gotonemanifest(urn, m, defer);
+		    return defer;
+		});
 	    });
-	
-	p = p.then(function () { gotallmanifests(); });
+	    await resolvepromises(tasks);
+	    gotallmanifests();
+	};
+	console.info("Asking for manifests", urns);
+
+	/*
+	 * Need to wait for this to return so we can call the donefunc()
+	 * when all of the manifests are processed.
+	 */
+	var deferred = sup.CallServerMethod(null, "status",
+					   "GetInstanceManifests",
+					   {"uuid" : uuid,
+					    "aggregate_urns" : urns});
+	$.when(deferred).done(function (json) {
+	    processManifests(json);
+	});
+    }
+
+    // Just a helper function to process a list of promises serially.
+    async function resolvepromises(tasks)
+    {
+	for (var i = 0; i < _.size(tasks); i++) {
+	    var func = tasks[i];
+	    await func();
+	}
     }
 
     //
@@ -2785,6 +3403,17 @@ $(function ()
 	    myCodeMirror.refresh();
 	});
 	ShowBindings();
+
+	// On a multisite topology, Jacks combines them as it gets them.
+	// We have to save the (final) combined manifest.
+	jacksManifest = manifest;
+
+	// And update instructions, since the updated manifest can
+	// innclude new info
+	var xmlDoc = $.parseXML(jacksManifest);
+	var xml    = $(xmlDoc);
+	    
+	UpdateInstructions(xml);
     }
 
     //
@@ -2816,7 +3445,7 @@ $(function ()
 	    $('#show_rspec_tab').on('shown.bs.tab', function (e) {
 		myCodeMirror.refresh();
 	    });
-	    $("#showtopo_container").removeClass("invisible");
+	    $("#showtopo_container").removeClass("hidden");
 	    $('#quicktabs_ul a[href="#rspec"]').parent().removeClass("hidden");
 	    $('#quicktabs_content #rspec').removeClass("hidden");
 	    $('#quicktabs_ul a[href="#rspec"]').tab('show');
@@ -2857,8 +3486,7 @@ $(function ()
 	    window.APT_OPTIONS.SetupCopyToClipboard("#rerun_modal");
 
 	}
-	if (expinfo.params &&
-	    $('#quicktabs_content #bindings').hasClass("hidden")) {
+	if (expinfo.params) {
 	    var bindings  = expinfo.params;
 	    var paramdefs = expinfo.paramdefs;
 	    var html = GetBindingsTable(paramdefs, bindings);
@@ -2881,14 +3509,14 @@ $(function ()
 	});
     }
 
-    function FindEncryptionBlocks(xml)
+    function FindEncryptionBlocks(xml, itext, continuation)
     {
 	var blocks    = {};
 	var passwords = xml[0].getElementsByTagNameNS(EMULAB_NS, 'password');
 
 	// Search the instructions for the pattern.
 	var regex   = /\{password-.*\}/gi;
-	var needed  = $('#instructions_text').html().match(regex);
+	var needed  = itext.match(regex);
 	//console.log(needed);
 
 	// Look for all the encryption blocks in the manifest ...
@@ -2911,8 +3539,12 @@ $(function ()
 	    }
 	});
 	if (!_.size(blocks)) {
+	    if (continuation) {
+		continuation(itext);
+	    }
 	    return;
 	}
+	console.info("blocks", blocks);
 	
 	// These are blocks that are referenced in the instructions
 	// and need the server to decrypt.  At some point we might
@@ -2926,8 +3558,6 @@ $(function ()
 			     json.value);
 		return;
 	    }
-	    var itext = $('#instructions_text').html();
-
 	    _.each(json.value, function(plaintext, key) {
 		// XXX
 		if (key == "password-vncpasswd" || key == "password-vncpswd") {
@@ -2938,8 +3568,9 @@ $(function ()
 		// replace in the instructions text.
 		itext = itext.replace(key, plaintext);
 	    });
-	    // Write the instructions back after replacing patterns
-	    $('#instructions_text').html(itext);
+	    if (continuation) {
+		continuation(itext);
+	    }
 	};
     	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
@@ -2951,34 +3582,58 @@ $(function ()
 
     /*
      * Add a context menu to the site tags
+     *
+     * XXX
+     * This does not work since moving Jacks into an iframe.
+     * Need a work around.
      */
     function SetupSiteContextMenus()
     {
 	// We do not have Jacks support, so find the site blob labels.
-	var sitetags = {};
 
 	$('g.sitelabelgroup text.sitetext').each(function () {
-	    var tag = $(this).text();
-	    if (tag != "") {
-		sitetags[tag] = $(this);
+	    var sitetag  = this;
+	    var nickname = $(this).text();
+	    if (nickname == "") {
+		return;
 	    }
+	    // Gotta find the URN.
+	    _.each(amlist, function (info, urn) {
+		if (info.nickname == nickname) {
+		    $(sitetag).click(function (event) {
+			SiteContextMenuShow(event, nickname, urn);
+		    });
+		}
+	    });
 	});
-	console.info("SetupSiteContextMenus", sitetags);
-	if (!_.size(sitetags)) {
+    }
+
+    /*
+     * Add a context menu to a node at a failed site that allows 
+     * it (the site) to be deleted.
+     */
+    function SetupFailedNodeMenu(client_id, urn)
+    {
+	// Called from UpdateSliverStatus so repeats.
+	if (_.has(contextMenus, client_id)) {
 	    return;
 	}
-	
-	_.each(manifests, function (manifest, urn) {
-	    var nickname = amlist[urn].name;
+	var clone = $("#site-context-menu").clone();
 
-	    if (_.has(sitetags, nickname)) {
-		var sitetag  = sitetags[nickname];
+	// Change the ID of the clone so its unique.
+	clone.attr('id', "context-menu-" + client_id);
 
-		$(sitetag).click(function (event) {
-		    SiteContextMenuShow(event, sitetag, urn);
-		});
-	    }
+	// Handler
+	$(clone).find("[name=delete]").click(function (event) {
+	    event.preventDefault();
+	    DoDeleteSite(urn);
 	});
+
+	// Insert into the context-menus div.
+	$('#context-menus').append(clone);
+
+	// Remember for ActionHandler
+	contextMenus[client_id] = clone;
     }
 
     /*
@@ -2988,15 +3643,7 @@ $(function ()
     {
 	var nickname = amlist[urn].nickname;
 
-	// Handler for hide modal to unbind the click handler.
-	$('#deletesite_modal').one('hidden.bs.modal', function (event) {
-	    $('#deletesite_confirm').unbind("click.deletesite");
-	});
-	
-	// Throw up a confirmation modal, with handler bound to confirm.
-	$('#deletesite_confirm').bind("click.deletesite", function (event) {
-	    sup.HideModal('#deletesite_modal');
-	
+	sup.ShowConfirmModal('#deletesite_modal', function () {
 	    var callback = function(json) {
 		console.info(json);
 		sup.HideWaitWait(function () {		
@@ -3017,8 +3664,6 @@ $(function ()
 						 "cluster"  : nickname});
 	    xmlthing.done(callback);
 	});
-        $('#error_panel').addClass("hidden");
-	sup.ShowModal('#deletesite_modal');
     }
 
     function ShowProgressModal()
@@ -3453,6 +4098,124 @@ $(function ()
 	     });
     }
 
+    var connectsetup = 0;
+    
+    function SetupConnectLanModal(linkname)
+    {
+	if (connectsetup) {
+	    return;
+	}
+	connectsetup = 1;
+			 
+	$("button#connect-sharedlan-button").click(function(event) {
+	    event.preventDefault();
+	    $('button#connect-sharedlan-button').popover('hide');
+	    sup.ShowModal('#connect-sharedlan-modal');
+	});
+	$("button#connect-sharedlan-confirm").click(function(event) {
+	    event.preventDefault();
+	    ConnectSharedLan();
+	});
+	var checkform = function () {
+	    var which = $('#connect-sharedlan-modal ' +
+			  'input[name="sharedlanradio"]:checked').val();
+	    var enable = 0;
+
+	    if (which === undefined) {
+		DisableButton("connect-sharedlan");
+		return;
+	    }
+	    var slan = $.trim($('#connect-sharedlan-modal .source-lan').val());
+	    var texp = $.trim($('#connect-sharedlan-modal .target-uuid').val());
+	    var tlan = $.trim($('#connect-sharedlan-modal .target-lan').val());
+
+	    if (which == "connect") {
+		if (slan != "" && texp != "" && tlan != "") {
+		    enable = 1;
+		}
+	    }
+	    else if (which == "disconnect") {	    
+		if (slan != "") {
+		    enable = 1;
+		}
+	    }
+	    if (enable) {
+		$("button#connect-sharedlan-confirm")
+		    .removeAttr("disabled");
+	    }
+	    else {
+		$("button#connect-sharedlan-confirm")
+		    .attr("disabled", "disabled");
+	    }
+	};
+	$('#connect-sharedlan-modal .target-uuid, ' +
+	  '#connect-sharedlan-modal .source-lan, ' +
+	  '#connect-sharedlan-modal .target-lan').on("keyup", function () {
+	      checkform();
+	  });
+	$('#connect-sharedlan-modal input[name="sharedlanradio"]')
+	    .change(function () {
+		var which = $('#connect-sharedlan-modal ' +
+			      'input[name="sharedlanradio"]:checked').val();
+
+		if (which === "connect") {
+		    $('#connect-sharedlan-modal .target-uuid, ' +
+		      '#connect-sharedlan-modal .target-lan')
+			.removeClass("hidden");
+		}
+		else if (which === "disconnect") {
+		    $('#connect-sharedlan-modal .target-uuid, ' +
+		      '#connect-sharedlan-modal .target-lan')
+			.addClass("hidden");
+		}
+		checkform();
+	    });
+
+	// Seed the form, most of the time there is one shared lan.
+	$('#connect-sharedlan-modal .source-lan').val(linkname);
+
+	// And show the button.
+	$("#connect-sharedlan-button").removeClass("hidden");
+    }
+
+    function ConnectSharedLan()
+    {
+	var target_uuid = $('#connect-sharedlan-modal .target-uuid').val();
+	var source_lan  = $('#connect-sharedlan-modal .source-lan').val();
+	var target_lan  = $('#connect-sharedlan-modal .target-lan').val();
+	var which       = $('#connect-sharedlan-modal ' +
+			    'input[name="sharedlanradio"]:checked').val();
+	var noreconfig  = $('#connect-sharedlan-modal ' +
+			    '.form-check-input').is(':checked') ? 1 : 0;
+
+	var args = {
+	    "uuid"        : uuid,
+	    "target-uuid" : $.trim(target_uuid),
+	    "source-lan"  : $.trim(source_lan),
+	    "target-lan"  : $.trim(target_lan),
+	    "which"       : which,
+	    "noreconfig"  : noreconfig,
+	};
+
+	var callback = function (json) {
+	    console.log("ConnectSharedLan", json);
+	    sup.HideWaitWait(function () {
+		if (json.code) {
+		    sup.SpitOops("oops", json.value);
+		    return;
+		}
+		sup.ShowModal('#success-modal');
+	    });
+	};
+	sup.HideModal('#connect-sharedlan-modal', function () {
+	    sup.ShowWaitWait("This will take a minute or two. " +
+			     "Patience please.", undefined, function () {
+				 sup.CallServerMethod(null, "status",
+						      "ConnectSharedLan", args, callback);
+			     });
+	});
+    }
+
     function CheckCreateProfileArgs(args, continuation)
     {
 	args["checkonly"] = 1;
@@ -3601,12 +4364,7 @@ $(function ()
 	    var tabname = client_id + "console_tab";
 	    if (! $("#" + tabname).length) {
 		// The tab.
-		var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
-		    client_id + "-Cons" +
-		    "<button class='close' type='button' " +
-		    "        id='" + tabname + "_kill'>x</button>" +
-		    "</a>" +
-		    "</li>";	
+		var html = navTabLink(client_id + "-Cons", tabname);
 
 		// Append to end of tabs
 		$("#quicktabs_ul").append(html);
@@ -3623,10 +4381,10 @@ $(function ()
 		$("#" + tabname + "_kill").click(function(e) {
 		    window.APT_OPTIONS.gaTabEvent("kill", ganame);
 		    e.preventDefault();
+		    // Activate the initialtab
+		    SwitchToLastKnownTab();
 		    // remove the li from the ul. this=ul.li.a.button
 		    $(this).parent().parent().remove();
-		    // Activate the "profile" tab.
-		    $('#quicktabs_ul li a:first').tab('show');
 		    // Trigger the custom event.
 		    $("#" + tabname).trigger("killconsole");
 		    // Remove the content div. Have to delay this though.
@@ -3663,10 +4421,11 @@ $(function ()
 	    
 		    if (_.has(json.value, "password")) {
 			html =
-			    "<div class='col-sm-4 col-sm-offset-4 " +
+			    "<div class='col-sm-4 col-sm-offset-4 offset-sm-4" +
 			    "     text-center'>" +
 			    " <small> " +
 			    " <a data-toggle='collapse' " +
+			    "    data-bs-toggle='collapse' " +
 			    "    href='#password_" + tabname + "'>Password" +
 			    "   </a></small> " +
 			    " <div id='password_" + tabname + "' " +
@@ -3747,10 +4506,10 @@ $(function ()
 	
 	if (_.has(coninfo, "password")) {
 	    html =
-		"<div class='col-sm-4 col-sm-offset-4 " +
+		"<div class='col-sm-4 col-sm-offset-4 offset-sm-4 " +
 		"     text-center'>" +
 		" <small> " +
-		" <a data-toggle='collapse' " +
+		" <a data-toggle='collapse' data-bs-toggle='collapse' " +
 		"    href='#password_" + tabname + "'>Password" +
 		"   </a></small> " +
 		" <div id='password_" + tabname + "' " +
@@ -3835,12 +4594,174 @@ $(function ()
 		sup.ShowModal('#top-processes-modal');
 	    });
 	}
-	sup.ShowModal('#waitwait-modal');
+
+	sup.ShowWaitWait("This will take a minute ... patience please");	
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status", "Top",
 					    {"uuid" : uuid,
 					     "node" : client_id});
 	xmlthing.done(callback);
+    }
+
+    //
+    // Node Service Logs. 
+    //
+    function DoServiceLogs(client_id)
+    {
+	sup.ShowModal('#waitwait-modal');
+
+	var callback = function(json) {
+	    sup.HideWaitWait();
+	    console.info("DoServiceLogs", json);
+	    
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    
+	    //
+	    // Create the tab, or else replace the contents.
+	    //
+	    var tabname = client_id + "logs";
+	    if (! $("#" + tabname).length) {
+		// The tab.
+		var html = navTabLink(client_id + "-Logs", tabname);
+
+		// Append to end of tabs
+		$("#quicktabs_ul").append(html);
+
+		// Install a kill click handler for the X button.
+		$("#" + tabname + "_kill").click(function(e) {
+		    e.preventDefault();
+		    // remove the li from the ul. this=ul.li.a.button
+		    $(this).parent().parent().remove();
+		    // Activate the initialtab
+		    SwitchToLastKnownTab();
+		    // Remove the content div. Have to delay this though.
+		    // See below.
+		    setTimeout(function(){
+			$("#" + tabname).remove() }, 3000);
+		});
+
+		// The content div.
+		html = "<div class='tab-pane' id='" + tabname + "'></div>";
+
+		$("#quicktabs_content").append(html);
+
+		// And make it active
+		$('#quicktabs_ul a:last').tab('show') // Select last tab
+	    }
+	    else {
+		// Switch back to it.
+		$('#quicktabs_ul a[href="#' + tabname + '"]').tab('show');
+		return;
+	    }
+	    var html = "";
+	    _.each(json.value, function(details) {
+		var cmd = details.command;
+		var log = details.log;
+
+		html +=
+		    "<pre class='servicelog-command'>" + cmd + "\n" + "</pre>" +
+		    "<pre class='servicelog-log'>" + log + "</pre>";
+	    });
+	    $('#' + tabname).html(html);
+	}
+	sup.ShowWaitWait("This will take a minute ... patience please");	
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "status",
+					    "ServiceLogs",
+					    {"uuid" : uuid,
+					     "node" : client_id});
+	xmlthing.done(callback);
+    }
+
+    //
+    // Portstats 
+    //
+    function ShowPortstatsTab()
+    {
+	if (isadmin) {
+	    $('#show_portstats_li').removeClass("hidden");
+	    $("#Portstats").removeClass("hidden");
+	    var phandler = function () {
+		$('#show_portstats_tab').off("shown.bs.tab", phandler);
+		$('#portstats-refresh-button')
+		    .removeClass("hidden")
+		    .click(Portstats);
+		Portstats();
+	    };
+	    $('#show_portstats_tab').on("shown.bs.tab", phandler);
+	}
+    }
+    
+    function Portstats()
+    {
+	if (instanceStatus != "ready" && instanceStatus != "quarantined") {
+	    alert("Experiment must be ready to gather switch port counters");
+	    return;
+	}
+	
+	var callback = function(json) {
+	    console.info(json);
+	    if (json.code) {
+		sup.HideModal('#waitwait-modal', function () {
+		    sup.SpitOops("oops", json.value);
+		});
+		return;
+	    }
+	    sup.HideModal('#waitwait-modal', function () {
+		ShowPortstats(json.value);
+	    });
+	}
+
+	sup.ShowWaitWait("This will take a minute ... patience please");	
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "status", "Portstats",
+					    {"uuid" : uuid});
+	xmlthing.done(callback);
+    }
+    function ShowPortstats(portstats)
+    {
+	$('#Portstats').html('');
+	
+	_.each(portstats, function (details, urn) {
+	    var nickname = amlist[urn].nickname;
+	    var stats    = details.portstats;
+	    var id       = "portstats-table-nickname";
+	    var table    = $("<table class=tablesorter id=" + id + ">" +
+			     "  <thead><tr></tr></thead>" +
+			     "  <tbody></tbody>" +
+			     "   </table>");
+
+	    // Stats is an array. First row has the column headers.
+	    var first = stats.shift();
+	    var html  = "";
+	    _.each(first.split(","), function (token) {
+		html += "<td>" + token + "</td>";
+	    });
+	    $(table).find("thead tr").html(html);
+
+	    // Now the rows.
+	    _.each(stats, function(row) {
+		var html  = "";
+		_.each(row.split(","), function (token) {
+		    html += "<td>" + token + "</td>";
+		});
+		$(table).find("tbody").append("<tr>" + html + "</tr>");
+	    });
+	    if (portstats.length > 1) {
+		var wrapper = $("<center>" + nickname + "</center>");
+		$(wrapper).append(table);
+		table = wrapper;
+	    }
+	    $('#Portstats').append(table);
+	    $('#' + id).tablesorter({
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra", "stickyHeaders"],
+		headerTemplate : '{content} {icon}',
+	    });
+	});
     }
 
     //
@@ -3886,13 +4807,11 @@ $(function ()
 	$('#powder-map_iframe')[0].contentWindow.PowderMapUpdate();
     }
 
-    var jacksInput;
-    var jacksOutput;
-    var jacksRspecs;
-
     function ShowViewer(divname, multisite, manifest)
     {
+	//console.info("ShowViewer");
 	var aggregates = [];
+	var defer = $.Deferred();
 	
 	_.each(amlist, function(details, aggregate_urn) {
 	    aggregates.push({"id" : aggregate_urn,
@@ -3901,67 +4820,60 @@ $(function ()
 	
 	if (! jacksInstance)
 	{
-	    jacksInstance = new window.Jacks({
-		mode: 'viewer',
-		source: 'rspec',
-		multiSite: multisite,
-		root: divname,
-		nodeSelect: false,
-		readyCallback: function (input, output) {
-		    jacksInput = input;
-		    jacksOutput = output;
-		    window.jacksInput = input;
-
-		    jacksOutput.on('modified-topology', function (object) {
-			_.each(object.nodes, function (node) {
-			    jacksIDs[node.client_id] = node.id;
-			    if (!_.has(jacksSites, node.aggregate_id)) {
-				jacksSites[node.aggregate_id] = {};
-			    }
-			    jacksSites[node.aggregate_id][node.client_id] =
-				node.id;
-			});
-			//console.log("jacksIDs", object, jacksIDs, jacksSites);
-			ShowManifest(object.rspec);
-		    });
-
-		    jacksInput.trigger('change-topology',
-				       [{ rspec: manifest }]);
-
-		    jacksOutput.on('click-event', function (jacksevent) {
-			if (jacksevent.type === 'node' ||
-			    jacksevent.type === 'host') {
-			    //console.log(jacksevent);
-			    ContextMenuShow(jacksevent);
-			}
-		    });
-		},
-	        canvasOptions: { "aggregates" : aggregates },
-		show: {
-		    rspec: false,
-		    tour: false,
-		    version: false,
-		    selectInfo: false,
-		    menu: false
+	    var modified_callback = function (object) {
+		_.each(object.nodes, function (node) {
+		    jacksIDs[node.client_id] = node.id;
+		    if (!_.has(jacksSites, node.aggregate_id)) {
+			jacksSites[node.aggregate_id] = {};
+		    }
+		    jacksSites[node.aggregate_id][node.client_id] =
+			node.id;
+		});
+		console.log("jacksIDs", object, jacksIDs, jacksSites);
+		ShowManifest(object.rspec);
+		window.jacksIDS = jacksIDs;
+		window.jacksSites = jacksSites;
+		defer.resolve();
+	    };
+	    var click_callback = function (jacksevent) {
+		if (jacksevent.type === 'node' ||
+		    jacksevent.type === 'host') {
+		    console.log(jacksevent);
+		    ContextMenuShow(jacksevent);
 		}
-            });
+	    };
+
+	    jacksInstance = JacksViewer.create({
+		"root"       : divname,
+		"selector"   : '.showtopology-bare',
+		"xml"        : manifest,
+		"showinfo"   : false,
+		"multisite"  : multisite,
+		"aggregates" : aggregates,
+		"modified_callback" : modified_callback,
+		"click_callback"    : click_callback,
+	    });
 	}
+	else {
+	    defer.resolve();
+	}
+	return defer;
     }
     // Clear the Jacks view to get ready for topo change.
     function ClearViewer(manifest)
     {
-	if (jacksInput) {
-	    jacksInput.trigger('change-topology',
-			       [{ rspec: manifest }], {});
-
+	if (jacksInstance) {
+	    jacksInstance.clear();
+	    if (manifest) {
+		jacksInstance.add(manifest);
+	    }
 	}
     }
     // Add manifest to viewer.
     function AddToViewer(manifest)
     {
-	if (jacksInput) {
-	    jacksInput.trigger('add-topology', 
-			       [{ rspec: manifest }]);
+	if (jacksInstance) {
+	    jacksInstance.add(manifest);
 	}
     }
 
@@ -3970,6 +4882,8 @@ $(function ()
      */
     function ShowSliverURLs(statusblob)
     {
+	//console.info("ShowSliverURLs", statusblob);
+	
 	if (!publicURLs) {
 	    $('#sliverinfo_dropdown').change(function (event) {
 		var selected =
@@ -4063,12 +4977,7 @@ $(function ()
 	var tabname = site + "_linktest";
 	if (! $("#" + tabname).length) {
 	    // The tab.
-	    var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
-		name + "" +
-		"<button class='close' type='button' " +
-		"        id='" + tabname + "_kill'>x</button>" +
-		"</a>" +
-		"</li>";	
+	    var html = navTabLink(name, tabname);
 
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);
@@ -4089,8 +4998,8 @@ $(function ()
 		$(this).parent().parent().remove();
 		// Remove the content div.
 		$("#" + tabname).remove();
-		// Activate the first visible tab
-		$('#quicktabs_ul a:visible:first').tab('show');
+		// Activate the initialtab
+		SwitchToLastKnownTab();
 	    });
 
 	    // The content div.
@@ -4142,7 +5051,9 @@ $(function ()
 	if (linktestsetup) {
 	    return ToggleLinktestButtons(status);
 	}
-
+	// Show portstats here, since we know there are links.
+	ShowPortstatsTab();
+	
         linktestsetup = 1;
         var md = templates['linktest-md'];
         $('#linktest-help').html(marked(md));
@@ -4287,6 +5198,9 @@ $(function ()
 	if (instanceStatus == "created") {
 	    spinwidth = "25";
 	}
+	else if (instanceStatus == "rdzwait") {
+	    spinwidth = "15";
+	}
 	else if (instanceStatus == "provisioning" ||
 		 instanceStatus == "stitching") {
 	    spinwidth = "33";
@@ -4305,20 +5219,24 @@ $(function ()
  	    $('#profile_status_collapse').trigger('show.bs.collapse');
 	    $('#status_progress_outerdiv').removeClass("hidden");
 	    $("#status_progress_bar").width(spinwidth + "%");	
-	    $("#status_progress_div").addClass("progress-striped");
-	    $("#status_progress_div").removeClass("progress-bar-success");
-	    $("#status_progress_div").removeClass("progress-bar-danger");
-	    $("#status_progress_div").addClass("active");
+	    $("#status_progress_bar").addClass("progress-bar-striped");
+	    $("#status_progress_bar").addClass("progress-bar-animated");
+	    $("#status_progress_bar").removeClass("bg-primary");
+	    $("#status_progress_bar").removeClass("bg-warning");
+	    $("#status_progress_bar").removeClass("bg-danger");
 	}
 	else {
 	    if (! $('#status_progress_outerdiv').hasClass("hidden")) {
-		$("#status_progress_div").removeClass("progress-striped");
-		$("#status_progress_div").removeClass("active");
+		$("#status_progress_bar").removeClass("progress-bar-striped");
+		$("#status_progress_bar").removeClass("progress-bar-animated");
 		if (instanceStatus == "ready") {
-		    $("#status_progress_div").addClass("progress-bar-success");
+		    $("#status_progress_bar").addClass("bg-primary");
+		}
+		else if (instanceStatus == "pending") {
+		    $("#status_progress_bar").addClass("bg-warning");
 		}
 		else {
-		    $("#status_progress_div").addClass("progress-bar-danger");
+		    $("#status_progress_bar").addClass("bg-danger");
 		}
 		$("#status_progress_bar").width("100%");
 	    }
@@ -4431,59 +5349,28 @@ $(function ()
 	ShowIdleGraphs({"uuid"     : uuid,
 			"showwait" : true,
 			"loadID"   : "#loadavg-panel-div",
+			"gpuID"    : "#gpu-panel-div",
 			"ctrlID"   : "#ctrl-traffic-panel-div",
 			"exptID"   : "#expt-traffic-panel-div",
 			"refreshID": "#graphs-refresh-button",
 			"callback" : callback});
     }
 
-    function LazyTopoTab(multisite, manifest)
-    {
-	if (! $('#show_topology_tab').parent().hasClass("hidden")) {
-	    return;
-	}
-	$('#show_topology_tab').parent().removeClass("hidden");
-	
-	// Helper function.
-	var loadScript = function (url, callback) {
-	    jQuery.ajax({
-		url: url,
-		dataType: 'html',
-		success: callback,
-		async: true
-	    });
-	};
-	var waitForJacks = function () {
-	    if (window.JACKS_LOADER.isReady) {
-		console.info("loaded");
-		ShowTopologyTab(multisite, manifest);
-		SetupLinktest(instanceStatus);
-		return;
-	    }
-	    console.info("waiting");
-	    setTimeout(function f() { waitForJacks() }, 500);	    
-	};
-	loadScript("jacksload.php", function (data) {
-	    console.info(data);
-
-	    $(document.body).append("<div>" + data + "</div>");
-	    waitForJacks();
-	});
-	lazytopo = 0;
-    }
-
     function ShowTopologyTab(multisite, manifest)
     {
+	// console.info("ShowTopologyTab");
 	if (! $('#quicktabs_content #topology').hasClass("hidden")) {
 	    return;
 	}
-	
-	// Show the tab.
 	$('#quicktabs_ul a[href="#topology"]').parent().removeClass("hidden");
 	$('#quicktabs_content #topology').removeClass("hidden");
-	$('#quicktabs_ul a[href="#topology"]').tab('show');
-
-	ShowViewer('#showtopo_statuspage', multisite, manifest);
+	// This avoids leaving the popovers visible when leaving the tab
+	// as when clicking on the shell/console button.
+	$('#quicktabs_ul a[href="#topology"]').on("hide.bs.tab", function (event) {
+	    $('.node-popover').popover('hide');	    
+	});
+	SwitchToLastKnownTab();
+	return ShowViewer('#showtopo_statuspage', multisite, manifest);
     }
 
     /*
@@ -4506,21 +5393,25 @@ $(function ()
 	    //console.info("Max extension date:", maxdate);
 		    
 	    /*
-	     * See if the difference is less then two days
+	     * Show warning if close to max. 
 	     */
 	    var now   = new Date();
 	    var hours = Math.floor((maxdate.getTime() -
 				    now.getTime()) / (1000 * 3600.0));
-	    if (hours > (7 * 24)) {
+
+	    console.info("Max allowed extension hours: ", hours);
+
+	    // Locked down experiments can go negative.
+	    if (hours > (14 * 24) || hours < 0) {
+		$('#maximum-extension').addClass("hidden");
 		return;
 	    }
-	    //console.info("Max allowed extension hours: ", hours);
 	    
 	    var when    = moment(maxdate).format('lll');
 	    var fromnow = moment(maxdate).fromNow(true) + " from now";
 	
 	    $('#maximum-extension-string').html(when + " (" + fromnow + ")");
-	    if (hours < 48) {
+	    if (hours < (7 * 24)) {
 		$('#maximum-extension-string').removeClass("text-warning");
 		$('#maximum-extension-string').addClass("text-danger");
 	    }
@@ -4577,23 +5468,36 @@ $(function ()
     function ExperimentStarted()
     {
 	console.info("ExperimentStarted");
-	
-	sup.CallServerMethod(null, "status", "ExpInfo",
-			     {"uuid" : uuid},
-	     function(json) {
-		 console.info("expinfo", json);
-		 if (json.code) {
-		     console.info("Could not get experiment "+
-				  "info: " + json.value);
-		     return;
-		 }
-		 expinfo = json.value;
-		 if (expinfo.started) {
-		     $('#exp-started-date')
-			 .html(moment(expinfo.started).format("lll"));
-		     $('.exp-running').removeClass("hidden");
-		 }
-	     });
+
+	LoadExperimentInfo(function() {
+	    if (expinfo.started) {
+		$('#exp-started-date')
+		    .html(moment(expinfo.started).format("lll"));
+		$('.exp-running').removeClass("hidden");
+	    }
+	});
+    }
+
+    /*
+     * Load experiment info and callback.
+     */
+    function LoadExperimentInfo(callback)
+    {
+	console.info("LoadExperimentInfo");
+
+	sup.CallServerMethod(null, "status", "ExpInfo", {"uuid" : uuid},
+			     function(json) {
+				 console.info("expinfo", json);
+				 if (json.code) {
+				     console.info("Could not get experiment "+
+						  "info: " + json.value);
+				     return;
+				 }
+				 expinfo = json.value;
+				 if (callback) {
+				     callback();
+				 }
+			     });
     }
 
     /*
@@ -4633,6 +5537,63 @@ $(function ()
 		$('#destroy-quarantine-checkbox').prop("checked", false);
 	    }
 	});
+	$('#destroy-experiment-modal .traffic-violation').click(function (e) {
+	    e.preventDefault();
+	    var msg =
+		"Please tell us what you are doing, you are sending a very\n" +
+		"unusual amount of traffic over the shared control network\n " +
+		"instead of your own internal network(s). Your internal\n" +
+		"networks have IP addresses in the 10.XXX.YYY.ZZZ range, see\n"+
+		"/etc/hosts on your nodes for the specific addresses to use\n" +
+		"in your software configuration.\n\n" +
+		"We need to know very soon so we do not have to terminate\n" +
+		"this experiment. You are not permitted to send high volume\n" +
+		"traffic on the public facing shared network!\n" +
+		"-------------------------------------------------------\n" +
+		$('#destroy-experiment-reason').val();		
+	    
+	    $('#destroy-experiment-reason').val(msg);
+	});
+	$('#destroy-experiment-modal .compromised').click(function (e) {
+	    e.preventDefault();
+	    var msg =
+		"This experiment is being quarantined because we have determined\n"+
+		"that one or more nodes in the experiment has been compromised\n"+
+		"and is engaged in improper activity. Here are guidelines for\n"+
+		"properly securing your nodes:\n\n" +
+                "If you are using Apache/Spark/Hadoop, it has has known\n" +
+		"vulnerabilities as described here:\n\n" +
+		"https://groups.google.com/forum/#!msg/cloudlab-users/qvGyZo8SIoE/vyiSgzRUDAAJ\n\n" +
+	        "Using weak passwords (especially those like 'hadoop',\n" +
+		"'root', 'linux', or 'admin') is strictly forbidden, even if\n"+
+		"online instructions tell you to do so.\n\n" +
+		"Starting web services on the public facing IP address, that\n"+
+		"are weakly protected (see note above about passwords) is\n" +
+		"also prohibited. Again, it does not matter what online\n" +
+		"instructions tell you to do, you must not enable weakly\n" +
+		"protected web services.\n\n" +
+		"Please note that you are fully responsible for the security\n"+
+		"of your nodes and any software you install on it.\n\n" +
+		"As soon as we know what you were doing and how you are\n" +
+		"going to prevent this from happening again, we can unfreeze\n"+
+		"your account.\n\n" +
+		"Once a node is compromised, the experiment must be terminated.\n" +
+		"If you have any data on the node you need, we can boot it into\n"+
+		"a memory based 'Recovery' system [1] where you can ssh into the\n"+
+		"experiment nodes, mount the filesystem [2], and copy that data off."+
+		"\n\n"+
+		"[1] https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/Using-the-Testbed/Using-the-Recovery-MFS\n"+
+		"[2] https://gitlab.flux.utah.edu/emulab/emulab-devel/-/wikis/faq/Using-the-Testbed/Using-the-Recovery-MFS#mounting-the-root-filesystem\n"+
+		"-------------------------------------------------------\n" +
+		$('#destroy-experiment-reason').val();		
+	    
+	    $('#destroy-experiment-reason').val(msg);
+	});
+	if (isadmin) {
+	    $('#destroy-experiment-modal .traffic-violation,' +
+	      '#destroy-experiment-modal .compromised')
+		.removeClass("hidden");
+	}
     }
     
     function WarnExperiment()
@@ -4782,12 +5743,7 @@ $(function ()
 	var tabname = client_id + "monitor_tab";
 	if (! $("#" + tabname).length) {
 	    // The tab.
-	    var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
-		client_id + "-Graph" +
-		"<button class='close' type='button' " +
-		"        id='" + tabname + "_kill'>x</button>" +
-		"</a>" +
-		"</li>";	
+	    var html = navTabLink(client_id + "-Graph", tabname);
 
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);
@@ -4797,21 +5753,45 @@ $(function ()
 		e.preventDefault();
 		// remove the li from the ul. this=ul.li.a.button
 		$(this).parent().parent().remove();
-		// Activate the "profile" tab.
-		$('#quicktabs_ul li a:first').tab('show');
+		// Activate the initialtab
+		SwitchToLastKnownTab();
 		// Remove the content div. Have to delay this though.
 		$("#" + tabname).remove();
 	    });
+	    var which    = "rfmonitor";
+	    var cluster  = amlist[info.aggregate_urn].nickname;
+	    var url      = amlist[info.aggregate_urn].weburl;
+	    var endpoint = null;
+	    if (info.itype == "ME") {
+		which = "rfmonitor-mobile";
+		endpoint = cluster.replace("Bus", "bus-").toLowerCase();
+		url = "https://www.emulab.net";
+	    }
 	    var options = {
-		"url"      : amlist[info.aggregate_urn].weburl,
+		"url"      : url,
 		"selector" : "#" + tabname + " .frequency-graph-div",
-		"cluster"  : amlist[info.aggregate_urn].nickname,
+		"cluster"  : cluster,
 		"node_id"  : info.node_id,
 		"iface"    : "rf0",
 		"logid"    : null,
 		"archived" : false,
-		"baseline" : false,
+		"which"    : which,
+		"endpoint" : endpoint,
+		"enableReload" : true,
 	    }
+	    // Narrow the range to the actual start/end of the aggregate.
+	    var blob = lastStatusBlob.sliverstatus[info.aggregate_urn];
+	    if (blob.started) {
+		options["rangestart"] = moment(blob.started).unix();
+	    }
+	    else {
+		options["rangestart"] = moment(expinfo.started).unix();
+	    }
+	    if (blob.destroyed) {
+		options["rangeend"] = moment(blob.destroyed).unix();
+	    }
+	    console.info("monitor tab options", options);
+	    
 	    var html = monitorTemplate(options);
 
 	    // The content div.
@@ -4833,10 +5813,294 @@ $(function ()
 	}
     }
 
+    /*
+     * Show a TX graph. 
+     */
+    function ShowTXGraph(client_id)
+    {
+	var route;
+	var args;
+	var defer = $.Deferred();
+
+	var callback = function (json) {
+	    console.info(json);
+	    if (json.code) {
+		defer.resolve(json.value);
+		return;
+	    }
+	    var txlist = json.value.txlist;
+	    if (!_.size(txlist)) {
+		defer.reject(null);
+		return;
+	    }
+	    var args = {
+		"selector"  : "#txgraph-modal",
+		"txlist"    : txlist,
+		"instances" : null,
+		"instance"  : expinfo,
+	    }
+	    defer.resolve(args);
+	};
+	if (client_id) {
+	    var fe       = radios[client_id].frontends["rf0"];
+	    var urn      = fe.aggregate_urn;
+	    var node_id  = fe.node_id;
+	    var frontend = fe.frontend;
+	    var iface    = fe.iface;
+	    console.info(urn, node_id, frontend, iface);
+
+	    args = {
+		"instance"      : uuid,
+		"aggregate_urn" : urn,
+		"node_id"       : node_id,
+		"iface"         : iface,
+		"frontend"      : frontend,
+	    };
+	    route = "rfrange";
+	}
+	else {
+	    args = {
+		"uuid" : uuid,
+	    };
+	    route = "status";
+	}
+	window.ShowTXGraph("#txgraph-modal", defer);
+	sup.CallServerMethod(null, route, "Transmissions", args, callback);
+    }
+
+    var modified    = 0;
+    var stepsmotion = false;
+    var newrspec    = null;
+    var modifyready = false;
+    
+    function Modify()
+    {
+	// Need to fix this global.
+	window.EXPMODIFY = true;
+	newrspec = null;
+
+	if (!modifyready) {
+	    // Moved some stuff so it can be shared with status.js
+	    instantiateCommon.initialize({
+		amlist    : amlist,
+		radioinfo : radioinfo,
+		resgroups : resgroups,
+		multisite : window.MULTISITE,
+	    });
+	    modifyready = true;
+	}
+
+	$('.ppwizard-cancel').click(function (event) {
+	    event.preventDefault();
+
+	    $('#ppwizard-body').addClass("hidden");
+	    $('#main-template').removeClass("hidden");
+	    $('.ppwizard-cancel, #ppwizard-accept, ' +
+	      '#ppwizard-finish, #ppwizard-modify').off("click");
+	    $('#ppwizard-body .topo-before, #ppwizard-body .topo-after')
+		.html("");
+	    $('#ppwizard-finish').attr("disabled", true);
+	    $('#ppwizard-finish-message').addClass("hidden");
+	});
+	
+	$('#ppwizard-accept').click(function (event) {
+	    event.preventDefault();
+	    console.info("accept", modified);
+
+	    if (modified) {
+		window.ppstart.HandleSubmit(function(success) {
+		    console.info("handlesubmit", success);
+		    if (success) {
+			modified = 0;
+			newrspec = instantiateCommon.setClusters(newrspec);
+			newrspec = instantiateCommon.mergeRSpecAndManifest(
+			    newrspec, jacksManifest);
+			instantiateCommon.createAggregateSelectors(newrspec,
+							   expinfo.project,
+							   expinfo.group);
+			$('#ppwizard-accept').attr("disabled", true);
+			$('#ppwizard-finish').removeAttr("disabled");
+			$('#ppwizard-finish-message').removeClass("hidden");
+			$('#ppwizard-rspec-modal textarea').val(newrspec);
+			$(window).scrollTop(1000000);
+			ShowModifyViewer("after", newrspec);
+			instantiateCommon.checkForRadioUsage(newrspec);
+		    }
+		    else {
+		    }
+		});
+	    }
+	});
+
+	$('#ppwizard-finish').click(function (event) {
+	    event.preventDefault();
+	    console.info("finish");
+
+	    if (!instantiateCommon.allClustersSelected()) {
+		alert("Please make your cluster selections!");
+		return;
+	    }
+	    var rspec = instantiateCommon.setSites(newrspec);
+
+	    var args = {"uuid"  : uuid,
+			"rspec" : rspec};
+
+	    statusHold = 1;
+	    sup.ShowWaitWait("This will take a minute ... patience please");	
+	    sup.CallServerMethod(null, "status", "ModifyExperiment", args,
+		 function(json) {
+		     console.info("ModifyExperiment", json);
+                     var currentStatus = lastStatus;
+		     statusHold = 0;
+		     GetStatus();
+		     
+		     if (json.code) {
+			 sup.HideWaitWait(function () {
+			     sup.SpitOops("oops",
+					  "Could not start modification: " + 
+					  json.value);
+			 });
+			 return;
+		     }
+		     // Clear/Hide current errors
+		     $('#error_panel_text').text("");
+		     $('#error_panel').addClass("hidden");
+		     
+		     // Set this for error display. 
+		     modifying = true;
+		     $('.ppwizard-cancel').trigger("click");
+
+                     var interval;
+                     function checkStatus() {
+                         console.info("checkStatus", currentStatus, lastStatus);
+                         if (currentStatus == lastStatus) {
+                             return;
+                         }
+                         clearInterval(interval);
+		         sup.HideWaitWait();
+                     }
+                     interval = setInterval(checkStatus, 2000);                     
+		 });
+	});
+
+	/*
+	 * XXXX
+	 * Need to save new bindings in the db and reuse them
+	 * for next experiment modify.
+	 *
+	 * For repo profiles, need to pass the paramdefs along to startPP.
+	 */
+
+	window.ppstart.StartPP({
+	    profile          : expinfo.profile_uuid,
+	    uuid             : expinfo.profile_uuid,
+	    ppdivname        : "ppwizard-form",
+	    isadmin          : isadmin,
+	    multisite        : multisite,
+	    amlist           : amlist,
+	    prunetypes       : prunetypes,
+	    fromrepo         : expinfo.repourl ? true : false,
+	    rerun_instance   : expinfo.uuid,
+	    rerun_paramset   : null,
+	    paramdefs        : (expinfo.paramdefs ?
+				JSON.stringify(expinfo.paramdefs) : null),
+	    bindings         : expinfo.params, 
+	    setStepsMotion   : function (which) {
+		console.info("setStepsMotion", which);
+		stepsmotion = which;
+	    },
+	    setRerunInstance : function () {
+		console.info("setRerunInstance");
+	    },
+	    config_callback  : function (rspec) {
+		console.info("ConfigureDone", rspec);
+		if (rspec) {
+		    newrspec = rspec;
+		}
+	    },
+	    modified_callback: function () {
+		console.info("Modified", stepsmotion);
+		if (stepsmotion) {
+		    modified = 1;
+		    $('#ppwizard-accept').removeAttr("disabled");
+		    $('#ppwizard-finish').attr("disabled", true);
+		}
+	    },
+	    ready_callback   : function () {
+		$('#main-template').addClass("hidden");
+		$('#ppwizard-body').removeClass("hidden");
+		ShowModifyViewer("before", jacksManifest);
+	    },
+	});
+    }
+
+    function ShowModifyViewer(which, rspec)
+    {
+	var divname    = '#ppwizard-body .topo-compare';
+	var aggregates = [];
+	
+	_.each(amlist, function(details, aggregate_urn) {
+	    aggregates.push({"id" : aggregate_urn,
+			     "name" : details.name});
+	});
+	$(divname + ' .topo-' + which).html("");
+
+	var jacks = JacksViewer.create({
+	    "root"       : divname,
+	    "selector"   : '.topo-' + which,
+	    "xml"        : rspec,
+	    "showinfo"   : false,
+	    "multisite"  : multisite,
+	    "aggregates" : aggregates,
+	});
+    }
+
     // Helper.
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));
     }
-    
+
+    // Switch to tab the user used in the last use of the status page.
+    function SwitchToLastKnownTab()
+    {
+	$('#quicktabs_ul a[href="#' + initialTab + '"]').tab('show');
+    }
+    // Remember for last time (only topology or listview of course).
+    function RememberUserTab(which)
+    {
+	which = which.substr(1);
+	if (which != "topology" && which != "listview") {
+	    return;
+	}
+	initialTab = which;
+	
+	// Delete existing cookies first
+	var expires = "expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+	document.cookie = PORTALTABCOOKIE + '=; ' + expires;
+
+	var date = new Date();
+	date.setTime(date.getTime()+(1000*24*60*60*1000))
+
+	var cookie = PORTALTABCOOKIE + '=' + which +
+	    '; expires=' + date.toGMTString() + '; path=/';
+
+	console.info("RememberUserTab: ", cookie);
+	document.cookie = cookie;
+    }
+    // Get last known tab (or null).
+    function LastKnownUserTab()
+    {
+	var which = null;
+	
+	document.cookie.split(';').forEach(function(el) {
+	    let [key,value] = el.split('=');
+	    if (key.trim() == PORTALTABCOOKIE) {
+		which = value;
+	    }
+	});
+	console.info("LastKnownUserTab:", which);
+	return which;
+    }
+
     $(document).ready(initialize);
 });

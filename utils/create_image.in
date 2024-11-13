@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,12 +56,20 @@ use Errno qw(ENOSPC);
 #		and comes from sitevar images/create/maxsize if set. It should
 #		probably be finer-grained (per-project? per-user?) than that.
 #
+# $maximagedata	Max size of allocated data in a partition above which we will
+#		not attempt to even create an image. This is detected and
+#		enforced by imagezip via a parameter we pass in. Zero means
+#		we do not enforce a limit. This value comes from the sitevar
+#		images/create/maxdata if set. It should also probably be
+#		finer-grained (per-project? per-user?).
+#
 my $maxwait      = (72 * 60);
 my $idlewait     = ( 8 * 60);
 my $reportwait   = ( 2 * 60);
 # Check more frequently for web updates, sez Leigh.
 my $checkwait    = 5;
 my $maximagesize = (6 * 1024**3);
+my $maximagedata = 0;
 
 #
 # Options for imagezipper on the client-side. These apply only to imagezip,
@@ -76,6 +84,13 @@ my $maximagesize = (6 * 1024**3);
 #   N,z=9,d,a=SHA1
 #
 # Specific options:
+#
+# As of 2022 we start passing in an uncompressed data limit for imagezip
+# (new -A option). This allows the image creation process to fail early
+# if a user attempts to capture an image of a filesystem with a ridiculous
+# amount of data. This is more likely to happen now that we have increased
+# the default root filesystem partition to 64GB. Any limit to be enforced
+# comes from a sitevar (images/create/maxdata) right now.
 #
 # By default we do not create relocations (-N) in the resulting image for a
 # couple of reasons. One is that we never did relocation support for GRUB
@@ -97,6 +112,7 @@ my $maximagesize = (6 * 1024**3);
 # relocations anywhere!
 #
 my $zipperopts = "";
+my %zipperoptsneeded = ();
 
 #
 # Create a disk image.
@@ -109,6 +125,7 @@ sub usage()
     print(STDERR
 	  "Usage: create_image [-wsN] [-p <pid>] <imagename> <node>\n" .
 	  "switches and arguments:\n".
+	  "-f          - run in the foreground\n".
 	  "-w          - wait for image to be fully created\n".
 	  "-s          - use ssh instead of frisbee uploader\n".
 	  "-N          - use NFS (if available) instead of frisbee uploader\n".
@@ -204,6 +221,9 @@ sub cleanup();
 sub fatal($);
 sub check_progress($$);
 sub run_with_ssh($$);
+sub ssh_command($$;$);
+sub getimagebootslice($);
+sub imagezipcompat($);
 
 my $nodereboot	= "$TB/bin/node_reboot";
 my $createimage = "/usr/local/bin/create-versioned-image";
@@ -458,6 +478,10 @@ if (TBGetSiteVar("images/create/idlewait", \$tmp)) {
 if (TBGetSiteVar("images/create/maxsize", \$tmp)) {
     $maximagesize = $tmp * 1024**3;
 }
+if (TBGetSiteVar("images/create/maxdata", \$tmp)) {
+    # XXX sitevar is in GiB, imagezip wants MiB
+    $maximagedata = $tmp * 1024;
+}
 $idlewait = $maxwait
     if ($maxwait < $idlewait);
 $reportwait = $idlewait
@@ -655,6 +679,21 @@ else {
 	fatal("Could not map $node to its experiment object!");
     }
     $pid = $experiment->pid();
+
+    #
+    # See if the project/user/experiment is allowed to override any data limit.
+    #
+    if ($maximagedata) {
+	my $project = Project->Lookup($image->pid());
+	if (!defined($project)) {
+	    fatal("Could not lookup project for $image");
+	}
+	my $group = Group->Lookup($image->pid(), $image->gid());
+	if (EmulabFeatures->FeatureEnabled("UnlimitedImageData",
+					   $this_user, $group, $experiment)) {
+	    $maximagedata = 0;
+	}
+    }
 
     if ($isvirtnode) {
 	#
@@ -937,6 +976,7 @@ my $command;
 
 my $SERVER = ($UPLOADTOFS ? $FSIP : $BOSSIP)
 ;
+
 #
 # EC2 images use a special command which is hardwired below.
 #
@@ -993,7 +1033,13 @@ elsif (!$doprovenance) {
 	$command .= " -S $SERVER -F $id";
     }
 
-    if ($isdataset) {
+    if ($image->isbootimage()) {
+	$startslice = getimagebootslice($image);
+	$command .= " -B $startslice";
+	$command .= " $device";
+	$zipperoptsneeded{'B'} = 1;
+    }
+    elsif ($isdataset) {
 	# This is not backward compatable, but none of the BS code is.
 	$command .= " -b $bsname";
     }
@@ -1075,10 +1121,16 @@ else {
     if ($isxenhost && !$isdataset && !$srcsigfile && !$dstsigfile) {
 	$sopts = " -S $SERVER -F $id";
 
-	$startslice = $image->loadpart();
-	$loadlength = $image->loadlength();
-	if ($startslice || $loadlength == 1) {
-	    $sopts .= " -s $startslice";
+	if ($image->isbootimage()) {
+	    $startslice = getimagebootslice($image);
+	    $sopts .= " -B $startslice";
+	}
+	else {
+	    $startslice = $image->loadpart();
+	    $loadlength = $image->loadlength();
+	    if ($startslice || $loadlength == 1) {
+		$sopts .= " -s $startslice";
+	    }
 	}
     }
 
@@ -1105,25 +1157,46 @@ else {
     # We only include generate relocations for FreeBSD parititon images.
     #
     my $needrelocs = 0;
-    if ($image->loadpart()) {
+    if ($image->loadpart() && !$image->isbootimage()) {
 	my $pnode   = Node->Lookup($node->phys_nodeid());
 	my $osimage = OSImage->Lookup($pnode->def_boot_osid());
 	if (defined($osimage) && $osimage->OS() eq "FreeBSD") {
 	    $needrelocs = 1;
 	}
     }
+    #
+    # Add the imagezip option for limiting allocated data if the client
+    # imagezip supports it.
+    #
+    # XXX we can check this without imagezip in the client. 
+    #
+    if (0 && $maximagedata > 0 && !$isdataset && !$isvirtnode) {
+	$zipperopts .= ","
+	    if ($zipperopts);
+	$zipperopts .= "A=$maximagedata";
+	$zipperoptsneeded{'A'} = 1;
+    }
     if (!$needrelocs) {
 	$zipperopts .= ","
 	    if ($zipperopts);
 	$zipperopts .= "N";
+	# this has been supported since the beginning of time.
+	#$zipperoptsneeded{'N'} = 1;
     }
-
     if ($deltapct > 0) {
 	$zipperopts .= ","
 	    if ($zipperopts);
 	$zipperopts .= "P=$deltapct";
+	# uses a different script that has always supported this option.
+	#$zipperoptsneeded{'P'} = 1;
     }
-
+    if ($image->isbootimage()) {
+	$startslice = getimagebootslice($image);
+	$zipperopts .= ","
+	    if ($zipperopts);
+	$zipperopts .= "B=$startslice";
+	$zipperoptsneeded{'B'} = 1;
+    }
     if ($isdataset) {
 	# This is not backward compatable, but none of the BS code is.
 	$oargs .= " BSNAME=$bsname";
@@ -1263,23 +1336,115 @@ if ($delta || $signature) {
 if ($isec2node) {
     my $safe_target = User::escapeshellarg($target);
     
-    my $cmd = "$TB/bin/sshtb -host $CONTROL $EC2SNAP -u $user_uid ".
+    my $cmd = "$EC2SNAP -u $user_uid ".
 	"$safe_target $pid $user_uid $imageid $ofilename";
-    print STDERR "About to: '$cmd'\n" if (1 || $debug);
-
-    my $SAVEUID	= $UID;
-    $EUID = $UID = 0;
-
-    system($cmd);
-    fatal("'$cmd' failed")
-	if ($?);
-
-    $EUID = $UID = $SAVEUID;
-
+    if (ssh_command($CONTROL, $cmd)) {
+	fatal("$CONTROL: '$cmd' failed");
+    }
     if (defined($webtask)) {
 	$webtask->status("finishing");
     }
     goto ec2done;
+}
+
+#
+# If we are limiting the size of filesystem allocated space, we check that
+# now before we go to the trouble of booting into the MFS.
+#
+# XXX Note that if this fails for any reason (timeout, wrong FS type,
+# no imagezip binary), we will still check again in the MFS.
+#
+# XXX Dataset images don't have an associated device, that is conjured
+# up by the client blockstore code. As a quick hack we assume the node
+# is running Linux with an LVM-based dataset filesystem using the current
+# naming convention. We really need a client-side script to do this
+# check correctly. But you know...backward compatibility.
+#
+# XXX surprise! Vnode images don't have a device either. Resort to more
+# hinky-ness. We first ssh over and do a "df /" and then parse the
+# root dev out of that! Again, all in the name of backward compatibility.
+#
+# XXX Unless we are a vnode or a dataset in which case the node will
+# not be in an MFS and the latter check is not made either because it
+# would require a newer imagezip binary which we cannot guarantee is
+# in the client OS. So in these cases, we will still catch it (fail)
+# during the upload process, likely 10s of minutes after the image
+# capture has started.
+#
+if ($maximagedata) {
+    my ($cmd, $outref);
+    my $fssize = 0;
+
+    #
+    # If it is a dataset, we have to specify the type of the filesystem
+    # we expect, otherwise it will be an MBR partition on the boot disk.
+    # XXX For a dataset, we assume a Linux filesystem.
+    #
+    my $arg = $isdataset ? "-l" : "-s " . $image->loadpart();
+
+    if (!$device) {
+	# XXX no device for datasets, again assume linux (with LVM)
+	if ($isdataset) {
+	    ($device = $bsname) =~ s/-/--/g;
+	    $device = "/dev/mapper/emulab-$device";
+	}
+	# XXX no device for vnodes either, ssh over and do "df /"
+	elsif ($isvirtnode) {
+	    $cmd = "df -k /";
+	    if (ssh_command($node_id, $cmd, \$outref) == 0) {
+		foreach my $line (@$outref) {
+		    if ($line =~ /^(\/dev\/\S+)\s+\d+\s+(\d+).*\/\s*$/) {
+			$device = $1;
+			# XXX strip the partition identifier
+			if ($device =~ /^(.*)(s1a|1)$/) {
+			    $device = $1;
+			}
+			# Remember the used amount in case imagezip fails
+			$fssize = int($2 / 1024)
+			    if ($2);
+			last;
+		    }
+		}
+	    }
+	}
+    }
+
+    #
+    # If we have a target device, we first try to run imagezip in "info"
+    # mode which will quickly tell us how much allocated data would be saved.
+    # Failing that, we try a "df" on the device.
+    #
+    if ($device) {
+	$cmd = "/usr/local/bin/imagezip -i -F 0 $arg $device";
+	if (ssh_command($node_id, $cmd, \$outref) == 0) {
+	    foreach my $line (@$outref) {
+		if ($line =~ /^Total Number of Valid Sectors: (\d+)/) {
+		    # XXX assumes 512 byte sectors
+		    $fssize = int($1 / 2048);
+		    print STDERR "imagezip returned $fssize, limit $maximagedata\n"
+			if ($debug);
+		}
+	    }
+	}
+	elsif (!$fssize) {
+	    $cmd = "df -k $device";
+	    if (ssh_command($node_id, $cmd, \$outref) == 0) {
+		foreach my $line (@$outref) {
+		    if ($line =~ /^$device\s+\d+\s+(\d+).*\/\s*$/) {
+			$fssize = int($1 / 1024)
+			    if ($1);
+			last;
+		    }
+		}
+	    }
+	}
+	if ($fssize && $fssize > $maximagedata) {
+	    # XXX do not reboot node from cleanup (fatal)
+	    $nomfs = 1;
+	    fatal("Amount of allocated data ($fssize MiB) exceeds ".
+		  "the maximum allowed ($maximagedata MiB)");
+	}
+    }
 }
 
 #
@@ -1289,15 +1454,12 @@ if ($isec2node) {
 # file in /var/run, the current version of prepare looks for it.
 #
 if ($update_prepare) {
-    my $SAVEUID	= $UID;
-    $EUID = $UID = 0;
-    my $cmd = "$TB/bin/sshtb -n -o ConnectTimeout=10 ".
-	"-host $node_id touch /var/run/updatemasterpasswdfiles";
-    print STDERR "About to: '$cmd'\n" if ($debug);
-    system($cmd);
-    fatal("'$cmd' failed")
-	if ($?);
-    $EUID = $UID = $SAVEUID;
+    my $cmd = "touch /var/run/updatemasterpasswdfiles";
+    if (ssh_command($node_id, $cmd)) {
+	# XXX do not reboot
+	$nomfs = 1;
+	fatal("$node_id: '$cmd' failed");
+    }
 }
 
 #
@@ -1305,9 +1467,6 @@ if ($update_prepare) {
 # Run on vnode host.
 #
 if ($isvirtnode || $isdataset) {
-    my $SAVEUID	= $UID;
-    $EUID = $UID = 0;
-
     if (!$isdataset) {
 	#
 	# XEN creates a problem; the physical host cannot actually
@@ -1317,12 +1476,10 @@ if ($isvirtnode || $isdataset) {
 	# does not run it, and a shutdown from outside the VM has the
 	# sae effect; prepare does not run. What a pain. 
 	#
-	my $cmd = "$TB/bin/sshtb -n -o ConnectTimeout=10 ".
-	    "-host $node_id $reboot_prep";
-	print STDERR "About to: '$cmd'\n" if ($debug);
-	system($cmd);
-	fatal("'$cmd' failed")
-	    if ($?);
+	my $cmd = "$reboot_prep";
+	if (ssh_command($node_id, $cmd)) {
+	    fatal("$node_id: '$cmd' failed");
+	}
     }
 
     # Mark webtask
@@ -1332,6 +1489,8 @@ if ($isvirtnode || $isdataset) {
     #
     # Now execute command and wait.
     #
+    my $SAVEUID	= $UID;
+    $EUID = $UID = 0;
     if ($NONFS) {
 	$result = run_with_ssh($command, $ofilename);
     } else {
@@ -1515,6 +1674,9 @@ elsif ($result eq "timeout") {
 }
 elsif ($result eq "toobig") {
     fatal("FAILED: Maximum image size ($maximagesize bytes) exceeded ... \n");
+}
+elsif ($result eq "imagezipincompat") {
+    fatal("FAILED: Imagezip on node does not support necessary option ... \n");
 }
 elsif ($result ne "0") {
     fatal("FAILED: Returned error code $result generating image ... \n");
@@ -1906,12 +2068,79 @@ sub check_progress($$)
     return 1;
 }
 
+#
+# I am sure there is a more elegant way to do this... 
+sub getimagebootslice($)
+{
+    my ($image) = @_;
+    
+    my $slice = 0;
+    if ($image->part1_osid()) {
+	$slice = 1;
+    } elsif ($image->part2_osid()) {
+	$slice = 2;
+    } elsif ($image->part3_osid()) {
+	$slice = 3;
+    } elsif ($image->part4_osid()) {
+	$slice = 4;
+    }
+    return $slice;
+}
+
+#
+# Does the client-side imagezip support the options in $zipperopts?
+# We ssh over and check. If it does, we return 1 else return 0.
+#
+sub imagezipcompat($)
+{
+    my ($node_id) = @_;
+    my %izopts = ();
+    my $outref;
+
+    print STDERR "imagezipcompat: collecting imagezip option info...\n"
+	if ($debug > 1);
+
+    my $cmd = "/usr/local/bin/imagezip -h";
+    # XXX usage message does exit(1) so have to ignore exit code here
+    ssh_command($node_id, $cmd, \$outref);
+    foreach my $line (@$outref) {
+	if ($line =~ /^\s+-([a-zA-Z0-9])\s/) {
+	    $izopts{$1} = 1;
+	}
+    }
+    print STDERR "imagezipcompat:\n".
+	"need:     ". join(',', sort(keys %zipperoptsneeded)). "\n".
+	"supports: ". join(',', sort(keys %izopts)). "\n"
+	if ($debug > 1 && scalar(keys %izopts) > 0);
+
+    foreach my $key (keys %zipperoptsneeded) {
+	if (!exists($izopts{$key})) {
+	    return 0;
+	}
+    }
+
+    return 1;
+}
+
 sub run_with_ssh($$)
 {
     my ($cmd,$output) = @_;
     my $stat = undef;
     $node_id = $node->phys_nodeid()
 	if ($isvirtnode && !$isdataset);
+
+    #
+    # XXX horrible, horrible face-melting hack.
+    #
+    # We have no mechanism for determining in advance if imagezip on the client
+    # side supports a particular option. So we have to run "imagezip -h" and
+    # check the usage message. But...if the node has to be booted into an MFS
+    # to capture the image, we need to wait til it is running in the MFS to
+    # make that check. That would be now.
+    #
+    if (keys(%zipperoptsneeded) > 0 && !imagezipcompat($node_id)) {
+	return "imagezipincompat";
+    }
 
     $cmd = "$TB/bin/sshtb -n -host $node_id $cmd";
     if (defined($output)) {
@@ -1989,6 +2218,31 @@ sub run_with_ssh($$)
     }
 
     return $stat;
+}
+
+#
+# Just execute a command as root on the indicated node. Similar to
+# run_with_ssh() but without the progress monitoring. It is intended
+# for running the image capture, this is more for running quicky commands.
+#
+sub ssh_command($$;$)
+{
+    my ($host, $cmdstr, $outref) = @_;
+
+    my $cmd = "$TB/bin/sshtb -n -o ConnectTimeout=5 -host $host $cmdstr";
+    print STDERR "About to: '$cmd'\n" if ($debug);
+
+    my $SAVEUID	= $UID;
+    $EUID = $UID = 0;
+    if ($outref) {
+	my @output = `$cmd 2>&1`;
+	$$outref = \@output;
+    } else {
+	system($cmd);
+    }
+    $EUID = $UID = $SAVEUID;
+
+    return $?;
 }
 
 #

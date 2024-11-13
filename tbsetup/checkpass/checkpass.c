@@ -1,26 +1,25 @@
 #include <stdio.h>
 #include <string.h>
-
-// From cracklib,2.7/cracklib/fascist.o
-// char* FascistCheck(char* passwd, char* path, char* gecos);
+#include <crack.h>
 
 int main(int ARGC, char* ARGV[]) {
-  char gecos[256];
-  char* path = "/usr/local/lib/pw_dict";
+  const char *path = GetDefaultCracklibDict();
   char passwd[256];
-  char* retval;
+  char user[256];
+  char gecos[256];
+  char *retval;
 
   if (ARGC < 4) {
     printf("Usage: checkpass <pass> <login> <fullname>\n");
     return 0;
   }
 
-  strncpy(passwd,ARGV[1],255);
-  sprintf(gecos,"%s:%s",ARGV[2],ARGV[3]);
+  strncpy(passwd, ARGV[1], sizeof passwd);
+  strncpy(user, ARGV[2], sizeof user);
+  strncpy(gecos, ARGV[3], sizeof gecos);
 
-  retval = (char *) FascistCheck(passwd,path,gecos);
-
-  if (retval!=NULL) {
+  retval = (char *) FascistCheckUser(passwd, path, user, gecos);
+  if (retval != NULL) {
     printf("Invalid Password: %s\n",retval);
     return 1;
   }

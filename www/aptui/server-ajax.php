@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,12 +47,9 @@ $session_interactive  = 0;
 $routing = array("geni-login" =>
 			array("file"    => "geni-login.ajax",
 			      "guest"   => true,
-			      "methods" => array("GetSignerInfo" =>
-						      "Do_GetSignerInfo",
-						 "CreateSecret" =>
-						      "Do_CreateSecret",
-						 "VerifySpeaksfor" =>
-						      "Do_VerifySpeaksfor")),
+			      "methods" => array("NoMoreGeniLogin" =>
+                                                     "Do_NoMoreGeniLogin"),
+                        ),
 		 "dashboard" =>
 			array("file"    => "dashboard.ajax",
 			      "guest"   => false,
@@ -74,7 +71,11 @@ $routing = array("geni-login" =>
 			array("file"    => "sumstats.ajax",
 			      "guest"   => false,
 			      "methods" => array("GetDurationInfo" =>
-						      "Do_GetDurationInfo")),
+                                                     "Do_GetDurationInfo",
+                                                 "GetStats" =>
+                                                     "Do_GetStats",
+                              )
+                        ),
 		 "instantiate" =>
 			array("file"    => "instantiate.ajax",
 			      "guest"   => false,
@@ -105,7 +106,11 @@ $routing = array("geni-login" =>
 						 "ClearFavorite" =>
 						     "Do_ClearFavorite",
 						 "RequestLicenses" =>
-						     "Do_RequestLicenses")),
+                                                     "Do_RequestLicenses",
+                                                 "ReservationInfo" =>
+                                                     "Do_ReservationInfo",
+                              )
+                        ),
 		 "manage_profile" =>
 			array("file"    => "manage_profile.ajax",
 			      "guest"   => false,
@@ -139,6 +144,10 @@ $routing = array("geni-login" =>
                                                      "Do_GetProfile",
 						 "Duplicate" =>
                                                      "Do_Duplicate",
+						 "ModifySharing" =>
+                                                     "Do_ModifySharing",
+						 "GetSharingInfo" =>
+                                                     "Do_GetSharingInfo",
                               )
                         ),
 		 "gitrepo" =>
@@ -157,8 +166,8 @@ $routing = array("geni-login" =>
 		 "show-profile" =>
 			array("file"    => "show-profile.ajax",
 			      "guest"   => true,
-			      "methods" => array("CheckScript" =>
-						     "Do_CheckScript",
+			      "methods" => array("GetSource" =>
+						     "Do_GetSource",
 						 "GetProfile" =>
                                                      "Do_GetProfile",
 						 "GetParamsets" =>
@@ -180,6 +189,8 @@ $routing = array("geni-login" =>
 						    "Do_TerminateInstance",
 						 "GetInstanceManifest" =>
 						    "Do_GetInstanceManifest",
+						 "GetInstanceManifests" =>
+						    "Do_GetInstanceManifests",
 						 "GetSSHAuthObject" =>
 						    "Do_GetSSHAuthObject",
 						 "GetVNCAuthObject" =>
@@ -241,7 +252,21 @@ $routing = array("geni-login" =>
 						 "Top" =>
 						     "Do_Top",
 						 "dismissExtensionDenied" =>
-                                                 "Do_DismissExtensionDenied")),
+                                                    "Do_DismissExtensionDenied",
+						 "ConnectSharedLan" =>
+						     "Do_ConnectSharedLan",
+						 "ModifyExperiment" =>
+						     "Do_ModifyExperiment",
+						 "Portstats" =>
+						     "Do_Portstats",
+						 "ServiceLogs" =>
+						     "Do_ServiceLogs",
+                                                 "Transmissions" =>
+                                                     "Do_Transmissions",
+                                                 "GatherTabStats" =>
+                                                     "Do_GatherTabStats",
+                              )
+                        ),
 		 "approveuser" =>
 			array("file"    => "approveuser.ajax",
 			      "guest"   => false,
@@ -299,7 +324,7 @@ $routing = array("geni-login" =>
 			      "methods" => array("ExperimentList" =>
 						      "Do_ExperimentList",
                                                  "ClassicExperimentList" =>
-						      "Do_ClassicExperimentList",
+						     "Do_ClassicExperimentList",
                                                  "ClassicProfileList" =>
 						      "Do_ClassicProfileList",
                                                  "DatasetList" =>
@@ -322,6 +347,8 @@ $routing = array("geni-login" =>
                                                      "Do_FreezeOrThaw",
                                                  "SendTestMessage" =>
                                                      "Do_SendTestMessage",
+                                                 "SendMessage" =>
+                                                     "Do_SendMessage",
                                                  "SendPasswordReset" =>
                                                      "Do_SendPasswordReset",
                                                  "NagPI" =>
@@ -335,7 +362,11 @@ $routing = array("geni-login" =>
                                                  "VerifyScopusInfo" =>
                                                      "Do_VerifyScopusInfo",
                                                  "DeleteUser" =>
-                                                     "Do_DeleteUser"
+                                                     "Do_DeleteUser",
+                                                 "ResourceList" =>
+                                                     "Do_ResourceList",
+                                                 "Logout" =>
+                                                     "Do_Logout",
                               )
                         ),
 		 "nag" =>
@@ -374,7 +405,11 @@ $routing = array("geni-login" =>
                                                  "DeleteProject" =>
                                                      "Do_DeleteProject",
                                                  "NSF" =>
-                                                     "Do_NSF"
+                                                     "Do_NSF",
+                                                 "SendotaAgreement" =>
+                                                     "Do_SendotaAgreement",
+                                                 "ResourceList" =>
+                                                     "Do_ResourceList",
                               )
                         ),
 		 "groups" =>
@@ -465,7 +500,11 @@ $routing = array("geni-login" =>
                                                  "RouteReservations" =>
                                                      "Do_RouteReservations",
                                                  "ReservationHistory" =>
-                                                     "Do_ReservationHistory")),
+                                                     "Do_ReservationHistory",
+                                                 "FindFirstFit" =>
+                                                     "Do_FindFirstFit",
+                              )
+                        ),
 		 "rfresgroup" =>
 			array("file"    => "rfresgroup.ajax",
 			      "guest"   => false,
@@ -490,7 +529,9 @@ $routing = array("geni-login" =>
                                                  "ReservationInfo" =>
                                                      "Do_ReservationInfo",
                                                  "ReservationHistory" =>
-                                                     "Do_ReservationHistory")),
+                                                     "Do_ReservationHistory",
+                              )
+                        ),
 		 "images" =>
 			array("file"    => "images.ajax",
 			      "guest"   => false,
@@ -541,7 +582,13 @@ $routing = array("geni-login" =>
                                                  "GetHistory" =>
                                                      "Do_GetHistory",
                                                  "GetRFViolations" =>
-                                                     "Do_GetRFViolations")),
+                                                     "Do_GetRFViolations",
+                                                 "GetUtilization" =>
+                                                     "Do_GetUtilization",
+                                                 "IfaceSearch" =>
+                                                     "Do_IfaceSearch",
+                              )
+                        ),
 		 "nodetype" =>
 			array("file"    => "nodetype.ajax",
                               # We wllow guest users to see type info.
@@ -630,12 +677,22 @@ $routing = array("geni-login" =>
 						 "GetHealthStatusExtended" =>
                                                    "Do_GetHealthStatusExtended",
 						 "GetWirelessStatus" =>
-						    "Do_GetWirelessStatus")),
+						    "Do_GetWirelessStatus",
+						 "GetPowderStats" =>
+                                                     "Do_GetPowderStats",
+						 "GetPaperList" =>
+                                                     "Do_GetPaperList",
+                              )
+                        ),
 		 "memlane" =>
 			array("file"    => "memlane.ajax",
 			      "guest"   => false,
 			      "methods" => array("HistoryRecord" =>
-						    "Do_HistoryRecord")),
+                                                     "Do_HistoryRecord",
+                                                 "Transmissions" =>
+                                                     "Do_Transmissions",
+                              )
+                        ),
 		 "aggregate-status" =>
 			array("file"    => "aggregate-status.ajax",
 			      "guest"   => false,
@@ -684,6 +741,8 @@ $routing = array("geni-login" =>
                                                      "Do_GetBaseStations",
                                                  "GetMobileEndpoints" =>
                                                      "Do_GetMobileEndpoints",
+                                                 "GetDenseDeployment" =>
+                                                     "Do_GetDenseDeployment",
                               )
                         ),
 		 "scopus" =>
@@ -695,7 +754,7 @@ $routing = array("geni-login" =>
                         ),
 		 "frequency-graph" =>
 			array("file"    => "frequency-graph.ajax",
-			      "guest"   => true,
+			      "guest"   => false,
 			      "methods" => array("GetFrequencyData" =>
 						     "Do_GetFrequencyData",
                                                  "GetListing" =>
@@ -714,7 +773,34 @@ $routing = array("geni-login" =>
                                                  "ProjectInuseRanges" =>
                                                      "Do_ProjectInuseRanges",
                                                  "AllInuseRanges" =>
-                                                     "Do_AllInuseRanges"
+                                                     "Do_AllInuseRanges",
+                                                 "RangeHistory" =>
+                                                     "Do_RangeHistory",
+                                                 "Transmissions" =>
+                                                     "Do_Transmissions",
+                              )
+                        ),
+		 "ota-agreement" =>
+			array("file"    => "ota-agreement.ajax",
+			      "guest"   => false,
+			      "methods" => array("Submit" =>
+                                                     "Do_Submit",
+                                                 "Agree" =>
+                                                     "Do_Agree",
+                              )
+                        ),
+		 "radioinfo" =>
+			array("file"    => "radioinfo.ajax",
+			      "guest"   => false,
+			      "methods" => array("EditTable" =>
+                                                     "Do_EditTable",
+                              )
+                        ),
+		 "resources" =>
+			array("file"    => "resources.ajax",
+			      "guest"   => false,
+			      "methods" => array("ResourceList" =>
+                                                     "Do_ResourceList",
                               )
                         ),
 );
@@ -743,7 +829,7 @@ $this_user = CheckLogin($check_status);
 function CheckLoginForAjax($route)
 {
     global $this_user, $check_status;
-    global $ISAPT;
+    global $ISAPT, $LOG_TESTBED;
     $guestokay = false;
     $unapprovedokay = false;
     $notloggedinokay = false;
@@ -859,7 +945,27 @@ if (! array_key_exists($ajax_method, $routing[$ajax_route]["methods"])) {
     exit(1);
 }
 CheckLoginForAjax($routing[$ajax_route]);
+if (!$this_user) {
+    openlog("server-ajax", LOG_CONS, constant("${LOG_TESTBED}"));
+    syslog(LOG_INFO, $_SERVER['REMOTE_ADDR'] . " " .
+           ($this_user ? "uid:" . $this_user->uid() . " " : "") .
+           "$ajax_route:$ajax_method " .
+           json_encode($ajax_args));
+    closelog();
+}
+if ($TUTORIALSTATS &&
+    ($ajax_route == "instantiate" ||
+     ($ajax_route == "manage_profile" && $ajax_method == "BindParameters"))) {
+    TutorialStat("instantiate:$ajax_method");
+}
+
 include($routing[$ajax_route]["file"]);
 call_user_func($routing[$ajax_route]["methods"][$ajax_method]);
+
+if ($TUTORIALSTATS &&
+    ($ajax_route == "instantiate" ||
+     ($ajax_route == "manage_profile" && $ajax_method == "BindParameters"))) {
+    TutorialStat("instantiate:$ajax_method done");
+}
 
 ?>

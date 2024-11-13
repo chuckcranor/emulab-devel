@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,6 +54,16 @@ case $# in
 	echo "Usage: $0 partition [disk]"
 	exit 1
 esac
+
+#
+# See if we are GPT or MBR
+#
+isgpt=0
+pchar=s
+if gpart show $disk 2>/dev/null | grep -q GPT; then
+	isgpt=1
+	pchar=p
+fi
 
 #
 # Handle pseudo arguments in the environment.
@@ -213,6 +223,14 @@ esac
 
 # DOM0MEM is optional
 DOM0MEM=$SLICEFIX_DOM0MEM
+
+#
+# See if we have a cnet interface MAC address
+#
+CNETMAC=
+if [ -e "$BOOTDIR/controlmac" ]; then
+    CNETMAC=`cat $BOOTDIR/controlmac`
+fi
 
 #
 # Handle pseudo-arguments in the filesystem
@@ -416,6 +434,79 @@ EOF8
     return 0
 }
 
+#
+# XXX tmp hack for custom images.
+# Check that the image has a recent "slothd" binary that supports
+# collecting data for GPU usage. A lot of heavy GPU users have custom
+# images that predate this addition, but we really want to monitor them.
+#
+dofixslothd() {
+    # Check /etc/os-release to see what OS and version it is
+    if [ ! -e /mnt/etc/os-release ]; then
+	return
+    fi
+    _os=`grep ^NAME= /mnt/etc/os-release | sed -E -e 's/NAME="?([^"]+)"?/\1/'`
+    _vers=`grep ^VERSION_ID= /mnt/etc/os-release | sed -E -e 's/VERSION_ID="?([^"]+)"?/\1/'`
+    case $_os in
+    Ubuntu*)
+	_os=ubuntu
+	_vers=${_vers%%.*}
+	case $_vers in
+	16|18|20)
+	    ;;
+	*)	
+            return
+	    ;;
+	esac
+	;;
+    CentOS*)
+	_os=centos
+	case $_vers in
+	7|8)
+	    ;;
+	*)	
+            return
+	    ;;
+	esac
+	;;
+    FreeBSD*)
+	_os=freebsd
+	_vers=${_vers%%.*}
+	case $_vers in
+	11|12|13)
+	    ;;
+	*)	
+            return
+	    ;;
+	esac
+	;;
+    esac
+    # Make sure we have a newer version
+    _bin="slothd-$_os-$_vers"
+    if [ ! -e /etc/emulab/$_bin ]; then
+	return
+    fi
+
+    _doit=0
+    # If slothd doesn't exist, always install it
+    if [ ! -x /mnt/usr/local/etc/emulab/slothd ]; then
+	_doit=1
+    else
+	# find will return /etc/emulab/$_bin if newer than the
+	# installed version. There may be an easier way to do this...
+	_out=`find /etc/emulab/$_bin -newer /mnt/usr/local/etc/emulab/slothd`
+	if [ $? -eq 0 -a -n "$_out" ]; then
+	    _doit=1
+	fi
+    fi
+
+    # Install the new version.
+    if [ $_doit -ne 0 ]; then
+	echo "  installing updated slothd"
+	cp -p /etc/emulab/$_bin /mnt/usr/local/etc/emulab/slothd
+    fi
+}
+
 dofreebsd() {
 	#
 	# ARGH!  FreeBSD 5, which primarily uses UFS2, internally converts
@@ -454,21 +545,26 @@ dofreebsd() {
 	#
 	vers=`uname -v | sed -e 's/FreeBSD \([0-9][0-9]*\).*/\1/'`
 
-	# see if there is a root ('a') partition on this BSD slice
-	`disklabel ${disk}s${part} 2>&1 | grep -s -E '^[ ]+a:' >/dev/null` || {
+	if [ $isgpt -eq 0 ]; then
+	    # see if there is a root ('a') partition on this BSD slice
+	    `disklabel ${disk}s${part} 2>&1 | grep -s -E '^[ ]+a:' >/dev/null` || {
 		return 1
-	}
+	    }
 
-	rootdev=/dev/${disk}s${part}a
-	echo "fixing FreeBSD root partition ${disk}s${part}a"
-	fsck -p $rootdev || {
+	    rootdev=/dev/${disk}s${part}a
+	    echo "fixing FreeBSD root partition ${disk}s${part}a"
+	    fsck -p $rootdev || {
 		# 8.x fsck fails to determine the FS type, try again with ufs
 		echo "retrying fsck with '-t ufs'"
 		fsck -t ufs -p $rootdev || {
 		    echo "Fsck of $rootdev failed"
 		    return 1
 		}
-	}
+	    }
+	else
+	    rootdev=/dev/${disk}p${part}
+	fi
+
 	mount -o ro $rootdev /mnt || {
 		echo "RO-mount of $rootdev failed"
 		return 1
@@ -492,6 +588,7 @@ dofreebsd() {
 	changesshd=0
 	changeauth=0
 	changercert=0
+	changelconf=0
 
 	fixit=0
 
@@ -506,7 +603,7 @@ dofreebsd() {
 	fi
 
 	# If our disk/part does not appear anywhere in fstab, we need to fix it
-	grep "^/dev/${disk}s${part}" /mnt/etc/fstab >/dev/null 2>&1
+	grep "^/dev/${disk}${pchar}${part}" /mnt/etc/fstab >/dev/null 2>&1
 	case $? in
 	0)
 	    ;;
@@ -546,6 +643,7 @@ dofreebsd() {
 		*)
 		    if [ $ACPI = "yes" ]; then
 			changeacpi=1
+			changelconf=1
 			fixit=1
 		    fi
 		    ;;
@@ -571,12 +669,14 @@ dofreebsd() {
 		0)
 		    if [ $ASF = "no" ]; then
 			changeasf=1
+			changelconf=1
 			fixit=1
 		    fi
 		    ;;
 		*)
 		    if [ $ASF = "yes" ]; then
 			changeasf=1
+			changelconf=1
 			fixit=1
 		    fi
 		    ;;
@@ -590,6 +690,7 @@ dofreebsd() {
 	fi
 
 	if [ $NOCLFLUSH != "unknown" ]; then
+	    changelconf=1
 	    fixit=1
 	fi
 
@@ -601,6 +702,7 @@ dofreebsd() {
 	null|vid)
 	    if [ "$curconsole" != "${CONSOLE}console" ]; then
 		changecons=1
+		changelconf=1
 		fixit=1
 	    fi
 	    ;;
@@ -608,6 +710,7 @@ dofreebsd() {
 	    if [ "$curconsole" != "comconsole" ]; then
 		# not comconsole, fix it
 		changecons=1
+		changelconf=1
 		fixit=1
 	    else
 		# see if the com port has changed
@@ -618,6 +721,7 @@ dofreebsd() {
 		fi
 		if [ "$flags" != "0x10" ]; then
 		    changecons=1
+		    changelconf=1
 		    fixit=1
 		fi
 	    fi
@@ -728,6 +832,27 @@ dofreebsd() {
 		return 0
 	fi
 
+	if [ 0 -eq 1 ]; then
+		echo changedisk=$changedisk
+		echo changeentropy=$changeentropy
+		echo changeacpi=$changeacpi
+		echo changeasf=$changeasf
+		echo changeclflush=$changeclflush
+		echo changecons=$changecons
+		echo changecerts=$changecerts
+		echo changehostkeys=$changehostkeys
+		echo changerootkeys=$changerootkeys
+		echo changezone=$changezone
+		echo changentp=$changentp
+		echo changechrony=$changechrony
+		echo changesshd=$changesshd
+		echo changeauth=$changeauth
+		echo changercert=$changercert
+		echo changelconf=$changelconf
+		umount $rootdev
+		return 0
+	fi
+
 	# We need to change something, remount RW and change it
 	umount $rootdev
 	mount $rootdev /mnt || {
@@ -747,15 +872,28 @@ dofreebsd() {
 
 	if [ $changedisk -eq 1 ]; then
 	    echo "  updating /etc/fstab"
-	    sed -E -i .preemulab -e "s;^/dev/[a-zA-Z]+[0-9]+s[0-9]+;/dev/${disk}s${part};" /mnt/etc/fstab || {
-		echo "Failed to update /etc/fstab"
-		umount $rootdev
-		return 1
-	    }
-	    echo "  updating /etc/dumpdates"
-	    sed -E -i .preemulab -e "s;^/dev/[a-zA-Z]+[0-9]+s[0-9]+;/dev/${disk}s${part};" /mnt/etc/dumpdates || {
-		echo "WARNING: Failed to update /etc/dumpdates"
-	    }
+	    if [ $isgpt -ne 0 ]; then
+		# XXX for GPT we need to remove any BSD partition specifier
+		# There should only be a root partition specified.
+		sed -i .preemulab -E -e "s;^/dev/[a-zA-Z]+[0-9]+[sp][0-9]+[a-z]*;/dev/${disk}${pchar}${part};" /mnt/etc/fstab || {
+		    echo "Failed to update /etc/fstab"
+		    umount $rootdev
+		    return 1
+		}
+	    else
+		# XXX otherwise we need to leave any BSD partition specifier
+		sed -i .preemulab -E -e "s;^/dev/[a-zA-Z]+[0-9]+[sp][0-9]+([a-z]*);/dev/${disk}${pchar}${part}\1;" /mnt/etc/fstab || {
+		    echo "Failed to update /etc/fstab"
+		    umount $rootdev
+		    return 1
+		}
+	    fi
+	    if [ -f /mnt/etc/dumpdates ]; then
+		echo "  updating /etc/dumpdates"
+		sed -i .preemulab -E -e "s;^/dev/[a-zA-Z]+[0-9]+[sp][0-9]+;/dev/${disk}${pchar}${part};" /mnt/etc/dumpdates || {
+		    echo "WARNING: Failed to update /etc/dumpdates"
+		}
+	    fi
 	    echo "  updating /etc/ttys"
 	    sed -i .preemulab -e "/^console/s;std.115200;std.$SPEED;" /mnt/etc/ttys || {
 		echo "WARNING: Failed to update /etc/ttys"
@@ -778,10 +916,12 @@ dofreebsd() {
 	cp -p /mnt/boot/loader.conf /mnt/boot/loader.conf.preemulab || {
 	    echo "WARNING: could not create a copy of loader.conf"
 	}
-	cat <<EOF4 >>/mnt/boot/loader.conf
+	if [ $changelconf -eq 1 ]; then
+	    cat <<EOF4 >>/mnt/boot/loader.conf
 # The remaining lines were added by Emulab slicefix.
 # DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.
 EOF4
+	fi
 
 	if [ $changeacpi -eq 1 ]; then
 	    if [ $ACPI = "no" ]; then
@@ -902,6 +1042,8 @@ EOF1
 		    cat <<EOF2 >>/mnt/boot/loader.conf
 comconsole_port="$PORT"
 comconsole_speed="$SPEED"
+boot_multicons="YES"
+boot_serial="YES"
 hint.$drv.0.flags="0x0"
 hint.$drv.1.flags="0x0"
 hint.$drv.2.flags="0x0"
@@ -1093,7 +1235,7 @@ dolinux() {
 
 		# XXX assume "n1"
 		ldisk="${dtype}${dunit}n1p"
-		rootdev="/dev/${disk}s${part}"
+		rootdev="/dev/${disk}${pchar}${part}"
 		;;
 	# SCSI
 	da[0-7])
@@ -1127,7 +1269,7 @@ dolinux() {
 	dunit=`echo $dunit | sed -e 'y/0123456789/abcdefghij/'`;
 	if [ "$dtype" != "nvme" ]; then
 	    ldisk=$dtype$dunit
-	    rootdev=/dev/${disk}s${part}
+	    rootdev=/dev/${disk}${pchar}${part}
 	fi
 
 	#
@@ -1196,7 +1338,7 @@ dolinux() {
 	#
 	# Attempt to mount filesystem   
 	#
-	echo "  fixing Linux root partition ${disk}s${part}"
+	echo "  fixing Linux root partition ${disk}${pchar}${part}"
 	mount -t ext2fs $rootdev /mnt || {
 	    # might need a journal recovery, try fsck
 	    echo "EXT2FS mount failed, trying recovery..."
@@ -1276,10 +1418,26 @@ dolinux() {
 		tgconf=gconf
 	    }
 
+	    #
+	    # Remove any emulabcnet=nn:nn:nn:nn:nn:nn clauses.
+	    # We will put them back with the correct value as needed.
+	    #
+	    if grep -q 'emulabcnet=' $tgconf 2>/dev/null; then
+		echo "    removing old emulabcnet lines"
+		sed -E -i '' -e 's; ?emulabcnet=[0-9a-fA-F:]+;;g' $tgconf
+	    fi
+
+	    # see if we need to add emulabcnet= Linux command line option
+	    cnetstr=""
+	    if [ -n "$CNETMAC" ]; then
+		cnetstr=" emulabcnet=$CNETMAC"
+		echo "    setting emulabcnet"
+	    fi
+
 	    # fix any (non-commented) boot=/root= lines
 	    if grep -q '^[^#].*[br]oot=/dev' $tgconf 2>/dev/null; then
 		echo "    fixing root (dev)"
-		sed -i '' -e "s;\([br]oot=/dev\)/[hs]d.[0-7];\1/${ldisk}${part};" $tgconf
+		sed -i '' -e "s;\([br]oot=/dev\)/[hs]d.[0-7];\1/${ldisk}${part}${cnetstr};" $tgconf
 	    fi
 
 	    # Ditto for UUID if we have one and grub conf uses it
@@ -1290,6 +1448,11 @@ dolinux() {
 		if [ -n "$OUUID" -a $RUUID != $OUUID ]; then
 		    echo "    fixing root (UUID)"
 		    sed -i '' -e "s;$OUUID;$RUUID;g" $tgconf
+		fi
+		# XXX need to make a second pass to put emulabcnet string on
+		# just the root=UUID= lines, not everywhere the UUID appears
+		if [ -n "$OUUID" -a -n "$cnetstr" ]; then
+		    sed -i '' -e "s;\(root=UUID=$RUUID\);\1$cnetstr;" $tgconf
 		fi
 	    fi
 
@@ -1514,13 +1677,13 @@ dolinux() {
 	    #
 	    # For vid or null we add:
 	    #
-	    # GRUB_CMDLINE_LINUX="console=tty0"
+	    # GRUB_CMDLINE_LINUX="console=tty0 emulabcnet=CNETMAC"
 	    # GRUB_TERMINAL=console
 	    # GRUB_SERIAL_COMMAND=""
 	    #
 	    # and for sio[1-3] we add:
 	    #
-	    # GRUB_CMDLINE_LINUX="console=ttySN,S"
+	    # GRUB_CMDLINE_LINUX="console=ttySN,S emulabcnet=CNETMAC"
 	    # GRUB_TERMINAL=serial
 	    # GRUB_SERIAL_COMMAND="serial --speed=S --unit=N"
 	    #
@@ -1546,7 +1709,7 @@ EOF5
 		case $CONSOLE in
 		null|vid)
 		    cat <<EOF6 >>$gdef
-GRUB_CMDLINE_LINUX="console=tty0"
+GRUB_CMDLINE_LINUX="console=tty0$cnetstr"
 GRUB_TERMINAL=console
 GRUB_SERIAL_COMMAND=""
 EOF6
@@ -1555,7 +1718,7 @@ EOF6
 		    u=`expr ${CONSOLE#sio} - 1`
 		    s=$SPEED
 		    cat <<EOF7 >>$gdef
-GRUB_CMDLINE_LINUX="console=ttyS$u,$s"
+GRUB_CMDLINE_LINUX="console=ttyS$u,$s$cnetstr"
 GRUB_TERMINAL=serial
 GRUB_SERIAL_COMMAND="serial --unit=$u $pstr --speed=$s"
 EOF7
@@ -1634,6 +1797,11 @@ EOF7
 	fi
 
 	#
+	# XXX update slothd binary
+	#
+	dofixslothd
+
+	#
 	# Localize the image. We only do this if the MFS we are running in
 	# has the necessary files.
 	#
@@ -1708,30 +1876,40 @@ EOF7
 }
 
 fixone() {
-    echo "*** ${disk}s${part}:"
-    ptype=`fdisk -${part} ${disk} | grep sysid | sed 's/^sysid \([0-9][0-9]*\).*/\1/'`
+    echo "*** ${disk}${pchar}${part}:"
+    if [ $isgpt -eq 0 ]; then
+	ptype=`fdisk -${part} ${disk} | grep sysid | \
+	    sed 's/^sysid \([0-9][0-9]*\).*/\1/'`
+    else
+	# Human readable gpart output...Bah! Who knew this could be such fun?
+	ptype=`gpart show $disk | \
+	    grep -E " +[0-9]+ +[0-9]+ +$part +[^ ]+" | \
+	    sed -E "s/ +[0-9]+ +[0-9]+ +$part +([^ ]+).*/\1/"`
+    fi
     ptype=${ptype:-0}
 
     case $ptype in
-    165)
+    165|freebsd-ufs)
+	echo "fixing FreeBSD OS partition"
 	dofreebsd
 	return $?
 	;;
-    131)
+    131|linux-data)
+	echo "fixing Linux OS partition"
 	dolinux
 	return $?
 	;;
-    130)
+    130|linux-swap)
 	echo "ignoring Linux swap partition"
 	;;
-    7)
+    7|ms-basic-data)
 	echo "ignoring NTFS partition"
 	;;
     0)
-	echo "ignoring unused partition"
+	echo "ignoring unused/non-existent partition $part"
 	;;
     *)
-	echo "ignoring partition type $ptype"
+	echo "ignoring partition $part type $ptype"
 	;;
     esac
     return 0

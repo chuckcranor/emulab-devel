@@ -6,8 +6,14 @@
 	<th>Name
 	  <% if (typeof showconvert === 'undefined' || showconvert) { %>
 	    <a href='#' class='btn btn-xs pull-right'
-	       data-toggle='modal' data-target='#conversion-help-modal'>
-	      <span class='glyphicon glyphicon-question-sign pull-right'></span>
+	       data-toggle='modal' data-bs-toggle='modal'
+	       data-target='#conversion-help-modal'
+	       data-bs-target='#conversion-help-modal'>
+	      <span class='glyphicon glyphicon-question-sign pull-right'
+		    data-toggle="tooltip" data-bs-toggle="tooltip"
+		    data-trigger="hover" data-bs-trigger="hover"
+		    title="Click for info about converting NS files."
+		    style='margin-bottom: 4px;'></span>
 	    </a>
 	  <% } %>
 	</th>

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2017-2018 University of Utah and the Flux Group.
+# Copyright (c) 2017-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,6 +47,7 @@ use English;
 use Getopt::Std;
 use Sys::Syslog;
 use IO::Handle;
+use Data::Dumper;
 
 #
 # Arbitrary thresholds: 50Kp/s or 500Mb/s for the given alert interval.
@@ -67,12 +68,15 @@ sub usage()
     print STDERR "              (must be a multiple of the gather interval)\n";
     print STDERR "   -M         Send email about alerts in addition to logging via syslog\n";
     print STDERR "   -d         Run in debug (foreground) mode\n";
+    print STDERR "   -D         Run in debug mode even if globally disabled\n";
     print STDERR "   -l logfile Log file to record a summary of packet/byte\n";
     print STDERR "              counts for all nodes at every gather interval\n";
     print STDERR "   -1         Run data gathering once and print summary report to STDOUT (for debugging gathering)\n";
+    print STDERR "   -n         Allow fallback to node-based metrics\n";
+    print STDERR "   -N         Force use of node-based metrics\n";
 }
 
-my $optlist = "adhl:I:A:M1";
+my $optlist = "adDhl:I:A:M1nN";
 my $doall = 0;
 my $debug = 0;
 my $interval = 60;
@@ -80,6 +84,8 @@ my $alertinterval = (5 * 60);
 my $reportlog = "";
 my $sendmail = 0;
 my $runonce = 0;
+my $forcerun = 0;
+my $nodemetrics = 0;
 
 #
 # Configure variables
@@ -115,6 +121,7 @@ sub gather($);
 sub diffem($$$);
 sub reportevents($);
 sub report($);
+sub getrrdstats($$);
 sub logit($);
 sub fatal($);
 
@@ -128,6 +135,7 @@ my $wap         = "$TB/sbin/withadminprivs";
 my $sudo        = "/usr/local/bin/sudo";
 my @nodes       = ();
 my %switches	= ();
+my @nodestats	= ();
 my %pcs		= ();
 my %rates	= ();
 my $rateivs	= 1;
@@ -153,6 +161,19 @@ use Experiment;
 if ($PGENISUPPORT) {
     require GeniSlice;
     require GeniHRN;
+}
+
+#
+# Need to check the force runonce flag up front. We ignore the sitevars
+# if it is set. Other options can override the sitevars so we process
+# them later.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{'D'})) {
+    $forcerun = 1;
 }
 
 #
@@ -192,7 +213,7 @@ if ($PGENISUPPORT) {
 my $tmp;
 my $svar = "cnetwatch/enable";
 if (TBGetSiteVar($svar, \$tmp)) {
-    if ($tmp == 0) {
+    if ($tmp == 0 && !$forcerun) {
 	print STDERR "WARNING: cnetwatch disabled by sitevar\n";
 	exit(0);
     }
@@ -201,7 +222,7 @@ $svar = "cnetwatch/reportlog";
 if (TBGetSiteVar($svar, \$tmp) && $tmp ne "") {
     if ($tmp =~ /^([-\w\.\/\+]*[-\w\.\+])$/) {
 	$reportlog = $1;
-    } else {
+    } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid path: '$tmp', ignored.\n";	
     }
 }
@@ -209,7 +230,7 @@ $svar = "cnetwatch/check_interval";
 if (TBGetSiteVar($svar, \$tmp)) {
     if ($tmp == 0 || $tmp >= 10) {
 	$interval = $tmp;
-    } else {
+    } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
 }
@@ -217,7 +238,7 @@ $svar = "cnetwatch/alert_interval";
 if (TBGetSiteVar($svar, \$tmp)) {
     if ($tmp >= 0) {
 	$alertinterval = $tmp;
-    } else {
+    } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
 }
@@ -225,7 +246,7 @@ $svar = "cnetwatch/pps_threshold";
 if (TBGetSiteVar($svar, \$tmp)) {
     if ($tmp >= 0) {
 	$MAX_PPS = $tmp;
-    } else {
+    } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
 
@@ -234,7 +255,7 @@ $svar = "cnetwatch/bps_threshold";
 if (TBGetSiteVar($svar, \$tmp)) {
     if ($tmp >= 0) {
 	$MAX_BPS = $tmp;
-    } else {
+    } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
 
@@ -246,7 +267,7 @@ if (TBGetSiteVar($svar, \$tmp)) {
 	if ($MAIL_IV > 0) {
 	    $sendmail = 1;
 	}
-    } else {
+    } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
 
@@ -255,7 +276,7 @@ $svar = "cnetwatch/mail_max";
 if (TBGetSiteVar($svar, \$tmp)) {
     if ($tmp >= 0) {
 	$MAIL_MAX = $tmp;
-    } else {
+    } elsif (!$forcerun) {
 	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
     }
 
@@ -271,12 +292,8 @@ if (0) {
 }
 
 #
-# Process command line options. Some will override sitevars.
+# Process most command line options. Some will override sitevars.
 #
-my %options = ();
-if (! getopts($optlist, \%options)) {
-    usage();
-}
 if (defined($options{'h'})) {
     usage();
     exit(0);
@@ -316,11 +333,39 @@ if (defined($options{"M"})) {
 }
 if (defined($options{"1"})) {
     $runonce = 1;
-    $interval = 1;
     $debug = 2;
+    $interval = 1;
     $reportlog = "-";
 }
+if (defined($options{"n"})) {
+    $nodemetrics = 1;
+}
+if (defined($options{"N"})) {
+    $nodemetrics = 2;
+}
+if ($forcerun) {
+    $debug = 2;
+    $sendmail = 0;
+    $reportlog = "-";
+}
+
 @nodes = @ARGV;
+
+#
+# Node-based metrics are aggregated in 5 minute chunks by RRD.
+# If we are doing all node-based, enforce this. Otherwise just warn.
+# Note that we allow polling at half that interval to pick up changes
+# a bit sooner if we are slightly out of sync with slothd.
+#
+if ($nodemetrics && $interval != 0 && $interval < 5 * 60 / 2) {
+    print STDERR "WARNING: node metrics are collected at 5 minute intervals, ".
+	($nodemetrics == 2 ?
+	 "adjusting intervals" : "accuracy will be affected for those nodes").
+	"\n";
+    if ($nodemetrics == 2) {
+	$interval = 5 * 60 / 2;
+    }
+}
 
 #
 # Sanity checks.
@@ -440,6 +485,41 @@ sub diffem($$$)
 	    next;
 	}
 
+	#
+	# Slothd-based node will only use the first three count values:
+	# timestamp, in-PPS for last 5 minutes, out-PPS for last 5 minutes.
+	#
+	# The "delta" ($dref) we return is just the after values ($aref)
+	# multiplied out by the length of the interval. Ie., we assume the
+	# whole interval played out at the latest rate recorded by slothd.
+	#
+	# Note that the consumer of these counts expects them to be coming
+	# from portstats with a switch-relative view. So we reverse the
+	# counts to conform to that.
+	#
+	if ($pcs{$node}{'nodestats'}) {
+	    my $cref = $aref->{$node}{'counts'};
+	    my $ipps = $cref->[1];
+	    my $opps = $cref->[2];
+	    my $iv = $dref->{'tstamp'};
+	    if ($ipps && $opps && $iv) {
+		$dref->{$node}{'counts'} =
+		    [0,			# switch-in octets
+		     int($opps * $iv),	# in ucast packets
+		     0, 0,		# in mcast/bcast packets
+		     0,			# switch-out octets
+		     int($ipps * $iv),	# out ucast packets
+		     0, 0		# out mcast/bcast packets
+		    ];
+	    } else {
+		$dref->{$node}{'counts'} = [0, 0, 0, 0, 0, 0, 0, 0];
+	    }
+	    print STDERR "$node: ".
+		"diff=(", join(',', @{$dref->{$node}{'counts'}}), ")\n"
+		if ($debug > 1);
+	    next;
+	}
+
 	if (!exists($bref->{$node})) {
 	    $bref->{$node}{'counts'} = [0, 0, 0, 0, 0, 0, 0, 0];
 	    $dref->{$node}{'first'} = 1;
@@ -491,6 +571,11 @@ sub sortem($$)
 
 #
 # Check for prolonged high traffic volumes from nodes.
+#
+# Note that the first four counters are "in", and the last four "out"
+# as they come from portstats. But this is switch relative, so we need
+# to reverse to get the node's "send" and "receive" perspective, i.e.:
+#
 # Counts: 0==s-bytes, 1==s-uni, 2==s-multi, 3==s-broad
 #         4==r-bytes, 5==r-uni, 6==r-multi, 7==r-broad
 #
@@ -531,9 +616,12 @@ sub reportevents($)
 	my $iv = $rates{$node}{'iv'} + 1;
 	if ($iv >= $rateivs) {
 	    my $sec = $secs;
-	    if ($debug && $sec != ($rateivs * $interval)) {
+	    if ($debug) {
+		# make sure we aren't overrunning by much
 		my $ideal = ($rateivs * $interval);
-		logit("elapsed: actual=$sec, ideal=$ideal");
+		if (($sec - $ideal) > int($ideal * 0.1 + 0.5)) {
+		    logit("$node: elapsed: actual=$sec, ideal=$ideal");
+		}
 	    }
 	    my $pps = int($pkts / $sec);
 	    my $bps = int($bytes * 8 / $sec);
@@ -545,7 +633,8 @@ sub reportevents($)
 		my $rbps = int($rbytes * 8 / $sec);
 
 		logit("$node: WARNING: pkts/sec=$pps (send=$spps, recv=$rpps)".
-		      ", bits/sec=$bps (send=$sbps, recv=$rbps)".
+		      ($pcs{$node}{'nodestats'} ?
+		       "" : ", bits/sec=$bps (send=$sbps, recv=$rbps)").
 		      " over $sec seconds");
 		if ($sendmail) {
 		    my $exp = $pcs{$node}{'exp'};
@@ -577,20 +666,33 @@ sub reportevents($)
 		    }
 		    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S",
 						localtime($ref->{'start'}));
-		    push(@mailbody,
-			 sprintf("%20s %30s %8d %8d %s for %d sec",
-				 $node, $expname, $pps,
-				 int($bps/1000000), $stamp, $secs));
+		    if ($pcs{$node}{'nodestats'}) {
+			push(@mailbody,
+			     sprintf("%20s %30s %8d %8s %s for %d sec",
+				     $node, $expname, $pps,
+				     "--", $stamp, $secs));
+		    } else {
+			push(@mailbody,
+			     sprintf("%20s %30s %8d %8d %s for %d sec",
+				     $node, $expname, $pps,
+				     int($bps/1000000), $stamp, $secs));
+		    }
 		    push(@mailbody, sprintf("%30s %s", "", $url))
 			if (defined($url));
 		    push(@mailbody, sprintf("%30s %s", "", $portalurl))
 			if (defined($portalurl));
 
-		    push(@maildetails,
-			 sprintf("%20s %8d/%-8d %8d/%-8d %d sec",
-				 $node, $spps, $rpps,
-				 int($sbps/1000000), int($rbps/1000000),
-				 $secs));
+		    if ($pcs{$node}{'nodestats'}) {
+			push(@maildetails,
+			     sprintf("%20s %8d/%-8d %8s/%-8s %d sec",
+				     $node, $spps, $rpps, "--", "--", $secs));
+		    } else {
+			push(@maildetails,
+			     sprintf("%20s %8d/%-8d %8d/%-8d %d sec",
+				     $node, $spps, $rpps,
+				     int($sbps/1000000), int($rbps/1000000),
+				     $secs));
+		    }
 		}
 	    }
 	    $rates{$node}{'spkts'} = 0; 
@@ -644,6 +746,13 @@ sub report($)
     foreach my $node (keys %pcs) {
 	next if (!exists($ref->{$node}{'counts'}));
 
+	#
+	# XXX slothd-based counts are sketchy as there is a lag in reporting
+	# and we get no reports if the node is not active. But for now, we
+	# will use them (except in oneshot mode where they are invalid).
+	#
+	next if ($pcs{$node}{'nodestats'} && $runonce);
+
 	my @counts = @{$ref->{$node}{'counts'}};
 
 	my $oct = 0;
@@ -679,8 +788,14 @@ sub report($)
 	my $expname = $pcs{$node}{'expname'};
 	my $tot = $ref->{$node}{'totals'};
 
-	printf RL "%20s %30s %12d %12d %12d %14d\n",
-	    $name, $expname, $tot->[3], $tot->[1], $tot->[2], $tot->[0];
+	# make it clear which ones are based on nodestats
+	if ($pcs{$node}{'nodestats'}) {
+	    printf RL "%20s %30s %12d %12s %12s %14s\n",
+		$name, $expname, $tot->[3], "--", "--", "--";
+	} else {
+	    printf RL "%20s %30s %12d %12d %12d %14d\n",
+		$name, $expname, $tot->[3], $tot->[1], $tot->[2], $tot->[0];
+	}
     }
 }
 
@@ -716,11 +831,18 @@ sub getnodeinfo($)
 	if ($debug && 0);
 
     $query_result =
-	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,iface1,node_id2,attrvalue".
-		    " from wires as w,nodes as n".
+	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,".
+		    "iface1,mac,node_id2,".
+		    "a.attrvalue as disable,a2.attrvalue as noportstats".
+		    " from nodes as n".
+		    " left join wires as w on n.node_id=w.node_id1".
+		    " left join interfaces as i on ".
+		    "  i.node_id=n.node_id and i.iface=w.iface1".
 		    " left join reserved as r on n.node_id=r.node_id".
 		    " left join node_attributes as a on".
-		    "  n.node_id=a.node_id and attrkey='cnetwatch_disable'".
+		    "  n.node_id=a.node_id and a.attrkey='cnetwatch_disable'".
+		    " left join node_attributes as a2 on".
+		    "  w.node_id2=a2.node_id and a2.attrkey='noportstats'".
 		    " where w.node_id1=n.node_id".
 		    "  $sclause".
 		    "  and w.type='Control'".
@@ -735,12 +857,15 @@ sub getnodeinfo($)
 	if ($debug && 0);
 
     %switches = ();
+    @nodestats = ();
     my %newpcs = ();
     while (my %row = $query_result->fetchhash()) {
 	my $switch = $row{'node_id2'};
 	my $pc = $row{'node_id1'};
 	my $pciface = $row{'iface1'};
-	my $disable = $row{'attrvalue'};
+	my $pcmac = $row{'mac'};
+	my $disable = $row{'disable'};
+	my $noportstats = ($nodemetrics == 2) ? 1 : $row{'noportstats'};
 
 	# XXX if cnetwatch is disabled for the node, just skip it.
 	if ($disable) {
@@ -771,15 +896,22 @@ sub getnodeinfo($)
 	#
 	my $cnet = "$pc:$pciface";
 
-	push(@{$switches{$switch}}, $cnet);
+	if ($noportstats) {
+	    push(@nodestats, $cnet);
+	} else {
+	    push(@{$switches{$switch}}, $cnet);
+	}
 	$newpcs{$cnet}{'exp'} = $exp;
 	$newpcs{$cnet}{'expname'} = $expname;
 	$newpcs{$cnet}{'url'} = $url;
 	$newpcs{$cnet}{'portalurl'} = $portalurl;
 	$newpcs{$cnet}{'state'} = $row{'eventstate'};
+	$newpcs{$cnet}{'nodestats'} = $noportstats ? 1 : 0;
 	$newpcs{$cnet}{'name'} = $pc;
+	$newpcs{$cnet}{'mac'} = $pcmac;
 
 	if (!exists($pcs{$cnet})) {
+	    $newpcs{$cnet}{'lastfetch'} = 0;
 	    $rates{$cnet}{'spkts'} = 0;
 	    $rates{$cnet}{'rpkts'} = 0;
 	    $rates{$cnet}{'sbytes'} = 0;
@@ -790,6 +922,8 @@ sub getnodeinfo($)
 		logit("$pc: new node!");
 	    }
 	} else {
+	    $newpcs{$cnet}{'first'} = 0;
+	    $newpcs{$cnet}{'lastfetch'} = $pcs{$cnet}{'lastfetch'};
 	    $pcs{$cnet}{'mark'} = 1;
 	}
 	
@@ -871,9 +1005,88 @@ sub gather($)
 	    print STDERR $erroutput;
 	}
     }
-    $resref->{'tstamp'} = time();
 
+    #
+    # Gather RRD info from all nodes using node-based traffic stats.
+    #
+    if (@nodestats > 0) {
+	getrrdstats(\@nodestats, $resref);
+    }
+    $resref->{'tstamp'} = time();
     return 1;
+}
+
+sub getrrdstats($$)
+{
+    my ($noderef, $resref) = @_;
+    my $RRDDIR = "$TB/data/slothd_rrd";
+    # max age of stats to consider
+    my $RRDAGE = 10 * 60;
+
+    require RRDTool::OO;
+
+    if ($debug) {
+	logit("rrdstats: " . join(' ', @$noderef));
+    }
+    my $now = time();
+    foreach my $nodeif (@$noderef) {
+	my $mac = uc($pcs{$nodeif}{'mac'});
+	my $node = $pcs{$nodeif}{'name'};
+	my $rrdfile = "$RRDDIR/$node-$mac.rrd";
+	my $rrd;
+
+	if (! -e "$rrdfile" ||
+	    !defined($rrd = RRDTool::OO->new(file => $rrdfile,
+					     raise_error => 0))) {
+	    logit("$node: no RRD info")
+		if ($debug);
+	    next;
+	}
+	my $lastcheck = $pcs{$nodeif}{'lastfetch'};
+	#
+	# We keep a days worth of 5 minute samples in the RRD,
+	# so we can't go back further than that. But in reality,
+	# we won't use anything approaching that old.
+	#
+	if ($lastcheck == 0) {
+	    $lastcheck = $now - ($RRDAGE + 1);
+	}
+	print STDERR "$node: $rrdfile: lastcheck=", $lastcheck, "\n"
+	    if ($debug && 1);
+	$rrd->fetch_start(cfunc => "AVERAGE", start => $lastcheck);
+	$rrd->fetch_skip_undef();
+	#
+	# Record the latest non-null sample
+	#
+	while (my @counts = $rrd->fetch_next()) {
+	    print STDERR "Got $counts[0]/",
+		(defined($counts[1]) ? "$counts[1]/" : "/"),
+		(defined($counts[2]) ? "$counts[2]" : ""),
+		"\n" if ($debug > 0);
+	    if (defined($counts[1]) && defined($counts[2])) {
+		$lastcheck = $counts[0];
+		$resref->{$nodeif}{'counts'} = \@counts;
+	    }
+	}
+	$pcs{$nodeif}{'lastfetch'} = $lastcheck;
+	if (!exists($resref->{$nodeif}{'counts'})) {
+	    $resref->{$nodeif}{'counts'} = [ $lastcheck, 0, 0 ];
+	}
+	if ($debug > 1) {
+	    my $cref = $resref->{$nodeif}{'counts'};
+	    logit("$cref->[0]: inPPS=$cref->[1], outPPS=$cref->[2]")
+		if ($debug > 1);
+	}
+	#
+	# If stats are more than 10 minutes old, assume the node is not up.
+	#
+	if (($now - $lastcheck) > $RRDAGE) {
+	    logit("*** $nodeif: last stats > " .
+		  int($RRDAGE/60) . " minutes old")
+		if ($debug > 1);
+	    $resref->{$nodeif}{'counts'} = [ $lastcheck, 0, 0 ];
+	}
+    }
 }
 
 sub fatal($)

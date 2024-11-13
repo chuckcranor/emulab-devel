@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,6 +28,126 @@ include_once("instance_defs.php");
 #
 # Server side of getting summary info
 #
+function Do_GetStats()
+{
+    global $this_user;
+    global $ajax_args;
+    global $urn_mapping;
+    $results     = array();
+    $forclass    = 0;
+
+    if (!(ISADMIN() || ISFOREIGN_ADMIN())) {
+        SPITAJAX_ERROR(1, "Not enough permission to view info!");
+        return;
+    }
+    if (!isset($ajax_args["target"])) {
+        SPITAJAX_ERROR(1, "Missing target!");
+        return;
+    }
+    $target = $ajax_args["target"];
+    if ($target != "pid" && $target != "creator") {
+        SPITAJAX_ERROR(1, "Bad target!");
+        return;
+    }
+    $whereclause = "";
+
+    if ($target == "pid" &&
+        isset($ajax_args["class"]) && $ajax_args["class"] == 1) {
+        $forclass = 1;
+    }
+
+    if (!(isset($ajax_args["min"]) && isset($ajax_args["max"]))) {
+        SPITAJAX_ERROR(1, "Must provide min and max");
+        return;
+    }
+    $min = $ajax_args["min"];
+    $max = $ajax_args["max"];
+    if (!is_numeric($min) || $min < 0) {
+        SPITAJAX_ERROR(1, "Bad value for min");
+        return;
+    }
+    if (!is_numeric($max) || $max < 0 || $max < $min) {
+        SPITAJAX_ERROR(1, "Bad value for max");
+        return;
+    }
+    $whereclause  = "where UNIX_TIMESTAMP(started) > $min ";
+    $whereclause .= "and UNIX_TIMESTAMP(started) < $max ";
+    if ($forclass) {
+        $whereclause .= "and p.forClass=1 ";
+    }
+
+    $query_result =
+        DBQueryFatal("(select i.${target},aggregate_urn,count(i.creator) as ecount, ".
+                     "   sum(physnode_count) as pcount, ".
+                     "   truncate(sum(physnode_count * ".
+                     "     ((UNIX_TIMESTAMP(i.destroyed) - ".
+                     "       UNIX_TIMESTAMP(i.started)) / 3600.0)),2) as phours ".
+                     " from apt_instance_history as i ".
+                     "left join projects as p on p.pid=i.pid ".
+                       $whereclause .
+                     " group by i.${target},aggregate_urn) ".
+                     "union ".
+                     "(select i.${target},aggregate_urn,count(i.creator) as ecount,".
+                     "   sum(physnode_count) as pcount, ".
+                     "   truncate(sum(physnode_count * ".
+                     "     ((UNIX_TIMESTAMP(now()) - ".
+                     "       UNIX_TIMESTAMP(i.started)) / 3600.0)),2) as phours ".
+                     " from apt_instances as i ".
+                     "left join projects as p on p.pid=i.pid ".
+                       $whereclause .
+                     " group by i.${target},aggregate_urn)");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $key    = $row[$target];
+        $urn    = $row["aggregate_urn"];
+        $cluster= $urn_mapping[$urn];
+        $ecount = $row["ecount"];
+        $pcount = $row["pcount"];
+        $phours = $row["phours"];
+
+        if (!$key || $key == "") {
+            $key = "NONE";
+        }
+
+        if (!array_key_exists($key, $results)) {
+            $results[$key] = array("ecount" => 0,
+                                   "pcount" => 0,
+                                   "phours" => 0.0,
+                                   "Utah"   => array("ecount" => 0,
+                                                     "pcount" => 0,
+                                                     "phours" => 0.0),
+                                   "Wisc"   => array("ecount" => 0,
+                                                     "pcount" => 0,
+                                                     "phours" => 0.0),
+                                   "Clem"   => array("ecount" => 0,
+                                                     "pcount" => 0,
+                                                     "phours" => 0.0),
+                                   "APT"    => array("ecount" => 0,
+                                                     "pcount" => 0,
+                                                     "phours" => 0.0),
+                                   "Emulab" => array("ecount" => 0,
+                                                     "pcount" => 0,
+                                                     "phours" => 0.0),
+                                   "Mass"   => array("ecount" => 0,
+                                                     "pcount" => 0,
+                                                     "phours" => 0.0));
+        }
+        $results[$key]["ecount"] += $ecount;
+        $results[$key]["pcount"] += $pcount;
+        $results[$key]["phours"] += $phours;
+        $results[$key][$cluster]["ecount"] += $ecount;
+        $results[$key][$cluster]["pcount"] += $pcount;
+        $results[$key][$cluster]["phours"] += $phours;
+
+        // Weird rounding going on.
+        $results[$key]["phours"] = round($results[$key]["phours"], 2);
+        $results[$key][$cluster]["phours"] =
+                           round($results[$key][$cluster]["phours"], 2);
+                                           
+    }
+    SPITAJAX_RESPONSE($results);
+}
+
 function Do_GetDurationInfo()
 {
     $duration_info = array();

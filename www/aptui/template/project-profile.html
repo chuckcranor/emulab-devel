@@ -1,5 +1,5 @@
 <style>
-.toggle {
+.toggle, .ota-agreement {
   cursor: pointer;
 }
 </style>
@@ -33,9 +33,26 @@
       </tr>
     <% } %>
     <tr>
+      <td>Signup URL
+	<a href='#' class='btn btn-xs'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
+	   title='Send this link to users who need to join your project'>
+	  <span class='glyphicon glyphicon-question-sign'
+		style='margin-bottom: 4px;'></span></a>
+      </td>
+      <td><a href="<%= fields.signup_url %>" target=_blank>
+	<%= fields.signup_url %></a></td>
+    </tr>
+    <tr>
       <td>Approved</td>
       <td><% if (fields.approved) { %>Yes<% } else { %>No<% } %></td>
     </tr>
+    <% if (!isadmin && fields.disabled) { %>
+      <tr>
+	<td>Disabled</td>
+	<td><b>Yes</b></td>
+      </tr>
+    <% } %>
     <% _.each(fields.licenses, function(license) { %>
       <tr>
 	<td><%- license.name %> license
@@ -77,19 +94,51 @@
 	</td>
       </tr>
     <% }); %>
-    <% if (isadmin) { %>
-      <tr>
-	<td>For a Class?</td>
-	<td><% if (fields.forClass) { %>Yes<% } else { %>No<% } %>
+    <tr>
+      <td>For a Class?</td>
+      <td><% if (fields.forClass) { %>Yes<% } else { %>No<% } %>
+	<% if (isadmin) { %>
 	  (<a class="toggle" data-name="project_forClass">Toggle</a>)
-	</td>
-      </tr>
+	<% } %>
+      </td>
+    </tr>
+    <% if (isadmin) { %>
       <tr>
 	<td>Disabled</td>
 	<td><% if (fields.disabled) { %>Yes<% } else { %>No<% } %>
 	  (<a class="toggle" data-name="project_disable">Toggle</a>)
 	</td>
       </tr>
+      <tr>
+	<td>Reservation Sharing</td>
+	<td>
+	  <div class="form-check form-check-inline">
+	    <input class="form-check-input" type="radio"
+		   name="sharedres-radio" id="sharedres-radio-project"
+		   value="project">
+	    <label class="form-check-label">Project</label>
+	  </div>
+	  <div class="form-check form-check-inline">
+	    <input class="form-check-input" type="radio"
+		   name="sharedres-radio" id="sharedres-radio-user"
+		   value="user">
+	    <label class="form-check-label">User</label>
+	  </div>
+	  <div class="form-check form-check-inline">
+	    <input class="form-check-input" type="radio"
+		   name="sharedres-radio" id="sharedres-radio-group"
+		   value="group">
+	    <label class="form-check-label">Group</label>
+	  </div>	  
+	</td>
+      </tr>
+    <% } else {  %>
+      <tr>
+	<td>Reservation Sharing</td>
+	<td><%- fields.shared_reservations %></td>
+      </tr>
+    <% } %>
+    <% if (isadmin) { %>
       <tr>
 	<td>Reservations Disabled</td>
 	<td><% if (fields.reservations_disabled) { %>Yes<% } else { %>No<% } %>
@@ -131,6 +180,17 @@
 	    <td><%= fields.allowed_clusters %></td>
 	  </tr>
 	<% } %>
+      <% } %>
+      <% if (window.ISPOWDER) { %>
+	<tr>
+	  <td>OTA Enabled</td>
+	  <td><% if (fields.otaAllowed) { %>
+	    Yes
+	  <% } else { %>
+	    No (<a id="send-ota-agreement" class="ota-agreement">Send OTA
+	    agreement to project leader</a>)
+	  <% } %>
+	</tr>
       <% } %>
     <% } %>
     <% _.each(fields.nsf_awards, function(award) { %>

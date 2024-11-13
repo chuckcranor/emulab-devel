@@ -3,7 +3,7 @@
 # Utah Network Testbed 
 #
 # PROVIDE: poweron
-# REQUIRE: capture
+# REQUIRE: capture jail
 # BEFORE: apache24
 
 case "$1" in

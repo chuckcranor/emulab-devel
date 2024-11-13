@@ -24,6 +24,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use Data::Dumper;
 
 #
 # Block storage server control utility.
@@ -615,8 +616,16 @@ sub getblockstores($$)
 
 	my $outref;
 	if (bsserver_cmd($srv, "$PROXYCMD volumes", 0, \$outref) == 0) {
+	    my $lineno = 0;
 	    foreach my $vstr (@$outref) {
-		my $attrs = get_bsattrs(parseattrs($vstr));
+		$lineno++;
+		my $attrs = parseattrs($vstr);
+		# XXX ignore bogus lines that don't parse
+		if (int(keys %$attrs) == 0) {
+		    print STDERR "$lineno unparseable: '$vstr'\n";
+		    next;
+		}
+		$attrs = get_bsattrs($attrs);
 		# XXX ignore bogus lines that don't include volume=...
 		next
 		    if (!exists($attrs->{'volume'}));

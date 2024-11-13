@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2005-2018 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1476,9 +1476,6 @@ sub tblog_email_error ( $$$$$$$$@ ) {
 
     my ($d, $to, $what, $pideid, $from, $headers, $tbops_headers, $prefix, @files) = @_;
 
-    carp "TBOBS_HEADERS must be a complete header!  Expect SENDMAIL to fail."  
-	unless $tbops_headers =~ /:/;
-
     my $threshold = 0.55;
 
     unless ($d->{confidence} > $threshold 
@@ -1486,8 +1483,9 @@ sub tblog_email_error ( $$$$$$$$@ ) {
 		|| $d->{cause} eq 'canceled'))
     {
 	$headers .= "\n" if defined $headers && length($headers) > 0;
-	$headers .= "$tbops_headers";
-	$headers .= "\nX-NetBed-Cc: testbed-ops";
+	$headers .= "$tbops_headers\n"
+	    if defined $tbops_headers && length($tbops_headers) > 0;
+	$headers .= "X-NetBed-Cc: testbed-ops";
     } else {
 	$from = "Testbed Ops <@TBOPSEMAIL@>";
 	$headers .= "\n" if defined $headers && length($headers) > 0;

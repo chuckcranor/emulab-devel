@@ -762,6 +762,7 @@ REPLACE INTO state_triggers VALUES ('*','WIMRELOAD','BOOTING','REBOOT');
 REPLACE INTO state_triggers VALUES ('*','WIMRELOAD','ISUP','REBOOT');
 REPLACE INTO state_triggers VALUES ('*','RELOAD-UE','RELOADDONE','RELOADDONE');
 REPLACE INTO state_triggers VALUES ('*','NORMALv2','PXEWAIT','PXEBOOT');
+REPLACE INTO state_triggers VALUES ('*','NORMALv2','SHUTDOWN','SHUTDOWN');
 
 --
 -- Dumping data for table `table_regex`
@@ -1006,7 +1007,7 @@ REPLACE INTO table_regex VALUES ('projects','num_members','int','redirect','defa
 REPLACE INTO table_regex VALUES ('projects','num_pcs','int','redirect','default:int',0,2048,NULL);
 REPLACE INTO table_regex VALUES ('projects','num_pcplab','int','redirect','default:int',0,2048,NULL);
 REPLACE INTO table_regex VALUES ('projects','num_ron','int','redirect','default:int',0,1024,NULL);
-REPLACE INTO table_regex VALUES ('experiments','encap_style','text','regex','^(alias|veth|veth-ne|vlan|vtun|egre|gre|default)$',0,0,NULL);
+REPLACE INTO table_regex VALUES ('experiments','encap_style','text','regex','^(alias|veth|veth-ne|vlan|vtun|egre|gre|default|none)$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','veth_encapsulate','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','allowfixnode','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','jail_osname','text','redirect','virt_nodes:osname',0,0,NULL);
@@ -1278,6 +1279,7 @@ REPLACE INTO table_regex VALUES ('images','auth_key','text','regex','^[0-9a-fA-F
 REPLACE INTO table_regex VALUES ('images','auth_uuid','text','regex','^[0-9a-fA-F]+$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','decryption_key','text','regex','^[0-9a-fA-F]+$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('images','isdataset','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('images','isbootimage','int','redirect','default:boolean',0,0,NULL);
 
 REPLACE INTO table_regex VALUES ('experiment_blobs','path','text','redirect','default:text',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiment_blobs','action','text','redirect','default:text',0,0,NULL);

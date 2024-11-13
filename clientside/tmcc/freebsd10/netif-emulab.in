@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -177,8 +177,8 @@ cnet_start()
 		;;
 	# XXX skip Intel 10Gb for now; they require huge numbers of mbufs
 	# XXX this should no longer be a problem as of FreeBSD 10.1 and we
-	#     relax to allow ixl0 for certain Powder nodes.
-	ix[0-9]|ixl[1-9])
+	#     relax to allow ix0/ixl0 (needed for certain Powder nodes).
+	ix[1-9]|ixl[1-9])
 		;;
 	ath*)
 		;;
@@ -194,13 +194,13 @@ cnet_start()
 
 	#
 	# XXX yow! If we don't come up with anything, we have to reconsider
-	# some of those interface types we skipped:
-	#  ix    because Clemson has an ix control network,
+	# some of those interface types we skipped. For now, just ix interfaces
+	# because Clemson has an ix control network.
 	#
 	if [ -z "$_ifs" ]; then
 	    for _if in $network_interfaces; do
 	    case $_if in
-	    ix[01])
+	    ix[1-9])
 		_ifs="$_ifs $_if"
 		;;
 	    *)

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,7 +25,9 @@ package Project;
 
 use strict;
 use Exporter;
-use vars qw(@ISA @EXPORT @PROJDIRECTORIES @GROUPDIRECTORIES);
+use vars qw(@ISA @EXPORT @PROJDIRECTORIES @GROUPDIRECTORIES
+            $RESERVATIONS_PERUSER $RESERVATIONS_PERPROJECT
+	    $RESERVATIONS_PERGROUP);
 
 @ISA    = "Exporter";
 @EXPORT = qw ();
@@ -39,6 +41,7 @@ use Group;
 use English;
 use Data::Dumper;
 use File::Basename;
+use Reservation;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -51,6 +54,7 @@ my $TBAUDIT	= "@TBAUDITEMAIL@";
 my $TBBASE      = "@TBBASE@";
 my $TBWWW       = "@TBWWW@";
 my $OURDOMAIN   = "@OURDOMAIN@";
+my $PROJROOT    = "@PROJROOT_DIR@";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $WIKISUPPORT = @WIKISUPPORT@;
 my $WITHZFS     = @WITHZFS@;
@@ -64,6 +68,11 @@ my $EXPORTS_SETUP    = "$TB/sbin/exports_setup";
 @PROJDIRECTORIES  = ("exp", "images", "logs", "deltas", "tarfiles", "rpms",
 		     "groups", "tiplogs", "images/sigs", "templates");
 @GROUPDIRECTORIES = ("exp", "images", "logs", "tarfiles", "rpms", "tiplogs");
+
+# The interpretation of shared_reservations
+$RESERVATIONS_PERUSER = 0;
+$RESERVATIONS_PERPROJECT = 1;
+$RESERVATIONS_PERGROUP = 2;
 
 # Cache of instances to avoid regenerating them.
 my %projects   = ();
@@ -165,12 +174,18 @@ sub manager_urn($)	{ return field($_[0], "manager_urn"); }
 sub portal($)		{ return field($_[0], "portal"); }
 sub expert_mode($)	{ return field($_[0], "expert_mode"); }
 sub nfsmounts($)	{ return field($_[0], "nfsmounts"); }
+sub forClass($)		{ return field($_[0], "forClass"); }
 sub Brand($)		{ return $_[0]->{'BRAND'}; }
 sub isAPT($)	        { return $_[0]->Brand()->isAPT() ? 1 : 0; }
 sub isCloud($)	        { return $_[0]->Brand()->isCloud() ? 1 : 0; }
 sub isPNet($)	        { return $_[0]->Brand()->isPNet() ? 1 : 0; }
 sub isPowder($)	        { return $_[0]->Brand()->isPowder() ? 1 : 0; }
 sub isEmulab($)         { return $_[0]->Brand()->isEmulab() ? 1 : 0; }
+
+# this value should match one of the RESERVATIONS_PER* definitions above
+sub shared_reservations($) { return field($_[0], "shared_reservations"); }
+# XXX
+sub shared_reservation($)  { return field($_[0], "shared_reservations"); }
 
 # These come from the group not the project.
 sub unix_gid($)         { return $_[0]->{'GROUP'}->unix_gid(); }
@@ -303,7 +318,12 @@ sub Update($$)
 sub Create($$$$)
 {
     my ($class, $pid, $leader, $argref) = @_;
-    my $unix_gname = $pid;
+    my $unix_gname = UnixGroupName($pid);
+    if (!defined($unix_gname)) {
+	print STDERR "Project->Create: ".
+	    "Could not form a unique Unix group name!";
+	return undef;
+    }
     my $nonlocal   = (exists($argref->{'nonlocal_id'}) ? 1 : 0);
 	
     #
@@ -313,28 +333,6 @@ sub Create($$$$)
     my @insert_data = (!defined($argref) ? () :
 		       map("$_=" . DBQuoteSpecial($argref->{$_}),
 			   keys(%{$argref})));
-
-    # Form a proper unix group name, which is limited to 16 chars.
-    if (length($pid) > 16) {
-	$unix_gname  = substr($pid, 0, 16);
-	my $maxtries = 9;
-	my $count    = 0;
-	while ($count < $maxtries) {
-	    my $query_result =
-		DBQueryFatal("select gid from groups ".
-			     "where unix_name='$unix_gname'");
-	    last
-		if (!$query_result->numrows);
-
-	    $count++;
-	    $unix_gname = substr($pid, 0, 15) . "$count";
-	}
-	if ($count == $maxtries) {
-	    print STDERR "Project->Create: ".
-		"Could not form a unique Unix group name!";
-	    return undef;
-	}
-    }
 
     # First create the underlying default group for the project.
     my $newgroup =
@@ -393,6 +391,35 @@ sub Create($$$$)
     }
 
     return $newproject;
+}
+
+#
+# Form a proper unix group name, which is limited to 16 chars.
+#
+sub UnixGroupName($)
+{
+    my ($pid) = @_;
+    my $unix_gname = $pid;
+ 
+    if (length($pid) > 16) {
+	$unix_gname  = substr($pid, 0, 16);
+	my $maxtries = 9;
+	my $count    = 0;
+	while ($count < $maxtries) {
+	    my $query_result =
+		DBQueryFatal("select gid from groups ".
+			     "where unix_name='$unix_gname'");
+	    last
+		if (!$query_result->numrows);
+
+	    $count++;
+	    $unix_gname = substr($pid, 0, 15) . "$count";
+	}
+	if ($count == $maxtries) {
+	    return undef;
+	}
+    }
+    return $unix_gname;
 }
 
 #
@@ -653,15 +680,10 @@ sub GetProjectGroup($)
 sub urn($)
 {
     my ($self) = @_;
-    my $pid  = $self->pid();
 
-    return undef
-	if (!$PGENISUPPORT);
-    require GeniHRN;
-
-    my $domain = "${OURDOMAIN}:${pid}";
-    return GeniHRN->new(GeniHRN::Generate($domain, "project", $pid));
+    return $self->GetProjectGroup()->urn();
 }
+
 sub nonlocalurn($)
 {
     my ($self) = @_;
@@ -1001,6 +1023,22 @@ sub AddNSFAward($$$)
     return 0;
 }
 
+sub NSFAwardList($)
+{
+    my ($self) = @_;
+    my $pid_idx = $self->pid_idx();
+    my @result  = ();
+
+    my $query_result =
+	DBQueryWarn("select award from project_nsf_awards ".
+		    "where pid_idx='$pid_idx'");
+
+    while (my ($award) = $query_result->fetchrow_array()) {
+	push(@result, $award);
+    }
+    return @result;
+}
+
 #
 # Return group_exports info, as a plain hash.
 #
@@ -1015,10 +1053,12 @@ sub PeerExports($$)
 # Do an exports setup if needed (ZFS). See exports_setup, when ZFS is on
 # we do not export all projects, only recently active ones. 
 #
-sub UpdateExports($)
+sub UpdateExports($;$)
 {
-    my ($self) = @_;
+    my ($self, $redirect) = @_;
     my $pid_idx = $self->pid_idx();
+    # Redirect output, see spewimage.
+    $redirect = 0 if (!defined($redirect));
 
     return 0
 	if (! ($WITHZFS && ($ZFS_NOEXPORT || !$WITHAMD)));
@@ -1043,13 +1083,14 @@ sub UpdateExports($)
 
     if (!defined($lastactivity) ||
 	time() - $lastactivity > ((($exports_limit * 24) - 12) * 3600)) {
-	if ($ZFS_NOEXPORT) {
-	    mysystem($EXPORTS_SETUP);
+	my $cmd = $EXPORTS_SETUP;
+	if (!$ZFS_NOEXPORT && !$WITHAMD) {
+	    $cmd .= " -B";
 	}
-	elsif (!$WITHAMD) {
-	    mysystem($EXPORTS_SETUP . " -B");
+	if ($redirect) {
+	    $cmd .= " >/dev/null 2>&1";
 	}
-
+	system($cmd);
 	# failed, reset the timestamp
 	if ($?) {
 	    my $set = (defined($lastactivity) ?
@@ -1062,16 +1103,59 @@ sub UpdateExports($)
     }
     return 0;
 }
+# Helper for after using above.
+sub WaitForMount($)
+{
+    my ($self) = @_;
+    my $pid  = $self->pid();
+    my $path = "$PROJROOT/$pid";
+
+    return emutil::waitForMount($path);
+}
 
 #
 # Return usage records for experiments that have terminated (were running)
 # between two dates.
 #
-sub Usage($$$)
+sub Usage($$$$$)
 {
-    my ($self, $start, $end) = @_;
+    my ($self, $group, $user, $start, $end) = @_;
     my $pid_idx = $self->pid_idx();
+    my $gid_idx = $group->gid_idx();
+    my $uid_idx = $user->uid_idx() if (defined($user));
     my @results = ();
+    my ($current_clause,$history_clause);
+
+    #
+    # When looking at project usage, all experiments.
+    # When looking at group usage, only experiments in the group.
+    #
+    if ($group->IsProjectGroup()) {
+	$current_clause = "e.pid_idx='$pid_idx'";
+	$history_clause = "s.pid_idx='$pid_idx'";
+    }
+    else {
+	$current_clause = "e.pid_idx='$pid_idx' and e.gid_idx='$gid_idx'";
+	$history_clause = "s.pid_idx='$pid_idx' and s.gid_idx='$gid_idx'";
+    }
+    #
+    # Limit to just the user when requested. 
+    #
+    if (defined($user)) {
+	#
+	# Nonlocal projects are created by the user but started by geniuser.
+	#
+	if ($self->IsNonLocal()) {
+	    my $nonlocal_urn = $user->nonlocal_id();
+	    # Bug in setting s.nonlocal_user_id, should be nonlocal_id?         
+	    my $local_urn = $user->urn();
+	    $history_clause .= " and (s.nonlocal_user_id='$nonlocal_urn' or ".
+		"s.nonlocal_user_id='$local_urn')";
+	}
+	else {
+	    $history_clause .= " and r.uid_idx='$uid_idx'";
+	}
+    }
 
     my $query_result =
 	DBQueryWarn("(select e.eid,s.rsrcidx,s.nonlocal_id,s.slice_uuid, ".
@@ -1083,7 +1167,8 @@ sub Usage($$$)
 		    "     s.exptidx=e.idx  ".
 		    "left join reserved as r on r.exptidx=e.idx ".
 		    "left join nodes as n on n.node_id=r.node_id ".
-		    "where e.pid_idx='$pid_idx' and e.state='active' ".
+		    "where $current_clause ".
+		    "      and e.state='active' ".
 		    "      and UNIX_TIMESTAMP(s.swapin_last) < $end ".
 		    "order by s.swapin_last desc) ".
 		    "union ".
@@ -1094,15 +1179,13 @@ sub Usage($$$)
 		    "  from experiment_resources as r ".
 		    "left join experiment_stats as s on ".
 		    "     s.exptidx=r.exptidx  ".
-		    "left join experiments as e on ".
-		    "     e.idx=r.exptidx  ".
 		    "left join node_history as h on ".
 		    "     h.exptidx=r.exptidx and h.op='alloc' and ".
 		    "     h.stamp >= r.swapin_time - 120 and ".
 		    "     (r.swapout_time=0 or ".
 		    "      h.stamp < r.swapout_time) ".
 		    "left join nodes as n on n.node_id=h.node_id ".
-		    "where s.pid_idx='$pid_idx' and ".
+		    "where $history_clause and ".
 		    "     r.swapin_time!=0 and r.swapout_time!=0 and ".
 		    "    ((r.swapin_time >= $start and ".
 		    "      r.swapin_time <= $end) or ".
@@ -1224,6 +1307,278 @@ sub Experiments($)
 	}
     }
     return \@result;
+}
+
+sub SetReservationsPerProject($;$$)
+{
+    my ($self, $details, $impotent) = @_;
+    my $pid_idx = $self->pid_idx();
+
+    my @reservations = Reservation->ProjectReservations( $self, undef );
+
+    $impotent = 0 unless( defined( $impotent ) );
+    
+    print Dumper(\@reservations);
+
+    foreach my $res ( @reservations ) {
+	my %notice = (
+	    "uuid" => $res->uuid(),
+	    "severity" => "warning",
+	    "message" => "reservation will no longer be user/group exclusive"
+	    );
+	push( @$details, \%notice )
+	    if( ref( $details ) );
+    }
+
+    return 0 if( $impotent );
+
+    return -1
+	if (!DBQueryWarn("update future_reservations set ".
+			 "  gid=pid,gid_idx=pid_idx ".
+			 "WHERE pid_idx='$pid_idx'"));
+    
+    my %args = ( "shared_reservations" => $RESERVATIONS_PERPROJECT );
+    $self->Update( \%args );
+
+    return 0;
+}
+
+sub SetReservationsPerUser($;$$)
+{
+    my ($self, $details, $impotent) = @_;
+    my $pid_idx = $self->pid_idx();
+
+    $impotent = 0 unless( defined( $impotent ) );
+    
+    while( 1 ) {    
+	my $version = Reservation->GetVersion();
+	my @types = ();
+	my $reject = 0;
+	
+	my $query_result = DBQueryWarn( "SELECT DISTINCT type FROM " .
+					"future_reservations " .
+					"WHERE approved IS NOT NULL " .
+					"AND pid_idx='$pid_idx'" );
+	while( my ($type) = $query_result->fetchrow_array() ) {
+	    push( @types, $type );
+	}
+
+	foreach my $type ( @types ) {
+	    my $reservations = Reservation->LookupAll( $type );
+
+	    print Dumper($reservations);
+
+	    #
+	    # per-user Reservations are at the project level
+	    # and need to be switched from the sub group for
+	    # everything to be consistent.
+	    #
+	    foreach my $res ( @$reservations ) {
+		if( defined( $res->pid_idx() ) &&
+		    $res->pid_idx() == $pid_idx ) {
+		    $res->{'SHARED_RES'} = $RESERVATIONS_PERUSER;
+		    $res->{'GID'} = $res->{'PID'};
+		}
+	    }
+	    
+	    my $error;
+	    if( !Reservation->IsFeasible( $reservations, \$error ) ) {
+		my %conflict = (
+		    "severity" => "error",
+		    "message" => "$type: $error"
+		    );
+		push( @$details, \%conflict )
+		    if( ref( $details ) );
+		
+		$reject = 1;
+	    }
+	}
+
+	return -1 if( $reject );
+
+	return 0 if( $impotent );
+	
+	next if( !defined( Reservation->BeginTransaction( $version,
+			   "projects", "groups" ) ) );
+
+	my %args = ( "shared_reservations" => $RESERVATIONS_PERUSER );
+	$self->Update( \%args );
+	
+	DBQueryWarn("update future_reservations set ".
+		    "  gid=pid,gid_idx=pid_idx ".
+		    "WHERE pid_idx='$pid_idx'");
+	
+	Reservation->EndTransaction();
+
+	return 0;
+    }
+}
+
+sub SetReservationsPerGroup($;$$)
+{
+    my ($self, $details, $impotent) = @_;
+    my $pid_idx = $self->pid_idx();
+
+    $impotent = 0 unless( defined( $impotent ) );
+    
+    while( 1 ) {    
+	my $version = Reservation->GetVersion();
+	my @types = ();
+	my $reject = 0;
+	my $reservations;
+	
+	my $query_result = DBQueryWarn( "SELECT DISTINCT type FROM " .
+					"future_reservations " .
+					"WHERE approved IS NOT NULL " .
+					"AND pid_idx='$pid_idx'" );
+	while( my ($type) = $query_result->fetchrow_array() ) {
+	    push( @types, $type );
+	}
+
+	foreach my $type ( @types ) {
+	    $reservations = Reservation->LookupAll( $type );
+
+	    print Dumper($reservations);
+
+	    foreach my $res ( @$reservations ) {
+		$res->{'SHARED_RES'} = $RESERVATIONS_PERGROUP
+		    if( defined( $res->pid_idx() ) &&
+			$res->pid_idx() == $pid_idx );
+	    }
+	    
+	    my $error;
+	    if( !Reservation->IsFeasible( $reservations, \$error ) ) {
+		my %conflict = (
+		    "severity" => "error",
+		    "message" => "$type: $error"
+		    );
+		push( @$details, \%conflict )
+		    if( ref( $details ) );
+		
+		$reject = 1;
+	    }
+	}
+
+	return -1 if( $reject );
+
+	return 0 if( $impotent );
+	
+	next if( !defined( Reservation->BeginTransaction( $version,
+			   "projects", "groups" ) ) );
+
+	my $weakened = shared_reservations( $self ) == $RESERVATIONS_PERUSER;
+	
+	my %args = ( "shared_reservations" => $RESERVATIONS_PERGROUP );
+	$self->Update( \%args );
+
+	Reservation->EndTransaction();
+
+	if( $weakened ) {
+	    foreach my $res ( @$reservations ) {
+		# Skip psuedo reservations (representing free nodes).
+		next
+		    if (!defined($res->uuid));
+		
+		my %notice = (
+		    "uuid" => $res->uuid(),
+		    "severity" => "warning",
+		    "message" => "reservation will no longer be user exclusive"
+		    );
+		push( @$details, \%notice )
+		    if( ref( $details ) );
+	    }
+	}
+	
+	return 0;
+    }
+}
+
+#
+# Modify a project's shared_reservations semantics.
+#
+# This is potentially problematic, because:
+#  - when turning shared reservations from per-user to per-group or
+#    per-project, the semantics change and users who have approved
+#    reservations might be surprised/confused to find that a
+#    reservation that was previously exclusive to them might now be
+#    consumed by another user in the same group/project.  It would be nice
+#    to warn them if this could happen.
+#  - when turning shared reservations to a finer granularity (e.g.,
+#    shared per-project to per-group, or per-group to per-user), if
+#    one user has an active reservation and another user in the same
+#    project has an active experiment using nodes of the same type, we
+#    will suddenly need additional spare nodes to accommodate both the
+#    experiment and the reservation simultaneously.  We resolve the
+#    problem by performing an admission control check on the schedule
+#    for the node type(s) in question, and make the check atomic
+#    w.r.t. the shared reservations flag update.  If the check fails,
+#    we refuse to touch the flag.
+sub SetSharedReservations($$;$$)
+{
+    my ($self, $shared, $details, $impotent) = @_;
+
+    # Initialise the detailed results if the caller is interested
+    @$details = ()
+	if( ref( $details ) );
+    
+    return 0
+	# well that was easy
+	if( $self->shared_reservations() == $shared );
+
+    if( $shared == $RESERVATIONS_PERUSER ) {
+	return SetReservationsPerUser( $self, $details, $impotent );
+    } elsif( $shared == $RESERVATIONS_PERPROJECT ) {
+	return SetReservationsPerProject( $self, $details, $impotent );
+    } else {
+	return SetReservationsPerGroup( $self, $details, $impotent );
+    }
+}
+
+#
+# Map shared reservations flag to string.
+#
+sub SharedReservationsString($)
+{
+    my ($self) = @_;
+    my $shared = ref($self) ? $self->shared_reservations() : $self;
+    my $val    = undef;
+
+    if ($shared == $RESERVATIONS_PERUSER) {
+	$val = "user";
+    }
+    elsif ($shared == $RESERVATIONS_PERPROJECT) {
+	$val = "project";
+    }
+    elsif ($shared == $RESERVATIONS_PERGROUP) {
+	$val = "group";
+    }
+    return $val;
+}
+sub ResModeProject($)	{ return ($_[0]->shared_reservations() ==
+				  $RESERVATIONS_PERPROJECT ? 1 : 0); }
+sub ResModeGroup($)	{ return ($_[0]->shared_reservations() ==
+				  $RESERVATIONS_PERGROUP ? 1 : 0); }
+sub ResModeUser($)	{ return ($_[0]->shared_reservations() ==
+				  $RESERVATIONS_PERUSER ? 1 : 0); }
+
+#
+# The reverse. Class method.
+#
+sub SharedReservationsValue($)
+{
+    my ($string) = @_;
+    my $val    = undef;
+
+    if ($string eq "user") {
+	$val = $RESERVATIONS_PERUSER;
+    }
+    elsif ($string eq "project") {
+	$val = $RESERVATIONS_PERPROJECT;
+    }
+    elsif ($string eq "group") {
+	$val = $RESERVATIONS_PERGROUP;
+    }
+    return $val;
 }
 
 sub Leases($)

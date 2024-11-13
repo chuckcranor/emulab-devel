@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,7 +41,7 @@ sub usage()
 	"add global <low> <high>",
 	"add project <pid> <name>",
 	"add project <pid> <low> <high>",
-	"remove named <name>",
+	"remove named [-F] <name>",
 	"remove global <idx> | <name>",
 	"remove project <pid> <idx>|<name>",
 	"remove project -all <pid>",
@@ -421,17 +421,32 @@ sub DoAdd()
 sub RemoveNamedRange()
 {
     my $errmsg;
+    my $force = 0;
     
-    usage()
-	if (@ARGV != 1);
-
+    if (@ARGV == 2 && $ARGV[0] eq "-F") {
+	$force = 1;
+	shift(@ARGV);
+    }
+    if (@ARGV != 1) {
+	usage();
+    }
     my $name  = $ARGV[0];
     my $range = APT_RFRange::NamedRange->Lookup($name);
     if (!defined($range)) {
 	fatal("No range with this name");
     }
     if ($range->InUse()) {
-	fatal("Range is referenced by either a project, set, or globally");
+	if (!$force) {
+	    fatal("Named range is in use; use -F option to also delete ".
+		  "those uses");
+	}
+	if (my $g = APT_RFRange::GlobalRange->Lookup($name)) {
+	    $g->Delete();
+	}
+	APT_RFRange::ProjectRange->DeleteFromAllProjects($name);
+	if ($range->InUse()) {
+	    fatal("Oops, internal error forcibly deleting named range");
+	}
     }
     $range->Delete() == 0
 	or fatal("Could not delete range");

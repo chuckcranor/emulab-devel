@@ -66,7 +66,7 @@ set +e
 dnsok=$(host $ntpserver) 2>/dev/null
 if [ "${dnsok/NXDOMAIN}" != "$dnsok" ] ; then
     echo -n "WARNING ntpserver $ntpserver unknown. " >> ${logfile}
-    x=$(/usr/local/etc/emulab/tmcc ntpinfo)
+    x=$($BINDIR/tmcc ntpinfo)
     if [ -n "$x" ] ; then
 	ntpserver=${x/SERVER=}
     else

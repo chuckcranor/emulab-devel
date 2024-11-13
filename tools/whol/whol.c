@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005 University of Utah and the Flux Group.
+ * Copyright (c) 2005,2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -274,9 +274,7 @@ whackanode(char *iface, char *victim)
  */
 
 u_short
-in_cksum(addr, len)
-        u_short *addr;
-        int len;
+in_cksum(u_short *addr, int len)
 {
     register int nleft = len;
     register u_short *w = addr;

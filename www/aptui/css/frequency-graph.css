@@ -1,3 +1,6 @@
+svg {
+    display: block;
+}
 .frequency-graph .line {
     fill: none;
     stroke: steelblue;
@@ -25,20 +28,20 @@
     stroke: #000;
 }
 
-.frequency-graph .tooltip-freq,
-.frequency-graph .tooltip-power,
-.frequency-graph .tooltip-center,
-.frequency-graph .tooltip-incident {
-    font-weight: bold;
-}
-.frequency-graph .tooltip-popover
+.frequency-graph .popover-content {
+    margin: 0px;
+    padding: 0px;
+}    
+.frequency-graph .arrow {
+    display: none;
+}    
+
+.frequency-graph-div .popover,
+.frequency-graph-div .tooltip-popover
 {
-    min-width: 200px !important;
+    min-width: 240px !important;
 }
-.frequency-graph .tooltip-incident {
-    stroke: green;
-    color: green;
-}
+
 .frequency-graph .tooltip-popover .table-condensed > thead > tr > th,
 .frequency-graph .tooltip-popover .table-condensed > tbody > tr > th,
 .frequency-graph .tooltip-popover .table-condensed > tfoot > tr > th,
@@ -46,6 +49,16 @@
 .frequency-graph .tooltip-popover .table-condensed > tbody > tr > td,
 .frequency-graph .tooltip-popover .table-condensed > tfoot > tr > td {
     padding: 0px;
+}
+
+/* Cleaning up, see txgraph */
+.frequency-graph .popover-content .table-condensed > thead > tr > th,
+.frequency-graph .popover-content .table-condensed > tbody > tr > th,
+.frequency-graph .popover-content .table-condensed > tfoot > tr > th,
+.frequency-graph .popover-content .table-condensed > thead > tr > td,
+.frequency-graph .popover-content .table-condensed > tbody > tr > td,
+.frequency-graph .popover-content .table-condensed > tfoot > tr > td {
+    padding: 1px;
 }
 .frequency-graph .tooltip-popover .table-condensed {
     margin-bottom: 0px;

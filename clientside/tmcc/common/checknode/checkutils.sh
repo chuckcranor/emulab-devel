@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,6 +47,11 @@ fi
 [[ -z "${native_bitsize-}" ]] && declare -i native_bitsize=0 # what is our native binary bit size
 [[ -z "${USE_DD-}" ]] && declare USE_DD="tdd" # if set which dd for the tdd program to use
 [[ -z "${TDD_DD-}" ]] && declare TDD_DD="dd" # if set which dd for the tdd program to use
+[[ -z "${slop-}" ]] && declare -i slop=0  # to hold the memory size diff from found and tmcc
+[[ -z "${memmethod-}" ]] && declare memmethod="none"  # method used to find memory
+[[ -z "${DIMMslots-}" ]] && declare -i DIMMslots=0 
+[[ -z "${DIMMsempty-}" ]] && declare -i DIMMsempty=0 
+[[ -z "${DIMMsize-}" ]] && declare DIMMsize="unknown" 
 
 # PathNames
 [[ -z "${logfile-}" ]] && declare logfile # output log
@@ -115,7 +120,6 @@ initialize () {
     initlogs $@
     inittestinfo
 
-    #trap 'err_report $FUNCNAME:$LINENO' ERR
     trap 'err_report $LINENO' ERR
 
     initdone="done"
@@ -195,7 +199,6 @@ readtmcinfo() {
 	# hwinvidx is always expected to be set
 	ref_hwinv["hwinvidx"]="" #restart the array
     fi
-
     # handle mult-line  input for disks and nets
     while read -r in ; do
 	keyword=${in%% *}
@@ -208,7 +211,7 @@ readtmcinfo() {
 		keyword+="$ncnt"
 		((++ncnt))
 		;;
-	    \#* ) continue ;; 
+	    \#* ) continue ;;   #allow comment in tmcc output
 	esac
 	ref_hwinv["hwinvidx"]+="$keyword " # keeping the keyword list preserves order
 	ref_hwinv[$keyword]=$in
@@ -644,6 +647,13 @@ inithostname() {
 
 findSmartctl() {
     local findit=$(which smartctl)
+    if [ "$os" == "Linux" ] ; then
+	if [ -x "/usr/sbin/smartctl" ]; then
+	    findit="/usr/sbin/smartctl"
+	    echo $findit
+	    return 0
+	fi
+    fi
     if [ "$os" == "FreeBSD" ] ; then
 	findit=$(which smartctl$osrel)
 	if [ -z "${findit}" ] ; then
@@ -789,6 +799,13 @@ getdrivenames() {
 		    drivelist+="/dev/sd${i} "
 		fi
 	    done
+	    list="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49"
+	    for i in $list
+	    do
+		if [ -c /dev/nvme${i} ] ; then
+		    drivelist+="/dev/nvme${i} "
+		fi
+	    done
 	    ;;
 	FreeBSD )
 	    list="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49"
@@ -843,8 +860,8 @@ getfromtb() {
 	    [[ -z "${tmccinfo[$info]+${tmccinfo[$info]}}" ]] && return 0
 	    s=${tmccinfo[$info]}
 	    s=${s/$info SIZE=}
-	     printf "%s" "$s"
-	     ;;
+	    printf "%s" "$s"
+	    ;;
 	DISKUNIT )
 	    [[ -z "${tmccinfo[${info}0]+${tmccinfo[${info}0]}}" ]] && return 0
 	    # only returning serial numbers

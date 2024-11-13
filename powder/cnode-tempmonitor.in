@@ -1,0 +1,700 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+use IO::Socket::INET;
+use JSON;
+use POSIX qw(strftime ceil);
+
+#
+# Grab temps from the cnodes and post to overwatch. Temporary until
+# the cnodes are converted to control nucs.
+#
+sub usage()
+{
+    print "Usage: cnode-tempmonitor.in [-d] [-s] [-n]\n";
+    exit(1);
+}
+my $optlist   = "dns";
+my $debug     = 0;
+my $impotent  = 0;
+my $oneshot   = 0;
+my $killed    = 0;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $OURDOMAIN        = "@OURDOMAIN@";
+my $DAEMONTAG        = "cnode-tempmonitor";
+my $LOGFILE          = "$TB/log/$DAEMONTAG.log";
+my $PASSWORD         = "$TB/etc/telegraf.pswd";
+my $CURL             = "/usr/local/bin/curl";
+my $POWER            = "$TB/bin/power";
+my $PTECHEXPECT      = "/home/mike/ptech.exp";
+my $EXPECT	     = "/usr/local/bin/expect";
+my $SUDO	     = "/usr/local/bin/sudo";
+my $SLEEP_INTERVAL   = 30;
+my $PORT             = 451;
+my $TEMP_RESUME     = 115;
+my $TEMP_WARN       = 122;
+my $TEMP_SHUTDOWN   = 130;
+
+my $STATUS_OK	    = 0;
+my $STATUS_WARN     = 1;
+my $STATUS_SHUTDOWN = 2;
+my @faketemps       = (40, 47, 47, 47, 47, 50, 55, 55, 55, 55, 55, 55, 55, 55,
+		       40, 40, 40, 40, 40, 40, 40);
+
+#
+# This is a hack of course ... 
+#
+my %frontends = (
+    "10.11.13.192"     => {
+	"enabled"      => 0,
+	"frontend"     => "10.11.13.192",
+	"autocyclefe"  => 1,
+	"alsocycle"    => [],
+    },
+    "cnode-guesthouse" => {
+	"enabled"      => 1,
+	"frontend"     => "powder-rffe-guesthouse",
+	"switch"       => "powder-mgmt-dbs6",
+	"autocyclefe"  => 1,
+	"alsocycle"    => [ "bru-650-4" ],
+    },
+    "cnode-mario"      => {
+	"enabled"      => 1,
+	"frontend"     => "powder-rffe-mario",
+	"switch"       => "powder-mgmt-dbs2",
+	"autocyclefe"  => 1,
+	"alsocycle"    => [],
+    },
+    "cnode-ustar"      => {
+	"enabled"      => 1,
+	"frontend"     => "powder-rffe-ustar",
+	"switch"       => "powder-mgmt-dbs8",
+	"autocyclefe"  => 1,
+	"alsocycle"    => [ "n310-ustar" ],
+    },
+    "cnode-wasatch"    => {
+	"enabled"      => 1,
+	"frontend"     => "powder-rffe-wasatch",
+	"switch"       => "powder-mgmt-dbs1",
+	"autocyclefe"  => 1,
+	"alsocycle"    => [ "cap-wasatch, n310-wasatch" ],
+    },
+    "cnode-moran"      => {
+	"enabled"      => 1,
+	"frontend"     => "powder-rffe-moran",
+	"switch"       => "powder-mgmt-dbs5",
+	"autocyclefe"  => 1,
+	"alsocycle"    => [],
+    },
+    "cnode-ebc"        => {
+	"enabled"      => 1,
+#	"frontend"     => "powder-rffe-ebc",
+	"rfsw"         => "powder-rfsw-ebc",
+	"switch"       => "powder-mgmt-dbs7",
+	"autocyclefe"  => 0,
+	"alsocycle"    => [],
+    },
+);
+
+#
+# Local data for each sensor.
+#
+foreach my $ref (values(%frontends)) {
+    $ref->{"temperature"} = 0;
+    # Timestamp of last good read, to report loss of contact.
+    $ref->{"lastread"}    = time();
+    # Number of sensor failures in a row.
+    $ref->{"failcount"}   = 0;
+    # Status (okay, warn, overtemp)
+    $ref->{"status"}      = $STATUS_OK;
+    # Timestamp of last status change.
+    $ref->{"lastchange"}  = time();
+    # Timestamp of last error email (sensor not available, back online).
+    $ref->{"notified"}    = 0;
+}
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub GrabTemp($);
+sub GrabRFFETemp($);
+sub GrabRFSWTemp($);
+sub GrabSwitchTemp($);
+sub UploadTemp($$);
+sub UploadSwitchTemp($$);
+sub TempConvert($);
+sub Power($$$);
+sub NotifyTBOPS($$);
+sub Notify($$$);
+sub fatal($);
+sub logit($);
+	  
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if ($UID != 0) {
+    die("Must be root to run this script\n");
+}
+if (!$MAINSITE) {
+    exit(0);
+}
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"s"})) {
+    $oneshot = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+
+my $TELEGRAF = `/bin/cat $PASSWORD`;
+if ($?) {
+    fatal("Could not read $PASSWORD");
+}
+chomp($TELEGRAF);
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use emdb;
+use libtestbed;
+use emutil;
+use libEmulab;
+use APT_Aggregate;
+use Node;
+
+if (! ($oneshot || $impotent)) {
+    if (CheckDaemonRunning("${DAEMONTAG}.log")) {
+	fatal("Not starting another $DAEMONTAG daemon!");
+    }
+    # Go to ground.
+    if (! $debug) {
+	if (TBBackGround($LOGFILE)) {
+	    exit(0);
+	}
+    }
+    if (MarkDaemonRunning("$DAEMONTAG")) {
+	fatal("Could not mark daemon as running!");
+    }
+}
+
+#
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    ReOpenLog($LOGFILE);
+}
+$SIG{HUP} = \&handler
+    if (! ($debug || $oneshot));
+
+# TERM while connected to a frontend makes the frontend very unhappy.
+sub killme()
+{
+    $killed = 1;
+}
+$SIG{TERM} = \&killme;
+$SIG{INT}  = \&killme;
+
+
+while (1) {
+    if ($killed) {
+	exit(0);
+    }
+    #
+    # We always run, we do not look at NoLogins().
+    #
+    foreach my $cnode (sort(keys(%frontends))) {
+	my $details = $frontends{$cnode};
+	
+	next
+	    if (! $details->{'enabled'});
+
+	my $node = Node->Lookup("$cnode");
+	next
+	    if (!defined($node));
+	
+	my $celcius  = GrabTemp($details);
+	if ($killed) {
+	    exit(0);
+	}
+	if (!defined($celcius)) {
+	    if ($details->{'failcount'} < 5) {
+		$details->{'failcount'}++;
+	    }
+	    elsif (time() - $details->{'notified'} > (3600 * 24)) {
+		my $message =
+		    "The temperature monitor for $cnode is no longer ".
+		    "responding.\n\n";
+		if (!$details->{'notified'} && $details->{'autocyclefe'}) {
+		    my $frontend = $details->{"frontend"};
+
+		    # Power cycle on first notification.
+		    $message .= "Power cycling $frontend ... \n";
+		    logit($message);
+		    system("$POWER -a cycle $frontend");
+		    if ($?) {
+			NotifyTBOPS("power cycle $frontend failed",
+				    "Could not power cycle $frontend");
+		    }
+		}
+		else {
+		    $message .= "Manual intervention required!\n";
+		    NotifyTBOPS("$cnode temperature monitor offline", $message);
+		    logit($message);
+		}
+		$details->{'notified'} = time();
+	    }
+	    $details->{'temperature'} = undef;
+
+	    #
+	    # XXX even if the FE is unreachable, we want to report
+	    # switch temps.
+	    #
+	    my $switchtemp = GrabSwitchTemp($details->{'switch'});
+	    if ($switchtemp) {
+		UploadSwitchTemp($cnode, $switchtemp);
+	    }
+
+	    next;
+	}
+	if (!defined($details->{'temperature'}) &&
+	    defined($details->{'notified'})) {
+	    NotifyTBOPS("$cnode temperature monitor is back online",
+			"The temperature monitor for $cnode is online.");
+	    $details->{'notified'} = 0;
+	}
+	$details->{'temperature'} = $celcius;
+	$details->{"lastread"}    = time();
+	$details->{'failcount'}   = 0;
+
+	# Grab switch temp.
+	my $switchtemp = GrabSwitchTemp($details->{'switch'});
+
+	#
+	# Upload to influx.
+	#
+	UploadTemp($cnode, $celcius);
+	if ($switchtemp) {
+	    UploadSwitchTemp($cnode, $switchtemp);
+	}
+	my $curstatus = $details->{'status'};
+	my $newstatus = $curstatus;
+	my $changed   = $details->{'lastchange'};
+	
+	my $temperature = TempConvert($celcius);
+	if ($debug) {
+	    my $msg = "$cnode : $temperature ($celcius C) ";
+	    if ($switchtemp) {
+		$msg .= "transceiver: " . TempConvert($switchtemp);
+	    }
+	    logit($msg);
+	}
+
+	#
+	# First decide what status we want to be in.
+	#
+	if ($temperature < $TEMP_RESUME) {
+	    $newstatus = $STATUS_OK;
+	}
+	elsif ($temperature >= $TEMP_WARN && $temperature < $TEMP_SHUTDOWN) {
+	    $newstatus = $STATUS_WARN;
+	}
+	elsif ($temperature >= $TEMP_SHUTDOWN) {
+	    $newstatus = $STATUS_SHUTDOWN;
+	}
+	next
+	    if ($newstatus == $curstatus);
+
+	#
+	# Status is different then last time, but we do not do anything
+	# for a little while to avoid bouncing around.
+	#
+	print "$cnode status changed $curstatus -> $newstatus\n";
+	if (time() - $changed < 20) {
+	    print "Waiting on this change a minute\n";
+	    next;
+	}
+	my ($subject, $body);
+
+	if ($newstatus == $STATUS_OK) {
+	    $subject = "$cnode Monitor: Temperature has returned to normal";
+	    $body    = "The temperature in the $cnode enclosure has returned\n".
+		"to normal. ";
+	    
+	    if ($curstatus == $STATUS_SHUTDOWN) {
+		$body .= "Powering $cnode back on.";
+		Power($node, "on", $details->{'alsocycle'});
+	    }
+	}
+	elsif ($newstatus == $STATUS_SHUTDOWN) {
+	    $subject = "$cnode Monitor: Extreme Temperature Condition";
+	    $body    = "The temperature in the $cnode enclosure is above\n".
+		"$TEMP_SHUTDOWN degrees. Powering off until the temperature\n".
+		"returns to normal.";
+	    Power($node, "off", $details->{'alsocycle'});
+	}
+	elsif ($newstatus == $STATUS_WARN) {
+	    if ($curstatus == $STATUS_OK) {
+		#
+		# Only say something when temps are increasing.
+		#
+		$subject = "$cnode Monitor: Temperature Warning";
+		$body    = "The temperature in the $cnode enclosure is ".
+		    "now $temperature degrees.\n".
+		    "This is okay for now, but if the temperature reaches ".
+		    "$TEMP_SHUTDOWN degrees,\n".
+		    "we will have to shutdown $cnode ".
+		    "to protect it from damage.";
+	    }
+	}
+	if (defined($subject)) {
+	    Notify($node, $subject, $body);
+	}
+	$details->{'status'}     = $newstatus;
+	$details->{'lastchange'} = time();
+    }
+    exit(0)
+	if ($oneshot);
+
+    emutil::FlushCaches();
+  again:
+    exit(0)
+	 if ($killed);
+    sleep($SLEEP_INTERVAL);
+}
+exit(0);
+
+
+sub TempConvert($)
+{
+    my ($celcius) = @_;
+    
+    return sprintf("%.3f", ($celcius * 9.0/5.0) + 32);
+}
+
+#
+# 
+#
+sub GrabTemp($)
+{
+    my ($details) = @_;
+
+    if (exists($details->{'rfsw'})) {
+	return GrabRFSWTemp($details->{'rfsw'});
+    }
+    return GrabRFFETemp($details->{'frontend'});
+}
+
+sub GrabRFFETemp($)
+{
+    my ($rffe) = @_;
+    my $celcius;
+
+    if (0) {
+	my $tmp = shift(@faketemps);
+	return $tmp;
+    }
+    logit("Connecting to $rffe") if ($debug > 1);
+	
+    my $sock = IO::Socket::INET->new(PeerAddr => $rffe,
+				     PeerPort => $PORT,
+				     Proto    => 'tcp',
+				     Blocking => 1,
+				     Timeout  => 5);
+    if (!$sock) {
+	logit("Could not connect to $rffe: $!");
+	return undef;
+    }
+    # This does not work.
+    $sock->timeout(5);
+
+    # So have to do this!
+    $sock->setsockopt(SOL_SOCKET, SO_RCVTIMEO, pack('l!l!', 5, 0))
+	or fatal("setsockopt: $!");
+    
+    my $buffer = "";
+    if (!defined($sock->recv($buffer, 16))) {
+	logit("Failed to recv from $rffe: $!");
+	$sock->shutdown(SHUT_RDWR);
+	$sock->close();
+	return undef;
+    }
+    $sock->shutdown(SHUT_RDWR);
+    $sock->close();
+    if ($buffer =~ /^(\-?[\d\.]+)$/) {
+	$celcius = $1;
+    }
+    else {
+	logit("Bogus temperature from $rffe: $buffer");
+	return undef;
+    }
+    return $celcius;
+}
+
+sub GrabRFSWTemp($)
+{
+    my ($rfsw) = @_;
+    my $celcius;
+    my $command = "$SUDO ssh $rfsw /usr/local/bin/temper";
+
+    logit("Connecting to $rfsw") if ($debug > 1);
+
+    my $output = emutil::ExecQuiet($command);
+    if ($?) {
+	logit($output);
+	return undef;
+    }
+    if ($debug > 1) {
+	logit("$rfsw returns: $output");
+    }
+    chomp($output);
+    my @tokens = split('\s+', $output);
+    if (scalar(@tokens) < 7) {
+	logit("Bogus result from $rfsw: '$output'");
+	return undef;
+    }
+    if ($tokens[6] =~ /^(\-?[\d\.]+)C$/) {
+	return $1;
+    }
+    logit("Bogus temperature from $rfsw: " . $tokens[6]);
+    return undef;
+}
+
+#
+# Grab switch temp. 
+#
+sub GrabSwitchTemp($)
+{
+    my ($switch) = @_;
+    
+    logit("Getting transceiver temp from $switch") if ($debug > 1);
+
+    my $celcius = `$EXPECT $PTECHEXPECT $switch`;
+    if ($?) {
+	logit("Could not get transceiver temp from $switch");
+	return undef;
+    }
+    if ($celcius =~ /^(\-?[\d\.]+)$/) {
+	$celcius = $1;
+    }
+    else {
+	logit("Bogus transceiver temperature from $switch: $celcius");
+	return undef;
+    }
+    return $celcius;
+}
+
+#
+# Send directly to influx, temporary until the cnode is a control nuc
+# and it runs telegraf on its own. 
+#
+sub UploadTemp($$)
+{
+    my ($cnode, $value) = @_;
+    my $hostname = "${cnode}.powderwireless.net";
+    my $url = "'https://overwatch.emulab.net:8086/write?db=telegraf' ".
+	"--data-binary 'exec_arduinotemp,host=${hostname} value=${value}'";
+    my $opts = ($debug > 1 ? "-S" : "");
+
+    my $command = "$CURL -s $opts -XPOST -u '$TELEGRAF' $url";
+    logit("$command") if ($debug > 1);
+    
+    if (!$impotent) {
+	system($command);
+	if ($?) {
+	    logit("ERROR: Could not upload temp for $cnode");
+	}
+    }
+}
+#
+# Ditto the switch temp.
+#
+sub UploadSwitchTemp($$)
+{
+    my ($cnode, $value) = @_;
+    my $hostname = "${cnode}.powderwireless.net";
+    my $chip     = "dense-1/4";
+    my $url = "'https://overwatch.emulab.net:8086/write?db=telegraf' ".
+	"--data-binary 'sensors,host=${hostname},chip=${chip} ".
+	"temp_input=${value}'";
+    my $opts = ($debug > 1 ? "-S" : "");
+
+    my $command = "$CURL -s $opts -XPOST -u '$TELEGRAF' $url";
+    logit("$command") if ($debug > 1);
+    
+    if (!$impotent) {
+	system($command);
+	if ($?) {
+	    logit("ERROR: Could not upload switch temp for $cnode");
+	}
+    }
+}
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    if (! ($oneshot || $debug || $impotent)) {
+	#
+	# Send a message to the testbed list. 
+	#
+	SENDMAIL($TBOPS,
+		 "$DAEMONTAG died",
+		 $msg,
+		 $TBOPS);
+    }
+    MarkDaemonStopped("$DAEMONTAG")
+	if (! ($oneshot || $impotent));
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print "$stamp: $msg\n";
+}
+
+sub NotifyTBOPS($$)
+{
+    my ($subject, $message) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    
+    # Append a timestamp to the end of the body, helpful for debugging
+    # since email will probably be delayed during a disconnect.
+    $message .= "\n\n" . $stamp . "\n";
+    
+    if ($impotent) {
+	print "$subject\n";
+	print "$message\n";
+	return;
+    }
+    SENDMAIL($TBOPS, "Dense Temp Monitor: $subject",
+	     $message, $TBOPS, "X-NetBed: cnode-tempmonitor");
+}
+
+sub Notify($$$)
+{
+    my ($node, $subject, $message) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    my $node_id = $node->node_id();
+    my $TO  = $TBOPS;
+    my $BCC = "";
+    
+    # Append a timestamp to the end of the body, helpful for debugging
+    # since email will probably be delayed during a disconnect.
+    $message .= "\n\n" . $stamp . "\n";
+    
+    if ($impotent) {
+	print "$subject\n";
+	print "$message\n";
+	return;
+    }
+
+    if ($node->IsReserved()) {
+	my $experiment = $node->Reservation();
+	if ($experiment) {
+	    my $user = $experiment->GetCreator();
+	    if ($user) {
+		$TO  = $user->email();
+		$BCC = "\n" . "BCC: $TO";
+	    }
+	}
+    }
+    SENDMAIL($TO, $subject,
+	     $message, $TBOPS, "X-NetBed: cnode-tempmonitor" . $BCC);
+}
+
+sub Power($$$)
+{
+    my ($node, $onoff, $alsocycle) = @_;
+    my @nodes = ($node);
+
+    foreach my $id (@{$alsocycle}) {
+	my $also = Node->Lookup($id);
+	if (!defined($also)) {
+	    print "Power: skipping unknown node $id\n";
+	    last;
+	}
+	push(@nodes, $also);
+    }
+
+    foreach my $n (@nodes) {
+	my $node_id = $n->node_id();
+	
+	#
+	# If the node is not reserved, leave it off.
+	# These nodes are idlepower_enabled, so they get turned off automatically.
+	#
+	if ($onoff eq "on" && !$n->IsReserved()) {
+	    logit("Power($onoff, $node_id): Node is not reserved, leaving it off");
+	    return;
+	}
+
+	if ($impotent) {
+	    logit("Would power $onoff $node_id");
+	}
+	else {
+	    logit("Powering $onoff $node_id");
+	    system("$POWER -a $onoff $node");
+	    if ($?) {
+		NotifyTBOPS("power $onoff $node failed",
+			    "Could not power $onoff $node");
+	    }
+	}
+    }
+}
+

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -858,49 +858,13 @@ sub IsUp($)
 sub NodeAllocCheck($$)
 {
     my ($self, $pid) = @_;
+    require libadminctrl;
 
     # Must be a real reference. 
     return 0
 	if (! ref($self));
 
-    my $node_id = $self->node_id();
-
-    #
-    # Hmm. The point of this join is to find rows in the permissions table
-    # with the corresponding type of the node. If no rows come back, its
-    # a non-existent node! If the values are NULL, then there are no rows
-    # with that type/class, and thus the type/class is free to be allocated
-    # by anyone. Otherwise we get the list of projects that are allowed,
-    # and so we have to look at those.
-    # Note: nodetypeXpid_permissions has the pid_idx in addition to the pid -
-    # presumably, the Right Thing would be to use that, but this function
-    # is only passed the pid right now.
-    #
-    my $query_result =
-	DBQueryFatal("select distinct p.type, p.pid_idx from nodes as n ".
-		     "left join node_types as nt on n.type=nt.type ".
-		     "left join nodetypeXpid_permissions as p on ".
-		     "     (p.type=nt.type or p.type=nt.class) ".
-		     "where node_id='$node_id'");
-
-    if (!$query_result->numrows) {
-	print STDERR "NodeAllocCheck: No such node $node_id!\n";
-	return 0;
-    }
-    my ($ptype,$pid_idx) = $query_result->fetchrow_array();
-
-    # No rows, or a pid match.
-    if (!defined($ptype) || $pid_idx eq $pid->pid_idx()) {
-	return 1;
-    }
-
-    # Okay, must be rows in the permissions table. Check each pid for a match.
-    while (my ($ptype,$pid_idx) = $query_result->fetchrow_array()) {
-	if ($pid_idx eq $pid->pid_idx()) {
-	    return 1;
-	}
-    }
-    return 0;
+    return libadminctrl::MaximumAllowed($pid, $self->type());
 }
 
 # Naming confusion.
@@ -981,6 +945,25 @@ sub GetEventState($;$$$)
     $$pstamp= $stamp
  	if (defined($pstamp));
     return 0;
+}
+
+sub SetCheckupStamp($;$)
+{
+    my ($self, $stamp) = @_;
+
+    # Must be a real reference.
+    return -1
+	if (!ref($self));
+
+    $stamp = time()
+	if (!$stamp);
+
+    my $node_id = $self->node_id();
+    DBQueryWarn("update nodes set checkup_timestamp=$stamp".
+		"    where node_id='$node_id'")
+	or return -1;
+
+    return Refresh($self);
 }
 
 #
@@ -1512,18 +1495,18 @@ sub SetKeyDist($$$)
 #
 # Load all attributes from the node_attributes table, 
 #
-sub LoadNodeAttributes($)
+sub LoadNodeAttributes($;$)
 {
-    my ($self) = @_;
+    my ($self,$reload) = @_;
     
     return -1
 	if (!ref($self));
 
     my $node_id = $self->node_id();
 
-    if (!defined($self->{"ATTRS"})) {
+    if (!defined($self->{"ATTRS"}) || $reload) {
 	my $query_result =
-	    DBQueryWarn("select * from node_attributes ".
+	    DBQueryWarn("select * from node_attributes as a ".
 			"where node_id='$node_id'");
 
 	return -1
@@ -1684,6 +1667,16 @@ sub GetNodeFeatures($)
     }
     return $self->{"FEATURES"};
 }
+sub GetNodeFeature($$)
+{
+    my ($self, $feature) = @_;
+    my $features = $self->GetNodeFeatures();
+
+    return undef
+	if (!exists($features->{$feature}));
+
+    return $features->{$feature};
+}
 
 #
 # Set a feature for a node, overwriting the same feature if it
@@ -1733,6 +1726,21 @@ sub ClearNodeFeature($$)
 	delete($self->{"FEATURES"}->{$feature});
     }
     return 0;
+}
+
+sub HasFeature($$)
+{
+    my ($self, $feature) = @_;
+    my $node_id = $self->node_id();
+    my $safe_feature = DBQuoteSpecial($feature);
+
+    my $query_result =
+	DBQueryWarn("select * from node_features ".
+		    "where node_id='$node_id' and feature=$safe_feature");
+    return 1
+	if (!$query_result);
+	    
+    return $query_result->numrows;
 }
 
 #
@@ -1995,6 +2003,17 @@ sub rebootable($;$) {
     return NodeTypeInfo($self)->rebootable($stuff);
 }
 
+sub imageable($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "imageable", \$val) == 0 && defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->imageable($stuff);
+}
+
 sub delayreloadtillalloc($;$) {
     my ($self,$stuff) = @_;
     my $val = undef;
@@ -2019,6 +2038,18 @@ sub powercycleafterreload($;$) {
     return NodeTypeInfo($self)->powercycleafterreload($stuff);
 }
 
+sub nfreepoweroff($;$) {
+    my ($self,$stuff) = @_;
+    my $val = undef;
+
+    if (NodeAttribute($self, "nfreepoweroff", \$val) == 0 &&
+	defined($val)) {
+	$$stuff = $val if (defined($stuff));
+	return $val;
+    }
+    return NodeTypeInfo($self)->nfreepoweroff($stuff);
+}
+
 sub requires_reservation($;$) {
     my ($self,$stuff) = @_;
     my $val = undef;
@@ -2039,6 +2070,50 @@ sub root_password($) {
     return $val;
 }
 
+sub conflicting_nodes($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "conflicting_nodes", \$val);
+    return $val;
+}
+
+sub rfswitch_location($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "rfswitch_location", \$val);
+    return $val;
+}
+
+sub rfswitch_port($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "rfswitch_port", \$val);
+    return $val;
+}
+
+sub rfswitch_type($) {
+    my ($self) = @_;
+    my $val = undef;
+
+    NodeAttribute($self, "rfswitch_type", \$val);
+    return $val;
+}
+
+sub rfswitchSettings($$$$)
+{
+    my ($self, $plocation, $pport, $ptype) = @_;
+
+    if ($self->NodeAttribute("rfswitch_location", $plocation) ||
+	$self->NodeAttribute("rfswitch_port", $pport) ||
+	$self->NodeAttribute("rfswitch_type", $ptype)) {
+	return -1;
+    }
+    return 0;
+}
+
 #
 # And these are the less common attributes, but still common enough to
 # warrant shortcuts.
@@ -2048,9 +2123,6 @@ sub delay_osid($;$) {
 }
 sub jail_osid($;$) {
     return NodeTypeInfo($_[0])->jail_osid($_[1]);
-}
-sub imageable($;$) {
-    return NodeTypeInfo($_[0])->imageable($_[1]);
 }
 sub control_iface($;$) {
     return NodeTypeInfo($_[0])->control_iface($_[1]);
@@ -3448,9 +3520,6 @@ sub MarkAsIll($)
     my ($self) = @_;
     my $nodeid = (ref($self) ? $self->node_id() : $self);
 
-    if (ClearBootAttributes($nodeid)) {
-	print STDERR "*** WARNING: Could not clear boot attributes: $self!\n";
-    }
     my $pid = NODEILL_PID();
     my $eid = NODEILL_EID();
     my $experiment = LocalExpLookup($pid, $eid);
@@ -4252,6 +4321,36 @@ sub CheckPreReserve($$$)
 	print "Setting pre-reserve for $node_id to $result\n";
     }
     return $result;
+}
+
+#
+# Is there an "active" prereserve for a node. For this purpose, active
+# means that reserved_pid is set OR there is specific node prereserve that
+# is now active. In effect, a specific node prereserve is slighty less
+# best effort then a type prereserve.
+#
+sub ActivePreReserve($)
+{
+    my ($self)  = @_;
+    my $node_id = $self->node_id();
+
+    return $self->reserved_pid()
+	if (defined($self->reserved_pid()));
+
+    my $query_result =
+	DBQueryWarn("select pr.pid from project_reservations as pr ".
+		    "join node_reservations as pnr on ".
+		    "     pr.pid=pnr.pid and ".
+		    "     pr.name=pnr.reservation_name ".
+		    "where pnr.node_id='$node_id' and pr.terminal=0 and ".
+		    "      pr.active=1");
+
+    return undef
+	if (! ($query_result && $query_result->numrows));
+    
+    my ($pid) = $query_result->fetchrow_array();
+
+    return $pid;
 }
 
 #

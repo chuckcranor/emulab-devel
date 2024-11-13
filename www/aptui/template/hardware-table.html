@@ -1,0 +1,151 @@
+<div>
+  <div class='panel panel-default'>
+    <div class='panel-heading text-center'>
+      <h3 class='panel-title'><%- title %></h3>
+    </div>
+  </div>
+  <div class='panel-body' style="padding-top: 10px;">
+    <div class='row'>
+      <div class="col-sm-3 text-right">
+	Product:
+      </div>
+      <div class="col-sm-9">
+	<%- summary.product %>
+      </div>
+    </div>
+    <div class='row'>
+      <div class="col-sm-3 text-right">
+	Vendor:
+      </div>
+      <div class="col-sm-9">
+	<%- summary.vendor %>
+      </div>
+    </div>
+    <div class='row'>
+      <div class="col-sm-3 text-right">
+	Number of CPUs:
+      </div>
+      <div class="col-sm-9">
+	<%- _.size(summary.cpu) %>
+      </div>
+    </div>
+    <div class='row'>
+      <div class="col-sm-3 text-right">
+	CPU:
+      </div>
+      <div class="col-sm-9">
+	<%- summary.cpu[0].product %>
+	<div>
+	  <b>Cores:</b> <%- summary.cpu[0].cores %>,
+	  <b>Threads:</b> <%- summary.cpu[0].threads %>
+	</div>
+	<% if (_.has(summary.cpu[0], "cache")) { %>
+	  <div>
+	    <% _.each(summary.cpu[0].cache, function (cache, idx) { %>
+	      <b><%- cache.description %>:</b>
+	      <%- cache.size %>
+	      <%- cache.units %><% if (idx < _.size(summary.cpu[0].cache) - 1) { %>, <% } %>
+	    <% }); %>
+	  </div>
+	<% } %>
+      </div>
+    </div>
+    <div class='row'>
+      <div class="col-sm-3 text-right">
+	Memory:
+      </div>
+      <div class="col-sm-9">
+	<%- parseInt(summary.memory.size / (1024 * 1024 * 1024)) %>GB
+	(<%- summary.memory.banks %> banks)
+	<div>
+	  <%- summary.memory.description %>
+	</div>
+      </div>
+    </div>
+    <div class='row'>
+      <div class="col-sm-3 text-right">
+	Disks:
+      </div>
+      <div class="col-sm-9">
+	<%- _.size(summary.disk) %> disk(s)
+	<a data-toggle="collapse" href="#disk-collapse">
+	  <span class="glyphicon glyphicon-chevron-right"
+	        style="margin-left: 5px;"></span></a>
+	<div id="disk-collapse" class="collapse">
+	  <% _.each(summary.disk, function(disk, idx) { %>
+	    <div>
+	      <b><%- idx %>:</b>
+	      <%- disk.vendor %> <%- disk.product %>,
+	      <%- parseInt(disk.size / (1024 * 1024 * 1024)) %> GB
+	    </div>
+	  <% }); %>
+	</div>
+      </div>
+    </div>
+    <div class='row'>
+      <div class="col-sm-3 text-right">
+	Network:
+      </div>
+      <div class="col-sm-9">
+	<%- _.size(summary.network) %> interface(s)
+	<a data-toggle="collapse" href="#network-collapse">
+	  <span class="glyphicon glyphicon-chevron-right"
+	        style="margin-left: 5px;"></span></a>
+	<div id="network-collapse" class="collapse">
+	  <% var keys = _.sortBy(_.keys(summary.network));
+	     _.each(keys, function(key, idx) {
+	       var iface = summary.network[key]; %>
+	         <div>
+		   <b><%- key %>:</b>
+		   <%- iface.vendor %> <%- iface.product %>,
+		   <%- parseInt(iface.speed / (1000 * 1000 * 1000)) %> Gb,
+		   role=<%- iface.role %>
+		 </div>
+  	  <% }); %>
+	</div>
+      </div>
+    </div>
+    <% if (_.has(summary, "nvme")) { %>
+      <div class='row'>
+	<div class="col-sm-3 text-right">
+	  NVME:
+	</div>
+	<div class="col-sm-9">
+	  <%- _.size(summary.nvme) %> device(s)
+	  <a data-toggle="collapse" href="#nvme-collapse">
+	    <span class="glyphicon glyphicon-chevron-right"
+	          style="margin-left: 5px;"></span></a>
+	  <div id="nvme-collapse" class="collapse">
+	    <% _.each(summary.nvme, function(nvme, idx) { %>
+	      <div>
+		<b><%- idx %>:</b>
+		<%- nvme.product %>
+	      </div>
+	    <% }); %>
+	  </div>
+	</div>
+      </div>
+    <% } %>
+    <% if (_.has(summary, "gpu")) { %>
+      <div class='row'>
+	<div class="col-sm-3 text-right">
+	  GPUs:
+	</div>
+	<div class="col-sm-9">
+	  <%- _.size(summary.gpu) %> GPU(s)
+	  <a data-toggle="collapse" href="#gpu-collapse">
+	    <span class="glyphicon glyphicon-chevron-right"
+	          style="margin-left: 5px;"></span></a>
+	  <div id="gpu-collapse" class="collapse">
+	    <% _.each(summary.gpu, function(gpu, idx) { %>
+	    <div>
+	      <b><%- idx %>:</b>
+	      <%- gpu.product %>
+	    </div>
+	  <% }); %>
+	  </div>
+	</div>
+      </div>
+    <% } %>
+  </div>
+</div>

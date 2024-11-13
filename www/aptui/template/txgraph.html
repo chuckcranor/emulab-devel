@@ -1,0 +1,89 @@
+
+<div class='modal fade' id="txgraph-modal">
+  <div class='modal-dialog modal-wide'>
+    <div class='modal-content'>
+      <div class='modal-body'
+	   style="padding-bottom: 0px;">
+	<div class='panel card panel-default'
+	     style="margin-bottom: 0px;">
+	  <div class="panel-body card-body"
+	       style="padding: 0px; margin-bottom: 5px;">
+	    <div>
+	      <center class="txgraph-spinner hidden">Loading
+		<div>
+		  <img src='images/spinner.gif' />
+		</div>
+	      </center>
+	      <center class="txgraph-nodata hidden">
+		<br>
+		<span class="text-danger">
+		  No recorded transmissions from this device</span>
+	      </center>
+	      <div class="frequency-graph tx-graph"
+		<div style="height: 800px;"></div>
+	      </div>
+	      <div class="txgraph-tooltip-popovers"></div>
+	    </div>
+	  </div>
+	</div>
+	<center>
+	  <button class='btn btn-default btn-sm' 
+		  style="margin-bottom: 10px; margin-top: 10px;"
+		  data-dismiss='modal' data-bs-dismiss='modal'>
+	    Dismiss</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="hidden">
+  <div id="txgraph-tooltipTemplate">
+    <table class="table table-condensed border-none"
+           style="font-size: 14px; margin: 5px;">
+      <tbody>
+	<tr>
+          <td class="border-none p-1">Node ID:</td>
+          <td class="border-none p-1 tooltip-nodeid"></td>
+	</tr>
+	<tr>
+          <td class="border-none p-1">Cluster:</td>
+          <td class="border-none p-1 tooltip-cluster"></td>
+	</tr>
+	<tr>
+          <td class="border-none p-1">Frequency:</td>
+          <td class="border-none p-1 tooltip-freq"></td>
+	</tr>
+	<tr>
+          <td class="border-none p-1">Power:</td>
+          <td class="border-none p-1 tooltip-power"></td>
+	</tr>
+	<tr>
+          <td class="border-none p-1">Above Floor:</td>
+          <td class="border-none p-1 abovefloor"></td>
+	</tr>
+	<tr>
+          <td class="border-none p-1">Time:</td>
+          <td class="border-none p-1 tooltip-time"></td>
+	</tr>
+	<tr class="hidden tooltip-admin">
+          <td class="border-none p-1">User:</td>
+          <td class="border-none p-1 tooltip-uid"></td>
+	</tr>
+	<tr class="hidden tooltip-admin">
+          <td class="border-none p-1">Project:</td>
+          <td class="border-none p-1 tooltip-pid"></td>
+	</tr>
+	<tr class="hidden tooltip-admin">
+          <td class="border-none p-1">Experiment:</td>
+          <td class="border-none p-1 tooltip-eid"></td>
+	</tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="popover-template">
+    <div class="popover" style="min-width: 240px;" role="tooltip">
+      <div class="popover-arrow"></div>
+      <div class="popover-body" style="padding: 0px;"></div>
+    </div>
+  </div>
+</div>

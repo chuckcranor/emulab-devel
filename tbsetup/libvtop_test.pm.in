@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2022 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1233,6 +1233,9 @@ sub LoadVirtNodes($)
 	$vnode->_blockstore_attributes(undef);
 	$vnode->_sanhostname(undef);
 	$vnode->_forcedarchitecture(undef);
+	$vnode->_pnode(undef);
+	# Running summary of disk usage for the vtop file.
+	$vnode->_disk_any(0);
 
 	#
 	# Explicit type request desire to match feature.
@@ -1240,6 +1243,9 @@ sub LoadVirtNodes($)
 	my $explict_type_request;
 	$nodetype->GetAttribute("explicit_request", \$explict_type_request);
 	$vnode->_explicit_type_request($explict_type_request);
+
+	# Similar, for handling conflicting nodes. Set later
+	$vnode->_explicit_node_request(undef);
 
 	# For a list of interfaces on this node, as for rspec generation
 	$vnode->_virtifaces([]);
@@ -1469,12 +1475,21 @@ sub LoadVirtNodes($)
 	    next
 		if ($desire->vname() ne $vname);
 	    
-	    $desires->{$desire->desire()} = $desire->weight();
-
 	    # User says a shared node is okay. We need this info later
 	    # when generating links/lans for the vtop.
 	    $vnode->_sharedokay(1)
 		if ($isvirt && $desire->desire() eq "pcshared");
+
+	    # Watch for a disk_any desire, we might need to adjust it
+	    if ($desire->desire() eq "?+disk_any") {
+		my $weight = $desire->weight();
+		
+		$self->printdb("Found a ?+disk_any desire: $weight\n");
+		$vnode->_disk_any($vnode->_disk_any() + $weight);
+	    }
+	    else {
+		$desires->{$desire->desire()} = $desire->weight();
+	    }
 	}
 	$vnode->_desires($desires);
 
@@ -1497,6 +1512,12 @@ sub LoadVirtNodes($)
 							  "VM_VCPUS",
 							  $attr->attrvalue());
 	    }
+	    elsif ($attr->attrkey() eq "XEN_EXTRAFS") {
+		my $size = $attr->attrvalue();
+		# Convert DB to 512 byte sectors.
+		$size = ($size * 1024 * 1024 * 1024) / 512;
+		$vnode->_disk_any($vnode->_disk_any() + $size);
+	    }
 	}
 	$vnode->_atttributes($attrs);
 
@@ -1511,9 +1532,9 @@ sub LoadVirtNodes($)
 	    !($vnode->type() eq "blockstore" ||
 	      $vnode->type() eq "interconnect" ||
 	      $vnode->type() eq "interconnect-vm")) {
-	    my $defmem = 128;
-	    my $minmem = 128;
-	    my $maxmem = 128;
+	    my $defmem = 1024;
+	    my $minmem = 1024;
+	    my $maxmem = 1024;
 
 	    if (defined($vnode->_parent_osinfo())
 		&& $vnode->_parent_osinfo()->FeatureSupported("xen-host")) {
@@ -1633,12 +1654,27 @@ sub LoadVirtNodes($)
 	if (!defined($fixnode) || $vnode->_fixedvm() eq $vname) {
 	    # Lets make sure its a real node.
 	    my $fixvname = $vnode->_fixedvm();
-	    
-	    if (!defined(Node->Lookup($fixvname))) {
+
+	    my $realnode = Node->Lookup($fixvname);
+	    if (!defined($realnode)) {
 		tberror("Cannot fix $vnode to $fixvname; No such phys node\n");
 		return -1;
 	    }
 	    $vnode->_fixedvm(undef);
+
+	    #
+	    # If fixed to a specific *shared* node, then we know the OS
+	    # that needs to be a parent of the VM's OS, which might not
+	    # be the default parent we set it to above.
+	    #
+	    if ($realnode->sharing_mode() && $vnode->type() ne "blockstore") {
+		my $realos = $realnode->RunningOsImage();
+		if (!defined($realos)) {
+		    tberror("No current OS for shared node $fixvname\n");
+		    return -1;
+		}
+		$vnode->_parent_osinfo($realos);
+	    }
 	    next;
 	}
 	my $osimage;
@@ -1670,6 +1706,52 @@ sub LoadVirtNodes($)
 	# See comment above.
 	#
 	delete($self->fixed()->{$fixnode})
+    }
+
+    #
+    # Deal with conflicting nodes. ptopgen forces nodes with conflicting nodes
+    # to be explictly requested by name. and so we can check here for the
+    # conflicts, which is easier and allows for a rational error message back
+    # to the user.
+    #
+    # Anyway, if a node has conflicting nodes, it cannot be allocated if any
+    # of the conflict nodes are allocated (except to hwdown/hwbroken).
+    #
+    foreach my $vname (sort(keys(%{ $self->fixednodes() }))) {
+	my $vnode = $self->vnodes()->{$vname};
+	my $fixed = $self->fixednodes()->{$vname};
+
+	next
+	    if (! $self->isatoponode($vname) || $vnode->_isvirtnode());
+
+	my $realnode = Node->Lookup($fixed);
+	if (!$realnode) {
+	    tberror("Conflict check: No such physical node $fixed\n");
+	    return -1;
+	}
+	my $conflicting_nodes = $realnode->conflicting_nodes();
+	next
+	    if (!defined($conflicting_nodes));
+
+	foreach my $con_id (split(",", $conflicting_nodes)) {
+	    my $connode = Node->Lookup($con_id);
+	    
+	    if (!$connode) {
+		tberror("Conflict check: No such physical node $con_id\n");
+		return -1;
+	    }
+	    if ($connode->IsReserved() && $connode->pid() ne TBOPSPID()) {
+		tberror("Conflicting node $con_id is already reserved\n");
+		return -1;
+	    }
+	}
+
+	#
+	# Set this to cause a desire that says the user properly has
+	# requested the specific node. ptopgen adds the equiv feature to
+	# nodes with conflicting_nodes.
+	#
+	$vnode->_explicit_node_request($fixed);
     }
 
     #
@@ -2030,7 +2112,9 @@ sub LoadVirtLans($)
 	    $virtlan->_ofenabled(1);
 	    $virtlan->_ofcontroller($vlanmember->ofcontroller());
 	}
-	
+	$virtlan->_trunk_mode(undef);
+	$virtlan->_native_vlan(undef);
+
 	if (defined($encap) &&
 	    ($encap eq "vtun" || $encap eq "gre" || $encap eq "egre")) {
 	    $virtlan->_tunnel(1);
@@ -2106,6 +2190,31 @@ sub LoadVirtLans($)
 		$virtlan->_portvlan($capval);
 		last;
 	    }
+	    elsif ($capkey eq "trunk_mode") {
+		$virtlan->_trunk_mode($capval);
+	    }
+	    elsif ($capkey eq "native_vlan") {
+		$virtlan->_native_vlan($capval);
+	    }
+	}
+
+	# Misc member settings
+	$vlanmember->_ptp(0);
+	$vlanmember->_synce(0);
+	
+	foreach my $setting ($self->virt_lan_member_settings()->Rows()) {
+	    next
+		if ($vlanmember->member() ne $setting->member());
+
+	    my $capkey = $setting->capkey();
+	    my $capval = $setting->capval();
+
+	    if ($capkey eq "ptpenable") {
+		$vlanmember->_ptp($capval);
+	    }
+	    elsif ($capkey eq "synceenable") {
+		$vlanmember->_synce($capval);
+	    }
 	}
 	
 	#
@@ -2175,10 +2284,19 @@ sub LoadVirtLans($)
     # Sanity check the shared lan requests.
     #
     foreach my $virtlan (values(%{ $self->vlans() })) {
+	# XXX make sure this exists for all vlans for later test
+	$virtlan->_iscephvlan(0);
+
 	next
 	    if (!defined($virtlan->_portvlan()));
 
 	my $porttoken = $virtlan->_portvlan();
+
+	#
+	# Unbound, connect later. 
+	#
+	next
+	    if ($porttoken eq "__placeholder__");
 
 	#
 	# Map the token.
@@ -2222,6 +2340,10 @@ sub LoadVirtLans($)
 	}
 	# Convert to actual object for later
 	$virtlan->_portvlan($portvlan);
+	# But remember that if it is the Ceph shared vlan
+	if ($porttoken eq "powder-ceph") {
+	    $virtlan->_iscephvlan(1);
+	}
     }
 
     #
@@ -2548,6 +2670,24 @@ sub GenVirtNodes($)
 	    my $osinfo = $vnode->_osinfo();
 
 	    #
+	    # A virtual node, add the size of requested disk image to the
+	    # disk_any desire. Note that the disk_any *feature* already
+	    # subtracts out the largest disk image, so we do not need to
+	    # account for the disk image on the physical node.
+	    #
+	    if ($vnode->_isvirtnode() &&
+		($osinfo->isImage() || $osinfo->isImageAlias())) {
+		my $osize = $vnode->_disk_any();
+		my $psize = $osinfo->PartitionSize();
+
+		if (defined($osize) && defined($psize)) {
+		    $self->printdb("Adjusting disk_any for OS: ".
+				   "$osize + $psize\n");
+		    $vnode->_disk_any($osize + $psize);
+		}
+	    }
+
+	    #
 	    # Support subOSes with a multi-OS desire.  Since the pnodes
 	    # will have features like OS-parent and OS-parent-subos, we 
 	    # generate desire to match.  Parent is major since then this 
@@ -2607,6 +2747,9 @@ sub GenVirtNodes($)
 		push(@interfaces, $iface);
 	    }
 	}
+	if ($vnode->_disk_any()) {
+	    $desires->{"?+disk_any"} = ['', $vnode->_disk_any()];
+	}
 	
 	#
 	# Now the type string, which might include some stuff for
@@ -2631,6 +2774,10 @@ sub GenVirtNodes($)
 	}
 	if ($vnode->_explicit_type_request()) {
 	    $desires->{"$type" . "-explicit"} = ['', 1.0];
+	}
+	if ($vnode->_explicit_node_request()) {
+	    my $node_id = $vnode->_explicit_node_request();
+	    $desires->{"$node_id" . "-explicit"} = ['', 1.0];
 	}
 	$self->createNode($vname, $vnode->_cmurn(),
 			  $type, $nodeweight, $desires, $others, \@interfaces);
@@ -3153,7 +3300,7 @@ sub GenVirtLans($)
 	    $errors++;
 	    next;
 	}
-	if (! ($linkencap =~ /^(default|veth-ne|vlan)$/)) {
+	if (! ($linkencap =~ /^(default|veth-ne|vlan|none)$/)) {
 	    tberror("$vname: unknown link encapsulation style '$linkencap'\n");
 	    $errors++;
 	    next;
@@ -3436,9 +3583,9 @@ sub GenVirtLans($)
 
 	    #
 	    # We do not do link delays, but we do want to multiplex
-	    # these links. For now, use usevirtiface() as an indicator.
+	    # these links.
 	    #
-	    if ($vlan->usevirtiface()) {
+	    if ($emulated) {
 		$others->{'emulated'}   = 1;
 		# assign seems to require this, but it seems wrong.
 		$others->{'trivial_ok'} = 1;
@@ -3453,7 +3600,14 @@ sub GenVirtLans($)
 		my $wiretype   = $vlan->_wiretype();
 
 		if ($besteffort) {
-		    $wiretype = $BESTEFFORT_WIRETYPE;
+		    #
+		    # If the user specifies a fixed interface, then we do
+		    # not want to use the BESTEFFORT_WIRETYPE, since that
+		    # can conflict with what the user wants.
+		    #
+		    if (! $member->fixed_iface()) {
+			$wiretype = $BESTEFFORT_WIRETYPE;
+		    }
 		}
 		elsif ($bw0 != 0 && !$emulated) {
 		    $wiretype = $self->GetWiretype($wiretype, $bw0);
@@ -3658,6 +3812,23 @@ sub GenVirtLans($)
 		if ($self->virtlan_use_linkdelay($vlan, $shaped)) {
 		    my $plink = "linksimple/$vname/$member0,$member1";
 		    my $others = {};
+		    my $wiretype = $vlan->_wiretype();
+
+		    if ($besteffort) {
+			#
+			# If the user specifies a fixed interface, then we do
+			# not want to use the BESTEFFORT_WIRETYPE, since that
+			# can conflict with what the user wants.
+			#
+			if (! ($member0->fixed_iface() ||
+			       $member1->fixed_iface())) {
+			    $wiretype = $BESTEFFORT_WIRETYPE;
+			}
+		    }
+		    elsif (!$emulated) {
+			$wiretype = $self->GetWiretype($vlan->_wiretype(),
+						       max($top_bw, $top_rbw));
+		    }
 		    if ($emulated) {
 			$others->{'emulated'} = 1
 			    if ($member0->_emulated() && $member1->_emulated());
@@ -3696,12 +3867,7 @@ sub GenVirtLans($)
 				     'virtual_interface_id' => "$member1" },
 				    ($top_bw == 0 ? "*" : 
 				     max($top_bw, $top_rbw)),
-				    ($besteffort ? $BESTEFFORT_WIRETYPE :
-				     ($emulated ?
-				      $vlan->_wiretype() :
-				      $self->GetWiretype($vlan->_wiretype(),
-						 max($top_bw, $top_rbw)))),
-				    $others);
+				     $wiretype, $others);
 		    }
 		    my @delayinfo = ($delay,$bw,$backfill,$loss,
 				     $rdelay,$rbw,$rbackfill,$rloss, 0);
@@ -3787,7 +3953,15 @@ sub GenVirtLans($)
 						   max($top_bw, $top_rbw));
 		}
 		elsif ($besteffort) {
-		    $wiretype = $BESTEFFORT_WIRETYPE;
+		    #
+		    # If the user specifies a fixed interface, then we do
+		    # not want to use the BESTEFFORT_WIRETYPE, since that
+		    # can conflict with what the user wants.
+		    #
+		    if (! ($member0->fixed_iface() ||
+			   $member1->fixed_iface())) {
+			$wiretype = $BESTEFFORT_WIRETYPE;
+		    }
 		}
 		if ($emulated) {
 		    $others->{'emulated'} = 1
@@ -3997,6 +4171,13 @@ sub GenVirtLans($)
 		my $bandwidth  = $self->getbandwidth($member,$vlan,$bw);
 		my $rbandwidth = $self->getbandwidth($member,$vlan,$rbw);
 
+		# Rob says not supported
+		if (($trivial_ok || $emulated) &&
+		    ($bandwidth == 0 || $rbandwidth == 0)) {
+		    tberror("Cannot mix trivial_ok|emulated with * bw\n");
+		    $errors++;
+		}
+		
 		#
 		# Lets see how many <=1Gb and >1Gb links we have. HACK!
 		#
@@ -4043,7 +4224,14 @@ sub GenVirtLans($)
 						   max($top_bw, $top_rbw));
 			}
 			elsif ($besteffort) {
-			    $wiretype = $BESTEFFORT_WIRETYPE;
+			    #
+			    # If the user specifies a fixed interface, then
+			    # we do not want to use the BESTEFFORT_WIRETYPE,
+			    # since that can conflict with what the user wants.
+			    #
+			    if (! $member->fixed_iface()) {
+				$wiretype = $BESTEFFORT_WIRETYPE;
+			    }
 			}
 			if ($emulated) {
 			    $others->{'emulated'} = 1 if ($member->_emulated());
@@ -4159,7 +4347,14 @@ sub GenVirtLans($)
 			$wiretype = $self->GetWiretype($wiretype, $top_bw);
 		    }
 		    elsif ($besteffort) {
-			$wiretype = $BESTEFFORT_WIRETYPE;
+			#
+			# If the user specifies a fixed interface, then
+			# we do not want to use the BESTEFFORT_WIRETYPE,
+			# since that can conflict with what the user wants.
+			#
+			if (! $member->fixed_iface()) {
+			    $wiretype = $BESTEFFORT_WIRETYPE;
+			}
 		    }
 		    if ($emulated) {
 			$others->{'emulated'} = 1 if ($member->_emulated());
@@ -7453,10 +7648,24 @@ sub InterpLinksAux($)
 	    $protolan->SetType("portlan");
 	    $protolan->SetRole("port/lan");
 	    $protolan->SetAttribute("link/lan", $lan);
-	    $protolan->SetAttribute("target_lanid", $portvlan->lanid());
+	    # Watch for placeholder shared vlan.
+	    if (ref($portvlan)) {
+		$protolan->SetAttribute("target_lanid", $portvlan->lanid());
+	    }
+	    else {
+		$protolan->SetAttribute("target_lanid", "unbound");
+	    }
 
 	    if ($member0->usevirtiface()) {
-		$protolan->AddMember($nodeA, $portA);
+		my $attrs = {};
+		my $vnodename = $member0->vnode();
+		my $isvnode   = exists($self->solution_v2v()->{$vnodename});
+		
+		if ($isvnode) {
+		    my $vnode_id = $self->solution_v2v()->{$vnodename};
+		    $attrs->{"vnode_id"} = $vnode_id;
+		}
+		$protolan->AddMember($nodeA, $portA, $attrs);
 		
 		my $virtiface = $self->NewVirtIface($virtlan, $member0,
 						    $nodeA, $portA);
@@ -7470,7 +7679,10 @@ sub InterpLinksAux($)
 		# so that tmcd can find the vlan tag. Do this here
 		# since we have what we need in hand. 
 		#
-		$virtiface->Update({"vlanid" => $portvlan->lanid()});
+		# Watch for placeholder shared vlan.
+		#
+		$virtiface->Update({"vlanid" =>
+				    ref($portvlan) ? $portvlan->lanid() : -1});
 	    }
 	    else {
 		$protolan->AddInterface($nodeA, $vnodeA, $vportA, $portA);
@@ -7963,6 +8175,35 @@ sub nodejailosinfo($$)
     my $osinfo    = $virtnode->_osinfo();
 
     $self->printdb("nodejailosid: $virtnode, $osinfo\n");
+    if ($osinfo->isImageAlias()) {
+	#
+	#  
+	#
+	my $posinfo;
+	
+	if ($virtnode->_pnode()) {
+	    my $vpnode  = $virtnode->_pnode();
+	    my $pnode   = $vpnode->GetPhysHost();
+	    $posinfo = $osinfo->MapToImage($pnode->type());
+	}
+	else {
+	    #
+	    # The problem on say, the Moonshot cluster, is that ARM
+	    # images do not do XEN, so we have to ata least find an image
+	    # that is jail capable. 
+	    #
+	    foreach my $image ($osinfo->imagelist()) {
+		if ($image->DefaultParent()) {
+		    $posinfo = $image;
+		    last
+		}
+	    }
+	}
+	if (defined($posinfo)) {
+	    $self->printdb("nodejailosid: Mapped image alias to $posinfo\n");
+	    $osinfo = $posinfo;
+	}
+    }
 
     #
     # The old method was to use nextosid, but the new method uses
@@ -8084,6 +8325,10 @@ sub NewVirtIface($$$$;$)
 	else {
 	    $isvdev = 1;
 	}
+    }
+    if ($type eq "none") {
+	print STDERR "NewVirtIface: Bad encapsulation for $virtlan\n";
+	return undef;
     }
 
     #
@@ -8697,6 +8942,7 @@ sub CheckIPAddressReservations($) {
 
     # For stashing lans we need to take a closer look at.
     my @sharedlans = ();
+    my @cephlans = ();
 
     $self->printdb("Checking IP Address Reservations.\n");
 
@@ -8708,6 +8954,21 @@ sub CheckIPAddressReservations($) {
     foreach my $virtlan (values(%{ $self->vlans() })) {
 	next
 	    if ($virtlan->_layer() != 2);  # foo from the beyond.
+
+	# XXX this is just as ugly as the blockstore check below.
+	# If this is the Ceph front-end network, assign an address.
+	# We could probably do something more general for both of
+	# these cases...someday.
+	my $portvlan = $virtlan->_portvlan();
+	if (defined($portvlan) && ref($portvlan) &&
+	    $virtlan->_iscephvlan() == 1) {
+	    # XXX only do this on the second pass, otherwise the changed
+	    # IPs get overwritten.
+	    if (!$self->alloconly()) {
+		push @cephlans, $virtlan;
+	    }
+	    next;
+	}
 
 	foreach my $member ($virtlan->memberlist()) {
 	    my $vnodename = $member->vnode();
@@ -8796,6 +9057,92 @@ sub CheckIPAddressReservations($) {
 		    $buddy->unlock();
 		    return -1;
 		}
+		$self->printdb("$vnodename: $ip -> $new_ip\n");
+		$vmember->ip($new_ip);
+		$vmember->mask($newmask);
+		# Replace the virt_lans row.  It already exists, so an insert
+		# would fail.
+		my $sflags = $VirtExperiment::STORE_FLAGS_REPLACE;
+		$sflags |= $self->verbose() ? 
+		    $VirtExperiment::STORE_FLAGS_DEBUG :
+		    0;
+		$sflags |= $self->impotent() ?
+		    $VirtExperiment::STORE_FLAGS_IMPOTENT :
+		    0;
+		if ($vmember->Store($sflags) != 0 && !$self->impotent()) {
+		    tberror("Could not store updated virt_lans row!\n");
+		    $buddy->unlock();
+		    return -1;
+		}
+	    }
+	}
+
+	# All done with reservations, so commit and unlock.
+	$buddy->commitReservations()
+	    unless $self->impotent();
+	$buddy->unlock();
+    }
+
+    #
+    # Round 2a: do the same thing for Ceph lan members. Note that we allocate
+    # the addresses one at a time since there are no CIDR alignment issues
+    # (these are not IP subnets, just random one-off IPs). We could allocate a
+    # whole block but that could cause needless fragmentation due to alignment.
+    #
+    # XXX this could likely be combined with the blockstore code above.
+    #
+    if (@cephlans) {
+	require IPBuddyWrapper;
+	require Socket;
+
+	$self->printdb("Modifying address allocations for: ".
+		       join(", ", map { $_->vname() } @cephlans) .
+		       "\n");
+
+	# Tie this buddy allocator to the "cephlan" global address range.
+	my $buddy = IPBuddyWrapper->new("cephlan");
+	return -1 
+	    unless defined($buddy);
+
+	# Grab the reserved addresses buddy allocator lock.
+	$buddy->lock() 
+	    or return -1;
+
+	# Now preload the reservations in the DB, including those associated
+	# with this experiment.  The buddy allocator will allocate around
+	# these.
+	if ($buddy->loadReservedRanges($self->experiment())) {
+	    $buddy->unlock();
+	    return -1;
+	}
+
+	foreach my $virtlan (@cephlans) {
+	    my $vlanname = $virtlan->vname();
+	    my @members = $virtlan->memberlist();
+	    my $prefix = $buddy->_getbuddy()->getprefix();
+	    my $newmask = Socket::inet_ntoa(pack("B32", "1" x $prefix));
+	    $virtlan->_mask($newmask);
+	    
+	    foreach my $member (@members) {
+		# Grab some info/objects for the current lan member.
+		my $vmember   = $member->virt_member();
+		my $ip        = $vmember->ip();
+		my $vnodename = $vmember->vnode();
+
+		# re-IP this member.  Push back into the virt_lans
+		# table; otherwise, things that expect the IP set
+		# there to match what is set in the
+		# interfaces/vinterfaces table will go wonky.
+		my $range =
+		    $buddy->requestAddressRange($self->experiment(), 32);
+		if (!defined($range)) {
+		    $buddy->unlock();
+		    return -1;
+		}
+		# XXX not designed for single-address use. getNextAddress
+		# skips the first address so we get it from the range instead.
+		(my $new_ip = $range) =~ s#([^/]+)/.*#$1#;
+
 		$self->printdb("$vnodename: $ip -> $new_ip\n");
 		$vmember->ip($new_ip);
 		$vmember->mask($newmask);
@@ -9016,16 +9363,16 @@ sub UploadVlans($)
 	# into lan instantiation.
 	#
 	foreach my $lan (@lans) {
+	    my $virtlan     = $self->vlans()->{$lan->vname()};
+	    next
+		if (!defined($virtlan));
+	    $virtlan->_reallan($lan);
+	    
 	    # Only care about encapsulated links.
 	    next
 		if (! ($lan->type() eq "emulated" ||
 		       $lan->GetRole() eq "emulated"));
 
-	    my $virtlan     = $self->vlans()->{$lan->vname()};
-	    if (!defined($virtlan)) {
-		tberror("Could not find lan $lan in local lan list!\n");
-		return -1;
-	    }
 	    my $virtlanidx  = $virtlan->idx();
 	    my $linkedlanid = $lan->lanid();
 
@@ -9156,6 +9503,31 @@ sub UploadVlans($)
     #
     foreach my $virtlan (values(%{ $self->vlans() })) {
 	my $vlanname = $virtlan->vname();
+	my $lan_trunk_mode;
+	my $lan_trunk_virtlan;
+	my $lan_trunk_vlan;
+
+	#
+	# User specific dual mode trunk request. 
+	#
+	if ($virtlan->_trunk_mode()) {
+	    if (! ($self->impotent() || $self->alloconly())) {
+		my $vlan = $virtlan->_reallan();
+		$vlan->SetAttribute("trunk_mode", $virtlan->_trunk_mode())
+	    }
+	    # Member setting for below.
+	    $lan_trunk_mode = $virtlan->_trunk_mode();
+	    
+	    if ($virtlan->_native_vlan()) {
+		$lan_trunk_virtlan = $self->vlans()->{$virtlan->_native_vlan()};
+		
+		if (! ($self->impotent() || $self->alloconly())) {
+		    my $vlan = $virtlan->_reallan();
+		    $lan_trunk_vlan = $lan_trunk_virtlan->_reallan();
+		    $vlan->SetAttribute("trunk_vlan", $lan_trunk_vlan->lanid());
+		}
+	    }
+	}	    
 
 	foreach my $member ($virtlan->memberlist()) {
 	    # Will this happen?
@@ -9171,8 +9543,9 @@ sub UploadVlans($)
 	    my $pnodename;
 	    my $interface;
 	    my $speed;
-	    my $trunk;
 	    my $trunk_vlan;
+	    my $trunk_mode;
+	    my $trunk;
 	    my $args = {};
 
 	    if (exists($self->solution_vifacemap()->{$member})) {
@@ -9204,6 +9577,7 @@ sub UploadVlans($)
 		# do.
 		#
 		if ($trunk && $interface->role() eq TBDB_IFACEROLE_CONTROL()) {
+		    $trunk_mode = "dual";
 		    $trunk_vlan = VLan->LookupInternal("Control");
 		    if (!defined($trunk_vlan)) {
 			tberror("Could not lookup control vlan\n");
@@ -9216,10 +9590,14 @@ sub UploadVlans($)
 			    tberror("Could not lookup vlan for $virtiface\n");
 			    return -1;
 			}
-			$vlan->SetAttribute("trunk_mode", "dual");
+			$vlan->SetAttribute("trunk_mode", $trunk_mode);
 			$vlan->SetAttribute("trunk_vlan", $trunk_vlan->lanid());
 		    }
 		}
+		elsif ($trunk && $lan_trunk_mode) {
+		    $trunk_mode = $lan_trunk_mode;
+		}
+		
 		#
 		# Do not mess with control interface speeds. 
 		#
@@ -9232,6 +9610,11 @@ sub UploadVlans($)
 		$pnodename = $self->solution_v2p()->{$member->vnode()};
 		$speed     = $self->portbw()->{$member};
 		$trunk     = 0;
+
+		if ($lan_trunk_mode) {
+		    $trunk      = 1;
+		    $trunk_mode = $lan_trunk_mode;
+		}
 
 		$interface = Interface->LookupByIface($pnodename, $iface);
 		if (!defined($interface)) {
@@ -9281,12 +9664,34 @@ sub UploadVlans($)
 		$dbgline .= " speed:$speed";
 		$args->{'current_speed'} = $speed;
 	    }
+	    if ($member->_ptp()) {
+		$dbgline .= " ptp:1";
+		$args->{'ptp'} = 1;
+	    }
+	    if ($member->_synce()) {
+		$dbgline .= " synce:1";
+		$args->{'synce'} = 1;
+	    }
+
 	    if ($trunk) {
-		$dbgline .= " trunk:$trunk";
+		$dbgline .= " trunk:1";
 		$args->{'trunk'} = 1;
-		if (defined($trunk_vlan)) {
-		    $args->{'trunk_mode'} = "dual";
-		    $dbgline .= ":dual(" . $trunk_vlan->lanid() . ")";
+
+		if (defined($trunk_vlan) || defined($lan_trunk_virtlan)) {
+		    $args->{'trunk_mode'} = $trunk_mode;
+
+		    # Messy debugging.
+		    my $token;
+		    if (defined($trunk_vlan)) {
+			$token = $trunk_vlan->lanid();
+		    }
+		    elsif (defined($lan_trunk_vlan)) {
+			$token = $lan_trunk_vlan->lanid();
+		    }
+		    else {
+			$token = $lan_trunk_virtlan->vname();
+		    }
+		    $dbgline .= ":${trunk_mode}($token)";
 		}
 	    }
 	    $dbgline .= "\n";

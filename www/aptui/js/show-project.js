@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal']);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal', "rfrange-history", "showtopo-modal", "resources-list","txgraph"]);
     var mainString = templates['show-project'];
     var experimentString = templates['experiment-list'];
     var profileString = templates['profile-list'];
@@ -15,13 +15,18 @@ $(function ()
     var oopsString = templates['oops-modal'];
     var converterHelpTemplate = _.template(templates['conversion-help-modal']);
     var mainTemplate    = _.template(mainString);
+    var amlist = null;
     
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
+
+	amlist = decodejson("#amlist-json");
+	console.info("amlist", amlist);
 	
 	// Generate the main template.
 	var html = mainTemplate({
+	    disabled       : window.PROJECT_DISABLED,
 	    disabledset    : window.UI_DISABLE_DATASETS,
 	    disabledres    : window.UI_DISABLE_RESERVATIONS,
 	    emulablink     : window.EMULAB_LINK,
@@ -34,7 +39,9 @@ $(function ()
 	$('#waitwait_div').html(waitString);
 	$('#oops_div').html(oopsString);
 	$('#conversion_help_div').html(converterHelpTemplate({}));
-
+	$('#showtopo-modal-div').html(templates["showtopo-modal"]);
+        $('#main-body').append(templates['txgraph']);
+        
 	// Focus on the search box when switching to these tabs.
         $('.nav-tabs a[href="#profiles"]')
 	    .on('shown.bs.tab', function (e) {
@@ -44,24 +51,9 @@ $(function ()
 		    $(searchbox)[0].focus();
 		}
 	    });
-
-        // Javascript to enable link to tab
-        var hash = document.location.hash;
-        if (hash) {
-            $('.nav-tabs a[href="'+hash+'"]').tab('show');
-        }
-        // Change hash for page-reload
-        $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-	    history.replaceState('', '', e.target.hash);
-        });
-	// Set the correct tab when a user uses their back/forward button
-        $(window).on('hashchange', function (e) {
-	    var hash = window.location.hash;
-	    if (hash == "") {
-		hash = "#experiments";
-	    }
-	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
-	});
+	
+	// Setup nav tab document hash handling.
+	sup.hashSetup(".nav-tabs", "#experiments");
 
 	// Setup NSF funding modal
 	if (window.ISADMIN) {
@@ -291,7 +283,7 @@ $(function ()
 		}
 	    });
 	    // This activates the tooltip subsystem.
-	    $('[data-toggle="tooltip"]').tooltip({
+	    $('#profiles_content [data-toggle="tooltip"]').tooltip({
 		delay: {"hide" : 500, "show" : 500},
 		placement: 'auto',
 	    });
@@ -312,7 +304,6 @@ $(function ()
 			    $(row).remove();
 			});
 		});
-
 	    // If this is the active tab after loading, focus the searchbox
 	    if ($('#profiles').hasClass("active")) {
 		var searchbox = $('#profiles .profile-search')
@@ -405,28 +396,6 @@ $(function ()
 	xmlthing.done(callback);
     }
 
-    function ShowTopology(profile)
-    {
-	var index;
-
-	var callback = function(json) {
-	    if (json.code) {
-		alert("Failed to get rspec for topology viewer: " + json.value);
-		return;
-	    }
-	    sup.ShowModal("#quickvm_topomodal");
-	    $("#quickvm_topomodal").one("shown.bs.modal", function () {
-		sup.maketopmap('#showtopo_nopicker',
-			       json.value.profile_rspec, false, !window.ISADMIN);
-	    });
-	};
-	var $xmlthing = sup.CallServerMethod(null,
-					     "show-profile",
-					     "GetProfile",
-				     	     {"uuid" : profile});
-	$xmlthing.done(callback);
-    }
-
     // Warn only once for page load.
     var WarnedAboutUserPrivs = false;
 
@@ -491,12 +460,12 @@ $(function ()
 		});
 
 	    // Do this after converting table.
-	    $('[data-toggle="tooltip"]').tooltip({
+	    $('#members_table [data-toggle="tooltip"]').tooltip({
 		trigger: 'hover',
 		placement: 'auto',
 	    });
 	    // Do this after converting table.
-	    $('[data-toggle="popover"]').popover({
+	    $('#members_table [data-toggle="popover"]').popover({
 		trigger: 'hover',
 		placement: 'auto',
 	    });
@@ -632,6 +601,14 @@ $(function ()
 		.html(template({"fields"   : json.value,
 				"isleader" : window.ISLEADER,
 				"isadmin"  : window.ISADMIN}));
+
+	    // Shared reservation radio setting.
+	    $('#sharedres-radio-' + json.value.shared_reservations)
+		.prop("checked", true);
+	    $('input[name="sharedres-radio"]').change(function (event) {
+		console.info($(this), $(this).val());
+		ToggleSharedReservations($(this).val());
+	    });
 	    
 	    // Format dates with moment before display.
 	    $('#project_table .format-date').each(function() {
@@ -644,6 +621,10 @@ $(function ()
 		trigger: 'hover',
 		placement: 'auto',
 	    });
+	    $('#project_table [data-toggle="tooltip"]').popover({
+		trigger: 'hover',
+		placement: 'auto',
+	    });
 	    $('#project_content .toggle').click(function() {
 		Toggle(this);
 	    });
@@ -651,6 +632,23 @@ $(function ()
 		event.preventDefault();
 		RequestLicense(this);
 	    });
+	    // Powder OTA agreement.
+	    if (window.ISPOWDER) {
+		$('#send-ota-agreement').click(function (event) {
+		    event.preventDefault();
+		    console.info("SendotaAgreement clicked");
+		    sup.CallServerMethod(null,
+					 "show-project", "SendotaAgreement",
+					 {"pid" : window.TARGET_PROJECT},
+					 function (json) {
+					     console.info(json);
+					     if (json.code) {
+						 sup.SpitOops("oops",
+							      json.value);
+					     }
+					 });
+		});
+	    }
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "show-project", "ProjectProfile",
@@ -703,11 +701,15 @@ $(function ()
 
 	    if (json.code) {
 		console.info(json.value);
+		LoadResources(null);
 		return;
 	    }
+	    LoadResources(json.value);
+
 	    if (!_.size(json.value)) {
 		return;
 	    }
+	    
 	    $(".resgroups-hidden").removeClass("hidden");
 	    window.DrawResGroupList("#resgroups_content", json.value);
 	    $("#resgroups_content .expando").trigger("click");
@@ -814,6 +816,8 @@ $(function ()
 		    "<td><a href='" + url + "'>" + info.name + "</a></td>" +
 		    "<td>" + info.freq_low + "</td>" +
 		    "<td>" + info.freq_high + "</td>" +
+		    "<td>" + info.type + "</td>" +
+		    "<td>" + info.target + "</td>" +
 		    "<td>" + moment(info.expires).format("MMM Do, h:m A") +
 		    "</td>" +
 		    "</tr>";
@@ -842,6 +846,217 @@ $(function ()
 		ProjectRanges(result1);
 		InuseRanges(result2);
 	    });
+
+	LoadRangeHistory();
+    }
+
+    function LoadResources(resgroups)
+    {
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+	
+	var callback = function(json) {
+	    console.info("resources", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (!_.size(json.value)) {
+		return;
+	    }
+	    var collated = {};
+	    var user_totals = {};
+	    
+	    _.each(json.value, function(details, uuid) {
+		_.each(details.slivers, function(sliver, aggregate_urn) {
+		    var resNodes = amlist[aggregate_urn].reservable_nodes;
+		    var typelist = {};
+		    var xml = $.parseXML(sliver.manifest);
+
+		    $(xml).find("node, emulab\\:vhost").each(function() {
+			// Only nodes that match the aggregate being processed,
+			// since we send the same rspec to every aggregate.
+			var manager_urn = $(this).attr("component_manager_id");
+			if (!manager_urn.length ||
+			    manager_urn != aggregate_urn) {
+			    return;
+			}
+			var tag     = $(this).prop("tagName");
+			var isvhost = (tag == "emulab:vhost" ? 1 : 0);
+			var vnode   = this.getElementsByTagNameNS(EMULAB_NS,
+								  'vnode');
+			if (vnode.length) {
+			    var hwtype = $(vnode).attr("hardware_type");
+			    var name   = $(vnode).attr("name");
+
+			    // Reservable nodes shown as themselves.
+			    if (resNodes && _.has(resNodes, name)) {
+				hwtype = name;
+			    }
+			    
+			    if (hwtype != "pcvm" && hwtype != "blockstore") {
+				if (!_.has(typelist, hwtype)) {
+				    typelist[hwtype] = 0;
+				}
+				typelist[hwtype]++;
+
+				if (!_.has(user_totals, aggregate_urn)) {
+				    user_totals[aggregate_urn] = {};
+				}
+				var aggtotals = user_totals[aggregate_urn];
+				if (!_.has(aggtotals, details.creator)) {
+				    aggtotals[details.creator] = {};
+				}
+				var utotals = aggtotals[details.creator];
+				if (!_.has(utotals, hwtype)) {
+				    utotals[hwtype] = 0;
+				}
+				utotals[hwtype]++;
+			    }
+			}
+		    });
+		    if (_.size(typelist)) {
+			if (!_.has(collated, uuid)) {
+			    collated[uuid] = {};
+			}
+			collated[uuid][aggregate_urn] = {
+			    "typelist"     : typelist,
+			    "cluster"      : sliver.name,
+			    "creator"      : details.creator,
+			    "name"         : details.name,
+			    "started"      : details.started,
+			    "expires"      : details.expires,
+			    "portal"       : details.portal,
+			    "reslist_user" : {},
+			    "reslist_proj" : {},
+			};
+		    }
+		});
+	    });
+	    if (!_.size(collated)) {
+		return;
+	    }
+	    /*
+	     * Find active reservations for types by the same user. 
+	     */
+	    _.each(collated, function(aggregates, uuid) {
+		_.each(aggregates, function(details, aggregate_urn) {
+		    var reslist_user = {};
+		    var reslist_proj = {};
+		    
+		    _.each(details.typelist, function(count, type) {
+			_.each(resgroups, function (group, group_uuid) {
+			    _.each(group.clusters, function (res) {
+				if (aggregate_urn == res.cluster_urn &&
+				    res.active && res.type == type) {
+				    /*
+				     * Active reservation for this type
+				     * at the same aggregate.
+				     *
+				     * If the project/res is per-user, do not
+				     * increment this since there are no project
+				     * reservations for this project.
+				     */
+				    if (group.shared_reservations == "project") {
+					if (!_.has(reslist_proj, type)) {
+					    reslist_proj[type] = 0;
+					}
+					reslist_proj[type] += res.count;
+				    }
+				    if (group.uid == details.creator) {
+					// And by the same user
+					if (!_.has(reslist_user, type)) {
+					    reslist_user[type] = 0;
+					}
+					reslist_user[type] += res.count;
+				    }
+				    
+				}
+			    });
+			});
+		    });
+		    if (_.size(reslist_user)) {
+			details.reslist_user = reslist_user;
+		    }
+		    if (_.size(reslist_proj)) {
+		    	details.reslist_proj = reslist_proj;
+		    }
+		});
+	    });
+	    console.info("collated", collated);
+	    console.info("user_totals", user_totals);
+	    
+	    var template = _.template(templates["resources-list"]);
+	    var html = template({
+		"resources"       : collated,
+		"user_totals"     : user_totals,
+		"showCreator"     : true,
+		"showProject"     : false,
+		"showPortal"      : window.MAINSITE && window.ISADMIN,
+		"showReserved"    : true,
+		"showBlockstores" : false,
+		"showVMs"         : false,
+	    });
+	    $('#resources_content').html(html);
+	    
+	    // Format dates with moment before display.
+	    $('#resources_content .format-date').each(function(){
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    var table = $('#resources_content .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		    sortList: [[3,0]],
+		});
+	    $(".resources-hidden").removeClass("hidden");
+
+	    // Do this after converting table.
+	    $('#resources_content [data-toggle="tooltip"]').each(function () {
+		$(this).tooltip({
+		    trigger: 'hover',
+		    placement: 'right',
+		});
+	    });
+
+	    // Handler for the Help button
+	    $('#resources-help-button').click(function (event) {
+		event.preventDefault();
+		sup.ShowModal('#resources-help-modal');
+	    });
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "show-project", "ResourceList",
+				 {"pid" : window.TARGET_PROJECT});
+	xmlthing.done(callback);
+    }
+    
+    var showTopoIframe = null;
+
+    function ShowTopology(profile)
+    {
+	var callback = function(json) {
+	    console.info("ShowTopology profile", json);
+	    if (json.code) {
+		alert("Failed to get rspec for topology viewer: " + json.value);
+		return;
+	    }
+	    if (showTopoIframe) {
+		showTopoIframe(json.value.profile_rspec);
+	    }
+	    else {
+		showTopoIframe = ShowTopoIframe($('#showtopology-modal'),
+						'.showtopology-bare',
+						json.value.profile_rspec);
+	    }
+	};
+	sup.CallServerMethod(null, "show-profile", "GetProfile",
+			     {"profile" : profile}, callback);
     }
     
     //
@@ -849,18 +1064,93 @@ $(function ()
     //
     function Toggle(item) {
 	var name = item.dataset["name"];
+	var wait = false;
 
+	// This one needs special handling.
+	if (name == "project_shared_reservations") {
+	    wait = true;
+	}
 	var callback = function(json) {
+	    console.info("Toggle callback:", json);
 	    if (json.code) {
-		sup.SpitOops("oops", json.value);
+		if (wait) {
+		    sup.HideWaitWait(function () {
+			if (name == "project_shared_reservations") {
+			    // This is all a bit cheesy.
+			    ShowSharedResErrors(json.value);
+			}
+			else {
+			    sup.SpitOops("oops", json.value);
+			}
+		    });
+		}
+		else {
+		    sup.SpitOops("oops", json.value);
+		}
 		return;
+	    }
+	    if (wait) {
+		sup.HideWaitWait();
 	    }
 	    LoadProjectTab();
 	};
-	sup.CallServerMethod(null, "show-project", "Toggle",
-			     {"pid" : window.TARGET_PROJECT,
-			      "toggle" : name},
-			     callback);
+	var dotoggle = function() {
+	    sup.CallServerMethod(null, "show-project", "Toggle",
+				 {"pid" : window.TARGET_PROJECT,
+				  "toggle" : name},
+				 callback);
+	};
+	if (wait) {
+	    sup.ShowWaitWait(undefined, undefined, dotoggle);
+	}
+	else {
+	    dotoggle();
+	}
+    }
+
+    function ToggleSharedReservations(value)
+    {
+	var callback = function(json) {
+	    console.info("Toggle callback:", json);
+	    if (json.code) {
+		sup.HideWaitWait(function () {
+		    ShowSharedResErrors(json.value);
+		});
+		// Reset the radio the long way.
+		LoadProjectTab();
+		return;
+	    }
+	    sup.HideWaitWait();
+	    // Reset the radio the long way.
+	    LoadProjectTab();
+	};
+
+	sup.ShowWaitWait(undefined, undefined, function () {
+	    sup.CallServerMethod(null, "show-project", "Toggle",
+				 {"pid"    : window.TARGET_PROJECT,
+				  "value"  : value,
+				  "toggle" : "project_shared_reservations"},
+				 callback);
+	});
+    }
+
+    function ShowSharedResErrors(errors) {
+	console.info("ShowSharedResErrors:", errors);
+	
+	var html = "";
+	_.each(errors, function (details, name) {
+	    html +=
+		"<dt class='col-sm-2'>" + name + "</dt>" +
+		"<dd class='col-sm-10'>";
+	    _.each(details, function(detail) {
+		html +=
+		    "<p class='mb-0'>" + detail.message + "</p>";
+	    });
+	    html += "</dd>";
+	});
+	console.info(html);
+	$('#setshared-errors-modal .modal-body dl').html(html);
+	sup.ShowModal('#setshared-errors-modal');
     }
 
     /*
@@ -953,6 +1243,112 @@ $(function ()
 	});
     }
 
+    function LoadRangeHistory()
+    {
+	var callback = function (json) {
+	    console.info("range history", json);
+	    if (json.code) {
+		console.info("Not enough permission for range history");
+		return;
+	    }
+	    if (json.value.length == 0) {
+		return;
+	    }
+	    var rfhash = [];
+	    _.each(json.value, function (range) {
+		rfhash[range.key] = range;
+	    });
+            
+	    var template = _.template(templates['rfrange-history']);
+	    $('#rfranges .history-rfranges .waiting')
+		.html(template({"ranges" : json.value}));
+	    $('.rfranges-hidden').removeClass("hidden");
+	    $('#rfranges .history-rfranges').removeClass("hidden");
+
+	    // Default dates for the date pickers.
+	    var first = _.first(json.value);
+	    var last  = _.last(json.value);
+
+	    var start_from = moment(last.started).format("L");
+	    var start_to   = moment(first.started).format("L");
+	    var end_from   = moment(last.destroyed).format("L");
+	    var end_to     = moment(first.destroyed).format("L");
+	    
+	    $('#rfranges .history-rfranges .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets: ["uitheme", "zebra", "filter"],
+		    headerTemplate : '{content} {icon}',
+		    widthFixed : true,
+		    
+		    widgetOptions: {
+			// class name applied to filter row and each input
+			//filter_cssFilter  : 'form-control input-sm',
+			// search from beginning
+			filter_startsWith : false,
+			// Set this option to false for case sensitive search
+			filter_ignoreCase : true,
+			// Only one search box.
+			filter_columnFilters : true,
+
+			filter_formatter : {
+			    // Date (two inputs)
+			    7 : function($cell, indx) {
+				return $.tablesorter.filterFormatter
+				    .uiDatepicker( $cell, indx, {
+					textFrom : "",
+					textTo : "-",
+					from : start_from,
+					to   : start_to,
+					changeMonth : true,
+					changeYear : true
+				    });
+			    },
+			    // Date (two inputs)
+			    8 : function($cell, indx) {
+				return $.tablesorter.filterFormatter
+				    .uiDatepicker( $cell, indx, {
+					textFrom : "",
+					textTo : "-",
+					from : end_from,
+					to   : end_to,
+					changeMonth : true,
+					changeYear : true
+				    });
+			    },
+			},
+			filter_placeholder : {
+			    from : 'From...',
+			    to   : 'To...'
+			},
+		    }
+		});
+	    
+            $('.history-rfranges .txgraph-button').click(function (event) {
+		event.preventDefault();
+		var key = $(this).data("key");
+		var record = rfhash[key];
+
+		console.info(record);
+		var args = {
+		    "selector" : "#txgraph-modal",
+		    "txlist"   : record.txlist,
+		    "instances": null,
+		    "instance" : record,
+		}
+	        var defer = $.Deferred();
+	        window.ShowTXGraph("#txgraph-modal", defer);
+	        defer.resolve(args);
+	    });
+	};
+	sup.CallServerMethod(null, "rfrange", "RangeHistory",
+			     {"pid" : window.TARGET_PROJECT}, callback);
+    }
+
+    // Helper.
+    function decodejson(id) {
+	return JSON.parse(_.unescape($(id)[0].textContent));
+    }
     $(document).ready(initialize);
 });
 

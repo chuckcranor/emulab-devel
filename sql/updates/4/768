@@ -1,0 +1,18 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("logfiles", "date_created")) {
+	DBQueryFatal("ALTER TABLE logfiles add " .
+		     " KEY `date_created` (`date_created`)");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

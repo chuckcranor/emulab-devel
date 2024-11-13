@@ -410,6 +410,9 @@ function Do_GetHardwareInfo()
 {
     global $this_user, $ajax_args, $node, $GuestUserOkay, $nodetype;
     global $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    $hidden  = 0;
+    $summary = 0;
+    $asjson  = 0;
 
     # Only this function allows guest users.
     $GuestUserOkay = true;
@@ -421,45 +424,58 @@ function Do_GetHardwareInfo()
                 SPITUSERERROR("$t contains illegal characters!");
                 return -1;
             }
-            $query_result =
-                DBQueryFatal("select type from node_types where type='$t'");
-            if (!mysql_num_rows($query_result)) {
-                SPITUSERERROR("No such node type $t");
-                return -1;
-            }
         }
     }
     elseif (CheckPageArgs(0)) {
         return;
     }
+    if (isset($ajax_args["summary"])) {
+        $summary = 1;
+    }
+    if (isset($ajax_args["asjson"])) {
+        $asjson = 1;
+    }
+    if ($this_user) {
+        $hidden = 1;
+    }
     $result = array();
-    
+
+    # We add a CORS header in httpd-www.conf on the Mothership.
+    if (!$TBMAINSITE) {
+        # Allow this to be fetched from pages loaded anywhere
+        header("Access-Control-Allow-Origin: *");
+    }
     if (isset($typelist)) {
         foreach ($typelist as $t) {
-            $blob = GetHardwareInfoForType($t);
+            $blob = GetHardwareInfoForType($t, $summary, $hidden, $asjson);
             if (!$blob) {
-                SPITAJAX_ERROR(-1, "No hardware info available for $t");
-                return -1;
+                $blob = array("type"    => $t,
+                              "paths"   => null);
             }
             $result[$t] = $blob;
         }
     }
     else {
         $type = $nodetype->type();
-        $blob = GetHardwareInfoForType($type);
+        $blob = GetHardwareInfoForType($type, $summary, $hidden, $asjson);
         if (!$blob) {
             SPITAJAX_ERROR(-1, "No hardware info available for $type");
             return -1;
+        }
+        if ($summary && $asjson) {
+            SPITAJAX_RESPONSE($blob);
+            return;
         }
         $result[$type] = $blob;
     }
     SPITAJAX_RESPONSE($result);
 }
 
-function GetHardwareInfoForType($type)
+function GetHardwareInfoForType($type, $summary, $hidden, $asjson)
 {
     $query_result =
-        DBQueryFatal("select * from node_type_hardware where type='$type'");
+        DBQueryFatal("select updated,uname,summaryjson ".
+                     "  from node_type_hardware where type='$type'");
     if (!mysql_num_rows($query_result)) {
         return null;
     }
@@ -470,9 +486,15 @@ function GetHardwareInfoForType($type)
                   "uname"   => $row["uname"],
                   "paths"   => array(),
     );
+    if ($summary && $asjson) {
+        $blob["json"] = json_decode($row["summaryjson"]);
+        return $blob;
+    }
     $query_result =
         DBQueryFatal("select path,value from node_type_hardware_paths ".
-                     "where type='$type'");
+                     "where type='$type' ".
+                     (!$hidden ? "and hidden=0 " : "") .
+                     ($summary ? "and summary=1 " : "and summary=0 "));
     if (!mysql_num_rows($query_result)) {
         return null;
     }

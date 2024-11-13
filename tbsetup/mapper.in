@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -165,6 +165,17 @@ $| = 1;
 $SIG{__WARN__} = sub { tbwarn $_[0];$warnings++; };
 
 #
+# Setup a signal handler cause of the locks.
+#
+sub handler()
+{
+    fatal("Caught a signal");
+}
+$SIG{HUP}  = \&handler;
+$SIG{TERM} = \&handler;
+$SIG{INT}  = \&handler;
+
+#
 # Parse command arguments. Once we return from getopts, all that should be
 # left are the required arguments.
 #
@@ -281,6 +292,8 @@ if (!defined($experiment)) {
     fatal("Could not lookup experiment object $pid,$eid!")
 }
 my $project = $experiment->GetProject();
+my $group   = $experiment->GetGroup();
+my $gid     = $group->gid();
 
 #
 # Verify that this person can muck with the experiment.
@@ -579,10 +592,11 @@ sub AssignLoop()
 			 "where name='pool_daemon'");
 	    $gotlock = 0;
 	}
-	# Just in case.
+	# An error in RunAssign leaves the lock held.
 	if ($seriallock) {
 	    libEmulab::EmulabCountUnlock("mapperlock");
 	    $seriallock = 0;
+	    TBDebugTimeStamp("Released the mapper lock after RunAssign1");
 	}
 
 	# Success!
@@ -616,6 +630,12 @@ sub AssignLoop()
 	    my $save_impotent = $impotent;
 	    $impotent  = 1;
 	    my $retval = RunAssign(1, $prefix . ".empty");
+	    # An error in RunAssign leaves the lock held.
+	    if ($seriallock) {
+		libEmulab::EmulabCountUnlock("mapperlock");
+		$seriallock = 0;
+		TBDebugTimeStamp("Released the mapper lock after RunAssign2");
+	    }
 	    if ($retval != 0) {
 		return [{type=>'extra', cause=>'user', severity=>SEV_ERROR,
 			 error=>['infeasible_resource_assignment']}, 
@@ -736,7 +756,7 @@ sub RunAssign($$)
     }
 
     # Hack for Kirk.
-    if ($pid eq "OAI2021FallWS" || $project->IsNonLocal()) {
+    if ($pid eq "@TUTORIALPID@" || $project->IsNonLocal()) {
 	TBDebugTimeStamp("Trying to get the mapper lock");
 	while (1) {
 	    if (libEmulab::EmulabCountLock("mapperlock", 1) == 0) {
@@ -747,7 +767,7 @@ sub RunAssign($$)
 	}
 	TBDebugTimeStamp("Got the mapper lock");
 	goto skipadctrl
-	    if ($pid eq "OAI2021FallWS");
+	    if ($pid eq "@TUTORIALPID@");
     }
     
     #
@@ -774,7 +794,7 @@ sub RunAssign($$)
     TBDebugTimeStamp("MaxSwapInMap finished"); 
     #print STDERR Dumper($reservation_bounds);
     # Skip this during tutorials, takes too long.
-    if ($pid ne "OAI2021FallWS") {
+    if ($pid ne "@TUTORIALPID@") {
 	# Dump to file.
 	DumpReservationInfo($resinfolog, $reservation_bounds);
 	TBDebugTimeStamp("DumpReservationInfo finished");
@@ -828,7 +848,7 @@ sub RunAssign($$)
 	}
 	else {
 	    $message .= "of existing resource reservations ".
-		"to other projects.\n";
+		"to other projects or users.\n";
 	}
 	tberror({type => 'primary', cause => 'temp',
 		 severity => SEV_ERROR,
@@ -906,7 +926,7 @@ sub RunAssign($$)
 			"*** Resource reservation violation: ".
 			"$wanted nodes of type $type requested, but only ".
 			"$bound available because of existing resource ".
-			"reservations to other projects.\n");
+			"reservations to other projects or users.\n");
 		# Unretriable error
 		return -1;
 	    }
@@ -931,7 +951,7 @@ sub RunAssign($$)
 		"*** Resource reservation violation: ".
 		"Node $node_id requested, but is not ".
 		"available because of existing resource reservations ".
-		"to other projects.\n");
+		"to other projects or users.\n");
 		# Unretriable error
 		return -1;
 	    }
@@ -1008,7 +1028,7 @@ sub RunAssign($$)
     # if updating (-u), include any resources that may already be
     # allocated to experiment in the PTOP results.
     #
-    my $ptopargs = "-p $pid ";
+    my $ptopargs = "-p $pid/$gid ";
     $ptopargs   .= "-e $eid "
 	if ($updating);
     $ptopargs   .= "-u "
@@ -1349,6 +1369,7 @@ END {
     if ($seriallock) {
 	libEmulab::EmulabCountUnlock("mapperlock");
 	$seriallock = 0;
+	TBDebugTimeStamp("Released the mapper lock in the END block");	
     }
 
     if ($exitcode && $exitcode != $WRAPPER_FAILED) {

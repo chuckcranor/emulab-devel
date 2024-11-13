@@ -2,46 +2,47 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class="modal-header">
-	<button type="button" class="close" data-dismiss="modal">
-	  <span aria-hidden="true">&times;</span></button>
 	<center><h4>Copy Profile</h4></center>
       </div>
       <div class='modal-body'>
-	  <form class="form-horizontal">
-	    <div class="form-group">
-	      <label class="col-sm-5 control-label">
-		New Profile Name</label>
-	      <div class="col-sm-4">
-		<input class="profile-name form-control"
-		       placeholder="alphanumeric only">
-		<div class="text-danger hidden
-			    copy-profile-error name-error"></div>
-	      </div>
+	<form class="form-horizontal">
+	  <div class="row mb-2">
+	    <label class="col-sm-5 control-label
+			  col-form-label">New Profile Name:</label>
+	    <div class="col-sm-4">
+	      <input class="profile-name form-control
+			    form-control-variable-size-ddhack"
+		     placeholder="alphanumeric only">
+	      <div class="text-danger hidden
+			  copy-profile-error name-error"></div>
 	    </div>
-	    <div class="form-group">
-	      <label class="col-sm-5 control-label">
-		Project</label>
-	      <div class="col-sm-4">
-		<select class='profile-pid form-control'>
-		  <option>Please Select</option>
-		  <% _.each(projects, function(name) { %>
-	            <option value='<%= name %>'><%= name %></option>
-		  <% }); %>
-		</select>
-		<div class="text-danger hidden
-			    copy-profile-error pid-error"></div>
-	      </div>
-	    </div>	      
-	  </form>
+	  </div>
+	  <div class="row">
+	    <label class="col-sm-5 control-label
+			  col-form-label">Project:</label>
+	    <div class="col-sm-4">
+	      <select class='profile-pid form-select'>
+		<option>Please Select</option>
+		<% _.each(projects, function(name) { %>
+	          <option value='<%= name %>'><%= name %></option>
+		<% }); %>
+	      </select>
+	      <div class="text-danger hidden
+			  copy-profile-error pid-error"></div>
+	    </div>
+	  </div>
+	</form>
 	<div style="margin-top: 20px;">
           <center>
-            <button type='button' style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' aria-hidden='true'>
-	      Cancel</button>
-	    <button type='button' class='btn btn-success btn-sm'
+	    <button type='button'
+		    class='btn btn-success btn-sm confirm-button'
 		    id='copy-profile-confirm'>
               Create</button>
+            <button type='button'
+                    class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
 	    <div class="text-danger hidden copy-profile-error general-error"
 		 style="text-align: center;"></div>
 	  </center>
@@ -50,21 +51,23 @@
     </div>
   </div>
 </div>
+  
 <div id='profile-copied-modal' class='modal fade'>
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
 	<center>
-	  Your new profile has been created,
+	  <h5>Your new profile has been created</h5>
 	  <div style="margin-top: 15px;">
+	    <!-- Leave this as a link, not a button -->
+            <a href="#" type='button'
+	       class='btn btn-success btn-sm confirm-button'>
+	      Edit Profile</a>
             <button type='button'
-                    class='btn btn-primary btn-sm'
-		    style="margin-right: 10px;"
-                    data-dismiss='modal' aria-hidden='true'>
+                    class='btn btn-default btn-sm cancel-button'
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
 	      Dismiss</button>
-            <a href="" type='button'
-               class='btn btn-success btn-sm'>
-	       Edit Profile</a>
 	  </div>
 	</center>
       </div>

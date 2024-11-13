@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,11 +27,11 @@ use Getopt::Std;
 use Date::Parse;
 
 #
-# Convert an NS file into rspec using geni-lib and some lxml parsing.
+# Search for an IP (and now a physical node name).
 #
 sub usage()
 {
-    print STDERR "Usage: searchip [-h | -b [-s min] [-e max]] ipv4\n";
+    print STDERR "Usage: searchip [-h | -b [-s min] [-e max]] [ipv4 | pnode]\n";
     print STDERR "Options:\n";
     print STDERR "  -h     - Search historical instances instead of current.\n";
     print STDERR "  -b     - Search both current and historical instances.\n";
@@ -132,8 +132,10 @@ usage()
 
 sub SearchCurrent($)
 {
-    my ($ip) = @_;
-    my $found;
+    my ($which) = @_;
+    my %dups    = ();
+    my @slivers = ();
+    my @result  = ();
     
     #
     # Look up all instances and get the manifest.
@@ -154,32 +156,38 @@ sub SearchCurrent($)
 		print STDERR "Could not parse manifest for $sliver\n";
 		next;
 	    }
-	    if (SearchManifest($manifest, $ip)) {
-		$found = $sliver;
-		last;
+	    if (SearchManifest($manifest, $which)) {
+		push(@slivers, $sliver);
 	    }
 	}
-	last
-	    if ($found);
     }
-    if (!$found) {
-	print "No matching instance for IP\n";
-	return undef;
+    if (!@slivers) {
+	print "No matching instances for $which\n";
+	return ();
     }
-    my $instance      = $found->instance();
-    my $pid           = $instance->pid();
-    my $name          = $instance->name();
-    my $aggregate_urn = $found->aggregate_urn();
-    my $aggregate     = APT_Aggregate->Lookup($aggregate_urn);
-    if (!defined($aggregate)) {
-	fatal("Cannot lookup aggregate object for $aggregate_urn");
-    }
-    my $cluster_name  = $aggregate->name();
-    
-    my $mesg = "Found IP: $pid/$name - $cluster_name";
-    print $mesg . "\n";
+    foreach my $sliver (@slivers) {
+	my $instance      = $sliver->instance();
+	my $uuid          = $instance->uuid();
+	my $pid           = $instance->pid();
+	my $name          = $instance->name();
+	my $aggregate_urn = $sliver->aggregate_urn();
+	my $aggregate     = APT_Aggregate->Lookup($aggregate_urn);
+	if (!defined($aggregate)) {
+	    fatal("Cannot lookup aggregate object for $aggregate_urn");
+	}
+	my $cluster_name  = $aggregate->name();
 
-    return $instance->uuid();
+	# Watch for dups.
+	if (exists($dups{$uuid})) {
+	    next;
+	}
+	$dups{$uuid} = 1;
+    
+	my $mesg = "Found: $pid/$name - $cluster_name";
+	print $mesg . "\n";
+	push(@result, $uuid);
+    }
+    return @result;
 }
 
 sub SearchHistory($)
@@ -226,9 +234,9 @@ sub SearchHistory($)
 	    my ($pid,$name) = $history_result->fetchrow_array();
 	    
 	    my $aggregate   = APT_Aggregate->Lookup($aggregate_urn);
-	    if (!defined($aggregate)) {
-		fatal("Cannot lookup aggregate object for $aggregate_urn");
-	    }
+	    next
+		if (!defined($aggregate));
+
 	    my $cluster_name  = $aggregate->name();
     
 	    my $mesg = "Found IP: $pid/$name - $cluster_name - $uuid";
@@ -236,25 +244,28 @@ sub SearchHistory($)
 	    push(@result, $uuid);
 	}
     }
-    if (defined($webtask)) {
-	$webtask->instancelist(\@result);
-	$webtask->Exited(0);
-    }
-    exit(0);
+    return @result;
 }
 
 sub SearchManifest($$)
 {
-    my ($manifest, $ip) = @_;
+    my ($manifest, $which) = @_;
+    my $searchnode = 0;
+
+    if ($which !~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)  {
+	$searchnode = 1;
+    }
     
     #
     # Check the routable pool bindings first
     #
-    my $pools = GeniXML::GetAddressPools($manifest);
-    foreach my $pool (@{$pools}) {
-	foreach my $ipref (@{$pool->{'list'}}) {
-	    if ($ipref->{'ipv4'} eq $ip) {
-		return 1;
+    if (!$searchnode) {
+	my $pools = GeniXML::GetAddressPools($manifest);
+	foreach my $pool (@{$pools}) {
+	    foreach my $ipref (@{$pool->{'list'}}) {
+		if ($ipref->{'ipv4'} eq $which) {
+		    return 1;
+		}
 	    }
 	}
     }
@@ -264,15 +275,31 @@ sub SearchManifest($$)
 				   $manifest,
 				   $GeniXML::EMULAB_NS)->get_nodelist()) {
 
-	my $host = FindFirst("n:host", $node);
-	next
-	    if (!defined($host));
-	my $ipv4 = GetText("ipv4", $host);
-	next
-	    if (!defined($ipv4));
+	if ($searchnode) {
+	    my $vnode = FindFirstNS("n:vnode", $node, $GeniXML::EMULAB_NS);
+	    next
+		if (!defined($vnode));
 	
-	if ($ipv4 eq $ip) {
-	    return 1;
+	    my $name = GetText("name", $vnode);
+	    next
+		if (!defined($name));
+	
+	    if ($name eq $which) {
+		return 1;
+	    }
+	}
+	else {
+	    my $host = FindFirst("n:host", $node);
+	    next
+		if (!defined($host));
+	
+	    my $ipv4 = GetText("ipv4", $host);
+	    next
+		if (!defined($ipv4));
+	
+	    if ($ipv4 eq $which) {
+		return 1;
+	    }
 	}
     }
     return 0;
@@ -280,14 +307,14 @@ sub SearchManifest($$)
 if ($historical || $both) {
     if (@ARGV == 1) {
 	if ($both) {
-	    my $uuid = SearchCurrent($ARGV[0]);
+	    my @list = SearchCurrent($ARGV[0]);
 	    if (defined($webtask)) {
-		$webtask->instance($uuid);
+		$webtask->instancelist(\@list);
 	    }
 	}
 	my @list = SearchHistory($ARGV[0]);
 	if (defined($webtask)) {
-	    $webtask->instancelist(\@list);
+	    $webtask->historylist(\@list);
 	    $webtask->Exited(0);
 	}
     }
@@ -297,8 +324,8 @@ if ($historical || $both) {
 }
 else {
     if (@ARGV == 1) {
-	my $uuid = SearchCurrent($ARGV[0]);
-	if (!defined($uuid)) {
+	my @list = SearchCurrent($ARGV[0]);
+	if (!@list) {
 	    if (defined($webtask)) {
 		$webtask->output("No matching instance for IP");
 		$webtask->Exited(1);
@@ -306,7 +333,7 @@ else {
 	    exit(1);	
 	}
 	if (defined($webtask)) {
-	    $webtask->instance($uuid);
+	    $webtask->instancelist(\@list);
 	    $webtask->Exited(0);
 	}
     }

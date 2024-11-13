@@ -1,0 +1,96 @@
+<html lang="en">
+  <head>
+    <title>noVNC</title>
+    <meta charset="utf-8">
+    <script src='https://www.cloudlab.us/js/lib/jquery.min.js'></script>
+    <link rel='stylesheet' href='https://www.cloudlab.us/css/bootstrap.css'>
+    <link rel='stylesheet' href='vnc_emulab.css'>
+    <script src='https://www.cloudlab.us/js/lib/bootstrap.js'></script>
+    <script type="module" src='vnc_emulab.js'></script>
+  </head>
+  <body>
+    <nav class="navbar navbar-inverse navbar-fixed-top">
+      <div class="container-fluid">
+	<div>
+          <form class="navbar-form" style="padding: 0px; margin-bottom: 2px;">
+            <div class="col-xs-3 col-md-4 col-lg-6">
+              <input type="text"
+		     id="clipboard-paste-area"
+		     style="width: 100%;"
+		     placeholder=""
+		     class="form-control input-sm">
+            </div>
+            <button id="copyToClipboard-button"
+		    class="btn btn-success btn-sm">
+	      Copy To System Clipboard</button>
+
+	    <button href='#' class='btn btn-info btn-sm'
+		    onclick="event.preventDefault();"
+		    data-toggle='modal'
+		    data-target="#help-modal">Help!</button>
+
+	    <p class="navbar-text pull-right"
+	       style="margin-top: 5px; margin-bottom: 5px;">Status:
+	      <span id="status">Connected to pc841.emulab.net:1 (guest1)
+	      </span></p>
+          </form>
+	  <p class="navbar-text"
+	     style="margin-top: 0px; margin-bottom: 0px; color:white;">
+	    <small>For more information on copy/paste between VNC and your
+	      desktop click on the
+	      <b><em>Help</em></b> button</small></p>
+	</div>
+      </div>
+    </nav>
+    <div id="screen" class="container-fluid">
+      <!-- This is where the remote screen will appear -->
+    </div>
+    <textarea id="clipboard-textarea" style="display: none;"></textarea>
+    
+    <div id='help-modal' class='modal fade'>
+      <div class='modal-dialog'>
+	<div class='modal-content'>
+	  <div class='modal-header'>
+	    <button type='button' class='close' data-dismiss='modal'
+		    aria-hidden='true'>
+	      &times;</button>
+	    <center><h4>About Copy/Paste and browser VNC</h4></center>
+	  </div>
+	  <div class='modal-body'>
+	    <p>
+	      Most browsers do not allow javascript to access the system
+	      clipboard directly, which makes it difficult to copy/paste
+	      text in/out from the operating system to X windows in your
+	      browser VNC window. So we have to jump through a couple of
+	      hoops to make it work:
+	    </p>
+	    <p><b>Copy:</b> Simply highlight a region in one of your
+	      VNC X windows and then click on the <span class="text-success">
+	      Copy To System Clipboard</span> button at the top.
+	      The region will be copied to your system clipboard, you can then
+	      paste it with your operating system paste key or menu item.
+	    </p>
+	    <p><b>Paste:</b> To paste from outside the VNC window,
+	      into one of your VNC X windows, you have to do it
+	      indirectly by first pasting into the paste box at the
+	      top left of the window, and then using the X paste key
+	      (or mouse button) to paste into one of the VNC X
+	      windows.</p>
+	    <p>
+	      Copy paste <b>between VNC X windows</b> behaves normally, the
+	      above only applies when <b>copying out of, or pasting into the
+	      VNC window.</b>
+	    </p>
+	    <center>
+	      <video src="vnc_help.mp4" width="1000" controls loop>
+		<p>If you are reading this, it is because your browser
+		  does not support the HTML5 video element.
+		</p>
+	      </video>
+	    </center>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </body>
+</html>

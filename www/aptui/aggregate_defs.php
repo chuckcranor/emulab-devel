@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -280,7 +280,7 @@ class Aggregate
             }
             elseif ($user && $aggregate->canuse_feature()) {
                 $allowed = 0;
-                $feature = $PORTAL_GENESIS . "-" . $aggregate->canuse_feature();
+                $feature = $aggregate->canuse_feature();
 
                 # Does the user have the feature?
                 if (FeatureEnabled($feature, $user, null, null)) {
@@ -314,8 +314,12 @@ class Aggregate
         #
         if ($PORTAL_GENESIS == "powder") {
             $ordered = array();
-            $ordered[] = $unordered["Emulab"];
-            $ordered[] = $unordered["Utah"];
+            if (array_key_exists("Emulab", $unordered)) {
+                $ordered[] = $unordered["Emulab"];
+            }
+            if (array_key_exists("Utah", $unordered)) {
+                $ordered[] = $unordered["Utah"];
+            }
             foreach ($unordered as $aggregate) {
                 if ($aggregate->nickname() != "Emulab" &&
                     $aggregate->nickname() != "Utah") {
@@ -370,12 +374,12 @@ class Aggregate
             elseif ($frontpage || $PORTAL_HEALTH) {
                 $allowed = 1;
             }
-            elseif ($aggregate->adminonly() && !ISADMIN()) {
+            elseif ($aggregate->adminonly() && !(ISADMIN() || STUDLY())) {
                 $allowed = 0;
             }
             elseif ($user && $aggregate->canuse_feature()) {
                 $allowed = 0;
-                $feature = $PORTAL_GENESIS . "-" . $aggregate->canuse_feature();
+                $feature = $aggregate->canuse_feature();
 
                 # Does the user have the feature?
                 if (FeatureEnabled($feature, $user, null, null)) {
@@ -588,32 +592,54 @@ class Aggregate
         $blob = array();
 
         $query_result =
-            DBQueryFatal("select *,r.available ".
+            DBQueryFatal("select l.*,i.*,r.available ".
                          " from apt_aggregate_radio_locations as l ".
                          "left join apt_aggregate_radio_info as i on ".
                          "  i.aggregate_urn=l.aggregate_urn and ".
-                         "  i.location=l.location ".
-                         "join apt_aggregate_reservable_nodes as r on ".
+                         "  i.location=l.location and ".
+                         "  i.itype=l.itype ".
+                         "left join apt_aggregate_reservable_nodes as r on ".
                          "  r.urn=i.aggregate_urn and r.node_id=i.node_id ".
-                         "order by itype desc, l.location asc");
+                         "where i.aggregate_urn is not null ".
+                         "order by l.itype desc, l.location asc");
 
         while ($row = mysql_fetch_array($query_result)) {
             $urn      = $row["aggregate_urn"];
             $node_id  = $row["node_id"];
+            $itype    = $row["itype"];
             $alive    = true;
+
+            # XXX Need to change the radio tables for this.
+            if (preg_match("/^ota/", $node_id)) {
+                $itype = "OTA";
+            }
+            elseif (preg_match("/^oai/", $node_id)) {
+                $itype = "OAI";
+            }
+            $row["itype"] = $itype;
+
+            # Sigh
+            $row["available"] = intval($row["available"]);
+
+            # URN for node
+            list ($auth,$type,$id) = Instance::ParseURN($urn);
+            $row["component_urn"] = "urn:publicid:IDN+${auth}+node+${node_id}";
 
             #
             # Grab the aggregate. We use the status info to determine if the
             # aggregate is alive (reachable).
             #
             if ($aggregate = Aggregate::Lookup($urn)) {
+                if ($aggregate->adminonly() && !ISADMIN()) {
+                    continue;
+                }
                 if (!array_key_exists($urn, $blob)) {
                     $blob[$urn] = array();
                 }
                 # Backwards compat for the frontpage.
-                $row["installation_type"] = $row["itype"];
+                $row["installation_type"] = $itype;
                 
-                if ($row["itype"] == "BS") {
+                if ($itype == "BS") {
                     #
                     # The CNUC determines if a base station is alive.
                     #
@@ -650,6 +676,23 @@ class Aggregate
                         $frow["notes"] = $row["notes"];
                     }
                     $iface = $frow["iface"];
+                    
+                    #
+                    # Form a link to the monitor graph.
+                    #
+                    if ($frow["monitored"] != 0) {
+                        $url = "frequency-graph.php";
+
+                        if ($aggregate->ismobile()) {
+                            $url .= "?which=rfmonitor-mobile";
+                            $url .= "&endpoint=" . $aggregate->nickname();
+                        }
+                        else {
+                            $url .= "?cluster=" . $aggregate->nickname();
+                        }
+                        $url .= "&node_id=" . $node_id . "&iface=" . $iface;
+                        $frow["monitor_url"] = $url;
+                    }
                     $row["frontends"][$iface] = $frow;
                 }
                 $blob[$urn][$node_id] = $row;

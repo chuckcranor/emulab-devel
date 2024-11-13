@@ -1,0 +1,145 @@
+<table class='tablesorter' id='sumstats_table'>
+  <thead>
+    <tr>
+      <% if (window.SHOWBY == "pid") { %>
+        <th rowspan=1>PID</th>
+      <% } else { %>
+        <th rowspan=1>UID</th>
+      <% } %>
+      <th colspan=3>Totals</th>
+      <th colspan=3>APT</th>
+      <th colspan=3>Utah</th>
+      <th colspan=3>Wisc</th>
+      <th colspan=3>Clem</th>
+      <th colspan=3>Emulab</th>
+      <th colspan=3>Mass</th>
+    </tr>
+    <tr>
+      <th class='filter-false sorter-false'
+          style='padding-left:1px; text-align:left'>Total</th>
+      <th>Expt</th>
+      <th>PCs</th>
+      <th>Phours</th>
+      <th>Expt</th>
+      <th>PCs</th>
+      <th>Phours</th>
+      <th>Expt</th>
+      <th>PCs</th>
+      <th>Phours</th>
+      <th>Expt</th>
+      <th>PCs</th>
+      <th>Phours</th>
+      <th>Expt</th>
+      <th>PCs</th>
+      <th>Phours</th>
+      <th>Expt</th>
+      <th>PCs</th>
+      <th>Phours</th>
+      <th>Expt</th>
+      <th>PCs</th>
+      <th>Phours</th>
+    </tr>
+    <tr id='header-column-counts'>
+      <th class='filter-false sorter-false' data-math='col-count'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% _.each(results, function (ref, key) { %>
+      <tr>
+	<td>
+          <% if (key != "NONE") { %>
+	    <% if (window.SHOWBY == "pid") { %>
+	      <a href='activity.php?pid=<%- key %>'><%- key %></a>
+	    <% } else { %>
+	      <a href='activity.php?user=<%- key %>'><%- key %></a>
+	    <% } %>
+	  <% } else { %>
+	    NONE
+	  <% } %>
+	</td>
+        <td><%- ref["ecount"] %></td>
+        <td><%- ref["pcount"] %></td>
+        <td><%- ref["phours"] %></td>
+        <td><%- ref["APT"]["ecount"] %></td>
+        <td><%- ref["APT"]["pcount"] %></td>
+        <td><%- ref["APT"]["phours"] %></td>
+        <td><%- ref["Utah"]["ecount"] %></td>
+        <td><%- ref["Utah"]["pcount"] %></td>
+        <td><%- ref["Utah"]["phours"] %></td>
+        <td><%- ref["Wisc"]["ecount"] %></td>
+        <td><%- ref["Wisc"]["pcount"] %></td>
+        <td><%- ref["Wisc"]["phours"] %></td>
+        <td><%- ref["Clem"]["ecount"] %></td>
+        <td><%- ref["Clem"]["pcount"] %></td>
+        <td><%- ref["Clem"]["phours"] %></td>
+        <td><%- ref["Emulab"]["ecount"] %></td>
+        <td><%- ref["Emulab"]["pcount"] %></td>
+        <td><%- ref["Emulab"]["phours"] %></td>
+        <td><%- ref["Mass"]["ecount"] %></td>
+        <td><%- ref["Mass"]["pcount"] %></td>
+        <td><%- ref["Mass"]["phours"] %></td>
+      </tr>
+    <% }); %>
+  </tbody>
+  <tfoot>
+    <tr id='footer-column-counts'>
+      <th class='filter-false sorter-false'>Totals</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+      <th class='filter-false sorter-false' 
+          data-math='col-sum' data-math-mask='##0.00'>0</th>
+    </tr>
+  </tfoot>
+</table>

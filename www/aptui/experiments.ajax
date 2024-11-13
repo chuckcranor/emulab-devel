@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,19 +61,17 @@ function Do_ExperimentList()
                      "  truncate(a.physnode_count * ".
                      "   ((UNIX_TIMESTAMP(now()) - ".
                      "     UNIX_TIMESTAMP(a.started)) / 3600.0),2) as phours, ".
-                     " IFNULL(aggs.count,0) as aggrows, ".
-                     " agg.aggregate_urn as aggrow_urn ".
-                     "  from apt_instances as a ".
-                     "left join (".
-                     "    select uuid, COUNT(*) AS count ".
-                     "    from apt_instance_aggregates group by uuid) AS aggs ".
-                     "  on aggs.uuid=a.uuid ".
+                     "  GROUP_CONCAT(aa.abbreviation) as clusters ".
+                     " from apt_instances as a ".
                      "left join apt_instance_aggregates as agg ".
-                     "     on agg.uuid=a.uuid ".
+                     "     on agg.uuid=a.uuid and agg.status!='terminated' ".
+                     "left join apt_aggregates as aa on ".
+                     "     aa.urn=agg.aggregate_urn ".
                      "left join geni.geni_slices as s on ".
                      "     s.uuid=a.slice_uuid ".
                      "left join geni.geni_users as u on u.uuid=a.creator_uuid ".
-                     "left join users on users.uid_idx=a.creator_idx");
+                     "left join users on users.uid_idx=a.creator_idx ".
+                     "group by a.uuid ");
 
     while ($row = mysql_fetch_array($query_result)) {
         $profile_id   = $row["profile_id"];
@@ -128,24 +126,8 @@ function Do_ExperimentList()
         else {
             $blob["profile_name"] = $profile_name;
         }
-        
-        #
-        # If arows non-zero, then we use that for aggregate_urn,
-        # and if its more then 1, we need to consume the extras rows
-        # to get the rest of the aggregate urns.
-        #
-        if ($row["aggrows"] > 0) {
-            $cluster = $urn_mapping[$row["aggrow_urn"]];
-
-            for ($i = 1; $i < $row["aggrows"]; $i++) {
-                $row = mysql_fetch_array($query_result);
-                $cluster .= "," . $urn_mapping[$row["aggrow_urn"]];
-            }
-        }
-        else {
-            $cluster = $urn_mapping[$row["aggregate_urn"]];
-        }
-        $namefrag = "<a href='adminextend.php?uuid=$uuid'>$name</a>
+        $namefrag = "<a href='adminextend.php?uuid=$uuid'
+               target=_blank>$name</a>
                <a href='status.php?uuid=$uuid' target=_blank>
 	       <span class='pull-right glyphicon glyphicon-eye-open'>
                </span></a>";
@@ -154,7 +136,7 @@ function Do_ExperimentList()
         $blob["uuid"]           = $uuid;
         $blob["name"]           = $namefrag;
         $blob["project"]        = $pidfrag;
-        $blob["cluster"]        = $cluster;
+        $blob["cluster"]        = $row["clusters"];
         $blob["pcount"]         = $pcount;
         $blob["phours"]         = $phours;
         $blob["vcount"]         = $vcount;
@@ -182,7 +164,8 @@ function Do_ExperimentList()
         if ($portal == $PORTAL_GENESIS) {
             $filters[] = "portal";
         }
-        if (time() - strtotime($created) > (45 * 24 * 3600)) {
+        if ($created &&
+            time() - strtotime($created) > (45 * 24 * 3600)) {
             $filters[] = "old";
         }
         $blob["filter"] = implode(",", $filters);
@@ -264,8 +247,7 @@ function Do_ExperimentErrors()
             # If there is a log file, show that instead.
             #
             if ($logfileid) {
-                $url = $TBBASE . "/" .
-                    CreateURL("spewlogfile", "logfile", $logfileid);
+                $url = "spewlogfile.php?logfile=${logfileid}";
             }
         }
         elseif (preg_match("/^(https:.*)\/showslicepub/", $url, $matches)) {
@@ -294,7 +276,7 @@ function Do_ExperimentErrors()
 }
 
 #
-# Search for an IP.
+# Search for an IP (and now also a pnode)
 #
 function Do_SearchIP()
 {
@@ -305,14 +287,15 @@ function Do_SearchIP()
     if (CheckPageArgs()) {
         return;
     }
-    $ip = $ajax_args["ip"];
-    if (! preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/', $ip)) {
-	SPITAJAX_ERROR(-1, "Bad IP address");
+    $token = $ajax_args["ip"];
+    if (! (TBvalid_IP($token) || TBvalid_node_id($token))) {
+        SPITAJAX_ERROR(-1, "Invalid search token");
         return;
     }
     $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC($this_uid, "nobody",
-		     "websearchip -t " . $webtask->task_id() . " $ip",
+		     "websearchip -t " .
+                        $webtask->task_id() . " " . escapeshellarg($token),
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     
@@ -327,9 +310,9 @@ function Do_SearchIP()
         $webtask->Delete();
         return;
     }
-    $uuid = $webtask->TaskValue("instance");
+    $list = $webtask->TaskValue("instancelist");
     $webtask->Delete();
-    SPITAJAX_RESPONSE($uuid);
+    SPITAJAX_RESPONSE($list);
 }
 
 #

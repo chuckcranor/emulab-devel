@@ -15,6 +15,10 @@ $(function ()
 	// Fetch spewlogfile via AJAX call
 	var xhr = new XMLHttpRequest();
 
+	// Remember the current scrollTop to indicate if the user has
+	// moved the scroll since the last time data came in.
+	var scrollTop = 0;
+
 	// Every time new data comes in or the state variable changes,
 	// this function is invoked.
 	xhr.onreadystatechange = function ()
@@ -27,15 +31,13 @@ $(function ()
 		var newText = xhr.responseText.substr(lastIndex);
 		lastIndex = xhr.responseText.length;
 
-		var scrollHeight = $('body')[0].scrollHeight;
-		var scrollTop    = $(window).scrollTop();
-		var innerHeight  = window.innerHeight;
-		var shouldScroll = scrollHeight - innerHeight === scrollTop;
+		var newScrollTop = $(window).scrollTop();
 
 		$('pre').append(_.escape(newText));
 
-		if (shouldScroll) {
+		if (scrollTop == newScrollTop) {
 		    $(window).scrollTop(1000000);
+		    scrollTop = $(window).scrollTop();
 		}
             }
 	    //

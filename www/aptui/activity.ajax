@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -99,25 +99,6 @@ function Do_Search()
             return;
         }
     }
-    $whereclause = "";
-
-    if (isset($target_project)) {
-        $target_idx   = $target_project->pid_idx();
-        $whereclause = "where h.pid_idx='$target_idx'";
-    }
-    elseif (isset($target_user)) {
-        $target_idx  = $target_user->idx();
-        $whereclause = "where h.creator_idx='$target_idx'";
-    }
-    if (isset($ajax_args["portalonly"])) {
-        if ($whereclause != "") {
-            $whereclause = "$whereclause and ";
-        }
-        else {
-            $whereclause = "where ";
-        }
-        $whereclause .= "servername='$APTHOST' ";
-    }
     if (!(isset($ajax_args["min"]) && isset($ajax_args["max"]))) {
         SPITAJAX_ERROR(1, "Must provide min and max");
         return;
@@ -136,21 +117,35 @@ function Do_Search()
     if ($isadmin && isset($ajax_args["IP"])) {
         return SearchForIP($ajax_args["IP"], $min, $max);
     }
-    if ($whereclause != "") {
-        $whereclause = "$whereclause and ";
+    $clauses = array();
+
+    # And these are noise.
+    $clauses[] = "h.pid != 'PMonitor'";
+
+    if (isset($target_project)) {
+        $target_idx = $target_project->pid_idx();
+        $clauses[]  = "h.pid_idx='$target_idx'";
     }
-    else {
-        $whereclause = "where ";
+    elseif (isset($target_user)) {
+        $target_idx = $target_user->idx();
+        $clauses[]  = "h.creator_idx='$target_idx'";
+    }
+    if (isset($ajax_args["portalonly"])) {
+        $clauses[] = "servername='$APTHOST' ";
     }
     if (isset($min)) {
-        $whereclause .= "UNIX_TIMESTAMP(h.started) > $min ";
-        if (isset($max)) {
-            $whereclause .= "and ";
-        }
+        $clauses[] = "UNIX_TIMESTAMP(h.started) > $min";
     }
     if (isset($max)) {
-        $whereclause .= "UNIX_TIMESTAMP(h.started) < $max ";
+        $clauses[] = "UNIX_TIMESTAMP(h.started) < $max";
     }
+    if (count($clauses)) {
+        $whereclause = "where " . join(" and ", $clauses);
+    }
+    else {
+        $whereclause = "";
+    }
+
     $query_result =
         DBQueryFatal("select h.uuid,h.profile_version,h.created, ".
                  "    h.started,h.destroyed,h.servername, ".
@@ -161,10 +156,13 @@ function Do_Search()
                  "      ((UNIX_TIMESTAMP(h.destroyed) - ".
                  "        UNIX_TIMESTAMP(h.started)) / 3600.0),2) as phours, ".
                  "    GROUP_CONCAT(aa.abbreviation) as clusters, ".
-                 "    GROUP_CONCAT(aa.nickname) as nicknames ".
+                 "    GROUP_CONCAT(aa.nickname) as nicknames, ".
+                 "    fa.uuid as failed,fa.exitmessage as failure_reason ".
 		 "  from apt_instance_history as h ".
                  "left join apt_instance_aggregate_history as ia ".
                  "     on ia.uuid=h.uuid ".
+                 "left join apt_instance_failures as fa ".
+                 "     on fa.uuid=h.uuid ".
                  "left join apt_aggregates as aa on aa.urn=ia.aggregate_urn ".
 		 "left join apt_profile_versions as p on ".
 		 "     p.profileid=h.profile_id and ".
@@ -172,6 +170,12 @@ function Do_Search()
 		 "left join geni.geni_users as u on u.uuid=h.creator_uuid ".
                  $whereclause . " " .
 		 "group by h.uuid order by h.started desc");
+
+    if (mysql_num_rows($query_result) > 15000) {
+        SPITAJAX_ERROR(1, "Too much data, please narrow the date range. ".
+                       "3-4 months is typically okay.");
+        return;
+    }
 
     while ($row = mysql_fetch_array($query_result)) {
         if ($aggregate &&
@@ -193,6 +197,9 @@ function Do_Search()
         $phours    = $row["phours"];
         $portal    = $portals[$row["servername"]];
         $clusters  = $row["clusters"];
+        $failed    = $row["failed"];
+        $errormsg  = $row["failure_reason"];
+        
         # Backwards compat.
         if (!isset($pproj)) {
             $pproj = "";
@@ -213,27 +220,28 @@ function Do_Search()
 	$instance =
             array($pname, $pproj, $puuid, $pcount, $vcount,
                   $creator, $started, $destroyed, $phours, $iname,
-                  $uuid, $created, $portal, $clusters);
+                  $uuid, $created, $portal, $clusters, $failed, $errormsg);
                           
 	$results[] = $instance;
     }
     SPITAJAX_RESPONSE($results);    
 }
 
-function SearchForIP($ip, $min, $max)
+# This now takes a pnode name too
+function SearchForIP($token, $min, $max)
 {
     global $this_user, $portals, $urn_mapping;
     $this_uid = $this_user->uid();
     $results = array();
     
-    if (!preg_match("/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/", $ip)) {
-        SPITAJAX_ERROR(1, "Invalid IP");
+    if (! (TBvalid_IP($token) || TBvalid_node_id($token))) {
+        SPITAJAX_ERROR(1, "Invalid search token");
         return;
     }
     $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC($this_uid, "nobody",
 		     "websearchip -t " . $webtask->task_id() .
-                     " -s $min -e $max -b $ip",
+                     " -s $min -e $max -b " . escapeshellarg($token),
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     
@@ -248,17 +256,16 @@ function SearchForIP($ip, $min, $max)
         $webtask->Delete();
         return;
     }
-    $current   = $webtask->TaskValue("instance");
-    $instances = $webtask->TaskValue("instancelist");
+    $current = $webtask->TaskValue("instancelist");
+    $history = $webtask->TaskValue("historylist");
     $webtask->Delete();
 
-    if ($current) {
+    foreach ($current as $uuid) {
         #
         # This is a bit hokey, but it lets us show a current experiment
         # in the activity list when searching for an IP, which is handy.
         #
         $instance = Instance::Lookup($current);
-        error_log("foo: $min, $max, " . strtotime($instance->started()));
         if ($instance &&
             (strtotime($instance->started()) > $min &&
              strtotime($instance->started()) < $max)) {
@@ -272,7 +279,7 @@ function SearchForIP($ip, $min, $max)
             $pcount    = $instance->physnode_count();
             $vcount    = $instance->virtnode_count();
             $portal    = $portals[$instance->servername()];
-            $phours    = round(pcount *
+            $phours    = round($pcount *
                                ((time() -
                                  strtotime($instance->created())) / 3600.0));
 
@@ -308,7 +315,7 @@ function SearchForIP($ip, $min, $max)
         }
     }
 
-    foreach ($instances as $uuid) {
+    foreach ($history as $uuid) {
         $instance = InstanceHistory::Lookup($uuid);
         if (!$instance) {
             continue;
@@ -322,7 +329,7 @@ function SearchForIP($ip, $min, $max)
         $pcount    = $instance->physnode_count();
         $vcount    = $instance->virtnode_count();
         $portal    = $portals[$instance->servername()];
-        $phours    = round(pcount *
+        $phours    = round($pcount *
                            ((strtotime($instance->destroyed()) -
                              strtotime($instance->created())) / 3600.0));
 
@@ -335,7 +342,7 @@ function SearchForIP($ip, $min, $max)
         }
         $clusters = array();
         foreach ($instance->slivers() as $sliver) {
-            $abbreviation = $urn_mapping[$sliver["aggregate_urn"]];
+            $abbreviation = $urn_mapping[$sliver->aggregate_urn()];
             $clusters[]   = $abbreviation;
         }
         $clusters = join(",", $clusters);

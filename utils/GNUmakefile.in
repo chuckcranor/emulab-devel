@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,7 +36,7 @@ BIN_SCRIPTS	= delay_config sshtb create_image node_admin link_config \
 		  template_record spewevents \
 		  wbts_dump mkblob rmblob \
 		  showlease createlease deletelease modlease approvelease \
-		  extendlease createdataset grantlease
+		  extendlease createdataset grantlease tbremotecmdpower
 SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
                   eventping grantnodetype import_commitlog daemon_wrapper \
 		  opsreboot deletenode node_statewait grabwebcams \
@@ -57,13 +57,14 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  node_exclude managetaint shutdown-shared imagerelease \
 		  runsonxen pxelinux_makeconf attend atten \
 		  addrfdevice addrfpath reserve announce createimagealias \
-		  predict test-reserve notify-reservations \
+		  predict test-reserve notify-reservations check-reservations \
 		  deprecate_image pushrootkey addinterface addwire cnetwatch \
 		  powerlog checkipmi adddisk \
 		  addswitch addtypetoimages resutil addstack addnode \
 		  processhwinfo cnetwatch_disable mksysproj mksysexp \
-		  certbot_renew certbot_authhook addnodeattribute signurl logfile \
-		  modportvlan flashnode
+		  certbot_renew certbot_authhook addnodeattribute signurl \
+		  logfile node_servicelogs \
+		  modportvlan flashnode pruneprojects ceph_control
 
 WEB_SBIN_SCRIPTS= webnewnode webdeletenode webspewconlog webarchive_list \
                   webspewimage webdumpdescriptor webemulabfeature \
@@ -82,10 +83,11 @@ CTRLSBIN_SCRIPTS= opsdb_control.proxy daemon_wrapper ec2import.proxy \
 SBSBIN_SCRIPTS=   daemon_wrapper subboss_cacheclean
 
 # These scripts installed setuid, with sudo. 
-SETUID_BIN_SCRIPTS   = create_image
+SETUID_BIN_SCRIPTS   = create_image tbremotecmdpower
 SETUID_SBIN_SCRIPTS  = grabwebcams checkquota spewconlog opsdb_control suchown \
                        readblob image_import delete_image node_top flashnode \
-                       pxelinux_makeconf imageinfo image_import-new pushrootkey
+                       pxelinux_makeconf imageinfo image_import-new \
+		       node_servicelogs pushrootkey ceph_control
 SETUID_LIBX_SCRIPTS  = tbsendmail
 SETUID_SUEXEC_SCRIPTS  = xlogin
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -73,6 +73,149 @@ function Do_GetWirelessStatus()
     header("Access-Control-Allow-Origin: *");
 
     SPITAJAX_RESPONSE($status);
+}
+
+#
+# A new call for new powder frontpage.
+#
+function Do_GetPowderStats()
+{
+    $status     = array();
+
+    # Allow this to be fetched from pages loaded anywhere
+    header("Access-Control-Allow-Origin: *");
+
+    #
+    # Bus route info
+    #
+    $query_result =
+        DBQueryWarn("select count(b.busid) as count,r.description ".
+                    "    from apt_mobile_aggregates as a ".
+                    "join apt_mobile_buses as b on b.urn=a.urn ".
+                    "join apt_aggregates as aa on aa.urn=a.urn ".
+                    "join apt_mobile_bus_routes as r on ".
+                    "     r.routeid=b.routeid ".
+                    "where aa.disabled=0 ".
+                    "group by b.routeid,r.description");
+    $blob = array();
+    while ($row = mysql_fetch_array($query_result)) {
+        $description = $row["description"];
+
+        $blob[$description] = array(
+            "count" => $row["count"],
+        );
+    }
+    $status["routes"] = $blob;
+
+    #
+    # Paired radios
+    #
+    $query_result =
+        DBQueryWarn("select n.node_id,r.node_id as inuse from nodes as n ".
+                    "left join reserved as r on ".
+                    "     r.node_id=n.node_id ".
+                    "where n.node_id like '%wb%'");
+    $avail = array();
+    while ($row = mysql_fetch_array($query_result)) {
+        $avail[$row["node_id"]] = $row["inuse"];
+    }
+    
+    $blob = array(
+        "count" => 2,
+        "avail" => 0,
+    );
+    if (! ($avail["oai-wb-a1"] || $avail["oai-wb-a2"])) {
+        $blob["avail"]++;
+    }
+    if (! ($avail["oai-wb-b1"] || $avail["oai-wb-b2"])) {
+        $blob["avail"]++;
+    }
+    $status["paired"] = $blob;
+
+    #
+    # OTA (indoor) nucs and radios
+    #
+    $query_result =
+        DBQueryWarn("select n.node_id,r.node_id as inuse from nodes as n ".
+                    "left join reserved as r on ".
+                    "     r.node_id=n.node_id ".
+                    "where n.node_id like 'ota-nuc%' or ".
+                    "      n.node_id like 'ota-x310%'");
+    $blob = array(
+        "nucs" => array(
+            "count" => 0,
+            "avail" => 0,
+        ),
+        "x310s" => array(
+            "count" => 0,
+            "avail" => 0,
+        ),
+    );
+    while ($row = mysql_fetch_array($query_result)) {
+        $node_id = $row["node_id"];
+        $inuse   = $row["inuse"];
+
+        if (preg_match("/nuc/", $node_id)) {
+            $blob["nucs"]["count"]++;
+            if (!$inuse) {
+                $blob["nucs"]["avail"]++;
+            }
+        }
+        else {
+            $blob["x310s"]["count"]++;
+            if (!$inuse) {
+                $blob["x310s"]["avail"]++;
+            }
+        }
+    }
+    $status["OTA"] = $blob;
+
+    SPITAJAX_RESPONSE($status);
+}
+
+#
+# Return portal paper list
+#
+function Do_GetPaperList()
+{
+    global $PORTAL_GENESIS;
+    $result = array();
+
+    # Allow this to be fetched from pages loaded anywhere
+    header("Access-Control-Allow-Origin: *");
+
+    $query_result =
+        DBQueryFatal("select * from ( ".
+                     " (select p.pubdate,p.url,p.title,p.authors,p.pubname ".
+                     "    from scopus_paper_info as p ".
+                     "  where p.cites='$PORTAL_GENESIS' and p.uses='yes' ".
+                     "  order by p.pubdate desc limit 10) ".
+                     " union all ".
+                     " (select p.pubdate,p.url,p.title,p.authors,p.pubname ".
+                     "    from other_paper_info as p ".
+                     "  where p.cites='$PORTAL_GENESIS' and p.uses='yes' ".
+                     "  order by p.pubdate desc limit 10) ".
+                     ") pp order by pp.pubdate desc limit 5");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $blob[] = $row;
+    }
+
+    $query_result =
+        DBQueryFatal("select count(*) from scopus_paper_info as p ".
+                     "where p.cites='$PORTAL_GENESIS' and p.uses='yes'");
+    $row = mysql_fetch_array($query_result);
+    $count = $row[0];
+
+    $query_result =
+        DBQueryFatal("select count(*) from other_paper_info ".
+                     "where cites='$PORTAL_GENESIS' and uses='yes'");
+    $row = mysql_fetch_array($query_result);
+    $count += $row[0];
+    
+    $result["papers"] = $blob;
+    $result["uses"] = $count;
+    SPITAJAX_RESPONSE($result);
 }
 
 # Local Variables:

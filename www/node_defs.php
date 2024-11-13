@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -196,6 +196,7 @@ class Node
     function reservation_name() {return $this->field("reservation_name"); }
     function taint_states() {return $this->field("taint_states"); }
     function reservable() {return $this->field("reservable"); }
+    function inception() {return $this->field("inception"); }
 
     function def_boot_image() {
 	return Image::Lookup($this->def_boot_osid(),
@@ -473,6 +474,16 @@ class Node
             return null;
         }
         $row = mysql_fetch_array($query_result);
+        $power_id = $row["power_id"];
+
+        #
+        # If the power_id is not an actual node, it is probably
+        # ipmi, ilo, etc. 
+        #
+        $node = Node::Lookup($power_id);
+        if (!$node) {
+            unset($row["outlet"]);
+        }
         return $row;
     }
 
@@ -1675,10 +1686,11 @@ class Node
     #
     # Get interface/switch related info for the node. 
     #
-    function GetInterfaceInfo($iface = null)
+    function GetInterfaceInfo($iface = null, $restricted = false)
     {
         $node_id = $this->node_id();
         $blob = array();
+        global $TBBASE;
 
         if (!($this->role() == "testswitch" || $this->role() == "ctrlswitch")) {
             $clause = ($iface ? "and i.iface='$iface'" : "");
@@ -1747,7 +1759,8 @@ class Node
                          "       i1.role as irole1,i1.interface_type as itype1,".
                          "       i2.role as irole2,i2.interface_type as itype2,".
                          "       t1.isswitch as isswitch1,".
-                         "       t2.isswitch as isswitch2 ".
+                         "       t2.isswitch as isswitch2, ".
+                         "       r1.pid,r1.eid,r1.exptidx,i1.IP ".
                          "  from wires as w ".
                          "left join interfaces as i1 on ".
                          "     i1.node_id=w.node_id1 and i1.iface=w.iface1 ".
@@ -1757,6 +1770,7 @@ class Node
                          "left join node_types as t1 on t1.type=n1.type ".
                          "left join nodes as n2 on n2.node_id=w.node_id2 ".
                          "left join node_types as t2 on t2.type=n2.type ".
+                         "left join reserved as r1 on r1.node_id=w.node_id1 ".
                          "where w.node_id1='$node_id' or w.node_id2='$node_id' ".
                          "order by w.iface1");
     
@@ -1774,6 +1788,17 @@ class Node
             $info["card1"]         = $row["card1"];
             $info["port1"]         = $row["port1"];
             $info["isswitch1"]     = $row["isswitch1"] == 1 ? true : false;
+            if ($row["IP"] && !$restricted) {
+                $pid = $row["pid"];
+                $eid = $row["eid"];
+                $url = "$TBBASE/showexp.php3?pid=$pid&eid=$eid";
+                
+                $info["pid"]           = $row["pid"];
+                $info["eid"]           = $row["eid"];
+                $info["exptidx"]       = $row["exptidx"];
+                $info["IP"]            = $row["IP"];
+                $info["url"]           = $url;
+            }
         
             $info["node_id2"]      = $row["node_id2"];
             $info["iface2"]        = $row["iface2"];

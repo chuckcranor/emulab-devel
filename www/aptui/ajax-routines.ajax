@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,7 +56,7 @@ function ClassicExperimentList($which, $target, $state = "active")
         $joinclause  = "left join experiment_stats as s on s.exptidx=e.idx ".
         "left join apt_instances as i on i.slice_uuid=s.slice_uuid";
         $whereclause = "where ((e.pid!='emulab-ops' and e.geniflags=0) or ".
-        "(e.geniflags=1 and i.slice_uuid=s.slice_uuid is null))";
+        "(e.geniflags!=0 and i.slice_uuid=s.slice_uuid is null))";
     }
     else {
         $target_pid = $target->pid();
@@ -148,6 +148,7 @@ function ExperimentList($which, $target)
         $extraclause = "left join group_membership as g on ".
                        "     g.uid_idx='$target_idx' and  ".
                        "     g.pid_idx=a.pid_idx and " .
+                       "     g.pid_idx=g.gid_idx and " .
                        "     g.trust!='$trust_none' ";
     }
     else {
@@ -163,20 +164,19 @@ function ExperimentList($which, $target)
                      "  truncate(a.physnode_count * ".
                      "   ((UNIX_TIMESTAMP(now()) - ".
                      "     UNIX_TIMESTAMP(a.started)) / 3600.0),2) as phours, ".
-                     " IFNULL(aggs.count,0) as aggrows, ".
-                     " agg.aggregate_urn as aggrow_urn".
-                     "  from apt_instances as a ".
-                     "left join (".
-                     "    select uuid, COUNT(*) AS count ".
-                     "    from apt_instance_aggregates group by uuid) AS aggs ".
-                     "  on aggs.uuid=a.uuid ".
+                     "  GROUP_CONCAT(aa.abbreviation) as clusters ".
+                     " from apt_instances as a ".
                      "left join apt_instance_aggregates as agg ".
-                     "     on agg.uuid=a.uuid ".
+                     "     on agg.uuid=a.uuid and agg.status!='terminated' ".
+                     "left join apt_aggregates as aa on ".
+                     "     aa.urn=agg.aggregate_urn ".
                      "left join geni.geni_slices as s on ".
                      "     s.uuid=a.slice_uuid ".
                      "left join geni.geni_users as u on u.uuid=a.creator_uuid ".
                      "$extraclause ".
-                     "$whereclause");
+                     "$whereclause ".
+                     "group by a.uuid ".
+                     "order by a.name");
 
     while ($row = mysql_fetch_array($query_result)) {
         $profile_id   = $row["profile_id"];
@@ -227,24 +227,7 @@ function ExperimentList($which, $target)
         else {
             $blob["profile_name"] = $profile_name;
         }
-        
-        #
-        # If arows non-zero, then we use that for aggregate_urn,
-        # and if its more then 1, we need to consume the extras rows
-        # to get the rest of the aggregate urns.
-        #
-        if ($row["aggrows"] > 0) {
-            $cluster = $urn_mapping[$row["aggrow_urn"]];
-
-            for ($i = 1; $i < $row["aggrows"]; $i++) {
-                $row = mysql_fetch_array($query_result);
-                $cluster .= "," . $urn_mapping[$row["aggrow_urn"]];
-            }
-        }
-        else {
-            $cluster = $urn_mapping[$row["aggregate_urn"]];
-        }
-        $blob["cluster"] = $cluster;
+        $blob["cluster"] = $row["clusters"];
         $blob["name"] = "<a href='status.php?uuid=$uuid'>$name</a>";
         $blob["project"] = "<a href='show-project.php?project=$pid'>$pid</a>";
         $blob["pcount"]   = $pcount;
@@ -330,7 +313,6 @@ function ProfileListAux($query_result)
         $version = $row["version"];
         $name    = $row["name"];
         $pid     = $row["pid"];
-        $desc    = $row["description"];
         $created = DateStringGMT($row["created"]);
         $last_use= DateStringGMT($row["last_use"]);
         $public  = $row["public"];
@@ -344,13 +326,16 @@ function ProfileListAux($query_result)
         if (!$profile) {
             continue;
         }
-        $parsed_xml = simplexml_load_string($rspec);
-        if ($parsed_xml &&
-            $parsed_xml->rspec_tour && $parsed_xml->rspec_tour->description) {
-            $desc = $parsed_xml->rspec_tour->description;
-            # Convert to array to get the one element. 
-            $desc = (array)$desc;
-            $desc = $desc[0];
+        if ($rspec) {
+            $parsed_xml = simplexml_load_string($rspec);
+            if ($parsed_xml &&
+                $parsed_xml->rspec_tour &&
+                $parsed_xml->rspec_tour->description) {
+                $desc = $parsed_xml->rspec_tour->description;
+                # Convert to array to get the one element. 
+                $desc = (array)$desc;
+                $desc = $desc[0];
+            }
         }
         $blob = array();
         $blob["profile_name"] = $name;
@@ -543,7 +528,9 @@ function ClassicImageList($target)
     $results    = array();
 
     $query =
-           "select distinct i.imagename,iv.*,ov.* from images as i ".
+           "select distinct i.imagename,iv.*,ov.*, ".
+           # We want to use image description.
+           "    iv.description as description from images as i ".
            "left join image_versions as iv on ".
            "          iv.imageid=i.imageid and iv.version=i.version ".
            "left join os_info_versions as ov on ".

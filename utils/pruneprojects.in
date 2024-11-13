@@ -1,0 +1,147 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2003-2022 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Date::Parse;
+
+#
+# Show some logfile table stuff.
+#
+sub usage()
+{
+    print STDERR "Usage: pruneprojects [-nd] <older then date>\n";
+    print STDERR "Options:\n";
+    print STDERR " -n       - Impotent mode; just say what will happen.\n";
+    exit(-1);
+}
+my $optlist   = "nd";
+my $debug     = 0;
+my $impotent  = 0;
+
+# Protos
+sub fatal($);
+
+#
+# Configure variables
+#
+my $TB          = "@prefix@";
+my $RMPROJ      = "$TB/sbin/rmproj";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use emdb;
+use emutil;
+use User;
+use Project;
+use emutil;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:/usr/local/bin";
+
+#
+# Parse command arguments. 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{'n'})) {
+    $impotent = 1;
+}
+if (defined($options{'d'})) {
+    $debug = 1;
+}
+usage()
+    if (!@ARGV);
+
+my $cutoff = str2time($ARGV[0]);
+if (!$cutoff) {
+    fatal("Could not parse cutoff time");
+}
+
+# Map invoking user to object.
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+
+#
+# Figure out who called us. Must have admin status to do this.
+#
+if (!$this_user->IsAdmin()) {
+    fatal("You must be a TB administrator to run this script!");
+}
+
+my $query_result =
+    DBQueryFatal("select pid_idx from projects ".
+		 "where approved=0 and ".
+		 "      created < FROM_UNIXTIME($cutoff) ".
+		 "order by created asc");
+while (my ($pid_idx) = $query_result->fetchrow_array()) {
+    my $project = Project->Lookup($pid_idx);
+    next
+	if (!defined($project));
+
+    my $created = $project->created();
+    my $pid     = $project->pid();
+    
+    if ($impotent) {
+	print "Would delete project $pid, created $created\n";
+	next;
+    }
+    print "Deleting project $pid, created $created\n";
+    if ($debug) {
+	system("$RMPROJ -s -l $pid");
+    }
+    else {
+	my $output = emutil::ExecQuiet("$RMPROJ -s -l $pid");
+	if ($?) {
+	    print STDERR $output;
+	}
+    }
+    if ($?) {
+	fatal("Failed to delete project $pid");
+    }
+}
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
+
+

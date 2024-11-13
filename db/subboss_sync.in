@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@ my $RSYNC = 'rsync';
 
 my $RSYNC_OPTS = "-W -u -av --delete --force";
 
-my @excludes=qw#cisco-config/ cisco-config. hp-config/ OLD/ tmp/ proj/ switch-backup#;
+my @excludes=qw#cisco-config/ cisco-config. dell/ hp-config/ OLD/ tmp/ proj/ switch-backup#;
 my @includes=qw##;
 
 #
@@ -106,7 +106,7 @@ $cmdline .= " -e ssh /tftpboot/";
 # other than the IP for boss.
 $query_result =
     DBQueryWarn("select distinct subboss_id from subbosses ".
-		"where service='tftp'");
+		"where service='tftp' and disabled=0");
 if (!$query_result) {
     fatal("Could not subboss data from DB!");
 }

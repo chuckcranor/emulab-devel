@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
@@ -30,9 +33,11 @@ chdir("apt");
 include("quickvm_sup.php");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
+include_once("resgroup_defs.php");
 $page_title = "Experiment Status";
 $ajax_request = 0;
 $lazytopo = 0;
+$slowdown = 0;
 
 #
 # Get current user.
@@ -56,8 +61,7 @@ $isfadmin = 0;
 #
 $reqargs = OptionalPageArguments("uuid",      PAGEARG_UUID,
                                  "slice_uuid",PAGEARG_UUID,
-                                 "maxextend", PAGEARG_INTEGER,
-				 "oneonly",   PAGEARG_BOOLEAN);
+                                 "maxextend", PAGEARG_INTEGER);
 
 if (! (isset($uuid) || isset($slice_uuid))) {
     SPITHEADER(1);
@@ -108,7 +112,7 @@ if (!$instance) {
 }
 
 #
-# When coming her via the slice_uuid, we want to flip over to the
+# When coming here via the slice_uuid, we want to flip over to the
 # correct portal. Hacky.
 #
 if ($TBMAINSITE && isset($slice_uuid) &&
@@ -179,6 +183,10 @@ $cansnapshot     = ((isset($this_user) &&
 $canterminate    = ((isset($this_user) &&
                      $instance->CanTerminate($this_user)) ||
                     ISADMIN() ? 1 : 0);
+$canmodify       = ((FeatureEnabled("ModifyExperiment",
+                                   $creator, $instance->Group()) &&
+                     $this_user->idx() == $creator->idx()) ||
+                    ISADMIN() ? 1 : 0);
 $cancopy_profile   = 0;
 $canclone_profile  = 0;
 $canupdate_profile = 0;
@@ -202,9 +210,7 @@ if ($profile = Profile::Lookup($instance->profile_id(),
     }
     $isscript = ($profile->script() && $profile->script() != "" ? 1 : 0);
 }
-$registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
-$oneonly         = (isset($oneonly) && $oneonly ? 1 : 0);
 $isadmin         = (ISADMIN() ? 1 : 0);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
 $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
@@ -218,17 +224,24 @@ $wholedisk       = FeatureEnabled("WholeDiskImage",$creator,$instance->Group());
 #}
 #$cansnap = 0;
 
-if ($instance->pid() == "OAI2021FallWS") {
+if ($instance->pid() == $TUTORIALPID && !$isadmin) {
     $lazytopo = 1;
+    $slowdown = 1;
+}
+#
+# Classes can really pound the web interface, so we slow the polling for
+# for those projects as well. 
+#
+if ($instance->Project()->forClass() && !$isadmin) {
+    $slowdown = 1;
 }
 
 #
-# We give ssh to the creator (real user or guest user).
+# We give ssh to the creator and project members. Only the creator
+# gets the VNC option (if the profile started it).
 #
-$dossh =
-    (((isset($this_user) && $instance->CanDoSSH($this_user)) ||
-      (isset($_COOKIE['quickvm_user']) &&
-       $_COOKIE['quickvm_user'] == $creator->uuid())) ? 1 : 0);
+$dossh = $instance->CanDoSSH($this_user);
+$dovnc = $instance->CanDoVNC($this_user);
 
 #
 # See if we have a task running in the background for this instance.
@@ -249,11 +262,8 @@ if ($instance_status == "imaging") {
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/nv.d3.css'>\n";
-
-echo "<link rel='stylesheet'
-            href='css/frequency-graph.css'>\n";
+echo "<link rel='stylesheet' href='css/nv.d3.css'>\n";
+echo "<link rel='stylesheet' href='css/frequency-graph.css'>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='status-body'></div>\n";
@@ -266,7 +276,6 @@ if (isset($this_user)) {
 else {
     echo "  window.APT_OPTIONS.thisUid = '" . $creator_uid . "';\n";
 }
-echo "  window.APT_OPTIONS.registered = $registered;\n";
 echo "  window.APT_OPTIONS.isadmin = $isadmin;\n";
 echo "  window.APT_OPTIONS.isfadmin = $isfadmin;\n";
 echo "  window.APT_OPTIONS.isstud = $isstud;\n";
@@ -276,12 +285,14 @@ echo "  window.APT_OPTIONS.canupdate_profile = $canupdate_profile;\n";
 echo "  window.APT_OPTIONS.cancopy_profile = $cancopy_profile;\n";
 echo "  window.APT_OPTIONS.canterminate = $canterminate;\n";
 echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
+echo "  window.APT_OPTIONS.canmodify = $canmodify;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";
 echo "  window.APT_OPTIONS.hidelinktest = false;\n";
-echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
 echo "  window.APT_OPTIONS.dossh = $dossh;\n";
+echo "  window.APT_OPTIONS.dovnc = $dovnc;\n";
 echo "  window.APT_OPTIONS.isscript = $isscript;\n";
 echo "  window.APT_OPTIONS.lazytopo = $lazytopo;\n";
+echo "  window.APT_OPTIONS.slowdown = $slowdown;\n";
 echo "  window.APT_OPTIONS.AJAXURL = 'server-ajax.php';\n";
 if (isset($maxextend) && $maxextend != "") {
     # Assumed to be hours.
@@ -292,43 +303,48 @@ else {
 }
 # Temporary feature for webssh
 $webssh = $this_user->DoWebSSH();
-echo "  window.APT_OPTIONS.webssh = $webssh;\n";    
+echo "  window.APT_OPTIONS.webssh = $webssh;\n";
 
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
 echo "<script src='js/lib/d3.v5.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";
-echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 echo "<script src='js/lib/filesize.min.js'></script>\n";
 
+
 REQUIRE_UNDERSCORE();
 REQUIRE_MOMENT();
-REQUIRE_TABLESORTER();
-if (!$lazytopo) {
-    REQUIRE_JACKS();
-}
+REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
 REQUIRE_IMAGE();
 REQUIRE_EXTEND();
 REQUIRE_IDLEGRAPHS();
 REQUIRE_OPENSTACKGRAPHS();
-REQUIRE_CONTEXTMENU();
 REQUIRE_SUP();
+REQUIRE_TOPOLOGY_VIEWER();
+REQUIRE_JQUERY_UI();
+
+AddTemplate("image-picker-modal");
+AddTemplate("ppform-wizard");
+AddLibrary("js/ppwizardstart.js");
+AddLibrary("js/powder-types.js");
+AddLibrary("js/instantiate-common.js");
+
 AddLibrary("js/bindings.js");
 AddLibrary("js/paramsets.js");
 if ($ISPOWDER) {
     AddLibrary("js/freqgraphs.js");
+    AddLibrary("js/txgraph.js");
     AddLibrary("js/lib/pako/pako.min.js");
 }
 SPITREQUIRE("js/status.js");
 
-echo "<link rel='stylesheet'
-            href='css/jquery-ui-1.10.4.custom.min.css'>\n";
 # For progress bubbles in the imaging modal.
 echo "<link rel='stylesheet' href='css/progress.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
+echo "<link rel='stylesheet' href='css/instantiate.css'>\n";
 
 #
 # Build up a blob of all aggregates for this portal. We need the entire
@@ -347,22 +363,16 @@ foreach ($instance->slivers() as $sliver) {
         $aggregates[$aggregate_urn] = $aggregate;
     }
 }
-$blob = array();
 
-foreach ($aggregates as $aggregate) {
-    $aggregate_urn = $aggregate->urn();
-    $weburl        = $aggregate->weburl();
+$prunelist = Instance::NodeTypePruneList(null, true);
+echo "<script type='text/plain' id='prunelist-json'>\n";
+echo htmlentities(json_encode($prunelist));
+echo "</script>\n";
 
-    $blob[$aggregate_urn] =
-        array("weburl"       => $weburl,
-              "name"         => $aggregate->name(),
-              "nickname"     => $aggregate->nickname(),
-              "abbreviation" => $aggregate->abbreviation(),
-              "ismobile"     => $aggregate->ismobile(),
-              "isFE"         => $aggregate->isFE());
-}
-echo "<script type='text/plain' id='amlist-json'>\n";
-echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
+SpitAggregateStatus(true, $this_user, $aggregates);
+$multisite = (isset($this_user) && ($ISCLOUD || $ISPOWDER) ? 1 : 0);
+echo "<script type='text/javascript'>\n";
+echo "    window.MULTISITE  = $multisite;\n";
 echo "</script>\n";
 
 #
@@ -388,11 +398,20 @@ if (isset($this_user)) {
     echo "</script>\n";
 }
 
+# Current and Future reservations for the cluster picker during modify
+$project = $instance->Project();
+$resinfo = ReservationGroup::ReservationInfo(
+    array($project->pid() => $project), $this_user);
+echo "<script type='text/plain' id='resgroup-json'>\n";
+echo htmlentities(json_encode($resinfo, JSON_NUMERIC_CHECK));
+echo "</script>\n";
+
 AddTemplateList(array("status", "waitwait-modal", "oops-modal",
-                      "register-modal", "terminate-modal", "oneonly-modal",
+                      "terminate-modal",
                       "approval-modal", "linktest-modal",
                       "destroy-experiment", "save-paramset-modal",
-                      "prestage-table", "frequency-graph"));
+                      "prestage-table", "frequency-graph", "txgraph",
+                      "picker-template", "instantiate-templates"));
 
 AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();

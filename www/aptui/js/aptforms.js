@@ -23,6 +23,11 @@ $(function () {
 		    var wrapper = $("<div id='form-wrapper-" + key + "'>" +
 				    "</div>");
 
+		    // Temporary
+		    if (window.BOOTSTRAP_VERSION == 5) {
+			$(wrapper).addClass("mt-3");
+		    }
+
 		    // How do I just move the item into the wrapper?
 		    wrapper.append($(item).clone());
 		    $(item).after(wrapper);
@@ -37,7 +42,8 @@ $(function () {
 			var label = item.dataset['label'];
 			
 			wrapper.prepend("<label for='" + key + "' " +
-					"       class='control-label'> " +
+					"       class='control-label " +
+					"              col-form-label'> " +
 					_.escape(label) + '</label>');
 		    }
 		}
@@ -49,17 +55,22 @@ $(function () {
 	    var root   = $(html);
 	    var list   = root.find('.format-me');
 	    var wide   = (options && _.has(options, "wide") ? true : false);
-
+	    
 	    list.each(function (index, item) {
 		if (item.dataset) {
   		    var key = item.dataset['key'];
 		    var margin  = 15;
 		    var colsize = null;
+		    var form = $(item).closest("form");
 
 		    // Squeeze vertical space for this field.
 		    if (_.has(item.dataset, "compact")) {
 			margin = 0;
 		    }
+		    else if (_.has(item.dataset, "margin")) {
+			margin = item.dataset['margin'];
+		    }
+		    
 		    // Column size per row,
 		    if (_.has(item.dataset, "colsize")) {
 			colsize = item.dataset['colsize'];;
@@ -79,15 +90,28 @@ $(function () {
 				    "style='margin-bottom: " + margin +
 				    "px;'></div>");
 		    
+		    // Temporary
+		    if (window.BOOTSTRAP_VERSION == 5) {
+			$(wrapper).addClass("row");
+		    }
+		    
 		    /*
 		     * A normal placeholder can be used, but sometimes
 		     * we want both a placeholder in the input, and a
 		     * label outside of other text.
 		     */
 		    if (_.has(item.dataset, "label")) {
+			var labelsize = 3;
+			
+			// Label column size per row,
+			if (_.has(item.dataset, "labelsize")) {
+			    labelsize = item.dataset['labelsize'];;
+			}
+			
 			var label_text =
 			    "<label for='" + key + "' " +
-			    " class='col-sm-3 control-label' ";
+			    " class='col-sm-" + labelsize +
+			    "        control-label col-form-label' ";
 			if (_.has(item.dataset, "optional")) {
 			    label_text = label_text +
 				"style='padding-top: 0px;'";
@@ -100,8 +124,11 @@ $(function () {
 				"<a href='#' class='btn btn-xs' " +
 				" style='padding-right: 0px;' " +
 				" data-toggle='popover' " +
+				" data-bs-toggle='popover' " +
 				" data-html='true' " +
+				" data-bs-html='true' " +
 				" data-delay='{\"hide\":1000}' " +
+				" data-bs-delay='{\"hide\":1000}' " +
 				" data-content='" + item.dataset['help'] + "'>"+
 				"<span style='margin-bottom: 4px;' " +
 				"  class='glyphicon " +
@@ -110,12 +137,12 @@ $(function () {
 			}
 			if (_.has(item.dataset, "optional")) {
 			    label_text = label_text +
-				"<br><small>(Optional)</small>";
+				"<div><small>(Optional)</small></div>";
 			}
 			label_text = label_text + "</label>";
 			wrapper.append($(label_text));
 			if (!colsize) {
-			    colsize = (wide ? 9 : 6);
+			    colsize = (wide ? 12 : 9) - labelsize;
 			}
 		    }
 		    var innerdiv =
@@ -137,17 +164,22 @@ $(function () {
 	    $(form).find(".format-me").each(function () {
 		if (this.dataset) {
   		    var key = this.dataset['key'];
+		    var label =
+			$('<label id="label-error-' + key + '" ' +
+			  '  for="inputError">' + _.escape(errors[key]) +
+			  '</label>');
 
 		    if (errors && _.has(errors, key)) {
-			$(this).parent().addClass("has-error");
-
-			var html =
-			    '<label class="control-label" ' +
-			    '  id="label-error-' + key + '" ' +
-			    '  for="inputError">' + _.escape(errors[key]) +
-			    '</label>';
-			    
-			$(this).parent().append(html);
+			if (window.BOOTSTRAP_VERSION == 5) {
+			    $('#' + key).addClass("is-invalid");
+			    $(this).addClass("is-invalid");
+			    $(label).addClass("invalid-feedback text-start");
+			}
+			else {
+			    $(this).parent().addClass("has-error");
+			    $(label).addClass("control-label");
+			}
+			$(this).parent().append(label);
 			delete errors[key];
 		    }
 		}
@@ -191,15 +223,15 @@ $(function () {
 	var form_modified = false;
 	
 	function EnableUnsavedWarning(form, modified_callback) {
-	    $(form + ' :input').change(function () {
-		//console.info("changed");
+	    $(form + ' :input').not('.ignore-unsaved').change(function () {
+		console.info("changed");
 		if (modified_callback) {
 		    modified_callback();
 		}
 		form_modified = true;
 	    });
-	    $(form + ' :input').on("input", function () {
-		//console.info("changed");
+	    $(form + ' :input').not('.ignore-unsaved').on("input", function () {
+		console.info("on input");
 		if (modified_callback) {
 		    modified_callback();
 		}
@@ -226,11 +258,19 @@ $(function () {
 		if (this.dataset) {
   		    var key = this.dataset['key'];
 
-		    // Remove the error label by id, that we added above.
-		    if ($(this).parent().hasClass("has-error")) {
-			$(this).parent()
-			    .find('#' + 'label-error-' + key).remove();
-			$(this).parent().removeClass("has-error");
+		    if (window.BOOTSTRAP_VERSION == 5) {
+			if ($('#' + key).hasClass("is-invalid")) {
+		    	    $('#' + key).removeClass("is-invalid");
+			    $('#label-error-' + key).remove();
+			}
+		    }
+		    else {
+			// Remove the error label by id, that we added above.
+			if ($(this).parent().hasClass("has-error")) {
+			    $(this).parent()
+				.find('#' + 'label-error-' + key).remove();
+			    $(this).parent().removeClass("has-error");
+			}
 		    }
 		}
 	    });
@@ -291,7 +331,7 @@ $(function () {
 	/*
 	 * Submit form.
 	 */
-	function SubmitForm(form, route, method, callback, message, formfields){
+	function SubmitForm(form, route, method, callback, message, formfields, ajax_args){
 	    /*
 	     * Convert form data into formfields array, like all our
 	     * form handler pages expect.
@@ -299,11 +339,13 @@ $(function () {
 	    if (formfields === undefined) {
 		formfields  = {};
 	    }
+	    if (ajax_args === undefined) {
+		ajax_args = {};
+	    }
 	    var fields = $(form).serializeArray();
 	    $.each(fields, function(i, field) {
 		formfields[field.name] = field.value;
 	    });
-	    console.info("Submitform", formfields);
 	    var submit_callback = function(json) {
 		console.info("SubmitForm", json);
 		if (!json.code) {
@@ -313,14 +355,16 @@ $(function () {
 		    callback(json);
 		});
 	    };
-	    sup.ShowWaitWait(message);
-	    var xmlthing =
-		sup.CallServerMethod(null, route, method,
-				     {"formfields" : formfields,
-				      "checkonly"  : 0,
-				      "embedded"   : window.EMBEDDED,
-				     });
-	    xmlthing.done(submit_callback);
+	    ajax_args["formfields"] = formfields;
+	    ajax_args["checkonly"]  = 0;
+	    ajax_args["embedded"]   = window.EMBEDDED;
+	    console.info("Submitform args", ajax_args);	
+
+	    sup.ShowWaitWait(message, undefined, function () {
+		var xmlthing =
+		    sup.CallServerMethod(null, route, method, ajax_args);
+		xmlthing.done(submit_callback);
+	    });
 	}
 
 	// Exports from this module.

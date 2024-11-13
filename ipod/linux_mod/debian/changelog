@@ -1,3 +1,9 @@
+emulab-ipod-dkms (3.4.0-0) unstable; urgency=medium
+
+  * Default to workqueue restart on x86 if EFI enabled; make it dynamically configurable (3.4.0).
+
+ -- David M. Johnson <johnsond@flux.utah.edu>  Wed, 26 Apr 2023 12:20:23 -0700
+
 emulab-ipod-dkms (3.3.0-0) unstable; urgency=medium
 
   * Update Emulab IPOD kernel module DKMS version to 3.3.0.

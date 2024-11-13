@@ -1,3 +1,10 @@
+<style>
+ .table-borderless th, .table-borderless td { 
+     border-top: none !important;
+     border-left: none !important;
+     padding: 0px !important;
+ }
+</style>
 <div>
   <table class='tablesorter' id='projects-table'>
     <thead>
@@ -18,23 +25,34 @@
 	       target="_blank">
 	      <%- value.pid %></a>
 	    <br>
-	    <% if (!value.leader_notyet) { %>
-	      <a href="#" class="approve-button">
-		<span class="glyphicon
-			     glyphicon-thumbs-up"
-		      style='color: green; margin-left: 3px;'
-		      margin-bottom: 4px;'></span></a>
-	    <% } %>
+	    <a href="#" class="approve-button">
+	      <span class="glyphicon
+			   glyphicon-thumbs-up"
+		    style='color: green; margin-left: 3px;
+			   margin-bottom: 4px;'></span></a>
 	    <a href="#" class="deny-button">
 	      <span class="glyphicon
 			   glyphicon-thumbs-down"
-		    style='color: red; margin-left: 3px;'
-		    margin-bottom: 4px;'></span></a>
+		    style='color: red; margin-left: 3px;
+			   margin-bottom: 4px;'></span></a>
 	    <a href="#" class="request-info-button">
 	      <span class="glyphicon
 			   glyphicon-info-sign text-info"
-		    style='margin-left: 3px;'
-		    margin-bottom: 4px;'></span></a>
+		    style='margin-left: 3px;
+			   margin-bottom: 4px;'></span></a>
+	    <% if (value.forClass) { %>
+	      <span class="glyphicon
+			   glyphicon-blackboard text-info"
+		    style='color: purple; margin-left: 3px;
+			   margin-bottom: 4px;'></span>
+	    <% } %>
+	    <% if (value.correspondence.length) { %>
+	      <a href="#" class="correspondence-button">
+		<span class="glyphicon
+			     glyphicon-envelope text-info"
+		      style='margin-left: 3px;
+			     margin-bottom: 4px;'></span></a>
+	    <% } %>
 	    <div class="clearfix"></div>
 	    <a class='btn btn-danger btn-xs pull-right why-save-button hidden' 
 	       style="margin-right: 10px;"
@@ -45,8 +63,8 @@
 	    <a href='user-dashboard.php?user=<%- value.leader_idx %>#admin'
 	       target="_blank">
 	      <%- value.leader_name %></a>
-	    <% if (value.leader_notyet) { %>
-	      <span class="text-danger">(Classic user, not verified!)</span>
+	    <% if (!value.leader_newuser) { %>
+	      <span>(returning user)</span>
 	    <% } %>
 	  </td>
 	  <td class="format-date" style='white-space: nowrap;'>
@@ -90,11 +108,39 @@
 	<center><h5>Request for more info</h5></center>
       </div>
       <div class='modal-body'>
+	<div class="row row-no-gutters">
+	  <div class='col-sm-6'>
+	    <table class="table table-condensed table-borderless project-info">
+	      <tr>
+		<td>Portal:</td>
+		<td><strong class="project-portal"></strong></td>
+	      </tr>
+	      <tr>
+		<td>Project:</td>
+		<td><strong class="project-name"></strong></td>
+	      </tr>
+	    </table>
+	  </div>
+	  <div class='col-sm-6'>
+	    <table class="table table-condensed table-borderless user-info">
+	      <tr>
+		<td>User:</td>
+		<td><strong class="user-name"></strong></td>
+	      </tr>
+	      <tr>
+		<td>Email:</td>
+		<td><strong class="user-email"></strong></td>
+	      </tr>
+	    </table>
+	  </div>
+	</div>	
 	<div class="form-group">
 	  <textarea id="info-body" name="info-body"
-		    class="form-control"
+		    class="form-control textarea-current"
 		    rows="15"
 		    placeholder="Please enter a message" type="text"></textarea>
+	  <textarea class="hidden textarea-previous"
+		    type="text"></textarea>
 	</div>
 	<br>
 	<center>
@@ -102,6 +148,24 @@
 		  id='request-info-confirm'>
 	    Send</button>
 	</center>
+	<div>
+	  <span>
+	    <a href="#" class="public-provider-template">
+	      <span class="glyphicon text-info
+			   glyphicon-education"
+		    style='margin-left: 3px;
+			   margin-bottom: 4px;'></span></a>
+	    Insert Public Provider Template
+	  </span>
+	  <span class="pull-right">
+	    <a href="#" class="insert-previous-message">
+	      <span class="glyphicon text-info
+			   glyphicon-pencil"
+		    style='margin-left: 3px;
+			   margin-bottom: 4px;'></span></a>
+	    Insert Previous Message
+	  </span>
+	</div>
       </div>
     </div>
   </div>
@@ -116,11 +180,39 @@
 	<center><h5>Deny Project Application</h5></center>
       </div>
       <div class='modal-body'>
+	<div class="row">
+	  <div class='col-sm-6'>
+	    <table class="table table-condensed table-borderless project-info">
+	      <tr>
+		<td>Portal:</td>
+		<td><strong class="project-portal"></strong></td>
+	      </tr>
+	      <tr>
+		<td>Project:</td>
+		<td><strong class="project-name"></strong></td>
+	      </tr>
+	    </table>
+	  </div>
+	  <div class='col-sm-6'>
+	    <table class="table table-condensed table-borderless user-info">
+	      <tr>
+		<td>User:</td>
+		<td><strong class="user-name"></strong></td>
+	      </tr>
+	      <tr>
+		<td>Email:</td>
+		<td><strong class="user-email"></strong></td>
+	      </tr>
+	    </table>
+	  </div>
+	</div>	
 	<div class="form-group">
 	  <textarea id="deny-body" name="deny-body"
-		    class="form-control"
+		    class="form-control textarea-current"
 		    rows="15"
 		    placeholder="Please enter a message" type="text"></textarea>
+	  <textarea id="deny-body-previous" class="textarea-previous hidden"
+		    type="text"></textarea>
 	</div>
 	<center>
 	  <input type=checkbox id=deny-delete-user value=yes checked>
@@ -134,6 +226,16 @@
 		  id='deny-confirm'>
 	    Confirm</button>
 	</center>
+	<div>
+	  <span class="pull-right">
+	    <a href="#" class="insert-previous-message">
+	      <span class="glyphicon text-info
+			   glyphicon-pencil"
+		    style='margin-left: 3px;
+			   margin-bottom: 4px;'></span></a>
+	    Insert Previous Message
+	  </span>
+	</div>	  
       </div>
     </div>
   </div>
@@ -148,11 +250,39 @@
 	<center><h5>Approve Project Application</h5></center>
       </div>
       <div class='modal-body'>
+	<div class="row">
+	  <div class='col-sm-6'>
+	    <table class="table table-condensed table-borderless project-info">
+	      <tr>
+		<td>Portal:</td>
+		<td><strong class="project-portal"></strong></td>
+	      </tr>
+	      <tr>
+		<td>Project:</td>
+		<td><strong class="project-name"></strong></td>
+	      </tr>
+	    </table>
+	  </div>
+	  <div class='col-sm-6'>
+	    <table class="table table-condensed table-borderless user-info">
+	      <tr>
+		<td>User:</td>
+		<td><strong class="user-name"></strong></td>
+	      </tr>
+	      <tr>
+		<td>Email:</td>
+		<td><strong class="user-email"></strong></td>
+	      </tr>
+	    </table>
+	  </div>
+	</div>	
 	<div class="form-group">
 	  <textarea id="approve-body" name="approve-body"
-		    class="form-control"
+		    class="form-control textarea-current"
 		    rows="15"
 		    placeholder="Please enter a message" type="text"></textarea>
+	  <textarea id="approve-body-previous" class="hidden textarea-previous"
+		    type="text"></textarea>
 	</div>
 	<br>
 	<center>
@@ -160,6 +290,16 @@
 		  id='approve-confirm'>
 	    Confirm</button>
 	</center>
+	<div>
+	  <span class="pull-right">
+	    <a href="#" class="insert-previous-message">
+	      <span class="glyphicon text-info
+			   glyphicon-pencil"
+		    style='margin-left: 3px;
+			   margin-bottom: 4px;'></span></a>
+	    Insert Previous Message
+	  </span>
+	</div>	  
       </div>
     </div>
   </div>
@@ -182,6 +322,16 @@
     </div>
   </div>
 </div>
-
-
-
+<div id='correspondence-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-header'>
+	<button type='button' class='close' data-dismiss='modal'
+		aria-hidden='true'>&times;</button>
+	<center><h4>Project Correspondence</h4></center>
+      </div>
+      <div class='modal-body'>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include("lease_defs.php");
@@ -111,6 +114,7 @@ $fields["dataset_uuid"]     = $uuid;
 $fields["dataset_urn"]      = $dataset->URN();
 $fields["dataset_read"]     = $dataset->read_access();
 $fields["dataset_write"]    = $dataset->write_access();
+$fields["dataset_permanent"]= $dataset->permanent();
 if (ISADMIN()) {
     $fields["dataset_idx"]  = $dataset->idx();
 }
@@ -137,7 +141,7 @@ SPITHEADER(1);
 echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/plain' id='fields-json'>\n";
-echo htmlentities(json_encode($fields)) . "\n";
+echo htmlentities(json_encode($fields, JSON_NUMERIC_CHECK)) . "\n";
 echo "</script>\n";
 
 #
@@ -173,13 +177,9 @@ echo "    window.CANREFRESH = $canrefresh;\n";
 echo "    window.CANSNAPSHOT= $cansnapshot;\n";
 echo "</script>\n";
 
-REQUIRE_UNDERSCORE();
-REQUIRE_SUP();
-REQUIRE_MOMENT();
-REQUIRE_APTFORMS();
+SPITREQUIRE_DATASET();
 REQUIRE_IMAGE();
-SPITREQUIRE("js/show-dataset.js",
-            "<script src='js/lib/jquery-ui.js'></script>\n");            
+SPITREQUIRE("js/show-dataset.js");
 # For progress bubbles in the imaging modal.
 echo "<link rel='stylesheet' href='css/progress.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -130,7 +130,7 @@ echo "<div id='page-body'>
 #
 $blob = array();
 foreach ($record->slivers as $sliver) {
-    $aggregate_urn = $sliver["aggregate_urn"];
+    $aggregate_urn = $sliver->aggregate_urn();
     $aggregate     = Aggregate::Lookup($aggregate_urn);
     $weburl        = $aggregate->weburl();
 
@@ -141,32 +141,42 @@ echo "<script type='text/plain' id='amlist-json'>\n";
 echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 
+if ($ISPOWDER) {
+    $radioinfo = Aggregate::RadioInfoNew();
+    echo "<script type='text/plain' id='radioinfo-json'>\n";
+    echo htmlentities(json_encode($radioinfo, JSON_NUMERIC_CHECK));
+    echo "</script>\n";
+}
+
 echo "<script type='text/javascript'>\n";
 echo "  window.uuid = '" . $uuid . "';\n";
 echo "  window.isadmin = $isadmin;\n";
 echo "  window.isfadmin = $isfadmin;\n";
 echo "</script>\n";
-echo "<script src='js/lib/d3.v3.js'></script>\n";
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
+REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
 REQUIRE_SUP();
-REQUIRE_JACKS();
 REQUIRE_MOMENT();
 REQUIRE_MARKED();
 REQUIRE_URITEMPLATE();
+REQUIRE_TOPOLOGY_VIEWER();
 AddLibrary("js/bindings.js");
 AddLibrary("js/paramsets.js");
-SPITREQUIRE("js/memlane.js");
+AddLibrary("js/txgraph.js");
+SPITREQUIRE("js/memlane.js",
+            "<script src='js/lib/d3.v5.js'></script>\n");
 
+echo "<link rel='stylesheet'
+            href='css/frequency-graph.css'>\n";
 echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
 
 AddTemplateList(array("memlane", "waitwait-modal", "oops-modal",
-                      "save-paramset-modal"));
+                      "save-paramset-modal", "txgraph"));
 
 SPITFOOTER();
 ?>

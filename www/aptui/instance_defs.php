@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -117,6 +117,7 @@ class Instance
     function profile_id()   { return $this->field('profile_id'); }
     function profile_version() { return $this->field('profile_version'); }
     function status()	    { return $this->field('status'); }
+    function rdz_status()   { return $this->field('rdz_status'); }
     function canceled()	    { return $this->field('canceled'); }
     function paniced()	    { return $this->field('paniced'); }
     function pid()	    { return $this->field('pid'); }
@@ -155,6 +156,8 @@ class Instance
     function isopenstack()  { return $this->field('isopenstack'); }
     function params()       { return $this->field('params'); }
     function paramdefs()    { return $this->field('paramdefs'); }
+    function portal()       { return $this->field('portal'); }
+    function powder_zones() { return $this->field('powder_zones'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
     }
@@ -168,6 +171,17 @@ class Instance
     }
     function IsPNet() {
 	return preg_match('/phantomnet/', $this->servername());
+    }
+
+    function Slice() {
+        return GeniSlice::Lookup("sa", $this->slice_uuid());
+    }
+    function expires() {
+        $slice = $this->Slice();
+        if (!$slice) {
+            return null;
+        }
+        return $slice->expires();
     }
 
     # Grab the webtask. Backwards compat mode, see if there is one associated
@@ -306,7 +320,7 @@ class Instance
     # Class function to create a new Instance
     #
     function Instantiate($uuid, $creator, $options, $args, $webtask) {
-	global $suexec_output, $suexec_output_array;
+	global $suexec_output, $suexec_output_array, $TUTORIALSTATS;
 
 	#
         # Generate a temporary file and write in the XML goo. 
@@ -354,6 +368,14 @@ class Instance
 	    putenv("SERVER_NAME=" . $_SERVER['SERVER_NAME']);
 	}
         $options .= " -t " . $webtask->task_id();
+
+        if ($TUTORIALSTATS) {
+            $name = "n/a";
+            if (isset($args["instance_name"])) {
+                $name = $args["instance_name"];
+            }
+            TutorialStat("instantiate $pid:$name $uuid");
+        }
         
 	$retval = SUEXEC($uid, $pid,
 			 "webcreate_instance $options -u $uuid $xmlname",
@@ -369,6 +391,15 @@ class Instance
                 $webtask->output("Internal error creating experiment");
                 $webtask->code(GENIRESPONSE_ERROR);
                 return null;
+            }
+            # Temp debugging.
+            if (0) {
+                SUEXECERROR(SUEXEC_ACTION_DEBUG);
+            }
+            # In case of error between creating the instance and forking off
+            $instance = Instance::Lookup($uuid);
+            if ($instance) {
+                return $instance;
             }
             # Error in the webtask for the caller.
             return null;
@@ -577,7 +608,21 @@ class Instance
         return 0;
     }
     function CanDoVNC($user) {
+        global $TUTORIALPID;
+        
 	if ($this->creator_idx() == $user->uid_idx()) {
+	    return 1;
+	}
+        if ($this->pid() != $TUTORIALPID) {
+            return 0;
+        }
+        # For the tutorial project, just needs to be a member of the project.
+	$project = Project::Lookup($this->pid_idx());
+	if (!$project) {
+	    return 0;
+	}
+	$isapproved = 0;
+	if ($project->IsMember($user, $isapproved) && $isapproved) {
 	    return 1;
 	}
         return 0;
@@ -855,6 +900,8 @@ class Instance
         $skiptypes = array("dboxvm"    => true,
                            "d430k"     => true,
                            "d530"      => true,
+                           "cl-ap"     => true,
+                           "nuc11i9"   => true,
                            "pcivy"     => true,
                            "pc2830qx2" => true,
                            "pc2400hp"  => true,
@@ -877,6 +924,34 @@ class Instance
                            "mmimotmp1" => true,
                            "iris03"    => true,
                            "iris04"    => true,
+                           "iris030"   => true,
+                           "n300"      => true,
+                           "nuvo7501"  => true,
+                           "pnbase2"   => true,
+                           "pnbase1"   => true,
+                           "cellsdr1-browning"  => true,
+                           "cellsdr1-dentistry" => true,
+                           "cbrssdr1-dentistry" => true,
+                           "cellsdr1-fm"        => true,
+                           "cellsdr1-honors"    => true,
+                           "cellsdr1-ustar"     => true,
+                           "cellsdr1-meb"       => true,
+                           "mmimo-ac"           => true,
+                           "n310-ustar"         => true,
+                           "cap-ustar"          => true,
+                           "ceg1"               => true,
+                           "cap1"               => true,
+                           "cl-ap"              => true,
+                           # Wisconsin, not ready yet
+                           "c240g2-infra"       => true,
+                           "r7525s"             => true,
+                           "rflab-blackbox"     => true,
+                           "at-ru"              => true,
+                           "bt-ru550"           => true,
+                           "bt-ru650"           => true,
+                           "mav-cpe"            => true,
+                           "mav-ru"             => true,
+                           "l3hpl2server"       => true,
         );
 
         #
@@ -887,8 +962,6 @@ class Instance
         if ($TBMAINSITE && 
             !($ISPOWDER || $ISPNET) &&
             ($all || $aggregate_urn == $DEFAULT_AGGREGATE_URN)) {
-            $skiptypes["nuc5300"]  = true;
-            $skiptypes["iris030"]  = true;
             $skiptypes["d840"]     = true;
             $skiptypes["d740"]     = true;
             #
@@ -916,7 +989,7 @@ class Instance
         $result = array();
 
         $query_result =
-            DBQueryFatal("select freq_low,freq_high ".
+            DBQueryFatal("select distinct freq_low,freq_high ".
                          "from apt_instance_rfranges");
 	while ($row = mysql_fetch_array($query_result)) {
             $result[] = array("freq_low"  => $row["freq_low"],
@@ -940,7 +1013,8 @@ class Instance
         }
 
         $query_result =
-            DBQueryFatal("select v.uuid,p.name,h.repohash, " .
+            DBQueryFatal("select c.* from ".
+                         "((select v.uuid,p.name,h.repohash,h.created, " .
                          "   h.name as expname,h.uuid as expuuid ".
                          " from apt_instance_history as h ".
                          "join apt_profiles as p on p.profileid=h.profile_id ".
@@ -948,7 +1022,19 @@ class Instance
                          "     v.profileid=p.profileid and ".
                          "     v.version=p.version ".
                          "where h.creator_idx='$uid_idx' $clause ".
-                         "order by h.created desc limit 10");
+                         "order by h.created desc limit 20) ".
+                         "union ".
+                         " (select v.uuid,p.name,h.repohash,h.created, " .
+                         "   h.name as expname,h.uuid as expuuid ".
+                         " from apt_instances as h ".
+                         "join apt_profiles as p on p.profileid=h.profile_id ".
+                         "join apt_profile_versions as v on ".
+                         "     v.profileid=p.profileid and ".
+                         "     v.version=p.version ".
+                         "where h.creator_idx='$uid_idx' $clause ".
+                         "order by h.created desc limit 20)) as c ".
+                         "order by c.created desc limit 10");
+
         if (!mysql_num_rows($query_result)) {
             return null;
         }
@@ -968,6 +1054,45 @@ class Instance
             );
         }
         return $result;
+    }
+
+    # Make up a list of clusters used by this experiment, for sending
+    # to the web ui, as for reruning an experiment.
+    function rerunClusters() {
+        $result  = array();
+        $slivers = $this->slivers();
+        foreach ($slivers as $sliver) {
+            $result[] = $sliver->aggregate_urn();
+        }
+        return $result;
+    }
+
+    # Check the create_instance countdown lock, if too high, we return
+    # an indicator.
+    function tooManyWaiting()
+    {
+	$query_result =
+	    DBQueryFatal("select value from emulab_locks ".
+                         "where name='create_instance_lock'");
+        
+        if (!mysql_num_rows($query_result)) {
+            return 0;
+        }
+        $row = mysql_fetch_array($query_result);
+        $count = $row[0];
+        if ($count > 10) {
+            return 1;
+        }
+        return 0;
+    }
+
+    function loadTooHigh()
+    {
+        $load = sys_getloadavg();
+        if ($load[0] > 15) {
+            return 1;
+        }
+        return 0;
     }
 }
 
@@ -994,33 +1119,10 @@ class InstanceHistory
 	    return;
 	}
 	$this->record  = mysql_fetch_array($query_result);
-
-        #
-        # Get the list of aggregate records. Early records do not have one.
-        #
-	$query_result =
-	    DBQueryWarn("select * from apt_instance_aggregate_history ".
-			"where uuid='$uuid'");
-	if (!$query_result) {
-	    $this->record = null;
-	    return;
-	}
-        if (!mysql_num_rows($query_result)) {
-            $this->slivers = array(
-                array("uuid" => $this->record["uuid"],
-                      "name" => $this->record["name"],
-                      "aggregate_urn" => $this->record["aggregate_urn"],
-                      "status" => $this->record["status"],
-                      "public_url" => $this->record["public_url"],
-                      "manifest" => $this->record["manifest"],
-                ));
-        }
-        else {
-            $this->slivers = array();
-
-            while ($row = mysql_fetch_array($query_result)) {
-                $this->slivers[] = $row;
-            }
+        $this->slivers = InstanceSliver::LookupForInstance($this);
+        if (!count($this->slivers) && $this->aggregate_urn()) {
+            $this->slivers =
+                array(InstanceSliver::Lookup($this, $this->aggregate_urn()));
         }
     }
     # accessors
@@ -1141,6 +1243,24 @@ class InstanceHistory
 	}
 	return 0;
     }
+
+    # Make up a list of clusters used by this experiment, for sending
+    # to the web ui, as for reruning an experiment.
+    function rerunClusters() {
+        $result  = array();
+        $slivers = $this->slivers();
+        foreach ($slivers as $sliver) {
+            $result[] = $sliver->aggregate_urn();
+        }
+        return $result;
+    }
+    
+    # URL to the memory page
+    function StatusURL() {
+        global $APTBASE;
+
+        return $APTBASE . "/memlane.php?uuid=" . $this->uuid();
+    }
 }
 
 class InstanceSliver
@@ -1158,10 +1278,13 @@ class InstanceSliver
         }
 	$uuid = $instance->uuid();
         $safe_urn = addslashes($urn);
-
-	$query_result =
-	    DBQueryWarn("select * from apt_instance_aggregates ".
-			"where uuid='$uuid' and aggregate_urn='$safe_urn'");
+        $table = "apt_instance_aggregates";
+        if (get_class($instance) == "InstanceHistory") {
+            $table = "apt_instance_aggregate_history";
+        }
+        $query_result =
+            DBQueryWarn("select * from $table ".
+                        "where uuid='$uuid' and aggregate_urn='$safe_urn'");
 
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->sliver = null;
@@ -1184,6 +1307,8 @@ class InstanceSliver
     function deferred_reason(){ return $this->field('deferred_reason'); }
     function last_retry()   { return $this->field('last_retry'); }
     function retry_count()  { return $this->field('retry_count'); }
+    function started()      { return $this->field('started'); }
+    function destroyed()    { return $this->field('destroyed'); }
     function manifest()	    { return $this->field('manifest'); }
     function physnode_count() { return $this->field('physnode_count'); }
     function virtnode_count() { return $this->field('virtnode_count'); }
@@ -1229,9 +1354,12 @@ class InstanceSliver
     function LookupForInstance($instance) {
         $result = array();
         $uuid   = $instance->uuid();
-
+        $table  = "apt_instance_aggregates";
+        if (get_class($instance) == "InstanceHistory") {
+            $table = "apt_instance_aggregate_history";
+        }
         $query_result =
-            DBQueryFatal("select aggregate_urn from apt_instance_aggregates ".
+            DBQueryFatal("select aggregate_urn from $table ".
                          "where uuid='$uuid'");
 
 	while ($row = mysql_fetch_array($query_result)) {
@@ -1383,9 +1511,12 @@ class ExtensionInfo
 # $amlist, $fedlist, and $status are all output arrays
 function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                                   $extended = false, $user = null,
-                                  $frontpage = false) {
+                                  $frontpage = false, $am_array = null) {
     global $TBMAINSITE, $DEFAULT_AGGREGATE_URN, $CHECKLOGIN_USER;
-    $am_array = Aggregate::DefaultAggregateList($user, $frontpage);
+
+    if ($am_array == null) {
+        $am_array = Aggregate::DefaultAggregateList($user, $frontpage);
+    }
 
     #
     # If not the Cloudlab Portal then we get local status only.
@@ -1407,7 +1538,10 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                       "nickname" => $aggregate->nickname(),
                       "typelist" => $typelist,
                       "typeinfo" => $aggregate->typeinfo,
-                      "reservable_nodes" => $aggregate->ReservableNodes());
+                      "reservable_nodes" => $aggregate->ReservableNodes(),
+                      "abbreviation"     => $aggregate->abbreviation(),
+                      "weburl"           => $aggregate->weburl(),
+                );
         }
         else {
             $amlist[$urn] = $am;
@@ -1440,7 +1574,13 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status,
                                   "ismobile" => $aggregate->ismobile(),
                                   "nickname" => $aggregate->nickname(),
                                   "typelist" => $typelist,
-                                  "typeinfo" => $aggregate->typeinfo);
+                                  "typeinfo" => $aggregate->typeinfo,
+                                  "isfederate"   => $aggregate->isfederate(),
+                                  "abbreviation" => $aggregate->abbreviation(),
+                                  "weburl"       => $aggregate->weburl(),
+                                  "reservable_nodes" =>
+                                           $aggregate->ReservableNodes(),
+            );
         }
         else {
             $amlist[$urn] = $am;
@@ -1514,19 +1654,16 @@ function CalculateWirelessStatus(&$result) {
     $result["controlled"] = $controlled1 + $controlled2;
 }
     
-function SpitAggregateStatus($extended = false, $user = null) {
+function SpitAggregateStatus($extended = false, $user = null, $agglist = null) {
     $amlist     = array();
-    $fedlist    = array();
     $status     = array();
-    CalculateAggregateStatus($amlist, $fedlist, $status, $extended, $user);
+    CalculateAggregateStatus($amlist, $fedlist,
+                             $status, $extended, $user, false, $agglist);
     echo "<script type='text/plain' id='amlist-json'>\n";
-    echo htmlentities(json_encode($amlist));
+    echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK));
     echo "</script>\n";
     echo "<script type='text/plain' id='amstatus-json'>\n";
     echo htmlentities(json_encode($status));
-    echo "</script>\n";
-    echo "<script type='text/javascript'>\n";
-    echo "    window.FEDERATEDLIST  = [". implode(",", $fedlist) . "];\n";
     echo "</script>\n";
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2018 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -193,7 +193,7 @@ read_linuxslice(int slice, iz_type stype, iz_lba start, iz_size size,
 
 		group = (struct ext4_group_desc *)&groups[gix * EXT4_DESC_SIZE(&fs)];
 
-		if (debug) {
+		if (debug > 1) {
 			fprintf(stderr,
 				"        Group:%-2d\tBitmap %9u, bfree %9d\n",
 				i, group->bg_block_bitmap_lo,

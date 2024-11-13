@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000- 2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include("lease_defs.php");
@@ -75,7 +78,7 @@ if (!$dataset->AccessCheck($this_user, $LEASE_ACCESS_MODIFYINFO)) {
 #
 # Spit the form
 #
-function SPITFORM($formfields, $errors)
+function SPITFORM($formfields, $dataset, $errors)
 {
     global $this_user, $projlist, $embedded, $this_idx;
     $button_label = "Save";
@@ -89,7 +92,7 @@ function SPITFORM($formfields, $errors)
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
-    echo htmlentities(json_encode($formfields)) . "\n";
+    echo htmlentities(json_encode($formfields, JSON_NUMERIC_CHECK)) . "\n";
     echo "</script>\n";
     echo "<script type='text/plain' id='error-json'>\n";
     echo htmlentities(json_encode($errors));
@@ -126,6 +129,7 @@ function SPITFORM($formfields, $errors)
     echo "</script>\n";
 
     SPITREQUIRE_DATASET();
+    SPITREQUIRE("js/create-dataset.js");
     AddTemplateList(array("create-dataset", "dataset-help", "oops-modal", "waitwait-modal"));
     SPITFOOTER();
 }
@@ -146,10 +150,11 @@ if (! isset($create)) {
     $fields["dataset_uuid"]     = $uuid;
     $fields["dataset_read"]     = $dataset->read_access();
     $fields["dataset_modify"]   = $dataset->write_access();
+    $fields["dataset_permanent"]= $dataset->permanent();
 
-    SPITFORM($fields, $errors);
+    SPITFORM($fields, $dataset, $errors);
     return;
 }
-SPITFORM($formfields, array());
+tSPITFORM($formfields, null, array());
 
 ?>

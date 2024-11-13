@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # Copyright (c) 2004-2009 Regents, University of California.
 # 
 # {{{EMULAB-LGPL
@@ -626,7 +626,13 @@ sub createVlan($$$$;$) {
 	    $device = $self->{DEVICES}{$devicename};
 	    $res = $device->createVlan($vlan_id, $vlan_number, $otherargs);
 	    if (!$res) {
-		goto failed;
+		#
+		# Ooops, failed. Don't try any more
+		#
+		print STDERR "$errortype VLAN $vlan_id as VLAN #$vlan_number ".
+		    "on stack $self->{STACKID} ... Failed\n";
+		$vlan_number = 0;
+		last LOCKBLOCK;
 	    }
 	}
 
@@ -637,7 +643,6 @@ sub createVlan($$$$;$) {
 	if (@ports) {
 	    if ($self->setPortVlan($vlan_id,@ports)) {
 		$errortype = "Adding Ports to";
-	    failed:
 		#
 		# Ooops, failed. Don't try any more
 		#
@@ -1172,6 +1177,48 @@ sub portControl ($$@) {
     # XXX: each
     while (my ($devicename,$ports) = each %portDeviceMap) {
 	$errors += $self->{DEVICES}{$devicename}->portControl($cmd,@$ports);
+    }
+    return $errors;
+}
+
+sub portPTP ($$$@) { 
+    my $self = shift;
+    my $cmd = shift;
+    my $profile = shift;
+    my @ports = @_;
+    my %portDeviceMap = mapPortsToDevices(@ports);
+    my $errors = 0;
+    # XXX: each
+    while (my ($devicename,$ports) = each %portDeviceMap) {
+	# XXX: hack to avoid implementing a buttload of empty methods
+	my $swtype = getDeviceType($devicename);
+	if ($swtype !~ /^dellrest-/) {
+	    warn "ERROR: PTP not currently supported on $swtype switches.\n";
+	    $errors++;
+	} else {
+	    $errors += $self->{DEVICES}{$devicename}->portPTP($cmd,$profile,@$ports);
+	}
+    }
+    return $errors;
+}
+
+sub portSyncE ($$$@) { 
+    my $self = shift;
+    my $cmd = shift;
+    my $param = shift;
+    my @ports = @_;
+    my %portDeviceMap = mapPortsToDevices(@ports);
+    my $errors = 0;
+    # XXX: each
+    while (my ($devicename,$ports) = each %portDeviceMap) {
+	# XXX: hack to avoid implementing a buttload of empty methods
+	my $swtype = getDeviceType($devicename);
+	if ($swtype !~ /^dellrest-/) {
+	    warn "ERROR: SyncE not currently supported on $swtype switches.\n";
+	    $errors++;
+	} else {
+	    $errors += $self->{DEVICES}{$devicename}->portSyncE($cmd,$param,@$ports);
+	}
     }
     return $errors;
 }
@@ -1873,7 +1920,7 @@ sub snap($) {
  		require snmpit_dellrest;
 		$device = new snmpit_dellrest($devicename,$self->{DEBUG});
 		last;
-	        }; # /Dell RESTCONF switch.*/
+	        }; # /dellrest.*/
 	    (/force10/)
 		    && do {
  		require snmpit_force10;
@@ -1892,6 +1939,12 @@ sub snap($) {
 		$device = new snmpit_netscout($devicename,$self->{DEBUG});
 		last;
 	        }; # /comware.*/
+	    (/planet/)
+		    && do {
+		require snmpit_planet;
+		$device = new snmpit_planet($devicename,$self->{DEBUG});
+		last;
+	        }; # /planet.*/
 	    print "Device $devicename is not of a known type\n";
 	}
 	if (!$device) {

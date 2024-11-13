@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -74,6 +74,9 @@ my $FRISBEE     = "/usr/local/bin/frisbee";
 
 my $TUNEFS	= "/sbin/tunefs";
 my $EXT_TUNEFS	= "/usr/local/sbin/tune2fs";
+
+my $LSOF	= "/usr/local/sbin/lsof";
+my $EXPORTS	= "/etc/exports";
 
 #
 # Force the use of GVINUM.
@@ -473,14 +476,22 @@ sub get_disktype($)
 
 #
 # Return the name (e.g., "da0") of the boot disk, aka the "system volume".
+# XXX a bit of hackary to the name matching. Our boot images are either
+# MBR (...s1a) or GPT (...p3).
 #
 sub get_bootdisk()
 {
     my $disk = undef;
+    my $ptype = undef;
     my $line = `$MOUNT | grep ' on / '`;
 
-    if ($line && $line =~ /^\/dev\/(\S+)s1a on \//) {
+    if ($line && $line =~ /^\/dev\/(\S+)(s1a|p3) on \//) {
 	$disk = $1;
+	if ($2 eq "p3") {
+	    $ptype = "GPT";
+	} else {
+	    $ptype = "MBR";
+	}
 	#
 	# FreeBSD 9+ changed the naming convention.
 	# But there will be a symlink to the real device.
@@ -492,7 +503,7 @@ sub get_bootdisk()
 	    }
 	}
     }
-    return $disk;
+    return ($disk, $ptype);
 }
 
 #
@@ -823,7 +834,7 @@ sub get_diskinfo($)
 	    $geominfo{$dev}{'inuse'} = -1;
 	}
 	elsif ($type eq "PART" && $geominfo{$dev}{'level'} == 1 &&
-	    $dev =~ /^(.*)s\d+$/) {
+	    $dev =~ /^(.*)[sp]\d+$/) {
 	    if (exists($geominfo{$1})) {
 		$geominfo{$1}{'inuse'} = 1;
 	    }
@@ -976,11 +987,122 @@ sub checkfs($$$)
 	$fopt .= " -t $fstype";
     }
 
-    if (mysystem("$FSCK $fopt $mdev $redir")) {
-	warn("*** $lv: fsck of $mdev failed\n");
+    my $rv = mysystem("$FSCK $fopt $mdev $redir");
+    if ($rv && ($fstype ne "ext2fs" || $rv != 256)) {
+	warn("*** $lv: fsck of $mdev failed: $?\n");
 	return 0;
     }
 
+    return 1;
+}
+
+#
+# The filesystem being busy (i.e., a file open on it or being the working dir
+# of a process) is the only case we handle right now.
+#
+# The two scenarios we handle right now are: user-mode processes accessing the
+# filesystem and a kernel-mode NFS server exporting the filesystem. The former
+# we handle by identifying and killing the accessing processes and retrying
+# the unmount. The latter by determining if the filesystem is being exported
+# and the NFS server running, in which case we shutdown the server.
+#
+# Returns zero if successful, an non-zero otherwise.
+#
+sub force_unmount($)
+{
+    my ($href) = @_;
+    my $bsid = $href->{'VOLNAME'};
+    my ($mpoint) = $href->{'MOUNTPOINT'};
+    my $fail = "";
+    my %pids = ();
+    
+    #
+    # Use lsof to identify processes accessing the filesystem and kill them.
+    #
+    if (-e "$LSOF") {
+	my @output = `$LSOF -Pn | grep ' $mpoint' 2>&1`;
+	foreach my $line (@output) {
+	    chomp($line);
+	    if ($line =~ m#^\S+\s+(\d+).*\s$mpoint(/\S+)?\s*#) {
+		$pids{$1} = 1 if ($1 > 1);
+	    }
+	}
+    }
+    #
+    # "lsof" does not exist, we try extracting the info using fstat.
+    # fstat seems to be a bit goofy and doesn't identify the mountpoint
+    # of a file symbolically, but does by device number. So we first find
+    # the device number of the mount point and look for matches on that.
+    #
+    else {
+	my $fsdev = "";
+	my @lines = ();
+	
+	my $line = `stat -f '%Xd %i' $mpoint`;
+	if ($line =~ /^([0-9a-f]+) (\d+)$/ && $2 == 2) {
+	    $fsdev = "0x$1";
+	    @lines = `fstat -n 2>/dev/null | grep ' $fsdev '`;
+	}
+	foreach my $line (@lines) {
+	    chomp $line;
+	    my @fields = split('\s+', $line);
+	    next
+		if (@fields < 5);
+	    if ($fields[4] eq $fsdev) {
+		my $pid = int($fields[2]);
+		if ($fields[3] eq "wd") {
+		    $pids{$pid} = 1 if ($pid > 1);
+		    print STDERR "Found pid $pid cwd is on '$mpoint'\n"
+			if (0);
+		    next;
+		}
+		if ($fields[3] =~ /^(\d+)$/) {
+		    $pids{$pid} = 1 if ($pid > 1);
+		    print STDERR "Found pid $pid FD $1 is on '$mpoint'\n"
+			if (0);
+		    next;
+		}
+	    }
+	}
+    }
+
+    #
+    # If we identified any processes, kill them.
+    # XXX maybe we should TERM and then KILL if that doesn't work?
+    #
+    if (keys(%pids) > 0) {
+	warn("*** $bsid: killing accessing processes: " .
+	     join(' ', keys(%pids)) . "\n");
+	kill('HUP', keys(%pids));
+	sleep(2);
+	kill('TERM', keys(%pids));
+	sleep(2);
+	$fail = `$UMOUNT $mpoint 2>&1`;
+	if ($? == 0) {
+	    return 0;
+	}
+    }
+
+    #
+    # See if the filesystem is exported and there is an NFS server running.
+    # If so, kill the server.
+    #
+    # XXX this is only intended to catch cases where NFS is setup by a
+    # profile derived from our nfs-server profile, which only works on
+    # Ubuntu and FreeBSD.
+    #
+    if (-f "$EXPORTS" && mysystem("grep -q -w '^$mpoint' $EXPORTS") == 0) {
+	foreach $service ("lockd", "statd", "nfsd", "mountd", "rpcbind") {
+	    warn("*** $bsid: stopping $service service\n");
+	    mysystem("/etc/rc.d/$service onestop");
+	}
+	sleep(2);
+	$fail = `$UMOUNT $mpoint 2>&1`;
+	if ($? == 0) {
+	    return 0;
+	}
+    }
+    warn("*** $bsid: could not unmount $mpoint:\n    $fail");
     return 1;
 }
 
@@ -1111,13 +1233,14 @@ sub os_init_storage($)
 	#
 	# Grab the bootdisk and current GEOM state
 	#
-	my $bdisk = get_bootdisk();
+	my ($bdisk, $bdtype) = get_bootdisk();
 	my $dinfo = get_diskinfo($usezfs);
 	if (!exists($dinfo->{$bdisk}) || $dinfo->{$bdisk}->{'inuse'} == 0) {
 	    warn("*** storage: bootdisk '$bdisk' marked as not in use!?\n");
 	    return undef;
 	}
 	$so{'BOOTDISK'} = $bdisk;
+	$so{'BOOTDISKTYPE'} = $bdtype;
 	$so{'DISKINFO'} = $dinfo;
     }
 
@@ -1187,9 +1310,10 @@ sub os_show_storage($)
     my ($so) = @_;
 
     my $bdisk = $so->{'BOOTDISK'};
+    my $bdtype = $so->{'BOOTDISKTYPE'};
     my $usezfs = $so->{'USEZFS'};
     print STDERR "OS Dep info:\n";
-    print STDERR "  BOOTDISK=$bdisk\n" if ($bdisk);
+    print STDERR "  BOOTDISK=$bdisk ($bdtype)\n" if ($bdisk);
     print STDERR "  USEZFS=$usezfs\n" if ($usezfs);
 
     my $dinfo = get_diskinfo($usezfs);
@@ -1456,11 +1580,16 @@ sub os_check_storage_slice($$)
 
 	my $dinfo = $so->{'DISKINFO'};
 	my $bdisk = $so->{'BOOTDISK'};
+	my $bdtype = $so->{'BOOTDISKTYPE'};
 
 	# figure out the device of interest
 	if ($bsid eq "SYSVOL") {
-	    $dev = "${bdisk}s4";
-	    $mdev = "${dev}a";
+	    if ($bdtype eq "MBR") {
+		$dev = "${bdisk}s4";
+		$mdev = "${dev}a";
+	    } else {
+		$dev = $mdev = "${bdisk}p4";
+	    }
 	    $devtype = "PART";
 	} else {
 	    if ($so->{'USEZFS'}) {
@@ -1866,6 +1995,9 @@ sub os_create_storage_slice($$$)
 	my $bdisk = $so->{'BOOTDISK'};
 	my $dinfo = $so->{'DISKINFO'};
 
+	# use MBR for all disks only if the boot disk is MBR
+	my $usembr = ($so->{'BOOTDISKTYPE'} eq "MBR" ? 1 : 0);
+
 	# record all the output for debugging
 	my $redir = "";
 	my $logmsg = "";
@@ -1884,20 +2016,30 @@ sub os_create_storage_slice($$$)
 	#
 	# System volume:
 	#
-	# gpart add -i 4 -a 2048 -t freebsd da0
-	# gpart create -s BSD da0s4
-	# gpart add -t freebsd-ufs da0s4
+	# MBR:
+	#   gpart add -i 4 -a 2048 -t freebsd da0
+	#   gpart create -s BSD da0s4
+	#   gpart add -t freebsd-ufs da0s4
+	# GPT:
+	#   gpart add -i 4 -a 2048 -t freebsd-ufs da0
 	#
 	if ($bsid eq "SYSVOL") {
-	    my $slice = "$bdisk" . "s4";
-	    my $part = "$slice" . "a";
-
-	    if (mysystem("$GPART add -i 4 -a 2048 -t freebsd $bdisk $redir")) {
+	    my ($slice, $part, $ptype);
+	    if ($usembr) {
+		$slice = "$bdisk" . "s4";
+		$part = "$slice" . "a";
+		$ptype = "freebsd";
+	    } else {
+		$slice = $part = "$bdisk" . "p4";
+		$ptype = "freebsd-ufs";
+	    }
+	    if (mysystem("$GPART add -i 4 -a 2048 -t $ptype $bdisk $redir")) {
 		warn("*** $lv: could not create $slice$logmsg\n");
 		return 0;
 	    }
-	    if (mysystem("$GPART create -s BSD $slice $redir") ||
-		mysystem("$GPART add -t freebsd-ufs $slice $redir")) {
+	    if ($usembr &&
+		(mysystem("$GPART create -s BSD $slice $redir") ||
+		 mysystem("$GPART add -t freebsd-ufs $slice $redir"))) {
 		warn("*** $lv: could not create $part$logmsg\n");
 		return 0;
 	    }
@@ -1911,9 +2053,14 @@ sub os_create_storage_slice($$$)
 	    #
 	    # If partitions have not yet been initialized handle that:
 	    #
-	    # gpart add -i 4 -a 2048 -t freebsd da0	(ANY only)
-	    # gpart create -s mbr da1
-	    # gpart add -i 1 -a 2048 -t freebsd da1
+	    # MBR (ZFS or vinum):
+	    #   gpart add -i 4 -a 2048 -t freebsd da0	  (ANY only)
+	    #   gpart create -s mbr da1
+	    #   gpart add -i 1 -a 2048 -t freebsd da1
+	    # GPT (ZFS only):
+	    #   gpart add -i 4 -a 2048 -t freebsd-ufs da0 (ANY only)
+	    #   gpart create -s gpt da1
+	    #   gpart add -i 1 -a 2048 -t freebsd-ufs da1
 	    #
 	    if (!exists($so->{'SPACEMAP'})) {
 		my %spacemap = ();
@@ -1941,7 +2088,7 @@ sub os_create_storage_slice($$$)
 		    if ($bsid eq "ANY") {
 			if (!$disktype ||
 			    $dinfo->{$bdisk}->{'disktype'} eq $disktype) {
-			    $spacemap{$bdisk}{'pchr'} = "s";
+			    $spacemap{$bdisk}{'pchr'} = ($usembr ? "s" : "p");
 			    $spacemap{$bdisk}{'pnum'} = 4;
 			}
 		    }
@@ -1963,7 +2110,7 @@ sub os_create_storage_slice($$$)
 		    #
 		    foreach my $disk (keys %spacemap) {
 			my $pnum = $spacemap{$disk}{'pnum'};
-			my $ptype = "freebsd";
+			my $ptype = ($usembr ? "freebsd" : "freebsd-zfs");
 
 			#
 			# If pnum==0, we need a GPT first
@@ -2263,8 +2410,22 @@ sub os_remove_storage_element($$$)
 	if (exists($href->{'MOUNTPOINT'})) {
 	    my $mpoint = $href->{'MOUNTPOINT'};
 
-	    if (mysystem("$UMOUNT $mpoint")) {
-		warn("*** $bsid: could not unmount $mpoint\n");
+	    #
+	    # If this is a persistent blockstore and the basic unmount fails,
+	    # we try extra hard to unmount it, otherwise it could be left in
+	    # an inconsistent state for the next use. Obviously, this does
+	    # not matter for ephemeral blockstores which will be destroyed
+	    # on termination anyway.
+	    #
+	    # The filesystem being busy (i.e., a file open on it or being the
+	    # working dir of a process) is the only case we handle right now.
+	    #
+	    my $fail = `$UMOUNT $mpoint 2>&1`;
+	    if ($? != 0) {
+		if ($fail !~ /Device busy/ || !$href->{'PERSIST'} ||
+		force_unmount($href) != 0) {
+		    warn("*** $bsid: could not unmount $mpoint:\n    $fail");
+		}
 	    }
 	}
 
@@ -2371,11 +2532,12 @@ sub os_remove_storage_slice($$$)
 
 	my $dinfo = $so->{'DISKINFO'};
 	my $bdisk = $so->{'BOOTDISK'};
+	my $bdtype = $so->{'BOOTDISKTYPE'};
 
 	# figure out the device of interest
 	my ($dev, $devtype);
 	if ($bsid eq "SYSVOL") {
-	    $dev = "${bdisk}s4a";
+	    $dev = $bdisk . ($bdtype eq "MBR" ? "s4a" : "p4");
 	    $devtype = "PART";
 	} else {
 	    if ($so->{'USEZFS'}) {
@@ -2489,10 +2651,15 @@ sub os_remove_storage_slice($$$)
 	    # gpart delete -i 4 da0
 	    #
 	    if ($bsid eq "SYSVOL") {
-		my $slice = "$bdisk" . "s4";
+		my $slice;
 
-		if (mysystem("$GPART destroy -F $slice $redir")) {
-		    warn("*** $lv: could not destroy ${slice}a$logmsg\n");
+		if ($bdtype eq "MBR") {
+		    $slice = "${bdisk}s4";
+		    if (mysystem("$GPART destroy -F $slice $redir")) {
+			warn("*** $lv: could not destroy ${slice}a$logmsg\n");
+		    }
+		} else {
+		    $slice = "${bdisk}p4";
 		}
 		if (mysystem("$GPART delete -i 4 $bdisk $redir")) {
 		    warn("*** $lv: could not destroy $slice$logmsg\n");
@@ -2542,7 +2709,7 @@ sub os_remove_storage_slice($$$)
 		# And de-partition the disks
 		#
 		foreach my $slice (@slices) {
-		    if ($slice eq "${bdisk}s4") {
+		    if ($slice =~ /^${bdisk}[sp]4$/) {
 			if (mysystem("$GPART delete -i 4 $bdisk $redir")) {
 			    warn("*** $lv: could not destroy $slice$logmsg\n");
 			}

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -58,6 +58,7 @@ $PORT_FORMAT_PORTINDEX= 5;
 		snmpitSet snmpitSetWarn snmpitSetFatal 
                 snmpitBulkwalk snmpitBulkwalkWarn snmpitBulkwalkFatal
 	        setPortEnabled setPortTagged IsPortTagged
+	        setPortPTP IsPortPTPEnabled setPortSyncE IsPortSyncEEnabled
 		printVars tbsort getExperimentCurrentTrunks
 	        getExperimentVlanPorts
                 uniq isSwitchPort getPathVlanIfaces
@@ -798,10 +799,54 @@ sub IsPortTagged($) {
     return $query_result->numrows();
 }
 
-#                                                                                    
-# If a port is on switch, some port ops in snmpit                                    
-# should be avoided.                                                                 
-#                                                                                    
+sub setPortPTP($$) { 
+    my ($port, $onoff) = @_;
+
+    my ($node, $iface) = ($port->node_id(), $port->iface());
+    $onoff = ($onoff ? 1 : 0);
+
+    DBQueryFatal("update interface_state set ptp=$onoff ".
+		 "where node_id='$node' and iface='$iface'");
+}
+
+sub IsPortPTPEnabled($) { 
+    my ($port) = @_;
+
+    my ($node, $iface) = ($port->node_id(), $port->iface());
+
+    my $query_result =
+	DBQueryFatal("select ptp from interface_state ".
+		     "where node_id='$node' and iface='$iface' and ptp!=0");
+    
+    return $query_result->numrows();
+}
+
+sub setPortSyncE($$) { 
+    my ($port, $onoff) = @_;
+
+    my ($node, $iface) = ($port->node_id(), $port->iface());
+    $onoff = ($onoff ? 1 : 0);
+
+    DBQueryFatal("update interface_state set synce=$onoff ".
+		 "where node_id='$node' and iface='$iface'");
+}
+
+sub IsPortSyncEEnabled($) { 
+    my ($port) = @_;
+
+    my ($node, $iface) = ($port->node_id(), $port->iface());
+
+    my $query_result =
+	DBQueryFatal("select synce from interface_state ".
+		     "where node_id='$node' and iface='$iface' and sync!=0");
+    
+    return $query_result->numrows();
+}
+
+#
+# If a port is on switch, some port ops in snmpit
+# should be avoided.
+#
 sub isSwitchPort($) {
 	my $port = shift;
 

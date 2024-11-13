@@ -1314,24 +1314,29 @@ sub createVlanInterface($$) {
 		$vlabel[1] ne $pid || $vlabel[2] ne $eid) {
 		$mismatch = 1;
 	    }
-
 	} else {
 	    warn("*** Malformed vlan label for existing vlan$vtag device");
 	    unlockVlan();
 	    return -1;
 	}
 	if ($mismatch) {
+	    my $old = $vlan->{'description'};
+	    my $new = $lname .
+		(@vlabel == 3 ? ":$pid:$eid" : "");
+
 	    if ($retried == 20) {
 		unlockVlan();
 		warn("*** ERROR: blockstore_createVlanInterface: ".
-		     "Experiment mismatch for vlan$vtag, ".
+		     "Experiment mismatch for vlan$vtag ".
+		     "('$old' should be '$new'), ".
 		     "something is really wrong!");
 		return -1;
 	    }
 	    $retried++;
 	    unlockVlan();
 	    warn("*** WARN: blockstore_createVlanInterface: ".
-		 "Experiment mismatch for vlan$vtag, ".
+		 "Experiment mismatch for vlan$vtag ".
+		 "('$old' should be '$new'), ".
 		 "old instance may be terminating; waiting 30 seconds ...");
 	    sleep(30);
 	    goto again;

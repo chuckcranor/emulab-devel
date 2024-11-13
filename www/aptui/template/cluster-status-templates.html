@@ -8,9 +8,9 @@
 	<% if (isadmin) { %>
 	  <th>Pre
 	    <a href='#' class='btn btn-xs'
-	       data-toggle='tooltip'
-	       data-container="body"
-	       data-trigger="hover"
+	       data-toggle='tooltip' data-bs-toggle='tooltip'
+	       data-container="body" data-bs-container="body"
+	       data-trigger="hover" data-bs-trigger="hover"
 	       title='Number preserved AND free in parens'
 	       style="margin-bottom: 3px;
 	              padding-left: 0px;
@@ -19,9 +19,9 @@
 	<% } %>
 	<th>Free
 	  <a href='#' class='btn btn-xs'
-	     data-toggle='tooltip'
-	     data-container="body"
-	     data-trigger="hover"
+	     data-toggle='tooltip' data-bs-toggle='tooltip'
+	     data-container="body" data-bs-container="body"
+	     data-trigger="hover" data-bs-trigger="hover"
 	     title='If the reservation system determines that some free
 		    nodes will soon be unavailble, the adjusted number is
 		    shown in parens.'
@@ -81,8 +81,9 @@
 	<tr>
 	  <td>
 	    <% if (value.prereserved.length) { %>
-	      <a>
+	      <a class="a-nohref">
 		<span data-target='<%- "#" + expando_target %>'
+		      data-bs-target='<%- "#" + expando_target %>'
 		      class='glyphicon glyphicon-chevron-right
 			     <%- expando_class %>'>
 		</span>

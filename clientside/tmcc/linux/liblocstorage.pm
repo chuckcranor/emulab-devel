@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2021 University of Utah and the Flux Group.
+# Copyright (c) 2013-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -51,6 +51,9 @@ BEGIN
     if (-e "/etc/emulab/paths.pm") {
 	require "/etc/emulab/paths.pm";
 	import emulabpaths;
+	if (!defined($LBINDIR)) {
+	    $LBINDIR = "/usr/local/bin";
+	}
     }
     else {
 	$ETCDIR  = "/etc/rc.d/testbed";
@@ -102,11 +105,14 @@ my $BLKID	= "/sbin/blkid";
 my $SFDISK	= "/sbin/sfdisk";
 my $SGDISK	= "/sbin/sgdisk";
 my $GDISK	= "/sbin/gdisk";
+my $PARTED	= "/sbin/parted";
 my $PPROBE	= "/sbin/partprobe";
-my $FRISBEE     = "/usr/local/bin/frisbee";
+my $FRISBEE     = "$LBINDIR/frisbee";
 my $HDPARM	= "/sbin/hdparm";
+my $LSOF	= "/usr/bin/lsof";
 
 my $FSTAB	= "/etc/fstab";
+my $EXPORTS	= "/etc/exports";
 
 #
 # Time to wait for a session to start.
@@ -191,7 +197,7 @@ sub is_iscsi_dev($)
 	my $line = `ls -l /sys/block/$dev 2>/dev/null`;
 	if ($line =~ m#/sys/block/$dev -> ../devices/platform/host\d+/session\d+#) {
 	    return 1;
-	    }
+	}
     }
     return 0;
 }
@@ -246,6 +252,28 @@ sub find_serial($)
 }
 
 #
+# Determine if the device passed in is a real disk as opposed to a virtual
+# disk device like an iSCSI volume or a Xen virtual disk or not a disk at all.
+#
+sub is_real_dev($)
+{
+    my ($dev) = @_;
+    my $sl = "";
+
+    if (-l "/sys/block/$dev") {
+	my $line = `ls -l /sys/block/$dev 2>/dev/null`;
+	# XXX if a pci device, assume a local disk
+	if ($line =~ m# -> ../devices/pci\d+# ||
+	    $line =~ m# -> ../devices/virtual/nvme-subsystem/# ||
+	    $line =~ m# -> ../devices/soc\.\d+/[0-9a-f]+\.sata/# ||
+	    $line =~ m# -> ../devices/platform/soc/[0-9a-f]+\.sata/#) {
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+#
 # Do a one-time initialization of a serial number -> /dev/sd? map.
 #
 sub init_serial_map()
@@ -254,13 +282,10 @@ sub init_serial_map()
     # XXX this is a total hack and maybe distro dependent?
     #
     my %snmap = ();
-    my @lines = `ls -l /sys/block/sd[a-z] /sys/block/sd[a-z][a-z] /sys/block/nvme[0-9]* 2>&1`;
+    my @lines = `cd /sys/block; ls -d sd* nvme* 2>&1`;
     foreach (@lines) {
-	# XXX if a pci device, assume a local disk
-	# XXX for moonshots (arm64), it is different
-	if (m#/sys/block/(sd[a-z][a-z]?) -> ../devices/pci\d+# ||
-	    m#/sys/block/(nvme\d+n\d+) -> ../devices/pci\d+# ||
-	    m#/sys/block/(sd[a-z][a-z]?) -> ../devices/soc.\d+#) {
+	# XXX just whole disk devices
+	if (m#^(sd[a-z][a-z]?)$# || m#^(nvme\d+n\d+)$#) {
 	    my $dev = $1;
 	    $sn = find_serial($dev);
 	    if ($sn) {
@@ -294,7 +319,15 @@ sub get_disktype($)
     my @lines;
 
     #
-    # Assume NVMe is SSSD.
+    # Virtual devices (Xen virtual disks, iSCSI volumes) are considered HDD.
+    # Perhaps we should return something else? "VDD"?
+    #
+    if (!is_real_dev($dev)) {
+	return "HDD";
+    }
+
+    #
+    # Assume NVMe is SSD.
     # Older hdparm and smartctl don't seem to handle NVMe
     #
     if ($dev =~ /^nvme\d+n\d+/) {
@@ -302,7 +335,28 @@ sub get_disktype($)
     }
 
     #
-    # Try hdparm first since it is a standard utility
+    # Try a short-cut. Must be done after the is_real_dev check as unreal
+    # devices will want to say they are an SSD.
+    #
+    if (open(HFD, "cat /sys/class/block/$dev/queue/rotational |")) {
+	my $line = <HFD>;
+	close(HFD);
+	chomp $line;
+	if ($line =~ /^(\d+)$/) {
+	    if (int($1) == 0) {
+		return "SSD";
+	    }
+	    return "HDD";
+	}
+    }
+
+    #
+    # Try hdparm first since it is a standard utility.
+    #
+    # XXX BEWARE in Ubuntu22 on the m400 nodes, "hdparm -I" would cause
+    # the following disk operation to timeout. These should be caught by
+    # the short-cut check above. We should probably go back to trying
+    # smartctl before hdparm...
     #
     if (-x "$HDPARM") {
 	if (open(HFD, "$HDPARM -I /dev/$dev 2>/dev/null |")) {
@@ -395,20 +449,46 @@ sub get_ptabtype($)
 	return "unknown";
     }
 
-    # if sfdisk fails, assume unknown
+    #
+    # parted is installed at least as far back as Ubuntu 14 and it
+    # gives an unambiguous answer about the type or lack thereof.
+    #
+    if (-x "$PARTED") {
+	my $pinfo = `$PARTED -s /dev/$dev print 2>&1`;
+	chomp($pinfo);
+	if ($? == 0) {
+	    if ($pinfo =~ /^partition table: (\S+)$/i) {
+		if ($1 eq "msdos") {
+		    return "MBR";
+		} elsif ($1 eq "gpt") {
+		    return "GPT";
+		} else {
+		    return "unknown";
+		}
+	    }
+	} else {
+	    if ($pinfo =~ /unrecognised disk label/) {
+		return "unknown";
+	    }
+	}
+    }
+    
+    #
+    # Just in case parted fails us, we fall back on the vagaries of sfdisk
+    #
     my $pinfo = `$SFDISK -l /dev/$dev 2>&1`;
-    if ($?) {
+
+    # if sfdisk fails or doesn't recognize it, assume unknown
+    if ($? != 0 || $pinfo =~ /unrecognized partition table type/) {
 	return "unknown";
     }
 
-    # if sfdisk doesn't recognize it, assume unknown
-    if ($pinfo =~ /unrecognized partition table type/) {
-	return "unknown";
-    }
-
-    # newer sfdisk recognizes GPT
+    # newer sfdisk recognizes GPT and MBR explicitly
     if ($pinfo =~ /Disklabel type: gpt/) {
 	return "GPT";
+    }
+    if ($pinfo =~ /Disklabel type: dos/) {
+	return "MBR";
     }
 
     # if sfdisk detects a GPT, go with it
@@ -835,6 +915,165 @@ sub set_iname($$)
 }
 
 #
+# Attempt to login to an iSCSI session.
+# Returns the session ID if successful, undef otherwise.
+#
+sub iscsi_login($$$$)
+{
+    my ($bsid,$hostip,$uuid,$log) = @_;
+
+    # record all the output for debugging
+    my $redir = ">/dev/null 2>&1";
+    if ($log) {
+	$redir = ">>$log 2>&1";
+    }
+
+    #
+    # XXX It may take some time for the server to respond on a first
+    # boot as it may be setting up many blockstores. So we retry the
+    # initial operation for awhile. The default iscsiadm timeout for
+    # connecting is 120 seconds, which we will retry 10 times for a
+    # total of 20 minutes. Note that the swapin node boot timeout will
+    # probably trigger before that, but rebooting the node will be
+    # okay here.
+    #
+    my $rv = 0;
+    for (my $tries = 0; $tries < int($SESSION_TIMEOUT/120); $tries++) {
+	$rv = mysystem("$ISCSI -m node -T $uuid -p $hostip -l $redir");
+	# exit code 8 indicates timeout
+	last
+	    if ($rv != 0x800);
+	warn("*** $bsid: could not connect to portal $hostip, retrying...\n");
+    }
+
+    #
+    # If the login succeeded, look up and return the session.
+    #
+    if (!$rv) {
+	my @lines = `$ISCSI -m session 2>&1`;
+	foreach (@lines) {
+	    chomp;
+	    if (/^tcp: \[(\d+)\].*$uuid\b/) {
+		return $1;
+	    }
+	}
+    }
+
+    return undef;
+}
+
+#
+# The filesystem being busy (i.e., a file open on it or being the working dir
+# of a process) is the only case we handle right now.
+#
+# The two scenarios we handle right now are: user-mode processes accessing the
+# filesystem and a kernel-mode NFS server exporting the filesystem. The former
+# we handle by identifying and killing the accessing processes and retrying
+# the unmount. The latter by determining if the filesystem is being exported
+# and the NFS server running, in which case we shutdown the server.
+#
+# Returns zero if successful, an non-zero otherwise.
+#
+sub force_unmount($)
+{
+    my ($href) = @_;
+    my $bsid = $href->{'VOLNAME'};
+    my ($mpoint) = $href->{'MOUNTPOINT'};
+    my $fail = "";
+    my %pids = ();
+    
+    #
+    # Use lsof to identify processes accessing the filesystem and kill them.
+    #
+    if (-e "$LSOF") {
+	my @output = `$LSOF -Pn | grep ' $mpoint' 2>&1`;
+	foreach my $line (@output) {
+	    chomp($line);
+	    if ($line =~ m#^\S+\s+(\d+).*\s$mpoint(/\S+)?\s*$#) {
+		$pids{$1} = 1 if ($1 > 1);
+	    }
+	}
+    }
+    #
+    # "lsof" does not exist, we try extracting the info by looking at the
+    # symlinks in /proc/*/cwd and /proc/*/fd/*. Since globbing will fail
+    # if there are lots of processes or open files, we use "find" and then
+    # filter the results to find processes.
+    #
+    # ala "find /proc -type l -ls | grep $mpoint" and then filter those in
+    # this script looking for /proc/\d+/cwd and /proc/\d+/fd/\d+ matches.
+    # This could be really slow, though maybe not any slower than running
+    # "lsof" in the same conditions.
+    #
+    else {
+	my @lines = `find /proc -type l -ls 2>/dev/null | grep $mpoint`;
+	foreach my $line (@lines) {
+	    if ($line =~ m#/proc/(\d+)/cwd -> $mpoint(/\S+)?$#) {
+		$pids{$1} = 1 if ($1 > 1);
+		$suf = defined($2) ? $2 : "";
+		print STDERR "Found pid $1 cwd is '$mpoint$suf'\n"
+		    if (0);
+		next;
+	    }
+	    if ($line =~ m#/proc/(\d+)/fd/(\d+) -> $mpoint(/\S+)?$#) {
+		$pids{$1} = 1 if ($1 > 1);
+		$suf = defined($3) ? $3 : "";
+		print STDERR "Found pid $1 FD $2 is '$mpoint$suf'\n"
+		    if (0);
+		next;
+	    }
+	}
+    }
+
+    #
+    # If we identified any processes, kill them.
+    # XXX maybe we should TERM and then KILL if that doesn't work?
+    #
+    if (keys(%pids) > 0) {
+	warn("*** $bsid: killing accessing processes: " .
+	     join(' ', keys(%pids)) . "\n");
+	kill('HUP', keys(%pids));
+	sleep(2);
+	kill('TERM', keys(%pids));
+	sleep(2);
+	$fail = `$UMOUNT $mpoint 2>&1`;
+	if ($? == 0) {
+	    return 0;
+	}
+    }
+
+    #
+    # See if the filesystem is exported and there is an NFS server running.
+    # If so, kill the server.
+    #
+    # XXX this is only intended to catch cases where NFS is setup by a
+    # profile derived from our nfs-server profile, which only works on
+    # Ubuntu and FreeBSD. So we assume the Ubuntu service name here.
+    #
+    if (-f "$EXPORTS" && mysystem("grep -q -w '^$mpoint' $EXPORTS") == 0) {
+	my @lines = `service --status-all | grep nfs- 2>&1`;
+	my $service = "";
+	foreach my $line (@lines) {
+	    if ($line =~ /^\s+\[ \+ \]\s+(nfs-kernel-server)/) {
+		$service = $1;
+	    }
+	}
+	if ($service) {
+	    warn("*** $bsid: stopping $service service\n");
+	    if (mysystem("service $service stop") == 0) {
+		sleep(2);
+		$fail = `$UMOUNT $mpoint 2>&1`;
+		if ($? == 0) {
+		    return 0;
+		}
+	    }
+	}
+    }
+    warn("*** $bsid: could not unmount $mpoint:\n    $fail");
+    return 1;
+}
+
+#
 # Handle one-time operations.
 # Return a cookie (object) with current state of storage subsystem.
 #
@@ -1013,7 +1252,7 @@ sub os_show_storage($)
 	my $snmap = $so->{'LOCAL_SNMAP'};
 
 	print STDERR "  LOCAL_SNMAP:\n";
-	foreach my $sn (keys %$snmap) {
+	foreach my $sn (sort { $snmap->{$a} cmp $snmap->{$b} } keys %$snmap) {
 	    print STDERR "    $sn -> ", $snmap->{$sn}, "\n";
 	}
     }
@@ -1115,12 +1354,39 @@ sub os_check_storage_element($$)
 		last;
 	    }
 	}
+
+	#
+	# Block store might exist, but we might just be logged out.
+	# Try to login and continue. Otherwise, an ephemeral blockstore
+	# will get recreated in os_create_storage_element after every
+	# shutdown (reboot). We don't want these blockstores to be *that*
+	# ephemeral!
+	#
 	if (!defined($session)) {
-	    return 0;
+	    #
+	    # XXX before we try to re-login, see if a mount exists on the
+	    # mountpoint when we are not expecting it. This can happen if we
+	    # did a shutdown and the unmount was unsuccessful, or if the user
+	    # mounted something else on the mount point. In this situation,
+	    # we attempt an unmount. If that is successful, we continue.
+	    # Otherwise we abort.
+	    #
+	    my $mpoint = $href->{'MOUNTPOINT'};
+	    if ($mpoint && !$href->{'EXPECTMOUNT'}) {
+		my $line = `$MOUNT | grep ' on $mpoint '`;
+		if ($line) {
+		    warn("*** $bsid: mount point occupied\n");
+		    return -1;
+		}
+	    }
+	    $session = iscsi_login($bsid, $hostip, $uuid, 0);
+	    if (!defined($session)) {
+		return 0;
+	    }
 	}
 
 	#
-	# If there is no session, we have a problem.
+	# If there is no device associated with the session, we have a problem.
 	#
 	my $dev = iscsi_to_dev($session);
 	if (!defined($dev)) {
@@ -1204,6 +1470,10 @@ sub os_check_storage_element($$)
 	    }
 	    elsif ($line !~ /^${mdev} on (\S+) / || $1 ne $mpoint) {
 		warn("*** $bsid: mounted on $1, should be on $mpoint\n");
+		return -1;
+	    }
+	    elsif ($line !~ /^(\/dev\/\S+) on $mpoint / || $1 ne $mdev) {
+		warn("*** $bsid: mounted from $1, should be from $mdev\n");
 		return -1;
 	    }
 	}
@@ -1647,50 +1917,20 @@ sub os_create_storage_element($$$)
 	# Perform one time iSCSI operations
 	#
 	if (mysystem("$ISCSI -m node -T $uuid -p $hostip -o new $redir")) {
-	    warn("*** $bsid: first-time init failed; Could not create DB record.\n");
+	    warn("*** $bsid: first-time init failed; ".
+		 "Could not create DB record$logmsg\n");
 	    return 0;
 	}
 	if (mysystem("$ISCSI -m node -T $uuid -p $hostip -o update -n node.startup -v manual $redir")) {
-	    warn("*** $bsid: first-time init failed; Could not update DB record.\n");
+	    warn("*** $bsid: first-time init failed; ".
+		 "Could not update DB record$logmsg\n");
 	    return 0;
 	}
 	    
-	#
-	# XXX It may take some time for the server to respond on a first
-	# boot as it may be setting up many blockstores. So we retry the
-	# initial operation for awhile. The default iscsiadm timeout for
-	# connecting is 120 seconds, which we will retry 10 times for a
-	# total of 20 minutes. Note that the swapin node boot timeout will
-	# probably trigger before that, but rebooting the node will be
-	# okay here.
-	#
-	my $rv = 0;
-	for (my $tries = 0; $tries < int($SESSION_TIMEOUT/120); $tries++) {
-	    $rv = mysystem("$ISCSI -m node -T $uuid -p $hostip -l $redir");
-	    # exit code 8 indicates timeout
-	    last
-		if ($rv != 0x800);
-	    warn("*** $bsid: could not connect to portal $hostip, retrying...\n");
-	}
-	if ($rv) {
-	    warn("*** $bsid: first-time init failed; Could not login session.\n");
-	    return 0;
-	}
-
-	#
-	# Make sure we are connected
-	#
-	my $session;
-	@lines = `$ISCSI -m session 2>&1`;
-	foreach (@lines) {
-	    chomp;
-	    if (/^tcp: \[(\d+)\].*$uuid\b/) {
-		$session = $1;
-		last;
-	    }
-	}
+	my $session = iscsi_login($bsid, $hostip, $uuid, $log);
 	if (!defined($session)) {
-	    warn("*** Could not locate session for block store $bsid (uuid=$uuid)\n");
+	    warn("*** Could not locate or login to iSCSI session for ".
+		 "block store $bsid (uuid=$uuid)$logmsg\n");
 	    return 0;
 	}
 
@@ -1921,10 +2161,11 @@ sub os_create_storage_slice($$$)
 	    #   or
 	    # lvcreate -n h2d2 -L 100m emulab
 	    #
+	    my $szarg = "-L ${lvsize}m";
 	    if ($lvsize == 0) {
 		my $sz = `vgs -o vg_size --units m --noheadings $VGNAME`;
 		if ($sz =~ /([\d\.]+)/) {
-		    $lvsize = int($1);
+		    $szarg = "-L ${1}m";
 		} else {
 		    warn("*** $lv: could not find size of VG\n");
 		}
@@ -1943,16 +2184,24 @@ sub os_create_storage_slice($$$)
 	    # option as well!
 	    #
 	    my $wipeopts = "-Zy -y";
-	    if (defined($pvs) && $pvs > 1 &&
-		!mysystem("lvcreate $wipeopts -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
-		$href->{'LVDEV'} = "/dev/$VGNAME/$lv";
-		return 1;
-	    }
-	    if (mysystem("lvcreate $wipeopts -n $lv -L ${lvsize}m $VGNAME $redir")) {
-		warn("*** $lv: could not create LV$logmsg\n");
-		return 0;
+	    if (!defined($pvs) || $pvs < 2 ||
+		mysystem("lvcreate $wipeopts -i $pvs -n $lv $szarg $VGNAME $redir")) {
+		if (mysystem("lvcreate $wipeopts -n $lv $szarg $VGNAME $redir")) {
+		    warn("*** $lv: could not create LV$logmsg\n");
+		    return 0;
+		}
 	    }
 	    $mdev = "$VGNAME/$lv";
+	    # in case $lvsize == 0, record true size for our caller
+	    if ($lvsize == 0) {
+		my $sz = `lvs -o lv_size --units m --noheadings $mdev`;
+		if ($sz =~ /([\d\.]+)/) {
+		    $lvsize = int($1);
+		} else {
+		    warn("*** $lv: could not find size of LV\n");
+		}
+	    }
+	    $href->{'VOLSIZE'} = $lvsize;
 	}
 
 	$href->{'LVDEV'} = "/dev/$mdev";
@@ -1997,8 +2246,22 @@ sub os_remove_storage_element($$$)
 		    _docker_get_ext_trans_mountpoint($mpoint);
 	    }
 
-	    if (mysystem("$UMOUNT $mpoint")) {
-		warn("*** $bsid: could not unmount $mpoint\n");
+	    #
+	    # If this is a persistent blockstore and the basic unmount fails,
+	    # we try extra hard to unmount it, otherwise it could be left in
+	    # an inconsistent state for the next use. Obviously, this does
+	    # not matter for ephemeral blockstores which will be destroyed
+	    # on termination anyway.
+	    #
+	    # The filesystem being busy (i.e., a file open on it or being the
+	    # working dir of a process) is the only case we handle right now.
+	    #
+	    my $fail = `$UMOUNT $mpoint 2>&1`;
+	    if ($? != 0) {
+		if ($fail !~ /is busy/ || !$href->{'PERSIST'} ||
+		force_unmount($href) != 0) {
+		    warn("*** $bsid: could not unmount $mpoint:\n    $fail");
+		}
 	    }
 	}
 
@@ -2239,14 +2502,18 @@ sub os_remove_storage_slice($$$)
 		if (mysystem("pvremove -f @devs $redir")) {
 		    warn("*** $lv: could not destroy PVs$logmsg\n");
 		} else {
-		    my $tdev = "/dev/${bdisk}4";
+		    my $pchr = "";
+		    if ($bdisk =~ /^nvme/) {
+			$pchr = "p";
+		    }
+		    my $tdev = "${bdisk}${pchr}4";
 		    if (grep(/\s*$tdev\s*/, @devs) != 0) {
 			if ($ginfo->{$bdisk}->{'ptabtype'} eq "GPT") {
 			    if (mysystem("$SGDISK -d 4 /dev/$bdisk $redir") ||
 				mysystem("$PPROBE /dev/$bdisk $redir")) {
 				warn("*** $lv: could not destroy $tdev$logmsg\n");
 			    } else {
-				delete $ginfo->{"${bdisk}4"};
+				delete $ginfo->{$tdev};
 			    }
 			}
 		    }

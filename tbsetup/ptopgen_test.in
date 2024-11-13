@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,11 +27,13 @@ use English;
 use Getopt::Std;
 use Math::BigInt;
 use List::Util 'shuffle';
+use Data::Dumper;
 
 use lib "@prefix@/lib";
 use libdb qw(TBGetSiteVar);
 use libadminctrl;
 use libptop;
+use Project;
 use EmulabFeatures;
 use OSImage;
 use libtestbed;
@@ -60,10 +62,10 @@ $opurl = "http://www.geni.net/resources/rspec/ext/opstate/1/ad.xsd";
 
 sub usage()
 {
-    print("Usage: ptopgen [-v] [-s switch] [-p pid [-e eid]] [-m factor] " .
+    print("Usage: ptopgen [-v] [-s switch] [-p pid/gid [-e eid]] [-m factor] " .
 	  "[-n c/e] [-x] [-g (0.1 | 2)] [-c component-name]".
 	  "[-l type-limit-file] [-z]\n" .
-	  "       -p include nodes the project has permission to use\n".
+	  "       -p include nodes the project/group has permission to use\n".
 	  "       -e include given experiments resources\n" .
 	  "          in the ptopfile (as if they were free)\n" .
 	  "       -v Include stuff for topologies with virtual nodes\n".
@@ -123,6 +125,10 @@ my $cmuuid = TBGetSiteVar('protogeni/cm_uuid');
 my $cmurn = "";
 if ($PGENISUPPORT) {
     require GeniHRN;
+    require GeniDB;
+    require GeniUser;
+    # talk to the right DB.
+    GeniDB::DBConnect(GeniDB::GENICM_DBNAME());
     $cmurn = &GeniHRN::Generate($OURDOMAIN, "authority", "cm");
 }
 my $allow_firewall = TBGetSiteVar("general/cnet_firewalls");
@@ -236,6 +242,7 @@ use Node;
 use NodeType;
 use Lan;
 use BlockstoreType;
+use Blockstore;
 use User;
 use Reservation;
 
@@ -261,6 +268,7 @@ my $DEADPID = NODEDEAD_PID();
 my $DEADEID = NODEDEAD_EID();
 
 my $pid;
+my $gid;
 my $exempt_eid;
 my $switchtouse;
 my $experiment;
@@ -307,7 +315,12 @@ if (defined($options{"R"})) {
     $regression = 1;
 }
 if (defined($options{"p"})) {
-    $pid = $options{"p"};
+    if( $options{"p"} =~ m"(.+)/(.+)" ) {
+	$pid = $1;
+	$gid = $2;
+    } else {
+	usage();
+    }
 }
 if (defined($options{"a"})) {
     $allnodes = 1;
@@ -333,7 +346,7 @@ if (defined($options{"n"})) {
 if (defined($options{"e"})) {
     $exempt_eid = $options{"e"};
     usage()
-	if (!defined($pid));
+	if (!defined($pid) || !defined( $gid ) );
     $experiment = Experiment->Lookup($pid, $exempt_eid);
     die("Could not look up experiment $pid,$exempt_eid\n")
 	if (!defined($experiment));
@@ -405,8 +418,30 @@ sub MyQueryFatal($)
 # Figure out who is running this script, to be used in finding OSes
 # with per-user permissions.  We assume that the user we want
 # to look up is the one running this script (and hence the mapper
-# wrapper that calls it).
-my $this_user = User->ThisUser()->uid() || "";
+# wrapper that calls it). 
+my $this_user = User->ThisUser();
+my $this_uid  = (defined($this_user) ? $this_user->uid() : "");
+
+#
+# Ick. For reservation related stuff, the current user will not be the
+# correct user when coming in on the Geni path for a nonlocal project.
+# Poor design choice many years ago.
+#
+# See similar (bad) hack in nalloc. :-(
+#
+# Note that we want this to be undef, not "". if we do not have a user.
+#
+my $reservation_user = User->ThisUser()->uid();
+if ($PGENISUPPORT &&
+    exists($ENV{'REALGENIURN'}) && $ENV{'REALGENIURN'} ne "") {
+    my $geniuser = GeniUser->Lookup($ENV{'REALGENIURN'}, 1);
+    if (!defined($geniuser)) {
+	fatal("Could not lookup geniuser for " . $ENV{'REALGENIURN'});
+    }
+    $reservation_user = $geniuser->uid();
+}
+print STDERR "ptopgen: reservation_user='$reservation_user'\n"
+    if (defined($reservation_user));
 
 $fake_inet_switch = "internet";
 $fake_inet_iface = "(null)";
@@ -610,6 +645,9 @@ while (($node,$eventstate, $role, $uuid, $isremotenode,
 	    || $eventstate eq TBDB_NODESTATE_PXEWAIT
 	    || $eventstate eq TBDB_NODESTATE_POWEROFF
 	    || $eventstate eq TBDB_NODESTATE_ALWAYSUP);
+    my $isreallyup = defined($eventstate)
+	&& ($eventstate eq TBDB_NODESTATE_ISUP
+	    || $eventstate eq TBDB_NODESTATE_ALWAYSUP);
     my $isshared = (defined($erole)
 		    && $erole eq "sharedhost"
 		    && $useshared
@@ -617,7 +655,7 @@ while (($node,$eventstate, $role, $uuid, $isremotenode,
     my $isblockstore = (defined($erole)
 			&& $erole eq "storagehost"
 			&& $useblockstore
-			&& $isup);
+			&& $isreallyup);
     my $isreserved = (defined($reserved_eid)
 		      || (defined($reserved_pid)
 			  && (! defined($pid) || $pid ne $reserved_pid)));
@@ -656,7 +694,8 @@ while (my ($class,$type,$isvirt,$architecture) = $result->fetchrow_array) {
 
     # Default is permission to use all types,classes. 
     $permissions{$class} = 1;
-    $permissions{$type}  = 1;
+    $permissions{$type}  =
+	(defined($pid) ? libadminctrl::MaximumAllowed($pid, $type) : 1);
 }
 TBDebugTimeStamp("Finished reading node type stuff");
 
@@ -668,6 +707,8 @@ while (my ($auxtype,$type) = $result->fetchrow()) {
     if (exists($typemap{$type})) {
 	$typemap{$type}->{'AUXTYPES'}->{$auxtype} = 1;
 	$auxtypemap{$auxtype} = $type;
+	$permissions{$auxtype} =
+	    (defined($pid) ? libadminctrl::MaximumAllowed($pid, $type) : 1);
     }
 }
 TBDebugTimeStamp("Finished reading node type auxtypes");
@@ -719,7 +760,11 @@ TBDebugTimeStamp("Finished reading node features");
 # Augment the features table to discourage selection of node types other
 # than those the project has reserved (if any).
 if( defined( $pid ) ) {
-    my @reservations = Reservation->CurrentReservations( [ $pid ] );
+    my $project = Project->Lookup($pid);
+    $gid = $pid if (!defined($gid));
+    
+    my @reservations =
+	Reservation->CurrentReservations( [ "$pid/$gid" ], $reservation_user);
     if( @reservations ) {
 	my @types = Reservation->ReservableTypes();
 	foreach my $type (@types) {
@@ -741,23 +786,31 @@ if( defined( $pid ) ) {
     #
     my @reservable_nodes   = Reservation->ReservableNodes();
     TBDebugTimeStamp("Finished reservations 2");
-    my @activereservations = Reservation->CurrentReservations(undef, 1);
+    my @activereservations = Reservation->CurrentReservations(undef, undef, 1);
     TBDebugTimeStamp("Finished reservations 3");
 
     foreach my $node (@reservable_nodes) {
 	my $node_id = $node->node_id();
 	foreach my $res (@activereservations) {
 	    if ($res->{'nodetype'} eq $node_id) {
-		if ($res->{'pid'} ne $pid) {
+		if ($res->{'pid'} eq $pid &&
+		    (($project->shared_reservations() ==
+		      $Project::RESERVATIONS_PERPROJECT) ||
+		     ($project->shared_reservations() ==
+		      $Project::RESERVATIONS_PERUSER &&
+		      $res->{'uid'} eq $reservation_user) ||
+		     ($project->shared_reservations() ==
+		      $Project::RESERVATIONS_PERGROUP &&
+		      $res->{'gid'} eq $gid))) {
+		    $reserved_nodes{$node_id} = $node;
+		}
+		else {
 		    #
 		    # Node is currently reserved to another project. Mark it
 		    # to be pruned out below.
 		    #
 		    $pruned_nodes{$node_id} = $node;
 		    last;
-		}
-		else {
-		    $reserved_nodes{$node_id} = $node;
 		}
 	    }
 	}
@@ -792,29 +845,6 @@ while (my ($node_id, $type, $count) = $result->fetchrow()) {
     push @{$auxtypes{$node_id}}, "$type:$count";
 }
 TBDebugTimeStamp("Finished reading node auxtypes");
-
-#
-# Read the permission table if given a pid. If there is an entry in
-# the table for a type/class, then permission is granted only if there
-# is a record with the pid. If not, remove the permission granted above.
-# 
-if (defined($pid)) {
-    $result =
-	MyQueryFatal("select distinct type from nodetypeXpid_permissions");
-    
-    while (my ($type) = $result->fetchrow_array) {
-	$permissions{$type} = 0;
-    }
-    
-    $result =
-	MyQueryFatal("select type from nodetypeXpid_permissions ".
-		     "where pid='$pid'");
-    
-    while (my ($type) = $result->fetchrow_array) {
-	$permissions{$type} = 1;
-    }
-}
-TBDebugTimeStamp("Finished reading nodetypeXpid_permissions");
 
 sub processOs(@)
 {
@@ -893,8 +923,8 @@ while (my ($osid,$osname,$nextosid) = $query_result->fetchrow_array()) {
 
 #
 # In Geni mode we are spitting out an advertisement which includes a bunch
-# of info we do not need otherwise. There is no user, but might be an
-# optional project.
+# of info we do not need otherwise. Additionally, if we have a type file,
+# then we can bypass using these giant queries, see below.
 #
 if ($genimode ne $NO_GENI || !defined($options{"I"})) {
     # First query uses osidtoimageid to get type info
@@ -913,7 +943,7 @@ if ($genimode ne $NO_GENI || !defined($options{"I"})) {
 	 " join image_permissions as p1 on ".
 	 "   p1.permission_type='group' and p1.permission_idx=g.gid_idx ".
 	 " join osidtoimageid as oi on oi.imageid=p1.imageid ".
-	 " where g.pid='$pid) " : " ") .
+	 " where g.pid='$pid') " : " ") .
 	") as u ".
 	"join os_info as o on o.osid=u.osid ".
 	"join os_info_versions as ov on ".
@@ -937,7 +967,7 @@ if ($genimode ne $NO_GENI || !defined($options{"I"})) {
 	"  where oi.type is null and ".
 	"        i.architecture is not null and ".
 	"        nt.architecture is not null and ".
-	"        (iv.global=1" . ($pid ? " or pid='$pid'" : "") . ")) " .
+	"        (iv.global=1" . ($pid ? " or iv.pid='$pid'" : "") . ")) " .
 	($pid ?
 	 # Images granted to the project.
 	 " union ".
@@ -1016,7 +1046,7 @@ else {
 	}
 	my @typelist;
 	
-	if ($image->isImage()) {
+	if ($image->isImage() || $image->isImageAlias()) {
 	    @typelist = $image->TypeList();
 
 	    foreach my $nodetype (@typelist) {
@@ -1028,11 +1058,22 @@ else {
 	    if (defined($realosid)) {
 		$nextimage = OSImage->Lookup($realosid);
 		if (defined($nextimage)) {
-		    @typelist = $nextimage->TypeList();
+		    if ($nextimage->isImage()) {
+			@typelist = $nextimage->TypeList();
+		    }
+		    else {
+			@typelist = $nextimage->osinfo()->TypeList();
+		    }
 		}
 		foreach my $nodetype (@typelist) {
 		    processOs($image->osid(), $nodetype->type());
 		}
+	    }
+	}
+	elsif (!$image->isImage()) {
+	    @typelist = $image->osinfo()->TypeList();
+	    foreach my $nodetype (@typelist) {
+		processOs($image->osid(), $nodetype->type());
 	    }
 	}
 	if (!@typelist) {
@@ -1075,14 +1116,14 @@ if ($pid) {
     $subosidquery1 .= " or i1.pid='$pid' or g1.pid='$pid'";
 }
 if ($this_user) {
-    $subosidquery1 .= " or u1.uid='$this_user'"
+    $subosidquery1 .= " or u1.uid='$this_uid'"
 }
 $subosidquery .= ") and (iv2.global = 1";
 if ($pid) {
     $subosidquery1 .= " or i2.pid='$pid' or g2.pid='$pid'";
 }
 if ($this_user) {
-    $subosidquery .= " or u2.uid='$this_user'"
+    $subosidquery .= " or u2.uid='$this_uid'"
 }
 $subosidquery1 .= ")";
 
@@ -1377,7 +1418,8 @@ $result =
 		 "  np.uuid,b.sharing_mode, ".
 		 "  t.isremotenode, b.erole, ".
 		 "  nat3.attrvalue as allowed_projects, ".
-		 "  nat4.attrvalue as explicit_request ".
+		 "  nat4.attrvalue as explicit_request, ".
+		 "  nat5.attrvalue as conflicting_nodes ".
 		 ($useshared ?
 		  "  ,so.osfeatures,nat2.attrvalue as shared_weight, " .
 		  "  ru.load_1min,ru.load_5min,ru.status_timestamp " : " ").
@@ -1403,6 +1445,9 @@ $result =
 		 "left join node_attributes as nat4 on ".
 		 "     nat4.node_id=a.node_id and ".
 		 "     nat4.attrkey='explicit_request' ".
+		 "left join node_attributes as nat5 on ".
+		 "     nat5.node_id=a.node_id and ".
+		 "     nat5.attrkey='conflicting_nodes' ".
 		 ($useshared ?  
 		  "left join node_rusage as ru on ru.node_id=a.node_id ".
 		  "left join os_info_versions as so on ".
@@ -1410,8 +1455,8 @@ $result =
 		  "     a.def_boot_osid_vers=so.vers " : "").
 		 "where $free_condition and ".
 		 "   (a.role='testnode' and t.isremotenode=0 ".
-		 # OAI2021FallWS
-		 #"    and a.type='d430'".
+		 (0 && defined($pid) && $pid eq "@TUTORIALPID@" ?
+		  " and a.type='d430' " : "") .
 		 "   )");
 
 TBDebugTimeStamp("Finished big node query");
@@ -1545,6 +1590,7 @@ foreach $node (@nodenames) {
     my $cpu_speed = $typemap{$type}->{'SPEED'};
     my $ram = $typemap{$type}->{'RAM'};
     my $trivspeed = $typemap{$type}->{'TRIVSPEED'};
+    my $typeinfo = $typemap{$type}->{'TYPEINFO'};
     my $uuid = $nodetouuid{$node};
     my @types = ();
     my @sliver_types = ();
@@ -1594,7 +1640,7 @@ foreach $node (@nodenames) {
 	push(@types, "$class:1");
     }
 
-    if ($typemap{$type}->{'EXPLICIT_REQUEST'} || $current->explicit_request()) {
+    if ($typemap{$type}->{'EXPLICIT_REQUEST'}) {
 	push(@features, "$type-explicit:1");
     }
 
@@ -1726,6 +1772,11 @@ foreach $node (@nodenames) {
 	    #
 	    if ($sharing_mode{$node} && exists($globalcounts{$node})) {
 		$count -= $globalcounts{$node};
+		# We can go negative, not super important if we do,
+		# but assign will choke on a negative number.
+		if ($count < 0) {
+		    $count = 0;
+		}
 	    }
 	    if (defined($mfactor) && $mfactor <= $count) {
 		$count = $mfactor;
@@ -1822,6 +1873,10 @@ foreach $node (@nodenames) {
 	    if ($feature =~ /highvlan/) {
 		push(@features, $feature);
 	    }
+	    elsif ($feature =~ /disk_any:([\d\.]+)$/) {
+		my $disk_any = $typeinfo->disksize_any();
+		push(@features, "?+disk_any:$disk_any");
+	    }
 	}
     }
 
@@ -1891,7 +1946,17 @@ foreach $node (@nodenames) {
 	push(@features,"already_reserved:0");
     }
 
-    if (exists($is_prereserved{$node})) {
+    #
+    # This effectively means that the user has to use fix-node and the
+    # mapper will add the corresponding desire. Without the fix-node,
+    # this will prevent the node from getting allocated, since we want
+    # the mapper to check that a conflict is not attempted, since it
+    # is easier to do there. 
+    #
+    if ($current->conflicting_nodes()) {
+	push(@features, "${node}-explicit:1");
+    }
+    elsif (exists($is_prereserved{$node})) {
 	push(@features,"prereserved:0");
 	#
 	# The idea here is that if the project has the node prereserved,
@@ -1980,6 +2045,12 @@ if ($useblockstore) {
     my %bspools = ();
     while (my ($nodeId, $bsId, $leaseIdx, $typeName,
 	       $capacity, $pool) = $result->fetchrow_array) {
+
+	# Skip blockstores on dead storage nodes.
+	next
+	    if (exists($nodetoavailable{$nodeId}) &&
+		!$nodetoavailable{$nodeId});
+		       
 	if ($pool) {
 	    my $key = "$nodeId/$pool";
 	    if (!exists($bspools{$key})) {
@@ -2246,37 +2317,57 @@ if ($nolinks) {
     exit(0);
 }
 
-$interfaceprotocols = {};
-$interfacespeeds = {};
-$interface_auxspeeds = {};
+#
+# Read interface type capabilities we care about.
+#
+my %interface_capabilities = ();
 
-# Read interface types. First need to find the protocols an interface supports
-# and then then the speed for each of those protocols.
-# Note that we are going to assume anything attached to a switch is ethernet.
-$result = MyQueryFatal("SELECT type,capkey,capval from interface_capabilities ".
-		       "where capkey='protocols' or capkey like '%_defspeed'"); 
-while (($type,$capkey,$capval) = $result->fetchrow_array) {
+$result = MyQueryFatal("SELECT type,capkey,capval from interface_capabilities");
+while (my ($type,$capkey,$capval) = $result->fetchrow_array()) {
+    if (!exists($interface_capabilities{$type})) {
+	$interface_capabilities{$type} = {
+	    "besteffort" => 1,
+	};
+    }
+    my $caps = $interface_capabilities{$type};
+    
     if ($capkey eq "protocols") {
-	$interfaceprotocols{$type} = [ split(",", $capval) ];
+	$caps->{"protocols"} = [ split(",", $capval) ];
+    }
+    elsif ($capkey =~ /^([-\w]+)_auxspeeds$/) {
+	$caps->{"auxspeeds"} = [ split(",", $capval) ];
     }
     elsif ($capkey =~ /^([-\w]+)_defspeed$/) {
-	$interfacespeeds{$type}{$1} = $capval;
+	if (!exists($caps->{"defspeeds"})) {
+	    $caps->{"defspeeds"} = {};
+	}
+	$caps->{"defspeeds"}->{$1} = $capval;
     }
-    else {
-	die("Improper defspeed $capval for $type!\n");
+    elsif ($capkey eq "nobesteffort") {
+	$caps->{"besteffort"} = 0;
     }
 }
+sub interfaceCapability($$)
+{
+    my ($type, $capkey) = @_;
 
-# Read interface auxspeeds.
-$result = MyQueryFatal("SELECT type,capkey,capval from interface_capabilities ".
-		       "where capkey like '%_auxspeeds'");
-while (($type,$capkey,$capval) = $result->fetchrow_array) {
-    if ($capkey =~ /^([-\w]+)_auxspeeds$/) {
-	$interface_auxspeeds{$type} = [ split(",", $capval) ];
-    }
-    else {
-	die("Improper auxspeeds $capval for $type!\n");
-    }
+    return undef
+	if (!exists($interface_capabilities{$type}) ||
+	    !exists($interface_capabilities{$type}->{$capkey}));
+
+    return $interface_capabilities{$type}->{$capkey};
+}
+sub interfaceProtocols($) { return interfaceCapability($_[0], "protocols"); }
+sub interfaceAuxspeeds($) { return interfaceCapability($_[0], "auxspeeds"); }
+sub interfaceBesteffort($){ return interfaceCapability($_[0], "besteffort"); }
+sub interfaceSpeeds($$)
+{
+    my ($type, $which) = @_;
+    my $defspeeds = interfaceCapability($type, "defspeeds");
+    return undef
+	if (! (defined($defspeeds) && exists($defspeeds->{$which})));
+
+    return $defspeeds->{$which};
 }
 
 # Read interface switches
@@ -2548,7 +2639,15 @@ foreach my $nodeid (keys(%simple_links)) {
     my $maxbw = 0;
 
     foreach my $ref (@{$simple_links{$nodeid}}) {
-	my (undef,undef,undef,undef,$bw) = @$ref;
+	my ($n1,$i1,$n2,$i2,$bw,$d,$l,$types) = @$ref;
+
+	#
+	# Prune out interfaces that are marked as not allowing best effort.
+	#
+	next
+	    if (! (get_iface_besteffort($n1,$i1) &&
+		   get_iface_besteffort($n2,$i2)));
+	
 	if ($bw > $maxbw) {
 	    $maxbw = $bw;
 	}
@@ -2665,9 +2764,9 @@ if (! defined($component_name)) {
       my $type    = $interfacetypes{$interface};
       
       next
-	  if (!defined($interfaceprotocols{$type}));
+	  if (!defined(interfaceProtocols($type)));
       
-      my @protos  = @{ $interfaceprotocols{$type} };
+      my @protos  = @{ interfaceProtocols($type) };
 
       #
       # Get the intersection of the protocols supported by this interface, and
@@ -2717,7 +2816,7 @@ exit(0);
 sub get_ifacebw {
     my ($node,$iface,$protocol) = @_;
     if (defined($interfacetypes{"$node:$iface"})) {
-	my $bw = $interfacespeeds{$interfacetypes{"$node:$iface"}}{$protocol};
+	my $bw = interfaceSpeeds($interfacetypes{"$node:$iface"}, $protocol);
 	return $bw if defined( $bw );
     }
     return $default_switchport_speed;
@@ -2730,11 +2829,20 @@ sub get_iface_type {
 
 sub get_iface_auxspeeds {
     my ($type) = @_;
-    my @result = ();
-    if (exists($interface_auxspeeds{"$type"})) {
-	push(@result, @{ $interface_auxspeeds{"$type"} });
-    }
-    return @result;
+    my $auxpeeds = interfaceAuxspeeds($type);
+    return ()
+	if (!defined($auxpeeds));
+
+    return @{$auxpeeds};
+}
+
+sub get_iface_besteffort {
+    my ($node,$iface) = @_;
+    my $type = get_iface_type($node, $iface);
+    # Default to yes.
+    return 1
+	if (!defined($type));
+    return interfaceBesteffort($type);
 }
 
 sub get_ifaceswitch {
@@ -3078,6 +3186,17 @@ sub print_node
 	print_node_flags(@$flags);
 	print_node_interfaces($name, @$interfaces);
 	print_node_features(@$features);
+	#
+	# This is a hint to the caller to avoid conflict early, rather then
+	# later when its more annoying (when nalloc or reserve fails).
+	#
+	if (exists($top->nodes()->{$name})) {
+	    my $node = $top->nodes()->{$name};
+	    if ($node->conflicting_nodes()) {
+		print "  <emulab:conflicting_nodes names=\"" .
+		    $node->conflicting_nodes() . "\" />\n";
+	    }
+	}
 	print "</node>\n";
     } else {
 	# ptop format

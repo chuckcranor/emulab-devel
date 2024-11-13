@@ -137,9 +137,9 @@ use liblocsetup;
 # No configure vars.
 #
 my $sudo = "";
-my $zipper = "/usr/local/bin/imagezip";
-my $uploader = "/usr/local/bin/frisupload";
-my $frisbee = "/usr/local/bin/frisbee";
+my $zipper = "$LBINDIR/imagezip";
+my $uploader = "$LBINDIR/frisupload";
+my $frisbee = "$LBINDIR/frisbee";
 my $localdir = "/local";
 my $impotent = 0;
 my $verbose = 0;
@@ -808,14 +808,16 @@ sub process_image($)
 	    $izstat = `cat $localdir/imagezip.stat`;
 	    chomp($izstat);
 	}
-	$izstat = sprintf("0x%04x", $izstat);
+	my $izstatstr = sprintf("0x%04x", $izstat);
 
 	print STDERR "*** Failed to create image!\n";
 	print STDERR "    command:   '$cmd'\n";
 	print STDERR "    status:    $stat\n";
-	print STDERR "    izstatus:  $izstat\n"
+	print STDERR "    izstatus:  $izstatstr\n"
 	    if ($izstat);
-	exit(3);
+
+	# return the imagezip error code if it failed
+	exit ($izstat ? $izstat : $retval);
     }
 
     if ($iinfo{$iid}{'method'} eq "frisbee" &&
@@ -849,8 +851,12 @@ sub mysystem($)
     return system($cmd);
 }
 
-# Get rid of any MFS we created
+#
+# Get rid of any MFS we created.
+# Note the save/restore of the exit code in case $domfs is set.
+#
 END {
+    my $estat = $?;
     if ($domfs) {
 	if ($^O eq 'linux') {
 	    if (mysystem("$sudo umount $localdir")) {
@@ -863,4 +869,5 @@ END {
 	    }
 	}
     }
+    $? = $estat;
 }

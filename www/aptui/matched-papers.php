@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -65,6 +68,7 @@ $query_result =
                  "     i.scopus_id=a.author_id ".
                  "left join users as u on u.uid_idx=i.uid_idx ".
                  "where p.cites='$PORTAL_GENESIS' and u.uid is not null ".
+                 ($isadmin ? "" : "and p.uses='yes' ") .
                  "order by p.pubdate desc");
 
 while ($row = mysql_fetch_array($query_result)) {
@@ -110,6 +114,7 @@ $query_result =
                  "left join user_scopus_info as i on ".
                  "     i.scopus_id=a.author_id ".
                  "where p.cites='$PORTAL_GENESIS' ".
+                 ($isadmin ? "" : "and p.uses='yes' ") .
                  "group by p.scopus_id having auids is null");
 
 while ($row = mysql_fetch_array($query_result)) {
@@ -144,6 +149,32 @@ while ($row = mysql_fetch_array($query_result)) {
     }
 }
 
+#
+# List of "other" papers that have not made it into scopus.
+#
+$query_result =
+    DBQueryFatal("select * from other_paper_info ".
+                 "where cites='$PORTAL_GENESIS' and uses='yes'");
+
+while ($row = mysql_fetch_array($query_result)) {
+    $idx = $row["idx"];
+    
+    $blob = array(
+        "latest_abstract_id"      => $idx,
+        "latest_abstract_pubdate" => $row["pubdate"],
+        "latest_abstract_pubtype" => $row["pubtype"],
+        "latest_abstract_doi"     => $row["doi"],
+        "latest_abstract_url"     => $row["url"],
+        "latest_abstract_pubname" => $row["pubname"],
+        "latest_abstract_title"   => $row["title"],
+        "latest_abstract_authors" => $row["authors"],
+        "citedby_count"           => 0,
+        "uses"                    => $row["uses"],
+        "authors"                 => null,
+    );
+    $papers["$idx"] = $blob;
+}
+
 echo "<script type='text/plain' id='papers-json'>\n";
 echo json_encode($papers,
                  JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
@@ -158,10 +189,12 @@ REQUIRE_UNDERSCORE();
 REQUIRE_TABLESORTER();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-REQUIRE_TABLESORTER();
+REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-output.js'));
 SPITREQUIRE("js/matched-papers.js");
 
 AddTemplateList(array("matched-papers",
                       "oops-modal", "waitwait-modal"));
+AddTemplate("output-dropdown");
+
 SPITFOOTER();
 ?>

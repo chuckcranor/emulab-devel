@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -179,6 +179,11 @@ elsif ($default) {
 foreach my $node (@nodes) {
     my $nodeobject = Node->Lookup($node);
 
+    if (!$nodeobject) {
+	warning("Unknown node '$node' ignored\n");
+	next;
+    }
+
     # In list mode, show all the IDs
     if ($list) {
 	my $tb = $nodeobject->temp_boot_osid();
@@ -233,7 +238,7 @@ sub debug($;$)
     if ($notice) { $prio = "notice"; }
     
     syslog($prio, $msg);
-    if ($debug) { print $msg; }
+    if ($debug || -t) { print $msg; }
 }
 
 sub notify($)

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2013-2017 University of Utah and the Flux Group.
+# Copyright (c) 2013-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,6 +39,8 @@ use POSIX qw(strftime);
 #
 # * For 'locked' leases, ignore them. Maybe periodically tell testbed-ops
 #   about them.
+#
+# * For 'valid' leases, if they are marked permanent, ignore them.
 #
 # * For 'valid' leases, determine which are currently "in use" and update
 #   the last_used time. Not sure if there is a lease-type independent way
@@ -364,6 +366,7 @@ while (1) {
 
     #
     # 4. Valid leases.
+    #    If the dataset is marked permanent, leave it alone.
     #    Check for idle datasets. If there is a max_idle time associated
     #    with the lease type and a lease is over that, put the lease into
     #    the grace state and inform the owner. Ditto if the lease has
@@ -371,10 +374,17 @@ while (1) {
     #
     logit("Checking for idle and expired leases...");
     foreach my $lease (@{$leases{LEASE_STATE_VALID()}}) {
-	my $ltype = $lease->type();
 	logit("  $lease")
 	    if ($debug);
 
+	if ($lease->IsPermanent()) {
+	    logit("  Marked permanent, skipping")
+		if ($debug);
+	    $lease->BumpLastChecked();
+	    next;
+	}
+
+	my $ltype = $lease->type();
 	my $delta = $now -
 	    ($lease->last_used() ? $lease->last_used() : $lease->inception());
 	my $limit = $vars{$ltype}->{'maxidle'};
@@ -562,6 +572,7 @@ sub graceify($$)
     my $ltype = $lease->type();
     my $grace = $vars{$ltype}->{'graceperiod'};
     my $extend = $vars{$ltype}->{'extendperiod'};
+    my $destroy = $vars{$ltype}->{'autodestroy'};
 
     if (changestate($lease, LEASE_STATE_GRACE())) {
 	return 1;
@@ -577,9 +588,16 @@ sub graceify($$)
 	    "It has entered a $ghours hour grace period.\n\n";
 	$msg .=
 	    "You need to extend the dataset lifetime\n".
-	    "or move your data out of Emulab within this time period.\n".
-	    "If you do not, the dataset will be destroyed and\n".
-	    "THE DATA WILL NOT BE RECOVERABLE.\n\n";
+	    "or move your data out of Emulab within this time period.\n";
+	if ($destroy) {
+	    $msg .=
+		"If you do not, the dataset will be destroyed and\n".
+		"THE DATA WILL NOT BE RECOVERABLE.\n\n";
+	} else {
+	    $msg .=
+		"If you do not, the dataset will become inaccessible and\n".
+		"may be destroyed by an admin if space is needed.\n\n";
+	}
 	if ($extend) {
 	    $msg .=
 		"To extend the dataset, ssh into $OPSNODE and run:\n".

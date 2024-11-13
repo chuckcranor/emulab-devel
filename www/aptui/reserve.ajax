@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -34,7 +34,7 @@ function AllowedToUse()
 {
     global $this_user;
 
-    if (1 || ISADMIN() || $this_user->admin() || $this_user->stud()) {
+    if (ISADMIN() || $this_user->admin() || $this_user->stud()) {
         return 1;
     }
     return 0;
@@ -858,12 +858,29 @@ function Do_ReservationInfo()
         $popts = "";
     }
     if (isset($ajax_args["project"])) {
+        if (!isset($ajax_args["user"])) {
+            SPITAJAX_ERROR(-1, "Must provide user");
+            return;
+        }
+        if (!TBvalid_pid($ajax_args["project"])) {
+            SPITAJAX_ERROR(-1, "Invalid project");
+            return;
+        }
         $project = Project::Lookup($ajax_args["project"]);
         if (!$project) {
             SPITAJAX_ERROR(-1, "No such project");
             return;
         }
-        $popts .= " " . $project->pid();
+        if (!TBvalid_uid($ajax_args["user"])) {
+            SPITAJAX_ERROR(-1, "Invalid user");
+            return;
+        }
+        $user = User::Lookup($ajax_args["user"]);
+        if (!$user) {
+            SPITAJAX_ERROR(-1, "No such user");
+            return;
+        }
+        $popts .= "-u " . $user->uid()  . " " . $project->pid();
     }
     $webtask = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();

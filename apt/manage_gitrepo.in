@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,10 +24,7 @@
 use English;
 use strict;
 use Getopt::Std;
-use XML::Simple;
 use Data::Dumper;
-use CGI;
-use POSIX ":sys_wait_h";
 use Date::Parse;
 use File::Basename;
 
@@ -375,7 +372,8 @@ sub DoClone()
     my $source = GetRepoSource($reponame, undef, $sourcename);
     if (!defined($source)) {
 	RemoveRepo($reponame);
-	UserError("Could not find profile.py or profile.rspec in repository");
+	UserError("Could not find profile.py or profiles/profile.py ".
+		  "in repository");
     }
     
     #
@@ -517,7 +515,9 @@ sub DoUpdate()
     #
     my $source = GetRepoSource($reponame, undef, $sourcename);
     if (!defined($source)) {
-	UserError("Could not find profile source in repository");
+	UserError("Could not find profile.py or profiles/profile.py ".
+		  (defined($sourcename) ? "or profiles/${sourcename}.py " : "").
+		  "in repository");
     }
 
     #
@@ -563,6 +563,7 @@ sub DoGetSource()
 {
     my $optlist = "n:p:o:";
     my $reponame;
+    my $sourcename;
     my $ofile;
     my $which;
     my $profile;
@@ -576,6 +577,7 @@ sub DoGetSource()
     }
     $which = shift(@ARGV) if (@ARGV);
     $profile = GetProfile(\%options);
+    $sourcename = $profile->name() if (defined($profile));
     $reponame = GetRepoName(\%options);
     $which = GetDefaultBranch($reponame) if (!defined($which));
 
@@ -583,10 +585,13 @@ sub DoGetSource()
     if ($which =~ /^(.*)$/) {
 	$which = $1;
     }
-    my $source = GetRepoSource($reponame, $which,
-			       defined($profile) ? $profile->name() : undef);
+    my $source = GetRepoSource($reponame, $which, $sourcename);
     if (!defined($source)) {
-	UserError("Could not find profile.py or profile.rspec in repository");
+	UserError("Could not find profile.py or profiles/profile.py ".
+		  (defined($sourcename) ? "or profiles/${sourcename}.py " : "").
+		  "in repository");
+	
+	UserError("Could not find profile.py in repository");
     }
     
     if (defined($ofile)) {
@@ -675,10 +680,11 @@ sub GetRepoSource($;$$)
 	}
     }
     if (!$source) {
-	print STDERR "$repodir, $refspec\n";
-	print STDERR `/usr/bin/id`;
-	print STDERR `/bin/ls -la`;
-	print STDERR "Could not find source code in repository: $reponame\n";
+	print STDERR "$reponame, $refspec\n";
+	if (0) {
+	    print STDERR `/usr/bin/id`;
+	    print STDERR `/bin/ls -la`;
+	}
 	return undef;
     }
     return $source;

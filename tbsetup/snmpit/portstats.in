@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,6 +48,11 @@ use libdb;
 use libtblog;
 use Interface;
 use Port;
+use WebTask;
+use Data::Dumper;
+
+# Webtask used from the Geni path.
+my $webtask;
 
 # Optional alternate version of libraries.
 use lib '@prefix@/lib/snmpit';
@@ -74,7 +79,8 @@ Usage: $0 [-h] <-p | <pid> <eid> > [vname ...] [vname:port ...]
 -s    Ports are specified in switch.port syntax.
       No pid,eid should be given when using this option.
 -C    List control net, rather than experimental net, ports
--H    Show high-capacity (64-bit) counters (implies -c, !-z right now)
+-H    Show high-capacity (64-bit) counters (implies -c, !-S, !-z)
+-S    With -a, sort columns in a more user useful order
 
 If only pid and eid are given, prints out information about all ports in the
 experiment. Otherwise, output is limited to the nodes and/or ports given.
@@ -95,22 +101,21 @@ END
 #
 my %opt = ();
 Getopt::Long::Configure("no_ignore_case");
-GetOptions(\%opt,'h','a','e','p','b','z','q','c','s','C','r','l','H','i');
+GetOptions(\%opt,'h','a','e','p','b','z','q','c','s','C','r','l','H','i','t=s','S');
 
 if ($opt{h}) {
     exit &usage;
 }
+if ($opt{"t"}) {
+    $webtask = WebTask->Lookup($opt{"t"});
+    if (!defined($webtask)) {
+	tbdie("Could not lookup/create webtask!");
+    }
+}
 
 my @oids = (); # The set of OIDs we care about
 
-if ($opt{a}) {
-    @oids = ('ifInOctets', 'ifInUcastPkts', 'ifInNUcastPkts', 'ifInDiscards',
-	     'ifInErrors', 'ifInUnknownProtos', 'ifOutOctets', 'ifOutUcastPkts',
-	     'ifOutNUcastPkts', 'ifOutDiscards', 'ifOutErrors', 'ifOutQLen');
-} elsif ($opt{e}) {
-    @oids = ('ifInDiscards', 'ifInErrors', 'ifInUnknownProtos', 'ifOutDiscards',
-	     'ifOutErrors');
-} elsif ($opt{H}) {
+if ($opt{H}) {
     @oids = ('ifHCInOctets', 'ifHCInUcastPkts', 'ifHCInMulticastPkts',
 	     'ifHCInBroadcastPkts',
 	     'ifHCOutOctets', 'ifHCOutUcastPkts', 'ifHCOutMulticastPkts',
@@ -118,6 +123,22 @@ if ($opt{a}) {
     # XXX database is only 32-bit counters - so don't do anything involving it
     $opt{c} = 1;
     $opt{z} = 0;
+} elsif ($opt{a}) {
+    if ($opt{S}) {
+	@oids = ('ifInOctets', 'ifInUcastPkts', 'ifInNUcastPkts',
+		 'ifInDiscards',
+		 'ifOutOctets', 'ifOutUcastPkts', 'ifOutNUcastPkts',
+		 'ifOutDiscards', 'ifOutQLen',
+		 'ifInErrors', 'ifOutErrors', 'ifInUnknownProtos');
+    }
+    else {
+	@oids = ('ifInOctets', 'ifInUcastPkts', 'ifInNUcastPkts', 'ifInDiscards',
+		 'ifInErrors', 'ifInUnknownProtos', 'ifOutOctets', 'ifOutUcastPkts',
+		 'ifOutNUcastPkts', 'ifOutDiscards', 'ifOutErrors', 'ifOutQLen');
+    }
+} elsif ($opt{e}) {
+    @oids = ('ifInDiscards', 'ifInErrors', 'ifInUnknownProtos', 'ifOutDiscards',
+	     'ifOutErrors');
 } else {
     @oids = ('ifInOctets', 'ifInUcastPkts', 'ifInNUcastPkts',
 	     'ifOutOctets', 'ifOutUcastPkts', 'ifOutNUcastPkts');
@@ -345,6 +366,7 @@ elsif ($opt{p}) {
 my %portMap = mapPortsToDevices(@ports);
 my %stats   = ();
 my @nports = ();
+my %switches = ();
 
 foreach my $name (keys %portMap) {
     my @ports = @{$portMap{$name}};
@@ -406,6 +428,11 @@ foreach my $name (keys %portMap) {
 	    $device = new snmpit_h3c($name);
 	    last;
 	};
+	/planet/ && do {
+	    require snmpit_planet;
+	    $device = new snmpit_planet($name);
+	    last;
+	};
 
 	# 'default' case
 	warn "WARNING: Unknown switch type ($type) for $name, skipping some ports\n";
@@ -421,6 +448,7 @@ foreach my $name (keys %portMap) {
 
     foreach my $result (@results) {
 	my $port = shift @ports;
+	my $sname = "n/a";
 
 	#
 	# Figure out which port on which switch this corresponds to
@@ -508,6 +536,8 @@ foreach my $name (keys %portMap) {
 
 		DBQueryFatal($query);
 	    }
+	    $sname = ($opt{i} ?
+		      $switchport->toIfaceString() : $switchport->toString());
 	}
 
 	if (!$opt{p} && !$opt{s}) {
@@ -527,6 +557,15 @@ foreach my $name (keys %portMap) {
 		}
 	    }
 	}
+	my $pname;
+    
+	if (Port->isPort($port)) {
+	    $pname = ($opt{i} ? $port->toIfaceString() : $port->toString());
+	}
+	else {
+	    $pname = $port;
+	}
+	$switches{$pname} = $sname;
 
 	#
 	# Save for printing.
@@ -560,10 +599,36 @@ if (! $opt{l}) {
 # Raw format.
 #
 if ($opt{r}) {
+    if (defined($webtask)) {
+	my @tokens = ("Node","Switch");
+	foreach my $line (@oids{@oids}) {
+	    my ($heading) = @$line;
+	    my $tok1 = $$heading[0];
+	    my $tok2 = $$heading[1];
+	    $tok1=~ s/^\s+|\s+$//g;
+	    $tok2=~ s/^\s+|\s+$//g;
+	    push(@tokens, "$tok1 $tok2");
+	}
+	my $header = join(",", @tokens);
+	$webtask->results([$header]);
+    }
     foreach my $port (@ports) {
 	my @numbers = @{$stats{$port}};
 	my $string  = join(",", @numbers);
-	print "$port,$string\n";
+	my $switch  = $switches{$port};
+	if (defined($webtask)) {
+	    my $tmp = $webtask->results();
+	    $tmp = [@$tmp, "$port,$switch,$string"];
+	    $webtask->results($tmp);
+	}
+	else {
+	    print "$port,$string\n";
+	}
+    }
+    if (defined($webtask)) {
+	print Dumper($webtask->results());
+	$webtask->Store();
+	$webtask->Exited(0);
     }
     exit(0);
 }

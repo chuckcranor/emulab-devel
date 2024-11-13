@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -271,7 +271,8 @@ if (exists($ENV{'PATH_INFO'}) && $ENV{'PATH_INFO'} ne "") {
 if (($MODULE eq "cm" || $MODULE eq $AM_MODULE) &&
     GeniUtil::ExperimentsDisabled()) {
     XMLError(HTTP_SERVICE_UNAVAILABLE(),
-	     "Server temporarily offline; please try again later");
+	     "Server temporarily offline; ".
+	     "  experiments are disabled in the CM");
 }
 
 #
@@ -359,10 +360,8 @@ if (@PROTOGENI_PORTALONLY@) {
 		$hrn->domain() eq "clemson.cloudlab.us" ||
 		$hrn->domain() =~ /\.powderwireless\.net$/ ||
 		$hrn->domain() eq "lab.onelab.eu" ||
-		$hrn->domain() eq "cloudlab.umass.edu" ||
-		$hrn->domain() eq "ilabt.imec.be" ||
-		$hrn->domain() eq "wall2.ilabt.iminds.be" ? 1 : 0);
-
+		$hrn->domain() eq "cloudlab.umass.edu" ? 1 : 0);
+    
     #
     # On the MotherShip, we have to allow access to some of the entrypoints
     #
@@ -560,7 +559,7 @@ sub AddLogfileMetaDataFromSpeaksFor($)
 }
 sub AbortLogging()
 {
-    LogEnd(0);
+    LogAbort();
     $logaborted = 1;
 }
 
@@ -812,24 +811,24 @@ else {
 	    push(@metadata, ["Code", $result->{'code'}])
 	}
     }
-    if (!$logaborted) {
-	# Add first line of result output to metadata. Bigger stuff
-	# will land at the end of the file. 
-	if (ref($result) && defined($result->{'output'}) &&
-	    $result->{'output'} ne "") {
-	    my $line = (split(/\n/, $result->{'output'}))[0];
-	    if (length($line) > 128) {
-		$line = substr($line, 0, 128);
-	    }
-	    push(@metadata, ["Output", $line]);
+    # Add first line of result output to metadata. Bigger stuff
+    # will land at the end of the file. 
+    if (ref($result) && defined($result->{'output'}) &&
+	$result->{'output'} ne "") {
+	my $line = (split(/\n/, $result->{'output'}))[0];
+	if (length($line) > 128) {
+	    $line = substr($line, 0, 128);
 	}
-	# Purge old data; if we forked we want latest. 
-	$logfile->SetMetadata(\@metadata, 1);
+	push(@metadata, ["Output", $line]);
+    }
+    # Purge old data; if we forked we want latest. 
+    $logfile->SetMetadata(\@metadata, 1);
     
-	foreach my $foo (@metadata) {
-	    my ($key,$val) = @{$foo};
-	    $message .= sprintf("%-15s: %s\n", $key, $val);
-	}
+    foreach my $foo (@metadata) {
+	my ($key,$val) = @{$foo};
+	$message .= sprintf("%-15s: %s\n", $key, $val);
+    }
+    if (!$logaborted) {
 	AddAuditInfo("message", $message);
     }
 
@@ -844,12 +843,13 @@ else {
 	    $iserror = 1;
 	}
     }
-    elsif (! ref($result) && $result) {
+    elsif (!ref($result) && $result) {
 	#
 	# This could happen if the child forks. 
 	#
 	$iserror = 1;
-	print STDERR "Forked child returned an error\n";
+	print STDERR "Forked child returned an error\n"
+	    if (!$logaborted);
     }
     
     #
@@ -862,7 +862,7 @@ else {
     # Yep, the child side of the fork will append any new log info
     # after these prints. But thats okay. 
     #
-    if (ref($result) && ($iserror || $debug > 1)) {
+    if (ref($result) && !$logaborted && ($iserror || $debug > 1)) {
 	printf STDERR "\n";
 	if (defined($result->{'output'}) && $result->{'output'} ne "") {
 	    print STDERR "-------------- Output -----------------\n";
@@ -876,7 +876,7 @@ else {
 	}
 	print STDERR "----------------------------------------\n";
     }
-    if ($debug) {
+    if ($debug && !$logaborted) {
 	print STDERR "\nDebugging is on.\n";
     }
     # Last bit of detail. 

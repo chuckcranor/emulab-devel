@@ -5,7 +5,8 @@ $(function ()
     var templates = APT_OPTIONS.fetchTemplateList(['user-dashboard',
 	   'experiment-list', 'profile-list', 'project-list', 'dataset-list', 
 	   'user-profile', 'oops-modal', 'waitwait-modal', 'classic-explist',
-	   'conversion-help-modal','paramsets-list']);
+	   'conversion-help-modal','paramsets-list', "showtopo-modal",
+	   "resources-list"]);
     var mainString = templates['user-dashboard'];
     var experimentString = templates['experiment-list'];
     var profileListString = templates['profile-list'];
@@ -17,10 +18,14 @@ $(function ()
     var classicString = templates['classic-explist'];
     var converterHelpTemplate = _.template(templates['conversion-help-modal']);
     var mainTemplate = _.template(mainString);
+    var amlist = null;
 
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
+
+	amlist = decodejson("#amlist-json");
+	console.info("amlist", amlist);
 
 	// Generate the main template.
 	var html = mainTemplate({
@@ -34,7 +39,8 @@ $(function ()
 	$('#oops_div').html(oopsString);
 	$('#waitwait_div').html(waitwaitString);
 	$('#conversion_help_div').html(converterHelpTemplate({}));
-
+	$('#showtopo-modal-div').html(templates["showtopo-modal"]);
+	
 	// Focus on the search box when switching to these tabs.
         $('.nav-tabs a[href="#profiles"], ' +
 	  '.nav-tabs a[href="#projectprofiles"]')
@@ -46,30 +52,8 @@ $(function ()
 		}
 	    });
 
-        // Javascript to enable link to tab
-        var hash = document.location.hash;
-        if (hash) {
-            $('.nav-tabs a[href="'+hash+'"]').tab('show');
-        }
-        // Change hash for page-reload
-        $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-	    history.replaceState('', '', e.target.hash);
-
-	    // GA reporting
-	    var ganame = e.target.hash;
-	    if (ganame == "") {
-		ganame = "#experiments";
-	    }
-	    window.APT_OPTIONS.gaTabEvent("show", ganame);
-        });
-	// Set the correct tab when a user uses their back/forward button
-        $(window).on('hashchange', function (e) {
-	    var hash = window.location.hash;
-	    if (hash == "") {
-		hash = "#experiments";
-	    }
-	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
-	});
+	// Setup nav tab document hash handling.
+	sup.hashSetup(".nav-tabs", "#experiments");
 
 	LoadUsage();
 	LoadExperimentTab();
@@ -82,6 +66,7 @@ $(function ()
 	LoadProfileTab();
 	LoadDatasetTab();
 	LoadResgroupTab();
+	LoadResourcesTab();
 	LoadParameterSetsTab();
 	LoadClassicDatasets();
 
@@ -90,6 +75,9 @@ $(function ()
 	 */
 	$('#sendtestmessage').click(function () {
 	    SendTestMessage();
+	});
+	$('#sendmessage').click(function () {
+	    SendMessage();
 	});
 	$('#sendpasswordreset').click(function () {
 	    SendPasswordReset();
@@ -205,7 +193,7 @@ $(function ()
 		$('#experiments_content #experiments_table')
 		    .tablesorter({
 			theme : 'bootstrap',
-			widgets : [ "uitheme" ],
+			widgets : [ "uitheme", "zebra" ],
 			headerTemplate : '{content} {icon}',			
 		    });
 	    }
@@ -213,7 +201,7 @@ $(function ()
 		$('#project_experiments_content #experiments_table')
 		    .tablesorter({
 			theme : 'bootstrap',
-			widgets : [ "uitheme", ],
+			widgets : [ "uitheme", "zebra"],
 			headerTemplate : '{content} {icon}',
 		    });
 	    }
@@ -292,7 +280,7 @@ $(function ()
 	    var table = $('#classic_experiments_content .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme", ],
+		    widgets : [ "uitheme", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		});
 	};
@@ -332,11 +320,6 @@ $(function ()
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
-	    // This activates the tooltip subsystem.
-	    $('[data-toggle="tooltip"]').tooltip({
-		delay: {"hide" : 100, "show" : 300},
-		placement: 'auto',
-	    });
 	    // Display the topo.
 	    $('.showtopo_modal_button').click(function (event) {
 		event.preventDefault();
@@ -354,7 +337,7 @@ $(function ()
 			    $(row).remove();
 			});
 		});
-
+	    
 	    // If this is the active tab after loading, focus the searchbox
 	    if ($('#profiles').hasClass("active")) {
 		var searchbox = $('#profiles .profile-search')
@@ -366,7 +349,7 @@ $(function ()
 	    var table = $('#' + 'user-profiles-table')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme", "filter"],
+		    widgets : [ "uitheme", "filter", "zebra"],
 		    headerTemplate : '{content} {icon}',
 		    widgetOptions: {
 			// include child row content while filtering, if true
@@ -387,6 +370,12 @@ $(function ()
 		});
 	    $.tablesorter.filter.bindSearch(table,
 					    $('#' + 'user-profiles-search'));
+
+	    // This activates the tooltip subsystem.
+	    $('#profiles_content [data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 100, "show" : 300},
+		placement: 'auto',
+	    });
 
 	    // Delete multiple profiles via the checkbox column.
 	    $('#profiles_content .delete-selected-profiles')
@@ -436,7 +425,7 @@ $(function ()
 		}
 	    });
 	    // This activates the tooltip subsystem.
-	    $('[data-toggle="tooltip"]').tooltip({
+	    $('#projectprofiles_content [data-toggle="tooltip"]').tooltip({
 		delay: {"hide" : 100, "show" : 300},
 		placement: 'auto',
 	    });
@@ -469,7 +458,7 @@ $(function ()
 	    var table = $('#' + 'project-profiles-table')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme", "filter"],
+		    widgets : [ "uitheme", "filter", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		    widgetOptions: {
 			// include child row content while filtering, if true
@@ -538,7 +527,7 @@ $(function ()
 	    var table = $('#classic_profiles_content .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme"],
+		    widgets : [ "uitheme", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		});
 	};
@@ -548,26 +537,27 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    var showTopoIframe = null;
+
     function ShowTopology(profile)
     {
-	var index;
-    
 	var callback = function(json) {
+	    console.info("ShowTopology profile", json);
 	    if (json.code) {
 		alert("Failed to get rspec for topology viewer: " + json.value);
 		return;
 	    }
-	    sup.ShowModal("#quickvm_topomodal");
-	    $("#quickvm_topomodal").one("shown.bs.modal", function () {
-		sup.maketopmap('#showtopo_nopicker',
-			       json.value.profile_rspec, false, !window.ISADMIN);
-	    });
+	    if (showTopoIframe) {
+		showTopoIframe(json.value.profile_rspec);
+	    }
+	    else {
+		showTopoIframe = ShowTopoIframe($('#showtopology-modal'),
+						'.showtopology-bare',
+						json.value.profile_rspec);
+	    }
 	};
-	var $xmlthing = sup.CallServerMethod(null,
-					     "show-profile",
-					     "GetProfile",
-				     	     {"uuid" : profile});
-	$xmlthing.done(callback);
+	sup.CallServerMethod(null, "show-profile", "GetProfile",
+			     {"profile" : profile}, callback);
     }
 
     function LoadProjectsTab()
@@ -590,7 +580,7 @@ $(function ()
 	    var table = $('#projects_table')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme"],
+		    widgets : [ "uitheme", "zebra"],
 		    headerTemplate : '{content} {icon}',
 		});
 	}
@@ -608,7 +598,7 @@ $(function ()
     function LoadProfileTab()
     {
 	var callback = function(json) {
-	    console.info(json.value);
+	    console.info("LoadProfileTab", json.value);
 
 	    if (json.code) {
 		console.info(json.value);
@@ -628,7 +618,7 @@ $(function ()
 		$('#admin_content .format-date').each(function() {
 		    var date = $.trim($(this).html());
 		    if (date != "") {
-			$(this).html(moment($(this).html()).format("ll"));
+			$(this).html(moment($(this).html()).format("lll"));
 		    }
 		});
 		$('#admin_content .toggle').click(function() {
@@ -648,6 +638,19 @@ $(function ()
 			FreezeOrThaw(json.value.status);
 		    });
 		}
+                // Force Logout
+                $('#force-user-logout').click(function () {
+                    sup.CallServerMethod(null, "user-dashboard", "Logout",
+			                 {"uid" : window.TARGET_USER},
+                                         function (json) {
+	                                     if (json.code) {
+                                                 alert("logout failed")
+                                             }
+                                             else {
+	                                         LoadProfileTab();
+                                             }
+                                         });
+                });
 	    }
 	    $('#myprofile_content')
 		.html(template({"fields"  : json.value,
@@ -697,7 +700,7 @@ $(function ()
 	    var table = $('#datasets_content .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme"],
+		    widgets : [ "uitheme", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		});
 	}
@@ -721,12 +724,17 @@ $(function ()
 	    var projlist = json.value.project;
 	    
 	    if (! (_.size(userlist) || _.size(projlist))) {
+		$('#resgroups_noresgroups').removeClass("hidden");
 		return;
 	    }
-	    $(".resgroups-hidden").removeClass("hidden");
-	    window.DrawResGroupList("#resgroups_content", userlist);
-	    $("#resgroups_content .expando").trigger("click");
-
+	    if (_.size(userlist)) {
+		window.DrawResGroupList("#resgroups_content", userlist);
+		$("#resgroups_content .expando").trigger("click");
+	    }
+	    else {
+		$('#resgroups_noresgroups').removeClass("hidden");
+	    }		
+	    
 	    /*
 	     * Prune out project reservations in the table above,
 	     * and if any left, show those in another table below.
@@ -746,6 +754,153 @@ $(function ()
 	var xmlthing =
 	    sup.CallServerMethod(null,
 				 "user-dashboard", "ResgroupList",
+				 {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    /*
+     * At the moment not making use of the resgroups we get, too confusing.
+     */
+    function LoadResourcesTab()
+    {
+	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+
+	var callback = function(json) {
+	    console.info("resources", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    var resources = json.value.resources;
+	    // resgroups for all projects user is a member of.
+	    var resgroups = json.value.resgroups;
+	    
+	    if (! (_.size(resources))) {
+		return;
+	    }
+	    var collated = {};
+	    var user_totals = {};
+	    
+	    _.each(resources, function(details, uuid) {
+		_.each(details.slivers, function(sliver, aggregate_urn) {
+		    var resNodes = amlist[aggregate_urn].reservable_nodes;
+		    var typelist = {};
+		    var xml = $.parseXML(sliver.manifest);
+
+		    $(xml).find("node, emulab\\:vhost").each(function() {
+			// Only nodes that match the aggregate being processed,
+			// since we send the same rspec to every aggregate.
+			var manager_urn = $(this).attr("component_manager_id");
+			if (!manager_urn.length ||
+			    manager_urn != aggregate_urn) {
+			    return;
+			}
+			var tag     = $(this).prop("tagName");
+			var isvhost = (tag == "emulab:vhost" ? 1 : 0);
+			var vnode   = this.getElementsByTagNameNS(EMULAB_NS,
+								  'vnode');
+			if (vnode.length) {
+			    var hwtype = $(vnode).attr("hardware_type");
+			    var name   = $(vnode).attr("name");
+
+			    // Reservable nodes shown as themselves.
+			    if (resNodes && _.has(resNodes, name)) {
+				hwtype = name;
+			    }
+			    
+			    if (hwtype != "pcvm" && hwtype != "blockstore") {
+				if (!_.has(typelist, hwtype)) {
+				    typelist[hwtype] = 0;
+				}
+				typelist[hwtype]++;
+
+				if (!_.has(user_totals, aggregate_urn)) {
+				    user_totals[aggregate_urn] = {};
+				}
+				var aggtotals = user_totals[aggregate_urn];
+				if (!_.has(aggtotals, details.creator)) {
+				    aggtotals[details.creator] = {};
+				}
+				var utotals = aggtotals[details.creator];
+				if (!_.has(utotals, hwtype)) {
+				    utotals[hwtype] = 0;
+				}
+				utotals[hwtype]++;
+			    }
+			}
+		    });
+		    if (_.size(typelist)) {
+			if (!_.has(collated, uuid)) {
+			    collated[uuid] = {};
+			}
+			collated[uuid][aggregate_urn] = {
+			    "typelist"     : typelist,
+			    "cluster"      : sliver.name,
+			    "creator"      : details.creator,
+			    "pid"          : details.pid,
+			    "name"         : details.name,
+			    "started"      : details.started,
+			    "expires"      : details.expires,
+			    "portal"       : details.portal,
+			    "reslist_user" : {},
+			    "reslist_proj" : {},
+			};
+		    }
+		});
+	    });
+	    if (!_.size(collated)) {
+		return;
+	    }
+	    console.info("collated", collated);
+	    console.info("user_totals", user_totals);
+	    
+	    var template = _.template(templates["resources-list"]);
+	    var html = template({
+		"resources"       : collated,
+		"user_totals"     : user_totals,
+		"showCreator"     : false,
+		"showProject"     : true,
+		"showPortal"      : window.MAINSITE && window.ISADMIN,
+		"showReserved"    : false,
+		"showBlockstores" : false,
+		"showVMs"         : false,
+	    });
+	    $('#resources_content').html(html);
+	    
+	    // Format dates with moment before display.
+	    $('#resources_content .format-date').each(function(){
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    var table = $('#resources_content .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		    sortList: [[3,0]],
+		});
+	    $(".resources-hidden").removeClass("hidden");
+
+	    // Do this after converting table.
+	    $('#resources_content [data-toggle="tooltip"]').each(function () {
+		$(this).tooltip({
+		    trigger: 'hover',
+		    placement: 'right',
+		});
+	    });
+
+	    // Handler for the Help button
+	    $('#resources-help-button').click(function (event) {
+		event.preventDefault();
+		sup.ShowModal('#resources-help-modal');
+	    });
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "user-dashboard", "ResourceList",
 				 {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }
@@ -817,7 +972,7 @@ $(function ()
 	    paramsets_table = $('#paramsets_content .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme"],
+		    widgets : [ "uitheme", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		});
 	}
@@ -858,7 +1013,7 @@ $(function ()
 	    var table = $('#classic_datasets_content .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets : [ "uitheme" ],
+		    widgets : [ "uitheme", "zebra" ],
 		    headerTemplate : '{content} {icon}',
 		});
 	};
@@ -965,11 +1120,45 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    //
+    // Send email message,
+    //
+    function SendMessage() {
+	// Handler for hide modal to unbind the click handler.
+	$('#sendemail-modal').on('hidden.bs.modal', function (event) {
+	    $(this).unbind(event);
+	    $('#confirm-sendemail').unbind("click.sendemail");
+	});
+	$('#confirm-sendemail').bind("click.sendemail", function (event) {
+	    var callback = function(json) {
+		console.info(json);
+		if (json.code) {
+		    sup.SpitOops("oops",
+				 "Failed to send email to user: " + json.value);
+		    return;
+		}
+	    };
+	    sup.HideModal('#sendemail-modal');
+	    var message = $('#sendemail-modal .user-message').val().trim();
+		
+	    var args = {
+		"uid"     : window.TARGET_USER,
+		"message" : message,
+	    };
+	    var xmlthing =
+		sup.CallServerMethod(null, "user-dashboard",
+				     "SendMessage", args);
+	    xmlthing.done(callback);
+	});
+	sup.ShowModal('#sendemail-modal');
+    }
+
     function SendPasswordReset()
     {
 	var callback = function(json) {
+	    console.info(json);
 	    if (json.code) {
-		alert("Password reset could not be sent!");
+		alert("Password reset could not be sent!\n\n" + json.value);
 		return;
 	    }
 	    alert("Password reset has has been sent");
@@ -1003,5 +1192,9 @@ $(function ()
 	});
     }
 
+    // Helper.
+    function decodejson(id) {
+	return JSON.parse(_.unescape($(id)[0].textContent));
+    }
     $(document).ready(initialize);
 });

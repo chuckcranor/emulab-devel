@@ -61,6 +61,8 @@ CFLAGS	+= -DETCDIR='"$(INSTALL_ETCDIR)"'
 SSLFLAGS = -DWITHSSL 
 TMLIBS	+= -lssl -lcrypto -lz
 
+CFLAGS	+= -DBOOTDIR='"$(CLIENT_VARDIR)/boot"'
+
 ifeq ($(SYSTEM),Linux)
 ifneq ($(LDSTATIC),)
 NOKERB := $(shell nm /usr/lib/libssl.a | grep -q krb; echo $$?)
@@ -96,11 +98,20 @@ endif
 ifeq ($(MDSUBDIR),redhat9)
 MDSUBDIR  = linux9
 endif
+ifeq ($(MDSUBDIR),PPC64leUbuntu22)
+MDSUBDIR  = ubuntu22-ppc64le
+endif
 ifeq ($(MDSUBDIR),PPC64leUbuntu20)
 MDSUBDIR  = ubuntu20-ppc64le
 endif
 ifeq ($(MDSUBDIR),PPC64leUbuntu18)
 MDSUBDIR  = ubuntu18-ppc64le
+endif
+ifeq ($(MDSUBDIR),MoonshotUbuntu24)
+MDSUBDIR  = ubuntu24-ms
+endif
+ifeq ($(MDSUBDIR),MoonshotUbuntu22)
+MDSUBDIR  = ubuntu22-ms
 endif
 ifeq ($(MDSUBDIR),MoonshotUbuntu20)
 MDSUBDIR  = ubuntu20-ms
@@ -123,6 +134,18 @@ MDSUBDIR  = ubuntu15
 endif
 ifeq ($(MDSUBDIR),debian9)
 MDSUBDIR  = ubuntu16
+endif
+ifeq ($(MDSUBDIR),debian10)
+MDSUBDIR  = ubuntu18
+endif
+ifeq ($(MDSUBDIR),debian11)
+MDSUBDIR  = ubuntu20
+endif
+ifeq ($(MDSUBDIR),debian12)
+MDSUBDIR  = ubuntu22
+endif
+ifeq ($(MDSUBDIR),debian13)
+MDSUBDIR  = ubuntu24
 endif
 # Just point debian sid to the latest Ubuntu supported and hope for
 # the best.
@@ -212,7 +235,7 @@ subboss-install: subboss
 	@$(MAKE) -C $(MDSUBDIR) subboss-install
 
 client-install: client
-	@$(MAKE) -C $(MDSUBDIR) install
+	@$(MAKE) NETWORKTARGETS=$(NETWORKTARGETS) -C $(MDSUBDIR) install
 
 mfs: client
 

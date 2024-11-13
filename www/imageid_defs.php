@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2020 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -360,6 +360,43 @@ class Image
                 return -1;
             }
 	}
+	return 0;
+    }
+
+    #
+    # Set Description.
+    #
+    function SetDescription($description) {
+	$imageid  = $this->imageid();
+	$version  = $this->version();
+        $safe_descrip = addslashes($description);
+
+        if (!DBQueryWarn("update image_versions set ".
+                         "  description='$safe_descrip' ".
+                         "where imageid='$imageid' and version='$version'")) {
+            return -1;
+        }
+        if (!DBQueryWarn("update os_info_versions set ".
+                         "  description='$safe_descrip' ".
+                         "where osid='$imageid' and vers='$version'")) {
+            return -1;
+        }
+	return 0;
+    }
+
+    #
+    # Set os version
+    #
+    function SetOSVersion($osversion) {
+	$imageid  = $this->imageid();
+	$version  = $this->version();
+        $safe_osvers = addslashes($osversion);
+
+        if (!DBQueryWarn("update os_info_versions set ".
+                         "  version='$safe_osvers' ".
+                         "where osid='$imageid' and vers='$version'")) {
+            return -1;
+        }
 	return 0;
     }
 

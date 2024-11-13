@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -393,11 +393,18 @@ sub TBAdminMfsSelect($$@)
 		# a grub2pxe, no need to set the grub2pxe_path node/type
 		# attr for this to work.
 		#
+		# XXX we used to use the existence of "grub.cfg" to indicate
+		# a Linux MFS, but we can now boot FreeBSD MFSes with grub2pxe
+		# and in those scenarios the BSD MFS has a grub.cfg file.
+		# So now the hack looks for a grub.cfg but NO boot subdir to
+		# indicate a Linux MFS.
+		#
 		my $osi = OSImage->Lookup($osid);
 		my $path = $osi->osinfo()->path();
-		if (-e "$path/grub.cfg") {
-		    foreach my $nodeid (@n) {
-			my $nodeobject = Node->Lookup($nodeid);
+		foreach my $nodeid (@n) {
+		    my $nodeobject = Node->Lookup($nodeid);
+		    my $node_pxechanged = 0;
+		    if (-e "$path/grub.cfg" && ! -e "$path/boot") {
 			my $gp;
 			$nodeobject->NodeAttribute('grub2pxe_path',\$gp);
 			if (!defined($gp)) {
@@ -405,14 +412,18 @@ sub TBAdminMfsSelect($$@)
 			}
 			next
 			    if (!defined($gp));
-			my $node_pxechanged = 0;
 			if ($nodeobject->PXESelect($gp, "next_pxe_boot_path",
 						   0, \$node_pxechanged)) {
 			    print STDERR "$me: pxe_select $nodeid $gp failed!";
 			    next;
 			}
-			$pxechanged += $node_pxechanged;
+		    } elsif ($nodeobject->next_pxe_boot_path()) {
+			# make sure to clear next_pxe_boot_path if not used
+			if (!$nodeobject->Update({"next_pxe_boot_path" => "NULL"})) {
+			    $node_pxechanged = 1;
+			}
 		    }
+		    $pxechanged += $node_pxechanged;
 		}
 	    }
 	}

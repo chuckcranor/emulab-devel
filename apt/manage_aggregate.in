@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,6 +44,7 @@ sub usage()
     print STDERR "       manage_aggregate [agg] portals rem <portal> \n";
     print STDERR "       manage_aggregate [agg] feature set <feature> \n";
     print STDERR "       manage_aggregate [agg] feature clear \n";
+    print STDERR "       manage_aggregate [agg] status up|down \n";
     print STDERR "Options:\n";
     print STDERR "  agg   - URN, nickname, abbrev, or domain of aggregate\n";
     exit(-1);
@@ -95,6 +96,7 @@ sub DoFlags();
 sub DoPing();
 sub DoPortals();
 sub DoFeature();
+sub DoStatus();
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -149,6 +151,9 @@ elsif ($action eq "portals") {
 }
 elsif ($action eq "feature") {
     DoFeature();
+}
+elsif ($action eq "status") {
+    DoStatus();
 }
 else {
     usage();
@@ -426,6 +431,29 @@ sub DoFeature()
 	$aggregate->Update({"canuse_feature" => $feature}) == 0
 	    or fatal("Could not set feature");
     }
+}
+
+#
+# Change the status (in case the monitor is confused, or for debugging).
+#
+sub DoStatus()
+{
+    my $optlist = "";
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV < 1 || @ARGV > 2);
+    
+    my $which = shift(@ARGV);
+
+    fatal("Must be one of 'up' or 'down' or 'offline'")
+	if ($which ne "up" && $which ne "down" && $which ne "offline");
+    
+    $aggregate->status($which);
+    $aggregate->StatusEvent($which);
 }
 
 exit(0);

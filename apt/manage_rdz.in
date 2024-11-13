@@ -1,0 +1,2618 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use POSIX ":sys_wait_h";
+use POSIX qw(setsid close strftime);
+use File::Temp qw(tempfile tempdir);
+use Date::Parse;
+use File::Basename;
+use MIME::Base64;
+use URI;
+use JSON;
+
+#
+# Back-end script to manage RDZ stuff
+#
+sub usage()
+{
+    print STDERR "Usage: manage_rdz reset\n";
+    print STDERR "Usage: manage_rdz version\n";
+    print STDERR "Usage: manage_rdz health\n";
+    print STDERR "Usage: manage_rdz zones list\n";
+    print STDERR "Usage: manage_rdz spectrum list|create|show|delete\n";
+    print STDERR "Usage: manage_rdz antennas list|create\n";
+    print STDERR "Usage: manage_rdz locations list|create\n";
+    print STDERR "Usage: manage_rdz radios list|create|show|delete\n";
+    print STDERR "Usage: manage_rdz grants list|create|delete|show\n";
+    print STDERR "Usage: manage_rdz monitors list|create|delete|show\n";
+    print STDERR "Usage: manage_rdz observations create\n";
+    print STDERR "Usage: manage_rdz subscriptions create\n";
+    print STDERR "Usage: manage_rdz claims list|create|delete|show\n";
+    print STDERR "Usage: manage_rdz users list|create|delete|show\n";
+    exit(-1);
+}
+my $optlist     = "dt:nT:jR:";
+my $debug       = 0;
+my $impotent    = 0;
+my $asjson      = 0;
+my $webtask_id;
+my $logfile;
+my $webtask;
+my $token;
+my $rdzinrdz;
+my $this_user;
+my $JSON;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $MAINSITE    = @TBMAINSITE@;
+my $OURDOMAIN	= "@OURDOMAIN@";
+my $MYURN       = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libtestbed;
+use emdb;
+use emutil;
+use libEmulab;
+use Node;
+use User;
+use APT_Aggregate;
+use APT_Instance;
+use APT_RDZRest;
+use APT_RDZ;
+use APT_Reservation;
+use WebTask;
+
+# Protos
+sub fatal($);
+sub UserError($);
+sub DoReset();
+sub DoGetVersion();
+sub DoGetHealth();
+sub DoLocations();
+sub DoAntennas();
+sub DoRadios();
+sub DoGrants();
+sub DoZones();
+sub DoSpectrum();
+sub DoMonitors();
+sub DoObservations();
+sub DoSubscriptions();
+sub DoClaims();
+sub DoUsers();
+sub UpdateMonitor($);
+sub DoRFSObservation($$);
+sub WatchGrant($);
+sub logit($);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (grep {$_ eq "--"} @ARGV &&
+    ! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"j"})) {
+    $asjson = 1;
+    $JSON = JSON->new->allow_nonref;
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not get webtask object");
+    }
+    $webtask->AutoStore(1);
+}
+if (defined($options{"T"})) {
+    $token = $options{"T"};
+}
+elsif (defined($options{"R"})) {
+    $rdzinrdz = $options{"R"};
+}
+
+if (@ARGV < 1) {
+    usage();
+}
+my $action = shift(@ARGV);
+
+#
+# We get the element from the token.
+#
+my $ZMC;
+
+if ($token) {
+    $ZMC = APT_RDZRest::ZMC->New($token);    
+}
+elsif ($rdzinrdz) {
+    my $errmsg;
+    
+    my $instance = APT_Instance->Lookup($rdzinrdz);
+    if (!defined($instance)) {
+	fatal("No such rdzinrdz experiment")
+    }
+    if (! exists($instance->RDZFLAGS()->{'rdzinrdz'})) {
+	fatal("Not an rdzinrdz experiment");
+    }
+    my $token = $instance->RDZINRDZINFO()->{'element_token'};
+    my $url = APT_RDZ::URLforRDZ($instance, \$errmsg);
+    if (!defined($url)) {
+	fatal($errmsg);
+    }
+    $ZMC = APT_RDZRest::ZMC->New($token, $url);
+}
+else {
+    $ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
+}
+if (!defined($ZMC)) {
+    fatal("Could not create the ZMC client");
+}
+my $ELEMENTID = $ZMC->elementid();
+
+#
+# Debugging
+#
+sub DebugDump($)
+{
+    my ($ref) = @_;
+    
+    if ($asjson) {
+	print $JSON->pretty->encode($ref);
+    }
+    else {
+	print Dumper($ref);
+    }
+}
+
+if ($action eq "reset") {
+    exit(DoReset());
+}
+if ($action eq "version") {
+    exit(DoGetVersion());
+}
+elsif ($action eq "health") {
+    exit(DoGetHealth());
+}
+elsif ($action eq "locations") {
+    exit(DoLocations());
+}
+elsif ($action eq "antennas") {
+    exit(DoAntennas());
+}
+elsif ($action eq "radios") {
+    exit(DoRadios());
+}
+elsif ($action eq "grants") {
+    exit(DoGrants());
+}
+elsif ($action eq "zones") {
+    exit(DoZones());
+}
+elsif ($action eq "spectrum") {
+    exit(DoSpectrum());
+}
+elsif ($action eq "observations") {
+    exit(DoObservations());
+}
+elsif ($action eq "monitors") {
+    exit(DoMonitors());
+}
+elsif ($action eq "subscriptions") {
+    exit(DoSubscriptions());
+}
+elsif ($action eq "claims") {
+    exit(DoClaims());
+}
+elsif ($action eq "users") {
+    exit(DoUsers());
+}
+else {
+    usage();
+}
+exit(0);
+
+#
+# Reset all of the RDZ ids in our DB as for reloading the RDZ after
+# it does a DB reset
+#
+sub DoReset()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz reset radios|antennas|all\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+
+    my %options    = ();
+    if (! getopts("F", \%options)) {
+	usage();
+    }
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(all|radios|locations)$/);
+
+    if (!defined($options{"F"})) {
+	fatal("Must provide the -F option to do this!");
+    }
+    if ($which eq "all" || $which eq "locations") {
+	DBQueryFatal("update apt_aggregate_radio_locations ".
+		     "   set rdz_location_id=null");
+    }
+    if ($which eq "all" || $which eq "radios") {
+	DBQueryFatal("update apt_aggregate_radio_info ".
+		     "   set rdz_radio_id=null");
+	DBQueryFatal("update apt_aggregate_radio_frontends ".
+		     "  set rdz_radioport_id=null,rdz_monitor_id=null");
+	DBQueryFatal("update apt_aggregate_radio_frontends ".
+		     "  set rdz_monitor_radio_id=null,".
+		     "      rdz_monitor_radioport_id=null,".
+		     "      rdz_monitor_monitor_id=null");
+    }
+    exit(0);
+}
+
+sub DoGetVersion()
+{
+    my $response;
+    
+    if ($ZMC->GET("/version", \$response)) {
+	fatal("Could not get RDZ /version");
+    }
+    print Dumper($response);
+    exit(0);
+}
+
+sub DoGetHealth()
+{
+    if ($ZMC->GET("/health/alive", undef)) {
+	fatal("Could not get RDZ /health/alive");
+    }
+    print "RDZ is alive\n";
+
+    if ($ZMC->GET("/health/ready", undef)) {
+	fatal("Could not get RDZ /health/ready");
+    }
+    print "RDZ is ready\n";
+    
+    exit(0);
+}
+
+#
+# 
+#
+sub DoZones()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz zones list\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list)$/);
+
+    my $response;
+    if ($ZMC->GET("/zones", \$response)) {
+	fatal("Could not get RDZ /zones");
+    }
+    if ($asjson) {
+	print $JSON->pretty->encode($response);
+    }
+    else {
+	print Dumper($response);
+    }
+    exit(0);
+}
+
+#
+# 
+#
+sub DoSpectrum()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz spectrum list\n";
+	print STDERR "Usage: manage_rdz spectrum create <low> <high>\n";
+	print STDERR "Usage: manage_rdz spectrum show <spectrum_id>\n";
+	print STDERR "Usage: manage_rdz spectrum delete <spectrum_id>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create|delete|show)$/);
+
+    if ($which eq "list") {
+	my $response;
+	if ($ZMC->GET("/spectrum", \$response)) {
+	    fatal("Could not get RDZ /spectrum");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show" || $which eq "delete") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+
+	my $spectrum_id = shift(@ARGV);
+
+	if ($which eq "delete") {
+	    if ($ZMC->DELETE("/spectrum/$spectrum_id", \$response)) {
+		fatal("Could not delete /spectrum/$spectrum_id");
+	    }
+	}
+	else {
+	    if ($ZMC->GET("/spectrum/$spectrum_id", \$response)) {
+		fatal("Could not get /spectrum/$spectrum_id");
+	    }
+	    print Dumper($response);
+	}
+	exit(0);
+    }
+    &$usage()
+	if (@ARGV != 2);
+
+    my $freq_low  = shift(@ARGV);
+    $freq_low *= 1000000 if ($freq_low < 10000);
+    my $freq_high = shift(@ARGV);
+    $freq_high *= 1000000 if ($freq_high < 10000);
+
+    my $request = {
+	"description" => "Test Spectrum",
+	"element_id"  => $ELEMENTID,
+	"starts_at"   => TBDateStringGMT(time()),
+	"url"         => "http://www.powderwireless.net/",
+	"enabled"     => JSON::true,
+	"constraints" => [
+	    {
+		"constraint" => {
+		    "min_freq"  => $freq_low + 0,
+		    "max_freq"  => $freq_high + 0,
+		    "max_eirp"  => -70,
+		    "exclusive" => JSON::true,
+		},
+	    },
+	],
+	"policies" => [
+	    {
+		"element_id"    => $ELEMENTID,
+		"allowed"      => JSON::true,
+		"auto_approve" => JSON::true,
+		"priority"     => 500,
+	    },
+	],
+    };
+    print Dumper($request);
+
+    if ($impotent) {
+	exit(0);
+    }
+    my $response;
+    
+    if ($ZMC->POST("/spectrum", $request, \$response)) {
+	fatal("Could not add RDZ /spectrum");
+    }
+    print Dumper($response);
+    exit(0);
+}
+
+#
+# We have just a single Antenna for now, so this is brain-dead.
+#
+sub DoAntennas()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz antennas list|create\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create)$/);
+
+    my $response;
+    if ($ZMC->GET("/antennas", \$response)) {
+	fatal("Could not get RDZ /antennas");
+    }
+    if ($which eq "list") {
+	print Dumper($response);
+	exit(0);
+    }
+    my @antennas = @{$response->{'antennas'}};
+    if (@antennas) {
+	fatal("Only one antenna for now");
+    }
+    my $request = {
+	"element_id" => $ELEMENTID,
+	"name"       => "powder-omni",
+	"type"       => "omni",
+	"gain"       => 5.0,
+    };
+    if ($ZMC->POST("/antennas", $request, \$response)) {
+	fatal("Could not add RDZ /antennas");
+    }
+    print Dumper($response);
+    exit(0);
+}
+
+#
+# We operate from the DB radio locations info. For the demo, we are
+# going to create locations for all BS/FE/DD sites.
+#
+sub DoLocations()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz locations list\n";
+	print STDERR "Usage: manage_rdz locations create\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 1);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create)$/);
+
+    if ($which eq "list") {
+	my $response;
+
+	if ($ZMC->GET("/locations", \$response)) {
+	    fatal("Could not get RDZ /locations");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+
+    #
+    # Post all locations.
+    #
+    my $query_result =
+	DBQueryFatal("select * from apt_aggregate_radio_locations ".
+		     "where itype in ('BS', 'FE', 'DD', 'OAI')");
+
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $itype       = $row->{'itype'};
+	my $urn         = $row->{'aggregate_urn'};
+	my $location    = $row->{'location'};
+	my $location_id = $row->{'rdz_location_id'};
+	my $name        = $location . '-' . $itype;
+	my $latitude    = $row->{'latitude'};
+	my $longitude   = $row->{'longitude'};
+
+	if (!$longitude || !$latitude) {
+	    my $aggregate = APT_Aggregate->Lookup($urn);
+	    if ($aggregate && $aggregate->latitude()) {
+		$latitude  = $aggregate->latitude();
+		$longitude = $aggregate->longitude();
+	    }
+	    else {
+		fatal("No latitude/longitude for $urn");
+	    }
+	}
+	
+	my $request = {
+	    "element_id" => $ELEMENTID,
+	    "name"       => $name,
+	    "srid"       => 4326,
+	    "x"          => $longitude,
+	    "y"          => $latitude,
+	    "z"          => 0,
+	};
+	if ($location_id) {
+	    print "This is an update to location $name\n";
+	    $request->{"id"} = $location_id;
+	}
+	if ($debug || $impotent) {
+	    print Dumper($request);
+	}
+	next
+	    if ($impotent);
+	
+	my $response;
+	if ($location_id) {
+	    if ($ZMC->PUT("/locations/$location_id", $request, \$response)) {
+		fatal("Could not update RDZ /locations/$location_id");
+	    }
+	}
+	else {
+	    if ($ZMC->POST("/locations", $request, \$response)) {
+		fatal("Could not add RDZ /locations");
+	    }
+	}
+	print Dumper($response);
+	if (! $location_id) {
+	    $location_id = $response->{"id"};
+	    DBQueryFatal("update apt_aggregate_radio_locations set ".
+			 "  rdz_location_id='$location_id' ".
+			 "where aggregate_urn='$urn' and ".
+			 "      location='$location' and itype='$itype'");
+	}
+    }
+    exit(0);
+}
+
+#
+# We operate from the DB radio info. For the demo, we are going to create
+# radios for all BS/FE/DD sites.
+#
+sub DoRadios()
+{
+    my $aggregate;
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz radios list\n";
+	print STDERR "Usage: manage_rdz radios create\n";
+	print STDERR "Usage: manage_rdz radios delete|show <radio_id>\n";
+	print STDERR "Usage: manage_rdz radios delete|show [-a agg] <node_id>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create|show|delete)$/);
+
+    my %options    = ();
+    if (! getopts("a:", \%options)) {
+	usage();
+    }
+    if (defined($options{"a"})) {
+	$aggregate = APT_Aggregate->LookupByNickname($options{"a"});
+    }
+    else {
+	$aggregate = APT_Aggregate->Lookup($MYURN);
+    }
+    if (!$aggregate) {
+	fatal("No such aggregate");
+    }
+    
+    if ($which eq "list") {
+	my $response;
+
+	if ($ZMC->GET("/radios", \$response)) {
+	    fatal("Could not get RDZ /radios");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show" || $which eq "delete") {
+	my $response;
+	my ($radio, $frontend);
+
+	&$usage()
+	    if (@ARGV != 1);
+
+	my $radio_id = shift(@ARGV);
+	if ($radio_id !~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
+	    $radio = $aggregate->Radio($radio_id);
+	    if (!$radio) {
+		fatal("No such radio in the DB");
+	    }
+	    if (!$radio->rdz_radio_id()) {
+		fatal("Not registered with the RDZ");
+	    }
+	    $radio_id = $radio->rdz_radio_id();
+	    $frontend = $radio->FrontendInterface("rf0");
+	    if (!$frontend) {
+		fatal("No rf0 frontend for $radio");
+	    }
+	}
+	if ($which eq "delete") {
+	    if ($ZMC->DELETE("/radios/$radio_id", \$response)) {
+		fatal("Could not delete /radios/$radio_id");
+	    }
+	}
+	else {
+	    if ($ZMC->GET("/radios/$radio_id", \$response)) {
+		fatal("Could not get /radios/$radio_id");
+	    }
+	    print Dumper($response);
+	}
+	if ($frontend && $frontend->rdz_monitor_radio_id()) {
+	    my $monitor_radio_id = $frontend->rdz_monitor_radio_id();
+	    
+	    if ($which eq "delete") {
+		if ($ZMC->DELETE("/radios/$monitor_radio_id", \$response)) {
+		    fatal("Could not delete /radios/$monitor_radio_id");
+		}
+	    }
+	    else {
+		if ($ZMC->GET("/radios/$monitor_radio_id", \$response)) {
+		    fatal("Could not get /radios/$monitor_radio_id");
+		}
+		print Dumper($response);
+	    }
+	}
+	exit(0);
+    }
+
+    # Need our one antenna id. Not stored in the DB yet.
+    my $response;
+    if ($ZMC->GET("/antennas", \$response)) {
+	fatal("Could not get RDZ /antennas");
+    }
+    my @antennas = @{$response->{'antennas'}};
+    if (!@antennas) {
+	fatal("There is no antenna!");
+    }
+    my $antenna_id = $antennas[0]->{'id'};
+
+    my $query_result =
+	DBQueryFatal("select l.rdz_location_id,l.location,l.itype,".
+		     "       l.aggregate_urn, ".
+		     "       i.rdz_radio_id,i.node_id,i.radio_type, ".
+		     "       f.rdz_radioport_id,f.rdz_monitor_id,".
+		     "       f.monitored,f.iface, ".
+		     "       f.transmit_frequencies, ".
+		     "       f.receive_frequencies ".
+		     "  from apt_aggregate_radio_locations as l ".
+		     "join apt_aggregate_radio_info as i on ".
+		     "  i.aggregate_urn=l.aggregate_urn and ".
+		     "  i.location=l.location and ".
+		     "  i.itype=l.itype ".
+		     "join apt_aggregate_radio_frontends as f on ".
+		     "  f.aggregate_urn=i.aggregate_urn and ".
+		     "  f.node_id=i.node_id and ".
+		     "  f.iface='rf0' ".
+		     "where l.rdz_location_id is not null and ".
+		     "      l.itype in ('BS', 'FE', 'DD', 'OAI')");
+    
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $location     = $row->{'location'};
+	my $itype        = $row->{'itype'};
+	my $urn          = $row->{'aggregate_urn'};
+	my $node_id      = $row->{'node_id'};
+	my $iface        = $row->{'iface'};
+	my $radioname    = $node_id;
+	my $portname     = $node_id . '-' . $iface;
+	my $location_id  = $row->{'rdz_location_id'};
+	my $radio_id     = $row->{'rdz_radio_id'};
+	my $port_id      = $row->{'rdz_radioport_id'};
+	my $monitored    = $row->{'monitored'};
+	
+	if (!$location_id) {
+	    fatal("No RDZ location ID set for $location,$itype");
+	}
+
+	# Skip skylark stuff for now.
+	next
+	    if ($row->{'radio_type'} =~ /skylark/i);
+
+	next
+	    if (0 && $row->{'node_id'} ne "bru-650-2");
+	
+	# I think it will be confusing if I do not distinguish these names
+	if ($itype eq "FE" && $node_id =~ /^nuc/) {
+	    $radioname = "$location FE " . $radioname;
+	    $portname  = "$location FE " . $portname;
+	}
+	
+	my $radio_request = {
+	    "element_id"   => $ELEMENTID,
+	    "name"         => $radioname,
+	    "description"  => $row->{'radio_type'},
+	    "location_id"  => $location_id,
+	    "enabled"      => JSON::true,
+	};
+	if ($radio_id) {
+	    print "This is an update to radio $node_id\n";
+	    $radio_request->{"id"} = $radio_id;
+	}
+	if ($debug || $impotent) {
+	    print "Radio: $node_id\n";
+	    print Dumper($radio_request);
+	}
+	
+	if (!$impotent) {
+	    my $response;
+	    if ($radio_id) {
+		if ($ZMC->PUT("/radios/$radio_id",
+				 $radio_request, \$response)) {
+		    fatal("Could not update RDZ /radios/$radio_id");
+		}
+	    }
+	    else {
+		if ($ZMC->POST("/radios", $radio_request, \$response)) {
+		    fatal("Could not add RDZ /radios");
+		}
+	    }
+	    print Dumper($response);
+	    if (! $radio_id) {
+		$radio_id = $response->{"id"};
+		DBQueryFatal("update apt_aggregate_radio_info set ".
+			     "  rdz_radio_id='$radio_id' ".
+			     "where aggregate_urn='$urn' and ".
+			     "      node_id='$node_id'");
+	    }
+	}
+
+	my $min_freq  = 1;
+	my $max_freq  = 1;
+	my $max_power = 10;
+	if ($row->{'transmit_frequencies'} ne "") {
+	    ($min_freq,$max_freq) = split("-", $row->{'transmit_frequencies'});
+	}
+	elsif ($row->{'receive_frequencies'} ne "") {
+	    ($min_freq,$max_freq) = split("-", $row->{'receive_frequencies'});
+	}
+	$min_freq  *= 1000000 if ($min_freq < 10000);
+	$max_freq  *= 1000000 if ($max_freq < 10000);
+	
+	#
+	# We need to store power in the DB!
+	#
+	if ($row->{'radio_type'} =~ /X310/i) {
+	    $max_power = 22;
+	}
+	elsif ($row->{'radio_type'} =~ /N310/i) {
+	    $max_power = 21;
+	}
+	elsif ($row->{'radio_type'} =~ /B210/i) {
+	    $max_power = 19.5;
+	}
+	
+	my $port_request = {
+	    "element_id"          => $ELEMENTID,
+	    "radio_id"            => $radio_id,
+	    "name"                => $portname,
+	    "rx"                  => ($row->{'receive_frequencies'} eq "" ?
+				      JSON::false : JSON::true),
+	    "tx"                  => ($row->{'transmit_frequencies'} eq "" ?
+				      JSON::false : JSON::true),
+	    "min_freq"            => $min_freq + 0,
+	    "max_freq"            => $max_freq + 0,
+	    "max_power"           => $max_power + 0,
+	    "antenna_id"          => $antenna_id,
+	    "antenna_location_id" => $location_id,
+	};
+	if ($port_id) {
+	    print "This is an update to radioport $portname\n";
+	    $port_request->{"id"} = $port_id;
+	}
+	if ($debug || $impotent) {
+	    print "Radio Port: $portname\n";
+	    print Dumper($port_request);
+	}
+
+	if (!$impotent) {
+	    if ($port_id) {
+		if ($ZMC->PUT("/radios/$radio_id/ports/$port_id",
+				 $port_request, \$response)) {
+		    fatal("Could not update RDZ /radios/$radio_id/ports/$port_id");
+		}
+	    }
+	    else {
+		if ($ZMC->POST("/radios/$radio_id/ports",
+				  $port_request, \$response)) {
+		    fatal("Could not add RDZ /radios/$radio_id/ports");
+		}
+	    }
+	    print Dumper($response);
+	    if (! $port_id) {
+		$port_id = $response->{"id"};
+		DBQueryFatal("update apt_aggregate_radio_frontends set ".
+			     "  rdz_radioport_id='$port_id' ".
+			     "where aggregate_urn='$urn' and ".
+			     "      node_id='$node_id' and iface='$iface'");
+	    }
+	}
+
+	#
+	# OK, Powder inline monitors are different then I first thought.
+	# They need to be separate radios, with a radio port, and the
+	# monitor is attached to that. We then tell the ZMC that it is
+	# monitoring the radio port we created up above.
+	#
+	if ($monitored) {
+	    my $monitor_radio_id     = $row->{'rdz_monitor_radio_id'};
+	    my $monitor_port_id      = $row->{'rdz_monitor_radioport_id'};
+	    my $monitor_id           = $row->{'rdz_monitor_monitor_id'};
+
+	    my $radio_request = {
+		"element_id"   => $ELEMENTID,
+		"name"         => $node_id . " inline monitor",
+		"description"  => "NI/Ettus B210",
+		"location_id"  => $location_id,
+		"enabled"      => JSON::true,
+	    };
+	    
+	    if ($monitor_radio_id) {
+		print "This is an update to monitor radio $node_id\n";
+		$radio_request->{"id"} = $monitor_radio_id;
+	    }
+	    if ($debug || $impotent) {
+		print "Monitor Radio: " . $node_id . " inline monitor\n";
+		print Dumper($radio_request);
+	    }
+	
+	    if (!$impotent) {
+		my $response;
+		if ($monitor_radio_id) {
+		    if ($ZMC->PUT("/radios/$monitor_radio_id",
+				     $radio_request, \$response)) {
+			fatal("Could not update RDZ /radios/$monitor_radio_id");
+		    }
+		}
+		else {
+		    if ($ZMC->POST("/radios", $radio_request, \$response)) {
+			fatal("Could not add RDZ /radios");
+		    }
+		}
+		print Dumper($response);
+		if (! $monitor_radio_id) {
+		    $monitor_radio_id = $response->{"id"};
+		    DBQueryFatal("update apt_aggregate_radio_frontends set ".
+				 "  rdz_monitor_radio_id='$monitor_radio_id' ".
+				 "where aggregate_urn='$urn' and ".
+				 "      node_id='$node_id'");
+		}
+	    }
+
+	    my $port_request = {
+		"element_id"          => $ELEMENTID,
+		"radio_id"            => $monitor_radio_id,
+		"name"                => $portname . " inline monitor",
+		"rx"                  => JSON::true,
+		"tx"                  => JSON::false,
+		"min_freq"            => 10e6 + 0,
+		"max_freq"            => 6000e6 + 0,
+		"max_power"           => 19.5,
+	    };
+	    if ($monitor_port_id) {
+		print "This is an update to monitor radioport $portname\n";
+		$port_request->{"id"} = $monitor_port_id;
+	    }
+	    if ($debug || $impotent) {
+		print "Monitor Radio Port: " . $node_id . " inline monitor\n";
+		print Dumper($port_request);
+	    }
+
+	    if (!$impotent) {
+		if ($monitor_port_id) {
+		    if ($ZMC->PUT(
+			    "/radios/$monitor_radio_id/ports/$monitor_port_id",
+			    $port_request, \$response)) {
+			fatal("Could not update RDZ ".
+			      "/radios/$monitor_radio_id/ports/$monitor_port_id");
+		    }
+		}
+		else {
+		    if ($ZMC->POST("/radios/$radio_id/ports",
+				      $port_request, \$response)) {
+			fatal("Could not add RDZ /radios/$radio_id/ports");
+		    }
+		}
+		print Dumper($response);
+		if (! $monitor_port_id) {
+		    $monitor_port_id = $response->{"id"};
+		    DBQueryFatal("update apt_aggregate_radio_frontends set ".
+				 "  rdz_monitor_radioport_id='$monitor_port_id' ".
+				 "where aggregate_urn='$urn' and ".
+				 "      node_id='$node_id' and iface='$iface'");
+		}
+	    }
+	    
+	    my $monitor_request = {
+		"element_id"     => $ELEMENTID,
+	        "radio_port_id"  => $monitor_port_id,
+	        "monitored_radio_port_id"  => $port_id,
+	        "name"           => $portname . " inline monitor",
+	        "types"          => "inline",
+	        "formats"        => "psd",
+		"enabled"        => JSON::true,
+	    };
+	    if ($monitor_id) {
+		print "This is an update to the monitor for $portname\n";
+		$monitor_request->{"id"} = $monitor_id;
+	    }
+	    if ($debug || $impotent) {
+		print "Monitor Monitor: " . $node_id . " inline monitor\n";
+		print Dumper($monitor_request);
+	    }
+
+	    if (!$impotent) {
+		if ($monitor_id) {
+		    if ($ZMC->PUT("/monitors/$monitor_id",
+				     $monitor_request, \$response)) {
+			fatal("Could not update RDZ /monitors/$monitor_id");
+		    }
+		}
+		else {
+		    if ($ZMC->POST("/monitors",
+				      $monitor_request, \$response)) {
+			fatal("Could not add RDZ /monitors");
+		    }
+		}
+		print Dumper($response);
+		if (! $monitor_id) {
+		    $monitor_id = $response->{"id"};
+		    DBQueryFatal("update apt_aggregate_radio_frontends set ".
+				 "  rdz_monitor_monitor_id='$monitor_id' ".
+				 "where aggregate_urn='$urn' and ".
+				 "      node_id='$node_id' and iface='$iface'");
+		}
+	    }
+	}
+    }
+    exit(0);
+}
+
+sub DoGrants()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz grants list\n";
+	print STDERR "Usage: manage_rdz grants create ".
+	    "[-H] [-w] <low> <high> [<bandwidth>]\n";
+	print STDERR "Usage: manage_rdz grants create ".
+	    "[-H] [-w] <low> <high> [<bandwidth>] <location> <radio>\n";
+	print STDERR "Usage: manage_rdz grants show <grant_id>\n";
+	print STDERR "Usage: manage_rdz grants delete <grant_id>\n";
+	print STDERR "Usage: manage_rdz grants beat <grant_id>\n";
+	print STDERR "Usage: manage_rdz grants watch <grant_id>\n";
+	print STDERR "Usage: manage_rdz grants extend <grant_id> <hours>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create|delete|show|beat|watch|extend)$/);
+
+    my %options = ();
+    my $beats   = 0;
+    my $watch   = 0;
+    if (! getopts("Hw", \%options)) {
+	usage();
+    }
+    if (defined($options{"H"})) {
+	$beats = 1;
+    }
+    if (defined($options{"w"})) {
+	$watch = 1;
+    }
+    if ($which eq "list") {
+	my $response;
+
+	if ($ZMC->GET("/grants?element_id=$ELEMENTID&revoked=false&deleted=false",
+			 \$response)) {
+	    fatal("Could not get RDZ /grants");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show" || $which eq "beat") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $grant_id = shift(@ARGV);
+	if ($ZMC->GET("/grants/$grant_id", \$response)) {
+	    fatal("Could not get /grants/$grant_id");
+	}
+	if ($debug) {
+	    DebugDump($response);
+	}
+	print "Grant status: ". $response->{'status'} . "\n";
+	if ($response->{'status'} eq "denied") {
+	    foreach my $log (@{$response->{'logs'}}) {
+		if ($log->{'status'} eq "denied") {
+		    print "Reason: " . $log->{'message'} . "\n";
+		    last;
+		}
+	    }
+	}
+	elsif ($response->{"allow_skip_acks"}) {
+	    print "Heartbeats are NOT required\n";
+	}
+	else {
+	    print "Heartbeats are required, next ack by ".
+		TBDateStringLocal($response->{'status_ack_by'}) . "\n";
+	}
+	exit(0)
+	    if ($which eq "show");
+
+	print "Sending a heartbeat\n";
+	
+	my $heartbeat = {
+	    "op_status" => $response->{'status'},
+	    "message"   => "The beat goes on and on",
+	};
+	if ($ZMC->PUT("/grants/$grant_id/opstatus", $heartbeat, \$response)) {
+	    fatal("Could not get /grants/$grant_id/opstatus");
+	}
+	if ($debug) {
+	    print Dumper($response);
+	}
+	print "Grant OP status: ". $response->{'op_status'} . "\n";
+	print "Grant next ack: " .
+	    TBDateStringLocal($response->{'status_ack_by'}) . "\n";
+	exit(0);
+    }
+    if ($which eq "delete") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $grant_id = shift(@ARGV);
+	if ($ZMC->DELETE("/grants/$grant_id", \$response)) {
+	    fatal("Could not delete /grants/$grant_id");
+	}
+	exit(0);
+    }
+    if ($which eq "extend") {
+	my ($response, $grant);
+
+	&$usage()
+	    if (@ARGV != 2);
+	
+	my $grant_id = shift(@ARGV);
+	my $hours    = shift(@ARGV);
+
+	if ($ZMC->GET("/grants/$grant_id", \$grant)) {
+	    fatal("Could not get /grants/$grant_id");
+	}
+	if ($debug) {
+	    DebugDump($grant);
+	}
+	$grant->{'expires_at'} =
+	    TBDateStringGMT(str2time($grant->{'expires_at'}) + (3600 * $hours));
+	if (0) {
+	    DebugDump($grant);
+	}	    
+	exit(0)
+	    if ($impotent);
+	
+	if ($ZMC->POST("/grants/$grant_id", $grant, \$response)) {
+	    fatal("Could not post /grants/$grant_id");
+	}
+
+	#
+	# This results in a grant replacement.
+	#
+	my $new_grant_id = $response->{'replacement'}->{'new_grant_id'};
+	my $status = $response->{'status'};
+	print "Grant status: $status\n";
+	print "Grant replacement ID: $new_grant_id\n";
+
+	#
+	# Delete the original grant unless we are watching the events.
+	#
+	if ($status eq "revoked" && !$watch) {
+	    print "Deleting original grant ID: $grant_id\n";
+	    
+	    if ($ZMC->DELETE("/grants/$grant_id", \$response)) {
+		fatal("Could not delete /grants/$grant_id");
+	    }
+	}
+	exit(0);
+    }
+    if ($which eq "watch") {
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $grant_id = shift(@ARGV);
+	exit(WatchGrant($grant_id));
+    }
+    &$usage()
+	if (@ARGV < 2 || @ARGV > 5);
+
+    my $freq_low  = shift(@ARGV);
+    $freq_low *= 1000000 if ($freq_low < 10000);
+    my $freq_high = shift(@ARGV);
+    $freq_high *= 1000000 if ($freq_high < 10000);
+
+    my $constraint = {
+	"min_freq"  => $freq_low + 0,
+	"max_freq"  => $freq_high + 0,
+	"max_eirp"  => -80,
+	"exclusive" => (@ARGV == 3 ? JSON::false : JSON::true)
+    };
+    if (@ARGV == 1 || @ARGV == 3) {
+	my $bandwidth = shift(@ARGV);
+	$bandwidth *= 1000000 if ($bandwidth < 10000);
+	$constraint->{"bandwidth"} = $bandwidth;
+    }
+    my $request = {
+	"description" => "Test Grant",
+	"element_id"  => $ELEMENTID,
+	"starts_at"   => TBDateStringGMT(time()),
+	"expires_at"  => TBDateStringGMT(time() + 3600),
+	"ext_id"      => NewUUID(),
+	"html_url"    => "https://www.powderwireless.net",
+	"constraints" => [
+	    {
+		"constraint" => $constraint,
+	    },
+	],
+    };
+    if ($beats) {
+	$request->{"allow_skip_acks"} = JSON::false;
+    }
+    if (@ARGV) {
+	my $location = shift(@ARGV);
+	my $radio    = shift(@ARGV);
+
+	my $query =
+	    "select l.rdz_location_id,".
+	    "       l.aggregate_urn, ".
+	    "       i.rdz_radio_id, ".
+	    "       f.rdz_radioport_id, ".
+	    "       f.rdz_monitor_id".
+	    "  from apt_aggregate_radio_locations as l ".
+	    "join apt_aggregate_radio_info as i on ".
+	    "  i.aggregate_urn=l.aggregate_urn and ".
+	    "  i.location=l.location and ".
+	    "  i.itype=l.itype ".
+	    "join apt_aggregate_radio_frontends as f on ".
+	    "  f.aggregate_urn=i.aggregate_urn and ".
+	    "  f.node_id=i.node_id and ".
+	    "  f.iface='rf0' ".
+	    "where l.rdz_location_id is not null and ".
+	    "      l.location='$location' and ".
+	    "      i.node_id='$radio'";
+
+	my $query_result = DBQueryFatal($query);
+	if (!$query_result->numrows) {
+	    fatal("No matching location/radio with RDZ info");
+	}
+	if ($query_result->numrows != 1) {
+	    fatal("Too many matching location/radio with RDZ info");
+	}
+	my $row = $query_result->fetchrow_hashref();
+ 	my $port_id  = $row->{'rdz_radioport_id'};
+	$request->{'radio_ports'} = [
+	    {
+		"radio_port_id" => $port_id,
+	    },
+	];
+    }
+    if ($debug || $impotent) {
+	DebugDump($request);
+    }
+    if ($impotent) {
+	exit(0);
+    }
+    my $response;
+    if ($ZMC->POST("/grants", $request, \$response)) {
+	fatal("Could not add RDZ /grants");
+    }
+    if ($debug) {
+	DebugDump($response);
+    }
+    print "Grant id: ". $response->{'id'} . "\n";
+    print "Grant status: ". $response->{'status'} . "\n";
+    if ($response->{'status'} eq "denied") {
+	foreach my $log (@{$response->{'logs'}}) {
+	    if ($log->{'status'} eq "denied") {
+		print "Reason: " . $log->{'message'} . "\n";
+		last;
+	    }
+	}
+    }
+
+    #
+    # Lets ack an approved grant immediately.
+    #
+    if ($beats) {
+	my $status = $response->{'status'};
+
+	if ($status eq "approved" || $status eq "active") {
+	    my $grant_id = $response->{'id'};
+	    my $reply = ($status eq "approved" ? "accepted" : "active");
+
+	    my $heartbeat = {
+		"op_status" => $reply,
+		"message"   => "The beat goes on",
+	    };
+	    if ($debug) {
+		print Dumper($heartbeat);
+	    }
+	    print "Sending initial heartbeat\n";
+	    if ($ZMC->PUT("/grants/$grant_id/opstatus", $heartbeat, \$response)) {
+		fatal("Could not put /grants/$grant_id/opstatus");
+	    }
+	    print "Grant OP status: ". $response->{'op_status'} . "\n";
+	    print "Grant next ack: " .
+		TBDateStringLocal($response->{'status_ack_by'}) . "\n";
+	}
+    }
+    if ($watch) {
+	WatchGrant($response->{'id'});
+    }
+    exit(0);
+}
+
+#
+# Watch a single grant for testing
+#
+sub WatchGrant($)
+{
+    my ($grant_id) = @_;
+    my ($grant);
+
+    #
+    # Load to see if it needs heartbeats.
+    #
+    if ($ZMC->GET("/grants/$grant_id", \$grant)) {
+	fatal("Could not get /grants/$grant_id");
+    }
+    my %grants = ($grant_id => $grant);
+
+    #
+    # Issue required hearbeat.
+    #
+    my $heartBeat = sub ()
+    {
+	my ($grant) = @_;
+	my $grant_id = $grant->{'id'};
+	my $status   = $grant->{'status'};
+	my $response;
+
+	logit("");
+	logit("Heartbeat: $grant_id, $status");
+	my $reply;
+	if ($status eq "active" || $status eq "paused") {
+	    $reply = $status;
+	}
+	elsif ($status eq "revoked" || $status eq "replacing") {
+	    $reply = "paused";
+	}
+	my $heartbeat = {
+	    "op_status" => $reply,
+	    "message"   => "The beat goes on",
+	};
+	logit("Sending $reply heartbeat");
+	    
+	if ($ZMC->PUT("/grants/$grant_id/opstatus", $heartbeat, \$response)) {
+	    fatal("Could not put /grants/$grant_id/opstatus");
+	}
+	my $nextack = $response->{'status_ack_by'};
+	logit("Grant next ack: " . TBDateStringLocal($nextack));
+	# Update in the caller supplied grant object.
+	$grant->{'status_ack_by'} = $nextack;
+	return 0;
+    };
+
+    #
+    # Call back for events and polls. 
+    #
+    my $callback = sub ()
+    {
+	my ($type, $ref) = @_;
+	my ($grant_id, $status, $nextack);
+
+	DebugDump($ref);
+
+	#
+	# Check to see if any grants need a heartbeat.
+	#
+	if ($type eq "heartbeat") {
+	    foreach my $grant (values(%grants)) {
+		next
+		    if ($grant->{"allow_skip_acks"});
+
+		my $nextack = str2time($grant->{'status_ack_by'});
+		next
+		    if ($nextack - time() > 10);
+
+		&$heartBeat($grant);
+	    }
+	    return 0;
+	}
+	logit("");
+	logit("WatchGrant callback: $type");
+	if ($type eq "event") {
+	    $grant_id = $ref->{'object'}->{'id'};
+	    $status   = $ref->{'object'}->{'status'};
+	    $nextack  = $ref->{'object'}->{'status_ack_by'};
+	}
+	elsif ($type eq "poll") {
+	    $grant_id = $ref->{'id'};
+	    $status   = $ref->{'status'};
+	    $nextack  = $ref->{'status_ack_by'};
+	}
+	logit("Grant id: $grant_id");
+	my $grant  = $grants{$grant_id};
+	my $beats  = $grant->{"allow_skip_acks"} ? 0 : 1;
+	my $dobeat = $type eq "event" && $beats;
+	
+	logit("Grant status: $status");
+	if ($beats) {
+	    logit("Grant next ack: " . TBDateStringLocal($nextack));
+	}
+	$grant->{'status'} = $status;
+	
+	if ($dobeat) {
+	    &$heartBeat($grant);
+	}
+	else {
+	    $grant->{'status_ack_by'} = $nextack;
+	}
+
+	
+
+	return 0;
+    };
+    while (1) {
+	if (APT_RDZ::WatchGrants($callback, [$grant_id], $ZMC, $debug) < 0) {
+	    exit(-1);
+	}
+    	sleep(5);
+    }
+}
+
+#
+# Post an observation. For now, we take a file output by the rfmonitor
+# daemon, massage it a bit, and then send it to the rdz.
+#
+sub DoObservations()
+{
+    no strict 'subs';
+    local(*FOO);
+    my $aggregate;
+    my $rfs;
+
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz observations create [-a urn] <file>\n";
+	print STDERR "Usage: manage_rdz observations create [-R id] <file>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(create)$/);
+
+    my %options = ();
+    if (! getopts("fa:R:", \%options)) {
+	&$usage();
+    }
+    if (defined($options{"a"})) {
+	$aggregate = APT_Aggregate->Lookup($options{"a"});
+	if (!$aggregate) {
+	    $aggregate = APT_Aggregate->LookupByNickname($options{"a"});
+	}
+    }
+    else {
+	$aggregate = APT_Aggregate->Lookup($MYURN);	
+    }
+    if (defined($options{"R"})) {
+	$rfs = $options{"R"};
+    }
+    if (!$aggregate) {
+	fatal("No such aggregate");
+    }
+    my $aggregate_urn = $aggregate->urn();
+
+    my $force = defined($options{"f"}) ? 1 : 0;
+
+    &$usage()
+	if (@ARGV != 1);
+    
+    my $file = shift(@ARGV);
+    fatal("No such file: $file")
+	if (!-e $file);
+
+    if (defined($rfs)) {
+	exit(DoRFSObservation($rfs, $file));
+    }
+
+    my ($node_id,$iface,$stamp);
+    my $name = basename($file);
+    if ($name =~ /^([^:]+):([^-]+)-(\d+)/) {
+	$node_id = $1;
+	$iface   = $2;
+	$stamp   = $3;
+    }
+    else {
+	fatal("Bad file name, must be a monitor filename");
+    }
+    
+    #
+    # Do not send up observations if the radio is not allocated and
+    # using RDZ spectrum. Only or local radios of course.
+    #
+    if ($aggregate_urn eq $MYURN) {
+	my $node = Node->Lookup($node_id);
+	if (!defined($node)) {
+	    fatal("No such node: $node_id");
+	}
+	if (!$force) {
+	    exit(0)
+		if (!$node->IsReserved());
+	    my $experiment = $node->Reservation();
+
+	    # Not likely to see any classic experiments, but make sure.
+	    if (! ($experiment && $experiment->slice_uuid())) {
+		print "Not a Portal experiment\n";
+		exit(0);
+	    }
+
+	    my $instance = APT_Instance->LookupBySlice(
+		$experiment->slice_uuid());
+
+	    if (!$instance) {
+		print STDERR "Could not lookup instance for $experiment\n";
+		exit(0);
+	    }
+	    # This is hacky.
+	    exit(0)
+		if (!defined($instance->rdz_status()));
+	}
+    }
+    
+    my $query_result =
+	DBQueryFatal("select rdz_monitor_monitor_id from ".
+		     "  apt_aggregate_radio_frontends ".
+		     "where aggregate_urn='$aggregate_urn' and ".
+		     "      node_id='$node_id' and ".
+		     "      iface='$iface'");
+    if (!$query_result->numrows) {
+	fatal("Cannot lookup frontend");
+    }
+    my ($monitor_id) = $query_result->fetchrow_array();
+    if (!$monitor_id) {
+	print "No rdz_monitor_monitor_id in DB for $node_id:iface. Skipping\n"
+	    if ($debug || -t STDOUT);
+	exit(0);
+    }
+
+    my $DST = APT_RDZRest::DST->New(APT_RDZRest::POWDER());
+    if (!defined($DST)) {
+	fatal("Could not get the DST API");
+    }
+
+    #
+    # It would be faster to do this with cut/awk. 
+    #
+    my $command = "/bin/cat $file | gunzip ";
+    my $data = "frequency,power,abovefloor,violation\n";
+
+    my $childpid = open(FOO, "-|");
+    if (!defined($childpid)) {
+	fatal("Could not fork");
+    }
+    if ($childpid == 0) {
+	open(STDERR, ">&STDOUT");
+	exec($command);
+    }
+    my $center     = 0;
+    my $incident   = 0;
+    my $violations = 0;
+    my $abovefloor = 0;
+    my ($min_freq,$max_freq);
+    
+    #
+    # First line tells us what to do.
+    #
+    my $header = <FOO>;
+    $abovefloor = 1
+	if ($header =~ /abovefloor/);
+    $violations = 1
+	if ($header =~ /violation/);
+    $center = 1
+	if ($header =~ /center/);
+    $incident = 1
+	if ($header =~ /incident/);
+
+    while (<FOO>) {
+	chomp($_);
+	my @tokens = split(",", $_);
+	my $freq   = shift(@tokens);
+	my $power  = shift(@tokens);
+
+	$min_freq = $freq
+	    if (!defined($min_freq));
+	$max_freq = $freq;
+
+	my $line = "${freq},${power},";
+	shift(@tokens) if ($center);
+	shift(@tokens) if ($incident);
+	
+	if ($violations) {
+	    my $abovevalue  = (@tokens ? shift(@tokens) : "0");
+	    my $violation   = (@tokens ? shift(@tokens) : "0");
+	    
+	    $line .= "$abovevalue,$violation";
+	}
+	elsif ($abovefloor) {
+	    my $abovevalue  = (@tokens ? shift(@tokens) : "0");
+
+	    $line .= "$abovevalue,0";
+	}
+	else {
+	    $line .= "0,0";
+	}
+	$line .= "\n";
+	$data .= $line;
+    }
+    # This throws an abscure perl error, I got no idea. Ignoring it.
+    #close(FOO);
+
+    my $request = {
+	"monitor_id"  => $monitor_id,
+	"types"       => "inline,sweep",
+	"format"      => "psd-csv-inline",
+	"description" => $aggregate->nickname() . " " . $node_id,
+	"min_freq"    => $min_freq * 1000000,
+	"max_freq"    => $max_freq * 1000000,
+	"starts_at"   => TBDateStringGMT($stamp),
+	"violation"   => ($violations ? JSON::true : JSON::false),
+    };
+    if ($debug || $impotent) {
+	$request->{'data'} = substr($data, 0, 200) . " ...";
+	print Dumper($request);
+    }
+    if ($impotent) {
+	exit(0);
+    }
+    $request->{'data'} = encode_base64($data);
+    my $response;
+    if ($DST->POST("/observations", $request, \$response)) {
+	fatal("Could not add RDZ /observations");
+    }
+    #print Dumper($response);
+    exit(0)
+}
+
+#
+# Cheesy hack to enter RFS sensor observations
+#
+sub DoRFSObservation($$)
+{
+    my ($id, $file) = @_;
+
+    my $DST = APT_RDZRest::DST->New(APT_RDZRest::POWDER());
+    if (!defined($DST)) {
+	fatal("Could not get the DST API");
+    }
+
+    my $request = {
+	"monitor_id"  => $id,
+	"types"       => "inline,sweep",
+	"format"      => "rfs-csv-inline",
+	"description" => "Virtual RFS Sensor",
+	"min_freq"    => 410000000,
+	"max_freq"    => 790000000,
+	"starts_at"   => TBDateStringGMT(time()),
+	"violation"   => JSON::false,
+	"interference"=> JSON::true,
+    };
+    my $data = emutil::ReadFile($file);
+    if (!defined($data)) {
+	fatal("Could not read data from $file");
+    }
+    if ($debug || $impotent) {
+	$request->{'data'} = $data;
+	print Dumper($request);
+    }
+    exit(0)
+	if ($impotent);
+    
+    $request->{'data'} = encode_base64($data);
+    my $response;
+    if ($DST->POST("/observations", $request, \$response)) {
+	fatal("Could not add RDZ /observations");
+    }
+    #print Dumper($response);
+    exit(0);
+}
+
+#
+# Inline monitors are created along with the radios above.
+# Here we handle stand alone (on demand) monitors.
+#
+sub DoMonitors()
+{
+    my $aggregate;
+    my $isScos = 0;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz monitors list\n";
+	print STDERR "Usage: manage_rdz monitors create all\n";
+	print STDERR "Usage: manage_rdz monitors create [-a agg] radio_id\n";
+	print STDERR "Usage: manage_rdz monitors create ".
+	    "-S [-a agg] radio_id <cred> <url>\n";
+	print STDERR "Usage: manage_rdz monitors show <monitor_id>\n";
+	print STDERR "Usage: manage_rdz monitors show [-a agg] <radio_id>\n";
+	print STDERR "Usage: manage_rdz monitors delete <monitor_id>\n";
+	print STDERR "Usage: manage_rdz monitors delete [-a agg] <radio_id>\n";
+	exit(-1);
+    };
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create|delete|show)$/);
+
+    my %options    = ();
+    if (! getopts("a:S", \%options)) {
+	usage();
+    }
+    if (defined($options{"a"})) {
+	$aggregate = APT_Aggregate->LookupByNickname($options{"a"});
+    }
+    else {
+	$aggregate = APT_Aggregate->Lookup($MYURN);
+    }
+    if (!$aggregate) {
+	fatal("No such aggregate");
+    }
+    if (defined($options{"S"})) {
+	$isScos = 1;
+    }
+    
+    if ($which eq "list") {
+	my $response;
+
+	if ($ZMC->GET("/monitors?element_id=$ELEMENTID&deleted=false",
+			 \$response)) {
+	    fatal("Could not get RDZ /monitors");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show" || $which eq "delete") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+
+	my $monitor_id = shift(@ARGV);
+	if ($monitor_id !~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
+	    my $radio = $aggregate->Radio($monitor_id);
+	    if (!$radio) {
+		fatal("No such radio in the DB");
+	    }
+	    if (!$radio->rdz_radio_id()) {
+		fatal("Not registered with the RDZ");
+	    }
+	    my $frontend = $radio->FrontendInterface("rf0");
+	    if (!$frontend) {
+		fatal("No rf0 frontend for $monitor_id");
+	    }
+	    if (!$frontend->rdz_monitor_id()) {
+		fatal("No monitor defined on rf0 frontend for $monitor_id");
+	    }
+	    $monitor_id = $frontend->rdz_monitor_id();
+	}
+	if ($which eq "show") {
+	    if ($ZMC->GET("/monitors/$monitor_id", \$response)) {
+		fatal("Could not get /monitors/$monitor_id");
+	    }
+	    print Dumper($response);
+	}
+	else {
+	    if ($ZMC->DELETE("/monitors/$monitor_id", \$response)) {
+		fatal("Could not delete /monitors/$monitor_id");
+	    }
+	    my $urn = $aggregate->urn();
+	    DBQueryFatal("update apt_aggregate_radio_frontends set ".
+			 "  rdz_monitor_id=NULL ".
+			 "where aggregate_urn='$urn' and ".
+			 "      rdz_monitor_id='$monitor_id'");
+	}
+	exit(0);
+    }
+    if ($isScos) {
+	fatal("SCOS monitor creation is disabled at the moment");
+    }
+    usage()
+	if (@ARGV != 1);
+
+    if (1) {
+	my $radio_id = shift(@ARGV);
+	if ($radio_id ne "all") {
+	    my $radio = $aggregate->Radio($radio_id);
+	    if (!$radio) {
+		fatal("No such radio in the DB");
+	    }
+	    UpdateMonitor($radio);
+	    exit(0);
+	}
+	#
+	# Create/Update on-demand monitors for all OTA radios.
+	#
+	my $query_result =
+	    DBQueryFatal("select l.aggregate_urn,i.node_id ".
+			 "  from apt_aggregate_radio_locations as l ".
+			 "join apt_aggregate_radio_info as i on ".
+			 "  i.aggregate_urn=l.aggregate_urn and ".
+			 "  i.location=l.location and ".
+			 "  i.itype=l.itype ".
+			 "join apt_aggregate_radio_frontends as f on ".
+			 "  f.aggregate_urn=i.aggregate_urn and ".
+			 "  f.node_id=i.node_id and ".
+			 "  f.iface='rf0' ".
+			 "where l.rdz_location_id is not null and ".
+			 "      l.itype in ('BS', 'FE', 'DD')");
+
+	while (my ($urn, $node_id) = $query_result->fetchrow_array()) {
+	    my $aggregate = APT_Aggregate->Lookup($urn);
+	    if (!defined($aggregate)) {
+		fatal("Could not lookup aggregate $urn");
+	    }
+	    my $radio = $aggregate->Radio($node_id);
+	    if (!defined($radio)) {
+		fatal("Could not lookup radio $node_id on aggregate $urn");
+	    }
+	    next
+		if (!$radio->rdz_radio_id());
+	    UpdateMonitor($radio);
+	}
+	exit(0);
+    }
+    #
+    # This stuff below is not used at the moment. Maybe later
+    #
+    # We create a monitor on an existing radio (by name). We provide to the
+    # DMZ a url and a credential. This is not generalized at all, just a
+    # specific use case we need now.
+    #
+    &$usage()
+	if (($isScos && @ARGV != 3) || (!$isScos && @ARGV != 1));
+
+    my $radio_id   = shift(@ARGV);
+
+    #
+    # The radio and radio port have to exist.
+    #
+    print "$radio_id, $aggregate\n";
+	
+    my $radio = $aggregate->Radio($radio_id);
+    if (!$radio) {
+	fatal("No such radio in the DB");
+    }
+    if (!$radio->rdz_radio_id()) {
+	fatal("Not registered with the RDZ");
+    }
+    my $rdz_radio_id = $radio->rdz_radio_id();
+    my $response;
+    if ($ZMC->GET("/radios/$rdz_radio_id", \$response)) {
+	fatal("Could not get /radios/$rdz_radio_id");
+    }
+    my $frontend = $radio->FrontendInterface("rf0");
+    if (!$frontend) {
+	fatal("No rf0 frontend for $radio");
+    }
+    if (!$frontend->rdz_radioport_id()) {
+	fatal("Frontend for $radio_id is not registered with the RDZ");
+    }
+    if ($frontend->rdz_monitor_id()) {
+	fatal("Already have a monitor defined on rf0 frontend for $radio");
+    }
+    my $nickname = $aggregate->nickname();
+
+    my $monitor_request = {
+	"element_id"     => $ELEMENTID,
+	"radio_port_id"  => $frontend->rdz_radioport_id(),
+	"name"           => "$nickname $radio_id on-demand monitor",
+	"description"    => "$nickname $radio_id on-demand monitor",
+	"types"          => "ota,sweep",
+	"formats"        => "psd-csv-ota",
+	"enabled"        => JSON::true,
+    };
+    if ($isScos) {
+	my $credential = shift(@ARGV);
+	my $url        = shift(@ARGV);
+	my $auth;
+	if ($credential =~ /^([-\w]+):(.*)$/) {
+	    $auth = {
+		"username" => $1,
+		    "password" => $2,
+	    };
+	}
+	else {
+	    $auth = {
+		"token" => $credential,
+	    };
+	}
+	$monitor_request->{'description'} = $monitor_request->{'name'} = 
+	    "SCOS-USRP monitor on $nickname $radio_id";
+	$monitor_request->{'types'}   = "scos,scos-usrp";
+	$monitor_request->{'formats'} = "psd";
+	$monitor_request->{'config'}  = {
+	    "url"  => $url,
+	    "auth" => $auth,
+	};
+    }
+    
+    if ($debug || $impotent) {
+	print $monitor_request->{'description'} . "\n";
+	print Dumper($monitor_request);
+    }
+    if (!$impotent) {
+	if ($ZMC->POST("/monitors", $monitor_request, \$response)) {
+	    fatal("Could not add RDZ /monitors");
+	}
+	print Dumper($response);
+	my $monitor_id = $response->{"id"};
+	my $urn = $aggregate->urn();
+	DBQueryFatal("update apt_aggregate_radio_frontends set ".
+		     "  rdz_monitor_id='$monitor_id' ".
+		     "where aggregate_urn='$urn' and ".
+		     "      node_id='$radio_id' and iface='rf0'");
+    }
+}
+
+#
+# Well, update or create.
+#
+sub UpdateMonitor($)
+{
+    my ($radio) = @_;
+    my $response;
+
+    if (!$radio->rdz_radio_id()) {
+	fatal("Not registered with the RDZ");
+    }
+    my $radio_id  = $radio->node_id();
+    my $aggregate = $radio->aggregate();
+    
+    my $rdz_radio_id = $radio->rdz_radio_id();
+    if ($ZMC->GET("/radios/$rdz_radio_id", \$response)) {
+	fatal("Could not get /radios/$rdz_radio_id");
+    }
+    my $frontend = $radio->FrontendInterface("rf0");
+    if (!$frontend) {
+	fatal("No rf0 frontend for $radio");
+    }
+    if (!$frontend->rdz_radioport_id()) {
+	fatal("Frontend for $radio_id is not registered with the RDZ");
+    }
+    my $nickname = $aggregate->nickname();
+
+    my $monitor_request = {
+	"element_id"     => $ELEMENTID,
+	"radio_port_id"  => $frontend->rdz_radioport_id(),
+	"name"           => "$nickname $radio_id on-demand monitor",
+	"description"    => "$nickname $radio_id on-demand monitor",
+	"types"          => "ota,sweep",
+	"formats"        => "psd-csv-ota",
+	"enabled"        => JSON::true,
+    };
+    if ($debug || $impotent) {
+	print $monitor_request->{'description'} . "\n";
+	print Dumper($monitor_request);
+    }
+    if (!$impotent) {
+	if ($frontend->rdz_monitor_id()) {
+	    my $monitor_id = $frontend->rdz_monitor_id();
+	    
+	    if ($ZMC->PUT("/monitors/$monitor_id",
+			     $monitor_request, \$response)) {
+		fatal("Could not update RDZ /monitors/$monitor_id");
+	    }
+	}
+	else {
+	    if ($ZMC->POST("/monitors", $monitor_request, \$response)) {
+		fatal("Could not add RDZ /monitors");
+	    }
+	}
+	print Dumper($response);
+
+	if (! $frontend->rdz_monitor_id()) {
+	    my $monitor_id = $response->{"id"};
+	    my $urn = $aggregate->urn();
+	    DBQueryFatal("update apt_aggregate_radio_frontends set ".
+			 "  rdz_monitor_id='$monitor_id' ".
+			 "where aggregate_urn='$urn' and ".
+			 "      node_id='$radio_id' and iface='rf0'");
+	}
+    }
+}
+
+#
+# For testing subscriptions; subscribe and then spew events.
+#
+sub DoSubscriptions()
+{
+    my $response;
+    require AnyEvent::WebSocket::Client;
+
+    # IO::Socket::SSL lets us open encrypted (wss) connections
+    require IO::Socket::SSL;
+    # IO::Select to "peek" IO::Sockets for activity
+    require IO::Select;
+    # Protocol handler for WebSocket HTTP protocol
+    require Protocol::WebSocket::Client;
+    require Protocol::WebSocket::Handshake::Client;
+    require Protocol::WebSocket::Request;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz subscriptions subscribe\n";
+	print STDERR "Usage: manage_rdz subscriptions delete [id]\n";
+	exit(-1);
+    };
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(subscribe|delete)$/);
+    
+    if ($which eq "delete") {
+	&usage()
+	    if (!@ARGV);
+	my $id = shift(@ARGV);
+
+	if (!$impotent) {
+	    if ($ZMC->DELETE("/subscriptions/$id", \$response)) {
+		fatal("Could not delete /subscriptions/$id");
+	    }
+	}
+	else {
+	    print "Would delete subscription $id\n";
+	}
+	exit(0);
+    }
+    
+    my $id   = NewUUID();
+    my $url  = URI->new($ZMC->url());
+    my $host = $url->host;
+    my $port = $url->port;
+    my $path = $url->path;
+    $url->scheme("wss");
+    if ($debug) {
+	print "$url\n";
+	print "$host,$port,$path\n";
+    }
+
+    #
+    # David says not to bother with filters.
+    #
+    my $subscription_request = {
+	"id"      => $id,
+	"filters" => [],
+    };
+    if ($debug || $impotent) {
+	print Dumper($subscription_request);
+    }
+    if (!$impotent) {
+	if ($ZMC->POST("/subscriptions", $subscription_request, \$response)) {
+	    fatal("Could not add RDZ /subscriptions");
+	}
+	print Dumper($response);
+    }
+    $url->path("$path/subscriptions/$id/events");
+    print "$url\n";
+
+    #
+    # Thank you!
+    # https://greg-kennedy.com/wordpress/2019/03/11/writing-a-websocket-client-in-perl-5/
+    #
+    my $socket = IO::Socket::SSL->new(
+	PeerAddr => $host,
+	PeerPort => "wss($port)",
+	Proto => 'tcp',
+	SSL_startHandshake => 1,
+	Blocking => 1);
+    if (!$socket) {
+	fatal("Could not create socket for subscription events");
+    }
+    # This has no side effects.
+    my $client = Protocol::WebSocket::Client->new(
+	url => "$url",
+	#  On Write: take the buffer (WebSocket packet) and send it on the socket.
+	on_write => sub {
+	    my $client = shift;
+	    my ($buf) = @_;
+
+	    print "Writing to WebSocket: $buf\n";
+	    syswrite($socket, $buf);
+	},
+	# On Read: This method is called whenever a complete WebSocket "frame"
+	# is successfully parsed.
+	on_read => sub {
+	    my $client = shift;
+	    my ($buf) = @_;
+
+	    print "Received from WebSocket: '$buf'\n";
+	},
+	# On Connect: this is what happens after the handshake succeeds, and we
+	# are "connected" to the service.
+	on_connect => sub {
+	    my $client = shift;
+
+	    print "Successfully connected to service\n";
+	},
+	# On Error, print to console.  This can happen if the handshake
+	#  fails for whatever reason.
+	on_error => sub {
+	    my $client = shift;
+	    my ($buf) = @_;
+
+	    print "Error on websocket: $buf";
+	    $socket->close();
+	    exit;
+	},
+    );
+    if (!$client) {
+	fatal("Could not create WebSocket client");
+    }
+    print $client . "\n" if ($debug);
+    my $headers = [
+	"X-Api-Token" => $ZMC->token(),
+	];
+
+    #
+    # Reach inside to get the headers added to the request. Ugly.
+    #
+    my $req = Protocol::WebSocket::Request->new(headers => $headers);
+    my $handshake = Protocol::WebSocket::Handshake::Client->new(
+	url => "$url", req => $req);
+    $client->{hs} = $handshake;
+    
+    # Connect causes the Protocol object to create a handshake and write it
+    $client->connect;
+
+    # read until handshake is complete.
+    while ($socket->connected) {
+	my $data;
+	my $cc = sysread($socket, $data, 16384);
+
+	if (!defined($cc)) {
+	    fatal("sysread on socket failed: $!")
+	}
+	elsif ($cc == 0) {
+	    print "Connection terminated\n";
+	    exit(0);
+	}
+	$client->read($data);
+	sleep(1);
+    }
+
+    # Now read data.
+    while (0) {
+	my $data;
+	my $cc = sysread($socket, $data, 16384);
+	if (!$cc) {
+	    print "Connection closed by remote\n";
+	    exit(1);
+	}
+	print "$data\n";
+	$client->read($data);
+	sleep(1);
+    }
+    exit(0);
+}
+
+sub DoClaims()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz claims list\n";
+	print STDERR "Usage: manage_rdz claims create <low> <high>\n";
+	print STDERR "Usage: manage_rdz claims create [-u] -g <resgroup>\n";
+	print STDERR "Usage: manage_rdz claims create [-u] -i <instance>\n";
+	print STDERR "Usage: manage_rdz claims show <claim_id>\n";
+	print STDERR "Usage: manage_rdz claims delete <claim_id>\n";
+	print STDERR "Usage: manage_rdz claims delete -g <resgroup>\n";
+	print STDERR "Usage: manage_rdz claims delete -i <instance>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(list|create|delete|show)$/);
+
+    my $update  = 0;
+    my %options = ();
+    if (! getopts("g:ui:", \%options)) {
+	usage();
+    }
+    if (defined($options{"u"})) {
+	$update = 1;
+    }
+    if ($which eq "list") {
+	my $response;
+
+	if ($ZMC->GET("/claims?element_id=$ELEMENTID&deleted=false",
+			 \$response)) {
+	    fatal("Could not get RDZ /claims");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $claim_id = shift(@ARGV);
+	if ($ZMC->GET("/claims/$claim_id", \$response)) {
+	    fatal("Could not get /claims/$claim_id");
+	}
+	if ($debug) {
+	    print Dumper($response);
+	}
+	exit(0);
+    }
+    if ($which eq "delete") {
+	my $response;
+
+	if (! (defined($options{"g"}) || defined($options{"i"}))) {
+	    &$usage()
+		if (@ARGV != 1);
+	
+	    my $claim_id = shift(@ARGV);
+	    if ($ZMC->DELETE("/claims/$claim_id", \$response)) {
+		fatal("Could not delete /claims/$claim_id");
+	    }
+	    exit(0);
+	}
+	if (defined($options{"i"})) {
+	    my $instance = APT_Instance->Lookup($options{"i"});
+	    if (!defined($instance)) {
+		fatal("No such experiment exists");
+	    }
+	    my @rfranges = $instance->RangeList();
+	    if (!@rfranges) {
+		fatal("No RF ranges in this reservation group");
+	    }
+	    if ($debug) {
+		foreach my $rfrange (@rfranges) {
+		    print "Claim ID: " . $rfrange->rdz_claimid() . "\n"
+			if ($rfrange->rdz_claimid());
+		}
+	    }
+	    exit(0)
+		if ($impotent);
+	    
+	    my $errmsg;
+	    if (APT_RDZ::DeleteClaimsFromInstance($instance, \$errmsg)) {
+		fatal($errmsg);
+	    }
+	    exit(0);
+	}
+	my $resgroup = APT_Reservation::Group->Lookup($options{"g"});
+	if (!defined($resgroup)) {
+	    fatal("No such reservation group exists");
+	}
+	my @rfranges = $resgroup->RFReservationList();
+	if (!@rfranges) {
+	    fatal("No RF ranges in this reservation group");
+	}
+	foreach my $rfrange (@rfranges) {
+	    if (!$rfrange->RDZClaimed()) {
+		print "$rfrange not marked as claimed in the DB\n";
+		next;
+	    }
+	    my $claim_id = $rfrange->rdz_claimid();
+	    if ($ZMC->DELETE("/claims/$claim_id", \$response)) {
+		fatal("Could not delete /claims/$claim_id");
+	    }
+	    $rfrange->RDZMarkUnclaimed();
+	}
+	exit(0);
+    }
+    if (! (defined($options{"g"}) || defined($options{"i"}))) {
+	&$usage()
+	    if (@ARGV != 2);
+
+	my ($freq_low, $freq_high, $start, $end, $desc, $name);
+
+	$freq_low   = shift(@ARGV);
+	$freq_low  *= 1000000 if ($freq_low < 10000);
+	$freq_high  = shift(@ARGV);
+	$freq_high *= 1000000 if ($freq_high < 10000);
+	$start      = time();
+	$end        = time() + 3600;
+	$name       = "Test Grant Claim";
+	$desc       = "Test Grant Claim";
+	my $constraint = {
+	    "min_freq"  => $freq_low + 0,
+	    "max_freq"  => $freq_high + 0,
+	    "max_eirp"  => 30,
+	    "exclusive" => JSON::true,
+	};
+	my $request = {
+	    "element_id"  => $ELEMENTID,
+	    "name"        => $name,
+	    "description" => $desc,
+	    "ext_id"      => NewUUID(),
+	    "type"        => "powder",
+	    "source"      => "powder-slc",
+	    "priority"    => 1023,
+	    "grant"       => {
+		"element_id"  => $ELEMENTID,
+		"spectrum_id" => "534203ea-c252-4ef0-9eec-4e0a56275181",
+		"starts_at"   => TBDateStringGMT($start),
+		"expires_at"  => TBDateStringGMT($end),
+		"name"        => $name,
+		"description" => $desc,
+		"priority"    => 1023,
+		"constraints" => [
+		    {
+			"constraint" => $constraint,
+		    },
+		],
+	    },
+	};
+	if ($debug || $impotent) {
+	    DebugDump($request);
+	}
+	if ($impotent) {
+	    exit(0);
+	}
+	my $response;
+	if ($ZMC->POST("/claims", $request, \$response)) {
+	    fatal("Could not add RDZ grant claim");
+	}
+	if ($debug) {
+	    DebugDump($response);
+	}
+	print "Claim id: ". $response->{'id'} . "\n";
+	exit(0);
+    }
+    if (defined($options{"i"})) {
+	my $instance = APT_Instance->Lookup($options{"i"});
+	if (!defined($instance)) {
+	    fatal("No such experiment exists");
+	}
+	my @rfranges = $instance->RangeList();
+	if (!@rfranges) {
+	    fatal("No RF ranges in this reservation group");
+	}
+	my $errmsg;
+	if (APT_RDZ::CreateClaimsFromInstance(
+		$instance, \$errmsg, $debug, $impotent)) {
+	    fatal($errmsg);
+	}
+	if (!$impotent) {
+	    foreach my $rfrange (@rfranges) {
+		print "Claim ID: " . $rfrange->rdz_claimid() . "\n"
+		    if ($rfrange->rdz_claimid());
+	    }
+	}
+	exit(0);
+    }
+    my $resgroup = APT_Reservation::Group->Lookup($options{"g"});
+    if (!defined($resgroup)) {
+	fatal("No such reservation group exists");
+    }
+    my @rfranges = $resgroup->RFReservationList();
+    if (!@rfranges) {
+	fatal("No RF ranges in this reservation group");
+    }
+    foreach my $rfrange (@rfranges) {
+	if ($rfrange->RDZClaimed() && !$update) {
+	    print "$rfrange already marked as claimed in the DB: ".
+		$rfrange->rdz_claimid() . "\n";
+	    next;
+	}
+	my $errmsg;
+	if (APT_RDZ::CreateClaimFromReservation(
+		$rfrange, \$errmsg, $debug, $impotent)) {
+	    fatal($errmsg);
+	}
+	next
+	    if ($impotent);
+	print "Claim ID: " . $rfrange->rdz_claimid() . "\n"
+	    if ($rfrange->rdz_claimid());
+    }
+    exit(0);
+}
+
+sub DoUsers()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_rdz users list\n";
+	print STDERR "Usage: manage_rdz users search <login>\n";
+	print STDERR "Usage: manage_rdz users show <user_id>\n";
+	print STDERR "Usage: manage_rdz users delete <user_id>\n";
+	print STDERR "Usage: manage_rdz users create <login> <first> <last> ".
+	    "<email> [<password>]\n";
+	print STDERR "Usage: manage_rdz users bindrole <user_id> <role>\n";
+	print STDERR "Usage: manage_rdz users token create <user_id> [<password>]\n";
+	exit(-1);
+    };
+    &$usage()
+	if (!@ARGV);
+    
+    my $which = shift(@ARGV);
+    &$usage()
+	if ($which !~ /^(search|list|create|delete|show|bindrole|token)$/);
+
+    my %options = ();
+    if (! getopts("", \%options)) {
+	usage();
+    }
+    my $IDENT = APT_RDZRest::IDENTITY->New(APT_RDZRest::POWDER());
+    if (!defined($IDENT)) {
+	fatal("Could not get the IDENTITY API");
+    }
+    
+    if ($which eq "list") {
+	my $response;
+
+	if ($IDENT->GET("/users?element_id=$ELEMENTID&deleted=false",
+		      \$response)) {
+	    fatal("Could not get RDZ /users");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "search") {
+	usage()
+	    if (@ARGV != 1);
+
+	my $login = $ARGV[0];
+	my $response;
+	if ($IDENT->GET("/users?element_id=$ELEMENTID&deleted=false&user=$login",
+		      \$response)) {
+	    fatal("Could not get RDZ /users");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "show") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $user_id = shift(@ARGV);
+	if ($IDENT->GET("/users/$user_id", \$response)) {
+	    fatal("Could not get /users/$user_id");
+	}
+	print Dumper($response);
+	exit(0);
+    }
+    if ($which eq "delete") {
+	my $response;
+
+	&$usage()
+	    if (@ARGV != 1);
+	
+	my $user_id = shift(@ARGV);
+	if ($IDENT->DELETE("/users/$user_id", \$response)) {
+	    fatal("Could not delete /users/$user_id");
+	}
+	exit(0);
+    }
+    if ($which eq "create") {
+	usage()
+	    if (@ARGV < 4 || @ARGV > 5);
+	
+	my ($login, $firstname, $lastname, $email, $password) = @ARGV;
+	if (!defined($password)) {
+	    $password = substr(TBGenSecretKey(), 0, 12);
+	    print "Password: $password\n";
+	}
+
+	my $request = {
+	    "name"        => $login,
+	    "given_name"  => $firstname,
+	    "family_name" => $lastname,
+	    "full_name"   => "$firstname $lastname",
+	    "password"    => $password,
+	    "primary_email_address" => $email,
+	};
+    
+	if ($debug || $impotent) {
+	    print Dumper($request);
+	}
+	if ($impotent) {
+	    exit(0);
+	}
+	my $response;
+	if ($IDENT->POST("/users", $request, \$response)) {
+	    fatal("Could not add RDZ user");
+	}
+	if ($debug) {
+	    print Dumper($response);
+	}
+	print "User id: ". $response->{'id'} . "\n";
+	exit(0);
+    }
+    if ($which eq "bindrole") {
+	usage()
+	    if (@ARGV != 2);
+
+	my ($user_id, $rolename) = @ARGV;
+
+	#
+	# Need to find the role we want, which is viewer
+	#
+	my $response;
+	if ($IDENT->GET("/roles", \$response)) {
+	    fatal("Could not get RDZ roles");
+	}
+	my $role_id;
+	foreach my $role (@{$response->{'roles'}}) {
+	    if ($role->{'name'} eq $rolename) {
+		$role_id = $role->{'id'};
+	    }
+	}
+	if (!defined($role_id)) {
+	    fatal("Could not locate the role");
+	}
+	if ($debug) {
+	    print "Role id: $role_id\n";
+	}
+	my $request = {
+	    "user_id"      => $user_id,
+	    "role_id"      => $role_id,
+	    "element_id"   => $ELEMENTID,
+	    "element_name" => "powder",
+	    "approved"     => JSON::true,
+	};
+	if ($debug || $impotent) {
+	    print Dumper($request);
+	}
+	if ($impotent) {
+	    exit(0);
+	}
+	if ($IDENT->POST("/rolebindings", $request, \$response)) {
+	    fatal("Could not create role binding");
+	}
+	if ($debug) {
+	    print Dumper($response);
+	}
+	print "Role id: " . $response->{'id'} . "\n";
+	exit(0);
+    }
+    if ($which eq "token") {
+	usage()
+	    if (@ARGV < 1);
+	
+	my $op = shift(@ARGV);
+	if ($op eq "create") {
+	    usage()
+		if (@ARGV != 2);
+	    
+	    my ($user_id, $password) = @ARGV;
+
+	    #
+	    # Need to find the role binding id for viewer:powder
+	    #
+	    my $response;
+	    if ($IDENT->GET("/users/$user_id", \$response)) {
+		fatal("Could not get /users/$user_id");
+	    }
+	    if ($debug) {
+		print Dumper($response);
+	    }
+	    my $name = $response->{'name'};
+
+	    my $role_binding_id;
+	    foreach my $rb (@{$response->{'role_bindings'}}) {
+		next
+		    if (!defined($rb->{'element_id'}) ||
+			$rb->{'element_id'} ne $ELEMENTID);
+
+		if ($rb->{'role'}->{'name'} eq "viewer") {
+		    $role_binding_id = $rb->{'role_id'};
+		    last
+		}
+	    }
+	    if (!defined($role_binding_id)) {
+		fatal("Could not get view:powder role binding");
+	    }
+	    if ($debug) {
+		print "Role Binding id: $role_binding_id\n";
+	    }
+
+	    my $request = {
+		"method"     => "password",
+		"token_type" => "pat",
+		"credential" => {
+		    "username" => $name,
+		    "password" => $password,
+		},
+		"role_binding_ids" => [
+		    $role_binding_id,
+		],
+		"expires_at" => TBDateStringGMT(time() + (24 * 3600 * 365 * 2)),
+	    };
+	    
+	    if ($debug || $impotent) {
+		print Dumper($request);
+	    }
+	    if ($impotent) {
+		exit(0);
+	    }
+	    if ($IDENT->POST("/tokens", $request, \$response)) {
+		fatal("Could not create new token");
+	    }
+	    if ($debug) {
+		print Dumper($response);
+	    }
+	}
+	exit(0);
+    }
+    exit(0);
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    # Exit with negative status so web interface treats it as system error.
+    exit(-1);
+}
+
+sub UserError($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(1);
+}
+
+sub logit($)
+{
+    my ($msg) = @_;
+    my $now = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+    print "$now: $msg\n";
+}

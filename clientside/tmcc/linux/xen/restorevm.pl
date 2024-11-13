@@ -91,8 +91,8 @@ if (! ($path =~ /^\//)) {
 }
 
 if (! -e $IMAGEUNZIP) {
-    $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
-    $IMAGEDUMP   = "/usr/local/bin/imagedump";
+    $IMAGEUNZIP  = "$LBINDIR/imageunzip";
+    $IMAGEDUMP   = "$LBINDIR/imagedump";
 }
 
 #

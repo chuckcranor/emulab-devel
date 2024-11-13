@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2021 University of Utah and the Flux Group.
+# Copyright (c) 2010-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -63,7 +63,7 @@ use vars qw($RSPEC_0_1 $RSPEC_0_2 $RSPEC_2 $RSPEC_3
             $RSPEC_TOUR
             $REQUEST_2_URL $MANIFEST_2_URL
             $REQUEST_3_URL $MANIFEST_3_URL
-	    $PROFILE_PARAMETERS_NS);
+	    $PROFILE_PARAMETERS_NS $ANSIBLE_NS);
 $RSPEC_0_1 = "0.1";
 $RSPEC_0_2 = "0.2";
 $RSPEC_2 = "2";
@@ -82,6 +82,7 @@ our $SHAREDVLAN_NS = "http://www.geni.net/resources/rspec/ext/shared-vlan/1";
 our $SHAREDVLAN_PG_NS = "http://www.protogeni.net/resources/rspec/ext/shared-vlan/1";
 our $PROFILE_PARAMETERS_NS = "http://www.protogeni.net/resources/rspec/ext/profile-parameters/1";
 our $RSPEC_TOUR = "http://www.protogeni.net/resources/rspec/ext/apt-tour/1";
+our $ANSIBLE_NS = "http://www.protogeni.net/resources/rspec/ext/ansible/1";
 
 $REQUEST_2_URL = "http://www.protogeni.net/resources/rspec/2/request.xsd";
 $MANIFEST_2_URL = "http://www.protogeni.net/resources/rspec/2/manifest.xsd";
@@ -572,6 +573,18 @@ sub GetVnode($)
     
     if (!IsVersion0($node)) {
 	$result = GeniXML::FindNodesNS("n:vnode", $node, $EMULAB_NS)->pop();
+    }
+    return $result;
+}
+
+# Returns the host element;
+sub GetHost($)
+{
+    my ($node) = @_;
+    my $result = undef;
+    
+    if (!IsVersion0($node)) {
+	$result = GeniXML::FindNodes("n:host", $node)->pop();
     }
     return $result;
 }
@@ -1189,11 +1202,12 @@ sub GetPortal($)
     }
     my $tag = GetText("name", $element);
     my $url = GetText("url", $element);
-    return ($tag, $url);
+    my $seq = GetText("sequence", $element);
+    return ($tag, $url, $seq);
 }
-sub SetPortal($$$$$)
+sub SetPortal($$$$$$)
 {
-    my ($rspec, $portal, $url, $pid, $eid) = @_;
+    my ($rspec, $portal, $url, $pid, $eid, $sequence) = @_;
     
     my $element = FindNodesNS("n:portal", $rspec, $EMULAB_NS)->pop();
     if (!defined($element)) {
@@ -1203,6 +1217,18 @@ sub SetPortal($$$$$)
     SetText("url", $element, $url);
     SetText("project", $element, $pid);
     SetText("experiment", $element, $eid);
+    SetText("sequence", $element, $sequence);
+    return 0;
+}
+sub UpdatePortalSequence($$)
+{
+    my ($rspec, $sequence) = @_;
+    
+    my $element = FindNodesNS("n:portal", $rspec, $EMULAB_NS)->pop();
+    if (!defined($element)) {
+	return -1;
+    }
+    SetText("sequence", $element, $sequence);
     return 0;
 }
 sub ClearPortal($)
@@ -1489,6 +1515,41 @@ sub HasTrivialSetting($)
     return scalar(@tmp);
 }
 
+sub HasDualModeSetting($)
+{
+    my ($link) = @_;
+    my @tmp = FindNodesNS("n:dualmodetrunking", $link,
+			  $EMULAB_NS)->get_nodelist();
+    return scalar(@tmp);
+}
+
+sub GetDualModeNativeVlan($)
+{
+    my ($link) = @_;
+    my $tmp = FindNodesNS("n:dualmodetrunking", $link, $EMULAB_NS)->pop();
+    
+    return undef
+	if (!defined($tmp));
+
+    return GetText("native_vlan", $tmp);
+}
+
+sub HasPTPSetting($)
+{
+    my ($iface) = @_;
+    my @tmp = FindNodesNS("n:ptp", $iface,
+			  $EMULAB_NS)->get_nodelist();
+    return scalar(@tmp);
+}
+
+sub HasSyncESetting($)
+{
+    my ($iface) = @_;
+    my @tmp = FindNodesNS("n:synce", $iface,
+			  $EMULAB_NS)->get_nodelist();
+    return scalar(@tmp);
+}
+
 sub IsUntaggedLan($)
 {
     my ($link) = @_;
@@ -1605,23 +1666,46 @@ sub DelayImage($)
     return $result;
 }
 
+sub IsSharedLanClient($)
+{
+    my ($lan) = @_;
+
+    if (! IsVersion0($lan)) {
+	my $element = FindNodesNS("n:link_shared_vlan", $lan,
+				  $SHAREDVLAN_NS)->pop();
+	if (! defined($element)) {
+	    $element = FindNodesNS("n:link_shared_vlan", $lan,
+				   $SHAREDVLAN_PG_NS)->pop();
+	}
+	return $element
+	    if (defined($element));
+    }
+    return undef;
+}
+
 sub GetSharedLanName($)
 {
-    my ($iface) = @_;
+    my ($lan) = @_;
+    my $element = IsSharedLanClient($lan);
 
-    if (! IsVersion0($iface)) {
-	my $interface_name = FindNodesNS("n:link_shared_vlan", $iface,
-					 $SHAREDVLAN_NS)->pop();
-	if (! defined($interface_name)) {
-	    $interface_name = FindNodesNS("n:link_shared_vlan", $iface,
-					  $SHAREDVLAN_PG_NS)->pop();
-	}
-	if (defined($interface_name)) {
-	    my $name = GetText("name", $interface_name);
-	    if (defined($name) and $name ne "") {
-		return $name;
-	    }
-	}
+    return undef
+	if (!defined($element));
+
+    my $name = GetText("name", $element);
+    if (defined($name) and $name ne "") {
+	return $name;
+    }
+    return undef;
+}
+
+sub IsSharedLanPlaceholder($)
+{
+    my ($lan) = @_;
+    my $element = IsSharedLanClient($lan);
+
+    my $attr = GetText("placeholder", $element);
+    if (defined($attr) and lc($attr) eq "true") {
+	return 1;
     }
     return undef;
 }
@@ -1636,7 +1720,7 @@ sub CreateSharedLan($)
     my $ref = FindNodesNS("n:create_shared_vlan",
 			  $linkref, $SHAREDVLAN_NS)->pop();
     if (!defined($ref)) {
-	$ref = FindNodesNS("n:link_shared_vlan", $linkref,
+	$ref = FindNodesNS("n:create_shared_vlan", $linkref,
 			   $SHAREDVLAN_PG_NS)->pop();
     }
     if (defined($ref)) {
@@ -1976,7 +2060,9 @@ sub GetSpectrum($)
 	push(@result, {
 	    "frequency_low"  => GetText("frequency_low", $element),
 	    "frequency_high" => GetText("frequency_high", $element),
-	    "power"          => GetText("power", $element)});
+	    "power"          => GetText("power", $element),
+	    "bandwidth"      => GetText("bandwidth", $element),
+	    "element"        => $element});
     }
     return \@result;
 }

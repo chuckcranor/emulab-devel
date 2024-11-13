@@ -1,0 +1,272 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2017-2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+
+#
+# Check all reservations to see if they are under-utilized, which at the
+# moment means not used at all in the first six hours. Send email and
+# schedule for cancellation. Also check for canceled reservations that
+# are now being used, and recind cancelation.
+#
+# I moved this from notify-reservations cause I want a command line tool.
+#
+sub usage()
+{
+    print STDERR "Usage: check-reservations [-dv] [-n] [-a]\n";
+    exit( 1 );
+}
+my $optlist  = "dnav";
+my $debug    = 0;
+my $impotent = 0;
+my $checkall = 0;
+my $verbose  = 0;
+my $residx;
+
+#
+# Configure variables
+#
+my $SITE  = "@THISHOMEBASE@";
+my $TBOPS = "@TBOPSEMAIL@";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use emdb;
+use libtestbed;
+use emutil;
+use Reservation;
+use ResUtil;
+use User;
+use Project;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"a"})) {
+    $checkall = 1;
+}
+if (defined($options{"v"})) {
+    $verbose = 1;
+    ResUtil::DebugOn();
+}
+if (@ARGV == 1) {
+    $residx = $ARGV[0];
+}
+elsif (@ARGV) {
+    usage();
+}
+
+#
+# Handle reservations that are unused within the first six hours. The
+# idea is that we start check after four hours. If idle we mark it for
+# cancel in two hours, and then if they start using it, we cancel the
+# cancelation. We stop checking after a while, in case we missed it
+# cause the testbed was down; do not want to keep checking cause its
+# expensive.
+#
+my $query_result =
+    DBQueryFatal("SELECT r.idx from future_reservations as r ".
+		 "where r.approved IS NOT NULL AND " .
+		 "      r.start <= NOW() AND ".
+		 ($residx ? "r.idx='$residx'" :
+		  "      r.override_unused=0 AND ".
+		  "      (TIMESTAMPDIFF(MINUTE, r.start, now()) > ".
+		  "       (6 * 60)) ".
+		  ($checkall ? "" :
+		   " AND (TIMESTAMPDIFF(MINUTE, r.start, now()) < ".
+		   "       (24 * 60))")));
+
+#
+# Gather up all of the reservations for each project so we can generate
+# the proper timeline.
+#
+my %resInfo = ();
+
+while (my ($idx) = $query_result->fetchrow_array()) {
+    my $res = Reservation->Lookup($idx);
+    next
+	if (!defined($res));
+    my $target = $res->Target();
+    my $type   = $res->type();
+
+    my $project = Project->Lookup($res->pid());
+    next
+	if (!defined($project));
+    
+    my $user;
+    my $group = $project->GetProjectGroup();
+
+    if ($res->shared_res() == $Project::RESERVATIONS_PERUSER) {
+	$user = User->Lookup($res->uid());
+	next
+	    if (!$user);
+    }
+    elsif ($res->shared_res() == $Project::RESERVATIONS_PERGROUP) {
+	$group = $project->LookupGroup($res->gid());
+	next
+	    if (!$group);
+    }
+    my @allres   = ResUtil::CollectReservations($group, $user, 0, $type);
+    my @timeline = ResUtil::CreateTimeline($project, $group, $user, @allres);
+    
+    $resInfo{"$idx"} = {
+	"project"  => $project,
+	"group"    => $group,
+	"user"     => $user,
+	"res"      => $res,
+	"timeline" => \@timeline,
+    };
+}
+
+#
+# Loop again to get utilization for each res.
+#
+foreach my $idx (sort(keys(%resInfo))) {
+    my $ref      = $resInfo{"$idx"};
+    my $project  = $ref->{'project'};
+    my @timeline = @{$ref->{'timeline'}};
+
+    # Did not want to reindent all this code yet.
+    foreach my $res ($ref->{'res'}) {
+	ResUtil::ReservationUtilizationNew($res, @timeline);
+
+	my $stats = $res->data("utilization");
+
+	if ($debug) {
+	    print "$res\n";
+	    print Dumper($stats);
+	}
+
+	#
+	# XXX: Need to handle per-group
+	#
+	my $utilization;
+	if ($project->ResModeProject()) {
+	    $utilization = $stats->{'projectUtilization'};
+	}
+	elsif ($project->ResModeUser()) {
+	    $utilization = $stats->{'userUtilization'};
+	}
+	if ($utilization == 0.0) {
+	    # Skip if cancel already set; do not interfere with a command
+	    # line operation that set the cancel.
+	    next
+		if ($res->cancel());
+	
+	    # Mark for cancelation.
+	    print "Marking unused reservation for cancellation.\n"
+		if ($debug || $verbose);
+	    if ($verbose && !$debug) {
+		print "$res\n";
+		print Dumper($stats);
+	    }
+	    next
+		if ($impotent);
+	    my $cancel = time() + (3 * 3600);
+
+	    while (1) {
+		if (!defined(Reservation->
+			     BeginTransaction(Reservation->GetVersion()))) {
+		    sleep(1);
+		    next;
+		}
+		$res->MarkUnused($cancel);
+		Reservation->EndTransaction();
+		last;
+	    }
+	    my $user = User->Lookup($res->uid());
+	    if (!defined($user)) {
+		print STDERR "Could not lookup user " . $res->uid() ."\n";
+		next;
+	    }
+	    my $email = $user->email();
+	    my $count = $res->nodes();
+	    my $pid   = $res->pid();
+	    my $gid   = $res->gid();
+	    my $type  = $res->type();
+	    my $start = TBDateStringUTC($res->start());
+	    my $end   = TBDateStringUTC($res->end());
+	    $cancel   = TBDateStringUTC($cancel);
+	
+	    SENDMAIL($email, "$SITE reservation",
+	      "Your reservation for $count $type nodes in project $pid/$gid,\n".
+	      "starting at $start and ending at $end,\n".
+	      "has not been used since it started.\n".
+	      "\n".
+	      "We have marked your reservation for cancellation at $cancel.\n".
+	      "\n".
+	      "If you use your reservation before then, we will rescind\n".
+	      "the cancellation.\n",
+	      $TBOPS, "Bcc: $TBOPS");
+	}
+	elsif ($res->notified_unused()) {
+	    #
+	    # We only cancel our own cancellation. If the command line tool
+	    # aborts the cancel (or even sets the cancel), we view that as an
+	    # override on our cancel (the notified_unused flag is cleared on
+	    # that path, and override_unused is set).
+	    #
+	    print "Clearing unused reservation cancellation.\n"
+		if ($debug || $verbose);
+	    next
+		if ($impotent);
+	    
+	    while (1) {
+		if (!defined(Reservation->
+			     BeginTransaction(Reservation->GetVersion()))) {
+		    sleep(1);
+		    next;
+		}
+		$res->ClearUnused();
+		Reservation->EndTransaction();
+		last;
+	    }
+	}
+    }
+}

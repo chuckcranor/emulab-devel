@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2014 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -25,9 +25,11 @@
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 #include <netdb.h>
 #include <syslog.h>
+#include <arpa/inet.h>
 #include "log.h"
 #include "bootwhat.h"
 #include "bootinfo.h"
@@ -71,7 +73,15 @@ open_bootinfo_db(void)
 }
 
 int
-query_bootinfo_db(struct in_addr ipaddr, int version, boot_what_t *info, char *key)
+findnode_bootinfo_db(struct in_addr ipaddr, int *events)
+{
+	*events = 0;
+	return 1;
+}
+
+int
+query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
+		  boot_what_t *info, char *key)
 {
 	struct config *configp;
 
@@ -111,26 +121,79 @@ parse_host(char *name)
 }
 
 
+static void
+parse_mfs_path(char *str, boot_what_t *info)
+{
+	struct hostent *he;
+	struct in_addr hip;
+	char *path, *args;
+
+	/* treat anything after a space as the command line */
+	args = strchr(str, ' ');
+	if (args != NULL) {
+		*args++ = '\0';
+		strncpy(info->cmdline, args, MAX_BOOT_CMDLINE-1);
+	}
+
+	/* no hostname, just copy string as is */
+	path = strchr(str, ':');
+	if (path == NULL) {
+		strncpy(info->what.mfs, str, sizeof(info->what.mfs));
+		return;
+	}
+	*path = '\0';
+
+	/* hostname is a valid IP addr, copy as is */
+	if (inet_addr(str) != INADDR_NONE) {
+		*path = ':';
+		strncpy(info->what.mfs, str, sizeof(info->what.mfs));
+		return;
+	}
+
+	/* not a valid hostname, whine and copy it as is */
+	he = gethostbyname(str);
+	if (he == NULL) {
+		*path = ':';
+		error("Invalid hostname in MFS path '%s', passing anyway\n",
+		      str);
+		strncpy(info->what.mfs, str, sizeof(info->what.mfs));
+		return;
+	}
+	*path = ':';
+
+	/* valid hostname, translate to IP and replace in string */
+	memcpy((char *)&hip, he->h_addr, he->h_length);
+	strcpy(info->what.mfs, inet_ntoa(hip));
+	strncat(info->what.mfs, path,
+		sizeof(info->what.mfs)-strlen(info->what.mfs));
+}
+
+
 static int
 parse_configs(char *filename)
 {
 	FILE	*fp;
+#ifdef TEST
 	int	i;
+#endif
 	char	buf[BUFSIZ], *bp, *cix, client[256], action[256];
 	struct  config *configp;
-	int	ipaddr;
+	int	ipaddr, lineno;
 
 	if ((fp = fopen(filename, "r")) == NULL) {
 		error("%s: cannot open\n", filename);
 		return 1;
 	}
 
+	lineno = 1;
 	while (1) {
 		if ((bp = fgets(buf, BUFSIZ, fp)) == NULL)
 			break;
 
-		if (*bp == '\n' || *bp == '#')
+		if (*bp == '\n' || *bp == '#') {
+			lineno++;
 			continue;
+		}
 
 		if (numconfigs >= MAX_CONFIGS) {
 			error("%s: too many lines\n", filename);
@@ -143,7 +206,7 @@ parse_configs(char *filename)
 		configp = (struct config *) calloc(sizeof *configp, 1);
 		if (!configp) {
 		bad:
-			error("%s: parse error\n", filename);
+			error("%s: %d: parse error\n", filename, lineno);
 			fclose(fp);
 			close_bootinfo_db();
 			return 1;
@@ -161,6 +224,9 @@ parse_configs(char *filename)
 		} else if (strncmp(action, "part=", 5) == 0) {
 			configp->bootinfo.type = BIBOOTWHAT_TYPE_PART;
 			configp->bootinfo.what.partition = atoi(&action[5]);
+		} else if (strncmp(action, "mfs=", 4) == 0) {
+			configp->bootinfo.type = BIBOOTWHAT_TYPE_MFS;
+			parse_mfs_path(&action[4], &configp->bootinfo);
 		} else if (strncmp(action, "file=", 5) == 0) {
 			if ((cix = index(action, ':')) == 0)
 				goto bad;
@@ -179,6 +245,7 @@ parse_configs(char *filename)
 			strcpy(configp->bootinfo.what.mb.filename, cix);
 		} else
 			goto bad;
+		lineno++;
 	}
 	fclose(fp);
 
@@ -229,9 +296,15 @@ print_bootwhat(boot_what_t *bootinfo)
 		       inet_ntoa(bootinfo->what.mb.tftp_ip),
 		       bootinfo->what.mb.filename);
 		break;
+	case BIBOOTWHAT_TYPE_MFS:
+		printf("boot from MFS %s\n", bootinfo->what.mfs);
+		break;
 	}
+	if (bootinfo->cmdline[0])
+		printf("Command line %s\n", bootinfo->cmdline);
 }
 
+int
 main(int argc, char **argv)
 {
 	struct in_addr ipaddr;
@@ -245,7 +318,8 @@ main(int argc, char **argv)
 
 	while (--argc > 0) {
 		if (inet_aton(*++argv, &ipaddr)) {
-			if (query_bootinfo_db(ipaddr, boot_whatp) == 0) {
+			if (query_bootinfo_db(ipaddr, NULL, BIVERSION_CURRENT,
+					      boot_whatp, NULL) == 0) {
 				printf("%s: ", *argv);
 				print_bootwhat(boot_whatp);
 			} else

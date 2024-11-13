@@ -12,6 +12,7 @@ $(function ()
     var waitwaitString = templates['waitwait-modal'];
     var oopsString     = templates['oops-modal'];
     var table          = null;
+    var projects       = null;
 
     function initialize()
     {
@@ -27,11 +28,12 @@ $(function ()
     function LoadTable()
     {
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("LoadTable", json);
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
+	    projects = json.value;
 	    var template = _.template(listString);
 	    var html = template({"projects" : json.value});
 	    $('#projects-content').html(html);
@@ -87,6 +89,25 @@ $(function ()
 	table.find('th:eq(2)').trigger('sort');	
     }
 
+    // Update modal table info
+    function updateModalInfo(modal, pid)
+    {
+        var pidinfo = projects[pid];
+
+        $(modal + " .project-info .project-name").html(pid);
+        $(modal + " .project-info .project-portal").html(pidinfo["portal"]);
+        $(modal + " .user-info .user-name").html(pidinfo["leader_name"]);
+        $(modal + " .user-info .user-email").html(pidinfo["leader_email"]);
+    }
+
+    // Save text area and clear current one.
+    function saveModalTextarea(modal)
+    {
+        $(modal + ' .textarea-previous')
+            .val($(modal + ' .textarea-current').val());
+        $(modal + ' .textarea-current').val("");
+    }
+
     //
     // Setup the action modals and buttons.
     //
@@ -99,6 +120,7 @@ $(function ()
 		event.preventDefault();
 		Approve(pid);
 	    });
+            updateModalInfo("#approve-modal", pid);
 	    sup.ShowModal("#approve-modal",
 			  function () {
 			      $("#approve-confirm").off("click");
@@ -111,6 +133,7 @@ $(function ()
 		event.preventDefault();
 		Deny(pid);
 	    });
+            updateModalInfo("#deny-modal", pid);
 	    sup.ShowModal("#deny-modal",
 			  function () {
 			      $("#deny-confirm").off("click");
@@ -123,11 +146,33 @@ $(function ()
 		event.preventDefault();
 		MoreInfo(pid);
 	    });
+            updateModalInfo("#request-info-modal", pid);
 	    sup.ShowModal("#request-info-modal",
 			  function () {
 			      $("#request-info-confirm").off("click");
 			  });
 	});
+	$(".correspondence-button").click(function (event) {
+	    event.preventDefault();
+	    var pid = $(this).closest('tr').data("pid");
+	    ShowCorrespondence(pid);
+	});
+	$('#request-info-modal .public-provider-template').click(function (e) {
+	    e.preventDefault();
+            console.info(e);
+	    var msg =
+                "Since you signed up with an account from a public email provider\n"+
+                "rather than one from your institution, can you please provide us with\n"+
+                "documentation of your affiliation?\n\n";
+	    $('#request-info-modal .textarea-current').val(msg);
+	});
+
+        $('.insert-previous-message').click(function (event) {
+            event.preventDefault();
+            var modal = $(this).closest('.modal');
+            var previous = $(modal).find(".textarea-previous").val();
+            $(modal).find(".textarea-current").val(previous);
+        });
     }
 
     //
@@ -199,6 +244,7 @@ $(function ()
 			     json.value);
 		return;
 	    }
+            saveModalTextarea('#request-info-modal');
 	};
     	var xmlthing = sup.CallServerMethod(null, "approve-projects",
 					    "MoreInfo",
@@ -221,6 +267,8 @@ $(function ()
 			     json.value);
 		return;
 	    }
+            saveModalTextarea('#approve-modal');
+            
 	    // Remove the project from the list. There are two rows.
 	    $('tr[data-pid="' + pid + '"]').remove();
 	    table.trigger('update');
@@ -255,6 +303,8 @@ $(function ()
 			     json.value);
 		return;
 	    }
+            saveModalTextarea('#deny-modal');
+            
 	    // Remove the project from the list. There are two rows.
 	    $('tr[data-pid="' + pid + '"]').remove();
 	    table.trigger('update');
@@ -268,6 +318,21 @@ $(function ()
 					     "deleteuser" : deleteuser,
 					     "silent"     : silent});
 	xmlthing.done(callback);
+    }
+
+    // Show the project correspondence
+    function ShowCorrespondence(pid)
+    {
+	var list = projects[pid].correspondence.map(function (details) {
+	    var date = moment(details.sent).format("llll");
+
+	    return "<pre>Sent: " + date + "\n\n" +
+		details.message + "\n" + "</pre>";
+	});
+	$("#correspondence-modal .modal-body")
+	    .html(list.join("<hr>"));
+
+	sup.ShowModal("#correspondence-modal");
     }
     
     $(document).ready(initialize);

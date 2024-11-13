@@ -148,6 +148,9 @@
 		      <a href="show-image.php?imageid=<%- version.uuid %>"
 			 target="_blank">
 			<%- image.imagename %>:<%- version.version %></a>
+		    <% } else if (window.ISADMIN) { %>
+		      <a href='<%- version["show-image"] %>' target="_blank">
+			<%- image.imagename %>:<%- version.version %></a>
 		    <% } else { %>
 			<%- image.imagename %>:<%- version.version %>
 		    <% } %>
@@ -318,6 +321,9 @@
 		      <a href="show-image.php?imageid=<%- version.uuid %>"
 			 target="_blank">
 			<%- image.imagename %>:<%- version.version %></a>
+		    <% } else if (window.ISADMIN) { %>
+		      <a href='<%- version["show-image"] %>' target="_blank">
+			<%- image.imagename %>:<%- version.version %></a>
 		    <% } else { %>
 		      <%- image.imagename %>:<%- version.version %>
 		    <% } %>
@@ -487,6 +493,9 @@
 		    <% if (window.ISEMULAB) { %>
 		      <a href="show-image.php?imageid=<%- version.uuid %>"
 			 target="_blank">
+			<%- image.imagename %>:<%- version.version %></a>
+		    <% } else if (window.ISADMIN) { %>
+		      <a href='<%- version["show-image"] %>' target="_blank">
 			<%- image.imagename %>:<%- version.version %></a>
 		    <% } else { %>
 		      <%- Image.imagename %>:<%- version.version %>

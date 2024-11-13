@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2014 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -240,6 +240,7 @@ class OSinfo
     function mfs()		{ return $this->field("mfs"); }
     function reboot_waittime()  { return $this->field("reboot_waittime"); }
     function def_parentosid()   { return $this->field("def_parentosid"); }
+    function taint_states()     { return $this->field("taint_states"); }
 
     function SetParent($parent_osid) {
 	$osid = $this->osid();

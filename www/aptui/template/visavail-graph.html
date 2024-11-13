@@ -1,5 +1,7 @@
-<div class="panel panel-default hidden">
-  <div class='panel-heading text-center'>
+<div class="panel  card panel-default hidden">
+  <!-- heading padding cause of the popover subtitle below -->
+  <div class='panel-heading card-header text-center'
+       style="padding: 5px;">
     <div class="pull-left zoom-control" style="font-size: 18px;">
       <a href="#" class="zoom-in">
 	<span class="glyphicon glyphicon-zoom-in"></span>
@@ -8,9 +10,9 @@
 	<span class="glyphicon glyphicon-zoom-out"></span>
       </a>
       <a href='#'
-	 data-toggle='popover'
-	 data-html='true'
-	 data-delay='{"hide":500}'
+	 data-toggle='popover' data-bs-toggle='popover'
+	 data-html='true' data-bs-html='true'
+	 data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 	 data-content='In addition to the zoom in/out buttons to the left,
 		       you can double click in the graph to zoom/recenter.
 		       You can also click-drag to pan left or right after
@@ -23,14 +25,15 @@
     </div>
     <div class="pull-right right-side"></div>
     <div style="display: inline-block;">
-      <h3 class='panel-title'><%= title %></h3>
+      <h5 class="panel-title card-title card-title-small">      
+	<%= title %></h5>
       <div>
 	<span class=small style="color:blue;">
           <a href="#" onclick="event.preventDefault();"
-	     data-toggle='popover'
-	     data-html='true'
-	     data-placement="auto left"
-	     data-delay='{"hide":500}'
+	     data-toggle='popover' data-bs-toggle='popover'
+	     data-html='true' data-bs-html='true'
+	     data-placement="auto" data-bs-placement="auto"
+	     data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 	     data-content='Areas in <span style="color: blue"><b>blue</b></span>
 			   denote an existing but unapproved reservation that
 			   might conflict with your request. Reservations are
@@ -44,7 +47,7 @@
       </div>
     </div>
   </div>
-  <div class='panel-body visavail' style="padding: 2px;"
+  <div class='panel-body card-body visavail' style="padding: 2px;"
        id="<%= id %>-graph-body">
     <div id="<%= id %>-graph-visavail" class="visavail-graph"></div>
   </div>

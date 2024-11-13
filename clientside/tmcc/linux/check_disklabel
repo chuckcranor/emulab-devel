@@ -20,6 +20,11 @@ if [ $# -ne 2 ]; then
 	exit 1
 fi
 
+# none of this applies for a GPT
+if fdisk -l /dev/$disk 2> /dev/null | grep -q 'Found valid GPT'; then
+    exit 1;
+fi
+
 freebsd_slices=`fdisk -l /dev/$disk 2> /dev/null | \
 	sed -n '/a5 *FreeBSD/s#^/dev/'$disk'\([0-9]*\) .*$#\1#p'`
 total_slices=`fdisk -l /dev/$disk | grep "^/dev/$disk[0-9]" | wc -l`

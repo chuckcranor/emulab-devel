@@ -1,8 +1,9 @@
+
 $(function ()
 {
     'use strict';
 
-    var template_list   = ["resgroup", "reserve-faq", "range-list",
+    var template_list   = ["resgroup", "reserve-faq", "range-tabs",
 			   "reservation-graph", "oops-modal", "waitwait-modal",
 			   "resusage-graph", "visavail-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
@@ -11,9 +12,9 @@ $(function ()
     var mainTemplate    = _.template(templates["resgroup"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var usageTemplate   = _.template(templates["resusage-graph"]);
-    var rangeTemplate   = _.template(templates["range-list"]);
     var visTemplate     = _.template(templates["visavail-graph"]);
     var current_pid  = null;
+    var current_gid  = null;
     var projlist     = null;
     var amlist       = null;
     var managerlist  = null;
@@ -31,8 +32,27 @@ $(function ()
     var allroutes    = [];
     var fakeroutes   = true;
     var JACKS_NS     = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
-    var IDEAL_STARTHOUR = 7;	// 7am start time preferred.
+    var IDEAL_STARTHOUR = 6;	// 6am start time preferred.
     var IDEAL_ENDHOUR   = 18;	// 6pm end time preferred.
+
+    // Helper function, can existing reservation be added to.
+    function canEnlarge()
+    {
+	if (isadmin || !editing) {
+	    return 1;
+	}
+	if (editing) {
+	    var now   = moment();
+	    var start = moment(resgroup.start);
+
+	    // Once start time has past, no editing allowed.
+	    if (now > start) {
+		console.info("Start time has past, no mods allowed");
+		return 0;
+	    }
+	}
+	return 1;
+    }
 
     var RouteColors = {
 	"Red Detour"       : "red",
@@ -43,12 +63,29 @@ $(function ()
 	"Guardsman Direct" : "pink",
     };
 
+    var OtaWarning = "Current project does not have OTA permission. " +
+	"<a href='' class='ota-request-permission'>" +
+	"Request permission.</a>";
+
+    var RangeWarning = "This frequency range is not valid for some of the " +
+	"radios above. Please see the " +
+	"<a href='radioinfo.php' target=_blank>radio information</a> page " +
+	"for details.";
+
+    function requestOtaPermission (event)
+    {
+	event.preventDefault();
+	
+	var pid = (editing ? current_pid : $('#pid').val());
+	otaStuff.RequestOtaPermission(pid);
+    }
+
     var addClusterRowString = 
 	' <tbody data-uuid="<%- remote_uuid %>" class="new-cluster">' +
 	'    <tr>' +
 	'      <td>' +
 	'       <div class="cluster-select-div form-control-div"> ' +
-	'  	   <select class="form-control cluster-select"' +
+	'  	   <select class="form-control form-select cluster-select"' +
 	'	   	   placeholder="Please Select">' +
 	'	     <option value="">Select Cluster</option>' +
 	'	     <% _.each(amlist, function(details, urn) { %>' +
@@ -66,7 +103,7 @@ $(function ()
 	'      </td>' +
 	'      <td>' +
 	'       <div class="hardware-select-div form-control-div"> ' +
-	'	  <select class="form-control hardware-select"' +
+	'	  <select class="form-control form-select hardware-select"' +
 	'	  	placeholder="Select Hardware">' +
 	'	    <option value="">Select Hardware</option>' +
 	'	  </select>' +
@@ -107,10 +144,17 @@ $(function ()
 	'        </button>' +
 	'      </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>' +
+	'    <tr class="ota-row hidden has-warning">' +
+	'      <td colspan=4 class="ota-message">' +
+	'         <span class="form-group-sm"> ' +
+	'           <label class="control-label">' + OtaWarning + '</label>' +
 	'         </span>' +
 	'      </td>' +
 	'    </tr>' +
@@ -181,9 +225,9 @@ $(function ()
 	'         </span>' +
 	'      </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
 	'         </span>' +
 	'      </td>' +
@@ -196,7 +240,7 @@ $(function ()
 	' <tbody data-uuid="<%- freq_uuid %>" class="new-range">' +
 	'    <tr>' +
 	'      <td>' +
-	'       <div> ' +
+	'       <div class="form-control-div"> ' +
 	'	  <input placeholder="Lower Frequency"' +
 	'	         value="<%- freq_low %>"' +
 	'	         size="8"' +
@@ -209,7 +253,7 @@ $(function ()
 	'       </div> '+
 	'      </td>' +
 	'      <td>' +
-	'       <div> ' +
+	'       <div class="form-control-div"> ' +
 	'	  <input placeholder="Upper Frequency"' +
 	'	         value="<%- freq_high %>"' +
 	'	         size="8"' +
@@ -242,10 +286,24 @@ $(function ()
 	'        </button>' +
 	'      </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>' +
+	'    <tr class="ota-row hidden has-warning">' +
+	'      <td colspan=4 class="ota-message">' +
+	'         <span class="form-group-sm"> ' +
+	'           <label class="control-label">' + OtaWarning + '</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>' +
+	'    <tr class="badrange-row hidden has-warning">' +
+	'      <td colspan=4 class="unsupported-message">' +
+	'         <span class="form-group-sm"> ' +
+	'           <label class="control-label">' + RangeWarning + '</label>' +
 	'         </span>' +
 	'      </td>' +
 	'    </tr>' +
@@ -293,9 +351,9 @@ $(function ()
 	'       </button>' +
 	'     </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
 	'         </span>' +
 	'      </td>' +
@@ -308,8 +366,8 @@ $(function ()
 	' <tbody data-uuid="<%- route_uuid %>" class="new-route">' +
 	'    <tr>' +
 	'      <td>' +
-	'        <div> ' +
-	'  	   <select class="form-control routename"' +
+	'        <div class="form-control-div"> ' +
+	'  	   <select class="form-control form-select routename"' +
 	'	   	   placeholder="Please Select">' +
 	'	     <option value="">Select Route</option>' +
 	'	     <% _.each(routelist, function(details) { %>' +
@@ -349,10 +407,17 @@ $(function ()
 	'        </button>' +
 	'      </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
+	'         </span>' +
+	'      </td>' +
+	'    </tr>' +
+	'    <tr class="ota-row hidden hidden has-warning">' +
+	'      <td colspan=4 class="ota-message">' +
+	'         <span class="form-group-sm"> ' +
+	'           <label class="control-label">' + OtaWarning + '</label>' +
 	'         </span>' +
 	'      </td>' +
 	'    </tr>' +
@@ -393,9 +458,9 @@ $(function ()
 	'       </button>' +
 	'     </td>' +
 	'    </tr>' +
-	'    <tr class="error-row">' +
+	'    <tr class="error-row hidden">' +
 	'      <td colspan=4 class="reservation-error">' +
-	'         <span class="form-group-sm hidden has-error"> ' +
+	'         <span class="form-group-sm"> ' +
 	'           <label class="control-label">Error</label>' +
 	'         </span>' +
 	'      </td>' +
@@ -417,6 +482,21 @@ $(function ()
 	    $('#reserve-approve-button').attr("disabled", "disabled");
 	}
     }
+
+    /*
+     * Is a type (or a reservable node) a radio.
+     */
+    function isRadio(urn, type)
+    {
+	if (type.startsWith("oai-wb")) {
+	    return 0;
+	}
+	
+	if (radioinfo && _.has(radioinfo, urn) && _.has(radioinfo[urn], type)) {
+	    return 1;
+	}
+	return 0;
+    }
     
     function initialize()
     {
@@ -428,6 +508,7 @@ $(function ()
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 	managerlist = JSON.parse(_.unescape($('#manager-json')[0].textContent));
 	console.info("amlist", amlist);
+	console.info("projlist", projlist);
 	console.info("managerlist", managerlist);
 	
 	if (window.ISPOWDER) {
@@ -442,12 +523,60 @@ $(function ()
 	    matrixinfo = JSON.parse(
 		_.unescape($('#matrixinfo-json')[0].textContent));
 	    console.info("matrixinfo", matrixinfo);
+
+	    // Ick. 
+	    otaStuff.init("resgroup");
 	}
 	GeneratePageBody();
 
 	// Now we can do this. 
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
+
+	if (window.ISADMIN) {
+            /*
+             * Handler for "canned responses" to fill in the message.
+             */
+            $("#delete-reservation-modal .canned-response, "+
+              "#approve-modal .canned-response").click(function (event) {
+                  var message = $.trim($(this).find("p").text());
+                  message = message.replace(/[\n\r]+/g, " ");
+                  message = message.replace(/\s+/g, " ");
+
+                  var textarea = $(this).closest('.modal-body').find('.user-message');
+                  $(textarea).text(message + "\n");
+                  $(textarea).focus();
+                  $(textarea)[0].setSelectionRange(message.length+1, message.length+1);
+              })
+            /*
+             * Crazy stuff to get a dropdown to work inside a modal. Seems
+             * to be a bug in bootstrap. Formatting still needs help.
+             * Needs to run after bootstrap initializes, hence the setTimeout().
+             */
+	    setTimeout(function () {
+                const dropdowns = document.querySelectorAll('.canned-responses ' +
+                                                            '.dropdown-toggle');
+                
+                const dropdown = [...dropdowns].map((dropdownToggleEl) =>
+                    new bootstrap.Dropdown(dropdownToggleEl, {
+                        popperConfig(defaultBsPopperConfig) {
+                            return { ...defaultBsPopperConfig, strategy: 'fixed' };
+                        }
+                    }));
+	    }, 100);
+        }
+        
+	// See if we can make users understand reservations are per-project.
+	$('#project-forewarned').change(function () {
+	    var ischecked =  $('#project-forewarned').is(":checked");
+
+	    if (ischecked) {
+		$('#commit-reservation').removeAttr("disabled");
+	    }
+	    else {
+		$('#commit-reservation').attr("disabled", "disabled");
+	    }
+	});
 
 	/*
 	 * In edit mode enable the controls.
@@ -518,24 +647,25 @@ $(function ()
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
 	$('.faq-contents').html(templates["reserve-faq"]);
-
+	if (window.BOOTSTRAP_VERSION == 5) {
+	    $('[data-bs-parent="#accordion"]').each(function () {
+		bootstrap.Collapse.getOrCreateInstance(this).toggle();
+	    });
+	}
+	if (window.ISPOWDER) {
+	    $('#range-info-div').html(templates["range-tabs"]);
+	}
+ 	
 	// Add one unassigned row.
 	if (!editing) {
-	    if (isadmin || managerlist[window.PID]) {
-		$('#for-class-checkbox').removeClass("hidden");
+	    if (projlist[window.PID].resmode != "user") {
+		if (isadmin || managerlist[window.PID]) {
+		    $('#for-class-checkbox').removeClass("hidden");
+		}
 	    }
-	    if (!isadmin) {
-		$('#pid').change(function (event) {
-		    var pid = $(this).val();
-		    
-		    if (managerlist[pid]) {
-			$('#for-class-checkbox').removeClass("hidden");
-		    }
-		    else {
-			$('#for-class-checkbox').addClass("hidden");
-		    }
-		});
-	    }
+	    $('#pid').change(function (event) {
+		HandleProjectChange();
+	    });
 	    if (window.FROMRSPEC) {
 		// XXX Need slight delay to wait for parent to write the
 		// rspec into our DOM. Need to revisit this approach.
@@ -561,6 +691,7 @@ $(function ()
 		    }
 		}
 	    }
+	    HandleProjectChange();
 	}
 	// Graph list(s).
 	_.each(amlist, function(details, urn) {
@@ -609,8 +740,9 @@ $(function ()
 			      sup.ShowModal('#reservation-faq-modal');
 			  });
 	});
-	// Set the manual link since the FAQ is not a template.
-	$('#reservation-manual').attr("href", window.MANUAL);
+	// Set the manual link, it is used in several places.
+	$('.reservation-manual').attr("href",
+				      window.MANUAL + "/reservations.html")
 
 	// Handler for the Reservation Graph Help button
 	$('.resgraph-help-button').click(function (event) {
@@ -648,7 +780,6 @@ $(function ()
 	// Insert datepickers after html inserted.
 	$("#reserve-request-form #start_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
-	    showButtonPanel: true,
 	    onClose: function (dateString, dateobject) {
 		DateChange("start");
 		modified_callback();
@@ -656,7 +787,6 @@ $(function ()
 	});
 	$("#reserve-request-form #end_day").datepicker({
 	    minDate: 0,		/* earliest date is today */
-	    showButtonPanel: true,
 	    onClose: function (dateString, dateobject) {
 		DateChange("end");
 		modified_callback();
@@ -676,10 +806,6 @@ $(function ()
 		modified_callback();
 	    }
 	});
-	$('#idle-detection-checkbox').change(function(event) {
-	    ToggleIdleDetection();
-	});
-
 	aptforms.EnableUnsavedWarning('#reserve-request-form',
 				      modified_callback);
     }
@@ -755,9 +881,14 @@ $(function ()
 		    $('#cluster-table .add-cluster').not(":last").hide();
 		}
 		RegenCombinedGraph();
+		if (window.ISPOWDER) {
+		    CheckAllRangesAgainstRadios();
+		}
 		modified_callback();
 		
 	    });
+	// OTA permission request.
+	row.find('.ota-request-permission').click(requestOtaPermission);
 	
 	if ($('#cluster-table tbody').length == 1) {
 	    $('#cluster-table .delete-cluster').hide();
@@ -841,10 +972,32 @@ $(function ()
 	    });
 	row.find('input.freq-low, input.freq-high').change(function () {
 	    modified_callback();
+
+	    // OTA perm check once the user sets something.
+	    var pid = (editing ? current_pid : $('#pid').val());
+
+	    // Clear before check.
+	    row.find(".ota-row").addClass("hidden");
+
+	    var low  = $.trim(row.find('input.freq-low').val());
+	    var high = $.trim(row.find('input.freq-high').val());
+	    
+	    if (!otaStuff.HasOtaPermission(pid)) {
+		if (low != "" || high != "") {
+		    row.find(".ota-row").removeClass("hidden");
+		}
+	    }
+	    // Range consistency checks against radios requested.
+	    if (low != "" && high != "") {
+		CheckRangeAgainstRadios(row);
+	    }
 	});
 	row.find('input.freq-low, input.freq-high').focus(function () {
 	    ReorderGraphs("ranges");
 	});
+	// OTA permission request.
+	row.find('.ota-request-permission').click(requestOtaPermission);
+	
 	// See above
 	updateButtons();
     }
@@ -931,9 +1084,23 @@ $(function ()
 		updateButtons();
 		modified_callback();
 	    });
-	row.find('input.routename').change(function () {
+	row.find('select.routename').change(function () {
+	    var name = $(this).val();
+	    
+	    // OTA permission checks/warning.
+	    var pid  = (editing ? current_pid : $('#pid').val());
+
+	    // Clear before check.
+	    row.find(".ota-row").addClass("hidden");
+	    
+	    if (name != "" && !otaStuff.HasOtaPermission(pid)) {
+		row.find(".ota-row").removeClass("hidden");
+	    }
 	    modified_callback();
 	});
+	// OTA permission request.
+	row.find('.ota-request-permission').click(requestOtaPermission);
+
 	// See above
 	updateButtons();
     }
@@ -953,7 +1120,7 @@ $(function ()
 	$('#route-table-div .route-help').popover({
 	    trigger: 'hover',
 	    container: 'body',
-	    delay: '{"hide":1000}',
+	    delay: {"hide":1000},
 	    content: 'Reservations that include mobile endpoints ' +
 		'must end on the same day by 11PM Mountain time ' +
 		'(' + now.format("h A") + ' in your local timezone).'
@@ -968,18 +1135,28 @@ $(function ()
 		_.each(routelist, function(details) {
 		    AddRouteRow(details.routename);
 		});
+		ReorderGraphs("routes");
+
+		// OTA perm warning.
+		var pid = (editing ? current_pid : $('#pid').val());
+		if (!otaStuff.HasOtaPermission(pid)) {
+		    // OTA perm warning.
+		    $('#allroutes-ota-warning').removeClass("hidden");
+		}
+                modified_callback();
 	    }
 	    else {
-		$('#route-table tbody').each(function() {
-		    var routename = $(this).find(".routename").val();
-		    console.info(routename);
-		    $(this).find('.delete-route').trigger("click");
-		});
+                Delete(undefined, true /* allroutes */);
+		// OTA perm warning.
+		$('#allroutes-ota-warning').addClass("hidden");
 	    }
 	    RegenCombinedGraph();
 	});
+	// OTA permission request.
+	$('#allroutes-ota-warning .ota-request-permission')
+	    .click(requestOtaPermission);
     }
-    
+
     /*
      * When the date selected is today, need to disable the hours
      * before the current hour. Also set the initial hour to a
@@ -1033,8 +1210,7 @@ $(function ()
 	/*
 	 * Ok, init the hour if not set.
 	 */
-	var ideal_hour =
-	    (which == "start" ? adjustedMorning().hour() : IDEAL_ENDHOUR);
+	var ideal_hour = (which == "start" ? IDEAL_STARTHOUR : IDEAL_ENDHOUR);
 	
 	if (!hourset && !moment(date).isSame(Date.now(), "day")) {
 	    $(selecter + ' option[value=' + ideal_hour + ']')
@@ -1078,135 +1254,6 @@ $(function ()
 		console.info("UpdateFormTime clear end");
 	    }
 	}
-    }
-
-    /*
-     * If the start time of reservation is for today, then it must
-     * start before 9am (in the home timezone). Otherwise, the user
-     * has to push the start time out till the next business day. If
-     * today is a weekend, then the user must push the start time out
-     * till the next business day.
-     */
-    function StartTimeOkay()
-    {
-	adjustMorning();
-
-	console.info("StartTimeOkay");
-
-	if (!window.MAINSITE || isadmin || !window.BISONLY) {
-	    return 1;
-	}
-	if (editing) {
-	    /*
-	     * We want to prevent users from editing a submitted reservation
-	     * such that the start time violates the rules. But since the
-	     * form contains the start time, need to be careful we do not
-	     * try to check it, since it might even be in the past, if the
-	     * user has not changed it.
-	     */
-	    var formstart = $('#reserve-request-form [name=start]').val();
-	    var start     = moment(formstart);
-	    var resstart  = moment(resgroup.start);
-	    
-	    console.info(start, resstart);
-	    if (start.isSame(resstart)) {
-		console.info("submitted reservation, start unchanged");
-		return 1;
-	    }
-	}
-	var start_day  = $('#reserve-request-form [name=start_day]').val();
-	var start_hour = $('#reserve-request-form [name=start_hour]').val();
-	var toosoon    = false;
-
-	console.info("StartTimeOkay: ", start_day, start_hour);
-
-	if (start_day && start_hour) {
-	    var now   = moment();
-	    var start = moment(start_day, "MM/DD/YYYY");
-	    start.hour(start_hour);
-	    
-	    if (now.isSame(start, 'day')) {
-		toosoon = 1;
-	    }
-	    else if (moment([start.year(), start.month(), start.date()])
-		     .diff(moment([now.year(), now.month(), now.date()]), 'day')
-		     == 1) {
-		// Next day, has to be after 9am on a weekday.
-		start.tz(window.HOMETZ);
-		console.info("next day");
-		
-		if (start.hours() < 9 || 
-		    start.isoWeekday() == 6 || start.isoWeekday() == 7) {
-		    toosoon = 1;
-		}
-	    }
-	    else {
-		console.info(now.format(), start.format());
-		start.tz(window.HOMETZ);
-		now.tz(window.HOMETZ);
-
-		// Advance, looking for a business day between now and start.
-		toosoon = 1;
-		var tmp = now.clone();
-		tmp.isoWeekday(tmp.isoWeekday() + 1);
-		tmp.hour(8);
-		tmp.minute(59);
-		tmp.second(0);
-		console.info("clone: " + tmp.format());
-
-		while (tmp.isBefore(start)) {
-		    var dayofweek = tmp.isoWeekday();
-		    console.info("dayofweek: " + dayofweek);
-			
-		    if (dayofweek >= 1 && dayofweek <= 5) {
-			toosoon = 0;
-			break;
-		    }
-		    tmp.isoWeekday(tmp.isoWeekday() + 1);
-		}
-	    }
-	}
-	else {
-	    var now = moment();
-	    // Change the timezone to home base so we can check against
-	    // 9am and weekend in that timezone.
-	    now.tz(window.HOMETZ);
-
-	    if (now.hours() > 5 ||
-		now.isoWeekday() == 6 || now.isoWeekday() == 7) {
-		toosoon = 1;
-	    }
-	}
-	if (toosoon) {
-	    sup.ShowModal('#toosoon-modal');
-	    return 0;
-	}
-	return 1;
-    }
-
-    /*
-     * Calculate the next business day after the current time.
-     */
-    function NextBusinessDay()
-    {
-	var now = moment();
-	// Change the timezone to home base so we can check against
-	// 9am and weekend in that timezone.
-	now.tz(window.HOMETZ);
-
-	if (now.isoWeekday() == 6 || now.isoWeekday() == 7 ||
-	    now.isoWeekday() == 5) {
-	    now.isoWeekday(1);
-	    now.isoWeek(now.isoWeek() + 1);
-	}
-	else {
-	    now.isoWeekday(now.isoWeekday() + 1);
-	}
-	now.hours(8);
-	now.minute(59);
-	now.second(59);
-	now.local();
-	return now;
     }
 
     /*
@@ -1393,55 +1440,61 @@ $(function ()
     {
 	_.each(clusters, function (reservation, uuid) {
 	    var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
+	    var html  = "";
+	    var newclass = "";
 
 	    if (_.has(reservation, "errcode")) {
 		if (_.has(reservation, "conflict")) {
+		    var conflict = reservation.conflict;
+		    
 		    // The string typically has the date in the wrong timezone,
-		    var when = moment(reservation.conflict.when).format("lll");
-		    var mesg = "Insufficient free nodes at " + when + " " +
-			"(" + reservation.conflict.needed + " more needed)";
-		    tbody.find(".reservation-error span label")
-			.html(mesg);
+		    var when = moment(conflict.when).format("lll");
+
+		    if (_.has(conflict, "conflicting_node")) {
+			html = "Conflict with node " + conflict.conflicting_node +
+			    " at " +  when;
+		    }
+		    else {
+			html = "Insufficient free nodes at " + when + " " +
+			    "(" + reservation.conflict.needed + " more needed)";
+		    }
 		}
 		else {
-		    tbody.find(".reservation-error span label")
-			.html(reservation.output);
+		    html = reservation.output;
 		}
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning")
-		    .addClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-error");
+		newclass = "has-error";
 	    }
 	    else if (parseInt(reservation.approved) != 0) {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
+		// No errors
+		html = "";
 	    }
 	    else {
 		if (_.has(reservation, "conflict")) {
+		    var conflict = reservation.conflict;
+		    var mesg;
+		    
 		    // The string typically has the date in the wrong timezone,
-		    var when = moment(reservation.conflict.when).format("lll");
-		    var mesg = "Conflicting reservation at " + when;
-		    tbody.find(".reservation-error span label")
-			.html("Approval is required. (" + mesg + ")");
+		    var when = moment(conflict.when).format("lll");
+
+		    if (_.has(conflict, "conflicting_node")) {
+			mesg = "Conflicting reservation with node " + conflict.conflicting_node;
+		    }
+		    else {
+			mesg = "Conflicting reservation";
+		    }
+		    mesg = mesg + " at " + when;
+		    html = "Approval is required. (" + mesg + ")";
 		}
 		else if (_.has(reservation, "noautoapprove_reason")) {
-		    tbody.find(".reservation-error span label")
-			.html("Approval is required: " +
-			      reservation.noautoapprove_reason);
+		    html = "Approval is required: " +
+			reservation.noautoapprove_reason;
 		}
 		else {
-		    tbody.find(".reservation-error span label")
-			.html("Approval is required");
+		    html = "Approval is required";
 		}
-		tbody.find(".reservation-error span")
-		    .addClass("has-warning")
-		    .removeClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-warning");
+		newclass = "has-warning";
 	    }
+	    SetClusterError(tbody, html, newclass);
 	});
     }
 
@@ -1452,38 +1505,27 @@ $(function ()
     {
 	_.each(ranges, function (reservation, uuid) {
 	    var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
+	    var html  = "";
+	    var newclass = "";
 
 	    if (_.has(reservation, "errcode")) {
-		tbody.find(".reservation-error span label")
-		    .html(reservation.output);
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning")
-		    .addClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-error");
+		html = reservation.output;
+		newclass = "has-error";
 	    }
 	    else if (parseInt(reservation.approved) != 0) {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
+		// No errors
 	    }
 	    else {
 		if (_.has(reservation, "noautoapprove_reason")) {
-		    tbody.find(".reservation-error span label")
-			.html("Approval is required: " +
-			      reservation.noautoapprove_reason);
+		    html = "Approval is required: " +
+			reservation.noautoapprove_reason;
 		}
 		else {
-		    tbody.find(".reservation-error span label")
-			.html("Approval is required");
+		    html = "Approval is required";
 		}
-		tbody.find(".reservation-error span")
-		    .addClass("has-warning")
-		    .removeClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-warning");
+		newclass = "has-warning";
 	    }
+	    SetRangeError(tbody, html, newclass);
 	});
     }
 
@@ -1494,57 +1536,23 @@ $(function ()
     {
 	_.each(routes, function (reservation, uuid) {
 	    var tbody = $('#route-table tbody[data-uuid="' + uuid + '"]');
+	    var html  = "";
+	    var newclass = "";
 
 	    if (_.has(reservation, "errcode")) {
-		tbody.find(".reservation-error span label")
-		    .html(reservation.output);
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning")
-		    .addClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-error");
-		if (fakeroutes) {
-		    $('#allroutes-error').parent()
-			.removeClass("has-warning")
-			.addClass("has-error");
-		    $('#allroutes-error')
-		        .html(reservation.output)
-			.removeClass("has-warning")
-			.addClass("has-error")
-			.removeClass("hidden");
-		}
+		html = reservation.output;
+		newclass = "has-error";
 	    }
 	    else if (parseInt(reservation.approved) != 0) {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
-		if (fakeroutes) {
-		    $('#allroutes-error').parent()
-			.removeClass("has-warning")
-			.removeClass("has-error");
-		    $('#allroutes-error').addClass("hidden");
-		}
+		// No error.
+		html = "";
+		newclass = "";
 	    }
 	    else {
-		tbody.find(".reservation-error span label")
-		    .html("Approval is required");
-		tbody.find(".reservation-error span")
-		    .addClass("has-warning")
-		    .removeClass("has-error")
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass("has-warning");
-		if (fakeroutes) {
-		    $('#allroutes-error').parent()
-			.addClass("has-warning")
-			.removeClass("has-error");
-		    $('#allroutes-error')
-		        .html("Approval is required")
-			.removeClass("has-error")
-			.addClass("has-warning")
-			.removeClass("hidden");
-		}
+		html = "Approval is required";
+		newclass = "has-warning";
 	    }
+	    SetRouteError(tbody, html, newclass);
 	});
     }
 
@@ -1626,10 +1634,16 @@ $(function ()
 	 */
 	$('#route-table tbody').each(function () {
 	    var tbody   = $(this);
-	    var name    = tbody.find(".routename option:selected").val();
 	    var uuid    = tbody.data("uuid");
+	    var name;
 
-	    console.info(tbody, name, uuid);
+	    if (tbody.hasClass("new-route")) {
+		name = tbody.find(".routename option:selected").val();
+	    }
+	    else {
+		name = tbody.find(".routename").val();
+	    }
+	    //console.info(tbody, name, uuid);
 
 	    // Skip an empty row
 	    if (name == "") {
@@ -1653,7 +1667,9 @@ $(function ()
 	var ranges   = {};
 	var routes   = {};
 	var errors   = 0;
-	
+	var pid      = (editing ? current_pid : $('#pid').val());
+	var gid      = (editing ? current_gid : $('#gid').val());
+
 	var checkonly_callback = function(json) {
 	    if (json.code) {
 		if (json.code != 2) {
@@ -1696,10 +1712,14 @@ $(function ()
 		.removeClass("has-error");
 	    $('#allroutes-error').addClass("hidden");
 	}
-	$('#reserve-request-form .form-group-sm').addClass("hidden");	
-	$('#reserve-request-form tbody').removeClass("has-warning has-error");
+	$('#reserve-request-form tbody')
+	    .removeClass("has-warning has-error");
 	$('#reserve-request-form .form-control-div')
 	    .removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div .form-group-sm')
+	    .addClass("hidden");	
+	$('#reserve-request-form .error-row')
+	    .addClass("hidden");
 	
 	errors += PreCheckClusterRows();
 	errors += PreCheckRangeRows();
@@ -1764,6 +1784,7 @@ $(function ()
 	    alert("No reservations have been specified");
 	    return;
 	}
+
 	var args = {
 	    "clusters" : clusters,
 	    "ranges"   : ranges,
@@ -1776,8 +1797,32 @@ $(function ()
 		args["override"] = 1;
 	    }
 	}
-	aptforms.CheckForm('#reserve-request-form', "resgroup",
-			   "Validate", checkonly_callback, args);
+	var submit = function () {
+	    aptforms.CheckForm('#reserve-request-form', "resgroup",
+			       "Validate", checkonly_callback, args);
+	};
+
+	// Deal with OTA permissions and agreement.
+	if (window.ISPOWDER) {
+	    var needcheck = _.size(ranges) + _.size(routes) +
+		$('tbody.isradio').length;
+
+	    if (needcheck && !otaStuff.HasOtaPermission(pid)) {
+		otaStuff.RequestOtaPermission(pid);
+		return;
+	    }
+	    // User cannot proceed without OTA agreement.
+	    if (!window.OTA_AGREED) {
+		otaStuff.RequestOtaAgreement(function (agreed) {
+		    if (agreed) {
+			window.OTA_AGREED = true;
+			submit();
+		    }
+		});
+		return;
+	    }
+	}
+	submit();
     }
 
     // Call back from the graphs to change the dates on a blank form
@@ -1856,7 +1901,7 @@ $(function ()
      * Load anonymized reservations from each am in the list and
      * generate tables.
      */
-    function LoadReservations(project)
+    function LoadReservations(project, user)
     {
 	var deferred = [];
 	if (window.ISPOWDER) {
@@ -1867,7 +1912,7 @@ $(function ()
 	}
 	_.each(amlist, function(details, urn) {
 	    var callback = function(json) {
-		console.log("LoadReservations: " + details.nickname, json);
+		//console.log("LoadReservations: " + details.nickname, json);
 		var id = "resgraph-" + details.nickname;
 		
 		// Kill the spinner.
@@ -1936,6 +1981,7 @@ $(function ()
 	    var args = {"cluster" : details.nickname};
 	    if (project !== undefined) {
 		args["project"] = project;
+		args["user"]    = user;
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ReservationInfo", args,
@@ -2022,6 +2068,12 @@ $(function ()
 		    if (!_.has(groups, group)) {
 			groups[group] = {};
 		    }
+		    // Gross Hack
+		    if (0 && group == "mmimo" &&
+			(key == "mmimo1-honors" || key == "mmimo1-ustar")) {
+			prunelist[key] = true;
+			return;
+		    }
 		    groups[group][key] = info;
 		}
 		else {
@@ -2032,7 +2084,7 @@ $(function ()
 	});
 	$('#powder-radios')
 	    .html(visTemplate({
-		    "title" : "Powder Outdoor Radio Availability",
+		    "title" : "Powder Rooftop Radio Availability",
 		    "id"    : "radio",
 	    }))
 	    .removeClass("hidden")
@@ -2044,6 +2096,13 @@ $(function ()
 	    .html(visTemplate({
 		"title" : "RENEW Massive MIMO Radio Availability",
 		"id"    : "mmimo",
+	    }))
+	    .removeClass("hidden")
+	    .find(".panel").removeClass("hidden");
+	$('#powder-dense')
+	    .html(visTemplate({
+		"title" : "Dense Deployment Availability",
+		"id"    : "dense",
 	    }))
 	    .removeClass("hidden")
 	    .find(".panel").removeClass("hidden");
@@ -2157,9 +2216,6 @@ $(function ()
 		});
 	};
 	var ReservedRanges = function(json1, json2) {
-	    $('#reserved-ranges table tbody').html("");
-	    $('.reserved-ranges-hidden').addClass("hidden");
-	    
 	    if (json1.code || json2.code) {
 		if (json1.code) {
 		    console.info("Could not get reserved range info");
@@ -2176,18 +2232,17 @@ $(function ()
 		allranges = [];
 		return;
 	    }
-	    var html = "";
 	    var reserved = [];
+	    var inuse    = [];
 	    
 	    if (_.size(json1.value)) {
 		// For the search button
 		allranges = json1.value;
 	    
-
 		_.each(allranges, function(info) {
 		    /*
 		     * If this range does not overlap with any of the ranges
-		     * the projet is allowed to use, then skip it.
+		     * the project is allowed to use, then skip it.
 		     */
 		    var overlaps = 0;
 		
@@ -2203,19 +2258,9 @@ $(function ()
 			return;
 		    }
 		    reserved.push(info);
-		    
-		    html = html +
-			"<tr>" +
-			"<td>" + info.freq_low + "</td>" +
-			"<td>" + info.freq_high + "</td>" +
-			"<td>" + moment(info.start).format("lll") + "</td>" +
-			"<td>" + moment(info.end).format("lll") + "</td>" +
-			"</tr>";
 		});
 	    }
 	    if (_.size(json2.value)) {
-		var inuse = "";
-		
 		_.each(json2.value, function(range) {
 		    /*
 		     * If this range does not overlap with any of the ranges
@@ -2254,36 +2299,15 @@ $(function ()
 		    if (isdup) {
 			return;
 		    }
-		    inuse = inuse +
-			"<tr>" +
-			"<td>" + range.freq_low + "<small>" +
-			"   <span class='inuse-range pull-right " +
-			"        glyphicon glyphicon-asterisk'>" +
-			"   </span></small>" + "</td>" +
-			"<td>" + range.freq_high + "</td>" +
-			"<td>" + moment(range.start).format("lll") + "</td>" +
-			"<td>" + moment(range.end).format("lll") + "</td>" +
-			"</tr>";
+		    inuse.push(range);
 		});
-		if (inuse != "") {
-		    html += inuse;
-		    $('#reserved-ranges .experiment-reserved-ranges')
-			.removeClass("hidden");
-		}
 	    }
-	    if (html == "") {
-		return;
-	    }
-	    $('#reserved-ranges table tbody').html(html);
 	    $('#range-info-div').removeClass("hidden");
-	    $('.reserved-ranges-hidden').removeClass("hidden");
-
-	    $('#reserved-ranges .tablesorter')
-		.tablesorter({
-		    theme : 'bootstrap',
-		    widgets : [ "uitheme", "zebra"],
-		    headerTemplate : '{content} {icon}',
-		});
+	    CreateRangeCharts({
+		"selector" : "#range-info-div",
+		"reserved" : reserved,
+		"inuse"    : inuse,
+	    });
 	};
 	var xmlthing1 = sup.CallServerMethod(null, "rfrange", "ProjectRanges",
 					     {"pid" : this_pid});
@@ -2303,7 +2327,7 @@ $(function ()
 		    if (this_pid != $('#pid').val()) {
 			console.info("LoadRangeReservations: project changed " +
 				     "from " + current_pid +
-				     " to " + selected_pid);
+				     " to " + $('#pid').val());
 			LoadRangeReservations();
 			return;
 		    }
@@ -2359,12 +2383,15 @@ $(function ()
 	var index = 0;
 	var bail  = 0;
 
+	if (PreCheckClusterRows() || PreCheckRangeRows()) {
+	    return;
+	}
 	// List of reservation requests.
-	var clusters = _.values(GetClusterRows());
-	var ranges   = _.values(GetRangeRows());
-	var routes   = _.values(GetRouteRows());
+	var clusters = GetClusterRows();
+	var ranges   = GetRangeRows();
+	var routes   = GetRouteRows();
 
-	if (!_.size(clusters)) {
+	if (!_.size(clusters) && !_.size(routes)) {
 	    alert("Need at least one complete cluster definition");
 	    return;
 	}
@@ -2372,8 +2399,16 @@ $(function ()
 	    alert("Please provide the number of days");
 	    return;
 	}
+	var pid = (editing ? current_pid : $('#pid').val());
+	if (pid == "") {
+	    alert("Please select a project first");
+	    return;
+	}
+	var gid = (editing ? current_gid : $('#gid').val());
+	
 	// Remove old sanity check errors.
-	$('#reserve-request-form .form-group-sm').addClass("hidden");
+	$('#reserve-request-form .form-control-div .form-group-sm')
+	    .addClass("hidden");
 
 	// Clear old search result.
 	$("#reserve-request-form #start_day")
@@ -2381,378 +2416,67 @@ $(function ()
 	$("#reserve-request-form #end_day")
 	    .datepicker('setDate', null);
 	
-	// Sanity check.
-	for (var i = 0; i < clusters.length; i++) {
-	    var count = clusters[i].count;
-	    var urn   = clusters[i].cluster;
-	    var error;
-
-	    if (count == "") {
-		error = "Missing count";
-	    }
-	    else if (! (isNumber(count) && count > 0)) {
-		error = "Invalid count"
-	    }
-	    if (error) {
-		var uuid  = clusters[i].uuid;
-		var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
-		
-		tbody.find(".count-error label")
-		    .html(error);
-		tbody.find(".count-error")
-		    .removeClass("hidden");
-		bail = 1;
-	    }
-	}
-	for (var i = 0; i < ranges.length; i++) {
-	    var low   = ranges[i].freq_low;
-	    var high  = ranges[i].freq_high;
-	    var error;
-	    var classname;
-
-	    if (low == "") {
-		error = "Missing frequency";
-		classname = ".freq-low-error";
-	    }
-	    else if (! (isNumber(low) && low > 0)) {
-		error = "Invalid frequency"
-		classname = ".freq-low-error";
-	    }
-	    else if (high == "") {
-		error = "Missing frequency";
-		classname = ".freq-high-error";
-	    }
-	    else if (! (isNumber(high) && high > 0)) {
-		error = "Invalid frequency"
-		classname = ".freq-high-error";
-	    }
-	    if (error) {
-		var uuid  = ranges[i].uuid;
-		var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
-		
-		tbody.find(classname + " label")
-		    .html(error);
-		tbody.find(classname)
-		    .removeClass("hidden");
-		bail = 1;
-	    }
-	}
-	if (bail) {
-	    return;
-	}
 	console.info("FindFit: ", days, clusters, ranges, routes);
 
-	/*
-	 * Slightly cheesy way to wait for the cluster data to come in.
-	 */
-	var needwait = function () {
-	    var flag = 0;
-	    
-	    _.each(clusters, function (cluster) {
-		if (forecasts[cluster.cluster] === undefined) {
-		    flag = 1;
-		};
-	    });
-	    return flag;
+	var args = {
+	    "days"     : days,
+	    "pid"      : pid,
+	    "gid"      : gid,
+	    "clusters" : clusters,
+	    "ranges"   : ranges,
+	    "routes"   : routes
 	};
-	if (needwait()) {
-	    sup.ShowWaitWait("Waiting for cluster reservation data");
-	    var waitfordata = function() {
-		if (! needwait()) {
-		    sup.HideWaitWait();
-		    FindFit();
+	console.info("FindFit args: ", args);
+	aptforms.ClearFormErrors('#reserve-request-form');        
+
+	var callback = function (json) {
+	    console.info("FindFit response", json);
+	    if (json.code) {
+		if (json.code != 2) {
+		    sup.HideWaitWait(function () {
+		        sup.SpitOops("oops", json.value);		    
+		    });
 		    return;
-		}
-		setTimeout(function() { waitfordata() }, 200);
-	    };
-	    setTimeout(function() { waitfordata() }, 200);
-	    return;
-	}
-	/*
-	 * Oh, major cheesiness going on here. Take the route rows and
-	 * make it look like a cluster and add to the cluster list so that
-	 * we process the forecasts in that loop. Do I get a cookie?
-	 */
-	if (routeforecast != null) {
-	    _.each(routes, function (route) {
-		clusters.push({"cluster" : "busroutes",
-			       "type"    : route.routename,
-			       "count"   : 1});
-	    });
-	    forecasts["busroutes"] = routeforecast;
-	    console.info("extend", clusters);
-	}
-	
-	
-	/*
-	 * Find the first fit for a cluster reservation
-	 */
-	var findfirst = function (cluster, lower, upper) {
-	    var starttime = null;
-	    var startdata = null;
-	    var enddata   = null;
-	    var type      = cluster.type;
-	    var count     = cluster.count;
+	        }
+	        sup.HideWaitWait();
+		aptforms.GenerateFormErrors('#reserve-request-form',
+					    json.value);
+            }
+	    sup.HideWaitWait();
+	    var start = moment(json.value.start);
+	    var end   = moment(json.value.end);
 
-	    console.info("findfirst", type, count, lower);
+	    var start_day  = $('#reserve-request-form [name=start_day]').val();
+	    var start_hour = $('#reserve-request-form [name=start_hour]').val();
+	    var end_day    = $('#reserve-request-form [name=end_day]').val();
+	    var end_hour   = $('#reserve-request-form [name=end_hour]').val();
+	    var new_start_day  = start.format("MM/DD/YYYY");
+	    var new_start_hour = start.format("H");
+	    var new_end_day    = end.format("MM/DD/YYYY");
+	    var new_end_hour   = end.format("H");
 
-	    var tmp = forecasts[cluster.cluster][cluster.type].slice(0);
-	    console.info("tmp", tmp);
-	    while (tmp.length && starttime == null) {
-		var data = tmp.shift();
-		var free = data.free - data.unapproved;
-		if (free < 0) {
-		    free = 0;
-		}
-		//console.info("baz", data, free);
-		
-		if (free >= cluster.count) {
-		    starttime = data.t;
-		    startdata = data;
-		    //console.info("baz2", startdata, starttime, lower);
-		    if (lower) {
-			if (tmp.length) {
-			    var next = tmp[0];
-			    var nextfree = next.free - next.unapproved;
-			    if (nextfree < 0) {
-				nextfree = 0;
-			    }
-			    //console.info("foo", lower, nextfree, data, next);
+	    $('#reserve-request-form [name=start_day]')
+		.datepicker("setDate", new_start_day);
+	    $('#reserve-request-form [name=start_hour]')
+		.val(new_start_hour);
+	    $('#reserve-request-form [name=end_day]')
+		.datepicker("setDate", new_end_day);
+	    $('#reserve-request-form [name=end_hour]')
+		.val(new_end_hour);
 
-			    if (nextfree >= cluster.count &&
-				lower >= data.t && lower <= next.t) {
-				starttime = lower;
-				//console.info("fee1", starttime);
-			    }
-			    else if (data.t < lower) {
-				/*
-				 * See if the current item is long enough that we
-				 * can start here. Otherwise need to jump to next.
-				 */
-				if (lower <= next.t &&
-				    lower + (3600 * 24 * days) + 3600 < next.t) {
-				    starttime = lower;
-				    //console.info("fee2", starttime);
-				}
-				else {
-				    //console.info("bar");
-				    starttime = null;
-				    continue;
-				}
-			    }
-			}
-			else {
-			    // Last one, has enough nodes, just move past
-			    // lower bound and be done.
-			    if (starttime < lower) {
-				starttime = lower + 60;
-			    }
-			}
-		    }
-		    //console.info("boop", data, starttime);
-		    
-		    for (var i = 0; i < tmp.length; i++) {
-			var next = tmp[i];
-			var nextfree = next.free - next.unapproved;
-			if (nextfree < 0) {
-			    nextfree = 0;
-			}
-			if (nextfree >= cluster.count) {
-			    // The next time stamp still has enough nodes,
-			    // keep checking until no longer true, so we
-			    // have the biggest range possible.
-			    continue;
-			}
-			/*
-			 * Okay, next range no longer has enough nodes, but
-			 * if the current range is long enough, we are good.
-			 */
-			if (starttime + (3600 * 24 * days) + 3600 < next.t) {
-			    // The next time stamp is beyond the days requested,
-			    // so it fits.
-			    enddata = next;
-			    break;
-			}
-			// Otherwise, we no longer fit, need to start over.
-			starttime = null;
-			break;
-		    }
-		}
+	    // And if we actually changed anything.
+	    if (start_day != new_start_day || start_hour != new_start_hour) {
+		DateChange("start");
+		modified_callback();
 	    }
-	    var results =
-		{"starttime" : starttime,
-		 "startdata" : startdata,
-		 "endtime"   : (enddata ? enddata.t : null),
-		 "enddata"   : enddata,
-		};
-	    console.info("findfirst return", results);
-	    return results;
+	    if (end_day != new_end_day || end_hour != new_end_hour) {
+		DateChange("end")
+		modified_callback();
+	    }
 	};
-	var lower = (window.BISONLY ? NextBusinessDay().unix() : null);
-	var fit   = null;
-	var loops = 100;  // Avoid infinite loop.
-	
-	while (!fit && loops) {
-	    loops--;
-	    fit = findfirst(clusters[0], lower, null);
-	    if (!fit.starttime) {
-		break;
-	    }
-	    for (index = 1; index < clusters.length; index++) {
-		var results = findfirst(clusters[index],
-					fit["starttime"], null);
-		if (!results.starttime) {
-		    break;
-		}
-		console.info("fit:" + index,
-			     fit.starttime, fit.endtime,
-			     fit.startdata, fit.enddata);
-		
-		/*
-		 * If the first avail is beyond the current fit, need
-		 * to start over.
-		 */
-		if (fit["endtime"] && results["starttime"] > fit["endtime"]) {
-		    console.info("skip1");
-		    fit   = null;
-		    lower = results["starttime"];
-		    break;
-		}
-		// Narrow to newest fit.
-		if (results["starttime"] > fit["starttime"]) {
-		    fit["starttime"] = results["starttime"];
-		}
-		if (results["endtime"] &&
-		    (!fit["endtime"] || results["endtime"] < fit["endtime"])) {
-		    fit["endtime"] = results["endtime"];
-		}
-		// If too narrow, have to keep going.
-		if (fit["endtime"] &&
-		    (fit["endtime"] - fit["starttime"] < 
-		     (3600 * 24 * days) + 3600)) {
-		    console.info("skip2");
-		    fit   = null;
-		    lower = fit["starttime"];
-		    break;
-		}
-	    }
-	    if (!fit || _.size(ranges) == 0) {
-		continue;
-	    }
-	    // Set lower in case we have to go around again, we bump it below.
-	    lower = fit["starttime"];
-	    
-	    /*
-	     * Ok, we have something that works for the clusters, lets look
-	     * at the ranges. This is a bit easier since current ranges
-	     * include both a start and end time. So if the current fit
-	     * above conflicts with a range we want, start over at the end
-	     * of the conflicting range. 
-	     */
-	    for (index = 0; index < ranges.length; index++) {
-		var range     = ranges[index];
-		var freq_low  = parseFloat(range.freq_low);
-		var freq_high = parseFloat(range.freq_high);
-
-		console.info("Range:" + index, freq_low, freq_high);
-
-		for (var r = 0; r < allranges.length; r++) {
-		    var existing = allranges[r];
-		    var low      = parseFloat(existing.freq_low);
-		    var high     = parseFloat(existing.freq_high);
-		    var starts   = moment(existing.start).unix();
-		    var ends     = moment(existing.end).unix();
-		    var fitend   = fit.starttime + (3600 * 24 * days) + 3600;
-
-		    console.info("Existing:" + r, low,high,starts,ends);
-
-		    // If this range does not overlap in time, keep going
-		    if ((fit.starttime < starts && fitend < starts) ||
-			(fit.starttime > ends)) {
-			continue;
-		    }
-		    // If this range does not overlap in frequency, keep going
-		    if ((freq_low < low && freq_high < low) ||
-			(freq_low > high)) {
-			continue;
-		    }
-		    // Does not fit!
-		    console.info("Range does not fit");
-		    fit   = null;
-		    break;
-		}
-		// No point in continuing, start over.
-		if (!fit) {
-		    lower = lower + (3600 * 4);
-		    break;
-		}
-	    }
-	}
-	// enddata can be null if we fit on the last timeline entry.
-	console.info("FindFit: ", fit);
-	if (!fit.starttime) {
-	    console.info("No fit");
-	    $("#reserve-request-form #start_day")
-		.datepicker('setDate', null);
-	    $("#reserve-request-form #end_day")
-		.datepicker('setDate', null);
-	    alert("Could not find a time that works!");
-	    return;
-	}
-	var starttime = fit.starttime;
-	var endtime   = fit.endtime;
-
-	var start = moment(starttime * 1000);
-	/*
-	 * Need to push out the start to the top of hour.
-	 */
-	var minutes = (start.hours() * 60) + start.minutes();
-	start.hour(Math.ceil(minutes / 60));
-
-	/*
-	 * Try to shift the reservation from the middle of the night.
-	 * It is okay if we cannot do this, we still want to give the
-	 * user the earliest possible reservation.
-	 */
-	if (!window.BISONLY && start.hour() < IDEAL_STARTHOUR) {
-	    var tmp = moment(start);
-	    tmp.hour(IDEAL_STARTHOUR);
-
-	    // If no enddata then we can definitely shift it.
-	    if (!endtime || tmp.unix() + ((3600 * 24 * days)) < endtime) {
-		console.info("Shifting to later start time");
-		start = tmp;
-	    }
-	}
-	var end = moment(start.valueOf() + ((3600 * 24 * days) * 1000));
-
-	var start_day  = $('#reserve-request-form [name=start_day]').val();
-	var start_hour = $('#reserve-request-form [name=start_hour]').val();
-	var end_day    = $('#reserve-request-form [name=end_day]').val();
-	var end_hour   = $('#reserve-request-form [name=end_hour]').val();
-	var new_start_day  = start.format("MM/DD/YYYY");
-	var new_start_hour = start.format("H");
-	var new_end_day    = end.format("MM/DD/YYYY");
-	var new_end_hour   = end.format("H");
-
-	$('#reserve-request-form [name=start_day]')
-	    .datepicker("setDate", new_start_day);
-	$('#reserve-request-form [name=start_hour]')
-	    .val(new_start_hour);
-	$('#reserve-request-form [name=end_day]')
-	    .datepicker("setDate", new_end_day);
-	$('#reserve-request-form [name=end_hour]')
-	    .val(new_end_hour);
-
-	// And if we actually changed anything.
-	if (start_day != new_start_day || start_hour != new_start_hour) {
-	    DateChange("start");
-	    modified_callback();
-	}
-	if (end_day != new_end_day || end_hour != new_end_hour) {
-	    DateChange("end")
-	    modified_callback();
-	}
+	sup.ShowWaitWait(undefined, undefined, function () {
+	    sup.CallServerMethod(null, "resgroup", "FindFirstFit", args, callback);
+	});
     }
 
     //
@@ -2847,6 +2571,12 @@ $(function ()
 		    }
 		});
 	    }
+            // Update NBD in the modals.
+            if (_.has(results, "nbd")) {
+                var nbd = moment(results['nbd']);
+                $('.adjustedNBD').text(nbd.format("ddd MMM Do hA"));
+            }
+            
 	    if (needsApproval) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
@@ -2862,8 +2592,10 @@ $(function ()
 		    $('#confirm-reservation .needs-approval-noconflict')
 			.removeClass("hidden");
 		}
-		if (!StartTimeOkay()) {
-		    return;
+
+                if (_.has(results, 'toosoon') && results['toosoon'] != 0) {
+	            sup.ShowModal('#toosoon-modal');
+                    return;
 		}
 	    }
 	    else {
@@ -2872,6 +2604,29 @@ $(function ()
 	    }
 	    // User can submit.
 	    ToggleSubmit(true, "submit");
+
+	    if (isadmin) {
+		$('#commit-reservation').removeAttr("disabled");
+		$('#confirm-reservation .res-warnings-div').addClass("hidden");
+	    }
+	    else {
+		// Various warnings based on sharing setting.
+		var pid = (editing ? current_pid : $('#pid').val());
+
+		$('#confirm-reservation .res-warnings').addClass("hidden");
+		if (projlist[pid].resmode == "project") {
+		    $('#confirm-reservation .per-project-reservations')
+			.removeClass("hidden");
+		}
+		else if (projlist[pid].resmode == "group") {
+		    $('#confirm-reservation .per-group-reservations')
+			.removeClass("hidden");
+		}
+		else if (projlist[pid].resmode == "user") {
+		    $('#confirm-reservation .per-user-reservations')
+			.removeClass("hidden");
+		}
+	    }
 	    sup.ShowModal('#confirm-reservation');
 	};
 	var args = {
@@ -2885,12 +2640,15 @@ $(function ()
 	    }
 	}
 	// Clear (hide) previous cluster table errors
-	$('#reserve-request-form .form-group-sm').addClass("hidden");
 	$('#reserve-request-form tbody')
 	    .removeClass("has-warning has-error");
 	$('#reserve-request-form .form-control-div')
 	    .removeClass("has-warning has-error");
-	
+	$('#reserve-request-form .form-control-div .form-group-sm')
+	    .addClass("hidden");	
+	$('#reserve-request-form .error-row')
+	    .addClass("hidden");
+
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
 			    "Validate", callback,
 			    "Checking to see if your request can be "+
@@ -3010,10 +2768,14 @@ $(function ()
 	    }
 	}
 	// Clear (hide) previous cluster table errors
-	$('#reserve-request-form .form-group-sm').addClass("hidden");
 	$('#reserve-request-form tbody')
 	    .removeClass("has-warning has-error");
 	$('#reserve-request-form .form-control-div')
+	    .removeClass("has-warning has-error");
+	$('#reserve-request-form .form-control-div .form-group-sm')
+	    .addClass("hidden");	
+	$('#reserve-request-form .error-row')
+	    .addClass("hidden")
 	    .removeClass("has-warning has-error");
 
 	aptforms.SubmitForm('#reserve-request-form', "resgroup",
@@ -3056,6 +2818,11 @@ $(function ()
 	    $('#reserve-request-form [name=days]')
 		.val(days.toFixed(1));
 	    $('#reserve-created').html(moment(details.created).format("lll"));
+	    if (details.approval) {
+		$('#reserve-approved')
+		    .html(moment(details.approval).format("lll"));
+		$('#reserve-approved-div').removeClass("hidden");
+	    }
 
 	    // Add cluster rows as needed.
 	    if (_.size(details.clusters)) {
@@ -3086,10 +2853,13 @@ $(function ()
 		    $('#cluster-table').append(row);
 		});
 		UpdateClustersTable(details);
-		$('#cluster-table .add-cluster').click(function (event) {
-		    AddClusterRow();
-		});
-		$('#cluster-table .add-cluster').last().removeClass("hidden");
+		if (canEnlarge()) {
+		    $('#cluster-table .add-cluster').click(function (event) {
+			AddClusterRow();
+		    });
+		    $('#cluster-table .add-cluster').last()
+			.removeClass("hidden");
+		}
 		// Move the first cluster to the top.
 		if (window.ISPOWDER || window.ISCLOUD) {
 		    var first = _.first(_.values(details.clusters));
@@ -3097,8 +2867,8 @@ $(function ()
 		    ReorderGraphs(first.cluster_urn);
 		}
 	    }
-	    else {
-		// Always show an empty cluster row.
+	    else if (canEnlarge()) {
+		// Show an empty cluster row.
 		AddClusterRow();
 	    }
 
@@ -3126,19 +2896,18 @@ $(function ()
 		    $('#range-table').append(row);
 		});
 		UpdateRangeTable(details);
-		$('#range-table .add-range').click(function (event) {
-		    AddRangeRow();
-		});
-		$('#range-table .add-range').last().removeClass("hidden");
+		if (canEnlarge()) {
+		    $('#range-table .add-range').click(function (event) {
+			AddRangeRow();
+		    });
+		    $('#range-table .add-range').last().removeClass("hidden");
+		}
 		if (window.ISADMIN) {
 		    $('#override-checkbox').removeClass("hidden");
 		}
 	    }
-	    else {
-		// Always show an empty range row.
-		if (window.ISPOWDER) {
-		    AddRangeRow();
-		}
+	    else if (window.ISPOWDER && canEnlarge()) {
+		AddRangeRow();
 	    }
 
 	    // Add route rows as needed.
@@ -3163,25 +2932,23 @@ $(function ()
 		    $('#route-table').append(row);
 		});
 		UpdateRouteTable(details);
-		$('#route-table .add-route').click(function (event) {
-		    AddRouteRow();
-		});
-		$('#route-table .add-route').last().removeClass("hidden");
-
+		if (canEnlarge()) {
+		    $('#route-table .add-route').click(function (event) {
+			AddRouteRow();
+		    });
+		    $('#route-table .add-route').last().removeClass("hidden");
+		}
 		if (fakeroutes) {
 		    $('#allroutes-checkbox').prop("checked", true);
 		    SetupFakeRoutes();
 		}
 	    }
-	    else {
-		// Always show an empty route row.
-		if (window.ISPOWDER && window.DOROUTES) {
-		    if (fakeroutes) {
-			SetupFakeRoutes();
-		    }
-		    else {
-			AddRouteRow();
-		    }
+	    else if (window.ISPOWDER && window.DOROUTES && canEnlarge()) {
+		if (fakeroutes) {
+		    SetupFakeRoutes();
+		}
+		else {
+		    AddRouteRow();
 		}
 	    }
 
@@ -3207,6 +2974,7 @@ $(function ()
 	    else {
 		$('#reserve-requestor').html(details.uid);
 	    }
+	    
 	    // Ditto the project.
 	    if (_.has(details, 'pid_idx')) {
 		$('#pid').html(
@@ -3218,13 +2986,42 @@ $(function ()
 		$('#pid').html(details.pid);
 	    }
 	    current_pid = details.pid;
+	    // Indicate what the sharing mode for the project is.
+	    $('#pid-resmode').html(details.shared_reservations);
+
+	    // And the group.
+	    if (details.shared_reservations == "group") {
+		if (details.gid_idx != details.pid_idx) {
+		    $('#gid').html(
+			"<a target=_blank href='show-group.php?group=" +
+			    details.gid_idx + "'>" +
+			    details.gid + "</a>");
+		}
+		else {
+		    $('#gid').html(details.gid);
+		}
+		$('#group-div').removeClass("hidden");
+	    }
+	    current_gid = details.gid;
 	    
 	    if (isadmin) {
+		if (details.idledetection) {
+		    $('#idle-detection-checkbox').prop("checked", true);
+		}
+		else {
+		    $('#idle-detection-checkbox').prop("checked", false);
+		}
+		$('#idle-detection-checkbox').change(function(event) {
+		    ToggleIdleDetection();
+		});
+		$('#idle-detection-checkbox-div').removeClass("hidden");
+		
 		/*
 		 * If this is an admin looking at an unapproved reservation,
-		 * show the approve button
+		 * show the approve button. A canceled reservation is obviously
+		 * approved.
 		 */
-		if (details.status != "approved") {
+		if (details.status != "approved" && details.status != "canceled") {
 		    $('#reserve-approve-button')
 			.removeClass("hidden")
 			.removeAttr("disabled")
@@ -3233,16 +3030,6 @@ $(function ()
 			    Approve();
 			});
 		}
-		else {
-		    if (details.idledetection) {
-			$('#idle-detection-checkbox').prop("checked", true);
-		    }
-		    else {
-			$('#idle-detection-checkbox').prop("checked", false);
-		    }
-		    $('#idle-detection-checkbox-div').removeClass("hidden");
-		}
-		
 		var now   = new Date();
 		var start = new Date(details.start);
 
@@ -3259,6 +3046,18 @@ $(function ()
 			$('#reserve-uncancel-button').removeClass("hidden");
 		    }
 		}
+
+                /*
+                 * Admins get a button to clear the start date/time so the
+                 * reservation can be rescheduled to start immediately.
+                 */
+                $("#clear-starttime").click(function (event) {
+                    event.preventDefault();
+		    $('#reserve-request-form [name=start_hour]').val("");
+		    $('#reserve-request-form [name=start_day]').val("");
+	            UpdateFormTime("start");
+		    modified_callback();
+                });
 	    }
 	    if (details.forclass) {
 		$('#for-class').prop("checked", true);
@@ -3266,10 +3065,12 @@ $(function ()
 		$('#for-class').attr("readonly", 'readonly');
 		$('#for-class-checkbox').removeClass("hidden");
 	    }
-	    if (details.status == "approved") {
-		$('#unapproved-warning').addClass("hidden");
+	    
+	    $('#canceled-warning, #unapproved-warning').addClass("hidden");
+	    if (details.status === "canceled") {
+		$('#canceled-warning').removeClass("hidden");
 	    }
-	    else {
+	    else if (details.status !== "approved") {
 		$('#unapproved-warning').removeClass("hidden");
 	    }
 	    
@@ -3281,11 +3082,12 @@ $(function ()
 	    $('#reserve-refresh-button').removeAttr("disabled");
 
 	    // Now we can load the graph since we know the project.
-	    LoadReservations(details.pid);
+	    LoadReservations(details.pid, details.uid);
 	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
-			     {"uuid"    : window.UUID},
+			     {"uuid"    : window.UUID,
+			      "withhistory" : true},
 			     callback);
     }
 
@@ -3314,6 +3116,7 @@ $(function ()
 	    var uuid  = res.remote_uuid;
 	    var tbody = $('#cluster-table tbody[data-uuid="' + uuid + '"]');
 	    var newClass = "";
+	    var newHtml  = "";
 
 	    // Update the hidden using count.
 	    if (details.active && res.using != null) {
@@ -3323,56 +3126,39 @@ $(function ()
 	    if (operationResults &&
 		_.has(operationResults, uuid) &&
 		operationResults[uuid].errcode) {
-		tbody.find(".reservation-error span label")
-		    .html(operationResults[uuid].errmesg);
+		newHtml  = operationResults[uuid].errmesg;
+		newClass = "has-error";
+	    }
+	    else if (res.deleted) {
+		newHtml  = "The reservation above has been deleted" +
+		    (!res.deleted_pushed ?
+		     " but the cluster is not reachable" : "");
 		newClass = "has-error";
 	    }
 	    else if (!res.approved) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above has not been approved yet");
+		newHtml  = "The reservation above has not been approved yet";
 		newClass = "has-warning";
 	    }
 	    else if (!res.approved_pushed) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above is approved but the cluster " +
-			  "is not reachable");
+		newHtml  = "The reservation above is approved but the " +
+		    "cluster is not reachable";
 		newClass = "has-warning";
 	    }
 	    else if (res.canceled) {
 		var when = moment(res.canceled).format("lll");
-		tbody.find(".reservation-error span label")
-  		   .html("The reservation above is scheduled to be canceled " +
-		         "at " + when +
-			 (!res.canceled_pushed ?
-			  " but the cluster is not reachable" : ""));
+		newHtml  = "The reservation above is scheduled to be " +
+		    "canceled at " + when +
+		    (!res.canceled_pushed ?
+		     " but the cluster is not reachable" : "");
 		newClass = "has-error";
 	    }
 	    else if (res.cancel_canceled) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above has been un-canceled" +
-			  " but the cluster is not reachable");
+		newHtml  = "The reservation above has been un-canceled " +
+		    "but the cluster is not reachable";
 		newClass = "has-error";
 	    }
-	    else if (res.deleted) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above has been deleted" +
-			  (!res.deleted_pushed ?
-			   " but the cluster is not reachable" : ""));
-		newClass = "has-error";
-	    }
-	    if (newClass == "") {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
-		tbody.removeClass("has-warning has-error");
-	    }
-	    else {
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning has-error")
-		    .addClass(newClass)
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass(newClass);
-	    }
+	    SetClusterError(tbody, newHtml, newClass);
+
 	    // Watch for underused.
 	    if (details.active && res.approved && details.using != null && 
 		res.using < res.count) {
@@ -3395,16 +3181,43 @@ $(function ()
 	else {
 	    $('#cluster-table .delete-reservation').removeClass("hidden");
 	}
-	// If no new reservations have been added, need to display
-	// add button on last existing reservation.
-	if ($('#cluster-table tbody.new-cluster').length == 0) {
-	    $('#cluster-table tbody.existing-cluster .add-cluster')
-		.addClass("hidden");
-	    $('#cluster-table tbody.existing-cluster .add-cluster')
-		.last().removeClass("hidden");
+	if (canEnlarge()) {
+	    // If no new reservations have been added, need to display
+	    // add button on last existing reservation.
+	    if ($('#cluster-table tbody.new-cluster').length == 0) {
+		$('#cluster-table tbody.existing-cluster .add-cluster')
+		    .addClass("hidden");
+		$('#cluster-table tbody.existing-cluster .add-cluster')
+		    .last().removeClass("hidden");
+	    }
 	}
 	// Add append history graphs under the reservation panel
 	DrawHistoryGraphs(details);
+	DrawUtilizationTable(details);
+    }
+    // Helper function to set/clear warning/error.
+    function SetClusterError(tbody, html, newclass)
+    {
+	console.info("setClusterError", tbody, html, newclass);
+	
+	if (html === undefined) {
+	    html = "";
+	}
+	tbody.find(".error-row span label").html(html);
+	
+	if (newclass === undefined || newclass == "") {
+	    tbody.find(".error-row")
+		.addClass("hidden");
+	    tbody.removeClass("has-warning has-error");
+	}
+	else {
+	    tbody.removeClass("has-warning has-error")
+		.addClass(newclass);
+	    tbody.find(".error-row")
+		.removeClass("has-warning has-error")
+		.addClass(newclass)
+		.removeClass("hidden");
+	}
     }
 
     /*
@@ -3434,50 +3247,59 @@ $(function ()
 	    var uuid  = res.freq_uuid;
 	    var tbody = $('#range-table tbody[data-uuid="' + uuid + '"]');
 	    var newClass = "";
+	    var newHtml  = "";
 
 	    if (operationResults &&
 		_.has(operationResults, uuid) &&
 		operationResults[uuid].errcode) {
-		tbody.find(".reservation-error span label")
-		    .html(operationResults[uuid].errmesg);
+		newHtml  = operationResults[uuid].errmesg;
 		newClass = "has-error";
 	    }
 	    else if (!res.approved) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above has not been approved yet");
+		newHtml  = "The reservation above has not been approved yet";
 		newClass = "has-warning";
 	    }
 	    else if (res.canceled) {
-		var when = moment(res.canceled).format("lll");
-		tbody.find(".reservation-error span label")
-  		   .html("The reservation above is scheduled to be canceled " +
-		         "at " + when);
+		newHtml  = "The reservation above is scheduled to be " +
+		    "canceled at " + moment(res.canceled).format("lll");
 		newClass = "has-error";
 	    }
-	    if (newClass == "") {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
-		tbody.removeClass("has-warning has-error");
-	    }
-	    else {
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning has-error")
-		    .addClass(newClass)
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass(newClass);
-	    }
+	    SetRangeError(tbody, newHtml, newClass);
 	});
 	// Always display delete button on existing ranges,
 	$('#range-table .existing-range .delete-range').removeClass("hidden");
 
-	// If no new reservations have been added, need to display
-	// add button on last existing reservation.
-	if ($('#range-table tbody.new-range').length == 0) {
-	    $('#range-table tbody.existing-range .add-range')
+	if (canEnlarge()) {
+	    // If no new reservations have been added, need to display
+	    // add button on last existing reservation.
+	    if ($('#range-table tbody.new-range').length == 0) {
+		$('#range-table tbody.existing-range .add-range')
+		    .addClass("hidden");
+		$('#range-table tbody.existing-range .add-range')
+		    .last().removeClass("hidden");
+	    }
+	}
+    }
+    // Helper function to set/clear warning/error.
+    function SetRangeError(tbody, html, newclass)
+    {
+	if (html == undefined) {
+	    html = "";
+	}
+	tbody.find(".reservation-error span label").html(html);
+	
+	if (newclass === undefined || newclass == "") {
+	    tbody.find(".error-row")
 		.addClass("hidden");
-	    $('#range-table tbody.existing-range .add-range')
-		.last().removeClass("hidden");
+	    tbody.removeClass("has-warning has-error");
+	}
+	else {
+	    tbody.removeClass("has-warning has-error")
+		.addClass(newclass);
+	    tbody.find(".error-row")
+		.removeClass("has-warning has-error")
+		.addClass(newclass)
+		.removeClass("hidden");
 	}
     }
 
@@ -3508,50 +3330,81 @@ $(function ()
 	    var uuid  = res.route_uuid;
 	    var tbody = $('#route-table tbody[data-uuid="' + uuid + '"]');
 	    var newClass = "";
+	    var newHtml  = "";
 
 	    if (operationResults &&
 		_.has(operationResults, uuid) &&
 		operationResults[uuid].errcode) {
-		tbody.find(".reservation-error span label")
-		    .html(operationResults[uuid].errmesg);
+		newHtml  = operationResults[uuid].errmesg;
 		newClass = "has-error";
 	    }
 	    else if (!res.approved) {
-		tbody.find(".reservation-error span label")
-		    .html("The reservation above has not been approved yet");
+		newHtml  = "The reservation has not been approved yet";
 		newClass = "has-warning";
 	    }
 	    else if (res.canceled) {
 		var when = moment(res.canceled).format("lll");
-		tbody.find(".reservation-error span label")
-  		   .html("The reservation above is scheduled to be canceled " +
-		         "at " + when);
+		newHtml  = "The reservation is scheduled to be canceled " +
+		    "at " + when;
 		newClass = "has-error";
 	    }
-	    if (newClass == "") {
-		tbody.find(".reservation-error span")
-		    .addClass("hidden");
-		tbody.removeClass("has-warning has-error");
-	    }
-	    else {
-		tbody.find(".reservation-error span")
-		    .removeClass("has-warning has-error")
-		    .addClass(newClass)
-		    .removeClass("hidden");
-		tbody.removeClass("has-warning has-error")
-		    .addClass(newClass);
-	    }
+	    SetRouteError(tbody, newHtml, newClass);
 	});
 	// Always display delete button on existing routes
 	$('#route-table .existing-route .delete-route').removeClass("hidden");
 
-	// If no new reservations have been added, need to display
-	// add button on last existing reservation.
-	if ($('#route-table tbody.new-route').length == 0) {
-	    $('#route-table tbody.existing-route .add-route')
-		.addClass("hidden");
-	    $('#route-table tbody.existing-route .add-route')
-		.last().removeClass("hidden");
+	if (canEnlarge()) {
+	    // If no new reservations have been added, need to display
+	    // add button on last existing reservation.
+	    if ($('#route-table tbody.new-route').length == 0) {
+		$('#route-table tbody.existing-route .add-route')
+		    .addClass("hidden");
+		$('#route-table tbody.existing-route .add-route')
+		    .last().removeClass("hidden");
+	    }
+	}
+    }
+    // Helper functions to set/clear warning/error.
+    function SetRouteError(tbody, html, newclass)
+    {
+	if (html == undefined) {
+	    html = "";
+	}
+	if (fakeroutes) {
+	    $('#allroutes-error').html(html);
+	}
+	else {
+	    tbody.find(".reservation-error span label").html(html);
+	}
+	if (newclass === undefined || newclass == "") {
+	    if (fakeroutes) {
+		$('#allroutes-error')
+		    .removeClass("text-warning text-danger")
+		    .addClass("hidden");
+	    }
+	    else {
+		tbody.find(".error-row")
+		    .addClass("hidden");
+		tbody.removeClass("has-warning has-error");
+	    }
+	}
+	else {
+	    if (fakeroutes) {
+		var lc = (newclass == "has-error" ?
+			  "text-danger" : "text-warning");
+		$('#allroutes-error')
+		    .removeClass("text-warning text-danger")
+		    .addClass(lc)
+		    .removeClass("hidden");
+	    }
+	    else {
+		tbody.removeClass("has-warning has-error")
+		    .addClass(newclass);
+		tbody.find(".error-row")
+		    .removeClass("has-warning has-error")
+		    .addClass(newclass)
+		    .removeClass("hidden");
+	    }
 	}
     }
 
@@ -3577,16 +3430,19 @@ $(function ()
 	    if (resgroup.status == "approved" && isadmin) {
 		$('#reserve-approve-button').addClass("hidden");
 	    }
-	    if (resgroup.status == "approved") {
-		$('#unapproved-warning').addClass("hidden");
+	    $('#canceled-warning, #unapproved-warning').addClass("hidden");
+	    if (resgroup.status === "canceled") {
+		$('#canceled-warning').removeClass("hidden");
 	    }
-	    else {
+	    else if (resgroup.status !== "approved") {
 		$('#unapproved-warning').removeClass("hidden");
 	    }
 	};
 	sup.CallServerMethod(null, "resgroup",
 			     "GetReservationGroup",
-			     {"uuid"    : window.UUID}, callback);
+			     {"uuid"    : window.UUID,
+			      "withhistory" : true},
+			     callback);
     }
 
     /*
@@ -3613,9 +3469,9 @@ $(function ()
     /*
      * Delete a reservation. Might be a group, or a single row in a group
      */
-    function Delete(row)
+    function Delete(row, allroutes)
     {
-	console.info("Delete", row);
+	console.info("Delete", row, allroutes);
 	
 	var callback = function(json) {
 	    sup.HideWaitWait();
@@ -3636,36 +3492,26 @@ $(function ()
 	if (row !== undefined) {
 	    args["reservation_uuid"] = $(row).attr('data-uuid');
 	}
+	else if (allroutes !== undefined) {
+	    args["allroutes"] = 1;
+	}
 	console.info("Delete", args);
-	
-	// Bind the confirm button in the modal. Do the deletion.
-	$('#delete-reservation-modal #confirm-delete').click(function (e) {
-	    e.preventDefault();
-	    sup.HideModal('#delete-reservation-modal', function () {
-		args["reason"] = $('#delete-reason').val();
-		sup.ShowWaitWait();
-		var xmlthing = sup.CallServerMethod(null, "resgroup",
-						    "Delete", args);
-		xmlthing.done(callback);
-	    });
-	});
-	// Helper for common issue;
-	$('#delete-reservation-modal .nolongerfits').click(function (e) {
-	    e.preventDefault();
-	    $('#delete-reason').val("This reservation no longer fits the " +
-				    "schedule. Please login and create a " +
-				    "new one, and we will get it approved " +
-				    "as soon as possible.");
-	});
-	
-	// Handler so we know the user closed the modal. We need to
-	// clear the confirm button handler.
-	$('#delete-reservation-modal').on('hidden.bs.modal', function (e) {
-	    $('#delete-reservation-modal #confirm-delete').unbind("click");
-	    $('#delete-reservation-modal .nolongerfits').unbind("click");
-	    $('#delete-reservation-modal').off('hidden.bs.modal');
-	})
-	sup.ShowModal("#delete-reservation-modal");
+
+        sup.ShowConfirmModal('#delete-reservation-modal',
+                             // Confirm
+                             function () {
+		                 args["reason"] = $('#delete-reason').val();
+		                 sup.ShowWaitWait();
+                                 sup.CallServerMethod(null, "resgroup",
+						      "Delete", args, callback);
+                             },
+                             // Cancel
+                             function () {
+                                 // Reset this back to checked
+                                 if (allroutes !== undefined) {
+		                     $('#allroutes-checkbox').prop("checked", true);
+                                 }
+                             });
     }
 
     /*
@@ -3674,7 +3520,7 @@ $(function ()
     function Approve()
     {
 	var callback = function (json) {
-	    console.info(json);
+	    console.info("Approve: ", json);
 	    sup.HideModal('#waitwait-modal');
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
@@ -3682,8 +3528,12 @@ $(function ()
 	    }
 	    $('#override-checkbox').prop("checked", false);	    
 	    RefreshTables(json.value);
-	    LoadRangeReservations();
-	    LoadRouteReservations();
+	    if (window.ISPOWDER) {
+		LoadRangeReservations();
+		if (window.DOROUTES) {
+		    LoadRouteReservations();
+		}
+	    }
 	};
 	var args = {
 	    "uuid"    : window.UUID,
@@ -3876,6 +3726,11 @@ $(function ()
 	row.find(".hardware-select")	
 	    .html("<option value=''>Select Hardware</option>" + options);
 
+	if (window.ISPOWDER) {
+	    // Clear any radio/OTA warning.
+	    $(".ota-row").addClass("hidden");
+	}
+	
 	ReorderGraphs(selected_cluster);
 	modified_callback();
     }
@@ -3928,6 +3783,29 @@ $(function ()
 		    .prop("readonly", false);
 	    }
 	}
+	if (window.ISPOWDER) {
+	    var pid = (editing ? current_pid : $('#pid').val());
+
+	    /*
+	     * When selecting a type, look to see if its a radio and if
+	     * the project has OTA permission. We will add a warning label
+	     * immediately. 
+	     */
+	    $(row).find(".ota-row").addClass("hidden");
+
+	    // Flag for project change, etc.
+	    $(row).removeClass("isradio");
+	    
+	    if (isRadio(selected_cluster, selected_type)) {
+		$(row).addClass("isradio");
+		
+		if (!otaStuff.HasOtaPermission(pid)) {
+		    console.info("Need OTA permission");
+		    $(row).find(".ota-row").removeClass("hidden");
+		}
+	    }
+	    CheckAllRangesAgainstRadios();
+	}
 	RegenCombinedGraph();
 	modified_callback();
     }
@@ -3967,6 +3845,90 @@ $(function ()
     }
 
     /*
+     * Project change tasks.
+     */
+    function HandleProjectChange()
+    {
+	var pid = $('#pid').val();
+	var groups = projlist[pid].groups;
+
+	// Project managers can set the for class checkbox
+	if (projlist[pid].resmode != "user") {
+	    if (isadmin || managerlist[pid]) {
+		$('#for-class-checkbox').removeClass("hidden");
+	    }
+	    else {
+		$('#for-class-checkbox').addClass("hidden");
+	    }
+	}
+	else {
+	    $('#for-class-checkbox').addClass("hidden");
+	}
+	// Indicate what the sharing mode for the project is.
+	$('#pid-resmode').html(projlist[pid].resmode);
+
+	// Group selector, but hidden if no sub groups. 
+	var html = "";
+	_.each(groups, function(gid) {
+	    html += "<option value='" + gid + "'>" + gid + "</option>";
+	});
+	$('#group-div select').html(html);
+
+	if (groups.length == 1) {
+	    $('#group-div').addClass("hidden");
+	}
+	else if (projlist[pid].resmode == "group") {
+	    $('#group-div').removeClass("hidden");
+	}
+	else {
+	    $('#group-div').addClass("hidden");
+	}	    
+
+	if (window.ISPOWDER) {
+	    // Clear/Set OTA warning. Messy.
+
+	    if (otaStuff.HasOtaPermission(pid)) {
+		// All rows for nodes, ranges and routes.
+		$('.ota-row').addClass("hidden");
+		
+		// Special all routes case.
+		if (fakeroutes) {
+		    $('#allroutes-ota-warning').addClass("hidden");
+		}
+	    }
+	    else {
+		// Only radios
+		$('tbody.isradio .ota-row').removeClass("hidden");
+
+		// And non-zero ranges
+		$('tbody.new-range').each(function () {
+		    var low = $(this).find(".freq-low").val();
+
+		    if (low != "") {
+			$(this).find('.ota-row').removeClass("hidden");
+		    }
+		});
+
+		// Special all routes case.
+		if (fakeroutes) {
+		    if ($('#allroutes-checkbox').is(":checked")) {
+			$('#allroutes-ota-warning').removeClass("hidden");
+		    }
+		}
+		else {
+		    $('tbody.new-route').each(function () {
+			var name = $(this).find(".routename").val();
+	    
+			if (name != "") {
+			    $(this).find(".ota-row").removeClass("hidden");
+			}
+		    });
+		}
+	    }
+	}
+    }
+
+    /*
      * Routes and FEs and Radios make this harder then it used to be.
      */
     function ReorderGraphs(which)
@@ -3977,7 +3939,7 @@ $(function ()
 	if (which == "routes") {
 	    graphid = "route-graph-div";
 	}
-	else if (which == "ranges") {
+	else if (0 && which == "ranges") {
 	    graphid = "range-info-div";
 	}
 	else {
@@ -4029,6 +3991,40 @@ $(function ()
 	buttonstate = which;
     }
 
+    /*
+     *
+     */
+    function DrawUtilizationTable(details)
+    {
+	var html = "";
+
+	if (!details.active) {
+	    return;
+	}
+	_.each(details.clusters, function (res) {
+	    var type   = res.type;
+	    var name   = amlist[res.cluster_urn].name;
+	    var using  = res.using;
+	    var util   = res.utilization;
+
+	    // No usage yet
+	    if (using == null) {
+		using = 0;
+		util  = 0;
+	    }
+
+	    html +=
+		'<tr>' +
+		' <td>' + name + '</td>' +
+		' <td>' + type + '</td>' +
+		' <td>' + using + '</td>' +
+		' <td>' + util + '%</td>' +
+		'</tr>';
+	});
+	$('#utilization-table tbody').html(html);
+	$('#utilization-div').removeClass("hidden");
+    }
+
     // Draw the history bar graph.
     function DrawHistoryGraphs(details)
     {
@@ -4068,6 +4064,9 @@ $(function ()
 	    res["start"]      = details.start;
 	    res["end"]        = details.end;
 	    res["nodes"]      = res.count;
+	    res["pid"]        = details.pid;
+	    res["gid"]        = details.gid;
+	    res["mode"]       = details.shared_reservations;
 	    
 	    window.DrawResHistoryGraph({"details"  : res,
 					"graphid"  : '#' + graphid});
@@ -4101,8 +4100,10 @@ $(function ()
 	    combinedForecasts[id] = forecasts[urn][type];
 	})
 	if (fakeroutes) {
-	    // Pick any route and use it, renamed.
-	    if ($('#allroutes-checkbox').is(":checked")) {
+	    // Pick any route and use it, renamed. Note that we still have
+	    // to deal with the reservations not being available yet.
+	    if ($('#allroutes-checkbox').is(":checked") &&
+		_.has(routeforecast, "Orange")) {
 		combinedForecasts["mobile"] = routeforecast["Orange"];
 	    }
 	}
@@ -4135,11 +4136,16 @@ $(function ()
 		      "selector"       : "combined-resgraph",
 		      "skiptypes"      : {},
 		      "colors"         : RouteColors,
-		      "widebrush"      : true,
+		      "widebrush"      : false,
 		      "unapproved"     : true,
 		      "click_callback" : function(when, type) {
 			  if (!editing) {
 			      var start = moment(when);
+			      // Need to round to next hour if not already
+			      // at the top of the hour.
+			      if (start.minute()) {
+				  start.add(60, 'minutes').startOf('hour');
+			      }
 			      $('#reserve-request-form [name=start_day]')
 				  .val(start.format("MM/DD/YYYY"));
 			      $('#reserve-request-form [name=start_hour]')
@@ -4179,13 +4185,19 @@ $(function ()
     {
 	$('#route-graph-div')
 	    .html(visTemplate({
-		"title" : "Bus Route Availability",
+		"title" : "Mobile Endpoint Availability",
 		"id"    : "route",
 	    }))
 	    .removeClass("hidden")
 	    .find(".panel").removeClass("hidden");
 
-	ShowNewGraph(routeforecast, "route");
+	var forecast = routeforecast;
+	if (fakeroutes) {
+	    forecast = {
+		"All Routes" : routeforecast["Orange"]
+	    };
+	}
+	ShowNewGraph(forecast, "route");
     }
 
     /*
@@ -4213,7 +4225,7 @@ $(function ()
 	    .sort()
 	    .forEach(function(id, index) {
 		var forecast = forecasts[id];
-		console.info(id, forecast);
+		//console.info(id, forecast);
 
 		var series = {
 		    "measure"   : id,
@@ -4417,7 +4429,7 @@ $(function ()
 						   "authority", "cm");
 		    }
 		}
-		else if (_.size(cluster_selections) == 1) {
+		else if (!manager_id && _.size(cluster_selections) == 1) {
 		    // Might be a site of one.
 		    var tag;
 
@@ -4608,26 +4620,91 @@ $(function ()
 	return isNaN(x) ? false : true;
     }
 
-    function adjustedMorning()
+    /*
+     * Check to see if a frquency range is okay for all of the radios
+     * currently declared in the reservation.
+     */
+    function CheckRangeAgainstRadios(row)
     {
-	/*
-	 * Create a moment object that converts 9am in the Portal timezone
-	 * to whatever it is in the local timezone.
-	 */
-	var now = moment();
-	now.tz(window.HOMETZ);
-	now.hours(9);
-	now.local();
-	return now;
-    }
-    function adjustMorning()
-    {
-	if (moment.tz.guess() != window.HOMETZ) {
-	    var adjusted = adjustedMorning();
-	    $('.adjustedmorning span').text(adjusted.format("h A"));
-	    $('.adjustedmorning').removeClass("hidden");
+	var low  = parseFloat($.trim(row.find('input.freq-low').val()));
+	var high = parseFloat($.trim(row.find('input.freq-high').val()));
+	var clusters = GetClusterRows();
+	var okay     = 1;
+
+	if (!window.VERIFY_SPECTRUM) {
+	    return;
+	}
+
+	// Clear before check.
+	row.find(".badrange-row").addClass("hidden");
+
+	if (!_.size(clusters)) {
+	    return 0;
+	}
+	
+	_.each(clusters, function(details, uuid) {
+	    if (!isRadio(details.cluster, details.type)) {
+		return;
+	    }
+	    var info = radioinfo[details.cluster][details.type];
+	    console.info("CheckRangeAgainstRadios", info);
+
+	    if (!_.has(info, "frontends")) {
+		return;
+	    }
+	    var frontends = info.frontends;
+	    var goodrange = 0;
+	    _.each(frontends, function (frontend) {
+		var ranges = frontend.transmit_frequencies;
+		if (!ranges || ranges == "") {
+		    goodrange = 1;
+		    return;
+		}
+		console.info(ranges);
+		_.each(ranges.split(","), function (range) {
+		    var rlh   = range.split("-");
+		    var rlow  = parseFloat(rlh[0]);
+		    var rhigh = parseFloat(rlh[1]);
+		    console.info(rlh, rlow, rhigh);
+		    
+		    if (low  >= rlow &&
+			high <= rhigh && low <= high) {
+			goodrange = 1;
+			return;
+		    }
+		});
+	    });
+	    if (!goodrange) {
+		okay = 0;
+	    }
+	});
+	if (!okay) {
+	    row.find(".badrange-row").removeClass("hidden");
 	}
     }
+
+    /*
+     * Check all ranges against radios.
+     */
+    function CheckAllRangesAgainstRadios()
+    {
+	/*
+	 * Collect the range rows into an array.
+	 */
+	$('#range-table tbody').each(function () {
+	    var tbody   = $(this);
+	    var low     = tbody.find(".freq-low").val();
+	    var high    = tbody.find(".freq-high").val();
+
+	    // Skip a partial row.
+	    if (low == "" || high == "") {
+		tbody.find(".badrange-row").addClass("hidden");
+		return;
+	    }
+	    CheckRangeAgainstRadios(tbody);
+	});
+    }
+
     $(document).ready(initialize);
 });
 

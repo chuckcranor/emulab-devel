@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2018 University of Utah and the Flux Group.
+ * Copyright (c) 2014-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -108,8 +108,8 @@ ndz_readhashinfo(struct ndz_file *ndz, char *sigfile)
     unsigned hashlen, blksize, hashtype;
     struct ndz_rangemap *map;
     struct ndz_hashdata *hashdata = NULL;
-    unsigned lhblock;
 #ifdef SANITY_CHECK
+    unsigned lhblock;
     uint64_t lstart, lsize;
 #endif
 
@@ -165,7 +165,9 @@ ndz_readhashinfo(struct ndz_file *ndz, char *sigfile)
 	(HASHBLK_SIZE / ndz->sectsize) : hi.blksize;
     ndz->hash32 = (hi.version < HASH_VERSION_3) ? 1 : 0;
 
-    lhblock = -1;
+#ifdef SANITY_CHECK
+    lhblock = ~0;
+#endif
     for (i = 0; i < hi.nregions; i++) {
 	uint32_t chunkno;
 	uint64_t hstart, hsize;

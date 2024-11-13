@@ -83,7 +83,6 @@ $(function () {
 		sup.HideWaitWait(function() {
 		    args.callback(json.value.script, json.value.hash);
 		});
-		GetCommitInfo(args);
 	    }
 	    sup.ShowWaitWait("We are getting the source code from the " +
 			     "repository. Patience please.");
@@ -165,7 +164,7 @@ $(function () {
 	    
 		if (json.code) {
 		    sup.HideWaitWait();
-		    sup.SpitOops("oops", json.value);
+		    sup.SpitOops("oops", "<pre>" + json.value + "</pre>");
 		    caller_callback(null);
 		    return;
 		}
@@ -174,7 +173,7 @@ $(function () {
 		});
 	    }
 	    sup.ShowWaitWait("We are attempting to pull from your repository. "+
-			     "Patience please.");
+			     "This will take a minute or two. Patience please.");
 	    var xmlthing = sup.CallServerMethod(null,
 						"manage_profile",
 						"UpdateRepository",

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -223,7 +223,7 @@ class User
     #
     # Class function to change the user profile.
     #
-    function ModUserInfo($target_user, $uid, $args, &$errors) {
+    public static function ModUserInfo($target_user, $uid, $args, &$errors) {
 	global $suexec_output, $suexec_output_array;
 
         #
@@ -379,6 +379,7 @@ class User
     function require_aup()   { return $this->field("require_aup"); }
     function accepted_aup()  { return $this->field("accepted_aup"); }
     function ga_userid()     { return $this->field("ga_userid"); }
+    function ota_agreed()    { return $this->field("ota_agreed"); }
     function portal_interface_warned() {
         return $this->field("portal_interface_warned"); }
     function affiliation_updated() {
@@ -874,6 +875,23 @@ class User
     function NeedAccountUpdate() {
         return $this->RequireAffiliation() + $this->RequireAddress();
     }
+
+    #
+    # Tutorial Hack.
+    #
+    function IsTutorialUser() {
+        global $TUTORIALPID;
+    
+        if ($TUTORIALPID == "") {
+            return 0;
+        }
+        $uid_idx = $this->uid_idx();
+        $query_result = DBQueryFatal("select uid from group_membership ".
+                                     "where pid='$TUTORIALPID' and ".
+                                     "      uid_idx='$uid_idx' and ".
+                                     "      trust!='none'");
+        return mysql_num_rows($query_result);
+    }
     
     #
     # Find all the project licenses this user needs to accept (as leader
@@ -1352,6 +1370,12 @@ class User
 	DBQueryFatal("update users set ".
 		     "   weblogin_frozen='$freeze' ".
 		     "where uid_idx='$idx'");
+        if ($freeze == 0) {
+            DBQueryFatal("update users set ".
+                         "   weblogin_failcount='0' ".
+                         "where uid_idx='$idx'");
+            $this->user["weblogin_failcount"] = 0;
+        }
 	$this->user["weblogin_frozen"] = $freeze;
 	return 0;
     }
@@ -1450,6 +1474,16 @@ class User
 
 	return $this->Refresh();
     }
+    function ClearNonlocalID() {
+	$idx   = $this->uid_idx();
+        
+	DBQueryFatal("update users set ".
+		     "   nonlocal_id=null ".
+		     "where uid_idx='$idx'");
+	$this->user["nonlocal_id"] = null;
+	return 0;
+    }
+    
     function HasEncryptedCert($expired_notokay) {
 	$query_result =
 	    $this->TableLookUp("user_sslcerts", "cert,privkey",
@@ -1494,6 +1528,24 @@ class User
 
         return mysql_num_rows($query_result);
     }
+    function LoggedInIPs() {
+	$idx    = $this->uid_idx();
+        $result = array();
+
+        # Need to order by to get the most recent last_access in the table
+        $query_result = 
+            DBQueryFatal("select IP,last_access from login ".
+                         "where uid_idx='$idx' ".
+                         "order by IP,last_access asc");
+
+        while ($row = mysql_fetch_array($query_result)) {
+            $ip = $row['IP'];
+            if ($ip) {
+                $result[$ip] = DateStringGMT($row["last_access"]);
+            }
+        }
+        return $result;
+    }
 
     #
     # Return project access list for a user. This returns just pid,eid for
@@ -1501,6 +1553,7 @@ class User
     #
     function ProjectAccessList($access_type) {
     	global $TB_PROJECT_CREATEEXPT;
+    	global $TB_PROJECT_CREATEPROFILE;
 	global $TB_PROJECT_MAKEOSID;
 	global $TB_PROJECT_MAKEIMAGEID;
 	global $TB_PROJECT_MAKEGROUP;
@@ -1509,8 +1562,11 @@ class User
 	$uid_idx     = $this->uid_idx();
 	$result      = array();
 	$ordered     = array();
-	$user_clause = "where uid_idx='$uid_idx' and p.nonlocal_id is null and";
-	$trust_clause= "";
+	$all         = 0;
+        $user_clause = "";
+        $trust_clause= "";
+        # Anything more than READINFO requires the project not be disabled
+        $pdisabled   = "p.disabled=0 and";
 
 	# Constants.
 	$trust_none   = TBDB_TRUSTSTRING_NONE;
@@ -1520,6 +1576,10 @@ class User
 	$trust_project= TBDB_TRUSTSTRING_PROJROOT;
 	
 	if ($access_type == $TB_PROJECT_READINFO) {
+	    $trust_clause = "trust!='$trust_none'";
+            $pdisabled    = "";
+	}
+	elseif ($access_type == $TB_PROJECT_CREATEPROFILE) {
 	    $trust_clause = "trust!='$trust_none'";
 	}
 	elseif ($access_type == $TB_PROJECT_MAKEGROUP) {
@@ -1533,7 +1593,7 @@ class User
 	elseif ($access_type == $TB_PROJECT_MAKEOSID ||
 		$access_type == $TB_PROJECT_MAKEIMAGEID) {
 	    if (ISADMIN()) {
-		$user_clause = "";
+                $all = 1;
 	    }
 	    else {
 		$trust_clause =
@@ -1545,7 +1605,11 @@ class User
 	else {
 	    TBERROR("Invalid access type $access_type!", 1);
 	}
-    
+
+        if (!$all) {
+            $user_clause = "where uid_idx='$uid_idx' and ".
+                         "p.nonlocal_id is null and $pdisabled ";
+        }
 	$query_result =
 	    DBQueryFatal("SELECT distinct g.pid,g.gid ".
                          "   FROM group_membership as g ".
@@ -1556,14 +1620,30 @@ class User
 	    return $result;
 	}
 
+        #
+        # Ick, we want the project first (if in fact the user has
+        # appropriate privs in the project group.
+        #
 	while ($row = mysql_fetch_array($query_result)) {
 	    $pid = $row['pid'];
 	    $gid = $row['gid'];
-	
-	    $result[$pid][] = $gid;
+
+            if (array_key_exists($pid, $result)) {
+                $tmp = $result[$pid];
+            }
+            else {
+                $tmp = array();
+            }
+            if ($pid == $gid) {
+                array_unshift($tmp, $pid);
+            }
+            else {
+                $tmp[] = $gid;
+            }
+            $result[$pid] = $tmp;
             $ordered[$pid]  = 0;
 	}
-
+        
         # We want to order by time of last usage.
         $query_result =
             DBQueryFatal("(select pid,max(UNIX_TIMESTAMP(s.last_activity)) ".
@@ -1786,16 +1866,8 @@ class User
     # Eventually this needs to be a much more restrictive test.
     #
     function WebCamAllowed() {
-	$uid_idx = $this->uid_idx();
-	
-	$query_result =
-	    DBQueryFatal("select distinct class from group_membership as g ".
-			 "left join nodetypeXpid_permissions as p on ".
-			 "     g.pid=p.pid ".
-			 "left join node_types as nt on nt.type=p.type ".
-			 "where g.uid_idx='$uid_idx' and class='robot'");
-	
-	return mysql_num_rows($query_result);
+        # No more webcams
+        return 0;
     }
 
     #
@@ -1899,7 +1971,7 @@ class User
         if (!$BROWSER_CONSOLE_WEBSSH) {
             return 0;
         }
-        if ($this->admin() || FeatureEnabled("webssh", $self, null, null)) {
+        if ($this->admin() || FeatureEnabled("webssh", $this, null, null)) {
             return 1;
         }
         # See if enabled in any of the users projects
@@ -1929,6 +2001,19 @@ class User
         }
 	$uid_idx = $this->uid_idx();
 
+        #
+        # Oh, if we go over the scopus quota in the middle of processing
+        # a user, not all the records for the user will be complete. Skip,
+        # it will finish up at a later time.
+        #
+        $notyet_result = 
+	    DBQueryFatal("select scopus_id from user_scopus_info ".
+			 "where uid_idx='$uid_idx' and ".
+                         "      latest_abstract_id=''");
+        if (mysql_num_rows($notyet_result)) {
+            return 0;
+        }
+
 	$query_result =
 	    DBQueryFatal("select scopus_id from user_scopus_info ".
 			 "where uid_idx='$uid_idx' and ".
@@ -1939,7 +2024,19 @@ class User
         if (mysql_num_rows($query_result) > 5) {
             return 0;
         }
+
         return mysql_num_rows($query_result);
     }
+
+    function SetOtaAgreed()
+    {
+    	$uid_idx = $this->uid_idx();
+
+        DBQueryFatal("update users set ota_agreed=now() ".
+                     "where uid_idx='$uid_idx'");
+
+        return 0;
+    }
+    
 }
 ?>

@@ -1,0 +1,18 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_aggregate_radio_frontends", "scanned")) {
+        DBQueryFatal("alter table apt_aggregate_radio_frontends add ".
+		     " `scanned` tinyint(1) NOT NULL default '0' ".
+		     "    after monitored");
+    }
+    return 0;
+}
+
+# Local Variables:
+# mode:perl
+# End:

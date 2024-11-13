@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -104,6 +104,7 @@ struct iz_disk {
 	iz_lba		hidata;		/* metadata above this */
 	iz_lba		losect;		/* lowest sector covered by a slice */
 	iz_lba		hisect;		/* highest sector covered by a slice */
+	iz_lba		metasect;	/* metadata header location */
 	struct iz_slice	slices[MAXSLICES];	/* slice info */
 };
 
@@ -129,14 +130,18 @@ extern partmap_t ignore, forceraw;
 
 extern struct sliceinfo *getslicemap(iz_type stype);
 extern void printslicemap(void);
+extern void dumpdiskinfo(struct iz_disk *disk);
 
 #ifdef WITH_MBR
 extern int parse_mbr(int fd, struct iz_disk *disk, int dowarn);
 extern int set_mbr_type(int fd, int slice, iz_type type);
+void mbr_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug);
 #endif
 #ifdef WITH_GPT
 extern int parse_gpt(int fd, struct iz_disk *disk, int dowarn);
 extern int set_gpt_type(int fd, int slice, iz_type type);
+void gpt_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug);
+int pmbr_setsize(void *start, uint32_t psize, uint32_t *osize);
 #endif
 
 #endif /* _SLICEINFO_H_ */

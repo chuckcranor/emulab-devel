@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,7 @@ include_once("webtask.php");
 chdir("apt");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
+include_once("checkscript.ajax");
 
 # Need to make non-hardcoded
 $maxduration = 16;
@@ -37,7 +38,7 @@ function Do_GetProfile()
 {
     global $this_user;
     global $ajax_args;
-    global $DEFAULT_AGGREGATE;
+    global $DEFAULT_AGGREGATE, $TUTORIALPID;
     
     if (!isset($ajax_args["profile"])) {
 	SPITAJAX_ERROR(1, "Missing profile");
@@ -64,36 +65,101 @@ function Do_GetProfile()
 	$amdefault = $profile->BestAggregate();
     }
     $ispp = ($profile->isParameterized() ? 1 : 0);
-    if ($profile->pid() == "OAI2021FallWS") {
+    if ($profile->pid() == $TUTORIALPID) {
         $lastused = 0;
         $count    = 0;
     }
     else  {
         list ($lastused, $count) = $profile->UsageInfo($this_user);
     }
-    
+
     #
     # Knowing the UUID means the user can instantiate it,
     # so no permission checks on the profile. 
     #
-    SPITAJAX_RESPONSE(array('rspec'       => $profile->rspec(),
-			    'name'        => $profile->name(),
-                            'pid'         => $profile->pid(),
-                            'version'     => $profile->version(),
-                            'uuid'        => $profile->uuid(),
-                            'lastused'    => $lastused,
-                            'usecount'    => $count,
-                            'creator'     => $profile->creator(),
-                            'created'     => $profile->created(),
-			    'ispprofile'  => $ispp,
-                            'isscript'    => ($profile->script() ? 1 : 0),
-                            'fromrepo'    => ($profile->repourl() ? 1 : 0),
-                            'reporef'     => ($profile->repourl() ?
-                                              $profile->reporef() : ""),
-                            'repohash'    => ($profile->repourl() ?
-                                              $profile->repohash() : ""),
-                            'newgenilib'  => $profile->UseNewGeniLib(),
-			    'amdefault'   => $amdefault));
+    $blob = array('rspec'       => $profile->rspec(),
+                  'name'        => $profile->name(),
+                  'pid'         => $profile->pid(),
+                  'version'     => $profile->version(),
+                  'uuid'        => $profile->uuid(),
+                  'lastused'    => $lastused,
+                  'usecount'    => $count,
+                  'creator'     => $profile->creator(),
+                  'created'     => $profile->created(),
+                  'ispprofile'  => $ispp,
+                  'isscript'    => ($profile->script() ? 1 : 0),
+                  'fromrepo'    => ($profile->repourl() ? 1 : 0),
+                  'reporef'     => ($profile->repourl() ?
+                                    $profile->reporef() : ""),
+                  'repohash'    => ($profile->repourl() ?
+                                    $profile->repohash() : ""),
+                  'newgenilib'  => $profile->UseNewGeniLib(),
+                  'amdefault'   => $amdefault);
+
+    if (isset($ajax_args["getsource"])) {
+        if ($profile->repourl() && isset($ajax_args["refhash"])) {
+            $which = escapeshellarg($ajax_args["refhash"]);
+
+            #
+            # Specific hash, need to get that source. 
+            # 
+            $webtask = WebTask::CreateAnonymous();
+            if (!$webtask) {
+                SPITAJAX_ERROR(-1, "Internal webtask Error");
+                return;
+            }
+            $outfname = tempnam("/tmp", "repofile");
+            chmod($outfname, 0666);
+    
+            $retval = SUEXEC($this_user, "tbadmin",
+                             "webmanage_gitrepo -t " . $webtask->task_id() .
+                             " getsource -o $outfname -p " . $profile->uuid() .
+                             "  $which",
+                             SUEXEC_ACTION_IGNORE);
+            $webtask->Refresh();
+    
+            if ($retval != 0) {
+                if ($retval < 0) {
+                    $error = $webtask->TaskValue("output");
+                    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                }
+                else {
+                    $error = $webtask->TaskValue("output");
+                }
+                $webtask->Delete();
+                unlink($outfname);
+                SPITAJAX_ERROR(1, $error);
+                return;
+            }
+            $webtask->Delete();
+
+            $blob["source"]   = file_get_contents($outfname); 
+            $blob["repohash"] = $ajax_args["refhash"];
+            $blob["reporef"]  = $ajax_args["refspec"];
+            unlink($outfname);
+
+            if ($ajax_args["getxml"] == 1 &&
+                (preg_match("/^(import|from)/m", $blob["source"]) ||
+                 preg_match("/^source tb_compat/m", $blob["source"]))) {
+                #
+                # And run the script.
+                #
+                $warningsfatal = false;
+                $usenewgenilib = false;
+                $getparams     = true;
+                $script        = $blob["source"];
+    
+                if (CheckScript($profile, $script, null, 
+                                $warningsfatal, $usenewgenilib,
+                                $ajax_args["refhash"],
+                                $getparams, null, $blob) != 0) {
+                    # Error already spit.
+                    return;
+                }
+            }
+        }
+    }
+    SPITAJAX_RESPONSE($blob);
 }
 
 #
@@ -105,6 +171,7 @@ function Do_GetParameters()
     global $ajax_args;
     global $suexec_output, $suexec_output_array;
     $parameter_sets = null;
+    $bindings = null;
 
     if (!isset($ajax_args["profile"])) {
 	SPITAJAX_ERROR(1, "Missing profile");
@@ -126,7 +193,9 @@ function Do_GetParameters()
 	return;
     }
     #
-    # For a repo-based profile, the paramdefs will be passed in.
+    # For a repo-based profile, the paramdefs will be passed in since
+    # instantiate page can be on any branch or commit, and no point in
+    # calling out to get them again.
     # Note that different refspecs might be parameterized, but others not.
     #
     if ($profile->repourl() &&
@@ -170,31 +239,53 @@ function Do_GetParameters()
             SPITAJAX_ERROR(1, "Not enough permission to view instance");
             return;
         }
-        $profile_uuid = $profile->uuid();
-        $webtask      = WebTask::CreateAnonymous();
-        $webtask_id   = $webtask->task_id();
-
-        $retval = SUEXEC($this_user->uid(), "nobody",
-                         "webmanage_profile -t $webtask_id -- ".
-                         "  bindings $rerun_uuid ",
-                         SUEXEC_ACTION_CONTINUE);
-        $webtask->Refresh();
-        
-        if ($retval) {
-            if (!$webtask->exited() || $retval < 0) {
-                SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-            }
-            else {
-                SPITAJAX_ERROR(1, $webtask->output());
-            }
-            $webtask->Delete();
-            return;
+        if ($record->isActive()) {
+            $bindings = json_decode($record->params());
         }
-        $blob["rerun_bindings"] = $webtask->TaskValue("bindings");
-        $webtask->Delete();
+        else {
+            $webtask      = WebTask::CreateAnonymous();
+            $webtask_id   = $webtask->task_id();
+
+            $retval = SUEXEC($this_user->uid(), "nobody",
+                             "webmanage_profile -t $webtask_id -- ".
+                             "  bindings $rerun_uuid ",
+                             SUEXEC_ACTION_CONTINUE);
+            $webtask->Refresh();
+        
+            if ($retval) {
+                if (!$webtask->exited() || $retval < 0) {
+                    SPITAJAX_ERROR(-1, "Internal Error. ".
+                                   "Please try again later");
+                }
+                else {
+                    SPITAJAX_ERROR(1, $webtask->output());
+                }
+                $webtask->Delete();
+                return;
+            }
+            $bindings = $webtask->TaskValue("bindings");
+            $webtask->Delete();
+        }
+        
+        # This matches what is returned below in Do_GetPreviousBindings
+        $blob["rerun_instance"] = array(
+            "bindings" => $bindings,
+            # This is the version uuid of the instantiated experiment.
+            "version_uuid" => $profile->uuid(),
+            "repohash" => $record->repohash(),
+            "reporef" => $record->reporef(),
+            "profile_version" => $record->profile_version(),
+            # And since it might be for last instance, return that.
+            "rerun_uuid" => $rerun_uuid,
+            "rerun_name" => $record->name(),
+            "rerun_pid" => $record->pid(),
+            "rerun_gid" => $record->gid(),
+            "rerun_clusters" => $record->rerunClusters(),
+        );
     }
     elseif (isset($ajax_args["rerun_paramset"])) {
-        if (!IsValidUUID($ajax_args["rerun_paramset"])) {
+        if (!(IsValidUUID($ajax_args["rerun_paramset"]) ||
+              IsValidHash($ajax_args["rerun_paramset"]))) {
             SPITAJAX_ERROR(1, "Rerun paramset UUID is not a valid UUID");
             return;
         }
@@ -209,7 +300,7 @@ function Do_GetParameters()
             SPITAJAX_ERROR(1, "Not enough permission to use parameter set");
             return;
         }
-        $blob["rerun_bindings"] = json_decode($paramset->bindings());
+        $blob["rerun_paramset"] = $paramset->Blob($this_user);
     }
     SPITAJAX_RESPONSE($blob);
 }
@@ -221,6 +312,7 @@ function Do_GetPreviousBindings()
 {
     global $this_user;
     global $ajax_args;
+    $bindings = null;
 
     if (!isset($ajax_args["profile"])) {
 	SPITAJAX_ERROR(1, "Missing profile");
@@ -266,7 +358,7 @@ function Do_GetPreviousBindings()
             SPITAJAX_ERROR(1, "Instance is for a different profile");
             return;
         }
-        if (!$instance->CanView($this_user)) {
+        if (! ($instance->CanView($this_user) || ISADMIN())) {
             SPITAJAX_ERROR(1, "Not allowed to view the instance");
             return;
         }
@@ -306,37 +398,51 @@ function Do_GetPreviousBindings()
             return;
         }
     }
-    $profile_uuid = $profile->uuid();
-    $webtask      = WebTask::CreateAnonymous();
-    $webtask_id   = $webtask->task_id();
-
-    $retval = SUEXEC($this_user->uid(), "nobody",
-                     "webmanage_profile -t $webtask_id -- ".
-                     "  bindings $rerun_uuid ",
-                     SUEXEC_ACTION_CONTINUE);
-    $webtask->Refresh();
-        
-    if ($retval) {
-        if (!$webtask->exited() || $retval < 0) {
-            SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
+    $profile = $instance->Profile();
+    
+    if ($profile->isParameterized()) {
+        if ($instance->isActive()) {
+            $bindings = json_decode($instance->params());
         }
         else {
-            SPITAJAX_ERROR(1, $webtask->output());
+            $webtask      = WebTask::CreateAnonymous();
+            $webtask_id   = $webtask->task_id();
+
+            $retval = SUEXEC($this_user->uid(), "nobody",
+                             "webmanage_profile -t $webtask_id -- ".
+                             "  bindings $rerun_uuid ",
+                             SUEXEC_ACTION_CONTINUE);
+            $webtask->Refresh();
+        
+            if ($retval) {
+                if (!$webtask->exited() || $retval < 0) {
+                    SPITAJAX_ERROR(-1, "Internal Error. ".
+                                   "Please try again later");
+                }
+                else {
+                    SPITAJAX_ERROR(1, $webtask->output());
+                }
+                $webtask->Delete();
+                return;
+            }
+            $bindings = $webtask->TaskValue("bindings");
+            $webtask->Delete();
         }
-        $webtask->Delete();
-        return;
     }
-    $profile = $instance->Profile();
     $blob = array(
-        "bindings" => $webtask->TaskValue("bindings"),
+        "bindings" => $bindings,
         # This is the version uuid of the instantiated experiment.
         "version_uuid" => $profile->uuid(),
         "repohash" => $instance->repohash(),
         "reporef" => $instance->reporef(),
+        "profile_version" => $instance->profile_version(),
         # And since it might be for last instance, return that.
         "rerun_uuid" => $rerun_uuid,
+        "rerun_name" => $instance->name(),
+        "rerun_pid" => $instance->pid(),
+        "rerun_gid" => $instance->gid(),
+        "rerun_clusters" => $instance->rerunClusters(),
     );
-    $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 }
 
@@ -449,7 +555,11 @@ function Do_GetImageInfo()
             $urn = preg_replace('/\/\//', ":", $urn);
             # Need to see if there is a specific version.
             list ($auth,$type,$id) = Instance::ParseURN($urn);
-            list ($proj,$name,$version) = preg_split('/:/', $id);
+
+            $parsed_id = preg_split('/:/', $id);
+            $proj = $parsed_id[0];
+            $name = $parsed_id[1];
+            $version = (count($parsed_id) == 3 ? $parsed_id[2] : null);
 
             #
             # Lookup is without the version number in the urn.
@@ -725,7 +835,7 @@ function CheckStep2()
         if (isset($formfields["sites"]) && is_array($formfields["sites"])) {
             while (list($siteid, $am) = each($formfields["sites"])) {
                 if (!array_key_exists($am, $am_array)) {
-                    $errors["sites"] = "Invalid Aggregate: $siteid";
+                    $errors["sites[$siteid]"] = "Invalid Aggregate: $siteid";
                     break;
                 }
             }
@@ -818,7 +928,7 @@ function CheckStep3()
     if (isset($formfields["start"]) && $formfields["start"] != "") {
         $start_ascii = $formfields["start"];
         $start = strtotime($formfields["start"]);
-        if (!$start) {
+        if (!$start || $start < 0) {
             $errors["start_day"] = "Cannot parse start time";
         }
         elseif ($start < time()) {
@@ -831,7 +941,7 @@ function CheckStep3()
     if (isset($formfields["end"]) && $formfields["end"] != "") {
         $end_ascii = $formfields["end"];
         $end = strtotime($formfields["end"]);
-        if (!$end) {
+        if (!$end || $end < 0) {
             $errors["end_day"] = "Cannot parse end time";
         }
         elseif ($end < time()) {
@@ -995,11 +1105,27 @@ function Do_Submit()
     global $ajax_args;
     global $PORTAL_GENESIS, $DEFAULT_AGGREGATE_URN;
     global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $ISPOWDER;
+    global $TUTORIALSTATS;
 
+    if (Instance::loadTooHigh()) {
+        sleep(2);
+        SPITAJAX_ERROR(65, "Load is too high");        
+        return;
+    }
+    if (Instance::tooManyWaiting()) {
+        sleep(2);
+        SPITAJAX_ERROR(66, "Too many experiments are waiting to start");        
+        return;
+    }
+    
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(1, "Missing formfields");
 	return;
     }
+    if ($TUTORIALSTATS) {
+        TutorialStat("Submit");
+    }
+
     #
     # Must recheck form values of course. 
     #
@@ -1120,7 +1246,15 @@ function Do_Submit()
     else {
         $args["duration"]  = $formfields["duration"];
     }
-    
+    if (isset($ajax_args["webinfo"])) {
+        $tmp = json_encode($ajax_args["webinfo"]);
+        if (!$tmp) {
+	    SPITAJAX_ERROR(1, "Internal error json encoding webinfo");
+	    return;
+        }
+        $args["webinfo"] = $tmp;
+    }
+
     # This is deprecated.
     if (0 && isset($_SESSION["privkey"])) {
         $keyname = tempnam("/tmp", "genilibkey");
@@ -1197,12 +1331,11 @@ function Do_Submit()
 #
 # Max Duration based on existing reservations.
 #
-#
 function Do_MaxDuration()
 {
     global $this_user;
     global $ajax_args;
-    global $PORTAL_GENESIS, $DEFAULT_AGGREGATE_URN;
+    global $PORTAL_GENESIS, $DEFAULT_AGGREGATE_URN, $am_array;
     global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $ISPOWDER;
 
     if (!isset($ajax_args["formfields"])) {
@@ -1217,8 +1350,13 @@ function Do_MaxDuration()
     $amlist     = Instance::DefaultAggregateList();
     $am_array   = array();
     $sitemap    = array();
-    $options    = "-p " . $formfields["pid"];
 
+    if ($formfields["pid"] == $formfields["gid"]) {
+        $options = "-p " . $formfields["pid"];
+    }
+    else {
+        $options = "-g " . $formfields["pid"] . "/" . $formfields["gid"];
+    }
     while (list($index, $aggregate) = each($amlist)) {
         $urn  = $aggregate->urn();
         $name = $aggregate->name();
@@ -1247,6 +1385,12 @@ function Do_MaxDuration()
             return;
         }
     }
+    elseif (isset($formfields["where"]) &&
+            $formfields["where"] != "" &&
+            array_key_exists($formfields["where"], $am_array)) {
+
+        $options .= " -a " . $am_array[$formfields["where"]] . " ";
+    }
     # Scheduled start time if set.
     if (isset($formfields["start"]) && $formfields["start"] != "") {
         $start = strtotime($formfields["start"]);
@@ -1256,6 +1400,7 @@ function Do_MaxDuration()
         }
         $options .= " -s $start ";
     }
+    
     $filename = tempnam("/tmp", "rspec");
     $fp = fopen($filename, "w");
     fwrite($fp, $rspec);
@@ -1279,23 +1424,24 @@ function Do_MaxDuration()
 
     $retval = SUEXEC($this_user->uid(), "nobody",
                      "webmanage_resgroup -t $webtask_id -- ".
-                     "  maxduration $options",
-                     SUEXEC_ACTION_CONTINUE);
+                     ($ISPOWDER ? "maxduration" : "maxextension") .
+                     " $options",
+                     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
+    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 
     if ($retval) {
-        SUEXECERROR(SUEXEC_ACTION_CONTINUE);    
-        
         if (!$webtask->exited() || $retval < 0) {
             SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
         }
         else {
             SPITAJAX_ERROR(1, $webtask->output());
         }
-        unlink($filename);
-        if (isset($filename2)) {
-            unlink($filename2);
-        }
+        #unlink($filename);
+        #if (isset($filename2)) {
+        #    unlink($filename2);
+        #}
         $webtask->Delete();
         return;
     }
@@ -1306,9 +1452,18 @@ function Do_MaxDuration()
     if (isset($filename2)) {
         unlink($filename2);
     }
-    $maxend = DateStringGMT(intval($webtask->TaskValue("maxend")));
+    $maxend = $webtask->TaskValue("maxend");
+    if ($maxend != null && $maxend != 0) {
+        $maxend = DateStringGMT(intval($maxend));
+    }
+    $blob = array("maxend" => $maxend);
+    $loser = $webtask->TaskValue("baddog");
+    if ($loser) {
+        $blob["loser"] = $loser;
+        $blob["which"] = $webtask->TaskValue("badtype");
+    }
     $webtask->Delete();
-    SPITAJAX_RESPONSE($maxend);
+    SPITAJAX_RESPONSE($blob);
     return;
 }
 
@@ -1425,6 +1580,44 @@ function Do_ClearFavorite()
     }
     $profile->ClearFavorite($this_user);
     SPITAJAX_RESPONSE(0);
+}
+
+#
+# Ask for reservation system info, which is now cached for instantiate.
+#
+function Do_ReservationInfo()
+{
+    global $this_user;
+    global $ajax_args;
+    global $PORTAL_GENESIS;
+    $popts = "-p '$PORTAL_GENESIS' -u " . $this_user->uid();
+
+    $webtask = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+
+    $retval = SUEXEC($this_user->uid(), "nobody",
+                     "webmanage_resgroup ".
+                     "   -t $webtask_id predictioninfo $popts ",
+                     SUEXEC_ACTION_IGNORE);
+    
+    if ($retval) {
+        $webtask->Refresh();
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error retrieving reservation info");
+        }
+        else {
+            SPITAJAX_ERROR($retval,
+                           "Could not get reservation data: " .
+                           $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Refresh();
+    $blob = $webtask->TaskValue("value");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($blob);
 }
 
 # Local Variables:

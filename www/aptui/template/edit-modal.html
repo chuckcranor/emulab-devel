@@ -1,27 +1,24 @@
 <!-- This is the topology edit modal -->
-<div id='quickvm_editmodal' class='modal fade'>
-  <div class='modal-dialog' id='edit_dialog'>
+<div id='edit-modal' class='modal fade'>
+  <div class='modal-dialog modal-wide'>
     <div class='modal-content'>
       <div class='modal-header'>
         <button type='button' id='edit-dismiss'
-		class='close' data-dismiss='modal'
-                aria-hidden='true'>
-          &times;</button>
+		class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
         <h3>Topology Editor</h3>
       </div>
       <div class='modal-body'>
-        <!-- This topo diagram goes inside this div -->
-        <div class='panel panel-default'
-             id='edit_container'>
-          <div class='panel-body'>
-            <div id='edit_nopicker' class='jacks'></div>
-	    <div class='edit_buttons readwrite'>
-	      <button id='edit-save' class='btn btn-primary'>Accept</button>
-	      <button id='edit-cancel' class='btn btn-default'>Cancel</button>
-	    </div>
-	    <div class='edit_buttons readonly'">
-	      <button id='edit-dismiss' class='btn btn-default'>Close</button>
-	    </div>
+	<div>
+          <!-- This topo diagram goes inside this div -->
+          <div class='edittopology-bare'></div>
+	  <div class='edit_buttons readwrite' style="margin-bottom: 10px;">
+	    <button id='edit-save' class='btn btn-primary'>Accept</button>
+	    <button id='edit-cancel' class='btn btn-default'>Cancel</button>
+	  </div>
+	  <div class='edit_buttons readonly'" style="margin-bottom: 10px;">
+	    <button id='edit-dismiss' class='btn btn-default'>Close</button>
           </div>
         </div>
       </div>

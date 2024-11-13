@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -73,6 +73,7 @@ use Group;
 use WebTask;
 use emutil;
 use GeniHRN;
+use EmulabConstants;
 
 # Protos
 sub fatal($);
@@ -92,6 +93,7 @@ sub usage()
     print " -s           - Do not send status email\n";
     print " -a urn       - Override default aggregate URN.\n";
     print " -k file      - Alternate CA private key file.\n";
+    print " --nofailures - Ignore sliver create failures\n";
     print " --project    - pid[,gid]: project[,group] for new experiment\n";
     print " --portal     - The Portal the experiment is started from.\n";
     print "                Defaults to the Emulab portal.\n";
@@ -111,6 +113,9 @@ my $waitmode       = 0;
 my $usestitcher    = 0;
 my $nopending      = 0;
 my $noemail        = 0;
+my $maxduration    = 0;
+my $nofailures     = 0;
+my @SAVEARGV       = @ARGV;
 my $portal;
 my $privkeyfile;
 my $start_at;
@@ -123,6 +128,8 @@ my $duration;
 my $paramset;
 my $bindingfile;
 my $bindingstr;
+my $sshpubkeyfile;
+my $sshpubkeystr;
 my ($refspec, $repohash, $reporef, $script, $rspec, $bindings);
 my $default_urn;
 my $logfile;
@@ -131,17 +138,19 @@ my $project;
 #
 # So many options ...
 #
-my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's',
+my @optlist = ('d', 'w', 'a=s', 'S', 'k=s', 'P', 's', 'X',
 	       "name=s"      => \$name,
 	       "duration=i"  => \$duration,
 	       "portal=s"    => \$portal,
 	       "project=s"   => \$pid,
 	       "site=s%"     => \$sitemap,
-	       "start=i"     => \$start_at,
-	       "stop=i"      => \$stop_at,
+	       "start=s"     => \$start_at,
+	       "stop=s"      => \$stop_at,
 	       "paramset=s"  => \$paramset,
 	       "bindings=s"  => \$bindingfile,
+	       "sshpubkey=s" => \$sshpubkeyfile,
 	       "refspec=s"   => \$refspec,
+	       "nofailures"  => \$nofailures,
     );
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -168,10 +177,6 @@ my $this_user = User->ThisUser();
 if (!defined($this_user)) {
     fatal("You ($UID) do not exist!");
 }
-my $profile = APT_Profile->Lookup($ARGV[0]);
-if (!defined($profile)) {
-    fatal("Profile does not exist");
-}
 if ($pid =~ /^([-\w]*),([-\w]*)$/) {
     $pid = $1;
     $gid = $2;
@@ -180,13 +185,23 @@ $project = Project->Lookup($pid, $gid);
 if (!defined($project)) {
     fatal("No such project");
 }
+my $profile = APT_Profile->Lookup($ARGV[0]);
+if (!defined($profile)) {
+    fatal("Profile does not exist");
+}
+if (!$profile->CanInstantiate($this_user)) {
+    fatal("Not enough permission to use this profile");
+}
 if (!defined($portal)) {
     $portal = $project->Brand()->brand();
     if ($portal eq "classic") {
 	$portal = "emulab";
     }
 }
-if (defined($duration)) {
+if (defined($options{"X"})) {
+    $maxduration = 1;
+}
+elsif (defined($duration)) {
     if ($duration !~ /^\d+$/) {
 	fatal("Duration is not an integer");
     }
@@ -202,7 +217,7 @@ if (defined($name)) {
 }
 if (defined($options{"a"})) {
     if (!GeniHRN::IsValid($options{"a"})) {
-	fatal("Ivalid aggregate URN");
+	fatal("Invalid aggregate URN");
     }
 }
 if (defined($start_at)) {
@@ -230,6 +245,45 @@ if (defined($bindingfile)) {
 	fatal("Binding file could not be read or is empty");
     }
 }
+if (defined($sshpubkeyfile)) {
+    if (! -e $sshpubkeyfile) {
+	fatal("SSH pubkeyfile does not exist");
+    }
+    $sshpubkeystr = emutil::ReadFile($sshpubkeyfile);
+    if ($sshpubkeystr eq "") {
+	fatal("SSH pubkey file could not be read or is empty");
+    }
+    if (!($sshpubkeystr =~
+	  /^(ssh-rsa|ssh-ed25519) ([-\w\.\@\+\/\=]*) ([-\w\@\.:\ ]*)$/ ||
+	  $sshpubkeystr =~
+	  /^(ssh-rsa|ssh-ed25519) ([-\w\.\@\+\/\=:]*)$/)) {
+	fatal("SSH pubkey is not a valid openssh protocol 2 key");
+    }
+}
+
+#
+# Check permission and disabled early so we return an reasonable error
+#
+if ($project->disabled()) {
+    print STDERR "Project is disabled\n";
+    exit(1);
+}
+if (!defined($gid) || $pid eq $gid) {
+    if (!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT)) {
+	print STDERR "No permission to create experiments in $pid\n";
+	exit(1);
+    }
+}
+else {
+    my $group = $project->LookupGroup($gid);
+    if (!defined($group)) {
+	fatal("Group $gid does not exist in project $pid");
+    }
+    if (!$group->AccessCheck($this_user, TB_PROJECT_CREATEEXPT)) {
+	print STDERR "No permission to create experiments in $pid/$gid\n";
+	exit(1);
+    }
+}
 
 # This was a dumb mistake, I need to convert from servername to portal.
 $ENV{"SERVER_NAME"} = $project->Brand()->Server();
@@ -238,7 +292,7 @@ $ENV{"SERVER_NAME"} = $project->Brand()->Server();
 # Bindings can come from a paramset or as a json string on the command line.
 #
 if (defined($paramset)) {
-    my ($uid,$name) = @_;
+    my ($uid,$name);
     my $profileid   = $profile->profileid();
     
     if ($paramset =~ /^([-\w]*),([-\w]*)$/) {
@@ -260,7 +314,7 @@ if (defined($paramset)) {
     #
     my $row = $query_result->fetchrow_hashref();
     my $creator_idx = $row->{"uid_idx"};
-    if ($creator_idx != $this_user->uid_idx() && $row->['public'] != 1) {
+    if ($creator_idx != $this_user->uid_idx() && $row->{'public'} != 1) {
 	my $creator = User->Lookup($creator_idx);
 	if (!$creator) {
 	    fatal("Could not look paramset creator");
@@ -279,7 +333,7 @@ if (defined($paramset)) {
 if (defined($bindingstr)) {
     $bindings = eval { decode_json($bindingstr); };
     if ($@) {
-	fatal("Could not json decode the bindings\n");
+	fatal("Could not json decode the bindings:\n$bindingstr");
     }
 
     #
@@ -414,6 +468,9 @@ if (defined($reporef)) {
 if (defined($rspec)) {
     $xmlstuff{"rspec"} = $rspec;
 }
+if (defined($sshpubkeystr)) {
+    $xmlstuff{"sshkey"} = $sshpubkeystr;
+}
 
 #
 # Create the (Simple) XML file.
@@ -444,6 +501,9 @@ my @args = ("-u $uuid -t " . $webtask->task_id());
 if (defined($options{"d"})) {
     @args = (@args, "-d");
 }
+if ($nofailures) {
+    @args = (@args, "-i");
+}
 if ($nopending) {
     @args = (@args, "-P");
 }
@@ -456,7 +516,10 @@ if (defined($options{"S"})) {
 if (defined($start_at)) {
     @args = (@args, "--start", $start_at);
 }
-if (defined($stop_at)) {
+if ($maxduration) {
+    @args = (@args, "-X");
+}
+elsif (defined($stop_at)) {
     @args = (@args, "--stop", $stop_at);
 }
 @args = (@args, $xmlfile);
@@ -522,7 +585,8 @@ if ($?) {
 			    "Failed to start portal experiment",
 			    "Failed to start portal experiment for profile ".
 			    $profile->pidversname() . "\n\n" .
-			    $body, $project->OpsEmailAddress());
+			    $body, $project->OpsEmailAddress(),
+			    "BCC: " . $project->OpsEmailAddress());
     }
     # Maybe delete the instance right away?
     
@@ -541,6 +605,7 @@ unlink($xmlfile);
 
 # This should not happen!
 if (!defined($instance)) {
+    $webtask->Delete();
     fatal("Could not lookup new instance $uuid");
 }
 
@@ -582,6 +647,7 @@ while (1) {
 if ($instance->status() eq "pending" ||
     $instance->status() eq "deferred") {
     unlink($logfile) if (defined($logfile));
+    $webtask->Delete();
     exit(0);
 }
 
@@ -611,13 +677,33 @@ if (!$noemail) {
 			$project->OpsEmailAddress());
 }
 unlink($logfile) if (defined($logfile));
+$webtask->Delete();
 exit(0);
 
 sub fatal($)
 {
     my ($mesg) = @_;
-    unlink($logfile) if (defined($logfile));
 
+    if (defined($logfile)) {
+	unlink($logfile);
+    }
+    elsif (defined($project) && !(isatty(\*STDOUT) || $debug)) {
+	my $url = (defined($this_user) ? $this_user->webURL() : "");
+	
+	#
+	# We failed early (since there is no log file). For debugging
+	# lets send the error info to logs.
+	#
+	my $to = (defined($this_user) ?
+		  $this_user->email() : $project->OpsEmailAddress());
+	$project->SendEmail($to,
+			    "Failed to start XMLRPC experiment",
+			    "Failed to start XMLRPC experiment:\n\n ".
+			    "$mesg\n\n".
+			    "$PROGRAM_NAME @SAVEARGV \n".
+			    "$url\n",
+			    $project->OpsEmailAddress());
+    }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
     exit(-1);

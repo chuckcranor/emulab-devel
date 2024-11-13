@@ -1,0 +1,22 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instances", "rdz_flags")) {
+	DBQueryFatal("ALTER TABLE apt_instances ADD ".
+		     " `rdz_flags` set('heartbeats') NOT NULL default '' ".
+		     "    after rdz_status");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

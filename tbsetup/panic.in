@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,7 +35,7 @@ sub usage()
 	  "Usage: panic [-l level] <pid> <eid>\n".
 	  "       panic -r <pid> <eid>\n".
 	  "switches and arguments:\n".
-	  "-l level - Level 1; reboot nodes into the admin MFS\n".
+	  "-l level - Level 1; reboot nodes into the admin MFS (default)\n".
 	  "         - Level 2; disable the control network\n".
           "         - Level 3; power off all nodes\n".
 	  "-R       - With level 3, power off only the radio equipment\n".

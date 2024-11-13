@@ -215,7 +215,8 @@ sub Install($$$)
 		"$LOGDIR/aptevent_daemon.log    644  7    1000  *     Z ".
 		"/var/run/aptevent_daemon.pid",
 		"$LOGDIR/apt_scheduler.log      644  7    1000  *     Z ".
-		"/var/run/apt_scheduler.pid"
+		"/var/run/apt_scheduler.pid",
+		"$LOGDIR/capture.log            640  7    1000  *     Z",
 		);
 
     	    if ($PROTOGENI_GENIRACK) {
@@ -227,6 +228,16 @@ sub Install($$$)
 	    if ($WITHZFS && !$WITHAMD) {
 		@nsyslog_lines = (@nsyslog_lines,
 		  "$LOGDIR/autofs.log             640  14   1000  *     Z");
+	    }
+
+	    if ($TARGETSYS_TARGET eq "POWDER-BUS" ||
+		$TARGETSYS_TARGET eq "POWDER-FIXED") {
+		@nsyslog_lines = (@nsyslog_lines,
+		  "$LOGDIR/powduino.log           640  7    10000  *    Z ".
+		  "/var/run/powduino.pid ",
+		  "$LOGDIR/tiplogs/powduino.log   640  7    10000  *    Z ".
+		  "$LOGDIR/tiplogs/powduino.pid"
+		);
 	    }
 
 	    AppendToFileFatal($NEWSYSLOG_CONF, @nsyslog_lines);

@@ -1,0 +1,107 @@
+<table id="mobile-endpoints-table" class="tablesorter">
+  <thead>
+    <tr>
+      <th class="text-nowrap">ID</th>
+      <th class="text-nowrap">Status</th>
+      <th class="text-nowrap">Route</th>
+      <% if (window.ISADMIN) { %>
+	<th class="sorter-mobiledates">Route Change</th>
+      <% } %>
+      <th class="sorter-mobiledates">Location Change</th>
+      <th class="sorter-mobiledates">Last Ping</th>
+      <% if (window.ISADMIN) { %>
+	<th>Lat,Long</th>
+      <% } %>
+      <th>Speed</th>
+      <th>Heading</th>
+      <th>Free</th>
+      <th>UE IMSI</th>
+      <th>GPSD</th>
+      <th class="sorter-mobiledates">GPSD Time</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% _.each(endpoints, function(info, id) { %>
+      <% if (!window.ISADMIN &&
+	(info.disabled || info.adminonly)) { return; } %>
+      <tr>
+	<td><%- id %></td>
+	<td class="<%- info.statusColor %>">
+	  <%- info.statusTag %></td>
+	<td>
+	  <% if (info.routeid) { %>
+	    <a href="powder-map.php?route=<%- id %>"
+	       class="location"
+	       data-urn="<%- info.urn %>"
+	       data-routeid="<%- info.routeid %>">
+	      <%- info.routename %></a>
+	  <% } %>
+	</td>
+	<% if (window.ISADMIN) { %>
+	  <td class="format-date" data-date="<%- info.route_changed %>">
+	    <%- info.route_changed %></td>
+	<% } %>
+	<% if (window.ISADMIN || info.status == "up") { %>
+	  <td class="format-date" data-date="<%- info.location_stamp %>">
+	    <%- info.location_stamp %></td>
+	<% } else { %>
+	  <td>n/a</td>
+	<% } %>
+	<% if (window.ISADMIN || info.status == "up") { %>
+	  <td class="format-date" data-date="<%- info.last_ping %>">
+	    <%- info.last_ping %></td>
+	<% } else { %>
+	  <td>n/a</td>
+	<% } %>
+	<% if (window.ISADMIN) { %>
+	  <td>
+	    <% if (info.routeid) { %>
+	      <a href="https://maps.google.com/?q=<%- info.latitude %>,<%- info.longitude %>&ll=<%- info.latitude %>,<%- info.longitude %>&z=18"
+		 target="_blank">
+		<%- info.latitude %>,<%- info.longitude %></a>
+	    <% } else { %>
+	      n/a
+	    <% } %>
+	  </td>
+	<% } %>
+	<td><%- info.speed %></td>
+	<td><%- info.heading %></td>
+	<td>
+	  <% if (info.status != "up") { %>
+	    n/a
+	  <% } else { %>
+	    <% if (info.free) { %>Yes<% } else { %>
+	      <% if (_.has(info, "holding_uuid")) { %>
+		<a href="status.php?uuid=<%- info.holding_uuid %>"
+		   target="_blank">No</a>
+	      <% } else { %>
+		No
+	      <% } %>
+	    <% } %>
+	  <% } %>
+	</td>
+	<td>
+	  <% if (_.has(info.radioinfo["ed1"], "ue_imsi") &&
+	         info.radioinfo["ed1"].ue_imsi) { %>
+	    <%- info.radioinfo["ed1"].ue_imsi %>
+	  <% } else { %>
+	    none
+	  <% } %>
+	</td>
+	<% if (info.gpsd_stamp &&
+	  (window.ISADMIN || info.status == "up")) { %>
+	  <td>
+	    <a href="https://maps.google.com/?q=<%- info.gpsd_latitude %>,<%- info.gpsd_longitude %>&ll=<%- info.gpsd_latitude %>,<%- info.gpsd_longitude %>&z=18"
+	       target="_blank">
+	      <%- info.gpsd_latitude %>,<%- info.gpsd_longitude %></a>
+	  </td>
+	  <td class="format-date" data-date="<%- info.gpsd_stamp %>">
+	    <%- info.gpsd_stamp %></td>
+	<% } else { %>
+	  <td>n/a</td>
+	  <td>n/a</td>
+	<% } %>
+      </tr>
+    <% }); %>
+  </tbody>
+</table>

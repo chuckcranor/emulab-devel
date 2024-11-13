@@ -1,0 +1,84 @@
+#
+# List of third-party app ports that often show up in CloudLab experiments.
+# Intended for running NMAP scans on nodes for a quick check of potentially
+# exposed and vulnerable ports. Includes:
+#
+#  * Apache stuff: Hadoop (HDFS, MapReduce, YARN), Spark, ZooKeeper
+#  * Docker
+#  * ELK stack (Elasticsearch, Logstash, Kibana)
+#  * VNC
+#
+# XXX need to add UDP ports where appropriate, though scanning those
+# is slow.
+#
+# There are of course many other ports for many other apps.
+#
+# Updated 04/22/2022
+#
+2181/tcp	# ZooKeeper master
+2375/tcp	# Docker (unencrypted)
+2376/tcp	# Docker (TLS encrypted)
+2888/tcp	# ZooKeeper replicated peer communication
+3888/tcp	# ZooKeeper replicated peer leader election
+4040/tcp	# Spark Web UI
+5601/tcp	# Kibana server
+5800/tcp	# VNC web interface
+5900/tcp	# VNC port (also 5900+N for display N)
+6066/tcp	# Spark master REST job submission
+7077/tcp	# Spark master job submission
+7337/tcp	# Spark shuffle service
+8030/tcp	# YARN ResourceManager scheduler interface
+8031/tcp	# YARN ResourceManager resource tracker
+8032/tcp	# YARN ResourceManager applications manager
+8033/tcp	# YARN ResourceManager admin interface
+8040/tcp	# YARN NodeManager localizer IPC
+8042/tcp	# YARN NodeManager HTTP Web interface
+8044/tcp	# YARN NodeManager HTTPS Web interface
+8045/tcp	# YARN Shared cache manager client interface
+8046/tcp	# YARN Shared cache manager uploader interface
+8047/tcp	# YARN Shared cache manager admin interface
+8048/tcp	# YARN NodeManager collector service IPC
+8049/tcp	# YARN NodeManager AMRMProxyService
+8080/tcp	# Common alternate web port (e.g., Spark master, Zookeeper)
+8081/tcp	# Common alternate web port (e.g., Spark worker)
+8088/tcp	# YARN ResourceManager HTTP web application
+8089/tcp	# YARN Router HTTP Web interface
+8090/tcp	# YARN ResourceManager HTTPS web application
+8091/tcp	# YARN Router HTTPS Web interface
+8111/tcp	# HDFS 3 federation router admin requests
+8188/tcp	# YARN Timeline HTTP Web interface
+8190/tcp	# YARN Timeline HTTPS Web interface
+8480/tcp	# HDFS 3 JournalNode HTTP server
+8481/tcp	# HDFS 3 JournalNode HTTPS server
+8485/tcp	# HDFS 3 JournalNode RPC server
+8788/tcp	# YARN Shared cache manager HTTP Web interface
+9200/tcp	# Elasticsearch server requests
+9300/tcp	# Elasticsearch server internode
+9600/tcp	# Logstash server or KMS REST API
+9864/tcp	# HDFS 3 datanode http server
+9865/tcp	# HDFS 3 datanode secure http server
+9866/tcp	# HDFS 3 datanode server
+9867/tcp	# HDFS 3 datanode ipc server
+9868/tcp	# HDFS 3 secondary namenode http server
+9869/tcp	# HDFS 3 secondary namenode HTTPS server
+9870/tcp	# HDFS 3 namenode web ui
+9871/tcp	# HDFS 3 namenode secure http server
+10020/tcp	# MapReduce JobHistory Server IPC
+10033/tcp	# MapReduce JobHistory Server admin
+10200/tcp	# YARN Timeline RPC server
+14000/tcp	# HttpFS REST API
+18080/tcp	# Spark history UI
+19888/tcp	# MapReduce JobHistory Server HTTP Web UI
+19890/tcp	# MapReduce JobHistory Server HTTPS Web UI
+50010/tcp	# HDFS 2 datanode server
+50020/tcp	# HDFS 2 datanode ipc server
+50070/tcp	# HDFS 2 namenode web ui
+50071/tcp	# HDFS 3 federation router HTTP web requests
+50072/tcp	# HDFS 3 federation router HTTPS requests
+50075/tcp	# HDFS 2 datanode http server
+50090/tcp	# HDFS 2 secondary namenode http server
+50091/tcp	# HDFS 2 secondary namenode HTTPS server
+50100/tcp	# HDFS 3 backup node server
+50105/tcp	# HDFS 3 backup node http server
+50470/tcp	# HDFS 2 namenode secure http server
+50475/tcp	# HDFS 2 datanode secure http server

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -208,8 +208,9 @@ function SPITFORM($uid, $referrer, $error)
               </script>\n";
     }
     echo "<div id='waitwait_div'></div>\n";
-    echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+    echo "<div id='nomore_genilogin_div'></div>\n";
 
+    AddTemplate("nomore-genilogin-modal");
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
     SPITREQUIRE("js/login.js");
@@ -274,6 +275,24 @@ else {
               Your account has been frozen!
               You must contact $SUPPORT to have your account
               restored. <br> <br>
+              Please do not attempt to login again; it will not work!
+              </h4>\n";
+        echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+	SPITNULLREQUIRE();
+	SPITFOOTER();
+	return;
+    }
+    elseif ($dologin_status == DOLOGIN_STATUS_IPFREEZE) {
+	# Short delay.
+	sleep(1);
+
+	SPITHEADER();
+	$IP = $_SERVER['REMOTE_ADDR'];
+	echo "<h4>
+              Your IP address ($IP) has been frozen because of too many
+              failures.
+              You must contact $SUPPORT to address this problen.
+              <br> <br>
               Please do not attempt to login again; it will not work!
               </h4>\n";
         echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
@@ -349,6 +368,7 @@ header("Pragma: no-cache");
 # Failed, then try again with an error message.
 # 
 if ($login_status == $STATUS_LOGINFAIL) {
+    #TBERROR("'${uid}', '${password}'", 0, 0);
     if ($ajax_request) {
 	SPITAJAX_ERROR(1, "login failed");
 	exit(0);

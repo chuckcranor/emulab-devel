@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -419,7 +419,9 @@ if (defined($image)) {
 	;
     }
     $image->Unlock();
-    
+    if (defined($webtask)) {
+	$webtask->imageid($image->imageid());
+    }
     if ($nosnapshot) {
 	print "Not taking a snapshot, as directed\n"
 	    if ($debug);
@@ -580,6 +582,7 @@ if (defined($base_image)) {
     $xmlfields{"loadpart"}        = $base_image->loadpart();
     $xmlfields{"noexport"}        = $base_image->noexport();
     $xmlfields{"noclone"}         = $base_image->noclone();
+    $xmlfields{"isbootimage"}     = $base_image->isbootimage();
     if ($base_image->format() ne 'ndz') {
 	$xmlfields{"format"} = $base_image->format();
     }
@@ -648,6 +651,14 @@ foreach my $type (@typelist) {
     my $type_id = $type->type();
     
     $xmlfields{"mtype_${type_id}"} = 1;
+
+    #
+    # Kludge. If the type list is not a pc, send along the node class
+    # to make newimageid_ez happy.
+    #
+    if ($type->class() eq "switch") {
+	$xmlfields{"nodeclass"} = "switch";
+    }
 }
 
 #
@@ -731,6 +742,9 @@ if ($image->pid() eq TBOPSPID()) {
 }
 if ($debug) {
     print "Created $image\n";
+}
+if (defined($webtask)) {
+    $webtask->imageid($image->imageid());
 }
 if ($nosnapshot) {
     print "Not taking a snapshot, as directed\n"

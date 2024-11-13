@@ -1,0 +1,37 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("node_hardware_paths", "hidden")) {
+	DBQueryFatal("alter table node_hardware_paths add ".
+		     "  `hidden` tinyint(1) default '0' after value");
+    }
+    if (!DBSlotExists("node_hardware_paths", "summary")) {
+	DBQueryFatal("alter table node_hardware_paths add ".
+		     "  `summary` tinyint(1) NOT NULL default '0' ".
+		     "   after hidden");
+    }
+    if (!DBSlotExists("node_type_hardware_paths", "hidden")) {
+	DBQueryFatal("alter table node_type_hardware_paths add ".
+		     "  `hidden` tinyint(1) default '0' after value");
+    }
+    if (!DBSlotExists("node_type_hardware_paths", "summary")) {
+	DBQueryFatal("alter table node_type_hardware_paths add ".
+		     "  `summary` tinyint(1) NOT NULL default '0' ".
+		     "   after hidden");
+    }
+    if (!DBSlotExists("node_type_hardware", "node_id")) {
+	DBQueryFatal("alter table node_type_hardware add ".
+		     "  `node_id` varchar(30) default NULL ".
+		     "      after `type`");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

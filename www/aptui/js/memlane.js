@@ -4,16 +4,23 @@ $(function ()
 
     var templates = APT_OPTIONS.fetchTemplateList(['memlane',
 						   'waitwait-modal',
-						   'oops-modal']);
+						   'oops-modal',
+						   'txgraph']);
     var mainTemplate = _.template(templates['memlane']);
     var EMULAB_NS    = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var amlist       = null;
+    var radioinfo    = null;
     var record       = null;
     
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
 	amlist = decodejson('#amlist-json');
+	console.info("amlist", amlist);
+	if (window.ISPOWDER) {
+	    radioinfo = decodejson('#radioinfo-json');
+	    console.info("radioinfo", radioinfo);
+	}
 
 	var xmlthing = sup.CallServerMethod(null, "memlane",
 					    "HistoryRecord",
@@ -65,6 +72,7 @@ $(function ()
 	}
 	$('#waitwait_div').html(templates['waitwait-model']);
 	$('#oops_div').html(templates['oops-model']);
+	$('#txgraph_div').html(templates['txgraph']);
 	if (json.value.exitcode) {
 	    ShowError(json.value);
 	}
@@ -96,8 +104,43 @@ $(function ()
 	" <td name='client_id'>n/a</td>" +
 	" <td name='node_id'>n/a</td>" +
 	" <td name='type'>n/a</td>" +
+	" <td name='monitor' class='hidden monitor-links'>n/a</td>" +
 	" <td name='image'>n/a</td>" +
 	"</tr>";
+
+    var monitor_url =
+	"<span>" +
+	"<a href='#' target=_blank class='monitor-button'>" +
+	"   <span class='glyphicon glyphicon-signal' " +
+	"         style='margin-right: 5px;'></span></a>" +
+	"<a href='#' class='txgraph-button'> " +
+	"  <span class='glyphicon glyphicon-align-left'</span></a>" +
+	"</span>";
+
+    function monitorUrl(urn, node_id)
+    {
+	var start = moment(record.started).unix();
+	var end   = moment(record.destroyed).unix();
+	
+	if (_.has(radioinfo, urn) &&
+	    _.has(radioinfo[urn], node_id) &&
+	    _.has(radioinfo[urn][node_id], "frontends") &&
+	    _.has(radioinfo[urn][node_id]["frontends"], "rf0")) {
+	    var fe = radioinfo[urn][node_id]["frontends"]["rf0"];
+			    
+	    if (fe.monitored && _.has(fe, "monitor_url")) {
+		var url = $(monitor_url);
+		var href = fe.monitor_url + "&range=" + start + "," + end;
+		url.find(".monitor-button").attr("href", href);
+		url.find(".txgraph-button").click(function (event) {
+		    event.preventDefault();
+		    ShowTXGraph(fe);
+		});
+		return url;
+	    }
+	}
+	return null;
+    }
 
     //
     // Show the topology inside the topo container. Called from the status
@@ -105,6 +148,8 @@ $(function ()
     //    
     function ShowTopo(record)
     {
+	var showmonitorlinks = 0;
+	
 	//
 	// Process the nodes in a single manifest.
 	//
@@ -144,6 +189,16 @@ $(function ()
 		    clone.find(" [name=node_id]").html(html);
 		    clone.find(" [name=type]")
 			.html($(vnode).attr("hardware_type"));
+
+		    // Radio monitor graph
+		    if (radioinfo) {
+			var url = monitorUrl(aggregate_urn, node_id);
+
+			if (url) {
+			    clone.find(" [name=monitor]").html(url);
+			    showmonitorlinks = 1;
+			}
+		    }
 		}
 		// Convenience.
 		clone.find(" [name=select]").attr("id", node);
@@ -203,6 +258,20 @@ $(function ()
 	    var xmlDoc = $.parseXML(manifest);
 	    ProcessNodes(aggregate_urn, $(xmlDoc));
 	});
+	if (showmonitorlinks) {
+	    $('#listview_table .monitor-links').removeClass("hidden");
+	    $('#txgraph_button').click(function (event) {
+		event.preventDefault();
+		ShowTXGraph();
+	    });
+	    $('#txgraph_button').removeClass("hidden");
+	}
+	$('#listview_table')
+	    .tablesorter({
+		theme : 'bootstrap',
+		widgets : [ "uitheme", "zebra"],
+		headerTemplate : '{content} {icon}',
+	    });
 
 	$("#showtopo_container").removeClass("invisible");
 	$('#quicktabs_ul a[href="#topology"]').tab('show');
@@ -210,7 +279,8 @@ $(function ()
 	    $('#quicktabs_ul li').removeClass('hidden');
 	    $('#quicktabs_content .tab-pane').removeClass('hidden');
 	    $('#quicktabs_ul a[href="#topology"]').tab('show');
-	    ShowViewer('#showtopo_statuspage', manifests);
+	    ShowTopoIframe($('#topology'), '.showtopology-bare',
+			   manifests, ShowManifest);
 	}
 	else {
 	    $('#quicktabs_ul a[href="#rspec"]').tab('show');
@@ -221,103 +291,6 @@ $(function ()
 	}
     }
 
-    var jacksInstance;
-    var jacksInput;
-    var jacksOutput;
-    var jacksRspecs;
-
-    function ShowViewer(divname, manifests)
-    {
-	var first_manifest  = _.first(manifests);
-	var rest            = _.rest(manifests);
-	var multisite       = rest.length ? true : false;
-	
-	if (! jacksInstance)
-	{
-	    jacksInstance = new window.Jacks({
-		mode: 'viewer',
-		source: 'rspec',
-		multiSite: multisite,
-		root: divname,
-		nodeSelect: true,
-		readyCallback: function (input, output) {
-		    jacksInput = input;
-		    jacksOutput = output;
-
-		    jacksOutput.on('modified-topology', function (object) {
-			//console.log("jacksIDs", object, jacksIDs);
-			ShowManifest(object.rspec);
-		    });
-		
-		    jacksInput.trigger('change-topology',
-				       [{ rspec: first_manifest }]);
-
-		    if (rest.length) {
-			_.each(rest, function(manifest) {
-			    jacksInput.trigger('add-topology',
-					       [{ rspec: manifest }]);
-			});
-		    }
-		},
-	        canvasOptions: {
-	    "aggregates": [
-	      {
-		"id": "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
-		"name": "Cloudlab Utah"
-	      },
-	      {
-		"id": "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
-		"name": "Cloudlab Wisconsin"
-	      },
-	      {
-		"id": "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
-		"name": "Cloudlab Clemson"
-	      },
-	      {
-		"id": "urn:publicid:IDN+utahddc.geniracks.net+authority+cm",
-		"name": "IG UtahDDC"
-	      },
-	      {
-		"id": "urn:publicid:IDN+apt.emulab.net+authority+cm",
-		"name": "APT Utah"
-	      },
-	      {
-		"id": "urn:publicid:IDN+emulab.net+authority+cm",
-		"name": "Emulab"
-	      },
-	      {
-		"id": "urn:publicid:IDN+wall2.ilabt.iminds.be+authority+cm",
-		"name": "iMinds Virt Wall 2"
-	      },
-	      {
-		"id": "urn:publicid:IDN+uky.emulab.net+authority+cm",
-		"name": "UKY Emulab"
-	      }
-	    ]
-		},
-		show: {
-		    rspec: false,
-		    tour: false,
-		    version: false,
-		    selectInfo: true,
-		    menu: false
-		}
-            });
-	}
-	else if (jacksInput)
-	{
-	    jacksInput.trigger('change-topology',
-			       [{ rspec: first_manifest }]);
-
-	    if (rest.length) {
-		_.each(rest, function(manifest) {
-		    jacksInput.trigger('add-topology',
-				       [{ rspec: manifest }]);
-		});
-	    }
-	}
-    }
-
     //
     // Show the manifest in the tab, using codemirror.
     //
@@ -325,7 +298,7 @@ $(function ()
     {
 	var mode   = "text/xml";
 
-	$("#manifest_textarea").css("height", "300");
+	$("#manifest_textarea").css("height", "500");
 	$('#manifest_textarea .CodeMirror').remove();
 
 	var myCodeMirror = CodeMirror(function(elt) {
@@ -350,7 +323,7 @@ $(function ()
     {
 	var mode   = "text/xml";
 
-	$("#rspec_textarea").css("height", "300");
+	$("#rspec_textarea").css("height", "500");
 	$('#rspec_textarea .CodeMirror').remove();
 
 	var myCodeMirror = CodeMirror(function(elt) {
@@ -422,6 +395,60 @@ $(function ()
 
 	$('#error_panel_text').text(record.exitmessage);
 	$('#error_panel').removeClass("hidden");
+    }
+
+    /*
+     * Show a TX graph.
+     */
+    function ShowTXGraph(fe)
+    {
+	var route;
+	var args;
+	var defer = $.Deferred();
+
+	var callback = function (json) {
+	    console.info(json);
+	    if (json.code) {
+		defer.resolve(json.value);
+		return;
+	    }
+	    var txlist = json.value.txlist;
+	    if (!_.size(txlist)) {
+		defer.reject(null);
+		return;
+	    }
+	    var args = {
+		"selector"  : "#txgraph-modal",
+		"txlist"    : txlist,
+		"instances" : null,
+		"instance"  : record,
+	    }
+	    defer.resolve(args);
+	};
+	if (fe) {
+	    var urn      = fe.aggregate_urn;
+	    var node_id  = fe.node_id;
+	    var frontend = fe.frontend;
+	    var iface    = fe.iface;
+	    console.info(urn, node_id, frontend, iface);
+
+	    args = {
+		"instance"      : window.uuid,
+		"aggregate_urn" : urn,
+		"node_id"       : node_id,
+		"iface"         : iface,
+		"frontend"      : frontend,
+	    };
+	    route = "rfrange";
+	}
+	else {
+	    args = {
+		"uuid" : window.uuid,
+	    };
+	    route = "memlane";
+	}
+	window.ShowTXGraph("#txgraph-modal", defer);
+	sup.CallServerMethod(null, route, "Transmissions", args, callback);
     }
 
     //

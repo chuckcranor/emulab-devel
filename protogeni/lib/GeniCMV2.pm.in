@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -94,6 +94,7 @@ my $NFREE	   = "$TB/bin/nfree";
 my $TEVC	   = "$TB/bin/tevc";
 my $AVAIL	   = "$TB/sbin/avail";
 my $PTOPGEN	   = "$TB/libexec/ptopgen";
+my $NODEREBOOT	   = "$TB/bin/node_reboot";
 my $TBSWAP	   = "$TB/bin/tbswap";
 my $SWAPEXP	   = "$TB/bin/swapexp";
 my $PLABSLICE	   = "$TB/sbin/plabslicewrapper";
@@ -111,6 +112,7 @@ my $DELETEIMAGE    = "$TB/sbin/delete_image";
 my $CREATEDATASET  = "$TB/bin/createdataset";
 my $DELETEDATASET  = "$TB/bin/deletelease";
 my $EXTENDDATASET  = "$TB/bin/extendlease";
+my $MODIFYDATASET  = "$TB/bin/modlease";
 my $GRANTDATASET   = "$TB/bin/grantlease";
 my $APPROVEDATASET = "$TB/bin/approvelease";
 my $GRANTIMAGE     = "$TB/sbin/grantimage";
@@ -122,9 +124,12 @@ my $LINKTEST       = "$TB/sbin/linktest_control";
 my $NODEADMIN      = "$TB/bin/node_admin";
 my $XMLLINT	   = "/usr/local/bin/xmllint";
 my $IMAGEINFO      = "$TB/sbin/imageinfo";
+my $MODPORTVLAN    = "$TB/sbin/modportvlan";
 my $PRERENDER      = "$TB/libexec/vis/prerender";
 my $IMPORTER       = "$TB/sbin/image_import";
 my $POSTIMAGEDATA  = "$TB/sbin/protogeni/postimagedata";
+my $NODE_SLOGS     = "$TB/sbin/node_servicelogs";
+my $SPEWIMAGE      = "$TB/sbin/spewimage";
 my $EMULAB_PEMFILE = "@prefix@/etc/genicm.pem";
 # Just one of these, at Utah.
 my $GENICH_PEMFILE = "@prefix@/etc/genich.pem";
@@ -283,7 +288,6 @@ sub Resolve($)
 	if ($slice->async_code()) {
 	    $blob->{"async_code"}   = $slice->async_code();
 	    $blob->{"async_output"} = $slice->async_output();
-	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 	}
 
 	my $aggregate = GeniAggregate->SliceAggregate($slice);
@@ -430,6 +434,7 @@ sub CreateSliver($)
     my $impotent     = $argref->{'impotent'} || 0;
     my $usetracker   = $argref->{'usetracker'} || 0;
     my $async        = $argref->{'asyncmode'} || 0;
+    my $update       = $argref->{'isupdate'} || 0;
     my $mypid        = $PID;
     my $cachedebug   = 0;
     my $rspec;
@@ -502,7 +507,7 @@ sub CreateSliver($)
 	    }
 	    $slice->UnLock();
 	}
-	if (defined($aggregate)) {
+	if (defined($aggregate) && !$update) {
 	    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 					"Must delete existing slice first");
 	}
@@ -532,7 +537,7 @@ sub CreateSliver($)
     }
     eval {$rspec = GeniCM::GetTicketAux({"credential" => $credential,
 					 "rspecstr"   => $rspecstr,
-					 "isupdate"   => 0,
+					 "isupdate"   => $update,
 					 "impotent"   => $impotent,
 					 "v2"         => 1,
 					 "level"      => 0,
@@ -629,7 +634,7 @@ sub CreateSliver($)
 	       GeniCM::SliverWorkAux({"credential"  => $credential,
 				      "object"      => $rspec,
 				      "keys"        => $keys,
-				      "isupdate"    => 0,
+				      "isupdate"    => $update,
 				      "impotent"    => $impotent,
 				      "v2"          => 1,
 				      "level"       => 0,
@@ -720,13 +725,19 @@ sub CreateSliver($)
     #
     $mypid = $PID;
 
-    eval { $retval = $aggregate->Start($API_VERSION); };
+    # When doing an update, different flags.
+    my $startflags = ($update ?
+		      $GeniAggregate::ACTION_FLAGS_SYNCVLANS|
+		      $GeniAggregate::ACTION_FLAGS_NOEVENTSTART : undef);
+
+    eval { $retval = $aggregate->Start($API_VERSION, $startflags); };
     if ($@) {
 	#
 	# This will cause the slice status to be failure.
 	#
 	$aggregate->SetBootFailure(GENIRESPONSE_SERVERERROR);
 	$aggregate->SetErrorLog("Internal Error: $@");
+	print STDERR "Internal Error: $@\n";
 	$retval = -1;
     }
     if ($retval) {
@@ -892,6 +903,7 @@ sub PrestageImages($)
 	while (@todo) {
 	    my $urn   = shift(@todo);
 	    my $image = $prestage{$urn};
+	    my $credential = $image->_credential();
 
 	    if ($image->Lock()) {
 		print STDERR "$image is currently locked. Waiting ...\n";
@@ -926,16 +938,17 @@ sub PrestageImages($)
 	    #
 	    my $pending = Image::PendingImport->Lookup($image->imageid());
 	    if (defined($pending)) {
-		# Already working on it elsewhere.
-		print STDERR "Pending already exists, moving on.\n";
-		$image->Unlock();
-		next;
+		if ($pending->failed()) {
+		    $pending->Delete();
+		}
+		else {
+		    # Already working on it elsewhere.
+		    print STDERR "Pending already exists, moving on.\n";
+		    $image->Unlock();
+		    next;
+		}
 	    }
-	    $pending = Image::PendingImport->Lookup($image->metadata_url());
-	    if (defined($pending)) {
-
-	    }
-	    $pending = Image::PendingImport->Create({
+	    my $pending_args = {
 		"uid"          => $image->creator(),
 		"uid_idx"      => $image->creator_idx(),
 		"pid"          => $image->pid(),
@@ -944,7 +957,11 @@ sub PrestageImages($)
 		"imagename"    => $image->imagename(),
 		"imageid"      => $image->imageid(),
 		"metadata_url" => $image->metadata_url(),
-	    });
+	    };
+	    if (defined($credential)) {
+		$pending_args->{"credential_string"} = $credential->asString();
+	    }
+	    $pending = Image::PendingImport->Create($pending_args);
 	    if (!defined($pending)) {
 		print STDERR "Could not pending import object\n";
 		$image->Unlock();
@@ -1318,9 +1335,10 @@ sub DeleteSlice($)
 	# slice disappearing (if the daemon beats us to it).
 	#
 	$slice->UnLock();
-	$slice->Flush();
 	while (1) {
 	    sleep(10);
+	    $slice->Flush();
+
 	    $slice = GeniSlice->Lookup($slice_uuid);
 	    if (!defined($slice)) {
 		print STDERR "Slice is gone, quiting ...\n";
@@ -1342,7 +1360,6 @@ sub DeleteSlice($)
 		if (!$aggregate->Busy());
 	    
 	    $slice->UnLock();
-	    $slice->Flush();
 	}
 	# Make sure the cancel flag is cleared (checked in endexp).
 	$slice_experiment->SetCancelFlag(0);
@@ -1570,57 +1587,13 @@ sub SliverAction($$$$$$)
 	print STDERR "Could not determine current state\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
-    my $CheckState = sub {
-	my ($object, $action) = @_;
-
-	if ($action eq "start") {
-	    if ($object->state() !~ /^(stopped|new|mixed|interrupted)$/) {
-		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-					    "Sliver is not stopped (yet)");
-	    }
-	}
-	elsif ($action eq "stop") {
-	    if ($object->state() ne "started" && $object->state() ne "mixed") {
-		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-					    "Sliver is not started (yet)");
-	    }
-	}
-	elsif ($action eq "restart") {
-	    if ($object->state() ne "started" && $object->state() ne "mixed") {
-		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-					    "Sliver is not started (yet)");
-	    }
-	}
-	elsif ($action eq "powercycle") {
-	    if ($object->state() ne "started" && $object->state() ne "mixed") {
-		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-					    "Sliver is not started (yet)");
-	    }
-	}
-	elsif ($action eq "reload") {
-	    # We want to make this check before the fork, which makes it messy
-	    if (ref($object) eq "GeniSliver::Node" ||
-		ref($object) eq "Aggregate") {
-		if ($object->InRecovery()) {
-		    return
-			GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-				 "Must clear recovery mode before reload");
-		}
-	    }
-	    if ($object->state() ne "started" && $object->state() ne "stopped"){
-		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-				    "Sliver is not started or stopped (yet)");
-	    }
-	}
-	return 0;
-    };
     my $PerformAction = sub {
 	my ($object, $action, @slivers) = @_;
 
 	my $exitval = 0;
 
 	if ($action eq "start") {
-	    $exitval = $object->Start($API_VERSION);
+	    $exitval = $object->Start($API_VERSION, undef, @slivers);
 	}
 	elsif ($action eq "stop") {
 	    $exitval = $object->Stop($API_VERSION);
@@ -1675,11 +1648,34 @@ sub SliverAction($$$$$$)
 	if ($action eq "restart" && $aggregate->state() eq "interrupted") {
 	    $action = "start";
 	}
-	
-	$response = &$CheckState($aggregate, $action);
-	goto bad
-	    if (GeniResponse::IsResponse($response));
-	    
+	elsif ($action eq "restart") {
+	    my @slivers = ();
+	    my $isnew   = 0;
+
+	    if ($aggregate->SliverList(\@slivers) != 0) {
+		$response = GeniResponse->Create(GENIRESPONSE_ERROR,
+						 undef,
+						 "Error getting sliver list");
+		goto bad;
+	    }
+	    foreach my $sliver (@slivers) {
+		$isnew++
+		    if ($sliver->state() eq "new");
+	    }
+	    #
+	    # If doing a restart and all the slivers are "new", then these
+	    # failed early enough that we should just do "start" instead.
+	    #
+	    if ($isnew == scalar(@slivers)) {
+		$action = "start";
+	    }
+	}
+	my $reason;
+	if (!$aggregate->IsActionAllowed($action, \$reason)) {
+	    $response = GeniResponse->Create(GENIRESPONSE_REFUSED,
+					     undef, $reason);
+	    goto bad;
+	}
 	if ($action eq "start" || $action eq "restart" || $action eq "reload"){
 	    if (defined($manifest) &&
 		$aggregate->ProcessManifest($manifest)) {
@@ -1716,10 +1712,8 @@ sub SliverAction($$$$$$)
     }
     else {
 	my @slivers = ();
+	my $isnew   = 0;
 
-	#
-	# Sanity check all arguments before doing anything.
-	#
 	foreach my $urn (@{ $sliver_urns }) {
 	    my $sliver = GeniSliver->Lookup($urn);
 	    if (!defined($sliver)) {
@@ -1728,12 +1722,29 @@ sub SliverAction($$$$$$)
 						 "Nothing here by that name");
 		goto bad;
 	    }
-	    
-	    $response = &$CheckState($sliver, $action);
-	    goto bad
-		if (GeniResponse::IsResponse($response));
-
 	    push(@slivers, $sliver);
+
+	    $isnew++
+		if ($sliver->state() eq "new");
+	}
+	#
+	# If doing a restart and all the slivers are "new", then these
+	# failed early enough that we should just do "start" instead.
+	#
+	if ($action eq "restart" && $isnew == scalar(@slivers)) {
+	    $action = "start";
+	}
+
+	#
+	# Sanity check all arguments before doing anything.
+	#
+	foreach my $sliver (@slivers) {
+	    my $reason;
+	    if (!$sliver->IsActionAllowed($action, \$reason)) {
+		$response = GeniResponse->Create(GENIRESPONSE_REFUSED,
+						 undef, $reason);
+		goto bad;
+	    }
 	}
 	foreach my $sliver (@slivers) {
 	    if ($action eq "start" && defined($manifest)) {
@@ -1745,7 +1756,7 @@ sub SliverAction($$$$$$)
 		}
 	    }
 	}
-	if ($asyncmode && $action =~ /^(restart|reload)$/) {
+	if ($asyncmode && $action =~ /^(start|restart|reload)$/) {
 	    #
 	    # At this point we want to return and let the startsliver proceed
 	    # in the background
@@ -4795,7 +4806,7 @@ sub ImageInfo($)
     if ($image->hash()) {
 	$blob->{"hash"} = $image->hash();
     }
-    print STDERR Dumper($blob);
+    #print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
@@ -5605,9 +5616,11 @@ sub CreateDataset($)
     my ($argref) = @_;
     my $credentials  = $argref->{'credentials'};
     my $dataset_urn  = $argref->{'dataset_urn'};
+    my $checkonly    = 0;
     my $POLICY_FAIL  = 2;
     my $needapproval = 0;
     my $unapproved_reason;
+    my $isimdataset  = 0;
     require WebTask;
     require Lease;
     require Image;
@@ -5616,6 +5629,9 @@ sub CreateDataset($)
 
     if (! (defined($credentials) && defined($dataset_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    if (exists($argref->{'checkonly'}) && $argref->{'checkonly'} != 0) {
+	$checkonly = 1;
     }
     if (!GeniHRN::IsValid($dataset_urn)) {
 	return GeniResponse->MalformedArgsResponse("Invalid dataset urn");
@@ -5696,16 +5712,6 @@ sub CreateDataset($)
 		    "A long/short term dataset with this name already exists");
     }
     my $opts = "-b ";
-    my $cmd  = "$CREATEDATASET ";
-    if ($PROTOGENI_LOCALUSER) {
-	$opts .= "-o ". $user->uid() . " ";
-	$cmd   = "$WAP $cmd ";
-	#
-	# We do this as admin so that we create dataset owned by this
-	# user and in the target project. 
-	#
-	GeniUtil::FlipToElabMan();
-    }
     if (exists($argref->{'size'})) {
 	my $size = $argref->{'size'};
 	return GeniResponse->MalformedArgsResponse("Bad size, use MiBs")
@@ -5719,6 +5725,9 @@ sub CreateDataset($)
 	return GeniResponse->MalformedArgsResponse("Mismatching type")
 	    if ($type ne $credential->target_urn()->type());
 	$opts .= " -t $type ";
+	if ($type eq "imdataset") {
+	    $isimdataset = 1;
+	}
     }
     if (exists($argref->{'fstype'})) {
 	my $fstype = $argref->{'fstype'};
@@ -5753,6 +5762,27 @@ sub CreateDataset($)
 	}
 	$opts .= " -e '$when' ";
     }
+
+    my $cmd = "$CREATEDATASET ";
+    if ($PROTOGENI_LOCALUSER && $isimdataset) {
+	#
+	# For nonlocal projects, images are actually created as GeniUser.
+	# and we store the urn of the user in the descriptor. Lets be
+	# consistent with that, even if it makes no sense to have choosen
+	# to do it this way. If a local project/user, we are going to
+	# operate as the actual user. 
+	#
+	if (!defined(GeniCM::FlipToUser($group->GetProject(), $user))) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"FlipToUser failed");
+	}
+    }
+    else {
+	# This works best for lt/st datasets
+	$opts .= " -o ". $user->uid() . " ";
+	$cmd   = "$WAP $cmd ";
+	GeniUtil::FlipToElabMan();	
+    }
     $opts .= $group->pid() . "/" . $group->gid() . "/" . $dataset_urn->id();
 
     #
@@ -5764,19 +5794,43 @@ sub CreateDataset($)
 	print STDERR "Could not create web task\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
-    $opts = " -C -T ". $webtask->task_id() . " $opts";
-	
+    $opts = " -T ". $webtask->task_id() . " $opts";
+    if ($checkonly) {
+	$opts = "-n $opts";
+    }
+    else {
+	$opts = "-C $opts";
+    }
     my $output = GeniUtil::ExecQuiet("$cmd $opts");
     # Not a typical op, so always print debugging info;
     print STDERR $output;
     if ($?) {
+	$webtask->Refresh();
+	if ($checkonly && $webtask->HasExited() &&
+	    $webtask->exitcode() == $POLICY_FAIL) {
+	    my $blob = {
+		"approved" => 0,
+		"unapproved_reason" => $webtask->output(),
+	    };
+	    $webtask->Delete();
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+	}
 	$webtask->Delete();
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
     }
-    GeniUtil::FlipToGeniUser()
-	if ($PROTOGENI_LOCALUSER);
-
     $webtask->Refresh();
+
+    if ($checkonly) {
+	my $blob = {
+	    "approved" => 1,
+	};
+	$webtask->Delete();
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    }
+    
+    GeniUtil::FlipToGeniUser()
+	if ($PROTOGENI_LOCALUSER && $isimdataset);
+
     if ($webtask->needapproval()) {
 	$needapproval = 1;
 	$unapproved_reason = $webtask->unapproved_reason();
@@ -5790,7 +5844,7 @@ sub CreateDataset($)
     # Grab the lease or image to see if its been created/approved, we want
     # to tell the user something.
     #
-    if (exists($argref->{'type'}) && $argref->{'type'} eq "imdataset") {
+    if ($isimdataset) {
 	my $image = Image->Lookup($group->pid(), $dataset_urn->id());
 	if (!defined($image)) {
 	    print STDERR "Could not lookup image after createdataset\n";
@@ -5944,8 +5998,42 @@ sub ModifyDataset($)
     }
     my $cmd;
     #
-    # All we can handle is extend and modify permission bits.
+    # All we can handle is extend,modify permission bits, and permanent flag
     #
+    if (exists($argref->{'permanent'})) {
+	return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED, undef,
+				    "IM datasets cannot made permanent")
+	    if (!$islease);
+	if ($lease->IsPermanent() != $argref->{'permanent'}) {
+	    my $onoff = ($argref->{'permanent'} == 1 ? "on" : "off");
+	    my $cmd = "$MODIFYDATASET -p $onoff " .
+		$lease->pid() . "/" . $lease->gid() . "/" .
+		$lease->lease_id();
+
+	    if ($PROTOGENI_LOCALUSER) {
+		$cmd = "$WAP $cmd";
+		#
+		# We do this as admin to avoid permission problems; caller has
+		# permission to do it via credential.
+		#
+		GeniUtil::FlipToElabMan();
+	    }
+	    my $output = GeniUtil::ExecQuiet($cmd);
+	    # Not a typical op, so always print debugging info;
+	    print STDERR $output;
+	    if ($?) {
+		my $val = $? >> 8;
+		if ($val == 255 || $val < 0) {
+		    $val = GENIRESPONSE_ERROR;
+		}
+		else {
+		    $val = GENIRESPONSE_REFUSED;
+		}
+		return GeniResponse->Create($val, undef, $output);
+	    }
+	    GeniUtil::FlipToGeniUser();
+	}
+    }
     if (exists($argref->{'extend'})) {
 	return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED, undef,
 				    "IM datasets cannot be extended")
@@ -5969,6 +6057,9 @@ sub ModifyDataset($)
 		       $write_access eq "creator"));
 	    $cmd .= " -W " . $write_access;
 	}
+    }
+    elsif (exists($argref->{'permanent'})) {
+	goto done;
     }
     else {
 	return GeniResponse->MalformedArgsResponse("unknown operation");
@@ -6321,6 +6412,8 @@ sub SecureImageDownload($)
     my ($argref)  = @_;
     my $credentials = $argref->{'credentials'};
     my $image_urn   = $argref->{'image_urn'};
+    my $usingwget   = $argref->{'usingwget'};
+
 
     if (! (defined($credentials))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -6372,76 +6465,159 @@ sub SecureImageDownload($)
     return GeniResponse->Create(GENIRESPONSE_ERROR)
 	if (!defined($group));
 
+    my $versid = $image->versid();
+    # spewimage always wants this.
+    my $access_key = $image->access_key();
+
     # Better make sure we have project mounted.
     $group->GetProject()->UpdateExports();
     my $file = $image->FullImageFile();
 
     # Need to set our groups so we can read the file.
-    GeniUtil::FlipToUser("root", $group->pid(), $group->unix_gid());
+    GeniUtil::FlipToUser("nobody", $group->pid(), $group->unix_gid());
     
     if (! -r $file) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 			    "Image file does not exist or cannot be read");
     }
-    #
-    # Stat the file to get the bytelen for spewing.
-    #
-    my (undef,undef,undef,undef,undef,undef,undef,$bytelen) = stat($file);
+    if (!$usingwget) {
+	#
+	# Stat the file to get the bytelen for spewing.
+	#
+	my (undef,undef,undef,undef,undef,undef,undef,$bytelen) = stat($file);
 
-    open(FD, "< $file") or
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Could not open file for reading");
-    # Flip back now that we have it opened.
-    GeniUtil::FlipToGeniUser();
+	open(FD, "< $file") or
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Could not open file for reading");
+	# Flip back now that we have it opened.
+	GeniUtil::FlipToGeniUser();
 
-    # This sets STDOUT back to apache.
-    main::AbortLogging();
-    print "Content-Type: application/octet-stream\n";
-    print "Cache-Control: no-cache, must-revalidate\n";
-    print "Pragma: no-cache\n\n";
+	# This sets STDOUT back to apache.
+	main::AbortLogging();
+	print "Content-Type: application/octet-stream\n";
+	print "Cache-Control: no-cache, must-revalidate\n";
+	print "Pragma: no-cache\n\n";
     
-    #
-    # Deal with NFS read failures
-    #
-    my $foffset = 0;
-    my $retries = 5;
-    my $buf;
+	#
+	# Deal with NFS read failures
+	#
+	my $foffset = 0;
+	my $retries = 5;
+	my $buf;
 
-    while ($bytelen) {
-	my $rlen = sysread(FD, $buf, 8192);
+	while ($bytelen) {
+	    my $rlen = sysread(FD, $buf, 8192);
 
-	if (! defined($rlen)) {
-	    #
-	    # Retry a few times on error to avoid the
-	    # changing-exports-file server problem.
-	    #
-	    if ($retries > 0 && sysseek(FD, $foffset, 0)) {
-		$retries--;
-		sleep(1);
-		next;
+	    if (! defined($rlen)) {
+		#
+		# Retry a few times on error to avoid the
+		# changing-exports-file server problem.
+		#
+		if ($retries > 0 && sysseek(FD, $foffset, 0)) {
+		    $retries--;
+		    sleep(1);
+		    next;
+		}
+		print STDERR "Error reading $file: $!\n";
+		last;
 	    }
-	    print STDERR "Error reading $file: $!\n";
-	    last;
+	    if ($rlen == 0) {
+		last;
+	    }
+	    if (! syswrite(STDOUT, $buf, $rlen)) {
+		print STDERR "Error writing file to stdout: $!\n";
+		last;
+	    }
+	    $foffset += $rlen;
+	    $bytelen -= $rlen;
+	    $retries = 5;
 	}
-        if ($rlen == 0) {
-	    last;
+	close(FD);
+	if ($bytelen) {
+	    print STDERR "Did not get the entire file! $bytelen bytes left.\n";
+	    # Cannot return XML at this point.
+	    return -1;
 	}
-	if (! syswrite(STDOUT, $buf, $rlen)) {
-	    print STDERR "Error writing file to stdout: $!\n";
-	    last;
-	}
-	$foffset += $rlen;
-	$bytelen -= $rlen;
-	$retries = 5;
-    }
-    close(FD);
-    if ($bytelen) {
-	print STDERR "Did not get the entire file! $bytelen bytes left.\n";
 	# Cannot return XML at this point.
-	return -1;
+	return 0;
+    }
+    
+    my $ishead = 0;
+    if ($ENV{'REQUEST_METHOD'} eq "HEAD") {
+	$ishead  = 1;
+    }
+
+    #
+    # This sets STDOUT back to apache.
+    # NOTE: STDERR gets reset as well, it goes to the apache log file.
+    #
+    main::AbortLogging();
+
+    my $buf;
+    my $rval = 0;
+    my $opts = "-k $access_key ";
+    if ($ishead) {
+	$opts .= "-h ";
+    }
+    #
+    # Check for RANGE header. We support a singlw range, there is no
+    # reason for the client to ask for multiple ranges for an image.
+    #
+    if (exists($ENV{'HTTP_RANGE'})) {
+	my $http_range = $ENV{'HTTP_RANGE'};
+	
+	if ($http_range =~ /bytes=(\d*)\-$/i) {
+	    $opts .= "-r ${1} ";
+	}
+	elsif ($http_range =~ /bytes=(\d*)\-(\d*)$/i) {
+	    $opts .= "-r ${1}-${2} ";
+	}
+	else {
+	    syswrite(STDOUT, "HTTP/1.0 416 Client requested invalid Range\n");
+	    return -1;
+	}
+    }
+    my $command = "$SPEWIMAGE $opts $versid";
+    print STDERR "GeniCMV2::SecureImageDownload: '$command'\n";
+
+    if (open(SPEW, "$command |")) {
+	while (1) {
+	    my $rlen = sysread(SPEW, $buf, 1024 * 64);
+	    if (!defined($rlen)) {
+		print STDERR "GeniCMV2::SecureImageDownload: ".
+		    "Error reading $file: $!\n";
+		$rval = -1;
+		last;
+	    }
+	    last
+		if ($rlen == 0);
+
+	    if (! syswrite(STDOUT, $buf, $rlen)) {
+		print STDERR "GeniCMV2::SecureImageDownload: ".
+		    "Error writing file to stdout: $!\n";
+		$rval = -1;
+		last;
+	    }
+	}
+	close(SPEW);
+	if ($ishead && $| == 0) {
+	    my $exitval = $? >> 8;
+            if ($exitval == 2) {
+		syswrite(STDOUT, "HTTP/1.0 304 File has not changed\n");
+            }
+            else {
+                syswrite(STDOUT, "HTTP/1.0 404 Could not verify file\n");
+            }
+	}
+    }
+    else {
+	syswrite(STDOUT, "HTTP/1.0 404 Could not start spewimage\n");
+	print STDERR "GeniCMV2::SecureImageDownload: ".
+	    "Error starting spewimage\n";
+	$rval = -1;
     }
     # Cannot return XML at this point.
-    return 0;
+    return $rval;
 }
 
 #
@@ -6938,6 +7114,89 @@ sub Recovery($)
 }
 
 #
+# Another Emulab specific function grab service logs from a node
+#
+sub ServiceLogs($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    my $sliver_urn   = $argref->{'sliver_urn'};
+    
+    if (! (defined($credentials) && 
+	   defined($slice_urn) && defined($sliver_urn))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my ($slice, $aggregate) = Credential2SliceAggregate($credential);
+    return $slice
+	if (defined($slice) && GeniResponse::IsResponse($slice));
+
+    if (! (defined($slice) && defined($aggregate))) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    return $user
+	if (GeniResponse::IsResponse($user));
+
+    main::AddLogfileMetaDataFromSlice($slice);
+
+    if ($slice_urn ne $slice->urn()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
+				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
+				    "Slice is marked for termination");
+    }
+    my $sliver = GeniSliver->Lookup($sliver_urn);
+    if (!defined($sliver)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    if ($sliver->slice_uuid() ne $slice->uuid()) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver is not in slice");
+    }
+    my $node_id = $sliver->resource_id();
+    my $node = Node->Lookup($node_id);
+    if (!defined($node)) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "No node for sliver urn");
+    }
+    if ($node->class() ne "pc") {
+	return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED(), undef,
+				    "Node does not support service logs");
+    }
+    if (!$node->IsUp()) {
+	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
+				    "Node is not ready");
+    }
+    if (!defined(GeniCM::FlipToUser($slice, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+    my $output = GeniUtil::ExecQuiet("$NODE_SLOGS $node_id");
+    $output =~ s/[^[:ascii:]]/ /g;
+    $output =~ tr/\x00-\x08\x0B\x0C\x0E-\x1F//d;    
+    if ($?) {
+	print STDERR $output . "\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $output);
+}
+
+#
 # Another Emulab specific function to flash a new FPGA image
 #
 sub Flash($)
@@ -7033,6 +7292,242 @@ sub Flash($)
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Failed to flash radio");
+    }
+    $slice->UnLock();
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
+#
+# Connect two shared lans together
+#
+sub ConnectSharedLan($)
+{
+    my ($argref) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    # These are the shared lan names in the create_shared_vlan rspec element.
+    my $sourcelan    = $argref->{'source'};
+    my $targetlan    = $argref->{'target'};
+    my $disconnect   = $argref->{'disconnect'};
+    my $noreconfig   = 0;
+    my $target_sharedlan;
+    require Node;
+    require Interface;
+    require Lan;
+
+    # We always want a log of this one.
+    print STDERR "ConnectSharedLan\n";
+    
+    if (! (defined($credentials) && 
+	   defined($slice_urn) && defined($sourcelan))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    if (exists($argref->{'noreconfig'}) && $argref->{'noreconfig'} == 1) {
+	$noreconfig = 1;
+    }
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my ($slice, $aggregate) = Credential2SliceAggregate($credential);
+    return $slice
+	if (defined($slice) && GeniResponse::IsResponse($slice));
+
+    if (! (defined($slice) && defined($aggregate))) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Sliver does not exist");
+    }
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    return $user
+	if (GeniResponse::IsResponse($user));
+
+    main::AddLogfileMetaDataFromSlice($slice);
+
+    if ($slice_urn ne $slice->urn()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
+				    "Credential does not match the URN");
+    }
+    # Terminated slices get nothing.
+    if ($slice->termination_pending()) {
+	return GeniResponse->Create(GENIRESPONSE_REFUSED(), undef,
+				    "Slice is marked for termination");
+    }
+    return GeniResponse->MalformedArgsResponse("Invalid source lan name")
+	if (!TBcheck_dbslot($sourcelan, "virt_lans", "vname",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+
+    if (!$disconnect) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments")
+	    if (!defined($targetlan));
+	
+	return GeniResponse->MalformedArgsResponse(
+	    "Invalid target shared lan name")
+	    if (!TBcheck_dbslot($targetlan, "virt_lans", "vname",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+
+	# We need the target vlan.
+	$target_sharedlan = VLan->FindSharedVLanByToken($targetlan);
+	return GeniResponse->MalformedArgsResponse("No such target lan name")
+	    if (!defined($target_sharedlan));
+
+	if (!$target_sharedlan->IsShared()) {
+	    return GeniResponse->MalformedArgsResponse(
+		"Target lan is not a shared lan")
+	}
+    }
+
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+    my $source_sharedlan = Lan->Lookup($experiment, $sourcelan);
+    return GeniResponse->MalformedArgsResponse("No such source lan name")
+	if (!defined($source_sharedlan));
+
+    my $role;
+    if ($source_sharedlan->GetAttribute("role", \$role)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No role value for source lan");
+    }
+    if ($role ne "port/lan") {    
+	return GeniResponse->MalformedArgsResponse(
+	    "Source lan is not a shared lan")
+    }
+
+    my $target_lanid;
+    if ($source_sharedlan->GetAttribute("target_lanid", \$target_lanid)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No target_lanid value for source lan");
+    }
+    if ($disconnect) {
+	if ("$target_lanid" eq "unbound") {
+	    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+					"Not connected to a shared lan");
+	}
+	# Need the target below.
+	$target_sharedlan = Lan->Lookup($target_lanid);
+    }
+    else {
+	# The source should not be connected yet.
+	if ("$target_lanid" ne "unbound") {
+	    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+					"Already connected to a shared lan");
+	}
+    }
+    if (!defined(GeniCM::FlipToUser($slice, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    if ($slice->Lock() != 0) {
+	return GeniResponse->BusyResponse();
+    }
+    $aggregate->Refresh();
+    # Check again after lock.
+    if ($aggregate->Busy()) {
+	$slice->UnLock();
+	return GeniResponse->BusyResponse();
+    }
+    my @members;
+    if ($source_sharedlan->MemberList(\@members)) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not get member list for source lan");
+    }
+    # Need to gather up all the vinterfaces;
+    my @vinterfaces = ();
+
+    foreach my $member (@members) {
+	#
+	# We tag the member with a vnode_id if its a pcvm. We need that to
+	# find the correct vinterface.
+	#
+	my $node_id;
+	my $node;
+	if ($member->GetAttribute("vnode_id", \$node_id) == 0 ||
+	    $member->GetAttribute("node_id", \$node_id) == 0) {
+	    $node = Node->Lookup($node_id)
+	}
+	else {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Cannot get node_id for member");
+	}
+	if (!defined($node)) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Cannot get node $node_id");
+	}
+	#
+	# Need the vinterface so that we can set/unset the vlanid, which is
+	# how tmcd tracks down the vlan tag. For now, unset means setting
+	# it to -1, fix later.
+	#
+	my $vinterface = Interface::VInterface->LookupByVirtLan($experiment,
+						$sourcelan, $node->vname());
+
+	push(@vinterfaces, $vinterface);
+    }
+
+    if ($disconnect) {
+	my @ports = map { $_->node_id() . ":" . $_->iface(); } @vinterfaces;
+	    
+	#
+	# Need to apply this to the experiment owning the target sharedlan
+	#
+	my $exp = $target_sharedlan->GetExperiment();
+	if ($exp->RemoveMembersFromPortlan(0, $target_sharedlan, @ports)) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"RemoveMembersFromPortlan() failed");
+	}
+	# Set the target lanid so that experiment terminate knows to clean up.
+	if ($source_sharedlan->SetAttribute("target_lanid", "unbound")) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not set target_lanid on source lan");
+	}
+	# For tmcd
+	foreach my $v (@vinterfaces) {
+	    $v->Update({"vlanid" => -1});
+	}
+    }
+    else {
+	# Set the target lanid so that experiment terminate knows to clean up.
+	if ($source_sharedlan->SetAttribute("target_lanid",
+					    $target_sharedlan->lanid())) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not set target_lanid on source lan");
+	}
+	# Now this will do the right thing.
+	if ($experiment->SetupPortLans()) {
+	    $source_sharedlan->SetAttribute("target_lanid", "unbound");
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"SetupPortLans() failed");
+	}
+	# And get snmpit to do its thing.
+	if ($experiment->SyncPortLans()) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"SyncPortLans() failed");
+	}
+	# For tmcd
+	foreach my $v (@vinterfaces) {
+	    $v->Update({"vlanid" => $target_sharedlan->lanid()});
+	}
+    }
+    #
+    # And now reconfig the node.
+    #
+    if (!$noreconfig) {
+	system("$NODEREBOOT -c " . join(" ", map { $_->node_id(); } @vinterfaces));
+	if ($?) {
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Could not reconfig all nodes");
+	}
     }
     $slice->UnLock();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);

@@ -1,0 +1,209 @@
+<style>
+ i.tablesorter-icon {
+     top: unset !important;
+ }
+ .group-border-left {
+     border-left-width: 3px !important;
+ }
+ .tooltip-inner {
+     max-width: 250px;
+ }
+ .tablesorter-bootstrap .tablesorter-header-inner {
+     padding-right: 4px !important;
+ }
+ .tablesorter-bootstrap tr:not(.header-grouping) .tablesorter-header {
+     cursor: ns-resize !important;
+ }
+ .text-nowrap {
+     padding-left: 4px !important;
+     padding-right: 1px !important;
+ }
+ .hide-impl {
+     display: none !important;
+ }
+</style>
+<div class='row justify-content-center'>
+  <div class="col-auto">
+    <div class="card">
+      <div class="card-header text-center">
+	<h5 class="card-title">Filtering Options</h5>
+      </div>
+      <div class="card-body pt-0 pb-1">
+	<div class="row mb-1 justify-content-center">
+	  <div class="col-auto">
+	    <small>There are <span id="matching-nodes">0</span> matching nodes</small>
+	  </div>
+	</div>	
+	<div class="row">
+	  <div class="col">
+	    <div class="form-floating">
+	    <select class="form-select search-select" id="cluster-select"
+		    data-column="3">
+	      <option value="">--</option>
+	      <option value="1">Cloudlab Utah</option>
+	      <option value="2">Cloudlab Wisc</option>
+	      <option value="3">Cloudlab Clemson</option>
+	      <option value="4">Cloudlab UMass</option>
+	      <option value="5">Emulab</option>
+	      <option value="6">Powder</option>
+	      <option value="7">APT</option>
+	    </select>
+	    <label>Cluster</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	    <select class="form-select search-select" id="processor-select"
+		    data-column="32">
+	      <option value="">--</option>
+	      <option value="Intel">Intel</option>
+	      <option value="AMD">AMD</option>
+	      <option value="NVIDIA">NVIDIA</option>
+	      <option value="IBM">IBM</option>
+	      <option value="ARM">ARM</option>
+	    </select>
+	    <label>CPU Manufacturer</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="processor-select"
+		      data-column="6">
+		<option value="">--</option>
+		<option value="1">Intel</option>
+		<option value="2">AMD</option>
+		<option value="3">ARM</option>
+		<option value="4">IBM</option>
+	      </select>
+	      <label>Processor</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="cpus-select"
+		      data-column="9">
+		<option value="">--</option>
+	      </select>
+	      <label>#CPUs</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="threads-select"
+		      data-column="7">
+		<option value="">--</option>
+	      </select>
+	      <label>#Threads</label>
+	    </div>
+	  </div>
+	</div>
+	<div class="row mt-2">
+	  <div class="col">
+	    <div class="form-floating">
+	    <select class="form-select search-select" id="gpu-select"
+		    data-placeholder="GPU"
+		    data-column="26">
+	      <option value="">--</option>
+	      <option value="1">A30</option>
+	      <option value="2">K80</option>
+	      <option value="3">K40m</option>
+	      <option value="4">A100</option>
+	      <option value="5">P100</option>
+	      <option value="6">V100</option>
+	      <option value="7">V100s</option>
+	    </select>
+	    <label>GPU</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="network-speeds-select"
+		      data-column="33">
+		<option value="">--</option>
+		<option value="100Mb">100Mb</option>
+		<option value="1Gb">1Gb</option>
+		<option value="10Gb">10Gb</option>
+		<option value="25Gb">25Gb</option>
+		<option value="40Gb">40Gb</option>
+		<option value="100Gb">100Gb</option>
+		<option value="200Gb">200Gb</option>
+	      </select>
+	      <label>Network Speed</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="network-cards-select"
+		      data-column="31">
+		<option value="">--</option>
+	      </select>
+	      <label>Network Card</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="dram-select"
+		      data-column="12">
+		<option value="">--</option>
+	      </select>
+	      <label>DRAM</label>
+	    </div>
+	  </div>
+	  <div class="col">
+	    <div class="form-floating">
+	      <select class="form-select search-select" id="threads-select"
+		      data-column="13">
+		<option value="">--</option>
+	      </select>
+	      <label>Disk Space (GB)</label>
+	    </div>
+	  </div>
+	</div>
+	<div class="row justify-content-center">
+	  <div class="col-auto">
+	    <a href="#" role="button" class="reset-filters">Reset Filters</a>
+	  </div>
+	</div>	
+      </div>
+    </div>
+  </div>
+</div>
+<div class='row'>
+  <div class='col-sm-12 table-responsive'>
+    <table id='portal-hardware-table' class='tablesorter hidden'>
+      <thead>
+	<tr class="header-grouping">
+          <th class='sorter-false' colspan=4></th>
+          <th class='sorter-false text-center
+		     group-border-left' colspan=2>Quantities</th>
+          <th class='sorter-false text-center
+		     group-border-left' colspan=6>CPU</th>
+          <th class='sorter-false group-border-left'></th>
+          <th class='sorter-false text-center group-border-left'
+	      colspan=4>Storage</th>
+          <th class='sorter-false text-center group-border-left'
+	      colspan=8>Network
+	    <a href='#' class='btn btn-xs'
+	       style="padding-left: 0px; margin-top: -3px; border-top: 0px;"
+	       data-toggle='popover' data-bs-toggle='popover'
+	       data-html='true' data-bs-html='true'
+	       data-placement="bottom"
+	       data-content='Hover over the quantities to see a hardware description of
+			     the nextwork cards.'>
+	      <span class='glyphicon glyphicon-question-sign'></span>
+	    </a>
+	  </th>
+          <th class='sorter-false text-center group-border-left'
+	      colspan=5>GPUs</th>
+          <th class='sorter-false text-center group-border-left'></th>
+	  <th class="hide-impl network-hidden"></th>
+	  <th class="hide-impl architecture-hidden"></th>
+	  <th class="hide-impl network-speeds-hidden"></th>
+	</tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+  </div>
+</div>
+

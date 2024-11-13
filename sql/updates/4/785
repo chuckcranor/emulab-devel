@@ -1,0 +1,23 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_aggregate_radio_info", "synchronization")) {
+	DBQueryFatal("alter table apt_aggregate_radio_info add ".
+		     " `synchronization` ".
+		     "   enum('none','White Rabbit','GPSDO') default 'none' ".
+		     "   after grouping");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

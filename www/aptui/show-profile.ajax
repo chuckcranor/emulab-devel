@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022, 2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,7 @@ chdir("..");
 include_once("webtask.php");
 chdir("apt");
 include_once("profile_defs.php");
+include_once("gitrepo.ajax");
 include_once("checkscript.ajax");
 
 #
@@ -82,6 +83,7 @@ function Do_GetProfile()
         $blob["hashkey"]         = $profile->hashkey();
     }
     $blob["profile_public"]      = $profile->ispublic() ? 1 : 0;
+    $blob["profile_project_write"] = $profile->project_write() ? 1 : 0;
     $blob["profile_pid"]         = $profile->pid();
     $blob["profile_created"]     = DateStringGMT($profile->created());
     $blob["profile_published"]   = DateStringGMT($profile->published());
@@ -95,6 +97,8 @@ function Do_GetProfile()
     }
     if ($profile->repourl() && $profile->repourl() != "") {
         $blob["profile_repourl"] = $profile->repourl();
+        $blob["profile_refhash"] = $profile->repohash();
+        $blob["profile_refspec"] = $profile->reporef();
     }
     else {
         $blob["profile_repourl"] = null;
@@ -146,74 +150,66 @@ function Do_GetParamsets()
 }
 
 #
-# Run a geni-lib script, returning the XML. This is a more constrained
-# version then the one in manage_profile.ajax since guest users can come
-# in on this path
+# Get source from repository, run the script.
 #
-function Do_CheckScript()
+function Do_GetSource()
 {
     global $this_user;
     global $ajax_args;
-
-    $warningsfatal = false;
-    $usenewgenilib = false;
-    $refspec       = null;
-    $getparams     = false;
-    $blob          = null;
-
-    if (!isset($ajax_args["profile"])) {
+    $refspec = "";
+    
+    if (!isset($ajax_args["refspec"])) {
+	SPITAJAX_ERROR(1, "Missing branch or tag name");
+	return;
+    }
+    if ($ajax_args["refspec"] != null) {
+        if (!TBvalid_refspec($ajax_args["refspec"])) {
+            SPITAJAX_ERROR(1, "Invalid refspec");
+            return;
+        }
+        $refspec = $ajax_args["refspec"];
+    }
+    if (!isset($ajax_args["uuid"])) {
 	SPITAJAX_ERROR(1, "Missing profile");
 	return;
     }
-    $target = $ajax_args["profile"];
-
-    if (! (IsValidUUID($target) || IsValidHash($target))) {
-	SPITAJAX_ERROR(1, "Not a valid profile target");
-	return;
-    }
-    $profile = Profile::Lookup($target);
+    $profile = Profile::Lookup($ajax_args["uuid"]);
     if (!$profile) {
-	SPITAJAX_ERROR(1, "No such profile $target");
+	SPITAJAX_ERROR(1, "Not a valid profile");
 	return;
     }
-    if ($isguest) {
+    if (!isset($this_user)) {
         if (!$profile->ispublic()) {
             SPITAJAX_ERROR(1, "This profile is not publicly accessible!");
             return;
         }
     }
-    elseif (! ($profile->CanView($this_user) || IsValidHash($target) ||
-               ISFOREIGN_ADMIN())) {
+    elseif (! ($profile->CanView($this_user) || ISFOREIGN_ADMIN())) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
-    if (!isset($ajax_args["script"])) {
-	SPITAJAX_ERROR(1, "Missing script");
-	return;
+    $blob = null;
+    if (GetRepoSource($profile, $refspec, $blob)) {
+        return;
     }
-    $script = $ajax_args["script"];
+    # Badly named, need to fix GetRepoSource.
+    $script = $blob["script"];
 
-    if (preg_match("/^import/m", $script)) {
-        if (isset($ajax_args["getparams"]) && $ajax_args["getparams"]) {
-            $getparams = true;
-        }
-        if ($profile->repourl()) {
-            if (isset($ajax_args["refspec"])) {
-                if (!preg_match('/^[-\w\/]+$/', $ajax_args["refspec"])) {
-                    SPITAJAX_ERROR(1, "Invalid refspec");
-                    return;
-                }
-                $refspec = $ajax_args["refspec"];
-            }
-        }
+    if (! (preg_match("/^(import|from)/m", $script) ||
+           preg_match("/^source tb_compat/m", $script))) {
+        $blob["rspec"] = $script;
+        unset($blob["script"]);
+        SPITAJAX_RESPONSE($blob);
+        return;
     }
-    elseif (! preg_match("/^source tb_compat/m", $script)) {
-	SPITAJAX_ERROR(1, "Unknown script type");
-	return;
-    }
+
     #
     # And run the script.
     #
+    $warningsfatal = false;
+    $usenewgenilib = false;
+    $getparams     = true;
+    
     if (CheckScript($profile, $script, null, 
                     $warningsfatal, $usenewgenilib,
                     $refspec, $getparams, null, $blob) != 0) {

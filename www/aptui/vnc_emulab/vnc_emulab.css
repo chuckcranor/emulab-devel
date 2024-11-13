@@ -1,0 +1,22 @@
+html {
+    height: 100%;
+}
+body {
+    padding-top: 50px;
+    height: 100%;
+}
+.navbar {
+    margin-bottom: 0px;
+}
+#screen {
+    flex: 1; /* fill remaining space */
+    overflow: hidden;
+}
+.container-fluid {
+  padding-right: 0px;
+  padding-left: 0px;
+}
+.modal-dialog {
+    width: 1050px;
+    margin: 30px auto;
+}

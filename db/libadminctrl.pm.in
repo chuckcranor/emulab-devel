@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -213,6 +213,7 @@ use libtblog_simple;
 use Experiment;
 use User;
 use Group;
+use Project;
 
 # Configure variables
 my $TB		= "@prefix@";
@@ -754,11 +755,29 @@ sub TestGlobalPolicy($$$$$)
 }
 
 #
-# Load the policies.
+# Load the policies. We want to avoid reloading the table if asking a
+# question about the same uid/pid/gid tuple.
 #
+my $cur_uid = "";
+my $cur_pid = "";
+my $cur_gid = "";
+
 sub LoadPolicies($$$)
 {
     my ($uid, $pid, $gid) = @_;
+
+    if ($cur_uid eq $uid && $cur_pid eq $pid && $cur_gid eq $gid) {
+	return 0;
+    }
+    $cur_uid = $uid;
+    $cur_pid = $pid;
+    $cur_gid = $gid;
+
+    %user_policies   = ();
+    %group_policies  = ();
+    %global_policies = ();
+    
+    LoadPortalTypes();
 
     #
     # Get the global policies. 
@@ -786,7 +805,7 @@ sub LoadPolicies($$$)
     # Get user policies that apply. Ordering by uid will put the global
     # policies last, which makes it easier in the loop below.
     #
-    if (defined($uid)) {
+    if ($uid ne "") {
 	$query_result =
 	    DBQueryWarn("select * from user_policies ".
 			"where uid='$uid' or uid='+' or uid='-' ".
@@ -817,14 +836,17 @@ sub LoadPolicies($$$)
 	    }
 	}
     }
+
+    
     my $gidclause = "pid=gid or gid='*'";
-    if (defined($gid)) {
+    if ($gid ne "") {
 	$gidclause .= "or gid='$gid'";
     }
     $query_result =
 	DBQueryWarn("select distinct * from group_policies ".
 		    "where (pid='$pid' and ($gidclause)) or ".
 		    "      pid='' or pid='-' ".
+		    # This order is important, we want the - policy last!
 		    "order by pid,gid desc");
     return -1
 	if (!$query_result);
@@ -836,17 +858,30 @@ sub LoadPolicies($$$)
 	my $count   = $rowref->{'count'};
 
 	if ($debug) {
-	    print "Group Policy: $pid, ".
-		(defined($gid) ? "$gid" : "") . ", $policy, $count, $auxdata\n";
+	    print "Group Policy: $pid, $gid, ".
+		"$ppid, $policy, $count, $auxdata\n";
 	}
-	
-	if ($ppid eq "+") {
-	    $group_policies{"$policy:$auxdata"} = $rowref;
-	}
-	elsif ($ppid eq "-") {
-	    # Allow existing policy to override this.
-	    $group_policies{"$policy:$auxdata"} = $rowref
-		if (!exists($group_policies{"$policy:$auxdata"}));
+
+	if ($ppid eq "-") {
+	    if (!exists($group_policies{"$policy:$auxdata"})) {
+		#
+		# The minus policy becomes the default case since there was
+		# no entry for the project. Note that "-" is always last
+		# cause of the order by clause above.
+		#
+		if ($policy eq TBADMINCTRL_POLICY_TYPE() &&
+		    PortalAllowedType($pid, $auxdata)) {
+		    #
+		    # Unless it is mentioned in the allowed portals table.
+		    # Then we make it look like there is an entry for pid.
+		    # This is a shortcut to avoid having to grant the type
+		    # to every project.
+		    #
+		    $rowref->{"count"} = $PLUS_GIDIDX;
+		    $rowref->{"pid"}   = $pid;
+		}
+		$group_policies{"$policy:$auxdata"} = $rowref;
+	    }
 	}
 	else {
 	    $group_policies{"$policy:$auxdata"} = $rowref;
@@ -939,10 +974,13 @@ sub TestPolicies($$$)
 sub MaximumAllowed($$)
 {
     my ($project, $type) = @_;
+    if (!ref($project)) {
+	$project = Project->Lookup($project);
+    }
     my $pid = $project->pid();
 
     return -1
-	if (LoadPolicies(undef, $pid, undef));
+	if (LoadPolicies("", $pid, ""));
 
     foreach my $key (keys(%group_policies)) {
 	my $pref    = $group_policies{$key};
@@ -953,11 +991,15 @@ sub MaximumAllowed($$)
 
 	next if
 	    ($policy ne TBADMINCTRL_POLICY_TYPE());
+	next
+	    if ($auxdata ne $type);
 
-	return $count
-	    if ($ppid eq $pid && $auxdata eq $type);
+	#
+	# Note that LoadPolicies handles the "-" policy override.
+	# 
+	return $count;
     }
-    return undef;
+    return $PLUS_GIDIDX;
 }
 
 #
@@ -991,7 +1033,7 @@ sub UpdateNodeTypeXpidPermissions()
     }
 
     #
-    # Get global policies
+    # Get "global" group policies
     # 
     $query_result =
 	DBQueryWarn("select * from group_policies ".
@@ -1117,8 +1159,22 @@ sub UpdateNodeTypeXpidPermissions()
     
     foreach my $gid_idx (keys(%permissions)) {
 	my @typelist = keys(%{ $permissions{$gid_idx} });
-	my $group    = Group->Lookup($gid_idx);
-	my $pid      = $group->pid();
+
+	next
+	    if (!@typelist);
+	
+	my $group = Group->Lookup($gid_idx);
+	#
+	# Watch for race with project deletion. Which only happens when
+	# Rob is doing a batch, and deletes one and approves another, at
+	# almost the same time. I do not want to lock this entire routine
+	# since it takes a long time to run the stuff above (on the
+	# Mothership we have a lot projects and lots of types).
+	#
+	next
+	    if (!defined($group));
+	
+	my $pid = $group->pid();
 
 	foreach my $type (@typelist) {
 	    return -1
@@ -1425,6 +1481,50 @@ sub LoadCurrent($$$$)
     }
     
     return \%curusage;
+}
+
+#
+# Load the allowed types for each portal.
+#
+my %portal_allowedtypes = ();
+
+sub LoadPortalTypes()
+{
+    %portal_allowedtypes = ();
+    
+    my $query_result =
+	DBQueryWarn("select * from portal_allowedtypes");
+
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $portal = $row->{'portal'};
+	my $type   = $row->{'type'};
+
+	if (!exists($portal_allowedtypes{$type})) {
+	    $portal_allowedtypes{$type} = {};
+	}
+	$portal_allowedtypes{$type}->{$portal} = 1;
+    }
+    #print Dumper(\%portal_allowedtypes);
+    return 0;
+}
+
+#
+# A project is associated with a portal, some types are restricted
+# to specific portals. If no mention of the type then we fall back
+# to other checks.
+#
+sub PortalAllowedType($$)
+{
+    my ($project, $type) = @_;
+    if (!ref($project)) {
+	$project = Project->Lookup($project);
+    }
+    my $portal = $project->portal();
+
+    return 1
+	if ($portal && exists($portal_allowedtypes{$type}->{$portal}));
+    
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

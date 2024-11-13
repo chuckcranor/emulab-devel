@@ -1,0 +1,140 @@
+#
+# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+#
+# XXX ONLY RUN THIS INSTALL ON AN UBUNTU LINUX TESTBED NODE!
+#
+# Trivial. These things just need to be installed into the right place
+# on a testbed node before cutting an image.
+#
+#
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= @top_builddir@
+SUBDIR		= $(subst $(TESTBED_SRCDIR)/,,$(SRCDIR))
+
+include $(OBJDIR)/Makeconf
+
+SCRIPTS		= 
+
+#
+# Force dependencies on the scripts so that they will be rerun through
+# configure if the .in file is changed.
+# 
+all:
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+SYSETCDIR	= $(DESTDIR)/etc
+ETCDIR		= $(DESTDIR)$(CLIENT_ETCDIR)
+BINDIR		= $(DESTDIR)$(CLIENT_BINDIR)
+VARDIR		= $(DESTDIR)$(CLIENT_VARDIR)
+RCDIR		= $(SYSETCDIR)
+RRCDIR		= /etc
+INSTALL		= /usr/bin/install -c 
+COMMON		= $(SRCDIR)/../common
+# group to use for directories (dir-install)
+DIRGROUP	?= root
+ifeq ($(NETWORKTARGETS),)
+NETWORKTARGETS := systemd-networkd
+endif
+ifeq ($(NETWORKTARGETS),none)
+NETWORKTARGETS :=
+endif
+
+install client-install:	common-install etc-install \
+			script-install bin-install sysetc-fixup sysetc-install \
+			systemd-install network-install
+	@echo "Remember to install the PEM files if necessary"
+
+simple-install:	common-install script-install bin-install
+
+dir-install:
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/initramfs-tools
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/initramfs-tools/conf.d
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/rsyslog.d
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/sudoers.d
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/default
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/ssh
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/ssh/sshd_config.d
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/systemd/system/chronyd.service.d
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/chrony
+	$(INSTALL) -m 755 -o root -g root -d $(SYSETCDIR)/chrony/conf.d
+
+common-install:	dir-install
+	(cd ../common; $(MAKE) DESTDIR=$(DESTDIR) local-install)
+
+bin-install:	dir-install
+	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) USES_SYSTEMD=1 bin-install)
+	$(INSTALL) -m 755 $(SRCDIR)/../ubuntu-common/chronystart $(BINDIR)/chronystart
+
+etc-install:	dir-install common-sysetc-install
+	$(INSTALL) -m 755 $(SRCDIR)/emulab-ssh.conf $(SYSETCDIR)/ssh/sshd_config.d/20-emulab.conf
+	if [ "$(NOHOSTS)" != "1" ]; then \
+		$(INSTALL) -m 644 $(SRCDIR)/hosts $(ETCDIR)/hosts ; \
+	fi
+
+common-sysetc-install:	dir-install
+	# Tell ../linux/GNUMakefile.in that we want systemd files, not SYSV
+	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) RRCDIR=$(RRCDIR) USES_SYSTEMD=1 sysetc-install)
+
+sysetc-fixup:
+	rm -rf $(SYSETCDIR)/modules.conf $(SYSETCDIR)/cron.pend \
+		$(SYSETCDIR)/sysconfig $(SYSETCDIR)/init.d/ntpd
+	rm -f $(SYSETCDIR)/ntp.drift
+	rm -f $(SYSETCDIR)/dhclient-enter-hooks $(SYSETCDIR)/dhclient-exit-hooks
+	rm -f $(SYSETCDIR)/rc.local
+
+sysetc-install:	dir-install
+	$(INSTALL) -m 644 $(SRCDIR)/rsyslog-emulab.conf $(SYSETCDIR)/rsyslog.d/40-emulab.conf
+	rm -f $(SYSETCDIR)/rsyslog.d/60-emulab.conf
+	$(INSTALL) -m 644 $(SRCDIR)/sudoers $(SYSETCDIR)/sudoers.d/99-emulab
+	$(INSTALL) -m 644 $(SRCDIR)/initramfs-emulab.conf $(SYSETCDIR)/initramfs-tools/conf.d/90-emulab
+	$(INSTALL) -m 644 $(SRCDIR)/grub-defaults $(SYSETCDIR)/default/grub
+	@if [ -z "$(NONTP)" ]; then \
+		$(INSTALL) -m 644 $(SRCDIR)/ntp.conf $(SYSETCDIR)/ntp.conf; \
+		$(INSTALL) -m 755 -o ntp -g ntp -d $(DESTDIR)/var/lib/ntp; \
+		$(INSTALL) -m 644 -o ntp -g ntp /dev/null $(DESTDIR)/var/lib/ntp/ntp.drift ; \
+	fi
+	$(INSTALL) -m 644 $(SRCDIR)/../ubuntu-common/10-emulab-chrony.conf $(SYSETCDIR)/chrony/conf.d/10-emulab-chrony.conf
+	$(INSTALL) -m 644 $(SRCDIR)/../ubuntu-common/10-emulab-chronystart.conf \
+		$(SYSETCDIR)/systemd/system/chronyd.service.d/10-emulab-chronystart.conf
+
+systemd-install: dir-install
+
+script-install:	dir-install $(SCRIPTS)
+	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) RCDIR=$(RCDIR) USES_SYSTEMD=1 script-install)
+
+genirack-install:
+
+sfs-install:
+
+network-install: $(addsuffix -install,$(NETWORKTARGETS))
+
+systemd-networkd-install:
+	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) systemd-networkd-install)
+
+NetworkManager-install:
+	(cd ../linux; $(MAKE) DESTDIR=$(DESTDIR) NetworkManager-install)

@@ -50,8 +50,8 @@ if ($EUID != 0) {
 }
 
 # Script specific goo.
-my $PCAPPER    = "/usr/local/etc/emulab/pcapper";
-my $GKRELLMD   = "/usr/local/etc/emulab/gkrellmd";
+my $PCAPPER    = "$BINDIR/pcapper";
+my $GKRELLMD   = "$BINDIR/gkrellmd";
 my @childpids  = ();
 
 #

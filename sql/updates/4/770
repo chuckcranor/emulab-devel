@@ -1,0 +1,32 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instance_rfranges", "type")) {
+	DBQueryFatal("ALTER TABLE apt_instance_rfranges add " .
+		     " `type` enum('global','node','iface','route') ".
+		     "    default NULL after name");
+    }
+    if (!DBSlotExists("apt_instance_rfranges", "target")) {
+	DBQueryFatal("ALTER TABLE apt_instance_rfranges add " .
+		     " `target` tinytext after `type`");
+    }
+    if (!DBSlotExists("apt_instance_rfrange_history", "type")) {
+	DBQueryFatal("ALTER TABLE apt_instance_rfrange_history add " .
+		     " `type` enum('global','node','iface','route') ".
+		     "    default NULL after uuid");
+    }
+    if (!DBSlotExists("apt_instance_rfrange_history", "target")) {
+	DBQueryFatal("ALTER TABLE apt_instance_rfrange_history add " .
+		     " `target` tinytext after `type`");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -125,6 +125,9 @@ my $DEADMAN_PORT = 12487;
 my $SHORTNAME = $hostname;
 $SHORTNAME =~ s/^boss\.([^\.]+).*$/$1/;
 
+# Credentials to talk to influx.
+my $INFLUXCREDS;
+
 #
 # Configure variables
 #
@@ -137,6 +140,7 @@ my $WAP        = "$TB/sbin/wap";
 my $SUDO       = "/usr/local/bin/sudo";
 my $TEVC       = "$TB/bin/tevc";
 my $POWER      = "$TB/bin/power";
+my $CURL       = "/usr/local/bin/curl";
 my $DBNUM;
 
 use lib "@prefix@/lib";
@@ -167,6 +171,8 @@ sub PowerAll($);
 sub PowerControl($@);
 sub DisableExperiments();
 sub EnableExperiments();
+sub InitInfluxCreds();
+sub UploadVoltage($$$);
 
 #
 # Turn off line buffering on output
@@ -179,7 +185,7 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"d"})) {
     $debug = 1;
-    $TBOPS = "stoller\@flux.utah.edu";
+    $TBOPS = "stoller\@emulab.net";
 }
 if (defined($options{"v"})) {
     $verbose = 1;
@@ -239,6 +245,7 @@ logit("Starting at " . POSIX::strftime("20%y-%m-%d %H:%M:%S\n", localtime()));
 
 InitDeadman();
 InitTempAndBattery();
+InitInfluxCreds();
 
 # Wait for other services (capture) to start running.
 sleep(30) if (! $debug);
@@ -466,6 +473,8 @@ sub CheckDeadman($$)
 #
 my $onBatteryTime    = undef;
 my $onBusTime        = time();
+# We can get transient onbattery indicators.
+my $onBatteryCount   = 0;
 
 my $tempWarningTime  = undef;
 my $tempShutdownTime = undef;
@@ -574,6 +583,28 @@ sub CheckTempAndBattery($$)
 	$tmp .= "\n";
 	logit($tmp);
     }
+    #
+    # Watch for transient onbattery signal. Did not know this could happen.
+    #
+    if ($ONBUS) {
+	if ($onbattery && !$onBatteryTime) {
+	    if (!$onBatteryCount) {
+		logit("Waiting to see if a transient onbattery indicator.\n");
+		$onbattery = 0;
+		$onBatteryCount++;
+	    }
+	    else {
+		logit("Got another onbattery indicator.\n");
+		$onBatteryCount = 0;
+	    }
+	}
+	elsif (!$onbattery) {
+	    if ($onBatteryCount) {
+		logit("Looks like a transient onbattery indicator after all.\n");
+		$onBatteryCount = 0;
+	    }
+	}
+    }
 
     #
     # The temp can go wonky, so if tempF is undefined, skip the temp checks.
@@ -646,6 +677,7 @@ sub CheckTempAndBattery($$)
     }
 
     if ($ONBUS) {
+	UploadVoltage($voltage, $onbattery, $current);
 	if (! $onbattery) {
 	    if (defined($onBatteryTime)) {
 		#
@@ -937,6 +969,52 @@ sub GetTempAndBattery($$$$)
     return 0;
 }
 
+#
+# Send voltage to grafana/influx
+#
+sub InitInfluxCreds()
+{
+    my $creds = `egrep '^[[:blank:]]+ password' /usr/local/etc/telegraf.conf`;
+    if ($?) {
+	logit("ERROR: Could not get influx credentials\n");
+	return;
+    }
+    if ($creds =~ /password\s+=\s+\"(.*)\"/) {
+	$INFLUXCREDS = "telegraf:${1}";
+    }
+    else {
+	logit("ERROR: Could not parse influx credentials: $creds\n");
+    }
+}
+
+sub UploadVoltage($$$)
+{
+    my ($voltage, $onbat, $current) = @_;
+
+    return
+	if (!defined($INFLUXCREDS));
+
+    my $params = "battery=${onbat},accessory=0 value=${voltage}";
+    if (defined($current)) {
+	$params .= ",current=${current}";
+    }
+    my $url = "'https://overwatch.emulab.net:8086/write?db=telegraf' ".
+	"--data-binary 'exec_arduinovolt,host=${hostname},${params}'";
+    my $opts = ($debug > 1 ? "-S" : "");
+
+    my $command = "$CURL --insecure -s $opts --connect-timeout 5 ".
+	"--max-time 10 -XPOST -u '$INFLUXCREDS' $url";
+    logit("$command\n") if ($debug);
+    
+    if (!$impotent) {
+	system($command);
+	if ($?) {
+	    logit("ERROR: Could not upload voltage to grafana\n");
+	}
+    }
+}
+
+
 sub logit($) {
     my ($msg) = @_;
 
@@ -971,7 +1049,12 @@ sub NotifyUsers($$)
 {
     my ($subject, $message) = @_;
     my %users = ();
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
 
+    # Append a timestamp to the end of the body, helpful for debugging
+    # since email will probably be delayed during a disconnect.
+    $message .= "\n\n" . $stamp . "\n";
+    
     if ($impotent || $mailonly) {
 	print "$subject\n";
 	print "$message";

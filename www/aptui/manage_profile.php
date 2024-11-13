@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 include_once("webtask.php");
@@ -157,9 +160,9 @@ function SPITFORM($formfields, $errors)
     echo "</script>\n";
 
     # Needed for genilib-editor
-    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/ace.js'></script>\n";
-    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-vim.js'></script>\n";
-    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
+    echo "<script src='https://cdn.jsdelivr.net/npm/ace-builds@1.15.2/src-noconflict/ace.js'></script>\n";
+    echo "<script src='https://cdn.jsdelivr.net/npm/ace-builds@1.15.2/src-noconflict/keybinding-vim.js'></script>\n";
+    echo "<script src='https://cdn.jsdelivr.net/npm/ace-builds@1.15.2/src-noconflict/keybinding-emacs.js'></script>\n";    
 
     # Pass project list through. Need to convert to list without groups.
     $plist = array();
@@ -175,7 +178,9 @@ function SPITFORM($formfields, $errors)
         echo json_encode($version_array);
         echo "</script>\n";
     }
-    
+
+    echo "<link rel='stylesheet'
+            href='https://cdn.jsdelivr.net/npm/ace-builds@1.15.2/css/ace.min.css'>\n";
     echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
     echo "<link rel='stylesheet'
@@ -185,7 +190,6 @@ function SPITFORM($formfields, $errors)
     echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
     echo "<link rel='stylesheet' href='css/genilib-editor.css'>\n";
 
-    SpitAggregateStatus();
     echo "<script type='text/javascript'>\n";
     echo "    window.VIEWING  = $viewing;\n";
     echo "    window.VERSION_UUID = $version_uuid;\n";
@@ -240,14 +244,18 @@ function SPITFORM($formfields, $errors)
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
     REQUIRE_FILESIZE();
-    REQUIRE_JACKS_EDITOR();
     REQUIRE_IMAGE();
     REQUIRE_MOMENT();
     REQUIRE_APTFORMS();
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
     REQUIRE_GENILIB_EDITOR();
+    REQUIRE_TOPOLOGY_EDITOR();
+    REQUIRE_TOPOLOGY_VIEWER();
+    
     AddLibrary("js/copy-profile.js");
+    AddLibrary("js/share-profile.js");
+    AddTemplateList(array("share-profile-modal", "share-profile-body"));
     AddLibrary("js/gitrepo.js");
     AddLibrary("js/paramhelp.js");
     AddLibrary("js/profile-support.js");
@@ -261,7 +269,7 @@ function SPITFORM($formfields, $errors)
 #
 # See what projects the user can do this in.
 #
-$projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
+$projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEPROFILE);
 
 if (isset($action) && ($action == "edit" || $action == "copy")) {
     if (!isset($uuid)) {
@@ -434,6 +442,7 @@ if (! isset($create)) {
 		$defaults["profile_repourl"]  = $profile->repourl();
                 # Need this so JS code knows when HEAD changes.
 		$defaults["profile_repohash"]  = $profile->repohash();
+		$defaults["profile_reporef"]  = $profile->reporef();
 		$defaults["profile_repopushurl"]
                     = "https://www.emulab.net:51369/githook/" .
                     $profile->repokey();

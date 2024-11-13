@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -138,7 +138,7 @@ if (!$this_user->IsAdmin()
 # Grab what we need out of the DB.
 #
 my ($tipserver, $tipname, $portnum, $keydata);
-if ($node->TipServer(\$tipserver, \$tipname, \$portnum, \$keydata)) {
+if ($node->TipServer(\$tipserver, \$tipname, \$portnum, \$keydata) || !$tipserver) {
     fatal("Could not find tipserver info for $nodeid");
 }
 

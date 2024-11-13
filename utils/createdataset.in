@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2020 University of Utah and the Flux Group.
+# Copyright (c) 2013-2020, 2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,6 +28,7 @@ use Date::Parse;
 use File::Temp qw(tempfile);
 use CGI;
 use Data::Dumper;
+use POSIX;
 
 #
 # Create a new dataset.
@@ -40,6 +41,7 @@ sub usage()
     print STDERR "   -d        Print additional debug info\n";
     print STDERR "   -U        Create but do not approve; admin will need to approve later\n";
     print STDERR "   -C        Always create, approve when there is no reason not to\n";
+    print STDERR "   -n        Check feasibility only; don't actually create\n";
     print STDERR "   -s size   Size in MiB\n";
     print STDERR "   -t type   Type ('stdataset' or 'ltdataset')\n";
     print STDERR "   -f fstype Type of filesystem to create on dataset (default is none)\n";
@@ -60,7 +62,7 @@ sub usage()
     print STDERR "   name           Name (in the form <pid>/<id> or <pid>/<gid>/<id>)\n";
     exit(-1);
 }
-my $optlist  = "dhUo:s:t:e:a:f:bCR:W:I:T:F:";
+my $optlist  = "dhUo:s:t:e:a:f:bCR:W:I:T:F:n";
 my $debug = 0;
 my $background = 0;
 my $pid;
@@ -73,6 +75,7 @@ my $size;
 my $fstype = "";
 my $approveme = 1;
 my $alwayscreate = 0;
+my $checkonly = 0;
 my $attrstr = "";
 my %attrs = ();
 my $read_access;
@@ -156,6 +159,9 @@ if (defined($options{b})) {
 }
 if (defined($options{C})) {
     $alwayscreate = 1;
+}
+if (defined($options{n})) {
+    $checkonly = 1;
 }
 if (defined($options{U})) {
     $approveme = 0;
@@ -364,8 +370,8 @@ if ($size <= 0) {
 if ($vars->{"maxsize"} > 0 && $size > $vars->{"maxsize"}) {
     if ($approveme) {
 	$unapproved_reason = 
-	    "Requested size ($size) is larger than allowed by default (" .
-	    $vars->{"maxsize"} . ").";
+	    "Requested size ($size MiB) is larger than allowed by default (" .
+	    $vars->{"maxsize"} . " MiB).";
 	$needapproval = 1;
     }
 }
@@ -397,28 +403,13 @@ if (!defined($expire)) {
 	fatal("Expiration date is in the past!");
     }
     if ($approveme && ($expire - $now) > $vars->{"maxlease"}) {
-	my $mdate = localtime($now + $vars->{"maxlease"});
-	my $rdate = localtime($expire);
+	my $mdate = POSIX::strftime("20%y-%m-%d GMT",
+				    gmtime($now + $vars->{"maxlease"}));
+	my $rdate = POSIX::strftime("20%y-%m-%d GMT", gmtime($expire));
 	$unapproved_reason =
 	    "Expiration is beyond the maximum allowed by default ".
 	    "($rdate > $mdate).";
 	$needapproval = 1;
-    }
-}
-if ($needapproval) {
-    print STDERR $unapproved_reason . "\n";
-    if (!$alwayscreate) {
-	print STDERR
-	    "Try again with '-U' to request special approval by testbed-ops.\n"
-	    if (!$background);
-	if (defined($webtask)) {
-	    $webtask->output($unapproved_reason);
-	    $webtask->Exited($POLICY_FAIL);
-	}
-	exit($POLICY_FAIL);
-    } else {
-	$approveme = 0;
-	print STDERR "WARNING: creating anyway!\n";
     }
 }
 
@@ -525,23 +516,45 @@ if ($vars->{"usequotas"}) {
 	}
 	if ($allocated + $size > $qsize) {
 	    $unapproved_reason =
-		"Allocation of $size would put $pid over quota ($qsize).";
-	    if (!$alwayscreate) {
-		print STDERR "$unapproved_reason\n";
-		print STDERR
-		    "Try again with '-U' to request special approval by testbed-ops.\n"
-		    if (!$background);
-		$quota->Unlock();
-		if (defined($webtask)) {
-		    $webtask->output($unapproved_reason);
-		    $webtask->Exited($POLICY_FAIL);
-		}
-		exit($POLICY_FAIL);
-	    } else {
-		$approveme = 0;
-		print STDERR "WARNING: creating anyway!\n";
-	    }
+		"Allocation of $size would put $pid over quota ($qsize MiB).";
+	    $needapproval = 1;
 	}
+    }
+}
+
+if ($checkonly) {
+    $quota->Unlock()
+	if (defined($quota));
+
+    if ($needapproval) {
+	if (defined($webtask)) {
+	    $webtask->output($unapproved_reason);
+	    $webtask->Exited($POLICY_FAIL);
+	}
+	exit($POLICY_FAIL);
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
+}
+
+if ($needapproval) {
+    print STDERR $unapproved_reason . "\n";
+    if (!$alwayscreate) {
+	print STDERR
+	    "Try again with '-U' to request special approval by testbed-ops.\n"
+	    if (!$background);
+	if (defined($webtask)) {
+	    $webtask->output($unapproved_reason);
+	    $webtask->Exited($POLICY_FAIL);
+	}
+	$quota->Unlock()
+	    if (defined($quota));
+	exit($POLICY_FAIL);
+    } else {
+	$approveme = 0;
+	print STDERR "WARNING: creating anyway!\n";
     }
 }
 

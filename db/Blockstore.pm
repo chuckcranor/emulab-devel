@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2021 University of Utah and the Flux Group.
+# Copyright (c) 2012-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -743,6 +743,20 @@ sub LoadEstimate($)
     # data.
     #
     my $extratime = int($size / 100);
+
+    #
+    # Temporary adjustment to temporary approach: this isn't quite enough
+    # time for a couple of the large images we have seen in practice.
+    # So for big images (20+GB), we are going to give them even more time.
+    #
+    # The "logic" here is that, these images are going to take forever to
+    # load anyway, so timing out after (2 * forever) is not going to piss
+    # off anyone worse than timing out at forever...
+    #
+    if ($size > 20000) {
+	$extratime *= 2;
+    }
+
     return $extratime;
 }
 

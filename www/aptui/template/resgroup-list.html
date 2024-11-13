@@ -10,12 +10,16 @@
  }
 </style>
 <div>
+  <center id="resgroups-count" class="hidden" style="margin-top: -10px;">
+    <small>There are <span></span> reservation groups.</small>
+  </center>
   <table class='tablesorter resgroup-list'>
     <thead>
       <tr>
 	<th class="sorter-false">&nbsp</th>
 	<% if (showuser) { %><th>Creator</th><% } %>
 	<% if (showproject) { %><th>Project</th><% } %>
+	<% if (showproject && isadmin) { %><th>S</th><% } %>
 	<% if (showportal) { %><th>Portal</th><% } %>
 	<th>Created</th>
 	<th>Starts</th>
@@ -35,9 +39,9 @@
 	      <span class='glyphicon glyphicon-chevron-right pull-left expando'
 		    style='margin-left: 0px; margin-right: 8px;
 			   margin-bottom: 4px;'
-		    data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
+		    data-toggle='tooltip' data-bs-toggle='tooltip'
+		    data-container="body" data-bs-container="body"
+		    data-trigger="hover" data-bs-trigger="hover" 
 		    title='Click to show details'></span></a>
 	    <% if (showcontrols) { %>
 	      <% if (isadmin) { %>
@@ -45,18 +49,18 @@
 		  <span class='glyphicon glyphicon-thumbs-down pull-left'
 			style='color: red; margin-left: 0px;
 			       margin-bottom: 4px;'
-			data-toggle='tooltip'
-			data-container="body"
-			data-trigger="hover"
+			data-toggle='tooltip' data-bs-toggle='tooltip'
+			data-container="body" data-bs-container="body"
+			data-trigger="hover" data-bs-trigger="hover"
 			title='Deny with reason'></span>
 		</a>
 		<a href="#" class="approve-button invisible">
 		  <span class='glyphicon glyphicon-thumbs-up pull-left'
 			style='color: red; margin-left: 5px;
 			       margin-bottom: 4px;'
-			data-toggle='tooltip'
-			data-container="body"
-			data-trigger="hover"
+			data-toggle='tooltip' data-bs-toggle='tooltip'
+			data-container="body" data-bs-container="body"
+			data-trigger="hover" data-bs-trigger="hover"
 			title='Approve reservation'></span>
 		</a>
 	      <% } %>
@@ -64,9 +68,9 @@
 		<span class='glyphicon glyphicon-remove pull-left'
 		      style='color: red; margin-left: 5px;
 			     margin-bottom: 4px;'
-		      data-toggle='tooltip'
-		      data-container="body"
-		      data-trigger="hover"
+		      data-toggle='tooltip' data-bs-toggle='tooltip'
+		      data-container="body" data-bs-container="body"
+		      data-trigger="hover" data-bs-trigger="hover"
 		      title='Delete reservation'></span>
 	      </a>
 	      <a href="resgroup.php?edit=1&uuid=<%- value.uuid %>"
@@ -74,9 +78,9 @@
 		<span class='glyphicon glyphicon-pencil pull-left text-primary'
 		      style='margin-left: 5px;
 			     margin-bottom: 4px;'
-		      data-toggle='tooltip'
-		      data-container="body"
-		      data-trigger="hover"
+		      data-toggle='tooltip' data-bs-toggle='tooltip'
+		      data-container="body" data-bs-container="body"
+		      data-trigger="hover" data-bs-trigger="hover"
 		      title='View/Edit reservation details'></span>
 	      </a>
 	      <% if (isadmin) { %>
@@ -86,9 +90,9 @@
 				 text-warning'
 			  style='margin-bottom: 4px;
 				 margin-left: 5px;'
-			  data-toggle='tooltip'
-			  data-container="body"
-			  data-trigger="hover"
+			  data-toggle='tooltip' data-bs-toggle='tooltip'
+			  data-container="body" data-bs-container="body"
+			  data-trigger="hover" data-bs-trigger="hover"
 			  title='Send a message to user'></span>
 		  </a>
 		  <a href="#" class="warn-button">
@@ -96,9 +100,9 @@
 				 text-warning'
 			  style='margin-bottom: 4px;
 				 margin-left: 5px;'
-			  data-toggle='tooltip'
-			  data-container="body"
-			  data-trigger="hover"
+			  data-toggle='tooltip' data-bs-toggle='tooltip'
+			  data-container="body" data-bs-container="body"
+			  data-trigger="hover" data-bs-trigger="hover"
 			  title='Warn user about unused reservaton'></span>
 		  </a>
 		<% } %>
@@ -110,16 +114,18 @@
 			      margin-left: 0px;'
 		       value="<%- value.uuid %>">
 	      <% } %>
-	      <a href="resgroup.php?edit=1&uuid=<%- value.uuid %>"
-		 target="_blank" 
-		 class="edit-button">
-		<span class='glyphicon glyphicon-eye-open text-primary'
-		      style='margin-bottom: 4px; margin-left: 10px;'
-		      data-toggle='tooltip'
-		      data-container="body"
-		      data-trigger="hover"
-		      title='View/Edit reservation details'></span>
-	      </a>
+	      <% if (!value.ishistory) { %>
+		<a href="resgroup.php?edit=1&uuid=<%- value.uuid %>"
+		  target="_blank" 
+		  class="edit-button">
+		  <span class='glyphicon glyphicon-eye-open text-primary'
+			style='margin-bottom: 4px; margin-left: 10px;'
+			data-toggle='tooltip' data-bs-toggle='tooltip'
+			data-container="body" data-bs-container="body"
+			data-trigger="hover" data-bs-trigger="hover"
+			title='View/Edit reservation details'></span>
+		</a>
+	      <% } %>
 	    <% } %>
 	  </td>
 	  <% if (showuser) { %>
@@ -135,10 +141,26 @@
 	  <% if (showproject) { %>	  
 	    <td style='white-space: nowrap;'>
 	      <% if (value.pid_idx) { %>
-		<a href='show-project.php?project=<%- value.pid %>'>
+		<a href='show-project.php?project=<%- value.pid %>'
+		   target="_blank">
 		  <%- value.pid %></a>
+		<% if (value.pid != value.gid) { %>
+		  (<a href='show-group.php?group=<%- value.gid_idx %>'
+		      target="_blank"><%- value.gid %></a>)
+		<% } %>
 	      <% } else { %>
 		<%- value.remote_pid %>
+	      <% } %>
+	    </td>
+	  <% } %>
+	  <% if (showproject && isadmin) { %>	  
+	    <td style='white-space: nowrap;'>
+	      <% if (value.shared_reservations == "project") { %>
+		P
+	      <% } else if (value.shared_reservations == "group") { %>
+		G
+	      <% } else { %>
+		U
 	      <% } %>
 	    </td>
 	  <% } %>
@@ -149,7 +171,8 @@
 	  <td>
 	    <% if (!value.start) { %>
 	      &nbsp
-	    <% } else if (new Date().getTime() >
+	    <% } else if (!value.ishistory &&
+	                  new Date().getTime() >
 	                  new Date(value.start).getTime()) { %>
 	      <span class="format-date"
 		    style="color: green;"><%- value.start %></span>
@@ -161,7 +184,7 @@
 	    <% if (!value.end) { %>
 	      &nbsp
 	    <% } else { %>
-	      <% if (!value.idledetection) { %>
+	      <% if (!value.ishistory && !value.idledetection) { %>
 		<span class="text-warning">
 	      <% } %>
 	      <span class="format-date"><%- value.end %></span>
@@ -185,9 +208,9 @@
 		  <span class='glyphicon glyphicon-thumbs-up'
 			style='color: green; margin-left: 5px;
 			       margin-bottom: 4px;'
-			data-toggle='tooltip'
-			data-container="body"
-			data-trigger="hover"
+			data-toggle='tooltip' data-bs-toggle='tooltip'
+			data-container="body" data-bs-container="body"
+			data-trigger="hover" data-bs-trigger="hover"
 			title='Cancel Cancellation'></span>
 		</a>
 	      <% } %>
@@ -196,9 +219,9 @@
 	  <% } %>
 	  <td align="center">
 	    <a href="#" 
-	       data-toggle='popover'
-	       data-html='true'
-	       data-trigger='hover'
+	       data-toggle='popover' data-bs-toggle='popover'
+	       data-html='true' data-bs-html='true'
+	       data-trigger='hover' data-bs-trigger='hover'
 	       data-title="Reservation Notes"
 	       data-content="<div class='form-control'
 			     style='height: auto;'><%- value.notes %></div>">
@@ -215,8 +238,10 @@
 		    <th>Cluster</th>
 		    <th>Type</th>
 		    <th>Count</th>
-		    <th>Using</th>
-		    <th>Utilization</th>
+		    <% if (!value.ishistory) { %>
+		      <th>Using</th>
+		      <th>Utilization</th>
+		    <% } %>
 		    <th>Status</th>
 		    <% if (isadmin) { %>
 		      <th class="sorter-false"></th>
@@ -228,26 +253,28 @@
 			  <td><%- info.cluster_id %></td>
 			  <td><%- info.type %></td>
 			  <td><%- info.count %></td>
-			  <td>
-			    <% if (info.active && info.using != null) { %>
-			      <% if (info.using < info.count) { %>
-				<span class="text-danger">
+			  <% if (!value.ishistory) { %>
+			    <td>
+			      <% if (info.active && info.using != null) { %>
+				<% if (info.using < info.count) { %>
+				  <span class="text-danger">
+				    <%- info.using %>
+				  </span>
+				<% } else { %>
 				  <%- info.using %>
-				</span>
+				<% } %>
 			      <% } else { %>
-				<%- info.using %>
+				&nbsp;
 			      <% } %>
-			    <% } else { %>
-			      &nbsp;
-			    <% } %>
-			  </td>
-			  <td>
-			    <% if (info.utilization != null) { %>
-			      <%- info.utilization %>%
-			    <% } else { %>
-			      &nbsp;
-			    <% } %>
-			  </td>
+			    </td>
+			    <td>
+			      <% if (info.utilization != null) { %>
+				<%- info.utilization %>%
+			      <% } else { %>
+				&nbsp;
+			      <% } %>
+			    </td>
+			  <% } %>
 			  <td class="reservation-status-column">
 			    <span class="status-approved hidden">
 			      Approved</span>

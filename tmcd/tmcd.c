@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2021 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2023 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -95,6 +95,7 @@
 #define URN_LEN		128
 #define XSTRINGIFY(s)   STRINGIFY(s)
 #define STRINGIFY(s)	#s
+#define ATTENUATORCONF  "/usr/testbed/etc/attenuator-matrix.conf"
 
 /* XXX backward compat */
 #ifndef TBCOREDIR
@@ -290,6 +291,7 @@ typedef struct {
 	char		erole[TBDB_FLEN_TINYTEXT];
 	char            privkey[PRIVKEY_LEN+1];
 	char		nodeuuid[TBDB_FLEN_UUID];
+	char		slice_uuid[TBDB_FLEN_UUID];
         /* This key is a replacement for privkey, on protogeni resources */
 	char            external_key[PRIVKEY_LEN+1];
 } tmcdreq_t;
@@ -409,6 +411,7 @@ COMMAND_PROTOTYPE(dohwcollect);
 COMMAND_PROTOTYPE(dowbstore);
 COMMAND_PROTOTYPE(doattenuatorlist);
 COMMAND_PROTOTYPE(doattenuator);
+COMMAND_PROTOTYPE(doattenuatorpaths);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -555,6 +558,7 @@ struct command {
 	{ "hwcollect",	  FULLCONFIG_NONE, 0, dohwcollect},
 	{ "wbstore",	  FULLCONFIG_NONE, 0, dowbstore},
 	{ "attenuatorlist", FULLCONFIG_NONE, F_ALLOCATED|F_REMREQSSL, doattenuatorlist },
+	{ "attenuatorpaths",   FULLCONFIG_NONE, F_ALLOCATED|F_REMREQSSL, doattenuatorpaths },
 	{ "attenuator",   FULLCONFIG_NONE, F_ALLOCATED|F_REMREQSSL, doattenuator },
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
@@ -2510,6 +2514,7 @@ COMMAND_PROTOTYPE(doifconfig)
 						  "  and vls.vname=vll.vname "
 						  "  and vls.capkey='jumboframes' "
 						  "where v.exptidx='%d' "
+						  " and v.vlanid>=0 "
 						  " and v.node_id='%s' "
 						  " and v.iface='%s' "
 						  " and (la2.attrvalue='Experimental' "
@@ -2608,6 +2613,7 @@ COMMAND_PROTOTYPE(doifconfig)
 			 "  vls.exptidx=vll.exptidx and vls.vname=vll.vname "
 			 "      and vls.capkey='jumboframes' "
 			 "where v.exptidx='%d' and v.node_id='%s' and "
+			 "      v.vlanid>=0 and "
 			 "      (la2.attrvalue='Experimental' or "
 			 "       la2.attrvalue is null) "
 			 "      and %s",
@@ -3696,10 +3702,24 @@ COMMAND_PROTOTYPE(doaccounts)
 						 2, row[17]);
 		}
 		else {
-			pubkeys_res = mydb_query("select idx,pubkey "
-						 " from user_pubkeys "
-						 "where uid_idx='%s'",
-						 2, row[17]);
+			char *q1 = "select idx,pubkey from user_pubkeys "
+				   " where uid_idx='%s'";
+			char *q2 = "(select idx,pubkey from user_pubkeys "
+				   " where uid_idx='%s') "
+				   "union "
+				   "(select 9999,sshpubkey from apt_instances "
+				   " where slice_uuid='%s' and "
+				   "       creator_idx='%s' and "
+				   "       sshpubkey is not null)";
+
+			if (reqp->slice_uuid[0]) {
+				pubkeys_res = mydb_query(q2, 2, row[17],
+							 reqp->slice_uuid,
+							 row[17]);
+			}
+			else {
+				pubkeys_res = mydb_query(q1, 2, row[17]);
+			}
 		}
 		if (!pubkeys_res) {
 			error("ACCOUNTS: %s: DB Error getting keys\n", row[0]);
@@ -8015,7 +8035,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
-				 " r.rootkey_private,r.rootkey_public "
+				 " r.rootkey_private,r.rootkey_public,NULL "
 				 "FROM nodes AS n "
 				 "LEFT JOIN reserved AS r ON "
 				 "  r.node_id=n.node_id "
@@ -8046,7 +8066,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "     (SELECT node_id FROM widearea_nodeinfo "
 				 "      WHERE privkey='%s') "
 				 "  AND notmcdinfo_types.attrvalue IS NULL",
-				 46, nodekey);
+				 47, nodekey);
 	}
 	else if (reqp->isvnode) {
 		char	clause[BUFSIZ];
@@ -8087,7 +8107,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " nv.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,va.attrvalue, "
-				 " r.rootkey_private,r.rootkey_public "
+				 " r.rootkey_private,r.rootkey_public, "
+				 " es.slice_uuid "
 				 "from nodes as nv "
 				 "left join nodes as np on "
 				 " np.node_id=nv.phys_nodeid "
@@ -8097,6 +8118,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " r.node_id=nv.node_id "
 				 "left join experiments as e on "
 				 "  e.pid=r.pid and e.eid=r.eid "
+				 "left join experiment_stats as es on "
+				 " es.exptidx=r.exptidx "
 				 "left join projects AS p ON "
 				 " p.pid=r.pid "
 				 "left join node_types as pt on "
@@ -8114,7 +8137,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " va.vname=r.vname and "
 				 " va.attrkey='routable_control_ip' "
 				 "where nv.node_id='%s' and (%s)",
-				 46, reqp->vnodeid, clause);
+				 47, reqp->vnodeid, clause);
 	}
 	else {
 		char	clause[BUFSIZ];
@@ -8148,13 +8171,16 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
 				 " p.nfsmounts AS pnfsmounts, "
 				 " p.nonlocal_id,NULL, "
-				 " r.rootkey_private,r.rootkey_public "
+				 " r.rootkey_private,r.rootkey_public, "
+				 " es.slice_uuid "
 				 "from interfaces as i "
 				 "left join nodes as n on n.node_id=i.node_id "
 				 "left join reserved as r on "
 				 "  r.node_id=i.node_id "
 				 "left join experiments as e on "
 				 " e.pid=r.pid and e.eid=r.eid "
+				 "left join experiment_stats as es on "
+				 " es.exptidx=r.exptidx "
 				 "left join projects AS p ON "
 				 " p.pid=r.pid "
 				 "left join node_types as t on "
@@ -8178,7 +8204,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "  on n.type=dedicated_wa_types.type "
 				 "where (%s) "
 				 "  and notmcdinfo_types.attrvalue is NULL",
-				 46, clause);
+				 47, clause);
 	}
 
 	if (!res) {
@@ -8371,6 +8397,11 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 	if (row[45] && atoi(row[45]) > 0)
 		reqp->experiment_keys |= TB_ROOTKEYS_PUBLIC;
 
+	/* Slice uuid */
+	if (row[46]) {
+		strcpy(reqp->slice_uuid, row[46]);
+	}
+	
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
 	strcpy(reqp->pnodeid, reqp->nodeid);
 	if (reqp->isvnode) {
@@ -12287,14 +12318,18 @@ COMMAND_PROTOTYPE(dodhcpdconf)
 
 	res = mydb_query("select n.node_id,n.pxe_boot_path,i.IP,i.mac,n.type,"
 			 "r.eid,r.pid,r.inner_elab_role,r.inner_elab_boot,"
-			 "r.plab_role,r.plab_boot,n.next_pxe_boot_path "
+			 "r.plab_role,r.plab_boot,n.next_pxe_boot_path, "
+			 "nat.attrvalue "
 			 "from nodes as n "
 			 "left join subbosses as s on n.node_id=s.node_id "
 			 "left join interfaces as i on n.node_id=i.node_id "
 			 "left join reserved as r on n.node_id=r.node_id "
+			 "left join node_attributes as nat on "
+			 "     nat.node_id=n.node_id and "
+			 "     nat.attrkey='dhcpd_configfile' "
 			 "where s.subboss_id='%s' and "
 	                 "s.service='dhcp' and s.disabled=0 and i.role='ctrl' "
-			 "order by n.priority", 12, reqp->nodeid);
+			 "order by n.priority", 13, reqp->nodeid);
 	if (!res) {
 		error("dodhcpconf: %s: DB Error getting dhcpd configuration\n",
 		      reqp->nodeid);
@@ -12462,7 +12497,18 @@ COMMAND_PROTOTYPE(dodhcpdconf)
 			remain -= rc;
 		}
 
-		if (row[11] && row[11][0]) {
+		if (row[12] && row[12][0]) {
+			rc = snprintf(b, remain, " CONFIGFILE=\"%s\"", row[12]);
+
+			if (rc < 0) {
+				error("dodhcpdconf: error creating output\n");
+				mysql_free_result(res);
+				return 1;
+			}
+
+			b += rc;
+			remain -= rc;
+		} else if (row[11] && row[11][0]) {
 			rc = snprintf(b, remain, " FILENAME=\"%s\"", row[11]);
 
 			if (rc < 0) {
@@ -12914,6 +12960,45 @@ COMMAND_PROTOTYPE(dohwinfo)
 		mysql_free_result(res);
 
 	/*
+	 * Allow individual node_type or node attributes to override global
+	 * settings for collect and check.
+	 */
+	res = mydb_query("(select attrkey,attrvalue from nodes as n,"
+			 " node_type_attributes as a where "
+			 "   n.type=a.type and n.node_id='%s' and "
+			 "   a.attrkey like 'nodecheck_%%') "
+			 "union "
+			 "(select attrkey,attrvalue "
+			 "   from node_attributes "
+			 " where node_id='%s' and "
+			 "   attrkey like 'nodecheck_%%')",
+			 2, reqp->nodeid, reqp->nodeid);
+	if (!res) {
+		error("dohwinfo: %s: DB Error getting nodecheck attributes!\n",
+		      reqp->nodeid);
+		return 1;
+	}
+
+	if ((nrows = (int)mysql_num_rows(res)) > 0) {
+		while (nrows) {
+			row = mysql_fetch_row(res);
+			if (row[1] && row[1][0]) {
+				char *key = row[0]+10; /* skip "nodecheck_" */
+				char *val = row[1];
+
+				if (strcmp(key, "check") == 0) {
+					check = atoi(val);
+				}
+				else if (strcmp(key, "collect") == 0) {
+					collect = atoi(val);
+				}
+			}
+			nrows--;
+		}
+	}
+	mysql_free_result(res);
+
+	/*
 	 * If collecting, set the path
 	 * XXX hardwired for now.
 	 */
@@ -13094,12 +13179,18 @@ COMMAND_PROTOTYPE(dohwinfo)
 	 *    just used by the management HW.
 	 *  - Infiniband (guid != NULL) interfaces. We need support on
 	 *    the client side before we start sending those over.
+	 *  - Interfaces with the "nonodecheck" capability. For interfaces
+	 *    that might require drivers not present in the MFSes that
+	 *    run nodecheck.
 	 */
-	res = mydb_query("select mac,iface from interfaces where "
-			 " mac not like '000000%%' and "
-			 " role!='mngmnt' and "
-			 " node_id='%s' order by iface",
-			 2, reqp->nodeid);
+	res = mydb_query("select i.mac,i.iface from interfaces as i"
+			 " left join interface_capabilities as c"
+			 "   on i.interface_type=c.type and"
+			 "   c.capkey='nonodecheck'"
+			 " where i.mac not like '000000%%' and"
+			 "   i.role!='mngmnt' and i.node_id='%s' and"
+			 "   (c.capval is NULL or c.capval=0)"
+			 " order by iface", 2, reqp->nodeid);
 	if (!res) {
 		error("dohwinfo: %s: DB Error getting NET attributes!\n",
 		      reqp->nodeid);
@@ -13714,7 +13805,7 @@ static char *getgenicert( tmcdreq_t *reqp ) {
     
 	MYSQL_RES	*res;
 	char		buf[ MAXTMCDPACKET ];
-	buf[0] = (char) NULL;  
+	buf[0] = '\0';
 
 	res = mydb_query( "SELECT c.cert FROM `geni-cm`.geni_slivers AS s, "
 			  "`geni-cm`.geni_slicecerts AS c WHERE "
@@ -13745,7 +13836,7 @@ static char *getgenikey( tmcdreq_t *reqp ) {
     
 	MYSQL_RES	*res;
 	char		buf[ MAXTMCDPACKET ];
-	buf[0] = (char) NULL;  
+	buf[0] = '\0';
 
 	res = mydb_query( "SELECT c.privkey FROM `geni-cm`.geni_slivers AS s, "
 			  "`geni-cm`.geni_slicecerts AS c WHERE "
@@ -14046,7 +14137,7 @@ static char *getgenirpccert(tmcdreq_t *reqp)
 	MYSQL_RES	*res;
 	MYSQL_ROW	row;
 	char		buf[MAXTMCDPACKET];
-	buf[0] = (char) NULL;
+	buf[0] = '\0';
 
 	if (!reqp->geniflags) {
 		return NULL;
@@ -14975,8 +15066,9 @@ COMMAND_PROTOTYPE(doattenuator)
 			  "w.node_id2=r2.node_id AND r1.exptidx=%d AND "
 			  "r2.exptidx=%d AND ( w.external_wire=%d OR "
 			  "w.external_wire LIKE '%d,%%' OR "
-			  "w.external_wire LIKE '%%,%d' )", 1, reqp->exptidx,
-			  reqp->exptidx, atten, atten, atten );
+			  "w.external_wire LIKE '%%,%d' OR "
+			  "w.external_wire LIKE '%%,%d,%%' )", 1, reqp->exptidx,
+			  reqp->exptidx, atten, atten, atten, atten );
 
 	if( mysql_num_rows( res ) ) {
 		sin.sin_family = AF_INET;
@@ -15004,4 +15096,163 @@ COMMAND_PROTOTYPE(doattenuator)
 	mysql_free_result( res );
 		
 	return 0;	    
+}
+
+struct nodelist {
+    char *node;
+    struct nodelist *next;
+};
+
+static void free_nodelist( struct nodelist *l ) {
+
+	if( l ) {
+		struct nodelist *next = l->next;
+
+		free( l );
+		return free_nodelist( next );
+	}
+}
+
+static int node_in_list( char *node, struct nodelist *l ) {
+
+	if( !l )
+		return 0;
+
+	if( !strcmp( node, l->node ) )
+		return 1;
+
+	return node_in_list( node, l->next );
+}
+
+/*
+ * Attenuator per-path inventory.
+ */
+COMMAND_PROTOTYPE(doattenuatorpaths)
+{
+	MYSQL_RES   *res;
+	MYSQL_ROW   row;
+	int         nrows;
+	char	    buf[MYBUFSIZE];
+	FILE        *f;
+	char	    *innode[ 32 ], *inport[ 32 ],
+	    	    *outnode[ 16 ], *outport[ 16 ];
+	int	    in, out, c, n, portnum;
+	char        dir[ 2 ], node[ 512 ], port[ 512 ];
+	struct nodelist *l = NULL;
+
+	res = mydb_query( "SELECT DISTINCT( r.node_id ) FROM reserved AS r, "
+			  "interfaces AS i WHERE r.exptidx=%d AND "
+			  "i.iface LIKE 'rf%%' AND r.node_id=i.node_id", 1,
+			  reqp->exptidx );
+
+	if( !res ) {
+		error( "ATTENUATORPATHS: %s: query failed\n",
+		       reqp->nodeid );
+		
+		return 1;
+	}
+	
+	if( !mysql_num_rows( res ) ) {
+		/* no attenuated RF paths in experiment */
+		mysql_free_result( res );
+		return 0;
+	}
+
+	nrows = (int)mysql_num_rows(res);
+	while (nrows-- > 0) {
+		struct nodelist *new = malloc( sizeof (struct nodelist) );
+
+		if( !new ) {
+			error( "ATTENUATORPATHS: malloc failed\n" );
+
+			mysql_free_result( res );
+			free_nodelist( l );
+			
+			return 1;
+		}
+
+		row = mysql_fetch_row(res);
+		new->node = strdup( row[ 0 ] );
+		new->next = l;
+		l = new;
+	}
+	
+	mysql_free_result( res );
+
+	if( !( f = fopen( ATTENUATORCONF, "r" ) ) ) {
+		error( "ATTENUATORPATHS: " ATTENUATORCONF ": %s\n",
+		       strerror( errno ) );
+		free_nodelist( l );
+		
+		return 1;
+	}
+
+	for( in = 0; in < 32; in++ )
+		innode[ in ] = inport[ in ] = NULL;
+	
+	for( out = 0; out < 16; out++ )
+		outnode[ out ] = outport[ out ] = NULL;
+
+	while( ( n = fscanf( f, " %1[io]%*[nut] %d %511s %*d "
+			     "\"%511[^\"]\"", dir, &portnum, node,
+			     port ) ) != EOF ) {
+		if( n < 4 ) {
+			c = getc( f );
+			if( n || c != '#' ) {
+			    error( "ATTENUATORPATHS: " ATTENUATORCONF
+				   ": unexpected '%c'\n", c );
+			    break;
+			}
+			
+			/* comment */
+			while( ( c = getc( f ) ) != '\n' && c != EOF )
+				;
+
+			continue;
+		}
+
+		if( *dir == 'i' ) {
+			if( portnum >= 1 && portnum <= 32 ) {
+				innode[ portnum - 1 ] = strdup( node );
+				inport[ portnum - 1 ] = strdup( port );
+			}
+		} else {
+			if( portnum >= 1 && portnum <= 16 ) {
+				outnode[ portnum - 1 ] = strdup( node );
+				outport[ portnum - 1 ] = strdup( port );
+			}
+		}
+	}
+	
+	fclose( f );
+
+	for( in = 0; in < 32; in++ )
+		for( out = in & 3; out < 16; out += 4 )
+			if( innode[ in ] && outnode[ out ] &&
+			    node_in_list( innode[ in ], l ) &&
+			    node_in_list( outnode[ out ], l ) ) {
+			    sprintf( buf, "%d:%s \"%s\"/%s \"%s\"\n",
+				     ( out << 3 ) + ( in >> 2 ) + 1,
+				     innode[ in ], inport[ in ],
+				     outnode[ out ], outport[ out ] );
+				client_writeback( sock, buf, strlen( buf ), tcp );
+			}
+	
+	for( in = 0; in < 32; in++ ) {
+		if( innode[ in ] )
+			free( innode[ in ] );
+		if( inport[ in ] )
+			free( inport[ in ] );
+	}
+
+	for( out = 0; out < 16; out++ ) {
+		if( outnode[ out ] )
+			free( outnode[ out ] );
+		if( outport[ out ] )
+			free( outport[ out ] );
+	}
+
+	free_nodelist( l );
+	
+	return 0;
 }

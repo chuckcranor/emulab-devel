@@ -31,8 +31,17 @@
 LOGDIR=/var/tmp
 LOCKDIR=/var/tmp
 
-if [ -d /usr/local/etc/emulab ]; then
+BINDIRISPKGLEGACYLINK=0
+if [ -L "/usr/local/etc/emulab" ]; then
+    ldest=`readlink -f /usr/local/etc/emulab`
+    if [ "$ldest" = "/usr/libexec/emulab" ]; then
+	BINDIRISPKGLEGACYLINK=1
+    fi
+fi
+
+if [ -d /usr/local/etc/emulab -a $BINDIRISPKGLEGACYLINK -eq 0 ]; then
 	BINDIR=/usr/local/etc/emulab
+	LBINDIR=/usr/local/bin
 	if [ -e /etc/emulab/client.pem ]; then
 	    ETCDIR=/etc/emulab
 	else
@@ -47,6 +56,7 @@ if [ -d /usr/local/etc/emulab ]; then
 elif [ -d /etc/testbed ]; then
 	ETCDIR=/etc/testbed
 	BINDIR=/etc/testbed
+	LBINDIR=/etc/testbed
 	VARDIR=/etc/testbed
 	BOOTDIR=/etc/testbed
 	LOGDIR=/tmp
@@ -56,10 +66,21 @@ elif [ -d /etc/testbed ]; then
 elif [ -d /etc/rc.d/testbed ]; then
 	ETCDIR=/etc/rc.d/testbed
 	BINDIR=/etc/rc.d/testbed
+	LBINDIR=/etc/rc.d/testbed
 	VARDIR=/etc/rc.d/testbed
 	BOOTDIR=/etc/rc.d/testbed
 	DBDIR=/etc/rc.d/testbed
 	STATICRUNDIR=/etc/rc.d/testbed/run
+elif [ -d /usr/libexec/emulab ]; then
+	BINDIR=/usr/libexec/emulab
+	LBINDIR=/usr/bin
+	ETCDIR=/etc/emulab
+	STATICRUNDIR=/etc/emulab/run
+	VARDIR=/var/emulab
+	BOOTDIR=/var/emulab/boot
+	LOGDIR=/var/emulab/logs
+	LOCKDIR=/var/emulab/lock
+	DBDIR=/var/emulab/db
 else
         echo "$0: Cannot find proper emulab paths!"
 	exit 1
@@ -69,6 +90,7 @@ DYNRUNDIR=/var/run/emulab
 
 export ETCDIR
 export BINDIR
+export LBINDIR
 export VARDIR
 export BOOTDIR
 export LOGDIR
@@ -76,5 +98,5 @@ export DBDIR
 export LOCKDIR
 export STATICRUNDIR
 export DYNRUNDIR
-PATH=$BINDIR:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:\
+PATH=$BINDIR:$LBINDIR:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:\
 /usr/site/bin:/usr/site/sbin

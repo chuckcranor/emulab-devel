@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1093,7 +1093,7 @@ sub ModUserInfo($$$$)
 		 "User Information for '$target_uid' Modified",
 		 $msg, TBMAIL_OPS(),
 		 "Bcc: " . TBMAIL_AUDIT() . "\n" .
-		 "Bcc: stoller\@flux.utah.edu\n" .
+		 "Bcc: stoller\@emulab.net\n" .
 		 "Errors-To: " . TBMAIL_WWW());
 
 	#
@@ -2397,7 +2397,7 @@ sub UpdateExports($)
 	
     if (!defined($last_activity) ||
 	time() - $last_activity > ((($exports_limit * 24) - 12) * 3600)) {
-	if ($ZFS_NOEXPORT) {
+	if ($WITHZFS && $ZFS_NOEXPORT) {
 	    mysystem($EXPORTS_SETUP);
 	}
 	elsif (!$WITHAMD) {
@@ -2595,6 +2595,17 @@ sub DeleteTokenPasswordByIdx($$$$)
 	if (!DBQueryWarn($q));
 
     return 0;
+}
+
+# Return a URL for the user dashboard page.
+sub webURL($)
+{
+    my ($self) = @_;
+    my $link = $self->Brand()->wwwBase();
+    if ($self->Brand()->isClassic()) {
+	$link .= "/portal";
+    }
+    return $link . "/user-dashboard.php?uid=" . $self->uid();
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

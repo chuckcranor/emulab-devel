@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -136,6 +136,13 @@ class Project
 	return 0;
     }
 
+    #
+    # Equality test.
+    #
+    function SameProject($project) {
+	return $project->pid_idx() == $this->pid_idx();
+    }
+
     # accessors
     function field($name) {
 	return (is_null($this->project) ? -1 : $this->project[$name]);
@@ -184,6 +191,10 @@ class Project
     function expert_mode()   { return $this->field("expert_mode"); }
     function nfsmounts()     { return $this->field("nfsmounts"); }
     function allowed_clusters() { return $this->field("allowed_clusters"); }
+    function ota_notified()  { return $this->field("ota_notified"); }
+    function shared_reservations() {
+        return $this->field("shared_reservations");
+    }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -410,6 +421,26 @@ class Project
 	    $result[] = $project;
 	}
 	return $result;
+    }
+
+    #
+    # Correspondence, as for the approval page
+    #
+    function ApprovalCorrespondence() {
+	$result  = array();
+        $pid_idx = $this->pid_idx();
+
+	$query_result =
+	    DBQueryFatal("select * from project_approval_correspondence ".
+			 "where pid_idx='$pid_idx' ".
+                         "order by idx asc");
+			     
+	while ($row = mysql_fetch_array($query_result)) {
+            $row["sent"] = DateStringGMT($row["sent"]);
+
+            $result[] = $row;
+        }
+        return $result;
     }
     
     function AccessCheck($user, $access_type) {
@@ -828,7 +859,12 @@ class Project
 	$proj_pcs		= $this->num_pcs();
         # These are now booleans, not actual counts.
 	$proj_linked		= YesNo($this->linked_to_us());
-	$proj_why		= nl2br($this->why());
+        if ($this->why()) {
+            $proj_why = nl2br($this->why());
+        }
+        else {
+            $proj_why = "";
+        }
 	$approved		= YesNo($this->approved());
 	$expt_count		= $this->expt_count();
 	$expt_last		= $this->expt_last();
@@ -1185,6 +1221,67 @@ class Project
             }
 	}
         return $result;
+    }
+    function otaAllowed()
+    {
+        return FeatureEnabled("OTA-allowed", null, $this);
+    }
+    function SetOtaNotified()
+    {
+	$idx    = $this->pid_idx();
+
+	DBQueryFatal("update projects set ota_notified=now() ".
+		     "where pid_idx='$idx'");
+
+	return 0;
+    }
+
+    function PortalURL()
+    {
+        global $APTBASE;
+        $pid = $this->pid();
+        
+        return $APTBASE . "/show-project.php?pid=${pid}";
+    }
+
+    function SignupURL()
+    {
+        global $APTBASE;
+        $pid = $this->pid();
+        
+        return $APTBASE . "/signup.php?pid=${pid}";
+    }
+
+    #
+    # Map Project Reservation values. Class method
+    #
+    function ReservationSharingMap($mode)
+    {
+        # Convert sharing mode to a string or value
+        if ($mode == "user") {
+            return TBDB_RESERVATIONS_PERUSER;
+        }
+        elseif ($mode == "group") {
+            return TBDB_RESERVATIONS_PERGROUP;
+        }
+        elseif ($mode == "project") {
+            return TBDB_RESERVATIONS_PERPROJECT;
+        }
+        elseif ($mode == TBDB_RESERVATIONS_PERUSER) {
+            return "user";
+        }
+        elseif ($mode == TBDB_RESERVATIONS_PERPROJECT) {
+            return "project";
+        }
+        elseif ($mode == TBDB_RESERVATIONS_PERGROUP) {
+            return "group";
+        }
+        return null;
+    }
+    function ResSharingMode()
+    {
+        $mode = $this->shared_reservations();
+        return Project::ReservationSharingMap($mode);
     }
 }
 ?>

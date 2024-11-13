@@ -1,0 +1,25 @@
+#
+# Bootimage stuff
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("image_versions", "isbootimage")) {
+	DBQueryFatal("alter table image_versions add ".
+		     " `isbootimage` tinyint(1) NOT NULL default '0' ".
+		     "   after isdataset");
+    }
+    DBQueryFatal("REPLACE INTO table_regex VALUES ".
+		 " ('images','isbootimage','int','redirect', ".
+		 "  'default:boolean',0,0,NULL)");
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

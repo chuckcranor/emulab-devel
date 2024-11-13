@@ -67,10 +67,10 @@
 		    <a href="memlane.php?uuid=<%- record.history_uuid %>"
 		       target="_blank"><%- record.eid %></a>
 		  <% } else if (record.experiment) { %>
-		    <a href="../showexp.php3?experiment=<%- record.exptidx %>"
+		    <a href="<%- window.CLASSIC %>/showexp.php3?experiment=<%- record.exptidx %>"
 		       target="_blank"><%- record.eid %></a>
 		  <% } else if (record.slice_uuid) { %>
-		    <a href="../showslicelogs.php3?uuid=<%- record.slice_uuid %>"
+		    <a href="../showslicelogs.php?slice_uuid=<%- record.slice_uuid %>"
 		       target="_blank"><%- record.eid %></a>
 		  <% } else { %>
 		    <%- record.eid %>

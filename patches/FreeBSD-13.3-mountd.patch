@@ -1,0 +1,199 @@
+diff -Nur mountd.orig/Makefile mountd/Makefile
+--- mountd.orig/Makefile	2024-03-14 21:16:29.100400000 -0600
++++ mountd/Makefile	2024-03-14 21:54:48.242442000 -0600
+@@ -8,6 +8,9 @@
+ CFLAGS+= -I${MOUNT}
+ WARNS?= 2
+ 
++# Emulab-specific CFLAGS
++CFLAGS+= -DCACHE_ROOT_CRED -DTS_WHEN_DONE -DMOUNTD_STATS # -g # -pg -O0 # -DDEBUG
++
+ .PATH: ${MOUNT}
+ 
+ LIBADD=	util
+diff -Nur mountd.orig/mountd.c mountd/mountd.c
+--- mountd.orig/mountd.c	2024-03-14 21:16:29.102091000 -0600
++++ mountd/mountd.c	2024-03-14 22:26:36.756457000 -0600
+@@ -90,6 +90,27 @@
+ #include <stdarg.h>
+ #endif
+ 
++#ifdef MOUNTD_STATS
++#include <sys/time.h>
++#define TS_DEF(s)	struct timeval s = {0, 0}
++#define TS_GET(s)	{ gettimeofday(&s, NULL); }
++#define TS_DIFF(o,n,r)	{ timersub(&n, &o, &r); }
++#define TS_SUM(o,n,r)	{ timeradd(&n, &o, &r); }
++#define TS_ZERO(s)	{ s.tv_sec = s.tv_usec = 0; }
++#define TSC_DEF(c)	int c = 0
++#define TSC_INC(c)	{ c++; }
++#define TSC_ZERO(c)	{ c = 0; }
++#else
++#define TS_DEF(s)
++#define TS_GET(s)
++#define TS_DIFF(n,o,r)
++#define TS_SUM(o,n,r)
++#define TS_ZERO(s)
++#define TSC_DEF(c)
++#define TSC_INC(c)
++#define TSC_ZERO(c)
++#endif
++
+ /*
+  * Structures for keeping the mount list and export list
+  */
+@@ -1544,6 +1565,11 @@
+ static size_t linesize;
+ static FILE *exp_file;
+ 
++TS_DEF(tsexport);	/* total time spend in the export function */
++TSC_DEF(rcalls);	/* export entries removed */
++TSC_DEF(icalls);	/* export entries inserted */
++TS_DEF(tse);
++
+ /*
+  * Get the export list from one, currently open file
+  */
+@@ -1898,6 +1924,10 @@
+ 	FILE *debug_file;
+ 	size_t nfs_maxvers_size;
+ 
++#ifdef MOUNTD_STATS
++	int cmpfailed = 0;
++#endif
++
+ 	if ((debug_file = fopen(_PATH_MOUNTDDEBUG, "r")) != NULL) {
+ 		fclose(debug_file);
+ 		logdebug = 1;
+@@ -1937,6 +1967,7 @@
+ 	iovlen = 0;
+ 	bzero(errmsg, sizeof(errmsg));
+ 
++	TS_GET(tsexport);
+ 	if (suspend_nfsd != 0)
+ 		(void)nfssvc(NFSSVC_SUSPENDNFSD, NULL);
+ 	/*
+@@ -1969,6 +2000,10 @@
+ 		/* Free up the old lists. */
+ 		free_exports(oldexphead);
+ 	} else {
++#ifdef MOUNTD_STATS
++		if (passno != 0)
++			cmpfailed = 1;
++#endif
+ 		LOGDEBUG("doing passno=0");
+ 		/*
+ 		 * Clear flag that notes if a public fh has been exported.
+@@ -2060,6 +2095,37 @@
+ 	/* Resume the nfsd. If they weren't suspended, this is harmless. */
+ 	(void)nfssvc(NFSSVC_RESUMENFSD, NULL);
+ 	LOGDEBUG("eo get_exportlist");
++	TS_GET(tse);
++	TS_DIFF(tsexport, tse, tsexport);
++
++#ifdef TS_WHEN_DONE
++	{
++		char *tsfile = "/var/run/mountd.ts";
++		FILE *tsfd;
++
++		/*
++		 * Update a timestamp file so that anyone signalling us can
++		 * tell when we have finished our work.
++		 */
++		unlink(tsfile);
++		tsfd = fopen(tsfile, "w");
++		if (tsfd != NULL) {
++			fprintf(tsfd, "%lu\n", (unsigned long)time(NULL));
++			fclose(tsfd);
++		}
++	}
++#endif
++#ifdef MOUNTD_STATS
++	syslog(LOG_INFO, "=== %s export: %ld.%06ld seconds",
++	       passno == 0 ? "full" :
++	       (cmpfailed ? "forced-full" : "incremental"),
++	       tsexport.tv_sec, tsexport.tv_usec);
++	syslog(LOG_INFO, "    %d export remove calls", rcalls);
++	syslog(LOG_INFO, "    %d export insert calls", icalls);
++	TS_ZERO(tsexport);
++	TSC_ZERO(rcalls);
++	TSC_ZERO(icalls);
++#endif
+ }
+ 
+ /*
+@@ -2406,6 +2472,7 @@
+ 		    "can't delete exports for %s: %m %s",
+ 		    fsp->f_mntonname, errmsg);
+ 	}
++	TSC_INC(rcalls);
+ }
+ 
+ /*
+@@ -3315,6 +3382,7 @@
+ 		/* free iov, allocated by realloc() */
+ 		free(iov);
+ 	}
++	TSC_INC(icalls);
+ 	return (ret);
+ }
+ 
+@@ -3541,6 +3609,16 @@
+ 	int ngroups;
+ 	unsigned long name_ul;
+ 	char *end = NULL;
++#ifdef CACHE_ROOT_CRED
++	/*
++	 * Cache credential for -maproot=root, which is common and
++	 * typically does not change. This really matters when you have
++	 * thousands of export lines with -maproot=root. Otherwise you
++	 * burn up half your time stat()ing /etc/nsswitch.conf.
++	 */
++	static struct expcred rootcred;
++	int cnt;
++#endif
+ 
+ 	/*
+ 	 * Set up the unprivileged user.
+@@ -3568,6 +3646,12 @@
+ 			syslog(LOG_ERR, "unknown user: %s", name);
+ 			return;
+ 		}
++#ifdef CACHE_ROOT_CRED
++		if (pw->pw_uid == 0 && rootcred.cr_ngroups > 0) {
++			*cr = rootcred;
++			return;
++		}
++#endif
+ 		cr->cr_uid = pw->pw_uid;
+ 		ngroups = NGROUPS_MAX + 1;
+ 		if (getgrouplist(pw->pw_name, pw->pw_gid, groups, &ngroups)) {
+@@ -3592,6 +3676,19 @@
+ 		cr->cr_groups[0] = groups[0];
+ 		memcpy(&cr->cr_groups[1], &groups[inpos], (ngroups - 1) *
+ 		    sizeof(gid_t));
++#ifdef CACHE_ROOT_CRED
++		if (cr->cr_uid == 0) {
++			rootcred = *cr;
++			if (debug) {
++				fprintf(stderr, "caching root credentials: %d",
++					rootcred.cr_uid);
++				for (cnt = 0; cnt < rootcred.cr_ngroups; cnt++)
++					fprintf(stderr, "/%d",
++						rootcred.cr_groups[cnt]);
++				fprintf(stderr, "\n");
++			}
++		}
++#endif
+ 		return;
+ 	}
+ 	/*
+@@ -3808,7 +3905,7 @@
+ 		}
+ 		cp++;
+ 	}
+-	if (lstat(dirp, &sb) < 0 || !S_ISDIR(sb.st_mode))
++	if (ret && (lstat(dirp, &sb) < 0 || !S_ISDIR(sb.st_mode)))
+ 		ret = 0;
+ 	return (ret);
+ }

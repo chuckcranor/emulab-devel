@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2021 University of Utah and the Flux Group.
+# Copyright (c) 2004-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -23,15 +23,18 @@
 #
 use English;
 use Getopt::Std;
-use POSIX qw(setsid);
+use File::stat;
+use POSIX qw(setsid :sys_wait_h);
 
 sub usage()
 {
-    print STDERR "Usage: daemon_wrapper [-i interval] [-p pidfile] [-l logfile] [-n name] command args ...\n";
+    print STDERR "Usage: daemon_wrapper [-tws] [-i interval] [-p pidfile] [-l logfile] [-n name] command args ...\n";
     exit(1);
 }
-my $optlist  = "di:p:l:n:";
+my $optlist  = "di:p:l:n:tw";
 my $debug    = 0;
+my $stamps   = 0;
+my $watch    = 0;
 my $mininterval = 1;
 my $maxinterval = (24 * 60 * 60);
 my $interval = $mininterval;
@@ -43,6 +46,8 @@ my $daemon;
 my $cmd;
 my $cmdargs;
 my $childpid;
+my $locked = 0;
+my $reopen = 0;
 
 # Turn off line buffering on output
 $| = 1;
@@ -70,6 +75,9 @@ if (defined($options{"p"})) {
 if (defined($options{"l"})) {
     $logfile = $options{"l"};
 }
+if (defined($options{"t"})) {
+    $stamps = 1;
+}
 if (defined($options{"n"})) {
     if ($options{"n"} =~ /^([-\w]+)$/) {
 	$daemon = $1;
@@ -79,6 +87,10 @@ if (defined($options{"n"})) {
     }
     
 }
+if (defined($options{"w"})) {
+    $watch = 1;
+}
+
 if (@ARGV < 1) {
     usage();
 }
@@ -110,7 +122,7 @@ use lib "@prefix@/lib";
 use libtestbed;
 
 # Signal handler to initiate cleanup in parent and the children.
-sub Pcleanup($)
+sub Pcleanup(;$)
 {
     my ($signame) = @_;
 
@@ -119,16 +131,26 @@ sub Pcleanup($)
     if (defined($childpid)) {
 	system("kill $childpid");
 	waitpid($childpid, 0);
+	undef $childpid;
     }
-    unlink $pidfile;
-    print TBTimeStampWithDate(),
-          " [$PID]: wrapper exiting\n";
+    unlink $pidfile if (-e $pidfile);
+
+    if ($signame) {
+	print TBTimeStampWithDate(),
+	    " [$PID]: wrapper exiting\n";
+    }
     exit(0);
 }
 # Signal handler for newsyslog.
 sub Loghandler()
 {
+    print "Loghandler: rolling the logfile\n";
+    
+    $reopen = 1;
     ReOpenLog($logfile);
+    if (defined($childpid)) {
+	system("kill $childpid");
+    }
 }
 
 # Daemonize;
@@ -137,6 +159,8 @@ if (!$debug && TBBackGround($logfile)) {
     exit(0);
 }
 
+$PPID = $PID;
+
 #
 # Write our pid into the pid file so we can be killed later. 
 #
@@ -144,18 +168,38 @@ system("echo '$PID' > $pidfile") == 0 or
     die("*** $0:\n".
 	"    Could not create $pidfile!");
 
+#
+# powder-rfswitcher starts and stops this daemon when it is being
+# used to "watch" the debugging output from the frontend.
+# Temporary situation, I hope!
+#
+if ($watch) {
+    TBScriptLock("powder-rfswitcher", 0, 15) == 0 or
+	fatal("Could not get the powder-rfswitcher lock!");
+    $locked = 1;
+}
+
 # Okay, cleanup function.
 $SIG{TERM} = \&Pcleanup;
+$SIG{INT}  = \&Pcleanup
+    if ($debug);
 # And reopen logfile for newsyslog.
 $SIG{HUP} = \&Loghandler
     if (! $debug);
 
-# Fully disconnect from bootup. 
-setsid();
-
 print TBTimeStampWithDate(),
       " [$PID]: wrapper starting '$cmd",
       $cmdargs ? " $cmdargs" : "", "'\n";
+
+#
+# Drop the lock, should be in a consistent state now, so getting killed
+# will be fine. 
+#
+if ($watch) {
+    # This is racey of course. 
+    TBScriptUnlock();
+    $locked = 0;
+}
 
 # Loop forever, restarting the daemon if it ever dies.
 while (1) {
@@ -168,6 +212,10 @@ while (1) {
 	if ($childpid < 0);
 
     if ($childpid == 0) {
+	$SIG{TERM} = 'DEFAULT';
+	$SIG{HUP}  = 'DEFAULT';
+	$SIG{USR1} = 'DEFAULT';
+	
 	if (!exec("$cmd $cmdargs")) {
 	    print STDERR "*** $0:\n".
 		         "    Could not exec $cmd!\n";
@@ -175,9 +223,47 @@ while (1) {
 	}
     }
     print TBTimeStampWithDate(),
-          " [$PID]: $daemon ($childpid) started\n";
+	" [$PID]: $daemon ($childpid) started\n";
 
-    waitpid($childpid, 0);
+    my $waitkid;
+    if ($watch || $stamps) {
+	my $stampcounter = 0;
+	
+	while (($waitkid = waitpid($childpid, &WNOHANG)) == 0) {
+	    #
+	    # The stamp timer must be longer then the watch timer. Simple.
+	    #
+	    if ($stampcounter > 300) {
+		print "\nSTAMP: " . TBTimeStampWithDate() . "\n";
+		$stampcounter = 0;
+	    }
+	    $stampcounter++;
+
+	    if ($watch && !$debug) {
+		my $sb = stat(STDOUT);
+		my $modtime = $sb->mtime;
+
+		if (time() - $modtime > 15) {
+		    print TBTimeStampWithDate(),
+			" [$PID]: daemon child ($childpid) is no ".
+			"longer updating the log file. Exiting ...\n";
+
+		    SENDMAIL($TBOPS, "$daemon problem",
+			     "$daemon is no longer updating the log file\n".
+			     "Human intervention required," .
+			     " daemon_wrapper exiting.\n",
+			     $TBOPS);
+		    
+		    exit(1);
+		}
+		#print "Update for testing\n";
+	    }
+	    sleep(1);
+	}
+    }
+    else {
+	$waitkid = waitpid($childpid, 0);
+    }
     my $exitstat = $?;
     my $ecode = $exitstat >> 8;
     my $esig = $exitstat & 0x3F;
@@ -206,15 +292,22 @@ while (1) {
 	die("*** $0:\n".
 	    "    Could not start $daemon! Might be a configuration error.\n");
     }
+    if ($reopen) {
+	$reopen = 0;
+	print "restarting immediately\n";
+	next;
+    }
     #
     # Anytime it exits, send email (unless TERM). The ecode is a bit hacky,
     # but need a way to avoid sending email if the process catches TERM
     # and then exits.
     #
     if (! ($exitstat == 15 || $ecode == 15)) {
-	SENDMAIL($TBOPS, "$daemon died",
-		 "$daemon $msg after $runtime seconds; restarting it.",
-		 $TBOPS);
+	if ($runtime < 60) {
+	    SENDMAIL($TBOPS, "$daemon died",
+		     "$daemon $msg after $runtime seconds; restarting it.",
+		     $TBOPS);
+	}
     }
 
     #
@@ -238,3 +331,15 @@ while (1) {
 }
 exit(0);
 
+END {
+    # Save, since shell commands will alter it.
+    my $exitstatus = $?;
+
+    if (defined($PPID) && $PID == $PPID) {
+	TBScriptUnlock() if ($locked);
+	$locked = 0;
+	Pcleanup();
+    }
+    
+    $? = $exitstatus;
+}

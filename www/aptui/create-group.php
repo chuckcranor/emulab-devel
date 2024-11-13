@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,6 +43,10 @@ $isadmin   = (ISADMIN() ? 1 : 0);
 $reqargs = RequiredPageArguments("project", PAGEARG_PROJECT);
 $optargs = OptionalPageArguments("leader",  PAGEARG_USER);
 
+if ($project->disabled()) {
+    SPITUSERERROR("Project " . $project->pid() . " is disabled");
+    return;
+}
 if (!$project->AccessCheck($this_user, $TB_PROJECT_MAKEGROUP)) {
     SPITUSERERROR("You do not have permission to create groups in ".
                   "project " . $project->pid());

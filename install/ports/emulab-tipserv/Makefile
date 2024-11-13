@@ -20,7 +20,7 @@ NO_BUILD=	yes
 # This prevents any ports from trying to configure interactively.
 #
 BATCH=		yes
-.MAKEFLAGS+=	-DBATCH
+.MAKEFLAGS+=	BATCH=yes
 
 LIB_DEPENDS=	\
 	libtelnet.so:${PORTSDIR}/misc/libtelnet

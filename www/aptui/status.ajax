@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,18 +87,87 @@ function StatusSetupAjax($needmodify)
     return 0;
 }
 
+# Map geni response code to a pithy message.
+function MapGeniResponse($code)
+{
+    $reason = "";
+    
+    if ($code == GENIRESPONSE_INSUFFICIENT_BANDWIDTH) {
+        $reason = "Not enough available bandwidth for a link.";
+    }
+    elseif ($code == GENIRESPONSE_NO_CONNECT) {
+        $reason = "Could not map all requested links to physical ".
+                "resources. Not enough free resources currently. ".
+                "Please try again later.";
+    }
+    elseif ($code == GENIRESPONSE_MAPPING_IMPOSSIBLE) {
+        $reason = "Your topology cannot be instantiated. ".
+                "You have most likely asked for hardware that does not exist, ".
+                "such as nodes of a type that are not at the target cluster, ".
+                "or more network interfaces that exist on any of the nodes ".
+                "at the target cluster. You will need to modify your profile ".
+                "or try a different cluster.";
+    }
+    elseif ($code == GENIRESPONSE_NO_MAPPING ||
+            $code == GENIRESPONSE_INSUFFICIENT_NODES) {            
+        $reason = "Your topology could not be mapped to physical ".
+                "resources. In addition to any information below, you can ".
+                "click on the 'Logs' button above, which will provide ".
+                "lots of info, some of which might be useful in figuring out ".
+                "why it failed.";
+    }
+    elseif ($code == GENIRESPONSE_TIMEDOUT) {
+        $reason = "Your experiment timed out while setting up, ".
+                "most likely because one or more nodes failed to boot. The ".
+                "node consoles may provide more information.";
+    }
+    elseif ($code == GENIRESPONSE_TIMEDOUT) {
+        $reason = "Your experiment timed out while setting up, ".
+                "most likely because one or more nodes failed to boot. The ".
+                "node consoles may provide more information.";
+    }
+    elseif ($code == GENIRESPONSE_NETWORK_ERROR) {
+        $reason = "One or more clusters could no longer be ".
+                "reached after your experiment was provisioned.";
+    }
+    elseif ($code == GENIRESPONSE_BADARGS) {
+        #
+        # This is GENIRESPONSE_BADARGS which typically means an error
+        # in the input rspec, something the user must have put in it.
+        #
+        $reason = "Your topology source contains invalid values.";
+    }
+    elseif ($code == GENIRESPONSE_NOSPACE) {
+        $reason = "You are over your disk quota at the target ".
+                "cluster, probably because of too many saved disk images. ".
+                "Please click on the 'Storage->My Disk Images' above and ".
+                "delete images you no longer need.";
+    }
+    elseif ($code == GENIRESPONSE_STITCHER_ERROR) {
+        #
+        # This is GENIRESPONSE_STITCHER_ERROR which is a catch all.
+        #
+        $reason = "Your multi-site topology could not be ".
+                "stitched together. Please look closely at the ".
+                "error message below to see what went wrong.";
+    }
+    return $reason;
+}
+
 #
-# Status/
+# Status
 #
 function Do_GetInstanceStatus()
 {
     global $instance, $creator, $APTBASE;
+    $failedslivers = 0;
 
     if (StatusSetupAjax(0)) {
 	return;
     }
     $blob = array();
     $blob["status"] = $instance->status();
+    $blob["rdz_status"] = $instance->rdz_status();
     $blob["canceled"] = $instance->canceled() ? 1 : 0;
     $blob["paniced"] = $instance->paniced() ? 1 : 0;
     $blob["started"] = DateStringGMT($instance->started());
@@ -114,12 +183,22 @@ function Do_GetInstanceStatus()
     $haveopenstack = $instance->isopenstack() ? 1 : 0;
 
     foreach ($instance->slivers() as $sliver) {
+        $wtask = $sliver->WebTask();
+        
         $sliverblob =
             array("aggregate_urn"   => $sliver->aggregate_urn(),
                   "status"          => $sliver->status(),
                   "deferred"        => $sliver->deferred(),
+                  "started"         => DateStringGMT($sliver->started()),
+                  "destroyed"       => DateStringGMT($sliver->destroyed()),
                   "havemanifest"    => 0,
-                  "offline"         => false);
+                  "offline"         => false,
+            );
+
+        if ($sliver->status() == "terminated") {
+            $blob["sliverstatus"][$sliver->aggregate_urn()] = $sliverblob;
+            continue;
+        }
 
         #
         # See if the aggregate is offline.
@@ -142,7 +221,6 @@ function Do_GetInstanceStatus()
             # going on.
             #
             if ($sliver->retry_count()) {
-                $wtask = $sliver->WebTask();
                 if ($wtask && $wtask->TaskValue("output")) {
                     $sliverblob["deferred_cause"] =
                         htmlentities($wtask->TaskValue("output"));
@@ -162,6 +240,20 @@ function Do_GetInstanceStatus()
                 }
                 $sliverblob["details"] = $statusblob;
             }
+            if ($sliver->status() == "failed") {
+                if ($wtask) {
+                    # Small race between updating wtask and setting failed.
+                    $wtask->Refresh();
+                    $sliverblob["failure_code"] = $wtask->exitcode();
+                    if ($wtask->TaskValue("output")) {
+                        $sliverblob["failure_cause"] =
+                                htmlentities($wtask->TaskValue("output"));
+                        $sliverblob["failure_message"] =
+                                MapGeniResponse($wtask->exitcode());
+                        $failedslivers++;
+                    }
+                }
+            }
         }
         if ($sliver->public_url()) {
             $sliverblob["url"] = $sliver->public_url();
@@ -179,92 +271,26 @@ function Do_GetInstanceStatus()
     if (count($prestageStatus)) {
         $blob["prestageStatus"] = $prestageStatus;
     }
+    $blob["failedslivers"] = $failedslivers;
 
     $webtask = $instance->WebTask();
     
     # Reflect errors back to the user.
     if ($webtask && $webtask->exited()) {
         $blob["code"] = $webtask->exitcode();
-        
-        if ($webtask->exitcode() == GENIRESPONSE_INSUFFICIENT_NODES) {
-            # All the info in the results from the cluster.
-            $blob["reason"]  = "";
+        if ($webtask->TaskValue("output")) {
+            $blob["message"] = htmlentities($webtask->TaskValue("output"));
         }
-        elseif ($webtask->exitcode() == GENIRESPONSE_INSUFFICIENT_BANDWIDTH) {
-            $blob["reason"]  = "Not enough available bandwidth for a link.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_NO_CONNECT) {
-            $blob["reason"]  = "Could not map all requested links to physical ".
-	    "resources. Not enough free resources currently. ".
-	    "Please try again later.\n\n";
-	}
-        elseif ($webtask->exitcode() == GENIRESPONSE_MAPPING_IMPOSSIBLE) {
-            $blob["reason"]  = "Your topology cannot be instantiated. ".
-	    "You have most likely asked for hardware that does not exist, ".
-            "such as nodes of a type that are not at the target cluster, ".
-            "or more network interfaces that exist on any of the nodes ".
-            "at the target cluster. You will need to modify your profile ".
-            "or try a different cluster.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_NO_MAPPING) {
-            $blob["reason"]  = "Your topology could not be mapped to physical ".
-                "resources. In addition to any information below, you can ".
-                "click on the 'Logs' button above, which will provide ".
-                "lots of info, some of which might be useful in figuring out ".
-                "why it failed.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_TIMEDOUT) {
-            $blob["reason"]  = "Your experiment timed out while setting up, ".
-                "most likely because one or more nodes failed to boot. The ".
-                "node consoles may provide more information.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_TIMEDOUT) {
-            $blob["reason"]  = "Your experiment timed out while setting up, ".
-                "most likely because one or more nodes failed to boot. The ".
-                "node consoles may provide more information.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_NETWORK_ERROR) {
-            $blob["reason"]  = "One or more clusters could no longer be ".
-                "reached after your experiment was provisioned.";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_BADARGS) {
-            #
-            # This is GENIRESPONSE_BADARGS which typically means an error
-            # in the input rspec, something the user must have put in it.
-            #
-            $blob["reason"]  = "Your topology source contains invalid ".
-                "values.\n\n";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_NOSPACE) {
-            #
-            # Over Quota.
-            #
-            $blob["reason"]  = "You are over your disk quota at the target ".
-                "cluster, probably because of too many saved disk images. ".
-                "Please click on the 'Storage->My Disk Images' above and ".
-                "delete images you no longer need.";
-        }
-        elseif ($webtask->exitcode() == GENIRESPONSE_STITCHER_ERROR) {
-            #
-            # This is GENIRESPONSE_STITCHER_ERROR which is a catch all.
-            #
-            $blob["reason"]  = "Your multi-site topology could not be ".
-                "stitched together. Please look closely at the ".
-                "error message below to see what went wrong.\n\n";
-        }
-        else {
-            $blob["reason"] = "";
-        }
-        $blob["reason"] .= htmlentities($webtask->TaskValue("output"));
         $blob["canclearerror"]
             = ($webtask->TaskValue("canignore") != 0 ||
                $webtask->exitcode() ==
                  GENIRESPONSE_SETUPFAILURE_BOOTFAILED ? 1 : 0);
     }
-    elseif ($instance->status() == "created" && $webtask && 
-            $webtask->TaskValue("delayed") &&
-            $webtask->TaskValue("delayed") != 0) {
-        $blob["delayedCount"] = Instance::DelayedCount();
+    elseif ($instance->status() == "created") {
+        $delayed = Instance::DelayedCount();
+        if ($delayed >= 5) {
+            $blob["delayedCount"] = $delayed;
+        }
     }
     SPITAJAX_RESPONSE($blob);
 }
@@ -395,6 +421,43 @@ function Do_GetInstanceManifest()
 }
 
 #
+# Improvement (hopefully). Return multiple manifests as needed by
+# the status page.
+#
+function Do_GetInstanceManifests()
+{
+    global $instance, $creator, $ajax_args;
+
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    if (! isset($ajax_args["aggregate_urns"])) {
+        SPITAJAX_ERROR(-1, "Missing aggregate urn list");
+        return;
+    }
+    $urns = $ajax_args["aggregate_urns"];
+    if (!is_array($urns)) {
+        SPITAJAX_ERROR(-1, "aggregate urns must be a list");
+        return;
+    }
+    $blob = array();
+
+    foreach ($urns as $urn) {
+        if (!Instance::ValidURN($urn)) {
+            SPITAJAX_ERROR(-1, "Illegal characters in aggregate urn");
+            return;
+        }
+        $sliver = InstanceSliver::Lookup($instance, $urn);
+        if (!$sliver) {
+            SPITAJAX_ERROR(-1, "No sliver for aggregate urn");
+            return;
+        }
+        $blob[$urn] = $sliver->manifest();
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
+#
 # SSH Auth Object
 #
 function Do_GetSSHAuthObject()
@@ -493,6 +556,11 @@ function Do_RequestExtension()
                        "contact us if you need to make special arrangements.");
 	goto bad;
     }
+    if ($instance->extension_disabled() && !ISADMIN()) {
+	SPITAJAX_ERROR(1, "Extensions are have been disabled on ".
+                       "this experiment.");
+        goto bad;
+    }
 
     if (!isset($ajax_args["howlong"]) || $ajax_args["howlong"] == "") {
 	SPITAJAX_ERROR(1, "Missing number of hours");
@@ -558,6 +626,7 @@ function Do_RequestExtension()
         #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     
         if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             SPITAJAX_ERROR(-1, "Internal error extending experiment");
         }
         else {
@@ -571,7 +640,8 @@ function Do_RequestExtension()
     $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
     $blob = array("expiration" => DateStringGMT($slice->expires()),
                   "granted"    => $webtask->TaskValue("granted"),
-                  "message"    => $webtask->TaskValue("message"));
+                  "message"    => $webtask->TaskValue("message"),
+                  "warning"    => $webtask->TaskValue("warning"));
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 bad:
@@ -971,7 +1041,9 @@ function Do_SnapshotStatus()
     if (isset($taskdata["copyback_urn"])) {
         $blob["copyback_urn"] = $taskdata["copyback_urn"];
     }
-    $blob["image_status"] = $taskdata["image_status"];
+    if (isset($taskdata["image_status"])) {
+        $blob["image_status"] = $taskdata["image_status"];
+    }
     
     #
     # Lets put the node status in too. The backend has helpfully told us
@@ -1374,6 +1446,7 @@ function Do_IgnoreFailure()
 {
     global $this_user;
     global $ajax_args, $instance;
+    global $TBMAIL_OPS, $TBMAIL_AUDIT;
 
     if (StatusSetupAjax(1)) {
 	return;
@@ -1385,6 +1458,12 @@ function Do_IgnoreFailure()
 	SPITAJAX_ERROR(1, "Internal Error");
 	return -1;
     }
+    TBMAIL($TBMAIL_OPS, "WEB DEBUG REPORT",
+           "Failures have been ignored on experiment:\n\n".
+           $instance->AdminURL() . "\n",
+           "From: $TBMAIL_OPS\n".
+           "CC: $TBMAIL_AUDIT");
+    
     SPITAJAX_RESPONSE("Success");
     return 0;
 }
@@ -1704,7 +1783,7 @@ function Do_DismissExtensionDenied()
 #
 function Do_ExpInfo()
 {
-    global $instance, $creator;
+    global $instance, $creator, $TUTORIALPID;
 
     if (StatusSetupAjax(0)) {
 	return;
@@ -1768,6 +1847,11 @@ function Do_ExpInfo()
     else {
         $blob["admin_notes"] = "";
     }
+    $blob["rspec"] = $instance->rspec();
+
+    # Tutorial
+    $blob["istutorial"] = ($instance->pid() == $TUTORIALPID ? 1 : 0);
+    
     #
     # Extension stuff
     #
@@ -1841,8 +1925,10 @@ function Do_Utilization()
         if (!($sliver->physnode_count() || $sliver->virtnode_count())) {
             continue;
         }
-        $blob[$urn_mapping[$sliver->aggregate_urn()]] = 
-            $results[$sliver->aggregate_urn()];
+        if (isset($results[$sliver->aggregate_urn()])) {
+            $blob[$urn_mapping[$sliver->aggregate_urn()]] = 
+                $results[$sliver->aggregate_urn()];
+        }
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
@@ -2008,8 +2094,7 @@ function Do_MaxExtension()
         $webtask->Delete();
         return;
     }
-    $blob = array("maxextension" => $webtask->TaskValue("MaxExtension"),
-                  "reservations" => $webtask->TaskValue("Reservations"));
+    $blob = array("maxextension" => $webtask->TaskValue("MaxExtension"));
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 }
@@ -2258,6 +2343,47 @@ function Do_Top()
 }
 
 #
+# Request service logs
+#
+function Do_ServiceLogs()
+{
+    global $instance, $creator, $this_user;
+    global $ajax_args, $TBDB_TRUST_LOCALROOT;
+
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    if (!isset($ajax_args["node"])) {
+	SPITAJAX_ERROR(1, "Missing node argument");
+	return 1;
+    }
+    $node = $ajax_args["node"];
+    $uuid = $instance->uuid();
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() . " ".
+                     "  servicelogs $uuid " . escapeshellarg($node),
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error getting service logs");
+        }
+        else {
+            SPITAJAX_ERROR(1, "Could not get service logs: ".
+                           $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    SPITAJAX_RESPONSE($webtask->TaskValue("results"));
+    $webtask->Delete();
+    return;
+}
+
+#
 # Delete nodes from an experiment
 #
 function Do_DeleteSite()
@@ -2327,6 +2453,239 @@ function Do_DeleteSite()
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE("Success");
+}
+
+#
+# Connect to a shared lan in another experiment
+#
+function Do_ConnectSharedLan()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+    $disconnect = 0;
+    
+    if (StatusSetupAjax(1)) {
+	return;
+    }
+    if ($instance->paniced()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined.");
+        return;
+    }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $instance->uuid();
+
+    if (!isset($ajax_args["which"]) || $ajax_args["which"] == "") {
+        SPITAJAX_ERROR(1, "Missing which operation to perform");
+        return;
+    }
+    if ($ajax_args["which"] == "disconnect") {
+        $disconnect = 1;
+        $required = array("source-lan");
+    }
+    else {
+        $required = array("source-lan", "target-uuid", "target-lan");
+    }
+    foreach ($required as $key) {
+        if (!isset($ajax_args[$key]) || $ajax_args[$key] == "") {
+            SPITAJAX_ERROR(1, "Missing $key");
+            return;
+        }
+        elseif (! preg_match("/^[-\w]+$/", $ajax_args[$key])) {
+            SPITAJAX_ERROR(1, "Invalid characters in $key");
+            return;
+        }
+    }
+    if ($disconnect) {
+        $args = "-r " . $ajax_args["source-lan"];
+    }
+    else {
+        $args = $ajax_args["source-lan"] . " " .
+              $ajax_args["target-uuid"] . " " . $ajax_args["target-lan"];
+    }
+
+    # Optional no reconfigure.
+    if ($ajax_args["noreconfig"] == 1) {
+        $args = "-R " . $args;
+    }
+    
+    #
+    # Call out to the backend.
+    #
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() .
+                     "  connectsharedlan $uuid $args",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error (dis)connecting shared lan");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE("Success");
+}
+
+#
+# Modify an experiment.
+#
+function Do_ModifyExperiment()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+    
+    if (StatusSetupAjax(1)) {
+	return;
+    }
+    if ($instance->paniced()) {
+        SPITAJAX_ERROR(1, "This experiment has been quarantined.");
+        return;
+    }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $instance->uuid();
+
+    if (!isset($ajax_args["rspec"]) || $ajax_args["rspec"] == "") {
+        SPITAJAX_ERROR(1, "Missing rspec");
+        return;
+    }
+    $filename = tempnam("/tmp", "modify");
+    $fp = fopen($filename, "w");
+    fwrite($fp, $ajax_args["rspec"]);
+    fclose($fp);
+    chmod($filename, 0666);
+    
+    #
+    # Call out to the backend.
+    #
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() .
+                     "  modify $uuid $filename",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+    unlink($filename);
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error modifying experiment");
+        }
+        else {
+            SUEXECERROR(SUEXEC_ACTION_DEBUG);
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $webtask->Delete();
+    SPITAJAX_RESPONSE("Success");
+}
+
+#
+# Get portstats
+#
+function Do_Portstats()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+    
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $instance->uuid();
+
+    #
+    # Call out to the backend.
+    #
+    $webtask = WebTask::CreateAnonymous();
+    $retval = SUEXEC("nobody", "nobody",
+		     "webmanage_instance -t " . $webtask->task_id() .
+                     "  portstats $uuid",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if (!$webtask->exited() || $retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal error getting portstats");
+        }
+        else {
+            SPITAJAX_ERROR(1, $webtask->output());
+        }
+        $webtask->Delete();
+	return;
+    }
+    $portstats = $webtask->TaskValue("results");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($portstats);
+}
+
+#
+# All transmissions for this experiment.
+#
+function Do_Transmissions()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+    $blob = array();
+    
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $instance->uuid();
+    
+    $query =
+           "select tx.*,a.nickname as cluster ".
+           "   from apt_aggregate_radio_transmissions as tx ".
+           "join apt_aggregates as a on ".
+           "   a.urn=tx.aggregate_urn ".
+           "where tx.instance_uuid='$uuid'";
+
+    $tx_result = DBQueryFatal($query);
+
+    while ($txrow = mysql_fetch_array($tx_result, MYSQLI_ASSOC)) {
+        unset($txrow["aggregate_urn"]);
+        $txrow["tstamp"] = DateStringGMT($txrow["tstamp"]);
+        $blob[] = $txrow;
+    }
+    SPITAJAX_RESPONSE(array("txlist" => $blob, "instances" => null));
+}
+
+function Do_GatherTabStats()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+
+    if (!isset($ajax_args["tab"]) || $ajax_args["tab"] == "") {
+        SPITAJAX_ERROR(1, "Missing tab id");
+        return;
+    }
+    $tab = $ajax_args["tab"];
+    if (!isset($ajax_args["justloaded"]) || $ajax_args["justloaded"] == "") {
+        SPITAJAX_ERROR(1, "Missing tab id");
+        return;
+    }
+    $justloaded = $ajax_args["justloaded"];
+                
+    if ($tab != "topology" && $tab != "listview" &&
+        $tab != "manifest" && $tab != "IdleGraphs") {
+        SPITAJAX_RESPONSE(0);
+        return;
+    }
+    if ($justloaded == 1) {
+        TBGetUniqueIndex("status_justloaded");
+    }
+    TBGetUniqueIndex("status_" . $tab);
+    SPITAJAX_RESPONSE(0);
 }
 
 # Local Variables:

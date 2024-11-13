@@ -65,9 +65,19 @@ my $RCDIR	= "$BINDIR/rc";
 my $LOGFILE	= "$LOGDIR/bootsetup.debug";
 my $BOOTLOG     = "/var/log/emulab.bootlog";
 my %TMCCTIMEOUT	= (REMOTE() ? ("timeout" => 5) : ());
+my $PUBSUBD     = "/usr/local/libexec/pubsubd";
 my $PUBSUBCONF  = "/usr/local/etc/pubsubd.conf";
 my $PUBSUBEXPR  = "/usr/local/etc/pubsubd.expr";
-my $PUBSUBD_RESTART = "/usr/local/etc/emulab/pubsubd.restart";
+my $PUBSUBD_RESTART = "$BINDIR/pubsubd.restart";
+#
+# If $PUBSUBD is not in /usr/local and is in /usr, swap config file
+# locations.
+#
+if (! -e $PUBSUBD && -e "/usr/libexec/pubsubd") {
+    $PUBSUBD     = "/usr/libexec/pubsubd";
+    $PUBSUBCONF  = "/etc/pubsubd.conf";
+    $PUBSUBEXPR  = "/etc/pubsubd.expr";
+}
 
 # Protos.
 sub doboot();
@@ -458,7 +468,7 @@ sub doboot()
 	    if ($?) {
 		fatal("Error restarting pubsubd");
 	    }
-	} elsif (-x "/usr/local/libexec/pubsubd") {
+	} elsif (-x $PUBSUBD) {
 	    system("killall pubsubd");
 	    my $ws = 8;
 	    while ($ws > 0
@@ -468,7 +478,7 @@ sub doboot()
 		$ws -= 1;
 	    }
 	    print("Starting pubsubd in cluster mode\n");
-	    system("/usr/local/libexec/pubsubd $clusteringoptions");
+	    system("$PUBSUBD $clusteringoptions");
 	    if ($?) {
 		fatal("Error running pubsubd");
 	    }

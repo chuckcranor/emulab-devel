@@ -1,0 +1,90 @@
+<div>
+  <div class="fs-5">
+    <p>
+      Share this profile with users in other projects so they can instantiate it.
+      Normally, only users who are members of the same project as the profile, are
+      allowed to instantiate it.
+    </p>
+    <p class="hidden">
+      <% if (!ispublic) { %>
+	Add projects using the form below. You will need to know the name
+	of the project. We will send the link to the project leader, but
+	you can also send the link below to other users in the project you
+	shared your profile with.
+	<em>Only the users in the projects listed below will be able
+	to instantiate this profile.</em>
+      <% } else { %>
+	Since this profile is public, you can send the link below to any other
+	registered user. 
+      <% } %>
+    </p>
+    <p>
+      Select whether you want to make your profile <em>public</em> (anyone
+      can view and instantiate, with the link below), or <em>private</em> (only
+      members of your project, or registered users with the access
+      link below, can view and instantiate).
+    </p>
+  </div>
+  <div class="container">
+    <div class="row">
+      <div class="col-sm-12 offset-sm-0">
+	<form>
+	  <h4>Access Type:</h4>
+	  <select <% if (!canedit) { %> disabled <% } %>
+		class="form-select form-select-lg select-access-type">
+	    <option <% if (ispublic) { %> selected <% } %>
+		  value="public">Public (any registered user with the link)</option>
+	    <option <% if (!ispublic) { %> selected <% } %>
+		   value="restricted">
+	      <% if (0) { %>
+		Specific Projects (only projects with access and the link)
+	      <% } else { %>
+		Private (only members of your project)
+	      <% } %>
+	    </option>
+	  </select>
+	  <% if (0 && canedit && !ispublic) { %>
+	    <h4 class="mt-3">Projects:</h4>
+	    <% if (_.size(projects)) { %>
+	      <% _.each(projects, function (name, pid) { %>
+		<div class="remove-sharing-project">
+		  <div class="input-group has-validation mt-2">
+		    <input disabled type="text" class="form-control"
+			   data-pid="<%- pid %>"
+			   value="<%- pid %> (<%- name %>)">
+		    <button class="btn btn-outline-secondary" type="button">Remove</button>
+		    <div class="invalid-feedback"></div>
+		  </div>
+		</div>
+	      <% }); %>
+	    <% } %>
+	    <div class="add-sharing-project">
+	      <div class="input-group has-validation mt-2">
+		<input type="text" class="form-control"
+		       placeholder="Project Name">
+		<button class="btn btn-outline-secondary"
+			type="button">Add</button>	  
+		<div class="invalid-feedback"></div>
+	      </div>
+	    </div>
+	  <% } %>
+	  <div class="mt-3">
+	    <h4>Link:</h4>
+	    <div class="copy-to-clipboard">
+	      <div class="input-group">
+		<input readonly
+		       class="form-control"
+		       value='<%- url %>'>
+		<span class="input-group-text">
+		  <a href='#' class='btn'>
+		    <span class='glyphicon glyphicon-copy'></span></a>
+		</span>
+	      </div>
+	    </div>
+	  </div>
+	</form>
+      </div>
+    </div>
+  </div>
+</div>
+

@@ -1,0 +1,345 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use POSIX ":sys_wait_h";
+use POSIX qw(setsid close strftime);
+use File::Temp qw(tempfile tempdir);
+use Date::Parse;
+use File::Basename;
+use MIME::Base64;
+use JSON;
+
+#
+# Back-end script to manage RDZ stuff
+#
+sub usage()
+{
+}
+my $optlist     = "dn";
+my $debug       = 0;
+my $impotent    = 0;
+my $this_user;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $MAINSITE    = @TBMAINSITE@;
+my $OURDOMAIN	= "@OURDOMAIN@";
+my $MYURN       = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $CURL        = "/usr/local/bin/curl";
+my $APIKEY      = "\$2a\$04\$d4NTGF0FXkwL88gSZxxYweDq4YnIG.elnnRWLuLIf1BTzErT6BqT6";
+my $CUSTOMERID  = "1000016324";
+my $STATSAPI    = "https://cso.celona.io/v1/api/stats";
+my $CFGMAPI     = "https://cso.celona.io/v1/api/cfgm";
+my $ELEMENTID;
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libtestbed;
+use emdb;
+use emutil;
+use libEmulab;
+use Node;
+use User;
+use APT_Aggregate;
+use APT_Instance;
+
+use lib ".";
+use APT_RDZ;
+
+# Protos
+sub DoAntennas();
+sub DoLocations();
+sub DoRadios();
+sub fatal($);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (grep {$_ eq "--"} @ARGV &&
+    ! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+
+#
+# XXX We need to use our token to get out current element ID.
+#
+$ELEMENTID = APT_RDZ::GetCelonaElementID();
+
+my $antenna = {
+    "element_id" => $ELEMENTID,
+    "name"       => "Celona 13dBi Omni-directional",
+    "type"       => "omni",
+    "gain"       => 13.0,
+    "model"      => "KPPA-3GHZ-DPOMA",
+};
+my %locations = (
+    "celona-ebc" => {
+	"element_id" => $ELEMENTID,
+	"name"       => "celona-ebc",
+	"srid"       => 4326,
+	"x"          => -111.84639739990234,
+	"y"          => 40.76850128173828,
+	"z"          => 0,
+    },
+    "celona-wasatch" => {
+	"element_id" => $ELEMENTID,
+	"name"       => "celona-wasatch",
+	"srid"       => 4326,
+	"x"          => -111.8431625366211,
+	"y"          => 40.77106857299805,
+	"z"          => 0,
+    },
+);
+
+my $port = {
+    "element_id"          => $ELEMENTID,
+    "name"                => "",
+    "rx"                  => JSON::true,
+    "tx"                  => JSON::true,
+    "min_freq"            => 3550000000,
+    "max_freq"            => 3700000000,
+    "max_power"           => 47,
+    "antenna_id"          => undef,
+    "antenna_location_id" => undef,
+};
+
+my %radios = (
+    "cap-ebc" => {
+	"element_id"   => $ELEMENTID,
+	"name"         => "cap-ebc",
+	"description"  => "Celona AP21 at EBC",
+	"location_id"  => "celona-ebc",
+	"enabled"      => JSON::true,
+	"fcc_id"       => "2AWNP-AP21-48",
+        "serial_number"=> "AP21RBAAN0300112",
+	"enabled"      => JSON::true,
+    },
+    "cap-wasatch" => {
+	"element_id"   => $ELEMENTID,
+	"name"         => "cap-wasatch",
+	"description"  => "Celona AP21 at Wasatch",
+	"location_id"  => "celona-wasatch",
+	"fcc_id"       => "2AWNP-AP21-48",
+	"serial_number"=> "AP21RBAAN0300222",
+	"enabled"      => JSON::true,
+    },
+);    
+DoAntennas();
+DoLocations();
+DoRadios();
+
+#
+# We have just a single Antenna for now
+#
+sub DoAntennas()
+{
+    my $response;
+    if (APT_RDZ::GET("/antennas", \$response)) {
+	fatal("Could not get RDZ /antennas");
+    }
+    my @antennas = @{$response->{'antennas'}};
+    #
+    # Only one for now.
+    #
+    if (@antennas) {
+	print "Celona Antenna:\n";
+	print Dumper($antennas[0]);
+	return $antenna->{'id'} = $antennas[0]->{'id'};
+    }
+    my $id = undef;
+    if ($impotent) {
+	print Dumper($antenna);
+    }
+    else {
+	if (APT_RDZ::POST("/antennas", $antenna, \$response)) {
+	    fatal("Could not add RDZ /antennas");
+	}
+	print Dumper($response);
+	$id = $response->{'id'};
+    }
+    return $antenna->{'id'} = $id;
+}
+
+sub DoLocations()
+{
+    my $response;
+    if (APT_RDZ::GET("/locations", \$response)) {
+	fatal("Could not get RDZ /locations");
+    }
+    foreach my $location (@{ $response->{'locations'} }) {
+	my $name = $location->{'name'};
+
+	print "Celona Location:\n";
+	print Dumper($location);
+	
+	if (exists($locations{$name})) {
+	    $locations{$name}->{'id'} = $location->{'id'};
+	}
+    }
+    foreach my $location (values(%locations)) {
+	my $name = $location->{'name'};
+	my $location_id;
+	
+	if (exists($location->{'id'})) {
+	    print "This is an update to location $name\n";
+	    $location_id = $location->{'id'};
+	}
+	if ($debug || $impotent) {
+	    print Dumper($location);
+	}
+	next
+	    if ($impotent);
+	
+	my $response;
+	if ($location_id) {
+	    if (APT_RDZ::PUT("/locations/$location_id", $location, \$response)) {
+		fatal("Could not update RDZ /locations/$location_id");
+	    }
+	}
+	else {
+	    if (APT_RDZ::POST("/locations", $location, \$response)) {
+		fatal("Could not add RDZ /locations");
+	    }
+	}
+	print Dumper($response);
+	if (! $location_id) {
+	    $location_id = $response->{"id"};
+	}
+	$locations{$name}->{'id'} = $location_id;
+    }
+}
+
+sub DoRadios()
+{
+    my $response;
+    if (APT_RDZ::GET("/radios", \$response)) {
+	fatal("Could not get RDZ /radios");
+    }
+    foreach my $radio (@{ $response->{'radios'} }) {
+	my $name  = $radio->{'name'};
+	my @ports = @{ $radio->{'ports'} };
+	
+	if (exists($radios{$name})) {
+	    $radios{$name}->{'id'} = $radio->{'id'};
+
+	    if (@ports) {
+		print "FOO\n";
+		$radios{$name}->{'ports'} = $radio->{'ports'};
+	    }
+	}
+	print "Celona Radio:\n";
+	print Dumper($radio);
+    }
+    
+    foreach my $radio (values(%radios)) {
+	my $name = $radio->{'name'};
+	my $radio_id;
+
+	if (exists($radio->{'id'})) {
+	    print "This is an update to radio $name\n";
+	    $radio_id = $radio->{'id'};
+	}
+	# Fill in the location.
+	my $locname = $radio->{'location_id'};
+	$radio->{'location_id'} = $locations{$locname}->{'id'};
+	
+	if ($debug || $impotent) {
+	    print Dumper($radio);
+	}
+
+	if (! $impotent) {
+	    my $response;
+	    if ($radio_id) {
+		if (APT_RDZ::PUT("/radios/$radio_id", $radio, \$response)) {
+		    fatal("Could not update RDZ /radios/$radio_id");
+		}
+	    }
+	    else {
+		if (APT_RDZ::POST("/radios", $radio, \$response)) {
+		    fatal("Could not add RDZ /radios");
+		}
+	    }
+	    print Dumper($response);
+	    if (! $radio_id) {
+		$radio_id = $response->{"id"};
+	    }
+	    $radios{$name}->{'id'} = $radio_id;
+	}
+
+	$port->{'radio_id'}     = $radio_id;
+	$port->{'antenna_id'}   = $antenna->{'id'};
+	$port->{'antenna_location_id'} = $radio->{'location_id'};
+	$port->{'name'} = "port0";
+
+	if ($debug || $impotent) {
+	    print Dumper($port);
+	}
+
+	if (! $impotent) {
+	    my $response;
+	    if (APT_RDZ::POST("/radios/$radio_id/ports", $port, \$response)) {
+		fatal("Could not add RDZ /radios/$radio_id/ports");
+	    }
+	    print Dumper($response);
+	}
+    }
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+    my $response;
+
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    # Exit with negative status so web interface treats it as system error.
+    exit(-1);
+}

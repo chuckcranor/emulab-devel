@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -693,7 +693,7 @@ sub TBScriptLock($;$$)
     my ($token, $global, $waittime) = @_;
     local *LOCK;
 
-    $waittime = 120
+    $waittime = 180
 	if (!defined($waittime));
     $global = 0
 	if (!defined($global));

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -123,7 +123,7 @@ if ($TOSTDOUT) {
 
 # ZFS_NOEXPORT requires WITHZFS
 if ($ZFS_NOEXPORT && !$WITHZFS) {
-    fatal("ZFS_NOEXPORT requires WITHZFS, reconfigure\n");
+    $ZFS_NOEXPORT = 0;
 }
 
 # Note no -n option. We redirect stdin from the new exports file below.
@@ -373,6 +373,20 @@ if ($ZFS_NOEXPORT) {
 		     "        UNIX_TIMESTAMP(s.weblogin_last)) <= $limit))");
     while (my ($uid) = $active_result->fetchrow_array()) {
 	$bossexports{"$usersdir/$uid"} = "$usersdir/$uid";
+    }
+
+    #
+    # XXX ensure that GeniSlices is exported to boss as that is where we
+    # download remote images for caching. The image downloader does not
+    # consider such a download as "activity". It could/should, but it is
+    # easy to compensate for it here.
+    #
+    my $pid = "GeniSlices";
+    if (!exists($bossexports{"$projdir/$pid"})) {
+	$bossexports{"$projdir/$pid"} = "$projdir/$pid";
+    }
+    if (!exists($bossexports{"$groupdir/$pid"})) {
+	$bossexports{"$groupdir/$pid"} = "$groupdir/$pid";
     }
 }
 

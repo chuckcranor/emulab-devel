@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -20,14 +20,15 @@
 # 
 # }}}
 #
+PREFIX		= @prefix@
 SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= @top_builddir@
 SUBDIR		= $(subst $(TESTBED_SRCDIR)/,,$(SRCDIR))
 SYSTEM	       := $(shell uname -s)
 CBINDIR		= $(DESTDIR)$(CLIENT_BINDIR)
-LBINDIR		= $(DESTDIR)/usr/local/bin
-LSBINDIR	= $(DESTDIR)/usr/local/sbin
+LBINDIR		= $(DESTDIR)$(PREFIX)/bin
+LSBINDIR	= $(DESTDIR)$(PREFIX)/sbin
 SYSTEM	       := $(shell uname -s)
 
 include $(OBJDIR)/Makeconf
@@ -62,6 +63,9 @@ boss-install:
 	-mkdir -p $(INSTALL_DIR)/opsdir/man/man1
 	$(INSTALL) -m 644 $(SRCDIR)/install-tarfile.1 \
 		$(INSTALL_DIR)/opsdir/man/man1/install-tarfile.1
+	$(INSTALL_PROGRAM) $(SRCDIR)/node_top.sh $(INSTALL_BINDIR)/node_top.sh
+	$(INSTALL_PROGRAM) $(SRCDIR)/node_servicelogs.sh \
+		$(INSTALL_BINDIR)/node_servicelogs.sh
 
 control: control-subdirs
 

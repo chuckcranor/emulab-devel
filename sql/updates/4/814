@@ -1,0 +1,34 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instances", "rdz_rdzinfo")) {
+	DBQueryFatal("ALTER TABLE apt_instances ADD ".
+		     " `rdz_rdzinfo` mediumtext after rdz_flags");
+    }
+    if (!DBSlotExists("apt_instances", "rdz_rdzinrdzinfo")) {
+	DBQueryFatal("ALTER TABLE apt_instances ADD ".
+		     " `rdz_rdzinrdzinfo` mediumtext after rdz_rdzinfo");
+    }
+    if (!DBSlotExists("apt_instance_rfranges", "rdz_claimid")) {
+	DBQueryFatal("ALTER TABLE apt_instance_rfranges ADD ".
+		     " `rdz_claimid` varchar(40) DEFAULT NULL after rdz_grantid");
+    }
+    if (DBSlotType("apt_instances", "rdz_flags") !~ /rdzinrdz/) {
+	DBQueryFatal("alter table apt_instances change `rdz_flags` `rdz_flags` ".
+		     " set('heartbeats','rdzinrdz') NOT NULL default ''");
+
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

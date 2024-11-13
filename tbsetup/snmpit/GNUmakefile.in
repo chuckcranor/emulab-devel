@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,7 +42,8 @@ LIB_STUFF       = snmpit_intel.pm \
 		  snmpit_mellanox.pm MLNX_XMLGateway.pm \
                   snmpit_force10.pm force10_expect.pm \
 		  snmpit_dellrest.pm dell_rest.pm \
-		  snmpit_h3c.pm snmpit_libNetconf.pm snmpit_netscout.pm
+		  snmpit_h3c.pm snmpit_libNetconf.pm snmpit_netscout.pm \
+		  snmpit_planet.pm
 
 #
 # Force dependencies on the scripts so that they will be rerun through

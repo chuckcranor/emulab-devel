@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -74,6 +74,7 @@ my $TBLOGS      = "@TBLOGSEMAIL@";
 use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
+use emutil;
 use OSImage;
 
 # Locals
@@ -155,6 +156,18 @@ if (!defined($image)) {
     die("*** $0:\n".
 	"    $imageid does not exist!\n");
 }
+#
+# If the local project has not been active in a while, it might not
+# be exported from ops. Need to bump activity and export.
+#
+my $project = $image->GetProject();
+if (!defined($project)) {
+    fatal("Project for $image does not exist!\n");
+}
+$project->UpdateExports(1) == 0 or
+    fatal("Could not export project directory");
+$project->WaitForMount() == 0 or
+    fatal("Timed out waiting for project mount");
 
 if (my $retval = VerifyImage()) {
     exit($retval);
@@ -281,7 +294,7 @@ sub VerifyImage()
 	    if ($timestamp >= $mtime);
     }
     my $length = $filelength;
-
+    
     if (defined($rangestart)) {
 	if ($rangeend) {
 	    $length = $rangeend - $rangestart;
@@ -300,6 +313,9 @@ sub VerifyImage()
     $foffset = ($rangestart ? $rangestart : 0);
 
     print "Content-Length: $length\n";
+    print "Content-Type: application/octet-stream\n";
+    print "Cache-Control: no-cache, must-revalidate\n";
+    print "Pragma: no-cache\n";
     print "Last-Modified: " .
 	strftime("%a, %d %b %Y %H:%M:%S GMT", gmtime($mtime)) . "\n";
 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -123,12 +123,14 @@ my $LOCALIZEIMG	= "$BINDIR/localize_image";
 my $IPTABLES	= "/sbin/iptables";
 my $IPBIN	= "/sbin/ip";
 my $NETSTAT     = "/bin/netstat";
-my $IMAGEZIP    = "/usr/local/bin/imagezip";
-my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
-my $IMAGEDUMP   = "/usr/local/bin/imagedump";
+my $IMAGEZIP    = "$LBINDIR/imagezip";
+my $IMAGEUNZIP  = "$LBINDIR/imageunzip";
+my $IMAGEDUMP   = "$LBINDIR/imagedump";
 my $XM          = "/usr/sbin/xm";
 my $FSCK	= "/sbin/e2fsck";
 my $FSCKUFS	= "/sbin/fsck.ufs";
+my $FDISK       = "/usr/sbin/fdisk";
+my $SGDISK      = "/usr/sbin/sgdisk";
 my $debug  = 0;
 my $lockdebug = 1;
 my $sleepdebug = 0;
@@ -182,6 +184,9 @@ my $MAXIMAGEWAIT = 1800;
 #	    long we wait between attempts to reconnect.
 #
 my $CAPTURE     = "/usr/local/sbin/capture-nossl";
+if (! -x $CAPTURE && -x "/usr/sbin/capture-nossl") {
+    $CAPTURE    = "/usr/sbin/capture-nossl";
+}
 my $CAPTUREOPTS	= "-i -C -L -T 10 -R 2000";
 
 #
@@ -256,16 +261,17 @@ sub VGNAME()  { return $VGNAME; }
 ##
 
 # Minimum memory for dom0
-my $MIN_MB_DOM0MEM = 256;
+my $MIN_MB_DOM0MEM = 512;
 
 #
 # Minimum acceptible size (in GB) of LVM VG for domUs.
 #
 # XXX we used to calculate this in terms of anticipated maximum number
 # of vnodes and minimum vnode images size, blah, blah. Now we just pick
-# a value that allows us to use a pc3000 node with a single 144GB disk!
+# a value that allows us to use a node with a 240GB disk and host three
+# MBR4 (~66GB) vnodes.
 #
-my $XEN_MIN_VGSIZE = 120;
+my $XEN_MIN_VGSIZE = 200;
 
 #
 # When loading an Emulab partition image, we use a compressed version of our
@@ -283,6 +289,10 @@ my $XEN_MIN_VGSIZE = 120;
 #    P1: 16GB (XEN_LDSIZE_3) offset at 2048, standard OS partition
 #    P2: 1MB (XEN_EMPTYSIZE), as small as we can make it
 #    P3: 1GB (XEN_SWAPSIZE), standard MBR2 swap size
+# MBR 4:
+#    P1: 64GB (XEN_LDSIZE_4) offset at 2048, standard OS partition
+#    P2: 1MB (XEN_EMPTYSIZE), as small as we can make it
+#    P3: 1GB (XEN_SWAPSIZE), standard MBR2 swap size
 #
 # P4 is sized based on what the user told us. If they do not specify
 # XEN_EXTRA, then we default to 1G (XEN_EXTRASIZE). We need enough
@@ -293,6 +303,7 @@ my $XEN_MIN_VGSIZE = 120;
 #
 my $XEN_LDSIZE    =  6152895;
 my $XEN_LDSIZE_3  = 16777216;
+my $XEN_LDSIZE_4  = 67108864;
 my $XEN_SWAPSIZE  =  1048576;
 my $XEN_EMPTYSIZE =     1024;
 my $XEN_EXTRASIZE =  1048576;
@@ -650,14 +661,6 @@ sub rootPreConfig($;$)
 	    # This is for arping -A to work. See emulab-cnet.pl
 	    mysystem("echo 1 >/proc/sys/net/ipv4/ip_nonlocal_bind");
 	}
-
-	# Set up for metadata server for ec2 support
-	print "Setting up redirection for meta server...\n";
-	mysystem("$IPBIN addr add 169.254.169.254/32 ".
-		 "   scope global dev $cnet_iface");
-	mysystem("$IPTABLES -t nat -A PREROUTING -d 169.254.169.254/32 " .
-		 "   -p tcp -m tcp --dport 80 -j DNAT ".
-		 "   --to-destination ${bossip}:8787");
     }
     else {
 	if (!existsBridge($BRIDGENAME)) {
@@ -688,10 +691,10 @@ sub rootPreConfig($;$)
     mysystem("$OVSSTART --delete-bridges start");
 
     # For gre tunnels to work with iptables
-    if (system("modinfo nf_conntrack_proto_gre") == 0) {
+    if (system("modinfo nf_conntrack_proto_gre >/dev/null 2>&1") == 0) {
         mysystem("$MODPROBE nf_conntrack_proto_gre");
     }
-    if (system("modinfo nf_conntrack_pptp") == 0) {
+    if (system("modinfo nf_conntrack_pptp >/dev/null 2>&1") == 0) {
         mysystem("$MODPROBE nf_conntrack_pptp");
     }
 
@@ -1736,7 +1739,6 @@ okay:
 		    $image{'ramdisk'} = $ramdisk;
 		}
 	    }
-	    # else... Use the booted kernel. Works sometimes. 
 
 	    # Some kernels (CentOS8) no longer support PV or PVH.  So,
 	    # attempt to handle that by falling back to HVM if PV is not
@@ -1754,6 +1756,17 @@ okay:
 		    undef $image{'ramdisk'};
 		    undef $image{'bootloader'};
 		}
+	    }
+
+	    # If we can't extract the kernel, fall back to HVM.  All modern
+	    # kernels support PVHVM, so this is the best default.
+	    if (!defined($kernel)) {
+		print "Warning: failed to extract kernel;".
+		    " falling back to HVM!\n";
+		$private->{'ishvm'} = $ishvm = 1;
+		undef $image{'kernel'};
+		undef $image{'ramdisk'};
+		undef $image{'bootloader'};
 	    }
 	}
     }
@@ -1920,7 +1933,12 @@ okay:
     if ($ispvh) {
 	addConfig($vninfo, "type='pvh'", 2);
 	if ($os eq "FreeBSD") {
-	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:xbd0s1a'", 2);
+	    my $rfs = "xbd0s1a";
+	    # XXX GUFI image
+	    if ($loadslice == 0 && $bootslice == 3) {
+		$rfs = "xbd0p3";
+	    }
+	    addConfig($vninfo, "extra='vfs.root.mountfrom=ufs:$rfs'", 2);
 	}
 	elsif (defined($extra)) {
 	    addConfig($vninfo, "extra='$extra'", 2);
@@ -1944,12 +1962,38 @@ okay:
 	#
 	# Not sure how to do this for PVM.
 	#
+	if (exists($attributes->{'XEN_USBCONTROLLERS'})) {
+	    my $controllers = $attributes->{'XEN_USBCONTROLLERS'};
+	    #
+	    # controllers are expected to be in "[...],[...]" format.
+	    #
+	    addConfig($vninfo, "usbctrl=$controllers", 2);
+	}
 	if (exists($attributes->{'XEN_USBDEVICES'})) {
 	    my $devices = $attributes->{'XEN_USBDEVICES'};
-	    addConfig($vninfo, "usb=1", 2);
-	    addConfig($vninfo, "usbdevice=[".
-		      join(",", map {"'" . $_ . "'"} split(",", $devices)) .
-		      "]", 2);
+
+	    if (!exists($attributes->{'XEN_USBCONTROLLERS'})) {
+		addConfig($vninfo, "usb=1", 2);
+	    }
+	    my $devstring;
+
+	    # How annoying.
+	    if ($xeninfo{xen_major} > 4 ||
+		($xeninfo{xen_major} == 4 && $xeninfo{xen_minor} >= 11)) {
+		$devstring = "usbdev=";
+	    }
+	    else {
+		$devstring = "usbdevice=";
+	    }
+
+	    if ($devices =~ /^\s*\[/) {
+		$devstring .= $devices;
+	    }
+	    else {
+		$devstring .= "[" .
+		    join(",", map {"'" . $_ . "'"} split(",", $devices)) . "]";
+	    }
+	    addConfig($vninfo, $devstring, 2);
 	}
     } else {
 	if ($os eq "FreeBSD") {
@@ -3571,6 +3615,13 @@ sub CreatePrimaryDisk($$$$;$$)
     }
 
     #
+    # Add 64 sectors for backup GPT header and partitions.
+    #
+    if ($loadslice == 0) {
+	$lv_size += (64 * 512) / 1024;
+    }
+
+    #
     # What we actually load up here is the golden image.
     #
     # Note that if this fails, we fall back on creating the vnode
@@ -3650,9 +3701,9 @@ sub CreatePrimaryDisk($$$$;$$)
 	my ($slice1_active,$slice2_active);
 	my $slice1_start = 63; 
 
-	if ($mbrvers == 3) {
+	if ($mbrvers == 3 || $mbrvers == 4) {
 	    $slice1_start = 2048;
-	    $slice1_size  = $XEN_LDSIZE_3 * 2;
+	    $slice1_size  = ($mbrvers == 3 ? $XEN_LDSIZE_3 : $XEN_LDSIZE_4) * 2;
 	    $slice2_size  = $s2size * 2;
 	    if ($imagemetadata->{'PARTOS'} =~ /freebsd/i) {
 		$slice1_type  = "0xA5";
@@ -3761,6 +3812,14 @@ sub CreatePrimaryDisk($$$$;$$)
 
 	    goto fail
 		if ($?);
+	}
+
+	if (-x $FDISK
+	    && mysystem2("$FDISK -l $rootvndisk 2>/dev/null | grep -q 'Disklabel type: gpt'") == 0) {
+	    TBDebugTimeStamp("$rootvndisk: sanitizing backup GPT headers");
+	    mysystem2("$SGDISK -e $rootvndisk");
+	    print STDERR "libvnode_xen: failed to sanitize backup GPT headers for $rootvndisk\n"
+		if ($? != 0);
 	}
     }
     if ($dothinlv) {
@@ -5188,6 +5247,48 @@ sub domainGone($$)
 }
 
 #
+# Highly specialized hack to get rid of FreeBSD instances in HVM domains.
+# When FreeBSD does a "halt" it leaves behind the domU in the "------" state. 
+# If we do an "xl destroy" we can kill them off in the eyes of xl. They
+# will leave behind a qemu process (the reason they hang in the first place?)
+# which we can optionally kill. These reproduces a lot of vnodeHalt but
+# skips the "xl shutdown" step which will hang for 90 seconds and not do
+# anything.
+#
+sub domainKill($$)
+{
+    my ($vnode_id,$killqemu) = @_;
+    my $zombiestate = "------";
+    my $domID;
+    
+    my $stat = domainStatus($vnode_id, \$domID);
+    if ($stat ne $zombiestate) {
+	print STDERR "$vnode_id: status='$stat', cannot kill\n"
+	    if ($debug);
+	return 0;
+    }
+    $stat = RunWithLock("xmtool", "$XM destroy $vnode_id");
+    if ($stat) {
+	print STDERR "$vnode_id: could not destroy\n"
+	    if ($debug);
+	return 0;
+    }
+    if (!domainGone($vnode_id, 3)) {
+	print STDERR "$vnode_id: destroyed, but did not go away\n"
+	    if ($debug);
+	return 0;
+    }
+    if ($killqemu && $domID) {
+	if (mysystem2("pkill -f 'qemu.* -xen-domid $domID '")) {
+	    print STDERR "$vnode_id: could not kill orphaned qemu ($domID)\n"
+		if ($debug);
+	}
+    }
+
+    return 1;
+}
+
+#
 # Add a line 'str' to the XenConfig array for vnode 'vmid'.
 #
 # If overwrite is set, any existing line with the same key is overwritten,
@@ -5432,7 +5533,7 @@ sub createThinPool($)
     }
 
     # Try to make it
-    if (mysystem2("lvcreate -Zy -i$num -L ${poolsize}g ".
+    if (mysystem2("lvcreate --chunksize 128k -Zy -i$num -L ${poolsize}g ".
 		  "--type thin-pool --thinpool $POOL_NAME $VGNAME")) {
 	print STDERR "createThinPool: could not create ${poolsize}g ".
 	    "thin pool\n";
@@ -5962,8 +6063,15 @@ sub ExtractKernelFromLinuxImage($$$)
 {
     my ($lvname, $rootpartition, $outdir) = @_;
     my $lvmpath = lvmVolumePath($lvname);
-    my $PYGRUB  = "$BINDIR/pygrub";
     my $configfile = "$outdir/kernel-config";
+    my $PYGRUB;
+
+    for my $pgc ("$BINDIR/pygrub", "/lib/xen-default/bin/pygrub", "/usr/lib/xen-default/bin/pygrub") {
+	if (-e $pgc) {
+	    $PYGRUB = $pgc;
+	    last;
+	}
+    }
 
     # Must kill this in case we cannot extract it.
     unlink($configfile)
@@ -6020,7 +6128,7 @@ sub ExtractKernelFromLinuxImage($$$)
 	# Temporarily unblock and set to default so we die. 
 	#
 	local $SIG{TERM} = 'DEFAULT';
-	exec("$PYGRUB --quiet --output-format=simple ".
+	exec("$PYGRUB --quiet --no-output-tempfile --output-format=simple ".
 	      "--output-directory=$outdir $lvmpath");
 	exit(1);
     }

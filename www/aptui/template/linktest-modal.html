@@ -5,7 +5,8 @@
 	<center>
           <h3>Run Linktest
             <a class='btn btn-xs' id="linktest-help-button"
-	       data-toggle="collapse" href="#linktest-help">
+	       data-toggle="collapse" data-bs-toggle="collapse"
+	       href="#linktest-help">
             <span class='glyphicon glyphicon-question-sign'
                   style='margin-bottom: 4px;'></span></a></h3>
 	</center>
@@ -13,24 +14,23 @@
       <div class='modal-body'>
 	Please select the test level and then click Start. Higher
 	levels will take longer to complete and require patience.
-	<br>
-	<br>
-	<center>
+	<center class="mt-3">
 	  <select id='linktest-level'>
 	    <option selected value='1'>Level 1 - Connectivity and Latency</option>
 	    <option value="2">Level 2 - Plus Static Routing</option>
 	    <option value="3">Level 3 - Plus Loss</option>
 	    <option value="4">Level 4 - Plus Bandwidth</option>
 	  </select>
-	  <br>
-	  <br>
-          <button type='button' style='margin-right: 20px;'
-                  class='btn btn-primary btn-sm' 
-                  data-dismiss='modal' aria-hidden='true'>
-	    Cancel</button>
-	  <button type='button' class='btn btn-success btn-sm'
+	</center>
+	<center class="mt-3">
+	  <button type='button' class='btn btn-primary btn-sm confirm-button'
 		  id='linktest-start-button'>
             Start</button>
+          <button type='button'
+                  class='btn btn-default btn-sm cancel-button' 
+                  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'>
+	    Cancel</button>
 	</center>
 	<div class="collapse" id="linktest-help"></div>
       </div>

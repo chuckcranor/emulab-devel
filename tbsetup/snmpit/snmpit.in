@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -75,6 +75,8 @@ sub doMakeVlan($$@);
 sub doDeleteVlan($@);
 sub doVlanNumber($$);
 sub doPortControl($$@);
+sub doPortPTP($$@);
+sub doPortSyncE($$@);
 sub doRecreateVlans($);
 sub doTrunkEnable($$$@);
 sub doTrunkDisable($$);
@@ -126,6 +128,10 @@ Usage: $0 [-h] [-v level] [-q] [-n] [-i device] [-S stack]
           [--of-enable name pid eid]
           [--of-controller name pid eid tcp:ip:port [fail-secure]]
           [--of-listener name pid eid]
+	  [--ptp-enable profile ports]
+	  [--ptp-disable ports]
+	  [--synce-enable ports]
+	  [--synce-disable ports]
 General:
   -h              Display this help message
   -v <level>      Verbose mode
@@ -198,6 +204,15 @@ Port Control:
   -B <statstring>        Pass in a stat string from -b to restore status
   -D <pid> <eid>         Disable all control net ports for an experiment
   -R <pid> <eid>         (Re)enable all control net ports for an experiment
+  --ptp-enable <profile> <ports>
+                         Enable PTP profile <profile> on the indicated ports.
+  --ptp-disable <ports>
+                         Disable PTP (any profile) on the indicated ports.
+  --synce-enable <param> <ports>
+                         Enable SyncE on the indicated ports. <param> is a
+		             placeholder and should always be 'default'.
+  --synce-disable <ports>
+                         Disable SyncE on the indicated ports.
 
 More than one operation can be specified - However, beware that the order in
 which operations will occur is undefined, and some combinations of operations
@@ -218,7 +233,8 @@ GetOptions(\%opt,
     'o=s@{1,1}', 'redirect-err', 'blockmode', 'syncvlans', 'impotent',
     'shadow', 'skip-supplied', 'whol-magic', 'backtraceonwarning',
     'prunestalevlans','setvlanontrunks','resetvlanontrunks',
-    'clearvlanontrunks','deletestalevlans');
+    'clearvlanontrunks','deletestalevlans',
+    'ptp-enable=s', 'ptp-disable', 'synce-enable=s', 'synce-disable');
 
 if ($opt{h}) {
     exit &usage;
@@ -272,6 +288,8 @@ our $next_vlan_tag; # XXX see doMakeVlan for explanation
 my %stack_ids = ();
 my $optdev; # when -i only specify a single device
 
+my $ptp_profile; # PTP profile to use
+my $synce_param; # Placeholder in case we need a SyncE option
 
 #
 # Move this initialization ahead from its previous location so that
@@ -306,7 +324,7 @@ if ($opt{m} || $opt{o}) {
 	($opt{m} && ($ARGV[0] =~ /:/ || $ARGV[1] =~ /:/)) ||
 	($opt{o} && ($ARGV[0] =~ /^\d+$/ || $ARGV[1] =~ /^\d+$/))) {
 	if (! $opt{f}) {
-	    tberror "pid/eid reqired!";
+	    tberror "pid/eid required!";
 	    exit(usage());
 	}
 	$pid = VLAN_PID();
@@ -329,7 +347,7 @@ if ($opt{t} || $opt{r} || $opt{D} || $opt{R} || $opt{X} ||
     #
     if (!defined($pid)) {
 	if (@ARGV < 2) {
-	    tberror "pid/eid reqired!";
+	    tberror "pid/eid required!";
 	    exit &usage;
 	} else {
 	    ($pid, $eid) = (shift @ARGV, shift @ARGV);
@@ -354,8 +372,8 @@ if ($opt{t} || $opt{r} || $opt{D} || $opt{R} || $opt{X} ||
 	    @optvlanids = @ARGV;
 	}
     }
-} elsif ($opt{d} || $opt{e} || $opt{a} || $opt{p} || $opt{u} || $opt{m}
-         || $opt{U} || $opt{b}) {
+} elsif ($opt{d} || $opt{e} || $opt{a} || $opt{p} || $opt{u} || $opt{m} ||
+         $opt{U} || $opt{b} || $opt{'ptp-disable'} || $opt{'synce-disable'}) {
     #
     # Options that take a list of ports
     #
@@ -389,13 +407,13 @@ if ($opt{t} || $opt{r} || $opt{D} || $opt{R} || $opt{X} ||
     # Options that take the pid eid and connection string
     #
     if (@ARGV < 2) {
-	tberror "pid/eid reqired!";
+	tberror "pid/eid required!";
 	exit &usage;
     } else {
 	($pid, $eid) = (shift @ARGV, shift @ARGV);
     }
     if (@ARGV < 0) {
-	tberror "Controller connection string reqired!";
+	tberror "Controller connection string required!";
 	exit &usage;
     } else {
 	$ofconnstr = shift @ARGV;
@@ -407,11 +425,25 @@ if ($opt{t} || $opt{r} || $opt{D} || $opt{R} || $opt{X} ||
     # Options that need pid eid
     #
     if (@ARGV < 1) {
-	tberror "pid/eid reqired!";
+	tberror "pid/eid required!";
 	exit &usage;
     } else {
 	($pid, $eid) = (shift @ARGV, shift @ARGV);
     }    
+} elsif ($opt{'ptp-enable'} || $opt{'synce-enable'}) {
+    #
+    # Options that need a parameter and a port list
+    #
+    if (@ARGV < 1) {
+	tberror "PTP/SyncE parameter and at least one port required!";
+	exit &usage;
+    }
+    if ($opt{'ptp-enable'}) {
+	$ptp_profile = $opt{'ptp-enable'};
+    } else {
+	$synce_param = $opt{'synce-enable'};
+    }
+    @ports = @ARGV;    
 } else {
     #
     # Everything else
@@ -474,6 +506,10 @@ if ($opt{'of-enable'}) { push @commands, ["ofenable", $opt{'of-enable'}]; }
 if ($opt{'of-disable'}) { push @commands, ["ofdisable", $opt{'of-disable'}]; }
 if ($opt{'of-controller'}) { push @commands, ["ofcontroller", $opt{'of-controller'}]; }
 if ($opt{'of-listener'}) { push @commands, ["oflistener", $opt{'of-listener'}]; }
+if ($opt{'ptp-enable'}) { push @commands, ["ptpcontrol","enable"]; }
+if ($opt{'ptp-disable'}) { push @commands, ["ptpcontrol","disable"]; }
+if ($opt{'synce-enable'}) { push @commands, ["syncecontrol","enable"]; }
+if ($opt{'synce-disable'}) { push @commands, ["syncecontrol","disable"]; }
 
 #
 # Commands that can occur more than once
@@ -979,7 +1015,7 @@ COMMAND: foreach my $command (@commands) {
             }
 	    last;
 	};
-	(/portcontrol/ || /trunkdisable/ || /portstatus/) && do {
+	(/portcontrol/ || /trunkdisable/ || /portstatus/ || /ptpcontrol/ || /syncecontrol/) && do {
 	    @devicenames = ($supplied_switches && !$skip_supplied)?
 	    		   @supplied_switches : getDeviceNames(@ports);
 	    last;
@@ -1292,6 +1328,16 @@ COMMAND: foreach my $command (@commands) {
 	/expcnetcontrol/ && do {
 	    my ($portcommand) = @args;
 	    $exitval += doPortControl(\@stacks,$portcommand,@ports);
+	    last;
+	};
+	/ptpcontrol/ && do {
+	    my ($cmd) = @args;
+	    $exitval += doPortPTP(\@stacks,$cmd,@ports);
+	    last;
+	};
+	/syncecontrol/ && do {
+	    my ($cmd) = @args;
+	    $exitval += doPortSyncE(\@stacks,$cmd,@ports);
 	    last;
 	};
 	/recreate/ && do {
@@ -2009,6 +2055,12 @@ sub doVlansFromTables($$@) {
     # not a general solution to this, but I have not found a solution I am
     # really happy with. 
     #
+    # New addition, going to do this in two passes, to support a single
+    # experiment defining a dual mode vlan (both the native and trunked
+    # vlans on the ports). So in the first loop look for dual with no
+    # native_vlan (trunk_vlanid) set; create these first. Note that
+    # trunk_vlanid is an internal setting, see libvtop.
+    #
     foreach my $ref (values(%vlans)) {
 	my $vlan   = $ref->{'vlan'};
 	my $stack  = $ref->{'stack'};
@@ -2020,67 +2072,86 @@ sub doVlansFromTables($$@) {
 	my $trunk_vlanid;
 	$vlan->GetAttribute("trunk_vlan", \$trunk_vlanid);
 
-	# This is set in libvtop.
-	if (defined($trunk_mode) && $trunk_mode eq "dual") {
-	    my @ports = getVlanPorts($vlanid);
+	next
+	    if (! (defined($trunk_mode) && $trunk_mode eq "dual"));
 
-	    #
-	    # If a specific vlan listed, it must already exist.
-	    #
-	    if (defined($trunk_vlanid)) {
-		my $trunk_vlan = VLan->Lookup($trunk_vlanid);
-		if (!defined($trunk_vlan)) {
-		    die("Trunk vlanid $trunk_vlanid does not exist\n");
-		}
-		if (!$trunk_vlan->CreatedOnSwitches()) {
-		    die("Trunk vlanid $trunk_vlan is not instantiated\n");
-		}
-		#
-		# To maintain backwards compatibility with how snmpit used
-		# to operate, "internal" vlans are sometimes named on the switch
-		# by the symbolic name instead of the lanid.
-		#
-		if ($trunk_vlan->IsInternal() &&
-		    !$stack->vlanExists($trunk_vlanid)) {
-		    $trunk_vlanid = $trunk_vlan->vname();
-		}
-		    
-		#
-		# For each port that has not yet been put into trunk
-		# mode, do that using the trunk_vlanid as the native.
-		#
-		foreach my $port (@ports) {
-		    if (!IsPortTagged($port) &&
-			doTrunkEnable([$stack],$port,0,$trunk_vlanid)) {
-			die("Could not put $port ($trunk_vlan) into ".
-			    "dual trunk mode\n");
-		    }
-		    delete($tports->{$port->toString()});
-		}
-		# Now we can create the actual vlan.
-		if (CreateOneVlan($experiment,$stack, $vlanid, @ports))  {
-		    die("Could not create dual trunked $vlan\n");
-		}
-	    }
-	    else {
-		# Create this vlan now.
-		if (CreateOneVlan($experiment,$stack, $vlanid, @ports))  {
-		    die("Could not create dual trunked $vlan\n");
-		}
-		# Trunk these ports, removing from list.
-		foreach my $port (@ports) {
-		    if (doTrunkEnable([$stack],$port,0,$vlanid)) {
-			die("Could not port $port ($vlan) into ".
-			    "dual trunk mode\n");
-		    }
-		    delete($tports->{$port->toString()});
-		}
-	    }
+	next
+	    if (defined($trunk_vlanid));
 
-	    # Delete this vlan from the list that will be created below.
-	    delete($vlans{"$vlanid"});
+	my @ports = getVlanPorts($vlanid);
+	# Create this vlan now.
+	if (CreateOneVlan($experiment,$stack, $vlanid, @ports))  {
+	    die("Could not create dual trunked $vlan\n");
 	}
+	# Trunk these ports, removing from list.
+	foreach my $port (@ports) {
+	    if (doTrunkEnable([$stack],$port,0,$vlanid)) {
+		die("Could not port $port ($vlan) into dual trunk mode\n");
+	    }
+	    delete($tports->{$port->toString()});
+	}
+	# Delete this vlan from the list that will be created below.
+	delete($vlans{"$vlanid"});
     }
+    # Second pass
+    foreach my $ref (values(%vlans)) {
+	my $vlan   = $ref->{'vlan'};
+	my $stack  = $ref->{'stack'};
+	my $tports = $ref->{'trunkports'};
+	my $vlanid = $vlan->id();
+	
+	my $trunk_mode;
+	$vlan->GetAttribute("trunk_mode", \$trunk_mode);
+	my $trunk_vlanid;
+	$vlan->GetAttribute("trunk_vlan", \$trunk_vlanid);
+
+	next
+	    if (! (defined($trunk_mode) && $trunk_mode eq "dual"));
+
+	next
+	    if (!defined($trunk_vlanid));
+
+	my @ports = getVlanPorts($vlanid);
+
+	#
+	# Must already exist, in most cases created above
+	#
+	my $trunk_vlan = VLan->Lookup($trunk_vlanid);
+	if (!defined($trunk_vlan)) {
+	    die("Native vlanid $trunk_vlanid does not exist\n");
+	}
+	if (!$trunk_vlan->CreatedOnSwitches()) {
+	    die("Native vlan $trunk_vlan for vlan $vlan is not instantiated\n");
+	}
+	#
+	# To maintain backwards compatibility with how snmpit used
+	# to operate, "internal" vlans are sometimes named on the switch
+	# by the symbolic name instead of the lanid.
+	#
+	if ($trunk_vlan->IsInternal() &&
+	    !$stack->vlanExists($trunk_vlanid)) {
+	    $trunk_vlanid = $trunk_vlan->vname();
+	}
+	#
+	# For each port that has not yet been put into trunk
+	# mode, do that using the trunk_vlanid as the native.
+	#
+	foreach my $port (@ports) {
+	    if (!IsPortTagged($port) &&
+		doTrunkEnable([$stack],$port,0,$trunk_vlanid)) {
+		die("Could not put $port ($trunk_vlan) into ".
+		    "dual trunk mode\n");
+	    }
+	    delete($tports->{$port->toString()});
+	}
+	# Now we can create the actual vlan.
+	if (CreateOneVlan($experiment,$stack, $vlanid, @ports))  {
+	    die("Could not create dual trunked $vlan\n");
+	}
+	# Delete this vlan from the list that will be created below.
+	delete($vlans{"$vlanid"});
+    }
+
     #
     # Do the rest of the trunked ports in equalmode.
     #
@@ -2229,6 +2300,30 @@ sub CreateOneVlan($$$@)
 	    }
 	}
     }
+    # PTP/SyncE enable on ports.
+    my @ptpPorts = ();
+    my @syncePorts = ();
+    foreach my $port (@ports) {
+	if ($port->ptp()) {
+	    push(@ptpPorts, $port);
+	}
+	if ($port->synce()) {
+	    push(@syncePorts, $port);
+	}
+    }
+    if (@ptpPorts) {
+	my $rv = doPortPTP([$stack], "enable", @ptpPorts);
+	if ($rv > 0) {
+	    $errors += $rv;
+	}
+    }
+    if (@syncePorts) {
+	my $rv = doPortSyncE([$stack], "enable", @syncePorts);
+	if ($rv > 0) {
+	    $errors += $rv;
+	}
+    }
+    
     #
     # Look for a layer 1 link; There is a logical wire that needs to be
     # activated once it is created. 
@@ -2273,19 +2368,24 @@ sub doReset($@) {
     }
 
     my $errors = 0;
-    my %trunkedPorts = getExperimentTrunks($pid, $eid, @vlans);
     my @controlports = ();
-    foreach my $port (values(%trunkedPorts)) {
-	#
-	# If operating on the control interface, the trunk disable
-	# will remove the port from the control vlan. Move it back.
-	#
-	if (doTrunkDisable($stacks,$port) == 0) {
-	    push(@controlports, $port)
-		if ($port->role() eq TBDB_IFACEROLE_CONTROL());
-	}
-	else {
-	    $errors++;
+
+    foreach my $stack (@$stacks) {
+	my @existant_vlans = $stack->existantVlans(@vlans);
+	my %trunkedPorts = getExperimentTrunks($pid, $eid, @existant_vlans);
+    
+	foreach my $port (values(%trunkedPorts)) {
+	    #
+	    # If operating on the control interface, the trunk disable
+	    # will remove the port from the control vlan. Move it back.
+	    #
+	    if (doTrunkDisable([$stack],$port) == 0) {
+		push(@controlports, $port)
+		    if ($port->role() eq TBDB_IFACEROLE_CONTROL());
+	    }
+	    else {
+		$errors++;
+	    }
 	}
     }
     return -1
@@ -2309,14 +2409,40 @@ sub doReset($@) {
 
     # Get a list of openflow enabled vlans we have to undo.
     my %ofenabled = ();
+
+    # And PTP/SyncE
+    my @ptpPorts = ();
+    my @syncePorts = ();
     
     foreach my $vlan_id (@vlans) {
 	my $vlan = VLan->Lookup($vlan_id);
+	my @ports = getVlanPorts($vlan_id);
 
 	my $flag;
 	$vlan->GetAttribute("ofenabled", \$flag);
 	if (defined($flag) && $flag == 1) {
 	    $ofenabled{"$vlan_id"} = 1;
+	}
+
+	foreach my $port (@ports) {
+	    if ($port->ptp()) {
+		push(@ptpPorts, $port);
+	    }
+	    if ($port->synce()) {
+		push(@syncePorts, $port);
+	    }
+	}
+    }
+    if (@ptpPorts) {
+	my $rv = doPortPTP($stacks, "disable", @ptpPorts);
+	if ($rv > 0) {
+	    $errors += $rv;
+	}
+    }
+    if (@syncePorts) {
+	my $rv = doPortSyncE($stacks, "disable", @syncePorts);
+	if ($rv > 0) {
+	    $errors += $rv;
 	}
     }
 
@@ -3885,6 +4011,82 @@ sub doPortControl($$@) {
 
 }
 
+sub doPortPTP($$@) {
+    my $stacks = shift;
+    my $command = shift;
+    my @ports = @_;
+    my $errors;
+
+    if ($ELABINELAB) {
+	die "Cannot do PTP configuration from ELABINELAB\n";
+    }
+
+    if (@$stacks > 1) {
+	die "Port PTP control accross multiple stacks is not supported\n" .
+	    "Stacks are " . join(", ",map {$_->{STACKID}} @$stacks) . "\n";
+    }
+    my ($stack) = @$stacks;
+
+    # XXX not called via the command line
+    $ptp_profile = "L2"
+	if (!$ptp_profile);
+
+    print "Applying PTP command '$command' " .
+	($command eq "enable" ? "for profile '$ptp_profile' " : "") .
+	"to ports " .
+	Port->toStrings(@ports) . " ...\n"
+	if (!$quiet);
+    $errors = $stack->portPTP($command,$ptp_profile,@ports);
+    if (!$quiet) {
+	print "Port PTP command ";
+	print $errors? "failed":"succeeded",".\n";
+    }
+    if (!$errors) {
+	foreach my $port (@ports) {
+	    setPortPTP($port, $command eq "enable" ? 1 : 0);
+	}
+    }
+    return $errors;
+
+}
+
+sub doPortSyncE($$@) {
+    my $stacks = shift;
+    my $command = shift;
+    my @ports = @_;
+    my $errors;
+
+    if ($ELABINELAB) {
+	die "Cannot do SyncE configuration from ELABINELAB\n";
+    }
+
+    if (@$stacks > 1) {
+	die "Port SyncE control accross multiple stacks is not supported\n" .
+	    "Stacks are " . join(", ",map {$_->{STACKID}} @$stacks) . "\n";
+    }
+    my ($stack) = @$stacks;
+
+    # XXX not called via the command line
+    $synce_param = "default"
+	if (!$synce_param);
+
+    print "Applying SyncE command '$command' to ports " .
+	Port->toStrings(@ports) . " ...\n"
+	if (!$quiet);
+    $errors = $stack->portSyncE($command,$synce_param,@ports);
+    if (!$quiet) {
+	print "Port SyncE command ";
+	print $errors? "failed":"succeeded",".\n";
+    }
+    if (!$errors) {
+	foreach my $port (@ports) {
+	    setPortSyncE($port, $command eq "enable" ? 1 : 0);
+	}
+    }
+    return $errors;
+
+}
+
 #
 # Remove all VLANs from the switch, and re-create them from the database
 # tables.
@@ -4291,7 +4493,7 @@ sub doPruneStaleVlans($)
     # Sanity checking
     #
     if (@$stacks != 1) {
-	die "Disabling trunk ports should only involve one stack\n" .
+	die "Pruning stale vlans should only involve one stack\n" .
 	    "Stacks are " . join(",",@$stacks) . "\n";
     }
     my $stack  = @$stacks[0];
@@ -4352,6 +4554,16 @@ sub doPruneStaleVlans($)
 	if ($id !~ /^\d+$/) {
 	    if ($id =~ /^Vlan (\d+)$/ && $1 != 1) {
 		print "Orphan VLAN '$id' ($tag)\n";
+                if ($tag < $min_vlan) {
+                    print "  Tag $tag is less than min_vlan ($min_vlan) ".
+                        "so we will ignore it\n";
+                    next;
+                }
+                if ($tag > $max_vlan) {
+                    print "  Tag $tag is more than max_vlan ($max_vlan) ".
+                        "so we will ignore it\n";
+                    next;
+                }
 		if (@$memberref) {
 		    print "  Ports: ";
 		    foreach my $member (@$memberref) {

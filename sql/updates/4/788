@@ -1,0 +1,31 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (DBSlotExists("apt_announcement_info", "idx")) {
+	#
+	# This removes bogus duplicate entries from the table that
+	# are added by the web interface.
+	#
+	DBQueryFatal("delete i1 from apt_announcement_info i1, ".
+		     "          apt_announcement_info i2 ".
+		     "where i1.idx < i2.idx and ".
+		     "      i1.uid_idx=i2.uid_idx and i1.aid=i2.aid");
+
+	#
+	# Now we can remove the autoincrement primary key and
+	# replace with the correct aid,uid_idx primary key.
+	#
+	DBQueryFatal("alter table apt_announcement_info drop idx");
+	DBQueryFatal("alter table apt_announcement_info ".
+		     "  add primary key (`aid`,`uid_idx`)");
+    }
+    return 0;
+}
+
+# Local Variables:
+# mode:perl
+# End:

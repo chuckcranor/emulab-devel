@@ -426,6 +426,24 @@
 		</td>
 	      </tr>
 	    <% } %>
+	    <tr>
+	      <td class="editable adminonly"
+		  data-fieldname="taint_states" data-fieldtype="select">
+		Taint Setting</td>
+	      <td>
+		<span class="original">
+		<select disabled>
+		  <option value="">None</option>
+		  <option
+		    <% if (fields.taint_states == "blackbox") { %>selected<% } %>
+		    value="blackbox">Black Box</option>
+		  <option
+		    <% if (fields.taint_states == "useronly") { %>selected<% } %>
+		    value="useronly">User Only</option>
+		</select>
+		</span>
+	      </td>
+	    </tr>
 	  <% } %>
 	  <tr class="adminnotes">
 	    <td>

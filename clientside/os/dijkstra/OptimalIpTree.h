@@ -1,7 +1,7 @@
 // OptimalIpTree.h
 
 /*
- * Copyright (c) 2004 University of Utah and the Flux Group.
+ * Copyright (c) 2004, 2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -39,7 +39,7 @@ public:
     OptimalIpTree();
     virtual ~OptimalIpTree();
 
-    virtual std::auto_ptr<IpTree> exemplar(void) const;
+    virtual auto_ptr<IpTree> exemplar(void) const;
     virtual void reset(void);
     virtual void addRoute(IPAddress ip, int newFirstHop, int depth);
     virtual void printRoutes(HostHostToIpMap const & ip, int source,
@@ -76,7 +76,7 @@ private:
 private:
     int m_depth;
     std::set<int> m_firstHops;
-    std::auto_ptr<OptimalIpTree> m_children[2];
+    auto_ptr<OptimalIpTree> m_children[2];
 };
 
 #endif

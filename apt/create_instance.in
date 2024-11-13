@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -46,12 +46,13 @@ sub usage()
     print "Usage: quickvm [-u uuid] [--site site:1=aggregate ...] <xmlfile>\n";
     exit(1);
 }
-my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s', 'P');
+my @optlist = ('d', 'v', 'f', 'u=s', 'a=s', 'S', 'k=s', 'i', 't=s', 'P', 'X');
 my $debug   = 0;
 my $verbose = 1;
 my $foreground     = 0;
 my $ignorefailures = 0;
 my $nopending      = 0;
+my $maxduration    = 0;
 my $xmlfile;
 my $webtask;
 my $webtask_id;
@@ -66,6 +67,8 @@ my $instance;
 my $privkeyfile;
 my $slice;
 my $sitemap;
+my $logfilename;
+my $logfile;
 my $usetracker = 0;
 my @aggregate_urns = ();
 my @prestage = ();
@@ -84,6 +87,7 @@ my $OURDOMAIN     = "@OURDOMAIN@";
 my $MAINSITE      = @TBMAINSITE@;
 my $PGENIDOMAIN   = "@PROTOGENI_DOMAIN@";
 my $PROTOGENI_URL = "@PROTOGENI_URL@";
+my $LOG_TESTBED   = "@LOG_TESTBED@";
 my $SACERT	  = "$TB/etc/genisa.pem";
 my $CMCERT	  = "$TB/etc/genicm.pem";
 my $SSHKEYGEN     = "/usr/bin/ssh-keygen";
@@ -94,6 +98,7 @@ my $UPDATEGENIUSER= "$TB/sbin/protogeni/updategeniuser";
 my $OPENSSL       = "/usr/bin/openssl";
 my $MANAGEGITREPO = "$TB/bin/manage_gitrepo";
 my $MANAGEINSTANCE= "$TB/bin/manage_instance";
+my $MANAGERESGROUP= "$TB/bin/manage_resgroup";
 my $DEFAULT_URN   = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 my $GUEST_URN     = "urn:publicid:IDN+apt.emulab.net+authority+cm";
 my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
@@ -116,26 +121,40 @@ my $seriallock;
 
 BEGIN {
     require libEmulab;
-    import libEmulab;
+    require APT_Utility;
+    
+    my $remote = (exists($ENV{"REMOTE_ADDR"}) ? $ENV{"REMOTE_ADDR"} : "");
+    APT_Utility::TutorialStat("create_instance: beginning $remote");
     
     while (1) {
-	if (libEmulab::EmulabCountLock("create_instance_lock", 10) == 0) {
+	if (libEmulab::EmulabCountLock("create_instance_lock", 15) == 0) {
 	    $seriallock = 1;
 	    last;
 	}
 	print STDERR "Waiting for the create_instance_lock lock ...\n";
-	sleep(2);
+	APT_Utility::TutorialStat("create_instance: waiting for lock");
+	sleep(3);
     }
-    while (LoadAverage() > 30) {
-	print STDERR "Load too high, waiting\n";
-	sleep(1);
+    while ((my $load = libEmulab::LoadAverage()) > 25) {
+	print STDERR "Load too high at $load, waiting ...\n";
+	APT_Utility::TutorialStat("create_instance: load too high at $load");
+	sleep(3);
     }
+    APT_Utility::TutorialStat("create_instance: done waiting, got serial lock");
 }
 END {
     # Be careful not to leave this locked on abnormal exit.
     if ($seriallock) {
 	libEmulab::EmulabCountUnlock("create_instance_lock");
 	$seriallock = 0;
+    }
+    if (defined($logfile)) {
+	# Need to do this before we close the log since it gets moved.
+	AuditEnd($?);
+	
+	$logfile->Close();
+	$logfile->Store();
+	$logfile = undef;
     }
 }
 
@@ -148,10 +167,13 @@ use APT_Instance;
 use APT_Geni;
 use APT_Dataset;
 use APT_Aggregate;
+use APT_Utility;
+use APT_RDZ;
 use Experiment;
 use User;
 use Project;
 use Group;
+use Brand;
 use Image;
 use emutil;
 use libEmulab;
@@ -202,17 +224,23 @@ if (defined($options{"v"})) {
 if (defined($options{"S"})) {
     $usestitcher = 1;
 }
+if (defined($options{"X"})) {
+    $maxduration = 1;
+}
 if (defined($options{"u"})) {
     $quickuuid = $options{"u"};
+    my $remote = (exists($ENV{"REMOTE_ADDR"}) ? $ENV{"REMOTE_ADDR"} : "");
+    APT_Utility::TutorialStat("create_instance $remote $quickuuid");
+    $ENV{"QUICKUUID"} = $quickuuid;
 }
 if (defined($options{"P"})) {
     $nopending = 1;
 }
 if (defined($start_at) && $start_at !~ /^\d+$/) {
-    fatal("Invalid --start_at parameter");
+    fatal("Invalid --start parameter");
 }
 if (defined($stop_at) && $stop_at !~ /^\d+$/) {
-    fatal("Invalid --stop_at parameter");
+    fatal("Invalid --stop parameter");
 }
 if (defined($options{"t"})) {
     $webtask_id = $options{"t"};
@@ -251,10 +279,27 @@ if (!defined($this_user) || !$this_user->IsAdmin()) {
     }
 }
 
+my $warned = 0;
+$SIG{__WARN__} = sub {
+    my $message = shift;
+    exit(-1)
+	if ($warned);
+    $warned = 1;
+    cluck($message);
+    $warned = 0;
+};
+
+chdir("/tmp");
+
+#
+# Use a log file for the output, so we can spew it and save it
+# The file in the tmp dir has to exist.
+#
 # Email record.
 if (! $debug) {
-    my $opts = LIBAUDIT_LOGTBLOGS()|LIBAUDIT_LOGONLY();
-    AuditStart(0, undef, $opts);
+    $logfilename = TBMakeLogname("create_instance");
+    my $opts = LIBAUDIT_LOGTBLOGS()|LIBAUDIT_LOGONLY()|LIBAUDIT_NODELETE();
+    AuditStart(0, $logfilename, $opts);
     #
     # Once we determine the project, we can add the appropriate log CC
     #
@@ -313,12 +358,26 @@ foreach my $key ("username", "email", "profile", "portal") {
 #
 my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
-    $userslice_id, $portal, $script, $paramdefs, $bindings,
-    $reporef, $repohash, $duration);
+    $userslice_id, $portal, $script, $paramdefs, $bindings, $start, $end,
+    $reporef, $repohash, $duration, $webinfo, $noresokay, $brand, $errcode,
+    $rdzenabled, $resources);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
+$brand  = Brand->Create($portal);
 
+# Some info from the web UI, saving it as is for now.
+if (exists($xmlparse->{'attribute'}->{"webinfo"})) {
+    my $json = $xmlparse->{'attribute'}->{"webinfo"}->{'value'};
+
+    # Sanity check this.
+    my $tmp = eval { decode_json($json); };
+    if ($@) {
+	UserError("Could not json decode webinfo");
+    }
+    $webinfo = $json;
+}
+    
 # User specified duration.
 if (exists($xmlparse->{'attribute'}->{"duration"}) &&
     defined($xmlparse->{'attribute'}->{"duration"}) &&
@@ -403,6 +462,10 @@ else {
 my $rspec = GeniXML::Parse($rspecstr);
 if (! defined($rspec)) {
     fatal("Could not parse rspec");
+}
+# Flag for below, only in Utah
+if ($MAINSITE) {
+    $rdzenabled = APT_RDZ::UseRDZ($rspec);
 }
 
 #
@@ -678,33 +741,6 @@ if ($localuser) {
 	# Nonlocal users get the holding project can now join/create
 	# real projects, so we get the pid passed in.
     }
-    elsif (defined($sshkey) && !$emulab_user->LookupSSHKey($sshkey)) {
-	#
-	# XXX This is deprecated; we no longer show the ssh box to
-	#     real users. Remove when we are satisfied with new
-	#     ssh key management page.
-	#
-	
-	#
-	# A local user. We mark keys that come through this path
-	# with the isaptkey flag (-a to addpubkey) so that we know
-	# which key in the DB it is. The reason for this is that the
-	# user might be a classic emulab user, but is now using the
-	# APT/Cloud UI. The key provided in the web interface will
-	# replace this key.
-	#
-	# XXX This is in flux, we now allow APT users to manage all
-	# their keys via the web interface.
-	#
-	my ($fh, $keyfile) = tempfile(UNLINK => 0);
-	print $fh $sshkey;
-
-	if (system("$ADDPUBKEY -a -u $user_uid -f $keyfile")) {
-	    fatal("Could not add new ssh pubkey");
-	}
-	close($fh);
-	unlink($keyfile);
-    }
     #
     # Hmm, users with real accounts who never used Geni, but now want
     # to use APT/Cloud, have no encrypted SSL certificate. Rather then
@@ -761,14 +797,6 @@ if ($localuser) {
     }
 }
 elsif (!$localuser) {
-    if (defined($sshkey)) {    #
-	# Guest user; remember key. For now we accept only one key. We store
-	# it simply so we can display it again for the user in the web
-	# interface. We allow key reuse for existing users, see above.
-	#
-	$geniuser->DeleteKeys();
-	$geniuser->AddKey($sshkey);
-    }
     # Guest users get a holding project.
     $pid = $APT_HOLDINGPROJECT;
     $project = Project->Lookup($pid);
@@ -795,192 +823,70 @@ if ($project->allowed_clusters()) {
     }
 }
 
-if (defined($profile->repourl())) {
+# Can be scheduled for the future.
+$start = (defined($start_at) ? $start_at : time());
+
+if ($maxduration) {
     #
-    # Make sure the repo is still accessible.
+    # The -X option says to compute the max duration allowed based on approved
+    # reservations. Currently used on the XMLRPC path only. Note that on the
+    # Powder portal we already compute this and fill in the duration for the
+    # user. Not so on the Cloudlab or Emulab portal.
     #
-    my $check = emutil::ExecQuiet("$MANAGEGITREPO check ".
-				  "'" . $profile->repourl() . "'");
+    my $ttask = WebTask::CreateAnonymous();
+    if (!defined($ttask)) {
+	fatal("Could not create webtask");
+    }
+    my $ttask_id = $ttask->task_id();
+    my ($fp, $filename) = tempfile(UNLINK => 0);
+    print $fp $rspec;
+    close($fp);
+    print "Computing max duration\n";
+    system("$MANAGERESGROUP -t $ttask_id maxduration --portal=$portal ".
+	   " -g '$pid/$gid' -s $start -f $filename ");
     if ($?) {
-	UserError($check);
+	# This should not fail!
+	$ttask->Delete();
+	fatal("Could not determine max duration");
     }
-    $tmp = APT_Profile::SetRepo($rspec, $profile->repourl(),
-				$reporef, $repohash, $geniuser, \$errmsg);
-    if ($tmp) {
-	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
-    }
-}
-
-#
-# Check for nodes/types/aggregates that require a License. 
-#
-my $licenses;
-
-$tmp = APT_Profile::CheckLicenses($rspec, $geniuser->emulab_user(), $project,
-				  \$licenses, \$errmsg);
-if ($tmp) {
-    if ($tmp < 0) {
-	fatal("Could not determine license requirements: $errmsg");
-    }
-    # Special handling.
-    if ($licenses) {
-	if (defined($webtask)) {
-	    $webtask->required_licenses($licenses);
-	}
-	UserError("Licenses are required before you can start this experiment");
-    }
-    UserError($errmsg);
-}
-
-#
-# New approach; if less then max duration, no reservations are needed.  But
-# if more then max duration (powder portal only), then user must have valid
-# reservations for the resources and time frame specified. Note that only
-# the powder portal will get this far with duration greater than the default
-# max duration.
-#
-my $noresokay = 1;
-if (defined($stop_at)) {
-    $duration = $stop_at - (defined($start_at) ? $start_at : time());
-    if ($duration > $DEFAULT_DURATION * 3600) {
-	$noresokay = 0;
-    }
-}
-my $start = (defined($start_at) ? $start_at : time());
-my $end   = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
-
-#
-# First sanity check the resources, then resource reservation requirements.
-# The type counts can be expensive to compute on a big topology, so save
-# for the reservation checks.
-#
-my $resources;
-my $retval = APT_Profile::CheckResources($rspec, \$errmsg, \$resources);
-if ($retval) {
-    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
-}
-$retval =
-    APT_Profile::CheckResourceReservations($rspec, $project, $start, $end,
-					   $noresokay, \$errmsg, $resources);
-if ($retval) {
-    if ($retval < 0) {
-	fatal($errmsg);
-    }
-    elsif (!defined($start_at)) {
-	# Immediate start, throw the error back to the user.
-	UserError($errmsg);
+    $ttask->Refresh();
+    my $maxend = $ttask->maxend();
+    $ttask->Delete();
+    if ($maxend == 0) {
+	UserError("There are no reservations for the requested resources");
     }
     else {
-	#
-	# Warn user that resources must be reserved by the time the
-	# experiment starts.
-	#
-	if (defined($webtask)) {
-	    $webtask->reservationWarn($errmsg);
-	}
-	else {
-	    print "Some resources still need to be reserved before the ".
-		"experiment start time is reached\n";
-	}
+	# We end up checking reservations again, but that is okay.
+	$end = $stop_at = $maxend;
     }
+    $noresokay = 0;
 }
-#
-# Warn user about deprecated image use. This will possibly duplicate the
-# email sent by the aggregates, but the email from the portal has a better
-# chance of getting through the user's spam filter. 
-#
-$retval = APT_Profile::CheckForDeprecatedImages($resources, $project,
-						$geniuser->emulab_user(),
-						\$errmsg);
-if ($retval) {
-    if ($retval < 0) {
-	fatal($errmsg);
+else {
+    #
+    # Else if less then max duration, no reservations are needed.  But
+    # if more then max duration (powder portal only), then user must have valid
+    # reservations for the resources and time frame specified. Note that only
+    # the powder portal will get this far with duration greater than the default
+    # max duration.
+    #
+    $noresokay = 1;
+    if ($brand->isPowder() && defined($stop_at)) {
+	$duration = $stop_at - (defined($start_at) ? $start_at : time());
+	if ($duration > $DEFAULT_DURATION * 3600) {
+	    $noresokay = 0;
+	}
     }
-    else {
-	UserError($errmsg);
-    }
+    $end = (defined($stop_at) ? $stop_at : time() + ($duration * 3600));
 }
 
 #
-# Spectrum sanity checks, then spectrum reservation checks.
+# All checks in one place.
 #
-my $spectrum;
-$retval = APT_Profile::CheckSpectrum($rspec, \$errmsg, \$spectrum);
-if ($retval) {
-    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
-}
-$retval =
-    APT_Profile::CheckSpectrumPermission($rspec, $project, \$errmsg, $spectrum);
-if ($retval) {
-    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
-}
-$retval =
-    APT_Profile::CheckSpectrumReservations($rspec, $project, $start, $end,
-					   $noresokay, \$errmsg,
-					   $spectrum, $resources);
-if ($retval) {
-    if ($retval < 0) {
-	fatal($errmsg);
-    }
-    elsif (!defined($start_at)) {
-	# Immediate start, throw the error back to the user.
-	UserError($errmsg);
-    }
-    else {
-	#
-	# Warn user that spectrum must be reserved by the time the
-	# experiment starts.
-	#
-	if (defined($webtask)) {
-	    $webtask->reservationWarn($errmsg);
-	}
-	else {
-	    print "Some spectrum still needs to be reserved before the ".
-		"experiment start time is reached\n";
-	}
-    }
-}
-#
-# And the routes.
-#
-$retval = APT_Profile::CheckRoutes($rspec, \$errmsg, \$routes);
-if ($retval) {
-    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
-}
-$retval =
-    APT_Profile::CheckRoutesPermission($rspec, $project, $start, $end,
-				       \$errmsg, $routes);
-if ($retval) {
-    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
-}
-$retval =
-    APT_Profile::CheckRoutesReservations($rspec, $project, $start, $end,
-					 $noresokay, \$errmsg, $routes);
-if ($retval) {
-    if ($retval < 0) {
-	fatal($errmsg);
-    }
-    elsif (!defined($start_at)) {
-	# Immediate start, throw the error back to the user.
-	UserError($errmsg);
-    }
-    else {
-	#
-	# Warn user that routes must be reserved by the time the
-	# experiment starts.
-	#
-	if (defined($webtask)) {
-	    $webtask->reservationWarn($errmsg);
-	}
-	else {
-	    print "Some routes still need to be reserved before the ".
-		"experiment start time is reached.\n";
-	}
-    }
-}
-# This check ensures that people do not allocate buses directly unless
-# they have special permission. Mere users must allocate routes.
-$retval = APT_Profile::CheckForBuses($rspec, $project, \$errmsg);
+my $retval = APT_Profile::CheckEverything($rspec, $geniuser->emulab_user(),
+					  $group, $start, $end,
+					  (defined($start_at) ? 0 : 1), 
+					  $noresokay, $rdzenabled, $webtask,
+					  \$resources, \$errmsg);
 if ($retval) {
     ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
 }
@@ -990,11 +896,19 @@ if ($retval) {
 #
 if (!$debug) {
     AddAuditInfo("cc", $project->LogsEmailAddress());
-    if ($MAINSITE) {
-	AddAuditInfo("cc", "stoller\@flux.utah.edu");
+    if (0 && $MAINSITE) {
+	AddAuditInfo("cc", "stoller\@emulab.net");
 	# AddAuditInfo("cc", "mike\@flux.utah.edu");
     }
     AddAuditInfo("brand", $project->Brand());
+
+    $logfile = Logfile->Create($group, $logfilename);
+    if (!defined($logfile)) {
+	fatal("Could not create a new logfile from $logfilename");
+    }
+    $logfile->SetMetadata({"op" => "create_instance"});
+    # For web spew.
+    $logfile->Open();
 }
 
 # Check for expired certs and speaksfor.
@@ -1044,10 +958,18 @@ my $slice_certificate =
     GeniCertificate->Create({'urn'  => $slice_urn,
 			     'hrn'  => $slice_hrn,
 			     'showuuid' => 1,
-			     'email'=> $user_email});
+			     'email'=> $user_email}, \$errcode);
 
 if (!defined($slice_certificate)) {
-    fatal("Could not generate certificate for $slice_urn");
+    if ($errcode == GENIRESPONSE_UNAVAILABLE()) {
+	UserError("Experiment name already in use, please use another. If you ".
+		  "just terminated an experiment with this name, it takes a ".
+		  "minute or two for the name to become available again.",
+		  GENIRESPONSE_ALREADYEXISTS());
+    }
+    else {
+	fatal("Could not generate certificate for $slice_urn");
+    }
 }
 # Slice is created as locked.
 $slice = GeniSlice->Create($slice_certificate,
@@ -1065,7 +987,7 @@ if ($slice->SetExpiration((defined($stop_at) ? $stop_at :
 my $slice_uuid = $slice->uuid();
 
 # Avoid pointless geni churn
-if ($project->pid() eq "OAI2021FallWS") {
+if ($project->pid() eq "@TUTORIALPID@") {
     $slice->SetRegisteredFlag(1);
 }
 
@@ -1098,15 +1020,6 @@ fatal("Could not create alt certificate")
     if (!defined($alt_certificate));
 
 #
-# Encrypt blocks.
-#
-$tmp = APT_Profile::EncryptBlocks($rspec, $alt_certificate, \$errmsg);
-if ($tmp) {
-    ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
-}
-$rspecstr = GeniXML::Serialize($rspec, 2);
-
-#
 # Got this far, lets create a quickvm record.
 #
 my $quickvm_uuid = (defined($quickuuid) ? $quickuuid : NewUUID());
@@ -1126,7 +1039,6 @@ my $blob = {'uuid'         => $quickvm_uuid,
 	    'stop_at'      => $stop_at,
 	    'servername'   => $SERVER_NAME,
 	    'portal'       => $portal,
-	    'rspec'        => $rspecstr,
 	    'cert'         => $alt_certificate->cert(),
 	    'privkey'      => $alt_certificate->PrivKeyDelimited(),
 };
@@ -1148,11 +1060,40 @@ if (defined($project)) {
     $blob->{"gid"}     = $group->gid();
     $blob->{"gid_idx"} = $group->gid_idx();
 }
+if (defined($sshkey)) {
+    $blob->{"sshpubkey"} = $sshkey;
+}
+if (defined($webinfo)) {
+    $blob->{"webinfo"} = $webinfo;
+}
+if (defined($resources->{'zone'})) {
+    $blob->{"powder_zone"} = $resources->{'zone'};
+}
 $errmsg = undef;
 $instance = APT_Instance->Create($blob, \$errmsg);
 if (!defined($instance)) {
     fatal(defined($errmsg) ? $errmsg :
 	  "Could not create instance record for $quickvm_uuid");
+}
+if (!$debug) {
+    $instance->SetLogFile($logfile);
+    $logfile->SetMetadata({"uuid" => $instance->uuid()}, 0);
+}
+#
+# Now set the rspec to avoid reparse later.
+#
+if ($instance->SetRSPEC($rspec)) {
+    fatal("Could not set the rspec");
+}
+# Finalize the rspec (lots of little things we do to it).
+$retval = $instance->FinalizeRSpec(\$errmsg);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+if ($rdzenabled) {
+    if (APT_RDZ::initRDZstate($instance, \$errmsg)) {
+	UserError($errmsg);
+    }
 }
 
 #
@@ -1161,59 +1102,25 @@ if (!defined($instance)) {
 #
 if (!$this_user->IsAdmin() && 
     $instance->CheckForExtensionLimit($rspec, \$errmsg)) {
-    $instance->Delete();
     fatal("Error checking extension limits: $errmsg");
 }
 
 # We use this list of references for ParRun below.
 my @aggregate_list = ();
-foreach my $aggregate_urn (@aggregate_urns) {
-    my $aptaggregate = APT_Aggregate->Lookup($aggregate_urn);
-    if (!defined($aptaggregate)) {
-	$slice->Delete();
-	$instance->Delete();
-        UserError("$aggregate_urn is not a valid (known) aggregate.");
-    }
-    my $aggregate_name = $aptaggregate->name();
-
-    # Check to make sure the aggregate is online and reachable
-    # We do not do this if the experiment start is deferred.
-    if (!defined($start_at)) {
-	if ($project->pid() ne "OAI2021FallWS" &&
-	    $aptaggregate->CheckStatus(\$errmsg)) {
-	    if ($usestitcher ||
-		!$aptaggregate->deferrable() ||
-		$nopending ||
-		# CheckStatus catches this and sets the error message.
-		$aptaggregate->disabled()) {
-		$slice->Delete();
-		$instance->Delete();
-		UserError($errmsg);
-	    }
-	}
-    }
-    if (! $aptaggregate->CanInstantiate($portal, $this_user, $project)) {
-	$slice->Delete();
-	$instance->Delete();
-        UserError("Not allowed to use the $aggregate_name cluster.");
-    }
-    my $authority = GeniAuthority->Lookup($aggregate_urn);
-    if (!defined($authority)) {
-	$authority = GeniAuthority->CreateFromRegistry("cm", $aggregate_urn);
-	if (!defined($authority)) {    
-	    fatal("Could not load CM authority object for $aggregate_urn");
-	}
-    }
-    my $aggobj = $instance->AddAggregate($aggregate_urn);
-    if (!defined($aggobj)) {
-	fatal("Could not create aggregate object for $aggregate_urn");
-    }
-    $aggobj->_authority($authority);
-    push(@aggregate_list, $aggobj);
-
-    #
-    # Mark for prestaging images if needed.
-    #
+#
+# Various checks are made in this function.
+#
+$retval = $instance->AddAggregates($nopending + $usestitcher,
+				   \@aggregate_list, \$errmsg, @aggregate_urns);
+if ($retval) {
+    ($retval < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+#
+# Mark for prestaging images if needed.
+#
+foreach my $aggobj (@aggregate_list) {
+    my $aptaggregate = $aggobj->GetAptAggregate();
+    
     if ($aptaggregate->prestageimages()) {
 	push(@prestage, $aggobj);
     }
@@ -1257,7 +1164,8 @@ print STDERR "Duration: $duration hours\n";
 print STDERR "Cluster: ";
 print STDERR join(",", map($_->aggregate_urn(), @aggregate_list))  . "\n";
 print STDERR "\n";
-print STDERR "$rspecstr\n";
+print STDERR "$webinfo\n\n" if (defined($webinfo));
+print STDERR $instance->rspec() . "\n";
 
 #
 # Check to see if any of the aggregates need a prestage check, if so
@@ -1273,6 +1181,7 @@ if (@prestage) {
 if ($seriallock) {
     libEmulab::EmulabCountUnlock("create_instance_lock");
     $seriallock = 0;
+    APT_Utility::TutorialStat("create_instance: released serial lock");
 }
 
 #
@@ -1294,6 +1203,9 @@ if (! ($debug || $foreground)) {
     my $child = fork();
     if ($child) {
 	# Parent exits but avoid libaudit email.
+	AuditAbort();
+	# And avoid the END block above, since this normal exit.
+	$logfile = undef;
 	exit(0);
     }
     # All of the logging magic happens in here.
@@ -1301,22 +1213,38 @@ if (! ($debug || $foreground)) {
 }
 
 #
-# End the current audit, create_slivers will start a new one.
-# 
-AuditEnd();
+# Back to using system() so we have one log/email instead of two.
+# Not worth the aggravation. 
+#
+system("$CREATESLIVERS -L -f " .
+       ($debug ? "-d " : "") .
+       ($ignorefailures ? "-i " : "") .
+       ($usestitcher ? "-S " : "") . $quickvm_uuid);
+my $status = $? >> 8;
 
-exec("$CREATESLIVERS -L -f -a " .
-     ($debug ? "-d " : "") .
-     ($ignorefailures ? "-i " : "") .
-     ($usestitcher ? "-S " : "") . $quickvm_uuid);
-exit(0);
+# Special case for this one. Too much email.
+if (($status == 0 && $project->pid() eq "PMonitor") || $status == 1) {
+    # Need to do this before we close the log since it gets moved.
+    AuditAbort();
+}
+else {
+    # Need to do this before we close the log since it gets moved.
+    AuditEnd($status);
+}
+
+if (defined($logfile)) {
+    $logfile->Close();
+    $logfile->Store();
+    $logfile = undef;
+}
+exit($status);
 
 sub fatal($) {
     my ($mesg) = $_[0];
 
     $slice->Delete()
 	if (defined($slice));
-    $instance->SetStatus("failed")
+    $instance->Delete()
 	if (defined($instance));
     if (defined($webtask)) {
 	$webtask->output($mesg);
@@ -1326,19 +1254,53 @@ sub fatal($) {
 	if (defined($xmlparse));
 
     print STDERR "*** $0:\n".
-	         "    $mesg\n";
+	"    $mesg\n";
+
+    # Need to do this before we close the log since it gets moved.
+    AuditEnd(-1);
+    
+    if (defined($logfile)) {
+	$logfile->Close();
+	$logfile->Store();
+	$logfile = undef;
+    }
     exit(-1);
 }
 sub UserError($;$) {
     my($mesg,$code) = @_;
     $code = 1 if (!defined($code));
 
+    $slice->Delete()
+	if (defined($slice));
+    $instance->Delete()
+	if (defined($instance));
     if (defined($webtask)) {
 	$webtask->output($mesg);
 	$webtask->Exited($code);
     }
-    AuditAbort()
-	if (!$debug);
-    print $mesg . "\n";
+    # Need to do this before we close the log since it gets moved.
+    # Do we even need to mail these errors?
+    AuditEnd();
+    
+    #
+    # We do not save these logfiles, email is enough.
+    #
+    if (defined($logfile)) {
+	$logfile->Delete(1);
+	$logfile = undef;
+    }
+
+    print $mesg . "\n\n";
+    
+    if (1) {
+	print "----------------------------------------------------\n";
+	print Dumper($xmlparse)
+	    if (defined($xmlparse));
+
+	print "\n\n";
+
+	print GeniXML::Serialize($rspec, 2)
+	    if (defined($rspec));
+    }
     exit($code);
 }

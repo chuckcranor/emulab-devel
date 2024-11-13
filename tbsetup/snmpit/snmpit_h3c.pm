@@ -20,7 +20,7 @@
 # 
 # }}}
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # Copyright (c) 2004-2015 Regents, University of California.
 # All rights reserved.
 #
@@ -1604,7 +1604,11 @@ sub resetVlanIfOnTrunk($$$) {
 	if (!$ifIndex);
     $self->debug($self->{NAME} . "::resetVlanIfOnTrunk m $modport "
 		    . "vlan $vlan ifIndex $ifIndex\n",1);
-    if ($self->{d1dx2ifx}) { $ifIndex = $self->{d1dx2ifx}{$ifIndex}; }
+    if ($self->{d1dx2ifx}) {
+	$ifIndex = $self->{d1dx2ifx}{$ifIndex};
+	return -1
+	    if (!$ifIndex);
+    }
     my $vlan_ports = $self->get1($egressOID, $vlan);
     if (testPortSet($vlan_ports, $ifIndex - 1)) {
 	$self->setVlansOnTrunk($modport,0,$vlan);

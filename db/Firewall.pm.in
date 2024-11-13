@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2017 University of Utah and the Flux Group.
+# Copyright (c) 2009-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -742,6 +742,17 @@ sub Panic($$$)
     }
     elsif ($which == PANIC_PANIC()) {
 	if ($level == 1) {
+	    # Recovery mode sitevar.
+	    my $sitevar    = "general/panic_does_recovery_mode";
+	    my $dorecovery = 0;
+	    if (! TBGetSiteVar($sitevar, \$dorecovery)) {
+		print "Error getting sitevar '$sitevar', defaulting to false\n";
+		$dorecovery = 0;
+	    }
+	    if ($dorecovery) {
+		print "Using recovery mode per sitevar\n";
+	    }
+
 	    #
 	    # Do the VMs. We continue if we get errors, want to do
 	    # as much as possible.
@@ -759,6 +770,7 @@ sub Panic($$$)
 	    my %myargs;
 	    $myargs{'name'} = "$0";
 	    $myargs{'on'}   = 1;
+	    $myargs{'recovery'} = 1 if ($dorecovery);
 	    if (TBAdminMfsSelect(\%myargs, undef, @nodes)) {
 		print STDERR "Failed to force all nodes into admin mode!\n";
 		print STDERR "Falling back to control network disable\n";

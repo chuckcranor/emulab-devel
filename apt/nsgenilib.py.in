@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2005-2019 University of Utah and the Flux Group.
+# Copyright (c) 2005-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@ import string
 import socket
 import re
 import math
-import HTMLParser
+import html
 
 # Configure stuff.
 TB        = "@prefix@";
@@ -43,7 +43,7 @@ if TBPATH not in sys.path:
 import libdb
 
 # Testbed specific stuff
-if False:
+if True:
     sys.path.append(TB + "/opsdir/lib/geni-lib")
 else:
     sys.path.append("/usr/local/lib/geni-lib")
@@ -65,14 +65,14 @@ routertype = None
 from lxml import etree
 
 def Fatal(message):
-    print >> sys.stderr, message
+    print(message, file=sys.stderr)
     sys.exit(1)
 
 def Warn(message):
-    print >> sys.stderr, message
+    print(message, file=sys.stderr)
 
 def Usage():
-    print "usage: " + sys.argv[0] + " [option...] irfile"
+    print("usage: " + sys.argv[0] + " [option...] irfile", file=sys.stderr)
     sys.exit(-1);
     pass
 
@@ -108,7 +108,7 @@ else:
 try:
     tree = etree.parse(NSfile);
 except etree.XMLSyntaxError:
-    print traceback.format_exc()
+    print(traceback.format_exc())
     Fatal("Could not parse IR file")
     pass
 
@@ -296,8 +296,7 @@ for child in tree.getroot():
         #
         foo = re.match(r"^\((.*) ; /usr/local/etc/emulab.*\)", cmd);
         if foo:
-            parser = HTMLParser.HTMLParser()
-            cmd = parser.unescape(foo.group(1));
+            cmd = html.unescape(foo.group(1));
             pass
         #
         # Watch for access to builting Emulab ENV variables, those
@@ -493,7 +492,7 @@ for child in tree.getroot():
         if row.find("nobwshaping") != None:
             nobwshaping = int(row.find("nobwshaping").text)
             if nobwshaping:
-                if not lansets[vname].has_key("nobwshaping"):
+                if not "nobwshaping" in lansets[vname]:
                     lan.setNoBandwidthShaping()
                     pass
                 lansets[vname]["nobwshaping"] = True
@@ -502,7 +501,7 @@ for child in tree.getroot():
         if row.find("mustdelay") != None:
             mustdelay = int(row.find("mustdelay").text)
             if mustdelay:
-                if not lansets[vname].has_key("mustdelay"):
+                if not "mustdelay" in lansets[vname]:
                     lan.setForceShaping()
                     pass
                 lansets[vname]["mustdelay"] = True
@@ -525,7 +524,7 @@ for child in tree.getroot():
         pass
     pass
 
-for lanname,lifaces in lanifaces.iteritems():
+for lanname,lifaces in lanifaces.items():
     skip = 0
     nobwshaping = 1;
     
@@ -545,8 +544,8 @@ for lanname,lifaces in lanifaces.iteritems():
         continue
     if len(lifaces.keys()) == 2:
         lan = lans[lanname]
-        member0_key = lifaces.keys()[0]
-        member1_key = lifaces.keys()[1]
+        member0_key = list(lifaces.keys())[0]
+        member1_key = list(lifaces.keys())[1]
         member0     = lifaces[member0_key]
         member1     = lifaces[member1_key]
         iface0      = ifaces[member0_key]
@@ -569,7 +568,7 @@ for lanname,lifaces in lanifaces.iteritems():
         #
         # The virt lans for bridges is done differently. 
         #
-        if bridged.has_key(lanname):
+        if lanname in bridged:
             bname  = bridged[lanname]["bridge"]
             bport  = bridged[lanname]["vport"]
             bridge = nodes[bname]
@@ -596,10 +595,10 @@ for lanname,lifaces in lanifaces.iteritems():
         # These are the bi-directional numbers.
         delay       = delay0+rdelay1
         loss        = 1-(1-loss0)*(1-rloss1)
-	bw          = min(bw0,rbw1)
+        bw          = min(bw0,rbw1)
         rdelay      = rdelay0+delay1
-	rloss       = 1-(1-rloss0)*(1-loss1)
-	rbw         = min(rbw0,bw1)
+        rloss       = 1-(1-rloss0)*(1-loss1)
+        rbw         = min(rbw0,bw1)
 
         #
         # If the user has simply requested a standard 1G or 10G link,
@@ -688,7 +687,7 @@ for child in tree.getroot():
         if row.find("encap_style") != None:
             encap_style = row.find("encap_style").text
             if encap_style == "vlan":
-                for name,lan in lans.iteritems():
+                for name,lan in lans.items():
                     lan.vlan_tagging = True
                     pass
                 pass
@@ -844,7 +843,7 @@ for child in tree.getroot():
 #
 # Add the rest of the program agents
 #
-for vname, program in programs.iteritems():
+for vname, program in programs.items():
     cmd = program["cmd"]
     directory = program["directory"]
     node = program["vnode"]

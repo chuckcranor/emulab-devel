@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,7 +70,8 @@ SBIN_STUFF	= resetvlans console_setup.proxy sched_reload named_setup \
 		  rmproj pool_daemon mkprojdirs \
 		  checknodes_daemon snmpit.proxyv3 image_setup tcpp \
 		  arplockdown bscontrol reportboot reportboot_daemon \
-		  nfsmfs_setup nfsmfs_setup.proxy manage_expsettings
+		  nfsmfs_setup nfsmfs_setup.proxy manage_expsettings \
+		  mkatten
 
 ifeq ($(ISMAINSITE),1)
 SBIN_STUFF     += repos_daemon
@@ -100,10 +101,10 @@ WEB_BIN_SCRIPTS = webnscheck webendexp webtbreport webbatchexp \
 		  webtemplate_linkgraph webtemplate_instantiate \
 		  webtemplate_delete webtemplate_revise
 
-LIBEXEC_STUFF	= wanlinksolve wanlinkinfo os_setup mkexpdir console_setup \
+LIBEXEC_STUFF	= os_setup mkexpdir console_setup \
 		  assign_wrapper assign_wrapper2 os_setup_old \
 		  assign_prepass ptopgen ptopgen_test \
-		  spewlogfile staticroutes routecalc wanassign \
+		  spewlogfile staticroutes routecalc \
 		  switchmac spewrpmtar spewrpmtar_verify spewrpmtar_cgi \
 		  webfrisbeekiller gentopofile \
                   $(WEB_BIN_SCRIPTS) $(WEB_SBIN_SCRIPTS)
@@ -119,11 +120,11 @@ LIB_STUFF       = libtbsetup.pm exitonwarn.pm libtestbed.pm \
 		  libossetup.pm \
 		  power_ipmi.pm libosload_new.pm libosload_switch.pm \
 		  libosload_ue.pm libossetup_switch.pm power_ibmbc.pm \
-		  power_icebox.pm \
+		  power_icebox.pm power_remotecmd.pm power_esi.pm \
 		  libvtop_stable.pm libvtop_test.pm \
                   libosload_dell_s3048.pm libosload_dell_s4048.pm \
                   libosload_mlnx_sn2410.pm libosload_dell.pm \
-                  libosload_hp5406.pm \
+                  libosload_hp5406.pm libosload_edge_100bf.pm \
 		  libimageops.pm libimageops_ndz.pm libimageops_docker.pm \
 		  libimageops_ec2.pm libSignedURL.pm
 
@@ -174,9 +175,6 @@ $(SUBBOSS_SBIN_SCRIPTS):
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 CXXFLAGS += -Wall -O2 -g
-
-wanlinksolve: wanlinksolve.cc
-	${CXX} $< ${CXXFLAGS} -o $@ ${LIBS} -lm -lstdc++ ${LDFLAGS}
 
 routecalc: routecalc.cc
 	${CXX} $< ${CXXFLAGS} -o $@ ${LIBS} -lm -lstdc++ ${LDFLAGS}
@@ -356,7 +354,7 @@ clrhouse-install: $(INSTALL_LIBDIR)/libaudit.pm \
 		$(INSTALL_LIBDIR)/libtblog_simple.pm
 
 clean:	subdir-clean
-	rm -f *.o core routecalc wanlinksolve
+	rm -f *.o core routecalc
 
 subdir-clean:
 	@$(MAKE) -C checkpass clean

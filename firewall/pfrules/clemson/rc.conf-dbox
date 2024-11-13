@@ -1,0 +1,6 @@
+#
+# Install as /etc/rc.conf.d/pf/rc.conf. To make the change persistent, also
+# install as /conf/base/etc/rc.conf.d/pf/rc.conf.
+#
+pf_enable="YES"
+pf_rules="/etc/emulab/pf.conf"

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -245,14 +245,51 @@ while (my ($vnode,$vport,$ip) = $query_result->fetchrow_array()) {
 my %raw_lans = ();
 
 $query_result =
-    DBQueryFatal("select * from virt_lans ".
-		 "where pid='$pid' and eid='$eid' ".
-		 "order by vname,member");
+    DBQueryFatal("select vl.*,l.lanid,s.capval as shared_target ".
+		 "    from virt_lans as vl ".
+		 "left join virt_lan_settings as s on ".
+		 "     s.pid=vl.pid and s.eid=vl.eid and ".
+		 "     s.vname=vl.vname and s.capkey='sharedvlan' ".
+		 "left join lans as l on ".
+		 "     l.pid=vl.pid and l.eid=vl.eid and ".
+		 "     l.vname=vl.vname ".
+		 "where vl.pid='$pid' and vl.eid='$eid' ".
+		 "order by vl.vname,vl.member");
 
 while (my $rowref = $query_result->fetchrow_hashref()) {
     my $vname  = $rowref->{"vname"};
     my $member = $rowref->{"member"};
     my ($vnode, $port) = split(":", $member);
+
+    #
+    # Skip placeholder shared lans that are not connected.
+    #
+    if (defined($rowref->{"shared_target"}) &&
+	$rowref->{"shared_target"} eq "__placeholder__") {
+	my $lanid = $rowref->{'lanid'};
+	
+	next
+	    if (!defined($lanid));
+	    
+	my $lan = VLan->Lookup($lanid);
+	if (!$lan) {
+	    print STDERR "No lan for placeholder lan $lanid\n";
+	    next;
+	}
+	my $target_lanid;
+	if ($lan->GetAttribute("target_lanid", \$target_lanid)) {
+	    print STDERR "No target lanid for placeholder lan $lanid\n";
+	    next;
+	}
+	next
+	    if ($target_lanid eq "unbound");
+    }
+
+    #
+    # Do not send along info for RF links (PhantomNet).
+    #
+    next
+	if (defined($rowref->{"protocol"}) && $rowref->{"protocol"} eq "P2PLTE");
 
     #
     # Create a row for this lan, if we have not seen it already.
@@ -614,6 +651,10 @@ while (my ($vname,$member,$mask,$cost,$bridgelink) =
     next
 	if (exists($bridges{$node}));
 
+    # Cull out skipped lans (see shared vlan join above).
+    next
+	if (!exists($virt_lans{$vname}));
+
     $vname = getRoot($vname);
     # One entry per lan.
     if (! defined($lans{$vname})) {
@@ -721,7 +762,7 @@ foreach my $node (sort keys(%nodes)) {
     # If this is a bridge node, skip.
     next
 	if (exists($bridges{$node}));
-    
+
     print $OUT "$node,";
     print $OUT join(" ", values(%{ $nodes{$node} }));
     print $OUT "\n";
@@ -853,7 +894,7 @@ if ($query_result->numrows) {
     #
     $query_result =
 	DBQueryFatal("select v.member,v.vname,i.mac,vi.mac,vi.type,l.iface,".
-		     "       v.nobwshaping,lans.type,v.encap_style ".
+		     "       v.nobwshaping,lans.type,v.encap_style,i.interface_type ".
 		     " from reserved as r join virt_lans as v".
 		     " left join interfaces as i".
 		     "  on v.ip=i.IP and r.node_id=i.node_id".
@@ -873,9 +914,18 @@ if ($query_result->numrows) {
 		     "  r.pid='$pid' and r.eid='$eid'");
     if ($query_result->numrows) {
 	while (my ($memb,$vlan,$imac,$vmac,$vtype,$iface,$noshape,
-		   $lantype,$encap_style) =
+		   $lantype,$encap_style,$itype) =
 	       $query_result->fetchrow_array) {
 	    $vlan = getRoot($vlan);
+
+	    # Cull out skipped lans (see shared vlan join above).
+	    next
+		if (!exists($virt_lans{$vlan}));
+
+	    # Do not send along info for RF links (PhantomNet).
+	    next
+		if (defined($itype) && $itype eq "P2PLTE");
+	    
 	    if (exists($virt_lans{$vlan}->{"MEMBERS"}->{$memb})) {
 		my $member = $virt_lans{$vlan}->{"MEMBERS"}->{$memb};
 		if (defined($vmac)) {

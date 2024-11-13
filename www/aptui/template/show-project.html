@@ -1,126 +1,116 @@
-<style type="text/css">
-/* make sidebar nav vertical */ 
-@media (min-width: 768px) {
-	.sidebar-nav .navbar .navbar-collapse {
-		padding: 0;
-		max-height: none;
-	}
-	.sidebar-nav .navbar ul {
-		float: none;
-	}
-	.sidebar-nav .navbar ul:not {
-		display: block;
-
-	}
-	.sidebar-nav .navbar li {
-		float: none;
-		display: block;
-	}
-	.sidebar-nav .navbar li a {
-		padding-top: 0px;
-		padding-bottom: 0px;
-		margin-top: 5px;
-	}
-}
-/*
-@media (min-width: 992px) {
-	.sidebar-nav .navbar {
-		width: 212px;
-	}
-}
-@media (min-width: 1200px) {
-	.sidebar-nav .navbar {
-		width: 262px;
-	}
-}
-*/
-.sidebar-nav .navbar-header{ float: none; }
-</style>
 <div class='row'>
   <div class='col-sm-12'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-	<h4 class="text-center">Project <%- target_project %></h4>
+    <div class='panel card panel-default'>
+      <div class='panel-heading card-header'>
+	<h4 class="panel-title card-title text-center">
+	  Project <%- target_project %>
+	  <% if (disabled) { %>
+	    <center>
+	      <small class="text-danger">This project is disabled</small>
+	    </center>
+	  <% } %>
+	</h4>
       </div>
-	<div class='panel-body'>
+	<div class='panel-body card-body'>
 	<div class='row'>
 	  <div class='col-sm-12'>
 	    <div>
 	      <!-- Nav tabs -->
 	      <ul class="nav nav-tabs" role="tablist">
-		<li role="presentation" class="active">
-		  <a href="#experiments" role="tab"
-		     data-toggle="tab">Experiments</a></li>
-		<li role="presentation">
-		  <a href="#profiles" role="tab"
-		     data-toggle="tab">Profiles</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#experiments" id="usertab-experiments"
+		     role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Experiments</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#profiles" id="usertab-profiles"
+		     role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Profiles</a></li>
 		<%  if (disabledset == 0 || (disabledset == 1 && isadmin) ) { %>
-		  <li role="presentation">
-		    <a href="#datasets" role="tab"
-		       data-toggle="tab">Datasets</a></li>
+		  <li role="presentation" class="nav-item">
+		    <a href="#datasets" id="usertab-datasets"
+		       role="tab" class="nav-link"
+		       data-toggle="tab" data-bs-toggle="tab">Datasets</a></li>
 		<% } %>
 		<%  if (disabledres == 0 || (disabledres == 1 && isadmin) ) { %>
-		<li role="presentation" class="hidden resgroups-hidden">
-		  <a href="#resgroups" role="tab"
-		     data-toggle="tab">Reservations</a></li>
+		  <li role="presentation" class="hidden resgroups-hidden nav-item">
+		    <a href="#resgroups" id="usertab-resgroups"
+		       role="tab" class="nav-link"
+		       data-toggle="tab" data-bs-toggle="tab">Reservations</a></li>
 		<% } %>
-		<li role="presentation">
-		  <a href="#members" role="tab"
-		     data-toggle="tab">Members</a></li>
-		<li role="presentation">
-		  <a href="#groups" role="tab"
-		     data-toggle="tab">Groups</a></li>
-		<li role="presentation">
-		  <a href="#usage" role="tab"
-		     data-toggle="tab">Usage</a></li>
+		<li role="presentation" class="nav-item hidden resources-hidden">
+		  <a href="#resources" id="usertab-resources"
+		     role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Resources</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#members" id="usertab-members"
+		     role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Members</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#groups" id="usertab-groups"
+		     role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Groups</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#usage" id="usertab-usage"
+		     role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Usage</a></li>
 		<% if (window.ISPOWDER) { %>
-		  <li role="presentation" class="hidden rfranges-hidden">
-		    <a href="#rfranges" role="tab"
-		       data-toggle="tab">RF Ranges</a></li>
+		  <li role="presentation" class="hidden rfranges-hidden nav-item">
+		    <a href="#rfranges" id="usertab-rfranges"
+		       role="tab" class="nav-link"
+		       data-toggle="tab" data-bs-toggle="tab">RF Ranges</a></li>
 		<% } %>
-		<li role="presentation">
-		  <a href="#project" role="tab" data-toggle="tab">
-		    Project</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#project" id="usertab-project"
+		     role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">
+		    Project Info</a></li>
 		<% if (showmore) { %>
-		  <li role="presentation"
-		      class="dropdown">
-		    <a class="dropdown-toggle" data-toggle="dropdown"
+		  <li role="presentation" class="nav-item dropdown">
+		    <a class="dropdown-toggle nav-link"
+		       data-toggle="dropdown" data-bs-toggle="dropdown"
 		       href="#" role="button">
 		      More ...<span class="caret"></span></a>
 		    <ul class="dropdown-menu">
-		      <li><a href="activity.php?project=<%= target_project %>">
+		      <li><a href="activity.php?project=<%= target_project %>"
+			     class='dropdown-item'>
 			Experiment History</a></li>
-		      <li><a href=
-			     "list-images.php?project=<%= target_project %>">
+		      <li><a href="list-images.php?project=<%= target_project %>"
+			     class='dropdown-item'>
 			Project Disk Images</a></li>
 		    </ul>
 		  </li>
 		<% } %>
 		<% if (isadmin) { %>
-		  <li role="presentation"
-		      class="dropdown">
-		    <a class="dropdown-toggle" data-toggle="dropdown"
+		  <li role="presentation" class="dropdown nav-item">
+		    <a class="dropdown-toggle nav-link"
+		       data-toggle="dropdown" data-bs-toggle="dropdown"
 		       href="#" role="button">
 		      Admin Menu<span class="caret"></span></a>
 		    <ul class="dropdown-menu">
 		      <% if (disabledres < 2) { %>
-		      <li><a href="resgroup.php?project=<%= target_project %>">
-			Create Reservation</a></li>
+			<li><a href="resgroup.php?project=<%= target_project %>"
+			       class='dropdown-item'>
+			  Create Reservation</a></li>
 		      <% } %>
-		      <li><a href="activity.php?project=<%= target_project %>">
+		      <li><a href="activity.php?project=<%= target_project %>"
+			     class='dropdown-item'>
 			Experiment History</a></li>
-		      <li><a href="#" data-toggle='modal'
-			     data-target='#nsf-funding-modal'>
+		      <li><a href="#" data-toggle='modal' data-bs-toggle='modal'
+			     class='dropdown-item'
+			     data-target='#nsf-funding-modal' data-bs-target='#nsf-funding-modal'>
 			Add NSF Award</a></li>
 		      <% if (disabledres < 2) { %>
-		      <li><a href="reservation-history.php?project=<%= target_project %>">
-			Reservation History</a></li>
+			<li><a href="resgroup-history.php?project=<%= target_project %>"
+			       class='dropdown-item'>
+			  Reservation History</a></li>
 		      <% } %>
-		      <li><a href="#" data-toggle='modal'
-			     data-target='#confirm-deleteproject-modal'>
+		      <li><a href="#" data-toggle='modal' data-bs-toggle='modal'
+			     class='dropdown-item'
+			     data-target='#confirm-deleteproject-modal'
+			     data-bs-target='#confirm-deleteproject-modal'>
 			<span class="text-danger">Delete Project</span></a></li>
-		      <li role="presentation">
-			<a href='<%- emulablink %>'>
+		      <li>
+			<a href='<%- emulablink %>' class='dropdown-item'>
 			  Emulab Project Page</a></li>
 		    </ul>
 		  </li>
@@ -128,7 +118,7 @@
 	      </ul>
 	      <!-- Tab panes -->
 	      <div class="tab-content">
-		<div role="tabpanel" class="tab-pane active" id="experiments">
+		<div role="tabpanel" class="tab-pane" id="experiments">
 		  <div id="experiments_content">
 		    <div id="experiments_loading">
 		      <br>
@@ -172,6 +162,10 @@
 		     id="resgroups">
 		  <div id="resgroups_content"></div>
 		</div>
+		<div role="tabpanel" class="tab-pane hidden resources-hidden"
+		     id="resources">
+		  <div id="resources_content"></div>
+		</div>
 		<div role="tabpanel" class="tab-pane" id="members">
 		  <div id="members_content"></div>
 		</div>
@@ -209,7 +203,7 @@
 			</table>
 		      </span>
 		      <span class="hidden inuse-rfranges"
-			    style="width: 500px; display: inline-block;">
+			    style="width: 700px; display: inline-block;">
 			<h5 class="text-center">
 			  Radio frequency ranges in use by this project</h5>
 			<table class='tablesorter'>
@@ -218,12 +212,24 @@
 			      <th>Name</th>
 			      <th>Lower (MHz)</th>
 			      <th>Upper (MHz)</th>
+			      <th>Type</th>
+			      <th>Target</th>
 			      <th>Expires</th>
 			    </tr>
 			  </thead>
 			  <tbody></tbody>
 			</table>
 		      </span>
+		      <div class="hidden history-rfranges
+				  col-sm-12">
+			<center>
+			  <h4 class="text-center">
+			    Recent History</h4>
+			  <div class="waiting">
+			    <img src='images/spinner.gif' />
+			  </div>
+			</center>
+		      </div>
 		    </div>
 		  </div>
 		<% }  %>
@@ -238,41 +244,22 @@
     </div>
   </div>
 </div>
-<!-- This is the topology view modal -->
-<div id='quickvm_topomodal' class='modal fade'>
-  <div class='modal-dialog' id='showtopo_dialog'>
-    <div class='modal-content'>
-      <div class='modal-header'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>
-          &times;</button>
-        <h3>Topology Viewer</h3>
-      </div>
-      <div class='modal-body'>
-        <!-- This topo diagram goes inside this div -->
-        <div class='panel panel-default'
-             id='showtopo_container'>
-          <div class='panel-body'>
-            <div id='showtopo_nopicker' class='jacks'></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 <!-- This is the terminate modal -->
 <div id='terminate-modal' class='modal fade'>
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
         <p>Are you sure you want to terminate this experiment? 
           Click on the button below if you are really sure.
 	</p>
 	<br>
-        <button class='btn btn-danger align-center' id='terminate-confirm'
-                type='submit' name='terminate'>Terminate</button>
+	<center>
+          <button class='btn btn-danger btn-sm confirm-button'
+		  id='terminate-confirm'
+                  type='submit' name='terminate'>Terminate</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>Cancel</button>
+	</center>
       </div>
     </div>
   </div>
@@ -292,12 +279,11 @@
 	      </label>
 	    </div>
 	  </div>
-	  <div>
-            <button class='btn btn-primary btn-sm'
-		    data-dismiss='modal'
-		    style="margin-right: 10px;">Cancel</button>
-            <button class='btn btn-danger btn-sm' disabled
+	  <div style="margin-top: 15px;">
+            <button class='btn btn-danger btn-sm confirm-button' disabled
 		    id='confirm-deleteproject'>Confirm</button>
+            <button class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'>Cancel</button>
 	  </div>
 	</center>
       </div>
@@ -325,13 +311,23 @@
 		     type="checkbox">Is this a supplement?</label>
 	  </div>
 	  <div style="margin-top: 15px;">
-            <button class='btn btn-primary btn-sm'
-		    data-dismiss='modal'
-		    style="margin-right: 10px;">Cancel</button>
-            <button class='btn btn-danger
-			   btn-sm save-button'>Save</button>
+            <button class='btn btn-danger btn-sm confirm-button save-button'>
+	      Save</button>
+            <button class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'>
+	      Cancel</button>
 	  </div>
 	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='setshared-errors-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	<dl class="row">
+	</dl>
       </div>
     </div>
   </div>
@@ -341,3 +337,4 @@
 <div id='conversion_help_div'></div>
 <div id='profile-imagelist-modal-div'></div>
 <div id='confirm-delete-profile-div'></div>
+<div id='showtopo-modal-div'></div>

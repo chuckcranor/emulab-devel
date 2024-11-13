@@ -1,0 +1,4 @@
+<FilesMatch "\.(js|css|html|json)$">
+   Header append Cache-Control "no-cache, must-revalidate"
+   Header set Pragma "no-cache"
+</FilesMatch>

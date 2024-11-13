@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2018, 2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -533,7 +533,7 @@ sub Register($)
 		     "Your user certificate is out of date! \n".
 		     "Please login to your home Emulab and generate\n".
 		     "a new encrypted SSL certificate.\n",
-		     $TBOPS, "BCC: protogeni-errors\@flux.utah.edu");
+		     $TBOPS, "BCC: protogeni-errors\@emulab.net");
 	}
 	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 	    "Improper or missing URN in certificate; Please regenerate");

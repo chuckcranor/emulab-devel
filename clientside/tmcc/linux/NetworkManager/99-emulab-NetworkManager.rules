@@ -1,0 +1,2 @@
+ACTION!="remove", SUBSYSTEM=="net", DRIVERS=="?*", ENV{SYSTEMD_WANTS}+="emulab-NetworkManager@$name.service", RUN+="/bin/sh -c '. /etc/emulab/paths.sh ; $$BINDIR/emulab-NetworkManager-udev-helper.sh $name'"
+ACTION=="remove", SUBSYSTEM=="net", DRIVERS=="?*", RUN+="systemctl stop --no-block emulab-NetworkManager@$name.service"

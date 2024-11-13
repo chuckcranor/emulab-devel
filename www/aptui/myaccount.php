@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -46,6 +49,7 @@ else {
 $optargs = OptionalPageArguments("target_user", PAGEARG_USER,
                                  "referrer",    PAGEARG_URL,
                                  "needupdate",  PAGEARG_BOOLEAN);
+$needupdate = ($needupdate ? 1 : 0);
 
 if (! isset($target_user)) {
     $target_user = $this_user;
@@ -58,9 +62,6 @@ if ($target_user->uid() != $this_user->uid() && !ISADMIN()) {
     return;
 }
 $isadmin = (ISADMIN() ? 1 : 0);
-if (!isset($needupdate)) {
-    $needupdate = 0;
-}
 
 # We use a session. in case we need to do verification
 session_start();
@@ -76,6 +77,7 @@ $defaults["city"]        = $target_user->city();
 $defaults["state"]       = $target_user->state();
 $defaults["country"]     = $target_user->country();
 $defaults["affiliation"] = $target_user->affil();
+$defaults["title"]       = $target_user->title();
 $defaults["address1"]    = $target_user->addr1();
 $defaults["address2"]    = $target_user->addr2();
 $defaults["zip"]         = $target_user->zip();
@@ -86,8 +88,6 @@ $defaults["shell"]       = $target_user->shell();
 SPITHEADER(1);
 echo "<script>\n";
 echo "</script>\n";
-echo "<link rel='stylesheet' href='css/bootstrap-formhelpers.min.css'>\n";
-echo "<link rel='stylesheet' href='css/jquery-ui.min.css'>\n";
 echo "<div id='page-body'></div>\n";
 echo "<div id='oops_div'></div>\n";
 echo "<div id='waitwait_div'></div>\n";
@@ -119,8 +119,8 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_APTFORMS();
 REQUIRE_FORMHELPERS();
-SPITREQUIRE("js/myaccount.js",
-            "<script src='js/lib/jquery-ui.js'></script>");
+REQUIRE_JQUERY_UI();
+SPITREQUIRE("js/myaccount.js");
 
 AddTemplateList(array("myaccount", "verify-modal", "oops-modal", "waitwait-modal"));
 SPITFOOTER();

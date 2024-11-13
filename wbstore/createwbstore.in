@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2020 University of Utah and the Flux Group.
+# Copyright (c) 2020-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use POSIX qw(strftime);
 use Data::Dumper;
 
 #
@@ -99,6 +100,7 @@ sub distribconfigs();
 sub portOK($);
 sub dumpinfo();
 sub fatal($);
+sub stampprint($);
 
 #
 # Configure variables
@@ -260,8 +262,12 @@ if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
     #
     my $ix = 0;
     do {
-	$portoffset = (TBGetUniqueIndex("syncthing_index", 0, 1) % 100);
-	if (++$ix >= 100) {
+	#
+	# XXX +1, to avoid portoffset of zero. Don't want to clash with a
+	# system-wide instance of syncthing on aggregates.
+	#
+	$portoffset = (TBGetUniqueIndex("syncthing_index", 0, 1) % 200) + 1;
+	if (++$ix >= 200) {
 	    fatal("createconfig: could not find available port!");
 	}
     } while (!portOK(8384 + int($portoffset)));
@@ -276,6 +282,9 @@ if (@ARGV == 1 && ($exptuuid = parseinstance($ARGV[0], 1))) {
     $exptname = "FAKE";
     @fqdns = @ARGV;
 }
+
+stampprint("createwbstore: $instance: starting")
+    if ($debug);
 
 # For all aggregates, we run on "boss"
 @fqdns = map { "boss.$_" } @fqdns;
@@ -320,6 +329,8 @@ if ($distribute) {
     distribconfigs();
 }
 
+stampprint("createwbstore: $instance: done")
+    if ($debug);
 exit(0);
 
 #
@@ -516,6 +527,11 @@ sub distribconfigs()
 	$todo{$rh} = 1;
     }
 
+    #
+    # Note that we timestamp messages here since they may happen over a
+    # very long time period and it is useful to be able to correlate these
+    # messages with other logs.
+    #
     do {
 	my $rv;
 
@@ -525,14 +541,14 @@ sub distribconfigs()
 	    }
 
 	    my $domain = $hosts{$rh}{'domain'};
-	    print STDERR "$instance: attempting to distribute ".
-		($install ? "and install " : "") . "to $domain ...\n"
+	    stampprint("$instance: attempting to distribute ".
+		       ($install ? "and install " : "") . "to $domain ...")
 		if ($debug);
 
 	    my $tarball = "$TMPDIR/$instance-$domain.tar.gz";
 	    if (! -e "$tarball") {
-		print STDERR "$instance: config for $domain does not exist, ".
-		    "ignored.\n";
+		stampprint("$instance: config for $domain does not exist, ".
+			   "ignored.");
 		delete $todo{$rh};
 		next;
 	    }
@@ -543,15 +559,15 @@ sub distribconfigs()
 	    if ($rv) {
 		$rv >>= 8;
 		if ($rv == 255) {
-		    print STDERR "$instance: could not connect to $host, ".
-			"trying again later.\n";
+		    stampprint("$instance: could not connect to $host, ".
+			       "trying again later.");
 		} else {
-		    print STDERR "$instance: copy of tarball to $host failed ".
-			"(stat=$rv), trying again later.\n";
+		    stampprint("$instance: copy of tarball to $host failed ".
+			       "(stat=$rv), trying again later.");
 		}
 		next;
 	    } elsif ($try && $debug) {
-		print STDERR "$instance: copy succeeded after $try retries\n";
+		stampprint("$instance: copy succeeded after $try retries.");
 	    }
 
 	    if ($install) {
@@ -559,19 +575,19 @@ sub distribconfigs()
 		if ($rv) {
 		    $rv >>= 8;
 		    if ($rv == 255) {
-			print STDERR "$instance: could not connect to $host, ".
-			    "trying again later.\n";
+			stampprint("$instance: could not connect to $host, ".
+				   "trying again later.");
 		    } else {
-			print STDERR "$instance: install of tarball on $host failed ".
-			    "(stat=$rv), trying again later.\n";
+			stampprint("$instance: install of tarball on $host ".
+				   "failed (stat=$rv), trying again later.");
 		    }
 		    next;
 		} elsif ($try && $debug) {
-		    print STDERR "$instance: install succeeded after $try retries\n";
+		    stampprint("$instance: install succeeded after $try retries");
 		}
 	    }
 
-	    print STDERR "$instance: $domain done.\n"
+	    stampprint("$instance: $domain done.")
 		if ($debug);
 
 	    unlink($tarball);
@@ -581,7 +597,7 @@ sub distribconfigs()
 	# If we reached everyone, we can quit now
 	if (keys(%todo) == 0) {
 	    # nothing left to do?
-	    print STDERR "$instance: finished aggregate installs!\n";
+	    stampprint("$instance: finished aggregate installs!");
 	    $done = 1;
 	}
 
@@ -605,8 +621,8 @@ sub distribconfigs()
 	    # Is experiment still valid?
 	    my $inst = APT_Instance->Lookup($exptuuid);
 	    if (!$inst) {
-		print STDERR "$instance: no longer valid, ".
-		    "terminating installs.\n";
+		stampprint("$instance: no longer valid, ".
+			   "terminating installs.");
 		$done = 1;
 	    } else {
 		$inst->Flush();
@@ -857,12 +873,23 @@ sub dumpinfo()
     }
 }
 
+#
+# Print timestamped message.
+#
+sub stampprint($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print STDERR "$stamp: $msg\n";
+}
+
 # system run as root
 sub mysystem($)
 {
     my ($cmd) = @_;
 
-    print STDERR "system($cmd) as root ...\n"
+    stampprint("system($cmd) as root ...")
 	if ($debug);
 
     my $SAVEUID = $UID;
@@ -885,6 +912,8 @@ sub fatal($)
 	    system("rm -rf $tmpdir");
 	}
     }
+    stampprint("createwbstore: $instance: FAILED")
+	if ($debug && $instance);
     die("*** $0:\n".
 	"    $mesg\n");
 }

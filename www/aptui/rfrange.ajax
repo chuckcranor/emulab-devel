@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -131,7 +131,7 @@ function Do_ProjectInuseRanges()
 
     $query_result =
         DBQueryFatal("select i.uuid,i.name,r.freq_low,r.freq_high, ".
-                     "     s.expires ".
+                     "     r.type,r.target,s.expires ".
                      "   from apt_instance_rfranges as r ".
                      "left join apt_instances as i on i.uuid=r.uuid ".
                      "left join geni.geni_slices as s on ".
@@ -146,6 +146,8 @@ function Do_ProjectInuseRanges()
                 "name"      => $row["name"],
                 "freq_low"  => $row["freq_low"],
                 "freq_high" => $row["freq_high"],
+                "type"      => $row["type"],
+                "target"    => $row["target"],
                 "expires"   => DateStringGMT($row["expires"]),
                 "isexp"     => 1,
             );
@@ -196,7 +198,8 @@ function Do_AllInuseRanges()
 
     $query_result =
         DBQueryFatal("select i.uuid,i.pid,i.name,r.freq_low,r.freq_high, ".
-                     "     s.expires,i.started ".
+                     "     r.type,r.target,s.expires,i.started,i.creator, ".
+                     "     i.powder_zones ".
                      "   from apt_instance_rfranges as r ".
                      "left join apt_instances as i on i.uuid=r.uuid ".
                      "left join geni.geni_slices as s on ".
@@ -207,19 +210,240 @@ function Do_AllInuseRanges()
         $range = array(
             "freq_low"  => $row["freq_low"],
             "freq_high" => $row["freq_high"],
+            "type"      => $row["type"],
+            "target"    => $row["target"],
             "start"     => DateStringGMT($row["started"]),
+            # Ick, for txgraph.js
+            "started"   => DateStringGMT($row["started"]),
             "end"       => DateStringGMT($row["expires"]),
+            "powder_zones" => $row["powder_zones"],
             "isexp"     => 1,
+            "txlist"    => null,
         );
         # Anonymous if not admin.
         if (ISADMIN()) {
+            $uuid = $row["uuid"];
+            
             $range["pid"]  = $row["pid"];
-            $range["uuid"] = $row["uuid"];
+            $range["uid"]  = $row["creator"];
             $range["name"] = $row["name"];
+            $range["eid"]  = $row["name"];
+            $range["uuid"] = $row["uuid"];
+            # Too many UUIds floating around.
+            $range["instance_uuid"] = $row["uuid"];
+            $range["key"]  = $uuid;
+
+            $instance = Instance::Lookup($uuid);
+            if ($instance) {
+                $range["url"] = $instance->StatusURL();
+            }
+
+            #
+            # Look for any transmissions in this range during that time.
+            #
+            $tx_result =
+                DBQueryFatal("select tx.*,a.nickname as cluster ".
+                             "   from apt_aggregate_radio_transmissions as tx ".
+                             "join apt_aggregates as a on ".
+                             "   a.urn=tx.aggregate_urn ".
+                             "where tx.instance_uuid='$uuid' ".
+                             "order by tx.tstamp asc");
+            if (mysql_num_rows($tx_result)) {
+                $txlist = array();
+                while ($txrow = mysql_fetch_array($tx_result)) {
+                    $txrow["tstamp"] = DateStringGMT($txrow["tstamp"]);
+                
+                    $txlist[] = $txrow;
+                }
+                $range["txlist"] = $txlist;
+            }
         }
         $blob[] = $range;
     }
     SPITAJAX_RESPONSE($blob);
+}
+
+function Do_RangeHistory()
+{
+    global $this_user;
+    global $ajax_args;
+    global $TB_PROJECT_READINFO;
+    $pidclause = "";
+    $blob = array();
+    $instances = array();
+
+    if (isset($ajax_args["pid"])) {
+        $pid = $ajax_args["pid"];
+    
+        if (!TBvalid_pid($pid)) {
+            SPITAJAX_ERROR(-1, "Invalid target pid");
+            return -1;
+        }
+        $target_project = Project::Lookup($pid);
+        if (!$target_project) {
+            SPITAJAX_ERROR(-1, "Unknown target pid");
+            return -1;
+        }
+        if (!ISADMIN() &&
+            !$target_project->AccessCheck($this_user, $TB_PROJECT_READINFO)) {
+            SPITAJAX_ERROR(-1, "Not enough permission");
+            return -1;
+        }
+        $pid_idx = $target_project->pid_idx();
+        $pidclause = "and h.pid_idx='$pid_idx'";
+    }
+    elseif (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+
+    $query_result =
+        DBQueryFatal("select h.uuid,h.pid,h.name,r.freq_low,r.freq_high, ".
+                     "     r.type,r.target,h.started,h.destroyed,h.creator, ".
+                     "     r.idx ".
+                     "   from apt_instance_rfrange_history as r ".
+                     "join apt_instance_history as h on h.uuid=r.uuid ".
+                     "where h.started > DATE_SUB(now(),interval 1 month) ".
+                     $pidclause . " " .
+                     "order by h.started desc");
+
+    while ($row = mysql_fetch_array($query_result, MYSQLI_ASSOC)) {
+        $started   = $row["started"];
+        $destroyed = $row["destroyed"];
+        $uuid      = $row["uuid"];
+        $idx       = $row["idx"];
+
+        $range = array(
+            "freq_low"  => $row["freq_low"],
+            "freq_high" => $row["freq_high"],
+            "type"      => $row["type"],
+            "target"    => $row["target"],
+            "started"   => DateStringGMT($started),
+            "destroyed" => DateStringGMT($destroyed),
+            "pid"       => $row["pid"],
+            "uid"       => $row["creator"],
+            "uuid"      => $uuid,
+            "name"      => $row["name"],
+            "eid"       => $row["name"],
+            "txlist"    => null,
+            "key"       => $uuid . ":" . $idx,
+        );
+        
+        #
+        # Look for any transmissions in this range during that time.
+        #
+        $tx_result =
+           DBQueryFatal("select tx.*,a.nickname as cluster ".
+                        "   from apt_aggregate_radio_transmissions as tx ".
+                        "join apt_aggregates as a on ".
+                        "   a.urn=tx.aggregate_urn ".
+                        "where tx.instance_uuid='$uuid' ".
+                        "order by tx.tstamp asc");
+        if (mysql_num_rows($tx_result)) {
+            $txlist = array();
+            while ($txrow = mysql_fetch_array($tx_result, MYSQLI_ASSOC)) {
+                $txrow["tstamp"] = DateStringGMT($txrow["tstamp"]);
+                
+                $txlist[] = $txrow;
+            }
+            $range["txlist"] = $txlist;
+        }
+        $blob[] = $range;
+    }
+    SPITAJAX_RESPONSE($blob);
+}
+
+function Do_Transmissions()
+{
+    global $this_user;
+    global $ajax_args;
+    $blob = array();
+
+    $required = array("aggregate_urn", "node_id", "frontend", "iface");
+
+    foreach ($required as $key) {
+        if (!isset($ajax_args[$key]) || $ajax_args[$key] == "") {
+            SPITAJAX_ERROR(-1, "Missing $key");
+            return -1;
+        }
+        if (!preg_match("/^[-_\w\.:+]*$/", $ajax_args[$key])) {
+            SPITAJAX_ERROR(-1, "Invalid $key");
+            return -1;
+        }
+    }
+    $aggregate_urn = $ajax_args["aggregate_urn"];
+    $node_id       = $ajax_args["node_id"];
+    $frontend      = $ajax_args["frontend"];
+    $iface         = $ajax_args["iface"];
+
+    $query =
+           "select tx.*,a.nickname as cluster ".
+           "   from apt_aggregate_radio_transmissions as tx ".
+           "join apt_aggregates as a on ".
+           "   a.urn=tx.aggregate_urn ".
+           "where tx.aggregate_urn='$aggregate_urn' and " .
+           "      tx.node_id='$node_id' and " .
+           "      tx.iface='$iface' and " .
+           "      tx.frontend='$frontend' ";
+    
+    if (isset($ajax_args["instance"]) && $ajax_args["instance"] != "") {
+        $instance_uuid = $ajax_args["instance"];
+        if (!preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", $instance_uuid)) {
+            SPITAJAX_ERROR(-1, "Invalid uuid");
+            return -1;
+        }
+        $instance = Instance::Lookup($instance_uuid);
+        if (!$instance) {
+            $instance = InstanceHistory::Lookup($instance_uuid);
+        }
+        if (! ($instance->CanView($this_user) || ISADMIN())) {
+            SPITAJAX_ERROR(-1, "Not enough permission");
+            return -1;
+        }
+        $query .= " and tx.instance_uuid='$instance_uuid' ";
+    }
+    else {
+        $query .= " and tx.tstamp > DATE_SUB(now(),interval 1 month) ";
+
+    }
+    $tx_result = DBQueryFatal($query);
+    $instances = array();
+
+    while ($txrow = mysql_fetch_array($tx_result, MYSQLI_ASSOC)) {
+        unset($txrow["aggregate_urn"]);
+        #
+        # Admins get more info.
+        #
+        if (ISADMIN()) {
+            $uuid = $txrow["instance_uuid"];
+            if (!array_key_exists($uuid, $instances)) {
+                $instances[$uuid] = array();
+            }
+        }
+        else {
+            unset($txrow["instance_uuid"]);
+        }
+        
+        $txrow["tstamp"] = DateStringGMT($txrow["tstamp"]);
+        $blob[] = $txrow;
+    }
+    # Fill in the instance info.
+    if (ISADMIN()) {
+        foreach ($instances as $uuid => &$details) {
+            $instance = Instance::Lookup($uuid);
+            if (!$instance) {
+                $instance = InstanceHistory::Lookup($uuid);
+                if (!$instance) {
+                    continue;
+                }
+            }
+            $details["uid"]   = $instance->creator();
+            $details["pid"]   = $instance->pid();
+            $details["eid"]   = $instance->name();
+            $details["url"]   = $instance->StatusURL();
+        }
+    }
+    SPITAJAX_RESPONSE(array("txlist" => $blob, "instances" => $instances));
 }
 
 # Local Variables:

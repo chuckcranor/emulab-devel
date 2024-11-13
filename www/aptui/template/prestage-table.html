@@ -7,6 +7,7 @@
 	<th>Image</th>
 	<th>Status</th>
 	<th>Size</th>
+	<th>ToGo</th>
 	<th>Progress</th>
       </tr>
     </thead>
@@ -18,6 +19,7 @@
 	    <td><%- imageurn %></td>
 	    <td><%- image.status %></td>
 	    <td><%- Math.floor(image.size / 1000) %>MB</td>
+	    <td><%- Math.floor((image.size - image.progress) / 1000) %>MB</td>
 	    <td style="width: 15%;">
 	      <div class="progress" style="margin-bottom: 0px;">
 		<% if (image.status != "ready") {

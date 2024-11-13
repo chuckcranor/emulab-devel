@@ -8,7 +8,7 @@ window.GetBindingsTable = (function ()
 	var html = "";
 
 	var doItem = function (details, defval, actual, index) {
-	    console.info("doItem", details.name, defval, actual, index);
+	    //console.info("doItem", details.name, defval, actual, index);
 	    
 	    var tname  = details.name;
 	    if (defval == undefined) {
@@ -50,7 +50,7 @@ window.GetBindingsTable = (function ()
 	    var html = "<tr>" +
 		"<td colspan=3><b>" + details.name + "</b></td></tr>";
 
-	    console.info("doMultiItem", bindings, defvals);
+	    //console.info("doMultiItem", bindings, defvals);
 		
 	    _.each(bindings, function (actual, index) {
 		var defval;
@@ -65,7 +65,7 @@ window.GetBindingsTable = (function ()
 	var doStruct = function (details, bindings, defvals) {
 	    var html = "";
 
-	    console.info("doStruct", bindings, defvals);
+	    //console.info("doStruct", bindings, defvals);
 	    
 	    _.each(details.parameterOrder, function (name) {
 		var d = details.parameters[name];

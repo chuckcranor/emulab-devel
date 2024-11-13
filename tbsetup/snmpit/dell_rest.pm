@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2019-2021 University of Utah and the Flux Group.
+# Copyright (c) 2019-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -43,6 +43,7 @@ use MIME::Base64;
 use Data::Dumper;
 use Socket;
 use Time::HiRes qw(gettimeofday);
+use libtestbed;
 
 $| = 1; # Turn off line buffering on output
 
@@ -105,10 +106,13 @@ sub call($$$;$$$$)
     my ($datastr,$paramstr);
     my %status = (
 	"GET"    => 200,
-	"PUT"    => 200,
+	"PUT"    => 201,
 	"POST"   => 201,
 	"DELETE" => 204,
 	"PATCH"  => 204
+    );
+    my %status2 = (
+	"PUT"    => 204
     );
 
     my $auth = $self->{USERNAME} . ":" . $self->{PASSWORD};
@@ -130,19 +134,49 @@ sub call($$$;$$$$)
 	"Accept"        => "application/json",
 	"Authorization" => "Basic " . MIME::Base64::encode_base64($auth, "")
     );
-    if ($method eq "POST" || $method eq "PATCH") {
+    if ($method eq "POST" || $method eq "PATCH" || $method eq "PUT") {
 	$headers{"Content-Type"} = "application/json";
     }
 
     my $http = $self->{HTTP};
     if (!$http) {
 	$http = $self->{HTTP} = HTTP::Tiny->new("timeout" => 10);
+	if ($http) {
+	    print STDERR "$server: established new HTTP connection\n"
+		if ($self->{DEBUG} > 1);
+	} else {
+	    print STDERR "$server: could not open HTTP connection!\n";
+	    return undef;
+	}
+    } else {
+	print STDERR "$server: using existing HTTP connection\n"
+	    if ($self->{DEBUG} > 1);
     }
     my %options = ("headers" => \%headers, "content" => $datastr); 
 
     my $stamp = gettimeofday()
 	if ($self->{DEBUG} > 1);
+
+    # Serialize calls, see lock() comment.
+    if ($self->lock()) {
+	if ($self->{DEBUG} > 2) {
+	    my $st = sprintf "%.3f", gettimeofday() - $stamp;
+	    print STDERR "$server: REQUEST: could not acquire lock after ${st} sec.\n";
+	}
+	my $msg = "Switch too busy!";
+	if ($errorp) {
+	    $$errorp = $msg;
+	} else {
+	    warn("*** ERROR: dell_rest: $msg");
+	}
+	return undef;
+    }
+    if ($self->{DEBUG} > 2) {
+	my $st = sprintf "%.3f", gettimeofday() - $stamp;
+	print STDERR "$server: REQUEST: got lock after ${st} sec.\n";
+    }
     my $res = $http->request($method, $url, \%options);
+    $self->unlock();
     if ($self->{DEBUG} > 1) {
 	$stamp = sprintf "%.3f", gettimeofday() - $stamp;
 	print STDERR "$server: RESTAPI ('$path') call done in ${stamp} sec.\n";
@@ -151,8 +185,10 @@ sub call($$$;$$$$)
     }
     $exstat = $status{$method}
 	if (!defined($exstat));
+    my $exstat2 = exists($status2{$method}) ? $status2{$method} : $exstat;
 
-    if ($res->{'success'} && $res->{'status'} == $exstat) {
+    if ($res->{'success'} &&
+	($res->{'status'} == $exstat || $res->{'status'} == $exstat2)) {
 	if (exists($res->{'headers'}{'content-type'}) &&
 	    ($res->{'headers'}{'content-type'} eq "application/json" ||
 	     $res->{'headers'}{'content-type'} eq "application/yang-data+json")) {
@@ -370,3 +406,179 @@ sub enableMultiplePortsSpec($$@)
     };
     return $porthash;
 }
+
+#
+# PTP support. Here are some potentially useful PTP REST queries as returned
+# by cli mode rest-translate:
+#
+# "show ptp":
+#   dell-ptp:ptp-ds/clock-ds
+#
+# "show running-configuration interface ethernet 1/1/1:1":
+#   ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1:1?content=config
+#
+# "show ptp interface ethernet 1/1/1:1":
+#   ietf-interfaces:interfaces-state/interface=ethernet1%2F1%2F1:1/dell-ptp:ptp-port-ds/dell-ptp:port-ds
+#
+# "ptp enable" on a port:
+#   -d '{"ietf-interfaces:interfaces":{"interface":[{"name":"ethernet1/1/1:1","dell-ptp:ptp-port-config":{"enable":true}}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+# "no ptp enable" on a port:
+#   DELETE https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1:1/dell-ptp:ptp-port-config/dell-ptp:enable
+#
+# "ptp transport layer2" on a port:
+#   -d '{"ietf-interfaces:interfaces":{"interface":[{"name":"ethernet1/1/1:1","dell-ptp:ptp-port-config":{"transport":{"layer2-mode":{"layer2":true}}}}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+# "no ptp transport":
+#   DELETE https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1:1/dell-ptp:ptp-port-config/dell-ptp:transport
+#
+# "ptp role master" on a port:
+#   -d '{"ietf-interfaces:interfaces":{"interface":[{"name":"ethernet1/1/1:1","dell-ptp:ptp-port-config":{"role":"master"}}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+# "no ptp role":
+#   DELETE https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1:1/dell-ptp:ptp-port-config/dell-ptp:role
+#
+# Set ptp state for multiple ports:
+#   curl -i -k -H "Accept: application/json" -H "Content-Type: application/json" -u $USER_NAME:$PASSWORD -d '{"ietf-interfaces:interfaces":{"interface":[{"name":"ethernet1/1/12","dell-ptp:ptp-port-config":{"enable":true,"role":"master","transport":{"layer2-mode":{"layer2":true}}}}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+# Clear most ptp state for multiple ports
+# (transport must be cleared seperately):
+#   curl -i -k -H "Accept: application/json" -H "Content-Type: application/json" -u $USER_NAME:$PASSWORD -d '{"ietf-interfaces:interfaces":{"interface":[{"name":"ethernet1/1/12","dell-ptp:ptp-port-config":{"enable":false,"role":"dynamic"}}]}}' -X PATCH https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces
+#
+# Set ptp state for single port:
+#   curl -s -k -H "Accept: application/json" -H "Content-Type: application/json" -u $USER_NAME:$PASSWORD -d '{"dell-ptp:ptp-port-config":{"enable":true,"role":"master","transport":{"layer2-mode":{"layer2":true}}}}' -X PUT https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1/dell-ptp:ptp-port-config
+#
+# Clear ptp state for single port:
+#   curl -s -k -H "Accept: application/json" -H "Content-Type: application/json" -u $USER_NAME:$PASSWORD -X DELETE https://$MGMT_IP/restconf/data/ietf-interfaces:interfaces/interface=ethernet1%2F1%2F1/dell-ptp:ptp-port-config
+#
+
+#
+# Enable/diable PTP on a single port
+# XXX role and transport ignored for now.
+#
+sub ptpPortSpec($$$$$)
+{
+    my ($self,$enable,$role,$transport,$iface) = @_;
+    my $porthash;
+
+    # This only makes sense for enable
+    if ($enable) {
+	$porthash = {
+	    "dell-ptp:ptp-port-config" => {
+		"enable" => JSON::PP::true,
+		"role" => "master",
+		"transport" => {
+		    "layer2-mode" => {
+			"layer2" => JSON::PP::true
+		    }
+		}
+	    }
+	};
+    }
+
+    return $porthash;
+}
+
+#
+# Enable/diable PTP on multiple ports
+# XXX role and transport ignored for now.
+#
+sub ptpMultiplePortSpec($$$$@)
+{
+    my ($self,$enable,$role,$transport,@ifaces) = @_;
+    my $pconfig;
+
+    if ($enable) {
+	$pconfig = {
+	    "enable" => JSON::PP::true,
+	    "role" => "master",
+	    "transport" => {
+		"layer2-mode" => {
+		    "layer2" => JSON::PP::true
+		}
+	    }
+	};
+    } else {
+	$pconfig = {
+	    "enable" => JSON::PP::false,
+	    "role" => "dynamic",
+	    "transport" => {}
+	}
+    }
+
+    my @pinfo = ();
+    foreach my $iface (uniqueList(@ifaces)) {
+	push @pinfo, {
+	    "name" => $iface,
+	    "dell-ptp:ptp-port-config" => $pconfig
+	};
+    }
+
+    my $porthash = {
+	"ietf-interfaces:interfaces" => {
+	    "interface" => \@pinfo
+	}
+    };
+
+    return $porthash;
+}
+
+#
+# Enable/diable SyncE on a single port
+# XXX param is ignored.
+#
+sub syncePortSpec($$$$)
+{
+    my ($self,$enable,$param,$iface) = @_;
+    my $porthash;
+
+    # This only makes sense for enable
+    if ($enable) {
+	$porthash = {
+	    "dell-synce:reference-config" => {
+		"enable" => JSON::PP::true,
+		"esmc-mode" => "tx-only"
+	    }
+	};
+    }
+
+    return $porthash;
+}
+
+#
+# Handle serialization of calls to a switch. The switch itself will queue
+# things, but it might cause a call to take a long time or a connection to
+# timeout, so we block here instead.
+#
+# Returns 0 if we get the lock, non-zero otherwise.
+#
+my $lock_held = 0;
+
+sub lock($) {
+    my $self = shift;
+    my $token = "dellrest_" . $self->{NAME};
+    # XXX longest single call is around 10s, most are about 2s.
+    my $timo = 60;
+    my $rv = 0;
+
+    if ($lock_held == 0) {
+	my $old_umask = umask(0);
+	$rv = TBScriptLock($token, 0, $timo);
+	umask($old_umask);
+    }
+    if ($rv == 0) {
+	$lock_held = 1;
+    }
+
+    return $rv;
+}
+
+sub unlock($) {
+    if ($lock_held == 1) {
+	TBScriptUnlock();
+    }
+    $lock_held = 0;
+}
+
+# End with true
+1;

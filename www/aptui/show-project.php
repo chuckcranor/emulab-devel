@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -55,6 +58,7 @@ $canbestow  = $project->AccessCheck($this_user,
                                     $TB_PROJECT_BESTOWGROUPROOT) ? 1 : 0;
 $isleader   = $project->IsLeader($this_user);
 $ismanager  = $project->IsManager($this_user);
+$disabled   = $project->disabled();
 
 echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN        = $isadmin;\n";
@@ -64,12 +68,23 @@ echo "  window.CANAPPROVE     = $canapprove;\n";
 echo "  window.CANBESTOW      = $canbestow;\n";
 echo "  window.EMULAB_LINK    = '$emulablink';\n";
 echo "  window.TARGET_PROJECT = '" . $project->pid() . "';\n";
+echo "  window.PROJECT_DISABLED = $disabled;\n";
 echo "  window.UI_DISABLE_DATASETS = '" . $UI_DISABLE_DATASETS . "';\n";
 echo "  window.UI_DISABLE_RESERVATIONS = '" .
         $UI_DISABLE_RESERVATIONS . "';\n";
 echo "  window.EMBEDDED_RESGROUPS = true;\n";
 echo "  window.EMBEDDED_RESGROUPS_SELECT = false;\n";
 echo "</script>\n";
+
+#
+# For admins, dump all aggregates so the resources tab works okay.
+#
+if ($isadmin) {
+    SpitAggregateStatus(true, null, Aggregate::AllAggregatesList());
+}
+else {
+    SpitAggregateStatus(true);
+}
 
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
@@ -78,13 +93,24 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MARKED();
 REQUIRE_MOMENT();
-REQUIRE_TABLESORTER();
-REQUIRE_JACKS();
+REQUIRE_JQUERY_UI();
+REQUIRE_TOPOLOGY_VIEWER();
+REQUIRE_TABLESORTER(
+    array("js/lib/tablesorter/widgets/widget-filter-formatter-jui.js"));
 AddLibrary("js/list-resgroups.js");
 AddLibrary("js/profile-support.js");
-AddTemplateList(array('confirm-delete-profile', 'profile-list-modal'));
+AddLibrary("js/txgraph.js");
+AddLibrary("js/lib/d3.v5.js");
+
+AddTemplateList(array('confirm-delete-profile', 'profile-list-modal', 'txgraph'));
 SPITREQUIRE("js/show-project.js");
 
-AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal", "resgroup-list"));
+AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal", "conversion-help-modal", "resgroup-list", "rfrange-history", "showtopo-modal", "resources-list"));
+
+echo "<link rel='stylesheet'
+            href='css/frequency-graph.css'>\n";
+echo "<link rel='stylesheet'
+            href='css/tablesorter-filter.formatter.css'>\n";
+
 SPITFOOTER();
 ?>

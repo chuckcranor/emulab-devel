@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -21,6 +21,9 @@
 #
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include_once("geni_defs.php");
@@ -47,28 +50,27 @@ $isstud    = (STUDLY() ? 1 : 0);
 # Verify page arguments. Cluster is a domain that we turn into a URN.
 #
 $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
+                                 "history",  PAGEARG_BOOLEAN,
                                  "debug",    PAGEARG_BOOLEAN,
                                  "cluster",  PAGEARG_STRING,
                                  "project",  PAGEARG_PROJECT,
                                  "fromrspec",PAGEARG_BOOLEAN,
                                  "uuid",     PAGEARG_UUID);
-if (!isset($fromrspec)) {
-    $fromrspec = 0;
-}
+$fromrspec = ($fromrspec ? 1 : 0);
 
-if ($edit) {
+if ($edit || $history) {
     if (!isset($uuid)) {
         SPITUSERERROR("Missing arguments for edit mode");
         exit();
     }
-    if (!($resgroup = ReservationGroup::Lookup($uuid))) {
+    if (!($resgroup = ReservationGroup::Lookup($uuid, $history))) {
         SPITUSERERROR("No such reservation group");
         exit();
     }
     if (! (ISADMIN() ||
            $this_user->idx() == $resgroup->creator_idx() ||
            $resgroup->Project()->UserTrust($this_user) >=
-           $TBDB_TRUST_GROUPROOT)) {
+           $TBDB_TRUST_LOCALROOT)) {
         SPITUSERERROR("Not enough permission");
         exit();
     }
@@ -83,8 +85,6 @@ if (isset($cluster)) {
 
 SPITHEADER(1);
 
-echo "<link rel='stylesheet'
-            href='css/jquery-ui.min.css'>\n";
 echo "<link rel='stylesheet'
             href='css/nv.d3.css'>\n";
 echo "<link rel='stylesheet'
@@ -102,8 +102,6 @@ echo "<div id='oops_div'></div>
       <div id='confirm_div'></div>
       <div id='waitwait_div'></div>\n";
 
-# Reservations now have to start next business day at 9am (unless expert).
-$bisdaysonly = $this_user->expert_mode() || $isadmin ? 0 : 1;
 # Ditto
 $routesokay  = $isadmin;
 
@@ -113,27 +111,63 @@ $routesokay  = $isadmin;
 $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 
 #
+# Powder, send OTA permission flag for the projects.
+#
+$otaAllowed = array();
+$doOtaCheck = 0;
+$doVerifySpectrum = 0;
+
+#
 # Pass project list through. Need to convert to list without groups.
 # When editing, pass through a single value. The template treats a
 # a single value as a read-only field.
 #
 $mlist = array();
 $plist = array();
-while (list($p) = each($projlist)) {
-    $plist[] = $p;
+foreach ($projlist as $p => $grouplist) {
     $ptmp = Project::LookupByPid($p);
     if ($ptmp) {
-        if ($ptmp->expert_mode()) {
-            $bisdaysonly = 0;
-        }
+        $info = array (
+            "pid"     => $p,
+            "groups"  => $grouplist,
+            "resmode" => $ptmp->ResSharingMode(),
+            "manager" => $ptmp->IsManager($this_user),
+        );
         $mlist[$p] = $ptmp->IsManager($this_user);
-    }
-    if ($ISPOWDER && !$isadmin) {
-        if ($ptmp && FeatureEnabled("powder-routes-allowed", null, $ptmp)) {
-            $routesokay = 1;
+
+        if ($ISPOWDER) {
+            if (!$isadmin) {            
+                if (FeatureEnabled("OTA-allowed", null, $ptmp)) {
+                    $routesokay = 1;
+                }
+            }
+            # Temporary for testing.
+            if (FeatureEnabled("powder-doota-check", null, $ptmp)) {
+                $doOtaCheck++;
+            }
+            if (FeatureEnabled("powder-verify-spectrum", $this_user, $ptmp)) {
+                $doVerifySpectrum++;
+            }
+            $otaAllowed[$p] = array(
+                "allowed"  => $ptmp->otaAllowed(),
+                "isleader" => $ptmp->IsLeader($this_user),
+            );
+            $info["ota"] = $otaAllowed[$p];
         }
+        $plist[$p] = $info;
     }
 }
+#
+# Deal with OTA temporary enable.
+#
+if (!$doOtaCheck) {
+    foreach ($otaAllowed as $pid => &$details) {
+        $details["allowed"] = 1;
+        $plist[$pid]["allowed"] = 1;
+    }
+    reset($otaAllowed);
+}
+
 echo "<script type='text/plain' id='projects-json'>\n";
 echo htmlentities(json_encode($plist));
 echo "</script>\n";
@@ -226,11 +260,35 @@ if ($ISPOWDER) {
     echo "<script type='text/plain' id='routelist-json'>\n";
     echo htmlentities(json_encode($routelist, JSON_NUMERIC_CHECK));
     echo "</script>\n";
+
+    echo "<script type='text/plain' id='otaAllowed-json'>\n";
+    echo htmlentities(json_encode($otaAllowed));
+    echo "</script>\n";
+
+    # User has seen and agreed to the OTA agreement.
+    # Temporary for testing.
+    if ($doOtaCheck) {
+        $ota_agreed = $this_user->ota_agreed() ? "true" : "false";
+    }
+    else {
+        $ota_agreed = "true";
+    }
+    echo "<script type='text/javascript'>\n";
+    echo "    window.OTA_AGREED  = $ota_agreed;\n";
+    echo "    window.VERIFY_SPECTRUM  = $doVerifySpectrum;\n";
+    echo "</script>\n";
 }
 
 echo "<script type='text/javascript'>\n";
-if ($edit) {
-    echo "   window.EDITING  = true;\n";
+if ($edit || $history) {
+    if ($edit) {
+        echo "   window.EDITING  = true;\n";
+        echo "   window.HISTORY  = false;\n";
+    }
+    else {
+        echo "   window.EDITING  = false;\n";
+        echo "   window.HISTORY  = true;\n";
+    }
     echo "   window.UUID     = '$uuid';\n";
     echo "   window.ISGROUP  = true;\n";
 }
@@ -240,7 +298,7 @@ else {
         $default_pid = $project->pid();
     }
     else {
-        $default_pid = $plist[0];
+        $default_pid = array_key_first($plist);
     }
     echo "   window.EDITING  = false;\n";
     echo "   window.PID      = '$default_pid';\n";
@@ -249,7 +307,6 @@ else {
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";
 echo "   window.HOMETZ   = '$OURTIMEZONE';\n";
-echo "   window.BISONLY  = $bisdaysonly;\n";
 echo "   window.DOROUTES = $routesokay;\n";
 
 echo "</script>\n";
@@ -260,17 +317,21 @@ REQUIRE_MOMENT();
 REQUIRE_MOMENTTIMEZONE();
 REQUIRE_APTFORMS();
 REQUIRE_TABLESORTER();
+REQUIRE_JQUERY_UI();
 AddLibrary("js/resgraphs.js");
+AddLibrary("js/rfchart.js");
+AddLibrary("js/ota-permission.js");
 AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
-                      "range-list", "route-list",
+                      "range-tabs", "route-list",
                       "oops-modal", "waitwait-modal", "confirm-modal",
                       "resusage-list", "resusage-graph",
-                      "confirm-something", "resusage-graph", "visavail-graph"));
+                      "confirm-something", "resusage-graph", "visavail-graph",
+                      "ota-agreement", "ota-permission"));
 SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n".
             "<script src='js/lib/nv.d3.js'></script>\n".
-            "<script src='js/lib/visavail.js'></script>\n".
-            "<script src='js/lib/jquery-ui.js'></script>");
+            "<script src='js/lib/visavail.js'></script>\n");
+
 SPITFOOTER();
 ?>

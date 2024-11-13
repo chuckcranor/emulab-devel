@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -93,6 +93,13 @@ define("TBDB_NEWACCOUNT_WEBONLY",	0x4);
 define("TBDB_NEWACCOUNT_NONLOCAL",	0x8);
 
 #
+# Project Reservation values.
+#
+define("TBDB_RESERVATIONS_PERUSER",     0);
+define("TBDB_RESERVATIONS_PERPROJECT",  1);
+define("TBDB_RESERVATIONS_PERGROUP",    2);
+
+#
 # Trust. Define the trust level as an increasing value. Then define a
 # function to return whether the given trust is high enough.
 #
@@ -166,8 +173,10 @@ $TB_PROJECT_DELOSID		= 11;
 $TB_PROJECT_MAKEIMAGEID		= 12;
 $TB_PROJECT_DELIMAGEID		= 13;
 $TB_PROJECT_CREATEEXPT		= 14;
+$TB_PROJECT_CREATELEASE 	= 15;
+$TB_PROJECT_CREATEPROFILE	= 16;
 $TB_PROJECT_MIN			= $TB_PROJECT_READINFO;
-$TB_PROJECT_MAX			= $TB_PROJECT_CREATEEXPT;
+$TB_PROJECT_MAX			= $TB_PROJECT_CREATEPROFILE;
 
 # OSIDs 
 $TB_OSID_READINFO		= 1;
@@ -424,7 +433,10 @@ function TBFreePCs($target = null)
                 }
             }
         }
-        $clause = "p.pid is null or " . join(" or ", $clauses);
+        $clause = "p.pid is null";
+        if (isset($clauses)) {
+            $clause = $clause . " or " . join(" or ", $clauses);
+        }
         $findinset = "or FIND_IN_SET(a.reserved_pid, '" . join(",", $pids)."')";
     }
     $total = 0;
@@ -873,6 +885,13 @@ function TBGetUniqueIndex($name)
     $query_result =
 	DBQueryFatal("select idx from emulab_indicies ".
 		     "where name='$name'");
+
+    if (!mysql_num_rows($query_result)) {
+        DBQueryFatal("replace into emulab_indicies (name, idx) ".
+                     "values ('$name', 1)");
+        DBQueryFatal("unlock tables");
+        return 0;
+    }
 
     $row = mysql_fetch_array($query_result);
     $curidx = $row["idx"];

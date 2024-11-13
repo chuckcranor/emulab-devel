@@ -18,7 +18,7 @@
 	padding: 2px;
 }
 .panel-heading {
-	padding: 5px;
+       padding: 10px 5px;
 }
 .inuse-panel {
 	height:350px;
@@ -40,9 +40,9 @@
   <div class='row' style="margin-bottom: 5px">
     <div
 	<% if (isadmin) { %>
-	    class='col-sm-8 col-sm-offset-3'
+	    class='col-sm-8 col-sm-offset-3 offset-sm-3'
 	<% } else { %>
-            class='col-sm-5 col-sm-offset-5'
+            class='col-sm-5 col-sm-offset-5 offset-sm-5'
 	<% } %> >
       <input class='form-control search'
 	     type='search' data-column='all'
@@ -56,13 +56,15 @@
 	<% if (isadmin) { %>
            class='col-sm-3'
 	<% } else { %>
-	   class='col-sm-3 col-sm-offset-2'
+	   class='col-sm-3 col-sm-offset-2 offset-sm-2'
 	<% } %> >
-      <div class='panel panel-default'>
-	<div class="panel-heading">
-	  <h5><center><%- name %> Totals</center></h5>
+      <div class='panel card panel-default'>
+	<div class="panel-heading card-header"
+	     style="padding-top: 10px; padding-bottom: 12px;">
+	  <h5 class="panel-title card-title card-title-small">
+	    <center><%- name %> Totals</center></h5>
 	</div>
-	<div class='panel-body panel-body-dashboard'>
+	<div class='panel-body card-body panel-body-dashboard'>
 	  <div class="counts-panel" id='counts-panel-<%- name %>'>
 	    <!-- Template goes here -->	    
 	  </div>
@@ -79,9 +81,12 @@
 	<% } else { %>
 	class='col-sm-5'
 	<% } %> >
-      <div class='panel panel-default'>
-	<div class="panel-heading" id='inuse-click-<%- name %>'>
-	  <h5 style="margin-bottom: 0px;">
+      <div class='panel card panel-default'>
+	<!-- heading padding cause of the URN subtitle below -->
+	<div class="panel-heading card-header"
+	     style="padding: 5px;"
+	     id='inuse-click-<%- name %>'>
+	  <h5 class="panel-title card-title card-title-small">
 	    <a href="#inuse-panel-<%- name %>">
 	      <span id="inuse-collapse-button-<%- name %>"
 		    class="glyphicon glyphicon-chevron-right pull-left"></span>
@@ -91,7 +96,7 @@
 	    </center>
 	  </h5>
 	</div>
-	<div class='panel-body panel-body-dashboard'>
+	<div class='panel-body card-body panel-body-dashboard'>
 	  <div class="row">
 	    <div class='col-sm-6'>	      
 	      <input class='form-control search'
@@ -136,20 +141,20 @@
   </div>
   <% if (isadmin) { %>
   <div class='row hidden' id="prereserve-row-<%- name %>">
-    <div class='col-sm-9 col-sm-offset-3'>
-      <div class='panel panel-default'>
-	<div class="panel-heading" id='prereserve-click-<%- name %>'>
-	  <h5>
-	    <center>Pre Reservations <%- name %>
-	      <a>
-		<span id="prereserve-collapse-button-<%- name %>"
-		      class="glyphicon glyphicon-chevron-right pull-right">
-		</span>
-	      </a>
-	    </center>
+    <div class='col-sm-9 col-sm-offset-3 offset-sm-3'>
+      <div class='panel  card panel-default'>
+	<div class="panel-heading card-header"
+	     id='prereserve-click-<%- name %>'>
+	  <h5 class="panel-title card-title card-title-small">
+	    <a href="#prereserve-row-<%- name %>">
+	      <span id="prereserve-collapse-button-<%- name %>"
+		    class="glyphicon glyphicon-chevron-right pull-left">
+	      </span>
+	    </a>
+	    <center>Pre Reservations <%- name %></center>
 	  </h5>
 	</div>
-	<div class='panel-body panel-body-dashboard'>
+	<div class='panel-body card-body panel-body-dashboard'>
 	  <div class="collapse" id='prereserve-panel-<%- name %>'
 	       data-status="minimized">
 	    <!-- Template goes here -->	    

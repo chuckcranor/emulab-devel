@@ -15,8 +15,6 @@ $(function () {
         var ppmodalString = templates['ppform-wizard'];
         var imagePickerString = templates['image-picker-modal'];
 	var debug         = 0;
-	var editor        = null;
-	var editorLarge   = null;
 	var paramdefs     = null;
 	var ppdivname     = null;
 	var uuid          = "";
@@ -34,8 +32,11 @@ $(function () {
 	var rerun_bindings= null;
 	var rerun_warnings= null;
 	var setStepsMotion= null;
+	var setRerunInstance= null;
 	var resinfo_window= null;
 	var ppchanged     = false;
+	var rerun_instance= null;
+	var rerun_paramset= null;
 
 	// List of form elements (fields,groups), in order of appearance.
 	var formFields    = [];
@@ -56,21 +57,31 @@ $(function () {
 	function Modified() {
 	    ppchanged = true;
 	    modified_callback();
+	    window.MODIFIED_PARAMS = true;
+	}
+	// Bootstrap 5 ...
+	function ShowPanel(target) {
+	    if (window.BOOTSTRAP_VERSION == 5) {
+		$(target).addClass("show");
+	    }
+	    else {
+		$(target).addClass("in");
+	    }
 	}
 
 	var groupTemplateString =
 	    '<div class="row group-row" data-fieldid="<%- fieldid %>" ' +
 	    '     style="margin-bottom: 5px;">' +
 	    ' <div class="col-xs-offset-0">' +
-	    '  <div class="panel" ' +
+	    '  <div class="panel card" ' +
 	    '       style="border-width: 0px; border: none;' +
 	    '       box-shadow: none; margin-bottom: 0px; padding-top: 0px;">' +
-	    '    <div class="panel-heading" ' +
+	    '    <div class="panel-heading card-header border-none" ' +
 	    '         style="padding-top: 0px; padding-bottom: 0px;">' +
 	    '      <h5 style="display: inline-block;">' +
 	    '        <a href="#pp-param-group-subpanel-<%- name %>" ' +
 	    '           class="subpanel-collapse-chevron" ' +
-	    '           data-toggle="collapse">' +
+	    '           data-toggle="collapse" data-bs-toggle="collapse">' +
 	    '          <span class="glyphicon glyphicon-chevron-right pull-left"' +
 	    '                style="font-weight: bold;"></span>' +
 	    '             <span style="font-weight: bold;">&nbsp;&nbsp; ' +
@@ -82,9 +93,9 @@ $(function () {
 	    '         class="panel-collapse collapse ' +
 	    '                pp-param-group-subpanel-collapse"' +
 	    '         style="height: auto;">' +
-	    '      <div id="pp-param-group-subpanel-body-<%- name %>" ' +
+	    '      <div id="pp-param-group-subpanel-<%- name %>" ' +
 	    '           style="padding-top: 0px; padding-bottom: 0px" ' +
-	    '           class="panel-body">' +
+	    '           class="panel-body card-body group-row-panel-body">' +
 	    '      </div>' +
 	    '    </div>' +
 	    '  </div>' +
@@ -94,19 +105,19 @@ $(function () {
 	var emptyStructTemplateString =
 	    '<div class="struct-row" data-fieldid="<%- fieldid %>"> ' +
 	    ' <div class="col-xs-offset-0">' +
-	    '  <div class="panel" ' +
+	    '  <div class="panel card" ' +
 	    '       style="border-width: 0px; border: none;' +
 	    '       box-shadow: none; margin-bottom: 0px;">' +
-	    '    <div class="panel-heading" ' +
+	    '    <div class="panel-heading card-header border-none" ' +
 	    '         style="padding-top: 0px; padding-bottom: 0px;">' +
 	    '      <h5 style="display: inline-block;">' +
 	    '             <span style="font-weight: bold;">&nbsp;&nbsp; ' +
 	    '                <%- prompt %></span>' +
 	    '      </h5>' +
 	    '      <span class="multivalue-struct-button-plus" ' +
-	    '            data-toggle="tooltip" ' +
-	    '            data-container="body" ' +
-	    '            data-trigger="hover" ' +
+	    '            data-toggle="tooltip" data-bs-toggle="tooltip" ' +
+	    '            data-container="body" data-bs-container="body" ' +
+	    '            data-trigger="hover" data-bs-trigger="hover" ' +
 	    '            title="Add another copy"> ' +
 	    '        <button type="button" ' +
 	    '                class="btn btn-small btn-default" ' +
@@ -122,15 +133,15 @@ $(function () {
 	var structSetTemplateString =
 	    '<div class="row structset" data-fieldid="<%- fieldid %>"> ' +
 	    ' <div class="col-xs-offset-0">' +
-	    '  <div class="panel" ' +
+	    '  <div class="panel card" ' +
 	    '       style="border-width: 0px; border: none;' +
 	    '       box-shadow: none; margin-bottom: 0px;">' +
-	    '    <div class="panel-heading" ' +
+	    '    <div class="panel-heading card-header border-none" ' +
 	    '         style="padding-top: 0px; padding-bottom: 0px;">' +
 	    '      <h5 style="display: inline-block;">' +
 	    '        <a href="#pp-param-structset-subpanel-<%- fieldid %>" ' +
 	    '           class="structset-subpanel-collapse-chevron" ' +
-	    '           data-toggle="collapse">' +
+	    '           data-toggle="collapse" data-bs-toggle="collapse">' +
 	    '          <span class="glyphicon ' +
 	    '                       glyphicon-chevron-right pull-left"' +
 	    '                style="font-weight: bold;"></span>' +
@@ -141,20 +152,22 @@ $(function () {
 	    '      <% if (longhelp) { %> ' +
 	    '          <span class="pp-param-popover"> ' +
 	    '             <a href="#<%- longhelp_id %>" ' +
-	    '                data-toggle="collapse" ' +
-	    '                data-trigger="hover"> ' +
+	    '                data-toggle="collapse" data-bs-toggle="collapse" '+
+	    '                data-trigger="hover" data-bs-trigger="hover"> ' +
 	    '               <i class="glyphicon glyphicon-question-sign"></i>' +
 	    '             </a></span>' +
 	    '      <% } %> ' +
 	    '    </div>' +
 	    '    <% if (longhelp) { %> ' +
 	    '      <div id="<%- longhelp_id %>" ' +
-	    '           class="panel-collapse collapse panel panel-info ' +
+	    '           class="panel-collapse collapse ' +
+	    '                  panel card panel-info card-info ' +
 	    '                  col-xs-10 col-xs-offset-1 pp-param-help-panel" '+
 	    '                  style="background-color: #e6f6fa;height: auto;' +
 	    '                         margin-top: 5px; margin-bottom: 5px;' +
 	    '                         padding: 5px;" ' +
-	    '                  data-toggle=collapse><%- longhelp %></div> ' +
+	    '                  data-toggle=collapse data-bs-toggle=collapse> ' +
+	    '             <%- longhelp %></div> ' +
 	    '    <% } %> ' +
 	    '    <div id="pp-param-structset-subpanel-<%- fieldid %>" ' +
 	    '         class="panel-collapse collapse ' +
@@ -162,26 +175,41 @@ $(function () {
 	    '         style="height: auto;">' +
 	    '      <div id="pp-param-structset-subpanel-body-<%- fieldid %>" ' +
 	    '           style="padding-top: 0px; padding-bottom: 0px;" ' +
-	    '           class="panel-body structset-panel-body">' +
+	    '           class="panel-body card-body structset-panel-body">' +
 	    '      </div>' +
 	    '    </div>' +
 	    '  </div>' +
 	    ' </div>' +
 	    '</div>';
 
+	var grpStructSetTemplateString =
+	    '<div class="row" data-fieldid="<%- fieldid %>"> ' +
+	    '  <div class="col-xs-offset-1">' +
+	    '    <div id="pp-param-structset-subpanel-<%- fieldid %>" ' +
+	    '        class=" ' +
+	    '               pp-param-structset-subpanel-collapse"' +
+	    '         style="height: auto;">' +
+	    '      <div id="pp-param-structset-subpanel-body-<%- fieldid %>" ' +
+	    '           style="padding-top: 0px; padding-bottom: 0px;" ' +
+	    '           class="structset-panel-body">' +
+	    '      </div>' +
+	    '    </div>' +
+	    '  </div>' +
+	    '</div>';
+
 	var structTemplateString =
 	    '<div class="struct-row" data-fieldid="<%- fieldid %>" ' +
 	    '     data-copyindex="<%- index %>"> ' +
 	    ' <div class="col-xs-offset-0">' +
-	    '  <div class="panel" ' +
+	    '  <div class="panel card" ' +
 	    '       style="border-width: 0px; border: none;' +
 	    '       box-shadow: none; margin-bottom: 0px;">' +
-	    '    <div class="panel-heading" ' +
+	    '    <div class="panel-heading card-header border-none" ' +
 	    '         style="padding-top: 0px; padding-bottom: 0px;"> ' +
 	    '      <h5 style="display: inline-block;">' +
 	    '        <a href="#pp-param-group-subpanel-<%- name %>" ' +
 	    '           class="subpanel-collapse-chevron" ' +
-	    '           data-toggle="collapse">' +
+	    '           data-toggle="collapse" data-bs-toggle="collapse">' +
 	    '          <span class="glyphicon ' +
 	    '                       glyphicon-chevron-right pull-left"' +
 	    '                style="font-weight: bold;"></span>' +
@@ -192,15 +220,15 @@ $(function () {
 	    '      <% if (longhelp) { %> ' +
 	    '          <span class="pp-param-popover"> ' +
 	    '             <a href="#<%- longhelp_id %>" ' +
-	    '                data-toggle="collapse" ' +
-	    '                data-trigger="hover"> ' +
+	    '                data-toggle="collapse" data-bs-toggle="collapse" '+
+	    '                data-trigger="hover" data-bs-trigger="hover"> ' +
 	    '               <i class="glyphicon glyphicon-question-sign"></i>' +
 	    '             </a></span>' +
 	    '      <% } %> ' +
 	    '      <% if (multivalue) { %> ' +
-	    '        <span data-toggle="tooltip" ' +
-	    '              data-container="body" ' +
-	    '              data-trigger="hover" ' +
+	    '        <span data-toggle="tooltip" data-bs-toggle="tooltip" ' +
+	    '              data-container="body" data-bs-container="body" ' +
+	    '              data-trigger="hover" data-bs-trigger="hover" ' +
 	    '              title="Delete this copy" ' +
 	    '              class="multivalue-struct-button-minus"> ' +
             '          <button type="button" ' +
@@ -208,9 +236,9 @@ $(function () {
 	    '                  style="margin-left: 5px; padding: 2px;">' +
 	    '            <span class="glyphicon glyphicon-minus"></span>' +
 	    '          </button></span>' +
-	    '        <span data-toggle="tooltip" ' +
-	    '              data-container="body" ' +
-	    '              data-trigger="hover" ' +
+	    '        <span  data-toggle="tooltip"data-bs-toggle="tooltip" ' +
+	    '              data-container="body" data-bs-container="body" ' +
+	    '              data-trigger="hover" data-bs-trigger="hover" ' +
 	    '              title="Add another copy" ' +
 	    '              class="multivalue-struct-button-plus"> ' +
 	    '          <button type="button" ' +
@@ -218,9 +246,9 @@ $(function () {
 	    '                  style="margin-left: 0px; padding: 2px;">' +
  	    '            <span class="glyphicon glyphicon-plus"></span>' +
 	    '          </button></span>' +
-	    '        <span data-toggle="tooltip" ' +
-	    '              data-container="body" ' +
-	    '              data-trigger="hover" ' +
+	    '        <span data-toggle="tooltip" data-bs-toggle="tooltip" ' +
+	    '              data-container="body" data-bs-container="body" ' +
+	    '              data-trigger="hover" data-bs-trigger="hover" ' +
 	    '              title="Move up" ' +
 	    '              class="multivalue-struct-button-up"> ' +
 	    '          <button type="button" ' +
@@ -228,9 +256,9 @@ $(function () {
 	    '                  style="margin-left: 0px; padding: 2px;">' +
  	    '            <span class="glyphicon glyphicon-arrow-up"></span>' +
 	    '          </button></span>' +
-	    '        <span data-toggle="tooltip" ' +
-	    '              data-container="body" ' +
-	    '              data-trigger="hover" ' +
+	    '        <span data-toggle="tooltip" data-bs-toggle="tooltip" ' +
+	    '              data-container="body" data-bs-container="body" ' +
+	    '              data-trigger="hover" data-bs-trigger="hover" ' +
 	    '              title="Move down" ' +
 	    '              class="multivalue-struct-button-down"> ' +
 	    '          <button type="button" ' +
@@ -242,12 +270,13 @@ $(function () {
 	    '    </div>' +
 	    '    <% if (longhelp) { %> ' +
 	    '      <div id="<%- longhelp_id %>" ' +
-	    '           class="panel-collapse collapse panel panel-info ' +
+	    '           class="panel-collapse collapse panel card panel-info ' +
 	    '                  col-xs-10 col-xs-offset-1 pp-param-help-panel" '+
 	    '                  style="background-color: #e6f6fa;height: auto;' +
 	    '                         margin-top: 5px; margin-bottom: 5px;' +
 	    '                         padding: 5px;" ' +
-	    '                  data-toggle=collapse><%- longhelp %></div> ' +
+	    '                  data-toggle=collapse data-bs-toggle=collapse>' +
+	    '            <%- longhelp %></div> ' +
 	    '    <% } %> ' +
 	    '    <div id="pp-param-group-subpanel-<%- name %>" ' +
 	    '         class="panel-collapse collapse ' +
@@ -255,7 +284,7 @@ $(function () {
 	    '         style="height: auto;">' +
 	    '      <div id="pp-param-group-subpanel-body-<%- name %>" ' +
 	    '           style="padding-top: 0px; padding-bottom: 0px;" ' +
-	    '           class="panel-body">' +
+	    '           class="panel-body card-body">' +
 	    '      </div>' +
 	    '    </div>' +
 	    '  </div>' +
@@ -264,9 +293,9 @@ $(function () {
 
 	var emptyInputTemplateString =
 	    '  <span class="multivalue-button-plus" ' +
-	    '        data-toggle="tooltip" ' +
-	    '        data-container="body" ' +
-	    '        data-trigger="hover" ' +
+	    '        data-toggle="tooltip" data-bs-toggle="tooltip" ' +
+	    '        data-container="body" data-bs-container="body" ' +
+	    '        data-trigger="hover" data-bs-trigger="hover" ' +
 	    '        title="Add value">' +
 	    '    <button type="button" ' +
 	    '        data-fieldid="<%- fieldid %>" ' +
@@ -309,7 +338,7 @@ $(function () {
 	    " <% if (multivalue) { %> "+
 	    "        style='display: inline-block; width: 75%' " +
 	    " <% } %>" +
-	    "        class='form-control format-me' " +
+	    "        class='form-control format-me form-select' " +
 	    "        data-label='<%- prompt %>' " +
 	    "        placeholder='Please Select'>" +
 	    " <% _.each(options, function(option, idx) { %> " +
@@ -327,18 +356,19 @@ $(function () {
 	    "</select>";
 
 	var nodeTypeTemplateString = 
-	    "<div> " +
-	    "  <div class='dropdown'> " +
+	    "<div class='nodetype-dropdown'> " +
+	    "  <div class='dropdown dropend'> " +
 	    "   <button class='btn btn-default dropdown-toggle' " +
 	    "           style='min-width: 150px; text-align: left' " +
-	    "           type=button data-toggle=dropdown> " +
+	    "           type=button data-toggle=dropdown " +
+	    "           data-bs-toggle=dropdown> " +
 	    "    <span class='type-selected'>" +
 	    "      <% if (constraints) { %>Please Select" +
 	    "         <% } else { %>Any<% } %></span> "+
-	    "      <span class=right-caret></span></button>" +
-	    "   <ul class='dropdown-menu right-menu scrollable-menu'>" +
+	    "      </button>" +
+	    "   <ul class='dropdown-menu right-menu scrollable-menuBADDOG'>" +
 	    "   <% if (!constraints) { %> " +
-	    "    <li><a href='#' class='clear-select'>" +
+	    "    <li><a href='#' class='clear-select dropdown-item'>" +
 	    "       <b>Clear Selection</b></a></li> " +
 	    "   <% } %> " +
 	    "   </ul>"+
@@ -377,9 +407,9 @@ $(function () {
 	var multivalueControlString =
 	    "<div style='display: inline-block;'>" +
 	    " <span class='hidden multivalue-button-minus' " +
-	    "       data-toggle='tooltip' " +
-	    "       data-container='body' " +
-	    "       data-trigger='hover' " +
+	    "       data-toggle='tooltip' data-bs-toggle='tooltip' " +
+	    "       data-container='body' data-bs-container='body' " +
+	    "       data-trigger='hover' data-bs-trigger='hover' " +
 	    "       title='Delete this copy'> " +
 	    "  <button type='button' " +
 	    "          class='btn btn-small btn-default' " +
@@ -387,9 +417,9 @@ $(function () {
 	    "    <span class='glyphicon glyphicon-minus'></span>" +
 	    "</button></span>" +
 	    "<span class='multivalue-button-plus' " +
-	    "       data-toggle='tooltip' " +
-	    "       data-container='body' " +
-	    "       data-trigger='hover' " +
+	    "       data-toggle='tooltip' data-bs-toggle='tooltip' " +
+	    "       data-container='body' data-bs-container='body' " +
+	    "       data-trigger='hover' data-bs-trigger='hover' " +
 	    "       title='Add another copy'> " +
 	    "  <button type='button' " +
 	    "          class='btn btn-small btn-default' " +
@@ -397,9 +427,9 @@ $(function () {
 	    "    <span class='glyphicon glyphicon-plus'></span>" +
 	    "</button></span>" +
 	    "<span class='multivalue-button-up' " +
-	    "       data-toggle='tooltip' " +
-	    "       data-container='body' " +
-	    "       data-trigger='hover' " +
+	    "       data-toggle='tooltip' data-bs-toggle='tooltip' " +
+	    "       data-container='body' data-bs-container='body' " +
+	    "       data-trigger='hover' data-bs-trigger='hover' " +
 	    "       title='Move up'> " +
 	    "  <button type='button' " +
 	    "          class='btn btn-small btn-default' " +
@@ -407,9 +437,9 @@ $(function () {
 	    "    <span class='glyphicon glyphicon-arrow-up'></span>" +
 	    "</button></span>" +
 	    "<span class='multivalue-button-down' " +
-	    "       data-toggle='tooltip' " +
-	    "       data-container='body' " +
-	    "       data-trigger='hover' " +
+	    "       data-toggle='tooltip' data-bs-toggle='tooltip' " +
+	    "       data-container='body' data-bs-container='body' " +
+	    "       data-trigger='hover' data-bs-trigger='hover' " +
 	    "       title='Move down'> " +
 	    "  <button type='button' " +
 	    "          class='btn btn-small btn-default' " +
@@ -422,7 +452,7 @@ $(function () {
 	    '     style="display: none">closed</div>' +
 	    '<div class="row">' +
 	    ' <div class="col-sm-12">' +
-	    '  <div id="help_show_all_panel" class="panel" ' +
+	    '  <div id="help_show_all_panel" class="panel card" ' +
 	    '    style="border-width: 0px; border: none; box-shadow: none;">' +
 	    '   <h5>' +
 	    '     <a id="pp-param-help-panel-toggle-link" href="#">' +
@@ -441,7 +471,7 @@ $(function () {
 	var formString =
 	    "<form id='pp-form' " +
 	    "      class='form-horizontal' role='form' method='post'>" +
-	    "  <div class='row'>" +
+	    "  <div class='row-B3'>" +
 	    "    <div id='pp-form-body' class='col-sm-12'></div>" +
 	    "  </div>" +
 	    "</form>" +
@@ -449,6 +479,7 @@ $(function () {
 
 	var emptyStructTemplate  = _.template(emptyStructTemplateString);
 	var structSetTemplate    = _.template(structSetTemplateString);
+	var grpStructSetTemplate = _.template(grpStructSetTemplateString);
 	var emptyInputTemplate   = _.template(emptyInputTemplateString);
 	var structTemplate       = _.template(structTemplateString);
 	var groupTemplate        = _.template(groupTemplateString);
@@ -707,14 +738,19 @@ $(function () {
 		    return;
 		}
 		m = details.defaultValue.length;
-		if (details.min && details.min > m) {
+		if (rerun_bindings &&
+		    _.has(rerun_bindings, details.name) &&
+		    rerun_bindings[details.name].length > m) {
+		    m = rerun_bindings[details.name].length;
+		}
+		else if (details.min && details.min > m) {
 		    m = details.min;
 		}
 	    }
 	    else if (details.min) {
 		m = details.min;
 	    }
-			
+
 	    while (i < m) {
 		var tname = details.name;
 		if (i) {
@@ -803,6 +839,7 @@ $(function () {
 			    "type"    : details.type,
 			    "hashelp" : false,
 			    "visible" : details.hide ? false : true,
+			    "index"   : formFields.length,
 			};
 			formGroups[groupId] = {
 			    "id"         : groupId,
@@ -814,7 +851,7 @@ $(function () {
 			formFields.push(field);
 		    }
 		}
-		else if (details.type == "struct") {
+		if (details.type == "struct") {
 		    // Convenience to match above.
 		    details["isgroup"]     = false;
 		    details["values"]      = {};
@@ -886,22 +923,28 @@ $(function () {
 			    details.hashelp = true;
 			}
 		    });
+		    details["index"] = formFields.length;
 		    formFields.push(details);
 		}
-		else {
+		else if (!groupId) {
 		    // Convenience for later
 		    details.groupId = null;
 		    details.groupName = null;
 		}
 		if (groupId) {
-		    // Convenience to match above.
-		    details["isgroup"]    = false;
-		    details["values"]     = {};
-		    // Only for applying parameter sets
-		    details["ppwarnings"] = {};
+		    /*
+		     * Might be a struct embedded in a group.
+		     */
+		    if (details.type != "struct") {
+			// Convenience to match above.
+			details["isgroup"]    = false;
+			details["values"]     = {};
+			// Only for applying parameter sets
+			details["ppwarnings"] = {};
 
-		    // Setup the initial fields value.
-		    initFieldInitialValues(details);
+			// Setup the initial fields value.
+			initFieldInitialValues(details);
+		    }
 		    if (details.hide == false) {
 			formGroups[groupId].visible = true;
 		    }
@@ -931,6 +974,7 @@ $(function () {
 		    }
 
 		    // Add to list of fields in the form.
+		    details["index"] = formFields.length;
 		    formFields.push(details);
 		}
 		if (!details.description || details.description == "") {
@@ -1136,7 +1180,7 @@ $(function () {
 	    else {
 		html = GenerateInput(name, fieldIndex, details, value);
 	    }
-	    var outerdiv = $("<div class='form-group' " +
+	    var outerdiv = $("<div class='form-group row' " +
 			     "     style='margin-bottom: 15px;'></div>");
 	    var innerdiv = $("<div class='col-sm-8'></div>");
 	    var item     = $(html);
@@ -1144,7 +1188,7 @@ $(function () {
 	    // The field desription on the left.
 	    var label_text =
 		"<label for='" + name + "' " +
-		" class='col-sm-4 control-label'> " + prompt;
+		" class='col-sm-4 control-label col-form-label'> " + prompt;
 	    
 	    // Extra help is optional.
 	    if (longhelp) {
@@ -1153,26 +1197,28 @@ $(function () {
 		    help_panel_id = help_panel_id + "-" + structIndex;
 		}
 		longhelp = escapeHtml(longhelp);
-		
+
 		label_text = label_text +
 		    "<span class='pp-param-popover' " +
-		    " data-toggle='popover' " +
-		    " data-trigger='hover' " +
+		    " data-toggle='popover' data-bs-toggle='popover' " +
+		    " data-trigger='hover' data-bs-trigger='hover' " +
 		    //" data-delay='{\"hide\":1000}' " +
 		    " data-content='" + longhelp + "'>" +
 		    " <a href='#" + help_panel_id + "'" +
-		    " data-toggle='collapse'>" +
+		    " data-toggle='collapse' data-bs-toggle='collapse'>" +
 		    "<i class='glyphicon glyphicon-question-sign'></i>" +
 		    "</a></span>";
 		
 		help_panel = 
 		    "<div id='" + help_panel_id + "'" +
-		    "     class='panel-collapse collapse panel panel-info " +
+		    "     class='panel-collapse collapse panel card panel-info " +
 		    "            col-sm-12 pp-param-help-panel'" +
 		    "     style='background-color: #e6f6fa; height: auto; " +
 		    "            margin-left: 0px; margin-right: 0px; " +
 		    "            margin-top: 5px; margin-bottom: 0px; " +
-		    "            padding: 5px;' data-toggle='collapse'>" +
+		    "            padding: 5px;' " +
+		    "            data-toggle='collapse' " +
+		    "            data-bs-toggle='collapse'>" +
 		        longhelp + "</div>";
 	    }
 	    label_text = label_text + "</label>";
@@ -1281,9 +1327,11 @@ $(function () {
 		    var count  = 0;
 		    var agghtml = 
 			"<li class='dropdown-submenu'> " +
-			"  <a href='#' class='dropdown-toggle' " +
-			"     data-toggle='dropdown'>" + aggregate.name + "</a>"+
-			"    <ul class='dropdown-menu scrollable-submenu'>";
+			"  <a href='#' class='dropdown-toggle dropdown-item' " +
+			"     data-toggle='dropdown' " +
+			"     data-bs-toggle='dropdown'>" +
+			     aggregate.name + "</a>" +
+			"  <ul class='dropdown-menu'>";
 		    
 		    _.each(aggregate.typelist, function(typeinfo, type) {
 			if (_.has(prunetypes, type)) {
@@ -1291,9 +1339,10 @@ $(function () {
 			}
 
 			var typehtml =
-			    "  <li style='position: relative;'>" +
-			    " <a href='#' name='" + type + "' " +
-			    "         class='type-select'>" + type + "</a>";
+			    "<li style='position: relative;'>" +
+			    "  <a href='#' name='" + type + "' " +
+			    "         class='type-select dropdown-item'>" +
+			    type + "</a>";
 
 			if (typeinfo) {
 			    /*
@@ -1322,7 +1371,10 @@ $(function () {
 			    typehtml +=
 				"<span class='icon-info-right glyphicon " +
  				"  glyphicon-info-sign' " +
-				"  data-toggle='popover' data-html=true " +
+				"  data-toggle='popover' " +
+				"  data-bs-toggle='popover' " +
+				"  data-html=true " +
+				"  data-bs-html=true " +
 				"  data-content=\"" + pophtml + "\"></span>";
 			}
 			else if (constraints) {
@@ -1381,16 +1433,18 @@ $(function () {
 		// Need to use a click handler cause of popover problems
 		// with the submenus.
 		$(innerdiv).find(".glyphicon-info-sign").popover({
-		    trigger: 'manual',
+		    trigger: 'hover',
 		    placement: 'auto',
 		    container: 'body',
 		});
+		if (0) {
 		$(innerdiv).find(".glyphicon-info-sign").click(
 		    function (event) {
 			event.preventDefault();
 			event.stopPropagation();
 			$(this).popover('toggle');
 		    });
+		}
 
 		// Move the main menu to halfway up/down.
 		$(innerdiv).find(".dropdown")
@@ -1411,7 +1465,17 @@ $(function () {
 			function(event) {
 			    var menu = $(event.target)
 				.parent().find(".dropdown-menu");
-		    
+
+			    /*
+			     * Hide siblings since we seem to sometimes
+			     * lose the hover out event.
+			     */
+			    var siblings = $(event.target).parent().siblings();
+			    _.each(siblings, function (sibling) {
+				$(sibling).find(".dropdown-menu")
+				    .css("display", "none");
+			    });
+
 			    $(menu).css("display", "inline-block");
 			    var height = $(menu).height();
 			    if (height > 26) {
@@ -1447,6 +1511,8 @@ $(function () {
 		    $(innerdiv).find("input").val($(this).attr("name"))
 		    // Make sure the popover is gone too.
 		    $(innerdiv).find(".glyphicon-info-sign").popover("hide");
+		    // And the menu itself.
+		    $(this).closest("ul").css("display", "none");
 		    Modified();
 		});
 		/*
@@ -1568,8 +1634,7 @@ $(function () {
 		// Disable plus button if reached maximum number.
 		if (details.max && _.size(names) >= details.max) {
 		    outerdiv.find(".multivalue-button-plus")
-			.attr('title', 'Maximum values is ' + details.max)
-			.tooltip('setContent');
+			.attr('title', 'Maximum values is ' + details.max);
 		    // Disable the button, but not in a gross way.
 		    outerdiv.find(".multivalue-button-plus button")
 			.css("pointer-events", "none");
@@ -1592,8 +1657,7 @@ $(function () {
 		 */
 		if (details.min && _.size(names) <= details.min) {
 		    outerdiv.find(".multivalue-button-minus")
-			.attr('title', 'Minimum values is ' + details.min)
-			.tooltip('setContent');
+			.attr('title', 'Minimum values is ' + details.min);
 		    // Disable the button, but not in a gross way.
 		    outerdiv.find(".multivalue-button-minus button")
 			.css("pointer-events", "none");
@@ -1950,6 +2014,8 @@ $(function () {
 	    var hasWarning   = false;
 	    var hasChanges   = 0;
 
+	    console.info("GenerateGroup", groupId, field);
+
 	    var html = groupTemplate({
 		"fieldid"    : groupId,
 		"name"       : name,
@@ -1961,7 +2027,12 @@ $(function () {
 	    _.each(fields, function(details) {
 		var set;
 
-		if (details.multiValue) {
+		console.info("GenerateGroup field", details);
+
+		if (details.type == "struct") {
+		    set = GenerateStruct(details.index, bindings);
+		}
+		else if (details.multiValue) {
 		    set = GenerateMultiValueField(details.values,
 						  details, fieldIndex,
 						  bindings, null);
@@ -1982,7 +2053,7 @@ $(function () {
 		if (set.hasClass("has-changes")) {
 		    hasChanges = hasChanges + set.data("has-changes");
 		}
-		$(groupdiv).find(".panel-body").append(set);
+		$(groupdiv).find(".group-row-panel-body").append(set);
 	    });
 	    // Remember visibility for redraw after errors	
 	    $(groupdiv).find(".pp-param-group-subpanel-collapse")
@@ -2009,8 +2080,8 @@ $(function () {
 	     * being drawn closed.
 	     */
 	    if (hasError || hasWarning || group.visible) {
-		$(groupdiv).find(".pp-param-group-subpanel-collapse")
-		    .addClass("in");
+		ShowPanel($(groupdiv)
+			  .find(".pp-param-group-subpanel-collapse"));
 		$(groupdiv).find(".subpanel-collapse-chevron .glyphicon")
 		    .removeClass("glyphicon-chevron-right")
 		    .addClass("glyphicon-chevron-down");
@@ -2033,18 +2104,28 @@ $(function () {
 	    var hasChanges  = 0;
 	    var structdiv;
 
+	    console.info("GenerateStruct", details, values, multivalue);
+
 	    // Process all copies of the struct and append to div.
 	    // Multivalue structs look different.
 	    if (multivalue) {
+		var html;
+		
 		if (details.multiValueTitle) {
 		    prompt = details.multiValueTitle;
 		}
-		var html = structSetTemplate({
+		var args = {
 		    "fieldid"     : name,
 		    "longhelp"    : details.longDescription,
 		    "longhelp_id" : "help-" + details.name,
 		    "prompt"      : prompt,
-		});
+		};
+		if (!details.groupId) {
+		    html = structSetTemplate(args);		    
+		}
+		else {
+		    html = grpStructSetTemplate(args);
+		}
 		structdiv = $(html);
 
 		/*
@@ -2106,12 +2187,12 @@ $(function () {
 			structdiv.addClass('has-error');
 
 			var html = 
-			    '<div class="panel panel-danger ' +
+			    '<div class="panel card panel-danger ' +
 			    '            col-xs-10 col-xs-offset-1" ' +
 			    '    style="height: auto;' +
 			    '           margin-top: 5px; margin-bottom: 5px;' +
 			    '           padding: 0px;">' +
-			    ' <div class=panel-heading> ' +
+			    ' <div class=panel-heading card-header> ' +
 			    message + '</div></div>';
 			
 			structdiv.find(".structset-panel-body").append(html);
@@ -2134,12 +2215,12 @@ $(function () {
 			structdiv.addClass('has-warning');
 
 			var html = 
-			    '<div class="panel panel-warning ' +
+			    '<div class="panel card panel-warning ' +
 			    '            col-xs-10 col-xs-offset-1" ' +
 			    '    style="height: auto;' +
 			    '           margin-top: 5px; margin-bottom: 5px;' +
 			    '           padding: 0px;">' +
-			    ' <div class=panel-heading> ' +
+			    ' <div class=panel-heading card-header> ' +
 			    message + '</div></div>';
 
 			structdiv.find(".structset-panel-body").append(html);
@@ -2195,9 +2276,11 @@ $(function () {
 	     */
 	    if (multivalue) {
 		if ($(structdiv)
-		    .find('.pp-param-group-subpanel-collapse.in').length) {
-		    $(structdiv).find(".pp-param-structset-subpanel-collapse")
-			.addClass("in");
+		    // Bootstrap 5 uses show instead on in.
+		    .find('.pp-param-group-subpanel-collapse.in, ' +
+			  '.pp-param-group-subpanel-collapse.show').length) {
+		    ShowPanel($(structdiv)
+			      .find(".pp-param-structset-subpanel-collapse"));
 		    $(structdiv)
 			.find(".structset-subpanel-collapse-chevron .glyphicon")
 			.removeClass("glyphicon-chevron-right")
@@ -2286,12 +2369,12 @@ $(function () {
 		    groupdiv.addClass('has-error');
 
 		    var html = 
-			'<div class="panel panel-danger ' +
+			'<div class="panel card panel-danger ' +
 			'            col-xs-10 col-xs-offset-1" ' +
 			'    style="height: auto;' +
 			'           margin-top: 5px; margin-bottom: 5px;' +
 			'           padding: 0px;">' +
-			' <div class=panel-heading> ' +
+			' <div class=panel-heading card-header> ' +
 			message + '</div></div>';
 
 		    $(groupdiv).find(".panel-body").append(html);
@@ -2315,12 +2398,12 @@ $(function () {
 		    groupdiv.addClass('has-warning');
 
 		    var html = 
-			'<div class="panel panel-warning ' +
+			'<div class="panel card panel-warning ' +
 			'            col-xs-10 col-xs-offset-1" ' +
 			'    style="height: auto;' +
 			'           margin-top: 5px; margin-bottom: 5px;' +
 			'           padding: 0px;">' +
-			' <div class=panel-heading> ' +
+			' <div class=panel-heading card-header> ' +
 			message + '</div></div>';
 
 		    $(groupdiv).find(".panel-body").append(html);
@@ -2397,8 +2480,8 @@ $(function () {
 		$(groupdiv).find(".panel-body").append(div);
 	    });
 	    if (details.visible[copyIndex]) {
-		$(groupdiv).find(".pp-param-group-subpanel-collapse")
-		    .addClass("in")
+		ShowPanel($(groupdiv)
+			  .find(".pp-param-group-subpanel-collapse"));
 	    }
 	    // Remember visibility for redraw after errors
 	    $(groupdiv).find(".pp-param-group-subpanel-collapse")
@@ -2427,8 +2510,8 @@ $(function () {
 	     * being drawn closed.
 	     */
 	    if (hasError || details.visible[copyIndex] || isfirst) {
-		$(groupdiv).find(".pp-param-group-subpanel-collapse")
-		    .addClass("in");
+		ShowPanel($(groupdiv)
+			  .find(".pp-param-group-subpanel-collapse"));
 		$(groupdiv).find(".subpanel-collapse-chevron .glyphicon")
 		    .removeClass("glyphicon-chevron-right")
 		    .addClass("glyphicon-chevron-down");
@@ -2463,8 +2546,7 @@ $(function () {
 		if (details.max && 
 		    _.keys(details.values).length >= details.max) {
 		    groupdiv.find(".multivalue-struct-button-plus")
-			.attr('title', 'Maximum values is ' + details.max)
-			.tooltip('setContent');
+			.attr('title', 'Maximum values is ' + details.max);
 		    // Disable the button, but not in a gross way.
 		    groupdiv.find(".multivalue-struct-button-plus button")
 			.css("pointer-events", "none");
@@ -2478,8 +2560,7 @@ $(function () {
 		if (details.min && 
 		    _.keys(details.values).length <= details.min) {
 		    groupdiv.find(".multivalue-struct-button-minus")
-			.attr('title', 'Minimum values is ' + details.min)
-			.tooltip('setContent');
+			.attr('title', 'Minimum values is ' + details.min);
 		    // Disable the button, but not in a gross way.
 		    groupdiv.find(".multivalue-struct-button-minus button")
 			.css("pointer-events", "none");
@@ -2799,10 +2880,16 @@ $(function () {
 	    $('#ppmodal-body').empty();
 	    var root = $(formString);
 	    $('#ppmodal-body').append(root)
+
+	    if (window.EXPMODIFY) {
+		$("#ppmodal-body .instantiate-experiment").addClass("hidden");
+		$("#ppmodal-body .modify-experiment").removeClass("hidden");
+	    }
 	    
 	    // Process each field/group.
 	    _.each(formFields, function(def, fieldIndex) {
-		if (def.type == "struct") {
+		// Watch for a struct embedded in a group
+		if (def.type == "struct" && !def.groupId) {
 		    var structdiv = GenerateStruct(fieldIndex, bindings);
 
 		    // Look for changes that need to be declared below.
@@ -2833,7 +2920,7 @@ $(function () {
 			hasHelp = true;
 		    }
 		}
-		else {
+		else if (def.type != "struct") {
 		    var details = def;
 		    var set;
 
@@ -2872,6 +2959,10 @@ $(function () {
 	    $('#ppmodal-body').find('[data-toggle="tooltip"]').tooltip();
 
 	    // Tell caller when user changes anything.
+	    $('#pp-form-body input')
+		.on("paste input textInput", function() {
+		    Modified();
+		});
 	    $('#pp-form-body input, #pp-form-body select').change(function() {
 		Modified();
 	    });
@@ -2881,9 +2972,9 @@ $(function () {
 		var ht =
 		    '<div class="row">' +
 		    ' <div class="col-sm-12">' +
-		    '  <div class="panel panel-' + style +'" ' +
+		    '  <div class="panel card panel-' + style +'" ' +
 		    '       style="margin-bottom: 10px;">' +
-		    '   <div class="panel-heading">' + message +
+		    '   <div class="panel-heading card-header">' + message +
 		    '</div></div></div></div>';
 		root.prepend(ht);
 	    };
@@ -3001,10 +3092,16 @@ $(function () {
 		    addMessage("warning", ht);
 		}
 	    }
-	    
-	    imagePicker = new jacksmod.ImagePicker();
-	    $('#image-picker-body').html(imagePickerString);
-	    $('#imagepicker-modal .modal-body > div').append(imagePicker.el);
+
+	    if (0) {
+		/*
+		 * I will restore this if requested.
+		 */
+		imagePicker = new jacksmod.ImagePicker();
+		$('#image-picker-body').html(imagePickerString);
+		$('#imagepicker-modal .modal-body > div').
+		    append(imagePicker.el);
+	    }
 	    
 	    //
 	    // Handle the toggle-all help panels link.  Bootstrap
@@ -3100,6 +3197,10 @@ $(function () {
 		    // Need to kill the rerun bindings when user picks defaults.
 		    ClearAlert();
 		    LoadBindings(null);
+		    // Clear these for stats reporting.
+		    setRerunInstance(null);
+		    window.SELECTED_PARAMSET = undefined;
+		    window.MODIFIED_PARAMS   = false;
 		});
 
 	    // We can bind this function, the button will be hidden as needed.
@@ -3134,12 +3235,11 @@ $(function () {
 	}
 
 	/*
-	 * Load bindings from a previous experiment.
+	 * Load bindings from a previous experiment
+	 * No instance_uuid means the last one.
 	 */
 	function LoadPreviousBindings(instance_uuid)
 	{
-	    ClearAlert();
-	    
 	    var callback = function(json) {
 		console.info("LoadPreviousBindings", json);
 		if (json.code) {
@@ -3147,14 +3247,8 @@ $(function () {
 		    setStepsMotion(true);
 		    return;
 		}
-		LoadBindings(json.value.bindings);
-		if (json.value.version_uuid != uuid ||
-		    (fromrepo && json.value.repohash !=
-		     window.PROFILE_REFHASH)) {
-		    InstanceWarning(json.value,
-				    (instance_uuid ?
-				     instance_uuid : json.value.rerun_uuid));
-		}
+		ApplyPreviousBindings(json.value)
+		window.SELECTED_PARAMSET = undefined;
 		setStepsMotion(true);
 	    };
 	    var args = {
@@ -3168,7 +3262,19 @@ $(function () {
 						"GetPreviousBindings", args);
 	    xmlthing.done(callback);
 	}
-
+	/*
+	 * Apply the bindings, possible with a warning.
+	 */
+	function ApplyPreviousBindings(details)
+	{
+	    ClearAlert();
+	    
+	    LoadBindings(details.bindings);
+	    if (!window.EXPMODIFY) {
+		CheckInstanceWarning(details);
+		setRerunInstance(details);
+	    }
+	}
 	/*
 	 * Update bindings.
 	 */
@@ -3180,60 +3286,148 @@ $(function () {
 	    // Always force a rerun of the script, do not worry about
 	    // a new set of bindings that are identical.
 	    Modified();
+	    // We do not want this flag set immediately after new bindings.
+	    window.MODIFIED_PARAMS = false;
 	}
 
 	/*
-	 * Alert user when trying to apply a bound paramset to the wrong place
+	 * Alert user when they are not runing the most recent version/commit
+	 * of a profile. This happens when using the Rerun Recent menu or
+	 * when running a bound paramset.
+	 * Only check this on initial load of the page.
+	 * When using the picker, always get latest commit on default branch,
+	 * or latest version.
 	 */
-	function ParamsetWarning(set)
+	function CheckNotLatest()
 	{
-	    console.info("ParamsetWarning:", set);
-	    
-	    var url = "instantiate.php?profile=" + set.version_uuid +
-		"&rerun_paramset=" + set.uuid;
-	    var link = "<a href='" + url + "'>here</a>";
-	    
-	    var warning = "The parameter set you applied is bound to a different ";
-	    if (set.version_uuid != uuid) {
-		warning += "version of this profile. ";
+	    console.info("CheckNotLatest",
+			 window.PROFILE_REFSPEC, window.TARGET_REFSPEC,
+			 window.PROFILE_REFHASH, window.TARGET_REFHASH,
+			 window.TARGET_HEADHASH,
+			 window.PROFILE_VERSION, window.PROFILE_HEADVERS);
+	    var warning;
+
+	    // Only when starting from a specific profile. 
+	    if (window.SHOWPICKER) {
+		return;
 	    }
-	    else {
-		warning += "commit of the repository for this profile. ";
+	    
+	    if (window.FROMREPO) {
+		if (window.PROFILE_REFSPEC != window.TARGET_REFSPEC) {
+		    if (window.TARGET_HEADHASH != window.TARGET_REFHASH) {
+			warning = 
+			    "You are not at the head of the branch (" +
+			    window.TARGET_REFSPEC + ") you are instantiating. ";
+		    }
+		    else {
+			warning =
+			    "You are currently on " +
+			    window.TARGET_REFSPEC + " instead of the default "+
+			    "branch " + window.PROFILE_REFSPEC + ". ";
+		    }
+		}
+		else if (window.PROFILE_REFHASH != window.TARGET_REFHASH) {
+		    warning = 
+			"You are not instantiating at the head of the default "+
+			"branch (" + window.PROFILE_REFSPEC + "). ";
+		}
 	    }
-	    warning += "This is typically okay, but might not be what you intended. " +
-		"Click " + link + " to instantiate the correct version of the profile. ";
-		
-	    $('#ppalert').html("WARNING: " + warning);
-	    $('#ppalert').removeClass("hidden");
+	    else if (window.PROFILE_VERSION != window.PROFILE_HEADVERS) {
+		    warning = 
+		    "You are are instantiating version " +
+		    window.PROFILE_VERSION + " instead of the most recent " +
+		    "version (" + window.PROFILE_HEADVERS + "). ";
+	    }
+	    if (warning) {
+		warning += "This is okay, but might not be what you intend.";
+		SetAlert(warning);
+	    }
+	}
+
+	/*
+	 * Warn user if the paramset is bound and being applied to a
+	 * different version (of the repo).
+	 */
+	function CheckParamsetWarning(set)
+	{
+	    console.info("CheckParamsetWarning:", set,
+			 window.PROFILE_REFSPEC, window.TARGET_REFSPEC,
+			 window.PROFILE_REFHASH, window.TARGET_REFHASH,
+			 window.TARGET_HEADHASH,
+			 window.PROFILE_VERSION, window.PROFILE_HEADVERS);
+	    var warning;
+	    var link = "<a href='" + set.run_url + "'>here</a>";
+
+	    if (!set.version_uuid) {
+		// Not bound, can apply to any version.
+		return;
+	    }
+	    if (window.FROMREPO) {
+		if (set.repohash != window.TARGET_REFHASH) {
+		    warning =
+			"The parameter set you applied is bound to a " +
+			"different commit of this profile. ";
+		}
+	    }
+	    else if (set.version_uuid != uuid) {
+		warning =
+		    "The parameter set you applied is bound to a " +
+		    "different version of this profile. ";
+	    }
+	    if (warning) {
+		warning +=
+		    "This is not an error, but might not be what you " +
+		    "intended.";
+		SetAlert(warning);
+	    }
 	}
 	/*
-	 * Ditto for applying instance bindings to wrong version.
+	 * Ditto for applying instance bindings to the wrong version.
 	 */
-	function InstanceWarning(set, instance_uuid)
+	function CheckInstanceWarning(details)
 	{
-	    console.info("InstanceWarning: ", set, instance_uuid);
+	    console.info("InstanceWarning: ", details,
+			 window.PROFILE_REFSPEC, window.TARGET_REFSPEC,
+			 window.PROFILE_REFHASH, window.TARGET_REFHASH,
+			 window.TARGET_HEADHASH,
+			 window.PROFILE_VERSION, window.PROFILE_HEADVERS);
+	    var warning;
 	    
-	    var url = "instantiate.php?profile=" + set.version_uuid +
-		"&rerun_instance=" + instance_uuid;
-	    var link = "<a href='" + url + "'>here</a>";
-	    
-	    var warning = "The bindings applied from the instance are for a different ";
-	    if (set.version_uuid != uuid) {
-		warning += "version of this profile. ";
+	    if (window.FROMREPO) {
+		if (details.reporef != window.TARGET_REFSPEC) {
+		    warning =
+			"The bindings applied from the previous instance are " +
+			"for " + details.reporef + " instead of the branch " +
+			"you are instantiating (" +
+			window.TARGET_REFSPEC + "). ";
+		}
+		else if (window.TARGET_HEADHASH != details.repohash) {
+		    warning =
+			"The bindings applied from the previous instance are " +
+			"for commit " + details.repohash.substring(0, 8) + " " +
+			"of " + details.reporef + " (the HEAD commit is " +
+			window.TARGET_HEADHASH.substr(0, 8) + ").";
+		}
 	    }
-	    else {
-		warning += "commit of the repository for this profile. ";
+	    else if (details.version_uuid != uuid) {
+		warning =
+		    "The bindings applied from the instance are for version " +
+		    details.profile_version + " of the profile, which is not "+
+		    "the latest version. ";
 	    }
-	    warning +=
-		"This is typically okay, but might not be what you intended. " +
-		"Click " + link + " to instantiate the correct version of the profile. ";
-		
-	    $('#ppalert').html("WARNING: " + warning);
-	    $('#ppalert').removeClass("hidden");
+	    if (warning) {
+		warning += "This is okay, but might not be what you intend.";
+		SetAlert(warning);
+	    }
 	}
 	function ClearAlert()
 	{
 	    $('#ppalert').addClass("hidden");
+	}
+	function SetAlert(warning)
+	{
+	    $('#ppalert').html("WARNING: " + warning);
+	    $('#ppalert').removeClass("hidden");
 	}
 
 	/*
@@ -3256,7 +3450,8 @@ $(function () {
 	    //
 	    var addpset = function (menu, set) {
 		var item = $("<li>" +
-			     " <a href='#'>" + set.name  + "</a>" +
+			     " <a href='#' class=dropdown-item>" +
+			        set.name  + "</a>" +
 			     "</li>");
 		// Add a popover to show the description.
 		$(item).popover({
@@ -3271,17 +3466,10 @@ $(function () {
 		    event.preventDefault();
 		    ClearAlert();
 		    LoadBindings(set.bindings);
-		    /*
-		     * Warn user if the paramset is bound and being applied to
-		     * a different version (of the repo).
-		     */
-		    if (set.version_uuid) {
-			if (set.version_uuid != uuid ||
-			    (fromrepo && set.repohash !=
-			     window.PROFILE_REFHASH)) {
-			    ParamsetWarning(set);
-			}
-		    }
+		    setRerunInstance(null);
+		    window.SELECTED_PARAMSET = set.uuid;
+		    window.MODIFIED_PARAMS   = false;
+		    CheckParamsetWarning(set);
 		});
 		$(menu).append(item);
 	    };
@@ -3306,7 +3494,8 @@ $(function () {
 		    var iname  = info["instance_name"];
 		    var pname  = info["profile_name"];
 		    var item = $("<li>" +
-				 " <a href='#'>" + iname + "</a>" +
+				 " <a href='#' class=dropdown-item>" +
+				     iname + "</a>" +
 				 "</li>");
 
 		    // Handler to regenerate the form.
@@ -3322,18 +3511,19 @@ $(function () {
 	    }
 	}
 	    
-        function HandleSubmit(callback, jacksGraphCallback)
+        function HandleSubmit(callback)
 	{
 	    console.info("HandleSubmit", ppchanged);
 	    
 	    if (!ppchanged) {
+		// No new rspec
+		configuredone_callback(null);
 		callback(true);
-		ShowThumbnail(RSPEC, jacksGraphCallback);
 		return;
 	    }
 	    // Submit with check only at first, since this will return
 	    // very fast, so no need to throw up a waitwait.
-	    SubmitForm(1, callback, jacksGraphCallback);
+	    SubmitForm(1, callback);
 	}
 
 	//
@@ -3351,9 +3541,9 @@ $(function () {
 	// Submit the form. If no errors, we get back the rspec. Throw that
 	// up in a Jack editor window. 
 	//
-        function SubmitForm(checkonly, steps_callback, jacksGraphCallback)
+        function SubmitForm(checkonly, steps_callback)
 	{
-	    console.info("SubmitForm", checkonly, steps_callback);
+	    console.info("SubmitForm", checkonly);
 	    var nosubmit = 0;
 	    
 	    // Current form contents as formfields array.
@@ -3411,7 +3601,7 @@ $(function () {
 		}
 		if (checkonly) {
 		    // Form checked out okay, submit again to generate rspec.
-		    SubmitForm(0, steps_callback, jacksGraphCallback);
+		    SubmitForm(0, steps_callback);
 		}
 		else {
 		    RSPEC = json.value.rspec;
@@ -3425,9 +3615,6 @@ $(function () {
 		    // the aggregate selector is reflected in the final tab
 		    if (steps_callback) {
 			steps_callback(true);
-		    }
-		    if (jacksGraphCallback) {
-			ShowThumbnail(RSPEC, jacksGraphCallback);
 		    }
 		}
 	    }
@@ -3657,31 +3844,46 @@ $(function () {
 	    xmlthing.done(callback);
 	}
 
-	function countNodes()
-	{
-	    //console.info("countNodes");
-	    var xmlDoc = $.parseXML(RSPEC);
-	    var count  = $(xmlDoc).find("node").length;
-	    //console.info(count);
-	    return count;
-	}
-
 	function StartPP(args) {
+	    console.info(args);
+	    
 	    registered     = args.registered;
 	    multisite      = args.multisite;
 	    ppdivname      = args.ppdivname;
 	    amlist         = args.amlist;
 	    prunetypes     = args.prunetypes;
 	    fromrepo       = args.fromrepo;
-	    
+
+	    /*
+	     * Once we have things set up, all that changes will 
+	     * be the bindings.
+	     */
+	    if (window.EXPMODIFY && uuid != "") {
+		setStepsMotion(false);
+		LoadBindings(args.bindings);
+		setStepsMotion(true);
+		if (args.ready_callback) {
+		    args.ready_callback();
+		}
+		return;
+	    }
+
+	    /*
+	     * Otherwise, do not change anything if the user has not changed
+	     * the profile.
+	     */
 	    if (formFields.length && uuid == args.uuid) {
 		GenerateForm(null);
+		if (args.ready_callback) {
+		    args.ready_callback();
+		}
 		return;
 	    }
 	    configuredone_callback = args.config_callback;
 	    modified_callback = args.modified_callback;
 	    setStepsMotion = args.setStepsMotion;
-	    
+	    setRerunInstance = args.setRerunInstance;
+
 	    /*
 	     * Need to ask for the profile parameter form fragment and
 	     * the initial values.
@@ -3703,24 +3905,40 @@ $(function () {
 		// Setup the parameter buttons for this profile.
 		SetupPPButtons(json.value.hasactivity,
 			       json.value.paramsets, json.value.recents);
-		
-		if (args.rerun_instance !== undefined ||
-		    args.rerun_paramset !== undefined) {
-		    rerun_bindings = json.value.rerun_bindings;
+
+		// Copy over the profile name/version
+		$('#' + ppdivname + ' .selected_profile_text')
+		    .html($('#step0-form .selected_profile_text').html());
+
+		if (window.EXPMODIFY) {
+		    // Switch the message at the top of the panel.
+		    $('#' + ppdivname + ' .ppform-instantiate')
+			.addClass("hidden");
+		    $('#' + ppdivname + ' .ppform-modify')
+			.removeClass("hidden");
+		}
+
+		if (args.rerun_instance !== undefined) {
+		    ApplyPreviousBindings(json.value.rerun_instance);
+		}
+		else if (args.rerun_paramset !== undefined) {
+		    rerun_bindings = json.value.rerun_paramset.bindings;
+		    InitializeForm(paramdefs);
+		    GenerateForm(null);
 		}
 		else {
 		    rerun_bindings = null;
+		    InitializeForm(paramdefs);
+		    GenerateForm(null);
 		}
-		InitializeForm(paramdefs);
-		GenerateForm(null);
+		if (!window.EXPMODIFY) {
+		    CheckNotLatest();
+		}
 		setStepsMotion(true);
-
-		if (args.rspec) {
-		    RSPEC = args.rspec;
-		    ConfigureDone();
-		    //ShowEditor();
-		    ShowThumbnail(RSPEC, args.jacksGraphCallback);
+		if (args.ready_callback) {
+		    args.ready_callback();
 		}
+
 		if (! $('#pp-wizard-ready').length) {
 		    $('#' + ppdivname).append("<div class='hidden' " +
 					      " id='pp-wizard-ready'></div>");
@@ -3730,93 +3948,30 @@ $(function () {
 	    var blob = {"profile" : args.profile};
 	    if (args.rerun_instance !== undefined) {
 		blob["rerun_instance"] = args.rerun_instance;
+		rerun_instance = args.rerun_instance;
 	    }
 	    else if (args.rerun_paramset !== undefined) {
 		blob["rerun_paramset"] = args.rerun_paramset;
+		rerun_paramset = args.rerun_paramset;
 	    }
 	    //
 	    // XXX: Look for paramdefs/script in the form and pass that along.
-	    // This is for repo-based profiles.
+	    // This is for repo-based profiles since we can be on any branch
+	    // or tag and this is easy and faster since the server would have
+	    // to dig the profile source out of the repo and recompute them.
+	    // This is a terrible way to do this, but it saves a bunch of time
+	    // when starting the ppwizard.
 	    //
 	    if ($('#paramdefs').val() !== undefined) {
 		blob["paramdefs"] = $('#paramdefs').val();
 	    }
+	    else if (args.paramdefs) {
+		blob["paramdefs"] = args.paramdefs;
+	    }
+	    console.info("GetParameters arguments", blob);
 	    var xmlthing = sup.CallServerMethod(null, "instantiate",
 						"GetParameters", blob);
 	    xmlthing.done(callback);
-	}
-
-      var thumbnail = null;
-      var jacksGraphCallback = null;
-      function ShowThumbnail(selected_rspec, updateJacksGraph)
-      {
-	if (updateJacksGraph)
-	{
-	  jacksGraphCallback = updateJacksGraph;
-	}
-	var root = $('#stepsContainer-p-2 #inline_jacks');
-	if (! thumbnail)
-	{
-	  thumbnail = new jacksmod.Thumb(setJacksGraph);
-	  root.append(thumbnail.el);
-	}
-	thumbnail.replaceRspec(selected_rspec);
-	if (countNodes() > 100)
-	{
-	  $('#stepsContainer #inline_overlay').addClass("hidden");
-	}
-	else
-	{
-	  $('#stepsContainer #inline_overlay').removeClass("hidden");
-	}
-	
-      }
-
-      function setJacksGraph(newGraph)
-      {
-	if (jacksGraphCallback)
-	{
-	  jacksGraphCallback(newGraph);
-	}
-      }
- 
-
-	function ChangeJacksRoot(root, selectionPane) {
-	  // console.info("ChangeJacksRoot: ", root, selectionPane);
-	  if (RSPEC)
-	    {
-	      if (countNodes() > 100) {
-		  $('#stepsContainer #inline_overlay').addClass("hidden");
-		  $('#inline_jacks #edit_dialog #edit_container')
-		      .addClass("hidden");
-		  return;
-	      }
-	      else {
-		  $('#stepsContainer #inline_overlay').removeClass("hidden");
-		  $('#inline_jacks #edit_dialog #edit_container')
-		      .removeClass("hidden");
-	      }
-	      editor = new JacksEditor(root, true, true, selectionPane, true);
-	      editor.show(RSPEC);
-	  }
-	}
-	function ShowEditor() {
-	  // console.info("ShowEditor");
-	  if (RSPEC)
-	  {
-//	      if (countNodes() > 100) {
-//		  $('#stepsContainer #inline_overlay').addClass("hidden");
-//		  $('#inline_jacks #edit_dialog #edit_container')
-//		      .addClass("hidden");
-//		  return;
-//	      }
-//	      else {
-		  $('#stepsContainer #inline_overlay').removeClass("hidden");
-		  $('#inline_jacks #edit_dialog #edit_container')
-		      .removeClass("hidden");
-//	      }
-	      editor.show(RSPEC);
-	  }
 	}
 
       var globalImages = [
@@ -3916,8 +4071,6 @@ $(function () {
 	return {
 		HandleSubmit: HandleSubmit,
 		StartPP: StartPP,
-	        ChangeJacksRoot: ChangeJacksRoot,
-	        ShowThumbnail: ShowThumbnail,
 	};
     }
 )();

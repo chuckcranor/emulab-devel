@@ -27,6 +27,7 @@ $(function ()
 	cansnapshot  = window.CANSNAPSHOT;
 
 	var fields = JSON.parse(_.unescape($('#fields-json')[0].textContent));
+	console.info("fields", fields);
 	if (!embedded && cansnapshot) {
 	    instances =
 		JSON.parse(_.unescape($('#instances-json')[0].textContent));
@@ -114,7 +115,8 @@ $(function ()
 	if (fields.dataset_type == "imdataset" &&
 	    (fields.dataset_state == "busy" ||
 	     fields.dataset_state == "allocating")) {
-	    ShowProgressModal();
+	    /* Bootstrap 5 sillyness, have not figured out a better solution */
+	    setTimeout(function f() { ShowProgressModal() }, 100);
 	}
 	else if (fields.dataset_type != "imdataset") {
 	    // Always poll for st/lt change in status.
@@ -306,7 +308,7 @@ $(function ()
 		return;
 	    });
 	});
-	// After error, need to rebuild selections lists
+	// Previously selected.
 	if (formfields.dataset_instance) {
 	    HandleInstanceChange(formfields.dataset_instance,
 				 formfields.dataset_node,
@@ -317,7 +319,6 @@ $(function ()
 	// Handle submit button.
 	//
 	$('#snapshot_submit_button').click(function (event) {
-	    sup.HideModal("#snapshot_modal");
 	    event.preventDefault();
 	    SubmitForm();
 	});
@@ -329,6 +330,18 @@ $(function ()
     //
     function SubmitForm()
     {
+	var selects = ["#dataset_instance", "#dataset_node", "#dataset_bsname"];
+	for (let i = 0; i < selects.length; i++) {
+	    var select = selects[i];
+	    var val    = $(select).find(":selected").val();
+
+	    if (val === undefined || val == '') {
+		$('#general_error').html("Please make all selections above");
+		return;
+	    }
+	}
+	sup.HideModal("#snapshot_modal");
+	
 	var submit_callback = function(json) {
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
@@ -366,9 +379,12 @@ $(function ()
 	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
 	var noderefs  = {};
 
+	// In case of earlier error choosing the instance. 
+	aptforms.ClearFormErrors('#snapshot_dataset_form');
+
 	// Clear old handler, set again below.
 	$('#dataset_node').off("change");
-	    
+	
 	var callback = function(json) {
 	    /*
 	     * Build up selection list of nodes in the instance that
@@ -403,14 +419,15 @@ $(function ()
 		});
 	    });
 	    if (options == "") {
-		$('#dataset_node')
-		    .html("<option value=''>Please Select</option>");
-		$('#dataset_bsname')
-		    .html("<option value=''>Please Select</option>");
-		
-		sup.SpitOops("oops",
-			     "The selected instance does not have any nodes " +
-			     "that can be used to create an image backed dataset");
+		$('#dataset_node').html("");
+		$('#dataset_bsname').html("");
+
+		var error = {
+		    "dataset_instance" :
+		         "The selected instance does not have any nodes " +
+			 "that can be used to create an image backed dataset"
+		};
+		aptforms.GenerateFormErrors('#snapshot_dataset_form', error);
 		return;
 	    }
 	    $('#dataset_node')
@@ -420,7 +437,11 @@ $(function ()
 
 	    $('#dataset_node').on("change", function (event) {
 		$("#dataset_node option:selected").each(function() {
-		    HandleInstanceNodeChange(noderefs[$(this).val()]);
+		    var client_id = $(this).val();
+		    var noderef   = (client_id != '' ?
+				     noderefs[client_id] : undefined);
+
+		    HandleInstanceNodeChange(noderef);
 		    return;
 		});
 	    });
@@ -438,6 +459,11 @@ $(function ()
     function HandleInstanceNodeChange(noderef, selected_bsname)
     {
 	var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+
+	if (noderef === undefined) {
+	    $('#dataset_bsname').html("");
+	    return;
+	}
 
 	/*
 	 * Build up selection list of blockstores on the node.
@@ -462,5 +488,3 @@ $(function ()
 
     $(document).ready(initialize);
 });
-
-

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2018, 2021, 2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -256,13 +256,22 @@ function Do_GetStatus()
             $info["ttl"]    = $details->ttl;
             $info["maxttl"] = $maxttl;
             $info["reserved_pid"] = $details->reserved_pid;
+            if (property_exists($details, "available")) {
+                $info["available"] = intval($details->available);
+            }
         }
         else {
-            $available = 1;
-            if ($details->pid != "") {
+            if (property_exists($details, "available")) {
+                $available = intval($details->available);
+            }
+            elseif ($details->pid != "") {
                 $available = 0;
             }
-            elseif ($details->reserved_pid != "" || $reserved_project) {
+            else {
+                $available = 1;
+            }
+            if ($available &&
+                ($details->reserved_pid != "" || $reserved_project)) {
                 #
                 # Free but a pre-reserve. See if the user is a member of
                 # local project and thus can use the node.

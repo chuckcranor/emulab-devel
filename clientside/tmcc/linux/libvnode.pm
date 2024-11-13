@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2018 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,9 +46,9 @@ use libtestbed;
 #
 # Magic control network config parameters.
 #
-my $PCNET_IP_FILE   = "/var/emulab/boot/myip";
-my $PCNET_MASK_FILE = "/var/emulab/boot/mynetmask";
-my $PCNET_GW_FILE   = "/var/emulab/boot/routerip";
+my $PCNET_IP_FILE   = "$VARDIR/boot/myip";
+my $PCNET_MASK_FILE = "$VARDIR/boot/mynetmask";
+my $PCNET_GW_FILE   = "$VARDIR/boot/routerip";
 my $VIFROUTING      = ((-e "$ETCDIR/xenvifrouting") ? 1 : 0);
 
 # Other local constants
@@ -757,12 +757,12 @@ sub downloadImage($$$$) {
 	if (!defined($imagepath) || !defined($reload_args_ref));
 
     my $addr = $reload_args_ref->{"ADDR"};
-    my $FRISBEE = "/usr/local/bin/frisbee";
-    my $IMAGEUNZIP = "/usr/local/bin/imageunzip";
+    my $FRISBEE = "$LBINDIR/frisbee";
+    my $IMAGEUNZIP = "$LBINDIR/imageunzip";
     my $command = "";
     # Backwards compat.
     if (! -e $FRISBEE) {
-	$FRISBEE = "/usr/local/etc/emulab/frisbee";
+	$FRISBEE = "$BINDIR/frisbee";
     }
 
     if (!defined($addr) || $addr eq "") {
@@ -775,7 +775,7 @@ sub downloadImage($$$$) {
 	    $server = $1;
 	}
 	if ($reload_args_ref->{"IMAGEID"} =~
-	    /^([-\d\w]+),([-\d\w]+),([-\d\w\.:]+)$/) {
+	    /^([-\d\w]+),([-\d\w]+),([-\d\w\.\+:]+)$/) {
 	    $imageid = "$1/$3";
 	}
 	if (SHAREDHOST()) {
@@ -878,10 +878,10 @@ sub createExtraFS($$$)
     my $exists = `lvs --noheadings -o origin $lvpath > /dev/null 2>&1`;
     if ($?) {
 	my $ns = computeStripeSize($vgname);
-	system("lvcreate -n $lvname -L $size -i$ns $vgname") == 0
+	mysystem("lvcreate --yes -n $lvname -L $size -i$ns $vgname") == 0
 	    or return -1;
 
-	system("mke2fs -j -q $lvpath") == 0
+	mysystem("mke2fs -t ext4 -q $lvpath") == 0
 	    or return -1;
     }
     if (! -e "$path/.mounted") {
@@ -961,13 +961,16 @@ sub reconfigDHCP()
     makeIfaceMaps();
     my ($cnet_iface) = findControlNet();
     my @ifaces = "$cnet_iface @vifs";
-
+    my $INTERFACES = "INTERFACES";
+    if (!system("egrep -q -s -i '^INTERFACESV4=' $defaults")) {
+	$INTERFACES .= "v4";
+    }
     if (! -e $defaults) {
-	mysystem2("echo 'INTERFACES=\"@ifaces\"' > $defaults");
+	mysystem2("echo '${INTERFACES}=\"@ifaces\"' > $defaults");
     }
     else {
 	mysystem2("/bin/sed -i.bak -e ".
-		 " 's,^INTERFACES=.*\$,INTERFACES=\"@ifaces\",i' $defaults");
+		 " 's,^${INTERFACES}=.*\$,${INTERFACES}=\"@ifaces\",i' $defaults");
     }
     return -1
 	if ($?);

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2021, 2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,6 +70,7 @@ define("PAGEARG_ANYTHING",	"anything");
 define("PAGEARG_ALPHALIST",     "alphalist");
 define("PAGEARG_UUID",		"uuid");
 define("PAGEARG_URL",   	"url");
+define("PAGEARG_PARAMSET",   	"paramset");
 
 define("URL_USER",		"user");
 define("URL_PROJECT",		"project");
@@ -626,21 +627,22 @@ function VerifyPageArguments($argspec, $required)
 		    strcasecmp("$object", "1") == 0 ||
 		    strcasecmp("$object", "true") == 0 ||
 		    strcasecmp("$object", "on") == 0) {
-		    $object = True;
+		    $object = true;
 		}
-		elseif (strcasecmp("$object", "no") == 0 ||
-			strcasecmp("$object", "0") == 0 ||
-			strcasecmp("$object", "false") == 0 ||
-			strcasecmp("$object", "off") == 0) {
-		    $object = False;
+		else {
+		    $object = false;
 		}
 	    }
+            else {
+                $object = false;
+            }
 	    break;
 
 	case PAGEARG_INTEGER:
 	case PAGEARG_NUMERIC:
 	case PAGEARG_ARRAY:
 	case PAGEARG_UUID:
+	case PAGEARG_PARAMSET:
 	    if (isset($_REQUEST[$name]) && $_REQUEST[$name] != "") {
 		$object = $_REQUEST[$name];
 		$yep = 1;
@@ -695,7 +697,7 @@ function VerifyPageArguments($argspec, $required)
                 # We use this strictly for internal URLs, so we can be
                 # very narrow in what we allow, to avoid XSS attacks.
                 #
-                if (!preg_match("/^[-\w\?\/\&\.=\+\:]+$/", $object)) {
+                if (!preg_match("/^[-\w\?\/\&\.=\+\:\*]+$/", $object)) {
                     error_log($object);
 		    $object = htmlspecialchars($object);
 		    PAGEARGERROR("Invalid characters in '$name': $object");
@@ -815,6 +817,12 @@ function ValidateArgument($name, $type, $arg, $isfatal = 1)
 
     case PAGEARG_UUID:
 	if (preg_match("/^\w+\-\w+\-\w+\-\w+\-\w+$/", "$arg")) {
+	    return 1;
+	}
+	break;
+
+    case PAGEARG_PARAMSET:
+	if (IsValidUUID("$arg") || IsValidHash("$arg")) {
 	    return 1;
 	}
 	break;

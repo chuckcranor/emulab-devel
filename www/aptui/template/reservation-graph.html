@@ -1,9 +1,9 @@
     <div id='<%- graphid %>'>
       <div class='reservation-details'>
-	<div class='panel panel-default'>
-	  <div class="panel-heading">
+	<div class='panel card panel-default'>
+	  <div class="panel-heading card-header">
 	    <center>
-	      <h3 class="panel-title">
+	      <h5 class="panel-title card-title card-title-small">	      
 		<% if (showfullscreen) { %>
 		  <a href="#" class="resgraph-fullscreen">
 		    <span style="margin-right: 10px;"
@@ -14,18 +14,19 @@
 		<%- title %> Availability
 		<% if (showhelp) { %>
 		  <a href='#' class='btn btn-xs resgraph-help-button'
-		     data-toggle='tooltip'
-		     data-container="body"
-		     data-trigger="hover"
+		     data-toggle='tooltip' data-bs-toggle='tooltip'
+		     data-container="body" data-bs-container="body"
+		     data-trigger="hover" data-bs-trigger="hover"
 		     style='padding-left: 0px;'
 		     title='Click for more info'>
 		    <span class='glyphicon glyphicon-question-sign text-primary'
 			  style='margin-bottom: 4px;'></span></a>
 		<% } %>
-	      </h3>
+		<div style="margin-top: -5px;"><%- urn %></div>
+	      </h5>
 	    </center>
 	  </div>
-	  <div class='panel-body' style="padding: 2px;">
+	  <div class='panel-body card-body' style="padding: 2px;">
 	    <!-- The col setting gives us a "relative" position div -->
 	    <div class='col-xs-12 col-xs-offset-0'
 		 style="padding:0px;">

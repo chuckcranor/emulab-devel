@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -694,9 +694,12 @@ sub osload($$$) {
 	#if (exists($nargs{nowait})) {
 	#    $nargs{waitmode} = $nargs{nowait};
 	#}
+
+	# Need a copy cause of image aliases, maintain original list
+	my @nodeimages = ();
+	
 	if (@images) {
 	    my $node_id = $nodeobject->node_id();
-	    my @tmp = ();
 
 	    foreach my $image (@images) {
 		if ($image->isImageAlias()) {
@@ -706,22 +709,23 @@ sub osload($$$) {
 				"for $node_id!");
 			return -1;
 		    }
-		    $image = $im;
+		    push(@nodeimages, $im);
 		}
-		push(@tmp, $image);
+		else {
+		    push(@nodeimages, $image);
+		}
 	    }
-	    @images = @tmp;
 	}
 
 	#
 	# Add the node with the given images and arguments
 	#
-	if ($object->AddNode($nodeobject,\@images,\%nargs)) {
+	if ($object->AddNode($nodeobject,\@nodeimages,\%nargs)) {
 	    goto failednode;
 	}
 	# We also need to add it to ourself for non-type-specific metadata
 	# storage
-	if ($self->AddNode($nodeobject,\@images,\%nargs)) {
+	if ($self->AddNode($nodeobject,\@nodeimages,\%nargs)) {
 	    goto failednode;
 	}
 	
@@ -739,7 +743,7 @@ sub osload($$$) {
 	# remote nodes is not really a type-specific thing!  It's more a 
 	# feature mixin than a type-specific class!
 	#
-	foreach my $image (@images) {
+	foreach my $image (@nodeimages) {
 	    # This is passed along so that remote node can request the file.
 	    # Make sure the image object has an access key defined.
 	    if (defined($image->access_key()) && $image->access_key() ne '') {

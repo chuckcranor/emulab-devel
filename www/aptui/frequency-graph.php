@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -21,6 +21,9 @@
 #
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include_once("geni_defs.php");
@@ -50,13 +53,44 @@ $optargs = OptionalPageArguments("cluster",   PAGEARG_STRING,
                                  "iface",     PAGEARG_STRING,
                                  "logid",     PAGEARG_STRING,
                                  "archived",  PAGEARG_BOOLEAN,
-                                 "baseline",  PAGEARG_BOOLEAN);
-if (!isset($archived)) {
-    $archived = 0;
+                                 "baseline",  PAGEARG_BOOLEAN,
+                                 "incident",  PAGEARG_BOOLEAN,
+                                 "which",     PAGEARG_STRING,
+                                 "endpoint",  PAGEARG_STRING,
+                                 "range",     PAGEARG_STRING);
+
+if (isset($which)) {
+    if (! ($which == "rfmonitor" || $which == "rfbaseline" ||
+           $which == "rfmonitor-mobile")) {
+        SPITUSERERROR("Which graphs do you want to look at?");
+        exit();
+    }
 }
-if (!isset($baseline)) {
-    $baseline = 0;
+elseif ($baseline) {
+    $which = "rfbaseline";    
 }
+else {
+    $which = "rfmonitor";
+}
+if (isset($endpoint)) {
+    if (!TBvalid_node_id($endpoint)) {
+        SPITUSERERROR("Illegal characters in endoint");
+        exit();
+    }
+}
+if ($which != "rfmonitor") {
+    if (!$TBMAINSITE) {
+        SPITUSERERROR("Not supported here.");
+        exit();
+    }
+    $aggregate = Aggregate::ThisAggregate();
+    #
+    # Kill the cluster argument, this only makes sense at the Mothership
+    #
+    unset($cluster);
+}
+$incident = ($incident ? 1 : 0);
+$archived = ($archived ? 1 : 0);
 
 #
 # The monitor looks at only one iface, rf0. That may change later.
@@ -72,17 +106,49 @@ if (isset($cluster)) {
         SPITUSERERROR("No such cluster: $cluster");
         exit();
     }
-    $cluster = "'$cluster'";
+}
+elseif ($which == "rfmonitor") {
+    SPITUSERERROR("Missing cluster argument");
+    exit();
 }
 else {
-    if ($baseline) {
-        $cluster = "null";
-    }
-    else {
-        SPITUSERERROR("Missing cluster argument");
+    $cluster = null;
+}
+if ($which == "rfmonitor" ||
+    $which == "rfmonitor-mobile") {
+    $url = $aggregate->weburl();
+}
+else {
+    $url = "https://${USERNODE}";
+}
+
+if (isset($range)) {
+    if (! (preg_match("/^\d+,\d+$/", $range) ||
+           preg_match("/^\d+$/", $range))) {
+        SPITUSERERROR("Illegal characters in range");
         exit();
     }
+    $tokens = preg_split("/,/", $range);
+    if (count($tokens) == 1) {
+        $rangestart = $tokens[0];
+    }
+    else {
+        $rangestart = $tokens[0];
+        $rangeend   = $tokens[1];
+    }
 }
+
+#
+# Gack, convert mobile endpoint nickname to bus-xxxx since that is how
+# synthing is uploading things. 
+#
+if ($which == "rfmonitor-mobile" && isset($endpoint)) {
+    $aggregate = Aggregate::LookupByNickname($endpoint);
+    if ($aggregate) {
+        $endpoint = str_replace("Bus", "bus-", $endpoint);
+    }
+}
+
 if (isset($node_id)) {
     if (!TBvalid_node_id($node_id)) {
         SPITUSERERROR("Illegal characters in node_id");
@@ -119,12 +185,6 @@ if (isset($logid)) {
         exit();
     }
 }
-if ($baseline) {
-    $url = "https://${USERNODE}";
-}
-else {
-    $url = $aggregate->weburl();
-}
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
@@ -139,14 +199,24 @@ echo "<div id='oops_div'></div>
       <div id='waitwait_div'></div>\n";
 
 echo "<script type='text/javascript'>\n";
-echo "    window.CLUSTER     = $cluster;\n";
+echo "    window.CLUSTER     = " . ($cluster ? "'$cluster'" : "null") . ";\n";
 echo "    window.NODEID      = " . ($node_id ? $node_id : "null") . ";\n";
 echo "    window.IFACE       = " . ($iface ? $iface : "null") . ";\n";
 echo "    window.URL         = '$url';\n";
 echo "    window.ARCHIVED    = $archived;\n";
-echo "    window.BASELINE    = $baseline;\n";
+echo "    window.WHICH       = '$which';\n";
+echo "    window.INCIDENT    = $incident;\n";
 if (isset($logid)) {
     echo "    window.LOGID       = '$logid';\n";
+}
+if (isset($endpoint)) {
+    echo "    window.ENDPOINT    = '$endpoint';\n";
+}
+if (isset($range)) {
+    echo "    window.RANGESTART  = $rangestart;\n";
+    if (isset($rangeend)) {
+        echo "    window.RANGEEND    = $rangeend;\n";
+    }
 }
 echo "</script>\n";
 

@@ -42,7 +42,10 @@ USES=		gmake libtool perl5 python
 BINARY_ALIAS=	swig=swig3.0
 .else
 PLIST=		${PKGDIR}/pkg-plist-nopython
-EXTRA_PATCHES=	${FILESDIR}/emulab-patch-abac-openssl
+EXTRA_PATCHES=	${FILESDIR}/emulab-patch-abac-openssl \
+		${FILESDIR}/emulab-patch-abac-xml \
+		${FILESDIR}/emulab-patch-abac-id \
+		${FILESDIR}/emulab-patch-swig-perl
 USES=		autoreconf gmake libtool perl5
 .endif
 CPPFLAGS+=	-I${LOCALBASE}/include

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -58,8 +58,7 @@ my $CREATESLIVERS    = "$TB/bin/create_slivers";
 my $LOGFILE          = "$TB/log/apt_scheduler.log";
 my $SUDO	     = "/usr/local/bin/sudo";
 my $PROTOUSER	     = "elabman";
-my $SLEEP_INTERVAL   = 300;
-my $DAILY_INTERVAL   = 24 * 3600;
+my $RETRY_INTERVAL   = 600;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -155,11 +154,15 @@ while (1) {
     #
 
     my $query_result =
-	DBQueryWarn("select distinct d.uuid from apt_deferred_instances as d ".
-		    "left join apt_instance_aggregates a on ".
-		    "  a.uuid=d.uuid ".
-		    "where (d.start_at is null or now() >= d.start_at) and ".
-		    "      a.deferred!=0");
+	DBQueryWarn("select d.uuid from apt_deferred_instances as d ".
+		    "left join apt_instances as i on i.uuid=d.uuid ".
+		    "where i.canceled=0 and i.status!='failed' and ".
+		    "      (d.start_at is null or ".
+		    "       (now() >= d.start_at and ".
+		    "        (i.stop_at is null or now() < i.stop_at))) and ".
+		    "      (d.last_retry is null or ".
+		    "       TIME_TO_SEC(TIMEDIFF(now(), ".
+		    "                      d.last_retry)) > $RETRY_INTERVAL)");
     
     if ($query_result && $query_result->numrows) {
 	while (my ($uuid) = $query_result->fetchrow_array()) {
@@ -215,7 +218,7 @@ while (1) {
 	    
 	    # Slight delay between calling create_slivers.
 	    if ($query_result->numrows && !($oneshot || $impotent)) {
-		sleep(10);
+		sleep(20);
 	    }
 	  skip:
 	    $instance->Purge();
@@ -227,7 +230,7 @@ while (1) {
     exit(0)
 	if ($oneshot);
     
-    sleep($SLEEP_INTERVAL);
+    sleep(60);
 }
 exit(0);
 

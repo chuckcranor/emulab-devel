@@ -1,6 +1,6 @@
-diff -Nur iperf-2.0.2.orig/compat/Thread.c iperf-2.0.2/compat/Thread.c
+diff -urb iperf-2.0.2.orig/compat/Thread.c iperf-2.0.2/compat/Thread.c
 --- iperf-2.0.2.orig/compat/Thread.c	2005-05-03 09:15:51.000000000 -0600
-+++ iperf-2.0.2/compat/Thread.c	2018-06-19 16:57:49.691488015 -0600
++++ iperf-2.0.2/compat/Thread.c	2022-08-10 21:22:21.165179901 -0600
 @@ -202,7 +202,7 @@
  #if   defined( HAVE_POSIX_THREAD )
              // Cray J90 doesn't have pthread_cancel; Iperf works okay without
@@ -10,9 +10,18 @@ diff -Nur iperf-2.0.2.orig/compat/Thread.c iperf-2.0.2/compat/Thread.c
  #endif
  #else // Win32
              // this is a somewhat dangerous function; it's not
-diff -Nur iperf-2.0.2.orig/config.guess iperf-2.0.2/config.guess
+@@ -381,7 +381,7 @@
+     Condition_Lock( thread_sNum_cond );
+     thread_sNum -= nonterminating_num;
+     if ( thread_sNum > 1 && nonterminating_num > 0 && interrupt != 0 ) {
+-        fprintf( stderr, wait_server_threads );
++        fprintf( stderr, "%s", wait_server_threads );
+     }
+     nonterminating_num = 0;
+     Condition_Signal( &thread_sNum_cond );
+diff -urb iperf-2.0.2.orig/config.guess iperf-2.0.2/config.guess
 --- iperf-2.0.2.orig/config.guess	2005-02-14 00:26:58.000000000 -0700
-+++ iperf-2.0.2/config.guess	2018-06-19 16:57:49.691488015 -0600
++++ iperf-2.0.2/config.guess	2022-08-10 21:02:52.644306891 -0600
 @@ -3,7 +3,7 @@
  #   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
  #   2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
@@ -32,9 +41,32 @@ diff -Nur iperf-2.0.2.orig/config.guess iperf-2.0.2/config.guess
      arm*:Linux:*:*)
  	echo ${UNAME_MACHINE}-unknown-linux-gnu
  	exit 0 ;;
-diff -Nur iperf-2.0.2.orig/include/Settings.hpp iperf-2.0.2/include/Settings.hpp
+diff -urb iperf-2.0.2.orig/include/headers.h iperf-2.0.2/include/headers.h
+--- iperf-2.0.2.orig/include/headers.h	2005-05-03 09:55:52.000000000 -0600
++++ iperf-2.0.2/include/headers.h	2022-08-10 21:02:52.644306891 -0600
+@@ -82,7 +82,6 @@
+ #include <errno.h>
+ #include <string.h>
+ #include <time.h>
+-#include <math.h>
+ 
+ #ifdef WIN32
+ 
+@@ -180,7 +179,11 @@
+ // from the gnu archive
+ 
+ #include <iperf-int.h>
++#ifdef __FreeBSD__
++typedef uint64_t max_size_t;
++#else
+ typedef uintmax_t max_size_t;
++#endif
+ 
+ /* in case the OS doesn't have these, we provide our own implementations */
+ #include "gettimeofday.h"
+diff -urb iperf-2.0.2.orig/include/Settings.hpp iperf-2.0.2/include/Settings.hpp
 --- iperf-2.0.2.orig/include/Settings.hpp	2005-05-02 14:09:26.000000000 -0600
-+++ iperf-2.0.2/include/Settings.hpp	2018-06-19 16:57:49.691488015 -0600
++++ iperf-2.0.2/include/Settings.hpp	2022-08-10 21:02:52.644306891 -0600
 @@ -125,6 +125,7 @@
      int mBufLen;                    // -l
      int mMSS;                       // -M
@@ -67,54 +99,22 @@ diff -Nur iperf-2.0.2.orig/include/Settings.hpp iperf-2.0.2/include/Settings.hpp
  #endif
  } client_hdr;
  
-diff -Nur iperf-2.0.2.orig/include/headers.h iperf-2.0.2/include/headers.h
---- iperf-2.0.2.orig/include/headers.h	2005-05-03 09:55:52.000000000 -0600
-+++ iperf-2.0.2/include/headers.h	2018-06-19 16:58:11.537898926 -0600
-@@ -82,7 +82,6 @@
- #include <errno.h>
- #include <string.h>
- #include <time.h>
--#include <math.h>
- 
- #ifdef WIN32
- 
-@@ -180,7 +179,11 @@
- // from the gnu archive
- 
- #include <iperf-int.h>
-+#ifdef __FreeBSD__
-+typedef uint64_t max_size_t;
-+#else
- typedef uintmax_t max_size_t;
-+#endif
- 
- /* in case the OS doesn't have these, we provide our own implementations */
- #include "gettimeofday.h"
-diff -Nur iperf-2.0.2.orig/src/Client.cpp iperf-2.0.2/src/Client.cpp
+diff -urb iperf-2.0.2.orig/src/Client.cpp iperf-2.0.2/src/Client.cpp
 --- iperf-2.0.2.orig/src/Client.cpp	2005-05-02 14:09:27.000000000 -0600
-+++ iperf-2.0.2/src/Client.cpp	2018-06-19 16:57:49.691488015 -0600
-@@ -216,13 +216,16 @@
++++ iperf-2.0.2/src/Client.cpp	2022-08-10 21:02:52.645306896 -0600
+@@ -216,9 +216,12 @@
          // perform write 
          currLen = write( mSettings->mSock, mBuf, mSettings->mBufLen ); 
          if ( currLen < 0 ) {
--            WARN_errno( currLen < 0, "write2" ); 
--            break; 
 +	    if (errno != ENOBUFS) {
-+                WARN_errno( currLen < 0, "write2" ); 
-+		break;
-+	    }
-+	    currLen = 0;
+             WARN_errno( currLen < 0, "write2" ); 
+             break; 
          }
++	    currLen = 0;
++        }
  
--        // report packets 
--        reportstruct->packetLen = currLen;
--        ReportPacket( mSettings->reporthdr, reportstruct );
-+	// report packets 
-+	reportstruct->packetLen = currLen;
-+	ReportPacket( mSettings->reporthdr, reportstruct );
-         
-         if ( delay > 0 ) {
-             delay_loop( delay ); 
+         // report packets 
+         reportstruct->packetLen = currLen;
 @@ -341,6 +344,7 @@
      struct timeval timeout; 
  
@@ -142,9 +142,23 @@ diff -Nur iperf-2.0.2.orig/src/Client.cpp iperf-2.0.2/src/Client.cpp
 +    fprintf( stderr, warn_no_ack, mSettings->mSock, count, timo ); 
  } 
  // end write_UDP_FIN 
-diff -Nur iperf-2.0.2.orig/src/Locale.c iperf-2.0.2/src/Locale.c
+diff -urb iperf-2.0.2.orig/src/Listener.cpp iperf-2.0.2/src/Listener.cpp
+--- iperf-2.0.2.orig/src/Listener.cpp	2005-05-02 14:09:27.000000000 -0600
++++ iperf-2.0.2/src/Listener.cpp	2022-08-10 21:06:31.377418402 -0600
+@@ -702,7 +702,9 @@
+         exit(0); 
+     }
+ 
+-    chdir("."); 
++    if (chdir(".") != 0) {
++        fprintf( stderr, "Failed to chdir(.)\n" );
++    }
+     fprintf( stderr, "Running Iperf Server as a daemon\n"); 
+     fprintf( stderr, "The Iperf daemon process ID : %d\n",((int)getpid())); 
+     fflush(stderr); 
+diff -urb iperf-2.0.2.orig/src/Locale.c iperf-2.0.2/src/Locale.c
 --- iperf-2.0.2.orig/src/Locale.c	2005-05-02 14:09:27.000000000 -0600
-+++ iperf-2.0.2/src/Locale.c	2018-06-19 16:57:49.692488034 -0600
++++ iperf-2.0.2/src/Locale.c	2022-08-10 21:02:52.645306896 -0600
 @@ -331,7 +331,7 @@
  "WARNING: Path MTU Discovery may not be enabled.\n";
  
@@ -154,9 +168,66 @@ diff -Nur iperf-2.0.2.orig/src/Locale.c iperf-2.0.2/src/Locale.c
  
  const char warn_ack_failed[]=
  "[%3d] WARNING: ack of last datagram failed after %d tries.\n";
-diff -Nur iperf-2.0.2.orig/src/Settings.cpp iperf-2.0.2/src/Settings.cpp
+diff -urb iperf-2.0.2.orig/src/main.cpp iperf-2.0.2/src/main.cpp
+--- iperf-2.0.2.orig/src/main.cpp	2005-05-02 14:09:27.000000000 -0600
++++ iperf-2.0.2/src/main.cpp	2022-08-10 21:02:52.645306896 -0600
+@@ -163,6 +163,11 @@
+     // read settings from command-line parameters
+     Settings_ParseCommandLine( argc, argv, ext_gSettings );
+ 
++    // if needed, redirect the output into a specified file
++    if ( !isSTDOUT( ext_gSettings ) ) {
++        redirect( ext_gSettings->mOutputFileName );
++    }
++
+     // Check for either having specified client or server
+     if ( ext_gSettings->mThreadMode == kMode_Client 
+          || ext_gSettings->mThreadMode == kMode_Listener ) {
+diff -urb iperf-2.0.2.orig/src/ReportDefault.c iperf-2.0.2/src/ReportDefault.c
+--- iperf-2.0.2.orig/src/ReportDefault.c	2005-05-02 14:09:27.000000000 -0600
++++ iperf-2.0.2/src/ReportDefault.c	2022-08-10 21:13:58.977698715 -0600
+@@ -150,7 +150,7 @@
+                   (data->mThreadMode == kMode_Listener ? 0 : 1) );
+     win_requested = data->mTCPWin;
+ 
+-    printf( seperator_line );
++    printf( "%s", seperator_line );
+     if ( data->mThreadMode == kMode_Listener ) {
+         printf( server_port,
+                 (isUDP( data ) ? "UDP" : "TCP"), 
+@@ -189,7 +189,7 @@
+         printf( warn_window_requested, buffer );
+     }
+     printf( "\n" );
+-    printf( seperator_line );
++    printf( "%s", seperator_line );
+ }
+ 
+ /*
+@@ -277,7 +277,7 @@
+         } else if ( checkMSS_MTU( inMSS, 576 ) ) {
+             net = "minimum";
+             mtu = 576;
+-            printf( warn_no_pathmtu );
++            puts( warn_no_pathmtu );
+         } else {
+             mtu = inMSS + 40;
+             net = "unknown interface";
+diff -urb iperf-2.0.2.orig/src/Reporter.c iperf-2.0.2/src/Reporter.c
+--- iperf-2.0.2.orig/src/Reporter.c	2005-05-02 14:09:27.000000000 -0600
++++ iperf-2.0.2/src/Reporter.c	2022-08-10 21:13:48.233643891 -0600
+@@ -891,7 +891,7 @@
+         } else if ( checkMSS_MTU( inMSS, 576 ) ) {
+             net = "minimum";
+             mtu = 576;
+-            printf( warn_no_pathmtu );
++            puts( warn_no_pathmtu );
+         } else {
+             mtu = inMSS + 40;
+             net = "unknown interface";
+diff -urb iperf-2.0.2.orig/src/Settings.cpp iperf-2.0.2/src/Settings.cpp
 --- iperf-2.0.2.orig/src/Settings.cpp	2005-05-02 14:09:27.000000000 -0600
-+++ iperf-2.0.2/src/Settings.cpp	2018-06-19 16:57:49.692488034 -0600
++++ iperf-2.0.2/src/Settings.cpp	2022-08-10 21:17:48.518833331 -0600
 @@ -105,6 +105,7 @@
  {"reportstyle",required_argument, NULL, 'y'},
  
@@ -182,6 +253,24 @@ diff -Nur iperf-2.0.2.orig/src/Settings.cpp iperf-2.0.2/src/Settings.cpp
      //main->mLocalhost    = NULL;        // -B,  none
      //main->mCompat     = false;         // -C,  run in Compatibility mode
      //main->mDaemon     = false;         // -D,  run as a daemon
+@@ -374,7 +376,7 @@
+ 
+         case 'h': // print help and exit
+ #ifndef WIN32
+-            fprintf( stderr, usage_long );
++            fprintf( stderr, "%s", usage_long );
+ #else
+             fprintf(stderr, usage_long1);
+             fprintf(stderr, usage_long2);
+@@ -484,7 +486,7 @@
+             break;
+ 
+         case 'v': // print version and exit
+-            fprintf( stderr, version );
++            fprintf( stderr, "%s", version );
+             exit(1);
+             break;
+ 
 @@ -540,6 +542,10 @@
  
  
@@ -223,24 +312,9 @@ diff -Nur iperf-2.0.2.orig/src/Settings.cpp iperf-2.0.2/src/Settings.cpp
      if ( client->mMode == kTest_DualTest ) {
          hdr->flags |= htonl(RUN_NOW);
      }
-diff -Nur iperf-2.0.2.orig/src/main.cpp iperf-2.0.2/src/main.cpp
---- iperf-2.0.2.orig/src/main.cpp	2005-05-02 14:09:27.000000000 -0600
-+++ iperf-2.0.2/src/main.cpp	2018-06-19 16:57:49.692488034 -0600
-@@ -163,6 +163,11 @@
-     // read settings from command-line parameters
-     Settings_ParseCommandLine( argc, argv, ext_gSettings );
- 
-+    // if needed, redirect the output into a specified file
-+    if ( !isSTDOUT( ext_gSettings ) ) {
-+        redirect( ext_gSettings->mOutputFileName );
-+    }
-+
-     // Check for either having specified client or server
-     if ( ext_gSettings->mThreadMode == kMode_Client 
-          || ext_gSettings->mThreadMode == kMode_Listener ) {
-diff -Nur iperf-2.0.2.orig/src/stdio.c iperf-2.0.2/src/stdio.c
+diff -urb iperf-2.0.2.orig/src/stdio.c iperf-2.0.2/src/stdio.c
 --- iperf-2.0.2.orig/src/stdio.c	2005-05-02 14:09:27.000000000 -0600
-+++ iperf-2.0.2/src/stdio.c	2018-06-19 16:57:49.692488034 -0600
++++ iperf-2.0.2/src/stdio.c	2022-08-10 21:02:52.646306901 -0600
 @@ -255,8 +255,6 @@
   * ------------------------------------------------------------------- */
  

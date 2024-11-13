@@ -8,8 +8,8 @@
     <th>EID</th>
     <th class="sorter-false"><img src="images/slice.png"></th>
     <th>User</th>
-    <th>Allocated</th>
-    <th>Released</th>
+    <th class="sorter-sugar">Allocated</th>
+    <th class="sorter-sugar">Released</th>
     <th class="sorter-false">Duration</th>
   </thead>
   <tbody>
@@ -38,10 +38,10 @@
 	      <% } %>
 	    <% } else { %>
 	      <% if (entry.running) { %>
-		<a href="../showexp.php3?experiment=<%- entry.eid_idx %>"
+		<a href="<%- window.CLASSIC %>/showexp.php3?experiment=<%- entry.eid_idx %>"
 		   target="_blank"><%- entry.eid %></a>
 	      <% } else { %>
-		<a href="../showexpstats.php3?record=<%- entry.eid_idx %>"
+		<a href="<%- window.CLASSIC %>/showexpstats.php3?record=<%- entry.eid_idx %>"
 		   target="_blank"><%- entry.eid %></a>
 	      <% } %>
 	    <% } %>

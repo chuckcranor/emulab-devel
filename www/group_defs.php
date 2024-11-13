@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021 University of Utah and the Flux Group.
+# Copyright (c) 2006-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -328,6 +328,7 @@ class Group
 	global $TB_PROJECT_MAKEIMAGEID;
 	global $TB_PROJECT_DELIMAGEID;
 	global $TB_PROJECT_CREATEEXPT;
+	global $TB_PROJECT_CREATEPROFILE;
 	global $TB_PROJECT_MIN;
 	global $TB_PROJECT_MAX;
 	global $TBDB_TRUST_USER;
@@ -345,6 +346,7 @@ class Group
 	    $access_type > $TB_PROJECT_MAX) {
 	    TBERROR("Invalid access type: $access_type!", 1);
 	}
+        $project = $this->Project();
  
         #
         # Admins do whatever they want!
@@ -361,18 +363,30 @@ class Group
 			   $TBDB_TRUST_GROUPROOT)) {
 		return 1;
 	    }
-            $project = $this->Project();
             $leader  = $this->GetLeader();
             if ($user->SameUser($leader)) {
                 return 1;
             }
 	    $mintrust = $TBDB_TRUST_USER;
+            return TBMinTrust(TBGrpTrust($uid, $pid, $gid), $mintrust);
 	}
+        /*
+         * Nothing else is allowed if the project is disabled
+         */
+        if ($project->disabled()) {
+            return 0;
+        }
 	elseif ($access_type == $TB_PROJECT_MAKEGROUP ||
 		$access_type == $TB_PROJECT_DELGROUP) {
             if ($access_type == $TB_PROJECT_DELGROUP) {
-                $project = $this->Project();
-                $leader  = $this->GetLeader();
+                #
+                # If user is project_root, allowed to delete any group
+                #
+                if (TBMinTrust(TBGrpTrust($uid, $pid, $pid),
+                               $TBDB_TRUST_PROJROOT)) {
+                    return 1;
+                }
+                $leader = $this->GetLeader();
 		if ($user->SameUser($leader)) {
                     return 1;
                 }
@@ -389,6 +403,9 @@ class Group
 		$access_type == $TB_PROJECT_MAKEIMAGEID ||
 		$access_type == $TB_PROJECT_CREATEEXPT) {
 	    $mintrust = $TBDB_TRUST_LOCALROOT;
+	}
+	elseif ($access_type == $TB_PROJECT_CREATEPROFILE) {
+	    $mintrust = $TBDB_TRUST_USER;
 	}
 	elseif ($access_type == $TB_PROJECT_ADDUSER ||
 		$access_type == $TB_PROJECT_EDITGROUP) {

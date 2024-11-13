@@ -28,23 +28,8 @@ $(function ()
 	$('#waitwait_div').html(waitString);
 	$('#oops_div').html(oopsString);
 
-        // Javascript to enable link to tab
-        var hash = document.location.hash;
-        if (hash) {
-            $('.nav-tabs a[href="'+hash+'"]').tab('show');
-        }
-        // Change hash for page-reload
-        $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
-	    history.replaceState('', '', e.target.hash);
-        });
-	// Set the correct tab when a user uses their back/forward button
-        $(window).on('hashchange', function (e) {
-	    var hash = window.location.hash;
-	    if (hash == "") {
-		hash = "#experiments";
-	    }
-	    $('.nav-tabs a[href="'+hash+'"]').tab('show');
-	});
+	// Setup nav tab document hash handling.
+	sup.hashSetup(".nav-tabs", "#info");
 
 	LoadExperimentTab();
 	LoadClassicExperiments();
@@ -137,28 +122,6 @@ $(function ()
 					    {"pid" : window.TARGET_PROJECT,
 					     "gid" : window.TARGET_GROUP});
 	xmlthing.done(callback);
-    }
-
-    function ShowTopology(profile)
-    {
-	var index;
-
-	var callback = function(json) {
-	    if (json.code) {
-		alert("Failed to get rspec for topology viewer: " + json.value);
-		return;
-	    }
-	    sup.ShowModal("#quickvm_topomodal");
-	    $("#quickvm_topomodal").one("shown.bs.modal", function () {
-		sup.maketopmap('#showtopo_nopicker',
-			       json.value.profile_rspec, false, !window.ISADMIN);
-	    });
-	};
-	var $xmlthing = sup.CallServerMethod(null,
-					     "show-profile",
-					     "GetProfile",
-				     	     {"uuid" : profile});
-	$xmlthing.done(callback);
     }
 
     // We want to warn just once.

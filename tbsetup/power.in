@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,7 +26,7 @@
 #
 # Testbed Power Control script
 #
-# power [on|off|cycle] <node> [<node>] ...
+# power [on|off|cycle|status] <node> [<node>] ...
 #
 ############################################################
 
@@ -40,7 +40,9 @@ my $RPCSERVER  = "@OUTERBOSS_NODENAME@";
 my $RPCPORT    = "@OUTERBOSS_XMLRPCPORT@";
 my $RPCCERT    = "@OUTERBOSS_SSLCERTNAME@";
 my $WOL        = "$TB/sbin/whol";
-my $TBLOG	= "@TBLOGFACIL@";
+my $POWER      = "$TB/bin/power";
+my $TBLOG      = "@TBLOGFACIL@";
+my $RFSWITCHER = "$TB/sbin/powder-rfswitcher";
 
 use lib "@prefix@/lib";
 use libdb;
@@ -59,6 +61,8 @@ use power_ue;
 use power_powduino;
 use power_5gstore;
 use power_enlogic;
+use power_remotecmd;
+use power_esi;
 use libtestbed;
 use User;
 use Node;
@@ -72,10 +76,11 @@ use Sys::Syslog;
 
 sub usage() {
     print << "END";
-Usage: $0 [-v n] [-e] [-a] <on|off|cycle> <node ...>
+Usage: $0 [-v n] [-e] [-a] [-W] <on|off|cycle|status> <node ...>
 -e     Surpress sending of event - for use by scripts that have already sent it
 -v n   Run with verbosity level n
 -a     Skip the access check, caller is knows what it is doing
+-W     Skip the timeout check, caller knows what it is doing.
 END
     1;
 }
@@ -126,6 +131,10 @@ if ($opt{e}) {
 my $nopermcheck = 0;
 if ($opt{"a"}) {
     $nopermcheck = 1;
+}
+my $notimecheck = 0;
+if ($opt{"W"}) {
+    $notimecheck = 1;
 }
 
 #
@@ -293,6 +302,16 @@ foreach my $nodeid (@machines) {
 	    warn "You are not authorized to control $nodeid. Skipping...\n";
 	    next;
 	}
+	#
+	# Powder radio sanity check.
+	#
+	if ($op eq "on" && $node->rfswitch_port()) {
+	    system("$RFSWITCHER -d -v $nodeid");
+	    if ($?) {
+		warn "Refusing to power on $nodeid until the RF switch is set.\n";
+		next;
+	    }
+	}
 	$nodes{$nodeid} = $node;
     }
 
@@ -305,10 +324,12 @@ foreach my $nodeid (@machines) {
 		     "where node_id='$nodeid'");
     if ($result->num_rows() == 0) {
 	warn "No outlets table entry found for $nodeid. Skipping...\n";
-	SENDMAIL($TBOPS,
-		 "No power outlet for $nodeid",
-		 "Unable to power '$op' $nodeid; no outlets table entry!",
-		 $TBOPS);
+	if (defined($node)) {
+	    SENDMAIL($TBOPS,
+		     "No power outlet for $nodeid",
+		     "Unable to power '$op' $nodeid; no outlets table entry!",
+		     $TBOPS);
+	}
 	next;
     }
     my ($power_id, $outlet, $last_power) = $result->fetchrow();
@@ -319,12 +340,23 @@ foreach my $nodeid (@machines) {
     my $power_delay = 60;
     my $postwol     = 0;
     my $forcecycle  = 0;
+    my @powergroup  = ();
+    
     if (defined($node)) {
 	$power_delay = $node->NodeTypeInfo()->power_delay();
+	$power_delay = 0 if (!defined($power_delay));
 
 	if ($node->NodeAttribute("wakeonlan_afterpower", \$postwol) != 0) {
 	    warn "Could not get wakeonlan_afterpower attr for $nodeid.\n";
 	    $postwol = 0;
+	}
+
+	my $pg;
+	if ($node->NodeAttribute("powergroup", \$pg) != 0) {
+	    warn "Could not get powergroup attr for $nodeid.\n";
+	}
+	elsif ($pg && $pg ne "") {
+	    @powergroup = split(",", $pg);
 	}
 
 	#
@@ -351,7 +383,8 @@ foreach my $nodeid (@machines) {
 	    $forcecycle = 1;
 	}
     }
-    my $time_ok = (time() - $power_delay > $last_power ? 1 : 0);
+    my $time_ok = ($notimecheck ? 1 :
+		   (time() - $power_delay > $last_power ? 1 : 0));
 
     #
     # Check for rate-limiting, and update the last power cycle time
@@ -373,7 +406,8 @@ foreach my $nodeid (@machines) {
     #
     # Associate this node with the power controller it is attached to
     #
-    push @{$outlets{$power_id}}, [$nodeid, $outlet, $postwol, $forcecycle];
+    push @{$outlets{$power_id}},
+	[$nodeid, $outlet, $postwol, $forcecycle, \@powergroup];
 }
 
 print "machines= ",join(" ",@machines),"\n" if $verbose;
@@ -395,8 +429,9 @@ foreach my $power_id (keys %outlets) {
     my @forcenodes = ();
     my @unforcenodes = ();
     my %postwol = ();
+    my @powergroup = ();
     foreach my $node (@{$outlets{$power_id}}) {
-	my ($node_id, $outlet, $wol, $force) = @$node;
+	my ($node_id, $outlet, $wol, $force, $pg) = @$node;
 	push @nodes, $node_id;
 	push @outlets, $outlet;
 	if ($force) {
@@ -407,6 +442,7 @@ foreach my $power_id (keys %outlets) {
 	    push @unforcenodes, $node_id;
 	}
 	$postwol{$node_id} = $wol;
+	push @powergroup, @{$pg};
     }
     my $nodestr = join(",",@nodes);
 
@@ -416,8 +452,10 @@ foreach my $power_id (keys %outlets) {
 
     if ($power_id eq "mail" || $power_id =~ /^whol-/ 
 	|| $power_id eq 'ipmi15' || $power_id eq 'ipmi20'
+	|| $power_id eq 'esi'
 	|| $power_id eq 'drac' || $power_id eq 'ue'
-	|| $power_id eq 'ilo' || $power_id eq 'ilo2' || $power_id eq 'ilo3') {
+	|| $power_id eq 'ilo' || $power_id eq 'ilo2' || $power_id eq 'ilo3'
+	|| $power_id eq 'remotecmd') {
 	$type = $power_id;
 	$IP = "";
 	$class = "";
@@ -653,6 +691,26 @@ foreach my $power_id (keys %outlets) {
 	    $errors++;
 	}
 	$sendevent = 0; # power_mail sends this itself.
+    } elsif ($type eq "remotecmd") {
+	if (remotecmdctrl($op,@nodes)) {
+	    print "Control of $nodestr failed.\n"; $exitval++;
+	    $errors++;
+	}
+	} elsif ($type eq "esi") {
+
+       my $device = new power_esi($type,@nodes,$verbose);
+
+       if (!defined $device) {
+	   	warn "Unable to contact controller for $nodestr. Skipping...\n";
+	   	next;
+       }
+       else {
+	   	print "Calling device->power($op,@outlets)\n" if $verbose > 1;
+	   	if ($device->power($op,@nodes)) {
+	       print "Control of $nodestr failed.\n";
+	       $errors++;
+	   	}
+       }
     } else {
 	print "power: Unknown power type '$type'\n";
 	$errors++;
@@ -692,6 +750,7 @@ foreach my $power_id (keys %outlets) {
 		    }
 		}
 		my $oldstate = $node->eventstate();
+		$oldstate = "" if (!defined($oldstate));
 		my $newstate;
 
 		if ($op eq "off") {
@@ -716,6 +775,26 @@ foreach my $power_id (keys %outlets) {
 	    }
 	    push(@wolnodes, $nodeid)
 		if ($postwol{$nodeid});
+	}
+	if (@powergroup && $op =~ /^(on|off)$/) {
+	    my $power_ids = join(" ", @powergroup);
+	    print "Powering $op nodes in the power group: $power_ids\n";
+
+	    if ($op eq "off") {
+		# This delay is needed for radios.
+		print "Delaying 10 seconds ... \n";
+		sleep(10);
+		system("$POWER -a off $power_ids");
+		if ($?) {
+		    $errors++;
+		}
+	    }
+	    elsif ($op eq "on") {
+		system("$POWER -a on $power_ids");
+		if ($?) {
+		    $errors++;
+		}
+	    }
 	}
     } else {
 	$exitval += $errors;
@@ -808,7 +887,7 @@ sub dostatus(@) {
 		($ctrl, $outlet) = $result->fetchrow();
 
 		# XXX hack for IPMI/iLo nodes
-		if ($ctrl =~ /^(ipmi15|ipmi20|ilo|ilo2|ilo3|drac)$/) {
+		if ($ctrl =~ /^(ipmi15|ipmi20|ilo|ilo2|ilo3|drac|esi)$/) {
 		    push(@{$pernode{$ctrl}}, $node);
 		    next;
 		}
@@ -1066,25 +1145,54 @@ sub dostatus(@) {
     }
 
     #
-    # Now handle all IPMI/iLo nodes
+    # Now handle all IPMI/iLo/ESI nodes
     #
     foreach my $ctrl (keys %pernode) {
 	my @cnodes = @{$pernode{$ctrl}};
 
 	my %status = ();
-	$errors += ilostatus($ctrl, \%status, @cnodes);
-	foreach my $node (@cnodes) {
-	    my $state;
-	    if (!exists($status{$node})) {
-		$state = "<unknown>";
-	    } elsif ($status{$node} == 1) {
-		$state = "on";
-	    } elsif ($status{$node} == 0) {
-		$state = "off";
+	
+	if ($ctrl eq 'esi') {		
+	    my $esidevice = new power_esi("esi", @cnodes, $verbose);
+	    if (!defined $esidevice) {
+		    warn "Unable to contact controller $ctrl.\n";
+		    $errors++;
+		    next;
 	    } else {
-		$state = "<unknown>";
+		print "Calling ESI esidevice->status()\n"
+		    if $verbose > 1;
+		$errors += $esidevice->status(\%status, @cnodes);
+		for my $outlet (@cnodes) {
+		    my $oname = "outlet$outlet";
+		    print "Retrieving status for $oname\n" if ($verbose);	
+		    my $state;
+		    if (!exists($status{$oname})) {
+			$state = "<no status>";
+		    } elsif ($status{$oname} == 1) {
+			$state = "on";
+		    } elsif ($status{$oname} == 0) {
+			$state = "off";
+		    } else {
+			$state = "<unknown>";
+		    }
+		    print "$outlet: $state\n";
+		}
 	    }
-	    print "$node: $state\n";
+	} else { ## IPMI/iLo
+	    $errors += ilostatus($ctrl, \%status, @cnodes);
+	    foreach my $node (@cnodes) {
+		my $state;
+		if (!exists($status{$node})) {
+		    $state = "<unknown>";
+		} elsif ($status{$node} == 1) {
+		    $state = "on";
+		} elsif ($status{$node} == 0) {
+		    $state = "off";
+		} else {
+		    $state = "<unknown>";
+		}
+		print "$node: $state\n";
+	    }
 	}
     }
 

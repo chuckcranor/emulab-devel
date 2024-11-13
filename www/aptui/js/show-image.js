@@ -260,8 +260,10 @@ $(function ()
 	var td_value  = $.trim($(td_field).find("span").text());
 	var td_type   = $(td_name).data("fieldtype");
 	var td_fname  = $(td_name).data("fieldname");
+	var original  = $(td_field).find("span").clone();
 
-	console.info(td_name, td_field, td_value, td_type, td_fname);
+	console.info("HandEditButton",
+		     td_name, td_field, td_value, td_type, td_fname);
 
 	// Hide the edit button till we are done.
 	$(target).addClass("invisible");
@@ -298,6 +300,11 @@ $(function ()
 		$(td_field).find("input").prop("checked", false);
 	    }
 	}
+	else if (td_type == "select") {
+	    $(original).removeClass("hidden original");
+	    $(original).find("select").attr("disabled", false);
+	    $(td_field).find("span.editing").append(original);
+	}
 	else {
 	    alert("Bad fieldtype in edit");
 	    return;
@@ -325,6 +332,10 @@ $(function ()
 	    else if (td_type == "checkbox") {
 		newval = $(td_field).find("input").is(":checked") ? 1 : 0;
 	    }
+	    else if (td_type == "select") {
+		newval = $(td_field)
+		    .find("span.editing select option:selected").val();
+	    }
 	    sup.CallServerMethod(null, "image", "Modify",
 				 {"uuid"  : window.UUID,
 				  "field" : td_fname,
@@ -337,13 +348,22 @@ $(function ()
 				     }
 				     // Kill the buttons/input field.
 				     $(td_field).find(".editing").remove();
+				     
 				     // Update and show the original
-				     if (td_type == "checkbox") {
-					 newval = YesNo(newval);
+				     if (td_type == "select") {
+					 $(td_field).find("span select")
+					     .val(newval);
+				     }
+				     else {
+					 if (td_type == "checkbox") {
+					     newval = YesNo(newval);
+					 }
+					 $(td_field).find("span")
+				             .text(newval);
 				     }
 				     $(td_field).find("span")
-				         .text(newval)
 					 .removeClass("hidden");
+				     
 				     // Show the edit button again
 				     $(target).removeClass("invisible");
 

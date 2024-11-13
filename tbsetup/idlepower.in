@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -145,14 +145,20 @@ my $result =
 		 "  (select type,attrvalue ".
 		 "   from node_type_attributes ".
 		 "   where attrkey='idlepower_enable' ".
-		 "   group by type) as idlepower_enabled ".
-		 "  on t.type=idlepower_enabled.type ".
+		 "   group by type) as idlepower_type_enabled ".
+		 "  on t.type=idlepower_type_enabled.type ".
+		 "left outer join node_attributes as na1 on ".
+		 "  na1.node_id=a.node_id and na1.attrkey='idlepower_enable' ".
+		 "left outer join node_attributes as na2 on ".
+		 "  na2.node_id=a.node_id and na2.attrkey='idlepower_disable' ".
 		 "where (b.node_id is null and t.class='pc' and ".
 		 "    (np.eventstate='" . TBDB_NODESTATE_PXEWAIT . "' or ".
 		 "     (np.op_mode='" . TBDB_NODESTATE_ALWAYSUP . "' and ".
 		 "      np.eventstate='" . TBDB_NODESTATE_ISUP . "'))) and ".
 		 "      (a.role='testnode' and t.isremotenode=0) and ".
-		 "      idlepower_enabled.attrvalue is not NULL");
+		 "    (idlepower_type_enabled.attrvalue is not NULL or ".
+		 "     na1.attrvalue is not null) and ".
+		 "    na2.attrvalue is null");
 
 # Scan the results, checking permissions and adding to the list
 # You get to use a node type if no pid was specified (that is, you get

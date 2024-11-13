@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -76,6 +76,8 @@ my $RELOADEID	= NODERELOADING_EID;
 my $PENDINGEID	= NODERELOADPENDING_EID;
 my $REPOSPID	= NODEREPOSITIONING_PID;
 my $RPPENDINGEID= NODEREPOSPENDING_EID;
+my $CHECKUPPID  = NODEILL_PID;
+my $CHECKUPEID  = NODEILL_EID;
 my $NODEDEAD_PID= NODEDEAD_PID;
 my $NODEDEAD_EID= NODEDEAD_EID;
 
@@ -102,6 +104,8 @@ my $widearea_multiplier = 2;       # widearea nodes get (mult+1)x longer, but
                                    #  possibly not quite true cause of mustwipe)
 my $warnonretry = 1;
 my $hwdownaction= "nothing";
+my $checkup_int = 0;
+my $checkup_max = 0;
 my %retried     = ();
 my %failed	= ();
 my @retry_list  = ();
@@ -176,10 +180,17 @@ $SIG{HUP} = \&handler
 
 logit("Reload Daemon starting... pid $$");
 
-# We use this a lot.
+# Reloading experiment
 my $reloading_experiment = Experiment->Lookup($RELOADPID, $RELOADEID);
 if (!defined($reloading_experiment)) {
-    Fatal("Could not locate experiment object for $RELOADEID");
+    fatal("Could not locate experiment object for $RELOADEID");
+    return;
+}
+
+# hwcheckup experiment
+my $hwcheckup_experiment = Experiment->Lookup($CHECKUPPID, $CHECKUPEID);
+if (!defined($hwcheckup_experiment)) {
+    fatal("Could not locate experiment object for $CHECKUPEID");
     return;
 }
 
@@ -194,9 +205,9 @@ while (1) {
 
     # Partial delay between loops in case of an error.
     if ($idle) {
+	# Wait longer if we're not doing anything
 	sleep(10);
     }
-    # Wait longer if we're not doing anything
     else {
 	sleep(1);
     }
@@ -447,7 +458,8 @@ while (1) {
     my $CLASSCLAUSE = "(n.class='pc' or n.class='pct')";
     
     $query_result =
-	DBQueryWarn("select a.node_id,b.pid,b.eid,b.mustwipe,a.type ".
+	DBQueryWarn("select a.node_id,b.pid,b.eid,b.mustwipe,a.type,".
+		    "a.checkup_timestamp,n.class ".
 		    "from reserved as b ".
 		    "left join nodes as a on a.node_id=b.node_id ".
 		    "left join last_reservation as l on l.node_id=a.node_id ".
@@ -485,6 +497,9 @@ while (1) {
     # note that we did something
     $idle = 0;
 
+    # Nodes to move into hwcheckup
+    my $cc = 0;
+
     # Grab all the nodes that match
     my @pending_list = @retry_list;
     while (%hrow = $query_result->fetchhash()) {
@@ -493,6 +508,8 @@ while (1) {
 	$eid  = $hrow{'eid'};
 	$mustwipe = $hrow{'mustwipe'};
 	$type = $hrow{'type'};
+	$lastcheckup = $hrow{'checkup_timestamp'};
+	$class = $hrow{'class'};
 	$imageable = NodeType->LookupSync($type)->imageable();
 
 	#
@@ -507,7 +524,36 @@ while (1) {
 	    if ($debug) {
 		logit("$node: in reloadpending.");
 	    }
-	    push(@pending_list, [$node,$mustwipe,0]);
+
+	    #
+	    # Look for nodes that are past due for a checkup and shunt those
+	    # off to hwcheckup instead of reloading. Any failure to move a
+	    # node will result in it going into reloading instead.
+	    # XXX we only handle "pc"s right now.
+	    #
+	    if ($class eq "pc" &&
+		$checkup_int && ($time - $lastcheckup) >= $checkup_int &&
+		($checkup_max == 0 || $cc < $checkup_max)) {
+		my $nodeobj = Node->Lookup($node);
+		if ($nodeobj &&
+		    $nodeobj->MoveReservation($hwcheckup_experiment) == 0) {
+		    $nodeobj->SetNodeHistory(TB_NODEHISTORY_OP_MOVE, undef,
+					     $hwcheckup_experiment);
+		    $nodeobj->SetCheckupStamp($time);
+		    $cc++;
+
+		    my $last = int(($time - $lastcheckup) / (24*60*60));
+		    logit("$node: moved to hwcheckup, ".
+			  ($lastcheckup == 0 ? "never checked." :
+			   "last checked $last days ago."));
+		} else {
+		    push(@pending_list, [$node,$mustwipe,0]);
+		    logit("$node: WARNING: could not move to hwcheckup, ".
+			  "reloading instead.");
+		}
+	    } else {
+		push(@pending_list, [$node,$mustwipe,0]);
+	    }
 	} else {
 	    if ($debug) {
 		logit("$node: otherwise needs reloading.");
@@ -879,6 +925,14 @@ sub tohwdown($$$)
 #	'adminmode' to put nodes in admin MFS,
 #	'nothing' to just move them (default).
 #
+# hwcheckup/interval:
+#	If non-zero, an interval (in days) at which nodes should be run
+#	through the hwcheckup experiment, where periodic tasks are performed.
+#	Checkup is disabled if interval is zero.
+# hwcheckup/maxnodes:
+#	Maximum number of nodes to feed into hwcheckup during any one pass.
+#	Zero means move all eligible nodes.
+#
 sub getsitevars()
 {
     my ($val,$nfail,$nretry,$nwarn,$nhwdown);
@@ -922,6 +976,28 @@ sub getsitevars()
 	$retry_time = $nretry;
 	$warnonretry = $nwarn;
 	$hwdownaction = $naction;
+    }
+
+    my $interval = $checkup_int;
+    if (TBGetSiteVar("hwcheckup/interval", \$val)) {
+	# note: interval variable is days
+	$val = 0
+	    if (int($val) < 0);
+	$val = 365
+	    if (int($val) > 365);
+	$interval = int($val) * (24 * 60 * 60);
+    }
+
+    my $maxnodes = $checkup_max;
+    if (TBGetSiteVar("hwcheckup/maxnodes", \$val)) {
+	$maxnodes = int($val);
+    }
+
+    if ($interval != $checkup_int || $maxnodes != $checkup_max) {
+	logit("Changing checkup interval/maxnodes values: ".
+	      "$checkup_int/$checkup_max => $interval/$maxnodes");
+	$checkup_int = $interval;
+	$checkup_max = $maxnodes;
     }
 }
 

@@ -239,9 +239,7 @@ MANAGEMENT_ROUTER=10.130.6.1
 DHCPD_DYNRANGE="128.104.223.200 128.104.223.250"
 
 # For our MANAGEMENT_NETWORK vlan interface:
-# 2015-02-26
-# bpkroth
-DHCPD_EXTRAIFS="xn1"
+DHCPD_EXTRAIFS="lagg0.215"
 
 #
 # Fill in the nameservers for your campus network here - the nameserver on boss
@@ -599,7 +597,7 @@ AMD_ROOT=/.amd_mnt/ops.wisc.cloudlab.us
 # 2015-04-04
 # bpkroth
 ZFS_NOEXPORT=1
-INCREMENTAL_MOUNTD=1
+INCREMENTAL_MOUNTD=0
 
 # Enable idle stats collection (RRD files)
 SDCOLLECTD_DOSTATS=1

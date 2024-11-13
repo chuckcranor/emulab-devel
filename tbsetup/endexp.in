@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2013, 2018 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -93,6 +93,7 @@ my $TB     = "@prefix@";
 my $DBNAME = "@TBDBNAME@";
 my $TBOPS  = "@TBOPSEMAIL@";
 my $TBLOGS = "@TBLOGSEMAIL@";
+my $TARGETSYS = "@TARGETSYS_TARGET@";
 
 #
 # Testbed Support libraries
@@ -191,6 +192,20 @@ my $swapper = $experiment->GetSwapper();
 my $workdir = $experiment->WorkDir();
 my $userdir = $experiment->UserDir();
 my $infodir = $experiment->InfoDir();
+
+#
+# Try to recover a messed up geni experiment, as happens every day
+# on buses. 
+#
+if ($TARGETSYS =~ /^POWDER/) {
+    if (! -e $workdir || ! -e $infodir) {
+	print "$pid/$eid is missing critical directories. Attempting to fix\n";
+	if ($experiment->CreateDirectory() != 0) {
+	    die("*** $0:\n".
+		"    Could not recreate critical directories!\n");
+	}
+    }
+}
 
 # Sanity check.
 if (! -e $workdir) {
@@ -362,6 +377,11 @@ else {
 		       "$expt_locked!\n".
 		       "You must wait until it is no longer in transition.\n")
 	    if (defined($expt_locked) && !$force);
+
+	if ($estate eq EXPTSTATE_TERMINATING() && $force) {
+	    $experiment->ResetState(EXPTSTATE_ACTIVE());
+	    $estate = EXPTSTATE_ACTIVE();
+	}
 
 	#
 	# Okay, check state. We do not allow termination to start when the

@@ -3,8 +3,6 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
         <p>Are you sure you want to terminate this experiment? 
           Click on the button below if you are really sure.
 	</p>
@@ -20,9 +18,14 @@
 	  <input size=5 id='terminate_lockdown_code'>
 	</center>
 	<% } %>
-	<br>
-        <button class='btn btn-primary align-center' id='terminate'
-                type='submit' name='terminate'>Terminate</button>
+	<center class="mt-3">
+          <button class='btn btn-danger confirm-button' id='terminate'
+                  type='submit' name='terminate'>
+	    Terminate</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>
+	    Cancel</button>
+	</center>
       </div>
     </div>
   </div>

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,6 +27,7 @@ use English;
 use Getopt::Std;
 use BSD::Resource;
 use POSIX qw(:signal_h);
+use File::Temp qw(tempdir);
     
 #
 # Simply a wrapper for the geni-lib python environment
@@ -63,10 +64,10 @@ my $TAR      = "/usr/bin/tar";
 my $debug    = 0;
 
 # Locals
-my $tempdir = "/tmp/genilib-$$";
 my $ifile   = "$$.py";
 my $ofile   = "$$.out";
 my $pfile   = "$$.json";
+my $tdir;
 
 # Protos
 sub fatal($);
@@ -199,14 +200,13 @@ if (! $TESTMODE) {
     # also be written as root, we need to make sure they aren't symlinks to
     # somewhere that the user could not normally access.
     #
-    if (! mkdir($tempdir, 0750)) {
-	die("Could not mkdir $tempdir: $!\n");
+    $tdir = tempdir("genilib-XXXXXX", DIR => "/tmp", CLEANUP => 1);
+    
+    if (! chmod(0750, $tdir)) {
+	die("Could not chmod $tdir to 0750: $!\n");
     }
-    if (! chmod(0750, $tempdir)) {
-	die("Could not chmod $tempdir to 0750: $!\n");
-    }
-    if (! chdir($tempdir)) {
-	die("Could not chdir to $tempdir: $!\n");
+    if (! chdir($tdir)) {
+	die("Could not chdir to $tdir: $!\n");
     }
 }
 elsif ($usejail && $UID != 0) {
@@ -287,7 +287,7 @@ if ($usejail) {
     # the results file).
     #
     if ($unix_uid) {
-	chown($unix_uid, $unix_gid, $tempdir, $ifile, $pfile, $ofile);
+	chown($unix_uid, $unix_gid, $tdir, $ifile, $pfile, $ofile);
 	$GID  = $unix_gid;
 	$EGID = $unix_glist;
 	$EUID = $UID = $unix_uid;
@@ -385,8 +385,8 @@ else {
     }
 }
 unless($debug) {
-    if (-d $tempdir) {
-	system("/bin/rm -r $tempdir");
+    if (-d $tdir) {
+	system("/bin/rm -r $tdir");
     }
 }
 exit($exit_status);

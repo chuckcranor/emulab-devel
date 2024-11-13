@@ -1,0 +1,22 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_aggregate_radio_transmissions", "instance_uuid")) {
+	DBQueryFatal("alter table apt_aggregate_radio_transmissions add ".
+		     " `instance_uuid` varchar(40) default NULL ".
+		     "     after violation");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

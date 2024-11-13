@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2022 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,10 +47,12 @@ use EmulabConstants;
 use emutil;
 use WebTask;
 use emdb;
+use APT_Aggregate;
 use APT_Dataset;
 use APT_Aggregate;
 use APT_Reservation;
 use APT_RFRange;
+use APT_RDZ;
 use GeniXML;
 use GeniHRN;
 use GeniIMS;
@@ -68,6 +70,7 @@ use Data::Dumper;
 use File::Basename;
 use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
 use URI::URL;
+use JSON;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -77,6 +80,7 @@ my $OURDOMAIN     = "@OURDOMAIN@";
 my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $MAINSITE      = @TBMAINSITE@;
 my $CONVERTER     = "$TB/bin/rspec2genilib";
+my $OTAALLOW      = "OTA-allowed";
 
 # Concat id/vers.
 sub versid($)
@@ -372,6 +376,7 @@ sub DESTROY {
     $self->{'WEBTASK'} = undef;
     $self->{'DBROW'}   = undef;
     $self->{'IMAGES'}  = undef;
+    $self->{'RSPEC'}   = undef;
 }
 
 sub IsRepoBased($) {
@@ -565,6 +570,7 @@ sub NewVersion($$)
     my $version     = $self->version();
     my $uid         = $creator->uid();
     my $uid_idx     = $creator->uid_idx();
+    my $vhashkey    = TBGenSecretKey();
 
     DBQueryWarn("lock tables apt_profiles write, ".
 		"            apt_profile_versions write, ".
@@ -594,13 +600,13 @@ sub NewVersion($$)
 			  "   created,uuid, ".
 			  "   parent_profileid,parent_version,rspec, ".
 			  "   script,paramdefs,reponame,repourl, ".
-			  "   portal_converted) ".
+			  "   portal_converted,hashkey) ".
 			  "select name,profileid,'$newvers',pid,pid_idx, ".
 			  "  gid,gid_idx, ".
 			  "  creator,creator_idx,'$uid','$uid_idx',".
 			  "  now(),uuid(),'$profileid', ".
 			  "  '$version',rspec,script,paramdefs, ".
-			  "  reponame,repourl,portal_converted ".
+			  "  reponame,repourl,portal_converted,'$vhashkey' ".
 			  "from apt_profile_versions as v ".
 			  "where v.profileid='$profileid' and ".
 			  "      v.version='$version'"));
@@ -1332,6 +1338,8 @@ sub SetSites($$$$$$)
 	$pneedstitcher, $perrmsg) = @_;
     my %interface_map   = ();
     my %aggregates      = ();
+    # Catch bogus remote blockstores that span clusters. Happens a lot.
+    my %blockstores     = ();
 
     #
     # Fill the APT_Aggregate cache.
@@ -1348,11 +1356,15 @@ sub SetSites($$$$$$)
 	    return -1;
 	}
     }
+    #print STDERR GeniXML::Serialize($rspec);
+    
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $client_id   = GetVirtualId($ref);
 	my $manager_urn = GetManagerId($ref);	
+	my $component_id= GeniXML::GetNodeId($ref);
 	my $site_id     = GeniXML::GetJacksSiteId($ref);
 	my $hardtype    = GeniXML::FindFirst("n:hardware_type", $ref);
+	my $slivertype  = GeniXML::GetVirtualizationSubtype($ref);
 	if ($hardtype) {
 	    $hardtype = GeniXML::GetText("name", $hardtype);
 	}
@@ -1364,12 +1376,23 @@ sub SetSites($$$$$$)
 		return 1;
 	    }
 	}
+	# Or is the component_id a URN (so we have a domain).
+	elsif (defined($component_id) && GeniHRN::IsValid($component_id)) {
+	    my $hrn = GeniHRN->new($component_id);
+	    my $agg = APT_Aggregate->LookupByDomain($hrn->domain());
+	    if (!defined($agg)) {
+		$$perrmsg = "$client_id has an invalid component_id";
+		return 1;
+	    }
+	    $manager_urn = $agg->urn();
+	    GeniXML::SetManagerId($ref, $manager_urn);
+	}
 	# Or there is a site tag, and a site mapping for it.
 	elsif (defined($site_id) && defined($sitemap)) {
 	    my $site_mid = "site:" . $site_id;
 	    if (!exists($sitemap->{$site_mid})) {
 		$$perrmsg = "No site mapping for node $client_id ($site_id)";
-		return -1;
+		return 1;
 	    }
 	    $manager_urn = $sitemap->{$site_mid};
 	    if (!GeniHRN::IsValid($manager_urn)) {
@@ -1403,11 +1426,24 @@ sub SetSites($$$$$$)
 	foreach my $iref (GeniXML::FindNodes("n:interface",
 					     $ref)->get_nodelist()) {
 	    my $client_id = GeniXML::GetInterfaceId($iref);
-	    $interface_map{$client_id} = $manager_urn;
+	    
+	    $interface_map{$client_id} = {
+		"manager_urn" => $manager_urn,
+		# Not checking too deeply, the CM will catch it too.
+		"hasIP"       => GeniXML::FindFirst("n:ip", $iref),
+	    };
+	    # Catch globe spanning blockstore lans.
+	    if ($slivertype && $slivertype eq "emulab-blockstore") {
+		$blockstores{$client_id} = $manager_urn;
+	    }
 	}
     }
     foreach my $ref (GeniXML::FindNodes("n:link", $rspec)->get_nodelist()) {
-	my %linksites = ();
+	my %linksites  = ();
+	my $blockcount = 0;
+	my $link_id      = GeniXML::GetInterfaceId($ref);
+	my $supplied_ips = 0;
+	my $possible_ips = 0;
 
 	foreach my $iref (GeniXML::FindNodes("n:interface_ref",
 					     $ref)->get_nodelist()) {
@@ -1415,11 +1451,20 @@ sub SetSites($$$$$$)
 	    next
 		if (!exists($interface_map{$client_id}));
 
-	    my $manager_urn = $interface_map{$client_id};
+	    my $manager_urn = $interface_map{$client_id}->{'manager_urn'};
 	    
 	    GeniXML::AddManagerToLink($ref, $manager_urn)
 		if (!exists($linksites{$manager_urn}));
 	    $linksites{$manager_urn} = 1;
+
+	    # Catch globe spanning blockstore lans.
+	    if (exists($blockstores{$client_id})) {
+		$blockcount++;
+	    }
+	    $possible_ips++;
+	    $supplied_ips++
+		if (defined($interface_map{$client_id}->{'hasIP'}));
+	    
 	}
 	# Two clusters only (point to point links and lans).
 	if (keys(%linksites) > 2) {
@@ -1428,6 +1473,20 @@ sub SetSites($$$$$$)
 	}
 	# if more then one site for a link, must use the stitcher.
 	if (keys(%linksites) > 1) {
+	    if ($blockcount) {
+		$$perrmsg = "Blockstore links are not allowed to span clusters";
+		return 1;
+	    }
+	    #
+	    # Sanity check early, a globe spanning link must define the
+	    # IP on every interface. The CM does this too of course, but
+	    # that takes forever to get to cause of the stitcher.
+	    #
+	    if ($possible_ips != $supplied_ips) {
+		$$perrmsg = "Must supply IP/MASK on every interface of " .
+		    "link $link_id since it spans multiple clusters";
+		return 1;
+	    }
 	    $$pneedstitcher = 1 if (defined($pneedstitcher));
 
 	    #
@@ -1515,6 +1574,180 @@ sub NeedStitcher($$)
     foreach my $ref (values(%linksites)) {
 	return 1
 	    if (keys(%{$ref}) > 1);
+    }
+    return 0;
+}
+
+#
+# Check everything that needs to be checked. :-)
+#
+sub CheckEverything($$$$$$$$$$$)
+{
+    my ($rspec, $user, $group,
+	$start, $end, $isnow, $noresokay, $rdzenabled, $webtask,
+	$presources, $perrmsg) = @_;
+    my $project = $group->GetProject();
+
+    my $resources;
+    my $retval = APT_Profile::CheckResources($rspec, $project,
+					     $perrmsg, \$resources);
+    if ($retval) {
+	return $retval;
+    }
+    # Caller needs this.
+    $$presources = $resources;
+   
+    $retval = APT_Profile::CheckResourceReservations($rspec, $group, $user,
+						     $start, $end, $noresokay,
+						     $perrmsg, $resources);
+    if ($retval) {
+	if ($retval < 0) {
+	    return $retval;
+	}
+	elsif ($isnow) {
+	    # Immediate start, throw the error back to the user.
+	    return 1;
+	}
+	else {
+	    #
+	    # Warn user that resources must be reserved by the time the
+	    # experiment starts.
+	    #
+	    print "Some resources still need to be reserved before the ".
+		"experiment start time is reached\n";
+
+	    if (defined($webtask)) {
+		$webtask->reservationWarn($$perrmsg);
+	    }
+	}
+    }
+    #
+    # Warn user about deprecated image use. This will possibly duplicate the
+    # email sent by the aggregates, but the email from the portal has a better
+    # chance of getting through the user's spam filter. 
+    #
+    $retval = APT_Profile::CheckForDeprecatedImages($resources, $project,
+						    $user, $perrmsg);
+    if ($retval) {
+	return $retval;
+    }
+
+    #
+    # Spectrum sanity checks, then spectrum reservation checks.
+    #
+    my $checkranges = 1
+	if (EmulabFeatures->FeatureEnabled("powder-verify-spectrum",
+					   $user, $project));
+
+    my $spectrum;
+    $retval = APT_Profile::CheckSpectrum($rspec, $perrmsg, \$spectrum,
+					 $resources, $checkranges);
+    if ($retval) {
+	return $retval;
+    }
+    $retval = APT_Profile::CheckSpectrumPermission($rspec, $project,
+						   $perrmsg, $spectrum);
+    if ($retval) {
+	return $retval;
+    }
+    $retval = APT_Profile::CheckSpectrumReservations($rspec, $group, $user,
+						     $start, $end,
+						     $noresokay, $rdzenabled,
+						     $perrmsg, $spectrum,
+						     $resources);
+    if ($retval) {
+	if ($retval < 0) {
+	    return $retval;
+	}
+	elsif ($isnow) {
+	    # Immediate start, throw the error back to the user.
+	    return 1;
+	}
+	else {
+	    #
+	    # Warn user that spectrum must be reserved by the time the
+	    # experiment starts.
+	    #
+	    if (defined($webtask)) {
+		$webtask->reservationWarn($$perrmsg);
+	    }
+	    print "Some spectrum still needs to be reserved before the ".
+		"experiment start time is reached\n";
+	}
+    }
+
+    #
+    # see if there are routes; we will bind the nodes later.
+    #
+    my $routes;
+    $retval = APT_Profile::GetRoutes($rspec, \$routes, $perrmsg);
+    if ($retval) {
+	return $retval;
+    }
+    $retval = APT_Profile::CheckRoutes($rspec, $perrmsg, \$routes);
+    if ($retval) {
+	return $retval;
+    }
+    $retval = APT_Profile::CheckRoutesPermission($rspec, $project,
+						 $start, $end,
+						 $perrmsg, $routes);
+    if ($retval) {
+	return $retval;
+    }
+    $retval = APT_Profile::CheckRoutesReservations($rspec, $group, $user,
+						   $start, $end, $noresokay,
+						   $perrmsg, $routes);
+    if ($retval) {
+	if ($retval < 0) {
+	    return $retval;
+	}
+	elsif ($isnow) {
+	    # Immediate start, throw the error back to the user.
+	    return 1;
+	}
+	else {
+	    #
+	    # Warn user that routes must be reserved by the time the
+	    # experiment starts.
+	    #
+	    if (defined($webtask)) {
+		$webtask->reservationWarn($$perrmsg);
+	    }
+	    print "Some routes still need to be reserved before the ".
+		"experiment start time is reached.\n";
+	}
+    }
+    #
+    # This check ensures that people do not allocate buses directly unless
+    # they have special permission. Mere users must allocate routes.
+    #
+    $retval = APT_Profile::CheckForBuses($rspec, $project, $perrmsg);
+    if ($retval) {
+	return $retval;
+    }
+
+    #
+    # Check for nodes/types/aggregates that require a License. 
+    #
+    my $licenses;
+
+    $retval  = APT_Profile::CheckLicenses($rspec, $user, $project,
+					  \$licenses, $perrmsg);
+    if ($retval) {
+	if ($retval < 0) {
+	    $$perrmsg = "Could not determine license requirements: $$perrmsg";
+	    return -1;
+	}
+	# Special handling.
+	if ($licenses) {
+	    if (defined($webtask)) {
+		$webtask->required_licenses($licenses);
+	    }
+	    $$perrmsg = "Licenses are required before you can start ".
+		"this experiment";
+	}
+	# Reflect back to user.
+	return 1;
     }
     return 0;
 }
@@ -1714,6 +1947,9 @@ sub GetResources($$$)
     }
     my %nodes = ();
     my %links = ();
+    my %aggregates = ();
+    my %radios = ();
+    my %zones = ();
     
     #
     # Build up counts for each reservable type (or reservable node).
@@ -1735,9 +1971,16 @@ sub GetResources($$$)
 	$aggregate = APT_Aggregate->Lookup($manager_urn);
 	if (!$aggregate) {
 	    $$pmsg = "No such aggregate: $manager_urn";
-	    return -1;
+	    # This should go back to the user, not an internal error.
+	    return 1;
 	}
 	$nodes{$client_id} = $ref;
+
+	# For per aggregate checks later.
+	if (!exists($aggregates{$manager_urn})) {
+	    $aggregates{$manager_urn} = [];
+	}
+	push(@{$aggregates{$manager_urn}}, $ref);
 	    
 	if (defined($component_id)) {
 	    if (GeniHRN::IsValid($component_id)) {
@@ -1745,7 +1988,8 @@ sub GetResources($$$)
 		$component_id = $hrn->id();
 
 		if ($hrn->domain() ne $aggregate->Domain()) {
-		    $$pmsg = "Domain mismatch: $client_id";
+		    $$pmsg = "Domain mismatch: $client_id, $hrn, " .
+			$aggregate->Domain();
 		    return -1;
 		}
 	    }
@@ -1757,6 +2001,17 @@ sub GetResources($$$)
 	}
 	if ($component_id && $aggregate->IsReservableNode($component_id)) {
 	    $restoken = $component_id;
+
+	    my $radio = $aggregate->Radio($component_id);
+	    if ($radio) {
+		$radios{$client_id} = $radio;
+
+		my $zone = $radio->powder_zone() || "Outdoor";
+		if (!exists($zones{$zone})) {
+		    $zones{$zone} = 0;
+		}
+		$zones{$zone} = $zones{$zone} + 1;
+	    }
 	}
 	elsif ($hardtype) {
 	    my $type = GeniXML::GetText("name", $hardtype);
@@ -1793,10 +2048,21 @@ sub GetResources($$$)
 	my $client_id   = GetVirtualId($ref);
 	$links{$client_id} = $ref;
     }
+    #
+    # We assign a zone only if all the radios are in a single non-null zone.
+    # Most radios have no zone, they are outdoor.
+    #
+    my $zones;
+    if (keys(%zones)) {
+	$zones = join(",", sort(keys(%zones)));
+    }
     $$pref = {
 	"typeCounts"  => \%typeCounts,
 	"nodes"       => \%nodes,
 	"links"       => \%links,
+	"aggregates"  => \%aggregates,
+	"radios"      => \%radios,
+	"zones"       => $zones,
     };
     return 0;
 }
@@ -1804,9 +2070,9 @@ sub GetResources($$$)
 #
 # Check resources (types and nodes) for any obvious issues.
 #
-sub CheckResources($$;$)
+sub CheckResources($$$;$)
 {
-    my ($rspec, $pmsg, $presources) = @_;
+    my ($rspec, $project, $pmsg, $presources) = @_;
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -1816,9 +2082,57 @@ sub CheckResources($$;$)
 	}
     }
     my $resources;
-    my $retval = APT_Profile::GetResources($rspec, $pmsg, \$resources);
-    return $retval
-	if ($retval);
+
+    if (defined($presources) && defined($$presources)) {
+	$resources = $$presources;
+    }
+    else {
+	my $retval = APT_Profile::GetResources($rspec, $pmsg, \$resources);
+	return $retval
+	    if ($retval);
+    }
+
+    #
+    # Initial OTA check, not allowed to use radios without OTA-allowed
+    #
+    if (EmulabFeatures->FeatureEnabled("powder-doota-check", undef, $project)) {
+	foreach my $urn (keys(%{$resources->{'aggregates'}})) {
+	    my $aggregate = APT_Aggregate->Lookup($urn);
+	    my @nodes = @{$resources->{'aggregates'}->{$urn}};
+
+	    foreach my $ref (@nodes) {
+		my $component_id = GeniXML::GetNodeId($ref);
+		#
+		# Ug, this test only works when the user specifies the
+		# specific radio. Mostly it makes no sense to not specify
+		# the exact component_id, so not a perfect test.
+		#
+		next
+		    if (!defined($component_id));
+
+		if (GeniHRN::IsValid($component_id)) {
+		    my $hrn = GeniHRN->new($component_id);
+		    $component_id = $hrn->id();
+		}
+		next
+		    if (!defined($aggregate->Radio($component_id)));
+
+		# A couple of special local cases. Sigh.
+		if ($aggregate->IsLocalCluster()) {
+		    my $node = Node->Lookup($component_id);
+		    next
+			if ($node && ($node->HasFeature("rf-controlled") ||
+				      $node->HasFeature("rf-paired")));
+		}
+		
+		if (!EmulabFeatures->FeatureEnabled($OTAALLOW,undef,$project)) {
+		    $$pmsg = "CheckResources: Use of some resources requires ".
+			"OTA permission";
+		    return 1;
+		}
+	    }
+	}
+    }
 
     #
     # Some node types require that we have spectrum reserved in order to
@@ -1864,9 +2178,11 @@ sub CheckResources($$;$)
 #
 # Check resource reservations
 #
-sub CheckResourceReservations($$$$$$;$)
+sub CheckResourceReservations($$$$$$$;$)
 {
-    my ($rspec, $project, $start, $end, $noresokay, $pmsg, $resources) = @_;
+    my ($rspec, $group, $user,
+	$start, $end, $noresokay, $pmsg, $resources) = @_;
+    my $project = $group->GetProject();
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -1920,9 +2236,9 @@ sub CheckResourceReservations($$$$$$;$)
 
 	    if (!$noresokayXX &&
 		!APT_Reservation::Group::Reservation::Reserved(
-		     $project, $start, $end, $urn, $type, $count) &&
+		     $group, $user, $start, $end, $urn, $type, $count) &&
 		!APT_Reservation::Group::Reservation::ReservedByType(
-		     $project, $start, $end, $urn, $type, $count)) {
+		     $group, $user, $start, $end, $urn, $type, $count)) {
 		$$pmsg = "$count $type node(s) at $nickname are not reserved ".
 		    "for the duration of the experiment";
 		return 1;
@@ -1953,21 +2269,25 @@ sub CheckResourceReservations($$$$$$;$)
 	    $component_id = $hrn->id();
 	}
 
+	next
+	    if ($project->expert_mode());
+	
 	# Eventually this will need to come from the aggregates.
 	my $node = Node->Lookup($component_id);
 	next
 	    if (!$node);
 
 	next
-	    if ($project->expert_mode() || !$node->requires_reservation());
+	    if (!$node->requires_reservation());
 
 	if (!APT_Reservation::Group::Reservation::Reserved(
-		 $project, $start, $end, $MYURN, $component_id, 1)) {
+		 $group, $user, $start, $end, $MYURN, $component_id, 1)) {
 	    $$pmsg = "$client_id ($component_id) is not reserved ".
 		"for the duration of the experiment";
 	    return 1;
-	}	    
+	}
     }
+
     return 0;
 }
 
@@ -2016,12 +2336,48 @@ sub CheckForDeprecatedImages($$$$)
 	    next;
 	}
 
-	if ($image_urn->IsOurDomain()) {
+	my $checkIMSdep = sub {
+	    my ($image_urn) = @_;
+	    
+	    if (! $MAINSITE) {
+		$deprecated{$image_urn} = {"deprecated" => 0};
+		return 0;
+	    }
+	    #
+	    # Talk to IMS database directly.
+	    #
+	    my $blob = GeniIMS::GetImageBlob($image_urn, undef);
+	    if (GeniResponse::IsResponse($blob)) {
+		#
+		# We are gonna let this pass, the aggregate will have
+		# a better picture.
+		#
+		$deprecated{$image_urn} = {"deprecated" => 0};
+		return 0;
+	    }
+	    if (exists($blob->{"deprecated"})) {
+		$deprecated{$image_urn} = {
+		    "deprecated" => 1,
+		    "iserror"    => $blob->{"deprecated_iserror"},
+		    "message"    => (exists($blob->{"deprecated_message"}) ?
+				     $blob->{"deprecated_message"} : undef),
+		};
+		return 1;
+	    }
+	    $deprecated{$image_urn} = {"deprecated" => 0};
+	    return 0;
+	};
+
+	if ($image_urn->IsOurDomain() || $image_urn->ospid() eq TBOPSPID()) {
 	    my $image = OSImage->Lookup($image_urn->ospid(),
 					$image_urn->osname());
 	    if (!defined($image)) {
-		$$pmsg = "Could not lookup local image $image_urn";
-		return 1;
+		if ($image_urn->IsOurDomain()) {
+		    $$pmsg = "Could not lookup local image $image_urn";
+		    return 1;
+		}
+		&$checkIMSdep($image_urn);
+		next;
 	    }
 	    # Skip anything that is not a real image
 	    next
@@ -2042,29 +2398,7 @@ sub CheckForDeprecatedImages($$$$)
 	    }
 	}
 	else {
-	    #
-	    # Talk to IMS database directly.
-	    #
-	    my $blob = GeniIMS::GetImageBlob($image_urn, undef);
-	    if (GeniResponse::IsResponse($blob)) {
-		#
-		# We are gonna let this pass, the aggregate will have
-		# a better picture.
-		#
-		$deprecated{$image_urn} = {"deprecated" => 0};
-		next;
-	    }
-	    if (exists($blob->{"deprecated"})) {
-		$deprecated{$image_urn} = {
-		    "deprecated" => 1,
-		    "iserror"    => $blob->{"deprecated_iserror"},
-		    "message"    => (exists($blob->{"deprecated_message"}) ?
-				     $blob->{"deprecated_message"} : undef),
-		}
-	    }
-	    else {
-		$deprecated{$image_urn} = {"deprecated" => 0};
-	    }
+	    &$checkIMSdep($image_urn);
 	}
     }
     print "deprecated\n";
@@ -2116,15 +2450,21 @@ sub CheckForDeprecatedImages($$$$)
 #
 # Check spectrum validity.
 #
-sub CheckSpectrum($$;$)
+sub CheckSpectrum($$;$$$)
 {
-    my ($rspec, $pmsg, $pspectrum) = @_;
+    my ($rspec, $pmsg, $pspectrum, $resources, $checkranges) = @_;
     my $spectrum = [];
+    $checkranges = 0 if (!defined($checkranges));
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
 	if (! defined($rspec)) {
 	    $$pmsg = "CheckSpectrum: Could not parse rspec";
+	    return -1;
+	}
+    }
+    if (!defined($resources)) {
+	if (APT_Profile::GetResources($rspec, $pmsg, \$resources)) {
 	    return -1;
 	}
     }
@@ -2143,6 +2483,7 @@ sub CheckSpectrum($$;$)
 	    my $frequency_low  = $request->{"frequency_low"};
 	    my $frequency_high = $request->{"frequency_high"};
 	    my $power          = $request->{"power"};
+	    my $width          = $request->{"bandwidth"};
 
 	    if (!TBcheck_dbslot($frequency_low, "default", "float",
 				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
@@ -2159,6 +2500,12 @@ sub CheckSpectrum($$;$)
 		$$pmsg = "Invalid integer or float: $power";
 		return 1;
 	    }
+	    if (defined($width) &&
+		!TBcheck_dbslot($power, "default", "float",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
+		$$pmsg = "Invalid integer or float: $width";
+		return 1;
+	    }
 	}
 	return 0;
     };
@@ -2167,6 +2514,181 @@ sub CheckSpectrum($$;$)
 	return -1;
     }
     if (&$check($spectrum)) {
+	return 1;
+    }
+    
+    if ($checkranges) {
+
+    my %global_errors = ();
+    my %node_errors   = ();
+    my %route_errors  = ();
+
+    my $checkone = sub($$$$) {
+	my ($radio, $request, $cluster, $client_id) = @_;
+	my $low     = $request->{"frequency_low"};
+	my $high    = $request->{"frequency_high"};
+	my $tag     = "${low}-${high}";
+	my $type    = $request->{"type"};
+	my $target  = $request->{"target"};
+	my $node_id = $radio->node_id();
+
+	#print STDERR "$node_id, $radio, $cluster, $type, $target,$client_id\n";
+	#print STDERR Dumper($request);
+
+	#
+	# Not worrying about multiple frontends, not till it happens.
+	#
+	my $frontend = $radio->FrontendInterface("rf0");
+	if (!defined($frontend)) {
+	    $$pmsg = "CheckSpectrum: Radio $node_id on $cluster ".
+		"does not have frontend rf0";
+	    return 1;
+	}
+
+	return 0
+	    if ($frontend->ValidTransmitRange($low, $high));
+
+	if ($type eq "global") {
+	    if (!exists($global_errors{$tag})) {
+		$global_errors{$tag} = {};
+	    }
+	    if (!exists($global_errors{$tag}->{$cluster})) {
+		$global_errors{$tag}->{$cluster} = {};
+	    }
+	    $global_errors{$tag}->{$cluster}->{$node_id} = $node_id;
+	}
+	elsif ($type eq "route") {
+	    # Does not matter what bus here, just whine about a problem
+	    $route_errors{$tag} = $tag;
+	}
+	elsif ($type eq "node" && $target eq $client_id) {
+	    if (!exists($node_errors{$tag})) {
+		$node_errors{$tag} = {};
+	    }
+	    if (!exists($node_errors{$tag}->{$cluster})) {
+		$node_errors{$tag}->{$cluster} = {};
+	    }
+	    $node_errors{$tag}->{$cluster}->{$node_id} = $node_id;
+	}
+	return 0;
+    };
+
+    foreach my $urn (keys(%{$resources->{'aggregates'}})) {
+	my $aggregate = APT_Aggregate->Lookup($urn);
+	my $cluster   = $aggregate->nickname();
+	my @nodes = @{$resources->{'aggregates'}->{$urn}};
+
+	foreach my $ref (@nodes) {
+	    my $component_id = GeniXML::GetNodeId($ref);
+	    my $client_id    = GetVirtualId($ref);
+
+	    #
+	    # Ug, this test only works when the user specifies the
+	    # specific radio. Mostly it makes no sense to not specify
+	    # the exact component_id, so not a perfect test.
+	    #
+	    next
+		if (!defined($component_id));
+
+	    if (GeniHRN::IsValid($component_id)) {
+		my $hrn = GeniHRN->new($component_id);
+		$component_id = $hrn->id();
+	    }
+	    my $radio = $aggregate->Radio($component_id);
+	    next
+		if (!defined($radio));
+
+	    foreach my $request (@$spectrum) {
+		if (&$checkone($radio, $request, $cluster, $client_id)) {
+		    return 1;
+		}
+	    }
+	}
+    }
+    #
+    # Ug, routes are a PITA! If we have routes, we have to test
+    # global spectrum and any route specific spectrum, against all
+    # of the buses. 
+    #
+    my $routes = [];
+    if (APT_Profile::GetRoutes($rspec, \$routes, $pmsg)) {
+	return -1;
+    }
+    if (@$routes) {
+	#
+	# Check every bus.
+	#
+	my @buses = APT_Aggregate::Mobile::Bus->LookupAll();
+
+	foreach my $bus (@buses) {
+	    my $radio = $bus->Radio("ed1");
+	    next
+		if (!defined($radio));
+
+	    foreach my $request (@$spectrum) {
+		if (&$checkone($radio, $request, "mobile endpoints", "")) {
+		    return 1;
+		}
+	    }
+	}
+    }
+    
+    if (keys(%global_errors) || keys(%node_errors) || keys(%route_errors)) {
+	my @gerrors = ();
+	my @nerrors = ();
+	my $message = "";
+
+	foreach my $range (keys(%global_errors)) {
+	    foreach my $cluster (keys(%{$global_errors{$range}})) {
+		my @components = keys(%{$global_errors{$range}->{$cluster}});
+
+		my $msg =
+		    "Global frequency declaration $range is out of range ".
+		    "for transmission from " . join(",", @components) . " " .
+		    "on $cluster.\n";
+		
+		push(@gerrors, $msg);
+	    }
+	}
+	foreach my $range (keys(%node_errors)) {
+	    foreach my $cluster (keys(%{$node_errors{$range}})) {
+		my @components = keys(%{$node_errors{$range}->{$cluster}});
+
+		my $msg =
+		    "Node frequency declaration $range is out of range ".
+		    "for transmission from " . join(",", @components) . " " .
+		    "on $cluster.\n";
+	    
+		push(@nerrors, $msg);
+	    }
+	}
+	if (@gerrors) {
+	    $message .= join(" ", @gerrors) . 
+		"Perhaps you need to declare the frequency range for ".
+		"specific devices ".
+		(keys(%route_errors) ? "(and/or routes) " : "") .
+		"instead of using a global declaration.\n\n";
+	}
+	if (@nerrors) {
+	    $message .= join(" ", @nerrors);
+	}
+	if (keys(%route_errors)) {
+	    foreach my $range (keys(%route_errors)) {
+		$message .=
+		    "Route frequency declaration $range is out of range ".
+		    "for transmission from ed1 on mobile endpoints\n";
+	    }
+	}
+	$message .= "\n" .
+	    "Please check the <a href='radioinfo.php' target=_blank>".
+	    "radio information</a> page for specific device frequency details.";
+
+	$$pmsg = $message;
+	return 1;
+    }
+    }
+    if (0) {
+	$$pmsg = "oops";
 	return 1;
     }
     $$pspectrum = $spectrum if (defined($pspectrum));
@@ -2196,7 +2718,7 @@ sub CheckSpectrumPermission($$$;$$)
 	if (!@$spectrum);
 
     # Top level check for OTA access
-    if (!EmulabFeatures->FeatureEnabled("OTA-allowed", undef, $project)) {
+    if (!EmulabFeatures->FeatureEnabled($OTAALLOW, undef, $project)) {
 	$$pmsg = "Not enough permission to use OTA resources.";
 	return 1;
     }
@@ -2219,10 +2741,11 @@ sub CheckSpectrumPermission($$$;$$)
 #
 # Check spectrum reservations.
 #
-sub CheckSpectrumReservations($$$$$$;$$)
+sub CheckSpectrumReservations($$$$$$$$;$$)
 {
-    my ($rspec, $project, $start, $end, $noresokay, $pmsg,
+    my ($rspec, $group, $user, $start, $end, $noresokay, $rdzenabled, $pmsg,
 	$spectrum, $resources) = @_;
+    my $project = $group->GetProject();
 
     if (!ref($rspec)) {
 	$rspec = GeniXML::Parse($rspec);
@@ -2276,10 +2799,16 @@ sub CheckSpectrumReservations($$$$$$;$$)
 	my $frequency_high = $request->{"frequency_high"};
 	my $power          = $request->{"power"};
 
+	# The user does not provide this
+	$request->{"frequency_zones"} = $resources->{"zones"};
+
 	if (!$noresokay &&
 	    !APT_Reservation::Group::RFReservation->RangeReserved(
-		 $project, $start, $end, $frequency_low, $frequency_high)) {
+		 $group, $user, $start, $end,
+		 $frequency_low, $frequency_high, $resources->{"zones"})) {
 	    $$pmsg = "Range $frequency_low,$frequency_high ".
+		(defined($resources->{"zones"}) ?
+		 "in the " . $resources->{"zones"} . " " : "") .
 		"is not reserved by your project for the duration of your ".
 		"experiment.";
 	    return 1;
@@ -2289,9 +2818,9 @@ sub CheckSpectrumReservations($$$$$$;$$)
     # Spectrum does not have to be reserved, but it does have to be available
     # for the duration of the experiment (not reserved by others).
     #
-    if (@$spectrum &&
-	!APT_Reservation::Group::RFReservation->CanStart($project, $start,
-						 $end, $spectrum, $pmsg)) {
+    if (@$spectrum && !$rdzenabled &&
+	!APT_Reservation::Group::RFReservation->CanStart($group, $user,
+					$start, $end, $spectrum, $pmsg)) {
 	return 1;
     }
     return 0;
@@ -2314,9 +2843,12 @@ sub GetSpectrum($$$)
     }
 
     my $collect = sub () {
-	my ($spectrum) = @_;
+	my ($spectrum, $type, $target, $component_id) = @_;
 	
 	foreach my $request (@{$spectrum}) {
+	    # global, node, or iface
+	    $request->{"type"}   = $type;
+	    $request->{"target"} = $target;
 	    push(@ranges, $request);
 	}
     };
@@ -2324,16 +2856,27 @@ sub GetSpectrum($$$)
     # Global spectrum
     my $global_spectrum = GeniXML::GetSpectrum($rspec);
     if (@$global_spectrum) {
-	&$collect($global_spectrum);
+	&$collect($global_spectrum, "global", "global");
     }
     
     # Node spectrum
     foreach my $ref (GeniXML::FindNodes("n:node",
 					$rspec)->get_nodelist()) {
-	my $spectrum = GeniXML::GetSpectrum($ref);
-	if (@$spectrum) {
-	    &$collect($spectrum);
+	my $spectrum     = GeniXML::GetSpectrum($ref);
+	my $component_id = GeniXML::GetNodeId($ref);
+	my $client_id    = GetVirtualId($ref);
+
+	next
+	    if (!@$spectrum);
+
+	#
+	# When using radios and spectrum, the component_id must be set.
+	#
+	if (!defined($component_id)) {
+	    $$perrmsg = "GetSpectrum: Must set the component_id for $client_id";
+	    return 1;
 	}
+	&$collect($spectrum, "node", $client_id);
     }
     
     # Iface spectrum
@@ -2342,11 +2885,28 @@ sub GetSpectrum($$$)
 	foreach my $ifaceref (GeniXML::FindNodes("n:interface",
 						 $ref)->get_nodelist()) {
 	    my $spectrum = GeniXML::GetSpectrum($ifaceref);
+	    my $client_id = GetVirtualId($ifaceref);
 	    if (@$spectrum) {
-		&$collect($spectrum);
+		if (1) {
+		    $$perrmsg = "GetSpectrum: Could not parse rspec";
+		    return -1;
+		}
+		&$collect($spectrum, "iface", $client_id);
 	    }
 	}
     }
+    # Routes are such a PITA!
+    my $routes = [];
+    if (APT_Profile::GetRoutes($rspec, \$routes, $perrmsg)) {
+	return -1;
+    }
+    foreach my $route (@{$routes}) {
+	my $spectrum = GeniXML::GetSpectrum($route->{'dom'});
+	my $name = $route->{'name'};
+	
+	&$collect($spectrum, "route", $name);
+    }
+    
     $$pref = \@ranges;
     return 0;
 }
@@ -2456,13 +3016,11 @@ sub CheckForBuses($$$)
 	next
 	    if (!$aggregate->ismobile());
 
-	#
-	# Check that the project has the feature.
-	#
-	if (!EmulabFeatures->FeatureEnabled("powder-me-allowed",
-					    undef, $project)) {
-	    $$perrmsg = "Not allowed to allocate mobile  ".
-		"endpoints directly: " . $aggregate->nickname();
+	# Top level check for OTA access
+	if (EmulabFeatures->FeatureEnabled("powder-doota-check",
+					   undef, $project) &&
+	    !EmulabFeatures->FeatureEnabled($OTAALLOW, undef, $project)) {
+	    $$perrmsg = "Not enough permission to use OTA resources.";
 	    return 1;
 	}
 
@@ -2470,6 +3028,9 @@ sub CheckForBuses($$$)
 	# Buses are single use, two experiments cannot allocate the
 	# same bus at the same time. Head that off early.
 	#
+	# XXX This breaks with experiment modify, need to fix.
+	#
+	if (0) {
 	my @others = APT_Instance::Aggregate->LookupByURN($manager_urn);
 	foreach my $instance (@others) {
 	    next
@@ -2481,6 +3042,7 @@ sub CheckForBuses($$$)
 		    "experiment: " . $aggregate->nickname();
 		return 1;
 	    }
+	}
 	}
 	# Make sure this element is removed, we use it to mark nodes
 	# we add internally (to routes).
@@ -2571,11 +3133,13 @@ sub CheckRoutesPermission($$$$$;$)
     return 0
 	if (! @{$routes});
 
-    if (!EmulabFeatures->FeatureEnabled("powder-routes-allowed",
-					undef, $project)) {
-	$$pmsg = "Not enough permission to use mobile resources";
+    # Top level check for OTA access
+    if (EmulabFeatures->FeatureEnabled("powder-doota-check", undef, $project) &&
+	!EmulabFeatures->FeatureEnabled($OTAALLOW, undef, $project)) {
+	$$pmsg = "Not enough permission to use OTA resources.";
 	return 1;
     }
+
     #
     # For now, any reservation with routes must end on the same
     # day by midnight.
@@ -2594,9 +3158,9 @@ sub CheckRoutesPermission($$$$$;$)
 #
 # Check route reservations.
 #
-sub CheckRoutesReservations($$$$$$;$)
+sub CheckRoutesReservations($$$$$$$;$)
 {
-    my ($rspec, $project, $start, $end, $noresokay, $pmsg, $routes) = @_;
+    my ($rspec, $group, $user, $start, $end, $noresokay, $pmsg, $routes) = @_;
 
     if (!ref($rspec)) {
 	my $rspec = GeniXML::Parse($rspec);
@@ -2613,7 +3177,7 @@ sub CheckRoutesReservations($$$$$$;$)
     return 0
 	if (! @{$routes});
 
-    if (!APT_Reservation::Group::RouteReservation->CanStart($project,
+    if (!APT_Reservation::Group::RouteReservation->CanStart($group, $user,
 			 $start, $end, $routes, $pmsg)) {
 	return 1;
     }
@@ -2647,9 +3211,10 @@ sub GetRoutes($$$)
 # Set the repository for the rspec. This is a top level element. At
 # some point we can think about per-node repos.
 #
-sub SetRepo($$$$$$)
+sub SetRepo($$$$$$$)
 {
-    my ($rspec, $repourl, $reporef, $repohash, $geniuser, $perrmsg) = @_;
+    my ($rspec, $repourl, $reporef,
+	$repohash, $geniuser, $project, $perrmsg) = @_;
 
     #
     # Temporary, lets just throw an execute service onto each node.
@@ -2658,6 +3223,7 @@ sub SetRepo($$$$$$)
     my $owner   = $geniuser->uid();
     my $command = "cd /local && sudo chmod 777 . && umask 002 && ".
 	"sudo rm -rf repository && ".
+	"sudo git config --system --add safe.directory /local/repository && ".
 	"git clone -n '$repourl' repository && " .
 	"cd repository && " .
 	"git config --add core.sharedRepository group && ".
@@ -2675,10 +3241,15 @@ sub SetRepo($$$$$$)
     #
     my $url = new URI::URL $repourl;
     my $host = $url->host();
-    my ($org,$project) = ($url->path() =~ /^\/([^\/]+)(\/.*)$/);
-    if (defined($org) && defined($project)) {
-	my $sshurl = "git\@${host}:${org}${project}";
+    my ($org,$proj) = ($url->path() =~ /^\/([^\/]+)(\/.*)$/);
+    if (defined($org) && defined($proj)) {
+	my $sshurl = "git\@${host}:${org}${proj}";
 	$command .= "&& git remote set-url --push origin '$sshurl'";
+    }
+    if ($MAINSITE) {
+	$command =
+	    "/bin/echo 'nameserver 155.98.60.2' | ".
+	    "sudo /bin/csh -c '/bin/cat >> /etc/resolv.conf' && $command";
     }
 
     #
@@ -2746,9 +3317,9 @@ sub GetRepoCommand($)
 #
 # Encrypt blocks.
 #
-sub EncryptBlocks($$$)
+sub EncryptBlocks($$$;$)
 {
-    my ($rspec, $certificate, $pmsg) = @_;
+    my ($rspec, $certificate, $pmsg, $prevrspec) = @_;
     my @encrypt = ();
     
     foreach my $encref (GeniXML::FindNodesNS("n:encrypt", $rspec,
@@ -2763,9 +3334,37 @@ sub EncryptBlocks($$$)
 	push(@encrypt, $encref);
     }
     foreach my $encref (GeniXML::FindNodesNS("n:password", $rspec,
-				   $GeniXML::EMULAB_NS)->get_nodelist()) {
-	my $plaintext = substr(TBGenSecretKey(), 0, 12);
-	$encref->appendText($plaintext);
+					     $GeniXML::EMULAB_NS)->get_nodelist()) {
+	my $name      = GeniXML::GetText("name", $encref);
+	my $encrypted = GeniXML::GetText("encrypted", $encref);
+	next
+	    if ($encrypted);
+
+	# Watch for overwriting passwords during an update, transfer password.
+	# Update could also add a new password element.
+	if ($prevrspec) {
+	    my $previous;
+	    
+	    foreach my $pref (GeniXML::FindNodesNS("n:password", $prevrspec,
+					$GeniXML::EMULAB_NS)->get_nodelist()) {
+		my $pname      = GeniXML::GetText("name", $pref);
+		my $pencrypted = GeniXML::GetText("encrypted", $pref);
+
+		if ($name eq $pname && $pencrypted) {
+		    $previous = $pref->textContent();
+		    $encref->setAttribute("encrypted", "true");
+		    $encref->removeChildNodes();
+		    $encref->appendText($previous);
+		    last;
+		}
+	    }
+	    next
+		if (defined($previous));
+	}
+	if (!$encref->textContent()) {
+	    my $plaintext = substr(TBGenSecretKey(), 0, 12);
+	    $encref->appendText($plaintext);
+	}
 	push(@encrypt, $encref);
     }
     if (@encrypt) {
@@ -2782,6 +3381,7 @@ sub EncryptBlocks($$$)
 				"-aes256 $certname",
 				$ref->textContent(), $pmsg);
 	    if ($?) {
+		$$pmsg = "Could not encrypt block";
 		return -1;
 	    }
 	    my $encrypted = `cat $tempname`;
@@ -2797,30 +3397,29 @@ sub EncryptBlocks($$$)
 #
 # Add a portal element.
 #
-sub AddPortalTag($$$$$$)
+sub AddPortalTag($$$$$$$)
 {
-    my ($pxml, $tag, $url, $pid, $eid, $pmsg) = @_;
+    my ($rspec, $tag, $url, $pid, $eid, $sequence, $pmsg) = @_;
     
-    my $rspec = GeniXML::Parse($$pxml);
-    if (! defined($rspec)) {
-	$$pmsg = "AddPortalTag: Could not parse rspec";
-	return -1;
-    }
-    GeniXML::SetPortal($rspec, $tag, $url, $pid, $eid);
-    $$pxml = GeniXML::Serialize($rspec);
-    return 0;
+    return GeniXML::SetPortal($rspec, $tag, $url, $pid, $eid, $sequence);
 }
-sub ClearPortalTag($$)
+#
+# Update the sequence number. We do not yet have parsed XML when we do this.
+#
+sub UpdatePortalSequence($$$)
 {
-    my ($pxml, $pmsg) = @_;
-    
-    my $rspec = GeniXML::Parse($$pxml);
+    my ($prspecstr, $sequence, $pmsg) = @_;
+
+    my $rspec = GeniXML::Parse($$prspecstr);
     if (! defined($rspec)) {
-	$$pmsg = "ClearPortalTag: Could not parse rspec";
+	$$pmsg = "UpdatePortalSequence: Could not parse rspec";
 	return -1;
     }
-    GeniXML::ClearPortal($rspec);
-    $$pxml = GeniXML::Serialize($rspec);
+    if (GeniXML::UpdatePortalSequence($rspec, $sequence)) {
+	$$pmsg = "UpdatePortalSequence: Could not update sequence number";
+	return -1;
+    }
+    $$prspecstr = GeniXML::Serialize($rspec);
     return 0;
 }
 
@@ -3076,7 +3675,7 @@ sub AdminURL($)
     $wwwbase .= "/apt"
 	if ($project->Brand()->isEmulab());
 
-    return $wwwbase . "/manage_profile.php?uuid=$uuid";
+    return $wwwbase . "/manage_profile.php?uuid=$uuid&action=edit";
 }
 
 #
@@ -3345,9 +3944,13 @@ sub RSpecNodeFragment($$$$)
 	if (!defined($protonode));
 
     #
-    # Now update with stuff from the protonode.
+    # Now update with stuff from the protonode. We have to change its
+    # namespace so that the following code works right. Have to set it
+    # back after (which I neglected to do originally), but when I tried
+    # it did not seem to do the right thing. I probably do not grok
+    # something about namespaces. So ... just clone it.
     #
-    # So that the following code works right.
+    $protonode = $protonode->cloneNode(1);
     $protonode->setNamespace("http://www.geni.net/resources/rspec/3");
     #print "$protonode\n";
 
@@ -3380,6 +3983,56 @@ sub RSpecNodeFragment($$$$)
     GeniXML::AddElement("portal-added", $node, $GeniXML::EMULAB_NS);
     print "$node\n";
     return $node;
+}
+
+#
+# Permission check that mirrors the check made in the web UI.
+#
+sub CanInstantiate($$)
+{
+    my ($self, $user) = @_;
+
+    if ($self->public() ||
+	$self->creator_idx() == $user->uid_idx()) {
+	return 1;
+    }
+    # Otherwise a project membership test.
+    my $project = Project->Lookup($self->pid_idx());
+    return 1
+	if ($project->IsMember($user));
+
+    # Otherwise, shared with the user.
+    #return 1
+    #	if ($self->AllowedUser($user));
+
+    return 0;
+}
+sub CanView($$) { return CanInstantiate($_[0], $_[1]); }
+
+sub AllowedUser($$)
+{
+    my ($self, $user) = @_;
+    my $profile_id = $self->profileid();
+    my $uid = $user->uid();
+
+    my $query_result =
+	DBQueryWarn("select permission_id from apt_profile_permissions ".
+		    "where profileid='$profile_id' and ".
+		    "      permission_type='group' and ".
+		    "      revoked is null");
+        
+    if (! ($query_result && $query_result->numrows)) {
+	return 0;
+    }
+    while (my ($pid) = $query_result->fetchrow_array()) {
+	my $project = Project->LookupByPid($pid);
+	if ($project) {
+	    if ($project->IsMember($user)) {
+		return 1;
+	    }
+        }
+    }
+    return 0;
 }
 
 ###################################################################

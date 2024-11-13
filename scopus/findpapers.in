@@ -89,7 +89,8 @@ if (@ARGV) {
 	    "ABS ( emulab ) OR KEY ( emulab ) ) AND PUBYEAR > 2000";
     }
     elsif ($portal eq "powder") {
-	$PAPER_QUERY = "( REF ( powderwireless.net )  OR  ".
+	$PAPER_QUERY = "( ABS ( {Digital Spectrum Twin} ) OR ".
+	    "REF ( powderwireless.net )  OR  ".
 	    "REF ( {POWDER: Platform for Open Wireless} ) )  AND  ".
 	    "PUBYEAR  > 2017";
     }

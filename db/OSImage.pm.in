@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -665,6 +665,13 @@ sub GetDiskOffset($)
     my ($self) = @_;
 
     return $self->image()->GetDiskOffset();
+}
+
+sub SetMBRVersion($$)
+{
+    my ($self,$mbr) = @_;
+
+    return $self->image()->SetMBRVersion($mbr);
 }
 
 sub PartitionSize($)
@@ -1917,6 +1924,25 @@ sub FeatureSupported($$)
     };
     $self->ImageIterate($coderef);
     return $supported;
+}
+
+#
+# When we need the partition size, use the x86 version of the image.
+#
+sub PartitionSize($)
+{
+    my ($self) = @_;
+    my $size = undef;
+    
+    my $coderef = sub {
+	my $image = $_[0];
+	$size = $image->PartitionSize()
+	    if (defined($image->architecture()) &&
+		$image->architecture() eq "x86_64");
+	return 0;
+    };
+    $self->ImageIterate($coderef);
+    return $size;
 }
 
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,8 +29,10 @@ use Data::Dumper;
 use JSON;
 use POSIX ":sys_wait_h";
 use POSIX qw(:signal_h ceil);
+use File::Temp qw(tempfile);
 use Date::Parse;
 use Date::Format;
+use Time::Piece;
 
 #
 # Back-end script to manage APT profiles.
@@ -50,6 +52,7 @@ my $webtask;
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $OURDOMAIN	= "@OURDOMAIN@";
+my $DORDZ       = @TBMAINSITE@;
 my $RESCOMMAND  = "$TB/bin/manage_reservations";
 my $GROUPCOMMAND= "$TB/bin/manage_resgroup";
 my $MYURN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
@@ -76,10 +79,13 @@ use emutil;
 use Brand;
 use User;
 use Project;
+use Group;
 use EmulabConstants;
 use EmulabFeatures;
+use Reservation;
 use libEmulab;
 use libtestbed;
+use libaudit;
 use WebTask;
 use APT_Profile;
 use APT_Instance;
@@ -90,6 +96,7 @@ use APT_Utility;
 use GeniResponse;
 use GeniHRN;
 use GeniXML;
+use APT_RDZ;
 
 # Protos
 sub fatal($);
@@ -105,6 +112,14 @@ sub DoIdleDetection();
 sub DoConvertReservationsToGroups();
 sub DoCheckReserved();
 sub DoMaxDuration();
+sub DoMaxExtension();
+sub DoRouteForecast();
+sub DoSetShareReservations();
+sub DoPredictionInfo();
+sub DoCreateFromRspec();
+sub DoStatus();
+sub DoFindFirstFit();
+sub FindFirstFit($$$$$$$);
 sub CallMethodOnReservations($$@);
 
 #
@@ -168,6 +183,27 @@ elsif ($action eq "checkreserved") {
 elsif ($action eq "maxduration") {
     DoMaxDuration();
 }
+elsif ($action eq "maxextension") {
+    DoMaxExtension();
+}
+elsif ($action eq "routeforecast") {
+    DoRouteForecast();
+}
+elsif ($action eq "setsharedreservations") {
+    DoSetShareReservations();
+}
+elsif ($action eq "predictioninfo") {
+    DoPredictionInfo();
+}
+elsif ($action eq "createfromrspec") {
+    DoCreateFromRspec();
+}
+elsif ($action eq "findfirstfit") {
+    DoFindFirstFit();
+}
+elsif ($action eq "status") {
+    DoStatus();
+}
 else {
     usage();
 }
@@ -187,8 +223,10 @@ sub DoGroupReserve()
     my $autoapprove= 1; # This might be turned off below
     my $updateall  = 0;
     my $override   = 0;	# Only range reservations can be overridden. 
-    my ($clusters, $ranges, $routes);
+    my ($clusters, $ranges, $routes, $zones);
     my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
+    my ($project,$group);
+    my $bisdaysonly = 1;
     my $checkonly;
 
     my %options = ();
@@ -197,12 +235,34 @@ sub DoGroupReserve()
     }
     usage()
 	if (@ARGV < 2);
-    my $project = Project->Lookup($ARGV[0]);
-    my $file    = $ARGV[1];
 
-    if (!defined($project)) {
-	fatal("No such project");
+    if (defined($options{"u"})) {
+	$update = 1;
+	$resgroup = APT_Reservation::Group->Lookup($options{"u"});
+	if (!defined($resgroup)) {
+	    fatal("No such reservation group");
+	}
+	$project = $resgroup->GetProject();
+	$group   = $resgroup->GetGroup();
     }
+    else {
+	if ($ARGV[0] =~ /[,\/]+/) {
+	    $group = Group->Lookup($ARGV[0]);
+	    if (!defined($group)) {
+		fatal("No such group");
+	    }
+	    $project = $group->GetProject();
+	}
+	else {
+	    $project = Project->Lookup($ARGV[0]);
+	    if (!defined($project)) {
+		fatal("No such project");
+	    }
+	    $group = $project->GetProjectGroup();
+	}
+    }
+    my $file = $ARGV[1];
+
     if (! -e $file) {
 	fatal("No such file: $file");
     }
@@ -246,7 +306,7 @@ sub DoGroupReserve()
 	#
 	# Only leader and managers can set this.
 	#
-	if (! ($this_user->IsAdmin() || $project->IsManager($this_user))) {
+	if (! ($this_user->IsAdmin() || $group->IsManager($this_user))) {
 	    fatal("Not allowed to declare this reservation is for a class.");
 	}
 	$forclass = 1;
@@ -258,13 +318,6 @@ sub DoGroupReserve()
 	}
 	$override = 1;
 	@argvcopy = map { "$_" ne "-O" ? $_ : () } @argvcopy;
-    }
-    if (defined($options{"u"})) {
-	$update = 1;
-	$resgroup = APT_Reservation::Group->Lookup($options{"u"});
-	if (!defined($resgroup)) {
-	    fatal("No such reservation group");
-	}
     }
     if (defined($options{"n"})) {
 	$checkonly = 1;
@@ -282,6 +335,9 @@ sub DoGroupReserve()
 	    print STDERR "Missing start time\n";
 	    usage();
 	}
+	if ($resgroup->noidledetection()) {
+	    $forclass = 1;
+	}
     }
     #
     # No start time means user wants the reservation right now.
@@ -289,6 +345,11 @@ sub DoGroupReserve()
     if (!defined($start)) {
 	$start = time();
     }
+
+    # All Portals get bisdaysonly now.
+    $bisdaysonly = 0
+	if ($this_user->expert_mode() || $project->expert_mode() ||
+	    $this_user->IsAdmin());
     
     #
     # The file is a JSON array of cluster/range reservation info.
@@ -304,7 +365,7 @@ sub DoGroupReserve()
     if (ref($blob) ne "HASH") {
 	fatal("json data is not a HASH");
     }
-    print Dumper($blob);
+    print Dumper($blob) if ($debug);
 
     if (0 && !$update) {
     	#
@@ -356,6 +417,75 @@ sub DoGroupReserve()
 		fatal("Invalid cluster uuid: " . $cluster->{"uuid"});
 	    }
 	}
+
+	#
+	# Check for conflicting node usage within the resgroup.  This
+	# is enforced at the cluster, but better to catch it earlier
+	# since it happens late at the cluster (in nalloc).
+	#
+	# Also watch for OTA nodes (radios in specific zones).
+	#
+	my $radios = 0;
+	my %zones  = ();
+	
+	foreach my $cluster_uuid (keys(%{$clusters})) {
+	    my $cluster   = $clusters->{$cluster_uuid};
+	    my $urn       = $cluster->{"cluster"};
+	    my $type      = $cluster->{"type"};
+	    my $aggregate = APT_Aggregate->Lookup($urn);
+
+	    next
+		if (!$aggregate->IsReservableNode($type));
+
+	    my $node_id = $type;
+	    my $node    = $aggregate->Node($node_id);
+	    next
+		if (!defined($node));
+
+	    #
+	    # Watch for OTA lab, if the only radios reserved are for the OTA
+	    # lab, we are going to mark this resgroup with a zone to indicate
+	    # it does not conflict with radios in other zones (or outside).
+	    #
+	    # Using node name is dumb, of course.
+	    #
+	    if (my $radio = $aggregate->Radio($node_id)) {
+		my $zone = $radio->powder_zone() || "Outdoor";
+		
+		if (!exists($zones{$zone})) {
+		    $zones{$zone} = 0;
+		}
+		$zones{$zone} = $zones{$zone} + 1;
+		$radios++;
+	    }
+	    
+	    next
+		if (! $node->{'conflicting_nodes'});
+
+	    my @conflicting_nodes = split(",",  $node->{'conflicting_nodes'});
+
+	    foreach my $other_uuid (keys(%{$clusters})) {
+		next
+		    if ($other_uuid eq $cluster_uuid);
+
+		my $ocluster   = $clusters->{$other_uuid};
+		my $ourn       = $ocluster->{"cluster"};
+		my $otype      = $ocluster->{"type"};
+		my $oaggregate = APT_Aggregate->Lookup($ourn);
+		
+		next
+		    if (!$oaggregate->IsReservableNode($otype));
+
+		if (grep {$_ eq $otype} @conflicting_nodes) {
+		    UserError("Not allowed to reserve $type at the same ".
+			      "time as $otype");
+		}
+	    }
+	}
+	if (keys(%zones)) {
+	    $zones = join(",", sort(keys(%zones)));
+	    print "ZONES:$zones\n";
+	}
     }
     if (exists($blob->{'ranges'})) {
 	$ranges = $blob->{'ranges'};
@@ -405,9 +535,6 @@ sub DoGroupReserve()
 		fatal("Invalid route uuid: " . $route->{"uuid"});
 	    }
 	}
-	# For now, force autoapprove off whenever a route is requested.
-	$autoapprove = 0
-	    if (!$this_user->IsAdmin());
     }
 
     #
@@ -636,9 +763,23 @@ sub DoGroupReserve()
     # version of what came in (clusters and ranges).
     my ($range_results, $cluster_results, $route_results);
     my $result = {
-	"hosed" => 0,
+	"hosed"   => 0,
+	"bisonly" => $bisdaysonly,
+	"nbd"     => TBDateStringGMT(APT_Utility::NextBusinessDay()),
     };
-    
+    if ($update) {
+	$result->{'uuid'} = $resgroup->uuid();
+    }
+
+    #
+    # Check for starting before NextBusinessDay.
+    #
+    if ($bisdaysonly) {
+	my $nbd = APT_Utility::NextBusinessDay();
+	if ($start < $nbd) {
+	    $result->{'toosoon'} = 1;
+	}
+    }
     if (defined($ranges)) {
 	$range_results = {"ranges"    => $ranges,
 			  "errors"    => 0,
@@ -695,6 +836,7 @@ sub DoGroupReserve()
 	    }
 	    @argvcopy = @tmp;
 	}
+	$command .= "-d " if ($debug);
 	$command .= "-a $urn reserve -S -t $type ";
 	$command .= "-n " if ($checkonly);
 	# Global autoapprove might have been turned off but in check mode
@@ -707,7 +849,7 @@ sub DoGroupReserve()
 	    $command .= "-I ";
 	}
 	$command .= " @argvcopy $count";
-	print "Running: $command\n";
+	print "Running: $command\n" if ($debug);
 	system($command);
 	if ($?) {
 	    return 1;
@@ -865,7 +1007,11 @@ sub DoGroupReserve()
 	foreach my $ref (@range_reservations) {
 	    my $freq_low  = $ref->{"freq_low"};
 	    my $freq_high = $ref->{"freq_high"};
-		
+	    my $conflict;
+
+	    # We determine this above.
+	    $ref->{'freq_zones'} = $zones;
+	    
 	    # These flags go back to the web interface.
 	    if (!($this_user->IsAdmin() ||
 		  $rfrange->Allowed($ref->{'freq_low'}, $ref->{'freq_high'}))) {
@@ -877,17 +1023,29 @@ sub DoGroupReserve()
 	    elsif (! ($override ||
 		      APT_Reservation::Group::RFReservation->Fits(\@allgroups,
 								  $start, $end,
-								  $ref))) {
+								  $ref,
+								  \$conflict))) {
 		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
 		$ref->{'output'}   = "Does not fit the schedule";
+		if ($conflict && $conflict->powder_zones()) {
+		    $ref->{'output'} .=
+			": conflicts with another reservation in the ".
+			$conflict->powder_zones() . " zone(s)";
+		}
 		$ref->{'valid'}    = 0;
 		$range_results->{'errors'}++;
 	    }
 	    elsif (!$override &&
-		   APT_Instance::RFRanges->InUse($project, $freq_low,
-						 $freq_high, $start, $end)) {
+		   APT_Instance::RFRanges->InUse($group, $this_user, $freq_low,
+						 $freq_high, $zones, $start, $end,
+						 \$conflict)) {
 		$ref->{'errcode'}  = GENIRESPONSE_REFUSED;
 		$ref->{'output'}   = "Currently in use by another project";
+		if ($conflict && $conflict->powder_zones()) {
+		    $ref->{'output'} .=
+			": conflicts with an experiment running in the ".
+			$conflict->powder_zones() . " zone(s)";
+		}
 		$ref->{'valid'}    = 0;
 		$range_results->{'errors'}++;
 	    }
@@ -1013,6 +1171,8 @@ sub DoGroupReserve()
 		my $args = {
 		    "pid"         => $project->pid(),
 		    "pid_idx"     => $project->pid_idx(),
+		    "gid"         => $group->gid(),
+		    "gid_idx"     => $group->gid_idx(),
 		    "creator_uid" => $this_user->uid(),
 		    "creator_idx" => $this_user->uid_idx(),
 		    "start"       => $start,
@@ -1021,6 +1181,9 @@ sub DoGroupReserve()
 		    "portal"      => $brand->brand(),
 		    "forclass"    => $forclass,
 		};
+		if ($zones) {
+		    $args->{'powder_zones'} = $zones;
+		}
 		$resgroup = APT_Reservation::Group->Create($args);
 		if (!defined($resgroup)) {
 		    fatal("Could not create a new reservation group");
@@ -1083,6 +1246,25 @@ sub DoGroupReserve()
 		}
 		# We do not trust the uuid from client, we return the new one
 		$res->{'freq_uuid'} = $reservation->freq_uuid();
+		
+		if ($res->{'approved'} && $DORDZ) {
+		    if (APT_RDZ::CreateClaimFromReservation(
+			    $reservation, \$errmsg, $debug)) {
+			my $brand      = $resgroup->Brand();
+			my $pid        = $project->pid();
+			my $url        = $resgroup->WebURL();
+
+			$brand->SendEmail($brand->OpsEmailAddress(),
+					  "Failed to submit RDZ claims",
+					  $errmsg . "\n" .
+					  $resgroup->InfoString() .
+					  "\n" .
+					  "$url",
+					  $brand->ReservationsEmailAddress());
+			# Clear the approval.
+			$res->{'approved'} = 0;
+		    }
+		}
 		$reservation->MarkSubmitted($res->{'approved'});
 	    }
 	    foreach my $res (@route_reservations) {
@@ -1121,11 +1303,12 @@ sub DoGroupReserve()
 		my $this_email = $this_user->email();
 		my $url        = $resgroup->WebURL();
 		my $pid        = $project->pid();
+		my $gid        = $group->pid();
     
 		$brand->SendEmail($brand->ReservationsEmailAddress(),
 			  "Pending reservation group request needs approval",
 			  "A reservation group request was made by $this_uid ".
-			  "in project $pid,\n".
+			  "in project $pid/$gid,\n".
 			  "but it needs approval.".
 			  "\n\n".
 			  $resgroup->InfoString() . "\n" .
@@ -1143,7 +1326,7 @@ sub DoGroupReserve()
 	$webtask->results($result);
 	$webtask->Exited($exitcode);
     }
-    print Dumper($result);
+    print Dumper($result) if ($debug);
     exit($exitcode);
 
   bad:
@@ -1162,11 +1345,12 @@ sub DoDelete()
     # is an expiration, initiated by the daemon when it sees a reservation
     # group is done. 
     #
-    my $optlist   = "N:LMps";
+    my $optlist   = "N:LMpsf";
     my $takelock  = 0;
     my $nolock    = 0;	# Caller holds the lock.
     my $noemail   = 0;
     my $pushonly  = 0;
+    my $force     = 0;
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
@@ -1185,6 +1369,9 @@ sub DoDelete()
 	    if (! -e $options{"N"});
 
 	$reason = emutil::ReadFile($options{"N"});
+    }
+    if (defined($options{"f"})) {
+	$force = 1;
     }
     if (defined($options{"L"})) {
 	$takelock = 1;
@@ -1210,13 +1397,14 @@ sub DoDelete()
     if (!defined($resgroup)) {
 	fatal("No such reservation group");
     }
-    my $project = Project->Lookup($resgroup->pid());
-    fatal("Cannot lookup project")
-	if (!defined($project));
+    my $project = $resgroup->GetProject();
+    my $group   = $resgroup->GetGroup();
+    fatal("Cannot lookup project or group")
+	if (! (defined($project) && defined($group)));
     
     if (! ($this_user->IsAdmin() ||
 	   $this_user->uid_idx() == $resgroup->creator_idx() ||
-	   $project->IsManager())) {
+	   $group->IsManager($this_user))) {
 	fatal("No permission to delete this reservation")
     }
     if (!$nolock) {
@@ -1233,22 +1421,29 @@ sub DoDelete()
     # are using this reservation; not allowed to delete the reservation
     # until the experiments are terminated.
     #
-    if ($resgroup->RouteReservationList()) {
-	my $current;
-	if (APT_Instance->LookupForProject($project, \$current)) {
-	    $resgroup->Unlock() if (!$nolock);
-	    fatal("Could not look up experiments for $project");
-	}
-	foreach my $instance (@$current) {
-	    # Only Route reservations actually matter here
-	    if ($resgroup->RoutesInUse($instance)) { 
+    my $checkForRouteUsage = sub () {
+	if ($resgroup->Active() && $resgroup->RouteReservationList()) {
+	    my $current;
+	    if (APT_Instance->LookupForProject($project, \$current)) {
 		$resgroup->Unlock() if (!$nolock);
-		UserError("You have experiments running that are using this ".
-			  "reservation, please terminate those first");
+		fatal("Could not look up experiments for $project");
+	    }
+	    foreach my $instance (@$current) {
+		# Only Route reservations actually matter here.
+		# And ignore expired experiments, they hang around until
+		# we can clean up the state at buses that went offline.
+		next
+		    if ($instance->IsExpired() || $instance->IsCanceled());
+	    
+		if ($resgroup->RoutesInUse($instance) && !$force) { 
+		    $resgroup->Unlock() if (!$nolock);
+		    UserError("You have experiments running that are using ".
+			      "this reservation, please terminate those first");
+		}
 	    }
 	}
-    }
-    
+    };
+
     #
     # See if we got specific reservations to delete.
     #
@@ -1279,6 +1474,11 @@ sub DoDelete()
 		push(@route_reservations, $reservation);
 	    }
 	}
+	# For now, if using routes and an experiment is active, not
+	# allowed to delete.
+	if (@route_reservations) {
+	    &$checkForRouteUsage();
+	}
 	#
 	# Mark the reservations as deleted in case the clusters are offline.
 	#
@@ -1288,6 +1488,8 @@ sub DoDelete()
 	# entry reflects what actually happened. 
 	#
 	if (!$resgroup->Expired()) {
+	    my $needemail = 0;
+	    
 	    foreach my $res (@cluster_reservations,
 			     @range_reservations, @route_reservations) {
 		if ($res->IsCluster()) {
@@ -1295,30 +1497,45 @@ sub DoDelete()
 		    if (!$res->deleted()) {
 			$res->MarkDeleted();
 			$res->ClearDeletedPushed();
+			$needemail++;
 		    }
 		}
 		else {
 		    # This is immediately deleted below.
 		    $res->MarkDeleted();
+		    $needemail++;
 		}
 	    }
-	    if (!$noemail) {
+	    if (!$noemail && $needemail) {
 		#
 		# Notify the user that a resgroup has been deleted.
 		#
+		my $this_uid   = $this_user->uid();
 		my $brand      = $resgroup->Brand();
 		my $creator    = $resgroup->GetCreator();
 		my $email      = $creator->email();
 		my $pid        = $project->pid();
+		my $gid        = $group->gid();
+		my $url        = $resgroup->WebURL();
 		my $string     = $resgroup->InfoString(\@cluster_reservations,
 						       \@range_reservations,
 						       \@route_reservations);
-		$brand->SendEmail($email,
-		  "Resources in reservation group have been removed",
-		  "Resources in your reservation group in project $pid ".
-		  "have been removed from the group.\n".
-		  (defined($reason) ? "\n$reason\n" : "\n") . $string,
-		  $brand->ReservationsEmailAddress());
+
+		my $subj =
+		    "Resources in reservation group have been removed";
+		my $body  =
+		    "Resources in your reservation group in project $pid/$gid ".
+		    "have been removed from the group.\n".
+		    (defined($reason) ? "\n$reason\n" : "") . $string . "\n" .
+		    $url . "\n\n";
+
+		$brand->SendEmail($email, $subj, $body,
+				  $brand->ReservationsEmailAddress());
+
+		# This email is not intended to go to the user.
+		$body .= "Resources removed by $this_uid\n";
+		$brand->SendEmail($brand->ReservationsEmailAddress(),
+				  $subj, $body, $email);
 	    }
 	}
     }
@@ -1327,6 +1544,11 @@ sub DoDelete()
 	@range_reservations   = $resgroup->RFReservationList();
 	@route_reservations   = $resgroup->RouteReservationList();
 
+	# For now, if using routes and an experiment is active, not
+	# allowed to delete.
+	if (@route_reservations) {
+	    &$checkForRouteUsage();
+	}
 	#
 	# Deleting entire reservation. If doing this before expired, mark
 	# it. If after expiration, or if already set, leave it alone. The
@@ -1340,23 +1562,51 @@ sub DoDelete()
 		#
 		# Notify the user that a resgroup has been deleted.
 		#
+		my $this_uid   = $this_user->uid();
 		my $brand      = $resgroup->Brand();
 		my $creator    = $resgroup->GetCreator();
 		my $email      = $creator->email();
 		my $pid        = $project->pid();
+		my $gid        = $group->gid();
 
-		$brand->SendEmail($email,
-			  "Reservation group has been deleted",
-			  "Your reservation group in project $pid ".
-			  "has been deleted.\n".
-			  (defined($reason) ? "\n$reason\n" : "\n"). 
-			  $resgroup->InfoString(),
-			  $brand->ReservationsEmailAddress());
+		my $subj =
+		    "Reservation group has been deleted";
+		my $body = 
+		    "Your reservation group in project $pid/$gid ".
+		    "has been deleted.\n".
+		    (defined($reason) ? "\n$reason\n" : "") . "\n" .
+		    $resgroup->InfoString() . "\n";
+		
+		$brand->SendEmail($email, $subj, $body,
+				  $brand->ReservationsEmailAddress());
+		
+		# This email is not intended to go to the user.
+		$body .= "Reservation deleted by $this_uid\n";
+		$brand->SendEmail($brand->ReservationsEmailAddress(),
+				  $subj, $body, $email);
 	    }
 	}
     }
     if (@range_reservations) {
 	foreach my $res (@range_reservations) {
+	    if ($DORDZ) {
+		if (APT_RDZ::DeleteClaimFromReservation($res, \$errmsg)) {
+		    my $brand      = $resgroup->Brand();
+		    my $pid        = $project->pid();
+		    my $url        = $resgroup->WebURL();
+
+		    $brand->SendEmail($brand->OpsEmailAddress(),
+				      "Failed to delete RDZ claim",
+				      $errmsg . "\n" .
+				      $resgroup->InfoString() .
+				      "\n" .
+				      "$url",
+				      $brand->ReservationsEmailAddress());
+		}
+		#
+		# Need to do something here.
+		#
+	    }
 	    my $blob = {
 		"uuid"    => $res->freq_uuid(),
 		"errcode" => 0,
@@ -1382,12 +1632,13 @@ sub DoDelete()
 	my $urn         = $reservation->aggregate_urn();
 	my $remote_uuid = $reservation->remote_uuid();
 	my $pid         = $project->pid();
+	my $gid         = $group->gid();
 	
 	my $command = "$RESCOMMAND -t $webtask_id -a $urn delete ";
 	if (defined($options{"N"})) {
 	    $command .= "-N " . $options{"N"} . " ";
 	}
-	$command .= "$pid $remote_uuid";
+	$command .= "$pid/$gid $remote_uuid";
 
 	print "Running: $command\n";
 	system($command);
@@ -1431,6 +1682,15 @@ sub DoDelete()
 		    # This is easy!
 		    $res->Delete();
 		    next;
+		}
+		elsif ($webtask->exitcode() ==
+		       GENIRESPONSE_SERVER_UNAVAILABLE ||
+		       $webtask->exitcode() ==
+		       GENIRESPONSE_NETWORK_ERROR) {
+		    #
+		    # This is okay, we have marked it as deleted, it will
+		    # get pushed out later.
+		    #
 		}
 		else {
 		    $blob->{'errcode'} = $webtask->exitcode();
@@ -1488,8 +1748,8 @@ sub DoRefresh()
     
     if (! ($this_user->IsAdmin() ||
 	   $this_user->uid_idx() == $resgroup->creator_idx() ||
-	   $project->IsManager())) {
-	fatal("No permission to refresh this reservation")
+	   $project->IsManager($this_user))) {
+	UserError("No permission to refresh this reservation")
     }
     if ($resgroup->Lock()) {
 	UserError("Reservation is locked, please try again later");
@@ -1618,7 +1878,7 @@ sub DoRefresh()
 		$res->Update("using", $details->{'using'});
 	    }
 	    # We set this, not the remote cluster.
-	    if ($details->{'utilization'}) {
+	    if (defined($details->{'utilization'})) {
 		$res->Update("utilization", $details->{'utilization'});
 	    }
 	    # Store this for generating the graphs.
@@ -1732,7 +1992,8 @@ sub DoApprove()
     
     foreach my $res ($resgroup->ReservationList()) {
 	push(@cluster_reservations, $res)
-	    if (!$res->approved() || !$res->approved_pushed());
+	    if (!$res->deleted() &&
+		(!$res->approved() || !$res->approved_pushed()));
     }
     foreach my $res ($resgroup->RFReservationList()) {
 	push(@range_reservations, $res)
@@ -1754,6 +2015,7 @@ sub DoApprove()
     if (@range_reservations) {
 	my @allgroups = APT_Reservation::Group->LookupAll();
 	my $nofits    = 0;
+	my $conflict;
     
 	foreach my $res (@range_reservations) {
 	    my $ref = {};
@@ -1763,13 +2025,19 @@ sub DoApprove()
 
 	    if (!($override ||
 		  APT_Reservation::Group::RFReservation->Fits(\@allgroups,
-							     $start, $end,
-							     $ref))) {
+							      $start, $end,
+							      $ref,
+							      \$conflict))) {
+		my $msg = "No longer fits the schedule";
+		if ($conflict && $conflict->powder_zones()) {
+		    $msg .= ": conflicts with another reservation in the ".
+			$conflict->powder_zones() . " zone(s)";
+		}
 		my $freq_uuid = $res->freq_uuid();
 		my $blob = {
 		    "uuid"    => $freq_uuid,
 		    "errcode" => 1,
-		    "errmesg" => "No longer fits the schedule",
+		    "errmesg" => $msg,
 		};
 		$results->{$freq_uuid} = $blob;
 		$nofits++;
@@ -1788,6 +2056,7 @@ sub DoApprove()
     
 	foreach my $res (@route_reservations) {
 	    my $ref = {};
+	    $ref->{'routename'}= $res->routename();
 	    $ref->{'routeid'}  = $res->routeid();
 	    $ref->{'uuid'}     = $res->route_uuid();
 
@@ -1898,6 +2167,10 @@ sub DoApprove()
 		}
 		next;
 	    }
+	    else {
+		my $response = $webtask->response();
+		print Dumper($response);
+	    }
 	    if (!$checkonlyflag) {
 		$res->MarkApprovedPushed();
 		push(@approved_reservations, $res);
@@ -1964,6 +2237,7 @@ sub DoApprove()
     }
     if (@range_reservations) {
 	my @allgroups = APT_Reservation::Group->LookupAll();
+	my $conflict;
     
 	foreach my $res (@range_reservations) {
 	    my $ref = {};
@@ -1974,14 +2248,48 @@ sub DoApprove()
 	    if (!($override ||
 		  APT_Reservation::Group::RFReservation->Fits(\@allgroups,
 							      $start, $end,
-							      $ref))) {
+							      $ref,
+							      \$conflict))) {
+		my $msg = "No longer fits the schedule";
+		if ($conflict && $conflict->powder_zones()) {
+		    $msg .= ": conflicts with another reservation in the ".
+			$conflict->powder_zones() . " zone(s)";
+		}
 		my $freq_uuid = $res->freq_uuid();
 		my $blob = {
 		    "uuid"    => $freq_uuid,
 		    "errcode" => 1,
-		    "errmesg" => "No longer fits the schedule",
+		    "errmesg" => $msg,
 		};
 		$results->{$freq_uuid} = $blob;
+	    }
+	    elsif ($DORDZ) {
+		if (APT_RDZ::CreateClaimFromReservation(
+			$res, \$errmsg, $debug)) {
+		    my $brand      = $resgroup->Brand();
+		    my $pid        = $project->pid();
+		    my $url        = $resgroup->WebURL();
+
+		    $brand->SendEmail($brand->OpsEmailAddress(),
+				      "Failed to submit RDZ claims",
+				      $errmsg . "\n" .
+				      $resgroup->InfoString() .
+				      "\n" .
+				      "$url",
+				      $brand->ReservationsEmailAddress());
+
+		    my $freq_uuid = $res->freq_uuid();
+		    my $blob = {
+			"uuid"    => $freq_uuid,
+			"errcode" => 1,
+			"errmesg" => "Unable to claim this range at the RDZ",
+		    };
+		    $results->{$freq_uuid} = $blob;
+		}
+		else {
+		    $res->MarkApproved();
+		    push(@approved_reservations, $res);
+		}
 	    }
 	    else {
 		$res->MarkApproved();
@@ -1994,6 +2302,7 @@ sub DoApprove()
     
 	foreach my $res (@route_reservations) {
 	    my $ref = {};
+	    $ref->{'routename'}= $res->routename();
 	    $ref->{'routeid'}  = $res->routeid();
 	    $ref->{'uuid'}     = $res->route_uuid();
 
@@ -2038,7 +2347,9 @@ sub DoApprove()
 			  (defined($reason) ? "\n$reason\n" : "") . "\n" .
 			  $resgroup->InfoString() .
 			  "\n".
-			  "See: $url", $brand->ReservationsEmailAddress());
+			  "See: $url",
+			  $brand->ReservationsEmailAddress(),
+			  "BCC: " . $brand->ReservationsEmailAddress());
 
 	# Schedule an announcement for the user.
 	$resgroup->AddAnnouncement();
@@ -2124,7 +2435,6 @@ sub DoInfoOrWarn()
 		      $resgroup->InfoString() .
 		      "See: $url",
 		      $brand->ReservationsEmailAddress(),
-		      "CC: "  . $brand->OpsEmailAddress() . "\n" .
 		      "BCC: " . $brand->ReservationsEmailAddress());
   done:
     if (defined($webtask)) {
@@ -2251,7 +2561,9 @@ sub DoCancel()
 			  "scheduled for cancellation, is no longer scheduled ".
 			  "for cancellation.\n\n".
 			  $resgroup->InfoString() .
-			  "See: $url", $brand->ReservationsEmailAddress());
+			  "See: $url", 
+			  $brand->ReservationsEmailAddress(),
+			  "BCC: " . $brand->ReservationsEmailAddress());
 	}
 	else {
 	    my $whentime = TBDateStringGMT($when);
@@ -2267,7 +2579,9 @@ sub DoCancel()
                 "Please contact the support staff if you would like to keep\n".
 		"your reservation.\n\n".
 		$resgroup->InfoString() .
-		"See: $url", $brand->ReservationsEmailAddress());
+		"See: $url", 
+		$brand->ReservationsEmailAddress(),
+		"BCC: " . $brand->ReservationsEmailAddress());
 	}
     }
     
@@ -2542,6 +2856,10 @@ sub DoIdleDetection()
 		next;
 	    }
 	    push(@reservations, $res);
+	    # If disabling and the res marked for cancel, do the uncancel
+	    if ($clear && $res->canceled()) {
+		$res->ClearCanceled();
+	    }
 	}
     }
     # nopush is a debugging flag only.
@@ -2746,8 +3064,8 @@ sub DoConvertReservationsToGroups()
 #
 sub DoCheckReserved()
 {
-    my @optlist = ('f=s', 's=s', 'e=s', 'p=s');
-    my ($start, $end, $rspec, $project, $errmsg, $sitemap);
+    my @optlist = ('f=s', 's=s', 'e=s', 'g=s');
+    my ($start, $end, $rspec, $group, $errmsg, $sitemap);
 
     Getopt::Long::Configure("no_ignore_case");
     my %options = ();
@@ -2760,11 +3078,11 @@ sub DoCheckReserved()
 	    if (! -e $options{"f"});
 	$rspec = emutil::ReadFile($options{"f"});
     }
-    if (defined($options{"p"})) {
-	$project = Project->Lookup($options{"p"});
+    if (defined($options{"g"})) {
+	$group = Group->Lookup($options{"g"});
 
-	if (!defined($project)) {
-	    fatal("No such project");
+	if (!defined($group)) {
+	    fatal("No such project/group");
 	}
     }
     if (defined($options{"s"})) {
@@ -2789,7 +3107,7 @@ sub DoCheckReserved()
 	}
     }
     usage()
-	if (!(defined($rspec) && defined($end) && defined($project)));
+	if (!(defined($rspec) && defined($end) && defined($group)));
 
     #
     # Update rspec with site aggregate urns so it is fully bound.
@@ -2804,15 +3122,18 @@ sub DoCheckReserved()
 	fatal("Could not parse rspec");
     }
     my $noresokay = 0;
-    if (APT_Profile::CheckResourceReservations($rspec, $project, $start, $end,
+    if (APT_Profile::CheckResourceReservations($rspec, $group, $this_user,
+					       $start, $end,
 					       $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckSpectrumReservations($rspec, $project, $start, $end,
-					       $noresokay, \$errmsg)) {
+    if (APT_Profile::CheckSpectrumReservations($rspec, $group, $this_user,
+					       $start, $end,
+					       $noresokay, 0, \$errmsg)) {
 	UserError($errmsg);
     }
-    if (APT_Profile::CheckRoutesReservations($rspec, $project, $start, $end,
+    if (APT_Profile::CheckRoutesReservations($rspec, $group, $this_user,
+					     $start, $end,
 					     $noresokay, \$errmsg)) {
 	UserError($errmsg);
     }
@@ -2827,8 +3148,10 @@ sub DoCheckReserved()
 #
 sub DoMaxDuration()
 {
-    my @optlist = ('f=s', 's=s', 'p=s', 'P=s');
-    my ($start, $end, $rspec, $project, $errmsg, $sitemap, $portal);
+    my @optlist = ('f=s', 's=s', 'p=s', 'P=s', 'a=s', 'g=s');
+    my ($start, $end, $rspec, $project, $group, $errmsg, $sitemap, $portal);
+    my ($baddog, $badtype);
+    my $where = $MYURN;
     my $prediction_info;
 
     Getopt::Long::Configure("no_ignore_case");
@@ -2838,22 +3161,13 @@ sub DoMaxDuration()
 		     "portal=s" => \$portal)) {
 	usage();
     }
+    if (defined($options{"a"})) {
+	$where = $options{"a"};
+    }
     if (defined($options{"f"})) {
 	fatal("Cannot read rspec file")
 	    if (! -e $options{"f"});
 	$rspec = emutil::ReadFile($options{"f"});
-    }
-    if (defined($options{"P"})) {
-	fatal("Cannot read prediction file")
-	    if (! -e $options{"P"});
-	my $tmp = emutil::ReadFile($options{"P"});
-	$prediction_info = eval { decode_json($tmp) };
-	if ($@) {
-	    fatal("Could not decode json prediction data: $@\n");
-	}
-	if (ref($prediction_info) ne "HASH") {
-	    fatal("prediction data is not a HASH");
-	}
     }
     if (defined($options{"p"})) {
 	$project = Project->Lookup($options{"p"});
@@ -2861,6 +3175,15 @@ sub DoMaxDuration()
 	if (!defined($project)) {
 	    fatal("No such project");
 	}
+	$group = $project->GetProjectGroup();
+    }
+    if (defined($options{"g"})) {
+	$group = Group->Lookup($options{"g"});
+
+	if (!defined($group)) {
+	    fatal("No such group");
+	}
+	$project = $group->GetProject();
     }
     if (defined($options{"s"})) {
 	$start = $options{"s"};
@@ -2877,11 +3200,12 @@ sub DoMaxDuration()
     usage()
 	if (!(defined($rspec) && defined($project)));
     my $pid = $project->pid();
+    my $gid = $group->gid();
 
     #
     # Update rspec with site aggregate urns so it is fully bound.
     #
-    my $tmp = APT_Profile::SetSites(\$rspec, $sitemap, $MYURN,
+    my $tmp = APT_Profile::SetSites(\$rspec, $sitemap, $where,
 				    undef, undef, \$errmsg);
     if ($tmp) {
 	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
@@ -2900,28 +3224,80 @@ sub DoMaxDuration()
     }
     my $typeCounts = $resources->{"typeCounts"};
     
-    #
-    # Ask for prediction info from the clusters referenced in the rspec.
-    #
-    if (!defined($prediction_info) && keys(%{$typeCounts})) {
-	my $urns = join(",", keys(%{$typeCounts}));
-	my $local_webtask = WebTask->CreateAnonymous();
-	my $local_task_id = $local_webtask->task_id();
-	system("$RESCOMMAND -t $local_task_id prediction -a '$urns' $pid");
-	if ($?) {
-	    $local_webtask->Delete();
-	    fatal("Could not get prediction info");
-	}
-	$local_webtask->Refresh();
-	$prediction_info = $local_webtask->value();
-	$local_webtask->Delete();
-	#print Dumper($prediction_info);
-    }
-    
     if (keys(%{$typeCounts})) {
+	my $loser;
+
+	#
+	# Prediction info is typically valid. If not, ask for just
+	# the URNS we need.
+	#
+	my $prediction_info = APT_Instance::PredictionInfo->Lookup($this_user);
+	my $pinfo;
+	my $forecasts = {};
+	if ($prediction_info->Stale()) {
+	    my $pidgid = "$pid/$gid";
+	    my $urns = join(",", keys(%{$typeCounts}));
+	    my $local_webtask = WebTask->CreateAnonymous();
+	    my $local_task_id = $local_webtask->task_id();
+	    system("$RESCOMMAND -t $local_task_id ".
+		   "  prediction -a '$urns' $pidgid");
+	    if ($?) {
+		$local_webtask->Delete();
+		fatal("Could not get prediction info");
+	    }
+	    $local_webtask->Refresh();
+	    $pinfo = $local_webtask->value();
+	    $local_webtask->Delete();
+	}
+	else {
+	    $pinfo = $prediction_info->PredictionInfo();
+	}
+	#print Dumper($pinfo);
+	
+	#
+	# We want the per project (group) prediction info for each
+	# cluster. This is in the pforecast arrays. Note that we have
+	# to watch for projects with per-group reservations. 
+	#
+	foreach my $urn (keys(%{$typeCounts})) {
+	    next
+		if (!exists($pinfo->{$urn}));
+
+	    # Results from cluster are canonicalized by GeniHRN
+	    my $pidgid = lc("$pid/$gid");
+	    my $pforecasts = $pinfo->{$urn}->{'pforecasts'};
+
+	    if ($project->shared_reservations() ==
+		$Project::RESERVATIONS_PERGROUP) {
+		if (exists($pforecasts->{$pidgid})) {
+		    $forecasts->{$urn}->{'forecast'} =
+			$pforecasts->{$pidgid};
+		}
+		else {
+		    # The group did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn}->{'forecast'} =
+			$pinfo->{$urn}->{'forecast'};
+		}
+	    }
+	    else {
+		if (exists($pforecasts->{lc($pid)})) {
+		    $forecasts->{$urn}->{'forecast'} =
+			$pforecasts->{lc($pid)};
+		}
+		else {
+		    # The project did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn}->{'forecast'} =
+			$pinfo->{$urn}->{'forecast'};
+		}
+	    }
+	}
+	#print Dumper($forecasts);
+	
 	if (APT_Reservation::Group::Reservation::MaxDuration(
-		$project, $start, \$end, $typeCounts,
-		$prediction_info, \$errmsg)) {
+		$group, $this_user, $start, \$end, $typeCounts,
+		$forecasts, \$errmsg, \$loser)) {
 	    fatal($errmsg);
 	}
 	if (defined($end)) {
@@ -2930,31 +3306,105 @@ sub DoMaxDuration()
 	else {
 	    print "undef\n";
 	}
+	if (defined($loser)) {
+	    $baddog  = $loser;
+	    $badtype = "type";
+	}
     }
     my $spectrum = [];
     if (APT_Profile::GetSpectrum($rspec, \$spectrum, \$errmsg)) {
 	fatal($errmsg);
     }
-    if (@{$spectrum}) {
-	if (APT_Reservation::Group::RFReservation::MaxDuration(
-		$project, $start, \$end, $spectrum, \$errmsg)) {
-	    fatal($errmsg);
+    if (@{$spectrum} && !defined($baddog) && !APT_RDZ::UseRDZ($rspec)) {
+	my $loser;
+
+	#
+	# Because we now allow some experiments to start without having
+	# reserved the ranges it is using, we have to check current experiments
+	# too.
+	#
+	foreach my $ref (@{$spectrum}) {
+	    my $freq_low  = $ref->{'frequency_low'};
+	    my $freq_high = $ref->{'frequency_high'};
+	    my $conflict;
+
+	    # This is not sourced from the user.
+	    my $zones = $ref->{'frequency_zones'} = $resources->{'zones'};
+
+	    if (APT_Instance::RFRanges->InUse($group, $this_user, $freq_low,
+					      $freq_high, $zones, $start, $end,
+					      \$conflict)) {
+		print "$freq_low,$freq_high is currently in use\n";
+		$loser = "$freq_low,$freq_high";
+		if (defined($zones)) {
+		    $loser .= " in the $zones zone(s)";
+		}
+		$end = 0;
+		last;
+	    }
 	}
-	if (defined($end)) {
-	    print POSIX::strftime("S %m/%d/20%y %H:%M", localtime($end)) . "\n";
+	if (!defined($loser)) {
+	    if (APT_Reservation::Group::RFReservation::MaxDuration(
+		    $group, $this_user,
+		    $start, \$end, $resources->{'zones'},
+		    $spectrum, \$errmsg, \$loser)) {
+		fatal($errmsg);
+	    }
+	    if (defined($end)) {
+		print POSIX::strftime("S %m/%d/20%y %H:%M",
+				      localtime($end)) . "\n";
+	    }
+	    else {
+		print "undef\n";
+	    }
 	}
-	else {
-	    print "undef\n";
+	if (defined($loser)) {
+	    $baddog  = $loser;
+	    $badtype = "range";
 	}
     }
     my $routes = [];
     if (APT_Profile::GetRoutes($rspec, \$routes, \$errmsg)) {
 	fatal($errmsg);
     }
-    if (@{$routes}) {
-	if (APT_Reservation::Group::RouteReservation::MaxDuration(
-		$project, $start, \$end, $routes, \$errmsg)) {
-	    fatal($errmsg);
+    if (@{$routes} && !defined($baddog)) {
+	my $loser;
+
+	#
+	# Because we now allow some experiments to start without having
+	# reserved the routes it is using, we have to check current experiments
+	# too.
+	#
+	foreach my $request (@{$routes}) {
+	    my $routename = $request->{"name"};
+
+	    # XXX
+	    if ($routename eq "allroutes") {
+		my $map = APT_Reservation::Group::RouteReservation::RouteMap();
+		$routename = (keys(%{$map}))[0];
+	    }
+	    my $routeid   =
+		APT_Reservation::Group::RouteReservation::RouteID($routename);
+
+	    if (APT_Instance::Aggregate::BusRoute->InUse($group, $this_user,
+							 $routeid,
+							 $start, $end)) {
+		print "$routename is currently in use\n";
+		$loser = $routename;
+		$end = 0;
+		last;
+	    }
+	}
+	if (!defined($loser)) {
+	    if (APT_Reservation::Group::RouteReservation::MaxDuration(
+		    $group, $this_user,
+		    $start, \$end, $routes, \$errmsg, \$loser)) {
+		fatal($errmsg);
+	    }
+	}
+	if (defined($loser)) {
+	    $baddog  = $loser;
+	    $badtype = "route";
 	}
     }
     if (!defined($end)) {
@@ -2972,6 +3422,204 @@ sub DoMaxDuration()
 	    POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . ")\n";
     }
     
+    if (defined($webtask)) {
+	$webtask->maxend($end);
+	if (defined($baddog)) {
+	    $webtask->baddog($baddog);
+	    $webtask->badtype($badtype);
+	}
+	$webtask->Exited(0);
+    }
+    exit(0);
+}
+
+#
+# Given an rspec determine a max extension. Slightly different then above
+# since we are ignoring MAXDURATION and is only used on non POWDER portals.
+#
+sub DoMaxExtension()
+{
+    my @optlist = ('f=s', 's=s', 'p=s', 'P=s', "a=s", "g=s");
+    my ($start, $end, $rspec, $project, $group, $errmsg, $sitemap, $portal);
+    my $where = $MYURN;
+
+    Getopt::Long::Configure("no_ignore_case");
+    my %options = ();
+    if (! GetOptions(\%options, @optlist,
+		     "site=s%"  => \$sitemap,
+		     "portal=s" => \$portal)) {
+	usage();
+    }
+    if (defined($options{"a"})) {
+	$where = $options{"a"};
+    }
+    if (defined($options{"f"})) {
+	fatal("Cannot read rspec file")
+	    if (! -e $options{"f"});
+	$rspec = emutil::ReadFile($options{"f"});
+	print $rspec . "\n";
+	
+    }
+    if (defined($options{"p"})) {
+	$project = Project->Lookup($options{"p"});
+
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	$group = $project->GetProjectGroup();
+    }
+    elsif (defined($options{"g"})) {
+	$group = Group->Lookup($options{"g"});
+
+	if (!defined($group)) {
+	    fatal("No such group");
+	}
+	$project = $group->GetProject();
+    }
+    if (defined($options{"s"})) {
+	$start = $options{"s"};
+	if ($start !~ /^\d+$/) {
+	    $start = str2time($start);
+	    if (!$start) {
+		fatal("Start is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    else {
+	$start = time();
+    }
+    usage()
+	if (!(defined($rspec) && defined($project)));
+    my $pid = $project->pid();
+    my $gid = $group->gid();
+
+    #
+    # Update rspec with site aggregate urns so it is fully bound.
+    #
+    my $tmp = APT_Profile::SetSites(\$rspec, $sitemap, $where,
+				    undef, undef, \$errmsg);
+    if ($tmp) {
+	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
+    $rspec = GeniXML::Parse($rspec);
+    if (!defined($rspec)) {
+	fatal("Could not parse rspec");
+    }
+    print GeniXML::Serialize($rspec);
+
+    #
+    # Use this to get the type counts
+    #
+    my $resources = {};
+    my $err = APT_Profile::GetResources($rspec, \$errmsg, \$resources);
+    if ($err) {
+	if ($err < 0) {
+	    fatal($errmsg);
+	}
+	else {
+	    UserError($errmsg);
+	}
+    }
+    my $typeCounts = $resources->{"typeCounts"};
+
+    #
+    # If no nodes are typed, we cannot determine anything.
+    #
+    if (keys(%{$typeCounts})) {
+	#
+	# Prediction info is typically valid. If not, ask for just
+	# the URNS we need.
+	#
+	my $prediction_info = APT_Instance::PredictionInfo->Lookup($this_user);
+	my $pinfo;
+	my $forecasts = {};
+	if ($prediction_info->Stale()) {
+	    my $pidgid = "$pid/$gid";
+	    my $urns = join(",", keys(%{$typeCounts}));
+	    my $local_webtask = WebTask->CreateAnonymous();
+	    my $local_task_id = $local_webtask->task_id();
+	    system("$RESCOMMAND -t $local_task_id ".
+		   "  prediction -a '$urns' $pidgid");
+	    if ($?) {
+		$local_webtask->Delete();
+		fatal("Could not get prediction info");
+	    }
+	    $local_webtask->Refresh();
+	    $pinfo = $local_webtask->value();
+	    $local_webtask->Delete();
+	}
+	else {
+	    $pinfo = $prediction_info->PredictionInfo();
+	}
+	
+	#
+	# We want the per project (group) prediction info for each
+	# cluster. This is in the pforecast arrays. Note that we have
+	# to watch for projects with per-group reservations. 
+	#
+	foreach my $urn (keys(%{$typeCounts})) {
+	    next
+		if (!exists($pinfo->{$urn}));
+
+	    # Results from cluster are canonicalized by GeniHRN
+	    my $pidgid = lc("$pid/$gid");
+	    my $pforecasts = $pinfo->{$urn}->{'pforecasts'};
+
+	    if ($project->shared_reservations() ==
+		$Project::RESERVATIONS_PERGROUP) {
+		if (exists($pforecasts->{$pidgid})) {
+		    $forecasts->{$urn}->{'forecast'} =
+			$pforecasts->{$pidgid};
+		}
+		else {
+		    # The group did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn}->{'forecast'} =
+			$pinfo->{$urn}->{'forecast'};
+		}
+	    }
+	    else {
+		if (exists($pforecasts->{lc($pid)})) {
+		    $forecasts->{$urn}->{'forecast'} =
+			$pforecasts->{lc($pid)};
+		}
+		else {
+		    # The project did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn}->{'forecast'} =
+			$pinfo->{$urn}->{'forecast'};
+		}
+	    }
+	}
+	#print Dumper($forecasts);
+	
+	if (APT_Reservation::Group::Reservation::MaxExtension(
+		$project, $this_user, $start, \$end, $typeCounts,
+		$forecasts, \$errmsg)) {
+	    fatal($errmsg);
+	}
+	if (defined($end)) {
+	    print POSIX::strftime("R %m/%d/20%y %H:%M", localtime($end)) . "\n";
+	}
+	else {
+	    print "undef\n";
+	}
+    }
+    if (!defined($end)) {
+	print "Cannot determine a max duration\n";
+    }
+    else {
+	if ($end < $start) {
+	    $end = 0;
+	}
+	if ($end == 0) {
+	    print "Some or all resources unavailable\n";
+	}
+	else {
+	    print "Max duration is $end (" .
+		POSIX::strftime("%m/%d/20%y %H:%M", localtime($end)) . ")\n";
+	}
+    }
     if (defined($webtask)) {
 	$webtask->maxend($end);
 	$webtask->Exited(0);
@@ -3058,6 +3706,1373 @@ sub CallMethodOnReservations($$@)
     # Yes, we delete the webtasks even though we return the in-memory version.
     map { $_->Delete(); } @webtasks;
     return 0;
+}
+
+#
+# Construct a forecast for routes that looks like Reservation system
+# forecasts, including unapproved info for the web interface.
+#
+sub RouteForecastInternal($$);
+sub DoRouteForecast()
+{
+    my $optlist      = "p:";
+    my @projlist     = ();
+    my @grouplist    = ();
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"p"})) {
+	@projlist = split(",", $options{"p"});
+    }
+    my $forecasts = RouteForecastInternal(\@projlist, \@grouplist);
+
+    if (defined($webtask)) {
+	$webtask->forecast($forecasts);
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($forecasts);
+    }
+    exit(0);
+
+}
+
+sub RouteForecastInternal($$)
+{
+    my ($projlist,$grouplist) = @_;
+    my %forecasts    = ();
+    my %reservations = ();
+    my %current      = ();
+    my $routemap     = APT_Reservation::Group::RouteReservation::RouteMap();
+    my $now          = time();
+
+    my @groups = APT_Reservation::Group->LookupAll();
+    return \%forecasts
+	if (!@groups);
+
+    foreach my $routename (keys(%{$routemap})) {
+	$reservations{$routename} = [];
+    }
+
+    foreach my $group (@groups) {
+	next
+	    if (! $group->RouteReservationList());
+
+	my $starttime = str2time($group->start());
+	my $endtime   = str2time($group->end());
+
+	#print "$group\n";
+	
+	foreach my $route ($group->RouteReservationList()) {
+	    my $routename = $route->routename();
+	    my $res;
+
+	    #print "$route\n";
+
+	    $res = Reservation->Create($group->pid(),
+				       $group->creator_uid(),
+				       $starttime, $endtime,
+				       $routename, 1);
+	    $res->Approve()
+		if ($route->approved());
+
+	    push(@{$reservations{$routename}}, $res);	    
+
+	    # The equiv of a node in use reservation.
+	    if ($route->approved() &&
+		$starttime < $now && $endtime > $now) {
+		$res = Reservation->CreateExisting($group->pid(),
+						   "unimportant",
+						   $group->creator_uid(),
+						   $endtime,
+						   $routename, 1);
+		$res->Approve();
+		$current{$routename} = $res;
+	    }
+	}
+    }
+    foreach my $routename (keys(%{$routemap})) {
+	my $res;
+	
+	if (exists($current{$routename})) {
+	    $res = $current{$routename};
+	}
+	else {
+	    # Need to push on a route free declaration.
+	    $res = Reservation->CreateCommon(undef, undef, undef, 0, undef,
+					     $routename, 1, undef);
+	}
+	$reservations{$routename} = [$res, @{$reservations{$routename}}];
+    }
+    
+    print Dumper(\%reservations);
+    foreach my $routename (keys(%reservations)) {
+	my $reslist  = $reservations{$routename};
+	my @forecast = Reservation->Forecast($routename, $projlist, $grouplist,
+					     undef, undef, 1, $reslist);
+
+	$forecasts{$routename} = \@forecast;
+    }
+    return \%forecasts;
+}
+
+#
+# This is a bad place for this. But its the only project level thing
+# that needs to be communicated to remote clusters. 
+#
+sub DoSetShareReservations()
+{
+    my $optlist   = "n";
+    my $checkonly = 0;
+    my $precheck  = 1;
+    my $errmsg;
+    my $errcode;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
+	$precheck  = 0;
+    }
+    else {
+	$checkonly = 1;
+	$precheck  = 1;
+    }
+    usage()
+	if (@ARGV != 2);
+
+    my $shared  = $ARGV[1];
+    my $project = Project->Lookup($ARGV[0]);
+    if (!defined($project)) {
+	fatal("No such project");
+    }
+
+    if ($shared =~ /^\d$/) {
+	if (!defined(Project::SharedReservationsString($shared))) {
+	    $shared = undef;
+	}
+    }
+    elsif ($shared =~ /^\w+$/) {
+	$shared = Project::SharedReservationsValue($shared);
+    }
+    else {
+	$shared = undef;
+    }
+    if (!defined($shared)) {
+	fatal("Bad sharing flag");
+    }
+
+    #
+    # If there are no current resgroups, we can be lazy about it, and
+    # let the change take effect whenever the next reservation is made.
+    #
+    my @resgroups = APT_Reservation::Group->LookupForProject($project);
+    if (! @resgroups) {
+	if (!$checkonly || $precheck) {
+	    $project->Update({"shared_reservations" => $shared});
+	}
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+
+    #
+    # Initial check on ranges,
+    #
+    my $rval = APT_Reservation::Group::RFReservation::CheckSharingModeChange(
+	$project, $shared, \$errmsg);
+    if ($rval) {
+	my $blob    = {};
+
+	if ($rval < 0) {
+	    $blob->{'errcode'} = -1;
+	    $blob->{'errmesg'} = "Internal error checking ranges";
+	    $blob->{'details'} = undef;
+	}
+	else {
+	    $blob->{'errcode'} = 1;
+	    $blob->{'errmesg'} = "Conflict detected on RF ranges";
+	    $blob->{'details'} = [
+		{
+		    "severity" => "error",
+		    "message"  => $errmsg,
+		}
+	    ];
+	}
+	my $errors = {
+	    $MYURN => $blob
+	};
+	print Dumper($errors);
+	if (defined($webtask)) {
+	    $webtask->errors($errors);
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+
+    #
+    # Build a list of aggregates to contact and change. 
+    #
+    my %aggregates = ();
+
+    foreach my $group (@resgroups) {
+	foreach my $res ($group->ReservationList()) {
+	    my $agg = APT_Aggregate->Lookup($res->aggregate_urn());
+	    $aggregates{$res->aggregate_urn()} = $agg;
+	}
+    }
+    # This can happen.
+    if (! keys(%aggregates)) {
+	#
+	# Reservations without any aggregates; might reservations for
+	# routes or ranges. We can just make the change at the Portal.
+	# We checked Ranges above, it will push out to aggregates later.
+	#
+	if (!$checkonly || $precheck) {
+	    $project->Update({"shared_reservations" => $shared});
+	}
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+    my @aggregates = values(%aggregates);
+
+    my $coderef = sub {
+	my ($aggregate, $webtask) = @_;
+	my $webtask_id  = $webtask->task_id();
+	my $urn         = $aggregate->urn();
+	my $pid         = $project->pid();
+	
+	my $command = "$RESCOMMAND -t $webtask_id -a $urn ".
+	    "setsharedreservations " . ($checkonly ? "-n " : " ") .
+	    "$pid $shared";
+	print "Running: $command\n";
+	system($command);
+	if ($?) {
+	    return 1;
+	}
+	return 0;
+    };
+
+    my $runit = sub {
+	my $responses;
+	$errcode = CallMethodOnReservations($coderef, \$responses, @aggregates);
+	if ($errcode) {
+	    $errmsg = $responses;
+	    return undef;
+	}
+	my %errors    = ();
+	my @responses = @{$responses};
+	foreach my $agg (@aggregates) {
+	    my $webtask = shift(@responses);
+	    my $urn     = $agg->urn();
+	    my $blob    = {};
+
+	    if (!$webtask->HasExited() || $webtask->exitcode()) {
+		if (!$webtask->HasExited()) {
+		    $blob->{'errcode'} = -1;
+		    $blob->{'errmesg'} = "Internal error changing shared flag";
+		    $blob->{'details'} = undef;
+		}
+		else {
+		    $blob->{'errcode'} = $webtask->exitcode();
+		    $blob->{'errmesg'} = "";
+		    $blob->{'details'} = $webtask->result();
+		}
+		$errors{$urn} = $blob;
+		next;
+	    }
+	    my $result = $webtask->result();
+	    # No messages to send?
+	    next
+		if (! @{$result});
+
+	    print Dumper($result);
+	}
+	return \%errors;
+    };
+    
+    if ($precheck) {
+	print "Running a precheck in checkonly mode first.\n";
+    }
+    my $errors = &$runit();
+    if (!ref($errors)) {
+	goto bad;
+    }
+    if (keys(%{$errors})) {
+	print Dumper($errors);
+	if (defined($webtask)) {
+	    $webtask->errors($errors);
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+    if (!$precheck) {
+	if (defined($webtask)) {
+	    $webtask->Exited(0);
+	}
+	exit(0);
+    }
+    print "No errors in precheck, running for real.\n";
+    $checkonly = 0;
+    $errors = &$runit();
+    if (!ref($errors)) {
+	goto bad;
+    }
+    if (keys(%{$errors})) {
+	print Dumper($errors);
+	if (defined($webtask)) {
+	    $webtask->errors($errors);
+	    $webtask->Exited(1);
+	}
+	exit(1);
+    }
+    #
+    # At this point, send email to all user. Ignore the stuff from the
+    # the remote clusters, I was not thinking clearly when I asked
+    # Gary for that. 
+    #
+    if (!$checkonly) {
+	$project->Update({"shared_reservations" => $shared});
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    exit(0);
+  bad:
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit(-1);
+}
+
+sub UpdatePredictionInfo($$$)
+{
+    my ($user, $portal, $perrmsg) = @_;
+
+    my $predictioninfo = APT_Instance::PredictionInfo->Lookup($user);
+    if (!defined($predictioninfo)) {
+	$$perrmsg = "Could not initialize predictioninfo for $user";
+	return -1;
+    }
+    if ($predictioninfo->Update($portal)) {
+	$$perrmsg = "Could not update predictioninfo for $user";
+	return -1;
+    }
+    return 0;
+}
+
+#
+# This is used only for the instantiate page Maxduration/MaxExtension
+# routines above. 
+#
+sub DoPredictionInfo()
+{
+    my $optlist   = "p:u:b";
+    my $portal;
+    my $target_user;
+    my $errmsg;
+    my $errcode;
+    my $background = 0;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"p"})) {
+	$portal = $options{"p"}
+    }
+    if (defined($options{"b"})) {
+	$background = 1;
+    }
+    if (defined($options{"u"})) {
+	$target_user = User->Lookup($options{"u"});
+	if (!defined($target_user)) {
+	    fatal("No such user: " . $options{"u"});
+	}
+    }
+    else {
+	$target_user = $this_user;
+    }
+    my $predictioninfo = APT_Instance::PredictionInfo->Lookup($target_user);
+    if (!defined($predictioninfo)) {
+	fatal("Could not initialize predictioninfo");
+    }
+
+    if ($predictioninfo->Stale()) {
+	if ($background) {
+	    my $pid = LogStart(1, undef, LIBAUDIT_LOGTBOPS);
+	    if ($pid) {
+		exit(0);
+	    }
+	}
+	if ($predictioninfo->Update($portal)) {
+	    fatal("Could not update predictioninfo");
+	}
+    }
+    if (defined($webtask)) {
+	$webtask->value($predictioninfo->PredictionInfo());
+	$webtask->Exited(0);
+    }
+    exit(0);
+}
+
+#
+# Create reservation from a fully bound rspec. 
+#
+sub DoCreateFromRspec()
+{
+    my $optlist    = "s:e:nN:p:F:";
+    my $exitcode   = 0;
+    my $autoapprove= 1; # This might be turned off below
+    my ($clusters, $ranges, $routes);
+    my ($start, $end, $errmsg, $errcode, $reason, $resgroup, $portal, $brand);
+    my ($project,$group,$resources,$duration);
+    my $checkonly;
+    my $bisdaysonly = 1;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV != 2 || !(defined($options{"e"}) || defined($options{"F"})));
+
+    if ($ARGV[0] =~ /[,\/]+/) {
+	$group = Group->Lookup($ARGV[0]);
+	if (!defined($group)) {
+	    fatal("No such group");
+	}
+	$project = $group->GetProject();
+    }
+    else {
+	$project = Project->Lookup($ARGV[0]);
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	$group = $project->GetProjectGroup();
+    }
+    my $file = $ARGV[1];
+
+    if (! -e $file) {
+	fatal("No such file: $file");
+    }
+    if (defined($options{"p"})) {
+	$brand = Brand->Create($options{"p"});
+	if (!defined($brand)) {
+	    fatal("No such portal");
+	}
+    }
+    else {
+	$brand = $project->Brand();
+    }
+    if (defined($options{"s"})) {
+	$start = $options{"s"};
+	if ($start !~ /^\d+$/) {
+	    $start = str2time($start);
+	    if (!$start) {
+		fatal("Start is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    if (defined($options{"e"})) {
+	$end = $options{"e"};
+	if ($end !~ /^\d+$/) {
+	    $end = str2time($end);
+	    if (!$end) {
+		fatal("End is not a unix timestamp or datetime");
+	    }
+	}
+    }
+    elsif (defined($options{"F"})) {
+	# Lets say hours
+	if ($options{"F"} !~ /^\d+$/) {
+	    fatal("-F option requires an integer number of hours");
+	}
+	if ($options{"F"} < 1) {
+	    fatal("-F option requires an integer greater then zero");
+	}
+	$duration = (3600 * $options{"F"});
+    }
+
+    if (defined($options{"N"})) {
+	$reason = emutil::ReadFile($options{"N"});
+	chomp($reason);
+
+	if (!TBcheck_dbslot($reason, "default", "fulltext",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Invalid characters in reason string");
+	}
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
+    }
+    if (! (defined($end) || defined($duration))) {
+	print STDERR "Missing end time or duration\n";
+	usage();
+    }
+    #
+    # No start or duration time means user wants the reservation right now.
+    #
+    if (!defined($start) && !defined($duration)) {
+	$start = time();
+    }
+
+    #
+    # Reservations  have to start next business day at 9am unless the
+    # the project or user is expert_mode. or an admin.
+    #
+    $bisdaysonly = 0
+	if ($this_user->expert_mode() || $project->expert_mode() ||
+	    $this_user->IsAdmin());
+
+    my $rspec = GeniXML::ParseFile($file);
+    if (! defined($rspec)) {
+	fatal("Could not parse rspec");
+    }
+    # This will ensure that the rspec is fully bound.
+    if (APT_Profile::GetResources($rspec, \$errmsg, \$resources)) {
+	fatal("GetResources error: $errmsg");
+    }
+
+    my %clusters = ();
+    my %ranges   = ();
+    my %routes   = ();
+
+    foreach my $urn (keys(%{ $resources->{'typeCounts'} })) {
+	foreach my $type (keys(%{ $resources->{'typeCounts'}->{$urn} })) {
+	    my $count = $resources->{'typeCounts'}->{$urn}->{$type};
+	    my $uuid  = NewUUID();
+	    
+	    $clusters{$uuid} = {
+		"uuid"    => $uuid,
+		"cluster" => $urn,
+		"type"    => $type,
+		"count"   => $count,
+	    };
+	}
+    }
+
+    my $tmps = [];
+    if (APT_Profile::GetSpectrum($rspec, \$tmps, \$errmsg)) {
+	fatal("GetSpectrum error: $errmsg");
+    }
+    foreach my $request (@{$tmps}) {
+	my $frequency_low  = $request->{"frequency_low"};
+	my $frequency_high = $request->{"frequency_high"};
+	my $uuid  = NewUUID();
+
+	$ranges{$uuid} = {
+	    "uuid"      => $uuid,
+	    "freq_low"  => $frequency_low,
+	    "freq_high" => $frequency_high,
+	};
+    }
+
+    my $tmpr = [];
+    if (APT_Profile::GetRoutes($rspec, \$tmpr, \$errmsg)) {
+	fatal("GetRoutes error: $errmsg");
+    }
+    if (@{$tmpr}) {
+	if ($tmpr->[0]->{'name'} eq "allroutes") {
+	    my $map = APT_Reservation::Group::RouteReservation::RouteMap();
+	    foreach my $routename (keys(%{$map})) {
+		my $uuid  = NewUUID();
+	
+		$routes{$uuid} = {
+		    "uuid"      => $uuid,
+		    "routename" => $routename,
+		};
+	    }
+	}
+	else {
+	    foreach my $route (@{$tmpr}) {
+		my $uuid  = NewUUID();
+	
+		$routes{$uuid} = {
+		    "uuid"      => $uuid,
+		    "routename" => $route->{'name'},
+		};
+	    }
+	}
+	print Dumper(\%routes) if ($debug);
+    }
+
+    #
+    # If duration, user wants first fit.
+    #
+    if (defined($duration)) {
+	$start = FindFirstFit($duration, $bisdaysonly,
+			      $group, \%clusters, \%ranges, \%routes, \$errmsg);
+	if (!defined($start)) {
+	    UserError("Could not fit this reservation into the schedule" .
+		      (defined($errmsg) ? ": $errmsg" : ""));
+	}
+	# Push out to top of next hour.
+	$start += 3600;
+	$start  = int($start / 3600);
+	$start *= 3600;
+	$end    = $start + $duration;
+	print "Start: $start, " . TBDateStringLocal($start) . "\n";
+	print "End:   $end, " . TBDateStringLocal($end) . "\n";
+    }
+
+    #
+    # DoGroupReserve() expects this json blob.
+    #
+    my $blob = {
+	"clusters" => \%clusters,
+	"ranges"   => \%ranges,
+	"routes"   => \%routes,
+    };
+    print Dumper($blob) if ($debug);
+
+    my $json = eval { encode_json($blob); };
+    if ($@) {
+	fatal("Could not json encode reservation request");
+    }
+    my ($fh, $filename) = tempfile(UNLINK => 1);
+    if (!defined($fh)) {
+	fatal("Could not open temporary file for reservation request");
+    }
+    print $fh $json;
+    close($fh);
+
+    my $local_webtask = WebTask->CreateAnonymous();
+    my $local_task_id = $local_webtask->task_id();
+    my $command = "$GROUPCOMMAND -t $local_task_id ";
+    $command   .= "-d " if ($debug);
+    $command   .= "reserve ";
+    my $options = "-p " . $options{"p"} . " " if (defined($options{"p"}));
+    $options   .= "-s $start " if (defined($start));
+    $options   .= "-e $end " if (defined($end));
+    $options   .= "-N " . $options{"N"} . " " if (defined($options{"N"}));
+    $options   .= $project->pid() . " " . $filename;
+
+    # Always do a precheck.
+    print "$command -n $options\n" if ($debug);
+    system("$command -n $options");
+    if ($?) {
+	$local_webtask->Delete();
+	unlink($filename);
+	fatal("Failed to reserve resources");
+    }
+    $local_webtask->Refresh();
+    my $results = $local_webtask->results();
+    print Dumper($results) if ($debug);
+
+    #
+    # Have to look inside the results to see if all of the reservations are
+    # going to be approved immediately. 
+    #
+    my $needsapproval = 0;
+    my $haserrors = 0;
+
+    foreach my $result ($results->{"cluster_results"}->{"clusters"},
+			$results->{"route_results"}->{"routes"},
+			$results->{"range_results"}->{"ranges"}) {
+	foreach my $ref (values(%{ $result })) {
+	    if (exists($ref->{'errcode'})) {
+		$haserrors++;
+	    }
+	    elsif ($ref->{'approved'} == 0) {
+		$needsapproval++;
+	    }
+	}
+    }
+    my $code = 0;
+    my $mesg;
+    if ($checkonly) {
+	$local_webtask->Delete();
+	my ($mesg);
+
+	if ($haserrors) {
+	    print Dumper($results) if (!$debug);
+	    $mesg = "Reservation request has errors";
+	    $code = 2;
+	}
+	elsif ($needsapproval) {
+	    $mesg = "Reservation request would need approval";
+	    $code = 1;
+	}
+	else {
+	    $mesg = "Reservation request would be auto-approved";
+	    $code = 0;
+	}
+	if (defined($webtask)) {
+	    $webtask->results($results);
+	    $webtask->output($mesg);
+	    $webtask->Exited($code);
+	}
+	print "$mesg\n";
+	exit($code);
+    }
+    if ($haserrors) {
+	print Dumper($results) if (!$debug);
+	print "Reservation request has errors, aborting\n";
+	$code = 2;
+    }
+    elsif ($needsapproval) {
+	print "Reservation request will need approval, but submitting anyway\n";
+    }
+    else {
+	print "Reservation request will be auto-approved, submitting\n";
+    }
+    
+    #
+    # Submit for real. 
+    #
+    if (!$haserrors) {
+	$local_webtask->Reset();
+	system("$command $options");
+	if ($?) {
+	    $local_webtask->Delete();
+	    unlink($filename);
+	    fatal("Failed to reserve resources");
+	}
+	$local_webtask->Refresh();
+	$results = $local_webtask->results();
+	print Dumper($results) if ($debug || !defined($webtask));
+    }
+
+    if (defined($webtask)) {
+	$webtask->results($results);
+	$webtask->Exited($code);
+    }
+    exit($code);
+}
+
+
+#
+# Determine start time for a set of reservation requests.
+#
+sub DoFindFirstFit()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_resgroup findfirstfit ".
+	    "-d <hours> pid[/gid] jsonfile\n";
+	exit(-1);
+    };
+
+    my $optlist    = "p:d:";
+    my $exitcode   = 0;
+    my ($clusters, $ranges, $routes);
+    my ($start, $end, $errmsg, $errcode, $portal, $brand);
+    my ($project,$group);
+    my $bisdaysonly = 1;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	&$usage();
+    }
+    &$usage()
+	if (@ARGV != 2 || !defined($options{"d"}));
+
+    # Lets say hours
+    if ($options{"d"} !~ /^[\.\d]+$/) {
+	fatal("-d option requires an integer number of hours");
+    }
+    if ($options{"d"} < 1) {
+	fatal("-d option requires an integer greater then zero");
+    }
+    my $duration = (3600 * $options{"d"});
+
+    # gid is optional
+    if ($ARGV[0] =~ /[,\/]+/) {
+	$group = Group->Lookup($ARGV[0]);
+	if (!defined($group)) {
+	    fatal("No such group");
+	}
+	$project = $group->GetProject();
+    }
+    else {
+	$project = Project->Lookup($ARGV[0]);
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	$group = $project->GetProjectGroup();
+    }
+    my $file = $ARGV[1];
+
+    if (! -e $file) {
+	fatal("No such file: $file");
+    }
+    system("/bin/cat $file | /usr/local/bin/json_pp") if ($debug);
+
+    #
+    # The file is a JSON array of cluster/range reservation info.
+    #
+    my $json = emutil::ReadFile($file);
+    if (!defined($json)) {
+	fatal("Could not read $file");
+    }
+    
+    my $blob = eval { decode_json($json) };
+    if ($@) {
+	fatal("Could not decode json data: $@\n");
+    }
+    if (ref($blob) ne "HASH") {
+	fatal("json data is not a HASH");
+    }
+    #print Dumper($blob) if ($debug);
+    
+    $clusters = $blob->{'clusters'} if (exists($blob->{'clusters'}));
+    $ranges   = $blob->{'ranges'} if (exists($blob->{'ranges'}));
+    $routes   = $blob->{'routes'} if (exists($blob->{'routes'}));
+    
+    #
+    # Reservations  have to start next business day at 9am unless the
+    # the project or user is expert_mode. or an admin.
+    #
+    $bisdaysonly = 0
+	if ($this_user->expert_mode() || $project->expert_mode() ||
+	    $this_user->IsAdmin());
+
+    #
+    # The web UI and create-reservation has made sure the input is valid.
+    # But we should do it again. Need to refactor code in DoGroupReserve.
+    #
+    $start = FindFirstFit($duration, $bisdaysonly,
+			  $group, $clusters, $ranges, $routes, \$errmsg);
+    if (!defined($start)) {
+	UserError("Could not fit this reservation request into the schedule" .
+		  (defined($errmsg) ? ": $errmsg" : ""));
+    }
+    # Push out to top of next hour.
+    $start += 3600;
+    $start  = int($start / 3600);
+    $start *= 3600;
+    $end    = $start + $duration;
+    print "Start: $start, " . TBDateStringLocal($start) . "\n";
+    print "End:   $end, " . TBDateStringLocal($end) . "\n";
+
+    if (defined($webtask)) {
+	$webtask->start(TBDateStringGMT($start));
+	$webtask->end(TBDateStringGMT($end));
+	$webtask->Exited(0);
+    }
+    exit(0);
+}
+
+#
+# 
+#
+sub FindFirstFit($$$$$$$)
+{
+    my ($duration, $bisdaysonly, $group,
+	$clusters, $ranges, $routes, $perrmsg) = @_;
+    my $project = $group->GetProject();
+    my $pid = $group->pid();
+    my $gid = $group->gid();
+    my $forecasts = {};
+    my @allgroups = ();
+    my $powder_zones;
+
+    #
+    # Need to determine the powder zones.
+    #
+    my %zones = ();
+    foreach my $cluster_uuid (keys(%{$clusters})) {
+	my $cluster   = $clusters->{$cluster_uuid};
+	my $urn       = $cluster->{"cluster"};
+	my $type      = $cluster->{"type"};
+	my $aggregate = APT_Aggregate->Lookup($urn);
+
+	next
+	    if (!$aggregate->IsReservableNode($type));
+
+	my $node_id = $type;
+	my $node    = $aggregate->Node($node_id);
+	next
+	    if (!defined($node));
+
+	if (my $radio = $aggregate->Radio($node_id)) {
+	    my $zone = $radio->powder_zone() || "Outdoor";
+		
+	    if (!exists($zones{$zone})) {
+		$zones{$zone} = 0;
+	    }
+	    $zones{$zone} = $zones{$zone} + 1;
+	}
+    }
+    if (keys(%zones)) {
+	$powder_zones = join(",", sort(keys(%zones)));
+	print "ZONES:$powder_zones\n";
+    }
+    
+    #
+    # Need prediction info for the cluster urns in the correct project.
+    #
+    if (keys(%{ $clusters })) {
+	my $prediction_info = APT_Instance::PredictionInfo->Lookup($this_user);
+	my @urns = map { $_->{'cluster'} } values(%{ $clusters });
+	my $pinfo;
+	if ($prediction_info->Stale()) {
+	    my $pidgid = "$pid/$gid";
+	    my $urns = join(",", @urns);
+	    my $local_webtask = WebTask->CreateAnonymous();
+	    my $local_task_id = $local_webtask->task_id();
+	    print "$RESCOMMAND -t $local_task_id ".
+		"  prediction -a '$urns' $pidgid\n";
+
+	    system("$RESCOMMAND -t $local_task_id ".
+		   "  prediction -a '$urns' $pidgid");
+	    if ($?) {
+		$local_webtask->Delete();
+		fatal("Could not get prediction info");
+	    }
+	    $local_webtask->Refresh();
+	    $pinfo = $local_webtask->value();
+	    $local_webtask->Delete();
+	}
+	else {
+	    $pinfo = $prediction_info->PredictionInfo();
+	}
+
+	#
+	# We want the per project (group) prediction info for each
+	# cluster. This is in the pforecast arrays. Note that we have
+	# to watch for projects with per-group reservations. 
+	#
+	foreach my $urn (@urns) {
+	    next
+		if (!exists($pinfo->{$urn}));
+
+	    # Results from cluster are canonicalized by GeniHRN
+	    my $pidgid = lc("$pid/$gid");
+	    my $pforecasts = $pinfo->{$urn}->{'pforecasts'};
+
+	    if ($project->shared_reservations() ==
+		$Project::RESERVATIONS_PERGROUP) {
+		if (exists($pforecasts->{$pidgid})) {
+		    $forecasts->{$urn} = $pforecasts->{$pidgid};
+		}
+		else {
+		    # The group did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn} = $pinfo->{$urn}->{'forecast'};
+		}
+	    }
+	    else {
+		if (exists($pforecasts->{lc($pid)})) {
+		    $forecasts->{$urn} = $pforecasts->{lc($pid)};
+		}
+		else {
+		    # The project did not exist at the cluster, so use
+		    # the general forecast.
+		    $forecasts->{$urn} = $pinfo->{$urn}->{'forecast'};
+		}
+	    }
+	}
+    }
+    my $dprint = sub {
+	my ($m) = @_;
+	if ($debug) {
+	    print $m;
+	}
+    };
+
+    #
+    # Shift start time to ideal start hour, if possible.
+    # Hmm, need the timezone the user is in for this to make sense.
+    # Finish later.
+    #
+    my $IDEAL_STARTHOUR = 7;
+    
+    my $idealStartHour = sub {
+	my ($when, $end) = @_;
+	my $twhen  = timelocal($when);
+	my $hour   = $twhen->hour;
+
+	return
+	    if (!$bisdaysonly || $hour >= $IDEAL_STARTHOUR);
+
+	$twhen = $twhen->truncate(to => 'day');
+	$twhen = $twhen + ($IDEAL_STARTHOUR * 3600);
+	
+	#
+	# If no end (free forever), then just return
+	#
+	if (!$end) {
+	    return $twhen->epoch();
+	}
+	if ($twhen->epoch() + $duration < $end) {
+	    return $twhen->epoch();
+	}
+	return $when;
+    };
+
+    #
+    # Find the first fit for a cluster reservation
+    #
+    my $findFirst = sub {
+	my ($cluster, $minstart) = @_;
+	my $starttime = 0;
+	my $startdata = undef;
+	my $enddata   = undef;
+	my $type      = $cluster->{'type'};
+	my $count     = $cluster->{'count'};
+	my $urn       = $cluster->{'cluster'};
+
+	&$dprint("findfirst: $type, $count, $minstart\n");
+
+	my @tmp = @{ $forecasts->{$urn}->{$type} };
+	foreach my $data (@tmp) {
+	    $data->{'stamp'} = TBDateStringLocal($data->{'t'});
+	}
+	while (@tmp && !$starttime) {
+	    my $data = shift(@tmp);
+	    my $free = $data->{'free'} - $data->{'unapproved'};
+	    if ($free < 0) {
+		$free = 0;
+	    }
+	    &$dprint("ff1: $free\n");
+	    
+	    if ($free >= $count) {
+		#
+		# The current timestamp has enough nodes.
+		#
+		$starttime = $data->{'t'};
+		$startdata = $data;
+		&$dprint("ff2: $starttime, $minstart\n");
+		#
+		# But if there is a min start time, have to scan ahead cause
+		# some other type in the cluster list did not fit.
+		#
+		if ($minstart) {
+		    if (@tmp) {
+			my $next     = $tmp[0];
+			my $nexttime = $next->{'t'};
+			my $nextfree = $next->{'free'} - $next->{'unapproved'};
+			if ($nextfree < 0) {
+			    $nextfree = 0;
+			}
+			&$dprint("ff3: $nexttime, $nextfree\n");
+
+			if ($nextfree >= $count &&
+			    $minstart >= $starttime &&
+			    $minstart <= $nexttime) {
+			    #
+			    # Still enough nodes and minstart falls between
+			    # the current and next timestamps. We can start
+			    # here.
+			    #
+			    $starttime = $minstart;
+			    &$dprint("ff4", $starttime);
+			}
+			elsif ($starttime < $minstart) {
+			    #
+			    # The current stamp has enough nodes, lets see if
+			    # its long enough.
+			    #
+			    if ($minstart <= $nexttime &&
+				$minstart + $duration < $nexttime) {
+				$starttime = $minstart;
+				&$dprint("ff5: $starttime\n");
+			    }
+			    else {
+				&$dprint("ff6\n");
+				$starttime = undef;
+				next;
+			    }
+			}
+		    }
+		    else {
+			#
+			# Last timestamp, has enough nodes. Bump lower bound
+			#
+			if ($starttime < $minstart) {
+			    $starttime = $minstart + 60;
+			}
+		    }
+		}
+		&$dprint("ff7: $starttime\n");
+
+		#
+		# OK, we have a starting timestamp. Now scan ahead to see if
+		# the entire duration fits (enough free nodes). We scan as
+		# far ahead as possible, since we want the widest range
+		# possible to give other clusters in the request the best
+		# chance of fitting (as soon as possible). 
+		#
+		for (my $i = 0; $i < scalar(@tmp); $i++) {
+		    my $next = $tmp[$i];
+		    my $nexttime = $next->{'t'};
+		    my $nextfree = $next->{'free'} - $next->{'unapproved'};
+		    if ($nextfree < 0) {
+			$nextfree = 0;
+		    }
+		    if ($nextfree >= $count) {
+			# The next time stamp still has enough nodes,
+			# keep checking until no longer true, so we
+			# have the biggest range possible.
+			next;
+		    }
+		    #
+		    # Okay, next range no longer has enough nodes, but
+		    # if the current range is long enough, we are good.
+		    #
+		    if ($starttime + $duration < $nexttime) {
+			# The next time stamp is beyond the days requested,
+			# so it fits.
+			$enddata = $next;
+			last;
+		    }
+		    # Otherwise, we no longer fit, need to start over.
+		    $starttime = undef;
+		    last;
+		}
+	    }
+	}
+	my $result = {
+	    "starttime" => $starttime,
+	    "startdata" => $startdata,
+	    "endtime"   => ($enddata ? $enddata->{'t'} : undef),
+	    "enddata"   => $enddata,
+	};
+	&$dprint("findfirst return:\n");
+	print Dumper($result) if ($debug);
+	return $result;
+    };
+
+    # Copy of the clusters cause ...
+    my @clusters = defined($clusters) ? values(%{ $clusters }) : ();
+
+    #
+    # ... if there are routes we are going to augment the clusters array
+    # and the forecast array such that the routes look like cluster reservations.
+    # Cheesy or do I get a cookie?
+    #
+    if (defined($routes) && keys(%{$routes})) {
+	my $routeforecast = RouteForecastInternal([],[]);
+
+	foreach my $route (values(%{$routes})) {
+	    push(@clusters, {
+		"cluster" => "busroutes",
+		"type"    => $route->{'routename'},
+		"count"   => 1,
+		 });
+	}
+	$forecasts->{"busroutes"} = $routeforecast;
+    }
+
+    #
+    # If there are ranges, we need the set of all reservations below.
+    #
+    my @ranges = ();
+    
+    if (defined($ranges) && keys(%{$ranges})) {
+	@allgroups = APT_Reservation::Group->LookupAll();
+	@ranges    = values(%{$ranges});
+
+	#
+	# Only ranges. It happens.
+	# 
+	if (!@clusters) {
+	    my $lower = $bisdaysonly ? APT_Utility::NextBusinessDay() : time();
+	    my $start = $lower;
+	    my $loop  = 0;
+	    my $max   = 100;
+	    
+	    while ($loop < $max) {
+		$loop++;
+		&$dprint("RR $loop: $lower\n");
+
+		foreach my $range (@ranges) {
+		    my $conflict;
+
+		    # We determine this above.
+		    $range->{'freq_zones'} = $powder_zones;
+
+		    if (!APT_Reservation::Group::RFReservation->Fits(
+			     \@allgroups, $lower, $lower + $duration,
+			     $range, \$conflict)) {
+			$lower  = str2time($conflict->end());
+			&$dprint("RR1 skip: $lower, " .
+				 TBDateStringLocal($lower) . "\n");
+			last;
+		    }
+		    elsif (APT_Instance::RFRanges->InUse(
+			       $group, $this_user,
+			       $range->{'freq_low'}, $range->{'freq_high'},
+			       $powder_zones, $lower, $lower + $duration,
+			       \$conflict)) {
+			$lower  = str2time($conflict->Expires());
+			&$dprint("RR2 skip: $lower, " .
+				 TBDateStringLocal($lower) . "\n");
+			last;
+		    }
+		}
+		last
+		    if ($start == $lower);
+		$start = $lower;
+	    }
+	    if ($loop >= $max) {
+		print "No range fit, exceeded loop maximum\n";
+		$$perrmsg = "could not fit the requested frequency range(s)";
+		return undef;
+	    }
+	    print "Range fit at $start, " . TBDateStringLocal($start) . "\n";
+	    return $start;
+	}
+    }
+
+    #
+    # This should obviously not happen.
+    #
+    return undef
+	if (!@clusters);
+
+    # Earliest start time, updated as we go through the forecasts.
+    my $lower = $bisdaysonly ? APT_Utility::NextBusinessDay() : time();
+    # Avoid infinite loop.	
+    my $loops = 100;
+    # Final fit.
+    my $fit   = undef;
+    # Offending cluster, for error reporting.
+    my $baddog;
+    
+    while (!$fit && $loops) {
+	$loops--;
+	$fit = &$findFirst($clusters[0], $lower);
+	if ($debug) {
+	    print "fit 0:\n";
+	    print Dumper($fit);
+	}
+	if (!$fit->{"starttime"}) {
+	    $fit = undef;
+	    $baddog = $clusters[0];
+	    last;
+	}
+	
+	for (my $index = 1; $index < scalar(@clusters); $index++) {
+	    $baddog = $clusters[$index];
+	    my $newfit = &$findFirst($clusters[$index], $fit->{"starttime"});
+	    if (!$newfit->{"starttime"}) {
+		$fit = undef;
+		last;
+	    }
+	    if ($debug) {
+		print "fit $index:\n";
+		print Dumper($newfit);
+	    }
+
+	    #
+	    # If the first available for the next cluster is beyond the
+	    # current fit, need to start over.
+	    #
+	    if ($fit->{"endtime"} &&
+		$newfit->{"starttime"} > $fit->{"endtime"}) {
+		&$dprint("skip1\n");
+		$fit   = undef;
+		$lower = $newfit->{"starttime"};
+		last;
+	    }
+	    # Narrow to newest fit.
+	    if ($newfit->{"starttime"} > $fit->{"starttime"}) {
+		$fit->{"starttime"} = $newfit->{"starttime"};
+	    }
+	    if ($newfit->{"endtime"} &&
+		(!$fit->{"endtime"} ||
+		 $newfit->{"endtime"} < $fit->{"endtime"})) {
+		$fit->{"endtime"} = $newfit->{"endtime"};
+	    }
+	    #
+	    # If too narrow now, have to keep going, starting at the
+	    # new lower bound.
+	    #
+	    if ($fit->{"endtime"} &&
+		($fit->{"endtime"} - $fit->{"starttime"} < $duration)) {
+		&$dprint("skip2\n");
+		$fit   = undef;
+		$lower = $newfit->{"starttime"};
+		last;
+	    }
+	}
+	$baddog = undef
+	    if ($fit && $fit->{'starttime'});
+	
+	if ($fit && @ranges) {
+	    #
+	    # Ok, we have something that works for the clusters, lets look
+	    # at the ranges. This is a bit easier since current ranges
+	    # include both a start and end time. So if the current fit
+	    # above conflicts with a range we want, start over at the end
+	    # of the conflicting range. 
+	    #
+	    # Set lower in case we have to go around again, we bump
+	    # it below.
+	    #
+	    $lower = $fit->{"starttime"};
+	    &$dprint("RR: $lower\n");
+
+	    foreach my $range (@ranges) {
+		my $conflict;
+		
+		# We determine this above.
+		$range->{'freq_zones'} = $powder_zones;
+
+		if (!APT_Reservation::Group::RFReservation->Fits(
+			 \@allgroups, $lower, $lower + $duration,
+			 $range, \$conflict)) {
+		    $fit    = undef;
+		    $lower  = str2time($conflict->end());
+		    &$dprint("RR1 range does not fit, skipping to $lower ".
+			     TBDateStringLocal($lower) . "\n");
+		    last;
+		}
+		elsif (APT_Instance::RFRanges->InUse(
+			   $group, $this_user,
+			   $range->{'freq_low'}, $range->{'freq_high'},
+			   $powder_zones, $lower, $lower + $duration,
+			   \$conflict)) {
+		    $fit    = undef;
+		    $lower  = str2time($conflict->Expires());
+		    &$dprint("RR2 range does not fit, skipping to $lower ".
+			     TBDateStringLocal($lower) . "\n");
+		    last;
+		}
+	    }
+	    # No point in continuing, start over.
+	    if (!$fit) {
+		$$perrmsg = "could not fit the requested frequency range(s)";
+	    }
+	    else {
+		$$perrmsg = undef;
+	    }
+	}
+    }
+    if (!defined($fit) || !$fit->{'starttime'}) {
+	if ($loops <= 0) {
+	    print "No fit, exceeded loop maximum\n";
+	}
+	else {
+	    print "No fit, could not find a start time\n";
+	}
+	if (defined($baddog)) {
+	    print Dumper($baddog);
+	    my $urn   = $baddog->{'cluster'};
+	    my $type  = $baddog->{'type'};
+	    my $count = $baddog->{'count'};
+	    my $agg   = APT_Aggregate->Lookup($urn);
+	    if (defined($agg)) {
+		my $nickname = $agg->nickname();
+		$$perrmsg = "could not fit $count $type at the $nickname cluster";
+	    }
+	} 
+	return undef;
+    }
+    print Dumper($fit) if ($debug);
+    my $starttime = $fit->{'starttime'};
+    return $starttime;
 }
 
 sub fatal($)

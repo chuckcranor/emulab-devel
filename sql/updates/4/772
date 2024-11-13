@@ -1,0 +1,20 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (DBSlotType("apt_aggregate_radio_locations", "itype") !~ /OTA/) {
+	DBQueryFatal("alter table apt_aggregate_radio_locations ".
+		     "  change itype itype ".
+		     "    enum('FE','ME','BS','PE','DD','OTA','OAI','unknown')".
+		     "       NOT NULL default 'unknown'");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

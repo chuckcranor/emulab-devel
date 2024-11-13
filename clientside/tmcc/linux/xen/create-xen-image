@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,14 +43,15 @@ my $TAR         = "/bin/tar";
 #
 sub usage()
 {
-    print STDOUT "Usage: create-image [-p] [-r] [-s slice] ".
+    print STDOUT "Usage: create-xen-image [-p] [-r] [-s slice] ".
 	"<vnodeid> filename KEY=VALUE ...\n";
     exit(-1);
 }
-my $optlist   = "F:S:prs:";
+my $optlist   = "F:S:prs:B:";
 my $aspack    = 0;
 my $norestart = 0;
 my $slice     = 0;
+my $bootslice;
 my $filename;
 
 # Frisbee master server params
@@ -111,6 +112,15 @@ if (defined($options{"S"})) {
 	die("Bad -S hostname: '$iserver'");
     }
 }
+if (defined($options{"B"})) {
+    # A bootimage, the slice is the argument.
+    $bootslice = $options{"B"};
+    if ($bootslice =~ /^(\d+)$/) {
+	$bootslice = $1;
+    } else {
+	die("Bad -B slice: '$bootslice'");
+    }
+}
 if (defined($options{"F"})) {
     $imageid = $options{"F"};
     if ($imageid =~ /^(\S+)$/) {
@@ -154,7 +164,14 @@ if ($status ne "") {
 	print STDERR "Container is still running. Waiting ...\n";
     }
     if ($status ne "stopped") {
-	die("Container would not stop!\n");
+	#
+	# XXX FreeBSD in a HVM domU seems to have issues with
+	# halting; FreeBSD will be halted but the domU will linger
+	# in some sort of comatose state.
+	#
+	if (!libvnode_xen::domainKill($vnodeid, 1)) {
+	    die("Container would not stop!\n");
+	}
     }
 }
 # Settling time :-)
@@ -203,7 +220,8 @@ else {
 	$cmd = "$VIMAGE -x $vnodeid @ARGV";
     }
     else {
-	$cmd = "$zipper " . ($slice ? "-s $slice " : "") . "$device $filename ";
+	$cmd = "$zipper " . (defined($bootslice) ? "-B $bootslice " :
+			     ($slice ? "-s $slice " : "")) . "$device $filename ";
 
 	#
 	# If imageid is defined, we use the frisbee uploader.

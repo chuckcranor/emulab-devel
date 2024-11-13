@@ -6,17 +6,17 @@
 #
 TBDBNAME=tbdb
 TBADMINGROUP=tbadmin
-TBOPSEMAIL=testbed-ops@ops.utah.cloudlab.us
-TBLOGSEMAIL=testbed-logs@ops.utah.cloudlab.us
-TBWWWEMAIL=testbed-www@ops.utah.cloudlab.us
-TBAPPROVALEMAIL=testbed-approval@ops.utah.cloudlab.us
-TBAUDITEMAIL=testbed-audit@ops.utah.cloudlab.us
-TBSTATEDEMAIL=testbed-stated@ops.utah.cloudlab.us
-TBTESTSUITEEMAIL=testbed-testsuite@ops.utah.cloudlab.us
-TBAUTOMAILEMAIL=testbed-automail@ops.utah.cloudlab.us
-TBACTIVEARCHIVE=testbed-active-users-archive@ops.utah.cloudlab.us
-TBUSERSARCHIVE=testbed-users-archive@ops.utah.cloudlab.us
-TBERRORSEMAIL=testbed-errors@ops.utah.cloudlab.us
+TBOPSEMAIL=testbed-ops@utah.cloudlab.us
+TBLOGSEMAIL=testbed-logs@utah.cloudlab.us
+TBWWWEMAIL=testbed-www@utah.cloudlab.us
+TBAPPROVALEMAIL=testbed-approval@utah.cloudlab.us
+TBAUDITEMAIL=testbed-audit@utah.cloudlab.us
+TBSTATEDEMAIL=testbed-stated@utah.cloudlab.us
+TBTESTSUITEEMAIL=testbed-testsuite@utah.cloudlab.us
+TBAUTOMAILEMAIL=testbed-automail@utah.cloudlab.us
+TBACTIVEARCHIVE=testbed-active-users-archive@utah.cloudlab.us
+TBUSERSARCHIVE=testbed-users-archive@utah.cloudlab.us
+TBERRORSEMAIL=testbed-errors@utah.cloudlab.us
 TBCOOKIESUFFIX="CLOUDLAB"
 JAILIPBASE=172.17.0.0
 JAILIPMASK=255.240.0.0
@@ -92,7 +92,7 @@ MANAGEMENT_NETWORK=10.9.8.0
 MANAGEMENT_NETMASK=255.255.252.0
 MANAGEMENT_ROUTER=10.9.8.100
 DHCPD_DYNRANGE="128.110.223.230 128.110.223.250"
-DHCPD_EXTRAIFS="xn1"
+DHCPD_EXTRAIFS="bge0"
 NAMED_FORWARDERS="155.98.32.70"
 NAMED_ALSONOTIFY="155.98.32.70"
 #
@@ -164,7 +164,7 @@ AMD_ROOT=/.amd_mnt/ops
 # otherwise filesystems will be exported twice.
 #
 ZFS_NOEXPORT=1
-INCREMENTAL_MOUNTD=1
+INCREMENTAL_MOUNTD=0
 
 #
 # If you use an NFS-based admin MFS, this is the root of the exported

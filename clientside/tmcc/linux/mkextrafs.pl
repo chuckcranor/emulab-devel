@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -76,7 +76,7 @@ STDERR->autoflush(1);
 # Untaint the environment.
 # 
 $ENV{'PATH'} = "/tmp:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:".
-    "/usr/local/bin:/usr/site/bin:/usr/site/sbin:/usr/local/etc/emulab";
+    "/usr/local/bin:/usr/site/bin:/usr/site/sbin:/usr/local/etc/emulab:/usr/libexec/emulab";
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 #
@@ -194,6 +194,11 @@ else {
     }
 }
 
+if ($slice == 0) {
+    print "Whole disk '$disk' specified, using partition 1\n";
+    $slice = 1;
+}
+
 my $diskdev    = "/dev/${disk}";
 my $fsdevice   = "${diskdev}${slice}";
 if ($NEEDSPFORMAT) {
@@ -257,15 +262,20 @@ if (system("parted -s $diskdev print >/dev/null 2>&1")) {
     }
     # Grab size (in sectors); DOS cannot handle our huge disks.
     # sfdisk can no longer handle units; must use sectors.
-    my $disksize = `fdisk -l $diskdev | sed -n -r -e "s/^.* ([0-9]+) sectors.*\$/\\1/p"`;
+    my $disksize = `fdisk -l $diskdev | sed -n -r -e 's/^.* ([0-9]+) sectors.*\$/\\1/p'`;
     if ($?) {
 	die("*** $0:\n".
 	    "    Could not get size of $diskdev!\n");
     }
     chomp($disksize);
+    # I am DOS
+    if ($disksize > 4000000000) {
+	$disksize = 4000000000;
+    }
+    $disksize -= 2048;
     # Must start at a sector offset; and sfdisk no longer tolerates -N <X>
     # if partition X is undefined.
-    system("echo '2048,$disksize' | sfdisk --force $diskdev");
+    system("echo '2048,$disksize,0x0' | sfdisk --force $diskdev");
     if ($?) {
 	die("*** $0:\n".
 	    "    Could not initialize primary partition on $diskdev!\n");
@@ -281,20 +291,36 @@ if ($? == 0) {
     }
 }
 
-my $stype = `sfdisk $diskdev -c $slice 2>/dev/null`;
-if ($? == 0 && $stype ne "") {
-    chomp($stype);
-    if ($stype =~ /^\s*([\da-fA-F]+)$/) {
-	# This is an MBR id.
-	$stype = "$1";
-    } elsif ($stype =~ /^\s*([\da-fA-F-]+)$/) {
-	# This is a GPT GUID; note the diff in the regexp (has `-`).
-	$stype = "$1";
+#
+# For GPT, the normal case is that partition 4 will not exist since we do
+# not run "growdisk" at imaging time (in slicefix). So we will need to create
+# it here.
+#
+my $stype = "-1";
+if ($ISGPT) {
+    my $out = `sfdisk --part-type $diskdev $slice 2>&1`;
+    if ($? != 0 && $out =~ /partition is unused/) {
+	mysystem("sgdisk -n $slice:0:0 -t $slice:$GPTLINUXDATA $diskdev");
+	mysystem("partprobe $diskdev");
+	$stype = $GPTLINUXDATA;
+    }
+}
+if ($stype eq "-1") {
+    $stype = `sfdisk --part-type $diskdev $slice 2>/dev/null`;
+    if ($? == 0 && $stype ne "") {
+	chomp($stype);
+	if ($stype =~ /^\s*([\da-fA-F]+)$/) {
+	    # This is an MBR id.
+	    $stype = "$1";
+	} elsif ($stype =~ /^\s*([\da-fA-F-]+)$/) {
+	    # This is a GPT GUID; note the diff in the regexp (has `-`).
+	    $stype = "$1";
+	} else {
+	    $stype = "-1";
+	}
     } else {
 	$stype = "-1";
     }
-} else {
-    $stype = "-1";
 }
 if ($stype eq "-1") {
     die("*** $0:\n".
@@ -321,7 +347,7 @@ if (!$forceit) {
 # something so that the kernel will place it in /dev; we cannot wait.
 #
 if ($ISGPT && $stype eq $GPTUNUSED) {
-    mysystem("sfdisk -c /dev/$disk $slice $GPTLINUXDATA");
+    mysystem("sfdisk --part-type /dev/$disk $slice $GPTLINUXDATA");
     if ($forcepartprobe) {
 	mysystem("partprobe /dev/$disk");
     }

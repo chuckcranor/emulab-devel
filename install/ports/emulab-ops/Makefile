@@ -30,7 +30,7 @@ USE_PHP=	bz2 ctype curl dom filter gd hash iconv json mcrypt \
 # Various ports need to agree on what version of apache.
 #
 .MAKEFLAGS+=	APACHE_PORT=www/apache24
-.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
 www_apache24_SET=	SUEXEC
 .else
 .MAKEFLAGS+=	WITH_SUEXEC=yes
@@ -69,6 +69,7 @@ RUN_DEPENDS+=	\
 	rsync:${PORTSDIR}/net/rsync \
 	sudo:${PORTSDIR}/security/sudo \
 	wget:${PORTSDIR}/ftp/wget \
+	opendkim:${PORTSDIR}/mail/opendkim \
 	${LOCALBASE}/bin/flex:${PORTSDIR}/textproc/flex
 
 # perl packages
@@ -97,17 +98,27 @@ RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}cryptography>0:${PORTSDIR}/security/py-cryptography \
 	${PYTHON_PKGNAMEPREFIX}lxml>0:${PORTSDIR}/devel/py-lxml \
 	${PYTHON_PKGNAMEPREFIX}certbot>0:${PORTSDIR}/security/py-certbot \
+	${PYTHON_PKGNAMEPREFIX}fail2ban>0:${PORTSDIR}/security/py-fail2ban \
 	${PYTHON_PKGNAMEPREFIX}tornado>0:${PORTSDIR}/www/py-tornado \
 	${PYTHON_PKGNAMEPREFIX}paramiko>0:${PORTSDIR}/security/py-paramiko
 
 # apache related ports
+.if (${EMULAB_PORTVERSION} == "9.3")
+RUN_DEPENDS+=	\
+	${LOCALBASE}/${APACHEMODDIR}/libphp.so:${PORTSDIR}/www/mod_php$(PHP_VER)
+.else
+RUN_DEPENDS+=	\
+	${LOCALBASE}/${APACHEMODDIR}/libphp$(PHP_MAJ).so:${PORTSDIR}/www/mod_php$(PHP_VER)
+.endif
 RUN_DEPENDS+=	\
 	${LOCALBASE}/${APACHEMODDIR}/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
-	${LOCALBASE}/${APACHEMODDIR}/libphp$(PHP_MAJ).so:${PORTSDIR}/www/mod_php$(PHP_VER)
 
+.if (${EMULAB_PORTVERSION} != "8.3" && ${EMULAB_PORTVERSION} != "9.3")
 # PHP packages
+# XXX I don't think this has been used in forever and the port is gone
 RUN_DEPENDS+= \
         ${LOCALBASE}/share/adodb/adodb.inc.php:${PORTSDIR}/databases/adodb
+.endif
 
 # Alternative shells that we allow users to select
 RUN_DEPENDS+= \

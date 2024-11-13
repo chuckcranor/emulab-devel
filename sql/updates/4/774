@@ -1,0 +1,19 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instances", "update_rspec")) {
+	DBQueryFatal("ALTER TABLE apt_instances add " .
+		     " `update_rspec` mediumtext ".
+		     "    after rspec");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

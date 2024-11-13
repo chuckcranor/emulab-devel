@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,7 +58,7 @@ if (!$UID) {
 
 my $errors = 0;
 my $message;
-my $type = "misc";
+my $type = TB_NODELOGTYPE_MISC();
 
 #
 # Verify user.

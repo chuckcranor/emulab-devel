@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2021 University of Utah and the Flux Group.
+# Copyright (c) 2003-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -355,12 +355,34 @@ sub ShowLogfiles(@)
 }
 
 #
-# Prune logfiles we do not care about; for now these are deletesliver
-# logs where the slice was busy, and sliverstatus calls.
+# Prune logfiles we do not care about
 #
 sub PruneLogfiles()
 {
+    my @prunelist = ('GetImageInfo','Remove','get_credentials','Reservations',
+		     'SliceMaxExtension', 'ReservationPrediction',
+		     'DescribeDataset', 'GetCredential');
+    my $prunelist = join(",", map { "'$_'" } @prunelist);
+    
     my $query_result =
+	DBQueryFatal("select m.logidx,l.logid,m.metaval ".
+		     "   from logfile_metadata as m ".
+		     "left join logfiles as l on m.logidx=l.logidx ".
+		     "where metakey='Method' and ".
+		     "      metaval in ($prunelist) and ".
+		     "      l.date_created < DATE_SUB(NOW(),INTERVAL 60 DAY)");
+    while (my ($logidx,$logid,$method) = $query_result->fetchrow_array()) {
+	my $logfile = Logfile->Lookup($logid);
+	next
+	    if (!defined($logfile));
+	if ($impotent) {
+	    print "Would delete $method $logfile\n";
+	}
+	else {
+	    $logfile->Delete(1);
+	}
+    }
+    $query_result =
 	DBQueryFatal("select m.logidx,l.logid from logfile_metadata as m ".
 		     "left join logfiles as l on m.logidx=l.logidx ".
 		     "where metakey='Method' and metaval='SliverStatus' and ".
@@ -370,7 +392,7 @@ sub PruneLogfiles()
 	next
 	    if (!defined($logfile));
 	if ($impotent) {
-	    print "Would delete $logfile\n";
+	    print "Would delete SliverStatus $logfile\n";
 	}
 	else {
 	    $logfile->Delete();
@@ -394,7 +416,7 @@ sub PruneLogfiles()
 	    next
 	}
 	if ($impotent) {
-	    print "Would delete $logfile\n";
+	    print "Would delete DeleteSliver $logfile\n";
 	}
 	else {
 	    $logfile->Delete();

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -324,7 +324,6 @@ foreach my $node (@nodes) {
     }
 
     if (!$node->IsReserved()) {
-        print STDERR "Reserving $node and adding to list.\n";
 	my $eid;
 	if ($pend) {
 	    $eid = $PENDINGEID;
@@ -332,6 +331,7 @@ foreach my $node (@nodes) {
 	else {
 	    $eid = $RELOADEID;
 	}
+        print STDERR "Reserving $node to $eid and adding to list.\n";
 	my $cmd = "$nalloc -f $RELOADPID $eid $pc";
 
         if ( system($cmd) != 0 ) {

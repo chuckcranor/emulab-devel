@@ -1,0 +1,706 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# 
+# {{{GENIPUBLIC-LICENSE
+# 
+# GENI Public License
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and/or hardware specification (the "Work") to
+# deal in the Work without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Work, and to permit persons to whom the Work
+# is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Work.
+# 
+# THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS
+# IN THE WORK.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Data::Dumper;
+use Date::Parse;
+use IO::Socket::INET;
+use JSON;
+use POSIX qw(strftime ceil);
+
+#
+# Toggle the RF switches at a location, so the antenna is hooked to the node.
+#
+sub usage()
+{
+    print "Usage: powder-rfswitcher [-dn] [-o [-O]] <node_id>\n";
+    print "       powder-rfswitcher -v <node_id>\n";
+    print "       powder-rfswitcher -r -t [rffe|rpi] location\n";
+    print "       powder-rfswitcher -z -t [rffe|rpi] location\n";
+    print "       powder-rfswitcher -s port -t [rffe|rpi] location\n";
+    print "       powder-rfswitcher -a\n";
+    print "With no options, set the appropiate rfswitch for <node_id> to transmit\n";
+    print "Options:\n";
+    print "  -o  - Set the switch associated with the node, to off\n";
+    print "      - This is preferred way to switch the antenna away from a node\n";
+    print "      - With -O, power off the node before switching away\n";
+    print "  -r  - Get the status of the rfswitch at <location>\n";
+    print "  -v  - Verify (for the power on command) that the switch is set\n";
+    print "  -a  - Check all RF switches, set to the correct switch port.\n";
+    print "  -d  - Turn on debugging output\n";
+    print "  -n  - Impotent mode, only show what would be done\n";
+    print "Do not use these options unless the node is first powered on/off\n";
+    print "  -z  - Set the current port of the rfswitch at <location> to zero\n";
+    print "        In other words, nothing is connected to an antenna\n";
+    print "  -s  - Set the current port of the rfswitch at <location> to <port>\n";
+    print "  -t  - Required for -r,-s,-z. The rfswitch type.\n";
+    exit(1);
+}
+my $optlist   = "adnzs:rt:ovO";
+my $debug     = 0;
+my $impotent  = 0;
+my $zero      = 0;
+my $set       = 0;
+my $read      = 0;
+my $all       = 0;
+my $ddrunning = 0;
+my $locked    = 0;
+my $verify    = 0;
+my $location;
+my $rfswtype;
+
+#
+# Configure variables
+#
+my $TB		     = "@prefix@";
+my $TBOPS            = "@TBOPSEMAIL@";
+my $MAINSITE         = @TBMAINSITE@;
+my $DDCTRL           = "/usr/local/etc/rc.d/dense-debug.sh";
+my $DDPID            = "/var/run/frontend-dense-%s.pid";
+my $PORT             = 111;
+my $SAVEUID          = $UID;
+my $SUDO	     = "/usr/local/bin/sudo";
+my $SSH		     = "/usr/bin/ssh";
+my $POWER            = "$TB/bin/power";
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Protos
+sub fatal($);
+sub Switcher($$$);
+sub SetSwitchPort($);
+sub GetSwitcher($$);
+sub GetSwitcherPort($$);
+sub GetSwitcherLock();
+sub ReleaseSwitcherLock();
+sub CheckAllSwitches();
+
+#
+# Turn off line buffering on output
+#
+$| = 1; 
+
+if ($EUID != 0) {
+    fatal("Must be root! Maybe its a development version?\n");
+}
+
+if (!$MAINSITE) {
+    exit(0);
+}
+
+#
+# 
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"a"})) {
+    $all = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"z"})) {
+    $zero = 1;
+}
+if (defined($options{"s"})) {
+    $set = 1;
+}
+if (defined($options{"r"})) {
+    $read = 1;
+}
+if (defined($options{"v"})) {
+    $verify = 1;
+}
+if (defined($options{"t"})) {
+    $rfswtype = $options{"t"};
+    if ($rfswtype ne "rffe" and $rfswtype ne "rpi") {
+	fatal("-t option is one of rffe or rpi");
+    }
+}
+if ($all) {
+    exit(CheckAllSwitches());
+}
+usage()
+    if (@ARGV != 1);
+
+my $arg = shift(@ARGV);
+# For Taint check
+if ($arg =~ /^([-\w]+)$/) {
+    $arg = $1;
+}
+else {
+    fatal("Illegal argument");
+}
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use EmulabConstants;
+use emdb;
+use libtestbed;
+use emutil;
+use libEmulab;
+use Node;
+use APT_Aggregate;
+
+if ($zero || $set || $read) {
+    # Change this later, to go in the DB.
+    if (!defined($rfswtype)) {
+	fatal("Must provide rfswitch type (rffe|rpi)");
+    }
+    if ($zero) {
+	$location = $arg;
+	GetSwitcherLock();
+	Switcher($location, $rfswtype, 0);
+	exit(0);
+    }
+
+    if ($set) {
+	$location = $arg;
+	my $port = $options{"s"};
+	GetSwitcherLock();
+	Switcher($location, $rfswtype, $port);
+	exit(0);
+    }
+
+    if ($read) {
+	$location = $arg;
+	GetSwitcherLock();
+	print GetSwitcher($location, $rfswtype) . "\n";
+	exit(0);
+    }
+}
+
+my $node = Node->Lookup($arg);
+if (!defined($node)) {
+    fatal("No such node $arg");
+}
+if (! $node->IsReserved()) {
+    print STDERR "$arg is not reserved, refusing to listen to you\n";
+    exit(1);
+}
+exit(SetSwitchPort($node));
+
+#
+# Open the socket, need to do this a few times to get things to work.
+#
+sub GetSocket($)
+{
+    my ($location) = @_;
+    my $rfswitch = "powder-rffe-" . lc($location);
+    my $ddpid    = sprintf($DDPID, $location);
+
+    if (-e $ddpid) {
+	print "Stopping the DD debugging process\n";
+	$UID = 0;
+	system("$DDCTRL stop $location");
+	if ($?) {
+	    fatal("Could not stop the debugging logger");
+	}
+	$UID = $SAVEUID;
+	$ddrunning = 1;
+	sleep(1);
+    }
+
+    my $sock = IO::Socket::INET->new(PeerAddr => $rfswitch,
+				     PeerPort => $PORT,
+				     Proto    => 'tcp',
+				     Blocking => 1,
+				     Timeout  => 5);
+    if (!$sock) {
+	fatal("Could not connect to $rfswitch: $!");
+    }
+    # This does not work.
+    $sock->timeout(5);
+
+    # So have to do this instead,
+    $sock->setsockopt(SOL_SOCKET, SO_RCVTIMEO, pack('l!l!', 5, 0))
+	or fatal("setsockopt: $!");
+
+    return $sock;
+}
+
+#
+# Toggle the rfswitch 
+#
+sub Switcher($$$)
+{
+    my ($location, $rfswtype, $port) = @_;
+
+    if ($rfswtype eq "rffe") {
+	return SwitcherRFFE($location, $port);
+    }
+    else {
+	return SwitcherRPI($location, $port);
+    }
+}
+
+sub SwitcherRPI($$)
+{
+    my ($location, $port) = @_;
+    my $rfswitch = "powder-rfsw-" . lc($location);
+    my $command  = "$SSH elabman\@${rfswitch} sudo " .
+	"rf_switch_control_scripts/switch_ctrl.py ";
+
+    if ($port == 0) {
+	$command .= " --off"
+    }
+    else {
+	$command .= " --on $port";
+    }
+    if ($impotent) {
+	print "Would run '$command'\n";
+	exit(0);
+    }
+    $UID = 0;
+    system($command);
+    $UID = $SAVEUID;
+    
+    if ($?) {
+	print STDERR "Failed to set rfswitch $rfswitch to ".
+	    ($port == 0 ? "off" : "port $port") . "\n";
+	return -1;
+    }
+    return 0;
+}
+
+sub SwitcherRFFE($$)
+{
+    my ($location, $port) = @_;
+    my $worked = 0;
+    my $cmdA   = "SWA" . $port;
+    my $cmdB   = "SWB" . $port;
+    my $rfswitch = "powder-rffe-" . lc($location);
+
+    if ($impotent) {
+	print "Would send $cmdA/$cmdB to $rfswitch\n";
+	exit(0);
+    }
+    elsif ($debug) {
+	print "Sending $cmdA/$cmdB to $rfswitch\n";
+    }
+    my $sock = GetSocket($location);
+    
+    my $buffer = "";
+    for (my $i = 0; $i < 32; $i++) {
+	my $tmp;
+	
+	if (!defined($sock->recv($tmp, 128))) {
+	    $sock->shutdown(SHUT_RDWR);
+	    $sock->close();
+	    fatal("Failed to recv before from $rfswitch: $!");
+	}
+	$buffer .= $tmp;
+	if ($buffer =~ /(^SW A Chan: \d\r\nSW B Chan: \d\r\n)/ms) {
+	    print $1;
+	    last;
+	}
+	select(undef, undef, undef, 0.1);
+    }
+    
+    print "Sending the commands\n";
+
+    if (! ($sock->send("\n${cmdA}\n") && sleep(5) &&
+	   $sock->send("\n${cmdB}\n") && sleep(5))) {
+	$sock->shutdown(SHUT_RDWR);
+	$sock->close();
+	fatal("Failed to send cmds to $rfswitch: $!");
+    }
+
+    $sock->shutdown(SHUT_RDWR);
+    $sock->close();
+    sleep(1);
+
+    $sock = GetSocket($location);
+
+    print "Sending the commands again\n";
+    if (! ($sock->send("\n${cmdA}\n") && sleep(5) &&
+	   $sock->send("\n${cmdB}\n") && sleep(5))) {
+	$sock->shutdown(SHUT_RDWR);
+	$sock->close();
+	fatal("Failed to send cmds to $rfswitch: $!");
+    }
+    $sock->shutdown(SHUT_RDWR);
+    $sock->close();
+    sleep(1);
+
+    $sock = GetSocket($location);
+
+    $buffer = "";
+    for (my $i = 0; $i < 128; $i++) {
+	my $tmp;
+	if (!defined($sock->recv($tmp, 128))) {
+	    $sock->shutdown(SHUT_RDWR);
+	    $sock->close();
+	    fatal("Failed to recv before from $rfswitch: $!");
+	}
+	$buffer .= $tmp;
+	if ($buffer =~ /(^SW A Chan: ${port}\r\nSW B Chan: ${port}\r\n)/ms) {
+	    print $1;
+	    $worked = 1;
+	    last;
+	}
+	select(undef, undef, undef, 0.25);
+    }
+    $sock->shutdown(SHUT_RDWR);
+    $sock->close();
+    if (!$worked) {
+	fatal("Failed to get back the correct debugging output\n");
+    }
+    return 0;
+}
+
+sub GetSwitcherRPI($)
+{
+    my ($location, $rfswtype) = @_;
+    my $rfswitch = "powder-rfsw-" . lc($location);
+    my $command  = "$SSH elabman\@${rfswitch} sudo " .
+	"rf_switch_control_scripts/switch_ctrl.py --status";
+
+    if ($debug) {
+	print "$command\n";
+    }
+
+    $UID = 0;
+    my $output = emutil::ExecQuiet($command);
+    $UID = $SAVEUID;
+    
+    if ($?) {
+	print $output;
+	fatal("Failed to get the rfswitcher status");
+    }
+    return $output;
+}
+
+sub GetSwitcherRFFE($)
+{
+    my ($location) = @_;
+    my $sock     = GetSocket($location);
+    my $rfswitch = "powder-rffe-" . lc($location);
+    my $output;
+    
+    my $buffer = "";
+    for (my $i = 0; $i < 32; $i++) {
+	my $tmp;
+	
+	if (!defined($sock->recv($tmp, 128))) {
+	    $sock->shutdown(SHUT_RDWR);
+	    $sock->close();
+	    fatal("Failed to recv from $rfswitch: $!");
+	}
+	$buffer .= $tmp;
+	if ($buffer =~ /(^SW A Chan: \d\r\nSW B Chan: \d\r\n)/ms) {
+	    $output = $1;
+	    last;
+	}
+	select(undef, undef, undef, 0.1);
+    }
+    $sock->shutdown(SHUT_RDWR);
+    $sock->close();
+    return $output;
+}
+
+#
+# Get the current status of the rfswitch 
+#
+sub GetSwitcher($$)
+{
+    my ($location, $rfswtype) = @_;
+
+    if ($rfswtype eq "rffe") {
+	return GetSwitcherRFFE($location);
+    }
+    else {
+	return GetSwitcherRPI($location);
+    }
+}
+
+sub GetSwitcherPort($$)
+{
+    my ($location, $rfswtype) = @_;
+    my $output = GetSwitcher($location, $rfswtype);
+    
+    if ($rfswtype eq "rffe") {
+    }
+    else {
+	if ($output =~ /^SWITCH_OFF/m) {
+	    return 0;
+	}
+	elsif ($output =~ /^SWITCH_ON_(\d)/m) {
+	    return $1;
+	}
+	else {
+	    print STDERR $output;
+	    fatal("Unexpected outout from rf switcher at $location");
+	}
+    }
+    return undef;
+}
+
+#
+# Verify all switch locations set properly. After a power outage, the
+# RF switch will come up in an "off" state, so the allocated radion
+# will not be able to power on (if there is a power interlock) or receive.
+#
+# This is invoked from /etc/crontab
+#
+sub CheckAllSwitches()
+{
+    my $query_result =
+	DBQueryFatal("select node_id from node_attributes ".
+		     "where attrkey='rfswitch_location'");
+    exit(0)
+	if (!$query_result->numrows);
+
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	my $node = Node->Lookup($node_id);
+	if (!defined($node)) {
+	    print STDERR "$node_id no longer exists\n";
+	    next;
+	}
+	next
+	    if (! $node->IsReserved());
+
+	if ($debug) {
+	    print "Checking that rfswitch for $node_id is set properly\n";
+	}
+	SetSwitchPort($node);
+    }
+}
+
+sub SetSwitchPort($)
+{
+    my ($node) = @_;
+    my $node_id = $node->node_id();
+    my ($location, $rfswitch_port, $rfswtype);
+
+    if ($node->rfswitchSettings(\$location, \$rfswitch_port, \$rfswtype)) {
+	print STDERR "Could not get the rfswitch settings\n";
+	return -1;
+    }
+    if (!defined($location)) {
+	print STDERR "There is no rfswitch_location in the DB for $node_id\n";
+	return -1;
+    }
+    if (!defined($rfswtype)) {
+	print STDERR "There is no rfswitch_type in the DB for $node_id\n";
+	return -1;
+    }
+    if (!defined($rfswitch_port)) {
+	print STDERR "There is no rfswitch_port in the DB for $node_id\n";
+	return -1;
+    }
+    if ($rfswtype ne "rffe" and $rfswtype ne "rpi") {
+	print STDERR "rfswitch_type must be one of rffe or rpi: $rfswtype\n";
+    }
+    my $next_port;
+    if (defined($options{"o"})) {
+	$next_port = 0;
+    }
+    else {
+	$next_port = $rfswitch_port;
+    }
+    if ($debug && !($verify || $all)) {
+	print "Setting RF switch at $location to port $next_port\n";
+    }
+    if (GetSwitcherLock()) {
+	return 1;
+    }
+
+    #
+    # For sanity checks
+    #
+    my $current_port = GetSwitcherPort($location, $rfswtype);
+    if (!defined($current_port)) {
+	print STDERR "Could not determine the current state of the RF switch\n";
+	ReleaseSwitcherLock();
+	return -1;
+    }
+    if ($debug) {
+	print "RF switch at $location is on port $current_port. ";
+	if ($current_port != $next_port) {
+	    print "Should be port $next_port.";
+	}
+	print "\n";
+    }
+    if ($verify) {
+	if ($current_port == $next_port) {
+	    ReleaseSwitcherLock();
+	    return 0;
+	}
+	ReleaseSwitcherLock();
+	return 1;
+    }
+    if ($current_port == $next_port) {
+	if (!$all) {
+	    print "RF switch at $location is already on the correct ".
+		"port: $next_port\n";
+	}
+	ReleaseSwitcherLock();
+	return 0;
+    }
+    #
+    # Find all other nodes on this switch for sanity checks.
+    #
+    my %other_nodes  = ();
+    my $query_result =
+	DBQueryFatal("select node_id from node_attributes ".
+		     "where attrkey='rfswitch_location' and ".
+		     "      attrvalue='$location' and ".
+		     "      node_id!='$node_id'");
+
+    while (my ($other_node_id) = $query_result->fetchrow_array()) {
+	my $other_node = Node->Lookup($other_node_id);
+	next
+	    if (!defined($other_node));
+	$other_nodes{$other_node_id} = $other_node;
+    }
+
+    #
+    # Switching away, radio must be powered off first.
+    #
+    if ($next_port != $rfswitch_port &&
+	$node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
+	if (defined($options{"O"})) {
+	    if ($impotent) {
+		print "Would power off $node_id before switching away\n";
+	    }
+	    else {
+		print "Powering off $node_id before switching away\n";
+		$UID = 0;
+		system("$POWER off $node_id");
+		$UID = $SAVEUID;
+		if ($?) {
+		    print STDERR "Could not power off $node_id\n";
+		    ReleaseSwitcherLock();
+		    return -1;
+		}
+		sleep(1);
+	    }
+	}
+	else {
+	    print STDERR "$node_id must be powered off before switching away\n";
+	    ReleaseSwitcherLock();
+	    return -1;
+	}
+    }
+    if ($next_port != 0) {
+	#
+	# Switching to the radio, confirm all other radios are powered off.
+	#
+	foreach my $other_node_id (keys(%other_nodes)) {
+	    my $other_node = $other_nodes{$other_node_id};
+
+	    if ($debug) {
+		print "Confirming $other_node_id is powered off\n";
+	    }
+	    if ($other_node->eventstate() ne TBDB_NODESTATE_POWEROFF()) {
+		if ($all) {
+		    print "Powering off $node_id before switching away\n";
+		    if (!$impotent) {
+			$UID = 0;
+			system("$POWER off $node_id");
+			$UID = $SAVEUID;
+			if ($?) {
+			    print STDERR "Could not power off $node_id\n";
+			    ReleaseSwitcherLock();
+			    return -1;
+			}
+			sleep(1);
+		    }
+		}
+		else {
+		    print "$other_node_id must be powered off before ".
+			"switching away\n";
+		    ReleaseSwitcherLock();
+		    return -1;
+		}
+	    }
+	}
+    }
+    if (Switcher($location, $rfswtype, $next_port)) {
+	ReleaseSwitcherLock();
+	return -1;
+    }
+    ReleaseSwitcherLock();
+    return 0;
+}
+
+#
+# Bad to let two of these run.
+#
+sub GetSwitcherLock()
+{
+    return
+	if ($locked);
+    
+    print "Trying to get the switcher lock ...\n" if ($debug);
+    if (TBScriptLock("powder-rfswitcher", 0, 15)) {
+	print STDERR "Could not get the lock!\n";
+	return -1;
+    }
+    $locked = 1;
+    return 0;
+}
+sub ReleaseSwitcherLock()
+{
+    TBScriptUnlock() if ($locked);
+    $locked = 0;
+    return 0;
+}
+
+exit(0);
+
+sub fatal($)
+{
+    my ($msg) = @_;
+
+    die("*** $0:\n".
+	"    $msg\n");
+}
+
+END {
+    if ($ddrunning) {
+	print "Restarting the debbugging logger\n";
+	$UID = 0;
+	system("$DDCTRL start $location");
+	if ($?) {
+	    print STDERR "Could not restart the debugging logger\n";
+	}
+    }
+    TBScriptUnlock() if ($locked);
+}

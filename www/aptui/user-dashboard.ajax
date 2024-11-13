@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -148,7 +148,7 @@ function Do_ResgroupList()
     }
     $resgroups = ReservationGroup::LookupForUser($target_user);
     foreach ($resgroups as $resgroup) {
-        $listing[$resgroup->uuid()] = $resgroup->Blob();
+        $listing[$resgroup->uuid()] = $resgroup->Blob(false);
     }
     $result["user"] = $listing;
 
@@ -161,7 +161,7 @@ function Do_ResgroupList()
     foreach ($projlist as $project) {
         $resgroups = ReservationGroup::LookupForProject($project);
         foreach ($resgroups as $resgroup) {
-            $listing[$resgroup->uuid()] = $resgroup->Blob();
+            $listing[$resgroup->uuid()] = $resgroup->Blob(false);
         }
     }
     $result["project"] = $listing;
@@ -252,6 +252,7 @@ function Do_AccountDetails()
     $results["name"]         = $target_user->name();
     $results["email"]        = $target_user->email();
     $results["affiliation"]  = $target_user->affil();
+    $results["title"]        = $target_user->title();
     $results["country"]      = $target_user->country();
     $results["address1"]     = $target_user->addr1();
     $results["address2"]     = $target_user->addr2();
@@ -286,6 +287,7 @@ function Do_AccountDetails()
         $results["affil_updated"] =
             DateStringGMT($target_user->affiliation_updated());
         $results["loggedin"]      = $target_user->LoggedIn();
+        $results["loggedinIPs"]   = $target_user->LoggedInIPs();
     }
     $scopus_info = array();
     $query_result =
@@ -421,6 +423,17 @@ function Do_Toggle()
     elseif ($toggle == "bound_portal") {
         $target_user->SetBoundPortal($target_user->bound_portal() ? 0 : 1);
     }
+    elseif ($toggle == "nonlocal_id") {
+        $priv = TBDB_TRUSTSTRING_USER;
+        
+        $target_user->ClearNonlocalID();
+        if (SUEXEC($this_uid, $TBADMINGROUP,
+                   "webmodgroups -m CloudLab:CloudLab:$priv $target_uid",
+                   SUEXEC_ACTION_CONTINUE)) {
+            SPITAJAX_ERROR(-1, $suexec_output);
+            return -1;
+        }
+    }
     elseif ($toggle == "foreign_admin") {
         $target_user->SetForeignAdmin($target_user->foreign_admin() ? 0 : 1);
     }
@@ -522,7 +535,7 @@ function Do_SendPasswordReset()
     }
     if ($target_user->status() != TBDB_USERSTATUS_ACTIVE &&
         $target_user->status() != TBDB_USERSTATUS_FROZEN) {
-	SPITAJAX_ERROR(-1, "User is not active or frozen!");
+	SPITAJAX_ERROR(-1, "User is not active or is frozen!");
         return;
     }
     $target_idx  = $target_user->uid_idx();
@@ -568,11 +581,11 @@ function Do_SendTestMessage()
         return;
     }
     $target_idx   = $target_user->uid_idx();
-    $target_uuid  = $target_user->uuid();
     $target_email = $target_user->email();
     $target_name  = $target_user->name();
     $target_uid   = $target_user->uid();
     $adminemail   = $target_user->adminEmail();
+    $reference    = GENHASH();
 
     TBMAIL("$target_name '$target_uid' <$target_email>",
            "This is a test",
@@ -584,7 +597,42 @@ function Do_SendTestMessage()
            "as soon as you receive it. If we do not hear back from you, we\n".
            "may be forced to freeze your account.\n".
            "\n".
+           "Reference: $reference\n\n".
            "Thank you very much!\n",
+           "From: $adminemail\n".
+           "Bcc: $adminemail");
+           
+    SPITAJAX_RESPONSE(1);
+}
+
+function Do_SendMessage()
+{
+    global $this_user, $target_user, $ajax_args;
+    global $APTMAIL;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(1, "Only administrators can do this.");
+        return;
+    }
+    if (!isset($ajax_args["message"]) || trim($ajax_args["message"]) == "") {
+	SPITAJAX_ERROR(-1, "No message provided");
+	return;
+    }    
+    $message      = $ajax_args["message"];
+    $target_idx   = $target_user->uid_idx();
+    $target_email = $target_user->email();
+    $target_name  = $target_user->name();
+    $target_uid   = $target_user->uid();
+    $adminemail   = $APTMAIL;
+
+    TBMAIL("$target_name '$target_uid' <$target_email>",
+           "Message from the operations staff",
+           $message . "\n\n" .
+           "Thank you very much!\n".
+           "Portal Operations\n",
            "From: $adminemail\n".
            "Bcc: $adminemail");
            
@@ -640,6 +688,23 @@ function Do_AcceptAUP()
     $this_user->AcceptAUP($PORTAL_GENESIS);
 
     SPITAJAX_RESPONSE("accepted");
+}
+
+# Admin function log a user out
+function Do_Logout()
+{
+    global $this_user, $target_user;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    $target_user->Logout();
+
+    SPITAJAX_RESPONSE("logged out");
 }
 
 #
@@ -743,6 +808,67 @@ function Do_DeleteUser()
         return -1;
     }
     SPITAJAX_RESPONSE(1);
+}
+
+function Do_ResourceList()
+{
+    global $this_user, $target_user, $ajax_args;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $target_uid = $target_user->uid();
+    $resources  = array();
+    $resgroups  = array();
+    $projects   = array();
+    
+    $query_result =
+        DBQueryFatal("select uuid from apt_instances as a ".
+                     "where a.creator='$target_uid'");
+    
+    while ($row = mysql_fetch_array($query_result)) {
+        $uuid      = $row["uuid"];
+        $instance  = Instance::Lookup($uuid);
+        $slivers   = array();
+        if (!$instance) {
+            continue;
+        }
+        foreach ($instance->slivers() as $sliver) {
+            if ($sliver->status != "terminated" && $sliver->manifest()) {
+                $slivers[$sliver->aggregate_urn()] = array(
+                    "name"     => $sliver->aggregate_name(),
+                    "manifest" => $sliver->manifest(),
+                );
+            }
+        }
+        if (!count($slivers)) {
+            continue;
+        }
+        $blob = array(
+            "name"      => $instance->name(),
+            "creator"   => $instance->creator(),
+            "portal"    => $instance->portal(),
+            "pid"       => $instance->pid(),
+            "started"   => DateStringGMT($instance->started()),
+            "expires"   => DateStringGMT($instance->expires()),
+            "slivers"   => $slivers,
+        );
+        $resources[$uuid] = $blob;
+
+        # Resgroups for this project
+        $projects[$instance->pid()] = $instance->Project();
+    }
+    # This is not currently being used, maybe later.
+    foreach ($projects as $project) {
+        $groups = ReservationGroup::LookupForProject($project);
+        $tmp    = array();
+        foreach ($groups as $group) {
+            $tmp[$group->uuid()] = $group->Blob(false);
+        }
+        $resgroups[$project->pid()] = $tmp;
+    }
+    SPITAJAX_RESPONSE(array("resources" => $resources,
+                            "resgroups" => $resgroups));
 }
 
 # Local Variables:

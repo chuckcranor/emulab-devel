@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2021 University of Utah and the Flux Group.
+ * Copyright (c) 2010-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -1305,7 +1305,7 @@ handle_put(int sock, struct sockaddr_in *sip, struct sockaddr_in *cip,
 		uint64_t pmaxsize;
 
 		pmaxsize = ((uint64_t)reply.himaxsize << 32) | reply.lomaxsize;
-		if (debug)
+		if (debug && pmaxsize != ii->put_maxsize)
 			FrisLog("%s: replace local maxsize %llu with parent %llu",
 				imageid, ii->put_maxsize, pmaxsize);
 		ii->put_maxsize = pmaxsize;

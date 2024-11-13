@@ -43,18 +43,20 @@ sub usage()
     print STDERR "   -e date    Update the expiration date ('now' for current time, 'never' for never)\n";
     print STDERR "   -l date    Update the last used date ('now' for current time, 'never' for never)\n";
 
+    print STDERR "   -p on|off  Mark or clear the lease permanent status\n";
     print STDERR "   -a key=val Add or update attribute 'key' with value 'val'\n";
     print STDERR "   -r key     Remove attribute 'key'\n";
     print STDERR "   name       Name of lease (of form <pid>/<id>)\n";
     exit(-1);
 }
-my $optlist  = "dhRUw:s:e:l:a:r:";
+my $optlist  = "dhRUw:s:e:l:a:r:p:";
 my $debug = 0;
 my $pid;
 my $gid;
 my $state;
 my $expire;
 my $lastused;
+my $permanent;
 my $addattr;
 my $delattr;
 my $lname;
@@ -139,16 +141,29 @@ if (defined($options{l})) {
 	}
     }
 }
+if (defined($options{p})) {
+    if ($options{p} =~ /^(on|off)$/i) {
+	$permanent = $1;
+    } else {
+	fatal("Permanent status must be 'on' or 'off'.");
+    }
+}
 if (defined($options{a})) {
     $addattr = $options{a};
     if ($addattr !~ /^([-\w]+)=([-\w\.\+\/:]+)$/) {
 	fatal("Malformed attribute name/value '$addattr'.");
+    }
+    if ($1 eq "permanent") {
+	fatal("Cannot change permanent status with -a");
     }
 }
 if (defined($options{r})) {
     $delattr = $options{r};
     if ($delattr !~ /^([-\w]+)$/) {
 	fatal("Malformed attribute name '$delattr'.");
+    }
+    if ($1 eq "permanent") {
+	fatal("Cannot change permanent status with -r");
     }
 }
 if (defined($options{w})) {
@@ -158,7 +173,8 @@ if (defined($options{w})) {
     }
 }
 
-if (!($state || defined($expire) || defined($lastused) ||
+if (!($state ||
+      defined($expire) || defined($lastused) || defined($permanent) ||
       $addattr || $delattr || $dounlock)) {
     print STDERR "Must specify SOME action!\n";
     usage();
@@ -189,6 +205,14 @@ else {
 #
 if (!TBAdmin()) {
     fatal("Only admins can modify leases right now.");
+}
+
+#
+# Only admin can set/clear permanent status.
+# XXX independent of the above check in case we allow user-mod in the future.
+#
+if (!TBAdmin() && defined($permanent)) {
+    fatal("Only admins can change lease permanent status.");
 }
 
 my $this_user = User->ThisUser();
@@ -276,7 +300,7 @@ else {
 	fatal("$pid/$lname: lease last_used changed ".
 	      "while waiting for the lock ($olused => $nlused).");
     }
-    if ($addattr || $delattr) {
+    if ($addattr || $delattr || $permanent) {
 	foreach my $a (keys %$oattrs) {
 	    if (!exists($nattrs->{$a}) || ($oattrs->{$a} ne $nattrs->{$a})) {
 		fatal("$pid/$lname: lease attributes changed ".
@@ -342,6 +366,15 @@ if ($state) {
     } else {
 	print "$pid/$lname: changed state from '$curstate' to '$state'.\n";
     }
+
+    # Returning to valid, clear the "why" attribute
+    if ($state ne $curstate && $state eq LEASE_STATE_VALID()) {
+	my $aval;
+	if (!$lease->GetAttribute("why", \$aval) && defined($aval)) {
+	    print "$pid/$lname: NOTE: was '$curstate' because: '$aval'.\n";
+	    $lease->DeleteAttribute("why");
+	}
+    }
 }
 
 # Handle expiration date
@@ -375,7 +408,29 @@ if (defined($lastused)) {
 }
 
 #
-# Handle attributes. Delete, then add (or replace).
+# Handle permanence
+#
+if (defined($permanent)) {
+    if ($lease->state() ne LEASE_STATE_VALID()) {
+	fatal("$pid/$lname: not in 'valid' state, cannot change permanence.");
+    }
+    if ($permanent eq "on") {
+	if ($lease->SetPermanent()) {
+	    fatal("$pid/$lname: could not set attribute '$permanent'.");
+	} else {
+	    print "$pid/$lname: set permanent status.\n";
+	}
+    } else {
+	if ($lease->ClearPermanent()) {
+	    fatal("$pid/$lname: could not clear attribute '$permanent'.");
+	} else {
+	    print "$pid/$lname: cleared permanent status.\n";
+	}
+    }
+}
+
+#
+# Handle other attributes. Delete, then add (or replace).
 #
 if ($delattr) {
     if ($lease->DeleteAttribute($delattr)) {

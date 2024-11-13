@@ -52,7 +52,7 @@ my $MAINSITE 	     = @TBMAINSITE@;
 my $TBOPS            = "@TBOPSEMAIL@";
 my $TBLOGS           = "@TBLOGSEMAIL@";
 my $TBBASE           = "@TBBASE@";
-my $PGERRORS	     = "protogeni-errors\@flux.utah.edu";
+my $PGERRORS	     = "protogeni-errors\@emulab.net";
 
 # Testbed libraries.
 use lib '@prefix@/lib';

@@ -1,23 +1,24 @@
 <div>
-  <div class='panel panel-default'>
-    <div class="panel-heading">
-      <h3 class="panel-title">
-	<center><%- title %></center></h3>
+  <div class='panel  card panel-default'>
+    <div class="panel-heading card-header">
+      <h5 class="panel-title card-title card-title-small">
+	<center><%- title %></center></h5>
     </div>
-    <div class='panel-body counts-size'>
+    <div class='panel-body card-body'>
       <div class='resgraph-spinner'>
 	<center>
 	  <img src='images/spinner.gif' /></center>
       </div>
+      <div class="counts-size">
       <table class='tablesorter hidden'>
 	<thead>
 	  <tr>
 	    <th class="type-header">Type</th>
 	    <th>Free
 	      <a href='#' class='btn btn-xs'
-		 data-toggle='tooltip'
-		 data-container="body"
-		 data-trigger="hover"
+		 data-toggle='tooltip' data-bs-toggle='tooltip'
+		 data-container="body" data-bs-container="body"
+		 data-trigger="hover" data-bs-trigger="hover"
 		 title='Number of nodes that are immediately available for
 			use in an experiment.'
 		 style="margin-bottom: 3px;
@@ -29,6 +30,7 @@
 	<tbody>
 	</tbody>
       </table>
+      </div>
     </div>
   </div>
 </div>

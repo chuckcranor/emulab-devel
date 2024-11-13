@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,11 +29,9 @@ SUBDIR		= rc.d
 
 WINSUPPORT      = @WINSUPPORT@
 PELABSUPPORT    = @PELABSUPPORT@
-ELVINCOMPAT	= @ELVIN_COMPAT@
 TBMAINSITE	= @TBMAINSITE@
 PROTOGENI       = @PROTOGENI_SUPPORT@
 CLUSTER_PORTAL  = @CLUSTER_PORTAL@
-CONFIG_TARGETSYS= @CONFIG_TARGETSYS@
 TARGETSYS       = @TARGETSYS_TARGET@
 BOSSNODE        = @BOSSNODE@
 POWDER_DEADMAN  = @POWDER_DEADMAN@
@@ -53,9 +51,6 @@ ifneq ($(CLUSTER_PORTAL),)
 ifeq ($(CLUSTER_PORTAL),$(BOSSNODE))
 RC_SCRIPTS     += 2.portalpsd.sh
 endif
-endif
-ifeq ($(ELVINCOMPAT),1)
-OPS_SCRIPTS    += 2.elvind.sh 3.elvin_gateway.sh
 endif
 FS_SCRIPTS	= arplock-opsfs.sh
 TIP_SCRIPTS	=
@@ -83,6 +78,7 @@ endif
 # Powder
 ifeq ($(TBMAINSITE),1)
 RC_SCRIPTS	+= powder_keepalive.sh
+OPS_SCRIPTS     += rfbaseline.sh
 endif
 ifeq ($(POWDER_DEADMAN),1)
 RC_SCRIPTS	+= endpoint-monitor.sh
@@ -105,15 +101,12 @@ endif
 ifeq ($(PELABSUPPORT),1)
 OPS_SCRIPTS += pelab.sh
 endif
-ifeq ($(CONFIG_TARGETSYS),0)
-OPS_SCRIPTS += 1.mysql-client.sh 1.mysql-server.sh 
-endif
 ifeq ($(WEBSSH),1)
 OPS_SCRIPTS += webssh.sh
 endif
-ifeq ($(TARGETSYS),POWDER-BUS)
-RC_SCRIPTS   += mobile-update.sh
-endif
+#ifeq ($(TARGETSYS),POWDER-BUS)
+#RC_SCRIPTS   += mobile-update.sh
+#endif
 
 #
 # Force dependencies to make sure configure regenerates if the .in file
@@ -147,6 +140,24 @@ ifeq ($(TBMAINSITE),0)
 	sed -i "" -e '/portalpsd/d' geniboot.sh
 endif
 	$(INSTALL_PROGRAM) geniboot.sh $@
+
+diff: $(RC_SCRIPTS)
+	@for s in $(RC_SCRIPTS); do \
+		if test -e $$s; then \
+			echo "$${s}: ====="; diff $$s $(INSTALL_RCDIR)/; echo "====="; \
+		else \
+			echo "$${s}: ====="; diff $(SRCDIR)/$$s $(INSTALL_RCDIR)/; echo "====="; \
+		fi \
+	done
+
+control-diff: control-build fs-build
+	@for s in $(OPS_SCRIPTS) $(FS_SCRIPTS); do \
+		if test -e $$s; then \
+			echo "$${s}: ====="; diff $$s $(INSTALL_RCDIR)/; echo "====="; \
+		else \
+			echo "$${s}: ====="; diff $(SRCDIR)/$$s $(INSTALL_RCDIR)/; echo "====="; \
+		fi \
+	done
 
 #
 # Well, this is awkward.  Make sure we don't try to install anything from

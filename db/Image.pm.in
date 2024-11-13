@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2020 University of Utah and the Flux Group.
+# Copyright (c) 2007-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,6 +56,36 @@ my $DOPROVENANCE  = @IMAGEPROVENANCE@;
 my $TBWWW         = "@TBWWW@";
 my $PROJROOT      = "@PROJROOT_DIR@";
 my $GROUPROOT     = "@GROUPSROOT_DIR@";
+
+# XXX these should come out of the DB or not exist at all!
+my %EMULABMBRS = (
+    # PC node MBRs
+    "1" => [
+	[63,6281352], [6281415,6281415], [12562830,257040], [12819870,0]
+    ],
+    "2" => [
+	[63,12305790], [12305853,12305790], [24611643,2100357], [26712000,0]
+    ],
+    "3" => [
+	[2048,33554432], [33556480,6291456], [39847936,6291456], [46139392,0]
+    ],
+    "4" => [
+	[2048,134217728], [-1,0], [134219776,16777216], [150996992,0]
+    ],
+    # Moonshot ARM node GPTs
+    "101" => [
+	[4096,1048576], [1052672,233388942], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [2048,2048]
+    ],
+    "102" => [
+	[4096,234437518], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [2048,2048]
+    ],
+    "103" => [
+	[4096,33554432], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [2048,2048]
+    ],
+    "104" => [
+	[4096,134217728], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [-1,0], [2048,2048]
+    ]
+);
 
 # Cache of instances to avoid regenerating them.
 my %images    = ();
@@ -579,6 +609,26 @@ sub ListAllVersions($$$)
 }
 
 #
+# Return start/size info for a specific MBR version and partition.
+#
+sub MBRPartInfo($$$)
+{
+    my ($class, $mbr, $part) = @_;
+
+    return undef
+	if (!defined($mbr) || !defined($part));
+
+    return (0, 0)
+	if ($part == 0);
+
+    return undef
+	if (!exists($EMULABMBRS{$mbr}) ||
+	    !exists($EMULABMBRS{$mbr}[$part-1]));
+
+    return @{$EMULABMBRS{$mbr}[$part-1]};
+}
+
+#
 # Refresh a class instance by reloading from the DB.
 #
 sub Refresh($)
@@ -642,7 +692,8 @@ sub Create($$$$$$$$$$)
     foreach my $key ("path", "shared", "global", "ezid", "mbr_version",
 		     "format", "metadata_url", "imagefile_url", "released",
 		     "isdataset", "lba_size", "lba_low", "lba_high",
-		     "origin_uuid", "origin_urn", "origin_name") {
+		     "origin_uuid", "origin_urn", "origin_name",
+		     "isbootimage") {
 	if (exists($argref->{$key})) {
 	    push(@arg_slots, $key);
 	}
@@ -1818,7 +1869,7 @@ sub UnLockTables($)
 }
 
 #
-# Get the disk offset at which the image will be loaded.
+# Get the disk partition offset in sectors at which the image will be loaded.
 # For a "whole disk" (loadpart == 0) image, it is always 0.
 # For a "partition" image, it depends on the MBR type of the image.
 #
@@ -1828,24 +1879,38 @@ sub GetDiskOffset($)
 {
     my ($self) = @_;
 
-    # XXX these should come out of the DB or not exist at all!
-    my %mbr = (
-	"1" => [0,   63,  6281415, 12562830, 12819870],
-	"2" => [0,   63, 12305853, 24611643, 26712000],
-	"3" => [0, 2048, 33556480, 39847936, 46139392]
-    );
-
     # Must be a real reference. 
     return -1
-	if (! ref($self));
+	if (!ref($self));
+
+    my $mbr = $self->mbr_version();
+    my $part = $self->loadpart();
 
     return -1
-	if (! exists($mbr{$self->mbr_version()}));
+	if (!defined($mbr) || !defined($part));
+
+    return 0
+	if ($part == 0);
 
     return -1
-	if ($self->loadpart() > 4);
+	if (!exists($EMULABMBRS{$mbr}) ||
+	    !exists($EMULABMBRS{$mbr}[$part-1]));
 
-    return $mbr{$self->mbr_version()}[$self->loadpart()];
+    my ($offset, $size) = @{$EMULABMBRS{$mbr}[$part-1]};
+    return $offset;
+}
+
+sub SetMBRVersion($$)
+{
+    my ($self,$mbr) = @_;
+
+    if (!exists($EMULABMBRS{$mbr})) {
+	print STDERR "Image::SetMBRVersion: no such MBR '$mbr'\n";
+	return -1;
+    }
+    my $argref = {"mbr_version" => $mbr};
+
+    return $self->Update($argref);
 }
 
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2009-2016 University of Utah and the Flux Group.
+# Copyright (c) 2009-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,7 +21,13 @@
 # 
 # }}}
 #
-# Merge internet nodes and links to them. 
+# THIS IS NO LONGER USED!
+# THIS IS NO LONGER USED!
+# THIS IS NO LONGER USED!
+#
+# Dates back to when I tried to make geni nodes look like local cluster
+# nodes. Predates Cloudlab.
+# 
 #
 package libGeni;
 

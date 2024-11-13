@@ -143,6 +143,17 @@ $(function ()
 		$('#howlong').prop("readonly", false);
 	    }
 	});
+        /*
+         * Handler for "canned responses" to fill in the message.
+         */
+        $(".canned-response").click(function (event) {
+            var message = $.trim($(this).find("p").text());
+            message = message.replace(/[\n\r]+/g, " ");
+            message = message.replace(/\s+/g, " ");
+            $('#reason').text(message + "\n");
+            $('#reason').focus();
+            $('#reason')[0].setSelectionRange(message.length+1, message.length+1);
+        });
     }
 
     //
@@ -725,6 +736,7 @@ $(function ()
 	ShowIdleGraphs({"uuid"     : window.UUID,
 			"showwait" : false,
 			"loadID"   : "#loadavg-panel-div",
+			"gpuID"    : "#gpuload-panel-div",
 			"ctrlID"   : "#ctrl-traffic-panel-div",
 			"exptID"   : "#expt-traffic-panel-div",
 			"callback" : callback});

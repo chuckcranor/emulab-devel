@@ -4,8 +4,10 @@ window.ShowPowderMap = (function()
     'use strict';
 
     var templates      = APT_OPTIONS.fetchTemplateList(['powder-filters']);
-    //var PowderMap      = "ede4026643ec40f7b73ab12d6c01b1da";
-    var PowderMap      = "6bb70a0d4abf42fa9efb159db1f169f6";
+    var IMAGERY_MAP    = "8e964417102b46f784474b50c57fe1ee";
+    var GREY_MAP       = "bb4f35e5e5fe4246b8172236feb4df28";
+    var PowderMap      = GREY_MAP;
+    var PowderMapZoom  = 15;
     var Container      = null;
     var Options        = null;
     var View           = null;
@@ -15,14 +17,15 @@ window.ShowPowderMap = (function()
     var WatchUtils     = null;
     var ResInfo        = null;
     var OurBuses       = null;
+    var FilterExpand   = null;
     var routeList      = {};
     var routeMap       = {};  // Map route name to route data structure
     var Aggregates     = {};
     var ShowBusIDs     = false;
     var Loaded         = false;
-    var LOCATION_URL   = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
+    var LOCATION_URL   = "https://uofubus.com/Services/JSONPRelay.svc/" +
 	"GetMapVehiclePoints?ApiKey=ride1791";
-    var ROUTES_URL     = "https://www.uofubus.com/Services/JSONPRelay.svc/" +
+    var ROUTES_URL     = "https://uofubus.com/Services/JSONPRelay.svc/" +
 	"GetRoutesForMapWithScheduleWithEncodedLine?ApiKey=ride1791";
     var LATITUDE       = 40.763451;
     var LONGITUDE      = -111.84000;
@@ -41,11 +44,26 @@ window.ShowPowderMap = (function()
 	    "all"    : null,
 	    "filter" : null,
 	},
+	"DD"  : {
+	    "data"   : null,	// Raw data
+	    "all"    : null,
+	    "filter" : null,
+	},
 	"Links"  : {
 	    "data"   : null,	// Raw data
 	    "all"    : null,
 	    "filter" : null,
 	},
+    };
+
+    /*
+     * We use the same icon for the layer list.
+     */
+    var layerIcons = {
+	"Dense"       : "images/dense.png",
+	"BaseStation" : "images/base-station.png",
+	"FE"          : "images/cell.png",
+	"DataCenter"  : "images/datacenter.png",
     };
 
     // x,y is the point to test
@@ -61,7 +79,6 @@ window.ShowPowderMap = (function()
     function DrawBaseMap(route)
     {
 	require([
-	    "dojo/number",
 	    "esri/WebMap",
 	    "esri/views/MapView",
 	    "esri/Graphic",
@@ -71,9 +88,8 @@ window.ShowPowderMap = (function()
 	    "esri/widgets/Expand",
             "esri/widgets/DistanceMeasurement2D",
             "esri/widgets/ScaleBar",
-	    "esri/core/watchUtils",
-  	    "dojo/domReady!"
-	], function (number, WebMap, MapView, graphic,
+	    "esri/core/watchUtils"
+	], function (WebMap, MapView, graphic,
 		     graphicslayer, LayerList,
 		     Home, Expand, Distance2D, ScaleBar, watchutils) {
 	    Graphic       = graphic;
@@ -95,6 +111,11 @@ window.ShowPowderMap = (function()
 				     "ListReservationGroups",
 				     {"useronly" : true}, callback);
 	    }
+
+	    if (Options.imagerymap) {
+		PowderMap     = IMAGERY_MAP;
+		PowderMapZoom = 16;
+	    }
 	    
 	    Map = new WebMap({
 		basemap: "gray",
@@ -105,7 +126,7 @@ window.ShowPowderMap = (function()
             });
             View = new MapView({
 		map: Map,
-		zoom: 15,
+		zoom: PowderMapZoom,
 		// Slightly shifted to the left to avoid being covered
 		// by the filter/layer widgets.
 		center: [LONGITUDE, LATITUDE],
@@ -134,6 +155,13 @@ window.ShowPowderMap = (function()
 				    className: route.legendClass
 				};
 				//console.info(route.legendClass);
+			    }
+			    else if (_.has(layerIcons, layer.id)) {
+				var path = layerIcons[layer.id];
+				
+				item.panel = {
+				    image: path
+				};
 			    }
 			}
 		    });
@@ -230,16 +258,54 @@ window.ShowPowderMap = (function()
 		    ForceLocationData();
 		});
 
+		/*
+		 * Toggle between default view and terrain view.
+		 */
+		var button3 =
+		    $('<button class="action-button esri-icon-maps" '+
+		      '        id="toggleTerrainButton" '+
+		      '   title="Switch between terrain view and default view"'+
+		      '        type="button"></button>');
+		View.ui.add($(button3).get(0), "top-left");
+
+		$('#toggleTerrainButton').click(function (event) {
+		    console.info("toggle terrain view");
+		    var show = (Options.imagerymap ? 0 : 1);
+		    var url  = new URL(document.location.href);
+
+		    url.searchParams.set("imagerymap", show);
+		    document.location.replace(url.href);
+		});
+
+		if (Options.showfilter) {
+		    var wrapper = document.createElement("div");
+		    $(wrapper).html(templates['powder-filters']);
+		    $(wrapper).css("width", "230px");
+		    $(wrapper).css("margin-top", "-150px");
+
+		    FilterExpand = new Expand({
+			expandIconClass: "esri-icon-filter",
+			view: View,
+			expandTooltip: "Click to show/hide filtering options",
+			content: wrapper,
+			expanded: false,
+		    });
+		    View.ui.add(FilterExpand, "top-left");
+		}
+
 		// Base layers
 		DrawCoverageArea();
 		DrawDataCenters();
 		// Need to wait till these are done before we mark resources
 		// They return the promise.
 		$.when(DrawRoutes(), DrawFixedEndpoints(),
-		       DrawBaseStations())
-		    .done(function (r1, r2, r3) {
-			console.info("done1", r1, r2, r3);
+		       DrawBaseStations(), DrawDenseDeployment())
+		    .done(function (r1, r2, r3, r4) {
+			console.info("done1", r1, r2, r3, r4);
 
+			if (Options.showfilter) {
+			    SetupFilteringOptions();
+			}
 			if (Options.showlinks) {
 			    DrawLinks(Options.showlinks);
 			}
@@ -254,29 +320,19 @@ window.ShowPowderMap = (function()
 			else if (_.has(Options, "route")) {
 			    ShowRoute(Options.route);
 			}
-			else if (Options.showmobile) {
-			    //ShowRoute(68);
+			else if (_.has(Options, "onlineonly")) {
+			    // Applies to buses only at this point.
+			    if (Options.onlineonly) {
+				ShowOnline();
+			    }
 			}
+			
 			if (window.opener) {
 			    window.addEventListener("message",
 						    receiveMessage, false);
 			    window.opener.postMessage("Ready Set Go");
 			}
 		    });
-
-		if (Options.showfilter) {
-		    var wrapper = document.createElement("div");
-		    $(wrapper).html(templates['powder-filters']);
-		    $(wrapper).css("width", "230px");
-
-		    var expand = new Expand({
-			expandIconClass: "esri-icon-filter",
-			view: View,
-			content: wrapper,
-			expanded: true
-		    });
-		    View.ui.add(expand, "bottom-right");
-		}
 	    });
 
 	    if (Options.showmobile) {
@@ -352,31 +408,53 @@ window.ShowPowderMap = (function()
     function SetupFilteringOptions()
     {
 	console.info("SetupFilteringOptions");
-	
+
 	var filter = function () {
 	    UnmarkFixedEndpoints();
 	    UnmarkBaseStations();
+	    UnmarkDenseDeployment();
 	    FilterFixedEndpoints();
 	    FilterBaseStations();
+	    FilterDenseDeployment();
+	    FilterRoutes();
 	};
-	$('.radio-type, .range-one input, .range-two input')
+	$('.radio-type')
 	    .change(function (event) {
 		filter();
 	    });
 
-	var keyup_timeout = null;
-	
-	$('.range-low, .range-high').on("keyup", function (event) {
-	    window.clearTimeout(keyup_timeout);
-
-	    keyup_timeout =
-		window.setTimeout(function() {
-		    filter();
-		}, 200);
-	});
-
 	if (Options.showreserved) {
 	    $('#show-reserved-checkbox').removeClass("hidden");
+	}
+
+	if (Options.setfilter) {
+	    /*
+	     * Comma separated list of filters to set.
+	     */
+	    _.each(Options.setfilter.split(","), function (token) {
+		//console.info("Filter:", token);
+		/*
+		 * itype:htype:txrx:antenna
+		 */
+		var [itype,htype,txrx,ante]  = token.split(":");
+		//console.info("Filter criteria:", itype, htype, txrx, ante);
+
+		$('.radio-type').each(function () {
+		    var Ritype   = $(this).data("radio-itype").toLowerCase();
+		    var Rhtype   = $(this).data("radio-htype").toLowerCase();
+		    var Rtxrx    = $(this).data("radio-txrx").toLowerCase();
+		    var Rante    = $(this).data("radio-antenna").toLowerCase();
+
+		    if (itype.toLowerCase() === Ritype &&
+			(htype === undefined || htype.toLowerCase() == Rhtype) &&
+			(txrx  === undefined || txrx.toLowerCase()  == Rtxrx) &&
+			(ante  === undefined || ante.toLowerCase()  == Rante)) {
+			$(this).prop("checked", "checked");
+		    }
+		});
+	    });
+	    FilterExpand.expand();
+	    filter();
 	}
 
 	/*
@@ -409,10 +487,31 @@ window.ShowPowderMap = (function()
 	
 	UnmarkFixedEndpoints();
 	UnmarkBaseStations();
-	
+	UnmarkDenseDeployment();
+
 	_.each(Layers["FE"].data, function (details, urn) {
 	    if (_.has(Aggregates, urn)) {
 		MarkFixedEndpoint(details.name, false);
+	    }
+	});
+
+	_.each(Layers["DD"].data, function (details) {
+	    var markit = 0;
+	    var urn = details.cluster_urn;
+
+	    if (details.radioinfo) {
+		_.each(details.radioinfo, function (info, index) {
+		    var node_id = info.node_id;
+		    
+		    if (_.has(Aggregates, urn) &&
+			_.has(Aggregates[urn], node_id)) {
+			markit = 1;
+		    }
+		});
+	    }
+	    // Experiment is using (part of) this base station.
+	    if (markit) {
+		MarkDenseDeployment(details.name, false);
 	    }
 	});
 
@@ -534,12 +633,16 @@ window.ShowPowderMap = (function()
     
     function DrawDataCenters()
     {
+	var id   = "DataCenter";
+	var icon = layerIcons[id];
+	
 	var layer = GraphicsLayer({
 	    title: "Data Centers",
+	    id: id,
 	});
 	var symbol = {
 	    type: "picture-marker",
-	    url: "images/datacenter.png",
+	    url: icon,
 	    width: "24px",
 	    height: "24px",
 	};
@@ -594,14 +697,270 @@ window.ShowPowderMap = (function()
 	});
 	Map.add(layer);
     }
-     
+
+    /*
+     * Draw the dense deployment.
+     */
+    function DrawDenseDeployment()
+    {
+	var id   = "Dense";
+	var icon = layerIcons[id];
+	var layer = GraphicsLayer({
+	    title: "Dense Deployment",
+	    id: id,
+	})
+
+	// Hidden layer to mark filtered DDs
+	var filter = GraphicsLayer({
+	    title: "Filtered Dense Deployment",
+	})
+	filter.listMode = "hide";
+	Map.add(filter);
+	Layers["DD"].filter = filter;
+
+	// Add now so it goes into the legend in the correct order, and
+	// on top of the filter layer.
+	Map.add(layer);
+	Layers["DD"].all = layer;
+
+	// Turn on/off the filter layer when the main layer is turned on/off.
+        WatchUtils.init(layer, "visible", function(visible) {
+	    filter.visible = visible;
+	});
+
+	var callback = function (json) {
+	    console.info("DrawDenseDeployment", json);
+	    if (json.code) {
+		console.info("Could not get dense deployment: " + json.value);
+		return;
+	    }
+	    var cabinets = json.value;
+	    Layers["DD"].data = cabinets;
+
+	    var symbol = {
+		type: "picture-marker",
+		url: icon,
+		width: "24px",
+		height: "24px",
+	    };
+	    _.each(cabinets, function (details) {
+		// For specific experiment marking.
+		var markit = 0;
+		var urn = details.cluster_urn;
+		
+		var point = {
+		    type: "point", // autocasts as new Point()
+		    latitude: details.latitude,
+		    longitude: details.longitude,
+		};
+		var attributes = {
+		    name        : details.name,
+		    description : details.type,
+		    longitude   : details.longitude,
+		    latitude    : details.latitude,
+		};
+		var popupcontent = [
+			{
+			    type: "fields",
+			    fieldInfos: [
+				{
+				    fieldName: "name",
+				    label: "Name"
+				},
+				{
+				    fieldName: "description",
+				    label: "Description"
+				},
+				{
+				    fieldName: "latitude",
+				    label: "Latitude"
+				},
+				{
+				    fieldName: "longitude",
+				    label: "Longitude"
+				},
+			    ],
+			},
+		];
+		// Add additional tables for the radio info.
+		if (details.radioinfo) {
+		    _.each(details.radioinfo, function (info, index) {
+			var node_id = info.node_id;
+			var prefix  = "radioinfo " + node_id + " ";
+
+			attributes[prefix + "node_id"]    = node_id;
+			attributes[prefix + "radio_type"] = info.radio_type;
+			attributes[prefix + "notes"] = info.notes;
+			attributes[prefix + "free"]  =
+			    (info.available ? "Yes" : "No");
+
+			var fieldInfos = [
+			    {
+				fieldName: prefix + "node_id",
+				label: "Node ID"
+			    },
+			    {
+				fieldName: prefix + "free",
+				label: "Available?"
+			    },
+			    {
+				fieldName: prefix + "radio_type",
+				label: "Radio Type"
+			    }
+			];
+
+			/*
+			 * Parse the comma separated strings into arrays
+			 * of low/high frequency info. See below.
+			 */
+			info["txRanges"] = [];
+			info["rxRanges"] = [];
+			info["txrx"]     = "";
+			info["antenna"]  = "";
+
+			/*
+			 * Each frontend has its own frequencies and notes.
+			 */
+			_.each(info.frontends, function (frontend, iface) {
+			    var fe_prefix = prefix + iface + " ";
+			    var tx       = frontend.transmit_frequencies;
+			    var rx       = frontend.receive_frequencies;
+			    var fe       = frontend.frontend;
+			    var notes    = frontend.notes;
+			    var fe_infos = [];
+
+			    if (fe != "none") {
+				fe_infos.push({
+				    fieldName: fe_prefix + "frontend",
+				    label: "Frontend"
+				});
+				attributes[fe_prefix + "frontend"] = fe;
+			    }
+			    fe_infos.push({
+				fieldName: fe_prefix + "tx_freq",
+				label: "TX Frequencies"
+			    });
+			    fe_infos.push({
+				fieldName: fe_prefix + "rx_freq",
+				label: "RX Frequencies"
+			    });
+			    fe_infos.push({
+				fieldName: fe_prefix + "notes",
+				label: "Notes"
+			    });
+			    attributes[fe_prefix + "tx_freq"] = tx;
+			    attributes[fe_prefix + "rx_freq"] = rx;
+			    attributes[fe_prefix + "notes"]   = notes;
+
+			    fieldInfos = fieldInfos.concat(fe_infos);
+			    parseTXRX(info, tx, rx);
+			});
+			popupcontent.push({
+			    type: "fields",
+			    fieldInfos: fieldInfos,
+			});
+		    });
+		}
+		var popup = {
+		    title: details.name,
+		    content: popupcontent,
+		};
+		var graphic = new Graphic({
+		    geometry:      point,
+		    symbol:        symbol,
+		    attributes:    attributes,
+		    popupTemplate: popup,
+		});
+		layer.add(graphic);
+		details["graphic"] = graphic;
+
+		// Add label text below the icon
+		var textGraphic = new Graphic({
+		    geometry: {
+			type: "point",
+			longitude: details.longitude,
+			latitude: details.latitude,
+		    },
+		    symbol: {
+			type: "text",
+			color: "green",
+			text: details.name,
+			xoffset: 0,
+			yoffset: 10,
+			font: {
+			    size: 8,
+			    weight: "bold",
+			}
+		    }
+		});
+		layer.add(textGraphic);
+	    });
+	};
+	return sup.CallServerMethod(null, "map-support", "GetDenseDeployment",
+				    null, callback);
+    }
+    /*
+     * Mark a DD on the filter layer.
+     */
+    function MarkDenseDeployment(name, partial)
+    {
+	var cabinets     = Layers["DD"].data;
+	var layer        = Layers["DD"].filter;
+	var cabinet      = null;
+
+	_.each(cabinets, function (details) {
+	    if (details.name == name) {
+		cabinet = details;
+	    }
+	});
+	if (!cabinet) {
+	    console.info("MarkDenseDeployment: Could not find " + name);
+	    return null;
+	}
+	// First create a point geometry (location of the BS).
+        var point = {
+            type:	"point", // autocasts as new Point()
+            longitude:  cabinet.longitude,
+            latitude:   cabinet.latitude,
+        };
+
+        // Create a symbol for drawing a circle around it
+        var symbol = {
+            type:	"simple-marker",
+            color:	[0, 0, 0, 0],
+	    size:       "31px",
+            outline: {
+		// autocasts as new SimpleLineSymbol()
+		color: (partial ? "green" : "green"),
+		width: 3,
+            }
+        };
+	var graphic = new Graphic({
+	    geometry:      point,
+	    symbol:        symbol,
+	});
+	layer.add(graphic);
+	return cabinet;
+    }
+    function UnmarkDenseDeployment()
+    {
+        Layers["DD"].filter.removeAll();
+    }
+    function FilterDenseDeployment()
+    {
+	FilterLayer("DD", MarkDenseDeployment);
+    }
+    
     function DrawFixedEndpoints()
     {
-	var url = "https://docs.powderwireless.net/hardware.html" +
+	var id   = "FE";
+	var icon = layerIcons[id];
+	var url   = "https://docs.powderwireless.net/hardware.html" +
 	    "#%28part._powder-fe-hw%29";
 	
 	var layer = GraphicsLayer({
 	    title: "Fixed Endpoints",
+	    id: id,
 	})
 	// Hidden layer to mark filtered FEs
 	var filter = GraphicsLayer({
@@ -614,7 +973,7 @@ window.ShowPowderMap = (function()
 	// Add now so it goes into the legend in the correct order, and
 	// on top of the filter layer.
 	Map.add(layer);
-	Layers["BS"].all = layer;
+	Layers["FE"].all = layer;
 
 	// Turn on/off the filter layer when the main layer is turned on/off.
         WatchUtils.init(layer, "visible", function(visible) {
@@ -622,11 +981,6 @@ window.ShowPowderMap = (function()
 	});
 
 	var callback = function (json) {
-	    // XXX
-	    if (Options.showfilter) {
-		SetupFilteringOptions();
-	    }
-	    
 	    console.info("DrawFixedEndpoints", json);
 	    if (json.code) {
 		console.info("Could not get fixed endpoints: " + json.value);
@@ -637,7 +991,7 @@ window.ShowPowderMap = (function()
 	    
 	    var symbol = {
 		type: "picture-marker",
-		url: "images/cell.png",
+		url: icon,
 		width: "24px",
 		height: "24px",
 	    };
@@ -704,8 +1058,7 @@ window.ShowPowderMap = (function()
 			attributes[prefix + "radio_type"] = info.radio_type;
 			attributes[prefix + "notes"] = info.notes;
 			attributes[prefix + "free"]  =
-			    (details.reservable_nodes[node_id].available ?
-			     "Yes" : "No");
+			    (info.available ? "Yes" : "No");
 
 			var fieldInfos = [
 			    {
@@ -728,6 +1081,8 @@ window.ShowPowderMap = (function()
 			 */
 			info["txRanges"] = [];
 			info["rxRanges"] = [];
+			info["txrx"]     = "";
+			info["antenna"]  = "";
 
 			/*
 			 * Each frontend has its own frequencies and notes.
@@ -764,25 +1119,7 @@ window.ShowPowderMap = (function()
 			    attributes[fe_prefix + "notes"]   = notes;
 
 			    fieldInfos = fieldInfos.concat(fe_infos);
-
-			    _.each(tx.split(","),
-				   function (range) {
-				       var tokens = range.split("-");
-
-				       info.txRanges.push({
-					   "low"  : tokens[0],
-					   "high" : tokens[1]
-				       });
-				   });
-			    _.each(rx.split(","),
-				   function (range) {
-				       var tokens = range.split("-");
-
-				       info.rxRanges.push({
-					   "low"  : tokens[0],
-					   "high" : tokens[1]
-				       });
-				   });
+			    parseTXRX(info, tx, rx);
 			});
 			popupcontent.push({
 			    type: "fields",
@@ -862,7 +1199,7 @@ window.ShowPowderMap = (function()
             color:	[0, 0, 0, 0],
 	    size:       "34px",
             outline: {
-		color: (partial ? "purple" : "green"),
+		color: (partial ? "green" : "green"),
 		width: 3,
             }
         };
@@ -883,10 +1220,12 @@ window.ShowPowderMap = (function()
      */
     function FilterFixedEndpoints()
     {
-	var endpoints = Layers["FE"].data;
-	var layer     = Layers["FE"].filter;
+	FilterLayer("FE", MarkFixedEndpoint)
+    }
 
-	_.each(endpoints, function (details, urn) {
+    function FilterLayer(layer, markfunction)
+    {
+	_.each(Layers[layer].data, function (details, urn) {
 	    var showme = 0;
 	    
 	    if (details.radioinfo) {
@@ -909,7 +1248,7 @@ window.ShowPowderMap = (function()
 		    };
 
 		    if ($('#show-available').is(":checked")) {
-			update(details.reservable_nodes[node_id].available);
+			update(info.available);
 		    }
 		    if (Options.showreserved &&
 			$('#show-reserved').is(":checked")) {
@@ -917,30 +1256,38 @@ window.ShowPowderMap = (function()
 		    }
 		    if ($('.radio-type').is(":checked")) {
 			var found = false;
+
+			// console.info(info);
 			
 			$('.radio-type').each(function () {
-			    var type = $(this).data("radio-type");
+			    var itype   = $(this).data("radio-itype");
+			    var type    = $(this).data("radio-htype");
+			    var txrx    = $(this).data("radio-txrx");
+			    var antenna = $(this).data("radio-antenna");
 			    var checked = $(this).is(":checked");
 
-			    if (checked) {
-				var radio = info.radio_type;
-				if (radio.includes(type)) {
-				    found = true;
+			    // console.info(itype, type, txrx, antenna, checked);
+
+			    if (checked &&
+				itype == layer) {
+				// COTS UEs are a kludge.
+				if (type == "COTS-UE") {
+				    if (info.ue_imsi != null) {
+					found = true;
+				    }
+				}
+				else {
+				    if (info.radio_type.includes(type) &&
+					info.txrx == txrx &&
+					info.antenna == antenna) {
+					found = true;
+				    }
 				}
 			    }
 			});
 			update(found);
 		    }
-		    if ($('.range-one .range-checkbox').is(":checked") &&
-			$.trim($('.range-one .range-low').val()) != "" &&
-			$.trim($('.range-one .range-high').val()) != "") {
-			FilterRange(".range-one", info, update);
-		    }
-		    if ($('.range-two .range-checkbox').is(":checked") &&
-			$.trim($('.range-two .range-low').val()) != "" &&
-			$.trim($('.range-two .range-high').val()) != "") {
-			FilterRange(".range-two", info, update);
-		    }
+
 		    // Only one node has to pass all tests
 		    if (passed === true) {
 			showme++;
@@ -948,50 +1295,11 @@ window.ShowPowderMap = (function()
 		});
 	    }
 	    if (showme) {
-		MarkFixedEndpoint(details.name,
-				  showme != _.size(details.radioinfo));
+		markfunction(details.name, showme != _.size(details.radioinfo));
 	    }
 	});
     }
-    function FilterRange(which, info, updater)
-    {
-	var tx       = $(which + " .range-tx").is(":checked");
-	var rx       = $(which + " .range-rx").is(":checked");
-	var low      = parseInt($.trim($(which + " .range-low").val()));
-	var high     = parseInt($.trim($(which + " .range-high").val()));
-	var txRanges = info.txRanges;
-	var rxRanges = info.rxRanges;
-
-	if (low > high) {
-	    // silent ignore.
-	    return;
-	}
-
-	//console.info("FilterRange", info, tx, rx, low, high);
-
-	if (tx) {
-	    if (_.size(txRanges)) {
-		_.each(txRanges, function (range) {
-		    updater(low  >= range.low && low  <= range.high &&
-			    high >= range.low && high <= range.high);
-		});
-	    }
-	    else {
-		updater(false);
-	    }
-	}
-	if (rx) {
-	    if (_.size(rxRanges)) {
-		_.each(rxRanges, function (range) {
-		    updater(low  >= range.low && low  <= range.high &&
-			    high >= range.low && high <= range.high);
-		});
-	    }
-	    else {
-		updater(false);
-	    }
-	}
-    }
+    
     // This could be optimized a bit. 
     function isReserved(urn, node_id)
     {
@@ -1019,10 +1327,13 @@ window.ShowPowderMap = (function()
      */
     function DrawBaseStations()
     {
+	var id   = "BaseStation";
+	var icon = layerIcons[id];
 	var url = "https://docs.powderwireless.net/hardware.html" +
 	    "#%28part._powder-bs-hw%29";
 	var layer = GraphicsLayer({
 	    title: "Base Stations",
+	    id: id,
 	})
 
 	// Hidden layer to mark filtered BSs
@@ -1054,7 +1365,7 @@ window.ShowPowderMap = (function()
 
 	    var symbol = {
 		type: "picture-marker",
-		url: "images/base-station.png",
+		url: icon,
 		width: "24px",
 		height: "24px",
 	    };
@@ -1140,6 +1451,8 @@ window.ShowPowderMap = (function()
 			 */
 			info["txRanges"] = [];
 			info["rxRanges"] = [];
+			info["txrx"]     = "";
+			info["antenna"]  = "";
 
 			/*
 			 * Each frontend has its own frequencies and notes.
@@ -1176,25 +1489,7 @@ window.ShowPowderMap = (function()
 			    attributes[fe_prefix + "notes"]   = notes;
 
 			    fieldInfos = fieldInfos.concat(fe_infos);
-
-			    _.each(tx.split(","),
-				   function (range) {
-				       var tokens = range.split("-");
-
-				       info.txRanges.push({
-					   "low"  : tokens[0],
-					   "high" : tokens[1]
-				       });
-				   });
-			    _.each(rx.split(","),
-				   function (range) {
-				       var tokens = range.split("-");
-
-				       info.rxRanges.push({
-					   "low"  : tokens[0],
-					   "high" : tokens[1]
-				       });
-				   });
+			    parseTXRX(info, tx, rx);
 			});
 			popupcontent.push({
 			    type: "fields",
@@ -1272,7 +1567,7 @@ window.ShowPowderMap = (function()
 	    size:       "34px",
             outline: {
 		// autocasts as new SimpleLineSymbol()
-		color: (partial ? "purple" : "green"),
+		color: (partial ? "green" : "green"),
 		width: 3,
             }
         };
@@ -1289,75 +1584,7 @@ window.ShowPowderMap = (function()
     }
     function FilterBaseStations()
     {
-	var basestations = Layers["BS"].data;
-	var layer        = Layers["BS"].filter;
-	
-	_.each(basestations, function (details) {
-	    var showme = 0;
-	    
-	    if (details.radioinfo) {
-		_.each(details.radioinfo, function (info, index) {
-		    var node_id = info.node_id;
-
-		    // Basically an "and" of all marked clauses.
-		    var passed = undefined;
-		    var update = function (val) {
-			val = (val ? true : false);
-			
-			if (passed === undefined) {
-			    passed = val;
-			    return;
-			}
-			if (passed == false) {
-			    return;
-			}
-			passed = val;
-		    };
-
-		    if ($('#show-available').is(":checked")) {
-			update(info.available);
-		    }
-		    if (Options.showreserved &&
-			$('#show-reserved').is(":checked")) {
-			update(isReserved(details.cluster_urn, node_id));
-		    }
-		    if ($('.radio-type').is(":checked")) {
-			var found = false;
-			
-			$('.radio-type').each(function () {
-			    var type = $(this).data("radio-type");
-			    var checked = $(this).is(":checked");
-
-			    if (checked) {
-				var radio = info.radio_type;
-				if (radio.includes(type)) {
-				    found = true;
-				}
-			    }
-			});
-			update(found);
-		    }
-		    if ($('.range-one .range-checkbox').is(":checked") &&
-			$.trim($('.range-one .range-low').val()) != "" &&
-			$.trim($('.range-one .range-high').val()) != "") {
-			FilterRange(".range-one", info, update);
-		    }
-		    if ($('.range-two .range-checkbox').is(":checked") &&
-			$.trim($('.range-two .range-low').val()) != "" &&
-			$.trim($('.range-two .range-high').val()) != "") {
-			FilterRange(".range-two", info, update);
-		    }
-		    // Only one node has to pass all tests
-		    if (passed === true) {
-			showme++;
-		    }
-		});
-	    }
-	    if (showme) {
-		MarkBaseStation(details.name,
-				showme != _.size(details.radioinfo));		
-	    }
-	});
+	FilterLayer("BS", MarkBaseStation);
     }
 
     /*
@@ -1372,6 +1599,89 @@ window.ShowPowderMap = (function()
 	    }
 	    OurBuses = json.value.buses;
 	    var routes = json.value.routes;
+
+	    /*
+	     * Set up the static part of the bus popup.
+	     */
+	    _.each(OurBuses, function (businfo, busid) {
+		var popupcontent = [];
+		var attributes   = {};
+		
+		_.each(businfo.radioinfo, function (info, index) {
+		    var node_id = info.node_id;
+		    var prefix  = "radioinfo " + node_id + " ";
+		    
+		    attributes[prefix + "node_id"]    = node_id;
+		    attributes[prefix + "radio_type"] = info.radio_type;
+		    attributes[prefix + "notes"]      = info.notes;
+
+		    var fieldInfos = [
+			{
+			    fieldName: prefix + "node_id",
+			    label: "Node ID"
+			},
+			{
+			    fieldName: prefix + "radio_type",
+			    label: "Radio Type"
+			},
+		    ];
+
+		    /*
+		     * Parse the comma separated strings into arrays
+		     * of low/high frequency info. See below.
+		     */
+		    info["txRanges"] = [];
+		    info["rxRanges"] = [];
+		    info["txrx"]     = "";
+		    info["antenna"]  = "";
+
+		    /*
+		     * Each frontend has its own frequencies and notes.
+		     */
+		    _.each(info.frontends, function (frontend, iface) {
+			var fe_prefix = prefix + iface + " ";
+			var tx       = frontend.transmit_frequencies;
+			var rx       = frontend.receive_frequencies;
+			var fe       = frontend.frontend;
+			var notes    = frontend.notes;
+			var fe_infos = [];
+
+			if (fe != "none") {
+			    fe_infos.push({
+				fieldName: fe_prefix + "frontend",
+				label: "Frontend"
+			    });
+			    attributes[fe_prefix + "frontend"] = fe;
+			}
+			fe_infos.push({
+			    fieldName: fe_prefix + "tx_freq",
+			    label: "TX Frequencies"
+			});
+			fe_infos.push({
+			    fieldName: fe_prefix + "rx_freq",
+			    label: "RX Frequencies"
+			});
+			fe_infos.push({
+			    fieldName: fe_prefix + "notes",
+			    label: "Notes"
+			});
+			attributes[fe_prefix + "tx_freq"] = tx;
+			attributes[fe_prefix + "rx_freq"] = rx;
+			attributes[fe_prefix + "notes"]   = notes;
+
+			fieldInfos = fieldInfos.concat(fe_infos);
+			parseTXRX(info, tx, rx);
+		    });
+		    popupcontent.push({
+			type: "fields",
+			fieldInfos: fieldInfos,
+		    });
+		});
+		businfo["popup"] = {
+		    content:    popupcontent,
+		    attributes: attributes,
+		};
+	    });
 	
 	    // Grab the routes we care about and draw the paths.
 	    _.each(routedata, function(route) {
@@ -1400,10 +1710,14 @@ window.ShowPowderMap = (function()
 	    });
 	    console.info("routelist", routeList);
 	};
+	var args = {};
+	if (_.has(Options, "onlineonly")) {
+	    args["onlineonly"] = Options.onlineonly ? 1 : 0;
+	}
 	var deferred = 
 	    $.when(getJSON(ROUTES_URL),
 		   sup.CallServerMethod(null, "map-support",
-					"GetMobileEndpoints", null));
+					"GetMobileEndpoints", args));
 	var chained =
 	    deferred.then(function(routedata, json) {
 		console.info("done2", routedata, json);
@@ -1489,6 +1803,12 @@ window.ShowPowderMap = (function()
     }
     function ShowRoute(routeID)
     {
+	if (routeID == "allroutes") {
+	    _.each(routeList, function (route, id) {
+		ShowRoute(id);
+	    });
+	    return
+	}
 	var layer = routeList[routeID].layer;
 	
 	layer.visible = true;
@@ -1505,6 +1825,22 @@ window.ShowPowderMap = (function()
 	    route.layer.visible = false;
 	});
     }
+    function ShowOnline()
+    {
+	var routes = [];
+
+	_.each(OurBuses, function (businfo, busid) {
+	    var routeid = businfo.routeid;
+	    
+	    if (routeid &&
+		_.has(routeList, routeid) && businfo.status == "up") {
+		routes.push(routeid);
+	    }
+	});
+	_.each(routes, function (id) {
+	    ShowRoute(id);
+	});
+    }
 
     /*
      * Periodically update the location info and move the dots.
@@ -1516,13 +1852,19 @@ window.ShowPowderMap = (function()
 	    url: LOCATION_URL,
 	    cache: false,
 	    success: function (data) {
+		var buscount= 0;
+		
 		_.each(data, function (bus) {
 		    var routeID = bus.RouteID;
+		    var busname = bus.Name;
 
-		    if (_.has(routeList, routeID)) {
+		    if (_.has(routeList, routeID) &&
+			OurBuses && _.has(OurBuses, busname)) {
 			UpdateBusLocation(routeID, bus);
+			buscount++;
 		    }
 		});
+		EnableRouteFiltering(buscount);
 	    }
 	});
 	var defer = $.Deferred();
@@ -1561,6 +1903,7 @@ window.ShowPowderMap = (function()
 	var color        = routeList[routeID].data.MapLineColor;
 	var routeDesc    = routeList[routeID].data.Description;
 	var busname      = data.Name;
+	var businfo      = OurBuses[busname];
 
 	var point = {
 	    type:      "point", // autocasts as new Point()
@@ -1572,13 +1915,13 @@ window.ShowPowderMap = (function()
 	    color: color,
 	    size: 10,
 	};
-	if (OurBuses && _.has(OurBuses, busname)) {
-	    markerSymbol["outline"] = {
-		// autocasts as new SimpleLineSymbol()
-		color: "green",
-		width: 3,
-            };
-	}
+	// Leave the green outline, users will be confused.
+	markerSymbol["outline"] = {
+	    // autocasts as new SimpleLineSymbol()
+	    color: "green",
+	    width: 3,
+        };
+
 	var attributes = {
 	    routeID     : routeID,
 	    busname     : busname,
@@ -1586,15 +1929,15 @@ window.ShowPowderMap = (function()
 	    latitude    : data.Latitude,
 	    longitude   : data.Longitude,
 	    groundSpeed : data.GroundSpeed,
+	    free        : (businfo && businfo.free ? "Yes" : "No"),
 	    heading     : data.Heading,
 	    earthurl    : " https://earth.google.com/web/search/" +
 		data.Latitude + "," + data.Longitude,
 	    mapurl      : " https://maps.google.com/maps?q=" +
 		data.Latitude + "," + data.Longitude,
 	};
-	var popup = {
-	    title: "Bus " + busname + " on " + routeDesc,
-	    content: [{
+	var popupcontent = [
+	    {
 		type: "fields",
 		fieldInfos: [
                     {
@@ -1605,6 +1948,10 @@ window.ShowPowderMap = (function()
 			fieldName: "routeDesc",
 			label: "Route"
                     },
+		    {
+			fieldName: "free",
+			label: "Available?"
+		    },
                     {
 			fieldName: "latitude",
 			label: "Latitude"
@@ -1630,8 +1977,20 @@ window.ShowPowderMap = (function()
 			label: "Google Earth"
                     },
 		],
-	    }],
+	    }
+	];
+
+	// Add additional tables for the radio info.
+	if (businfo) {
+	    popupcontent = popupcontent.concat(businfo.popup.content);
+	    $.extend(attributes, businfo.popup.attributes);
 	}
+	//console.info(attributes, popupcontent);
+	
+	var popup = {
+	    title: "Bus " + busname + " on " + routeDesc,
+	    content: popupcontent,
+	};
         var pointGraphic = new Graphic({
 	    geometry:   point,
 	    symbol:     markerSymbol,
@@ -1675,6 +2034,54 @@ window.ShowPowderMap = (function()
 	    data.labelGraphic = labelGraphic;
 	    layer.add(labelGraphic);
 	}
+    }
+
+    /*
+     * Disable the filter options if there are no buses online.
+     */
+    function EnableRouteFiltering(enable)
+    {
+	if (enable) {
+	    $('.mobile-checkbox, .mobile-filter').removeClass("disabled");
+	    $('.mobile-filter').prop("disabled", false);
+	}
+	else {
+	    $('.mobile-checkbox, .mobile-filter').addClass("disabled");
+	    $('.mobile-filter').prop("disabled", true);
+	}
+    }
+
+    /*
+     * The filter for buses is really a filter on the routes.
+     */
+    function FilterRoutes()
+    {
+	HideAllRoutes();
+	
+	if (! $('.mobile-filter').is(":checked")) {
+	    return;
+	}
+	/*
+	 * All buses are same. Just find the routes with at least one of
+	 * our buses on it.
+	 */ 
+	_.each(routeList, function (route, routeID) {
+	    var markit = 0;
+		
+	    // Kobus says to show only the Wasatch route.
+	    if (route.data.Description != "Wasatch Express") {
+		return;
+	    }
+	    // Only if it has one of our buses on the route.
+	    _.each(route.buses, function(bus, busid) {
+		if (_.has(OurBuses, busid)) {
+		    markit = 1;
+		}
+	    });
+	    if (markit) {
+		ShowRoute(routeID);
+	    }
+	});
     }
 
     /*
@@ -1893,6 +2300,51 @@ window.ShowPowderMap = (function()
 	}
     }
 
+    function parseTXRX(info, tx, rx)
+    {
+	tx = $.trim(tx);
+	rx = $.trim(rx);
+	
+	if (tx && tx != "") {
+	    _.each(tx.split(","),
+		   function (range) {
+		       var tokens = range.split("-");
+		       info.txRanges.push({
+			   "low"  : tokens[0],
+			   "high" : tokens[1]
+		       });
+		   });
+	}
+	if (rx && rx != "") {
+	    _.each(rx.split(","),
+		   function (range) {
+		       var tokens = range.split("-");
+		       
+		       info.rxRanges.push({
+			   "low"  : tokens[0],
+			   "high" : tokens[1]
+		       });
+		   });
+	}
+	if (info.txRanges.length && info.rxRanges.length) {
+	    info.txrx = "TX/RX";
+	}
+	else if (info.rxRanges.length) {
+	    info.txrx = "RX";
+	}
+	if (info.rxRanges.length) {
+	    // XXX: Infer the antenna from RX frequency. 
+	    var range = info.rxRanges[0];
+	    if (range.low <= 700 && range.high >= 6000) {
+		info.antenna = "broadband";
+	    }
+	    else if (range.low >= 3300 &&
+		     range.high <= 3800) {
+		info.antenna = "cbrs";
+	    }
+	}
+    }
+    
     return function(id, options)
     {
 	Container = $(id).get(0);

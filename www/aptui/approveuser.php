@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,12 +53,16 @@ $user_uid = $user->uid();
 $pid      = $project->pid();
 
 SPITHEADER(1);
-SpitWaitModal("waitwait-modal");
-SpitOopsModal("oops");
 echo "<div id='page-body'></div>\n";
+echo "<div id='waitwait_div'></div>\n";
+echo "<div id='oops_div'></div>\n";
 
 if ($action != "approve" && $action != "deny") {
     SPITUSERERROR("Action is not one of approve or deny");
+    return;
+}
+if ($project->disabled()) {
+    SPITUSERERROR("This project has been disabled, you cannot modify users");
     return;
 }
 
@@ -93,7 +97,8 @@ echo "    window.PROJECT = '$pid';\n";
 echo "    window.AJAXURL = 'server-ajax.php';\n";
 echo "</script>\n";
 
-echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+AddTemplate("waitwait-modal");
+AddTemplate("oops-modal");
 REQUIRE_SUP();
 SPITREQUIRE("js/approveuser.js");
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 include("lease_defs.php");
@@ -81,10 +84,10 @@ $portal_result =
                  "$whereclause3 order by d.dataset_id");
 
 echo "<div class='row'>
-       <div class='col-lg-12 col-lg-offset-0
-                   col-md-12 col-md-offset-0
-                   col-sm-12 col-sm-offset-0
-                   col-xs-12 col-xs-offset-0'>\n";
+       <div class='col-lg-12 col-lg-offset-0 offset-lg-0
+                   col-md-12 col-md-offset-0 offset-lg-0
+                   col-sm-12 col-sm-offset-0 offset-lg-0
+                   col-xs-12 col-xs-offset-0 offset-lg-0'>\n";
 
 function SPITTABLE($which, $results, $where) {
     global $embedded, $ISEMULAB;
@@ -106,6 +109,7 @@ function SPITTABLE($which, $results, $where) {
         echo "     <th>State</th>
                    <th>Size (GB)</th>
                    <th>Created</th>
+                   <th>Last Used</th>
                    <th>Expires</th>
               </tr>
             </thead>
@@ -131,6 +135,7 @@ function SPITTABLE($which, $results, $where) {
             $creator = $dataset->owner_uid();
             $expires = $dataset->expires();
             $created = $dataset->created();
+            $lastuse = $dataset->last_used();
             $size    = $dataset->size() ? $dataset->size() : 0;
             # Convert to GB.
             $size     = sprintf('%0.2f', $size * 0.00104858);
@@ -164,6 +169,7 @@ function SPITTABLE($which, $results, $where) {
             echo "  <td>$state</td>
                     <td>$size</td>
                     <td class='format-date'>$created</td>
+                    <td class='format-date'>$lastuse</td>
                     <td class='format-date'>$expires</td>
                  </tr>\n";
         }

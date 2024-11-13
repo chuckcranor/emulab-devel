@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2020 University of Utah and the Flux Group.
+# Copyright (c) 2008-2023 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -160,6 +160,8 @@ sub KillInstances()
 		    "         UNIX_TIMESTAMP(IF(a.started is null, ".
 		    "                           a.created, a.started)) ".
 		    "           > 7200))) and ".
+		    # These will just fail later so avoid
+		    "      a.admin_lockdown=0 and a.user_lockdown=0 and ".
 		    # Not locked or corresponding slice does not exist.
 		    "      (s.locked is null or s.idx is null)");
     return
@@ -174,6 +176,12 @@ sub KillInstances()
 	print "$instance is in the $status state\n";
 	print "$instance has its canceled flag set\n"
 	    if ($instance->canceled());
+	print "$instance has its modified flag set\n"
+	    if ($instance->modify_count());
+
+	# Do not terminate a failed modify unless canceled
+	next
+	    if ($instance->modify_count() && !$instance->canceled());
 
 	#
 	# Try to terminate the instance. We cannot take the lock since

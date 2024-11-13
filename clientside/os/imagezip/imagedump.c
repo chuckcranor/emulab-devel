@@ -811,6 +811,9 @@ dumpchunk(char *name, char *buf, int chunkno, int checkindex)
 			case RELOC_SHORTSECTOR:
 				relocstr = "SHORTSECTOR";
 				break;
+			case RELOC_GPTFIX:
+				relocstr = "GPTFIX";
+				break;
 			default:
 				relocstr = "??";
 				break;

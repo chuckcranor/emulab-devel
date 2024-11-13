@@ -40,7 +40,7 @@ use POSIX qw(strftime);
 # Configure variables
 #
 my $TB		= "/usr/testbed";
-my $TBOPS       = "testbed-ops\@flux.utah.edu";
+my $TBOPS       = "testbed-ops\@emulab.net";
 my $PHPLOG      = "/usr/testbed/log/php-errors.log";
 my $EGREP       = "/usr/bin/egrep";
 my $FGREP       = "/usr/bin/fgrep";

@@ -44,6 +44,9 @@ pre {
     display:block;
     width: 100px;
     margin: 0 auto;
+ }
+.canned-response {
+    white-space: normal !important;
 }
 </style>
 <div class="row" id="firstrow"></div>
@@ -54,8 +57,79 @@ pre {
 <div id="extension-controls" class='row hidden'>
   <div class='col-sm-8 col-sm-offset-2' style="margin-bottom: 10px;">
     <center>
-      Message to send to user
-      <br>
+      <div style="margin-bottom: 3px;">
+	Message to send to user
+	<div class="btn-group">
+	  <button class="btn btn-xs btn-info dropdown-toggle"
+	     type="button" data-toggle="dropdown">
+	    Canned Responses <span class="caret"></span></button>
+	  <ul class="dropdown-menu" style="width: 600px;">
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  This experiment has been idle for several
+		  days. CloudLab is extremely busy, and holding on to
+		  resources you are not actively using prevents others
+		  from getting their own work done.
+		</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  We have extended this for as long as we can, but
+		  further extensions will not be possible due to
+		  upcoming reservations.</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  This experiment has been idle for several
+		  days. These nodes are in high demand, and holding on
+		  to resources you are not actively using prevents
+		  others from getting their own work done.</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  CloudLab does not allocate resources for an entire
+		  semester or quarter. The expectation is that you will
+		  allocate nodes when you are ready to actively use
+		  them, and release them when they are idle so that
+		  others can get their own work done.</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  This experiment has been idle for several days. With
+		  academic semesters and quarters starting, CloudLab is
+		  getting busy.</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  Only one node in this experiment appears to be
+		  active; holding the entire experiment with several
+		  idle nodes prevents others from getting their own
+		  work done.
+		</p>
+	      </a>
+	    </li>
+	    <li>
+	      <a href="#" class="canned-response">
+		<p>
+		  Your extension reason cannot be parsed, did you
+		  intend to say something informative?
+		</p>
+	      </a>
+	    </li>
+	  </ul>
+	</div>
+      </div>
       <textarea id='reason'
 		class='form-control'
 		rows=3></textarea>
@@ -221,7 +295,7 @@ pre {
 	      col-xs-12 col-xs-offset-0'>
     <div class="well well-sm text-danger hidden" id="idledata-error"></div>
     <div class="well well-sm hidden" id="idledata-nodata">
-	There is insufficient data to graph, please check back later.
+      There is insufficient data to graph, please check back later.
     </div>
     <div class='panel panel-default hidden' id="loadavg-panel-div">
       <div class="panel-heading">
@@ -249,6 +323,49 @@ pre {
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
 	    <div id="loadavg-chart"
+		 class='fixedsize-panel idlegraph-div
+			with-3d-shadow with-transitions'>
+	      <svg></svg>
+	    </div>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class='row'>
+  <div class='col-sm-10 col-sm-offset-1
+	      col-xs-12 col-xs-offset-0'>
+    <div class="well well-sm text-danger hidden" id="idledata-error"></div>
+    <div class="well well-sm hidden" id="idledata-nodata">
+	There is insufficient data to graph, please check back later.
+    </div>
+    <div class='panel panel-default hidden' id="gpuload-panel-div">
+      <div class="panel-heading">
+	<a data-toggle="collapse" id="gpuload-toggle"
+	   href="#gpuload-collapse">
+	  <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+	</a>
+	<div class="maxavg-toggles pull-right"
+	     style="margin-right: 10px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="gpuload-radio"
+		   checked="checked" value="max"> Max
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="gpuload-radio"
+		   value="avg"> Avg
+	  </label>
+	</div>
+	<h5><span>GPU Load Graph</span></h5>
+      </div>
+      <div id="gpuload-collapse"
+	   class="panel-collapse collapse">
+	<div style="padding-top:5px;" class='panel-body'>
+	  <!-- The col setting gives us a "relative" position div -->
+	  <div class='col-xs-12 col-xs-offset-0'
+	       style="padding:0px;">
+	    <div id="gpuload-chart"
 		 class='fixedsize-panel idlegraph-div
 			with-3d-shadow with-transitions'>
 	      <svg></svg>

@@ -1,0 +1,67 @@
+#
+# 
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (DBTableExists("nonlocal_users") &&
+	!DBSlotExists("nonlocal_users", "pid_idx")) {
+	DBQueryFatal("DROP TABLE IF EXISTS `nonlocal_users`");
+    }
+    if (!DBTableExists("nonlocal_users")) {
+	DBQueryFatal("CREATE TABLE `nonlocal_users` ( ".
+		     " `nonlocal_id` varchar(128) NOT NULL default '', ".
+		     " `uid` varchar(8) NOT NULL default '', ".
+		     " `uid_idx` mediumint(8) unsigned NOT NULL default '0', ".
+		     " `pid` varchar(48) NOT NULL default '', ".
+		     " `pid_idx` mediumint(8) unsigned NOT NULL default '0', ".
+		     " `unix_uid` int(10) unsigned NOT NULL auto_increment, ".
+		     " `created` datetime default NULL, ".
+		     " `lastuse` datetime default NULL, ".
+		     " PRIMARY KEY  (`pid_idx`,`unix_uid`), ".
+		     " UNIQUE KEY `piduid` (`pid_idx`,`uid_idx`) ".
+		     ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
+
+	DBQueryFatal("SET SESSION sql_mode=(SELECT REPLACE(\@\@sql_mode,".
+		     "'ONLY_FULL_GROUP_BY',''))");
+
+	my $query_result =
+	    DBQueryFatal("select nla.*,e.pid,e.pid_idx,".
+			 "   MAX(nla.unix_uid) as unix_uid  ".
+			 " from nonlocal_user_accounts as nla ".
+			 "left join experiments as e on e.idx=nla.exptidx ".
+			 "left join projects as p on p.pid_idx=e.pid_idx ".
+			 "where p.nonlocal_id is not null ".
+			 "group by nla.uid,e.pid");
+	
+	while (my $row = $query_result->fetchrow_hashref()) {
+	    my $urn       = $row->{"urn"};
+	    my $uid       = $row->{"uid"};
+	    my $uid_idx   = $row->{"uid_idx"};
+	    my $pid       = $row->{"pid"};
+	    my $pid_idx   = $row->{"pid_idx"};
+	    my $unix_uid  = $row->{"unix_uid"};
+	    my $created   = $row->{"created"};
+
+	    #
+	    # There can be duplicates.
+	    #
+	    DBQueryFatal("replace into nonlocal_users set ".
+			 " nonlocal_id='$urn',".
+			 " uid='$uid',uid_idx='$uid_idx', ".
+			 " pid='$pid',pid_idx='$pid_idx', ".
+			 " unix_uid='$unix_uid',".
+			 " created='$created',lastuse=now()");
+	}
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

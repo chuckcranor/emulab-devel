@@ -135,6 +135,7 @@ xen-client-tarball: tarball-check
 	echo "Building and installing client-side in $(TARBALLDESTDIR)..."
 	DESTDIR=$(TARBALLDESTDIR) $(MAKE) client-install
 	DESTDIR=$(TARBALLDESTDIR) $(MAKE) -C tmcc/linux xen-install
+	DESTDIR=$(TARBALLDESTDIR) $(MAKE) -C tmcc/linux xen-install-pygrub
 	echo "Creating tarball..."
 	tar czf emulab-client.tar.gz -C $(TARBALLDESTDIR) .
 
@@ -155,6 +156,13 @@ freenas-os-check:
 	    false; \
 	fi
 
+truenas-os-check:
+	@if [ "$(SYSTEM)" != "FreeBSD" -o "$(ARCH)" != "amd64" -o \
+	      \( "$(REL)" != "12.3" -a "$(REL)" != "13.1" \) ]; then \
+	    echo "Must run on FreeBSD 12.3 or 13.1 amd64 for TrueNAS install"; \
+	    false; \
+	fi
+
 #
 # XXX when we have a real freenas9 target, all the moving files around
 # should be done there...
@@ -165,6 +173,13 @@ freenas-tarball: freenas-os-check tarball-check
 	    DESTDIR=$(TARBALLDESTDIR) $(MAKE) client-install
 	echo "Creating tarball freenas-client.tar.gz..."
 	tar czf freenas-client.tar.gz -C $(TARBALLDESTDIR) .
+
+truenas-tarball: truenas-os-check tarball-check
+	echo "Building and installing client-side in $(TARBALLDESTDIR)..."
+	OSSTUFF="OS=FreeBSD DIST=TrueNAS REL=$(REL)" \
+	    DESTDIR=$(TARBALLDESTDIR) $(MAKE) client-install
+	echo "Creating tarball truenas-client.tar.gz..."
+	tar czf truenas-client.tar.gz -C $(TARBALLDESTDIR) .
 
 #
 # Attempt to find a git commit hash and stash in /etc/emulab.

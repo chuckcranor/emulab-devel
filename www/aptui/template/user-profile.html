@@ -25,6 +25,10 @@
       <td>Affiliation</td>
       <td><%= fields.affiliation %></td>
     </tr>
+    <tr>
+      <td>Job Title</td>
+      <td><%= fields.title %></td>
+    </tr>
     <% if (window.ISPOWDER) { %>
       <% if (fields.address1 != "") { %>
 	<tr>
@@ -71,8 +75,24 @@
     <% if (isadmin) { %>
       <tr>
 	<td>Logged in now?</td>
-	<td><% if (fields.loggedin) { %>Yes<% } else { %>No<% } %></td>
+	<td><% if (fields.loggedin) { %>
+	  Yes (<a href="#" id="force-user-logout">Force logout</a>)
+	<% } else { %>
+	  No
+	<% } %></td>
       </tr>
+      <% if (_.size(fields.loggedinIPs)) { %>
+	<tr>
+	  <td>IP(s)</td>
+	  <td><% print(_.keys(fields.loggedinIPs).join(", ")); %></td>
+	</tr>
+	<% _.each(fields.loggedinIPs, function (when, ip) { %>
+	  <tr>
+	    <td><%= ip %></td>
+	    <td class="format-date"><%= when %></td>
+	  </tr>
+	<% }) %>
+      <% } %>
       <% if (fields.portal) { %>
 	<tr>
 	  <td>Portal</td>
@@ -130,7 +150,15 @@
       <% if (fields.nonlocal_id != "") { %>
 	<tr>
 	  <td>Nonlocal ID</td>
-	  <td><%= fields.nonlocal_id %></td>
+	  <% if (fields.bound_portal) { %>
+	    <td></td>
+	  <% } else { %>
+	    <td><%= fields.nonlocal_id %>
+	      <% if (window.MAINSITE) { %>
+		(<a class="toggle" data-name="nonlocal_id">Convert to local user</a>)
+	      <% } %>
+	    </td>
+	  <% } %>
 	</tr>
       <% } %>
       <tr>
@@ -175,7 +203,11 @@
 	<tr>
 	  <td>Scopus Profile (<%= info.scopus_id %>)
 	    <% if (info.validation_state == "valid") { %>
-	      <span class="glyphicon glyphicon-asterisk"></span>
+	      <span class="glyphicon glyphicon-thumbs-up"></span>
+	    <% } else if (info.validation_state == "unknown") { %>
+	      <span class="glyphicon glyphicon-question-sign"></span>
+	    <% } else if (info.validation_state == "invalid") { %>
+	      <span class="glyphicon glyphicon-thumbs-down"></span>
 	    <% } %>
 	  </td>
 	  <td><a href="<%= info.author_url %>" target="_blank">

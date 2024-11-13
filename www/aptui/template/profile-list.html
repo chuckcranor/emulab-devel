@@ -12,9 +12,9 @@
 	       style="color: red;">
 	      <span class='glyphicon glyphicon-remove pull-right'
 		    style='margin-right: 0px;'
-		    data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
+		    data-toggle='tooltip' data-bs-toggle='tooltip'
+		    data-container="body" data-bs-container="body"
+		    data-trigger="hover" data-bs-trigger="hover"
 		    title='Delete Selected Profiles'></span>
 	    </a>
 	  <% } %>
@@ -47,26 +47,26 @@
             <a href="instantiate.php?profile=<%- value.profile_uuid %>"
 	       style="margin-left: 0px;">
 	      <span class='glyphicon glyphicon-play-circle'
-		    data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
+		    data-toggle='tooltip' data-bs-toggle='tooltip'
+		    data-container="body" data-bs-container="body"
+		    data-trigger="hover" data-bs-trigger="hover"
 		    title='Instantiate this profile'></span>
 	    </a>
 	    <a href="#" class='showtopo_modal_button'
 	       style="margin-left: 0px;"
                data-profile=<%= value.profile_uuid %>>	    
 	      <span class='glyphicon glyphicon-modal-window'
-		    data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
+		    data-toggle='tooltip' data-bs-toggle='tooltip'
+		    data-container="body" data-bs-container="body"
+		    data-trigger="hover" data-bs-trigger="hover"
 		    title='Show topology'></span>
 	    </a>
             <a href="manage_profile.php?action=edit&uuid=<%- value.profile_uuid %>"
 	       <% if (!value.canedit) { %>class="invisible"<% } %> >
 	      <span class='glyphicon glyphicon-edit'
-		    data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
+		    data-toggle='tooltip' data-bs-toggle='tooltip'
+		    data-container="body" data-bs-container="body"
+		    data-trigger="hover" data-bs-trigger="hover"
 		    title='Edit this profile'></span>
 	    </a>
 	    <a href="#"
@@ -74,9 +74,9 @@
 		      <% if (!value.candelete) { %>invisible<% } %> "
 	       style="margin-left: 0px; color: red;">
 	      <span class='glyphicon glyphicon-remove'
-		    data-toggle='tooltip'
-		    data-container="body"
-		    data-trigger="hover"
+		    data-toggle='tooltip' data-bs-toggle='tooltip'
+		    data-container="body" data-bs-container="body"
+		    data-trigger="hover" data-bs-trigger="hover"
 		    title='Delete Profile'></span>
 	    </a>
 	    <% if (bulkdelete) { %>
@@ -88,10 +88,11 @@
 	    </div>
 	  </td>	    
 	  <% if (showCreator) { %>
-	    <td><%= value.creator %></td>
+	    <td style='white-space: nowrap;'><%= value.creator %></td>
 	  <% } %>
 	  <% if (showProject) { %>
-	    <td><a href='show-project.php?project=<%- value.project %>'
+	    <td style='white-space: nowrap;'>
+	      <a href='show-project.php?project=<%- value.project %>'
 		   target=_blank><%- value.project %></a></td>
 	  <% } %>
 	  <td><%- value.description %></td>

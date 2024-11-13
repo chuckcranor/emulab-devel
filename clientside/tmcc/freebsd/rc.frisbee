@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -79,11 +79,12 @@ getvar() {
 #
 # Update the MBR of the given disk to the indicated "version."
 #
-# XXX this is somewhat of a hack right now.  We recognize three
+# XXX this is somewhat of a hack right now.  We recognize four
 # versions of the MBR:
 #	v1 (partition 1 size 6281352)
 #	v2 (partition 1 size 12305790)
 #	v3 (partition 1 size 33554432)
+#	v4 (partition 1 size 134217728)
 # Currently we only install a new MBR if the existing one is the
 # wrong size or if ALWAYS is specified, just in case the user has
 # customized the boot program.
@@ -98,41 +99,71 @@ tweakmbr() {
 	return
     }
 
-    _size=`fdisk -s $_DSK 2>/dev/null | sed -n -e 's/^ *1: *[0-9][0-9]* *\([0-9][0-9]*\).*$/\1/p'`
-    case ${_size}s in
-    6281352s)
-	_CUR=1
-	;;
-    12305790s)
-	_CUR=2
-	;;
-    33554432s)
-	_CUR=3
-	;;
-    s)
-        # special case: no part1 so probably no MBR at all, make sure we install
-	echo "Found no MBR on $_DSK, installing version $_NEW"
-	_CUR=1000000
-	;;
-    *)
-        if [ $_ALWAYS -ne 0 ]; then
-	    echo "WARNING: overwriting unknown MBR on $_DSK with version $_NEW"
-	    _CUR=1000000
-	else
-	    echo "WARNING: custom MBR on $_DSK, not changed"
-	    return
-	fi
-    	;;
-    esac
-
-    if [ $_ALWAYS -eq 0 -a $_CUR = $_NEW ]; then
-	return
-    fi
-
-    # now set it if we can
+    #
+    # Make sure new MBR exists before getting all destructive
+    #
     if [ ! -r "/etc/emulab/mbr${_NEW}.dd" ]; then
 	echo "WARNING: cannot find MBR version $_NEW, not installed"
 	return
+    fi
+
+    #
+    # If the disk currently has GPT, we have to destroy it since we might
+    # get fooled by the protective MBR.
+    #
+    if gpart show $DISK 2>/dev/null | grep -q GPT; then
+	_ALWAYS=1
+    fi
+    
+    #
+    # If _ALWAYS is set, then we need to just clear any partition metadata
+    # on the boot disk. Otherwise we might be fooled by a protective MBR
+    # (type 0xEE) in a GPT layout. If _ALWAYS is not set, we treat it like
+    # a custom MBR and do nothing, likely resulting in total chaos.
+    #
+    if [ $_ALWAYS -ne 0 ]; then
+	echo "Wiping any GPT/MBR on $_DSK and installing MBR version $_NEW"
+	if [ -x "$BINDIR/zapdisk" ]; then
+	    $BINDIR/zapdisk -v -BZ /dev/$_DSK
+	else
+	    echo "WARNING: no zapdisk program, faking it"
+	    dd if=/dev/zero of=/dev/$_DSK bs=512 count=128
+	fi
+	_CUR=1000000
+    else
+	_size=`fdisk -s $_DSK 2>/dev/null | sed -n -e 's/^ *1: *[0-9][0-9]* *\([0-9][0-9]*\).*$/\1/p'`
+	case ${_size}s in
+	    6281352s)
+		_CUR=1
+		;;
+	    12305790s)
+		_CUR=2
+		;;
+	    33554432s)
+		_CUR=3
+		;;
+	    134217728s)
+		_CUR=4
+		;;
+	    s)
+		# special case: no part1 so probably no MBR at all, make sure we install
+		echo "Found no MBR on $_DSK, installing version $_NEW"
+		_CUR=1000000
+		;;
+	    *)
+		if [ $_ALWAYS -ne 0 ]; then
+		    echo "WARNING: overwriting unknown MBR on $_DSK with version $_NEW"
+		    _CUR=1000000
+		else
+		    echo "WARNING: custom MBR on $_DSK, not changed"
+		    return
+		fi
+    		;;
+	esac
+
+	if [ $_CUR = $_NEW ]; then
+	    return
+	fi
     fi
 
     echo "Installing MBR version $_NEW ..."
@@ -516,6 +547,13 @@ loadone() {
 
     case $fstat in
     0)
+	#
+	# If the disk has a corrupt GPT (secondary in the wrong place),
+	# recover it.
+	#
+	if gpart show $DISK 2>/dev/null | grep -q CORRUPT; then
+	    gpart recover $DISK
+	fi
 	;;
     *)
 	echo "Frisbee run failed, status $fstat"

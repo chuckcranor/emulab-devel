@@ -1,0 +1,65 @@
+#!/usr/bin/perl -wT
+
+#
+# Copyright (c) 2022 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+
+# A little perl module to power cycle a mote attached to a stargate -
+# basically just a wrapper for the tbsgmotepower script
+
+package power_remotecmd;
+
+use Exporter;
+@ISA = ("Exporter");
+@EXPORT = qw( remotecmdctrl );
+
+#
+# Commands we run
+#
+my $TBROOT = '@prefix@';
+my $TBREMOTECMDPOWER = "$TBROOT/bin/tbremotecmdpower";
+
+# Turn off line buffering on output
+$| = 1;
+
+# usage: remotecmdctrl(cmd, nodes)
+# cmd = { "cycle" | "on" | "off" }
+# nodes = list of one or more node names
+#
+# Returns 0 on success. Non-zero on failure.
+# 
+sub remotecmdctrl($@) {
+    my ($cmd, @nodes) = @_;
+
+    #
+    # All we have to do is call tbremotecmdpower
+    #
+    print "Running $TBREMOTECMDPOWER $cmd " . join(" ",@nodes) . "\n";
+    if (system("$TBREMOTECMDPOWER $cmd " . join(" ",@nodes))) {
+	return 1;
+    }
+    else {
+	return 0;
+    }
+}
+
+1;

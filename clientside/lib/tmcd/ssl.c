@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2011 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2021 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -77,15 +77,7 @@
  * This is used by tmcd to determine if the connection is ssl or not.
  */
 int	isssl;
-
-/*
- * Client side; optional use of SSL.
- */
 int	nousessl;
-
-/*
- * Client side; use TPM for SSL
- */
 int	usetpm;
 
 /*

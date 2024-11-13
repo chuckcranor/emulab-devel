@@ -1,0 +1,449 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use Data::Dumper;
+use POSIX ":sys_wait_h";
+use POSIX qw(setsid close strftime);
+use File::Temp qw(tempfile tempdir);
+use Date::Parse;
+use JSON;
+
+#
+# Back-end script to manage FABRIC stuff
+#
+sub usage()
+{
+    print STDERR "Usage: manage_fabric getconfig\n";
+    print STDERR "Usage: manage_fabric listslices\n";
+    print STDERR "Usage: manage_fabric sliceexists\n";
+    print STDERR "Usage: manage_fabric sliceinfo\n";
+    print STDERR "Usage: manage_fabric deleteslice\n";
+    print STDERR "Usage: manage_fabric refreshtoken\n";
+    print STDERR "Usage: manage_fabric renewslice\n";
+    print STDERR "Usage: manage_fabric getad\n";
+    exit(-1);
+}
+my $optlist     = "dt:nD:";
+my $debug       = 0;
+my $impotent    = 0;
+my $webtask_id;
+my $tmpdir;
+my $logfile;
+my $webtask;
+my $this_user;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $MAINSITE    = @TBMAINSITE@;
+my $OURDOMAIN	= "@OURDOMAIN@";
+
+#
+# Stitcher is in a python virtualenv. 
+#
+my $VIRTUALENV =
+    ". $TB/venv/fabric/bin/activate ; ".
+    ". $TB/fabric/fabric_rc ; ";
+my $GETCONFIG  = "$VIRTUALENV python $TB/fabric/getconfig.py ";
+my $SLICEINFO  = "$VIRTUALENV python $TB/fabric/getslice.py ";
+my $LISTSLICES = "$VIRTUALENV python $TB/fabric/listslices.py ";
+my $REFRESH    = "$VIRTUALENV fabric-cli tokens refresh ";
+my $DELETE     = "$VIRTUALENV python $TB/fabric/deleteslice.py ";
+my $RENEW      = "$VIRTUALENV python $TB/fabric/renewslice.py ";
+my $GETAD      = "$VIRTUALENV python $TB/fabric/getads.py ";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use libtestbed;
+use emdb;
+use emutil;
+use libEmulab;
+use User;
+use Project;
+use APT_Instance;
+use WebTask;
+
+# Protos
+sub fatal($);
+sub UserError($);
+sub DoRefreshToken();
+sub DoListSlices();
+sub DoSliceInfo();
+sub DoSliceExists();
+sub DoGetConfig();
+sub DoDeleteSlice();
+sub DoRenewSlice();
+sub DoGetAd();
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (grep {$_ eq "--"} @ARGV &&
+    ! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not get webtask object");
+    }
+    $webtask->AutoStore(1);
+}
+
+if (@ARGV < 1) {
+    usage();
+}
+my $action = shift(@ARGV);
+
+#
+# Need to deal with fablib not being rentrant wrt logfiles and tmpfiles.
+# And cause it likes to overwrite the token file on every operation,
+# which is incredibly annoying. 
+#
+if (defined($options{"D"})) {
+    $tmpdir = $options{"D"};
+}
+else {
+    # Create a temporary directory for the log file, token, etc.
+    $tmpdir = tempdir("/tmp/manage_fabric.XXXXXX");
+    system("/bin/chmod 775 $tmpdir");
+    print "TMPDIR=$tmpdir\n" if ($debug);
+    chdir($tmpdir);
+}
+$logfile = "$tmpdir/fablib.$$";
+
+# Fablib uses the same logfile name.
+$ENV{"FABRIC_LOG_FILE"} = $logfile;
+# Must set this to avoid permission errors.
+$ENV{"TMPDIR"} = $tmpdir;
+# Make sure this gets deleted if no error.
+END {
+    if (!$debug && !defined($options{"D"})) {
+	if (!$?) {
+	    system("/bin/rm -rf $tmpdir")
+		if (-d $tmpdir);
+	}
+    }
+}
+#
+# When invoked from the web interface, HOME will not be set, and FABRIC croaks.
+#
+if (!exists($ENV{"HOME"})) {
+    $ENV{"HOME"} = "$tmpdir";
+}
+# Copy the token to the tmpdir. Force fablib to use the copy since it
+# wants very much to mess with the file.
+system("/bin/cp $TB/fabric/token.json $tmpdir");
+if ($?) {
+    fatal("Could not copy $TB/fabric/token.json to $tmpdir");
+}
+system("/bin/chmod 666 $tmpdir/token.json");
+$ENV{"FABRIC_TOKEN_LOCATION"} = "$tmpdir/token.json";
+system("/bin/cp $TB/fabric/fabric_rc $tmpdir");
+if ($?) {
+    fatal("Could not copy $TB/fabric/fabric_rc to $tmpdir");
+}
+
+if ($action eq "getconfig") {
+    exit(DoGetConfig());
+}
+elsif ($action eq "refreshtoken") {
+    exit(DoRefreshToken());
+}
+elsif ($action eq "sliceinfo") {
+    exit(DoSliceInfo());
+}
+elsif ($action eq "listslices") {
+    exit(DoListSlices());
+}
+elsif ($action eq "sliceexists") {
+    exit(DoSliceExists());
+}
+elsif ($action eq "deleteslice") {
+    exit(DoDeleteSlice());
+}
+elsif ($action eq "renewslice") {
+    exit(DoRenewSlice());
+}
+elsif ($action eq "getad") {
+    exit(DoGetAd());
+}
+else {
+    usage();
+}
+exit(1);
+
+#
+# Test function just make sure the environment is working okay.
+#
+sub DoGetConfig()
+{
+    system($GETCONFIG);
+    if ($?) {
+	fatal("DoGetConfig: failed");
+    }
+}
+
+#
+# Refresh the token that expires way too soon.
+#
+sub DoRefreshToken()
+{
+    system("$REFRESH > /dev/null");
+    if ($?) {
+	fatal("DoRefreshToken: failed");
+    }
+    system("/bin/chmod 666 $tmpdir/token.json");
+    if ($?) {
+	fatal("DoRefreshToken: chmod failed");
+    }
+    system("/bin/cp -f $tmpdir/token.json $TB/fabric");
+    if ($?) {
+	fatal("DoRefreshToken: could not copy new token into place");
+    }
+}
+
+#
+# Print out basic FABRIC slice info. This throws a bad error if
+# the slice does not exist, so not useful as an existence test.
+#
+sub DoSliceInfo()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric sliceinfo <slicename>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 1);
+    my $name = $ARGV[0];
+
+    system("$SLICEINFO --name $name");
+    if ($?) {
+	fatal("DoSliceInfo: failed");
+    }
+}
+
+#
+# List Slices
+#
+sub DoListSlices()
+{
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric listslices\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV);
+
+    system("$LISTSLICES");
+    if ($?) {
+	fatal("DoListSlices: failed");
+    }
+}
+
+#
+# See if slice exists. Have to use list slices cause of the breakage
+# in sliceinfo.
+#
+sub DoSliceExists()
+{
+    my $exists = 0;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric sliceexists <slicename | sliceid>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 1);
+    my $slicename = $ARGV[0];
+
+    my $output = emutil::ExecQuiet("$LISTSLICES -j");
+    if ($?) {
+	print $output . "\n";
+	fatal("DoSliceExists: failed");
+    }
+    my $list = eval { decode_json($output); };
+    if ($@) {
+	fatal("Could not decode json data");
+    }
+    foreach my $ref (@{$list}) {
+	if ($ref->{'name'} eq $slicename || $ref->{'id'} eq $slicename) {
+	    $exists = 1;
+	    last;
+	}
+    }
+    if ($exists) {
+	print "Slice $slicename exists\n";
+    }
+    else {
+	print "Slice $slicename does not exist\n"
+    }
+    # Exit with zero status if slice exists.
+    exit($exists ? 0 : 1);
+}
+
+#
+# Delete a slice by slice ID or slice name
+#
+sub DoDeleteSlice()
+{
+    my $exists = 0;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric deleteslice.py".
+	    "<sliceid> | <slicename>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 1);
+    my $sliceid = $ARGV[0];
+
+    my $output = emutil::ExecQuiet("$DELETE --name $sliceid");
+    if ($?) {
+	print $output . "\n";
+	fatal("DoDeleteSlice: failed");
+    }
+    if ($debug) {
+	print $output . "\n";
+    }
+    exit(0);
+}
+
+#
+# Extend a slice by slice ID
+#
+sub DoRenewSlice()
+{
+    my $exists = 0;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric renewslice <experiment> <when>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 2);
+    my $instance = APT_Instance->Lookup($ARGV[0]);
+    if (!defined($instance)) {
+	fatal("No such experiment");
+    }
+    if (!$instance->HasFabricSlices()) {
+	fatal("Experiment does not have FABRIC links");
+    }
+
+    my $when = $ARGV[1];
+    if ($when !~ /^(\d+)$/) {
+	$when = str2time($when);
+	if (!defined($when)) {
+	    fatal("Could not parse date");
+	}
+    }
+    $when = POSIX::strftime("20%y-%m-%d %H:%M:00 +0000", gmtime($when));
+
+    foreach my $ref (@{ $instance->FabricSlices() }) {
+	my $linkname  = $ref->{'linkname'};
+	my $sliceid   = $ref->{'sliceid'};
+
+	print "Renewing slice for $linkname: $sliceid to $when\n";
+	my $output = emutil::ExecQuiet("$RENEW --sliceid '$sliceid' ".
+				       " --when '$when'");
+	if ($?) {
+	    print $output . "\n";
+	    fatal("DoRenewSlice: failed");
+	}
+    }
+    exit(0);
+}
+
+
+#
+# Get advertisement
+#
+sub DoGetAd()
+{
+    my $exists = 0;
+    
+    my $usage = sub {
+	print STDERR "Usage: manage_fabric getad <site>\n";
+	exit(-1);
+    };
+    &$usage()
+	if (@ARGV != 1);
+    my $site = $ARGV[0];
+
+    system("$GETAD --site $site");
+    if ($?) {
+	fatal("DoGetAd: failed");
+    }
+    exit(0);
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    # Exit with negative status so web interface treats it as system error.
+    exit(-1);
+}
+
+sub UserError($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(1);
+}

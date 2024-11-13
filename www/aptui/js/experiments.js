@@ -57,10 +57,16 @@ $(function ()
 	var searchname = "#experiments_search";
 
 	// Format dates with moment before display.
-	$('.format-date').each(function() {
+	$('.format-date:not(".format-date-expires")').each(function() {
 	    var date = $.trim($(this).html());
 	    if (date != "") {
 		$(this).html(moment(date).format("ll"));
+	    }
+	});
+	$('.format-date-expires').each(function() {
+	    var date = $.trim($(this).html());
+	    if (date != "") {
+		$(this).html(moment(date).format("lll"));
 	    }
 	});
 
@@ -187,16 +193,17 @@ $(function ()
 	    table.find('th:eq(0)').trigger('sort');
 	}
 
-	// Bind search for IP.
+	// Bind search for IP (or physical node name)
 	$('#experiment-search-ip button').click(function (event) {
 	    event.preventDefault();
-	    var ip = $.trim($('#experiment-search-ip input').val());
-	    var rx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-	    if (rx.test(ip)) {
-		SearchForIP(ip, table);
+	    var token = $.trim($('#experiment-search-ip input').val());
+	    var ipx = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+	    var pnx = /^\w[-\w]*$/;
+	    if (ipx.test(token) || pnx.test(token)) {
+		SearchForIP(token, table);
 	    }
 	    else {
-		alert("Invalid IP address");
+		alert("Invalid IP address or physical node ID");
 	    }
 	});
     }
@@ -257,7 +264,7 @@ $(function ()
 	    }
 	    sup.HideWaitWait();
 	    filters[13] = "";
-	    filters[14] = json.value;
+	    filters[14] = json.value.join("|");
 	    $.tablesorter.setFilters(table, filters, true);
 	}
 	// Clear this, we search for everything.

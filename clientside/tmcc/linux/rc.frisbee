@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -115,9 +115,9 @@ get_part_type()
 	# Failing that, if the GPT magic is in place, it's GPT (although
 	# we should never see this).
 	#
-	b512=`dd if=$disk bs=1 count=8 skip=512 status=none | hexdump -e '16/1 "%02x""\n"'`
+	b512=`dd if=$disk bs=1 count=8 skip=512 status=none | hexdump -e '8/1 "%02x""\n"'`
 	b510=`dd if=$disk bs=1 count=2 skip=510 status=none | hexdump -e '2/1 "%02x""\n"'`
-	b450=`dd if=$disk bs=1 count=1 skip=450 status=none | hexdump -e '2/1 "%02x""\n"'`
+	b450=`dd if=$disk bs=1 count=1 skip=450 status=none | hexdump -e '1/1 "%02x""\n"'`
 	if [ "$b512" = 4546492050415254 -a \( "$b510" != 55aa -o "$b450" = ee \) ]; then
 	    echo "GPT"
 	    return 0
@@ -285,6 +285,19 @@ tweakmbr()
 	    echo "Unknown partition table on $disk!"
 	fi
 
+	# Get known MBR/GPT sizes, so that we can know if the old MBR is
+	# "one of ours" -- we are happy to overwrite our old MBRs with one
+	# of our newer MBRs if needed.
+	known_sizes=
+	for mbrfile in $MBR_PATH/mbr*.dd ; do
+		known_size=`get_part_size $mbrfile 1`
+		known_sizes="$known_sizes $known_size "
+	done
+	is_known_size=0
+	if [ -n "$size" ]; then
+		( echo "$known_sizes" | grep -q " $size " ) && is_known_size=1
+	fi
+
 	mbrfile=$MBR_PATH/mbr${new_mbr_ver}.dd
 	if ! [ -r $mbrfile ]; then
 		echo "WARNING: cannot find MBR/GPT version $new_mbr_ver ($mbrfile), not installing!"
@@ -305,7 +318,23 @@ tweakmbr()
 	    echo "Unknown partition table in $mbrfile!"
 	fi
 
-	if [ -z "$pttype" ]; then
+	#
+	# If the disk currently has GPT, we have to destroy it since we might
+	# get fooled by the protective MBR.
+	#
+	if [ $pttype = "GPT" ]; then
+	    always=1
+	fi
+
+	# Always means always...
+	if [ $always -ne 0 ]; then
+	    echo "Wiping any GPT/MBR on $disk and installing MBR version $new_mbr_ver"
+	    if [ -x "$BINDIR/zapdisk" ]; then
+		$BINDIR/zapdisk -v -BZ $disk
+	    else
+		dd if=/dev/zero of=$disk bs=512 count=16
+	    fi
+	elif [ -z "$pttype" ]; then
 	    echo "Found no MBR/GPT on $disk, installing version $new_mbr_ver ($newpttype/$newsize)"
 	elif [ -z "$size" ]; then
 	    echo "Found no $pttype partition 1 size on $disk, installing version $new_mbr_ver ($newpttype/$newsize)"
@@ -313,21 +342,17 @@ tweakmbr()
 	#elif [ ! "$pttype" = "$newpttype" ]; then
 	#    echo "New partition table type $newpttype does not match on-disk type $pttype, installing new version $new_mbr_ver"
 	elif [ -n "$newsize" -a $size -eq $newsize ]; then
-	    if [ $always -ne 0 ]; then
-		echo "WARNING: overwriting (always!=0) matching $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size)!"
-	    else
-		echo "On-disk partition 1 size $size and new version $new_mbr_ver match, not installing $newpttype over old $pttype"
-		return 0
-	    fi
+	    echo "On-disk partition 1 size $size and new version $new_mbr_ver match, not installing $newpttype over old $pttype"
+	    return 0
 	# NB: this is the one new case over the old version of these checks.
 	# Better make sure this code recognizes any mbr/gpt files in the MFS!
 	elif [ -z "$newpttype" -o -z "$newsize" ]; then
 	    echo "Unrecognizeable new partition table type $newpttype or size $newsize; installing anyway!"
 	elif [ ! $size -eq $newsize ]; then
-	    if [ $always -ne 0 ]; then
-		echo "WARNING: overwriting (always!=0) mismatched $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size)!"
+	    if [ $is_known_size -eq 1 ]; then
+		echo "Overwriting mismatched $pttype/$size on $disk with new version $new_mbr_ver ($newpttype/$size) because the existing MBR appears to be ours"
 	    else
-		echo "WARNING: custom $pttype/$size on $disk, not always-installing version $new_mbr_ver ($newpttype/$newsize)"
+		echo "WARNING: custom $pttype/$size on $disk, NOT installing version $new_mbr_ver ($newpttype/$newsize)"
 		return 0
 	    fi
 	# Unreachable.
@@ -338,6 +363,7 @@ tweakmbr()
 
 	echo "Installing $newpttype version $new_mbr_ver ..."
 	dd if=$MBR_PATH/mbr${new_mbr_ver}.dd of=$disk
+
 	# Zero out the partition type bytes for FreeBSD and Linux partitions
 	# so that if the user tries to make a whole-disk image later it will
 	# work without imagezip complaining about filesystem-specific errors
@@ -345,11 +371,11 @@ tweakmbr()
 	# will write the correct type byte when it writes the image.
 	#
 	# The Linux swap partition is left alone because imagezip currently
-	# blindly includes just the first portion of the swap partition without
-	# checking to ensure it is valid.
+	# blindly includes just the first portion of the swap partition
+	# without checking to ensure it is valid.
 	#
 	# XXX: should probably do for GPT.
-	if [ $newpttype = "MBR" ]; then
+	if [ $always -eq 0 -a $newpttype = "MBR" ]; then
 	    for i in 0 1; do
 		dd if=/dev/zero of=$disk bs=1 count=1 seek=$(( $i * 16 + 450 )) > /dev/null 2>&1
 	    done
@@ -684,7 +710,18 @@ handle_loadinfo()
 	if [ $rc -eq 0 -a "$pttype" = "GPT" ]; then
 	    #build_secondary_gpt /dev/$DISK /dev/$DISK
 	    #build_protective_mbr /dev/$DISK
-	    /bin/echo -e '\n\nr\nd\nv\nw\ny\n' | gdisk /dev/$DISK
+	    echo "Fixing secondary GPT on /dev/$DISK ..."
+	    rc=1
+	    if [ -x /usr/sbin/sgdisk ]; then
+		sgdisk -e /dev/$DISK >/dev/null 2>&1
+		rc=$?
+		if [ $rc -ne 0 ]; then
+		    echo "*** could not repair secondary GPT, trying gdisk"
+		fi
+	    fi
+	    if [ $rc -ne 0 ]; then
+		/bin/echo -e '\n\nr\nd\nv\nw\ny\n' | gdisk /dev/$DISK
+	    fi
 	    echo "Re-reading partition table after GPT fixups ..."
 	    if [ -x /usr/sbin/partprobe ]; then
 		/usr/sbin/partprobe /dev/$DISK > /dev/null 2>&1
@@ -808,7 +845,7 @@ RESIDMEM=`expr \( $RESIDMEM + 2 \) \* 1024`
 FREEMEM=`free | sed -n 's/^-\/+ buffers.* \([0-9]*\)$/\1/p'`
 if [ -z "$FREEMEM" ]; then
 	# BusyBox's 'free' command has slightly different output
-	FREEMEM=`free | sed -n 's/^  *Mem: *[0-9]* *[0-9]* *\([0-9]*\) *.*$/\1/p'`
+	FREEMEM=`free | sed -n 's/^ *Mem: *[0-9]* *[0-9]* *\([0-9]*\) *.*$/\1/p'`
 fi
 if [ $FREEMEM -gt $RESIDMEM ]; then
 	BUFFERMEM=`expr $FREEMEM - $RESIDMEM`
@@ -870,9 +907,11 @@ if [ $RELOADALL -eq 1 ]; then
 	else
 	    zapsuperblocks /dev/$d
 	    echo "Invalidating MBR/GPT on /dev/$d"
-	    # XXX not in the Linux MFS yet
-	    #sgdisk -Z /dev/$d >/dev/null 2>&1
-	    dd if=/dev/zero of=/dev/$d bs=512 count=8192
+	    if [ -x /usr/sbin/sgdisk ]; then
+		sgdisk -Z /dev/$d >/dev/null 2>&1
+	    else
+		dd if=/dev/zero of=/dev/$d bs=512 count=8192
+	    fi
 	fi
 
     	echo "Re-reading partition table for /dev/$d after zap ..."
@@ -961,9 +1000,14 @@ for dev in $devs; do
 	# for an image fetched via HTTP).
 	#
 	if [ $PART -eq 0 ]; then
-	    echo "Resizing final disk partition"
 	    LDISK=`getvar LDISK "$line" hda`
-	    growdisk -vW /dev/$LDISK
+	    spttype=`get_part_type /dev/$LDISK`
+	    if [ $? -eq 0 -a "$spttype" = "MBR" ]; then
+		echo "Resizing final disk partition on /dev/$LDISK"
+		growdisk -vW /dev/$LDISK
+	    else
+		echo "NOT resizing final disk partition on /dev/$LDISK"
+	    fi
 	fi
 
 	# whack the info so we don't slicefix again

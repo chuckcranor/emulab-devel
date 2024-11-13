@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 include("node_defs.php");
@@ -149,10 +152,42 @@ if ($edit) {
     echo htmlentities(json_encode($list));
     echo "</script>\n";
 }
+else {
+    #
+    # List of nodes for a table.
+    #
+    $nodes_result = DBQueryFatal("select n.node_id,r.pid,r.eid, ".
+                                 "    e.expt_head_uid as uid,e.expt_expires ".
+                                 "  from nodes as n ".
+                                 "left join reserved as r on ".
+                                 "     r.node_id=n.node_id ".
+                                 "left join experiments as e on ".
+                                 "     e.idx=r.exptidx ".
+                                 "where n.type='$type' ".
+                                 "order by n.node_id");
+    
+    $list = array();
+    while ($row = mysql_fetch_array($nodes_result)) {
+        $blob = array(
+            "node_id" => $row["node_id"],
+        );
+        if (ISADMIN()) {
+            $blob["pid"] = $row["pid"];
+            $blob["eid"] = $row["eid"];
+            $blob["uid"] = $row["uid"];
+            $blob["expires"] = DateStringGMT($row["expt_expires"]);
+        }
+        $list[] = $blob;
+    }
+    echo "<script type='text/plain' id='nodes-json'>\n";
+    echo htmlentities(json_encode($list));
+    echo "</script>\n";
+}
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_TABLESORTER();
 SPITREQUIRE("js/show-nodetype.js");
 AddTemplateList(array("show-nodetype", "oops-modal", "waitwait-modal"));
 SPITFOOTER();

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -115,6 +115,7 @@ if ($target_project) {
 else {
     echo "  window.TARGET_USER = '" . $target_user->uid() . "';\n";
 }
+echo "    window.ISADMIN        = " . (ISADMIN() ? "true" : "false") . "\n";
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

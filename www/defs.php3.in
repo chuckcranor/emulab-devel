@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -100,6 +100,10 @@ $UI_DISABLE_RESERVATIONS = @UI_DISABLE_RESERVATIONS@;
 $UI_EXTERNAL_ACCOUNTS = @UI_EXTERNAL_ACCOUNTS@;
 $CLASSICWEB_OVERRIDE = @CLASSICWEB_OVERRIDE@;
 $OURTIMEZONE = "@OURTIMEZONE@";
+$LOG_TESTBED = "@LOG_TESTBED@";
+$TUTORIALPID = "@TUTORIALPID@";
+$TUTORIALPROFILE = "@TUTORIALPROFILE@";
+$TUTORIALSTATS = 0;
 
 $TBMAILADDR_OPS		= "@TBOPSEMAIL_NOSLASH@";
 $TBMAILADDR_WWW		= "@TBWWWEMAIL_NOSLASH@";
@@ -123,6 +127,9 @@ $TBCHKPASS_PATH = "$TBLIBEXEC_DIR/checkpass";
 $TBSENDMAIL_PATH= "$TBLIBEXEC_DIR/tbsendmail";
 $TBCSLOGINS     = "$TBETC_DIR/cslogins";
 $UUIDGEN_PATH   = "@UUIDGEN@";
+
+# Google analytics ids.
+$GOOGLEGAIDS    = "/usr/testbed/etc/google-analytics.json";
 
 #
 # Hardcoded check against $WWWHOST, to prevent anyone from accidentally setting
@@ -326,11 +333,26 @@ function SendProjAdminMail($project, $from, $to,
 function TBERROR ($message, $death, $xmp = 0) {
     global $TBMAIL_WWW, $TBMAIL_OPS, $TBMAILADDR, $TBMAILADDR_OPS;
     global $session_interactive, $session_errorhandler;
+    global $TBMAINSITE, $CHECKLOGIN_USER, $APTBASE, $TBBASE;
     $script = urldecode($_SERVER['REQUEST_URI']);
 
     # print backtrace
     $e = new Exception();
     $trace = $e->getTraceAsString();
+    $trace .= "\n\n" .
+           "IP:   " . $_SERVER['REMOTE_ADDR'] . "\n" .
+           "URI:  " . $_SERVER['REQUEST_URI'] . "\n" .
+           "Time: " . date("d/M/Y:H:i:s T", time()) . "\n";
+    if ($CHECKLOGIN_USER) {
+        $uid = $CHECKLOGIN_USER->uid();
+        if ($APTBASE) {
+            $url = "$APTBASE/user-dashboard.php?user=$uid";
+        }
+        else {
+            $url = "$TBBASE/showuser.php3?user=$uid";
+        }
+        $trace .= "User: " . $url . "\n";
+    }
 
     if (function_exists("CLEARBUSY")) {
         CLEARBUSY();
@@ -491,7 +513,7 @@ function SUEXEC($uid, $gid, $cmdandargs, $action) {
     # Allow for uid/gid to be user/group/project objects.
     #
     if (is_object($uid)) {
-        $object = $gid;
+        $object = $uid;
         if (is_a($object, "User")) {
             $uid = $object->uid();
         }
@@ -851,6 +873,21 @@ function RedirectHTTPS() {
 function CleanString($string)
 {
     return htmlspecialchars($string, ENT_QUOTES);
+}
+
+#
+# For gathering stats during stress testing for tutorials.
+#
+function TutorialStat($msg)
+{
+    global $LOG_TESTBED;
+    
+    $loadavg = sys_getloadavg();
+    $load = sprintf("%.2f", $loadavg[0]);
+
+    openlog("tutorial-stats", LOG_CONS, constant("${LOG_TESTBED}"));
+    syslog(LOG_INFO, $_SERVER['REMOTE_ADDR'] . " " . $msg . " (load $load)");
+    closelog();
 }
 
 #

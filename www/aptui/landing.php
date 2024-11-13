@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,21 +41,6 @@ $this_user = CheckLogin($check_status);
 $optargs = OptionalPageArguments("login",    PAGEARG_BOOLEAN,
                                  "redirect", PAGEARG_BOOLEAN);
 
-#
-# Tutorial Hack.
-#
-function IsTutorialUser($user)
-{
-    $pid = "OAI2021FallWS";
-    $uid_idx = $user->uid_idx();
-
-    $query_result = DBQueryFatal("select uid from group_membership ".
-                                 "where pid='$pid' and ".
-                                 "      uid_idx='$uid_idx' and ".
-                                 "      trust!='none'");
-    return mysql_num_rows($query_result);
-}
-
 if (! ($CHECKLOGIN_STATUS & CHECKLOGIN_LOGGEDIN)) {
     if ($redirect) {
         header("Location: landing.php");
@@ -81,9 +66,11 @@ if ($this_user) {
     elseif ($this_user->IsNonLocal() && $this_user->webonly()) {
 	header("Location: $APTBASE/nomembership.php");
     }
-    elseif (0 && $redirect && IsTutorialUser($this_user)) {
+    elseif ($redirect && $this_user->IsTutorialUser() &&
+            $TUTORIALPROFILE != "") {
+        # For TUTORIALPID
         header("Location: show-profile.php".
-               "?project=OAI2021FallWS&profile=oai-5g-e2e-rfsim");
+               "?project=${TUTORIALPID}&profile=${TUTORIALPROFILE}");
     }
     elseif (Instance::UserHasInstances($this_user)) {
 	header("Location: $APTBASE/user-dashboard.php");

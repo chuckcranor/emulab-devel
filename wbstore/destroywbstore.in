@@ -24,6 +24,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use POSIX qw(strftime);
 use Data::Dumper;
 
 #
@@ -32,7 +33,7 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print STDERR "Usage: destroywbstore [-hdB] [-s state] uuid\n";
+    print STDERR "Usage: destroywbstore [-hdBS] [-s state] uuid\n";
     print STDERR "Destroy a write-back store for the specified experiment instance.\n";
     print STDERR "Options:\n";
     print STDERR "   -h          This message\n";
@@ -55,6 +56,7 @@ my @fqdns;
 # Protos
 sub parseinstance($;$);
 sub parsehostname($);
+sub stampprint($);
 sub fatal($);
 
 #
@@ -175,8 +177,8 @@ if (@fqdns == 0) {
 }
 
 if ($debug) {
-    print STDERR "$exptuuid: found " . $active ? "active" : "past" .
-	" experiment with aggregates: " . join(' ', @fqdns) . "\n";
+    stampprint("$uuid: $exptuuid: found " . $active ? "active" : "past" .
+	       " experiment with aggregates: " . join(' ', @fqdns));
 }
 
 my $tmpdir = "$CONFDIR/tarballs/$uuid";
@@ -233,8 +235,8 @@ foreach my $h ($SERVER, @fqdns) {
 
     $SSH_ARGS .= " -o ConnectTimeout=5";
 
-    print STDERR "$exptuuid: " .
-	"attempting to set state=$state on $domain for slice $uuid ...\n"
+    stampprint("$uuid: $exptuuid: " .
+	       "attempting to set state=$state on $domain for slice $uuid ...")
 	if ($debug);
 
     # XXX we hardwire /usr/testbed here because we don't know their config
@@ -246,11 +248,11 @@ foreach my $h ($SERVER, @fqdns) {
     $UID = $SAVEUID;
     if ($rv) {
 	my $stat = ($? >> 8);
-	print STDERR "$exptuuid: WARNING: setting state=$state " .
-	    "for slice $uuid at $h failed ($stat)\n";
+	stampprint("$uuid: $exptuuid: WARNING: setting state=$state " .
+		   "for slice $uuid at $h failed ($stat)");
 	$failed++;
     } else {
-	print STDERR "$exptuuid: $domain done.\n"
+	stampprint("$uuid: $exptuuid: $domain done.")
 	    if ($debug);
     }
 }
@@ -313,10 +315,23 @@ sub parsehostname($)
     return ($host, $dom);
 }
 
+#
+# Print timestamped message.
+#
+sub stampprint($)
+{
+    my ($msg) = @_;
+    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime());
+
+    print STDERR "$stamp: $msg\n";
+}
+
 sub fatal($)
 {
     my ($mesg) = $_[0];
 
+    stampprint("destroywbstore: $uuid: FAILED")
+	if ($debug && $uuid);
     die("*** $0:\n".
 	"    $mesg\n");
 }

@@ -3,7 +3,7 @@ $(function ()
     'use strict';
 
     var template_list   = ["resinfo", "resinfo-totals", "reservation-graph",
-			   "range-list", "oops-modal", "waitwait-modal",
+			   "range-tabs", "oops-modal", "waitwait-modal",
 			   "visavail-graph"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var oopsString      = templates["oops-modal"];
@@ -11,12 +11,12 @@ $(function ()
     var mainTemplate    = _.template(templates["resinfo"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
     var totalsTemplate  = _.template(templates["resinfo-totals"]);
-    var rangeTemplate   = _.template(templates["range-list"]);
     var visTemplate     = _.template(templates["visavail-graph"]);
     var amlist          = null;
     var FEs             = {};  // Powder
     var radioinfo       = {};  // Powder
     var matrixinfo      = {};  // Powder
+    var fakeroutes      = true;
     var isadmin         = false;
 
     function initialize()
@@ -47,9 +47,6 @@ $(function ()
 	// Not really sure why they do not.
 	setTimeout(function () {
 	    LoadReservations();
-	    if (window.ISPOWDER) {
-		LoadRangeReservations();
-	    }
 	}, 100);	
     }
 
@@ -71,12 +68,12 @@ $(function ()
 	if (window,ISPOWDER) {
 	    $('#powder-radios .graph-panel')
 		.html(visTemplate({
-		    "title" : "Powder Outdoor Radio Availability",
+		    "title" : "Powder Rooftop Radio Availability",
 		    "id"    : "radio",
 		}))
 		.find(".panel").removeClass("hidden");
 	    $('#powder-radios .counts-panel')
-		.html(totalsTemplate({"title" : "Radios"}));
+		.html(totalsTemplate({"title" : "Rooftop Radios"}));
 	    $('#powder-radios .counts-panel .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
@@ -93,6 +90,21 @@ $(function ()
 	    $('#powder-mmimo .counts-panel')
 		.html(totalsTemplate({"title" : "Massive MIMO"}));
 	    $('#powder-mmimo .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+
+	    $('#powder-dense .graph-panel')
+		.html(visTemplate({
+		    "title" : "Dense Deployment Availability",
+		    "id"    : "dense",
+		}))
+		.find(".panel").removeClass("hidden");
+	    $('#powder-dense .counts-panel')
+		.html(totalsTemplate({"title" : "Dense Deployment"}));
+	    $('#powder-dense .counts-panel .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
 		    widgets : [ "uitheme", "zebra"],
@@ -123,6 +135,21 @@ $(function ()
 	    $('#powder-paired .counts-panel')
 		.html(totalsTemplate({"title" : "Paired Radio Workbenches"}));
 	    $('#powder-paired .counts-panel .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets : [ "uitheme", "zebra"],
+		    headerTemplate : '{content} {icon}',
+		});
+
+	    $('#powder-mobile .graph-panel')
+		.html(visTemplate({
+		    "title" : "Mobile Endpoints",
+		    "id"    : "mobile",
+		}))
+		.find(".panel").removeClass("hidden");
+	    $('#powder-mobile .counts-panel')
+		.html(totalsTemplate({"title" : "Mobile Endpoints"}));
+	    $('#powder-mobile .counts-panel .tablesorter')
 		.tablesorter({
 		    theme : 'bootstrap',
 		    widgets : [ "uitheme", "zebra"],
@@ -164,6 +191,8 @@ $(function ()
 		.html("<span class=small> " +
 			" <a href='#' " +
 			"    data-target='#matrix-connections-modal' " +
+			"    data-bs-target='#matrix-connections-modal' " +
+			"    data-bs-toggle='modal' " +
 			"    data-toggle='modal'>" +
 			"  Matrix Connections</a></span>" +
 			"");
@@ -245,6 +274,11 @@ $(function ()
      */
     function LoadReservations()
     {
+	if (window.ISPOWDER) {
+	    LoadRouteReservations();
+	    LoadRangeReservations();
+	}
+	
 	_.each(amlist, function(details, urn) {
  	    var callback = function(json) {
 		console.log("LoadReservations " + details.nickname, json);
@@ -293,8 +327,7 @@ $(function ()
 	    };
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ReservationInfo",
-						{"cluster" : details.nickname,
-						 "anonymous" : 1});
+						{"cluster" : details.nickname});
 	    xmlthing.done(callback);
 	});
     }
@@ -334,6 +367,11 @@ $(function ()
 		    var group = radioinfo[urn][key].grouping;
 		    if (!_.has(groups, group)) {
 			groups[group] = {};
+		    }
+		    // Gross Hack
+		    if (0 && group == "mmimo" &&
+			(key == "mmimo1-honors" || key == "mmimo1-ustar")) {
+			return;
 		    }
 		    groups[group][key] = info;
 		}
@@ -389,7 +427,42 @@ $(function ()
 			   forecast, json.value.prunelist, false);
     }
 
-    function GenerateCountPanel(urn, selector, forecast, skiptypes, asnodes)
+    /*
+     * Load the route reservation info.
+     */
+    function LoadRouteReservations()
+    {
+	var callback = function(json) {
+	    console.log("LoadRouteReservations", json);
+	    if (json.code) {
+		console.info("Could not get route info");
+		return;
+	    }
+	    var routeforecast = json.value.forecast;
+	    GenerateRouteGraph(routeforecast);
+
+	    if (!_.size(json.value.list)) {
+		return;
+	    }
+	};
+	var xmlthing = sup.CallServerMethod(null, "resgroup",
+					    "RouteReservations");
+	xmlthing.done(callback);
+    }
+    function GenerateRouteGraph(routeforecast)
+    {
+	if (fakeroutes) {
+	    routeforecast = {
+		"All Routes" : routeforecast["Orange"]
+	    };
+	}
+	ShowNewGraph(routeforecast, "mobile");
+	GenerateCountPanel(window.EMULABURN, "powder-mobile .counts-panel",
+			   routeforecast, null, true, true);
+    }
+
+    function GenerateCountPanel(urn, selector,
+				forecast, skiptypes, asnodes, isroutes)
     {
 	var details = amlist[urn];
 	var html    = "";
@@ -440,6 +513,14 @@ $(function ()
 	    if (asnodes) {
 		free = (free ? "Yes" : "No");
 	    }
+	    if (isroutes) {
+		if (fakeroutes) {
+		    weburl = "All Routes";
+		}
+		else {
+		    weburl = type;
+		}
+	    }
 	    html +=
 		"<tr>" +
 		" <td>" + weburl + "</td>" +
@@ -447,7 +528,10 @@ $(function ()
 		"</tr>";
 	}
 	$('#' + selector + ' tbody').append(html);
-	if (asnodes) {
+	if (isroutes) {
+	    $('#' + selector + ' .type-header').html("Route");
+	}
+	else if (asnodes) {
 	    $('#' + selector + ' .type-header').html("Node");
 	}
 	$('#' + selector + ' table')
@@ -531,8 +615,8 @@ $(function ()
 	var zoomout = $('#' + container).closest(".panel")
 	    .find(".panel-heading .zoom-control .zoom-out");
 
-	// Do not show more then 60 days, the graphs are hard to read.
-	limit.setDate(limit.getDate() + 60);
+	// Do not show too many days, the graphs are hard to read.
+	limit.setDate(limit.getDate() + 14);
 	
 	Object.keys(forecasts)
 	    .sort()
@@ -727,28 +811,24 @@ $(function ()
 	    if (! (_.size(json1.value) || _.size(json2.value))) {
 		return;
 	    }
-	    var html = rangeTemplate({
-		"ranges" : json1.value.concat(json2.value),
+	    $('#range-info-div').html(templates["range-tabs"]);
+	    $('#range-info-div .panel-title')
+		.html("All Frequency Usage");
+	    $('#range-info-div').removeClass("hidden");
+	    $('#range-info-div a[href="#cbrs-ranges"]').tab('show');
+	    
+	    // This activates the popover subsystem.
+	    $('#range-info-div [data-toggle="popover"]').popover({
+		trigger: 'hover',
+		container: 'body'
 	    });
-	    $('#range-list').html(html).removeClass("hidden");
-
-	    // Format dates with moment before display.
-	    $('#range-list .format-date').each(function() {
-		var date = $.trim($(this).html());
-		if (date != "") {
-		    $(this).html(moment(date).format("lll"));
-		}
+	    
+	    CreateRangeCharts({
+		"selector" : "#range-info-div",
+		"reserved" : json1.value,
+		"inuse"    : json2.value,
+		"activate" : "cbrs",
 	    });
-	    $('#range-list .tablesorter')
-		.tablesorter({
-		    theme : 'bootstrap',
-		    widgets : [ "uitheme", "zebra"],
-		    headerTemplate : '{content} {icon}',
-		});
-	    if (_.size(json2.value)) {
-		$('#range-list .experiment-reserved-ranges')
-		    .removeClass("hidden");
-	    }
 	};
 
 	var xmlthing1 = sup.CallServerMethod(null, "resgroup",

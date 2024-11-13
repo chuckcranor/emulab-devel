@@ -1,15 +1,15 @@
 <div class='row'>
-  <div class='col-lg-8 col-lg-offset-2
-              col-md-8 col-md-offset-2
-              col-sm-10 col-sm-offset-1
+  <div class='col-lg-8 col-lg-offset-2 offset-lg-2 offset-lg-2
+              col-md-8 col-md-offset-2 offset-md-2 offset-md-2
+              col-sm-10 col-sm-offset-1 offset-sm-1 offset-sm-1
               col-xs-12'>
-    <div class='panel panel-default'>
+    <div class='panel  card  card panel-default'>
       <% if (!embedded) { %>
-        <div class='panel-heading'>
-          <h3 class='panel-title'><%= title %></h3>
+        <div class='panel-heading card-header'>
+          <h3 class='panel-title card-title'><%= title %></h3>
 	</div>
       <% } %>
-      <div class='panel-body'>
+      <div class='panel-body card-body'>
 	<span id="general_error" style="color:red;"></span>
 	<form id='create_dataset_form'
               class='form-horizontal' role='form'
@@ -30,7 +30,7 @@
 		  <div class="form-group">
 		    <select name="dataset_pid"
 			    id="dataset_pid"
-			    class='form-control format-me'
+			    class='form-control form-select format-me'
 			    data-key="dataset_pid"
 			    data-label="Project"
 			    placeholder='Please Select'>
@@ -48,7 +48,7 @@
 	        <% } %>
 	      <% } %>
 	      <div class="form-group">
-		<input name="dataset_name"
+		<input name="dataset_name" id="dataset_name"
 		     value="<%- formfields.dataset_name %>"
 		     class="form-control format-me"
 		     data-key="dataset_name"
@@ -75,30 +75,33 @@
 	        <div class="form-group">
 	          <div class='format-me' data-key='dataset_type'
 		       data-label="Type">
-                    <label class='radio-inline'>
+		    <div class="format-check">
                       <input type='radio' name='dataset_type'
+			     class="form-check-input"			     
 			     id='dataset_type_stdataset'
 		             <% if (formfields.dataset_type == "stdataset") {
 				%>checked<% } %>
-			     value='stdataset'>Short term
-		    </label>
-		    <div></div>
-                    <label class='radio-inline'>
+			     value='stdataset'>
+		      <label class="form-check-label">Short term</label>
+		    </div>
+		    <div class="format-check">
                       <input type='radio' name='dataset_type'
+			     class="form-check-input"			     
 			     id='dataset_type_ltdataset'
 		             <% if (formfields.dataset_type == "ltdataset") {
 			     %>checked<% } %>
-			     value='ltdataset'>Long term
-		    </label>
-		    <div></div>
-                    <label class='radio-inline'>
+			     value='ltdataset'>
+		      <label class="form-check-label">Long term</label>
+		    </div>
+		    <div class="format-check">
                       <input type='radio' name='dataset_type'
+			     class="form-check-input"			     
 			     id='dataset_type_imagedataset'
 		             <% if (formfields.dataset_type == "imdataset") {
 			     %>checked<% } %>
-			     value='imdataset'>Image backed
-		    </label>
-		    <div></div>
+			     value='imdataset'>
+		      <label class="form-check-label">Image backed</label>
+		    </div>
 		    <a href='#' id='dataset_help_link'>
 		      <span>What type should I pick?</span></a>
 		  </div>
@@ -108,7 +111,7 @@
 		   <% if (formfields.dataset_type == "imdataset") {
 		      %> class='hidden' <% } %> >
 		<div class="form-group">
-		  <input name="dataset_size"
+		  <input name="dataset_size" id="dataset_size"
 			 value="<%- formfields.dataset_size %>"
 			 class="form-control format-me"
 			 data-key="dataset_size"
@@ -126,7 +129,7 @@
 		  <div class="form-group">
 		    <select name="dataset_cluster"
 			id="dataset_cluster"
-			class='form-control format-me'
+			class='form-control form-select format-me'
 			data-key="dataset_cluster"
 			data-label="Cluster"
 			placeholder='Please Select'>
@@ -152,7 +155,7 @@
 		  <div class="form-group">
 		    <select name="dataset_instance"
 			  id="dataset_instance"
-			  class='form-control format-me'
+			  class='form-control form-select format-me'
 			  data-key="dataset_instance"
 			  data-label="Instance"
 			  placeholder='Please Select'>
@@ -170,7 +173,7 @@
 		  <div class="form-group">
 		    <select name="dataset_node"
 			  id="dataset_node"
-			  class='form-control format-me'
+			  class='form-control form-select format-me'
 			  data-key="dataset_node"
 			  data-label="Node"
 			  placeholder='Please Select'>
@@ -179,7 +182,7 @@
 		  <div class="form-group">
 		    <select name="dataset_bsname"
 			  id="dataset_bsname"
-			  class='form-control format-me'
+			  class='form-control form-select format-me'
 			  data-key="dataset_bsname"
 			  data-label="BS Name"
 			  placeholder='Please Select'>
@@ -241,7 +244,7 @@
 		<% } else { %>
 		  <div class="form-group">
 		    <select name="dataset_fstype"
-			class="form-control format-me"
+			class="form-control form-select format-me"
 			data-key="dataset_fstype"
 			data-label="FS Type">
 		      <% _.each(fstypes, function(name) { %>
@@ -259,74 +262,89 @@
 	      </div>
 	      <!-- Permission checkboxes. -->
 	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
+		<div class='col-sm-9 col-sm-offset-3 offset-sm-3 offset-sm-3'>
 		  Who can read your dataset?
 		</div>
 	      </div>
 	      <div class='row'>
-		<div class='col-sm-8 col-sm-offset-4'>
+		<div class='col-sm-8 col-sm-offset-4 offset-sm-4 offset-sm-4'>
 		  <div class="form-group">
 		    <div class='format-me' data-key='dataset_read'>
-		      <div class='radio'>
-			<label>
-			  <input type='radio' name='dataset_read'
+		      <div class='format-check'>
+			<input type='radio' name='dataset_read'
 			       id='dataset_read_public'
+			       class="form-check-input"
 		               <% if (formfields.dataset_read == "global") {
 				  %>checked<% } %>
 			       value='global'>
-			  <em>Anyone</em>
-    			</label>
+			<label class="form-check-label"><em>Anyone</em></label>
                       </div>
-                      <div class='radio'>
-			<label>
-			  <input type='radio' name='dataset_read'
+                      <div class='format-check'>
+			<input type='radio' name='dataset_read'
 			       id='dataset_read_private'
+			       class="form-check-input"
 		               <% if (formfields.dataset_read == "project") {
-				  %>checked<% } %>
+			           %>checked<% } %>
 			       value='project'>
-			  Only members of 
-			  <span name="project_name">your project</span>
-    			</label>
+			<label class="form-check-label">Only members of 
+			  <span name="project_name">your project</span></label>
                       </div>
                     </div>
 		  </div>
 		</div>
               </div>
 	      <div class='row'>
-		<div class='col-sm-9 col-sm-offset-3'>
+		<div class='col-sm-9 col-sm-offset-3 offset-sm-3 offset-sm-3'>
 		  Who can write to your dataset?
 		</div>
 	      </div>
 	      <div class='row'>
-		<div class='col-sm-8 col-sm-offset-4'>
+		<div class='col-sm-8 col-sm-offset-4 offset-sm-4 offset-sm-4'>
 		  <div class="form-group">
 		    <div class='format-me' data-key='dataset_modify'>
-                      <div class='radio'>
-			<label>
-			  <input type='radio' name='dataset_modify'
+                      <div class='format-check'>
+			<input type='radio' name='dataset_modify'
 			       id='dataset_modify_registered'
-		               <% if (formfields.dataset_modify == "creator") {
-				  %>checked<% } %>
+			       class="form-check-input"			     
+			       <% if (formfields.dataset_modify == "creator") {
+			       %>checked<% } %>
 			       value='creator'>
-			  Only you
+			<label class="form-check-label">Only you</label>
     			</label>
                       </div>
-                      <div class='radio'>
-			<label>
-			  <input type='radio' name='dataset_modify'
+                      <div class='format-check'>
+			<input type='radio' name='dataset_modify'
 			       id='dataset_modify_private'
-		               <% if (formfields.dataset_modify == "project") {
-				  %>checked<% } %>
+			       class="form-check-input"			     
+			       <% if (formfields.dataset_modify == "project") {
+			       %>checked<% } %>
 			       value='project'>
-			  You and members of
-			  <span name="project_name">your project</span>
-    			</label>
+			<label class="form-check-label">You and members of
+			  <span name="project_name">your project</span></label>
                       </div>
                     </div>
 		  </div>
 		</div>
               </div>
-	      
+	      <% if (isadmin && editing &&
+		     formfields.dataset_type == "ltdataset") { %>
+		<div class='row'>
+		  <div class='col-sm-9 col-sm-offset-3 offset-sm-3 offset-sm-3'>
+		    <div class='form-checkbox format-me'
+			 data-key='dataset_permanent'
+			 data-compact='yep'>
+		      <input type='checkbox' name='dataset_permanent'
+			       class="form-check-input"			     
+			       id='dataset_modify_permanent'
+			       <% if (formfields.dataset_permanent) {
+			       %>checked<% } %>
+			       value='checked'>
+		      <label class="form-check-label">
+			Permanent (never delete).</label>
+                    </div>
+		  </div>
+		</div>
+              <% } %>
 	      <% if (editing) { %>
 	      <input type='hidden' name='dataset_uuid'
 		     value='<%= formfields.dataset_uuid %>'>
@@ -343,12 +361,42 @@
       </div>
     </div>
   </div>
+  <div id="checkapproval-modal" class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <center><h4>Your dataset will need administrator approval</h4></center>
+	</div>
+	<div class='modal-body'>
+	  Your dataset will need administrator approval for the following reason:
+          <div class="mt-2 mb-2">
+	    <code style="white-space: pre-wrap" id="checkapproval-text"></code>
+	  </div>
+	  You can click Continue and wait for approval, which typically takes a
+	  day or two. Or you can click Cancel and modify the form as needed.
+	  Then Submit again.
+	  <center>
+	    <button type='button'
+		    class='btn btn-primary btn-sm confirm-button'>
+	      Continue
+	    </button>
+	    <button type='button'
+		    class='btn btn-default btn-sm cancel-button'
+		    data-dismiss='modal' data-bs-dismiss='modal'>
+	      Cancel</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
   <div id="needapproval-modal" class='modal fade'>
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <button type='button' class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
+          <button type='button' class='close btn-close'
+		  data-dismiss='modal'
+		  data-bs-dismiss='modal'
+                  aria-hidden='true'></button>
           <center><h4>Your dataset needs to be approved!</h4></center>
 	</div>
 	<div class='modal-body'>

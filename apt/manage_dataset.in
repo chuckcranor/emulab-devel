@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -195,7 +195,7 @@ exit(1);
 sub DoCreate()
 {
     my $usage = sub {
-	print STDERR "Usage: manage_dataset create ".
+	print STDERR "Usage: manage_dataset create [-n] ".
 	    "[-t type] [-f fstype] [-e expiration] ".
 	    "[-R global|project] [-W creator|project] ".
 	    "-a am_urn -s size pid/name\n";
@@ -206,6 +206,7 @@ sub DoCreate()
     my $errmsg;
     my $pid;
     my $expires;
+    my $checkonly = 0;
     my $size = 0;
     my $type = "stdataset";
     my $fstype;
@@ -214,10 +215,13 @@ sub DoCreate()
     # imdataset snapshot info.
     my ($instance,$aggregate,$nodeid,$bsname);
     
-    my $optlist = "ds:t:e:f:w:p:R:W:I:i:a:";
+    my $optlist = "ds:t:e:f:w:p:R:W:I:i:a:n";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	&$usage();
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
     }
     if (defined($options{"d"})) {
 	$debug = 1;
@@ -235,6 +239,9 @@ sub DoCreate()
 	&$usage();
     }
     if ($type eq "imdataset") {
+	if ($checkonly) {
+	    fatal("Do not use -n (checkonly) with imdatasets");
+	}
 	if (!exists($options{"i"})) {
 	    print STDERR "Must provide -i opton for imdatasets\n";
 	    &$usage();
@@ -323,11 +330,13 @@ sub DoCreate()
 	}
     }
     if (defined($options{"e"})) {
-	$expires = str2time($options{"e"});
-	if (!defined($expires)) {
-	    fatal("Could not parse expiration date.");
+	$expires = $options{"e"};	
+	if ($expires !~ /^\d+$/) {
+	    $expires = str2time($expires);
+	    if (!$expires) {
+		fatal("Could not parse expiration date.");
+	    }
 	}
-	$expires = $options{"e"};
     }
     
     &$usage()
@@ -409,15 +418,43 @@ sub DoCreate()
     # that now, else its a failure.
     if ($type eq "imdataset" && defined($instance)) {
 	if ($instance->Lock()) {
-	    $errmsg = "Instance is busy, cannot snapshot data";
-	    goto failed;
+	    $dataset->Delete();
+	    UserError("Experiment is busy, cannot snapshot data");
 	}
     }
     # Before we go into polling, make sure changes are written back.
     $dataset->webtask()->AutoStore(1);
+
+    #
+    # Checkonly mode, for the web UI.
+    #
+    if ($checkonly) {
+	my $response = $dataset->CreateDataset($checkonly);
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $dataset->Delete();
+	    $instance->Unlock()
+		if (defined($instance));
+	    ExitWithError($response);
+	}
+	my $blob = $response->value();
+	my $approved = $blob->{'approved'};
+	my $message  = ($approved ? "Dataset would be approved" :
+			$blob->{'unapproved_reason'});
+	
+	if (defined($webtask)) {
+	    $webtask->output($message);
+	    $webtask->approved($approved);
+	    $webtask->Exited(0);
+	}
+	$dataset->Delete();
+	$instance->Unlock()
+	    if (defined($instance));
+	print STDERR "$message\n";
+	exit(0);
+    }
     
     #
-    # Ask the aggregate to create the dataset. 
+    # Ask the aggregate to create the dataset.
     #
     my $response = $dataset->CreateDataset();
     if ($response->code() != GENIRESPONSE_SUCCESS) {
@@ -675,11 +712,11 @@ sub DoModify()
     my $errmsg;
     
     my $usage = sub {
-	print STDERR "Usage: manage_dataset modify ".
+	print STDERR "Usage: manage_dataset modify [-p on|off] ".
 	    "[-R global|project] [-W creator|project] pid/name\n";
 	exit(-1);
     };
-    my $optlist = "R:W:";
+    my $optlist = "R:W:p:";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	&$usage();
@@ -705,6 +742,15 @@ sub DoModify()
 	    if ($write_access !~ /^(creator|project)$/);
 	$blob->{'write_access'} = $write_access;
     }
+    if (defined($options{"p"})) {
+	my $onoff = $options{"p"};
+	&$usage()
+	    if ($onoff !~ /^(on|off)$/);
+	$blob->{'permanent'} = ($onoff eq "on" ? 1 : 0);
+    }
+    usage()
+	if (!keys(%$blob));
+    
     # Check if the aggregate is online and reachable. 
     my $aggregate = $dataset->GetAggregate();
     if ($aggregate->CheckStatus(\$errmsg)) {
@@ -714,18 +760,16 @@ sub DoModify()
     if ($dataset->Lock()) {
 	UserError("dataset is busy, cannot lock it");
     }
-    if (keys(%$blob)) {
-	if ($dataset->Update($blob)) {
-	    $errmsg = "Could not update privacy settings!";
-	    $dataset->Unlock();
-	    # This will set the webtask, see below.
-	    fatal($errmsg);
-	}
-    }
-    my $response = $dataset->ModifyDataset();
+    my $response = $dataset->ModifyDataset($blob);
     if (GeniResponse::IsError($response)) {
 	$dataset->Unlock();
 	ExitWithError($response);
+    }
+    if ($dataset->Update($blob)) {
+	$errmsg = "Could not update dataset settings!";
+	$dataset->Unlock();
+	# This will set the webtask, see below.
+	fatal($errmsg);
     }
     $blob = $response->value();
     if ($dataset->type() ne "imdataset") {

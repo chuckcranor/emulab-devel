@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2019, 2021 University of Utah and the Flux Group.
+# Copyright (c) 2019-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -98,7 +98,15 @@ my $PORT_FORMAT_NATIVE     = 6;
 #
 # Additional targets: enablePortTrunking2, disablePortTrunking
 #
-my $OPTIMIZE       = 1;
+# OPTIMIZE == 2 optimizes the "snmpit -g" case which makes a interface-state
+# call that can return 1MB or more of data and take 10+ seconds.
+# This optimization reduces the "depth" of info returned in the hash to 4
+# which is sufficient to get the stats we need. This can reduce the data
+# returned by 1/3 to 1/2 and the time taken by 2-4 seconds. Still not great,
+# but I have not found a way to ask for just the fields we need ("statistics")
+# or to limit the interfaces for which we return info.
+#
+my $OPTIMIZE       = 2;
 
 #
 # XXX safety net: make sure we don't remove this vlan from any port.
@@ -179,6 +187,13 @@ sub new($$$)
     $self->{IFINDEX} = {};	# port -> if-index map
     $self->{IFINDEXMAP} = {};	# ifindex -> port map
     
+    #
+    # See if the switch is PTP and SyncE enabled.
+    # These will only be filled in on a PTP/SyncE related call.
+    #
+    $self->{PTPTRANSPORT} = "";
+    $self->{SYNCE} = "";
+
     # XXX some stats
     $self->{CALLGETINFO} = 0;
     $self->{CACHEGETINFO} = 0;
@@ -378,9 +393,10 @@ sub getPortInfo($)
     }
 
     my $path = "interfaces";
-    my $json = $self->{ROBJ}->call("GET", $path);
+    my $error = "UNKNOWN";
+    my $json = $self->{ROBJ}->call("GET", $path, undef, undef, \$error, 0);
     if (!$json) {
-	warn "$id: ERROR: Could not read interface information.\n";
+	warn "$id: ERROR: Could not read interface information: $error\n";
 	return 0;
     }
     $self->debug("$id: '$path' call returns:\n" . Dumper($json), 4);
@@ -392,7 +408,6 @@ sub getPortInfo($)
 	    my $enabled = (!exists($iface->{"enabled"}) || $iface->{"enabled"}) ? 1 : 0;
 	    my $ix;
 
-	    #
 	    #
 	    # Ethernet
 	    # Modes:
@@ -419,6 +434,30 @@ sub getPortInfo($)
 		} else {
 		    my $mode = $iface->{"dell-interface:mode"};
 		    warn "$id: interface '$name' has unknown mode '$mode', ignored\n";
+		}
+
+		#
+		# Collect PTP/SyncE info on physical ports
+		#
+		$self->{PORTS}{$name}->{"ptp-enabled"} = 0;
+		$self->{PORTS}{$name}->{"ptp-role"} = "either";
+		$self->{PORTS}{$name}->{"ptp-transport"} = "";
+		if (exists($iface->{"dell-ptp:ptp-port-config"})) {
+		    my $ptp = $iface->{"dell-ptp:ptp-port-config"};
+		    $self->{PORTS}{$name}->{"ptp-enabled"} = 1
+			if (exists($ptp->{"enable"}) && $ptp->{"enable"});
+		    $self->{PORTS}{$name}->{"ptp-role"} = $ptp->{"role"}
+			if (exists($ptp->{"role"}));
+		    if (exists($ptp->{"transport"})) {
+			$self->{PORTS}{$name}->{"ptp-transport"} =
+			    (exists($ptp->{"transport"}->{"layer2-mode"}->{"layer2"})) ? "L2" : "L3";
+		    }
+		}
+		$self->{PORTS}{$name}->{"synce-enabled"} = 0;
+		if (exists($iface->{"dell-synce:reference-config"})) {
+		    my $synce = $iface->{"dell-synce:reference-config"};
+		    $self->{PORTS}{$name}->{"synce-enabled"} = 1
+			if (exists($synce->{"enable"}) && $synce->{"enable"});
 		}
 	    }
 	    # Vlans
@@ -560,6 +599,15 @@ sub dumpPortInfo($;$)
 		    my $ifix = $self->{IFINDEX}{$access};
 		    my $enabled = $self->{PORTS}{$access}->{"enabled"};
 		    print STDERR "$id: ACCESS port=$access, ifindex=$ifix, enabled=$enabled, access=$avlan\n";
+		    my $ptpe = $self->{PORTS}{$access}->{"ptp-enabled"};
+		    if ($ptpe) {
+			my $ptpr = $self->{PORTS}{$access}->{"ptp-role"};
+			my $ptpt = $self->{PORTS}{$access}->{"ptp-transport"};
+			print STDERR "$id: PTP: role=$ptpr, transport=$ptpt\n";
+		    }
+		    if ($self->{PORTS}{$access}->{"synce-enabled"}) {
+			print STDERR "$id: SYNCE: enabled\n";
+		    }
 		}
 	    }
 	}
@@ -575,6 +623,15 @@ sub dumpPortInfo($;$)
 		    my $avstr = ($avlan ? ", access=$avlan" : "");
 		    print STDERR "$id: TRUNK port=$trunk, enabled=$enabled, ifindex=$ifix, members=",
 			join(' ', sort { $a <=> $b} @vlans), "$avstr\n";
+		    my $ptpe = $self->{PORTS}{$trunk}->{"ptp-enabled"};
+		    if ($ptpe) {
+			my $ptpr = $self->{PORTS}{$trunk}->{"ptp-role"};
+			my $ptpt = $self->{PORTS}{$trunk}->{"ptp-transport"};
+			print STDERR "$id: PTP: role=$ptpr, transport=$ptpt\n";
+		    }
+		    if ($self->{PORTS}{$trunk}->{"synce-enabled"}) {
+			print STDERR "$id: SYNCE: enabled\n";
+		    }
 		}
 	    }
 	}
@@ -994,6 +1051,13 @@ sub native2PortInstance($$)
     my ($self, $iface) = @_;
     my $string;
 
+    #
+    # XXX TODO: for individual ports commands like "snmpit -g" to work,
+    # we need to explicitly address the "ethernet1/C/P:SP" case. Ironically,
+    # this form *works* where the handled "ethernet1/C/P" case does not!
+    # Either way, we need to work with the iface directly and not try to
+    # hack up something based on card/port.
+    #
     if ($iface =~ /^ethernet(\d+)\/(\d+)\/(\d+)$/) {
 	$string = Port->Tokens2TripleString($self->{NAME}, $3, $2);
     }
@@ -1221,6 +1285,16 @@ sub getAllStats($)
 
     $self->{CALLOTHER}++;
     my $path = "interfaces-state";
+
+    #
+    # XXX a depth of 4 is sufficient to get the stats we need without
+    # a lot of excess. The resulting output is 1/2 to 1/3 and we can
+    # save 2-4 seconds.
+    #
+    if ($OPTIMIZE > 1) {
+	$path .= "?depth=4";
+    }
+
     my $error = "UNKNOWN";
     my $json = $self->{ROBJ}->call("GET", $path, undef, undef, \$error, 0);
     if (!$json) {
@@ -1407,6 +1481,324 @@ sub portControl ($$@) {
 	# Command not supported, not even a fake command.
 	#
 	$self->debug("Unsupported port control command '$cmd' ignored.\n");
+    }
+
+    return $errors;
+}
+
+#
+# Enable/diable PTP on one or more ports.
+# Returns 0 on complete success, a count of failed nodes otherwise.
+#
+# XXX we only support L2 multicast right now.
+#
+# XXX we make individual calls per port right now. We could set all in
+# one call, but cleaning up from errors will be more difficult.
+#
+my $PTPPERPORT = 1;
+
+sub portPTP ($$$@) {
+    my $self = shift;
+    my $cmd = shift;
+    my $profile = shift;
+    my @ports = @_;
+
+    my $id = $self->{NAME} . "::portPTP";
+    my $errors = 0;
+    my $transport;
+    
+    $self->debug("$id: $cmd -> (".Port->toStrings(@ports).")\n");
+
+    #
+    # Check for valid profile name before we start doing any heavy lifting.
+    # Note that profile argument is undef for disable command.
+    #
+    if ($cmd eq "enable") {
+	if ($profile eq "G8275-1" || $profile eq "L2") {
+	    $transport = "L2";
+	}
+	# XXX
+	else {
+	    warn "$id: ERROR: only support G8275-1 (L2) PTP profile.\n";
+	    return 1;
+	}
+    }
+
+    #
+    # XXX On first call, determine the protocol in use.
+    #
+    if ($self->{PTPTRANSPORT} eq "") {
+	$self->{CALLOTHER}++;
+	my $path = "dell-ptp:ptp-ds/clock-ds/default-ds";
+	my $error = "UNKNOWN";
+	my $json = $self->{ROBJ}->call("GET", $path, undef, undef, \$error, 0);
+	if (!$json) {
+	    warn "$id: ERROR: Could not read PTP information: $error\n";
+	    $self->{PTPTRANSPORT} = "none";
+	    return 1;
+	}
+	$self->debug("$id: '$path' call returns:\n" . Dumper($json), 4);
+
+	if (exists($json->{"dell-ptp:default-ds"}) &&
+	    exists($json->{"dell-ptp:default-ds"}->{"domain"})) {
+	    # XXX in trouble if they do not use the default domain
+	    my $pdom = $json->{"dell-ptp:default-ds"}->{"domain"};
+	    if ($pdom eq "24") {
+		$self->{PTPTRANSPORT} = "L2";
+	    } elsif ($pdom eq "44") {
+		$self->{PTPTRANSPORT} = "L3";
+	    } else {
+		warn "$id: ERROR: Unrecognized PTP domain '$pdom'.\n";
+		$self->{PTPTRANSPORT} = "none";
+		return 1;
+	    }
+	} else {
+	    warn "$id: ERROR: PTP not enabled.\n";
+	    $self->{PTPTRANSPORT} = "none";
+	    return 1;
+	}
+    }
+    if ($self->{PTPTRANSPORT} ne "L2") {
+	warn "$id: ERROR: only support G8275.1 (L2) profile right now.\n";
+	return 1;
+    }
+
+    # For disable, transport is whatever the switch supports
+    if ($cmd eq "disable") {
+	$transport = $self->{PTPTRANSPORT};
+    }
+
+    # For enable, desired transport must match what the switch supports
+    elsif ($transport ne $self->{PTPTRANSPORT}) {
+	warn "$id: ERROR: switch does not support '$transport' transport.\n";
+	return 1;
+    }
+
+    # Get complete Port/Vlan info
+    if (!$self->getPortInfo()) {
+	warn "$id: ERROR: getPortInfo failed.\n";
+	return 1;
+    }
+
+    my @nports = $self->convertPortFormat($PORT_FORMAT_NATIVE, @ports);
+    if (@nports == 0) {
+	return 0;
+    }
+
+    my @cports = ();
+    my %gotport = ();
+    foreach my $iface (@nports) {
+	my $isenabled = $self->{PORTS}{$iface}->{"ptp-enabled"};
+	$self->debug("$id: PTP is " . ($isenabled ? "enable" : "disable") . "d\n");
+	if ($cmd eq "enable" && $isenabled ||
+	    $cmd eq "disable" && !$isenabled) {
+	    print STDERR $self->{NAME} . ": $iface: PTP already ${cmd}d\n";
+	    next;
+	}
+
+	# set transport, role and enable
+	if (!exists($gotport{$iface})) {
+	    $self->debug("$id: will $cmd PTP...\n");
+	    push @cports, $iface;
+	    $gotport{$iface} = 1;
+	}
+    }
+
+    if (@cports) {
+	my $on = ($cmd eq "enable") ? 1 : 0;
+
+	if ($PTPPERPORT) {
+	    foreach my $iface (@cports) {
+		my $path = "ietf-interfaces:interfaces/interface=" .
+		    uri_escape($iface) . "/dell-ptp:ptp-port-config";
+		$self->{CALLOTHER}++;
+		my $RetVal;
+		if ($on) {
+		    # Build up a hash with all the right stuff
+		    my $phash = $self->{ROBJ}->ptpPortSpec($on, "master",
+							   $transport,
+							   $iface);
+		    # Enable PTP on the port
+		    $RetVal = $self->{ROBJ}->call("PUT", $path, $phash);
+		} else {
+		    # Disable PTP on the port
+		    $RetVal = $self->{ROBJ}->call("DELETE", $path, undef);
+		}
+		if (!defined($RetVal)) { 
+		    warn "$id: ERROR: PTP $cmd on port '$iface' failed.\n";
+		    $errors++;
+		    next;
+		}
+		print STDERR $self->{NAME} . ": $iface: PTP ${cmd}d\n";
+
+		# update cached info
+		if ($self->{GOTPORTINFO}) {
+		    if ($on) {
+			$self->{PORTS}{$iface}->{"ptp-enabled"} = 1;
+			$self->{PORTS}{$iface}->{"ptp-role"} = "master";
+			$self->{PORTS}{$iface}->{"ptp-transport"} = "L2";
+		    } else {
+			$self->{PORTS}{$iface}->{"ptp-enabled"} = 0;
+			$self->{PORTS}{$iface}->{"ptp-role"} = "either";
+			$self->{PORTS}{$iface}->{"ptp-transport"} = "";
+		    }
+		}
+	    }
+	} else {
+	    # Build up a hash with all the right stuff
+	    my $phash =
+		$self->{ROBJ}->ptpMultiplePortSpec($on, "master",
+						   $transport, @cports);
+
+	    # Enable/disable PTP on those ports
+	    $self->{CALLOTHER}++;
+	    my $path = "ietf-interfaces:interfaces";
+	    my $RetVal = $self->{ROBJ}->call("PATCH", $path, $phash);
+	    if (!defined($RetVal)) { 
+		warn "$id: ERROR: PTP $cmd on ports '@cports' failed.\n";
+		return int(@cports);
+	    }
+	    print STDERR $self->{NAME} . ": @cports: PTP ${cmd}d\n";
+
+	    # update cached info
+	    if ($self->{GOTPORTINFO}) {
+		foreach my $iface (@cports) {
+		    if ($cmd eq "enable") {
+			$self->{PORTS}{$iface}->{"ptp-enabled"} = 1;
+			$self->{PORTS}{$iface}->{"ptp-role"} = "master";
+			$self->{PORTS}{$iface}->{"ptp-transport"} = "L2";
+		    } else {
+			$self->{PORTS}{$iface}->{"ptp-enabled"} = 0;
+			$self->{PORTS}{$iface}->{"ptp-role"} = "either";
+			$self->{PORTS}{$iface}->{"ptp-transport"} = "";
+		    }
+		}
+	    }
+	}
+    }
+
+    return $errors;
+}
+
+#
+# Enable/diable SyncE on one or more ports.
+# Returns 0 on complete success, a count of failed nodes otherwise.
+#
+# XXX we don't support any parameters to this right now.
+#
+# XXX we make individual calls per port right now.
+#
+sub portSyncE($$$@)
+{
+    my $self = shift;
+    my $cmd = shift;
+    my $param = shift;
+    my @ports = @_;
+
+    my $id = $self->{NAME} . "::portSyncE";
+    my $errors = 0;
+
+    $self->debug("$id: $cmd -> (".Port->toStrings(@ports).")\n");
+
+    #
+    # XXX On first call, determine the protocol in use.
+    #
+    if ($self->{SYNCE} eq "") {
+	$self->{CALLOTHER}++;
+	my $path = "dell-synce:system-info/mgmt-info";
+	my $error = "UNKNOWN";
+	my $json = $self->{ROBJ}->call("GET", $path, undef, undef, \$error, 0);
+	if (!$json) {
+	    warn "$id: ERROR: Could not read SyncE information: $error\n";
+	    $self->{SYNCE} = "none";
+	    return 1;
+	}
+	$self->debug("$id: '$path' call returns:\n" . Dumper($json), 4);
+
+	if (exists($json->{"dell-synce:mgmt-info"}) &&
+	    exists($json->{"dell-synce:mgmt-info"}->{"ql-mode"})) {
+	    my $mgmt = $json->{"dell-synce:mgmt-info"};
+	    if ($mgmt->{"ql-mode"} eq "ql-enabled") {
+		$self->{SYNCE} = "ql-enabled";
+		if ($mgmt->{"lock-status"} ne "locked") {
+		    warn "$id: WARNING: SyncE not locked.\n";
+		}
+	    } else {
+		warn "$id: ERROR: SyncE not ql-enabled.\n";
+		$self->{SYNCE} = "none";
+	    }
+	} else {
+	    $self->{SYNCE} = "none";
+	}
+    }
+    if ($self->{SYNCE} ne "ql-enabled") {
+	warn "$id: ERROR: SyncE not supported or not enabled.\n";
+	return 1;
+    }
+
+    # Get complete Port/Vlan info
+    if (!$self->getPortInfo()) {
+	warn "$id: ERROR: getPortInfo failed.\n";
+	return 1;
+    }
+
+    my @nports = $self->convertPortFormat($PORT_FORMAT_NATIVE, @ports);
+    if (@nports == 0) {
+	return 0;
+    }
+
+    my @cports = ();
+    my %gotport = ();
+    foreach my $iface (@nports) {
+	my $isenabled = $self->{PORTS}{$iface}->{"synce-enabled"};
+	$self->debug("$id: SyncE is " . ($isenabled ? "enable" : "disable") . "d\n");
+	if ($cmd eq "enable" && $isenabled ||
+	    $cmd eq "disable" && !$isenabled) {
+	    print STDERR $self->{NAME} . ": $iface: SyncE already ${cmd}d\n";
+	    next;
+	}
+
+	# set transport, role and enable
+	if (!exists($gotport{$iface})) {
+	    $self->debug("$id: will $cmd SyncE...\n");
+	    push @cports, $iface;
+	    $gotport{$iface} = 1;
+	}
+    }
+
+    if (@cports) {
+	my $on = ($cmd eq "enable") ? 1 : 0;
+
+	foreach my $iface (@cports) {
+	    my $path = "ietf-interfaces:interfaces/interface=" .
+		uri_escape($iface) . "/dell-synce:reference-config";
+	    $self->{CALLOTHER}++;
+	    my $RetVal;
+	    if ($on) {
+		# Build up a hash with all the right stuff
+		my $shash = $self->{ROBJ}->syncePortSpec($on, $param, $iface);
+		# Enable SyncE on the port
+		$RetVal = $self->{ROBJ}->call("PUT", $path, $shash);
+	    } else {
+		# Disable SyncE on the port
+		$RetVal = $self->{ROBJ}->call("DELETE", $path, undef);
+	    }
+	    if (!defined($RetVal)) { 
+		warn "$id: ERROR: SyncE $cmd on port '$iface' failed.\n";
+		$errors++;
+		next;
+	    }
+	    print STDERR $self->{NAME} . ": $iface: SyncE ${cmd}d\n";
+
+	    # update cached info
+	    if ($self->{GOTPORTINFO}) {
+		if ($on) {
+		    $self->{PORTS}{$iface}->{"synce-enabled"} = 1;
+		} else {
+		    $self->{PORTS}{$iface}->{"synce-enabled"} = 0;
+		}
+	    }
+	}
     }
 
     return $errors;
@@ -1850,7 +2242,7 @@ sub setPortVlan($$@) {
 		# vlan1
 		#
 		if ($atag == 1) {
-		    warn "$id: ERROR: Trunk port $portobj[$i] has access vlan1, fix it!\n";
+		    warn "$id: WARNING: Trunk port $portobj[$i] has access vlan1, you should remove it.\n";
 		}
 	    }
 
@@ -1862,7 +2254,7 @@ sub setPortVlan($$@) {
 		push @enablelist, $swport;
 	    }
 	} else {
-	    warn "$id: ERROR: Unknown state for port $portobj[$i], fix it!\n";
+	    warn "$id: WARNING: Unknown mode for port $portobj[$i], not access or trunk, skipping.\n";
 	}
 	$i++;
     }
@@ -2469,13 +2861,19 @@ sub getFields($$$) {
     # only do it once. Hence, if more than one port is specified, just get
     # info for all ports.
     #
+    # XXX we can actually do up to about 4 ports individually and still win. 
+    #
+    my $nifaces = ($OPTIMIZE > 1 && @ifaces <= 4) ? @ifaces : 1;
     my %swstats = ();
-    if (@ifaces == 1) {
-	$self->{CALLOTHER}++;
-	my $iface = $ifaces[0];
-	my $path = "interfaces-state/interface=". uri_escape($iface). "/statistics";
-	my $json = $self->{ROBJ}->call("GET", $path);
-	$swstats{$iface} = $json->{"statistics"};
+    if (@ifaces <= $nifaces) {
+	for (my $i = 0; $i < @ifaces; $i++) {
+	    $self->{CALLOTHER}++;
+	    my $iface = $ifaces[$i];
+	    my $path = "interfaces-state/interface=".
+		uri_escape($iface). "/statistics";
+	    my $json = $self->{ROBJ}->call("GET", $path);
+	    $swstats{$iface} = $json->{"ietf-interfaces:statistics"};
+	}
     } else {
 	if (!$self->getPortInfo()) {
 	    warn "$id: ERROR: could not get port info!\n";

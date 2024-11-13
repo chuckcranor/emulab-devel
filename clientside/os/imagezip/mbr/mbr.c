@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2022 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -76,6 +76,7 @@ parse_mbr(int fd, struct iz_disk *disk, int dowarn)
 	disk->hidata = disk->dsize - 1;
 	disk->losect = (iz_lba)losect;
 	disk->hisect = (iz_lba)hisect - 1;
+	disk->metasect = (iz_lba)DOSBBSECTOR;
 
 	return 0;
 }
@@ -217,7 +218,7 @@ read_mbr(int fd, uint32_t bbstart, uint32_t pstart, uint32_t extstart,
 			break;
 		}
 
-		if (start < losect)
+		if ((start != 0 || size != 0) && start < losect)
 			losect = start;
 		if (start + size > hisect)
 			hisect = start + size;
@@ -284,3 +285,86 @@ set_mbr_type(int fd, int slice, iz_type dostype)
 	}
 	return 0;
 }
+
+/*
+ * Hack function for protective MBR in a GPT configuration.
+ * Make sure there is a pMBR and it has exactly one partition.
+ * Set the size of that partition to the given value.
+ * Return 0 on success, 1 on error.
+ */
+int pmbr_setsize(void *start, uint32_t psize, uint32_t *osize)
+{
+	struct doslabel label;
+
+	memcpy(&label.pad2, start, DOSPARTSIZE);
+	if (label.magic != BOOT_MAGIC) {
+		fprintf(stderr, "Wrong magic number in GPT pMBR!\n");
+		return 1;
+	}
+
+	if (label.parts[0].dp_typ != DOSPTYP_PROTECTIVE) {
+		fprintf(stderr, "pMBR partition 1 not correct type!\n");
+		return 1;
+	}
+
+	if (label.parts[1].dp_typ != DOSPTYP_UNUSED ||
+	    label.parts[2].dp_typ != DOSPTYP_UNUSED ||
+	    label.parts[3].dp_typ != DOSPTYP_UNUSED) {
+		fprintf(stderr, "pMBR has more than one partition!\n");
+		return 1;
+	}
+
+	/* All is well, set partition 1 size to our "disk" size. */
+	if (osize)
+		*osize = label.parts[0].dp_size;
+	label.parts[0].dp_size = psize - label.parts[0].dp_start;
+	memcpy(start, &label.pad2, DOSPARTSIZE);
+
+	return 0;
+}
+
+void mbr_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug)
+{
+	struct doslabel label;
+	struct iz_slice *nparttab;
+	int i;
+
+	start += sectobytes(dinfo->metasect);
+	memcpy(&label.pad2, start, DOSPARTSIZE);
+	if (label.magic != BOOT_MAGIC) {
+		fprintf(stderr, "Wrong magic number in DOS partition table\n");
+		return;
+	}
+
+	nparttab = dinfo->slices;
+	for (i = 0; i < NDOSPART; i++) {
+		unsigned char	type  = label.parts[i].dp_typ;
+
+		/* We only care if we have changed the type of the partition */
+		if (nparttab[i].type == type ||
+		    (type == DOSPTYP_UNUSED &&
+		     nparttab[i].type == IZTYPE_INVALID))
+			continue;
+
+		/* and only that we deleted it */
+		if (nparttab[i].type != IZTYPE_INVALID) {
+			fprintf(stderr,
+				"mbr_fixup: P%d changed from %x to %x!?\n",
+				i+1, type, nparttab[i].type);
+			continue;
+		}
+
+		if (debug)
+			fprintf(stderr,
+				"mbr_fixup: marking P%d (0x%x) as unused\n",
+				i+1, type);
+
+		/* make it unused */
+		label.parts[i].dp_typ = DOSPTYP_UNUSED;
+		label.parts[i].dp_start = 0;
+		label.parts[i].dp_size = 0;
+	}
+
+	memcpy(start, &label.pad2, DOSPARTSIZE);
+}
+

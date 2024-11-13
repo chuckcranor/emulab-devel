@@ -1,0 +1,20 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_aggregate_radio_info", "itype")) {
+	DBQueryFatal("alter table apt_aggregate_radio_info add ".
+		     "  itype enum('FE','ME','BS','PE','DD',".
+		     "             'OTA','OAI','unknown')".
+		     "      NOT NULL default 'unknown' after location");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

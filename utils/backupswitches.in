@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2005-2017 University of Utah and the Flux Group.
+# Copyright (c) 2005-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,17 @@
 # }}}
 #
 
+#
+# WARNING: Somewhat Utah specific. We rely on certain users and config for
+# this to work:
+#
+# force10: uses the (root alias) "toor" user which is expected to have root's
+#          pubkey uploaded to allow password-less login.
+# dellrest: just uses root ssh to admin user on switch, needs to have root
+#           pubkey uploaded for admin user
+# comware: just uses root ssh to switch, needs to have root pubkey encoded(?)
+#          and uploaded (appears independent of user on switch).
+#
 my $BACKUPDIR = '@prefix@/backup/switch-config';
 my $TMPFILE = "/tftpboot/switch-backup";
 my $GRAB = "@prefix@/sbin/grabswitchconfig";
@@ -65,7 +76,7 @@ foreach my $switch (@ARGV) {
     #
     # Is it a Cisco or maybe an HP
     my $type = getDeviceType($switch);
-    if ($type !~ /(cisco|catalyst|hp|force10)/) {
+    if ($type !~ /(arista|cisco|catalyst|hp|force10|dellrest|comware)/) {
 	print STDERR
 	    " *** $0:\n" .
 	    "     ignoring unsupported switch type (type $type)\n";
@@ -88,11 +99,46 @@ foreach my $switch (@ARGV) {
 	    next;
 	}
     }
+    if ($type =~ /comware/) {
+	#
+	# XXX you must make sure the switch is backing up to startup.cfg.
+	# Login to the switch and do "show startup" and make sure it is not
+	# set to something like "flash:/sa-ch7.cfg". If it is, reset it with
+	# "startup saved-configuration startup.cfg". This will change the
+	# "Next main startup saved-configuration file". (Note that the
+	# "Current startup saved-configuration file" will get changed on the
+	# next reboot). After doing this, do a "save force" to backup the
+	# current config to "startup.cfg".
+	#
+	if (system("scp $switch:startup.cfg $BACKUPDIR/$switch-$datestr")) {
+	    print STDERR "Unable to grab and save config for $switch, ignored\n";
+	    next;
+	}
+    }
     if ($type =~ /force10/) {
-	if (system("ssh toor\@$switch write terminal \> $BACKUPDIR/$switch.in")) {
-	    if (($? >> 8) != 255) {
+	my $args = "";
+      again:
+	if (system("ssh $args toor\@$switch write terminal 2>/tmp/$switch-$datestr.err > $BACKUPDIR/$switch.in")) {
+	    my $err = $?;
+	    my $errstr = `cat /tmp/$switch-$datestr.err`;
+	    unlink("/tmp/$switch-$datestr.err");
+	    if (($err >> 8) != 255) {
+		print STDERR "----\n$errstr\n----";
 		print STDERR "Unable to grab and save config for $switch ($?), ignored\n";
 		next;
+	    } elsif ($errstr =~ /Unable to negotiate/) {
+		if ($args eq "") {
+		    # try again once with old cipher/kexalgo
+		    $args = "-c 3des-cbc ".
+			    "-o KexAlgorithms=diffie-hellman-group1-sha1";
+		    goto again;
+		}
+		print STDERR "----\n$errstr\n----";
+		print STDERR "Negotiation error with $switch ($?), ignored\n";
+		next;
+	    } else {
+		# XXX the switch can disconnect abruptly after doing its thing
+		;
 	    }
 	}
         if (system("egrep -v \\#\\|Current\\|SupportAssist $BACKUPDIR/$switch.in \> $BACKUPDIR/$switch-$datestr")) {
@@ -101,6 +147,26 @@ foreach my $switch (@ARGV) {
 	    next;
 	}
 	unlink("$BACKUPDIR/$switch.in");
+    }
+    if ($type =~ /dellrest/) {
+	if (system("ssh admin\@$switch show running-config 2>/dev/null > $BACKUPDIR/$switch.in")) {
+	    if (($? >> 8) != 255) {
+		print STDERR "Unable to grab and save config for $switch ($?), ignored\n";
+		next;
+	    }
+	}
+	unlink("$BACKUPDIR/$switch-$datestr");
+	rename("$BACKUPDIR/$switch.in", "$BACKUPDIR/$switch-$datestr");
+    }
+    if ($type =~ /arista/) {
+	if (system("ssh toor\@$switch write terminal 2>/dev/null > $BACKUPDIR/$switch.in")) {
+	    if (($? >> 8) != 255) {
+		print STDERR "Unable to grab and save config for $switch ($?), ignored\n";
+		next;
+	    }
+	}
+	unlink("$BACKUPDIR/$switch-$datestr");
+	rename("$BACKUPDIR/$switch.in", "$BACKUPDIR/$switch-$datestr");
     }
 }
 

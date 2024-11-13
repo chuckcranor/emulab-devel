@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,6 +28,8 @@ chdir("apt");
 include("quickvm_sup.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 $page_title = "POWDER Map";
+# Mark the page as allowing it to be iframed.
+$page_allowframing = true;
 
 #
 # Get current user.
@@ -44,6 +46,7 @@ $showlegend    = 1;
 $showavailable = ($this_user ? 1 : 0);
 $showreserved  = ($this_user ? 1 : 0);
 $showmobile    = ($this_user ? 1 : 0);
+$isadmin       = (ISADMIN() ? 1 : 0);
 
 # Optional views
 $optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
@@ -51,9 +54,12 @@ $optargs = OptionalPageArguments("baseonly",   PAGEARG_BOOLEAN,
                                  "nomobile",   PAGEARG_BOOLEAN,
                                  "showlinks",  PAGEARG_STRING,
                                  "location",   PAGEARG_STRING,
-                                 "route",      PAGEARG_STRING);
+                                 "filter",     PAGEARG_STRING,
+                                 "route",      PAGEARG_STRING,
+                                 "imagerymap", PAGEARG_BOOLEAN,
+                                 "onlineonly", PAGEARG_BOOLEAN);
 
-if ($experiment) {
+if (isset($experiment)) {
     $baseonly   = 0;
     $showfilter = $showreserved = 0;
     $showlegend = 1;
@@ -75,6 +81,8 @@ if (!isset($showlinks)) {
 else {
     $showlinks = "'$showlinks'";
 }
+$onlineonly = ($onlineonly ? 1 : 0);
+$imagerymap = ($imagerymap ? 1 : 0);
 SPITHEADER(1);
 
 echo '<link rel="stylesheet"
@@ -90,15 +98,22 @@ echo "window.SHOWAVAILABLE = $showavailable;\n";
 echo "window.SHOWRESERVED  = $showreserved;\n";
 echo "window.SHOWMOBILE    = $showmobile;\n";
 echo "window.SHOWLINKS     = $showlinks;\n";
+echo "window.IMAGERYMAP    = $imagerymap;\n";
 echo "window.BASEONLY      = $baseonly;\n";
-if ($experiment) {
+echo "window.ONLINEONLY    = $onlineonly;\n";
+echo "window.ISADMIN       = $isadmin;\n";
+if (isset($experiment)) {
     echo "window.EXPERIMENT = '$experiment';\n";
 }
-if ($location) {
+if (isset($location)) {
     echo "window.LOCATION   = '$location';\n";
 }
-if ($route) {
+if (isset($route)) {
     echo "window.ROUTE   = '$route';\n";
+}
+if (isset($filter)) {
+    echo "window.SETFILTER = '$filter';\n";
+
 }
 echo "</script>\n";
 

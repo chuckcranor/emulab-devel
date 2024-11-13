@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,7 +44,7 @@ if [ $OS = FreeBSD ]; then
     fi    
 fi
 
-freebsd_disk="ad0"
+freebsd_disk="ada0"
 
 case $# in
 1)
@@ -63,10 +63,20 @@ linux_disk=`$BINDIR/freebsd_to_linux_disk $freebsd_disk`
 old_linux_disk=${linux_disk#* }
 linux_disk=${linux_disk%% *}
 
+isgpt=0
+freebsd_pchar=s
 if [ $OS = Linux ]; then
 	disk=$linux_disk
+	if fdisk -l /dev/$disk 2>/dev/null | grep -Eqi '(found valid|disklabel type:) gpt'; then
+		isgpt=1
+		freebsd_pchar=p
+	fi
 elif [ $OS = FreeBSD ]; then
 	disk=$freebsd_disk
+	if gpart show $freebsd_disk 2>/dev/null | grep -q GPT; then
+		isgpt=1
+		freebsd_pchar=p
+	fi
 fi
 
 #
@@ -144,7 +154,7 @@ fi
 DISABLEIF=$SLICEFIX_DISABLEIF
 DISABLEHINT=
 if [ -n "$DISABLEIF" ]; then
-    _str=`echo $DISABLEIF | sed -e 's/^([a-zA-Z0-9]*[a-zA-Z])([0-9][0-9]*)/hint.\1.\2.disabled/'`
+    _str=`echo $DISABLEIF | sed -E -e 's/^([a-zA-Z0-9]*[a-zA-Z])([0-9]+)/hint.\1.\2.disabled/'`
     if [ "$_str" = "$DISABLEIF" ]; then
 	echo "WARNING: unparsable define name \"$DISABLEIF\" ignored"
     else
@@ -205,8 +215,15 @@ if [ $CONSOLE = "unknown" ]; then
     echo "WARNING: console type not set, assuming \"sio1\""
     CONSOLE=sio1
 fi
-# XXX reset SLICEFIX_CONSOLE for the benefit of linux_slicefix
-SLICEFIX_CONSOLE=$CONSOLE
+
+#
+# XXX if we picked a console here, reset SLICEFIX_CONSOLE for the benefit
+# of linux_slicefix. Otherwise, we don't want to mess with any speed setting
+# in the original SLICEFIX_CONSOLE string.
+#
+if [ $OS = Linux -a "$SLICEFIX_CONSOLE" = "unknown" ]; then
+    SLICEFIX_CONSOLE=$CONSOLE
+fi
 
 # Console ISA port
 PORT=
@@ -283,8 +300,12 @@ dofixauthkeys() {
 	if [ ! -d /mnt/root/.ssh ]; then
 	    return 1
 	fi
-	if [ -x /usr/bin/stat ]; then
-	    _stat=`/usr/bin/stat -f '%u,%g,%p' /mnt/root/.ssh`
+	if [ -x /bin/stat -o -x /usr/bin/stat ]; then
+	    if [ $OS = Linux ]; then
+		_stat=`/bin/stat -c '%u,%g,40%a' /mnt/root/.ssh`
+	    else
+		_stat=`/usr/bin/stat -f '%u,%g,%p' /mnt/root/.ssh`
+	    fi
 	    if [ "$_stat" != "0,0,40700" ]; then
 		return 1
 	    fi
@@ -432,41 +453,8 @@ EOF8
 }
 
 dofreebsd() {
-	#
-	# ARGH!  FreeBSD 5, which primarily uses UFS2, internally converts
-	# UFS1 filesystems to an updated, UFS2 compatible form.  However,
-	# some of the converted fields leak back to disk when the filesystem
-	# is unmounted, creating the potential for corruption in the following
-	# scenerio:
-	#
-	# 1. mount, update, and unmount a UFS1 FS under FBSD5
-	# 2. mount, update, and unmount the FS under FBSD4
-	# 3. go back and access the FS under FBSD5
-	#
-	# #2 will update the old version of the csum structure.  At step
-	# #3, the mount will see some of the leaked info from the unmount
-	# in #1 and determine that it has already "upgraded" this FS and
-	# thus doesn't need to copy the old csum into the new one.  The
-	# result is that it will use stale csum info.
-	#
-	# In theory we could encounter this problem when we slicefix
-	# a newly loaded FBSD image (#1), boot up and update stuff on
-	# the image (#2), and then create a new image with imagezip
-	# (#3, as imagezip uses the FBSD5 filesystem logic).
-	#
-	# How do we deal with this?  What we will have to do is either
-	# fix the FBSD5 filesystem code or we will have to run a little
-	# hack after the slicefix unmount to undo the damage that FBSD5
-	# does.  Currently I have not done either.  Instead we avoid the
-	# problem as follows.  Before making any change to the FS with
-	# slicefix, we first RO-mount the FS to see if anything needs to
-	# be done.  If not, we just leave it alone.  Since I currently
-	# create all new images on machines with "ad" disks and that is
-	# what the default fstab contains for its root device, we avoid
-	# making any mods with slicefix and thus avoid #1 above.
-	#
-	# This is clearly not a solution.
-	#
+	pchar=$freebsd_pchar
+
 	if [ $OS = FreeBSD ]; then
 		vers=`uname -v | sed -e 's/FreeBSD \([0-9]\).*/\1/'`
 
@@ -475,8 +463,12 @@ dofreebsd() {
 			return 1
 		}
 
-		rootdev=/dev/${disk}s${part}a
-		echo "fixing FreeBSD root partition ${disk}s${part}a"
+		if [ $isgpt -eq 0 ]; then
+			rootdev=/dev/${disk}s${part}a
+		else
+			rootdev=/dev/${disk}p${part}
+		fi
+		echo "fixing FreeBSD root partition $rootdev"
 		fsck -p $rootdev || {
 			# 8.x fsck fails to determine the FS type, try again with ufs
 			echo "retrying fsck with '-t ufs'"
@@ -495,7 +487,11 @@ dofreebsd() {
 		else
 			echo w | /sbin/fdisk /dev/$disk > /dev/null 2>&1
 		fi
-		rootdev=/dev/`$BINDIR/check_disklabel $disk $part`
+
+		rootdev=/dev/
+		if [ $isgpt -eq 0 ]; then
+			rootdev=/dev/`$BINDIR/check_disklabel $disk $part`
+		fi
 		#
 		# XXX Linux seems to no longer detect the BSD disk label
 		# when there is a single BSD partition. For all our recent
@@ -505,7 +501,14 @@ dofreebsd() {
 		# complain to himself if this breaks.
 		#
 		if [ "$rootdev" = /dev/ ]; then
-		    rootdev="/dev/$disk$part"
+			case $disk in
+			nvme*)
+			    rootdev="/dev/${disk}p${part}"
+			    ;;
+			*)
+			    rootdev="/dev/${disk}${part}"
+			    ;;
+			esac
 		fi
 		fstype=ufs
 		fsopts="ro,ufstype=44bsd"
@@ -540,6 +543,7 @@ dofreebsd() {
 	changesshd=0
 	changeauth=0
 	changercert=0
+	changelconf=0
 
 	fixit=0
 
@@ -554,7 +558,7 @@ dofreebsd() {
 	fi
 
 	# If our disk/part does not appear anywhere in fstab, we need to fix it
-	grep "^/dev/${freebsd_disk}s${part}" /mnt/etc/fstab >/dev/null 2>&1
+	grep "^/dev/${freebsd_disk}${pchar}${part}" /mnt/etc/fstab >/dev/null 2>&1
 	case $? in
 	0)
 	    ;;
@@ -594,6 +598,7 @@ dofreebsd() {
 		*)
 		    if [ $ACPI = "yes" ]; then
 			changeacpi=1
+			changelconf=1
 			fixit=1
 		    fi
 		    ;;
@@ -619,12 +624,14 @@ dofreebsd() {
 		0)
 		    if [ $ASF = "no" ]; then
 			changeasf=1
+			changelconf=1
 			fixit=1
 		    fi
 		    ;;
 		*)
 		    if [ $ASF = "yes" ]; then
 			changeasf=1
+			changelconf=1
 			fixit=1
 		    fi
 		    ;;
@@ -638,6 +645,7 @@ dofreebsd() {
 	fi
 
 	if [ $NOCLFLUSH != "unknown" ]; then
+	    changelconf=1
 	    fixit=1
 	fi
 
@@ -649,6 +657,7 @@ dofreebsd() {
 	null|vid)
 	    if [ "$curconsole" != "${CONSOLE}console" ]; then
 		changecons=1
+		changelconf=1
 		fixit=1
 	    fi
 	    ;;
@@ -656,6 +665,7 @@ dofreebsd() {
 	    if [ "$curconsole" != "comconsole" ]; then
 		# not comconsole, fix it
 		changecons=1
+		changelconf=1
 		fixit=1
 	    else
 		# see if the com port has changed
@@ -666,6 +676,7 @@ dofreebsd() {
 		fi
 		if [ "$flags" != "0x10" ]; then
 		    changecons=1
+		    changelconf=1
 		    fixit=1
 		fi
 	    fi
@@ -776,6 +787,27 @@ dofreebsd() {
 		return 0
 	fi
 
+	if [ 0 -eq 1 ]; then
+		echo changedisk=$changedisk
+		echo changeentropy=$changeentropy
+		echo changeacpi=$changeacpi
+		echo changeasf=$changeasf
+		echo changeclflush=$changeclflush
+		echo changecons=$changecons
+		echo changecerts=$changecerts
+		echo changehostkeys=$changehostkeys
+		echo changerootkeys=$changerootkeys
+		echo changezone=$changezone
+		echo changentp=$changentp
+		echo changechrony=$changechrony
+		echo changesshd=$changesshd
+		echo changeauth=$changeauth
+		echo changercert=$changercert
+		echo changelconf=$changelconf
+		umount $rootdev
+		return 0
+	fi
+
 	# We need to change something, remount RW and change it
 	if [ $OS = FreeBSD ]; then
 		umount $rootdev
@@ -804,16 +836,27 @@ dofreebsd() {
 	    if [ -f /mnt/etc/fstab ]; then
 	    	    echo "  updating /etc/fstab"
 		    cp -fp /mnt/etc/fstab /mnt/etc/fstab.preemulab
-		    sed -i -e "s;^/dev/[a-zA-Z][a-zA-Z]*[0-9][0-9]*s[0-9][0-9]*;/dev/${freebsd_disk}s${part};" /mnt/etc/fstab || {
-			echo "Failed to update /etc/fstab"
-			umount $rootdev
-			return 1
-		    }
+		    if [ $isgpt -ne 0 ]; then
+			# XXX for GPT we need to remove any BSD partition specifier
+			# There should only be a root partition specified.
+			sed -i -E -e "s;^/dev/[a-zA-Z]+[0-9]+[sp][0-9]+[a-z]*;/dev/${freebsd_disk}${pchar}${part};" /mnt/etc/fstab || {
+			    echo "Failed to update /etc/fstab"
+			    umount $rootdev
+			    return 1
+			}
+		    else
+			# XXX otherwise we need to leave any BSD partition specifier
+			sed -i -E -e "s;^/dev/[a-zA-Z]+[0-9]+[sp][0-9]+([a-z]*);/dev/${freebsd_disk}${pchar}${part}\1;" /mnt/etc/fstab || {
+			    echo "Failed to update /etc/fstab"
+			    umount $rootdev
+			    return 1
+			}
+		    fi
     	    fi
 	    if [ -f /mnt/etc/dumpdates ]; then
 		    echo "  updating /etc/dumpdates"
 		    cp -fp /mnt/etc/dumpdates /mnt/etc/dumpdates.preemulab
-		    sed -i -e "s;^/dev/[a-zA-Z][a-zA-Z]*[0-9][0-9]*s[0-9][0-9]*;/dev/${freebsd_disk}s${part};" /mnt/etc/dumpdates || {
+		    sed -i -E -e "s;^/dev/[a-zA-Z]+[0-9]+[sp][0-9]+;/dev/${freebsd_disk}${pchar}${part};" /mnt/etc/dumpdates || {
 			echo "WARNING: Failed to update /etc/dumpdates"
 		    }
 	    fi
@@ -842,10 +885,12 @@ dofreebsd() {
 	cp -p /mnt/boot/loader.conf /mnt/boot/loader.conf.preemulab || {
 	    echo "WARNING: could not create a copy of loader.conf"
 	}
-	cat <<EOF4 >>/mnt/boot/loader.conf
+	if [ $changelconf -eq 1 ]; then
+	    cat <<EOF4 >>/mnt/boot/loader.conf
 # The remaining lines were added by Emulab slicefix.
 # DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.
 EOF4
+	fi
 
 	if [ $changeacpi -eq 1 ]; then
 	    if [ $ACPI = "no" ]; then
@@ -966,6 +1011,8 @@ EOF1
 		    cat <<EOF2 >>/mnt/boot/loader.conf
 comconsole_port="$PORT"
 comconsole_speed="$SPEED"
+boot_multicons="YES"
+boot_serial="YES"
 hint.$drv.0.flags="0x0"
 hint.$drv.1.flags="0x0"
 hint.$drv.2.flags="0x0"
@@ -1086,14 +1133,6 @@ EOF1
 	fi
 
 	umount $rootdev
-	if [ $OS = FreeBSD ]; then
-		# XXX need to fixup FS, see big comment above
-		if [ "x$vers" != "x4" ]; then
-			echo "WARNING: FBSD${vers} may have modified the UFS1 root FS"
-		fi
-
-	fi
-
 	return 0
 }
 
@@ -1132,24 +1171,34 @@ dolinux() {
 
 fixone() {
     if [ $OS = FreeBSD ]; then
-    	echo "*** ${disk}s${part}:"
+    	echo "*** ${disk}${freebsd_pchar}${part}:"
     	ptype=`fdisk -${part} ${disk} | grep sysid | sed 's/^sysid \([0-9][0-9]*\).*/\1/'`
     elif [ $OS = Linux ]; then
 	fullpath=${disk}${part}
 	(echo ${disk} | grep -q ^nvme) && fullpath=${disk}p${part}
     	echo "*** ${fullpath}:"
-	fdisk -l /dev/$disk | grep -qi 'found valid gpt'
-	if [ $? -eq 0 ]; then
+	if [ $isgpt -ne 0 ]; then
 	    # gdisk output converts the gpt partition ID to, e.g., 8300.
 	    ptype=`gdisk -l /dev/$disk | awk "/^ *${part} / {print \\$6}"`
 	else
-    	    ptype=`fdisk -l /dev/$disk | awk /${fullpath}/'{sub(/\*/,""); print "0x"$8}'`
+	    # busybox fdisk and "real" fdisk have different output styles
+	    isrealfdisk=1
+	    fdiskpath=`which fdisk`
+	    if [ -L $fdiskpath ]; then
+		readlink $fdiskpath | grep -q busybox
+		isrealfdisk=$?
+	    fi
+	    if [ $isrealfdisk -eq 0 ]; then
+    		ptype=`fdisk -l /dev/$disk | awk /${fullpath}/'{sub(/\*/,""); print "0x"$8}'`
+	    else
+    		ptype=`fdisk -l /dev/$disk | awk /${fullpath}/'{sub(/\*/,""); print "0x"$6}'`
+	    fi
 	fi
     fi
     ptype=${ptype:-0}
 
     case $ptype in
-    165|0xa5)
+    165|0xa5|A503)
 	dofreebsd
 	return $?
 	;;
@@ -1157,7 +1206,7 @@ fixone() {
 	dolinux
 	return $?
 	;;
-    130|0x82)
+    130|0x82|8200)
 	echo "ignoring Linux swap partition"
 	;;
     7|0x7)
@@ -1165,6 +1214,12 @@ fixone() {
 	;;
     0|0x0)
 	echo "ignoring unused partition"
+	;;
+    EF00)
+	echo "ignoring EFI partition"
+	;;
+    A501)
+	echo "ignoring FreeBSD boot partition"
 	;;
     *)
 	echo "ignoring partition type $ptype"

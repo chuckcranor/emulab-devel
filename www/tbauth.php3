@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -210,7 +210,7 @@ function GETUID() {
 #
 function LoginStatus() {
     global $TBAUTHCOOKIE, $TBLOGINCOOKIE, $TBAUTHTIMEOUT;
-    global $CHECKLOGIN_STATUS, $CHECKLOGIN_UID, $CHECKLOGIN_NODETYPES;
+    global $CHECKLOGIN_STATUS, $CHECKLOGIN_UID;
     global $CHECKLOGIN_WIKINAME, $TBOPSPID;
     global $EXPOSEARCHIVE, $EXPOSETEMPLATES;
     global $CHECKLOGIN_HASHKEY, $CHECKLOGIN_HASHHASH;
@@ -276,7 +276,7 @@ function LoginStatus() {
     $query_result =
 	DBQueryFatal("select NOW()>=u.pswd_expires,l.hashkey,l.timeout, ".
 		     "       status,admin,cvsweb,g.trust,l.adminon,webonly, " .
-		     "       user_interface,n.type,u.stud,u.wikiname, ".
+		     "       user_interface,null,u.stud,u.wikiname, ".
 		     "       u.wikionly,g.pid,u.foreign_admin,u.uid_idx, " .
 		     "       p.allow_workbench,u.weblogin_frozen, ".
                      "       u.nonlocal_id,p.disabled ".
@@ -284,7 +284,6 @@ function LoginStatus() {
 		     "left join login as l on l.uid_idx=u.uid_idx ".
 		     "left join group_membership as g on g.uid_idx=u.uid_idx ".
 		     "left join projects as p on p.pid_idx=g.pid_idx ".
-		     "left join nodetypeXpid_permissions as n on g.pid=n.pid ".
 		     "where u.uid_idx='$safe_idx' and ".
 		     (isset($curhash) ?
 		      "l.hashkey='$safe_curhash'" :
@@ -306,7 +305,6 @@ function LoginStatus() {
     $frozen    = 0;
     $nonlocal  = 0;
     $pcount    = 0;
-    $pdisabled = 0;
     
     while ($row = mysql_fetch_array($query_result)) {
 	$expired = $row[0];
@@ -316,13 +314,14 @@ function LoginStatus() {
 	$admin   = $row[4];
 	$cvsweb  = $row[5];
         $trust   = $row[6];
+        $disable = $row[20];
 
         #
         # Count up number of projects where user has local_root or better.
         # These are projects where user has viable permission to do things,
         # like create experiments.
         #
-        if ($trust != "none" && $trust != "user") {
+        if ($trust != "none" && $trust != "user" && $disable == 0) {
             $pcount++;
         }
 	if ($trust == "project_root" || $trust == "group_root") {
@@ -332,7 +331,6 @@ function LoginStatus() {
 	$webonly  = $row[8];
 	$interface= $row[9];
 
-	$type     = $row[10];
 	$stud     = $row[11];
 	$wikiname = $row[12];
 	$wikionly = $row[13];
@@ -349,12 +347,6 @@ function LoginStatus() {
 	$workbench      += $row[17];
 	$frozen          = $row[18];
 	$nonlocal        = $row[19] ? 1 : 0;
-        $disable         = $row[20];
-        if ($disable) {
-            $pdisabled++;
-        }
-
-	$CHECKLOGIN_NODETYPES[$type] = 1;
     }
 
     #
@@ -368,7 +360,7 @@ function LoginStatus() {
     #
     # Check for frozen account. Might do something interesting later.
     #
-    if ($pdisabled || $frozen ||
+    if ($frozen ||
 	$status == TBDB_USERSTATUS_FROZEN) {
 	DBQueryFatal("DELETE FROM login WHERE uid_idx='$uid_idx'");
 	$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
@@ -868,29 +860,6 @@ function ISPLABUSER() {
 }
 
 #
-# Check to see if a user is allowed, in some project, to use the given node
-# type. Returns 1 if allowed, 0 if not.
-#
-# NOTE: This is NOT intended as a real permissions check. It is intended only
-# for display purposes (ie. deciding whether or not to give the user a link to
-# the plab_ez page.) It does not require the user to be actually logged in, so
-# that it still works for pages fetched through http. Thus, it may be possible
-# for a clever user to fake it out.
-#
-function NODETYPE_ALLOWED($type) {
-    global $CHECKLOGIN_NODETYPES;
-
-    if (! GETUID())
-	return 0;
-
-    if (isset($CHECKLOGIN_NODETYPES[$type])) {
-	return 1;
-    } else {
-	return 0;
-    }
-}
-
-#
 # Attempt a login.
 # 
 function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
@@ -899,7 +868,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     global $TBMAIL_OPS, $TBMAIL_AUDIT, $TBMAIL_WWW;
     global $WIKISUPPORT, $WIKICOOKIENAME;
     global $BUGDBSUPPORT, $BUGDBCOOKIENAME, $CHECKLOGIN_USER;
-    global $TB_PROJECT_READINFO;
+    global $TB_PROJECT_READINFO, $TUTORIALSTATS, $APTBASE, $TBBASE;
     
     # Caller makes these checks too.
     if ((!TBvalid_uid($token) && !TBvalid_email($token)) ||
@@ -919,6 +888,10 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     unset($IP);
     if (isset($_SERVER['REMOTE_ADDR'])) {
 	$IP = $_SERVER['REMOTE_ADDR'];
+
+        if ($TUTORIALSTATS) {
+            TutorialStat("Login: $token");
+        }
 	
 	$ip_result =
 	    DBQueryFatal("select * from login_failures ".
@@ -945,7 +918,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
     else {
 	$user = User::Lookup($token);
     }
-	    
+    
     #
     # Check password in the database against provided. 
     #
@@ -964,6 +937,13 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
         $ga_userid   = $user->ga_userid();
         $lastlogin   = $user->weblogin_last();
 
+        if ($APTBASE) {
+            $url = "$APTBASE/user-dashboard.php?user=$uid";
+        }
+        else {
+            $url = "$TBBASE/showuser.php3?user=$uid";
+        }
+
         #
         # Yuck.
         #
@@ -979,11 +959,6 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	    $user->UpdateWebLoginFail();
 	    return DOLOGIN_STATUS_WEBFREEZE;
 	}
-        # Check for membership in disabled project.
-        $plist = $user->DisabledProjects();
-        if (count($plist)) {
-            return DOLOGIN_STATUS_PROJDISABLED;
-        }
         # Check for a geni user trying to login with a password.
         if (!$nopassword && $user->nonlocal_id()) {
             return DOLOGIN_STATUS_NOGENIUSER;
@@ -1006,8 +981,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 			   "Testbed Operations has been notified.\n".
                            (isset($PORTAL_GENESIS) ?
                             "Portal: $PORTAL_GENESIS" :
-                            "Classic Interface") . "\n",
-                           
+                            "Classic Interface") . "\n" . $url . "\n",
 			   "From: $TBMAIL_OPS\n".
 			   "Cc: $TBMAIL_OPS\n".
 			   "Bcc: $TBMAIL_AUDIT\n".
@@ -1035,7 +1009,8 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
                        "Web Login Inactivity Alert: '$uid'",
                        "Login attempt by $uid ($uid_idx) after extended ".
                        "period of inactivity!\n".
-                       "Login was denied, last activity was $lastlogin\n",
+                       "Login was denied, last activity was $lastlogin\n\n".
+                       "$url\n",
                        "From: $TBMAIL_OPS\n".
                        "Bcc: $TBMAIL_AUDIT\n".
                        "CC: $TBMAIL_OPS\n".
@@ -1249,6 +1224,10 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
                  "    $adminon, '$opskey')");
     if (isset($PORTAL_GENESIS)) {
         DBQueryFatal("update login set portal='$PORTAL_GENESIS' ".
+                     "where uid_idx='$uid_idx' and hashkey='$hashkey'");
+    }
+    if (isset($IP)) {
+        DBQueryFatal("update login set IP='$IP' ".
                      "where uid_idx='$uid_idx' and hashkey='$hashkey'");
     }
 
@@ -1536,9 +1515,11 @@ function BumpLogoutTime()
     if (! is_null($CHECKLOGIN_HASHKEY)) {
 	$timeout = time() + (ISADMINISTRATOR() ? 3600 * 24 : $TBAUTHTIMEOUT);
 
-            $TBAUTHTIMEOUT;
-
-	DBQueryFatal("UPDATE login set timeout='$timeout' ".
+        if (isset($_SERVER['REMOTE_ADDR'])) {
+            $IP = $_SERVER['REMOTE_ADDR'];
+        }
+	DBQueryFatal("UPDATE login set last_access=now(),timeout='$timeout' ".
+                     (isset($IP) ? ", IP='$IP' " : "") .
 		     "where uid_idx='$CHECKLOGIN_IDX' and ".
 		     "      hashkey='$CHECKLOGIN_HASHKEY'");
     }

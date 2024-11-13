@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,7 +40,7 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 
 install: $(INSTALL_ETCDIR)/dhcpd.conf.frag.one \
 	 $(INSTALL_SBINDIR)/run_capture \
-	 $(INSTALL_RCDIR)/getcacerts.sh
+	 $(INSTALL_RCDIR)/getcacerts.sh install-poweron
 
 install-idlefix: $(INSTALL_SBINDIR)/idlefix \
 	 $(INSTALL_RCDIR)/idlefix.sh

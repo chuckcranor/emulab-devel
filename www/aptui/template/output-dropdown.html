@@ -12,12 +12,15 @@
     margin-bottom: 5px;
   }
 </style>
+<div class="dropdown-center">
    <!-- Split button -->
     <div class="btn-group">
-      <button type="button" class="btn btn-default btn-sm download">Download</button>
-      <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown">
-        <span class="caret"></span>
-        <span class="sr-only">Toggle Dropdown</span>
+      <button type="button" class="btn btn-default download">Download</button>
+      <button type="button" class="btn btn-default dropdown-toggle"
+	      data-bs-auto-close="false"
+	      data-toggle="dropdown" data-bs-toggle="dropdown">
+	<span class="glyphicon glyphicon-cog"
+	      style="height: 20px;"></span>	
       </button>
       <ul class="dropdown-menu output-dropdown" role="menu">
         <li><h5><strong>Output options</strong></h5></li>
@@ -25,14 +28,14 @@
           <label>Separator: <input class="output-separator-input" type="text" size="2" value=","></label>
           <button type="button" class="output-separator btn btn-default btn-xs active" title="comma">,</button>
           <button type="button" class="output-separator btn btn-default btn-xs" title="semi-colon">;</button>
-          <button type="button" class="output-separator btn btn-default btn-xs" title="tab">  </button>
+          <button type="button" class="output-separator btn btn-default btn-xs" title="tab">	</button>
           <button type="button" class="output-separator btn btn-default btn-xs" title="space"> </button>
           <button type="button" class="output-separator btn btn-default btn-xs" title="output JSON">json</button>
           <button type="button" class="output-separator btn btn-default btn-xs" title="output Array (see note)">array</button>
         </li>
         <li>
           <div class="btn-group output-download-popup" data-toggle="buttons" title="Download file or open in Popup window">
-            <label class="btn btn-default btn-sm active">
+            <label class="btn btn-default btn-sm">
               <input type="radio" name="delivery1" class="output-popup" checked=""> Popup
             </label>
             <label class="btn btn-default btn-sm">
@@ -42,7 +45,7 @@
         </li>
         <li>
           <div class="btn-group output-filter-all" data-toggle="buttons" title="Output only filtered, visible or all rows">
-            <label class="btn btn-default btn-sm active">
+            <label class="btn btn-default btn-sm">
               <input type="radio" name="getrows1" class="output-filter" checked="checked"> Filtered
             </label>
             <label class="btn btn-default btn-sm">
@@ -66,3 +69,4 @@
         <li><label title="Choose a download filename">Filename: <input class="output-filename" type="text" size="15" value="mytable.csv"></label></li>
       </ul>
     </div>
+</div>

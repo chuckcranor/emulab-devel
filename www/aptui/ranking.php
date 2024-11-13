@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -41,9 +44,7 @@ $optargs = OptionalPageArguments("days",     PAGEARG_INTEGER,
 if (!isset($days)) {
     $days = 30;
 }
-if (!isset($allusers)) {
-    $allusers = 0;
-}
+$allusers = ($allusers ? 1 : 0);
 
 #
 # Verify page arguments.
@@ -79,7 +80,8 @@ function SpitRankList($target, $days, $allusers)
     $query_result =
         DBQueryFatal("select $which,SUM(physnode_count) as physnode_count,".
                      "   SUM(phours) as phours,u.usr_name,u.usr_affil, ".
-                     "   u.uid from ".
+                     "   u.uid, ".
+                     ($target == "user" ? "u.portal" : "p.portal") . " from ".
                      " ((select $which,physnode_count,started,NULL, ".
                      "   physnode_count * (TIMESTAMPDIFF(HOUR, ".
                      "    IF(started > DATE_SUB(now(), INTERVAL $days DAY), ".
@@ -112,6 +114,7 @@ function SpitRankList($target, $days, $allusers)
         $blob["usr_affil"]  = $row["usr_affil"];
         $blob["pnodes"]     = $row["physnode_count"];
         $blob["phours"]     = $row["phours"];
+        $blob["portal"]     = $row["portal"];
         $results[$row[0]] = $blob;
     }
     echo "<script type='text/plain' id='${target}-json'>\n";

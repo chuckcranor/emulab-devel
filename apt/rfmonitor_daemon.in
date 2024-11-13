@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -36,6 +36,7 @@ use IO::Socket::INET;
 use File::Temp qw(tempdir);
 use POSIX qw(strftime);
 use POSIX ":sys_wait_h";
+use POSIX qw(ceil floor);
 use JSON;
 
 #
@@ -57,14 +58,16 @@ my $HOST      = "@POWDER_RFMONITOR_HOST@";
 my $usemax    = 1;
 my $MAXPOWER  = 0; # I like that zero power does not mean zero. 
 my $NOISEFLOOR= -110.0;
+my $POWEROFF  = -90.0;
 
 #
 # Configure variables
 #
 my $TB		     = "@prefix@";
 my $TBOPS            = "@TBOPSEMAIL@";
-my $TBRFOPS          = "powder-rfmon\@flux.utah.edu";
+my $TBRFOPS          = "powder-rfmon\@emulab.net";
 my $OURDOMAIN        = "@OURDOMAIN@";
+my $DEFAULT_URN      = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 my $TBBASE           = "@TBBASE@";
 my $MAINSITE         = @TBMAINSITE@;
 my $POWDER_RFMONITOR = @POWDER_RFMONITOR@;
@@ -73,11 +76,13 @@ my $PGENISUPPORT     = @PROTOGENI_SUPPORT@;
 my $LOGFILE          = "$TB/log/rfmonitor_daemon.log";
 my $RAWDATADIR       = "$TB/www/rfmonitor";
 my $POWER            = "$TB/bin/power";
+my $MANAGERDZ        = "$TB/bin/manage_rdz";
 my $GZIP             = "/usr/bin/gzip";
 my $FIND             = "/usr/bin/find";
 my $FORMAT1          = "portid,timestamp,frequency,power";
 my $FORMAT2          = $FORMAT1 . ",center_freq";
 my $FORMAT3          = $FORMAT2 . ",incident";
+my $CSVHEADER        = "frequency,power";
 my $MAILDELAY        = 3600;
 
 # un-taint path
@@ -94,6 +99,7 @@ sub HandleChild($);
 sub LoadNodeData($);
 sub HandleViolations($$$);
 sub WriteRawData($$$);
+sub measurement_consistent($$$$);
 
 #
 # Explanatory text.
@@ -169,6 +175,8 @@ use libtestbed;
 use emutil;
 use libEmulab;
 use Experiment;
+use APT_Instance;
+use Node;
 use Brand;
 if ($PGENISUPPORT) {
     require GeniSlice;
@@ -301,6 +309,7 @@ sub HandleChild($)
     my @dbinserts  = ();
     my %csvdata    = ();
     my $filestamp  = time();
+    my @abovefloor = ();
 
     # Add a DB insert to the list of violations to store in the DB.
     my $addInsert = sub {
@@ -420,6 +429,9 @@ sub HandleChild($)
 	print STDERR "Improper format from $address:$port: '$header'\n";
 	exit(1);
     }
+    # Set the CSV header; strip first two tokens. 
+    my @tokens = split(",", $header);
+    $CSVHEADER = join(",", splice(@tokens, 2));
 
     for (my $i = 0; $i < scalar(@lines); $i++) {
 	my $line = $lines[$i];
@@ -434,7 +446,6 @@ sub HandleChild($)
 	my $power     = $measurement->{"power"} + 0.0;
 	my $timestamp = $measurement->{"timestamp"};
 	my $center    = $measurement->{"center"};
-	my $incident  = $measurement->{"incident"};
 	my $key       = "${nodeid}:${iface}:${frequency}";
 
 	my $node = Node->Lookup($nodeid);
@@ -451,10 +462,7 @@ sub HandleChild($)
 	if (!exists($csvdata{"${nodeid}:${iface}"})) {
 	    $csvdata{"${nodeid}:${iface}"} = [];
 	}
-	my @csv = ($frequency, $power);
-	push(@csv, $center + 0.0) if (defined($center));
-	push(@csv, $incident + 0.0) if (defined($incident));
-	push(@{ $csvdata{"${nodeid}:${iface}"} }, \@csv);
+	push(@{ $csvdata{"${nodeid}:${iface}"} }, $measurement);
 	
 	#
 	# This is bogus, I was expecting the monitor to only send me
@@ -465,7 +473,7 @@ sub HandleChild($)
 	next
 	    if ($power < $floor);
 
-	print "Above floor:$noisefloor $nodeid:$iface: $frequency,$power\n";
+	print "Above floor:$noisefloor $nodeid:$iface: $frequency,$power,$center\n";
 
 	#
 	# Temporary measure; lets ignore violations below 1Gz, Alex says
@@ -474,6 +482,14 @@ sub HandleChild($)
 	#
 	next
 	    if ($nodeid !~ /^cbrs/ && $frequency < 1000.0);
+
+	#
+	# We will adjust CSV data when there are any violations.
+	#
+	$measurement->{"abovefloor"} = $power - $floor;
+	$measurement->{"violation"}  = 0;
+	$measurement->{"instance"}   = undef;
+	push(@abovefloor, $measurement);
 	
 	#
 	# Check for a report that comes in after we have powered off the
@@ -532,6 +548,9 @@ sub HandleChild($)
 	# If no RF limit for the interface, its a violation.
 	#
 	if (!defined($limits)) {
+	    # Mark immediately in the CSV file.
+	    $measurement->{"violation"} = 1;
+	    
 	    # Ignore sample first time we see it. 	    
 	    if (exists($prevdata->{$key})) {
 		my $previous = $prevdata->{$key};
@@ -567,9 +586,23 @@ sub HandleChild($)
 		    $inrange = 1;
 		    last;
 		}
+		if ($measurement->{"center"} &&
+		    measurement_consistent($limit->{"freq_low"},
+					   $limit->{"freq_high"},
+					   $measurement->{"frequency"},
+					   $measurement->{"center"})) {
+		    print "Appears to be a subharmonic for the range ".
+			$limit->{"freq_low"} . "," .
+			$limit->{"freq_high"} . "\n";
+		    $inrange = 1;
+		    last;
+		}
 	    }
 	}
 	if (!$inrange) {
+	    # Mark immediately in the CSV file.
+	    $measurement->{"violation"} = 1;
+
 	    # Ignore sample first time we see it.
 	    if (exists($prevdata->{$key})) {
 		my $previous = $prevdata->{$key};
@@ -593,7 +626,73 @@ sub HandleChild($)
     #
     # Write the raw data file(s)
     #
-    WriteRawData(\%csvdata, $filestamp, scalar(keys(%violaters)));
+    WriteRawData(\%csvdata, $filestamp, \@abovefloor);
+
+    #
+    # On the mainsite, we can figure out the instance holding the
+    # resource and add it to the transmissions table.
+    #
+    if ($MAINSITE && @abovefloor) {
+	foreach my $measurement (@abovefloor) {
+	    my $node_id = $measurement->{"node_id"};
+	    my $node    = Node->Lookup($node_id);
+
+	    if (!$node) {
+		print STDERR "Could not lookup node: $node_id\n";
+		next;
+	    }
+	    next
+		if (!$node->IsReserved());
+
+	    my $experiment = $node->Reservation();
+	    if (!$experiment) {
+		print STDERR "Could not lookup experiment for $node_id\n";
+		next;
+	    }
+	    my $slice_uuid = $experiment->slice_uuid();
+	    if (!$slice_uuid) {
+		print STDERR "No slice for experiment $experiment\n";
+		next;
+	    }
+	    my $instance = APT_Instance->LookupBySlice($slice_uuid);
+	    if (!$instance) {
+		print STDERR "No APT instance for experiment $experiment\n";
+		next;
+	    }
+	    $measurement->{'instance'} = $instance->uuid();
+	}
+    }
+
+    #
+    # Insert transmission data (new version).
+    #
+    foreach my $measurement (@abovefloor) {
+	my $nodeid    = $measurement->{"node_id"};
+	my $iface     = $measurement->{"iface"};
+	my $frequency = $measurement->{"frequency"} + 0.0;
+	my $power     = $measurement->{"power"} + 0.0;
+	my $timestamp = $measurement->{"timestamp"};
+	my $center    = $measurement->{"center"};
+	my $abovefloor= $measurement->{"abovefloor"};
+	my $violation = $measurement->{"violation"};
+	my $instance  = $measurement->{"instance"};
+
+	if (!$impotent) {
+	    DBQueryFatal("replace into apt_aggregate_radio_transmissions set ".
+			 "  aggregate_urn='$DEFAULT_URN', ".
+			 "  node_id='$nodeid', ".
+			 "  iface='$iface',frontend='none', ".
+			 "  tstamp=FROM_UNIXTIME($filestamp), ".
+			 "  frequency='$frequency', ".
+			 (defined($instance) ?
+			  "instance_uuid='$instance', " : "").
+			 "  power='$power',center='$center', ".
+			 "  abovefloor='$abovefloor',violation='$violation'");
+	}
+	else {
+	    print "Would insert apt_aggregate_radio_transmission entry\n";
+	}
+    }
 
     #
     # We send links to the data and the graph page in the email.
@@ -679,6 +778,7 @@ sub HandleViolations($$$)
     foreach my $nodeid (keys(%{$violations})) {
 	my ($TO, $subject, $body, $portalurl, $rfurl, $graphurl);
 	my $forcemail = 0;
+	my $shutdown  = 0;
 	my $headers;
 
 	my $node = Node->Lookup($nodeid);
@@ -760,6 +860,9 @@ sub HandleViolations($$$)
 		# We always send email when it is a new frequency.
 		$forcemail = 1
 		    if ($measurement->{'repeatcount'} == 1);
+
+		$shutdown = 1
+		    if ($power > $POWEROFF);
 	    }
 	    $body .= "\n";
 	    #
@@ -770,7 +873,7 @@ sub HandleViolations($$$)
 		"/frequency-graph.php?node_id=$nodeid&iface=$iface" .
 		"&cluster=${POWDER_NICKNAME}&logid=$filestamp&archived=1";
 	}
-	if (!$mailonly) {
+	if (!$mailonly || $shutdown) {
 	    $body .= "\n" . "This node will be immediately powered off!\n";
 	}
 	# Link to the violation history page.
@@ -796,7 +899,10 @@ sub HandleViolations($$$)
 	    libtestbed::SENDMAIL($TO, $subject, $body, $TBOPS, $headers);
 	    NodeNotified($nodeid, "user", $body);
 	}
-	if (!($impotent || $mailonly)) {
+	next
+	    if ($impotent);
+
+	if (!$mailonly || $shutdown) {
 	    #
 	    # We are allowed to run the power command as root.
 	    #
@@ -804,6 +910,13 @@ sub HandleViolations($$$)
 	    if ($?) {
 		NodeNotify($nodeid, "system",
 			   "Failed to power of $nodeid!\n\n". $output);
+	    }
+	    if ($shutdown) {
+		print STDERR "Shutting down slice since over $POWEROFF\n";
+		my $slice = GeniSlice->LookupByNode($node);
+		if ($slice) {
+		    $slice->SetShutdown(1);
+		}
 	    }
 	}
     }
@@ -874,7 +987,18 @@ sub NodeNotify($$$)
 #
 sub WriteRawData($$$)
 {
-    my ($data, $filestamp, $violations) = @_;
+    my ($data, $filestamp, $aboveref) = @_;
+    my $header = $CSVHEADER;
+    my $abovefloor = scalar(@{$aboveref});
+    my $violations = 0;
+    foreach my $measurement (@{$aboveref}) {
+	if ($measurement->{"violation"} == 1) {
+	    $violations = 1;
+	    last;
+	}
+    }
+    $header .= ",abovefloor" if ($abovefloor);
+    $header .= ",violation" if ($abovefloor && $violations);
 
     foreach my $portid (keys(%{$data})) {
 	my @samples   = @{$data->{$portid}};
@@ -882,47 +1006,48 @@ sub WriteRawData($$$)
 	my $tmpname   = "$RAWDATADIR/${portid}.tmp";
 	my $csvname   = "$RAWDATADIR/${portid}.csv";
 	my $gzsymlink = "$RAWDATADIR/${portid}.csv.gz";
-	my ($gzipname);
-	#
-	# When there are violations, we archive the raw data for longer
-	# in the archive directory, and the symlink points there instead.
-	#
-	if ($violations) {
-	    $gzipname  = "$RAWDATADIR/archive/${filename}.gz";
-	}
-	else {
-	    $gzipname  = "$RAWDATADIR/${filename}.gz";
-	}
+	my $gzipname  = "$RAWDATADIR/${filename}.gz";
 
 	#
-	# Prune historical data older then 24 hours.
-	# Prune archived data older then 1 week.
+	# Prune historical data older then 10 days.
 	#
 	system("$FIND -E $RAWDATADIR -regex '^.*\-[0-9]+\.csv\.gz\$' ".
-	       "-mtime +24h -depth 1 -print " . ($impotent ? "" : "-delete"));
-	system("$FIND $RAWDATADIR/archive -type f -mtime +7 -print ".
-	       ($impotent ? "" : "-delete"));
+	       "-mtime +14 -print " . ($impotent ? "" : "-delete"));
 
 	if (open(CSV, "> $tmpname")) {
-	    my $first = $samples[0];
-
-	    print CSV "frequency,power";
-	    if (scalar(@$first) > 2) {
-		print CSV ",center_freq";
-	    }
-	    if (scalar(@$first) > 3) {
-		print CSV ",incident";
-	    }
-	    print CSV "\n";
+	    print CSV "$header\n";
 	    
 	    foreach my $ref (@samples) {
-		my ($freq, $power, $cfreq, $inci) = @$ref;
-		$freq  = sprintf("%.3f", $freq);
-		$power = sprintf("%.3f", $power);
-		$cfreq = (defined($cfreq) ? sprintf(",%.4f", $cfreq) : "");
-		$inci  = (defined($inci)  ? sprintf(",%.4f", $inci)  : "");
-		
-		print CSV "$freq,$power${cfreq}${inci}\n";
+		my $center      = "";
+		my $incident    = "";
+
+		my $freq  = sprintf("%.3f", $ref->{"frequency"});
+		my $power = sprintf("%.3f", $ref->{"power"});
+		if (defined($ref->{"center"})) {
+		    $center = sprintf(",%.3f", $ref->{"center"});
+		}
+		if (defined($ref->{"incident"})) {
+		    $incident = sprintf(",%.3f", $ref->{"incident"});
+		}
+		print CSV "$freq,$power${center}${incident}";
+		if ($abovefloor) {
+		    if (exists($ref->{"abovefloor"})) {
+			print CSV sprintf(",%.3f", $ref->{"abovefloor"});
+		    }
+		    else {
+			print CSV ",";
+		    }
+		    if ($violations) {
+			if (exists($ref->{"violation"}) &&
+			    $ref->{"violation"} == 1) {
+			    print CSV ",1"
+			}
+			else {
+			    print CSV ",";
+			}
+		    }
+		}
+		print CSV "\n";
 	    }
 	    if (close(CSV)) {
 		system("$GZIP -c $tmpname > $gzipname");
@@ -934,16 +1059,22 @@ sub WriteRawData($$$)
 		    print STDERR "Could not rename new CSV file: $!\n";
 		    return -1;
 		}
-		# A violation, symlink into the
-		if ($violations &&
-		    system("/bin/ln -sf archive/${filename}.gz ".
-			   "                  $RAWDATADIR/${filename}.gz")) {
+		# Above the noise floor, symlink into the main directory
+		if ($abovefloor &&
+		    system("/bin/ln -sf ../${filename}.gz ".
+			   "    $RAWDATADIR/archive/${filename}.gz")) {
 		    print STDERR "Could not create archive symlink\n";
 		    return -1;
 		}
 		if (system("/bin/ln -sf ${filename}.gz $gzsymlink")) {
 		    print STDERR "Could not update $gzsymlink\n";
 		    return -1;
+		}
+		if ($MAINSITE) {
+		    if (-x $MANAGERDZ) {
+			print "RDZ: $gzipname\n";
+			system("$MANAGERDZ observations create $gzipname");
+		    }
 		}
 	    }
 	    else {
@@ -954,6 +1085,49 @@ sub WriteRawData($$$)
 	    print STDERR "Could not open new CSV file $tmpname: $!\n";
 	}
     }
+}
+
+#
+# Math provided by Alex. 
+#
+sub measurement_consistent($$$$)
+{
+    my ($f_min, $f_max, $f_detected, $f_center) = @_;
+
+    # multiplier = [1, 1, -1, -1]
+    # f_true = n*f_center + multiplier[n%4] * (f_detected - f_center)
+
+    # n = (f_true + multiplier[n%4] * (f_center - f_detected)) / f_center
+    # multiplier = 1, n%4 in {0,1}
+    my $n1 = ($f_min + ($f_center - $f_detected)) / $f_center;
+    my $n2 = ($f_max + ($f_center - $f_detected)) / $f_center;
+    # multipler = -1, n%4 in {2,3}
+    my $n3 = ($f_min - ($f_center - $f_detected)) / $f_center;
+    my $n4 = ($f_max - ($f_center - $f_detected)) / $f_center;
+
+    #print("f_min: ${f_min}\n");
+    #print("f_max: ${f_max}\n");
+    #print("f_detected: ${f_detected}\n");
+    #print("f_center: ${f_center}\n");
+    #print("$n1, $n2, $n3, $n4\n");
+
+    my $n_p = int(ceil($n1));
+    my $consistent_p = (ceil($n1) <= floor($n2) &&
+			(($n_p % 4) == 0 || ($n_p % 4) == 1) ? 1 : 0);
+
+    my $n_m = int(ceil($n3));
+    my $consistent_m = (ceil($n3) <= floor($n4) &&
+			(($n_m % 4) == 2 || ($n_m % 4) == 3) ? 1 : 0);
+
+    my $consistent = $consistent_p || $consistent_m;
+
+    if ($consistent) {
+	print("Consistent: ${consistent}\n");
+	print("Consistent 0,1 harmonic: ${consistent_p}\n");
+	print("Consistent 2,3 harmonic: ${consistent_m}\n");
+	return 1;
+    }
+    return 0;
 }
 
 sub fatal($)

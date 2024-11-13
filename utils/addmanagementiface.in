@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# Copyright (c) 2003-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,10 +38,10 @@ sub usage()
 {
     print STDERR "Usage: addmanagementiface -t <type> -a [key|pswd] ";
     print STDERR "[-s <switchinfo>] <node_id> mac IP key_uid key\n";
-    print STDERR "       management_iface -r <node_id>\n";
-    print STDERR "       management_iface -i <node_id>\n";
+    print STDERR "       addmanagementiface -r <node_id>\n";
+    print STDERR "       addmanagementiface -i <node_id>\n";
     print STDERR "  -h       This message\n";
-    print STDERR "  -t type  Management type; ilo, ilo2, ilo3, drac, ipmi15, ipmi20\n";
+    print STDERR "  -t type  Management type; ilo, ilo2, ilo3, drac, ipmi15, ipmi20, esi, web (simple http auth)\n";
     print STDERR "  -s info  Optional switch info; switch,card,port\n";
     print STDERR "  -s -     Search output of switchmac to find switch info\n";
     print STDERR "  -a pswd  Password auth; provide login and password.\n";
@@ -142,7 +142,7 @@ if (defined($options{'T'})) {
 if (defined($options{'t'})) {
     $type = $options{'t'};
     usage()
-	if ($type !~ /^(ilo|ilo2|ilo3|drac|ipmi15|ipmi20)$/);
+	if ($type !~ /^(ilo|ilo2|ilo3|drac|ipmi15|ipmi20|esi|web)$/);
 }
 if (defined($options{'a'})) {
     $authtype = $options{'a'};
@@ -254,14 +254,21 @@ if (defined($switchinfo)) {
 
 my $isipmi = ($type =~ /^ipmi/ ? 1 : 0);
 
+my $role = "ssh-passwd";
+if ($authtype eq "key") {
+    $role = ($isipmi ? "ipmi-kgkey" : "ssh-key");
+} elsif ($isipmi) {
+    $role = "ipmi-passwd";
+} elsif ($type eq "esi" || $type eq "web") {
+    $role = "$type-passwd";
+}
+
 #
 # Add the outlet and authinfo.
 #
 $node->AddOutlet($type, 0,
 		 {"key_type"  => $type,
-		  "key_role"  => ($authtype eq "key" ?
-				  ($isipmi ? "ipmi-kgkey" : "ssh-key") :
-				  ($isipmi ? "ipmi-passwd" : "ssh-passwd")),
+		  "key_role"  => $role,
 		  "key_uid"   => $ARGV[0],
 		  "key"       => $ARGV[1]}) == 0
     or fatal("Could not add outlet records");
@@ -306,7 +313,7 @@ else {
 	"role"      => TBDB_IFACEROLE_MANAGEMENT(),
 	"MAC"       => $mac,
 	"IP"        => $IP,
-	"type"      => $type,
+	"type"      => ($type eq "web" ? "generic" : $type)
     };
     $interface = Interface->Create($node, $ifaceargs);
     if (!defined($interface)) {

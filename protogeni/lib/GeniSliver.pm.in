@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2022 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -47,7 +47,9 @@ use GeniUsage;
 use GeniHRN;
 use GeniXML;
 use GeniEvent;
+use GeniResponse;
 use EmulabConstants;
+use libtestbed;
 use emutil;
 use Node;
 use English;
@@ -738,6 +740,7 @@ use GeniCredential;
 use GeniCertificate;
 use GeniUtil;
 use EmulabConstants;
+use libtestbed;
 use emutil;
 use XML::Simple;
 use Data::Dumper;
@@ -1412,6 +1415,51 @@ sub PowerCycle($$)
 }
 
 #
+# Determine if SliverAction() can do what the user requested.
+# We need to this before the wrapperfork in the caller.
+#
+sub IsActionAllowed($$$)
+{
+    my ($self, $action, $perrmsg) = @_;
+    my $error;
+
+    my $node_id = $self->resource_id();
+    my $node    = Node->Lookup($node_id);
+    if (!defined($node)) {
+	print STDERR "Could not map node $node_id to its object\n";
+	$error = "Could not map node $node_id to its object";
+    }
+    elsif ($action eq "start") {
+	if ($self->state() !~ /^(stopped|new)$/) {
+	    $error = "Sliver is not stopped (yet)";
+	}
+    }
+    elsif ($action eq "stop") {
+	if ($self->state() !~ /^(started)$/) {
+	    $error = "Sliver is not started (yet)";
+	}
+    }
+    elsif ($action =~ /(restart|powercycle)$/) {
+	if ($self->state() !~ /^(started|stopped)$/) {
+	    $error = "Sliver is not started or stopped (yet)";
+	}
+    }
+    elsif ($action eq "reload") {
+	if ($self->InRecovery()) {
+	    $error = "Must clear recovery mode before reload";
+	}
+	elsif ($self->state() !~ /^(started|stopped)$/) {
+	    $error = "Sliver is not started or stopped (yet)";
+	}
+    }
+    if (defined($error)) {
+	$$perrmsg = $error;
+	return 0;
+    }
+    return 1;
+}
+
+#
 # Start, Restart, and Reload.
 #
 sub Action($$$)
@@ -1541,10 +1589,11 @@ sub Stop($$)
     return 0;
 }
 
-sub ComputeStatus($;$)
+sub ComputeStatus($;$$)
 {
-    my ($self, $pref) = @_;
+    my ($self, $pref, $nosend) = @_;
     my $status = undef;
+    $nosend = 0 if (!defined($nosend));
 
     return -1
 	if (! ref($self));
@@ -1590,7 +1639,7 @@ sub ComputeStatus($;$)
 	}
 	else {
 	    # return to normal started state and continue below.
-	    $self->SetState("started");
+	    $self->SetState("started", $nosend);
 	}
     }
     if ($self->state() eq "imaging" || $self->state() eq "restarting") {
@@ -1640,18 +1689,20 @@ sub ComputeStatus($;$)
 	$status = "changing";
     }
   done:
-    $self->SetStatus($status);
+    # Caller will send if nosend is set. For igevent_daemon.
+    $self->SetStatus($status, $nosend);
     $$pref = $status
 	if (defined($pref));
     return 0;
 }
 
 #
-# Set the status for the sliver.
+# Set the status for the sliver. $nosend for igevent_daemon.
 #
-sub SetStatus($$)
+sub SetStatus($$;$)
 {
-    my ($self, $status) = @_;
+    my ($self, $status, $nosend) = @_;
+    $nosend = 0 if (!defined($nosend));
     my $idx = $self->idx();
 
     #
@@ -1669,7 +1720,7 @@ sub SetStatus($$)
     $self->{'SLIVER'}->{'status'} = $status;
     # No change.
     return 0
-	if (!$query_result->affectedrows);
+	if (!$query_result->affectedrows || $nosend);
 
     return $self->SendStatusEvent();
 }
@@ -1677,9 +1728,10 @@ sub SetStatus($$)
 #
 # Set the state for the sliver.
 #
-sub SetState($$)
+sub SetState($$;$)
 {
-    my ($self, $state) = @_;
+    my ($self, $state, $nosend) = @_;
+    $nosend = 0 if (!defined($nosend));
     my $idx = $self->idx();
 
     #
@@ -1698,7 +1750,7 @@ sub SetState($$)
     $self->{'SLIVER'}->{'state'} = $state;
     # No change.
     return 0
-	if (!$query_result->affectedrows);
+	if (!$query_result->affectedrows || $nosend);
     
     return $self->SendStatusEvent();
 }
@@ -1710,17 +1762,23 @@ sub SetState($$)
 sub SendStatusEvent($)
 {
     my ($self) = @_;
+    my $idx = $self->idx();
 
     my $slice = $self->GetSlice();
-    return -1
+    return 1
 	if (!defined($slice));
 
     my $blob = $self->GenerateStatusBlob();
+
+    #print STDERR TBTimeStamp() . ": Sending new state/status for $idx\n";
+    #print STDERR Dumper($blob);
+    
     if (defined($blob)) {
-	GeniEvent->SendEvent({"type"    => "SLIVERSTATUS",
-			      "slice"   => $slice->urn(),
-			      "urn"     => $self->sliver_urn(),
-			      "details" => $blob});
+	return -1
+	    if (GeniEvent->SendEvent({"type"    => "SLIVERSTATUS",
+				      "slice"   => $slice->urn(),
+				      "urn"     => $self->sliver_urn(),
+				      "details" => $blob}));
     }
     return 0;
 }
@@ -1732,7 +1790,7 @@ sub SendFrisbeeEvent($$$)
 {
     my ($self, $imagename, $mb_written) = @_;
     my $slice = $self->GetSlice();
-    return -1
+    return 1
 	if (!defined($slice));
 
     my $resource_id   = $self->resource_id();
@@ -1745,10 +1803,11 @@ sub SendFrisbeeEvent($$$)
 	"MB_written"    => $mb_written,
 	"utc"           => time(),
     };
-    GeniEvent->SendEvent({"type"    => "FRISBEESTATUS",
-			  "slice"   => $slice->urn(),
-			  "urn"     => $self->sliver_urn(),
-			  "details" => $blob});
+    return -1
+	if (GeniEvent->SendEvent({"type"    => "FRISBEESTATUS",
+				  "slice"   => $slice->urn(),
+				  "urn"     => $self->sliver_urn(),
+				  "details" => $blob}));
     return 0;
 }
 

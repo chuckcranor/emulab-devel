@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2021 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -83,6 +83,7 @@ sub Lookup($$)
     $self->{'TYPEINFO'}  = {};
     $self->{'RESNODES'}  = undef;
     $self->{'NODES'}     = undef;
+    $self->{'RADIOS'}    = {};
 
     #
     # Look to see if there is a status row. Create it if it does not exist.
@@ -133,6 +134,7 @@ sub Lookup($$)
     
     return $self;
 }
+sub LookupLocalCluster($) { return Lookup($_[0], $MYURN); }
 
 AUTOLOAD {
     my $self  = $_[0];
@@ -180,6 +182,7 @@ sub DESTROY {
     $self->{'TYPEINFO'}  = undef;
     $self->{'RESNODES'}  = undef;
     $self->{'NODES'}     = undef;
+    $self->{'RADIOS'}    = undef;
 }
 
 #
@@ -406,6 +409,25 @@ sub LookupByNickname($$)
     return Lookup($class, $aggregate_urn);
 }
 
+sub LookupByName($$)
+{
+    my ($class, $name) = @_;
+
+    if ($name !~ /^[-\w]+$/) {
+	return undef;
+    }
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where name='$name'");
+    return undef
+	if (!$query_result);
+    return undef
+	if (!$query_result->numrows);
+
+    my ($aggregate_urn) = $query_result->fetchrow_array();
+    return Lookup($class, $aggregate_urn);
+}
+
 sub LookupByAbbreviation($$)
 {
     my ($class, $abbreviation) = @_;
@@ -508,7 +530,7 @@ sub CanInstantiate($$$$)
 	if ($self->adminonly() && !($user->admin() || $user->stud()));
 
     if (defined($self->canuse_feature())) {
-	my $feature = $portal . "-" . $self->canuse_feature();
+	my $feature = $self->canuse_feature();
 
 	return 1
 	    if (EmulabFeatures->FeatureEnabled($feature, $user));
@@ -520,6 +542,15 @@ sub CanInstantiate($$$$)
 	return 1
 	    if ($project->approved() && !$project->disabled() &&
 		EmulabFeatures->FeatureEnabled($feature, undef, $project));
+
+	return 0;
+    }
+    elsif ($self->portals()) {
+	# Otherwise it has to be marked as okay to use for the portal.
+	my @portals = split(/,/, $self->portals());
+
+	return 1
+	    if (grep {$_ eq $portal} @portals);
 
 	return 0;
     }
@@ -623,8 +654,7 @@ sub Nodes($)
 	return $self->{'NODES'};
     }
     my $query_result =
-	DBQueryWarn("select node_id,type,reservable,available ".
-		    "  from apt_aggregate_nodes ".
+	DBQueryWarn("select * from apt_aggregate_nodes ".
 		    "where urn='$urn'");
 
     while (my $row = $query_result->fetchrow_hashref()) {
@@ -634,6 +664,16 @@ sub Nodes($)
     }
     $self->{'NODES'} = $result;
     return $result;
+}
+sub Node($$)
+{
+    my ($self, $node_id) = @_;
+    my $nodes = $self->Nodes();
+
+    return undef
+	if (!exists($nodes->{$node_id}));
+
+    return $nodes->{$node_id};
 }
 
 sub IsReservableNode($$)
@@ -680,7 +720,13 @@ sub Radio($$)
 {
     my ($self, $node_id) = @_;
 
-    return APT_Aggregate::Radio->Lookup($self, $node_id);
+    return $self->{'RADIOS'}->{$node_id}
+        if (exists($self->{'RADIOS'}->{$node_id}));
+
+    $self->{'RADIOS'}->{$node_id} =
+	APT_Aggregate::Radio->Lookup($self, $node_id);
+    
+    return $self->{'RADIOS'}->{$node_id};
 }
 
 #
@@ -1206,6 +1252,37 @@ sub Frontend($$$)
     return APT_Aggregate::Radio::Frontend->Lookup($self, $iface, $frontend);
 }
 
+sub FrontendInterface($$)
+{
+    my ($self, $iface) = @_;
+
+    return APT_Aggregate::Radio::Frontend::LookupByInterface(
+	"APT_Aggregate::Radio::Frontend", $self, $iface);
+}
+
+#
+# Lookup all radios for an Aggregate. 
+#
+sub LookupForAggregate($$)
+{
+    my ($class, $aggregate) = @_;
+    my $urn = $aggregate->urn();
+    my @results = ();
+
+    my $query_result =
+	DBQueryWarn("select node_id from apt_aggregate_radio_info ".
+		    "where aggregate_urn='$urn'");
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    while (my ($node_id) = $query_result->fetchrow_array()) {
+	my $radio = $aggregate->Radio($node_id);
+	push(@results, $radio)
+	    if (defined($radio));
+    }
+    return @results;
+}
+
 ###################################################################
 package APT_Aggregate::Radio::Frontend;
 use Carp;
@@ -1278,7 +1355,59 @@ sub Stringify($)
     my $iface     = $self->iface();
     my $frontend  = $self->node_id();
 
-    return "[Frontend: $node_id:$iface:$frontend";
+    return "[Frontend: $node_id:$iface:$frontend]";
+}
+
+#
+# For now, only one frontend per radio, rf0.
+#
+sub LookupByInterface($$$)
+{
+    my ($class, $radio, $iface) = @_;
+    my $urn      = $radio->aggregate()->urn();
+    my $node_id  = $radio->node_id();
+    my $query_result;
+
+    if ($iface =~/^[-\w]*$/) {
+	$query_result =
+	    DBQueryWarn("select frontend from apt_aggregate_radio_frontends ".
+			"where aggregate_urn='$urn' and ".
+			"      node_id='$node_id' and ".
+			"      iface='$iface'");
+    }
+    else {
+	return undef;
+    }
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    if ($query_result->numrows > 1) {
+	print STDERR "More than one frontend $radio\n";
+	return undef;
+    }
+    my ($frontend) = $query_result->fetchrow_array();
+
+    return Lookup($class, $radio, $iface, $frontend);
+}
+
+#
+# Compare a range against low, high to see if its within the ranges
+# permitted by this frontend.
+#
+sub ValidTransmitRange($$$)
+{
+    my ($self, $freq_low, $freq_high) = @_;
+    my @ranges = split(",", $self->transmit_frequencies());
+
+    foreach my $range (@ranges) {
+	my ($low,$high) = split("-", $range);
+
+	if ($freq_low  >= $low &&
+	    $freq_high <= $high && $freq_low <= $freq_high) {
+	    return 1;
+	}
+    }
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

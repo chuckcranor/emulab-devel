@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,6 +32,7 @@ BINS		= suexec runsuid
 SBINS		= genlastlog lastlog_daemon runmedusa sshbanlist
 OTHERS          = hosts.allow
 CTRL_SBINS      = sshbanlist
+NMAPSERVICES    = /usr/local/share/nmap/nmap-services
 
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = 
@@ -72,7 +73,8 @@ genlastlog:	genlastlog.c
 install: $(addprefix $(INSTALL_LIBEXECDIR)/, $(BINS)) \
 	$(addprefix $(INSTALL_SBINDIR)/, $(SBINS)) \
 	$(addprefix $(INSTALL_DIR)/opsdir/libexec/, $(SETUID_CTRL_LIBX_PROGS)) \
-	$(addprefix $(INSTALL_DIR)/opsdir/sbin/, $(CTRL_SBINS))
+	$(addprefix $(INSTALL_DIR)/opsdir/sbin/, $(CTRL_SBINS)) \
+	$(INSTALL_DIR)/etc/nmap/nmap-services
 
 install-hosts-allow: hosts.allow
 	sudo $(INSTALL_DATA) hosts.allow /etc/hosts.allow
@@ -94,6 +96,14 @@ $(INSTALL_DIR)/opsdir/sbin/%: %
 	@echo "Installing $<"
 	-mkdir -p $(INSTALL_DIR)/opsdir/sbin
 	$(INSTALL) $< $@
+
+$(INSTALL_DIR)/etc/nmap/nmap-services: nmap-services.txt
+	-mkdir -p $(INSTALL_DIR)/etc/nmap
+	$(INSTALL_DATA) $< $@
+
+nmap-services.txt: nmap-services $(NMAPSERVICES)
+	cat $(NMAPSERVICES) | sed '/1024\/udp/q;p' > nmap-services.txt
+	cat $< >> nmap-services.txt
 
 clean:
 	rm -f *.o genlastlog suexec runsuid core

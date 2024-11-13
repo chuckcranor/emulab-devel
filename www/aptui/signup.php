@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -181,7 +184,7 @@ if (! isset($create)) {
     # Default to start
     if (!isset($joinproject)) {
         $joinproject = 0;
-        $defaults["startorjoin"] = "start";
+        $defaults["startorjoin"] = "join";
     }
     elseif ($joinproject) {
         $defaults["startorjoin"] = "join";
@@ -206,6 +209,7 @@ if (! isset($create)) {
         $defaults["state"]       = $this_user->state();
         $defaults["country"]     = $this_user->country();
         $defaults["affiliation"] = $this_user->affil();
+        $defaults["title"]       = $this_user->title();
         $defaults["address1"]    = $this_user->addr1();
         $defaults["address2"]    = $this_user->addr2();
         $defaults["zip"]         = $this_user->zip();
@@ -266,6 +270,20 @@ if (!$this_user || $promoting) {
              posix_getpwnam($formfields["uid"]))) {
 	$errors["uid"] = "Already in use. Pick another";
     }
+    else {
+        #
+        # Damn users, they like to pick stupid user names like root, admin, etc.
+        #
+        $bogos = array("user", "test", "root", "admin", "toor", "daemon",
+                       "nobody", "student", "research", "cloud", "guest",
+                       "network", "mininet");
+
+        foreach ($bogos as $bogo) {
+            if (preg_match("/^${bogo}\d*$/i", $formfields["uid"])) {
+                $errors["uid"] = "Improper user name. Pick another";
+            }
+        }
+    }
     if (!isset($formfields["fullname"]) ||
 	strcmp($formfields["fullname"], "") == 0) {
 	$errors["fullname"] = "Missing Field";
@@ -305,6 +323,13 @@ if (!$this_user || $promoting) {
     }
     elseif (! TBvalid_affiliation(htmlentities($formfields["affiliation"]))) {
 	$errors["affiliation"] = TBFieldErrorString();
+    }
+    if (!isset($formfields["title"]) ||
+        trim($formfields["title"]) == "") {
+	$errors["title"] = "Missing Field";
+    }
+    elseif (! TBvalid_title(htmlentities($formfields["title"]))) {
+	$errors["title"] = TBFieldErrorString();
     }
     if (!isset($formfields["country"]) ||
 	strcmp($formfields["country"], "") == 0) {
@@ -520,11 +545,12 @@ if ($this_user && $promoting) {
     $args["city"]          = $formfields["city"];
     $args["state"]         = $formfields["state"];
     $args["country"]       = $formfields["country"];
-    $args["shell"]         = 'tcsh';
+    $args["shell"]         = 'bash';
     $args["affiliation"]   = htmlentities($formfields["affiliation"]);
     $args["address1"]      = $formfields["address1"];
     $args["address2"]      = $formfields["address2"];
     $args["zip"]           = $formfields["zip"];
+    $args["title"]         = $formfields["title"];
 
     if (! User::ModUserInfo($this_user, $this_user->uid(), $args, $errors)) {
         # Always respit the form so that the form fields are not lost.
@@ -547,8 +573,9 @@ if (!$this_user) {
     $args["city"]          = $formfields["city"];
     $args["state"]         = $formfields["state"];
     $args["country"]       = $formfields["country"];
-    $args["shell"]         = 'tcsh';
+    $args["shell"]         = 'bash';
     $args["affiliation"]   = htmlentities($formfields["affiliation"]);
+    $args["title"]         = $formfields["title"];
     $args["password"]      = $formfields["password1"];
     # Force initial SSL cert generation.
     $args["passphrase"]    = $formfields["password1"];

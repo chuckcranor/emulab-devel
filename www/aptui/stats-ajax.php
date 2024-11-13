@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -68,6 +68,9 @@ if ($portal == "emulab") {
         DBQueryFatal("select count(*) from experiments ".
                      "where geniflags=0 && state='active'");
 }
+else {
+    $query_result = null;
+}
 if ($query_result) {
     $row = mysql_fetch_array($query_result);
     $blob["active_experiments"] += $row[0];
@@ -76,21 +79,33 @@ if ($query_result) {
 #
 # Number of experiments ever
 #
-$query_result =
-    DBQueryFatal("select portal,count(*) as count ".
-                 "  from apt_instance_history ".
-                 "where portal='$portal' ".
-                 "group by portal");
-while ($row = mysql_fetch_array($query_result)) {
-    if ($row["portal"] == $portal) {
-        $blob["total_experiments"] = $row["count"];
-    }
+if ($portal == "powder") {
+    $query_result = 
+        DBQueryFatal("select count(*) from apt_instance_history as h ".
+                     "join users as u on u.uid_idx=h.creator_idx ".
+                     "where h.portal='powder' and ".
+                     "     h.pid!='PMonitor' and ".
+                     "     h.pid!='emulab-ops' and ".
+                     "     h.pid!='testbed' and ".
+                     "     u.usr_email not like '%utah.edu' and ".
+                     "     u.usr_email not like '%rice.edu'");
 }
+else {
+    $query_result =
+        DBQueryFatal("select count(*) from apt_instance_history ".
+                     "where portal='$portal' ");
+}
+$row = mysql_fetch_array($query_result);
+$blob["total_experiments"] = $row[0];
+
 # Add classic to emulab portal numbers,
 if ($portal == "emulab") {
     $query_result =
         DBQueryFatal("select count(*) from experiment_stats ".
                      "where geniflags is null");
+}
+else {
+    $query_result = null;
 }
 if ($query_result) {
     $row = mysql_fetch_array($query_result);

@@ -1,0 +1,399 @@
+<div>
+  <%
+  var _xwidthx_ = window.USENEWINSTANTIATE || true ? "col-sm-4" : "col-sm-6";
+  %>
+  <script id="nosite-selector-template" type="text/template">
+    <div id='nosite_selector' 
+	 class='form-horizontal experiment_option'>
+      <div class='form-group cluster-group row mb-3'>
+	<label class='col-sm-4 control-label col-form-label'
+	       name='<%- siteid %>' 
+               style='text-align: right;'>Cluster:</a>
+	</label> 
+	<div class='<%- _xwidthx_ %> site-selector'>
+	  <select id='site<%- sitenum %>_selector' name='where' 
+		  data-siteid='nosite_selector' 
+		  class='form-control form-select select_where'>
+            <option value=''>Please Select</option>
+	    <% print(options); %>
+	  </select>
+	</div>
+	<div class='col-sm-4'></div>
+	<div class='col-sm-6 alert alert-danger'
+	     id='where-nowhere'
+	     style='display: none; margin-top: 5px; margin-bottom: 5px'>
+	  This profile <b>will not work on any clusters</b>. Please
+	  check your profile or parameters for errors. If you are sure
+	  they are correct, you can report the problem to
+	  support@cloudlab.us and make sure to link to the problematic
+	  profile.
+	</div> 
+	<div class='col-sm-4 col-sm-offset-1 offset-sm-1'
+	     style='display: none; margin-top: 5px; margin-bottom: 5px;'>
+	  <button class='btn btn-default' type='button'
+		  data-toggle='collapse' data-bs-toggle='collapse'
+		  data-target='#nowhere-breakdown'
+		  data-bs-target='#nowhere-breakdown'
+		  aria-expanded='false'
+		  id='nowhere-breakdown-button'>
+	    Cluster Compatibility Report</button>
+	</div>
+	<div class='col-sm-12 collapse' id='nowhere-breakdown'></div>
+	<div class='col-sm-2 site-wait'><img src='images/spinner.gif' /></div>
+      </div>
+    </div>
+  </script>
+  
+  <script id="site-selector-template" type="text/template">
+    <%
+    var _xwidthx_ = window.USENEWINSTANTIATE || true ? "col-sm-4" : "col-sm-6";
+    %>
+    <div id='site<%- sitenum %>cluster'
+	 class='form-horizontal experiment_option'>
+      <div class='form-group cluster-group row mb-3'>
+	<label class='col-sm-4 control-label' name='<%- siteid %>' 
+               style='text-align: right;'>
+          Site <%- siteid %> Cluster:</a>
+        </label>
+        <div class='<%- _xwidthx_ %> site-selector'>
+          <select id='<%- selectID %>'
+		  data-siteid='<%- siteid %>'
+		  name="sites[<%- siteid %>]"
+		  class='form-control form-select select_where'>
+            <option value=''>Please Select</option>
+	    <% print(options); %>
+          </select>
+        </div>
+	<div class='col-sm-4'></div>
+	<div class='col-sm-6 alert alert-danger' id='where-nowhere'
+	     style='display: none; margin-top: 5px; margin-bottom: 5px'>
+	  This site <b>will not work on any clusters</b>.
+	  All clusters are unselectable.
+	</div>
+	<div class='col-sm-2 site-wait hidden'>
+	  <img src='images/spinner.gif' />
+	</div>
+      </div>
+    </div>
+  </script>
+
+  <script id="pickered-site-template" type="text/template">
+    <%
+    var _xwidthx_ = window.USENEWINSTANTIATE || true ? "col-sm-4" : "col-sm-6";
+    %>
+    <div id='site<%- sitenum %>cluster'
+	 class='form-horizontal experiment_option'>
+      <div class='form-group cluster-group pickered row mb-3'>
+	<label class='col-sm-4 control-label' name='<%- siteid %>' 
+               style='text-align: right;'>
+	  <% if (multisite) { %>
+            Site <%- siteid %>
+	  <% } %>
+	  Cluster:
+        </label>
+        <div class='<%- _xwidthx_ %> site-selector'>
+	  <input type="hidden"
+		 data-siteid="<%- siteid %>"
+		 <% if (!multisite) { %>
+		 name="where"
+		 <% } else { %>
+  		 name="sites[<%- siteid %>]"
+		 <% } %>
+		 class="select_where">
+	  <div id='site<%- sitenum %>_selector_picker'
+	       class="picker btn-group cluster_picker_status">
+	    <button type="button"
+		    class="form-control btn btn-default dropdown-toggle"
+		    data-toggle="dropdown"
+		    data-bs-toggle="dropdown"
+		    aria-expanded="false">
+	      <span class="value">Please Select</span>
+	      <div class="cluster-tooltips" style="display: inline-block"></div>
+	    </button>
+	    <ul class="dropdown-menu" role="menu">
+	      <li class="initial enabled">
+		<a href="#" class="dropdown-item" value="">
+		  Please Select
+		</a>
+	      </li>
+	      <% print(clusters); %>	      
+	    </ul>
+	  </div>
+	  <label
+	      <% if (!multisite) { %>
+	      for="where"
+	      <% } else { %>
+  	      for="sites[<%- siteid %>]"
+	      <% } %>
+	      class='control-label control-error hidden'></label>
+	</div>
+	<div class="col-sm-offset-4 offset-sm-6 col-sm-6 alert-success
+		    reservation-text hidden"
+	     style="margin-top: 3px;"></div>
+	<div class='col-sm-4'></div>
+	<div class='col-sm-6 alert alert-danger'
+	     id='where-nowhere'
+	     style='display: none; margin-top: 5px; margin-bottom: 5px'>
+	  This <% if (multisite) { %>site<% } else { %>profile<% } %>
+	  <b>will not work on any clusters</b>. Please
+	  check your profile or parameters for errors. 
+	</div> 
+	<div class='col-sm-4 col-sm-offset-1'
+	     style='display: none; margin-top: 5px; margin-bottom: 5px;'>
+	  <button class='btn btn-default' type='button'
+		  data-toggle='collapse'
+		  data-bs-toggle='collapse'
+		  data-target='#nowhere-breakdown'
+		  data-bs-target='#nowhere-breakdown'
+		  aria-expanded='false'
+		  id='nowhere-breakdown-button'>
+	    Cluster Compatibility Report</button>
+	</div>
+	<div class='col-sm-12 collapse' id='nowhere-breakdown'></div>
+      </div>
+    </div>
+</div>
+  </script>
+  
+  <script id="pickered-agg-template" type="text/template">
+    <% if (addfed) { %>
+      <li class="federated_divider withText divider" role="separator">
+	<div>Federated Clusters</div>
+      </li>
+    <% } %>
+    <li class="enabled <% if (selected) { %>selected<% } %>"
+	urn="<%- urn %>">
+      <a href="#"
+	 class="dropdown-item enabled <% if (selected) { %>active<% } %>"
+	 value="<%- name  %>">
+	<%- name %>
+	<div class="cluster-tooltips">
+	  <% if (status) { %>
+	    <div class="tooltip_div"
+		 data-health="<%- status.health %>"
+		 data-rating="<%- status.status %>"
+		 data-toggle="tooltip"
+		 data-placement="right"
+		 data-html="true"
+		 title="<%- status.statusTooltip %>">
+	      <div class="picker_stats icon_position_1"
+		   data-toggle="tooltip"
+		   data-placement="left"
+		   data-html="true"
+		   title="<%- status.healthTooltip %>">
+		<span class="picker_status <%- status.pickerClasses %>">
+		  <span class="circle"></span>
+		</span>
+	      </div>
+	    </div>
+	  <% } %>
+	  <% if (resgroup) { %>
+	    <div class="reservation_tooltip <%- resgroup.class %>">
+	      <div class="warning_icon
+			  <% if (resgroup.class == "has_reservation") { %>
+			  confirm
+			  <% } else { %>
+			  warn
+			  <% } %>
+			  icon_position_2"
+		   data-toggle="tooltip"
+		   <% if (resgroup.mode == "project") { %>
+		     title="Project <%- resgroup.project %> has an
+			    <%- resgroup.which %> reservation on this cluster."
+		   <% } else { %>
+		     title="You have a <%- resgroup.which %> cluster reservation 
+			  in project <%- resgroup.project %>."
+		   <% } %>
+		   data-placement="right">
+		<span class="glyphicon glyphicon-calendar pull-right"></span>
+	      </div>
+	    </div>
+	  <% } %>
+	</div>
+      </a>
+    </li>
+  </script>
+
+  <script id="pickered-proj-template" type="text/template">
+    <%
+    var _xwidthx_ = window.USENEWINSTANTIATE || true ? "col-sm-4" : "col-sm-6";
+    %>
+    <div id='profile_pid_picker'
+	 class='form-horizontal experiment_option'>
+      <div class='form-group pickered row mb-3'>
+	<label class='col-sm-4 control-label col-form-label' 
+               style='text-align: right;'>
+	  Project:
+        </label>
+        <div class='<%- _xwidthx_ %> project-picker'>
+	  <input type="hidden"
+		 id="profile_pid"
+		 name="pid">
+	  <div class="picker dropdown">
+	    <button type="button"
+		    class="form-control btn btn-default dropdown-toggle"
+		    data-toggle="dropdown" data-bs-toggle="dropdown"
+		    aria-expanded="false">
+	      <span class="value">Please Select</span>
+	      <div class="reservation-tooltips"
+		   style="display: inline-block"></div>
+	    </button>
+	    <ul class="dropdown-menu" role="menu">
+	      <li class="initial enabled" data-priority="0">
+		<a href="#" class="dropdown-item" value="">
+		  Please Select
+		</a>
+	      </li>
+	      <% print(projects); %>
+	    </ul>
+	  </div>
+	  <label class='control-label control-error hidden'
+		 for='pid'></label>
+	</div>
+      </div>
+    </div>
+  </script>
+
+  <script id="pickered-pid-template" type="text/template">
+    <li class="<% if (selected) { %>selected<% } %>"
+	data-priority="<%- priority %>">
+      <a href="#" value="<%- pid %>"
+	 class="dropdown-item <% if (selected) { %>active<% } %>">
+	<%- pid %>
+	<div class="reservation-tooltips">
+	  <% if (resgroup) { %>
+	    <div class="reservation_tooltip <%- resgroup.class %>">
+	      <div class="warning_icon
+			  <% if (resgroup.class == "has_reservation") { %>
+			    confirm
+			  <% } else { %>
+			    warn
+			  <% } %>
+			  icon_position_1"
+		   data-toggle="tooltip" data-bs-toggle="tooltip"
+		   <% if (resgroup.mode == "project") { %>
+		     title="Project <%- pid %> has
+			    <% if (resgroup.which == "active") { %>
+			      an active
+			    <% } else { %>
+			      a future
+			    <% } %>
+		            cluster reservation."
+		   <% } else if (resgroup.mode == "group") { %>
+		     title="Project group <%- pid %>/<%- resgroup.gid %> has
+			  <% if (resgroup.which == "active") { %>
+			  an active
+			  <% } else { %>
+			  a future
+			  <% } %>
+		          cluster reservation."
+		   <% } else { %>
+		     title="You have
+			    <% if (resgroup.which == "active") { %>
+			    an active
+			    <% } else { %>
+			    a future
+			    <% } %>
+			    cluster reservation in project <%- pid %>."
+		   <% } %>
+		   data-placement="right" data-bs-placement="right">
+		<span class="glyphicon
+			     glyphicon-calendar pull-right"></span>
+	      </div>
+	    </div>
+	  <% } %>
+	</div>
+      </a>
+    </li>
+  </script>
+
+  <script id="pickered-group-template" type="text/template">
+    <div class='form-horizontal experiment_option'>
+      <div class='form-group pickered row mb-3'>
+	<label class='col-sm-4 control-label col-form-label' 
+               style='text-align: right;'>
+	  Group:
+        </label>
+        <div class='col-sm-4 group-picker'>
+	  <input type="hidden"
+		 id="profile_gid"
+		 name="gid">
+	  <div class="picker dropdown">
+	    <button type="button"
+		    class="form-control btn btn-default dropdown-toggle"
+		    data-toggle="dropdown" data-bs-toggle="dropdown"
+		    aria-expanded="false">
+	      <span class="value">Please Select</span>
+	      <div class="reservation-tooltips"
+		   style="display: inline-block"></div>
+	    </button>
+	    <ul class="dropdown-menu" role="menu">
+	      <li class="initial enabled" data-priority="0">
+		<a href="#" class="dropdown-item" value="">
+		  Please Select
+		</a>
+	      </li>
+	      <% print(groups); %>
+	    </ul>
+	  </div>
+	  <label class='control-label control-error hidden'
+		 for='gid'></label>
+	</div>
+      </div>
+    </div>
+  </script>
+  
+  <script id="pickered-gid-template" type="text/template">
+    <li class="<% if (selected) { %>selected<% } %>">
+      <a href="#"
+	 class="dropdown-item <% if (selected) { %>active<% } %>"	 
+	 value="<%- gid %>">
+	<%- gid %>
+	<div class="reservation-tooltips">
+	  <% if (resgroup) { %>
+	    <div class="reservation_tooltip <%- resgroup.class %>">
+	      <div class="warning_icon
+			  <% if (resgroup.class == "has_reservation") { %>
+			  confirm
+			  <% } else { %>
+			  warn
+			  <% } %>
+			  icon_position_1"
+		   data-toggle="tooltip" data-bs-toggle="tooltip"
+		   <% if (resgroup.mode == "project") { %>
+		   title="Project <%- pid %> has
+			  <% if (resgroup.which == "active") { %>
+			  an active
+			  <% } else { %>
+			  a future
+			  <% } %>
+		          cluster reservation."
+		   <% } else if (resgroup.mode == "group") { %>
+		   title="Project group <%- pid %>/<%- resgroup.gid %> has
+			  <% if (resgroup.which == "active") { %>
+			  an active
+			  <% } else { %>
+			  a future
+			  <% } %>
+		          cluster reservation."
+		   <% } else { %>
+		   title="You have
+			  <% if (resgroup.which == "active") { %>
+			  an active
+			  <% } else { %>
+			  a future
+			  <% } %>
+			  cluster reservation in project <%- pid %>."
+		   <% } %>
+		   data-placement="right" data-bs-placement="right">
+		<span class="glyphicon
+			     glyphicon-calendar pull-right"></span>
+	      </div>
+	    </div>
+	  <% } %>
+	</div>
+      </a>
+    </li>
+  </script>
+</div>
+

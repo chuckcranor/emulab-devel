@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,18 +40,14 @@ function Do_GetFixedEndpoints()
         if (! $aggregate->isFE() || $aggregate->disabled()) {
             continue;
         }
-        $reservablenodes = $aggregate->ReservableNodes(true);
-
         $blob[$urn] =
             array("urn"       => $urn,
                   "latitude"  => $aggregate->latitude(),
                   "longitude" => $aggregate->longitude(),
                   "nickname"  => $aggregate->nickname(),
                   "name"      => $aggregate->name(),
-                  "typelist"  => $typelist,
-                  "radioinfo" => null,
-                  # Ask for extended info.
-                  "reservable_nodes" => $reservablenodes);
+                  "typelist"  => null,
+                  "radioinfo" => null);
         if (array_key_exists($urn, $radioinfo)) {
             $blob[$urn]["radioinfo"] = $radioinfo[$urn];
         }
@@ -76,6 +72,9 @@ function Do_GetBaseStations()
     $locationRadios   = array();
     # Split up radios by location
     foreach ($radioinfo[$urn] as $node_id => &$info) {
+        if ($info["itype"] != "BS") {
+            continue;
+        }
         $location = $info["location"];
         if (!array_key_exists($location, $locationRadios)) {
             $locationRadios[$location] = array();
@@ -121,15 +120,82 @@ function Do_GetBaseStations()
 }
 
 #
+# Return Dense Deployment info. All DDs are attached to the MotherShip.
+#
+function Do_GetDenseDeployment()
+{
+    global $this_user, $ajax_args;
+    global $this_user, $ajax_args;
+    $aggregate = Aggregate::ThisAggregate();
+    if (!$aggregate) {
+	SPITAJAX_ERROR(-1, "No aggregate info");
+	return -1;
+    }
+    $urn = $aggregate->urn();
+    $radioinfo        = Aggregate::RadioInfoNew();
+    $locationRadios   = array();
+    # Split up radios by location
+    foreach ($radioinfo[$urn] as $node_id => &$info) {
+        if ($info["itype"] != "DD") {
+            continue;
+        }
+        $location = $info["location"];
+        if (!array_key_exists($location, $locationRadios)) {
+            $locationRadios[$location] = array();
+        }
+        $locationRadios[$location][$node_id] = $info;
+    }
+
+    #
+    # Grab the dense locations,
+    #
+    $query_result =
+        DBQueryFatal("select * from apt_aggregate_radio_locations ".
+                     "where itype='DD' and aggregate_urn='$urn'");
+    if (!mysql_num_rows($query_result)) {
+        SPITAJAX_RESPONSE(null);
+        return 0;
+    }
+    $result = array();
+    
+    while ($row = mysql_fetch_array($query_result)) {
+        $location   = $row["location"];
+        $latitude   = $row["latitude"];
+        $longitude  = $row["longitude"];
+        $streeturl  = $row["streeturl"];
+
+        $result[$location] = array(
+            "name"        => $location,
+            "latitude"    => $latitude,
+            "longitude"   => $longitude,
+            "type"        => "Dense Deployment",
+            "street"      => $streeturl,
+            "cluster_urn" => $urn,
+            "radioinfo"   => null
+        );
+        if (array_key_exists($location, $locationRadios)) {
+            $result[$location]["radioinfo"] = $locationRadios[$location];
+        }
+    }
+    SPITAJAX_RESPONSE($result);
+}
+
+#
 # Return Bus information.
 #
 function Do_GetMobileEndpoints()
 {
     global $this_user, $ajax_args;
+    $onlineonly = 0;
+
+    if (isset($ajax_args["onlineonly"]) && $ajax_args["onlineonly"]) {
+        $onlineonly = 1;
+    }
 
     $query_result =
-        DBQueryFatal("select a.*,b.*,r.description as routename,aas.status ".
-                     "   from apt_mobile_aggregates as a ".
+        DBQueryFatal("select a.*,b.*,r.description as routename,aas.status, ".
+                     "       aa.adminonly,aa.disabled ".
+                     "  from apt_mobile_aggregates as a ".
                      "left join apt_mobile_buses as b on b.urn=a.urn ".
                      "left join apt_aggregates as aa on aa.urn=a.urn ".
                      "left join apt_aggregate_status as aas on aas.urn=a.urn ".
@@ -145,7 +211,31 @@ function Do_GetMobileEndpoints()
     $buses = array();
     
     while ($row = mysql_fetch_array($query_result)) {
-        $urn = $row["urn"];
+        $urn       = $row["urn"];
+        $disabled  = intval($row["disabled"]);
+        $adminonly = intval($row["adminonly"]);
+
+        if ($onlineonly &&
+            ($row["status"] != "up" ||
+             (($disabled || $adminonly) && !ISADMIN()))) {
+            continue;
+        }
+
+        # For the mobile endpoints page.
+        if ($row["status"] == "up" && ($row["routename"] || ISADMIN())) {
+            $tag = "online";
+        }
+        else {
+            $tag = "offline";
+        }
+        $color = $tag == "online" ? "text-success" : "";
+
+        if ($disabled) {
+            $tag   = "disabled";
+        }
+        elseif ($adminonly) {
+            $tag   = "adminonly";
+        }
         
         $blob = array(
             "urn"           => $urn,
@@ -160,7 +250,11 @@ function Do_GetMobileEndpoints()
             "longitude"     => $row["longitude"],
             "speed"         => $row["speed"],
             "heading"       => $row["heading"],
+            "adminonly"     => $adminonly,
+            "disabled"      => $disabled,
             "location_stamp"=> DateStringGMT($row["location_stamp"]),
+            "statusColor"   => $color,
+            "statusTag"     => $tag,
             # GPSD data
             "gpsd_stamp"    => DateStringGMT($row["gpsd_stamp"]),
             "gpsd_latitude" => $row["gpsd_latitude"],
@@ -174,12 +268,56 @@ function Do_GetMobileEndpoints()
         # state. To many buses at the end of slow links to ask them anytime
         # a user wants to know (say, from the resource availability page).
         #
+        $blob["free"] = 1;
+            
         $free_result =
-            DBQueryFatal("select status from apt_instance_aggregates as ia ".
-                         "where ia.status!='terminated' and ".
-                         "      ia.aggregate_urn='$urn'");
-        $blob["free"] = (mysql_num_rows($free_result) == 0 ? 1 : 0);
+             DBQueryFatal("select status,uuid ".
+                          "    from apt_instance_aggregates as ia ".
+                          "where ia.aggregate_urn='$urn'");
+        if (mysql_num_rows($free_result)) {
+            while ($iarow = mysql_fetch_array($free_result)) {
+                if ($iarow["status"] != "terminated") {
+                    $blob["free"] = 0;
+                    if (ISADMIN()) {
+                        $blob["holding_uuid"] = $iarow["uuid"];
+                    }
+                }
+            }
+        }
+
+        #
+        # Radio info
+        #
+        $radioinfo = array();
         
+        $radio_result =
+            DBQueryFatal("select i.* ".
+                         "  from apt_aggregate_radio_locations as l ".
+                         "left join apt_aggregate_radio_info as i on ".
+                         "  i.aggregate_urn=l.aggregate_urn and ".
+                         "  i.location=l.location ".
+                         "where l.aggregate_urn='$urn'");
+
+        while ($rrow = mysql_fetch_array($radio_result)) {
+            $node_id   = $rrow["node_id"];
+            $frontends = array();
+
+            $frontend_result =
+                DBQueryFatal("select * from apt_aggregate_radio_frontends ".
+                             "where aggregate_urn='$urn' and ".
+                             "      node_id='$node_id'");
+            while ($frow = mysql_fetch_array($frontend_result)) {
+                $iface = $frow["iface"];
+            
+                if (!$frow["notes"]) {
+                    $frow["notes"] = $rrow["notes"];
+                }
+                $frontends[$iface] = $frow;
+            }
+            $rrow["frontends"] = $frontends;
+            $radioinfo[$node_id] = $rrow;
+        }
+        $blob["radioinfo"] = $radioinfo;
         $buses[$row["busid"]] = $blob;
     }
 

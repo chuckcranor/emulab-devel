@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 #
-# Copyright (c) 2015-2021 University of Utah and the Flux Group.
+# Copyright (c) 2015-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,8 @@
 my $VOL_ID = '/lib/udev/vol_id';
 my $BLKID = '/sbin/blkid';
 my $FDISK = '/sbin/fdisk';
+my $SGDISK = '/usr/sbin/sgdisk';
+my $E2FSCK = '/sbin/e2fsck';
 my $MOUNT = '/bin/mount';
 my $UMOUNT = '/bin/umount';
 my $RM = '/bin/rm';
@@ -32,6 +34,7 @@ my $CP = '/bin/cp';
 my $CPIO = 'cpio';
 my $GZIP = 'gzip';
 my $XZ = 'xz';
+my $ZSTD = 'zstd';
 my $MKSWAP = '/sbin/mkswap';
 my $UUIDGEN = 'uuidgen';
 my $LOSETUP = 'losetup';
@@ -45,6 +48,7 @@ use constant LARGEST_PAGE_SIZE => 0x4000;
 use constant UUID_OFFSET => 1036;
 use constant ELFHDR => 0x7f454c46;
 use constant XZHDRSTART => 0xfd377a58;
+use constant ZSTDHDRSTART => 0x28b52ffd;
 
 #
 # Turn off line buffering on output
@@ -78,13 +82,13 @@ sub get_uuid
 		close CMD;
 	}
 	elsif (-x $BLKID) {
-		open CMD, "$BLKID|" || die
+		open CMD, "$BLKID $device|" || die
 			"Couldn't run blkid: $!\n";
 
 		while (<CMD>) {
 			next unless m#^$device:\s+#;
 			chomp;
-			next unless s/.*\s+UUID="([a-f0-9-]+)".*/\1/;
+			next unless s/.*\sUUID="([a-f0-9-]+)".*/\1/;
 			$uuid = $_;
 		}
 
@@ -135,14 +139,19 @@ sub set_random_rootfs_uuid
 {
 	my ($root) = @_;
 	
-	system("$TUNE2FS -U random $root");
+	my $output = `echo yes | $TUNE2FS -U random $root 2>&1`;
+	if ($? && $output =~ /requires a freshly checked filesystem/) {
+		print STDERR "Running fsck on $root ...";
+		system("$E2FSCK -yf $root");
+		system("echo yes | $TUNE2FS -U random $root");
+	}
 }
 
 sub disable_time_dependent_fsck
 {
 	my ($root) = @_;
 	
-	system("$TUNE2FS -i 0 $root >/dev/null 2>&1");
+	system("echo yes | $TUNE2FS -i 0 $root >/dev/null 2>&1");
 }
 
 sub kernel_version_compare
@@ -168,17 +177,27 @@ sub find_swap_partitions
 	my ($device) = @_;
 	my @swap_devices;
 
-	open CMD, $FDISK . " -l $device|" ||
-	     die "Couldn't run fdisk: $!\n";
+	if (-x $SGDISK) {
+	    open CMD, $SGDISK . " -p $device|" ||
+		die "Couldn't run sgdisk: $!\n";
 
-	while (<CMD>) {
-		next unless m#^$device#;
-		split /\s+/;
-		if ($_[4] eq '82') {
-			push @swap_devices, $_[0];
+	    while (<CMD>) {
+		if (/^\s+(\d+)\s+.*\sLinux swap/) {
+		    push @swap_devices, "$device$1";
 		}
-	}
+	    }
+	} else {
+	    open CMD, $FDISK . " -l $device|" ||
+		die "Couldn't run fdisk: $!\n";
 
+	    while (<CMD>) {
+		next unless m#^$device#;
+		@_ = split /\s+/;
+		if ($_[4] eq '82') {
+		    push @swap_devices, $_[0];
+		}
+	    }
+	}
 	close CMD;
 
 	return @swap_devices;
@@ -269,7 +288,7 @@ sub fix_swap_partitions
 
 	my ($root_disk) = get_linux_device_components($root);
 	my ($old_root_disk) = get_linux_device_components($old_root);
-	my @swap_partitions = find_swap_partitions($root_disk);
+	my @swap_partitions = find_swap_partitions("/dev/$root_disk");
 	my ($l, $u) = binary_supports_blkid("$imageroot/sbin/swapon");
 
 	for my $part (@swap_partitions) {
@@ -435,7 +454,7 @@ sub find_default_grub2_entry
 
 	open FILE, "$imageroot/$conf" || die "Couldn't read grub config: $!\n";
 	while (<FILE>) {
-		if (/^set\s+default\s*=\s*["']?(\d+)["']?$/) {
+		if (/^\s*set\s+default\s*=\s*["']?(\d+)["']?$/) {
 			$default = $1;
 			next;
 		}
@@ -472,7 +491,7 @@ sub set_grub_root_device
 		open FILE, $BOOTDIR . "/edd_map";
 		while (<FILE>) {
 			chomp;
-			split /=/;
+			@_ = split /=/;
 			if ($_[0] eq $root_disk) {
 				$grub_disk = hex($_[1]) - 0x80;
 				print "Found GRUB root device using EDD\n";
@@ -514,7 +533,7 @@ sub set_grub2_root_device
 		open FILE, $BOOTDIR . "/edd_map";
 		while (<FILE>) {
 			chomp;
-			split /=/;
+			@_ = split /=/;
 			if ($_[0] eq $root_disk) {
 				$grub_disk = hex($_[1]) - 0x80;
 				print "Found GRUB root device using EDD\n";
@@ -633,7 +652,8 @@ sub guess_bootloader
 {
 	my ($device) = @_;
 	my $buffer;
-	my $bootloader;
+	# assume grub unless we can prove otherwise
+	my $bootloader = 'grub';
 
 	open DEVICE, $device || die "Couldn't open $device: $!\n";
 	read DEVICE, $buffer, 512;
@@ -654,12 +674,12 @@ sub udev_supports_label
 	my ($imageroot) = @_;
 	my ($handles_label, $handles_uuid) = (0, 0);
 
-	if (! -d "$imageroot/etc/udev/rules.d") {
+	if (! -d "$imageroot/etc/udev/rules.d" && ! -d "$imageroot/lib/udev/rules.d") {
 		return (0, 0);
 	}
 
 	my @files = glob "$imageroot/etc/udev/rules.d/*";
-	if (@files) {
+	if (!@files) {
 		@files = glob "$imageroot/lib/udev/rules.d/*";
 	}
 	for my $file (@files) {
@@ -718,7 +738,8 @@ sub get_fstab_root
 	     die "Couldn't open fstab: $!\n";
 
 	while (<FSTAB>) {
-		split /\s+/;
+		next if (/^#/);
+		@_ = split /\s+/;
 		if ($_[1] eq '/') {
 			$root = $_[0];
 		}
@@ -740,6 +761,15 @@ sub check_kernel
 	my $kernel_has_ide = 0;
 	my $version_string;
 	my $compression;
+
+	#
+	# XXX this is just bizarre, a lot of work just to get a version number
+	# or evidence of IDE? If the kernel name has what appears to be a
+	# version string in it, return that. And just say "no" to IDE!
+	#
+	if ($kernel =~ /^[^-]+-(\d+.\d+.\d+)/) {
+	    return ("$1", 0);
+	}
 
 	open KERNEL, $kernel or die "Couldn't open $kernel: $!\n";
 	read KERNEL, $buffer, 4;
@@ -871,10 +901,16 @@ sub check_initrd
 	elsif ($value == XZHDRSTART) {
 		$compression = 'lzma';
 	}
+	elsif ($value == ZSTDHDRSTART) {
+		$compression = 'zstd';
+	}
 	close INITRD;
 
 	if (defined($compression) && $compression eq 'lzma') {
 		`$XZ -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
+	}
+	elsif (defined($compression) && $compression eq 'zstd') {
+		`$ZSTD -dc < "$initrd_filename" > "$decompressed_initrd" 2> /dev/null`;
 	}
 	else {
 		# Just bail to gzip no matter what.
@@ -905,9 +941,13 @@ sub check_initrd
 		last;
 	}
 
-	if (!$handles_label && !$handles_uuid) {
-		($handles_label, $handles_uuid) =
+	if (!$handles_label || !$handles_uuid) {
+		my ($udev_handles_label, $udev_handles_uuid) =
 		    udev_supports_label($initrd_dir);
+		$handles_label |= $udev_handles_label
+		    if (defined($udev_handles_label));
+		$handles_uuid |= $udev_handles_uuid
+		    if (defined($udev_handles_uuid));
 	}
 
 	#
@@ -929,7 +969,7 @@ sub check_initrd
 	open LOSETUP, "$LOSETUP -a |";
 	while (<LOSETUP>) {
 		chomp;
-		split /:/;
+		@_ = split /:/;
 		push @loopdevs, $_[0];
 	}
 	close LOSETUP;
@@ -946,7 +986,7 @@ sub mount_image
 	my ($root, $imageroot) = @_;
 	my $fstype;
 
-	for my $type (qw/ext3 ext2/) {
+	for my $type (qw/ext4 ext3 ext2/) {
 		`mount -t $type $root $imageroot`;
 		if (!($? >> 8)) {
 			$fstype = $type;
@@ -982,22 +1022,20 @@ sub update_random_seed
 	close SEED;
 }
 
-sub fix_console
+sub get_console_params
 {
-    my ($imageroot, $bloader, $file) = @_;
+    my ($imageroot, $bloader) = @_;
 
     my $console = $ENV{"SLICEFIX_CONSOLE"};
     if (!$console) {
 	print STDERR "no SLICEFIX_CONSOLE, leaving console as is\n";
-	return;
+	return (undef, undef, undef);
     }
 
     # XXX BSDism
     if ($console eq "vid") {
 	$console = "vga";
     }
-
-    print STDERR "Setting console device to $console\n";
 
     # parse off speed if present
     my $sspeed = 115200;
@@ -1017,8 +1055,16 @@ sub fix_console
 	}
     }
 
-    fix_grub_console($imageroot, $file, $console, $sunit, $sspeed, $sport);
-    fix_grub_defaults($imageroot, $console, $sunit, $sspeed, $sport);
+    return ($console, $sunit, $sspeed, $sport);
+}
+
+sub fix_console
+{
+    my ($imageroot, $bloader, $file, $console, $sunit, $sspeed, $sport, $arch) = @_;
+
+    print STDERR "Setting console device to $console\n";
+
+    fix_grub_console($imageroot, $file, $console, $sunit, $sspeed, $sport, $arch);
 
     # XXX we don't bother with /etc/inittab, only RHLnn-STD used it
 
@@ -1083,7 +1129,7 @@ sub fix_console
 #
 sub fix_grub_defaults
 {
-    my ($imageroot, $console, $sunit, $sspeed, $sport) = @_;
+    my ($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr, $arch) = @_;
     my $gdef = "$imageroot/etc/default/grub";
 
     if (! -e $gdef) {
@@ -1098,6 +1144,10 @@ sub fix_grub_defaults
     }
 
     my $esig = "# The remaining lines were added by Emulab slicefix";
+    my $cnetstr = "";
+    if (defined($cnetmacaddr) && $cnetmacaddr ne "") {
+	$cnetstr = " emulabcnet=$cnetmacaddr";
+    }
 
     my @buffer = ();
     while (<FILE>) {
@@ -1111,15 +1161,20 @@ sub fix_grub_defaults
     push @buffer, "$esig\n";
     push @buffer, "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
     if ($sunit < 0 && $console =~ /^hvc/) {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0 console=$console\"\n";
+	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0 console=$console$cnetstr\"\n";
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
     } elsif ($sunit < 0) {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0\"\n";
+	if ($arch eq "aarch64") {
+	    # XXX hack for Nvidia Grace Hopper nodes
+	    push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyAMA0$cnetstr\"\n";
+	} else {
+	    push @buffer, "GRUB_CMDLINE_LINUX=\"console=tty0$cnetstr\"\n";
+	}
 	push @buffer, "GRUB_TERMINAL=console\n";
 	push @buffer, "GRUB_SERIAL_COMMAND=\"\"\n";
     } else {
-	push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyS$sunit,$sspeed\"\n";
+	push @buffer, "GRUB_CMDLINE_LINUX=\"console=ttyS$sunit,$sspeed$cnetstr\"\n";
 	push @buffer, "GRUB_TERMINAL=serial\n";
 	if ($sport) {
 	    push @buffer, "GRUB_SERIAL_COMMAND=\"serial --unit=$sunit --port=$sport --speed=$sspeed\"\n";
@@ -1138,7 +1193,7 @@ sub fix_grub_defaults
 
 sub fix_grub_console
 {
-	my ($imageroot, $file, $console, $sunit, $sspeed, $sport) = @_;
+	my ($imageroot, $file, $console, $sunit, $sspeed, $sport, $arch) = @_;
 	my $comunit = $sunit + 1;
 
 	open FILE, "+<$imageroot/$file" ||
@@ -1214,6 +1269,19 @@ sub fix_grub_console
 		next;
 	    }
 	    #
+	    # XXX Kernel and initrd command lines with GH VGA (ttyAMA0)
+	    #
+	    if (/console=ttyAMA0\s/) {
+		# get rid of any existing serial console clauses
+		s#console=ttyS\S+##g;
+		if ($sunit >= 0) {
+		    # change ttyAMA0 to appropriate serial device
+		    s#console=ttyAMA0#console=ttyS$sunit,$sspeed#;
+		}
+		push @buffer, $_;
+		next;
+	    }
+	    #
 	    # Xen command lines with VGA (vga)
 	    #
 	    if (/console=vga\s/) {
@@ -1232,10 +1300,20 @@ sub fix_grub_console
 	    #
 	    if (/console=ttyS(\d+)/) {
 		# get rid of any existing VGA clause
-		s#console=tty0##g;
+		if ($arch eq "aarch64") {
+		    # XXX hack for Nvidia Grace Hopper nodes
+		    s#console=ttyAMA0##g;
+		} else {
+		    s#console=tty0##g;
+		}
 		if ($sunit < 0) {
 		    # replace serial with VGA
-		    s#console=ttyS\S+#console=tty0#g;
+		    if ($arch eq "aarch64") {
+			# XXX hack for Nvidia Grace Hopper nodes
+			s#console=ttyS\S+#console=ttyAMA0#g;
+		    } else {
+			s#console=ttyS\S+#console=tty0#g;
+		    }
 		} else {
 		    # fixup serial lines
 		    s#console=ttyS\S+#console=ttyS$sunit,$sspeed#g;
@@ -1265,6 +1343,67 @@ sub fix_grub_console
 	    # Otherwise, just copy
 	    #
 	    push @buffer, $_;
+	}
+
+	seek FILE, 0, 0;
+	truncate FILE, 0;
+
+	print FILE @buffer;
+
+	close FILE;
+
+	return;
+}
+
+sub get_cnet_mac_addr
+{
+	my $cnetmacaddr;
+	if (-s "$BOOTDIR/controlmac") {
+		$cnetmacaddr = `cat $BOOTDIR/controlmac`;
+		chomp($cnetmacaddr);
+		if ($cnetmacaddr =~ /^([a-fA-F0-9:]+)$/) {
+			$cnetmacaddr = "$1";
+		}
+		else {
+			$cnetmacaddr = undef;
+		}
+	}
+
+	return $cnetmacaddr;
+}
+
+sub fix_grub_cnet_hint
+{
+	my ($imageroot, $bootloader, $file, $cnetmacaddr) = @_;
+
+	if (!defined($cnetmacaddr) || $cnetmacaddr eq "") {
+		print STDERR "Cannot replace emulabcnet hint; no control interface mac address!\n";
+		return;
+	}
+
+	open FILE, "+<$imageroot/$file" ||
+		die "Couldn't open $imageroot/$file: $!\n";
+
+	my @buffer = ();
+	while (<FILE>) {
+		if (/emulabcnet=[\w:]+/) {
+			s#emulabcnet=[\w:]+#emulabcnet=$cnetmacaddr#g;
+			push @buffer, $_;
+			print "Replaced emulabcnet=$cnetmacaddr in cmdline in $file\n";
+			next;
+		}
+		# Most likely we need to add it; guess.
+		elsif (/root=/ && /console=/) {
+			chomp;
+			$_ .= " emulabcnet=$cnetmacaddr\n";
+			push @buffer, $_;
+			print "Added emulabcnet=$cnetmacaddr to cmdline in $file\n";
+			next;
+		}
+		#
+		# Otherwise, just copy
+		#
+		push @buffer, $_;
 	}
 
 	seek FILE, 0, 0;
@@ -1509,7 +1648,13 @@ sub main
 	my $lilo_commandline = 0;
 
 	my $old_uuid = get_uuid($root);
-	set_random_rootfs_uuid($root);
+	#
+	# Currently this break our UEFI images where the UUID is embedded
+	# in /EFI/boot/ubuntu/grub.cfg. Until we start fixing up there,
+	# don't change the UUID. Note that the FreeBSD slicefix doesn't
+	# generate a random UUID either.
+	#
+	#set_random_rootfs_uuid($root);
 	disable_time_dependent_fsck($root);
 	my $fstype = mount_image($root, $imageroot);
 	my $uuid = get_uuid($root);
@@ -1575,6 +1720,10 @@ sub main
 
 	my ($initrd_does_label, $initrd_does_uuid) = 
 	    check_initrd("$imageroot/$initrd");
+	# XXX
+	if ($arch eq "aarch64") {
+	    $initrd_does_label = $initrd_does_uuid = 1;
+	}
 	my ($mount_does_label, $mount_does_uuid) = 
 	    binary_supports_blkid("$imageroot/bin/mount");
 
@@ -1585,7 +1734,7 @@ sub main
 	print "Root FS UUID: $uuid\n";
 	print "Root FS LABEL: $label\n";
 	print "Installed bootloader: $bootloader\n";
-	print "fstab root: $old_fstab_root\n";
+	print "Old fstab root: $old_fstab_root\n";
 	print "kernel: $kernel\n";
 	print "kernel version: $kernel_version\n";
 	print "kernel has IDE support: $kernel_has_ide\n";
@@ -1649,7 +1798,11 @@ sub main
 		set_grub2_root_device($imageroot, $grub_config, $root);
 	}
 	fix_grub_dom0mem($imageroot, $grub_config);
-	fix_console($imageroot, $bootloader, $grub_config);
+	my ($console, $sunit, $sspeed, $sport) = get_console_params($imageroot, $bootloader);
+	fix_console($imageroot, $bootloader, $grub_config, $console, $sunit, $sspeed, $sport, $arch);
+	my ($cnetmacaddr) = get_cnet_mac_addr();
+	fix_grub_cnet_hint($imageroot, $bootloader, $grub_config, $cnetmacaddr);
+	fix_grub_defaults($imageroot, $console, $sunit, $sspeed, $sport, $cnetmacaddr, $arch);
 
 	fix_swap_partitions($imageroot, $root,
 		$kernel_has_ide ? $old_root : undef );

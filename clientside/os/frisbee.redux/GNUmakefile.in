@@ -367,14 +367,14 @@ control-install: control
 
 subboss-install: subboss
 	$(MAKE) WITH_MSERVER_EMULAB=0 noops-install
-	$(INSTALL_PROGRAM) frisbee $(DESTDIR)/usr/local/bin/frisbee
-	$(INSTALL_PROGRAM) frisupload $(DESTDIR)/usr/local/bin/frisupload
+	$(INSTALL_PROGRAM) frisbee $(DESTDIR)$(INSTALL_BINDIR)/frisbee
+	$(INSTALL_PROGRAM) frisupload $(DESTDIR)$(INSTALL_BINDIR)/frisupload
 
 client: frisbee frisupload
 
 client-install: client
-	$(INSTALL_PROGRAM) frisbee $(DESTDIR)/usr/local/bin/frisbee
-	$(INSTALL_PROGRAM) frisupload $(DESTDIR)/usr/local/bin/frisupload
+	$(INSTALL_PROGRAM) frisbee $(DESTDIR)$(INSTALL_BINDIR)/frisbee
+	$(INSTALL_PROGRAM) frisupload $(DESTDIR)$(INSTALL_BINDIR)/frisupload
 
 frisbee-mfs:
 	$(MAKE) WITH_EVENTS=0 client

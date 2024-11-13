@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,16 +21,28 @@
 # 
 # }}}
 #
-use English;
 use strict;
+use English;
+use Getopt::Std;
 
 #
 # Remove a project. We delete the project directory hierarchy and the
 # we remove the group from /etc/group. Actually, the project directory
 # is *renamed* since we do not want to be so destructive.
 #
-# usage: rmprojdir <pid>
-#
+sub usage()
+{
+    print STDERR "Usage: rmproj [-s] [-l] <pid>\n";
+    print STDERR "Options:\n";
+    print STDERR "  -s  - Silent, no email to the leader or members\n";
+    print STDERR "  -l  - Remove the project leader account is user was ".
+	"never approved\n";
+    exit(1);
+}
+my $optlist   = "ls";
+my $rmleader  = 0;
+my $silent    = 0;
+my $sopt      = "";
 
 #
 # Configure variables
@@ -41,8 +53,8 @@ my $CONTROL  = "@USERNODE@";
 my $MAILMANSUPPORT= @MAILMANSUPPORT@;
 
 my $RMGROUP  = "$TB/sbin/rmgroup";
-my $MODGROUPS= "$TB/sbin/modgroups";
 my $DELMMLIST= "$TB/sbin/delmmlist";
+my $RMUSER   = "$TB/sbin/rmuser";
 my @grouplist= ();
 
 #
@@ -97,13 +109,6 @@ if ($UID == 0) {
 	"    Please do not run this as root! Its already setuid!\n");
 }
 
-#
-# Check args.
-#
-if ($#ARGV < 0) {
-    die("Usage: rmprojdir <pid>\n");
-}
-
 # Map invoking user to object.
 my $this_user = User->ThisUser();
 if (! defined($this_user)) {
@@ -117,6 +122,20 @@ if (!TBAdmin()) {
     fatal("You must be a TB administrator to run this script!");
 }
 
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"l"}) || defined($options{"L"})) {
+    $rmleader = 1;
+}
+if (defined($options{"s"})) {
+    $silent = 1;
+    $sopt   = "-s";
+}
+usage()
+    if (@ARGV != 1);
+
 #
 # Map project name to object.
 #
@@ -127,6 +146,7 @@ if (! defined($target_project)) {
 my $pid     = $target_project->pid();
 my $pid_idx = $target_project->pid_idx();
 my $gid_idx = $target_project->gid_idx();
+my $leader  = $target_project->GetLeader();
 
 #
 # Sanity checks.
@@ -220,7 +240,7 @@ foreach my $group (@grouplist) {
     
     print "Removing project group $group ...\n";
 
-    if (system("$RMGROUP $idx")) {
+    if (system("$RMGROUP $sopt $idx")) {
 	fatal("Could not remove subgroup $group!");
     }
 }
@@ -229,7 +249,7 @@ foreach my $group (@grouplist) {
 # Now remove the main project group. 
 #
 print "Removing main project group ...\n";
-if (system("$RMGROUP $pid_idx")) {
+if (system("$RMGROUP $sopt $pid_idx")) {
     fatal("Could not remove main project group $pid!");
 }
 
@@ -247,8 +267,6 @@ if (0 && $MAILMANSUPPORT) {
     }
 }
 
-$EUID = 0;
-
 #
 # Then the project table itself, plus a few other bits and pieces
 # 
@@ -262,6 +280,27 @@ DBQueryFatal("delete FROM group_stats where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM projects where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM group_policies where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM group_features where pid_idx='$pid_idx'");
+
+#
+# Remove leader if this was last project membership;
+#
+if ($rmleader) {
+    $leader->Refresh();
+    my @plist = ();
+    my $uid   = $leader->uid();
+    
+    if ($leader->ProjectMembershipList(\@plist, "")) {
+	fatal("Could not get ProjectMembershipList() for $leader");
+    }
+    if (!@plist) {
+	if ($leader->status() eq $User::USERSTATUS_UNAPPROVED ||
+	    $leader->status() eq $User::USERSTATUS_NEWUSER) {
+	    print "Removing project leader $uid as directed ...\n";
+	    $leader->Delete() == 0 or
+		fatal("Could not delete unapproved $leader");
+	}
+    }
+}
 
 print "Project $pid has been removed!\n";
 exit(0);

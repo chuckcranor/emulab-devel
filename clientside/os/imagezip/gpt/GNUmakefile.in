@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,7 +31,7 @@ include $(OBJDIR)/Makeconf
 CFLAGS		+= -DIMAGEZIP $(SUBDIRCFLAGS) -I$(MAINDIR) -I$(SRCDIR)
 
 # XXX avoid a symbol conflict
-CFLAGS		+= -Dcrc32=gpt_crc32
+CFLAGS		+= -Dcrc32=gpt_crc32 -DWITH_GPT
 
 all:	libgpt.a
 

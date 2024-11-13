@@ -20,7 +20,7 @@
     <input name="formfields[pid]" value="<%- formfields.pid %>"
 	   id="form_join_pid"
 	   class="form-control format-me" data-key="pid"
-	   placeholder="Project Name" type="text">
+	   placeholder="Project ID (descriptive alphanumeric word)" type="text">
   </div>
   <div id="start_project_rollup"
        <% if (formfields.startorjoin == "join") { %>class=hidden<% } %> >
@@ -28,7 +28,7 @@
       <input name="formfields[proj_title]"
 	     value="<%- formfields.proj_title %>"
 	     class="form-control format-me" data-key="proj_title"
-	     placeholder="Project Title (short sentence)" type="text">
+	     placeholder="Project Title (one short sentence)" type="text">
     </div>
     <div class="form-group sidebyside-form" >
       <input name="formfields[proj_url]" value="<%- formfields.proj_url %>"
@@ -38,27 +38,33 @@
     <div class="form-group sidebyside-form" >
       <div class="format-me" data-key="proj_class"
 	   style='padding-left: 15px; margin-bottom: 7px;'>
-	<label class="checkbox-inline"
-	       style='margin-right: 10px; padding-lefttt: 0px;'>
+	<div class="form-check">
 	  <input name="formfields[proj_class]"
+		 class="form-check-input"		 
 		 style='margin-lefttt: 20px;'
 		 value="1"
 		 <% if (formfields.proj_class == 1) { %>checked<% } %>
-		 type="checkbox">Will this project be used for a class?</label>
+		 type="checkbox">
+	  <label class="form-check-label">
+	    Will this project be used for a class?</label>
+	</div>
       </div>
     </div>
     <% if (window.ISPOWDER) { %>
       <div class="form-group sidebyside-form" >
 	<div class="format-me" data-key="proj_nsf"
 	     style='padding-left: 15px; margin-bottom: 7px;'>
-	  <label class="checkbox-inline"
-		 style='margin-right: 10px; padding-lefttt: 0px;'>
+	  <div class="form-check">
 	    <input name="formfields[proj_nsf]"
 		   id="nsf-checkbox"
+		   class="form-check-input"		 
 		   style='margin-lefttt: 20px;'
 		   value="1"
 		   <% if (formfields.proj_nsf == 1) { %>checked<% } %>
-		   type="checkbox">Is this project funded by NSF?</label>
+		   type="checkbox">
+	    <label class="form-check-label">
+	      Is this project funded by NSF?</label>
+	  </div>
 	  <div id="nsf-awards-input"
 	       <% if (formfields.proj_nsf == 0) { %>
 	       class="row hidden"
@@ -74,16 +80,16 @@
 		     type="text">
 	    </div>
 	    <div class="col-xs-7" style="padding-top: 5px;">
-	      <label class="checkbox-inline"
-		     style='margin-right: 10px; padding-lefttt: 0px;'>
-	      <input name="formfields[proj_nsf_supplement]"
-		     value="1"
-		     <% if (formfields.proj_nsf_supplement == 1) { %>checked<% } %>
-		     type="checkbox">Is this work funded by a supplement to
-	      this award?</label>
+	      <div class="form-check">
+		<input name="formfields[proj_nsf_supplement]"
+		       value="1"
+		       class="form-check-input"		 
+		       <% if (formfields.proj_nsf_supplement == 1) { %>checked<% } %>
+		       type="checkbox">
+		<label class="form-check-label">
+		  Is this work funded by a supplement to this award?</label>
+	      </div>
 	    </div>
-	    
-	  </div>
 	</div>
       </div>
     <% } %>
@@ -131,9 +137,9 @@
 		  license.description_text + "</pre>";
 		} %>
 	        <a href='#' class='btn btn-xs'
-		   data-toggle='popover'
-		   data-html='true'
-		   data-delay='{"hide":500}'
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-html='true' data-bs-html='true'
+		   data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 		   data-content="<%- description_html %>">
 		  <span class='glyphicon glyphicon-question-sign'
 			style='margin-bottom: 4px;'></span>

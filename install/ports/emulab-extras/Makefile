@@ -20,7 +20,7 @@ NO_BUILD=	yes
 # This prevents any ports from trying to configure interactively.
 #
 BATCH=		yes
-.MAKEFLAGS+=	-DBATCH
+.MAKEFLAGS+=	BATCH=yes
 
 #
 # XXX hackary to get around bugs in Makefiles:
@@ -42,8 +42,8 @@ RUN_DEPENDS+=	\
 	bash:${PORTSDIR}/shells/bash \
 	${LOCALBASE}/sbin/e2fsck:${PORTSDIR}/sysutils/e2fsprogs \
 	emacs:${PORTSDIR}/editors/emacs \
-	git:${PORTSDIR}/devel/git \
 	jove:${PORTSDIR}/editors/jove \
+	git:${PORTSDIR}/devel/git \
 	lsof:${PORTSDIR}/sysutils/lsof \
 	rsync:${PORTSDIR}/net/rsync \
 	sudo:${PORTSDIR}/security/sudo \
@@ -51,7 +51,7 @@ RUN_DEPENDS+=	\
 	xterm:${PORTSDIR}/x11/xterm \
 	zsh:${PORTSDIR}/shells/zsh
 
-.if (${EMULAB_PORTVERSION} == "8.2" || ${EMULAB_PORTVERSION} == "8.3")
+.if (${EMULAB_PORTVERSION} == "8.3" || ${EMULAB_PORTVERSION} == "9.3")
 RUN_DEPENDS+=	\
 	gdb:${PORTSDIR}/devel/gdb \
 	vim:${PORTSDIR}/editors/vim

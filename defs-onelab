@@ -492,6 +492,7 @@ PORTAL_ENABLE=1
 # Fancy new browser in the console support
 #
 BROWSER_CONSOLE_ENABLE=1
+BROWSER_CONSOLE_WEBSSH=1
 
 #
 # If enabled, needs setup, see:

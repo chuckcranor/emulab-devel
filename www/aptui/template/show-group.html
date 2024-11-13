@@ -1,37 +1,37 @@
 <div class='row'>
   <div class='col-sm-12'>
-    <div class='panel panel-default'>
-      <div class='panel-heading'>
-	<h4 class="text-center">Group
-	  <%- target_project %>/<%- target_group %></h4>
+    <div class='panel  card panel-default'>
+      <div class='panel-heading card-header'>
+	<h4 class="panel-title card-title text-center">Group</h4>
       </div>
-	<div class='panel-body'>
+      <div class='panel-body card-body'>
 	<div class='row'>
 	  <div class='col-sm-12'>
 	    <div>
 	      <!-- Nav tabs -->
 	      <ul class="nav nav-tabs" role="tablist">
-		<li role="presentation" class="active">
-		  <a href="#info" role="tab"
-		     data-toggle="tab">Info</a></li>
-		<li role="presentation">
-		  <a href="#experiments" role="tab"
-		     data-toggle="tab">Experiments</a></li>
-		<li role="presentation">
-		  <a href="#members" role="tab"
-		     data-toggle="tab">Members</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#info" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Info</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#experiments" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Experiments</a></li>
+		<li role="presentation" class="nav-item">
+		  <a href="#members" role="tab" class="nav-link"
+		     data-toggle="tab" data-bs-toggle="tab">Members</a></li>
 		<% if (isadmin) { %>
-		  <li role="presentation">
-		    <a href="#admin" role="tab" data-toggle="tab">
+		  <li role="presentation" class="nav-item">
+		    <a href="#admin" role="tab"  class="nav-link"
+		       data-toggle="tab" data-bs-toggle="tab">
 		      Admin</a></li>
-		  <li role="presentation">
-		    <a href='<%- emulablink %>'>
+		  <li role="presentation" class="nav-item">
+		    <a href='<%- emulablink %>' class="nav-link">
 		      Emulab Group Page</a></li>
 		<% } %>
 	      </ul>
 	      <!-- Tab panes -->
 	      <div class="tab-content">
-		<div role="tabpanel" class="tab-pane active" id="info">
+		<div role="tabpanel" class="tab-pane" id="info">
 		  <div id="info_content"></div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="members">
@@ -68,11 +68,13 @@
   <div class='modal-dialog'>
     <div class='modal-content'>
       <div class='modal-body'>
-        <button type='button' class='close' data-dismiss='modal'
-                aria-hidden='true'>&times;</button>
         <center><h4>Confirm to delete group</h4>
-          <button class='btn btn-danger btn-sm'
-		  id='confirm-delete-group'>Confirm</button></center>
+	  <br>
+          <button class='btn btn-danger btn-sm confirm-button'
+		  id='confirm-delete-group'>Confirm</button>
+          <button class='btn btn-default btn-sm cancel-button'
+		  data-dismiss='modal' data-bs-dismiss='modal'>Cancel</button>
+	</center>
       </div>
     </div>
   </div>

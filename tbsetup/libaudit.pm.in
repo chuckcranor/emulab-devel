@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -381,12 +381,6 @@ sub AuditAbort()
 	    undef($logfile);
 	}
 	delete @ENV{'TBAUDITLOG', 'TBAUDITON'};
-	
-	if (defined($prefork)) {
-	    my $oldmask = umask(0000);
-	    system("/usr/bin/touch $prefork");
-	    umask($oldmask);
-	}
     }
     return 0;
 }
@@ -424,7 +418,7 @@ sub AuditFork()
 	}
 	unlink($prefork);
     }
-    $prefork = undef;
+    $prefork  = undef;
 
     open(LOG, ">> $logfile") or
 	die("opening $logfile for $logfile: $!");
@@ -557,8 +551,15 @@ sub SendAuditMail($)
 	# then no point in sending to tblogs, obviously.
 	#
 	my $TO;
+	my $CC;
 	my $HDRS  = "Reply-To: $TBOPS";
 	my @FILES = ();
+
+	if (defined($AUDIT_INFO{'headers'})) {
+	    foreach my $h (@{ $AUDIT_INFO{'headers'} }) {
+		$HDRS .= "\n" . $h;
+	    }
+	}
 	
 	if (defined($logfile) && -s $logfile) {
 	    @FILES = ($logfile);
@@ -572,28 +573,37 @@ sub SendAuditMail($)
 		}
 		elsif ($logtblogs) {
 		    $TO    = $TBLOGS;
-		    $HDRS .= "\nCC: $TBOPS" if ($exitstatus);
+		    $CC    = $TBOPS if ($exitstatus);
 		}
 		else {
 		    $TO    = $FROM;
-		    $HDRS .= "\nCC: ". ($exitstatus ? $TBOPS : $TBLOGS);
+		    $CC    = ($exitstatus ? $TBOPS : $TBLOGS);
 		}
 	    }
 	    else {
 		$TO    = $TBLOGS;
-		$HDRS .= "\nCC: $TBOPS" if ($exitstatus);
+		$CC    = $TBOPS if ($exitstatus);
 	    }
 	}
 	elsif ($logtblogs) {
 	    $TO    = $TBLOGS;
-	    $HDRS .= "\nCC: $TBOPS" if ($exitstatus);
+	    $CC    = $TBOPS if ($exitstatus);
 	}
 	else {
 	    $TO    = $TBOPS;
 	}
 	if (defined($AUDIT_INFO{'cc'})) {
+	    my $cc = join(', ', @{ $AUDIT_INFO{'cc'} });
+	    if (defined($CC)) {
+		$CC .= ", $cc";
+	    }
+	    else {
+		$CC = $cc
+	    }
+	}
+	if (defined($CC)) {
 	    $HDRS .= "\n";
-	    $HDRS .= "CC: " . join(', ', @{ $AUDIT_INFO{'cc'} });
+	    $HDRS .= "CC: $CC";
 	}
 
 	# This always succeeds, stop leaving file in /tmp
@@ -602,8 +612,6 @@ sub SendAuditMail($)
 	    if (defined($logfile) && !$savelog);
 
       done:
-	system("/usr/bin/touch $prefork")
-	    if (defined($prefork));
     }
 }
 
@@ -701,6 +709,7 @@ my %AUDIT_METAINFO =
       message      => 'string',
       to           => 'list',   # Send audit mail to these people
       cc           => 'list',   # Cc audit mail to these people
+      headers      => 'list',   # X- headers
       brand        => 'brand'); # Brand object for sendmail
 
 #
@@ -748,11 +757,17 @@ sub AddAuditInfo ($$) {
 END {
     return
 	if (($forked || $nochild) && $PID != $SAVEPID);
-    
+
     # Save, since shell commands will alter it.
     my $exitstatus = $?;
     
     SendAuditMail($exitstatus);
+
+    if (defined($prefork)) {
+	my $oldmask = umask(0000);
+	system("/usr/bin/touch $prefork");
+	umask($oldmask);
+    }
 
     $? = $exitstatus;
 }

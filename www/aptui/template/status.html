@@ -18,35 +18,66 @@
 }
 pre {
 	white-space: pre-wrap;
+        word-break: normal;
+        word-wrap: normal;
 }
 .panel-body-nopad {
      padding: 5px;
- }
+}
 .panel-heading-nopad {
     padding: 5px;
- }
+}
 .table-condensed > thead > tr > th,
 .table-condensed > tbody > tr > th,
 .table-condensed > tfoot > tr > th,
 .table-condensed > thead > tr > td,
 .table-condensed > tbody > tr > td,
 .table-condensed > tfoot > tr > td {
-    padding: 2px;
+    padding: 4px 2px;
  }
 .popover
 {
     min-width: 500px !important;
 }
+/* Important part */
+#top-processes-modal .modal-dialog {
+    overflow-y: initial !important
+}
+#top-processes-modal .modal-body {
+    height: 80vh;
+    overflow-y: auto;
+}
+.servicelog-command {
+    margin-bottom: 0px;
+    border-bottom: 1px;
+    border-bottom-right-radius: 0px;
+    border-bottom-left-radius: 0px;
+}
+.servicelog-log {
+    border-top-left-radius:  0px;
+    border-top-right-radius: 0px;
+    background-color: inherit;
+    margin-bottom: 15px;
+}
+.CodeMirror {
+    height: auto !important;
+}
+.navtab-icon {
+    margin-top: 0px;
+    padding: 0px;
+    margin-bottom: 4px;
+}
 </style>
+<div id="main-template">
 <div class='row'>
-  <div class='col-lg-8  col-lg-offset-2
-       col-md-8  col-md-offset-2
-       col-sm-10 col-sm-offset-1
+  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
+       col-md-8  col-md-offset-2 offset-md-2
+       col-sm-10 col-sm-offset-1 offset-sm-1
        col-xs-12 col-xs-offset-0'>
-    <div class='panel panel-default' id='status_panel'>
-      <div class="panel-heading">
+    <div class='panel  card panel-default' id='status_panel'>
+      <div class="panel-heading card-header">
 	<h5>
-	  <a data-toggle="collapse" id="profile_status_toggle"
+	  <a data-toggle="collapse" data-bs-toggle="collapse" id="profile_status_toggle"
 	     href="#profile_status_collapse">
 	    <span id='status_message'></span>
 	    <span class="glyphicon glyphicon-chevron-right pull-left"
@@ -56,7 +87,7 @@ pre {
       </div>
       <div id="profile_status_collapse" data-chevron="profile_status_toggle"
 	   class="panel-collapse collapse">
-	<div class='panel-body'>
+	<div class='panel-body card-body pb-1 pt-1'>
           <span id='quickvm_status_hidden' class="hidden"></span>
 	  <table class='table table-condensed nospaceafter border-none'>
 	  <!-- The spinner will start out invisible -->
@@ -64,10 +95,11 @@ pre {
 	    <td colspan=2 class='border-none'>
 	      <div id='status_progress_outerdiv' class='hidden'>
 		<div id='status_progress_div'
-                     class='progress progress-striped active nospaceafter'>
-		  <div class='progress-bar' role='progressbar'
-                       id='status_progress_bar'
-                       style='width: 33%;'></div>
+		     class='progress my-2' style="height: 20px;">
+		  <div id='status_progress_bar'
+		       class="progress-bar progress-bar-striped
+			      progress-bar-animated bg-primary"
+		       style='width: 33%;'></div>
 		</div>
 	      </div>
 	    </td>
@@ -82,16 +114,16 @@ pre {
               <span id='quickvm_status'>
 		<font></font>
               </span>
-	      <span class="hidden" id="ignore-failure"
+	      <span class="hidden ignore-failure"
 		    style='margin-left: 10px;'>
-		(<a id='ignore-failure-button' href="#"
-		    data-target='#ignore-failure-modal'
-		    data-toggle='modal'>Ignore this failure</a>?)</span>
+		(You can <a class='ignore-failure-button' href="#"
+		    data-target='#ignore-failure-modal' data-bs-target='#ignore-failure-modal'
+			    data-toggle='modal' data-bs-toggle='modal'>ignore this failure</a>)</span>
 	      <span class="hidden" id="explain-quarantine"
 		    style='margin-left: 10px;'>
 		(<a id='explain-quarantine-button' href="#"
-		    data-target='#explain-quarantine-modal'
-		    data-toggle='modal'>What does this mean</a>?)</span>
+		    data-target='#explain-quarantine-modal' data-bs-target='#explain-quarantine-modal'
+		    data-toggle='modal' data-bs-toggle='modal'>What does this mean</a>?)</span>
 	    </td>
 	  </tr>
 	  <% if (expinfo.profile_uuid) { %>
@@ -123,12 +155,8 @@ pre {
 	    <tr>
 	      <td class='border-none'>Creator:</td>
 	      <td class='border-none'>
-		<% if (registered) { %>
-		  <a href="user-dashboard.php?user=<%- expinfo.creator %>">
-		    <%- expinfo.creator %></a>
-		<% } else { %>
-	          <a href="mailto:<%- expinfo.creator_email %>"><%- expinfo.creator_email %></a>
-	        <% } %>
+		<a href="user-dashboard.php?user=<%- expinfo.creator %>">
+		  <%- expinfo.creator %></a>
 	      </td>
 	    </tr>
 	    <% if (expinfo.project) { %>
@@ -179,9 +207,9 @@ pre {
 	    <td class='border-none'>
 	      <span id="maximum-extension-string"></span>
 	      <a href='#' class='btn btn-xs'
-		 data-toggle='popover'
-		 data-html='true'
-		 data-delay='{"hide":500}'
+		 data-toggle='popover' data-bs-toggle='popover'
+		 data-html='true' data-bs-html='true'
+		 data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 		 data-content="This is the maximum extension that is
 			       <em>possible</em> because of future reservation
 			       promises for the resources you are using. It
@@ -193,181 +221,191 @@ pre {
 	    </td>
 	  </tr>
 	  </table>
-	  <div class='pull-left'>
-	    <a class='btn btn-info btn-xs pull-left hidden'
-               style='margin-right: 10px;'
-	       id='sliverinfo_button'
-               href='#'
-	       target='_blank'
-               type='button'>Logs</a>
-	    <div id='sliverinfo_dropdown' class='hidden'>
-	      <select style='margin-right: 0px;'>
-		<option value='selectme'>Logs</option>
-	      </select>
-	      <a class='btn btn-info btn-tiny'
+	  <div class="row justify-content-between">
+	    <div class='col-auto me-auto'>
+	      <a class='btn btn-info btn-xs hidden'
 		 style='margin-right: 10px;'
+		 id='sliverinfo_button'
 		 href='#'
 		 target='_blank'
-		 type='button'>Go</a>
-	    </div>
-	  </div>
-	  <div class='pull-left'>
-	    <a class='hidden'
-               style='margin-right: 10px;'
-	       id='logfile_button'
-               href='#'
-	       target='_blank'
-               type='button'>Stitcher</a>
-	  </div>
-	  <% if (isadmin) { %>
-	    <div class='pull-left'>
-	      <button class='btn btn-xs btn-danger' disabled hidden
-		      style='margin-left: 10px;'
-		      style='margin-right: 10px;'
-		      id='warnkill-experiment-button' type=button
-		      data-delay='{"show":300}'
-		      data-toggle='popover'
-		      data-content='Warn user or terminate/quarantine
-				    experiment with cause
-				    and optionally freeze the user account.'>
- 		Warn/Kill</button>
-	      <button class='btn btn-xs btn-danger' disabled hidden
-		      style='margin-left: 10px;'
-		      style='margin-right: 10px;'
-		      id='release-quarantine-button' type=button
-		      data-toggle='popover'
-		      data-content='Release experiment from quarantine.'>
- 		Release</button>
-	    </div>
-	  <% } %>
-	  <div class='pull-right'>
-	    <a href="#" target="_blank"
-	       class='btn btn-xs btn-info hidden' 
-	       style='margin-right: 10px;'
-	       id='confirm-stuff-button' type=button
-	       data-delay='{"show":250}'
-	       data-toggle='popover'
-	       data-content='Explore performance results from a set of
-			     low-level benchmarks characterizing the
-			     hardware used in this experiment.'>
- 	      Performance History</a>
-	    <% if (registered && !isfadmin) { %>
-	      <button class='btn btn-xs btn-info hidden'
-		      id='rerun_button' type=button
-		      data-toggle='popover'
-	              data-delay='{"show":300}'
-		      data-html='true'
-		      data-content="Share a link to run this experiment using the
-				    same parameters."> 
-		Share</button>
-	      <button class='btn btn-info btn-xs hidden'
-		      style='margin-right: 30px;'
-		      id='save_paramset_button'
-		      data-toggle='popover'
-		      data-delay='{"show":300}'
-		      data-content='Save the parameters used to create this
-				    experiment, so you can quickly apply them
-				    when starting a new experiment using this
-				    profile. Click for more information.'
-		      type='button'>Save Parameters</button>
-	      <span>
-		<button class='btn btn-xs btn-success hidden' disabled
-			style='margin-right: 10px;'
-			id='linktest-stop-button' type=button
-                        data-delay='{"show":300}'
-			data-toggle='popover'
-			data-content='Stop a running or wedged linktest'>
- 		  Stop Linktest</button>
+		 type='button'>Logs</a>
+	      <span id='sliverinfo_dropdown' class='hidden'>
+		<select style='margin-right: 0px;'>
+		  <option value='selectme'>Logs</option>
+		</select>
+		<a class='btn btn-info btn-tiny'
+		   style='margin-right: 10px; margin-top: -3px;'
+		   href='#'
+		   target='_blank'
+		   type='button'>Go</a>
 	      </span>
-	      <button class='btn btn-xs btn-primary hidden' disabled
-		      id='snapshot_button' type=button
-		      data-toggle='popover'
-	              data-delay='{"show":300}'
-		      data-html='true'
-		      data-content="Create a disk image from one of your nodes.
-				    Click for more info."> 
-		Create Disk Image</button>
-	      <% if (window.APT_OPTIONS.cancopy_profile) { %>
-		<a class='btn btn-xs btn-primary'
-		   href='manage_profile.php?action=copy&uuid=<%= expinfo.profile_uuid %>'
-		   id='copy_button' type=button
-		   data-toggle='popover'
-	           data-delay='{"show":300}'
-		   data-html='true'
-		   data-content="When you <em>copy</em> a profile,
-			 you are creating a new profile that
-			 uses the same source code and metadata (description,
-			 instructions) as the original profile, but without
-			 creating a new disk image. Instead, the new profile
-			 uses whatever images the original profile uses."> 
-		  Copy</a>
+	      <a class='hidden'
+		 style='margin-right: 10px;'
+		 id='logfile_button'
+		 href='#'
+		 target='_blank'
+		 type='button'>Portal Log</a>
+	      <% if (isadmin) { %>
+		<button class='btn btn-xs btn-danger hidden' disabled
+			style='margin-right: 10px;'
+			id='warnkill-experiment-button' type=button
+			data-delay='{"show":300}' data-bs-delay='{"show":300}'
+			data-toggle='popover' data-bs-toggle='popover'
+			data-content='Warn user or terminate/quarantine
+				      experiment with cause
+				      and optionally freeze the user account.'>
+ 		  Warn/Kill</button>
+		<button class='btn btn-xs btn-danger hidden' disabled
+			style='margin-right: 10px;'
+			id='release-quarantine-button' type=button
+			data-toggle='popover' data-bs-toggle='popover'
+			data-content='Release experiment from quarantine.'>
+ 		  Release</button>
 	      <% } %>
-	    <% } %>
-	    <button class='btn btn-xs btn-success exp-running hidden' disabled
-		    id='extend_button' type=button>
-              <% if (isfadmin) { %>Extension History<% } else { %>Extend<% } %>
-	    </button>
-	    <% if (!isfadmin) { %>
-	      <button class='btn btn-xs btn-danger' disabled
-		      id='terminate_button' type=button
-		      data-toggle='modal' data-target='#terminate_modal'>
-		Terminate</button>
-	    <% } %>
+	    </div>
+	    <div class='col-auto'>
+	      <a href="#" target="_blank"
+		 class='btn btn-xs btn-info hidden' 
+		 style='margin-right: 10px;'
+		 id='confirm-stuff-button' type=button
+		 data-delay='{"show":250}' data-bs-delay='{"show":250}'
+		 data-toggle='popover' data-bs-toggle='popover'
+		 data-content='Explore performance results from a set of
+			       low-level benchmarks characterizing the
+			       hardware used in this experiment.'>
+ 		Performance History</a>
+	      <% if (!isfadmin) { %>
+		<button class='btn btn-sm btn-info hidden'
+			id='txgraph_button' type=button
+			style='margin-right: 10px;'
+			data-toggle='popover' data-bs-toggle='popover'
+			data-delay='{"show":300}' data-bs-delay='{"show":300}'
+			data-html='true' data-bs-html='true'
+			data-content="Transmission history for this
+				      experiment."> 
+		  <span class="glyphicon glyphicon-align-left"
+			style="margin-right: 5px;"></span></button>
+		<button class='btn btn-xs btn-info hidden'
+			id='rerun_button' type=button
+			data-toggle='popover' data-bs-toggle='popover'
+			data-delay='{"show":300}' data-bs-delay='{"show":300}'
+			data-html='true' data-bs-html='true'
+			data-content="Share a link to run this experiment
+				      using the same parameters."> 
+		  Share</button>
+		<button class='btn btn-info btn-xs hidden'
+			id='save_paramset_button'
+			data-toggle='popover' data-bs-toggle='popover'
+			data-delay='{"show":300}' data-bs-delay='{"show":300}'
+			data-content='Save the parameters used to create this
+				      experiment, so you can quickly apply them
+				      when starting a new experiment using this
+				      profile. Click for more information.'
+			type='button'>Save Parameters</button>
+		<span>
+		  <button class='btn btn-xs btn-success hidden' disabled
+			  style='margin-right: 10px;'
+			  id='linktest-stop-button' type=button
+                          data-delay='{"show":300}' data-bs-delay='{"show":300}'
+			  data-toggle='popover' data-bs-toggle='popover'
+			  data-content='Stop a running or wedged linktest'>
+ 		    Stop Linktest</button>
+		</span>
+		<button class='btn btn-xs btn-primary hidden'
+			style='margin-right: 10px;'
+			id='connect-sharedlan-button' type=button
+			data-toggle='popover' data-bs-toggle='popover'
+			data-delay='{"show":300}' data-bs-delay='{"show":300}'
+			data-html='true' data-bs-html='true'
+			data-content="Connect to a shared lan in another
+				      experiment."> 
+		  (Dis)Connect Shared Lan</button>
+		<button class='btn btn-primary btn-xs hidden' disabled
+			id='modify_experiment_button'
+			data-toggle='popover' data-bs-toggle='popover'
+			data-delay='{"show":300}' data-bs-delay='{"show":300}'
+			data-content='Modify experiment'
+			type='button'>Modify</button>
+		<button class='btn btn-xs btn-primary hidden' disabled
+			id='snapshot_button' type=button
+			data-toggle='popover' data-bs-toggle='popover'
+			data-delay='{"show":300}' data-bs-delay='{"show":300}'
+			data-html='true' data-bs-html='true'
+			data-content="Create a disk image from one of your
+				      nodes. Click for more info."> 
+		  Create Disk Image</button>
+		<% if (window.APT_OPTIONS.cancopy_profile) { %>
+		  <a class='btn btn-xs btn-primary'
+		     href='manage_profile.php?action=copy&uuid=<%= expinfo.profile_uuid %>'
+		     id='copy_button' type=button
+		     data-toggle='popover' data-bs-toggle='popover'
+	             data-delay='{"show":300}' data-bs-delay='{"show":300}'
+		     data-html='true' data-bs-html='true'
+		     data-content="When you <em>copy</em> a profile,
+				   you are creating a new profile that
+				   uses the same source code and metadata
+				   (description, instructions) as the original
+				   profile, but without
+				   creating a new disk image. Instead, the
+				   new profile
+				   uses whatever images the original
+				   profile uses."> 
+		    Copy</a>
+		<% } %>
+	      <% } %>
+	      <button class='btn btn-xs btn-success exp-running hidden' disabled
+		      id='extend_button' type=button>
+		<% if (isfadmin) { %>
+		  Extension History
+		<% } else { %>
+		  Extend
+		<% } %>
+	      </button>
+	      <% if (window.APT_OPTIONS.canterminate) { %>
+		<button class='btn btn-xs btn-danger' disabled
+			id='terminate_button' type=button
+			data-toggle='modal' data-bs-toggle='modal'
+			data-target='#terminate_modal'
+			data-bs-target='#terminate_modal'>
+		  Terminate</button>
+	      <% } %>
+	    </div>
 	  </div>
 	  <% if (isadmin) { %>
-	    <div class='clearfix'></div>	  
-	    <div class='exp-running hidden pull-left'
-		 style='margin-right: 10px;'
-		 data-toggle='popoverxx'
-		 data-delay='{"show":750}'
-		 data-content="When checked, only administrators can extend
-			       this experiment. No free time is granted to
-			       user at all.">
-	      <label class="checkbox-inline">
-		<input type="checkbox" id="lockout_checkbox" disabled
-		       <% if (expinfo.lockout) { %>checked<% } %> >
-		Lockout</label>
-	    </div>
-	    <div class='exp-running hidden pull-left'
-		 style='margin-right: 10px;'
-		 data-toggle='popoverxx'
-		 data-delay='{"show":750}'
-		 data-content="When checked, the experiment 
-			       cannot be terminated by the user unless the
-			       user verifies 
-			       the lockdown code when clicking the Terminate
-			       button. This prevents accidental termination,
-			       and is automatically set whenever an experiment
-			       is extended for more then two weeks.
-			       Use the admin lockdown flag to fully prevent
-			       termination."> 
-	      <label class="checkbox-inline">
-		<input type="checkbox" id="user_lockdown_checkbox" disabled
-		       <% if (expinfo.user_lockdown) { %>checked<% } %> >
-		User Lockdown</label>
-	    </div>
-	    <div class='exp-running hidden pull-left'
-		 style='margin-right: 10px;'
-		 data-toggle='popoverxx'
-		 data-delay='{"show":750}'
-		 data-content="When checked, the experiment 
-			       cannot be terminated by the user. Only an
-			       admin can do it.">
-	      <label class="checkbox-inline">
-		<input type="checkbox" id="admin_lockdown_checkbox" disabled
-		       <% if (expinfo.admin_lockdown) { %>checked<% } %> >
-		Admin Lockdown</label>
-	    </div>
-	    <div class='exp-running hidden pull-left'>
-	      <a target="_blank"
-		 data-toggle='popover'
-		 data-delay='{"show":500, "hide":0}'
-		 <% if (expinfo.admin_notes == "") { %>
-		 data-content="Add admin notes to this experiment"
-		 <% } else { %>
-		 data-content="This experiment has admin notes"
-		 <% } %>
-		 href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
+	    <div class="mt-1">
+	      <span class='exp-running hidden'
+		    style='margin-right: 10px;'>
+		<label class="checkbox-inline">
+		  <input type="checkbox" id="lockout_checkbox" disabled
+			 <% if (expinfo.lockout) { %>checked<% } %> >
+		  Lockout</label>
+	      </span>
+	      <span class='exp-running hidden'
+		    style='margin-right: 10px;'>
+		<label class="checkbox-inline">
+		  <input type="checkbox" id="user_lockdown_checkbox" disabled
+			 <% if (expinfo.user_lockdown) { %>checked<% } %> >
+		  User Lockdown</label>
+	      </span>
+	      <span class='exp-running hidden'
+		    style='margin-right: 10px;'>
+		<label class="checkbox-inline">
+		  <input type="checkbox" id="admin_lockdown_checkbox" disabled
+			 <% if (expinfo.admin_lockdown) { %>checked<% } %> >
+		  Admin Lockdown</label>
+	      </span>
+	      <span class='exp-running hidden'>
+		<a target="_blank"
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-delay='{"show":500, "hide":0}'
+		   data-bs-delay='{"show":500, "hide":0}'
+		   <% if (expinfo.admin_notes == "") { %>
+		   data-content="Add admin notes to this experiment"
+		   <% } else { %>
+		   data-content="This experiment has admin notes"
+		   <% } %>
+		   href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
+	      </span>
 	    </div>
 	  <% } %>
 	</div>
@@ -377,18 +415,18 @@ pre {
 </div>
 <!-- Add a hidden div for errors returned by the instantiation. -->
 <div class='row hidden' id='error_panel'>
-  <div class='col-lg-8  col-lg-offset-2
-	      col-md-8  col-md-offset-2
-	      col-sm-10 col-sm-offset-1
+  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
+	      col-md-8  col-md-offset-2 offset-md-2
+	      col-sm-10 col-sm-offset-1 offset-sm-1
 	      col-xs-12 col-xs-offset-0'>
-    <div class="panel panel-danger">
-      <div class="panel-heading">
-        <center><h4 class="panel-title">Error Message</h4></center>
+    <div class="panel  card panel-danger">
+      <div class="panel-heading card-header">
+        <center><h4 class="panel-title card-title">Error Messages</h4></center>
       </div>
-      <div class="panel-body"><code style="white-space: pre-wrap"
+      <div class="panel-body card-body"><code style="white-space: pre-wrap"
 				    id="error_panel_text"></code>
       </div>
-      <div class="panel-footer">
+      <div class="panel-footer card-footer">
 	<div class="resource-error hidden">
 	  <b>More info about resource errors (not enough nodes):</b>
 	  <ul>
@@ -418,29 +456,157 @@ pre {
 	Not sure how to proceed or have further questions about this
 	error? Join the
         <a href='<%= errorURL %>'>users group</a> and ask a question. Be
-        sure to include the error message in your question, and the name
-	of your profile and experiment:
-	'<%= expinfo.profile_name %>/<%= expinfo.name %>'.
+        sure to include the error message in your question and the
+	<a href="#" class="status-page-link">URL</a> of your experiment
+	status page.
+	<span class="hidden ignore-failure">
+	  <em>This error can be
+	    <a class='ignore-failure-button' href="#"
+	       data-target='#ignore-failure-modal' data-bs-target='#ignore-failure-modal'
+	       data-toggle='modal' data-bs-toggle='modal'>ignored</a> if you do not want the
+	    experiment to be reaped automatically.</em>
+	  Nodes can sometimes be resurrected by rebooting or reloading, click
+	  on the node(s) to view the context menu.
+	</span>
       </div>
     </div>
   </div>
 </div>
+<!-- Add a hidden div for errors returned by the instantiation. -->
+<div class='row hidden' id='general-error'>
+  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
+	      col-md-8  col-md-offset-2 offset-md-2
+	      col-sm-10 col-sm-offset-1 offset-sm-1
+	      col-xs-12 col-xs-offset-0
+	      alert alert-danger'>
+    <code class="error-cause"
+	  style="white-space: pre-wrap; padding:0px;"></code>
+  </div>
+</div>
+<div class='row hidden' id='error-panel-new'>
+  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
+	      col-md-8  col-md-offset-2 offset-md-2
+	      col-sm-10 col-sm-offset-1 offset-sm-1
+	      col-xs-12 col-xs-offset-0'>
+    <div class="panel  card panel-danger">
+      <div class="panel-heading card-header">
+        <center><h4 class="panel-title card-title">Error Information</h4></center>
+      </div>
+      <div class="panel-body card-body">
+	<div class="multisite-errors hidden">
+	  <div class="panel-group" style="margin-bottom: 5px; "
+	       role="tablist">
+	    <div class="panel  card panel-danger error-template hidden">
+	      <div class="panel-heading card-header" role="tab">
+		<h4 class="panel-title card-title">
+		  <a role="button" data-toggle="collapse" data-bs-toggle="collapse"
+		     style="text-decoration: underline;"
+		     data-parent="#error-panel-new .panel-group"
+		     href="#fooey"></a>
+		</h4>
+	      </div>
+	      <div id="fooey" class="panel-collapse collapse" role="tabpanel">
+		<div class="panel-body card-body">
+		  <div class="error-message hidden"
+		       style="margin-bottom:10px;"></div>
+		  <div style="padding-left: 20px;">
+		    <code class="error-cause"
+			  style="white-space: pre-wrap; padding:0px;"></code>
+		  </div>
+		</div>
+	      </div>
+	    </div>	  
+	  </div>
+	</div>
+	<div class="singlesite-errors hidden">
+	  <div class="error-message" style="margin-bottom:10px;"></div>
+	  <div style="padding-left: 20px;">
+	    <code class="error-cause"
+		  style="white-space: pre-wrap; padding:0px;"></code></div>
+	</div>
+      </div>
+      <div class="panel-footer card-footer resource-error hidden">
+	<div>
+	  <b>More info about resource errors (not enough nodes):</b>
+	  <ul>
+	    <li> To see how many nodes are available right now, or
+	      when nodes will be available in the future, check out
+	      the <a href="resinfo.php" target="_blank">cluster status</a>
+	      page.
+	    </li>
+	    <li> Try asking for a smaller number of nodes, or nodes of a
+	      different type.
+	      <% if (window.ISCLOUD) { %>
+		Or try using a different cluster.
+	      <% } %>
+	    </li>
+	    <li> Try setting the initial experiment duration to a
+	      shorter amount of time. You will find this option in the
+	      <em>Advanced Options</em> section of the
+	      <a href="instantiate" target="_blank">Start Experiment</a>
+	      page.
+	    </li>
+	    <li> Still cannot get enough nodes right away? Try making a
+	      <a href="resgroup.php" target="_blank">reservation</a>
+	      for the future.
+	    </li>
+	  </ul>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class='row hidden' id='pending-panel'>
+  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
+	      col-md-8  col-md-offset-2 offset-md-2
+	      col-sm-10 col-sm-offset-1 offset-sm-1
+	      col-xs-12 col-xs-offset-0'>
+    <div class="panel  card panel-info">
+      <div class="panel-heading card-header">
+        <center><h4 class="panel-title card-title">Experiment is Pending</h4></center>
+      </div>
+      <div class="panel-body card-body">
+	<code class="pending-cause" style="white-space: pre-wrap"></code>
+	<div class="pending-reason"
+	     style="margin-top: 15px; font-weight: bold;"></div>
+      </div>
+      <div class="panel-footer card-footer">
+	More info about pending experiments:
+	<ul>
+	  <li>
+	    An experiment enters the <em>pending</em> state when none
+	    of the resources can be allocated, but the system decides
+	    that it should attempt again later.
+	  </li>
+	  <li>
+	    For example, if you have a reservation for all of the
+	    resources, the error is possibly transient, and might
+	    clear up in a short time.
+	  </li>
+	  <li>
+	    You can terminate the experiment any time.
+	  </li>
+	</ul>
+      </div>
+    </div>
+  </div>
 </div>
 <!-- Add a div for the prestaging info -->
 <div class='row hidden' id='prestage-panel'>
-  <div class='col-lg-8  col-lg-offset-2
-	      col-md-8  col-md-offset-2
-	      col-sm-10 col-sm-offset-1
+  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
+	      col-md-8  col-md-offset-2 offset-md-2
+	      col-sm-10 col-sm-offset-1 offset-sm-1
 	      col-xs-12 col-xs-offset-0'>
-    <div class="panel panel-info">
-      <div class="panel-heading panel-heading-nopad">
+    <div class="panel  card panel-info">
+      <div class="panel-heading card-header panel-heading-nopad">
 	<h5>Prestage Progress
 	  <a href='#' class='btn btn-xs info-button'>
 	    <span class='glyphicon glyphicon-question-sign'
 		  style='margin-bottom: 4px;'></span></a>
 	</h5>
       </div>
-      <div class="panel-body">
+      <div class="panel-body card-body">
       </div>
     </div>
   </div>
@@ -449,15 +615,15 @@ pre {
      will actually fill in the div though, since it is markdown and that
      is more easily done on the client side for now. -->
 <div class='row hidden' id='instructions_panel'>
-  <div class='col-lg-8  col-lg-offset-2
-	      col-md-8  col-md-offset-2
-	      col-sm-10 col-sm-offset-1
+  <div class='col-lg-8  col-lg-offset-2 offset-lg-2
+	      col-md-8  col-md-offset-2 offset-md-2
+	      col-sm-10 col-sm-offset-1 offset-sm-1
 	      col-xs-12 col-xs-offset-0'>
-    <!-- Collapsable panel -->
-    <div class="panel panel-info">
-      <div class="panel-heading">
+    <!-- Collapsable panel  card -->
+    <div class="panel  card panel-info card-info">
+      <div class="panel-heading card-header">
 	<h5>
-	  <a data-toggle="collapse" id="profile_instructions_toggle"
+	  <a data-toggle="collapse" data-bs-toggle="collapse" id="profile_instructions_toggle"
 	     href="#profile_instructions_collapse">Profile Instructions
 	    <span class="glyphicon glyphicon-chevron-right pull-left"
 	          style="margin-right: 5px;"></span>
@@ -467,7 +633,7 @@ pre {
       <div id="profile_instructions_collapse"
 	   data-chevron="profile_instructions_toggle"
 	   class="panel-collapse collapse">
-	<div class="panel-body">
+	<div class="panel-body card-body">
 	  <div id="instructions_text"></div>
 	</div>
       </div>
@@ -484,70 +650,77 @@ pre {
       <button class="hidden"
 	      type='button' id="selenium-shell-button">SHELL</button>
     </center>
-    <div class='panel panel-default invisible' id='showtopo_container'>
-      <div class='panel-body'>
+    <div class='panel card panel-default hidden' id='showtopo_container'>
+      <div class='panel-body card-body'>
 	<div id='quicktabs_div'>
 	  <ul id='quicktabs_ul' class='nav nav-tabs'>
-	    <li class='hidden'>
-              <a href='#topology' id='show_topology_tab'
-		 data-toggle='tab'>Topology View</a>
+	    <li class='hidden nav-item'>
+              <a href='#topology' id='show_topology_tab' class="nav-link"
+		 data-toggle='tab' data-bs-toggle='tab'>Topology View</a>
             </li>
-	    <li class='hidden'>
-              <a href='#listview' id='show_listview_tab'
-		 data-toggle='tab'>List View</a>
+	    <li class='hidden nav-item'>
+              <a href='#listview' id='show_listview_tab' class="nav-link"
+		 data-toggle='tab' data-bs-toggle='tab'>List View</a>
             </li>
-	    <li class='hidden' id="show_powder-map_li">
-              <a href='#powder-map' id='show_powder-map_tab'
-		 data-toggle='tab'>Powder Map</a>
+	    <li class='hidden nav-item' id="show_powder-map_li">
+              <a href='#powder-map' id='show_powder-map_tab' class="nav-link"
+		 data-toggle='tab' data-bs-toggle='tab'>Powder Map</a>
             </li>
-	    <li class='hidden'>
-              <a href='#rspec' id='show_rspec_tab'
-		 data-toggle='tab'>Rspec</a>
+	    <li class='hidden nav-item'>
+              <a href='#rspec' id='show_rspec_tab' class="nav-link"
+		 data-toggle='tab' data-bs-toggle='tab'>Rspec</a>
             </li>
-	    <li class='hidden'>
-              <a href='#manifest' id='show_manifest_tab'
-		 data-toggle='tab'>Manifest</a>
+	    <li class='hidden nav-item'>
+              <a href='#manifest' id='show_manifest_tab' class="nav-link"
+		 data-toggle='tab' data-bs-toggle='tab'>Manifest</a>
             </li>
-	    <li class="hidden" id="show_idlegraphs_li">
-              <a href='#Idlegraphs' id='show_idlegraphs_tab'
-		 data-toggle='tab'>Graphs
-		<button class='close hidden'
-			style="margin-top:0px;"
+	    <li class="hidden nav-item" id="show_idlegraphs_li">
+              <a href='#Idlegraphs' id='show_idlegraphs_tab' class="nav-link"
+		 data-toggle='tab' data-bs-toggle='tab'>Graphs
+		<button class='btn btn-small hidden navtab-icon'
 			type='button' id="graphs-refresh-button">
 		  <span class='glyphicon glyphicon-repeat'></span></button>
 	      </a>
             </li>
-	    <li class="hidden" id="show_openstack_li">
-              <a href='#Openstack' id='show_openstack_tab'
-		 data-toggle='tab'>Openstack Data
-		<button class='close hidden'
-			style="margin-top:0px;"
+	    <li class="hidden nav-item" id="show_portstats_li">
+              <a href='#Portstats' id='show_portstats_tab' class="nav-link"
+		 data-toggle='tab' data-bs-toggle='tab'>Portstats
+		<button class='btn btn-small navtab-icon hidden'
+			type='button' id="portstats-refresh-button">
+		  <span class='glyphicon glyphicon-repeat'></span></button>
+	      </a>
+            </li>
+	    <li class="hidden nav-item" id="show_openstack_li">
+              <a href='#Openstack' id='show_openstack_tab' class="nav-link"
+		 data-toggle='tab' data-bs-toggle='tab'>Openstack Data
+		<button class='btn btn-small navtab-icon hidden'
 			type='button' id="openstack-refresh-button">
 		  <span class='glyphicon glyphicon-repeat'></span></button>
 	      </a>
             </li>
-	    <li class="hidden" id="show_bindings_li">
-              <a href='#bindings' id='show_bindings_tab'
-		 data-toggle='tab'>Bindings</a>
+	    <li class="hidden nav-item" id="show_bindings_li">
+              <a href='#bindings' id='show_bindings_tab' class="nav-link"
+		 data-toggle='tab' data-bs-toggle='tab'>Bindings</a>
             </li>
 	  </ul>
 	  <div id='quicktabs_content' class='tab-content'>
             <div class='tab-pane hidden' id='topology'>
-	      <div id='showtopo_statuspage' class='jacks'></div>
-              <small>Click on a node for more options. 
-                Click and drag to move things around.</small>
-	      <% if (registered) { %>
+	      <div id='showtopo_statuspage'>	      
+		<div class='showtopology-bare'></div>
+	      </div>
 		<button class='btn btn-xs btn-success pull-right' disabled
 			id='refresh_button' type=button
-			data-toggle='popover'
+			data-toggle='popover' data-bs-toggle='popover'
 			data-delay='{"hide":1000, "show":500}'
+			data-bs-delay='{"hide":1000, "show":500}'
 			data-content='Ask cluster for updated node status'>
 		  Refresh Status</button>
 		<span>
 		  <button class='btn btn-xs btn-success pull-right hidden'
 			  disabled
-			  data-toggle='popover'
+			  data-toggle='popover' data-bs-toggle='popover'
 			  data-delay='{"hide":1000, "show":500}'
+			  data-bs-delay='{"hide":1000, "show":500}'
 			  data-content='Run linktest on the topology'
 			  style='margin-right: 10px;'
 			  id='linktest-modal-button' type=button>
@@ -557,8 +730,9 @@ pre {
 		  <span>
 		    <button class='btn btn-xs btn-success pull-right'
 			    disabled
-			    data-toggle='popover'
+			    data-toggle='popover' data-bs-toggle='popover'
 			    data-delay='{"hide":1000, "show":500}'
+			    data-bs-delay='{"hide":1000, "show":500}'
 			    data-content='Reload the topology in case it has
 					  changed at the cluster'
 			    style='margin-right: 10px;'
@@ -566,11 +740,15 @@ pre {
 		      Reload Topo</button>
 		  </span>
 		<% } %>
-	      <% } %>
+              <small class="pull-left">Click on a node for more options. 
+                Click and drag to move things around.
+		<span id="multisite-context-menu-notice" class="hidden">
+		  Click on a <em>site name</em> to delete the site.</span>
+	      </small>
 	    </div>
             <div class='tab-pane hidden' id='listview'>
 	      <div id='showtopo_listview'>
-		<table class='tablesorter' id='listview_table'>
+		<table class='tablesorter table-hover' id='listview_table'>
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -592,15 +770,19 @@ pre {
 			  <button id='action-menu-button' type='button'
 				  style="margin-top: -6px;"
 				  class='btn btn-primary btn-xs dropdown-toggle'
-				  data-toggle='dropdown'>
+				  data-toggle='dropdown' data-bs-toggle='dropdown'>
 			    <span class='glyphicon glyphicon-cog'></span>
 			  </button>
-			  <ul class='dropdown-menu text-left' role='menu'>
-			    <li><a href='#' name='reboot'>Reboot Selected</a>
+			  <ul class='dropdown-menu dropdown-menu-right
+				     text-left' role='menu'>
+			    <li><a href='#' name='reboot' class='dropdown-item'>
+			      Reboot Selected</a>
 			    </li>
-			    <li><a href='#' name='reload'>Reload Selected</a>
+			    <li><a href='#' name='reload' class='dropdown-item'>
+			      Reload Selected</a>
 			    </li>
-			    <li><a href='#' name='delete'>Delete Selected</a>
+			    <li><a href='#' name='delete' class='dropdown-item'>
+			      Delete Selected</a>
 			    </li>
 			  </ul>
 			</div>
@@ -633,9 +815,9 @@ pre {
 		</center>
 	      </div>
 	      <div class='row'>
-		<div class='panel panel-default hidden'
+		<div class='panel  card panel-default hidden'
 		     id="loadavg-panel-div">
-		  <div class="panel-heading">
+		  <div class="panel-heading card-header">
 		    <div class="maxavg-toggles pull-right">
 		      <label class="radio-inline">
 			<input type="radio" name="loadav-radio"
@@ -648,7 +830,7 @@ pre {
 		    </div>
 		    <h5>Load Average Graph</h5>
 		  </div>
-		  <div class='panel-body panel-body-nopad'>
+		  <div class='panel-body card-body panel-body-nopad'>
 		    <!-- The col setting gives us a "relative" position div -->
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
@@ -662,9 +844,38 @@ pre {
 		</div>
 	      </div>
 	      <div class='row'>
-		<div class='panel panel-default hidden'
+		<div class='panel  card panel-default hidden'
+		     id="gpu-panel-div">
+		  <div class="panel-heading card-header">
+		    <div class="maxavg-toggles pull-right">
+		      <label class="radio-inline">
+			<input type="radio" name="gpu-radio"
+			       checked="checked" value="max"> Max
+		      </label>
+		      <label class="radio-inline">
+			<input type="radio" name="gpu-radio"
+			       value="avg"> Avg
+		      </label>
+		    </div>
+		    <h5>GPU Usage Graph</h5>
+		  </div>
+		  <div class='panel-body card-body panel-body-nopad'>
+		    <!-- The col setting gives us a "relative" position div -->
+		    <div class='col-xs-12 col-xs-offset-0'
+			 style="padding:0px;">
+		      <div id="gpu-chart"
+			   class='fixedsize-panel idlegraph-div
+				  with-3d-shadow with-transitions'>
+			<svg></svg>
+		      </div>
+		    </div>
+		  </div>
+		</div>
+	      </div>
+	      <div class='row'>
+		<div class='panel  card panel-default hidden'
 		     id="ctrl-traffic-panel-div">
-		  <div class="panel-heading">
+		  <div class="panel-heading card-header">
 		    <div class="maxavg-toggles pull-right">
 		      <label class="radio-inline">
 			<input type="radio" name="ctrl-radio"
@@ -693,7 +904,7 @@ pre {
 		    </div>
 		    <h5>Control Traffic Graph</h5>
 		  </div>
-		  <div class='panel-body panel-body-nopad'>
+		  <div class='panel-body card-body panel-body-nopad'>
 		    <!-- The col setting gives us a "relative" position div -->
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
@@ -707,9 +918,9 @@ pre {
 		</div>
 	      </div>
 	      <div class='row'>
-		<div class='panel panel-default hidden'
+		<div class='panel  card panel-default hidden'
 		     id="expt-traffic-panel-div">
-		  <div class="panel-heading">
+		  <div class="panel-heading card-header">
 		    <div class="maxavg-toggles pull-right">
 		      <label class="radio-inline">
 			<input type="radio" name="expt-radio"
@@ -736,7 +947,7 @@ pre {
 		    </div>
 		    <h5>Experiment Traffic Graph</h5>
 		  </div>
-		  <div class='panel-body panel-body-nopad'>
+		  <div class='panel-body card-body panel-body-nopad'>
 		    <!-- The col setting gives us a "relative" position div -->
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
@@ -750,6 +961,7 @@ pre {
 		</div>
 	      </div>
 	    </div>
+	    <div class='tab-pane hidden' id='Portstats'></div>
 	    <div class='tab-pane hidden' id='Openstack'>
 	      <div class="hidden" id="nodata">
 		<br>
@@ -760,11 +972,11 @@ pre {
 	      <div id="openstack-div" class="hidden">
 		<ul id='chart-tabs' class='nav nav-tabs'>
 		  <li class="active">
-		    <a href='#jsondata' data-toggle='tab'>Raw Data</a>
+		    <a href='#jsondata' data-toggle='tab' data-bs-toggle='tab'>Raw Data</a>
 		  </li>
 		  <li>
 		    <a href='#activity' id="activity-tab"
-		       data-toggle='tab'>Activity</a>
+		       data-toggle='tab' data-bs-toggle='tab'>Activity</a>
 		  </li>
 		</ul>
 		<div id='chart-contents' class='tab-content'>
@@ -775,31 +987,31 @@ pre {
 		    </div>
 		  </div>
 		  <div class='tab-pane hidden' id='template'>
-		    <div class='panel panel-default cpu'>
-		      <div class="panel-heading">
+		    <div class='panel  card panel-default cpu'>
+		      <div class="panel-heading card-header">
 			<h5>CPU Utilization</h5>
 		      </div>
-		      <div class='panel-body panel-body-nopad'>
+		      <div class='panel-body card-body panel-body-nopad'>
 			<div class='smalldiv with-3d-shadow with-transitions'>
 			  <svg></svg>
 			</div>
 		      </div>
 		    </div>
-		    <div class='panel panel-default netout'>
-		      <div class="panel-heading">
+		    <div class='panel  card panel-default netout'>
+		      <div class="panel-heading card-header">
 			<h5>Outgoing Traffic</h5>
 		      </div>
-		      <div class='panel-body panel-body-nopad'>
+		      <div class='panel-body card-body panel-body-nopad'>
 			<div class='smalldiv with-3d-shadow with-transitions'>
 			  <svg></svg>
 			</div>
 		      </div>
 		    </div>
-		    <div class='panel panel-default netin'>
-		      <div class="panel-heading">
+		    <div class='panel  card panel-default netin'>
+		      <div class="panel-heading card-header">
 			<h5>Incoming Traffic</h5>
 		      </div>
-		      <div class='panel-body panel-body-nopad'>
+		      <div class='panel-body card-body panel-body-nopad'>
 			<div class='smalldiv with-3d-shadow with-transitions'>
 			  <svg></svg>
 			</div>
@@ -828,6 +1040,21 @@ pre {
       </div>
     </div>
   </div>
+</div>
+<div class="row" id='error-help'>
+  <div class='col-lg-12 col-lg-offset-0
+	      col-md-12 col-md-offset-0
+	      col-sm-12 col-sm-offset-0
+	      col-xs-12 col-xs-offset-0 text-center'>
+    <small>
+    Not sure how to proceed or have further questions? Join the
+    <a href='<%= errorURL %>'>users group</a> and ask a question. Be
+    sure to include any error messages in your question <b>and the
+    <a href="#" class="status-page-link">URL</a> of your experiment
+    status page.</b>
+    </small>
+  </div>
+</div>
 </div>
 <div>
   <!-- place to hang the modals for now -->
@@ -954,15 +1181,15 @@ pre {
 	       style="text-align: center; margin-top: 10px;">
 	    <div style="display: inline-block; text-align: left">
 	      <ul class="list-unstyled">	    
-	      <li id='snapshot-wholedisk-div'
+		<li id='snapshot-wholedisk-div'
 		  class="hidden">
 		<input type=checkbox
 		       id='snapshot-wholedisk' value=yes>
 		<b>Create a whole disk image?</b>
 		<a href='#' class='btn btn-xs'
-		   data-toggle='popover'
-		   data-html='true'
-		   data-delay='{"hide":500}'
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-html='true' data-bs-html='true'
+		   data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 		   data-content="Check this box if you need to capture more
 				 then just the primary partition of your disk.
 				 For example, you created a file system on
@@ -979,9 +1206,9 @@ pre {
 		       id='snapshot_update_prepare' value=yes>
 		<b>Did you add any accounts or groups to your node?</b>
 		<a href='#' class='btn btn-xs'
-		   data-toggle='popover'
-		   data-html='true'
-		   data-delay='{"hide":500}'
+		   data-toggle='popover' data-bs-toggle='popover'
+		   data-html='true' data-bs-html='true'
+		   data-delay='{"hide":500}' data-bs-delay='{"hide":500}'
 		   data-content="Check this box if you installed any software
 				 that added new
 				 users or groups. For example, if you installed
@@ -1001,7 +1228,9 @@ pre {
 	  </div>
 	  <p style="padding-top: 10px;">
 	    <b>WARNING:</b>
-	    <em>The contents of your home directory is <b>NOT</b> saved</em>.
+	    <em><font color="red">
+	      The contents of your home directory is <b>NOT</b>
+	      saved and will be deleted during the imaging process</font></em>.
 	    You  should install your software and data files in standard
 	    locations like <tt>/usr/local</tt> or <tt>/opt</tt>. The reason
 	    for this is so that dependencies on specific user home directories
@@ -1010,34 +1239,33 @@ pre {
 	  <div class="text-danger hidden snapshot-error general-error"
 	       style="white-space: pre-wrap;
 		      padding: 0px 50px 0px 50px;"></div>
-	</div>
-	<div class="pull-right" style="margin-bottom: 10px;">
-          <button style='margin-right: 10px;'
-                  class='btn btn-danger btn-sm' 
-                  data-dismiss='modal' aria-hidden='true'>
-	    Cancel</button>
-          <button class='btn btn-success btn-sm'; type='button'
-		  style='margin-right: 15px;'
-		  id='snapshot_confirm'>
-	    Continue</button>
+	  <center>
+            <button class='btn btn-success btn-sm confirm-button' type='button'
+		    id='snapshot_confirm'>
+	      Continue</button>
+            <button class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
+	  </center>
 	</div>
 	<br>
 	<div class="modal-footer-steps hidden">
 	  <button type="button" class="btn btn-default js-btn-step pull-left"
-		  data-orientation="cancel" data-dismiss="modal"></button>
+		  data-orientation="cancel" data-dismiss="modal" data-bs-dismiss="modal"></button>
 	  <button type="button" class="btn btn-warning js-btn-step"
 		  data-orientation="previous"></button>
 	  <button type="button" class="btn btn-success js-btn-step"
 		  data-orientation="next"></button>
 	</div>
+	    </div>
       </div>
-    </div>
-  </div>
+      </div>
   <div id='snapshot_modal_old' class='modal fade'>
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <center><h3>Confirm to Snapshot</h3>
+          <center><h3>Confirm to Snapshot</h3></center>
 	</div>
 	<div class='modal-body'>
 	  <div id='snapshot_update_profile_div' class='hidden'>
@@ -1103,13 +1331,13 @@ pre {
 	  </div>
 	  <br>
 	  <center>
-            <button style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' aria-hidden='true'>
-	      Cancel</button>
-            <button class='btn btn-danger btn-sm'; type='button'
-		    id='snapshot_confirm'>
+            <button class='btn btn-danger btn-sm confirm-button'
+		    type='button' id='snapshot_confirm'>
 	      Confirm</button>
+            <button class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1126,16 +1354,16 @@ pre {
 	    Are you <b>sure</b> you want to delete nodes from your
             experiment?  This operation cannot be stopped once it is
             started!
-
 	  </p>
 	  <center>
-            <button style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' aria-hidden='true'>
-	      Cancel</button>
-            <button class='btn btn-danger btn-sm'; type='button'
+            <button class='btn btn-danger btn-sm confirm-button'
+		    type='button'
 		    id='deletenode_confirm'>
 	      Confirm</button>
+            <button class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1154,94 +1382,155 @@ pre {
 	    stopped once it is started!
 	  </p>
 	  <center>
-            <button style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' aria-hidden='true'>
-	      Cancel</button>
-            <button class='btn btn-danger btn-sm'; type='button'
-		    id='deletesite_confirm'>
+            <button class='btn btn-danger btn-sm confirm-button'
+		    type='button' id='deletesite_confirm'>
 	      Confirm</button>
+            <button class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
 	  </center>
 	</div>
       </div>
     </div>
   </div>
-  <div id="context-menu">
+  <div id="context-menu" class="dropdown">
+    <button class="btn btn-sm dropdown-toggle hidden" type="button"
+	    data-bs-toggle="dropdown" aria-expanded="false"></button>
     <ul class="dropdown-menu" role="menu"
 	style='cursor: pointer; cursor: hand'>
-      <li id="shell"><a name="shell">Shell</a></li>
-      <li id="console"><a name="console">Console</a></li>
-      <li id="consolelog"><a name="consolelog">Console Log</a></li>
+      <li id="shell">
+	<a name="shell" class='dropdown-item'>Shell</a></li>
+      <li id="console">
+	<a name="console" class='dropdown-item'>Console</a></li>
+      <li id="consolelog">
+	<a name="consolelog" class='dropdown-item'>Console Log</a></li>
       <li id="reboot">
-	<a name="reboot"
-	   data-toggle='tooltip'
+	<a name="reboot" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
 	   title='Reboot node, click to confirm'
-	   data-trigger="hover">Reboot</a></li>
+	   data-trigger="hover" data-bs-trigger="hover">Reboot</a></li>
       <li id="reload">
-	<a name="reload"
-	   data-toggle='tooltip'
-	   title='Reload node, click to confirm'
-	   data-trigger="hover">Reload</a></li>
+	<a name="reload" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
+	   title='Reload the current OS image on your node, click to confirm'
+	   data-trigger="hover" data-bs-trigger="hover">Reload</a></li>
       <li id="recovery">
-	<a name="recovery"
-	   data-toggle='tooltip'
+	<a name="recovery" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
 	   title='Boot node into (or out of) recovery mode, click for more info'
-	   data-trigger="hover">Recovery</a></li>
+	   data-trigger="hover" data-bs-trigger="hover">Recovery</a></li>
       <li id="monitor" class="hidden">
-	<a name="monitor"
-	   data-toggle='tooltip'
+	<a name="monitor" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
 	   title='Radio monitoring graph'
-	   data-trigger="hover">Monitor Graph</a></li>
+	   data-trigger="hover" data-bs-trigger="hover">Monitor Graph</a></li>
+      <li id="txhistory" class="hidden">
+	<a name="txhistory" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
+	   title='Radio transmission history'
+	   data-trigger="hover" data-bs-trigger="hover">Transmission History</a></li>
       <li id="nodetop" class="hidden">
-	<a name="nodetop"
-	   data-toggle='tooltip'
+	<a name="nodetop" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
 	   title='Top Processes'
-	   data-trigger="hover">Top Processes</a></li>
+	   data-trigger="hover" data-bs-trigger="hover">Top Processes</a></li>
+      <li id="servicelogs" class="hidden">
+	<a name="servicelogs" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
+	   title='Execute Service Logs'
+	   data-trigger="hover" data-bs-trigger="hover">Execute Service Logs</a></li>
       <li id="powercycle" class="hidden">
-	<a name="powercycle"
-	   data-toggle='tooltip'
+	<a name="powercycle" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
 	   title='Power cycle node, click to confirm'
-	   data-trigger="hover">Power Cycle</a></li>
+	   data-trigger="hover" data-bs-trigger="hover">Power Cycle</a></li>
       <li id="flash" class="hidden">
-	<a name="flash"
-	   data-toggle='tooltip'
+	<a name="flash" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
 	   title='Reflash via JTAG; only as a last resort!'
-	   data-trigger="hover">Flash Recovery</a></li>
-      <li id="vnc" class="vnc hidden">
-	<a name="vnc"
-	   data-trigger="hover">Open VNC window</a></li>
+	   data-trigger="hover" data-bs-trigger="hover">Flash Recovery</a></li>
+      <li id="vnc" class="vnc">
+	<a name="vnc" class='dropdown-item'
+	   data-trigger="hover" data-bs-trigger="hover">Open VNC window</a></li>
       <li id="delete">
-	<a name="delete"
-	   data-toggle='tooltip'
+	<a name="delete" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
 	   title='Delete node from experiment, click for more info'
-	   data-trigger="hover">Delete Node</a></li>
+	   data-trigger="hover" data-bs-trigger="hover">Delete Node</a></li>
     </ul>
   </div>
-  <div id="site-context-menu">
+  <div id="site-context-menu" class="dropdown">
+    <button class="btn btn-sm dropdown-toggle hidden" type="button"
+	    data-bs-toggle="dropdown" aria-expanded="false"></button>
     <ul class="dropdown-menu" role="menu"
 	style='cursor: pointer; cursor: hand'>
       <li>
-	<a name="delete"
-	   data-toggle='tooltip'
+	<a name="delete" class='dropdown-item'
+	   data-toggle='tooltip' data-bs-toggle='tooltip'
 	   title='Delete site from experiment, click for more info'
-	   data-trigger="hover">Delete Site</a></li>
+	   data-trigger="hover" data-bs-trigger="hover">Delete Site</a></li>
     </ul>
   </div>
   <div id="context"></div>
   <div id="context-menus"></div>
+  <div id="node-popover-template" class="hidden">
+    <table class='table table-condensed border-none'
+	   style="margin-bottom: 0px;">
+      <tbody>
+	<tr>
+	  <td class='border-none'>Node:</td>
+	  <td class='border-none node-popover-node'></td>
+	</tr>
+	<tr>
+	  <td class='border-none'>ID:</td>
+	  <td class='border-none node-popover-id'></td>
+	</tr>
+	<tr>
+	  <td class='border-none'>Cluster:</td>
+	  <td class='border-none node-popover-cluster'></td>
+	</tr>
+	<tr>
+	  <td class='border-none'>Status:</td>
+	  <td class='border-none node-popover-status'></td>
+	</tr>
+	<tr>
+	  <td class='border-none'>State:</td>
+	  <td class='border-none node-popover-state'></td>
+	</tr>
+	<tr>
+	  <td class='border-none'>Raw State:</td>
+	  <td class='border-none node-popover-rawstate'></td>
+	</tr>
+	<tr class="node-popover-frisbee-status hidden">
+	  <td class='border-none'>Image:</td>
+	  <td class='border-none node-popover-frisbee-image'></td>
+	</tr>
+	<tr class="node-popover-frisbee-status hidden">
+	  <td class='border-none'>Image:</td>
+	  <td class='border-none node-popover-frisbee-written'></td>
+	</tr>
+	<tr class="node-popover-execute-service hidden">
+	  <td class='border-none'>Startup Service:</td>
+	  <td class='border-none node-popover-execute-status'></td>
+	</tr>
+      </tbody>
+    </table>
+  </div>
   <div id='console_password_modal' class='modal fade'>
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <button type='button' class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
+          <button type='button' class='close btn-close'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'></button>
           <center><h4>Console Password for
 	    <span id='console_password_clientid'></span></h4></center>
 	</div>
 	<div class='modal-body'>
 	  <form class="form-horizontal">
 	    <div class="row">
-	      <div class="col-sm-4 col-sm-offset-4">
+	      <div class="col-sm-4 col-sm-offset-4 offset-sm-4">
 		<div class="form-group">
 		  <input onClick="this.select();"
 			 id='console_password_input'
@@ -1260,14 +1549,26 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-body'>
-          <center><h3>Confirm Node <span id="confirm-which"></span></h3>
-            <button type='button' style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' aria-hidden='true'>
-	      Cancel</button>
-            <button class='btn btn-danger btn-sm'
+          <center>
+	    <h3>Confirm Node <span id="confirm-which"></span></h3>
+	  </center>
+	  <div class="reload-warning mb-2 hidden">
+	    WARNING: When you reload a node, the primary OS partition
+	    is overwritten with a fresh copy of the OS image that is
+	    currently running on it. Any additional data you have put
+	    in that partition will be lost. Reloading is a last resort
+	    operation if you have messed up your node and it will no
+	    longer boot.
+	  </div>
+	  <center>
+            <button class='btn btn-danger btn-sm confirm-button'
 		    id='confirm_reload_button'>
 	      Confirm</button>
+            <button type='button'
+                    class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1297,7 +1598,7 @@ pre {
 	  <center style="margin-top: 10px;">
             <button type='button' style='margin-right: 20px;'
                     class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' aria-hidden='true'>
+                    data-dismiss='modal' data-bs-dismiss='modal' aria-hidden='true'>
 	      Cancel</button>
             <button class='btn btn-danger btn-sm'
 		    id='confirm_recovery_button'>
@@ -1323,7 +1624,7 @@ pre {
 	  <center style="margin-top: 10px;">
             <button type='button' style='margin-right: 20px;'
                     class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' aria-hidden='true'>
+                    data-dismiss='modal' data-bs-dismiss='modal' aria-hidden='true'>
 	      Cancel</button>
             <button class='btn btn-danger btn-sm'
 		    id='confirm_flash_button'>
@@ -1351,7 +1652,8 @@ pre {
 	  <center style="margin-top: 15px;">
             <button type='button'
                     class='btn btn-primary btn-sm' 
-                    data-dismiss='modal' aria-hidden='true'>
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
 	      Dismiss</button>
 	  </center>
 	</div>
@@ -1363,8 +1665,9 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <button type='button' class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
+          <button type='button' class='close btn-close'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'></button>
 	  <h5>Extension History</h5>
 	</div>
 	<div class='modal-body scrollable-panel'>
@@ -1437,8 +1740,9 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-body'>
-          <button type='button' class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
+          <button type='button' class='close btn-close'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'></button>
           <center>
 	    <h4>You are about to create or update a System Image!</h4>
 	  </center>
@@ -1452,11 +1756,11 @@ pre {
 	    the cluster (command line).
 	  </p>
 	  <center>
-            <button type='button' style='margin-right: 20px;'
-                    class='btn btn-primary btn-sm'
-		    id='cancel-update-systemimage'>Cancel</button>
-            <button class='btn btn-danger btn-sm'
+            <button class='btn btn-danger btn-sm confirm-button'
 		    id='confirm-update-systemimage'>Continue</button>
+            <button type='button' 
+                    class='btn btn-default btn-sm cancel-button'
+		    id='cancel-update-systemimage'>Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1466,7 +1770,7 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <center><h4>SSH Failure!</h3></center>
+          <center><h4>SSH Failure!</h4></center>
 	</div>
 	<div class='modal-body'>
 	  There was an error trying to set up your SSH shell.
@@ -1487,7 +1791,7 @@ pre {
 	  <div>
 	    <center>
               <button class='btn btn-primary btn-sm'
-		      data-dismiss='modal'>
+		      data-dismiss='modal' data-bs-dismiss='modal'>
 		Dismiss</button>
 	    </center>
 	  </div>
@@ -1497,10 +1801,11 @@ pre {
   </div>
   <div class="hidden" id="clone-help-div">
     <!-- This is the Clone help box -->
-    <div id="clone-help-panel" class="panel panel-info">
-      <div class="panel-body">
-	<button type='button' class='close clone-popover-close'>
-          &times;</button>
+    <div id="clone-help-panel" class="panel  card panel-info">
+      <div class="panel-body card-body">
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<br>
 	<p>
 	  You can quickly convert a running experiment into
@@ -1526,10 +1831,11 @@ pre {
     </div>
   </div>
   <div class="hidden" id="snapshot-help-div">
-    <div class="panel panel-info">
-      <div class="panel-body">
-	<button type='button' class='close snapshot-popover-close'>
-          &times;</button>
+    <div class="panel  card panel-info">
+      <div class="panel-body card-body">
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<br>
 	<p>
 	  Create a disk image, saving it away for future experiments
@@ -1559,10 +1865,11 @@ pre {
     </div>
   </div>    
   <div class="hidden" id="imageonly-help-div">
-    <div class="panel panel-info">
-      <div class="panel-body">
-	<button type='button' class='close'>
-          &times;</button>
+    <div class="panel  card panel-info">
+      <div class="panel-body card-body">
+        <button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+                aria-hidden='true'></button>
 	<br>
 	<p>
 	  Create a disk image from the node selected, you can decide
@@ -1602,12 +1909,12 @@ pre {
 	  </div>
 	  If you want to force this lockdown, click below.
 	  <center>
-            <button type='button' style='margin-right: 20px;'
-		    data-dismiss='modal'
-                    class='btn btn-primary btn-sm'
-		    id='cancel-lockdown'>Cancel</button>
-            <button class='btn btn-danger btn-sm'
+            <button class='btn btn-danger btn-sm confirm-button'
 		    id='force-lockdown'>Lockdown</button>
+            <button type='button'
+		    data-dismiss='modal' data-bs-dismiss='modal'
+                    class='btn btn-default btn-sm cancel-button'
+		    id='cancel-lockdown'>Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1618,8 +1925,9 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <button type='button' class="close"
-                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+          <button type='button' class="close btn-close"
+                  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'></button>
           <center><h4>Oops, no extensions are permitted!</h4></center>
 	</div>
 	<div class='modal-body'>
@@ -1647,8 +1955,9 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <button type='button' class="close"
-                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+          <button type='button' class="close btn-close"
+                  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'></button>
           <center><h4>Oops, no extension was granted!</h4></center>
 	</div>
 	<div class='modal-body'>
@@ -1670,13 +1979,35 @@ pre {
       </div>
     </div>
   </div>
+  <div id='extension-warning-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <button type='button' class="close btn-close"
+                  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'></button>
+          <center><h4>WARNING!</h4></center>
+	</div>
+	<div class='modal-body'>
+	  <p class="reason"></p>
+	  <p>
+	    Please contact the
+	    <a href="mailto:<%- window.SUPPORT %>?subject=Experiment%20<%- expinfo.project %>/<%- expinfo.name %>"
+	       target="_blank">
+	      support staff</a> for more information.
+	  </p>
+	</div>
+      </div>
+    </div>
+  </div>
   <!-- Explain quarantine mode -->
   <div id='explain-quarantine-modal' class='modal fade'>
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-body'>
-          <button type='button' class="close"
-                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+          <button type='button' class="close btn-close"
+                  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'></button>
 	  <p>
 	  Your experiment has been quarantined by an administrator.
 	  Typically, this action would be taken because your experiment was
@@ -1694,16 +2025,17 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-body'>
-          <button type='button' class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
+          <button type='button' class='close btn-close'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'></button>
 	  <center>
 	    <h3>Confirm to release from Quarantine</h3>
 	    <div style="margin-top: 10px;">
-              <button style='margin-right: 10px;'
-                      class='btn btn-primary btn-sm' 
-                      data-dismiss='modal' aria-hidden='true'>Cancel</button>
-              <button class='btn btn-danger btn-sm'
+              <button class='btn btn-danger btn-sm confirm-button'
 		      id='confirm-disable-quarantine'>Confirm</button>
+              <button class='btn btn-default btn-sm cancel-button' 
+                      data-dismiss='modal' data-bs-dismiss='modal'
+		      aria-hidden='true'>Cancel</button>
 	    </div>
 	  </center>
 	</div>
@@ -1715,8 +2047,9 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <button type='button' class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
+          <button type='button' class='close btn-close'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'></button>
 	  <center>
 	    <h4>Prestaging Images Used By Your Profile</h4>
 	  </center>
@@ -1737,8 +2070,9 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <button type='button' class="close"
-                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+          <button type='button' class="close btn-close"
+                  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'></button>
           <center><h4>Ignore this failure?</h4></center>
 	</div>
 	<div class='modal-body'>
@@ -1762,17 +2096,17 @@ pre {
 	  <p>
 	    Other errors cannot be easily fixed, for example failed
    	    hardware or a bad cable that causes your network to fail.
-   	    You cannot those failures of course since your experiment
-   	    cannot be productively used.
+   	    You cannot ignore those failures of course since your
+	    experiment cannot be productively used.
 	  </p>
 	  <center>
-            <button type='button' style='margin-right: 20px;'
-		    data-dismiss='modal'
-                    class='btn btn-primary btn-sm'>
-	      Cancel</button>
-            <button class='btn btn-danger btn-sm'
+            <button class='btn btn-danger btn-sm confirm-button'
 		    id='ignore-failure-confirm'>
 	      Ignore Failure</button>
+            <button type='button'
+		    data-dismiss='modal' data-bs-dismiss='modal'
+                    class='btn btn-default btn-sm cancel-button'>
+	      Cancel</button>
 	  </center>
 	</div>
       </div>
@@ -1782,12 +2116,11 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-body'>
-          <button type='button' class="close"
-                  data-dismiss='modal' aria-hidden='true'>&times;</button>
+          <button type='button' class="close btn-close"
+                  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'></button>
 	  <pre>
 	  </pre>
-	  Idle processes not shown, top run as:
-	  <tt>top -c -b -n 1 -i -w 120</tt>
 	</div>
       </div>
     </div>
@@ -1796,29 +2129,107 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
-          <button type='button'
-		  class='close' data-dismiss='modal'
-                  aria-hidden='true'>&times;</button>
+          <button type='button' class='close btn-close'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'></button>
 	  <h4 class='modal-title text-center'>Run this experiment again</h4>
 	</div>
 	<div class='modal-body'>
 	  <p>
-	    You can use this link, or share it with another user, to run this profile
-	    using the same parameters. 
+	    You can use this link, or share it with another user, to run
+	    this profile using the same parameters. 
 	  </p>
           <center>
-	    <div style="margin-top: 5px;">
-	      <div class="copy-to-clipboard form-inline">
+	    <div class="copy-to-clipboard">
+	      <div class="input-group">
 		<input readonly
-		       style="width: 90%"
 		       class="form-control"
 		       value='<%- window.location.origin %>/instantiate.php?profile=<%- expinfo.profile_uuid %>&rerun_instance=<%= uuid %>'>
-		<a href='#' class='btn'>
-		  <span class='glyphicon glyphicon-copy'
-			style='margin-bottom: 4px;'></span>
-		</a>
+		<span class="input-group-text">
+		  <a href='#' class='btn'>
+		    <span class='glyphicon glyphicon-copy'></span></a>
+		</span>
 	      </div>
 	    </div>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='connect-sharedlan-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <h3 class="text-center" style="margin: 0;">
+	    Connect To Shared Lan</h3>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    To connect (or disconnect) a shared lan in your experiment
+	    to/from a shared lan
+	    in another experiment, you need to know the UUID of the target
+	    experiment and the name of the shared lan in the target
+	    experiment. Note that the <em>target lan name</em> is the
+	    argument provided
+	    to <code>lan.createSharedVlan("somename")</code> in the profile
+	    that <b>created</b> the shared lan (in the target experiment).
+	  </p>
+	  <form>
+	    <center>
+	      <div class="form-group">
+		<label class="radio-inline">
+		  <input type="radio" name="sharedlanradio"
+			 value="connect"> Connect
+		</label>
+		<label class="radio-inline">
+		  <input type="radio" name="sharedlanradio"
+			 value="disconnect"> Disconnect
+		</label>
+	      </div>
+	      <div class="form-group mt-2">
+		<input placeholder="Source Lan Name"
+		       style="width: 300px;"
+		       class="source-lan" type="text">
+	      </div>
+	      <div class="form-group mt-2">
+		<input placeholder="Target Experiment UUID"
+		       style="width: 300px;"
+		       class="target-uuid hidden" type="text">
+	      </div>
+	      <div class="form-group mt-2">
+		<input placeholder="Target Shared Lan Name"
+		       style="width: 300px;"
+		       class="target-lan hidden" type="text">
+	      </div>
+	      <div class="form-check form-check-inline mt-2">
+		<input class="form-check-input" type="checkbox" value="" if="gooo">
+		<label class="form-check-label" for="gooo">Do not reconfigure nodes</label>
+	      </div>
+	    </center>
+	  </form>
+	  <center>
+            <button class='btn btn-success btn-sm confirm-button'
+		    type='button' disabled
+		    id='connect-sharedlan-confirm'>
+	      Continue</button>
+            <button class='btn btn-default btn-sm cancel-button' 
+                    data-dismiss='modal' data-bs-dismiss='modal'
+		    aria-hidden='true'>
+	      Cancel</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='success-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+          <center><h3>Operation Successful</h3>
+	    <br>
+            <button class='btn btn-default btn-sm'
+		    data-dismiss='modal' data-bs-dismiss='modal'>
+	      Dismiss</button>
 	  </center>
 	</div>
       </div>
@@ -1836,50 +2247,223 @@ pre {
       <td name='status'>n/a</td>
       <td name='startup'>n/a</td>
       <td name='image'>n/a</td>
-      <td name='sshurl'>n/a</td>
+      <td name='sshurl'><span class="sshurl-url">n/a</span>
+	<span class="sshurl-copy hidden">
+	  <a href='#' class='btn'
+	     style='margin-bottom: 4px;
+		    padding-top: 0px;padding-bottom: 0px;'>
+	    <span style="font-size: 16px;"
+		  class="glyphicon glyphicon-copy"></span></a></span></td>
       <td align=left><input name='select' type=checkbox></td>
       <td name='menu' align=center> 
 	<div name='action-menu' class='dropdown'>
 	  <button id='action-menu-button' type='button' 
 		  class='btn btn-primary btn-xs dropdown-toggle' 
-		  data-toggle='dropdown'> 
+		  data-toggle='dropdown' data-bs-toggle='dropdown'> 
             <span class='glyphicon glyphicon-cog'></span> 
 	  </button> 
 	  <ul class='dropdown-menu dropdown-menu-right text-left' role='menu'> 
-            <li><a href='#' name='shell'>Shell</a></li> 
-            <li><a href='#' name='console'>Console</a></li> 
-            <li><a href='#' name='consolelog'>Console Log</a></li> 
-            <li><a href='#' name='recovery'>Recovery</a></li> 
+            <li><a href='#' name='shell' class='dropdown-item'>
+	      Shell</a></li> 
+            <li><a href='#' name='console' class='dropdown-item'>
+	      Console</a></li> 
+            <li><a href='#' name='consolelog' class='dropdown-item'>
+	      Console Log</a></li> 
+            <li><a href='#' name='recovery' class='dropdown-item'>
+	      Recovery</a></li> 
             <li class='hidden'> 
-              <a href='#' name='monitor'>Monitor Graph</a></li> 
+              <a href='#' name='monitor' class='dropdown-item'>
+		Monitor Graph</a></li> 
             <li class='hidden'> 
-              <a href='#' name='nodetop'>Top Processes</a></li> 
+              <a href='#' name='txhistory' class='dropdown-item'>
+		Transmission History</a></li> 
             <li class='hidden'> 
-              <a href='#' name='powercycle'>Power Cycle</a></li> 
+              <a href='#' name='nodetop' class='dropdown-item'>
+		Top Processes</a></li> 
             <li class='hidden'> 
-              <a href='#' name='vnc'>Open VNC window</a></li> 
+              <a href='#' name='servicelogs' class='dropdown-item'>
+		Execute Service Logs</a></li> 
             <li class='hidden'> 
-              <a href='#' name='flash'>Flash Recovery</a></li> 
-            <li><a href='#' name='delete'>Delete Node</a></li> 
+              <a href='#' name='powercycle' class='dropdown-item'>
+		Power Cycle</a></li> 
+            <li> 
+              <a href='#' name='vnc' class='dropdown-item'>
+		Open VNC window</a></li> 
+            <li class='hidden'> 
+              <a href='#' name='flash' class='dropdown-item'>
+		Flash Recovery</a></li> 
+            <li><a href='#' name='delete' class='dropdown-item'>
+	      Delete Node</a></li> 
 	  </ul>
 	</div>
       </td>
     </tr>
     </table>
   </div>
+  <div id='ppwizard-body'
+       class='col-lg-8  col-lg-offset-2 offset-lg-2
+	      col-md-8  col-md-offset-2 offset-md-2
+	      col-sm-10  col-sm-offset-1 offset-sm-1
+	      col-xs-12 col-xs-offset-0 hidden'>
+    <div id="ppwizard-form"></div>
+    <center>
+      <button id='ppwizard-accept' type='button' disabled
+	      class='btn btn-primary btn-sm confirm-button'>
+	Continue
+      </button>
+      <button type='button'
+	      class='btn btn-default btn-sm ppwizard-cancel cancel-button'>
+	Cancel</button>
+    </center>
+    <style>
+     .container {
+	 margin-top: 0px !important;
+     }
+     .jacks {
+	 background-color: #FFF;
+     }
+    </style>
+    <div class="topo-compare row" style="margin-top: 15px;">
+      <div class='col-sm-6'>
+	<div class='panel  card panel-default'>
+	  <div class='panel-heading card-header text-center'>Topology Before</div>
+	  <div class='panel-body card-body' style="padding: 0px;">
+	    <div class="topo-before jacks"
+		 style="height: 350px; position: relative;"></div>
+	  </div>
+	</div>
+      </div>
+      <div class='col-sm-6'>
+	<div class='panel  card panel-default'>
+	  <div class='panel-heading card-header text-center'>Topology After</div>
+	  <div class='panel-body card-body' style="padding: 0px;">
+	    <div class="topo-after jacks"
+		 style="height: 350px; position: relative;">
+	    </div>
+	  </div>
+	</div>
+      </div>
+    </div>
+    <div id='cluster_selector' class='hidden'></div>
+    <div id="reservation-warnings"
+	 class="col-sm-offset-2 offset-sm-2 col-sm-10 hidden"></div>
+    <div class="row" style="margin-top: 0px; margin-bottom: 10px;">
+      <div class='col-sm-12'>
+	<center>
+	  <div id="ppwizard-finish-message" class="hidden"
+	       style="margin-bottom: 5px;">
+	    <p style="margin-bottom: 5px;">
+	      Click <b>Finish</b> if you are sure you want to apply
+	      these changes to your experiment. View the
+	      <a href="" class="show-newrspec"
+		 data-target='#ppwizard-rspec-modal'
+		 data-bs-target='#ppwizard-rspec-modal'
+		 data-toggle='modal' data-bs-toggle='modal'>new rspec</a>.
+	    </p>
+	    <p>
+	      Once we begin experiment
+	      modification, it cannot be stopped until it finishes.
+	    </p>
+	  </div>
+	  <button id='ppwizard-finish' type='button' disabled
+		  class='btn btn-primary btn-sm confirm-button'>
+	    Finish
+	  </button>
+	  <button type='button'
+		  class='btn btn-default btn-sm ppwizard-cancel cancel-button'>
+	    Cancel</button>
+	</center>
+      </div>
+    </div>
+  </div>
+  <div id='ppwizard-continue' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  Click <b>Continue</b> if you are sure you want to apply
+	  these changes to your experiment. Once we begin experiment
+	  modification, it cannot be stopped until it finishes (or fails).
+	  <center>
+	    <button id='ppwizard-modify' type='button'
+		    class='btn btn-primary btn-sm confirm-button'>
+	      Continue
+	    </button>
+	    <button type='button'
+		    class='btn btn-default btn-sm
+			   ppwizard-cancel cancel-button'>
+	      Cancel</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='ppwizard-rspec-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body''>
+          <button type='button' class='close btn-close'
+		  data-dismiss='modal' data-bs-dismiss='modal'
+                  aria-hidden='true'></button>
+	  <textarea rows=30 readonly class="form-control"
+                    type='textarea'></textarea>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='nospectrum-warning' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <div style="font-size: 18px;">
+	    <p>
+	      <b>Warning:</b> You have not specified any frequency
+	      request(s) for this experiment. Any transmissions will
+	      result in a quarantined experiment and frozen account.
+	    </p>
+	    <center>
+	      <button type='button' class='btn btn-default btn-sm'
+		      data-dismiss='modal' data-bs-dismiss='modal'>
+		Dismiss</button>
+	    </center>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='services-running-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <div style="font-size: 18px;">
+	    <p>
+	      <b>Warning:</b> Startup services are still running on
+	      this node. Logging in now might not work, and/or software
+	      may not be fully installed and running. Are you sure you
+	      want to continue?
+	    </p>
+	    <center>
+	      <button id='services-continue-login' type='button'
+		      class='btn btn-primary btn-sm confirm-button'>
+		Continue
+	      </button>
+	      <button type='button'
+		      class='btn btn-default btn-sm cancel-button'
+		      data-dismiss='modal' data-bs-dismiss='modal'>
+		Cancel</button>
+	    </center>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
   <div id='waitwait_div'></div>
   <div id='terminate_div'></div>
   <div id='oops_div'></div>
-  <div id='register_div'></div>
   <div id='extend_div'></div>
   <div id='imaging_div'></div>
-  <div id='oneonly_div'></div>
   <div id='approval_div'></div>
   <div id='linktest_div'></div>
   <div id='destroy_div'></div>
   <div id='save_paramset_div'></div>
+  <div id='txgraph_div'></div>
 </div>
-
-
-
-

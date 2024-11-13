@@ -1,0 +1,8 @@
+Medusa is intended to be a speedy, massively parallel, modular, login
+brute-forcer. The goal is to support as many services which allow remote
+authentication as possible.
+
+This port uses a post-2.2 checkout of the git repository that fixes some
+segmentation fault issues we have in its Emulab usage.
+
+WWW: http://www.foofus.net/jmk/medusa/medusa.html

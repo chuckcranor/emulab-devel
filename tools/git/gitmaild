@@ -48,7 +48,11 @@ use strict;
 my $TOKEN = "";
 
 # Unless specified, send mail to this email address on all commits
-my $DEFAULT_ARCHIVEMAIL = 'commits@flux.utah.edu';
+my $DEFAULT_ARCHIVEMAIL = 'commits@emulab.net';
+
+# Unless specified, set the Sender header to this address; set to empty
+# to not set the header
+my $DEFAULT_SENDER = 'gitmail@gitlab.flux.utah.edu';
 
 # Path to gitmail - defaults to same directory as gmaild lives in
 my $GITMAIL = dirname(abs_path($0)) . "/gitmail";
@@ -275,6 +279,11 @@ sub run_gitmail($$) {
         } else {
             $options{'alwaysmail'} = $ALWAYSMAIL_ADDRESS;
         }
+    }
+
+    # Set Sender to make SPF checks happy
+    if (defined($DEFAULT_SENDER) && $DEFAULT_SENDER ne "") {
+        $options{'mailsender'} = $DEFAULT_SENDER;
     }
 
 

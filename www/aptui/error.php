@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,10 +30,6 @@ include("quickvm_sup.php");
 # No menu, not hidden.
 #
 SPITHEADER(1, true, true);
-#
-# And minimal navigation.
-#
-SPITNAV("", 2, "", "", null);
 
 echo "<div class=container>\n";
 echo "<div class=jumbotron>\n";

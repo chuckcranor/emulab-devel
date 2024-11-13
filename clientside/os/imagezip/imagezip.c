@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2022 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -54,6 +54,7 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <zlib.h>
+#include <signal.h>
 
 #include "imagehdr.h"
 #include "sliceinfo.h"
@@ -78,7 +79,7 @@
 #undef WITH_HASH_CHUNKSPLIT
 
 /* XXX this is a hack right now */
-#define USE_HACKSORT 1
+#define USE_HACKSORT 0
 
 #define min(a,b) ((a) <= (b) ? (a) : (b))
 
@@ -90,6 +91,7 @@ int	dots	  = 0;
 int	info	  = 0;
 int	version	  = 0;
 int	slicemode = 0;
+int	bootpartmode = 0;
 int	maxmode	  = 0;
 int	slice	  = 0;
 int	level	  = 4;
@@ -140,19 +142,27 @@ static void output_uuid(char *, char *);
 iz_lba inputminsec	= 0;
 iz_lba inputmaxsec	= 0;	/* 0 means the entire input image */
 
+/*
+ * For limiting the amount of allocated data in an image (-A)
+ */
+unsigned maxallocsec	= 0;
+unsigned curallocsec	= 0;
+
 struct range	*ranges, *skips, *fixups;
 int		numranges, numskips, numfixups;
 blockreloc_t	*relocs;
 int		numregions, numrelocs;
 
 void	dumpskips(int verbose);
-static void	sortrange(struct range **head, int domerge,
-		  int (*rangecmp)(struct range *, struct range *));
+static void	sortrange(struct range **head,
+			  int (*rangecmp)(struct range *, struct range *));
 int	mergeskips(int verbose);
 int	mergeranges(struct range *head);
+void	checkvalidcount(void);
 void	makeranges(int *need64);
 void	dumpranges(int verbose);
 uint64_t sectinranges(struct range *range);
+void	addvalid(uint64_t start, uint64_t size);
 void	addreloc(off_t offset, off_t size, int reloctype);
 void	removereloc(off_t offset, off_t size, int reloctype);
 static int cmpfixups(struct range *r1, struct range *r2);
@@ -404,7 +414,7 @@ main(int argc, char *argv[])
 	memset(imageid, '\0', UUID_LENGTH);
 
 	gettimeofday(&sstamp, 0);
-	while ((ch = getopt(argc, argv, "vlbnNdihrs:c:z:ofI:135F:DR:S:XxH:U:P:Me:k:u:a:ZL")) != -1)
+	while ((ch = getopt(argc, argv, "vlbnNdihrs:c:z:ofI:135F:DR:S:XxH:U:P:Me:k:u:a:ZLA:B:")) != -1)
 		switch(ch) {
 		case 'v':
 			version++;
@@ -579,10 +589,20 @@ main(int argc, char *argv[])
 #endif
 			break;
 		case 'u':
-			/* Unique image id. */
+			/* UUID for image id. */
 			if (!hexstr_to_mem(imageid, optarg, UUID_LENGTH))
 				usage();
 			got_imageid = 1;
+			break;
+		case 'A':
+			/* Count is in MiB, convert to sectors */
+			maxallocsec = atoi(optarg);
+			maxallocsec = bytestosec((off_t)maxallocsec *
+						 (1024 * 1024));
+			break;
+		case 'B':
+			bootpartmode = 1;
+			slice = atoi(optarg);
 			break;
 		case 'h':
 		case '?':
@@ -653,9 +673,19 @@ main(int argc, char *argv[])
 			"or extended DOS partition (5-%d)\n\n", MAXSLICES);
 		usage();
 	}
+	if (bootpartmode && (slice < 1 || slice > MAXSLICES)) {
+		fprintf(stderr, "Boot image root partition must be between 1 and %d\n\n",
+			MAXSLICES);
+		usage();
+	}
 	if (maxmode && slicemode) {
 		fprintf(stderr, "Count option (-c) cannot be used with "
 			"the slice (-s) option\n\n");
+		usage();
+	}
+	if (bootpartmode && (slicemode || slicetype || rawmode)) {
+		fprintf(stderr, "Boot image option (-B) cannot be used with "
+			"slice (-s), type (-S), or raw (-r) options\n\n");
 		usage();
 	}
 	if (!info && argc != 2) {
@@ -703,7 +733,17 @@ main(int argc, char *argv[])
 	 * The pubkey is written to <imagename>.skey.
 	 */
 	if (do_checksum) {
+#if OPENSSL_VERSION_NUMBER >= 0x0090800fL
+		RSA *rsa = RSA_new();
+		BIGNUM *e = BN_new();
+
+		BN_set_word(e, 17);
+		RSA_generate_key_ex(rsa, CSUM_MAX_LEN*8, e, NULL);
+		BN_free(e);
+		sig_key = rsa;
+#else
 		sig_key = RSA_generate_key(CSUM_MAX_LEN*8, 17, NULL, NULL);
+#endif
 		if (!info)
 			output_public_key(outfilename, sig_key);
 	}
@@ -786,7 +826,7 @@ main(int argc, char *argv[])
 			"*** No valid data on specified disk/partition!?\n");
 		exit(1);
 	}
-	sortrange(&fixups, 0, cmpfixups);
+	sortrange(&fixups, cmpfixups);
 	if (debug > 1)
 		dumpfixups(debug > 2, 0);
 	fflush(stderr);
@@ -997,6 +1037,30 @@ read_slice(int snum, iz_type stype, iz_lba start, iz_size size,
 	return -1;
 }
 
+static void
+bbfixup(void *bstart, off_t bsize, void *fdata)
+{
+	struct iz_disk *dinfo = (struct iz_disk *)fdata;
+	assert(fdata != NULL);
+	int isgpt = (dinfo->metasect > 0) ? 1 : 0;
+
+	assert(bsize == sectobytes(dinfo->lodata));
+	if (debug > 1) {
+		fprintf(stderr, "bbfixup: fixing %s in bootblock %p for %lu bytes\n",
+			(isgpt ? "GPT" : "MBR"), bstart, (unsigned long)bsize);
+		dumpdiskinfo(dinfo);
+	}
+
+#ifdef WITH_GPT
+	if (isgpt)
+		gpt_fixup(bstart, bsize, dinfo, debug);
+#endif
+#ifdef WITH_MBR
+	if (!isgpt)
+		mbr_fixup(bstart, bsize, dinfo, debug);
+#endif
+}
+
 /*
  * Parse the MBR/GPT and dispatch to the individual readers.
  */
@@ -1055,49 +1119,8 @@ read_image(int fd)
 	dstart = 0;
 	dsize = disk.dsize;
 
-	if (debug) {
-		int i;
-
-		fprintf(stderr, "Disk:            start %12u, size %12lu\n",
-			0, (unsigned long)dsize);
-		fprintf(stderr, "Usable:          start %12lu, size %12lu\n",
-			(unsigned long)disk.lodata,
-			(unsigned long)disk.hidata - disk.lodata + 1);
-		fprintf(stderr, "Partition range: start %12lu, size %12lu\n",
-			(unsigned long)disk.losect,
-			(unsigned long)disk.hisect - disk.losect + 1);
-		fprintf(stderr, "%s Partitions:\n", bbstr);
-		for (i = 0; i < MAXSLICES; i++) {
-			struct sliceinfo *sinfo;
-
-			if (parttab[i].type == IZTYPE_INVALID)
-				continue;
-
-			fprintf(stderr, "  P%d: ", i+1);
-			sinfo = getslicemap(parttab[i].type);
-			if (sinfo == 0)
-				fprintf(stderr, "0x%x", parttab[i].type);
-			else
-				fprintf(stderr, "%-12s", sinfo->desc);
-
-			fprintf(stderr, "  start %12lu, size %12lu",
-				(unsigned long)parttab[i].offset,
-				(unsigned long)parttab[i].size);
-			if (parttab[i].flags) {
-				fprintf(stderr, " (");
-				if (parttab[i].flags & IZFLAG_NOTSUP)
-					fprintf(stderr, "Not supported,");
-				if (parttab[i].flags & IZFLAG_IGNORE)
-					fprintf(stderr, "IGNORED,");
-				if (parttab[i].flags & IZFLAG_RAW)
-					fprintf(stderr, "compress RAW");
-				fprintf(stderr, ")\n");
-			} else {
-				fprintf(stderr, "\n");
-			}
-		}
-		fprintf(stderr, "\n");
-	}
+	if (debug)
+		dumpdiskinfo(&disk);
 
 	/*
 	 * Quick, brute-force check for overlap of partitions.
@@ -1116,8 +1139,8 @@ read_image(int fd)
 
 		if ((size1 = parttab[i].size) == 0)
 			continue;
-
 		start1 = parttab[i].offset;
+
 		for (ii = i + 1; ii < MAXSLICES; ii++) {
 			if (parttab[ii].type == IZTYPE_INVALID)
 				continue;
@@ -1133,6 +1156,234 @@ read_image(int fd)
 	}
 	if (rval)
 		return 1;
+
+	/*
+	 * For the special boot partition mode, we are only interested in the
+	 * MBR/GPT, any EFI partition, any BIOS boot partition and the specified
+	 * root partition. Anything beyond the end of the highest of those
+	 * partitions is not even recorded as free in the image. Any space
+	 * inbetween an EFI and root partition is ignored. Any space below
+	 * the lowest partition is included as it might be MBR magic.
+	 *
+	 * XXX to make our life easier, we require the partitions to be
+	 * "inorder" (increasing partition numbers at increasing locations)
+	 * and non-overlapping (checked above). Is this too much to ask?
+	 */
+	if (bootpartmode) {
+		iz_lba pstart, gapstart, hisect;
+		iz_size psize, gapsize;
+		int biospartno, rootpartno;
+
+		biospartno = rootpartno = 0;
+		hisect = 0;
+		for (i = 0; i < MAXSLICES; i++) {
+			if (i+1 == slice) {
+				if (parttab[i].type == IZTYPE_INVALID) {
+					warnx("P%d: partition type is not valid!", i+1);
+					exit(1);
+				}
+				if (parttab[i].type == IZTYPE_EFISYSTEM) {
+					warnx("P%d: partition is EFI partition, need the root partition", i+1);
+					exit(1);
+				}
+				if (parttab[i].type == IZTYPE_BIOSBOOT ||
+				    parttab[i].type == IZTYPE_FBSDBOOT) {
+					warnx("P%d: partition is a BIOS boot partition, need the root partition", i+1);
+					exit(1);
+				}
+				if ((pstart = parttab[i].offset) < hisect) {
+					warnx("P%d: partition starts before lower numbered partition!", i+1);
+					exit(1);
+				}
+				if ((psize = parttab[i].size) == 0) {
+					warnx("P%d: partition is zero length!", i+1);
+					exit(1);
+				}
+				rootpartno = i+1;
+				hisect = pstart;
+				if (debug)
+					fprintf(stderr,
+						"Boot image: Root in P%d [%lu-%lu]\n",
+						i+1, (unsigned long)pstart,
+						(unsigned long)pstart + psize - 1);
+				continue;
+			}
+			if (parttab[i].type == IZTYPE_EFISYSTEM) {
+				if ((pstart = parttab[i].offset) < hisect) {
+					warnx("P%d: EFI partition starts before lower numbered partition!", i+1);
+					exit(1);
+				}
+				if ((psize = parttab[i].size) == 0) {
+					warnx("P%d: EFI partition is zero length!", i+1);
+					exit(1);
+				}
+				hisect = pstart;
+				if (debug)
+					fprintf(stderr,
+						"Boot image: EFI in P%d [%lu-%lu]\n",
+						i+1, (unsigned long)pstart,
+						(unsigned long)pstart + psize - 1);
+				continue;
+			}
+			if (parttab[i].type == IZTYPE_BIOSBOOT ||
+			    parttab[i].type == IZTYPE_FBSDBOOT) {
+				if (biospartno > 0) {
+					warnx("P%d: Already found BIOS boot partition P%d, ignoring this one.",
+					      i+1, biospartno);
+					parttab[i].type = IZTYPE_INVALID;
+					continue;
+				}
+				if ((pstart = parttab[i].offset) < hisect) {
+					warnx("P%d: BIOS partition starts before lower numbered partition!", i+1);
+					exit(1);
+				}
+				if ((psize = parttab[i].size) == 0) {
+					warnx("P%d: BIOS boot partition is zero length!", i+1);
+					exit(1);
+				}
+				biospartno = i+1;
+				hisect = pstart;
+				if (debug)
+					fprintf(stderr,
+						"Boot image: BIOS boot in P%d [%lu-%lu]\n",
+						i+1, (unsigned long)pstart,
+						(unsigned long)pstart + psize - 1);
+				continue;
+			}
+
+			/*
+			 * Mark all other partitions as invalid since we
+			 * don't care about them.
+			 */
+			parttab[i].type = IZTYPE_INVALID;
+		}
+		if (rootpartno == 0) {
+			warnx("Boot image: Root partition not found!");
+			exit(1);
+		}
+
+		/*
+		 * Make another pass to skip gaps between the remaining
+		 * partitions and record the end location of the last partition
+		 * so we don't even scan past that. Could do this all in
+		 * one pass, but I am that lazy.
+		 *
+		 * N.B. gap calculation only works because partitions are
+		 * in order.
+		 */
+		gapstart = ~0;
+		hisect = 0;
+		for (i = 0; i < MAXSLICES; i++) {
+			iz_lba partend;
+
+			if (parttab[i].type == IZTYPE_INVALID)
+				continue;
+			
+			partend = parttab[i].offset + parttab[i].size;
+			if (partend > hisect)
+				hisect = partend;
+
+			fprintf(stderr, "Found P%d: [%lu-%lu]\n",
+				i+1, (unsigned long)parttab[i].offset,
+				(unsigned long)partend - 1);
+
+			if (gapstart == ~0 || gapstart == parttab[i].offset) {
+				gapstart = partend;
+				continue;
+			}
+
+			gapsize = parttab[i].offset - gapstart;
+			if (debug)
+				fprintf(stderr, "Boot image: gap at [%lu-%lu]\n",
+					(unsigned long)gapstart,
+					(unsigned long)gapstart + gapsize - 1);
+			if (gapsize > 0) {
+				addskip(gapstart, gapsize);
+				if (dowarn > 1)
+					warnx("%s: skipping %lu sectors at %lu",
+					      bbstr, (unsigned long)gapsize,
+					      (unsigned long)gapstart);
+			}
+			gapstart = ~0;
+		}
+
+		/*
+		 * Adjust the disk size for the maximum partition end while
+		 * also allowing for any metadata (GPT). We assume that the
+		 * end metadata will be the same size as the beginning, which
+		 * is true for both MBR (0) and GPT (34-40ish) and is
+		 * reflected by the value of disk.lodata.
+		 *
+		 * XXX unfortunately, the last part is NOT true. On at least
+		 * Ubuntu22 we have seen lodata==40 but the GPT is actually
+		 * only 34 sectors. So adding lodata will trigger the assert
+		 * for a layout in which the boot partition uses all remaining
+		 * space on the disk. The proper value to add is the
+		 * difference between dsize and hidata.
+		 * 
+		 * Note also that "hisect" here is actually the highest
+		 * sector + 1.
+		 */
+		inputmaxsec = (hisect - 1) + (disk.dsize - disk.hidata);
+		assert(inputmaxsec <= disk.dsize);
+
+		if (gotbb == 1) {
+#if 0
+			/*
+			 * XXX needs more thought.
+			 *
+			 * This would work for the primary copy of the GPT,
+			 * but how do we get the backup copy onto disk in unzip?
+			 * We cannot do anything here because we have no idea
+			 * how big the target disk will be. We cannot do it
+			 * easily in unzip when processing the relocation for
+			 * the primary copy, because just writing the last
+			 * sector of the disk at that point in time would not
+			 * work with non-seekable output devices (which we
+			 * probably don't care much about anymore) and would
+			 * require us to schedule the write rather than just
+			 * doing it right then so we do not interfere with the
+			 * separate writer thread.
+			 *
+			 * So we are going to punt and print a big ol' warning
+			 * in imageunzip that "The backup copy is invalid and
+			 * you had better fix it!"
+			 */
+
+			/*
+			 * If this is GPT, arrange for imageunzip to drop the
+			 * alternate copy at the end of the disk.
+			 * XXX another mild abuse of the relocation mechanism...
+			 */
+#else
+			warnx(
+			      "WARNING: image is GPT-based and loading it onto a target disk of a\n"
+			      "          different size will result in a corrupt GPT that must be repaired.\n");
+#endif
+		}
+		
+		/*
+		 * We need to fixup the MBR or primary GPT to reflect the
+		 * partitions we pruned out. We schedule a fixup for that.
+		 * Note that we pass the base of the boot area instead of
+		 * location of the MBR/GPT header. This is for GPT, where
+		 * we might need to fixup the pMBR which is just before
+		 * the GPT header. The fixup routines know how to compensate
+		 * and find the header.
+		 */
+		disk.dsize = inputmaxsec;
+		addfixupfunc(bbfixup,
+			     0, 0, sectobytes(disk.lodata),
+			     &disk, sizeof(disk), RELOC_NONE);
+
+		/*
+		 * Ensure we use inputmaxsec as the number of sectors to save.
+		 */
+		maxmode = 1;
+		if (debug)
+			fprintf(stderr, "Boot image: only saving [0-%lu]\n",
+				(unsigned long)inputmaxsec - 1);
+	}
 
 	/*
 	 * If not in slice mode, skip sectors outside of any partition.
@@ -1322,45 +1573,68 @@ read_raw(int fd)
 }
 
 char *usagestr =
- "usage: imagezip [-vihor] [-s #] <image | device> [outputfilename]\n"
- " -v             Print version info and exit\n"
- " -i             Info mode only.  Do not write an output file\n"
- " -h             Print this help message\n"
- " -o             Print progress indicating dots\n"
- " -r             Generate a `raw' image.  No FS compression is attempted\n"
- " -f             Generate an image from a regular file (implies -r)\n"
- " -s slice       Compress a particular slice (DOS numbering 1-4)\n"
- " image | device The input image or a device special file (ie: /dev/ad0)\n"
- " outputfilename The output file ('-' for stdout)\n"
- "\n"
- " Authentication and integrity options\n"
- " -a hashalg     Create per-chunk signatures using the hash algorithm given\n"
- " -u uuid        Assign the given value (up to 16 ascii chars) as the image ID\n"
- "\n"
- " Encryption options\n"
- " -e cipher      Encrypt the image with the given cipher\n"
- " -k keyfile     File containing a key to use for encrypting\n"
+ "usage: imagezip [-vihorf] [-s #] <image | device> [outputfilename]\n"
+ " -v             Print version info and exit.\n"
+ " -i             Info mode only.  Do not write an output file.\n"
+ " -h             Print this help message.\n"
+ " -o             Print progress indicating dots.\n"
+ " -r             Generate a `raw' image.  No FS compression is attempted.\n"
+ " -f             Generate an image from a regular file (implies -r).\n"
+ " -s slice       Compress a particular slice (DOS numbering 1-4).\n"
+ " image | device The input image or a device special file (e.g. /dev/da0).\n"
+ " outputfilename The output file ('-' for stdout).\n"
  "\n"
  " Advanced options\n"
- " -z level       Set the compression level.  Range 0-9 (0==none, default==4)\n"
- " -I slice       Ignore (skip) the indicated slice (not with slice mode)\n"
- " -R slice       Force raw compression of the indicated slice (not with slice mode)\n"
- " -c count       Compress <count> number of sectors (not with slice mode)\n"
- " -D             Do `dangerous' writes (don't check for async errors)\n"
- " -1             Output a version one image file\n"
- " -H hashfile    Use the specified imagehash-generated signature to produce a delta image\n"
- " -U sigfile     Update or create the signature to reflect the new image.\n"
- "                Image is written to named sigfile or <outfile>.sig if ''.\n"
- " -P pct         With -H, if the resulting delta would be <pct> percent or\n"
- "                greater of the (uncompressed) size of a full image, create\n"
- "                a full image instead\n"
+ " -z level       Set the compression level.  Range 0-9 (0==none, default==4).\n"
+ " -B slice       Create a boot image with <slice> as the root FS partition.\n"
+ "                A boot image is a full image containing just the MBR/GPT,\n"
+ "                any boot partitions (EFI, bios-boot, freebsd-boot), and the\n"
+ "                root filesystem partition. All other partitions are skipped.\n"
+ " -I slice       Ignore (skip) the indicated slice (not with slice mode).\n"
+ " -R slice       Force raw compression of the indicated slice (not with slice mode).\n"
+ " -D             Do `dangerous' writes (don't check for async errors).\n"
+ " -X             If a sector cannot be read, replace it with zeroed data.\n"
+ " -F nsec        Require ignored ranges to be at least <nsec> sectors.\n"
+ "                Shorter ranges are compressed and included in the image.\n"
+ "                Default value is 64, use 0 to disable.\n"
+ " -Z             With -F, zero ranges less than <nsec> before compressing.\n"
+ " -x             Ignore sectors outside of a filesystem but within the\n"
+ "                partition. The default is to consider them allocated.\n"
+ " -A max         Maximum uncompressed size (in MB) of allocated data to allow\n"
+ "                in an image. Default is zero (no limit).\n"
+ " -L             Force generation of relocations where normally omitted.\n"
+ " -N             Do not generate any relocations.\n"
  "\n"
- " Debugging options (not to be used by mere mortals!)\n"
- " -d             Turn on debugging.  Multiple -d options increase output\n"
- " -b             FreeBSD slice only.  Input must be a FreeBSD FFS slice\n"
- " -l             Linux slice only.  Input must be a Linux EXT2FS slice\n"
- " -n             NTFS slice only.  Input must be an NTFS slice\n"
- " -S DOS-ptype   Treat the input device as containing a slice of the given type\n";
+ " Authentication and integrity options\n"
+ " -a hashalg     Create per-chunk signatures using the hash algorithm given.\n"
+ " -u uuid        Assign the given value as the image UUID.\n"
+ "\n"
+ " Encryption options\n"
+ " -e cipher      Encrypt the image with the given cipher.\n"
+ " -k keyfile     File containing a key to use for encrypting.\n"
+ "\n"
+ "Delta (incremental) image options\n"
+ " -H hashfile    Use the specified imagehash-generated signature to produce\n"
+ "                a delta image from the given device.\n"
+ " -U sigfile     Update or create the signature to reflect the new image.\n"
+ "                Signature is written to named sigfile or <outfile>.sig if ''.\n"
+ " -P pct         With -H, when the resulting delta would be <pct> percent or\n"
+ "                greater of the (uncompressed) size of a full image, create\n"
+ "                a full image instead.\n"
+ "\n"
+ " Compatibility options\n"
+ " -3             Generate a version 3 format image if possible.\n"
+ " -5             Generate a version 5 format image if possible.\n"
+ "\n"
+ " Debugging and experimental options (not to be used by mere mortals!)\n"
+ " -d             Turn on debugging.  Multiple -d options increase output.\n"
+ " -b             Treat input as a FreeBSD slice (slice mode only).\n"
+ " -l             Treat input as a Linux slice (slice mode only).\n"
+ " -n             Treat input as an NTFS slice (slice mode only).\n"
+ " -S DOS-ptype   Treat input as a slice of the given type (slice mode only).\n"
+ " -c count       Compress <count> number of sectors (not with slice mode).\n"
+ " -M             Clear empty UFS inode blocks, creating relocations to\n"
+ "                initialize them when unzipped (FreeBSD slices only).\n";
 
 void
 usage()
@@ -1583,8 +1857,16 @@ mergeskips(int verbose)
 	memset(histo, 0, sizeof(histo));
 #endif
 
-	sortrange(&skips, 0, 0);
+	sortrange(&skips, 0);
 	freed += mergeranges(skips);
+
+	/*
+	 * If limiting the amount of data going into the image (-A),
+	 * we check here before we cull the small free ranges since we
+	 * want an accurate check of allocated data.
+	 */
+	if (maxallocsec > 0)
+		checkvalidcount();
 
 	/*
 	 * After merging, make another pass to cull out the too-small ranges.
@@ -1769,8 +2051,7 @@ bettersort(struct range *head, size_t count,
  * A very dumb bubblesort!
  */
 void
-sortrange(struct range **headp, int domerge,
-	  int (*rangecmp)(struct range *, struct range *))
+sortrange(struct range **headp, int (*rangecmp)(struct range *, struct range *))
 {
 	struct range	*prange, tmp, *head = *headp;
 	int		changed = 1;
@@ -1783,7 +2064,7 @@ sortrange(struct range **headp, int domerge,
 		size_t count = 0;
 		for (prange = head; prange; prange = prange->next)
 			count++;
-		fprintf(stderr, "sorting %lu records\n", count);
+		fprintf(stderr, "sorting %lu records\n", (unsigned long)count);
 		if (count > 10000) {
 			head = bettersort(head, count, rangecmp);
 			if (head != NULL) {
@@ -1823,9 +2104,6 @@ sortrange(struct range **headp, int domerge,
 		}
 	}
 
-	if (domerge)
-		(void)mergeranges(head);
-
 	return;
 }
 
@@ -1863,6 +2141,36 @@ mergeranges(struct range *head)
 	}
 
 	return (freed);
+}
+
+void
+checkvalidcount(void)
+{
+	struct range	*pskip;
+	uint64_t	offset;
+
+	assert(maxallocsec > 0 && curallocsec == 0);
+
+	offset = inputminsec;
+
+	pskip = skips;
+	while (pskip) {
+		if ((pskip->start - offset) > 0)
+			curallocsec += (pskip->start - offset);
+		offset = pskip->start + pskip->size;
+
+		pskip = pskip->next;
+	}
+	if (inputmaxsec > offset)
+		curallocsec += (inputmaxsec - offset);
+
+	if (curallocsec > maxallocsec) {
+		fprintf(stderr,
+			"Number of allocated sectors (%u) exceeds the maximum "
+			"allowed (%u), try again with larger limit (-A)\n",
+			curallocsec, maxallocsec);
+		exit(1);
+	}
 }
 
 /*
@@ -2004,7 +2312,7 @@ addfixupentry(off_t offset, off_t poffset, off_t size, void *data, off_t dsize,
 
 	/*
 	 * Malloc the range separate from the fixup data since
-	 * sortranges will swap contents of the former.
+	 * sortrange will swap contents of the former.
 	 */
 	if ((entry = malloc(sizeof(*entry))) == NULL ||
 	    (buf = malloc(sizeof(*buf) + (size_t)dsize)) == NULL) {
@@ -2152,7 +2460,7 @@ savefixups(void)
 	assert(numfixups == Onumfixups);
 
 	/* sort--addfixupentry adds to the end, so the list is reversed */
-	sortrange(&fixups, 0, cmpfixups);
+	sortrange(&fixups, cmpfixups);
 }
 
 void
@@ -2435,6 +2743,11 @@ compress_image(void)
 	inputoffset = 0;
 #ifdef SIGINFO
 	signal(SIGINFO, compress_status);
+#else
+#ifdef linux
+	/* be like dd and let SIGUSR1 print stats */
+	signal(SIGUSR1, compress_status);
+#endif
 #endif
 
 	buf = output_buffer;

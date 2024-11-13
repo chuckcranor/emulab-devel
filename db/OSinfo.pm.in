@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2019 University of Utah and the Flux Group.
+# Copyright (c) 2007-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -611,6 +611,29 @@ sub IsNfsMfs($)
     return 0
 	if (!ref($self));
     return ($self->mfs() && $self->path() eq TB_OSID_PATH_NFS());
+}
+
+#
+# Derive a type list by looking for nodes that have that as their
+# default boot osid.
+#
+sub TypeList($)
+{
+    my ($self) = @_;
+    my $osid   = $self->osid();
+    my @result = ();
+    require NodeType;
+
+    my $query_result =
+	DBQueryFatal("select distinct type from nodes ".
+		     "where def_boot_osid='$osid'");
+
+    while (my ($type) = $query_result->fetchrow_array()) {
+	my $typeinfo = NodeType->Lookup($type);
+	push(@result, $typeinfo)
+	    if (defined($typeinfo));
+    }
+    return @result;
 }
 
 #

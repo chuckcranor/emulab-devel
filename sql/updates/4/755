@@ -1,0 +1,27 @@
+use strict;
+use libdb;
+use libtestbed;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    #
+    # Need to initialize missing hashkeys
+    #
+    my $query_result =
+	DBQueryFatal("select uuid from apt_profile_versions ".
+		     "where hashkey is null");
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $newkey = TBGenSecretKey();
+	DBQueryFatal("update apt_profile_versions set hashkey='$newkey' ".
+		     "where uuid='$uuid'");
+	select(undef, undef, undef, 0.1);
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -238,6 +238,7 @@ sub gendhcpdconf($$)
 			    my $bootinfo_server = $$row{"BOOTINFO"};
 			    my $hostname = $$row{"HOSTNAME"};
 			    my $filename = $$row{"FILENAME"};
+			    my $configfile = $$row{"CONFIGFILE"};
 			    my $singlenet = $$row{"SINGLENET"};
 			    my $inner_elab_boot = $$row{"INNER_ELAB_BOOT"};
 			    my $inner_elab_role = $$row{"INNER_ELAB_ROLE"};
@@ -264,6 +265,11 @@ sub gendhcpdconf($$)
 				    $filename =
 					"${spaces}\tfilename \"$filename\";\n";
 				}
+			    }
+			    elsif (defined $configfile) {
+				$configfile =~ s/^"(.*)"$/$1/;
+				$configfile = 
+				    "${spaces}\toption configfile \"$configfile\";\n";
 			    } else {
 				ClearPXEBoot($node_id, $mac);
 			    }
@@ -298,6 +304,7 @@ sub gendhcpdconf($$)
 
 			    print OF "${spaces}host $ip {\n";
 			    print OF $filename if $filename;
+			    print OF $configfile if $configfile;
 			    print OF $next_server if $next_server;
 			    print OF $bootinfo_server if $bootinfo_server;
 			    print OF $dns if $dns;

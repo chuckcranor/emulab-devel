@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,7 +77,7 @@ AC_SUBST(PATH)
 CPPFLAGS="-I/usr/local/include"
 
 # BEGIN Python detection. For the event library.
-AC_PATH_PROGS(PYTHON, python python2.7 python2.6 python2.5 python2.4 python2.3 python2.2 python3)
+AC_PATH_PROGS(PYTHON, python python2.7 python3 python3.9)
 
 if test x"$PYTHON" = x""; then
     AC_MSG_ERROR([python not detected])
@@ -199,6 +199,7 @@ AC_SUBST(CLIENT_ETCDIR)
 AC_SUBST(CLIENT_BINDIR)
 AC_SUBST(CLIENT_VARDIR)
 AC_SUBST(CLIENT_MANDIR)
+AC_SUBST(CLIENT_LIBDIR)
 AC_SUBST(SNMP_RW_COMMUNITY)
 AC_SUBST(WWWHOST)
 AC_SUBST(WWW)
@@ -386,9 +387,11 @@ AC_SUBST(POWDER_RFMONITOR)
 AC_SUBST(POWDER_RFMONITOR_HOST)
 AC_SUBST(POWDER_NICKNAME)
 AC_SUBST(POWDER_WBSTORE)
-AC_SUBST(POWDER_BUS_P0WER_VERSION);
+AC_SUBST(POWDER_BUS_P0WER_VERSION)
 AC_SUBST(DISABLE_RESERVATION_EMAIL)
 AC_SUBST(MAILERNODE)
+AC_SUBST(TUTORIALPID)
+AC_SUBST(TUTORIALPROFILE)
 
 #
 # Offer both versions of the email addresses that have the @ escaped
@@ -497,13 +500,13 @@ PROTOGENI_SUPPORT=0
 PROTOGENI_NOPORTALEXPIRE=0
 PROTOGENI_PORTALONLY=0
 PROTOGENI_ISCLEARINGHOUSE=0
-PROTOGENI_EMAIL="geni-dev-utah@flux.utah.edu"
+PROTOGENI_EMAIL="geni-dev-utah@emulab.net"
 PROTOGENI_WEBSITE="www.emulab.net"
 PROTOGENI_DOMAIN="unknown"
 PROTOGENI_RPCPORT=12369
 PROTOGENI_RPCNAME=""
 PROTOGENI_LOCALUSER=0
-PROTOGENI_PGERRORS="protogeni-errors@flux.utah.edu"
+PROTOGENI_PGERRORS="protogeni-errors@emulab.net"
 PROTOGENI_GENIWEBLOGIN=0
 PROTOGENI_HOLDINGPROJECT=""
 PROTOGENI_MAXSERVERLOAD=12
@@ -594,6 +597,8 @@ POWDER_NICKNAME=""
 POWDER_BUS_P0WER_VERSION=0
 DISABLE_RESERVATION_EMAIL=0
 MAILERNODE="ops"
+TUTORIALPID=""
+TUTORIALPROFILE=""
 
 #
 # XXX You really don't want to change these!
@@ -891,8 +896,8 @@ fi
 if test -n "$PROTOGENI_EMAIL"; then
     PROTOGENI_EMAIL="`echo $PROTOGENI_EMAIL | sed -e 's/@/\\\@/'`"
 fi
-if test -n "ELABINELAB_MAILTARGET"; then
-    ELABINELAB_MAILTARGET="`echo $ELABINELAB | sed -e 's/@/\\\@/'`"
+if test -n "$ELABINELAB_MAILTARGET"; then
+    ELABINELAB_MAILTARGET="`echo $ELABINELAB_MAILTARGET | sed -e 's/@/\\\@/'`"
 fi
 PROTOGENI_PGERRORS="`echo $PROTOGENI_PGERRORS | sed -e 's/@/\\\@/'`"
 
@@ -1552,7 +1557,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
         protogeni/rspec-emulab/0.1/GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \
 	protogeni/rspec-emulab/2/GNUmakefile \
-        apt/GNUmakefile \
+        apt/GNUmakefile apt/fabric/GNUmakefile \
         powder/GNUmakefile powder/sasproxy/GNUmakefile \
         collab/GNUmakefile \
 	collab/exp-vis/GNUmakefile collab/exp-vis/fetch-vis \
@@ -1563,6 +1568,20 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	node_usage/from_ptop node_usage/sanity \
 	node_usage/gather node_usage/mk-php-pages \
 	node_usage/get-start-date"
+
+#
+# Since we do not use clientside/configure, hack up one particular
+# variable that must be fully expanded, e.g. in source files.
+#
+if test "$prefix" = "/usr" -o test "$prefix" = "/usr/local" ; then
+    CLIENT_LIBDIR="$libdir"
+else
+    if test x"$prefix" = x"NONE"; then
+        CLIENT_LIBDIR="/usr/testbed/lib"
+    else
+        CLIENT_LIBDIR="$prefix/lib"
+    fi
+fi
 
 #
 # While it would be nice to use the configure setup in the clientside subdir,
@@ -1598,20 +1617,10 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/GNUmakefile \
  clientside/tmcc/common/GNUmakefile clientside/tmcc/common/config/GNUmakefile \
  clientside/tmcc/freebsd/GNUmakefile clientside/tmcc/freebsd/init/GNUmakefile \
- clientside/tmcc/freebsd/init/4/GNUmakefile \
- clientside/tmcc/freebsd/init/5/GNUmakefile \
- clientside/tmcc/freebsd/init/6/GNUmakefile \
- clientside/tmcc/freebsd/init/7/GNUmakefile \
- clientside/tmcc/freebsd/init/8/GNUmakefile \
- clientside/tmcc/freebsd/init/9/GNUmakefile \
- clientside/tmcc/freebsd/init/10/GNUmakefile \
- clientside/tmcc/freebsd/init/10.3/GNUmakefile \
- clientside/tmcc/freebsd/init/10.4/GNUmakefile \
  clientside/tmcc/freebsd/init/11/GNUmakefile \
  clientside/tmcc/freebsd/init/11.2/GNUmakefile \
  clientside/tmcc/freebsd/init/11.4/GNUmakefile \
  clientside/tmcc/freebsd/init/12/GNUmakefile \
- clientside/tmcc/freebsd/init/13/GNUmakefile \
  clientside/tmcc/freebsd/supfile clientside/tmcc/freebsd/sethostname \
  clientside/tmcc/linux/GNUmakefile clientside/tmcc/linux/supfile \
  clientside/tmcc/linux/sethostname.dhclient \
@@ -1638,15 +1647,13 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/linux-ms/GNUmakefile \
  clientside/tmcc/archlinux/GNUmakefile \
  clientside/tmcc/alpine/GNUmakefile \
- clientside/tmcc/freebsd5/GNUmakefile clientside/tmcc/freebsd5/supfile \
- clientside/tmcc/freebsd6/GNUmakefile clientside/tmcc/freebsd6/supfile \
- clientside/tmcc/freebsd6/netif-emulab \
- clientside/tmcc/freebsd7/GNUmakefile clientside/tmcc/freebsd7/netif-emulab \
- clientside/tmcc/freebsd9/GNUmakefile clientside/tmcc/freebsd9/netif-emulab \
+ clientside/tmcc/freebsd5/GNUmakefile \
  clientside/tmcc/freebsd10/GNUmakefile clientside/tmcc/freebsd10/netif-emulab \
  clientside/tmcc/freebsd11/GNUmakefile clientside/tmcc/freebsd11/netif-emulab \
  clientside/tmcc/freebsd12/GNUmakefile clientside/tmcc/freebsd12/netif_emulab \
  clientside/tmcc/freebsd13/GNUmakefile clientside/tmcc/freebsd13/netif_emulab \
+ clientside/tmcc/freebsd14/GNUmakefile clientside/tmcc/freebsd14/netif_emulab \
+ clientside/tmcc/freenas11/GNUmakefile clientside/tmcc/truenas13/GNUmakefile \
  clientside/tmcc/cygwinxp/GNUmakefile clientside/tmcc/dp/GNUmakefile \
  clientside/tmcc/openbsd/GNUmakefile clientside/tmcc/ron/GNUmakefile \
  clientside/tmcc/plab/GNUmakefile clientside/tmcc/cygwinseven/GNUmakefile \

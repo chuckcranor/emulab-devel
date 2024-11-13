@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -21,6 +21,9 @@
 #
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5ONLY = true;
+
 chdir("..");
 include("defs.php3");
 chdir("apt");
@@ -49,7 +52,8 @@ echo "<div id='main-body'></div>\n";
 
 # Place to hang the modals for now
 echo "<div id='oops_div'></div>
-      <div id='waitwait_div'></div>\n";
+      <div id='waitwait_div'></div>
+      <div id='txgraph_div'></div>\n";
 
 $aggregates = Aggregate::AllAggregatesList();
 
@@ -66,7 +70,8 @@ foreach ($aggregates as $aggregate) {
               "isFE"         => $aggregate->isFE());
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
+echo json_encode($blob, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|
+                 JSON_HEX_AMP|JSON_NUMERIC_CHECK);
 echo "</script>\n";
 
 $radioinfo = Aggregate::RadioInfoNew();
@@ -82,7 +87,12 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER();
-AddTemplateList(array("radioinfo", "waitwait-modal", "oops-modal"));
-SPITREQUIRE("js/radioinfo.js");
+AddLibrary("js/txgraph.js");
+AddLibrary("js/lib/tablesorter/widgets/widget-editable.js");
+AddTemplateList(array("radioinfo", "waitwait-modal", "oops-modal", "txgraph"));
+SPITREQUIRE("js/radioinfo.js",
+            "<script src='js/lib/d3.v5.js'></script>\n");
+echo "<link rel='stylesheet'
+            href='css/frequency-graph.css'>\n";
 SPITFOOTER();
 ?>

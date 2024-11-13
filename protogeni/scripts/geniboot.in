@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -66,6 +66,7 @@ sub fatal($);
 
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
+use EmulabConstants;
 use libEmulab;
 use libtestbed;
 use GeniDB;
@@ -99,6 +100,7 @@ if ($impotent) {
     sleep(3);
 }
 
+GeniUtil::FlipToGeniUser();
 if (!$debug) {
     $logname = TBMakeLogname("geniboot");
 
@@ -108,14 +110,17 @@ if (!$debug) {
     # 
     open(STDERR, ">> $logname") or die("opening $logname for STDERR: $!");
     open(STDOUT, ">> $logname") or die("opening $logname for STDOUT: $!");
+    # So sendmail can read the file.
+    system("/bin/chmod a+r $logname");
 
     #
     # Turn off line buffering on output
     #
-    STDOUT->autoflush(1);
-    STDERR->autoflush(1);
+    select STDERR;
+    $OUTPUT_AUTOFLUSH = 1;
+    select STDOUT;
+    $OUTPUT_AUTOFLUSH = 1;
 }
-GeniUtil::FlipToGeniUser();
 
 #
 # For now lets just deal with CM slices that are stuck cause the system
@@ -137,6 +142,7 @@ while (my ($idx,$hrn) = $query_result->fetchrow_array()) {
 	next;
     }
     my $aggregate = GeniAggregate->SliceAggregate($slice);
+    my $expt      = $slice->GetExperiment();
     
     # Ideally, the slice is not locked and not busy.
     next
@@ -145,15 +151,23 @@ while (my ($idx,$hrn) = $query_result->fetchrow_array()) {
 	
     if ($slice->locked()) {
 	my $locked = $slice->locked();
-	print "$slice was locked at $locked\n";
+	print "$slice was locked at $locked ($expt)\n";
 
 	# If no aggregate, just clear the lock and let it get reaped.
 	if (!defined($aggregate)) {
 	    if ($impotent) {
 		print "No aggregate, would clear the lock\n";
+		if ($expt && $expt->locked()) {
+		    print "Would clear the experiment lock first\n";
+		}
 	    }
 	    else {
 		print "No aggregate, clearing the lock\n";
+		# Do this first just in case experiment it is wedged
+		if ($expt && $expt->locked()) {
+		    print "Clearing the experiment lock first\n";
+		    $expt->Unlock(EXPTSTATE_ACTIVE);
+		}
 		$slice->ClearLock();
 		# Just in case.
 		$slice->ClearMonitorPid();
@@ -166,33 +180,43 @@ while (my ($idx,$hrn) = $query_result->fetchrow_array()) {
 	# update, lets see if it helps.
 	$aggregate->ComputeState();
 
-	if ($aggregate->Ready()) {
-	    next;
-	}
-	my $state  = $aggregate->state();
-	my $status = $aggregate->status();
-	print "$aggregate is not ready: state:$state, status:$status\n";
-	#
-	# Set the aggregate to mixed unless some of the slivers were
-	# in the new state, in which case set the aggregates state
-	# back to new so it can do reload, etc.
-	#
-	# This will provide the best chance of bringing it back to life
-	# or killing it.
-	#
-	my $newstate = "mixed";
+	if (!$aggregate->Ready()) {
+	    my $state  = $aggregate->state();
+	    my $status = $aggregate->status();
+	    print "$aggregate is not ready: state:$state, status:$status\n";
+	    #
+	    # Set the aggregate to mixed unless some of the slivers were
+	    # in the new state, in which case set the aggregates state
+	    # back to new so it can do reload, etc.
+	    #
+	    # This will provide the best chance of bringing it back to life
+	    # or killing it.
+	    #
+	    my $newstate = "mixed";
 
-	if ($aggregate->CheckSliverStates("new") > 0) {
-	    $newstate = "interrupted";
-	}
-	if ($impotent) {
-	    print "Would set the state,status to $newstate,mixed\n";
-	}
-	else {
-	    print "Setting the state,status to $newstate,mixed\n";
-	    $aggregate->SetStateStatus($newstate, "mixed");
+	    if ($aggregate->CheckSliverStates("new") > 0) {
+		$newstate = "interrupted";
+	    }
+	    if ($impotent) {
+		print "Would set the state,status to $newstate,mixed\n";
+	    }
+	    else {
+		print "Setting the state,status to $newstate,mixed\n";
+		$aggregate->SetStateStatus($newstate, "mixed");
+	    }
 	}
     }
+    # Do this first just in case experiment it is wedged
+    if ($expt && $expt->locked()) {
+	if ($impotent) {
+	    print "Would clear the experiment lock\n";
+	}
+	else {
+	    print "Clearing the experiment lock\n";
+	    $expt->Unlock(EXPTSTATE_ACTIVE);
+	}
+    }
+    
     if ($slice->locked()) {
 	if ($impotent) {
 	    print "Would clear the slice lock\n";
@@ -200,6 +224,7 @@ while (my ($idx,$hrn) = $query_result->fetchrow_array()) {
 	else {
 	    print "Clearing the slice lock\n";
 	    $slice->ClearLock();
+	    $slice->ClearMonitorPid();
 	}
     }
 }
@@ -248,7 +273,7 @@ if (!$debug) {
 	SENDMAIL($TBOPS, "Geni DB Boot Finished", "Geni DB Boot results:",
 		 $TBOPS, undef, $logname);
     }
-    #unlink("$logname");
+    unlink("$logname");
 }
 exit($errors);
 

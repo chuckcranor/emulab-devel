@@ -3,10 +3,11 @@
   <h5>
     These profiles demonstrate how to construct various topologies and select
     options such as node type, operating system, etc.</h5>
-  <div class="table-responsive">
+  <div>
     <input class='form-control search' type='search' data-column='all'
 	   id='list-profiles-search' placeholder='Search'>
     <table class='tablesorter'
+	   style="width: 100%;"
 	   id='list-profiles-table'>
       <thead>
 	<tr>
@@ -15,24 +16,57 @@
 	  <th class="sorter-false">Description</th>
 	</tr>
       </thead>
+      <% if (window.ISPOWDER) { %>
+	<tbody class="tablesorter-no-sort">
+	  <tr><th colspan="3"
+		  class="text-center">Powder Specific Profiles</th></tr>
+	</tbody>	
+	<tbody>
+	  <% _.each(profiles["powder"], function(value, name) { %>
+	    <tr>
+	      <td class="text-nowrap">
+		<% var url;
+	        if (window.MAINSITE) {
+		  url = "/show/" + value.pid + "/" + value.name;
+		}
+	        else {
+		  url = "show-profile.php?uuid=" + value.uuid;
+		}
+		%>
+		<a href='<%= url %>' target="_blank"><%= value.name %>
+	      </td>
+	      <td class="format-date text-nowrap">
+		<%- value.created %></td>
+	      <td><%= marked(value.desc) %></td>
+	    </tr>
+	  <% }); %>
+	</tbody>
+	<tbody class="tablesorter-no-sort">
+	  <tr><th colspan="3"
+		  class="text-center">Other Useful Profiles</th></tr>
+	</tbody>	
+      <% } %>
       <tbody>
-	<% _.each(profiles, function(value, name) { %>
-	  <tr>
-	    <td class="text-nowrap">
-	      <% var url;
-	         if (window.MAINSITE) {
-		   url = "/show/" + value.pid + "/" + value.name;
-		 }
-	         else {
-		   url = "show-profile.php?uuid=" + value.uuid;
-		 }
-	       %>
-	      <a href='<%= url %>' target="_blank"><%= value.name %>
-	    </td>
-	    <td class="format-date text-nowrap">
-	      <%- value.created %></td>
-	    <td><%= value.desc %></td>
-	  </tr>
+	<% _.each(profiles, function(group, portals) { %>
+	  <% if (window.ISPOWDER && portals == "powder") { return; } %>
+	  <% _.each(group, function(value, name) { %>
+	    <tr>
+	      <td class="text-nowrap">
+		<% var url;
+	        if (window.MAINSITE) {
+		  url = "/show/" + value.pid + "/" + value.name;
+		}
+	        else {
+		  url = "show-profile.php?uuid=" + value.uuid;
+		}
+		%>
+		<a href='<%= url %>' target="_blank"><%= value.name %>
+	      </td>
+	      <td class="format-date text-nowrap">
+		<%- value.created %></td>
+	      <td><%= marked(value.desc) %></td>
+	    </tr>
+	  <% }); %>
 	<% }); %>
       </tbody>
     </table>

@@ -33,6 +33,15 @@ $(function ()
 	});
 	$('#main-body').html(html);
 
+	// Bind search for MAC
+	$('#search-mac button').click(function (event) {
+	    event.preventDefault();
+	    var token = $.trim($('#search-mac input').val());
+	    if (token) {
+		SearchForMAC(token);
+	    }
+	});
+
 	// Format dates with moment before display.
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
@@ -54,7 +63,7 @@ $(function ()
 	var table = $(".tablesorter")
 		.tablesorter({
 		    theme : 'bootstrap',
-		    widgets: ["uitheme", "filter"],
+		    widgets: ["uitheme", "zebra", "filter"],
 		    headerTemplate : '{content} {icon}',
 
 		    widgetOptions: {
@@ -74,5 +83,31 @@ $(function ()
 		});
     }
 
+    /*
+     * Search for a node having MAC address
+     */
+    function SearchForMAC(mac)
+    {
+	sup.CallServerMethod(null, "node", "IfaceSearch",
+			     {"mac" : mac}, function (json) {
+                                 console.info("IfaceSearch", json);
+                                 if (json.code) {
+                                     $('#search-mac-link').addClass("hidden");
+                                     alert(json.value);
+                                     return;
+                                 }
+                                 if (!json.value) {
+                                     $('#search-mac-link').addClass("hidden");
+                                     alert("Cannot find a node with this MAC address")
+                                     return
+                                 }
+                                 var node_id = json.value;
+                                 var url = "show-node.php?node_id=" + node_id;
+                                 $('#search-mac-link')
+                                     .prop("href", url)
+                                     .html(node_id)
+                                     .removeClass("hidden");
+                             });
+    }
     $(document).ready(initialize);
 });

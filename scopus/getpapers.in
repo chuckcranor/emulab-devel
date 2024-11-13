@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2021 University of Utah and the Flux Group.
+# Copyright (c) 2005-2021, 2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -93,7 +93,7 @@ my $query_result =
 		 "   s.uid_idx=u.uid_idx ".
 		 "left join user_scopus_info as scopus on ".
 		 "   scopus.uid_idx=u.uid_idx ".
-		 "where scopus.uid is not null ".
+		 "where scopus.uid is not null and scopus.uid!='cai' ".
 		 (!$update ? "and scopus.latest_abstract_id='' " : " ") .
 		 "$users_clause order by u.uid $limit");
 

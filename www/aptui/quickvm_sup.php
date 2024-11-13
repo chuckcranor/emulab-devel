@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,26 @@
 # 
 # }}}
 #
+#
+# Slowly moving to bootstrap 5. Defined in the page
+#
+if (!isset($BOOTSTRAP5OK)) {
+    $BOOTSTRAP5OK = false;
+}
+if (!isset($BOOTSTRAP5ONLY)) {
+    $BOOTSTRAP5ONLY = false;
+}
+# allow URL override
+if (isset($_REQUEST["bootstrap5"])) {
+    if ($_REQUEST["bootstrap5"] == 1) {
+        $BOOTSTRAP5OK = true;
+    }
+    else {
+        $BOOTSTRAP5OK = false;
+    }
+}
+define("BOOTSTRAP5", $BOOTSTRAP5OK || $BOOTSTRAP5ONLY);
+
 include_once("portal_defs.php");
 include_once("instance_defs.php");
 include_once("require.php");
@@ -41,26 +61,28 @@ if (isset($_REQUEST["embedded"]) && $_REQUEST["embedded"]) {
     $embedded = 1;
 }
 
+# Global flage to allow specific pages to let themselves be iframed.
+$page_allowframing = 0;
+
 # For backend scripts to know how they were invoked.
 if (isset($_SERVER['SERVER_NAME'])) { 
     putenv("SERVER_NAME=" . $_SERVER['SERVER_NAME']);
 }
 
 #
-# Redefine this so APT errors are styled properly. Called by PAGEERROR();.
+# Spit out the global variables we always want. 
 #
-$PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
-    global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $ISPOWDER;
-    global $spatrequired, $TBMAINSITE, $PORTAL_HELPFORUM, $APTBASE;
-    global $APTMAIL, $APTMAILTO, $PROTOGENI_GENIWEBLOGIN;
+$spatglobals = 0;
 
-    if (! $drewheader) {
-	SPITHEADER();
-    }
-    echo "<br>";
-    if ($msg) {
-        echo $msg;
-    }
+function SpitGlobals()
+{
+    global $spatglobals;
+    global $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $ISPOWDER;
+    global $TBMAINSITE, $PORTAL_HELPFORUM, $APTBASE;
+    global $APTMAIL, $APTMAILTO, $PROTOGENI_GENIWEBLOGIN, $TBBASE;
+    global $PORTAL_MANUAL, $PORTAL_WIKI, $PORTAL_NSFNUMBER;
+    global $embedded, $SUPPORT, $APTTITLE, $PORTAL_NAME, $TBBASE;
+
     echo "<script type='text/javascript'>\n";
     echo "    window.ISEMULAB  = " . ($ISEMULAB ? "1" : "0") . ";\n";
     echo "    window.ISCLOUD   = " . ($ISCLOUD  ? "1" : "0") . ";\n";
@@ -74,7 +96,44 @@ $PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
     echo "    window.APTMAILTO = \"$APTMAILTO\"\n";
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
+    echo "    window.CLASSIC  = '$TBBASE';\n";
+    echo "    window.MANUAL   = '$PORTAL_MANUAL';\n";
+    if ($PORTAL_WIKI) {
+        echo "    window.WIKI     = '$PORTAL_WIKI';\n";
+    }
+    if ($PORTAL_NSFNUMBER) {
+        echo "    window.PORTAL_NSFNUMBER = '$PORTAL_NSFNUMBER';\n";
+    }
+    echo "    window.EMBEDDED = $embedded;\n";
+    echo "    window.SUPPORT  = '$SUPPORT';\n";
+    echo "    window.APTTILE  = '$APTTITLE';\n";
+    echo "    window.APTMAIL   = \"$APTMAIL\";\n";
+    echo "    window.APTMAILTO = \"$APTMAILTO\";\n";
+    echo "    window.PORTAL_NAME = \"$PORTAL_NAME\"\n";
+    echo "    window.CLASSIC = '$TBBASE';\n";
     echo "</script>\n";
+    
+    $spatglobals = 1;
+}
+
+#
+# Redefine this so APT errors are styled properly. Called by PAGEERROR();.
+#
+$PAGEERROR_HANDLER = function($msg = null, $status_code = 0) {
+    global $drewheader;
+    global $spatrequired, $spatglobals;
+    global $APTBASE;
+
+    if (! $drewheader) {
+	SPITHEADER();
+    }
+    echo "<br>";
+    if ($msg) {
+        echo $msg;
+    }
+    if (! $spatglobals) {
+        SpitGlobals();
+    }
     if (!$spatrequired) {
 	echo "<script src='$APTBASE/js/lib/jquery.min.js'></script>\n";
 	SPITNULLREQUIRE();
@@ -90,9 +149,13 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
     global $GOOGLEUA, $ISCLOUD, $TBBASE, $PORTAL_GENESIS, $APTBASE;
     global $ISPNET, $ISPOWDER, $ISEMULAB, $PROTOGENI_GENIWEBLOGIN;
+    global $THISHOMEBASE, $UI_DISABLE_DATASETS, $UI_DISABLE_RESERVATIONS;
     global $login_user, $login_status, $SUPPORT, $FIRSTUSER, $PORTAL_NAME;
     global $disable_accounts, $page_title, $drewheader, $embedded;
-    global $UI_EXTERNAL_ACCOUNTS, $BrandMapping;
+    global $UI_EXTERNAL_ACCOUNTS, $BrandMapping, $page_allowframing;
+    global $PORTAL_WIKI, $PORTAL_NSFNUMBER, $GOOGLEGAIDS;
+
+    
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
                   $_COOKIE['cleanmode'] == 1 ? 1 : 0);
     $showmenus = 0;
@@ -103,8 +166,14 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     $height = ($thinheader ? 150 : 250);
     $drewheader = 1;
     $nonav = 0;
-    $parsed_url = parse_url($_SERVER['REQUEST_URI']);
-    $script = basename($parsed_url["path"]);
+    $noannouncements = 0;
+    $script = null;
+    if ($_SERVER['REQUEST_URI']) {
+        $parsed_url = parse_url($_SERVER['REQUEST_URI']);
+        if ($parsed_url && isset($parsed_url["path"])) {
+            $script = basename($parsed_url["path"]);
+        }
+    }
 
     #
     # Figure out who is logged in, if anyone.
@@ -113,10 +182,15 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
 	$login_status = $status;
 	$login_uid    = $login_user->uid();
         $ga_userid    = $login_user->ga_userid();
+        if ($login_user->IsTutorialUser()) {
+            # TUTORIALPID
+            $noannouncements = 1;
+        }
     }
     if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
         $showmenus = 1;
     }
+    if (!$embedded) {
     if ($TBMAINSITE && $login_user &&
         $login_user->bound_portal() && $login_user->portal() &&
         $login_user->portal() != $PORTAL_GENESIS) {
@@ -169,23 +243,56 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
             }
         }
     }
+    }
 
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
     header("Cache-Control: no-cache, must-revalidate");
     header("Pragma: no-cache");
-    header("X-Frame-Options: SAMEORIGIN");
+    if (!$page_allowframing) {
+        header("X-Frame-Options: SAMEORIGIN");
+    }
     
     echo "<html>
-      <head>
-        <title>$title</title>
+      <head>\n";
+    if ($TBMAINSITE && !$embedded && $ISCLOUD && file_exists($GOOGLEGAIDS)) {
+        echo "<!-- Google Tag Manager -->
+              <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+              new Date().getTime(),event:'gtm.js'});
+              var f=d.getElementsByTagName(s)[0],
+              j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+              j.async=true;j.src=
+              'https://www.googletagmanager.com/gtm.js?id='+i+dl;
+              f.parentNode.insertBefore(j,f);
+              })(window,document,'script','dataLayer','GTM-TSZK7GW');</script>
+              <!-- End Google Tag Manager --> \n";
+    }
+    echo "<title>$title</title>
         <link rel='shortcut icon' href='$APTBASE/$FAVICON'
-              type='image/vnd.microsoft.icon'>
-        <link rel='stylesheet' href='$APTBASE/css/bootstrap.css'>
-        <link rel='stylesheet' href='$APTBASE/css/quickvm.css'>
-        <link rel='stylesheet' href='$APTBASE/css/multilevel.css'>
-        <link rel='stylesheet' href='$APTBASE/css/$APTSTYLE'>\n";
-    if (0 && $ISPOWDER) {
-        echo "<link href='https://www.powderwireless.net/powder/fonts/raleway/style.css' rel='stylesheet'>";
+              type='image/vnd.microsoft.icon'>";
+    if (BOOTSTRAP5) {
+        echo "<link rel='stylesheet'
+                    href='$APTBASE/css/bootstrap-5/bootstrap.css'>\n";
+        echo "<link rel='stylesheet' href='$APTBASE/css/quickvm.css'>\n";
+        echo "<link rel='stylesheet'
+                    href='$APTBASE/css/bootstrap-5/compat.css'>\n";
+    }
+    else {
+        echo "<link rel='stylesheet' href='$APTBASE/css/bootstrap.css'>";
+        echo "<link rel='stylesheet' href='$APTBASE/css/quickvm.css'>";
+        echo "<link rel='stylesheet'
+                    href='$APTBASE/css/bootstrap-5/backwards.css'>\n";
+    }
+    echo "<link rel='stylesheet' href='$APTBASE/css/multilevel.css'>\n";
+    echo "<link rel='stylesheet' href='$APTBASE/css/$APTSTYLE'>\n";
+    if (!BOOTSTRAP5 && $ISEMULAB) {
+        #
+        # Ug, weird compat problem caused by the Emulab header and
+        # flex boxes. Hard to fix, but this little change is easy
+        # until all of the pages are converted.
+        #
+        echo "<style>\n";
+        echo ".portal-navbar .navbar-header { margin-top: 0px; }\n";
+        echo "</style>\n";
     }
     if ($TBMAINSITE) {
         if ($ISEMULAB) {
@@ -199,6 +306,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     echo "<script src='$APTBASE/js/common.js?nocache=asdfasdf'></script>
         <link rel='stylesheet' href='$APTBASE/css/jquery-steps.css'>
         <script src='$TBBASE/emulab_sup.js'></script>
+        <script src='$APTBASE/js/lib/underscore-min.js'></script>
       </head>\n";
 
     if ($inline) {
@@ -209,41 +317,115 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     }
 
     echo "<script type='text/javascript'>\n";
-    echo "    window.ISEMULAB = " . ($ISEMULAB ? "1" : "0") . ";\n";
-    echo "    window.ISCLOUD  = " . ($ISCLOUD  ? "1" : "0") . ";\n";
-    echo "    window.ISPNET   = " . ($ISPNET   ? "1" : "0") . ";\n";
-    echo "    window.ISPOWDER = " . ($ISPOWDER ? "1" : "0") . ";\n";
-    echo "    window.ISAPT    = " . ($ISAPT    ? "1" : "0") . ";\n";
-    echo "    window.MAINSITE = " . ($TBMAINSITE ? "1" : "0") . ";\n";
-    echo "    window.PGENILOGIN  = " .
-        ($PROTOGENI_GENIWEBLOGIN ? "1" : "0") . ";\n";
-    echo "    window.MANUAL   = '$PORTAL_MANUAL';\n";
-    echo "    window.HELPFORUM = " .
-        "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
-    echo "    window.EMBEDDED = $embedded;\n";
-    echo "    window.SUPPORT  = '$SUPPORT';\n";
-    echo "    window.APTTILE  = '$APTTITLE';\n";
-    echo "    window.APTMAIL   = \"$APTMAIL\";\n";
-    echo "    window.APTMAILTO = \"$APTMAILTO\";\n";
     echo "    window.LOGINUID  = " .
         ($login_user ? "'$login_uid'" : "null") . ";\n";
-    echo "    window.PORTAL_NAME = \"$PORTAL_NAME\"\n";
-    # For OAI2021FallWS
-    echo "    window.NOANNOUNCEMENTS = 1\n";
+    # For TUTORIALPID
+    echo "    window.NOANNOUNCEMENTS = $noannouncements\n";
     echo "</script>\n";
-    
-    if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {
-	readfile("../google-analytics.php");
-	echo "<script type='text/javascript'>\n";
-        echo "  ga('create', '$GOOGLEUA', 'auto');\n";
-        if ($login_user) {
-            echo "  ga('set', 'userId', '$ga_userid');\n";
+    SpitGlobals();
+
+    if ($TBMAINSITE && !$embedded && !$ISCLOUD && file_exists($GOOGLEGAIDS)) {
+        $json = file_get_contents($GOOGLEGAIDS);
+        $ids  = json_decode($json, true);
+
+        if (array_key_exists($PORTAL_GENESIS, $ids)) {
+            $gua = $ids[$PORTAL_GENESIS];
+            $gaurl = "https://www.googletagmanager.com/gtag/js?id=${gua}";
+
+            echo "<script async src='$gaurl'></script>
+                  <script>
+                     window.dataLayer = window.dataLayer || [];
+                     function gtag(){dataLayer.push(arguments);}
+                     gtag('js', new Date());\n";
+            if ($login_user) {
+                echo "gtag('config', '$gua', {'user_id' : '$ga_userid'});\n";
+            }
+            else {
+                echo "gtag('config', '$gua');\n";
+            }
+            echo "window.GOOGLEUA = '$gua';
+                  </script>\n";
         }
-        echo "  ga('send', 'pageview');\n";
-        echo "  window.GOOGLEUA  = '$GOOGLEUA';\n";
-        echo "</script>";
     }
 
+    # HEADER variables
+    $headervars = array();
+    $addHeaderVariable = function ($name, $value) use (&$headervars) {
+        $headervars[$name] = $value;
+    };
+    $addHeaderVariable("disable_accounts", $disable_accounts);
+    $addHeaderVariable("cleanmode", $cleanmode);
+    $addHeaderVariable("nonav", $nonav);
+    $addHeaderVariable("login_uid", $login_user ? $login_uid : null);
+    $addHeaderVariable("NOLOGINS", NOLOGINS() ? 1 : 0);
+    $addHeaderVariable("UI_EXTERNAL_ACCOUNTS", $UI_EXTERNAL_ACCOUNTS);
+    $addHeaderVariable("UI_DISABLE_RESERVATIONS", $UI_DISABLE_RESERVATIONS);
+    $addHeaderVariable("UI_DISABLE_DATASETS", $UI_DISABLE_DATASETS);
+    $addHeaderVariable("page_title", $page_title);
+    if ($login_user) {
+        $addHeaderVariable("isadministrator", ISADMINISTRATOR() ? 1 : 0);
+        $addHeaderVariable("isadmin", ISADMIN() ? 1 : 0);
+        $addHeaderVariable("isforeign_admin", ISFOREIGN_ADMIN() ? 1 : 0);
+        $addHeaderVariable("WEBONLY", $login_status & CHECKLOGIN_WEBONLY ? 1 : 0);
+        $addHeaderVariable("isactive", $login_user->IsActive() ? 1 : 0);
+        $addHeaderVariable("classic_user", $login_user->portal() ? 0 : 1);
+        $addHeaderVariable("newNews", $login_user->APTNewNews() ? 1 : 0);
+        $addHeaderVariable("anyNews", $login_user->APTAnyNews() ? 1 : 0);
+        $addHeaderVariable("login_idx", $login_user->uid_idx());
+    }
+    $addHeaderVariable("APTLOGO", "${APTBASE}/images/${APTLOGO}");
+    $addHeaderVariable("THISHOMEBASE", $THISHOMEBASE);
+    if (NOLOGINS()) {
+        $message = TBGetSiteVar("web/message");
+        if ($message && $message != "" && !$cleanmode) {
+            $addHeaderVariable("message", $message);
+        }
+    }
+    if ($login_user)  {
+        $recents = Instance::RecentExperiments($login_user);
+        if ($recents) {
+            $addHeaderVariable("recents", $recents);
+        }
+
+        $pending = $login_user->PendingMembership();
+        if (count($pending)) {
+            # Just deal with the first, that is enough.
+            $unproj = $pending[0];
+            $leader = $unproj->GetLeader();
+            $unpid  = $unproj->pid();
+            
+            if ($login_user->SameUser($leader)) {
+                # Nag the approval committee.
+                $mailto = $unproj->ApprovalEmailAddress() .
+                        "?Subject=Pending Project $unpid";
+                
+                $addHeaderVariable("NAGUS", "${mailto}");
+            }
+            else {
+                # Nag the PI.
+                $addHeaderVariable("NAGPI", "${unpid}");
+                #
+                # Lets not nag the PI for at least a day.
+                #
+                $membership = $unproj->MemberShipInfo($login_user);
+                $applied = strtotime($membership["date_applied"]);
+                if (time() - $applied > 3600 * 18) {
+                    $addHeaderVariable("NAGNOW", 1);
+                }                    
+            }
+        }
+        list($foo, $phours) = Instance::CurrentUsage($login_user);
+        list($foo, $weeksusage) = Instance::WeeksUsage($login_user);
+        list($foo, $monthsusage) = Instance::MonthsUsage($login_user);
+        list($rank, $ranktotal) = Instance::Ranking($login_user, 30);
+        if ($phours || $weeksusage || $monthsusage) {
+            $addHeaderVariable("phours", sprintf("%.2f", $phours));
+            $addHeaderVariable("week", sprintf("%.2f", $weeksusage));
+            $addHeaderVariable("month", sprintf("%.2f", $monthsusage));
+            $addHeaderVariable("rank", $rank);
+            $addHeaderVariable("ranktotal", $ranktotal);
+        }
+    }
     if ($embedded) {
 	goto embed;
     }
@@ -256,101 +438,36 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     }
 
     #
-    # This is the stuff to the right of the logo.
-    # 
-    $navbar_status = "";
-    $navbar_right  = "";
-    $aptmargin = "";
-    if (!$ISCLOUD && !$ISPNET && !$ISEMULAB || $ISPOWDER)
-    {
-        $aptmargin = "margin-top: 7px;";
+    # The header navbar is now a template.
+    #
+    EchoTemplate("mainHeader", "template/header.html");
+    echo "<div id='mainheader-div'></div>\n";
+    
+    echo "<script type='text/plain' id='mainheader-json'>\n";
+    echo htmlentities(json_encode($headervars, JSON_NUMERIC_CHECK)) . "\n";
+    echo "</script>\n";
+    
+    echo "<script type='text/javascript'>\n";
+    echo "  window.APT_OPTIONS.drawMainHeader();\n";
+    echo "</script>\n";
+
+    if (!$disable_accounts && !NOLOGINS() && !$login_user) {
+        REQUIRE_GENI_AUTH();
     }
 
-    if (!$disable_accounts) {
-        if ($login_user && ISADMINISTRATOR() && !$cleanmode) {
-            $navbar_status .= 
-                "<li class='apt-left admin-toggle-container'>\n";
-            
-	    if (ISADMIN()) {
-		$url = CreateURL("toggle", $login_user,
-				 "type", "adminon", "value", 0);
-
-                $navbar_status .=
-                    "<a href='/$url' class='admin-toggle'>
-                          <img src='$APTBASE/images/redball.gif'
-                               style='height: 10px; $aptmargin'
-                               border='0' alt='Admin On'></a>\n";
-	    }
-	    else {
-		$url = CreateURL("toggle", $login_user,
-				 "type", "adminon", "value", 1);
-
-                $navbar_status .=
-                    "<a href='/$url' class='admin-toggle'>
-                          <img src='$APTBASE/images/greenball.gif'
-                               style='height: 10px; $aptmargin'
-                               border='0' alt='Admin Off'></a>\n";
-	    }
-            $navbar_status .= "</li>\n";
-	}
-	if (!NOLOGINS()) {
-	    if (!$login_user) {
-		if ($UI_EXTERNAL_ACCOUNTS == 0) {
-                    $navbar_right .=
-                        "<li id='signupitem' class='apt-left'>" .
-                        "  <a class='btn btn-success navbar-btn apt-navbar-btn'
-                                    id='signupbutton'
-                                    href='signup.php'>Sign Up</a></li>\n";
-		}
-		if ($page_title != "Login") {
-                    $navbar_right .=
-                        "<li id='loginitem' class='apt-left'>" .
-                        "  <a class='btn btn-quickvm-home navbar-btn apt-navbar-btn'
-                                    href='login.php'
-                                    id='loginbutton'>Login</a></li>\n";
-		}
-		REQUIRE_GENI_AUTH();
-	    }
-	}
-    }
-    # This is for dealing with the narowest window class; we hide some of
-    # the buttons when a logged in user shrinks the window the window down,
-    # and turn them on inside the action menu.
-    $hiddenxs = ($showmenus ? "hidden-xs" : "");
-
-    SPITNAV($hiddenxs, $nonav, $navbar_status, $navbar_right, $login_uid);
-
-    # Put announcements, if any, right below the header.
-    if (!$cleanmode && $login_user && $login_user->IsActive() &&
-        !($login_status & CHECKLOGIN_WEBONLY)) {
-        # Always create empty div for announcements, for ajax update.
-        echo "<div id='portal-announcement-div'>\n";
-        #
-        # When a classic user hits the Portal interface for the first time,
-        # enter a announcement for the user to make sure they know what is
-        # going on and how to return to the Classic interface. I put a canned
-        # announcement in the announce script. 
-        #
-        if (!$login_user->portal() && !$login_user->portal_interface_warned()) {
-            SUEXEC($FIRSTUSER, "nobody",
-                   "webannounce -a -U $login_uid -p emulab -m 10 -P",
-                   SUEXEC_ACTION_CONTINUE);            
-            $login_user->SetPortalWarned();
-        }
-        $announcements = GET_ANNOUNCEMENTS($login_user);
-        for ($i = 0; $i < count($announcements); $i++) {
-            echo $announcements[$i];
-        }
-        echo "</div>";
-    }
-    if (NOLOGINS()) {
-        $message = TBGetSiteVar("web/message");
-    }
-    if ($message && $message != "" && !$cleanmode) {
-        echo "<div class='alert alert-warning alert-dismissible'
-                 role='alert' style='margin-top: -10px; padding: 5px;'>
-                <center>$message</center>
-          </div>";
+    #
+    # When a classic user hits the Portal interface for the first time,
+    # enter a announcement for the user to make sure they know what is
+    # going on and how to return to the Classic interface. I put a canned
+    # announcement in the announce script. 
+    #
+    if ($login_user && $login_user->IsActive() &&
+        !($login_status & CHECKLOGIN_WEBONLY) &&
+        !$login_user->portal() && !$login_user->portal_interface_warned()) {
+        SUEXEC($FIRSTUSER, "nobody",
+               "webannounce -a -U $login_uid -p emulab -m 10 -P",
+               SUEXEC_ACTION_CONTINUE);            
+        $login_user->SetPortalWarned();
     }
 
     #
@@ -362,79 +479,6 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
         $login_user->IsActive() && $login_user->isClassic() &&
         !$login_user->HasEncryptedCert(1)) {
         $login_user->GenEncryptedCert();
-    }
-
-    if ($login_user && !$cleanmode) {
-        $pending = $login_user->PendingMembership();
-
-        if (count($pending)) {
-            # Just deal with the first, that is enough.
-            $unproj = $pending[0];
-            $leader = $unproj->GetLeader();
-            $pid    = $unproj->pid();
-            $mailto = "mailto:" . $unproj->ApprovalEmailAddress() .
-                "?Subject=Pending Project $pid";
-                
-            echo "<div class=alert-danger ";
-            echo "     style='margin-bottom: 6px; margin-top: -10px'>";
-            echo "<center><span>";
-
-            if ($login_user->SameUser($leader)) {
-                echo "Your project application is still under review. ";
-                echo "<a href='$mailto' class=alert-link>";
-                echo "Contact the Review Committee.</a>";
-            }
-            else {
-                echo "Your request for membership in project '$pid' has not ";
-                echo "yet been approved by the project leader. ";
-                #
-                # Lets not nag the PI for at least a day.
-                #
-                $membership = $unproj->MemberShipInfo($login_user);
-                $applied = strtotime($membership["date_applied"]);
-                if (time() - $applied > 3600 * 18) {
-                    echo "<a href='#' class=alert-link ";
-                    echo "   onclick=\"APT_OPTIONS.nagPI(" . "'$pid'" . ")\"";
-                    echo "   style='text-decoration: underline'>";
-                    echo "Remind the Project Leader.</a>";
-                }
-            }
-            echo "</span></center></div>";
-        }
-        list($pcount, $phours) = Instance::CurrentUsage($login_user);
-        list($foo, $weeksusage) = Instance::WeeksUsage($login_user);
-        list($foo, $monthsusage) = Instance::MonthsUsage($login_user);
-        list($rank, $ranktotal) = Instance::Ranking($login_user, 30);
-        if ($phours || $weeksusage || $monthsusage) {
-            echo "<center style='margin-bottom: 5px; margin-top: -8px'>";
-            if ($phours) 
-                $phours = sprintf("%.2f", $phours);
-            echo "<span class='text-info'>
-                       Current Usage: $phours Node Hours</span>";
-            if ($weeksusage) {
-                $weeksusage = sprintf("%.0f", $weeksusage);
-                echo ", ";
-                echo "<span class='text-warning'>
-                       Prev Week: $weeksusage</span>";
-            }
-            if ($monthsusage) {
-                $monthsusage = sprintf("%.0f", $monthsusage);
-                echo ", ";
-                echo "<span class='text-danger'>
-                       Prev Month: $monthsusage</span>";
-                if ($rank) {
-                    echo "<span class='text-info'>
-                          (30 day rank: $rank of $ranktotal users)</span>";
-                }
-            }
-            echo "<a href='#' class='btn btn-xs' data-toggle='modal' ".
-                "data-target='#myusage_modal'> ".
-                "<span class='glyphicon glyphicon-question-sign' ".
-                "      style='margin-bottom: 4px;'></span> ".
-                "</a>";
-            echo "</center>\n";
-        }
-        readfile("template/myusage.html");
     }
 embed:
     echo " <!-- Page content -->
@@ -449,243 +493,6 @@ function SPITHEADER($thinheader = 0,
     $PAGEHEADER_FUNCTION($thinheader, $ignore1, $ignore2, $ignore3);
 }
 
-function SPITNAV($hiddenxs, $nonav, $navbar_status, $navbar_right, $login_uid)
-{
-    global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE;
-    global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER, $TBBASE, $APTBASE;
-    global $PORTAL_WIKI;
-    global $UI_DISABLE_DATASETS, $UI_DISABLE_RESERVATIONS;
-    global $UI_EXTERNAL_ACCOUNTS;
-    $hiddenxs = "";
-echo "
-
-<div class='navbar portal-navbar' role='navigation'>
-   <div class='navbar-header'>
-      <button type='button' class='navbar-toggle collapsed' data-toggle='collapse' data-target='#main-navbar-collapse' aria-expanded='false'>
-        <span class='sr-only'>Toggle navigation</span>
-        <span class='icon-bar'></span>
-        <span class='icon-bar'></span>
-        <span class='icon-bar'></span>
-      </button>
-      <a class='navbar-brand' href='landing.php'>
-                <img src='$APTBASE/images/$APTLOGO'/></a>";
-echo "
-    </div>
-
-<div class='collapse navbar-collapse navbar-inner' id='main-navbar-collapse'>";
-echo "  <ul class='nav navbar-nav navbar-left apt-left'>";
-    if (! $TBMAINSITE) {
-    #if (1) {
-      echo "<li class='local-name apt-left apt-nav-item'>" . $THISHOMEBASE . "</li>";
-    }
-
-   if ($login_user && !$nonav && !($login_status & CHECKLOGIN_WEBONLY)) {
-
-    if ($login_user->IsActive()) {
-      $recents = Instance::RecentExperiments($login_user);
-      $then = time() - (90 * 3600 * 24);
-    
-echo "
-    <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item $hiddenxs'> 
-      <a href='#'
-	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
-	 data-toggle='dropdown'>
-	Experiments <b class='caret'></b></a>
-      <ul class='dropdown-menu'>
-	<li><a href='instantiate.php'>Start Experiment</a></li>\n";
-
-     if ($recents) {
-         echo "<li class='multilevel-submenu'>
-                <a href='#'>Rerun Recent Experiment </a>
-                  <ul class='dropdown-menu'>";
-
-         foreach ($recents as $recent) {
-             $instance_name = $recent["instance_name"];
-             $profile_name  = $recent["profile_name"];
-             $rerun_url     = $recent["rerun_url"];
-             echo "<li><a href='${rerun_url}' target=_blank>
-                       $instance_name (${profile_name})</a></li>\n";
-         }
-         echo "<li class=text-center><a target=_blank
-                href='activity.php?user=$login_uid&min=$then'>More
-                <b class='caret'></b></a></li>";
-         echo "   </ul>
-              </li>\n";
-     }
-
-echo "	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>";
-
-      if ($UI_DISABLE_RESERVATIONS == 0 ||
-         ($UI_DISABLE_RESERVATIONS == 1 && ISADMIN()) ) {
-echo "    <li><a href='reserve.php'>Reserve " .
-             ($ISPOWDER ? "Resources" : "Nodes") . "</a></li>";
-      }
-
-echo "
-       <li><a href='resinfo.php'>Resource Availability</a></li>
-       <li><a href='cluster-status.php'>Cluster Status</a></li>
-        ";
-      if ($ISPOWDER) {
-          echo "<li><a href='radioinfo.php'>Powder Radio Info</a></li>";
-          echo "<li><a href='powder-map.php'>Powder Map</a></li>";
-      }
-echo " <li class='divider'></li>
-        <li><a href='user-dashboard.php#experiments'>
-	    My Experiments</a></li>
-	<li><a href='user-dashboard.php#profiles'>
-            My Profiles</a></li>";
-
-      if ($UI_DISABLE_RESERVATIONS == 0 ||
-         ($UI_DISABLE_RESERVATIONS == 1 && ISADMIN()) ) {
-echo "    <li><a href='list-resgroups.php'>
-              My Reservations</a></li>";
-      }
-
-echo "  <li><a href='activity.php?user=$login_uid&min=$then'>
-                            My History</a></li>";
-# Classic users, using the Portal, get a link back to it. SAD!
-if (!$login_user->portal()) {
-    echo " <li class='divider'></li>";
-    echo " <li><a href='$TBBASE/classic.php'>Emulab Classic</a></li>";
-}
-      echo "
-    </ul>
-    </li>
-    <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item $hiddenxs'> 
-      <a href='#'
-	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
-	 data-toggle='dropdown'>
-	Storage <b class='caret'></b></a>
-      <ul class='dropdown-menu'>";
-
-if ($UI_DISABLE_DATASETS == 0 || ($UI_DISABLE_DATASETS == 1 && ISADMIN()) ) {
-      echo "
-	<li><a href='create-dataset.php'>Create Dataset</a></li>
-	<li><a href='user-dashboard.php#datasets'>
-	    My Datasets</a></li>";
-}
-
-      echo "
-	<li><a href='list-images.php'>My Disk Images</a></li>
-        <li><a href='images.php'>Other Disk Images</a></li>
-      </ul>
-    </li>
-    ";
-    }
-
-    if ($login_user->IsActive() && (ISADMIN() || ISFOREIGN_ADMIN())) {
-               echo "<li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item'>
-                  <a href='#'
-                        class='dropdown-toggle btn btn-quickvm-home navbar-btn'
-                        data-toggle='dropdown'>
-                    Admin <b class='caret'></b></a>
-                  <ul class='dropdown-menu'>\n";
-               echo "  <li><a href='dashboard.php'>DashBoard</a></li>";
-               echo "  <li><a href='aggregate-status.php'>Cluster Status</a></li>";
-               $then = time() - (14 * 3600 * 24);
-               echo "  <li><a href='activity.php?min=$then'>
-                            History Data</a></li>
-		               <li><a href='sumstats.php?min=$then'>Summary Stats</a></li>
-		      <li><a href='ranking.php'>User/Proj Ranking</a></li>";
-		               echo "<li><a href='experiments.php#extending'>
-                            Extension Requests</a></li>";
-		               echo "<li><a href='experiments.php#all'>
-                            All Experiments</a></li>
-		                 <li><a href='list-profiles.php'>
-                            All Profiles</a></li>";
-                            if ($UI_DISABLE_RESERVATIONS <= 1) {
-                                 echo "<li><a href='list-resgroups.php'>
-                                All ResGroups</a></li>\n";
-                            }
-                            if ($UI_DISABLE_DATASETS <= 1) {
-		                   echo "<li><a href='list-datasets.php'>
-                                All Datasets</a></li>\n";
-                            }
-                               echo "<li><a href='images.php?all=1'>
-                            All Images</a></li>
-                                 <li><a href='list-vlans.php'>
-                            All Vlans</a></li>";
-                            if ($ISPOWDER) {
-		                   echo "<li><a href='list-rfranges.php'>
-                                All RF Ranges</a></li>\n";
-                            }
-                               echo "<li><a href='instance-errors.php'>
-                            Experiment Errors</a></li>
-                                 <li><a href='lists.php'>
-                            Users/Projects</a></li>
-                                 <li><a href='approve-projects.php'>
-                            Approve new projects</a></li>
-                                 <li><a href='sitevars.php'>
-                            Edit Site Variables</a></li>
-                                 <li><a href='portal-news.php'>
-                            Manage News</a></li>";
-                               echo " </ul>
-        </li>\n";
-    }
-    if ($login_user && $login_user->APTNewNews()) {
-        echo "<li class='apt-left apt-nav-item'>
-              <a id='new-news-button' href='portal-news.php' target='_blank'
-                 class='btn btn-quickvm-news navbar-btn'>News!</a></li>";
-    }
-   }
-   echo "</ul>";
-   if ($nonav < 2) {
-   echo "  <ul class='nav navbar-nav navbar-right apt-right'>
-    $navbar_status
-    $navbar_right\n";
-
-   echo "<li id='quickvm_actions_menu'
-                 class='dropdown apt-left apt-nav-item'>
-               <a href='#'
-	          class='dropdown-toggle btn btn-quickvm-home navbar-btn'
-	          data-toggle='dropdown'>Docs <b class='caret'></b></a>
-               <ul class='dropdown-menu'>
-                 <li><a href='$PORTAL_MANUAL' target='_blank'>Manual</a></li>";
-   if ($PORTAL_WIKI) {
-       echo "    <li><a href='$PORTAL_WIKI' target='_blank'>Wiki</a></li>";
-   }
-   echo "        <li><a href='example-profiles.php'
-                                 target='_blank'>Example Profiles</a></li>";
-   if ($login_user && $login_user->APTAnyNews()) {
-       echo "    <li><a href='portal-news.php'
-                             target='_blank'>News</a></li>";
-   }
-   echo "      </ul>
-         </li>\n";
-
-
-   if ($login_user) {
-   echo "
-    <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item'> 
-      <a href='#'
-	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
-	 data-toggle='dropdown'>
-	$login_uid <b class='caret'></b></a>
-      <ul class='dropdown-menu'>\n";
-       if (!$nonav && !($login_status & CHECKLOGIN_WEBONLY)) {
-           echo "
-	        <li><a href='myaccount.php'>Manage Account</a></li>
-		<li><a href='signup.php'>Start/Join Project</a></li>";
-           if ($UI_EXTERNAL_ACCOUNTS == 0) {
-	        echo "<li><a href='changepswd.php'>Change Password</a></li>";
-           }
-               if ($login_user->isActive()) {
-                   echo "
-                 <li><a href='getcreds.php'>Download Credentials</a></li>
-    	         <li><a href='ssh-keys.php'>Manage SSH Keys</a></li>
-                 <li class='divider'></li>";
-               }
-       }
-       echo "<li><a href='logout.php'>Logout</a></li>";
-       echo "</ul>
-           </li>";
-    }
-  echo "</ul>";
-  }
-  echo "</div></div>";
-
-}
-
 function GET_ANNOUNCEMENTS($user, $update = true)
 {
   global $PORTAL_GENESIS;
@@ -693,10 +500,27 @@ function GET_ANNOUNCEMENTS($user, $update = true)
   $uid_idx = $user->uid_idx();
   $result = array();
 
-  # Add an apt_announcement_info entry for any announcements which don't have one
-  $query_result = DBQueryWarn('select a.idx from apt_announcements as a left join apt_announcement_info as i on a.idx=i.aid and ((a.uid_idx is NULL and i.uid_idx="'.$uid_idx.'") or (a.uid_idx is not NULL and a.uid_idx=i.uid_idx)) where a.portal="'.$PORTAL_GENESIS.'" and a.retired=0 and i.uid_idx is NULL and (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'")');
+  #
+  # Add an apt_announcement_info entry for any announcements this
+  # user has not seen yet. We are not locking this table, but instead
+  # we can use insert ignore to make sure we do not try get an error
+  # in the obvious race; the user loading pages at the same time, say
+  # when I restart Chrome and dozens of tabs all reload at the same time.
+  # I was getting multiple alerts for same announcement cause of
+  # mulitple entries in the apt_announcement_info for me. 
+  #
+  $query_result =
+        DBQueryWarn('select a.idx from apt_announcements as a '.
+                    'left join apt_announcement_info as i on '.
+                    '     a.idx=i.aid and '.
+                    '     ((a.uid_idx is NULL and i.uid_idx="'.$uid_idx.'") or '.
+                    '      (a.uid_idx is not NULL and a.uid_idx=i.uid_idx)) '.
+                    'where a.portal="'.$PORTAL_GENESIS.'" and '.
+                    '      a.retired=0 and i.uid_idx is NULL and '.
+                    '      (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'")');
   while ($row = mysql_fetch_row($query_result)) {
-      DBQueryWarn('insert into apt_announcement_info set aid="'.$row[0].'", uid_idx="'.$uid_idx.'",seen_count=0');
+      DBQueryWarn('insert ignore into apt_announcement_info set '.
+                  '    aid="'.$row[0].'", uid_idx="'.$uid_idx.'",seen_count=0');
   }
 
   $query_result =
@@ -730,13 +554,12 @@ function GET_ANNOUNCEMENTS($user, $update = true)
       $html =
           "<div class='alert $style alert-dismissible' ".
           "     role='alert' style='margin-top: -10px; margin-bottom: 12px; ".
-          "     margin-left: 40px; margin-right: 40px; ".
           "     padding-top: 10px; padding-bottom: 10px;'>\n";
       $html .=
           "  <button onclick='window.APT_OPTIONS.announceDismiss($aid)' " .
-          "     type='button' class='close' ".
-          "     data-dismiss='alert' aria-label='Close'>".
-          "    <span aria-hidden='true'>&times;</span></button>".
+          "     type='button' class='close btn-close' ".
+          "     data-dismiss='alert' data-bs-dismiss='alert' aria-label='Close'>".
+          "    <span aria-hidden='true'></span></button>".
           "      <span>$text</span>";
 
       if ($url) {
@@ -761,36 +584,17 @@ $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
         echo "</div>\n";
     }
     if (!$embedded) {
-        if ($PORTAL_NSFNUMBER) {
-            SpitNSFModal();
-        }
         echo "</div>\n";
-        echo "
-          <!--- Footer -->
-          <div>
-           <div id='footer'>
-            <div class='pull-left'>
-              <a href='http://www.emulab.net' target='_blank'>
-                 Powered by
-                 <img src='$APTBASE/images/emulab-whiteout.png'
-                      id='elabpower'></a>
-            </div>
-            <span>Question or comment? Join the
-               <a href='https://groups.google.com/forum/#!forum/${PORTAL_HELPFORUM}'
-                  target='_blank'>Help Forum</a></span>
-               <div class='pull-right'>\n";
-        if ($PORTAL_NSFNUMBER) {
-            echo " <a data-toggle='modal' style='margin-right: 10px;'
-                   href='#nsf_supported_modal'
-	           data-target='#nsf_supported_modal'>Supported by NSF</a>\n";
-        }
-        echo "&copy; 2021
-              <a href='http://www.utah.edu' target='_blank'>
-                 The University of Utah</a>
-               </div>
-           </div>
-          </div>
-         <!-- Placed at the end of the document so the pages load faster -->\n";
+        
+        #
+        # The footer is now a template.
+        #
+        EchoTemplate("mainFooter", "template/footer.html");
+        echo "<div id='mainfooter-div'></div>\n";
+    
+        echo "<script type='text/javascript'>\n";
+        echo "  window.APT_OPTIONS.drawMainFooter();\n";
+        echo "</script>\n";
     }
     EchoTemplateList($PORTAL_TEMPLATES);
     echo "</body></html>\n";
@@ -862,132 +666,6 @@ function SPITAJAX_ERROR($code, $msg)
 	'value' => $msg
 	);
     echo json_encode($results);
-}
-
-#
-# Spit out an info tooltip.
-#
-function SpitToolTip($info)
-{
-    echo "<a href='#' class='btn btn-xs' data-toggle='popover' ".
-	"data-content='$info'> ".
-        "<span class='glyphicon glyphicon-question-sign'></span> ".
-        "</a>\n";
-}
-
-#
-# Spit out the verify modal. We are not using real password authentication
-# like the rest of the Emulab website. Assumed to be inside of a form
-# that handles a create button.
-#
-function SpitVerifyModal($id, $label)
-{
-    echo "<!-- This is the user verify modal -->
-          <div id='$id' class='modal fade'>
-            <div class='modal-dialog'>
-            <div class='modal-content'>
-               <div class='modal-header'>
-                <button type='button' class='close' data-dismiss='modal'
-                   aria-hidden='true'>&times;</button>
-                <h3>Important</h3>
-               </div>
-               <div class='modal-body'>
-                    <p>Check your email for a verification code, and
-                       enter it here:</p>
-                       <div class='form-group'>
-                        <input name='verify' class='form-control'
-                               placeholder='Verification code'
-                               autofocus type='text' />
-                       </div>
-                       <div class='form-group'>
-                        <button class='btn btn-primary form-control'
-                            id='verify_modal_submit'
-                            type='submit' name='create'>
-                            $label</button>
-                       </div>
-               </div>
-            </div>
-            </div>
-         </div>\n";
-}
-
-#
-# Please Wait.
-#
-function SpitWaitModal($id)
-{
-    echo "<!-- This is the Please Wait modal -->
-          <div id='$id' class='modal fade'>
-            <div class='modal-dialog'>
-            <div class='modal-content'>
-               <div class='modal-header'>
-                <center><h3>Please Wait</h3></center>
-               </div>
-               <div class='modal-body'>
-                 <center><img src='images/spinner.gif' /></center>
-               </div>
-            </div>
-            </div>
-         </div>\n";
-    ?>
-	<script>
-	function ShowWaitModal(name) { $('#' + name).modal('show'); }
-	function HideWaitModal(name) { $('#' + name).modal('hide'); }
-	</script>
-    <?php
-}
-
-#
-# Oops modal.
-#
-function SpitOopsModal($id)
-{
-    echo "<!-- This is the Oops modal -->
-          <div id='${id}_modal' class='modal fade'>
-            <div class='modal-dialog'>
-            <div class='modal-content'>
-               <div class='modal-header'>
-                 <button type='button'
-                      class='btn btn-default btn-sm pull-right' 
-                      data-dismiss='modal' aria-hidden='true'>
-                   Close</button>
-                 <center><h3>Oops!</h3></center>
-               </div>
-               <div class='modal-body'>
-                 <div id='${id}_text'></div>
-               </div>
-            </div>
-            </div>
-         </div>\n";
-}
-
-function SpitNSFModal()
-{
-    global $PORTAL_NSFNUMBER;
-    
-    echo "<!-- This is the NSF Supported modal -->
-          <div id='nsf_supported_modal' class='modal fade'>
-            <div class='modal-dialog'>
-             <div class='modal-content'>
-              <div class='modal-body'>
-                This material is based upon work supported by the
-                National Science Foundation under Grant
-                No. ${PORTAL_NSFNUMBER}. Any opinions, findings, and
-                conclusions or recommendations expressed in this
-                material are those of the author(s) and do not
-                necessarily reflect the views of the National Science
-                Foundation.
-                <br><br>
-                <center>
-                <button type='button'
-                     class='btn btn-default btn-sm' 
-                     data-dismiss='modal' aria-hidden='true'>
-                  Close</button>
-                </center>
-              </div>
-             </div>
-            </div>
-         </div>\n";
 }
 
 function SpitPageReplace($newpage, $when = 0) {

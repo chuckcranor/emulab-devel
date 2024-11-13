@@ -1,0 +1,34 @@
+#
+# Add sitevar
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    # Sitevars
+    my %value = (
+	"general/panic_does_recovery_mode" => 0,
+    );
+    my %desc = (
+	"general/panic_does_recovery_mode" => "When non-zero, panic mode level 1 will use the recovery MFS instead of the admin MFS.",
+    );
+
+    foreach my $name (keys %value) {
+	my $val = $value{$name};
+	my $desc = $desc{$name};
+	DBQueryFatal("INSERT INTO sitevariables VALUES ".
+		     " ('$name',NULL,'$val','$desc',0)")
+	    if (!TBSiteVarExists("$name"));
+    }
+
+    return 0;
+}
+
+1;
+
+# Local Variables:
+# mode:perl
+# End:

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -73,7 +73,7 @@ my %results = ();
 # This the binding string we pass along to startExperiment.
 #
 my $bindingsTemplate =
-    '{"Where" : "%s", "NodeID" : "%s", "Type" : "%s", "ComputeType" : "d430"}';
+    '{"Where" : "%s", "NodeID" : "%s", "Type" : "%s", "ComputeType" : "Any"}';
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -608,7 +608,7 @@ sub NotifyTBOPS($$)
 	print "$message\n";
 	return;
     }
-    SENDMAIL("stoller\@flux.utah.edu", $subject, $message, $TBOPS);
+    SENDMAIL("stoller\@emulab.net", $subject, $message, $TBOPS);
 }
 
 sub FlipTo($)

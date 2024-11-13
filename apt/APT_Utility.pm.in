@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2021 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,6 +33,7 @@ use Date::Parse;
 use Carp;
 use Exporter;
 use POSIX qw(ceil);
+use Sys::Syslog qw(:standard :macros);
 use vars qw(@ISA @EXPORT);
 
 @ISA    = "Exporter";
@@ -48,12 +49,15 @@ use Group;
 use GeniHRN;
 use GeniUser;
 use emutil;
+use libEmulab;
 
 # Configure variables
 my $TB		  = "@prefix@";
 my $MAINSITE      = @TBMAINSITE@;
 my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
+my $LOG_TESTBED   = "@LOG_TESTBED@";
+my $TUTORIALSTATS = 0;
 
 #
 # Find all of the instances a user has (should have) an account on, and
@@ -194,7 +198,6 @@ sub ReservationUtilization($$)
     }
     foreach my $ref (@tmp) {
 	my $stamp     = $ref->{'t'};
-	my $reserved  = $ref->{'reserved'};
 	my $allocated = $ref->{'allocated'};
 	$ref->{'tt'}  = TBDateStringGMT($ref->{'t'});
 
@@ -269,3 +272,62 @@ sub ExtensionUnlock()
 {
     DBQueryWarn("select RELEASE_LOCK('maxextlock')");
 }
+
+#
+# For gathering stats during stress testing for tutorials.
+#
+sub TutorialStat($)
+{
+    my ($msg) = @_;
+
+    return
+	if (!$TUTORIALSTATS);
+
+    my $load = LoadAverage();
+
+    openlog("tutorial-stats", "pid", $LOG_TESTBED);
+    syslog(LOG_INFO, "$msg (load $load)");
+    closelog();
+}
+
+#
+# Next Business Day. 
+#
+sub NextBusinessDay(;$)
+{
+    my ($now) = @_;
+    require DateTime;
+    require DateTime::Duration;
+
+    if (!defined($now)) {
+	$now = DateTime->now(time_zone => 'local');
+    }
+    else {
+	$now = DateTime->from_epoch(epoch => $now, time_zone => 'local');
+    }
+    my $wday = $now->day_of_week;
+    my $incr;
+
+    SWITCH: for ($wday) {
+	/^[71234]$/ && do {
+	    $incr = 1;
+	    last SWITCH;
+	};
+	/^[5]$/ && do {
+	    $incr = 3;
+	    last SWITCH;
+	};
+	/^[6]$/ && do {
+	    $incr = 2;
+	    last SWITCH;
+	};
+    };
+    my $nbd = $now->add_duration(DateTime::Duration->new(days => $incr));
+    $nbd->set_hour(9);
+    $nbd->set_minute(0);
+    $nbd->set_second(0);
+    return $nbd->epoch;
+}
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014, 2018, 2020, 2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,7 +71,7 @@ elseif ($FirstInitState) {
 }
 else {
     header("Location: portal/signup.php");
-    
+    exit(0);
 }
 unset($addpubkeyargs);
 
@@ -494,9 +494,6 @@ function SPITFORM($formfields, $returning, $errors)
     echo "<tr>
               <td colspan=2>*Can we list your project publicly as
                              an \"Emulab User?\":
-                  <br>
-                  (See our <a href=\"projectlist.php3\"
-                              target=\"Users\">Users</a> page)
               </td>
               <td><input type=checkbox value=checked
                          name=\"formfields[proj_public]\"

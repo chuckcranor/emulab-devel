@@ -1,0 +1,26 @@
+TB=@prefix@
+
+export PYTHONHOME=@prefix@/venv/fabric/lib/python3.9
+export PYTHONPATH=@prefix@/venv/fabric/lib/python3.9:@prefix@/venv/fabric/lib/python3.9/lib-dynload
+export LD_LIBRARY_PATH=@prefix@/venv/fabric/lib
+
+export FABRIC_CREDMGR_HOST=cm.fabric-testbed.net
+export FABRIC_ORCHESTRATOR_HOST=orchestrator.fabric-testbed.net
+export FABRIC_BASTION_HOST=bastion.fabric-testbed.net
+export FABRIC_CORE_API_HOST=uis.fabric-testbed.net
+
+# Find your real project ID from FABRIC portal: https://portal.fabric-testbed.net/.
+export FABRIC_PROJECT_ID=12a5a713-f87d-4ede-aa14-111f0993e7bc
+
+# Download FABRIC token from FABRIC credential manager: https://cm.fabric-testbed.net/.
+#export FABRIC_TOKEN_LOCATION=@prefix@/fabric/token.json
+
+# Find your real FABRIC bastion host username at https://portal.fabric-testbed.net/user.
+export FABRIC_BASTION_USERNAME=lbstoller_0051589302
+export FABRIC_BASTION_KEY_LOCATION=@prefix@/fabric/bastion
+
+export FABRIC_SLICE_PRIVATE_KEY_FILE=@prefix@/fabric/fabric
+export FABRIC_SLICE_PUBLIC_KEY_FILE=@prefix@/fabric/fabric.pub
+
+export FABRIC_LOG_LEVEL=DEBUG
+export FABRIC_LOG_FILE=/tmp/fablib/fablib.log

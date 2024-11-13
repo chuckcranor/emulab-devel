@@ -2,7 +2,8 @@ $(function ()
 {
     'use strict';
     var templates      = APT_OPTIONS.fetchTemplateList(['list-rfranges',
-				       'waitwait-modal', 'oops-modal']);
+ 			   "rfrange-history", 'waitwait-modal', 
+			   'oops-modal', 'txgraph']);
     var template       = _.template(templates['list-rfranges']);
     var waitwait       = templates['waitwait-modal'];
     var oops           = templates['oops-modal'];
@@ -18,6 +19,8 @@ $(function ()
 	var xmlthing3 =
 	    sup.CallServerMethod(null, "rfrange", "AllInuseRanges");
 
+	LoadHistory();
+
 	$.when(xmlthing1, xmlthing2, xmlthing3)
 	    .done(function(result1, result2, result3) {
 		console.info(result1, result2, result3);
@@ -28,6 +31,12 @@ $(function ()
 		    "inuse_ranges"   : result3.value,
 		};
 		$('#main-body').html(template(args));
+		$('#main-body').append(templates['txgraph']);
+
+		$('[data-toggle="tooltip"]').tooltip({
+		    placement: 'auto',
+		    delay: { "show": 100, "hide": 100 },
+		});
 
 		if (_.size(result1.value)) {
 		    $('#global-ranges').removeClass("hidden");
@@ -52,14 +61,178 @@ $(function ()
 		if (_.size(result3.value)) {
 		    $('#inuse-ranges').removeClass("hidden");
 
+		    var rfhash = [];
+		    var instances = {};
+		    _.each(result3.value, function (range) {
+			rfhash[range.key] = range;
+			instances[range.uuid] = range;
+		    });
+
 		    $('#inuse-ranges .tablesorter')
 			.tablesorter({
 			    theme : 'bootstrap',
 			    widgets: ["uitheme", "zebra"],
 			    headerTemplate : '{content} {icon}',
 			});
+		    $('#inuse-ranges .txgraph-button')
+			.click(function (event) {
+			    event.preventDefault();
+			    var key = $(this).data("key");
+			    var record = rfhash[key];
+
+			    console.info(record);
+			    var args = {
+				"selector" : "#txgraph-modal",
+				"txlist"   : record.txlist,
+				"instances": null,
+				"instance" : record,
+			    }
+			    ShowTXGraph(args);
+			});
+
+		    $('#global-inuse-button').click(function (event) {
+			event.preventDefault();
+			var txlist = [];
+		
+			$('#inuse-ranges tbody > tr').not(".filtered")
+			    .find(".txgraph-button").each(function () {
+				var key = $(this).data("key");
+				var record = rfhash[key];
+
+				txlist = txlist.concat(record.txlist);
+			    });
+			console.info(txlist);
+			ShowTXGraph({
+			    "selector" : "#txgraph-modal",
+			    "txlist"   : txlist,
+			    "instances": instances,
+			    "instance" : null,
+			});
+		    });
 		}
 	    });
+    }
+
+    function LoadHistory()
+    {
+	var callback = function (json) {
+	    console.info("history", json);
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    var instances = {};
+	    var rfhash = [];
+	    _.each(json.value, function (range) {
+		rfhash[range.key] = range;
+		instances[range.uuid] = range;
+	    });
+	    
+	    var template = _.template(templates['rfrange-history']);
+	    $('#history-ranges .waiting')
+		.html(template({"ranges" : json.value}));
+
+	    // Default dates for the date pickers.
+	    var first = _.first(json.value);
+	    var last  = _.last(json.value);
+
+	    var start_from = moment(last.started).format("L");
+	    var start_to   = moment(first.started).format("L");
+	    var end_from   = moment(last.destroyed).format("L");
+	    var end_to     = moment(first.destroyed).format("L");
+
+	    $('#history-ranges .tablesorter')
+		.tablesorter({
+		    theme : 'bootstrap',
+		    widgets: ["uitheme", "zebra", "filter"],
+		    headerTemplate : '{content} {icon}',
+		    widthFixed : true,
+		    
+		    widgetOptions: {
+			// class name applied to filter row and each input
+			//filter_cssFilter  : 'form-control input-sm',
+			// search from beginning
+			filter_startsWith : false,
+			// Set this option to false for case sensitive search
+			filter_ignoreCase : true,
+			// Only one search box.
+			filter_columnFilters : true,
+
+			filter_formatter : {
+			    // Date (two inputs)
+			    7 : function($cell, indx) {
+				return $.tablesorter.filterFormatter
+				    .uiDatepicker( $cell, indx, {
+					textFrom : "",
+					textTo : "-",
+					from : start_from,
+					to   : start_to,
+					changeMonth : true,
+					changeYear : true
+				    });
+			    },
+			    // Date (two inputs)
+			    8 : function($cell, indx) {
+				return $.tablesorter.filterFormatter
+				    .uiDatepicker( $cell, indx, {
+					textFrom : "",
+					textTo : "-",
+					from : end_from,
+					to   : end_to,
+					changeMonth : true,
+					changeYear : true
+				    });
+			    },
+			},
+			filter_placeholder : {
+			    from : 'From...',
+			    to   : 'To...'
+			},
+		    }
+		});
+	    $('#history-ranges .txgraph-button').click(function (event) {
+		event.preventDefault();
+		var key = $(this).data("key");
+		var record = rfhash[key];
+
+		console.info(record);
+		var args = {
+		    "selector" : "#txgraph-modal",
+		    "txlist"   : record.txlist,
+		    "instances": null,
+		    "instance" : record,
+		}
+		ShowTXGraph(args);
+	    });
+
+	    $('#global-history-button').click(function (event) {
+		event.preventDefault();
+		var txlist = [];
+		
+		$('#history-ranges tbody > tr').not(".filtered")
+		    .find(".txgraph-button").each(function () {
+			var key = $(this).data("key");
+			var record = rfhash[key];
+
+			txlist = txlist.concat(record.txlist);
+		    });
+		console.info(txlist);
+		ShowTXGraph({
+		    "selector" : "#txgraph-modal",
+		    "txlist"   : txlist,
+		    "instances": instances,
+		    "instance" : null,
+		});
+	    });
+	};
+	sup.CallServerMethod(null, "rfrange", "RangeHistory", null, callback);
+    }
+
+    // Wrapper to handle the defer
+    function ShowTXGraph(args) {
+	var defer = $.Deferred();
+	window.ShowTXGraph("#txgraph-modal", defer);
+	defer.resolve(args);
     }
     $(document).ready(initialize);
 });

@@ -39,9 +39,16 @@ int		tmcd_quote_hash(void *, size_t, void *);
 int		tmcd_quote_verifysig(void *, void *, size_t, void *);
 X509*		tmcd_sslgetpeercert(void);
 X509*		tmcd_sslrowtocert(char*, char*);
-int		isssl;
-int		nousessl;
-int		usetpm;
+
+/*
+ * SSL vars:
+ * isssl: used by tmcd to determine if the connection is ssl or not.
+ * nousessl: optional use of SSL.
+ * usetpm: optional use of TPM.
+ */
+extern int	isssl;
+extern int	nousessl;
+extern int	usetpm;
 
 /*
  * The client sends this tag to indicate that it is SSL capable.

@@ -1,0 +1,22 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("projects", "ota_notified")) {
+	DBQueryFatal("alter table projects add ".
+		     "  `ota_notified` datetime default NULL");
+    }
+    if (!DBSlotExists("users", "ota_agreed")) {
+	DBQueryFatal("alter table users add ".
+		     "  `ota_agreed` datetime default NULL");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

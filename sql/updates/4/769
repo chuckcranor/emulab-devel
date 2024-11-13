@@ -1,0 +1,24 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBTableExists("project_approval_correspondence")) {
+        DBQueryFatal("CREATE TABLE `project_approval_correspondence` ( ".
+		     " `idx` smallint(5) unsigned NOT NULL auto_increment, ".
+		     " `pid` varchar(48) NOT NULL default '', ".
+		     " `pid_idx` mediumint(8) unsigned NOT NULL default '0', ".
+		     " `sent` datetime DEFAULT NULL, ".
+		     " `message` text NOT NULL, ".
+		     " PRIMARY KEY  (`pid_idx`,`idx`) ".
+		     ") ENGINE=MyISAM DEFAULT CHARSET=latin1");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:

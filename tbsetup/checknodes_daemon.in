@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2021 University of Utah and the Flux Group.
+# Copyright (c) 2009-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -149,11 +149,6 @@ if (!defined($hwdown_experiment)) {
     fatal("Cannot find the hwdown experiment.");
 }
 
-#
-# New library resturns an object.
-#
-my $loadobj = libosload_new->New();
-
 # Go to ground.
 if (! $debug) {
     if (TBBackGround($LOGFILE)) {
@@ -219,7 +214,7 @@ while (1) {
             "       r.pid is null and n.role='testnode' and ".
             "       t.class!='switch' and ".
 	    "       t.isvirtnode=0 and ".
-            "       (UNIX_TIMESTAMP(now()) - n.state_timestamp) > 600");
+            "       (UNIX_TIMESTAMP() - n.state_timestamp) > 600");
     goto loop
 	if (!$query_result);
 
@@ -247,7 +242,7 @@ while (1) {
 	# push it into the hwcheckup experiment.
 	#
 	if ($node->MoveReservation($experiment)) {
-	    logit("Could not move $node to $experiment", 1);
+	    logit("Could not move $nodeid to $experiment", 1);
 	    next;
 	}
 	$node->InsertNodeLogEntry($elabman, TB_DEFAULT_NODELOGTYPE(),
@@ -285,22 +280,29 @@ while (1) {
     logit("Checking nodes @nodelist", 0);
 
     if (@nodelist) {
+	my $loadobj = libosload_new->New();
+	if (!$loadobj) {
+	    logit("WARNING: could not allocate an osload object, ".
+		  "hoping for better luck on the next pass.", 1);
+	    goto loop;
+	}
+
 	logit("Running $GENTOPOFILE ...", 0);
 	if (system("$GENTOPOFILE $pid $eid")) {
 	    logit("$GENTOPOFILE failed", 1);
-	    next;
+	    goto loop;
 	}
 	logit("Running $EXPORTS_SETUP ...", 0);
 	if (system("$EXPORTS_SETUP")) {
 	    logit("$EXPORTS_SETUP failed", 1);
-	    next;
+	    goto loop;
 	}
 	# The nodes will not boot locally unless there is a DNS
 	# record.
 	logit("Running $NAMED_SETUP ...", 0);
 	if (system("$NAMED_SETUP")) {
 	    logit("$NAMED_SETUP failed", 1);
-	    next;
+	    goto loop;
 	}
 	my @nodenames       = map { $_->node_id() } @nodelist;
 	my %reload_args     = ();
@@ -313,7 +315,13 @@ while (1) {
 	logit("Running osload on @nodenames", 0);
 	my $failures = $loadobj->osload(\%reload_args, \%reload_results);
 	if ($failures) {
-	    logit("osload returned $failures failures", 1);
+	    my @failed = ();
+	    foreach my $node (@nodelist) {
+		if ($reload_results{$node->node_id()}) {
+		    push(@failed, $node->node_id());
+		}
+	    }
+	    logit("osload returned failures: @failed", 1);
 	}
 
 	foreach my $node (@nodelist) {
@@ -336,36 +344,32 @@ while (1) {
 		 "The nodes have been taken out of the pool.\n");
     }
     if (@informtbopswarn) {
-	my $count = scalar(@informtbopswarn);
-
 	system("$NFREE $pid $eid @informtbopswarn");
 	if ($?) {
 	    fatal("Could not free nodes: @informtbopswarn");
 	}
 	else {
-	    SENDMAIL($TBOPS, "$count nodes appear to be okay",
-		     "Nodes:\n".
-		     "  " . join(" ", @informtbopswarn) . "\n".
-		     "have reloaded and rebooted okay.\n\n".
-		     "The nodes have been freed.\n");
+	    # XXX just log nodes that passed, don't send mail.
+	    logit("successfully reloaded and freed: ".
+		  join(" ", @informtbopswarn), 1);
 	}
     }
 
     logit("Running $GENTOPOFILE ...", 0);
     if (system("$GENTOPOFILE $pid $eid")) {
 	logit("$GENTOPOFILE failed", 1);
-	next;
+	goto loop;
     }
     logit("Running $EXPORTS_SETUP ...", 0);
     if (system("$EXPORTS_SETUP")) {
 	logit("$EXPORTS_SETUP failed", 1);
-	next;
+	goto loop;
     }
     # The nodes will not boot locally unless there is a DNS record.
     logit("Running $NAMED_SETUP ...", 0);
     if (system("$NAMED_SETUP")) {
 	logit("$NAMED_SETUP failed", 1);
-	next;
+	goto loop;
     }
   loop:
     sleep(($debug ? 10 : 60));

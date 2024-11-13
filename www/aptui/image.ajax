@@ -183,6 +183,7 @@ function Do_GetInfo()
         $blob["os_version"]       = $osinfo->version();
         $blob["os_features"]      = preg_split("/,/", $osinfo->osfeatures());
         $blob["xen_capable"]      = 0;
+        $blob["taint_states"]     = $osinfo->taint_states();
         if ($osinfo->def_parentosid()) {
 	    $n_image = Image::Lookup($osinfo->def_parentosid());
             if ($n_image) {
@@ -223,7 +224,7 @@ function Do_GetInfo()
             $blob["deprecated_message"] = $image->deprecated_message();
         }
     }
-
+        
     if ($image->parent_imageid()) {
         $p_imageid   = $image->parent_imageid();
         $p_version   = $image->parent_version();
@@ -310,6 +311,7 @@ function Do_Modify()
                      "listed"          => true,
                      "ims_noreport"    => true,
                      "osfeatures"      => true,
+                     "taint_states"   => true,
     );
     if (!array_key_exists($field, $allowed)) {
 	SPITAJAX_ERROR(-1, "Not allowed to change this field");
@@ -319,14 +321,21 @@ function Do_Modify()
 	SPITAJAX_ERROR(-1, "No permission to change this field");
 	return -1;
     }
-    if ($field == "reboot_waittime" || $field == "osfeatures") {
+    if ($field == "reboot_waittime" || $field == "osfeatures" ||
+        $field == "taint_states") {
         $table = "os_info";
     }
     else {
         $table = "images";
     }
-    if (!TBcheck_dbslot($value, $table, $field,
-                       TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+    if ($field == "taint_states") {
+        if ($value != "blackbox" && $value != "useronly" && $value != "") {
+            SPITAJAX_ERROR(1, "Illegal value");
+            return 1;
+        }
+    }
+    elseif (!TBcheck_dbslot($value, $table, $field,
+                        TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	SPITAJAX_ERROR(1, "Illegal value: " . TBFieldErrorString());
         return 1;
     }
@@ -339,12 +348,19 @@ function Do_Modify()
         }
     }
     $safe_value = DBQuoteSpecial($value);
-    if ($field == "osfeatures" || $field == "reboot_waittime") {
+    if ($field == "osfeatures" || $field == "reboot_waittime" ||
+        $field == "taint_states") {
         $imageid = $image->imageid();
         $version = $image->version();
-        
+
+        if ($field == "taint_states" && $value == "") {
+            $safe_value = "null";
+        }
+        else {
+            $safe_value = "'" . $safe_value . "'";
+        }
         $query_result = 
-            DBQueryWarn("update os_info_versions set ${field}='$safe_value' ".
+            DBQueryWarn("update os_info_versions set ${field}=$safe_value ".
                         "where osid='$imageid' and vers='$version'");
     }
     elseif ($field == "architecture" && $value == "") {
@@ -511,7 +527,7 @@ function Do_Delete()
     $unix_pgid = $project->unix_gid();
 
     $retval = SUEXEC($this_user->uid(), $unix_pgid,
-                     "webdelete_image -F $purgeopt $imageid",
+                     "webdelete_image -V -F $purgeopt $imageid",
                      SUEXEC_ACTION_CONTINUE);
     if ($retval) {
 	SPITAJAX_ERROR(-1, "Internal error, operations have been notified.");
@@ -575,7 +591,7 @@ function Do_Clone()
     $errors = array();
     $node   = null;
 
-    $required = array("image_pid", "image_gid", "imagename", "description",
+    $required = array("node_id", "imagename", "description",
                       "os_version", "shared-global");
 
     foreach ($required as $field) {
@@ -607,12 +623,22 @@ function Do_Clone()
     elseif (! $baseimage->AccessCheck($this_user, $TB_IMAGEID_READINFO)) {
         $errors["error"] = "Not enough permission to clone image";
     }
+
+    if (!TBvalid_description($formfields["description"])) {
+        $errors["description"] = TBFieldErrorString();
+    }
+    if (!TBvalid_imagename($formfields["imagename"])) {
+        $errors["imagename"] = TBFieldErrorString();
+    }
+    if (!TBcheck_dbslot($formfields["os_version"], "os_info", "version",
+                       TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+        $errors["os_version"] = TBFieldErrorString();
+    }
     
     #
-    # The node is optional for admins.
     # Make sure the node is running the image we are cloning.
     #
-    if (isset($formfields["node_id"]) && $formfields["node_id"] != "") {
+    if (TBvalid_node_id($formfields["node_id"])) {
         $node = Node::Lookup($formfields["node_id"]);
         if (!$node) {
             $errors["node_id"] = "No such node";
@@ -634,48 +660,8 @@ function Do_Clone()
             }
         }
     }
-    elseif (!ISADMIN()) {
-        # Mere users have no reason to clone an image without a snapshot.
+    else {
         $errors["node_id"] = "Missing field";
-    }
-    if (!TBvalid_pid($formfields["image_pid"])) {
-        $errors["image_pid"] = "Invalid project name";
-    }
-    elseif (! ($project = Project::Lookup($formfields["image_pid"]))) {
-        $errors["image_pid"] = "No such project";
-    }
-    if (!TBvalid_gid($formfields["image_gid"])) {
-	$errors["image_gid"] = "Invalid group name";
-    }
-    elseif ($project &&
-	    !($group =
-              $project->LookupSubgroupByName($formfields["image_gid"]))) {
-	$errors["image_gid"] = "No such group";
-    }
-    # Permission check if we managed to get a proper group above.
-    if ($group &&
-        ! $group->AccessCheck($this_user, $TB_PROJECT_MAKEIMAGEID)) {
-        $errors["image_pid"] = "Not enough permission";
-    }
-    if (!TBvalid_imagename($formfields["imagename"])) {
-        $errors["imagename"] = "Invalid image name";
-    }
-    elseif ($project &&
-            Image::LookupByName($project, $formfields["imagename"])) {
-        $errors["imagename"] = "Already in use";
-    }
-    
-    if (!TBvalid_description($formfields["description"])) {
-        $errors["description"] = "Invalid description";
-    }
-    if (!TBcheck_dbslot($formfields["os_version"], "os_info", "version",
-                        TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-        $errors["os_version"] = "Invalid version string";
-    }
-    if (! ($formfields["shared-global"] == "shared" ||
-           $formfields["shared-global"] == "global" ||
-           $formfields["shared-global"] == "none")) {
-        $errors["shared-global"] = "Invalid shared/global value";
     }
     if (count($errors)) {
 	SPITAJAX_ERROR(2, $errors);
@@ -686,106 +672,63 @@ function Do_Clone()
 	return;
     }
 
-    #
-    # Build up argument array to pass along. A lot comes from the
-    # baseimage, to be compatible with the existing code paths.
-    #
-    $args = array();
-    $args["pid"]         = $formfields["image_pid"];
-    $args["gid"]         = $formfields["image_gid"];
-    $args["imagename"]   = $formfields["imagename"];
-    $args["description"] = $formfields["description"];
-    $args["loadpart"]    = $baseimage->loadpart();
-    $args["OS"]          = $baseinfo->OS();
-    $args["version"]     = $formfields["os_version"];
-    $args["op_mode"]     = $baseinfo->op_mode();
-    if (isset($formfields["wholedisk"]) && $formfields["wholedisk"] != "") {
-        $args["wholedisk"]  = 1;
-    }
-    if ($formfields["shared-global"] == "shared") {
-        $args["shared"] = 1;
-    }
-    elseif ($formfields["shared-global"] == "global") {
-        $args["global"] = 1;
-    }
-    $args["noexport"]        = $baseimage->noexport();
-    $args["mbr_version"]     = $baseimage->mbr_version();
-    $args["osfeatures"]      = $baseinfo->osfeatures();
-    if ($baseimage->architecture()) {
-        $args["architecture"] = $baseimage->architecture();
-    }
-    if ($baseinfo->reboot_waittime() && $baseinfo->reboot_waittime() != "") {
-        $args["reboot_waittime"] = $baseinfo->reboot_waittime();
-    }
-    # Send the type array anyway.
-    foreach ($baseimage->Types() as $type) {
-        $args["mtype_$type"] = 1;
-    }
-    if ($baseinfo->def_parentosid()) {
-        $p_image = Image::Lookup($baseinfo->def_parentosid());
-        if ($p_image) {
-            $args["def_parentosid"] = $p_image->pid() .
-                                    "," . $p_image->imagename();
-        }
-    }
-    if (! ($newimage =
-           Image::NewImageId(1, $formfields["imagename"], $args,
-                             $this_user, $group, null, $errors))) {
-	SPITAJAX_ERROR(-1, $suexec_output);
-        sleep(1);
+    $experiment = $node->Reservation();
+    if (!$experiment) {
+        SPITAJAX_ERROR(-1, "not currently reserved to an experiment");
         return;
     }
-    #
-    # OK, if there is a node, we want to start the cloning. We pass a
-    # webtask through, so that Do_SnapshotStatus() below can pick up
-    # the status for the imaging modal.
-    #
-    if (isset($node)) {
-        $experiment = $node->Reservation();
-        if (!$experiment) {
-            SPITAJAX_ERROR(-1, "not currently reserved to an experiment");
-            return;
-        }
-        $node_pid = $experiment->pid();
-        $unix_gid = $experiment->UnixGID();
-        $unix_groups = $project->unix_gid() . "," . $unix_gid;
-        if ($project->pid() != $node_pid) {
-            $unix_groups = "$unix_groups,$node_pid";
-        }
-        $webtask = WebTask::CreateAnonymous();
-        $webtask->SetTaskValue("node_id", $node->node_id());
-        $webtask->Store();
-
-        #
-        # On this path, the image does not exist, so if this fails then
-        # we want to kill the descriptor to avoid cruft in the DB.
-        # Note that we created the descriptor above, so force with -C
-        #
-        $retval = SUEXEC($this_uid, $unix_groups,
-                         "webclone_image -C -t " . $webtask->task_id() .
-                         " " . escapeshellarg($formfields["imagename"]) .
-                         " " . $node->node_id(),
-                         SUEXEC_ACTION_IGNORE);
-
-        if ($retval != 0) {
-            $webtask->Refresh();
-            
-            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-            
-            if (!$webtask->exited() || $retval < 0) {
-                SPITAJAX_ERROR(-1,
-                               "Internal error starting snapshot" .
-                               ($webtask->output() ?
-                                ": " . $webtask->output() : ""));
-            }
-            else {
-                # Need to pass exitcode through on this one.
-                SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
-            }
-            $webtask->Delete();
-            return;
-        }
+    $project  = $experiment->Project();
+    $node_pid = $experiment->pid();
+    $unix_gid = $experiment->UnixGID();
+    $unix_groups = $project->unix_gid() . "," . $unix_gid;
+    if ($project->pid() != $node_pid) {
+        $unix_groups = "$unix_groups,$node_pid";
     }
+    $webtask = WebTask::CreateAnonymous();
+    $webtask->SetTaskValue("node_id", $node->node_id());
+    $webtask->Store();
+
+    #
+    # On this path, the image does not exist, so if this fails then
+    # we want to kill the descriptor to avoid cruft in the DB.
+    #
+    $retval = SUEXEC($this_uid, $unix_groups,
+                     "webclone_image -t " . $webtask->task_id() .
+                     " " . escapeshellarg($formfields["imagename"]) .
+                     " " . $node->node_id(),
+                     SUEXEC_ACTION_IGNORE);
+
+    $webtask->Refresh();
+    if ($retval != 0) {
+        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        
+        if (!$webtask->exited() || $retval < 0) {
+            SPITAJAX_ERROR(-1,
+                           "Internal error starting snapshot" .
+                           ($webtask->output() ?
+                            ": " . $webtask->output() : ""));
+        }
+        else {
+            # Need to pass exitcode through on this one.
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->output());
+        }
+        $webtask->Delete();
+        return;
+    }
+    $newimage = Image::Lookup($webtask->TaskValue("imageid"));
+
+    #
+    # Bad place to do this ...
+    #
+    if ($formfields["shared-global"] == "shared") {
+        $newimage->SetSharedGlobal(1, 0);
+    }
+    elseif ($formfields["shared-global"] == "global") {
+        $newimage->SetSharedGlobal(0, 1);
+    }
+    $newimage->SetDescription($formfields["description"]);
+    $newimage->SetOSVersion($formfields["os_version"]);
+
     $url = "show-image.php?imageid=" . $newimage->uuid();
     if (isset($node)) {
         $url .= "&showsnapstatus=1&node_id=" . $node->node_id();

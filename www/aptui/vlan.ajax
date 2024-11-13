@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2022 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,7 @@ chdir("..");
 include_once("webtask.php");
 include_once("experiment_defs.php");
 include_once("node_defs.php");
+include_once("instance_defs.php");
 chdir("apt");
 
 function Do_List()
@@ -55,6 +56,14 @@ function Do_List()
         DBQueryFatal("select * from vlans $clause order by pid,eid");
 
     while ($row = mysql_fetch_array($query_result)) {
+        $experiment = Experiment::Lookup($row['exptidx']);
+        if ($experiment) {
+            $expstats = $experiment->GetStats();
+            if ($expstats->slice_uuid() &&
+                ($instance = Instance::LookupBySlice($expstats->slice_uuid()))) {
+                $row["instance_uuid"] = $instance->uuid();
+            }
+        }
         $result[] = $row;
     }
     SPITAJAX_RESPONSE($result);
@@ -86,6 +95,14 @@ function Do_GetInfo()
 	return -1;
     }
     $row = mysql_fetch_array($query_result);
+    $experiment = Experiment::Lookup($row['exptidx']);
+    if ($experiment) {
+        $expstats = $experiment->GetStats();
+        if ($expstats->slice_uuid() &&
+            ($instance = Instance::LookupBySlice($expstats->slice_uuid()))) {
+            $row["instance_uuid"] = $instance->uuid();
+        }
+    }
 
     if (isset($row["members"]) && $row["members"] != "") {
         $members = array();

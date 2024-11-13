@@ -88,7 +88,6 @@ getvar() {
 #
 #    Disk /dev/sda: 234441648 sectors, 111.8 GiB
 #    Logical sector size: 512 bytes
-#    Disk identifier (GUID): 13673C37-E52B-4BF0-860B-BC8AF00D74DC
 #    Partition table holds up to 128 entries
 #    First usable sector is 34, last usable sector is 234441614
 #    Partitions will be aligned on 2048-sector boundaries
@@ -103,7 +102,6 @@ getvar() {
 #
 #    Disk /dev/sda: 234441648 sectors, 111.8 GiB
 #    Logical sector size: 512 bytes
-#    Disk identifier (GUID): 8639755F-23E6-487A-8740-D464BA75AAD7
 #    Partition table holds up to 128 entries
 #    First usable sector is 34, last usable sector is 234441614
 #    Partitions will be aligned on 2048-sector boundaries
@@ -117,7 +115,6 @@ getvar() {
 #
 #    Disk /dev/sda: 234441648 sectors, 111.8 GiB
 #    Logical sector size: 512 bytes
-#    Disk identifier (GUID): 0C380AF3-14D2-4615-9452-233306CC82D5
 #    Partition table holds up to 128 entries
 #    First usable sector is 34, last usable sector is 234441614
 #    Partitions will be aligned on 2048-sector boundaries
@@ -125,6 +122,19 @@ getvar() {
 #
 #    Number  Start (sector)    End (sector)  Size       Code  Name
 #       1            4096        33558527   16.0 GiB    8300  Linux filesystem
+#      15            2048            4095   1024.0 KiB  EF02  
+#
+# MBR version 104 (aka GPT version 4):
+#
+#    Disk /dev/sda: 234441648 sectors, 111.8 GiB
+#    Sector size (logical/physical): 512/4096 bytes
+#    Partition table holds up to 128 entries
+#    First usable sector is 34, last usable sector is 234441614
+#    Partitions will be aligned on 2048-sector boundaries
+#    Total free space is 100221805 sectors (47.8 GiB)
+#
+#    Number  Start (sector)    End (sector)  Size       Code  Name
+#       1            4096       134221823   64.0 GiB    8300  Linux filesystem
 #      15            2048            4095   1024.0 KiB  EF02  
 #
 tweakgpt() {
@@ -147,6 +157,9 @@ tweakgpt() {
 		;;
 	    33554432s)
 		_CUR=103
+		;;
+	    134217728s)
+		_CUR=104
 		;;
 	    *)
 		if [ $_ALWAYS -eq 1 ]; then

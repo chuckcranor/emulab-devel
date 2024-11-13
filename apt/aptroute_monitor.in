@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2021 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -126,6 +126,20 @@ if (! $impotent) {
 	fatal("Could not mark daemon as running!");
     }
 }
+#
+# Setup a signal handler for newsyslog.
+#
+sub handler()
+{
+    my $SAVEEUID = $EUID;
+    
+    $EUID = 0;
+    ReOpenLog($LOGFILE);
+    $EUID = $SAVEEUID;
+}
+$SIG{HUP} = \&handler
+    if (! ($debug || $oneshot || $impotent));
+
 sleep(5) if (! $debug);
 
 while (1) {
@@ -251,13 +265,25 @@ sub LookForThingsToDo()
 	my $busid      = $bus->busid();
 	my $routeid    = $bus->routeid();
 	my $routename  = $bus->routename();
+	my $instance;
 	my $errmsg;
 
 	next
 	    if ($bus->disabled() || $bus->adminonly());
 	
-	# Current holder of the bus.
-	my ($instance) = APT_Instance::Aggregate->LookupByURN($bus->urn());
+	# Current holder of the bus. Terminated does not count.
+	my @instances = APT_Instance::Aggregate->LookupByURN($bus->urn());
+	foreach my $i (@instances) {
+	    next
+		if ($i->IsTerminated());
+	    
+	    my $aggregate = $i->GetAggregate($bus->urn());
+
+	    if ($aggregate->status() ne "terminated") {
+		$instance = $i;
+		last;
+	    }
+	}
 	
 	# Current holder of the route the bus is on.
 	my $routeholder;
@@ -275,15 +301,7 @@ sub LookForThingsToDo()
 	}
 	if (defined($instance) &&
 	    (!defined($routeholder) || !$instance->SameInstance($routeholder))){
-
-	    #
-	    # If this aggregate is in the terminated state, it no longer
-	    # counts, it is just taking up space in the database until
-	    # the entire instance can be terminated. Say nothing.
-	    #
 	    my $aggregate = $instance->GetAggregate($bus->urn());
-	    next
-		if ($aggregate->status() eq "terminated");
 
 	    print "$busid still held by " . $instance->Printable() . " ";
 
@@ -421,6 +439,18 @@ sub LookForThingsToDo()
 	}
 	$instance->Refresh();
 
+	#
+	# Record the status of all the aggregates before we call, to make
+	# sure that we send one email if/when the removal fails and it is
+	# set to canceled. Another email will be generated later when it
+	# is finally removed (or added back).
+	#
+	my %beforeStatus = ();
+
+	foreach my $agg ($instance->AggregateList()) {
+	    $beforeStatus{$agg->aggregate_urn()} = $agg->status();
+	}
+
 	my $command  = "$SUDO -u $PROTOUSER $WAP $MANAGEINSTANCE ";
 	if (!$impotent) {
 	    $wtask = WebTask->CreateAnonymous();
@@ -458,20 +488,27 @@ sub LookForThingsToDo()
 	# See what was actually removed, since not removing means 
 	# there is no point trying to add it to another instance.
 	#
-	my @tmp = ();
+	my @removed  = ();
+	my @canceled = ();
 	foreach my $bus (@buslist) {
 	    my $urn = $bus->urn();
+	    my $agg = $instance->GetAggregate($urn);
 	    
-	    if ($instance->GetAggregate($urn)) {
+	    if ($agg) {
 		print "$urn could not be removed from instance\n";
 		$failedRemovals{$urn} = $bus;
+
+		if ($beforeStatus{$urn} eq "ready" &&
+		    $agg->status() eq "canceled") {
+		    push(@canceled, $bus);
+		}
 	    }
 	    else {
 		$workedRemovals{$urn} = $bus;
-		push(@tmp, $bus);
+		push(@removed, $bus);
 	    }
 	}
-	if (@tmp) {
+	if (@removed) {
 	    NotifyCreator(
 		$instance,
 		"Mobile endpoints removed from experiment ".
@@ -479,7 +516,17 @@ sub LookForThingsToDo()
 		"The following mobile endpoints have been removed from your\n".
 		"experiment because they are no longer running on a route\n".
 		"that is in use by your experiment.\n\n".
-		"\t" . join(",", map {"bus-" . $_->busid()} @tmp));
+		"\t" . join(",", map {"bus-" . $_->busid()} @removed));
+	}
+	if (@canceled) {
+	    NotifyCreator(
+		$instance,
+		"Mobile endpoints scheduled to be removed from experiment ".
+		$instance->Printable() . "\n",
+		"The following mobile endpoints will be removed from your\n".
+		"experiment because they are no longer running on a route\n".
+		"that is in use by your experiment.\n\n".
+		"\t" . join(",", map {"bus-" . $_->busid()} @canceled));
 	}
       skip:
 	$instance->Unlock();

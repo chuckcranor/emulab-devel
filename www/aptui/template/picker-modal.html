@@ -1,0 +1,170 @@
+<!-- This is the topology view modal -->
+<div id='picker-modal' class='modal fade'>
+  <div class='modal-dialog modal-wide' id='showtopo_dialog'>
+    <div class='modal-content'>
+      <div class='modal-header'>
+	<button type='button' class='close btn-close'
+		data-dismiss='modal' data-bs-dismiss='modal'
+		aria-hidden='true'></button>
+	<h3>Select a Profile</h3>
+      </div>
+      <div class='modal-body'>
+	<!-- This topo diagram goes inside this div -->
+	<div class='row' id='showtopo_container'>
+	  <div class='form-group col-md-3 col-sm-3 col-xs-3'>
+	    <input type='text' class='form-control'
+		   placeholder='Search'
+		   id='profile_picker_search'>
+	    <ul class='list-group' id='profile_name'
+		style="overflow-y: scroll"
+		name='profile'>
+	      <span id='title_recently_used'>
+		<% if (showpopular) { %>Popular<% } else { %>Recent<% } %>
+		<span class='category_collapsable expanded'></span>
+	      </span>
+	      <ul class='list-category' id='recently_used'>
+		<% for (var i = 0; i < recent.length; i++) { 
+		  var key = recent[i][0];
+		  var value = recent[i][1]; %>
+		<li class='list-group-item profile-item clearfix'
+		    value='<%- key %>' name='<%- value.name %>'>
+		  <%- value.name %>
+		  <div class="project_info pull-right">
+		    <%- value.project %></div>
+		</li>
+		<% }; %>
+	      </ul>
+
+	      <% var hidefav = _.size(categories.favorite) ? '' : 'hidden'; %>
+	      <span id='title_favorites' class="<%- hidefav %>">
+		Favorites
+		<span class='category_collapsable expanded'></span>
+	      </span>
+	      <ul class='list-category' id='favorites'>
+		<% _.each(categories.favorite, function(value, key) {  %>
+		  <li class='list-group-item profile-item clearfix'
+		      value='<%- key %>'
+		      name='<%- value.name %>'><%- value.name %>
+		    <div class="project_info pull-right">
+		      <%- value.project %></div>
+		  </li>
+		<% }); %>
+	      </ul>
+
+	      <% var hidemy = _.size(categories.myprofiles) ? '' : 'hidden'; %>
+	      <span id='title_myprofiles' class='<%- hidemy %>'>
+		My Profiles
+		<span class='category_collapsable expanded'></span>
+	      </span>
+	      <ul class='list-category' id='myprofiles'>
+		<% _.each(categories.myprofiles, function(value, key) {  %>
+		  <li class='list-group-item profile-item clearfix'
+		      value='<%- key %>'
+		      name='<%- value.name %>'><%- value.name %>
+		    <div class="project_info pull-right">
+		      <%- value.project %></div>
+		  </li>
+		<% }); %>
+	      </ul>
+
+	      <% _.each(categories.inproj, function(value, key) { %>
+		<span id='title_<%- key %>_profiles'>
+		  <%- key %>
+		  <span class='category_collapsable expanded'></span>
+		</span>
+		<ul class='list-category' id='<%- key %>_profiles'>
+		  <% _.each(value, function(v,k) { %>
+		    <li class='list-group-item profile-item clearfix'
+			value='<%- k %>' name='<%- v.name %>'><%- v.name %> 
+		    </li>
+		  <% }); %>
+		</ul>
+	      <%}); %>
+
+	      <span id='title_default_profiles'>
+		Default Profiles
+		<span class='category_collapsable expanded'></span>
+	      </span>
+	      <ul class='list-category' id='default_profiles'>
+		<% _.each(categories.sysproj, function(value, key) { %>
+		  <li class='list-group-item profile-item clearfix'
+		      value='<%- key %>'
+		      name='<%- value.name %>'><%- value.name %>
+		  </li>
+		<% }); %>
+	      </ul>
+
+	      <span id='title_other_profiles'>
+		Other Profiles
+		<span class='category_collapsable expanded'></span>
+	      </span>
+	      <ul class='list-category' id='other_profiles'>
+		<% _.each(categories.otherproj, function(value, key) { %>
+		  <li class='list-group-item profile-item clearfix'
+		      value='<%- key %>'
+		      name='<%- value.name %>'><%- value.name %>
+		    <div class="project_info pull-right">
+		      <%- value.project %></div>
+		  </li>
+		<% }); %>
+	      </ul>
+	    </ul>
+	  </div> 
+	  <div class='col-md-9 col-sm-9 col-xs-9'>
+	    <div class='panel-body'>
+	      <span id='showtopo_title'>
+		<h3></h3><button id='favorite_button'
+		     class='btn btn-default btn-sm'><span id='set_favorite'
+			class='glyphicon glyphicon-star'></span></button>
+	      </span>
+	      <div id='showtopo_details'>
+		<div class='clearfix row mx-0'>
+		  <div class='col-md-3'>Created By:</div>
+		  <div id='showtopo_author' class='col-md-9'></div>
+		</div>
+		<div class='clearfix row mx-0'>
+		  <div class='col-md-3'>Project:</div>
+		  <div id='showtopo_project' class='col-md-9'></div>
+		</div>
+		<div class='clearfix row mx-0'>
+		  <div class='col-md-3'>Latest Version:</div>
+		  <div id='showtopo_version' class='col-md-9'></div>
+		</div>
+		<div class='clearfix row mx-0 hidden showtopo_repoinfo'>
+		  <div class='col-md-3'>Repo Based?:</div>
+		  <div id='showtopo_repobased' class='col-md-9'>Yes</div>
+		</div>
+		<div class='clearfix row mx-0 hidden showtopo_repoinfo'>
+		  <div class='col-md-3'>Repo Hash:</div>
+		  <div id='showtopo_repohash' class='col-md-9'></div>
+		</div>
+		<div class='clearfix row mx-0'>
+		  <div class='col-md-3'>Last Updated:</div>
+		  <div id='showtopo_last_updated' class='col-md-9'></div>
+		</div>
+		<div class='clearfix row mx-0'>
+		  <div class='col-md-3'>Description:</div>
+		  <div id='showtopo_description' class='col-md-9'></div>
+		</div>
+	      </div>
+	      <div id='showtopo_div'>
+		<div class='showtopology-picker'></div>
+	      </div>
+	    </div>
+	  </div>
+	</div>
+	<div id='showtopo_buttons' class='pull-right'>
+	  <button id='showtopo_select'
+		  class='btn btn-primary btn-sm'
+		  type='submit' name='select'>
+	    Select Profile</button>
+	  <button type='button' class='btn btn-default btn-sm'
+		  id='showtopo_cancel'		  
+		  data-dismiss='modal' data-bs-dismiss='modal'
+		  aria-hidden='true'>
+	    Cancel</button>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>

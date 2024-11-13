@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2019 University of Utah and the Flux Group.
+# Copyright (c) 2007-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -251,7 +251,7 @@ sub Create($$)
 
     if ($query_result->numrows) {
 	DBQueryWarn("unlock tables");
-	tberror("Dataset uuid $uuid already exists!");
+	print "*** Dataset uuid $uuid already exists!\n";
 	return undef;
     }
 
@@ -261,7 +261,7 @@ sub Create($$)
 
     if ($query_result->numrows) {
 	DBQueryWarn("unlock tables");
-	tberror("Dataset $pid/$id already exists!");
+	print "*** Dataset $pid/$id already exists!\n";
 	return undef;
     }
 
@@ -273,7 +273,6 @@ sub Create($$)
 
     if (! DBQueryWarn($query)) {
 	DBQueryWarn("unlock tables");
-	tberror("Error inserting new apt_datasets record for $uuid!");
 	return undef;
     }
     DBQueryWarn("unlock tables");
@@ -589,9 +588,9 @@ sub CredentialError()
 #
 # Create a dataset on the remote aggregate.
 #
-sub CreateDataset($)
+sub CreateDataset($;$)
 {
-    my ($self) = @_;
+    my ($self, $checkonly) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->GetGeniUser();
     my $context   = APT_Geni::GeniContext();
@@ -620,7 +619,9 @@ sub CreateDataset($)
 	if ($self->fstype() ne "none");
     $args->{"expires"} = emutil::TBDateStringGMT($self->expires())
 	if (defined($self->expires()));
-
+    $args->{"checkonly"} = $checkonly
+	if (defined($checkonly) && $checkonly);
+    
     my $cmurl = $authority->url();
     $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
 
@@ -663,9 +664,9 @@ sub DeleteDataset($)
 #
 # Apply some updates to the dataset on server.
 #
-sub ModifyDataset($)
+sub ModifyDataset($$)
 {
-    my ($self) = @_;
+    my ($self, $blob) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->GetGeniUser();
     my $context   = APT_Geni::GeniContext();
@@ -686,9 +687,14 @@ sub ModifyDataset($)
     my $args = {
 	"dataset_urn" => $cert->urn(),
 	"credentials" => $credentials,
-	"read_access" => $self->read_access(),
-	"write_access"=> $self->write_access(),
     };
+    $args->{"read_access"} = $blob->{'read_access'}
+	if (exists($blob->{'read_access'}));
+    $args->{"write_access"} = $blob->{'write_access'}
+        if (exists($blob->{'write_access'}));
+    $args->{"permanent"} = $blob->{'permanent'}
+        if (exists($blob->{'permanent'}));
+    
     my $cmurl = $authority->url();
     $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
 

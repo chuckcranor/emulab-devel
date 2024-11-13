@@ -29,7 +29,6 @@ $(function ()
     var repobusy     = false;
     var pollrepo     = true;
     var ajaxurl      = "";
-    var amlist       = null;
     var modified     = false;
     var editor       = null;
     var myCodeMirror = null;
@@ -82,7 +81,6 @@ $(function ()
 		return versions.length - profile.version;
 	    });
 	}
-	amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 
 	// Notice if we have an rspec in the formfields, to start from.
 	if (_.has(fields, "profile_rspec")) {
@@ -184,12 +182,34 @@ $(function ()
 	$('#publish_div').html(publishString);
     	var rspectext_html = rspectextTemplate({});
 	$('#rspectext_div').html(rspectext_html);
-	$('#share_div').html(shareTemplate({
-	    formfields: fields,
-	    fromrepo:   fromrepo
-	}));
+        if (window.ACTION !== 'create') {
+            if (0) {
+	        $('#share_div').html(shareTemplate({
+	            formfields: fields,
+	            fromrepo:   fromrepo
+	        }));
+	        // Bind the copy to clipboard button in the share modal
+	        window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
+
+	        // Handler for share modal; do not want to show it if the
+	        // the profile is not saved.
+	        $('.profile-share-button').click(function() {
+	            if (modified) {
+		        alert("Please save your profile before sharing it!");
+		        return false;
+	            }
+	            sup.ShowModal("#share_profile_modal");
+	        });
+            }
+            else {
+                ShareProfile.InitShareProfile();
+            }
+        }
 	$('#copy_repobased_profile_div').html(copyrepoString);
 
+	// Fire this off now to load all the goo. 
+	CreateJacksEditor();
+	
 	// Fireoff repo stuff now.
 	if (fromrepo) {
 	    SetupRepo();
@@ -198,15 +218,16 @@ $(function ()
 	    // Need to fill in the URL.
 	    $('#copy-repobased-profile-modal input')
 		.val(fields["profile_repourl"]);
-	    $('#copy-repobased-profile-modal .copy-to-clipboard')
-		.click(function (e) {
-		    e.preventDefault();
-		    $('#copy-repobased-profile-modal .gitrepo-url').select();
-		    document.execCommand("copy");
-		});
+	    
+	    // Bind the copy to clipbload button in the share modal
+	    window.APT_OPTIONS.
+		SetupCopyToClipboard("#copy-repobased-profile-modal");
+
+	    // Bind the copy to clipboard button for the push URL.
+	    window.APT_OPTIONS.
+		SetupCopyToClipboard("#copy-push-url");
 	}
-	// Copy profile.
-	if (!fromrepo) {
+	else {
 	    CopyProfile.InitCopyProfile('#copy-profile-button',
 					version_uuid, projlist);
 	}
@@ -228,44 +249,7 @@ $(function ()
 	    placement: 'auto',
 	    container: 'body',
 	});
-	// But the repo push URL is handled differently.
-	var urlstring = 
-	    "<div style='width 100%'> "+
-	    "  <input readonly type=text id='push-url-input' " +
-	    "       style='display:inline; width: 93%; padding: 2px;' " +
-	    "       class='form-control input-sm' "+
-	    "       value='" + fields.profile_repopushurl + "'>" +
-	    "  <a href='#' class='btn' id='push-url-copy' " +
-	    "     style='padding: 0px'>" +
-	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
-	
-	$('#push-url').click(function (e) {
-	    console.info("push-url click");
-	    if ($('#push-url-input').length == 0) {
-		$('#push-url').popover({
-		    html:     true,
-		    content:  urlstring,
-		    trigger:  'manual',
-		    placement:'auto',
-		    container:'body',
-		});
-		$('#push-url').popover('show');
-		$('#push-url-copy').click(function (e) {
-		    e.preventDefault();
-		    $('#push-url-input').select();
-		    document.execCommand("copy");
-		    $('#push-url').popover('destroy');
-		});
-		$('#push-url-input').click(function (e) {
-		    e.preventDefault();
-		    $('#push-url').popover('destroy');
-		});
-	    }
-	    else {
-		$('#push-url').popover('destroy');
-	    }
-	});
-	
+
 	// Format dates with moment before display.
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
@@ -313,7 +297,6 @@ $(function ()
 	    // Do this now instead of on page load, since user might switch
 	    // between geni-lib and rspec, and that changes whether the
 	    // editor is read-only or writable.
-	    CreateJacksEditor();
 	    editor.show($('#profile_rspec_textarea').val(),
 			function (newrspec) {
 			    // Only for a new profile or profile converted
@@ -526,7 +509,7 @@ $(function ()
 		return false;
 	    }
 	    // Add steps to the tour.
-	    if (SyncSteps()) {
+	    if (0 && SyncSteps()) {
 		return false;
 	    }
 	    if (window.CLONING) {
@@ -542,30 +525,33 @@ $(function ()
 		    pid = $('#profile_pid option:selected').val();
 		}
 		if (pid == EMULAB_OPS) {
-		    $('#cancel-update-systemimage').click(function() {
-			sup.HideModal('#confirm-update-systemimage-modal');
-		    });
 		    $('#confirm-update-systemimage').click(function() {
 			sup.HideModal('#confirm-update-systemimage-modal');
 			SubmitForm();
 		    });
 		    sup.ShowModal('#confirm-update-systemimage-modal',
 				  function() {
-				      $('#cancel-update-systemimage')
-					  .off("click");
 				      $('#confirm-update-systemimage')
 					  .off("click");
 				  });
 		}
 		else {
 		    // Need to ask if any extra accounts created.
-		    sup.ShowModal('#clone-modal', function () {
-			if ($('#clone-modal-update-prepare').is(':checked')) {
-			    $('#quickvm_create_profile_form ' +
-			      '[name=update_prepare]').val("yes");
-			}
-			SubmitForm();
-		    });
+		    sup.ShowModal('#clone-modal',
+				  function () {
+				      $('#clone-modal .confirm-button').off("click");
+				  },
+				  function () {
+				      $('#clone-modal .confirm-button')
+					  .click(function () {
+					      if ($('#clone-modal-update-prepare')
+						  .is(':checked')) {
+						  $('#quickvm_create_profile_form ' +
+						    '[name=update_prepare]').val("yes");
+					      }
+					      SubmitForm();
+					  });
+				  });
 		}
 	    }
 	    else {
@@ -641,17 +627,6 @@ $(function ()
 	    event.preventDefault();
 	    PublishProfile();
 	});
-	// Handler for share modal; do not want to show it if the
-	// the profile is not saved.
-	$('#profile_share_button').click(function() {
-	    if (modified) {
-		alert("Please save your profile before sharing it!");
-		return false;
-	    }
-	    sup.ShowModal("#share_profile_modal");
-	});
-	// Bind the copy to clipbload button in the share modal
-	window.APT_OPTIONS.SetupCopyToClipboard("#share_profile_modal");
 	
 	// Handler for updates to the example portals field, on the
 	// the Mothership, where we have multiple portals.
@@ -723,11 +698,17 @@ $(function ()
 	    }
 	    else if (gotscript) {
 		if (window.CLONING && !portal_converted) {
-		    sup.ShowModal('#warn_pp_modal');
+		    /* Bootstrap 5 sillyness, have not figured out
+		       a better solution */
+		    setTimeout(function f() {
+			sup.ShowModal('#warn_pp_modal');
+		    }, 100);
 		}
 	    }
 	    else if (_.has(window, "EXPUUID")) {
-		ConvertFromExperiment();
+		/* Bootstrap 5 sillyness, have not figured
+		   out a better solution */
+		setTimeout(function f() { ConvertFromExperiment(); }, 250);
 	    }
 	}
     }
@@ -772,57 +753,33 @@ $(function ()
     }
     
     // Handler for all paths to rspec change (file upload, jacks, edit).
-    function changeRspec(newRspec, repoupdate_callback)
+    function changeRspec(newRspec)
     {
+	console.info("changeRspec");
+	
 	if (pythonRe.test(newRspec) || tclRe.test(newRspec)) {
 	    //
-	    // A geni-lib script. We are going to pass the script to
-	    // the server to be "run", which returns XML.
+	    // Need to normalize the newline characters for this
+	    // comparison to be meaningful, else we think the
+	    // source has changed when it really has not.
 	    //
-	    if (repoupdate_callback) {
-		/*
-		 * For repo based profiles always run the script.
-		 * Might be in a submodule or import, etc. So looking
-		 * at just profile.py is not an indicator. checkScript()
-		 * is what causes the profile to be "saved". 
-		 *
-		 * This is silly, and is a hold over from when I
-		 * thought we would give the user the option of
-		 * "saving" the change. But that makes no sense for a
-		 * repo backed profile, and when the user clicks
-		 * "Update" we should just update in the backend and
-		 * not go through all this jumping around.
-		 */
-		gotscript = 1;
-		checkScript(newRspec, repoupdate_callback);
-	    }
-	    else {
-		//
-		// Need to normalize the newline characters for this
-		// comparison to be meaningful, else we think the
-		// source has changed when it really has not.
-		//
-		var newr = $.trim(newRspec);
-		var oldr = $.trim($('#profile_script_textarea').val());
-		newr = newr.replace(new RegExp(/\r?\n|\r/g), " ");
-		oldr = oldr.replace(new RegExp(/\r?\n|\r/g), " ");
+	    var newr = $.trim(newRspec);
+	    var oldr = $.trim($('#profile_script_textarea').val());
+	    newr = newr.replace(new RegExp(/\r?\n|\r/g), " ");
+	    oldr = oldr.replace(new RegExp(/\r?\n|\r/g), " ");
 	    
-		if (oldr != newr || goodscript == 0) {
-		    console.info("geni-lib code has changed");
-		    if (portal_converted) {
-			/*
-			 * User might not want to proceed down this path,
-			 * will not be able to use Jacks. 
-			 */
-			rteCheckScript(newRspec);
-		    }
-	            else {
-			gotscript = 1;
-			checkScript(newRspec, repoupdate_callback);
-		    }
+	    if (oldr != newr || goodscript == 0) {
+		console.info("geni-lib code has changed");
+		if (portal_converted) {
+		    /*
+		     * User might not want to proceed down this path,
+		     * will not be able to use Jacks. 
+		     */
+		    rteCheckScript(newRspec);
 		}
-		else if (repoupdate_callback !== undefined) {
-		    repoupdate_callback(false /* unmodified. */);
+	        else {
+		    gotscript = 1;
+		    checkScript(newRspec);
 		}
 	    }
 	}
@@ -846,7 +803,7 @@ $(function ()
     // We could probably do this as a continuation instead, which would
     // be cleaner. 
     //
-    var initialized = false;
+    var initialized = true;
     function StepsTableLoaded()
     {
 	if (!initialized) {
@@ -1107,7 +1064,7 @@ $(function ()
 	    }
 	    $('#profile_rspec_textarea').val(newrspec);
 	    ExtractFromRspec();
-	    SyncSteps();
+	    //SyncSteps();
 	    if (!fromrepo)
 		ProfileModified();
 	    UpdateButtons();
@@ -1201,7 +1158,7 @@ $(function ()
 	// back to the XML. 
 	//
 	if (! stepsInitialized) {
-	    InitStepsTable(xml);
+	    //InitStepsTable(xml);
 	}
     }
 
@@ -1326,8 +1283,10 @@ $(function ()
     //
     // Pass a geni-lib script to the server to run (convert to XML).
     //
-    function checkScript(script, repoupdate_callback)
+    function checkScript(script)
     {
+	console.info("checkScript");
+	
 	// Save for later.
 	$('#profile_script_textarea').val(script);
 
@@ -1353,9 +1312,6 @@ $(function ()
 		}
 		else {
 		    paramHelp.HideParameterHelp();
-		}
-		if (repoupdate_callback !== undefined) {
-		    repoupdate_callback(true /* modified */);
 		}
 		// Force this; the script is obviously different, but the
 		// the XML might be exactly same. Still want to save it.
@@ -1384,15 +1340,9 @@ $(function ()
 	    args["profile_uuid"] = profile_uuid;
 	}
 	if (fromrepo) {
-	    if (repoupdate_callback !== undefined) {
-		// Pass along flag to update repo (if allowed).
-		args["updaterepo"] = true;
-	    }
-	    else {
-		// Pass along refspec for running genilib
-		// Will be null on initial profile creation.
-		args["refspec"] = reporefspec;
-	    }
+	    // Pass along refspec for running genilib
+	    // Will be null on initial profile creation.
+	    args["refspec"] = reporefspec;
 	}
 	WaitWait("We are converting your geni-lib script to XML");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -1429,7 +1379,10 @@ $(function ()
 
 	    if (json.code) {
 		sup.HideWaitWait();
-		sup.SpitOops("oops", json.value);
+		sup.SpitOops("oops",
+			     "<pre><code>" +
+			     $('<div/>').text(json.value).html() +
+			     "</code></pre>");
 		return;
 	    }
 	    fromrepo = 1;
@@ -1480,34 +1433,27 @@ $(function ()
 	    }
 	    else {
 		// Mark as HEAD in the page.
-		repohash = blob.hash;
+		repohash = blob.repohash;
+		reporefspec = blob.refspec;
 
-		/*
-		 * If the source was an rspec, we updated the profile
-		 * to match the current repo right away. But to make things
-		 * nicer for script based profiles, we wait until the
-		 * script is converted to an rspec. Cause of workflow, we
-		 * end up doing this later so that the user sees a short
-		 * delay when hitting the update button for a script based
-		 * profile. 
-		 */
-		if (!pythonRe.test(blob.source)) {
-		    NewRspecHandler(blob.source);
-		    // Reset the list of tags and branches whenever we
-		    // successfully update our clone.
+		NewRspecHandler(blob.rspec);
+		if (blob.script) {	
+		    $('#profile_script_textarea').val(blob.script);
+		    gotscript = 1;
+		    // Need to do this again to get new commit info (tags and branches).
 		    SetupRepo(function () { repobusy = false; });
-		    return;
+
+		    // In case the user had switched branches earlier.
+		    UpdateInstantiateButton();
+		    
+		    // Top left panel.
+		    $('#current-refspec').html(reporefspec);
+		    $('#current-refhash').html(repohash.substring(0, 8));
 		}
-		/*
-		 * Else we wait till the script converted, the call back is
-		 * invoked after CheckScript() finishes. The server side
-		 * has done the profile update, so we can finish things up.
-		 */
-		changeRspec(blob.source, function(modified) {
-		    // Reset the list of tags and branches whenever we
-		    // successfully update our clone.
-		    SetupRepo(function () { repobusy = false; });
-		});
+		else {
+		    $('#profile_script_textarea').val("");
+		    gotscript = 0;
+		}
 	    }
 	};
 	/*
@@ -1543,9 +1489,7 @@ $(function ()
 		"share_url" : profile.profile_profile_url,
 		"refspec"   : reporefspec,
 		"callback"  : function(which) {
-		    // So we remember what the user selected.
-		    reporefspec = which;
-		    UpdateInstantiateButton();
+		    console.info("SetupRepo initrepopicker", which);
 		    SelectRepoTarget(which);
 		}
 	    });
@@ -1567,9 +1511,17 @@ $(function ()
     {
 	console.info("SelectRepoTarget: ", which);
 
+	// So we remember what the user selected.
+	reporefspec = which;
+	UpdateInstantiateButton();
+
 	var callback = function (source, hash) {
 	    if (source) {
+		console.info("SelectRepoTarget: ", which, hash);
 		changeRspec(source);
+		// Top left panel.
+		$('#current-refspec').html(which);
+		$('#current-refhash').html(hash.substring(0, 8));
 	    }
 	};
 	gitrepo.GetRepoSource({
@@ -1746,17 +1698,19 @@ $(function ()
 	
         var isViewer = window.ISPOWDER || (gotscript && !portal_converted);
 	if (editor) {
-	    $('#editmodal_div').empty();
-	}
-	editor = new JacksEditor($('#editmodal_div'),
-				 isViewer, false, false, false, !multisite);
-	if (isViewer) {
-	    $('#edit_container .edit_buttons.readwrite').addClass("hidden");
-	    $('#edit_container .edit_buttons.readonly').removeClass("hidden");
+	    editor.clear();
 	}
 	else {
-	    $('#edit_container .edit_buttons.readwrite').removeClass("hidden");
-	    $('#edit_container .edit_buttons.readonly').addClass("hidden");
+	    editor = JacksEditor.create($('#editmodal_div'),
+					isViewer, false, false, false, !multisite);
+	}
+	if (isViewer) {
+	    $('#edit-modal .edit_buttons.readwrite').addClass("hidden");
+	    $('#edit-modal .edit_buttons.readonly').removeClass("hidden");
+	}
+	else {
+	    $('#edit-modal .edit_buttons.readwrite').removeClass("hidden");
+	    $('#edit-modal .edit_buttons.readonly').addClass("hidden");
 	}
     }
 
@@ -1856,7 +1810,6 @@ $(function ()
 		    sup.HideModal('#edit-genilib-warning-modal',
 				  function () {
 				      MarkPortalConverted(false);
-				      CreateJacksEditor();
 				      checkScript(script);
 				  });
 		});
@@ -1880,6 +1833,8 @@ $(function ()
      */
     function UpdateInstantiateButton()
     {
+	console.info("UpdateInstantiateButton", reporefspec);
+	
 	var url = "instantiate.php?profile=" +
 	    version_uuid + "&from=manage-profile";
 

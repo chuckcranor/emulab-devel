@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2019 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -41,21 +41,27 @@ sub usage()
     print STDERR "Usage: cacontrol [-a] [-n] [-d] <certfile>\n";
     print STDERR "       cacontrol [-n] [-d] -c <commonname>\n";
     print STDERR "       cacontrol [-n] [-d] -r <commonname>\n";
+    print STDERR "       cacontrol [-n] [-d] [-lEG]\n";
     print STDERR "Options\n";
     print STDERR "  -n     - Impotent mode; do not do anything for real\n";
     print STDERR "  -d     - Turn on debugging.\n";
     print STDERR "  -a     - Add certificate to approved list instead.\n";
     print STDERR "  -c     - Move certificate (commonname) to approved list.\n";
     print STDERR "  -r     - Remove certificate with given commonname.\n";
+    print STDERR "  -l     - List all certificates with their expiration\n";
+    print STDERR "  -E     - Remove all expired certificates\n";
+    print STDERR "  -G     - Regenerate the certificate bundle\n";
     print STDERR "  -R     - With -r, remove cm/sa/ses authorities.\n";
     exit(1);
 }
-my $optlist    = "dnawcrRi";
+my $optlist    = "dnawcrRilEG";
 my $fromweb    = 0;
 my $approve    = 0;
 my $remove     = 0;
 my $purge      = 0;
 my $impotent   = 0;
+my $list       = 0;
+my $expire     = 0;
 my $debug      = 0;
 my $commonname;
 my $certfile;
@@ -85,6 +91,7 @@ sub ReadBundle($);
 sub Regenerate($$);
 sub AddCertificate($$);
 sub RemoveAuthorities($);
+sub RemoveCert($);
 sub Initialize();
 
 # Flag to regen the unapproved bundle
@@ -123,19 +130,23 @@ if (defined($options{"i"})) {
 if (defined($options{"a"})) {
     $approve = 1;
 }
+if (defined($options{"E"})) {
+    $expire = 1;
+}
 if (defined($options{"n"})) {
     $impotent = 1;
 }
 if (defined($options{"d"})) {
     $debug = 1;
 }
-if (defined($options{"w"})) {
-    $fromweb = 1;
-    # Force from web.
-    $approve = 0;
+if (defined($options{"l"})) {
+    $list = 1;
+}
+if (defined($options{"G"})) {
+    $regen = 1;
 }
 usage()
-    if (@ARGV != 1);
+    if (@ARGV != 1 && !($list || $expire || $regen));
 
 if (defined($options{"c"})) {
     $commonname = $ARGV[0];
@@ -186,6 +197,64 @@ foreach my $pem (@pems) {
     $approved_certs{$pemcert->DN()} = $pemcert;
 }
 
+if ($list) {
+    foreach my $DN (sort(keys(%unapproved_certs))) {
+	my $cert = $unapproved_certs{$DN};
+	print $cert->CommonName() . " (U): " . $cert->enddate() . "\n";
+    }
+    foreach my $DN (sort(keys(%approved_certs))) {
+	my $cert = $approved_certs{$DN};
+	print $cert->CommonName() . " (A): " . $cert->enddate() . "\n";
+    }
+    exit(0);
+}
+
+if ($expire) {
+    foreach my $DN (sort(keys(%unapproved_certs))) {
+	my $cert = $unapproved_certs{$DN};
+	next
+	    if (!$cert->IsExpired());
+
+	if ($impotent) {
+	    print "Would delete from unapproved: " .
+		$cert->CommonName() . " - " . $cert->enddate() . "\n";
+	    print "  " . $cert->certfile() . "\n";
+	}
+	else {
+	    RemoveCert($cert);
+	    delete($unapproved_certs{$cert->DN()});
+	    RemoveAuthorities($cert);
+	    $regen++;
+	}
+    }
+    foreach my $DN (sort(keys(%approved_certs))) {
+	my $cert = $approved_certs{$DN};
+	next
+	    if (!$cert->IsExpired());
+
+	if ($impotent) {
+	    print "Would delete from approved: " .
+		$cert->CommonName() . " - " . $cert->enddate() . "\n";
+	    print "  " . $cert->certfile() . "\n";
+	}
+	else {
+	    RemoveCert($cert);
+	    delete($approved_certs{$cert->DN()});
+	    RemoveAuthorities($cert);
+	    $regen++;
+	}
+    }
+    if ($regen) {
+	Regenerate(1, 1);
+    }
+    exit(0);
+}
+
+if ($regen) {
+    Regenerate(1, 1);
+    exit(0);
+}
+
 #
 # Deal with removing first. Find the matching common name in either
 # of the lists. 
@@ -196,11 +265,16 @@ if ($remove) {
     #
     foreach my $cert (values(%unapproved_certs)) {
 	if ($cert->CommonName() eq $commonname) {
-	    delete($unapproved_certs{$cert->DN()});
-	    print "Deleting from unapproved list: " . $cert->DN() . "\n";
-	    Regenerate(1, 1);
-	    if ($purge) {
-		RemoveAuthorities($cert);
+	    if ($impotent) {
+		print "Would delete from unapproved: " . $cert->DN() . "\n";
+	    }
+	    else {
+		delete($unapproved_certs{$cert->DN()});
+		print "Deleting from unapproved list: " . $cert->DN() . "\n";
+		Regenerate(1, 1);
+		if ($purge) {
+		    RemoveAuthorities($cert);
+		}
 	    }
 	    exit(0);
 	}
@@ -213,24 +287,16 @@ if ($remove) {
     #
     foreach my $cert (values(%approved_certs)) {
 	if ($cert->CommonName() eq $commonname) {
-	    delete($approved_certs{$cert->DN()});
-	    #
-	    # Need to delete the pem file.
-	    #
-	    print "Deleting from approved: " . $cert->certfile() . "\n";
-	    if (!$impotent) {
-		my $certfile = $cert->certfile();
-		my $hash     = $cert->SubjectHash();
-
-		DBQueryWarn("delete from geni_cas where hash='$hash'")
-		    or fatal("Could not delete $commonname from DB");
-		
-		system("/bin/mv -f ${certfile} ${certfile}.del") == 0
-		    or fatal("Could not remove ${certfile}: $!");
+	    if ($impotent) {
+		print "Would delete from approved: " . $cert->certfile() . "\n";		
 	    }
-	    Regenerate(0, 1);
-	    if ($purge) {
-		RemoveAuthorities($cert);
+	    else {
+		RemoveCert($cert);
+		delete($approved_certs{$cert->DN()});
+		Regenerate(0, 1);
+		if ($purge) {
+		    RemoveAuthorities($cert);
+		}
 	    }
 	    exit(0);
 	}
@@ -408,7 +474,25 @@ sub AddCertificate($$)
     }
     Regenerate($regen, $restart);
     return 0;
-}    
+}
+
+#
+# Remove one cert from approved list
+#
+sub RemoveCert($)
+{
+    my ($cert) = @_;
+
+    print "Deleting from approved: " . $cert->certfile() . "\n";
+    my $certfile = $cert->certfile();
+    my $hash     = $cert->SubjectHash();
+
+    DBQueryWarn("delete from geni_cas where hash='$hash'")
+	or fatal("Could not delete $commonname from DB");
+		
+    system("/bin/mv -f ${certfile} ${certfile}.del") == 0
+	or fatal("Could not remove ${certfile}: $!");
+}
 
 #
 # Regen the unapproved bundle and/or the CA bundle.

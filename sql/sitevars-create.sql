@@ -109,6 +109,7 @@ INSERT INTO sitevariables VALUES ('oml/default_server_startcmd',NULL,'','Default
 INSERT INTO sitevariables VALUES ('images/create/maxwait',NULL,'72','Max time (minutes) to allow for saving an image',0);
 INSERT INTO sitevariables VALUES ('images/create/idlewait',NULL,'8','Max time (minutes) to allow between periods of progress (image file getting larger) when saving an image (should be <= maxwait)',0);
 INSERT INTO sitevariables VALUES ('images/create/maxsize',NULL,'6','Max size (GB) of a created image',0);
+INSERT INTO sitevariables VALUES ('images/create/maxdata',NULL,'0','Maximum amount of uncompressed allocated data (GB) in a filesystem allowed for image creation. Default is zero (no limit).',0);
 INSERT INTO sitevariables VALUES ('general/testbed_shutdown',NULL,'0','Non-zero value indicates that the testbed is shutdown and scripts should not do anything when they run. DO NOT SET THIS BY HAND!',0);
 INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_std',NULL,'72000000','Max bandwidth (Bits/sec) at which to distribute standard images from the /usr/testbed/images directory.',0);
 INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_usr',NULL,'54000000','Max bandwidth (Bits/sec) at which to distribute user-defined images from the /proj/.../images directory.',0);
@@ -201,6 +202,13 @@ INSERT INTO sitevariables VALUES ('rfmonitor/noisefloor',NULL,'-110.0','Noise fl
 INSERT INTO sitevariables VALUES ('powder/deadman_enable',NULL,'0','Set to non-zero to enable Powder deadman operation.',0);
 INSERT INTO sitevariables VALUES ('powder/mobile_update',NULL,'1','Set to zero to disable automated software update at boot time.',0);
 INSERT INTO sitevariables VALUES ('images/listed_default',NULL,'1','By default, newly created or imported global images in the emulab-ops project will be listed for users to see (and use). Set this to zero to prevent automatic listing.',0);
+INSERT INTO sitevariables VALUES ('hwcheckup/interval',NULL,'0','Interval (in days) at which nodes should be run through hwcheckup. Zero disables periodic checks.',0);
+INSERT INTO sitevariables VALUES ('hwcheckup/maxnodes',NULL,'10','Maximum number of healthy nodes to run through hwcheckup in one pass.',0);
+INSERT INTO sitevariables VALUES ('general/panic_does_recovery_mode',NULL,'0','When non-zero, panic mode level 1 will use the recovery MFS instead of the admin MFS.',0);
+INSERT INTO sitevariables VALUES ('portal/grantnodetypes',NULL,'','Default set of node types to grant to newly approved projects.',0);
+INSERT INTO sitevariables VALUES ('cloudlab/grantnodetypes',NULL,'','Default set of node types to grant to newly approved projects (cloudlab portal).',0);
+INSERT INTO sitevariables VALUES ('powder/grantnodetypes',NULL,'','Default set of node types to grant to newly approved projects (powder portal).',0);
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

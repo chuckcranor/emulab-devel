@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019, 2022, 2023 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -248,6 +248,7 @@ my %xmlfields =
      "lba_size",	=> ["lba_size",		$SLOT_OPTIONAL],
      "architecture",	=> ["architecture",	$SLOT_OPTIONAL],
      "taint_states",	=> ["taint_states",	$SLOT_OPTIONAL],
+     "isbootimage",	=> ["isbootimage",	$SLOT_OPTIONAL],
 );
 
 #
@@ -387,6 +388,13 @@ foreach $key (keys(%{ $xmlparse->{'attribute'} })) {
 	}
 	if (! TBcheck_dbslot($osname, "os_info",
 			     "osname", TBDB_CHECKDBSLOT_ERROR)) {
+	    $errors{$key} = TBFieldErrorString();
+	    next;
+	}
+    }
+    elsif ($dbslot eq "nodeclass") {
+	if (! TBcheck_dbslot($value, "node_types",
+			     "class", TBDB_CHECKDBSLOT_ERROR)) {
 	    $errors{$key} = TBFieldErrorString();
 	    next;
 	}
@@ -640,8 +648,8 @@ if (1 || $debug) {
 my $loadpart = 0;
 if (!$isdataset) {
     $loadpart = $newimageid_args{"loadpart"};
-    if ($loadpart < 1 || $loadpart > 4) {
-	UserError("DOS Partion: Out of range.");
+    if (!$newimageid_args{"wholedisk"} && $loadpart < 1 || $loadpart > 4) {
+	UserError("DOS Partition: Out of range.");
     }
 }
 
@@ -866,8 +874,9 @@ if (defined($parentos)) {
     #
     # Temp hack until we put all mappings into XML file.
     #
+    my $pname = $parentos->pid() . "/" . $parentos->osname();    
     if ($parentos->osname() =~ /^XEN4/) {
-        system("$RUNSONXEN $imagepid,$imagename");
+        system("$RUNSONXEN -p $pname $imagepid,$imagename");
     }
 }
 

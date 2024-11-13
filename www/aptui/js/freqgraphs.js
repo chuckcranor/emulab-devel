@@ -10,15 +10,41 @@ window.ShowFrequencyGraph = (function ()
     'use strict';
     var d3 = d3v5;
 
+    // Needed for the floating popovers, see below.
+    // See https://popper.js.org/docs/v2/virtual-elements/ for an
+    // explaination of this stuff. 
+    var generateGetBoundingClientRect =
+	function(x1 = 0, y1 = 0, x2 = 0, y2 = 0) {
+	    return () => ({
+		width: 10,
+		height: 10,
+		left: x1 - 5,
+		top: y1 - 5,
+		right: x1 + 5,
+		bottom: y1 + 5,
+	    });
+	};
+
     function CreateGraph(args, data) {
 	//console.log(data);
 	
 	var selector     = args.selector + " .frequency-graph-subgraph";
-	var parentWidth  = $(selector).width();
-	var parentHeight = $(selector).height();
+	// Closest positioned element.
+	var parent       = $(selector).closest(".panel");
+	var parentWidth  = $(parent).width();
+	var parentHeight = $(parent).height();
+	var ParentTop    = $(parent).position().top;
+	var ParentLeft   = $(parent).position().left;
 	// Not all data files have the incident value.
-	var hasIncident  = false;
+	var hasIncident  = (_.has(data[0], "incident") ? true : false);
+	// Ditto the above noise floor values
+	var hasAboveFloor= (_.has(data[0], "abovefloor") ? true : false);
 	var lineI;
+
+	// incident reporting is by request
+	if (! args.incident) {
+	    hasIncident = false;
+	}
 
 	var margin  = {top: 20, right: 20, bottom: 130, left: 55};
 	var width   = parentWidth - margin.left - margin.right;
@@ -59,16 +85,16 @@ window.ShowFrequencyGraph = (function ()
             .x(function (d) { return x(d.frequency); })
             .y(function (d) { return y(d.power); });
 
+	var line2 = d3.line().curve(d3.curveStep)
+            .x(function (d) { return x2(d.frequency); })
+            .y(function (d) { return y2(d.power); });
+
 	if (hasIncident) {
 	    lineI = d3.line().curve(d3.curveStep)
 		.x(function (d) { return x(d.frequency); })
 		.y(function (d) { return y(d.incident); });
 	}
-
-	var line2 = d3.line().curve(d3.curveStep)
-            .x(function (d) { return x2(d.frequency); })
-            .y(function (d) { return y2(d.power); });
-
+	
 	var svg = d3.select(selector)
 	    .append('svg')
             .attr("width", $(selector).width())
@@ -101,7 +127,18 @@ window.ShowFrequencyGraph = (function ()
 	x.domain(d3.extent(data, function(d) { return d.frequency; }));
 	// I want a little more pad above and below
 	var power_extents = d3.extent(data, function(d) { return d.power; });
-	console.info(power_extents);
+	console.info("power extents", power_extents);
+	if (hasIncident) {
+	    var incident_extents = d3.extent(data, function(d) { return d.incident; });
+	    console.info("incident_extents", incident_extents);
+	    if (incident_extents[0] < power_extents[0]) {
+		power_extents[0] = incident_extents[0];
+	    }
+	    if (incident_extents[1] > power_extents[1]) {
+		power_extents[1] = incident_extents[1];
+	    }
+	}
+	console.info("power extents", power_extents);
 	power_extents[0] = power_extents[0] - 2;
 	power_extents[1] = power_extents[1] + 2;
 	console.info(power_extents);
@@ -139,6 +176,20 @@ window.ShowFrequencyGraph = (function ()
 	    .attr("class", "line line-power")
 	    .attr("d", line);
 
+	if (hasAboveFloor) {
+	    Line_chart.selectAll("myCircles")
+		.data(data.filter(function(d) { return d.abovefloor != 0; } ))
+		.enter()
+		.append("circle")
+		.attr("class", "abovefloor-circles")
+		.attr("fill", function(d) {
+		    return d.violation ? "red" : "blue"; })
+		.attr("stroke", "none")
+		.attr("cx", function(d) { return x(d.frequency) })
+		.attr("cy", function(d) { return y(d.power) })
+		.attr("r", 4);
+	}
+
 	if (hasIncident) {
 	    Line_chart.append("path")
 		.datum(data)
@@ -154,61 +205,36 @@ window.ShowFrequencyGraph = (function ()
 	tooltip.append("circle")
 	    .attr("r", 5);
 
-	var toolbox = tooltip.append("g")
-	    .attr("class", "tooltip-box")
-            .attr("transform", "translate(10,0)");
+	const virtualElement = {
+	    getBoundingClientRect: generateGetBoundingClientRect(),
+	};
+	
+	$('#subgraph-tooltip-popover')
+	    .popover({"content"   : $("#subgraph-tooltipTemplate").html(),
+		      "template"  : $("#popover-template").html(),
+		      "trigger"   : "manual",
+		      "html"      : true,
+		      "container" : $(parent)[0],
+		      "placement" : "left",
+		      // These are popper config variables.
+		      "fallbackPlacements" : ["right"],
+		      "reference" : virtualElement,
+		     });
 
-	toolbox.append("rect")
-	    .attr("class", "tooltip-rect")
-	    .attr("width", 130)
-	    .attr("height", 95)
-            .attr("y", -22)
-	    .attr("rx", 4)
-	    .attr("ry", 4);
-
-	toolbox.append("text")
-	    .attr("x", 5)
-	    .attr("y", -2)
-	    .text("Freq:");
-
-	toolbox.append("text")
-	    .attr("class", "tooltip-freq")
-	    .attr("x", 65)
-	    .attr("y", -2);
-
-	toolbox.append("text")
-	    .attr("x", 5)
-	    .attr("y", 18)
-	    .text("Power:");
-
-	toolbox.append("text")
-	    .attr("class", "tooltip-power")
-	    .attr("x", 65)
-	    .attr("y", 18);
-
-	toolbox.append("text")
-	    .attr("x", 5)
-	    .attr("y", 38)
-	    .text("Center:");
-
-	toolbox.append("text")
-	    .attr("class", "tooltip-center")
-	    .attr("x", 65)
-	    .attr("y", 38);
-
-	if (hasIncident) {
-	    toolbox.append("text")
-		.attr("x", 5)
-		.attr("y", 58)
-		.attr("class", "line-incident")
-		.text("Incident:");
-
-	    toolbox.append("text")
-		.attr("class", "tooltip-incident")
-		.attr("x", 65)
-		.attr("y", 58);
+	function HideTooltip()
+	{
+	    // The circle
+	    tooltip.style("display", "none");;
+	    // The box
+	    $('#subgraph-tooltip-popover').popover("hide");	    
 	}
 
+	function ShowTooltip()
+	{
+	    // The circle.
+	    tooltip.style("display", null);
+	}
+    
 	context.append("path")
 	    .datum(data)
 	    .attr("class", "line")
@@ -220,7 +246,7 @@ window.ShowFrequencyGraph = (function ()
 	    .call(xAxis2);
 
 	context.append("g")
-	    .attr("class", "brush")
+		    .attr("class", "brush")
 	    .call(brush)
 	    .call(brush.move, x.range());
 
@@ -231,8 +257,8 @@ window.ShowFrequencyGraph = (function ()
 	    .attr("transform",
 		  "translate(" + margin.left + "," + margin.top + ")")
 	    .call(zoom)
-	    .on("mouseover", function() { tooltip.style("display", null); })
-	    .on("mouseout", function() { tooltip.style("display", "none");})
+	    .on("mouseover", ShowTooltip)
+	    .on("mouseout", HideTooltip)
 	    .on("mousemove", mousemove);
 
 	function mousemove() {
@@ -244,35 +270,69 @@ window.ShowFrequencyGraph = (function ()
 	    var d = x0 - d0.frequency > d1.frequency - x0 ? d1 : d0;
 	    //console.info(x0, d, x(d.frequency));
 
-	    // Move the box to the left/right of the circle, if
-	    // its near the right/left margin.
-	    if (x(d.frequency) > width - 150) {
-		toolbox.attr("transform", "translate(-140,0)");
-	    }
-	    else {
-		toolbox.attr("transform", "translate(10,0)");
-	    }
-	    
 	    tooltip.attr("transform",
 			 "translate(" + x(d.frequency) +
 			 "," + y(d.power) + ")");
-	    tooltip.select(".tooltip-freq").text(formatter(d.frequency));
-	    tooltip.select(".tooltip-power").text(formatter(d.power));
-	    if (_.has(d, "center_freq")) {
-		tooltip.select(".tooltip-center")
-		    .text(formatter(d.center_freq));
+
+	    // Bootstrap popover based tooltip.
+	    // Bootstrap popover based tooltip.
+	    var isVisible = false;
+	    var popoverid = $('#subgraph-tooltip-popover')
+		.attr("aria-describedby");
+	    if (popoverid && $("#" + popoverid).length) {
+		isVisible = true;
 	    }
-	    else {
-		tooltip.select(".tooltip-center").text("n/a");
-	    }
-	    if (hasIncident) {
-		if (_.has(d, "incident")) {
-		    tooltip.select(".tooltip-incident")
-			.text(formatter(d.incident));
+	    var updater   = function () {
+		var content = $('#' + popoverid).find(".popover-body");
+
+		$(content).find(".tooltip-freq")
+		    .html(formatter(d.frequency));
+		$(content).find(".tooltip-power")
+		    .html(formatter(d.power));
+		if (_.has(d, "center_freq")) {
+		    $(content).find(".tooltip-center")
+			.html(formatter(d.center_freq));
 		}
 		else {
-		    tooltip.select(".tooltip-incident").text("n/a");
+		    $(content).find(".tooltip-center").text("n/a");
 		}
+		if (hasIncident && _.has(d, "incident")) {
+		    $(content).find(".tooltip-incident .incident")
+			.html(formatter(d.incident));
+		    $(content).find(".tooltip-incident")
+			.removeClass("hidden");
+		}
+		if (hasAboveFloor) {
+		    if (d.abovefloor) {
+			$(content).find(".tooltip-abovefloor .abovefloor")
+			    .html(formatter(d.abovefloor) + " dB");
+			$(content).find(".tooltip-abovefloor")
+			    .removeClass("hidden");
+		    }
+		    else {
+			$(content).find(".tooltip-abovefloor")
+			    .addClass("hidden");
+		    }
+		}
+		var ptop    = Math.floor(ParentTop + y(d.power));
+		var pleft   = Math.floor(ParentLeft + x(d.frequency)) + margin.left;
+		// And compensate for scroll.
+		ptop -= $(window).scrollTop();
+		
+		virtualElement.getBoundingClientRect =
+		    generateGetBoundingClientRect(pleft, ptop);
+		
+		$('#subgraph-tooltip-popover').popover('update');
+	    };
+	    if (isVisible) {
+		updater();
+	    }
+	    else {
+		$('#subgraph-tooltip-popover')
+		    .one("inserted.bs.popover", function (event) {
+			updater();
+		    });
+		$('#subgraph-tooltip-popover').popover('show');
 	    }
 	}
 
@@ -284,6 +344,10 @@ window.ShowFrequencyGraph = (function ()
 	    Line_chart.select(".line-power").attr("d", line);
 	    if (hasIncident) {
 		Line_chart.select(".line-incident").attr("d", lineI);
+	    }
+	    if (hasAboveFloor) {
+		Line_chart.selectAll(".abovefloor-circles")
+		    .attr("cx", function(d) { return x(d.frequency) });
 	    }
 	    focus.select(".axis--x").call(xAxis);
 	    svg.select(".zoom").call(zoom.transform, d3.zoomIdentity
@@ -300,6 +364,10 @@ window.ShowFrequencyGraph = (function ()
 	    if (hasIncident) {
 		Line_chart.select(".line-incident").attr("d", lineI);
 	    }
+	    if (hasAboveFloor) {
+		Line_chart.selectAll(".abovefloor-circles")
+		    .attr("cx", function(d) { return x(d.frequency) });
+	    }
 	    focus.select(".axis--x").call(xAxis);
 	    context.select(".brush")
 		.call(brush.move, x.range().map(t.invertX, t));
@@ -310,8 +378,7 @@ window.ShowFrequencyGraph = (function ()
     {
 	var result = [];
 	var bins   = [];
-	// Not all data files have the incident value.
-	var hasIncident  = false;
+	var hasAboveFloor= (_.has(data[0], "abovefloor") ? true : false);
 	console.info("CreateBins: ", data);
 
 	_.each(data, function (d, index) {
@@ -327,8 +394,12 @@ window.ShowFrequencyGraph = (function ()
 		    "avg"       : power,
 		    "samples"   : [d],
 		};
-		if (hasIncident) {
-		    bin["imax"] = +d.incident;
+		if (hasAboveFloor) {
+		    bin["abovefloor"] = d.abovefloor;
+		    bin["violation"]  = d.violation;
+		    if (d.abovefloor) {
+			console.info(bin);
+		    }
 		}
 		bins[x] = bin;
 		result.push(bin);
@@ -341,10 +412,15 @@ window.ShowFrequencyGraph = (function ()
 	    if (power < bin.min) {
 		bin.min = power;
 	    }
-	    if (hasIncident) {
-		var inci = +d.incident;
-		if (inci > bin.imax) {
-		    bin.imax = inci;
+	    if (hasAboveFloor) {
+		if (d.abovefloor > bin.abovefloor) {
+		    bin.abovefloor = d.abovefloor;
+		}
+		if (d.violation) {
+		    bin.violation = 1;
+		}
+		if (d.abovefloor) {
+		    console.info(bin);
 		}
 	    }
 	    bin.samples.push(d);
@@ -358,41 +434,16 @@ window.ShowFrequencyGraph = (function ()
 	return result;
     }
 
-    var tooltipTemplate =
-	'  <table class="table table-condensed border-none" ' +
-	'         style="font-size: 14px;">' +
-	'    <tbody>' +
-	'      <tr>' +
-	'        <td class="border-none">Frequency:</td>' +
-	'        <td class="border-none tooltip-frequency"></td>' +
-	'      </tr>' +
-	'      <tr>' +
-	'        <td class="border-none">Avg Power:</td>' +
-	'        <td class="border-none tooltip-avg"></td>' +
-	'      </tr>' +
-	'      <tr>' +
-	'        <td class="border-none">Max Power:</td>' +
-	'        <td class="border-none tooltip-max"></td>' +
-	'      </tr>' +
-	'      <tr>' +
-	'        <td class="border-none">Min Power:</td>' +
-	'        <td class="border-none tooltip-min"></td>' +
-	'      </tr>' +
-	'      <tr class="hidden tooltip-incident">' +
-	'        <td class="border-none">Incident Max:</td>' +
-	'        <td class="border-none incident"></td>' +
-	'      </tr>' +
-	'    </tbody>' +
-	'  </table>';
-    
     function CreateBinGraph(args, data) {
 	var bins         = CreateBins(data);
 	var selector     = args.selector + " .frequency-graph-maingraph";
-	var parentWidth  = $(selector).parent().width();
-	var parentHeight = $(selector).parent().height();
-	var ParentTop    = $(selector).parent().position().top;
-	var ParentLeft   = $(selector).parent().position().left;
-	var hasIncident  = false;
+	// Closest positioned element.
+	var parent       = $(selector).closest(".panel");
+	var parentWidth  = $(parent).width();
+	var parentHeight = $(parent).height();
+	var ParentTop    = $(parent).position().top;
+	var ParentLeft   = $(parent).position().left;
+	var hasAboveFloor= (_.has(data[0], "abovefloor") ? true : false);
 	var lineI;
 
 	// Clear old graph
@@ -437,12 +488,6 @@ window.ShowFrequencyGraph = (function ()
             .x(function (d) { return x(d.frequency); })
             .y(function (d) { return y(d.max); });
 
-	if (hasIncident) {
-	    lineI = d3.line().curve(d3.curveStep)
-		.x(function (d) { return x(d.frequency); })
-		.y(function (d) { return y(d.imax); });
-	}
-
 	var line2 = d3.line().curve(d3.curveStep)
             .x(function (d) { return x2(d.frequency); })
             .y(function (d) { return y2(d.max); });
@@ -477,7 +522,7 @@ window.ShowFrequencyGraph = (function ()
 		  "translate(" + margin2.left + "," + margin2.top + ")");
 
 	x.domain(d3.extent(bins, function(d) { return d.frequency; }));
-	y.domain(d3.extent(bins, function(d) { return d.max; }));
+	y.domain(d3.extent(bins, function(d) { return d.max + 1; }));
 	x2.domain(x.domain());
 	y2.domain(y.domain());
 
@@ -511,11 +556,17 @@ window.ShowFrequencyGraph = (function ()
 	    .attr("class", "line line-power")
 	    .attr("d", line);
 
-	if (hasIncident) {
-	    Line_chart.append("path")
-		.datum(bins)
-		.attr("class", "line line-incident")
-		.attr("d", lineI);
+	if (hasAboveFloor) {
+	    Line_chart.selectAll("myCircles")
+		.data(bins.filter(function(d) { return d.abovefloor != 0; } ))
+		.enter()
+		.append("circle")
+		.attr("class", "abovefloor-circles")
+		.attr("fill", function(d) { return d.violation ? "red" : "blue";})
+		.attr("stroke", "none")
+		.attr("cx", function(d) { return x(d.frequency) })
+		.attr("cy", function(d) { return y(d.max) })
+		.attr("r", 4);
 	}
 
 	var tooltip = Line_chart.append("g")
@@ -553,12 +604,20 @@ window.ShowFrequencyGraph = (function ()
 	    .on("mousemove", mousemove)
 	    .on("click", DrawSubGraph);
 
-	$('#tooltip-popover')
-	    .popover({"content"   : tooltipTemplate,
+	const virtualElement = {
+	    getBoundingClientRect: generateGetBoundingClientRect(),
+	};
+	
+	$('#maingraph-tooltip-popover')
+	    .popover({"content"   : $("#maingraph-tooltipTemplate").html(),
+		      "template"  : $("#popover-template").html(),
 		      "trigger"   : "manual",
 		      "html"      : true,
-		      "container" : selector,
-		      "placement" : "auto",
+		      "container" : $(parent)[0],
+		      "placement" : "left",
+		      // These are popper config variables.
+		      "fallbackPlacements" : ["right"],
+		      "reference" : virtualElement,
 		     });
 
 	function HideTooltip()
@@ -566,7 +625,7 @@ window.ShowFrequencyGraph = (function ()
 	    // The circle
 	    tooltip.style("display", "none");;
 	    // The box
-	    $('#tooltip-popover').popover("hide");	    
+	    $('#maingraph-tooltip-popover').popover("hide");	    
 	}
 
 	function ShowTooltip()
@@ -591,30 +650,16 @@ window.ShowFrequencyGraph = (function ()
 			 "translate(" + x(d.frequency) +
 			 "," + y(d.max) + ")");
 
-	    // Bootstrap popover based tooltip.	    
-	    var popover   = $('#tooltip-popover').data("bs.popover");
-	    var isVisible = popover.tip().hasClass('in');
-	    var updater   = function () {
-		var content = popover.tip().find('.popover-content');
-		var ptop    = Math.floor(ParentTop + y(d.max));
-		var pleft   = Math.floor(ParentLeft + x(d.frequency));
+	    // Bootstrap popover based tooltip.
+	    var isVisible = false;
+	    var popoverid = $('#maingraph-tooltip-popover')
+		.attr("aria-describedby");
+	    if (popoverid && $("#" + popoverid).length) {
+		isVisible = true;
+	    }
 
-		// Adjust ptop if its near the bottom or top.
-		if (height - y(d.max) > popover.tip().height()) {
-		    ptop = ptop + margin.top;
-		}
-		else {
-		    ptop = ptop - (popover.tip().height() / 2);
-		}
-		// And pleft if too close to right side.
-		if (x(d.frequency) > width - 150) {
-		    pleft = pleft - 175;
-		}
-		else {
-		    pleft = pleft + 70;
-		}
-		popover.tip().css("top", ptop + "px");
-		popover.tip().css("left", pleft + "px");
+	    var updater   = function () {
+		var content = $('#' + popoverid).find(".popover-body");
 
 		$(content).find(".tooltip-frequency")
 		    .html(formatter(d.frequency));
@@ -624,25 +669,37 @@ window.ShowFrequencyGraph = (function ()
 		    .html(formatter(d.max));
 		$(content).find(".tooltip-avg")
 		    .html(formatter(d.avg));
-		if (hasIncident) {
-		    $(content).find(".tooltip-incident .incident")
-			.html(formatter(d.imax));
-		    $(content).find(".tooltip-incident")
-			.removeClass("hidden");
+		if (hasAboveFloor) {
+		    if (d.abovefloor) {
+			$(content).find(".tooltip-abovefloor .abovefloor")
+			    .html(formatter(d.abovefloor) + " dB");
+			$(content).find(".tooltip-abovefloor")
+			    .removeClass("hidden");
+		    }
+		    else {
+			$(content).find(".tooltip-abovefloor")
+			    .addClass("hidden");
+		    }
 		}
+		var ptop    = Math.floor(ParentTop + y(d.max));
+		var pleft   = Math.floor(ParentLeft + x(d.frequency)) + margin.left;
+		// And compensate for scroll.
+		ptop -= $(window).scrollTop();
+		
+		virtualElement.getBoundingClientRect =
+		    generateGetBoundingClientRect(pleft, ptop);
+		
+		$('#maingraph-tooltip-popover').popover('update');
 	    };
 	    if (isVisible) {
 		updater();
 	    }
 	    else {
-		$('#tooltip-popover')
-		    .on("inserted.bs.popover", function (event) {
-			popover.tip().addClass("tooltip-popover")
-			popover.tip().find(".arrow").remove();
+		$('#maingraph-tooltip-popover')
+		    .one("inserted.bs.popover", function (event) {
 			updater();
-			$('#tooltip-popover').off("inserted.bs.popover");
 		    });
-		$('#tooltip-popover').popover('show');
+		$('#maingraph-tooltip-popover').popover('show');
 	    }
 	}
 
@@ -652,8 +709,9 @@ window.ShowFrequencyGraph = (function ()
 	    var s = d3.event.selection || x2.range();
 	    x.domain(s.map(x2.invert, x2));
 	    Line_chart.select(".line-power").attr("d", line);
-	    if (hasIncident) {
-		Line_chart.select(".line-incident").attr("d", lineI);
+	    if (hasAboveFloor) {
+		Line_chart.selectAll(".abovefloor-circles")
+		    .attr("cx", function(d) { return x(d.frequency) });
 	    }
 	    focus.select(".axis--x").call(xAxis);
 	    svg.select(".zoom").call(zoom.transform, d3.zoomIdentity
@@ -667,8 +725,9 @@ window.ShowFrequencyGraph = (function ()
 	    var t = d3.event.transform;
 	    x.domain(t.rescaleX(x2).domain());
 	    Line_chart.select(".line-power").attr("d", line);
-	    if (hasIncident) {
-		Line_chart.select(".line-incident").attr("d", lineI);
+	    if (hasAboveFloor) {
+		Line_chart.selectAll(".abovefloor-circles")
+		    .attr("cx", function(d) { return x(d.frequency) });
 	    }
 	    focus.select(".axis--x").call(xAxis);
 	    context.select(".brush")
@@ -723,62 +782,25 @@ window.ShowFrequencyGraph = (function ()
     function type(d) {
 	d.frequency = +d.frequency;
 	d.power     = +d.power;
+	if (_.has(d, "center_freq")) {
+	    d.center_freq = +d.center_freq;
+	}
 	if (_.has(d, "incident")) {
 	    d.incident = +d.incident;
 	}
-	return d;
-    }
-
-    function GetFrequencyData(datatype, route, method, args, callback)
-    {
-	var url = 'server-ajax.php';
-	if (!datatype) {
-	    datatype = "text";
+	if (_.has(d, "abovefloor") && d.abovefloor != "") {
+	    d.abovefloor = +d.abovefloor;
 	}
-
-	var networkError = {
-	    "code"  : -1,
-	    "value" : "Server error, possible network failure.",
-	};
-
-	var jqxhr = $.ajax({
-            // the URL for the request
-            url: url,
-            success: function (json) {
-		window.APT_OPTIONS.gaAjaxEvent(route, method, json.code);
-		if (callback !== undefined) {
-		    callback(json);
-		}
-	    },
-	    error: function (jqXHR, textStatus, errorThrown) {
-		if (callback !== undefined) {
-		    callback(networkError);
-		}
-	    },
- 
-            // the data to send (will be converted to a query string)
-            data: {
-		ajax_route:     route,
-		ajax_method:    method,
-		ajax_args:      args,
-            },
- 
-            // whether this is a POST or GET request
-            type: "GET",
- 
-            // the type of data we expect back
-            dataType : datatype,
-	});
-	var defer = $.Deferred();
-    
-	jqxhr.done(function (data) {
-	    defer.resolve(data);
-	});
-	jqxhr.fail(function (jqXHR, textStatus, errorThrown) {
-	    networkError["jqXHR"] = jqXHR;
-	    defer.resolve(networkError);
-	});
-	return defer;
+	else {
+	    d.abovefloor = 0;
+	}
+	if (_.has(d, "violation") && d.abovefloor != "") {
+	    d.violation = +d.violation;
+	}
+	else {
+	    d.violation = 0;
+	}
+	return d;
     }
 
     // Easier to get a binary (gzip) file this way, since jquery does
@@ -797,34 +819,6 @@ window.ShowFrequencyGraph = (function ()
 	oReq.send();
     }
 
-    /*
-     * Saving this. It is faster to go directly to the aggregate, but
-     * they all have to have valid certificates. Note that we cannot load
-     * it via http from inside an https page, the browser will block it.
-     */
-    function SaveMe(args) {
-	console.info("ShowFrequencyGraph", args);
-	GetBlob(window.URL + ".gz",
-		function (arrayBuffer) {
-		    console.info("gz version");
-		    var output = pako.inflate(arrayBuffer, { 'to': 'string' });
-		    
-		    var data = d3.csvParse(output, type);
-		    CreateBinGraph(args, data);
-		},
-		function () {
-		    $.get(window.URL)
-			.done(function (data) {
-			    console.info("text version");
-			    data = d3.csvParse(data, type);
-			    CreateBinGraph(args, data);
-			})
-			.fail(function() {
-			    alert("Could not get data file: " + window.URL);
-			});
-		});
-    }
-
     function getRandomInt() {
 	var min = 10000;
 	var max = 99999999;
@@ -835,6 +829,8 @@ window.ShowFrequencyGraph = (function ()
     // Link to the graph page for a specific graph.
     function GraphURL(args, info)
     {
+	console.info("GraphURL", info);
+	
 	if (_.has(info, "graphurl")) {
 	    return info.graphurl;
 	}
@@ -845,17 +841,31 @@ window.ShowFrequencyGraph = (function ()
 	    "&node_id=" + info.node_id +
 	    "&iface=" + info.iface;
 
-	if (args.cluster) {
-	    url = url + "&cluster=" + args.cluster;
-	}
-	if (args.baseline) {
-	    url = url + "&baseline=1";
-	    
-	    if (!args.cluster) {
-		url = url + "&cluster=" + dirname;
+	if (args.which == "rfmonitor") {
+	    if (args.cluster) {
+		url = url + "&cluster=" + args.cluster;
 	    }
 	}
-	else if (dirname == "archive") {
+	else {
+	    var endpoint;
+	    if (args.endpoint) {
+		endpoint = args.endpoint;
+	    }
+	    else {
+		// Get it from the path. Do not like this.
+		var dirs = info.path.split('/').reverse();
+		
+		if (info.archived) {
+		    endpoint = dirs[1];
+		}
+		else {
+		    endpoint = dirs[0];
+		}
+	    }
+	    url = url + "&endpoint=" + endpoint;
+	}
+	url = url + "&which=" + args.which;
+	if (dirname == "archive") {
 	    url = url + "&archived=1";
 	}
 	// Remember it so we can add a link at top of page when selected
@@ -904,8 +914,18 @@ window.ShowFrequencyGraph = (function ()
 		if (!match) {
 		    return;
 		}
+		var logid = parseInt(match[3]);
+
+		// Prune to range.
+		if (_.has(args, "rangestart") && logid < args.rangestart) {
+		    return;
+		}
+		if (_.has(args, "rangeend") && logid > args.rangeend) {
+		    return;
+		}
+		
 		// Prune out other radios and interfaces unless browsing
-		if (args.baseline) {
+		if (args.which == "rfbaseline") {
 		    info["node_id"] = node_id = match[1];
 		    info["iface"]   = match[2];
 		}
@@ -918,7 +938,7 @@ window.ShowFrequencyGraph = (function ()
 		    info["iface"]   = match[2];
 		}
 		info["path"]      = path;
-		info["logid"]     = parseInt(match[3]);
+		info["logid"]     = logid;
 		info["id"]        = getRandomInt();
 		info["lastmod"]   = parseInt(info["lastmod"]);
 		info["archived"]  = dirname == "archive" ? 1 : 0;
@@ -943,12 +963,15 @@ window.ShowFrequencyGraph = (function ()
 		});
 		_.each(dirs, function(info) {
 		    var item =
-			$("<li class='multilevel-menu-parent'>" +
-			  "  <a href='#'>" + info.name + "</a>" +
-			  "  <div class='multilevel-menu-wrapper dropdown'>" +
-			  "  </div> " +
+			$("<li class='dropstart " +
+			  "           multilevel-toggle'>" +
+			  "  <a href='#' " +
+			  "     class='dropdown-item dropdown-toggle' " +
+			  "     data-bs-auto-close='false' " +
+			  "     data-bs-toggle='dropdown'>" +
+			     info.name + "</a>" +
 			  "</li>");
-		    $(item).find("div").append(info.submenu);
+		    $(item).append(info.submenu);
 		    $(menu).append(item);
 		});
 	    }
@@ -964,12 +987,12 @@ window.ShowFrequencyGraph = (function ()
 		    return btime - atime;
 		});
 		_.each(list, function(info) {
-		    // Remeber this for generating graph url.
+		    // Remember this for generating graph url.
 		    info["dirname"] = dirname;
 		    
 		    var html =
 			"<li class='fgraph-" + info.id  + "'>" +
-			" <a href='#'>" +
+			" <a href='#' class='dropdown-item'>" +
 			info.node_id + ":" + info.iface + " - " +
 			moment(info.logid ?
 			       info.logid : info.lastmod, "X").format("L LTS") +
@@ -977,6 +1000,7 @@ window.ShowFrequencyGraph = (function ()
 		    var item = $(html);
 		    $(item).click(function (event) {
 			event.preventDefault();
+			ClearDropdowns();
 			UpdateGraph(args, info);
 		    });
 		    // Lazily put in the href for the specific graph link.
@@ -996,22 +1020,25 @@ window.ShowFrequencyGraph = (function ()
 		    }
 		    // Latest graph will be shown if nothing else.
 		    if (dirname != "archive" && 
-			(!latest || info.latest > latest.logid)) {
+			(!latest || info.logid > latest.logid)) {
 			latest = info;
 		    }
 		});
 		if (_.size(nodes) > 1) {
 		    var item =
-			$("<li class='multilevel-menu-parent'>" +
-			  "  <a href='#'>" + node_id + "</a>" +
-			  "  <div class='multilevel-menu-wrapper dropdown'>" +
-			  "   <ul class='dropdown-menu'>" +
+			$("<li class='dropstart multilevel-toggle'>" +
+			  "  <a href='#' " +
+			  "     class='dropdown-item dropdown-toggle' " +
+			  "     data-bs-auto-close='false' " +
+			  "     data-bs-toggle='dropdown'> " +
+			        node_id + "</a>" +
+			  "  <ul class='dropdown-menu multilevel-scrollable'>" +
 			  "     <li class='disabled text-center'>" +
-			  "       <a href='#'>" + node_id + "</a></li>" +
+			  "       <a href='#' class='dropdown-item'>" +
+			        node_id + "</a></li>" +
 			  "     <li class='divider' role='separator' " +
 			  "         style='margin-top: 0;'>" +
-			  "   </ul> " +
-			  "  </div> " +
+			  "  </ul> " +
 			  "</li>");
 		    
 		    $(item).find("ul").append(menuitems);
@@ -1025,6 +1052,13 @@ window.ShowFrequencyGraph = (function ()
 	    //console.info(dirname, $(menu).html());
 	    return menu;
 	}
+
+	/* Clear all open dropdowns when any graph is selected. */
+	function ClearDropdowns()
+	{
+	    $(args.selector + ' .moregraphs-dropdown .dropdown-toggle.show')
+		.dropdown('hide');
+	}
 	
 	var callback = function (value) {
 	    // XXX This will always be a string. Need to
@@ -1036,9 +1070,40 @@ window.ShowFrequencyGraph = (function ()
 	    var listing = JSON.parse(_.unescape(value));
 
 	    var menu = processDir("", "", listing);
+	    
 	    //console.info($(menu).html());
-	    $(args.selector + ' .multilevel-menu').append(menu);
+	    $(args.selector + ' .moregraphs-dropdown').append(menu);
 
+	    /*
+	     * Any click outside our multilevel dropdowns closes any
+	     * open menus.
+	     */
+	    $('body').click(function (event) {
+		var target = $(event.target);
+		var moregraphs = $(target).closest(".moregraphs-dropdown");
+		if (!moregraphs.length) {
+		    ClearDropdowns();
+		}
+	    });
+
+	    /*
+	     * Anytime we click on (show) a menu, we want to hide the
+	     * any sibling (and its children) that are showing. 
+	     */
+	    $(args.selector + ' .moregraphs-dropdown .multilevel-toggle')
+		.click(function(event) {
+		    console.info("multilevel-toggle", event);
+		    console.info($(this), $(this).siblings());
+
+		    _.each($(this).siblings(), function (sibling) {
+			$(sibling).find('.dropdown-toggle.show')
+			    .each(function () {
+				$(this).dropdown('hide');
+			    });
+		    });
+		    event.stopPropagation();
+		});
+	    
 	    $(menu).find(".multilevel-menu-parent")
 		.hover(
 		    function(event) {
@@ -1051,12 +1116,12 @@ window.ShowFrequencyGraph = (function ()
 			// Menu to be displayed
 			var menu    = $(wrapper).children(".dropdown-menu");
 		    
-			console.info(offset, poffset);
+			console.info("offsets", offset, poffset);
 
 			// Adjust the top of the menu.
 			var height = $(menu).height();
 			var top    = offset.top - poffset.top - 15;
-			console.info(height, top);
+			console.info("h/t", height, top);
 			$(wrapper).css("top", top + "px");
 
 			// Adjust the left offset of the menu. Oddly, it has to
@@ -1065,6 +1130,9 @@ window.ShowFrequencyGraph = (function ()
 			var thiswidth = $(this).width();
 			var menuwidth = $(menu).width();
 			var left;
+
+			console.info("widths", thiswidth, menuwidth,
+				     $(window).width());
 		    
 			// Clear it so calculation below works right.
 			$(wrapper).css("left", '')
@@ -1076,8 +1144,8 @@ window.ShowFrequencyGraph = (function ()
 			else {
 			    left = thiswidth;
 			}
-			console.info("left", poffset.left, thiswidth, menuwidth,
-				     $(window).width(), left);
+			left = poffset.left + left;
+			console.info("left", poffset.left, left);
 			$(wrapper).css("left", left + "px")
 		    },
 		    function(event) {
@@ -1093,70 +1161,20 @@ window.ShowFrequencyGraph = (function ()
 		    .html("Please select a graph to view");
 	    }
 	};
-	var url = args.url;
-	if (args.baseline) {
-	    url = url + "/rfbaseline/";
-	    if (args.cluster) {
-		url = url + args.cluster + "/";
+	var url = args.url + "/" + args.which + "/";
+	if (args.which != "rfmonitor") {
+	    if (args.endpoint) {
+		url = url + args.endpoint + "/";
 	    }
 	}
-	else {
-	    url = url + "/rfmonitor/";
+	url = url + "listing.php";
+	if ((args.which == "rfmonitor" ||
+	     args.which == "rfbaseline") && args.node_id) {
+	    url = url + "?node_id=" + args.node_id;
 	}
-	url = url + "/listing.php";
 	console.info("BuildMenu", url);
 	
 	$.get(url, callback);
-    }
-
-    /*
-     * Setup the download button to download the CSV data as a file.
-     */
-    function SetupDownloadOld(args, csvdata)
-    {
-	var selector = args.selector + " .download-button";
-	var filename = args.node_id + ":" + args.iface +
-	    (args.logid ? "-" + args.logid : "") + ".csv";
-
-	console.info("Download", args, filename);
-	$(selector)
-	    .unbind("click")
-	    .removeAttr("disabled")
-	    .click(function (event) {
-		event.preventDefault();
-	    
-		var blob     = new Blob([csvdata], {type: 'text/csv'});
-		const fileStream = streamSaver.createWriteStream(filename, {
-		    size: blob.size 
-		});
-		
-		var readableStream;
-		if (0) {
-		    readableStream = blob.stream();
-		}
-		else {
-		    readableStream = new Response(Blob).body;
-		}
-
-		// more optimized pipe version
-		// (Safari may have pipeTo but it's useless
-		//   without the WritableStream)
-		if (window.WritableStream && readableStream.pipeTo) {
-		    return readableStream.pipeTo(fileStream)
-			.then(() => console.log('done writing'));
-		}
-		// Write (pipe) manually
-		window.writer = fileStream.getWriter();
-		
-		const reader = readableStream.getReader();
-		
-		const pump = () => reader.read()
-		    .then(res => res.done
-			  ? writer.close()
-			  : writer.write(res.value).then(pump));
-
-		pump();
-	    });
     }
 
     function SetupDownload(args, url)
@@ -1173,6 +1191,7 @@ window.ShowFrequencyGraph = (function ()
     {
 	// If no logid (timestamp) use the lastmod from the listing.
 	var when = (info.logid ? info.logid : info.lastmod);
+	var cluster = null;
 		    
 	$(args.selector + " .frequency-graph-date")
 	    .html(moment(when, "X").format("L LTS"))
@@ -1184,19 +1203,35 @@ window.ShowFrequencyGraph = (function ()
 	$(args.selector + " .frequency-graph-iface")
 	    .html(info.iface);
 
-	if (args.cluster) {
-	    $(args.selector + " .frequency-graph-cluster")
-		.html(args.cluster);
+	if (args.cluster || args.endpoint) {
+	    cluster = args.endpoint ? args.endpoint : args.cluster;
 	}
 	else if (_.has(info, "path")) {
-	    $(args.selector + " .frequency-graph-cluster")
-		.html(info.path.split('/').reverse()[0]);
+	    cluster = info.path.split('/').reverse()[0];
+	}
+	if (cluster) {
+	    $(args.selector + " .frequency-graph-cluster").html(cluster)
 	}
 
+	// GPS link
+	if (args.which == "rfmonitor-mobile" && info.logid && cluster) {
+	    var to     = info.logid;
+	    var from   = (to - 75);
+	    
+	    var gpsurl = "https://overwatch.emulab.net:8889/" +
+		"d/VY5WqX1Mz/mobile-endpoint?orgId=3" +
+		"&from=" + (from * 1000) + "&to=" + (to * 1000) +
+		"&var-fixedNode=" + cluster + "&viewPanel=9";
+	    
+	    $(args.selector + " .gps-button")
+		.attr("href", gpsurl)
+		.removeAttr("disabled");
+	}
+	
 	$(args.selector + ' .moregraphs-dropdown')
 	    .find(".active").removeClass("active");
 	$(args.selector + ' .moregraphs-dropdown')
-	    .find(".fgraph-" + info.id).addClass("active");
+	    .find(".fgraph-" + info.id + " a").addClass("active");
 
 	// Link to graph.
 	var url = GraphURL(args, info);
@@ -1214,21 +1249,11 @@ window.ShowFrequencyGraph = (function ()
 	 * possible with jquery ajax call, so we have to something
 	 * special.
 	 */
-	var url = args.url;
-	if (args.baseline) {
-	    url = url + "/rfbaseline/";
-	    if (args.cluster) {
-		url = url + args.cluster + "/";
-	    }
-	    url = url + info["path"] + "/";
+	var url = args.url + "/" + args.which + "/";
+	if (args.endpoint) {
+	    url = url + args.endpoint + "/";
 	}
-	else {
-	    url = url + "/rfmonitor/";
-	    
-	    if (info.archived) {
-		url = url + "/archive/";
-	    }
-	}
+	url = url + info["path"] + "/";
 	url = url + info.node_id + ":" + info.iface;
 	if (info.logid) {
 	    url = url + "-" + info.logid;
@@ -1239,6 +1264,11 @@ window.ShowFrequencyGraph = (function ()
 
 	// Disable the download button until we have the data.
 	$(args.selector + " .download-button").attr("disabled", "disabled");
+
+	// Ditto the GPS link
+	if (args.which == "rfmonitor-mobile") {
+	    $(args.selector + " .gps-button").attr("disabled", "disabled");
+	}
 
 	// Clear the graph now and show the spinner.	
 	$(args.selector + " .frequency-graph-maingraph").html("");
@@ -1318,6 +1348,15 @@ window.ShowFrequencyGraph = (function ()
 	    Share(args);
 	});
 	BuildMenu(args);
+	if (_.has(args, "enableReload") && args.enableReload) {
+	    $(args.selector + ' .reload-button').click(function (e) {
+		BuildMenu(args);
+	    });
+	    $(args.selector + ' .reload-button').removeClass("hidden");
+	}
+	$(args.selector + ' [data-toggle="tooltip"]').tooltip({
+	    placement: 'auto',
+	});
     };
 }
 )();

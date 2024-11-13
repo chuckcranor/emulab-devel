@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -21,6 +21,9 @@
 # 
 # }}}
 #
+# Moving to bootstrap 5 slowly. 
+$BOOTSTRAP5OK = true;
+
 chdir("..");
 include("defs.php3");
 include_once("webtask.php");
@@ -39,9 +42,12 @@ $ishashed= 0;
 #
 RedirectSecure();
 $this_user = CheckLogin($check_status);
+# Operate as a guest user if not logged in,
+if (! ($check_status & CHECKLOGIN_LOGGEDIN)) {
+    $this_user = null;
+}
 if (isset($this_user)) {
-    CheckLoginOrDie(CHECKLOGIN_NONLOCAL|CHECKLOGIN_WEBONLY);
-    $isadmin  = (ISADMIN() ? 1 : 0);
+    $isadmin = (ISADMIN() ? 1 : 0);
 }
 else {
     $isguest = 1;
@@ -116,6 +122,8 @@ if ($isguest || $ishashed) {
     $cancopy      = 0;
     $disabled     = ($profile->isDisabled() ? 1 : 0);
     $paramsets    = 0;
+    $isleader     = 0;
+    $iscreator    = 0;
 }
 else {
     $history      = ($profile->HasHistory() ? 1 : 0);
@@ -124,6 +132,8 @@ else {
     $disabled     = ($profile->isDisabled() ? 1 : 0);
     $cancopy      = ($this_user->webonly() || $ishashed ? 0 : 1);
     $paramsets    = ($profile->HasParamsets($this_user) ? 1 : 0);
+    $isleader     = ($profile->isLeader($this_user) ? 1 : 0);
+    $iscreator    = ($profile->isCreator($this_user) ? 1 : 0);
 }
 
 # Place to hang the toplevel template.
@@ -161,6 +171,8 @@ echo "    window.ISGUEST      = $isguest;\n";
 echo "    window.ISADMIN      = $isadmin;\n";
 echo "    window.CANEDIT      = $canedit;\n";
 echo "    window.CANCOPY      = $cancopy;\n";
+echo "    window.ISCREATOR    = $iscreator;\n";
+echo "    window.ISLEADER     = $isleader;\n";
 echo "    window.DISABLED     = $disabled;\n";
 echo "    window.HISTORY      = $history;\n";
 echo "    window.ACTIVITY     = $activity;\n";
@@ -168,6 +180,15 @@ echo "    window.PARAMSETS    = $paramsets;\n";
 echo "    window.ISPPPROFILE  = $ispp;\n";
 echo "    window.WITHPUBLISHING = $WITHPUBLISHING;\n";
 echo "    window.EDITOR_READONLY = true;\n";
+if ($profile->repourl()) {
+    # Head of default branch
+    $phash    = $profile->repohash();
+    $prefspec = $profile->reporef();
+
+    echo "    window.FROMREPO = true;\n";
+    echo "    window.PROFILE_REFHASH = '$phash';\n";
+    echo "    window.PROFILE_REFSPEC = '$prefspec';\n";
+}
 echo "</script>\n";
 
 # See what projects the user can make copies in.
@@ -187,19 +208,20 @@ echo "<script src='js/lib/codemirror-min.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
-REQUIRE_JACKS();
 REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 REQUIRE_MARKED();
-REQUIRE_GENILIB_EDITOR();
+REQUIRE_TOPOLOGY_VIEWER();
 AddLibrary("js/copy-profile.js");
+AddLibrary("js/share-profile.js");
+AddTemplateList(array("share-profile-modal", "share-profile-body"));
 AddLibrary("js/gitrepo.js");
 AddLibrary("js/paramhelp.js");
 SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
             "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>");
 
-AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "oops-modal", "share-modal", "gitrepo-picker", "copy-repobased-profile", "copy-profile-modal"));
+AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "rspectextview-modal", "oops-modal", "share-modal", "gitrepo-picker", "copy-repobased-profile", "copy-profile-modal", "showtopo-modal"));
 SPITFOOTER();
 
 ?>

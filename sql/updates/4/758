@@ -1,0 +1,22 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("apt_instance_history", "webinfo")) {
+	DBQueryFatal("alter table apt_instance_history add ".
+		     "  `webinfo` mediumtext");
+    }
+    if (!DBSlotExists("apt_instances", "webinfo")) {
+	DBQueryFatal("alter table apt_instances add ".
+		     "  `webinfo` mediumtext");
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
