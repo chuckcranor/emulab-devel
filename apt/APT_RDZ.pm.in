@@ -896,19 +896,14 @@ sub CreateClaimFromReservation($$;$$)
 	if (!$DOCLAIMS);
 
     #
-    # We do not want to create a claim for resgroups that are using
-    # OTA/OAI radios. This is not an ideal approach, might have to
-    # change if users start mixing with outdoor radios.
+    # Only resgroups that are marked as using ranges outdoors are claimed.
     #
-    if (0) {
-    foreach my $res ($resgroup->ReservationList()) {
-	if ($res->type() =~ /^(oai|ota)/) {
-	    print "CreateClaimFromReservation: Skipping claim since the ".
-		"reservation is using ota/oai radios\n";
-	    return 0;
-	}	    
-    }
-    }
+    if (!defined($resgroup->powder_zones()) ||
+	$resgroup->powder_zones() !~ /outdoor/i) {
+	print "CreateClaimFromReservation: Skipping claim since the ".
+	    "reservation is not using outdoor radios\n";
+	return 0;
+    }	    
     
     if (!defined($ZMC)) {
 	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
@@ -1014,29 +1009,14 @@ sub CreateClaimsFromInstance($$;$$)
 	if (!$instance->RangeList());
 
     #
-    # Gack, the OTA lab does not fit into the RDZ. For now, just skip
-    # claiming experiments that use the OTA lab radios. Fortunately they
-    # are on the local cluster and all named accordingly. 
+    # Only instances that are marked as using ranges outdoors are claimed.
     #
-    my $resources = $instance->_resources();
-    if (!defined($resources)) {
-	my $perrmsg;
-	if (APT_Profile::GetResources($instance->RSPEC(),
-				      $perrmsg, \$resources)) {
-	    $$perrmsg = "Could not get resources for experiment";
-	    return -1;
-	}
-    }
-    if (0) {
-    foreach my $client_id (keys(%{$resources->{'radios'}})) {
-	my $radio = $resources->{'radios'}->{$client_id};
-	if ($radio->node_id() =~ /^(oai-w|ota-)/) {
-	    print "CreateClaimsFromInstance: Skipping claim since the ".
-		"experiment is using ota/oai radios\n";
-	    return 0;
-	}
-    }
-    }
+    if (!defined($instance->powder_zones()) ||
+	$instance->powder_zones() !~ /outdoor/i) {
+	print "CreateClaimsFromInstance: Skipping claim since the ".
+	    "experiment is not using outdoor radios\n";
+	return 0;
+    }	    
 
     if (!defined($ZMC)) {
 	$ZMC = APT_RDZRest::ZMC->New(APT_RDZRest::POWDER());
