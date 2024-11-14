@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,7 +31,7 @@ include $(OBJDIR)/Makeconf
 BINS		= suexec runsuid
 SBINS		= genlastlog lastlog_daemon runmedusa sshbanlist
 OTHERS          = hosts.allow
-CTRL_SBINS      = sshbanlist
+CTRL_SBINS      = sshbanlist dbb-daemon
 NMAPSERVICES    = /usr/local/share/nmap/nmap-services
 
 # These scripts installed setuid, with sudo. 
