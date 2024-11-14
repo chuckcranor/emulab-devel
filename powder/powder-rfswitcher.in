@@ -88,6 +88,7 @@ my $DDPID            = "/var/run/frontend-dense-%s.pid";
 my $PORT             = 111;
 my $SAVEUID          = $UID;
 my $SUDO	     = "/usr/local/bin/sudo";
+my $SSH		     = "/usr/bin/ssh";
 my $POWER            = "$TB/bin/power";
 
 # un-taint path
@@ -272,7 +273,7 @@ sub SwitcherRPI($$)
 {
     my ($location, $port) = @_;
     my $rfswitch = "powder-rfsw-" . lc($location);
-    my $command  = "$SUDO ssh elabman\@${rfswitch} sudo " .
+    my $command  = "$SSH elabman\@${rfswitch} sudo " .
 	"rf_switch_control_scripts/switch_ctrl.py ";
 
     if ($port == 0) {
@@ -387,7 +388,7 @@ sub GetSwitcherRPI($)
 {
     my ($location, $rfswtype) = @_;
     my $rfswitch = "powder-rfsw-" . lc($location);
-    my $command  = "$SUDO ssh elabman\@${rfswitch} sudo " .
+    my $command  = "$SSH elabman\@${rfswitch} sudo " .
 	"rf_switch_control_scripts/switch_ctrl.py --status";
 
     if ($debug) {

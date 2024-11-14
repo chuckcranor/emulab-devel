@@ -1749,7 +1749,7 @@ sub DoRefresh()
     if (! ($this_user->IsAdmin() ||
 	   $this_user->uid_idx() == $resgroup->creator_idx() ||
 	   $project->IsManager($this_user))) {
-	fatal("No permission to refresh this reservation")
+	UserError("No permission to refresh this reservation")
     }
     if ($resgroup->Lock()) {
 	UserError("Reservation is locked, please try again later");
@@ -4998,7 +4998,7 @@ sub FindFirstFit($$$$$$$)
 	    }
 	}
 	$baddog = undef
-	    if ($fit || $fit->{'starttime'});
+	    if ($fit && $fit->{'starttime'});
 	
 	if ($fit && @ranges) {
 	    #
