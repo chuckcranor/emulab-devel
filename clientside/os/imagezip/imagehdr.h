@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2022 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -40,7 +40,7 @@
  *	lay down an incorrect images, I bumped the version number.
  *	Note that there is no change to the header structure however.
  *
- *	V4 of the block descriptor adds support for integrety protection
+ *	V4 of the block descriptor adds support for integrity protection
  *	and encryption. V4 HAS BEEN DEPRECATED and we are pretending it
  *	never existed. We will re-add the security features as part of
  *	V6 or a later version.
@@ -150,7 +150,7 @@ struct blockhdr_V5 {
 
 /*
  * Version 6 of the block descriptor adds support for authentication,
- * integrety protection and encryption.
+ * integrity protection and encryption.
  *
  * An optionally-signed checksum (hash) of each header+chunk is stored in
  * the header (checksum) along with the hash algorithm used (csum_type).

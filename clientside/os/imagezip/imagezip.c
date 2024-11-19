@@ -79,7 +79,7 @@
 #undef WITH_HASH_CHUNKSPLIT
 
 /* XXX this is a hack right now */
-#define USE_HACKSORT 0
+#define USE_HACKSORT 1
 
 #define min(a,b) ((a) <= (b) ? (a) : (b))
 
@@ -658,16 +658,16 @@ main(int argc, char *argv[])
 	if (argc < 1 || argc > 2)
 		usage();
 
+	if (compat && compat < COMPRESSED_V5 && got_imageid) {
+		fprintf(stderr, "Cannot use uuid with -3\n");
+		usage();
+	}
 #ifdef WITH_CRYPTO
 	if (compat && compat < COMPRESSED_V6 && (do_encrypt || do_checksum)) {
-		fprintf(stderr, "Cannot use uuid/encrypt/checksum with -3\n");
+		fprintf(stderr, "Cannot use encrypt/checksum with -3 or -5\n");
 		usage();
 	}
 #endif
-	if (compat && compat < COMPRESSED_V5 && got_imageid) {
-		fprintf(stderr, "Cannot use uuid/encrypt/checksum with -3\n");
-		usage();
-	}
 	if (slicemode && (slice < 1 || slice > MAXSLICES)) {
 		fprintf(stderr, "Slice must be a DOS partition (1-4) "
 			"or extended DOS partition (5-%d)\n\n", MAXSLICES);
