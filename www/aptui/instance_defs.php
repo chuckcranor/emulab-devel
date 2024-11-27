@@ -54,6 +54,8 @@ $geni_response_codes =
           "Insufficient Nodes",
           "Insufficient Memory",
           "No Mapping Possible",
+          "No Connection Possible",
+          "Mapping Impossible",
     );
 define("GENIRESPONSE_BADARGS",   	       1);
 define("GENIRESPONSE_ERROR",       	       2);

@@ -1428,7 +1428,7 @@ function Do_MaxDuration()
                      " $options",
                      SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+    #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 
     if ($retval) {
         if (!$webtask->exited() || $retval < 0) {
@@ -1438,10 +1438,10 @@ function Do_MaxDuration()
         else {
             SPITAJAX_ERROR(1, $webtask->output());
         }
-        #unlink($filename);
-        #if (isset($filename2)) {
-        #    unlink($filename2);
-        #}
+        unlink($filename);
+        if (isset($filename2)) {
+            unlink($filename2);
+        }
         $webtask->Delete();
         return;
     }

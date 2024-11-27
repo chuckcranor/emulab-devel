@@ -116,8 +116,8 @@ use lib "@prefix@/lib";
 use libtestbed;
 
 if (! $impotent) {
-    if (CheckDaemonRunning("sshbanlist")) {
-	fatal("Not starting another sshbanlist daemon!");
+    if (CheckDaemonRunning("dbb-daemon")) {
+	fatal("Not starting another dbb-daemon daemon!");
     }
     # Go to ground.
     if (! $debug) {
@@ -125,7 +125,7 @@ if (! $impotent) {
 	    exit(0);
 	}
     }
-    if (MarkDaemonRunning("sshbanlist")) {
+    if (MarkDaemonRunning("dbb-daemon")) {
 	fatal("Could not mark daemon as running!");
     }
 }
@@ -421,11 +421,11 @@ sub fatal($)
 	# Send a message to the testbed list. 
 	#
 	SENDMAIL($TBOPS,
-		 "sshbanlist died",
+		 "dbb-daemon died",
 		 $msg,
 		 $TBOPS);
     }
-    MarkDaemonStopped("sshbanlist")
+    MarkDaemonStopped("dbb-daemon")
 	if (! $impotent);
 
     die("*** $0:\n".
@@ -436,7 +436,7 @@ sub notify($)
     my ($mesg) = @_;
     
     SENDMAIL($TBOPS,
-	     "SSHbanlist Critical Notification",
+	     "DBB Daemon Critical Notification",
 	     $mesg,
 	     $TBOPS);
 }

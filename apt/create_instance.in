@@ -1066,8 +1066,8 @@ if (defined($sshkey)) {
 if (defined($webinfo)) {
     $blob->{"webinfo"} = $webinfo;
 }
-if (defined($resources->{'zone'})) {
-    $blob->{"powder_zone"} = $resources->{'zone'};
+if (defined($resources->{'zones'})) {
+    $blob->{"powder_zones"} = $resources->{'zones'};
 }
 $errmsg = undef;
 $instance = APT_Instance->Create($blob, \$errmsg);
