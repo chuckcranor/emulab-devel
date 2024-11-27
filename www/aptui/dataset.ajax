@@ -755,6 +755,7 @@ function Do_RefreshDataset()
     global $this_user;
     global $ajax_args;
     global $suexec_output, $suexec_output_array, $APTBASE;
+    global $LEASE_ACCESS_READINFO;
     
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
@@ -806,6 +807,7 @@ function Do_ExtendDataset()
     global $this_user;
     global $ajax_args;
     global $suexec_output, $suexec_output_array, $APTBASE;
+    global $LEASE_ACCESS_MODIFYINFO;
     
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();

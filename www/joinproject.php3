@@ -45,7 +45,7 @@ $show_sslcertbox = TBGetSiteVar("protogeni/show_sslcertbox");
 if ($UI_EXTERNAL_ACCOUNTS) {
     $this_user = CheckLoginOrDie();    # force login, newuser is disabled
 } else {
-g    $this_user = CheckLogin($check_status);
+    $this_user = CheckLogin($check_status);
 }
 
 #
