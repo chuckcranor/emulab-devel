@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2022 University of Utah and the Flux Group.
+# Copyright (c) 2008-2024 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -45,7 +45,7 @@ sub usage()
     print "Usage: sshbanlist [-d] [-n]\n";
     exit(1);
 }
-my $optlist   = "dnsv";
+my $optlist   = "dnsvU";
 my $debug     = 0;
 my $impotent  = 0;
 my $oneshot   = 0;
@@ -66,10 +66,14 @@ my $LOGINS	     = "/var/log/logins";
 # This runs on ops where things are a bit unusual.
 my $BANLIST	     = "/usr/local/www/apache24/data/sshbanlist.txt";
 my $WHITELIST        = "$TB/etc/sshwhitelist.txt";
+my $BLOCKINGSET      = "$TB/etc/sshblockset.txt";
 my $DATAFILE         = "$TB/etc/sshbanlist.json";
 my $THRESHOLD	     = 10;
 my $UPDATE_THRESHOLD = 10;
-my $RELEASE_TIMEOUT  = 3600 * 24;
+my $FAIL2BAN_TIMEOUT = 3600 * 24;
+my $DBB_TIMEOUT      = 3600 * 24 * 30;
+my $TYPE_FAIL2BAN    = "fail2ban" ;
+my $TYPE_DBB         = "dbb";
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -81,6 +85,7 @@ sub notify($);
 sub logit($);
 sub ProcessLoginFile($);
 sub GetList($);
+sub GetBlockingSet();
 sub WriteBanList();
 sub ReadDataFile();
 sub WriteDataFile();
@@ -158,14 +163,12 @@ $SIG{USR1} = \&handler;
 $SIG{TERM} = \&handler;
 
 #
-# The count list holds offending ips and the last time they offended.
+# The count file/list holds offending ips and the last time they offended.
 #
 my $counts = {};
 
-#
-# The banlist holds the ips and the time it was banned.
-#
-my $banlist = {};
+# Co not want this data file to get too stale.
+my $lastdatawrite = time();
 
 #
 # Keep track of how many offenders have not been written.
@@ -189,6 +192,37 @@ my $control_network = inet_aton($CONTROL_NETWORK);
 # for timing them out).
 #
 ReadDataFile();
+
+# Rebuild from the current block lists
+if (defined($options{"U"})) {
+    logit("Loading initial state from the current block lists");
+
+    # Throw away whatever we got from ReadDataFile()
+    $counts = {};
+    
+    my $sachin = GetList("/usr/testbed/data/kssachin/dbb/blocked_ips");
+    foreach my $ip (keys(%{$sachin})) {
+	$counts->{$ip} = {
+	    "ip"     => $ip,
+	    "when"   => time(),
+	    "type"   => $TYPE_DBB,
+	    "count"  => 1,
+	    "banned" => 1,
+	};
+    }
+    my $banned = GetList($BANLIST);
+    foreach my $ip (keys(%{$banned})) {
+	$counts->{$ip} = {
+	    "ip"     => $ip,
+	    "when"   => time(),
+	    "type"   => $TYPE_FAIL2BAN,
+	    "count"  => 1,
+	    "banned" => 1,
+	};
+    }
+    WriteDataFile();
+}
+logit("There are " . scalar(keys(%{$counts})) . " in the initial block list");
 
 #
 # Process the logins file, generating a hash of all the IPs
@@ -222,6 +256,8 @@ while (1) {
 	    WriteBanList();
 	    last;
 	}
+	PurgeOldEntries();
+	
 	#
 	# We want to periodically update so that we are not holding
 	# to many offenders in memory and not in the list.
@@ -229,11 +265,9 @@ while (1) {
 	if ($outstandingCount) {
 	    WriteBanList();
 	}
-	
-	#
-	# Periodically purge old entries from the ban list. 
-	#
-	PurgeOldEntries();
+	elsif (time() - $lastdatawrite > 300) {
+	    WriteDataFile();
+	}
 
 	sleep(5);
     }
@@ -252,28 +286,42 @@ sub ProcessLoginFile($)
     }
 
     #
+    # This is the list of blocked user names. Generally not updated.
+    #
+    my $blockingset = GetBlockingSet();
+
+    #
     # Reread the white list each time we process.
     #
     my $whitelist = GetList($WHITELIST);
 
     # Yank anything new from the current ban list.
     foreach my $ip (keys(%{$whitelist})) {
-	if (exists($banlist->{$ip})) {
-	    delete($banlist->{$ip});
-	    logit("Removing $ip from ban list cause its white listed");
-	    $outstandingCount++
+	if (exists($counts->{$ip})) {
+	    if ($counts->{$ip}->{'banned'}) {
+		logit("Removing $ip from ban list cause its white listed");
+		$outstandingCount++;
+	    }
+	    delete($counts->{$ip});
 	}
-	delete($counts->{$ip}) if (exists($counts->{$ip}));
     }
 
     while (<$IN>) {
 	my $ip;
 	my $date;
+	my $user;
 	
-	if ($_ =~ /^${datere} .*\]: Invalid user [-\w]+ from $ipre/i ||
-	    $_ =~ /^${datere} .*\]: Did not receive identification.*$ipre/i ||
-	    $_ =~ /^${datere} .*\]: Bad protocol version.*$ipre/i ||
-	    $_ =~ /^${datere} .*\]: Failed password for [-\w]+ from $ipre/i) {
+	if ($_ =~ /^${datere} .*\]: Invalid user ([^\s]+) from $ipre/i ||
+	    $_ =~ /^${datere} .*\]: Failed password for ([^\s]+) from $ipre/i) {
+	    $date = $1;
+	    $user = $2;
+	    $ip   = $3;
+	    if ($debug > 1) {
+		logit("$date:$ip $user")
+	    }
+	}
+	elsif ($_ =~ /^${datere} .*\]: Did not receive identification.*$ipre/i ||
+	    $_ =~ /^${datere} .*\]: Bad protocol version.*$ipre/i) {
 	    $date = $1;
 	    $ip   = $2;
 	    if ($debug > 1) {
@@ -289,61 +337,85 @@ sub ProcessLoginFile($)
 
 	# Ignore anything in the whitelist.
 	if (exists($whitelist->{$ip})) {
-	    if (exists($banlist->{$ip})) {
-		delete($banlist->{$ip});
-		logit("Removing $ip from ban list cause its white listed");
-		$outstandingCount++
+	    if (exists($counts->{$ip})) {
+		if ($counts->{$ip}->{'banned'}) {
+		    logit("Removing $ip from ban list cause its white listed");
+		    $outstandingCount++;
+		}
+		delete($counts->{$ip});
 	    }
-	    delete($counts->{$ip}) if (exists($counts->{$ip}));
 	    next;
 	}
 
 	if (!exists($counts->{$ip})) {
 	    $counts->{$ip} = {
 		"ip"    => $ip,
+		"banned"=> 0,
 		"count" => 1,
 		"when"  => time(),
+		"type"  => $TYPE_FAIL2BAN,
 	    };
 	}
 	else {
 	    $counts->{$ip}->{"count"} = $counts->{$ip}->{"count"} + 1;
 	    $counts->{$ip}->{"when"}  = time();
 	}
+	my $ipinfo = $counts->{$ip};
+	
 	#
 	# If its already on the ban list, that is okay. Just means the
 	# firewall has not picked it up yet. Update the time so we know
 	# it is still being a bad actor.
 	#
-	if (exists($banlist->{$ip})) {
-	    $banlist->{$ip}->{"when"} = time();
+	if ($ipinfo->{'banned'}) {
+	    $ipinfo->{"when"} = time();
 	    next;
 	}
-	
-	if ($counts->{$ip}->{"count"} > $THRESHOLD) {
-	    #
-	    # Anything from within the testbed is unusual and should be
-	    # reported but we do not want to ban it, too confusing for
-	    # users (and us). Just log it for now.
-	    #
-	    my $public_masked  = inet_aton($ip) & $public_netmask;
-	    my $control_masked = inet_aton($ip) & $control_netmask;
 
-	    if ($public_masked  eq $public_network ||
-		$control_masked eq $control_network) {
-		logit("*** Unusual number of password failures from $ip");
-		# Reset, if we see a lot of these for the same ip,
-		# might be time to take a look. 
-		delete($counts->{$ip});
-	    }	    
-	    else {
-		if ($verbose) {
-		    logit("Banning $ip");
-		}
-		$banlist->{$ip} = {
-		    "ip"     => $ip,
-		    "when"   => time(),
-		};
-		$outstandingCount++;
+	#
+	# Anything from within the testbed is unusual and should be
+	# reported but we do not want to ban it, too confusing for
+	# users (and us). Just log it for now.
+	#
+	my $public_masked  = inet_aton($ip) & $public_netmask;
+	my $control_masked = inet_aton($ip) & $control_netmask;
+
+	if (($public_masked  eq $public_network ||
+	     $control_masked eq $control_network) &&
+	    $ipinfo->{"count"} > $THRESHOLD) {
+	    logit("*** Unusual number of password failures from $ip");
+	    # Reset, if we see a lot of these for the same ip,
+	    # might be time to take a look. 
+	    delete($counts->{$ip});
+	    next;
+	}	    
+	
+	#
+	# Check for the Sachin case first.
+	#
+	if (defined($user) && exists($blockingset->{$user})) {
+	    $ipinfo->{'banned'} = 1;
+	    # Mark the entry since we have different age out thresholds.
+	    $ipinfo->{"type"} = $TYPE_DBB;
+	    
+	    $outstandingCount++;
+	    if ($verbose) {
+		logit("Banning $ip ($user)");
+	    }
+	    next;
+	}
+
+	#
+	# Original fail2ban case.
+	# 
+	if ($ipinfo->{"count"} > $THRESHOLD) {
+	    $ipinfo->{'banned'} = 1;
+	    # Mark the entry since we have different age out thresholds.
+	    $ipinfo->{"type"} = $TYPE_FAIL2BAN,
+
+	    $outstandingCount++;
+	    if ($verbose) {
+		logit("Banning $ip");
 	    }
 	}
     }
@@ -356,30 +428,18 @@ sub ProcessLoginFile($)
 sub PurgeOldEntries()
 {
     my $now = time();
-    my $changed = 0;
     
-    foreach my $ref (values(%$banlist)) {
-	my $when = $ref->{"when"};
-	my $ip   = $ref->{"ip"};
-
-	if ($now - $when > $RELEASE_TIMEOUT) {
-	    delete($banlist->{$ip});
-	    delete($counts->{$ip}) if (exists($counts->{$ip}));
-	    $changed++;
-	    logit("Released $ip from ban list");
-	}
-    }
     foreach my $ref (values(%$counts)) {
 	my $when = $ref->{"when"};
 	my $ip   = $ref->{"ip"};
+	my $type = $ref->{"type"};
+	my $timo = ($type eq $TYPE_DBB ? $DBB_TIMEOUT : $FAIL2BAN_TIMEOUT);
 
-	if ($now - $when > $RELEASE_TIMEOUT) {
+	if ($now - $when > $timo) {
 	    delete($counts->{$ip});
 	    logit("Released $ip from count list");
+	    $outstandingCount++;
 	}
-    }
-    if ($changed) {
-	WriteBanList();
     }
 }
 
@@ -388,6 +448,11 @@ sub PurgeOldEntries()
 #
 sub WriteBanList()
 {
+    if ($impotent) {
+	$outstandingCount = 0;
+	return;
+    }
+    
     my $newfile  = ($impotent ? "/tmp/sshbanlist.$$" : $BANLIST);
     my $tempname = ($impotent ? "/tmp/banlistXXXXX"  : $BANLIST . ".XXXXX");
 
@@ -398,7 +463,10 @@ sub WriteBanList()
     if (!$in) {
 	fatal("Could not create a temp file");
     }
-    foreach my $ip (sort(keys(%$banlist))) {
+    foreach my $ip (sort(keys(%$counts))) {
+	next
+	    if (! $ip->{'banned'});
+	
 	print $in $ip . "\n";
     }
     close($in);
@@ -445,6 +513,30 @@ sub GetList($)
     close(LIST);
     return $result;
 }
+#
+# Grab a list of users from a file
+#
+sub GetBlockingSet()
+{
+    my $result = {};
+
+    if (! -e $BLOCKINGSET) {
+	logit("GetList: $BLOCKINGSET does not exist");
+	return $result;
+    }
+    open(LIST, $BLOCKINGSET) or
+	fatal("Could not open $BLOCKINGSET");
+
+    while (<LIST>) {
+	next
+	    if ($_ =~ /^#/);
+
+	chomp($_);
+	$result->{$_} = $_
+    }
+    close(LIST);
+    return $result;
+}
 
 #
 # Get our datafile
@@ -461,9 +553,12 @@ sub ReadDataFile()
 	    my $list = GetList($BANLIST);
 
 	    foreach my $ip (keys(%$list)) {
-		$banlist->{$ip} = {
+		$counts->{$ip} = {
 		    "ip"     => $ip,
 		    "when"   => time(),
+		    "type"   => $TYPE_FAIL2BAN,
+		    "count"  => 1,
+		    "banned" => 1,
 		};
 	    }
 	    if ($impotent) {
@@ -483,7 +578,7 @@ sub ReadDataFile()
     }
     close(IN);
 
-    $banlist = eval { decode_json($json) };
+    $counts = eval { decode_json($json) };
     if ($@) {
 	fatal("Could not decode $DATAFILE");
     }
@@ -493,9 +588,9 @@ sub WriteDataFile()
 {
     my $tempname = $DATAFILE . "XXXXX";
     
-    my $json = eval { encode_json($banlist); };
+    my $json = eval { encode_json($counts); };
     if ($@) {
-	fatal("Could not encode the banlist");
+	fatal("Could not encode the list data");
     }
     logit("Writing a new datafile to $DATAFILE");
     
@@ -515,6 +610,7 @@ sub WriteDataFile()
     if (!rename($filename, $DATAFILE)) {
 	fatal("Could not rename $filename to $DATAFILE: $!");
     }
+    $lastdatawrite = time();
     return 0;
 }
 
