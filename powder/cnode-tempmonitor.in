@@ -321,18 +321,15 @@ while (1) {
 	my $switchtemp = GrabSwitchTemp($details->{'switch'});
 
 	#
-	# Upload to influx.
+	# The old RFFE sensors return bogus results when the temp goes
+	# below 0 degrees (C). Look for that and just make it zero.
+	# This should be temporary, we have USB based sensors for all
+	# of the cnodes, just need to get the PIs into them all.
 	#
-	UploadTemp($cnode, $celcius);
-	if ($switchtemp) {
-	    UploadSwitchTemp($cnode, $switchtemp);
-	}
-	my $curstatus = $details->{'status'};
-	my $newstatus = $curstatus;
-	my $changed   = $details->{'lastchange'};
-	
+	my $bogus = ($celcius < -50 ? 1 : 0);
+
 	my $temperature = TempConvert($celcius);
-	if ($debug) {
+	if (1) {
 	    my $msg = "$cnode : $temperature ($celcius C) ";
 	    if ($switchtemp) {
 		$msg .= "transceiver: " . TempConvert($switchtemp);
@@ -340,6 +337,17 @@ while (1) {
 	    logit($msg);
 	}
 
+	#
+	# Upload to influx.
+	#
+	UploadTemp($cnode, $bogus ? -0.69 : $celcius);
+	if ($switchtemp) {
+	    UploadSwitchTemp($cnode, $switchtemp);
+	}
+	my $curstatus = $details->{'status'};
+	my $newstatus = $curstatus;
+	my $changed   = $details->{'lastchange'};
+	
 	#
 	# First decide what status we want to be in.
 	#
