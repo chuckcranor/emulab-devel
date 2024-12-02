@@ -213,7 +213,7 @@ use APT_Aggregate;
 use Node;
 
 if (! ($oneshot || $impotent)) {
-    if (CheckDaemonRunning("${DAEMONTAG}.log")) {
+    if (CheckDaemonRunning("$DAEMONTAG")) {
 	fatal("Not starting another $DAEMONTAG daemon!");
     }
     # Go to ground.
