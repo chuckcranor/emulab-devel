@@ -1445,7 +1445,7 @@ function Do_MaxDuration()
         $webtask->Delete();
         return;
     }
-    elseif ($ISPOWDER) {
+    elseif (0 && $ISPOWDER) {
         SUEXECERROR(SUEXEC_ACTION_DEBUG);
     }
     unlink($filename);
