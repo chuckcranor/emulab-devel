@@ -464,8 +464,10 @@ sub WriteBanList()
 	fatal("Could not create a temp file");
     }
     foreach my $ip (sort(keys(%$counts))) {
+	my $ipinfo = $counts->{$ip};
+	
 	next
-	    if (! $ip->{'banned'});
+	    if (! $ipinfo->{'banned'});
 	
 	print $in $ip . "\n";
     }
