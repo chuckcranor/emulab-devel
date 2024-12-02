@@ -81,52 +81,51 @@ my @faketemps       = (40, 47, 47, 47, 47, 50, 55, 55, 55, 55, 55, 55, 55, 55,
 #
 # This is a hack of course ... 
 #
-my %frontends = (
+my %cnodes = (
     "10.11.13.192"     => {
 	"enabled"      => 0,
-	"frontend"     => "10.11.13.192",
+	"enclosure"    => "10.11.13.192",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [],
     },
     "cnode-guesthouse" => {
 	"enabled"      => 1,
-	"frontend"     => "powder-rffe-guesthouse",
+	"enclosure"    => "powder-rffe-guesthouse",
 	"switch"       => "powder-mgmt-dbs6",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [ "bru-650-4" ],
     },
     "cnode-mario"      => {
 	"enabled"      => 1,
-	"frontend"     => "powder-rffe-mario",
+	"enclosure"    => "powder-rffe-mario",
 	"switch"       => "powder-mgmt-dbs2",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [],
     },
     "cnode-ustar"      => {
 	"enabled"      => 1,
-	"frontend"     => "powder-rffe-ustar",
+	"enclosure"    => "powder-rfsw-ustar",
 	"switch"       => "powder-mgmt-dbs8",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [ "n310-ustar" ],
     },
     "cnode-wasatch"    => {
 	"enabled"      => 1,
-	"frontend"     => "powder-rffe-wasatch",
+	"enclosure"    => "powder-rffe-wasatch",
 	"switch"       => "powder-mgmt-dbs1",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [ "cap-wasatch, n310-wasatch" ],
     },
     "cnode-moran"      => {
 	"enabled"      => 1,
-	"frontend"     => "powder-rffe-moran",
+	"enclosure"    => "powder-rffe-moran",
 	"switch"       => "powder-mgmt-dbs5",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [],
     },
     "cnode-ebc"        => {
 	"enabled"      => 1,
-#	"frontend"     => "powder-rffe-ebc",
-	"rfsw"         => "powder-rfsw-ebc",
+	"enclosure"    => "powder-rfsw-ebc",
 	"switch"       => "powder-mgmt-dbs7",
 	"autocyclefe"  => 0,
 	"alsocycle"    => [],
@@ -136,7 +135,7 @@ my %frontends = (
 #
 # Local data for each sensor.
 #
-foreach my $ref (values(%frontends)) {
+foreach my $ref (values(%cnodes)) {
     $ref->{"temperature"} = 0;
     # Timestamp of last good read, to report loss of contact.
     $ref->{"lastread"}    = time();
@@ -213,7 +212,7 @@ use APT_Aggregate;
 use Node;
 
 if (! ($oneshot || $impotent)) {
-    if (CheckDaemonRunning("${DAEMONTAG}.log")) {
+    if (CheckDaemonRunning("$DAEMONTAG")) {
 	fatal("Not starting another $DAEMONTAG daemon!");
     }
     # Go to ground.
@@ -253,8 +252,8 @@ while (1) {
     #
     # We always run, we do not look at NoLogins().
     #
-    foreach my $cnode (sort(keys(%frontends))) {
-	my $details = $frontends{$cnode};
+    foreach my $cnode (sort(keys(%cnodes))) {
+	my $details = $cnodes{$cnode};
 	
 	next
 	    if (! $details->{'enabled'});
@@ -276,15 +275,15 @@ while (1) {
 		    "The temperature monitor for $cnode is no longer ".
 		    "responding.\n\n";
 		if (!$details->{'notified'} && $details->{'autocyclefe'}) {
-		    my $frontend = $details->{"frontend"};
+		    my $sensor = $details->{"enclosure"};
 
 		    # Power cycle on first notification.
-		    $message .= "Power cycling $frontend ... \n";
+		    $message .= "Power cycling $sensor ... \n";
 		    logit($message);
-		    system("$POWER -a cycle $frontend");
+		    system("$POWER -a cycle $sensor");
 		    if ($?) {
-			NotifyTBOPS("power cycle $frontend failed",
-				    "Could not power cycle $frontend");
+			NotifyTBOPS("power cycle $sensor failed",
+				    "Could not power cycle $sensor");
 		    }
 		}
 		else {
@@ -313,6 +312,7 @@ while (1) {
 			"The temperature monitor for $cnode is online.");
 	    $details->{'notified'} = 0;
 	}
+
 	$details->{'temperature'} = $celcius;
 	$details->{"lastread"}    = time();
 	$details->{'failcount'}   = 0;
@@ -321,18 +321,15 @@ while (1) {
 	my $switchtemp = GrabSwitchTemp($details->{'switch'});
 
 	#
-	# Upload to influx.
+	# The old RFFE sensors return bogus results when the temp goes
+	# below 0 degrees (C). Look for that and just make it zero.
+	# This should be temporary, we have USB based sensors for all
+	# of the cnodes, just need to get the PIs into them all.
 	#
-	UploadTemp($cnode, $celcius);
-	if ($switchtemp) {
-	    UploadSwitchTemp($cnode, $switchtemp);
-	}
-	my $curstatus = $details->{'status'};
-	my $newstatus = $curstatus;
-	my $changed   = $details->{'lastchange'};
-	
+	my $bogus = ($celcius < -50 ? 1 : 0);
+
 	my $temperature = TempConvert($celcius);
-	if ($debug) {
+	if (1) {
 	    my $msg = "$cnode : $temperature ($celcius C) ";
 	    if ($switchtemp) {
 		$msg .= "transceiver: " . TempConvert($switchtemp);
@@ -340,6 +337,17 @@ while (1) {
 	    logit($msg);
 	}
 
+	#
+	# Upload to influx.
+	#
+	UploadTemp($cnode, $bogus ? -0.69 : $celcius);
+	if ($switchtemp) {
+	    UploadSwitchTemp($cnode, $switchtemp);
+	}
+	my $curstatus = $details->{'status'};
+	my $newstatus = $curstatus;
+	my $changed   = $details->{'lastchange'};
+	
 	#
 	# First decide what status we want to be in.
 	#
@@ -428,11 +436,15 @@ sub TempConvert($)
 sub GrabTemp($)
 {
     my ($details) = @_;
+    my $sensor = $details->{'enclosure'};
 
-    if (exists($details->{'rfsw'})) {
-	return GrabRFSWTemp($details->{'rfsw'});
+    if ($sensor =~ /rffe/) {
+	return GrabRFFETemp($sensor);
     }
-    return GrabRFFETemp($details->{'frontend'});
+    elsif ($sensor =~ /rfsw/) {
+	return GrabRFSWTemp($sensor);
+    }
+    return undef;
 }
 
 sub GrabRFFETemp($)
