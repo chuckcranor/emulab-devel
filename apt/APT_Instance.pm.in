@@ -63,7 +63,6 @@ use APT_Aggregate;
 use APT_Geni;
 use APT_Utility;
 use APT_Reservation;
-use APT_RDZ;
 use EmulabFeatures;
 use Genixmlrpc;
 use GeniResponse;
@@ -91,6 +90,11 @@ my $MAINSITE      = @TBMAINSITE@;
 my $DORDZ	  = $MAINSITE;
 my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
+
+# Only needed when we need to contact the RDZ.
+if ($DORDZ) {
+    require APT_RDZ;
+}
 
 # Cache of instances to avoid regenerating them.
 my %instances  = ();

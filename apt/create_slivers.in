@@ -86,6 +86,7 @@ my $CREATEWBSTORE    = "$TB/sbin/createwbstore";
 my $DESTROYWBSTORE   = "$TB/sbin/destroywbstore";
 my $TEE              = "/usr/bin/tee";
 my $FABRICSTITCHER   = "$TB/bin/fabric-stitcher";
+my $DORDZ            = $MAINSITE;
 
 #
 # Untaint the path
@@ -179,7 +180,7 @@ use GeniXML;
 use WebTask;
 use Logfile;
 use EmulabFeatures;
-if ($MAINSITE) {
+if ($DORDZ) {
     require APT_RDZ;
 }
 

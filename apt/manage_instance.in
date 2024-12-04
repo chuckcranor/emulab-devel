@@ -153,7 +153,11 @@ use GeniImage;
 use GeniUser;
 use WebTask;
 use EmulabFeatures;
-use APT_RDZ;
+
+# Only needed when we need to contact the RDZ.
+if ($DORDZ) {
+    require APT_RDZ;
+}
 
 # Protos
 sub fatal($);
