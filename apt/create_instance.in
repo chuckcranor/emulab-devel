@@ -101,6 +101,7 @@ my $MANAGEINSTANCE= "$TB/bin/manage_instance";
 my $MANAGERESGROUP= "$TB/bin/manage_resgroup";
 my $DEFAULT_URN   = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 my $GUEST_URN     = "urn:publicid:IDN+apt.emulab.net+authority+cm";
+my $DORDZ	  = $MAINSITE;
 my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
 my $default_aggregate_urn = $DEFAULT_URN;
 
@@ -168,7 +169,6 @@ use APT_Geni;
 use APT_Dataset;
 use APT_Aggregate;
 use APT_Utility;
-use APT_RDZ;
 use Experiment;
 use User;
 use Project;
@@ -191,6 +191,10 @@ use WebTask;
 use Logfile;
 use EmulabFeatures;
 
+# Only needed when we need to contact the RDZ.
+if ($DORDZ) {
+    require APT_RDZ;
+}
 #
 # Parse command arguments. Once we return from getopts, all that should be
 # left are the required arguments.
@@ -464,9 +468,7 @@ if (! defined($rspec)) {
     fatal("Could not parse rspec");
 }
 # Flag for below, only in Utah
-if ($MAINSITE) {
-    $rdzenabled = APT_RDZ::UseRDZ($rspec);
-}
+$rdzenabled = ($DORDZ ? APT_RDZ::UseRDZ($rspec) : 0);
 
 #
 # Optional rspec and/or script, as for a repo-based profile.

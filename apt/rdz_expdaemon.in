@@ -75,6 +75,7 @@ my $LOGFILE          = "$TB/log/rdz_expdaemon.log";
 my $SUDO	     = "/usr/local/bin/sudo";
 my $PROTOUSER	     = "elabman";
 my $ENDPOINTDIR	     = "/usr/testbed/www/rfmonitor-endpoint";
+my $DORDZ            = $MAINSITE;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -90,8 +91,11 @@ sub ReportObservation($$$);
 #
 # Turn off line buffering on output
 #
-$| = 1; 
+$| = 1;
 
+if (!$DORDZ) {
+    exit(0);
+}
 if ($UID != 0) {
     fatal("Must be root to run this script\n");
 }
@@ -137,7 +141,10 @@ use libEmulab;
 use APT_Aggregate;
 use APT_Instance;
 use APT_Profile;
-use APT_RDZ;
+# Only needed when we need to contact the RDZ.
+if ($DORDZ) {
+    require APT_RDZ;
+}
 
 if (! ($oneshot || $impotent || $leebee)) {
     if (CheckDaemonRunning("rdz_expdaemon")) {
