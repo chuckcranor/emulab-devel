@@ -7237,8 +7237,7 @@ sub InUse($$$$$$$$$)
 	print "Inuse: $freq_low, $freq_high, $inuse_lower, $inuse_upper, $pzones\n";
 	if ($freq_high > $inuse_lower &&
 	    $freq_low  <= $inuse_upper &&
-	    APT_Reservation::Group::RFReservation::ZonesOverlap(
-		$freq_zones, $inuse_zones)) {
+	    APT_Reservation::Group::ZonesOverlap($freq_zones, $inuse_zones)) {
 	    #
 	    # Return conflict info.
 	    #

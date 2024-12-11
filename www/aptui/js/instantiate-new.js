@@ -1577,6 +1577,7 @@ $(function ()
 	console.info("UpdateMaxDuration", start_day, start_hour);
 	if (window.ISPOWDER) {
 	    $('#doesnotfit-warning').addClass("hidden");
+	    $('#bestguess-info').addClass("hidden");
 	}
 	else {
 	    $('#maxduration-limited').addClass("hidden");
@@ -1666,8 +1667,11 @@ $(function ()
 		    else if (which == "range") {
 			phrase = "range " + loser;
 		    }
-		    else {
+		    else if (which == "route") {
 			phrase = "route " + loser;
+		    }
+		    else if (which == "zone") {
+			phrase = "zone " + loser;
 		    }
 		    $('#doesnotfit-warning-loser').html(phrase + ".");
 		    $('#doesnotfit-warning-loser').removeClass("hidden");

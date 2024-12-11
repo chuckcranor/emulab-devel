@@ -836,10 +836,28 @@ sub DeleteAnnouncement($)
     system("$ANNOUNCE -R $uuid");    
 }
 
+sub ZonesOverlap($$)
+{
+    my ($z1, $z2) = @_;
+
+    return 0
+	if (! (defined($z1) && defined($z2)));
+
+    my %z1 = map { $_ => $_ } split(",", $z1);
+    my %z2 = map { $_ => $_ } split(",", $z2);
+
+    foreach my $key (keys(%z1)) {
+	return 1
+	    if (exists($z2{$key}));
+    }
+    return 0;
+}
+
 ###################################################################
 package APT_Reservation::Group::Reservation;
 use emdb;
 use libtestbed;
+use emutil;
 use APT_Aggregate;
 use Carp;
 use JSON;
@@ -869,6 +887,15 @@ sub Lookup($$$$)
     $self->{'GROUP'}    = $group;
     weaken($self->{'GROUP'});
     bless($self, $class);
+
+    # Grab the powder zone.
+    $group->{'zone'} = undef;
+    my $aggregate = APT_Aggregate->Lookup($urn);
+    if ($aggregate->IsReservableNode($type)) {
+	if (my $radio = $aggregate->Radio($type)) {
+	    $self->{'DBROW'}->{'zone'} = $radio->powder_zone() || "Outdoor";
+	}
+    }
 
     # Handy;
     $self->{'AGGURN'}   = GeniHRN->new($self->aggregate_urn());
@@ -1239,6 +1266,171 @@ sub Update($$$)
 	or return -1;
 
     $self->{'DBROW'}->{$which} = $what;
+    return 0;
+}
+
+sub CheckForBlockingZones($$$$$;$)
+{
+    my ($group, $user, $start, $end, $zone, $pconflict) = @_;
+    my $project = $group->GetProject();
+
+    return 0
+	if (!defined($zone));
+
+    #
+    # No start time means user wants the reservation right now.
+    #
+    $start = time()
+	if (!defined($start));
+
+    #
+    # Check current experiments.
+    # This is similar to the InUse() routines in APT_Instance, but I think
+    # for the zone checks, this is a better place.
+    #
+    my $pid_idx = $project->pid_idx();
+    my $gid_idx = $group->gid_idx();
+    my $uid_idx = $user->uid_idx();
+    my $clause  = "";
+
+    if ($project->shared_reservations() == $Project::RESERVATIONS_PERGROUP) {
+	$clause = "i.gid_idx!='$gid_idx' ";
+    }
+    elsif ($project->shared_reservations() == $Project::RESERVATIONS_PERUSER) {
+	$clause = "i.creator_idx!='$uid_idx' ";
+    }
+    else {
+	$clause = "i.pid_idx!='$pid_idx' ";
+    }
+
+    #
+    # This is the fastest way to do this.
+    # Yes, we use the reservation system sharing definitions. 
+    #
+    my $query_result =
+	DBQueryWarn("select s.resource_id,r.powder_zone,i.uuid ".
+		    "  from apt_instance_sliver_status as s ".
+		    "join apt_aggregate_radio_info as r on ".
+		    "   r.node_id=s.resource_id ".
+		    "join apt_instances as i on ".
+		    "   i.uuid=s.uuid ".
+		    "where $clause");
+    
+    if (!$query_result) {
+	return -1;
+    }
+    while (my ($node_id,$powder_zone,$uuid) = $query_result->fetchrow_array()) {
+	my $instance = APT_Instance->Lookup($uuid);
+	next
+	    if (!defined($instance));
+
+	my $instance_zones = $instance->powder_zones();
+	next
+	    if (!defined($instance_zones));
+
+	my $instance_start = str2time($instance->started());
+	my $instance_end   = str2time($instance->Expires());
+
+	# If this instance does not overlap in time, skip it.
+	if (($start < $instance_start && $end < $instance_start) ||
+	    ($start > $instance_end - 1)) {
+	    next;
+	}
+
+	#
+	# Look for a matching zone that is "exclusive".
+	# At the moment this is the OTA lab. :-)
+	#
+	foreach my $z (split(",", $instance_zones)) {
+	    next
+		if ($z !~ /ota/i);
+
+	    if ($z eq $zone) {
+		if (defined($pconflict)) {
+		    $$pconflict = {
+			"errmsg" => "A running experiment is using ".
+			    "the $z zone at the same time",
+			"zones"  => $z,
+			"when"   => time(),
+			"stamp"  => TBDateStringLocal(time()),
+		    };
+		}
+		return 1;
+	    }
+	}
+    }
+    
+    #
+    # Look at all existing project reservations.
+    #
+    my @groups = APT_Reservation::Group->LookupAll();
+
+    return 0
+	if (!@groups);
+
+    #
+    # For the caller, we want to sort the list by reservation start
+    # time so that we get the earliest conflict.
+    #
+    @groups = sort { str2time($a->start()) <=> str2time($b->start()) } @groups;
+
+    foreach my $resgroup (@groups) {
+	my $res_start   = str2time($resgroup->start());
+	my $res_end     = str2time($resgroup->end());
+	my $res_zones   = $resgroup->powder_zones();
+	my $res_creator = $resgroup->GetCreator();
+	my $res_project = $resgroup->GetProject();
+	my $res_group   = $resgroup->GetGroup();
+
+	#
+	# XXX Really need to look at the individual cluster
+	# reservations for the approval check, but I will need
+	# to add a zone slot to the DB.
+	#
+	next
+	    if (!$resgroup->PartiallyApproved());
+
+	# If this reservation does not overlap in time, skip it.
+	if (($start < $res_start && $end < $res_start) ||
+	    ($start > $res_end - 1)) {
+	    next;
+	}
+
+	# Skip if zones do not overlap.
+	next
+	    if (! APT_Reservation::Group::ZonesOverlap($res_zones, $zone));
+	
+	# Skip reservations in our own project, they do not conflict
+	next
+	    if ($project->SameProject($res_project) &&
+		($project->ResModeProject() ||
+		 ($project->ResModeGroup() &&
+		  $group->SameGroup($res_group)) ||
+		 ($project->ResModeUser() &&
+		  $user->SameUser($res_creator))));
+
+	#
+	# Look for a matching zone that is "exclusive".
+	# At the moment this is the OTA lab. :-)
+	#
+	foreach my $z (split(",", $res_zones)) {
+	    next
+		if ($z !~ /ota/i);
+
+	    if ($z eq $zone) {
+		if (defined($pconflict)) {
+		    $$pconflict = {
+			"errmsg" => "Another approved reservation has the ".
+			    "$z zone reserved",
+			"zones"  => $z,
+			"when"   => $res_start,
+			"stamp"  => TBDateStringLocal($res_start),
+		    };
+		}
+		return 1;
+	    }
+	}
+    }
     return 0;
 }
 
@@ -2052,23 +2244,6 @@ sub Overlaps($$$)
     return 1;
 }
 
-sub ZonesOverlap($$)
-{
-    my ($z1, $z2) = @_;
-
-    return 0
-	if (! (defined($z1) && defined($z2)));
-
-    my %z1 = map { $_ => $_ } split(",", $z1);
-    my %z2 = map { $_ => $_ } split(",", $z2);
-
-    foreach my $key (keys(%z1)) {
-	return 1
-	    if (exists($z2{$key}));
-    }
-    return 0;
-}
-
 #
 # See if a request fits the schedule.
 # 
@@ -2113,7 +2288,8 @@ sub Fits($$$$$;$)
 
 	    # Skip if zones do not overlap.
 	    next
-		if (! ZonesOverlap($res_zones, $freq_zones));
+		if (! APT_Reservation::Group::ZonesOverlap(
+			  $res_zones, $freq_zones));
 
 	    # If this reservation does not overlap in time, skip it.
 	    if (($start < $res_start && $end < $res_start) ||
@@ -2204,7 +2380,8 @@ sub CheckSharingModeChange($$$)
 
 		# Skip if zones do not overlap.
 		next
-		    if (! ZonesOverlap($res_zones, $range_zones));
+		    if (! APT_Reservation::Group::ZonesOverlap(
+			      $res_zones, $range_zones));
 
 		# If no overlap in freq, skip it.
 		if (($range_low < $res_low && $range_high < $res_low) ||
@@ -2346,7 +2523,8 @@ sub CanStart($$$$$$$)
 
 		# Skip if zones do not overlap.
 		next
-		    if (! ZonesOverlap($res_zones, $freq_zones));
+		    if (! APT_Reservation::Group::ZonesOverlap(
+			      $res_zones, $freq_zones));
 
 		# If this reservation does not overlap in time, skip it.
 		if (($start < $res_start && $end < $res_start) ||
@@ -2481,7 +2659,8 @@ sub RangeReserved($$$$$$$$)
 	return 1
 	    if ($freq_low >= $lower && $freq_low <= $upper &&
 		$freq_high >= $lower && $freq_high <= $upper &&
-		ZonesOverlap($freq_zones, $powder_zones));
+		APT_Reservation::Group::ZonesOverlap(
+		    $freq_zones, $powder_zones));
     }
     return 0;
 }
@@ -2577,7 +2756,8 @@ sub MaxExtension($$)
 
 		# Skip if zones do not overlap.
 		next
-		    if (! ZonesOverlap($res_zones, $freq_zones));
+		    if (! APT_Reservation::Group::ZonesOverlap(
+			      $res_zones, $freq_zones));
 
 		# If this reservation does not overlap in freq, skip it.
 		if (($freq_low < $res_low && $freq_high < $res_low) ||
@@ -2653,7 +2833,8 @@ sub MaxDuration($$$$$$$$)
 
 		# Skip if zones do not overlap.
 		next
-		    if (! ZonesOverlap($res_zones, $freq_zones));
+		    if (! APT_Reservation::Group::ZonesOverlap(
+			      $res_zones, $freq_zones));
 
 		# If this reservation does not overlap in freq, skip it.
 		if (($freq_low < $res_low && $freq_high < $res_low) ||

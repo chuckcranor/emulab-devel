@@ -2474,9 +2474,42 @@ sub ExtendInternal($$$$$$)
     my $oldexpires = str2time($slice->expires());
 
     #
-    # Before we ask the clusters, confirm that there are no conflicting
-    # RF reservations for this instance.
+    # Before we ask the clusters, confirm that there are no blocking
+    # zones.
     #
+    if ($instance->powder_zones()) {
+	my @zones   = split(",", $instance->powder_zones());
+	my $group   = $instance->GetGroup();
+	my $creator = $instance->GetCreator();
+	my $start   = time();
+	my $end     = $oldexpires + $seconds;
+
+	foreach my $zone (@zones) {
+	    my $conflict;
+
+	    #
+	    # This will return the earliest blocker
+	    #
+	    if (APT_Reservation::Group::Reservation::CheckForBlockingZones(
+		    $group, $creator, $start, $end, $zone, \$conflict)) {
+		my $zmax = $conflict->{'when'};
+		
+		if ($debug) {
+		    print "Zone Max extension is $zmax\n";
+		    print Dumper($conflict);
+		}
+		if (!$force) {
+		    $errmsg = "Extension refused cause there is a blocking ".
+			"experiment or reservation using the $zone zone";
+		    $errcode = 1;
+		    goto bad;
+		}
+		last;
+	    }
+	}
+    }
+
+    # Ditto range reservations
     my $rfmax =
 	APT_Reservation::Group::RFReservation::MaxExtension($instance, \$tmp);
     if (!defined($rfmax)) {
@@ -2870,6 +2903,41 @@ sub DoMaxExtensionInternal($$)
 	$newmax = $max
 	    if ($max < $newmax);
     }
+    #
+    # For Powder, need to check for blocking zone violations
+    #
+    if ($instance->powder_zones()) {
+	my @zones   = split(",", $instance->powder_zones());
+	my $group   = $instance->GetGroup();
+	my $creator = $instance->GetCreator();
+	my $start   = time();
+
+	foreach my $zone (@zones) {
+	    my $conflict;
+
+	    #
+	    # This will return the earliest blocker
+	    #
+	    if (APT_Reservation::Group::Reservation::CheckForBlockingZones(
+		    $group, $creator, $start, $newmax, $zone, \$conflict)) {
+		my $zmax = $conflict->{'when'};
+		
+		if ($debug) {
+		    print "Zone Max extension is $zmax, ".
+			"current max is $newmax\n";
+		    print Dumper($conflict);
+		}
+		if ($newmax > $zmax) {
+		    if ($debug) {
+			print "Cutting back max extension cause of a zone\n";
+		    }
+		    $newmax = $zmax;
+		}
+		last;
+	    }
+	}
+    }
+    
     #
     # See if we are bounded by RF reservations.
     #
