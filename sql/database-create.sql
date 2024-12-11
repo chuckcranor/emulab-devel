@@ -172,6 +172,7 @@ CREATE TABLE `apt_aggregate_radio_info` (
   `notes` text,
   `rdz_radio_id` varchar(40) DEFAULT NULL,
   `powder_zone` varchar(32) default NULL,
+  `hidden` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`aggregate_urn`,`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

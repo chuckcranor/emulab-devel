@@ -609,6 +609,10 @@ class Aggregate
             $itype    = $row["itype"];
             $alive    = true;
 
+            if ($row["hidden"] && !ISADMIN()) {
+                continue;
+            }
+
             # XXX Need to change the radio tables for this.
             if (preg_match("/^ota/", $node_id)) {
                 $itype = "OTA";
