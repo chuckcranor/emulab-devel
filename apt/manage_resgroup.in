@@ -390,6 +390,27 @@ sub DoGroupReserve()
     }
 
     #
+    # For Powder, need to know the zones.
+    #
+    my %zones  = ();
+    
+    my $getZone = sub {
+	my ($aggregate_urn, $node_id) = @_;
+	my $aggregate = APT_Aggregate->Lookup($aggregate_urn);
+	
+	if (my $radio = $aggregate->Radio($node_id)) {
+	    my $zone = $radio->powder_zone() || "Outdoor";
+	    
+	    if (!exists($zones{$zone})) {
+		$zones{$zone} = 0;
+	    }
+	    $zones{$zone} = $zones{$zone} + 1;
+	    return $zone;
+	}
+	return undef;
+    };
+
+    #
     # Sanity check incoming cluster/range data.
     #
     if (exists($blob->{'clusters'})) {
@@ -419,6 +440,8 @@ sub DoGroupReserve()
 	    if (!ValidUUID($cluster->{"uuid"})) {
 		fatal("Invalid cluster uuid: " . $cluster->{"uuid"});
 	    }
+	    # We (might) assign a zone below.
+	    $cluster->{'zone'} = undef;
 	}
 
 	#
@@ -426,11 +449,6 @@ sub DoGroupReserve()
 	# is enforced at the cluster, but better to catch it earlier
 	# since it happens late at the cluster (in nalloc).
 	#
-	# Also watch for OTA nodes (radios in specific zones).
-	#
-	my $radios = 0;
-	my %zones  = ();
-	
 	foreach my $cluster_uuid (keys(%{$clusters})) {
 	    my $cluster   = $clusters->{$cluster_uuid};
 	    my $urn       = $cluster->{"cluster"};
@@ -446,22 +464,12 @@ sub DoGroupReserve()
 		if (!defined($node));
 
 	    #
-	    # Watch for OTA lab, if the only radios reserved are for the OTA
-	    # lab, we are going to mark this resgroup with a zone to indicate
-	    # it does not conflict with radios in other zones (or outside).
+	    # Watch for radios, need their zone,
 	    #
-	    # Using node name is dumb, of course.
-	    #
-	    if (my $radio = $aggregate->Radio($node_id)) {
-		my $zone = $radio->powder_zone() || "Outdoor";
-		
-		if (!exists($zones{$zone})) {
-		    $zones{$zone} = 0;
-		}
-		$zones{$zone} = $zones{$zone} + 1;
-		$radios++;
+	    if (my $zone = &$getZone($urn, $node_id)) {
+		$cluster->{'zone'} = $zone;
 	    }
-	    
+
 	    next
 		if (! $node->{'conflicting_nodes'});
 
@@ -594,16 +602,21 @@ sub DoGroupReserve()
 	if (defined($clusters)) {
 	    foreach my $cluster_uuid (keys(%{$clusters})) {
 		my $cluster     = $clusters->{$cluster_uuid};
+		my $urn         = $cluster->{"cluster"};
 		my $count       = $cluster->{"count"};
 		my $remote_uuid = $cluster->{"uuid"};
+
 		my $reservation = $resgroup->Reservation($remote_uuid);
 
 		if (defined($reservation)) {
-		    # We ignore the type/cluster that came in, in case the
-		    # client tried to change it. See below.
-		    $cluster->{"type"} = $reservation->type();
-		    $cluster->{"cluster"} = $reservation->aggregate_urn();
-		
+		    #
+		    # Watch for a client trying to change the details of
+		    # an existing reservation. Not allowed.
+		    #
+		    if ($cluster->{"type"} ne $reservation->type() ||
+			$cluster->{"cluster"} ne $reservation->aggregate_urn()) {
+			fatal("Mismatched type/cluster for $cluster_uuid");
+		    }
 		    if ($updateall || $count != $reservation->count()) {
 			push(@cluster_reservations, $cluster);
 			# Flag for below, for generating command line.
@@ -709,7 +722,10 @@ sub DoGroupReserve()
 	}
     }
     else {
-	@cluster_reservations = values(%{$clusters}) if (defined($clusters));
+	if (defined($clusters)) {
+	    @cluster_reservations = values(%{$clusters});
+	}
+	
 	if (defined($ranges)) {
 	    foreach my $range_uuid (keys(%{$ranges})) {
 		my $range = $ranges->{$range_uuid};
@@ -923,6 +939,31 @@ sub DoGroupReserve()
     };
     
     if (@cluster_reservations) {
+	if (keys(%zones) && !$override) {
+	    #
+	    # Check for zone blockout (attempt to use a "blocking" zone that
+	    # is already in use or reserved).
+	    #
+	    foreach my $res (@cluster_reservations) {
+		my $urn         = $res->{"cluster"};
+		my $type        = $res->{"type"};
+		my $zone        = $res->{"zone"};
+		my $conflict;
+	    
+		if (APT_Reservation::Group::Reservation::CheckForBlockingZones(
+			$group, $this_user, $start, $end, $zone, \$conflict)) {
+
+		    $res->{'errcode'}  = GENIRESPONSE_REFUSED;
+		    $res->{'output'}   = (defined($conflict) ?
+					  $conflict->{'errmsg'} : "");
+		    $res->{"approved"} = 0;
+		    $cluster_results->{'errors'}++;		
+		}
+	    }
+	    goto skipclusters
+		if ($cluster_results->{'errors'});
+	}
+	
 	#
 	# In checkonly mode we do one pass. In submit mode we do two
 	# passes, the first is a checkonly pass to see if any clusters
@@ -996,6 +1037,7 @@ sub DoGroupReserve()
 		# 
 	    }
 	}
+      skipclusters:
     }
     if (@range_reservations) {
 	#
@@ -1984,6 +2026,7 @@ sub DoApprove()
     if (!defined($project)) {
 	fatal("Could not get project for reservation");
     }
+    my $group = $resgroup->GetGroup();
     if ($takelock) {
 	$resgroup->TakeLock();
     }
@@ -2010,6 +2053,43 @@ sub DoApprove()
 	print "Nothing to approve\n";
 	$resgroup->Unlock();
 	exit(0);
+    }
+
+    #
+    # Check for blocking zone issues here.
+    #
+    if (@cluster_reservations && !$override) {
+	my $nofits    = 0;
+	my $creator   = $resgroup->GetCreator();
+	
+	foreach my $res (@cluster_reservations) {
+	    my $type        = $res->type();
+	    my $zone        = $res->zone();
+	    my $conflict;
+
+	    next
+		if (!defined($zone));
+
+	    if (APT_Reservation::Group::Reservation::CheckForBlockingZones(
+		    $group, $creator, $start, $end, $zone, \$conflict)) {
+		
+		my $msg = "No longer fits the schedule";
+		if ($conflict) {
+		    $msg .= ": " . $conflict->{'errmsg'};
+		}
+		my $blob = {
+		    "uuid"    => $res->remote_uuid(),
+		    "errcode" => 1,
+		    "errmesg" => $msg,
+		};
+		$results->{$res->remote_uuid()} = $blob;
+		$nofits++;
+		next;
+	    }
+	}
+	if ($nofits) {
+	    goto done;
+	}
     }
 
     #
@@ -3063,7 +3143,7 @@ sub DoConvertReservationsToGroups()
 
 #
 # Given an rspec check to see if the resources are reserved for the
-# given 
+# given time.
 #
 sub DoCheckReserved()
 {
@@ -3416,6 +3496,37 @@ sub DoMaxDuration()
     }
     elsif ($end < $start) {
 	$end = 0;
+    }
+    if ($end) {
+	#
+	# Need to check for blocking zones. This check looks at both
+	# current resgroups and running experiments and if there is a
+	# conflict, returns the start of that conflict. 
+	#
+	if (defined($resources->{'zones'})) {
+	    my @zones = split(",", $resources->{'zones'});
+
+	    foreach my $zone (@zones) {
+		my $conflict;
+		if (APT_Reservation::Group::Reservation::CheckForBlockingZones(
+			$group, $this_user, $start, $end, $zone, \$conflict)) {
+		    print Dumper($conflict);
+		    #
+		    # If the conflict is within the next hour, then we
+		    # call it not possible.
+		    #
+		    if ($conflict->{'when'} < time() + 3600) {
+			$end = 0;
+		    }
+		    else {
+			$end = $conflict->{'when'};
+		    }
+		    $badtype = "zone";
+		    $baddog  = $conflict->{'zones'};
+		    last;
+		}
+	    }
+	}
     }
     if ($end == 0) {
 	print "Some or all resources unavailable\n";

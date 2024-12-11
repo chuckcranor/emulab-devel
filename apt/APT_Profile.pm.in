@@ -2287,6 +2287,23 @@ sub CheckResourceReservations($$$$$$$;$)
 	}
     }
 
+    #
+    # Need to check for blocking zones. This check looks at both
+    # current resgroups and running experiments and if there is a
+    # conflict, returns the start of that conflict. 
+    #
+    if (defined($resources->{'zones'})) {
+	my @zones = split(",", $resources->{'zones'});
+
+	foreach my $zone (@zones) {
+	    my $conflict;
+	    if (APT_Reservation::Group::Reservation::CheckForBlockingZones(
+		    $group, $user, $start, $end, $zone, \$conflict)) {
+		$$pmsg = $conflict->{'errmsg'};
+		return 1;
+	    }
+	}
+    }
     return 0;
 }
 
