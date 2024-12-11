@@ -604,7 +604,9 @@ function Do_CloneStatus()
     else {
 	$blob["image_size"] = 0;
     }
-    $blob["image_status"] = $taskdata["image_status"];
+    if (isset($taskdata["image_status"])) {
+        $blob["image_status"] = $taskdata["image_status"];
+    }
     
     #
     # Lets put the node status in too. The backend has helpfully told us
