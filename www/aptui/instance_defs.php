@@ -944,6 +944,8 @@ class Instance
                            "ceg1"               => true,
                            "cap1"               => true,
                            "cl-ap"              => true,
+                           "wifi-ap"            => true,
+                           "bb-pc"              => true,
                            # Wisconsin, not ready yet
                            "c240g2-infra"       => true,
                            "r7525s"             => true,
