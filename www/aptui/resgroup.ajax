@@ -1455,7 +1455,7 @@ function Do_FindFirstFit()
         $webtask->Delete();
 	return;
     }
-    else {
+    elseif (0) {
         # Debug for now.
         SUEXECERROR(SUEXEC_ACTION_DEBUG);
     }        
