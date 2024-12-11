@@ -265,7 +265,7 @@ function SearchForIP($token, $min, $max)
         # This is a bit hokey, but it lets us show a current experiment
         # in the activity list when searching for an IP, which is handy.
         #
-        $instance = Instance::Lookup($current);
+        $instance = Instance::Lookup($uuid);
         if ($instance &&
             (strtotime($instance->started()) > $min &&
              strtotime($instance->started()) < $max)) {

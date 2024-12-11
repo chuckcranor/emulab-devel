@@ -41,6 +41,7 @@
  }
  .form-group-sm .control-label, .form-group-ota .control-label {
      padding-top: 0px !important;
+     font-size: 0.80rem;
  }
  .reservation-error, .underused-warning, .ota-message {
      padding-top: 0px !important;
@@ -99,8 +100,7 @@
 	</div>
 	<div class='row'>
 	  <div class='col-sm-12'>
-	    <form id='reserve-request-form'
-		  class='form-horizontal' role='form'>
+	    <form id='reserve-request-form' role='form'>
 	      <% var d = new Date(); var offset = d.getTimezoneOffset(); %>
 	      <input id="timezone" name="timezone" type="hidden"
 		     value=<%- offset %>>

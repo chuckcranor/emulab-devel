@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -59,7 +59,7 @@ else {
     $edit = 0;
 }
 if (!preg_match("/^[-\w]+$/", $type)) {
-    SPITUSERERROR("$node_type contains illegal characters!");
+    SPITUSERERROR("$type contains illegal characters!");
 }
 $nodetype = NodeType::Lookup($type);
 if (!$nodetype) {

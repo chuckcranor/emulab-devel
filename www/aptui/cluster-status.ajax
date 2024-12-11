@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -114,6 +114,7 @@ function Do_GetStatus()
                                        "preres"       => 0,
                                        "free"         => 0,
                                        "free_preres"  => 0);
+            # Only real types (not reservable nodes) have free_reserved.
             if (isset($typeinfo) &&
                 property_exists($typeinfo, $type)) {
                 $typecounts[$type]["free_reserved"] =
@@ -212,7 +213,7 @@ function Do_GetStatus()
             $details->reserved_urn != "" && 
             Instance::ValidURN($details->reserved_urn)) {
             
-            list ($auth,$type,$id) = Instance::ParseURN($details->reserved_urn);
+            list ($auth,$t,$id) = Instance::ParseURN($details->reserved_urn);
             #
             # Subdomain is project id.
             #
@@ -290,12 +291,16 @@ function Do_GetStatus()
             $info["available"] = $available;
             #
             # Adjust free counts for this type, see above. 
+            # Reservation system treats prereserved as not free.
             #
             if ($available &&
                 $details->pid == "" && $details->reserved_pid != "") {
                 $typecounts[$type]["free"] += 1;
-                # Reservation system treats prereserved as not free.
-                $typecounts[$type]["free_reserved"] += 1;
+                
+                # Only real types (not reservable nodes) can be prereserved
+                if (array_key_exists("free_reserved", $typecounts[$type])) {
+                    $typecounts[$type]["free_reserved"] += 1;
+                }
             }
         }
         $nodeinfo[] = $info;

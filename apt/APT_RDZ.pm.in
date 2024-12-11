@@ -1921,6 +1921,8 @@ sub PowerControl($$$)
 
 	push(@node_ids, $client_id);
     }
+    return 0
+	if (!@node_ids);
 
     #
     # Options:
