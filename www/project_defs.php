@@ -874,18 +874,6 @@ class Project
 	$portal                 = $this->portal();
         $nonlocal_id            = $this->nonlocal_id();
 
-	# Before project approval, display ron/plab request status.
-	if ($this->approved()) {
-	    $proj_ronpcs   =
-		YesNo(strpos($this->pcremote_ok(), "pcron") !== false);
-	    $proj_plabpcs  = 
-		YesNo(strpos($this->pcremote_ok(), "pcplabphys") !== false);
-	}
-	else {
-	    $proj_ronpcs   = YesNo($this->num_ron());
-	    $proj_plabpcs  = YesNo($this->num_pcplab());
-	}
-
 	if (! ($head_user = User::Lookup($proj_head_idx))) {
 	    TBERROR("Could not lookup object for user $proj_head_idx", 1);
 	}
@@ -1039,16 +1027,6 @@ class Project
                   <td class=\"left\">$proj_pcs</td>
               </tr>\n";
     
-	echo "<tr>
-                  <td>Planetlab Access: </td>
-                  <td class=\"left\">$proj_plabpcs</td>
-              </tr>\n";
-    
-	echo "<tr>
-                  <td>RON Access: </td>
-                  <td class=\"left\">$proj_ronpcs</td>
-              </tr>\n";
-
 	# Fine-grained Datapository access: show node_ids over all sub-groups.
 	# Should probably do likewise in individual sub-group pages.
 	# "dp_projects" node_attributes are lists of group gid_idxs.
