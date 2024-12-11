@@ -68,7 +68,7 @@ RANDFILE	= $dir/.rand		# private random number file
 
 default_days	= 2000			# how long to certify for
 default_crl_days= 2000			# how long before next CRL
-default_md	= sha1			# which md to use.
+default_md	= sha256		# which md to use.
 preserve	= no			# keep passed DN ordering
 unique_subject  = no
 copy_extensions = copy
@@ -117,7 +117,7 @@ RANDFILE	= $dir/.rand		# private random number file
 
 default_days	= 2000			# how long to certify for
 default_crl_days= 2000			# how long before next CRL
-default_md	= sha1			# which md to use.
+default_md	= sha256		# which md to use.
 preserve	= no			# keep passed DN ordering
 unique_subject  = no
 copy_extensions = copy
@@ -132,7 +132,7 @@ crl		= $dir/crl.pem 		# The current CRL
 RANDFILE	= $dir/.rand		# private random number file
 default_crl_days= 30			# how long before next CRL
 # Added for update 5.10
-default_md	= sha1			# CRL md to use
+default_md	= sha256		# CRL md to use
 preserve	= no			# keep passed DN ordering
 unique_subject  = no
 
