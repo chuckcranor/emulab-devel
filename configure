@@ -7433,6 +7433,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/freebsd12/GNUmakefile clientside/tmcc/freebsd12/netif_emulab \
  clientside/tmcc/freebsd13/GNUmakefile clientside/tmcc/freebsd13/netif_emulab \
  clientside/tmcc/freebsd14/GNUmakefile clientside/tmcc/freebsd14/netif_emulab \
+ clientside/tmcc/freebsd15/GNUmakefile clientside/tmcc/freebsd15/netif_emulab \
  clientside/tmcc/freenas11/GNUmakefile clientside/tmcc/truenas13/GNUmakefile \
  clientside/tmcc/cygwinxp/GNUmakefile clientside/tmcc/dp/GNUmakefile \
  clientside/tmcc/openbsd/GNUmakefile clientside/tmcc/ron/GNUmakefile \
