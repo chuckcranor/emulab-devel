@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,6 +64,9 @@ ifeq ($(OSTAG),freebsd13)
 ISBROKEN = 1
 endif
 ifeq ($(OSTAG),freebsd14)
+ISBROKEN = 1
+endif
+ifeq ($(OSTAG),freebsd15)
 ISBROKEN = 1
 endif
 

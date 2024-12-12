@@ -213,7 +213,7 @@ if test $TPM -eq 1; then
 fi
 
 # BEGIN Python detection. For the event library.
-AC_PATH_PROGS(PYTHON, python python2.7 python3 python3.9)
+AC_PATH_PROGS(PYTHON, python python2.7 python3 python3.9 python3.11)
 
 if test x"$PYTHON" = x""; then
     AC_MSG_ERROR([python not detected])
@@ -373,6 +373,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/freebsd12/GNUmakefile tmcc/freebsd12/netif_emulab \
 	  tmcc/freebsd13/GNUmakefile tmcc/freebsd13/netif_emulab \
 	  tmcc/freebsd14/GNUmakefile tmcc/freebsd14/netif_emulab \
+	  tmcc/freebsd15/GNUmakefile tmcc/freebsd15/netif_emulab \
 	  tmcc/freenas11/GNUmakefile tmcc/truenas13/GNUmakefile \
 	  tmcc/cygwinxp/GNUmakefile tmcc/dp/GNUmakefile \
 	  tmcc/openbsd/GNUmakefile tmcc/ron/GNUmakefile \
