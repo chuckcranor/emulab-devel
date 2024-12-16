@@ -65,7 +65,6 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  certbot_renew certbot_authhook addnodeattribute signurl \
 		  logfile node_servicelogs addradioinfo \
 		  modportvlan flashnode pruneprojects ceph_control
-		  logfile node_servicelogs addradioinfo \
 
 WEB_SBIN_SCRIPTS= webnewnode webdeletenode webspewconlog webarchive_list \
                   webspewimage webdumpdescriptor webemulabfeature \
