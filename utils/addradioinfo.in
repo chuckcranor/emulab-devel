@@ -1,0 +1,408 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2003-2024 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Long;
+use Date::Parse;
+use Time::Local;
+use Data::Dumper;
+use File::Temp qw(tempfile);
+
+#
+# Add a Powder radio to the radio info table. The node_id must already be
+# node at the aggregate before you can add it to the radio info tables.
+#
+my $debug     = 0;
+my $impotent  = 0;
+my $update    = 0;
+my $delete    = 0;
+
+#
+# Configure variables
+#
+my $TB		   = "@prefix@";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use emdb;
+use emutil;
+use Node;
+use APT_Aggregate;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+# Protos
+sub fatal($);
+
+#
+# Need the location info for error checking.
+#
+my %locations = ();
+
+my $query_result =
+    DBQueryFatal("select aggregate_urn,location,itype from ".
+		 "  apt_aggregate_radio_locations ");
+while (my ($aggregate_urn,$location,$itype) = $query_result->fetchrow_array()) {
+    if (!exists($locations{$aggregate_urn})) {
+	$locations{$aggregate_urn} = {};
+    }
+    my $agglocs = $locations{$aggregate_urn};
+    if (!exists($agglocs->{$location})) {
+	$agglocs->{$location} = {};
+    }
+    my $locitypes = $agglocs->{$location};
+    if (!exists($locitypes->{$itype})) {
+	$locitypes->{$itype} = $itype;
+    }
+}
+
+sub usage(;$$)
+{
+    my ($message,$complete) = @_;
+    if ($message) {
+	print "$message\n\n";
+    }
+    my @strings = (
+	"Options:",
+	" -d                - Turn on debugging",
+	" -n                - Dry run mode",
+	" -u                - Update existing radio, specific options",
+	" -r                - Delete existing radio",
+	" -h                - Complete usage information",
+	" --location=       - When more then a single location at an aggregate",
+	" --itype=          - When more then a single install type at a location",
+	" --delete          - Delete existing radioinstead of adding",
+	" --hidden=(0|1)    - Do not show on the radio web page",
+	" --monitored=(0|1) - Flag that a radio has inline monitoring",
+	" --rfscans=(0|1)   - Flag that a radio is being used for RF scanning",
+	" --delete          - Delete existing radioinstead of adding",
+	" --tx=             - Comma separated list of TX ranges",
+	" --rx=             - Comma separated list of RX ranges",
+	" --notes=          - Pithy informative string",
+	" --radio-type=     - Adhoc string like 'NI/Ettus B210'",
+	" --sync=           - Synchronization method: 'White Rabbit',GPSDO,PTP",
+	" --ue-imsi=        - UE IMSI",
+	" --powder-zone=    - Radio zone: 'Indoor OTA Lab'",
+	);
+    print STDERR "Usage: addradioinfo [-dn] [options] ".
+	"[--location=location [--itype=itype] <aggregate> <node_id>\n";
+
+    foreach my $str (@strings) {
+	print STDERR $str . "\n";
+    }
+
+    if ($complete) {
+	print STDERR "Aggregate:Location => Itypes:\n";
+	foreach my $urn (sort(keys(%locations))) {
+	    my $aggregate = APT_Aggregate->Lookup($urn);
+	    my $nickname  = $aggregate->nickname();
+	    my @locs      = sort(keys(%{$locations{$urn}}));
+
+	    if (@locs == 1) {
+		my $loc = $locs[0];
+		my $itypes = join(",", sort(keys(%{$locations{$urn}->{$loc}})));
+
+		printf("%-25s %s\n", "$nickname", $itypes);
+	    }
+	    else {
+		foreach my $loc (sort(keys(%{$locations{$urn}}))) {
+		    my $itypes = join(",", sort(keys(%{$locations{$urn}->{$loc}})));
+
+		    printf("%-25s %s\n", "$nickname:$loc", $itypes);
+		}
+	    }
+	}
+    }
+    exit(-1);
+}
+
+my @optlist   = ('d', 'n', 'u', 'r', 'F', 'h', "delete",
+		 "location=s", "itype=s", 
+		 "tx=s", "rx=s", "radio-type=s", "sync=s", "powder-zone=s",
+		 "ue-imsi=s", "hidden=i", "notes=s", "monitored=i", "rfscans=i"
+                );
+my @isets     = ();
+my @fsets     = ();
+my ($location,$itype);
+my ($radiotype,$sync,$powderzone,$ueimsi,$notes,$hidden);
+
+#
+# Parse command arguments. 
+#
+my %options = ();
+if (! GetOptions(\%options, @optlist)) {
+    usage();
+}
+if (defined($options{'h'})) {
+    usage(undef, 1);
+}
+if (defined($options{'d'})) {
+    $debug = 1;
+}
+if (defined($options{'n'})) {
+    $impotent = 1;
+}
+if (defined($options{'u'})) {
+    $update = 1;
+}
+if (defined($options{'delete'})) {
+    $delete = 1;
+}
+if (defined($options{'location'})) {
+    $location = $options{'location'};
+}
+if (defined($options{'itype'})) {
+    $itype = $options{'itype'};
+}
+usage()
+    if (@ARGV != 2);
+my ($nickname,$node_id) = @ARGV;
+
+my $aggregate = APT_Aggregate->LookupByNickname($nickname);
+if (!defined($aggregate)) {
+    fatal("No such aggregate: $nickname");
+}
+my $aggregate_urn = $aggregate->urn();
+
+my $radio = $aggregate->Radio($node_id);
+if ($update || $delete) {
+    if (!defined($radio)) {
+	fatal("Radio does not exist at $nickname => $location: $itype");
+    }
+}
+else {
+    if (defined($radio)) {
+	fatal("Radio already exists at $nickname => $location: $itype");
+    }
+}
+#
+# 
+#
+if ($delete) {
+    if (!defined($options{'F'})) {
+	fatal("Must also provide -F option to really do this.");
+    }
+    DBQueryFatal("delete info, frontends ".
+		 "from apt_aggregate_radio_info as info ".
+		 # Use left in case nothing in the frontends table
+		 # or else nothing will be deleted.
+		 "left join apt_aggregate_radio_frontends as frontends on ".
+		 "     frontends.aggregate_urn=info.aggregate_urn and ".
+		 "     frontends.node_id=info.node_id ".
+		 "where info.aggregate_urn='$aggregate_urn' and ".
+		 "      info.node_id='$node_id'");
+    exit(0);
+}
+
+#
+# If there is more then a single location at the aggregate, the
+# --location argument is required.
+#
+if (!defined($location)) {
+    my @locs = keys(%{ $locations{$aggregate_urn} });
+    if (@locs != 1) {
+	fatal("$nickname has more then 1 location, must add --location option");
+    }
+    ($location) = @locs;
+}
+elsif (!exists($locations{$aggregate_urn}->{$location})) {
+    fatal("No such location at $nickname: $location");
+}
+
+#
+# If there is more then a single installation at the location, the
+# --itype argument is required.
+#
+if (!defined($itype)) {
+    my @itypes = keys(%{ $locations{$aggregate_urn}->{$location} });
+    if (@itypes != 1) {
+	fatal("$nickname:$location has more than 1 itype, must add --itype option");
+    }
+    ($itype) = @itypes;
+}
+elsif (!exists($locations{$aggregate_urn}->{$location}->{$itype})) {
+    fatal("No such itype at $nickname:$location: $itype");
+}
+
+#
+# Node has to exist at the aggregate.
+#
+if (! $aggregate->Node($node_id)) {
+    fatal("Node is not yet added to the $nickname aggregate\n");
+}
+if (! $aggregate->IsReservableNode($node_id)) {
+    print "WARNING: $node_id is not marked as reservable ...\n\n";
+}
+
+#
+# Some of these can be modified via the web interface.
+#
+foreach my $x ("tx", "rx") {
+    if (defined($options{$x})) {
+	my $ranges = $options{$x};
+	my @ranges = split(",", $ranges);
+	usage("Invalid option: --${x}")
+	    if (!@ranges);
+	foreach my $r (@ranges) {
+	    if ($r !~ /^[\d\.]+\-[\d\.]+$/) {
+		usage("Invalid --${x} range: $r");
+	    }
+	}
+	if ($x eq "tx") {
+	    push(@fsets, "transmit_frequencies='$ranges'");
+	}
+	else {
+	    push(@fsets, "receive_frequencies='$ranges'");
+	}
+    }
+}
+foreach my $x ("hidden", "monitored", "rfscans") {
+    if (defined($options{$x})) {
+	my $val = $options{$x};
+	
+	if ($val !~ /^(0|1)$/) {
+	    usage("Invalid --${x}: must be 0|1");
+	}
+	if ($x eq "hidden") {
+	    push(@isets, "hidden='$val'");
+	}
+	elsif ($x eq "monitored") {
+	    push(@fsets, "monitored='$val'");
+	}
+	else {
+	    push(@fsets, "scanned='$val'");
+	}
+    }
+}
+if (defined($options{"sync"})) {
+    $sync = $options{"sync"};
+    if ($sync !~ /^(White Rabbit|GPSDO|PTP)$/) {
+	usage("Invalid --sync: $sync");
+    }
+    push(@isets, "synchronization='$sync'");
+}
+if (defined($options{"powder-zone"})) {
+    $powderzone = $options{"powder-zone"};
+    if ($powderzone !~ /^(Indoor OTA Lab)$/) {
+	usage("Invalid --powder-zone: $powderzone");
+    }
+    push(@isets, "powder_zone='$powderzone'");
+}
+if (defined($options{"ue-imsi"})) {
+    $ueimsi = $options{"ue-imsi"};
+    if ($ueimsi !~ /^\d+$/) {
+	usage("Invalid --ue-imsi: $ueimsi");
+    }
+    push(@isets, "ue_imsi='$ueimsi'");
+}
+if (defined($options{"notes"})) {
+    $notes = $options{"notes"};
+    if (! TBcheck_dbslot($notes, "default", "tinytext",
+			 TBDB_CHECKDBSLOT_ERROR)) {
+	usage("Invalid --notes: " . TBFieldErrorString());
+    }
+    push(@isets, "notes='$notes'");
+}
+if (defined($options{"radio-type"})) {
+    $radiotype = $options{"radio-type"};
+    if (! TBcheck_dbslot($radiotype, "default", "tinytext",
+			 TBDB_CHECKDBSLOT_ERROR)) {
+	usage("Invalid --radio-type: " . TBFieldErrorString());
+    }
+    push(@isets, "radio_type='$radiotype'");
+}
+if ($update) {
+    my $isets = join(",", @isets);
+    my $fsets = join(",", @fsets);
+    my $frontend = $radio->FrontendInterface("rf0")->frontend();
+    my ($q1,$q2);
+    
+    if (@isets) {
+	$q1 =
+	    "update apt_aggregate_radio_info set $isets ".
+	    " where aggregate_urn='$aggregate_urn' and ".
+	    "       node_id='$node_id' and location='$location' and ".
+	    "       itype='$itype'";
+    }
+    if (@fsets) {
+	$q2 =
+	    "update apt_aggregate_radio_frontends set $fsets ".
+	    " where aggregate_urn='$aggregate_urn' and ".
+	    "       node_id='$node_id' and iface='rf0' and ".
+	    "       frontend='$frontend'";
+    }
+    if ($impotent) {
+	print "$q1\n" if ($q1);
+	print "$q2\n" if ($q2);
+    }
+    else {
+	DBQueryFatal($q1) if ($q1);
+	DBQueryFatal($q2) if ($q2);
+    }
+}
+else {
+    push(@isets, "aggregate_urn='$aggregate_urn'", "node_id='$node_id'",
+	 "location='$location'", "itype='$itype'");
+    push(@fsets, "aggregate_urn='$aggregate_urn'", "node_id='$node_id'",
+	 "iface='rf0'", "frontend='none'");
+
+    my $isets = join(",", @isets);
+    my $fsets = join(",", @fsets);
+
+    my $q1 = "insert into apt_aggregate_radio_info set $isets";
+    my $q2 = "insert into apt_aggregate_radio_frontends set $fsets";
+
+    if ($impotent) {
+	print "$q1\n$q2\n";
+    }
+    else {
+	if (! (DBQueryWarn($q1) && DBQueryWarn($q2))) {
+	    DBQueryWarn("delete from apt_aggregate_radio_info ".
+			" where aggregate_urn='$aggregate_urn' and ".
+			"       node_id='$node_id'");
+	    DBQueryWarn("delete from apt_aggregate_radio_frontends ".
+			" where aggregate_urn='$aggregate_urn' and ".
+			"       node_id='$node_id'");
+	}
+    }
+}
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
