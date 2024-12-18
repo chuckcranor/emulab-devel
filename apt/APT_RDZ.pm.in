@@ -917,7 +917,7 @@ sub CreateClaimFromReservation($$;$$)
 	"element_id"  => $ZMC->elementid(),
 	"name"        => $name,
 	"description" => $desc,
-	"ext_id"      => $resgroup->uuid(),
+	"ext_id"      => $range->freq_uuid(),
 	"html_url"    => $resgroup->WebURL(),
 	"type"        => "powder",
 	"source"      => "powder-slc",
