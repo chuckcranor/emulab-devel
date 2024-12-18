@@ -1976,7 +1976,7 @@ sub DoApprove()
     my @cluster_reservations = ();
     my @range_reservations   = ();
     my @route_reservations   = ();
-    my @approved_reservations= ();
+    my $approved_count       = 0;  # Just for sending email.
     my $errmsg;
     my $results   = {};
     my $takelock  = 0;
@@ -2256,7 +2256,7 @@ sub DoApprove()
 	    }
 	    if (!$checkonlyflag) {
 		$res->MarkApprovedPushed();
-		push(@approved_reservations, $res);
+		$approved_count++;
 	    }
 	}
 	return $errors;
@@ -2346,37 +2346,9 @@ sub DoApprove()
 		};
 		$results->{$freq_uuid} = $blob;
 	    }
-	    elsif ($DORDZ) {
-		if (APT_RDZ::CreateClaimFromReservation(
-			$res, \$errmsg, $debug)) {
-		    my $brand      = $resgroup->Brand();
-		    my $pid        = $project->pid();
-		    my $url        = $resgroup->WebURL();
-
-		    $brand->SendEmail($brand->OpsEmailAddress(),
-				      "Failed to submit RDZ claims",
-				      $errmsg . "\n" .
-				      $resgroup->InfoString() .
-				      "\n" .
-				      "$url",
-				      $brand->ReservationsEmailAddress());
-
-		    my $freq_uuid = $res->freq_uuid();
-		    my $blob = {
-			"uuid"    => $freq_uuid,
-			"errcode" => 1,
-			"errmesg" => "Unable to claim this range at the RDZ",
-		    };
-		    $results->{$freq_uuid} = $blob;
-		}
-		else {
-		    $res->MarkApproved();
-		    push(@approved_reservations, $res);
-		}
-	    }
 	    else {
 		$res->MarkApproved();
-		push(@approved_reservations, $res);
+		$approved_count++;
 	    }
 	}
     }
@@ -2403,15 +2375,53 @@ sub DoApprove()
 	    }
 	    else {
 		$res->MarkApproved();
-		push(@approved_reservations, $res);
+		$approved_count++;
 	    }
 	}
     }
     if (@range_reservations || @route_reservations) {
 	APT_Reservation::Group->UnlockTables();
     }
+    #
+    # When creating claims at the RDZ, we do not want to that from the
+    # above loop since a bunch of tables are locked. This might might
+    # alter the list of approved reservations. 
+    #
+    if (@range_reservations && $approved_count && $DORDZ) {
+	foreach my $res (@range_reservations) {
+	    next
+		if (! $res->approved());
+
+	    if (APT_RDZ::CreateClaimFromReservation(
+		    $res, \$errmsg, $debug)) {
+		my $brand      = $resgroup->Brand();
+		my $pid        = $project->pid();
+		my $url        = $resgroup->WebURL();
+
+		$brand->SendEmail($brand->OpsEmailAddress(),
+				  "Failed to submit RDZ claims",
+				  $errmsg . "\n" .
+				  $resgroup->InfoString() .
+				  "\n" .
+				  "$url",
+				  $brand->ReservationsEmailAddress());
+
+		my $freq_uuid = $res->freq_uuid();
+		my $blob = {
+		    "uuid"    => $freq_uuid,
+		    "errcode" => 1,
+		    "errmesg" => "Unable to claim this range at the RDZ",
+		};
+		$results->{$freq_uuid} = $blob;
+		$approved_count--;
+		# Yuck. 
+		$res->ClearApproved();
+	    }
+	}
+    }
+   
   done:
-    if (!$checkonly && @approved_reservations && !$noemail) {
+    if (!$checkonly && $approved_count && !$noemail) {
 	#
 	# Notify the user that a resgroup was approved. The wrinkle is
 	# partial approval, but that should be a rare case, so lets now

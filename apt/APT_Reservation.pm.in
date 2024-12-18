@@ -2141,6 +2141,11 @@ sub MarkApproved($;$)
     }
     return $self->Mark("approved", $value);
 }
+sub ClearApproved($)
+{
+    my ($self) = @_;
+    return $self->Mark("approved", undef);
+}
 
 sub MarkSubmitted($$)
 {
