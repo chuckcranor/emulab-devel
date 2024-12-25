@@ -346,18 +346,30 @@ typedef union region {
 #define REG_VALID(is32, start, size) \
 	(!is32 || (uint32_t)(start) == (start) || (uint32_t)(size) == size)
 
+#define REG_RSIZE(is32) \
+	(is32 ? \
+	    sizeof(struct region_32) : \
+	    sizeof(struct region_64))
+
 #define REG_DIFF(is32, last, first) \
 	(is32 ? \
 	    ((struct region_32 *)(last) - (struct region_32 *)(first)) : \
 	    ((struct region_64 *)(last) - (struct region_64 *)(first)))
 	
-#define REG_ADD(is32, ptr, _start, _size) \
+#define REG_SET(is32, ptr, _start, _size) \
 if (is32) { \
 	(ptr)->r32.start = (uint32_t)(_start); \
 	(ptr)->r32.size = (uint32_t)(_size); \
 } else { \
 	(ptr)->r64.start = (_start); \
 	(ptr)->r64.size = (_size); \
+}
+
+#define REG_ADDSIZE(is32, ptr, sz) \
+if (is32) { \
+	ptr->r32.size += (sz); \
+} else { \
+	ptr->r64.size += (sz); \
 }
 
 #define REG_NEXT(is32, ptr) \
