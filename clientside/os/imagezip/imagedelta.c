@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -76,7 +76,9 @@
 #include <sys/time.h>
 #include <errno.h>
 #include <openssl/sha.h>
+#ifdef WITH_MD5
 #include <openssl/md5.h>
+#endif
 #ifndef NOTHREADS
 #include <pthread.h>
 #endif
@@ -343,8 +345,9 @@ struct chunkstate {
     unsigned char *chunkdatabuf;
     blockhdr_t *header;
     uint32_t headerleft;
-    struct region *region;
-    struct region *curregion;
+    int32_t is32;
+    region_t *region;
+    region_t *curregion;
     struct ndz_rangemap *verifysigmap;
     struct ndz_rangemap *newsigmap;
 };
@@ -352,32 +355,34 @@ struct chunkstate {
 static int
 initnewchunk(struct chunkstate *cstate, struct ndz_file *ndz)
 {
-    struct blockhdr_V2 *hdr;
-
     cstate->chunkobj = ndz_chunk_create(ndz, cstate->chunkno, clevel);
     if (cstate->chunkobj == NULL) {
 	fprintf(stderr, "Error creating chunk %u\n", cstate->chunkno);
 	return 1;
     }
+
     cstate->header = ndz_chunk_header(cstate->chunkobj);
-
-    /*
-     * XXX we still do V3 (actually V2 format) headers.
-     * We still don't really support V4 yet...
-     */
-    hdr = (struct blockhdr_V2 *)cstate->header;
-    hdr->magic = COMPRESSED_V3;
-    hdr->size = 0;
-    hdr->blockindex = cstate->chunkno;
-    hdr->regionsize = DEFAULTREGIONSIZE;
-    hdr->regioncount = 0;
-    hdr->firstsect = 0;
-    hdr->lastsect = 0;
-    hdr->reloccount = 0;
-
-    cstate->region = (struct region *)(hdr + 1);
+    cstate->header->magic = ndz->magic;
+    cstate->header->size = 0;
+    cstate->header->blockindex = cstate->chunkno;
+    cstate->header->regionsize = DEFAULTREGIONSIZE;
+    cstate->header->regioncount = 0;
+    cstate->header->firstsect = 0;
+    cstate->header->lastsect = 0;
+    cstate->header->reloccount = 0;
+    if (ndz->magic < COMPRESSED_V5) {
+	struct blockhdr_V2 *hdr = (struct blockhdr_V2 *)cstate->header;
+	cstate->region = (region_t *)(hdr + 1);
+	cstate->is32 = 1;
+    } else {
+	struct blockhdr_V5 *hdr = (struct blockhdr_V5 *)cstate->header;
+	hdr->firstsect64 = 0;
+	hdr->lastsect64 = 0;
+	cstate->region = (region_t *)(hdr + 1);
+	cstate->is32 = 0;
+    }
     cstate->curregion = cstate->region;
-    cstate->headerleft = hdr->regionsize - sizeof(blockhdr_t);
+    cstate->headerleft = cstate->header->regionsize - sizeof(blockhdr_t);
 
     return 0;
 }
@@ -424,8 +429,13 @@ chunkify(struct ndz_rangemap *mmap, struct ndz_range *range, void *arg)
 	cstate->chunkno = 0;
 	if (initnewchunk(cstate, delta.ndz) != 0)
 	    return 1;
-	cstate->header->firstsect = rstart;
-	cstate->curregion->start = rstart;
+	if (cstate->is32) {
+	    cstate->header->firstsect = rstart;
+	    cstate->curregion->r32.start = rstart;
+	} else {
+	    cstate->header->firstsect64 = rstart;
+	    cstate->curregion->r64.start = rstart;
+	}
 
 	/*
 	 * Account for relocations.
@@ -434,8 +444,8 @@ chunkify(struct ndz_rangemap *mmap, struct ndz_range *range, void *arg)
 	 */
 	if (delta.ndz->relocentries > 0)
 	    cstate->headerleft -=
-		(ndz_reloc_inrange(delta.ndz, rstart, 0) *
-		 sizeof(struct blockreloc));
+		RELOC_RSIZE(cstate->is32,
+			    ndz_reloc_inrange(delta.ndz, rstart, 0));
     }
 
     /*
@@ -544,7 +554,7 @@ chunkify(struct ndz_rangemap *mmap, struct ndz_range *range, void *arg)
 
 	    chunkremaining = ndz_chunk_left(cstate->chunkobj);
 	    if (chunkremaining < delta.ndz->sectsize ||
-		cstate->headerleft < sizeof(struct region)) {
+		cstate->headerleft < REG_RSIZE(cstate->is32)) {
 		/* switch to new chunk */
 #ifdef CHUNKIFY_DEBUG
 		fprintf(stderr,
@@ -581,12 +591,17 @@ chunkify(struct ndz_rangemap *mmap, struct ndz_range *range, void *arg)
 		cstate->chunkno++;
 		if (initnewchunk(cstate, delta.ndz) != 0)
 		    return 1;
-		cstate->header->firstsect = pstart;
-		cstate->curregion->start = pstart;
+		if (cstate->is32) {
+		    cstate->header->firstsect = pstart;
+		    cstate->curregion->r32.start = pstart;
+		} else {
+		    cstate->header->firstsect64 = pstart;
+		    cstate->curregion->r64.start = pstart;
+		}
 		if (delta.ndz->relocentries > 0)
 		    cstate->headerleft -=
-			(ndz_reloc_inrange(delta.ndz, pstart, 0) *
-			 sizeof(struct blockreloc));
+			RELOC_RSIZE(cstate->is32,
+				    ndz_reloc_inrange(delta.ndz, rstart, 0));
 
 		/* keep track if this hash range spans chunks */
 		if (psize < hsize)
@@ -620,8 +635,8 @@ chunkify(struct ndz_rangemap *mmap, struct ndz_range *range, void *arg)
 	    assert(cc == wbytes);
 
 	    /* append to the current region or create a new one */
-	    if (cstate->curregion->start + cstate->curregion->size == pstart) {
-		cstate->curregion->size += wsize;
+	    if (REG_END(cstate->is32, cstate->curregion) == pstart) {
+		REG_ADDSIZE(cstate->is32, cstate->curregion, wsize);
 #ifdef CHUNKIFY_DEBUG
 		fprintf(stderr, "    adjust range entry to [%u-%u]\n",
 			cstate->curregion->start,
@@ -629,9 +644,8 @@ chunkify(struct ndz_rangemap *mmap, struct ndz_range *range, void *arg)
 #endif
 	    } else {
 		cstate->curregion++;
-		cstate->curregion->start = pstart;
-		cstate->curregion->size = wsize;
-		cstate->headerleft -= sizeof(struct region);
+		REG_SET(cstate->is32, cstate->curregion, pstart, wsize);
+		cstate->headerleft -= REG_RSIZE(cstate->is32);
 #ifdef CHUNKIFY_DEBUG
 		fprintf(stderr,
 			"    new range entry [%u-%u], %u header bytes left\n",
@@ -763,8 +777,13 @@ main(int argc, char **argv)
 	    break;
 	case 'D':
 	    if (strcmp(optarg, "md5") == 0) {
+#ifdef WITH_MD5
 		hashtype = HASH_TYPE_MD5;
 		hashlen = 16;
+#else
+		fprintf(stderr, "MD5 digest no longer supported\n");
+		usage();
+#endif
 	    } else if (strcmp(optarg, "sha1") == 0) {
 		hashtype = HASH_TYPE_SHA1;
 		hashlen = 20;
@@ -830,6 +849,19 @@ main(int argc, char **argv)
 	fflush(stdout);
     }
 #endif
+
+    /*
+     * Right now, both images must have the same version and the delta
+     * will be the same. Changing versions would be difficult if not
+     * impossible in many cases.
+     */
+    if (ndz1.ndz->magic != ndz2.ndz->magic) {
+	fprintf(stderr, "Incompatible versions for %s (%d) and %s (%d)\n",
+		argv[0], ndz1.ndz->magic - COMPRESSED_MAGIC_BASE + 1,
+		argv[1], ndz2.ndz->magic - COMPRESSED_MAGIC_BASE + 1);
+	exit(1);
+    }
+    delta.ndz->magic = ndz1.ndz->magic;
 
     /*
      * Compute a delta map from the image signature maps.
