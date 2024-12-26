@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2024 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -67,7 +67,7 @@ WITH_CRYPTO	= 0
 WITH_SIGNING	= 0
 
 # XXX broken right now til I finish conversion to 64-bit
-WITH_LIBNDZ	= 0
+WITH_LIBNDZ	= 1
 
 #
 # Support for auto-generation of old image versions
@@ -124,6 +124,7 @@ WITH_FAT	= @WINSUPPORT@
 
 WITH_HASH	= 1
 WITH_HASHALIGN	= 0
+WITH_MD5	= 1
 
 include $(OBJDIR)/Makeconf
 
@@ -262,6 +263,9 @@ LIBS		+= -lcrypto $(PTHREADLIBS)
 ifeq ($(WITH_HASHALIGN),1)
 CFLAGS		+= -DWITH_HASHALIGN
 endif
+endif
+ifeq ($(WITH_MD5),1)
+CFLAGS		+= -DWITH_MD5
 endif
 
 ifeq ($(WITH_RANGEMAP),1)

@@ -327,19 +327,24 @@ parse_gpt(int fd, struct iz_disk *disk, int dowarn)
 		}
 //fprintf(stderr, "dsize=%lu, pri=%lu, alt=%lu, lba_low=%lu, lba_high=%lu\n", dsize, prilba, seclba, hdr->hdr_lba_start, hdr->hdr_lba_end);
 		if (dowarn && (prilba == 0 || seclba == 0))
-			warnx("GPT: primary (%lu) or secondary (%lu) is zero",
+			warnx("GPT: primary (%" PRIu64 ") or secondary (%"
+			      PRIu64 ") is zero",
 			      prilba, seclba);
 		if (dowarn && losect < hdr->hdr_lba_start)
-			warnx("GPT: partition starts (%lu) below lba_start (%lu)",
+			warnx("GPT: partition starts (%" PRIu64
+			      ") below lba_start (%" PRIu64 ")",
 			      losect, hdr->hdr_lba_start);
 		if (dowarn && hisect - 1 > hdr->hdr_lba_end)
-			warnx("GPT: partition ends (%lu) after lba_end (%lu)",
+			warnx("GPT: partition ends (%" PRIu64
+			      ") after lba_end (%" PRIu64 ")",
 			      hisect-1, hdr->hdr_lba_end);
 		if (dowarn && prilba != 1)
-			warnx("GPT: primary (%lu) not at sector 1", prilba);
+			warnx("GPT: primary (%" PRIu64 ") not at sector 1",
+			      prilba);
 		if (dsize && seclba + 1 != dsize) {
 			if (dowarn)
-				warnx("GPT: secondary (%lu) not at end of disk (%lu)",
+				warnx("GPT: secondary (%" PRIu64
+				      ") not at end of disk (%" PRIu64 ")",
 				      seclba, dsize);
 			seclba = dsize - 1;
 		}
@@ -362,11 +367,11 @@ parse_gpt(int fd, struct iz_disk *disk, int dowarn)
 		 * at some point in the future.
 		 */
 		if (disk->hidata >= disk->dsize) {
-			warnx("GPT: hdr_lba_end >= disk size (%lu >= %lu); "
-			      "adjusting to %lu and hoping for the best!",
-			      (unsigned long)disk->hidata,
-			      (unsigned long)disk->dsize,
-			      (unsigned long)disk->dsize-hdr->hdr_lba_start);
+			warnx("GPT: hdr_lba_end >= disk size (%" PRIu64
+			      ">= %" PRIu64 "); adjusting to %" PRIu64
+			      " and hoping for the best!",
+			      disk->hidata, disk->dsize,
+			      disk->dsize-hdr->hdr_lba_start);
 			disk->hidata =
 				disk->dsize - (iz_lba)hdr->hdr_lba_start - 1;
 		}
@@ -520,7 +525,8 @@ void gpt_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug)
 
 	/* Make sure the primary header is internally consistent. */
 	if (gptcheckhdr(hdr, dinfo->metasect, "primary", 0)) {
-		fprintf(stderr, "WARNING: gpt_fixup: GPT header check failed.\n");
+		fprintf(stderr,
+			"WARNING: gpt_fixup: GPT header check failed.\n");
 		return;
 	}
 
@@ -531,7 +537,8 @@ void gpt_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug)
 	olba = hdr->hdr_lba_end;
 	hdr->hdr_lba_end = dinfo->dsize - hdr->hdr_lba_start;
 	if (debug)
-		fprintf(stderr, "gpt_fixup: lba_end was %lu, now %lu\n",
+		fprintf(stderr, "gpt_fixup: lba_end was %" PRIu64
+			", now %" PRIu64 "\n",
 			olba, hdr->hdr_lba_end);
 
 	/*
@@ -541,7 +548,8 @@ void gpt_fixup(void *start, off_t size, struct iz_disk *dinfo, int debug)
 	olba = hdr->hdr_lba_alt;
 	hdr->hdr_lba_alt = dinfo->dsize - 1;
 	if (debug)
-		fprintf(stderr, "gpt_fixup: lba_alt was %lu, now %lu\n",
+		fprintf(stderr, "gpt_fixup: lba_alt was %" PRIu64
+			", now %" PRIu64 "\n",
 			olba, hdr->hdr_lba_alt);
 
 	/*

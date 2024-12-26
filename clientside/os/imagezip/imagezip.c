@@ -44,6 +44,7 @@
 #if !defined(__UCLIBC__)
 #include <fstab.h>
 #endif
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -780,8 +781,9 @@ main(int argc, char *argv[])
 				assert(inputmaxsec == 0 ||
 				       inputmaxsec > inputminsec);
 				if (debug)
-					fprintf(stderr, "Max sector: %lu\n",
-						(unsigned long)inputmaxsec);
+					fprintf(stderr,
+						"Max sector: %" PRIu64 "\n",
+						(uint64_t)inputmaxsec);
 			}
 			(void) lseek(infd, (off_t)0, SEEK_SET);
 		}
@@ -865,9 +867,7 @@ main(int argc, char *argv[])
 	 * XXX we need to generate a proper UUID. For now, if they don't
 	 * specify one, we just leave it zeroed.
 	 */
-	if ((!compat || compat >= COMPRESSED_V5) && !got_imageid) {
-		memset(imageid, '\0', UUID_LENGTH);
-#if 0
+	if (0 && (!compat || compat >= COMPRESSED_V5) && !got_imageid) {
 		int fd = open("/dev/urandom", O_RDONLY, 0);
 
 		if (fd < 0 ||
@@ -883,7 +883,6 @@ main(int argc, char *argv[])
 
 		if (fd >= 0)
 			close(fd);
-#endif
 	}
 
 #ifdef WITH_HASH
@@ -1566,8 +1565,8 @@ read_raw(int fd)
 
 	if (debug) {
 		fprintf(stderr, "  Raw Image\n");
-		fprintf(stderr, "        start %12d, size %12lld\n",
-			0, (long long)size);
+		fprintf(stderr, "        start %12d, size %12" PRIu64 "\n",
+			0, (uint64_t)size);
 	}
 	return 0;
 }
@@ -1624,7 +1623,7 @@ char *usagestr =
  "\n"
  " Compatibility options\n"
  " -3             Generate a version 3 format image if possible.\n"
- " -5             Generate a version 5 format image if possible.\n"
+ " -5             Force generation of a version 5 format image.\n"
  "\n"
  " Debugging and experimental options (not to be used by mere mortals!)\n"
  " -d             Turn on debugging.  Multiple -d options increase output.\n"
@@ -1801,9 +1800,10 @@ dumpskips(int verbose)
 		return;
 
 	if (verbose) {
-		fprintf(stderr, "\nMin sector %lu, Max sector %lu\n",
-			(unsigned long)inputminsec,
-			(unsigned long)inputmaxsec);
+		fprintf(stderr,
+			"\nMin sector %" PRIu64 ", Max sector %" PRIu64 "\n",
+			(uint64_t)inputminsec,
+			(uint64_t)inputmaxsec);
 		fprintf(stderr, "Skip ranges (start/size) in sectors:\n");
 	}
 
@@ -1820,8 +1820,9 @@ dumpskips(int verbose)
 	}
 
 	fprintf(stderr,
-		"Total Number of Free Sectors: %u (bytes %lld) in %d ranges\n",
-		(unsigned)total, (long long)sectobytes(total), nranges);
+		"Total Number of Free Sectors: "
+		"%" PRIu64 " (bytes %" PRIu64 ") in %d ranges\n",
+		total, (uint64_t)sectobytes(total), nranges);
 }
 
 #undef DOHISTO
@@ -1834,8 +1835,8 @@ static void
 zerofixup(void *bstart, off_t bsize, void *fdata)
 {
 	if (debug > 1)
-		fprintf(stderr, "zerofixup: zeroing %llu@%p\n",
-			(unsigned long long)bsize, bstart);
+		fprintf(stderr, "zerofixup: zeroing %" PRIu64 "@%p\n",
+			(uint64_t)bsize, bstart);
 
 	memset(bstart, 0, bsize);
 }
@@ -2617,10 +2618,10 @@ dumpfixups(int verbose, int count)
 		fp = range->data;
 
 		if (verbose) {
-			fprintf(stderr, "  %12lu/%9lu (%12llu/%9llu)\n",
+			fprintf(stderr, "  %12lu/%9lu (%12lu/%9lu)\n",
 				range->start, range->size,
-				(unsigned long long)fp->offset,
-				(unsigned long long)fp->size);
+				(uint64_t)fp->offset,
+				(uint64_t)fp->size);
 		}
 		nfixups++;
 		if (count && count == nfixups)
@@ -2804,8 +2805,8 @@ compress_image(void)
 		 */
 		if (debug > 1 && debug < 3) {
 			fprintf(stderr,
-				"Compressing range: %14llu --> ",
-				(unsigned long long)inputoffset);
+				"Compressing range: %14" PRIu64 " --> ",
+				(uint64_t)inputoffset);
 			fflush(stderr);
 		}
 
@@ -2813,9 +2814,11 @@ compress_image(void)
 				      &full, &blkhdr->size);
 
 		if (debug > 2) {
-			fprintf(stderr, "%14llu -> %12llu %10ld %10lu %10d %d\n",
-				(unsigned long long)inputoffset,
-				(unsigned long long)inputoffset + size,
+			fprintf(stderr,
+				"%14" PRIu64 " -> %12" PRIu64 " %10" PRIu64
+				" %10" PRIu64 " %10d %d\n",
+				(uint64_t)inputoffset,
+				(uint64_t)inputoffset + size,
 				prange->start - inputminsec,
 				bytestosec(size),
 				blkhdr->size, full);
@@ -2823,8 +2826,8 @@ compress_image(void)
 		else if (debug > 1) {
 			gettimeofday(&estamp, 0);
 			estamp.tv_sec -= cstamp.tv_sec;
-			fprintf(stderr, "%12llu in %ld seconds.\n",
-				(unsigned long long)inputoffset + size,
+			fprintf(stderr, "%12" PRIu64 " in %ld seconds.\n",
+				(uint64_t)inputoffset + size,
 				(long)estamp.tv_sec);
 		}
 		else if (dots && full) {
@@ -2834,8 +2837,8 @@ compress_image(void)
 			if (pos++ >= 60) {
 				gettimeofday(&estamp, 0);
 				estamp.tv_sec -= cstamp.tv_sec;
-				fprintf(stderr, " %12llu %4ld\n",
-					(unsigned long long)inputoffset+size,
+				fprintf(stderr, " %12" PRIu64 " %4ld\n",
+					(uint64_t)inputoffset+size,
 					(long)estamp.tv_sec);
 				pos = 0;
 			}
@@ -2849,8 +2852,9 @@ compress_image(void)
 		 * This should never happen!
 		 */
 		if (size & (secsize - 1)) {
-			fprintf(stderr, "  Not on a sector boundry at %llu\n",
-				(unsigned long long)inputoffset);
+			fprintf(stderr,
+				"  Not on a sector boundry at %" PRIu64 "\n",
+				(uint64_t)inputoffset);
 			return 1;
 		}
 
@@ -2876,7 +2880,7 @@ compress_image(void)
 		 * For #1 we want to continue filling the current chunk.
 		 * For 2 and 3 we are done with the current chunk.
 		 */
-		REG_ADD(is32, curregion, rstart, rsize);
+		REG_SET(is32, curregion, rstart, rsize);
 		curregion = REG_NEXT(is32, curregion);
 		numregions++;
 
@@ -3215,14 +3219,15 @@ compress_status(int sig)
 	ms = (stamp.tv_sec - cstamp.tv_sec) * 1000 +
 		(stamp.tv_usec - cstamp.tv_usec) / 1000;
 	fprintf(stderr,
-		"%llu input (%lu compressed) bytes in %u.%03u seconds\n",
-		(unsigned long long)inputoffset,
+		"%" PRIu64 " input (%" PRIu64
+		" compressed) bytes in %u.%03u seconds\n",
+		(uint64_t)inputoffset,
 		bytescompressed, ms / 1000, ms % 1000);
 	if (badsectors)
 		fprintf(stderr, "%d bad input sectors skipped\n", badsectors);
 	if (sig == 0) {
-		fprintf(stderr, "Image size: %llu bytes\n",
-			(unsigned long long)datawritten);
+		fprintf(stderr, "Image size: %" PRIu64 " bytes\n",
+			(uint64_t)datawritten);
 		bps = ms ? (bytescompressed * 1000) / ms : 0;
 		fprintf(stderr, "%.3fMB/second compressed\n",
 			(double)bps / (1024*1024));
@@ -3234,7 +3239,8 @@ compress_status(int sig)
  * Compress a chunk. The next bit of input stream is read in and compressed
  * into the output file.
  */
-#define INBSIZE		(128 * 1024)	/* size of device input buffer */
+#define INBSIZE		(512 * 1024)	/* size of device input buffer */
+#define INBSIZEV3	(128 * 1024)	/* size of buffer (V3 compat) */
 #define SBTHRESHOLD	(8 * 1024)	/* remaining space threshold */
 
 static char		inbuf[INBSIZE];
@@ -3257,6 +3263,10 @@ compress_chunk(off_t off, off_t size, int *full, uint32_t *subblksize)
 {
 	int		cc, count, err, tileof, finish, outsize;
 	off_t		total = 0;
+	int		inbsize;
+
+	inbsize = (compat && compat < COMPRESSED_V5) ? INBSIZEV3 : INBSIZE;
+	inbsize = INBSIZEV3;
 
 	/*
 	 * One-time calculation
@@ -3309,13 +3319,13 @@ compress_chunk(off_t off, off_t size, int *full, uint32_t *subblksize)
 	 */
 	if (!size) {
 		tileof  = 1;
-		size	= INBSIZE + 1;
+		size	= inbsize + 1;
 	} else
 		tileof  = 0;
 
 	while (size > 0) {
-		if (size > INBSIZE)
-			count = INBSIZE;
+		if (size > inbsize)
+			count = inbsize;
 		else
 			count = (int) size;
 		/*
@@ -3385,9 +3395,9 @@ compress_chunk(off_t off, off_t size, int *full, uint32_t *subblksize)
 		}
 
 		if (cc != count && !tileof) {
-			fprintf(stderr, "Bad count in read, %d != %d at %llu\n",
-				cc, count,
-				(unsigned long long)off+total);
+			fprintf(stderr, "Bad count in read, %d != %d at %"
+				PRIu64 "\n",
+				cc, count, (uint64_t)off+total);
 			exit(1);
 		}
 
@@ -3509,6 +3519,37 @@ compress_finish(uint32_t *subblksize)
 	return 1;
 }
 
+static void
+output_uuid(char *imagename, char *uuidstr)
+{
+	FILE *file;
+	char *fname;
+
+	if (strcmp(imagename, "-")) {
+		fname = malloc(strlen(imagename) + 8);
+		if (fname == NULL) {
+			fprintf(stderr, "No memory\n");
+			exit(1);
+		}
+		strcpy(fname, imagename);
+		strcat(fname, ".uuid");
+	} else {
+		fname = strdup("stdout.uuid");
+	}
+
+	file = fopen(fname, "w");
+	if (file == NULL) {
+		fprintf(stderr, "Cannot create UUID file %s\n", fname);
+		exit(1);
+	}
+
+	fprintf(file, "%s\n", uuidstr);
+	fclose(file);
+
+	fprintf(stderr, "UUID written to %s\n", fname);
+	free(fname);
+}
+
 #ifdef WITH_CRYPTO
 /*
  * Checksum functions
@@ -3627,37 +3668,6 @@ output_public_key(char *imagename, RSA *key)
 	free(fname);
 }
 #endif
-
-static void
-output_uuid(char *imagename, char *uuidstr)
-{
-	FILE *file;
-	char *fname;
-
-	if (strcmp(imagename, "-")) {
-		fname = malloc(strlen(imagename) + 8);
-		if (fname == NULL) {
-			fprintf(stderr, "No memory\n");
-			exit(1);
-		}
-		strcpy(fname, imagename);
-		strcat(fname, ".uuid");
-	} else {
-		fname = strdup("stdout.uuid");
-	}
-
-	file = fopen(fname, "w");
-	if (file == NULL) {
-		fprintf(stderr, "Cannot create keyfile %s\n", fname);
-		exit(1);
-	}
-
-	fprintf(file, "%s\n", uuidstr);
-	fclose(file);
-
-	fprintf(stderr, "UUID written to %s\n", fname);
-	free(fname);
-}
 
 void
 checksum_chunk(uint8_t *buf, off_t size)

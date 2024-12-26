@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -45,7 +45,9 @@
 #include <sys/time.h>
 #include <errno.h>
 #include <openssl/sha.h>
+#ifdef WITH_MD5
 #include <openssl/md5.h>
+#endif
 #ifndef NOTHREADS
 #include <pthread.h>
 #endif
@@ -720,8 +722,13 @@ main(int argc, char **argv)
 	    break;
 	case 'D':
 	    if (strcmp(optarg, "md5") == 0) {
+#ifdef WITH_MD5
 		hashtype = HASH_TYPE_MD5;
 		hashlen = 16;
+#else
+		fprintf(stderr, "MD5 digest no longer supported\n");
+		usage();
+#endif
 	    } else if (strcmp(optarg, "sha1") == 0) {
 		hashtype = HASH_TYPE_SHA1;
 		hashlen = 20;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2022 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -59,13 +59,13 @@
 
 #define MAXWRITEBUFMEM	0	/* 0 == unlimited */
 
-long long totalddata = 0;	/* total decompressed data */
-long long totaledata = 0;	/* total bytes covered by image */
-long long totalrdata = 0;	/* total data written to disk (image+zeros) */
-long long totalzdata = 0;	/* total zeros written to disk */
-long totalwriteops   = 0;	/* total write operations */
-long totalzeroops    = 0;	/* total zero write operations */
-long totalseekops    = 0;	/* total non-contiguous writes */
+uint64_t totalddata = 0;	/* total decompressed data */
+uint64_t totaledata = 0;	/* total bytes covered by image */
+uint64_t totalrdata = 0;	/* total data written to disk (image+zeros) */
+uint64_t totalzdata = 0;	/* total zeros written to disk */
+uint64_t totalwriteops   = 0;	/* total write operations */
+uint64_t totalzeroops    = 0;	/* total zero write operations */
+uint64_t totalseekops    = 0;	/* total non-contiguous writes */
 
 int totalchunks, donechunks;
 
@@ -76,8 +76,8 @@ int totalchunks, donechunks;
  *
  * These numbers are in sectors.
  */
-static long		outputminsec	= 0;
-static long		outputmaxsec	= 0;
+static uint64_t		outputminsec	= 0;
+static uint64_t		outputmaxsec	= 0;
 
 /* Why is this not defined in a public header file? */
 #define BOOT_MAGIC	0xAA55
@@ -171,8 +171,8 @@ static int has_id = 0;
 /*
  * Some stats
  */
-unsigned long decompblocks;
-unsigned long writeridles;
+uint64_t decompblocks;
+uint64_t writeridles;
 
 #ifdef NOTHREADS
 #define		threadinit()
@@ -218,8 +218,8 @@ typedef struct {
 	char		*data;
 } writebuf_t;
 
-static unsigned long long	   maxwritebufmem = MAXWRITEBUFMEM;
-static volatile unsigned long long curwritebufmem, curwritebufs;
+static uint64_t		 maxwritebufmem = MAXWRITEBUFMEM;
+static volatile uint64_t curwritebufmem, curwritebufs;
 #ifndef NOTHREADS
 static queue_head_t	writequeue;
 static pthread_mutex_t	writebuf_mutex;
@@ -230,9 +230,9 @@ static pthread_cond_t	writebuf_cond;
 static volatile int	writebufwanted;
 
 /* stats */
-unsigned long		maxbufsalloced;
-unsigned long long	maxmemalloced;
-unsigned long		memsplits;
+uint64_t		maxbufsalloced;
+uint64_t		maxmemalloced;
+uint64_t		memsplits;
 
 #ifdef WITH_CRYPTO
 /* security */
@@ -277,21 +277,21 @@ dump_stats(int sig)
 					donechunks);
 		}
 		fprintf(stderr,
-			"Decompressed %lld bytes, wrote %lld bytes (%lld actual) in %ld.%03ld seconds\n",
+			"Decompressed %lu bytes, wrote %lu bytes (%lu actual) in %ld.%03ld seconds\n",
 			totalddata, totaledata, totalrdata,
 			(long)estamp.tv_sec, (long)estamp.tv_usec/1000);
 		fprintf(stderr,
-			"%lld bytes of data in %ld ops (%lld bytes/op), %ld seeks\n",
+			"%lu bytes of data in %lu ops (%lu bytes/op), %lu seeks\n",
 			totalrdata, totalwriteops,
 			totalrdata/(totalwriteops?:1), totalseekops);
 		if (totalzdata > 0) {
 			fprintf(stderr,
-				"  %lld bytes of disk data in %ld ops (%lld bytes/op)\n",
+				"  %lu bytes of disk data in %ld ops (%lu bytes/op)\n",
 				(totalrdata-totalzdata),
 				(totalwriteops-totalzeroops),
 				(totalrdata-totalzdata)/((totalwriteops-totalzeroops)?:1));
 			fprintf(stderr,
-				"  %lld bytes of zero data in %ld ops (%lld bytes/op)\n",
+				"  %lu bytes of zero data in %ld ops (%lu bytes/op)\n",
 				totalzdata, totalzeroops,
 				totalzdata/(totalzeroops?:1));
 		}
@@ -357,7 +357,7 @@ void dodots(int dottype, off_t cc)
 void
 dump_writebufs(void)
 {
-	fprintf(stderr, "%lu max bufs, %llu max memory\n",
+	fprintf(stderr, "%lu max bufs, %lu max memory\n",
 		maxbufsalloced, maxmemalloced);
 	fprintf(stderr, "%lu buffers split, %lu blocked on buf memory\n",
 		memsplits, decompblocks);
@@ -668,7 +668,7 @@ main(int argc, char *argv[])
 
 #ifndef NOTHREADS
 		case 'W':
-			maxwritebufmem = (unsigned long long)atoi(optarg);
+			maxwritebufmem = (uint64_t)atoi(optarg);
 			if (MAXWRITEBUFMEM > 0 &&
 			    maxwritebufmem >= MAXWRITEBUFMEM)
 				maxwritebufmem = MAXWRITEBUFMEM;
@@ -1069,7 +1069,7 @@ ImageUnzipInitKeys(char *uuidstr, char *sig_keyfile, char *enc_keyfile)
 int
 ImageUnzipInit(char *filename, int _slice, int _debug, int _fill,
 	       int _nothreads, int _dostype, int _dodots,
-	       unsigned long long _writebufmem, int _directio)
+	       uint64_t _writebufmem, int _directio)
 {
 	int flags;
 
@@ -1153,13 +1153,13 @@ ImageUnzipInit(char *filename, int _slice, int _debug, int _fill,
 }
 
 void
-ImageUnzipSetChunkCount(unsigned long _chunkcount)
+ImageUnzipSetChunkCount(uint64_t _chunkcount)
 {
 	totalchunks = _chunkcount;
 }
 
 void
-ImageUnzipSetMemory(unsigned long long _writebufmem)
+ImageUnzipSetMemory(uint64_t _writebufmem)
 {
 #ifndef NOTHREADS
 	maxwritebufmem = _writebufmem;
@@ -1610,8 +1610,8 @@ inflate_subblock(const char *chunkbufp)
 	}
 
 	if (debug == 1)
-		fprintf(stderr, "Decompressing chunk %04d: %14lld --> ",
-			blockhdr->blockindex, (long long)offset);
+		fprintf(stderr, "Decompressing chunk %04d: %14lu --> ",
+			blockhdr->blockindex, (uint64_t)offset);
 
 	wbuf = NULL;
 
@@ -1704,10 +1704,10 @@ inflate_subblock(const char *chunkbufp)
 
 			if (debug == 2) {
 				fprintf(stderr,
-					"%12lld %8d %8d %12lld %10lld %8d %5d %8d"
+					"%12lu %8d %8d %12lu %10lu %8d %5d %8d"
 					"\n",
-					(long long)offset, cc, count,
-					totaledata, (long long)size,
+					(uint64_t)offset, cc, count,
+					totaledata, (uint64_t)size,
 					ibsize, ibleft, d_stream.avail_in);
 			}
 
@@ -1798,7 +1798,7 @@ inflate_subblock(const char *chunkbufp)
 
 	donechunks++;
 	if (debug == 1) {
-		fprintf(stderr, "%14lld\n", (long long)offset);
+		fprintf(stderr, "%14lu\n", (uint64_t)offset);
 	}
 	dodots(DODOTS_CHUNKS, 0);
 
@@ -1834,8 +1834,8 @@ writezeros(off_t offset, off_t zcount)
 		}
 		nextwriteoffset = offset;
 	} else if (offset != nextwriteoffset) {
-		fprintf(stderr, "Non-contiguous write @ %lld (should be %lld)\n",
-			(long long)offset, (long long)nextwriteoffset);
+		fprintf(stderr, "Non-contiguous write @ %lu (should be %lu)\n",
+			(uint64_t)offset, (uint64_t)nextwriteoffset);
 		exit(1);
 	}
 
@@ -1903,8 +1903,8 @@ writedata(off_t offset, size_t size, void *buf)
 	} else if (offset == nextwriteoffset || ignoreskips) {
 		cc = write(outfd, buf, size);
 	} else {
-		fprintf(stderr, "Non-contiguous write @ %lld (should be %lld)\n",
-			(long long)offset, (long long)nextwriteoffset);
+		fprintf(stderr, "Non-contiguous write @ %lu (should be %lu)\n",
+			(uint64_t)offset, (uint64_t)nextwriteoffset);
 		exit(1);
 	}
 
@@ -1941,10 +1941,10 @@ zero_remainder()
 		return;
 
 	if (outputmaxsec == 0)
-		outputmaxsec = (unsigned long)getdisksize(outfd);
+		outputmaxsec = (uint64_t)getdisksize(outfd);
 	disksize = sectobytes(outputmaxsec);
 	if (debug)
-		fprintf(stderr, "\ndisksize = %lld\n", (long long)disksize);
+		fprintf(stderr, "\ndisksize = %lu\n", (uint64_t)disksize);
 
 	/* XXX must wait for writer thread to finish to get maxwrittenoffset value */
 	threadwait();
@@ -1954,20 +1954,20 @@ zero_remainder()
 		writebuf_t *wbuf;
 
 		if (debug)
-			fprintf(stderr, "zeroing %lld bytes at offset %lld "
+			fprintf(stderr, "zeroing %lu bytes at offset %lu "
 				"(%lu sectors at %lu)\n",
-				(long long)remaining,
-				(long long)maxwrittenoffset,
+				(uint64_t)remaining,
+				(uint64_t)maxwrittenoffset,
 				bytestosec(remaining),
 				bytestosec(maxwrittenoffset));
 		wbuf = alloc_writebuf(maxwrittenoffset, remaining, 0, 1);
 		dowrite_request(wbuf);
 	} else {
 		if (debug)
-			fprintf(stderr, "not zeroing: disksize = %lld, "
-				"maxwritten =  %lld\n",
-				(long long)disksize,
-				(long long)maxwrittenoffset);
+			fprintf(stderr, "not zeroing: disksize = %lu, "
+				"maxwritten =  %lu\n",
+				(uint64_t)disksize,
+				(uint64_t)maxwrittenoffset);
 	}
 }
 
@@ -1979,7 +1979,7 @@ zero_remainder()
 #include "gpt/gpt_glue.h"
 #endif
 
-static long long outputmaxsize = 0;
+static uint64_t outputmaxsize = 0;
 static int ismbr;
 
 static int
@@ -2034,10 +2034,10 @@ getslicebounds(int slice)
 
 	outputminsec  = parttab[slice-1].offset;
 	outputmaxsec  = parttab[slice-1].offset + parttab[slice-1].size;
-	outputmaxsize = (long long)sectobytes(outputmaxsec - outputminsec);
+	outputmaxsize = sectobytes(outputmaxsec - outputminsec);
 
 	if (debug) {
-		fprintf(stderr, "Slice Mode: S:%d min:%ld max:%ld size:%lld\n",
+		fprintf(stderr, "Slice Mode: S:%d min:%lu max:%lu size:%lu\n",
 			slice, outputminsec, outputmaxsec, outputmaxsize);
 	}
 	return 0;

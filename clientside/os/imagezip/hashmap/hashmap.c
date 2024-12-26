@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2005-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -29,7 +29,9 @@
 #include <string.h>
 #include <errno.h>
 #include <openssl/sha.h>
+#ifdef WITH_MD5
 #include <openssl/md5.h>
+#endif
 #include <assert.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -781,11 +783,13 @@ hashmap_compute_delta(struct range *curranges, char *hfile, int infd,
 	 * Deterimine the hash function
 	 */
 	switch (hinfo->hashtype) {
-	case HASH_TYPE_MD5:
 	default:
+#ifdef WITH_MD5
+	case HASH_TYPE_MD5:
 		hashlen = 16;
 		hashfunc = MD5;
 		break;
+#endif
 	case HASH_TYPE_SHA1:
 		hashlen = 20;
 		hashfunc = SHA1;
@@ -1370,17 +1374,23 @@ hashmap_dump_stats(int pnum)
 		fprintf(stderr, "Modified from original: %10u (%.1f%%)\n\n",
 			b2, ((double)b2 / b1) * 100.0);
 
-		fprintf(stderr, "Hash blocks covering free sectors:   %lu\n",
+		fprintf(stderr, "Hash blocks covering free sectors:   %"
+			PRIu64 "\n",
 			hashstats.gaps);
-		fprintf(stderr, "  Total free sectors covered:        %lu\n",
+		fprintf(stderr, "  Total free sectors covered:        %"
+			PRIu64 "\n",
 			hashstats.gapsects);
-		fprintf(stderr, "  Hash blocks compared identical:    %lu\n",
+		fprintf(stderr, "  Hash blocks compared identical:    %"
+			PRIu64 "\n",
 			hashstats.unchangedgaps);
-		fprintf(stderr, "  Free sectors compared identical:   %lu\n",
+		fprintf(stderr, "  Free sectors compared identical:   %"
+			PRIu64 "\n",
 			hashstats.gapunchanged);
-		fprintf(stderr, "  Allocated sectors assumed changed: %lu\n",
+		fprintf(stderr, "  Allocated sectors assumed changed: %"
+			PRIu64 "\n",
 			hashstats.nocompare);
-		fprintf(stderr, "    Assumed changed due to fixups:   %lu\n",
+		fprintf(stderr, "    Assumed changed due to fixups:   %"
+			PRIu64 "\n",
 			hashstats.fixup);
 	}
 

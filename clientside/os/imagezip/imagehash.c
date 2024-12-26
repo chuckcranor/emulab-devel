@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2020 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -39,7 +39,9 @@
 #include <sys/time.h>
 #include <errno.h>
 #include <openssl/sha.h>
+#ifdef WITH_MD5
 #include <openssl/md5.h>
+#endif
 #ifndef NOTHREADS
 #include <pthread.h>
 #endif
@@ -159,9 +161,14 @@ main(int argc, char **argv)
 			sigfile = strdup(optarg);
 			break;
 		case 'D':
-			if (strcmp(optarg, "md5") == 0)
+			if (strcmp(optarg, "md5") == 0) {
+#ifdef WITH_MD5
 				hashtype = HASH_TYPE_MD5;
-			else if (strcmp(optarg, "sha1") == 0)
+#else
+				fprintf(stderr, "MD5 no longer supported\n");
+				usage();
+#endif
+			} else if (strcmp(optarg, "sha1") == 0)
 				hashtype = HASH_TYPE_SHA1;
 			else if (strcmp(optarg, "sha256") == 0)
 				hashtype = HASH_TYPE_SHA256;
@@ -289,10 +296,12 @@ main(int argc, char **argv)
 		hashversion = hashinfo->version;
 		hashtype = hashinfo->hashtype;
 		switch (hashtype) {
-		case HASH_TYPE_MD5:
 		default:
+#ifdef WITH_MD5
+		case HASH_TYPE_MD5:
 			hashlen = 16;
 			break;
+#endif
 		case HASH_TYPE_SHA1:
 			hashlen = 20;
 			break;
@@ -516,10 +525,12 @@ readhashinfo(char *name, struct hashinfo **hinfop)
 
 	*hinfop = hinfo;
 	switch (hinfo->hashtype) {
-	case HASH_TYPE_MD5:
 	default:
+#ifdef WITH_MD5
+	case HASH_TYPE_MD5:
 		hashlen = 16;
 		break;
+#endif
 	case HASH_TYPE_SHA1:
 		hashlen = 20;
 		break;
@@ -593,17 +604,18 @@ dumphash(char *name, struct hashinfo *hinfo, int withchunk)
 {
 	uint32_t i;
 	struct hashregion *reg;
-	int is32 = 1;
 
 	if (detail > 1) {
 		if (!terse) {
 			char *type = "??";
 
 			switch (hinfo->hashtype) {
-			case HASH_TYPE_MD5:
 			default:
+#ifdef WITH_MD5
+			case HASH_TYPE_MD5:
 				type = "MD5";
 				break;
+#endif
 			case HASH_TYPE_SHA1:
 				type = "SHA1";
 				break;
@@ -622,7 +634,6 @@ dumphash(char *name, struct hashinfo *hinfo, int withchunk)
 				       hinfo->blksize, type);
 				break;
 			case HASH_VERSION_3:
-				is32 = 0;
 				printf("sig version 3, blksize=%u, type=%s, sectors:\n",
 				       hinfo->blksize, type);
 				break;
@@ -856,10 +867,12 @@ comparehashinfo(struct hashinfo *siginfo, struct hashinfo *imageinfo)
 		return i;
 
 	switch (siginfo->hashtype) {
-	case HASH_TYPE_MD5:
 	default:
+#ifdef WITH_MD5
+	case HASH_TYPE_MD5:
 		hashlen = 16;
 		break;
+#endif
 	case HASH_TYPE_SHA1:
 		hashlen = 20;
 		break;
@@ -930,12 +943,14 @@ checkhash(char *name, struct hashinfo *hinfo)
 	badhashdata = 0;
 	badstart = badsize = ~0;
 	switch (hinfo->hashtype) {
-	case HASH_TYPE_MD5:
 	default:
+#ifdef WITH_MD5
+	case HASH_TYPE_MD5:
 		hashlen = 16;
 		hashfunc = MD5;
 		hashstr = "MD5 digest";
 		break;
+#endif
 	case HASH_TYPE_SHA1:
 		hashlen = 20;
 		hashfunc = SHA1;
@@ -1367,11 +1382,13 @@ hashchunk(int chunkno, char *chunkbufp, struct hashinfo **hinfop)
 	 * Deterimine the hash function
 	 */
 	switch (hashtype) {
-	case HASH_TYPE_MD5:
 	default:
+#ifdef WITH_MD5
+	case HASH_TYPE_MD5:
 		hashfunc = MD5;
 		hashlen = 16;
 		break;
+#endif
 	case HASH_TYPE_SHA1:
 		hashfunc = SHA1;
 		hashlen = 20;
@@ -1655,10 +1672,12 @@ hashfilechunk(int chunkno, char *chunkbufp, int chunksize,
 	 * Deterimine the hash function
 	 */
 	switch (hashtype) {
-	case HASH_TYPE_MD5:
 	default:
+#ifdef WITH_MD5
+	case HASH_TYPE_MD5:
 		hashfunc = MD5;
 		break;
+#endif
 	case HASH_TYPE_SHA1:
 		hashfunc = SHA1;
 		break;
