@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2022 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -32,6 +32,7 @@ static struct sliceinfo fsmap[] = {
 	{ IZTYPE_BIOSBOOT,	"BIOS Boot",	read_rawslice },
 	{ IZTYPE_FBSDBOOT,	"FreeBSD Boot",	read_rawslice },
 	{ IZTYPE_FBSDSWAP,	"FreeBSD Swap",	read_bsdswapslice },
+	{ IZTYPE_EFISYSTEM,	"EFI",		read_rawslice },
 #endif
 #ifdef WITH_FFS
 	{ IZTYPE_386BSD,	"FreeBSD UFS1/2",	   read_bsdslice },
@@ -52,7 +53,6 @@ static struct sliceinfo fsmap[] = {
 	{ IZTYPE_FAT16L_LBA,	"FAT16 LBA",	read_fatslice },
 	{ IZTYPE_FAT32,		"FAT32",	read_fatslice },
 	{ IZTYPE_FAT32_LBA,	"FAT32 LBA",	read_fatslice },
-	{ IZTYPE_EFISYSTEM,	"EFI System (FAT)",	read_fatslice },
 #endif
 	{ IZTYPE_EXT,		"DOSEXT",	0 },
 	{ IZTYPE_EXT_LBA,	"DOSEXT LBA",	0 },
@@ -98,7 +98,7 @@ dumpdiskinfo(struct iz_disk *disk)
 		(unsigned long)disk->losect,
 		(unsigned long)disk->hisect - disk->losect + 1);
 	fprintf(stderr, "%s Partitions (%s at lba %lu):\n",
-		bbstr, bbstr, disk->metasect);
+		bbstr, bbstr, (unsigned long)disk->metasect);
 	for (i = 0; i < MAXSLICES; i++) {
 		struct sliceinfo *sinfo;
 
