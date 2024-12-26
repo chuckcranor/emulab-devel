@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2022 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -34,8 +34,10 @@
  * sense of how common shared chunks between images are (i.e., could a
  * frisbee server that serves multiple images take advantage of this to
  * significant effect).
+ *
+ * XXX disabled til we change from MD5 to something not obsolete.
  */
-#define WITH_HASHCMD
+#undef WITH_HASHCMD
 #endif
 
 #ifdef WITH_CRYPTO
@@ -548,8 +550,12 @@ dumpchunk(char *name, char *buf, int chunkno, int checkindex)
 		break;
 	}
 	default:
-		printf("%s: bad magic (%x!=%x) in chunk %d\n",
-		       name, hdr->magic, magic, chunkno);
+		if (chunkno == 0)
+			printf("%s: invalid magic (%x) in chunk 0\n",
+			       name, hdr->magic);
+		else
+			printf("%s: bad magic (%x!=%x) in chunk %d\n",
+			       name, hdr->magic, magic, chunkno);
 		return 1;
 	}
 	if (checkindex && hdr->blockindex != chunkno) {
