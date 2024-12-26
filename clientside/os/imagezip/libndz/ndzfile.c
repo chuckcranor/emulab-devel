@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2018 University of Utah and the Flux Group.
+ * Copyright (c) 2014-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -84,12 +84,22 @@ ndz_open(const char *name, int forwrite)
 	hdr = (blockhdr_t *)buf;
 
 	magic = hdr->magic;
-	if (magic < COMPRESSED_MAGIC_BASE ||
-	    magic > COMPRESSED_MAGIC_CURRENT) {
+	switch (magic) {
+	case COMPRESSED_V1:
+	case COMPRESSED_V2:
+	case COMPRESSED_V3:
+	case COMPRESSED_V5:
+	    break;
+	case COMPRESSED_V4:
+	    fprintf(stderr, "%s: imagezip V%d is not supported\n",
+		    name, magic-COMPRESSED_MAGIC_BASE+1);
+	    goto fail;
+	default:
 	    fprintf(stderr, "%s: bad version 0x%x, not an ndz file?\n",
 		    name, magic);
 	    goto fail;
 	}
+	ndz->magic = magic;
     }
 
     /* XXX hardwired right now */
@@ -399,10 +409,6 @@ ndz_readchunkheader(struct ndz_file *ndz, ndz_chunkno_t chunkno,
     case COMPRESSED_V2:
     case COMPRESSED_V3:
 	reg = (region_t *)((struct blockhdr_V2 *)hdr + 1);
-	rel = (blockreloc_t *)((struct region_32 *)reg + hdr->regioncount);
-	break;
-    case COMPRESSED_V4:
-	reg = (region_t *)((struct blockhdr_V4 *)hdr + 1);
 	rel = (blockreloc_t *)((struct region_32 *)reg + hdr->regioncount);
 	break;
     case COMPRESSED_V5:

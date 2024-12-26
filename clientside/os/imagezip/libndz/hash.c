@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2022 University of Utah and the Flux Group.
+ * Copyright (c) 2014-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -34,7 +34,9 @@
 #include <assert.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#ifdef WITH_MD5
 #include <openssl/md5.h>
+#endif
 #include <openssl/sha.h>
 
 #include "libndz.h"
@@ -86,8 +88,10 @@ ndz_hash_data(struct ndz_file *ndz, unsigned char *data, unsigned long count,
 
     if (ndz->hashtype == HASH_TYPE_SHA1)
 	SHA1(data, count, hash);
+#ifdef WITH_MD5
     else if (ndz->hashtype == HASH_TYPE_MD5)
 	MD5(data, count, hash);
+#endif
 }
 
 #define SANITY_CHECK
@@ -183,13 +187,13 @@ ndz_readhashinfo(struct ndz_file *ndz, char *sigfile)
 	}
 	if (ndz->hash32) {
 	    chunkno = hr.hr32.chunkno;
-	    hstart = hr.hr32.region.start;
-	    hsize = hr.hr32.region.size;
+	    hstart = hr.hr32.start;
+	    hsize = hr.hr32.size;
 	    hash = &hr.hr32.hash[0];
 	} else {
 	    chunkno = hr.hr64.chunkno;
-	    hstart = hr.hr64.region.start;
-	    hsize = hr.hr64.region.size;
+	    hstart = hr.hr64.start;
+	    hsize = hr.hr64.size;
 	    hash = &hr.hr64.hash[0];
 	}
 	hashdata[i].chunkno = chunkno;
@@ -264,16 +268,16 @@ writehinfo(struct ndz_rangemap *map, struct ndz_range *range, void *arg)
     assert(hd->hashlen <= HASH_MAXSIZE);
 
     if (is32) {
-	hr.hr32.region.start = (uint32_t)range->start;
-	hr.hr32.region.size = (uint32_t)(range->end - range->start + 1);
+	hr.hr32.start = (uint32_t)range->start;
+	hr.hr32.size = (uint32_t)(range->end - range->start + 1);
 	hr.hr32.chunkno = hd->chunkno;
 	memcpy(hr.hr32.hash, hd->hash, hd->hashlen);
 	if (hd->hashlen < HASH_MAXSIZE)
 	    memset(&hr.hr32.hash[hd->hashlen], 0, HASH_MAXSIZE - hd->hashlen);
 	sz = sizeof(hr.hr32);
     } else {
-	hr.hr64.region.start = range->start;
-	hr.hr64.region.size = range->end - range->start + 1;
+	hr.hr64.start = range->start;
+	hr.hr64.size = range->end - range->start + 1;
 	hr.hr64.chunkno = hd->chunkno;
 	memcpy(hr.hr64.hash, hd->hash, hd->hashlen);
 	if (hd->hashlen < HASH_MAXSIZE)

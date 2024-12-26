@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2018 University of Utah and the Flux Group.
+ * Copyright (c) 2014-2024 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -50,6 +50,7 @@ struct ndz_file {
     int flags;
     off_t curoff;
     char *fname;
+    uint32_t magic;
     int sectsize;
     int chunksize;
     ndz_chunkno_t nchunks;
