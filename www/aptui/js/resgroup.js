@@ -1216,6 +1216,15 @@ $(function ()
 	    $(selecter + ' option[value=' + ideal_hour + ']')
 		.prop('selected', 'selected');
 	}
+
+        /*
+         * When changing the start date, change the end date if not already set.
+         */
+        if (which == "start" &&
+            !$("#reserve-request-form #end_day").datepicker("getDate")) {
+	    $("#reserve-request-form #end_day").datepicker("setDate", date);
+            DateChange("end");
+        }
 	UpdateFormTime(which);
     }
 
