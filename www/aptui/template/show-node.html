@@ -302,6 +302,10 @@
 	      <td><a href="<%= fields.expinfo.url %>">
 		<%- fields.expinfo.eid %></a></td>
 	    </tr>	
+	    <tr>
+	      <td>Node Vname</td>
+	      <td><%= fields.expinfo.vname %></td>
+	    </tr>	
 	    <% if (_.has(fields.expinfo, "startupcmd")) { %>
 	      <tr>
 		<td>Startup Command</td>

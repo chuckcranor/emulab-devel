@@ -342,6 +342,7 @@ function GetExpInfo($node)
     
     $blob["pid"]       = $experiment->pid();
     $blob["eid"]       = $experiment->eid();
+    $blob["vname"]     = $node->VirtName();
     if ($node->startupcmd() && $node->startupcmd() != "") {
         $blob["startupcmd"]  = $node->startupcmd();
         $blob["startstatus"] = $node->startstatus();
