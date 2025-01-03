@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2021, 2023 University of Utah and the Flux Group.
+# Copyright (c) 2006-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -697,9 +697,17 @@ function VerifyPageArguments($argspec, $required)
                 # We use this strictly for internal URLs, so we can be
                 # very narrow in what we allow, to avoid XSS attacks.
                 #
-                if (!preg_match("/^[-\w\?\/\&\.=\+\:\*]+$/", $object)) {
-                    error_log("PAGEARG_URL: $name: " . $object);
-		    $object = htmlspecialchars($object);
+                if (!preg_match("/^\/[-\w\?\/\&\.=\+\:\*]+$/", $object)) {
+                    $IP = "";
+                    if (isset($_SERVER['REMOTE_ADDR'])) {
+                        $IP = $_SERVER['REMOTE_ADDR'];
+                    }
+                    error_log("PAGEARG_URL ($IP): $name: " . $object);
+                    error_log("  URI: " . $_SERVER['REQUEST_URI']);
+                    if (isset($_SERVER['HTTP_REFERER'])) {
+                        error_log("  REFERER: " . $_SERVER['HTTP_REFERER']);
+                    }
+                    $object = htmlspecialchars($object, ENT_COMPAT);
 		    PAGEARGERROR("Invalid characters in '$name': $object");
                 }
 	    }

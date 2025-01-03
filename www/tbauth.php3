@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -553,7 +553,7 @@ function LoginStatus() {
 # conditions. 
 #
 function LOGGEDINORDIE($uid, $modifier = 0) {
-    global $TBBASE, $APTBASE, $BASEPATH;
+    global $TBBASE, $APTBASE, $BASEPATH, $WWWHOST;
     global $TBAUTHTIMEOUT, $CHECKLOGIN_HASHKEY, $CHECKLOGIN_IDX;
     global $drewheader;
 
@@ -573,11 +573,12 @@ function LOGGEDINORDIE($uid, $modifier = 0) {
     }
 
     $redirect_url = null;
+    $referrer     = null;
     if ($uid || REMEMBERED_ID()) {
         # HTTP_REFERER will not work reliably when redirecting so
         # pass in the URI for this page as an argument
-        $redirect_url = "${login_url}?referrer=".
-            urlencode($_SERVER['REQUEST_URI']);
+        $redirect_url = $login_url;
+        $referrer     = $_SERVER['REQUEST_URI'];
     }
 
     $link = "\n<a href=\"$login_url\">Please ".
@@ -588,6 +589,7 @@ function LOGGEDINORDIE($uid, $modifier = 0) {
     switch ($status & CHECKLOGIN_STATUSMASK) {
     case CHECKLOGIN_NOTLOGGEDIN:
 	if ($redirect_url) {
+            SetReferrer($referrer);
 	    header("Location: $redirect_url&error=notloggedin");
 	    exit;
         } else {
@@ -597,6 +599,7 @@ function LOGGEDINORDIE($uid, $modifier = 0) {
         break;
     case CHECKLOGIN_TIMEDOUT:
 	if ($redirect_url) {
+            SetReferrer($referrer);
 	    header("Location: $redirect_url&error=timedout");
 	    exit;
         } else {
@@ -1539,6 +1542,44 @@ function ReactivateUser($user)
         $user->SetStatus(TBDB_USERSTATUS_INACTIVE);
         return -1;
     }
+    return 0;
+}
+
+#
+# Referrer is now handled with a cookie.
+#
+function SetReferrer($referrer)
+{
+    global $WWWHOST;
+    setcookie("referrer", $referrer, time() + 300, "/", $WWWHOST, 0);
+}
+function ClearReferrer()
+{
+    global $WWWHOST;
+    setcookie("referrer", '', 1, "/", $WWWHOST, 0);
+}
+function GetReferrer(&$referrer)
+{
+    if (isset($_COOKIE['referrer']) && $_COOKIE['referrer'] != "") {
+        if (CheckReferrer($_COOKIE['referrer']) != 0) {
+            ClearReferrer();
+            return -1;
+        }
+        $referrer = $_COOKIE['referrer'];
+    }
+    return 0;
+}
+function CheckReferrer($referrer)
+{
+    if (!preg_match("/^\/[-\w\?\/\&\.=\+\:\*]+$/", $referrer)) {
+        $IP = "";
+        if (isset($_SERVER['REMOTE_ADDR'])) {
+            $IP = $_SERVER['REMOTE_ADDR'];
+        }
+        error_log("Invalid LOGIN REFERRER ($IP): " . $referrer);
+        return -1;
+    }
+    error_log("LOGIN REFERRER COOKIE: " . $referrer);
     return 0;
 }
 

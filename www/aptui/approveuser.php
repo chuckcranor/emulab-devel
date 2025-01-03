@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,6 @@ $page_title = "Approve User";
 #
 # Get current user in case we need an error message.
 #
-RedirectSecure();
 $this_user = CheckLoginOrRedirect();
 
 #

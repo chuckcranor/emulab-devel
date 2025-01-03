@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,13 +41,17 @@ if (isset($this_user)) {
 }
 else {
     CheckLoginOrRedirect();
+
 }
+# Now a cookie
+$referrer = null;
+GetReferrer($referrer);
+ClearReferrer();
 
 #
 # Verify page arguments.
 #
 $optargs = OptionalPageArguments("target_user", PAGEARG_USER,
-                                 "referrer",    PAGEARG_URL,
                                  "needupdate",  PAGEARG_BOOLEAN);
 $needupdate = ($needupdate ? 1 : 0);
 
@@ -97,7 +101,6 @@ echo "</script>\n";
 
 echo "<script type='text/javascript'>\n";
 if ($referrer) {
-    #$referrer = CleanString($referrer);
     echo "    window.REFERRER = '$referrer';\n";
 }
 echo "    window.NEEDUPDATE  = $needupdate;\n";
