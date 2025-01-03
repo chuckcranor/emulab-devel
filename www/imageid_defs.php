@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2022 University of Utah and the Flux Group.
+# Copyright (c) 2006-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -206,8 +206,8 @@ class Image
                         "  from image_versions as v ".
                         "left join images as i on ".
                         "     i.imageid=v.imageid ".
-                        "where v.imageid='$safe_id' and ".
-                        "      v.version='$safe_version'");
+                        "where v.imageid='$imageid' and ".
+                        "      v.version='$version'");
     
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->imageid = NULL;
@@ -774,8 +774,9 @@ class Image
 	    $path = "&nbsp;";
 	if (!$created)
 	    $created = "N/A";
-	if (!strcmp($notes, ""))
+	if (!$notes || $nodes == "") {
 	    $notes = "&nbsp;";
+        }
     
         #
         # Generate the table.
