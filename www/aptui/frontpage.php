@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2016-2018 University of Utah and the Flux Group.
+# Copyright (c) 2016-2018, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,7 +49,11 @@ if (file_exists($sitefile)) {
 } else {
     $matter    = file_get_contents("frontpage.html");
 }
-$stats     = json_decode(file_get_contents("$APTBASE/stats-ajax.php"), true);
+$json      = file_get_contents("$APTBASE/stats-ajax.php", false, $sslcontext);
+if ($json === false) {
+    PAGEERROR("Could not continue. Please contact $TBMAILADDR");
+}
+$stats     = json_decode($json, true);
 $whoarewe  = ($TBMAINSITE ? "" : $THISHOMEBASE);
 $counts    = "<tr><th>Type</th><th>Free</th><th>% Inuse</th></tr>";
 
