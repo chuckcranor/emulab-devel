@@ -59,6 +59,11 @@
  .canned-response {
      white-space: normal !important;
  }
+ .error-link {
+     text-decoration: underline;
+     font-weight: bold;
+     color: inherit;
+ }
 </style>  
 <div class='row main-row'>
   <div class='col-lg-7
@@ -1162,6 +1167,34 @@
 	    </table>
 	  </small>
 	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='blocking-zone-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+	<button type="button" class="close btn-close"
+		data-dismiss="modal" data-bs-dismiss="modal"
+	  <span aria-hidden="true"></span></button>
+	<p>
+	  We have changed the policy for how resources are reserved in the
+	  POWDER indoor OTA lab. Only a single reservation covering a particular
+	  time window may be present at a time for indoor lab resources,
+	  regardless of how many devices are included in the reservation.
+	</p>
+
+	<p>
+	  The reason for the change is to prevent conflicts between simultaneous
+	  experiments from different users. The key difficulty is that when two
+	  (or more) experimenters run different 5G gNB (or 4G eNB) services, the
+	  COTS UEs can get confused and behave unexpectedly, attaching to the
+	  wrong gNB/Core, taking a long time to attach, or not attempting to
+	  attach at all.  There is also simply more potential to inadvertently
+	  impact a fellow experimenter by using the wrong channel on accident
+	  when running experiments at the same time in the indoor OTA lab.
+	</p>
       </div>
     </div>
   </div>

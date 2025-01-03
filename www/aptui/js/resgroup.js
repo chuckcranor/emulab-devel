@@ -1459,6 +1459,16 @@ $(function ()
 			    "(" + reservation.conflict.needed + " more needed)";
 		    }
 		}
+		else if (_.has(reservation, "blocked")) {
+		    var zone = reservation.zone;
+
+                    // Add a popup with more info. 
+                    html = reservation.output +
+                        " <a href='#' class='btn btn-xs' " +
+                        "     data-bs-toggle=modal data-bs-target='#blocking-zone-modal'>" +
+                        "<span style='margin-bottom: 4px;' "+
+                        "      class='glyphicon glyphicon-question-sign'></span></a>";
+		}
 		else {
 		    html = reservation.output;
 		}
