@@ -36,9 +36,9 @@
     <tbody>
       <% _.each(radioinfo, function(aggregate, urn) { %>
 	<% _.each(aggregate, function(node, node_id) { %>
-	  <% var url = amlist[urn].weburl +
-  	  "/portal/show-node.php?node_id=" + node_id; %>
 	  <% _.each(node.frontends, function(frontend, iface) { %>
+	    <% var url = amlist[urn].weburl +
+  	    "/portal/show-node.php?node_id=" + node_id; %>
 	    <tr data-urn="<%- urn %>"
 		data-node_id="<%- node_id %>"
 		data-iface="<%- iface %>"
