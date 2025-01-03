@@ -250,7 +250,9 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     if (!$login_user && !NOLOGINS()) {
         if ($script != "login.php" && $script != "logout.php" &&
             $script != "frontpage.php") {
-            SetReferrer($_SERVER['REQUEST_URI']);
+            if (REMEMBERED_ID()) {
+                SetReferrer($_SERVER['REQUEST_URI']);
+            }
         }
     }
 
