@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,6 +24,18 @@
 include("defs.php3");
 
 #
+# Do this check first for the redirect.
+# This is safe to do before the CheckLoginOrDie
+#
+if (!$CLASSICWEB_OVERRIDE) {
+    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+    if (!$classic) {
+        RedirectToPortal("lists.php#projects");
+        return;
+    }
+}
+
+#
 # Only known and logged in users can do this.
 #
 $this_user = CheckLoginOrDie();
@@ -33,14 +45,7 @@ $isadmin   = ISADMIN();
 #
 # Verify page arguments
 #
-$optargs = OptionalPageArguments("showtype",   PAGEARG_STRING,
-                                 "classic",    PAGEARG_BOOLEAN);
-
-if ($isadmin && !$classic) {
-    $url = "portal/lists.php#projects";
-    header("Location: $url");
-    return;
-}
+$optargs = OptionalPageArguments("showtype",   PAGEARG_STRING);
 
 #
 # Standard Testbed Header

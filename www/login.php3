@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2021 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,12 +54,13 @@ if (! isset($error)) {
 # For redirect from the geni tool login.
 $isgenitool = 0;
 
-if (! isset($referrer)) {
-    $referrer = null;
+$referrer = null;
+if (GetReferrer($referrer) != 0) {
+    PAGEARGERROR("Invalid REFERRER");        
 }
 
 # If redirecting from the geni tool, show a different message.
-if (isset($referrer) && preg_match("/getsslcertjs/", $referrer)) {
+if ($referrer && preg_match("/getsslcertjs/", $referrer)) {
     $isgenitool = 1;
 }
 
@@ -116,7 +117,7 @@ if (($this_user = CheckLogin($status))) {
 #
 # The uid can be an email address, and in fact defaults to that now. 
 # 
-function SPITFORM($uid, $key, $referrer, $error, $adminmode, $simple, $view)
+function SPITFORM($uid, $key, $error, $adminmode, $simple, $view)
 {
     global $TBDB_UIDLEN, $TBBASE;
     global $isgenitool;
@@ -188,10 +189,6 @@ function SPITFORM($uid, $key, $referrer, $error, $adminmode, $simple, $view)
                  <b><input type=submit value=Login name=login></b></td>
           </tr>\n";
     
-    if ($referrer) {
-	echo "<input type=hidden name=referrer value='$referrer'>\n";
-    }
-
     if ($simple) {
 	echo "<input type=hidden name=simple value=$simple>\n";
     }
@@ -220,7 +217,7 @@ if (! isset($login)) {
 	$login_id = REMEMBERED_ID();
     }
 
-    SPITFORM($login_id, $key, $referrer, $error, $adminmode, $simple, $view);
+    SPITFORM($login_id, $key, $error, $adminmode, $simple, $view);
     PAGEFOOTER($view);
     return;
 }
@@ -308,9 +305,16 @@ else {
 # Failed, then try again with an error message.
 # 
 if ($login_status == $STATUS_LOGINFAIL) {
-    SPITFORM($uid, $key, $referrer, "failed", $adminmode, $simple, $view);
+    SPITFORM($uid, $key, "failed", $adminmode, $simple, $view);
     PAGEFOOTER($view);
     return;
+}
+
+#
+# Do not leave this cookie:
+#
+if ($referrer) {
+    ClearReferrer();
 }
 
 if (isset($key)) {

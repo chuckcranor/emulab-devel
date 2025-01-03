@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,19 @@ include("defs.php3");
 include("imageid_defs.php");
 
 #
+# Do this check first for the redirect.
+# This is safe to do before the CheckLoginOrDie
+#
+if (!$CLASSICWEB_OVERRIDE) {
+    $reqargs = RequiredPageArguments("imageid", PAGEARG_STRING);
+    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+    if (!$classic) {
+        RedirectToPortal("show-image.php", "image=$imageid");
+        return;
+    }
+}
+
+#
 # Only known and logged in users.
 #
 $this_user = CheckLoginOrDie();
@@ -39,8 +52,7 @@ include("showlogfile_sup.php3");
 # Verify page arguments.
 #
 $reqargs = RequiredPageArguments("image",   PAGEARG_IMAGE);
-$optargs = OptionalPageArguments("showlog", PAGEARG_BOOLEAN,
-                                 "classic", PAGEARG_BOOLEAN);
+$optargs = OptionalPageArguments("showlog", PAGEARG_BOOLEAN);
 
 # Need these below.
 $imageid = $image->imageid();
@@ -54,17 +66,12 @@ if (!$image->AccessCheck($this_user, $TB_IMAGEID_READINFO)) {
     USERERROR("You do not have permission to access ImageID $imageid.", 1);
 }
 
-if (!$CLASSICWEB_OVERRIDE && $image->ezid() && !$classic) {
-    header("Location: apt/show-image.php?imageid=$imageid&version=$version");
-    return;
-}
-
 #
 # Standard Testbed Header
 #
 PAGEHEADER("Image Descriptor");
 
-if (isset($showlog)) {
+if ($showlog) {
     $logfile = $image->GetLogfile();
     if ($logfile) {
 	echo $image->PageHeader();

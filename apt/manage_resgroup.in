@@ -957,6 +957,7 @@ sub DoGroupReserve()
 		    $res->{'output'}   = (defined($conflict) ?
 					  $conflict->{'errmsg'} : "");
 		    $res->{"approved"} = 0;
+		    $res->{"blocked"}  = $zone if (defined($conflict));
 		    $cluster_results->{'errors'}++;		
 		}
 	    }

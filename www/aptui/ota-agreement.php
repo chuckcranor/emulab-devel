@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,7 +37,6 @@ RedirectSecure();
 $this_user = CheckLoginOrRedirect();
 
 $reqargs = RequiredPageArguments("project",  PAGEARG_PROJECT);
-$optargs = OptionalPageArguments("referrer", PAGEARG_URL);
 $pid = $project->pid();
 
 SPITHEADER(1);
@@ -46,9 +45,6 @@ echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "    window.PID = '$pid';\n";
-if ($referrer) {
-    echo "    window.REFERRER = '$referrer';\n";
-}
 echo "</script>\n";
 
 REQUIRE_UNDERSCORE();

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2023 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,14 +39,16 @@ $this_user = CheckLogin($check_status);
 $optargs = OptionalPageArguments("login",       PAGEARG_STRING,
 				 "uid",         PAGEARG_STRING,
 				 "password",    PAGEARG_PASSWORD,
-				 "referrer",    PAGEARG_URL,
 				 "from",        PAGEARG_STRING,
 				 "adminmode",   PAGEARG_BOOLEAN,
                                  "cleanmode",   PAGEARG_BOOLEAN,
 				 "ajax_request",PAGEARG_BOOLEAN);
-if (! isset($referrer)) {
-    $referrer = null;
+
+$referrer = null;
+if (GetReferrer($referrer) != 0) {
+    PAGEARGERROR("Invalid REFERRER");        
 }
+
 # Allow adminmode to be passed along to new login. Handy for letting admins
 # log in when NOLOGINS() is on.
 if (!isset($adminmode)) {
@@ -78,13 +80,13 @@ if (NOLOGINS() && !$adminmode) {
 #
 # Spit out the form.
 # 
-function SPITFORM($uid, $referrer, $error)
+function SPITFORM($uid, $error)
 {
     global $PORTAL_PASSWORD_HELP;
     global $TBDB_UIDLEN;
     global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER, $PROTOGENI_GENIWEBLOGIN;
     global $adminmode, $cleanmode;
-    global $UI_EXTERNAL_ACCOUNTS;
+    global $UI_EXTERNAL_ACCOUNTS, $TBMAINSITE;
 
     header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
@@ -137,10 +139,6 @@ function SPITFORM($uid, $referrer, $error)
 	    echo "Unknown Error ($error)!";
         }
         echo "</font></span>";
-    }
-    if ($referrer) {
-	echo "<input type=hidden name=referrer id='login_referrer' ".
-            "value='$referrer'>\n";
     }
 ?>
              <div class='form-group'>
@@ -223,6 +221,7 @@ function SPITFORM($uid, $referrer, $error)
 if (!$ajax_request && !isset($login)) {
     if ($this_user) {
 	header("Location: $APTBASE/landing.php");
+        ClearReferrer();
 	return;
     }
     if (NOLOGINS() && !$adminmode) {
@@ -231,7 +230,7 @@ if (!$ajax_request && !isset($login)) {
                       "please try again later.");
         return;
     }
-    SPITFORM(REMEMBERED_ID(), $referrer, null);
+    SPITFORM(REMEMBERED_ID(), null);
     return;
 }
 
@@ -373,7 +372,7 @@ if ($login_status == $STATUS_LOGINFAIL) {
 	SPITAJAX_ERROR(1, "login failed");
 	exit(0);
     }
-    SPITFORM($uid, $referrer, "failed");
+    SPITFORM($uid, "failed");
     return;
 }
 #
@@ -395,7 +394,14 @@ if ($cleanmode || isset($_COOKIE['cleanmode'])) {
     setcookie("cleanmode", ($cleanmode ? 1 : 0), 0, "/", $TBAUTHDOMAIN, 0);
 }
 
-if (isset($referrer) && $CHECKLOGIN_USER->IsActive()) {
+#
+# Do not leave this cookie:
+#
+if ($referrer) {
+    ClearReferrer();
+}
+
+if ($referrer && $CHECKLOGIN_USER->IsActive()) {
     #
     # Zap back to page that started the login request.
     #

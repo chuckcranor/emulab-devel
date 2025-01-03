@@ -2288,6 +2288,9 @@ window.ShowPowderMap = (function()
 	else if (event.data.type == "FE") {
 	    details = MarkFixedEndpoint(event.data.location, false);
 	}
+	else if (event.data.type == "DD") {
+	    details = MarkDenseDeployment(event.data.location, false);
+	}
 	if (details) {
 	    View.goTo(details.graphic)
 		.then(function() {

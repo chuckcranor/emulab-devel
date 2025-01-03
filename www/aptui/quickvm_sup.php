@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -215,34 +215,43 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
     elseif ($login_user && $login_user->IsActive()) {
         if ($login_user->NeedAccountUpdate()) {
             if ($script != "myaccount.php" && $script != "logout.php") {
-                $referrer = urlencode($_SERVER['REQUEST_URI']);
-                header("Location: myaccount.php".
-                       "?referrer=$referrer&needupdate=1");
+                SetReferrer($_SERVER['REQUEST_URI']);
+                header("Location: myaccount.php?needupdate=1");
                 return;
             }
         }
         elseif ($login_user->NeedScopusValidation()) {
             if ($script != "verify-match.php" && $script != "logout.php") {
-                $referrer = urlencode($_SERVER['REQUEST_URI']);
-                header("Location: verify-match.php?referrer=$referrer");
+                SetReferrer($_SERVER['REQUEST_URI']);
+                header("Location: verify-match.php");
                 return;
             }
         }
         elseif ($login_user->RequireAUP()) {
             if ($script != "portal-aup.php" && $script != "logout.php") {
-                $referrer = urlencode($_SERVER['REQUEST_URI']);
-                header("Location: portal-aup.php?referrer=$referrer");
+                SetReferrer($_SERVER['REQUEST_URI']);
+                header("Location: portal-aup.php");
                 return;
             }
         }
         elseif ($login_user->Licenses()) {
             if ($script != "licenses.php" && $script != "logout.php") {
-                $referrer = urlencode($_SERVER['REQUEST_URI']);
-                header("Location: licenses.php?referrer=$referrer");
+                SetReferrer($_SERVER['REQUEST_URI']);
+                header("Location: licenses.php");
                 return;
             }
         }
     }
+    }
+    #
+    # If not logged in and not the login/logout page, set a referrer cookie
+    # in case the user clicks the login button on the page.
+    #
+    if (!$login_user && !NOLOGINS()) {
+        if ($script != "login.php" && $script != "logout.php" &&
+            $script != "frontpage.php") {
+            SetReferrer($_SERVER['REQUEST_URI']);
+        }
     }
 
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
@@ -810,10 +819,13 @@ function RedirectSecure()
 #
 function RedirectLoginPage()
 {
+    if (REMEMBERED_ID()) {
+        SetReferrer($_SERVER['REQUEST_URI']);
+    }
+    
     # HTTP_REFERER will not work reliably when redirecting so
     # pass in the URI for this page as an argument
-    header("Location: login.php?referrer=".
-	   urlencode($_SERVER['REQUEST_URI']));
+    header("Location: login.php");
     exit(0);
 }
 

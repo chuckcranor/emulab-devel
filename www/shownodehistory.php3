@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014, 2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -23,6 +23,20 @@
 #
 include("defs.php3");
 include_once("node_defs.php");
+
+#
+# Do this check first for the redirect.
+# This is safe to do before the CheckLoginOrDie
+#
+if (!$CLASSICWEB_OVERRIDE) {
+    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN,
+                                     "node_id", PAGEARG_STRING);
+    if (!$classic) {
+        RedirectToPortal("show-nodehistory.php",
+                         isset($node_id) ? "node_id=$node_id" : null);
+        return;
+    }
+}
 
 #
 # Only known and logged in users can do this.
@@ -48,17 +62,7 @@ $optargs = OptionalPageArguments("showall",   PAGEARG_BOOLEAN,
 				 "mac",       PAGEARG_STRING,
 				 # To allow for pcvm search, since they are
                                  # transient and will not map to a node.
-				 "node_id",   PAGEARG_STRING,
-                                 "classic",   PAGEARG_BOOLEAN);
-
-if (!$classic) {
-    $url = "portal/show-nodehistory.php";
-    if (isset($node_id)) {
-        $url .= "?node_id=$node_id";
-    }
-    header("Location: $url");
-    return;
-}
+				 "node_id",   PAGEARG_STRING);
 
 #
 # Standard Testbed Header

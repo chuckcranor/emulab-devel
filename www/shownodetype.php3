@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,17 +25,24 @@ include("defs.php3");
 include("imageid_defs.php");
 
 #
+# Do this check first for the redirect.
+# This is safe to do before the CheckLoginOrDie
+#
+if (!$CLASSICWEB_OVERRIDE) {
+    $reqargs = RequiredPageArguments("node_type", PAGEARG_STRING);
+    $optargs = OptionalPageArguments("classic",   PAGEARG_BOOLEAN);
+    if (!$classic) {
+        RedirectToPortal("show-nodetype.php", "type=$node_type");
+        return;
+    }
+}
+
+#
 # Anyone can access this info, its a PUBLIC PAGE!
 # Get current user if there is one.
 #
 $this_user = CheckLogin($check_status);
 $reqargs   = RequiredPageArguments("node_type", PAGEARG_STRING);
-$optargs   = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
-
-if (!$CLASSICWEB_OVERRIDE && !$classic) {
-    header("Location: apt/show-nodetype.php?type=$node_type");
-    return;
-}
 
 # Sanitize.
 if (!preg_match("/^[-\w]+$/", $node_type)) {

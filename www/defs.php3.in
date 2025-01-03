@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -930,6 +930,23 @@ function UnusedSSHAuthObject($uid)
     $valid_json_auth_object = json_encode($authobj);
 
     return $valid_json_auth_object;
+}
+
+#
+# Helper for portal redirect.
+#
+function RedirectToPortal($portalpage, $query_args = null)
+{
+    $redirect_url = "portal/${portalpage}";
+    
+    if (!$query_args) {
+        $query_args  = parse_url($_SERVER['REQUEST_URI'], PHP_URL_QUERY);
+    }
+    if ($query_args) {
+        $redirect_url .= "?${query_args}";
+    }
+    header("Location: $redirect_url");
+    exit(0);
 }
 
 #

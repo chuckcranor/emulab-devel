@@ -1216,6 +1216,15 @@ $(function ()
 	    $(selecter + ' option[value=' + ideal_hour + ']')
 		.prop('selected', 'selected');
 	}
+
+        /*
+         * When changing the start date, change the end date if not already set.
+         */
+        if (which == "start" &&
+            !$("#reserve-request-form #end_day").datepicker("getDate")) {
+	    $("#reserve-request-form #end_day").datepicker("setDate", date);
+            DateChange("end");
+        }
 	UpdateFormTime(which);
     }
 
@@ -1458,6 +1467,16 @@ $(function ()
 			html = "Insufficient free nodes at " + when + " " +
 			    "(" + reservation.conflict.needed + " more needed)";
 		    }
+		}
+		else if (_.has(reservation, "blocked")) {
+		    var zone = reservation.zone;
+
+                    // Add a popup with more info. 
+                    html = reservation.output +
+                        " <a href='#' class='btn btn-xs' " +
+                        "     data-bs-toggle=modal data-bs-target='#blocking-zone-modal'>" +
+                        "<span style='margin-bottom: 4px;' "+
+                        "      class='glyphicon glyphicon-question-sign'></span></a>";
 		}
 		else {
 		    html = reservation.output;
