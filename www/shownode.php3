@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,19 @@ include_once("node_defs.php");
 include_once("imageid_defs.php");
 
 #
+# Do this check first for the redirect.
+# This is safe to do before the CheckLoginOrDie
+#
+if (!$CLASSICWEB_OVERRIDE) {
+    $reqargs = RequiredPageArguments("node", PAGEARG_STRING);
+    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+    if (!$classic) {
+        RedirectToPortal("show-node.php", "node=$node");
+        return;
+    }
+}
+
+#
 # Only known and logged in users can do this.
 #
 $this_user = CheckLoginOrDie();
@@ -36,15 +49,9 @@ $isadmin   = ISADMIN();
 # Verify page arguments.
 #
 $reqargs = RequiredPageArguments("node", PAGEARG_NODE);
-$optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
 
 # Need these below
 $node_id = $node->node_id();
-
-if (!$classic) {
-    header("Location: portal/show-node.php?node_id=$node_id");
-    return;
-}
 
 #
 # Standard Testbed Header
