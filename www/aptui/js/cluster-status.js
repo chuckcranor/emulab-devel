@@ -150,8 +150,16 @@ $(function ()
 		});
 		$('#' + name + '-tbody').html(html);
 
+                // Sort by type
+                var totals = json.value.totals;
+                var sorted = {};
+                
+                _.each(_.keys(totals).sort(), function (type) {
+                    sorted[type] = totals[type];
+                });
+
 		// These are the totals.
-		html = countsTemplate({"totals" : json.value.totals,
+		html = countsTemplate({"totals" : sorted,
 				       "weburl" : info.url,
 				       "isadmin": isadmin});
 		$('#counts-panel-' + name).html(html);
