@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -222,7 +222,7 @@ sub InUse()
 		    "     unix_timestamp(stats.swapin_last))/60)) as ttl, ".
 		    "  u.uid,stats.slice_uuid,cert.urn,e.swappable, ".
 		    "  s.lockdown,unix_timestamp(stats.swapin_last), ".
-		    "  n.eventstate ".
+		    "  n.eventstate,n.role ".
 		    "  from nodes as n ".
 		    "left join reserved as r on r.node_id=n.node_id ".
 		    "left join node_types as t on t.type=n.type ".
@@ -234,12 +234,13 @@ sub InUse()
 		    "left join `geni-cm`.geni_certificates as cert on ".
 		    "     cert.uuid=stats.slice_uuid ".
 		    "left join users as u on u.uid_idx=e.swapper_idx ".
-		    "where n.role='testnode' and ".
-		    "      (t.class='pc' or t.class='ue') ".
+		    "where (n.role='testnode' and ".
+		    "       (t.class='pc' or t.class='ue')) or ".
+		    "      n.role='virtnode' ".
 		    "order by n.node_id");
     while (my ($node_id,$type,$pid,$eid,$reserved_pid,$expires,
 	       $autoswap,$ttl,$uid,$slice_uuid,$slice_urn,
-	       $swappable,$slice_lockdown,$swapin_time,$eventstate) =
+	       $swappable,$slice_lockdown,$swapin_time,$eventstate,$role) =
 	   $query_result->fetchrow_array()) {
 	my $maxttl;
 
@@ -311,6 +312,7 @@ sub InUse()
 	}
 	push(@blob, {"node_id"      => $node_id,
 		     "type"         => $type,
+		     "role"         => $role,
 		     "available"    => $available,
 		     "pid"          => $pid || "",
 		     "eid"          => $eid || "",

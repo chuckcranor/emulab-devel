@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -107,6 +107,9 @@ function Do_GetStatus()
     $nodeinfo     = array();
 
     foreach ($inuse as $details) {
+        if ($details->role == "virtnode" && !$isadmin) {
+            continue;
+        }
         $info = array();
         $type = $details->type;
         if (!array_key_exists($type, $typecounts)) {
