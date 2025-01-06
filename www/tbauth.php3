@@ -1571,15 +1571,19 @@ function GetReferrer(&$referrer)
 }
 function CheckReferrer($referrer)
 {
+    $IP = "?";
+    if (isset($_SERVER['REMOTE_ADDR'])) {
+        $IP = $_SERVER['REMOTE_ADDR'];
+    }
+    $UID = "?";
+    if (REMEMBERED_ID()) {
+        $UID = REMEMBERED_ID();
+    }
     if (!preg_match("/^\/[-\w\?\/\&\.=\+\:\*]+$/", $referrer)) {
-        $IP = "";
-        if (isset($_SERVER['REMOTE_ADDR'])) {
-            $IP = $_SERVER['REMOTE_ADDR'];
-        }
-        error_log("Invalid LOGIN REFERRER ($IP): " . $referrer);
+        error_log("Invalid LOGIN REFERRER (IP:$IP, UID:$UID): " . $referrer);
         return -1;
     }
-    error_log("LOGIN REFERRER COOKIE: " . $referrer);
+    error_log("LOGIN REFERRER COOKIE (IP:$IP, UID:$UID): " . $referrer);
     return 0;
 }
 
