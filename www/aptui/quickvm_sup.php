@@ -242,7 +242,6 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
             }
         }
     }
-    }
     #
     # If not logged in and not the login/logout page, set a referrer cookie
     # in case the user clicks the login button on the page.
@@ -254,6 +253,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $nomenu = false,
                 SetReferrer($_SERVER['REQUEST_URI']);
             }
         }
+    }
     }
 
     header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
