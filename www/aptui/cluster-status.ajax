@@ -107,7 +107,8 @@ function Do_GetStatus()
     $nodeinfo     = array();
 
     foreach ($inuse as $details) {
-        if ($details->role == "virtnode" && !$isadmin) {
+        if (property_exists($details, "role") &&
+            $details->role == "virtnode" && !$isadmin) {
             continue;
         }
         $info = array();
