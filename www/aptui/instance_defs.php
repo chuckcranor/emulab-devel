@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2024 University of Utah and the Flux Group.
+# Copyright (c) 2006-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -931,7 +931,6 @@ class Instance
                            "nuvo7501"  => true,
                            "pnbase2"   => true,
                            "pnbase1"   => true,
-                           "cellsdr1-browning"  => true,
                            "cellsdr1-dentistry" => true,
                            "cbrssdr1-dentistry" => true,
                            "cellsdr1-fm"        => true,
