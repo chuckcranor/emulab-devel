@@ -1027,13 +1027,11 @@ sub doimage($)
     # should be 0775, owned by the image creator and in the group of the
     # containing directory.
     #
-    # XXX right now, I only check the directory permissions and not the
-    # user/groups. Too lazy.
-    #
     if (($validate{"all"} || $validate{"perm"}) &&
 	$accessfs && ($path || $dpath)) {
 	my $ipid = $image->pid();
 	my $igid = $image->gid();
+	my $iuid = $image->creator();
 
 	my $idir;
 	if ($ipid eq $igid) {
@@ -1050,7 +1048,8 @@ sub doimage($)
 	    if (! -d $idir) {
 		print STDERR "$pidimage: mode: image dir '$idir' does not exist?!\n";
 	    } else {
-		my $mode = (stat($idir)->mode & 0777);
+		my $sb = stat($idir);
+		my $mode = ($sb->mode & 0777);
 		if ($mode != 0770) {
 		    my $mstr = sprintf "0%o", $mode;
 		    print("$pidimage: mode: '$idir' mode $mstr != 0770\n")
@@ -1067,6 +1066,32 @@ sub doimage($)
 			}
 		    }
 		}
+
+		my $wrong = 0;
+		my $fuid = getpwuid($sb->uid);
+		if ($fuid ne $iuid) {
+		    print("$pidimage: uid: '$fuid' != $iuid\n")
+			if (!$update || !$quiet);
+		    $wrong++;
+		}
+		my $fgid = getgrgid($sb->gid);
+		if ($fgid ne $igid) {
+		    print("$pidimage: gid: '$fgid' != $igid\n")
+			if (!$update || !$quiet);
+		    $wrong++;
+		}
+		if ($wrong && $update) {
+		    print("$pidimage: uid/gid: ")
+			if (!$quiet);
+		    # XXX fix the dir and everything in it
+		    if (!system("chown -R $iuid:$igid $idir")) {
+			print "[FIXED]\n"
+			    if (!$quiet);
+		    } else {
+			print "[FAILED]\n"
+			    if (!$quiet);
+		    }
+		}
 	    }
 	}
 
@@ -1078,7 +1103,8 @@ sub doimage($)
 		if (! -d $idir) {
 		    print STDERR "$pidimage: mode: image subdir '$idir' does not exist?!\n";
 		} else {
-		    my $mode = (stat($idir)->mode & 0777);
+		    my $sb = stat($idir);
+		    my $mode = ($sb->mode & 0777);
 		    if ($mode != 0775) {
 			my $mstr = sprintf "0%o", $mode;
 			print("$pidimage: mode: '$idir' mode $mstr != 0775\n")
@@ -1095,6 +1121,32 @@ sub doimage($)
 			    }
 			}
 		    }
+
+		    my $wrong = 0;
+		    my $fuid = getpwuid($sb->uid);
+		    if ($fuid ne $iuid) {
+			print("$pidimage: uid: '$fuid' != $iuid\n")
+			    if (!$update || !$quiet);
+			$wrong++;
+		    }
+		    my $fgid = getgrgid($sb->gid);
+		    if ($fgid ne $igid) {
+			print("$pidimage: gid: '$fgid' != $igid\n")
+			    if (!$update || !$quiet);
+			$wrong++;
+		    }
+		    if ($wrong && $update) {
+			print("$pidimage: uid/gid: ")
+			    if (!$quiet);
+			# XXX fix the dir and everything in it
+			if (!system("chown -R $iuid:$igid $idir")) {
+			    print "[FIXED]\n"
+				if (!$quiet);
+			} else {
+			    print "[FAILED]\n"
+				if (!$quiet);
+			}
+		    }
 		}
 	    }
 	}
@@ -1107,7 +1159,7 @@ sub doimage($)
 	print STDERR "$pidimage: no image file found or cannot access\n";
 	return 1;
     }
-    my ($ftime,$fsize,$fuid,$dftime,$dfsize,$dfuid);
+    my ($ftime,$fsize,$fuid,$fgid,$dftime,$dfsize,$dfuid,$dfgid);
     if ($path) {
 	if (! -r "$path") {
 	    print STDERR "$pidimage: path: image path '$path' cannot be read\n";
@@ -1121,9 +1173,11 @@ sub doimage($)
 	    }
 	    return 1;
 	}
-	$ftime = stat($path)->mtime;
-	$fuid = stat($path)->uid;
-	$fsize = stat($path)->size;
+	my $sb = stat($path);
+	$ftime = $sb->mtime;
+	$fuid = $sb->uid;
+	$fgid = $sb->gid;
+	$fsize = $sb->size;
 
 	# XXX image file size must be non-zero
 	if ($fsize == 0) {
@@ -1144,9 +1198,10 @@ sub doimage($)
 	    }
 	    return 1;
 	}
-	$dftime = stat($dpath)->mtime;
-	$dfuid = stat($dpath)->uid;
-	$dfsize = stat($dpath)->size;
+	my $dsb = stat($dpath);
+	$dftime = $dsb->mtime;
+	$dfuid = $dsb->uid;
+	$dfsize = $dsb->size;
 
 	# XXX image file size must be non-zero
 	if ($dfsize == 0) {
