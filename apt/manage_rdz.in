@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1173,6 +1173,7 @@ sub DoGrants()
 	$constraint->{"bandwidth"} = $bandwidth;
     }
     my $request = {
+	"name"        => "Test Grant",
 	"description" => "Test Grant",
 	"element_id"  => $ELEMENTID,
 	"starts_at"   => TBDateStringGMT(time()),

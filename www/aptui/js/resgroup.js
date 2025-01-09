@@ -3057,6 +3057,7 @@ $(function ()
 			    event.preventDefault();
 			    Approve();
 			});
+                    LoadResGroups(details.uid);
 		}
 		var now   = new Date();
 		var start = new Date(details.start);
@@ -4736,6 +4737,28 @@ $(function ()
 	});
     }
 
+    /*
+     * Check for existing reservations and draw the list.
+     */
+    function LoadResGroups(uid)
+    {
+	sup.CallServerMethod(null, "resgroup", "ListReservationGroups",
+			     {"uid" : uid},
+			     function (json) {
+				 if (json.code) {
+				     console.info(json.value);
+				     return;
+				 }
+				 var groups = json.value;
+				 if (_.size(groups)) {
+				     $('#current-reservations')
+					 .removeClass("hidden");
+				     window.DrawResGroupList(
+                                         "#current-reservations .card-body ", groups);
+				 }
+			     });
+    }
+    
     $(document).ready(initialize);
 });
 

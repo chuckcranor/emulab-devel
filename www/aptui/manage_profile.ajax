@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -304,17 +304,6 @@ function Do_Create()
         fwrite($fp, "<attribute name='profile_public'><value>" .
                ($who == "public" ? 1 : 0) . "</value></attribute>\n");
 
-        if (isset($formfields["profile_project_write"])) {
-            fwrite($fp, "<attribute name='profile_project_write'><value>");
-            if ($formfields["profile_project_write"] == "checked") {
-                fwrite($fp, "1");
-            }
-            else {
-                fwrite($fp, "0");
-            }
-            fwrite($fp, "</value></attribute>\n");
-        }
-        
         if (ISADMIN()) {
             fwrite($fp, "<attribute name='profile_topdog'><value>");
 

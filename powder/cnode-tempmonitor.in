@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2024 University of Utah and the Flux Group.
+# Copyright (c) 2008-2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -97,7 +97,7 @@ my %cnodes = (
     },
     "cnode-mario"      => {
 	"enabled"      => 1,
-	"enclosure"    => "powder-rffe-mario",
+	"enclosure"    => "powder-pi-mario",
 	"switch"       => "powder-mgmt-dbs2",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [],
@@ -118,7 +118,7 @@ my %cnodes = (
     },
     "cnode-moran"      => {
 	"enabled"      => 1,
-	"enclosure"    => "powder-rffe-moran",
+	"enclosure"    => "powder-pi-moran",
 	"switch"       => "powder-mgmt-dbs5",
 	"autocyclefe"  => 1,
 	"alsocycle"    => [],
@@ -156,7 +156,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 # Protos
 sub GrabTemp($);
 sub GrabRFFETemp($);
-sub GrabRFSWTemp($);
+sub GrabRPITemp($);
 sub GrabSwitchTemp($);
 sub UploadTemp($$);
 sub UploadSwitchTemp($$);
@@ -441,8 +441,8 @@ sub GrabTemp($)
     if ($sensor =~ /rffe/) {
 	return GrabRFFETemp($sensor);
     }
-    elsif ($sensor =~ /rfsw/) {
-	return GrabRFSWTemp($sensor);
+    elsif ($sensor =~ /^(powder-rfsw|powder-pi)/) {
+	return GrabRPITemp($sensor);
     }
     return undef;
 }
@@ -493,13 +493,13 @@ sub GrabRFFETemp($)
     return $celcius;
 }
 
-sub GrabRFSWTemp($)
+sub GrabRPITemp($)
 {
-    my ($rfsw) = @_;
+    my ($rpi) = @_;
     my $celcius;
-    my $command = "$SUDO ssh $rfsw /usr/local/bin/temper";
+    my $command = "$SUDO ssh $rpi /usr/local/bin/temper";
 
-    logit("Connecting to $rfsw") if ($debug > 1);
+    logit("Connecting to $rpi") if ($debug > 1);
 
     my $output = emutil::ExecQuiet($command);
     if ($?) {
@@ -507,18 +507,18 @@ sub GrabRFSWTemp($)
 	return undef;
     }
     if ($debug > 1) {
-	logit("$rfsw returns: $output");
+	logit("$rpi returns: $output");
     }
     chomp($output);
     my @tokens = split('\s+', $output);
     if (scalar(@tokens) < 7) {
-	logit("Bogus result from $rfsw: '$output'");
+	logit("Bogus result from $rpi: '$output'");
 	return undef;
     }
     if ($tokens[6] =~ /^(\-?[\d\.]+)C$/) {
 	return $1;
     }
-    logit("Bogus temperature from $rfsw: " . $tokens[6]);
+    logit("Bogus temperature from $rpi: " . $tokens[6]);
     return undef;
 }
 

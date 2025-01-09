@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2024 University of Utah and the Flux Group.
+# Copyright (c) 2007-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -275,34 +275,41 @@ sub setupRDZinRDZ($$$)
     return 0
 	if (GeniXML::GetText("user-id", $element));
 
-    my $user;
-    if (CreateTemporaryUser($pid, $eid, $email, \$user, 1)) {
-	# Error returned here.
-	$$perrmsg = $user;
+    my $rdzinrdzinfo = $instance->RDZINRDZINFO();
+    if (! (defined($rdzinrdzinfo) && exists($rdzinrdzinfo->{'usertoken'}))) {
+	$$perrmsg = "setupRDZinRDZ: Inconsistent rdzinrdzinfo";
 	return -1;
     }
-    GeniXML::SetText("user-id", $element, $user->{"user_id"});
-    GeniXML::SetText("username", $element, $user->{"username"});
+    GeniXML::SetText("user-id", $element, $rdzinrdzinfo->{"user-id"});
+    GeniXML::SetText("username", $element, $rdzinrdzinfo->{"username"});
 
-    # Update DB, marking it as an rdzinrdz
-    my $rdzinrdzinfo = {
-	'user-id'  => $user->{"user_id"},
-        'username' => $user->{"username"},
-    };
-    # Must do this now in case of errors below.
-    $instance->SetRDZINRDZINFO($rdzinrdzinfo);
+    # Add temporary user ID as an ansible fact.
+    my $override = AddElement("override", $rspec, $GeniXML::ANSIBLE_NS);
+    SetText("name", $override, "openzms_parent_element_userid");
+    SetText("source", $override, "");
+    SetText("source_name", $override, "");
+    SetText("on_empty", $override, "");
+    $override->appendText($rdzinrdzinfo->{"user-id"});
     
     # Use an encrypted password to store the outer token
     my $pswdref = AddElement("password", $rspec, $GeniXML::EMULAB_NS);
     SetText("name", $pswdref, "openzms_parent_element_token");
-    $pswdref->appendText($user->{'token'});
+    $pswdref->appendText($rdzinrdzinfo->{'usertoken'});
 
     # And add it as an ansible fact.
-    my $override = AddElement("override", $rspec, $GeniXML::ANSIBLE_NS);
+    $override = AddElement("override", $rspec, $GeniXML::ANSIBLE_NS);
     SetText("name", $override, "openzms_parent_element_token");
     SetText("source", $override, "password");
     SetText("source_name", $override, "openzms_parent_element_token");
     SetText("on_empty", $override, "");
+
+    # Set a fact that gives the ID of the element
+    $override = AddElement("override", $rspec, $GeniXML::ANSIBLE_NS);
+    SetText("name", $override, "openzms_parent_element_id");
+    SetText("source", $override, "");
+    SetText("source_name", $override, "");
+    SetText("on_empty", $override, "");
+    $override->appendText($rdzinrdzinfo->{"element-id"});
 
     #
     # Insert the grant list that provides spectrum to the inner RDZ
@@ -487,6 +494,7 @@ sub RequestSpectrum($$)
     my @grants = ();
     my @radio_ports = ();
     my %dynamic = ();
+    my $rdzinrdzinfo;
 
     print "RequestSpectrum: $instance\n";
 
@@ -548,6 +556,36 @@ sub RequestSpectrum($$)
 	@radio_ports = ();
 	foreach my $id (values(%radios)) {
 	    push(@radio_ports, {"radio_port_id" => $id});
+	}
+    }
+    elsif ($rdzinrdz) {
+	$rdzinrdzinfo = $instance->RDZINRDZINFO();
+	if (!exists($rdzinrdzinfo->{'user_id'})) {
+	    my $pid   = $instance->pid();
+	    my $eid   = $instance->name();
+	    my $email = $instance->GetGeniUser()->email();
+	    my $user;
+	    
+	    if (CreateTemporaryUser($pid, $eid, $email, \$user, 1)) {
+		$$perrmsg = $user;
+		return -1;
+	    }
+	    # Update DB, marking it as an rdzinrdz
+	    $rdzinrdzinfo = {
+		'user-id'    => $user->{"user_id"},
+		'username'   => $user->{"username"},
+		'usertoken'  => $user->{"token"},
+		'element-id' => $user->{"element_id"},
+	    };
+	    # Must do this now in case of errors below.
+	    $instance->SetRDZINRDZINFO($rdzinrdzinfo);
+
+	    $ZMC = APT_RDZRest::ZMC->New($user->{'token'});
+	    if (!defined($ZMC)) {
+		$$perrmsg = "Cannot create ZMC rest interface for ".
+		    "temporary RDZinRDZ user";
+		return -1;
+	    }
 	}
     }
     
@@ -1160,7 +1198,8 @@ sub CreateTemporaryUser($$$$;$)
 	return -1;
     }
     #
-    # Need to find the role we want, which is viewer
+    # Need to find the role we want, which is member (so the user can
+    # create the grants)
     #
     if ($IDENT->GET("/roles", \$response)) {
 	$$pref = "CreateTemporaryUser: could not get RDZ roles";
@@ -1168,12 +1207,12 @@ sub CreateTemporaryUser($$$$;$)
     }
     my $role_id;
     foreach my $role (@{$response->{'roles'}}) {
-	if ($role->{'name'} eq "viewer") {
+	if ($role->{'name'} eq "member") {
 	    $role_id = $role->{'id'};
 	}
     }
     if (!defined($role_id)) {
-	$$pref = "CreateTemporaryUser: could not find the viewer role id";
+	$$pref = "CreateTemporaryUser: could not find the member role id";
 	return -1;
     }
     if ($debug) {
@@ -1263,9 +1302,10 @@ sub CreateTemporaryUser($$$$;$)
 	}
     }
     $$pref = {
-	"username" => $username,
-	"user_id"  => $user_id,
-	"token"    => $token,
+	"username"   => $username,
+	"user_id"    => $user_id,
+	"token"      => $token,
+	"element_id" => $IDENT->elementid(),
     };
     return 0;
 
@@ -1549,14 +1589,17 @@ sub WatchExperiment($$;$)
 			delete($grant->{"old_grant_id"});
 			delete($grant->{"new_grant_id"});
 			delete($grants{$grant_id});
-			
+
+			# David says replaced grants are auto deleted now.
+			if (0) {
 			logit("WatchExperiment($PID) $pideid: Removing revoked grant ".
 			      "$old_grant_id which was replaced by $new_grant_id");
-
+			
 			my $response;
 			if ($ZMC->DELETE("/grants/$old_grant_id", \$response)) {
 			    logit("WatchExperiment($PID) $pideid: could not remove ".
 				  "revoked grant $old_grant_id from the ZMC");
+			}
 			}
 			# Flag non-fatal error, to force a restart of the stream.
 			return 1;
