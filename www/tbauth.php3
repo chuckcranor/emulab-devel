@@ -1583,7 +1583,7 @@ function CheckReferrer($referrer)
         error_log("Invalid LOGIN REFERRER (IP:$IP, UID:$UID): " . $referrer);
         return -1;
     }
-    error_log("LOGIN REFERRER COOKIE (IP:$IP, UID:$UID): " . $referrer);
+    #error_log("LOGIN REFERRER COOKIE (IP:$IP, UID:$UID): " . $referrer);
     return 0;
 }
 
