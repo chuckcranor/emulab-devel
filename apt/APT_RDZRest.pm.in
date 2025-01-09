@@ -263,7 +263,8 @@ sub GetElementID($;$)
 	next
 	    if (!defined($role_binding->{"element_id"}));
 
-	if ($role_name eq "owner" || $role_name eq "viewer") {
+	if ($role_name eq "owner" || $role_name eq "viewer" ||
+	    $role_name eq "member") {
 	    $id = $role_binding->{"element_id"};
 	    last;
 	}
