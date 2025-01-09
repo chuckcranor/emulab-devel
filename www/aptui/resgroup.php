@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2024 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 #
 # {{{EMULAB-LICENSE
 #
@@ -308,6 +308,8 @@ echo "   window.ISADMIN  = $isadmin;\n";
 echo "   window.ISSTUD   = $isstud;\n";
 echo "   window.HOMETZ   = '$OURTIMEZONE';\n";
 echo "   window.DOROUTES = $routesokay;\n";
+echo "   window.EMBEDDED_RESGROUPS = true;\n";
+echo "   window.EMBEDDED_RESGROUPS_SELECT = false;\n";
 
 echo "</script>\n";
 
@@ -318,6 +320,7 @@ REQUIRE_MOMENTTIMEZONE();
 REQUIRE_APTFORMS();
 REQUIRE_TABLESORTER();
 REQUIRE_JQUERY_UI();
+AddLibrary("js/list-resgroups.js");
 AddLibrary("js/resgraphs.js");
 AddLibrary("js/rfchart.js");
 AddLibrary("js/ota-permission.js");
@@ -326,7 +329,7 @@ AddTemplateList(array("resgroup", "reserve-faq", "reservation-graph",
                       "oops-modal", "waitwait-modal", "confirm-modal",
                       "resusage-list", "resusage-graph",
                       "confirm-something", "resusage-graph", "visavail-graph",
-                      "ota-agreement", "ota-permission"));
+                      "ota-agreement", "ota-permission", "resgroup-list"));
 SPITREQUIRE("js/resgroup.js",
             "<script src='js/lib/d3.v3.js'></script>\n".
             "<script src='js/lib/d3.v5.js'></script>\n".
