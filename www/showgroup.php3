@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,7 +22,6 @@
 # }}}
 #
 include("defs.php3");
-include_once("template_defs.php");
 
 #
 # Note the difference with which this page gets it arguments!
@@ -95,11 +94,6 @@ $group->ShowMembers($this_user);
 
 if ($showmenu) {
     SUBPAGEEND();
-}
-
-# Project wide Templates.
-if ($EXPOSETEMPLATES) {
-    SHOWTEMPLATELIST("GROUP", 0, $uid, $pid, $gid);
 }
 
 #

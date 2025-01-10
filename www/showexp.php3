@@ -25,7 +25,6 @@ include("defs.php3");
 require("Sajax.php");
 include("showstuff.php3");
 include_once("node_defs.php");
-include_once("template_defs.php");
 chdir("apt");
 include_once("instance_defs.php");
 chdir("..");
@@ -67,17 +66,7 @@ if (!$experiment->AccessCheck($this_user, $TB_EXPT_READINFO)) {
     USERERROR("You do not have permission to view experiment $exp_eid!", 1);
 }
 
-# Template Instance Experiments get special treatment in this page.
 $instance = NULL;
-if ($EXPOSETEMPLATES) {
-     $instance = TemplateInstance::LookupByExptidx($experiment->idx());
-
-     if (! is_null($instance)) {
-	 $tag = "Instance";
-	 $guid = $instance->guid();
-	 $vers = $instance->vers();
-     }
-}
 
 #
 # For the Sajax Interface
@@ -286,9 +275,6 @@ function ShowVis($pid, $eid, $zoom = 1.25, $detail = 1) {
 # if it is. Otherwise return and continue on.
 #
 sajax_handle_client_request();
-
-# Faster to do this after the sajax stuff
-include_once("template_defs.php");
 
 #
 # Need some DB info.

@@ -7360,7 +7360,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	www/GNUmakefile www/defs.php3 www/dbdefs.php3 www/xmlrpc.php3 \
 	www/xmlrpcpipe.php3 \
 	www/swish.conf www/websearch \
-	www/garcia-telemetry/GNUmakefile www/tutorial/GNUmakefile \
+	www/garcia-telemetry/GNUmakefile \
 	www/sec-check/GNUmakefile www/emusearch.xml \
 	vis/GNUmakefile vis/webvistopology vis/dbvistopology \
 	vis/prerender vis/prerender_all vis/render \

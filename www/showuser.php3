@@ -23,7 +23,6 @@
 #
 include("defs.php3");
 include("showstuff.php3");
-include_once("template_defs.php");
 include_once("table_defs.php");
 include_once("pub_defs.php");
 
@@ -85,7 +84,6 @@ else {
 
 $html_groups    = null;
 $html_stats     = null;
-$html_templates = null;
 $html_pubs      = null;
 $html_exports   = null;
 
@@ -243,14 +241,6 @@ if ($isadmin) {
 #
 # Lets show Experiments.
 #
-if ($EXPOSETEMPLATES) {
-    $html_templates = SHOWTEMPLATELIST("USER", 0, $uid, $target_uid, "", TRUE);
-    if ($html_templates) {
-	list ($html_templates, $button_templates) =
-	    TableWrapUp($html_templates, FALSE, FALSE,
-			"templates_table", "templates_button");
-    }
-}
 $html_experiments =
     ShowExperimentList_internal(FALSE, "USER", $this_user,
 				$target_user,
@@ -476,13 +466,6 @@ echo "<script type='text/javascript' language='javascript'>
 #
 echo "<div width=\"100%\" align=center>\n";
 echo "<ul id=\"topnavbar\">\n";
-if ($html_templates) {
-    echo "<li>
-           <a href=\"#templates\" ".
-	       "class=topnavbar onfocus=\"this.hideFocus=true;\" ".
-               "id=\"li_templates\" onclick=\"Show('templates');\">".
-               "Templates</a></li>\n";
-}
 if ($html_experiments) {
      echo "<li>
             <a href=\"#experiments\" ".
@@ -535,9 +518,6 @@ echo "</ul>\n";
 echo "</div>\n";
 echo "<div align=center id=topnavbarbottom>&nbsp</div>\n"; 
 
-if ($html_templates) {
-     echo $html_templates;
-}
 if ($html_instances) {
     echo $html_instances;
 }

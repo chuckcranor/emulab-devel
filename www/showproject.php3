@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2019 University of Utah and the Flux Group.
+# Copyright (c) 2000-2019, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,7 +22,6 @@
 # }}}
 #
 include("defs.php3");
-include_once("template_defs.php");
 include_once("pub_defs.php");
 
 #
@@ -95,12 +94,6 @@ ob_start();
 $project->ShowGroupList();
 $groups_html = ob_get_contents();
 ob_end_clean();
-
-# Project wide Templates.
-$templates_html = null;
-if ($EXPOSETEMPLATES) {
-    $templates_html = SHOWTEMPLATELIST("PROJ", 0, $uid, $pid, "", TRUE);
-}
 
 ob_start();
 ShowExperimentList("PROJ", $this_user, $project);
@@ -237,13 +230,6 @@ echo "<script type='text/javascript' language='javascript'>
 #
 echo "<div width=\"100%\" align=center>\n";
 echo "<ul id=\"topnavbar\">\n";
-if ($templates_html) {
-    echo "<li>
-           <a href=\"#templates\" ".
-	       "class=topnavbar onfocus=\"this.hideFocus=true;\" ".
-               "id=\"li_templates\" onclick=\"Show('templates');\">".
-               "Templates</a></li>\n";
-}
 if ($experiments_html) {
      echo "<li>
             <a href=\"#experiments\" ".
@@ -302,9 +288,6 @@ echo "</ul>\n";
 echo "</div>\n";
 echo "<div align=center id=topnavbarbottom>&nbsp</div>\n";
 
-if ($templates_html) {
-     echo "<div class=invisible id=\"div_templates\">$templates_html</div>";
-}
 if ($experiments_html) {
      echo "<div class=invisible id=\"div_experiments\">$experiments_html</div>";
 }

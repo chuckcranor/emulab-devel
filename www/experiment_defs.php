@@ -22,7 +22,6 @@
 # }}}
 #
 #
-include_once("template_defs.php");
 include_once("geni_defs.php");
 
 # This class is really just a wrapper around the DB data ...
@@ -897,36 +896,6 @@ class Experiment
 	}
 
 	if (!$short) {
-	    $instance = TemplateInstance::LookupByExptidx($exptidx);
-
-	    if (! is_null($instance)) {
-		$guid   = $instance->guid();
-		$vers   = $instance->vers();
-	
-		echo "<tr>
-                    <td>Template: </td>
-                    <td class=\"left\">
-                       <a href='template_show.php?guid=$guid&version=$vers'>
-                          $guid/$vers</a>";
-
-		if ($instance->runidx()) {
-		    $runidx = $instance->runidx();
-		    $runid  = $instance->GetRunID($runidx);
-		    $url    = CreateURL("experimentrun_show", $instance,
-					"runidx", $runidx);
-		    echo " (Current Run:
-                       <a href='$url'>$runid</a>)</td>";
-		} else {
-		    $runidx = $instance->LastRunIdx();
-		    $runid  = $instance->GetRunID($runidx);
-		    $url    = CreateURL("experimentrun_show", $instance,
-					"runidx", $runidx);
-		    echo " (Last Run:
-                       <a href='$url'>$runid</a>)</td>";
-		}
-		echo "</tr>\n";
-	    }
-
 	    echo "<tr>
                 <td>Created: </td>
                 <td class=\"left\">$exp_created</td>
@@ -1492,11 +1461,6 @@ class ExperimentResources
 # Class function to show a listing of experiments by user/pid/gid
 #
 function ShowExperimentList($type, $this_user, $object) {
-    global $EXPOSETEMPLATES;
-    
-    if ($EXPOSETEMPLATES) {
-	ShowExperimentList_internal(1, $type, $this_user, $object);
-    }
     ShowExperimentList_internal(0, $type, $this_user, $object);
 }
 
@@ -1542,9 +1506,6 @@ function ShowExperimentList_internal($templates_only,
     }
 
     $template_clause = "";
-    if ($templates_only) {
-	$template_clause = " and i.idx is not null ";
-    }
 
     if (ISADMIN()) {
 	$query_result =
@@ -1686,4 +1647,21 @@ function ShowExperimentList_internal($templates_only,
     }
     return $html;
 }
+
+function MakeLink($which, $args, $text)
+{
+    $page = "";
+    
+    if ($which == "project") {
+	$page = "showproject.php3";
+    }
+    elseif ($which == "user") {
+	$page = "showuser.php3";
+    }
+    elseif ($which == "experiment") {
+	$page = "showexp.php3";
+    }
+    return "<a href=${page}?${args}>$text</a>";
+}
+
 ?>

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2022 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,7 @@ HTMLINSTALL     = $(INSTALL_SBINDIR)/htmlinstall
 
 include $(OBJDIR)/Makeconf
 
-SUBDIRS = tutorial
+SUBDIRS = 
 
 #
 # Force dependencies to make sure configure regenerates if the .in file
@@ -99,16 +99,6 @@ DOCFILES += $(wildcard $(SRCDIR)/doc/*.php)
 DOCFILES += $(wildcard $(SRCDIR)/doc/*.ps)
 DOCFILES += $(wildcard $(SRCDIR)/doc/*.pdf)
 DOCFILES += $(wildcard $(SRCDIR)/doc/*.svg)
-
-TUTFILES  = $(wildcard $(SRCDIR)/tutorial/*.html)
-TUTFILES += $(wildcard $(SRCDIR)/tutorial/*.jpg)
-TUTFILES += $(wildcard $(SRCDIR)/tutorial/*.gif)
-TUTFILES += $(wildcard $(SRCDIR)/tutorial/*.png)
-TUTFILES += $(wildcard $(SRCDIR)/tutorial/*.php3)
-TUTFILES += $(wildcard $(SRCDIR)/tutorial/*.php)
-TUTFILES += $(wildcard $(SRCDIR)/tutorial/*.ns)
-TUTFILES += $(wildcard $(SRCDIR)/tutorial/*.txt)
-TUTFILES += $(SRCDIR)/tutorial/tb_compat.tcl
 
 BUIFILES  = $(wildcard $(SRCDIR)/buildui/*.html)
 BUIFILES += $(wildcard $(SRCDIR)/buildui/*.jpg)
@@ -218,7 +208,6 @@ ALLFILES  = $(notdir $(FILES))
 ALLFLOORMAPS  = $(notdir $(FLOORMAPFILES))
 ALLPIXES  = $(notdir $(PIXFILES))
 ALLDOCS   = $(notdir $(DOCFILES))
-ALLTUTS   = $(notdir $(TUTFILES))
 ALLICONS  = $(notdir $(AUTOICONS))
 ALLPGENI  = $(notdir $(PGENIFILES))
 ALLDOWNLOADS = $(notdir $(DOWNLOADFILES))
@@ -257,7 +246,6 @@ INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/, $(ALLFILES)) \
 	$(addprefix $(INSTALL_WWWDIR)/floormap/, $(ALLFLOORMAPS)) \
 	$(addprefix $(INSTALL_WWWDIR)/pix/, $(ALLPIXES)) \
-	$(addprefix $(INSTALL_WWWDIR)/tutorial/, $(ALLTUTS)) \
 	$(addprefix $(INSTALL_WWWDIR)/doc/, $(ALLDOCS)) \
 	$(addprefix $(INSTALL_WWWDIR)/protogeni/, $(ALLPGENI)) \
 	$(addprefix $(INSTALL_WWWDIR)/downloads/, $(ALLDOWNLOADS)) \
