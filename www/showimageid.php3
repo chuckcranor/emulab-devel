@@ -32,7 +32,7 @@ if (!$CLASSICWEB_OVERRIDE) {
     $reqargs = RequiredPageArguments("imageid", PAGEARG_STRING);
     $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
     if (!$classic) {
-        RedirectToPortal("show-image.php", "image=$imageid");
+        RedirectToPortal("show-image.php", "imageid=$imageid");
         return;
     }
 }
