@@ -57,6 +57,21 @@
 			   title='Public images created by anyone'>
 		      Public</label>
 		  </div>
+		<% } %>
+ 		<% if (isadmin) { %>
+		  <div class="form-check form-check-inline">
+		    <input class="form-check-input" 
+			   type="checkbox" role="switch"
+			   id="deprecated-images">
+		    <label class="form-check-label"
+			   data-toggle='tooltip' data-bs-toggle='tooltip'
+			   data-container="body" data-bs-container="body"
+			   data-trigger="hover" data-bs-trigger="hover"
+			   title='Deprecated images'>
+		      Show Deprecated</label>
+		  </div>
+		<% } %>
+		<% if (all) { %>
 		  <div class="form-check form-switch form-check-inline">
 		    <input class="form-check-input" checked
 			   type="checkbox" role="switch"
@@ -69,12 +84,20 @@
 		      Red-Dot</label>
 		  </div>
 		<% } %>
-		<a href='#' class='btn btn-xs'
-		   data-toggle='modal' data-bs-toggle='modal'
-		   data-target='#help-modal' data-bs-target='#help-modal'>
-		  <span class='glyphicon glyphicon-question-sign'
-			style='margin-bottom: 4px; margin-left: -5px'>
-		  </span></a>
+		<span data-toggle='tooltip' data-bs-toggle='tooltip'
+		      data-bs-placement="right"		      
+		      data-delay='{"hide":0, "show":250}'
+		      data-bs-delay='{"hide":0, "show":250}'
+		      data-trigger="hover" data-bs-trigger="hover"
+		      data-html='true' data-bs-html='true'
+		      data-bs-title="Click for more info for about these images.">
+		  <a href='#' class='btn btn-xs'
+		     data-toggle='modal' data-bs-toggle='modal'
+		     data-target='#help-modal' data-bs-target='#help-modal'>
+		    <span class='glyphicon glyphicon-question-sign'
+			  style='margin-bottom: 4px; margin-left: -5px'>
+		    </span></a>
+		</span>
 	      </div>
 	      <div class="col-sm-4">
  		<% if (isadmin && window.ISEMULAB) { %>
@@ -129,6 +152,7 @@
 		<% } %>
 		<th class="sorter-false">Description</th>
 		<th class="sorter-false">URN</th>
+		<th class="hidden-column">Deprecated</th>
 		<th class="hidden-column">Filters</th>
 	      </tr>
 	    </thead>
@@ -137,12 +161,21 @@
 	      <% var project_re = /project/; %>
 	      <% _.each(images, function(value, index) { %>
 		<tr>
-		  <% if (_.has(value, "url")) { %>
-		    <td><a href="<%- value.url %>" target="_blank">
-		      <%= value.imagename %></a></td>
-		  <% } else { %>
-		    <td><%= value.imagename %></td>
-	          <% } %>
+		  <td>
+		    <% if (_.has(value, "url")) { %>
+		      <a href="<%- value.url %>" target="_blank">
+			<%= value.imagename %></a>
+		    <% } else { %>
+		      <%= value.imagename %>
+	            <% } %>
+		    <% if (value.deprecated == "deprecated") { %>
+		      <% if (value.deprecation == "error") { %>
+			<span class="text-danger glyphicon glyphicon-alert"></span>
+	              <% } else { %>
+			<span class="text-warning glyphicon glyphicon-alert"></span>
+	              <% } %>
+	            <% } %>
+		  </td>
 		  <% if (isadmin || value.filter.search(creator_re) >= 0) { %>
 		    <td><a href='user-dashboard.php?uid=<%- value.creator_idx %>'>
 		      <%= value.creator %></a></td>
@@ -167,6 +200,7 @@
 		      <span class="glyphicon glyphicon-link"></span>
 		    </a>
 		  </td>
+		  <td class="hidden-column"><%- value.deprecated %></td>
 		  <td class="hidden-column"><%- value.filter %></td>
 		</tr>
 	      <% }); %>

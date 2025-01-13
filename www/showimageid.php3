@@ -32,7 +32,7 @@ if (!$CLASSICWEB_OVERRIDE) {
     $reqargs = RequiredPageArguments("imageid", PAGEARG_STRING);
     $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
     if (!$classic) {
-        RedirectToPortal("show-image.php", "image=$imageid");
+        RedirectToPortal("show-image.php", "imageid=$imageid");
         return;
     }
 }
@@ -44,6 +44,14 @@ $this_user = CheckLoginOrDie();
 $uid       = $this_user->uid();
 $isadmin   = ISADMIN();
 $showperms = 1;
+
+# Mere users do not see this page.
+if (!$CLASSICWEB_OVERRIDE) {
+    if (!$isadmin) {
+        RedirectToPortal("show-image.php", "image=$imageid");
+        return;
+    }
+}
 
 # This will not return if its a sajax request.
 include("showlogfile_sup.php3");

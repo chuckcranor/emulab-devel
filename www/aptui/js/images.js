@@ -6,7 +6,7 @@ $(function ()
 						   "image-format-modal"]);
     var mainTemplate = _.template(templates['images']);
     var formatTemplate = _.template(templates['image-format-modal']);
-    var filterindex = 7;
+    var filterindex = 8;
     var showformat = false;
 
     /*
@@ -69,10 +69,18 @@ $(function ()
 
 	// Set up the urn link popovers to the table.
 	addUrnPopovers("images-table");
+
+        // Optional initial filter.
+        if (window.INITIAL_FILTER === "project") {
+            $('#system-images').prop("checked", false);
+        }
+        else if (window.INITIAL_FILTER === "system") {
+            $('#project-images').prop("checked", false);
+        }
 	
 	// Bind handlers for the checkboxes.
 	$('#my-images, #project-images, #public-images, ' +
-	  '#admin-images, #system-images')
+	  '#admin-images, #system-images, #deprecated-images')
 	    .change(function () {
 		SetFilters();
 	    });
@@ -103,7 +111,10 @@ $(function ()
 		    filter_columnFilters : false,
 		    // Search as typing
 		    filter_liveSearch : true,
-		},
+
+                    // Initial sort on updated column. Hmm, this is not working.
+                    //sortList: [[0,1]],
+                }
 	    });
 	
 	/*
@@ -126,6 +137,9 @@ $(function ()
 		}, 500);
 	});
 	SetFilters();
+
+        // Since sortList does not work, do this to set initial sort on updated column
+        $('#images-table').trigger('sorton', [ [[3,"d"]] ]);
     }
 
     function SetFilters()
@@ -162,6 +176,15 @@ $(function ()
 	    // Hmm, an empty string will get everything.
 	    filters[filterindex - 1] = "WHY";
 	}
+
+        // Independent flag. 
+	if ($('#deprecated-images').is(":checked")) {
+            filters[filterindex - 2] = "deprecated";
+	}
+        else {
+            filters[filterindex - 2] = "notdeprecated";
+        }
+        
 	console.info("SetFilters", filters);
 	$.tablesorter.setFilters($('#images-table'), filters, true);
     }
