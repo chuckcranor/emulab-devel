@@ -35,8 +35,10 @@ $page_title = "Image List";
 #
 # Verify page arguments.
 #
-$optargs = OptionalPageArguments("target_user", PAGEARG_USER,
-                                 "all",         PAGEARG_BOOLEAN);
+$optargs = OptionalPageArguments("target_user",  PAGEARG_USER,
+                                 "project_only", PAGEARG_BOOLEAN,
+                                 "system_only",  PAGEARG_BOOLEAN,
+                                 "all",          PAGEARG_BOOLEAN);
 $all = ($all ? 1 : 0);
 
 #
@@ -177,6 +179,11 @@ if ($ISCLOUD) {
         $blob["creator_idx"] = $creator_idx;
         $blob["project_urn"] = $row["project_urn"];
         $blob["urn"]         = $row["urn"];
+        $blob["deprecated"]  = DateStringGMT($row["deprecated"]);
+        if ($row["deprecated"]) {
+            $blob["deprecation"] = ($row["deprecated_iserror"] ?
+                                    "error" : "warning");
+        }
         #
         # Virtualization implies the format.
         #
@@ -257,6 +264,12 @@ else {
         $blob["format"]      = $row["format"];
         $blob["urn"]         = $urn;
 	$blob["url"]         = "show-image.php?imageid=$imageid";
+	$blob["deprecated"]  = DateStringGMT($row["deprecated"]);
+        if ($row["deprecated"]) {
+            $blob["deprecation"] = ($row["deprecated_iserror"] ?
+                                    "error" : "warning");
+        }
+        
         $tmp[] = $blob;
     }
 }
@@ -304,12 +317,20 @@ foreach ($tmp as $blob) {
         }
     }
     $blob["filter"] = implode(",", $filters);
+    // Deprecated is a filter in another hidden column
+    $blob["deprecated"] = ($blob["deprecated"] ? "deprecated" : "notdeprecated");
     $images[] = $blob;
 }
 echo "<script type='text/javascript'>\n";
 $isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
 echo "    window.ISADMIN    = $isadmin;\n";
 echo "    window.ALL        = $all;\n";
+if ($project_only) {
+    echo "    window.INITIAL_FILTER = 'project';\n";
+}
+elseif ($system_only) {
+    echo "    window.INITIAL_FILTER = 'system';\n";
+}
 echo "</script>\n";
 
 echo "<script type='text/plain' id='images-json'>\n";
