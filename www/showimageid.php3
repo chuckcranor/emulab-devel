@@ -45,6 +45,14 @@ $uid       = $this_user->uid();
 $isadmin   = ISADMIN();
 $showperms = 1;
 
+# Mere users do not see this page.
+if (!$CLASSICWEB_OVERRIDE) {
+    if (!$isadmin) {
+        RedirectToPortal("show-image.php", "image=$imageid");
+        return;
+    }
+}
+
 # This will not return if its a sajax request.
 include("showlogfile_sup.php3");
 

@@ -43,6 +43,14 @@ $this_user = CheckLoginOrDie();
 $uid       = $this_user->uid();
 $isadmin   = ISADMIN();
 
+# Mere users do not see this page.
+if (!$CLASSICWEB_OVERRIDE) {
+    if (!$isadmin) {
+        RedirectToPortal("images.php");
+        return;
+    }
+}
+
 #
 # Admin users can see all ImageIDs, while normal users can only see
 # ones in their projects or ones that are globally available.
