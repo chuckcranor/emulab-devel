@@ -70,6 +70,17 @@
 			   title='Deprecated images'>
 		      Show Deprecated</label>
 		  </div>
+		  <div class="form-check form-check-inline">
+		    <input class="form-check-input" 
+			   type="checkbox" role="switch"
+			   id="unlisted-images">
+		    <label class="form-check-label"
+			   data-toggle='tooltip' data-bs-toggle='tooltip'
+			   data-container="body" data-bs-container="body"
+			   data-trigger="hover" data-bs-trigger="hover"
+			   title='Unlisted images'>
+		      Show Unlisted</label>
+		  </div>
 		<% } %>
 		<% if (all) { %>
 		  <div class="form-check form-switch form-check-inline">
@@ -131,8 +142,11 @@
 	    </div>
 	  </div>
 	</div>
+	<center id="images-counter">
+	  <span id="images-count"></span> matching images
+	</center>
 	<div class="table-responsive">
-	  <table class='tablesorter' id='images-table'>
+	  <table class='tablesorter hidden' id='images-table'>
 	    <thead>
 	      <tr>
 		<th>Name</th>
@@ -152,7 +166,7 @@
 		<% } %>
 		<th class="sorter-false">Description</th>
 		<th class="sorter-false">URN</th>
-		<th class="hidden-column">Deprecated</th>
+		<th class="hidden-column">Flags</th>
 		<th class="hidden-column">Filters</th>
 	      </tr>
 	    </thead>
@@ -168,12 +182,15 @@
 		    <% } else { %>
 		      <%= value.imagename %>
 	            <% } %>
-		    <% if (value.deprecated == "deprecated") { %>
+		    <% if (value.deprecated) { %>
 		      <% if (value.deprecation == "error") { %>
 			<span class="text-danger glyphicon glyphicon-alert"></span>
 	              <% } else { %>
 			<span class="text-warning glyphicon glyphicon-alert"></span>
 	              <% } %>
+	            <% } %>
+		    <% if (value.listed == 0) { %>
+		      <span class="glyphicon glyphicon-eye-close"></span>
 	            <% } %>
 		  </td>
 		  <% if (isadmin || value.filter.search(creator_re) >= 0) { %>
@@ -200,7 +217,11 @@
 		      <span class="glyphicon glyphicon-link"></span>
 		    </a>
 		  </td>
-		  <td class="hidden-column"><%- value.deprecated %></td>
+		  <% if (value.flags == "") { %>
+		    <td class="hidden-column">noflags</td>
+		  <% } else { %>
+		    <td class="hidden-column"><%- value.flags %></td>
+		  <% } %>
 		  <td class="hidden-column"><%- value.filter %></td>
 		</tr>
 	      <% }); %>

@@ -175,6 +175,7 @@ if ($ISCLOUD) {
         $blob["pid"]         = $pid;
         $blob["pid_idx"]     = $pid_idx;
         $blob["global"]      = $row["visibility"] == "public" ? 1 : 0;
+        $blob["listed"]      = $row["listed"] ? 1 : 0;
         $blob["creator"]     = $creator;
         $blob["creator_idx"] = $creator_idx;
         $blob["project_urn"] = $row["project_urn"];
@@ -228,7 +229,7 @@ else {
                 "      g.gid_idx=p1.permission_idx) ";
     
         $whereclause = "and (iv.global or p2.imageid is not null or ".
-                     "g.uid_idx is not null) and i.listed!=0 ";
+                     "g.uid_idx is not null) ";
     }
     $query =
            "select distinct i.imagename,iv.* from images as i ".
@@ -239,7 +240,7 @@ else {
            "left join osidtoimageid as map on map.osid=i.imageid ".
            $joinclause .
            "where (iv.ezid = 1 or iv.isdataset = 1) $whereclause ".
-           (ISADMIN() ? "" : "and deprecated is null ") .
+           (ISADMIN() ? "" : "and deprecated is null and listed!=0 ") .
            "order by i.imagename";
 
     $query_result = DBQueryFatal($query);
@@ -316,9 +317,16 @@ foreach ($tmp as $blob) {
             continue;
         }
     }
+    $flags = array();
+    if ($blob["deprecated"]) {
+        $flags[] = "deprecated";
+    }
+    if ($blob["listed"] == 0) {
+        $flags[] = "notlisted";
+    }
+    
     $blob["filter"] = implode(",", $filters);
-    // Deprecated is a filter in another hidden column
-    $blob["deprecated"] = ($blob["deprecated"] ? "deprecated" : "notdeprecated");
+    $blob["flags"] =  implode(",", $flags);
     $images[] = $blob;
 }
 echo "<script type='text/javascript'>\n";

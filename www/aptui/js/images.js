@@ -80,7 +80,7 @@ $(function ()
 	
 	// Bind handlers for the checkboxes.
 	$('#my-images, #project-images, #public-images, ' +
-	  '#admin-images, #system-images, #deprecated-images')
+	  '#admin-images, #system-images, #deprecated-images, #unlisted-images')
 	    .change(function () {
 		SetFilters();
 	    });
@@ -116,7 +116,12 @@ $(function ()
                     //sortList: [[0,1]],
                 }
 	    });
-	
+
+	// Update the count of matched experiments
+	table.bind('filterEnd', function(e, filter) {
+	    $('#images-count').text(filter.filteredRows);
+	});
+
 	/*
 	 * We have to implement our own live search cause we want to combine
 	 * the search box with the checkbox filters. To do that, we have to
@@ -140,6 +145,8 @@ $(function ()
 
         // Since sortList does not work, do this to set initial sort on updated column
         $('#images-table').trigger('sorton', [ [[3,"d"]] ]);
+
+	$("#images-table, #images-counter").removeClass("hidden");
     }
 
     function SetFilters()
@@ -177,12 +184,29 @@ $(function ()
 	    filters[filterindex - 1] = "WHY";
 	}
 
-        // Independent flag. 
+        if (0) {
 	if ($('#deprecated-images').is(":checked")) {
-            filters[filterindex - 2] = "deprecated";
+            flags.push("deprecated")
 	}
         else {
-            filters[filterindex - 2] = "notdeprecated";
+            flags.push("notdeprecated")
+        }
+	if ($('#unlisted-images').is(":checked")) {
+            flags.push("notlisted")
+	}
+        else {
+            flags.push("listed")
+        }
+        }
+        var flags = ["noflags"];
+	if ($('#deprecated-images').is(":checked")) {
+            flags.push("deprecated")
+	}
+	if ($('#unlisted-images').is(":checked")) {
+            flags.push("notlisted")
+	}
+        if (flags.length) {
+            filters[filterindex - 2] = "/" + flags.join("|") + "/";
         }
         
 	console.info("SetFilters", filters);
