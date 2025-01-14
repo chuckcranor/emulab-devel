@@ -936,7 +936,7 @@ $(function ()
 	    case 'scheduled':
 	    case 'pending':
 	    case 'rdzwait':
-	        refresh = reloadtopo = extend = snapshot = destroy = 0;
+	        refresh = reloadtopo = snapshot = destroy = 0;
   	        terminate = 1;
   	        break;
 	    
@@ -947,10 +947,10 @@ $(function ()
 
 	    case 'quarantined':
 	        refresh = reloadtopo = extend = snapshot = destroy = 0;
-	        release = 1;
+	        release = 1
 	        // We let admins terminate/refresh a quarantined experiment.
 	        if (isadmin) {
-		    terminate = refresh = 1;
+		    terminate = refresh = extend = 1;
 		}
   	        break;
 
