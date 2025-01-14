@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2017 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017, 2025 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -130,6 +130,11 @@ elsif (@ARGV == 1 && $ARGV[0] eq "prune") {
 	my $domain = $OURDOMAIN;
 	my $urn;
 
+	my $image = OSImage->Lookup($uuid);
+	if (!defined($image)) {
+	    fatal("No such image $uuid!");
+	}
+
 	if ($isdataset) {
 	    $domain .= ":${pid}";
 	    $domain .= ":${gid}" if ($pid ne $gid);
@@ -139,7 +144,7 @@ elsif (@ARGV == 1 && $ARGV[0] eq "prune") {
 	else {
 	    $urn = GeniHRN::Generate($domain, "image", $pid . "//" . $name);
 	}
-	push(@images, [$urn, $uuid]);
+	push(@images, [$urn, $uuid, $image]);
     }
 }
 elsif (@ARGV == 1) {
@@ -154,10 +159,10 @@ elsif (@ARGV == 1) {
     # descriptor at the server.
     #
     if ($ARGV[0] =~ /:\d+$/) {
-	push(@images, [$imageurn, $image->uuid()]);
+	push(@images, [$imageurn, $image->uuid(), $image]);
     }
     else {
-	push(@images, [$imageurn, $image->image_uuid()]);
+	push(@images, [$imageurn, $image->image_uuid(), $image]);
     }
 }
 else {
@@ -183,19 +188,37 @@ Genixmlrpc->SetContext($context);
 Genixmlrpc->SetTimeout(15);
 
 foreach my $ref (@images) {
-    my ($imageurn, $imageuuid) = @{ $ref };
+    my ($imageurn, $imageuuid, $image) = @{ $ref };
 
     if ($impotent) {
-	print "Would ask IMS to delete $imageurn\n";
+	print "Would ask IMS to delete $imageurn ($imageuuid)\n";
 	next;
     }
+    print "Asking IMS to delete $imageurn ($imageuuid)\n" if ($debug);
+    
     # Retry a few times if we get an RPC error, usually transient.
     my $count = 3;
     while ($count) {
 	my $rval = GeniImage::DeleteImageData($imageurn,
 					      $imageuuid, \$errormsg);
-	last
-	    if ($rval == 0);
+
+	if ($rval == 0) {
+	    # Clear this so we do not try again.
+	    # When deleting an entire descriptor instead of a version, need
+	    # to clear this on all the versions.
+	    if ($image) {
+		if ($image->uuid() eq $imageuuid) {
+		    $image->ClearIMSReported();
+		}
+		else {
+		    my $imageid = $image->imageid();
+		
+		    DBQueryFatal("update image_versions set ims_reported=NULL " .
+				 "where imageid='$imageid'");
+		}
+	    }
+	    last;
+	}
 
 	fatal($errormsg)
 	    if ($rval != GENIRESPONSE_RPCERROR);
