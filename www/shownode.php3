@@ -30,8 +30,15 @@ include_once("imageid_defs.php");
 # This is safe to do before the CheckLoginOrDie
 #
 if (!$CLASSICWEB_OVERRIDE) {
-    $reqargs = RequiredPageArguments("node", PAGEARG_STRING);
-    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+    $optargs = OptionalPageArguments("node",    PAGEARG_STRING,
+                                     "node_id", PAGEARG_STRING,
+                                     "classic", PAGEARG_BOOLEAN);
+    if (!isset($node) && !isset($node_id)) {
+        PAGEARGERROR("Must provide 'node' page argument");
+    }
+    if (!isset($node)) {
+        $node = $node_id;
+    }
     if (!$classic) {
         RedirectToPortal("show-node.php", "node=$node");
         return;
