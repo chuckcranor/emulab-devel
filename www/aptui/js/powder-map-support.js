@@ -620,14 +620,16 @@ window.ShowPowderMap = (function()
 	    "Y": 40.7659667,
 	    "X": -111.830693,
 	    "Type": "Compute Resources",
-	    "Details": "https://docs.powderwireless.net/hardware.html#%28part._powder-ne-hw%29"
+	    "Details": "https://docs.powderwireless.net/hardware.html#%28part._powder-ne-hw%29",
+            "Label": "FORT"
 	},
 	{
 	    "ID": "MEB Data Center",
 	    "Y": 40.7685099,
 	    "X": -111.8464161,
 	    "Type": "Compute Resources",
-	    "Details": "https://docs.powderwireless.net/hardware.html#%28part._powder-ne-hw%29"
+	    "Details": "https://docs.powderwireless.net/hardware.html#%28part._powder-ne-hw%29",
+            "Label": "MEB"
 	}
     ];
     
@@ -655,8 +657,8 @@ window.ShowPowderMap = (function()
 	    var attributes = {
 		name        : details.ID,
 		description : details.Type,
-		latitude    : details.X,
-		longitude   : details.Y,
+		latitude    : details.Y,
+		longitude   : details.X,
 		url         : details.Details,
 	    };
 	    var popup = {
@@ -694,6 +696,28 @@ window.ShowPowderMap = (function()
 		popupTemplate: popup,
 	    });
 	    layer.add(graphic);
+
+	    // Add label text below the icon
+	    var textGraphic = new Graphic({
+		geometry: {
+		    type: "point",
+		    longitude: details.X,
+		    latitude: details.Y,
+		},
+		symbol: {
+		    type: "text",
+		    color: "black",
+		    text: details.Label,
+		    xoffset: 0,
+		    yoffset: -15,
+		    font: {
+			size: 8,
+			weight: "bold",
+		    }
+		}
+	    });
+            console.info("ADDING", textGraphic);
+	    layer.add(textGraphic);
 	});
 	Map.add(layer);
     }

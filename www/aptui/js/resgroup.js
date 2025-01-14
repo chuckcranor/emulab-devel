@@ -4750,7 +4750,17 @@ $(function ()
 				     return;
 				 }
 				 var groups = json.value;
-				 if (_.size(groups)) {
+                                 // This list will always include the current reservation.
+                                 // We do not want to show that in the list.
+				 if (_.size(groups) > 1) {
+                                     var tmp = {};
+                                     _.each(groups, function(details, uuid) {
+                                         if (uuid != window.UUID) {
+                                             tmp[uuid] = details;
+                                         }
+                                     });
+                                     groups = tmp;
+                                     
 				     $('#current-reservations')
 					 .removeClass("hidden");
 				     window.DrawResGroupList(

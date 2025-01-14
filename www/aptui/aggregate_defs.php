@@ -53,6 +53,7 @@ class Aggregate
 	    return;
 	}
 	$this->aggregate = mysql_fetch_array($query_result);
+        $this->aggregate["islocalcluster"] = $this->isLocalCluster();
         $this->typeinfo  = array();
 
         #
