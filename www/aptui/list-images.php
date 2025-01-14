@@ -72,41 +72,25 @@ if (isset($cluster)) {
         SPITUSERERROR("No such cluster");
         exit();
     }    
-    $amlist[$aggregate->nickname()] = $aggregate->urn();
+    $amlist[$aggregate->nickname()] = $aggregate;
 }
 else {
     # List of clusters.
-    $ams     = Aggregate::DefaultAggregateList();
+    $ams     = Aggregate::DefaultAggregateList($target_user);
     $amlist  = array();
     while (list($index, $aggregate) = each($ams)) {
-        $amlist[$aggregate->nickname()] = $aggregate->urn();
+        $amlist[$aggregate->nickname()] = $aggregate;
     }
 }
 echo "<script type='text/plain' id='amlist-json'>\n";
-echo htmlentities(json_encode($amlist));
+echo htmlentities(json_encode($amlist, JSON_NUMERIC_CHECK), ENT_COMPAT);
 echo "</script>\n";
 
 echo "<link rel='stylesheet'
             href='css/tablesorter-widget-grouping.css'>\n";
 
 # Place to hang the toplevel template.
-echo "<div id='main-body'>
-        <div id='spinner'>
-          <center id='spinner'><img src='images/spinner.gif' /></center><br>
-        </div>
-        <div id='no-images-message' class='hidden'>
-         <center>
-          You have no images (clones or snapshots) yet.
-         </center>
-        </div>
-        <div id='classic-images-div' class='hidden'></div>
-      </div>\n";
-
-# Place to hang the modals for now
-echo "<div id='oops_div'></div>
-      <div id='waitwait_div'></div>
-      <div id='confirm_div'></div>
-      <div id='image-format-modal_div'></div>\n";
+echo "<div id='main-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 if ($target_project) {
@@ -122,7 +106,7 @@ REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_TABLESORTER(array('js/lib/tablesorter/widgets/widget-grouping.js'));
-AddTemplateList(array("image-list", "classic-image-list",
+AddTemplateList(array("list-images", "image-list", "classic-image-list",
                       "confirm-delete-image", "image-format-modal",
                       "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-images.js");

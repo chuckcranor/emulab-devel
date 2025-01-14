@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["image-list", "classic-image-list",
+    var template_list   = ["list-images", "image-list", "classic-image-list",
 			   "oops-modal", "confirm-delete-image",
 			   "waitwait-modal", "image-format-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
@@ -21,14 +21,17 @@ $(function ()
     {
 	window.APT_OPTIONS.initialize(sup);
 	amlist = decodejson('#amlist-json');
+        console.info("amlist", amlist);
+        
 	window.IMLIST = imagelist;
 
+        $('#main-body').html(templates["list-images"]);
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
 	$('#image-format-modal_div').html(formatTemplate({}));
 
-	LoadData();
 	LoadClassic();
+	LoadData();
     }
 
     /*
@@ -60,9 +63,22 @@ $(function ()
      */
     function LoadData()
     {
-	var count = Object.keys(amlist).length;
+        /*
+         * Lets cull out mobile endpoints that are down.
+         */
+        var tmp = {};
+	_.each(amlist, function(details, name) {
+            if (details.aggregate.ismobile
+                && details.statusinfo.status != "up") {
+                return;
+            }
+            tmp[name] = details;
+        });
+	var count = Object.keys(tmp).length;
 	
-	_.each(amlist, function(urn, name) {
+	_.each(tmp, function(details, name) {
+            var urn = details.aggregate.urn;
+            
 	    var callback = function(json) {
 		var error = null;
 		var images = null;
@@ -92,17 +108,19 @@ $(function ()
 		    // Save for later
 		    imagelist[name] = images;
 		}
-		// We show the format only if there is more then one
-		// format type.
-		var formats = {};
-		_.each(images, function(value, index) {
-		    _.each(value.versions, function(image, index) {
-			formats[image.format] = 1;
+                if (!error) {
+		    // We show the format only if there is more then one
+		    // format type.
+		    var formats = {};
+		    _.each(images, function(value, index) {
+		        _.each(value.versions, function(image, index) {
+			    formats[image.format] = 1;
+		        });
 		    });
-		});
-		if (Object.keys(formats).length > 1) {
-		    showformat = true;
-		}
+		    if (Object.keys(formats).length > 1) {
+		        showformat = true;
+		    }
+                }
 		// Generate the main template.
 		var html = listTemplate({
 		    "images"       : images,
@@ -118,7 +136,21 @@ $(function ()
 		    " </div>" +
 		    "</div>";
 
-		$('#main-body').prepend(html);
+                if (details.aggregate.islocalcluster) {
+		    $('#local-cluster-div').html(html);
+                }
+                else if (details.aggregate.isFE) {
+		    $('#FE-clusters-div').prepend(html);
+                }
+                else if (details.aggregate.ismobile) {
+		    $('#mobile-clusters-div').prepend(html);
+                }
+                else if (error) {
+		    $('#failed-clusters-div').prepend(html);
+                }
+                else {
+		    $('#remote-clusters-div').prepend(html);
+                }
 
 		// On error, no need for the rest of this.
 		if (error)
@@ -250,6 +282,15 @@ $(function ()
 		});
 		
 	    }
+            // If the cluster is not up, lets generate a quick error.
+            if (details.statusinfo.status != "up") {
+                callback({
+                    "code"  : 1,
+                    "value" : "The " + details.name + " cluster is currently unavailable. " +
+                        "Please try again later",
+                });
+                return;
+            }
 	    var args = {"cluster" : name};
 	    if (window.TARGET_PROJECT !== undefined) {
 		args["pid"] = window.TARGET_PROJECT;
