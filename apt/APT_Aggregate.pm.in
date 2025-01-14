@@ -46,6 +46,7 @@ my $TB		  = "@prefix@";
 my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $MYURN	  = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+my $FPING         = "/usr/local/sbin/fping";
 
 # Cache of instances to avoid regenerating them.
 my %aggregates  = ();
@@ -460,7 +461,19 @@ sub CheckStatus($$;$)
 	    "is currently offline, please try again later.";
 	return 1;
     }
-    # Ping test. If we cannot get to the aggregate right now, bail.
+    if (! $self->IsLocalCluster()) {
+	# Ping Test
+	my $hrn  = GeniHRN->new($self->urn());
+	my $boss = "boss." . $hrn->domain();
+	system("$FPING -q -B 1.1 -r 10 -i 250 -p 250 -t 150 $boss");
+	if ($?) {
+	    $$perrmsg = "The " . $self->name() . " cluster ".
+		"is currently unavailable. Please try again later";
+	    return 1;
+	}
+    }
+    
+    # XMLRPC test. If we cannot get to the aggregate right now, bail.
     my $retval = APT_Geni::PingAggregate($self, $perrmsg, $portalrpc);
     if ($retval) {
 	if ($retval < 0) {
