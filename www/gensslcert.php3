@@ -23,6 +23,11 @@
 #
 include("defs.php3");
 
+if (!$CLASSICWEB_OVERRIDE) {
+    RedirectToPortal("getcreds.php", "node=$node");
+    return;
+}
+
 #
 # Only known and logged in users can do this.
 #

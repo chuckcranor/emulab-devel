@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2020 University of Utah and the Flux Group.
+# Copyright (c) 2000-2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,8 +25,13 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-# See this variable in getsslcert.php3
-$FILENAME = "cloudlab";
+$page_title = "Get Credentials";
 
-include("../getsslcert.php3");
+RedirectSecure();
+$this_user = CheckLoginOrRedirect();
+SPITHEADER(1, false, true);
+
+echo "Click <a href=getsslcert.php>here</a> for your PEM encoded SSL certificate..\n";
+
+SPITFOOTER();
 ?>
