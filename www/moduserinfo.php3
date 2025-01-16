@@ -23,6 +23,13 @@
 #
 include("defs.php3");
 
+if (!$CLASSICWEB_OVERRIDE) {
+    $optargs = OptionalPageArguments("user", PAGEARG_STRING);
+    RedirectToPortal("myaccount.php",
+                     isset($user) ? "user=$user" : null);
+    return;
+}
+
 #
 # No PAGEHEADER here since we spit out a Location header later. See below.
 # 

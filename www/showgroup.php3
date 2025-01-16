@@ -37,6 +37,14 @@ $this_user = CheckLoginOrDie();
 $uid       = $this_user->uid();
 $isadmin   = ISADMIN();
 
+if (!$CLASSICWEB_OVERRIDE) {
+    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+    if (!$isadmin || !$classic) {
+        RedirectToPortal("show-project.php");
+        return;
+    }
+}
+
 #
 # Verify page arguments.
 #

@@ -23,6 +23,11 @@
 #
 include("defs.php3");
 
+if (!$CLASSICWEB_OVERRIDE) {
+    RedirectToPortal("vlan-history.php");
+    return;
+}
+
 #
 # Only known and logged in users can do this.
 #
@@ -44,12 +49,6 @@ $optargs = OptionalPageArguments("datetime",  PAGEARG_STRING,
 				 "tag",       PAGEARG_INTEGER,
 				 "lanid",     PAGEARG_INTEGER,
                                  "classic",   PAGEARG_BOOLEAN);
-
-if (!$classic) {
-    $url = "portal/vlan-history.php";
-    header("Location: $url");
-    return;
-}
 
 #
 # Standard Testbed Header

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015, 2025 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,6 +22,13 @@
 # }}}
 #
 include("defs.php3");
+
+if (!$CLASSICWEB_OVERRIDE) {
+    $optargs = OptionalPageArguments("user", PAGEARG_STRING);
+    RedirectToPortal("ssh-keys.php",
+                     isset($user) ? "user=$user" : null);
+    return;
+}
 
 #
 # Only known and logged in users can do this.

@@ -29,13 +29,10 @@ include_once("node_defs.php");
 # This is safe to do before the CheckLoginOrDie
 #
 if (!$CLASSICWEB_OVERRIDE) {
-    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN,
-                                     "node_id", PAGEARG_STRING);
-    if (!$classic) {
-        RedirectToPortal("show-nodehistory.php",
-                         isset($node_id) ? "node_id=$node_id" : null);
-        return;
-    }
+    $optargs = OptionalPageArguments("node_id", PAGEARG_STRING);
+    RedirectToPortal("show-nodehistory.php",
+                     isset($node_id) ? "node_id=$node_id" : null);
+    return;
 }
 
 #

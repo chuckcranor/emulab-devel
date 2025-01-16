@@ -35,6 +35,14 @@ $uid       = $this_user->uid();
 $uid_idx   = $this_user->uid_idx();
 $isadmin   = ISADMIN();
 
+if (!$CLASSICWEB_OVERRIDE) {
+    $optargs = OptionalPageArguments("classic", PAGEARG_BOOLEAN);
+    if (!$isadmin || !$classic) {
+        RedirectToPortal("user-dashboard.php");
+        return;
+    }
+}
+
 #
 # Verify page arguments.
 #
@@ -127,9 +135,6 @@ if (!$archived && !$target_user->wikionly() &&
     WRITESUBMENUBUTTON("Edit SSH Keys",
 		       CreateURL("ssh-keys", $target_user));
     
-    WRITESUBMENUBUTTON("Generate SSL Cert",
-		       CreateURL("gensslcert", $target_user));
-
     if ($target_user->HasEncryptedCert(0)) {
 	WRITESUBMENUBUTTON("Download your SSL Cert",
 			   CreateURL("gensslcert", $target_user,
