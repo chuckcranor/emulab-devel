@@ -445,7 +445,8 @@
                         "in": "body",
                         "name": "start_at",
                         "schema": {
-                            "type": "date-time"
+                            "type": "string",
+                            "format" "date-time"
                         },
                         "description": "Start time for the experiment. Defaults to immediately",
                         "required": false
