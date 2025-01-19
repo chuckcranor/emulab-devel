@@ -1,0 +1,528 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Cloudlab Portal API",
+        "description": "This document describes the Cloudlab Portal API.",
+        "version": "1.0.0",
+        "license": {
+            "name": "Apache 2.0",
+            "identifier": "Apache-2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+        }
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8000/v1"
+        }
+    ],
+    "components": {
+        "schemas": {
+            "Error": {
+                "properties": {
+                    "error": {
+                        "example": "The main error message.",
+                        "type": "string"
+                    },
+                    "errors": {
+                        "items": {
+                            "example": "Additional errors, if any.",
+                            "type": "string"
+                        },
+                        "type": "array"
+                    }
+                },
+                "type": "object"
+            },
+            "Version": {
+                "properties": {
+                    "branch": {
+                        "example": "master",
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "build_timestamp": {
+                        "example": "2020-12-18T21:06:28.000Z",
+                        "format": "date-time",
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "commit": {
+                        "example": "deadbeef",
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "major": {
+                        "example": 0,
+                        "type": "integer"
+                    },
+                    "minor": {
+                        "example": 1,
+                        "type": "integer"
+                    },
+                    "patch": {
+                        "example": 0,
+                        "type": "integer"
+                    },
+                    "version": {
+                        "example": "0.1.0",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "major","minor","patch","version"
+                ],
+                "type": "object"
+            },
+            "Experiment": {
+                "type": "object",
+                "description": "A cloudlab experiment.",
+                "properties": {
+                    "id": {
+                        "description": "Unique identifier of the experiment.",
+                        "type": "string",
+                        "format": "uuid",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "name": {
+                        "description": "A human readable name for the experiment .",
+                        "type": "string",
+                        "x-immutable-on-put": true
+                    },
+                    "project": {
+                        "description": "The project the experiment is instantiated in.",
+                        "type": "string",
+                        "x-immutable-on-put": true
+                    },
+                    "profile_id": {
+                        "description": "ID of the profile used to create the experiment",
+                        "type": "string",
+                        "format": "uuid",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "profile_name": {
+                        "description": "Human readable name of the profile.",
+                        "type": "string",
+                        "x-immutable-on-put": true
+                    },
+                    "profile_project": {
+                        "description": "Human readable name of the profile project",
+                        "type": "string",
+                        "x-immutable-on-put": true
+                    },
+                    "creator": {
+                        "description": "The name of the creator.",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "updater": {
+                        "description": "The name of the updater.",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true,
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Creation time.",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "started_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Start time.",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true,
+                        "nullable": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Last modification time.",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true,
+                        "nullable": true
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Expiration time.",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true,
+                        "nullable": true
+                    },
+                    "status": {
+                        "description": "Current status of the experiment.",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "wbstore_id": {
+                        "description": "The ID of the experiments WB store.",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "url": {
+                        "description": "The URL of the Portal status page",
+                        "type": "string",
+                        "format": "url",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "aggregates": {
+                        "description": "List of aggregates in the experiment",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AggregateList"
+                        },
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    }
+                }
+            },
+            "AggregateList": {
+                "type": "object",
+                "properties": {
+                    "aggregates": {
+                        "items": {
+                            "$ref": "#/components/schemas/AggregateStatus"
+                        },
+                        "type": "array"
+                    }
+                }
+            },
+            "AggregateStatus": {
+                "type": "object",
+                "description": "Per aggregate status.",
+                "properties": {
+                    "urn": {
+                        "description": "URN of the aggregate.",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "name": {
+                        "description": "Human readable name of the aggregate.",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "status": {
+                        "description": "Current status of the experiment.",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "nodes": {
+                        "description": "List of nodes at the aggregate",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExperimentNodeList"
+                        },
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    }
+                }
+            },
+            "ExperimentList": {
+                "type": "object",
+                "properties": {
+                    "experiments": {
+                        "items": {
+                            "$ref": "#/components/schemas/Experiment"
+                        },
+                        "type": "array"
+                    }
+                }
+            },
+            "ExperimentNode": {
+                "type": "object",
+                "description": "Per-node information at each aggregate.",
+                "properties": {
+                    "urn": {
+                        "description": "URN of the node",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "hostname": {
+                        "description": "Qualified hostname of the node.",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "ipv4": {
+                        "description": "IPV4 of the node.",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "status": {
+                        "description": "Current status of the node",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "state": {
+                        "description": "Current state of the node",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "rawstate": {
+                        "description": "Current raw state of the node",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    },
+                    "startup_status": {
+                        "description": "Current status of the startup  execution service",
+                        "type": "string",
+                        "x-immutable-on-put": true,
+                        "x-immutable-on-post": true
+                    }
+                }
+            },
+            "ExperimentNodeList": {
+                "type": "object",
+                "properties": {
+                    "nodes": {
+                        "items": {
+                            "$ref": "#/components/schemas/ExperimentNode"
+                        },
+                        "type": "array"
+
+                    }
+                }
+            }
+        }
+    },
+    "paths": {
+        "/version": {
+            "get": {
+                "description": "Get system version information.",
+                "operationId": "getVersion",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Version"
+                                }
+                            }
+                        },
+                        "description": "Version information."
+                    }
+                },
+                "tags": [
+                    "Version"
+                ]
+            }
+        },
+        "/experiments": {
+            "get": {
+                "description": "Get experiment list",
+                "operationId": "getExperimentList",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "experiment_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "description": "Filter by experiment id.",
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "creator",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Filter for matching creator.",
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "project",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Filter for matching project.",
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExperimentList"
+                                }
+                            }
+                        },
+                        "description": "List of experiments."
+                    },
+                    "400": {
+                        "description": "Malformed request.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized request.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden request.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new experiment.",
+                "operationId": "createExperiment",
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "name",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Name of the new experiment.",
+                        "required": true
+                    },
+                    {
+                        "in": "body",
+                        "name": "project",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Name of the project for the new experiment.",
+                        "required": true
+                    },
+                    {
+                        "in": "body",
+                        "name": "profile_name",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Name of the profile to use for the new experiment.",
+                        "required": true
+                    },
+                    {
+                        "in": "body",
+                        "name": "profile_project",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "The profile project",
+                        "required": true
+                    },
+                    {
+                        "in": "body",
+                        "name": "start_at",
+                        "schema": {
+                            "type": "date-time"
+                        },
+                        "description": "Start time for the experiment. Defaults to immediately",
+                        "required": false
+                    },
+                    {
+                        "in": "body",
+                        "name": "duration",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Duration in hours. Defaults to Portal default",
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Experiment created.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Spectrum"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed request.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated request.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Unauthorized request.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Resource not found.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
