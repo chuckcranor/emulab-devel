@@ -466,7 +466,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/Spectrum"
+                                    "$ref": "#/components/schemas/Experiment"
                                 }
                             }
                         }
