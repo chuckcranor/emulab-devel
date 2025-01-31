@@ -90,10 +90,10 @@ my %cnodes = (
     },
     "cnode-guesthouse" => {
 	"enabled"      => 1,
-	"enclosure"    => "powder-rffe-guesthouse",
+	"enclosure"    => "powder-pi-guesthouse",
 	"switch"       => "powder-mgmt-dbs6",
 	"autocyclefe"  => 1,
-	"alsocycle"    => [ "bru-650-4" ],
+	"alsocycle"    => [],
     },
     "cnode-mario"      => {
 	"enabled"      => 1,
@@ -106,15 +106,15 @@ my %cnodes = (
 	"enabled"      => 1,
 	"enclosure"    => "powder-rfsw-ustar",
 	"switch"       => "powder-mgmt-dbs8",
-	"autocyclefe"  => 1,
-	"alsocycle"    => [ "n310-ustar" ],
+	"autocyclefe"  => 0,
+	"alsocycle"    => [],
     },
     "cnode-wasatch"    => {
 	"enabled"      => 1,
-	"enclosure"    => "powder-rffe-wasatch",
+	"enclosure"    => "powder-rfsw-wasatch",
 	"switch"       => "powder-mgmt-dbs1",
-	"autocyclefe"  => 1,
-	"alsocycle"    => [ "cap-wasatch, n310-wasatch" ],
+	"autocyclefe"  => 0,
+	"alsocycle"    => [  "bru-650-4" ],
     },
     "cnode-moran"      => {
 	"enabled"      => 1,
