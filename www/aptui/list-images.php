@@ -78,7 +78,7 @@ else {
     # List of clusters.
     $ams     = Aggregate::DefaultAggregateList($target_user);
     $amlist  = array();
-    while (list($index, $aggregate) = each($ams)) {
+    foreach ($ams as $index => $aggregate) {
         $amlist[$aggregate->nickname()] = $aggregate;
     }
 }
