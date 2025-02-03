@@ -8,9 +8,9 @@ sub DoUpdate($$$)
 {
     my ($dbhandle, $dbname, $version) = @_;
 
-    if (!DBSlotExists("apt_deferred_instances", "reason")) {
-	DBQueryFatal("ALTER TABLE apt_deferred_instances ADD ".
-		     " `reason` tinytext");
+    if (!DBSlotExists("apt_aggregate_radio_info", "hidden")) {
+	DBQueryFatal("ALTER TABLE apt_aggregate_radio_info ADD ".
+		     " `hidden` tinyint(1) NOT NULL default '0'");
     }
 
     return 0;
